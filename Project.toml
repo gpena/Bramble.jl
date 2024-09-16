@@ -18,7 +18,15 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
 
 [compat]
-julia = "1.10"
+julia = "1.10.5"
+Cubature = "1.5.1"
+FastBroadcast = "0.3.5"
+FillArrays = "1.13.0"
+IncompleteLU = "0.2.1"
+Integrals = "4.5.0"
+LazyArrays = "2.2.1"
+LinearSolve = "2.34.0"
+WriteVTK = "1.19.2"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
