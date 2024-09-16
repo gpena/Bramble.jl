@@ -9,7 +9,8 @@ Date Create: 10/05/2023
 """
 
 module Bramble
-
+	using Random
+#=
 if Sys.isapple()
 	# Apple: Load Apple Accelerate
 	try
@@ -113,5 +114,5 @@ include("exporters/types.jl")
 include("exporters/exporter_vtk.jl")
 
 #include("precompile.jl")
-
+=#
 end

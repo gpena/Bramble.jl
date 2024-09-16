@@ -9,5 +9,5 @@ makedocs(sitename="Bramble",
 )
 
 deploydocs(
-    repo = "github.com/gpena/Bramble.git"
+    repo = "github.com/gpena/bramble.github.io.git"
 )
