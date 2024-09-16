@@ -9,8 +9,7 @@ Date Create: 10/05/2023
 """
 
 module Bramble
-	using Random
-#=
+
 if Sys.isapple()
 	# Apple: Load Apple Accelerate
 	try
@@ -56,7 +55,7 @@ export Interval, Domain, ×, markers
 
 # Mesh handling
 export Mesh, hₘₐₓ, submesh, ndofs, points
-
+#=
 # Spaces handling
 export GridSpace, Element
 export innerₕ
@@ -79,7 +78,7 @@ export mass, stiffness, advection
 
 # Exporters
 export ExporterVTK, addScalarDataset!, datasets, save2file, close
-
+=#
 include("utils.jl")
 
 include("geometry/sets.jl")
@@ -88,7 +87,7 @@ include("geometry/domains.jl")
 include("meshes/common.jl")
 include("meshes/mesh1d.jl")
 include("meshes/meshnd.jl")
-
+#=
 include("spaces/gridspace.jl")
 include("spaces/vectorelements.jl")
 include("spaces/matrixelements.jl")

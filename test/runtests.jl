@@ -23,8 +23,6 @@ end
 
 sep = "######"
 
-#include("quality.jl")
-
 @time @testset "\n$sep Sets and Domains $sep" begin
     include("sets.jl")
     include("domains.jl")
@@ -33,34 +31,4 @@ end
 @time @testset "\n$sep Meshes $sep" begin
   include("mesh1d.jl")
   include("meshnd.jl")
-end
-
-
-@time @testset "\n$sep Grid spaces $sep" begin
-    include("gridspaces.jl")
-    include("vectorelements.jl")
-    include("matrixelements.jl")
-end
-
-
-
-@time @testset "\n$sep Forms $sep" begin
-    include("bilinearforms.jl")
-end
-
-@time @testset "\n$sep 1D Problems $sep" begin
-    include("problems/1d/laplacian_uniform.jl")
-    include("problems/1d/laplacian_nonuniform.jl")
-    #include("problems/1d/laplacian_nonlinear.jl")
-    #include("problems/1d/advection.jl")
-    #include("problems/1d/advectionstab.jl")
-    #include("problems/1d/wave.jl")
-end
-
-@time @testset "\n$sep 2D Problems $sep" begin
-    include("problems/2d/laplacian_uniform.jl")
-end
-
-@time @testset "\n$sep 3D Problems $sep" begin
-    include("problems/3d/laplacian_uniform.jl")
 end
