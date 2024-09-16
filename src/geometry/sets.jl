@@ -1,0 +1,178 @@
+"""
+# DomainBaseType
+
+An abstract type representing a domain with a set and a set of markers.
+"""
+abstract type DomainBaseType <: BrambleType end
+
+"""
+	CartesianProduct{D,T}
+
+Represents the Cartesian product of D intervals.
+"""
+struct CartesianProduct{D,T} <: BrambleType
+	data::NTuple{D,Tuple{T,T}}
+end
+
+"""
+	Interval(x, y)
+
+Create a one-dimensional interval set from two scalars x and y.
+
+# Example
+
+```jldoctest
+julia> Interval(0.0, 1.0)
+CartesianProduct{1,Float64}((0.0,1.0))
+```
+"""
+@inline function Interval(x, y)
+	_x = float(x)
+	_y = float(y)
+	return CartesianProduct{1,typeof(_x)}(((_x, _y),))
+end
+
+"""
+	CartesianProduct(x, y)
+
+An alias for the one-dimensional Interval constructor.
+
+# Example
+
+```jldoctest
+julia> CartesianProduct(0.0, 1.0)
+CartesianProduct{1,Float64}((0.0,1.0))
+```
+"""
+@inline CartesianProduct(x, y) = Interval(x, y)
+
+"""
+	(X::CartesianProduct)(i)
+
+Get the i-th set in the Cartesian product X.
+
+# Example
+
+```jldoctest
+julia> X = CartesianProduct(0.0, 1.0);
+	   X(1);
+(0.0, 1.0)
+```
+"""
+@inline (X::CartesianProduct)(i) = X.data[i]
+
+"""
+	eltype(_::CartesianProduct{D,T})
+
+Get the element type of a Cartesian product.
+
+# Example
+
+```jldoctest
+julia> eltype(CartesianProduct(0.0, 1.0))
+Float64
+```
+"""
+@inline eltype(_::CartesianProduct{D,T}) where {D,T} = T
+@inline eltype(_::Type{<:CartesianProduct{D,T}}) where {D,T} = T
+
+"""
+	dim(_::CartesianProduct{D})
+
+Get the dimension of a Cartesian product.
+
+# Example
+
+```jldoctest
+julia> dim(CartesianProduct(0.0, 1.0))
+1
+```
+"""
+@inline dim(_::CartesianProduct{D}) where D = D
+@inline dim(_::Type{CartesianProduct{D}}) where D = D
+
+"""
+	Interval(x::CartesianProduct{1})
+
+An alias for the one-dimensional Interval constructor.
+"""
+@inline Interval(x::CartesianProduct{1}) = Interval(x.data...)
+
+"""
+	CartesianProduct(X::CartesianProduct)
+
+An identity function.
+"""
+@inline CartesianProduct(X::CartesianProduct) = X
+
+"""
+	tails(X::CartesianProduct, i)
+
+Get the i-th set in the Cartesian product X as a tuple.
+"""
+@inline tails(X::CartesianProduct, i) = X(i)
+
+"""
+	tails(X::CartesianProduct{D})
+
+Get all sets in the Cartesian product X as a tuple.
+"""
+@inline @generated tails(X::CartesianProduct{D}) where D = :(Base.Cartesian.@ntuple $D i->X(i))
+#ntuple(i -> X(i), D)
+
+"""
+	tails(X::CartesianProduct{1})
+
+Get the one and only set in the Cartesian product X as a tuple.
+"""
+@inline tails(X::CartesianProduct{1}) = X(1)
+
+"""
+	×(X::CartesianProduct{D1, T}, Y::CartesianProduct{D2, T})
+
+Compute the Cartesian product of two Cartesian products X and Y.
+
+# Example
+
+```jldoctest
+julia> X = CartesianProduct(0.0, 1.0);
+	   Y = CartesianProduct(2.0, 3.0);
+	   X × Y;
+CartesianProduct{2,Float64}(((0.0, 2.0), (0.0, 3.0)), ((1.0, 2.0), (1.0, 3.0)))
+```
+"""
+@inline function ×(X::CartesianProduct{D1,T}, Y::CartesianProduct{D2,T}) where {D1,D2,T}
+	a = tails(X)
+	b = tails(Y)
+	c = tuple((a...)..., (b...)...)
+
+	return CartesianProduct{D1 + D2,T}(ntuple(i -> (c[2 * i - 1], c[2 * i]), D1 + D2))
+end
+
+"""
+	projection(X::CartesianProduct, i)
+
+Get the i-th set in the Cartesian product X as an Interval.
+"""
+@inline projection(X::CartesianProduct, i) = Interval(X(i)...)
+
+"""
+	show(io::IO, X::CartesianProduct{D})
+
+Print a human-readable representation of a Cartesian product X.
+
+# Example
+
+```jldoctest
+julia> X = CartesianProduct(0.0, 1.0);
+	   show(X);
+Type: CartesianProduct{1,Float64}((0.0,1.0))
+ Dim: 1
+ Set: [0.0, 1.0]
+```
+"""
+function show(io::IO, X::CartesianProduct{D}) where D
+	sets = ["[$(tails(X,i)[1]), $(tails(X,i)[2])]" for i in 1:D]
+	sets_string = join(sets, " × ")
+	print(io, "Type: $(eltype(X)) \n Dim: $D \n Set: $sets_string")
+end
