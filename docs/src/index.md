@@ -1,4 +1,4 @@
-# Example.jl Documentation
+# Bramble.jl Documentation
 
 ```@docs
 Interval(x,y)
