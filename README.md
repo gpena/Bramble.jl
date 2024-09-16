@@ -1,6 +1,4 @@
 # Bramble
-[![Global Docs](https://img.shields.io/badge/docs-SciML-blue.svg)](https://docs.sciml.ai/DiffEqDocs/stable/)
+A Julia package for nonuniform finite difference method approximations in cartesian domains.
 
-[![codecov](https://codecov.io/gh/gpena/Bramble/branch/master/graph/badge.svg)](https://codecov.io/gh/gpena/Bramble)
-[![Build Status](https://github.com/gpena/Bramble/workflows/CI/badge.svg)](https://github.com/gpena/Bramble.jl/actions?query=workflow%3ACI)
-
+This package provides a set of functions to create and solve discretization problems associated with finite difference methods on nonuniform grids.
