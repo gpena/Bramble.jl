@@ -23,6 +23,13 @@ with the marker.
 MarkerType{F} = Pair{String,F}
 
 """
+# DomainBaseType
+
+An abstract type representing a domain with a set and a set of markers.
+"""
+abstract type DomainBaseType <: BrambleType end
+
+"""
 	struct Domain{SetType, MarkersType}
 
 Represents a domain with a set and a set of markers.

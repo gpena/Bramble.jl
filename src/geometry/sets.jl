@@ -1,27 +1,32 @@
-"""
-# DomainBaseType
-
-An abstract type representing a domain with a set and a set of markers.
-"""
-abstract type DomainBaseType <: BrambleType end
+# Defines the [`Interval`](@ref) and [`CartesianProduct`](@ref) types
+# 
+# @author: Gonçalo Pena
+#
 
 """
-	CartesianProduct{D,T}
+$(SIGNATURES)
+Stores a Cartesian product of `D` intervals with elements of type `T`.
 
-Represents the Cartesian product of D intervals.
+**Fields**
+
+- `data` -- a D-tuple containing the coordinate projections.
 """
 struct CartesianProduct{D,T} <: BrambleType
 	data::NTuple{D,Tuple{T,T}}
 end
 
 """
-	Interval(x, y)
+$(SIGNATURES)
 
-Create a one-dimensional interval set from two scalars x and y.
+Creates an interval set from two scalars x and y.
+
+**Fields**
+
+- `x` -- the lower bound
+- `y` -- the upper bound
 
 # Example
-
-```jldoctest
+```@docs
 julia> Interval(0.0, 1.0)
 CartesianProduct{1,Float64}((0.0,1.0))
 ```
@@ -32,43 +37,22 @@ CartesianProduct{1,Float64}((0.0,1.0))
 	return CartesianProduct{1,typeof(_x)}(((_x, _y),))
 end
 
-"""
-	CartesianProduct(x, y)
 
-An alias for the one-dimensional Interval constructor.
-
-# Example
-
-```jldoctest
-julia> CartesianProduct(0.0, 1.0)
-CartesianProduct{1,Float64}((0.0,1.0))
-```
-"""
 @inline CartesianProduct(x, y) = Interval(x, y)
 
-"""
-	(X::CartesianProduct)(i)
-
-Get the i-th set in the Cartesian product X.
-
-# Example
-
-```jldoctest
-julia> X = CartesianProduct(0.0, 1.0);
-	   X(1);
-(0.0, 1.0)
-```
-"""
 @inline (X::CartesianProduct)(i) = X.data[i]
 
 """
-	eltype(_::CartesianProduct{D,T})
+$(SIGNATURES)
 
 Get the element type of a Cartesian product.
 
-# Example
+**Fields**
 
-```jldoctest
+- `X` -- the Cartesian product
+
+# Example
+```@docs
 julia> eltype(CartesianProduct(0.0, 1.0))
 Float64
 ```
@@ -77,12 +61,15 @@ Float64
 @inline eltype(_::Type{<:CartesianProduct{D,T}}) where {D,T} = T
 
 """
-	dim(_::CartesianProduct{D})
+$(SIGNATURES)
 
-Get the dimension of a Cartesian product.
+Get the topological dimension of a Cartesian product.
+
+**Fields**
+
+- `X` -- the Cartesian product
 
 # Example
-
 ```jldoctest
 julia> dim(CartesianProduct(0.0, 1.0))
 1
@@ -91,49 +78,28 @@ julia> dim(CartesianProduct(0.0, 1.0))
 @inline dim(_::CartesianProduct{D}) where D = D
 @inline dim(_::Type{CartesianProduct{D}}) where D = D
 
-"""
-	Interval(x::CartesianProduct{1})
-
-An alias for the one-dimensional Interval constructor.
-"""
 @inline Interval(x::CartesianProduct{1}) = Interval(x.data...)
 
-"""
-	CartesianProduct(X::CartesianProduct)
-
-An identity function.
-"""
 @inline CartesianProduct(X::CartesianProduct) = X
 
-"""
-	tails(X::CartesianProduct, i)
-
-Get the i-th set in the Cartesian product X as a tuple.
-"""
 @inline tails(X::CartesianProduct, i) = X(i)
 
-"""
-	tails(X::CartesianProduct{D})
-
-Get all sets in the Cartesian product X as a tuple.
-"""
 @inline @generated tails(X::CartesianProduct{D}) where D = :(Base.Cartesian.@ntuple $D i->X(i))
 #ntuple(i -> X(i), D)
 
-"""
-	tails(X::CartesianProduct{1})
-
-Get the one and only set in the Cartesian product X as a tuple.
-"""
 @inline tails(X::CartesianProduct{1}) = X(1)
 
 """
-	×(X::CartesianProduct{D1, T}, Y::CartesianProduct{D2, T})
+$(SIGNATURES)
 
 Compute the Cartesian product of two Cartesian products X and Y.
 
-# Example
+**Fields**
 
+- `X` -- the first Cartesian product
+- `Y` -- the second Cartesian product
+
+# Example
 ```jldoctest
 julia> X = CartesianProduct(0.0, 1.0);
 	   Y = CartesianProduct(2.0, 3.0);
