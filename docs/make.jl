@@ -1,16 +1,14 @@
-push!(LOAD_PATH,"../src/")
+using Documenter, Bramble
 
-using Pkg
-Pkg.add(url="https://github.com/gpena/Bramble")
-using Bramble
-using Documenter
+include("pages.jl")
 
-makedocs(sitename="Bramble",
-    format = Documenter.HTML(
-        prettyurls = get(ENV, "CI", nothing) == "true"
-    )
-)
+makedocs(sitename = "Bramble.jl",
+		 authors = "Gonçalo Pena",
+		 modules = [Bramble],
+		 clean = true, doctest = false, linkcheck = true,
+		 warnonly = [:docs_block, :missing_docs, :cross_references, :linkcheck],
+		 format = Documenter.HTML(prettyurls=false ),
+		 pages = pages)
 
-deploydocs(
-    repo = "github.com/gpena/bramble.github.io.git"
-)
+#deploydocs(repo = "github.com/gpena/Bramble.jl.git";
+#		   push_preview = true)
