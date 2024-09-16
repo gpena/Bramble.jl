@@ -7,3 +7,7 @@ makedocs(sitename="Bramble",
         prettyurls = get(ENV, "CI", nothing) == "false"
     )
 )
+
+deploydocs(
+    repo = "github.com/gpena/Bramble.git"
+)
