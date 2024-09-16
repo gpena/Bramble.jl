@@ -1,11 +1,18 @@
 """
-Bramble, a nonuniform finite difference method approximation in cartesian domains, in the Julia language.
 
-This module provides a set of functions to create and solve discretization problems associated with finite difference methods on nonuniform grids
+The module exports the following functions
+* Domain handling
+- [`Interval`](@ref). Creates an interval set from the lower and upper bounds
+- [`×`](@ref). Creates Cartesian products of intervals
+- [`markers`](@ref). Handles markers for a given domain
+- [`Domain`](@ref). Creates a domain with a cartesian domain and a set of markers
 
---------------------------------------------------------------------------------------
-Author: Gonçalo Pena (University of Coimbra)
-Date Create: 10/05/2023
+* Mesh handling
+- [`Mesh`](@ref). Creates a mesh from a domain
+- [`submesh`](@ref). Creates a submesh from a mesh
+- [`ndofs`](@ref). Returns the number of number of points in a mesh
+- [`points`](@ref). Returns the coordinates of the points in a mesh
+
 """
 
 module Bramble
@@ -30,6 +37,7 @@ if Sys.iswindows()
 	end
 end
 
+using DocStringExtensions
 using InteractiveUtils: @code_warntype, @code_llvm, @code_native
 import Base: eltype, similar, length, copyto!, isapprox, isequal, Generator, IndexStyle, axes, materialize!
 import Base: map, map!, show, getindex, setindex!, IndexStyle, iterate, size, ndims, diff
