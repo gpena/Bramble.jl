@@ -1,10 +1,13 @@
 push!(LOAD_PATH,"../src/")
 
-using Documenter, Bramble
+using Pkg
+Pkg.add(url="https://github.com/gpena/Bramble")
+using Bramble
+using Documenter
 
 makedocs(sitename="Bramble",
     format = Documenter.HTML(
-        prettyurls = get(ENV, "ci", nothing) == "true"
+        prettyurls = get(ENV, "CI", nothing) == "true"
     )
 )
 

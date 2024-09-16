@@ -53,7 +53,7 @@ jobs:
         with:
           version: '1.10'
       - run: |
-          julia --project="docs/" -e 'using Pkg; Pkg.add(url="https://github.com/gpena/Bramble"); Pkg.instantiate()'
+          julia --project="docs/" -e 'using Pkg; Pkg.add(url="https://github.com/gpena/Bramble")'
       - run: julia --project=docs docs/make.jl
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
