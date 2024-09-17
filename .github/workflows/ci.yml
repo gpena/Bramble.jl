@@ -55,7 +55,7 @@ jobs:
       - run: |
           julia --project=docs -e '
             import Pkg; Pkg.add("Documenter")
-            using Pkg
+            using Pkg'
         #    Pkg.add(url="https://github.com/gpena/Bramble.jl")
         #    Pkg.activate("Bramble")
         #    Pkg.instantiate()'
