@@ -56,7 +56,7 @@ jobs:
           julia --project=docs -e '
             import Pkg; Pkg.add("Documenter")
             using Pkg
-            Pkg.develop(PackageSpec(path=pwd()))
+            using Bramble
             Pkg.instantiate()'
       - run: julia --project=docs docs/make.jl
         env:
