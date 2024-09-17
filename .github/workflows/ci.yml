@@ -44,22 +44,22 @@ jobs:
           file: lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false  # or true if you want CI to fail when Codecov fails
-  docs:
-    name: Documentation
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: julia-actions/setup-julia@v1
-        with:
-          version: '1'
-      - run: |
-          julia --project=docs -e '
-            import Pkg; Pkg.add("Documenter")
-            using Pkg'
-        #    Pkg.add(url="https://github.com/gpena/Bramble.jl")
-        #    Pkg.activate("Bramble")
-        #    Pkg.instantiate()'
-      #- run: julia --project=docs docs/make.jl
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
+  # docs:
+  #   name: Documentation
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #     - uses: julia-actions/setup-julia@v1
+  #       with:
+  #         version: '1'
+  #     - run: |
+  #         julia --project=docs -e '
+  #           import Pkg; Pkg.add("Documenter")
+  #           using Pkg'
+  #           Pkg.add(url="https://github.com/gpena/Bramble.jl")
+  #           Pkg.activate("Bramble")
+  #           Pkg.instantiate()'
+  #     - run: julia --project=docs docs/make.jl
+  #       env:
+  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #         DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
