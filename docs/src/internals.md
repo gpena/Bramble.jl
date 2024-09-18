@@ -39,5 +39,7 @@ Order   = [:function]
 
 ## Mesh
 ```@autodocs
+Private = false
+Order   = [:function]
 Pages = ["common.jl", "mesh1d.jl", "meshnd.jl"]
 ```
