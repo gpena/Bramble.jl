@@ -2,7 +2,7 @@
 CollapsedDocStrings = false
 ```
 
-# API documentation
+# Full internal documentation
 Documentation for `Bramble.jl`'s functions.
 
 ## Geometry

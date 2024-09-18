@@ -5,12 +5,7 @@
 
 """
 $(SIGNATURES)
-Creates a cartesian product of `D` intervals with elements of type `T`.
-
-# Fields
-  - `data`, a D-tuple containing the intervals defining the coordinate projections as 2-tuples.
-```@docs; canonical=false
-```
+Type for storage of cartesian products of `D` intervals having elements of type `T`.
 """
 struct CartesianProduct{D,T} <: BrambleType
 	data::NTuple{D,Tuple{T,T}}
@@ -18,15 +13,11 @@ end
 
 """
 $(SIGNATURES)
-Creates an interval set from two scalars x and y.
-
-# Fields
-  - `x`, the lower bound
-  - `y`, the upper bound
+Returns a 1D [CartesianProduct](@ref) set from two scalars `x` and `y`, where `x` and `y` are, respectively, the lower and upper bounds of the interval.
 
 # Example
-```@docs; canonical=false
-julia> Interval(0.0, 1.0)
+```
+julia> Interval(0, 1)
 CartesianProduct{1,Float64}((0.0,1.0))
 ```
 """
@@ -40,14 +31,10 @@ end
 
 """
 $(SIGNATURES)
-Creates an interval set from two scalars x and y.
-
-# Fields
-  - `x`, the lower bound
-  - `y`, the upper bound
+Returns a 1D [CartesianProduct](@ref) from two scalars `x` and `y`, where `x` and `y` are, respectively, the lower and upper bounds of the interval.
 
 # Example
-```@docs; canonical=false
+```
 julia> CartesianProduct(0, 1)
 Type: Float64 
  Dim: 1 
@@ -60,56 +47,56 @@ Type: Float64
 
 """
 $(SIGNATURES)
-Get the element type of a cartesian product set.
-
-# Fields
-  - `X` -- the set
+Returns the element type of a [CartesianProduct](@ref).
 
 # Example
 ```
-julia> eltype(CartesianProduct(0.0, 1.0))
+julia> X = CartesianProduct(0, 1); eltype(X)
 Float64
 ```
 """
-@inline eltype(_::CartesianProduct{D,T}) where {D,T} = T
-@inline eltype(_::Type{<:CartesianProduct{D,T}}) where {D,T} = T
+@inline eltype(X::CartesianProduct{D,T}) where {D,T} = T
+@inline eltype(::Type{<:CartesianProduct{D,T}}) where {D,T} = T
 
 """
 $(SIGNATURES)
-Get the topological dimension of a cartesian product set.
-
-# Fields
-  - `X` -- the Cartesian product
+Returns the topological dimension of a [CartesianProduct](@ref).
 
 # Example
 ```
-julia> dim(CartesianProduct(0.0, 1.0))
+julia> X = CartesianProduct(0, 1); dim(X)
 1
 ```
 """
-@inline dim(_::CartesianProduct{D}) where D = D
-@inline dim(_::Type{CartesianProduct{D}}) where D = D
+@inline dim(X::CartesianProduct{D}) where D = D
+@inline dim(::Type{CartesianProduct{D}}) where D = D
 
 @inline Interval(x::CartesianProduct{1}) = Interval(x.data...)
 
 @inline CartesianProduct(X::CartesianProduct) = X
 
+"""
+$(SIGNATURES)
+
+Returns a tuple with the 1D [CartesianProduct](@ref) of the i-th interval of the [CartesianProduct](@ref) `X`.
+"""
 @inline tails(X::CartesianProduct, i) = X(i)
 
+"""
+$(SIGNATURES)
+
+Returns a tuple of tuples with 1D [CartesianProduct](@ref)s that make up the [CartesianProduct](@ref) `X`.
+"""
 @inline @generated tails(X::CartesianProduct{D}) where D = :(Base.Cartesian.@ntuple $D i->X(i))
 
 @inline tails(X::CartesianProduct{1}) = X(1)
 
 """
 $(SIGNATURES)
-Compute the cartesian product of two cartesian products X and Y.
-
-# Fields
-  - `X` -- the first set
-  - `Y` -- the second set
+Returns the cartesian product of two [CartesianProduct](@ref) `X` and `Y` as a [CartesianProduct](@ref).
 
 # Example
-```@docs; canonical=false
+```
 julia> X = CartesianProduct(0, 1); Y = CartesianProduct(2, 3);
 	   X × Y;
 Type: Float64 
@@ -127,11 +114,7 @@ end
 
 """
 $(SIGNATURES)
-Get the i-th set in the cartesian product set X (as a 1D set).
-
-# Fields
-  - `X` -- the set
-  - `i` -- the index of the set
+Returns the i-th 1D [CartesianProduct](@ref) of the [CartesianProduct](@ref) `X`.
 """
 @inline projection(X::CartesianProduct, i) = Interval(X(i)...)
 

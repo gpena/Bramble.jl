@@ -8,9 +8,9 @@ Documentation for `Bramble.jl`'s public API.
 ## Geometry
 
 ```@docs
+CartesianProduct
 Interval
 ×
-CartesianProduct
 markers
 labels
 Domain
