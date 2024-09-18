@@ -62,7 +62,7 @@ jobs:
           julia --project=docs -e '
             import Pkg; Pkg.add("Documenter")
             using Documenter: doctest
-            using JuliaNotes
+            using Bramble
             doctest(JuliaNotes)'
       - run: julia --project=docs docs/make.jl
         env:
