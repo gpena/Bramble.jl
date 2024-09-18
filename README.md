@@ -6,4 +6,4 @@ This package provides a set of functions to create and solve discretization prob
 ---
 [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://gpena.github.io/Bramble.jl/)
 
-[![CI](https://github.com/gpena/Bramble.jl/workflows/CI/badge.svg)](https://github.com/gpena/Bramble.jl/actions?query=workflow%3ACI)
+[![CI](https://github.com/gpena/Bramble.jl/workflows/CI/badge.svg)](https://github.com/gpena/Bramble.jl/actions?query=workflow%3ACI++)
