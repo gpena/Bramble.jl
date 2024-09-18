@@ -5,6 +5,6 @@ using Bramble
 
 include("pages.jl")
 
-makedocs()
+makedocs(; sitename="Bramble.jl")
 
 deploydocs(repo = "github.com/gpena/Bramble.jl.git")
