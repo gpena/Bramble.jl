@@ -8,7 +8,7 @@ $(SIGNATURES)
 Creates a Cartesian product of `D` intervals with elements of type `T`.
 
 # Fields
-  - `data` -- a D-tuple containing the intervals defining the coordinate projections as 2-tuples.
+  - `data`, a D-tuple containing the intervals defining the coordinate projections as 2-tuples.
 """
 struct CartesianProduct{D,T} <: BrambleType
 	data::NTuple{D,Tuple{T,T}}
