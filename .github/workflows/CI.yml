@@ -56,8 +56,10 @@ jobs:
           julia --project=docs docs/nursery.jl
       - run: |
            julia --project=docs -e '
-             using Documenter: doctest
+             using Pkg
+             using Documenter
              using Bramble
+             Pkg.instantiate()
              doctest(Bramble)'
       - run: julia --project=docs docs/make.jl
         env:
