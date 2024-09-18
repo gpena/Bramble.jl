@@ -31,21 +31,37 @@ CartesianProduct{1,Float64}((0.0,1.0))
 @inline function Interval(x, y)
 	_x = float(x)
 	_y = float(y)
+	@assert _x <= _y
+
 	return CartesianProduct{1,typeof(_x)}(((_x, _y),))
 end
 
+"""
+$(SIGNATURES)
+Creates an interval set from two scalars x and y.
 
+# Fields
+  - `x`, the lower bound
+  - `y`, the upper bound
+
+# Example
+```
+julia> CartesianProduct(0, 1)
+Type: Float64 
+ Dim: 1 
+ Set: [0.0, 1.0]
+```
+"""
 @inline CartesianProduct(x, y) = Interval(x, y)
 
 @inline (X::CartesianProduct)(i) = X.data[i]
 
 """
 $(SIGNATURES)
-
-Get the element type of a Cartesian product.
+Get the element type of a Cartesian product set.
 
 # Fields
-  - `X` -- the Cartesian product
+  - `X` -- the set
 
 # Example
 ```
@@ -58,7 +74,6 @@ Float64
 
 """
 $(SIGNATURES)
-
 Get the topological dimension of a Cartesian product.
 
 # Fields

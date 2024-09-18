@@ -122,7 +122,7 @@ Converts pairs of "label" => func to domain markers to be accepted in the Domain
 
 # Example
 ```
-markers( "Dirichlet" => (x -> x-1), "Neumann" => (x -> x-0) )
+julia> markers( "Dirichlet" => (x -> x-1), "Neumann" => (x -> x-0) )
 ```
 """
 @inline @generated function markers(ps::MarkerType...)
