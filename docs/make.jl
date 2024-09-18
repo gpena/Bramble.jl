@@ -1,13 +1,16 @@
-using Documenter, Bramble
+import Pkg
+Pkg.add("Documenter")
+using Documenter
+push!(LOAD_PATH,"../")
+push!(LOAD_PATH,"../src/")
+using Bramble
 
 include("pages.jl")
 
-makedocs(sitename = "Bramble.jl",
+makedocs(
+    sitename = "Bramble.jl",
 		 authors = "Gonçalo Pena",
-		 modules = [Bramble],
-		 clean = true, doctest = false, linkcheck = true,
-		 warnonly = [:docs_block, :missing_docs, :cross_references, :linkcheck],
-		 format = Documenter.HTML(prettyurls=false),
-		 pages = pages)
+		 modules = [Bramble]
+)
 
 deploydocs(repo = "github.com/gpena/Bramble.jl.git")
