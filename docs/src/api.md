@@ -11,7 +11,9 @@ Documentation for `Bramble.jl`'s public API.
 CartesianProduct
 Interval
 ×
+Domain
+Domain(X::CartesianProduct)
+create_markers
 markers
 labels
-Domain
 ```
