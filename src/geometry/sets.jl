@@ -9,6 +9,8 @@ Creates a cartesian product of `D` intervals with elements of type `T`.
 
 # Fields
   - `data`, a D-tuple containing the intervals defining the coordinate projections as 2-tuples.
+```@docs; canonical=false
+```
 """
 struct CartesianProduct{D,T} <: BrambleType
 	data::NTuple{D,Tuple{T,T}}
@@ -23,7 +25,7 @@ Creates an interval set from two scalars x and y.
   - `y`, the upper bound
 
 # Example
-```
+```@docs; canonical=false
 julia> Interval(0.0, 1.0)
 CartesianProduct{1,Float64}((0.0,1.0))
 ```
@@ -45,7 +47,7 @@ Creates an interval set from two scalars x and y.
   - `y`, the upper bound
 
 # Example
-```
+```@docs; canonical=false
 julia> CartesianProduct(0, 1)
 Type: Float64 
  Dim: 1 
@@ -107,7 +109,7 @@ Compute the cartesian product of two cartesian products X and Y.
   - `Y` -- the second set
 
 # Example
-```
+```@docs; canonical=false
 julia> X = CartesianProduct(0, 1); Y = CartesianProduct(2, 3);
 	   X × Y;
 Type: Float64 
