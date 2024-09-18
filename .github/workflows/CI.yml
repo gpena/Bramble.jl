@@ -59,10 +59,9 @@ jobs:
              using Pkg
              Pkg.add("Documenter")
              Pkg.add("Bramble")
-             using Documenter
-             using Bramble
              Pkg.instantiate()
-             doctest(Bramble)'
+             using Documenter
+             using Bramble'
       - run: julia --project=docs docs/make.jl
         env:
           PYTHON: ""
