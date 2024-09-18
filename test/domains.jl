@@ -7,7 +7,7 @@ function domain_tests()
 
     f1(x) = x - 0.0
     f3(x) = x - 0.5
-    domain_markers = markers("Dirichlet" => f1, "Neumann" => f3)
+    domain_markers = create_markers("Dirichlet" => f1, "Neumann" => f3)
     
     I2 = Interval(M[2, 1], M[2, 2])
     I3 = Interval(M[3, 1], M[3, 2])
