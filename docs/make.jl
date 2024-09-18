@@ -2,10 +2,7 @@ push!(LOAD_PATH, joinpath(@__DIR__, ".."))
 
 using Documenter, Bramble
 
-makedocs(;
-		 modules = [Bramble],
-		 format = Documenter.HTML(; prettyurls = get(ENV, "CI", nothing) == "true"),
-		 sitename = "Bramble.jl",
+makedocs(sitename = "Bramble.jl",
 		 pages = ["Home" => "index.md",
 			 "internals.md"],
 		 authors = "Gonçalo Pena")
