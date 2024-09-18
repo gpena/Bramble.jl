@@ -7,4 +7,4 @@ include("pages.jl")
 
 makedocs()
 
-deploydocs(repo = "https://github.com/gpena/gpena.github.io.git")
+deploydocs(repo = "github.com/gpena/Bramble.jl.git")
