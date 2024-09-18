@@ -4,26 +4,12 @@
 #
 
 """
-$(SIGNATURES)
-Stores a Cartesian product of `D` intervals with elements of type `T`.
+Creates an interval `[x,y]` from two scalars x and y.
 
-**Fields**
+# Fields
 
-- `data` -- a D-tuple containing the coordinate projections.
-"""
-struct CartesianProduct{D,T} <: BrambleType
-	data::NTuple{D,Tuple{T,T}}
-end
-
-"""
-$(SIGNATURES)
-
-Creates an interval set from two scalars x and y.
-
-**Fields**
-
-- `x` -- the lower bound
-- `y` -- the upper bound
+  - `x` -- the lower bound
+  - `y` -- the upper bound
 
 # Example
 ```@docs
@@ -31,12 +17,12 @@ julia> Interval(0.0, 1.0)
 CartesianProduct{1,Float64}((0.0,1.0))
 ```
 """
+
 @inline function Interval(x, y)
 	_x = float(x)
 	_y = float(y)
 	return CartesianProduct{1,typeof(_x)}(((_x, _y),))
 end
-
 
 @inline CartesianProduct(x, y) = Interval(x, y)
 
@@ -47,12 +33,12 @@ $(SIGNATURES)
 
 Get the element type of a Cartesian product.
 
-**Fields**
+# Fields
 
 - `X` -- the Cartesian product
 
 # Example
-```@docs
+```
 julia> eltype(CartesianProduct(0.0, 1.0))
 Float64
 ```
@@ -122,21 +108,6 @@ Get the i-th set in the Cartesian product X as an Interval.
 """
 @inline projection(X::CartesianProduct, i) = Interval(X(i)...)
 
-"""
-	show(io::IO, X::CartesianProduct{D})
-
-Print a human-readable representation of a Cartesian product X.
-
-# Example
-
-```jldoctest
-julia> X = CartesianProduct(0.0, 1.0);
-	   show(X);
-Type: CartesianProduct{1,Float64}((0.0,1.0))
- Dim: 1
- Set: [0.0, 1.0]
-```
-"""
 function show(io::IO, X::CartesianProduct{D}) where D
 	sets = ["[$(tails(X,i)[1]), $(tails(X,i)[2])]" for i in 1:D]
 	sets_string = join(sets, " × ")

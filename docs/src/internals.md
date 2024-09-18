@@ -2,7 +2,7 @@
 CollapsedDocStrings = false
 ```
 
-# Internal documentation
+# API documentation
 
 ## Geometry
 
