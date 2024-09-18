@@ -4,7 +4,7 @@ CollapsedDocStrings = false
 
 # API documentation
 Documentation for `Bramble.jl`'s public API.
-
+<!---
 ## Contents
 
 ```@contents
@@ -17,7 +17,7 @@ Depth = 2:2
 ```@index
 Pages = ["internals.md"]
 ```
-
+-->
 ## Geometry
 
 ### Sets 
@@ -25,7 +25,7 @@ Pages = ["internals.md"]
 Modules = [Bramble]
 Pages = ["sets.jl"]
 Private = false
-Order   = [:type, :function]
+Order   = [:function]
 ```
 
 ### Domains
@@ -33,12 +33,11 @@ Order   = [:type, :function]
 Modules = [Bramble]
 Pages = ["domains.jl"]
 Private = false
-Order   = [:type, :function]
+Order   = [:function]
 ```
 
 
 ## Mesh
 ```@autodocs
-Modules = [Bramble]
 Pages = ["common.jl", "mesh1d.jl", "meshnd.jl"]
 ```
