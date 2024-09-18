@@ -1,9 +1,6 @@
 push!(LOAD_PATH, joinpath(@__DIR__, ".."))
 
-using Documenter
-using Bramble
-
-include("pages.jl")
+using Documenter, Bramble
 
 makedocs(;
 		 modules = [Bramble],
