@@ -114,7 +114,12 @@ end
 """
 	markers(p...)
 
-Converts pairs of `Pair{String, Function}` into a `Tuple{Marker}`.
+Converts pairs of "label" => func to domain markers.
+
+# Example
+```
+markers( "Dirichlet" => (x -> x-1), "Neumann" => (x -> x-0) )
+```
 """
 @inline @generated function markers(ps::MarkerType...)
 	D = length(ps) # Get the number of arguments

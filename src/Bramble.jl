@@ -59,7 +59,7 @@ using WriteVTK
 abstract type BrambleType end
 
 # Domain/Interval handling functions
-export Interval, Domain, ×, markers
+export Interval, Domain, ×, markers, labels
 
 # Mesh handling
 export Mesh, hₘₐₓ, submesh, ndofs, points

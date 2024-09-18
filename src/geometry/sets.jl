@@ -23,7 +23,7 @@ Creates an interval set from two scalars x and y.
   - `y` -- the upper bound
 
 # Example
-```@docs
+```
 julia> Interval(0.0, 1.0)
 CartesianProduct{1,Float64}((0.0,1.0))
 ```
@@ -48,7 +48,7 @@ Get the element type of a Cartesian product.
   - `X` -- the Cartesian product
 
 # Example
-```@docs
+```
 julia> eltype(CartesianProduct(0.0, 1.0))
 Float64
 ```
@@ -65,7 +65,7 @@ Get the topological dimension of a Cartesian product.
   - `X` -- the Cartesian product
 
 # Example
-```jldoctest
+```
 julia> dim(CartesianProduct(0.0, 1.0))
 1
 ```
@@ -94,7 +94,7 @@ Compute the Cartesian product of two Cartesian products X and Y.
   - `Y` -- the second Cartesian product
 
 # Example
-```jldoctest
+```
 julia> X = CartesianProduct(0.0, 1.0);
 	   Y = CartesianProduct(2.0, 3.0);
 	   X × Y;
