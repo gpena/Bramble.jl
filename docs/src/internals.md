@@ -20,20 +20,11 @@ Pages = ["internals.md"]
 -->
 ## Geometry
 
-### Sets 
-```@autodocs
-Modules = [Bramble]
-Pages = ["sets.jl"]
-Private = false
-Order   = [:function]
-```
-
-### Domains
-```@autodocs
-Modules = [Bramble]
-Pages = ["domains.jl"]
-Private = false
-Order   = [:function]
+```@docs
+Interval
+×
+Domain
+markers
 ```
 
 
