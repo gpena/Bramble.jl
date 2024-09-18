@@ -57,9 +57,11 @@ jobs:
       - run: |
            julia --project=docs -e '
              using Pkg
+             Pkg.add("Documenter")
+             Pkg.add("Bramble")
+             Pkg.instantiate()
              using Documenter
              using Bramble
-             Pkg.instantiate()
              doctest(Bramble)'
       - run: julia --project=docs docs/make.jl
         env:
