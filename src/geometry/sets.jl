@@ -19,8 +19,8 @@ $(SIGNATURES)
 Creates an interval set from two scalars x and y.
 
 # Fields
-  - `x` -- the lower bound
-  - `y` -- the upper bound
+  - `x`, the lower bound
+  - `y`, the upper bound
 
 # Example
 ```
