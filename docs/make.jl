@@ -10,4 +10,4 @@ makedocs(sitename = "Bramble.jl",
 		 format = Documenter.HTML(prettyurls=false),
 		 pages = pages)
 
-deploydocs(repo = "github.com/gpena/Bramble.jl")
+deploydocs(repo = "github.com/gpena/Bramble.jl.git")
