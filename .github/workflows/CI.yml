@@ -57,6 +57,8 @@ jobs:
         run: julia --project=docs/ -e '
           using Pkg;
           Pkg.develop(PackageSpec(path=pwd()));
+          using Documenter
+          using Bramble
           Pkg.instantiate()'
       - name: Build and deploy
         env:
