@@ -3,9 +3,9 @@
 
 Represents a marker function.
 
-	Inputs:
-	`label::String``, the label associated with the marker.
-	`f::F``, The function associated with the marker.
+# Fields
+  - `label::String`, the label associated with the marker.
+  -`f::F``, The function associated with the marker.
 """
 struct Marker{F<:Function}
 	label::String

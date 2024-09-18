@@ -4,10 +4,21 @@
 #
 
 """
-Creates an interval `[x,y]` from two scalars x and y.
+$(SIGNATURES)
+Creates a Cartesian product of `D` intervals with elements of type `T`.
 
 # Fields
+  - `data` -- a D-tuple containing the intervals defining the coordinate projections as 2-tuples.
+"""
+struct CartesianProduct{D,T} <: BrambleType
+	data::NTuple{D,Tuple{T,T}}
+end
 
+"""
+$(SIGNATURES)
+Creates an interval set from two scalars x and y.
+
+# Fields
   - `x` -- the lower bound
   - `y` -- the upper bound
 
@@ -17,12 +28,12 @@ julia> Interval(0.0, 1.0)
 CartesianProduct{1,Float64}((0.0,1.0))
 ```
 """
-
 @inline function Interval(x, y)
 	_x = float(x)
 	_y = float(y)
 	return CartesianProduct{1,typeof(_x)}(((_x, _y),))
 end
+
 
 @inline CartesianProduct(x, y) = Interval(x, y)
 
@@ -34,11 +45,10 @@ $(SIGNATURES)
 Get the element type of a Cartesian product.
 
 # Fields
-
-- `X` -- the Cartesian product
+  - `X` -- the Cartesian product
 
 # Example
-```
+```@docs
 julia> eltype(CartesianProduct(0.0, 1.0))
 Float64
 ```
@@ -51,9 +61,8 @@ $(SIGNATURES)
 
 Get the topological dimension of a Cartesian product.
 
-**Fields**
-
-- `X` -- the Cartesian product
+# Fields
+  - `X` -- the Cartesian product
 
 # Example
 ```jldoctest
@@ -80,17 +89,18 @@ $(SIGNATURES)
 
 Compute the Cartesian product of two Cartesian products X and Y.
 
-**Fields**
-
-- `X` -- the first Cartesian product
-- `Y` -- the second Cartesian product
+# Fields
+  - `X` -- the first Cartesian product
+  - `Y` -- the second Cartesian product
 
 # Example
 ```jldoctest
 julia> X = CartesianProduct(0.0, 1.0);
 	   Y = CartesianProduct(2.0, 3.0);
 	   X × Y;
-CartesianProduct{2,Float64}(((0.0, 2.0), (0.0, 3.0)), ((1.0, 2.0), (1.0, 3.0)))
+Type: Float64 
+ Dim: 2 
+ Set: [0.0, 1.0] × [2.0, 3.0]
 ```
 """
 @inline function ×(X::CartesianProduct{D1,T}, Y::CartesianProduct{D2,T}) where {D1,D2,T}
@@ -105,6 +115,10 @@ end
 	projection(X::CartesianProduct, i)
 
 Get the i-th set in the Cartesian product X as an Interval.
+
+# Fields
+  - `X` -- the Cartesian product
+  - `i` -- the index of the set
 """
 @inline projection(X::CartesianProduct, i) = Interval(X(i)...)
 
