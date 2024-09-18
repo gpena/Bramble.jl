@@ -1,8 +1,6 @@
-import Pkg
-Pkg.add("Documenter")
+push!(LOAD_PATH,joinpath(@__DIR__,".."))
+
 using Documenter
-push!(LOAD_PATH,"../")
-push!(LOAD_PATH,"../src/")
 using Bramble
 
 include("pages.jl")
@@ -13,4 +11,4 @@ makedocs(
 		 modules = [Bramble]
 )
 
-deploydocs(repo = "github.com/gpena/Bramble.jl.git")
+deploydocs(repo = "https://github.com/gpena/gpena.github.io.git")
