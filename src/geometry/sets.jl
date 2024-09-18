@@ -108,7 +108,7 @@ Compute the cartesian product of two cartesian products X and Y.
 
 # Example
 ```
-julia> X = CartesianProduct(0.0, 1.0); Y = CartesianProduct(2.0, 3.0);
+julia> X = CartesianProduct(0, 1); Y = CartesianProduct(2, 3);
 	   X × Y;
 Type: Float64 
  Dim: 2 
