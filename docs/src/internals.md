@@ -1,8 +1,8 @@
 ```@meta
-CollapsedDocStrings = true
+CollapsedDocStrings = false
 ```
 
-# Internals
+# Internal documentation
 
 ## Geometry
 
