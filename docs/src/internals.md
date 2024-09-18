@@ -10,9 +10,8 @@ Documentation for `Bramble.jl`'s public API.
 ```@docs
 Interval
 ×
-Domain
 markers
-labels
+Domain
 ```
 
 

@@ -59,6 +59,10 @@ Boundary markers: Dirichlet
 """
 Domain(X::CartesianProduct) = Domain(X, (Marker("Dirichlet", x -> zero(eltype(x))),))
 
+
+
+@inline Domain(X::CartesianProduct, markers::MarkersType) where MarkersType = Domain{typeof(X), MarkersType}(X, markers)
+
 """
 $(SIGNATURES)
 	set(domain)
@@ -143,6 +147,7 @@ Returns a generator with the markers associated with a domain.
 	labels(domain)
 
 Returns a generator with the labels of the markers associated with a domain.
+
 """
 @inline labels(domain::Domain) = (p.label for p in domain.markers)
 
