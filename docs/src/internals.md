@@ -6,20 +6,11 @@ CollapsedDocStrings = false
 Documentation for `Bramble.jl`'s functions.
 
 ## Geometry
-### Sets
 ```@autodocs
 Modules = [Bramble]
 Public = false
-Pages = ["sets.jl"]
+Pages = ["sets.jl", "domains.jl"]
 ```
-
-### Domains
-```@autodocs
-Modules = [Bramble]
-Public = false
-Pages = ["domains.jl"]
-```
-
 
 ## Mesh
 ### 1D Meshes
