@@ -5,6 +5,10 @@
 
 """
 $(SIGNATURES)
+	struct CartesianProduct{D,T}
+		data::NTuple{D,Tuple{T,T}}
+	end
+
 Type for storage of cartesian products of `D` intervals having elements of type `T`.
 """
 struct CartesianProduct{D,T} <: BrambleType
@@ -79,6 +83,12 @@ julia> X = CartesianProduct(0, 1); dim(X)
 $(SIGNATURES)
 
 Returns a tuple with the 1D [CartesianProduct](@ref) of the i-th interval of the [CartesianProduct](@ref) `X`.
+
+# Example
+```
+julia> X = CartesianProduct(0, 1) × CartesianProduct(4, 5); tails(X,1)
+(0.0, 1.0)
+```
 """
 @inline tails(X::CartesianProduct, i) = X(i)
 
@@ -86,6 +96,11 @@ Returns a tuple with the 1D [CartesianProduct](@ref) of the i-th interval of the
 $(SIGNATURES)
 
 Returns a tuple of tuples with 1D [CartesianProduct](@ref)s that make up the [CartesianProduct](@ref) `X`.
+# Example
+```
+julia> X = CartesianProduct(0, 1) × CartesianProduct(4, 5); tails(X)
+((0.0, 1.0), (4.0, 5.0))
+```
 """
 @inline @generated tails(X::CartesianProduct{D}) where D = :(Base.Cartesian.@ntuple $D i->X(i))
 
@@ -115,6 +130,14 @@ end
 """
 $(SIGNATURES)
 Returns the i-th 1D [CartesianProduct](@ref) of the [CartesianProduct](@ref) `X`.
+
+# Example
+```
+julia> X = CartesianProduct(0, 1) × CartesianProduct(4, 5); projection(X, 1)
+Type: Float64 
+ Dim: 1 
+ Set: [0.0, 1.0]
+```
 """
 @inline projection(X::CartesianProduct, i) = Interval(X(i)...)
 
