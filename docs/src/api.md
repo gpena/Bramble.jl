@@ -2,18 +2,26 @@
 CollapsedDocStrings = false
 ```
 
-# API documentation
+# API 
 Documentation for `Bramble.jl`'s public API.
 
 ## Geometry
 
 ```@docs
-CartesianProduct
-Interval
+cartesianproduct
+interval
 ×
-Domain
-Domain(X::CartesianProduct)
+domain
 create_markers
 markers
 labels
 ```
+
+## Mesh
+
+```@docs
+mesh
+hₘₐₓ
+```
+
+## Space
