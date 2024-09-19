@@ -1,20 +1,3 @@
-"""
-
-The module exports the following functions
-* Domain handling
-- [`Interval`](@ref). Creates an interval set from the lower and upper bounds
-- [`×`](@ref). Creates Cartesian products of intervals
-- [`markers`](@ref). Handles markers for a given domain
-- [`Domain`](@ref). Creates a domain with a cartesian domain and a set of markers
-
-* Mesh handling
-- [`Mesh`](@ref). Creates a mesh from a domain
-- [`submesh`](@ref). Creates a submesh from a mesh
-- [`ndofs`](@ref). Returns the number of number of points in a mesh
-- [`points`](@ref). Returns the coordinates of the points in a mesh
-
-"""
-
 module Bramble
 
 if Sys.isapple()
