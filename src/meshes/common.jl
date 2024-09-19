@@ -1,4 +1,6 @@
 """
+     MeshType{D}
+     
 Abstract type for meshes of topological dimension `D`.
 """
 abstract type MeshType{D} <: BrambleType end
