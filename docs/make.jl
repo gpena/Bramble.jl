@@ -4,8 +4,9 @@ using Documenter, Bramble
 
 makedocs(sitename = "Bramble.jl",
 		 pages = ["Home" => "index.md",
-			 "api.md",
-			 "internals.md"],
+			 "Examples" => ["examples.md"],
+			 "Documentation" => ["api.md",
+				 "internals.md"]],
 		 authors = "Gonçalo Pena")
 
 deploydocs(; repo = "github.com/gpena/Bramble.jl")
