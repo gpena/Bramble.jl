@@ -11,5 +11,5 @@ makedocs(sitename = "Bramble.jl",
 
 deploydocs(;
 		   repo = "github.com/gpena/Bramble.jl",
-		   versions = ["stable"],
+		   versions = nothing,
 		   branch = "gh-pages")
