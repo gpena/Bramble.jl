@@ -2,7 +2,7 @@
 CollapsedDocStrings = false
 ```
 
-# Full internal documentation
+# Internal 
 Documentation for `Bramble.jl`'s functions.
 
 ## Geometry
@@ -20,9 +20,10 @@ Public = false
 Pages = ["mesh1d.jl"]
 ```
 
-### nD Meshes, ``n>1``
+### nD Meshes, ``n=2,3``
 ```@autodocs
 Modules = [Bramble]
 Public = false
 Pages = ["meshnd.jl"]
 ```
+
