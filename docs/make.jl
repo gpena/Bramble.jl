@@ -9,4 +9,7 @@ makedocs(sitename = "Bramble.jl",
 				 "internals.md"]],
 		 authors = "Gonçalo Pena")
 
-deploydocs(; repo = "github.com/gpena/Bramble.jl")
+deploydocs(;
+		   repo = "github.com/gpena/Bramble.jl",
+		   versions = ["stable" => "v^", "v#.#", "v#.#.#"],
+		   branch = "gh-pages")
