@@ -1,14 +1,14 @@
 using Bramble
-using Bramble: projection, dim, CartesianProduct
+using Bramble: projection, dim
 
 function set_tests()
-    I = Interval(-3.0, 10.0)
+    I = interval(-3.0, 10.0)
 
     @test validate_equal(I.data[1][1], -3.0)
     @test validate_equal(I.data[1][2], 10.0)
     @test dim(I) == 1
 
-    I2 = Interval(70.0, 100.0)
+    I2 = interval(70.0, 100.0)
 
     test_sets = [a × b for a in [I] for b in [I2]]
     for set in test_sets
@@ -21,9 +21,9 @@ function set_tests()
         @test validate_equal(Ω2_x.data[1][2], 10.0)
     end
 
-    I3 = Interval(-15.0, -1.0)
+    I3 = interval(-15.0, -1.0)
 
-    S(x) = (x, CartesianProduct(x))
+    S(x) = (x, cartesianproduct(x))
     test_sets = (a × b × c for a in S(I) for b in S(I2) for c in S(I3))
     for set in test_sets
         Ω3_x = projection(set, 1)

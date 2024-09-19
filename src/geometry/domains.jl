@@ -34,12 +34,13 @@ end
 MarkerType{F} = Pair{String,F}
 
 """
-$(SIGNATURES)
+	Domain(Ω::CartesianProduct)
+
 Creates a [Domain](@ref) from a [CartesianProduct](@ref) assuming the single [Marker](@ref) `"Dirichlet" => x -> zero(eltype(x))`.
 
 # Example
 ```
-julia> Domain(Interval(0,1))
+julia> domain(Interval(0,1))
 Type: Float64 
  Dim: 1 
  Set: [0.0, 1.0]
@@ -47,10 +48,11 @@ Type: Float64
 Boundary markers: Dirichlet
 ```
 """
-Domain(X::CartesianProduct) = Domain(X, (Marker("Dirichlet", x -> zero(eltype(x))),))
+@inline domain(Ω::CartesianProduct) = Domain(Ω, (Marker("Dirichlet", x -> zero(eltype(x))),))
 
 """
-$(SIGNATURES)
+	Domain(Ω::CartesianProduct, markers::MarkersType)
+
 Creates a [Domain](@ref) from a [CartesianProduct](@ref) assuming the single [Marker](@ref) `"Dirichlet" => x -> zero(eltype(x))`.
 
 # Example
@@ -63,18 +65,19 @@ Type: Float64
 Boundary markers: Dirichlet, Neumann
 ```
 """
-@inline Domain(X::CartesianProduct, markers::MarkersType) where MarkersType = Domain{typeof(X), MarkersType}(X, markers)
+@inline domain(Ω::CartesianProduct, markers::MarkersType) where MarkersType = Domain{typeof(Ω), MarkersType}(Ω, markers)
 
 """
-$(SIGNATURES)
-Returns the [CartesianProduct](@ref) associated with a [Domain](@ref) `X`.
+	set(Ω::Domain)
+
+Returns the [CartesianProduct](@ref) associated with a [Domain](@ref) `Ω`.
 """
-@inline set(X::Domain) = X.set
+@inline set(Ω::Domain) = Ω.set
 
 """
-$(SIGNATURES)
+	dim(Ω::DomainBaseType)
 
-Returns the topological dimension of a [Domain](@ref) `X`.
+Returns the topological dimension of a [Domain](@ref) `Ω`.
 
 # Example
 ```
@@ -82,13 +85,13 @@ julia> I = Interval(0.0, 1.0); dim(Domain(I × I))
 2
 ```
 """
-@inline dim(X::DomainBaseType) = dim(set(X))
-@inline dim(X::Type{<:Domain{SetType}}) where SetType = dim(SetType)
+@inline dim(Ω::Domain) = dim(set(Ω))
+@inline dim(Ω::Type{<:Domain{SetType}}) where SetType = dim(SetType)
 
 """
-$(SIGNATURES)
+	eltype(Ω::Domain)
 
-Returns the element type of a [Domain](@ref) `X`.
+Returns the element type of a [Domain](@ref) `Ω`.
 
 # Example
 ```
@@ -96,27 +99,29 @@ julia> eltype(Domain(I × I))
 Float64
 ```
 """
-@inline eltype(X::Domain) = eltype(set(X))
-@inline eltype(X::Type{<:Domain{SetType}}) where SetType = eltype(SetType)
+@inline eltype(Ω::Domain) = eltype(set(Ω))
+@inline eltype(Ω::Type{<:Domain{SetType}}) where SetType = eltype(SetType)
 
 """
-$(SIGNATURES)
-Returns the [CartesianProduct](@ref) of the `i`-th projection of the set of the [Domain](@ref) `X`. 
+	projection(Ω::Domain, i::Int)
+
+Returns the [CartesianProduct](@ref) of the `i`-th projection of the set of the [Domain](@ref) `Ω`. 
 
 For example, `projection(Domain(I × I), 1)` will return `I`.
 """
-@inline projection(X::Domain, i::Int) = CartesianProduct(set(X).data[i]...)
+@inline projection(Ω::Domain, i::Int) = cartesianproduct(set(Ω).data[i]...)
 
-function show(io::IO, X::Domain)
-	l = join(labels(X), ", ")
+function show(io::IO, Ω::Domain)
+	l = join(labels(Ω), ", ")
 
-	show(io, set(X))
+	show(io, set(Ω))
 	print(io, "\n\nMarkers: $l")
 end
 
 """
-$(SIGNATURES)
-Converts several `Pair{String,F}` ("label" => func) to domain [Marker](@ref)s to be passed in the construction of a [Domain](@ref) `X`.
+	create_markers(m::MarkerType...)
+
+Converts several `Pair{String,F}` ("label" => func) to domain [Marker](@ref)s to be passed in the construction of a [Domain](@ref) `Ω`.
 
 # Example
 ```
@@ -135,21 +140,23 @@ julia> create_markers( "Dirichlet" => (x -> x-1), "Neumann" => (x -> x-0) )
 end
 
 """
-$(SIGNATURES)
-Returns a generator with the [Marker](@ref)s associated with a [Domain](@ref) `X`.
+	markers(Ω::Domain)
+
+Returns a generator with the [Marker](@ref)s associated with a [Domain](@ref) `Ω`.
 """
-@inline markers(X::Domain) = X.markers
+@inline markers(Ω::Domain) = Ω.markers
 
 """
-	labels(X)
+	labels(Ω::Domain)
 
-Returns a generator with the labels of the [Marker](@ref)s associated with a [Domain](@ref) `X`.
-
-"""
-@inline labels(X::Domain) = (p.label for p in X.markers)
+Returns a generator with the labels of the [Marker](@ref)s associated with a [Domain](@ref) `Ω`.
 
 """
-$(SIGNATURES)
-Returns a generator with the [Marker](@ref)s levelset functions associated with a [Domain](@ref) `X`.
+@inline labels(Ω::Domain) = (p.label for p in Ω.markers)
+
 """
-@inline marker_funcs(X::Domain) = (p.f for p in X.markers)
+	marker_funcs(Ω::Domain)
+	
+Returns a generator with the [Marker](@ref)s levelset functions associated with a [Domain](@ref) `Ω`.
+"""
+@inline marker_funcs(Ω::Domain) = (p.f for p in Ω.markers)
