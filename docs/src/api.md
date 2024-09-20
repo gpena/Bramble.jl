@@ -25,3 +25,11 @@ hₘₐₓ
 ```
 
 ## Space
+```@docs
+gridspace
+element
+avgₕ
+avgₕ!
+Rₕ
+Rₕ!
+```
