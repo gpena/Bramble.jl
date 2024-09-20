@@ -22,9 +22,10 @@ end
 
 using DocStringExtensions
 using InteractiveUtils: @code_warntype, @code_llvm, @code_native
-import Base: eltype, similar, length, copyto!, isapprox, isequal, Generator, IndexStyle, axes, materialize!
-import Base: map, map!, show, getindex, setindex!, IndexStyle, iterate, size, ndims, diff
-import Base: *, +, -, /, ≈, ==, ^, \
+import Base: eltype, similar, length, copyto!, isapprox, isequal, IndexStyle, axes, materialize!
+import Base: show, getindex, setindex!, IndexStyle, iterate, size, ndims, diff, firstindex, lastindex
+#import Base: map, map!,
+import Base: *, +, -, /, \
 import Random: rand!
 
 using LazyArrays
@@ -45,10 +46,12 @@ abstract type BrambleType end
 export interval, cartesianproduct, domain, ×, create_markers, markers, labels
 
 # Mesh handling
-export mesh, hₘₐₓ#, ndofs, points
-#=
+export mesh, hₘₐₓ
+
 # Spaces handling
-export GridSpace, Element
+export gridspace, element
+export Rₕ, Rₕ!, avgₕ, avgₕ!
+
 export innerₕ
 export inner₊, inner₊ₓ, inner₊ᵧ, inner₊₂
 export snorm₁ₕ, norm₁ₕ, norm₊, normₕ
@@ -57,11 +60,9 @@ export diff, diff₋ₓ, diff₋ᵧ, diff₋₂, D₋ₓ, D₋ᵧ, D₋₂, ∇�
 export Mₕ, Mₕₓ, Mₕᵧ, Mₕ₂
 export jump, jumpₓ, jumpᵧ, jump₂
 
-export Rₕ, Rₕ!, avgₕ, avgₕ!
-
 export solve, solve!
-export eltype, length, similar, copyto!, isapprox, isequal, show
-
+#export eltype, length, similar, copyto!, isapprox, isequal, show
+#=
 # Forms exports
 export BilinearForm, LinearForm, assemble, assemble!, Mass, Diff, update!
 export dirichletbcs
@@ -70,7 +71,7 @@ export mass, stiffness, advection
 # Exporters
 export ExporterVTK, addScalarDataset!, datasets, save2file, close
 =#
-include("utils.jl")
+#include("utils.jl")
 
 include("geometry/sets.jl")
 include("geometry/domains.jl")
@@ -78,7 +79,7 @@ include("geometry/domains.jl")
 include("meshes/common.jl")
 include("meshes/mesh1d.jl")
 include("meshes/meshnd.jl")
-#=
+
 include("spaces/gridspace.jl")
 include("spaces/vectorelements.jl")
 include("spaces/matrixelements.jl")
@@ -89,7 +90,7 @@ include("spaces/jump.jl")
 include("spaces/inner_product.jl")
 include("spaces/linearalg.jl")
 
-
+#=
 include("forms/types.jl")
 include("forms/utils.jl")
 include("forms/dirichletbcs.jl")
@@ -102,7 +103,7 @@ include("problems/laplacian.jl")
 
 include("exporters/types.jl")
 include("exporters/exporter_vtk.jl")
-
-#include("precompile.jl")
 =#
+
+include("precompile.jl")
 end
