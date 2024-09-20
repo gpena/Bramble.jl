@@ -1,8 +1,3 @@
-"""
-	DomainBaseType
-
-An abstract type for representing domains.
-"""
 abstract type DomainBaseType <: BrambleType end
 
 """
@@ -39,6 +34,7 @@ MarkerType{F} = Pair{String,F}
 Creates a [Domain](@ref) from a [CartesianProduct](@ref) assuming the single [Marker](@ref) `"Dirichlet" => x -> zero(eltype(x))`.
 
 # Example
+
 ```
 julia> domain(Interval(0,1))
 Type: Float64 
@@ -56,6 +52,7 @@ Boundary markers: Dirichlet
 Creates a [Domain](@ref) from a [CartesianProduct](@ref) assuming the single [Marker](@ref) `"Dirichlet" => x -> zero(eltype(x))`.
 
 # Example
+
 ```
 julia> m = markers( "Dirichlet" => (x -> x-1), "Neumann" => (x -> x-0) ); Domain(Interval(0,1), m)
 Type: Float64 
@@ -65,7 +62,7 @@ Type: Float64
 Boundary markers: Dirichlet, Neumann
 ```
 """
-@inline domain(Ω::CartesianProduct, markers::MarkersType) where MarkersType = Domain{typeof(Ω), MarkersType}(Ω, markers)
+@inline domain(Ω::CartesianProduct, markers::MarkersType) where MarkersType = Domain{typeof(Ω),MarkersType}(Ω, markers)
 
 """
 	set(Ω::Domain)
@@ -80,13 +77,14 @@ Returns the [CartesianProduct](@ref) associated with a [Domain](@ref) `Ω`.
 Returns the topological dimension of a [Domain](@ref) `Ω`.
 
 # Example
+
 ```
 julia> I = Interval(0.0, 1.0); dim(Domain(I × I))
 2
 ```
 """
 @inline dim(Ω::Domain) = dim(set(Ω))
-@inline dim(Ω::Type{<:Domain{SetType}}) where SetType = dim(SetType)
+@inline dim(::Type{<:Domain{SetType}}) where SetType = dim(SetType)
 
 """
 	eltype(Ω::Domain)
@@ -94,22 +92,26 @@ julia> I = Interval(0.0, 1.0); dim(Domain(I × I))
 Returns the element type of a [Domain](@ref) `Ω`.
 
 # Example
+
 ```
 julia> eltype(Domain(I × I))
 Float64
 ```
 """
 @inline eltype(Ω::Domain) = eltype(set(Ω))
-@inline eltype(Ω::Type{<:Domain{SetType}}) where SetType = eltype(SetType)
+@inline eltype(::Type{<:Domain{SetType}}) where SetType = eltype(SetType)
 
 """
 	projection(Ω::Domain, i::Int)
 
-Returns the [CartesianProduct](@ref) of the `i`-th projection of the set of the [Domain](@ref) `Ω`. 
+Returns the [CartesianProduct](@ref) of the `i`-th projection of the set of the [Domain](@ref) `Ω`.
 
 For example, `projection(Domain(I × I), 1)` will return `I`.
 """
-@inline projection(Ω::Domain, i::Int) = cartesianproduct(set(Ω).data[i]...)
+@inline function projection(Ω::Domain, i) 
+	@assert i in eachindex(set(Ω).data)
+	return cartesianproduct(set(Ω).data[i]...)
+end
 
 function show(io::IO, Ω::Domain)
 	l = join(labels(Ω), ", ")
@@ -124,12 +126,13 @@ end
 Converts several `Pair{String,F}` ("label" => func) to domain [Marker](@ref)s to be passed in the construction of a [Domain](@ref) `Ω`.
 
 # Example
+
 ```
 julia> create_markers( "Dirichlet" => (x -> x-1), "Neumann" => (x -> x-0) )
 ```
 """
 @inline @generated function create_markers(m::MarkerType...)
-	D = length(m) 
+	D = length(m)
 
 	tuple_expr = Expr(:tuple)
 	for i in 1:D
@@ -150,13 +153,12 @@ Returns a generator with the [Marker](@ref)s associated with a [Domain](@ref) `�
 	labels(Ω::Domain)
 
 Returns a generator with the labels of the [Marker](@ref)s associated with a [Domain](@ref) `Ω`.
-
 """
 @inline labels(Ω::Domain) = (p.label for p in Ω.markers)
 
 """
 	marker_funcs(Ω::Domain)
-	
+
 Returns a generator with the [Marker](@ref)s levelset functions associated with a [Domain](@ref) `Ω`.
 """
 @inline marker_funcs(Ω::Domain) = (p.f for p in Ω.markers)

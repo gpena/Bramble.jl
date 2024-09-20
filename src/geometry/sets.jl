@@ -19,7 +19,10 @@ end
 
 Returns a [CartesianProduct](@ref) from a tuple of intervals.
 """
-@inline cartesianproduct(data::NTuple{D, Tuple{T,T}}) where {D,T} = CartesianProduct{D, T}(data)
+@inline function cartesianproduct(data::NTuple{D,Tuple{T,T}}) where {D,T} 
+	@assert all(x -> x[1] <= x[2], data)
+	return CartesianProduct{D,T}(data)
+end
 
 """
 	interval(x, y)
@@ -27,6 +30,7 @@ Returns a [CartesianProduct](@ref) from a tuple of intervals.
 Returns a 1D [CartesianProduct](@ref) set from two scalars `x` and `y`, where `x` and `y` are, respectively, the lower and upper bounds of the interval.
 
 # Example
+
 ```
 julia> interval(0, 1)
 CartesianProduct{1,Float64}((0.0,1.0))
@@ -46,6 +50,7 @@ end
 Returns a 1D [CartesianProduct](@ref) from two scalars `x` and `y`, where `x` and `y` are, respectively, the lower and upper bounds of the interval.
 
 # Example
+
 ```
 julia> cartesianproduct(0, 1)
 Type: Float64 
@@ -55,7 +60,10 @@ Type: Float64
 """
 @inline cartesianproduct(x, y) = interval(x, y)
 
-@inline (X::CartesianProduct)(i) = X.data[i]
+@inline function (X::CartesianProduct)(i) 
+	@assert i in eachindex(X.data)
+	return X.data[i]
+end
 
 """
 	eltype(X::CartesianProduct)
@@ -63,6 +71,7 @@ Type: Float64
 Returns the element type of a [CartesianProduct](@ref).
 
 # Example
+
 ```
 julia> X = cartesianproduct(0, 1); eltype(X)
 Float64
@@ -77,13 +86,14 @@ Float64
 Returns the topological dimension of a [CartesianProduct](@ref).
 
 # Example
+
 ```
 julia> X = cartesianproduct(0, 1); dim(X)
 1
 ```
 """
 @inline dim(X::CartesianProduct{D}) where D = D
-@inline dim(::Type{CartesianProduct{D}}) where D = D
+@inline dim(::Type{<:CartesianProduct{D}}) where D = D
 
 @inline interval(x::CartesianProduct{1}) = interval(x.data...)
 
@@ -95,18 +105,24 @@ julia> X = cartesianproduct(0, 1); dim(X)
 Returns a tuple with the 1D [CartesianProduct](@ref) of the i-th interval of the [CartesianProduct](@ref) `X`.
 
 # Example
+
 ```
 julia> X = cartesianproduct(0, 1) × cartesianproduct(4, 5); tails(X,1)
 (0.0, 1.0)
 ```
 """
-@inline tails(X::CartesianProduct, i) = X(i)
+@inline function tails(X::CartesianProduct, i) 
+	@assert i in eachindex(X.data)
+	return X(i)
+end
 
 """
 	tails(X::CartesianProduct)
 
 Returns a tuple of tuples with 1D [CartesianProduct](@ref)s that make up the [CartesianProduct](@ref) `X`.
+
 # Example
+
 ```
 julia> X = cartesianproduct(0, 1) × cartesianproduct(4, 5); tails(X)
 ((0.0, 1.0), (4.0, 5.0))
@@ -122,6 +138,7 @@ julia> X = cartesianproduct(0, 1) × cartesianproduct(4, 5); tails(X)
 Returns the cartesian product of two [CartesianProduct](@ref) `X` and `Y` as a [CartesianProduct](@ref).
 
 # Example
+
 ```
 julia> X = cartesianproduct(0, 1); Y = cartesianproduct(2, 3);
 	   X × Y;
@@ -140,10 +157,11 @@ end
 
 """
 	projection(X::CartesianProduct, i)
-	
+
 Returns the i-th 1D [CartesianProduct](@ref) of the [CartesianProduct](@ref) `X`.
 
 # Example
+
 ```
 julia> X = cartesianproduct(0, 1) × cartesianproduct(4, 5); projection(X, 1)
 Type: Float64 
@@ -154,7 +172,7 @@ Type: Float64
 @inline projection(X::CartesianProduct, i) = interval(X(i)...)
 
 function show(io::IO, X::CartesianProduct{D}) where D
-	sets = ["[$(tails(X,i)[1]), $(tails(X,i)[2])]" for i in 1:D]
+	sets = ["[$(tails(X,i)[1]), $(tails(X,i)[2])]" for i in eachindex(X.data)]
 	sets_string = join(sets, " × ")
 	print(io, "Type: $(eltype(X)) \n Dim: $D \n Set: $sets_string")
 end
