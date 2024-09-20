@@ -13,17 +13,15 @@ Pages = ["sets.jl", "domains.jl"]
 ```
 
 ## Mesh
-### 1D Meshes
 ```@autodocs
 Modules = [Bramble]
 Public = false
-Pages = ["mesh1d.jl"]
+Pages = ["common.jl", "mesh1d.jl", "meshnd.jl"]
 ```
 
-### nD Meshes, ``n=2,3``
+## Spaces
 ```@autodocs
 Modules = [Bramble]
 Public = false
-Pages = ["meshnd.jl"]
+Pages = ["gridspace.jl", "vectorelements.jl"]
 ```
-
