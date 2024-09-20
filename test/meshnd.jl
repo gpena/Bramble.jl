@@ -1,4 +1,4 @@
-import Bramble: dim, indices, projection, ndofs
+import Bramble: dim, indices, projection, npoints
 
 function meshnd_tests()
     I = interval(-1.0, 1.0)
@@ -16,10 +16,10 @@ function meshnd_tests()
         @test(length(indices(Ωₕ)) == N[D])
 
         @test(dim(Ωₕ) == D)
-        @test(ndofs(Ωₕ) == N[D])
+        @test(npoints(Ωₕ) == N[D])
 
         for i = 1:D
-            @test(ndofs(Ωₕ(i)) == npts[D][i])
+            @test(npoints(Ωₕ(i)) == npts[D][i])
         end
     end
 end
