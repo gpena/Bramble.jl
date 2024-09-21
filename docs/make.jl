@@ -2,11 +2,13 @@ push!(LOAD_PATH, joinpath(@__DIR__, ".."))
 
 using Documenter, Bramble
 
+internals = "Internals" => ["internals/geometry.md", "internals/mesh.md", "internals/space.md"]
+
 makedocs(sitename = "Bramble.jl",
 		 pages = ["Home" => "index.md",
 			 "Examples" => ["examples.md"],
 			 "Documentation" => ["api.md",
-				 "internals.md"]],
+				 internals]],
 		 authors = "Gonçalo Pena")
 
 deploydocs(;
