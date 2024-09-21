@@ -141,7 +141,7 @@ end
 				element(Wh, s)
 			end
 
-			for op in (-, *, /, \, +)
+			for op in (-, *, /, +)
 				op(uh, wh)
 
 				for p in list_scalars
@@ -187,7 +187,7 @@ end
 				op(Uh, Vh)
 			end
 
-			for op in (+, -, *, /, \), p in list_scalars
+			for op in (+, -, *, /), p in list_scalars
 				op(p, Uh)
 				op(Uh, p)
 			end
