@@ -25,7 +25,7 @@ using InteractiveUtils: @code_warntype, @code_llvm, @code_native
 import Base: eltype, similar, length, copyto!, isapprox, isequal, IndexStyle, axes, materialize!
 import Base: show, getindex, setindex!, IndexStyle, iterate, size, ndims, diff, firstindex, lastindex
 #import Base: map, map!,
-import Base: *, +, -, /, \
+import Base: *, +, -, /
 import Random: rand!
 
 using LazyArrays
