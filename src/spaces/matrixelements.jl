@@ -69,13 +69,35 @@ Copies the coefficients of [MatrixElement](@ref) `Vₕ` into [MatrixElement](@re
 """
 @inline copyto!(Uₕ::MatrixElement, Vₕ::MatrixElement) = (@.. Uₕ.values.nzval = Vₕ.values.nzval)
 
-Base.@propagate_inbounds getindex(Uₕ::MatrixElement, i::Int) = getindex(Uₕ.values, i)
-Base.@propagate_inbounds getindex(Uₕ::MatrixElement, I::Vararg{Int,N}) where N = getindex(Uₕ.values, I...)
-Base.@propagate_inbounds getindex(Uₕ::MatrixElement, I::NTuple{N,Int}) where N = getindex(Uₕ.values, I...)
+@inline Base.@propagate_inbounds function getindex(Uₕ::MatrixElement, i::Int)
+	@boundscheck checkbounds(Uₕ.values, i)
+	getindex(Uₕ.values, i)
+end
 
-Base.@propagate_inbounds setindex!(Uₕ::MatrixElement, v, i::Int) = (setindex!(Uₕ.values, v, i))
-Base.@propagate_inbounds setindex!(Uₕ::MatrixElement, v, I::Vararg{Int,N}) where N = (setindex!(Uₕ.values, v, I...))
-Base.@propagate_inbounds setindex!(Uₕ::MatrixElement, v, I::NTuple{N,Int}) where N = (setindex!(Uₕ.values, v, I...))
+@inline Base.@propagate_inbounds function getindex(Uₕ::MatrixElement, I::Vararg{Int,N}) where N 
+	@boundscheck checkbounds(Uₕ.values, I...)
+	getindex(Uₕ.values, I...)
+end
+
+@inline Base.@propagate_inbounds function getindex(Uₕ::MatrixElement, I::NTuple{N,Int}) where N 
+	@boundscheck checkbounds(Uₕ.values, I...)
+	getindex(Uₕ.values, I...)
+end
+
+@inline Base.@propagate_inbounds function setindex!(Uₕ::MatrixElement, v, i::Int)
+	@boundscheck checkbounds(Uₕ.values, i)
+	setindex!(Uₕ.values, v, i)
+end
+
+@inline Base.@propagate_inbounds function setindex!(Uₕ::MatrixElement, v, I::Vararg{Int,N}) where N 
+	@boundscheck checkbounds(Uₕ.values, I...)
+	setindex!(Uₕ.values, v, I...)
+end
+
+@inline Base.@propagate_inbounds function setindex!(Uₕ::MatrixElement, v, I::NTuple{N,Int}) where N 
+	@boundscheck checkbounds(Uₕ.values, I...)
+	setindex!(Uₕ.values, v, I...)
+end
 
 @inline firstindex(Uₕ::MatrixElement) = firstindex(Uₕ.values)
 @inline lastindex(Uₕ::MatrixElement) = lastindex(Uₕ.values)
@@ -101,40 +123,40 @@ end
 """
 	*(Uₕ::MatrixElement, vₕ::VectorElement)
 
-Returns a new [MatrixElement](@ref) calculated by multiplying each coefficient of `Uₕ` with the corresponding column of `vₕ`.
+Returns a new [MatrixElement](@ref) calculated by multiplying each coefficient of `vₕ` with the corresponding column of `Uₕ`.
 """
-function *(Uₕ::MatrixElement, vₕ::VectorElement)
+@inline function *(Uₕ::MatrixElement, vₕ::VectorElement)
 	Zₕ = similar(Uₕ)
 	mul!(Zₕ.values, Uₕ.values, Diagonal(vₕ.values))
 
 	return Zₕ
 end
 
-for op in (:+, :-, :*) #### parei aqui
+for op in (:+, :-, :*)
+	dict = Dict(:+ => ("adding", "to", true), :- => ("subtracting", "to", false), :* => ("multiplying", "by", true))
+	w1, w2, w3 = dict[op]
+	el1, el2 = w3 ? ("`Uₕ`", "`Vₕ`") : ("`Vₕ`", "`Uₕ`")
+	text = "\n\nReturns a new [MatrixElement](@ref) given by $w1 the matrix of [MatrixElement](@ref) $el1 $w2 the matrix of [MatrixElement](@ref) $el2."
+
+	docstr = "	$(string(op))(Uₕ::MatrixElement, Vₕ::MatrixElement) $text"
 	@eval begin
-		(Base.$op)(Uₕ::MatrixElement, Vₕ::MatrixElement) = MatrixElement(space(Uₕ), ($op)(Uₕ.values, Vₕ.values))
+		@doc $docstr @inline (Base.$op)(Uₕ::MatrixElement, Vₕ::MatrixElement) = MatrixElement(space(Uₕ), (Base.$op)(Uₕ.values, Vₕ.values))
 	end
 end
 
-for op in (:+, :-, :*, :/, :^, :\)
-	@eval begin
-		"""
-			(op)(α::AbstractFloat, Uₕ::MatrixElement)
+for op in (:+, :-, :*, :/, :^)
+	same_text = "\n\nReturns a new [MatrixElement](@ref) with coefficients given by the elementwise evaluation of"
+	docstr1 = "	" * string(op) * "(α::Number, Uₕ::MatrixElement)" * same_text * "`α`" * string(op) * "`Uₕ`."
+	docstr2 = "	" * string(op) * "(Uₕ::MatrixElement, α::Number)" * same_text * "`Uₕ`" * string(op) * "`α`."
 
-		Returns a new `MatrixElement` `R` with coefficients obtained by applying `(op)` to the coefficients of `u` and `α`.
-		"""
-		function (Base.$op)(α::Number, Uₕ::MatrixElement)
+	@eval begin
+		@doc $docstr1 @inline function (Base.$op)(α::Number, Uₕ::MatrixElement)
 			r = similar(Uₕ)
 			map!(Base.Fix1(Base.$op, α), r.values.nzval, Uₕ.values.nzval)
 			return r
 		end
 
-		"""
-			(op)(Uₕ::MatrixElement, α::AbstractFloat)
-
-		Returns a new `MatrixElement` `R` with coefficients obtained by applying `(op)` to the coefficients of `u` and `α`.
-		"""
-		function (Base.$op)(Uₕ::MatrixElement, α::Number)
+		@doc $docstr2 @inline function (Base.$op)(Uₕ::MatrixElement, α::Number)
 			r = similar(Uₕ)
 			map!(Base.Fix2(Base.$op, α), r.values.nzval, Uₕ.values.nzval)
 			return r

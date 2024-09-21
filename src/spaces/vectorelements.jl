@@ -112,8 +112,14 @@ end
 	return copyto!(dest.values, instantiate(Broadcasted(bc.style, bc.f, bc.args, axes(dest.values))))
 end
 
-Base.@propagate_inbounds getindex(uₕ::VectorElement, i) = getindex(uₕ.values, i)
-Base.@propagate_inbounds setindex!(uₕ::VectorElement, val, i) = setindex!(uₕ.values, val, i)
+@inline Base.@propagate_inbounds function getindex(uₕ::VectorElement, i) 
+	@boundscheck checkbounds(uₕ.values, i)
+	return getindex(uₕ.values, i)
+end
+@inline Base.@propagate_inbounds function setindex!(uₕ::VectorElement, val, i) 
+	@boundscheck checkbounds(uₕ.values, i)
+	setindex!(uₕ.values, val, i)
+end
 
 @inline firstindex(uₕ::VectorElement) = firstindex(uₕ.values)
 @inline lastindex(uₕ::VectorElement) = lastindex(uₕ.values)
@@ -199,27 +205,26 @@ Returns a new [VectorElement](@ref) with coefficients obtained by applying funct
 """
 @inline map(f, uₕ::VectorElement) = element(space(u), map(f, uₕ.values))
 
-for op in (:-, :*, :/, :\, :+)
+for op in (:-, :*, :/, :+)
 	same_text = "\n\nReturns a new [VectorElement](@ref) with coefficients given by the elementwise evaluation of"
-	docstr1 = "	" * string(op) * "(α::AbstractFloat, uₕ::VectorElement)" * same_text * "`α`" * string(op) * "`uₕ`."
-	docstr2 = "	" * string(op) * "(uₕ::VectorElement, α::AbstractFloat)" * same_text * "`uₕ`" * string(op) * "`α`."
+	docstr1 = "	" * string(op) * "(α::Number, uₕ::VectorElement)" * same_text * "`α`" * string(op) * "`uₕ`."
+	docstr2 = "	" * string(op) * "(uₕ::VectorElement, α::Number)" * same_text * "`uₕ`" * string(op) * "`α`."
 	docstr3 = "	" * string(op) * "(uₕ::VectorElement, vₕ::VectorElement)" * same_text * " `uₕ`" * string(op) * "`vₕ`."
 
-	func_name = Symbol(string(op))
 	@eval begin
-		@doc $docstr1 function (Base.$op)(α::Number, uₕ::VectorElement)
+		@doc $docstr1 @inline function (Base.$op)(α::Number, uₕ::VectorElement)
 			rₕ = similar(uₕ)
 			map!(Base.Fix1(Base.$op, α), rₕ.values, uₕ.values)
 			return rₕ
 		end
 
-		@doc $docstr2 function (Base.$op)(uₕ::VectorElement, α::Number)
+		@doc $docstr2 @inline function (Base.$op)(uₕ::VectorElement, α::Number)
 			rₕ = similar(uₕ)
 			map!(Base.Fix2(Base.$op, α), rₕ.values, uₕ.values)
 			return rₕ
 		end
 
-		@doc $docstr3 function (Base.$op)(uₕ::VectorElement, vₕ::VectorElement)
+		@doc $docstr3 @inline function (Base.$op)(uₕ::VectorElement, vₕ::VectorElement)
 			rₕ = similar(uₕ)
 			map!((Base.$op), rₕ.values, uₕ.values, vₕ.values)
 			return rₕ
