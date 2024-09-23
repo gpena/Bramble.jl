@@ -32,4 +32,13 @@ avgₕ
 avgₕ!
 Rₕ
 Rₕ!
+diff₋ₓ
+diff₋ᵧ
+diff₋₂
+D₋ₓ
+D₋ᵧ
+D₋₂
+diffₓ
+diffᵧ
+diff₂
 ```
