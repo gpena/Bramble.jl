@@ -1,12 +1,12 @@
-ops(::Val{1}) = (diff₋ₓ, jumpₓ, Mₕₓ, D₋ₓ)
+ops(::Val{1}) = (diff₋ₓ, diffₓ, jumpₓ, Mₕₓ, D₋ₓ)
 
 function ops(::Val{2})
-	ops2 = (D₋ᵧ, jumpᵧ, diff₋ᵧ, Mₕᵧ)
+	ops2 = (D₋ᵧ, diffᵧ, diff₋ₓ, diff₋ᵧ, Mₕᵧ)
 	return (ops2..., ops(Val(1))...)
 end
 
 function ops(::Val{3})
-	ops2 = (D₋₂, jump₂, diff₋₂, Mₕ₂)
+	ops2 = (D₋₂, diff₂, diff₋ₓ, diff₋₂, Mₕ₂)
 	return (ops2..., ops(Val(2))...)
 end
 
@@ -24,7 +24,7 @@ function matrix_element_tests(::Val{D}) where D
 		u₁ₕ .= op(uₕ).values
 		dd1 = reshape(u₁ₕ, dims)
 
-		u₂ₕ .= op(Wₕ) * uₕ.values
+		u₂ₕ .= op(Wₕ).values * uₕ.values
 		dd2 = reshape(u₂ₕ, dims)
 		@test(@views validate_equal(dd1, dd2))
 	end

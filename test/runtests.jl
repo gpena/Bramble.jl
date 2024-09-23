@@ -36,3 +36,9 @@ end
 	include("vectorelements.jl")
 	include("matrixelements.jl")
 end
+
+
+
+@time @testset "\n$sep Forms $sep" begin
+    include("bilinearforms.jl")
+end

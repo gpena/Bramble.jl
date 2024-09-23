@@ -74,7 +74,7 @@ function vector_element_tests(::Val{D}) where {D}
 	u .= 1.0
 	der = ∇ₕ(u)
 	for i in 1:D
-		dd = reshape(der[i].values, dims)
+		dd = D == 1 ? reshape(der.values, dims) : reshape(der[i].values, dims)
 		@views ee = dd[valid_range(i, dims)...]
 		@test(validate_zero(ee))
 	end
@@ -85,7 +85,7 @@ function vector_element_tests(::Val{D}) where {D}
 		der = ∇ₕ(u)
 
 		for i in 1:D
-			dd = reshape(der[i].values, dims)
+			dd = D == 1 ? reshape(der.values, dims) : reshape(der[i].values, dims)
 			@views ee = dd[valid_range(i, dims)...]
 
 			@test(validate_equal(ee, (i != dimension ? 0.0 : 1.0)))
