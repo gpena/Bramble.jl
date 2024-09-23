@@ -43,12 +43,13 @@ using WriteVTK
 abstract type BrambleType end
 
 # Domain/Interval handling functions
-export interval, cartesianproduct, domain, ×, create_markers, markers, labels
+export interval, cartesianproduct
+export domain, ×, create_markers, markers, labels
 
 # Mesh handling
 export mesh, hₘₐₓ
 
-# Spaces handling
+# Space handling
 export gridspace, element
 export Rₕ, Rₕ!, avgₕ, avgₕ!
 
@@ -56,22 +57,22 @@ export innerₕ
 export inner₊, inner₊ₓ, inner₊ᵧ, inner₊₂
 export snorm₁ₕ, norm₁ₕ, norm₊, normₕ
 
-export diff, diff₋ₓ, diff₋ᵧ, diff₋₂, D₋ₓ, D₋ᵧ, D₋₂, ∇ₕ
-export Mₕ, Mₕₓ, Mₕᵧ, Mₕ₂
-export jump, jumpₓ, jumpᵧ, jump₂
+export diff₋ₓ, diff₋ᵧ, diff₋₂, diff₋
+export D₋ₓ, D₋ᵧ, D₋₂, ∇ₕ
+export diffₓ, diffᵧ, diff₂, diff
+export jumpₓ, jumpᵧ, jump₂, jump
+export Mₕₓ, Mₕᵧ, Mₕ₂, Mₕ
 
 export solve, solve!
-#export eltype, length, similar, copyto!, isapprox, isequal, show
-#=
+
 # Forms exports
 export BilinearForm, LinearForm, assemble, assemble!, Mass, Diff, update!
 export dirichletbcs
 export mass, stiffness, advection
-
+#=
 # Exporters
 export ExporterVTK, addScalarDataset!, datasets, save2file, close
 =#
-#include("utils.jl")
 
 include("geometry/sets.jl")
 include("geometry/domains.jl")
@@ -83,21 +84,24 @@ include("meshes/meshnd.jl")
 include("spaces/gridspace.jl")
 include("spaces/vectorelements.jl")
 include("spaces/matrixelements.jl")
-include("spaces/diff.jl")
-include("spaces/average.jl")
+include("spaces/difference_utils.jl")
+include("spaces/backward_difference.jl")
+include("spaces/backward_finite_difference.jl")
+include("spaces/forward_difference.jl")
 include("spaces/jump.jl")
+include("spaces/average.jl")
 
 include("spaces/inner_product.jl")
 include("spaces/linearalg.jl")
 
-#=
+
 include("forms/types.jl")
 include("forms/utils.jl")
 include("forms/dirichletbcs.jl")
 include("forms/bilinearforms.jl")
 include("forms/linearforms.jl")
 include("forms/assembler.jl")
-
+#=
 include("problems/types.jl")
 include("problems/laplacian.jl")
 
@@ -105,5 +109,5 @@ include("exporters/types.jl")
 include("exporters/exporter_vtk.jl")
 =#
 
-include("precompile.jl")
+#include("precompile.jl")
 end
