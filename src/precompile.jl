@@ -1,31 +1,36 @@
-import PrecompileTools: @compile_workload, @setup_workload
+import PrecompileTools: @compile_workload, @setup_workload, @recompile_invalidations
 
-## Domain precompilation
 @setup_workload begin
 	pts = [-1, -1.0, 0, 0.0, 1 // 2, π]
 	combinations = ((pts[i], pts[j]) for i in eachindex(pts) for j in eachindex(pts) if pts[i] <= pts[j])
 
 	npts = ((2,), (2, 2), (2, 2, 2))
 
+	I0 = interval(-3.0, 10.0)
+	Ω0 = cartesianproduct(I0)
+
+	Ω1 = cartesianproduct(I0) × cartesianproduct(I0)
+	Ω2 = Ω1 × cartesianproduct(I0)
+	Ω3 = cartesianproduct(I0) × Ω1
+	omegas = (Ω0, Ω1, Ω2, Ω3)
+
 	@compile_workload begin
 		for p in combinations
 			interval(p...)
 		end
 
-		I0 = interval(-3.0, 10.0)
-		Ω0 = cartesianproduct(I0)
-		Ω0 = cartesianproduct(I0)
+		interval(-3.0, 10.0)
+		_Ω0 = cartesianproduct(I0)
 		cartesianproduct(Ω0)
-		Ω0(1)
+		_Ω0(1)
 
-		Ω1 = cartesianproduct(I0) × cartesianproduct(I0)
-		Ω2 = Ω1 × cartesianproduct(I0)
-		Ω3 = cartesianproduct(I0) × Ω1
+		_Ω1 = cartesianproduct(I0) × cartesianproduct(I0)
+		_Ω2 = Ω1 × cartesianproduct(I0)
+		_Ω3 = cartesianproduct(I0) × Ω1
 
-		omegas = (Ω0, Ω1, Ω2, Ω3)
 		for o in omegas
-			eltype(o), eltype(o), dim(o)
-			eltype(typeof(o)), eltype(typeof(o)), dim(typeof(o))
+			eltype(o), dim(o)
+			eltype(typeof(o)), dim(typeof(o))
 		end
 
 		for i in 1:3
@@ -44,18 +49,7 @@ import PrecompileTools: @compile_workload, @setup_workload
 			markers(X)
 			labels(X)
 			marker_funcs(X)
-		end
-	end
-end
 
-## Mesh precompilation
-@setup_workload begin
-	npts = ((2,), (2, 2), (2, 2, 2))
-
-	@compile_workload begin
-		I0 = interval(-3.0, 10.0)
-
-		for i in 1:3
 			X = domain(reduce(×, ntuple(j -> I0, i)))
 			M = mesh(X, npts[i], ntuple(j -> false, i))
 			M
@@ -101,23 +95,47 @@ end
 	end
 end
 
+@recompile_invalidations begin
+	for o in (Ω0, Ω1, Ω2)
+		Base.eltype(o)
+		Base.eltype(typeof(o))
+	end
+
+	for i in 1:3
+		Ω = reduce(×, ntuple(j -> I0, i))
+		X = domain(Ω)
+
+		Base.eltype(X), Base.eltype(typeof(X))
+	end
+end
+
 ## Space compilation
 @setup_workload begin
-	npts = ((2,), (2, 2), (2, 2, 2))
+	f = x -> sum(x)
+
 	list_scalars = (1, 1.0, π, 1 // 2)
-	f(x) = sum(x)
+
+	ops(::Val{1}) = (diff₋ₓ, diffₓ, jumpₓ, Mₕₓ, D₋ₓ)
+
+	function ops(::Val{2})
+		ops2 = (D₋ᵧ, diffᵧ, jumpᵧ, diff₋ᵧ, Mₕᵧ)
+		return (ops2..., ops(Val(1))...)
+	end
+
+	function ops(::Val{3})
+		ops2 = (D₋₂, diff₂, jump₂, diff₋₂, Mₕ₂)
+		return (ops2..., ops(Val(2))...)
+	end
+
+	tuple_ops() = (∇ₕ, diff, jump, Mₕ, diff₋)
 
 	@compile_workload begin
-		I0 = interval(-3.0, 10.0)
-
 		for i in 1:3
 			X = domain(reduce(×, ntuple(j -> I0, i)))
 			M = mesh(X, npts[i], ntuple(j -> false, i))
 
 			Wh = gridspace(M)
 			Wh
-			getcache(Wh, get_symbol_diff_matrix(Val(1)))
-			iscached(Wh, get_symbol_diff_matrix(Val(1)))
 
 			eltype(Wh), eltype(typeof(Wh))
 			mesh(Wh), ndofs(Wh)
@@ -155,10 +173,8 @@ end
 				uh .= p .* wh .+ wh .- .+wh ./ p
 			end
 
-			Rₕ!(uh, f)
-			Rₕ(Wh, f)
-			avgₕ!(uh, f)
-			avgₕ(Wh, f)
+			Rₕ!(uh, f), avgₕ!(uh, f)
+			Rₕ(Wh, f), avgₕ(Wh, f)
 
 			__shift_index1(CartesianIndex(ntuple(i -> 1, i)))
 
@@ -187,33 +203,59 @@ end
 				op(Uh, Vh)
 			end
 
-			for op in (+, -, *, /), p in list_scalars
+			for op in (+, -, *, /, ^), p in list_scalars
 				op(p, Uh)
 				op(Uh, p)
 			end
 
-			#operators = ((D₋ₓ, jumpₓ, Mₕₓ, diff₋ₓ, Mₕ),)
-			#for op in operators[i]
-			#		wh .= op(uh)[1]
-			#		wh .= op(Wh)*uh.values
-			#			op(Uh)
-			#			end
+			gen_ops = ops(Val(i))
 
-			#=
-						operators = ((D₋ₓ, jumpₓ, Mₕₓ, diff₋ₓ, Mₕ),
-									(D₋ₓ, D₋ᵧ, jumpₓ, jumpᵧ, diff₋ₓ, diff₋ᵧ, Mₕₓ, Mₕᵧ),
-									(D₋ₓ, D₋ᵧ, D₋₂, jumpₓ, jumpᵧ, jump₂, diff₋ₓ, diff₋ᵧ, diff₋₂, Mₕₓ, Mₕᵧ, Mₕ₂))
+			for op in gen_ops
+				op(Wh), op(uh), op(Uh)
+			end
 
-						for op in operators[i]
-							u1h .= op(uh)[1]
-							u2h .= op(Wh)*uh.values
-							op(Uh)
-						end
+			for tup_ops in tuple_ops()
+				tup_ops(Wh), tup_ops(uh), tup_ops(Uh)
+			end
 
-						z = ∇ₕ(uh)
-						normₕ(uh), snorm₁ₕ(uh), norm₁ₕ(uh), norm₊(z)
-			=#
-			#jump(z), diff(z), Mₕ(z)
+			z = ∇ₕ(uh)
+			normₕ(uh), snorm₁ₕ(uh), norm₁ₕ(uh), norm₊(z)
 		end
+	end
+end
+
+@recompile_invalidations begin
+	for i in 1:3
+		X = domain(reduce(×, ntuple(j -> I0, i)))
+		M = mesh(X, npts[i], ntuple(j -> false, i))
+		Base.eltype(M), Base.eltype(typeof(M))
+
+		W = gridspace(M)
+		eltype(W), eltype(typeof(W))
+
+		uh = element(W, 1)
+		vh = element(W, 1)
+		Uh = elements(W)
+		Vh = elements(W)
+
+		Base.eltype(uh), Base.eltype(typeof(uh))
+		Base.similar(uh), Base.copyto!(uh, vh)
+		Base.similar(Uh), Base.copyto!(Uh, Vh)
+		Base.isequal(uh, vh.values), Base.isequal(uh, vh)
+
+		for p in list_scalars
+			Base.copyto!(uh, p)
+			Base.isequal(uh, p)
+
+			for op in (Base.:-, Base.:*, Base.:/, Base.:+, Base.:^)
+				op(uh, p), op(p, uh), op(uh, vh)
+				op(Uh, p), op(p, Uh)
+			end
+		end
+
+		(Base.:*)(Uh, Vh)
+		(Base.:*)(uh, Vh)
+		(Base.:*)(Uh, vh)
+		Base.size(Uh), Base.axes(Uh), Base.length(Uh)
 	end
 end
