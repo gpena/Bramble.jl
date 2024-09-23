@@ -1,7 +1,7 @@
 """
 	solve(A, F, Solver = LUFactorization(); prec = Diagonal(A))
 
-Solves the linear system `A * u = F` using the solver `Solver` and preconditioner `prec`.
+Returns the solution of the linear system `A * u = F` using the solver `Solver` and preconditioner `prec`.
 
 # Arguments
 
@@ -9,10 +9,6 @@ Solves the linear system `A * u = F` using the solver `Solver` and preconditione
   - `F`: The right hand side, a `AbstractVector`.
   - `Solver`: The solver to use, a `LinearSolve.Solver`. Defaults to `LUFactorization()`.
   - `prec`: The preconditioner to use, a `AbstractMatrix`. Defaults to `Diagonal(A)`.
-
-# Output
-
-  - `u`: The solution, a `VectorElement`.
 """
 function Bramble.solve(A::AbstractMatrix, F::AbstractVector, Solver = LUFactorization(); prec = Diagonal(A))
 	prob = LinearProblem(A, F)
@@ -24,7 +20,7 @@ end
 """
 	solve!(u, A, F, Solver = LUFactorization(); prec = Diagonal(A))
 
-Solves the linear system `A * u = F` using the solver `Solver` and preconditioner `prec` and stores the result in `u`.
+Stores the solution of the linear system `A * u = F` in vector `u`, using the solver `Solver` and preconditioner `prec`.
 
 # Arguments
 

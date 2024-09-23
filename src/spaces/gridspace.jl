@@ -5,19 +5,41 @@ Abstract type for grid spaces defined on meshes of type [MeshType](@ref).
 """
 abstract type SpaceType{MeshType} <: BrambleType end
 
-const SpaceCacheType = Dict{Symbol,Any}
+"""
+	struct VectorElement{S,T}
+		space::S
+		values::Vector{T}
+	end
+
+Vector element of space `S` with coefficients of type `T`.
+"""
+struct VectorElement{S,T} <: AbstractVector{T}
+	space::S
+	values::Vector{T}
+end
+
+"""
+	MatrixElement{S, T}
+
+A `MatrixElement` is a container with a sparse matrix where each entry is a `T` and a space `S`. Its purpose is to represent discretization matrices from finite difference methods.
+"""
+struct MatrixElement{S,T} <: AbstractMatrix{T}
+	space::S
+	values::SparseMatrixCSC{T,Int}
+end
+
 
 """
 	struct GridSpace{MType,D,T}
 		mesh::MType
-		innerh_weights::Diagonal{T,Vector{T}}
-		innerplus_weights::NTuple{D,Diagonal{T,Vector{T}}}
+		innerh_weights::Vector{T}
+		innerplus_weights::NTuple{D,Vector{T}}}
 		cache::SpaceCacheType
 	end
 
 Structure for a gridspace defined on a mesh.
 
-The diagonal matrix `innerh_weights` has the weights for the standard discrete ``L^2``
+The vector `innerh_weights` has the weights for the standard discrete ``L^2``
 inner product on the space of grid functions defined as follows
 
   - 1D case
@@ -38,7 +60,7 @@ inner product on the space of grid functions defined as follows
 (u_h, v_h)_h = \\sum_{i=1}^{N_x}\\sum_{j=1}^{N_y}\\sum_{l=1}^{N_z} h_{x,i+1/2} h_{y,j+1/2} h_{z,l+1/2} u_h(x_i,y_j,z_l) v_h(x_i,y_j,z_l).
 ```
 
-The diagonal matrix `innerplus_weights` has the weights for the modified discrete ``L^2`` inner product on the space of grid functions, for each component (x, y, z).
+The vector `innerplus_weights` has the weights for the modified discrete ``L^2`` inner product on the space of grid functions, for each component (x, y, z).
 
   - 1D case
 
@@ -72,57 +94,55 @@ The diagonal matrix `innerplus_weights` has the weights for the modified discret
 """
 struct GridSpace{MType,D,T} <: SpaceType{MType}
 	mesh::MType
-	innerh_weights::Diagonal{T,Vector{T}}
-	innerplus_weights::NTuple{D,Diagonal{T,Vector{T}}}
-	cache::SpaceCacheType
+	innerh_weights::Vector{T}
+	innerplus_weights::NTuple{D,Vector{T}}
+	diff_matrix_cache::Dict{Int, MatrixElement{GridSpace{MType,D,T},T}}
 end
 
 const var2symbol = ("ₓ", "ᵧ", "₂")
+
 
 """
 	gridspace(Ωₕ::MeshType)
 
 Constructor for a [GridSpace](@ref) defined on the mesh `Ωₕ`.
 """
-function gridspace(Ωₕ::MType) where {D,MType<:MeshType{D}}
-	innerh = _create_diagonal(Ωₕ)
+function gridspace(Ωₕ::MType) where MType
+	T = eltype(Ωₕ)
+	innerh = _create_vector(Ωₕ)
 	build_innerh_weights!(innerh, Ωₕ)
 
-	innerplus = ntuple(i -> similar(innerh), D)
-	diagonals = ntuple(j -> _create_diagonal(Ωₕ(j)), D)
+	D = dim(Ωₕ)
+	npts = npoints(Ωₕ, Tuple)
+	innerplus = ntuple(i -> _create_vector(Ωₕ), D)
+	innerplus_per_component = ntuple(j -> _create_vector(Ωₕ(j)), D)
 
 	for i in 1:D
 		for k in 1:D
 			if k == i
-				_innerplus_weights!(diagonals[k], Ωₕ, k)
+				_innerplus_weights!(innerplus_per_component[k], Ωₕ, k)
 			else
-				_innerplus_mean_weights!(diagonals[k], Ωₕ, k)
+				_innerplus_mean_weights!(innerplus_per_component[k], Ωₕ, k)
 			end
 		end
 
-		v = Base.ReshapedArray(innerplus[i].diag, npoints(Ωₕ, Tuple), ())
-		__innerplus_weights!(v, diagonals)
+		v = Base.ReshapedArray(innerplus[i], npts, ())
+		__innerplus_weights!(v, innerplus_per_component)
 	end
 
-	Wₕ = GridSpace(Ωₕ, innerh, innerplus, SpaceCacheType())
+	T = eltype(Ωₕ)
+	type = MatrixElement{GridSpace{MType, D, T}, T}
+	Wₕ = GridSpace(Ωₕ, innerh, innerplus, Dict{Int, type}())
 
 	# create backward difference matrices
-	_aux = _create_diagonal(Wₕ)
-	diff_matrices = create_backward_diff_matrices(Wₕ; diagonal = _aux)
+	diff_matrices = create_backward_diff_matrices(Wₕ; vector = _create_vector(Ωₕ))
 
 	# push diff matrices to cache
-	 __push_diff_matrice_to_space(Wₕ, diff_matrices)
-
-	return Wₕ
-end
-
-@generated function __push_diff_matrice_to_space(Wₕ::GridSpace, diff_matrices::NTuple{D, DType}) where {D, DType}
-	ex = :()
 	for i in 1:D
-		push!(ex.args, :(push2cache!(Wₕ, get_symbol_diff_matrix(Val($i)), diff_matrices[$i])))
+		push!(Wₕ.diff_matrix_cache, i => diff_matrices[i])
 	end
 
-	return ex
+	return Wₕ
 end
 
 function show(io::IO, Wₕ::GridSpace)
@@ -141,10 +161,6 @@ function show(io::IO, Wₕ::GridSpace)
 	properties = ["  $(direction[i]) direction | nPoints: $(npoints(Ωₕ, Tuple)[i])" for i in 1:D]
 
 	print(io, join(properties, "\n"))
-
-	cached_variables = keys(spacecache(Wₕ))
-	print(io, "\n\nCached variables: $cached_variables")
-
 end
 
 
@@ -170,98 +186,69 @@ Returns the element type of [GridSpace](@ref) `Wₕ`.
 @inline eltype(Wₕ::SpaceType) = eltype(typeof(Wₕ))
 @inline eltype(::Type{<:SpaceType{MType}}) where MType = eltype(MType)
 
-"""
-	spacecache(Wₕ::SpaceType)
-
-Returns the cache dictionary associated with [GridSpace](@ref) `Wₕ`.
-"""
-@inline spacecache(Wₕ::SpaceType) = Wₕ.cache
-
-"""
-	getcache(Wₕ::SpaceType, s::Symbol)
-
-Returns the value associated with key `s` in the cache of [GridSpace](@ref) `Wₕ`.
-"""
-@inline getcache(Wₕ::SpaceType, s::Symbol) = (Wₕ.cache[s])::typeof(Wₕ.cache[s])
-
-"""
-	iscached(Wₕ::SpaceType, s::Symbol)
-
-Returns `true` if the cache of the [GridSpace](@ref) `Wₕ` has a key `s`, `false` otherwise.
-"""
-@inline iscached(Wₕ::SpaceType, s::Symbol) = haskey(spacecache(Wₕ), s)
-
-"""
-	push2cache!(Wₕ::SpaceType, id::Symbol, item)
-
-Adds a new entry `id => item` to the cache of the [GridSpace](@ref) `Wₕ`.
-"""
-@inline function push2cache!(Wₕ::SpaceType, id::Symbol, item)
-	push!(spacecache(Wₕ), id => item)
+@inline function get_diff_matrix(Wₕ::SpaceType, i) 
+	@assert 1 <= i <= dim(mesh(Wₕ))
+	return Wₕ.diff_matrix_cache[i]
 end
 
 """
-	_create_diagonal(Wₕ::SpaceType)
+	_create_vector(Wₕ::SpaceType)
 
-Returns a diagonal matrix with the same number of degrees of freedom as the [GridSpace](@ref) `Wₕ`.
+Returns a `Vector` with the same number of degrees of freedom as the [GridSpace](@ref) `Wₕ`.
 """
-@inline _create_diagonal(Wₕ::SpaceType) = _create_diagonal(mesh(Wₕ))
+@inline _create_vector(Wₕ::SpaceType) = _create_vector(mesh(Wₕ))
 
 """
 	_create_diagonal(Ωₕ::MeshType)
 
 Returns a diagonal matrix with the same number of degrees of freedom as the mesh.
 """
-@inline _create_diagonal(Ωₕ::MeshType) = Diagonal(Vector{eltype(Ωₕ)}(undef, npoints(Ωₕ)))
+@inline _create_vector(Ωₕ::MeshType) = Vector{eltype(Ωₕ)}(undef, npoints(Ωₕ))
 
 """
-	build_innerh_weights!(matrix::Diagonal, Ωₕ::MeshType
+	build_innerh_weights!(u::Vector, Ωₕ::MeshType)
 
-Builds the weights for the standard discrete ``L^2`` inner product, ``inner_h(\\cdot, \\cdot)``, on the space of grid functions, following the order of the [points](@ref). The values are stored on the diagonal of `matrix`.
+Builds the weights for the standard discrete ``L^2`` inner product, ``inner_h(\\cdot, \\cdot)``, on the space of grid functions, following the order of the [points](@ref). The values are stored in vector `u`.
 """
-function build_innerh_weights!(matrix::Diagonal, Ωₕ::MeshType)
+function build_innerh_weights!(u::Vector, Ωₕ::MeshType)
 	f = Base.Fix1(cell_measure, Ωₕ)
-	map!(f, matrix.diag, indices(Ωₕ))
+	map!(f, u, indices(Ωₕ))
 end
 
 """
-	_innerplus_weights!(matrix::Diagonal, Ωₕ::MeshType, component::Int = 1)
+	_innerplus_weights!(u::Vector{T}, Ωₕ::MeshType, component::Int = 1)
 
-Builds a set of weights based on the spacings, associated with the `component`-th direction, for the modified discrete ``L^2`` inner product on the space of grid functions, following the order of the [points](@ref). The values are stored on the diagonal of `matrix`.
+Builds a set of weights based on the spacings, associated with the `component`-th direction, for the modified discrete ``L^2`` inner product on the space of grid functions, following the order of the [points](@ref). The values are stored in vector `u`.
 """
-function _innerplus_weights!(matrix::Diagonal{T,Vector{T}}, Ωₕ::MeshType, component::Int = 1) where T
+function _innerplus_weights!(u::Vector{T}, Ωₕ::MeshType, component::Int = 1) where T
 	@assert 1 <= component <= dim(Ωₕ)
 
 	#N = npoints(Ωₕ(component))
-	_diag = matrix.diag
-
-	_diag[1] = zero(T)
+	u[1] = zero(T)
 	f = Base.Fix1(spacing, Ωₕ(component))
 
 	for i in Iterators.drop(indices(Ωₕ(component)), 1) #2:N
-		_diag[i] = f(i)
+		u[i] = f(i)
 	end
 end
 
 """
-	_innerplus_mean_weights!(matrix::Diagonal, Ωₕ::MeshType, component::Int = 1)
+	_innerplus_mean_weights!(u::Vector{T}, Ωₕ::MeshType, component::Int = 1)
 
-Builds a set of weights based on the half spacings, associated with the `component`-th direction, for the modified discrete ``L^2`` inner product on the space of grid functions, following the order of the [points](@ref). The values are stored on the diagonal of `matrix`.
+Builds a set of weights based on the half spacings, associated with the `component`-th direction, for the modified discrete ``L^2`` inner product on the space of grid functions, following the order of the [points](@ref). The values are stored in vector `u`.
 for each component.
 """
-function _innerplus_mean_weights!(matrix::Diagonal{T,Vector{T}}, Ωₕ::MeshType, component::Int = 1) where T
+function _innerplus_mean_weights!(u::Vector{T}, Ωₕ::MeshType, component::Int = 1) where T
 	@assert 1 <= component <= dim(Ωₕ)
 
-	
-	_diag = matrix.diag
-	_diag[1] = zero(T)
+	u[1] = zero(T)
 
 	idxs = Iterators.drop(indices(Ωₕ(component)), 1)
 	for i in Iterators.take(idxs, 1) #2:(N - 1)
-		_diag[i] = half_spacing(Ωₕ(component), i)
+		u[i] = half_spacing(Ωₕ(component), i)
 	end
 
-	_diag[npoints(Ωₕ(component))] = zero(T)
+	u[npoints(Ωₕ(component))] = zero(T)
 end
 #=
 @inline @generated function __prod(diags::NTuple{D}, I) where D
@@ -272,21 +259,21 @@ end
 	return res
 end
 =#
-@inline @generated function __prod(diags::NTuple{D, Diagonal{T,Vector{T}}}, I) where {D,T}
-	res = :(convert(T, 1))
+@inline @generated function __prod(diags::NTuple{D, Vector{T}}, I) where {D,T}
+	res = :(convert(T, 1)::T)
 	for i in 1:D
-		res = :(diags[$i].diag[I[$i]] * $res)
+		res = :(diags[$i][I[$i]] * $res)
 	end
 	return res
 end
 
 """
-	__innerplus_weights!(v, diagonals)
+	__innerplus_weights!(v, innerplus_per_component)
 
 Builds the weights for the modified discrete ``L^2`` inner product on the space of grid functions [GridSpace](@ref).
 """
-function __innerplus_weights!(v, diagonals)
+function __innerplus_weights!(v, innerplus_per_component)
 	for idx in CartesianIndices(v)
-		v[idx] = __prod(diagonals, idx)
+		v[idx] = __prod(innerplus_per_component, idx)
 	end
 end

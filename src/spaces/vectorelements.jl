@@ -1,25 +1,4 @@
 """
-	struct VectorElement{S,T}
-		space::S
-		values::Vector{T}
-	end
-
-Vector element of space `S` with coefficients of type `T`.
-"""
-struct VectorElement{S,T} <: AbstractVector{T}
-	space::S
-	values::Vector{T}
-end
-
-"""
-	element(Wₕ::SpaceType, v::AbstractVector)
-
-Returns a [VectorElement](@ref) for [GridSpace](@ref) `Wₕ` with the same coefficients of vector `v`.
-"""
-@inline element(Wₕ::SpaceType, v::AbstractVector) = (@assert length(v) == ndofs(Wₕ);
-													 VectorElement(Wₕ, v))
-
-"""
 	element(Wₕ::SpaceType)
 
 Returns a [VectorElement](@ref) for [GridSpace](@ref) `Wₕ` with uninitialized components.
@@ -33,9 +12,17 @@ Returns a [VectorElement](@ref) for [GridSpace](@ref) `Wₕ` with all components
 """
 function element(Wₕ::SpaceType, α::Number)
 	T = eltype(Wₕ)
-	vₕ = Vector{T}(convert(T, α) * Ones(ndofs(Wₕ)))
+	vₕ = Vector{T}(convert(T, α)::T * Ones(ndofs(Wₕ)))
 	return element(Wₕ, vₕ)
 end
+
+"""
+	element(Wₕ::SpaceType, v::AbstractVector)
+
+Returns a [VectorElement](@ref) for [GridSpace](@ref) `Wₕ` with the same coefficients of vector `v`.
+"""
+@inline element(Wₕ::SpaceType, v::AbstractVector) = (@assert length(v) == ndofs(Wₕ);
+													 VectorElement(Wₕ, v))
 
 @inline ndims(::Type{<:VectorElement}) = 1
 
@@ -112,11 +99,11 @@ end
 	return copyto!(dest.values, instantiate(Broadcasted(bc.style, bc.f, bc.args, axes(dest.values))))
 end
 
-@inline Base.@propagate_inbounds function getindex(uₕ::VectorElement, i) 
+@inline Base.@propagate_inbounds function getindex(uₕ::VectorElement, i)
 	@boundscheck checkbounds(uₕ.values, i)
 	return getindex(uₕ.values, i)
 end
-@inline Base.@propagate_inbounds function setindex!(uₕ::VectorElement, val, i) 
+@inline Base.@propagate_inbounds function setindex!(uₕ::VectorElement, val, i)
 	@boundscheck checkbounds(uₕ.values, i)
 	setindex!(uₕ.values, val, i)
 end
@@ -180,7 +167,10 @@ end
 
 Copies the scalar `α` into the coefficients of [VectorElement](@ref) `uₕ`.
 """
-@inline copyto!(uₕ::VectorElement, α::Number) = (@.. uₕ.values = convert(eltype(uₕ), α))
+@inline function copyto!(uₕ::VectorElement, α::Number)
+	s = convert(eltype(uₕ), α)::eltype(uₕ)
+	@.. uₕ.values = s
+end
 
 """
 	isequal(uₕ::VectorElement, v::AbstractVector)
@@ -205,7 +195,7 @@ Returns a new [VectorElement](@ref) with coefficients obtained by applying funct
 """
 @inline map(f, uₕ::VectorElement) = element(space(u), map(f, uₕ.values))
 
-for op in (:-, :*, :/, :+)
+for op in (:-, :*, :/, :+, :^)
 	same_text = "\n\nReturns a new [VectorElement](@ref) with coefficients given by the elementwise evaluation of"
 	docstr1 = "	" * string(op) * "(α::Number, uₕ::VectorElement)" * same_text * "`α`" * string(op) * "`uₕ`."
 	docstr2 = "	" * string(op) * "(uₕ::VectorElement, α::Number)" * same_text * "`uₕ`" * string(op) * "`α`."
@@ -425,7 +415,7 @@ end
 """
 	__integrandnd(y, t, p)
 
-Implements the integrand function needed in the calculation of [avgₕ](@ref). In this function, `y` denotes the return values, `t` denotes the integration variable and `p` denotes the parameters (integrand function `f`, points `x`, measures `meas` and indices `idxs`). 
+Implements the integrand function needed in the calculation of [avgₕ](@ref). In this function, `y` denotes the return values, `t` denotes the integration variable and `p` denotes the parameters (integrand function `f`, points `x`, measures `meas` and indices `idxs`).
 
 For efficiency, each integral is calculated on ``[0,1]^D``, where ``D`` is the dimension of the integration domain. This is done through a similar change of variable as in [__integrand1d(y, t, p)](@ref).
 """

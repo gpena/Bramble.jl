@@ -18,8 +18,8 @@ for ___dim in var2symbol
         end
         =#
 
-        #jumpₓ(S::SType) where {SType<:SpaceType} = shiftₓ(mesh(S), Val(dim(SType))) .- shiftₓ(mesh(S), Val(dim(SType)), 1)
-        #=function $(Symbol(string("jump")  * ___dim))(S::SpaceType)
+        #diffₓ(S::SType) where {SType<:SpaceType} = shiftₓ(mesh(S), Val(dim(SType))) .- shiftₓ(mesh(S), Val(dim(SType)), 1)
+        #=function $(Symbol(string("diff")  * ___dim))(S::SpaceType)
             ex1 = $(Symbol(s))(mesh(S), Val(dim(S)), Val(0))
             ex2 = $(Symbol(s))(mesh(S), Val(dim(S)), Val(1))
 
@@ -33,18 +33,18 @@ diff(S::SType, ::Val{1}) where {SType<:SpaceType} = diffₓ(S)
 diff(S::SType, ::Val{D}) where {D,SType<:SpaceType} = nothing
 diff(S::SType) where {SType<:SpaceType} = diff(S, Val(dim(SType)))
 
-jump(S::SType, ::Val{1}) where {SType<:SpaceType} = jumpₓ(S)
-jump(S::SType, ::Val{D}) where {D,SType<:SpaceType} = nothing
-jump(S::SType) where {SType<:SpaceType} = jump(S, Val(dim(SType)))
+diff(S::SType, ::Val{1}) where {SType<:SpaceType} = diffₓ(S)
+diff(S::SType, ::Val{D}) where {D,SType<:SpaceType} = nothing
+diff(S::SType) where {SType<:SpaceType} = diff(S, Val(dim(SType)))
 
 Mₕ(S::SType, ::Val{1}) where {SType<:SpaceType} = Mₕₓ(S)
 Mₕ(S::SType, ::Val{D}) where {D,SType<:SpaceType} = nothing
 Mₕ(S::SType) where {SType<:SpaceType} = Mₕ(S, Val(dim(SType)))
 =#
 
-for op in ("diff","Mₕ", "jump")
+for op in ("diff","Mₕ", "diff")
     eval(quote
-        ## jump_back operators
+        ## diff_back operators
         #$(Symbol(string(op)))(U::SpaceType, ::Val{1}) = $(Symbol(string(op) * string(var2symbol[1])))(U)
         #$(Symbol(string(op)))(U::SpaceType, ::Val{D}) where D = @error "Not implemented!!!"
         #$(Symbol(string(op)))(S::SpaceType) = Val(dim(S)) isa Val{1} ? $(Symbol(string(op) * string(var2symbol[1])))(S) : @error "Not implemented!!!"
@@ -72,7 +72,7 @@ end
 =#
 
 
-#for op in ("Mₕ", "jump"), D in 1:3
+#for op in ("Mₕ", "diff"), D in 1:3
 #    @eval $(Symbol(op  * string("2dim")))(u::VecOrMatElem, ::Val{$D}) = $(Symbol((op) * string(var2symbol[D])))(u)
 #send
 
@@ -81,15 +81,15 @@ end
 #Mₕ(u::VecOrMatElem) = dim(u) == 1 ? typeof(u)(space(u), Mₕ(space(u))*u.values) : ntuple(i->Mₕ2dim(u, Val(i))::VecOrMatElem, Val(dim(u)))
 #Mₕ(u::NTuple{D,VecOrMatElem}) where D = ntuple(i->Mₕ2dim(u[i], Val(i))::VecOrMatElem, D)
 
-#jump(u::VecOrMatElem) = dim(u) == 1 ? typeof(u)(space(u), jump(space(u))*u.values) : ntuple(i->jump2dim(u, Val(i))::VecOrMatElem, Val(dim(u)))
-#jump(u::NTuple{D,VecOrMatElem}) where D = ntuple(i->jump2dim(u[i], Val(i))::VecOrMatElem, D)
+#diff(u::VecOrMatElem) = dim(u) == 1 ? typeof(u)(space(u), diff(space(u))*u.values) : ntuple(i->diff2dim(u, Val(i))::VecOrMatElem, Val(dim(u)))
+#diff(u::NTuple{D,VecOrMatElem}) where D = ntuple(i->diff2dim(u[i], Val(i))::VecOrMatElem, D)
 
 #diff(u::VecOrMatElem) = dim(u) == 1 ? typeof(u)(space(u), diff(space(u))*u.values) : ntuple(i->diff2dim(u, Val(i))::VecOrMatElem, Val(dim(u)))
 #diff(u::NTuple{D,VecOrMatElem}) where D = ntuple(i->diff2dim(u[i], Val(i))::VecOrMatElem, D)
 
 
 for op in (#:D₋ₓ, :D₋ᵧ, :D₋₂,
-           #:jumpₓ, :jumpᵧ, :jump₂, #:jump, # 2D and 3D (untested)
+           #:diffₓ, :diffᵧ, :diff₂, #:diff, # 2D and 3D (untested)
            #:diffₓ, :diffᵧ, :diff₂,
             #D꜀, D꜀ₓ, D꜀ᵧ, D꜀₂,
            #:Mₕ, 

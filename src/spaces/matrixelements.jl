@@ -1,14 +1,4 @@
 """
-	MatrixElement{S, T}
-
-A `MatrixElement` is a container with a sparse matrix where each entry is a `T` and a space `S`. Its purpose is to represent discretization matrices from finite difference methods.
-"""
-struct MatrixElement{S,T} <: AbstractMatrix{T}
-	space::S
-	values::SparseMatrixCSC{T,Int}
-end
-
-"""
 	elements(Wₕ::SpaceType)
 
 Returns a [MatrixElement](@ref) from a given [SpaceType](@ref), initialized with as the identity matrix.
@@ -144,6 +134,21 @@ for op in (:+, :-, :*)
 	end
 end
 
+@inline function Base.:^(Uₕ::MatrixElement, i::Integer) 
+	Vₕ = similar(Uₕ)
+
+	map!(Base.Fix1(Base.:^, i), Vₕ.values.nzval, Uₕ.values.nzval)
+	return Vₕ
+end
+
+@inline function Base.:^(Uₕ::MatrixElement, i::Real) 
+	Vₕ = similar(Uₕ)
+
+	map!(Base.Fix1(Base.:^, i), Vₕ.values.nzval, Uₕ.values.nzval)
+	return Vₕ
+end
+
+
 for op in (:+, :-, :*, :/, :^)
 	same_text = "\n\nReturns a new [MatrixElement](@ref) with coefficients given by the elementwise evaluation of"
 	docstr1 = "	" * string(op) * "(α::Number, Uₕ::MatrixElement)" * same_text * "`α`" * string(op) * "`Uₕ`."
@@ -151,15 +156,15 @@ for op in (:+, :-, :*, :/, :^)
 
 	@eval begin
 		@doc $docstr1 @inline function (Base.$op)(α::Number, Uₕ::MatrixElement)
-			r = similar(Uₕ)
-			map!(Base.Fix1(Base.$op, α), r.values.nzval, Uₕ.values.nzval)
-			return r
+			Vₕ = similar(Uₕ)
+			map!(Base.Fix1(Base.$op, α), Vₕ.values.nzval, Uₕ.values.nzval)
+			return Vₕ
 		end
 
 		@doc $docstr2 @inline function (Base.$op)(Uₕ::MatrixElement, α::Number)
-			r = similar(Uₕ)
-			map!(Base.Fix2(Base.$op, α), r.values.nzval, Uₕ.values.nzval)
-			return r
+			Vₕ = similar(Uₕ)
+			map!(Base.Fix2(Base.$op, α), Vₕ.values.nzval, Uₕ.values.nzval)
+			return Vₕ
 		end
 	end
 end
