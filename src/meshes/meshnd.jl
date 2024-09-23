@@ -63,11 +63,11 @@ function mesh(Ω::Domain, npts::NTuple{D,Int}, unif::NTuple{D,Bool}) where D
 	return MeshnD{D,T}(markersForMesh, R, meshes)
 end
 
-@inline dim(Ωₕ::MeshnD{D}) where D = D
-@inline dim(Ωₕ::Type{<:MeshnD{D,T}}) where {T,D} = D
+@inline dim(_::MeshnD{D}) where D = D
+@inline dim(::Type{<:MeshnD{D,T}}) where {T,D} = D
 
-@inline eltype(Ωₕ::MeshnD{D,T}) where {D,T} = T
-@inline eltype(Ωₕ::Type{<:MeshnD{D,T}}) where {D,T} = T
+@inline eltype(_::MeshnD{D,T}) where {D,T} = T
+@inline eltype(_::Type{<:MeshnD{D,T}}) where {D,T} = T
 
 function show(io::IO, Ωₕ::MeshnD)
 	D = dim(Ωₕ)

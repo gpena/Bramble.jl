@@ -51,11 +51,11 @@ end
 	return mesh(Ω, npts[1], unif[1])
 end
 
-@inline dim(Ωₕ::Mesh1D{T}) where T = 1
-@inline dim(Ωₕ::Type{<:Mesh1D{T}}) where T = 1
+@inline dim(_::Mesh1D{T}) where T = 1
+@inline dim(::Type{<:Mesh1D{T}}) where T = 1
 
-@inline eltype(Ωₕ::Mesh1D{T}) where T = T
-@inline eltype(Ωₕ::Type{<:Mesh1D{T}}) where T = T
+@inline eltype(_::Mesh1D{T}) where T = T
+@inline eltype(::Type{<:Mesh1D{T}}) where T = T
 
 """
 	create_mesh1d_basics(Ω::Domain, npts::Int, unif::Bool)
@@ -209,11 +209,11 @@ where ``h_{N+1/2} = \\frac{h_{N}}{2}`` and ``h_{1/2} = \\frac{h_1}{2}``.
 	@assert idx in indices(Ωₕ)
 
 	if idx === first(indices(Ωₕ)) || idx === last(indices(Ωₕ))
-		return spacing(Ωₕ, idx) * convert(T, 0.5)
+		return spacing(Ωₕ, idx) * convert(T, 0.5)::T
 	end
 
 	next = idx[1] + 1
-	return (spacing(Ωₕ, next) + spacing(Ωₕ, idx)) * convert(T, 0.5)
+	return (spacing(Ωₕ, next) + spacing(Ωₕ, idx)) * convert(T, 0.5)::T
 end
 
 """
@@ -250,7 +250,7 @@ x_{i+1/2} = x_i + \\frac{h_{i+1}}{2}, \\, i=1,\\dots,N-1,
 
 	former = idx[1] - 1
 
-	return (point(Ωₕ, idx) + point(Ωₕ, former)) * convert(T, 0.5)
+	return (point(Ωₕ, idx) + point(Ωₕ, former)) * convert(T, 0.5)::T
 end
 
 """

@@ -1,29 +1,3 @@
-# Defines the [`interval`](@ref) and [`CartesianProduct`](@ref) types
-# 
-# @author: Gonçalo Pena
-#
-
-"""
-	struct CartesianProduct{D,T}
-		data::NTuple{D,Tuple{T,T}}
-	end
-
-Type for storage of cartesian products of `D` intervals having elements of type `T`.
-"""
-struct CartesianProduct{D,T} <: BrambleType
-	data::NTuple{D,Tuple{T,T}}
-end
-
-"""
-	cartesianproduct(data::NTuple)
-
-Returns a [CartesianProduct](@ref) from a tuple of intervals.
-"""
-@inline function cartesianproduct(data::NTuple{D,Tuple{T,T}}) where {D,T} 
-	@assert all(x -> x[1] <= x[2], data)
-	return CartesianProduct{D,T}(data)
-end
-
 """
 	interval(x, y)
 
@@ -45,6 +19,27 @@ CartesianProduct{1,Float64}((0.0,1.0))
 end
 
 """
+	struct CartesianProduct{D,T}
+		data::NTuple{D,Tuple{T,T}}
+	end
+
+Type for storage of cartesian products of `D` intervals having elements of type `T`.
+"""
+struct CartesianProduct{D,T} <: BrambleType
+	data::NTuple{D,Tuple{T,T}}
+end
+
+"""
+	cartesianproduct(data::NTuple)
+
+Returns a [CartesianProduct](@ref) from a tuple of intervals.
+"""
+@inline function cartesianproduct(data::NTuple{D,Tuple{T,T}}) where {D,T}
+	@assert all(x -> x[1] <= x[2], data)
+	return CartesianProduct{D,T}(data)
+end
+
+"""
 	cartesianproduct(x, y)
 
 Returns a 1D [CartesianProduct](@ref) from two scalars `x` and `y`, where `x` and `y` are, respectively, the lower and upper bounds of the interval.
@@ -60,7 +55,7 @@ Type: Float64
 """
 @inline cartesianproduct(x, y) = interval(x, y)
 
-@inline function (X::CartesianProduct)(i) 
+@inline function (X::CartesianProduct)(i)
 	@assert i in eachindex(X.data)
 	return X.data[i]
 end
@@ -77,7 +72,7 @@ julia> X = cartesianproduct(0, 1); eltype(X)
 Float64
 ```
 """
-@inline eltype(X::CartesianProduct{D,T}) where {D,T} = T
+@inline eltype(_::CartesianProduct{D,T}) where {D,T} = T
 @inline eltype(::Type{<:CartesianProduct{D,T}}) where {D,T} = T
 
 """
@@ -92,7 +87,7 @@ julia> X = cartesianproduct(0, 1); dim(X)
 1
 ```
 """
-@inline dim(X::CartesianProduct{D}) where D = D
+@inline dim(_::CartesianProduct{D}) where D = D
 @inline dim(::Type{<:CartesianProduct{D}}) where D = D
 
 @inline interval(x::CartesianProduct{1}) = interval(x.data...)
@@ -111,7 +106,7 @@ julia> X = cartesianproduct(0, 1) × cartesianproduct(4, 5); tails(X,1)
 (0.0, 1.0)
 ```
 """
-@inline function tails(X::CartesianProduct, i) 
+@inline function tails(X::CartesianProduct, i)
 	@assert i in eachindex(X.data)
 	return X(i)
 end
