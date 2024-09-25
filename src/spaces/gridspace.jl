@@ -1,5 +1,5 @@
 """
-	SpaceType{MeshType}
+	SpaceType
 
 Abstract type for grid spaces defined on meshes of type [MeshType](@ref).
 """
@@ -170,6 +170,7 @@ end
 Returns the `mesh` on which the [GridSpace](@ref) `Wₕ` is defined.
 """
 @inline mesh(Wₕ::SpaceType{MType}) where MType = Wₕ.mesh
+@inline mesh(::Type{<:SpaceType{MType}}) where MType = MType
 
 """
 	ndofs(Wₕ::SpaceType)
