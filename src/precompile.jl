@@ -111,8 +111,6 @@ end
 
 ## Space compilation
 @setup_workload begin
-	f = x -> sum(x)
-
 	list_scalars = (1, 1.0, π, 1 // 2)
 
 	ops(::Val{1}) = (diff₋ₓ, diffₓ, jumpₓ, Mₕₓ, D₋ₓ)
@@ -133,7 +131,7 @@ end
 		for i in 1:3
 			X = domain(reduce(×, ntuple(j -> I0, i)))
 			M = mesh(X, npts[i], ntuple(j -> false, i))
-
+			f = embed(x->sum(x), M)
 			Wh = gridspace(M)
 			Wh
 

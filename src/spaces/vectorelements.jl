@@ -228,13 +228,28 @@ end
 #                      #
 ########################
 
-@inline function _func2array!(vector, f::F, mesh) where {F<:Function}
+@inline function _func2array!(u, f::FunctionWrapper{T, Tuple{CartesianIndex{D}}}, mesh) where {D, T}
+	idxs = indices(mesh)
+	@.. u = f(idxs)
+end
+
+@inline function _func2array!(u, f::FunctionWrapper{T, Tuple{NTuple{D,T}}}, mesh) where {D, T}
 	pts = points(mesh)
 	idxs = indices(mesh)
 
 	g(idx) = _index2point(pts, idx)
-	@.. vector = f(g(idxs))
+	@.. u = f(g(idxs))
 end
+
+@inline function _func2array!(u, f, mesh)
+	pts = points(mesh)
+	idxs = indices(mesh)
+
+	g(idx) = _index2point(pts, idx)
+	@.. u = f(g(idxs))
+end
+
+
 #=
 @generated function _func2array2!(A, f::F, mesh::MeshType{D}) where {D,F<:Function}
 	return quote
@@ -252,10 +267,10 @@ end
 
 In-place version of the restriction operator [Rₕ](@ref).
 """
-function Rₕ!(uₕ::VectorElement, f::F) where {F<:Function}
-	v = Base.ReshapedArray(uₕ.values, npoints(mesh(space(uₕ)), Tuple), ())
-	_func2array!(v, f, mesh(space(uₕ)))
-	return uₕ
+function Rₕ!(uₕ::VectorElement, f::FType) where FType
+	u = Base.ReshapedArray(uₕ.values, npoints(mesh(space(uₕ)), Tuple), ())
+	_func2array!(u, f, mesh(space(uₕ)))
+	return nothing
 end
 
 """
@@ -281,7 +296,7 @@ Rₕ (x_i, y_j)= f(x_i, y_j), \\, i = 1,\\dots,N_x,  j = 1,\\dots,N_y
 Rₕ (x_i, y_j, z_l)= f(x_i, y_j, z_l), \\, i = 1,\\dots,N_x,  j = 1,\\dots,N_y, l = 1,\\dots,N_z
 ```
 """
-function Rₕ(Wₕ::SpaceType, f::F) where {F<:Function}
+function Rₕ(Wₕ::SpaceType, f::FType) where FType
 	uₕ = element(Wₕ)
 	Rₕ!(uₕ, f)
 	return uₕ
@@ -318,7 +333,7 @@ Returns a [VectorElement](@ref) with the average of `f` with respect to the [cel
 
 Please check the implementations of [cell_measure](@ref) for the details of ``\\square_{idx}``.
 """
-@inline function avgₕ(Wₕ::SpaceType, f::F) where {F<:Function}
+@inline function avgₕ(Wₕ::SpaceType, f)
 	uₕ = element(Wₕ)
 	_avgₕ!(uₕ, f, Val(dim(mesh(Wₕ))))
 	return uₕ
@@ -329,9 +344,9 @@ end
 
 In-place version of averaging operator [avgₕ](@ref).
 """
-@inline function avgₕ!(uₕ::VectorElement, f::F) where {F<:Function}
+@inline function avgₕ!(uₕ::VectorElement, f)
 	_avgₕ!(uₕ, f, Val(dim(mesh(space(uₕ)))))
-	return uₕ
+	return nothing
 end
 
 """
@@ -375,7 +390,7 @@ end
 
 In-place version of [avgₕ](@ref) for the 1D case. Defines the parameters needed in the calculation of [avgₕ](@ref), integrand function `f`, [half_points](@ref) ``x_{i+1/2}``, [half_spacing](@ref) `h_{i+1/2}` and indices `indices(mesh(space(uₕ)))`.
 """
-function _avgₕ!(uₕ::VectorElement, f::F, ::Val{1}) where {F<:Function}
+function _avgₕ!(uₕ::VectorElement, f, ::Val{1})
 	Ωₕ = mesh(space(uₕ))
 
 	x = Base.Fix1(half_points, Ωₕ)
@@ -385,12 +400,32 @@ function _avgₕ!(uₕ::VectorElement, f::F, ::Val{1}) where {F<:Function}
 	__quad!(uₕ, (0, 1), param)
 end
 
+function _avgₕ!(uₕ::VectorElement, f::StaticFunction{1}, ::Val{1})
+	Ωₕ = mesh(space(uₕ))
+
+	x = Base.Fix1(half_points, Ωₕ)
+	h = Base.Fix1(half_spacing, Ωₕ)
+
+	param = (f, x, h, 1:npoints(Ωₕ))
+	__quad!(uₕ, (0, 1), param)
+end
+
 """
 	_avgₕ!(uₕ::VectorElement, f::F, ::Val{D})
 
 In-place version of [avgₕ](@ref) for the nD case. Defines the parameters needed in the calculation of [avgₕ](@ref), integrand function `f`, [half_points](@ref) ``x_{i+1/2}``, [half_spacing](@ref) `h_{i+1/2}` and indices `indices(mesh(space(uₕ)))`.
 """
-function _avgₕ!(uₕ::VectorElement, f::F, ::Val{D}) where {D,F<:Function}
+function _avgₕ!(uₕ::VectorElement, f, ::Val{D}) where D
+	Ωₕ = mesh(space(uₕ))
+
+	x = Base.Fix1(half_points, Ωₕ)
+	meas = Base.Fix1(cell_measure, Ωₕ)
+
+	param = (f, x, meas, indices(Ωₕ))
+	__quadnd!(uₕ, (zeros(D), ones(D)), param)
+end
+
+function _avgₕ!(uₕ::VectorElement, f::StaticFunction{D}, ::Val{D}) where D
 	Ωₕ = mesh(space(uₕ))
 
 	x = Base.Fix1(half_points, Ωₕ)

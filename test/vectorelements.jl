@@ -1,4 +1,4 @@
-import Bramble: spacing, points, half_points
+import Bramble: spacing, points, half_points, embed
 
 valid_range(i::Int, ds::NTuple{D,Int}) where {D} = ntuple(k -> k == i ? (2:ds[1]) : (1:ds[k]), D)
 
@@ -30,8 +30,6 @@ function __init(::Val{D}) where {D}
 	return dims, Wₕ, uₕ
 end
 
-@inline __test_function(x) = exp(-sum(x))
-
 function vector_element_tests(::Val{D}) where {D}
 	dims, Wₕ, u = __init(Val(D))
 
@@ -57,15 +55,16 @@ function vector_element_tests(::Val{D}) where {D}
 		@test(validate_equal(res, map(op, u, v)))
 	end
 
-	Rₕ!(u, __test_function)
+	test_function = embed(x->exp(-sum(x)), mesh(Wₕ))
+	Rₕ!(u, test_function)
 
 	w = Array{Float64,D}(undef, dims)
-	Bramble._func2array!(w, __test_function, mesh(Wₕ))
+	Bramble._func2array!(w, test_function, mesh(Wₕ))
 
 	w2 = reshape(w, prod(dims))
 	@test(validate_equal(u, w2))
 
-	avgₕ!(u, __test_function)
+	avgₕ!(u, test_function)
 	__func2array_med(w, mesh(Wₕ))
 
 	vv = reshape(u.values, dims)
