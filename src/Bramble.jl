@@ -28,6 +28,8 @@ import Base: show, getindex, setindex!, IndexStyle, iterate, size, ndims, diff, 
 import Base: *, +, -, /
 import Random: rand!
 
+using FunctionWrappers
+import FunctionWrappers: FunctionWrapper
 using LazyArrays
 using FastBroadcast: @..
 using LinearAlgebra
@@ -80,6 +82,8 @@ include("geometry/domains.jl")
 include("meshes/common.jl")
 include("meshes/mesh1d.jl")
 include("meshes/meshnd.jl")
+include("meshes/function.jl")
+
 
 include("spaces/gridspace.jl")
 include("spaces/vectorelements.jl")
