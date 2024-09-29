@@ -14,72 +14,66 @@ struct Domain{SetType,MarkersType} <: DomainBaseType
 end
 
 """
-	struct Marker{F<:Function}
-		label::String
+	struct Marker{F}
+		label::Symbol
 		f::F
 	end
 
-Structure to implement markers for a portion of a domain. Each [Marker](@ref) is composed of a label and a levelset function that identifies a portion of the domain.
+Structure to implement markers for a portion of a domain or even boundary conditions. Each [Marker](@ref) is composed of a symbol and a [BrambleFunction](@ref).
 """
-struct Marker{F<:Function}
-	label::String
+struct Marker{F}
+	label::Symbol
 	f::F
 end
 
-MarkerType{F} = Pair{String,F}
+MarkerType{F} = Pair{Symbol,F}
 
 """
-	Domain(Ω::CartesianProduct)
+	domain(X::CartesianProduct)
+	domain(Ω::CartesianProduct, markers::MarkersType)
 
-Creates a [Domain](@ref) from a [CartesianProduct](@ref) assuming the single [Marker](@ref) `"Dirichlet" => x -> zero(eltype(x))`.
+Returns a [Domain](@ref) from a [CartesianProduct](@ref), assuming the single [Marker](@ref) `":dirichlet" => x -> 0`. Alternatively, a set of [Marker](@ref) can be passed as an argument.
 
 # Example
 
 ```
-julia> domain(Interval(0,1))
+julia> domain(interval(0,1))
 Type: Float64 
  Dim: 1 
  Set: [0.0, 1.0]
 
-Boundary markers: Dirichlet
+Boundary markers: :dirichlet
 ```
-"""
-@inline domain(Ω::CartesianProduct) = Domain(Ω, (Marker("Dirichlet", x -> zero(eltype(x))),))
-
-"""
-	Domain(Ω::CartesianProduct, markers::MarkersType)
-
-Creates a [Domain](@ref) from a [CartesianProduct](@ref) assuming the single [Marker](@ref) `"Dirichlet" => x -> zero(eltype(x))`.
-
-# Example
 
 ```
-julia> m = markers( "Dirichlet" => (x -> x-1), "Neumann" => (x -> x-0) ); Domain(Interval(0,1), m)
+julia> I = interval(0,1); m = markers( :dirichlet => ↪(I, x->x[1]-1)), :neumann => ↪(I, x->x[1]-0)); domain(interval(0,1), m)
 Type: Float64 
  Dim: 1 
  Set: [0.0, 1.0]
 
-Boundary markers: Dirichlet, Neumann
+Boundary markers: :dirichlet, :neumann
 ```
 """
-@inline domain(Ω::CartesianProduct, markers::MarkersType) where MarkersType = Domain{typeof(Ω),MarkersType}(Ω, markers)
+@inline domain(X::CartesianProduct) = Domain(X, (Marker(:Dirichlet, x -> zero(eltype(x))),))
+@inline domain(X::CartesianProduct, markers::MType) where MType = Domain{typeof(X),MType}(X, markers)
 
 """
 	set(Ω::Domain)
 
-Returns the [CartesianProduct](@ref) associated with a [Domain](@ref) `Ω`.
+Returns the [CartesianProduct](@ref) associated with the [Domain](@ref) `Ω`.
 """
 @inline set(Ω::Domain) = Ω.set
 
 """
-	dim(Ω::DomainBaseType)
+	dim(Ω::Domain)
+	dim(::Type{<:Domain{SetType}})
 
-Returns the topological dimension of a [Domain](@ref) `Ω`.
+Returns the topological dimension of the [Domain](@ref) `Ω`.
 
 # Example
 
 ```
-julia> I = Interval(0.0, 1.0); dim(Domain(I × I))
+julia> I = interval(0.0, 1.0); dim(domain(I × I))
 2
 ```
 """
@@ -88,13 +82,14 @@ julia> I = Interval(0.0, 1.0); dim(Domain(I × I))
 
 """
 	eltype(Ω::Domain)
+	eltype(::Type{<:Domain{SetType}})
 
-Returns the element type of a [Domain](@ref) `Ω`.
+Returns the type of the bounds defining [Domain](@ref) `Ω`.
 
 # Example
 
 ```
-julia> eltype(Domain(I × I))
+julia> I = interval(0.0, 1.0); eltype(domain(I × I))
 Float64
 ```
 """
@@ -102,13 +97,13 @@ Float64
 @inline eltype(::Type{<:Domain{SetType}}) where SetType = eltype(SetType)
 
 """
-	projection(Ω::Domain, i::Int)
+	projection(Ω::Domain, i)
 
-Returns the [CartesianProduct](@ref) of the `i`-th projection of the set of the [Domain](@ref) `Ω`.
+Returns the `i`-th `1`-dimensional [CartesianProduct](@ref) of the [set](@ref set(Ω::Domain)) associated with [Domain](@ref) `Ω`.
 
-For example, `projection(Domain(I × I), 1)` will return `I`.
+For example, `projection(domain(I × I), 1)` will return `I`.
 """
-@inline function projection(Ω::Domain, i) 
+@inline function projection(Ω::Domain, i)
 	@assert i in eachindex(set(Ω).data)
 	return cartesianproduct(set(Ω).data[i]...)
 end
@@ -123,19 +118,19 @@ end
 """
 	create_markers(m::MarkerType...)
 
-Converts several `Pair{String,F}` ("label" => func) to domain [Marker](@ref)s to be passed in the construction of a [Domain](@ref) `Ω`.
+Converts several `Pair{Symbol,F}` (:symbol => func) to [Marker](@ref)s. These are to be passed in the construction of a [Domain](@ref). The functions need to be defined as [BrambleFunction](@ref)s.
 
 # Example
 
 ```
-julia> create_markers( "Dirichlet" => (x -> x-1), "Neumann" => (x -> x-0) )
+julia> create_markers( :dirichlet => ↪(X, x -> x[1]-1), :neumann => ↪(X, x -> x[2]-0) )
 ```
 """
-@inline @generated function create_markers(m::MarkerType...)
-	D = length(m)
+@inline @generated function create_markers(m::MarkerType{BrambleFunction{D,T,H}}...) where {D,T,H}
+	nPairs = length(m)
 
 	tuple_expr = Expr(:tuple)
-	for i in 1:D
+	for i in 1:nPairs
 		push!(tuple_expr.args, :(Marker(m[$i]...)))
 	end
 
@@ -145,20 +140,48 @@ end
 """
 	markers(Ω::Domain)
 
-Returns a generator with the [Marker](@ref)s associated with a [Domain](@ref) `Ω`.
+Returns a generator with the [Marker](@ref)s associated with [Domain](@ref) `Ω`.
 """
 @inline markers(Ω::Domain) = Ω.markers
 
 """
 	labels(Ω::Domain)
 
-Returns a generator with the labels of the [Marker](@ref)s associated with a [Domain](@ref) `Ω`.
+Returns a generator with the labels of the [Marker](@ref)s associated with [Domain](@ref) `Ω`.
 """
 @inline labels(Ω::Domain) = (p.label for p in Ω.markers)
 
 """
 	marker_funcs(Ω::Domain)
 
-Returns a generator with the [Marker](@ref)s levelset functions associated with a [Domain](@ref) `Ω`.
+Returns a generator with the [Marker](@ref)'s [BrambleFunction](@ref)s associated with [Domain](@ref) `Ω`.
 """
 @inline marker_funcs(Ω::Domain) = (p.f for p in Ω.markers)
+
+"""
+	embed(f, Ω::Domain)
+	embed(f::BrambleFunction, Ω::Domain)
+
+Returns a [BrambleFunction](@ref). The dimension of [Domain](@ref) `Ω` is used to caracterize the types in the returning [BrambleFunction](@ref). The notation `↪` can also be used for this operation.
+
+# Example
+
+julia> Ω = domain(interval(0,1) × interval(0,1)); f = embed(Ω, x -> x[1]*x[2]+1);
+"""
+function embed(Ω::Domain, f)
+	D = dim(Ω)
+	T = eltype(Ω)
+	wrapped_f_tuple = FunctionWrapper{T,Tuple{NTuple{D,T}}}(f)
+	wrapped_f_cartesian = FunctionWrapper{T,Tuple{CartesianIndex{D}}}(zero)
+
+	return BrambleFunction{D,T,false}(wrapped_f_tuple, wrapped_f_cartesian)
+end
+
+@inline embed(Ω::Domain, f::BrambleFunction) = f
+
+"""
+	↪(Ω::Domain, f)
+
+Alias for [embed](@ref embed(Ω::Domain, f)).
+"""
+@inline ↪(Ω::Domain, f) = embed(Ω, f)

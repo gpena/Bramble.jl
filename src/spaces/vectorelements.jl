@@ -19,7 +19,7 @@ end
 """
 	element(Wₕ::SpaceType, v::AbstractVector)
 
-Returns a [VectorElement](@ref) for [GridSpace](@ref) `Wₕ` with the same coefficients of vector `v`.
+Returns a [VectorElement](@ref) for [GridSpace](@ref) `Wₕ` with the same coefficients of `v`.
 """
 @inline element(Wₕ::SpaceType, v::AbstractVector) = (@assert length(v) == ndofs(Wₕ);
 													 VectorElement(Wₕ, v))
@@ -48,7 +48,6 @@ find_aac(::Any, rest) = find_aac(rest)
 	println("copyto!")
 	copyto!(dest.values, convert(Broadcast.Broadcasted{Nothing}, bc))
 end
-=#
 
 @inline function copyto!(dest::VectorElement, bc::Broadcast.Broadcasted{<:Broadcast.AbstractArrayStyle{0}})
 	println("here-1")
@@ -82,7 +81,7 @@ end
 	println("here1")
 	return materialize!(dest.values, instantiate(Broadcasted(identity, (x,), axes(dest.values))))
 end
-
+=#
 @inline function materialize!(dest::VectorElement, bc::Broadcast.Broadcasted{<:Any})
 	aux = Broadcast.instantiate(Broadcast.Broadcasted(bc.style, bc.f, bc.args, axes(dest.values)))
 
@@ -92,13 +91,13 @@ end
 
 	return dest
 end
-
+#=
 @inline function materialize!(::Broadcast.BroadcastStyle, dest::VectorElement, bc::Broadcast.Broadcasted{<:Any})
 	println("here3")
 
 	return copyto!(dest.values, instantiate(Broadcasted(bc.style, bc.f, bc.args, axes(dest.values))))
 end
-
+=#
 @inline Base.@propagate_inbounds function getindex(uₕ::VectorElement, i)
 	@boundscheck checkbounds(uₕ.values, i)
 	return getindex(uₕ.values, i)
@@ -118,6 +117,7 @@ show(io::IO, uₕ::VectorElement) = show(io, "text/plain", uₕ.values)
 
 """
 	eltype(uₕ::VectorElement{S,T})
+	eltype(::Type{<:VectorElement{S,T}})
 
 Returns the element type of a [VectorElement](@ref) `uₕ`, `T``.
 """
@@ -136,7 +136,7 @@ Returns the space associated with [VectorElement](@ref) `uₕ`.
 """
 	similar(uh::VectorElement)
 
-Returns a new [VectorElement](@ref) belonging to the same [GridSpace](@ref) as `uh`.
+Returns a new [VectorElement](@ref) belonging to the same [GridSpace](@ref) as `uh`, with uninitialized components.
 """
 @inline similar(uₕ::VectorElement) = VectorElement(space(uₕ), similar(uₕ.values))
 
@@ -171,20 +171,6 @@ Copies the scalar `α` into the coefficients of [VectorElement](@ref) `uₕ`.
 	s = convert(eltype(uₕ), α)::eltype(uₕ)
 	@.. uₕ.values = s
 end
-
-"""
-	isequal(uₕ::VectorElement, v::AbstractVector)
-
-Tests if the coefficients of [VectorElement](@ref) `uₕ` are equal to the coefficients of vector `v`.
-"""
-@inline isequal(uₕ::VectorElement, v::AbstractVector) = (isequal(uₕ.values, v))
-
-"""
-	isequal(uₕ::VectorElement, α::Number)
-
-Tests if the coefficients of [VectorElement](@ref) `uₕ` are all equal to `α`.
-"""
-@inline isequal(uₕ::VectorElement, α::Number) = (isequal(uₕ.values, α))
 
 """
 	map(f, uₕ::VectorElement)
@@ -228,75 +214,62 @@ end
 #                      #
 ########################
 
-@inline function _func2array!(u, f::FunctionWrapper{T, Tuple{CartesianIndex{D}}}, mesh) where {D, T}
+@inline function _func2array!(u, f::BrambleFunction{D,T,true}, mesh) where {D,T}
+	@assert length(u) === npoints(mesh) === length(indices(mesh))
 	idxs = indices(mesh)
-	@.. u = f(idxs)
+	fcart = f.f_cartesian
+	#=for idx in indices(mesh)
+		u[idx] = fcart(idx)
+	end=#
+	@.. u = fcart(idxs)
 end
 
-@inline function _func2array!(u, f::FunctionWrapper{T, Tuple{NTuple{D,T}}}, mesh) where {D, T}
-	pts = points(mesh)
-	idxs = indices(mesh)
+_func2array!(u, f::BrambleFunction{D,T,false}, mesh) where {D,T} = @error "BrambleFunction needs to be embedded in a mesh."
 
-	g(idx) = _index2point(pts, idx)
-	@.. u = f(g(idxs))
-end
-
+# fallback if f is not a BrambleFunction
 @inline function _func2array!(u, f, mesh)
 	pts = points(mesh)
 	idxs = indices(mesh)
 
-	g(idx) = _index2point(pts, idx)
+	g(idx) = _i2p(pts, idx)
 	@.. u = f(g(idxs))
 end
 
-
-#=
-@generated function _func2array2!(A, f::F, mesh::MeshType{D}) where {D,F<:Function}
-	return quote
-		res = points(mesh)
-		Base.Cartesian.@nloops $D i A begin
-			#idx = CartesianIndex(Base.Cartesian.@ntuple $D i)
-			x = Base.Cartesian.@ntuple $D (i -> res[i][i])
-			(Base.Cartesian.@nref $D A i) = f(x)
-		end
-	end
-end
-=#
 """
-	Rₕ!(uₕ::VectorElement, f::F)
+	Rₕ!(uₕ::VectorElement, f)
 
 In-place version of the restriction operator [Rₕ](@ref).
 """
-function Rₕ!(uₕ::VectorElement, f::FType) where FType
+function Rₕ!(uₕ::VectorElement, f)
 	u = Base.ReshapedArray(uₕ.values, npoints(mesh(space(uₕ)), Tuple), ())
 	_func2array!(u, f, mesh(space(uₕ)))
 	return nothing
 end
 
 """
-	Rₕ(Wₕ::SpaceType, f::F)
+	Rₕ(Wₕ::SpaceType, f)
 
-Standard nodal restriction operator. It returns a [VectorElement](@ref) with the result of evaluating the function `f` at the points of `mesh(space(uₕ))`.
+Standard nodal restriction operator. It returns a [VectorElement](@ref) with the result of evaluating the function `f` at the points of `mesh(Wₕ)`. It can accept any function (like `x->x[2]+x[1])`) or a [BrambleFunction](@ref). The latter is preferred.
 
   - 1D case
 
 ```math
-Rₕ(x_i) = f(x_i), \\, i = 1,\\dots,N
+\\textrm{R}ₕ(x_i) = f(x_i), \\, i = 1,\\dots,N
 ```
 
   - 2D case
 
 ```math
-Rₕ (x_i, y_j)= f(x_i, y_j), \\, i = 1,\\dots,N_x,  j = 1,\\dots,N_y
+\\textrm{R}ₕ (x_i, y_j)= f(x_i, y_j), \\, i = 1,\\dots,N_x,  j = 1,\\dots,N_y
 ```
 
   - 3D case
 
 ```math
-Rₕ (x_i, y_j, z_l)= f(x_i, y_j, z_l), \\, i = 1,\\dots,N_x,  j = 1,\\dots,N_y, l = 1,\\dots,N_z
+\\textrm{R}ₕ (x_i, y_j, z_l)= f(x_i, y_j, z_l), \\, i = 1,\\dots,N_x,  j = 1,\\dots,N_y, l = 1,\\dots,N_z
 ```
 """
-function Rₕ(Wₕ::SpaceType, f::FType) where FType
+function Rₕ(Wₕ::SpaceType, f)
 	uₕ = element(Wₕ)
 	Rₕ!(uₕ, f)
 	return uₕ
@@ -309,9 +282,9 @@ end
 ######################
 
 """
-	avgₕ(Wₕ::SpaceType, f::F)
+	avgₕ(Wₕ::SpaceType, f)
 
-Returns a [VectorElement](@ref) with the average of `f` with respect to the [cell_measure](@ref) of `mesh(Wₕ)` around each grid point. It is defined as follows
+Returns a [VectorElement](@ref) with the average of function `f` with respect to the [cell_measure](@ref) of `mesh(Wₕ)` around each grid point. It can accept any function (like `x->x[2]+x[1])`) or a [BrambleFunction](@ref). The latter is preferred. It is defined as follows
 
   - 1D case
 
@@ -331,7 +304,7 @@ Returns a [VectorElement](@ref) with the average of `f` with respect to the [cel
 \\textrm{avg}ₕ(x_i, y_j, z_l) = \\frac{1}{|\\square_{i,j,l}|} \\iiint_{\\square_{i,j,l}} f(x,y,z) dV, \\, i = 1,\\dots,N_x,  j = 1,\\dots,N_y, l = 1,\\dots,N_z
 ```
 
-Please check the implementations of [cell_measure](@ref) for the details of ``\\square_{idx}``.
+Please check the implementations of functions [cell_measure](@ref cell_measure(Ωₕ::Mesh1D, i)) (for the `1`-dimensional case) and [cell_measure](@ref cell_measure(Ωₕ::MeshnD, i)) (for the `n`-dimensional cases).
 """
 @inline function avgₕ(Wₕ::SpaceType, f)
 	uₕ = element(Wₕ)
@@ -340,13 +313,54 @@ Please check the implementations of [cell_measure](@ref) for the details of ``\\
 end
 
 """
-	avgₕ!(uₕ::VectorElement, f::F)
+	avgₕ!(uₕ::VectorElement, f)
 
 In-place version of averaging operator [avgₕ](@ref).
 """
 @inline function avgₕ!(uₕ::VectorElement, f)
 	_avgₕ!(uₕ, f, Val(dim(mesh(space(uₕ)))))
 	return nothing
+end
+
+function _avgₕ!(uₕ::VectorElement, f, ::Val{1})
+	Ωₕ = mesh(space(uₕ))
+
+	x = Base.Fix1(half_points, Ωₕ)
+	h = Base.Fix1(half_spacing, Ωₕ)
+
+	param = (f, x, h, 1:npoints(Ωₕ)) ## indides(omegah)
+	__quad!(uₕ, (0, 1), param)
+end
+
+function _avgₕ!(uₕ::VectorElement, f::BrambleFunction{1}, ::Val{1})
+	Ωₕ = mesh(space(uₕ))
+
+	x = Base.Fix1(half_points, Ωₕ)
+	h = Base.Fix1(half_spacing, Ωₕ)
+
+	param = (f, x, h, 1:npoints(Ωₕ))
+	__quad!(uₕ, (0, 1), param)
+end
+
+function _avgₕ!(uₕ::VectorElement, f, ::Val{D}) where D
+	Ωₕ = mesh(space(uₕ))
+
+	x = Base.Fix1(half_points, Ωₕ)
+	meas = Base.Fix1(cell_measure, Ωₕ)
+
+	param = (f, x, meas, indices(Ωₕ))
+	__quadnd!(uₕ, (zeros(D), ones(D)), param)
+	return nothing
+end
+
+function _avgₕ!(uₕ::VectorElement, f::BrambleFunction{D}, ::Val{D}) where D
+	Ωₕ = mesh(space(uₕ))
+
+	x = Base.Fix1(half_points, Ωₕ)
+	meas = Base.Fix1(cell_measure, Ωₕ)
+
+	param = (f, x, meas, indices(Ωₕ))
+	__quadnd!(uₕ, (zeros(D), ones(D)), param)
 end
 
 """
@@ -369,11 +383,6 @@ function __integrand1d(y, t, p)
 	end
 end
 
-"""
-	__quad!(uₕ::VectorElement, domain::NTuple, p::ParamType)
-
-Calculates all the integrals in [avgₕ](@ref) and stores the result in `uₕ`. In this function, `domain` denotes the integration domain and `p` denotes the parameters (integrand function `f`, points `x`, spacing `h` and indices `idxs`).
-"""
 function __quad!(uₕ::VectorElement, domain::NTuple{2,T}, p::ParamType) where {T,ParamType}
 	prototype = zeros(ndofs(space(uₕ)))
 
@@ -385,59 +394,9 @@ function __quad!(uₕ::VectorElement, domain::NTuple{2,T}, p::ParamType) where {
 	return nothing
 end
 
-"""
-	_avgₕ!(uₕ::VectorElement, f::F, ::Val{1})
-
-In-place version of [avgₕ](@ref) for the 1D case. Defines the parameters needed in the calculation of [avgₕ](@ref), integrand function `f`, [half_points](@ref) ``x_{i+1/2}``, [half_spacing](@ref) `h_{i+1/2}` and indices `indices(mesh(space(uₕ)))`.
-"""
-function _avgₕ!(uₕ::VectorElement, f, ::Val{1})
-	Ωₕ = mesh(space(uₕ))
-
-	x = Base.Fix1(half_points, Ωₕ)
-	h = Base.Fix1(half_spacing, Ωₕ)
-
-	param = (f, x, h, 1:npoints(Ωₕ)) ## indides(omegah)
-	__quad!(uₕ, (0, 1), param)
-end
-
-function _avgₕ!(uₕ::VectorElement, f::StaticFunction{1}, ::Val{1})
-	Ωₕ = mesh(space(uₕ))
-
-	x = Base.Fix1(half_points, Ωₕ)
-	h = Base.Fix1(half_spacing, Ωₕ)
-
-	param = (f, x, h, 1:npoints(Ωₕ))
-	__quad!(uₕ, (0, 1), param)
-end
-
-"""
-	_avgₕ!(uₕ::VectorElement, f::F, ::Val{D})
-
-In-place version of [avgₕ](@ref) for the nD case. Defines the parameters needed in the calculation of [avgₕ](@ref), integrand function `f`, [half_points](@ref) ``x_{i+1/2}``, [half_spacing](@ref) `h_{i+1/2}` and indices `indices(mesh(space(uₕ)))`.
-"""
-function _avgₕ!(uₕ::VectorElement, f, ::Val{D}) where D
-	Ωₕ = mesh(space(uₕ))
-
-	x = Base.Fix1(half_points, Ωₕ)
-	meas = Base.Fix1(cell_measure, Ωₕ)
-
-	param = (f, x, meas, indices(Ωₕ))
-	__quadnd!(uₕ, (zeros(D), ones(D)), param)
-end
-
-function _avgₕ!(uₕ::VectorElement, f::StaticFunction{D}, ::Val{D}) where D
-	Ωₕ = mesh(space(uₕ))
-
-	x = Base.Fix1(half_points, Ωₕ)
-	meas = Base.Fix1(cell_measure, Ωₕ)
-
-	param = (f, x, meas, indices(Ωₕ))
-	__quadnd!(uₕ, (zeros(D), ones(D)), param)
-end
-
 @inline @generated __shift_index1(idx::CartesianIndex{D}) where D = :(Base.Cartesian.@ntuple $D i->idx[i] + 1)
 
-function __idx2point(t, x, idx::CartesianIndex{D}) where D
+function __idx2points(t, x, idx::CartesianIndex{D}) where D
 	lb = x(Tuple(idx))
 	ub = x(__shift_index1(idx))
 
@@ -458,16 +417,11 @@ function __integrandnd(y, t, p)
 	f, x, meas, idxs = p
 
 	for idx in idxs
-		point, diff = __idx2point(t, x, idx)
+		point, diff = __idx2points(t, x, idx)
 		y[idx] = f(point) * prod(diff) / meas(idx)
 	end
 end
 
-"""
-	__quadnd!(uₕ::VectorElement, domain::NTuple, p::ParamType)
-
-Calculates all the integrals in [avgₕ](@ref) and stores the result in `uₕ`. In this function, `domain` denotes the integration domain and `p` denotes the parameters (integrand function `f`, points `x`, spacing `h` and indices `idxs`).
-"""
 function __quadnd!(uₕ::VectorElement, domain::NTuple{D,T}, p::ParamType) where {D,T,ParamType}
 	npts = npoints(mesh(space(uₕ)), Tuple)
 	v = Base.ReshapedArray(uₕ.values, npts, ())

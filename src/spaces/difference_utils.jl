@@ -208,14 +208,14 @@ end
 """
 	weights_D₋ₓ!(v, Ωₕ::MeshType, ::Val{1})
 
-Sets `v` to the inverse of the [spacing](@ref) of `Ωₕ` on the `x` component, ``h_{i}`` .
+Sets `v` to the inverse of the [spacing](@ref spacing(Ωₕ::Mesh1D, i)) of `Ωₕ` on the `x` component, ``h_{i}`` .
 """
 @inline weights_D₋ₓ!(v, Ωₕ::MeshType, ::Val{1}) = invert_spacing!(v, Ωₕ)
 
 """
 	weights_D₋ₓ!(v, Ωₕ::MeshType, ::Val{D})
 
-Sets `v` to the inverse of the [spacing](@ref) of `Ωₕ` on the `x` component, ``h_{x,i}`` .
+Sets `v` to the inverse of the [spacing](@ref spacing(Ωₕ::MeshnD, i)) of `Ωₕ` on the `x` component, ``h_{x,i}`` .
 """
 @inline function weights_D₋ₓ!(v, Ωₕ::MeshType, ::Val{D}) where D
 	first_dims = prod(npoints(Ωₕ, Tuple)[1:(D - 1)])
@@ -227,7 +227,7 @@ end
 """
 	weights_D₋ᵧ!(v, Ωₕ::MeshType, ::Val{2})
 
-Sets `v` to the inverse of the [spacing](@ref) of `Ωₕ` on the `y` component, ``h_{y,j}`` .
+Sets `v` to the inverse of the [spacing](@ref spacing(Ωₕ::MeshnD, i)) of `Ωₕ` on the `y` component, ``h_{y,j}`` .
 """
 @inline function weights_D₋ᵧ!(v, Ωₕ::MeshType, ::Val{2})
 	dims = npoints(Ωₕ, Tuple)
@@ -244,7 +244,7 @@ end
 """
 	weights_D₋ᵧ!(v, Ωₕ::MeshType, ::Val{3})
 
-Sets `v` to the inverse of the [spacing](@ref) of `Ωₕ` on the `y` component, ``h_{y,j}`` .
+Sets `v` to the inverse of the [spacing](@ref spacing(Ωₕ::MeshnD, i)) of `Ωₕ` on the `y` component, ``h_{y,j}`` .
 """
 @inline function weights_D₋ᵧ!(v, Ωₕ::MeshType, ::Val{3})
 	dims = npoints(Ωₕ, Tuple)
@@ -258,7 +258,7 @@ end
 """
 	weights_D₋₂!(v, Ωₕ::MeshType, ::Val{3})
 
-Sets `v` to the inverse of the [spacing](@ref) of `Ωₕ` on the `z` component, ``h_{z,l}`` .
+Sets `v` to the inverse of the [spacing](@ref spacing(Ωₕ::MeshnD, i)) of `Ωₕ` on the `z` component, ``h_{z,l}`` .
 """
 @inline function weights_D₋₂!(v, Ωₕ::MeshType, ::Val{3})
 	dims = npoints(Ωₕ, Tuple)
@@ -275,15 +275,15 @@ end
 
 function _create_D₋ₓ(Ωₕ::MeshType; vector = _create_vector(Ωₕ))
 	weights_D₋ₓ!(vector, Ωₕ, Val(dim(Ωₕ)))
-	return vector .* diff₋ₓ(Ωₕ)
+	return Diagonal(vector) * diff₋ₓ(Ωₕ)
 end
 
 function _create_D₋ᵧ(Ωₕ::MeshType; vector = _create_vector(Ωₕ))
 	weights_D₋ᵧ!(vector, Ωₕ, Val(dim(Ωₕ)))
-	return vector .* diff₋ᵧ(Ωₕ)
+	return Diagonal(vector) * diff₋ᵧ(Ωₕ)
 end
 
 function _create_D₋₂(Ωₕ::MeshType; vector = _create_vector(Ωₕ))
 	weights_D₋₂!(vector, Ωₕ, Val(dim(Ωₕ)))
-	return vector .* diff₋₂(Ωₕ)
+	return Diagonal(vector) * diff₋₂(Ωₕ)
 end

@@ -7,24 +7,27 @@
 # Implementation of the backward difference operators as matrices
 """
 	diff₋ₓ(Wₕ::SpaceType)
+	diff₋ₓ(Ωₕ::MeshType)
 
-Returns a [MatrixElement](@ref) implementing the backward difference matrix for the mesh grid of `Wₕ`, in the `x` direction. It is defined as being the (sparse) matrix representation of the linear operator defined by [`diff₋ₓ(uₕ::VectorElement)`](@ref).
+Returns a [MatrixElement](@ref) implementing the backward difference matrix for the mesh grid of `Wₕ`, in the `x` direction. It is defined as being the (sparse) matrix representation of the linear operator defined by [diff₋ₓ](@ref diff₋ₓ(uₕ::VectorElement)). It can also be calculated passing a mesh as argument.
 """
 @inline diff₋ₓ(Wₕ::SpaceType) = elements(Wₕ, diff₋ₓ(mesh(Wₕ)))
 @inline diff₋ₓ(Ωₕ::MeshType) = shiftₓ(Ωₕ, Val(dim(Ωₕ)), Val(0)) - shiftₓ(Ωₕ, Val(dim(Ωₕ)), Val(-1))
 
 """
 	diff₋ᵧ(Wₕ::SpaceType)
+	diff₋ᵧ(Ωₕ::MeshType)
 
-Returns a [MatrixElement](@ref) implementing the backward difference matrix for the mesh grid of `Wₕ`, in the `y` direction. It is defined as being the (sparse) matrix representation of the linear operator defined by [`diff₋ᵧ(uₕ::VectorElement)`](@ref).
+Returns a [MatrixElement](@ref) implementing the backward difference matrix for the mesh grid of `Wₕ`, in the `y` direction. It is defined as being the (sparse) matrix representation of the linear operator defined by [diff₋ᵧ](@ref diff₋ᵧ(uₕ::VectorElement)). It can also be calculated passing a mesh as argument.
 """
 @inline diff₋ᵧ(Wₕ::SpaceType) = elements(Wₕ, diff₋ᵧ(mesh(Wₕ)))
 @inline diff₋ᵧ(Ωₕ::MeshType) = shiftᵧ(Ωₕ, Val(dim(Ωₕ)), Val(0)) - shiftᵧ(Ωₕ, Val(dim(Ωₕ)), Val(-1))
 
 """
 	diff₋₂(Wₕ::SpaceType)
+	diff₋₂(Ωₕ::MeshType)
 
-Returns a [MatrixElement](@ref) implementing the backward difference matrix for the mesh grid of `Wₕ`, in the `z` direction. It is defined as being the (sparse) matrix representation of the linear operator defined by [`diff₋₂(uₕ::VectorElement)`](@ref).
+Returns a [MatrixElement](@ref) implementing the backward difference matrix for the mesh grid of `Wₕ`, in the `z` direction. It is defined as being the (sparse) matrix representation of the linear operator defined by [diff₋₂](@ref diff₋₂(uₕ::VectorElement)). It can also be calculated passing a mesh as argument.
 """
 @inline diff₋₂(Wₕ::SpaceType) = elements(Wₕ, diff₋₂(mesh(Wₕ)))
 @inline diff₋₂(Ωₕ::MeshType) = shift₂(Ωₕ, Val(dim(Ωₕ)), Val(0)) - shift₂(Ωₕ, Val(dim(Ωₕ)), Val(-1))
@@ -36,7 +39,7 @@ Returns a [MatrixElement](@ref) implementing the backward difference matrix for 
 """
 	diff₋(Wₕ::SpaceType)
 
-Returns a tuple of [MatrixElement](@ref)s implementing the backward difference operators in the `x`, `y`, and `z` directions. If the problem is 1D, it returns a single [MatrixElement](@ref).
+Returns a tuple of [MatrixElement](@ref)s implementing the backward difference operators in the `x`, `y`, and `z` directions. If the problem is `1`-dimensikonal, it returns a single [MatrixElement](@ref).
 """
 @inline diff₋(Wₕ::SpaceType) = diff₋(Wₕ, Val(dim(mesh(Wₕ))))
 @inline diff₋(Wₕ::SpaceType, ::Val{1}) = diff₋ₓ(Wₕ)
@@ -51,13 +54,13 @@ Returns the backward difference, in the `x` direction, of the element `uₕ`.
   - 1D case
 
 ```math
-\\textrm{diff}_{-x} \\textrm{u}_h(x_i) = \\textrm{u}_h(x_i) - \\textrm{u}_h(x_{i-1})
+\\textrm{diff}_{-x} \\textrm{u}_h(x_i) \\vcentcolon = \\textrm{u}_h(x_i) - \\textrm{u}_h(x_{i-1})
 ```
 
   - 2D and 3D case
 
 ```math
-\\textrm{diff}_{-x} \\textrm{u}_h(x_i, \\dots) = \\textrm{u}_h(x_i, \\dots)-\\textrm{u}_h(x_{i-1}, \\dots)
+\\textrm{diff}_{-x} \\textrm{u}_h(x_i, \\dots) \\vcentcolon = \\textrm{u}_h(x_i, \\dots)-\\textrm{u}_h(x_{i-1}, \\dots)
 ```
 """
 Base.@propagate_inbounds function diff₋ₓ(uₕ::VectorElement)
@@ -76,7 +79,7 @@ Returns the backward difference, in the `y` direction, of the element `uₕ`.
   - 2D and 3D case
 
 ```math
-\\textrm{diff}_{-y} \\textrm{u}_h(x_i, y_j,\\dots) = \\textrm{u}_h(x_i, y_j,\\dots)-\\textrm{u}_h(x_i, y_{j-1}, \\dots)
+\\textrm{diff}_{-y} \\textrm{u}_h(x_i, y_j,\\dots) \\vcentcolon = \\textrm{u}_h(x_i, y_j,\\dots)-\\textrm{u}_h(x_i, y_{j-1}, \\dots)
 ```
 """
 Base.@propagate_inbounds function diff₋ᵧ(uₕ::VectorElement)
@@ -99,7 +102,7 @@ end
 Returns the backward difference, in the `z` direction, of the element `uₕ`.
 
 ```math
-\\textrm{diff}_{-z} \\textrm{u}_h(x_i, y_j,z_l) = \\textrm{u}_h(x_i, y_j,z_l)-\\textrm{u}_h(x_i, y_j, z_{l-1})
+\\textrm{diff}_{-z} \\textrm{u}_h(x_i, y_j,z_l) \\vcentcolon = \\textrm{u}_h(x_i, y_j,z_l)-\\textrm{u}_h(x_i, y_j, z_{l-1})
 ```
 """
 Base.@propagate_inbounds function diff₋₂(uₕ::VectorElement)
@@ -124,7 +127,7 @@ end
 """
 	diff₋(uₕ::VectorElement)
 
-Returns a tuple of [VectorElement](@ref)s implementing the backward difference operators in the `x`, `y`, and `z` directions applied to `uₕ`. If the problem is 1D, it returns a single [VectorElement](@ref).
+Returns a tuple of [VectorElement](@ref)s implementing the backward difference operators in the `x`, `y`, and `z` directions applied to `uₕ`. If the problem is `1`-dimensional, it returns a single [VectorElement](@ref).
 """
 @inline diff₋(uₕ::VectorElement) = diff₋(uₕ, Val(dim(mesh(space(uₕ)))))
 @inline diff₋(uₕ::VectorElement, ::Val{1}) = diff₋ₓ(uₕ)
@@ -159,7 +162,7 @@ Returns a [MatrixElement](@ref) resulting of the multiplication of the backward 
 """
 	diff₋(Uₕ::MatrixElement)
 
-Returns a tuple of [MatrixElement](@ref)s implementing the forward difference operators in the `x`, `y`, and `z` directions applied to `Uₕ`. If the problem is 1D, it returns a single [MatrixElement](@ref).
+Returns a tuple of [MatrixElement](@ref)s implementing the forward difference operators in the `x`, `y`, and `z` directions applied to `Uₕ`. If the problem is `1`-dimensional, it returns a single [MatrixElement](@ref).
 """
 @inline diff₋(Uₕ::MatrixElement) = diff₋(Uₕ, Val(dim(mesh(space(Uₕ)))))
 @inline diff₋(Uₕ::MatrixElement, ::Val{1}) = diff₋ₓ(Uₕ)

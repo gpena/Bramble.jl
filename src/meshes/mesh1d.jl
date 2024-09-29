@@ -1,12 +1,12 @@
 """
 	struct Mesh1D{T} <: MeshType{1}
 		markers::MeshMarkers{1}
-		indices::CartesianIndices{1,Tuple{Base.OneTo{Int}}}
+		indices::CartesianIndices{1}
 		pts::Vector{T}
 		npts::Int
 	end	
 
-Structure to create a 1D mesh with `npts` points of type `T`. The points that define the mesh are stored in `pts` and are identified, following the same order, with the indices in `indices`. The variable `markers` stores, for each [Domain](@ref) marker, the indices satisfying ``f(x)=0``, where ``f``is the marker function.
+Structure to create a 1D mesh with `npts` points of type `T`. The points that define the mesh are stored in `pts` and are identified, following the same order, with the indices in `indices`. The variable `markers` stores, for each [Domain](@ref) marker, the indices satisfying ``f(x_i)=0``, where `f` is the marker's function.
 
 For future reference, the `npts` entries of vector `pts` are
 
@@ -24,9 +24,7 @@ end
 	mesh(Ω::Domain, npts::Int, unif::Bool)
 
 Returns a [Mesh1D](@ref) based on [Domain](@ref) `Ω` and `npts` points with uniform spacing
-if `unif` is `true` (otherwise, the points are randomly generated on the domain).
-
-For future reference, we denote the `npts` entries of vector `pts` as
+if `unif` is `true` (otherwise, the points are randomly generated on the domain). For future reference, we denote the `npts` entries of vector `pts` as
 
 ```math
 x_i, \\, i=1,\\dots,N.
@@ -36,35 +34,12 @@ x_i, \\, i=1,\\dots,N.
 
 ```
 julia> I = interval(0,1); Ωₕ = mesh(domain(I), 10, true)
-1D Mesh
+1D mesh
 nPoints: 10
 Markers: Dirichlet
 ```
 """
 function mesh(Ω::Domain{CartesianProduct{1,T},MarkersType}, npts::Int, unif::Bool) where {T,MarkersType}
-	R, pts, markersForMesh = create_mesh1d_basics(Ω, npts, unif)
-
-	return Mesh1D{T}(markersForMesh, R, pts)
-end
-
-@inline function mesh(Ω::Domain{CartesianProduct{1,T},Markers}, npts::NTuple{1,Int}, unif::NTuple{1,Bool}) where {T,Markers}
-	return mesh(Ω, npts[1], unif[1])
-end
-
-@inline dim(_::Mesh1D{T}) where T = 1
-@inline dim(::Type{<:Mesh1D{T}}) where T = 1
-
-@inline eltype(_::Mesh1D{T}) where T = T
-@inline eltype(::Type{<:Mesh1D{T}}) where T = T
-
-"""
-	create_mesh1d_basics(Ω::Domain, npts::Int, unif::Bool)
-
-Creates the basic components of a 1D mesh, given a [Domain](@ref) `Ω`, the number
-of points `npts` and a boolean `unif`. The points are equally spaced if `unif`
-is `true` (otherwise, the points are randomly generated on the domain).
-"""
-function create_mesh1d_basics(Ω::Domain, npts::Int, unif::Bool)
 	pts = Vector{eltype(Ω)}(undef, npts)
 	createpoints!(pts, set(Ω), unif)
 	R = generate_indices(npts)
@@ -75,14 +50,30 @@ function create_mesh1d_basics(Ω::Domain, npts::Int, unif::Bool)
 		merge!(markersForMesh, Dict(label => VecCartIndex{1}()))
 	end
 
-	addmarkers!(markersForMesh, Ω, R, pts)
+	boundary = boundary_indices(R)
 
-	return R, pts, markersForMesh
+	for idx in boundary, marker in markers(Ω)
+		if marker.f(_i2p(pts, idx)) ≈ 0
+			push!(markersForMesh[marker.label], idx)
+		end
+	end
+
+	return Mesh1D{T}(markersForMesh, R, pts)
 end
+
+@inline function mesh(Ω::Domain{CartesianProduct{1,T},Markers}, npts::NTuple{1,Int}, unif::NTuple{1,Bool}) where {T,Markers}
+	return mesh(Ω, npts[1], unif[1])
+end
+
+@inline dim(_::Mesh1D) = 1
+@inline dim(::Type{<:Mesh1D{T}}) where T = 1
+
+@inline eltype(_::Mesh1D{T}) where T = T
+@inline eltype(::Type{<:Mesh1D{T}}) where T = T
 
 function show(io::IO, Ωₕ::Mesh1D)
 	l = join(keys(Ωₕ.markers), ", ")
-	properties = ["1D Mesh",
+	properties = ["1D mesh",
 		"#Points: $(npoints(Ωₕ))",
 		"Markers: $l"]
 
@@ -92,16 +83,10 @@ end
 @inline (Ωₕ::Mesh1D)(_) = Ωₕ
 
 """
-	struct Iterator end
-
-Structure to retrieve lazy iterators from points or spacings.
-"""
-struct Iterator <: BrambleType end
-
-"""
 	npoints(Ωₕ::Mesh1D)
+	npoints(Ωₕ::Mesh1D, Tuple)
 
-Returns the number of points ``x_i`` in `Ωₕ`.
+Returns the number of points ``x_i`` in `Ωₕ`. If the second argument is passed, it returns the same information as a `1`-tuple.
 
 # Example
 
@@ -111,41 +96,18 @@ julia> Ωₕ = mesh(domain(interval(0,1)), 10, true); npoints(Ωₕ)
 ```
 """
 @inline npoints(Ωₕ::Mesh1D) = length(Ωₕ.pts)
-
-"""
-	npoints(Ωₕ::Mesh1D, Tuple)
-
-Returns the number of points ``x_i`` in `Ωₕ` as a 1-tuple.
-
-# Example
-
-```
-julia> Ωₕ = mesh(domain(interval(0,1)), 10, true); npoints(Ωₕ, Iterator)
-(10,)
-```
-"""
 @inline npoints(Ωₕ::Mesh1D, ::Type{Tuple}) = (length(Ωₕ.pts),)
 
 """
 	points(Ωₕ::Mesh1D)
-
-Returns a vector with all the points ``x_i, \\, i=1,\\dots,N`` in `Ωₕ`.
-"""
-@inline points(Ωₕ::Mesh1D) = Ωₕ.pts
-
-"""
+	points(Ωₕ::Mesh1D, i)
 	points(Ωₕ::Mesh1D, Iterator)
 
-Returns a generator iterating over all the points ``x_i, \\, i=1,\\dots,N`` in `Ωₕ`.
+Returns a vector with all the points ``x_i, \\, i=1,\\dots,N`` in `Ωₕ`. A second argument can be passed. If it is an `Int` or a `CartesianIndex{1}`, it returns the `i`-th point of `Ωₕ`, ``x_i``. If the second argument is `Iterator` then the function returns a generator iterating over the points.
 """
+@inline points(Ωₕ::Mesh1D) = Ωₕ.pts
 @inline points(Ωₕ::Mesh1D, ::Type{Iterator}) = (p for p in points(Ωₕ))
-
-"""
-	point(Ωₕ::Mesh1D, i)
-
-Returns the `i`-th point of `Ωₕ`, ``x_i``.
-"""
-@inline function point(Ωₕ::Mesh1D, i)
+@inline function points(Ωₕ::Mesh1D, i)
 	idx = CartesianIndex(i)
 	@assert idx in indices(Ωₕ)
 	return getindex(Ωₕ.pts, idx[1])
@@ -157,21 +119,22 @@ end
 Returns the maximum over the space stepsize ``h_i``of mesh `Ωₕ`
 
 ```math
-h_{max} = \\max_{i=1,\\dots,N} x_i - x_{i-1}.
+h_{max} \\vcentcolon = \\max_{i=1,\\dots,N} x_i - x_{i-1}.
 ```
 """
 @inline hₘₐₓ(Ωₕ::Mesh1D) = maximum(spacing(Ωₕ, Iterator))
 
 """
 	spacing(Ωₕ::Mesh1D, i)
+	spacing(Ωₕ::Mesh1D, Iterator)
 
-Returns the space stepsize, ``h_i`` at index `i` in mesh `Ωₕ`
+Returns the space stepsize, ``h_i`` at index `i` in mesh `Ωₕ`. If the second argument `Iterator` is supplied, the function returns a generator iterating over all spacings.
 
 ```math
-h_i = x_i - x_{i-1}, \\, i=2,\\dots,N
+h_i \\vcentcolon = x_i - x_{i-1}, \\, i=2,\\dots,N
 ```
 
-where ``h_1 = x_2 - x_1``.
+and ``h_1 \\vcentcolon = x_2 - x_1``.
 """
 @inline function spacing(Ωₕ::Mesh1D, i)
 	idx = CartesianIndex(i)
@@ -186,23 +149,19 @@ where ``h_1 = x_2 - x_1``.
 	return Ωₕ.pts[_i] - Ωₕ.pts[_i_1]
 end
 
-"""
-	spacing(Ωₕ::Mesh1D, Iterator)
-
-Returns a generator iterating over all space step sizes ``h_i, \\, i=1,\\dots,N`` in mesh `Ωₕ`.
-"""
 @inline spacing(Ωₕ::Mesh1D, ::Type{Iterator}) = (spacing(Ωₕ, i) for i in eachindex(points(Ωₕ)))
 
 """
 	half_spacing(Ωₕ::Mesh1D, i)
+	half_spacing(Ωₕ::Mesh1D, Iterator)
 
-Returns the indexwise average of the space stepsize, ``h_{i+1/2}``, at index `i` in mesh `Ωₕ`
+Returns the indexwise average of the space stepsize, ``h_{i+1/2}``, at index `i` in mesh `Ωₕ`. If the second argument `Iterator` is supplied, the function returns a generator iterating over all half spacings.
 
 ```math
-h_{i+1/2} = \\frac{h_i + h_{i+1}}{2}, \\, i=1,\\dots,N-1
+h_{i+1/2} \\vcentcolon = \\frac{h_i + h_{i+1}}{2}, \\, i=1,\\dots,N-1,
 ```
 
-where ``h_{N+1/2} = \\frac{h_{N}}{2}`` and ``h_{1/2} = \\frac{h_1}{2}``.
+``h_{N+1/2} \\vcentcolon = \\frac{h_{N}}{2}`` and ``h_{1/2} \\vcentcolon = \\frac{h_1}{2}``.
 """
 @inline function half_spacing(Ωₕ::Mesh1D{T}, i) where T
 	idx = CartesianIndex(i)
@@ -216,23 +175,19 @@ where ``h_{N+1/2} = \\frac{h_{N}}{2}`` and ``h_{1/2} = \\frac{h_1}{2}``.
 	return (spacing(Ωₕ, next) + spacing(Ωₕ, idx)) * convert(T, 0.5)::T
 end
 
-"""
-	half_spacing(Ωₕ::Mesh1D, Iterator)
-
-Returns an iterator over all indexwise average of the space stepsizes ``h_{i+1/2}, \\, i=1,\\dots,N`` in mesh `Ωₕ`.
-"""
 @inline half_spacing(Ωₕ::Mesh1D, ::Type{Iterator}) = (half_spacing(Ωₕ, i) for i in eachindex(points(Ωₕ)))
 
 """
-	function half_points(Ωₕ::Mesh1D, i)
+	half_points(Ωₕ::Mesh1D, i)
+	half_points(Ωₕ::Mesh1D, Iterator)
 
-Returns the average of two neighboring, ``x_{i+1/2}``, points in mesh `Ωₕ`, at index `i`
+Returns the average of two neighboring, ``x_{i+1/2}``, points in mesh `Ωₕ`, at index `i`. If the second argument `Iterator` is supplied, the function returns a generator iterating over all half points.
 
 ```math
-x_{i+1/2} = x_i + \\frac{h_{i+1}}{2}, \\, i=1,\\dots,N-1,
+x_{i+1/2} \\vcentcolon = x_i + \\frac{h_{i+1}}{2}, \\, i=1,\\dots,N-1,
 ```
 
-``x_{N+1/2} = x_{N}`` and ``x_{1/2} = x_1``.
+``x_{N+1/2} \\vcentcolon = x_{N}`` and ``x_{1/2} \\vcentcolon = x_1``.
 """
 @inline function half_points(Ωₕ::Mesh1D{T}, i) where T
 	indices_half_points = generate_indices(npoints(Ωₕ) + 1)
@@ -241,46 +196,35 @@ x_{i+1/2} = x_i + \\frac{h_{i+1}}{2}, \\, i=1,\\dots,N-1,
 	@assert idx in indices_half_points
 
 	if idx === first(indices_half_points)
-		return point(Ωₕ, 1)
+		return points(Ωₕ, 1)
 	end
 
 	if idx == last(indices_half_points)
-		return point(Ωₕ, npoints(Ωₕ))
+		return points(Ωₕ, npoints(Ωₕ))
 	end
 
 	former = idx[1] - 1
 
-	return (point(Ωₕ, idx) + point(Ωₕ, former)) * convert(T, 0.5)::T
+	return (points(Ωₕ, idx) + points(Ωₕ, former)) * convert(T, 0.5)::T
 end
 
-"""
-	half_points(Ωₕ::Mesh1D, Iterator)
-
-Returns an iterator over all points ``x_{i+1/2}, \\, i=1,\\dots,N`` in mesh `Ωₕ`.
-"""
 @inline half_points(Ωₕ::Mesh1D, ::Type{Iterator}) = (half_points(Ωₕ, i) for i in 1:(npoints(Ωₕ) + 1))
 
 """
 	cell_measure(Ωₕ::Mesh1D, i)
-
-Returns the measure of the cell ``\\square_{i} = [x_i - \\frac{h_{i}}{2}, x_i + \\frac{h_{i+1}}{2}]`` at `CartesianIndex` `i` in mesh `Ωₕ`, which is
-given by ``h_{i+1/2}``.
-"""
-@inline cell_measure(Ωₕ::Mesh1D, i) = half_spacing(Ωₕ, i)
-
-"""
 	cell_measure(Ωₕ::Mesh1D, Iterator)
 
-Returns an iterator over ``h_{i+1/2}, \\, i=1,\\dots,N`` in mesh `Ωₕ`.
+Returns the measure of the cell
+
+```math
+\\square_{i} \\vcentcolon = \\left[x_i - \\frac{h_{i}}{2}, x_i + \\frac{h_{i+1}}{2} \\right]
+```
+
+at `CartesianIndex` `i` in mesh `Ωₕ`, which is given by ``h_{i+1/2}``. If the second argument `Iterator` is supplied, the function returns a generator iterating over all cell measures.
 """
+@inline cell_measure(Ωₕ::Mesh1D, i) = half_spacing(Ωₕ, i)
 @inline cell_measure(Ωₕ::Mesh1D, ::Type{Iterator}) = Iterators.map(Base.Fix1(cell_measure, Ωₕ), indices(Ωₕ))
 
-"""
-	createpoints!(x::Vector, I::CartesianProduct{1}, unif::Bool)
-
-Overrides the components of vector `x` with uniformly (`unif = true`) or randomly distributed
-(`unif = false`) points in the interval `I`.
-"""
 @inline function createpoints!(x::Vector{T}, I::CartesianProduct{1,T}, unif::Bool) where T
 	npts = length(x)
 	x .= range(zero(T), one(T), length = npts)
@@ -317,19 +261,3 @@ Returns the indices of the interior points of mesh `Ωₕ`.
 """
 @inline interior_indices(Ωₕ::Mesh1D) = CartesianIndices((2:(npoints(Ωₕ) - 1),))
 @inline interior_indices(R::CartesianIndices{1}) = CartesianIndices((2:(length(R) - 1),))
-
-"""
-	addmarkers!(markerList::MeshMarkers{1}, Ω::Domain, R::CartesianIndices{1}, pts)
-
-For each [Domain](@ref) marker, stores in `markerList` the indices of the points that satisfy ``f(x)=0``,
-where ``f`` is the corresponding levelset function associated with the marker.
-"""
-function addmarkers!(markerList::MeshMarkers{1}, Ω::Domain, R::CartesianIndices{1}, pts)
-	boundary = boundary_indices(R)
-
-	for idx in boundary, marker in markers(Ω)
-		if marker.f(_index2point(pts, idx)) ≈ 0
-			push!(markerList[marker.label], idx)
-		end
-	end
-end

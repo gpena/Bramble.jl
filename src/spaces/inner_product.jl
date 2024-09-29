@@ -2,25 +2,26 @@
 ## innerₕ
 """
 	innerₕ(uₕ::VectorElement, vₕ::VectorElement)
+	innerₕ(Uₕ::VecOrMatElem, Vₕ::VecOrMatElem)
 
 Returns the discrete ``L^2`` inner product of the grid functions `uₕ` and `vₕ`
 
   - 1D case
 
 ```math
-\\textrm{inner}_h (u_h, v_h) = \\sum_{i=1}^N h_{i+1/2} u_h(x_i) v_h(x_i)
+(\\textrm{u}_h, \\textrm{v}_h)_h \\vcentcolon = \\sum_{i=1}^N |\\square_{i}| \\textrm{u}_h(x_i) \\textrm{v}_h(x_i)
 ```
 
   - 2D case
 
 ```math
-\\textrm{inner}_h (u_h, v_h) = \\sum_{i=1}^{N_x} \\sum_{j=1}^{N_y} h_{x,i+1/2} h_{y,j+1/2} u_h(x_i,y_j) v_h(x_i,y_j)
+(\\textrm{u}_h, \\textrm{v}_h)_h \\vcentcolon = \\sum_{i=1}^{N_x} \\sum_{j=1}^{N_y} |\\square_{i,j}| \\textrm{u}_h(x_i,y_j) \\textrm{v}_h(x_i,y_j)
 ```
 
   - 3D case
 
 ```math
-\\textrm{inner}_h (u_h, v_h) = \\sum_{i=1}^{N_x} \\sum_{j=1}^{N_y}  \\sum_{l=1}^{N_z}  h_{x,i+1/2} h_{y,j+1/2} h_{z,l+1/2} u_h(x_i,y_j) v_h(x_i,y_j)
+(\\textrm{u}_h, \\textrm{v}_h)_h \\vcentcolon = \\sum_{i=1}^{N_x} \\sum_{j=1}^{N_y}  \\sum_{l=1}^{N_z}  |\\square_{i,j,l}| \\textrm{u}_h(x_i,y_j) \\textrm{v}_h(x_i,y_j)
 ```
 """
 @inline innerₕ(uₕ::VectorElement, vₕ::VectorElement) = _dot(uₕ.values, innerh_weights(space(uₕ)), vₕ.values)
@@ -29,43 +30,53 @@ Returns the discrete ``L^2`` inner product of the grid functions `uₕ` and `v�
 """
 	innerh_weights(Wₕ::SpaceType)
 
-Returns the weights to be used in the calculation of [`innerₕ`](@ref).
+Returns the weights to be used in the calculation of [innerₕ](@ref innerₕ(uₕ::VectorElement, vₕ::VectorElement)).
 """
 @inline innerh_weights(Wₕ::SpaceType) = Wₕ.innerh_weights
 
 """
 	normₕ(uₕ::VectorElement)
 
-	Returns the discrete ``L^2`` norm of the grid function `uₕ`, defined as
+Returns the discrete ``L^2`` norm of the grid function `uₕ`, defined as
 
 ```math
-\\textrm{norm}_h (u_h) = \\sqrt{\\textrm{inner}_h (u_h, u_h)}
+\\Vert \\textrm{u}_h \\Vert_h \\vcentcolon = \\sqrt{(\\textrm{u}_h, \\textrm{u}_h)_h}
 ```
 """
 @inline normₕ(uₕ::VectorElement) = sqrt(innerₕ(uₕ, uₕ))
 
 """
-	inner₊(uₕ::VectorElement, vₕ::VectorElement)
+	inner₊(uₕ::VecOrMatElem, vₕ::VecOrMatElem)
+	inner₊(uₕ::VecOrMatElem, vₕ::VecOrMatElem, Tuple)
+	inner₊(uₕ::NTuple, vₕ::NTuple)
 
-Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ` and `vₕ`
+Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ` and `vₕ`. It accepts arguments of type [VectorElement](@ref) or [MatrixElement](@ref), in any order.
+
+If the `Tuple` argument is given, it returns `D`-tuple of all ``\\textrm{inner}_{x_i,+}`` applied to its input arguments, where `D` is the topological dimension of the mesh associated with the elements.
+
+If `NTuple`s of [VectorElement](@ref) or [MatrixElement](@ref) are passed as input arguments, it returns the sum of all inner products ``(\\textrm{u}_h[i],\\textrm{v}_h[i])_{+x_i}``.
+
+For [VectorElement](@ref)s, the definition is given by
 
   - 1D case
 
 ```math
-(u_h, v_h)_+ = \\sum_{i=1}^{N_x} h_{i} u_h(x_i) v_h(x_i)
+(\\textrm{u}_h, \\textrm{v}_h)_+ \\vcentcolon = \\sum_{i=1}^{N_x} h_{i} \\textrm{u}_h(x_i) \\textrm{v}_h(x_i)
 ```
 
   - 2D case
 
 ```math
-(u_h, v_h)_+ = \\sum_{i=1}^{N_x}\\sum_{j=1}^{N_y} \\left( h_{x,i} h_{y,j+1/2} +  h_{x,i} h_{y,j+1/2}  \\right) u_h(x_i,y_j) v_h(x_i,y_j)
+(\\textrm{u}_h, \\textrm{v}_h)_+ \\vcentcolon = (\\textrm{u}_h, \\textrm{v}_h)_{+x} + (\\textrm{u}_h, \\textrm{v}_h)_{+y}
 ```
 
   - 3D case
 
 ```math
-(u_h, v_h)_+ = \\sum_{i=1}^{N_x}\\sum_{j=1}^{N_y}\\sum_{l=1}^{N_z} \\left( h_{x,i} h_{y,j+1/2} h_{z,l+1/2} +  h_{x,i+1/2} h_{y,j} h_{z,l+1/2} +  h_{x,i+1/2} h_{y,j+1/2} h_{z,l}\\right) u_h(x_i,y_j,z_l) v_h(x_i,y_j,z_l).
+(\\textrm{u}_h, \\textrm{v}_h)_+ \\vcentcolon = (\\textrm{u}_h, \\textrm{v}_h)_{+x} + (\\textrm{u}_h, \\textrm{v}_h)_{+y} + (\\textrm{u}_h, \\textrm{v}_h)_{+z}.
 ```
+
+See the definitions of [inner₊ₓ](@ref inner₊ₓ(uₕ::VecOrMatElem, vₕ::VecOrMatElem)), [inner₊ᵧ](@ref inner₊ᵧ(uₕ::VecOrMatElem, vₕ::VecOrMatElem)) and [inner₊₂](@ref inner₊₂(uₕ::VecOrMatElem, vₕ::VecOrMatElem)) for more details.
 """
 @inline @generated function inner₊(uₕ::VectorElement{SType}, vₕ::VectorElement{SType}) where SType
 	D = dim(mesh(SType))
@@ -78,57 +89,49 @@ Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ`
 	return res
 end
 
-@inline @generated function inner₊(uₕ::VecOrMatElem{SType}, vₕ::VecOrMatElem{SType}) where SType
+@inline @generated function inner₊(Uₕ::MatrixElement{SType}, vₕ::VectorElement{SType}) where SType
 	D = dim(mesh(SType))
-	res = :(x = _inner_product(uₕ.values, innerplus_weights(space(uₕ), Val(1)), vₕ.values))
+	res = :(x = _inner_product(Uₕ.values, innerplus_weights(space(Uₕ), Val(1)), vₕ.values))
 
 	for i in 2:D
-		push!(res.args, :(x .+= _inner_product_add!(x, uₕ.values, innerplus_weights(space(uₕ), Val($i)), vₕ.values)))
+		push!(res.args, :(x .+= _inner_product_add!(x, Uₕ.values, innerplus_weights(space(Uₕ), Val($i)), vₕ.values)))
 	end
 
 	return res
 end
 
-"""
-	inner₊(uₕ::VecOrMatElem, vₕ::VecOrMatElem, ::Type{Tuple})
+@inline @generated function inner₊(uₕ::VectorElement{SType}, Vₕ::MatrixElement{SType}) where SType
+	D = dim(mesh(SType))
+	res = :(x = _inner_product(uₕ.values, innerplus_weights(space(uₕ), Val(1)), vₕ.values))
 
-Returns a `D`-tuple of the ``\\textrm{inner}_{x_i,+}`` applied to `uₕ` and `vₕ`, where `D` is the topological dimension of the mesh associated with the elements.
-"""
+	for i in 2:D
+		push!(res.args, :(x .+= _inner_product_add!(x, uₕ.values, innerplus_weights(space(uₕ), Val($i)), Vₕ.values)))
+	end
+
+	return res
+end
+
+@inline @generated function inner₊(uₕ::MatrixElement{SType}, vₕ::MatrixElement{SType}) where SType
+	D = dim(mesh(SType))
+	res = :(_inner_product(uₕ.values, innerplus_weights(space(uₕ), Val(1)), vₕ.values))
+
+	for i in 2:D
+		res = :($res + _inner_product_add!(x, uₕ.values, innerplus_weights(space(uₕ), Val($i)), vₕ.values))
+	end
+
+	return res
+end
+
 @inline @generated function inner₊(uₕ::VecOrMatElem{SType}, vₕ::VecOrMatElem{SType}, ::Type{Tuple}) where SType
 	D = dim(mesh(SType))
 	return :(Base.Cartesian.@ntuple $D i->_inner_product(uₕ.values, innerplus_weights(space(uₕ), Val(i)), vₕ.values))
 end
 
-"""
-	inner₊(uₕ::NTuple{D,VecOrMatElem}, vₕ::NTuple{D,VecOrMatElem})
+@inline @generated inner₊(uₕ::NTuple{D,VecOrMatElem}, vₕ::NTuple{D,VecOrMatElem}) where D = :(sum(inner₊(uₕ, vₕ, Tuple)))
 
-Returns the sum of the inner products ``\\textrm{inner}_+(u_h[i],v_h[i])``
-
-```math
-\\sum_{i=1}^D \\textrm{inner}_+(u_h[i],v_h[i])
-```
-
-where `D` is the topological dimension of the mesh associated with the elements.
-"""
-@inline @generated function inner₊(uₕ::NTuple{D,VecOrMatElem}, vₕ::NTuple{D,VecOrMatElem}) where D
-	res = :(x = _inner_product(uₕ[1].values, innerplus_weights(space(uₕ[1]), Val(1)), vₕ[1].values))
-
-	for i in 2:D
-		push!(res.args, :(x .+= _inner_product(uₕ[$i].values, innerplus_weights(space(uₕ[$i]), Val($i)), vₕ[$i].values)))
-	end
-	return res
-end
-
-"""
-	inner₊(uₕ::NTuple{D,VecOrMatElem}, vₕ::NTuple{D,VecOrMatElem})
-
-Returns a tuple with the inner products ``\\textrm{inner}_+(u_h[i],v_h[i])``
-"""
 @inline @generated function inner₊(uₕ::NTuple{D,VecOrMatElem}, vₕ::NTuple{D,VecOrMatElem}, ::Type{Tuple}) where D
 	return :(Base.Cartesian.@ntuple $D i->_inner_product(uₕ[i].values, innerplus_weights(space(uₕ[i]), Val(i)), vₕ[i].values))
 end
-
-#@inline inner₊(Uₕ::VecOrMatElem, Vₕ::VecOrMatElem) = _inner_product(Uₕ.values, innerplus_weights(space(Uₕ), Val(dim(mesh(space(Uₕ))))), Vₕ.values)
 
 """
 	innerplus_weights(Wₕ::SpaceType, ::Val{D})
@@ -141,97 +144,99 @@ Returns the weights to be used in the calculation of [`inner₊`](@ref).
 """
 	inner₊ₓ(uₕ::VecOrMatElem, vₕ::VecOrMatElem)
 
-Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ` and `vₕ` associated with the first variable
+Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ` and `vₕ` associated with the first variable. It accepts arguments of type [VectorElement](@ref) or [MatrixElement](@ref), in any order.
+
+For [VectorElement](@ref)s, it is defined as
 
   - 1D case
 
 ```math
-(u_h, v_h)_+ = \\sum_{i=1}^{N_x} h_{i} u_h(x_i) v_h(x_i)
+(\\textrm{u}_h, \\textrm{v}_h)_+ \\vcentcolon = \\sum_{i=1}^{N_x} h_{i} \\textrm{u}_h(x_i) \\textrm{v}_h(x_i)
 ```
 
   - 2D case
 
 ```math
-(u_h, v_h)_{+x} = \\sum_{i=1}^{N_x}\\sum_{j=1}^{N_y}  h_{x,i} h_{y,j+1/2}  u_h(x_i,y_j) v_h(x_i,y_j)
+(\\textrm{u}_h, \\textrm{v}_h)_{+x} \\vcentcolon = \\sum_{i=1}^{N_x}\\sum_{j=1}^{N_y}  h_{x,i} h_{y,j+1/2}  \\textrm{u}_h(x_i,y_j) \\textrm{v}_h(x_i,y_j)
 ```
 
   - 3D case
 
 ```math
-(u_h, v_h)_{+x} = \\sum_{i=1}^{N_x}\\sum_{j=1}^{N_y}\\sum_{l=1}^{N_z}   h_{x,i} h_{y,j+1/2} h_{z,l+1/2}  u_h(x_i,y_j,z_l) v_h(x_i,y_j,z_l).
+(\\textrm{u}_h, \\textrm{v}_h)_{+x} \\vcentcolon = \\sum_{i=1}^{N_x}\\sum_{j=1}^{N_y}\\sum_{l=1}^{N_z}   h_{x,i} h_{y,j+1/2} h_{z,l+1/2}  \\textrm{u}_h(x_i,y_j,z_l) \\textrm{v}_h(x_i,y_j,z_l).
 ```
 """
 @inline inner₊ₓ(uₕ::VecOrMatElem, vₕ::VecOrMatElem) = _inner_product(uₕ.values, innerplus_weights(space(uₕ), Val(1)), vₕ.values)#inner₊(uₕ, vₕ, Val(1))
 
 """
-	inner₊ᵧ(uₕ::VectorElement, vₕ::VectorElement)
+	inner₊ᵧ(uₕ::VecOrMatElem, vₕ::VecOrMatElem)
 
-Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ` and `vₕ` associated with the second variable
+Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ` and `vₕ` associated with the second variable. It accepts
 
   - 2D case
 
 ```math
-(u_h, v_h)_{x+} = \\sum_{i=1}^{N_x}\\sum_{j=1}^{N_y}   h_{x,i} h_{y,j+1/2}   u_h(x_i,y_j) v_h(x_i,y_j)
+(\\textrm{u}_h, \\textrm{v}_h)_{+y} \\vcentcolon = \\sum_{i=1}^{N_x}\\sum_{j=1}^{N_y}   h_{x,i} h_{y,j+1/2}   \\textrm{u}_h(x_i,y_j) \\textrm{v}_h(x_i,y_j)
 ```
 
   - 3D case
 
 ```math
-(u_h, v_h)_{y+} = \\sum_{i=1}^{N_x}\\sum_{j=1}^{N_y}\\sum_{l=1}^{N_z}   h_{x,i+1/2} h_{y,j} h_{z,l+1/2} u_h(x_i,y_j,z_l) v_h(x_i,y_j,z_l).
+(\\textrm{u}_h, \\textrm{v}_h)_{+y} \\vcentcolon = \\sum_{i=1}^{N_x}\\sum_{j=1}^{N_y}\\sum_{l=1}^{N_z}   h_{x,i+1/2} h_{y,j} h_{z,l+1/2} \\textrm{u}_h(x_i,y_j,z_l) \\textrm{v}_h(x_i,y_j,z_l).
 ```
 """
 @inline inner₊ᵧ(uₕ::VecOrMatElem, vₕ::VecOrMatElem) = _inner_product(uₕ.values, innerplus_weights(space(uₕ), Val(2)), vₕ.values)#inner₊(uₕ, vₕ, Val(2))
 
 """
-	inner₊₂(uₕ::VectorElement, vₕ::VectorElement)
+	inner₊₂(uₕ::VecOrMatElem, vₕ::VecOrMatElem)
 
 Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ` and `vₕ` associated with the `z` variable
 
 ```math
-(u_h, v_h)_{z+} = \\sum_{i=1}^{N_x}\\sum_{j=1}^{N_y}\\sum_{l=1}^{N_z}  h_{x,i+1/2} h_{y,j+1/2} h_{z,l} u_h(x_i,y_j,z_l) v_h(x_i,y_j,z_l).
+(\\textrm{u}_h, \\textrm{v}_h)_{+z} \\vcentcolon = \\sum_{i=1}^{N_x}\\sum_{j=1}^{N_y}\\sum_{l=1}^{N_z}  h_{x,i+1/2} h_{y,j+1/2} h_{z,l} \\textrm{u}_h(x_i,y_j,z_l) \\textrm{v}_h(x_i,y_j,z_l).
 ```
 """
 @inline inner₊₂(uₕ::VecOrMatElem, vₕ::VecOrMatElem) = _inner_product(uₕ.values, innerplus_weights(space(uₕ), Val(3)), vₕ.values)#inner₊(uₕ, vₕ, Val(3))
 
 """
 	norm₊(uₕ::VectorElement)
+	norm₊(uₕ::NTuple{D,VectorElement})
 
-	Returns the discrete modified ``L^2`` norm of the grid function `uₕ`, defined as
+Returns the discrete modified ``L^2`` norm of the grid function `uₕ`. It also accepts a `NTuple` of [VectorElement](@ref)s.
+
+For [VectorElement](@ref)s `uₕ`, it is defined as
 
 ```math
-\\textrm{norm}_+ (u_h) = \\sqrt{\\textrm{inner}_+ (u_h,u_h)}.
+\\Vert \\textrm{u}_h \\Vert_+ = \\sqrt{(\\textrm{u}_h,\\textrm{u}_h)_+}.
+```
+
+and for `NTuple`s of [VectorElement](@ref)s it returns
+
+```math
+\\Vert \\textrm{u}_h \\Vert_+ \\vcentcolon = \\sqrt{ \\sum_{i=1}^D(\\textrm{u}_h[i],\\textrm{u}_h[i])_{+,x_i}}.
 ```
 """
 @inline norm₊(uₕ::VectorElement) = sqrt(inner₊(uₕ, uₕ))
-
-"""
-	norm₊(uₕ::NTuple{D,VectorElement})
-
-	Returns the discrete modified ``L^2`` norm of a tuple of grid functions `uₕ`, defined as
-
-```math
-\\textrm{norm}_+ (u_h) = \\sqrt{ \\sum_{i=1}^D \\textrm{norm}_+ (u_h[i],u_h[i])}.
-```
-"""
 @inline norm₊(uₕ::NTuple{D,VectorElement}) where D = sqrt(inner₊(uₕ, uₕ))
 
 """
 	norm₁ₕ(uₕ::VectorElement)
 
-Returns the discrete version of the standard ``H^1`` norm
+Returns the discrete version of the standard ``H^1`` norm of [VectorElement](@ref) `uₕ`.
 
 ```math
-\\textrm{norm}_{1h}(u_h) = \\sqrt{ \\Vert u_h \\Vert_h^2 +  \\Vert \\nabla_h u_h \\Vert_h^2   }
+\\Vert \\textrm{u}_h \\Vert_{1h} \\vcentcolon = \\sqrt{ \\Vert \\textrm{u}_h \\Vert_h^2 +  \\Vert \\nabla_h \\textrm{u}_h \\Vert_h^2   }
 ```
 """
 @inline norm₁ₕ(uₕ::VectorElement) = sqrt(normₕ(uₕ)^2 + snorm₁ₕ(uₕ)^2)
 
 """
-	norm₁ₕ(uₕ::VectorElement)
+	snorm₁ₕ(uₕ::VectorElement)
 
-Returns the discrete version of the standard ``H^1`` seminorm
+Returns the discrete version of the standard ``H^1`` seminorm of [VectorElement](@ref) `uₕ`.
+
 ```math
-\\textrm{snorm}_{1h}(u_h) = \\Vert \\nabla_h u_h \\Vert_h^2
+|\\textrm{u}_h|_{1h} \\vcentcolon = \\Vert \\nabla_h \\textrm{u}_h \\Vert_h
 ```
 """
 function snorm₁ₕ(uₕ::VectorElement)
@@ -321,88 +326,3 @@ end
 end
 
 @inline _inner_product(u, h, v) = transpose(v) * Diagonal(h) * u
-
-# implementation of innerh 
-#=
-innerₕ(U::VecOrMatElem, V::VecOrMatElem, ::Val{D}) where D = _inner_product(U.values, innerh_weights(space(U)), V.values)
-innerₕ(U::VectorElement, V::MatrixElement, ::Val{D}) where {D} = _inner_product(U.values, innerh_weights(space(U)), V.values)::Vector{eltype(U)}
-
-function innerₕ(U::VectorElement, V::VectorElement, ::Val{D}) where D
-	T = eltype(U)
-
-	weights = innerh_weights(space(U))::Diagonal{T, Vector{T}}
-	return _dot(U.values, weights.diag, V.values)
-end
-
-innerₕ(u::VecOrMatElem, v::VecOrMatElem) = innerₕ(u, v, Val(dim(u)))
-=#
-
-##########################################
-# implementation of innerplus and normplus 
-
-#@inline inner₊(uₕ::VectorElement, vₕ::VectorElement, i::Int) = _inner_product(uₕ.values, innerplus_weights(space(uₕ), Val(i)), vₕ.values)::eltype(uₕ)
-#@inline inner₊(uₕ::VectorElement, Vₕ::MatrixElement, i::Int) = _inner_product(uₕ.values, innerplus_weights(space(uₕ), Val(i)), Vₕ.values)
-#@inline inner₊(Uₕ::MatrixElement, vₕ::VectorElement, i::Int) = _inner_product(Uₕ.values, innerplus_weights(space(Uₕ), Val(i)), vₕ.values)
-
-#=
-@generated function inner₊(u::NTuple{D,MatrixElement{S1,T}}, v::NTuple{D,VectorElement{S2,T}}) where {S1,S2,T,D}
-	ex = :()
-	push!(ex.args, :(s = similar(transpose(v[1].values))))
-	push!(ex.args, :(s .= zero(T));)
-
-	for i in 1:D
-		push!(ex.args, :(inner₊add!(s, u[$i], v[$i], Val($i))))
-	end
-
-	return ex
-end
-
-@inline inner₊add!(z::LinearAlgebra.Transpose{T,Vector{T}}, Uₕ::MatrixElement, vₕ::VectorElement, ::Val{i}) where {T,i} = _inner_product_add!(z, Uₕ.values, innerplus_weights(space(Uₕ), Val(i)), vₕ.values)
-
-@generated function inner₊(u::NTuple{D,VectorElement{S1,T}}, v::NTuple{D,MatrixElement{S2,T}}) where {S1,S2,T,D}
-	ex = :()
-	push!(ex.args, :(s = similar(u[1].values)))
-	push!(ex.args, :(s .= zero(T));)
-
-	for i in 1:D
-		push!(ex.args, :(inner₊add!(s, u[$i], v[$i], Val($i))))
-	end
-
-	return ex
-end
-
-@inline inner₊add!(z::Vector, uₕ::VectorElement, Vₕ::MatrixElement, ::Val{i}) where i = _inner_product_add!(z, uₕ.values, innerplus_weights(space(uₕ), Val(i)), Vₕ.values)
-
-@generated function inner₊(u::NTuple{D,MatrixElement{S1,T}}, v::NTuple{D,MatrixElement{S2,T}}) where {S1,S2,T,D}
-	ex = :()
-	push!(ex.args, :(s = similar(u[1].values)))
-	push!(ex.args, :(s.nzval .= zero(T));)
-
-	for i in 1:D
-		push!(ex.args, :(inner₊add!(s, u[$i], v[$i], Val($i))))
-	end
-
-	return ex
-end
-
-@inline inner₊add!(Z::SparseMatrixCSC{T,Int}, Uₕ::MatrixElement, Vₕ::MatrixElement, ::Val{i}) where {T,i} = _inner_product_add!(Z, Uₕ.values, innerplus_weights(space(Uₕ), Val(i)), Vₕ.values)
-=#
-
-# implementation of snorm₁ₕ and norm₁ₕ
-#=
-function __snorm_aux(v, u, ::Val{D}) where D
-	if D == 1
-		_backward_finite_differencex!(v.values, u.values, Base.Fix1(spacing, mesh(space(u))(1)), npoints(u, Tuple))
-	end
-
-	if D == 2
-		_backward_finite_differencey!(v.values, u.values, Base.Fix1(spacing, mesh(space(u))(2)), npoints(u, Tuple))
-	end
-
-	if D == 3
-		_diff1!(v.values, u.values, Base.Fix1(spacing, mesh(space(u))(3)), npoints(u, Tuple))
-	end
-
-	return inner₊(v, v, Val(D))
-end
-=#

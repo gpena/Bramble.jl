@@ -1,7 +1,7 @@
 """
 	elements(Wₕ::SpaceType)
 
-Returns a [MatrixElement](@ref) from a given [SpaceType](@ref), initialized with as the identity matrix.
+Returns a [MatrixElement](@ref) from a given [SpaceType](@ref), initialized with the identity matrix.
 """
 @inline elements(Wₕ::SpaceType) = MatrixElement(Wₕ, spdiagm(0 => FillArrays.Ones(eltype(Wₕ), ndofs(Wₕ))))
 
@@ -18,6 +18,7 @@ show(io::IO, Uₕ::MatrixElement) = show(io, "text/plain", Uₕ.values)
 
 """
 	eltype(Uₕ::MatrixElement{S,T})
+	eltype(::Type{MatrixElement{S,T}})
 
 Returns the element type of a [MatrixElement](@ref), `T``.
 """
@@ -45,11 +46,6 @@ Returns a similar [MatrixElement](@ref) to `Uₕ`.
 """
 @inline similar(Uₕ::MatrixElement) = MatrixElement(space(Uₕ), similar(Uₕ.values))
 
-"""
-	size(Uₕ::MatrixElement)
-
-Returns the size of a [MatrixElement](@ref) `Uₕ`.
-"""
 @inline size(Uₕ::MatrixElement) = size(Uₕ.values)
 
 """
@@ -57,19 +53,19 @@ Returns the size of a [MatrixElement](@ref) `Uₕ`.
 
 Copies the coefficients of [MatrixElement](@ref) `Vₕ` into [MatrixElement](@ref) `Uₕ`.
 """
-@inline copyto!(Uₕ::MatrixElement, Vₕ::MatrixElement) = (@.. Uₕ.values.nzval = Vₕ.values.nzval)
+@inline copyto!(Uₕ::MatrixElement, Vₕ::MatrixElement) = (copyto!(Uₕ.values, Vₕ.values))
 
 @inline Base.@propagate_inbounds function getindex(Uₕ::MatrixElement, i::Int)
 	@boundscheck checkbounds(Uₕ.values, i)
 	getindex(Uₕ.values, i)
 end
 
-@inline Base.@propagate_inbounds function getindex(Uₕ::MatrixElement, I::Vararg{Int,N}) where N 
+@inline Base.@propagate_inbounds function getindex(Uₕ::MatrixElement, I::Vararg{Int,N}) where N
 	@boundscheck checkbounds(Uₕ.values, I...)
 	getindex(Uₕ.values, I...)
 end
 
-@inline Base.@propagate_inbounds function getindex(Uₕ::MatrixElement, I::NTuple{N,Int}) where N 
+@inline Base.@propagate_inbounds function getindex(Uₕ::MatrixElement, I::NTuple{N,Int}) where N
 	@boundscheck checkbounds(Uₕ.values, I...)
 	getindex(Uₕ.values, I...)
 end
@@ -79,12 +75,12 @@ end
 	setindex!(Uₕ.values, v, i)
 end
 
-@inline Base.@propagate_inbounds function setindex!(Uₕ::MatrixElement, v, I::Vararg{Int,N}) where N 
+@inline Base.@propagate_inbounds function setindex!(Uₕ::MatrixElement, v, I::Vararg{Int,N}) where N
 	@boundscheck checkbounds(Uₕ.values, I...)
 	setindex!(Uₕ.values, v, I...)
 end
 
-@inline Base.@propagate_inbounds function setindex!(Uₕ::MatrixElement, v, I::NTuple{N,Int}) where N 
+@inline Base.@propagate_inbounds function setindex!(Uₕ::MatrixElement, v, I::NTuple{N,Int}) where N
 	@boundscheck checkbounds(Uₕ.values, I...)
 	setindex!(Uₕ.values, v, I...)
 end
@@ -101,19 +97,18 @@ const VecOrMatElem{S,T} = Union{VectorElement{S,T},MatrixElement{S,T}}
 """
 	*(uₕ::VectorElement, Vₕ::MatrixElement)
 
-Returns a new [MatrixElement](@ref) calculated by multiplying each coefficient of `uₕ` with the corresponding row of `Vₕ`.
+Returns a new [MatrixElement](@ref) calculated by multiplying each coefficient of [VectorElement](@ref) `uₕ` with the corresponding row of `Vₕ`.
 """
 function *(uₕ::VectorElement, Vₕ::MatrixElement)
 	Zₕ = similar(Vₕ)
 	mul!(Zₕ.values, Diagonal(uₕ.values), Vₕ.values)
-
 	return Zₕ
 end
 
 """
 	*(Uₕ::MatrixElement, vₕ::VectorElement)
 
-Returns a new [MatrixElement](@ref) calculated by multiplying each coefficient of `vₕ` with the corresponding column of `Uₕ`.
+Returns a new [MatrixElement](@ref) calculated by multiplying each coefficient of [VectorElement](@ref) `vₕ` with the corresponding column of `Uₕ`.
 """
 @inline function *(Uₕ::MatrixElement, vₕ::VectorElement)
 	Zₕ = similar(Uₕ)
@@ -134,20 +129,19 @@ for op in (:+, :-, :*)
 	end
 end
 
-@inline function Base.:^(Uₕ::MatrixElement, i::Integer) 
+@inline function Base.:^(Uₕ::MatrixElement, i::Integer)
 	Vₕ = similar(Uₕ)
 
 	map!(Base.Fix1(Base.:^, i), Vₕ.values.nzval, Uₕ.values.nzval)
 	return Vₕ
 end
 
-@inline function Base.:^(Uₕ::MatrixElement, i::Real) 
+@inline function Base.:^(Uₕ::MatrixElement, i::Real)
 	Vₕ = similar(Uₕ)
 
 	map!(Base.Fix1(Base.:^, i), Vₕ.values.nzval, Uₕ.values.nzval)
 	return Vₕ
 end
-
 
 for op in (:+, :-, :*, :/, :^)
 	same_text = "\n\nReturns a new [MatrixElement](@ref) with coefficients given by the elementwise evaluation of"

@@ -7,24 +7,27 @@
 # Jump operator as a matrix
 """
 	jumpₓ(Wₕ::SpaceType)
+	jumpₓ(Ωₕ::MeshType)
 
-Returns a [MatrixElement](@ref) implementing the jump matrix for the mesh grid of `Wₕ`, in the `x` direction. It is defined as being the (sparse) matrix representation of the linear operator defined by [`jumpₓ(uₕ::VectorElement)`](@ref).
+Returns a [MatrixElement](@ref) implementing the jump matrix for the mesh grid of `Wₕ`, in the `x` direction. It is defined as being the (sparse) matrix representation of the linear operator defined by [jumpₓ](@ref jumpₓ(uₕ::VectorElement)). It also accepts a mesh as an argument.
 """
 @inline jumpₓ(Wₕ::SpaceType) = elements(Wₕ, jumpₓ(mesh(Wₕ)))
 @inline jumpₓ(Ωₕ::MeshType) = shiftₓ(Ωₕ, Val(dim(Ωₕ)), Val(0)) - shiftₓ(Ωₕ, Val(dim(Ωₕ)), Val(1))
 
 """
 	jumpᵧ(Wₕ::SpaceType)
+	jumpᵧ(Ωₕ::MeshType)
 
-Returns a [MatrixElement](@ref) implementing the jump matrix for the mesh grid of `Wₕ`, in the `y` direction. It is defined as being the (sparse) matrix representation of the linear operator defined by [`jumpᵧ(uₕ::VectorElement)`](@ref).
+Returns a [MatrixElement](@ref) implementing the jump matrix for the mesh grid of `Wₕ`, in the `y` direction. It is defined as being the (sparse) matrix representation of the linear operator defined by [jumpᵧ](@ref jumpᵧ(uₕ::VectorElement)). It also accepts a mesh as an argument.
 """
 @inline jumpᵧ(Wₕ::SpaceType) = elements(Wₕ, jumpᵧ(mesh(Wₕ)))
 @inline jumpᵧ(Ωₕ::MeshType) = shiftᵧ(Ωₕ, Val(dim(Ωₕ)), Val(0)) - shiftᵧ(Ωₕ, Val(dim(Ωₕ)), Val(1))
 
 """
 	jump₂(Wₕ::SpaceType)
+	jump₂(Ωₕ::MeshType)
 
-Returns a [MatrixElement](@ref) implementing the jump matrix for the mesh grid of `Wₕ`, in the `z` direction. It is defined as being the (sparse) matrix representation of the linear operator defined by [`jump₂(uₕ::VectorElement)`](@ref).
+Returns a [MatrixElement](@ref) implementing the jump matrix for the mesh grid of `Wₕ`, in the `z` direction. It is defined as being the (sparse) matrix representation of the linear operator defined by [jump₂](@ref jump₂(uₕ::VectorElement)). It also accepts a mesh as an argument.
 """
 @inline jump₂(Wₕ::SpaceType) = elements(Wₕ, jump₂(mesh(Wₕ)))
 @inline jump₂(Ωₕ::MeshType) = shift₂(Ωₕ, Val(dim(Ωₕ)), Val(1)) - shift₂(Ωₕ, Val(dim(Ωₕ)), Val(0))
@@ -36,7 +39,7 @@ Returns a [MatrixElement](@ref) implementing the jump matrix for the mesh grid o
 """
 	jump(Wₕ::SpaceType)
 
-Returns a tuple of [MatrixElement](@ref)s implementing the jump operators in the `x`, `y`, and `z` directions. If the problem is 1D, it returns a single [MatrixElement](@ref).
+Returns a tuple of [MatrixElement](@ref)s implementing the jump operators in the `x`, `y`, and `z` directions. If the problem is `1`-dimensional, it returns a single [MatrixElement](@ref).
 """
 @inline jump(Wₕ::SpaceType) = jump(Wₕ, Val(dim(mesh(Wₕ))))
 @inline jump(Wₕ::SpaceType, ::Val{1}) = jumpₓ(Wₕ)
@@ -51,13 +54,13 @@ Returns the jump, in the `x` direction, of the element `uₕ`.
   - 1D case
 
 ```math
-\\textrm{jump}_{x} \\textrm{u}_h(x_i) = \\textrm{u}_h(x_i) - \\textrm{u}_h(x_{i+1})
+\\textrm{jump}_{x} \\textrm{u}_h(x_i) \\vcentcolon = \\textrm{u}_h(x_i) - \\textrm{u}_h(x_{i+1})
 ```
 
   - 2D and 3D case
 
 ```math
-\\textrm{jump}_{x} \\textrm{u}_h(x_i, \\dots) = \\textrm{u}_h(x_i, \\dots)-\\textrm{u}_h(x_{i+1}, \\dots)
+\\textrm{jump}_{x} \\textrm{u}_h(x_i, \\dots) \\vcentcolon = \\textrm{u}_h(x_i, \\dots)-\\textrm{u}_h(x_{i+1}, \\dots)
 ```
 """
 @inline jumpₓ(uₕ::VectorElement) = element(space(uₕ), jumpₓ(space(uₕ)).values * uₕ.values)
@@ -68,7 +71,7 @@ Returns the jump, in the `x` direction, of the element `uₕ`.
 Returns the jump, in the `y` direction, of the element `uₕ`.
 
 ```math
-\\textrm{jump}_{y} \\textrm{u}_h(x_i, y_j,\\dots) = \\textrm{u}_h(x_i, y_j\\dots)-\\textrm{u}_h(x_i, y_{j+1}, \\dots)
+\\textrm{jump}_{y} \\textrm{u}_h(x_i, y_j,\\dots) \\vcentcolon = \\textrm{u}_h(x_i, y_j\\dots)-\\textrm{u}_h(x_i, y_{j+1}, \\dots)
 ```
 """
 @inline jumpᵧ(uₕ::VectorElement) = element(space(uₕ), jumpᵧ(space(uₕ)).values * uₕ.values)
@@ -79,7 +82,7 @@ Returns the jump, in the `y` direction, of the element `uₕ`.
 Returns the jump, in the `z` direction, of the element `uₕ`.
 
 ```math
-\\textrm{jump}_{z} \\textrm{u}_h(x_i, y_j,z_l) = \\textrm{u}_h(x_i, y_j, z_l)-\\textrm{u}_h(x_i, y_j, z_{l+1})
+\\textrm{jump}_{z} \\textrm{u}_h(x_i, y_j,z_l) \\vcentcolon = \\textrm{u}_h(x_i, y_j, z_l)-\\textrm{u}_h(x_i, y_j, z_{l+1})
 ```
 """
 @inline jump₂(uₕ::VectorElement) = element(space(uₕ), jump₂(space(uₕ)).values * uₕ.values)
@@ -91,14 +94,11 @@ Returns the jump, in the `z` direction, of the element `uₕ`.
 """
 	jump(uₕ::VectorElement)
 
-Returns a tuple of [VectorElement](@ref)s implementing the jump operators in the `x`, `y`, and `z` directions applied to `uₕ`. If the problem is 1D, it returns a single [VectorElement](@ref).
+Returns a tuple of [VectorElement](@ref)s implementing the jump operators in the `x`, `y`, and `z` directions applied to `uₕ`. If the problem is `1`-dimensional, it returns a single [VectorElement](@ref).
 """
 @inline jump(uₕ::VectorElement) = jump(uₕ, Val(dim(mesh(space(uₕ)))))
 @inline jump(uₕ::VectorElement, ::Val{1}) = jumpₓ(uₕ)
 @inline jump(uₕ::VectorElement, ::Val{D}) where D = ntuple(i -> element(space(uₕ), jumpᵢ(space(uₕ), Val(i)).values * uₕ.values), D)
-
-
-
 
 # Jump operator applied to matrices
 """
@@ -129,7 +129,7 @@ Returns a [MatrixElement](@ref) resulting of the multiplication of the jump matr
 """
 	jump(Uₕ::MatrixElement)
 
-Returns a tuple of [MatrixElement](@ref)s implementing the jump operators in the `x`, `y`, and `z` directions applied to `Uₕ`. If the problem is 1D, it returns a single [MatrixElement](@ref).
+Returns a tuple of [MatrixElement](@ref)s implementing the jump operators in the `x`, `y`, and `z` directions applied to `Uₕ`. If the problem is `1`-dimensional, it returns a single [MatrixElement](@ref).
 """
 @inline jump(Uₕ::MatrixElement) = jump(Uₕ, Val(dim(mesh(space(Uₕ)))))
 @inline jump(Uₕ::MatrixElement, ::Val{1}) = jumpₓ(Uₕ)
