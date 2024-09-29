@@ -46,8 +46,6 @@ function vector_element_tests(::Val{D}) where {D}
 		@test validate_equal(z, 11.180339887498947)
 	end
 
-	u .= v
-
 	@test(length(u)==prod(dims))
 
 	for op in (+, -, *, /)
@@ -55,7 +53,7 @@ function vector_element_tests(::Val{D}) where {D}
 		@test(validate_equal(res, map(op, u, v)))
 	end
 
-	test_function = embed(x->exp(-sum(x)), mesh(Wₕ))
+	test_function = ↪(mesh(Wₕ), x -> exp(-sum(x)))
 	Rₕ!(u, test_function)
 
 	w = Array{Float64,D}(undef, dims)
@@ -78,9 +76,9 @@ function vector_element_tests(::Val{D}) where {D}
 		@test(validate_zero(ee))
 	end
 
-	wf(x, i) = x[i]
 	for dimension in 1:D
-		Rₕ!(u, Base.Fix2(wf, dimension))
+		func = ↪(mesh(Wₕ), x -> x[dimension])
+		Rₕ!(u, func)
 		der = ∇ₕ(u)
 
 		for i in 1:D
