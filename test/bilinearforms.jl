@@ -4,7 +4,7 @@ function bilinearforms_test()
     N = 3
     I = interval(-1.0, 4.0)
 
-    X = domain(I, create_markers("dd" => x -> x - 4.0))
+    X = domain(I, create_markers( :bc => ↪(I, x -> x[1]-4)))
     Mh = mesh(X, N, false)
 
     Wh = gridspace(Mh)
@@ -26,7 +26,7 @@ function bilinearforms_test()
     lform = LinearForm(l, Wh)
     F = assemble(lform)
 
-    u = solve(A, F)
+    u = A\F
 
     @test validate_equal( u, sin.(points(Mh)))
     

@@ -5,9 +5,9 @@ function domain_tests()
 
 	I = interval(M[1, 1], M[1, 2])
 
-	f1(x) = x - 0.0
-	f3(x) = x - 0.5
-	domain_markers = create_markers("Dirichlet" => f1, "Neumann" => f3)
+	f1 = ↪(I, x->x[1]-0)
+	f3 = ↪(I, x->x[1]-0.5)
+	domain_markers = create_markers(:dirichlet => f1, :neumann => f3)
 
 	I2 = interval(M[2, 1], M[2, 2])
 	I3 = interval(M[3, 1], M[3, 2])

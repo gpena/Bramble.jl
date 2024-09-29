@@ -13,7 +13,7 @@ end
 function matrix_element_tests(::Val{D}) where D
 	dims, Wₕ, uₕ = __init(Val(D))
 
-	test_function = embed(x->exp(-sum(x)), mesh(Wₕ))
+	test_function = ↪(mesh(Wₕ), x -> exp(-sum(x)))
 	Rₕ!(uₕ, test_function)
 
 	u₁ₕ = similar(uₕ.values)
