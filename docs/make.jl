@@ -4,7 +4,9 @@ using Documenter, Bramble
 
 internals = "Internals" => ["internals/geometry.md", "internals/mesh.md", "internals/space.md"]
 
-makedocs(sitename = "Bramble.jl",
+makedocs(#format = Documenter.LaTeX(platform = "none"),
+		 format = Documenter.HTML(),
+		 sitename = "Bramble.jl",
 		 pages = ["Home" => "index.md",
 			 "Examples" => ["examples.md"],
 			 "Documentation" => ["api.md",
