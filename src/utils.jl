@@ -6,7 +6,7 @@ function spmatmul_rvec!(M::AbstractSparseMatrix, v::AbstractVector)
     for j = 1:m
         vj = v[j]
         @simd for i in nzrange(M, j)
-            @inbounds M.nzval[i] *= vj
+             M.nzval[i] *= vj
         end
     end
 end
@@ -20,7 +20,7 @@ function spmatmul_lvec!(M::AbstractSparseMatrix, v::AbstractVector)
     for j = 1:m
         vj = v[rows[j]]
         @simd for i in nzrange(M, j)
-            @inbounds M.nzval[i] *= vj
+             M.nzval[i] *= vj
         end
     end
 end
