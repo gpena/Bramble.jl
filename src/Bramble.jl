@@ -22,8 +22,8 @@ end
 
 using DocStringExtensions
 using InteractiveUtils: @code_warntype, @code_llvm, @code_native
-import Base: eltype, similar, length, copyto!, isapprox, isequal, IndexStyle, axes, materialize!
-import Base: show, getindex, setindex!, IndexStyle, iterate, size, ndims, diff, firstindex, lastindex
+import Base: eltype, similar, length, copyto!, axes, materialize!
+import Base: show, getindex, setindex!, iterate, size, ndims, diff, firstindex, lastindex
 #import Base: map, map!,
 import Base: *, +, -, /
 import Random: rand!
@@ -44,12 +44,12 @@ using WriteVTK
 
 abstract type BrambleType end
 
-# Domain/Interval handling functions
+# domain/interval handling functions
 export interval, cartesianproduct
-export domain, ×, create_markers, markers, labels
+export domain, ×, create_markers, markers, labels, embed, ↪
 
 # Mesh handling
-export mesh, hₘₐₓ
+export mesh, hₘₐₓ, points
 
 # Space handling
 export gridspace, element
@@ -65,12 +65,12 @@ export diffₓ, diffᵧ, diff₂, diff
 export jumpₓ, jumpᵧ, jump₂, jump
 export Mₕₓ, Mₕᵧ, Mₕ₂, Mₕ
 
-export solve, solve!
 
 # Forms exports
 export BilinearForm, LinearForm, assemble, assemble!, Mass, Diff, update!
 export dirichletbcs
 export mass, stiffness, advection
+
 #=
 # Exporters
 export ExporterVTK, addScalarDataset!, datasets, save2file, close
@@ -82,8 +82,6 @@ include("geometry/domains.jl")
 include("meshes/common.jl")
 include("meshes/mesh1d.jl")
 include("meshes/meshnd.jl")
-include("meshes/function.jl")
-
 
 include("spaces/gridspace.jl")
 include("spaces/vectorelements.jl")
@@ -94,9 +92,7 @@ include("spaces/backward_finite_difference.jl")
 include("spaces/forward_difference.jl")
 include("spaces/jump.jl")
 include("spaces/average.jl")
-
 include("spaces/inner_product.jl")
-include("spaces/linearalg.jl")
 
 
 include("forms/types.jl")
@@ -105,13 +101,11 @@ include("forms/dirichletbcs.jl")
 include("forms/bilinearforms.jl")
 include("forms/linearforms.jl")
 include("forms/assembler.jl")
-#=
-include("problems/types.jl")
-include("problems/laplacian.jl")
 
+#=
 include("exporters/types.jl")
 include("exporters/exporter_vtk.jl")
-=#
 
+=#
 #include("precompile.jl")
 end
