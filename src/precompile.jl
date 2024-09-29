@@ -36,6 +36,9 @@ import PrecompileTools: @compile_workload, @setup_workload, @recompile_invalidat
 		for i in 1:3
 			Ii = ntuple(j -> I0, i)
 			Ω = reduce(×, Ii)
+
+			f1 = ↪(Ω, x->x[i])
+
 			projection(Ω, 1)
 			tails(Ω)
 			tails(Ω, 1)
@@ -43,6 +46,7 @@ import PrecompileTools: @compile_workload, @setup_workload, @recompile_invalidat
 
 			X = domain(Ω)
 			X
+
 			set(X), projection(X, 1)
 			dim(X), eltype(X)
 			dim(typeof(X)), eltype(typeof(X))
@@ -51,7 +55,17 @@ import PrecompileTools: @compile_workload, @setup_workload, @recompile_invalidat
 			marker_funcs(X)
 
 			X = domain(reduce(×, ntuple(j -> I0, i)))
+			f2 = ↪(X, x->x[i])
+
+			m1 = create_markers(:symbol1 => f2)
+			m2 = create_markers(:symbol1 => f2, :symbol2 => f2)
+			m3 = create_markers(:symbol1 => f2, :symbol2 => f2, :symbol3 => f2)
+			domain(Ω, m1)
+			domain(Ω, m2)
+			domain(Ω, m3)
+
 			M = mesh(X, npts[i], ntuple(j -> false, i))
+
 			M
 			M(1)
 			eltype(M), eltype(typeof(M)), dim(M), dim(typeof(M))
@@ -59,9 +73,14 @@ import PrecompileTools: @compile_workload, @setup_workload, @recompile_invalidat
 			indices(M), npoints(M), M(1), npoints(M, Tuple), hₘₐₓ(M)
 			points(M)
 
+			f3 = ↪(M, x->x[i])
+
 			if i == 1
+				f1(0)
+				f2(0)
+				f3(0)
 				for p in (1, CartesianIndex(1))
-					point(M, p)
+					points(M, p)
 					spacing(M, p)
 					half_spacing(M, p)
 					half_points(M, p)
@@ -72,8 +91,11 @@ import PrecompileTools: @compile_workload, @setup_workload, @recompile_invalidat
 				boundary_indices(M)
 				interior_indices(M)
 			else
+				f2(ntuple(j -> j, i))
+				f3(ntuple(j -> j, i))
+
 				for p in (npts[i], CartesianIndex(npts[i]))
-					point(M, p)
+					points(M, p)
 					spacing(M, p)
 					half_spacing(M, p)
 					half_points(M, p)
@@ -131,7 +153,8 @@ end
 		for i in 1:3
 			X = domain(reduce(×, ntuple(j -> I0, i)))
 			M = mesh(X, npts[i], ntuple(j -> false, i))
-			f = embed(x->sum(x), M)
+			f = ↪(X, x->sum(x))
+			f2 = ↪(M, x->sum(x))
 			Wh = gridspace(M)
 			Wh
 
@@ -140,6 +163,7 @@ end
 
 			uh = element(Wh, 1.0)
 			wh = element(Wh)
+			element(Wh, 1)
 			element(Wh, uh.values)
 			eltype(uh), eltype(typeof(uh))
 			length(uh)
@@ -173,8 +197,6 @@ end
 
 			Rₕ!(uh, f), avgₕ!(uh, f)
 			Rₕ(Wh, f), avgₕ(Wh, f)
-
-			__shift_index1(CartesianIndex(ntuple(i -> 1, i)))
 
 			Uh = elements(Wh)
 			Vh = elements(Wh, Uh.values)
@@ -232,7 +254,7 @@ end
 		eltype(W), eltype(typeof(W))
 
 		uh = element(W, 1)
-		vh = element(W, 1)
+		vh = element(W, 1.0)
 		Uh = elements(W)
 		Vh = elements(W)
 
