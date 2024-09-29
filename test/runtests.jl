@@ -37,8 +37,15 @@ end
 	include("matrixelements.jl")
 end
 
-
-
 @time @testset "\n$sep Forms $sep" begin
-    include("bilinearforms.jl")
+	include("bilinearforms.jl")
 end
+
+@time @testset "\n$sep Poisson equation $sep" begin
+	include("problems/poisson_linear.jl")
+	#include("problems/1d/laplacian_nonlinear.jl")
+	#include("problems/1d/advection.jl")
+	#include("problems/1d/advectionstab.jl")
+	#include("problems/1d/wave.jl")
+end
+
