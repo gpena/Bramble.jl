@@ -279,3 +279,46 @@ end
 		Base.size(Uh), Base.axes(Uh), Base.length(Uh)
 	end
 end
+
+## Space compilation
+@compile_workload begin
+	for i in 1:3
+		X = domain(reduce(×, ntuple(j -> I0, i)))
+		M = mesh(X, npts[i], ntuple(j -> false, i))
+		sol = @embed(M, x->sum(x))
+		Wh = gridspace(M)
+		bc = constraints(sol)
+
+		list_constraints = (constraints(sol),
+							constraints(:dirichlet => sol),
+							constraints(:dirichlet => sol, :dirichlet => sol),
+							constraints(:dirichlet => sol, :dirichlet => sol, :dirichlet => sol),
+							constraints(:dirichlet => sol, :dirichlet => sol, :dirichlet => sol, :dirichlet => sol))
+
+		bform = bilinearform((u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)), Wh, Wh)
+		trialspace(bform)
+		testspace(bform)
+
+		A = assemble(bform)
+		assemble!(A, bform)
+
+		u = element(Wh, 0.0)
+		lform = LinearForm(v -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)), Wh)
+		testspace(lform)
+		F = assemble(lform)
+
+		for bcs in list_constraints
+			markers(bcs)
+			constraint_type(bcs)
+			symbols(bcs)
+			labels(bcs)
+
+			assemble(bform, bcs)
+			assemble!(A, bform, bcs)
+			assemble(lform, bcs)
+			assemble!(F, lform, bcs)
+
+			symmetrize!(A, F, bcs, M)
+		end
+	end
+end
