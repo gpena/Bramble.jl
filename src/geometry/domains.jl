@@ -28,6 +28,9 @@ end
 
 MarkerType{F} = Pair{Symbol,F}
 
+@inline label(m::Marker{F}) where F = m.label
+@inline func(m::Marker{F}) where F = m.f
+
 """
 	domain(X::CartesianProduct)
 	domain(Ω::CartesianProduct, markers::MarkersType)
@@ -54,7 +57,7 @@ Type: Float64
 Boundary markers: :dirichlet, :neumann
 ```
 """
-@inline domain(X::CartesianProduct) = Domain(X, (Marker(:Dirichlet, x -> zero(eltype(x))),))
+@inline domain(X::CartesianProduct) = Domain(X, (Marker(:dirichlet, x -> zero(eltype(x))),))
 @inline domain(X::CartesianProduct, markers::MType) where MType = Domain{typeof(X),MType}(X, markers)
 
 """
