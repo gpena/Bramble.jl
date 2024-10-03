@@ -49,18 +49,22 @@ println("")
 end
 
 if __with_examples
+	
 	sep = "--------------"
 	println("\n\n$sep Examples batch $sep\n")
 	@time @testset "Linear Poisson equation" begin
 		include("../docs/examples/poisson_linear.jl")
-		#include("problems/1d/advection.jl")
-		#include("problems/1d/advectionstab.jl")
-		#include("problems/1d/wave.jl")
 	end
 
 	println("")
 
 	@time @testset "Nonlinear Poisson equation" begin
 		include("../docs/examples/poisson_nonlinear.jl")
+	end
+
+	println("")
+
+	@time @testset "Linear convection-diffusion equation" begin
+		include("../docs/examples/convection_diffusion_linear.jl")
 	end
 end
