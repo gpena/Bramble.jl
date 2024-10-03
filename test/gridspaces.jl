@@ -1,7 +1,7 @@
 function gridspaces_tests()
 	I = interval(-1.0, 4.0)
 
-	m = create_markers(:dirichlet => ↪(I, x -> x[1]-1))
+	m = create_markers(:dirichlet => @embed(I, x -> x[1]-1))
 	Ω = domain(I, m)
 	Ωₕ = mesh(Ω, 4, false)
 

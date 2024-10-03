@@ -1,19 +1,19 @@
-ops(::Val{1}) = (diff₋ₓ, diffₓ, jumpₓ, Mₕₓ, D₋ₓ)
+ops(::Val{1}) = (diff₋ₓ, diffₓ, jumpₓ, M₋ₕₓ, D₋ₓ)
 
 function ops(::Val{2})
-	ops2 = (D₋ᵧ, diffᵧ, diff₋ₓ, diff₋ᵧ, Mₕᵧ)
+	ops2 = (D₋ᵧ, diffᵧ, diff₋ₓ, diff₋ᵧ, M₋ₕᵧ)
 	return (ops2..., ops(Val(1))...)
 end
 
 function ops(::Val{3})
-	ops2 = (D₋₂, diff₂, diff₋ₓ, diff₋₂, Mₕ₂)
+	ops2 = (D₋₂, diff₂, diff₋ₓ, diff₋₂, M₋ₕ₂)
 	return (ops2..., ops(Val(2))...)
 end
 
 function matrix_element_tests(::Val{D}) where D
 	dims, Wₕ, uₕ = __init(Val(D))
 
-	test_function = ↪(mesh(Wₕ), x -> exp(-sum(x)))
+	test_function = @embed(mesh(Wₕ), x -> exp(-sum(x)))
 	Rₕ!(uₕ, test_function)
 
 	u₁ₕ = similar(uₕ.values)

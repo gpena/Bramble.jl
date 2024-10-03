@@ -1,6 +1,6 @@
-import Bramble: spacing, points, half_points, embed
+import Bramble: spacing, points, half_points, _embed
 
-valid_range(i::Int, ds::NTuple{D,Int}) where {D} = ntuple(k -> k == i ? (2:ds[1]) : (1:ds[k]), D)
+valid_range(i::Int, ds::NTuple{D,Int}) where D = ntuple(k -> k == i ? (2:ds[1]) : (1:ds[k]), D)
 
 @inline function __exp(v::NTuple{D,T}) where {D,T}
 	h, x0, x1 = v
@@ -53,7 +53,7 @@ function vector_element_tests(::Val{D}) where {D}
 		@test(validate_equal(res, map(op, u, v)))
 	end
 
-	test_function = ↪(mesh(Wₕ), x -> exp(-sum(x)))
+	test_function = @embed(mesh(Wₕ), x -> exp(-sum(x)))
 	Rₕ!(u, test_function)
 
 	w = Array{Float64,D}(undef, dims)
@@ -69,7 +69,7 @@ function vector_element_tests(::Val{D}) where {D}
 	@test @views isapprox(vv[valid_range(D, dims)...], w[valid_range(D, dims)...]; atol = 1e-5)
 
 	u .= 1.0
-	der = ∇ₕ(u)
+	der = ∇₋ₕ(u)
 	for i in 1:D
 		dd = D == 1 ? reshape(der.values, dims) : reshape(der[i].values, dims)
 		@views ee = dd[valid_range(i, dims)...]
@@ -77,9 +77,9 @@ function vector_element_tests(::Val{D}) where {D}
 	end
 
 	for dimension in 1:D
-		func = ↪(mesh(Wₕ), x -> x[dimension])
+		func = @embed(mesh(Wₕ), x -> x[dimension])
 		Rₕ!(u, func)
-		der = ∇ₕ(u)
+		der = ∇₋ₕ(u)
 
 		for i in 1:D
 			dd = D == 1 ? reshape(der.values, dims) : reshape(der[i].values, dims)

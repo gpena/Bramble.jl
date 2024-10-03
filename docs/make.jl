@@ -1,16 +1,19 @@
-push!(LOAD_PATH, joinpath(@__DIR__, ".."))
+using Pkg
+Pkg.activate(".")
+using Bramble
+using Documenter
+#using LiveServer; servedocs()
 
-using Documenter, Bramble
-
+home = "Home" => "index.md"
 internals = "Internals" => ["internals/geometry.md", "internals/mesh.md", "internals/space.md"]
+examples = "Examples" => ["examples/poisson_linear.md", "examples/poisson_nonlinear.md"]
+documentation = "Documentation" => ["api.md", internals]
+allpages = [home, examples, documentation]
 
 makedocs(#format = Documenter.LaTeX(platform = "none"),
 		 format = Documenter.HTML(),
 		 sitename = "Bramble.jl",
-		 pages = ["Home" => "index.md",
-			 "Examples" => ["examples.md"],
-			 "Documentation" => ["api.md",
-				 internals]],
+		 pages = allpages,
 		 authors = "Gonçalo Pena")
 
 deploydocs(;

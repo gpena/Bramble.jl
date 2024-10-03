@@ -1,4 +1,5 @@
 import Bramble: indices, npoints, dim, spacing, half_spacing, Iterator
+import Base: diff
 
 function mesh1d_tests()
 	I = interval(-1.0, 4.0)

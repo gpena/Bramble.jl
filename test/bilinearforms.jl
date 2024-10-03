@@ -4,7 +4,7 @@ function bilinearforms_test()
     N = 3
     I = interval(-1.0, 4.0)
 
-    X = domain(I, create_markers( :bc => ↪(I, x -> x[1]-4)))
+    X = domain(I, create_markers( :bc => @embed(I, x -> x[1]-4)))
     Mh = mesh(X, N, false)
 
     Wh = gridspace(Mh)
@@ -16,7 +16,7 @@ function bilinearforms_test()
     bform2 = BilinearForm((U, V) -> inner₊(D₋ₓ(U), D₋ₓ(V)), Wh, Wh)
     assemble(bform2)
 
-    bform3 = BilinearForm((U, V) -> inner₊(Mₕ(U), D₋ₓ(V)), Wh, Wh)
+    bform3 = BilinearForm((U, V) -> inner₊(M₋ₕ(U), D₋ₓ(V)), Wh, Wh)
     assemble(bform3)
     
     gh = element(Wh)

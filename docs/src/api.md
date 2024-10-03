@@ -7,30 +7,21 @@ CurrentModule = Bramble
 
 Documentation for `Bramble.jl`'s public API.
 
-## Geometries
+## Geometries and meshes
 
 ```@docs
 interval(x, y)
 ×
-embed(X::CartesianProduct, f)
-↪(X::CartesianProduct, f)
+dim
 domain(X::CartesianProduct)
 create_markers
 markers(Ω::Domain)
 labels(Ω::Domain)
-embed(Ω::Domain, f)
-↪(Ω::Domain, f)
-```
-
-## Meshes
-
-```@docs
-mesh(Ω::Domain{CartesianProduct{1,T},MarkersType}, npts::Int, unif::Bool) where {T,MarkersType}
+@embed
 mesh(Ω::Domain, npts::NTuple{D,Int}, unif::NTuple{D,Bool}) where D
 points
 hₘₐₓ
-embed(Ωₕ::MeshType, f)
-↪(Ωₕ::MeshType, f)
+npoints
 ```
 
 ## Spaces
@@ -46,23 +37,23 @@ Rₕ!
 diff₋ₓ
 diff₋ᵧ
 diff₋₂
-diff₋
+diff₋ₕ
 diffₓ
 diffᵧ
 diff₂
-diff(Wₕ::SpaceType)
+diffₕ(Wₕ::SpaceType)
 D₋ₓ
 D₋ᵧ
 D₋₂
-∇ₕ
+∇₋ₕ(Wₕ::SpaceType)
 jumpₓ
 jumpᵧ
+jumpₕ(Wₕ::SpaceType)
 jump₂
-jump
-Mₕₓ
-Mₕᵧ
-Mₕ₂
-Mₕ
+M₋ₕₓ
+M₋ₕᵧ
+M₋ₕ₂
+M₋ₕ(Wₕ::SpaceType)
 innerₕ
 inner₊ₓ
 inner₊ᵧ

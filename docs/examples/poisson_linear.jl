@@ -1,6 +1,6 @@
 using Bramble
-using LinearSolve
-using IncompleteLU: ilu
+import LinearSolve: LinearProblem, solve, KrylovJL_GMRES
+import IncompleteLU: ilu
 
 # Tests for -Δu = g, with homogeneous Dirichlet bc in [0,1]^d
 # with u(x) = exp(sum(x)) and g(x) = -d * sol(x)
@@ -13,13 +13,13 @@ end
 
 function solve_poisson(poisson::PoissonProblem, nPoints::NTuple{D,Int}, unif::NTuple{D,Bool}) where D
 	Mh = mesh(poisson.dom, nPoints, unif)
-	sol = ↪(Mh, poisson.sol)
-	rhs = ↪(Mh, poisson.rhs)
+	sol = @embed(Mh, poisson.sol)
+	rhs = @embed(Mh, poisson.rhs)
 
 	Wh = gridspace(Mh)
 	bc = dirichletbcs(sol)
 
-	bform = BilinearForm((U, V) -> inner₊(∇ₕ(U), ∇ₕ(V)), Wh, Wh)
+	bform = BilinearForm((U, V) -> inner₊(∇₋ₕ(U), ∇₋ₕ(V)), Wh, Wh)
 	A = assemble(bform, bc)
 
 	uh = element(Wh)
@@ -29,7 +29,7 @@ function solve_poisson(poisson::PoissonProblem, nPoints::NTuple{D,Int}, unif::NT
 	F = assemble(lform, bc)
 
 	prob = LinearProblem(A, F)
-	solh = LinearSolve.solve(prob, KrylovJL_GMRES(), Pl = ilu(A, τ = 0.0001))
+	solh = solve(prob, KrylovJL_GMRES(), Pl = ilu(A, τ = 0.0001))
 
 	uh .= solh.u
 	F .= uh
@@ -42,8 +42,8 @@ end
 function poisson(d::Int)
 	I = interval(0, 1)
 	Ω = Bramble.domain(reduce(×, ntuple(i -> I, d)))
-	sol = ↪(Ω, x -> exp(sum(x)))
-	rhs = ↪(Ω, x -> -d * sol(x))
+	sol = @embed(Ω, x -> exp(sum(x)))
+	rhs = @embed(Ω, x -> -d * sol(x))
 	return PoissonProblem(Ω, sol, rhs)
 end
 

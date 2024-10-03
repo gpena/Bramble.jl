@@ -5,6 +5,7 @@ using LinearAlgebra: norm, \
 using Bramble
 
 #Aqua.test_all(Bramble)
+const __with_examples = true
 
 validate_zero(u) = norm(u, Inf) < 1e-9
 validate_equal(u, v) = validate_zero(u .- v)
@@ -19,33 +20,47 @@ function leastsquares(x::AbstractVector, y::AbstractVector)
 	return res[1], res[2]
 end
 
-sep = "######"
+println("")
 
-@time @testset "\n$sep Sets and Domains $sep" begin
+@time @testset "Sets and Domains" begin
 	include("sets.jl")
 	include("domains.jl")
 end
 
-@time @testset "\n$sep Meshes $sep" begin
+println("")
+
+@time @testset "Meshes" begin
 	include("mesh1d.jl")
 	include("meshnd.jl")
 end
 
-@time @testset "\n$sep Grid spaces $sep" begin
+println("")
+
+@time @testset "Grid spaces" begin
 	include("gridspaces.jl")
 	include("vectorelements.jl")
 	include("matrixelements.jl")
 end
 
-@time @testset "\n$sep Forms $sep" begin
+println("")
+
+@time @testset "Forms" begin
 	include("bilinearforms.jl")
 end
 
-@time @testset "\n$sep Poisson equation $sep" begin
-	include("problems/poisson_linear.jl")
-	#include("problems/1d/laplacian_nonlinear.jl")
-	#include("problems/1d/advection.jl")
-	#include("problems/1d/advectionstab.jl")
-	#include("problems/1d/wave.jl")
-end
+if __with_examples
+	sep = "--------------"
+	println("\n\n$sep Examples batch $sep\n")
+	@time @testset "Linear Poisson equation" begin
+		include("../docs/examples/poisson_linear.jl")
+		#include("problems/1d/advection.jl")
+		#include("problems/1d/advectionstab.jl")
+		#include("problems/1d/wave.jl")
+	end
 
+	println("")
+
+	@time @testset "Nonlinear Poisson equation" begin
+		include("../docs/examples/poisson_nonlinear.jl")
+	end
+end

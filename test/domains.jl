@@ -5,8 +5,8 @@ function domain_tests()
 
 	I = interval(M[1, 1], M[1, 2])
 
-	f1 = ↪(I, x->x[1]-0)
-	f3 = ↪(I, x->x[1]-0.5)
+	f1 = @embed(I, x->x[1]-0)
+	f3 = @embed(I, x->x[1]-0.5)
 	domain_markers = create_markers(:dirichlet => f1, :neumann => f3)
 
 	I2 = interval(M[2, 1], M[2, 2])

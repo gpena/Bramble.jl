@@ -52,13 +52,13 @@ Returns the average, in the `x` direction, of the element `uₕ`.
   - 1D case
 
 ```math
-\\textrm{M}_{-hx} \\textrm{u}_h(x_i) \\vcentcolon = \\frac{\\textrm{u}_h(x_i) + \\textrm{u}_h(x_{i-1})}{2}
+\\textrm{M}_{hx} \\textrm{u}_h(x_i) \\vcentcolon = \\frac{\\textrm{u}_h(x_i) + \\textrm{u}_h(x_{i-1})}{2}
 ```
 
   - 2D and 3D case
 
 ```math
-\\textrm{M}_{-hx} \\textrm{u}_h(x_i, \\dots) \\vcentcolon = \\frac{\\textrm{u}_h(x_i, \\dots)+\\textrm{u}_h(x_{i-1}, \\dots)}{2}
+\\textrm{M}_{hx} \\textrm{u}_h(x_i, \\dots) \\vcentcolon = \\frac{\\textrm{u}_h(x_i, \\dots)+\\textrm{u}_h(x_{i-1}, \\dots)}{2}
 ```
 """
 @inline M₋ₕₓ(uₕ::VectorElement) = element(space(uₕ), M₋ₕₓ(space(uₕ)).values * uₕ.values)
@@ -69,7 +69,7 @@ Returns the average, in the `x` direction, of the element `uₕ`.
 Returns the average, in the `y` direction, of the element `uₕ`.
 
 ```math
-\\textrm{M}_{-hy} \\textrm{u}_h(x_i, y_j,\\dots) \\vcentcolon = \\textrm{u}_h(x_i, y_j\\dots)-\\textrm{u}_h(x_i, y_{j+1}, \\dots)
+\\textrm{M}_{hy} \\textrm{u}_h(x_i, y_j,\\dots) \\vcentcolon = \\textrm{u}_h(x_i, y_j\\dots)-\\textrm{u}_h(x_i, y_{j+1}, \\dots)
 ```
 """
 @inline M₋ₕᵧ(uₕ::VectorElement) = element(space(uₕ), M₋ₕᵧ(space(uₕ)).values * uₕ.values)
@@ -80,7 +80,7 @@ Returns the average, in the `y` direction, of the element `uₕ`.
 Returns the average, in the `z` direction, of the element `uₕ`.
 
 ```math
-\\textrm{M}_{-hz} \\textrm{u}_h(x_i, y_j,z_l) \\vcentcolon = \\frac{\\textrm{u}_h(x_i, y_j, z_l)+\\textrm{u}_h(x_i, y_j, z_{l-1})}{2}
+\\textrm{M}_{hz} \\textrm{u}_h(x_i, y_j,z_l) \\vcentcolon = \\frac{\\textrm{u}_h(x_i, y_j, z_l)+\\textrm{u}_h(x_i, y_j, z_{l-1})}{2}
 ```
 """
 @inline M₋ₕ₂(uₕ::VectorElement) = element(space(uₕ), M₋ₕ₂(space(uₕ)).values * uₕ.values)
