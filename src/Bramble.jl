@@ -65,7 +65,7 @@ export M₋ₕₓ, M₋ₕᵧ, M₋ₕ₂, M₋ₕ
 
 # Forms exports
 export BilinearForm, LinearForm, assemble, assemble!, Mass, Diff, update!
-export dirichletbcs
+export dirichletbcs, constraints
 export mass, stiffness, advection
 
 #=
@@ -92,12 +92,9 @@ include("spaces/average.jl")
 include("spaces/inner_product.jl")
 
 
-include("forms/types.jl")
-include("forms/utils.jl")
-include("forms/dirichletbcs.jl")
+include("forms/constraints.jl")
 include("forms/bilinearforms.jl")
 include("forms/linearforms.jl")
-include("forms/assembler.jl")
 
 #=
 include("exporters/types.jl")
