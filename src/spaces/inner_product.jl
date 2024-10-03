@@ -1,5 +1,3 @@
-# inner products
-## innerₕ
 """
 	innerₕ(uₕ::VectorElement, vₕ::VectorElement)
 	innerₕ(Uₕ::VecOrMatElem, Vₕ::VecOrMatElem)
@@ -102,7 +100,7 @@ end
 
 @inline @generated function inner₊(uₕ::VectorElement{SType}, Vₕ::MatrixElement{SType}) where SType
 	D = dim(mesh(SType))
-	res = :(x = _inner_product(uₕ.values, innerplus_weights(space(uₕ), Val(1)), vₕ.values))
+	res = :(x = _inner_product(uₕ.values, innerplus_weights(space(uₕ), Val(1)), Vₕ.values))
 
 	for i in 2:D
 		push!(res.args, :(x .+= _inner_product_add!(x, uₕ.values, innerplus_weights(space(uₕ), Val($i)), Vₕ.values)))
