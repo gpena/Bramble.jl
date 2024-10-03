@@ -5,19 +5,19 @@ import IncompleteLU: ilu
 # Tests for -Δu = g, with homogeneous Dirichlet bc in [0,1]^d
 # with u(x) = exp(sum(x)) and g(x) = -d * sol(x)
 
-struct PoissonProblem{DomainType,SolType,RhsType}
+struct SimpleScalarPDEProblem{DomainType,SolType,RhsType}
 	dom::DomainType
 	sol::SolType
 	rhs::RhsType
 end
 
-function solve_poisson(poisson::PoissonProblem, nPoints::NTuple{D,Int}, unif::NTuple{D,Bool}) where D
+function solve_poisson(poisson::SimpleScalarPDEProblem, nPoints::NTuple{D,Int}, unif::NTuple{D,Bool}) where D
 	Mh = mesh(poisson.dom, nPoints, unif)
 	sol = @embed(Mh, poisson.sol)
 	rhs = @embed(Mh, poisson.rhs)
 
 	Wh = gridspace(Mh)
-	bc = dirichletbcs(sol)
+	bc = constraints(sol)
 
 	bform = BilinearForm((U, V) -> inner₊(∇₋ₕ(U), ∇₋ₕ(V)), Wh, Wh)
 	A = assemble(bform, bc)
@@ -44,10 +44,10 @@ function poisson(d::Int)
 	Ω = Bramble.domain(reduce(×, ntuple(i -> I, d)))
 	sol = @embed(Ω, x -> exp(sum(x)))
 	rhs = @embed(Ω, x -> -d * sol(x))
-	return PoissonProblem(Ω, sol, rhs)
+	return SimpleScalarPDEProblem(Ω, sol, rhs)
 end
 
-function test_poisson(poisson_problem::PoissonProblem, nTests, npoints_generator, unif::NTuple{D,Bool}) where D
+function test_poisson(poisson_problem::SimpleScalarPDEProblem, nTests, npoints_generator, unif::NTuple{D,Bool}) where D
 	error = zeros(nTests)
 	hmax = zeros(nTests)
 

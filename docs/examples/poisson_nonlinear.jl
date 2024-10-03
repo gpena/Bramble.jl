@@ -56,7 +56,7 @@ function solve_poisson_nl(poisson_nl::PoissonNLProblem, nPoints::NTuple{D,Int}, 
 	sol = @embed(Mh, poisson_nl.sol)
 	rhs = @embed(Mh, poisson_nl.rhs)
 	A = poisson_nl.coeff
-	bc = dirichletbcs(sol)
+	bc = constraints(sol)
 
 	Wh = gridspace(Mh)
 	u = element(Wh, 0)
