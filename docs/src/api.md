@@ -64,3 +64,13 @@ norm₊
 snorm₁ₕ
 norm₁ₕ
 ```
+
+## Linear and bilinear forms
+
+```@docs
+form
+assemble
+assemble!
+constraints
+symmetrize!
+```
