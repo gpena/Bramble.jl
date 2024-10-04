@@ -22,13 +22,13 @@ function solve_convection_diffusion(convdiff::LinearConvectionDiffusionProblem, 
 	Wh = gridspace(Mh)
 	bc = constraints(sol)
 
-	bform = BilinearForm((U, V) -> ϵ * inner₊(∇₋ₕ(U), ∇₋ₕ(V)) + b * inner₊(M₋ₕ(U), ∇₋ₕ(V)), Wh, Wh)
+	bform = form(Wh, Wh, (U, V) -> ϵ * inner₊(∇₋ₕ(U), ∇₋ₕ(V)) + b * inner₊(M₋ₕ(U), ∇₋ₕ(V)))
 	A = assemble(bform, bc)
 
 	uh = element(Wh)
 	avgₕ!(uh, rhs)
 
-	lform = LinearForm(U -> innerₕ(uh, U), Wh)
+	lform = form(Wh, U -> innerₕ(uh, U))
 	F = assemble(lform, bc)
 
 	prob = LinearProblem(A, F)
