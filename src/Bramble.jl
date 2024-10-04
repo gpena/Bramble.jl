@@ -64,11 +64,9 @@ export jumpₓ, jumpᵧ, jump₂, jumpₕ
 export M₋ₕₓ, M₋ₕᵧ, M₋ₕ₂, M₋ₕ
 
 # Forms exports
-export BilinearForm, bilinearform
-export LinearForm, linearform
-export assemble, assemble! #update!
+export form
+export assemble, assemble!
 export constraints, symmetrize!
-#export mass, diffusion, convection
 
 #=
 # Exporters
@@ -103,5 +101,5 @@ include("exporters/types.jl")
 include("exporters/exporter_vtk.jl")
 
 =#
-include("precompile.jl")
+#include("precompile.jl")
 end
