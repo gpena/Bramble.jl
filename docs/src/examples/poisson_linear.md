@@ -144,7 +144,7 @@ Wₕ = gridspace(Ωₕ)
 and move on to define the bilinear form and assembling the associated matrix
 
 ```julia
-bform = BilinearForm((uₕ, vₕ) -> inner₊(∇₋ₕ(uₕ), ∇₋ₕ(vₕ)), Wₕ, Wₕ)
+bform = form((uₕ, vₕ) -> inner₊(∇₋ₕ(uₕ), ∇₋ₕ(vₕ)), Wₕ, Wₕ)
 A = assemble(bform, bc)
 ```
 
@@ -160,7 +160,7 @@ avgₕ!(uₕ, rhs)
 We now define the linear forms associated with the right hand side
 
 ```julia
-lform = LinearForm(vₕ -> innerₕ(uₕ, vₕ), Wₕ)
+lform = form(vₕ -> innerₕ(uₕ, vₕ), Wₕ)
 F = assemble(lform, bc)
 ```
 

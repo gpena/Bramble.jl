@@ -65,12 +65,12 @@ function solve_poisson_nl(poisson_nl::PoissonNLProblem, nPoints::NTuple{D,Int}, 
 	avgₕ!(uold, rhs)
 
 	l(V) = innerₕ(uold, V)
-	lform = LinearForm(l, Wh)
+	lform = form(Wh, l)
 	F = assemble(lform, bc)
 
 	getcoeff = @embed(Wh, u -> D == 1 ? A.(M₋ₕ(u)) : sum(ntuple(i -> A.(M₋ₕ(u)[i]), D)) ./ D)
 	a(U, V) = inner₊(getcoeff(u) * ∇₋ₕ(U), ∇₋ₕ(V))
-	bform = BilinearForm(a, Wh, Wh)
+	bform = form(Wh, Wh, a)
 	mat = assemble(bform, bc)
 
 	uold .= getcoeff(u)

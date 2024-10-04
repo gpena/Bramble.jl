@@ -96,12 +96,12 @@ Next, we introduce the linear and bilinear forms associated with the problem. He
 
 ```julia
 l(V) = innerₕ(uold, V)
-lform = LinearForm(l, Wh)
+lform = form(l, Wh)
 F = assemble(lform, bc)
 
 A(u) = D == 1 ? coeff.(M₋ₕ(u)) : sum(ntuple(i -> coeff.(M₋ₕ(u)[i]), D)) ./ D
 a(U, V) = inner₊(A(u) * ∇₋ₕ(U), ∇₋ₕ(V))
-bform = BilinearForm(a, Wh, Wh)
+bform = form(a, Wh, Wh)
 mat = assemble(bform, bc)
 ```
 
