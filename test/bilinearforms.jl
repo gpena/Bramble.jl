@@ -10,20 +10,20 @@ function bilinearforms_test()
     Wh = gridspace(Mh)
 
     a(U, V) = innerₕ(U, V)
-    bform = BilinearForm(a, Wh, Wh)
+    bform = form(Wh, Wh, a)
     A = assemble(bform)
 
-    bform2 = BilinearForm((U, V) -> inner₊(D₋ₓ(U), D₋ₓ(V)), Wh, Wh)
+    bform2 = form(Wh, Wh, (U, V) -> inner₊(D₋ₓ(U), D₋ₓ(V)))
     assemble(bform2)
 
-    bform3 = BilinearForm((U, V) -> inner₊(M₋ₕ(U), D₋ₓ(V)), Wh, Wh)
+    bform3 = form(Wh, Wh, (U, V) -> inner₊(M₋ₕ(U), D₋ₓ(V)))
     assemble(bform3)
     
     gh = element(Wh)
     Rₕ!(gh, x->sin(x[1]))
 
     l(V) = innerₕ(gh, V)
-    lform = LinearForm(l, Wh)
+    lform = form(Wh, l)
     F = assemble(lform)
 
     u = A\F
