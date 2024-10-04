@@ -64,9 +64,11 @@ export jumpₓ, jumpᵧ, jump₂, jumpₕ
 export M₋ₕₓ, M₋ₕᵧ, M₋ₕ₂, M₋ₕ
 
 # Forms exports
-export BilinearForm, LinearForm, assemble, assemble!, Mass, Diff, update!
-export dirichletbcs, constraints
-export mass, stiffness, advection
+export BilinearForm, bilinearform
+export LinearForm, linearform
+export assemble, assemble! #update!
+export constraints, symmetrize!
+#export mass, diffusion, convection
 
 #=
 # Exporters
