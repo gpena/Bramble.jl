@@ -295,7 +295,7 @@ end
 							constraints(:dirichlet => sol, :dirichlet => sol, :dirichlet => sol),
 							constraints(:dirichlet => sol, :dirichlet => sol, :dirichlet => sol, :dirichlet => sol))
 
-		bform = bilinearform((u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)), Wh, Wh)
+		bform = form(Wh, Wh, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
 		trialspace(bform)
 		testspace(bform)
 
@@ -303,7 +303,7 @@ end
 		assemble!(A, bform)
 
 		u = element(Wh, 0.0)
-		lform = LinearForm(v -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)), Wh)
+		lform = form(Wh, v -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
 		testspace(lform)
 		F = assemble(lform)
 
