@@ -19,19 +19,19 @@ struct Constraints{D,FType} <: ConstraintsType
 end
 
 """
-	constraints(pairs::NTuple{D,MarkerType{BrambleBareFunction{D,T,bool}}}, type::Symbol = :dirichlet)
+	constraints(pairs::NTuple{D,MarkerType}, type::Symbol = :dirichlet)
 
 Returns a [Constraints](@ref) object from a tuple of [Marker](@ref)s and a symbol
 defining the type of boundary condition. Currently, the only supported type is for Dirichlet boundary conditions. The default type is `:dirichlet`.
 """
 function constraints(pairs::Vararg{MarkerType{BrambleBareFunction{D,T,bool}},N}; type::Symbol = :dirichlet) where {D,T,bool,N}
-	@assert type == :dirichlet
+	@assert bool && type == :dirichlet
 	mrks = create_markers(ntuple(i -> pairs[i], N)...)
 	return Constraints{N,BrambleBareFunction{D,T,bool}}(mrks, type)
 end
 
 """
-	constraints(f::BrambleBareFunction{D,T,bool}; type::Symbol = :dirichlet)
+	constraints(f::BrambleBareFunction; type::Symbol = :dirichlet)
 
 Returns a [Constraints](@ref) object from a single [BrambleBareFunction](@ref) and a symbol
 defining the type of boundary condition.
@@ -43,32 +43,32 @@ function constraints(f::BrambleBareFunction{D,T,bool}; type::Symbol = :dirichlet
 end
 
 """
-	markers(S::Constraints)
+	markers(bcs::Constraints)
 
-Returns the [Marker](@ref)s stored in the [Constraints](@ref) object `S`.
+Returns the [Marker](@ref)s stored in the [Constraints](@ref) object `bcs`.
 """
-@inline markers(S::Constraints) = S.markers
-
-"""
-	constraint_type(S::Constraints)
-
-Returns the symbol defining the type of boundary condition stored in the [Constraints](@ref) object `S`.
-"""
-@inline constraint_type(S::Constraints) = S.constraint_type
+@inline markers(bcs::Constraints) = bcs.markers
 
 """
-	symbols(S::Constraints)
+	constraint_type(bcs::Constraints)
 
-Returns an iterator over the symbols of the [Marker](@ref)s stored in the [Constraints](@ref) object `S`.
+Returns the symbol defining the type of boundary condition stored in the [Constraints](@ref) object `bcs`.
 """
-@inline symbols(S::Constraints) = (p.symbol for p in S)
+@inline constraint_type(bcs::Constraints) = bcs.constraint_type
 
 """
-	labels(S::Constraints)
+	symbols(bcs::Constraints)
 
-Returns an iterator over the labels of the [Marker](@ref)s stored in the [Constraints](@ref) object `S`.
+Returns an iterator over the symbols of the [Marker](@ref)s stored in the [Constraints](@ref) object `bcs`.
 """
-@inline labels(S::Constraints) = (p.label for p in S)
+@inline symbols(bcs::Constraints) = (symbol(bc) for bc in bcs)
+
+"""
+	labels(bcs::Constraints)
+
+Returns an iterator over the labels of the [Marker](@ref)s stored in the [Constraints](@ref) object `bcs`.
+"""
+@inline labels(bcs::Constraints) = (label(bc) for bc in bcs)
 
 """
 	apply_dirichlet_bc!(A, bcs::Constraints, M::MeshType)
@@ -76,12 +76,12 @@ Returns an iterator over the labels of the [Marker](@ref)s stored in the [Constr
 Apply Dirichlet boundary conditions to matrix `A` using the [Constraints](@ref) object `bcs`
 and the mesh `M`. For each index `i` associated with a Dirichlet boundary condition, we set the `i`-th row of matrix `A` to zero and change the diagonal element `A[i,i]` to 1.
 """
-function apply_dirichlet_bc!(A::AbstractMatrix, bcs::Constraints, M::MeshType)
+function apply_dirichlet_bc!(A::AbstractMatrix, bcs::Constraints, Ωₕ::MeshType)
 	@assert constraint_type(bcs) == :dirichlet
-	npts = npoints(M, Tuple)
+	npts = npoints(Ωₕ, Tuple)
 
 	for p in markers(bcs)
-		idxs = marker(M, label(p))
+		idxs = marker(Ωₕ, label(p))
 		_apply_dirichlet_bc!(A, npts, idxs)
 	end
 end
@@ -113,7 +113,7 @@ function __set_rows_zero(A::AbstractMatrix, npts, indices)
 end
 
 """
-	symmetrize!(A, F, bcs::Constraints, M::MeshType)
+	symmetrize!(A, F, bcs::Constraints, Ωₕ::MeshType)
 
 After Dirichlet boundary conditions are applied to matrix `A` and vector `F` using the [Constraints](@ref) object `bcs`, this function allows to make `A` symmetric, if the original matrix (before applying boundary conditions was symmetric). The algorithm goes as follows: for any given row `i` where Dirichlet boundary conditions have been applied
 
@@ -121,12 +121,12 @@ After Dirichlet boundary conditions are applied to matrix `A` and vector `F` usi
 	- replace `F` by substracting `dᵢ` to `F` (except for the `i`-th component)
 	- replace all elements in the `i`-th column of `A` (except the `i`-th by zero).
 """
-function symmetrize!(A::AbstractMatrix, F::AbstractVector, bcs::Constraints, M::MeshType)
-	npts = npoints(M, Tuple)
+function symmetrize!(A::AbstractMatrix, F::AbstractVector, bcs::Constraints, Ωₕ::MeshType)
+	npts = npoints(Ωₕ, Tuple)
 	T = eltype(A)
 
 	for p in markers(bcs)
-		indices = marker(M, p.label)
+		indices = marker(Ωₕ, label(p))
 		for idx in indices
 			i = sub2ind(npts, idx)
 			aux = F[i]
@@ -158,7 +158,7 @@ end
 end
 
 """
-	apply_dirichlet_bc!(v::AbstractVector, bcs::Constraints, M::MeshType)
+	apply_dirichlet_bc!(v::AbstractVector, bcs::Constraints, Ωₕ::MeshType)
 
 Apply Dirichlet boundary conditions to vector `v` using the [Constraints](@ref) object `bcs`
 and the mesh `Ωₕ`.
