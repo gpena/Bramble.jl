@@ -1,5 +1,5 @@
-using Pkg
-Pkg.activate(".")
+#using Pkg
+#Pkg.activate(".")
 using Bramble
 using Documenter
 #using LiveServer; servedocs()
