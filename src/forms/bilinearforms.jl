@@ -44,11 +44,11 @@ Returns the test space of a bilinear form.
 testspace(a::BilinearFormType) = a.test_space
 
 """
-	form(Wₕ::TrialType, Vₕ::TestType, f::F)
+	form(Wₕ::SpaceType, Vₕ::SpaceType, f)
 
 Returns a bilinear form from a given expression and trial and test spaces.
 """
-form(Wₕ::TrialType, Vₕ::TestType, f::F) where {TrialType,TestType,F} = BilinearForm{TrialType,TestType,F}(Wₕ, Vₕ, f)
+form(Wₕ::SpaceType, Vₕ::SpaceType, f::F) where F = BilinearForm{typeof(Wₕ),typeof(Vₕ),F}(Wₕ, Vₕ, f)
 
 """
 	assemble(a::BilinearForm)

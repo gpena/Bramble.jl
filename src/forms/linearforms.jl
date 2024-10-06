@@ -39,7 +39,7 @@ testspace(l::LinearForm) = l.test_space
 
 Returns a linear form from a given expression and a test space.
 """
-form(Wₕ::TestType, f::F) where {F,TestType} = LinearForm{TestType,F}(Wₕ, f)
+form(Wₕ::SpaceType, f::F) where F = LinearForm{typeof(Wₕ),F}(Wₕ, f)
 
 """
 	assemble(l::LinearForm)
