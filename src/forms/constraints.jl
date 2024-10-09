@@ -36,10 +36,10 @@ end
 Returns a [Constraints](@ref) object from a single [BrambleFunction](@ref) and a symbol
 defining the type of boundary condition.
 """
-function constraints(f::BrambleFunction{A,B,C}; type::Symbol = :dirichlet) where {A,B,C}
+function constraints(f::BrambleFunction{A,hastime,C}; type::Symbol = :dirichlet) where {A,hastime,C}
 	@assert type == :dirichlet
 	mrks = create_markers(:dirichlet => f)
-	return Constraints{1,BrambleFunction{A,B,C}}(mrks, type)
+	return Constraints{1,BrambleFunction{A,hastime,C}}(mrks, type)
 end
 
 """
