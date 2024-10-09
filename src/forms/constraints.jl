@@ -24,10 +24,10 @@ end
 Returns a [Constraints](@ref) object from a tuple of [Marker](@ref)s and a symbol
 defining the type of boundary condition. Currently, the only supported type is for Dirichlet boundary conditions. The default type is `:dirichlet`.
 """
-function constraints(pairs::Vararg{MarkerType{BrambleFunction{A,B,C}},N}; type::Symbol = :dirichlet) where {A,B,C,N}
-	@assert bool && type == :dirichlet
+function constraints(pairs::Vararg{MarkerType{BrambleFunction{A,hastime,C}},N}; type::Symbol = :dirichlet) where {A,hastime,C,N}
+	@assert type == :dirichlet
 	mrks = create_markers(ntuple(i -> pairs[i], N)...)
-	return Constraints{N,BrambleFunction{A,B,C}}(mrks, type)
+	return Constraints{N,BrambleFunction{A,hastime,C}}(mrks, type)
 end
 
 """
@@ -168,7 +168,7 @@ function apply_dirichlet_bc!(v::AbstractVector, bcs::Constraints{N,BFType}, Ω�
 	npts = npoints(Ωₕ, Tuple)
 	pts = points(Ωₕ)
 	f = Base.Fix1(_i2p, pts)
-	
+
 	for _marker in markers(bcs), idx in marker(Ωₕ, label(_marker))
 		i = sub2ind(npts, idx)
 		v[i] = func(_marker)(f(idx))
