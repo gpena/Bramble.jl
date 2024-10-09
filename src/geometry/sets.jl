@@ -10,7 +10,7 @@ struct CartesianProduct{D,T} <: BrambleType
 end
 
 """
-	struct BrambleFunction{ArgsType,hastime,hascart,CoType}
+	struct BrambleFunction{ArgsType,hastime,CoType}
 		wrapped::FunctionWrapper{CoType,Tuple{ArgsType}}
 	end
 
@@ -199,7 +199,6 @@ function show(io::IO, X::CartesianProduct{D}) where D
 	sets_string = join(sets, " × ")
 	print(io, "Type: $(eltype(X)) \n Dim: $D \n Set: $sets_string")
 end
-
 
 function _embed_notime(X, f)
 	D = dim(X)
