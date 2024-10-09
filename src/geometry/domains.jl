@@ -19,7 +19,7 @@ end
 		f::F
 	end
 
-Structure to implement markers for a portion of a domain or even boundary conditions. Each [Marker](@ref) is composed of a symbol and a [BrambleBareFunction](@ref).
+Structure to implement markers for a portion of a domain or even boundary conditions. Each [Marker](@ref) is composed of a symbol and a [BrambleFunction](@ref).
 """
 struct Marker{F}
 	label::Symbol
@@ -121,7 +121,7 @@ end
 """
 	create_markers(m::MarkerType...)
 
-Converts several `Pair{Symbol,F}` (:symbol => func) to [Marker](@ref)s. These are to be passed in the construction of a [Domain](@ref). The functions need to be defined as [BrambleBareFunction](@ref)s.
+Converts several `Pair{Symbol,F}` (:symbol => func) to [Marker](@ref)s. These are to be passed in the construction of a [Domain](@ref). The functions need to be defined as [BrambleFunction](@ref)s.
 
 # Example
 
@@ -129,7 +129,7 @@ Converts several `Pair{Symbol,F}` (:symbol => func) to [Marker](@ref)s. These ar
 julia> create_markers( :dirichlet => @embed(X, x -> x[1]-1), :neumann => @embed(X, x -> x[2]-0) )
 ```
 """
-@inline @generated function create_markers(m::MarkerType{BrambleBareFunction{D,T,H}}...) where {D,T,H}
+@inline @generated function create_markers(m::MarkerType{BrambleFunction{T,bool,C}}...) where {T,bool,C}
 	nPairs = length(m)
 
 	tuple_expr = Expr(:tuple)
@@ -157,17 +157,6 @@ Returns a generator with the labels of the [Marker](@ref)s associated with [Doma
 """
 	marker_funcs(Ω::Domain)
 
-Returns a generator with the [Marker](@ref)'s [BrambleBareFunction](@ref)s associated with [Domain](@ref) `Ω`.
+Returns a generator with the [Marker](@ref)'s [BrambleFunction](@ref)s associated with [Domain](@ref) `Ω`.
 """
 @inline marker_funcs(Ω::Domain) = (p.f for p in Ω.markers)
-
-function _embed(Ω::Domain, f)
-	D = dim(Ω)
-	T = eltype(Ω)
-	wrapped_f_tuple = FunctionWrapper{T,Tuple{NTuple{D,T}}}(f)
-	wrapped_f_cartesian = FunctionWrapper{T,Tuple{CartesianIndex{D}}}(zero)
-
-	return BrambleBareFunction{D,T,false}(wrapped_f_tuple, wrapped_f_cartesian)
-end
-
-@inline _embed(Ω::Domain, f::BrambleBareFunction) = f

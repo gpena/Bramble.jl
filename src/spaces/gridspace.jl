@@ -112,16 +112,17 @@ struct BrambleGridSpaceFunction{ElemType}
 	f_vec::FunctionWrapper{ElemType,Tuple{ElemType}}
 end
 
-function _embed(Wₕ::SpaceType, f)
+function _embed_notime(Wₕ::SpaceType, f)
 	T = eltype(Wₕ)
-	dom_type = VectorElement{typeof(Wₕ),T}
-	wrapped_f_vec = FunctionWrapper{dom_type,Tuple{dom_type}}(f)
-	#wrapped_f_cartesian = FunctionWrapper{T,Tuple{CartesianIndex{1}}}(zero)
+	ArgsType = VectorElement{typeof(Wₕ),T}
+	CoType = ArgsType
 
-	return BrambleGridSpaceFunction{dom_type}(wrapped_f_vec)
+	wrapped_f_tuple = FunctionWrapper{CoType,Tuple{ArgsType}}(f)
+
+	return BrambleFunction{ArgsType,false,CoType}(wrapped_f_tuple)
 end
 
-@inline (f::BrambleGridSpaceFunction{ElemType})(x::VectorElement) where ElemType = f.f_vec(x)
+(f::BrambleFunction{VectorElement{SType,T}})(u::VectorElement{SType,T}) where {SType,T} = f.wrapped(u)
 
 # a tuple storing the symbols used for the different coordinate directions
 const var2symbol = ("ₓ", "ᵧ", "₂")

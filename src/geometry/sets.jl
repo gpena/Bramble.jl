@@ -10,16 +10,14 @@ struct CartesianProduct{D,T} <: BrambleType
 end
 
 """
-	struct BrambleBareFunction{D,T,has_cart} 
-		f_tuple::FunctionWrapper{T, Tuple{NTuple{D,T}}}
-		f_cartesian::FunctionWrapper{T, Tuple{CartesianIndex{D}}}
+	struct BrambleFunction{ArgsType,hastime,hascart,CoType}
+		wrapped::FunctionWrapper{CoType,Tuple{ArgsType}}
 	end
 
-Structure to wrap around functions to make them more type agnostic. It uses `FunctionWrappers` to provide functions calculated on `Tuple`s and `CartesianIndices`. The type arguments are `D`, the dimension of the underlying domain in which the function is defined, `f_tuple`, a version of the function appliable to `Tuple`s and `f_cartesian`, a version of the function appliable to `CartesianIndices` (useful when dealing with meshes)
+Structure to wrap around functions to make them more type agnostic. It uses `FunctionWrappers` to provide functions calculated on `ArgsType`. The type arguments are `hastime` to indicate if the function is time-dependent and `CoType`, the time of the codomain of the function.
 """
-struct BrambleBareFunction{D,T,has_cart}
-	f_tuple::FunctionWrapper{T,Tuple{NTuple{D,T}}}
-	f_cartesian::FunctionWrapper{T,Tuple{CartesianIndex{D}}}
+struct BrambleFunction{ArgsType,hastime,CoType}
+	wrapped::FunctionWrapper{CoType,Tuple{ArgsType}}
 end
 
 """
@@ -62,7 +60,7 @@ Type: Float64
 ```
 
 ```@example
-julia> cartesianproduct(((0,1), (4,5)))
+julia> cartesianproduct(((0, 1), (4, 5)))
 Type: Int64 
  Dim: 2 
  Set: [0, 1] × [4, 5]
@@ -95,7 +93,8 @@ Returns the element type of a [CartesianProduct](@ref).
 # Example
 
 ```@example
-julia> X = cartesianproduct(0, 1); eltype(X)
+julia> X = cartesianproduct(0, 1);
+	   eltype(X);
 Float64
 ```
 """
@@ -111,12 +110,14 @@ Returns the topological dimension of a [CartesianProduct](@ref).
 # Example
 
 ```@example
-julia> X = cartesianproduct(0, 1); dim(X)
+julia> X = cartesianproduct(0, 1);
+	   dim(X);
 1
 ```
 
 ```@example
-julia> Y = cartesianproduct(((0,1), (4,5))); dim(Y)
+julia> Y = cartesianproduct(((0, 1), (4, 5)));
+	   dim(Y);
 2
 ```
 """
@@ -132,12 +133,14 @@ Returns `i`-th interval in [CartesianProduct](@ref) `X` as a Tuple. It can also 
 # Example
 
 ```@example
-julia> X = cartesianproduct(0, 1) × cartesianproduct(4, 5); tails(X,1)
+julia> X = cartesianproduct(0, 1) × cartesianproduct(4, 5);
+	   tails(X, 1);
 (0.0, 1.0)
 ```
 
 ```@example
-julia> X = cartesianproduct(0, 1) × cartesianproduct(4, 5); tails(X)
+julia> X = cartesianproduct(0, 1) × cartesianproduct(4, 5);
+	   tails(X);
 ((0.0, 1.0), (4.0, 5.0))
 ```
 """
@@ -158,7 +161,9 @@ Returns the cartesian product of two [CartesianProduct](@ref)s `X` and `Y` as a 
 # Example
 
 ```@example
-julia> X = interval(0, 1); Y = interval(2, 3); X × Y;
+julia> X = interval(0, 1);
+	   Y = interval(2, 3);
+	   X × Y;
 Type: Float64 
  Dim: 2 
  Set: [0.0, 1.0] × [2.0, 3.0]
@@ -180,7 +185,8 @@ Returns the `i`-th interval in [CartesianProduct](@ref) `X` as a new `1`-dimensi
 # Example
 
 ```@example
-julia> X = cartesianproduct(0, 1) × cartesianproduct(4, 5); projection(X, 1)
+julia> X = cartesianproduct(0, 1) × cartesianproduct(4, 5);
+	   projection(X, 1);
 Type: Float64 
  Dim: 1 
  Set: [0.0, 1.0]
@@ -195,46 +201,93 @@ function show(io::IO, X::CartesianProduct{D}) where D
 end
 
 
+function _embed_notime(X, f)
+	D = dim(X)
+	T = eltype(X)
+	ArgsType = D == 1 ? T : NTuple{D,T}
+
+	wrapped_f_tuple = FunctionWrapper{T,Tuple{ArgsType}}(f)
+
+	return BrambleFunction{ArgsType,false,T}(wrapped_f_tuple)
+end
+
 """
 	@embed(X:CartesianProduct, f)
 	@embed(X:Domain, f)
 	@embed(X:MeshType, f)
 	@embed(X:SpaceType, f)
+	@embed(X × I, f)
 
-Returns a new wrapped version of function `f`. If 
-	
- - `X` is not a [SpaceType](@ref), the topological dimension of `X` is used to caracterize the types in the returning [BrambleBareFunction](@ref); in this case, the new function can be applied to tuples (with point coordinates) or cartesian indices (if `X` is a [MeshType](@ref))
+Returns a new wrapped version of function `f`. If
 
- - `X` is a [SpaceType](@ref), the returning function type, [BrambleGridSpaceFunction](@ref), is caracterized by the dimension of the [element](@ref)s of the space.
- 
+  - `X` is not a [SpaceType](@ref), the topological dimension of `X` is used to caracterize the types in the returning [BrambleFunction](@ref); in this case, the new function can be applied to `Tuple`s (with point coordinates);
+
+  - `X` is a [SpaceType](@ref), the returning function type, [BrambleFunction](@ref), is caracterized by the dimension of the [element](@ref)s of the space.
+
+If the first argument is of the form `X × I`, where `I` is an interval, then `f` must be a time-dependent function defined as `f(x,t) = ...`.
+
 # Example
 
 ```@example
-julia> Ω = domain(interval(0,1) × interval(0,1)); f = @embed Ω x -> x[1]*x[2]+1;  # or f = @embed(Ω, x -> x[1]*x[2]+1)
-```
+julia> Ω = domain(interval(0, 1) × interval(0, 1));
+	   f = @embed Ω x->x[1] * x[2] + 1;  # or f = @embed(Ω, x -> x[1]*x[2]+1)
 
+```
 """
 macro embed(domain_expr, func_expr)
-    if func_expr isa Symbol || func_expr.head == :-> || func_expr.head == :.
-        return esc(:(Bramble._embed($domain_expr, $func_expr)))
-    end
-    
-    return :(@error "Don't know how to handle this expression")
+	space_domain, time_domain = _get_domains(domain_expr)
+
+	if func_expr isa Symbol || func_expr.head == :-> || func_expr.head == :.
+		if time_domain isa Nothing
+			# case of function only depending on space variables
+			return esc(:(Bramble._embed_notime($space_domain, $func_expr)))
+		end
+
+		# case when the function also depends on a time variable
+		return esc(:(Bramble._embed_withtime($space_domain, $time_domain, $func_expr)))
+	end
+
+	return :(@error "Don't know how to handle this expression")
 end
 
-function _embed(X::CartesianProduct{D,T}, f) where {D,T}
-	wrapped_f_tuple = FunctionWrapper{T,Tuple{NTuple{D,T}}}(f)
-	wrapped_f_cartesian = FunctionWrapper{T,Tuple{CartesianIndex{D}}}(zero)
+@inline function _get_domains(expr::Expr)
+	if expr.args isa Array && length(expr.args) == 3
+		args = expr.args
+		return args[2], args[3]
+	end
 
-	return BrambleBareFunction{D,T,false}(wrapped_f_tuple, wrapped_f_cartesian)
+	if expr.head == :call
+		return :($expr), nothing
+	end
+
+	return :(@error "Invalid domain format. Please write the first input as Ω × I, where Ω is the space domain and I is the time domain.")
 end
 
-@inline _embed(X::CartesianProduct, f::BrambleBareFunction) = f
+@inline _get_domains(s::Symbol) = :($s), nothing
 
-@inline (f::BrambleBareFunction{1,T})(x::Tin) where {T,Tin<:Number} = f.f_tuple((convert(T, x)::T,))
-@inline (f::BrambleBareFunction{1,T})(x::Tuple{Tin}) where {T,Tin} = f.f_tuple(Tuple(convert(T, x[1])::T))
-@inline (f::BrambleBareFunction{2,T})(x::Tuple{T1,T2}) where {T,T1,T2} = f.f_tuple(ntuple(i -> convert(T, x[i])::T, 2))
-@inline (f::BrambleBareFunction{3,T})(x::Tuple{T1,T2,T3}) where {T,T1,T2,T3} = f.f_tuple(ntuple(i -> convert(T, x[i])::T, 3))
+function (f::BrambleFunction{NTuple{D,T},false})(x...) where {D,T}
+	if x[1] isa Tuple
+		@assert length(x[1]) == D
+		y = Tuple(convert.(T, x[1])::NTuple{D,T})
+		return f.wrapped(y)
+	end
 
-@inline (f::BrambleBareFunction{D,T,true})(x::CartesianIndex{D}) where {D,T} = f.f_cartesian(x)
-@inline (f::BrambleBareFunction{D,T,false})(x::CartesianIndex{D}) where {D,T} = @error "This function doesn't isn't _embedded in a mesh"
+	@assert length(x) == D
+
+	y = Tuple(convert.(T, x)::NTuple{D,T})
+	return f.wrapped(y)
+end
+
+(f::BrambleFunction{ArgsType,false})(x) where {ArgsType<:Number} = f.wrapped(convert(ArgsType, x)::ArgsType)
+(f::BrambleFunction{ArgsType,true})(t) where ArgsType = f.wrapped(t)
+
+function _embed_withtime(X, I::CartesianProduct{1}, f)
+	_f(t) = _embed_notime(X, Base.Fix2(f, t))
+
+	ArgsType = eltype(X)
+	CoType = typeof(_f(sum(tails(I)) * 0.5))
+
+	wrapped_f_tuple = FunctionWrapper{CoType,Tuple{ArgsType}}(_f)
+
+	return BrambleFunction{ArgsType,true,CoType}(wrapped_f_tuple)
+end

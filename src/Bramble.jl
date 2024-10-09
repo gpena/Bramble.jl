@@ -101,5 +101,5 @@ include("exporters/types.jl")
 include("exporters/exporter_vtk.jl")
 
 =#
-include("precompile.jl")
+#include("precompile.jl")
 end

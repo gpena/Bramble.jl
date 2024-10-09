@@ -16,17 +16,6 @@ MeshMarkers{D} = Dict{Symbol,VecCartIndex{D}} where D
 
 struct Iterator <: BrambleType end
 
-function _embed(Ωₕ::MeshType{D}, f) where D
-	T = eltype(Ωₕ)
-	wrapped_f_tuple = FunctionWrapper{T,Tuple{NTuple{D,T}}}(f)
-	pts = points(Ωₕ)
-	g = Base.Fix1(_i2p, pts)
-	fog(idx) = f(g(idx))
-	wrapped_f_cartesian = FunctionWrapper{T,Tuple{CartesianIndex{D}}}(fog)
-
-	return BrambleBareFunction{D,T,true}(wrapped_f_tuple, wrapped_f_cartesian)
-end
-
 """
 	dim(Ωₕ::MeshType)
 	dim(::Type{<:MeshType})

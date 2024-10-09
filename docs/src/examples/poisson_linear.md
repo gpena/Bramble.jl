@@ -122,7 +122,7 @@ I = interval(0, 1)
 The first two lines create a [domain](@ref Domain) object, while the third generates a [mesh](@ref mesh(Ω::Domain, npts::NTuple{D,Int}, unif::NTuple{D,Bool}) where D
 ) with 10 and 20 points along the `x` and `y` directions, respectively. The last input argument encodes that we want a uniform grid in the `x` axis and random generated points in the `y` axis.
 
-We now move on to prepare and define functions `f` and `g` associated with the problem as [BrambleBareFunction](@ref). This is a needed step to prepare these function to work well the the internal machinery of `Bramble.jl`:
+We now move on to prepare and define functions `f` and `g` associated with the problem as [BrambleFunction](@ref). This is a needed step to prepare these function to work well the the internal machinery of `Bramble.jl`:
 
 ```julia
 sol = @embed(Ωₕ, x -> exp(sum(x)))

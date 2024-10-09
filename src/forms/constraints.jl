@@ -24,22 +24,22 @@ end
 Returns a [Constraints](@ref) object from a tuple of [Marker](@ref)s and a symbol
 defining the type of boundary condition. Currently, the only supported type is for Dirichlet boundary conditions. The default type is `:dirichlet`.
 """
-function constraints(pairs::Vararg{MarkerType{BrambleBareFunction{D,T,bool}},N}; type::Symbol = :dirichlet) where {D,T,bool,N}
+function constraints(pairs::Vararg{MarkerType{BrambleFunction{A,B,C}},N}; type::Symbol = :dirichlet) where {A,B,C,N}
 	@assert bool && type == :dirichlet
 	mrks = create_markers(ntuple(i -> pairs[i], N)...)
-	return Constraints{N,BrambleBareFunction{D,T,bool}}(mrks, type)
+	return Constraints{N,BrambleFunction{A,B,C}}(mrks, type)
 end
 
 """
-	constraints(f::BrambleBareFunction; type::Symbol = :dirichlet)
+	constraints(f::BrambleFunction; type::Symbol = :dirichlet)
 
-Returns a [Constraints](@ref) object from a single [BrambleBareFunction](@ref) and a symbol
+Returns a [Constraints](@ref) object from a single [BrambleFunction](@ref) and a symbol
 defining the type of boundary condition.
 """
-function constraints(f::BrambleBareFunction{D,T,bool}; type::Symbol = :dirichlet) where {D,T,bool}
+function constraints(f::BrambleFunction{A,B,C}; type::Symbol = :dirichlet) where {A,B,C}
 	@assert type == :dirichlet
 	mrks = create_markers(:dirichlet => f)
-	return Constraints{1,BrambleBareFunction{D,T,bool}}(mrks, type)
+	return Constraints{1,BrambleFunction{A,B,C}}(mrks, type)
 end
 
 """
@@ -76,7 +76,7 @@ Returns an iterator over the labels of the [Marker](@ref)s stored in the [Constr
 Apply Dirichlet boundary conditions to matrix `A` using the [Constraints](@ref) object `bcs`
 and the mesh `M`. For each index `i` associated with a Dirichlet boundary condition, we set the `i`-th row of matrix `A` to zero and change the diagonal element `A[i,i]` to 1.
 """
-function apply_dirichlet_bc!(A::AbstractMatrix, bcs::Constraints, Ωₕ::MeshType)
+function apply_dirichlet_bc!(A::AbstractMatrix, bcs::Constraints{N,BFType}, Ωₕ::MeshType) where {N,BFType}
 	@assert constraint_type(bcs) == :dirichlet
 	npts = npoints(Ωₕ, Tuple)
 
@@ -163,12 +163,14 @@ end
 Apply Dirichlet boundary conditions to vector `v` using the [Constraints](@ref) object `bcs`
 and the mesh `Ωₕ`.
 """
-function apply_dirichlet_bc!(v::AbstractVector, bcs::Constraints{N,BrambleBareFunction{D,T,true}}, Ωₕ) where {N,D,T}
+function apply_dirichlet_bc!(v::AbstractVector, bcs::Constraints{N,BFType}, Ωₕ) where {N,BFType}
 	@assert constraint_type(bcs) == :dirichlet
 	npts = npoints(Ωₕ, Tuple)
-
+	pts = points(Ωₕ)
+	f = Base.Fix1(_i2p, pts)
+	
 	for _marker in markers(bcs), idx in marker(Ωₕ, label(_marker))
 		i = sub2ind(npts, idx)
-		v[i] = func(_marker)(idx)
+		v[i] = func(_marker)(f(idx))
 	end
 end

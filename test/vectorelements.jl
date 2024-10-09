@@ -1,4 +1,4 @@
-import Bramble: spacing, points, half_points, _embed
+import Bramble: spacing, points, half_points
 
 valid_range(i::Int, ds::NTuple{D,Int}) where D = ntuple(k -> k == i ? (2:ds[1]) : (1:ds[k]), D)
 

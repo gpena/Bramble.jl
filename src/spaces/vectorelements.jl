@@ -49,7 +49,7 @@ _find_vec_in_broadcast(::Any, rest) = _find_vec_in_broadcast(rest)
 	return dest
 end
 
-function Base.copyto!(dest::DestType, bc::Broadcast.Broadcasted{Nothing})where DestType
+function Base.copyto!(dest::DestType, bc::Broadcast.Broadcasted{Nothing}) where DestType
 	"here1111"
 	@show bc
 	copyto!(dest, convert(Broadcast.Broadcasted{Nothing}, bc))
@@ -83,12 +83,10 @@ end
 	return dest
 end
 
-
 function materialize!(dest::VectorElement, x)
 	println("here1")
 	return materialize!(dest.values, instantiate(Broadcasted(identity, (x,), axes(dest.values))))
 end
-
 
 @inline function materialize!(dest::VectorElement, bc::Broadcast.Broadcasted{<:Any})
 	aux = Broadcast.instantiate(Broadcast.Broadcasted(bc.style, bc.f, bc.args, axes(dest)))
@@ -99,7 +97,7 @@ end
 	return dest
 end
 
-function materialize(v::Broadcast.Broadcasted{Broadcast.ArrayStyle{VectorElement}, Nothing, Any, Tuple{T1, VectorElement{S, T2}}} ) where {T1, T2, S}
+function materialize(v::Broadcast.Broadcasted{Broadcast.ArrayStyle{VectorElement},Nothing,Any,Tuple{T1,VectorElement{S,T2}}}) where {T1,T2,S}
 	println("materialize!")
 end
 
@@ -160,9 +158,12 @@ Returns a new [VectorElement](@ref) belonging to the same [GridSpace](@ref) as `
 
 Copies the coefficients of [VectorElement](@ref) `vₕ` into [VectorElement](@ref) `uₕ`. The second argument can also be a regular `Vector` or a `Number``.
 """
-@inline copyto!(uₕ::VectorElement, vₕ::VectorElement) = ( @assert length(uₕ.values) == length(vₕ.values); @.. uₕ.values = vₕ.values)
-@inline copyto!(uₕ::VectorElement, v::AbstractVector) = ( @assert length(uₕ.values) == length(v); @.. uₕ.values = v )
-@inline copyto!(uₕ::VectorElement, α::Number) = ( s = convert(eltype(uₕ), α)::eltype(uₕ); @.. uₕ.values = s)
+@inline copyto!(uₕ::VectorElement, vₕ::VectorElement) = (@assert length(uₕ.values) == length(vₕ.values);
+														 @.. uₕ.values = vₕ.values)
+@inline copyto!(uₕ::VectorElement, v::AbstractVector) = (@assert length(uₕ.values) == length(v);
+														 @.. uₕ.values = v)
+@inline copyto!(uₕ::VectorElement, α::Number) = (s = convert(eltype(uₕ), α)::eltype(uₕ);
+												 @.. uₕ.values = s)
 
 """
 	map(f, uₕ::VectorElement)
@@ -188,7 +189,7 @@ for op in (:-, :*, :/, :+, :^)
 
 		@doc $docstr2 @inline function (Base.$op)(uₕ::VectorElement, α::Number)
 			rₕ = similar(uₕ)
-			
+
 			map!(Base.Fix2(Base.$op, α), rₕ.values, uₕ.values)
 			return rₕ
 		end
@@ -207,21 +208,8 @@ end
 #                      #
 ########################
 
-@inline function _func2array!(u, f::BrambleBareFunction{D,T,true}, mesh) where {D,T}
-	@assert length(u) === npoints(mesh) === length(indices(mesh))
-	idxs = indices(mesh)
-	fcart = f.f_cartesian
-	#=for idx in indices(mesh)
-		u[idx] = fcart(idx)
-	end=#
-	@.. u = fcart(idxs)
-	return nothing
-end
-
-_func2array!(u, f::BrambleBareFunction{D,T,false}, mesh) where {D,T} = @error "BrambleBareFunction needs to be _embedded in a mesh."
-
-# fallback if f is not a BrambleBareFunction
 @inline function _func2array!(u, f, mesh)
+	@assert length(u) === npoints(mesh) === length(indices(mesh))
 	pts = points(mesh)
 	idxs = indices(mesh)
 
@@ -245,7 +233,7 @@ end
 """
 	Rₕ(Wₕ::SpaceType, f)
 
-Standard nodal restriction operator. It returns a [VectorElement](@ref) with the result of evaluating the function `f` at the points of `mesh(Wₕ)`. It can accept any function (like `x->x[2]+x[1])`) or a [BrambleBareFunction](@ref). The latter is preferred.
+Standard nodal restriction operator. It returns a [VectorElement](@ref) with the result of evaluating the function `f` at the points of `mesh(Wₕ)`. It can accept any function (like `x->x[2]+x[1])`) or a [BrambleFunction](@ref). The latter is preferred.
 
   - 1D case
 
@@ -280,7 +268,7 @@ end
 """
 	avgₕ(Wₕ::SpaceType, f)
 
-Returns a [VectorElement](@ref) with the average of function `f` with respect to the [cell_measure](@ref) of `mesh(Wₕ)` around each grid point. It can accept any function (like `x->x[2]+x[1])`) or a [BrambleBareFunction](@ref). The latter is preferred. It is defined as follows
+Returns a [VectorElement](@ref) with the average of function `f` with respect to the [cell_measure](@ref) of `mesh(Wₕ)` around each grid point. It can accept any function (like `x->x[2]+x[1])`) or a [BrambleFunction](@ref). The latter is preferred. It is defined as follows
 
   - 1D case
 
@@ -329,7 +317,7 @@ function _avgₕ!(uₕ::VectorElement, f, ::Val{1})
 	return nothing
 end
 
-function _avgₕ!(uₕ::VectorElement, f::BrambleBareFunction{1}, ::Val{1})
+function _avgₕ!(uₕ::VectorElement, f::BrambleFunction{1}, ::Val{1})
 	Ωₕ = mesh(space(uₕ))
 
 	x = Base.Fix1(half_points, Ωₕ)
@@ -351,7 +339,7 @@ function _avgₕ!(uₕ::VectorElement, f, ::Val{D}) where D
 	return nothing
 end
 
-function _avgₕ!(uₕ::VectorElement, f::BrambleBareFunction{D}, ::Val{D}) where D
+function _avgₕ!(uₕ::VectorElement, f::BrambleFunction{D}, ::Val{D}) where D
 	Ωₕ = mesh(space(uₕ))
 
 	x = Base.Fix1(half_points, Ωₕ)
