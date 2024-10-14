@@ -99,14 +99,3 @@ function test_poisson_nl(poisson_nl_problem::PoissonNLProblem, nTests, npoints_g
 	order, _ = leastsquares(log.(hmax2), log.(err2))
 	@test(abs(order - 2.0) < threshold||order > 2.0)
 end
-
-for strat in (AutoDetect(), DefaultAssembly())
-	test_poisson_nl(poisson_nl(1), 10, (i -> 2^i + 1,), ntuple(i -> true, 1), strat)
-	test_poisson_nl(poisson_nl(1), 10, (i -> 2^i + 1,), ntuple(i -> false, 1), strat)
-
-	test_poisson_nl(poisson_nl(2), 5, (i -> 2^i + 1, i -> 2^i + 2), ntuple(i -> true, 2), strat)
-	#test_poisson_nl(poisson_nl(2), 60, (i -> 2*i+1, i -> 3*i), (true, false))
-
-	test_poisson_nl(poisson_nl(3), 5, (i -> 2^i + 1, i -> 2^i + 2, i -> 2^i + 1), ntuple(i -> true, 3), strat)
-	#test_poisson_nl(poisson_nl(3), 5, (i -> 2^i + 1, i -> 2^i + 2, i -> 2^i + 1), ntuple(i -> false, 3))
-end

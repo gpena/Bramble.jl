@@ -25,7 +25,7 @@ function solve_poisson(poisson::SimpleScalarPDEProblem, nPoints::NTuple{D,Int}, 
 	uh = element(Wh)
 	avgₕ!(uh, rhs)
 
-	lform = form(Wh, v -> innerₕ(uh, v), strategy = strategy, verbose = true)
+	lform = form(Wh, v -> innerₕ(uh, v), strategy = strategy, verbose = false)
 	F = assemble(lform, bc)
 
 	prob = LinearProblem(A, F)

@@ -70,14 +70,3 @@ function test_conv_diff(convec_diff_problem::LinearConvectionDiffusionProblem, n
 	order, _ = leastsquares(log.(hmax2), log.(err2))
 	@test(abs(order - 2.0) < threshold||order > 2.0)
 end
-
-for strat in (DefaultAssembly(), AutoDetect())
-	test_conv_diff(convection_diffusion(1), 10, (i -> 2^i + 1,), ntuple(i -> true, 1), strat)
-	test_conv_diff(convection_diffusion(1), 100, (i -> 20 * i,), (false,), strat)
-
-	test_conv_diff(convection_diffusion(2), 4, (i -> 2^i + 1, i -> 2^i + 2), ntuple(i -> true, 2), strat)
-	test_conv_diff(convection_diffusion(2), 7, (i -> 2^i + 1, i -> 2^i + 2), ntuple(i -> false, 2), strat)
-
-	test_conv_diff(convection_diffusion(3), 5, (i -> 2^i + 1, i -> 2^i + 2, i -> 2^i + 3), ntuple(i -> true, 3), strat)
-	#test_conv_diff(convection_diffusion(3), 6, (i->2^i+1, i->2^i+2, i->2^i+1), ntuple(i->false, 3)) # the linear solver takes a while to solve
-end
