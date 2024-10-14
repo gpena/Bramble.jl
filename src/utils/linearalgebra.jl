@@ -20,7 +20,6 @@ end
 
 @inline function _inner_product(u::Vector{T}, h::Vector{T}, A::SparseMatrixCSC{T,Int}) where T
 	z = zeros(T, size(u))
-	#@show "1"
 	_inner_product_add!(z, u, h, A)
 
 	return z
@@ -37,8 +36,6 @@ end
 
 @inline function _inner_product_add!(z, u::Vector{T}, h::Vector{T}, A::SparseMatrixCSC{T,Int}) where T
 	#z = transpose(A) * Diagonal(h) * u
-	#@show "2"
-
 	@simd for j in eachindex(h, u)
 		for idx in A.colptr[j]:(A.colptr[j + 1] - 1)
 			i = A.rowval[idx]
@@ -52,8 +49,6 @@ end
 
 @inline function _inner_product_add!(z, A::SparseMatrixCSC{T,Int}, h::Vector{T}, v::Vector{T}) where T
 	#z = transpose(v) * Diagonal(h) * A
-	#@show "3"
-
 	@simd for j in eachindex(h, v)
 		for idx in A.colptr[j]:(A.colptr[j + 1] - 1)
 			i = A.rowval[idx]
@@ -65,11 +60,9 @@ end
 end
 
 @inline function _inner_product_add!(Z::SparseMatrixCSC{T,Int}, U::SparseMatrixCSC{T,Int}, h::Vector{T}, V::SparseMatrixCSC{T,Int}) where T
-	#@show "4"
 	#Z .+= transpose(V) * Diagonal(h) * U
 	mul!(Z, transpose(V), Diagonal(h) * U)
 end
-
 
 #=
 function __sp_add_matrix_transpose_times_vector(y, A, x)
