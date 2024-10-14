@@ -13,7 +13,6 @@ end
 if Sys.iswindows()
 	try
 		using MKL
-		using MKLSparse
 		@info "Compiled with MKL support on Windows"
 	catch e
 		@warn "Not an Intel machine, falling back to default BLAS/LAPACK"
@@ -106,5 +105,5 @@ include("exporters/types.jl")
 include("exporters/exporter_vtk.jl")
 
 =#
-include("precompile.jl")
+#include("precompile.jl")
 end
