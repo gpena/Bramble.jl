@@ -130,7 +130,7 @@ end
 
 @inline *(Uₕ::MatrixElement, vₕ::Tuple{VectorElement}) = Uₕ * vₕ[1]
 
-@inline *(uₕ::NTuple{D, VectorElement}, Vₕ::NTuple{D,MatrixElement}) where D = ntuple(i-> uₕ[i] * Vₕ[i], D)
+@inline ⋅(uₕ::NTuple{D, VectorElement}, Vₕ::NTuple{D,MatrixElement}) where D = ntuple(i-> uₕ[i] * Vₕ[i], D)
 
 for op in (:+, :-, :*)
 	dict = Dict(:+ => ("adding", "to", true), :- => ("subtracting", "to", false), :* => ("multiplying", "by", true))

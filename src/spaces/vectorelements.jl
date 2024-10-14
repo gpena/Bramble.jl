@@ -122,7 +122,7 @@ end
 #@inline iterate(uₕ::VectorElement) = iterate(uₕ.values)
 #@inline iterate(uₕ::VectorElement, state) = iterate(uₕ.values, state)
 
-show(io::IO, uₕ::VectorElement) = show(io, "text/plain", uₕ.values)
+Base.show(io::IO, uₕ::VectorElement) = Base.show(io, "text/plain", uₕ.values)
 
 """
 	eltype(uₕ::VectorElement{S,T})

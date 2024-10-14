@@ -76,6 +76,7 @@ For [VectorElement](@ref)s, the definition is given by
 
 See the definitions of [inner₊ₓ](@ref inner₊ₓ(uₕ::VecOrMatElem, vₕ::VecOrMatElem)), [inner₊ᵧ](@ref inner₊ᵧ(uₕ::VecOrMatElem, vₕ::VecOrMatElem)) and [inner₊₂](@ref inner₊₂(uₕ::VecOrMatElem, vₕ::VecOrMatElem)) for more details.
 """
+
 @inline @generated function inner₊(uₕ::VectorElement{SType}, vₕ::VectorElement{SType}) where SType
 	D = dim(mesh(SType))
 	res = :(_inner_product(uₕ.values, innerplus_weights(space(uₕ), Val(1)), vₕ.values))
@@ -87,6 +88,16 @@ See the definitions of [inner₊ₓ](@ref inner₊ₓ(uₕ::VecOrMatElem, vₕ::
 	return res
 end
 
+#=
+@inline function inner₊(uₕ::VectorElement{SType}, vₕ::VectorElement{SType}) where SType
+	#res = 0
+	#for i in 1:dim(mesh(SType))
+#		res += _inner_product(uₕ.values, innerplus_weights(space(uₕ), Val(i)), vₕ.values)
+	#end
+	return sum(ntuple(i ->  _inner_product(uₕ.values, innerplus_weights(space(uₕ), Val(i)), vₕ.values)::eltype(uₕ), dim(mesh(SType))))
+end
+=#
+#=
 @inline @generated function inner₊(Uₕ::MatrixElement{SType}, vₕ::VectorElement{SType}) where SType
 	D = dim(mesh(SType))
 	res = :(x = _inner_product(Uₕ.values, innerplus_weights(space(Uₕ), Val(1)), vₕ.values))
@@ -97,7 +108,20 @@ end
 
 	return res
 end
+=#
 
+@inline function inner₊(Uₕ::MatrixElement{SType}, vₕ::VectorElement{SType}) where SType
+	x = _inner_product(Uₕ.values, innerplus_weights(space(Uₕ), Val(1)), vₕ.values)
+	W = space(vₕ)
+	for i in 2:dim(mesh(SType))
+		W.vec_cache .= innerplus_weights(W, Val(i)) .* vₕ.values
+		mul!(x, Uₕ.values, W.vec_cache, 1, 1)
+	end
+
+	return x
+end
+
+#=
 @inline @generated function inner₊(uₕ::VectorElement{SType}, Vₕ::MatrixElement{SType}) where SType
 	D = dim(mesh(SType))
 	res = :(x = _inner_product(uₕ.values, innerplus_weights(space(uₕ), Val(1)), Vₕ.values))
@@ -107,14 +131,33 @@ end
 	end
 
 	return res
-end
+end=#
+@inline function inner₊(uₕ::VectorElement{SType}, Vₕ::MatrixElement{SType}) where SType
+	x = _inner_product(uₕ.values, innerplus_weights(space(uₕ), Val(1)), Vₕ.values)
 
+	for i in 2:dim(mesh(SType))
+		mul!(x, uₕ.values, innerplus_weights(space(uₕ), i), Vₕ.values)
+	end
+
+	return x
+end
+#=
 @inline @generated function inner₊(uₕ::MatrixElement{SType}, vₕ::MatrixElement{SType}) where SType
 	D = dim(mesh(SType))
 	res = :(_inner_product(uₕ.values, innerplus_weights(space(uₕ), Val(1)), vₕ.values))
 
 	for i in 2:D
 		res = :($res + _inner_product_add!(x, uₕ.values, innerplus_weights(space(uₕ), Val($i)), vₕ.values))
+	end
+
+	return res
+end=#
+@inline function inner₊(uₕ::MatrixElement{SType}, vₕ::MatrixElement{SType}) where SType
+	D = dim(mesh(SType))
+	res = _inner_product(uₕ.values, innerplus_weights(space(uₕ), Val(1)), vₕ.values)
+
+	for i in 2:D
+		 mul!(res, uₕ.values, Diagonal(innerplus_weights(space(uₕ), Val(i))) * vₕ.values, 1, 1)
 	end
 
 	return res
@@ -126,9 +169,13 @@ end
 end
 
 @inline @generated inner₊(uₕ::NTuple{D,VecOrMatElem}, vₕ::NTuple{D,VecOrMatElem}) where D = :(sum(inner₊(uₕ, vₕ, Tuple)))
+@inline @generated inner₊(uₕ::VectorElement, vₕ::NTuple{D,VecOrMatElem}) where D = :(sum(inner₊(uₕ, vₕ, Tuple)))
 
 @inline @generated function inner₊(uₕ::NTuple{D,VecOrMatElem}, vₕ::NTuple{D,VecOrMatElem}, ::Type{Tuple}) where D
 	return :(Base.Cartesian.@ntuple $D i->_inner_product(uₕ[i].values, innerplus_weights(space(uₕ[i]), Val(i)), vₕ[i].values))
+end
+@inline @generated function inner₊(uₕ::VectorElement, vₕ::NTuple{D,VecOrMatElem}, ::Type{Tuple}) where D
+	return :(Base.Cartesian.@ntuple $D i->_inner_product(uₕ.values, innerplus_weights(space(uₕ), Val(i)), vₕ[i].values))
 end
 
 """
@@ -136,8 +183,8 @@ end
 
 Returns the weights to be used in the calculation of [`inner₊`](@ref).
 """
-@inline innerplus_weights(Wₕ::SpaceType, ::Val{D}) where D = (@assert 1 <= D <= dim(mesh(Wₕ));
-															  Wₕ.innerplus_weights[D])
+@inline innerplus_weights(Wₕ::SpaceType, ::Val{D}) where D = (@assert 1 <= D <= dim(mesh(Wₕ)); Wₕ.innerplus_weights[D])
+@inline innerplus_weights(Wₕ::SpaceType, D::Int) = (@assert 1 <= D <= dim(mesh(Wₕ)); Wₕ.innerplus_weights[D])
 
 """
 	inner₊ₓ(uₕ::VecOrMatElem, vₕ::VecOrMatElem)
@@ -261,66 +308,3 @@ function snorm₁ₕ(uₕ::VectorElement)
 	end
 	return sqrt(s)
 end
-
-# some helper functions to calculate the inner products in discrete spaces
-@inline function _dot(u::Vector{T}, v::Vector{T}, w::Vector{T}) where T
-	s = zero(T)
-
-	@simd for i in eachindex(u, v, w)
-		s += u[i] * v[i] * w[i]
-	end
-
-	return s
-end
-
-@inline _inner_product(u::Vector{T}, h::Vector{T}, v::Vector{T}) where T = _dot(u, h, v)
-
-@inline function _inner_product_add!(z::Vector{T}, u::Vector{T}, v::Vector{T}, w::Vector{T}) where T
-	@simd for i in eachindex(z, u, v, w)
-		z[i] += u[i] * v[i] * w[i]
-	end
-end
-
-@inline function _inner_product(u::Vector{T}, h::Vector{T}, A::SparseMatrixCSC{T,Int}) where T
-	z = zeros(T, size(u))
-	_inner_product_add!(z, u, h, A)
-
-	return z
-end
-
-@inline function _inner_product_add!(z, u::Vector{T}, h::Vector{T}, A::SparseMatrixCSC{T,Int}) where T
-	#z = transpose(A) * Diagonal(h) * u
-	@simd for j in eachindex(h, u)
-		for idx in A.colptr[j]:(A.colptr[j + 1] - 1)
-			i = A.rowval[idx]
-			val = A.nzval[idx]
-
-			z[j] += val * h[i] * u[i]
-		end
-	end
-end
-
-@inline function _inner_product(A::SparseMatrixCSC{T,Int}, h::Vector{T}, v::Vector{T}) where T
-	z = transpose(zeros(T, size(v)))
-	_inner_product_add!(z, A, h, v)
-
-	return z
-end
-
-@inline function _inner_product_add!(z, A::SparseMatrixCSC{T,Int}, h::Vector{T}, v::Vector{T}) where T
-	#z = transpose(v) * Diagonal(h) * A
-	@simd for j in eachindex(h, v)
-		for idx in A.colptr[j]:(A.colptr[j + 1] - 1)
-			i = A.rowval[idx]
-			val = A.nzval[idx]
-
-			z[j] += h[i] * v[i] * val
-		end
-	end
-end
-
-@inline function _inner_product_add!(Z::SparseMatrixCSC{T,Int}, U::SparseMatrixCSC{T,Int}, h::Vector{T}, V::SparseMatrixCSC{T,Int}) where T
-	Z .+= transpose(V) * Diagonal(h) * U
-end
-
-@inline _inner_product(u, h, v) = transpose(v) * Diagonal(h) * u
