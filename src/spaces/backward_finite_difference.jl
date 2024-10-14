@@ -4,6 +4,7 @@
 #                                                                            #
 ##############################################################################
 
+
 @inline function _create_backward_diff_matrix(Wₕ::SpaceType, ::Val{1}; vector = _create_vector(Wₕ))
 	A = _create_D₋ₓ(mesh(Wₕ), vector = vector)
 	return elements(Wₕ, A)
@@ -80,14 +81,16 @@ Returns the backward finite difference, in the `x` direction, of the element `u�
 \\textrm{D}_{-x} \\textrm{u}_h (x_i, \\dots) \\vcentcolon = \\frac{\\textrm{u}_h(x_i, \\dots)-\\textrm{u}_h(x_{i-1}, \\dots)}{h_{x,i}}
 ```
 """
-Base.@propagate_inbounds function D₋ₓ(uₕ::VectorElement)
-	h = Base.Fix1(spacing, mesh(space(uₕ))(1))
-	dims = npoints(mesh(space(uₕ)), Tuple)
-	vₕ = similar(uₕ)
+@inline D₋ₓ(uₕ::VectorElement) = D₋ᵢ(uₕ, Val(1)) 
+@inline D₋ₓ!(x, uₕ::VectorElement) = D₋ₓ!(x, uₕ.values, space(uₕ))
 
-	_backward_finite_differencex!(vₕ.values, uₕ.values, h, dims)
+Base.@propagate_inbounds function D₋ₓ!(x, u, S::SpaceType)
+	@assert length(x) == length(u)
 
-	return vₕ
+	h = Base.Fix1(spacing, mesh(S)(1))
+	dims = npoints(mesh(S), Tuple)
+
+	_backward_finite_differencex!(x, u, h, dims)
 end
 
 """
@@ -99,16 +102,19 @@ Returns the backward finite difference, in the `y` direction, of the element `u�
 \\textrm{D}_{-y} \\textrm{u}_h(x_i, y_j, \\dots) \\vcentcolon = \\frac{\\textrm{u}_h(x_i, y_j, \\dots)-\\textrm{u}_h(x_i, y_{j-1}, \\dots)}{h_{y,j}}
 ```
 """
-Base.@propagate_inbounds function D₋ᵧ(uₕ::VectorElement)
-	Ωₕ = mesh(space(uₕ))
+@inline D₋ᵧ(uₕ::VectorElement) = D₋ᵢ(uₕ, Val(2)) 
+
+Base.@propagate_inbounds function D₋ᵧ!(x, u, S::SpaceType)
+	@assert length(x) == length(u)
+
+	Ωₕ = mesh(S)
 	hy = Base.Fix1(spacing, Ωₕ(2))
 	dims = npoints(Ωₕ, Tuple)
-	vₕ = similar(uₕ)
 
-	_backward_finite_differencey!(vₕ.values, uₕ.values, hy, dims)
-
-	return vₕ
+	_backward_finite_differencey!(x, u, hy, dims)
 end
+
+@inline D₋ᵧ!(x, uₕ::VectorElement) = D₋ᵧ!(x, uₕ.values, space(uₕ))
 
 """
 	D₋₂(uₕ::VectorElement)
@@ -119,8 +125,12 @@ Returns the backward finite difference, in the `z` direction, of the element `u�
 \\textrm{D}_{-z} \\textrm{u}_h(x_i, y_j, z_l) \\vcentcolon = \\frac{\\textrm{u}_h(x_i, y_j, z_l)-\\textrm{u}_h(x_i, y_j, z_)}{h_{z,l}}
 ```
 """
-Base.@propagate_inbounds function D₋₂(uₕ::VectorElement)
-	Ωₕ = mesh(space(uₕ))
+@inline D₋₂(uₕ::VectorElement) = D₋ᵢ(uₕ, Val(3)) 
+
+Base.@propagate_inbounds function D₋₂!(x, u, S::SpaceType)
+	@assert length(x) == length(u)
+
+	Ωₕ = mesh(S)
 	D = dim(Ωₕ)
 
 	if D === 1 || D === 2
@@ -129,16 +139,36 @@ Base.@propagate_inbounds function D₋₂(uₕ::VectorElement)
 
 	hz = Base.Fix1(spacing, Ωₕ(3))
 	dims = npoints(Ωₕ, Tuple)
-	vₕ = similar(uₕ)
 
-	_backward_finite_differencez!(vₕ.values, uₕ.values, hz, dims)
-
-	return vₕ
+	_backward_finite_differencez!(x, u, hz, dims)
 end
 
-@inline D₋ᵢ(uₕ::VectorElement, ::Val{1}) = D₋ₓ(uₕ)
-@inline D₋ᵢ(uₕ::VectorElement, ::Val{2}) = D₋ᵧ(uₕ)
-@inline D₋ᵢ(uₕ::VectorElement, ::Val{3}) = D₋₂(uₕ)
+@inline D₋₂!(x::AbstractVector, uₕ::VectorElement) = D₋₂!(x, uₕ.values, space(uₕ))
+	
+@inline function D₋ᵢ(uₕ::VectorElement, ::Val{1}) 
+	v = similar(uₕ)
+	D₋ₓ!(v.values, uₕ)
+	return v
+end
+
+@inline function D₋ᵢ(uₕ::VectorElement, ::Val{2}) 
+	v = similar(uₕ)
+	D₋ᵧ!(v.values, uₕ)
+	return v
+end
+
+@inline function D₋ᵢ(uₕ::VectorElement, ::Val{3}) 
+	v = similar(uₕ)
+	D₋₂!(v.values, uₕ)
+	return v
+end
+
+@inline D₋ᵢ!(x, uₕ::VectorElement, ::Val{1}) = D₋ₓ!(x,uₕ)
+@inline D₋ᵢ!(x, uₕ::VectorElement, ::Val{2}) = D₋ᵧ!(x,uₕ)
+@inline D₋ᵢ!(x, uₕ::VectorElement, ::Val{3}) = D₋₂!(x,uₕ)
+@inline D₋ᵢ!(x, u, S, ::Val{1}) = D₋ₓ!(x,u,S)
+@inline D₋ᵢ!(x, u, S, ::Val{2}) = D₋ᵧ!(x,u,S)
+@inline D₋ᵢ!(x, u, S, ::Val{3}) = D₋₂!(x,u,S)
 
 """
 	∇₋ₕ(uₕ::VectorElement)
