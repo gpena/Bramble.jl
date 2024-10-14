@@ -1,10 +1,13 @@
-using Test
+if abspath(PROGRAM_FILE) == @__FILE__
+	using Pkg
+	Pkg.activate(@__DIR__)
+	Pkg.develop(PackageSpec(path = joinpath(@__DIR__, "..")))
+	Pkg.instantiate()
+end
 
+using Test
 using LinearAlgebra: norm, \
 
-using Bramble
-
-#Aqua.test_all(Bramble)
 const __with_examples = true
 
 validate_zero(u) = norm(u, Inf) < 1e-9
@@ -20,51 +23,35 @@ function leastsquares(x::AbstractVector, y::AbstractVector)
 	return res[1], res[2]
 end
 
-println("")
-
-@time @testset "Sets and Domains" begin
-	include("sets.jl")
-	include("domains.jl")
-end
-
-println("")
-
-@time @testset "Meshes" begin
-	include("mesh1d.jl")
-	include("meshnd.jl")
-end
-
-println("")
-
-@time @testset "Grid spaces" begin
-	include("gridspaces.jl")
-	include("vectorelements.jl")
-	include("matrixelements.jl")
-end
-
-println("")
-
-@time @testset "Forms" begin
-	include("bilinearforms.jl")
-end
-
-if __with_examples
-	
-	sep = "--------------"
-	println("\n\n$sep Examples batch $sep\n")
-	@time @testset "Linear Poisson equation" begin
-		include("../docs/examples/poisson_linear.jl")
-	end
-
+function main()
 	println("")
 
-	@time @testset "Nonlinear Poisson equation" begin
-		include("../docs/examples/poisson_nonlinear.jl")
+	@testset verbose=true "Core library" begin
+		@testset "Sets and Domains" begin
+			include("sets.jl")
+			include("domains.jl")
+		end
+
+		@testset "Meshes" begin
+			include("mesh1d.jl")
+			include("meshnd.jl")
+		end
+
+		@testset "Grid spaces" begin
+			include("gridspaces.jl")
+			include("vectorelements.jl")
+			include("matrixelements.jl")
+			include("operators.jl")
+		end
+
+		@testset "Forms" begin
+			include("bilinearforms.jl")
+		end
 	end
 
-	println("")
-
-	@time @testset "Linear convection-diffusion equation" begin
-		include("../docs/examples/convection_diffusion_linear.jl")
+	if __with_examples
+		include("examples.jl")
 	end
 end
+
+main()
