@@ -99,6 +99,7 @@ struct GridSpace{MType,D,T} <: SpaceType{MType}
 	innerh_weights::Vector{T}
 	innerplus_weights::NTuple{D,Vector{T}}
 	diff_matrix_cache::Dict{Int, MatrixElement{GridSpace{MType,D,T},T}}
+	vec_cache::Vector{T}
 end
 
 """
@@ -157,7 +158,7 @@ function gridspace(Ωₕ::MeshType)
 
 	T = eltype(Ωₕ)
 	type = MatrixElement{GridSpace{typeof(Ωₕ), D, T}, T}
-	Wₕ = GridSpace(Ωₕ, innerh, innerplus, Dict{Int, type}())
+	Wₕ = GridSpace(Ωₕ, innerh, innerplus, Dict{Int, type}(), _create_vector(Ωₕ))
 
 	# create backward difference matrices
 	diff_matrices = create_backward_diff_matrices(Wₕ; vector = _create_vector(Ωₕ))
