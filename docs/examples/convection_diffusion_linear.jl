@@ -13,7 +13,7 @@ struct LinearConvectionDiffusionProblem{DomainType,SolType,RhsType,T}
 	b::T
 end
 
-function solve_convection_diffusion(convdiff::LinearConvectionDiffusionProblem, nPoints::NTuple{D,Int}, unif::NTuple{D,Bool}) where D
+function solve_convection_diffusion(convdiff::LinearConvectionDiffusionProblem, nPoints::NTuple{D,Int}, unif::NTuple{D,Bool}, strategy) where D
 	Mh = mesh(convdiff.dom, nPoints, unif)
 	sol = @embed(Mh, convdiff.sol)
 	rhs = @embed(Mh, convdiff.rhs)
@@ -28,7 +28,7 @@ function solve_convection_diffusion(convdiff::LinearConvectionDiffusionProblem, 
 	uh = element(Wh)
 	avgₕ!(uh, rhs)
 
-	lform = form(Wh, U -> innerₕ(uh, U))
+	lform = form(Wh, v -> innerₕ(uh, v), strategy = strategy, verbose = false)
 	F = assemble(lform, bc)
 
 	prob = LinearProblem(A, F)
@@ -47,19 +47,19 @@ function convection_diffusion(d::Int)
 	Ω = Bramble.domain(reduce(×, ntuple(i -> I, d)))
 	b = 0.1
 	ϵ = 1.0
-	sol = @embed(Ω, x -> exp(sum(x)))
-	rhs = @embed(Ω, x -> -d * sol(x) * (b + ϵ))
-	
+	sol = @embed(Ω, x->exp(sum(x)))
+	rhs = @embed(Ω, x->-d * sol(x) * (b + ϵ))
+
 	return LinearConvectionDiffusionProblem(Ω, sol, rhs, ϵ, b)
 end
 
-function test_conv_diff(convec_diff_problem::LinearConvectionDiffusionProblem, nTests, npoints_generator, unif::NTuple{D,Bool}) where D
+function test_conv_diff(convec_diff_problem::LinearConvectionDiffusionProblem, nTests, npoints_generator, unif::NTuple{D,Bool}, strategy) where D
 	error = zeros(nTests)
 	hmax = zeros(nTests)
 
 	for i in 1:nTests
 		nPoints = ntuple(j -> npoints_generator[j](i), D)
-		hmax[i], error[i] = solve_convection_diffusion(convec_diff_problem, nPoints, unif)
+		hmax[i], error[i] = solve_convection_diffusion(convec_diff_problem, nPoints, unif, strategy)
 	end
 	threshold = unif[1] ? 0.3 : 0.4
 	mask = (!isnan).(error)
@@ -71,11 +71,13 @@ function test_conv_diff(convec_diff_problem::LinearConvectionDiffusionProblem, n
 	@test(abs(order - 2.0) < threshold||order > 2.0)
 end
 
-test_conv_diff(convection_diffusion(1), 10, (i -> 2^i + 1,), ntuple(i -> true, 1))
-test_conv_diff(convection_diffusion(1), 100, (i -> 20 * i,), (false,))
+for strat in (DefaultAssembly(), AutoDetect())
+	test_conv_diff(convection_diffusion(1), 10, (i -> 2^i + 1,), ntuple(i -> true, 1), strat)
+	test_conv_diff(convection_diffusion(1), 100, (i -> 20 * i,), (false,), strat)
 
-test_conv_diff(convection_diffusion(2), 4, (i -> 2^i + 1, i -> 2^i + 2), ntuple(i -> true, 2))
-test_conv_diff(convection_diffusion(2), 7, (i -> 2^i + 1, i -> 2^i + 2), ntuple(i -> false, 2))
+	test_conv_diff(convection_diffusion(2), 4, (i -> 2^i + 1, i -> 2^i + 2), ntuple(i -> true, 2), strat)
+	test_conv_diff(convection_diffusion(2), 7, (i -> 2^i + 1, i -> 2^i + 2), ntuple(i -> false, 2), strat)
 
-test_conv_diff(convection_diffusion(3), 5, (i -> 2^i + 1, i -> 2^i + 2, i -> 2^i + 3), ntuple(i -> true, 3))
-#test_conv_diff(convection_diffusion(3), 6, (i->2^i+1, i->2^i+2, i->2^i+1), ntuple(i->false, 3)) # the linear solver takes a while to solve
+	test_conv_diff(convection_diffusion(3), 5, (i -> 2^i + 1, i -> 2^i + 2, i -> 2^i + 3), ntuple(i -> true, 3), strat)
+	#test_conv_diff(convection_diffusion(3), 6, (i->2^i+1, i->2^i+2, i->2^i+1), ntuple(i->false, 3)) # the linear solver takes a while to solve
+end
