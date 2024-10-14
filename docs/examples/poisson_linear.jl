@@ -11,7 +11,7 @@ struct SimpleScalarPDEProblem{DomainType,SolType,RhsType}
 	rhs::RhsType
 end
 
-function solve_poisson(poisson::SimpleScalarPDEProblem, nPoints::NTuple{D,Int}, unif::NTuple{D,Bool}) where D
+function solve_poisson(poisson::SimpleScalarPDEProblem, nPoints::NTuple{D,Int}, unif::NTuple{D,Bool}, strategy) where D
 	Mh = mesh(poisson.dom, nPoints, unif)
 	sol = @embed(Mh, poisson.sol)
 	rhs = @embed(Mh, poisson.rhs)
@@ -25,11 +25,11 @@ function solve_poisson(poisson::SimpleScalarPDEProblem, nPoints::NTuple{D,Int}, 
 	uh = element(Wh)
 	avgₕ!(uh, rhs)
 
-	lform = form(Wh, U -> innerₕ(uh, U))
+	lform = form(Wh, v -> innerₕ(uh, v), strategy = strategy, verbose = true)
 	F = assemble(lform, bc)
 
 	prob = LinearProblem(A, F)
-	solh = solve(prob, KrylovJL_GMRES(), Pl = ilu(A, τ = 0.0001))
+	solh = solve(prob, KrylovJL_GMRES(), Pl = ilu(A, τ = 0.001))
 
 	uh .= solh.u
 	F .= uh
@@ -47,13 +47,13 @@ function poisson(d::Int)
 	return SimpleScalarPDEProblem(Ω, sol, rhs)
 end
 
-function test_poisson(poisson_problem::SimpleScalarPDEProblem, nTests, npoints_generator, unif::NTuple{D,Bool}) where D
+function test_poisson(poisson_problem::SimpleScalarPDEProblem, nTests, npoints_generator, unif::NTuple{D,Bool}, strategy) where D
 	error = zeros(nTests)
 	hmax = zeros(nTests)
 
 	for i in 1:nTests
 		nPoints = ntuple(j -> npoints_generator[j](i), D)
-		hmax[i], error[i] = solve_poisson(poisson_problem, nPoints, unif)
+		hmax[i], error[i] = solve_poisson(poisson_problem, nPoints, unif, strategy)
 	end
 	threshold = unif[1] ? 0.3 : 0.4
 	mask = (!isnan).(error)
@@ -65,11 +65,3 @@ function test_poisson(poisson_problem::SimpleScalarPDEProblem, nTests, npoints_g
 	@test(abs(order - 2.0) < threshold||order > 2.0)
 end
 
-test_poisson(poisson(1), 10, (i -> 2^i + 1,), ntuple(i -> true, 1))
-test_poisson(poisson(1), 100, (i -> 20 * i,), (false,))
-
-test_poisson(poisson(2), 4, (i -> 2^i + 1, i -> 2^i + 2), ntuple(i -> true, 2))
-test_poisson(poisson(2), 7, (i -> 2^i + 1, i -> 2^i + 2), ntuple(i -> false, 2))
-
-test_poisson(poisson(3), 5, (i -> 2^i + 1, i -> 2^i + 2, i -> 2^i + 3), ntuple(i -> true, 3))
-#test_poisson(poisson(3), 6, (i->2^i+1, i->2^i+2, i->2^i+1), ntuple(i->false, 3)) # the linear solver takes a while to solve

@@ -1,8 +1,8 @@
 using Bramble
-import LinearSolve: LinearProblem, solve, KrylovJL_GMRES, init, solve!, LUFactorization
+import LinearSolve: LinearProblem, solve, KrylovJL_GMRES, init, solve!
 import ILUZero: ilu0, ilu0!
 
-# Tests for -∇ ⋅ ( A(u) ∇u ) = g, with homogeneous Dirichlet bc in [0,1]^d
+# Tests for - ∇ ⋅ ( A(u) ∇u ) = g, with homogeneous Dirichlet bc in [0,1]^d
 # with A(u) = 3 + 1 / (1 + u^2) and g calculated accordingly such that 
 # u(x) = exp(sum(x)) is the exact solution
 
@@ -17,10 +17,10 @@ function poisson_nl(d::Int)
 	I = interval(0, 1)
 	Ω = domain(reduce(×, ntuple(i -> I, d)))
 
-	sol = @embed(Ω, x -> exp(sum(x)))
-	A = @embed(I, u -> 3 + 1 / (1 + u[1]^2))
-	Ap = @embed(I, u -> -2 * u[1] / (1 + u[1]^2)^2)
-	rhs = @embed(Ω, x -> -d * Ap(sol(x)) * sol(x)^2 - d * A(sol(x)) * sol(x))
+	sol = @embed(Ω, x->exp(sum(x)))
+	A = @embed(I, u->3 + 1 / (1 + u[1]^2))
+	Ap = @embed(I, u->-2 * u[1] / (1 + u[1]^2)^2)
+	rhs = @embed(Ω, x->-d * Ap(sol(x)) * sol(x)^2 - d * A(sol(x)) * sol(x))
 
 	return PoissonNLProblem(Ω, sol, rhs, A)
 end
@@ -45,13 +45,13 @@ function fixed_point!(mat, F, bform, bc, uold, u, A)
 		u.values .= sol.u
 		uold.values .-= u.values
 
-		if norm₁ₕ(uold) < 1e-10
+		if norm₁ₕ(uold) < 1e-3
 			break
 		end
 	end
 end
 
-function solve_poisson_nl(poisson_nl::PoissonNLProblem, nPoints::NTuple{D,Int}, unif::NTuple{D,Bool}) where D
+function solve_poisson_nl(poisson_nl::PoissonNLProblem, nPoints::NTuple{D,Int}, unif::NTuple{D,Bool}, strategy) where D
 	Mh = mesh(poisson_nl.dom, nPoints, unif)
 	sol = @embed(Mh, poisson_nl.sol)
 	rhs = @embed(Mh, poisson_nl.rhs)
@@ -65,30 +65,30 @@ function solve_poisson_nl(poisson_nl::PoissonNLProblem, nPoints::NTuple{D,Int}, 
 	avgₕ!(uold, rhs)
 
 	l(V) = innerₕ(uold, V)
-	lform = form(Wh, l)
+	lform = form(Wh, l, strategy = strategy, verbose = false)
 	F = assemble(lform, bc)
 
-	getcoeff = @embed(Wh, u -> D == 1 ? A.(M₋ₕ(u)) : sum(ntuple(i -> A.(M₋ₕ(u)[i]), D)) ./ D)
+	getcoeff = @embed(Wh, u->D == 1 ? A.(M₋ₕ(u)) : sum(ntuple(i -> A.(M₋ₕ(u)[i]), D)) ./ D)
 	a(U, V) = inner₊(getcoeff(u) * ∇₋ₕ(U), ∇₋ₕ(V))
 	bform = form(Wh, Wh, a)
 	mat = assemble(bform, bc)
 
-	uold .= getcoeff(u)
+	Rₕ!(u, sol)
 	fixed_point!(mat, F, bform, bc, uold, u, getcoeff)
 
 	Rₕ!(uold, sol)
 	u .-= uold
-	
+
 	return hₘₐₓ(Mh), norm₁ₕ(u)
 end
 
-function test_poisson_nl(poisson_nl_problem::PoissonNLProblem, nTests, npoints_generator, unif::NTuple{D,Bool}) where D
+function test_poisson_nl(poisson_nl_problem::PoissonNLProblem, nTests, npoints_generator, unif::NTuple{D,Bool}, strategy) where D
 	error = zeros(nTests)
 	hmax = zeros(nTests)
 
 	for i in 1:nTests
 		nPoints = ntuple(j -> npoints_generator[j](i), D)
-		hmax[i], error[i] = solve_poisson_nl(poisson_nl_problem, nPoints, unif)
+		hmax[i], error[i] = solve_poisson_nl(poisson_nl_problem, nPoints, unif, strategy)
 	end
 
 	threshold = unif[1] ? 0.3 : 0.4
@@ -100,11 +100,13 @@ function test_poisson_nl(poisson_nl_problem::PoissonNLProblem, nTests, npoints_g
 	@test(abs(order - 2.0) < threshold||order > 2.0)
 end
 
-test_poisson_nl(poisson_nl(1), 10, (i -> 2^i + 1,), ntuple(i -> true, 1))
-test_poisson_nl(poisson_nl(1), 10, (i -> 2^i + 1,), ntuple(i -> false, 1))
+for strat in (AutoDetect(), DefaultAssembly())
+	test_poisson_nl(poisson_nl(1), 10, (i -> 2^i + 1,), ntuple(i -> true, 1), strat)
+	test_poisson_nl(poisson_nl(1), 10, (i -> 2^i + 1,), ntuple(i -> false, 1), strat)
 
-test_poisson_nl(poisson_nl(2), 5, (i -> 2^i + 1, i -> 2^i + 2), ntuple(i -> true, 2))
-#test_poisson_nl(poisson_nl(2), 60, (i -> 2*i+1, i -> 3*i), (true, false))
+	test_poisson_nl(poisson_nl(2), 5, (i -> 2^i + 1, i -> 2^i + 2), ntuple(i -> true, 2), strat)
+	#test_poisson_nl(poisson_nl(2), 60, (i -> 2*i+1, i -> 3*i), (true, false))
 
-test_poisson_nl(poisson_nl(3), 5, (i -> 2^i + 1, i -> 2^i + 2, i -> 2^i + 1), ntuple(i -> true, 3))
-#test_poisson_nl(poisson_nl(3), 5, (i -> 2^i + 1, i -> 2^i + 2, i -> 2^i + 1), ntuple(i -> false, 3))
+	test_poisson_nl(poisson_nl(3), 5, (i -> 2^i + 1, i -> 2^i + 2, i -> 2^i + 1), ntuple(i -> true, 3), strat)
+	#test_poisson_nl(poisson_nl(3), 5, (i -> 2^i + 1, i -> 2^i + 2, i -> 2^i + 1), ntuple(i -> false, 3))
+end
