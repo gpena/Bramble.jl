@@ -12,8 +12,8 @@ end
 
 if Sys.iswindows()
 	try
-		#using MKLSparse
 		using MKL
+		using MKLSparse
 		@info "Compiled with MKL support on Windows"
 	catch e
 		@warn "Not an Intel machine, falling back to default BLAS/LAPACK"
@@ -22,19 +22,17 @@ end
 
 import Base: eltype, similar, length, copyto!, axes, materialize!
 import Base: show, getindex, setindex!, iterate, size, ndims, firstindex, lastindex
-import Base: map, map!
+import Base: map, map!, first
 import Base: *, +, -, /, ^
 import Random: rand!
 
 using FunctionWrappers: FunctionWrapper
 
 using FastBroadcast: @..
-using LinearAlgebra: Diagonal, mul!
+using LinearAlgebra: Diagonal, mul!, I
+import LinearAlgebra: ⋅
 using SparseArrays: spdiagm, SparseMatrixCSC, AbstractSparseMatrix
 using FillArrays: Ones, Eye
-
-using LinearSolve: LinearProblem, solve, KrylovJL_GMRES, LinearSolve, LUFactorization
-using IncompleteLU: ilu
 
 using Cubature
 using Integrals: solve, IntegralFunction, IntegralProblem, QuadGKJL, CubatureJLh
@@ -53,7 +51,7 @@ export mesh, hₘₐₓ, points, Iterator
 export gridspace, element
 export Rₕ, Rₕ!, avgₕ, avgₕ!
 
-export innerₕ
+export innerₕ, innerₕ!
 export inner₊, inner₊ₓ, inner₊ᵧ, inner₊₂
 export snorm₁ₕ, norm₁ₕ, norm₊, normₕ
 
@@ -63,7 +61,10 @@ export diffₓ, diffᵧ, diff₂, diffₕ
 export jumpₓ, jumpᵧ, jump₂, jumpₕ
 export M₋ₕₓ, M₋ₕᵧ, M₋ₕ₂, M₋ₕ
 
+export ⋅
+
 # Forms exports
+export AutoDetect, DefaultAssembly, InPlaceAssembly, OperatorsAssembly
 export form
 export assemble, assemble!
 export constraints, symmetrize!
@@ -72,6 +73,9 @@ export constraints, symmetrize!
 # Exporters
 export ExporterVTK, addScalarDataset!, datasets, save2file, close
 =#
+
+include("utils/bramblefunction.jl")
+include("utils/linearalgebra.jl")
 
 include("geometry/sets.jl")
 include("geometry/domains.jl")
@@ -90,6 +94,7 @@ include("spaces/forward_difference.jl")
 include("spaces/jump.jl")
 include("spaces/average.jl")
 include("spaces/inner_product.jl")
+include("spaces/operators.jl")
 
 
 include("forms/constraints.jl")
@@ -101,5 +106,5 @@ include("exporters/types.jl")
 include("exporters/exporter_vtk.jl")
 
 =#
-#include("precompile.jl")
+include("precompile.jl")
 end
