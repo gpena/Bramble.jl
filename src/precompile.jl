@@ -14,6 +14,7 @@ import PrecompileTools: @compile_workload, @setup_workload, @recompile_invalidat
 	Ω3 = cartesianproduct(I0) × Ω1
 	omegas = (Ω0, Ω1, Ω2, Ω3)
 
+	@info "Precompiling sets, domains and meshes..."
 	@compile_workload begin
 		for p in combinations
 			interval(p...)
@@ -133,6 +134,8 @@ end
 
 ## Space compilation
 @setup_workload begin
+	@info "Precompiling spaces..."
+
 	list_scalars = (1, 1.0, π, 1 // 2)
 
 	ops(::Val{1}) = (diff₋ₓ, diffₓ, jumpₓ, M₋ₕₓ, D₋ₓ)
@@ -155,8 +158,16 @@ end
 			M = mesh(X, npts[i], ntuple(j -> false, i))
 			f = @embed(X, x->sum(x))
 			f2 = @embed(M, x->sum(x))
+
+			I = interval(0, 1)
+			f3 = @embed(X×I, (x, t)->sum(x) * t)
+			f3(1.0)
+			f4 = @embed(M×I, (x, t)->sum(x) * t)
+			f4(1.0)
+
 			Wh = gridspace(M)
-			Wh
+			f5 = @embed(Wh×I, (x, t)->sum(x) * t)
+			f5(1.0)
 
 			eltype(Wh), eltype(typeof(Wh))
 			mesh(Wh), ndofs(Wh)
@@ -287,6 +298,8 @@ end
 		M = mesh(X, npts[i], ntuple(j -> false, i))
 		sol = @embed(M, x->sum(x))
 		Wh = gridspace(M)
+		@embed(Wh, u->u)
+
 		bc = constraints(sol)
 
 		list_constraints = (constraints(sol),
@@ -299,13 +312,9 @@ end
 		trialspace(bform)
 		testspace(bform)
 
+		F = 0.0 * element(Wh).values
 		A = assemble(bform)
 		assemble!(A, bform)
-
-		u = element(Wh, 0.0)
-		lform = form(Wh, v -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
-		testspace(lform)
-		F = assemble(lform)
 
 		for bcs in list_constraints
 			markers(bcs)
@@ -315,10 +324,52 @@ end
 
 			assemble(bform, bcs)
 			assemble!(A, bform, bcs)
-			assemble(lform, bcs)
-			assemble!(F, lform, bcs)
 
 			symmetrize!(A, F, bcs, M)
 		end
 	end
 end
+
+# add precompilation for linear forms
+@compile_workload begin
+	@info "Precompiling linear forms..."
+
+	for i in 1:3
+		X = domain(reduce(×, ntuple(j -> I0, i)))
+		M = mesh(X, npts[i], ntuple(j -> false, i))
+		sol = @embed(M, x->sum(x))
+		Wh = gridspace(M)
+
+		bc = constraints(sol)
+
+		u = element(Wh, 0.0)
+		F = 0.0 * u.values
+
+		list_constraints = (constraints(sol),
+							constraints(:dirichlet => sol),
+							constraints(:dirichlet => sol, :dirichlet => sol),
+							constraints(:dirichlet => sol, :dirichlet => sol, :dirichlet => sol),
+							constraints(:dirichlet => sol, :dirichlet => sol, :dirichlet => sol, :dirichlet => sol))
+
+
+		for strat in (DefaultAssembly(), OperatorsAssembly(), AutoDetect())
+			lform = form(Wh, v -> innerₕ(u, v), strategy = strat)
+			testspace(lform)
+
+			assemble(lform)
+			assemble!(F, lform)
+
+			for bcs in list_constraints
+				assemble(lform, bcs)
+				assemble!(F, lform, bcs)
+			end
+		end
+
+		lform_inplace = form(Wh, (res, v) -> innerₕ!(res, u, v), strategy = InPlaceAssembly())
+		for bcs in list_constraints
+			assemble!(F, lform_inplace, bcs)
+		end
+	end
+end
+
+@info "Precompilation done."
