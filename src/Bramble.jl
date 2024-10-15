@@ -44,7 +44,7 @@ export interval, cartesianproduct, first, last, set
 export domain, ×, create_markers, markers, labels, @embed
 
 # Mesh handling
-export mesh, hₘₐₓ, points, Iterator, iterative_refinement
+export mesh, hₘₐₓ, points, Iterator, iterative_refinement, npoints
 
 # Space handling
 export gridspace, element
