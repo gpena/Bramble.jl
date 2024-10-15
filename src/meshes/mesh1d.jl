@@ -243,7 +243,6 @@ Returns the indices of the interior points of mesh `Ωₕ`.
 # |-----*-----------*---|
 # |--*--*-----*-----*-*-|  each cell is divided in two cells of same width
 function iterative_refinement(Ωₕ::Mesh1D{T}, Ω::Domain{CartesianProduct{1,T},MarkersType}) where {T,MarkersType}
-	@show points(Ωₕ)
 	npts = 2*npoints(Ωₕ)-1
 
 	pts = Vector{eltype(Ωₕ)}(undef, npts)
@@ -252,8 +251,6 @@ function iterative_refinement(Ωₕ::Mesh1D{T}, Ω::Domain{CartesianProduct{1,T}
 		pts[i] = (pts[i+1]+pts[i-1])/2
 	end
 	
-	#pts = Vector{eltype(Ωₕ)}(undef, npts[1])
-	#createpoints!(pts, set(Ω), unif[1])
 	R = generate_indices(npts)
 
 	markersForMesh = MeshMarkers{1}()
