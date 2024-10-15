@@ -40,11 +40,11 @@ using WriteVTK
 abstract type BrambleType end
 
 # domain/interval handling functions
-export interval, cartesianproduct, first, last
+export interval, cartesianproduct, first, last, set
 export domain, ×, create_markers, markers, labels, @embed
 
 # Mesh handling
-export mesh, hₘₐₓ, points, Iterator
+export mesh, hₘₐₓ, points, Iterator, iterative_refinement
 
 # Space handling
 export gridspace, element

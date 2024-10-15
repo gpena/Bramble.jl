@@ -252,3 +252,33 @@ Returns the interior indices of mesh `Ωₕ`.
 """
 @inline interior_indices(Ωₕ::MeshnD) = interior_indices(indices(Ωₕ))
 @inline interior_indices(R::CartesianIndices{D}) where D = CartesianIndices(ntuple(i -> 2:size(R)[i], D))
+
+# |-----*-----------*---|
+# |--*--*-----*-----*-*-|  
+#
+# each cell is divided in two cells of same width
+# this is done for each submesh
+function iterative_refinement(Ωₕ::MeshnD{D,T}, Ω::Domain) where {D,T}
+	submeshes = ntuple(i -> iterative_refinement(Ωₕ(i), domain(projection(Ω, i)))::Mesh1D{T}, D)
+	npts = ntuple(i -> npoints(submeshes[i]), D)
+	
+	R = generate_indices(npts)
+
+	markersForMesh::MeshMarkers{D} = MeshMarkers{D}()
+
+	for label in labels(Ω)
+		merge!(markersForMesh, Dict(label => VecCartIndex{D}()))
+	end
+
+	R = generate_indices(ntuple(i -> npoints(submeshes[i]), D))
+	boundary = boundary_indices(R)
+
+	for idx in boundary, m in markers(Ω)
+		point = ntuple(i -> points(submeshes[i])[idx[i]], D)
+		if isapprox(m.f(point), 0)
+			push!(markersForMesh[m.label], idx)
+		end
+	end
+
+	return MeshnD{D,T}(markersForMesh, R, submeshes)
+end

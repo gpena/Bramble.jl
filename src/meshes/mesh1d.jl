@@ -238,3 +238,37 @@ Returns the indices of the interior points of mesh `Ωₕ`.
 """
 @inline interior_indices(Ωₕ::Mesh1D) = CartesianIndices((2:(npoints(Ωₕ) - 1),))
 @inline interior_indices(R::CartesianIndices{1}) = CartesianIndices((2:(length(R) - 1),))
+
+
+# |-----*-----------*---|
+# |--*--*-----*-----*-*-|  each cell is divided in two cells of same width
+function iterative_refinement(Ωₕ::Mesh1D{T}, Ω::Domain{CartesianProduct{1,T},MarkersType}) where {T,MarkersType}
+	@show points(Ωₕ)
+	npts = 2*npoints(Ωₕ)-1
+
+	pts = Vector{eltype(Ωₕ)}(undef, npts)
+	@views pts[1:2:end] .= points(Ωₕ)
+	for i in 2:2:npts-1
+		pts[i] = (pts[i+1]+pts[i-1])/2
+	end
+	
+	#pts = Vector{eltype(Ωₕ)}(undef, npts[1])
+	#createpoints!(pts, set(Ω), unif[1])
+	R = generate_indices(npts)
+
+	markersForMesh = MeshMarkers{1}()
+
+	for label in labels(Ω)
+		merge!(markersForMesh, Dict(label => VecCartIndex{1}()))
+	end
+
+	boundary = boundary_indices(R)
+
+	for idx in boundary, marker in markers(Ω)
+		if marker.f(_i2p(pts, idx)) ≈ 0
+			push!(markersForMesh[marker.label], idx)
+		end
+	end
+
+	return Mesh1D{T}(markersForMesh, R, pts)
+end
