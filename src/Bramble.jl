@@ -21,7 +21,7 @@ end
 
 import Base: eltype, similar, length, copyto!, axes, materialize!
 import Base: show, getindex, setindex!, iterate, size, ndims, firstindex, lastindex
-import Base: map, map!, first
+import Base: map, map!, first, last
 import Base: *, +, -, /, ^
 import Random: rand!
 
@@ -40,7 +40,7 @@ using WriteVTK
 abstract type BrambleType end
 
 # domain/interval handling functions
-export interval, cartesianproduct
+export interval, cartesianproduct, first, last
 export domain, ×, create_markers, markers, labels, @embed
 
 # Mesh handling

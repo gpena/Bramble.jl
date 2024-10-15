@@ -142,6 +142,9 @@ end
 
 @inline tails(X::CartesianProduct{1}) = X(1)
 
+@inline firstindex(X::CartesianProduct{1,T}) where T = firstindex(X(1))
+@inline lastindex(X::CartesianProduct{1,T}) where T = lastindex(X(1))
+
 """
 	×(X::CartesianProduct, Y::CartesianProduct)
 
