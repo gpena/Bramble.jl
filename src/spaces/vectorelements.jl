@@ -403,11 +403,12 @@ For efficiency, each integral is calculated on ``[0,1]^D``, where ``D`` is the d
 """
 function __integrandnd(y, t, p)
 	f, x, meas, idxs = p
-
+	
 	for idx in idxs
 		point, diff = __idx2points(t, x, idx)
 		y[idx] = f(point) * prod(diff) / meas(idx)
 	end
+
 	return nothing
 end
 
@@ -419,7 +420,7 @@ function __quadnd!(uₕ::VectorElement, domain::NTuple{D,T}, p::ParamType) where
 	func = IntegralFunction(__integrandnd, prototype)
 	prob = IntegralProblem(func, domain, p)
 	sol = solve(prob, CubatureJLh())
-
+	@show sol.u
 	copyto!(v, sol.u)
 	return nothing
 end
