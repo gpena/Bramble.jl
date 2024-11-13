@@ -18,6 +18,14 @@ struct Constraints{D,FType} <: ConstraintsType
 	constraint_type::Symbol
 end
 
+
+function (bcs::Constraints{D,FType})(time) where {D,FType}
+	mrks = bcs.markers
+	function_type = typeof(first(mrks).f(time))
+	new_markers = create_markers((mrk.label => mrk.f(time) for mrk in mrks)...)
+	return Constraints{D,function_type}(new_markers, bcs.constraint_type)
+end
+
 """
 	constraints(pairs::NTuple{D,MarkerType}, type::Symbol = :dirichlet)
 
