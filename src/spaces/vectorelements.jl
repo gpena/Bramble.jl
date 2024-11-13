@@ -420,7 +420,7 @@ function __quadnd!(uₕ::VectorElement, domain::NTuple{D,T}, p::ParamType) where
 	func = IntegralFunction(__integrandnd, prototype)
 	prob = IntegralProblem(func, domain, p)
 	sol = solve(prob, CubatureJLh())
-	@show sol.u
+	#@show sol.u
 	copyto!(v, sol.u)
 	return nothing
 end
