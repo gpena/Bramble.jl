@@ -32,30 +32,38 @@ end
 	return z
 end
 
-@inline _inner_product(u, h, v) = transpose(v) * Diagonal(h) * u
+@inline function _inner_product(u, h, v) 
+	return transpose(v) * (Diagonal(h) * u)
+end
 
 @inline function _inner_product_add!(z, u::Vector{T}, h::Vector{T}, A::SparseMatrixCSC{T,Int}) where T
-	#z = transpose(A) * Diagonal(h) * u
-	@simd for j in eachindex(h, u)
-		for idx in A.colptr[j]:(A.colptr[j + 1] - 1)
-			i = A.rowval[idx]
-			val = A.nzval[idx]
-
-			z[j] += val * h[i] * u[i]
+	rows = A.rowval
+	vals = A.nzval
+	ptrs = A.colptr
+	
+	@inbounds @simd for j in eachindex(h, u)
+		zj = z[j]
+		for idx in ptrs[j]:(ptrs[j + 1] - 1)
+			i = rows[idx]
+			zj += vals[idx] * h[i] * u[i]
 		end
+		z[j] = zj
 	end
 end
 
 
 @inline function _inner_product_add!(z, A::SparseMatrixCSC{T,Int}, h::Vector{T}, v::Vector{T}) where T
-	#z = transpose(v) * Diagonal(h) * A
-	@simd for j in eachindex(h, v)
-		for idx in A.colptr[j]:(A.colptr[j + 1] - 1)
-			i = A.rowval[idx]
-			val = A.nzval[idx]
-
-			z[j] += h[i] * v[i] * val
+	rows = A.rowval
+	vals = A.nzval
+	ptrs = A.colptr
+	
+	@inbounds @simd for j in eachindex(h, v)
+		zj = z[j]
+		for idx in ptrs[j]:(ptrs[j + 1] - 1)
+			i = rows[idx]
+			zj += vals[idx] * h[i] * v[i]
 		end
+		z[j] = zj
 	end
 end
 

@@ -209,14 +209,14 @@ end
 ########################
 
 @inline function _func2array!(u, f, mesh)
-	@assert length(u) === npoints(mesh) === length(indices(mesh))
-	pts = points(mesh)
-	idxs = indices(mesh)
+    @assert length(u) === npoints(mesh) === length(indices(mesh))
+    pts = points(mesh)
+    idxs = indices(mesh)
 
-	g(idx) = _i2p(pts, idx)
-	fog = f ∘ g
-	@.. u = fog(idxs)
-	return nothing
+    for i in eachindex(idxs)
+        u[i] = f(_i2p(pts, idxs[i]))
+    end
+    return nothing
 end
 
 """
@@ -224,7 +224,7 @@ end
 
 In-place version of the restriction operator [Rₕ](@ref).
 """
-function Rₕ!(uₕ::VectorElement, f)
+@inline function Rₕ!(uₕ::VectorElement, f)
 	u = Base.ReshapedArray(uₕ.values, npoints(mesh(space(uₕ)), Tuple), ())
 	_func2array!(u, f, mesh(space(uₕ)))
 	return nothing

@@ -41,4 +41,5 @@ println("")
 			#test_conv_diff(convection_diffusion(3), 6, (i->2^i+1, i->2^i+2, i->2^i+1), ntuple(i->false, 3)) # the linear solver takes a while to solve
 		end
 	end
+	
 end

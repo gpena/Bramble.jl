@@ -1,6 +1,0 @@
-[deps]
-ILUZero = "88f59080-6952-5380-9ea5-54057fb9a43f"
-IncompleteLU = "40713840-3770-5561-ab4c-a76e7d0d7895"
-LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
-LinearSolve = "7ed4a6bd-45f5-4d41-b270-4a48e9bafcae"
-Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"

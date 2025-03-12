@@ -20,6 +20,8 @@ function solve_poisson(poisson::SimpleScalarPDEProblem, nPoints::NTuple{D,Int}, 
 	bc = constraints(sol)
 
 	bform = form(Wh, Wh, (U, V) -> inner₊(∇₋ₕ(U), ∇₋ₕ(V)))
+	assemble(bform)
+
 	A = assemble(bform, bc)
 
 	uh = element(Wh)
@@ -28,8 +30,9 @@ function solve_poisson(poisson::SimpleScalarPDEProblem, nPoints::NTuple{D,Int}, 
 	lform = form(Wh, v -> innerₕ(uh, v), strategy = strategy, verbose = false)
 	F = assemble(lform, bc)
 
+	prec = ilu(A, τ = 0.001)
 	prob = LinearProblem(A, F)
-	solh = solve(prob, KrylovJL_GMRES(), Pl = ilu(A, τ = 0.001))
+	solh = solve(prob, KrylovJL_GMRES(), Pl = prec, verbose=false)
 
 	uh .= solh.u
 	F .= uh
