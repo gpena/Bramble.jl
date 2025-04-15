@@ -86,12 +86,41 @@ function (f::BrambleFunction{NTuple{D,T},false})(x...) where {D,T}
 	return f.wrapped(y)
 end
 
+"""
+	embed_function(space_domain, func)
+
+Creates a BrambleFunction for a function `func` defined over `space_domain`.
+Equivalent to `@embed space_domain func`.
+"""
+function embed_function(space_domain, func)
+	# Directly call the existing non-time-dependent helper
+	return _embed_notime(space_domain, func)
+end
+
+"""
+	embed_function(space_domain, time_domain, func)
+
+Creates a BrambleFunction for a time-dependent function `func(x, t)` defined
+over `space_domain × time_domain`.
+Equivalent to `@embed space_domain × time_domain func`.
+"""
+function embed_function(space_domain, time_domain, func)
+	# Directly call the existing time-dependent helper
+	# Note: _embed_withtime requires time_domain to be an interval (CartesianProduct{1})
+	# You might add checks or handle different time domain types if needed.
+	if !(time_domain isa CartesianProduct{1})
+		# Or handle other cases if applicable
+		error("Time domain must be a 1D CartesianProduct (interval) for this function.")
+	end
+	return _embed_withtime(space_domain, time_domain, func)
+end
+
 (f::BrambleFunction{ArgsType,false})(x) where {ArgsType<:Number} = f.wrapped(convert(ArgsType, x)::ArgsType)
 (f::BrambleFunction{ArgsType,true})(t) where ArgsType = f.wrapped(t)
 
 function _embed_withtime(X, I, f)
 	@assert I isa CartesianProduct{1}
-	
+
 	_f(t) = _embed_notime(X, Base.Fix2(f, t))
 
 	ArgsType = eltype(X)
