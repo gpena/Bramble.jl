@@ -16,20 +16,24 @@ end
 """
 	struct Marker{F}
 		label::Symbol
-		f::F
+		identifier::F
 	end
 
-Structure to implement markers for a portion of a domain or even boundary conditions. Each [Marker](@ref) is composed of a symbol and a [BrambleFunction](@ref).
+Structure to implement markers for a portion of a domain or even boundary conditions. Each [Marker](@ref) is composed of a label represented by a symbol and a [BrambleFunction](@ref) or a symbol representing the identified part of the domain. The function will work as a levelset function and the symbol will correspond to part of the boundary:
+
+  - in 1D `[x₁,x₂]`, :left (x[1]=x₁), :right (x[1]=x₂)
+  - in 2D `[x₁,x₂] \\times [y₁,y₂]`, :left (x[1]=x₁), :right (x[1]=x₂), :top (x[2]=y₂), :bottom (x[2]=y₁)
+  - in 3D `[x₁,x₂] \\times [y₁,y₂] \\times [z₁,z₂]`, :front (x[1]=x₂), :back (x[1]=x₁, :left (x[2]=y₁), :right (x[2]=y₂), :top (x[3]=z₃), :bottom (x[3]=z₁)
 """
 struct Marker{F}
 	label::Symbol
-	f::F
+	identifier::F
 end
 
 MarkerType{F} = Pair{Symbol,F}
 
 @inline label(m::Marker{F}) where F = m.label
-@inline func(m::Marker{F}) where F = m.f
+@inline identifier(m::Marker{F}) where F = m.identifier
 
 """
 	domain(X::CartesianProduct)
@@ -40,7 +44,7 @@ Returns a [Domain](@ref) from a [CartesianProduct](@ref), assuming the single [M
 # Example
 
 ```@example
-julia> domain(interval(0,1))
+julia> domain(interval(0, 1))
 Type: Float64 
  Dim: 1 
  Set: [0.0, 1.0]
@@ -49,7 +53,9 @@ Boundary markers: :dirichlet
 ```
 
 ```@example
-julia> I = interval(0,1); m = markers( :dirichlet => @embed(I, x->x[1]-1)), :neumann => @embed(I, x->x[1]-0)); domain(interval(0,1), m)
+julia> I = interval(0, 1);
+	   m = create_markers(I, :dirichlet => x -> x[1] - 1, :neumann => x -> x[1] - 0);
+	   domain(I, m);
 Type: Float64 
  Dim: 1 
  Set: [0.0, 1.0]
@@ -57,7 +63,12 @@ Type: Float64
 Boundary markers: :dirichlet, :neumann
 ```
 """
-@inline domain(X::CartesianProduct) = Domain(X, (Marker(:dirichlet, x -> zero(eltype(x))),))
+function domain(X::CartesianProduct)
+	f(x) = zero(eltype(x))
+	markers = create_markers(:dirichlet => f)
+	return Domain(X, markers)
+end
+
 @inline domain(X::CartesianProduct, markers::MType) where MType = Domain{typeof(X),MType}(X, markers)
 
 """
@@ -76,7 +87,8 @@ Returns the topological dimension of the [Domain](@ref) `Ω`.
 # Example
 
 ```@example
-julia> I = interval(0.0, 1.0); dim(domain(I × I))
+julia> I = interval(0.0, 1.0);
+	   dim(domain(I × I));
 2
 ```
 """
@@ -92,7 +104,8 @@ Returns the type of the bounds defining [Domain](@ref) `Ω`.
 # Example
 
 ```@example
-julia> I = interval(0.0, 1.0); eltype(domain(I × I))
+julia> I = interval(0.0, 1.0);
+	   eltype(domain(I × I));
 Float64
 ```
 """
@@ -119,25 +132,43 @@ function show(io::IO, Ω::Domain)
 end
 
 """
-	create_markers(m::MarkerType...)
+	create_markers(X::CartesianProduct, marker_pairs::Vararg{Pair})
 
-Converts several `Pair{Symbol,F}` (:symbol => func) to [Marker](@ref)s. These are to be passed in the construction of a [Domain](@ref). The functions need to be defined as [BrambleFunction](@ref)s.
+Converts several `Pair{Symbol,F}` (:symbol => arg), where arg is Symbol, Function or a tuple of these types, to [Marker](@ref)s. These are to be passed in the construction of a [Domain](@ref)..
 
 # Example
 
 ```@example
-julia> create_markers( :dirichlet => @embed(X, x -> x[1]-1), :neumann => @embed(X, x -> x[2]-0) )
+julia> create_markers(I, :dirichlet => x -> x[1] - 1, :neumann => x -> x[2] - 0)
+
 ```
 """
-@inline @generated function create_markers(m::MarkerType{BrambleFunction{T,bool,C}}...) where {T,bool,C}
-	nPairs = length(m)
+@inline function create_markers(embedder, marker_pairs::Vararg{Pair})
+	return tuple((Marker(p.first, process_identifier(embedder, p.second)) for p in marker_pairs)...)
+end
 
-	tuple_expr = Expr(:tuple)
-	for i in 1:nPairs
-		push!(tuple_expr.args, :(Marker(m[$i]...)))
-	end
+@inline process_identifier(embedder, identifier::Function) = embed_function(embedder, identifier)
+@inline process_identifier(_, identifier::Symbol) = identifier
 
-	return tuple_expr
+_process_tuple_recursive(embedder, current_tuple::Tuple{}) = ()
+
+function _process_tuple_recursive(embedder, current_tuple::Tuple)
+	first_element = first(current_tuple)
+	rest_of_tuple = Base.tail(current_tuple)
+
+	processed_first = process_identifier(embedder, first_element)
+	processed_rest = _process_tuple_recursive(embedder, rest_of_tuple)
+
+	return (processed_first, processed_rest...)
+end
+
+function process_identifier(embedder, identifier::Tuple)
+	return _process_tuple_recursive(embedder, identifier)
+end
+
+function process_identifier(embedder, identifier::Any)
+	@warn "Unhandled identifier type `$(typeof(identifier))` for embedder `$embedder`. Storing as-is."
+	return identifier
 end
 
 """
@@ -155,8 +186,8 @@ Returns a generator with the labels of the [Marker](@ref)s associated with [Doma
 @inline labels(Ω::Domain) = (p.label for p in Ω.markers)
 
 """
-	marker_funcs(Ω::Domain)
+	marker_identifiers(Ω::Domain)
 
-Returns a generator with the [Marker](@ref)'s [BrambleFunction](@ref)s associated with [Domain](@ref) `Ω`.
+Returns a generator with the [Marker](@ref)'s identifiers ([BrambleFunction](@ref), Symbol or Tuples of the previous) associated with [Domain](@ref) `Ω`.
 """
-@inline marker_funcs(Ω::Domain) = (p.f for p in Ω.markers)
+@inline marker_identifiers(Ω::Domain) = (p.f for p in Ω.markers)
