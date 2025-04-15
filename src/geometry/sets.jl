@@ -30,7 +30,7 @@ CartesianProduct{1,Float64}((0.0,1.0))
 	return CartesianProduct{1,typeof(_x)}(((_x, _y),))
 end
 
-@inline interval(x::CartesianProduct{1}) = interval(x.data...)
+@inline interval(x::CartesianProduct{1}) = interval(x(1)...)
 
 """
 	cartesianproduct(x, y)
@@ -142,8 +142,8 @@ end
 
 @inline tails(X::CartesianProduct{1}) = X(1)
 
-@inline first(X::CartesianProduct{1,T}) where T = first(X(1))
-@inline last(X::CartesianProduct{1,T}) where T = last(X(1))
+@inline first(X::CartesianProduct{1}) = first(X(1))
+@inline last(X::CartesianProduct{1}) = last(X(1))
 
 """
 	×(X::CartesianProduct, Y::CartesianProduct)
