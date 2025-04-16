@@ -1,34 +1,203 @@
-using Bramble
-using Bramble: projection, dim
+using Bramble: CartesianProduct
+using Bramble: interval, cartesianproduct, projection, dim, tails, ×
 
-function set_tests()
-	I = interval(-3.0, 10.0)
+@testset "CartesianProduct Tests" begin
+	@testset "Constructors" begin
+		# interval constructor (Float64 default)
+		I_f64 = interval(-3.0, 10.0)
+		@test I_f64 isa CartesianProduct{1,Float64}
+		@test I_f64.data === ((-3.0, 10.0),)
+		@test validate_equal(I_f64.data[1], (-3.0, 10.0))
 
-	@test validate_equal(I.data[1][1], -3.0)
-	@test validate_equal(I.data[1][2], 10.0)
-	@test dim(I) == 1
+		# interval constructor (Int -> Float64)
+		I_int = interval(-3, 10)
+		@test I_int isa CartesianProduct{1,Float64} # Converts to float
+		@test I_int.data === ((-3.0, 10.0),)
+		@test validate_equal(I_int.data[1], (-3.0, 10.0))
 
-	I2 = interval(70.0, 100.0)
+		# interval edge case: zero width
+		I_zero = interval(5.5, 5.5)
+		@test I_zero isa CartesianProduct{1,Float64}
+		@test validate_equal(I_zero.data[1], (5.5, 5.5))
 
-	test_sets = [a × b for a in [I] for b in [I2]]
-	for set in test_sets
-		Ω2_x = projection(set, 1)
-		Ω2_y = projection(set, 2)
+		# interval constructor assertion x <= y
+		@test_throws AssertionError interval(10, 1)
 
+		# interval from CartesianProduct{1}
+		I_f64_again = interval(I_f64)
+		@test I_f64_again isa CartesianProduct{1,Float64}
+		@test validate_equal(I_f64_again.data[1], (-3.0, 10.0))
+
+		# cartesianproduct(x, y) alias
+		cp_f64 = cartesianproduct(-3.0, 10.0)
+		@test cp_f64 isa CartesianProduct{1,Float64}
+		@test validate_equal(cp_f64.data[1], (-3.0, 10.0))
+
+		# cartesianproduct(NTuple) - Int
+		cp_int_2d = cartesianproduct(((0, 1), (4, 5)))
+		@test cp_int_2d isa CartesianProduct{2,Int}
+		@test cp_int_2d.data === ((0, 1), (4, 5))
+
+		# cartesianproduct(NTuple) - Float32
+		cp_f32_3d = cartesianproduct(((0.0f0, 1.0f0), (2.0f0, 3.0f0), (-1.0f0, 0.0f0)))
+		@test cp_f32_3d isa CartesianProduct{3,Float32}
+		@test cp_f32_3d.data === ((0.0f0, 1.0f0), (2.0f0, 3.0f0), (-1.0f0, 0.0f0))
+
+		# cartesianproduct(NTuple) assertion min <= max
+		@test_throws AssertionError cartesianproduct(((0, 1), (5, 4)))
+
+		# cartesianproduct(CartesianProduct) identity
+		cp_id = cartesianproduct(cp_int_2d)
+		@test cp_id === cp_int_2d # Should be the same object
+	end
+
+	@testset "Accessors and Properties" begin
+		I = interval(0.0, 1.0)
+		R2 = cartesianproduct(((0, 1), (2, 3)))
+		R3 = I × interval(2.0, 3.0) × interval(4.0, 5.0)
+
+		# eltype
+		@test eltype(I) === Float64
+		@test eltype(typeof(I)) === Float64
+		@test eltype(R2) === Int
+		@test eltype(typeof(R2)) === Int
+		@test eltype(R3) === Float64
+		@test eltype(typeof(R3)) === Float64
+
+		# dim
+		@test dim(I) === 1
+		@test dim(typeof(I)) === 1
+		@test dim(R2) === 2
+		@test dim(typeof(R2)) === 2
+		@test dim(R3) === 3
+		@test dim(typeof(R3)) === 3
+
+		# Call syntax (X(i))
+		@test validate_equal(I(1), (0.0, 1.0))
+		@test validate_equal(R2(1), (0, 1))
+		@test validate_equal(R2(2), (2, 3))
+		@test validate_equal(R3(1), (0.0, 1.0))
+		@test validate_equal(R3(2), (2.0, 3.0))
+		@test validate_equal(R3(3), (4.0, 5.0))
+		@test_throws AssertionError I(2)
+		@test_throws AssertionError R2(0)
+		@test_throws AssertionError R3(4)
+
+		# tails(X, i)
+		@test validate_equal(tails(I, 1), (0.0, 1.0))
+		@test validate_equal(tails(R2, 1), (0, 1))
+		@test validate_equal(tails(R2, 2), (2, 3))
+		@test validate_equal(tails(R3, 3), (4.0, 5.0))
+		@test_throws AssertionError tails(I, 2)
+		@test_throws AssertionError tails(R2, 0)
+		@test_throws AssertionError tails(R3, 4)
+
+		# tails(X)
+		@test validate_equal(tails(I), (0.0, 1.0)) # Special case D=1
+		@test tails(R2) === ((0, 1), (2, 3))
+		@test validate_equal(tails(R3), ((0.0, 1.0), (2.0, 3.0), (4.0, 5.0)))
+
+		# first/last (only for D=1)
+		@test validate_equal(first(I), 0.0)
+		@test validate_equal(last(I), 1.0)
+		@test_throws MethodError first(R2)
+		@test_throws MethodError last(R3)
+	end
+
+	@testset "Operations" begin
+		I1 = interval(0.0, 1.0)
+		I2 = interval(2.0, 3.0)
+		I3_int = interval(4, 5) # Creates Float64 product
+		R2 = cartesianproduct(((10, 11), (12, 13)))
+
+		# × operator (Float64 x Float64)
+		P1 = I1 × I2
+		@test P1 isa CartesianProduct{2,Float64}
+		@test dim(P1) == 2
+		@test validate_equal(tails(P1), ((0.0, 1.0), (2.0, 3.0)))
+
+		# × operator (Float64 x Float64 x Float64)
+		P2 = I1 × I2 × I3_int
+		@test P2 isa CartesianProduct{3,Float64}
+		@test dim(P2) == 3
+		@test validate_equal(tails(P2), ((0.0, 1.0), (2.0, 3.0), (4.0, 5.0)))
+
+		# × operator (Int x Int) - Note: Need cartesianproduct for Int type
+		R2_A = cartesianproduct(((0, 1),))
+		R2_B = cartesianproduct(((2, 3),))
+		P3_int = R2_A × R2_B
+		@test P3_int isa CartesianProduct{2,Int}
+		@test dim(P3_int) == 2
+		@test tails(P3_int) === ((0, 1), (2, 3))
+
+		# × operator type mismatch (should fail)
+		@test_throws MethodError I1×R2 # Float64 x Int
+
+		# projection
+		P_proj = I1 × I2 × I3_int # Dim 3, Float64
+		proj1 = projection(P_proj, 1)
+		proj2 = projection(P_proj, 2)
+		proj3 = projection(P_proj, 3)
+
+		@test proj1 isa CartesianProduct{1,Float64}
+		@test dim(proj1) == 1
+		@test validate_equal(tails(proj1), (0.0, 1.0))
+		@test validate_equal(first(proj1), 0.0)
+		@test validate_equal(last(proj1), 1.0)
+
+		@test proj2 isa CartesianProduct{1,Float64}
+		@test dim(proj2) == 1
+		@test validate_equal(tails(proj2), (2.0, 3.0))
+
+		@test proj3 isa CartesianProduct{1,Float64}
+		@test dim(proj3) == 1
+		@test validate_equal(tails(proj3), (4.0, 5.0))
+
+		# projection index out of bounds
+		@test_throws AssertionError projection(P_proj, 4)
+		@test_throws AssertionError projection(P_proj, 0)
+	end
+
+	@testset "Show Method" begin
+		# Capture output using sprint
+		I = interval(-1.5, 2.0)
+		R2 = cartesianproduct(((0, 1), (10, 20)))
+		R3 = I × interval(5.0, 6.0)
+
+		I_str = sprint(show, I)
+		R3_str = sprint(show, R3)
+
+		@test I_str == "Type: Float64 \n Dim: 1 \n Set: [-1.5, 2.0]"
+		@test R3_str == "Type: Float64 \n Dim: 2 \n Set: [-1.5, 2.0] × [5.0, 6.0]"
+	end
+
+	# Include original tests for regression checking
+	@testset "Original Tests" begin
+		I = interval(-3.0, 10.0)
+
+		@test validate_equal(I.data[1][1], -3.0)
+		@test validate_equal(I.data[1][2], 10.0)
+		@test dim(I) == 1
+
+		I2 = interval(70.0, 100.0)
+
+		# Using list comprehension for combinations was fine, but direct construction is clearer
+		set_2d = I × I2
+		Ω2_x = projection(set_2d, 1)
+		Ω2_y = projection(set_2d, 2)
+
+		# Note: projection returns CartesianProduct{1, Float64}
 		@test validate_equal(Ω2_y.data[1][1], 70.0)
 		@test validate_equal(Ω2_x.data[1][1], -3.0)
 		@test validate_equal(Ω2_y.data[1][2], 100.0)
 		@test validate_equal(Ω2_x.data[1][2], 10.0)
-	end
 
-	I3 = interval(-15.0, -1.0)
+		I3 = interval(-15.0, -1.0)
 
-	S(x) = (x, cartesianproduct(x))
-	test_sets = (a × b × c for a in S(I) for b in S(I2) for c in S(I3))
-	for set in test_sets
-		Ω3_x = projection(set, 1)
-		Ω3_y = projection(set, 2)
-		Ω3_z = projection(set, 3)
+		set_3d = I × I2 × I3
+		Ω3_x = projection(set_3d, 1)
+		Ω3_y = projection(set_3d, 2)
+		Ω3_z = projection(set_3d, 3)
 
 		@test validate_equal(Ω3_x.data[1][1], -3.0)
 		@test validate_equal(Ω3_x.data[1][2], 10.0)
@@ -37,6 +206,4 @@ function set_tests()
 		@test validate_equal(Ω3_z.data[1][1], -15.0)
 		@test validate_equal(Ω3_z.data[1][2], -1.0)
 	end
-end
-
-set_tests()
+end # End CartesianProduct Tests
