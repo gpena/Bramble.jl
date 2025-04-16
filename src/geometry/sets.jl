@@ -69,9 +69,12 @@ end
 Returns the `i`-th interval in the [CartesianProduct](@ref).
 """
 @inline function (X::CartesianProduct)(i)
-	@assert i in eachindex(X.data)
-	return X.data[i]
+	box = bounds(X)
+	@assert i in eachindex(box)
+	return box[i]
 end
+
+@inline bounds(X::CartesianProduct) = X.data
 
 """
 	eltype(X::CartesianProduct)
@@ -187,7 +190,7 @@ Type: Float64
 @inline projection(X::CartesianProduct, i) = interval(X(i)...)
 
 function show(io::IO, X::CartesianProduct{D}) where D
-	sets = ["[$(tails(X,i)[1]), $(tails(X,i)[2])]" for i in eachindex(X.data)]
+	sets = ["[$(tails(X,i)[1]), $(tails(X,i)[2])]" for i in eachindex(bounds(X))]
 	sets_string = join(sets, " × ")
 	print(io, "Type: $(eltype(X)) \n Dim: $D \n Set: $sets_string")
 end
