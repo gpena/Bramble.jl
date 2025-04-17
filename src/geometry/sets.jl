@@ -1,12 +1,12 @@
 """
 	struct CartesianProduct{D,T}
-		data::NTuple{D,Tuple{T,T}}
+		box::NTuple{D,Tuple{T,T}}
 	end
 
 Type for storage of cartesian products of `D` intervals having elements of type `T`.
 """
 struct CartesianProduct{D,T} <: BrambleType
-	data::NTuple{D,Tuple{T,T}}
+	box::NTuple{D,Tuple{T,T}}
 end
 
 """
@@ -22,22 +22,22 @@ julia> interval(0, 1)
 CartesianProduct{1,Float64}((0.0,1.0))
 ```
 """
-@inline function interval(x, y)
-	_x = float(x)
-	_y = float(y)
-	@assert _x <= _y
+@inline function interval(_x, _y)
+	x = float(_x)
+	y = float(_y)
+	@assert x <= y
 
-	return CartesianProduct{1,typeof(_x)}(((_x, _y),))
+	return CartesianProduct{1,typeof(x)}(((x, y),))
 end
 
 @inline interval(x::CartesianProduct{1}) = interval(x(1)...)
 
 """
 	cartesianproduct(x, y)
-	cartesianproduct(data::NTuple)
+	cartesianproduct(box::NTuple)
 	cartesianproduct(X::CartesianProduct)
 
-Returns a `1`-dimensional [CartesianProduct](@ref) to represent the interval [`x`,`y`]. Alternatively, if `D` tuples are provided in `data`, it returns a `D`-dimensional [CartesianProduct](@ref).
+Returns a `1`-dimensional [CartesianProduct](@ref) to represent the interval [`x`,`y`]. Alternatively, if `D` tuples are provided in `box`, it returns a `D`-dimensional [CartesianProduct](@ref).
 
 # Example
 
@@ -58,9 +58,9 @@ Type: Int64
 @inline cartesianproduct(x, y) = interval(x, y)
 @inline cartesianproduct(X::CartesianProduct) = X
 
-@inline function cartesianproduct(data::NTuple{D,Tuple{T,T}}) where {D,T}
-	@assert all(x -> x[1] <= x[2], data)
-	return CartesianProduct{D,T}(data)
+@inline function cartesianproduct(box::NTuple{D,Tuple{T,T}}) where {D,T}
+	@assert all(x -> x[1] <= x[2], box)
+	return CartesianProduct{D,T}(box)
 end
 
 """
@@ -69,12 +69,10 @@ end
 Returns the `i`-th interval in the [CartesianProduct](@ref).
 """
 @inline function (X::CartesianProduct)(i)
-	box = bounds(X)
+	@unpack box = X
 	@assert i in eachindex(box)
 	return box[i]
 end
-
-@inline bounds(X::CartesianProduct) = X.data
 
 """
 	eltype(X::CartesianProduct)
@@ -137,7 +135,8 @@ julia> X = cartesianproduct(0, 1) × cartesianproduct(4, 5);
 ```
 """
 @inline function tails(X::CartesianProduct, i)
-	@assert i in eachindex(X.data)
+	@unpack box = X
+	@assert i in eachindex(box)
 	return X(i)
 end
 
@@ -190,7 +189,8 @@ Type: Float64
 @inline projection(X::CartesianProduct, i) = interval(X(i)...)
 
 function show(io::IO, X::CartesianProduct{D}) where D
-	sets = ["[$(tails(X,i)[1]), $(tails(X,i)[2])]" for i in eachindex(bounds(X))]
+	@unpack box = X
+	sets = ["[$(tails(X,i)[1]), $(tails(X,i)[2])]" for i in eachindex(box)]
 	sets_string = join(sets, " × ")
 	print(io, "Type: $(eltype(X)) \n Dim: $D \n Set: $sets_string")
 end
