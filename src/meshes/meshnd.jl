@@ -253,6 +253,26 @@ Returns the interior indices of mesh `Ωₕ`.
 @inline interior_indices(Ωₕ::MeshnD) = interior_indices(indices(Ωₕ))
 @inline interior_indices(R::CartesianIndices{D}) where D = CartesianIndices(ntuple(i -> 2:size(R)[i], D))
 
+function generate_markers(Ω::Domain{CartesianProduct{D,T},MarkersType}, submeshes) where {D,T,MarkersType}
+	markersForMesh::MeshMarkers{D} = MeshMarkers{D}()
+
+	for label in labels(Ω)
+		merge!(markersForMesh, Dict(label => VecCartIndex{D}()))
+	end
+
+	R = generate_indices(ntuple(i -> npoints(submeshes[i]), D))
+	boundary = boundary_indices(R)
+
+	for idx in boundary, m in markers(Ω)
+		point = ntuple(i -> points(submeshes[i])[idx[i]], D)
+		if isapprox(m.f(point), 0)
+			push!(markersForMesh[m.label], idx)
+		end
+	end
+
+	return markersForMesh, R
+end
+
 # |-----*-----------*---|
 # |--*--*-----*-----*-*-|  
 #
@@ -279,6 +299,39 @@ function iterative_refinement(Ωₕ::MeshnD{D,T}, Ω::Domain) where {D,T}
 			push!(markersForMesh[m.label], idx)
 		end
 	end
+
+	return MeshnD{D,T}(markersForMesh, R, submeshes)
+end
+
+#TODO document
+function generate_markers_indices(Ω::Domain, submeshes::NTuple{D,MType}) where {D, MType}
+	npts = ntuple(i -> npoints(submeshes[i]), D)
+	
+	R = generate_indices(npts)
+
+	markersForMesh::MeshMarkers{D} = MeshMarkers{D}()
+
+	for label in labels(Ω)
+		merge!(markersForMesh, Dict(label => VecCartIndex{D}()))
+	end
+
+	R = generate_indices(ntuple(i -> npoints(submeshes[i]), D))
+	boundary = boundary_indices(R)
+
+	for idx in boundary, m in markers(Ω)
+		point = ntuple(i -> points(submeshes[i])[idx[i]], D)
+		if isapprox(m.f(point), 0)
+			push!(markersForMesh[m.label], idx)
+		end
+	end
+
+	return markersForMesh, R
+end
+
+#TODO document
+function remesh(Ωₕ::MeshnD{D,T}, Ω::Domain, pts::NTuple{D,Vector{T}}) where {D,T}
+	submeshes = ntuple(i -> remesh(Ωₕ(i), domain(projection(Ω, i)), pts[i])::Mesh1D{T}, D)
+	markersForMesh, R = generate_markers_indices(Ω, submeshes)
 
 	return MeshnD{D,T}(markersForMesh, R, submeshes)
 end
