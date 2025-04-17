@@ -221,3 +221,18 @@ function show(io::IO, Ω::Domain)
 	show(io, set(Ω))
 	print(io, "\n\nMarkers: $l")
 end
+
+"""
+	get_boundary_symbols(X::CartesianProduct)
+
+Returns a tuple of standard boundary symbols for a [CartesianProduct](@ref).
+
+  - in 1D `[x₁,x₂]`, :left (x=x₁), :right (x=x₂)
+  - in 2D `[x₁,x₂] \\times [y₁,y₂]`, :left (x=x₁), :right (x=x₂), :top (y=y₂), :bottom (y=y₁)
+  - in 3D `[x₁,x₂] \\times [y₁,y₂] \\times [z₁,z₂]`, :front (x=x₂), :back (x=x₁), :left (y=y₁), :right (y=y₂), :top (z=z₃), :bottom (z=z₁)
+"""
+@inline get_boundary_symbols(X::CartesianProduct) = get_boundary_symbols(Val(dim(X)))
+
+@inline get_boundary_symbols(::Val{1}) = (:left, :right)
+@inline get_boundary_symbols(::Val{2}) = (:bottom, :top, :left, :right)
+@inline get_boundary_symbols(::Val{3}) = (:bottom, :top, :back, :front, :left, :right)
