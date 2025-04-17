@@ -1,5 +1,9 @@
 import PrecompileTools: @compile_workload, @setup_workload, @recompile_invalidations
 
+include("utils/precompile.jl")
+include("geometry/precompile.jl")
+
+#=
 @setup_workload begin
 	pts = [-1, -1.0, 0, 0.0, 1 // 2, π]
 	combinations = ((pts[i], pts[j]) for i in eachindex(pts) for j in eachindex(pts) if pts[i] <= pts[j])
@@ -351,7 +355,6 @@ end
 							constraints(:dirichlet => sol, :dirichlet => sol, :dirichlet => sol),
 							constraints(:dirichlet => sol, :dirichlet => sol, :dirichlet => sol, :dirichlet => sol))
 
-
 		for strat in (DefaultAssembly(), OperatorsAssembly(), AutoDetect())
 			lform = form(Wh, v -> innerₕ(u, v), strategy = strat)
 			testspace(lform)
@@ -371,5 +374,5 @@ end
 		end
 	end
 end
-
+=#
 @info "Precompilation done."
