@@ -18,7 +18,6 @@ struct Constraints{D,FType} <: ConstraintsType
 	constraint_type::Symbol
 end
 
-
 function (bcs::Constraints{D,FType})(time) where {D,FType}
 	mrks = bcs.markers
 	function_type = typeof(first(mrks).f(time))
@@ -27,12 +26,12 @@ function (bcs::Constraints{D,FType})(time) where {D,FType}
 end
 
 """
-	constraints(pairs::NTuple{D,MarkerType}, type::Symbol = :dirichlet)
+	constraints(pairs::NTuple{D,MarkerPair}, type::Symbol = :dirichlet)
 
 Returns a [Constraints](@ref) object from a tuple of [Marker](@ref)s and a symbol
 defining the type of boundary condition. Currently, the only supported type is for Dirichlet boundary conditions. The default type is `:dirichlet`.
 """
-function constraints(pairs::Vararg{MarkerType{BrambleFunction{A,hastime,C}},N}; type::Symbol = :dirichlet) where {A,hastime,C,N}
+function constraints(pairs::Vararg{MarkerPair{BrambleFunction{A,hastime,C}},N}; type::Symbol = :dirichlet) where {A,hastime,C,N}
 	@assert type == :dirichlet
 	mrks = create_markers(ntuple(i -> pairs[i], N)...)
 	return Constraints{N,BrambleFunction{A,hastime,C}}(mrks, type)
