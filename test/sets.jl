@@ -6,19 +6,19 @@ using Bramble: interval, cartesianproduct, projection, dim, tails, ×
 		# interval constructor (Float64 default)
 		I_f64 = interval(-3.0, 10.0)
 		@test I_f64 isa CartesianProduct{1,Float64}
-		@test I_f64.data === ((-3.0, 10.0),)
-		@test validate_equal(I_f64.data[1], (-3.0, 10.0))
+		@test I_f64.box === ((-3.0, 10.0),)
+		@test validate_equal(I_f64.box[1], (-3.0, 10.0))
 
 		# interval constructor (Int -> Float64)
 		I_int = interval(-3, 10)
 		@test I_int isa CartesianProduct{1,Float64} # Converts to float
-		@test I_int.data === ((-3.0, 10.0),)
-		@test validate_equal(I_int.data[1], (-3.0, 10.0))
+		@test I_int.box === ((-3.0, 10.0),)
+		@test validate_equal(I_int.box[1], (-3.0, 10.0))
 
 		# interval edge case: zero width
 		I_zero = interval(5.5, 5.5)
 		@test I_zero isa CartesianProduct{1,Float64}
-		@test validate_equal(I_zero.data[1], (5.5, 5.5))
+		@test validate_equal(I_zero.box[1], (5.5, 5.5))
 
 		# interval constructor assertion x <= y
 		@test_throws AssertionError interval(10, 1)
@@ -26,22 +26,22 @@ using Bramble: interval, cartesianproduct, projection, dim, tails, ×
 		# interval from CartesianProduct{1}
 		I_f64_again = interval(I_f64)
 		@test I_f64_again isa CartesianProduct{1,Float64}
-		@test validate_equal(I_f64_again.data[1], (-3.0, 10.0))
+		@test validate_equal(I_f64_again.box[1], (-3.0, 10.0))
 
 		# cartesianproduct(x, y) alias
 		cp_f64 = cartesianproduct(-3.0, 10.0)
 		@test cp_f64 isa CartesianProduct{1,Float64}
-		@test validate_equal(cp_f64.data[1], (-3.0, 10.0))
+		@test validate_equal(cp_f64.box[1], (-3.0, 10.0))
 
 		# cartesianproduct(NTuple) - Int
 		cp_int_2d = cartesianproduct(((0, 1), (4, 5)))
 		@test cp_int_2d isa CartesianProduct{2,Int}
-		@test cp_int_2d.data === ((0, 1), (4, 5))
+		@test cp_int_2d.box === ((0, 1), (4, 5))
 
 		# cartesianproduct(NTuple) - Float32
 		cp_f32_3d = cartesianproduct(((0.0f0, 1.0f0), (2.0f0, 3.0f0), (-1.0f0, 0.0f0)))
 		@test cp_f32_3d isa CartesianProduct{3,Float32}
-		@test cp_f32_3d.data === ((0.0f0, 1.0f0), (2.0f0, 3.0f0), (-1.0f0, 0.0f0))
+		@test cp_f32_3d.box === ((0.0f0, 1.0f0), (2.0f0, 3.0f0), (-1.0f0, 0.0f0))
 
 		# cartesianproduct(NTuple) assertion min <= max
 		@test_throws AssertionError cartesianproduct(((0, 1), (5, 4)))
@@ -175,8 +175,8 @@ using Bramble: interval, cartesianproduct, projection, dim, tails, ×
 	@testset "Original Tests" begin
 		I = interval(-3.0, 10.0)
 
-		@test validate_equal(I.data[1][1], -3.0)
-		@test validate_equal(I.data[1][2], 10.0)
+		@test validate_equal(I.box[1][1], -3.0)
+		@test validate_equal(I.box[1][2], 10.0)
 		@test dim(I) == 1
 
 		I2 = interval(70.0, 100.0)
@@ -187,10 +187,10 @@ using Bramble: interval, cartesianproduct, projection, dim, tails, ×
 		Ω2_y = projection(set_2d, 2)
 
 		# Note: projection returns CartesianProduct{1, Float64}
-		@test validate_equal(Ω2_y.data[1][1], 70.0)
-		@test validate_equal(Ω2_x.data[1][1], -3.0)
-		@test validate_equal(Ω2_y.data[1][2], 100.0)
-		@test validate_equal(Ω2_x.data[1][2], 10.0)
+		@test validate_equal(Ω2_y.box[1][1], 70.0)
+		@test validate_equal(Ω2_x.box[1][1], -3.0)
+		@test validate_equal(Ω2_y.box[1][2], 100.0)
+		@test validate_equal(Ω2_x.box[1][2], 10.0)
 
 		I3 = interval(-15.0, -1.0)
 
@@ -199,11 +199,11 @@ using Bramble: interval, cartesianproduct, projection, dim, tails, ×
 		Ω3_y = projection(set_3d, 2)
 		Ω3_z = projection(set_3d, 3)
 
-		@test validate_equal(Ω3_x.data[1][1], -3.0)
-		@test validate_equal(Ω3_x.data[1][2], 10.0)
-		@test validate_equal(Ω3_y.data[1][1], 70.0)
-		@test validate_equal(Ω3_y.data[1][2], 100.0)
-		@test validate_equal(Ω3_z.data[1][1], -15.0)
-		@test validate_equal(Ω3_z.data[1][2], -1.0)
+		@test validate_equal(Ω3_x.box[1][1], -3.0)
+		@test validate_equal(Ω3_x.box[1][2], 10.0)
+		@test validate_equal(Ω3_y.box[1][1], 70.0)
+		@test validate_equal(Ω3_y.box[1][2], 100.0)
+		@test validate_equal(Ω3_z.box[1][1], -15.0)
+		@test validate_equal(Ω3_z.box[1][2], -1.0)
 	end
 end # End CartesianProduct Tests

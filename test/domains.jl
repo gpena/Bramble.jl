@@ -5,7 +5,7 @@ using Bramble: get_boundary_symbols, create_markers, label, identifier, domain, 
 inner_f1 = x -> x[1] - 0.0
 inner_f2(x) = sum(x .^ 2) - 0.25 # Example for 2D/3D
 
-# Test Data
+# Test.box
 M = [-3.0 10.0; 70.0 100.0; -15.0 -1.0]
 I1 = interval(M[1, 1], M[1, 2])
 I2 = interval(M[2, 1], M[2, 2])
@@ -129,8 +129,8 @@ X3 = I1 × I2 × I3
 				# Check projection is the correct 1D interval
 				@test Pi isa CartesianProduct{1}
 				# Compare bounds using validate_equal (or isapprox)
-				@test validate_equal(Pi.data[1][1], M[i, 1]) # Pi.data is ((low, upp),)
-				@test validate_equal(Pi.data[1][2], M[i, 2])
+				@test validate_equal(Pi.box[1][1], M[i, 1]) # Pi.box is ((low, upp),)
+				@test validate_equal(Pi.box[1][2], M[i, 2])
 			end
 			# Test assertion error for invalid index
 			@test_throws AssertionError projection(X, D + 1)
