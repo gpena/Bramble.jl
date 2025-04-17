@@ -113,7 +113,7 @@ function *(uₕ::VectorElement, Vₕ::NTuple{D,MatrixElement}) where D
 	return Zₕ
 end
 
-@inline *(uₕ::Tuple{VectorElement}, Vₕ::MatrixElement) = uₕ[1] * Vₕ
+#@inline *(uₕ::Tuple{VectorElement}, Vₕ::MatrixElement) = uₕ[1] * Vₕ
 
 
 """
