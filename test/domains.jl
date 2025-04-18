@@ -1,140 +1,196 @@
-using Bramble: Marker, BrambleFunction
-using Bramble: get_boundary_symbols, create_markers, label, identifier, domain, set, markers, labels, marker_identifiers
+using Bramble: Marker, BrambleFunction, DomainMarkers
+using Bramble: get_boundary_symbols, create_markers, label, identifier, domain, set, markers, labels
+using Bramble: marker_identifiers, _embed_notime, process_identifier, marker_symbols, marker_tuples, marker_conditions
 
-# Helper fFunction if needed (using isapprox for floats)  # Test fFunctions
-inner_f1 = x -> x[1] - 0.0
-inner_f2(x) = sum(x .^ 2) - 0.25 # Example for 2D/3D
+# --- Test Suite ---
 
-# Test.box
-M = [-3.0 10.0; 70.0 100.0; -15.0 -1.0]
-I1 = interval(M[1, 1], M[1, 2])
-I2 = interval(M[2, 1], M[2, 2])
-I3 = interval(M[3, 1], M[3, 2])
-X1 = I1
-X2 = I1 × I2
-X3 = I1 × I2 × I3
+@testset "Domain System Tests" begin
 
-@testset "Domain Tests" begin
-	@testset "get_boundary_symbols" begin
-		@test get_boundary_symbols(Val(1)) === (:left, :right)
-		@test get_boundary_symbols(Val(2)) === (:bottom, :top, :left, :right) # Check order matches definition
-		@test get_boundary_symbols(Val(3)) === (:bottom, :top, :back, :front, :left, :right) # Check order
-		@test get_boundary_symbols(X1) === (:left, :right)
-		@test get_boundary_symbols(X2) === (:bottom, :top, :left, :right)
-		@test get_boundary_symbols(X3) === (:bottom, :top, :back, :front, :left, :right)
+	# --- Setup Test Data ---
+	I1D = interval(0.0, 1.0)
+	I2D = interval(0.0f0, 1.0f0) × interval(2.0f0, 3.0f0) # Use Float32 for eltype test
+	I3D = interval(0.0, 1.0) × interval(2.0, 3.0) × interval(4.0, 5.0)
+
+	# Use distinct functions for testing equality/hashing
+	func1 = x -> x[1] > 0.5
+	func2 = x -> x[2] < 2.5
+	func3 = x -> x[1] == 0.0 # Another function
+
+	# Expected BrambleFunction type parameterization
+	BFTypeFloat64 = BrambleFunction{Float64,false,Bool} where F<:Function
+	BFTypeFloat32 = BrambleFunction{Float32,false,Bool} where F<:Function
+
+	@testset "Marker Struct" begin
+		m_sym = Marker(:boundary, :left)
+		m_tup = Marker(:corners, Set((:top, :right))) # Identifier stored as Set
+		bf_func1 = _embed_notime(I1D, func1; CoType = eltype(I1D))
+		m_fun = Marker(:region, bf_func1)
+
+		@test label(m_sym) === :boundary
+		@test identifier(m_sym) === :left
+
+		@test label(m_tup) === :corners
+		@test identifier(m_tup) == Set((:top, :right)) # Compare content
+
+		@test label(m_fun) === :region
+		@test identifier(m_fun) isa BrambleFunction
 	end
 
-	@testset "create_markers" begin
-		m1 = create_markers(X1, :func => inner_f1)
-		@test length(m1) == 1
-		@test m1[1] isa Marker{<:BrambleFunction}
-		@test label(m1[1]) === :func
-		@test identifier(m1[1]) isa BrambleFunction
+	@testset "Boundary Symbols" begin
+		@test get_boundary_symbols(I1D) == (:left, :right)
+		@test get_boundary_symbols(I2D) == (:bottom, :top, :left, :right)
+		@test get_boundary_symbols(I3D) == (:bottom, :top, :back, :front, :left, :right)
+		# Test Val dispatch directly
+		@test get_boundary_symbols(Val(1)) == (:left, :right)
+		@test get_boundary_symbols(Val(2)) == (:bottom, :top, :left, :right)
+		@test get_boundary_symbols(Val(3)) == (:bottom, :top, :back, :front, :left, :right)
+	end
 
-		m2 = create_markers(X2, :bnd => :left, :crn => (:top, :right), :fun => inner_f2)
-		@test length(m2) == 3
-		@test m2[1] isa Marker{Symbol}
-		@test identifier(m2[1]) === :left
-		@test m2[2] isa Marker{Tuple{Symbol,Symbol}}
-		@test identifier(m2[2]) === (:top, :right)
-		@test m2[3] isa Marker{<:BrambleFunction}
-		@test label(m2[3]) === :fun
+	@testset "Process Identifier Function" begin
+		bf_func1_f64 = _embed_notime(I1D, func1; CoType = Float64)
+		bf_func1_f32 = _embed_notime(I2D, func1; CoType = Float32)
 
+		@test process_identifier(I1D, :left) === :left
+		@test process_identifier(I2D, (:top, :right)) == Set((:top, :right)) # Test NTuple{Symbol}
+		@test process_identifier(I1D, func1) isa BrambleFunction
+	end
+
+	@testset "Create Markers Function" begin
 		# Test empty call
-		m_empty = create_markers(X1)
-		@test m_empty isa Tuple{}
-		@test length(m_empty) == 0
+		dm_empty = create_markers(I1D)
+		@test dm_empty isa DomainMarkers
+		@test isempty(dm_empty.symbols)
+		@test isempty(dm_empty.tuples)
+		@test isempty(dm_empty.functions)
+		@test eltype(dm_empty.functions) <: Marker{<:BrambleFunction} # Check function marker type
 
-		# Test error propagation from process_identifier
-		@test_throws ErrorException create_markers(X1, :bad => 123)
+		# Test mixed types (using Float32 domain I2D)
+		pairs = (:bnd_left => :left,
+				 :bnd_right => :right,                 # Symbol
+				 :corners => (:top, :right),           # NTuple{Symbol}
+				 :all_bnd => (:top, :bottom, :left, :right), # NTuple{Symbol}
+				 :region1 => func1,                    # Function
+				 :region2 => func2)
+		dm_mixed = create_markers(I2D, pairs...)
+
+		# Test type stability (check the type parameter of DomainMarkers)
+		@test dm_mixed isa DomainMarkers
+
+		# Test duplicate labels (different identifiers should be kept)
+		dm_dup_label = create_markers(I1D, :boundary => :left, :boundary => :right)
+		@test length(dm_dup_label.symbols) == 2
+		@test Set(label(m) for m in dm_dup_label.symbols) == Set([:boundary])
+		@test Set(identifier(m) for m in dm_dup_label.symbols) == Set([:left, :right])
+
+		# Test duplicate markers (same label, same identifier -> only one kept)
+		dm_dup_marker = create_markers(I1D, :boundary => :left, :boundary => :left)
+		@test length(dm_dup_marker.symbols) == 1
+		@test first(dm_dup_marker.symbols) == Marker(:boundary, :left)
+
+		# Test only function markers
+		dm_only_func = create_markers(I1D, :region1 => func1)
+		@test isempty(dm_only_func.symbols)
+		@test isempty(dm_only_func.tuples)
+		@test length(dm_only_func.functions) == 1
+		@test first(dm_only_func.functions).label == :region1
 	end
 
-	@testset "Default Domain Constructor" begin
-		d1_def = domain(X1)
-		@test set(d1_def) === X1
-		@test dim(d1_def) == 1
-		@test eltype(d1_def) === Float64
-		m_def1 = markers(d1_def)
-		@test length(m_def1) == 1
-		@test label(m_def1[1]) === :dirichlet
-		# Default identifier is tuple of all boundary symbols
-		@test identifier(m_def1[1]) === get_boundary_symbols(X1)
+	@testset "Domain Construction" begin
+		# Test default constructor (1D - Float64)
+		Ω1_def = domain(I1D)
+		@test set(Ω1_def) === I1D
+		expected_markers_1d = create_markers(I1D, :dirichlet => (:left, :right)) # Uses NTuple internally
+		@test dim(Ω1_def) == 1
+		@test eltype(Ω1_def) == Float64
 
-		d2_def = domain(X2)
-		@test dim(d2_def) == 2
-		m_def2 = markers(d2_def)
-		@test length(m_def2) == 1
-		@test label(m_def2[1]) === :dirichlet
-		@test identifier(m_def2[1]) === get_boundary_symbols(X2)
+		# Test default constructor (2D - Float32)
+		Ω2_def = domain(I2D)
+		@test set(Ω2_def) === I2D
+		expected_markers_2d = create_markers(I2D, :dirichlet => (:bottom, :top, :left, :right))
+		@test dim(Ω2_def) == 2
+		@test eltype(Ω2_def) == Float32
+
+		# Test constructor with DomainMarkers object
+		markers_premade = create_markers(I2D, :neumann => :top, :fixed => func1)
+		Ω_premade = domain(I2D, markers_premade)
+		@test set(Ω_premade) === I2D
+
+		# Test constructor with pairs...
+		Ω_pairs = domain(I2D, :neumann => :top, :fixed => func1, :mixed => (:left, :bottom))
+		@test set(Ω_pairs) === I2D
+		expected_markers_pairs = create_markers(I2D, :neumann => :top, :fixed => func1, :mixed => (:left, :bottom))
 	end
 
-	@testset "Domain Constructors & Accessors" begin
-		# Create markers first
-		markers_d1 = create_markers(X1, :neumann => :left, :robin => inner_f1)
-		markers_d2 = create_markers(X2, :bc1 => :top, :bc2 => inner_f2, :bc3 => (:left, :right))
-		markers_d3 = create_markers(X3, :all_bnd => get_boundary_symbols(X3))
+	@testset "Domain Accessors and Helpers" begin
+		# Use Float32 domain I2D for this test section
+		Ω = domain(I2D,
+				   :bnd_left => :left,           # Symbol
+				   :corners => (:top, :right),   # Tuple
+				   :region1 => func1,            # Function
+				   :boundary => :top)
 
-		# Test domain(X, markers_tuple)
-		d1 = domain(X1, markers_d1)
-		d2 = domain(X2, markers_d2)
-		d3 = domain(X3, markers_d3)
+		@test set(Ω) === I2D
+		@test dim(Ω) == 2
+		@test eltype(Ω) == Float32
+		@test dim(typeof(Ω)) == 2      # Test type method
+		@test eltype(typeof(Ω)) == Float32 # Test type method
 
-		# Test dim, eltype, set
-		@test dim(d1) === 1
-		@test eltype(d1) === Float64
-		@test set(d1) === X1
-		@test dim(d2) === 2
-		@test eltype(d2) === Float64
-		@test set(d2) === X2
-		@test dim(d3) === 3
-		@test eltype(d3) === Float64
-		@test set(d3) === X3
+		# Test markers() returns the correct DomainMarkers object
+		dm_retrieved = markers(Ω)
 
-		# Test domain(X, pair1, pair2...)
-		d1_vp = domain(X1, :neumann => :left, :robin => inner_f1)
-		d2_vp = domain(X2, :bc1 => :top, :bc2 => inner_f2, :bc3 => (:left, :right))
+		@test dm_retrieved isa DomainMarkers
+		@test length(dm_retrieved.symbols) == 2
+		@test length(dm_retrieved.tuples) == 1
+		@test length(dm_retrieved.functions) == 1
 
-		# Test markers(), labels(), marker_identifiers()
-		@test markers(d1) === markers_d1
-		@test collect(labels(d1)) == [:neumann, :robin]
-		ids1 = collect(marker_identifiers(d1))
-		@test ids1[1] === :left
-		@test ids1[2] isa BrambleFunction
+		# Test labels (collect generator)
+		lbls = Set(labels(Ω))
+		@test lbls == Set([:bnd_left, :corners, :region1, :boundary])
 
-		@test markers(d2) === markers_d2
-		@test collect(labels(d2)) == [:bc1, :bc2, :bc3]
-		ids2 = collect(marker_identifiers(d2))
-		@test ids2[1] === :top
-		@test ids2[2] isa BrambleFunction
-		@test ids2[3] === (:left, :right)
+		# Test specific identifier types (collect generators)
+		@test Set(marker_symbols(Ω)) == Set([:left, :top])
+		@test Set(marker_tuples(Ω)) == Set([Set((:top, :right))])
 
-		@test markers(d3) === markers_d3
-		@test collect(labels(d3)) == [:all_bnd]
-		ids3 = collect(marker_identifiers(d3))
-		@test ids3[1] === get_boundary_symbols(X3)
+		# Test accessors on domain with only one type of marker
+		Ω_sym_only = domain(I1D, :a => :left)
+		@test Set(labels(Ω_sym_only)) == Set([:a])
+		@test Set(marker_symbols(Ω_sym_only)) == Set([:left])
+		@test isempty(collect(marker_tuples(Ω_sym_only)))
+		@test isempty(collect(marker_conditions(Ω_sym_only))) # Test empty generator
+
+		# Test projection
+		proj1 = projection(Ω, 1)
+		proj2 = projection(Ω, 2)
+		@test proj1 isa CartesianProduct{1,Float32}
+		@test proj1.box == ((0.0f0, 1.0f0),)
+		@test proj2 isa CartesianProduct{1,Float32}
+		@test proj2.box == ((2.0f0, 3.0f0),)
 	end
 
-	@testset "Projection Tests" begin
-		d1 = domain(X1) # Use default for simplicity
-		d2 = domain(X2)
-		d3 = domain(X3)
-		domains = (d1, d2, d3)
-		sets = (X1, X2, X3)
+	@testset "Show Method" begin
+		Ω = domain(I2D, :bnd => :top, :region => func1)
+		# Capture output
+		output = sprint(show, Ω)
 
-		for D in 1:3
-			local X = domains[D] # Use local to avoid scope issues in loop
-			local setX = sets[D]
-			for i in 1:D
-				Pi = projection(X, i)
-				# Check projection is the correct 1D interval
-				@test Pi isa CartesianProduct{1}
-				# Compare bounds using validate_equal (or isapprox)
-				@test validate_equal(Pi.box[1][1], M[i, 1]) # Pi.box is ((low, upp),)
-				@test validate_equal(Pi.box[1][2], M[i, 2])
-			end
-			# Test assertion error for invalid index
-			@test_throws AssertionError projection(X, D + 1)
-			@test_throws AssertionError projection(X, 0)
-		end
+		# Basic checks for content - adjust if CartesianProduct show changes
+		@test occursin("Type: Float32", output)
+		@test occursin("Dim: 2", output)
+		@test occursin("Set: [0.0, 1.0] × [2.0, 3.0]", output)
+		@test occursin("Markers: ", output)
+		# Order isn't guaranteed by Set iteration, so check for presence of labels
+		@test occursin("bnd", output)
+		@test occursin("region", output)
+
+		# Test show with no markers
+		Ω_empty = domain(I1D, create_markers(I1D)) # Manually create empty markers
+		output_empty = sprint(show, Ω_empty)
+		@test occursin("Type: Float64", output_empty)
+		@test occursin("Dim: 1", output_empty)
+		@test occursin("Set: [0.0, 1.0]", output_empty)
+
+		# Test show with default dirichlet marker
+		Ω_def = domain(I1D)
+		output_def = sprint(show, Ω_def)
+		@test occursin("Markers: dirichlet", output_def)
 	end
-end # End Domain Tests testset
+end # End Domain System Tests

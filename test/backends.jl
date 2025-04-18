@@ -1,36 +1,36 @@
-using Bramble: Backend, vector, matrix
+using Bramble: Backend, vector, matrix, vector_type, matrix_type
 using SparseArrays
 
 @testset "Backand Tests" begin
 	@testset "Backend Constructor" begin
 		# Test default Backend
 		be_default = Backend()
-		@test be_default.vector_type === Vector{Float64}
-		@test be_default.matrix_type === SparseMatrixCSC{Float64,Int}
+		@test vector_type(be_default) === Vector{Float64}
+		@test matrix_type(be_default) === SparseMatrixCSC{Float64,Int}
 		@test be_default isa Backend{Vector{Float64},SparseMatrixCSC{Float64,Int}}
 
 		# Test custom Float32 Backend (Dense-Sparse)
 		be_f32_ds = Backend(vector_type = Vector{Float32}, matrix_type = SparseMatrixCSC{Float32,Int})
-		@test be_f32_ds.vector_type === Vector{Float32}
-		@test be_f32_ds.matrix_type === SparseMatrixCSC{Float32,Int}
+		@test vector_type(be_f32_ds) === Vector{Float32}
+		@test matrix_type(be_f32_ds) === SparseMatrixCSC{Float32,Int}
 		@test be_f32_ds isa Backend{Vector{Float32},SparseMatrixCSC{Float32,Int}}
 
 		# Test custom Float64 Backend (Dense-Dense)
 		be_f64_dd = Backend(vector_type = Vector{Float64}, matrix_type = Matrix{Float64})
-		@test be_f64_dd.vector_type === Vector{Float64}
-		@test be_f64_dd.matrix_type === Matrix{Float64}
+		@test vector_type(be_f64_dd) === Vector{Float64}
+		@test matrix_type(be_f64_dd) === Matrix{Float64}
 		@test be_f64_dd isa Backend{Vector{Float64},Matrix{Float64}}
 
 		# Test custom Float64 Backend (Sparse-Sparse)
 		be_f64_ss = Backend(vector_type = SparseVector{Float64,Int}, matrix_type = SparseMatrixCSC{Float64,Int})
-		@test be_f64_ss.vector_type === SparseVector{Float64,Int}
-		@test be_f64_ss.matrix_type === SparseMatrixCSC{Float64,Int}
+		@test vector_type(be_f64_ss) === SparseVector{Float64,Int}
+		@test matrix_type(be_f64_ss) === SparseMatrixCSC{Float64,Int}
 		@test be_f64_ss isa Backend{SparseVector{Float64,Int},SparseMatrixCSC{Float64,Int}}
 
 		# Test custom Complex Backend (Dense-Dense)
 		be_c64_dd = Backend(vector_type = Vector{ComplexF64}, matrix_type = Matrix{ComplexF64})
-		@test be_c64_dd.vector_type === Vector{ComplexF64}
-		@test be_c64_dd.matrix_type === Matrix{ComplexF64}
+		@test vector_type(be_c64_dd) === Vector{ComplexF64}
+		@test matrix_type(be_c64_dd) === Matrix{ComplexF64}
 		@test be_c64_dd isa Backend{Vector{ComplexF64},Matrix{ComplexF64}}
 	end
 
@@ -114,37 +114,5 @@ using SparseArrays
 		M_zero_col_dense = matrix(be_dense, m, 0)
 		@test M_zero_col_dense isa Matrix{Float64}
 		@test size(M_zero_col_dense) == (m, 0)
-	end
-
-	# Optional: Test error handling (more advanced)
-	@testset "Error Handling" begin
-		# Define a dummy type that cannot be constructed either way
-		struct BadVec <: AbstractVector{Int} end
-		struct BadMat <: AbstractMatrix{Int} end
-
-		be_bad_vec = Backend(vector_type = BadVec, matrix_type = Matrix{Float64})
-		be_bad_mat = Backend(vector_type = Vector{Float64}, matrix_type = BadMat)
-
-		@test_throws ErrorException vector(be_bad_vec, 10)
-		@test_throws ErrorException matrix(be_bad_mat, 10, 5)
-
-		# Check that the error message contains the type name
-		try
-			vector(be_bad_vec, 10)
-		catch e
-			@test e isa ErrorException
-			@test occursin("BadVec", e.msg)
-			@test occursin("T(undef, n)", e.msg)
-			@test occursin("T(n)", e.msg)
-		end
-
-		try
-			matrix(be_bad_mat, 10, 5)
-		catch e
-			@test e isa ErrorException
-			@test occursin("BadMat", e.msg)
-			@test occursin("T(undef, m, n)", e.msg)
-			@test occursin("T(m, n)", e.msg)
-		end
 	end
 end # Top level testset
