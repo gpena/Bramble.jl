@@ -28,14 +28,28 @@ end
 
 MarkerPair{F} = Pair{Symbol,F}
 
+@inline label(m::Marker{F}) where F = m.label
+@inline identifier(m::Marker{F}) where F = m.identifier
+
+# Domain markers
 struct DomainMarkers{BFType}
 	symbols::Set{Marker{Symbol}}
 	tuples::Set{Marker{Set{Symbol}}}
 	functions::Set{Marker{BFType}}
 end
 
-@inline label(m::Marker{F}) where F = m.label
-@inline identifier(m::Marker{F}) where F = m.identifier
+@inline symbols(domain_markers::DomainMarkers) = domain_markers.symbols
+@inline tuples(domain_markers::DomainMarkers) = domain_markers.tuples
+@inline conditions(domain_markers::DomainMarkers) = domain_markers.functions
+
+@inline function label_identifiers(domain_markers::DomainMarkers)
+	@unpack symbols, tuples, functions = domain_markers
+	return (label(marker)::Symbol for marker in Iterators.flatten((symbols, tuples, functions)))
+end
+
+@inline label_symbols(domain_markers::DomainMarkers) = (label(marker)::Symbol for marker in symbols(domain_markers))
+@inline label_tuples(domain_markers::DomainMarkers) = (label(marker)::Symbol for marker in tuples(domain_markers))
+@inline label_conditions(domain_markers::DomainMarkers) = (label(marker)::Symbol for marker in conditions(domain_markers))
 
 """
 	create_markers(X::CartesianProduct, pairs...)
@@ -91,7 +105,7 @@ Returns a generator with the labels of the [Marker](@ref)s associated with [Doma
 """
 @inline function labels(Ω::Domain)
 	@unpack symbols, tuples, functions = markers(Ω)
-	return (label(marker) for marker in Iterators.flatten((symbols, tuples, functions)))
+	return (label(marker)::Symbol for marker in Iterators.flatten((symbols, tuples, functions)))
 end
 
 """
@@ -118,6 +132,11 @@ end
 	@unpack symbols, tuples, functions = markers(Ω)
 	return (identifier(marker) for marker in functions)
 end
+
+@inline label_identifiers(Ω::Domain) = label_identifiers(markers(Ω))
+@inline label_symbols(Ω::Domain) = label_symbols(markers(Ω))
+@inline label_tuples(Ω::Domain) = label_tuples(markers(Ω))
+@inline label_conditions(Ω::Domain) = label_conditions(markers(Ω))
 
 """
 	domain(X::CartesianProduct)
@@ -160,7 +179,7 @@ Boundary markers: :dirichlet, :dirichlet_alternative, :neuman
 """
 @inline domain(X::CartesianProduct) = Domain(X, create_markers(X, :dirichlet => get_boundary_symbols(X)))
 @inline domain(X::CartesianProduct, markers::DomainMarkers) = Domain(X, markers)
-@inline domain(X::CartesianProduct, pairs...) = domain(X, create_markers(X, pairs))
+@inline domain(X::CartesianProduct, pairs...) = domain(X, create_markers(X, pairs...))
 
 """
 	set(Ω::Domain)
