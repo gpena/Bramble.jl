@@ -288,7 +288,7 @@ function process_label_for_mesh!(markers_mesh::MeshMarkers{D}, indices, set_labe
 	end
 end
 
-function __init_mesh_markers(Ωₕ::MeshType, domain_markers::DomainMarkers)
+function _init_mesh_markers(Ωₕ::MeshType, domain_markers::DomainMarkers)
 	D = dim(Ωₕ)
 	idxs = indices(Ωₕ)
 	markers_mesh = MeshMarkers{D}()
