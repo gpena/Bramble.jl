@@ -202,6 +202,14 @@ for op in (:-, :*, :/, :+, :^)
 	end
 end
 
+function *(uₕ::VectorElement, Vₕ::NTuple{D,VectorElement}) where D
+	Zₕ = ntuple(i-> similar(Vₕ[i]), D)
+	for i in 1:D
+		Zₕ[i].values .= uₕ.values .* Vₕ[i].values
+	end
+	return Zₕ
+end
+
 ########################
 #                      #
 # Restriction operator #
