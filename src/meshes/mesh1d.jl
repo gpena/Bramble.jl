@@ -23,7 +23,18 @@ mutable struct Mesh1D{BackendType,CartIndicesType,VectorType} <: MeshType{1}
 	npts::Int
 end
 
+"""
+	markers(Ωₕ::Mesh1D)
+
+Retrieve the `MeshMarkers{1}` field from Ωₕ.
+"""
 @inline markers(Ωₕ::Mesh1D) = Ωₕ.markers
+
+"""
+	backend(Ωₕ::Mesh1D)
+
+Retrieve the linear algebra backend field from Ωₕ.
+"""
 @inline backend(Ωₕ::Mesh1D) = Ωₕ.backend
 
 """
@@ -39,7 +50,65 @@ Returns a vector with all the points ``x_i, \\, i=1,\\dots,N`` in `Ωₕ`. A sec
 @inline function points(Ωₕ::Mesh1D, i)
 	idx = CartesianIndex(i)
 	@assert idx in indices(Ωₕ)
+
 	return getindex(points(Ωₕ), idx[1])
+end
+
+"""
+	set_points!(Ωₕ::Mesh1D, pts)
+
+	Overrides the points in Ωₕ.
+"""
+@inline set_points!(Ωₕ::Mesh1D, pts) = (Ωₕ.pts = pts;
+										Ωₕ.npts = length(pts))
+
+"""
+	set_indices!(Ωₕ::Mesh1D, indices)
+
+	Overrides the indices in Ωₕ.
+"""
+@inline set_indices!(Ωₕ::Mesh1D, indices) = (Ωₕ.indices = indices)
+
+"""
+	set_markers!(Ωₕ::Mesh1D, domain_markers::DomainMarkers)
+
+Populates the marker index collections of `Mesh1D` Ωₕ based on boundary symbols or geometric conditions defined in the `Domain` Ω, applied to the `Mesh1D` Ωₕ.
+"""
+function set_markers!(Ωₕ::Mesh1D, domain_markers)
+	mesh_points = points(Ωₕ)
+	mesh_indices = indices(Ωₕ)
+
+	mesh_markers = _init_mesh_markers(Ωₕ, domain_markers)
+	symbol_to_index_map = boundary_symbol_to_cartesian(mesh_indices)
+
+	for marker in symbols(domain_markers)
+		@unpack label, identifier = marker
+		target_indices = mesh_markers[label].c_index
+
+		push!(target_indices, symbol_to_index_map[identifier])
+	end
+
+	for marker in tuples(domain_markers)
+		@unpack label, identifier = marker
+		target_indices = mesh_markers[label].c_index
+
+		for sym in identifier
+			push!(target_indices, symbol_to_index_map[sym])
+		end
+	end
+
+	for marker in conditions(domain_markers)
+		@unpack label, identifier = marker
+		for idx in mesh_indices
+			if identifier(_i2p(mesh_points, idx))
+				push!(mesh_markers[label].c_index, idx)
+			end
+		end
+
+		merge_consecutive_indices!(mesh_markers[label])
+	end
+
+	Ωₕ.markers = mesh_markers
 end
 
 @inline dim(_::Mesh1D) = 1
@@ -47,7 +116,7 @@ end
 
 @inline eltype(_::Mesh1D{BackendType}) where BackendType = eltype(BackendType)
 @inline eltype(::Type{<:Mesh1D{BackendType}}) where BackendType = eltype(BackendType)
-#=
+
 function show(io::IO, Ωₕ::Mesh1D)
 	l = join(keys(markers(Ωₕ)), ", ")
 	properties = ["1D mesh",
@@ -56,17 +125,13 @@ function show(io::IO, Ωₕ::Mesh1D)
 
 	print(io, join(properties, "\n"))
 end
-=#
 
 @inline (Ωₕ::Mesh1D)(_) = Ωₕ
 
 """
 	merge_consecutive_indices!(marker_data::MarkerIndices{1})
 
-Finds sequences of consecutive `CartesianIndex{1}`
-elements within `marker_data.c_index`. Removes these sequences (if longer than
-one element) and adds the corresponding `CartesianIndices{1}` range object to
-`marker_data.c_indices`.
+Finds sequences of consecutive `CartesianIndex{1}` elements within `marker_data.c_index`. Removes these sequences (if longer than one element) and adds the corresponding `CartesianIndices{1}` range object to `marker_data.c_indices`.
 """
 function merge_consecutive_indices!(marker_data::MarkerIndices{1})
 	c_index_set = marker_data.c_index
@@ -144,49 +209,6 @@ function merge_consecutive_indices!(marker_data::MarkerIndices{1})
 	# --- End apply changes ---
 
 	return nothing
-end
-
-"""
-	set_markers!(Ωₕ::Mesh1D, domain_markers::DomainMarkers)
-
-Populates the marker index collections of `Mesh1D` Ωₕ based on boundary symbols
-or geometric conditions defined in the `Domain` Ω, applied to the `Mesh1D` Ωₕ.
-"""
-function set_markers!(Ωₕ::Mesh1D, domain_markers::DomainMarkers)
-	mesh_points = points(Ωₕ)
-	mesh_indices = indices(Ωₕ)
-
-	mesh_markers = __init_mesh_markers(Ωₕ, domain_markers)
-	symbol_to_index_map = boundary_symbol_to_cartesian(mesh_indices)
-
-	for marker in symbols(domain_markers)
-		@unpack label, identifier = marker
-		target_indices = mesh_markers[label].c_index
-
-		push!(target_indices, symbol_to_index_map[identifier])
-	end
-
-	for marker in tuples(domain_markers)
-		@unpack label, identifier = marker
-		target_indices = mesh_markers[label].c_index
-
-		for sym in identifier
-			push!(target_indices, symbol_to_index_map[sym])
-		end
-	end
-
-	for marker in conditions(domain_markers)
-		@unpack label, identifier = marker
-		for idx in mesh_indices
-			if identifier(_i2p(mesh_points, idx))
-				push!(mesh_markers[label].c_index, idx)
-			end
-		end
-
-		merge_consecutive_indices!(mesh_markers[label])
-	end
-
-	Ωₕ.markers = mesh_markers
 end
 
 """
@@ -323,8 +345,10 @@ at `CartesianIndex` `i` in mesh `Ωₕ`, which is given by ``h_{i+1/2}``. If the
 @inline cell_measure(Ωₕ::Mesh1D, i) = half_spacing(Ωₕ, i)
 @inline cell_measure(Ωₕ::Mesh1D, ::Type{Iterator}) = Iterators.map(Base.Fix1(cell_measure, Ωₕ), indices(Ωₕ))
 
-@inline function set_points!(x::VType, I::CartesianProduct{1,T}, unif::Bool) where {T,VType}
+@inline function _set_points!(x, I::CartesianProduct{1}, unif::Bool)
 	npts = length(x)
+	T = eltype(I)
+
 	x .= range(zero(T), one(T), length = npts)
 	v = view(x, 2:(npts - 1))
 
@@ -334,7 +358,7 @@ at `CartesianIndex` `i` in mesh `Ωₕ`, which is given by ``h_{i+1/2}``. If the
 	end
 
 	a, b = tails(I)
-	@.. x = a + x * (b - a)
+	@. x = a + x * (b - a)
 end
 
 """
@@ -368,7 +392,7 @@ function _mesh(Ω::Domain{CartesianProduct{1,T}}, npts::Tuple{Int}, unif::Tuple{
 
 	pts = vector(backend, n_points)
 
-	set_points!(pts, set, is_uniform)
+	_set_points!(pts, set, is_uniform)
 	idxs = generate_indices(n_points)
 
 	mesh_markers = MeshMarkers{1}()
@@ -378,53 +402,44 @@ function _mesh(Ω::Domain{CartesianProduct{1,T}}, npts::Tuple{Int}, unif::Tuple{
 	return mesh
 end
 
-# |-----*-----------*---|
-# |--*--*-----*-----*-*-|  each cell is divided in two cells of same width
-#=function iterative_refinement(Ωₕ::Mesh1D{T,BType}, Ω::Domain{CartesianProduct{1,T},MarkersType}) where {T,MarkersType,BType}
+"""
+	iterative_refinement!(Ωₕ::Mesh1D, domain_markers::DomainMarkers)
+
+Refines the given 1D mesh `Ωₕ` by halving each existing cell, effectively doubling the number of cells and nearly doubling the number of points. It also updates the markers according to `domain_markers` after the refinement.
+"""
+function iterative_refinement!(Ωₕ::Mesh1D, domain_markers::DomainMarkers)
 	npts = 2 * npoints(Ωₕ) - 1
 
-	pts = Vector{eltype(Ωₕ)}(undef, npts)
+	pts = vector(backend(Ωₕ), npts)
 	@views pts[1:2:end] .= points(Ωₕ)
 	for i in 2:2:(npts - 1)
 		pts[i] = (pts[i + 1] + pts[i - 1]) / 2
 	end
 
-	markersForMesh, R = generate_markers_indices(Ω, npts)
+	idxs = generate_indices(npts)
 
-	return Mesh1D{T}(markersForMesh, R, pts)
+	set_indices!(Ωₕ, idxs)
+	set_points!(Ωₕ, pts)
+	set_markers!(Ωₕ, domain_markers)
+	return nothing
 end
 
-#TODO document
-function generate_markers_indices(Ω::Domain{CartesianProduct{1,T},MarkersType}, pts) where {T,MarkersType}
-	markersForMesh = MeshMarkers{1}()
-	npts = length(pts)
-	R = generate_indices(npts)
+"""
+	change_points!(Ωₕ::Mesh1D, Ω::Domain{CartesianProduct{1}}, pts)
 
-	for label in labels(Ω)
-		merge!(markersForMesh, Dict(label => VecCartIndex{1}()))
-	end
-
-	boundary = boundary_indices(R)
-
-	for idx in boundary, marker in markers(Ω)
-		if marker.f(_i2p(pts, idx)) ≈ 0
-			push!(markersForMesh[marker.label], idx)
-		end
-	end
-
-	return markersForMesh, R
-end
-
-#TODO document and change name to change_points!()
-function remesh(Ωₕ::Mesh1D{T}, Ω::Domain{CartesianProduct{1,T},MarkersType}, pts::Vector{T}) where {T,MarkersType}
+Changes the coordinates of the internal points of the `Mesh1D` object `Ωₕ` to the new coordinates specified in `pts`. The markers of the mesh are also recalculated after this change.
+"""
+function change_points!(Ωₕ::Mesh1D, domain_markers::DomainMarkers, pts)
 	npts = npoints(Ωₕ)
 	@assert npts == length(pts)
+	sort!(pts)
 
-	@assert isapprox(pts[1], points(Ωₕ, 1)) && isapprox(pts[end], points(Ωₕ, npts))
-	# check if x is in ascending order
+	idxs = (1, npts)
+	test = all(idx -> isapprox(pts[idx], points(Ωₕ, idx)), idxs)
+	@assert(test, "The first and last points don't coincide with the ones in the mesh.")
 
-	markersForMesh, R = generate_markers_indices(Ω, pts)
+	set_points!(Ωₕ, pts)
+	set_markers!(Ωₕ, domain_markers)
 
-	return Mesh1D{T}(markersForMesh, R, pts)
+	return nothing
 end
-=#
