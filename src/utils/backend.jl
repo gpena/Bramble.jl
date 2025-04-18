@@ -93,3 +93,10 @@ function matrix(b::Backend{VType,MatType}, m::Integer, n::Integer) where {VType,
 		end
 	end
 end
+
+@inline eltype(b::Backend{VecType,MatType}) where {VecType,MatType} = eltype(Backend{VecType,MatType})
+
+function eltype(::Type{Backend{VecType,MatType}}) where {VecType,MatType}
+	@assert eltype(VecType) == eltype(MatType)
+	return eltype(VecType)
+end
