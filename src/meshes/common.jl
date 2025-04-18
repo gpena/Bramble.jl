@@ -5,6 +5,14 @@ Abstract type for meshes. Meshes are only parametrized by their topological dime
 """
 abstract type MeshType{D} <: BrambleType end
 
+"""
+	struct MarkerIndices{D}
+		c_index::Set{CartesianIndex{D}}
+		c_indices::Set{CartesianIndices{D}}
+	end
+
+	Structure to hold sets of individual `CartesianIndex` or `CartesianIndices`.
+"""
 struct MarkerIndices{D} <: BrambleType
 	c_index::Set{CartesianIndex{D}}
 	c_indices::Set{CartesianIndices{D}}
@@ -46,13 +54,10 @@ function boundary_symbol_to_cartesian(indices, ::Val{3})
 	return dict_3d
 end
 
-using Base: axes, first, last, size, ndims # Explicit imports for clarity if needed
-
 """
 	_get_face_indices(axs, dim, is_min)
 
 Internal helper to create CartesianIndices for a face of a multi-dimensional space.
-(Remains the same as before)
 """
 function _get_face_indices(axs::NTuple{N,AbstractUnitRange}, dim::Integer, is_min::Bool) where {N}
 	idx_ranges = Any[ax for ax in axs]
@@ -131,86 +136,6 @@ function boundary_symbol_to_cartesian2(indices::CartesianIndices{3}, ::Val{3})
 end
 
 """
-	merge_consecutive_indices!(marker_data::MarkerIndices{1})
-
-Finds sequences of consecutive `CartesianIndex{1}` elements within the
-`marker_data.c_index` set. Removes these sequences (if longer than one element)
-and adds the corresponding `CartesianIndices{1}` range object to the
-`marker_data.c_indices` set.
-
-Modifies `marker_data` in place.
-
-# Example
-
-```julia
-# index_set = Set([CartesianIndex(1), CartesianIndex(2), CartesianIndex(3), CartesianIndex(5), CartesianIndex(7), CartesianIndex(8)])
-# indices_set = Set{CartesianIndices{1}}()
-# marker_data = MarkerIndices{1}(index_set, indices_set)
-# merge_consecutive_indices!(marker_data)
-# # After execution:
-# # marker_data.c_index == Set([CartesianIndex(5)])
-# # marker_data.c_indices == Set([CartesianIndices((1:3,)), CartesianIndices((7:8,))])
-
-```
-"""
-function merge_consecutive_indices!(marker_data::MarkerIndices{1})
-	c_index_set = marker_data.c_index
-	c_indices_set = marker_data.c_indices
-	# Need at least 2 elements to form a range
-	if length(c_index_set) < 2
-		return nothing
-	end
-
-	# Convert Set to sorted Vector to find consecutive runs
-	sorted_indices = sort(collect(c_index_set))
-
-	indices_to_remove = Set{CartesianIndex{1}}()
-	ranges_to_add = Set{CartesianIndices{1}}()
-
-	i = 1
-	n = length(sorted_indices)
-	while i <= n
-		# Start of a potential run
-		start_index = sorted_indices[i]
-		start_val = start_index.I[1]
-		end_val = start_val
-		run_end_vec_idx = i
-
-		# Check for consecutive elements
-		j = i + 1
-		while j <= n && sorted_indices[j].I[1] == end_val + 1
-			end_val = sorted_indices[j].I[1]
-			run_end_vec_idx = j
-			j += 1
-		end
-
-		# If the run has more than one element, it's a mergeable sequence
-		run_length = run_end_vec_idx - i + 1
-		if run_length > 1
-			# Create the CartesianIndices range object
-			range = CartesianIndices((start_val:end_val,))
-			push!(ranges_to_add, range)
-
-			# Mark all indices in this run for removal from the original set
-			for k in i:run_end_vec_idx
-				push!(indices_to_remove, sorted_indices[k])
-			end
-		end
-
-		# Move the main index past the processed run
-		i = run_end_vec_idx + 1
-	end
-
-	# Modify the original sets *after* iterating
-	if !isempty(ranges_to_add)
-		union!(c_indices_set, ranges_to_add)
-		setdiff!(c_index_set, indices_to_remove)
-	end
-
-	return nothing
-end
-
-"""
 	merge_consecutive_indices!(marker_data::MarkerIndices{D}) where {D}
 
 Finds sequences of `CartesianIndex{D}` elements consecutive along any single
@@ -218,55 +143,51 @@ axis within `marker_data.c_index`. Removes these sequences (if longer than one e
 and adds the corresponding `CartesianIndices{D}` range object to
 `marker_data.c_indices`.
 
-Modifies `marker_data` in place.
+Modifies `marker_data` in place. Uses standard `Dict` for internal grouping.
 
 Note: This version for D > 1 iterates through each dimension. An index might be part
 of multiple ranges (e.g., a corner of a 2x2 block could be part of a row and a column range).
 It merges linear sequences along axes.
 """
-function merge_consecutive_indices!(marker_data::MarkerIndices{D}) where D
-	c_index_set = marker_data.c_index
-	c_indices_set = marker_data.c_indices
-
-	if D == 1 # Use the specialized, simpler version for D=1
-		# Redirect to the D=1 specific method for efficiency / clarity
-		# This requires defining the D=1 method separately as above.
-		# If defined within the same function via dispatch, Julia handles it.
-		# If defined as separate functions, call the specific one:
-		merge_consecutive_indices!(marker_data::MarkerIndices{1}) # Assuming specific method exists
+function merge_consecutive_indices!(marker_data::MarkerIndices{D}) where {D}
+	# Handle D=1 case by calling the specialized method
+	if D == 1
+		# This requires the MarkerIndices{1} method to be defined separately
+		merge_consecutive_indices!(marker_data::MarkerIndices{1})
 		return nothing
 	end
+
+	c_index_set = marker_data.c_index
+	c_indices_set = marker_data.c_indices
 
 	# Need at least 2 elements to potentially form a range
 	if length(c_index_set) < 2
 		return nothing
 	end
 
-	# Keep track of indices that formed *any* range and the ranges found
-	# Do modifications at the very end to avoid interference between dimensions
+	# Use master lists to collect changes across all dimensions before applying
 	master_indices_to_remove = Set{CartesianIndex{D}}()
 	master_ranges_to_add = Set{CartesianIndices{D}}()
 
 	# Iterate through each dimension, trying to find runs along it
 	for dim_to_vary in 1:D
-		# Group indices by the coordinates in other dimensions
+		# Group indices using standard Dict
 		# Key: Tuple of coordinates in dimensions *not* equal to dim_to_vary
 		# Value: List of CartesianIndex sharing those fixed coordinates
-		grouped_indices = Dictionaries.Dictionary{NTuple{D - 1,Int},Vector{CartesianIndex{D}}}()
+		grouped_indices = Dict{NTuple{D - 1,Int},Vector{CartesianIndex{D}}}()
 
 		for idx in c_index_set
 			# Create the key tuple from coordinates in fixed dimensions
 			fixed_coords = ntuple(i -> idx.I[i < dim_to_vary ? i : i + 1], D - 1)
 
-			# Get or create the vector for this group
-			group_vec = get!(grouped_indices, fixed_coords) do
-				Vector{CartesianIndex{D}}()
-			end
+			# Get or create the vector for this group using standard get!
+			# get!(collection, key, default) -> returns value for key, adding default if key not present
+			group_vec = get!(grouped_indices, fixed_coords, Vector{CartesianIndex{D}}())
 			push!(group_vec, idx)
 		end
 
 		# Process each group to find runs along dim_to_vary
-		for group_vec in Dictionaries.values(grouped_indices) # Or values(grouped_indices) for standard Dict
+		for group_vec in values(grouped_indices) # Use standard values()
 			if length(group_vec) < 2
 				continue # Cannot form a range within this group
 			end
@@ -285,8 +206,6 @@ function merge_consecutive_indices!(marker_data::MarkerIndices{D}) where D
 
 				j = i + 1
 				while j <= n && group_vec[j].I[dim_to_vary] == end_val + 1
-					# Ensure other dimensions are indeed the same (should be by grouping, but belt-and-suspenders)
-					# Check: all(k -> group_vec[j].I[k] == start_index.I[k], filter(!=(dim_to_vary), 1:D))
 					end_val = group_vec[j].I[dim_to_vary]
 					run_end_vec_idx = j
 					j += 1
@@ -296,11 +215,11 @@ function merge_consecutive_indices!(marker_data::MarkerIndices{D}) where D
 				if run_length > 1
 					# Construct the ranges tuple for CartesianIndices
 					ranges = ntuple(k -> begin
-										coord_k = start_index.I[k] # Get the coordinate for the k-th dimension
+										coord_k = start_index.I[k]
 										if k == dim_to_vary
-											return start_val:end_val # The range along the varying dimension
+											return start_val:end_val
 										else
-											return coord_k:coord_k # Fixed dimension range (single value)
+											return coord_k:coord_k
 										end
 									end, D)
 
@@ -343,17 +262,8 @@ struct Iterator <: BrambleType end
 
 Returns the tolopogical dimension of `Ωₕ`.
 """
-@inline dim(Ωₕ::MeshType{D}) where D = D
+@inline dim(_::MeshType{D}) where D = D
 @inline dim(::Type{<:MeshType{D}}) where D = D
-
-"""
-	eltype(Ωₕ::MeshType)
-	eltype(::Type{<:MeshType})
-
-Returns the type of element of the points of the mesh.
-"""
-@inline eltype(Ωₕ::MeshType) = eltype(typeof(Ωₕ))
-@inline eltype(Ωₕ::Type{<:MeshType}) = eltype(typeof(Ωₕ))
 
 """
 	indices(Ωₕ::MeshType)
@@ -367,9 +277,29 @@ Returns the `CartesianIndices` associated with the points of mesh `Ωₕ`.
 
 Returns the [Marker](@ref) function with label `str`.
 """
-@inline marker(Ωₕ::MeshType, str::Symbol) = Ωₕ.markers[str]
+@inline marker(Ωₕ::MeshType, symbol::Symbol) = Ωₕ.markers[symbol]
 
-# investigate if this function is necessary
+function process_label_for_mesh!(markers_mesh::MeshMarkers{D}, indices, set_labels) where D
+	c_indices_type = typeof(indices)
+	c_index_type = eltype(indices)
+
+	for label in set_labels
+		markers_mesh[label] = MarkerIndices{D}(Set{c_index_type}(), Set{c_indices_type}())
+	end
+end
+
+function __init_mesh_markers(Ωₕ::MeshType, domain_markers::DomainMarkers)
+	D = dim(Ωₕ)
+	idxs = indices(Ωₕ)
+	markers_mesh = MeshMarkers{D}()
+
+	process_label_for_mesh!(markers_mesh, idxs, label_symbols(domain_markers))
+	process_label_for_mesh!(markers_mesh, idxs, label_tuples(domain_markers))
+	process_label_for_mesh!(markers_mesh, idxs, label_conditions(domain_markers))
+
+	return markers_mesh # Return the populated mesh markers
+end
+
 @inline _i2p(pts, idx) = pts[idx]
 
 """
@@ -434,6 +364,6 @@ function mesh(Ω::Domain, npts::NTuple{D,Int}, unif::NTuple{D,Bool}; backend = B
 	return _mesh(Ω, npts, unif, backend)
 end
 
-function mesh(Ω::Domain{CartesianProduct{1,T},Markers}, npts::Int, unif::Bool; backend = Backend()) where {T,Markers}
+function mesh(Ω::Domain{CartesianProduct{1,T}}, npts::Int, unif::Bool; backend = Backend()) where T
 	return _mesh(Ω, (npts,), (unif,), backend)
 end
