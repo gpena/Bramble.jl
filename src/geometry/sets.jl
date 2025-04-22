@@ -64,6 +64,17 @@ Type: Int64
 end
 
 """
+	box(a,b)
+
+Creates a [CartesianProduct](@ref) from the coordinates in `a` and `b`. It accepts `Number` or `NTuple{D}`. The subintervals of the new set are defined as
+`interval(a[1],b[1]) × ... × interval(a[D],b[D])`.
+"""
+@inline box(a, b) = interval(a, b)
+@inline @generated function box(a::NTuple{D}, b::NTuple{D}) where D
+	return :(CartesianProduct(Base.Cartesian.@ntuple $D i->(float(a[i]), float(b[i]))))
+end
+
+"""
 	(X::CartesianProduct)(i)
 
 Returns the `i`-th interval in the [CartesianProduct](@ref).
