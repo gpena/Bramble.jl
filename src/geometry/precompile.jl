@@ -48,6 +48,14 @@ using Bramble: interval
 		cartesianproduct(((0, 1), (2, 3)))  # 2D Int
 		cartesianproduct(((0.0, 1.0), (2.0, 3.0))) # 2D Float64
 
+		#box
+		box(0, 1)         # Int
+		box(0.0, 1.0)     # Float64
+		box((0, 1), (2, 3))  # 2D Int
+		box((0.0, 1.0), (2.0, 3.0)) # 2D Float64
+		box((0, 1, 4), (2, 3, 5))  # 3D Int
+		box((0.0, 1.0, 3.0), (2.0, 3.0, 4.0)) # 3D Float64
+
 		# cartesianproduct(::CartesianProduct) (identity)
 		cartesianproduct(I_f64)
 		cartesianproduct(R2_int)
