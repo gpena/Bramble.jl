@@ -35,7 +35,7 @@ end
 	matrix(backend_default, 5, 0)
 	matrix(backend_default, 0, 0)
 
-	@info "Precompiling Backend functionalities..." # Specific message
+	@info "Backend: complete" # Specific message
 end
 
 # precompile bramblefunctions
@@ -127,5 +127,5 @@ end # @setup_workload
 		end
 	end # loop D
 
-	@info "Precompiling BrambleFunction and embedding..."
+	@info "BrambleFunction and embeddings: complete"
 end # @compile_workload
