@@ -1,49 +1,42 @@
 """
-	struct MeshnD{n,T} <: MeshType{n}
-		markers::MeshMarkers{n}
-		indices::CartesianIndices{n,NTuple{n,UnitRange{Int}}}
-		submeshes::NTuple{n,Mesh1D{T}}
+	struct MeshnD{D, BackendType, CartIndicesType, Mesh1DType} <: MeshType{D}
+		markers::MeshMarkers{D}
+		indices::CartIndicesType
+		backend::BackendType
+		submeshes::NTuple{D, Mesh1DType}
 	end
 
 Structure to store a cartesian nD-mesh (``2 \\leq n \\leq 3``) with points of type `T`. For efficiency, the mesh points are not stored. Instead, we store the points of the 1D meshes that make up the nD mesh. To connect both nD and 1D meshes, we use the indices in `indices`. The [Domain](@ref) markers are translated to `markers` as for [Mesh1D](@ref).
 """
-struct MeshnD{n,T} <: MeshType{n}
-	markers::MeshMarkers{n}
-	indices::CartesianIndices{n,NTuple{n,UnitRange{Int}}}
-	submeshes::NTuple{n,Mesh1D{T}}
+mutable struct MeshnD{D,BackendType<:Backend,CartIndicesType,Mesh1DType<:MeshType{1}} <: MeshType{D}
+	markers::MeshMarkers{D}
+	indices::CartIndicesType
+	const backend::BackendType
+	submeshes::NTuple{D,Mesh1DType}
 end
 
-function _mesh(Ω::Domain, npts::NTuple{D,Int}, unif::NTuple{D,Bool}) where D
+@generated function generate_submeshes(Ω::Domain, npts::NTuple{D,Int}, unif::NTuple{D,Bool}, backend) where D
+	return :(Base.Cartesian.@ntuple $D i->_mesh(domain(projection(Ω, i)), (npts[i],), (unif[i],), backend))
+end
+
+function _mesh(Ω::Domain, npts::NTuple{D,Int}, unif::NTuple{D,Bool}, backend) where D
 	@assert dim(Ω) == D
 
-	T = eltype(Ω)
-	R = generate_indices(npts)
-	submeshes = ntuple(i -> _mesh(domain(projection(Ω, i)), (npts[i],), (unif[i],))::Mesh1D{T}, D)
+	idxs = generate_indices(npts)
+	submeshes = generate_submeshes(Ω, npts, unif, backend)
 
-	markersForMesh::MeshMarkers{D} = MeshMarkers{D}()
+	mesh_markers = MeshMarkers{D}()
+	mesh = MeshnD(mesh_markers, idxs, backend, submeshes)
+	set_markers!(mesh, markers(Ω))
 
-	for label in labels(Ω)
-		merge!(markersForMesh, Dict(label => VecCartIndex{D}()))
-	end
-
-	R = generate_indices(ntuple(i -> npoints(submeshes[i]), D))
-	boundary = boundary_indices(R)
-
-	for idx in boundary, m in markers(Ω)
-		point = ntuple(i -> points(submeshes[i])[idx[i]], D)
-		if isapprox(m.f(point), 0)
-			push!(markersForMesh[m.label], idx)
-		end
-	end
-
-	return MeshnD{D,T}(markersForMesh, R, submeshes)
+	return mesh
 end
 
 @inline dim(_::MeshnD{D}) where D = D
-@inline dim(::Type{<:MeshnD{D,T}}) where {T,D} = D
+@inline dim(::Type{<:MeshnD{D}}) where D = D
 
-@inline eltype(_::MeshnD{D,T}) where {D,T} = T
-@inline eltype(_::Type{<:MeshnD{D,T}}) where {D,T} = T
+@inline eltype(_::MeshnD{D,BackendType}) where {D,BackendType} = eltype(BackendType)
+@inline eltype(_::Type{<:MeshnD{D,BackendType}}) where {D,BackendType} = eltype(BackendType)
 
 function show(io::IO, Ωₕ::MeshnD)
 	D = dim(Ωₕ)
@@ -74,9 +67,8 @@ end
 """
 	points(Ωₕ::MeshnD)
 	points(Ωₕ::MeshnD{D}, idx)
-	points(Ωₕ::MeshnD{D}, Iterator)
 
-Returns a tuple with the points of `Ωₕ`. If the `Tuple` `idx` is passed as the second argument is passed, it returns the tuple with the point corresponding to that index. Alternatively, if `Iterator` is passed as the second argument, a generator iterating over all points of the mesh is returned.
+Returns a tuple with the points of `Ωₕ`. If the `Tuple` `idx` is passed as the second argument is passed, it returns the tuple with the point corresponding to that index.
 
   - 2D mesh, with `npts` = (``N_x``, ``N_y``)
 
@@ -92,13 +84,18 @@ Returns a tuple with the points of `Ωₕ`. If the `Tuple` `idx` is passed as th
 """
 @inline @generated points(Ωₕ::MeshnD{D}) where D = :(Base.Cartesian.@ntuple $D i->points(Ωₕ(i)))
 @inline @generated points(Ωₕ::MeshnD{D}, idx) where D = :(Base.Cartesian.@ntuple $D i->points(Ωₕ(i), idx[i]))
-@inline points(Ωₕ::MeshnD{D}, ::Type{Iterator}) where D = Base.Iterators.product(ntuple(i -> points(Ωₕ(i), Iterator), D)...)
+
+"""
+	points_iterator(Ωₕ::MeshnD)
+
+Returns an iterator over the  points of `Ωₕ`.
+"""
+@inline @generated points_iterator(Ωₕ::MeshnD{D}) where D = :(Base.Iterators.product((Base.Cartesian.@ntuple $D i->points_iterator(Ωₕ(i)))...))
 
 """
 	half_points(Ωₕ::MeshnD{D}, idx)
-	half_points(Ωₕ::MeshnD{D}, Iterator)
 
-Returns a tuple with the [half_points](@ref), for each submesh, of the points at index `idx`. If `Iterator` is passed as the second argument, a generator iterating over all `half_points` of the mesh is returned.
+Returns a tuple with the [half_points](@ref), for each submesh, of the points at index `idx`.
 
   - 2D mesh, with `idx` = ``(i,j)``
 
@@ -113,13 +110,18 @@ Returns a tuple with the [half_points](@ref), for each submesh, of the points at
 ```
 """
 @inline @generated half_points(Ωₕ::MeshnD{D}, idx) where D = :(Base.Cartesian.@ntuple $D i->half_points(Ωₕ(i), idx[i]))
-@inline half_points(Ωₕ::MeshnD{D}, ::Type{Iterator}) where D = Base.Iterators.product(ntuple(i -> half_points(Ωₕ(i), Iterator), D)...)
+
+"""
+	half_points_iterator(Ωₕ::MeshnD{D})
+
+Returns an iterator for the [half_points](@ref), for each submesh.
+"""
+@inline @generated half_points_iterator(Ωₕ::MeshnD{D}) where D = :(Base.Iterators.product((Base.Cartesian.@ntuple $D i->half_points_iterator(Ωₕ(i)))...))
 
 """
 	spacing(Ωₕ::MeshnD, idx::NTuple)
-	spacing(Ωₕ::MeshnD{D}, Iterator)
 
-Returns a tuple with the [spacing](@ref), for each submesh, at index `idx`. If `Iterator` is passed as the second argument, a generator iterating over all `spacing`s of the mesh is returned.
+Returns a tuple with the [spacing](@ref), for each submesh, at index `idx`.
 
   - 2D mesh, with `idx` = ``(i,j)``
 
@@ -134,13 +136,18 @@ Returns a tuple with the [spacing](@ref), for each submesh, at index `idx`. If `
 ```
 """
 @inline @generated spacing(Ωₕ::MeshnD{D}, idx) where D = :(Base.Cartesian.@ntuple $D i->spacing(Ωₕ(i), idx[i]))
-@inline spacing(Ωₕ::MeshnD{D}, ::Type{Iterator}) where D = Base.Iterators.product(ntuple(i -> spacing(Ωₕ(i), Iterator), D)...)
+
+"""
+	spacing_iterator(Ωₕ::MeshnD)
+
+Returns an iterator for the [spacing](@ref), for each submesh.
+"""
+@inline @generated spacing_iterator(Ωₕ::MeshnD{D}) where D = :(Base.Iterators.product((Base.Cartesian.@ntuple $D i->spacing_iterator(Ωₕ(i)))...))
 
 """
 	half_spacing(Ωₕ::MeshnD, idx)
-	half_spacing(Ωₕ::MeshnD{D}, Iterator)
 
-Returns a tuple with the [half_spacing](@ref), for each submesh, at index `idx`. If `Iterator` is passed as the second argument, a generator iterating over all `half_spacing`s of the mesh is returned.
+Returns a tuple with the [half_spacing](@ref), for each submesh, at index `idx`.
 
   - 2D mesh, with `idx` = ``(i,j)``
 
@@ -155,7 +162,13 @@ Returns a tuple with the [half_spacing](@ref), for each submesh, at index `idx`.
 ```
 """
 @inline @generated half_spacing(Ωₕ::MeshnD{D}, idx) where D = :(Base.Cartesian.@ntuple $D i->half_spacing(Ωₕ(i), idx[i]))
-@inline half_spacing(Ωₕ::MeshnD{D}, ::Type{Iterator}) where D = Base.Iterators.product(ntuple(i -> half_spacing(Ωₕ(i), Iterator), D)...)
+
+"""
+	half_spacing_iterator(Ωₕ::MeshnD)
+
+Returns an iterator for the [half_spacing](@ref), for each submesh.
+"""
+@inline @generated half_spacing_iterator(Ωₕ::MeshnD{D}) where D = :(Base.Iterators.product((Base.Cartesian.@ntuple $D i->half_spacing_iterator(Ωₕ(i)))...))
 
 """
 	npoints(Ωₕ::MeshnD)
@@ -163,7 +176,7 @@ Returns a tuple with the [half_spacing](@ref), for each submesh, at index `idx`.
 
 Returns the number of points of mesh `Ωₕ`. If `Tuple` is passed as the second argument, it returns a tuple with the number of points of each submesh composing `Ωₕ`.
 """
-@inline npoints(Ωₕ::MeshnD) = prod(npoints(Ωₕ, Tuple))
+@inline @generated npoints(Ωₕ::MeshnD) = :(prod(npoints(Ωₕ, Tuple)))
 @inline @generated npoints(Ωₕ::MeshnD{D}, ::Type{Tuple}) where D = :(Base.Cartesian.@ntuple $D i->npoints(Ωₕ(i)))
 
 """
@@ -183,8 +196,8 @@ Returns the maximum diagonal of mesh `Ωₕ`.
 \\max_{i,j,l} \\Vert (h_{x,i}, h_{y,j},  h_{z,l}) \\Vert_2
 ```
 """
-@inline function hₘₐₓ(Ωₕ::MeshnD{D,T}) where {D,T}
-	diagonals = Iterators.map(h -> hypot(h...), spacing(Ωₕ, Iterator))
+@inline function hₘₐₓ(Ωₕ::MeshnD)
+	diagonals = Base.Iterators.map(h -> hypot(h...), spacing_iterator(Ωₕ))
 	return maximum(diagonals)
 end
 
@@ -209,8 +222,14 @@ with area ``h_{x,i+1/2} h_{y,j+1/2}``, where `idx` = ``(i,j)``,
 
 with volume ``h_{x,i+1/2} h_{y,j+1/2} h_{z,l+1/2}``, where `idx` = ``(i,j,l)``.
 """
-@inline cell_measure(Ωₕ::MeshnD{D,T}, idx) where {D,T} = prod(half_spacing(Ωₕ, idx))
-@inline cell_measure(Ωₕ::MeshnD{D,T}, ::Type{Iterator}) where {D,T} = (cell_measure(Ωₕ, idx) for idx in indices(Ωₕ))
+@inline cell_measure(Ωₕ::MeshnD, idx) = prod(half_spacing(Ωₕ, idx))
+
+"""
+	cell_measure_iterator(Ωₕ::MeshnD)
+
+Returns an iterator for the measure of the cells ``\\square_{idx}``
+"""
+@inline cell_measure_iterator(Ωₕ::MeshnD) = (cell_measure(Ωₕ, idx) for idx in indices(Ωₕ))
 
 """
 	generate_indices(nPoints::NTuple)
@@ -220,21 +239,29 @@ Returns the `CartesianIndices` of a mesh with `nPoints[i]` in each direction.
 @inline generate_indices(nPoints::NTuple{D,Int}) where D = CartesianIndices(ntuple(i -> 1:nPoints[i], D))
 
 """
-	is_boundary_index(idx, R::CartesianIndices)
+	is_boundary_index(idx, idxs::CartesianIndices)
 
-Returns true if the index `idx` is a boundary index of the mesh with indices stored in `R`.
+Returns true if the index `idx` is a boundary index of the mesh with indices stored in `idxs`.
 """
-@inline function is_boundary_index(idx, R::CartesianIndices{D}) where D
-	dims = size(R)
-	_idx = CartesianIndex(idx)
-
-	for i in 1:D
-		if _idx[i] == 1 || _idx[i] == dims[i]
-			return true
-		end
+@generated function is_boundary_index(idx, idxs::CartesianIndices{D}) where D
+	setup_expr = quote
+		dims = size(idxs)
+		_idx = CartesianIndex(idx)
 	end
 
-	return false
+	check_expr = :(false)
+
+	for i in 1:D
+		dim_check_expr = :(_idx[$i] == 1 || _idx[$i] == dims[$i])
+		check_expr = :($check_expr || $dim_check_expr)
+	end
+
+	final_expr = quote
+		$setup_expr
+		return $check_expr
+	end
+
+	return final_expr
 end
 
 """
@@ -243,7 +270,7 @@ end
 Returns the boundary indices of mesh `Ωₕ`.
 """
 @inline boundary_indices(Ωₕ::MeshnD) = boundary_indices(indices(Ωₕ))
-@inline boundary_indices(R::CartesianIndices{D}) where D = (i for i in R if is_boundary_index(i, R))
+@inline boundary_indices(idxs::CartesianIndices{D}) where D = (idx for idx in idxs if is_boundary_index(idx, idxs))
 
 """
 	interior_indices(Ωₕ::MeshnD)
@@ -251,87 +278,25 @@ Returns the boundary indices of mesh `Ωₕ`.
 Returns the interior indices of mesh `Ωₕ`.
 """
 @inline interior_indices(Ωₕ::MeshnD) = interior_indices(indices(Ωₕ))
-@inline interior_indices(R::CartesianIndices{D}) where D = CartesianIndices(ntuple(i -> 2:size(R)[i], D))
+@inline interior_indices(indices::CartesianIndices{D}) where D = CartesianIndices(ntuple(i -> 2:(size(indices)[i] - 1), D))
 
-function generate_markers(Ω::Domain{CartesianProduct{D,T},MarkersType}, submeshes) where {D,T,MarkersType}
-	markersForMesh::MeshMarkers{D} = MeshMarkers{D}()
-
-	for label in labels(Ω)
-		merge!(markersForMesh, Dict(label => VecCartIndex{D}()))
+function iterative_refinement!(Ωₕ::MeshnD{D}, domain_markers::DomainMarkers) where D
+	for i in 1:D
+		iterative_refinement!(Ωₕ(i))
 	end
 
-	R = generate_indices(ntuple(i -> npoints(submeshes[i]), D))
-	boundary = boundary_indices(R)
+	npts = npoints(Ωₕ, Tuple)
 
-	for idx in boundary, m in markers(Ω)
-		point = ntuple(i -> points(submeshes[i])[idx[i]], D)
-		if isapprox(m.f(point), 0)
-			push!(markersForMesh[m.label], idx)
-		end
-	end
+	idxs = generate_indices(npts)
 
-	return markersForMesh, R
+	set_indices!(Ωₕ, idxs)
+	set_markers!(Ωₕ, domain_markers)
 end
 
-# |-----*-----------*---|
-# |--*--*-----*-----*-*-|  
-#
-# each cell is divided in two cells of same width
-# this is done for each submesh
-function iterative_refinement(Ωₕ::MeshnD{D,T}, Ω::Domain) where {D,T}
-	submeshes = ntuple(i -> iterative_refinement(Ωₕ(i), domain(projection(Ω, i)))::Mesh1D{T}, D)
-	npts = ntuple(i -> npoints(submeshes[i]), D)
-	
-	R = generate_indices(npts)
-
-	markersForMesh::MeshMarkers{D} = MeshMarkers{D}()
-
-	for label in labels(Ω)
-		merge!(markersForMesh, Dict(label => VecCartIndex{D}()))
+function change_points!(Ωₕ::MeshnD{D}, domain_markers::DomainMarkers, pts::NTuple{D,VecType}) where {D,VecType}
+	for i in 1:D
+		change_points!(Ωₕ(i), pts[i])
 	end
 
-	R = generate_indices(ntuple(i -> npoints(submeshes[i]), D))
-	boundary = boundary_indices(R)
-
-	for idx in boundary, m in markers(Ω)
-		point = ntuple(i -> points(submeshes[i])[idx[i]], D)
-		if isapprox(m.f(point), 0)
-			push!(markersForMesh[m.label], idx)
-		end
-	end
-
-	return MeshnD{D,T}(markersForMesh, R, submeshes)
-end
-
-#TODO document
-function generate_markers_indices(Ω::Domain, submeshes::NTuple{D,MType}) where {D, MType}
-	npts = ntuple(i -> npoints(submeshes[i]), D)
-	
-	R = generate_indices(npts)
-
-	markersForMesh::MeshMarkers{D} = MeshMarkers{D}()
-
-	for label in labels(Ω)
-		merge!(markersForMesh, Dict(label => VecCartIndex{D}()))
-	end
-
-	R = generate_indices(ntuple(i -> npoints(submeshes[i]), D))
-	boundary = boundary_indices(R)
-
-	for idx in boundary, m in markers(Ω)
-		point = ntuple(i -> points(submeshes[i])[idx[i]], D)
-		if isapprox(m.f(point), 0)
-			push!(markersForMesh[m.label], idx)
-		end
-	end
-
-	return markersForMesh, R
-end
-
-#TODO document
-function remesh(Ωₕ::MeshnD{D,T}, Ω::Domain, pts::NTuple{D,Vector{T}}) where {D,T}
-	submeshes = ntuple(i -> remesh(Ωₕ(i), domain(projection(Ω, i)), pts[i])::Mesh1D{T}, D)
-	markersForMesh, R = generate_markers_indices(Ω, submeshes)
-
-	return MeshnD{D,T}(markersForMesh, R, submeshes)
+	set_markers!(Ωₕ, domain_markers)
 end
