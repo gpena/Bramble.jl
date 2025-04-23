@@ -257,7 +257,7 @@ h_{i+1/2} \\vcentcolon = \\frac{h_i + h_{i+1}}{2}, \\, i=1,\\dots,N-1,
 	end
 
 	next = idx[1] + 1
-	return (spacing(Ωₕ, next) + spacing(Ωₕ, idx)) * convert(T, 0.5)::T
+	return (spacing(Ωₕ, next) + spacing(Ωₕ, idx)) * T(0.5)
 end
 
 """
@@ -285,23 +285,19 @@ x_{i+1/2} \\vcentcolon = x_i + \\frac{h_{i+1}}{2}, \\, i=1,\\dots,N-1,
 ``x_{N+1/2} \\vcentcolon = x_{N}`` and ``x_{1/2} \\vcentcolon = x_1``.
 """
 @inline function half_points(Ωₕ::Mesh1D, i)
-	indices_half_points = generate_indices(npoints(Ωₕ) + 1)
 	T = eltype(Ωₕ)
 
-	idx = CartesianIndex(i)
-	@assert idx in indices_half_points
+	@assert i in 1:(npoints(Ωₕ) + 1)
 
-	if idx === first(indices_half_points)
+	if i === 1
 		return points(Ωₕ, 1)
 	end
 
-	if idx == last(indices_half_points)
+	if i === npoints(Ωₕ) + 1
 		return points(Ωₕ, npoints(Ωₕ))
 	end
 
-	former = idx[1] - 1
-
-	return (points(Ωₕ, idx) + points(Ωₕ, former)) * convert(T, 0.5)::T
+	return (points(Ωₕ, i) + points(Ωₕ, i - 1)) * convert(T, 0.5)::T
 end
 
 """
@@ -310,7 +306,7 @@ end
 Returns an iterator for the average of two neighboring, ``x_{i+1/2}``, points in mesh `Ωₕ`, at index `i`.
 """
 
-@inline half_points_iterator(Ωₕ::Mesh1D) = (half_points(Ωₕ, i) for i in generate_indices(npoints(Ωₕ) + 1))
+@inline half_points_iterator(Ωₕ::Mesh1D) = (half_points(Ωₕ, i) for i in 1:(npoints(Ωₕ) + 1))
 
 """
 	cell_measure(Ωₕ::Mesh1D, i)
@@ -400,7 +396,7 @@ function iterative_refinement!(Ωₕ::Mesh1D)
 	pts = vector(backend(Ωₕ), npts)
 	@views pts[1:2:end] .= points(Ωₕ)
 	for i in 2:2:(npts - 1)
-		pts[i] = (pts[i + 1] + pts[i - 1]) / 2
+		pts[i] = (pts[i + 1] + pts[i - 1]) * 0.5
 	end
 
 	idxs = generate_indices(npts)
@@ -417,7 +413,7 @@ end
 """
 	change_points!(Ωₕ::Mesh1D, Ω::Domain{CartesianProduct{1}}, pts)
 
-Changes the coordinates of the internal points of the `Mesh1D` object `Ωₕ` to the new coordinates specified in `pts`. The markers of the mesh are also recalculated after this change.
+Changes the coordinates of the internal points of the `Mesh1D` object `Ωₕ` to the new coordinates specified in `pts`. The markers of the mesh are also recalculated after this change. This function assumes the points in `pts` are ordered and that the first and last of them coincide with the bounds of the `Ω`.
 """
 function change_points!(Ωₕ::Mesh1D, domain_markers::DomainMarkers, pts)
 	change_points!(Ωₕ, pts)
@@ -427,12 +423,6 @@ end
 function change_points!(Ωₕ::Mesh1D, pts)
 	npts = npoints(Ωₕ)
 	@assert npts == length(pts)
-	sort!(pts)
-
-	idxs = (1, npts)
-	test = all(idx -> isapprox(pts[idx], points(Ωₕ, idx)), idxs)
-
-	@assert(test, "The first and last points don't coincide with the ones in the mesh.")
 
 	set_points!(Ωₕ, pts)
 end
