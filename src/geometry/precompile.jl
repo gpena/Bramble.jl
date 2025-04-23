@@ -136,9 +136,6 @@ end # @setup_workload
 
 @compile_workload begin
 	# === Boundary Symbols ===
-	for D in 1:3
-		get_boundary_symbols(Val(D))
-	end
 	get_boundary_symbols(X1)
 	get_boundary_symbols(X2)
 	get_boundary_symbols(X3)
