@@ -13,248 +13,265 @@ abstract type MeshType{D} <: BrambleType end
 
 	Structure to hold sets of individual `CartesianIndex` or `CartesianIndices`.
 """
-struct MarkerIndices{D} <: BrambleType
-	c_index::Set{CartesianIndex{D}}
-	c_indices::Set{CartesianIndices{D}}
+struct MarkerIndices{D,CartIndexType<:CartesianIndex{D},CartIndicesType} <: BrambleType
+	c_index::Set{CartIndexType}
+	c_indices::Set{CartIndicesType}
 end
 
-function boundary_symbol_to_cartesian(indices)
-	D = length(size(indices))
-	return boundary_symbol_to_cartesian(indices, Val(D))
-end
+"""
+	boundary_symbol_to_cartesian(indices::CartesianIndices{D}) where D
 
-function boundary_symbol_to_cartesian(indices, ::Val{1})
-	return Dict(:left => first(indices), :right => last(indices))
-end
+	Returns a dictionary connecting the facet labels of a set to the corresponding `CartesianIndices`.
 
-function boundary_symbol_to_cartesian(indices, ::Val{2})
+```@example
+julia> boundary_symbol_to_cartesian(CartesianIndices((1:10,)))
+Dict{Symbol, CartesianIndex{1}} with 2 entries:
+  :left  => CartesianIndex(1,)
+  :right => CartesianIndex(10,)
+```
+
+```@example
+julia> boundary_symbol_to_cartesian(CartesianIndices((1:10,)))
+Dict{Symbol, CartesianIndex{1}} with 2 entries:
+  :left  => CartesianIndex(1,)
+  :right => CartesianIndex(10,)
+```
+
+```@example
+julia> boundary_symbol_to_cartesian(CartesianIndices((1:10, 1:20)))
+Dict{Symbol, CartesianIndices{2, R} where R<:Tuple{OrdinalRange{Int64, Int64}, OrdinalRange{Int64, Int64}}} with 4 entries:
+  :left   => CartesianIndices((1:1, 1:20))
+  :right  => CartesianIndices((10:10, 1:20))
+  :bottom => CartesianIndices((1:10, 1:1))
+  :top    => CartesianIndices((1:10, 20:20))
+```
+
+```@example
+julia> boundary_symbol_to_cartesian(CartesianIndices((1:10, 1:20, 1:15)))
+Dict{Symbol, CartesianIndices{3, R} where R<:Tuple{OrdinalRange{Int64, Int64}, OrdinalRange{Int64, Int64}, OrdinalRange{Int64, Int64}}} with 6 entries:
+  :left   => CartesianIndices((1:10, 1:1, 1:15))
+  :right  => CartesianIndices((1:10, 20:20, 1:15))
+  :bottom => CartesianIndices((1:10, 1:20, 1:1))
+  :top    => CartesianIndices((1:10, 1:20, 15:15))
+  :front  => CartesianIndices((10:10, 1:20, 1:15))
+  :back   => CartesianIndices((1:1, 1:20, 1:15))
+```
+"""
+@inline boundary_symbol_to_cartesian(indices::CartesianIndices{1}) = Dict(:left => first(indices), :right => last(indices))
+
+function boundary_symbol_to_cartesian(indices::CartesianIndices{2})
 	N, M = size(indices)
 	dict_2d = Dict{Symbol,CartesianIndices{2}}()
-	dict_2d[:left] = CartesianIndices((1, 1:M))
-	dict_2d[:right] = CartesianIndices((N, 1:M))
+	dict_2d[:left] = CartesianIndices((1:1, 1:M))
+	dict_2d[:right] = CartesianIndices((N:N, 1:M))
 
-	dict_2d[:top] = CartesianIndices((1:N, M))
-	dict_2d[:bottom] = CartesianIndices((1:N, M))
+	dict_2d[:top] = CartesianIndices((1:N, M:M))
+	dict_2d[:bottom] = CartesianIndices((1:N, 1:1))
 
 	return dict_2d
 end
 
-function boundary_symbol_to_cartesian(indices, ::Val{3})
+function boundary_symbol_to_cartesian(indices::CartesianIndices{3})
 	N, M, K = size(indices)
 	dict_3d = Dict{Symbol,CartesianIndices{3}}()
-	dict_3d[:left] = CartesianIndices((1:N, 1, 1:K))
-	dict_3d[:right] = CartesianIndices((1:N, M, 1:K))
+	dict_3d[:left] = CartesianIndices((1:N, 1:1, 1:K))
+	dict_3d[:right] = CartesianIndices((1:N, M:M, 1:K))
 
-	dict_3d[:top] = CartesianIndices((1:N, 1:M, K))
-	dict_3d[:bottom] = CartesianIndices((1:N, 1:M, 1))
+	dict_3d[:top] = CartesianIndices((1:N, 1:M, K:K))
+	dict_3d[:bottom] = CartesianIndices((1:N, 1:M, 1:1))
 
-	dict_3d[:front] = CartesianIndices((N, 1:M, 1:K))
-	dict_3d[:back] = CartesianIndices((1, 1:M, 1:K))
+	dict_3d[:front] = CartesianIndices((N:N, 1:M, 1:K))
+	dict_3d[:back] = CartesianIndices((1:1, 1:M, 1:K))
 
 	return dict_3d
 end
 
 """
-	_get_face_indices(axs, dim, is_min)
-
-Internal helper to create CartesianIndices for a face of a multi-dimensional space.
-"""
-function _get_face_indices(axs::NTuple{N,AbstractUnitRange}, dim::Integer, is_min::Bool) where {N}
-	idx_ranges = Any[ax for ax in axs]
-	target_ax = axs[dim]
-	face_index = is_min ? first(target_ax) : last(target_ax)
-	idx_ranges[dim] = face_index:face_index
-	return CartesianIndices(Tuple(idx_ranges))
-end
-
-"""
-	boundary_symbol_to_cartesian(indices::CartesianIndices)
-
-Compute a dictionary mapping boundary symbols (:left, :right, etc.) to the
-corresponding CartesianIndex or CartesianIndices on the boundary defined
-by the input `indices`.
-
-Dispatches to specific methods based on the dimensionality of `indices`.
-"""
-function boundary_symbol_to_cartesian2(indices::CartesianIndices) # Type hint can be more specific
-	D = ndims(indices)
-	# Dispatch still works correctly as CartesianIndices are AbstractArrays
-	return boundary_symbol_to_cartesian2(indices, Val(D))
-end
-
-# --- 1D Implementation ---
-"""
-	boundary_symbol_to_cartesian(indices::CartesianIndices{1}, ::Val{1})
-
-1D specialization. Maps :left and :right to the first and last CartesianIndex.
-"""
-function boundary_symbol_to_cartesian2(indices::CartesianIndices{1}, ::Val{1})
-	# axes(indices) returns a tuple like (1:10,)
-	ax1 = axes(indices, 1)
-	imin = first(ax1)
-	imax = last(ax1)
-	# Return CartesianIndex objects for consistency
-	return Dict(:left => CartesianIndex(imin), :right => CartesianIndex(imax))
-end
-
-# --- 2D Implementation ---
-"""
-	boundary_symbol_to_cartesian(indices::CartesianIndices{2}, ::Val{2})
-
-2D specialization. Maps :left, :right (Dim 1) and :bottom, :top (Dim 2)
-to CartesianIndices representing the boundary faces.
-(Remains the same, but type hint adjusted for clarity)
-"""
-function boundary_symbol_to_cartesian2(indices::CartesianIndices{2}, ::Val{2})
-	axs              = axes(indices)
-	dict_2d          = Dict{Symbol,CartesianIndices{2}}()
-	dict_2d[:left]   = _get_face_indices(axs, 1, true)
-	dict_2d[:right]  = _get_face_indices(axs, 1, false)
-	dict_2d[:bottom] = _get_face_indices(axs, 2, true)
-	dict_2d[:top]    = _get_face_indices(axs, 2, false)
-	return dict_2d
-end
-
-# --- 3D Implementation ---
-"""
-	boundary_symbol_to_cartesian(indices::CartesianIndices{3}, ::Val{3})
-
-3D specialization. Maps :left, :right (Dim 1), :bottom, :top (Dim 2),
-and :front, :back (Dim 3) to CartesianIndices representing the boundary faces.
-(Remains the same, but type hint adjusted for clarity)
-"""
-function boundary_symbol_to_cartesian2(indices::CartesianIndices{3}, ::Val{3})
-	axs              = axes(indices)
-	dict_3d          = Dict{Symbol,CartesianIndices{3}}()
-	dict_3d[:left]   = _get_face_indices(axs, 1, true)
-	dict_3d[:right]  = _get_face_indices(axs, 1, false)
-	dict_3d[:bottom] = _get_face_indices(axs, 2, true)
-	dict_3d[:top]    = _get_face_indices(axs, 2, false)
-	dict_3d[:front]  = _get_face_indices(axs, 3, true)
-	dict_3d[:back]   = _get_face_indices(axs, 3, false)
-	return dict_3d
-end
-
-"""
-	merge_consecutive_indices!(marker_data::MarkerIndices{D}) where {D}
+	merge_consecutive_indices!(marker_data::MarkerIndices{D}) where D
 
 Finds sequences of `CartesianIndex{D}` elements consecutive along any single
 axis within `marker_data.c_index`. Removes these sequences (if longer than one element)
 and adds the corresponding `CartesianIndices{D}` range object to
 `marker_data.c_indices`.
-
-Modifies `marker_data` in place. Uses standard `Dict` for internal grouping.
-
-Note: This version for D > 1 iterates through each dimension. An index might be part
-of multiple ranges (e.g., a corner of a 2x2 block could be part of a row and a column range).
-It merges linear sequences along axes.
 """
-function merge_consecutive_indices!(marker_data::MarkerIndices{D}) where {D}
-	# Handle D=1 case by calling the specialized method
-	if D == 1
-		# This requires the MarkerIndices{1} method to be defined separately
-		merge_consecutive_indices!(marker_data::MarkerIndices{1})
+function merge_consecutive_indices!(marker_data::MarkerIndices{D}; check_consistency = true) where D
+	# --- Save Initial State (only if checking consistency) ---
+	initial_indices_copy = check_consistency ? copy(marker_data.c_index) : Set{CartesianIndex{D}}()
+	# We assume initial marker_data.c_indices should be preserved and added to.
+	# The check focuses on conserving the points from the initial c_index set.
+
+	# --- Main Merging Logic ---
+	remaining_indices = copy(marker_data.c_index)
+	if isempty(remaining_indices)
+		# Consistency check is trivial if input was empty
+		if check_consistency && !isempty(initial_indices_copy)
+			# This case should ideally not happen if logic is correct
+			error("Internal logic error: Input c_index was empty but initial copy wasn't.")
+		end
+		# Optional: Add a print statement if consistency check passes trivially
+		# if check_consistency; println("Consistency check passed (empty input)."); end
 		return nothing
 	end
 
-	c_index_set = marker_data.c_index
-	c_indices_set = marker_data.c_indices
+	# These store the results of *this merging run*
+	output_ranges = Set{CartesianIndices{D}}()
+	# Keep track of indices successfully merged into multi-index blocks *in this run*
+	merged_indices_in_run = Set{CartesianIndex{D}}()
 
-	# Need at least 2 elements to potentially form a range
-	if length(c_index_set) < 2
-		return nothing
-	end
+	# Use a copy for safe iteration while modifying remaining_indices
+	seeds_to_process = copy(remaining_indices)
 
-	# Use master lists to collect changes across all dimensions before applying
-	master_indices_to_remove = Set{CartesianIndex{D}}()
-	master_ranges_to_add = Set{CartesianIndices{D}}()
+	while !isempty(seeds_to_process)
+		seed_index = first(seeds_to_process)
 
-	# Iterate through each dimension, trying to find runs along it
-	for dim_to_vary in 1:D
-		# Group indices using standard Dict
-		# Key: Tuple of coordinates in dimensions *not* equal to dim_to_vary
-		# Value: List of CartesianIndex sharing those fixed coordinates
-		grouped_indices = Dict{NTuple{D - 1,Int},Vector{CartesianIndex{D}}}()
-
-		for idx in c_index_set
-			# Create the key tuple from coordinates in fixed dimensions
-			fixed_coords = ntuple(i -> idx.I[i < dim_to_vary ? i : i + 1], D - 1)
-
-			# Get or create the vector for this group using standard get!
-			# get!(collection, key, default) -> returns value for key, adding default if key not present
-			group_vec = get!(grouped_indices, fixed_coords, Vector{CartesianIndex{D}}())
-			push!(group_vec, idx)
+		# Skip if seed was already incorporated into a block previously found in this run
+		if !(seed_index in remaining_indices)
+			pop!(seeds_to_process, seed_index)
+			continue
 		end
 
-		# Process each group to find runs along dim_to_vary
-		for group_vec in values(grouped_indices) # Use standard values()
-			if length(group_vec) < 2
-				continue # Cannot form a range within this group
-			end
+		current_ranges = ntuple(k -> seed_index.I[k]:seed_index.I[k], D)
 
-			# Sort the group based on the coordinate in the varying dimension
-			sort!(group_vec, by = ci -> ci.I[dim_to_vary])
-
-			# --- Apply 1D merging logic along dim_to_vary ---
-			i = 1
-			n = length(group_vec)
-			while i <= n
-				start_index = group_vec[i]
-				start_val = start_index.I[dim_to_vary]
-				end_val = start_val
-				run_end_vec_idx = i
-
-				j = i + 1
-				while j <= n && group_vec[j].I[dim_to_vary] == end_val + 1
-					end_val = group_vec[j].I[dim_to_vary]
-					run_end_vec_idx = j
-					j += 1
-				end
-
-				run_length = run_end_vec_idx - i + 1
-				if run_length > 1
-					# Construct the ranges tuple for CartesianIndices
-					ranges = ntuple(k -> begin
-										coord_k = start_index.I[k]
-										if k == dim_to_vary
-											return start_val:end_val
-										else
-											return coord_k:coord_k
-										end
-									end, D)
-
-					range_obj = CartesianIndices(ranges)
-					push!(master_ranges_to_add, range_obj)
-
-					# Mark indices in this run for removal (master list)
-					for k in i:run_end_vec_idx
-						push!(master_indices_to_remove, group_vec[k])
+		# --- Expansion Phase (Identical to previous version) ---
+		while true
+			expanded_in_pass = false
+			for dim in 1:D
+				# Positive expansion
+				while true
+					next_coord = current_ranges[dim].stop + 1
+					slice_ranges = Base.setindex(current_ranges, next_coord:next_coord, dim)
+					slice_indices = CartesianIndices(slice_ranges)
+					can_expand = true
+					for idx_in_slice in slice_indices
+						if !(idx_in_slice in remaining_indices)
+							can_expand = false
+							break
+						end
+					end
+					if can_expand
+						expanded_ranges = Base.setindex(current_ranges, (current_ranges[dim].start):next_coord, dim)
+						current_ranges = expanded_ranges
+						expanded_in_pass = true
+					else
+						break
 					end
 				end
-				i = run_end_vec_idx + 1
-			end # --- End 1D merging logic ---
-		end # End processing groups
-	end # End looping through dimensions
+				# Negative expansion
+				while true
+					prev_coord = current_ranges[dim].start - 1
+					slice_ranges = Base.setindex(current_ranges, prev_coord:prev_coord, dim)
+					slice_indices = CartesianIndices(slice_ranges)
+					can_expand = true
+					for idx_in_slice in slice_indices
+						if !(idx_in_slice in remaining_indices)
+							can_expand = false
+							break
+						end
+					end
+					if can_expand
+						expanded_ranges = Base.setindex(current_ranges, prev_coord:(current_ranges[dim].stop), dim)
+						current_ranges = expanded_ranges
+						expanded_in_pass = true
+					else
+						break
+					end
+				end
+			end # end loop dimensions
+			!expanded_in_pass && break
+		end # end expansion phase
+		# --- End Expansion Phase ---
 
-	# --- Apply collected changes ---
-	if !isempty(master_ranges_to_add)
-		union!(c_indices_set, master_ranges_to_add)
-		setdiff!(c_index_set, master_indices_to_remove) # Use the master list
-	end
+		final_block = CartesianIndices(current_ranges)
+		block_size = length(final_block)
+
+		# --- Decision & Update Sets ---
+		indices_in_block_set = Set(final_block) # Needed in both cases for removal
+
+		if block_size > 1
+			# Successful merge
+			push!(output_ranges, final_block)
+			union!(merged_indices_in_run, indices_in_block_set)
+			setdiff!(remaining_indices, indices_in_block_set) # Remove from available pool
+		else
+			# Isolated index (block_size == 1)
+			# Don't add to output_ranges or merged_indices_in_run
+			delete!(remaining_indices, seed_index) # Just remove the single seed from available pool
+		end
+
+		# Remove processed indices (seed or full block) from the list of seeds to process
+		setdiff!(seeds_to_process, indices_in_block_set)
+	end # end while !isempty(seeds_to_process)
+
+	# --- Apply changes to marker_data ---
+	# Update c_index: Remove indices that were successfully merged in this run
+	setdiff!(marker_data.c_index, merged_indices_in_run)
+	# Add the newly found multi-element blocks to the c_indices set
+	union!(marker_data.c_indices, output_ranges)
+
+	# --- Consistency Check ---
+	if check_consistency
+		# Reconstruct the total set of points represented *after* the merge operation.
+		# Start with the indices remaining in c_index
+		reconstructed_indices = copy(marker_data.c_index)
+
+		# Add all indices contained within the *newly added* ranges
+		# Note: We are checking the conservation of points *originating* from the
+		# initial c_index set. If marker_data.c_indices had pre-existing ranges,
+		# this check doesn't include them, which is correct for verifying this function's action.
+		for block in output_ranges
+			# Efficiently add all elements from the CartesianIndices iterator
+			union!(reconstructed_indices, Set(block))
+			# Alternative (potentially less memory for huge blocks, maybe slower):
+			# for idx in block
+			#     push!(reconstructed_indices, idx)
+			# end
+		end
+
+		# Compare the reconstructed set with the initial set
+		if reconstructed_indices != initial_indices_copy
+			# --- Detailed Debug Output ---
+			println("Consistency Check FAILED!")
+			println("Initial index count:      ", length(initial_indices_copy))
+			println("Reconstructed index count:", length(reconstructed_indices))
+
+			lost_indices = setdiff(initial_indices_copy, reconstructed_indices)
+			gained_indices = setdiff(reconstructed_indices, initial_indices_copy)
+
+			if !isempty(lost_indices)
+				println("Lost indices (present initially, missing finally):")
+				display(lost_indices) # Use display for potentially large sets
+				# Consider limiting output: display(collect(Iterators.take(lost_indices, 10)))
+			end
+			if !isempty(gained_indices)
+				println("Gained indices (present finally, missing initially):")
+				display(gained_indices)
+				# Consider limiting output: display(collect(Iterators.take(gained_indices, 10)))
+			end
+
+			# You might want to inspect the state just before the error
+			println("\nState before error:")
+			println("Initial c_index copy: ")
+			display(initial_indices_copy)
+			println("Final c_index: ")
+			display(marker_data.c_index)
+			println("Final added c_indices (output_ranges): ")
+			display(output_ranges)
+			println("Reconstructed indices: ")
+			display(reconstructed_indices)
+
+			error("Consistency check failed: The set of indices after merging does not match the initial set.")
+		end
+	end # end if check_consistency
 
 	return nothing
 end
 
-VecCartIndex{D} = Set{CartesianIndex{D}} where D
-
 """
 	MeshMarkers{D}
 
-Type of dictionary to store the `CartesianIndices` associated with a [Marker](@ref).
+Type of dictionary to store the `CartesianIndices` associated with a [MarkerIndices](@ref).
 """
-MeshMarkers{D} = Dict{Symbol,MarkerIndices{D}} where D
-
-struct Iterator <: BrambleType end
+MeshMarkers{D} = Dict{Symbol,MarkerIndices{D,CartesianIndex{D},CartesianIndices{D,NTuple{D,UnitRange{Int}}}}}
 
 """
 	dim(Ωₕ::MeshType)
@@ -270,7 +287,16 @@ Returns the tolopogical dimension of `Ωₕ`.
 
 Returns the `CartesianIndices` associated with the points of mesh `Ωₕ`.
 """
-@inline indices(Ωₕ::MeshType{D}) where D = (Ωₕ.indices)::CartesianIndices{D}
+@inline indices(Ωₕ::MeshType) = Ωₕ.indices
+
+@inline backend(Ωₕ::MeshType) = Ωₕ.backend
+
+"""
+	set_indices!(Ωₕ::MeshType, indices)
+
+	Overrides the indices in Ωₕ.
+"""
+@inline set_indices!(Ωₕ::MeshType, indices) = (Ωₕ.indices = indices)
 
 """
 	marker(Ωₕ::MeshType, str::Symbol)
@@ -279,29 +305,69 @@ Returns the [Marker](@ref) function with label `str`.
 """
 @inline marker(Ωₕ::MeshType, symbol::Symbol) = Ωₕ.markers[symbol]
 
-function process_label_for_mesh!(markers_mesh::MeshMarkers{D}, indices, set_labels) where D
-	c_indices_type = typeof(indices)
-	c_index_type = eltype(indices)
+function process_label_for_mesh!(markers_mesh::MeshMarkers{D}, set_labels) where D
+	c_indices_type = CartesianIndices{D,NTuple{D,UnitRange{Int}}}
+	c_index_type = CartesianIndex{D}
 
 	for label in set_labels
-		markers_mesh[label] = MarkerIndices{D}(Set{c_index_type}(), Set{c_indices_type}())
+		markers_mesh[label] = MarkerIndices{D,c_index_type,c_indices_type}(Set{c_index_type}(), Set{c_indices_type}())
 	end
 end
 
-function _init_mesh_markers(Ωₕ::MeshType, domain_markers::DomainMarkers)
-	D = dim(Ωₕ)
-	idxs = indices(Ωₕ)
+function _init_mesh_markers(_::MeshType{D}, domain_markers::DomainMarkers) where D
 	markers_mesh = MeshMarkers{D}()
 
-	process_label_for_mesh!(markers_mesh, idxs, label_symbols(domain_markers))
-	process_label_for_mesh!(markers_mesh, idxs, label_tuples(domain_markers))
-	process_label_for_mesh!(markers_mesh, idxs, label_conditions(domain_markers))
+	process_label_for_mesh!(markers_mesh, label_symbols(domain_markers))
+	process_label_for_mesh!(markers_mesh, label_tuples(domain_markers))
+	process_label_for_mesh!(markers_mesh, label_conditions(domain_markers))
 
-	return markers_mesh # Return the populated mesh markers
+	return markers_mesh
 end
 
-@inline _i2p(pts, idx) = pts[idx]
+"""
+	set_markers!(Ωₕ::Mesh1D, domain_markers::DomainMarkers)
 
+Populates the marker index collections of `Mesh1D` Ωₕ based on boundary symbols or geometric conditions defined in the `Domain` Ω, applied to the `Mesh1D` Ωₕ.
+"""
+function set_markers!(Ωₕ::MeshType, domain_markers)
+	D = dim(Ωₕ)
+	mesh_indices = indices(Ωₕ)
+
+	mesh_markers = _init_mesh_markers(Ωₕ, domain_markers)
+	symbol_to_index_map = boundary_symbol_to_cartesian(mesh_indices)
+
+	for marker in symbols(domain_markers)
+		@unpack label, identifier = marker
+		target_indices = D == 1 ? mesh_markers[label].c_index : mesh_markers[label].c_indices
+
+		push!(target_indices, symbol_to_index_map[identifier])
+	end
+
+	for marker in tuples(domain_markers)
+		@unpack label, identifier = marker
+		target_indices = D == 1 ? mesh_markers[label].c_index : mesh_markers[label].c_indices
+
+		for sym in identifier
+			push!(target_indices, symbol_to_index_map[sym])
+		end
+	end
+
+	for marker in conditions(domain_markers)
+		@unpack label, identifier = marker
+		for idx in mesh_indices
+			if identifier(points(Ωₕ, idx))
+				push!(mesh_markers[label].c_index, idx)
+			end
+		end
+
+		merge_consecutive_indices!(mesh_markers[label])
+	end
+
+	Ωₕ.markers = mesh_markers
+end
+
+#@inline _i2p(pts, idx) = pts[idx]
+#=
 """
 	_i2p(pts::NTuple{D, Vector{T}}, index::CartesianIndex{D})
 
@@ -311,7 +377,7 @@ Returns a `D` tuple with the coordinates of the point in `pts` associated with t
 
 # necessary?!
 @inline @generated _i2ppo(pts::NTuple{D,Vector{T}}, index::CartesianIndex{D}) where {D,T} = :(Base.Cartesian.@ntuple $D i->pts[i][index[i] + 1])
-
+=#
 """
 	mesh(Ω::Domain, npts::Int, unif::Bool)
 	mesh(Ω::Domain, npts::NTuple{D}, unif::NTuple{D})
@@ -360,10 +426,5 @@ Submeshes:
   y direction | nPoints: 15
 ```
 """
-function mesh(Ω::Domain, npts::NTuple{D,Int}, unif::NTuple{D,Bool}; backend = Backend()) where D
-	return _mesh(Ω, npts, unif, backend)
-end
-
-function mesh(Ω::Domain{CartesianProduct{1,T}}, npts::Int, unif::Bool; backend = Backend()) where T
-	return _mesh(Ω, (npts,), (unif,), backend)
-end
+@inline mesh(Ω::Domain, npts::NTuple{D,Int}, unif::NTuple{D,Bool}; backend = Backend()) where D = _mesh(Ω, npts, unif, backend)
+@inline mesh(Ω::Domain{CartesianProduct{1,T}}, npts::Int, unif::Bool; backend = Backend()) where T = _mesh(Ω, (npts,), (unif,), backend)
