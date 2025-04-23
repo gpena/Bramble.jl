@@ -132,8 +132,6 @@ end
 	f_2d = x -> x[1]^2 + x[2]^2 - 0.5 >= 0
 	f_3d = x -> x[1] + x[2] + x[3] - 1.0 == 0
 	test_funcs = (f_1d, f_2d, f_3d)
-
-	@info "Precompiling Domain/Marker functionalities..." # Specific message
 end # @setup_workload
 
 @compile_workload begin
@@ -214,4 +212,5 @@ end # @setup_workload
 		show(io, MIME("text/plain"), d_def) # Show for Domain
 		show(io, MIME("text/plain"), d_tup)
 	end
+	@info "Domains: complete" # Specific message
 end # @compile_workload
