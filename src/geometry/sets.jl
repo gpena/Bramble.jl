@@ -174,12 +174,13 @@ Type: Float64
  Set: [0.0, 1.0] × [2.0, 3.0]
 ```
 """
-@inline function ×(X::CartesianProduct{D1,T}, Y::CartesianProduct{D2,T}) where {D1,D2,T}
-	a = tails(X)
-	b = tails(Y)
-	c = tuple((a...)..., (b...)...)
+@generated function ×(X::CartesianProduct{D1,T}, Y::CartesianProduct{D2,T}) where {D1,D2,T}
+	new_box_expr = :(tuple(X.box..., Y.box...))
 
-	return CartesianProduct{D1 + D2,T}(ntuple(i -> (c[2 * i - 1], c[2 * i]), D1 + D2))
+	ResultType = CartesianProduct{D1 + D2,T} # The type itself can often be used directly if concrete
+	final_expr = :($ResultType($new_box_expr))
+
+	return final_expr
 end
 
 """
