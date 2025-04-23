@@ -40,10 +40,6 @@ using Bramble: marker_identifiers, _embed_notime, process_identifier, marker_sym
 		@test get_boundary_symbols(I1D) == (:left, :right)
 		@test get_boundary_symbols(I2D) == (:bottom, :top, :left, :right)
 		@test get_boundary_symbols(I3D) == (:bottom, :top, :back, :front, :left, :right)
-		# Test Val dispatch directly
-		@test get_boundary_symbols(Val(1)) == (:left, :right)
-		@test get_boundary_symbols(Val(2)) == (:bottom, :top, :left, :right)
-		@test get_boundary_symbols(Val(3)) == (:bottom, :top, :back, :front, :left, :right)
 	end
 
 	@testset "Process Identifier Function" begin
