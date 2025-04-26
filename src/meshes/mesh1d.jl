@@ -4,7 +4,6 @@
 		indices::CartIndicesType
 		const backend::BackendType
 		pts::VectorType
-		npts::Int
 	end	
 
 Structure to create a 1D mesh with `npts` points. The points that define the grid are stored in `pts` and are identified, following the same order, with the indices in field `indices`. The variable `markers` is a dictionary that stores the indices associated with the [DomainMarkers](@ref) using [MarkerIndices](@ref).
@@ -20,7 +19,6 @@ mutable struct Mesh1D{BackendType<:Backend,CartIndicesType,VectorType<:AbstractV
 	indices::CartIndicesType
 	const backend::BackendType
 	pts::VectorType
-	npts::Int
 end
 
 """
@@ -64,8 +62,7 @@ Returns an iterable object over all the points ``x_i, \\, i=1,\\dots,N`` in `Ω�
 
 	Overrides the points in Ωₕ.
 """
-@inline set_points!(Ωₕ::Mesh1D, pts) = (Ωₕ.pts = pts;
-										Ωₕ.npts = length(pts))
+@inline set_points!(Ωₕ::Mesh1D, pts) = (Ωₕ.pts = pts)
 
 @inline dim(_::Mesh1D) = 1
 @inline dim(::Type{<:Mesh1D}) = 1
@@ -182,7 +179,7 @@ julia> Ωₕ = mesh(domain(interval(0, 1)), 10, true);
 10
 ```
 """
-@inline npoints(Ωₕ::Mesh1D) = Ωₕ.npts
+@inline npoints(Ωₕ::Mesh1D) = length(points(Ωₕ))
 @inline npoints(Ωₕ::Mesh1D, ::Type{Tuple}) = (npoints(Ωₕ),)
 
 """
@@ -328,6 +325,11 @@ Returns an iterator for the measure of the cells.
 """
 @inline cell_measure_iterator(Ωₕ::Mesh1D) = Iterators.map(Base.Fix1(cell_measure, Ωₕ), indices(Ωₕ))
 
+function _generate_random_points!(v)
+	rand!(v)
+	sort!(v)
+end
+
 @inline function _set_points!(x, I::CartesianProduct{1}, unif::Bool)
 	npts = length(x)
 	T = eltype(I)
@@ -336,8 +338,7 @@ Returns an iterator for the measure of the cells.
 	v = view(x, 2:(npts - 1))
 
 	if !unif
-		rand!(v)
-		sort!(v)
+		_generate_random_points!(v)
 	end
 
 	a, b = tails(I)
@@ -379,7 +380,7 @@ function _mesh(Ω::Domain{CartesianProduct{1,T}}, npts::Tuple{Int}, unif::Tuple{
 	idxs = generate_indices(n_points)
 
 	mesh_markers = MeshMarkers{1}()
-	mesh = Mesh1D(mesh_markers, idxs, backend, pts, n_points)
+	mesh = Mesh1D(mesh_markers, idxs, backend, pts)
 
 	set_markers!(mesh, markers)
 	return mesh
