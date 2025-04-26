@@ -11,7 +11,7 @@ using Test
 using Bramble
 
 const __bramble_with_examples = false
-const __bramble_with_quality = false
+const __bramble_with_quality = true
 const __bramble_with_unit_tests = true
 
 if __bramble_with_unit_tests

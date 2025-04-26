@@ -40,18 +40,29 @@ end
 
 function show(io::IO, Ωₕ::MeshnD)
 	D = dim(Ωₕ)
-	properties = ["$(D)D mesh",
-		"nPoints: $(npoints(Ωₕ))",
-		"Markers: $(keys(Ωₕ.markers))"]
+	fields = ("Markers", "Resolution")
+	mlength = max_length_fields(fields)
 
-	println(io, join(properties, "\n"))
+	colors = style_color_sets()
+	num_colors = length(colors)
 
-	print(io, "\nSubmeshes:\n")
+	type_info = style_mesh_title("$(D)D mesh", max_length = mlength)
+	print(io, type_info * "\n")
 
-	direction = ["x", "y", "z"]
-	properties = ["  $(direction[i]) direction | nPoints: $(npoints(Ωₕ, Tuple)[i])" for i in 1:D]
+	npts = npoints(Ωₕ, Tuple)
+	styled_points = [let
+						 set_str = "$(npts[i])"
+						 color_sym = colors[mod1(i, num_colors)]
+						 styled"{$color_sym:$(set_str)}"
+					 end
+					 for i in 1:D]
 
-	print(io, join(properties, "\n"))
+	sets_styled_combined = join(styled_points, " × ")
+
+	points_info = "$(npoints(Ωₕ)) (" * sets_styled_combined * ")"
+	submeshes = style_field("Resolution", points_info, max_length = mlength)
+	print(io, submeshes * "\n")
+	show(io, markers(Ωₕ))
 end
 
 """

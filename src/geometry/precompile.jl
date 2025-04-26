@@ -86,9 +86,6 @@ using Bramble: interval
 				proj(1)
 			end
 
-			# show method (use sprint to avoid printing during precompilation)
-			sprint(show, P)
-
 			# Specific 1D methods
 			if D == 1
 				first(P)
@@ -202,12 +199,6 @@ end # @setup_workload
 		marker_func = Marker(:a, embed_function(X_set, f_for_dim))
 		marker_sym = Marker(:b, sym1)
 		marker_tup = Marker(:c, sym_tuple)
-		io = IOBuffer()
-		# show(io, MIME("text/plain"), marker_func) # Show for Marker requires embed_function
-		show(io, MIME("text/plain"), marker_sym)
-		show(io, MIME("text/plain"), marker_tup)
-		show(io, MIME("text/plain"), d_def) # Show for Domain
-		show(io, MIME("text/plain"), d_tup)
 	end
 	@info "Domains: complete" # Specific message
 end # @compile_workload

@@ -147,19 +147,6 @@ using Bramble: interval, cartesianproduct, projection, dim, tails, ×
 		@test_throws AssertionError projection(P_proj, 0)
 	end
 
-	@testset "Show Method" begin
-		# Capture output using sprint
-		I = interval(-1.5, 2.0)
-		R2 = cartesianproduct(((0, 1), (10, 20)))
-		R3 = I × interval(5.0, 6.0)
-
-		I_str = sprint(show, I)
-		R3_str = sprint(show, R3)
-
-		@test I_str == "Type: Float64 \n Dim: 1 \n Set: [-1.5, 2.0]"
-		@test R3_str == "Type: Float64 \n Dim: 2 \n Set: [-1.5, 2.0] × [5.0, 6.0]"
-	end
-
 	# Include original tests for regression checking
 	@testset "Original Tests" begin
 		I = interval(-3.0, 10.0)

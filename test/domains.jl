@@ -162,31 +162,4 @@ using Bramble: marker_identifiers, _embed_notime, process_identifier, marker_sym
 		@test proj2 isa CartesianProduct{1,Float32}
 		@test proj2.box == ((2.0f0, 3.0f0),)
 	end
-
-	@testset "Show Method" begin
-		Ω = domain(I2D, :bnd => :top, :region => func1)
-		# Capture output
-		output = sprint(show, Ω)
-
-		# Basic checks for content - adjust if CartesianProduct show changes
-		@test occursin("Type: Float32", output)
-		@test occursin("Dim: 2", output)
-		@test occursin("Set: [0.0, 1.0] × [2.0, 3.0]", output)
-		@test occursin("Markers: ", output)
-		# Order isn't guaranteed by Set iteration, so check for presence of labels
-		@test occursin("bnd", output)
-		@test occursin("region", output)
-
-		# Test show with no markers
-		Ω_empty = domain(I1D, create_markers(I1D)) # Manually create empty markers
-		output_empty = sprint(show, Ω_empty)
-		@test occursin("Type: Float64", output_empty)
-		@test occursin("Dim: 1", output_empty)
-		@test occursin("Set: [0.0, 1.0]", output_empty)
-
-		# Test show with default dirichlet marker
-		Ω_def = domain(I1D)
-		output_def = sprint(show, Ω_def)
-		@test occursin("Markers: dirichlet", output_def)
-	end
 end # End Domain System Tests

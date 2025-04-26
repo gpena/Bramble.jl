@@ -235,25 +235,14 @@ For example, `projection(domain(I × I), 1)` will return `I`.
 	return cartesianproduct(box[i]...)
 end
 
-function color_markers(labels)
-	colors = (:cyan, :green, :magenta, :blue, :red)
-	num_colors = length(colors)
-
-	styled_labels = [let color_sym = colors[mod1(i, num_colors)]
-						 styled"{$color_sym:$(label)}"
-					 end
-					 for (i, label) in enumerate(labels)]
-
-	labels_styled_combined = join(styled_labels, ", ")
-
-	return labels_styled_combined
-end
-
 function Base.show(io::IO, markers::DomainMarkers)
+	fields = ("Markers")
+	mlength = max_length_fields(fields)
+
 	labels = collect(label_identifiers(markers))
 	labels_styled_combined = color_markers(labels)
 
-	final_output = style_field("Markers", labels_styled_combined)
+	final_output = style_field("Markers", labels_styled_combined, max_length = mlength)
 	print(io, final_output)
 end
 

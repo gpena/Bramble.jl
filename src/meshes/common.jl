@@ -273,6 +273,17 @@ Type of dictionary to store the `CartesianIndices` associated with a [MarkerIndi
 """
 MeshMarkers{D} = Dict{Symbol,MarkerIndices{D,CartesianIndex{D},CartesianIndices{D,NTuple{D,UnitRange{Int}}}}}
 
+function Base.show(io::IO, markers::MeshMarkers{D}) where D
+	labels = collect(keys(markers))
+	labels_styled_combined = color_markers(labels)
+
+	fields = D == 1 ? ("Markers",) : ("Resolution",)
+	mlength = max_length_fields(fields)
+
+	final_output = style_field("Markers", labels_styled_combined, max_length = mlength)
+	print(io, final_output)
+end
+
 """
 	dim(Ωₕ::MeshType)
 	dim(::Type{<:MeshType})
@@ -290,6 +301,7 @@ Returns the `CartesianIndices` associated with the points of mesh `Ωₕ`.
 @inline indices(Ωₕ::MeshType) = Ωₕ.indices
 
 @inline backend(Ωₕ::MeshType) = Ωₕ.backend
+@inline markers(Ωₕ::MeshType) = Ωₕ.markers
 
 """
 	set_indices!(Ωₕ::MeshType, indices)

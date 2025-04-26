@@ -22,20 +22,6 @@ mutable struct Mesh1D{BackendType<:Backend,CartIndicesType,VectorType<:AbstractV
 end
 
 """
-	markers(Ωₕ::Mesh1D)
-
-Retrieve the `MeshMarkers` from Ωₕ.
-"""
-@inline markers(Ωₕ::Mesh1D) = Ωₕ.markers
-
-"""
-	backend(Ωₕ::Mesh1D)
-
-Retrieve the linear algebra backend field from Ωₕ.
-"""
-@inline backend(Ωₕ::Mesh1D) = Ωₕ.backend
-
-"""
 	points(Ωₕ::Mesh1D)
 	points(Ωₕ::Mesh1D, i)
 
@@ -70,19 +56,18 @@ Returns an iterable object over all the points ``x_i, \\, i=1,\\dots,N`` in `Ω�
 @inline eltype(_::Mesh1D{BackendType}) where BackendType = eltype(BackendType)
 @inline eltype(::Type{<:Mesh1D{BackendType}}) where BackendType = eltype(BackendType)
 
-function style_mesh_title(name)
-	return styled("{red,bold,underline:$(name)}\n")
-end
-
 function show(io::IO, Ωₕ::Mesh1D)
 	labels = keys(markers(Ωₕ))
 	labels_styled_combined = color_markers(labels)
 
-	labels_output = style_field("Markers", labels_styled_combined)
-	type_info = style_mesh_title("1D mesh")
-	npoints_info = style_field("#Points", npoints(Ωₕ))
+	fields = ("Markers",)
+	mlength = max_length_fields(fields)
 
-	final_output = type_info * npoints_info * labels_output
+	labels_output = style_field("Markers", labels_styled_combined, max_length = mlength)
+	type_info = style_mesh_title("1D mesh")
+	npoints_info = style_field("nPoints", npoints(Ωₕ), max_length = mlength)
+
+	final_output = style_join(type_info, npoints_info, labels_output)
 	print(io, final_output)
 end
 

@@ -203,32 +203,27 @@ Type: Float64
 """
 @inline projection(X::CartesianProduct, i) = interval(X(i)...)
 
-function style_field(name, value)
-	whitespace = repeat(" ", 7 - length(name))
-	prefix = styled("{yellow,bold:$whitespace$(name)}: ")
-	suffix = value isa Base.AnnotatedString ? value : "$value\n"
-	return prefix * suffix
-end
-
 function Base.show(io::IO, X::CartesianProduct{D}) where D
 	@unpack box = X
-	colors = (:red, :green, :blue)
+
+	colors = style_color_sets()
 	num_colors = length(colors)
 
+	fields = ("Type", "Dim", "Set", "Markers")
+	mlength = max_length_fields(fields)
 	styled_sets = [let
 					   set_str = "[$(tails(X,i)[1]), $(tails(X,i)[2])]"
 					   color_sym = colors[mod1(i, num_colors)]
-
 					   styled"{$color_sym:$(set_str)}"
 				   end
 				   for i in eachindex(box)]
 
 	sets_styled_combined = join(styled_sets, " × ")
 
-	type_info = style_field("Type", eltype(X))
-	dim_info = style_field("Dim", D)
-	set_info = style_field("Set", sets_styled_combined)
+	type_info = style_field("Type", eltype(X), max_length = mlength)
+	dim_info = style_field("Dim", D, max_length = mlength)
+	set_info = style_field("Set", sets_styled_combined, max_length = mlength)
 
-	final_output = type_info * dim_info * set_info
-	print(io, final_output)
+	output = style_join(type_info, dim_info, set_info)
+	print(io, output)
 end
