@@ -1,7 +1,12 @@
 import PrecompileTools: @compile_workload, @setup_workload, @recompile_invalidations
 
+@info "Start precompilation..."
+
 include("utils/precompile.jl")
 include("geometry/precompile.jl")
+include("meshes/precompile.jl")
+
+@info "Precompilation finished."
 
 #=
 @setup_workload begin
@@ -375,4 +380,3 @@ end
 	end
 end
 =#
-@info "Precompilation done."
