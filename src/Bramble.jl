@@ -9,9 +9,9 @@ end
 	using MKLSparse
 end
 
-using StyledStrings
+using StyledStrings: styled, StyledString
 
-using Base: remove_linenums! # Often useful in macros to clean up expressions
+using Base: remove_linenums!
 
 import Base: eltype#, similar, length, copyto!, axes, materialize!
 import Base: show, first, last#, getindex, setindex!, iterate, size, ndims, firstindex, lastindex
@@ -37,7 +37,7 @@ using WriteVTK
 abstract type BrambleType end
 
 # domain/interval handling functions
-export box
+export box, interval
 export domain, markers, labels
 
 # Mesh handling

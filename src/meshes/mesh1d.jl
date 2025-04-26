@@ -70,13 +70,20 @@ Returns an iterable object over all the points ``x_i, \\, i=1,\\dots,N`` in `Ω�
 @inline eltype(_::Mesh1D{BackendType}) where BackendType = eltype(BackendType)
 @inline eltype(::Type{<:Mesh1D{BackendType}}) where BackendType = eltype(BackendType)
 
-function show(io::IO, Ωₕ::Mesh1D)
-	l = join(keys(markers(Ωₕ)), ", ")
-	properties = ["1D mesh",
-		"#Points: $(npoints(Ωₕ))",
-		"Markers: $l"]
+function style_mesh_title(name)
+	return styled("{red,bold,underline:$(name)}\n")
+end
 
-	print(io, join(properties, "\n"))
+function show(io::IO, Ωₕ::Mesh1D)
+	labels = keys(markers(Ωₕ))
+	labels_styled_combined = color_markers(labels)
+
+	labels_output = style_field("Markers", labels_styled_combined)
+	type_info = style_mesh_title("1D mesh")
+	npoints_info = style_field("#Points", npoints(Ωₕ))
+
+	final_output = type_info * npoints_info * labels_output
+	print(io, final_output)
 end
 
 @inline (Ωₕ::Mesh1D)(_) = Ωₕ
