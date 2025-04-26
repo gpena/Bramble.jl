@@ -1,24 +1,12 @@
 module Bramble
-using Preferences
 
 @static if Sys.isapple()
-	# Apple: Load Apple Accelerate
-	try
-		using AppleAccelerate
-		#@info "Compiled with Apple Accelerate support on macOS"
-	catch e
-		#@warn "Not an Apple machine, falling back to default BLAS/LAPACK"
-	end
+	using AppleAccelerate
 end
 
 @static if Sys.iswindows()
-	try
-		using MKL
-		using MKLSparse
-		#@info "Compiled with MKL and MKLSparse support on Windows"
-	catch e
-		#@warn "Not an Intel machine, falling back to default BLAS/LAPACK"
-	end
+	using MKL
+	using MKLSparse
 end
 
 using StyledStrings
@@ -36,7 +24,6 @@ using SparseArrays: SparseMatrixCSC#, AbstractSparseMatrix, spdiagm
 using FunctionWrappers: FunctionWrapper
 
 using UnPack: @unpack
-using MuladdMacro: @muladd
 
 #=using LinearAlgebra: Diagonal, mul!, I
 import LinearAlgebra: ⋅
