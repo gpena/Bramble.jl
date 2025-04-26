@@ -1,54 +1,65 @@
 module Bramble
+using Preferences
 
-if Sys.isapple()
+@static if Sys.isapple()
 	# Apple: Load Apple Accelerate
 	try
 		using AppleAccelerate
-		@info "Compiled with Apple Accelerate support on macOS"
+		#@info "Compiled with Apple Accelerate support on macOS"
 	catch e
-		@warn "Not an Apple machine, falling back to default BLAS/LAPACK"
+		#@warn "Not an Apple machine, falling back to default BLAS/LAPACK"
 	end
 end
 
-if Sys.iswindows()
+@static if Sys.iswindows()
 	try
 		using MKL
-		@info "Compiled with MKL support on Windows"
+		using MKLSparse
+		#@info "Compiled with MKL and MKLSparse support on Windows"
 	catch e
-		@warn "Not an Intel machine, falling back to default BLAS/LAPACK"
+		#@warn "Not an Intel machine, falling back to default BLAS/LAPACK"
 	end
 end
 
-import Base: eltype, similar, length, copyto!, axes, materialize!
-import Base: show, getindex, setindex!, iterate, size, ndims, firstindex, lastindex
-import Base: map, map!, first, last
-import Base: *, +, -, /, ^
-import Random: rand!
+using StyledStrings
+
+using Base: remove_linenums! # Often useful in macros to clean up expressions
+
+import Base: eltype#, similar, length, copyto!, axes, materialize!
+import Base: show, first, last#, getindex, setindex!, iterate, size, ndims, firstindex, lastindex
+#import Base: map, map!, first, last
+#import Base: *, +, -, /, ^
+using Random: rand!
+
+using SparseArrays: SparseMatrixCSC#, AbstractSparseMatrix, spdiagm
 
 using FunctionWrappers: FunctionWrapper
 
-using FastBroadcast: @..
-using LinearAlgebra: Diagonal, mul!, I
+using UnPack: @unpack
+using MuladdMacro: @muladd
+
+#=using LinearAlgebra: Diagonal, mul!, I
 import LinearAlgebra: ⋅
-using SparseArrays: spdiagm, SparseMatrixCSC, AbstractSparseMatrix
+
 using FillArrays: Ones, Eye
 
 using Cubature
 using Integrals: solve, IntegralFunction, IntegralProblem, QuadGKJL, CubatureJLh
 using WriteVTK
-
+=#
 abstract type BrambleType end
 
 # domain/interval handling functions
-export interval, cartesianproduct, first, last, set
-export domain, ×, create_markers, markers, labels, @embed
+export box
+export domain, markers, labels
 
 # Mesh handling
-export mesh, hₘₐₓ, points, Iterator, iterative_refinement, npoints
+export mesh, hₘₐₓ, iterative_refinement!, change_points!
 
 # Space handling
-export gridspace, element
+#=export gridspace, element
 export Rₕ, Rₕ!, avgₕ, avgₕ!
+export ndofs
 
 export innerₕ, innerₕ!
 export inner₊, inner₊ₓ, inner₊ᵧ, inner₊₂
@@ -67,14 +78,15 @@ export AutoDetect, DefaultAssembly, InPlaceAssembly, OperatorsAssembly
 export form
 export assemble, assemble!
 export constraints, symmetrize!
-
+=#
 #=
 # Exporters
 export ExporterVTK, addScalarDataset!, datasets, save2file, close
 =#
 
 include("utils/bramblefunction.jl")
-include("utils/linearalgebra.jl")
+include("utils/backend.jl")
+#include("utils/linearalgebra.jl")
 
 include("geometry/sets.jl")
 include("geometry/domains.jl")
@@ -82,7 +94,7 @@ include("geometry/domains.jl")
 include("meshes/common.jl")
 include("meshes/mesh1d.jl")
 include("meshes/meshnd.jl")
-
+#=
 include("spaces/gridspace.jl")
 include("spaces/vectorelements.jl")
 include("spaces/matrixelements.jl")
@@ -95,15 +107,14 @@ include("spaces/average.jl")
 include("spaces/inner_product.jl")
 include("spaces/operators.jl")
 
-
 include("forms/constraints.jl")
 include("forms/bilinearforms.jl")
 include("forms/linearforms.jl")
-
+=#
 #=
 include("exporters/types.jl")
 include("exporters/exporter_vtk.jl")
 
 =#
-#include("precompile.jl")
+include("precompile.jl")
 end
