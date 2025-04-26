@@ -59,7 +59,10 @@ Type: Int64
 @inline cartesianproduct(X::CartesianProduct) = X
 
 @inline function cartesianproduct(box::NTuple{D,Tuple{T,T}}) where {D,T}
-	@assert all(x -> x[1] <= x[2], box)
+	predicate_result = all(x -> x[1] <= x[2], box)
+
+	@assert predicate_result===true "Invalid box: Each tuple must satisfy x[1] <= x[2]. Check for non-compliant pairs or unexpected values. Found box: $box"
+
 	return CartesianProduct{D,T}(box)
 end
 
