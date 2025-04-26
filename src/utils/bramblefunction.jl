@@ -42,36 +42,94 @@ julia> Ω = domain(interval(0, 1) × interval(0, 1));
 
 ```
 """
+
 macro embed(domain_expr, func_expr)
-	space_domain, time_domain = _get_domains(domain_expr)
+	# 1. Parse domain (assuming _get_domains is the robust version from previous step)
+	local space_domain, time_domain
+	try
+		space_domain, time_domain = _get_domains(domain_expr)
+	catch e
+		# If _get_domains errors, rethrow the error originating from the macro call site
+		return :(throw($e))
+	end
 
-	if func_expr isa Symbol || func_expr.head == :-> || func_expr.head == :.
-		if time_domain isa Nothing
-			# case of function only depending on space variables
-			return esc(:(Bramble._embed_notime($space_domain, $func_expr)))
+	# 2. Validate func_expr safely
+	local is_valid_func_format = false
+	local func_head = nothing # Store head if it's an Expr
+
+	if func_expr isa Symbol
+		is_valid_func_format = true
+	elseif func_expr isa Expr
+		func_head = func_expr.head
+		# Use isequal to safely compare, handling potential `missing` in func_head
+		if isequal(func_head, :->) || isequal(func_head, :.) || isequal(func_head, :function) # Added :function case
+			is_valid_func_format = true
 		end
-
-		# case when the function also depends on a time variable
-		return esc(:(Bramble._embed_withtime($space_domain, $time_domain, $func_expr)))
+		# Add other valid Expr heads if necessary
 	end
+	# Otherwise (Number, String, Nothing, Missing, etc.), is_valid_func_format remains false
 
-	return :(@error "Don't know how to handle this expression")
+	# 3. Construct the appropriate call or error
+	if is_valid_func_format
+		if time_domain isa Nothing
+			# Case: function only depends on space variables
+			# Ensure Module name is PascalCase: Bramble
+			# Ensure function names are snake_case: _embed_notime
+			return esc(:(Bramble._embed_notime($space_domain, $func_expr)))
+		else
+			# Case: function also depends on a time variable
+			return esc(:(Bramble._embed_withtime($space_domain, $time_domain, $func_expr)))
+		end
+	else
+		# Invalid func_expr type or structure
+		# Use error() for proper error reporting
+		# Provide context about the received expression
+		func_expr_str = repr(remove_linenums!(func_expr)) # Clean representation for error message
+		error("In macro @embed: Invalid function expression format. Received: `$func_expr_str` (type: $(typeof(func_expr))). Expected a function Symbol, an anonymous function (`->`), a regular function definition (`function ...`), or certain dot calls (`.`).")
+	end
 end
 
-@inline function _get_domains(expr::Expr)
-	if expr.args isa Array && length(expr.args) == 3
-		args = expr.args
-		return args[2], args[3]
-	end
+"""
+	_get_domains(domain_spec)
 
-	if expr.head == :call
-		return :($expr), nothing
-	end
+Parses a domain specification, which can be:
 
-	return :(@error "Invalid domain format. Please write the first input as Ω × I, where Ω is the space domain and I is the time domain.")
+  - A Symbol representing a spatial domain (e.g., :Ω).
+  - An Expr representing a function call for a spatial domain (e.g., :(unit_interval())).
+  - An Expr representing the product of space and time domains (e.g., :(Ω × I)).
+
+Returns a tuple `(spatial_domain_expr, time_domain_expr)`, where `time_domain_expr`
+is `nothing` if no time domain is specified.
+"""
+function _get_domains(domain_spec) # Accept Any type for flexibility
+	if domain_spec isa Expr
+		expr = domain_spec # Use a local variable named expr
+
+		# Check for the specific structure Ω × I -> :(×(Ω, I))
+		# Use isequal to safely handle potential `missing` if expr.args[1] is missing
+		if expr.head == :call && length(expr.args) == 3 && isequal(expr.args[1], :×)
+			# Return the expressions for the space and time domains directly
+			spatial_domain = expr.args[2]
+			time_domain = expr.args[3]
+			return spatial_domain, time_domain
+			# Check if it's any other function call (assumed to be spatial domain)
+		elseif expr.head == :call
+			# Assume it's just a space domain expression
+			return expr, nothing
+		else
+			# Handle other Expr types that are not valid domain specifications
+			error("Invalid domain format: Unexpected expression structure '$expr'. Expected a symbol, a function call (like `domain()`), or a product (like `Ω × I`).")
+		end
+	elseif domain_spec isa Symbol
+		# Assume it's just a space domain symbol (e.g., Ω)
+		return domain_spec, nothing
+	else
+		# Handle inputs that are neither Expr nor Symbol
+		error("Invalid domain format: Input '$domain_spec' (type $(typeof(domain_spec))) is not a Symbol or Expr. Expected a symbol, a function call, or Ω × I.")
+	end
 end
 
-@inline _get_domains(s::Symbol) = :($s), nothing
+@inline _get_domains(s::Symbol) = s, nothing # Return the symbol directly
 
 function (f::BrambleFunction{NTuple{D,T},false})(x...) where {D,T}
 	@unpack wrapped = f
