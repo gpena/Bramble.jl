@@ -55,6 +55,10 @@ end
 
 Create a vector of the type specified in `b.vector_type` with length `n`.
 """
+function vector(b::Backend{Vector{T},MType}, n::Integer) where {MType,T}
+	return Vector{T}(undef, n)
+end
+
 function vector(b::Backend{VecType,MType}, n::Integer) where {VecType,MType}
 	try
 		# Attempt standard constructor for dense-like arrays (e.g., Vector)
