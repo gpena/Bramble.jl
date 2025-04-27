@@ -7,6 +7,10 @@ function style_field(name::String, value; max_length::Int)
 	return prefix * suffix
 end
 
+@inline style_real_space(::Val{1}) = "ℝ"
+@inline style_real_space(::Val{2}) = "ℝ²"
+@inline style_real_space(::Val{3}) = "ℝ³"
+
 @inline style_join(fields...) = join(fields, "\n")
 
 @inline max_length_fields(labels) = max(length.(labels)...)
@@ -33,7 +37,7 @@ function color_markers(labels)
 	return labels_styled_combined
 end
 
-@inline function style_mesh_title(name; max_length = 0)
+@inline function style_title(name; max_length = 0)
 	whitespace = style_whitespace(name, max_length)
 	return styled("$whitespace{red,bold,underline:$(name)}")
 end
