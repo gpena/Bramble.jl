@@ -19,7 +19,10 @@ mutable struct Mesh1D{BackendType<:Backend,CartIndicesType,VectorType<:AbstractV
 	indices::CartIndicesType
 	const backend::BackendType
 	pts::VectorType
+	collapsed::Bool
 end
+
+@inline is_collapsed(Ωₕ::Mesh1D) = Ωₕ.collapsed
 
 """
 	points(Ωₕ::Mesh1D)
@@ -64,7 +67,7 @@ function show(io::IO, Ωₕ::Mesh1D)
 	mlength = max_length_fields(fields)
 
 	labels_output = style_field("Markers", labels_styled_combined, max_length = mlength)
-	type_info = style_mesh_title("1D mesh")
+	type_info = style_title("1D mesh")
 	npoints_info = style_field("nPoints", npoints(Ωₕ), max_length = mlength)
 
 	final_output = style_join(type_info, npoints_info, labels_output)
@@ -197,6 +200,10 @@ h_i \\vcentcolon = x_i - x_{i-1}, \\, i=2,\\dots,N
 and ``h_1 \\vcentcolon = x_2 - x_1``.
 """
 @inline function spacing(Ωₕ::Mesh1D, i)
+	if topo_dim(Ωₕ) == 0
+		return eltype(Ωₕ)(0.0)
+	end
+
 	pts = points(Ωₕ)
 	idx = CartesianIndex(i)
 	@assert idx in indices(Ωₕ)
@@ -286,7 +293,7 @@ x_{i+1/2} \\vcentcolon = x_i + \\frac{h_{i+1}}{2}, \\, i=1,\\dots,N-1,
 		return points(Ωₕ, npoints(Ωₕ))
 	end
 
-	return (points(Ωₕ, i) + points(Ωₕ, i - 1)) * convert(T, 0.5)::T
+	return (points(Ωₕ, i) + points(Ωₕ, i - 1)) * convert(T, 0.5)
 end
 
 """
@@ -326,6 +333,11 @@ end
 	npts = length(x)
 	T = eltype(I)
 
+	if npts == 1
+		x .= zero(T)
+		return nothing
+	end
+
 	x .= range(zero(T), one(T), length = npts)
 	v = view(x, 2:(npts - 1))
 
@@ -362,8 +374,13 @@ Returns the indices of the interior points of mesh `Ωₕ`.
 
 function _mesh(Ω::Domain{CartesianProduct{1,T}}, npts::Tuple{Int}, unif::Tuple{Bool}, backend) where T
 	@unpack set, markers = Ω
-
 	n_points, = npts
+
+	if topo_dim(Ω) == 0
+		n_points = 1
+	end
+
+	is_collapsed = topo_dim(set) == 0
 	is_uniform, = unif
 
 	pts = vector(backend, n_points)
@@ -372,7 +389,7 @@ function _mesh(Ω::Domain{CartesianProduct{1,T}}, npts::Tuple{Int}, unif::Tuple{
 	idxs = generate_indices(n_points)
 
 	mesh_markers = MeshMarkers{1}()
-	mesh = Mesh1D(mesh_markers, idxs, backend, pts)
+	mesh = Mesh1D(mesh_markers, idxs, backend, pts, is_collapsed)
 
 	set_markers!(mesh, markers)
 	return mesh
@@ -384,6 +401,10 @@ end
 Refines the given 1D mesh `Ωₕ` by halving each existing cell, effectively doubling the number of cells and nearly doubling the number of points. It also updates the markers according to `domain_markers` after the refinement.
 """
 function iterative_refinement!(Ωₕ::Mesh1D)
+	if is_collapsed(Ωₕ)
+		return
+	end
+
 	npts = 2 * npoints(Ωₕ) - 1
 
 	pts = vector(backend(Ωₕ), npts)
@@ -399,6 +420,10 @@ function iterative_refinement!(Ωₕ::Mesh1D)
 end
 
 function iterative_refinement!(Ωₕ::Mesh1D, domain_markers::DomainMarkers)
+	if is_collapsed(Ωₕ)
+		return
+	end
+
 	iterative_refinement!(Ωₕ)
 	set_markers!(Ωₕ, domain_markers)
 end

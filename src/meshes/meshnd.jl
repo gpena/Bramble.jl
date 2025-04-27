@@ -21,15 +21,17 @@ end
 
 function _mesh(Ω::Domain, npts::NTuple{D,Int}, unif::NTuple{D,Bool}, backend) where D
 	@assert dim(Ω) == D
+	_set = set(Ω)
+	npts_with_collapsed = ntuple(i -> _set.collapsed[i] ? 1 : npts[i], D)
 
-	idxs = generate_indices(npts)
-	submeshes = generate_submeshes(Ω, npts, unif, backend)
+	idxs = generate_indices(npts_with_collapsed)
+	submeshes = generate_submeshes(Ω, npts_with_collapsed, unif, backend)
 
 	mesh_markers = MeshMarkers{D}()
-	mesh = MeshnD(mesh_markers, idxs, backend, submeshes)
-	set_markers!(mesh, markers(Ω))
+	__mesh = MeshnD(mesh_markers, idxs, backend, submeshes)
+	set_markers!(__mesh, markers(Ω))
 
-	return mesh
+	return __mesh
 end
 
 @inline dim(_::MeshnD{D}) where D = D
@@ -46,7 +48,7 @@ function show(io::IO, Ωₕ::MeshnD)
 	colors = style_color_sets()
 	num_colors = length(colors)
 
-	type_info = style_mesh_title("$(D)D mesh", max_length = mlength)
+	type_info = style_title("$(D)D mesh", max_length = mlength)
 	print(io, type_info * "\n")
 
 	npts = npoints(Ωₕ, Tuple)
@@ -172,7 +174,12 @@ Returns a tuple with the [half_spacing](@ref), for each submesh, at index `idx`.
 (h_{x,i+1/2}, h_{y,j+1/2}, h_{z,l+1/2})
 ```
 """
-@inline @generated half_spacing(Ωₕ::MeshnD{D}, idx) where D = :(Base.Cartesian.@ntuple $D i->half_spacing(Ωₕ(i), idx[i]))
+@inline @generated function half_spacing(Ωₕ::MeshnD{D}, idx) where D
+	generated_code = :(Base.Cartesian.@ntuple $D i->_apply_hs_logic(half_spacing(Ωₕ(i), idx[i])))
+	return generated_code
+end
+
+@inline _apply_hs_logic(value) = ifelse(value == 0, 1, value)
 
 """
 	half_spacing_iterator(Ωₕ::MeshnD)
@@ -254,25 +261,10 @@ Returns the `CartesianIndices` of a mesh with `nPoints[i]` in each direction.
 
 Returns true if the index `idx` is a boundary index of the mesh with indices stored in `idxs`.
 """
-@generated function is_boundary_index(idx, idxs::CartesianIndices{D}) where D
-	setup_expr = quote
-		dims = size(idxs)
-		_idx = CartesianIndex(idx)
-	end
+function is_boundary_index(idx, idxs::CartesianIndices{D}) where D
+	boundary_sections = boundary_indices(idxs)
 
-	check_expr = :(false)
-
-	for i in 1:D
-		dim_check_expr = :(_idx[$i] == 1 || _idx[$i] == dims[$i])
-		check_expr = :($check_expr || $dim_check_expr)
-	end
-
-	final_expr = quote
-		$setup_expr
-		return $check_expr
-	end
-
-	return final_expr
+	return any(section -> idx in section, boundary_sections)
 end
 
 """
@@ -281,7 +273,7 @@ end
 Returns the boundary indices of mesh `Ωₕ`.
 """
 @inline boundary_indices(Ωₕ::MeshnD) = boundary_indices(indices(Ωₕ))
-@inline boundary_indices(idxs::CartesianIndices{D}) where D = (idx for idx in idxs if is_boundary_index(idx, idxs))
+@inline boundary_indices(idxs::CartesianIndices{D}) where D = tuple(values(boundary_symbol_to_cartesian(idxs))...)
 
 """
 	interior_indices(Ωₕ::MeshnD)
@@ -289,7 +281,21 @@ Returns the boundary indices of mesh `Ωₕ`.
 Returns the interior indices of mesh `Ωₕ`.
 """
 @inline interior_indices(Ωₕ::MeshnD) = interior_indices(indices(Ωₕ))
-@inline interior_indices(indices::CartesianIndices{D}) where D = CartesianIndices(ntuple(i -> 2:(size(indices)[i] - 1), D))
+@inline function interior_indices(indices::CartesianIndices{D}) where D
+	original_ranges = indices.indices
+
+	interior_ranges_tuple = ntuple(D) do i
+		r = original_ranges[i]
+
+		if length(r) <= 1
+			return r
+		else
+			(first(r) + 1):(last(r) - 1)
+		end
+	end
+
+	return CartesianIndices(interior_ranges_tuple)
+end
 
 function iterative_refinement!(Ωₕ::MeshnD{D}, domain_markers::DomainMarkers) where D
 	for i in 1:D
