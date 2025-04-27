@@ -61,6 +61,7 @@ Dict{Symbol, CartesianIndices{3, R} where R<:Tuple{OrdinalRange{Int64, Int64}, O
 
 function boundary_symbol_to_cartesian(indices::CartesianIndices{2})
 	N, M = size(indices)
+
 	dict_2d = Dict{Symbol,CartesianIndices{2}}()
 	dict_2d[:left] = CartesianIndices((1:1, 1:M))
 	dict_2d[:right] = CartesianIndices((N:N, 1:M))
@@ -288,10 +289,25 @@ end
 	dim(Ωₕ::MeshType)
 	dim(::Type{<:MeshType})
 
-Returns the tolopogical dimension of `Ωₕ`.
+Returns the dimension of the space where `Ωₕ` is embedded.
 """
 @inline dim(_::MeshType{D}) where D = D
 @inline dim(::Type{<:MeshType{D}}) where D = D
+
+"""
+	topo_dim(Ωₕ::MeshType)
+
+Returns the topological dimension `Ωₕ`.
+"""
+@inline @generated function topo_dim(Ωₕ::MeshType{D}) where D
+	if D <= 0
+		return :(0) # Handle edge case
+	end
+
+	term_expression = :((npoints(Ωₕ(i)) == 1) ? 0 : dim(Ωₕ(i)))
+	generated_code = :(sum(Base.Cartesian.@ntuple $D i->$term_expression))
+	return generated_code
+end
 
 """
 	indices(Ωₕ::MeshType)
