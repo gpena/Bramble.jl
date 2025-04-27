@@ -192,7 +192,7 @@ Returns the [CartesianProduct](@ref) associated with the [Domain](@ref) `Ω`.
 	dim(Ω::Domain)
 	dim(::Type{<:Domain})
 
-Returns the topological dimension of the [Domain](@ref) `Ω`.
+Returns the dimension of the space where [Domain](@ref) `Ω` is embedded.
 
 # Example
 
@@ -204,6 +204,13 @@ julia> I = interval(0.0, 1.0);
 """
 @inline dim(Ω::Domain) = dim(set(Ω))
 @inline dim(::Type{<:Domain{SetType}}) where SetType = dim(SetType)
+
+"""
+	topo_dim(Ω::Domain)
+
+Returns the topological dimension [Domain](@ref) `Ω`.
+"""
+@inline topo_dim(Ω::Domain) = topo_dim(set(Ω))
 
 """
 	eltype(Ω::Domain)
@@ -247,8 +254,13 @@ function Base.show(io::IO, markers::DomainMarkers)
 end
 
 function show(io::IO, Ω::Domain)
-	show(io, set(Ω))
-	println()
+	fields = ("Type", "Dim", "Set", "Markers")
+	mlength = max_length_fields(fields)
+
+	title_info = style_title("Domain", max_length = mlength)
+	output = style_join(title_info, set_info_only(set(Ω), mlength))
+	print(io, output * "\n")
+
 	show(io, markers(Ω))
 end
 
