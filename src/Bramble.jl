@@ -37,7 +37,7 @@ using WriteVTK
 abstract type BrambleType end
 
 # domain/interval handling functions
-export box, interval
+export box, interval, ×
 export domain, markers, labels
 
 # Mesh handling
