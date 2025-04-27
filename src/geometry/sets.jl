@@ -7,6 +7,7 @@ Type for storage of cartesian products of `D` intervals having elements of type 
 """
 struct CartesianProduct{D,T} <: BrambleType
 	box::NTuple{D,Tuple{T,T}}
+	collapsed::NTuple{D,Bool}
 end
 
 """
@@ -27,10 +28,22 @@ CartesianProduct{1,Float64}((0.0,1.0))
 	y = float(_y)
 	@assert x <= y
 
-	return CartesianProduct{1,typeof(x)}(((x, y),))
+	is_collapsed = isapprox(x, y) ? true : false
+	return CartesianProduct{1,typeof(x)}(((x, y),), (is_collapsed,))
 end
 
 @inline interval(x::CartesianProduct{1}) = interval(x(1)...)
+
+"""
+	point(x)
+
+Returns the interval `[x,x]`.
+"""
+@inline function point(_x)
+	x = float(_x)
+
+	return CartesianProduct{1,typeof(x)}(((x, x),), (true,))
+end
 
 """
 	cartesianproduct(x, y)
@@ -63,7 +76,8 @@ Type: Int64
 
 	@assert predicate_result===true "Invalid box: Each tuple must satisfy x[1] <= x[2]. Check for non-compliant pairs or unexpected values. Found box: $box"
 
-	return CartesianProduct{D,T}(box)
+	_falses = ntuple(i -> isapprox(float(box[i][1]), float(box[i][2])) ? true : false, D)
+	return CartesianProduct{D,T}(box, _falses)
 end
 
 """
@@ -74,7 +88,7 @@ Creates a [CartesianProduct](@ref) from the coordinates in `a` and `b`. It accep
 """
 @inline box(a, b) = interval(a, b)
 @inline @generated function box(a::NTuple{D}, b::NTuple{D}) where D
-	return :(CartesianProduct(Base.Cartesian.@ntuple $D i->(float(a[i]), float(b[i]))))
+	return :(CartesianProduct((Base.Cartesian.@ntuple $D i->(float(a[i]), float(b[i]))), (Base.Cartesian.@ntuple $D i->(isapprox(float(a[i]), float(b[i])) ? true : false))))
 end
 
 """
@@ -109,7 +123,7 @@ Float64
 	dim(X::CartesianProduct)
 	dim(::Type{<:CartesianProduct})
 
-Returns the topological dimension of a [CartesianProduct](@ref).
+Returns the dimension of the space where a [CartesianProduct](@ref) is embedded.
 
 # Example
 
@@ -127,6 +141,13 @@ julia> Y = cartesianproduct(((0, 1), (4, 5)));
 """
 @inline dim(_::CartesianProduct{D}) where D = D
 @inline dim(::Type{<:CartesianProduct{D}}) where D = D
+
+"""
+	topo_dim(X::CartesianProduct)
+
+Returns the topological dimension of a [CartesianProduct](@ref).
+"""
+@inline topo_dim(X::CartesianProduct{D}) where D = (D - sum(X.collapsed))
 
 """
 	tails(X::CartesianProduct, i)
@@ -179,9 +200,9 @@ Type: Float64
 """
 @generated function ×(X::CartesianProduct{D1,T}, Y::CartesianProduct{D2,T}) where {D1,D2,T}
 	new_box_expr = :(tuple(X.box..., Y.box...))
-
-	ResultType = CartesianProduct{D1 + D2,T} # The type itself can often be used directly if concrete
-	final_expr = :($ResultType($new_box_expr))
+	new_falses_expr = :(tuple(X.collapsed..., Y.collapsed...))
+	ResultType = CartesianProduct{D1 + D2,T}
+	final_expr = :($ResultType($new_box_expr, $new_falses_expr))
 
 	return final_expr
 end
@@ -206,13 +227,23 @@ Type: Float64
 function Base.show(io::IO, X::CartesianProduct{D}) where D
 	@unpack box = X
 
+	fields = ("Type", "Dim", "Set", "Markers")
+	mlength = max_length_fields(fields)
+
+	title_info = style_title("Set", max_length = mlength)
+	output = style_join(title_info, set_info_only(X, mlength))
+	print(io, output)
+end
+
+function set_info_only(X::CartesianProduct{D}, mlength) where D
+	@unpack box = X
+
 	colors = style_color_sets()
 	num_colors = length(colors)
 
-	fields = ("Type", "Dim", "Set", "Markers")
-	mlength = max_length_fields(fields)
 	styled_sets = [let
-					   set_str = "[$(tails(X,i)[1]), $(tails(X,i)[2])]"
+					   is_collapsed = X.collapsed[i]
+					   set_str = is_collapsed ? "{$(tails(X,i)[1])}" : "[$(tails(X,i)[1]), $(tails(X,i)[2])]"
 					   color_sym = colors[mod1(i, num_colors)]
 					   styled"{$color_sym:$(set_str)}"
 				   end
@@ -221,9 +252,10 @@ function Base.show(io::IO, X::CartesianProduct{D}) where D
 	sets_styled_combined = join(styled_sets, " × ")
 
 	type_info = style_field("Type", eltype(X), max_length = mlength)
-	dim_info = style_field("Dim", D, max_length = mlength)
+	dim_info = style_field("Space", style_real_space(Val(D)), max_length = mlength)
+	topological_info = style_field("Dim", topo_dim(X), max_length = mlength)
 	set_info = style_field("Set", sets_styled_combined, max_length = mlength)
 
-	output = style_join(type_info, dim_info, set_info)
-	print(io, output)
+	output = style_join(type_info, dim_info, topological_info, set_info)
+	return output
 end
