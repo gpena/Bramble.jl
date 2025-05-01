@@ -175,11 +175,10 @@ Returns a tuple with the [half_spacing](@ref), for each submesh, at index `idx`.
 ```
 """
 @inline @generated function half_spacing(Ωₕ::MeshnD{D}, idx) where D
-	generated_code = :(Base.Cartesian.@ntuple $D i->_apply_hs_logic(half_spacing(Ωₕ(i), idx[i])))
-	return generated_code
+	return :(Base.Cartesian.@ntuple $D i->_apply_hs_logic(half_spacing(Ωₕ(i), idx[i])))
 end
 
-@inline _apply_hs_logic(value) = ifelse(value == 0, 1, value)
+@inline _apply_hs_logic(value::T) where T = ifelse(value == zero(T), one(T), value)
 
 """
 	half_spacing_iterator(Ωₕ::MeshnD)
@@ -259,12 +258,13 @@ Returns the `CartesianIndices` of a mesh with `nPoints[i]` in each direction.
 """
 	is_boundary_index(idx, idxs::CartesianIndices)
 
-Returns true if the index `idx` is a boundary index of the mesh with indices stored in `idxs`.
+Returns true if the index `idx` is a boundary index of the mesh.
 """
 function is_boundary_index(idx, idxs::CartesianIndices{D}) where D
 	boundary_sections = boundary_indices(idxs)
 
-	return any(section -> idx in section, boundary_sections)
+	_idx = CartesianIndex(idx)
+	return any(section -> _idx in section, boundary_sections)
 end
 
 """
@@ -273,8 +273,11 @@ end
 Returns the boundary indices of mesh `Ωₕ`.
 """
 @inline boundary_indices(Ωₕ::MeshnD) = boundary_indices(indices(Ωₕ))
-@inline boundary_indices(idxs::CartesianIndices{D}) where D = tuple(values(boundary_symbol_to_cartesian(idxs))...)
+@inline function boundary_indices(idxs::CartesianIndices{D}) where D
+	tup = boundary_symbol_to_cartesian(idxs)
 
+	return ntuple(i -> tup[i], length(tup))
+end
 """
 	interior_indices(Ωₕ::MeshnD)
 
