@@ -61,7 +61,7 @@ end # @setup
 		# Call merge directly on a marker that likely has consecutive indices
 		merge_consecutive_indices!(_marker_indices_instance)
 	end
-	boundary_symbol_to_cartesian(_idxs)
+	boundary_symbol_to_dict(_idxs)
 
 	# Basic Accessors
 	dim(_Ωₕ)
