@@ -23,6 +23,8 @@ using SparseArrays: SparseMatrixCSC#, AbstractSparseMatrix, spdiagm
 
 using FunctionWrappers: FunctionWrapper
 
+using OhMyThreads
+using Base.Threads: @threads
 using UnPack: @unpack
 
 #=using LinearAlgebra: Diagonal, mul!, I
