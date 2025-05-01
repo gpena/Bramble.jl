@@ -104,3 +104,15 @@ function eltype(::Type{Backend{VecType,MatType}}) where {VecType,MatType}
 	@assert eltype(VecType) == eltype(MatType)
 	return eltype(VecType)
 end
+
+
+function get_chunk_range(total_length::Int, num_chunks::Int, chunk_id::Int)
+    base_size = total_length ÷ num_chunks
+    remainder = total_length % num_chunks
+    # Calculate start index, accounting for extra elements in earlier chunks
+    start_idx = (chunk_id - 1) * base_size + min(chunk_id - 1, remainder) + 1
+    # Calculate chunk size for this specific chunk
+    chunk_size = base_size + (chunk_id <= remainder ? 1 : 0)
+    end_idx = start_idx + chunk_size - 1
+    return start_idx:end_idx
+end
