@@ -38,6 +38,7 @@ test = ["Test"]
 
 [weakdeps]
 Meshes = "eacbb407-ea5a-433e-ab97-5258b1ca43fa"
+MakieCore = "20f20a25-4f0e-4fdf-b5d1-57303727442b"
 
 [extensions]
-BrambleMeshesExt = "Meshes"
+BrambleMeshesExt = ["Meshes", "MakieCore"]
