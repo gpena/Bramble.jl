@@ -102,6 +102,20 @@ struct GridSpace{MType,D,T} <: SpaceType{MType}
 	vec_cache::Vector{T}
 end
 
+#=
+mutable struct VectorBuffer{VType} <: BrambleType
+	const vector::VType
+	in_use::Bool
+end
+
+struct GridSpace{Msh,D,Vec,Mat} <: SpaceType{MType}
+	mesh::Msh
+	weights::Dict{Symbol, Vec}
+	diff_matrix::Dict{Int, Mat}
+	vector_buffer::Dict{Int,VectorBuffer{VType}}
+end
+=#
+
 """
 	struct BrambleGridSpaceFunction{S,T} 
 		f_tuple::FunctionWrapper{T, Tuple{VectorElement{S,T}}}
