@@ -1,4 +1,4 @@
-import Bramble: indices, change_points!, npoints, dim, spacing, half_spacing, generate_indices, boundary_symbol_to_cartesian, merge_consecutive_indices!, create_markers, backend, set_indices!, points, set_points!, marker, set_markers!,
+import Bramble: indices, change_points!, npoints, dim, spacing, half_spacing, generate_indices, boundary_symbol_to_dict, merge_consecutive_indices!, create_markers, backend, set_indices!, points, set_points!, marker, set_markers!,
 				iterative_refinement!
 import Bramble: cell_measure, spacing, half_spacing, hₘₐₓ, half_points, boundary_indices, interior_indices
 import Bramble: MarkerIndices, DomainMarkers, Mesh1D, Backend, points_iterator, half_points_iterator, spacing_iterator, cell_measure_iterator, half_spacing_iterator
@@ -21,14 +21,14 @@ import Base: diff
 			@test generate_indices(1) == CartesianIndices((1,))
 		end
 
-		@testset "boundary_symbol_to_cartesian (D=1)" begin
+		@testset "boundary_symbol_to_dict (D=1)" begin
 			indices = CartesianIndices((10,))
-			dict = boundary_symbol_to_cartesian(indices)
+			dict = boundary_symbol_to_dict(indices)
 			@test dict[:left] == CartesianIndex(1)
 			@test dict[:right] == CartesianIndex(10)
 
 			indices_single = CartesianIndices((1,))
-			dict_single = boundary_symbol_to_cartesian(indices_single)
+			dict_single = boundary_symbol_to_dict(indices_single)
 			@test dict_single[:left] == CartesianIndex(1)
 			@test dict_single[:right] == CartesianIndex(1)
 		end
