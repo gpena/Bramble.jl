@@ -21,71 +21,72 @@ end
 """
 	boundary_symbol_to_cartesian(indices::CartesianIndices{D}) where D
 
-	Returns a dictionary connecting the facet labels of a set to the corresponding `CartesianIndices`.
+	Returns a named tuple connecting the facet labels of a set to the corresponding `CartesianIndices`. See []
 
 ```@example
-julia> boundary_symbol_to_cartesian(CartesianIndices((1:10,)))
-Dict{Symbol, CartesianIndex{1}} with 2 entries:
-  :left  => CartesianIndex(1,)
-  :right => CartesianIndex(10,)
-```
-
-```@example
-julia> boundary_symbol_to_cartesian(CartesianIndices((1:10,)))
-Dict{Symbol, CartesianIndex{1}} with 2 entries:
-  :left  => CartesianIndex(1,)
-  :right => CartesianIndex(10,)
-```
-
-```@example
-julia> boundary_symbol_to_cartesian(CartesianIndices((1:10, 1:20)))
-Dict{Symbol, CartesianIndices{2, R} where R<:Tuple{OrdinalRange{Int64, Int64}, OrdinalRange{Int64, Int64}}} with 4 entries:
-  :left   => CartesianIndices((1:1, 1:20))
-  :right  => CartesianIndices((10:10, 1:20))
-  :bottom => CartesianIndices((1:10, 1:1))
-  :top    => CartesianIndices((1:10, 20:20))
+julia> boundary_symbol_to_cartesian(CartesianIndices((1:3,1:4)))
+(left = CartesianIndices((1:1, 1:4)), 
+ right = CartesianIndices((3:3, 1:4)), 
+ top = CartesianIndices((1:3, 4:4)), 
+ bottom = CartesianIndices((1:3, 1:1))
+)
 ```
 
 ```@example
 julia> boundary_symbol_to_cartesian(CartesianIndices((1:10, 1:20, 1:15)))
-Dict{Symbol, CartesianIndices{3, R} where R<:Tuple{OrdinalRange{Int64, Int64}, OrdinalRange{Int64, Int64}, OrdinalRange{Int64, Int64}}} with 6 entries:
-  :left   => CartesianIndices((1:10, 1:1, 1:15))
-  :right  => CartesianIndices((1:10, 20:20, 1:15))
-  :bottom => CartesianIndices((1:10, 1:20, 1:1))
-  :top    => CartesianIndices((1:10, 1:20, 15:15))
-  :front  => CartesianIndices((10:10, 1:20, 1:15))
-  :back   => CartesianIndices((1:1, 1:20, 1:15))
+(left = CartesianIndices((1:10, 1:1, 1:15)), 
+ right = CartesianIndices((1:10, 20:20, 1:15)), 
+ top = CartesianIndices((1:10, 1:20, 15:15)), 
+ bottom = CartesianIndices((1:10, 1:20, 1:1)), 
+ front = CartesianIndices((10:10, 1:20, 1:15)), 
+ back = CartesianIndices((1:1, 1:20, 1:15))
+)
 ```
 """
-@inline boundary_symbol_to_cartesian(indices::CartesianIndices{1}) = Dict(:left => first(indices), :right => last(indices))
+@inline function boundary_symbol_to_cartesian(indices::CartesianIndices{1})
+	named_tuple_1d = (; :left => first(indices), :right => last(indices))
+	return named_tuple_1d
+end
 
 function boundary_symbol_to_cartesian(indices::CartesianIndices{2})
 	N, M = size(indices)
 
-	dict_2d = Dict{Symbol,CartesianIndices{2}}()
-	dict_2d[:left] = CartesianIndices((1:1, 1:M))
-	dict_2d[:right] = CartesianIndices((N:N, 1:M))
-
-	dict_2d[:top] = CartesianIndices((1:N, M:M))
-	dict_2d[:bottom] = CartesianIndices((1:N, 1:1))
-
-	return dict_2d
+	named_tuple_2d = (;
+		:left => indices[1:1, 1:M],
+		:right => indices[N:N, 1:M],
+		:top => indices[1:N, M:M],
+		:bottom => indices[1:N, 1:1]
+	)
+	return named_tuple_2d
 end
 
 function boundary_symbol_to_cartesian(indices::CartesianIndices{3})
 	N, M, K = size(indices)
-	dict_3d = Dict{Symbol,CartesianIndices{3}}()
-	dict_3d[:left] = CartesianIndices((1:N, 1:1, 1:K))
-	dict_3d[:right] = CartesianIndices((1:N, M:M, 1:K))
 
-	dict_3d[:top] = CartesianIndices((1:N, 1:M, K:K))
-	dict_3d[:bottom] = CartesianIndices((1:N, 1:M, 1:1))
-
-	dict_3d[:front] = CartesianIndices((N:N, 1:M, 1:K))
-	dict_3d[:back] = CartesianIndices((1:1, 1:M, 1:K))
-
-	return dict_3d
+	named_tuple_3d = (;
+		:left => indices[1:N, 1:1, 1:K],
+		:right => indices[1:N, M:M, 1:K],
+		:top => indices[1:N, 1:M, K:K],
+		:bottom => indices[1:N, 1:M, 1:1],
+		:front => indices[N:N, 1:M, 1:K],
+		:back => indices[1:1, 1:M, 1:K]
+	)
+	return named_tuple_3d
 end
+
+"""
+	boundary_symbol_to_dict(indices::CartesianIndices{D}) where D
+
+	Returns a dictionary connecting the facet labels of a set to the corresponding `CartesianIndices`. See [boundary_symbol_to_cartesian](@ref)
+"""
+boundary_symbol_to_dict(indices::CartesianIndices{D}) where D = Dict(pairs(boundary_symbol_to_cartesian(indices)))
+
+"""
+	is_boundary_index(idx, Ωₕ::MeshType)
+
+Returns true if the index `idx` is a boundary index of the mesh.
+"""
+@inline is_boundary_index(idx, Ωₕ::MeshType) = is_boundary_index(idx, indices(Ωₕ))
 
 """
 	merge_consecutive_indices!(marker_data::MarkerIndices{D}) where D
@@ -96,21 +97,14 @@ and adds the corresponding `CartesianIndices{D}` range object to
 `marker_data.c_indices`.
 """
 function merge_consecutive_indices!(marker_data::MarkerIndices{D}; check_consistency = true) where D
-	# --- Save Initial State (only if checking consistency) ---
 	initial_indices_copy = check_consistency ? copy(marker_data.c_index) : Set{CartesianIndex{D}}()
-	# We assume initial marker_data.c_indices should be preserved and added to.
-	# The check focuses on conserving the points from the initial c_index set.
 
-	# --- Main Merging Logic ---
 	remaining_indices = copy(marker_data.c_index)
 	if isempty(remaining_indices)
-		# Consistency check is trivial if input was empty
 		if check_consistency && !isempty(initial_indices_copy)
-			# This case should ideally not happen if logic is correct
 			error("Internal logic error: Input c_index was empty but initial copy wasn't.")
 		end
-		# Optional: Add a print statement if consistency check passes trivially
-		# if check_consistency; println("Consistency check passed (empty input)."); end
+
 		return nothing
 	end
 
@@ -220,17 +214,12 @@ function merge_consecutive_indices!(marker_data::MarkerIndices{D}; check_consist
 		# initial c_index set. If marker_data.c_indices had pre-existing ranges,
 		# this check doesn't include them, which is correct for verifying this function's action.
 		for block in output_ranges
-			# Efficiently add all elements from the CartesianIndices iterator
 			union!(reconstructed_indices, Set(block))
-			# Alternative (potentially less memory for huge blocks, maybe slower):
-			# for idx in block
-			#     push!(reconstructed_indices, idx)
-			# end
 		end
 
 		# Compare the reconstructed set with the initial set
 		if reconstructed_indices != initial_indices_copy
-			# --- Detailed Debug Output ---
+			# --- Debug Output ---
 			println("Consistency Check FAILED!")
 			println("Initial index count:      ", length(initial_indices_copy))
 			println("Reconstructed index count:", length(reconstructed_indices))
@@ -240,16 +229,13 @@ function merge_consecutive_indices!(marker_data::MarkerIndices{D}; check_consist
 
 			if !isempty(lost_indices)
 				println("Lost indices (present initially, missing finally):")
-				display(lost_indices) # Use display for potentially large sets
-				# Consider limiting output: display(collect(Iterators.take(lost_indices, 10)))
+				display(lost_indices) 
 			end
 			if !isempty(gained_indices)
 				println("Gained indices (present finally, missing initially):")
 				display(gained_indices)
-				# Consider limiting output: display(collect(Iterators.take(gained_indices, 10)))
 			end
 
-			# You might want to inspect the state just before the error
 			println("\nState before error:")
 			println("Initial c_index copy: ")
 			display(initial_indices_copy)
@@ -262,7 +248,7 @@ function merge_consecutive_indices!(marker_data::MarkerIndices{D}; check_consist
 
 			error("Consistency check failed: The set of indices after merging does not match the initial set.")
 		end
-	end # end if check_consistency
+	end
 
 	return nothing
 end
@@ -272,9 +258,10 @@ end
 
 Type of dictionary to store the `CartesianIndices` associated with a [MarkerIndices](@ref).
 """
-MeshMarkers{D} = Dict{Symbol,MarkerIndices{D,CartesianIndex{D},CartesianIndices{D,NTuple{D,UnitRange{Int}}}}}
+CIndices_Type{D} = CartesianIndices{D,NTuple{D,UnitRange{Int}}}
+MeshMarkers{D} = Dict{Symbol,MarkerIndices{D,CartesianIndex{D},CIndices_Type{D}}}
 
-function Base.show(io::IO, markers::MeshMarkers{D}) where D
+function Base.show(io::IO, markers::MeshMarkers{D}) where {D}
 	labels = collect(keys(markers))
 	labels_styled_combined = color_markers(labels)
 
@@ -291,15 +278,15 @@ end
 
 Returns the dimension of the space where `Ωₕ` is embedded.
 """
-@inline dim(_::MeshType{D}) where D = D
-@inline dim(::Type{<:MeshType{D}}) where D = D
+@inline dim(_::MeshType{D}) where {D} = D
+@inline dim(::Type{<:MeshType{D}}) where {D} = D
 
 """
 	topo_dim(Ωₕ::MeshType)
 
 Returns the topological dimension `Ωₕ`.
 """
-@inline @generated function topo_dim(Ωₕ::MeshType{D}) where D
+@inline @generated function topo_dim(Ωₕ::MeshType{D}) where {D}
 	if D <= 0
 		return :(0) # Handle edge case
 	end
@@ -333,7 +320,7 @@ Returns the [Marker](@ref) function with label `str`.
 """
 @inline marker(Ωₕ::MeshType, symbol::Symbol) = Ωₕ.markers[symbol]
 
-function process_label_for_mesh!(markers_mesh::MeshMarkers{D}, set_labels) where D
+function process_label_for_mesh!(markers_mesh::MeshMarkers{D}, set_labels) where {D}
 	c_indices_type = CartesianIndices{D,NTuple{D,UnitRange{Int}}}
 	c_index_type = CartesianIndex{D}
 
@@ -342,7 +329,7 @@ function process_label_for_mesh!(markers_mesh::MeshMarkers{D}, set_labels) where
 	end
 end
 
-function _init_mesh_markers(_::MeshType{D}, domain_markers::DomainMarkers) where D
+function _init_mesh_markers(_::MeshType{D}, domain_markers::DomainMarkers) where {D}
 	markers_mesh = MeshMarkers{D}()
 
 	process_label_for_mesh!(markers_mesh, label_symbols(domain_markers))
@@ -362,7 +349,7 @@ function set_markers!(Ωₕ::MeshType, domain_markers)
 	mesh_indices = indices(Ωₕ)
 
 	mesh_markers = _init_mesh_markers(Ωₕ, domain_markers)
-	symbol_to_index_map = boundary_symbol_to_cartesian(mesh_indices)
+	symbol_to_index_map = boundary_symbol_to_dict(mesh_indices)
 
 	for marker in symbols(domain_markers)
 		@unpack label, identifier = marker
@@ -382,12 +369,13 @@ function set_markers!(Ωₕ::MeshType, domain_markers)
 
 	for marker in conditions(domain_markers)
 		@unpack label, identifier = marker
-		for idx in mesh_indices
-			if identifier(points(Ωₕ, idx))
-				push!(mesh_markers[label].c_index, idx)
-			end
-		end
 
+			for idx in mesh_indices
+				if identifier(points(Ωₕ, idx))
+					push!(mesh_markers[label].c_index, idx)
+				end
+			end
+		
 		merge_consecutive_indices!(mesh_markers[label])
 	end
 
@@ -454,5 +442,5 @@ Submeshes:
   y direction | nPoints: 15
 ```
 """
-@inline mesh(Ω::Domain, npts::NTuple{D,Int}, unif::NTuple{D,Bool}; backend = Backend()) where D = _mesh(Ω, npts, unif, backend)
-@inline mesh(Ω::Domain{CartesianProduct{1,T}}, npts::Int, unif::Bool; backend = Backend()) where T = _mesh(Ω, (npts,), (unif,), backend)
+@inline mesh(Ω::Domain, npts::NTuple{D,Int}, unif::NTuple{D,Bool}; backend = Backend()) where {D} = _mesh(Ω, npts, unif, backend)
+@inline mesh(Ω::Domain{CartesianProduct{1,T}}, npts::Int, unif::Bool; backend = Backend()) where {T} = _mesh(Ω, (npts,), (unif,), backend)
