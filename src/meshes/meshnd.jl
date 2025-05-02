@@ -6,7 +6,7 @@
 		submeshes::NTuple{D, Mesh1DType}
 	end
 
-Structure to store a cartesian nD-mesh (``2 \\leq n \\leq 3``) with points of type `T`. For efficiency, the mesh points are not stored. Instead, we store the points of the 1D meshes that make up the nD mesh. To connect both nD and 1D meshes, we use the indices in `indices`. The [Domain](@ref) markers are translated to `markers` as for [Mesh1D](@ref).
+Structure to store a cartesian nD-mesh (``2 \\leq n \\leq 3``). For efficiency, the mesh points are not stored. Instead, we store the points of the 1D meshes that make up the nD mesh. To connect both nD and 1D meshes, we use the indices in `indices`. The [DomainMarkers](@ref) are translated to `markers` as for [Mesh1D](@ref).
 """
 mutable struct MeshnD{D,BackendType<:Backend,CartIndicesType,Mesh1DType<:MeshType{1}} <: MeshType{D}
 	markers::MeshMarkers{D}
@@ -34,13 +34,10 @@ function _mesh(Ω::Domain, npts::NTuple{D,Int}, unif::NTuple{D,Bool}, backend) w
 	return __mesh
 end
 
-@inline dim(_::MeshnD{D}) where D = D
-@inline dim(::Type{<:MeshnD{D}}) where D = D
+@inline _eltype(_::MeshnD{D,BackendType}) where {D,BackendType} = eltype(BackendType)
+@inline Base.eltype(_::Type{<:MeshnD{D,BackendType}}) where {D,BackendType} = eltype(BackendType)
 
-@inline eltype(_::MeshnD{D,BackendType}) where {D,BackendType} = eltype(BackendType)
-@inline eltype(_::Type{<:MeshnD{D,BackendType}}) where {D,BackendType} = eltype(BackendType)
-
-function show(io::IO, Ωₕ::MeshnD)
+function Base.show(io::IO, Ωₕ::MeshnD)
 	D = dim(Ωₕ)
 	fields = ("Markers", "Resolution")
 	mlength = max_length_fields(fields)
@@ -77,235 +74,49 @@ Returns the `i`-th submesh of `Ωₕ`.
 	return Ωₕ.submeshes[i]
 end
 
-"""
-	points(Ωₕ::MeshnD)
-	points(Ωₕ::MeshnD{D}, idx)
+@inline @generated _points(Ωₕ::MeshnD{D}) where D = :(Base.Cartesian.@ntuple $D i->_points(Ωₕ(i)))
+@inline @generated _points(Ωₕ::MeshnD{D}, idx) where D = :(Base.Cartesian.@ntuple $D i->_points(Ωₕ(i), idx[i]))
 
-Returns a tuple with the points of `Ωₕ`. If the `Tuple` `idx` is passed as the second argument is passed, it returns the tuple with the point corresponding to that index.
+@inline @generated _points_iterator(Ωₕ::MeshnD{D}) where D = :(Base.Iterators.product((Base.Cartesian.@ntuple $D i->_points_iterator(Ωₕ(i)))...))
 
-  - 2D mesh, with `npts` = (``N_x``, ``N_y``)
+@inline @generated _half_points(Ωₕ::MeshnD{D}, idx) where D = :(Base.Cartesian.@ntuple $D i->_half_points(Ωₕ(i), idx[i]))
 
-```math
-([x_i]_{i=1}^{N_x}, [y_j]_{j=1}^{N_y})
-```
+@inline @generated _half_points_iterator(Ωₕ::MeshnD{D}) where D = :(Base.Iterators.product((Base.Cartesian.@ntuple $D i->_half_points_iterator(Ωₕ(i)))...))
 
-  - 3D mesh, with `npts` = (``N_x``, ``N_y``, ``N_z``)
+@inline @generated _spacing(Ωₕ::MeshnD{D}, idx) where D = :(Base.Cartesian.@ntuple $D i->_spacing(Ωₕ(i), idx[i]))
 
-```math
-([x_i]_{i=1}^{N_x}, [y_j]_{j=1}^{N_y}, [z_l]_{l=1}^{N_z}).
-```
-"""
-@inline @generated points(Ωₕ::MeshnD{D}) where D = :(Base.Cartesian.@ntuple $D i->points(Ωₕ(i)))
-@inline @generated points(Ωₕ::MeshnD{D}, idx) where D = :(Base.Cartesian.@ntuple $D i->points(Ωₕ(i), idx[i]))
+@inline @generated _spacing_iterator(Ωₕ::MeshnD{D}) where D = :(Base.Iterators.product((Base.Cartesian.@ntuple $D i->_spacing_iterator(Ωₕ(i)))...))
 
-"""
-	points_iterator(Ωₕ::MeshnD)
-
-Returns an iterator over the  points of `Ωₕ`.
-"""
-@inline @generated points_iterator(Ωₕ::MeshnD{D}) where D = :(Base.Iterators.product((Base.Cartesian.@ntuple $D i->points_iterator(Ωₕ(i)))...))
-
-"""
-	half_points(Ωₕ::MeshnD{D}, idx)
-
-Returns a tuple with the [half_points](@ref), for each submesh, of the points at index `idx`.
-
-  - 2D mesh, with `idx` = ``(i,j)``
-
-```math
-(x_{i+1/2}, y_{j+1/2})
-```
-
-  - 3D mesh, with `idx` = ``(i,j,l)``
-
-```math
-(x_{i+1/2}, y_{j+1/2}, z_{l+1/2}).
-```
-"""
-@inline @generated half_points(Ωₕ::MeshnD{D}, idx) where D = :(Base.Cartesian.@ntuple $D i->half_points(Ωₕ(i), idx[i]))
-
-"""
-	half_points_iterator(Ωₕ::MeshnD{D})
-
-Returns an iterator for the [half_points](@ref), for each submesh.
-"""
-@inline @generated half_points_iterator(Ωₕ::MeshnD{D}) where D = :(Base.Iterators.product((Base.Cartesian.@ntuple $D i->half_points_iterator(Ωₕ(i)))...))
-
-"""
-	spacing(Ωₕ::MeshnD, idx::NTuple)
-
-Returns a tuple with the [spacing](@ref), for each submesh, at index `idx`.
-
-  - 2D mesh, with `idx` = ``(i,j)``
-
-```math
-(h_{x,i}, h_{y,j}) \\vcentcolon = (x_i - x_{i-1}, y_j - y_{j-1})
-```
-
-  - 3D mesh, with `idx` = ``(i,j,l)``
-
-```math
-(h_{x,i}, h_{y,j}, h_{z,l}) \\vcentcolon = (x_i - x_{i-1}, y_j - y_{j-1}, z_l - z_{l-1})
-```
-"""
-@inline @generated spacing(Ωₕ::MeshnD{D}, idx) where D = :(Base.Cartesian.@ntuple $D i->spacing(Ωₕ(i), idx[i]))
-
-"""
-	spacing_iterator(Ωₕ::MeshnD)
-
-Returns an iterator for the [spacing](@ref), for each submesh.
-"""
-@inline @generated spacing_iterator(Ωₕ::MeshnD{D}) where D = :(Base.Iterators.product((Base.Cartesian.@ntuple $D i->spacing_iterator(Ωₕ(i)))...))
-
-"""
-	half_spacing(Ωₕ::MeshnD, idx)
-
-Returns a tuple with the [half_spacing](@ref), for each submesh, at index `idx`.
-
-  - 2D mesh, with `idx` = ``(i,j)``
-
-```math
-(h_{x,i+1/2}, h_{y,j+1/2})
-```
-
-  - 3D mesh, with `idx` = ``(i,j,l)``
-
-```math
-(h_{x,i+1/2}, h_{y,j+1/2}, h_{z,l+1/2})
-```
-"""
-@inline @generated function half_spacing(Ωₕ::MeshnD{D}, idx) where D
-	return :(Base.Cartesian.@ntuple $D i->_apply_hs_logic(half_spacing(Ωₕ(i), idx[i])))
+@inline @generated function _half_spacing(Ωₕ::MeshnD{D}, idx) where D
+	return :(Base.Cartesian.@ntuple $D i->_apply_hs_logic(_half_spacing(Ωₕ(i), idx[i])))
 end
 
 @inline _apply_hs_logic(value::T) where T = ifelse(value == zero(T), one(T), value)
 
-"""
-	half_spacing_iterator(Ωₕ::MeshnD)
+@inline @generated _half_spacing_iterator(Ωₕ::MeshnD{D}) where D = :(Base.Iterators.product((Base.Cartesian.@ntuple $D i->_half_spacing_iterator(Ωₕ(i)))...))
 
-Returns an iterator for the [half_spacing](@ref), for each submesh.
-"""
-@inline @generated half_spacing_iterator(Ωₕ::MeshnD{D}) where D = :(Base.Iterators.product((Base.Cartesian.@ntuple $D i->half_spacing_iterator(Ωₕ(i)))...))
+@inline @generated _npoints(Ωₕ::MeshnD) = :(prod(_npoints(Ωₕ, Tuple)))
+@inline @generated _npoints(Ωₕ::MeshnD{D}, ::Type{Tuple}) where D = :(Base.Cartesian.@ntuple $D i->_npoints(Ωₕ(i)))
 
-"""
-	npoints(Ωₕ::MeshnD)
-	npoints(Ωₕ::MeshnD, Tuple)
-
-Returns the number of points of mesh `Ωₕ`. If `Tuple` is passed as the second argument, it returns a tuple with the number of points of each submesh composing `Ωₕ`.
-"""
-@inline @generated npoints(Ωₕ::MeshnD) = :(prod(npoints(Ωₕ, Tuple)))
-@inline @generated npoints(Ωₕ::MeshnD{D}, ::Type{Tuple}) where D = :(Base.Cartesian.@ntuple $D i->npoints(Ωₕ(i)))
-
-"""
-	hₘₐₓ(Ωₕ::MeshnD)
-
-Returns the maximum diagonal of mesh `Ωₕ`.
-
-  - 2D mesh
-
-```math
-\\max_{i,j} \\Vert (h_{x,i}, h_{y,j}) \\Vert_2
-```
-
-  - 3D mesh
-
-```math
-\\max_{i,j,l} \\Vert (h_{x,i}, h_{y,j},  h_{z,l}) \\Vert_2
-```
-"""
-@inline function hₘₐₓ(Ωₕ::MeshnD)
+@inline function _hₘₐₓ(Ωₕ::MeshnD)
 	diagonals = Base.Iterators.map(h -> hypot(h...), spacing_iterator(Ωₕ))
 	return maximum(diagonals)
 end
 
-"""
-	cell_measure(Ωₕ::MeshnD, idx)
+@inline _cell_measure(Ωₕ::MeshnD, idx) = prod(_half_spacing(Ωₕ, idx))
 
-Returns the measure of the cell ``\\square_{idx}`` centered at the index `idx` (can be a `CartesianIndex` or a `Tuple`):
+@inline _cell_measure_iterator(Ωₕ::MeshnD) = (_cell_measure(Ωₕ, idx) for idx in indices(Ωₕ))
 
-  - 2D mesh
-
-```math
-  \\square_{i,j} \\vcentcolon = \\left[x_i - \\frac{h_{x,i}}{2}, x_i + \\frac{h_{x,i+1}}{2} \\right] \\times \\left[y_j - \\frac{h_{y,j}}{2}, y_j + \\frac{h_{y,j+1}}{2} \\right]
-```
-
-with area ``h_{x,i+1/2} h_{y,j+1/2}``, where `idx` = ``(i,j)``,
-
-  - 3D mesh
-
-```math
-\\square_{i,j,l} \\vcentcolon = \\left[x_i - \\frac{h_{x,i}}{2}, x_i + \\frac{h_{x,i+1}}{2}\\right] \\times \\left[y_j - \\frac{h_{y,j}}{2}, y_j + \\frac{h_{y,j+1}}{2}\\right] \\times \\left[z_l - \\frac{h_{z,l}}{2}, z_l + \\frac{h_{z,l+1}}{2}\\right]
-```
-
-with volume ``h_{x,i+1/2} h_{y,j+1/2} h_{z,l+1/2}``, where `idx` = ``(i,j,l)``.
-"""
-@inline cell_measure(Ωₕ::MeshnD, idx) = prod(half_spacing(Ωₕ, idx))
-
-"""
-	cell_measure_iterator(Ωₕ::MeshnD)
-
-Returns an iterator for the measure of the cells ``\\square_{idx}``
-"""
-@inline cell_measure_iterator(Ωₕ::MeshnD) = (cell_measure(Ωₕ, idx) for idx in indices(Ωₕ))
-
-"""
-	generate_indices(nPoints::NTuple)
-
-Returns the `CartesianIndices` of a mesh with `nPoints[i]` in each direction.
-"""
-@inline generate_indices(nPoints::NTuple{D,Int}) where D = CartesianIndices(ntuple(i -> 1:nPoints[i], D))
-
-"""
-	is_boundary_index(idx, idxs::CartesianIndices)
-
-Returns true if the index `idx` is a boundary index of the mesh.
-"""
-function is_boundary_index(idx, idxs::CartesianIndices{D}) where D
-	boundary_sections = boundary_indices(idxs)
-
-	_idx = CartesianIndex(idx)
-	return any(section -> _idx in section, boundary_sections)
-end
-
-"""
-	boundary_indices(Ωₕ::MeshnD)
-
-Returns the boundary indices of mesh `Ωₕ`.
-"""
-@inline boundary_indices(Ωₕ::MeshnD) = boundary_indices(indices(Ωₕ))
-@inline function boundary_indices(idxs::CartesianIndices{D}) where D
-	tup = boundary_symbol_to_cartesian(idxs)
-
-	return ntuple(i -> tup[i], length(tup))
-end
-"""
-	interior_indices(Ωₕ::MeshnD)
-
-Returns the interior indices of mesh `Ωₕ`.
-"""
-@inline interior_indices(Ωₕ::MeshnD) = interior_indices(indices(Ωₕ))
-@inline function interior_indices(indices::CartesianIndices{D}) where D
-	original_ranges = indices.indices
-
-	interior_ranges_tuple = ntuple(D) do i
-		r = original_ranges[i]
-
-		if length(r) <= 1
-			return r
-		else
-			(first(r) + 1):(last(r) - 1)
-		end
-	end
-
-	return CartesianIndices(interior_ranges_tuple)
-end
-
-function iterative_refinement!(Ωₕ::MeshnD{D}, domain_markers::DomainMarkers) where D
+function _iterative_refinement!(Ωₕ::MeshnD{D}) where D
 	for i in 1:D
-		iterative_refinement!(Ωₕ(i))
+		_iterative_refinement!(Ωₕ(i))
 	end
+end
 
-	npts = npoints(Ωₕ, Tuple)
+function _iterative_refinement!(Ωₕ::MeshnD{D}, domain_markers) where D
+	_iterative_refinement!(Ωₕ)
+
+	npts = _npoints(Ωₕ, Tuple)
 
 	idxs = generate_indices(npts)
 
@@ -313,10 +124,178 @@ function iterative_refinement!(Ωₕ::MeshnD{D}, domain_markers::DomainMarkers) 
 	set_markers!(Ωₕ, domain_markers)
 end
 
-function change_points!(Ωₕ::MeshnD{D}, domain_markers::DomainMarkers, pts::NTuple{D,VecType}) where {D,VecType}
+function _change_points!(Ωₕ::MeshnD{D}, pts::NTuple{D,VecType}) where {D,VecType}
 	for i in 1:D
-		change_points!(Ωₕ(i), pts[i])
+		_change_points!(Ωₕ(i), pts[i])
+	end
+end
+
+function _change_points!(Ωₕ::MeshnD{D}, domain_markers, pts::NTuple{D,VecType}) where {D,VecType}
+	_change_points!(Ωₕ, pts)
+	set_markers!(Ωₕ, domain_markers)
+end
+
+"""
+	merge_consecutive_indices!(marker_data::MarkerIndices{D}) where D
+
+Finds sequences of `CartesianIndex{D}` elements consecutive along any single
+axis within `marker_data.cartesian_index`. Removes these sequences (if longer than one element)
+and adds the corresponding `CartesianIndices{D}` range object to
+`marker_data.cartesian_indices`.
+"""
+function merge_consecutive_indices!(marker_data::MarkerIndices{D}; check_consistency = true) where D
+	initial_indices_copy = check_consistency ? copy(marker_data.cartesian_index) : Set{CartesianIndex{D}}()
+
+	remaining_indices = copy(marker_data.cartesian_index)
+	if isempty(remaining_indices)
+		if check_consistency && !isempty(initial_indices_copy)
+			error("Internal logic error: Input cartesian_index was empty but initial copy wasn't.")
+		end
+
+		return nothing
 	end
 
-	set_markers!(Ωₕ, domain_markers)
+	# These store the results of *this merging run*
+	output_ranges = Set{CartesianIndices{D}}()
+	# Keep track of indices successfully merged into multi-index blocks *in this run*
+	merged_indices_in_run = Set{CartesianIndex{D}}()
+
+	# Use a copy for safe iteration while modifying remaining_indices
+	seeds_to_process = copy(remaining_indices)
+
+	while !isempty(seeds_to_process)
+		seed_index = first(seeds_to_process)
+
+		# Skip if seed was already incorporated into a block previously found in this run
+		if !(seed_index in remaining_indices)
+			pop!(seeds_to_process, seed_index)
+			continue
+		end
+
+		current_ranges = ntuple(k -> seed_index.I[k]:seed_index.I[k], D)
+
+		# --- Expansion Phase (Identical to previous version) ---
+		while true
+			expanded_in_pass = false
+			for dim in 1:D
+				# Positive expansion
+				while true
+					next_coord = current_ranges[dim].stop + 1
+					slice_ranges = Base.setindex(current_ranges, next_coord:next_coord, dim)
+					slice_indices = CartesianIndices(slice_ranges)
+					can_expand = true
+					for idx_in_slice in slice_indices
+						if !(idx_in_slice in remaining_indices)
+							can_expand = false
+							break
+						end
+					end
+					if can_expand
+						expanded_ranges = Base.setindex(current_ranges, (current_ranges[dim].start):next_coord, dim)
+						current_ranges = expanded_ranges
+						expanded_in_pass = true
+					else
+						break
+					end
+				end
+				# Negative expansion
+				while true
+					prev_coord = current_ranges[dim].start - 1
+					slice_ranges = Base.setindex(current_ranges, prev_coord:prev_coord, dim)
+					slice_indices = CartesianIndices(slice_ranges)
+					can_expand = true
+					for idx_in_slice in slice_indices
+						if !(idx_in_slice in remaining_indices)
+							can_expand = false
+							break
+						end
+					end
+					if can_expand
+						expanded_ranges = Base.setindex(current_ranges, prev_coord:(current_ranges[dim].stop), dim)
+						current_ranges = expanded_ranges
+						expanded_in_pass = true
+					else
+						break
+					end
+				end
+			end # end loop dimensions
+			!expanded_in_pass && break
+		end # end expansion phase
+		# --- End Expansion Phase ---
+
+		final_block = CartesianIndices(current_ranges)
+		block_size = length(final_block)
+
+		# --- Decision & Update Sets ---
+		indices_in_block_set = Set(final_block) # Needed in both cases for removal
+
+		if block_size > 1
+			# Successful merge
+			push!(output_ranges, final_block)
+			union!(merged_indices_in_run, indices_in_block_set)
+			setdiff!(remaining_indices, indices_in_block_set) # Remove from available pool
+		else
+			# Isolated index (block_size == 1)
+			# Don't add to output_ranges or merged_indices_in_run
+			delete!(remaining_indices, seed_index) # Just remove the single seed from available pool
+		end
+
+		# Remove processed indices (seed or full block) from the list of seeds to process
+		setdiff!(seeds_to_process, indices_in_block_set)
+	end # end while !isempty(seeds_to_process)
+
+	# --- Apply changes to marker_data ---
+	# Update cartesian_index: Remove indices that were successfully merged in this run
+	setdiff!(marker_data.cartesian_index, merged_indices_in_run)
+	# Add the newly found multi-element blocks to the cartesian_indices set
+	union!(marker_data.cartesian_indices, output_ranges)
+
+	# --- Consistency Check ---
+	if check_consistency
+		# Reconstruct the total set of points represented *after* the merge operation.
+		# Start with the indices remaining in cartesian_index
+		reconstructed_indices = copy(marker_data.cartesian_index)
+
+		# Add all indices contained within the *newly added* ranges
+		# Note: We are checking the conservation of points *originating* from the
+		# initial cartesian_index set. If marker_data.cartesian_indices had pre-existing ranges,
+		# this check doesn't include them, which is correct for verifying this function's action.
+		for block in output_ranges
+			union!(reconstructed_indices, Set(block))
+		end
+
+		# Compare the reconstructed set with the initial set
+		if reconstructed_indices != initial_indices_copy
+			# --- Debug Output ---
+			println("Consistency Check FAILED!")
+			println("Initial index count:      ", length(initial_indices_copy))
+			println("Reconstructed index count:", length(reconstructed_indices))
+
+			lost_indices = setdiff(initial_indices_copy, reconstructed_indices)
+			gained_indices = setdiff(reconstructed_indices, initial_indices_copy)
+
+			if !isempty(lost_indices)
+				println("Lost indices (present initially, missing finally):")
+				display(lost_indices)
+			end
+			if !isempty(gained_indices)
+				println("Gained indices (present finally, missing initially):")
+				display(gained_indices)
+			end
+
+			println("\nState before error:")
+			println("Initial cartesian_index copy: ")
+			display(initial_indices_copy)
+			println("Final cartesian_index: ")
+			display(marker_data.cartesian_index)
+			println("Final added cartesian_indices (output_ranges): ")
+			display(output_ranges)
+			println("Reconstructed indices: ")
+			display(reconstructed_indices)
+
+			error("Consistency check failed: The set of indices after merging does not match the initial set.")
+		end
+	end
+
+	return nothing
 end
