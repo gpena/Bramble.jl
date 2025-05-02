@@ -1,18 +1,3 @@
-abstract type DomainBaseType <: BrambleType end
-
-"""
-	struct Domain{SetType, MarkersType}
-		set::SetType
-		markers::MarkersType
-	end
-
-Structure to represent a domain composed of a [CartesianProduct](@ref) and a tuple of [Marker](@ref)s.
-"""
-struct Domain{SetType,MarkersType} <: DomainBaseType
-	set::SetType
-	markers::MarkersType
-end
-
 """
 	struct Marker{F}
 		label::Symbol
@@ -31,20 +16,28 @@ MarkerPair{F} = Pair{Symbol,F}
 @inline label(m::Marker{F}) where F = m.label
 @inline identifier(m::Marker{F}) where F = m.identifier
 
-# Domain markers
-struct DomainMarkers{BFType}
+"""
+	struct DomainMarkers{BFType}
+		symbols::Set{Marker{Symbol}}
+		tuples::Set{Marker{Set{Symbol}}}
+		conditions::Set{Marker{BFType}}
+	end
+
+The `DomainMarkers` struct represents a collection of markers associated with a domain, categorizing them based on how they identify parts of the domain or its boundary. Each marker is identified as a `Symbol` and a set of [Marker](@ref).
+"""
+struct DomainMarkers{BFType} <: BrambleType
 	symbols::Set{Marker{Symbol}}
 	tuples::Set{Marker{Set{Symbol}}}
-	functions::Set{Marker{BFType}}
+	conditions::Set{Marker{BFType}}
 end
 
 @inline symbols(domain_markers::DomainMarkers) = domain_markers.symbols
 @inline tuples(domain_markers::DomainMarkers) = domain_markers.tuples
-@inline conditions(domain_markers::DomainMarkers) = domain_markers.functions
+@inline conditions(domain_markers::DomainMarkers) = domain_markers.conditions
 
 @inline function label_identifiers(domain_markers::DomainMarkers)
-	@unpack symbols, tuples, functions = domain_markers
-	return (label(marker)::Symbol for marker in Iterators.flatten((symbols, tuples, functions)))
+	@unpack symbols, tuples, conditions = domain_markers
+	return (label(marker)::Symbol for marker in Iterators.flatten((symbols, tuples, conditions)))
 end
 
 @inline label_symbols(domain_markers::DomainMarkers) = (label(marker)::Symbol for marker in symbols(domain_markers))
@@ -64,7 +57,7 @@ julia> create_markers(I,
 					  :corners => (:top, :right),                      # Tuple ID
 					  :all_boundary => (:top, :right, :left, :bottom), # Tuple ID
 					  :internal => x -> 0 <= x[1] - 0.5 <= 1)          # Function ID
-
+Markers: left_boundary, corners, all_boundary, internal
 ```
 """
 @inline create_markers(set::CartesianProduct{1,T}, pairs...) where T = create_markers(T, set, pairs...)
@@ -73,9 +66,9 @@ julia> create_markers(I,
 @inline function create_markers(::Type{CoType}, embedder::CartesianProduct{D,T}, pairs...) where {D,T,CoType}
 	symbols = pairs_to_set(Symbol, Symbol, embedder, pairs...)
 	tuples = pairs_to_set(Tuple, Set{Symbol}, embedder, pairs...)
-	functions = pairs_to_set(Function, BrambleFunction{CoType,false,Bool}, embedder, pairs...)
+	conditions = pairs_to_set(Function, BrambleFunction{CoType,false,Bool}, embedder, pairs...)
 
-	return DomainMarkers(symbols, tuples, functions)
+	return DomainMarkers(symbols, tuples, conditions)
 end
 
 function pairs_to_set(::Type{InputType}, ::Type{OutputType}, embedder, pairs...) where {InputType,OutputType}
@@ -91,48 +84,68 @@ end
 	error("Invalid identifier type for create_markers: $(typeof(identifier)). Expected Symbol, Function, or Tuple containing only Symbols.")
 end
 
+abstract type DomainBaseType <: BrambleType end
+
+"""
+	struct Domain{SetType, MarkersType}
+		set::SetType
+		markers::MarkersType
+	end
+
+Structure to represent a domain composed of a [CartesianProduct](@ref) and a [DomainMarkers](@ref).
+"""
+struct Domain{SetType,MarkersType} <: DomainBaseType
+	set::SetType
+	markers::MarkersType
+end
+
 """
 	markers(Ω::Domain)
 
-Returns a generator with the [Marker](@ref)s associated with [Domain](@ref) `Ω`.
+Returns a generator with the [DomainMarkers](@ref] associated with [Domain](@ref) `Ω`.
 """
 @inline markers(Ω::Domain) = Ω.markers
 
 """
 	labels(Ω::Domain)
 
-Returns a generator with the labels of the [Marker](@ref)s associated with [Domain](@ref) `Ω`.
+Returns a generator with the labels of the [DomainMarkers](@ref] associated with [Domain](@ref) `Ω`.
 """
 @inline function labels(Ω::Domain)
-	@unpack symbols, tuples, functions = markers(Ω)
-	return (label(marker)::Symbol for marker in Iterators.flatten((symbols, tuples, functions)))
+	@unpack symbols, tuples, conditions = markers(Ω)
+	return (label(marker)::Symbol for marker in Iterators.flatten((symbols, tuples, conditions)))
 end
 
 """
 	marker_identifiers(Ω::Domain)
 
-Returns a generator with the [Marker](@ref)'s identifiers ([BrambleFunction](@ref), Symbol or Tuples of Symbols) associated with [Domain](@ref) `Ω`.
+Returns a generator with the [DomainMarkers](@ref)'s identifiers ([BrambleFunction](@ref), `Symbol` or `Tuple` of `Symbol`) associated with [Domain](@ref) `Ω`.
 """
 @inline function marker_identifiers(Ω::Domain)
-	@unpack symbols, tuples, functions = markers(Ω)
-	return (identifier(marker) for marker in Iterators.flatten((symbols, tuples, functions)))
+	@unpack symbols, tuples, conditions = markers(Ω)
+	return (identifier(marker) for marker in Iterators.flatten((symbols, tuples, conditions)))
 end
 
 @inline function marker_symbols(Ω::Domain)
-	@unpack symbols, tuples, functions = markers(Ω)
+	@unpack symbols, tuples, conditions = markers(Ω)
 	return (identifier(marker) for marker in symbols)
 end
 
 @inline function marker_tuples(Ω::Domain)
-	@unpack symbols, tuples, functions = markers(Ω)
+	@unpack symbols, tuples, conditions = markers(Ω)
 	return (identifier(marker) for marker in tuples)
 end
 
 @inline function marker_conditions(Ω::Domain)
-	@unpack symbols, tuples, functions = markers(Ω)
-	return (identifier(marker) for marker in functions)
+	@unpack symbols, tuples, conditions = markers(Ω)
+	return (identifier(marker) for marker in conditions)
 end
 
+"""
+	marker_identifiers(Ω::Domain)
+
+Returns a generator with the labels of the [DomainMarkers](@ref)'s identifiers ([BrambleFunction](@ref), `Symbol` or `Tuple` of `Symbol`) associated with [Domain](@ref) `Ω`.
+"""
 @inline label_identifiers(Ω::Domain) = label_identifiers(markers(Ω))
 @inline label_symbols(Ω::Domain) = label_symbols(markers(Ω))
 @inline label_tuples(Ω::Domain) = label_tuples(markers(Ω))
@@ -142,39 +155,42 @@ end
 	domain(X::CartesianProduct)
 	domain(X::CartesianProduct, markers...)
 
-Returns a [Domain](@ref) from a [CartesianProduct](@ref), assuming a single [Marker](@ref) with the label `:dirichlet` that marks the whole boundary of X. Alternatively, a list of markers can be passed as argument in the form of `:symbol => key` (see examples and [create_markers](@ref)).
+Returns a [Domain](@ref) from a [CartesianProduct](@ref), assuming a single [Marker](@ref) with the label `:dirichlet` that marks the whole boundary of X. Alternatively, a list of [Marker](@ref) can be passed as argument in the form of `:symbol => key` (see examples and [create_markers](@ref)).
 
 # Example
 
 ```@example
 julia> domain(interval(0, 1))
-Type: Float64 
- Dim: 1 
- Set: [0.0, 1.0]
-
-Boundary markers: :dirichlet
+ Domain
+   Type: Float64
+  Space: ℝ
+	Dim: 1
+	Set: [0.0, 1.0]
+Markers: dirichlet
 ```
 
 ```@example
 julia> I = interval(0, 1);
 	   m = create_markers(I, :dirichlet => x -> x[1] - 1 == 0, :dirichlet_alternative => :right);
 	   domain(I, m);
-Type: Float64 
- Dim: 1 
- Set: [0.0, 1.0]
-
-Boundary markers: :dirichlet, :dirichlet_alternative
+ Domain
+   Type: Float64
+  Space: ℝ
+	Dim: 1
+	Set: [0.0, 1.0]
+Markers: dirichlet_alternative, dirichlet
 ```
 
 ```@example
 julia> I = interval(0, 1) × interval(2, 3);
 	   m = create_markers(I, :dirichlet => x -> x[1] - 1 == 0, :dirichlet_alternative => :right, :neuman => (:bottom, :top));
 	   domain(I, m);
-Type: Float64 
- Dim: 2 
- Set: [0.0, 1.0] × [2.0, 3.0]
-
-Boundary markers: :dirichlet, :dirichlet_alternative, :neuman
+ Domain
+   Type: Float64
+  Space: ℝ²
+	Dim: 2
+	Set: [0.0, 1.0] × [2.0, 3.0]
+Markers: dirichlet_alternative, neuman, dirichlet
 ```
 """
 @inline domain(X::CartesianProduct) = Domain(X, create_markers(X, :dirichlet => get_boundary_symbols(X)))
@@ -226,13 +242,13 @@ julia> I = interval(0.0, 1.0);
 Float64
 ```
 """
-@inline eltype(Ω::Domain) = eltype(set(Ω))
-@inline eltype(::Type{<:Domain{SetType}}) where SetType = eltype(SetType)
+@inline Base.eltype(Ω::Domain) = eltype(set(Ω))
+@inline Base.eltype(::Type{<:Domain{SetType}}) where SetType = eltype(SetType)
 
 """
 	projection(Ω::Domain, i)
 
-Returns the `i`-th `1`-dimensional [CartesianProduct](@ref) of the [set](@ref set(Ω::Domain)) associated with [Domain](@ref) `Ω`.
+Returns the `i`-th [CartesianProduct](@ref) of the [set](@ref set(Ω::Domain)) associated with [Domain](@ref) `Ω`.
 
 For example, `projection(domain(I × I), 1)` will return `I`.
 """
@@ -253,7 +269,7 @@ function Base.show(io::IO, markers::DomainMarkers)
 	print(io, final_output)
 end
 
-function show(io::IO, Ω::Domain)
+function Base.show(io::IO, Ω::Domain)
 	fields = ("Type", "Dim", "Set", "Markers")
 	mlength = max_length_fields(fields)
 
@@ -267,7 +283,7 @@ end
 """
 	get_boundary_symbols(X::CartesianProduct)
 
-Returns a tuple of standard boundary symbols for a [CartesianProduct](@ref).
+Returns a tuple of default boundary symbols for a [CartesianProduct](@ref).
 
   - in 1D `[x₁,x₂]`, :left (x=x₁), :right (x=x₂)
   - in 2D `[x₁,x₂] \\times [y₁,y₂]`, :left (x=x₁), :right (x=x₂), :top (y=y₂), :bottom (y=y₁)

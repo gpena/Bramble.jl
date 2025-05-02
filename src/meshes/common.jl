@@ -7,24 +7,24 @@ abstract type MeshType{D} <: BrambleType end
 
 """
 	struct MarkerIndices{D}
-		c_index::Set{CartesianIndex{D}}
-		c_indices::Set{CartesianIndices{D}}
+		cartesian_index::Set{CartesianIndex{D}}
+		cartesian_indices::Set{CartesianIndices{D}}
 	end
 
 	Structure to hold sets of individual `CartesianIndex` or `CartesianIndices`.
 """
-struct MarkerIndices{D,CartIndexType<:CartesianIndex{D},CartIndicesType} <: BrambleType
-	c_index::Set{CartIndexType}
-	c_indices::Set{CartIndicesType}
+struct MarkerIndices{D,CartIndicesType} <: BrambleType
+	cartesian_index::Set{CartesianIndex{D}}
+	cartesian_indices::Set{CartIndicesType}
 end
 
 """
 	boundary_symbol_to_cartesian(indices::CartesianIndices{D}) where D
 
-	Returns a named tuple connecting the facet labels of a set to the corresponding `CartesianIndices`. See []
+	Returns a named tuple connecting the facet labels of a set to the corresponding `CartesianIndices`.
 
 ```@example
-julia> boundary_symbol_to_cartesian(CartesianIndices((1:3,1:4)))
+julia> boundary_symbol_to_cartesian(CartesianIndices((1:3, 1:4)))
 (left = CartesianIndices((1:1, 1:4)), 
  right = CartesianIndices((3:3, 1:4)), 
  top = CartesianIndices((1:3, 4:4)), 
@@ -52,11 +52,10 @@ function boundary_symbol_to_cartesian(indices::CartesianIndices{2})
 	N, M = size(indices)
 
 	named_tuple_2d = (;
-		:left => indices[1:1, 1:M],
-		:right => indices[N:N, 1:M],
-		:top => indices[1:N, M:M],
-		:bottom => indices[1:N, 1:1]
-	)
+					  :left => indices[1:1, 1:M],
+					  :right => indices[N:N, 1:M],
+					  :top => indices[1:N, M:M],
+					  :bottom => indices[1:N, 1:1])
 	return named_tuple_2d
 end
 
@@ -64,194 +63,21 @@ function boundary_symbol_to_cartesian(indices::CartesianIndices{3})
 	N, M, K = size(indices)
 
 	named_tuple_3d = (;
-		:left => indices[1:N, 1:1, 1:K],
-		:right => indices[1:N, M:M, 1:K],
-		:top => indices[1:N, 1:M, K:K],
-		:bottom => indices[1:N, 1:M, 1:1],
-		:front => indices[N:N, 1:M, 1:K],
-		:back => indices[1:1, 1:M, 1:K]
-	)
+					  :left => indices[1:N, 1:1, 1:K],
+					  :right => indices[1:N, M:M, 1:K],
+					  :top => indices[1:N, 1:M, K:K],
+					  :bottom => indices[1:N, 1:M, 1:1],
+					  :front => indices[N:N, 1:M, 1:K],
+					  :back => indices[1:1, 1:M, 1:K])
 	return named_tuple_3d
 end
 
 """
-	boundary_symbol_to_dict(indices::CartesianIndices{D}) where D
+	boundary_symbol_to_dict(indices::CartesianIndices)
 
 	Returns a dictionary connecting the facet labels of a set to the corresponding `CartesianIndices`. See [boundary_symbol_to_cartesian](@ref)
 """
-boundary_symbol_to_dict(indices::CartesianIndices{D}) where D = Dict(pairs(boundary_symbol_to_cartesian(indices)))
-
-"""
-	is_boundary_index(idx, Ωₕ::MeshType)
-
-Returns true if the index `idx` is a boundary index of the mesh.
-"""
-@inline is_boundary_index(idx, Ωₕ::MeshType) = is_boundary_index(idx, indices(Ωₕ))
-
-"""
-	merge_consecutive_indices!(marker_data::MarkerIndices{D}) where D
-
-Finds sequences of `CartesianIndex{D}` elements consecutive along any single
-axis within `marker_data.c_index`. Removes these sequences (if longer than one element)
-and adds the corresponding `CartesianIndices{D}` range object to
-`marker_data.c_indices`.
-"""
-function merge_consecutive_indices!(marker_data::MarkerIndices{D}; check_consistency = true) where D
-	initial_indices_copy = check_consistency ? copy(marker_data.c_index) : Set{CartesianIndex{D}}()
-
-	remaining_indices = copy(marker_data.c_index)
-	if isempty(remaining_indices)
-		if check_consistency && !isempty(initial_indices_copy)
-			error("Internal logic error: Input c_index was empty but initial copy wasn't.")
-		end
-
-		return nothing
-	end
-
-	# These store the results of *this merging run*
-	output_ranges = Set{CartesianIndices{D}}()
-	# Keep track of indices successfully merged into multi-index blocks *in this run*
-	merged_indices_in_run = Set{CartesianIndex{D}}()
-
-	# Use a copy for safe iteration while modifying remaining_indices
-	seeds_to_process = copy(remaining_indices)
-
-	while !isempty(seeds_to_process)
-		seed_index = first(seeds_to_process)
-
-		# Skip if seed was already incorporated into a block previously found in this run
-		if !(seed_index in remaining_indices)
-			pop!(seeds_to_process, seed_index)
-			continue
-		end
-
-		current_ranges = ntuple(k -> seed_index.I[k]:seed_index.I[k], D)
-
-		# --- Expansion Phase (Identical to previous version) ---
-		while true
-			expanded_in_pass = false
-			for dim in 1:D
-				# Positive expansion
-				while true
-					next_coord = current_ranges[dim].stop + 1
-					slice_ranges = Base.setindex(current_ranges, next_coord:next_coord, dim)
-					slice_indices = CartesianIndices(slice_ranges)
-					can_expand = true
-					for idx_in_slice in slice_indices
-						if !(idx_in_slice in remaining_indices)
-							can_expand = false
-							break
-						end
-					end
-					if can_expand
-						expanded_ranges = Base.setindex(current_ranges, (current_ranges[dim].start):next_coord, dim)
-						current_ranges = expanded_ranges
-						expanded_in_pass = true
-					else
-						break
-					end
-				end
-				# Negative expansion
-				while true
-					prev_coord = current_ranges[dim].start - 1
-					slice_ranges = Base.setindex(current_ranges, prev_coord:prev_coord, dim)
-					slice_indices = CartesianIndices(slice_ranges)
-					can_expand = true
-					for idx_in_slice in slice_indices
-						if !(idx_in_slice in remaining_indices)
-							can_expand = false
-							break
-						end
-					end
-					if can_expand
-						expanded_ranges = Base.setindex(current_ranges, prev_coord:(current_ranges[dim].stop), dim)
-						current_ranges = expanded_ranges
-						expanded_in_pass = true
-					else
-						break
-					end
-				end
-			end # end loop dimensions
-			!expanded_in_pass && break
-		end # end expansion phase
-		# --- End Expansion Phase ---
-
-		final_block = CartesianIndices(current_ranges)
-		block_size = length(final_block)
-
-		# --- Decision & Update Sets ---
-		indices_in_block_set = Set(final_block) # Needed in both cases for removal
-
-		if block_size > 1
-			# Successful merge
-			push!(output_ranges, final_block)
-			union!(merged_indices_in_run, indices_in_block_set)
-			setdiff!(remaining_indices, indices_in_block_set) # Remove from available pool
-		else
-			# Isolated index (block_size == 1)
-			# Don't add to output_ranges or merged_indices_in_run
-			delete!(remaining_indices, seed_index) # Just remove the single seed from available pool
-		end
-
-		# Remove processed indices (seed or full block) from the list of seeds to process
-		setdiff!(seeds_to_process, indices_in_block_set)
-	end # end while !isempty(seeds_to_process)
-
-	# --- Apply changes to marker_data ---
-	# Update c_index: Remove indices that were successfully merged in this run
-	setdiff!(marker_data.c_index, merged_indices_in_run)
-	# Add the newly found multi-element blocks to the c_indices set
-	union!(marker_data.c_indices, output_ranges)
-
-	# --- Consistency Check ---
-	if check_consistency
-		# Reconstruct the total set of points represented *after* the merge operation.
-		# Start with the indices remaining in c_index
-		reconstructed_indices = copy(marker_data.c_index)
-
-		# Add all indices contained within the *newly added* ranges
-		# Note: We are checking the conservation of points *originating* from the
-		# initial c_index set. If marker_data.c_indices had pre-existing ranges,
-		# this check doesn't include them, which is correct for verifying this function's action.
-		for block in output_ranges
-			union!(reconstructed_indices, Set(block))
-		end
-
-		# Compare the reconstructed set with the initial set
-		if reconstructed_indices != initial_indices_copy
-			# --- Debug Output ---
-			println("Consistency Check FAILED!")
-			println("Initial index count:      ", length(initial_indices_copy))
-			println("Reconstructed index count:", length(reconstructed_indices))
-
-			lost_indices = setdiff(initial_indices_copy, reconstructed_indices)
-			gained_indices = setdiff(reconstructed_indices, initial_indices_copy)
-
-			if !isempty(lost_indices)
-				println("Lost indices (present initially, missing finally):")
-				display(lost_indices) 
-			end
-			if !isempty(gained_indices)
-				println("Gained indices (present finally, missing initially):")
-				display(gained_indices)
-			end
-
-			println("\nState before error:")
-			println("Initial c_index copy: ")
-			display(initial_indices_copy)
-			println("Final c_index: ")
-			display(marker_data.c_index)
-			println("Final added c_indices (output_ranges): ")
-			display(output_ranges)
-			println("Reconstructed indices: ")
-			display(reconstructed_indices)
-
-			error("Consistency check failed: The set of indices after merging does not match the initial set.")
-		end
-	end
-
-	return nothing
-end
+boundary_symbol_to_dict(indices::CartesianIndices) = Dict(pairs(boundary_symbol_to_cartesian(indices)))
 
 """
 	MeshMarkers{D}
@@ -259,9 +85,9 @@ end
 Type of dictionary to store the `CartesianIndices` associated with a [MarkerIndices](@ref).
 """
 CIndices_Type{D} = CartesianIndices{D,NTuple{D,UnitRange{Int}}}
-MeshMarkers{D} = Dict{Symbol,MarkerIndices{D,CartesianIndex{D},CIndices_Type{D}}}
+MeshMarkers{D} = Dict{Symbol,MarkerIndices{D,CIndices_Type{D}}}
 
-function Base.show(io::IO, markers::MeshMarkers{D}) where {D}
+function Base.show(io::IO, markers::MeshMarkers{D}) where D
 	labels = collect(keys(markers))
 	labels_styled_combined = color_markers(labels)
 
@@ -273,20 +99,91 @@ function Base.show(io::IO, markers::MeshMarkers{D}) where {D}
 end
 
 """
+	generate_indices(nPoints::Int)
+	generate_indices(nPoints::NTuple)
+
+Returns the `CartesianIndices` of a mesh with `nPoints[i]` in each direction or just `nPoints`, if the argument is an `Int`.
+"""
+@inline generate_indices(npts::Int) = CartesianIndices((npts,))
+@inline generate_indices(nPoints::NTuple{D,Int}) where D = CartesianIndices(ntuple(i -> 1:nPoints[i], D))
+
+"""
+	is_boundary_index(idx, Ωₕ::MeshType)
+
+Returns true if the index `idx` is a boundary index of the mesh.
+"""
+@inline is_boundary_index(idx, Ωₕ::MeshType) = is_boundary_index(idx, indices(Ωₕ))
+
+"""
+	boundary_indices(Ωₕ::MeshType)
+
+Returns the boundary indices of mesh `Ωₕ`.
+"""
+@inline boundary_indices(Ωₕ::MeshType) = boundary_indices(indices(Ωₕ))
+
+"""
+	interior_indices(Ωₕ::MeshType)
+
+Returns the interior indices of mesh `Ωₕ`.
+"""
+@inline interior_indices(Ωₕ::MeshType) = interior_indices(indices(Ωₕ))
+
+"""
+	is_boundary_index(idx, idxs::CartesianIndices)
+
+Returns true if the index `idx` is a boundary index of the mesh.
+"""
+function is_boundary_index(idx, idxs::CartesianIndices)
+	boundary_sections = boundary_indices(idxs)
+
+	_idx = CartesianIndex(idx)
+	return any(section -> _idx in section, boundary_sections)
+end
+
+@inline function boundary_indices(idxs::CartesianIndices)
+	tup = boundary_symbol_to_cartesian(idxs)
+
+	return ntuple(i -> tup[i], length(tup))
+end
+
+@inline function interior_indices(indices::CartesianIndices{D}) where D
+	original_ranges = indices.indices
+
+	interior_ranges_tuple = ntuple(D) do i
+		r = original_ranges[i]
+
+		if length(r) <= 1
+			return r
+		else
+			(first(r) + 1):(last(r) - 1)
+		end
+	end
+
+	return CartesianIndices(interior_ranges_tuple)
+end
+
+"""
+	eltype(Ωₕ::MeshType)
+
+Returns the element type of the points of `Ωₕ`.
+"""
+@inline Base.eltype(Ωₕ::MeshType) = _eltype(Ωₕ)
+
+"""
 	dim(Ωₕ::MeshType)
 	dim(::Type{<:MeshType})
 
 Returns the dimension of the space where `Ωₕ` is embedded.
 """
-@inline dim(_::MeshType{D}) where {D} = D
-@inline dim(::Type{<:MeshType{D}}) where {D} = D
+@inline dim(_::MeshType{D}) where D = D
+@inline dim(::Type{<:MeshType{D}}) where D = D
 
 """
 	topo_dim(Ωₕ::MeshType)
 
 Returns the topological dimension `Ωₕ`.
 """
-@inline @generated function topo_dim(Ωₕ::MeshType{D}) where {D}
+@inline @generated function topo_dim(Ωₕ::MeshType{D}) where D
 	if D <= 0
 		return :(0) # Handle edge case
 	end
@@ -303,7 +200,18 @@ Returns the `CartesianIndices` associated with the points of mesh `Ωₕ`.
 """
 @inline indices(Ωₕ::MeshType) = Ωₕ.indices
 
+"""
+	backend(Ωₕ::MeshType)
+
+Returns the linear algebra backend`associated with the mesh`Ωₕ`.
+"""
 @inline backend(Ωₕ::MeshType) = Ωₕ.backend
+
+"""
+	markers(Ωₕ::MeshType)
+
+Returns the [DomainMarkers](@ref)) associated with the mesh `Ωₕ`.
+"""
 @inline markers(Ωₕ::MeshType) = Ωₕ.markers
 
 """
@@ -314,22 +222,23 @@ Returns the `CartesianIndices` associated with the points of mesh `Ωₕ`.
 @inline set_indices!(Ωₕ::MeshType, indices) = (Ωₕ.indices = indices)
 
 """
-	marker(Ωₕ::MeshType, str::Symbol)
+	marker(Ωₕ::MeshType, symbol::Symbol)
 
-Returns the [Marker](@ref) function with label `str`.
+Returns the [Marker](@ref) identifier with label `symbol`.
 """
 @inline marker(Ωₕ::MeshType, symbol::Symbol) = Ωₕ.markers[symbol]
 
-function process_label_for_mesh!(markers_mesh::MeshMarkers{D}, set_labels) where {D}
-	c_indices_type = CartesianIndices{D,NTuple{D,UnitRange{Int}}}
-	c_index_type = CartesianIndex{D}
+function process_label_for_mesh!(markers_mesh::MeshMarkers{D}, set_labels) where D
+	cartesian_indices_type = CartesianIndices{D,NTuple{D,UnitRange{Int}}}
+	cartesian_index_type = CartesianIndex{D}
 
 	for label in set_labels
-		markers_mesh[label] = MarkerIndices{D,c_index_type,c_indices_type}(Set{c_index_type}(), Set{c_indices_type}())
+		idxs = MarkerIndices{D,cartesian_indices_type}(Set{cartesian_index_type}(), Set{cartesian_indices_type}())
+		markers_mesh[label] = idxs
 	end
 end
 
-function _init_mesh_markers(_::MeshType{D}, domain_markers::DomainMarkers) where {D}
+function _init_mesh_markers(_::MeshType{D}, domain_markers::DomainMarkers) where D
 	markers_mesh = MeshMarkers{D}()
 
 	process_label_for_mesh!(markers_mesh, label_symbols(domain_markers))
@@ -340,9 +249,9 @@ function _init_mesh_markers(_::MeshType{D}, domain_markers::DomainMarkers) where
 end
 
 """
-	set_markers!(Ωₕ::Mesh1D, domain_markers::DomainMarkers)
+	set_markers!(Ωₕ::MeshType, domain_markers::DomainMarkers)
 
-Populates the marker index collections of `Mesh1D` Ωₕ based on boundary symbols or geometric conditions defined in the `Domain` Ω, applied to the `Mesh1D` Ωₕ.
+Populates the marker index collections of mesh Ωₕ based on boundary symbols or geometric conditions defined in the [DomainMarkers](@ref).
 """
 function set_markers!(Ωₕ::MeshType, domain_markers)
 	D = dim(Ωₕ)
@@ -353,14 +262,14 @@ function set_markers!(Ωₕ::MeshType, domain_markers)
 
 	for marker in symbols(domain_markers)
 		@unpack label, identifier = marker
-		target_indices = D == 1 ? mesh_markers[label].c_index : mesh_markers[label].c_indices
+		target_indices = D == 1 ? mesh_markers[label].cartesian_index : mesh_markers[label].cartesian_indices
 
 		push!(target_indices, symbol_to_index_map[identifier])
 	end
 
 	for marker in tuples(domain_markers)
 		@unpack label, identifier = marker
-		target_indices = D == 1 ? mesh_markers[label].c_index : mesh_markers[label].c_indices
+		target_indices = D == 1 ? mesh_markers[label].cartesian_index : mesh_markers[label].cartesian_indices
 
 		for sym in identifier
 			push!(target_indices, symbol_to_index_map[sym])
@@ -370,12 +279,12 @@ function set_markers!(Ωₕ::MeshType, domain_markers)
 	for marker in conditions(domain_markers)
 		@unpack label, identifier = marker
 
-			for idx in mesh_indices
-				if identifier(points(Ωₕ, idx))
-					push!(mesh_markers[label].c_index, idx)
-				end
+		for idx in mesh_indices
+			if identifier(points(Ωₕ, idx))
+				push!(mesh_markers[label].cartesian_index, idx)
 			end
-		
+		end
+
 		merge_consecutive_indices!(mesh_markers[label])
 	end
 
@@ -427,20 +336,244 @@ julia> I = interval(0, 1);
 	   Ωₕ = mesh(domain(I), 10, true);
 1D mesh
 nPoints: 10
-Markers: Dirichlet
+Markers: dirichlet
 ```
 
 ```@example
 julia> X = domain(interval(0, 1) × interval(4, 5));
 	   Ωₕ = mesh(X, (10, 15), (true, false));
-2D mesh
-nPoints: 150
-Markers: ["Dirichlet"]
-
-Submeshes:
-  x direction | nPoints: 10
-  y direction | nPoints: 15
+   2D mesh
+Resolution: 150 (10 × 15)
+   Markers: dirichlet
 ```
 """
 @inline mesh(Ω::Domain, npts::NTuple{D,Int}, unif::NTuple{D,Bool}; backend = Backend()) where {D} = _mesh(Ω, npts, unif, backend)
 @inline mesh(Ω::Domain{CartesianProduct{1,T}}, npts::Int, unif::Bool; backend = Backend()) where {T} = _mesh(Ω, (npts,), (unif,), backend)
+
+"""
+	points(Ωₕ::MeshType)
+	points(Ωₕ::MeshType, idx)
+
+Returns the points of `Ωₕ` either as a vector (1D case) or a tuple of vectors (nD case). If the `Tuple` `idx` is passed as the second argument, it returns the tuple with the point corresponding to that index.
+
+  - 1D mesh, with `npts` = ``N_x``
+
+```math
+x_i, \\, i=1,\\dots,N_x
+```
+
+  - 2D mesh, with `npts` = (``N_x``, ``N_y``)
+
+```math
+([x_i]_{i=1}^{N_x}, [y_j]_{j=1}^{N_y})
+```
+
+  - 3D mesh, with `npts` = (``N_x``, ``N_y``, ``N_z``)
+
+```math
+([x_i]_{i=1}^{N_x}, [y_j]_{j=1}^{N_y}, [z_l]_{l=1}^{N_z}).
+```
+"""
+@inline points(Ωₕ::MeshType) = _points(Ωₕ)
+@inline points(Ωₕ::MeshType, idx) = _points(Ωₕ, idx)
+
+"""
+	points_iterator(Ωₕ::MeshType)
+
+Returns an iterator over the  points of `Ωₕ`.
+"""
+@inline points_iterator(Ωₕ::MeshType) = _points_iterator(Ωₕ)
+
+"""
+	half_points(Ωₕ::MeshType, idx)
+
+Returns a tuple with the half points (defined as follows), for each submesh, of the points at index `idx`.
+
+  - 1D mesh
+
+```
+math, with `idx`=``(i,)`` or ``i``
+x_{i+1/2} \\vcentcolon = x_i + \\frac{h_{i+1}}{2}, \\, i=1,\\dots,N-1,
+```
+
+``x_{N+1/2} \\vcentcolon = x_{N}`` and ``x_{1/2} \\vcentcolon = x_1``.
+
+  - 2D mesh, with `idx` = ``(i,j)``
+
+```math
+(x_{i+1/2}, y_{j+1/2})
+```
+
+  - 3D mesh, with `idx` = ``(i,j,l)``
+
+```math
+(x_{i+1/2}, y_{j+1/2}, z_{l+1/2}).
+```
+"""
+
+@inline half_points(Ωₕ::MeshType, idx) = _half_points(Ωₕ, idx)
+
+"""
+	half_points_iterator(Ωₕ::MeshType)
+
+Returns an iterator for the [half_points](@ref), for each submesh.
+"""
+@inline half_points_iterator(Ωₕ::MeshType) = _half_points_iterator(Ωₕ)
+
+"""
+	spacing(Ωₕ::MeshType, idx)
+
+Returns a tuple with the [spacing](@ref), for each submesh, at index `idx`.
+
+  - 1D mesh, with `idx` = ``(i,)`` or ``i``
+
+```math
+h_{x,i} \\vcentcolon = x_i - x_{i-1}, \\, i=2,\\dots,N
+```
+
+and ``h_{x,1} \\vcentcolon = x_2 - x_1``
+
+  - 2D mesh, with `idx` = ``(i,j)``
+
+```math
+(h_{x,i}, h_{y,j}) \\vcentcolon = (x_i - x_{i-1}, y_j - y_{j-1})
+```
+
+  - 3D mesh, with `idx` = ``(i,j,l)``
+
+```math
+(h_{x,i}, h_{y,j}, h_{z,l}) \\vcentcolon = (x_i - x_{i-1}, y_j - y_{j-1}, z_l - z_{l-1})
+```
+"""
+@inline spacing(Ωₕ::MeshType, idx) = _spacing(Ωₕ, idx)
+
+"""
+	spacing_iterator(Ωₕ::MeshType)
+
+Returns an iterator for the [spacing](@ref), for each submesh.
+"""
+@inline spacing_iterator(Ωₕ::MeshType) = _spacing_iterator(Ωₕ)
+
+"""
+	half_spacing(Ωₕ::MeshType, idx)
+
+Returns a tuple with the indexwise average of the space stepsize, for each submesh, at index `idx`.
+
+	- 1D mesh, with `idx` = ``(i,)`` or ``i``
+
+```math
+h_{x,i+1/2} \\vcentcolon = \\frac{h_{x,i} + h_{x,i+1}}{2}, \\, i=1,\\dots,N-1,
+```
+
+``h_{x,N+1/2} \\vcentcolon = \\frac{h_{N}}{2}`` and ``h_{x,1/2} \\vcentcolon = \\frac{h_1}{2}``.
+
+  - 2D mesh, with `idx` = ``(i,j)``
+
+```math
+(h_{x,i+1/2}, h_{y,j+1/2})
+```
+
+  - 3D mesh, with `idx` = ``(i,j,l)``
+
+```math
+(h_{x,i+1/2}, h_{y,j+1/2}, h_{z,l+1/2})
+```
+"""
+@inline half_spacing(Ωₕ::MeshType, idx) = _half_spacing(Ωₕ, idx)
+
+"""
+	half_spacing_iterator(Ωₕ::MeshnD)
+
+Returns an iterator for the [half_spacing](@ref), for each submesh.
+"""
+@inline half_spacing_iterator(Ωₕ::MeshType) = _half_spacing_iterator(Ωₕ)
+
+"""
+	npoints(Ωₕ::MeshType)
+	npoints(Ωₕ::MeshType, Tuple)
+
+Returns the number of points of mesh `Ωₕ`. If `Tuple` is passed as the second argument, it returns a tuple with the number of points of each submesh composing `Ωₕ`.
+"""
+@inline npoints(Ωₕ::MeshType) = _npoints(Ωₕ)
+@inline npoints(Ωₕ::MeshType, ::Type{Tuple}) = _npoints(Ωₕ, Tuple)
+
+"""
+	hₘₐₓ(Ωₕ::MeshType)
+
+Returns the maximum diagonal of mesh `Ωₕ`.
+
+  - 1D mesh
+
+```math
+h_{max} \\vcentcolon = \\max_{i=1,\\dots,N} x_i - x_{i-1}.
+```
+
+  - 2D mesh
+
+```math
+\\max_{i,j} \\Vert (h_{x,i}, h_{y,j}) \\Vert_2
+```
+
+  - 3D mesh
+
+```math
+\\max_{i,j,l} \\Vert (h_{x,i}, h_{y,j},  h_{z,l}) \\Vert_2
+```
+"""
+@inline hₘₐₓ(Ωₕ::MeshType) = _hₘₐₓ(Ωₕ)
+
+"""
+	cell_measure(Ωₕ::MeshType, idx)
+
+Returns the measure of the cell ``\\square_{idx}`` centered at the index `idx` (can be a `CartesianIndex` or a `Tuple`):
+
+  - 1D mesh, with `idx` = ``(i,)``
+
+```math
+\\square_{i} \\vcentcolon = \\left[x_i - \\frac{h_{i}}{2}, x_i + \\frac{h_{i+1}}{2} \\right]
+```
+
+at `CartesianIndex` `i` in mesh `Ωₕ`, which is given by ``h_{i+1/2}``
+
+  - 2D mesh
+
+```math
+  \\square_{i,j} \\vcentcolon = \\left[x_i - \\frac{h_{x,i}}{2}, x_i + \\frac{h_{x,i+1}}{2} \\right] \\times \\left[y_j - \\frac{h_{y,j}}{2}, y_j + \\frac{h_{y,j+1}}{2} \\right]
+```
+
+with area ``h_{x,i+1/2} h_{y,j+1/2}``, where `idx` = ``(i,j)``,
+
+  - 3D mesh
+
+```math
+\\square_{i,j,l} \\vcentcolon = \\left[x_i - \\frac{h_{x,i}}{2}, x_i + \\frac{h_{x,i+1}}{2}\\right] \\times \\left[y_j - \\frac{h_{y,j}}{2}, y_j + \\frac{h_{y,j+1}}{2}\\right] \\times \\left[z_l - \\frac{h_{z,l}}{2}, z_l + \\frac{h_{z,l+1}}{2}\\right]
+```
+
+with volume ``h_{x,i+1/2} h_{y,j+1/2} h_{z,l+1/2}``, where `idx` = ``(i,j,l)``.
+"""
+@inline cell_measure(Ωₕ::MeshType, idx) = _cell_measure(Ωₕ, idx)
+
+"""
+	cell_measure_iterator(Ωₕ::MeshType)
+
+Returns an iterator for the measure of the cells.
+"""
+@inline cell_measure_iterator(Ωₕ::MeshType) = _cell_measure_iterator(Ωₕ)
+
+"""
+	iterative_refinement!(Ωₕ::MeshType)
+	iterative_refinement!(Ωₕ::MeshType, domain_markers::DomainMarkers)
+
+Refines the given mesh `Ωₕ` by halving each existing cell (in every direction). If [DomainMarkers](@ref) is passed as an argument, it also updates the markers according to `domain_markers` after the refinement.
+"""
+@inline iterative_refinement!(Ωₕ::MeshType) = _iterative_refinement!(Ωₕ)
+@inline iterative_refinement!(Ωₕ::MeshType, domain_markers::DomainMarkers) = _iterative_refinement!(Ωₕ, domain_markers)
+
+"""
+	change_points!(Ωₕ::MeshType, pts)
+	change_points!(Ωₕ::MeshType, Ω::Domain, pts)
+
+Changes the coordinates of the internal points of the mesh `Ωₕ` to the new coordinates specified in `pts`. This function assumes the points in `pts` are ordered and that the first and last of them coincide with the bounds of the `Ω`. if the domain `Ω` is passed as an argument, the markers of the mesh are also recalculated after this change.
+"""
+@inline change_points!(Ωₕ::MeshType, pts) = _change_points!(Ωₕ, pts)
+@inline change_points!(Ωₕ::MeshType, domain_markers::DomainMarkers, pts) = _change_points!(Ωₕ, domain_markers, pts)

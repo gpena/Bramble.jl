@@ -20,7 +20,11 @@ Returns a `1`-dimensional [CartesianProduct](@ref) representing the interval [`x
 
 ```@example
 julia> interval(0, 1)
-CartesianProduct{1,Float64}((0.0,1.0))
+	Set
+   Type: Float64
+  Space: ℝ
+	Dim: 1
+	Set: [0.0, 1.0]
 ```
 """
 @inline function interval(_x, _y)
@@ -38,6 +42,15 @@ end
 	point(x)
 
 Returns the interval `[x,x]`.
+
+```@example
+julia> point(0)
+	Set
+   Type: Float64
+  Space: ℝ
+	Dim: 0
+	Set: {0.0}
+```
 """
 @inline function point(_x)
 	x = float(_x)
@@ -50,22 +63,29 @@ end
 	cartesianproduct(box::NTuple)
 	cartesianproduct(X::CartesianProduct)
 
-Returns a `1`-dimensional [CartesianProduct](@ref) to represent the interval [`x`,`y`]. Alternatively, if `D` tuples are provided in `box`, it returns a `D`-dimensional [CartesianProduct](@ref).
+Returns a [CartesianProduct](@ref).
+
+  - If `D` tuples are provided in `box`, it returns a `D`-dimensional [CartesianProduct](@ref).
+  - If two values `x` and `y` are provided, it returns a `1`-dimensional [CartesianProduct](@ref) to represent the interval [`x`,`y`].
 
 # Example
 
 ```@example
 julia> cartesianproduct(0, 1)
-Type: Float64 
- Dim: 1 
- Set: [0.0, 1.0]
+	Set
+   Type: Float64
+  Space: ℝ
+	Dim: 1
+	Set: [0.0, 1.0]
 ```
 
 ```@example
 julia> cartesianproduct(((0, 1), (4, 5)))
-Type: Int64 
- Dim: 2 
- Set: [0, 1] × [4, 5]
+	Set
+   Type: Float64
+  Space: ℝ²
+	Dim: 2
+	Set: [0.0, 1.0] × [4.0, 5.0]
 ```
 """
 @inline cartesianproduct(x, y) = interval(x, y)
@@ -76,15 +96,15 @@ Type: Int64
 
 	@assert predicate_result===true "Invalid box: Each tuple must satisfy x[1] <= x[2]. Check for non-compliant pairs or unexpected values. Found box: $box"
 
-	_falses = ntuple(i -> isapprox(float(box[i][1]), float(box[i][2])) ? true : false, D)
-	return CartesianProduct{D,T}(box, _falses)
+	_box = ntuple(i -> (float(box[i][1]), float(box[i][2])), D)
+	_falses = ntuple(i -> isapprox(_box[i]...) ? true : false, D)
+	return CartesianProduct{D,eltype(_box[1])}(_box, _falses)
 end
 
 """
 	box(a,b)
 
-Creates a [CartesianProduct](@ref) from the coordinates in `a` and `b`. It accepts `Number` or `NTuple{D}`. The subintervals of the new set are defined as
-`interval(a[1],b[1]) × ... × interval(a[D],b[D])`.
+Creates a [CartesianProduct](@ref) from the coordinates in `a` and `b`. It accepts `Number` or `NTuple{D}`. The subintervals of the new set are defined as `interval(a[1],b[1]) × ... × interval(a[D],b[D])`.
 """
 @inline box(a, b) = interval(a, b)
 @inline @generated function box(a::NTuple{D}, b::NTuple{D}) where D
@@ -94,7 +114,7 @@ end
 """
 	(X::CartesianProduct)(i)
 
-Returns the `i`-th interval in the [CartesianProduct](@ref).
+Returns the `i`-th [interval](@ref)) or [point](@ref) in the [CartesianProduct](@ref).
 """
 @inline function (X::CartesianProduct)(i)
 	@unpack box = X
@@ -116,8 +136,8 @@ julia> X = cartesianproduct(0, 1);
 Float64
 ```
 """
-@inline eltype(_::CartesianProduct{D,T}) where {D,T} = T
-@inline eltype(::Type{<:CartesianProduct{D,T}}) where {D,T} = T
+@inline Base.eltype(_::CartesianProduct{D,T}) where {D,T} = T
+@inline Base.eltype(::Type{<:CartesianProduct{D,T}}) where {D,T} = T
 
 """
 	dim(X::CartesianProduct)
@@ -153,7 +173,7 @@ Returns the topological dimension of a [CartesianProduct](@ref).
 	tails(X::CartesianProduct, i)
 	tails(X::CartesianProduct{D})
 
-Returns `i`-th interval in [CartesianProduct](@ref) `X` as a Tuple. It can also be called on `X, returning a `D`-tuple with all intervals defining [CartesianProduct](@ref) `X`.
+Returns `i`-th [interval](@ref) or [point](@ref) in [CartesianProduct](@ref) `X` as a Tuple. It can also be called on `X, returning a `D`-tuple with all intervals defining [CartesianProduct](@ref) `X`.
 
 # Example
 
@@ -193,9 +213,11 @@ Returns the cartesian product of two [CartesianProduct](@ref)s `X` and `Y` as a 
 julia> X = interval(0, 1);
 	   Y = interval(2, 3);
 	   X × Y;
-Type: Float64 
- Dim: 2 
- Set: [0.0, 1.0] × [2.0, 3.0]
+	Set
+   Type: Float64
+  Space: ℝ²
+	Dim: 2
+	Set: [0.0, 1.0] × [2.0, 3.0]
 ```
 """
 @generated function ×(X::CartesianProduct{D1,T}, Y::CartesianProduct{D2,T}) where {D1,D2,T}
@@ -210,16 +232,18 @@ end
 """
 	projection(X::CartesianProduct, i)
 
-Returns the `i`-th interval in [CartesianProduct](@ref) `X` as a new `1`-dimensional [CartesianProduct](@ref).
+Returns the `i`-th [interval](@ref) or [point](@ref)) in [CartesianProduct](@ref) `X` as a new [CartesianProduct](@ref).
 
 # Example
 
 ```@example
 julia> X = cartesianproduct(0, 1) × cartesianproduct(4, 5);
 	   projection(X, 1);
-Type: Float64 
- Dim: 1 
- Set: [0.0, 1.0]
+	Set
+   Type: Float64
+  Space: ℝ
+	Dim: 1
+	Set: [0.0, 1.0]
 ```
 """
 @inline projection(X::CartesianProduct, i) = interval(X(i)...)
@@ -243,7 +267,8 @@ function set_info_only(X::CartesianProduct{D}, mlength) where D
 
 	styled_sets = [let
 					   is_collapsed = X.collapsed[i]
-					   set_str = is_collapsed ? "{$(tails(X,i)[1])}" : "[$(tails(X,i)[1]), $(tails(X,i)[2])]"
+					   a, b = tails(X, i)
+					   set_str = is_collapsed ? "{$a}" : "[$(a), $(b)]"
 					   color_sym = colors[mod1(i, num_colors)]
 					   styled"{$color_sym:$(set_str)}"
 				   end
