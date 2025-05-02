@@ -57,8 +57,8 @@ using Bramble: marker_identifiers, _embed_notime, process_identifier, marker_sym
 		@test dm_empty isa DomainMarkers
 		@test isempty(dm_empty.symbols)
 		@test isempty(dm_empty.tuples)
-		@test isempty(dm_empty.functions)
-		@test eltype(dm_empty.functions) <: Marker{<:BrambleFunction} # Check function marker type
+		@test isempty(dm_empty.conditions)
+		@test eltype(dm_empty.conditions) <: Marker{<:BrambleFunction} # Check function marker type
 
 		# Test mixed types (using Float32 domain I2D)
 		pairs = (:bnd_left => :left,
@@ -87,8 +87,8 @@ using Bramble: marker_identifiers, _embed_notime, process_identifier, marker_sym
 		dm_only_func = create_markers(I1D, :region1 => func1)
 		@test isempty(dm_only_func.symbols)
 		@test isempty(dm_only_func.tuples)
-		@test length(dm_only_func.functions) == 1
-		@test first(dm_only_func.functions).label == :region1
+		@test length(dm_only_func.conditions) == 1
+		@test first(dm_only_func.conditions).label == :region1
 	end
 
 	@testset "Domain Construction" begin
@@ -137,7 +137,7 @@ using Bramble: marker_identifiers, _embed_notime, process_identifier, marker_sym
 		@test dm_retrieved isa DomainMarkers
 		@test length(dm_retrieved.symbols) == 2
 		@test length(dm_retrieved.tuples) == 1
-		@test length(dm_retrieved.functions) == 1
+		@test length(dm_retrieved.conditions) == 1
 
 		# Test labels (collect generator)
 		lbls = Set(labels(Ω))

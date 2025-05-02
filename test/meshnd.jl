@@ -88,22 +88,22 @@ using LinearAlgebra: hypot
 			# Case 1: 2x1 block
 			CIndicesType{D} = CartesianIndices{D,NTuple{D,UnitRange{Int}}}
 			CIndexType{D} = CartesianIndex{D}
-			MarkType{D} = MarkerIndices{D,CIndexType{D},CIndicesType{D}}
+			MarkType{D} = MarkerIndices{D,CIndicesType{D}}
 
 			idx1 = CartesianIndex(2, 3)
 			idx2 = CartesianIndex(3, 3)
 			md1 = MarkType{2}(Set([idx1, idx2]), Set{CIndicesType{2}}())
 			merge_consecutive_indices!(md1; check_consistency = false) # Disable check for simplicity here
-			@test isempty(md1.c_index)
-			@test md1.c_indices == Set([CartesianIndices((2:3, 3:3))])
+			@test isempty(md1.cartesian_index)
+			@test md1.cartesian_indices == Set([CartesianIndices((2:3, 3:3))])
 
 			# Case 2: 1x2 block
 			idx3 = CartesianIndex(2, 3)
 			idx4 = CartesianIndex(2, 4)
 			md2 = MarkType{2}(Set([idx3, idx4]), Set{CIndicesType{2}}())
 			merge_consecutive_indices!(md2; check_consistency = false)
-			@test isempty(md2.c_index)
-			@test md2.c_indices == Set([CartesianIndices((2:2, 3:4))])
+			@test isempty(md2.cartesian_index)
+			@test md2.cartesian_indices == Set([CartesianIndices((2:2, 3:4))])
 
 			# Case 3: 2x2 block
 			idx5 = CartesianIndex(2, 3)
@@ -112,8 +112,8 @@ using LinearAlgebra: hypot
 			idx8 = CartesianIndex(3, 4)
 			md3 = MarkType{2}(Set([idx5, idx6, idx7, idx8]), Set{CIndicesType{2}}())
 			merge_consecutive_indices!(md3; check_consistency = false)
-			@test isempty(md3.c_index)
-			@test md3.c_indices == Set([CartesianIndices((2:3, 3:4))])
+			@test isempty(md3.cartesian_index)
+			@test md3.cartesian_indices == Set([CartesianIndices((2:3, 3:4))])
 
 			# Case 4: L-shape (should not merge into one block)
 			md4 = MarkType{2}(Set([idx5, idx6, idx7]), Set{CIndicesType{2}}()) # (2,3), (3,3), (2,4)
@@ -123,14 +123,14 @@ using LinearAlgebra: hypot
 			# Let's trace: Seed (2,3). Expands to (3,3). Block (2:3, 3:3). Remove (2,3),(3,3). Left with (2,4).
 			# Seed (2,4). Cannot expand. Isolated.
 			# Result: Range (2:3, 3:3), Single (2,4)
-			@test md4.c_index == Set([CartesianIndex(2, 4)])
-			@test md4.c_indices == Set([CartesianIndices((2:3, 3:3))])
+			@test md4.cartesian_index == Set([CartesianIndex(2, 4)])
+			@test md4.cartesian_indices == Set([CartesianIndices((2:3, 3:3))])
 
 			# Case 5: Isolated points
 			md5 = MarkType{2}(Set([CartesianIndex(1, 1), CartesianIndex(3, 3)]), Set{CIndicesType{2}}())
 			merge_consecutive_indices!(md5; check_consistency = false)
-			@test md5.c_index == Set([CartesianIndex(1, 1), CartesianIndex(3, 3)])
-			@test isempty(md5.c_indices)
+			@test md5.cartesian_index == Set([CartesianIndex(1, 1), CartesianIndex(3, 3)])
+			@test isempty(md5.cartesian_indices)
 		end
 	end # Helper Functions Testset
 
@@ -260,20 +260,20 @@ using LinearAlgebra: hypot
 			Ω_2d_marked = create_test_nd_domain(intervals_2d, markers = dm_2d)
 			Ωₕ_2d_marked = mesh(Ω_2d_marked, npts_2d, (true, true); backend = Backend()) # Pts: x=[0,1,2,3], y=[0,1,2,3,4]
 
-			# Check symbol markers (D=2 uses c_indices)
-			@test isempty(marker(Ωₕ_2d_marked, :LeftWall).c_index)
-			@test marker(Ωₕ_2d_marked, :LeftWall).c_indices == Set([CartesianIndices((1:1, 1:5))]) # Corrected based on test logic
+			# Check symbol markers (D=2 uses cartesian_indices)
+			@test isempty(marker(Ωₕ_2d_marked, :LeftWall).cartesian_index)
+			@test marker(Ωₕ_2d_marked, :LeftWall).cartesian_indices == Set([CartesianIndices((1:1, 1:5))]) # Corrected based on test logic
 
-			@test isempty(marker(Ωₕ_2d_marked, :RightWall).c_index)
-			@test marker(Ωₕ_2d_marked, :RightWall).c_indices == Set([CartesianIndices((4:4, 1:5))]) # Corrected based on test logic
+			@test isempty(marker(Ωₕ_2d_marked, :RightWall).cartesian_index)
+			@test marker(Ωₕ_2d_marked, :RightWall).cartesian_indices == Set([CartesianIndices((4:4, 1:5))]) # Corrected based on test logic
 
 			# Check tuple marker
-			@test isempty(marker(Ωₕ_2d_marked, :TopBottom).c_index)
+			@test isempty(marker(Ωₕ_2d_marked, :TopBottom).cartesian_index)
 			expected_tb = Set([
 								  CartesianIndices((1:4, 5:5)), # Top (N:N, 1:M)
 								  CartesianIndices((1:4, 1:1))  # Bottom (1:1, 1:M)
 							  ]) # Corrected based on test logic
-			@test marker(Ωₕ_2d_marked, :TopBottom).c_indices == expected_tb
+			@test marker(Ωₕ_2d_marked, :TopBottom).cartesian_indices == expected_tb
 
 			# Check condition marker
 			# x = [0,1,2,3], y = [0,1,2,3,4]
@@ -282,8 +282,8 @@ using LinearAlgebra: hypot
 			# Expected points: (1,2), (2,2) => Indices: (2,3), (3,3)
 			# These should be merged by merge_consecutive_indices!
 			center_marker = marker(Ωₕ_2d_marked, :CenterRegion)
-			@test isempty(center_marker.c_index)
-			@test center_marker.c_indices == Set([CartesianIndices((2:3, 3:3))])
+			@test isempty(center_marker.cartesian_index)
+			@test center_marker.cartesian_indices == Set([CartesianIndices((2:3, 3:3))])
 		end
 
 		@testset "Mesh Modification (D=2)" begin
@@ -305,7 +305,7 @@ using LinearAlgebra: hypot
 			@test points(Ωₕ_2d_refined(1)) ≈ [0.0, 0.75, 1.5, 2.25, 3.0]
 			@test points(Ωₕ_2d_refined(2)) ≈ [0.0, 1.0, 2.0, 3.0, 4.0]
 			# Check marker update
-			@test marker(Ωₕ_2d_refined, :L).c_indices == Set([CartesianIndices((1:1, 1:npts_refined[1]))]) # Left wall on refined mesh
+			@test marker(Ωₕ_2d_refined, :L).cartesian_indices == Set([CartesianIndices((1:1, 1:npts_refined[1]))]) # Left wall on refined mesh
 
 			# change_points!
 			Ωₕ_2d_changed = deepcopy(Ωₕ_2d_orig)
@@ -316,7 +316,7 @@ using LinearAlgebra: hypot
 			@test points(Ωₕ_2d_changed(1)) ≈ new_pts_x
 			@test points(Ωₕ_2d_changed(2)) ≈ new_pts_y
 
-			@test marker(Ωₕ_2d_changed, :L).c_indices == Set([CartesianIndices((1:1, 1:3))])
+			@test marker(Ωₕ_2d_changed, :L).cartesian_indices == Set([CartesianIndices((1:1, 1:3))])
 		end
 	end # Dimension D=2 Testset
 
@@ -409,21 +409,21 @@ using LinearAlgebra: hypot
 			Ωₕ_3d_marked = mesh(Ω_3d_marked, npts_3d, (true, true, true); backend = Backend()) # Pts: x=[0,1,2], y=[0,1,2,3], z=[0,1]
 
 			# Check symbol markers
-			@test isempty(marker(Ωₕ_3d_marked, :BottomFace).c_index)
-			@test marker(Ωₕ_3d_marked, :BottomFace).c_indices == Set([CartesianIndices((1:3, 1:4, 1:1))]) # Correct
+			@test isempty(marker(Ωₕ_3d_marked, :BottomFace).cartesian_index)
+			@test marker(Ωₕ_3d_marked, :BottomFace).cartesian_indices == Set([CartesianIndices((1:3, 1:4, 1:1))]) # Correct
 
-			@test isempty(marker(Ωₕ_3d_marked, :FrontFace).c_index)
-			@test marker(Ωₕ_3d_marked, :FrontFace).c_indices == Set([CartesianIndices((3:3, 1:4, 1:2))]) # Correct
+			@test isempty(marker(Ωₕ_3d_marked, :FrontFace).cartesian_index)
+			@test marker(Ωₕ_3d_marked, :FrontFace).cartesian_indices == Set([CartesianIndices((3:3, 1:4, 1:2))]) # Correct
 
 			# Check condition marker
 			# x<0.5 -> x=0 -> i=1
 			# y<0.5 -> y=0 -> j=1
 			# z<0.5 -> z=0 -> k=1
 			# Expected point: (0,0,0) => Index (1,1,1)
-			# Should remain a single point in c_index after merge attempt
+			# Should remain a single point in cartesian_index after merge attempt
 			corner_marker = marker(Ωₕ_3d_marked, :SmallCorner)
-			@test corner_marker.c_index == Set([CartesianIndex(1, 1, 1)])
-			@test isempty(corner_marker.c_indices)
+			@test corner_marker.cartesian_index == Set([CartesianIndex(1, 1, 1)])
+			@test isempty(corner_marker.cartesian_indices)
 		end
 	end # Dimension D=3 Testset
 end # Main Testset

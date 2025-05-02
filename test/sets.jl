@@ -30,8 +30,8 @@ using Bramble: interval, cartesianproduct, projection, dim, tails, ×
 		@test all(isapprox.(cp_f64.box[1], (-3.0, 10.0)))
 		# cartesianproduct(NTuple) - Int
 		cp_int_2d = cartesianproduct(((0, 1), (4, 5)))
-		@test cp_int_2d isa CartesianProduct{2,Int}
-		@test cp_int_2d.box === ((0, 1), (4, 5))
+		@test cp_int_2d isa CartesianProduct{2,Float64}
+		@test cp_int_2d.box === ((0.0, 1.0), (4.0, 5.0))
 
 		# cartesianproduct(NTuple) - Float32
 		cp_f32_3d = cartesianproduct(((0.0f0, 1.0f0), (2.0f0, 3.0f0), (-1.0f0, 0.0f0)))
@@ -54,8 +54,8 @@ using Bramble: interval, cartesianproduct, projection, dim, tails, ×
 		# eltype
 		@test eltype(I) === Float64
 		@test eltype(typeof(I)) === Float64
-		@test eltype(R2) === Int
-		@test eltype(typeof(R2)) === Int
+		@test eltype(R2) === Float64
+		@test eltype(typeof(R2)) === Float64
 		@test eltype(R3) === Float64
 		@test eltype(typeof(R3)) === Float64
 
@@ -89,7 +89,7 @@ using Bramble: interval, cartesianproduct, projection, dim, tails, ×
 
 		# tails(X)
 		@test all(isapprox.(tails(I), (0.0, 1.0)))
-		@test tails(R2) === ((0, 1), (2, 3))
+		@test tails(R2) === ((0.0, 1.0), (2.0, 3.0))
 		@test all(tails(R3) .== ((0.0, 1.0), (2.0, 3.0), (4.0, 5.0)))
 		# first/last (only for D=1)
 		@test all(isapprox.(first(I), 0.0))
@@ -114,16 +114,6 @@ using Bramble: interval, cartesianproduct, projection, dim, tails, ×
 		@test P2 isa CartesianProduct{3,Float64}
 		@test dim(P2) == 3
 		@test all(tails(P2) .== ((0.0, 1.0), (2.0, 3.0), (4.0, 5.0)))
-		# × operator (Int x Int) - Note: Need cartesianproduct for Int type
-		R2_A = cartesianproduct(((0, 1),))
-		R2_B = cartesianproduct(((2, 3),))
-		P3_int = R2_A × R2_B
-		@test P3_int isa CartesianProduct{2,Int}
-		@test dim(P3_int) == 2
-		@test tails(P3_int) === ((0, 1), (2, 3))
-
-		# × operator type mismatch (should fail)
-		@test_throws MethodError I1×R2 # Float64 x Int
 
 		# projection
 		P_proj = I1 × I2 × I3_int # Dim 3, Float64

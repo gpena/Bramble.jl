@@ -37,55 +37,54 @@ import Base: diff
 			# Case 1: Empty input
 			CIndicesType = CartesianIndices{1,NTuple{1,UnitRange{Int}}}
 			CIndexType = CartesianIndex{1}
-			md1 = MarkerIndices{1,CIndexType,CIndicesType}(Set{CIndexType}(), Set{}())
+			md1 = MarkerIndices{1,CIndicesType}(Set{CIndexType}(), Set{}())
 			merge_consecutive_indices!(md1)
-			@test isempty(md1.c_index)
-			@test isempty(md1.c_indices)
+			@test isempty(md1.cartesian_index)
+			@test isempty(md1.cartesian_indices)
 
 			# Case 2: Single index
-			md2 = MarkerIndices{1,CIndexType,CIndicesType}(Set([CartesianIndex(5)]), Set{CIndicesType}())
+			md2 = MarkerIndices{1,CIndicesType}(Set([CartesianIndex(5)]), Set{CIndicesType}())
 			merge_consecutive_indices!(md2)
-			@test md2.c_index == Set([CartesianIndex(5)])
-			@test isempty(md2.c_indices)
+			@test md2.cartesian_index == Set([CartesianIndex(5)])
+			@test isempty(md2.cartesian_indices)
 
 			# Case 3: Two consecutive indices
-			md3 = MarkerIndices{1,CIndexType,CIndicesType}(Set([CartesianIndex(5), CartesianIndex(6)]), Set{CIndicesType}())
+			md3 = MarkerIndices{1,CIndicesType}(Set([CartesianIndex(5), CartesianIndex(6)]), Set{CIndicesType}())
 			merge_consecutive_indices!(md3)
-			@test isempty(md3.c_index)
-			@test md3.c_indices == Set([CartesianIndices((5:6,))])
+			@test isempty(md3.cartesian_index)
+			@test md3.cartesian_indices == Set([CartesianIndices((5:6,))])
 
 			# Case 4: Multiple consecutive indices
-			md4 = MarkerIndices{1,CIndexType,CIndicesType}(Set([CartesianIndex(2), CartesianIndex(3), CartesianIndex(4)]), Set{CIndicesType}())
+			md4 = MarkerIndices{1,CIndicesType}(Set([CartesianIndex(2), CartesianIndex(3), CartesianIndex(4)]), Set{CIndicesType}())
 			merge_consecutive_indices!(md4)
-			@test isempty(md4.c_index)
-			@test md4.c_indices == Set([CartesianIndices((2:4,))])
+			@test isempty(md4.cartesian_index)
+			@test md4.cartesian_indices == Set([CartesianIndices((2:4,))])
 
 			# Case 5: Non-consecutive indices
-			md5 = MarkerIndices{1,CIndexType,CIndicesType}(Set([CartesianIndex(2), CartesianIndex(4), CartesianIndex(6)]), Set{CIndicesType}())
+			md5 = MarkerIndices{1,CIndicesType}(Set([CartesianIndex(2), CartesianIndex(4), CartesianIndex(6)]), Set{CIndicesType}())
 			merge_consecutive_indices!(md5)
-			@test md5.c_index == Set([CartesianIndex(2), CartesianIndex(4), CartesianIndex(6)])
-			@test isempty(md5.c_indices)
+			@test md5.cartesian_index == Set([CartesianIndex(2), CartesianIndex(4), CartesianIndex(6)])
+			@test isempty(md5.cartesian_indices)
 
 			# Case 6: Mixed consecutive and non-consecutive
-			md6 = MarkerIndices{1,CIndexType,CIndicesType}(Set([CartesianIndex(1), CartesianIndex(3), CartesianIndex(4), CartesianIndex(5), CartesianIndex(7)]),
-														   Set{CIndicesType}())
+			md6 = MarkerIndices{1,CIndicesType}(Set([CartesianIndex(1), CartesianIndex(3), CartesianIndex(4), CartesianIndex(5), CartesianIndex(7)]), Set{CIndicesType}())
 			merge_consecutive_indices!(md6)
-			@test md6.c_index == Set([CartesianIndex(1), CartesianIndex(7)])
-			@test md6.c_indices == Set([CartesianIndices((3:5,))])
+			@test md6.cartesian_index == Set([CartesianIndex(1), CartesianIndex(7)])
+			@test md6.cartesian_indices == Set([CartesianIndices((3:5,))])
 
 			# Case 7: Multiple disjoint ranges
-			md7 = MarkerIndices{1,CIndexType,CIndicesType}(Set([CartesianIndex(1), CartesianIndex(2), CartesianIndex(5), CartesianIndex(6), CartesianIndex(7), CartesianIndex(10)]),
-														   Set{CIndicesType}())
+			md7 = MarkerIndices{1,CIndicesType}(Set([CartesianIndex(1), CartesianIndex(2), CartesianIndex(5), CartesianIndex(6), CartesianIndex(7), CartesianIndex(10)]),
+												Set{CIndicesType}())
 			merge_consecutive_indices!(md7)
-			@test md7.c_index == Set([CartesianIndex(10)])
-			@test md7.c_indices == Set([CartesianIndices((1:2,)), CartesianIndices((5:7,))])
+			@test md7.cartesian_index == Set([CartesianIndex(10)])
+			@test md7.cartesian_indices == Set([CartesianIndices((1:2,)), CartesianIndices((5:7,))])
 
-			# Case 8: Pre-existing c_indices
+			# Case 8: Pre-existing cartesian_indices
 			pre_existing_range = CartesianIndices((100:101,))
-			md8 = MarkerIndices{1,CIndexType,CIndicesType}(Set([CartesianIndex(3), CartesianIndex(4)]), Set([pre_existing_range]))
+			md8 = MarkerIndices{1,CIndicesType}(Set([CartesianIndex(3), CartesianIndex(4)]), Set([pre_existing_range]))
 			merge_consecutive_indices!(md8)
-			@test isempty(md8.c_index)
-			@test md8.c_indices == Set([pre_existing_range, CartesianIndices((3:4,))])
+			@test isempty(md8.cartesian_index)
+			@test md8.cartesian_indices == Set([pre_existing_range, CartesianIndices((3:4,))])
 		end
 	end
 
@@ -285,35 +284,35 @@ import Base: diff
 		@test Set(keys(markers(Ωₕ))) == Set([:Dirichlet, :Neumann, :Mixed, :LowerHalf, :PointMarker])
 
 		# Test specific markers
-		@test marker(Ωₕ, :Dirichlet).c_index == Set([CartesianIndex(1)])
-		@test isempty(marker(Ωₕ, :Dirichlet).c_indices)
+		@test marker(Ωₕ, :Dirichlet).cartesian_index == Set([CartesianIndex(1)])
+		@test isempty(marker(Ωₕ, :Dirichlet).cartesian_indices)
 
-		@test marker(Ωₕ, :Neumann).c_index == Set([CartesianIndex(5)])
-		@test isempty(marker(Ωₕ, :Neumann).c_indices)
+		@test marker(Ωₕ, :Neumann).cartesian_index == Set([CartesianIndex(5)])
+		@test isempty(marker(Ωₕ, :Neumann).cartesian_indices)
 
-		@test marker(Ωₕ, :Mixed).c_index == Set([CartesianIndex(1), CartesianIndex(5)])
-		@test isempty(marker(Ωₕ, :Mixed).c_indices)
+		@test marker(Ωₕ, :Mixed).cartesian_index == Set([CartesianIndex(1), CartesianIndex(5)])
+		@test isempty(marker(Ωₕ, :Mixed).cartesian_indices)
 
 		# Test condition marker (:LowerHalf, x < 0.5) -> indices 1, 2
 		# Should be merged into a range
-		@test isempty(marker(Ωₕ, :LowerHalf).c_index)
-		@test marker(Ωₕ, :LowerHalf).c_indices == Set([CartesianIndices((1:2,))])
+		@test isempty(marker(Ωₕ, :LowerHalf).cartesian_index)
+		@test marker(Ωₕ, :LowerHalf).cartesian_indices == Set([CartesianIndices((1:2,))])
 
 		# Test condition marker (:PointMarker, x ≈ 0.75) -> index 4
 		# Should remain a single index
-		@test marker(Ωₕ, :PointMarker).c_index == Set([CartesianIndex(4)])
-		@test isempty(marker(Ωₕ, :PointMarker).c_indices)
+		@test marker(Ωₕ, :PointMarker).cartesian_index == Set([CartesianIndex(4)])
+		@test isempty(marker(Ωₕ, :PointMarker).cartesian_indices)
 
 		# Test explicit call to set_markers! (should ideally yield the same)
 		set_markers!(Ωₕ, dm) # Recalculate
 		@test Set(keys(markers(Ωₕ))) == Set([:Dirichlet, :Neumann, :Mixed, :LowerHalf, :PointMarker])
-		@test marker(Ωₕ, :Dirichlet).c_index == Set([CartesianIndex(1)])
-		@test marker(Ωₕ, :Neumann).c_index == Set([CartesianIndex(5)])
-		@test marker(Ωₕ, :Mixed).c_index == Set([CartesianIndex(1), CartesianIndex(5)])
-		@test isempty(marker(Ωₕ, :LowerHalf).c_index)
-		@test marker(Ωₕ, :LowerHalf).c_indices == Set([CartesianIndices((1:2,))])
-		@test marker(Ωₕ, :PointMarker).c_index == Set([CartesianIndex(4)])
-		@test isempty(marker(Ωₕ, :PointMarker).c_indices)
+		@test marker(Ωₕ, :Dirichlet).cartesian_index == Set([CartesianIndex(1)])
+		@test marker(Ωₕ, :Neumann).cartesian_index == Set([CartesianIndex(5)])
+		@test marker(Ωₕ, :Mixed).cartesian_index == Set([CartesianIndex(1), CartesianIndex(5)])
+		@test isempty(marker(Ωₕ, :LowerHalf).cartesian_index)
+		@test marker(Ωₕ, :LowerHalf).cartesian_indices == Set([CartesianIndices((1:2,))])
+		@test marker(Ωₕ, :PointMarker).cartesian_index == Set([CartesianIndex(4)])
+		@test isempty(marker(Ωₕ, :PointMarker).cartesian_indices)
 	end
 
 	@testset "Mesh Modification" begin
@@ -333,7 +332,7 @@ import Base: diff
 			@test indices(Ωₕ) == CartesianIndices((npts_refined1,))
 			@test points(Ωₕ) ≈ [0.0, 0.25, 0.5, 0.75, 1.0]
 			# Markers should *not* be updated in this version
-			@test marker(Ωₕ, :BC).c_index == Set([CartesianIndex(1)]) # Still refers to old index system? No, indices field updated. Check marker content.
+			@test marker(Ωₕ, :BC).cartesian_index == Set([CartesianIndex(1)]) # Still refers to old index system? No, indices field updated. Check marker content.
 			# The markers dict was likely overwritten by the _init step within set_markers! if called implicitly.
 			# Let's re-check the logic or assume the markers become inconsistent without the DomainMarkers argument.
 			# Based on the code, the first version *only* updates points and indices. Markers remain untouched/potentially inconsistent.
@@ -347,10 +346,10 @@ import Base: diff
 			@test points(Ωₕ2) ≈ [0.0, 0.25, 0.5, 0.75, 1.0]
 
 			# Check markers are correct *for the refined mesh*
-			@test marker(Ωₕ2, :BC).c_index == Set([CartesianIndex(1)]) # x=0.0 -> index 1
-			@test isempty(marker(Ωₕ2, :BC).c_indices)
-			@test marker(Ωₕ2, :Center).c_index == Set([CartesianIndex(3)]) # x=0.5 -> index 3
-			@test isempty(marker(Ωₕ2, :Center).c_indices)
+			@test marker(Ωₕ2, :BC).cartesian_index == Set([CartesianIndex(1)]) # x=0.0 -> index 1
+			@test isempty(marker(Ωₕ2, :BC).cartesian_indices)
+			@test marker(Ωₕ2, :Center).cartesian_index == Set([CartesianIndex(3)]) # x=0.5 -> index 3
+			@test isempty(marker(Ωₕ2, :Center).cartesian_indices)
 		end
 
 		@testset "change_points!" begin
@@ -362,7 +361,7 @@ import Base: diff
 			Ωₕ = mesh(Ω, npts, true; backend = Backend())
 
 			# Original markers
-			@test marker(Ωₕ, :Endpoint).c_index == Set([CartesianIndex(5)])
+			@test marker(Ωₕ, :Endpoint).cartesian_index == Set([CartesianIndex(5)])
 
 			new_pts_valid = [0.0, 0.1, 0.5, 1.5, 2.0] # Keep endpoints, change interior
 			new_pts_invalid_len = [0.0, 1.0, 2.0]
@@ -373,17 +372,17 @@ import Base: diff
 			change_points!(Ωₕ_copy1, new_pts_valid)
 			@test points(Ωₕ_copy1) ≈ new_pts_valid
 			# Markers should be inconsistent now
-			@test marker(Ωₕ_copy1, :Endpoint).c_index == Set([CartesianIndex(5)]) # Unchanged marker data
+			@test marker(Ωₕ_copy1, :Endpoint).cartesian_index == Set([CartesianIndex(5)]) # Unchanged marker data
 
 			# Test valid change *with* marker update
 			Ωₕ_copy2 = deepcopy(Ωₕ)
 			change_points!(Ωₕ_copy2, dm, new_pts_valid)
 			@test points(Ωₕ_copy2) ≈ new_pts_valid
 			# Check markers recalculated for new points
-			@test marker(Ωₕ_copy2, :Endpoint).c_index == Set([CartesianIndex(5)]) # Still index 5
+			@test marker(Ωₕ_copy2, :Endpoint).cartesian_index == Set([CartesianIndex(5)]) # Still index 5
 			# NearStart: x < 0.3 -> new pts[1]=0.0, pts[2]=0.1 => indices 1, 2
-			@test isempty(marker(Ωₕ_copy2, :NearStart).c_index)
-			@test marker(Ωₕ_copy2, :NearStart).c_indices == Set([CartesianIndices((1:2,))])
+			@test isempty(marker(Ωₕ_copy2, :NearStart).cartesian_index)
+			@test marker(Ωₕ_copy2, :NearStart).cartesian_indices == Set([CartesianIndices((1:2,))])
 		end
 	end
 end
