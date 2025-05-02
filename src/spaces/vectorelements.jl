@@ -320,7 +320,7 @@ function _avgₕ!(uₕ::VectorElement, f, ::Val{1})
 	x = Base.Fix1(half_points, Ωₕ)
 	h = Base.Fix1(half_spacing, Ωₕ)
 
-	param = (f, x, h, 1:npoints(Ωₕ)) ## indides(omegah)
+	param = (f, x, h, 1:npoints(Ωₕ)) ## indices(omegah)
 	__quad!(uₕ, (0, 1), param)
 	return nothing
 end
