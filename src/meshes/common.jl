@@ -291,18 +291,6 @@ function set_markers!(Ωₕ::MeshType, domain_markers)
 	Ωₕ.markers = mesh_markers
 end
 
-#@inline _i2p(pts, idx) = pts[idx]
-#=
-"""
-	_i2p(pts::NTuple{D, Vector{T}}, index::CartesianIndex{D})
-
-Returns a `D` tuple with the coordinates of the point in `pts` associated with the `CartesianIndex` given by ìndex`.
-"""
-@inline @generated _i2p(pts::NTuple{D,Vector{T}}, index::CartesianIndex{D}) where {D,T} = :(Base.Cartesian.@ntuple $D i->pts[i][index[i]])
-
-# necessary?!
-@inline @generated _i2ppo(pts::NTuple{D,Vector{T}}, index::CartesianIndex{D}) where {D,T} = :(Base.Cartesian.@ntuple $D i->pts[i][index[i] + 1])
-=#
 """
 	mesh(Ω::Domain, npts::Int, unif::Bool)
 	mesh(Ω::Domain, npts::NTuple{D}, unif::NTuple{D})
@@ -482,7 +470,7 @@ h_{x,i+1/2} \\vcentcolon = \\frac{h_{x,i} + h_{x,i+1}}{2}, \\, i=1,\\dots,N-1,
 @inline half_spacing(Ωₕ::MeshType, idx) = _half_spacing(Ωₕ, idx)
 
 """
-	half_spacing_iterator(Ωₕ::MeshnD)
+	half_spacing_iterator(Ωₕ::MeshType)
 
 Returns an iterator for the [half_spacing](@ref), for each submesh.
 """
