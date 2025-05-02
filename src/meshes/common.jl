@@ -1,102 +1,9 @@
 """
 	 MeshType{D}
 
-Abstract type for meshes. Meshes are only parametrized by their topological dimension `D``.
+Abstract type for meshes. Meshes are only parametrized by their dimension `D``.
 """
 abstract type MeshType{D} <: BrambleType end
-
-"""
-	struct MarkerIndices{D}
-		cartesian_index::Set{CartesianIndex{D}}
-		cartesian_indices::Set{CartesianIndices{D}}
-	end
-
-	Structure to hold sets of individual `CartesianIndex` or `CartesianIndices`.
-"""
-struct MarkerIndices{D,CartIndicesType} <: BrambleType
-	cartesian_index::Set{CartesianIndex{D}}
-	cartesian_indices::Set{CartIndicesType}
-end
-
-"""
-	boundary_symbol_to_cartesian(indices::CartesianIndices{D}) where D
-
-	Returns a named tuple connecting the facet labels of a set to the corresponding `CartesianIndices`.
-
-```@example
-julia> boundary_symbol_to_cartesian(CartesianIndices((1:3, 1:4)))
-(left = CartesianIndices((1:1, 1:4)), 
- right = CartesianIndices((3:3, 1:4)), 
- top = CartesianIndices((1:3, 4:4)), 
- bottom = CartesianIndices((1:3, 1:1))
-)
-```
-
-```@example
-julia> boundary_symbol_to_cartesian(CartesianIndices((1:10, 1:20, 1:15)))
-(left = CartesianIndices((1:10, 1:1, 1:15)), 
- right = CartesianIndices((1:10, 20:20, 1:15)), 
- top = CartesianIndices((1:10, 1:20, 15:15)), 
- bottom = CartesianIndices((1:10, 1:20, 1:1)), 
- front = CartesianIndices((10:10, 1:20, 1:15)), 
- back = CartesianIndices((1:1, 1:20, 1:15))
-)
-```
-"""
-@inline function boundary_symbol_to_cartesian(indices::CartesianIndices{1})
-	named_tuple_1d = (; :left => first(indices), :right => last(indices))
-	return named_tuple_1d
-end
-
-function boundary_symbol_to_cartesian(indices::CartesianIndices{2})
-	N, M = size(indices)
-
-	named_tuple_2d = (;
-					  :left => indices[1:1, 1:M],
-					  :right => indices[N:N, 1:M],
-					  :top => indices[1:N, M:M],
-					  :bottom => indices[1:N, 1:1])
-	return named_tuple_2d
-end
-
-function boundary_symbol_to_cartesian(indices::CartesianIndices{3})
-	N, M, K = size(indices)
-
-	named_tuple_3d = (;
-					  :left => indices[1:N, 1:1, 1:K],
-					  :right => indices[1:N, M:M, 1:K],
-					  :top => indices[1:N, 1:M, K:K],
-					  :bottom => indices[1:N, 1:M, 1:1],
-					  :front => indices[N:N, 1:M, 1:K],
-					  :back => indices[1:1, 1:M, 1:K])
-	return named_tuple_3d
-end
-
-"""
-	boundary_symbol_to_dict(indices::CartesianIndices)
-
-	Returns a dictionary connecting the facet labels of a set to the corresponding `CartesianIndices`. See [boundary_symbol_to_cartesian](@ref)
-"""
-boundary_symbol_to_dict(indices::CartesianIndices) = Dict(pairs(boundary_symbol_to_cartesian(indices)))
-
-"""
-	MeshMarkers{D}
-
-Type of dictionary to store the `CartesianIndices` associated with a [MarkerIndices](@ref).
-"""
-CIndices_Type{D} = CartesianIndices{D,NTuple{D,UnitRange{Int}}}
-MeshMarkers{D} = Dict{Symbol,MarkerIndices{D,CIndices_Type{D}}}
-
-function Base.show(io::IO, markers::MeshMarkers{D}) where D
-	labels = collect(keys(markers))
-	labels_styled_combined = color_markers(labels)
-
-	fields = D == 1 ? ("Markers",) : ("Resolution",)
-	mlength = max_length_fields(fields)
-
-	final_output = style_field("Markers", labels_styled_combined, max_length = mlength)
-	print(io, final_output)
-end
 
 """
 	generate_indices(nPoints::Int)
@@ -128,11 +35,6 @@ Returns the interior indices of mesh `Ωₕ`.
 """
 @inline interior_indices(Ωₕ::MeshType) = interior_indices(indices(Ωₕ))
 
-"""
-	is_boundary_index(idx, idxs::CartesianIndices)
-
-Returns true if the index `idx` is a boundary index of the mesh.
-"""
 function is_boundary_index(idx, idxs::CartesianIndices)
 	boundary_sections = boundary_indices(idxs)
 
@@ -222,76 +124,6 @@ Returns the [DomainMarkers](@ref)) associated with the mesh `Ωₕ`.
 @inline set_indices!(Ωₕ::MeshType, indices) = (Ωₕ.indices = indices)
 
 """
-	marker(Ωₕ::MeshType, symbol::Symbol)
-
-Returns the [Marker](@ref) identifier with label `symbol`.
-"""
-@inline marker(Ωₕ::MeshType, symbol::Symbol) = Ωₕ.markers[symbol]
-
-function process_label_for_mesh!(markers_mesh::MeshMarkers{D}, set_labels) where D
-	cartesian_indices_type = CartesianIndices{D,NTuple{D,UnitRange{Int}}}
-	cartesian_index_type = CartesianIndex{D}
-
-	for label in set_labels
-		idxs = MarkerIndices{D,cartesian_indices_type}(Set{cartesian_index_type}(), Set{cartesian_indices_type}())
-		markers_mesh[label] = idxs
-	end
-end
-
-function _init_mesh_markers(_::MeshType{D}, domain_markers::DomainMarkers) where D
-	markers_mesh = MeshMarkers{D}()
-
-	process_label_for_mesh!(markers_mesh, label_symbols(domain_markers))
-	process_label_for_mesh!(markers_mesh, label_tuples(domain_markers))
-	process_label_for_mesh!(markers_mesh, label_conditions(domain_markers))
-
-	return markers_mesh
-end
-
-"""
-	set_markers!(Ωₕ::MeshType, domain_markers::DomainMarkers)
-
-Populates the marker index collections of mesh Ωₕ based on boundary symbols or geometric conditions defined in the [DomainMarkers](@ref).
-"""
-function set_markers!(Ωₕ::MeshType, domain_markers)
-	D = dim(Ωₕ)
-	mesh_indices = indices(Ωₕ)
-
-	mesh_markers = _init_mesh_markers(Ωₕ, domain_markers)
-	symbol_to_index_map = boundary_symbol_to_dict(mesh_indices)
-
-	for marker in symbols(domain_markers)
-		@unpack label, identifier = marker
-		target_indices = D == 1 ? mesh_markers[label].cartesian_index : mesh_markers[label].cartesian_indices
-
-		push!(target_indices, symbol_to_index_map[identifier])
-	end
-
-	for marker in tuples(domain_markers)
-		@unpack label, identifier = marker
-		target_indices = D == 1 ? mesh_markers[label].cartesian_index : mesh_markers[label].cartesian_indices
-
-		for sym in identifier
-			push!(target_indices, symbol_to_index_map[sym])
-		end
-	end
-
-	for marker in conditions(domain_markers)
-		@unpack label, identifier = marker
-
-		for idx in mesh_indices
-			if identifier(points(Ωₕ, idx))
-				push!(mesh_markers[label].cartesian_index, idx)
-			end
-		end
-
-		merge_consecutive_indices!(mesh_markers[label])
-	end
-
-	Ωₕ.markers = mesh_markers
-end
-
-"""
 	mesh(Ω::Domain, npts::Int, unif::Bool)
 	mesh(Ω::Domain, npts::NTuple{D}, unif::NTuple{D})
 
@@ -335,8 +167,8 @@ Resolution: 150 (10 × 15)
    Markers: dirichlet
 ```
 """
-@inline mesh(Ω::Domain, npts::NTuple{D,Int}, unif::NTuple{D,Bool}; backend = Backend()) where {D} = _mesh(Ω, npts, unif, backend)
-@inline mesh(Ω::Domain{CartesianProduct{1,T}}, npts::Int, unif::Bool; backend = Backend()) where {T} = _mesh(Ω, (npts,), (unif,), backend)
+@inline mesh(Ω::Domain, npts::NTuple{D,Int}, unif::NTuple{D,Bool}; backend = Backend()) where D = _mesh(Ω, npts, unif, backend)
+@inline mesh(Ω::Domain{CartesianProduct{1,T}}, npts::Int, unif::Bool; backend = Backend()) where T = _mesh(Ω, (npts,), (unif,), backend)
 
 """
 	points(Ωₕ::MeshType)

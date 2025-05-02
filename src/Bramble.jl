@@ -14,8 +14,8 @@ using SparseArrays: SparseMatrixCSC#, AbstractSparseMatrix, spdiagm
 
 using FunctionWrappers: FunctionWrapper
 
-using OhMyThreads
-using Base.Threads: @threads
+#using OhMyThreads
+#using Base.Threads: @threads
 using UnPack: @unpack
 
 #=using LinearAlgebra: Diagonal, mul!, I
@@ -70,9 +70,11 @@ include("utils/backend.jl")
 #include("utils/linearalgebra.jl")
 
 include("geometry/sets.jl")
+include("geometry/markers.jl")
 include("geometry/domains.jl")
 
 include("meshes/common.jl")
+include("meshes/markers.jl")
 include("meshes/mesh1d.jl")
 include("meshes/meshnd.jl")
 #=

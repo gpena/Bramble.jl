@@ -62,90 +62,6 @@ end
 
 @inline (Ωₕ::Mesh1D)(_) = Ωₕ
 
-"""
-	merge_consecutive_indices!(marker_data::MarkerIndices{1})
-
-Finds sequences of consecutive `CartesianIndex{1}` elements within `marker_data.cartesian_index`. Removes these sequences (if longer than one element) and adds the corresponding `CartesianIndices{1}` range object to `marker_data.cartesian_indices`.
-"""
-function merge_consecutive_indices!(marker_data::MarkerIndices{1})
-	cartesian_index_set = marker_data.cartesian_index
-	cartesian_indices_set = marker_data.cartesian_indices
-
-	n = length(cartesian_index_set)
-
-	# Need at least 2 elements to potentially form a mergeable range
-	if n < 2
-		return nothing
-	end
-
-	# --- Optimization using BitSet ---
-	# 1. Convert CartesianIndex values to integers in a BitSet
-	#    This allocates the BitSet but avoids collect+sort.
-	#    Iteration over the BitSet is fast and yields sorted integers.
-	int_values_bs = BitSet(ci.I[1] for ci in cartesian_index_set)
-	# --------------------------------
-
-	# Store results temporarily as primitive types to minimize allocations until the end
-	ranges_found = Vector{Base.UnitRange{Int}}()     # Stores integer ranges like 1:3, 7:8
-	vals_to_remove = Vector{Int}()             # Stores integers like 1,2,3, 7,8
-
-	# --- Iterate efficiently through the BitSet ---
-	# We need to manually handle the iterator to detect runs
-	iter_state = iterate(int_values_bs)
-	while iter_state !== nothing
-		start_val, state = iter_state # Current value is the start of a potential run
-		end_val = start_val           # Track the end of the run
-
-		# Look ahead for consecutive values
-		prev_val = start_val
-		iter_state = iterate(int_values_bs, state) # Advance iterator once
-
-		while iter_state !== nothing
-			current_val, state = iter_state
-			if current_val == prev_val + 1
-				# Extend the run
-				end_val = current_val
-				prev_val = current_val
-				iter_state = iterate(int_values_bs, state) # Consume this element
-			else
-				# Run ended (or next element is not consecutive)
-				break
-			end
-		end
-		# --- Run identified: start_val to end_val ---
-
-		# Check if the run had more than one element
-		if end_val > start_val
-			push!(ranges_found, start_val:end_val)
-			# Add all values in the found range to removal list
-			# This avoids creating intermediate CartesianIndex objects here
-			for v in start_val:end_val
-				push!(vals_to_remove, v)
-			end
-		end
-		# The outer loop continues with the state from where the inner loop broke or finished
-	end
-	# --- Finished iterating through BitSet ---
-
-	# --- Apply changes if any ranges were found ---
-	if !isempty(ranges_found)
-		# Convert collected integer ranges to CartesianIndices objects
-		# Using a generator avoids allocating an intermediate collection
-		ranges_to_add = Set(CartesianIndices((r,)) for r in ranges_found)
-
-		# Convert collected integer values to CartesianIndex objects for removal
-		# Using a generator avoids allocating an intermediate collection
-		indices_to_remove = Set(CartesianIndex(v) for v in vals_to_remove)
-
-		# Modify the original marker_data sets
-		union!(cartesian_indices_set, ranges_to_add)
-		setdiff!(cartesian_index_set, indices_to_remove)
-	end
-	# --- End apply changes ---
-
-	return nothing
-end
-
 @inline _npoints(Ωₕ::Mesh1D) = length(_points(Ωₕ))
 @inline _npoints(Ωₕ::Mesh1D, ::Type{Tuple}) = (_npoints(Ωₕ),)
 
@@ -208,7 +124,7 @@ end
 
 @inline _cell_measure(Ωₕ::Mesh1D, i) = _half_spacing(Ωₕ, i)
 
-@inline _cell_measure_iterator(Ωₕ::Mesh1D) = Iterators.map(Base.Fix1(_cell_measure, Ωₕ), indices(Ωₕ))
+@inline _cell_measure_iterator(Ωₕ::Mesh1D) = map(Base.Fix1(_cell_measure, Ωₕ), indices(Ωₕ))
 
 _generate_random_points!(v) = (rand!(v); sort!(v))
 
