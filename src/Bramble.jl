@@ -1,14 +1,5 @@
 module Bramble
 
-@static if Sys.isapple()
-	using AppleAccelerate
-end
-
-@static if Sys.iswindows()
-	using MKL
-	using MKLSparse
-end
-
 using StyledStrings: styled, @styled_str
 
 using Base: remove_linenums!
