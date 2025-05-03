@@ -124,41 +124,49 @@ end
 Populates the marker index collections of mesh Ωₕ based on boundary symbols or geometric conditions defined in the [DomainMarkers](@ref).
 """
 function set_markers!(Ωₕ::MeshType, domain_markers)
-	D = dim(Ωₕ)
-	mesh_indices = indices(Ωₕ)
-
 	mesh_markers = _init_mesh_markers(Ωₕ, domain_markers)
-	symbol_to_index_map = boundary_symbol_to_dict(mesh_indices)
 
-	for marker in symbols(domain_markers)
-		@unpack label, identifier = marker
-		target_indices = D == 1 ? mesh_markers[label].cartesian_index : mesh_markers[label].cartesian_indices
-
-		push!(target_indices, symbol_to_index_map[identifier])
-	end
-
-	for marker in tuples(domain_markers)
-		@unpack label, identifier = marker
-		target_indices = D == 1 ? mesh_markers[label].cartesian_index : mesh_markers[label].cartesian_indices
-
-		for sym in identifier
-			push!(target_indices, symbol_to_index_map[sym])
-		end
-	end
-
-	for marker in conditions(domain_markers)
-		@unpack label, identifier = marker
-
-		for idx in mesh_indices
-			if identifier(points(Ωₕ, idx))
-				push!(mesh_markers[label].cartesian_index, idx)
-			end
-		end
-
-		merge_consecutive_indices!(mesh_markers[label])
-	end
+	_set_markers_symbols!(mesh_markers, symbols(domain_markers), Ωₕ)
+	_set_markers_symbols!(mesh_markers, tuples(domain_markers), Ωₕ)
+	_set_markers_conditions!(mesh_markers, conditions(domain_markers), Ωₕ)
 
 	Ωₕ.markers = mesh_markers
+end
+
+function __process_symbols(identifier)
+	source_iterable = identifier isa Symbol ? (identifier,) : identifier
+	return Set{Symbol}(source_iterable)
+end
+
+function _set_markers_symbols!(mesh_markers::MeshMarkers{D}, symbols, Ωₕ) where D
+	symbol_to_index_map = boundary_symbol_to_dict(indices(Ωₕ))
+
+	for marker in symbols
+		@unpack label, identifier = marker
+		marker_label = mesh_markers[label]
+		target_indices = D == 1 ? marker_label.cartesian_index : marker_label.cartesian_indices
+
+		processed_symbols = __process_symbols(identifier)
+		indices_to_add = (symbol_to_index_map[sym] for sym in processed_symbols)
+
+		union!(target_indices, indices_to_add)
+	end
+end
+
+function __process_condition!(mesh_marker, identifier, Ωₕ)
+	c_index = mesh_marker.cartesian_index
+	indices_to_add = (idx for idx in indices(Ωₕ) if identifier(points(Ωₕ, idx)))
+
+	union!(c_index, indices_to_add)
+end
+
+function _set_markers_conditions!(mesh_markers::MeshMarkers, conditions, Ωₕ)
+	for marker in conditions
+		@unpack label, identifier = marker
+
+		__process_condition!(mesh_markers[label], identifier, Ωₕ)
+		merge_consecutive_indices!(mesh_markers[label])
+	end
 end
 
 """
