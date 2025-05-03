@@ -37,30 +37,27 @@ end
 @inline _eltype(_::MeshnD{D,BackendType}) where {D,BackendType} = eltype(BackendType)
 @inline Base.eltype(_::Type{<:MeshnD{D,BackendType}}) where {D,BackendType} = eltype(BackendType)
 
-function Base.show(io::IO, Ωₕ::MeshnD)
-	D = dim(Ωₕ)
+function Base.show(io::IO, Ωₕ::MeshnD{D}) where D
 	fields = ("Markers", "Resolution")
 	mlength = max_length_fields(fields)
 
+	type_info = style_title("$(D)D mesh", max_length = mlength)
+	println(io, type_info)
+
+	npts_per_dim = npoints(Ωₕ, Tuple)
+	total_pts = prod(npts_per_dim)
+
 	colors = style_color_sets()
 	num_colors = length(colors)
+	styled_dims = (styled"{$(colors[mod1(i, num_colors)]):$(npts_per_dim[i])}" for i in 1:D)
 
-	type_info = style_title("$(D)D mesh", max_length = mlength)
-	print(io, type_info * "\n")
+	dims_str = join(styled_dims, styled" {light_black:× }")
 
-	npts = npoints(Ωₕ, Tuple)
-	styled_points = [let
-						 set_str = "$(npts[i])"
-						 color_sym = colors[mod1(i, num_colors)]
-						 styled"{$color_sym:$(set_str)}"
-					 end
-					 for i in 1:D]
+	points_info_str = "$(total_pts) (" * dims_str * ")"
 
-	sets_styled_combined = join(styled_points, " × ")
+	resolution_line = style_field("Resolution", points_info_str, max_length = mlength)
+	println(io, resolution_line)
 
-	points_info = "$(npoints(Ωₕ)) (" * sets_styled_combined * ")"
-	submeshes = style_field("Resolution", points_info, max_length = mlength)
-	print(io, submeshes * "\n")
 	show(io, markers(Ωₕ))
 end
 
@@ -117,7 +114,6 @@ function _iterative_refinement!(Ωₕ::MeshnD{D}, domain_markers) where D
 	_iterative_refinement!(Ωₕ)
 
 	npts = _npoints(Ωₕ, Tuple)
-
 	idxs = generate_indices(npts)
 
 	set_indices!(Ωₕ, idxs)
