@@ -176,18 +176,20 @@ function _iterative_refinement!(Ωₕ::Mesh1D)
 		return
 	end
 
-	npts = 2 * npoints(Ωₕ) - 1
+	N_old = npoints(Ωₕ)
+	N_new = 2 * N_old - 1
 
-	pts = vector(backend(Ωₕ), npts)
-	@views pts[1:2:end] .= _points(Ωₕ)
-	for i in 2:2:(npts - 1)
-		pts[i] = (pts[i + 1] + pts[i - 1]) * 0.5
-	end
+	new_points = vector(backend(Ωₕ), N_new)
+	old_points = _points(Ωₕ)
 
-	idxs = generate_indices(npts)
+	@views new_points[1:2:end] .= old_points
+	@views new_points[2:2:end] .= (old_points[1:(end - 1)] .+ old_points[2:end]) .* 0.5
 
-	set_indices!(Ωₕ, idxs)
-	set_points!(Ωₕ, pts)
+	new_indices = generate_indices(N_new)
+
+	set_indices!(Ωₕ, new_indices)
+	set_points!(Ωₕ, new_points)
+	return nothing
 end
 
 function _iterative_refinement!(Ωₕ::Mesh1D, domain_markers)
@@ -197,11 +199,13 @@ function _iterative_refinement!(Ωₕ::Mesh1D, domain_markers)
 
 	_iterative_refinement!(Ωₕ)
 	set_markers!(Ωₕ, domain_markers)
+	return nothing
 end
 
 function _change_points!(Ωₕ::Mesh1D, domain_markers, pts)
 	_change_points!(Ωₕ, pts)
 	set_markers!(Ωₕ, domain_markers)
+	return nothing
 end
 
 function _change_points!(Ωₕ::Mesh1D, pts)
@@ -209,4 +213,5 @@ function _change_points!(Ωₕ::Mesh1D, pts)
 	@assert npts == length(pts)
 
 	set_points!(Ωₕ, pts)
+	return nothing
 end
