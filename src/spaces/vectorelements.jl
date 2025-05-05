@@ -1,28 +1,66 @@
+# Getters and setters for VectorElement
 """
-	element(Wₕ::SpaceType)
+	values(uₕ::VectorElement)
 
-Returns a [VectorElement](@ref) for [GridSpace](@ref) `Wₕ` with uninitialized components.
+Returns the coefficients of the [VectorElement](@ref) `uₕ`.
 """
-@inline element(Wₕ::SpaceType) = element(Wₕ, Vector{eltype(Wₕ)}(undef, ndofs(Wₕ)))
+@inline values(uₕ::VectorElement) = uₕ.values
 
 """
-	element(Wₕ::SpaceType, α::Number)
+	values!(uₕ::VectorElement, s)
 
-Returns a [VectorElement](@ref) for [GridSpace](@ref) `Wₕ` with all components equal to `α`.
+Copies the values of `s` into the coefficients of [VectorElement](@ref) `uₕ`.
 """
-function element(Wₕ::SpaceType, α::Number)
-	T = eltype(Wₕ)
-	vₕ = Vector{T}(convert(T, α)::T * Ones(ndofs(Wₕ)))
-	return element(Wₕ, vₕ)
+@inline values!(uₕ::VectorElement, s) = copyto!(values(uₕ), s)
+
+"""
+	space(uₕ::VectorElement)
+
+Returns the [GridSpace](@ref) associated with [VectorElement](@ref) `uₕ`.
+"""
+@inline space(uₕ::VectorElement) = uₕ.space
+
+@forward VectorElement.values (Base.size, Base.length, Base.firstindex, Base.lastindex, Base.iterate, Base.eltype)
+@forward VectorElement.space (Bramble.mesh,)
+
+# Constructor for VectorElement
+"""
+	element(Wₕ::AbstractSpaceType)
+
+Returns a [VectorElement](@ref) for grid space `Wₕ` with uninitialized components.
+"""
+@inline function element(Wₕ::AbstractSpaceType)
+	b = backend(Wₕ)
+
+	ST = typeof(Wₕ)
+	VT = vector_type(b)
+	T = eltype(b)
+	VectorElement{ST,VT,T}(Wₕ, vector(b, ndofs(Wₕ)))
 end
 
 """
-	element(Wₕ::SpaceType, v::AbstractVector)
+	element(Wₕ::AbstractSpaceType, α::Number)
 
-Returns a [VectorElement](@ref) for [GridSpace](@ref) `Wₕ` with the same coefficients of `v`.
+Returns a [VectorElement](@ref) for a grid space `Wₕ` with all components equal to `α`.
 """
-@inline element(Wₕ::SpaceType, v::AbstractVector) = (@assert length(v) == ndofs(Wₕ);
-													 VectorElement(Wₕ, v))
+function element(Wₕ::AbstractSpaceType, α::Number)
+	uₕ = element(Wₕ)
+	fill!(values(uₕ), α)
+	return uₕ
+end
+
+"""
+	element(Wₕ::AbstractSpaceType, v::AbstractVector)
+
+Returns a [VectorElement](@ref) for a grid space `Wₕ` with the same coefficients of `v`.
+"""
+@inline function element(Wₕ::AbstractSpaceType, v::AbstractVector)
+	@assert length(v) == ndofs(Wₕ)
+	elem = element(Wₕ)
+	copyto!(values(elem), v)
+
+	return elem
+end
 
 @inline ndims(::Type{<:VectorElement}) = 1
 
@@ -30,7 +68,8 @@ Base.BroadcastStyle(::Type{<:VectorElement}) = Broadcast.ArrayStyle{VectorElemen
 function Base.similar(bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{VectorElement}}, ::Type{ElType}) where ElType
 	# Scan the inputs for the VectorElement:
 	A = _find_vec_in_broadcast(bc)
-	return element(space(A), similar(A.values, ElType))
+	@unpack space, values = A
+	return element(space, similar(values, ElType))
 end
 
 _find_vec_in_broadcast(bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{VectorElement}}) = _find_vec_in_broadcast(bc.args)
@@ -40,138 +79,64 @@ _find_vec_in_broadcast(::Tuple{}) = nothing
 _find_vec_in_broadcast(a::VectorElement, rest) = a
 _find_vec_in_broadcast(::Any, rest) = _find_vec_in_broadcast(rest)
 
-@inline axes(uₕ::VectorElement) = axes(uₕ.values)
-
 @inline function copyto!(dest::VectorElement, bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{VectorElement}})
-	#println("copyto!")
-	copyto!(dest.values, convert(Broadcast.Broadcasted{Nothing}, bc))
+	copyto!(values(dest), convert(Broadcast.Broadcasted{Nothing}, bc))
 
 	return dest
-end
-
-function Base.copyto!(dest::DestType, bc::Broadcast.Broadcasted{Nothing}) where DestType
-	"here1111"
-	@show bc
-	copyto!(dest, convert(Broadcast.Broadcasted{Nothing}, bc))
-end
-
-@inline function copyto!(dest::VectorElement, bc::Broadcast.Broadcasted{<:Broadcast.AbstractArrayStyle{0}})
-	println("here-1")
-
-	if bc.f === identity && bc.args isa Tuple{Any} && isflat(bc)
-		return fill!(dest.values, bc.args[1][])
-	else
-		return copyto!(dest.values, convert(Broadcasted{Nothing}, bc))
-	end
-end
-
-@inline function copyto!(dest::VectorElement, bc::Broadcast.Broadcasted{Nothing})
-	println("here0")
-	axes(dest.values) == axes(bc) || throwdm(axes(dest.values), axes(bc))
-
-	if bc.f === identity && bc.args isa Tuple{VectorElement} # only a single input argument to broadcast!
-		A = bc.args[1]
-		if axes(dest.values) == axes(A)
-			return copyto!(dest.values, A)
-		end
-	end
-	bc′ = Broadcast.preprocess(dest.values, bc)
-
-	@inbounds @simd for I in eachindex(bc′)
-		dest.values[I] = bc′[I]
-	end
-	return dest
-end
-
-function materialize!(dest::VectorElement, x)
-	println("here1")
-	return materialize!(dest.values, instantiate(Broadcasted(identity, (x,), axes(dest.values))))
 end
 
 @inline function materialize!(dest::VectorElement, bc::Broadcast.Broadcasted{<:Any})
 	aux = Broadcast.instantiate(Broadcast.Broadcasted(bc.style, bc.f, bc.args, axes(dest)))
+	@unpack space, values = dest
 	@simd for i in eachindex(aux)
-		dest.values[i] = aux[i]
+		values[i] = aux[i]
 	end
 
 	return dest
 end
 
-function materialize(v::Broadcast.Broadcasted{Broadcast.ArrayStyle{VectorElement},Nothing,Any,Tuple{T1,VectorElement{S,T2}}}) where {T1,T2,S}
-	println("materialize!")
-end
-
-@inline function materialize!(::Broadcast.BroadcastStyle, dest::VectorElement, bc::Broadcast.Broadcasted{<:Any})
-	println("here3")
-
-	return copyto!(dest.values, instantiate(Broadcasted(bc.style, bc.f, bc.args, axes(dest.values))))
-end
-
 @inline Base.@propagate_inbounds function getindex(uₕ::VectorElement, i)
-	@boundscheck checkbounds(uₕ.values, i)
-	return getindex(uₕ.values, i)
+	@unpack space, values = uₕ
+	@boundscheck checkbounds(values, i)
+	return getindex(values, i)
 end
 @inline Base.@propagate_inbounds function setindex!(uₕ::VectorElement, val, i)
-	@boundscheck checkbounds(uₕ.values, i)
-	setindex!(uₕ.values, val, i)
+	@unpack space, values = uₕ
+	@boundscheck checkbounds(values, i)
+	setindex!(values, val, i)
 end
 #=
-@inline firstindex(uₕ::VectorElement) = firstindex(uₕ.values)
-@inline lastindex(uₕ::VectorElement) = lastindex(uₕ.values)
-=#
-#@inline iterate(uₕ::VectorElement) = iterate(uₕ.values)
 #@inline iterate(uₕ::VectorElement, state) = iterate(uₕ.values, state)
-
-Base.show(io::IO, uₕ::VectorElement) = Base.show(io, "text/plain", uₕ.values)
-
-"""
-	eltype(uₕ::VectorElement{S,T})
-	eltype(::Type{<:VectorElement{S,T}})
-
-Returns the element type of a [VectorElement](@ref) `uₕ`, `T``.
-"""
-@inline eltype(uₕ::VectorElement{S,T}) where {S,T} = T
-@inline eltype(::Type{<:VectorElement{S,T}}) where {S,T} = T
-
-@inline length(uₕ::VectorElement) = length(uₕ.values)
-
-"""
-	space(uₕ::VectorElement)
-
-Returns the space associated with [VectorElement](@ref) `uₕ`.
-"""
-@inline space(uₕ::VectorElement) = uₕ.space
+=#
 
 """
 	similar(uh::VectorElement)
 
 Returns a new [VectorElement](@ref) belonging to the same [GridSpace](@ref) as `uh`, with uninitialized components.
 """
-@inline similar(uₕ::VectorElement) = VectorElement(space(uₕ), similar(uₕ.values))
-
-@inline size(uₕ::VectorElement) = size(uₕ.values)
+@inline similar(uₕ::VectorElement) = element(space(uₕ))
 
 """
 	copyto!(uₕ::VectorElement, vₕ::VectorElement)
 	copyto!(uₕ::VectorElement, v::AbstractVector)
 	copyto!(uₕ::VectorElement, α::Number)
 
-Copies the coefficients of [VectorElement](@ref) `vₕ` into [VectorElement](@ref) `uₕ`. The second argument can also be a regular `Vector` or a `Number``.
+Copies the coefficients of [VectorElement](@ref) `vₕ` into [VectorElement](@ref) `uₕ`. The second argument can also be a regular `AbstractVector` or a `Number``.
 """
-@inline copyto!(uₕ::VectorElement, vₕ::VectorElement) = (@assert length(uₕ.values) == length(vₕ.values);
-														 @.. uₕ.values = vₕ.values)
-@inline copyto!(uₕ::VectorElement, v::AbstractVector) = (@assert length(uₕ.values) == length(v);
-														 @.. uₕ.values = v)
-@inline copyto!(uₕ::VectorElement, α::Number) = (s = convert(eltype(uₕ), α)::eltype(uₕ);
-												 @.. uₕ.values = s)
-
+@inline copyto!(uₕ::VectorElement, vₕ::VectorElement) = (@assert length(values(uₕ)) == length(values(vₕ));
+														 copyto!(values(uₕ), values(vₕ)))
+@inline copyto!(uₕ::VectorElement, v::AbstractVector) = (@assert length(values(uₕ)) == length(v);
+														 copyto!(values(uₕ), v))
+@inline copyto!(uₕ::VectorElement, α::Number) = (s = eltype(uₕ)(α);
+												 copyto!(values(uₕ), s))
+#=
 """
 	map(f, uₕ::VectorElement)
 
 Returns a new [VectorElement](@ref) with coefficients obtained by applying function `f` to each coefficient of `uₕ`
 
 	yₕ[i] = f(uₕ[i])
-"""
+"""=#
 #@inline map(f, uₕ::VectorElement) = element(space(u), map(f, uₕ.values))
 
 for op in (:-, :*, :/, :+, :^)
@@ -183,25 +148,25 @@ for op in (:-, :*, :/, :+, :^)
 	@eval begin
 		@doc $docstr1 @inline function (Base.$op)(α::Number, uₕ::VectorElement)
 			rₕ = similar(uₕ)
-			map!(Base.Fix1(Base.$op, α), rₕ.values, uₕ.values)
+			tmap!(Base.Fix1(Base.$op, α), values(rₕ), values(uₕ))
 			return rₕ
 		end
 
 		@doc $docstr2 @inline function (Base.$op)(uₕ::VectorElement, α::Number)
 			rₕ = similar(uₕ)
 
-			map!(Base.Fix2(Base.$op, α), rₕ.values, uₕ.values)
+			tmap!(Base.Fix2(Base.$op, α), values(rₕ), values(uₕ))
 			return rₕ
 		end
 
 		@doc $docstr3 @inline function (Base.$op)(uₕ::VectorElement, vₕ::VectorElement)
 			rₕ = similar(uₕ)
-			map!((Base.$op), rₕ.values, uₕ.values, vₕ.values)
+			tmap!((Base.$op), values(rₕ), values(uₕ), values(vₕ))
 			return rₕ
 		end
 	end
 end
-
+#=
 function *(uₕ::VectorElement, Vₕ::NTuple{D,VectorElement}) where D
 	Zₕ = ntuple(i-> similar(Vₕ[i]), D)
 	for i in 1:D
@@ -217,14 +182,14 @@ end
 ########################
 
 @inline function _func2array!(u, f, mesh)
-    @assert length(u) === npoints(mesh) === length(indices(mesh))
-    pts = points(mesh)
-    idxs = indices(mesh)
+	@assert length(u) === npoints(mesh) === length(indices(mesh))
+	pts = points(mesh)
+	idxs = indices(mesh)
 
-    for i in eachindex(idxs)
-        u[i] = f(_i2p(pts, idxs[i]))
-    end
-    return nothing
+	for i in eachindex(idxs)
+		u[i] = f(_i2p(pts, idxs[i]))
+	end
+	return nothing
 end
 
 """
@@ -239,7 +204,7 @@ In-place version of the restriction operator [Rₕ](@ref).
 end
 
 """
-	Rₕ(Wₕ::SpaceType, f)
+	Rₕ(Wₕ::AbstractSpaceType, f)
 
 Standard nodal restriction operator. It returns a [VectorElement](@ref) with the result of evaluating the function `f` at the points of `mesh(Wₕ)`. It can accept any function (like `x->x[2]+x[1])`) or a [BrambleFunction](@ref). The latter is preferred.
 
@@ -261,7 +226,7 @@ Standard nodal restriction operator. It returns a [VectorElement](@ref) with the
 \\textrm{R}ₕ (x_i, y_j, z_l)= f(x_i, y_j, z_l), \\, i = 1,\\dots,N_x,  j = 1,\\dots,N_y, l = 1,\\dots,N_z
 ```
 """
-function Rₕ(Wₕ::SpaceType, f)
+function Rₕ(Wₕ::AbstractSpaceType, f)
 	uₕ = element(Wₕ)
 	Rₕ!(uₕ, f)
 	return uₕ
@@ -274,7 +239,7 @@ end
 ######################
 
 """
-	avgₕ(Wₕ::SpaceType, f)
+	avgₕ(Wₕ::AbstractSpaceType, f)
 
 Returns a [VectorElement](@ref) with the average of function `f` with respect to the [cell_measure](@ref) of `mesh(Wₕ)` around each grid point. It can accept any function (like `x->x[2]+x[1])`) or a [BrambleFunction](@ref). The latter is preferred. It is defined as follows
 
@@ -298,7 +263,7 @@ Returns a [VectorElement](@ref) with the average of function `f` with respect to
 
 Please check the implementations of functions [cell_measure](@ref cell_measure(Ωₕ::Mesh1D, i)) (for the `1`-dimensional case) and [cell_measure](@ref cell_measure(Ωₕ::MeshnD, i)) (for the `n`-dimensional cases).
 """
-@inline function avgₕ(Wₕ::SpaceType, f)
+@inline function avgₕ(Wₕ::AbstractSpaceType, f)
 	uₕ = element(Wₕ)
 	_avgₕ!(uₕ, f, Val(dim(mesh(Wₕ))))
 	return uₕ
@@ -411,7 +376,7 @@ For efficiency, each integral is calculated on ``[0,1]^D``, where ``D`` is the d
 """
 function __integrandnd(y, t, p)
 	f, x, meas, idxs = p
-	
+
 	for idx in idxs
 		point, diff = __idx2points(t, x, idx)
 		y[idx] = f(point) * prod(diff) / meas(idx)
@@ -432,3 +397,4 @@ function __quadnd!(uₕ::VectorElement, domain::NTuple{D,T}, p::ParamType) where
 	copyto!(v, sol.u)
 	return nothing
 end
+=#
