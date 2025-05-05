@@ -4,8 +4,8 @@ using StyledStrings: styled, @styled_str
 
 using Base: remove_linenums!
 
-import Base: eltype#, similar, length, copyto!, axes, materialize!
-import Base: show, first, last#, getindex, setindex!, iterate, size, ndims, firstindex, lastindex
+import Base: eltype, similar, length, copyto!, axes, materialize!
+import Base: show, first, last, getindex, setindex!, iterate, size, ndims, firstindex, lastindex
 #import Base: map, map!, first, last
 #import Base: *, +, -, /, ^
 using Random: rand!
@@ -13,13 +13,15 @@ using Random: rand!
 using SparseArrays: SparseMatrixCSC#, AbstractSparseMatrix, spdiagm
 
 using FunctionWrappers: FunctionWrapper
+using Lazy: @forward
 
-#using OhMyThreads
+using OrderedCollections: LittleDict, OrderedDict, freeze
+using OhMyThreads: tforeach, tmap!
 #using Base.Threads: @threads
 using UnPack: @unpack
 
-#=using LinearAlgebra: Diagonal, mul!, I
-import LinearAlgebra: ⋅
+using LinearAlgebra: norm#Diagonal, mul!, I
+#=import LinearAlgebra: ⋅
 
 using FillArrays: Ones, Eye
 
@@ -37,7 +39,8 @@ export domain, markers, labels
 export mesh, hₘₐₓ, iterative_refinement!, change_points!
 
 # Space handling
-#=export gridspace, element
+export gridspace, element
+#=
 export Rₕ, Rₕ!, avgₕ, avgₕ!
 export ndofs
 
@@ -77,10 +80,12 @@ include("meshes/common.jl")
 include("meshes/markers.jl")
 include("meshes/mesh1d.jl")
 include("meshes/meshnd.jl")
-#=
+
+include("spaces/buffer.jl")
+include("spaces/types.jl")
 include("spaces/gridspace.jl")
 include("spaces/vectorelements.jl")
-include("spaces/matrixelements.jl")
+#=include("spaces/matrixelements.jl")
 include("spaces/difference_utils.jl")
 include("spaces/backward_difference.jl")
 include("spaces/backward_finite_difference.jl")
