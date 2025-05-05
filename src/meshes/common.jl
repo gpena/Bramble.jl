@@ -1,9 +1,9 @@
 """
-	 MeshType{D}
+	 AbstractMeshType{D}
 
 Abstract type for meshes. Meshes are only parametrized by their dimension `D``.
 """
-abstract type MeshType{D} <: BrambleType end
+abstract type AbstractMeshType{D} <: BrambleType end
 
 """
 	generate_indices(nPoints::Int)
@@ -15,25 +15,25 @@ Returns the `CartesianIndices` of a mesh with `nPoints[i]` in each direction or 
 @inline generate_indices(nPoints::NTuple{D,Int}) where D = CartesianIndices(ntuple(i -> 1:nPoints[i], D))
 
 """
-	is_boundary_index(idx, Ωₕ::MeshType)
+	is_boundary_index(idx, Ωₕ::AbstractMeshType)
 
 Returns true if the index `idx` is a boundary index of the mesh.
 """
-@inline is_boundary_index(idx, Ωₕ::MeshType) = is_boundary_index(idx, indices(Ωₕ))
+@inline is_boundary_index(idx, Ωₕ::AbstractMeshType) = is_boundary_index(idx, indices(Ωₕ))
 
 """
-	boundary_indices(Ωₕ::MeshType)
+	boundary_indices(Ωₕ::AbstractMeshType)
 
 Returns the boundary indices of mesh `Ωₕ`.
 """
-@inline boundary_indices(Ωₕ::MeshType) = boundary_indices(indices(Ωₕ))
+@inline boundary_indices(Ωₕ::AbstractMeshType) = boundary_indices(indices(Ωₕ))
 
 """
-	interior_indices(Ωₕ::MeshType)
+	interior_indices(Ωₕ::AbstractMeshType)
 
 Returns the interior indices of mesh `Ωₕ`.
 """
-@inline interior_indices(Ωₕ::MeshType) = interior_indices(indices(Ωₕ))
+@inline interior_indices(Ωₕ::AbstractMeshType) = interior_indices(indices(Ωₕ))
 
 function is_boundary_index(idx, idxs::CartesianIndices)
 	boundary_sections = boundary_indices(idxs)
@@ -65,27 +65,27 @@ end
 end
 
 """
-	eltype(Ωₕ::MeshType)
+	eltype(Ωₕ::AbstractMeshType)
 
 Returns the element type of the points of `Ωₕ`.
 """
-@inline Base.eltype(Ωₕ::MeshType) = _eltype(Ωₕ)
+@inline Base.eltype(Ωₕ::AbstractMeshType) = _eltype(Ωₕ)
 
 """
-	dim(Ωₕ::MeshType)
-	dim(::Type{<:MeshType})
+	dim(Ωₕ::AbstractMeshType)
+	dim(::Type{<:AbstractMeshType})
 
 Returns the dimension of the space where `Ωₕ` is embedded.
 """
-@inline dim(_::MeshType{D}) where D = D
-@inline dim(::Type{<:MeshType{D}}) where D = D
+@inline dim(_::AbstractMeshType{D}) where D = D
+@inline dim(::Type{<:AbstractMeshType{D}}) where D = D
 
 """
-	topo_dim(Ωₕ::MeshType)
+	topo_dim(Ωₕ::AbstractMeshType)
 
 Returns the topological dimension `Ωₕ`.
 """
-@inline @generated function topo_dim(Ωₕ::MeshType{D}) where D
+@inline @generated function topo_dim(Ωₕ::AbstractMeshType{D}) where D
 	if D <= 0
 		return :(0) # Handle edge case
 	end
@@ -96,32 +96,32 @@ Returns the topological dimension `Ωₕ`.
 end
 
 """
-	indices(Ωₕ::MeshType)
+	indices(Ωₕ::AbstractMeshType)
 
 Returns the `CartesianIndices` associated with the points of mesh `Ωₕ`.
 """
-@inline indices(Ωₕ::MeshType) = Ωₕ.indices
+@inline indices(Ωₕ::AbstractMeshType) = Ωₕ.indices
 
 """
-	backend(Ωₕ::MeshType)
+	backend(Ωₕ::AbstractMeshType)
 
 Returns the linear algebra backend`associated with the mesh`Ωₕ`.
 """
-@inline backend(Ωₕ::MeshType) = Ωₕ.backend
+@inline backend(Ωₕ::AbstractMeshType) = Ωₕ.backend
 
 """
-	markers(Ωₕ::MeshType)
+	markers(Ωₕ::AbstractMeshType)
 
 Returns the [DomainMarkers](@ref)) associated with the mesh `Ωₕ`.
 """
-@inline markers(Ωₕ::MeshType) = Ωₕ.markers
+@inline markers(Ωₕ::AbstractMeshType) = Ωₕ.markers
 
 """
-	set_indices!(Ωₕ::MeshType, indices)
+	set_indices!(Ωₕ::AbstractMeshType, indices)
 
 	Overrides the indices in Ωₕ.
 """
-@inline set_indices!(Ωₕ::MeshType, indices) = (Ωₕ.indices = indices)
+@inline set_indices!(Ωₕ::AbstractMeshType, indices) = (Ωₕ.indices = indices)
 
 """
 	mesh(Ω::Domain, npts::Int, unif::Bool)
@@ -171,8 +171,8 @@ Resolution: 150 (10 × 15)
 @inline mesh(Ω::Domain{CartesianProduct{1,T}}, npts::Int, unif::Bool; backend = Backend()) where T = _mesh(Ω, (npts,), (unif,), backend)
 
 """
-	points(Ωₕ::MeshType)
-	points(Ωₕ::MeshType, idx)
+	points(Ωₕ::AbstractMeshType)
+	points(Ωₕ::AbstractMeshType, idx)
 
 Returns the points of `Ωₕ` either as a vector (1D case) or a tuple of vectors (nD case). If the `Tuple` `idx` is passed as the second argument, it returns the tuple with the point corresponding to that index.
 
@@ -194,18 +194,18 @@ x_i, \\, i=1,\\dots,N_x
 ([x_i]_{i=1}^{N_x}, [y_j]_{j=1}^{N_y}, [z_l]_{l=1}^{N_z}).
 ```
 """
-@inline points(Ωₕ::MeshType) = _points(Ωₕ)
-@inline points(Ωₕ::MeshType, idx) = _points(Ωₕ, idx)
+@inline points(Ωₕ::AbstractMeshType) = _points(Ωₕ)
+@inline points(Ωₕ::AbstractMeshType, idx) = _points(Ωₕ, idx)
 
 """
-	points_iterator(Ωₕ::MeshType)
+	points_iterator(Ωₕ::AbstractMeshType)
 
 Returns an iterator over the  points of `Ωₕ`.
 """
-@inline points_iterator(Ωₕ::MeshType) = _points_iterator(Ωₕ)
+@inline points_iterator(Ωₕ::AbstractMeshType) = _points_iterator(Ωₕ)
 
 """
-	half_points(Ωₕ::MeshType, idx)
+	half_points(Ωₕ::AbstractMeshType, idx)
 
 Returns a tuple with the half points (defined as follows), for each submesh, of the points at index `idx`.
 
@@ -231,17 +231,17 @@ x_{i+1/2} \\vcentcolon = x_i + \\frac{h_{i+1}}{2}, \\, i=1,\\dots,N-1,
 ```
 """
 
-@inline half_points(Ωₕ::MeshType, idx) = _half_points(Ωₕ, idx)
+@inline half_points(Ωₕ::AbstractMeshType, idx) = _half_points(Ωₕ, idx)
 
 """
-	half_points_iterator(Ωₕ::MeshType)
+	half_points_iterator(Ωₕ::AbstractMeshType)
 
 Returns an iterator for the [half_points](@ref), for each submesh.
 """
-@inline half_points_iterator(Ωₕ::MeshType) = _half_points_iterator(Ωₕ)
+@inline half_points_iterator(Ωₕ::AbstractMeshType) = _half_points_iterator(Ωₕ)
 
 """
-	spacing(Ωₕ::MeshType, idx)
+	spacing(Ωₕ::AbstractMeshType, idx)
 
 Returns a tuple with the [spacing](@ref), for each submesh, at index `idx`.
 
@@ -265,17 +265,17 @@ and ``h_{x,1} \\vcentcolon = x_2 - x_1``
 (h_{x,i}, h_{y,j}, h_{z,l}) \\vcentcolon = (x_i - x_{i-1}, y_j - y_{j-1}, z_l - z_{l-1})
 ```
 """
-@inline spacing(Ωₕ::MeshType, idx) = _spacing(Ωₕ, idx)
+@inline spacing(Ωₕ::AbstractMeshType, idx) = _spacing(Ωₕ, idx)
 
 """
-	spacing_iterator(Ωₕ::MeshType)
+	spacing_iterator(Ωₕ::AbstractMeshType)
 
 Returns an iterator for the [spacing](@ref), for each submesh.
 """
-@inline spacing_iterator(Ωₕ::MeshType) = _spacing_iterator(Ωₕ)
+@inline spacing_iterator(Ωₕ::AbstractMeshType) = _spacing_iterator(Ωₕ)
 
 """
-	half_spacing(Ωₕ::MeshType, idx)
+	half_spacing(Ωₕ::AbstractMeshType, idx)
 
 Returns a tuple with the indexwise average of the space stepsize, for each submesh, at index `idx`.
 
@@ -299,26 +299,26 @@ h_{x,i+1/2} \\vcentcolon = \\frac{h_{x,i} + h_{x,i+1}}{2}, \\, i=1,\\dots,N-1,
 (h_{x,i+1/2}, h_{y,j+1/2}, h_{z,l+1/2})
 ```
 """
-@inline half_spacing(Ωₕ::MeshType, idx) = _half_spacing(Ωₕ, idx)
+@inline half_spacing(Ωₕ::AbstractMeshType, idx) = _half_spacing(Ωₕ, idx)
 
 """
-	half_spacing_iterator(Ωₕ::MeshType)
+	half_spacing_iterator(Ωₕ::AbstractMeshType)
 
 Returns an iterator for the [half_spacing](@ref), for each submesh.
 """
-@inline half_spacing_iterator(Ωₕ::MeshType) = _half_spacing_iterator(Ωₕ)
+@inline half_spacing_iterator(Ωₕ::AbstractMeshType) = _half_spacing_iterator(Ωₕ)
 
 """
-	npoints(Ωₕ::MeshType)
-	npoints(Ωₕ::MeshType, Tuple)
+	npoints(Ωₕ::AbstractMeshType)
+	npoints(Ωₕ::AbstractMeshType, Tuple)
 
 Returns the number of points of mesh `Ωₕ`. If `Tuple` is passed as the second argument, it returns a tuple with the number of points of each submesh composing `Ωₕ`.
 """
-@inline npoints(Ωₕ::MeshType) = _npoints(Ωₕ)
-@inline npoints(Ωₕ::MeshType, ::Type{Tuple}) = _npoints(Ωₕ, Tuple)
+@inline npoints(Ωₕ::AbstractMeshType) = _npoints(Ωₕ)
+@inline npoints(Ωₕ::AbstractMeshType, ::Type{Tuple}) = _npoints(Ωₕ, Tuple)
 
 """
-	hₘₐₓ(Ωₕ::MeshType)
+	hₘₐₓ(Ωₕ::AbstractMeshType)
 
 Returns the maximum diagonal of mesh `Ωₕ`.
 
@@ -340,10 +340,10 @@ h_{max} \\vcentcolon = \\max_{i=1,\\dots,N} x_i - x_{i-1}.
 \\max_{i,j,l} \\Vert (h_{x,i}, h_{y,j},  h_{z,l}) \\Vert_2
 ```
 """
-@inline hₘₐₓ(Ωₕ::MeshType) = _hₘₐₓ(Ωₕ)
+@inline hₘₐₓ(Ωₕ::AbstractMeshType) = _hₘₐₓ(Ωₕ)
 
 """
-	cell_measure(Ωₕ::MeshType, idx)
+	cell_measure(Ωₕ::AbstractMeshType, idx)
 
 Returns the measure of the cell ``\\square_{idx}`` centered at the index `idx` (can be a `CartesianIndex` or a `Tuple`):
 
@@ -371,29 +371,29 @@ with area ``h_{x,i+1/2} h_{y,j+1/2}``, where `idx` = ``(i,j)``,
 
 with volume ``h_{x,i+1/2} h_{y,j+1/2} h_{z,l+1/2}``, where `idx` = ``(i,j,l)``.
 """
-@inline cell_measure(Ωₕ::MeshType, idx) = _cell_measure(Ωₕ, idx)
+@inline cell_measure(Ωₕ::AbstractMeshType, idx) = _cell_measure(Ωₕ, idx)
 
 """
-	cell_measure_iterator(Ωₕ::MeshType)
+	cell_measure_iterator(Ωₕ::AbstractMeshType)
 
 Returns an iterator for the measure of the cells.
 """
-@inline cell_measure_iterator(Ωₕ::MeshType) = _cell_measure_iterator(Ωₕ)
+@inline cell_measure_iterator(Ωₕ::AbstractMeshType) = _cell_measure_iterator(Ωₕ)
 
 """
-	iterative_refinement!(Ωₕ::MeshType)
-	iterative_refinement!(Ωₕ::MeshType, domain_markers::DomainMarkers)
+	iterative_refinement!(Ωₕ::AbstractMeshType)
+	iterative_refinement!(Ωₕ::AbstractMeshType, domain_markers::DomainMarkers)
 
 Refines the given mesh `Ωₕ` by halving each existing cell (in every direction). If [DomainMarkers](@ref) is passed as an argument, it also updates the markers according to `domain_markers` after the refinement.
 """
-@inline iterative_refinement!(Ωₕ::MeshType) = _iterative_refinement!(Ωₕ)
-@inline iterative_refinement!(Ωₕ::MeshType, domain_markers::DomainMarkers) = _iterative_refinement!(Ωₕ, domain_markers)
+@inline iterative_refinement!(Ωₕ::AbstractMeshType) = _iterative_refinement!(Ωₕ)
+@inline iterative_refinement!(Ωₕ::AbstractMeshType, domain_markers::DomainMarkers) = _iterative_refinement!(Ωₕ, domain_markers)
 
 """
-	change_points!(Ωₕ::MeshType, pts)
-	change_points!(Ωₕ::MeshType, Ω::Domain, pts)
+	change_points!(Ωₕ::AbstractMeshType, pts)
+	change_points!(Ωₕ::AbstractMeshType, Ω::Domain, pts)
 
 Changes the coordinates of the internal points of the mesh `Ωₕ` to the new coordinates specified in `pts`. This function assumes the points in `pts` are ordered and that the first and last of them coincide with the bounds of the `Ω`. if the domain `Ω` is passed as an argument, the markers of the mesh are also recalculated after this change.
 """
-@inline change_points!(Ωₕ::MeshType, pts) = _change_points!(Ωₕ, pts)
-@inline change_points!(Ωₕ::MeshType, domain_markers::DomainMarkers, pts) = _change_points!(Ωₕ, domain_markers, pts)
+@inline change_points!(Ωₕ::AbstractMeshType, pts) = _change_points!(Ωₕ, pts)
+@inline change_points!(Ωₕ::AbstractMeshType, domain_markers::DomainMarkers, pts) = _change_points!(Ωₕ, domain_markers, pts)
