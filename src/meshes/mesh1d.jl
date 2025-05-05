@@ -1,5 +1,5 @@
 """
-	mutable struct Mesh1D{BackendType,CartIndicesType,VectorType} <: MeshType{1}
+	mutable struct Mesh1D{BackendType,CartIndicesType,VectorType} <: AbstractMeshType{1}
 		markers::MeshMarkers{1}
 		indices::CartIndicesType
 		const backend::BackendType
@@ -15,7 +15,7 @@ For future reference, the entries of vector `pts` are
 x_i, \\, i=1,\\dots,N.
 ```
 """
-mutable struct Mesh1D{BackendType<:Backend,CartIndicesType,VectorType<:AbstractVector} <: MeshType{1}
+mutable struct Mesh1D{BackendType<:Backend,CartIndicesType,VectorType<:AbstractVector} <: AbstractMeshType{1}
 	markers::MeshMarkers{1}
 	indices::CartIndicesType
 	const backend::BackendType
@@ -54,7 +54,7 @@ function Base.show(io::IO, Ωₕ::Mesh1D)
 
 	labels_output = style_field("Markers", labels_styled_combined, max_length = mlength)
 	type_info = style_title("1D mesh")
-	npoints_info = style_field("nPoints", npoints(Ωₕ), max_length = mlength)
+	npoints_info = style_field("nPoints", format_with_underscores(npoints(Ωₕ)), max_length = mlength)
 
 	final_output = style_join(type_info, npoints_info, labels_output)
 	print(io, final_output)

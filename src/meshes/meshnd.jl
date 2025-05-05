@@ -1,5 +1,5 @@
 """
-	struct MeshnD{D, BackendType, CartIndicesType, Mesh1DType} <: MeshType{D}
+	struct MeshnD{D, BackendType, CartIndicesType, Mesh1DType} <: AbstractMeshType{D}
 		markers::MeshMarkers{D}
 		indices::CartIndicesType
 		backend::BackendType
@@ -8,7 +8,7 @@
 
 Structure to store a cartesian nD-mesh (``2 \\leq n \\leq 3``). For efficiency, the mesh points are not stored. Instead, we store the points of the 1D meshes that make up the nD mesh. To connect both nD and 1D meshes, we use the indices in `indices`. The [DomainMarkers](@ref) are translated to `markers` as for [Mesh1D](@ref).
 """
-mutable struct MeshnD{D,BackendType<:Backend,CartIndicesType,Mesh1DType<:MeshType{1}} <: MeshType{D}
+mutable struct MeshnD{D,BackendType<:Backend,CartIndicesType,Mesh1DType<:AbstractMeshType{1}} <: AbstractMeshType{D}
 	markers::MeshMarkers{D}
 	indices::CartIndicesType
 	const backend::BackendType
@@ -45,15 +45,16 @@ function Base.show(io::IO, Ωₕ::MeshnD{D}) where D
 	println(io, type_info)
 
 	npts_per_dim = npoints(Ωₕ, Tuple)
-	total_pts = prod(npts_per_dim)
+	npts_per_dim_str = format_with_underscores.(npts_per_dim)
+	total_pts = format_with_underscores(prod(npts_per_dim))
 
 	colors = style_color_sets()
 	num_colors = length(colors)
-	styled_dims = (styled"{$(colors[mod1(i, num_colors)]):$(npts_per_dim[i])}" for i in 1:D)
+	styled_dims = (styled"{$(colors[mod1(i, num_colors)]):$(npts_per_dim_str[i])}" for i in 1:D)
 
 	dims_str = join(styled_dims, styled" {light_black:× }")
 
-	points_info_str = "$(total_pts) (" * dims_str * ")"
+	points_info_str = "$total_pts (" * dims_str * ")"
 
 	resolution_line = style_field("Resolution", points_info_str, max_length = mlength)
 	println(io, resolution_line)

@@ -92,11 +92,11 @@ function Base.show(io::IO, markers::MeshMarkers{D}) where D
 end
 
 """
-	marker(Ωₕ::MeshType, symbol::Symbol)
+	marker(Ωₕ::AbstractMeshType, symbol::Symbol)
 
 Returns the [Marker](@ref) identifier with label `symbol`.
 """
-@inline marker(Ωₕ::MeshType, symbol::Symbol) = Ωₕ.markers[symbol]
+@inline marker(Ωₕ::AbstractMeshType, symbol::Symbol) = Ωₕ.markers[symbol]
 
 function process_label_for_mesh!(markers_mesh::MeshMarkers{D}, set_labels) where D
 	cart_idxs_type = CartesianIndices{D,NTuple{D,UnitRange{Int}}}
@@ -108,7 +108,7 @@ function process_label_for_mesh!(markers_mesh::MeshMarkers{D}, set_labels) where
 	end
 end
 
-function _init_mesh_markers(_::MeshType{D}, domain_markers::DomainMarkers) where D
+function _init_mesh_markers(_::AbstractMeshType{D}, domain_markers::DomainMarkers) where D
 	markers_mesh = MeshMarkers{D}()
 
 	process_label_for_mesh!(markers_mesh, label_symbols(domain_markers))
@@ -119,11 +119,11 @@ function _init_mesh_markers(_::MeshType{D}, domain_markers::DomainMarkers) where
 end
 
 """
-	set_markers!(Ωₕ::MeshType, domain_markers::DomainMarkers)
+	set_markers!(Ωₕ::AbstractMeshType, domain_markers::DomainMarkers)
 
 Populates the marker index collections of mesh Ωₕ based on boundary symbols or geometric conditions defined in the [DomainMarkers](@ref).
 """
-function set_markers!(Ωₕ::MeshType, domain_markers)
+function set_markers!(Ωₕ::AbstractMeshType, domain_markers)
 	mesh_markers = _init_mesh_markers(Ωₕ, domain_markers)
 
 	_set_markers_symbols!(mesh_markers, symbols(domain_markers), Ωₕ)
