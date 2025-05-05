@@ -5,6 +5,7 @@ import PrecompileTools: @compile_workload, @setup_workload, @recompile_invalidat
 include("utils/precompile.jl")
 include("geometry/precompile.jl")
 include("meshes/precompile.jl")
+include("spaces/precompile.jl")
 
 @info "Precompilation finished."
 
