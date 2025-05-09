@@ -124,5 +124,16 @@ struct CompositeGridSpace{S1,S2} <: AbstractSpaceType
 	space2::S2
 end
 
+abstract type ComponentStyle <: BrambleType end
+struct SingleComponent <: ComponentStyle end
+struct MultiComponent{D} <: ComponentStyle end
+
+ncomponents(::Type{<:SingleGridSpace}) = 1
+ncomponents(::Type{<:CompositeGridSpace{S1,S2}}) where {S1,S2} = ncomponents(S1) + ncomponents(S2)
+
+ComponentStyle(::Type) = SingleComponent()
+ComponentStyle(::Type{<:SingleGridSpace}) = SingleComponent()
+ComponentStyle(::Type{<:CompositeGridSpace{S1,S2}}) where {S1,S2} = MultiComponent{ncomponents(CompositeGridSpace{S1,S2})}()
+
 # a tuple storing the symbols used for the different coordinate directions
 const _BRAMBLE_var2symbol = ("ₓ", "ᵧ", "₂")
