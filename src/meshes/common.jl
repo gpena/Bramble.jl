@@ -5,14 +5,22 @@ Abstract type for meshes. Meshes are only parametrized by their dimension `D``.
 """
 abstract type AbstractMeshType{D} <: BrambleType end
 
+abstract type PointType end
+struct ZeroDimensional <: PointType end
+struct OneDimensional <: PointType end
+struct NDimensional <: PointType end
+
+PointTypeTrait(::Type{<:Int}) = OneDimensional()
+PointTypeTrait(::Type{<:NTuple{D}}) where D = NDimensional()
+
 """
-	generate_indices(nPoints::Int)
-	generate_indices(nPoints::NTuple)
+	generate_indices(nPoints)
 
 Returns the `CartesianIndices` of a mesh with `nPoints[i]` in each direction or just `nPoints`, if the argument is an `Int`.
 """
-@inline generate_indices(npts::Int) = CartesianIndices((npts,))
-@inline generate_indices(nPoints::NTuple{D,Int}) where D = CartesianIndices(ntuple(i -> 1:nPoints[i], D))
+@inline generate_indices(npts::T) where T = generate_indices(PointTypeTrait(T), npts)
+@inline generate_indices(::OneDimensional, npts) = CartesianIndices((npts,))
+@inline generate_indices(::NDimensional, npts) = CartesianIndices(ntuple(i -> 1:npts[i], length(npts)))
 
 """
 	is_boundary_index(idx, Ωₕ::AbstractMeshType)
@@ -85,14 +93,14 @@ Returns the dimension of the space where `Ωₕ` is embedded.
 
 Returns the topological dimension `Ωₕ`.
 """
-@inline @generated function topo_dim(Ωₕ::AbstractMeshType{D}) where D
+@inline function topo_dim(Ωₕ::AbstractMeshType)
+	D = dim(Ωₕ)
 	if D <= 0
-		return :(0) # Handle edge case
+		return 0
 	end
 
-	term_expression = :((npoints(Ωₕ(i)) == 1) ? 0 : dim(Ωₕ(i)))
-	generated_code = :(sum(Base.Cartesian.@ntuple $D i->$term_expression))
-	return generated_code
+	terms = ntuple(i -> (npoints(Ωₕ(i)) == 1 ? 0 : dim(Ωₕ(i))), Val(D))
+	return sum(terms)
 end
 
 """
