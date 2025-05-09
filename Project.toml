@@ -15,7 +15,6 @@ OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
 PrecompileTools = "aea7be01-6a6a-4083-8856-8a6e6704d82a"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
-StyledStrings = "f489334b-da3d-4c2e-b8f0-e476e12c162b"
 UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
 
 [weakdeps]
@@ -32,12 +31,16 @@ FunctionWrappers = "1.0"
 Lazy = "0.15.1"
 OhMyThreads = "0.8.3"
 OrderedCollections = "1.8.0"
-StyledStrings = "1.11.0"
 UnPack = "1.0.2"
-julia = "1.10.5"
+julia = "1.10.9"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
+JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+OhMyREPL = "5fb14364-9ced-5910-84b2-373655c76a03"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [targets]
-test = ["Test"]
+test = ["Test", "Aqua", "JET", "LinearAlgebra", "OhMyREPL", "SparseArrays"]
