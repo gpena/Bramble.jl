@@ -1,5 +1,6 @@
 """
-	mutable struct Mesh1D{BackendType,CartIndicesType,VectorType} <: AbstractMeshType{1}
+	mutable struct Mesh1D{BackendType,CartIndicesType,VectorType,T} <: AbstractMeshType{1}
+		set::CartesianProduct{1,T}
 		markers::MeshMarkers{1}
 		indices::CartIndicesType
 		const backend::BackendType
@@ -15,7 +16,8 @@ For future reference, the entries of vector `pts` are
 x_i, \\, i=1,\\dots,N.
 ```
 """
-mutable struct Mesh1D{BackendType<:Backend,CartIndicesType,VectorType<:AbstractVector} <: AbstractMeshType{1}
+mutable struct Mesh1D{BackendType<:Backend,CartIndicesType,VectorType<:AbstractVector,T} <: AbstractMeshType{1}
+	const set::CartesianProduct{1,T}
 	markers::MeshMarkers{1}
 	indices::CartIndicesType
 	const backend::BackendType
@@ -24,13 +26,14 @@ mutable struct Mesh1D{BackendType<:Backend,CartIndicesType,VectorType<:AbstractV
 end
 
 @inline is_collapsed(Ωₕ::Mesh1D) = Ωₕ.collapsed
+@inline set(Ωₕ::Mesh1D) = Ωₕ.set
 
 @inline _points(Ωₕ::Mesh1D) = Ωₕ.pts
 @inline function _points(Ωₕ::Mesh1D, i)
-	idx = CartesianIndex(i)
-	@assert idx in indices(Ωₕ)
+	#idx = CartesianIndex(i)
+	#@assert idx in indices(Ωₕ)
 
-	return getindex(_points(Ωₕ), idx[1])
+	return getindex(_points(Ωₕ), i)
 end
 
 @inline _points_iterator(Ωₕ::Mesh1D) = (point for point in _points(Ωₕ))
@@ -46,6 +49,7 @@ end
 @inline _eltype(_::Mesh1D{BackendType}) where BackendType = eltype(BackendType)
 @inline Base.eltype(::Type{<:Mesh1D{BackendType}}) where BackendType = eltype(BackendType)
 
+#=
 function Base.show(io::IO, Ωₕ::Mesh1D)
 	labels = keys(markers(Ωₕ))
 	labels_styled_combined = color_markers(labels)
@@ -61,7 +65,7 @@ function Base.show(io::IO, Ωₕ::Mesh1D)
 	print(io, final_output)
 	return nothing
 end
-
+=#
 @inline (Ωₕ::Mesh1D)(_) = Ωₕ
 
 @inline _npoints(Ωₕ::Mesh1D) = length(_points(Ωₕ))
@@ -69,23 +73,20 @@ end
 
 @inline _hₘₐₓ(Ωₕ::Mesh1D) = maximum(_spacing_iterator(Ωₕ))
 
-@inline function _spacing(Ωₕ::Mesh1D, i)
+@inline function _spacing(Ωₕ::Mesh1D, i::Int)
 	if topo_dim(Ωₕ) == 0
 		return _eltype(Ωₕ)(0.0)
 	end
 
-	pts = _points(Ωₕ)
-	idx = CartesianIndex(i)
-	@assert idx in indices(Ωₕ)
-
-	if idx === first(indices(Ωₕ))
-		return pts[2] - pts[1]
+	result = points(Ωₕ, 2) - points(Ωₕ, 1)
+	if i > 1
+		result = points(Ωₕ, i) - points(Ωₕ, i-1)
 	end
 
-	_i = idx[1]
-	_i_1 = idx[1] - 1
-	return pts[_i] - pts[_i_1]
+	return result
 end
+
+@inline _spacing(Ωₕ::Mesh1D, i::CartesianIndex{1}) = _spacing(Ωₕ, i[1])
 
 @inline function _half_points(Ωₕ::Mesh1D, i)
 	T = eltype(Ωₕ)
@@ -105,20 +106,18 @@ end
 
 @inline _spacing_iterator(Ωₕ::Mesh1D) = (_spacing(Ωₕ, i) for i in eachindex(_points(Ωₕ)))
 
-@inline function _half_spacing(Ωₕ::Mesh1D, i)
-	idx = CartesianIndex(i)
-	idxs = indices(Ωₕ)
+@inline function _half_spacing(Ωₕ::Mesh1D, i::Int)
+	npts = npoints(Ωₕ)
 
-	@assert idx in idxs
-	T = _eltype(Ωₕ)
-
-	if idx === first(idxs) || idx === last(idxs)
-		return _spacing(Ωₕ, idx) * convert(T, 0.5)::T
+	result = _spacing(Ωₕ, i)
+	if 1 < i < npts
+		result += _spacing(Ωₕ, i+1)
 	end
 
-	next = idx[1] + 1
-	return (_spacing(Ωₕ, next) + _spacing(Ωₕ, idx)) * T(0.5)
+	return result * 0.5
 end
+
+@inline _half_spacing(Ωₕ::Mesh1D, idx::CartesianIndex{1}) = _half_spacing(Ωₕ, idx[1])
 
 @inline _half_spacing_iterator(Ωₕ::Mesh1D) = (_half_spacing(Ωₕ, i) for i in eachindex(_points(Ωₕ)))
 
@@ -168,7 +167,7 @@ function _mesh(Ω::Domain{CartesianProduct{1,T}}, npts::Tuple{Int}, unif::Tuple{
 	idxs = generate_indices(n_points)
 
 	mesh_markers = MeshMarkers{1}()
-	mesh = Mesh1D(mesh_markers, idxs, backend, pts, is_collapsed)
+	mesh = Mesh1D(set, mesh_markers, idxs, backend, pts, is_collapsed)
 
 	set_markers!(mesh, markers)
 	return mesh

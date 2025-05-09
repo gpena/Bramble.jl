@@ -8,7 +8,8 @@
 
 Structure to store a cartesian nD-mesh (``2 \\leq n \\leq 3``). For efficiency, the mesh points are not stored. Instead, we store the points of the 1D meshes that make up the nD mesh. To connect both nD and 1D meshes, we use the indices in `indices`. The [DomainMarkers](@ref) are translated to `markers` as for [Mesh1D](@ref).
 """
-mutable struct MeshnD{D,BackendType<:Backend,CartIndicesType,Mesh1DType<:AbstractMeshType{1}} <: AbstractMeshType{D}
+mutable struct MeshnD{D,BackendType<:Backend,CartIndicesType,Mesh1DType<:AbstractMeshType{1},T} <: AbstractMeshType{D}
+	set::CartesianProduct{D,T}
 	markers::MeshMarkers{D}
 	indices::CartIndicesType
 	const backend::BackendType
@@ -28,7 +29,7 @@ function _mesh(Ω::Domain, npts::NTuple{D,Int}, unif::NTuple{D,Bool}, backend) w
 	submeshes = generate_submeshes(Ω, npts_with_collapsed, unif, backend)
 
 	mesh_markers = MeshMarkers{D}()
-	output_mesh = MeshnD(mesh_markers, idxs, backend, submeshes)
+	output_mesh = MeshnD(_set, mesh_markers, idxs, backend, submeshes)
 	set_markers!(output_mesh, markers(Ω))
 
 	return output_mesh
@@ -37,6 +38,7 @@ end
 @inline _eltype(_::MeshnD{D,BackendType}) where {D,BackendType} = eltype(BackendType)
 @inline Base.eltype(_::Type{<:MeshnD{D,BackendType}}) where {D,BackendType} = eltype(BackendType)
 
+#=
 function Base.show(io::IO, Ωₕ::MeshnD{D}) where D
 	fields = ("Markers", "Resolution")
 	mlength = max_length_fields(fields)
@@ -62,7 +64,7 @@ function Base.show(io::IO, Ωₕ::MeshnD{D}) where D
 	show(io, markers(Ωₕ))
 	return nothing
 end
-
+=#
 """
 	(Ωₕ::MeshnD)(i)
 
@@ -95,7 +97,27 @@ end
 	return maximum(diagonals)
 end
 
-@inline _cell_measure(Ωₕ::MeshnD, idx) = prod(_half_spacing(Ωₕ, idx))
+#@inline _cell_measure(Ωₕ::MeshnD, idx) = prod(_half_spacing(Ωₕ, idx))
+
+@inline @generated function _cell_measure(Ωₕ::MeshnD{D}, idx) where D
+	if D == 0
+		return :(1)
+	end
+
+	mesh_component_expr_1 = Expr(:call, :Ωₕ, 1)
+	index_component_expr_1 = Expr(:ref, :idx, 1)
+	current_product_expr = Expr(:call, :_half_spacing, mesh_component_expr_1, index_component_expr_1)
+
+	for i in 2:D
+		mesh_component_expr_i = Expr(:call, :Ωₕ, i)
+		index_component_expr_i = Expr(:ref, :idx, i)
+		term_i_expr = Expr(:call, :_half_spacing, mesh_component_expr_i, index_component_expr_i)
+
+		current_product_expr = Expr(:call, :*, current_product_expr, term_i_expr)
+	end
+
+	return current_product_expr
+end
 
 @inline _cell_measure_iterator(Ωₕ::MeshnD) = (_cell_measure(Ωₕ, idx) for idx in indices(Ωₕ))
 
