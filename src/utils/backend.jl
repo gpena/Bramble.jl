@@ -47,6 +47,9 @@ backend_dense32 = Backend(vector_type = Vector{Float32},
 """
 @inline Backend(; vector_type = Vector{Float64}, matrix_type = SparseMatrixCSC{Float64,Int}) = Backend{vector_type,matrix_type}()
 
+@inline backend_types(::Type{Backend{VT,MT}}) where {VT,MT} = eltype(VT), VT, MT, Backend{VT,MT}
+@inline backend_types(_::Backend{VT,MT}) where {VT,MT} = eltype(VT), VT, MT, Backend{VT,MT}
+
 """
 	create_vector(b::Backend, n::Integer)
 
