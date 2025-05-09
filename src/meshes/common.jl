@@ -22,6 +22,8 @@ Returns the `CartesianIndices` of a mesh with `nPoints[i]` in each direction or 
 @inline generate_indices(::OneDimensional, npts) = CartesianIndices((npts,))
 @inline generate_indices(::NDimensional, npts) = CartesianIndices(ntuple(i -> 1:npts[i], length(npts)))
 
+@inline set(Ωₕ::AbstractMeshType) = Ωₕ.set
+
 """
 	is_boundary_index(idx, Ωₕ::AbstractMeshType)
 

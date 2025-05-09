@@ -80,7 +80,7 @@ end
 @inline process_identifier(embedder::CartesianProduct, identifier::F) where F<:Function = _embed_notime(embedder, identifier, CoType = Bool)
 @inline process_identifier(_::CartesianProduct, identifier::Symbol) = identifier
 @inline process_identifier(_::CartesianProduct, identifier::NTuple{N,Symbol}) where N = Set(identifier)
-
+#=
 function Base.show(io::IO, markers::DomainMarkers)
 	fields = ("Markers")
 	mlength = max_length_fields(fields)
@@ -91,4 +91,4 @@ function Base.show(io::IO, markers::DomainMarkers)
 	final_output = style_field("Markers", labels_styled_combined, max_length = mlength)
 	print(io, final_output)
 	return nothing
-end
+end=#

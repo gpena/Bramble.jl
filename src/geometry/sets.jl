@@ -260,7 +260,7 @@ julia> X = cartesianproduct(0, 1) × cartesianproduct(4, 5);
 ```
 """
 @inline projection(X::CartesianProduct, i) = interval(X(i)...)
-
+#=
 function Base.show(io::IO, X::CartesianProduct{D}) where D
 	@unpack box = X
 
@@ -297,3 +297,4 @@ function set_info_only(X::CartesianProduct{D}, mlength) where D
 	output = style_join(type_info, dim_info, topological_info, set_info)
 	return output
 end
+=#

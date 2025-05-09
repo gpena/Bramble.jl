@@ -74,7 +74,7 @@ Type of dictionary to store the `CartesianIndices` associated with a [MarkerIndi
 """
 CIndices_Type{D} = CartesianIndices{D,NTuple{D,UnitRange{Int}}}
 MeshMarkers{D} = Dict{Symbol,MarkerIndices{D,CIndices_Type{D}}}
-
+#=
 function Base.show(io::IO, markers::MeshMarkers{D}) where D
 	labels = collect(keys(markers))
 	labels_styled_combined = color_markers(labels)
@@ -84,7 +84,7 @@ function Base.show(io::IO, markers::MeshMarkers{D}) where D
 
 	final_output = style_field("Markers", labels_styled_combined, max_length = mlength)
 	print(io, final_output)
-end
+end=#
 
 """
 	marker(Ωₕ::AbstractMeshType, symbol::Symbol)

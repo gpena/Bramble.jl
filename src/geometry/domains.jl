@@ -171,7 +171,7 @@ For example, `projection(domain(I × I), 1)` will return `I`.
 	@assert i in eachindex(box)
 	return cartesianproduct(box[i]...)
 end
-
+#=
 function Base.show(io::IO, Ω::Domain)
 	fields = ("Type", "Dim", "Set", "Markers")
 	mlength = max_length_fields(fields)
@@ -182,7 +182,7 @@ function Base.show(io::IO, Ω::Domain)
 
 	show(io, markers(Ω))
 	return nothing
-end
+end=#
 
 """
 	get_boundary_symbols(X::CartesianProduct)
