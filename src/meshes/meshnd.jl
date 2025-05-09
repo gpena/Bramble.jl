@@ -15,23 +15,23 @@ mutable struct MeshnD{D,BackendType<:Backend,CartIndicesType,Mesh1DType<:Abstrac
 	submeshes::NTuple{D,Mesh1DType}
 end
 
-@generated function generate_submeshes(Ω::Domain, npts::NTuple{D,Int}, unif::NTuple{D,Bool}, backend) where D
-	return :(Base.Cartesian.@ntuple $D i->_mesh(domain(projection(Ω, i)), (npts[i],), (unif[i],), backend))
+@inline function generate_submeshes(Ω::Domain, npts, unif, backend)
+	return ntuple(i -> mesh(domain(projection(Ω, i)), npts[i], unif[i], backend = backend), Val(dim(Ω)))
 end
 
 function _mesh(Ω::Domain, npts::NTuple{D,Int}, unif::NTuple{D,Bool}, backend) where D
 	@assert dim(Ω) == D
 	_set = set(Ω)
-	npts_with_collapsed = ntuple(i -> _set.collapsed[i] ? 1 : npts[i], D)
+	npts_with_collapsed = ntuple(i -> is_collapsed(_set(i)...) ? 1 : npts[i], D)
 
 	idxs = generate_indices(npts_with_collapsed)
 	submeshes = generate_submeshes(Ω, npts_with_collapsed, unif, backend)
 
 	mesh_markers = MeshMarkers{D}()
-	__mesh = MeshnD(mesh_markers, idxs, backend, submeshes)
-	set_markers!(__mesh, markers(Ω))
+	output_mesh = MeshnD(mesh_markers, idxs, backend, submeshes)
+	set_markers!(output_mesh, markers(Ω))
 
-	return __mesh
+	return output_mesh
 end
 
 @inline _eltype(_::MeshnD{D,BackendType}) where {D,BackendType} = eltype(BackendType)
@@ -60,6 +60,7 @@ function Base.show(io::IO, Ωₕ::MeshnD{D}) where D
 	println(io, resolution_line)
 
 	show(io, markers(Ωₕ))
+	return nothing
 end
 
 """
@@ -72,32 +73,25 @@ Returns the `i`-th submesh of `Ωₕ`.
 	return Ωₕ.submeshes[i]
 end
 
-@inline @generated _points(Ωₕ::MeshnD{D}) where D = :(Base.Cartesian.@ntuple $D i->_points(Ωₕ(i)))
-@inline @generated _points(Ωₕ::MeshnD{D}, idx) where D = :(Base.Cartesian.@ntuple $D i->_points(Ωₕ(i), idx[i]))
+@inline _points(Ωₕ::MeshnD{D}) where D = ntuple(i -> _points(Ωₕ(i)), Val(D))
 
-@inline @generated _points_iterator(Ωₕ::MeshnD{D}) where D = :(Base.Iterators.product((Base.Cartesian.@ntuple $D i->_points_iterator(Ωₕ(i)))...))
+@inline _points(Ωₕ::MeshnD{D}, idx) where D = ntuple(i -> _points(Ωₕ(i), idx[i]), Val(D))
+@inline _half_points(Ωₕ::MeshnD{D}, idx) where D = ntuple(i -> _half_points(Ωₕ(i), idx[i]), Val(D))
+@inline _spacing(Ωₕ::MeshnD{D}, idx) where D = ntuple(i -> _spacing(Ωₕ(i), idx[i]), Val(D))
+@inline _half_spacing(Ωₕ::MeshnD{D}, idx) where D = ntuple(i -> _apply_hs_logic(_half_spacing(Ωₕ(i), idx[i])), Val(D))
 
-@inline @generated _half_points(Ωₕ::MeshnD{D}, idx) where D = :(Base.Cartesian.@ntuple $D i->_half_points(Ωₕ(i), idx[i]))
-
-@inline @generated _half_points_iterator(Ωₕ::MeshnD{D}) where D = :(Base.Iterators.product((Base.Cartesian.@ntuple $D i->_half_points_iterator(Ωₕ(i)))...))
-
-@inline @generated _spacing(Ωₕ::MeshnD{D}, idx) where D = :(Base.Cartesian.@ntuple $D i->_spacing(Ωₕ(i), idx[i]))
-
-@inline @generated _spacing_iterator(Ωₕ::MeshnD{D}) where D = :(Base.Iterators.product((Base.Cartesian.@ntuple $D i->_spacing_iterator(Ωₕ(i)))...))
-
-@inline @generated function _half_spacing(Ωₕ::MeshnD{D}, idx) where D
-	return :(Base.Cartesian.@ntuple $D i->_apply_hs_logic(_half_spacing(Ωₕ(i), idx[i])))
-end
+@inline _points_iterator(Ωₕ::MeshnD{D}) where D = Iterators.product(ntuple(i -> _points_iterator(Ωₕ(i)), Val(D))...)
+@inline _half_points_iterator(Ωₕ::MeshnD{D}) where D = Iterators.product(ntuple(i -> _half_points_iterator(Ωₕ(i)), Val(D))...)
+@inline _spacing_iterator(Ωₕ::MeshnD{D}) where D = Iterators.product(ntuple(i -> _spacing_iterator(Ωₕ(i)), Val(D))...)
+@inline _half_spacing_iterator(Ωₕ::MeshnD{D}) where D = Iterators.product(ntuple(i -> _half_spacing_iterator(Ωₕ(i)), Val(D))...)
 
 @inline _apply_hs_logic(value::T) where T = ifelse(value == zero(T), one(T), value)
 
-@inline @generated _half_spacing_iterator(Ωₕ::MeshnD{D}) where D = :(Base.Iterators.product((Base.Cartesian.@ntuple $D i->_half_spacing_iterator(Ωₕ(i)))...))
-
-@inline @generated _npoints(Ωₕ::MeshnD) = :(prod(_npoints(Ωₕ, Tuple)))
-@inline @generated _npoints(Ωₕ::MeshnD{D}, ::Type{Tuple}) where D = :(Base.Cartesian.@ntuple $D i->_npoints(Ωₕ(i)))
+@inline _npoints(Ωₕ::MeshnD) = prod(_npoints(Ωₕ, Tuple))
+@inline _npoints(Ωₕ::MeshnD{D}, ::Type{Tuple}) where D = ntuple(i -> _npoints(Ωₕ(i)), Val(D))
 
 @inline function _hₘₐₓ(Ωₕ::MeshnD)
-	diagonals = Base.Iterators.map(h -> hypot(h...), spacing_iterator(Ωₕ))
+	diagonals = Iterators.map(h -> hypot(h...), spacing_iterator(Ωₕ))
 	return maximum(diagonals)
 end
 
@@ -109,6 +103,7 @@ function _iterative_refinement!(Ωₕ::MeshnD{D}) where D
 	for i in 1:D
 		_iterative_refinement!(Ωₕ(i))
 	end
+	return nothing
 end
 
 function _iterative_refinement!(Ωₕ::MeshnD{D}, domain_markers) where D
@@ -119,15 +114,18 @@ function _iterative_refinement!(Ωₕ::MeshnD{D}, domain_markers) where D
 
 	set_indices!(Ωₕ, idxs)
 	set_markers!(Ωₕ, domain_markers)
+	return nothing
 end
 
-function _change_points!(Ωₕ::MeshnD{D}, pts::NTuple{D,VecType}) where {D,VecType}
+function _change_points!(Ωₕ::MeshnD{D}, pts) where D
 	for i in 1:D
 		_change_points!(Ωₕ(i), pts[i])
 	end
+	return nothing
 end
 
-function _change_points!(Ωₕ::MeshnD{D}, domain_markers, pts::NTuple{D,VecType}) where {D,VecType}
+function _change_points!(Ωₕ::MeshnD{D}, domain_markers, pts) where D
 	_change_points!(Ωₕ, pts)
 	set_markers!(Ωₕ, domain_markers)
+	return nothing
 end

@@ -40,7 +40,8 @@ end
 
 	Overrides the points in Ωₕ.
 """
-@inline set_points!(Ωₕ::Mesh1D, pts) = (Ωₕ.pts = pts)
+@inline set_points!(Ωₕ::Mesh1D, pts) = (Ωₕ.pts = pts;
+										return nothing)
 
 @inline _eltype(_::Mesh1D{BackendType}) where BackendType = eltype(BackendType)
 @inline Base.eltype(::Type{<:Mesh1D{BackendType}}) where BackendType = eltype(BackendType)
@@ -58,6 +59,7 @@ function Base.show(io::IO, Ωₕ::Mesh1D)
 
 	final_output = style_join(type_info, npoints_info, labels_output)
 	print(io, final_output)
+	return nothing
 end
 
 @inline (Ωₕ::Mesh1D)(_) = Ωₕ
@@ -126,7 +128,7 @@ end
 
 @inline _cell_measure_iterator(Ωₕ::Mesh1D) = map(Base.Fix1(_cell_measure, Ωₕ), indices(Ωₕ))
 
-_generate_random_points!(v) = (rand!(v); sort!(v))
+_generate_random_points!(v) = (rand!(v); sort!(v); nothing)
 
 @inline function _set_points!(x, I::CartesianProduct{1}, unif::Bool)
 	npts = length(x)
@@ -146,6 +148,7 @@ _generate_random_points!(v) = (rand!(v); sort!(v))
 
 	a, b = tails(I)
 	@. x = a + x * (b - a)
+	return nothing
 end
 
 function _mesh(Ω::Domain{CartesianProduct{1,T}}, npts::Tuple{Int}, unif::Tuple{Bool}, backend) where T
@@ -173,10 +176,15 @@ end
 
 function _iterative_refinement!(Ωₕ::Mesh1D)
 	if is_collapsed(Ωₕ)
-		return
+		return nothing
 	end
 
 	N_old = npoints(Ωₕ)
+
+	if N_old <= 1
+		return
+	end
+
 	N_new = 2 * N_old - 1
 
 	new_points = vector(backend(Ωₕ), N_new)
@@ -194,7 +202,7 @@ end
 
 function _iterative_refinement!(Ωₕ::Mesh1D, domain_markers)
 	if is_collapsed(Ωₕ)
-		return
+		return nothing
 	end
 
 	_iterative_refinement!(Ωₕ)
