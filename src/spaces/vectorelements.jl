@@ -11,7 +11,7 @@ Returns the coefficients of the [VectorElement](@ref) `uₕ`.
 
 Reshapes the coefficients of the [VectorElement](@ref) `uₕ` to a matrix.
 """
-@inline to_matrix(uₕ::VectorElement) = Base.ReshapedArray(values(uₕ), npoints(mesh(space(uₕ)), Tuple), ())
+@inline to_matrix(uₕ::VectorElement{ST}) where ST = to_matrix(ComponentStyle(ST), uₕ)
 
 """
 	values!(uₕ::VectorElement, s)
@@ -27,7 +27,7 @@ Returns the grid space associated with [VectorElement](@ref) `uₕ`.
 """
 @inline space(uₕ::VectorElement) = uₕ.space
 
-@forward VectorElement.data (Base.size, Base.length, Base.firstindex, Base.lastindex, Base.iterate, Base.eltype)
+@forward VectorElement.data (Base.size, Base.length, Base.firstindex, Base.lastindex, Base.iterate, Base.eltype, Base.axes)
 @forward VectorElement.space (Bramble.mesh,)
 
 # Constructor for VectorElement
@@ -52,7 +52,7 @@ Returns a [VectorElement](@ref) for a grid space `Wₕ` with all components equa
 """
 function element(Wₕ::AbstractSpaceType, α::Number)
 	uₕ = element(Wₕ)
-	fill!(values(uₕ), α) # maybe fill!(uₕ, α) works?
+	fill!(uₕ, α)
 	return uₕ
 end
 
@@ -64,19 +64,35 @@ Returns a [VectorElement](@ref) for a grid space `Wₕ` with the same coefficien
 @inline function element(Wₕ::AbstractSpaceType, v::AbstractVector)
 	@assert length(v) == ndofs(Wₕ)
 	elem = element(Wₕ)
-	copyto!(values(elem), v)
+	copyto!(elem, v)
 
 	return elem
 end
 
-@inline ndims(::Type{<:VectorElement}) = 1
+@inline Base.@propagate_inbounds function getindex(uₕ::VectorElement, i)
+	@unpack data = uₕ
+	@boundscheck checkbounds(data, i)
+	return getindex(data, i)
+end
 
+@inline Base.@propagate_inbounds function setindex!(uₕ::VectorElement, val, i)
+	@unpack data = uₕ
+	@boundscheck checkbounds(data, i)
+	setindex!(data, val, i)
+end
+
+@inline Base.similar(uₕ::VectorElement) = element(space(uₕ))
+
+# Broadcasting
 Base.BroadcastStyle(::Type{<:VectorElement}) = Broadcast.ArrayStyle{VectorElement}()
 function Base.similar(bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{VectorElement}}, ::Type{ElType}) where ElType
-	# Scan the inputs for the VectorElement:
-	A = _find_vec_in_broadcast(bc)
-	@unpack data, space = A
+	@unpack data, space = _find_vec_in_broadcast(bc)
 	return element(space, similar(data, ElType))
+end
+
+function Base.similar(bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{VectorElement}})
+	@unpack data, space = _find_vec_in_broadcast(bc)
+	return element(space, similar(data))
 end
 
 _find_vec_in_broadcast(bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{VectorElement}}) = _find_vec_in_broadcast(bc.args)
@@ -86,84 +102,6 @@ _find_vec_in_broadcast(::Tuple{}) = nothing
 _find_vec_in_broadcast(a::VectorElement, rest) = a
 _find_vec_in_broadcast(::Any, rest) = _find_vec_in_broadcast(rest)
 
-@inline function copyto!(dest::VectorElement, bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{VectorElement}})
-	copyto!(values(dest), convert(Broadcast.Broadcasted{Nothing}, bc))
-
-	return dest
-end
-
-@inline function materialize!(dest::VectorElement, bc::Broadcast.Broadcasted{<:Any})
-	aux = Broadcast.instantiate(Broadcast.Broadcasted(bc.style, bc.f, bc.args, axes(dest)))
-	@unpack data, space = dest
-	@simd for i in eachindex(aux)
-		data[i] = aux[i]
-	end
-
-	return dest
-end
-
-@inline Base.@propagate_inbounds function getindex(uₕ::VectorElement, i)
-	@unpack data, space = uₕ
-	@boundscheck checkbounds(data, i)
-	return getindex(data, i)
-end
-
-@inline Base.@propagate_inbounds function setindex!(uₕ::VectorElement, val, i)
-	@unpack data, space = uₕ
-	@boundscheck checkbounds(data, i)
-	setindex!(data, val, i)
-end
-
-@inline iterate(uₕ::VectorElement, state) = iterate(values(uₕ), state)
-
-"""
-	similar(uh::VectorElement)
-
-Returns a new [VectorElement](@ref) belonging to the same space as `uh`, with uninitialized components.
-"""
-@inline similar(uₕ::VectorElement) = element(space(uₕ))
-
-"""
-	copyto!(uₕ::VectorElement, vₕ::VectorElement)
-	copyto!(uₕ::VectorElement, v::AbstractVector)
-	copyto!(uₕ::VectorElement, α::Number)
-
-Copies the coefficients of [VectorElement](@ref) `vₕ` into [VectorElement](@ref) `uₕ`. The second argument can also be a regular `AbstractVector` or a `Number``.
-"""
-@inline copyto!(uₕ::VectorElement, vₕ::VectorElement) = (@assert length(values(uₕ)) == length(values(vₕ));
-														 copyto!(values(uₕ), values(vₕ)))
-@inline copyto!(uₕ::VectorElement, v::AbstractVector) = (@assert length(values(uₕ)) == length(v);
-														 copyto!(values(uₕ), v))
-@inline copyto!(uₕ::VectorElement, α::Number) = (s = eltype(uₕ)(α);
-												 copyto!(values(uₕ), s))
-
-for op in (:-, :*, :/, :+, :^)
-	same_text = "\n\nReturns a new [VectorElement](@ref) with coefficients given by the elementwise evaluation of"
-	docstr1 = "	" * string(op) * "(α::Number, uₕ::VectorElement)" * same_text * "`α`" * string(op) * "`uₕ`."
-	docstr2 = "	" * string(op) * "(uₕ::VectorElement, α::Number)" * same_text * "`uₕ`" * string(op) * "`α`."
-	docstr3 = "	" * string(op) * "(uₕ::VectorElement, vₕ::VectorElement)" * same_text * " `uₕ`" * string(op) * "`vₕ`."
-
-	@eval begin
-		@doc $docstr1 @inline function (Base.$op)(α::Number, uₕ::VectorElement)
-			rₕ = similar(uₕ)
-			tmap!(Base.Fix1(Base.$op, α), values(rₕ), values(uₕ))
-			return rₕ
-		end
-
-		@doc $docstr2 @inline function (Base.$op)(uₕ::VectorElement, α::Number)
-			rₕ = similar(uₕ)
-
-			tmap!(Base.Fix2(Base.$op, α), values(rₕ), values(uₕ))
-			return rₕ
-		end
-
-		@doc $docstr3 @inline function (Base.$op)(uₕ::VectorElement, vₕ::VectorElement)
-			rₕ = similar(uₕ)
-			tmap!((Base.$op), values(rₕ), values(uₕ), values(vₕ))
-			return rₕ
-		end
-	end
-end
 #=
 function *(uₕ::VectorElement, Vₕ::NTuple{D,VectorElement}) where D
 	Zₕ = ntuple(i-> similar(Vₕ[i]), D)
@@ -172,6 +110,7 @@ function *(uₕ::VectorElement, Vₕ::NTuple{D,VectorElement}) where D
 	end
 	return Zₕ
 end
+=#
 
 ########################
 #                      #
@@ -179,25 +118,33 @@ end
 #                      #
 ########################
 
-@inline function _func2array!(u, f, mesh)
-	@assert length(u) === npoints(mesh) === length(indices(mesh))
-	pts = points(mesh)
-	idxs = indices(mesh)
+function _func2array!(::SingleComponent, u, f, space)
+	Ωₕ = mesh(space)
+	idxs = indices(Ωₕ)
 
-	for i in eachindex(idxs)
-		u[i] = f(_i2p(pts, idxs[i]))
-	end
+	g(idx) = f(points(Ωₕ, idx))
+	_parallel_for!(u, idxs, g)
 	return nothing
 end
+
+@inline function _func2array!(::MultiComponent{D}, u, f, mesh) where D
+	return nothing
+end
+
+@inline to_matrix(::SingleComponent, uₕ::VectorElement) = Base.ReshapedArray(values(uₕ), npoints(mesh(space(uₕ)), Tuple), ())
+@inline to_matrix(::MultiComponent{D}, uₕ::VectorElement) where D = ntuple(i -> to_matrix(SingleComponent(), uₕ(i)), Val(D))
 
 """
 	Rₕ!(uₕ::VectorElement, f)
 
 In-place version of the restriction operator [Rₕ](@ref).
 """
-@inline function Rₕ!(uₕ::VectorElement, f)
-	u = Base.ReshapedArray(uₕ.data, npoints(mesh(space(uₕ)), Tuple), ())
-	_func2array!(u, f, mesh(space(uₕ)))
+@inline function Rₕ!(uₕ::VectorElement{ST}, f) where ST
+	@unpack data, space = uₕ
+	CStyle = ComponentStyle(ST)
+	u = to_matrix(CStyle, uₕ)
+
+	_func2array!(CStyle, u, f, space)
 	return nothing
 end
 
@@ -235,7 +182,7 @@ end
 # Averaging operator #
 #                    #
 ######################
-
+#=
 """
 	avgₕ(Wₕ::AbstractSpaceType, f)
 
