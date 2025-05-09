@@ -36,33 +36,28 @@ julia> boundary_symbol_to_cartesian(CartesianIndices((1:10, 1:20, 1:15)))
 )
 ```
 """
-@inline function boundary_symbol_to_cartesian(indices::CartesianIndices{1})
-	named_tuple_1d = (; :left => first(indices), :right => last(indices))
-	return named_tuple_1d
-end
+@inline boundary_symbol_to_cartesian(indices::CartesianIndices{1}) = (; :left => first(indices), :right => last(indices))
 
 function boundary_symbol_to_cartesian(indices::CartesianIndices{2})
 	N, M = size(indices)
 
-	named_tuple_2d = (;
-					  :left => indices[1:1, 1:M],
-					  :right => indices[N:N, 1:M],
-					  :top => indices[1:N, M:M],
-					  :bottom => indices[1:N, 1:1])
-	return named_tuple_2d
+	return (;
+			:left => indices[1:1, 1:M],
+			:right => indices[N:N, 1:M],
+			:top => indices[1:N, M:M],
+			:bottom => indices[1:N, 1:1])
 end
 
 function boundary_symbol_to_cartesian(indices::CartesianIndices{3})
 	N, M, K = size(indices)
 
-	named_tuple_3d = (;
-					  :left => indices[1:N, 1:1, 1:K],
-					  :right => indices[1:N, M:M, 1:K],
-					  :top => indices[1:N, 1:M, K:K],
-					  :bottom => indices[1:N, 1:M, 1:1],
-					  :front => indices[N:N, 1:M, 1:K],
-					  :back => indices[1:1, 1:M, 1:K])
-	return named_tuple_3d
+	return (;
+			:left => indices[1:N, 1:1, 1:K],
+			:right => indices[1:N, M:M, 1:K],
+			:top => indices[1:N, 1:M, K:K],
+			:bottom => indices[1:N, 1:M, 1:1],
+			:front => indices[N:N, 1:M, 1:K],
+			:back => indices[1:1, 1:M, 1:K])
 end
 
 """
