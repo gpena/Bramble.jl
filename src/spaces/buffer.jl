@@ -13,6 +13,18 @@ end
 
 @forward VectorBuffer.vector (Base.size, Base.length, Base.firstindex, Base.lastindex, Base.iterate, Base.eltype)
 
+@inline Base.@propagate_inbounds function getindex(u::VectorBuffer, i)
+	@unpack vector = u
+	@boundscheck checkbounds(vector, i)
+	return getindex(vector, i)
+end
+
+@inline Base.@propagate_inbounds function setindex!(u::VectorBuffer, val, i)
+	@unpack vector = u
+	@boundscheck checkbounds(vector, i)
+	setindex!(vector, val, i)
+end
+
 """
 	create_vector_buffer(b::Backend, n::Int)
 
@@ -73,9 +85,7 @@ Creates a `GridSpaceBuffer` with an initial number of buffers.
 function create_simple_space_buffer(b::Backend, npts::Int; nbuffers::Int = 1)
 	@assert nbuffers >= 0
 
-	T = eltype(b)
-	BT = typeof(b)
-	VT = vector_type(b)
+	T, VT, _, BT = backend_types(b)
 	space_buffer = GridSpaceBuffer{BT,VT,T}(BufferType{T,VT}(), b, npts)
 
 	for _ in 1:nbuffers
