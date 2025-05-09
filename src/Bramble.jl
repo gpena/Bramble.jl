@@ -68,11 +68,12 @@ export ExporterVTK, addScalarDataset!, datasets, save2file, close
 =#
 
 include("utils/style.jl")
-include("utils/bramblefunction.jl")
 include("utils/backend.jl")
 #include("utils/linearalgebra.jl")
 
 include("geometry/sets.jl")
+include("utils/bramblefunction.jl")
+
 include("geometry/markers.jl")
 include("geometry/domains.jl")
 
@@ -85,6 +86,7 @@ include("spaces/buffer.jl")
 include("spaces/types.jl")
 include("spaces/gridspace.jl")
 include("spaces/vectorelements.jl")
+
 #=include("spaces/matrixelements.jl")
 include("spaces/difference_utils.jl")
 include("spaces/backward_difference.jl")
@@ -104,5 +106,5 @@ include("exporters/types.jl")
 include("exporters/exporter_vtk.jl")
 
 =#
-include("precompile.jl")
+#include("precompile.jl")
 end
