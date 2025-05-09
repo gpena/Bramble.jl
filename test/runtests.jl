@@ -11,12 +11,11 @@ using Test
 using Bramble
 
 const __bramble_with_examples = false
-const __bramble_with_quality = false
+const __bramble_with_quality = true
 const __bramble_with_unit_tests = true
 
 if __bramble_with_unit_tests
 	@testset verbose=true "Core library" begin
-		#=
 		@testset "Backends and BrambleFunctions" begin
 			include("bramblefunctions.jl")
 			include("backends.jl")
@@ -31,7 +30,7 @@ if __bramble_with_unit_tests
 			include("mesh1d.jl")
 			include("meshnd.jl")
 		end
-		=#
+
 		@testset "Grid spaces" begin
 			include("buffers.jl")
 			include("gridspaces.jl")
