@@ -9,15 +9,29 @@ struct BrambleFunction{ArgsType,hastime,CoType}
 	wrapped::FunctionWrapper{CoType,Tuple{ArgsType}}
 end
 
-function _embed_notime(X, f; CoType = eltype(X))
+function _get_args_type(X)
 	D = dim(X)
 	T = eltype(X)
-	ArgsType = D == 1 ? T : NTuple{D,T}
-
-	wrapped_f_tuple = FunctionWrapper{CoType,Tuple{ArgsType}}(f)
-
-	return BrambleFunction{ArgsType,false,CoType}(wrapped_f_tuple)
+	return ifelse(D == 1, T, NTuple{D,T})
 end
+
+function _create_bramble_function_with_domain(f, X, hastime, CoType)
+	ArgType = _get_args_type(X)
+	wrapped_f = FunctionWrapper{CoType,Tuple{ArgType}}(f)
+	return BrambleFunction{ArgType,hastime,CoType}(wrapped_f)
+end
+#=
+function _create_bramble_function(f, ArgType, hastime, CoType)
+	wrapped_f = FunctionWrapper{CoType,Tuple{ArgType}}(f)
+	return BrambleFunction{ArgType,hastime,CoType}(wrapped_f)
+end
+=#
+
+@inline _embed_notime(X, f; CoType = eltype(X)) = _create_bramble_function_with_domain(f, X, false, CoType)
+#=)
+	ArgsType = _get_args_type(X)
+	return _create_bramble_function(f, ArgsType, false, CoType)
+end=#
 
 """
 	@embed(X:CartesianProduct, f)
@@ -129,7 +143,20 @@ function _get_domains(domain_spec) # Accept Any type for flexibility
 	end
 end
 
-@inline _get_domains(s::Symbol) = s, nothing # Return the symbol directly
+@inline _get_domains(s::Symbol) = s, nothing
+
+# function evaluators
+@inline _convert_and_wrap(f, coords, ::Val{1}, ::Type{T}) where T = f.wrapped(T(coords))
+@inline _convert_and_wrap(f, coords, ::Val{D}, ::Type{T}) where {D,T} = f.wrapped(NTuple{D,T}(coords))
+
+@inline (f::BrambleFunction{AT})(x::Number) where {AT<:Number} = _convert_and_wrap(f, x, Val(1), AT) #f.wrapped(convert(AT, x))
+@inline (f::BrambleFunction{NTuple{D,T},false})(coords::Tuple) where {D,T} = _convert_and_wrap(f, coords, Val(D), T)
+@inline (f::BrambleFunction{NTuple{D,T},false})(coords::Vararg{Number,D}) where {D,T} = _convert_and_wrap(f, coords, Val(D), T)
+
+#=
+@inline (f::BrambleFunction{AT,false})(x) where {AT<:Number} = f.wrapped(convert(ArgsType, x)::ArgsType)
+@inline (f::BrambleFunction{AT,true})(t) where AT = f.wrapped(t)
+@inline (f::BrambleFunction{AT,true})(t::Number) where AT = f.wrapped(convert(AT, t))
 
 function (f::BrambleFunction{NTuple{D,T},false})(x...) where {D,T}
 	@unpack wrapped = f
@@ -142,10 +169,11 @@ function (f::BrambleFunction{NTuple{D,T},false})(x...) where {D,T}
 	end
 
 	@assert length(x) == D
-
 	y = Tuple(convert.(T, x)::NTuple{D,T})
+	println(y)
+
 	return wrapped(y)
-end
+end=#
 
 """
 	embed_function(space_domain, func)
@@ -162,27 +190,17 @@ Creates a BrambleFunction for a time-dependent function `func(x, t)` defined
 over `space_domain × time_domain`.
 Equivalent to `@embed space_domain × time_domain func`.
 """
-function embed_function(space_domain, time_domain, func)
-	if !(time_domain isa CartesianProduct{1})
-		error("Time domain must be a 1D CartesianProduct (interval) for this function.")
-	end
+function embed_function(space_domain, time_domain::CartesianProduct{1}, func)
 	return _embed_withtime(space_domain, time_domain, func)
 end
 
-(f::BrambleFunction{ArgsType,false})(x) where {ArgsType<:Number} = f.wrapped(convert(ArgsType, x)::ArgsType)
-(f::BrambleFunction{ArgsType,true})(t) where ArgsType = f.wrapped(t)
+function _embed_withtime(spatial_domain, time_domain::CartesianProduct{1}, f)
+	_f(t) = _embed_notime(spatial_domain, Base.Fix2(f, t))
 
-function _embed_withtime(X, I, f)
-	@assert I isa CartesianProduct{1}
+	#TimeArgType = _get_args_type(time_domain)
+	CoType = typeof(_f(sum(tails(time_domain)) * 0.5))
 
-	_f(t) = _embed_notime(X, Base.Fix2(f, t))
-
-	ArgsType = eltype(X)
-	CoType = typeof(_f(sum(tails(I)) * 0.5))
-
-	wrapped_f_tuple = FunctionWrapper{CoType,Tuple{ArgsType}}(_f)
-
-	return BrambleFunction{ArgsType,true,CoType}(wrapped_f_tuple)
+	return _create_bramble_function_with_domain(_f, time_domain, true, CoType)
 end
 
 argstype(g::FunctionWrapper{CoType,Tuple{ArgsType}}) where {CoType,ArgsType} = ArgsType
