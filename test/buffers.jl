@@ -12,7 +12,7 @@ using Bramble: create_vector_buffer, is_in_use, vector, lock!, unlock!, VectorBu
 	@testset "VectorBuffer Tests" begin
 		vb = create_vector_buffer(test_backend, test_vector_len)
 
-		@test vb isa VectorBuffer{TestVecType}
+		@test vb isa VectorBuffer{Float64,TestVecType}
 		@test !is_in_use(vb)
 		@test vector(vb) isa TestVecType
 		@test length(vector(vb)) == test_vector_len
@@ -28,7 +28,7 @@ using Bramble: create_vector_buffer, is_in_use, vector, lock!, unlock!, VectorBu
 		@testset "Creation" begin
 			# Test creation with 0 initial buffers
 			gsb0 = create_simple_space_buffer(test_backend, test_vector_len; nbuffers = 0)
-			@test gsb0 isa GridSpaceBuffer{BackendType,TestVecType}
+			@test gsb0 isa GridSpaceBuffer{BackendType,TestVecType,Float64}
 			@test gsb0.backend === test_backend
 			@test gsb0.npts == test_vector_len
 			@test nbuffers(gsb0) == 0
@@ -37,12 +37,12 @@ using Bramble: create_vector_buffer, is_in_use, vector, lock!, unlock!, VectorBu
 			# Test creation with > 0 initial buffers
 			num_initial = 3
 			gsb3 = create_simple_space_buffer(test_backend, test_vector_len; nbuffers = num_initial)
-			@test gsb3 isa GridSpaceBuffer{BackendType,TestVecType}
+			@test gsb3 isa GridSpaceBuffer{BackendType,TestVecType,Float64}
 			@test nbuffers(gsb3) == num_initial
 			@test length(gsb3.buffer) == num_initial
 			for i in 1:num_initial
 				@test haskey(gsb3.buffer, i)
-				@test gsb3.buffer[i] isa VectorBuffer{TestVecType}
+				@test gsb3.buffer[i] isa VectorBuffer{Float64,TestVecType}
 				@test !is_in_use(gsb3.buffer[i])
 				@test length(vector(gsb3.buffer[i])) == test_vector_len
 			end
