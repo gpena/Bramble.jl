@@ -41,12 +41,12 @@ Returns a generator with the [DomainMarkers](@ref)'s identifiers ([BrambleFuncti
 end
 
 @inline function marker_symbols(Ω::Domain)
-	@unpack symbols, tuples, conditions = markers(Ω)
+	@unpack symbols = markers(Ω)
 	return (identifier(marker) for marker in symbols)
 end
 
 @inline function marker_tuples(Ω::Domain)
-	@unpack symbols, tuples, conditions = markers(Ω)
+	@unpack symbols, tuples = markers(Ω)
 	return (identifier(marker) for marker in tuples)
 end
 
@@ -181,6 +181,7 @@ function Base.show(io::IO, Ω::Domain)
 	print(io, output * "\n")
 
 	show(io, markers(Ω))
+	return nothing
 end
 
 """

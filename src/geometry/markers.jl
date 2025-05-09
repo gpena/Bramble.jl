@@ -80,9 +80,6 @@ end
 @inline process_identifier(embedder::CartesianProduct, identifier::F) where F<:Function = _embed_notime(embedder, identifier, CoType = Bool)
 @inline process_identifier(_::CartesianProduct, identifier::Symbol) = identifier
 @inline process_identifier(_::CartesianProduct, identifier::NTuple{N,Symbol}) where N = Set(identifier)
-@inline function process_identifier(_, identifier)
-	error("Invalid identifier type for create_markers: $(typeof(identifier)). Expected Symbol, Function, or Tuple containing only Symbols.")
-end
 
 function Base.show(io::IO, markers::DomainMarkers)
 	fields = ("Markers")
@@ -93,4 +90,5 @@ function Base.show(io::IO, markers::DomainMarkers)
 
 	final_output = style_field("Markers", labels_styled_combined, max_length = mlength)
 	print(io, final_output)
+	return nothing
 end

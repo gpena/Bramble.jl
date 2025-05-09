@@ -10,6 +10,10 @@ struct CartesianProduct{D,T} <: BrambleType
 	collapsed::NTuple{D,Bool}
 end
 
+@inline is_collapsed(a::T, b::T) where T<:Number = isapprox(a, b)
+@inline is_collapsed(X::CartesianProduct{1}) = X.collapsed[1]
+
+@inline set(X::CartesianProduct) = X
 """
 	interval(x, y)
 	interval(x::CartesianProduct{1})
@@ -32,8 +36,8 @@ julia> interval(0, 1)
 	y = float(_y)
 	@assert x <= y
 
-	is_collapsed = isapprox(x, y) ? true : false
-	return CartesianProduct{1,typeof(x)}(((x, y),), (is_collapsed,))
+	_is_collapsed = is_collapsed(x, y)
+	return CartesianProduct{1,typeof(x)}(((x, y),), (_is_collapsed,))
 end
 
 @inline interval(x::CartesianProduct{1}) = interval(x(1)...)
@@ -96,8 +100,8 @@ julia> cartesianproduct(((0, 1), (4, 5)))
 
 	@assert predicate_result===true "Invalid box: Each tuple must satisfy x[1] <= x[2]. Check for non-compliant pairs or unexpected values. Found box: $box"
 
-	_box = ntuple(i -> (float(box[i][1]), float(box[i][2])), D)
-	_falses = ntuple(i -> isapprox(_box[i]...) ? true : false, D)
+	_box = ntuple(i -> float.(box[i]), D)
+	_falses = ntuple(i -> is_collapsed(_box[i]...) ? true : false, D)
 	return CartesianProduct{D,eltype(_box[1])}(_box, _falses)
 end
 
@@ -107,8 +111,17 @@ end
 Creates a [CartesianProduct](@ref) from the coordinates in `a` and `b`. It accepts `Number` or `NTuple{D}`. The subintervals of the new set are defined as `interval(a[1],b[1]) × ... × interval(a[D],b[D])`.
 """
 @inline box(a, b) = interval(a, b)
-@inline @generated function box(a::NTuple{D}, b::NTuple{D}) where D
-	return :(CartesianProduct((Base.Cartesian.@ntuple $D i->(float(a[i]), float(b[i]))), (Base.Cartesian.@ntuple $D i->(isapprox(float(a[i]), float(b[i])) ? true : false))))
+
+@inline function box(a::NTuple{D}, b::NTuple{D}) where D
+	box_coords = Base.ntuple(Val(D)) do i
+		return float.((a[i], b[i]))
+	end
+
+	collapsed_flags = Base.ntuple(Val(D)) do i
+		return is_collapsed(float.(box_coords[i])...)
+	end
+
+	return CartesianProduct(box_coords, collapsed_flags)
 end
 
 """
@@ -119,6 +132,7 @@ Returns the `i`-th [interval](@ref)) or [point](@ref) in the [CartesianProduct](
 @inline function (X::CartesianProduct)(i)
 	@unpack box = X
 	@assert i in eachindex(box)
+	#return interval(box[i]...)
 	return box[i]
 end
 
@@ -195,9 +209,8 @@ julia> X = cartesianproduct(0, 1) × cartesianproduct(4, 5);
 	return X(i)
 end
 
-@inline @generated tails(X::CartesianProduct{D}) where D = :(Base.Cartesian.@ntuple $D i->X(i))
-
 @inline tails(X::CartesianProduct{1}) = X(1)
+@inline tails(X::CartesianProduct{D}) where D = ntuple(i -> X(i), Val(D))
 
 @inline first(X::CartesianProduct{1}) = first(X(1))
 @inline last(X::CartesianProduct{1}) = last(X(1))
@@ -257,6 +270,7 @@ function Base.show(io::IO, X::CartesianProduct{D}) where D
 	title_info = style_title("Set", max_length = mlength)
 	output = style_join(title_info, set_info_only(X, mlength))
 	print(io, output)
+	return nothing
 end
 
 function set_info_only(X::CartesianProduct{D}, mlength) where D
@@ -266,9 +280,8 @@ function set_info_only(X::CartesianProduct{D}, mlength) where D
 	num_colors = length(colors)
 
 	styled_sets = [let
-					   is_collapsed = X.collapsed[i]
 					   a, b = tails(X, i)
-					   set_str = is_collapsed ? "{$a}" : "[$(a), $(b)]"
+					   set_str = is_collapsed(a, b) ? "{$a}" : "[$a, $b]"
 					   color_sym = colors[mod1(i, num_colors)]
 					   styled"{$color_sym:$(set_str)}"
 				   end
