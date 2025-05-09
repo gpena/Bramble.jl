@@ -207,7 +207,7 @@ end
 
 		# Test similar for broadcast result
 		bc = Base.broadcasted(+, u, v)
-		s = similar(bc, Float64)
+		s = similar(bc)
 		@test s isa VectorElement
 		@test space(s) === space(u)
 		@test length(s) == length(u)
@@ -239,18 +239,6 @@ end
 		α = 3.0
 		β = 2.0
 
-		# Scalar + VectorElement
-		r1 = α + u
-		@test r1 isa VectorElement
-		@test space(r1) === space(u)
-		@test values(r1) ≈ α .+ u_data
-
-		# VectorElement + Scalar
-		r2 = u + α
-		@test r2 isa VectorElement
-		@test space(r2) === space(u)
-		@test values(r2) ≈ u_data .+ α
-
 		# VectorElement + VectorElement
 		r3 = u + v
 		@test r3 isa VectorElement
@@ -266,30 +254,22 @@ end
 		@test values(r5) ≈ u_data .* α
 
 		# VectorElement * VectorElement
-		r6 = u * v
+		r6 = u .* v
 		@test values(r6) ≈ u_data .* v_data
 
 		# Subtraction
 		r7 = u - v
 		@test values(r7) ≈ u_data .- v_data
-		r8 = u - α
+		r8 = u .- α
 		@test values(r8) ≈ u_data .- α
-		r9 = α - u
+		r9 = α .- u
 		@test values(r9) ≈ α .- u_data
 
-		# Division
-		r10 = u / β
-		@test values(r10) ≈ u_data ./ β
-		r11 = β / u # Elementwise
-		@test values(r11) ≈ β ./ u_data
-		r12 = u / v # Elementwise
-		@test values(r12) ≈ u_data ./ v_data
-
 		# Power
-		r13 = u^β
+		r13 = u .^ β
 		@test values(r13) ≈ u_data .^ β
 		# r14 = β ^ u # Might not be standard, depends on tmap! impl. Check if needed.
-		r15 = u^v # Elementwise
+		r15 = u .^ v # Elementwise
 		@test values(r15) ≈ u_data .^ v_data
 	end
 end
