@@ -1,3 +1,10 @@
+@inline function _parallel_for!(v, idxs, f)
+	tforeach(idxs) do idx
+		v[idx] = f(idx)
+	end
+	return nothing
+end
+
 # Getters for SpaceWeights
 @inline weights_innerh(weights::SpaceWeights) = weights.innerh
 @inline weights_innerplus(weights::SpaceWeights) = weights.innerplus
@@ -46,16 +53,21 @@ function gridspace(Ωₕ::AbstractMeshType{D}; cache_average_matrices = false, c
 	b = backend(Ωₕ)
 	npts = npoints(Ωₕ)
 
+	@info "Create weights"
 	weights = create_space_weights(Ωₕ)
 	diff_matrices = create_space_backward_diff_matrices(Ωₕ)
 	average_matrices = create_space_backward_diff_matrices(Ωₕ)
 
 	if cache_backward_diff_matrices
+		@info "Create differentiation matrices"
+
 		# cache matrices in variable diff_matrices
 		# diff_matrices = create_backward_diff_matrices(Wₕ; vector = _create_vector(Ωₕ))
 	end
 
 	if cache_average_matrices
+		@info "Create average matrices"
+
 		# cache matrices in variable average_matrices
 		# average_matrices = create_average_matrices(Wₕ; vector = _create_vector(Ωₕ))
 	end
@@ -63,9 +75,11 @@ function gridspace(Ωₕ::AbstractMeshType{D}; cache_average_matrices = false, c
 	space_buffer = create_simple_space_buffer(b, npts, nbuffers = 1)
 
 	MType = typeof(Ωₕ)
-	VT = vector_type(b)
-	MT = matrix_type(b)
+	#VT = vector_type(b)
+	#MT = matrix_type(b)
+	_, VT, MT, _ = backend_types(b)
 	BufferType = typeof(space_buffer)
+
 	return SingleGridSpace{MType,D,VT,MT,BufferType}(Ωₕ, weights, diff_matrices, cache_backward_diff_matrices, average_matrices, cache_average_matrices, space_buffer)
 end
 
@@ -95,7 +109,7 @@ Returns the number of degrees of freedom of the [GridSpace](@ref) `Wₕ`.
 Returns the element type of the mesh associated with [GridSpace](@ref) `Wₕ`. If the input argument is a type derived from [AbstractSpaceType](@ref) then the function returns the element type of the [AbstractMeshType](@ref) associated with it.
 """
 @inline Base.eltype(Wₕ::SingleGridSpace) = eltype(backend(Wₕ))
-
+#=
 function show(io::IO, Wₕ::SingleGridSpace)
 	Ωₕ = mesh(Wₕ)
 	D = dim(Ωₕ)
@@ -114,7 +128,7 @@ function show(io::IO, Wₕ::SingleGridSpace)
 	properties = ["  $(direction[i]) direction | nPoints: $(npoints(Ωₕ, Tuple)[i])" for i in 1:D]
 
 	print(io, join(properties, "\n"))
-end
+end=#
 
 #=
 
@@ -167,14 +181,13 @@ end
 Builds the weights for the standard discrete ``L^2`` inner product, ``inner_h(\\cdot, \\cdot)``, on the space of grid functions, following the order of the points provided by `indices(Ωₕ)`. The values are stored in vector `u`.
 """
 function build_innerh_weights!(u, Ωₕ::AbstractMeshType)
-	f = Base.Fix1(cell_measure, Ωₕ)
+	f = Base.Fix1(_cell_measure, Ωₕ)
 	idxs = indices(Ωₕ)
+	dims = npoints(Ωₕ, Tuple)
 
-	linear_indices = LinearIndices(idxs)
-	tforeach(idxs) do idx
-		i = linear_indices[idx]
-		u[i] = f(idx)
-	end
+	v = Base.ReshapedArray(u, dims, ())
+
+	_parallel_for!(v, idxs, f)
 end
 
 """
@@ -223,16 +236,11 @@ function _innerplus_mean_weights!(u::VT, Ωₕ, component::Int = 1) where VT
 end
 
 @inline @generated function __prod(diags::NTuple{D,VT}, I) where {D,VT}
-	T = :(eltype($VT))
-	if D == 0
-		return :(one($T))
-	end
-
-	ex = :(one($T))
+	res = :(one(eltype(VT)))
 	for i in 1:D
-		ex = :(diags[$i][I[$i]] * $ex)
+		res = :(@inbounds(diags[$i][I[$i]]) * $res)
 	end
-	return :($ex)
+	return res
 end
 
 """
@@ -242,9 +250,6 @@ Builds the weights for the modified discrete ``L^2`` inner product on the space 
 """
 function __innerplus_weights!(v, innerplus_per_component)
 	idxs = CartesianIndices(v)
-	linear_idxs = LinearIndices(idxs)
-	tforeach(idxs) do idx
-		i = linear_idxs[idx]
-		v[i] = __prod(innerplus_per_component, idx)
-	end
+	f = Base.Fix1(__prod, innerplus_per_component)
+	_parallel_for!(v, idxs, f)
 end
