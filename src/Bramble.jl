@@ -1,6 +1,6 @@
 module Bramble
 
-using StyledStrings: styled, @styled_str
+#using StyledStrings: styled, @styled_str
 
 using Base: remove_linenums!
 
@@ -67,7 +67,7 @@ export constraints, symmetrize!
 export ExporterVTK, addScalarDataset!, datasets, save2file, close
 =#
 
-include("utils/style.jl")
+#include("utils/style.jl")
 include("utils/backend.jl")
 #include("utils/linearalgebra.jl")
 
