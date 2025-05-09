@@ -3,7 +3,7 @@ using Aqua
 @testset "Aqua analysis" begin
 	Aqua.test_all(Bramble;
 				  piracies = true,
-				  ambiguities = false,
+				  ambiguities = true,
 				  unbound_args = false,
 				  undefined_exports = true,
 				  project_extras = false,
