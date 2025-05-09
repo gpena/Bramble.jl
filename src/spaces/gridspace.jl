@@ -7,8 +7,8 @@
 @inline _create_vector(Ωₕ) = vector(backend(Ωₕ), npoints(Ωₕ))
 
 function create_space_weights(Ωₕ::AbstractMeshType{D}) where D
-	innerplus = ntuple(i -> _create_vector(Ωₕ), D)
-	innerplus_per_component = ntuple(j -> _create_vector(Ωₕ(j)), D)
+	innerplus = ntuple(i -> _create_vector(Ωₕ), Val(D))
+	innerplus_per_component = ntuple(j -> _create_vector(Ωₕ(j)), Val(D))
 
 	npts_tuple = npoints(Ωₕ, Tuple)
 	for i in 1:D
@@ -34,7 +34,7 @@ function create_space_backward_diff_matrices(Ωₕ::AbstractMeshType{D}) where D
 	b = backend(Ωₕ)
 	npts = npoints(Ωₕ)
 
-	return ntuple(i -> matrix(b, npts, npts), D)
+	return ntuple(i -> matrix(b, npts, npts), Val(D))
 end
 
 """

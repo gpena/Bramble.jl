@@ -1,44 +1,50 @@
 """
-	SpaceType
+	AbstractSpaceType
 
 Abstract type for grid spaces defined on meshes of type [MeshType](@ref).
 """
 abstract type AbstractSpaceType <: BrambleType end
 
 """
-	struct VectorElement{S, VectorType, T} <: AbstractVector{T}
+	struct VectorElement{S,T,VT<:AbstractVector{T}} <: AbstractVector{T}
+		data::VT
 		space::S
-		values::VectorType
 	end
 
 Vector element of `space` with coefficients stored in `values`.
 """
-struct VectorElement{S,VectorType,T} <: AbstractVector{T}
+struct VectorElement{S,T,VT<:AbstractVector{T}} <: AbstractVector{T}
+	data::VT
 	space::S
-	values::VectorType
 end
 
 """
-	MatrixElement{S, MatrixType, T} <: AbstractMatrix{T}
+	struct MatrixElement{S,T,MT<:AbstractMatrix{T}} <: AbstractMatrix{T}
+		data::MT
+		space::S
+	end
 
 A `MatrixElement` is a container with a matrix of type `MatrixType`. The container also has a space to retain the information to which this special element belongs to. Its purpose is to represent discretization matrices from finite difference methods.
 """
-struct MatrixElement{S,MatrixType,T} <: AbstractMatrix{T}
+struct MatrixElement{S,T,MT<:AbstractMatrix{T}} <: AbstractMatrix{T}
+	data::MT
 	space::S
-	values::MatrixType
 end
 
-struct SpaceWeights{D,VT} <: BrambleType
+struct SpaceWeights{D,VT<:AbstractVector} <: BrambleType
 	innerh::VT
 	innerplus::NTuple{D,VT}
 end
 
 """
-	struct SingleGridSpace{MType,D,BT,VT,MT} <: SpaceType{MType}
+	struct SingleGridSpace{MType,D,VT,MT,BT} <: SpaceType{MType}
 		mesh::MType
 		weights::SpaceWeights{D,VT}
-		diff_matrix::NTuple{D,MT}
-		vector_buffer::GridSpaceBuffer{BT,VT}
+		backward_diff_matrix::NTuple{D,MT}
+		has_backward_diff_matrix::Bool
+		average_matrix::NTuple{D,MT}
+		has_average_matrix::Bool
+		vector_buffer::BT
 	end
 
 Structure for a gridspace defined on a mesh.
@@ -103,14 +109,14 @@ Here, ``|\\cdot|`` denotes the measure of the set and all details on the definit
 (u_h, v_h)_{+z} = \\sum_{i=1}^{N_x}\\sum_{j=1}^{N_y}\\sum_{l=1}^{N_z} h_{x,i+1/2} h_{y,j+1/2} h_{z,l} u_h(x_i,y_j,z_l) v_h(x_i,y_j,z_l).
 ```
 """
-mutable struct SingleGridSpace{MType,D,VT,MT,SpaceBufferType} <: AbstractSpaceType
+mutable struct SingleGridSpace{MType,D,VT,MT,BT} <: AbstractSpaceType
 	const mesh::MType
 	const weights::SpaceWeights{D,VT}
 	const backward_diff_matrix::NTuple{D,MT}
 	has_backward_diff_matrix::Bool
 	const average_matrix::NTuple{D,MT}
 	has_average_matrix::Bool
-	const vector_buffer::SpaceBufferType
+	const vector_buffer::BT
 end
 
 struct CompositeGridSpace{S1,S2} <: AbstractSpaceType

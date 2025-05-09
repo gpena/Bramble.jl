@@ -4,7 +4,14 @@
 
 Returns the coefficients of the [VectorElement](@ref) `uₕ`.
 """
-@inline values(uₕ::VectorElement) = uₕ.values
+@inline values(uₕ::VectorElement) = uₕ.data
+
+"""
+	to_matrix(uₕ::VectorElement)
+
+Reshapes the coefficients of the [VectorElement](@ref) `uₕ` to a matrix.
+"""
+@inline to_matrix(uₕ::VectorElement) = Base.ReshapedArray(values(uₕ), npoints(mesh(space(uₕ)), Tuple), ())
 
 """
 	values!(uₕ::VectorElement, s)
@@ -16,11 +23,11 @@ Copies the values of `s` into the coefficients of [VectorElement](@ref) `uₕ`.
 """
 	space(uₕ::VectorElement)
 
-Returns the [GridSpace](@ref) associated with [VectorElement](@ref) `uₕ`.
+Returns the grid space associated with [VectorElement](@ref) `uₕ`.
 """
 @inline space(uₕ::VectorElement) = uₕ.space
 
-@forward VectorElement.values (Base.size, Base.length, Base.firstindex, Base.lastindex, Base.iterate, Base.eltype)
+@forward VectorElement.data (Base.size, Base.length, Base.firstindex, Base.lastindex, Base.iterate, Base.eltype)
 @forward VectorElement.space (Bramble.mesh,)
 
 # Constructor for VectorElement
@@ -35,7 +42,7 @@ Returns a [VectorElement](@ref) for grid space `Wₕ` with uninitialized compone
 	ST = typeof(Wₕ)
 	VT = vector_type(b)
 	T = eltype(b)
-	VectorElement{ST,VT,T}(Wₕ, vector(b, ndofs(Wₕ)))
+	VectorElement{ST,T,VT}(vector(b, ndofs(Wₕ)), Wₕ)
 end
 
 """
@@ -45,7 +52,7 @@ Returns a [VectorElement](@ref) for a grid space `Wₕ` with all components equa
 """
 function element(Wₕ::AbstractSpaceType, α::Number)
 	uₕ = element(Wₕ)
-	fill!(values(uₕ), α)
+	fill!(values(uₕ), α) # maybe fill!(uₕ, α) works?
 	return uₕ
 end
 
@@ -68,8 +75,8 @@ Base.BroadcastStyle(::Type{<:VectorElement}) = Broadcast.ArrayStyle{VectorElemen
 function Base.similar(bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{VectorElement}}, ::Type{ElType}) where ElType
 	# Scan the inputs for the VectorElement:
 	A = _find_vec_in_broadcast(bc)
-	@unpack space, values = A
-	return element(space, similar(values, ElType))
+	@unpack data, space = A
+	return element(space, similar(data, ElType))
 end
 
 _find_vec_in_broadcast(bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{VectorElement}}) = _find_vec_in_broadcast(bc.args)
@@ -87,32 +94,32 @@ end
 
 @inline function materialize!(dest::VectorElement, bc::Broadcast.Broadcasted{<:Any})
 	aux = Broadcast.instantiate(Broadcast.Broadcasted(bc.style, bc.f, bc.args, axes(dest)))
-	@unpack space, values = dest
+	@unpack data, space = dest
 	@simd for i in eachindex(aux)
-		values[i] = aux[i]
+		data[i] = aux[i]
 	end
 
 	return dest
 end
 
 @inline Base.@propagate_inbounds function getindex(uₕ::VectorElement, i)
-	@unpack space, values = uₕ
-	@boundscheck checkbounds(values, i)
-	return getindex(values, i)
+	@unpack data, space = uₕ
+	@boundscheck checkbounds(data, i)
+	return getindex(data, i)
 end
+
 @inline Base.@propagate_inbounds function setindex!(uₕ::VectorElement, val, i)
-	@unpack space, values = uₕ
-	@boundscheck checkbounds(values, i)
-	setindex!(values, val, i)
+	@unpack data, space = uₕ
+	@boundscheck checkbounds(data, i)
+	setindex!(data, val, i)
 end
-#=
-#@inline iterate(uₕ::VectorElement, state) = iterate(uₕ.values, state)
-=#
+
+@inline iterate(uₕ::VectorElement, state) = iterate(values(uₕ), state)
 
 """
 	similar(uh::VectorElement)
 
-Returns a new [VectorElement](@ref) belonging to the same [GridSpace](@ref) as `uh`, with uninitialized components.
+Returns a new [VectorElement](@ref) belonging to the same space as `uh`, with uninitialized components.
 """
 @inline similar(uₕ::VectorElement) = element(space(uₕ))
 
@@ -129,15 +136,6 @@ Copies the coefficients of [VectorElement](@ref) `vₕ` into [VectorElement](@re
 														 copyto!(values(uₕ), v))
 @inline copyto!(uₕ::VectorElement, α::Number) = (s = eltype(uₕ)(α);
 												 copyto!(values(uₕ), s))
-#=
-"""
-	map(f, uₕ::VectorElement)
-
-Returns a new [VectorElement](@ref) with coefficients obtained by applying function `f` to each coefficient of `uₕ`
-
-	yₕ[i] = f(uₕ[i])
-"""=#
-#@inline map(f, uₕ::VectorElement) = element(space(u), map(f, uₕ.values))
 
 for op in (:-, :*, :/, :+, :^)
 	same_text = "\n\nReturns a new [VectorElement](@ref) with coefficients given by the elementwise evaluation of"
@@ -170,7 +168,7 @@ end
 function *(uₕ::VectorElement, Vₕ::NTuple{D,VectorElement}) where D
 	Zₕ = ntuple(i-> similar(Vₕ[i]), D)
 	for i in 1:D
-		Zₕ[i].values .= uₕ.values .* Vₕ[i].values
+		Zₕ[i].data .= uₕ.data .* Vₕ[i].data
 	end
 	return Zₕ
 end
@@ -198,7 +196,7 @@ end
 In-place version of the restriction operator [Rₕ](@ref).
 """
 @inline function Rₕ!(uₕ::VectorElement, f)
-	u = Base.ReshapedArray(uₕ.values, npoints(mesh(space(uₕ)), Tuple), ())
+	u = Base.ReshapedArray(uₕ.data, npoints(mesh(space(uₕ)), Tuple), ())
 	_func2array!(u, f, mesh(space(uₕ)))
 	return nothing
 end
@@ -351,7 +349,7 @@ function __quad!(uₕ::VectorElement, domain::NTuple{2,T}, p::ParamType) where {
 	prob = IntegralProblem(func, domain, p)
 	sol = solve(prob, CubatureJLh())
 
-	copyto!(uₕ.values, sol.u)
+	copyto!(uₕ.data, sol.u)
 	return nothing
 end
 
@@ -387,7 +385,7 @@ end
 
 function __quadnd!(uₕ::VectorElement, domain::NTuple{D,T}, p::ParamType) where {D,T,ParamType}
 	npts = npoints(mesh(space(uₕ)), Tuple)
-	v = Base.ReshapedArray(uₕ.values, npts, ())
+	v = Base.ReshapedArray(uₕ.data, npts, ())
 	prototype = v
 
 	func = IntegralFunction(__integrandnd, prototype)
