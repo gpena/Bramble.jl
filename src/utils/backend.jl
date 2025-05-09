@@ -12,8 +12,7 @@ This allows specifying the desired concrete types for vectors and matrices
   - `vector_type`: The concrete vector type (e.g., `Vector{Float64}`).
   - `matrix_type`: The concrete matrix type (e.g., `Matrix{Float64}`, `SparseMatrixCSC{Float64, Int}`).
 """
-struct Backend{VType<:AbstractVector,MType<:AbstractMatrix} <: BrambleType
-end
+struct Backend{VType<:AbstractVector,MType<:AbstractMatrix} <: BrambleType end
 
 @inline vector_type(b::Backend{VType,MType}) where {VType,MType} = VType
 @inline matrix_type(b::Backend{VType,MType}) where {VType,MType} = MType
@@ -46,9 +45,7 @@ backend_dense32 = Backend(vector_type = Vector{Float32},
 						  matrix_type = SparseMatrixCSC{Float32,Int})
 ```
 """
-function Backend(; vector_type = Vector{Float64}, matrix_type = SparseMatrixCSC{Float64,Int})
-	return Backend{vector_type,matrix_type}()
-end
+@inline Backend(; vector_type = Vector{Float64}, matrix_type = SparseMatrixCSC{Float64,Int}) = Backend{vector_type,matrix_type}()
 
 """
 	create_vector(b::Backend, n::Integer)
@@ -98,21 +95,20 @@ function matrix(b::Backend{VType,MatType}, m::Integer, n::Integer) where {VType,
 	end
 end
 
-@inline eltype(b::Backend{VecType,MatType}) where {VecType,MatType} = eltype(Backend{VecType,MatType})
+@inline eltype(_::Type{<:Backend{VecType,MatType}}) where {VecType,MatType} = eltype(VecType)
 
 function eltype(::Type{Backend{VecType,MatType}}) where {VecType,MatType}
 	@assert eltype(VecType) == eltype(MatType)
 	return eltype(VecType)
 end
 
-
 function get_chunk_range(total_length::Int, num_chunks::Int, chunk_id::Int)
-    base_size = total_length ÷ num_chunks
-    remainder = total_length % num_chunks
-    # Calculate start index, accounting for extra elements in earlier chunks
-    start_idx = (chunk_id - 1) * base_size + min(chunk_id - 1, remainder) + 1
-    # Calculate chunk size for this specific chunk
-    chunk_size = base_size + (chunk_id <= remainder ? 1 : 0)
-    end_idx = start_idx + chunk_size - 1
-    return start_idx:end_idx
+	base_size = total_length ÷ num_chunks
+	remainder = total_length % num_chunks
+	# Calculate start index, accounting for extra elements in earlier chunks
+	start_idx = (chunk_id - 1) * base_size + min(chunk_id - 1, remainder) + 1
+	# Calculate chunk size for this specific chunk
+	chunk_size = base_size + (chunk_id <= remainder ? 1 : 0)
+	end_idx = start_idx + chunk_size - 1
+	return start_idx:end_idx
 end
