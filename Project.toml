@@ -10,7 +10,7 @@ FunctionWrappers = "069b7b12-0de2-55c6-9aab-29f3d0a68a2e"
 Integrals = "de52edbc-65ea-441a-8357-d3a637375a31"
 Lazy = "50d2b5c4-7a5e-59d5-8109-a42b560f39c0"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
-OhMyThreads = "67456a42-1dca-4109-a031-0a68de7e3ad5"
+MuladdMacro = "46d2c3a1-f734-5fdb-9937-b9b9aeba4221"
 OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
 PrecompileTools = "aea7be01-6a6a-4083-8856-8a6e6704d82a"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
@@ -29,18 +29,17 @@ Cubature = "1.5.1"
 FillArrays = "1.13.0"
 FunctionWrappers = "1.0"
 Lazy = "0.15.1"
-OhMyThreads = "0.8.3"
 OrderedCollections = "1.8.0"
 UnPack = "1.0.2"
 julia = "1.10.9"
 
 [extras]
-Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
 JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 OhMyREPL = "5fb14364-9ced-5910-84b2-373655c76a03"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
 test = ["Test", "Aqua", "JET", "LinearAlgebra", "OhMyREPL", "SparseArrays"]
