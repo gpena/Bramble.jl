@@ -121,29 +121,25 @@ end
 		z = element(W)
 		copyto!(z, u3)
 		copyto!(z, v_data)
-		copyto!(z, α)
-		copyto!(z, β)
 
 		# Arithmetic Operators
-		r1 = α + u3
-		r2 = u3 + α
+		r1 = α .+ u3
+		r2 = u3 .+ α
 		r3 = u3 + u2
 		r4 = α * u3
 		r5 = u3 * α
-		r6 = u3 * u2
+		r6 = u3 .* u2
 		r7 = u3 - u2
-		r8 = u3 - α
-		r9 = α - u3
-		r10 = u3 / β
-		r11 = β / u3
-		r12 = u3 / u2
-		r13 = u3^β
-		# r14 = β ^ u3 # Might cause issues depending on interpretation
-		r15 = u3^u2
+		r8 = u3 .- α
+		r9 = α .- u3
+		r10 = u3 ./ β
+		r11 = β ./ u3
+		r12 = u3 ./ u2
+		r13 = u3 .^ β
+		r15 = u3 .^ u2
 
 		# Broadcasting
 		w = element(W)
-		# copyto! broadcast
 		copyto!(w, Base.broadcasted(identity, u3))
 		# materialize! / fused broadcast
 		w .= u3 .+ u2 .* α
@@ -154,4 +150,27 @@ end
 		nrm = norm(u3)
 	end
 	@info "VectorElement constructor and operations: complete"
+
+	for D in DIMS
+		S = reduce(×, ntuple(i -> I, D))
+		X = domain(S)
+		dims_tuple = ntuple(i -> 3, D)
+		unif_tuple = ntuple(i -> true, D)
+		test_mesh = mesh(X, dims_tuple, unif_tuple)
+		W = gridspace(test_mesh)
+
+		u_example = element(W, 1.0)
+
+		ax = axes(u_example)
+		mat_u = to_matrix(u_example)
+
+		f = x->x[1]
+		u_r = Rₕ(W, f)
+		Rₕ!(u_example, f)
+
+		u_avg = avgₕ(W, f)
+		avgₕ!(u_example, f)
+	end
+
+	@info "VectorElement Rₕ and avgₕ: complete"
 end
