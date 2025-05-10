@@ -1,6 +1,7 @@
-import Bramble: VectorElement, spacing, points, half_points, space, values, ndofs, values!
-#=
-valid_range(i::Int, ds::NTuple{D,Int}) where D = ntuple(k -> k == i ? (2:ds[1]) : (1:ds[k]), D)
+import Bramble: VectorElement, spacing, points, half_points, space, values, ndofs, values!, _func2array!, ComponentStyle, half_spacing_iterator, half_points_iterator
+using LinearAlgebra: norm
+
+valid_range(i::Int, ds::NTuple{D,Int}) where D = ntuple(k -> k == i ? (2:ds[1]) : (1:ds[k]), Val(D))
 
 @inline function __exp(v::NTuple{D,T}) where {D,T}
 	h, x0, x1 = v
@@ -8,19 +9,19 @@ valid_range(i::Int, ds::NTuple{D,Int}) where D = ntuple(k -> k == i ? (2:ds[1]) 
 end
 
 function __func2array_med(w::Array{T,D}, M::MType) where {MType,D,T}
-	Xi = ntuple(i -> zip(half_spacing(M(i), Iterator), half_points(M(i), Iterator), Iterators.drop(half_points(M(i), Iterator), 1)), D)
+	Xi = ntuple(i -> zip(half_spacing_iterator(M(i)), half_points_iterator(M(i)), Iterators.drop(half_points_iterator(M(i)), 1)), Val(D))
 
 	@inbounds for (i, v) in enumerate(Iterators.product(Xi...))
-		w[i] = prod(ntuple(j -> __exp(v[j]), D))
+		w[i] = prod(ntuple(j -> __exp(v[j]), Val(D)))
 	end
 end
 
-function __init(::Val{D}) where {D}
+function __init(::Val{D}) where D
 	npts = ((3,), (3, 3), (3, 3, 3))
 	unif = ((false,), (true, false), (false, true, false))
 	dims = npts[D]
 
-	intervals = ntuple(j -> interval(-1.0, 4.0), D)
+	intervals = ntuple(j -> interval(-1.0, 4.0), Val(D))
 	Ω = domain(reduce(×, intervals))
 
 	Ωₕ = mesh(Ω, dims, unif[D])
@@ -29,71 +30,6 @@ function __init(::Val{D}) where {D}
 
 	return dims, Wₕ, uₕ
 end
-
-function vector_element_tests(::Val{D}) where {D}
-	dims, Wₕ, u = __init(Val(D))
-
-	v = element(Wₕ, 1.0)
-
-	z = normₕ(v)
-
-	if D == 1
-		@test validate_equal(z, sqrt(sum(half_spacing(mesh(Wₕ), Iterator))))
-		@test validate_zero(norm₊(D₋ₓ(u)))
-	elseif D == 2
-		@test validate_equal(z, 5.0)
-	else
-		@test validate_equal(z, 11.180339887498947)
-	end
-
-	@test(length(u)==prod(dims))
-
-	for op in (+, -, *, /)
-		res = op(u, v)
-		@test(validate_equal(res, map(op, u, v)))
-	end
-
-	test_function = @embed(mesh(Wₕ), x->exp(-sum(x)))
-	Rₕ!(u, test_function)
-
-	w = Array{Float64,D}(undef, dims)
-	Bramble._func2array!(w, test_function, mesh(Wₕ))
-
-	w2 = reshape(w, prod(dims))
-	@test(validate_equal(u, w2))
-
-	avgₕ!(u, test_function)
-	__func2array_med(w, mesh(Wₕ))
-
-	vv = reshape(u.data, dims)
-	@test @views isapprox(vv[valid_range(D, dims)...], w[valid_range(D, dims)...]; atol = 1e-5)
-
-	u .= 1.0
-	der = ∇₋ₕ(u)
-	for i in 1:D
-		dd = D == 1 ? reshape(der.data, dims) : reshape(der[i].data, dims)
-		@views ee = dd[valid_range(i, dims)...]
-		@test(validate_zero(ee))
-	end
-
-	for dimension in 1:D
-		func = @embed(mesh(Wₕ), x->x[dimension])
-		Rₕ!(u, func)
-		der = ∇₋ₕ(u)
-
-		for i in 1:D
-			dd = D == 1 ? reshape(der.data, dims) : reshape(der[i].data, dims)
-			@views ee = dd[valid_range(i, dims)...]
-
-			@test(validate_equal(ee, (i != dimension ? 0.0 : 1.0)))
-		end
-	end
-end
-
-for i in 1:3
-	vector_element_tests(Val(i))
-end
-=#
 
 @testset "VectorElement Tests" begin
 	# Setup a mock space
@@ -271,5 +207,73 @@ end
 		# r14 = β ^ u # Might not be standard, depends on tmap! impl. Check if needed.
 		r15 = u .^ v # Elementwise
 		@test values(r15) ≈ u_data .^ v_data
+	end
+
+	@testset "Rₕ and avgₕ" begin
+		function vector_element_tests(::Val{D}) where D
+			dims, Wₕ, u = __init(Val(D))
+			CStyle = ComponentStyle(typeof(Wₕ))
+
+			v = element(Wₕ, 1.0)
+
+			#z = normₕ(v)
+
+			if D == 1
+				#@test isapprox(z, sqrt(sum(half_spacing_iterator(mesh(Wₕ)))))
+				#@test validate_zero(norm₊(D₋ₓ(u)))
+			elseif D == 2
+				#@test validate_equal(z, 5.0)
+			else
+				#@test validate_equal(z, 11.180339887498947)
+			end
+			#
+			@test length(u)==prod(dims)
+
+			for op in (+, -, *, /)
+				res = op.(u, v)
+				@test norm(res - map(op, u, v)) < 1e-16
+			end
+
+			test_function = x->exp(-sum(x))
+			Rₕ!(u, test_function)
+
+			w = Array{Float64,D}(undef, dims)
+			_func2array!(CStyle, w, test_function, Wₕ)
+
+			w2 = reshape(w, prod(dims))
+			@test norm(u - w2) < 1e-16
+
+			avgₕ!(u, test_function)
+			__func2array_med(w, mesh(Wₕ))
+
+			vv = reshape(values(u), dims)
+			@test @views norm(vv[valid_range(D, dims)...] - w[valid_range(D, dims)...]) < 1e-10
+			#=
+																		u .= 1.0
+																		der = ∇₋ₕ(u)
+																		for i in 1:D
+																			dd = D == 1 ? reshape(der.data, dims) : reshape(der[i].data, dims)
+																			@views ee = dd[valid_range(i, dims)...]
+																			@test(validate_zero(ee))
+																		end
+
+																		for dimension in 1:D
+																			func = x->x[dimension]
+																			Rₕ!(u, func)
+																			der = ∇₋ₕ(u)
+
+																			for i in 1:D
+																				dd = D == 1 ? reshape(der.data, dims) : reshape(der[i].data, dims)
+																				@views ee = dd[valid_range(i, dims)...]
+
+																				@test(validate_equal(ee, (i != dimension ? 0.0 : 1.0)))
+																			end
+																		end
+																		=#
+		end
+
+		for i in 1:3
+			vector_element_tests(Val(i))
+		end
 	end
 end
