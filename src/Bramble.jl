@@ -16,19 +16,20 @@ using FunctionWrappers: FunctionWrapper
 using Lazy: @forward
 
 using OrderedCollections: LittleDict, OrderedDict, freeze
-using OhMyThreads: tforeach, tmap!
-#using Base.Threads: @threads
+#using OhMyThreads: tforeach, tmap!, @tasks
+using Base.Threads: @threads
 using UnPack: @unpack
+using MuladdMacro
 
 using LinearAlgebra: norm#Diagonal, mul!, I
 #=import LinearAlgebra: ⋅
 
 using FillArrays: Ones, Eye
-
+=#
 using Cubature
 using Integrals: solve, IntegralFunction, IntegralProblem, QuadGKJL, CubatureJLh
-using WriteVTK
-=#
+#using WriteVTK
+
 abstract type BrambleType end
 
 # domain/interval handling functions
@@ -40,10 +41,10 @@ export mesh, hₘₐₓ, iterative_refinement!, change_points!
 
 # Space handling
 export gridspace, element
-#=
+
 export Rₕ, Rₕ!, avgₕ, avgₕ!
 export ndofs
-
+#=
 export innerₕ, innerₕ!
 export inner₊, inner₊ₓ, inner₊ᵧ, inner₊₂
 export snorm₁ₕ, norm₁ₕ, norm₊, normₕ
@@ -69,7 +70,7 @@ export ExporterVTK, addScalarDataset!, datasets, save2file, close
 
 #include("utils/style.jl")
 include("utils/backend.jl")
-#include("utils/linearalgebra.jl")
+include("utils/linearalgebra.jl")
 
 include("geometry/sets.jl")
 include("utils/bramblefunction.jl")
