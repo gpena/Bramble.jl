@@ -12,6 +12,8 @@ Returns the coefficients of the [VectorElement](@ref) `uₕ`.
 Reshapes the coefficients of the [VectorElement](@ref) `uₕ` to a matrix.
 """
 @inline to_matrix(uₕ::VectorElement{ST}) where ST = to_matrix(ComponentStyle(ST), uₕ)
+@inline to_matrix(::SingleComponent, uₕ::VectorElement) = Base.ReshapedArray(values(uₕ), npoints(mesh(space(uₕ)), Tuple), ())
+@inline to_matrix(::MultiComponent{D}, uₕ::VectorElement) where D = ntuple(i -> to_matrix(SingleComponent(), uₕ(i)), Val(D))
 
 """
 	values!(uₕ::VectorElement, s)
@@ -131,9 +133,6 @@ end
 	return nothing
 end
 
-@inline to_matrix(::SingleComponent, uₕ::VectorElement) = Base.ReshapedArray(values(uₕ), npoints(mesh(space(uₕ)), Tuple), ())
-@inline to_matrix(::MultiComponent{D}, uₕ::VectorElement) where D = ntuple(i -> to_matrix(SingleComponent(), uₕ(i)), Val(D))
-
 """
 	Rₕ!(uₕ::VectorElement, f)
 
@@ -182,7 +181,7 @@ end
 # Averaging operator #
 #                    #
 ######################
-#=
+
 """
 	avgₕ(Wₕ::AbstractSpaceType, f)
 
@@ -210,7 +209,8 @@ Please check the implementations of functions [cell_measure](@ref cell_measure(�
 """
 @inline function avgₕ(Wₕ::AbstractSpaceType, f)
 	uₕ = element(Wₕ)
-	_avgₕ!(uₕ, f, Val(dim(mesh(Wₕ))))
+	ST = typeof(space(uₕ))
+	_avgₕ!(ComponentStyle(ST), uₕ, f, Val(dim(mesh(Wₕ))))
 	return uₕ
 end
 
@@ -219,55 +219,42 @@ end
 
 In-place version of averaging operator [avgₕ](@ref).
 """
-@inline function avgₕ!(uₕ::VectorElement, f)
-	_avgₕ!(uₕ, f, Val(dim(mesh(space(uₕ)))))
+@inline function avgₕ!(uₕ::VectorElement{ST}, f) where ST
+	_avgₕ!(ComponentStyle(ST), uₕ, f, Val(dim(mesh(space(uₕ)))))
 	return nothing
 end
 
-function _avgₕ!(uₕ::VectorElement, f, ::Val{1})
+function _avgₕ!(::SingleComponent, uₕ::VectorElement{ST}, f, ::Val{1}) where ST
 	Ωₕ = mesh(space(uₕ))
 
-	x = Base.Fix1(half_points, Ωₕ)
-	h = Base.Fix1(half_spacing, Ωₕ)
+	x = Base.Fix1(_half_points, Ωₕ)
+	h = Base.Fix1(_half_spacing, Ωₕ)
 
-	param = (f, x, h, 1:npoints(Ωₕ)) ## indices(omegah)
-	__quad!(uₕ, (0, 1), param)
+	idxs = eachindex(uₕ)
+	param = (f, x, h, idxs)
+
+	__quad!(ComponentStyle(ST), uₕ, (0, 1), param)
 	return nothing
 end
 
-function _avgₕ!(uₕ::VectorElement, f::BrambleFunction{1}, ::Val{1})
-	Ωₕ = mesh(space(uₕ))
-
-	x = Base.Fix1(half_points, Ωₕ)
-	h = Base.Fix1(half_spacing, Ωₕ)
-
-	param = (f, x, h, 1:npoints(Ωₕ))
-	__quad!(uₕ, (0, 1), param)
+function _avgₕ!(::MultiComponent{N}, uₕ::VectorElement{ST}, f, ::Val{1}) where {N,ST}
 	return nothing
 end
 
-function _avgₕ!(uₕ::VectorElement, f, ::Val{D}) where D
+function _avgₕ!(::SingleComponent, uₕ::VectorElement{ST}, f, ::Val{D}) where {D,ST}
 	Ωₕ = mesh(space(uₕ))
 
-	x = Base.Fix1(half_points, Ωₕ)
-	meas = Base.Fix1(cell_measure, Ωₕ)
+	x = Base.Fix1(_half_points, Ωₕ)
+	meas = Base.Fix1(_cell_measure, Ωₕ)
 
 	param = (f, x, meas, indices(Ωₕ))
-	__quadnd!(uₕ, (zeros(D), ones(D)), param)
+	__quadnd!(ComponentStyle(ST), uₕ, (zeros(D), ones(D)), param)
 	return nothing
 end
 
-function _avgₕ!(uₕ::VectorElement, f::BrambleFunction{D}, ::Val{D}) where D
-	Ωₕ = mesh(space(uₕ))
-
-	x = Base.Fix1(half_points, Ωₕ)
-	meas = Base.Fix1(cell_measure, Ωₕ)
-
-	param = (f, x, meas, indices(Ωₕ))
-	__quadnd!(uₕ, (zeros(D), ones(D)), param)
+function _avgₕ!(::MultiComponent{N}, uₕ::VectorElement{ST}, f, ::Val{D}) where {N,D,ST}
 	return nothing
 end
-
 """
 	__integrand1d(y, t, p)
 
@@ -282,21 +269,25 @@ For efficiency, each integral in [avgₕ](@ref) is rewritten as an integral over
 function __integrand1d(y, t, p)
 	f, x, h, idxs = p
 
-	@inbounds for i in idxs
-		diff = (x(i + 1) - x(i))
-		y[i] = f(x(i) + t * diff) * diff / h(i)
+	@threads for i in idxs
+		local diff = (x(i + 1) - x(i))
+		@muladd y[i] = f(x(i) + t * diff) * diff / h(i)
 	end
 	return nothing
 end
 
-function __quad!(uₕ::VectorElement, domain::NTuple{2,T}, p::ParamType) where {T,ParamType}
+function __quad!(::SingleComponent, uₕ::VectorElement, domain::NTuple{2}, p::ParamType) where ParamType
 	prototype = zeros(ndofs(space(uₕ)))
 
 	func = IntegralFunction(__integrand1d, prototype)
 	prob = IntegralProblem(func, domain, p)
 	sol = solve(prob, CubatureJLh())
 
-	copyto!(uₕ.data, sol.u)
+	copyto!(uₕ, sol)
+	return nothing
+end
+
+function __quad!(::MultiComponent{N}, uₕ::VectorElement, domain::NTuple{2}, p::ParamType) where {N,ParamType}
 	return nothing
 end
 
@@ -307,7 +298,7 @@ function __idx2points(t, x, idx::CartesianIndex{D}) where D
 	ub = x(__shift_index1(idx))
 
 	diff = ub .- lb
-	point = ntuple(i -> lb[i] + t[i] * diff[i], D)
+	point = ntuple(i -> lb[i] + t[i] * diff[i], Val(D))
 
 	return point, diff
 end
@@ -322,7 +313,7 @@ For efficiency, each integral is calculated on ``[0,1]^D``, where ``D`` is the d
 function __integrandnd(y, t, p)
 	f, x, meas, idxs = p
 
-	for idx in idxs
+	@threads for idx in idxs
 		point, diff = __idx2points(t, x, idx)
 		y[idx] = f(point) * prod(diff) / meas(idx)
 	end
@@ -330,16 +321,20 @@ function __integrandnd(y, t, p)
 	return nothing
 end
 
-function __quadnd!(uₕ::VectorElement, domain::NTuple{D,T}, p::ParamType) where {D,T,ParamType}
+function __quadnd!(::SingleComponent, uₕ::VectorElement, domain::NTuple{D}, p::ParamType) where {D,ParamType}
+	data = values(uₕ)
 	npts = npoints(mesh(space(uₕ)), Tuple)
-	v = Base.ReshapedArray(uₕ.data, npts, ())
+	v = Base.ReshapedArray(data, npts, ())
 	prototype = v
 
 	func = IntegralFunction(__integrandnd, prototype)
 	prob = IntegralProblem(func, domain, p)
 	sol = solve(prob, CubatureJLh())
-	#@show sol.u
-	copyto!(v, sol.u)
+
+	copyto!(v, sol)
 	return nothing
 end
-=#
+
+function __quadnd!(::MultiComponent{N}, uₕ::VectorElement, domain::NTuple{D}, p::ParamType) where {N,D,ParamType}
+	return nothing
+end
