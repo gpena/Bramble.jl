@@ -1,4 +1,11 @@
+@inline function _parallel_for!(v, idxs, f)
+	@threads for idx in idxs
+		v[idx] = f(idx)
+	end
+	return nothing
+end
 
+#=
 # some helper functions to calculate the inner products in discrete spaces
 @inline function _dot(u::Vector{T}, v::Vector{T}, w::Vector{T}) where T
 	s = zero(T)
@@ -40,7 +47,7 @@ end
 	rows = A.rowval
 	vals = A.nzval
 	ptrs = A.colptr
-	
+
 	@inbounds @simd for j in eachindex(h, u)
 		zj = z[j]
 		for idx in ptrs[j]:(ptrs[j + 1] - 1)
@@ -51,12 +58,11 @@ end
 	end
 end
 
-
 @inline function _inner_product_add!(z, A::SparseMatrixCSC{T,Int}, h::Vector{T}, v::Vector{T}) where T
 	rows = A.rowval
 	vals = A.nzval
 	ptrs = A.colptr
-	
+
 	@inbounds @simd for j in eachindex(h, v)
 		zj = z[j]
 		for idx in ptrs[j]:(ptrs[j + 1] - 1)
@@ -102,4 +108,5 @@ function __sp_tuple_matrix_transpose_times_vector(y, A1, A2, x1, x2, d1, d2)
 	end
 	return nothing
 end
+=#
 =#
