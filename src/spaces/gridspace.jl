@@ -1,10 +1,3 @@
-@inline function _parallel_for!(v, idxs, f)
-	tforeach(idxs) do idx
-		v[idx] = f(idx)
-	end
-	return nothing
-end
-
 # Getters for SpaceWeights
 @inline weights_innerh(weights::SpaceWeights) = weights.innerh
 @inline weights_innerplus(weights::SpaceWeights) = weights.innerplus
@@ -53,20 +46,20 @@ function gridspace(Ωₕ::AbstractMeshType{D}; cache_average_matrices = false, c
 	b = backend(Ωₕ)
 	npts = npoints(Ωₕ)
 
-	@info "Create weights"
+	#@info "Create weights"
 	weights = create_space_weights(Ωₕ)
 	diff_matrices = create_space_backward_diff_matrices(Ωₕ)
 	average_matrices = create_space_backward_diff_matrices(Ωₕ)
 
 	if cache_backward_diff_matrices
-		@info "Create differentiation matrices"
+		#@info "Create differentiation matrices"
 
 		# cache matrices in variable diff_matrices
 		# diff_matrices = create_backward_diff_matrices(Wₕ; vector = _create_vector(Ωₕ))
 	end
 
 	if cache_average_matrices
-		@info "Create average matrices"
+		#@info "Create average matrices"
 
 		# cache matrices in variable average_matrices
 		# average_matrices = create_average_matrices(Wₕ; vector = _create_vector(Ωₕ))
@@ -186,7 +179,6 @@ function build_innerh_weights!(u, Ωₕ::AbstractMeshType)
 	dims = npoints(Ωₕ, Tuple)
 
 	v = Base.ReshapedArray(u, dims, ())
-
 	_parallel_for!(v, idxs, f)
 end
 
@@ -198,19 +190,17 @@ Builds a set of weights based on the spacings, associated with the `component`-t
 function _innerplus_weights!(u::VT, Ωₕ, component = 1) where VT
 	T = eltype(VT)
 
-	#N = npoints(Ωₕ(component))
-	u[1] = zero(T)
 	f = Base.Fix1(spacing, Ωₕ(component))
 	idxs = indices(Ωₕ(component))
 
 	for idx in idxs
 		i = idx[1]
-		if i === 1
-			continue
-		end
 
 		u[i] = f(i)
 	end
+
+	u[1] = zero(T)
+	return nothing
 end
 
 """
