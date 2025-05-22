@@ -29,12 +29,7 @@ end
 @inline set(Ωₕ::Mesh1D) = Ωₕ.set
 
 @inline _points(Ωₕ::Mesh1D) = Ωₕ.pts
-@inline function _points(Ωₕ::Mesh1D, i)
-	#idx = CartesianIndex(i)
-	#@assert idx in indices(Ωₕ)
-
-	return getindex(_points(Ωₕ), i)
-end
+@inline _points(Ωₕ::Mesh1D, i) = getindex(_points(Ωₕ), i)
 
 @inline _points_iterator(Ωₕ::Mesh1D) = (point for point in _points(Ωₕ))
 
@@ -74,47 +69,48 @@ end
 @inline _hₘₐₓ(Ωₕ::Mesh1D) = maximum(_spacing_iterator(Ωₕ))
 
 @inline function _spacing(Ωₕ::Mesh1D, i::Int)
-	if topo_dim(Ωₕ) == 0
+	if is_collapsed(Ωₕ)
 		return _eltype(Ωₕ)(0.0)
 	end
 
-	result = points(Ωₕ, 2) - points(Ωₕ, 1)
-	if i > 1
-		result = points(Ωₕ, i) - points(Ωₕ, i-1)
+	if i == 1
+		return points(Ωₕ, 2) - points(Ωₕ, 1)
 	end
 
-	return result
+	return points(Ωₕ, i) - points(Ωₕ, i-1)
 end
 
 @inline _spacing(Ωₕ::Mesh1D, i::CartesianIndex{1}) = _spacing(Ωₕ, i[1])
 
-@inline function _half_points(Ωₕ::Mesh1D, i)
+@inline function _half_points(Ωₕ::Mesh1D, i::Int)
 	T = eltype(Ωₕ)
 
-	@assert i in 1:(npoints(Ωₕ) + 1)
+	npts = _npoints(Ωₕ)
+	#@assert i in 1:(npts + 1)
 
-	if i === 1
+	if i == 1
 		return _points(Ωₕ, 1)
 	end
 
-	if i === _npoints(Ωₕ) + 1
-		return _points(Ωₕ, _npoints(Ωₕ))
+	if i == _npoints(Ωₕ) + 1
+		return _points(Ωₕ, npts)
 	end
 
-	return (_points(Ωₕ, i) + _points(Ωₕ, i - 1)) * convert(T, 0.5)
+	return (_points(Ωₕ, i) + _points(Ωₕ, i - 1)) * T(0.5)
 end
 
 @inline _spacing_iterator(Ωₕ::Mesh1D) = (_spacing(Ωₕ, i) for i in eachindex(_points(Ωₕ)))
 
 @inline function _half_spacing(Ωₕ::Mesh1D, i::Int)
 	npts = npoints(Ωₕ)
+	T = eltype(Ωₕ)
 
 	result = _spacing(Ωₕ, i)
 	if 1 < i < npts
 		result += _spacing(Ωₕ, i+1)
 	end
 
-	return result * 0.5
+	return result * T(0.5)
 end
 
 @inline _half_spacing(Ωₕ::Mesh1D, idx::CartesianIndex{1}) = _half_spacing(Ωₕ, idx[1])
@@ -154,11 +150,12 @@ function _mesh(Ω::Domain{CartesianProduct{1,T}}, npts::Tuple{Int}, unif::Tuple{
 	@unpack set, markers = Ω
 	n_points, = npts
 
-	if topo_dim(Ω) == 0
+	is_collapsed = topo_dim(set) == 0
+
+	if is_collapsed
 		n_points = 1
 	end
 
-	is_collapsed = topo_dim(set) == 0
 	is_uniform, = unif
 
 	pts = vector(backend, n_points)
@@ -189,8 +186,8 @@ function _iterative_refinement!(Ωₕ::Mesh1D)
 	new_points = vector(backend(Ωₕ), N_new)
 	old_points = _points(Ωₕ)
 
-	@views new_points[1:2:end] .= old_points
-	@views new_points[2:2:end] .= (old_points[1:(end - 1)] .+ old_points[2:end]) .* 0.5
+	@views @inbounds new_points[1:2:end] .= old_points
+	@views @inbounds new_points[2:2:end] .= (old_points[1:(end - 1)] .+ old_points[2:end]) .* 0.5
 
 	new_indices = generate_indices(N_new)
 
