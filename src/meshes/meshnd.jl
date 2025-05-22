@@ -23,7 +23,7 @@ end
 function _mesh(Ω::Domain, npts::NTuple{D,Int}, unif::NTuple{D,Bool}, backend) where D
 	@assert dim(Ω) == D
 	_set = set(Ω)
-	npts_with_collapsed = ntuple(i -> is_collapsed(_set(i)...) ? 1 : npts[i], D)
+	npts_with_collapsed = ntuple(i -> is_collapsed(_set(i)...) ? 1 : npts[i], Val(D))
 
 	idxs = generate_indices(npts_with_collapsed)
 	submeshes = generate_submeshes(Ω, npts_with_collapsed, unif, backend)
@@ -96,8 +96,6 @@ end
 	diagonals = Iterators.map(h -> hypot(h...), spacing_iterator(Ωₕ))
 	return maximum(diagonals)
 end
-
-#@inline _cell_measure(Ωₕ::MeshnD, idx) = prod(_half_spacing(Ωₕ, idx))
 
 @inline @generated function _cell_measure(Ωₕ::MeshnD{D}, idx) where D
 	if D == 0
