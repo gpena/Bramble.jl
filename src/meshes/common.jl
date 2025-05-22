@@ -95,13 +95,8 @@ Returns the dimension of the space where `Ωₕ` is embedded.
 
 Returns the topological dimension `Ωₕ`.
 """
-@inline function topo_dim(Ωₕ::AbstractMeshType)
-	D = dim(Ωₕ)
-	if D <= 0
-		return 0
-	end
-
-	terms = ntuple(i -> (npoints(Ωₕ(i)) == 1 ? 0 : dim(Ωₕ(i))), Val(D))
+@inline function topo_dim(Ωₕ::AbstractMeshType{D}) where D
+	terms = ntuple(i -> ifelse(npoints(Ωₕ(i)) == 1, 0, 1), Val(D))
 	return sum(terms)
 end
 
