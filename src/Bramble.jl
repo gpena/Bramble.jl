@@ -15,6 +15,8 @@ using SparseArrays: SparseMatrixCSC#, AbstractSparseMatrix, spdiagm
 using FunctionWrappers: FunctionWrapper
 using Lazy: @forward
 
+using StaticArrays
+
 using OrderedCollections: LittleDict, OrderedDict, freeze
 #using OhMyThreads: tforeach, tmap!, @tasks
 using Base.Threads: @threads
