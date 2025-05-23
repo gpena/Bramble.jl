@@ -180,6 +180,8 @@ function build_innerh_weights!(u, Ωₕ::AbstractMeshType)
 
 	v = Base.ReshapedArray(u, dims, ())
 	_parallel_for!(v, idxs, f)
+	# it should be 
+	# _parallel_map!(f, v, idxs)
 end
 
 """
@@ -215,14 +217,14 @@ function _innerplus_mean_weights!(u::VT, Ωₕ, component::Int = 1) where VT
 	N = npoints(Ωₕ(component))
 
 	for i in 2:(N - 1)#indices(Ωₕ(component)) <- try
-		if i === 1 || i === N
-			continue
-		end
+		#if i === 1 || i === N
+		#	continue
+		#end
 
-		u[i] = half_spacing(Ωₕ(component), i)
+		@inbounds u[i] = half_spacing(Ωₕ(component), i)
 	end
 
-	u[npoints(Ωₕ(component))] = zero(T)
+	u[N] = zero(T)
 end
 
 @inline @generated function __prod(diags::NTuple{D,VT}, I) where {D,VT}
@@ -242,4 +244,6 @@ function __innerplus_weights!(v, innerplus_per_component)
 	idxs = CartesianIndices(v)
 	f = Base.Fix1(__prod, innerplus_per_component)
 	_parallel_for!(v, idxs, f)
+
+	return nothing
 end
