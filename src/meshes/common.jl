@@ -61,7 +61,7 @@ end
 @inline function interior_indices(indices::CartesianIndices{D}) where D
 	original_ranges = indices.indices
 
-	interior_ranges_tuple = ntuple(D) do i
+	interior_ranges_tuple = ntuple(Val(D)) do i
 		r = original_ranges[i]
 
 		if length(r) <= 1
@@ -96,7 +96,7 @@ Returns the dimension of the space where `Ωₕ` is embedded.
 Returns the topological dimension `Ωₕ`.
 """
 @inline function topo_dim(Ωₕ::AbstractMeshType{D}) where D
-	terms = ntuple(i -> ifelse(npoints(Ωₕ(i)) == 1, 0, 1), Val(D))
+	terms = ntuple(i -> ifelse(npoints(Ωₕ(i)) == 1, false, true), Val(D))
 	return sum(terms)
 end
 
