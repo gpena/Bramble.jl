@@ -87,7 +87,7 @@ end
 @inline _spacing_iterator(Ωₕ::MeshnD{D}) where D = Iterators.product(ntuple(i -> _spacing_iterator(Ωₕ(i)), Val(D))...)
 @inline _half_spacing_iterator(Ωₕ::MeshnD{D}) where D = Iterators.product(ntuple(i -> _half_spacing_iterator(Ωₕ(i)), Val(D))...)
 
-@inline _apply_hs_logic(value::T) where T = ifelse(value == zero(T), one(T), value)
+@inline _apply_hs_logic(value::T) where T = ifelse(iszero(value), one(T), value)
 
 @inline _npoints(Ωₕ::MeshnD) = prod(_npoints(Ωₕ, Tuple))
 @inline _npoints(Ωₕ::MeshnD{D}, ::Type{Tuple}) where D = ntuple(i -> _npoints(Ωₕ(i)), Val(D))
