@@ -73,11 +73,12 @@ end
 		return _eltype(Ωₕ)(0.0)
 	end
 
+	pts = _points(Ωₕ)
 	if i == 1
-		return points(Ωₕ, 2) - points(Ωₕ, 1)
+		return pts[2] - pts[1]
 	end
 
-	return points(Ωₕ, i) - points(Ωₕ, i-1)
+	return pts[i] - pts[i-1]
 end
 
 @inline _spacing(Ωₕ::Mesh1D, i::CartesianIndex{1}) = _spacing(Ωₕ, i[1])
@@ -86,17 +87,19 @@ end
 	T = eltype(Ωₕ)
 
 	npts = _npoints(Ωₕ)
+	pts = _points(Ωₕ)
+
 	#@assert i in 1:(npts + 1)
 
 	if i == 1
-		return _points(Ωₕ, 1)
+		return pts[1]
 	end
 
 	if i == _npoints(Ωₕ) + 1
-		return _points(Ωₕ, npts)
+		return pts[npts]
 	end
 
-	return (_points(Ωₕ, i) + _points(Ωₕ, i - 1)) * T(0.5)
+	return (pts[i] + pts[i-1]) * T(0.5)
 end
 
 @inline _spacing_iterator(Ωₕ::Mesh1D) = (_spacing(Ωₕ, i) for i in eachindex(_points(Ωₕ)))
@@ -121,9 +124,9 @@ end
 
 @inline _cell_measure(Ωₕ::Mesh1D, i) = _half_spacing(Ωₕ, i)
 
-@inline _cell_measure_iterator(Ωₕ::Mesh1D) = map(Base.Fix1(_cell_measure, Ωₕ), indices(Ωₕ))
+@inline _cell_measure_iterator(Ωₕ::Mesh1D) = (_cell_measure(Ωₕ, i) for i in indices(Ωₕ))
 
-_generate_random_points!(v) = (rand!(v); sort!(v); nothing)
+_generate_random_points!(v) = (rand!(v); sort!(v); return nothing)
 
 @inline function _set_points!(x, I::CartesianProduct{1}, unif::Bool)
 	npts = length(x)
