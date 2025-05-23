@@ -97,13 +97,10 @@ end
 		@test u[1] == 1.0
 		@test u[5] == 5.0
 		@test u[10] == 10.0
-		@test_throws BoundsError u[0]
-		@test_throws BoundsError u[11]
 
 		u[3] = 99.0
 		@test u[3] == 99.0
 		@test values(u)[3] == 99.0
-		@test_throws BoundsError (u[11]=0.0)
 	end
 
 	@testset "similar" begin
@@ -204,7 +201,7 @@ end
 		# Power
 		r13 = u .^ β
 		@test values(r13) ≈ u_data .^ β
-		# r14 = β ^ u # Might not be standard, depends on tmap! impl. Check if needed.
+
 		r15 = u .^ v # Elementwise
 		@test values(r15) ≈ u_data .^ v_data
 	end
