@@ -98,9 +98,10 @@ function process_label_for_mesh!(markers_mesh::MeshMarkers{D}, set_labels) where
 	cart_idx_type = CartesianIndex{D}
 
 	for label in set_labels
-		idxs = MarkerIndices{D,cart_idxs_type}(Set{cart_idx_type}(), Set{cart_idxs_type}())
-		markers_mesh[label] = idxs
+		markers_mesh[label] = MarkerIndices{D,cart_idxs_type}(Set{cart_idx_type}(), Set{cart_idxs_type}())
 	end
+
+	return nothing
 end
 
 function _init_mesh_markers(_::AbstractMeshType{D}, domain_markers::DomainMarkers) where D
@@ -126,6 +127,8 @@ function set_markers!(Ωₕ::AbstractMeshType, domain_markers)
 	_set_markers_conditions!(mesh_markers, conditions(domain_markers), Ωₕ)
 
 	Ωₕ.markers = mesh_markers
+
+	return nothing
 end
 
 function __process_symbols(identifier)
@@ -133,9 +136,10 @@ function __process_symbols(identifier)
 	return Set{Symbol}(source_iterable)
 end
 
-function _set_markers_symbols!(mesh_markers::MeshMarkers{D}, symbols, Ωₕ) where D
+function _set_markers_symbols!(mesh_markers::MeshMarkers, symbols, Ωₕ)
 	symbol_to_index_map = boundary_symbol_to_dict(indices(Ωₕ))
 
+	D = dim(Ωₕ)
 	for marker in symbols
 		@unpack label, identifier = marker
 		marker_label = mesh_markers[label]
@@ -146,6 +150,8 @@ function _set_markers_symbols!(mesh_markers::MeshMarkers{D}, symbols, Ωₕ) whe
 
 		union!(target_indices, indices_to_add)
 	end
+
+	return nothing
 end
 
 function __process_condition!(mesh_marker, identifier, Ωₕ)
@@ -153,6 +159,7 @@ function __process_condition!(mesh_marker, identifier, Ωₕ)
 	indices_to_add = (idx for idx in indices(Ωₕ) if identifier(points(Ωₕ, idx)))
 
 	union!(c_index, indices_to_add)
+	return nothing
 end
 
 function _set_markers_conditions!(mesh_markers::MeshMarkers, conditions, Ωₕ)
@@ -162,6 +169,8 @@ function _set_markers_conditions!(mesh_markers::MeshMarkers, conditions, Ωₕ)
 		__process_condition!(mesh_markers[label], identifier, Ωₕ)
 		merge_consecutive_indices!(mesh_markers[label])
 	end
+
+	return nothing
 end
 
 """
