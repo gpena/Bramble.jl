@@ -1,4 +1,4 @@
-using Bramble: interval
+using Bramble: interval, embed_function
 
 @setup_workload begin
 	# --- Basic Types and Intervals ---
@@ -10,16 +10,15 @@ using Bramble: interval
 	# Basic Float64 interval (most common case via interval())
 	I_f64 = interval(-3.0, 10.0)
 
-	# Basic Int intervals/products (using cartesianproduct(NTuple))
-	I_int = cartesianproduct(((0, 1),))         # 1D Int
-	R2_int = cartesianproduct(((0, 1), (2, 3))) # 2D Int
+	# Basic Int intervals/products (using cartesian_product(NTuple))
+	I_int = cartesian_product(((0, 1),))         # 1D Int
+	R2_int = cartesian_product(((0, 1), (2, 3))) # 2D Int
 
 	# Basic Float32 product
-	R2_f32 = cartesianproduct(((0.0f0, 1.0f0), (2.0f0, 3.0f0))) # 2D Float32
+	R2_f32 = cartesian_product(((0.0f0, 1.0f0), (2.0f0, 3.0f0))) # 2D Float32
 
 	# --- Higher Dimensional Products (Float64) ---
-	# Reuse I_f64 for consistency
-	R1_f64 = cartesianproduct(I_f64) # Essentially I_f64 but via cartesianproduct
+	R1_f64 = cartesian_product(I_f64) # Essentially I_f64 but via cartesian_product
 	R2_f64 = R1_f64 × interval(0.0, 1.0)
 	R3_f64 = R2_f64 × interval(2.0, 3.0)
 	R4_f64 = R1_f64 × R3_f64 # Test product of non-1D products
@@ -27,26 +26,26 @@ using Bramble: interval
 	# Collection of representative products
 	products = (I_f64, R1_f64, I_int, R2_int, R2_f32, R2_f64, R3_f64, R4_f64)
 
-	# @info "Precompiling CartesianProduct methods..." # Keep info if useful during build
 	@compile_workload begin
 		# --- Constructors ---
 		# interval(x, y) with various types (results in Float64 Product)
 		for p in combinations
 			interval(p...)
 		end
+
 		# interval(::CartesianProduct{1})
 		interval(I_f64)
 		interval(I_int) # Note: Creates Float64 product
 
-		# cartesianproduct(x, y) alias
-		cartesianproduct(-1.0, 1.0)
+		# cartesian_product(x, y) alias
+		cartesian_product(-1.0, 1.0)
 
-		# cartesianproduct(::NTuple) (creates specific type)
-		cartesianproduct(((0, 1),))         # Int
-		cartesianproduct(((0.0, 1.0),))     # Float64
-		cartesianproduct(((0.0f0, 1.0f0),)) # Float32
-		cartesianproduct(((0, 1), (2, 3)))  # 2D Int
-		cartesianproduct(((0.0, 1.0), (2.0, 3.0))) # 2D Float64
+		# cartesian_product(::NTuple) (creates specific type)
+		cartesian_product(((0, 1),))         # Int
+		cartesian_product(((0.0, 1.0),))     # Float64
+		cartesian_product(((0.0f0, 1.0f0),)) # Float32
+		cartesian_product(((0, 1), (2, 3)))  # 2D Int
+		cartesian_product(((0.0, 1.0), (2.0, 3.0))) # 2D Float64
 
 		#box
 		box(0, 1)         # Int
@@ -56,9 +55,9 @@ using Bramble: interval
 		box((0, 1, 4), (2, 3, 5))  # 3D Int
 		box((0.0, 1.0, 3.0), (2.0, 3.0, 4.0)) # 3D Float64
 
-		# cartesianproduct(::CartesianProduct) (identity)
-		cartesianproduct(I_f64)
-		cartesianproduct(R2_int)
+		# cartesian_product(::CartesianProduct) (identity)
+		cartesian_product(I_f64)
+		cartesian_product(R2_int)
 
 		# --- Accessors & Properties ---
 		for P in products
@@ -79,7 +78,7 @@ using Bramble: interval
 			# projection(P, i)
 			for i in 1:D
 				proj = projection(P, i) # Creates CartesianProduct{1}
-				# Maybe access the result of projection too
+
 				first(proj)
 				last(proj)
 				tails(proj)
@@ -95,41 +94,34 @@ using Bramble: interval
 
 		# --- Operations ---
 		# × operator (already created R2_f64, R3_f64, R4_f64 above)
-		# Add a specific Int x Int case if not covered by setup
 		I_int × I_int
-		# Add Float32 x Float32
-		cartesianproduct(((0.0f0, 1.0f0),)) × cartesianproduct(((2.0f0, 3.0f0),))
 
-		# The loop from the original code (covers reduce(×, ...))
-		# Kept for safety, although × is likely covered above
+		# Add Float32 x Float32
+		cartesian_product(((0.0f0, 1.0f0),)) × cartesian_product(((2.0f0, 3.0f0),))
+
 		for i in 1:3
 			Ii = ntuple(j -> I_f64, i) # Tuple of intervals
 			Ω = reduce(×, Ii)
 			projection(Ω, 1)
 			tails(Ω)
 			tails(Ω, 1)
-			# The @embed call is removed as it might be external
-			# f1 = @embed(Ω, x->x[i])
 		end
 	end
-	# @info "Precompilation done." # Optional closing message
 end
 
 @setup_workload begin
-	# --- Assume basic sets are available from previous setup ---
-	# Or redefine minimal ones if needed for this specific workload block
 	I_f64 = interval(-1.0, 1.0)
-	X1 = I_f64 # Alias for clarity
+	X1 = I_f64
 	X2 = X1 × interval(0.0, 2.0)
 	X3 = X2 × interval(-0.5, 0.5)
-	test_sets = (X1, X2, X3) # Sets for testing domain creation
+	test_sets = (X1, X2, X3)
 
 	# --- Define helper functions needed ---
 	f_1d = x -> x[1] - 0.0 <= 0
 	f_2d = x -> x[1]^2 + x[2]^2 - 0.5 >= 0
 	f_3d = x -> x[1] + x[2] + x[3] - 1.0 == 0
 	test_funcs = (f_1d, f_2d, f_3d)
-end # @setup_workload
+end
 
 @compile_workload begin
 	# === Boundary Symbols ===
@@ -146,27 +138,29 @@ end # @setup_workload
 		sym1 = boundary_syms[1]
 		sym_tuple = D > 1 ? (boundary_syms[1], boundary_syms[2]) : (boundary_syms[1],)
 
-		# === process_identifier (called implicitly via create_markers, but add direct calls for certainty) ===
 		process_identifier(X_set, f_for_dim)
 		process_identifier(X_set, sym1)
 		process_identifier(X_set, sym_tuple)
+
 		try
 			process_identifier(X_set, 123)
 		catch
-		end # Test error path
+		end
 
 		# === create_markers ===
-		m_func = create_markers(X_set, :m_func => f_for_dim)
-		m_sym = create_markers(X_set, :m_sym => sym1)
-		m_tup = create_markers(X_set, :m_tup => sym_tuple)
-		m_mixed = create_markers(X_set, :m_func => f_for_dim, :m_sym => sym1, :m_tup => sym_tuple)
-		m_empty = create_markers(X_set)
+		m_func = markers(X_set, :m_func => f_for_dim)
+		m_sym = markers(X_set, :m_sym => sym1)
+		m_tup = markers(X_set, :m_tup => sym_tuple)
+		m_mixed = markers(X_set, :m_func => f_for_dim, :m_sym => sym1, :m_tup => sym_tuple)
+		m_empty = markers(X_set)
 
 		# === Domain Constructors ===
 		# Default constructor
 		d_def = domain(X_set)
+
 		# Constructor with marker tuple
 		d_tup = domain(X_set, m_mixed)
+
 		# Constructor with varargs pairs
 		d_vp = domain(X_set, :m_func => f_for_dim, :m_sym => sym1)
 
@@ -174,7 +168,7 @@ end # @setup_workload
 		domains_to_test = (d_def, d_tup, d_vp)
 		for dom in domains_to_test
 			set(dom)
-			# dim/eltype/projection call Domain methods which might differ from CartesianProduct ones
+
 			dim(dom)
 			eltype(dom)
 			dim(typeof(dom))
@@ -182,11 +176,13 @@ end # @setup_workload
 			if dim(dom) > 0
 				projection(dom, 1)
 			end
+
 			# Test marker accessors
 			mks = marker_identifiers(dom)
 			sbs = marker_symbols(dom)
 			tds = marker_tuples(dom)
 			fds = marker_conditions(dom)
+
 			# Iterate through generators to force compilation
 			collect(mks)
 			collect(sbs)
@@ -195,10 +191,10 @@ end # @setup_workload
 		end
 
 		# === Show Methods ===
-		# Create specific Marker instances (assuming embed_function works)
+		# Create specific Marker instances
 		marker_func = Marker(:a, embed_function(X_set, f_for_dim))
 		marker_sym = Marker(:b, sym1)
 		marker_tup = Marker(:c, sym_tuple)
 	end
-	@info "Domains: complete" # Specific message
-end # @compile_workload
+	@info "Domains: complete"
+end
