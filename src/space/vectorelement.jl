@@ -7,7 +7,7 @@ Returns the coefficients of the [VectorElement](@ref) `uₕ`.
 @inline values(uₕ::VectorElement) = uₕ.data
 
 """
-	to_matrix(uₕ::VectorElement)
+	to_matrix([::ComponentStyle], uₕ::VectorElement)
 
 Reshapes the coefficients of the [VectorElement](@ref) `uₕ` to a matrix.
 """
@@ -28,15 +28,16 @@ Copies the values of `s` into the coefficients of [VectorElement](@ref) `uₕ`.
 Returns the grid space associated with [VectorElement](@ref) `uₕ`.
 """
 @inline space(uₕ::VectorElement) = uₕ.space
+@inline space_type(::Type{<:VectorElement{S}}) where S = S
 
-@forward VectorElement.data (Base.size, Base.length, Base.firstindex, Base.lastindex, Base.iterate, Base.eltype, Base.axes)
+@forward VectorElement.data (Base.size, Base.length, Base.firstindex, Base.lastindex, Base.iterate, Base.eltype, Base.axes, Base.ndims, Bramble.show)
 @forward VectorElement.space (Bramble.mesh,)
 
 # Constructor for VectorElement
 """
-	element(Wₕ::AbstractSpaceType)
+	element(Wₕ::AbstractSpaceType, [α::Number])
 
-Returns a [VectorElement](@ref) for grid space `Wₕ` with uninitialized components.
+Returns a [VectorElement](@ref) for grid space `Wₕ` with uninitialized components. if `\\alpha` is provided, the components are initialized to `\\alpha`.
 """
 @inline function element(Wₕ::AbstractSpaceType)
 	b = backend(Wₕ)
@@ -44,14 +45,9 @@ Returns a [VectorElement](@ref) for grid space `Wₕ` with uninitialized compone
 	ST = typeof(Wₕ)
 	VT = vector_type(b)
 	T = eltype(b)
-	VectorElement{ST,T,VT}(vector(b, ndofs(Wₕ)), Wₕ)
+	return VectorElement{ST,T,VT}(vector(b, ndofs(Wₕ)), Wₕ)
 end
 
-"""
-	element(Wₕ::AbstractSpaceType, α::Number)
-
-Returns a [VectorElement](@ref) for a grid space `Wₕ` with all components equal to `α`.
-"""
 function element(Wₕ::AbstractSpaceType, α::Number)
 	uₕ = element(Wₕ)
 	fill!(uₕ, α)
@@ -71,17 +67,8 @@ Returns a [VectorElement](@ref) for a grid space `Wₕ` with the same coefficien
 	return elem
 end
 
-@inline Base.@propagate_inbounds function getindex(uₕ::VectorElement, i)
-	@unpack data = uₕ
-	@boundscheck checkbounds(data, i)
-	return getindex(data, i)
-end
-
-@inline Base.@propagate_inbounds function setindex!(uₕ::VectorElement, val, i)
-	@unpack data = uₕ
-	@boundscheck checkbounds(data, i)
-	setindex!(data, val, i)
-end
+@inline Base.@propagate_inbounds getindex(uₕ::VectorElement, i) = getindex(uₕ.data, i)
+@inline Base.@propagate_inbounds setindex!(uₕ::VectorElement, val, i) = (setindex!(uₕ.data, val, i); return)
 
 @inline Base.similar(uₕ::VectorElement) = element(space(uₕ))
 
@@ -120,37 +107,63 @@ end
 #                      #
 ########################
 
-function _func2array!(::SingleComponent, u, f, space)
-	Ωₕ = mesh(space)
-	idxs = indices(Ωₕ)
+function _func2array!(::SingleComponent, u, g, mesh_indices::NTuple)
+	u .= zero(eltype(u))
 
-	g(idx) = f(points(Ωₕ, idx))
-	_parallel_for!(u, idxs, g)
-	return nothing
+	@inbounds @simd for idxs in mesh_indices
+		_apply!(u, g, idxs)
+	end
 end
 
-@inline function _func2array!(::MultiComponent{D}, u, f, mesh) where D
-	return nothing
+@inline _func2array!(::SingleComponent, u, g, mesh_indices::CartesianIndices) = (_parallel_for!(u, mesh_indices, g))
+@inline _func2array!(::MultiComponent{D}, u, f, mesh) where D = nothing
+
+struct PointwiseEvaluator{F,M}
+	func::F
+	mesh::M
 end
+
+@inline func(pe::PointwiseEvaluator) = pe.func
+@inline mesh(pe::PointwiseEvaluator) = pe.mesh
+
+(pe::PointwiseEvaluator)(idx) = func(pe)(point(mesh(pe), idx))
 
 """
-	Rₕ!(uₕ::VectorElement, f)
+	Rₕ!(uₕ::VectorElement, f; markers)
 
 In-place version of the restriction operator [Rₕ](@ref).
 """
-@inline function Rₕ!(uₕ::VectorElement{ST}, f) where ST
+@inline function Rₕ!(uₕ::VectorElement{ST}, f; markers::NTuple{N,Symbol} = NTuple{0,Symbol}()) where {N,ST}
+	if N > 0
+		@warn "Check that restricting to markers is working properly"
+	end
+
 	@unpack data, space = uₕ
+	Ωₕ = mesh(space)
+
 	CStyle = ComponentStyle(ST)
 	u = to_matrix(CStyle, uₕ)
 
-	_func2array!(CStyle, u, f, space)
-	return nothing
+	g = PointwiseEvaluator(f, Ωₕ)
+
+	if N == 0
+		_func2array!(CStyle, u, g, indices(Ωₕ))
+		return
+	end
+
+	mesh_indices = ntuple(i->marker(Ωₕ, markers[i]), Val(N))
+	_func2array!(CStyle, u, g, mesh_indices)
 end
 
-"""
-	Rₕ(Wₕ::AbstractSpaceType, f)
+#@inline fuse_markers(_::Nothing, _::Nothing) = ()
+#@inline fuse_markers(marker::Symbol, _::Nothing) = (marker,)
+#@inline fuse_markers(_::Nothing, markers::NTuple{N,Symbol}) where N = markers
+#@inline fuse_markers(marker::Symbol, markers::NTuple{N,Symbol}) where N = (marker, markers...)
 
-Standard nodal restriction operator. It returns a [VectorElement](@ref) with the result of evaluating the function `f` at the points of `mesh(Wₕ)`. It can accept any function (like `x->x[2]+x[1])`) or a [BrambleFunction](@ref). The latter is preferred.
+"""
+	Rₕ(Wₕ::AbstractSpaceType, f; markers)
+
+Standard nodal restriction operator. It returns a [VectorElement](@ref) with the result of evaluating the function `f` at the points of `mesh(Wₕ)`. It is defined as follows
 
   - 1D case
 
@@ -169,10 +182,12 @@ Standard nodal restriction operator. It returns a [VectorElement](@ref) with the
 ```math
 \\textrm{R}ₕ (x_i, y_j, z_l)= f(x_i, y_j, z_l), \\, i = 1,\\dots,N_x,  j = 1,\\dots,N_y, l = 1,\\dots,N_z
 ```
+
+An optional tuple of marker smbols can be passed and the restriction will only be calculated w.r.t the degrees of freedom related with those markers.
 """
-function Rₕ(Wₕ::AbstractSpaceType, f)
+function Rₕ(Wₕ::AbstractSpaceType, f; markers::NTuple{N,Symbol} = NTuple{0,Symbol}()) where N
 	uₕ = element(Wₕ)
-	Rₕ!(uₕ, f)
+	Rₕ!(uₕ, f, markers = markers)
 	return uₕ
 end
 
@@ -185,7 +200,7 @@ end
 """
 	avgₕ(Wₕ::AbstractSpaceType, f)
 
-Returns a [VectorElement](@ref) with the average of function `f` with respect to the [cell_measure](@ref) of `mesh(Wₕ)` around each grid point. It can accept any function (like `x->x[2]+x[1])`) or a [BrambleFunction](@ref). The latter is preferred. It is defined as follows
+Returns a [VectorElement](@ref) with the average of function `f` with respect to the [cell_measure](@ref) of `mesh(Wₕ)` around each grid point. It is defined as follows
 
   - 1D case
 
@@ -220,40 +235,46 @@ end
 In-place version of averaging operator [avgₕ](@ref).
 """
 @inline function avgₕ!(uₕ::VectorElement{ST}, f) where ST
-	_avgₕ!(ComponentStyle(ST), uₕ, f, Val(dim(mesh(space(uₕ)))))
-	return nothing
+	Ωₕ = mesh(space(uₕ))
+	_f = embed_function(set(Ωₕ), f)
+
+	_avgₕ!(ComponentStyle(ST), uₕ, _f, Val(dim(Ωₕ)))
+	return
 end
 
 function _avgₕ!(::SingleComponent, uₕ::VectorElement{ST}, f, ::Val{1}) where ST
 	Ωₕ = mesh(space(uₕ))
 
-	x = Base.Fix1(_half_points, Ωₕ)
-	h = Base.Fix1(_half_spacing, Ωₕ)
+	x = half_points(Ωₕ)
+	h = half_spacings(Ωₕ)
 
 	idxs = eachindex(uₕ)
 	param = (f, x, h, idxs)
 
 	__quad!(ComponentStyle(ST), uₕ, (0, 1), param)
-	return nothing
+	return
 end
 
 function _avgₕ!(::MultiComponent{N}, uₕ::VectorElement{ST}, f, ::Val{1}) where {N,ST}
-	return nothing
+	return
 end
 
 function _avgₕ!(::SingleComponent, uₕ::VectorElement{ST}, f, ::Val{D}) where {D,ST}
 	Ωₕ = mesh(space(uₕ))
 
-	x = Base.Fix1(_half_points, Ωₕ)
-	meas = Base.Fix1(_cell_measure, Ωₕ)
-
+	x = half_points(Ωₕ)
+	meas = Base.Fix1(cell_measure, Ωₕ)
 	param = (f, x, meas, indices(Ωₕ))
-	__quadnd!(ComponentStyle(ST), uₕ, (zeros(D), ones(D)), param)
-	return nothing
+
+	_zeros = @SVector zeros(D)
+	_ones = @SVector ones(D)
+
+	__quadnd!(ComponentStyle(ST), uₕ, (_zeros, _ones), param)
+	return
 end
 
 function _avgₕ!(::MultiComponent{N}, uₕ::VectorElement{ST}, f, ::Val{D}) where {N,D,ST}
-	return nothing
+	return
 end
 """
 	__integrand1d(y, t, p)
@@ -266,41 +287,47 @@ For efficiency, each integral in [avgₕ](@ref) is rewritten as an integral over
 \\int_{a}^{b} f(x) dx = (b-a) \\int_{0}^{1} f(a + t (b-a)) dt
 ```
 """
-function __integrand1d(y, t, p)
+@inline @muladd function __integrand1d(y, t, p)
 	f, x, h, idxs = p
 
-	@threads for i in idxs
-		local diff = (x(i + 1) - x(i))
-		@muladd y[i] = f(x(i) + t * diff) * diff / h(i)
+	@inbounds @simd for idx in idxs
+		i = idx[1]
+		xip1 = x[i + 1]
+		xi = x[i]
+		diff = xip1 - xi
+		y[i] = f(xi + t * diff) * diff / h[i]
 	end
-	return nothing
+	return
 end
 
 function __quad!(::SingleComponent, uₕ::VectorElement, domain::NTuple{2}, p::ParamType) where ParamType
-	prototype = zeros(ndofs(space(uₕ)))
-
-	func = IntegralFunction(__integrand1d, prototype)
-	prob = IntegralProblem(func, domain, p)
-	sol = solve(prob, CubatureJLh())
+	domain_to_float = float.(domain)
+	prototype = values(uₕ)
+	sol = __quad_problem(prototype, domain_to_float, p)
 
 	copyto!(uₕ, sol)
-	return nothing
+	return
 end
 
 function __quad!(::MultiComponent{N}, uₕ::VectorElement, domain::NTuple{2}, p::ParamType) where {N,ParamType}
-	return nothing
+	return
 end
 
-@inline @generated __shift_index1(idx::CartesianIndex{D}) where D = :(Base.Cartesian.@ntuple $D i->idx[i] + 1)
+@inline @muladd function _point_tuple_and_volume(t::SVector{D}, x, idx::CartesianIndex{D}) where D
+	lb_tuple = ntuple(i -> x[i][idx[i]], Val(D))
+	ub_tuple = ntuple(i -> x[i][idx[i] + 1], Val(D))
 
-function __idx2points(t, x, idx::CartesianIndex{D}) where D
-	lb = x(Tuple(idx))
-	ub = x(__shift_index1(idx))
+	lb = SVector(lb_tuple)
+	ub = SVector(ub_tuple)
 
-	diff = ub .- lb
-	point = ntuple(i -> lb[i] + t[i] * diff[i], Val(D))
+	point_svector = lb .+ t .* (ub .- lb)
 
-	return point, diff
+	volume_element = one(eltype(lb))
+	for i in 1:D
+		volume_element *= (ub[i] - lb[i])
+	end
+
+	return Tuple(point_svector), volume_element
 end
 
 """
@@ -313,28 +340,36 @@ For efficiency, each integral is calculated on ``[0,1]^D``, where ``D`` is the d
 function __integrandnd(y, t, p)
 	f, x, meas, idxs = p
 
-	@threads for idx in idxs
-		point, diff = __idx2points(t, x, idx)
-		y[idx] = f(point) * prod(diff) / meas(idx)
+	@inbounds @simd for idx in idxs
+		point_tuple, volume_element = _point_tuple_and_volume(t, x, idx)
+		y[idx] = f(point_tuple) * volume_element / meas(idx)
 	end
 
-	return nothing
+	return
 end
 
-function __quadnd!(::SingleComponent, uₕ::VectorElement, domain::NTuple{D}, p::ParamType) where {D,ParamType}
-	data = values(uₕ)
-	npts = npoints(mesh(space(uₕ)), Tuple)
-	v = Base.ReshapedArray(data, npts, ())
-	prototype = v
+@inline int_function(::Val{D}) where D = __integrandnd
+@inline int_function(::Val{1}) = __integrand1d
 
-	func = IntegralFunction(__integrandnd, prototype)
-	prob = IntegralProblem(func, domain, p)
-	sol = solve(prob, CubatureJLh())
+function __quad_problem(prototype, domain, p)
+	D = length(size(prototype))
+	T = eltype(domain[1])
 
+	func = IntegralFunction(int_function(Val(D)), prototype)
+	prob = IntegralProblem{true}(func, domain, p)
+	sol = solve(prob, CubatureJLh()).u
+
+	return sol::Array{T,D}
+end
+
+function __quadnd!(::SingleComponent, uₕ::VectorElement, domain::NTuple{S,SV}, p::ParamType) where {S,SV,ParamType}
+	v = to_matrix(SingleComponent(), uₕ)
+
+	sol = __quad_problem(v, domain, p)
 	copyto!(v, sol)
-	return nothing
+	return
 end
 
 function __quadnd!(::MultiComponent{N}, uₕ::VectorElement, domain::NTuple{D}, p::ParamType) where {N,D,ParamType}
-	return nothing
+	return
 end

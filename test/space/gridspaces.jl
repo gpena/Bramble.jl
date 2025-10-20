@@ -1,8 +1,8 @@
-using Bramble: __prod, mesh, box, domain, interval, dim, backend, npoints, vector, matrix, _innerplus_weights!, spacing, build_innerh_weights!, _innerplus_mean_weights!, __innerplus_weights!, half_spacing, create_space_weights, SpaceWeights,
-			   create_space_backward_diff_matrices, vector_type, matrix_type, mesh, weights, has_backward_diff_matrix, has_average_matrix, gridspace, ndofs
+using Bramble: __prod, mesh, box, domain, interval, dim, backend, npoints, vector, matrix, _innerplus_weights!, spacing, _innerh_weights!, _innerplus_mean_weights!, __innerplus_weights!, half_spacing, space_weights, SpaceWeights,
+			   vector_type, matrix_type, mesh, weights, has_backward_difference_matrix, has_average_matrix, gridspace, ndofs, backward_difference_matrices
 using LinearAlgebra: norm
 
-@testset "SingleGridSpace construction" begin
+@testset "ScalarGridSpace construction" begin
 	@testset "Weight Helper Functions" begin
 		mesh1d = mesh(domain(interval(0, 1)), 10, true)
 		mesh2d = mesh(domain(box((0, 0), (0.5, 0.6))), (5, 6), (true, true))
@@ -21,9 +21,9 @@ using LinearAlgebra: norm
 			@test __prod(v2, idx2) ≈ 2.0 * 5.0 ≈ 10.0
 		end
 
-		@testset "build_innerh_weights!" begin
+		@testset "_innerh_weights!" begin
 			u = vector(backend(mesh2d), npoints(mesh2d))
-			build_innerh_weights!(u, mesh2d)
+			_innerh_weights!(u, mesh2d)
 			expected_norm = 0.05952940449895328
 			@test norm(u) .≈ expected_norm
 		end
@@ -54,6 +54,7 @@ using LinearAlgebra: norm
 			v = zeros(Float64, npts_tup) # Reshaped array target
 			comp_weights = (rand(npts_tup[1]), rand(npts_tup[2])) # Example component weights
 			__innerplus_weights!(v, comp_weights)
+
 			# Test a specific point
 			idx = CartesianIndex(3, 4)
 			@test v[idx] ≈ comp_weights[1][idx[1]] * comp_weights[2][idx[2]]
@@ -68,9 +69,9 @@ using LinearAlgebra: norm
 		VT = vector_type(b)
 		MT = matrix_type(b)
 
-		@testset "create_space_weights" begin
+		@testset "space_weights" begin
 			# Use the optimized version if available
-			weights = create_space_weights(mesh2d) # Or create_space_weights
+			weights = space_weights(mesh2d) # Or space_weights
 			@test weights isa SpaceWeights{D,VT}
 			@test size(weights.innerh) == (npoints(mesh2d),)
 			@test length(weights.innerplus) == D
@@ -78,15 +79,15 @@ using LinearAlgebra: norm
 			# Could add value checks if mocks are deterministic enough
 		end
 
-		@testset "create_space_backward_diff_matrices" begin
-			mats = create_space_backward_diff_matrices(mesh2d)
+		@testset "create_backward_diff_matrices" begin
+			mats = backward_difference_matrices(mesh2d)
 			@test mats isa NTuple{D,MT}
 			@test length(mats) == D
 			@test all(size(m) == (npoints(mesh2d), npoints(mesh2d)) for m in mats)
 		end
 	end
 
-	@testset "SingleGridSpace Constructor and Accessors" begin
+	@testset "ScalarGridSpace Constructor and Accessors" begin
 		mesh1d = mesh(domain(box(0, 1)), 3, true)
 		mesh3d = mesh(domain(box((0, 0, 0), (0.5, 0.6, 0.7))), (5, 6, 4), (true, true, true))
 
@@ -94,17 +95,17 @@ using LinearAlgebra: norm
 		space1d = gridspace(mesh1d)
 		@test mesh(space1d) === mesh1d
 		@test weights(space1d) isa SpaceWeights{1,Vector{Float64}}
-		@test has_backward_diff_matrix(space1d) == true
+		@test has_backward_difference_matrix(space1d) == true
 		@test has_average_matrix(space1d) == false
-		@test length(space1d.backward_diff_matrix) == 1
+		@test length(space1d.backward_difference_matrix) == 1
 		@test length(space1d.average_matrix) == 1
 
 		# Test custom caching
-		space3d = gridspace(mesh3d; cache_average_matrices = true, cache_backward_diff_matrices = false)
+		space3d = gridspace(mesh3d; cache_avg = true, cache_bwd = false)
 		@test dim(space3d) == 3
 		@test ndofs(space3d) == npoints(mesh3d)
 		@test eltype(space3d) == Float64
-		@test has_backward_diff_matrix(space3d) == false
+		@test has_backward_difference_matrix(space3d) == false
 		@test has_average_matrix(space3d) == true
 	end
 end

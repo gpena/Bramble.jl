@@ -5,7 +5,7 @@
 
 Structure to wrap around functions defined on gridspaces to make them more type agnostic. It uses `FunctionWrappers` to provide functions calculated on [VectorElement](@ref).
 """
-struct BrambleGridSpaceFunction{ElemType}
+#=struct BrambleGridSpaceFunction{ElemType}
 	f_vec::FunctionWrapper{ElemType,Tuple{ElemType}}
 end
 
@@ -18,5 +18,5 @@ function _embed_notime(Wₕ::SpaceType, f)
 
 	return BrambleFunction{ArgsType,false,CoType}(wrapped_f_tuple)
 end
-
-(f::BrambleFunction{VectorElement{SType,T}})(u::VectorElement{SType,T}) where {SType,T} = f.wrapped(u)
+=#
+#(f::BrambleFunction{VectorElement{SType,T}})(u::VectorElement{SType,T}) where {SType,T} = f.wrapped(u)

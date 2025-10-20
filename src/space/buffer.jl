@@ -23,14 +23,15 @@ end
 	@unpack vector = u
 	@boundscheck checkbounds(vector, i)
 	setindex!(vector, val, i)
+	return
 end
 
 """
-	create_vector_buffer(b::Backend, n::Int)
+	vector_buffer(b::Backend, n::Int)
 
 Creates a `VectorBuffer` associated with a backend `b` and a size `n`.
 """
-@inline create_vector_buffer(b::Backend, n::Int) = VectorBuffer{eltype(b),vector_type(b)}(vector(b, n), false)
+@inline vector_buffer(b::Backend, n::Int) = VectorBuffer{eltype(b),vector_type(b)}(vector(b, n), false)
 
 """
 	is_in_use(buffer::VectorBuffer)
@@ -51,14 +52,14 @@ Returns the vector stored in a `VectorBuffer`.
 
 Marks a `VectorBuffer` as in use.
 """
-@inline lock!(buffer::VectorBuffer) = buffer.in_use = true
+@inline lock!(buffer::VectorBuffer) = (buffer.in_use = true; return)
 
 """
 	unlock!(buffer::VectorBuffer)
 
 Marks a `VectorBuffer` as not in use.
 """
-@inline unlock!(buffer::VectorBuffer) = buffer.in_use = false
+@inline unlock!(buffer::VectorBuffer) = (buffer.in_use = false; return)
 
 BufferType{T,VectorType} = OrderedDict{Int,VectorBuffer{T,VectorType}}
 
@@ -104,7 +105,7 @@ function add_buffer!(space_buffer::GridSpaceBuffer)
 	@unpack buffer, backend, npts = space_buffer
 
 	n = length(buffer) + 1
-	buffer[n] = create_vector_buffer(backend, npts)
+	buffer[n] = vector_buffer(backend, npts)
 
 	return vector(buffer[n]), n
 end
@@ -143,6 +144,7 @@ Unlocks the `i`-th buffer in a `GridSpaceBuffer`.
 	b = buffer[i]
 
 	unlock!(b)
+	return
 end
 
 """

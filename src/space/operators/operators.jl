@@ -12,7 +12,6 @@
 _process_scalar(f::FunctionWrapper{T,Tuple{}}) where T<:Number = "$(f())"
 _process_scalar(f::FunctionWrapper{CoType,Tuple{}}) where CoType = "uₕ"
 
-
 abstract type OperatorType <: BrambleType end
 abstract type ScalarOperatorType <: OperatorType end
 abstract type VectorOperatorType <: OperatorType end
@@ -65,9 +64,6 @@ show(io::IO, _::ZeroOperator) = print(io, "0")
 @inline ⋅(α, op::ZeroOperator) = op
 scalar(op::ZeroOperator) = zero(eltype(space(op)))
 
-
-
-
 #########################################
 #                                       #
 #            Vector Operator            #
@@ -82,9 +78,6 @@ end
 
 show(io::IO, op::VectorOperator) = print(io, "0")
 
-
-
-
 #########################################
 #                                       #
 #           Identity Operator           #
@@ -98,7 +91,7 @@ end
 show(io::IO, _::IdentityOperator) = print(io, "I")
 scalar(op::IdentityOperator) = one(eltype(space(op)))
 
-@inline function ⋅(α, op::IdentityOperator) 
+@inline function ⋅(α, op::IdentityOperator)
 	if α isa Number
 		return ScaledOperator(op.space, α, op)
 	end
@@ -116,12 +109,6 @@ scalar(op::IdentityOperator) = one(eltype(space(op)))
 
 	@error "Don't know how to handle this expression"
 end
-
-
-
-
-
-
 
 #########################################
 #                                       #
@@ -144,10 +131,10 @@ show(io::IO, op::ScaledOperator{OP}) where OP<:OperatorType = print(io, "$(_proc
 
 # rules for scaled operators
 ## α * ZeroOperator
-ScaledOperator(S::SpaceType, α, op::ZeroOperator) = op
+ScaledOperator(S::AbstractSpaceType, α, op::ZeroOperator) = op
 
 ## α * op
-function ScaledOperator(S::SpaceType, α, op = IdentityOperator(S))
+function ScaledOperator(S::AbstractSpaceType, α, op = IdentityOperator(S))
 	T = eltype(S)
 
 	if α isa Number && α == 1
@@ -156,10 +143,10 @@ function ScaledOperator(S::SpaceType, α, op = IdentityOperator(S))
 
 	if α isa Number && α == 0
 		return ZeroOperator(S)
-	end 
+	end
 
 	f = _scalar2wrapper(T, α)
-	return ScaledOperator{typeof(op), typeof(S), typeof(f)}(S, f, op)
+	return ScaledOperator{typeof(op),typeof(S),typeof(f)}(S, f, op)
 end
 
 @inline *(α, op::IdentityOperator) = ScaledOperator(space(op), α)
@@ -192,15 +179,6 @@ end
 	@error "Don't know how to handle this expression"
 end
 
-
-
-
-
-
-
-
-
-
 #########################################
 #                                       #
 #           Gradient Operators          #
@@ -223,24 +201,11 @@ show(io::IO, op::ScaledOperator{OP1}) where {OP<:GradientOperator,OP1<:ScaledOpe
 @inline scalar(op::ScaledGradientOperator) = op.scalar()
 @inline parent_operator(op::ScaledGradientOperator) = op.operator
 
-
 # rules for (scaled) gradient operators
-ScaledGradientOperator(_::SpaceType, _, op::ZeroOperator) = op
-ScaledGradientOperator(S::SpaceType, α) = ScaledGradientOperator(S, α, GradientOperator(S))
+ScaledGradientOperator(_::AbstractSpaceType, _, op::ZeroOperator) = op
+ScaledGradientOperator(S::AbstractSpaceType, α) = ScaledGradientOperator(S, α, GradientOperator(S))
 
 @inline ∇₋ₕ(op::IdentityOperator) = GradientOperator(op.space)
-
-
-
-
-
-
-
-
-
-
-
-
 
 #########################################
 #                                       #
@@ -255,7 +220,7 @@ struct AddOperator{OP1,OP2,S} <: OperatorType
 	scalar::Int        # op1 + scalar*op2, scalar = 1 or -1
 end
 
-@inline function codomaintype(op::AddOperator) 
+@inline function codomaintype(op::AddOperator)
 	@assert codomaintype(op.operator1) == codomaintype(op.operator2)
 	return codomaintype(op.operator1)
 end
@@ -266,28 +231,13 @@ end
 
 show(io::IO, op::AddOperator) = print(io, "$(op.operator1) $(scalar(op) == 1 ? "+" : "-") $(op.operator2)")
 
-+(op1::OP1, op2::OP2) where {OP1<:OperatorType, OP2<:OperatorType} = AddOperator{typeof(op1),typeof(op2),typeof(space(op1))}(space(op1), op1, op2, 1)
-+(op1::OP1, _::ZeroOperator) where OP1<:OperatorType  = op1
-+(_::ZeroOperator, op2::OP2) where OP2<:OperatorType  = op2
++(op1::OP1, op2::OP2) where {OP1<:OperatorType,OP2<:OperatorType} = AddOperator{typeof(op1),typeof(op2),typeof(space(op1))}(space(op1), op1, op2, 1)
++(op1::OP1, _::ZeroOperator) where OP1<:OperatorType = op1
++(_::ZeroOperator, op2::OP2) where OP2<:OperatorType = op2
 
--(op1::OP1, op2::OP2) where {OP1<:OperatorType, OP2<:OperatorType} = AddOperator(space(op1), op1, op2, -1)
+-(op1::OP1, op2::OP2) where {OP1<:OperatorType,OP2<:OperatorType} = AddOperator(space(op1), op1, op2, -1)
 -(op1::OP1, _::ZeroOperator) where {OP1<:OperatorType} = op1
 -(_::ZeroOperator, op2::OP2) where {OP2<:OperatorType} = ScaledOperator(space(op2), -1, op2)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 ###################################
 #                                 #
@@ -327,7 +277,7 @@ end
 	x = innerplus_weights(space(uₕ), Val(1))
 	α = l.scalar()
 	u = uₕ.values
-	@.. vₕ += x * α * u
+	@. vₕ += x * α * u
 	nothing
 end
 
@@ -345,7 +295,7 @@ function inner₊!(vₕ::AbstractVector, uₕ::VectorElement, l::GradientOperato
 
 	for i in 1:D
 		x = innerplus_weights(W, i)
-		@.. W.vec_cache = x * uₕ.values
+		@. W.vec_cache = x * uₕ.values
 		mul!(vₕ, transpose(W.diff_matrix_cache[i].values), W.vec_cache, 1, 1)
 	end
 
@@ -365,7 +315,7 @@ function inner₊!(vₕ::AbstractVector, uₕ::NTuple{D,VectorElement}, l::Gradi
 
 	for i in 1:D
 		x = innerplus_weights(W, i)
-		@.. W.vec_cache = x * uₕ[i].values
+		@. W.vec_cache = x * uₕ[i].values
 		mul!(vₕ, transpose(W.diff_matrix_cache[i].values), W.vec_cache, 1, 1)
 	end
 

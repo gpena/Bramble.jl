@@ -1,11 +1,11 @@
 # --- Precompilation Workload ---
 @compile_workload begin
-	precompile_backend = Backend()
+	precompile_backend = backend()
 	precompile_vector_len = 10
 	precompile_num_buffers = 2
 
 	# --- VectorBuffer Operations ---
-	vb = create_vector_buffer(precompile_backend, precompile_vector_len)
+	vb = vector_buffer(precompile_backend, precompile_vector_len)
 	is_in_use(vb)
 	v = vector(vb)
 	lock!(vb)
@@ -47,33 +47,35 @@ end
 @setup_workload begin
 	DIMS = (1, 2, 3)
 	T = Float64
-	I = interval(0, 1)
+	_interval = interval(0, 1)
 
 	@compile_workload begin
 		for D in DIMS
-			S = reduce(×, ntuple(i -> I, D))
+			S = reduce(×, ntuple(i -> _interval, D))
 			X = domain(S)
 			dims_tuple = ntuple(i -> 3, D)
 			unif_tuple = ntuple(i -> true, D)
 			test_mesh = mesh(X, dims_tuple, unif_tuple)
-			test_space = gridspace(test_mesh, cache_backward_diff_matrices = true, cache_average_matrices = true)
-			w = weights(test_space)
-			mesh(test_space)
-			eltype(test_space)
-			dim(test_space)
-			ndofs(test_space)
-			weights_innerh(w)
-			weights_innerplus(w, 1)
-			has_backward_diff_matrix(test_space)
-			backward_diff_matrix(test_space, 1)
-			has_average_matrix(test_space)
-			average_matrix(test_space, 1)
+			space_weights(test_mesh)
+			Wh = gridspace(test_mesh, cache_bwd = true, cache_avg = true)
+			w = weights(Wh)
+			mesh(Wh)
+			eltype(Wh)
+			dim(Wh)
+			ndofs(Wh)
+			weights(Wh, Innerh(), 1)
+			weights(Wh, Innerplus(), 1)
+			weights(Wh)
+			has_backward_difference_matrix(Wh)
+			backward_difference_matrix(Wh, 1)
+			has_average_matrix(Wh)
+			average_matrix(Wh, 1)
 		end
 	end
 	@info "GridSpace basics: complete"
 
 	for D in DIMS
-		S = reduce(×, ntuple(i -> I, D))
+		S = reduce(×, ntuple(i -> _interval, D))
 		X = domain(S)
 		dims_tuple = ntuple(i -> 3, D)
 		unif_tuple = ntuple(i -> true, D)
@@ -152,7 +154,7 @@ end
 	@info "VectorElement constructor and operations: complete"
 
 	for D in DIMS
-		S = reduce(×, ntuple(i -> I, D))
+		S = reduce(×, ntuple(i -> _interval, D))
 		X = domain(S)
 		dims_tuple = ntuple(i -> 3, D)
 		unif_tuple = ntuple(i -> true, D)
@@ -173,4 +175,78 @@ end
 	end
 
 	@info "VectorElement Rₕ and avgₕ: complete"
+end
+
+@setup_workload begin
+	I0 = interval(0, 1)
+	ops(::Val{1}) = (diff₋ₓ, diff₊ₓ, D₋ₓ, D₊ₓ, jump₋ₓ, jump₊ₓ, M₋ₓ, M₊ₓ)
+
+	function ops(::Val{2})
+		ops2 = (diff₋ᵧ, diff₊ᵧ, D₋ᵧ, D₊ᵧ, jump₋ᵧ, jump₊ᵧ, M₋ᵧ, M₊ᵧ)
+		return (ops2..., ops(Val(1))...)
+	end
+
+	function ops(::Val{3})
+		ops2 = (diff₋₂, diff₊₂, D₋₂, D₊₂, jump₋₂, jump₊₂, M₋₂, M₊₂)
+		return (ops2..., ops(Val(2))...)
+	end
+
+	tuple_ops() = (diff₋ₕ, diff₊ₕ, ∇₋ₕ, ∇₊ₕ, jump₋ₕ, jump₊ₕ, M₋ₕ, M₊ₕ)
+
+	@compile_workload begin
+		for i in 1:3
+			X = domain(reduce(×, ntuple(j -> I0, i)))
+			M = mesh(X, ntuple(j -> 4, i), ntuple(j -> false, i))
+
+			Wh = gridspace(M)
+			uh = element(Wh)
+			wh = element(Wh)
+			Uh = elements(Wh)
+			Vh = elements(Wh)
+
+			for op in (.-, .*, ./, .+)
+				op(uh, wh)
+			end
+
+			for op in (.-, .*, ./, .+)
+				op(uh, 1.0)
+				op(1.0, uh)
+			end
+
+			uh .= 1.0
+			uh .= 1.0 .* wh .+ wh .- .+wh ./ 1.0
+
+			Rₕ!(uh, x->x[1]), avgₕ!(uh, x->x[1])
+			Rₕ(Wh, x->x[1]), avgₕ(Wh, x->x[1])
+
+			Uh.data[1, 1] = 1.0
+			Uh .= 1.0
+			Uh .= 1.0 .* Vh .+ Vh .- .+Vh ./ 1.0
+
+			uh * Uh
+			Uh * uh
+
+			for op in (+, -, *)
+				op(Uh, Vh)
+			end
+
+			for op in (.+, .-, .*, ./, .^)
+				op(1.0, Uh)
+				op(Uh, 1.0)
+			end
+
+			gen_ops = ops(Val(i))
+
+			for op in gen_ops
+				op(Wh), op(uh), op(Uh)
+			end
+
+			for tup_ops in tuple_ops()
+				tup_ops(Wh), tup_ops(uh), tup_ops(Uh)
+			end
+
+			z = ∇₋ₕ(uh)
+			normₕ(uh), snorm₁ₕ(uh), norm₁ₕ(uh), norm₊(z)
+		end
+	end
 end
