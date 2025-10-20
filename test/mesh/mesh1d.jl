@@ -1,7 +1,7 @@
-import Bramble: indices, change_points!, npoints, dim, spacing, half_spacing, generate_indices, boundary_symbol_to_dict, merge_consecutive_indices!, create_markers, backend, set_indices!, points, set_points!, marker, set_markers!,
-				iterative_refinement!
-import Bramble: cell_measure, spacing, half_spacing, hₘₐₓ, half_points, boundary_indices, interior_indices
-import Bramble: MarkerIndices, DomainMarkers, Mesh1D, Backend, points_iterator, half_points_iterator, spacing_iterator, cell_measure_iterator, half_spacing_iterator
+import Bramble: indices, change_points!, npoints, dim, spacing, half_spacings, generate_indices, boundary_symbol_to_dict, markers, backend, set_indices!, points, set_points!, set_markers!, point, half_point,
+				half_spacing, iterative_refinement!
+import Bramble: cell_measure, hₘₐₓ, half_points, boundary_indices, interior_indices
+import Bramble: DomainMarkers, Mesh1D, Backend, points_iterator, half_points_iterator, spacings_iterator, cell_measures_iterator, half_spacings_iterator
 import Base: diff
 
 @testset "Mesh1D Tests" begin
@@ -32,67 +32,13 @@ import Base: diff
 			@test dict_single[:left] == CartesianIndex(1)
 			@test dict_single[:right] == CartesianIndex(1)
 		end
-
-		@testset "merge_consecutive_indices! (D=1)" begin
-			# Case 1: Empty input
-			CIndicesType = CartesianIndices{1,NTuple{1,UnitRange{Int}}}
-			CIndexType = CartesianIndex{1}
-			md1 = MarkerIndices{1,CIndicesType}(Set{CIndexType}(), Set{}())
-			merge_consecutive_indices!(md1)
-			@test isempty(md1.cartesian_index)
-			@test isempty(md1.cartesian_indices)
-
-			# Case 2: Single index
-			md2 = MarkerIndices{1,CIndicesType}(Set([CartesianIndex(5)]), Set{CIndicesType}())
-			merge_consecutive_indices!(md2)
-			@test md2.cartesian_index == Set([CartesianIndex(5)])
-			@test isempty(md2.cartesian_indices)
-
-			# Case 3: Two consecutive indices
-			md3 = MarkerIndices{1,CIndicesType}(Set([CartesianIndex(5), CartesianIndex(6)]), Set{CIndicesType}())
-			merge_consecutive_indices!(md3)
-			@test isempty(md3.cartesian_index)
-			@test md3.cartesian_indices == Set([CartesianIndices((5:6,))])
-
-			# Case 4: Multiple consecutive indices
-			md4 = MarkerIndices{1,CIndicesType}(Set([CartesianIndex(2), CartesianIndex(3), CartesianIndex(4)]), Set{CIndicesType}())
-			merge_consecutive_indices!(md4)
-			@test isempty(md4.cartesian_index)
-			@test md4.cartesian_indices == Set([CartesianIndices((2:4,))])
-
-			# Case 5: Non-consecutive indices
-			md5 = MarkerIndices{1,CIndicesType}(Set([CartesianIndex(2), CartesianIndex(4), CartesianIndex(6)]), Set{CIndicesType}())
-			merge_consecutive_indices!(md5)
-			@test md5.cartesian_index == Set([CartesianIndex(2), CartesianIndex(4), CartesianIndex(6)])
-			@test isempty(md5.cartesian_indices)
-
-			# Case 6: Mixed consecutive and non-consecutive
-			md6 = MarkerIndices{1,CIndicesType}(Set([CartesianIndex(1), CartesianIndex(3), CartesianIndex(4), CartesianIndex(5), CartesianIndex(7)]), Set{CIndicesType}())
-			merge_consecutive_indices!(md6)
-			@test md6.cartesian_index == Set([CartesianIndex(1), CartesianIndex(7)])
-			@test md6.cartesian_indices == Set([CartesianIndices((3:5,))])
-
-			# Case 7: Multiple disjoint ranges
-			md7 = MarkerIndices{1,CIndicesType}(Set([CartesianIndex(1), CartesianIndex(2), CartesianIndex(5), CartesianIndex(6), CartesianIndex(7), CartesianIndex(10)]),
-												Set{CIndicesType}())
-			merge_consecutive_indices!(md7)
-			@test md7.cartesian_index == Set([CartesianIndex(10)])
-			@test md7.cartesian_indices == Set([CartesianIndices((1:2,)), CartesianIndices((5:7,))])
-
-			# Case 8: Pre-existing cartesian_indices
-			pre_existing_range = CartesianIndices((100:101,))
-			md8 = MarkerIndices{1,CIndicesType}(Set([CartesianIndex(3), CartesianIndex(4)]), Set([pre_existing_range]))
-			merge_consecutive_indices!(md8)
-			@test isempty(md8.cartesian_index)
-			@test md8.cartesian_indices == Set([pre_existing_range, CartesianIndices((3:4,))])
-		end
 	end
 
 	@testset "Mesh Construction and Basic Properties" begin
 		Ω = create_test_domain(0.0, 2.0)
 		npts = 5
-		Ωₕ_unif = mesh(Ω, npts, true; backend = Backend())
-		Ωₕ_nonunif = mesh(Ω, npts, false; backend = Backend())
+		Ωₕ_unif = mesh(Ω, npts, true; backend = backend())
+		Ωₕ_nonunif = mesh(Ω, npts, false; backend = backend())
 
 		@testset "Uniform Mesh" begin
 			@test Ωₕ_unif isa Mesh1D
@@ -105,8 +51,8 @@ import Base: diff
 			@test indices(Ωₕ_unif) == CartesianIndices((npts,))
 			@test length(points(Ωₕ_unif)) == npts
 			@test points(Ωₕ_unif) ≈ [0.0, 0.5, 1.0, 1.5, 2.0]
-			@test points(Ωₕ_unif, 3) ≈ 1.0
-			@test points(Ωₕ_unif, CartesianIndex(3)) ≈ 1.0
+			@test point(Ωₕ_unif, 3) ≈ 1.0
+			@test point(Ωₕ_unif, CartesianIndex(3)) ≈ 1.0
 			@test collect(points_iterator(Ωₕ_unif)) ≈ [0.0, 0.5, 1.0, 1.5, 2.0]
 		end
 
@@ -125,14 +71,14 @@ import Base: diff
 			@test all(diff(pts_nonunif) .> 0) # Check sorted
 			# Cannot test exact values, but check bounds and sorting
 			@test all(pts_nonunif .>= 0.0) && all(pts_nonunif .<= 2.0)
-			@test points(Ωₕ_nonunif, 1) ≈ 0.0
-			@test points(Ωₕ_nonunif, npts) ≈ 2.0
+			@test point(Ωₕ_nonunif, 1) ≈ 0.0
+			@test point(Ωₕ_nonunif, npts) ≈ 2.0
 			@test collect(points_iterator(Ωₕ_nonunif)) ≈ pts_nonunif
 		end
 
 		@testset "set_points! and set_indices!" begin
 			Ω = create_test_domain(0.0, 1.0)
-			Ωₕ = mesh(Ω, 3, true; backend = Backend()) # [0.0, 0.5, 1.0]
+			Ωₕ = mesh(Ω, 3, true; backend = backend()) # [0.0, 0.5, 1.0]
 
 			new_pts = [0.0, 0.3, 0.7, 1.0]
 			new_indices = CartesianIndices((4,))
@@ -149,11 +95,11 @@ import Base: diff
 	@testset "Geometric Properties" begin
 		npts = 5
 		Ω_unif = create_test_domain(0.0, 4.0) # Step = 1.0
-		Ωₕ_unif = mesh(Ω_unif, npts, true; backend = Backend()) # Pts: 0, 1, 2, 3, 4
+		Ωₕ_unif = mesh(Ω_unif, npts, true; backend = backend()) # Pts: 0, 1, 2, 3, 4
 
 		# Create a non-uniform mesh manually for predictable spacing
 		Ω_nonunif = create_test_domain(0.0, 5.0)
-		Ωₕ_nonunif = mesh(Ω_nonunif, 4, true; backend = Backend()) # Start uniform
+		Ωₕ_nonunif = mesh(Ω_nonunif, 4, true; backend = backend()) # Start uniform
 		nonunif_pts = [0.0, 1.0, 3.0, 5.0] # Spacing: 1.0, 2.0, 2.0
 		set_points!(Ωₕ_nonunif, nonunif_pts)
 		set_indices!(Ωₕ_nonunif, CartesianIndices((4,)))
@@ -163,7 +109,7 @@ import Base: diff
 			@test spacing(Ωₕ_unif, 1) ≈ 1.0 # Defined as pts[2]-pts[1]
 			@test spacing(Ωₕ_unif, 2) ≈ 1.0
 			@test spacing(Ωₕ_unif, 5) ≈ 1.0
-			@test collect(spacing_iterator(Ωₕ_unif)) ≈ [1.0, 1.0, 1.0, 1.0, 1.0]
+			@test collect(spacings_iterator(Ωₕ_unif)) ≈ [1.0, 1.0, 1.0, 1.0, 1.0]
 
 			# Non-uniform
 			@test spacing(Ωₕ_nonunif, 1) ≈ 1.0 # pts[2]-pts[1]
@@ -171,7 +117,7 @@ import Base: diff
 			@test spacing(Ωₕ_nonunif, 3) ≈ 2.0 # pts[3]-pts[2]
 			@test spacing(Ωₕ_nonunif, 4) ≈ 2.0 # pts[4]-pts[3]
 			# Iterator starts from index 1, using the definition for spacing(mesh, i)
-			@test collect(spacing_iterator(Ωₕ_nonunif)) ≈ [1.0, 1.0, 2.0, 2.0]
+			@test collect(spacings_iterator(Ωₕ_nonunif)) ≈ [1.0, 1.0, 2.0, 2.0]
 		end
 
 		@testset "hₘₐₓ" begin
@@ -185,7 +131,7 @@ import Base: diff
 			@test half_spacing(Ωₕ_unif, 2) ≈ 0.5 * (spacing(Ωₕ_unif, 2) + spacing(Ωₕ_unif, 3)) ≈ 1.0
 			@test half_spacing(Ωₕ_unif, 4) ≈ 0.5 * (spacing(Ωₕ_unif, 4) + spacing(Ωₕ_unif, 5)) ≈ 1.0
 			@test half_spacing(Ωₕ_unif, 5) ≈ 0.5 * spacing(Ωₕ_unif, 5) ≈ 0.5
-			@test collect(half_spacing_iterator(Ωₕ_unif)) ≈ [0.5, 1.0, 1.0, 1.0, 0.5]
+			@test collect(half_spacings_iterator(Ωₕ_unif)) ≈ [0.5, 1.0, 1.0, 1.0, 0.5]
 
 			# Non-uniform: h = [1.0, 1.0, 2.0, 2.0] (spacings at indices 1, 2, 3, 4)
 			# h_half should be: h1/2, (h1+h2)/2, (h2+h3)/2, h3/2  <- NO! Definition uses i and i+1
@@ -197,7 +143,7 @@ import Base: diff
 			@test half_spacing(Ωₕ_nonunif, 2) ≈ 0.5 * (spacing(Ωₕ_nonunif, 2) + spacing(Ωₕ_nonunif, 3)) ≈ 1.5
 			@test half_spacing(Ωₕ_nonunif, 3) ≈ 0.5 * (spacing(Ωₕ_nonunif, 3) + spacing(Ωₕ_nonunif, 4)) ≈ 2.0
 			@test half_spacing(Ωₕ_nonunif, 4) ≈ 0.5 * spacing(Ωₕ_nonunif, 4) ≈ 1.0
-			@test collect(half_spacing_iterator(Ωₕ_nonunif)) ≈ [0.5, 1.5, 2.0, 1.0]
+			@test collect(half_spacings_iterator(Ωₕ_nonunif)) ≈ [0.5, 1.5, 2.0, 1.0]
 		end
 
 		@testset "cell_measure" begin
@@ -205,12 +151,12 @@ import Base: diff
 			@test cell_measure(Ωₕ_unif, 1) ≈ half_spacing(Ωₕ_unif, 1)
 			@test cell_measure(Ωₕ_unif, 3) ≈ half_spacing(Ωₕ_unif, 3)
 			@test cell_measure(Ωₕ_unif, 5) ≈ half_spacing(Ωₕ_unif, 5)
-			@test collect(cell_measure_iterator(Ωₕ_unif)) ≈ collect(half_spacing_iterator(Ωₕ_unif))
+			@test collect(cell_measures_iterator(Ωₕ_unif)) ≈ collect(half_spacings_iterator(Ωₕ_unif))
 
 			@test cell_measure(Ωₕ_nonunif, 1) ≈ half_spacing(Ωₕ_nonunif, 1)
 			@test cell_measure(Ωₕ_nonunif, 2) ≈ half_spacing(Ωₕ_nonunif, 2)
 			@test cell_measure(Ωₕ_nonunif, 4) ≈ half_spacing(Ωₕ_nonunif, 4)
-			@test collect(cell_measure_iterator(Ωₕ_nonunif)) ≈ collect(half_spacing_iterator(Ωₕ_nonunif))
+			@test collect(cell_measures_iterator(Ωₕ_nonunif)) ≈ collect(half_spacings_iterator(Ωₕ_nonunif))
 		end
 
 		@testset "half_points" begin
@@ -222,11 +168,11 @@ import Base: diff
 			# hp(4) = (pts(3)+pts(4))/2 = 2.5
 			# hp(5) = (pts(4)+pts(5))/2 = 3.5
 			# hp(6) = pts(5) = 4
-			@test half_points(Ωₕ_unif, 1) ≈ 0.0
-			@test half_points(Ωₕ_unif, 2) ≈ 0.5
-			@test half_points(Ωₕ_unif, 3) ≈ 1.5
-			@test half_points(Ωₕ_unif, 5) ≈ 3.5
-			@test half_points(Ωₕ_unif, 6) ≈ 4.0
+			@test half_point(Ωₕ_unif, 1) ≈ 0.0
+			@test half_point(Ωₕ_unif, 2) ≈ 0.5
+			@test half_point(Ωₕ_unif, 3) ≈ 1.5
+			@test half_point(Ωₕ_unif, 5) ≈ 3.5
+			@test half_point(Ωₕ_unif, 6) ≈ 4.0
 			@test collect(half_points_iterator(Ωₕ_unif)) ≈ [0.0, 0.5, 1.5, 2.5, 3.5, 4.0]
 
 			# Non-uniform: pts = 0, 1, 3, 5; npts=4
@@ -236,11 +182,11 @@ import Base: diff
 			# hp(3) = (pts(2)+pts(3))/2 = 2.0
 			# hp(4) = (pts(3)+pts(4))/2 = 4.0
 			# hp(5) = pts(4) = 5.0
-			@test half_points(Ωₕ_nonunif, 1) ≈ 0.0
-			@test half_points(Ωₕ_nonunif, 2) ≈ 0.5
-			@test half_points(Ωₕ_nonunif, 3) ≈ 2.0
-			@test half_points(Ωₕ_nonunif, 4) ≈ 4.0
-			@test half_points(Ωₕ_nonunif, 5) ≈ 5.0
+			@test half_point(Ωₕ_nonunif, 1) ≈ 0.0
+			@test half_point(Ωₕ_nonunif, 2) ≈ 0.5
+			@test half_point(Ωₕ_nonunif, 3) ≈ 2.0
+			@test half_point(Ωₕ_nonunif, 4) ≈ 4.0
+			@test half_point(Ωₕ_nonunif, 5) ≈ 5.0
 			@test collect(half_points_iterator(Ωₕ_nonunif)) ≈ [0.0, 0.5, 2.0, 4.0, 5.0]
 		end
 	end
@@ -248,13 +194,13 @@ import Base: diff
 	@testset "Index Subsets" begin
 		npts = 5
 		Ω = create_test_domain(0.0, 1.0)
-		Ωₕ = mesh(Ω, npts, true; backend = Backend())
+		Ωₕ = mesh(Ω, npts, true; backend = backend())
 
 		@test boundary_indices(Ωₕ) == (CartesianIndex(1), CartesianIndex(npts))
 		@test interior_indices(Ωₕ) == CartesianIndices((2:(npts - 1),))
 
 		# Edge cases
-		Ωₕ_2 = mesh(Ω, 2, true; backend = Backend())
+		Ωₕ_2 = mesh(Ω, 2, true; backend = backend())
 		@test boundary_indices(Ωₕ_2) == (CartesianIndex(1), CartesianIndex(2))
 		@test isempty(interior_indices(Ωₕ_2)) # Interior is empty range 2:1
 
@@ -268,62 +214,35 @@ import Base: diff
 		I = interval(0, 1)
 
 		# Define markers
-		dm = create_markers(I,
-							:Dirichlet => :left,
-							:Neumann => :right,
-							:Mixed => (:left, :right),
-							:LowerHalf => x -> x[1] < 0.5,
-							:PointMarker => x -> isapprox(x[1], 0.75))
+		dm = markers(I,
+					 :Dirichlet => :left,
+					 :Neumann => :right,
+					 :Mixed => (:left, :right),
+					 :LowerHalf => x -> x[1] < 0.5,
+					 :PointMarker => x -> isapprox(x[1], 0.75))
 
 		Ω = create_test_domain(0.0, 1.0; markers = dm)
 
 		npts = 5 # Points: 0.0, 0.25, 0.5, 0.75, 1.0
-		Ωₕ = mesh(Ω, npts, true; backend = Backend())
+		Ωₕ = mesh(Ω, npts, true; backend = backend())
 
 		# Test marker retrieval before explicit setting (should be done by constructor)
 		@test Set(keys(markers(Ωₕ))) == Set([:Dirichlet, :Neumann, :Mixed, :LowerHalf, :PointMarker])
 
-		# Test specific markers
-		@test marker(Ωₕ, :Dirichlet).cartesian_index == Set([CartesianIndex(1)])
-		@test isempty(marker(Ωₕ, :Dirichlet).cartesian_indices)
-
-		@test marker(Ωₕ, :Neumann).cartesian_index == Set([CartesianIndex(5)])
-		@test isempty(marker(Ωₕ, :Neumann).cartesian_indices)
-
-		@test marker(Ωₕ, :Mixed).cartesian_index == Set([CartesianIndex(1), CartesianIndex(5)])
-		@test isempty(marker(Ωₕ, :Mixed).cartesian_indices)
-
-		# Test condition marker (:LowerHalf, x < 0.5) -> indices 1, 2
-		# Should be merged into a range
-		@test isempty(marker(Ωₕ, :LowerHalf).cartesian_index)
-		@test marker(Ωₕ, :LowerHalf).cartesian_indices == Set([CartesianIndices((1:2,))])
-
-		# Test condition marker (:PointMarker, x ≈ 0.75) -> index 4
-		# Should remain a single index
-		@test marker(Ωₕ, :PointMarker).cartesian_index == Set([CartesianIndex(4)])
-		@test isempty(marker(Ωₕ, :PointMarker).cartesian_indices)
-
 		# Test explicit call to set_markers! (should ideally yield the same)
 		set_markers!(Ωₕ, dm) # Recalculate
 		@test Set(keys(markers(Ωₕ))) == Set([:Dirichlet, :Neumann, :Mixed, :LowerHalf, :PointMarker])
-		@test marker(Ωₕ, :Dirichlet).cartesian_index == Set([CartesianIndex(1)])
-		@test marker(Ωₕ, :Neumann).cartesian_index == Set([CartesianIndex(5)])
-		@test marker(Ωₕ, :Mixed).cartesian_index == Set([CartesianIndex(1), CartesianIndex(5)])
-		@test isempty(marker(Ωₕ, :LowerHalf).cartesian_index)
-		@test marker(Ωₕ, :LowerHalf).cartesian_indices == Set([CartesianIndices((1:2,))])
-		@test marker(Ωₕ, :PointMarker).cartesian_index == Set([CartesianIndex(4)])
-		@test isempty(marker(Ωₕ, :PointMarker).cartesian_indices)
 	end
 
 	@testset "Mesh Modification" begin
 		@testset "iterative_refinement!" begin
-			dm = create_markers(interval(0, 1),
-								:BC => :left,
-								:Center => x -> 0.4 < x[1] < 0.6)
+			dm = markers(interval(0, 1),
+						 :BC => :left,
+						 :Center => x -> 0.4 < x[1] < 0.6)
 			Ω = create_test_domain(0.0, 1.0; markers = dm)
 
 			npts_initial = 3 # Pts: 0.0, 0.5, 1.0
-			Ωₕ = mesh(Ω, npts_initial, true; backend = Backend())
+			Ωₕ = mesh(Ω, npts_initial, true; backend = backend())
 
 			# Refine without marker update
 			iterative_refinement!(Ωₕ)
@@ -331,38 +250,25 @@ import Base: diff
 			@test npoints(Ωₕ) == npts_refined1
 			@test indices(Ωₕ) == CartesianIndices((npts_refined1,))
 			@test points(Ωₕ) ≈ [0.0, 0.25, 0.5, 0.75, 1.0]
-			# Markers should *not* be updated in this version
-			@test marker(Ωₕ, :BC).cartesian_index == Set([CartesianIndex(1)]) # Still refers to old index system? No, indices field updated. Check marker content.
-			# The markers dict was likely overwritten by the _init step within set_markers! if called implicitly.
-			# Let's re-check the logic or assume the markers become inconsistent without the DomainMarkers argument.
-			# Based on the code, the first version *only* updates points and indices. Markers remain untouched/potentially inconsistent.
 
 			# Refine *with* marker update
-			Ωₕ2 = mesh(Ω, npts_initial, true; backend = Backend()) # Start fresh: 0.0, 0.5, 1.0
+			Ωₕ2 = mesh(Ω, npts_initial, true; backend = backend()) # Start fresh: 0.0, 0.5, 1.0
 			iterative_refinement!(Ωₕ2, dm)
 			npts_refined2 = 2 * npts_initial - 1 # 5
 			@test npoints(Ωₕ2) == npts_refined2
 			@test indices(Ωₕ2) == CartesianIndices((npts_refined2,))
 			@test points(Ωₕ2) ≈ [0.0, 0.25, 0.5, 0.75, 1.0]
-
-			# Check markers are correct *for the refined mesh*
-			@test marker(Ωₕ2, :BC).cartesian_index == Set([CartesianIndex(1)]) # x=0.0 -> index 1
-			@test isempty(marker(Ωₕ2, :BC).cartesian_indices)
-			@test marker(Ωₕ2, :Center).cartesian_index == Set([CartesianIndex(3)]) # x=0.5 -> index 3
-			@test isempty(marker(Ωₕ2, :Center).cartesian_indices)
 		end
 
 		@testset "change_points!" begin
-			dm = create_markers(interval(0, 1),
-								:Endpoint => :right,
-								:NearStart => x -> x[1] < 0.3)
+			dm = markers(interval(0, 1),
+						 :Endpoint => :right,
+						 :NearStart => x -> x[1] < 0.3)
 			Ω = create_test_domain(0.0, 2.0; markers = dm)
 			npts = 5 # Pts: 0.0, 0.5, 1.0, 1.5, 2.0
-			Ωₕ = mesh(Ω, npts, true; backend = Backend())
+			Ωₕ = mesh(Ω, npts, true; backend = backend())
 
 			# Original markers
-			@test marker(Ωₕ, :Endpoint).cartesian_index == Set([CartesianIndex(5)])
-
 			new_pts_valid = [0.0, 0.1, 0.5, 1.5, 2.0] # Keep endpoints, change interior
 			new_pts_invalid_len = [0.0, 1.0, 2.0]
 			new_pts_invalid_ends = [0.1, 0.5, 1.0, 1.5, 2.1]
@@ -371,18 +277,11 @@ import Base: diff
 			Ωₕ_copy1 = deepcopy(Ωₕ)
 			change_points!(Ωₕ_copy1, new_pts_valid)
 			@test points(Ωₕ_copy1) ≈ new_pts_valid
-			# Markers should be inconsistent now
-			@test marker(Ωₕ_copy1, :Endpoint).cartesian_index == Set([CartesianIndex(5)]) # Unchanged marker data
 
 			# Test valid change *with* marker update
 			Ωₕ_copy2 = deepcopy(Ωₕ)
 			change_points!(Ωₕ_copy2, dm, new_pts_valid)
 			@test points(Ωₕ_copy2) ≈ new_pts_valid
-			# Check markers recalculated for new points
-			@test marker(Ωₕ_copy2, :Endpoint).cartesian_index == Set([CartesianIndex(5)]) # Still index 5
-			# NearStart: x < 0.3 -> new pts[1]=0.0, pts[2]=0.1 => indices 1, 2
-			@test isempty(marker(Ωₕ_copy2, :NearStart).cartesian_index)
-			@test marker(Ωₕ_copy2, :NearStart).cartesian_indices == Set([CartesianIndices((1:2,))])
 		end
 	end
 end

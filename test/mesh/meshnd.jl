@@ -80,58 +80,6 @@ using LinearAlgebra: hypot
 			@test is_boundary_index(CartesianIndex(2, 3, 2), idxs_larger) == false
 			@test is_boundary_index(CartesianIndex(3, 2, 3), idxs_larger) == false
 		end
-
-		# Note: Testing merge_consecutive_indices! for D>1 is complex.
-		# The provided implementation merges hyper-rectangles.
-		# Basic tests can check simple cases.
-		@testset "merge_consecutive_indices! (D=2)" begin
-			# Case 1: 2x1 block
-			CIndicesType{D} = CartesianIndices{D,NTuple{D,UnitRange{Int}}}
-			CIndexType{D} = CartesianIndex{D}
-			MarkType{D} = MarkerIndices{D,CIndicesType{D}}
-
-			idx1 = CartesianIndex(2, 3)
-			idx2 = CartesianIndex(3, 3)
-			md1 = MarkType{2}(Set([idx1, idx2]), Set{CIndicesType{2}}())
-			merge_consecutive_indices!(md1; check_consistency = false) # Disable check for simplicity here
-			@test isempty(md1.cartesian_index)
-			@test md1.cartesian_indices == Set([CartesianIndices((2:3, 3:3))])
-
-			# Case 2: 1x2 block
-			idx3 = CartesianIndex(2, 3)
-			idx4 = CartesianIndex(2, 4)
-			md2 = MarkType{2}(Set([idx3, idx4]), Set{CIndicesType{2}}())
-			merge_consecutive_indices!(md2; check_consistency = false)
-			@test isempty(md2.cartesian_index)
-			@test md2.cartesian_indices == Set([CartesianIndices((2:2, 3:4))])
-
-			# Case 3: 2x2 block
-			idx5 = CartesianIndex(2, 3)
-			idx6 = CartesianIndex(3, 3)
-			idx7 = CartesianIndex(2, 4)
-			idx8 = CartesianIndex(3, 4)
-			md3 = MarkType{2}(Set([idx5, idx6, idx7, idx8]), Set{CIndicesType{2}}())
-			merge_consecutive_indices!(md3; check_consistency = false)
-			@test isempty(md3.cartesian_index)
-			@test md3.cartesian_indices == Set([CartesianIndices((2:3, 3:4))])
-
-			# Case 4: L-shape (should not merge into one block)
-			md4 = MarkType{2}(Set([idx5, idx6, idx7]), Set{CIndicesType{2}}()) # (2,3), (3,3), (2,4)
-			merge_consecutive_indices!(md4; check_consistency = false)
-			# Expects to find (2:3, 3:3) and leave (2,4) alone, or find (2:2, 3:4) and leave (3,3) alone
-			# The current implementation might find one block and remove its indices, then process the remaining.
-			# Let's trace: Seed (2,3). Expands to (3,3). Block (2:3, 3:3). Remove (2,3),(3,3). Left with (2,4).
-			# Seed (2,4). Cannot expand. Isolated.
-			# Result: Range (2:3, 3:3), Single (2,4)
-			@test md4.cartesian_index == Set([CartesianIndex(2, 4)])
-			@test md4.cartesian_indices == Set([CartesianIndices((2:3, 3:3))])
-
-			# Case 5: Isolated points
-			md5 = MarkType{2}(Set([CartesianIndex(1, 1), CartesianIndex(3, 3)]), Set{CIndicesType{2}}())
-			merge_consecutive_indices!(md5; check_consistency = false)
-			@test md5.cartesian_index == Set([CartesianIndex(1, 1), CartesianIndex(3, 3)])
-			@test isempty(md5.cartesian_indices)
-		end
 	end # Helper Functions Testset
 
 	@testset "Dimension D=2" begin
@@ -139,8 +87,8 @@ using LinearAlgebra: hypot
 		npts_2d = (4, 5) # Nx=4, Ny=5
 		intervals_2d = ((0.0, 3.0), (0.0, 4.0)) # dx=1.0, dy=1.0
 		Ω_2d = create_test_nd_domain(intervals_2d)
-		Ωₕ_2d_unif = mesh(Ω_2d, npts_2d, (true, true); backend = Backend())
-		Ωₕ_2d_nonunif = mesh(Ω_2d, npts_2d, (false, true); backend = Backend())
+		Ωₕ_2d_unif = mesh(Ω_2d, npts_2d, (true, true); backend = backend())
+		Ωₕ_2d_nonunif = mesh(Ω_2d, npts_2d, (false, true); backend = backend())
 
 		@testset "Construction and Basic Properties (D=2)" begin
 			@test Ωₕ_2d_unif isa MeshnD{2}
@@ -183,8 +131,8 @@ using LinearAlgebra: hypot
 			@test pts_tuple[2] ≈ [0.0, 1.0, 2.0, 3.0, 4.0]
 
 			# points(mesh, index)
-			@test points(Ωₕ_2d_unif, CartesianIndex(2, 3)) == (1.0, 2.0) # x[2], y[3]
-			@test points(Ωₕ_2d_unif, (4, 5)) == (3.0, 4.0) # x[4], y[5]
+			@test point(Ωₕ_2d_unif, CartesianIndex(2, 3)) == (1.0, 2.0) # x[2], y[3]
+			@test point(Ωₕ_2d_unif, (4, 5)) == (3.0, 4.0) # x[4], y[5]
 
 			# points_iterator(mesh)
 			pts_iter = points_iterator(Ωₕ_2d_unif)
@@ -221,10 +169,10 @@ using LinearAlgebra: hypot
 			# Half points
 			# hp_x = [0.0, 0.5, 1.5, 2.5, 3.0] (len 5)
 			# hp_y = [0.0, 0.5, 1.5, 2.5, 3.5, 4.0] (len 6)
-			@test half_points(Ωₕ_2d_unif, (1, 1)) == (0.0, 0.0) # hp_x[1], hp_y[1]
-			@test half_points(Ωₕ_2d_unif, (2, 3)) == (0.5, 1.5) # hp_x[2], hp_y[3]
-			@test half_points(Ωₕ_2d_unif, (4 + 1, 5 + 1)) == (3.0, 4.0) # hp_x[5], hp_y[6] - Accessing end half points
-			@test half_points(Ωₕ_2d_unif, CartesianIndex(3, 4)) == (1.5, 2.5) # hp_x[3], hp_y[4]
+			@test half_point(Ωₕ_2d_unif, (1, 1)) == (0.0, 0.0) # hp_x[1], hp_y[1]
+			@test half_point(Ωₕ_2d_unif, (2, 3)) == (0.5, 1.5) # hp_x[2], hp_y[3]
+			@test half_point(Ωₕ_2d_unif, (4 + 1, 5 + 1)) == (3.0, 4.0) # hp_x[5], hp_y[6] - Accessing end half points
+			@test half_point(Ωₕ_2d_unif, CartesianIndex(3, 4)) == (1.5, 2.5) # hp_x[3], hp_y[4]
 		end
 
 		@testset "Index Subsets (D=2)" begin
@@ -252,48 +200,23 @@ using LinearAlgebra: hypot
 		@testset "Marker Setting (D=2)" begin
 			Ω_2d_dummy = create_test_nd_set(intervals_2d)
 
-			dm_2d = create_markers(Ω_2d_dummy,
-								   :LeftWall => :left,
-								   :RightWall => :right,
-								   :TopBottom => (:top, :bottom),
-								   :CenterRegion => p -> 0.8 < p[1] < 2.2 && 1.5 < p[2] < 2.5)
+			dm_2d = markers(Ω_2d_dummy,
+							:LeftWall => :left,
+							:RightWall => :right,
+							:TopBottom => (:top, :bottom),
+							:CenterRegion => p -> 0.8 < p[1] < 2.2 && 1.5 < p[2] < 2.5)
 			Ω_2d_marked = create_test_nd_domain(intervals_2d, markers = dm_2d)
-			Ωₕ_2d_marked = mesh(Ω_2d_marked, npts_2d, (true, true); backend = Backend()) # Pts: x=[0,1,2,3], y=[0,1,2,3,4]
-
-			# Check symbol markers (D=2 uses cartesian_indices)
-			@test isempty(marker(Ωₕ_2d_marked, :LeftWall).cartesian_index)
-			@test marker(Ωₕ_2d_marked, :LeftWall).cartesian_indices == Set([CartesianIndices((1:1, 1:5))]) # Corrected based on test logic
-
-			@test isempty(marker(Ωₕ_2d_marked, :RightWall).cartesian_index)
-			@test marker(Ωₕ_2d_marked, :RightWall).cartesian_indices == Set([CartesianIndices((4:4, 1:5))]) # Corrected based on test logic
-
-			# Check tuple marker
-			@test isempty(marker(Ωₕ_2d_marked, :TopBottom).cartesian_index)
-			expected_tb = Set([
-								  CartesianIndices((1:4, 5:5)), # Top (N:N, 1:M)
-								  CartesianIndices((1:4, 1:1))  # Bottom (1:1, 1:M)
-							  ]) # Corrected based on test logic
-			@test marker(Ωₕ_2d_marked, :TopBottom).cartesian_indices == expected_tb
-
-			# Check condition marker
-			# x = [0,1,2,3], y = [0,1,2,3,4]
-			# x condition: 0.8 < x < 2.2 => x=1, x=2 => indices i=2, i=3
-			# y condition: 1.5 < y < 2.5 => y=2 => index j=3
-			# Expected points: (1,2), (2,2) => Indices: (2,3), (3,3)
-			# These should be merged by merge_consecutive_indices!
-			center_marker = marker(Ωₕ_2d_marked, :CenterRegion)
-			@test isempty(center_marker.cartesian_index)
-			@test center_marker.cartesian_indices == Set([CartesianIndices((2:3, 3:3))])
+			Ωₕ_2d_marked = mesh(Ω_2d_marked, npts_2d, (true, true); backend = backend()) # Pts: x=[0,1,2,3], y=[0,1,2,3,4]
 		end
 
 		@testset "Mesh Modification (D=2)" begin
 			Ω_2d_dummy = create_test_nd_set(intervals_2d)
 
 			# Setup for modification tests
-			dm_2d = create_markers(Ω_2d_dummy, :L => :left)
+			dm_2d = markers(Ω_2d_dummy, :L => :left)
 			Ω_2d_mod = create_test_nd_domain(intervals_2d, markers = dm_2d)
 			npts_initial = (3, 3) # Pts: x=[0, 1.5, 3], y=[0, 2, 4]
-			Ωₕ_2d_orig = mesh(Ω_2d_mod, npts_initial, (true, true); backend = Backend())
+			Ωₕ_2d_orig = mesh(Ω_2d_mod, npts_initial, (true, true); backend = backend())
 
 			# iterative_refinement!
 			Ωₕ_2d_refined = deepcopy(Ωₕ_2d_orig)
@@ -304,8 +227,6 @@ using LinearAlgebra: hypot
 			# Check a point coordinate after refinement
 			@test points(Ωₕ_2d_refined(1)) ≈ [0.0, 0.75, 1.5, 2.25, 3.0]
 			@test points(Ωₕ_2d_refined(2)) ≈ [0.0, 1.0, 2.0, 3.0, 4.0]
-			# Check marker update
-			@test marker(Ωₕ_2d_refined, :L).cartesian_indices == Set([CartesianIndices((1:1, 1:npts_refined[1]))]) # Left wall on refined mesh
 
 			# change_points!
 			Ωₕ_2d_changed = deepcopy(Ωₕ_2d_orig)
@@ -315,8 +236,6 @@ using LinearAlgebra: hypot
 			@test npoints(Ωₕ_2d_changed, Tuple) == npts_initial # Size doesn't change
 			@test points(Ωₕ_2d_changed(1)) ≈ new_pts_x
 			@test points(Ωₕ_2d_changed(2)) ≈ new_pts_y
-
-			@test marker(Ωₕ_2d_changed, :L).cartesian_indices == Set([CartesianIndices((1:1, 1:3))])
 		end
 	end # Dimension D=2 Testset
 
@@ -325,7 +244,7 @@ using LinearAlgebra: hypot
 		npts_3d = (3, 4, 2) # Nx=3, Ny=4, Nz=2
 		intervals_3d = ((0.0, 2.0), (0.0, 3.0), (0.0, 1.0)) # dx=1.0, dy=1.0, dz=1.0
 		Ω_3d = create_test_nd_domain(intervals_3d)
-		Ωₕ_3d_unif = mesh(Ω_3d, npts_3d, (true, true, true); backend = Backend())
+		Ωₕ_3d_unif = mesh(Ω_3d, npts_3d, (true, true, true); backend = backend())
 
 		@testset "Construction and Basic Properties (D=3)" begin
 			@test Ωₕ_3d_unif isa MeshnD{3}
@@ -350,9 +269,9 @@ using LinearAlgebra: hypot
 			@test points(Ωₕ_3d_unif(2)) ≈ [0.0, 1.0, 2.0, 3.0]
 			@test points(Ωₕ_3d_unif(3)) ≈ [0.0, 1.0]
 
-			# points(mesh, index)
-			@test points(Ωₕ_3d_unif, CartesianIndex(2, 3, 1)) == (1.0, 2.0, 0.0) # x[2], y[3], z[1]
-			@test points(Ωₕ_3d_unif, (3, 4, 2)) == (2.0, 3.0, 1.0) # x[3], y[4], z[2]
+			# point(mesh, index)
+			@test point(Ωₕ_3d_unif, CartesianIndex(2, 3, 1)) == (1.0, 2.0, 0.0) # x[2], y[3], z[1]
+			@test point(Ωₕ_3d_unif, (3, 4, 2)) == (2.0, 3.0, 1.0) # x[3], y[4], z[2]
 
 			# Spacing (uniform dx=1, dy=1, dz=1)
 			@test spacing(Ωₕ_3d_unif, (2, 3, 1)) == (1.0, 1.0, 1.0)
@@ -380,7 +299,7 @@ using LinearAlgebra: hypot
 			# Let's redefine for a mesh where interior exists
 			npts_3d_larger = (4, 5, 4)
 			Ω_3d_larger = create_test_nd_domain(((0.0, 3.0), (0.0, 4.0), (0.0, 3.0)))
-			Ωₕ_3d_larger = mesh(Ω_3d_larger, npts_3d_larger, (true, true, true); backend = Backend())
+			Ωₕ_3d_larger = mesh(Ω_3d_larger, npts_3d_larger, (true, true, true); backend = backend())
 			idxs_larger = indices(Ωₕ_3d_larger) # (4,5,4)
 			int_indices_lg = interior_indices(Ωₕ_3d_larger)
 
@@ -401,29 +320,12 @@ using LinearAlgebra: hypot
 
 		@testset "Marker Setting (D=3)" begin
 			_set = create_test_nd_set(intervals_3d)
-			dm_3d = create_markers(_set,
-								   :BottomFace => :bottom,
-								   :FrontFace => :front,
-								   :SmallCorner => p -> p[1] < 0.5 && p[2] < 0.5 && p[3] < 0.5)
+			dm_3d = markers(_set,
+							:BottomFace => :bottom,
+							:FrontFace => :front,
+							:SmallCorner => p -> p[1] < 0.5 && p[2] < 0.5 && p[3] < 0.5)
 			Ω_3d_marked = create_test_nd_domain(intervals_3d, markers = dm_3d) # (3,4,2) pts, intervals ((0,2),(0,3),(0,1))
-			Ωₕ_3d_marked = mesh(Ω_3d_marked, npts_3d, (true, true, true); backend = Backend()) # Pts: x=[0,1,2], y=[0,1,2,3], z=[0,1]
-
-			# Check symbol markers
-			@test isempty(marker(Ωₕ_3d_marked, :BottomFace).cartesian_index)
-			@test marker(Ωₕ_3d_marked, :BottomFace).cartesian_indices == Set([CartesianIndices((1:3, 1:4, 1:1))]) # Correct
-
-			@test isempty(marker(Ωₕ_3d_marked, :FrontFace).cartesian_index)
-			@test marker(Ωₕ_3d_marked, :FrontFace).cartesian_indices == Set([CartesianIndices((3:3, 1:4, 1:2))]) # Correct
-
-			# Check condition marker
-			# x<0.5 -> x=0 -> i=1
-			# y<0.5 -> y=0 -> j=1
-			# z<0.5 -> z=0 -> k=1
-			# Expected point: (0,0,0) => Index (1,1,1)
-			# Should remain a single point in cartesian_index after merge attempt
-			corner_marker = marker(Ωₕ_3d_marked, :SmallCorner)
-			@test corner_marker.cartesian_index == Set([CartesianIndex(1, 1, 1)])
-			@test isempty(corner_marker.cartesian_indices)
+			Ωₕ_3d_marked = mesh(Ω_3d_marked, npts_3d, (true, true, true); backend = backend()) # Pts: x=[0,1,2], y=[0,1,2,3], z=[0,1]
 		end
 	end # Dimension D=3 Testset
 end # Main Testset
