@@ -10,38 +10,42 @@ end
 using Test
 using Bramble
 
-const __bramble_with_examples = false
-const __bramble_with_quality = true
+const __bramble_with_examples = true
+const __bramble_with_quality = false
 const __bramble_with_unit_tests = true
 
 if __bramble_with_unit_tests
 	@testset verbose=true "Core library" begin
 		@testset "Backends and BrambleFunctions" begin
-			include("bramblefunctions.jl")
-			include("backends.jl")
+			include("utils/bramble_functions.jl")
+			include("utils/backends.jl")
 		end
 
 		@testset "Sets and Domains" begin
-			include("sets.jl")
-			include("domains.jl")
+			include("geometry/sets.jl")
+			include("geometry/domains.jl")
 		end
 
 		@testset "Meshes" begin
-			include("mesh1d.jl")
-			include("meshnd.jl")
+			include("mesh/mesh1d.jl")
+			include("mesh/meshnd.jl")
 		end
 
 		@testset "Grid spaces" begin
-			include("buffers.jl")
-			include("gridspaces.jl")
-			include("vectorelements.jl")
-			#include("matrixelements.jl")
-			#include("operators.jl")
+			include("space/buffers.jl")
+			include("space/gridspaces.jl")
+			include("space/vector_elements.jl")
+			include("space/matrix_elements.jl")
+			include("space/difference.jl")
+			include("space/jump.jl")
+			include("space/average.jl")
+			include("space/inner_product.jl")
 		end
-		#=
-								@testset "Forms" begin
-									include("bilinearforms.jl")
-								end=#
+
+		@testset "Forms" begin
+			include("form/dirichlet_constraints.jl")
+			include("form/forms.jl")
+		end
 	end
 end
 
@@ -51,7 +55,7 @@ end
 
 if __bramble_with_quality
 	@testset verbose=true "\nQuality" begin
-		include("aqua.jl")
-		include("jet.jl")
+		include("quality/aqua.jl")
+		include("quality/jet.jl")
 	end
 end
