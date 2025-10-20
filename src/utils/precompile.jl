@@ -1,19 +1,23 @@
 using SparseArrays: SparseVector
-using Bramble: Backend, matrix, vector
-using Bramble: interval, @embed, embed_function
+using Bramble: matrix, vector
+using Bramble: interval, embed_function
 
 @setup_workload begin
 	# Define common backend configurations to precompile
-	backend_default = Backend() # Vector{Float64}, SparseMatrixCSC{Float64,Int}
-	backend_dense64 = Backend(vector_type = Vector{Float64}, matrix_type = Matrix{Float64})
-	backend_sparse64 = Backend(vector_type = SparseVector{Float64,Int}, matrix_type = SparseMatrixCSC{Float64,Int})
-	backend_dense32 = Backend(vector_type = Vector{Float32}, matrix_type = Matrix{Float32})
-	backend_sparse32 = Backend(vector_type = SparseVector{Float32,Int32}, matrix_type = SparseMatrixCSC{Float32,Int32}) # Note Int32 for Sparse*
+	backend_default = backend() # Vector{Float64}, SparseMatrixCSC{Float64,Int}
+	backend_dense64 = backend(vector_type = Vector{Float64}, matrix_type = Matrix{Float64})
+	backend_sparse64 = backend(vector_type = SparseVector{Float64,Int}, matrix_type = SparseMatrixCSC{Float64,Int})
+	backend_dense32 = backend(vector_type = Vector{Float32}, matrix_type = Matrix{Float32})
+	backend_sparse32 = backend(vector_type = SparseVector{Float32,Int32}, matrix_type = SparseMatrixCSC{Float32,Int32}) # Note Int32 for Sparse*
 end
 
 @compile_workload begin
+	u = Vector{Float64}(undef, 3)
+	v = Vector{Float64}(undef, 3)
+	w = Vector{Float64}(undef, 3)
+	_dot(u, v, w)
 	# Backend constructor itself (the keyword method implicitly calls the inner one)
-	Backend(vector_type = Vector{ComplexF64}, matrix_type = Matrix{ComplexF64})
+	backend(vector_type = Vector{ComplexF64}, matrix_type = Matrix{ComplexF64})
 
 	# vector for various backends and a typical size
 	vector(backend_default, 10)
@@ -87,45 +91,34 @@ end # @setup_workload
 		test_pt = test_points[D]      # Point for calling (Float64)
 		test_pt_f32 = test_points_f32[D] # Point for calling (Float32)
 
-		# === Test @embed macro ===
-		# Use function symbols as arguments to the macro
-		bf_macro_space = @embed X_set f_space
-		bf_macro_spacetime = @embed X_set×I_time ft_spacetime
-		# Using lambdas directly is also possible but less critical for precompilation
-		# if the function call path (`_embed_notime`/`_embed_withtime`) is covered.
-
 		# === Test embed_function (function interface) ===
 		bf_func_space = embed_function(X_set, f_space)
 		bf_func_spacetime = embed_function(X_set, I_time, ft_spacetime)
 
 		# === Test BrambleFunction Calls ===
 		# Test space-only functions (hastime=false)
-		for bf_s in (bf_macro_space, bf_func_space)
-			if D == 1
-				bf_s(test_pt)      # Call with Number (correct type)
-				bf_s(pt1d_f32)     # Call with Number (needs convert)
-			else
-				bf_s(test_pt...)   # Call with splatted tuple NTuple{D, Float64}
-				bf_s(test_pt)      # Call with tuple NTuple{D, Float64}
-				bf_s(test_pt_f32)  # Call with tuple NTuple{D, Float32} (needs convert)
-			end
+		if D == 1
+			bf_func_space(test_pt)      # Call with Number (correct type)
+			bf_func_space(pt1d_f32)     # Call with Number (needs convert)
+		else
+			bf_func_space(test_pt...)   # Call with splatted tuple NTuple{D, Float64}
+			bf_func_space(test_pt)      # Call with tuple NTuple{D, Float64}
+			bf_func_space(test_pt_f32)  # Call with tuple NTuple{D, Float32} (needs convert)
 		end
 
 		# Test space-time functions (hastime=true)
-		for bf_st in (bf_macro_spacetime, bf_func_spacetime)
-			# Calling with time 't' returns the inner space-only BrambleFunction
-			inner_bf = bf_st(test_time)
-			# Now call the inner function with spatial points
-			if D == 1
-				inner_bf(test_pt)
-				inner_bf(pt1d_f32)
-			else
-				inner_bf(test_pt...)
-				inner_bf(test_pt)
-				inner_bf(test_pt_f32)
-			end
+		# Calling with time 't' returns the inner space-only BrambleFunction
+		inner_bf = bf_func_spacetime(test_time)
+		# Now call the inner function with spatial points
+		if D == 1
+			inner_bf(test_pt)
+			inner_bf(pt1d_f32)
+		else
+			inner_bf(test_pt...)
+			inner_bf(test_pt)
+			inner_bf(test_pt_f32)
 		end
 	end # loop D
 
 	@info "BrambleFunction and embeddings: complete"
-end # @compile_workload
+end
