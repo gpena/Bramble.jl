@@ -1,4 +1,5 @@
 using Bramble
+import Bramble: domain
 import LinearSolve: LinearProblem, solve, KrylovJL_GMRES
 import IncompleteLU: ilu
 
@@ -13,60 +14,70 @@ struct LinearConvectionDiffusionProblem{DomainType,SolType,RhsType,T}
 	b::T
 end
 
-function solve_convection_diffusion(convdiff::LinearConvectionDiffusionProblem, nPoints::NTuple{D,Int}, unif::NTuple{D,Bool}, strategy) where D
-	Mh = mesh(convdiff.dom, nPoints, unif)
-	sol = @embed(Mh, convdiff.sol)
-	rhs = @embed(Mh, convdiff.rhs)
-	b = convdiff.b
-	ϵ = convdiff.ϵ
-	Wh = gridspace(Mh)
-	bc = constraints(sol)
+domain(p::LinearConvectionDiffusionProblem) = p.dom
+solution(p::LinearConvectionDiffusionProblem) = p.sol
+right_hand_side(p::LinearConvectionDiffusionProblem) = p.rhs
+diffusion_coefficient(p::LinearConvectionDiffusionProblem) = p.ϵ
+convection_coefficient(p::LinearConvectionDiffusionProblem) = p.b
 
-	bform = form(Wh, Wh, (U, V) -> ϵ * inner₊(∇₋ₕ(U), ∇₋ₕ(V)) + b * inner₊(M₋ₕ(U), ∇₋ₕ(V)))
-	A = assemble(bform, bc)
+function solve_convection_diffusion(problem::LinearConvectionDiffusionProblem, nPoints::NTuple{D,Int}, unif::NTuple{D,Bool}) where D
+	Ω = domain(problem)
+	Ωₕ = mesh(Ω, nPoints, unif)
 
-	uh = element(Wh)
-	avgₕ!(uh, rhs)
+	sol = solution(problem)
+	rhs = right_hand_side(problem)
+	b = convection_coefficient(problem)
+	ϵ = diffusion_coefficient(problem)
 
-	lform = form(Wh, v -> innerₕ(uh, v), strategy = strategy, verbose = false)
-	F = assemble(lform, bc)
+	Wₕ = gridspace(Ωₕ)
+	bcs = dirichlet_constraints(set(Ω), :boundary => x -> sol(x))
+
+	aₕ = form(Wₕ, Wₕ, (U, V) -> ϵ * inner₊(∇₋ₕ(U), ∇₋ₕ(V)) + b * inner₊(M₋ₕ(U), ∇₋ₕ(V)))
+	A = assemble(aₕ, dirichlet_labels = :boundary)
+
+	uₕ = element(Wₕ)
+	avgₕ!(uₕ, rhs)
+
+	lₕ = form(Wₕ, v -> innerₕ(uₕ, v))
+	F = assemble(lₕ, bcs, dirichlet_labels = :boundary)
 
 	prob = LinearProblem(A, F)
 	solh = solve(prob, KrylovJL_GMRES(), Pl = ilu(A, τ = 0.0001))
 
-	uh .= solh.u
-	F .= uh
-	Rₕ!(uh, sol)
-	uh .-= F
+	uₕ .= solh.u
+	F .= uₕ
+	Rₕ!(uₕ, sol)
+	uₕ .-= F
 
-	return hₘₐₓ(Mh), norm₁ₕ(uh)
+	return hₘₐₓ(Ωₕ), norm₁ₕ(uₕ)
 end
 
 function convection_diffusion(d::Int)
 	I = interval(0, 1)
-	Ω = Bramble.domain(reduce(×, ntuple(i -> I, d)))
+	Ω = domain(reduce(×, ntuple(i -> I, d)))
 	b = 0.1
 	ϵ = 1.0
-	sol = @embed(Ω, x->exp(sum(x)))
-	rhs = @embed(Ω, x->-d * sol(x) * (b + ϵ))
+	sol = x -> exp(sum(x))
+	rhs = x -> -d * sol(x) * (b + ϵ)
 
 	return LinearConvectionDiffusionProblem(Ω, sol, rhs, ϵ, b)
 end
 
-function test_conv_diff(convec_diff_problem::LinearConvectionDiffusionProblem, nTests, npoints_generator, unif::NTuple{D,Bool}, strategy) where D
+function test_conv_diff(problem::LinearConvectionDiffusionProblem, nTests, npoints_generator, unif::NTuple{D,Bool}) where D
 	error = zeros(nTests)
 	hmax = zeros(nTests)
 
 	for i in 1:nTests
 		nPoints = ntuple(j -> npoints_generator[j](i), D)
-		hmax[i], error[i] = solve_convection_diffusion(convec_diff_problem, nPoints, unif, strategy)
+		hmax[i], error[i] = solve_convection_diffusion(problem, nPoints, unif)
 	end
+
 	threshold = unif[1] ? 0.3 : 0.4
 	mask = (!isnan).(error)
 	err2 = error[mask]
 	hmax2 = hmax[mask]
 
 	# some least squares fitting
-	order, _ = leastsquares(log.(hmax2), log.(err2))
-	@test(abs(order - 2.0) < threshold||order > 2.0)
+	order, _ = least_squares_fit(hmax2, err2)
+	@test(abs(order - 2.0) < threshold || order > 2.0)
 end

@@ -1,4 +1,6 @@
 using Bramble
+import Bramble: domain
+import Bramble: embed_function
 import LinearSolve: LinearProblem, solve, KrylovJL_GMRES
 import IncompleteLU: ilu
 
@@ -11,52 +13,58 @@ struct SimpleScalarPDEProblem{DomainType,SolType,RhsType}
 	rhs::RhsType
 end
 
-function solve_poisson(poisson::SimpleScalarPDEProblem, nPoints::NTuple{D,Int}, unif::NTuple{D,Bool}, strategy) where D
-	Mh = mesh(poisson.dom, nPoints, unif)
-	sol = @embed(Mh, poisson.sol)
-	rhs = @embed(Mh, poisson.rhs)
+domain(p::SimpleScalarPDEProblem) = p.dom
+solution(p::SimpleScalarPDEProblem) = p.sol
+right_hand_side(p::SimpleScalarPDEProblem) = p.rhs
 
-	Wh = gridspace(Mh)
-	bc = constraints(sol)
+function solve_poisson(poisson::SimpleScalarPDEProblem, nPoints::NTuple, unif::NTuple)
+	Ω = domain(poisson)
+	Ωₕ = mesh(Ω, nPoints, unif)
 
-	bform = form(Wh, Wh, (U, V) -> inner₊(∇₋ₕ(U), ∇₋ₕ(V)))
-	assemble(bform)
+	sol = solution(poisson)
+	rhs = right_hand_side(poisson)
 
-	A = assemble(bform, bc)
+	bcs = dirichlet_constraints(set(Ω), :boundary => x -> sol(x))
 
-	uh = element(Wh)
-	avgₕ!(uh, rhs)
+	Wₕ = gridspace(Ωₕ)
 
-	lform = form(Wh, v -> innerₕ(uh, v), strategy = strategy, verbose = false)
-	F = assemble(lform, bc)
+	aₕ = form(Wₕ, Wₕ, (Uₕ, Vₕ) -> inner₊(∇₋ₕ(Uₕ), ∇₋ₕ(Vₕ)))
+	A = assemble(aₕ, dirichlet_labels = :boundary)
+
+	uₕ = element(Wₕ)
+	avgₕ!(uₕ, rhs)
+
+	lₕ = form(Wₕ, vₕ -> innerₕ(uₕ, vₕ))
+	F = assemble(lₕ, bcs, dirichlet_labels = :boundary)
 
 	prec = ilu(A, τ = 0.001)
 	prob = LinearProblem(A, F)
-	solh = solve(prob, KrylovJL_GMRES(), Pl = prec, verbose=false)
+	solₕ = solve(prob, KrylovJL_GMRES(), Pl = prec, verbose = false)
 
-	uh .= solh.u
-	F .= uh
-	Rₕ!(uh, sol)
-	uh .-= F
+	uₕ .= solₕ.u
+	F .= uₕ
+	Rₕ!(uₕ, sol)
+	uₕ .-= F
 
-	return hₘₐₓ(Mh), norm₁ₕ(uh)
+	return hₘₐₓ(Ωₕ), norm₁ₕ(uₕ)
 end
 
 function poisson(d::Int)
 	I = interval(0, 1)
-	Ω = Bramble.domain(reduce(×, ntuple(i -> I, d)))
-	sol = @embed(Ω, x -> exp(sum(x)))
-	rhs = @embed(Ω, x -> -d * sol(x))
+	X = reduce(×, ntuple(i -> I, d))
+	Ω = domain(X)
+	sol = x -> exp(sum(x))
+	rhs = x -> -d * sol(x)
 	return SimpleScalarPDEProblem(Ω, sol, rhs)
 end
 
-function test_poisson(poisson_problem::SimpleScalarPDEProblem, nTests, npoints_generator, unif::NTuple{D,Bool}, strategy) where D
+function test_poisson(poisson_problem::SimpleScalarPDEProblem, nTests, npoints_generator, unif::NTuple{D,Bool}) where D
 	error = zeros(nTests)
 	hmax = zeros(nTests)
 
 	for i in 1:nTests
 		nPoints = ntuple(j -> npoints_generator[j](i), D)
-		hmax[i], error[i] = solve_poisson(poisson_problem, nPoints, unif, strategy)
+		hmax[i], error[i] = solve_poisson(poisson_problem, nPoints, unif)
 	end
 	threshold = unif[1] ? 0.3 : 0.4
 	mask = (!isnan).(error)
@@ -64,7 +72,7 @@ function test_poisson(poisson_problem::SimpleScalarPDEProblem, nTests, npoints_g
 	hmax2 = hmax[mask]
 
 	# some least squares fitting
-	order, _ = leastsquares(log.(hmax2), log.(err2))
+	order, _ = least_squares_fit(hmax2, err2)
 	@test(abs(order - 2.0) < threshold||order > 2.0)
 end
 

@@ -2,28 +2,28 @@
 CollapsedDocStrings = false
 ```
 
-# Geometry
+# Utilities
 
-## Sets
+## Backend
 
 ```@autodocs
 Modules = [Bramble]
 Public = false
-Pages = ["geometry/set.jl"]
+Pages = ["utils/backend.jl", ]
 ```
 
-## Markers
+## Linear Algebra
 
 ```@autodocs
 Modules = [Bramble]
 Public = false
-Pages = ["geometry/marker.jl"]
+Pages = ["utils/linear_algebra.jl", ]
 ```
 
-## Domains
+## Bramble Function
 
 ```@autodocs
 Modules = [Bramble]
 Public = false
-Pages = ["geometry/domain.jl"]
+Pages = ["utils/bramble_function.jl", ]
 ```
