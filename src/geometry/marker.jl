@@ -220,8 +220,8 @@ end
 	return _embed_withtime(space_domain, time_domain, identifier, FinalCoType = FinalType)
 end
 
-@inline process_identifier(X::CartesianProduct, identifier::Symbol) = identifier
-@inline process_identifier(X::CartesianProduct, identifier::NTuple{N,Symbol}) where N = Set(identifier)
+@inline process_identifier(::CartesianProduct, identifier::Symbol) = identifier
+@inline process_identifier(::CartesianProduct, identifier::NTuple{N,Symbol}) where N = Set(identifier)
 
 """
 	$(TYPEDEF)

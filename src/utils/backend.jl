@@ -15,7 +15,7 @@ struct Backend{VT<:AbstractVector,MT<:AbstractMatrix} end
 Returns the vector type (`VT`) associated with the given [Backend](@ref) instance or type.
 This function is useful for extracting the underlying vector type used by a specific backend.
 """
-@inline vector_type(backend::Backend{VT,MT}) where {VT,MT} = VT
+@inline vector_type(::Backend{VT,MT}) where {VT,MT} = VT
 @inline vector_type(::Type{<:Backend{VT,MT}}) where {VT,MT} = VT
 
 """
@@ -24,7 +24,7 @@ This function is useful for extracting the underlying vector type used by a spec
 Returns the matrix type (`MT`) associated with the given [Backend](@ref) instance or type.
 This function is useful for extracting the underlying matrix type used by a specific backend.
 """
-@inline matrix_type(backend::Backend{VT,MT}) where {VT,MT} = MT
+@inline matrix_type(::Backend{VT,MT}) where {VT,MT} = MT
 @inline matrix_type(::Type{<:Backend{VT,MT}}) where {VT,MT} = MT
 
 """
@@ -76,8 +76,7 @@ This is useful for extracting type information from either a [Backend](@ref) typ
 Create a vector of the type `VT` associated with the given [Backend](@ref) instance with length `n`.
 """
 
-function vector(backend::Backend, n::Integer)
-	_, VT = backend_types(backend)
+function vector(::Backend{VT,MT}, n::Integer) where {VT,MT}
 	try
 		# Attempt to construct the vector using `VT(undef, n)`.
 		return VT(undef, n)
@@ -125,7 +124,7 @@ end
 
 Constructs a square `n` x `n` sparse identity matrix associated with the given [Backend](@ref) instance.
 """
-@inline backend_eye(backend::Backend, n) = _backend_eye(matrix_type{backend}, n)
+@inline backend_eye(backend::Backend, n) = _backend_eye(matrix_type(backend), n)
 @inline _backend_eye(::Type{<:SparseMatrixCSC{T,Int}}, n) where T = spdiagm(0 => Ones(T, n))
 
 """

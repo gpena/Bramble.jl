@@ -22,7 +22,7 @@ end
 Checks if a [BrambleFunction](@ref) is time-dependent by inspecting its `hastime` type parameter.
 Returns `true` if the function is time-dependent, `false` otherwise.
 """
-@inline has_time(f::BrambleFunction{ArgsType,hastime}) where {ArgsType,hastime} = hastime
+@inline has_time(::BrambleFunction{ArgsType,hastime}) where {ArgsType,hastime} = hastime
 @inline has_time(::Type{<:BrambleFunction{ArgsType,hastime}}) where {ArgsType,hastime} = hastime
 
 """
@@ -155,8 +155,8 @@ end
 
 Extracts the argument type `ArgsType` from a `FunctionWrapper` instance or type.
 """
-argstype(f::FunctionWrapper{CoType,Tuple{ArgsType}}) where {CoType,ArgsType} = ArgsType
-argstype(f::FunctionWrapper{CoType,Tuple{}}) where CoType = Nothing
+argstype(::FunctionWrapper{CoType,Tuple{ArgsType}}) where {CoType,ArgsType} = ArgsType
+argstype(::FunctionWrapper{CoType,Tuple{}}) where CoType = Nothing
 argstype(::Type{FunctionWrapper{CoType,Tuple{ArgsType}}}) where {CoType,ArgsType} = ArgsType
 argstype(::Type{FunctionWrapper{CoType,Tuple{}}}) where CoType = Nothing
 
@@ -165,7 +165,7 @@ argstype(::Type{FunctionWrapper{CoType,Tuple{}}}) where CoType = Nothing
 
 Extracts the codomain type `CoType` from a `FunctionWrapper` instance or type.
 """
-codomaintype(f::FunctionWrapper{CoType}) where CoType = CoType
-codomaintype(f::FunctionWrapper{CoType,Tuple{}}) where CoType = Nothing
+codomaintype(::FunctionWrapper{CoType}) where CoType = CoType
+codomaintype(::FunctionWrapper{CoType,Tuple{}}) where CoType = Nothing
 codomaintype(::Type{FunctionWrapper{CoType}}) where CoType = CoType
 codomaintype(::Type{FunctionWrapper{CoType,Tuple{}}}) where CoType = CoType

@@ -139,7 +139,7 @@ julia> X = cartesian_product(0, 1);
 Float64
 ```
 """
-@inline eltype(X::CartesianProduct{D,T}) where {D,T} = T
+@inline eltype(::CartesianProduct{D,T}) where {D,T} = T
 @inline eltype(::Type{<:CartesianProduct{D,T}}) where {D,T} = T
 
 """
@@ -161,7 +161,7 @@ julia> Y = cartesian_product(((0, 1), (4, 5)));
 2
 ```
 """
-@inline dim(X::CartesianProduct{D}) where D = D
+@inline dim(::CartesianProduct{D}) where D = D
 @inline dim(::Type{<:CartesianProduct{D}}) where D = D
 
 """
