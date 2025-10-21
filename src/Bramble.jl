@@ -33,8 +33,8 @@ using Integrals: solve, IntegralFunction, IntegralProblem, QuadGKJL, CubatureJLh
 #using WriteVTK
 
 # domain/interval handling functions
-export box, interval, ×
-export domain, markers, labels, dim
+export box, interval, ×, dim, topo_dim
+export domain, markers, labels
 
 # Mesh handling
 export mesh, hₘₐₓ, iterative_refinement!, change_points, npoints
