@@ -1,31 +1,21 @@
 """
-	 AbstractMeshType{D}
+	 $(TYPEDEF)
 
 Abstract type for meshes. Meshes are only parametrized by their dimension `D`.
 """
 abstract type AbstractMeshType{D} end
 
-"""
-	Dimension
-
-Abstract type representing spatial dimensions. Serves as a base type for implementing specific dimension types.
-"""
+#=
+The `Dimension` abstract type and its subtypes are used for internal, compile-time
+dispatch. This allows functions like `generate_indices` to have specialized,
+efficient methods for 1D vs. nD cases based on the type of the input.
+=#
 abstract type Dimension end
 
-"""
-	struct OneDimensional end
-
-A struct representing a one-dimensional mesh. It is a subtype of `Dimension`.
-"""
 struct OneDimensional <: Dimension end
-
-"""
-	struct NDimensional end
-
-A struct representing a multi-dimensional mesh. It is a subtype of `Dimension`.
-"""
 struct NDimensional <: Dimension end
 
+# Helper functions to select the correct dimension type based on input type.
 dimension_one_or_all(::Type{<:Int}) = OneDimensional()
 dimension_one_or_all(::Type{<:NTuple{D}}) where D = NDimensional()
 
@@ -34,13 +24,17 @@ dimension(::Type{<:NTuple{2}}) = TwoDimensional()
 dimension(::Type{<:NTuple{3}}) = ThreeDimensional()
 
 """
-	generate_indices([::Dimension], nPoints)
+	generate_indices([::Dimension], pts)
 
-Returns the `CartesianIndices` of a mesh with `nPoints[i]` in each direction or just `nPoints`, if the argument is an `Int`.
+Returns the `CartesianIndices` of a mesh with `pts[i]` in each direction or just `pts`, if the argument is an `Int`.
 """
-@inline generate_indices(npts::PointsType) where PointsType = generate_indices(dimension_one_or_all(PointsType), npts)
-@inline generate_indices(::OneDimensional, npts) = CartesianIndices((npts,))
-@inline generate_indices(::NDimensional, npts) = CartesianIndices(ntuple(i -> 1:npts[i], length(npts)))
+@inline generate_indices(pts::PointsType) where PointsType = generate_indices(dimension_one_or_all(PointsType), pts)
+@inline generate_indices(::OneDimensional, pts) = CartesianIndices((pts,))
+@inline generate_indices(::NDimensional, pts) = CartesianIndices(ntuple(i -> 1:pts[i], length(pts)))
+
+#------------------------------------------------------------------------------------------#
+# AbstractMeshType Getters and Indexing Helpers
+#------------------------------------------------------------------------------------------#
 
 """
 	set(Ωₕ::AbstractMeshType)
@@ -50,44 +44,48 @@ Returns the set of the domain over which the mesh `Ωₕ` is defined.
 @inline set(Ωₕ::AbstractMeshType) = Ωₕ.set
 
 """
-	is_boundary_index(idx, Ωₕ::AbstractMeshType)
+	is_boundary_index(Ωₕ::AbstractMeshType, idx)
 
-Returns true if the index `idx` is a boundary index of the mesh.
+Checks if the `CartesianIndex` `idx` lies on the boundary of the mesh `Ωₕ`. This delegates to the implementation for `CartesianIndices`.
 """
-@inline is_boundary_index(idx, Ωₕ::AbstractMeshType) = is_boundary_index(idx, indices(Ωₕ))
+@inline is_boundary_index(Ωₕ::AbstractMeshType, idx) = is_boundary_index(indices(Ωₕ), idx)
 
 """
 	boundary_indices(Ωₕ::AbstractMeshType)
 
-Returns the boundary indices of mesh `Ωₕ`.
+Returns an iterator or collection of all `CartesianIndex` points on the boundary of mesh `Ωₕ`.
 """
 @inline boundary_indices(Ωₕ::AbstractMeshType) = boundary_indices(indices(Ωₕ))
 
 """
 	interior_indices(Ωₕ::AbstractMeshType)
 
-Returns the interior indices of mesh `Ωₕ`.
+Returns a `CartesianIndices` object representing the interior region of the mesh `Ωₕ`.
 """
 @inline interior_indices(Ωₕ::AbstractMeshType) = interior_indices(indices(Ωₕ))
 
 """
-	is_boundary_index(idx, idxs::CartesianIndices) -> Bool
+	is_boundary_index(idxs::CartesianIndices, idx)
 
-Checks if a given index `idx` lies on the boundary of a `CartesianIndices` domain. This function determines if a point is part of any boundary facet (e.g., face, edge, or corner) of the specified domain.
+Checks if a given index `idx` lies on the boundary of a `CartesianIndices` domain.
 
 # Example
 
-```julia
-is_boundary_index((1, 2), domain)
-domain = CartesianIndices((3, 4))
-is_boundary_index((2, 2), domain)
+```jldoctest
+julia> domain = CartesianIndices((3, 4));
+	   is_boundary_index(domain, (1, 2));
 true
+
+julia> is_boundary_index(domain, (2, 2))
+false
 ```
 """
-function is_boundary_index(idx, idxs::CartesianIndices{D}) where D
-	_idx = CartesianIndex(idx)
+function is_boundary_index(idxs::CartesianIndices{D}, idx) where D
+	_idx = CartesianIndex(idx) # Iterate over each dimension (axis) of the Cartesian domain. 
 	for i in 1:D
 		axis = idxs.indices[i]
+		# A point is on the boundary if its coordinate along any axis of length > 1 
+		# matches the first or last element of that axis range. 
 		if length(axis) > 1 && (_idx[i] == first(axis) || _idx[i] == last(axis))
 			return true
 		end
@@ -102,9 +100,9 @@ Returns all boundary facets of a `CartesianIndices` domain as a tuple of `Cartes
 
 # Example
 
-```julia
-domain = CartesianIndices((2, 2));
-boundary_indices(domain)
+```jldoctest
+julia> domain = CartesianIndices((2, 2));
+	   boundary_indices(domain)
 (CartesianIndices((1:1, 1:2)), CartesianIndices((2:2, 1:2)), CartesianIndices((1:2, 1:1)), CartesianIndices((1:2, 2:2)))
 ```
 """
@@ -122,14 +120,13 @@ Computes the `CartesianIndices` representing the interior of a given domain, exc
 # Examples
 
 ```@jldoctest
-domain = CartesianIndices((3, 3)); # A 3x3 grid
-interior_indices(domain)
+julia> domain = CartesianIndices((3, 3)); interior_indices(domain)
 CartesianIndices((2:2, 2:2))
 ```
 
-```julia
-domain_2d_line = CartesianIndices((1, 5)); # A line in 2D space
-interior_indices(domain_2d_line)
+```jldoctest
+julia> domain_2d_line = CartesianIndices((1, 5));
+	   interior_indices(domain_2d_line)
 CartesianIndices((1:1, 2:4))
 ```
 """
@@ -149,13 +146,18 @@ CartesianIndices((1:1, 2:4))
 	return CartesianIndices(interior_ranges_tuple)
 end
 
+#------------------------------------------------------------------------------------------#
+# AbstractMeshType Interface
+# The following functions define the interface for AbstractMeshType.
+# Any concrete subtype must implement the methods that throw an error.
+#------------------------------------------------------------------------------------------#
+
 """
 	eltype(Ωₕ::AbstractMeshType)
-	eltype(::Type{<:AbstractMeshType})
 
 Returns the element type of the points of `Ωₕ`.
 
-This function is a required part of the `AbstractMeshType` interface. Any concrete subtype of `AbstractMeshType` must implement this method.
+This function is a required part of the [AbstractMeshType](@ref) interface.
 """
 function eltype(Ωₕ::AbstractMeshType)
 	error("Interface function 'eltype' not implemented for mesh of type $(typeof(Ωₕ)).")
@@ -167,13 +169,12 @@ end
 
 """
 	dim(Ωₕ::AbstractMeshType)
-	dim(::Type{<:AbstractMeshType})
 
 Returns the dimension of the space where `Ωₕ` is embedded.
 
-This function is a required part of the `AbstractMeshType` interface. Any concrete subtype of `AbstractMeshType` must implement this method.
+This function is a required part of the [AbstractMeshType](@ref) interface. Can be applied to the type of an [AbstractMeshType](@ref).
 """
-@inline dim(_::AbstractMeshType{D}) where D = D
+@inline dim(::AbstractMeshType{D}) where D = D
 @inline dim(::Type{<:AbstractMeshType{D}}) where D = D
 
 """
@@ -189,14 +190,14 @@ end
 """
 	indices(Ωₕ::AbstractMeshType)
 
-Returns the `CartesianIndices` associated with the points of mesh `Ωₕ`. This function is a required part of the `AbstractMeshType` interface. Any concrete subtype of `AbstractMeshType` must implement this method and have a field called `indices` of type `CartesianIndices`.
+Returns the `CartesianIndices` associated with the points of mesh `Ωₕ`. This function is a required part of the [AbstractMeshType](@ref) interface. Any concrete subtype of [AbstractMeshType](@ref) must implement this method and have a field called `indices` of type `CartesianIndices`.
 """
 @inline indices(Ωₕ::AbstractMeshType) = Ωₕ.indices
 
 """
 	backend(Ωₕ::AbstractMeshType)
 
-Returns the linear algebra [Backend](@ref) associated with the mesh `Ωₕ`. This function is a required part of the `AbstractMeshType` interface. Any concrete subtype of `AbstractMeshType` must implement this method and have a field called `backend` of type [Backend](@ref).
+Returns the linear algebra [Backend](@ref) associated with the mesh `Ωₕ`. This function is a required part of the [AbstractMeshType](@ref) interface. Any concrete subtype of [AbstractMeshType](@ref) must implement this method and have a field called `backend` of type [Backend](@ref).
 """
 @inline backend(Ωₕ::AbstractMeshType) = Ωₕ.backend
 
@@ -210,7 +211,7 @@ Returns the `BitVector` associated with the marker with `label` of mesh `Ωₕ`.
 """
 	markers(Ωₕ::AbstractMeshType)
 
-Returns the [DomainMarkers](@ref)) associated with the mesh `Ωₕ`. This function is a required part of the `AbstractMeshType` interface. Any concrete subtype of `AbstractMeshType` must implement this method and have a field called `markers` of type [DomainMarkers](@ref).
+Returns the [DomainMarkers](@ref)) associated with the mesh `Ωₕ`. This function is a required part of the [AbstractMeshType](@ref) interface. Any concrete subtype of [AbstractMeshType](@ref) must implement this method and have a field called `markers` of type [DomainMarkers](@ref).
 """
 @inline markers(Ωₕ::AbstractMeshType) = Ωₕ.markers
 
@@ -319,7 +320,7 @@ x_{i+1/2} \\vcentcolon = x_i + \\frac{h_{i+1}}{2}, \\, i=1,\\dots,N-1,
 ```
 
 ```math
-x_{N+1/2} \\vcentcolon = x_{N}``and``x_{1/2} \\vcentcolon = x_1``.
+x_{N+1/2} \\vcentcolon = x_{N},  \\, x_{1/2} \\vcentcolon = x_1.
 ```
 
   - 2D mesh, with `idx` = ``(i,j)``
@@ -482,7 +483,6 @@ Returns an iterator for the [half_spacing](@ref), for each submesh.
 end
 
 """
-	npoints(Ωₕ::AbstractMeshType)
 	npoints(Ωₕ::AbstractMeshType, [::Type{Tuple}])
 
 Returns the number of points of mesh `Ωₕ`. If `Tuple` is passed as the second argument, it returns a tuple with the number of points of each submesh composing `Ωₕ`.
@@ -565,8 +565,7 @@ Returns an iterator for the measure of the cells.
 end
 
 """
-	iterative_refinement!(Ωₕ::AbstractMeshType)
-	iterative_refinement!(Ωₕ::AbstractMeshType, domain_markers::DomainMarkers)
+	iterative_refinement!(Ωₕ::AbstractMeshType, [domain_markers::DomainMarkers])
 
 Refines the given mesh `Ωₕ` by halving each existing cell (in every direction). If an object of type [DomainMarkers](@ref) is passed as an argument, it also updates the markers according to accordingly after the refinement.
 """
@@ -578,8 +577,7 @@ end
 end
 
 """
-	change_points!(Ωₕ::AbstractMeshType, pts)
-	change_points!(Ωₕ::AbstractMeshType, Ω::Domain, pts)
+	change_points!(Ωₕ::AbstractMeshType, [Ω::Domain], pts)
 
 Changes the coordinates of the internal points of the mesh `Ωₕ` to the new coordinates specified in `pts`. This function assumes the points in `pts` are ordered and that the first and last of them coincide with the bounds of the `Ω`. if the domain `Ω` is passed as an argument, the markers of the mesh are also recalculated after this change.
 """
