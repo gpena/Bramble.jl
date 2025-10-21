@@ -10,7 +10,7 @@ This allows specifying the desired concrete types for vectors and matrices
 struct Backend{VT<:AbstractVector,MT<:AbstractMatrix} end
 
 """
-	$(SIGNATURES)
+	vector_type(backend::Backend)
 
 Returns the vector type (`VT`) associated with the given [Backend](@ref) instance or type.
 This function is useful for extracting the underlying vector type used by a specific backend.
@@ -19,7 +19,7 @@ This function is useful for extracting the underlying vector type used by a spec
 @inline vector_type(::Type{<:Backend{VT,MT}}) where {VT,MT} = VT
 
 """
-	$(SIGNATURES)
+	matrix_type(backend::Backend)
 
 Returns the matrix type (`MT`) associated with the given [Backend](@ref) instance or type.
 This function is useful for extracting the underlying matrix type used by a specific backend.
@@ -38,27 +38,25 @@ via standard patterns like `T(undef, dims...)` or `T(dims...)`.
 
 # Examples
 
-```julia
-# Default backend (Dense-Sparse Float64)
-dense_sparse = backend()
+```jldoctest
+julia> dense_sparse = backend() # Default backend (Dense-Sparse Float64)
 
-# Sparse Float64 backend
-using SparseArrays
-SVec{T} = SparseVector{T,Int}
-SMat{T} = SparseMatrixCSC{T,Int}
+julia> using SparseArrays;
+	   SVec{T} = SparseVector{T,Int};
+	   SMat{T} = SparseMatrixCSC{T,Int};
+	   T64 = Float64
 
-T64 = Float64
-sparse_sparse = backend(vector_type = SVec{T64}, matrix_type = SMat{T64})
+julia> sparse_sparse = backend(vector_type = SVec{T64}, matrix_type = SMat{T64}) # Sparse-Sparse Float64 backend
 
-# Dense-Sparse Float32 backend
-T32 = Float32
-dense32 = backend(vector_type = Vector{T32}, matrix_type = SMat{T32})
+julia> T32 = Float32;
+	   dense32 = backend(vector_type = Vector{T32}, matrix_type = SMat{T32}) # Dense-Sparse Float32 backend
+
 ```
 """
 @inline backend(; vector_type = Vector{Float64}, matrix_type = SparseMatrixCSC{Float64,Int}) = Backend{vector_type,matrix_type}()
 
 """
-	$(SIGNATURES)
+	backend_types(backend::Backend)
 
 Returns a tuple with the backend associated types:
 
@@ -73,7 +71,7 @@ This is useful for extracting type information from either a [Backend](@ref) typ
 @inline backend_types(::Type{<:Backend{VT,MT}}) where {VT,MT} = eltype(VT), VT, MT, Backend{VT,MT}
 
 """
-	$(SIGNATURES)
+	vector(backend::Backend, n::Integer)
 
 Create a vector of the type `VT` associated with the given [Backend](@ref) instance with length `n`.
 """
@@ -101,7 +99,7 @@ end
 @inline vector(::Backend{VT,MT}, n::Integer) where {MT,T,VT<:Vector{T}} = Vector{T}(undef, n)
 
 """
-	$(SIGNATURES)
+	matrix(backend::Backend, n::Integer, m::Integer)
 
 Create a matrix of the type `MT` associated with the given [Backend](@ref) instance with dimensions `n` x `m`.
 """
@@ -139,7 +137,7 @@ Constructs a square `n` x `n` sparse matrix of zeros associated with the given [
 @inline _backend_zeros(::Type{<:SparseMatrixCSC{T,Int}}, n) where T = spzeros(T, n, n)
 
 """
-	$(SIGNATURES)
+	eltype(backend::Backend)
 
 Returns the element type of the vector type (`VT`) used in the given [Backend](@ref) type or instance.
 This function allows querying the underlying element type stored in the backend's vector representation.

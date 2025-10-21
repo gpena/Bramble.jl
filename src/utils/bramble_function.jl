@@ -17,7 +17,7 @@ struct BrambleFunction{ArgsType,hastime,CoType,DType}
 end
 
 """
-	$(SIGNATURES)
+	has_time(f::BrambleFunction)
 
 Checks if a [BrambleFunction](@ref) is time-dependent by inspecting its `hastime` type parameter.
 Returns `true` if the function is time-dependent, `false` otherwise.
