@@ -7,7 +7,7 @@ Creates Dirichlet boundary constraints where functions return values of type `el
 
 Each pair is of the form `:label => func`, where `:label` is a symbol identifying the region where the Dirichlet conditions are applied and `func` is a function or a [BrambleFunction](@ref) defining the values of the Dirichlet conditions. If `I` is provided, then `func` should be a time-dependent function of the form `func(x, t)`, where `x` is a point in the spatial domain and `t` is a point in the time domain.
 
-The provided `:label` should match one of the labels used when creating the [MeshType](@ref) object where the Dirichlet conditions will be applied.
+The provided `:label` should match one of the labels used when creating the [AbstractMeshType](@ref) object where the Dirichlet conditions will be applied.
 """
 #@inline dirichlet_constraints(X::CartesianProduct{D,T}, pairs::Pair...) where {D,T} = _create_generic_markers(T, X, pairs...)
 #@inline dirichlet_constraints(X::CartesianProduct{D,T}, I::CartesianProduct{1}, pairs::Pair...) where {D,T} = _create_generic_markers(T, X, I, pairs...)

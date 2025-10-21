@@ -9,7 +9,7 @@ Returns a [MatrixElement](@ref) from a given [AbstractSpaceType](@ref), initiali
 	ST = typeof(Wₕ)
 	MT = matrix_type(b)
 	T = eltype(b)
-	matrix = MT(eye(MT, ndofs(Wₕ)))
+	matrix = MT(backend_eye(MT, ndofs(Wₕ)))
 	return MatrixElement{ST,T,MT}(matrix, Wₕ)
 end
 
@@ -27,7 +27,7 @@ end
 	eltype(Uₕ::MatrixElement{S,T})
 	eltype(::Type{MatrixElement{S,T}})
 
-Returns the element type of a [MatrixElement](@ref), `T``.
+Returns the element type of a [MatrixElement](@ref), `T`.
 """
 @inline eltype(::MatrixElement{S,T}) where {S,T} = T
 @inline eltype(::Type{<:MatrixElement{S,T}}) where {S,T} = T
@@ -35,7 +35,7 @@ Returns the element type of a [MatrixElement](@ref), `T``.
 @inline space_type(::Type{<:MatrixElement{S}}) where S = S
 
 """
-	space(Uₕ::MatrixElement)
+	$(SIGNATURES)
 
 Returns the space associated with the [MatrixElement](@ref) `Uₕ`.
 """

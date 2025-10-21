@@ -4,7 +4,7 @@ const _BRAMBLE_var2symbol = ("ₓ", "ᵧ", "₂")
 """
 	AbstractSpaceType{N}
 
-Abstract type for N grid spaces defined on meshes of type [MeshType](@ref).
+Abstract type for N grid spaces defined on meshes of type [AbstractMeshType](@ref).
 """
 abstract type AbstractSpaceType{N} <: BrambleType end
 
@@ -90,7 +90,7 @@ end
 	ndofs(Wₕ::AbstractSpaceType)
 	ndofs(Wₕ::AbstractSpaceType, [::Type{Tuple}])
 
-Returns the total number of degrees of freedom (or a tuple with the degrees of freedom per direction) of the [GridSpace](@ref) `Wₕ`.
+Returns the total number of degrees of freedom (or a tuple with the degrees of freedom per direction) of the [AbstractSpaceType](@ref) `Wₕ`.
 """
 @inline function ndofs(Wₕ::AbstractSpaceType)
 	error("ndofs not implemented for $(typeof(Wₕ))")
@@ -104,7 +104,7 @@ end
 	eltype(Wₕ::AbstractSpaceType)
 	eltype(::Type{<:AbstractSpaceType})
 
-Returns the element type of the mesh associated with [GridSpace](@ref) `Wₕ`. If the input argument is a type derived from [AbstractSpaceType](@ref) then the function returns the element type of the [AbstractMeshType](@ref) associated with it.
+Returns the element type of the mesh associated with [AbstractSpaceType](@ref) `Wₕ`. If the input argument is a type derived from [AbstractSpaceType](@ref) then the function returns the element type of the [AbstractMeshType](@ref) associated with it.
 """
 @inline function eltype(Wₕ::AbstractSpaceType)
 	error("eltype not implemented for $(typeof(Wₕ))")

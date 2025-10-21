@@ -134,7 +134,7 @@ end
 """
 	gridspace(Ωₕ::ScalarGridSpace; cache_avg = false, cache_bwd = true)
 
-Constructor for a [ScalarGridSpace](@ref) defined on the mesh `Ωₕ`. This builds the weights for the inner products mentioned in [GridSpace](@ref) as well as the differentiation matrices associated with the grid points of mesh `Ωₕ`.
+Constructor for a [ScalarGridSpace](@ref) defined on the mesh `Ωₕ`. This builds the weights for the inner products mentioned in [ScalarGridSpace](@ref) as well as the differentiation matrices associated with the grid points of mesh `Ωₕ`.
 The keyword arguments `cache_avg` and `cache_bwd` can be used to indicate if the average and backward difference matrices should be precomputed and stored in the space (default is `true` for `cache_bwd` and `false` for `cache_avg`).
 """
 function gridspace(Ωₕ::AbstractMeshType{D}; cache_avg = false, cache_bwd = true) where D
@@ -182,7 +182,7 @@ Returns the weights associated with the functionspace. A second argument can be 
 	ndofs(Wₕ::ScalarGridSpace)
 	ndofs(Wₕ::ScalarGridSpace, [::Type{Tuple}])
 
-Returns the total number of degrees of freedom (or a tuple with the degrees of freedom per direction) of the [GridSpace](@ref) `Wₕ`.
+Returns the total number of degrees of freedom (or a tuple with the degrees of freedom per direction) of the [ScalarGridSpace](@ref) `Wₕ`.
 """
 @inline ndofs(Wₕ::ScalarGridSpace) = npoints(mesh(Wₕ))
 @inline ndofs(Wₕ::ScalarGridSpace, ::Type{Tuple}) = npoints(mesh(Wₕ), Tuple)
@@ -191,7 +191,7 @@ Returns the total number of degrees of freedom (or a tuple with the degrees of f
 	eltype(Wₕ::ScalarGridSpace)
 	eltype(::Type{<:ScalarGridSpace})
 
-Returns the element type of the mesh associated with [GridSpace](@ref) `Wₕ`. If the input argument is a type derived from [ScalarGridSpace](@ref) then the function returns the element type of the [AbstractMeshType](@ref) associated with it.
+Returns the element type of the mesh associated with [ScalarGridSpace](@ref) `Wₕ`. If the input argument is a type derived from [ScalarGridSpace](@ref) then the function returns the element type of the [AbstractMeshType](@ref) associated with it.
 """
 @inline eltype(Wₕ::ScalarGridSpace) = eltype(backend(Wₕ))
 @inline eltype(::Type{W}) where W<:ScalarGridSpace = eltype(mesh_type(W))
@@ -265,7 +265,7 @@ end
 """
 	__innerplus_weights!(v, innerplus_per_component)
 
-Builds the weights for the modified discrete ``L^2`` inner product on the space of grid functions [GridSpace](@ref). The result is stored in vector `v`.
+Builds the weights for the modified discrete ``L^2`` inner product on the space of grid functions [ScalarGridSpace](@ref). The result is stored in vector `v`.
 """
 function __innerplus_weights!(v, innerplus_per_component)
 	idxs = CartesianIndices(v)

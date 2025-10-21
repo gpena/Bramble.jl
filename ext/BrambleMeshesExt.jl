@@ -25,7 +25,7 @@ function Meshes.viz(X::CartesianProduct)
 end
 
 """
-	Meshes.viz(Ωₕ::MeshType)
+	Meshes.viz(Ωₕ::MeshnD{D})
 
 Visualize a [MeshnD](@ref).
 """

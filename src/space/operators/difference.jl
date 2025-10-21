@@ -96,7 +96,9 @@ op_configs = [
 	 diff_alias = :diff₊,
 	 finite_diff_alias = :D₊,
 	 grad_alias = :diff₊ₕ,
-	 finite_grad_alias = :∇₊ₕ),
+	 finite_grad_alias = :∇₊ₕ,
+	 dir_string = "Forward",
+	 math_op = "u_{i+1} - u_i", math_finite_op = "\\frac{u_{i+1} - u_i}{h_i}"),
 	(direction = Backward(),
 	 diff_name = :backward_difference,
 	 finite_diff_name = :backward_finite_difference,
@@ -105,7 +107,9 @@ op_configs = [
 	 diff_alias = :diff₋,
 	 finite_diff_alias = :D₋,
 	 grad_alias = :diff₋ₕ,
-	 finite_grad_alias = :∇₋ₕ)
+	 finite_grad_alias = :∇₋ₕ,
+	 dir_string = "Backward",
+	 math_op = "u_{i} - u_{i-1}", math_finite_op = "\\frac{u_{i} - u_{i-1}}{h_i}")
 ]
 
 for config in op_configs

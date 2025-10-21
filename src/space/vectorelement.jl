@@ -276,12 +276,13 @@ end
 function _avgₕ!(::MultiComponent{N}, uₕ::VectorElement{ST}, f, ::Val{D}) where {N,D,ST}
 	return
 end
+
 """
 	__integrand1d(y, t, p)
 
-Implements the integrand function needed in the calculation of [avgₕ](@ref). In this function, `y` denotes the return values, `t` denotes the integration variable and `p` denotes the parameters (integrand function `f`, points `x`, spacing `h` and indices `idxs`).
+Implements the integrand function needed in the calculation of the averaging operator `avgₕ`. In this function, `y` denotes the return values, `t` denotes the integration variable and `p` denotes the parameters (integrand function `f`, points `x`, spacing `h` and indices `idxs`).
 
-For efficiency, each integral in [avgₕ](@ref) is rewritten as an integral over `[0,1]` following
+For efficiency, each integral in `avgₕ` is rewritten as an integral over `[0,1]` following
 
 ```math
 \\int_{a}^{b} f(x) dx = (b-a) \\int_{0}^{1} f(a + t (b-a)) dt
@@ -333,7 +334,7 @@ end
 """
 	__integrandnd(y, t, p)
 
-Implements the integrand function needed in the calculation of [avgₕ](@ref). In this function, `y` denotes the return values, `t` denotes the integration variable and `p` denotes the parameters (integrand function `f`, points `x`, measures `meas` and indices `idxs`).
+Implements the integrand function needed in the calculation of `avgₕ`. In this function, `y` denotes the return values, `t` denotes the integration variable and `p` denotes the parameters (integrand function `f`, points `x`, measures `meas` and indices `idxs`).
 
 For efficiency, each integral is calculated on ``[0,1]^D``, where ``D`` is the dimension of the integration domain. This is done through a similar change of variable as in [__integrand1d(y, t, p)](@ref).
 """
