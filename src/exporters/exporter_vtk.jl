@@ -1,4 +1,4 @@
-abstract type Exporter{SpaceType} <: BrambleType end
+abstract type Exporter{SpaceType} end
 
 #=
 Template for Exporter structs

@@ -3,7 +3,7 @@
 
 Abstract type for meshes. Meshes are only parametrized by their dimension `D`.
 """
-abstract type AbstractMeshType{D} <: BrambleType end
+abstract type AbstractMeshType{D} end
 
 """
 	Dimension

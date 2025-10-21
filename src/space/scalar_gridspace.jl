@@ -1,4 +1,4 @@
-struct SpaceWeights{D,VT<:AbstractVector} <: BrambleType
+struct SpaceWeights{D,VT<:AbstractVector}
 	innerh::VT
 	innerplus::NTuple{D,VT}
 end

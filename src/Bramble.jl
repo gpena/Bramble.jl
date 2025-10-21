@@ -32,8 +32,6 @@ using Cubature
 using Integrals: solve, IntegralFunction, IntegralProblem, QuadGKJL, CubatureJLh, BatchIntegralFunction
 #using WriteVTK
 
-abstract type BrambleType end
-
 # domain/interval handling functions
 export box, interval, ×
 export domain, markers, labels, dim

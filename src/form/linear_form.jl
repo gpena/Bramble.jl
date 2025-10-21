@@ -3,12 +3,12 @@
 
 Abstract type for linear forms.
 """
-abstract type LinearFormType <: BrambleType end
+abstract type LinearFormType end
 
-struct DefaultAssembly <: BrambleType end
-struct InPlaceAssembly <: BrambleType end
-struct OperatorsAssembly <: BrambleType end
-struct AutoDetect <: BrambleType end
+struct DefaultAssembly end
+struct InPlaceAssembly end
+struct OperatorsAssembly end
+struct AutoDetect end
 
 """
 	struct LinearForm{TestType,F} <: LinearFormType

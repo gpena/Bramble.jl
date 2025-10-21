@@ -72,7 +72,7 @@ BufferType{T,VectorType} = OrderedDict{Int,VectorBuffer{T,VectorType}}
 
 A `GridSpaceBuffer` manages a collection of `VectorBuffer`s for a given backend and number of points.
 """
-struct GridSpaceBuffer{BT,VT,T} <: BrambleType
+struct GridSpaceBuffer{BT,VT,T}
 	buffer::BufferType{T,VT}
 	backend::BT
 	npts::Int

@@ -6,7 +6,7 @@ const _BRAMBLE_var2symbol = ("ₓ", "ᵧ", "₂")
 
 Abstract type for N grid spaces defined on meshes of type [AbstractMeshType](@ref).
 """
-abstract type AbstractSpaceType{N} <: BrambleType end
+abstract type AbstractSpaceType{N} end
 
 """
 	struct VectorElement{S,T,VT<:AbstractVector{T}} <: AbstractVector{T}
@@ -35,7 +35,7 @@ struct MatrixElement{S,T,MT<:AbstractMatrix{T}} <: AbstractMatrix{T}
 end
 
 # Accessors for GridSpaces
-abstract type ComponentStyle <: BrambleType end
+abstract type ComponentStyle end
 struct SingleComponent <: ComponentStyle end
 struct MultiComponent{D} <: ComponentStyle end
 

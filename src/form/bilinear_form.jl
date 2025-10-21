@@ -3,7 +3,7 @@
 
 Abstract type for bilinear forms.
 """
-abstract type BilinearFormType <: BrambleType end
+abstract type BilinearFormType end
 
 """
 	struct BilinearForm{TrialType,TestType,F} <: BilinearFormType
