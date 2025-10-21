@@ -1,4 +1,4 @@
-import Bramble: CartesianProduct, @embed, DirichletConstraint, label_conditions, embed_function, symbols, labels, DomainMarkers, tuples, conditions, identifier, EvaluatedDomainMarkers, BrambleFunction, label, markers, point, index_in_marker
+import Bramble: CartesianProduct, DirichletConstraint, label_conditions, embed_function, symbols, labels, DomainMarkers, tuples, conditions, identifier, EvaluatedDomainMarkers, BrambleFunction, label, markers, point, index_in_marker
 
 @testset "Dirichlet Constraints Tests" begin
 	# --- Setup ---
@@ -13,10 +13,10 @@ import Bramble: CartesianProduct, @embed, DirichletConstraint, label_conditions,
 		# Define a time-dependent function: f(x, t)
 		f_t = (x, t) -> x[1] * t
 
-		# Wrap them using the @embed macro
-		bf1 = @embed Ω f1
-		bf2 = @embed Ω f2
-		bf_t = @embed Ω × I f_t
+		# Wrap them using the embed_function(macro
+		bf1 = embed_function(Ω, f1)
+		bf2 = embed_function(Ω, f2)
+		bf_t = embed_function(Ω, I, f_t)
 
 		# --- Tests ---
 

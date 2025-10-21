@@ -44,41 +44,41 @@ using LinearAlgebra: hypot
 
 		@testset "is_boundary_index (D=2)" begin
 			idxs = CartesianIndices((3, 4))
-			@test is_boundary_index(CartesianIndex(1, 1), idxs) == true
-			@test is_boundary_index(CartesianIndex(1, 2), idxs) == true
-			@test is_boundary_index(CartesianIndex(1, 4), idxs) == true
-			@test is_boundary_index(CartesianIndex(2, 1), idxs) == true
-			@test is_boundary_index(CartesianIndex(3, 1), idxs) == true
-			@test is_boundary_index(CartesianIndex(2, 4), idxs) == true
-			@test is_boundary_index(CartesianIndex(3, 4), idxs) == true
-			@test is_boundary_index(CartesianIndex(3, 2), idxs) == true
-			@test is_boundary_index(CartesianIndex(2, 2), idxs) == false
-			@test is_boundary_index(CartesianIndex(2, 3), idxs) == false
+			@test is_boundary_index(idxs, CartesianIndex(1, 1)) == true
+			@test is_boundary_index(idxs, CartesianIndex(1, 2)) == true
+			@test is_boundary_index(idxs, CartesianIndex(1, 4)) == true
+			@test is_boundary_index(idxs, CartesianIndex(2, 1)) == true
+			@test is_boundary_index(idxs, CartesianIndex(3, 1)) == true
+			@test is_boundary_index(idxs, CartesianIndex(2, 4)) == true
+			@test is_boundary_index(idxs, CartesianIndex(3, 4)) == true
+			@test is_boundary_index(idxs, CartesianIndex(3, 2)) == true
+			@test is_boundary_index(idxs, CartesianIndex(2, 2)) == false
+			@test is_boundary_index(idxs, CartesianIndex(2, 3)) == false
 			# Test tuple input
-			@test is_boundary_index((1, 3), idxs) == true
-			@test is_boundary_index((2, 2), idxs) == false
+			@test is_boundary_index(idxs, (1, 3)) == true
+			@test is_boundary_index(idxs, (2, 2)) == false
 		end
 
 		@testset "is_boundary_index (D=3)" begin
 			idxs = CartesianIndices((3, 4, 2))
-			@test is_boundary_index(CartesianIndex(1, 1, 1), idxs) == true # Corner
-			@test is_boundary_index(CartesianIndex(2, 2, 1), idxs) == true # On face z=1
-			@test is_boundary_index(CartesianIndex(2, 1, 2), idxs) == true # On face y=1
-			@test is_boundary_index(CartesianIndex(1, 3, 2), idxs) == true # On face x=1
-			@test is_boundary_index(CartesianIndex(3, 2, 1), idxs) == true # On face x=3
-			@test is_boundary_index(CartesianIndex(2, 4, 2), idxs) == true # On face y=4
-			@test is_boundary_index(CartesianIndex(3, 4, 2), idxs) == true # Corner
-			@test is_boundary_index(CartesianIndex(2, 2, 2), idxs) == true # On face z=2
-			@test is_boundary_index(CartesianIndex(2, 3, 1), idxs) == true # On face z=1
+			@test is_boundary_index(idxs, CartesianIndex(1, 1, 1)) == true # Corner
+			@test is_boundary_index(idxs, CartesianIndex(2, 2, 1)) == true # On face z=1
+			@test is_boundary_index(idxs, CartesianIndex(2, 1, 2)) == true # On face y=1
+			@test is_boundary_index(idxs, CartesianIndex(1, 3, 2)) == true # On face x=1
+			@test is_boundary_index(idxs, CartesianIndex(3, 2, 1)) == true # On face x=3
+			@test is_boundary_index(idxs, CartesianIndex(2, 4, 2)) == true # On face y=4
+			@test is_boundary_index(idxs, CartesianIndex(3, 4, 2)) == true # Corner
+			@test is_boundary_index(idxs, CartesianIndex(2, 2, 2)) == true # On face z=2
+			@test is_boundary_index(idxs, CartesianIndex(2, 3, 1)) == true # On face z=1
 
-			@test is_boundary_index(CartesianIndex(2, 2, 1), idxs) == true # Interior in x,y but boundary in z
-			@test is_boundary_index(CartesianIndex(2, 3, 1), idxs) == true # Interior in x,y but boundary in z
+			@test is_boundary_index(idxs, CartesianIndex(2, 2, 1)) == true # Interior in x,y but boundary in z
+			@test is_boundary_index(idxs, CartesianIndex(2, 3, 1)) == true # Interior in x,y but boundary in z
 
 			# Need an interior point test if dims allow
 			idxs_larger = CartesianIndices((4, 4, 4))
-			@test is_boundary_index(CartesianIndex(2, 2, 2), idxs_larger) == false
-			@test is_boundary_index(CartesianIndex(2, 3, 2), idxs_larger) == false
-			@test is_boundary_index(CartesianIndex(3, 2, 3), idxs_larger) == false
+			@test is_boundary_index(idxs_larger, CartesianIndex(2, 2, 2)) == false
+			@test is_boundary_index(idxs_larger, CartesianIndex(2, 3, 2)) == false
+			@test is_boundary_index(idxs_larger, CartesianIndex(3, 2, 3)) == false
 		end
 	end # Helper Functions Testset
 
@@ -179,14 +179,14 @@ using LinearAlgebra: hypot
 			idxs = indices(Ωₕ_2d_unif) # (4, 5)
 			int_indices = collect(interior_indices(Ωₕ_2d_unif))
 
-			@test is_boundary_index(CartesianIndex(1, 1), Ωₕ_2d_unif)
-			@test is_boundary_index(CartesianIndex(4, 5), Ωₕ_2d_unif)
-			@test is_boundary_index(CartesianIndex(3, 1), Ωₕ_2d_unif)
-			@test is_boundary_index(CartesianIndex(1, 3), Ωₕ_2d_unif)
-			@test is_boundary_index(CartesianIndex(4, 2), Ωₕ_2d_unif)
-			@test is_boundary_index(CartesianIndex(2, 5), Ωₕ_2d_unif)
-			@test !is_boundary_index(CartesianIndex(2, 2), Ωₕ_2d_unif)
-			@test !is_boundary_index(CartesianIndex(3, 4), Ωₕ_2d_unif)
+			@test is_boundary_index(Ωₕ_2d_unif, CartesianIndex(1, 1))
+			@test is_boundary_index(Ωₕ_2d_unif, CartesianIndex(4, 5))
+			@test is_boundary_index(Ωₕ_2d_unif, CartesianIndex(3, 1))
+			@test is_boundary_index(Ωₕ_2d_unif, CartesianIndex(1, 3))
+			@test is_boundary_index(Ωₕ_2d_unif, CartesianIndex(4, 2))
+			@test is_boundary_index(Ωₕ_2d_unif, CartesianIndex(2, 5))
+			@test !is_boundary_index(Ωₕ_2d_unif, CartesianIndex(2, 2))
+			@test !is_boundary_index(Ωₕ_2d_unif, CartesianIndex(3, 4))
 
 			# Interior indices are (2:N-1, 2:M-1) -> (2:3, 2:4)
 			@test interior_indices(Ωₕ_2d_unif) == CartesianIndices((2:3, 2:4))
@@ -303,13 +303,13 @@ using LinearAlgebra: hypot
 			idxs_larger = indices(Ωₕ_3d_larger) # (4,5,4)
 			int_indices_lg = interior_indices(Ωₕ_3d_larger)
 
-			@test is_boundary_index((1, 1, 1), Ωₕ_3d_larger)
-			@test is_boundary_index((4, 5, 4), Ωₕ_3d_larger)
-			@test is_boundary_index((2, 2, 1), Ωₕ_3d_larger)
-			@test is_boundary_index((2, 1, 2), Ωₕ_3d_larger)
-			@test is_boundary_index((1, 3, 3), Ωₕ_3d_larger)
-			@test !is_boundary_index((2, 2, 2), Ωₕ_3d_larger)
-			@test !is_boundary_index((3, 4, 3), Ωₕ_3d_larger)
+			@test is_boundary_index(Ωₕ_3d_larger, (1, 1, 1))
+			@test is_boundary_index(Ωₕ_3d_larger, (4, 5, 4))
+			@test is_boundary_index(Ωₕ_3d_larger, (2, 2, 1))
+			@test is_boundary_index(Ωₕ_3d_larger, (2, 1, 2))
+			@test is_boundary_index(Ωₕ_3d_larger, (1, 3, 3))
+			@test !is_boundary_index(Ωₕ_3d_larger, (2, 2, 2))
+			@test !is_boundary_index(Ωₕ_3d_larger, (3, 4, 3))
 			@test interior_indices(Ωₕ_3d_larger) == CartesianIndices((2:3, 2:4, 2:3))
 
 			@test CartesianIndex(2, 2, 2) in int_indices_lg
