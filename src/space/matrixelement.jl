@@ -9,7 +9,7 @@ Returns a [MatrixElement](@ref) from a given [AbstractSpaceType](@ref), initiali
 	ST = typeof(Wₕ)
 	MT = matrix_type(b)
 	T = eltype(b)
-	matrix = MT(backend_eye(MT, ndofs(Wₕ)))
+	matrix = backend_eye(b, ndofs(Wₕ))
 	return MatrixElement{ST,T,MT}(matrix, Wₕ)
 end
 
