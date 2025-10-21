@@ -2,6 +2,7 @@ module Bramble
 
 #using StyledStrings: styled, @styled_str
 
+using DocStringExtensions
 using Base: remove_linenums!
 
 import Base: eltype, similar, length, copyto!, axes, materialize!
