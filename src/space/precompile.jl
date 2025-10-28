@@ -6,13 +6,13 @@
 
 	# --- VectorBuffer Operations ---
 	vb = vector_buffer(precompile_backend, precompile_vector_len)
-	is_in_use(vb)
+	in_use(vb)
 	v = vector(vb)
 	lock!(vb)
 	unlock!(vb)
 
 	# --- GridSpaceBuffer Operations ---
-	gsb = create_simple_space_buffer(precompile_backend, precompile_vector_len; nbuffers = precompile_num_buffers)
+	gsb = simple_space_buffer(precompile_backend, precompile_vector_len; nbuffers = precompile_num_buffers)
 	nbuffers(gsb)
 
 	# Ensure at least one buffer exists for lock/unlock/get
@@ -21,20 +21,20 @@
 	end
 
 	local key1::Int # Ensure type stability
-	local vec1 # Type will be inferred from get_vector_buffer
-	vec1, key1 = get_vector_buffer(gsb) # This locks the buffer
+	local vec1 # Type will be inferred from vector_buffer
+	vec1, key1 = vector_buffer(gsb) # This locks the buffer
 
-	# Need another buffer to test lock/unlock on a specific key if get_vector_buffer added one
+	# Need another buffer to test lock/unlock on a specific key if vector_buffer added one
 	if nbuffers(gsb) < 2
 		add_buffer!(gsb)
 	end
-	key_to_test = 1 == key1 ? 2 : 1 # Pick a key different from the one locked by get_vector_buffer
+	key_to_test = 1 == key1 ? 2 : 1 # Pick a key different from the one locked by vector_buffer
 
-	# Lock/Unlock a specific buffer (that wasn't just locked by get_vector_buffer)
+	# Lock/Unlock a specific buffer (that wasn't just locked by vector_buffer)
 	lock!(gsb, key_to_test)
 	unlock!(gsb, key_to_test)
 
-	# Unlock the one obtained from get_vector_buffer
+	# Unlock the one obtained from vector_buffer
 	unlock!(gsb, key1)
 
 	# Add another buffer
