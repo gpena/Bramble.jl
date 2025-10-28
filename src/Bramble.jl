@@ -33,13 +33,18 @@ using Integrals: solve, IntegralFunction, IntegralProblem, QuadGKJL, CubatureJLh
 #using WriteVTK
 
 # domain/interval handling functions
+export CartesianProduct
 export box, interval, ×, dim, topo_dim
+
+export Marker, MarkerPair, DomainMarkers, Domain
 export domain, markers, labels
 
 # Mesh handling
+export AbstractMeshType, Mesh1D, MeshnD
 export mesh, hₘₐₓ, iterative_refinement!, change_points, npoints, points
 
 # Space handling
+export AbstractSpaceType, SpaceWeights, SingleGridSpace, VectorBuffer, GridSpaceBuffer, VectorElement, MatrixElement
 export gridspace, element
 
 export Rₕ, Rₕ!, avgₕ, avgₕ!
@@ -62,6 +67,10 @@ export M₋ₓ, M₋ᵧ, M₋₂, M₋ₕ
 export M₊ₓ, M₊ᵧ, M₊₂, M₊ₕ
 
 export ⋅
+
+export DirichletConstraint
+export LinearFormType, LinearForm
+export BilinearFormType, BilinearForm
 
 export dirichlet_constraints
 export form, assemble, assemble!
