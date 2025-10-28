@@ -1,7 +1,12 @@
+"""
+	$(TYPEDEF)
+
+Alias for storage of Dirichlet constraints.
+"""
 const DirichletConstraint{FType} = DomainMarkers{FType}
 
 """
-	dirichlet_constraints(X::CartesianProduct{D}, [I::CartesianProduct{1}], pairs...)
+	dirichlet_constraints(X::CartesianProduct, [I::CartesianProduct{1}], pairs...)
 
 Creates Dirichlet boundary constraints where functions return values of type `eltype(X)`.
 
@@ -14,21 +19,21 @@ The provided `:label` should match one of the labels used when creating the [Abs
 #@inline dirichlet_constraints(Wₕ::AbstractSpaceType, pairs::Pair...) = _create_generic_markers(eltype(Wₕ), set(mesh(Wₕ)), pairs...)
 #@inline dirichlet_constraints(Wₕ::AbstractSpaceType, I::CartesianProduct{1}, pairs::Pair...) = _create_generic_markers(eltype(Wₕ), set(mesh(Wₕ)), I, pairs...)
 """
-	dirichlet_constraints(domain_provider, [I::CartesianProduct{1}], pairs...)
+	dirichlet_constraints(cartesian_product, [I::CartesianProduct{1}], pairs...)
 
 Creates Dirichlet boundary constraints.
 
 Each `pair` is of the form `:label => func`, where `:label` identifies the boundary region and `func` defines the Dirichlet values. If the optional time domain `I` is provided, `func` should be a time-dependent function `func(x, t)`.
 
-The `domain_provider` can be a `CartesianProduct` mesh domain or an `ScalarGridSpace` from which the mesh can be extracted. The `:label` must match a label in the mesh definition.
+The `cartesian_product` can be a `CartesianProduct` mesh domain or an `ScalarGridSpace` from which the mesh can be extracted. The `:label` must match a label in the mesh definition.
 """
-function dirichlet_constraints(domain_provider, pairs::Pair...)
-	T, domain = _get_eltype_and_domain(domain_provider)
+function dirichlet_constraints(cartesian_product, pairs::Pair...)
+	T, domain = _get_eltype_and_domain(cartesian_product)
 	_create_generic_markers(T, domain, pairs...)
 end
 
-function dirichlet_constraints(domain_provider, I::CartesianProduct{1}, pairs::Pair...)
-	T, domain = _get_eltype_and_domain(domain_provider)
+function dirichlet_constraints(cartesian_product, I::CartesianProduct{1}, pairs::Pair...)
+	T, domain = _get_eltype_and_domain(cartesian_product)
 	_create_generic_markers(T, domain, I, pairs...)
 end
 
@@ -37,11 +42,11 @@ _get_eltype_and_domain(X::CartesianProduct{D,T}) where {D,T} = (T, X)
 _get_eltype_and_domain(Wₕ::ScalarGridSpace) = (eltype(Wₕ), set(mesh(Wₕ)))
 
 """
-	dirichlet_constraints(X::CartesianProduct{D,T}, f::Function)
+	dirichlet_constraints(X::CartesianProduct, f::Function)
 
-	Creates a single Dirichlet boundary constraint with function ``f`` with the label `:dirichlet`.
+	Creates a single Dirichlet boundary constraint with function `f` with the label `:dirichlet`.
 """
-@inline dirichlet_constraints(X::CartesianProduct{D,T}, f::F) where {D,T,F<:Function} = dirichlet_constraints(X, :boundary => f)
+@inline dirichlet_constraints(X::CartesianProduct, f::F) where F<:Function = dirichlet_constraints(X, :boundary => f)
 
 #==============================================================================
 						APPLYING DIRICHLET BOUNDARY CONDITIONS
@@ -67,8 +72,7 @@ end
 """
 	dirichlet_bc!(v::AbstractVector, Ωₕ::AbstractMeshType, bcs::DirichletConstraint, labels::Symbol...)
 
-Apply Dirichlet boundary conditions to vector `v` using the [Constraint](@ref) object `bcs`
-and the mesh `Ωₕ`.
+Apply Dirichlet boundary conditions to vector `v` using the [DirichletConstraint](@ref) object `bcs` and the mesh `Ωₕ`.
 """
 function dirichlet_bc!(v::AbstractVector, Ωₕ::AbstractMeshType, bcs::DirichletConstraint, labels::Symbol...)
 	isempty(labels) && return

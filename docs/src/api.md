@@ -96,3 +96,13 @@ norm₊
 snorm₁ₕ
 norm₁ₕ
 ```
+
+## Form
+
+```@docs
+dirichlet_constraints
+form
+assemble
+assemble!
+symmetrize!
+```

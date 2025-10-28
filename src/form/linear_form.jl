@@ -41,9 +41,9 @@ Returns the test space of a linear form.
 test_space(l::LinearForm) = l.test_space
 
 """
-	form(Wₕ::SType, f::F)
+	form(Wₕ::AbstractSpaceType, f)
 
-Returns a linear form from a given expression and a test space.
+Returns a linear form from a given expression `f`` and a test space `Wₕ`.
 """
 @inline function form(Wₕ::AbstractSpaceType, _f::F; strategy = DefaultAssembly(), verbose::Bool = false) where F
 	available_strategy = []
@@ -112,11 +112,11 @@ In-place assemble of a linear form into a given vector.
 #@inline _assemble!(x::AbstractVector, l::LinearForm, ::InPlaceAssembly) = l.form_expr(x, IdentityOperator(test_space(l)))
 
 """
-	_assemble!(x::VectorElement, l::LinearForm)
+	_assemble!(uₕ::VectorElement, l::LinearForm)
 
 In-place assemble of a linear form into a given [VectorElement](@ref).
 """
-@inline _assemble!(x::VectorElement, l::LinearForm) = (assemble!(x.values, l); return nothing)
+@inline _assemble!(uₕ::VectorElement, l::LinearForm) = (assemble!(values(uₕ), l); return nothing)
 
 """
 	assemble(l::LinearForm, dirichlet_conditions::DomainMarkers, [dirichlet_labels])
