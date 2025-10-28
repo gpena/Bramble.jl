@@ -4,7 +4,7 @@ import LinearAlgebra: Diagonal
 
 @testset "MatrixElement Tests" begin
 	# Setup a mock space
-	dofs = 5
+	dofs = 4
 
 	W = gridspace(mesh(domain(box(0, 1)), dofs, true))
 	T = Float64

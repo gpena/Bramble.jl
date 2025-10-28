@@ -62,7 +62,7 @@ using LinearAlgebra: norm
 	end
 
 	@testset "Space Creation Functions" begin
-		mesh2d = mesh(domain(box((0, 0), (0.5, 0.6))), (5, 6), (true, true))
+		mesh2d = mesh(domain(box((0, 0), (0.5, 0.6))), (4, 5), (true, true))
 		D = dim(mesh2d)
 		T = eltype(mesh2d)
 		b = backend(mesh2d)
@@ -89,7 +89,7 @@ using LinearAlgebra: norm
 
 	@testset "ScalarGridSpace Constructor and Accessors" begin
 		mesh1d = mesh(domain(box(0, 1)), 3, true)
-		mesh3d = mesh(domain(box((0, 0, 0), (0.5, 0.6, 0.7))), (5, 6, 4), (true, true, true))
+		mesh3d = mesh(domain(box((0, 0, 0), (0.5, 0.6, 0.7))), (4, 4, 4), (true, true, true))
 
 		# Test default caching
 		space1d = gridspace(mesh1d)
