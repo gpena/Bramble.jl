@@ -12,7 +12,7 @@
 _process_scalar(f::FunctionWrapper{T,Tuple{}}) where T<:Number = "$(f())"
 _process_scalar(f::FunctionWrapper{CoType,Tuple{}}) where CoType = "uₕ"
 
-abstract type OperatorType end
+abstract type OperatorType <: BrambleType end
 abstract type ScalarOperatorType <: OperatorType end
 abstract type VectorOperatorType <: OperatorType end
 
