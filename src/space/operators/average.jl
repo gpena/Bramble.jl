@@ -55,24 +55,39 @@ end
 function _average_operator(Ωₕ::AbstractMeshType, ::Backward, ::Val{AVG_DIM}) where AVG_DIM
 	return add_half_shift(Ωₕ, Val(AVG_DIM), Val(0), Val(-1))
 end
-
+# Configuration array for average operators, expanded with descriptive strings.
 op_configs = [
 	(direction = Forward(),
 	 average_name = :forward_average,
 	 average_alias = :M₊,
-	 vectorial_average_alias = :M₊ₕ),
+	 vectorial_average_alias = :M₊ₕ,
+	 dir_string_lowercase = "forward",
+	 math_op = "\\frac{u_{i} + u_{i+1}}{2}"),
 	(direction = Backward(),
 	 average_name = :backward_average,
 	 average_alias = :M₋,
-	 vectorial_average_alias = :M₋ₕ)
+	 vectorial_average_alias = :M₋ₕ,
+	 dir_string_lowercase = "backward",
+	 math_op = "\\frac{u_{i-1} + u_{i}}{2}")
 ]
 
+# Metaprogramming loop to generate all specified average operators.
 for config in op_configs
+	# Extract ALL values from `config` to avoid scope issues with @eval.
 	dir_instance = config.direction
 	average_name = config.average_name
+	average_alias = config.average_alias
+	vectorial_average_alias = config.vectorial_average_alias
+	dir_string_lowercase = config.dir_string_lowercase
+	math_op = config.math_op
 
 	@eval begin
 		# --- In-place applicators ---
+		@doc """
+			$($(QuoteNode(Symbol(average_name, :_dim!))))(out, in, dims, average_dim)
+
+		Low-level, in-place function to compute the $($dir_string_lowercase) average of vector `in` along dimension `average_dim`, storing the result in `out`. This function computes ``$($math_op)``.
+		"""
 		function $(Symbol(average_name, :_dim!))(out, in, h, dims::NTuple{D,Int}, average_dim::Val{DIFF_DIM}) where {D,DIFF_DIM}
 			@assert 1 <= DIFF_DIM <= D "Dimension must be between 1 and $D."
 			@assert length(out) == length(in) == prod(dims) "Vector and grid dimensions must match."
@@ -86,11 +101,16 @@ for config in op_configs
 		end
 
 		# --- Matrix operator functions ---
+		@doc """
+			$($(QuoteNode(average_name)))(arg, dim_val::Val)
+
+		Constructs or applies the $($dir_string_lowercase) averaging operator, representing the operation ``$($math_op)``.
+		"""
 		@inline $average_name(Ωₕ::AbstractMeshType, dim_val::Val) = _average_operator(Ωₕ, $dir_instance, dim_val)
 
 		# --- Generic applicators ---
 		@inline $average_name(Wₕ::AbstractSpaceType, dim_val::Val) = elements(Wₕ, $average_name(mesh(Wₕ), dim_val))
-		function $average_name(uₕ::VectorElement, dim_val::Val{DIM}) where DIM
+		function $average_name(uₕ::VectorElement, dim_val::Val)
 			vₕ = similar(uₕ)
 			dims = ndofs(space(uₕ), Tuple)
 			_average_engine!(vₕ.data, uₕ.data, dims, $dir_instance, dim_val)
@@ -100,17 +120,24 @@ for config in op_configs
 	end
 
 	# --- Aliases for x, y, z directions ---
+	# Use the robust helper function to generate aliases and their docstrings.
 	for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
-		average_alias_op_name = Symbol(config.average_alias, suffix)
-
-		@eval begin
-			@inline $(average_alias_op_name)(arg) = $average_name(arg, Val($i))
-		end
+		direction = _BRAMBLE_var2label[i]
+		_define_directional_alias(average_name, Symbol(average_alias, suffix), dir_string_lowercase, direction, i)
 	end
 
-	# --- Aliases for gradient tuples ---
-	for (vectorial_average_op, base_op) in [(config.vectorial_average_alias, average_name),]
+	# --- Aliases for vectorial average tuples ---
+	for (vectorial_average_op, base_op) in [(vectorial_average_alias, average_name),]
 		@eval begin
+			@doc """
+				$($(QuoteNode(vectorial_average_op)))(arg)
+
+			Computes the vectorial $($dir_string_lowercase) average of `arg`, returning a tuple of
+			operators/elements for each spatial dimension.
+
+			For a 2D space, `$($(QuoteNode(vectorial_average_op)))(uₕ)` is equivalent to
+			`($($(QuoteNode(base_op)))(uₕ, Val(1)), $($(QuoteNode(base_op)))(uₕ, Val(2)))`.
+			"""
 			@inline $vectorial_average_op(arg) = $vectorial_average_op(arg, Val(dim(mesh(space(arg)))))
 			@inline $vectorial_average_op(arg, ::Val{1}) = $base_op(arg, Val(1))
 			@inline $vectorial_average_op(arg, ::Val{D}) where D = ntuple(i -> $base_op(arg, Val(i)), Val(D))

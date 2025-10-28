@@ -7,13 +7,16 @@ Returns the coefficients of the [VectorElement](@ref) `uₕ`.
 @inline values(uₕ::VectorElement) = uₕ.data
 
 """
-	to_matrix([::ComponentStyle], uₕ::VectorElement)
+	to_matrix(uₕ::VectorElement, [::ComponentStyle])
 
-Reshapes the coefficients of the [VectorElement](@ref) `uₕ` to a matrix.
+Reshapes the flat coefficient vector of `uₕ` into a multidimensional array that matches the logical layout of the grid points.
+
+  - For a `SingleComponent` space, this returns a D-dimensional array.
+  - For a `MultiComponent` space, it returns a tuple of D arrays, one for each component.
 """
-@inline to_matrix(uₕ::VectorElement{ST}) where ST = to_matrix(ComponentStyle(ST), uₕ)
-@inline to_matrix(::SingleComponent, uₕ::VectorElement) = Base.ReshapedArray(values(uₕ), npoints(mesh(space(uₕ)), Tuple), ())
-@inline to_matrix(::MultiComponent{D}, uₕ::VectorElement) where D = ntuple(i -> to_matrix(SingleComponent(), uₕ(i)), Val(D))
+@inline to_matrix(uₕ::VectorElement{ST}) where ST = to_matrix(uₕ, ComponentStyle(ST))
+@inline to_matrix(uₕ::VectorElement, ::SingleComponent) = Base.ReshapedArray(values(uₕ), npoints(mesh(space(uₕ)), Tuple), ())
+@inline to_matrix(uₕ::VectorElement, ::MultiComponent{D}) where D = ntuple(i -> to_matrix(uₕ(i), SingleComponent()), Val(D))
 
 """
 	values!(uₕ::VectorElement, s)
@@ -30,6 +33,8 @@ Returns the grid space associated with [VectorElement](@ref) `uₕ`.
 @inline space(uₕ::VectorElement) = uₕ.space
 @inline space_type(::Type{<:VectorElement{S}}) where S = S
 
+# Forward array-like methods to the `data` field. This allows a VectorElement
+# to behave like a standard Julia vector (e.g., support `size`, `length`, `eltype`).
 @forward VectorElement.data (Base.size, Base.length, Base.firstindex, Base.lastindex, Base.iterate, Base.eltype, Base.axes, Base.ndims, Bramble.show)
 @forward VectorElement.space (Bramble.mesh,)
 
@@ -37,17 +42,22 @@ Returns the grid space associated with [VectorElement](@ref) `uₕ`.
 """
 	element(Wₕ::AbstractSpaceType, [α::Number])
 
-Returns a [VectorElement](@ref) for grid space `Wₕ` with uninitialized components. if `\\alpha` is provided, the components are initialized to `\\alpha`.
+Returns a [VectorElement](@ref) for grid space `Wₕ` with uninitialized components. if ``\\alpha`` is provided, the components are initialized to ``\\alpha``.
 """
 @inline function element(Wₕ::AbstractSpaceType)
+	# Get the backend (e.g., CPU, GPU) from the space.
 	b = backend(Wₕ)
 
+	# Determine the types for the space, vector, and elements.
 	ST = typeof(Wₕ)
 	VT = vector_type(b)
 	T = eltype(b)
+
+	# Allocate a vector with the correct number of degrees of freedom (DoFs) and return the element.
 	return VectorElement{ST,T,VT}(vector(b, ndofs(Wₕ)), Wₕ)
 end
 
+# Constructor with a fill value `α`.
 function element(Wₕ::AbstractSpaceType, α::Number)
 	uₕ = element(Wₕ)
 	fill!(uₕ, α)
@@ -60,36 +70,47 @@ end
 Returns a [VectorElement](@ref) for a grid space `Wₕ` with the same coefficients of `v`.
 """
 @inline function element(Wₕ::AbstractSpaceType, v::AbstractVector)
-	@assert length(v) == ndofs(Wₕ)
+	# Ensure the provided vector has the correct number of DoFs.
+	@assert length(v) == ndofs(Wₕ) "Input vector length does not match the number of degrees of freedom in the space."
 	elem = element(Wₕ)
 	copyto!(elem, v)
-
 	return elem
 end
 
+# Enable array-like indexing `uₕ[i]` for VectorElement.
 @inline Base.@propagate_inbounds getindex(uₕ::VectorElement, i) = getindex(uₕ.data, i)
 @inline Base.@propagate_inbounds setindex!(uₕ::VectorElement, val, i) = (setindex!(uₕ.data, val, i); return)
 
-@inline Base.similar(uₕ::VectorElement) = element(space(uₕ))
+# Create a new, uninitialized VectorElement with the same space as the input.
+@inline Base.similar(uₕ::VectorElement) = element(space(uₕ))#===============##===============#
 
 # Broadcasting
+
+# Enable broadcasting capabilities (e.g., uₕ .= vₕ .+ 1) for VectorElement.
 Base.BroadcastStyle(::Type{<:VectorElement}) = Broadcast.ArrayStyle{VectorElement}()
+
+# Define how to create a `similar` container for the broadcast result, preserving the space.
 function Base.similar(bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{VectorElement}}, ::Type{ElType}) where ElType
-	@unpack data, space = _find_vec_in_broadcast(bc)
-	return element(space, similar(data, ElType))
+	# Find a VectorElement within the broadcast expression to extract its space.
+	vec_elem = _find_vec_in_broadcast(bc)
+	# Create a new element on the same space with a similar data array of the correct element type.
+	return element(space(vec_elem), similar(values(vec_elem), ElType))
 end
 
+# Version without a specified ElType.
 function Base.similar(bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{VectorElement}})
-	@unpack data, space = _find_vec_in_broadcast(bc)
-	return element(space, similar(data))
+	vec_elem = _find_vec_in_broadcast(bc)
+	return element(space(vec_elem), similar(values(vec_elem)))
 end
 
-_find_vec_in_broadcast(bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{VectorElement}}) = _find_vec_in_broadcast(bc.args)
+# --- Helper functions to find a VectorElement instance within a broadcast expression ---
+_find_vec_in_broadcast(bc::Broadcast.Broadcasted) = _find_vec_in_broadcast(bc.args)
 _find_vec_in_broadcast(args::Tuple) = _find_vec_in_broadcast(_find_vec_in_broadcast(args[1]), Base.tail(args))
-_find_vec_in_broadcast(x) = x
-_find_vec_in_broadcast(::Tuple{}) = nothing
-_find_vec_in_broadcast(a::VectorElement, rest) = a
-_find_vec_in_broadcast(::Any, rest) = _find_vec_in_broadcast(rest)
+_find_vec_in_broadcast(x::VectorElement) = x
+_find_vec_in_broadcast(::Any) = nothing # Not a VectorElement
+_find_vec_in_broadcast(::Tuple{}) = nothing # End of recursion
+_find_vec_in_broadcast(a::VectorElement, rest) = a # Found one
+_find_vec_in_broadcast(::Any, rest) = _find_vec_in_broadcast(rest) # Keep searching
 
 #=
 function *(uₕ::VectorElement, Vₕ::NTuple{D,VectorElement}) where D
@@ -107,17 +128,30 @@ end
 #                      #
 ########################
 
+# Workhorse function for the restriction operator: evaluates a function `g`
+# point-by-point over the grid indices and stores the result in `u`.
 function _func2array!(::SingleComponent, u, g, mesh_indices::NTuple)
 	u .= zero(eltype(u))
-
+	# Iterate over all specified indices in the mesh.
 	@inbounds @simd for idxs in mesh_indices
 		_apply!(u, g, idxs)
 	end
 end
 
+# Optimized version for CartesianIndices, enabling parallel execution.
 @inline _func2array!(::SingleComponent, u, g, mesh_indices::CartesianIndices) = (_parallel_for!(u, mesh_indices, g))
+# Placeholder for multi-component version.
 @inline _func2array!(::MultiComponent{D}, u, f, mesh) where D = nothing
 
+"""
+	$(TYPEDEF)
+
+Helper struct to bundle a function with its mesh. This allows passing both as a single callable object, `pe(idx)`, which evaluates the function at the physical coordinates corresponding to the grid index `idx`.
+
+# Fields
+
+$(FIELDS)
+"""
 struct PointwiseEvaluator{F,M}
 	func::F
 	mesh::M
@@ -142,7 +176,7 @@ In-place version of the restriction operator [Rₕ](@ref).
 	Ωₕ = mesh(space)
 
 	CStyle = ComponentStyle(ST)
-	u = to_matrix(CStyle, uₕ)
+	u = to_matrix(uₕ, CStyle)
 
 	g = PointwiseEvaluator(f, Ωₕ)
 
@@ -161,29 +195,27 @@ end
 #@inline fuse_markers(marker::Symbol, markers::NTuple{N,Symbol}) where N = (marker, markers...)
 
 """
-	Rₕ(Wₕ::AbstractSpaceType, f; markers)
+	Rₕ(Wₕ::AbstractSpaceType, f)
 
 Standard nodal restriction operator. It returns a [VectorElement](@ref) with the result of evaluating the function `f` at the points of `mesh(Wₕ)`. It is defined as follows
 
   - 1D case
 
 ```math
-\\textrm{R}ₕ(x_i) = f(x_i), \\, i = 1,\\dots,N
+\\textrm{R}ₕ f(x_i) = f(x_i), \\, i = 1,\\dots,N
 ```
 
   - 2D case
 
 ```math
-\\textrm{R}ₕ (x_i, y_j)= f(x_i, y_j), \\, i = 1,\\dots,N_x,  j = 1,\\dots,N_y
+\\textrm{R}ₕ f(x_i, y_j)= f(x_i, y_j), \\, i = 1,\\dots,N_x,  j = 1,\\dots,N_y
 ```
 
   - 3D case
 
 ```math
-\\textrm{R}ₕ (x_i, y_j, z_l)= f(x_i, y_j, z_l), \\, i = 1,\\dots,N_x,  j = 1,\\dots,N_y, l = 1,\\dots,N_z
+\\textrm{R}ₕ f(x_i, y_j, z_l)= f(x_i, y_j, z_l), \\, i = 1,\\dots,N_x,  j = 1,\\dots,N_y, l = 1,\\dots,N_z
 ```
-
-An optional tuple of marker smbols can be passed and the restriction will only be calculated w.r.t the degrees of freedom related with those markers.
 """
 function Rₕ(Wₕ::AbstractSpaceType, f; markers::NTuple{N,Symbol} = NTuple{0,Symbol}()) where N
 	uₕ = element(Wₕ)
@@ -205,19 +237,19 @@ Returns a [VectorElement](@ref) with the average of function `f` with respect to
   - 1D case
 
 ```math
-\\textrm{avg}ₕ(x_i) = \\frac{1}{|\\square_i|} \\int_{\\square_i} f(x) dx, \\, i = 1,\\dots,N
+\\textrm{avg}ₕ f(x_i) = \\frac{1}{|\\square_i|} \\int_{\\square_i} f(x) dx, \\, i = 1,\\dots,N
 ```
 
   - 2D case
 
 ```math
-\\textrm{avg}ₕ(x_i, y_j) = \\frac{1}{|\\square_{i,j}|} \\iint_{\\square_{i,j}} f(x,y) dA, \\, i = 1,\\dots,N_x,  j = 1,\\dots,N_y
+\\textrm{avg}ₕ f(x_i, y_j) = \\frac{1}{|\\square_{i,j}|} \\iint_{\\square_{i,j}} f(x,y) dA, \\, i = 1,\\dots,N_x,  j = 1,\\dots,N_y
 ```
 
   - 3D case
 
 ```math
-\\textrm{avg}ₕ(x_i, y_j, z_l) = \\frac{1}{|\\square_{i,j,l}|} \\iiint_{\\square_{i,j,l}} f(x,y,z) dV, \\, i = 1,\\dots,N_x,  j = 1,\\dots,N_y, l = 1,\\dots,N_z
+\\textrm{avg}ₕ f(x_i, y_j, z_l) = \\frac{1}{|\\square_{i,j,l}|} \\iiint_{\\square_{i,j,l}} f(x,y,z) dV, \\, i = 1,\\dots,N_x,  j = 1,\\dots,N_y, l = 1,\\dots,N_z
 ```
 
 Please check the implementations of functions [cell_measure](@ref cell_measure(Ωₕ::Mesh1D, i)) (for the `1`-dimensional case) and [cell_measure](@ref cell_measure(Ωₕ::MeshnD, i)) (for the `n`-dimensional cases).
@@ -364,7 +396,7 @@ function __quad_problem(prototype, domain, p)
 end
 
 function __quadnd!(::SingleComponent, uₕ::VectorElement, domain::NTuple{S,SV}, p::ParamType) where {S,SV,ParamType}
-	v = to_matrix(SingleComponent(), uₕ)
+	v = to_matrix(uₕ, SingleComponent())
 
 	sol = __quad_problem(v, domain, p)
 	copyto!(v, sol)

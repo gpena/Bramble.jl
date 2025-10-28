@@ -25,17 +25,17 @@ end
 
 """
 	eltype(Uₕ::MatrixElement{S,T})
-	eltype(::Type{MatrixElement{S,T}})
 
-Returns the element type of a [MatrixElement](@ref), `T`.
+Returns the element type of a [MatrixElement](@ref), `T`. CAn be applied to the type of the [MatrixElement](@ref).
 """
 @inline eltype(::MatrixElement{S,T}) where {S,T} = T
 @inline eltype(::Type{<:MatrixElement{S,T}}) where {S,T} = T
 
+@inline space_type(::MatrixElement{S}) where S = S
 @inline space_type(::Type{<:MatrixElement{S}}) where S = S
 
 """
-	$(SIGNATURES)
+	space(Uₕ::MatrixElement)
 
 Returns the space associated with the [MatrixElement](@ref) `Uₕ`.
 """
@@ -127,8 +127,8 @@ end
 
 for op in (:+, :-, :*, :/)
 	same_text = "\n\nReturns a new [MatrixElement](@ref) with coefficients given by the elementwise evaluation of"
-	docstr1 = "	" * string(op) * "(α::Number, Uₕ::MatrixElement)" * same_text * "`α`" * string(op) * "`Uₕ`."
-	docstr2 = "	" * string(op) * "(Uₕ::MatrixElement, α::Number)" * same_text * "`Uₕ`" * string(op) * "`α`."
+	docstr1 = "	" * string(op) * "(α::Number, Uₕ::MatrixElement)" * same_text * " `α` " * string(op) * " `Uₕ`."
+	docstr2 = "	" * string(op) * "(Uₕ::MatrixElement, α::Number)" * same_text * " `Uₕ` " * string(op) * " `α`."
 
 	@eval begin
 		@doc $docstr1 @inline function (Base.$op)(α::Number, Uₕ::MatrixElement)

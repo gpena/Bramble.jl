@@ -4,9 +4,8 @@
 
 """
 	innerₕ(uₕ::VectorElement, vₕ::VectorElement)
-	innerₕ(Uₕ::VecOrMatElem, Vₕ::VecOrMatElem)
 
-Returns the discrete ``L^2`` inner product of the grid functions `uₕ` and `vₕ`
+Returns the discrete ``L^2`` inner product of the grid functions `uₕ` and `vₕ`. Also accepts [MatrixElement](@ref) as any of the arguments.
 
   - 1D case
 

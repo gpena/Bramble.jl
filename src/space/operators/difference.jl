@@ -87,6 +87,27 @@ function _derivative_weights!(v::AbstractVector, Ωₕ::AbstractMeshType, spacin
 	return
 end
 
+function _define_directional_alias(base_op_name, alias_name, dir_string, suffix, direction_index)
+	# 1. Construct the docstring content.
+	doc_string = """
+		$alias_name(arg)
+
+	Alias for `$base_op_name(arg, Val($direction_index))`. Computes the
+	`$dir_string` difference in the `$suffix`-direction.
+	"""
+
+	# 2. Construct the function definition as an expression.
+	func_def_expr = :(@inline $(alias_name)(arg) = $(base_op_name)(arg, Val($(direction_index))))
+
+	# 3. Combine them using the @doc macro syntax into a final expression.
+	#    The `__source__` variable is replaced with `nothing`.
+	final_expr = Expr(:macrocall, GlobalRef(Core, Symbol("@doc")), nothing, doc_string, func_def_expr)
+
+	# 4. Evaluate the final, complete expression in the module's global scope.
+	Core.eval(@__MODULE__, final_expr)
+end
+
+# Configuration array to define forward and backward difference operators.
 op_configs = [
 	(direction = Forward(),
 	 diff_name = :forward_difference,
@@ -98,6 +119,7 @@ op_configs = [
 	 grad_alias = :diff₊ₕ,
 	 finite_grad_alias = :∇₊ₕ,
 	 dir_string = "Forward",
+	 dir_string_lowercase = "forward",
 	 math_op = "u_{i+1} - u_i", math_finite_op = "\\frac{u_{i+1} - u_i}{h_i}"),
 	(direction = Backward(),
 	 diff_name = :backward_difference,
@@ -109,18 +131,35 @@ op_configs = [
 	 grad_alias = :diff₋ₕ,
 	 finite_grad_alias = :∇₋ₕ,
 	 dir_string = "Backward",
+	 dir_string_lowercase = "backward",
 	 math_op = "u_{i} - u_{i-1}", math_finite_op = "\\frac{u_{i} - u_{i-1}}{h_i}")
 ]
 
+# Metaprogramming loop to generate all specified difference operators.
 for config in op_configs
+	# Extract ALL values from `config` into local variables here.
 	dir_instance = config.direction
 	diff_name = config.diff_name
 	finite_diff_name = config.finite_diff_name
 	weights_func! = config.weights_func!
 	spacing_func = config.spacing_func
+	diff_alias = config.diff_alias
+	finite_diff_alias = config.finite_diff_alias
+	grad_alias = config.grad_alias
+	finite_grad_alias = config.finite_grad_alias
+	dir_string = config.dir_string
+	dir_string_lowercase = config.dir_string_lowercase
+	math_op = config.math_op
+	math_finite_op = config.math_finite_op
 
+	# This first @eval block is fine because it doesn't depend on any inner loops.
 	@eval begin
 		# --- In-place applicators ---
+		@doc """
+			$($(QuoteNode(Symbol(diff_name, :_dim!))))(out, in, [h], dims, diff_dim)
+
+		Low-level, in-place function to compute the **unscaled** $($dir_string_lowercase) difference of vector `in` along dimension `diff_dim`, storing the result in `out`. This function computes ``$($math_op)``.
+		"""
 		function $(Symbol(diff_name, :_dim!))(out, in, h, dims::NTuple{D,Int}, diff_dim::Val{DIFF_DIM}) where {D,DIFF_DIM}
 			@assert 1 <= DIFF_DIM <= D "Differentiation dimension must be between 1 and $D."
 			@assert length(out) == length(in) == prod(dims) "Vector and grid dimensions must match."
@@ -134,13 +173,28 @@ for config in op_configs
 		end
 
 		# --- Weight calculation function ---
+		@doc """
+			$($(QuoteNode(weights_func!)))(v::AbstractVector, Ωₕ::AbstractMeshType, diff_dim::Val)
+
+		Computes the geometric weights for the $($dir_string_lowercase) finite difference operator and stores them in-place in vector `v`.
+		"""
 		@inline function $weights_func!(v::AbstractVector, Ωₕ::AbstractMeshType, diff_dim::Val)
 			_derivative_weights!(v, Ωₕ, $spacing_func, diff_dim)
 		end
 
 		# --- Matrix operator functions ---
+		@doc """
+			$($(QuoteNode(diff_name)))(arg, dim_val::Val)
+
+		Constructs the **unscaled** $($dir_string_lowercase) difference operator, representing the operation ``$($math_op)``.
+		"""
 		@inline $diff_name(Ωₕ::AbstractMeshType, dim_val::Val) = _difference_operator(Ωₕ, $dir_instance, dim_val)
 
+		@doc """
+			$($(QuoteNode(finite_diff_name)))(arg, dim_val::Val)
+
+		Constructs the $($dir_string_lowercase) **finite difference** operator, which approximates the first derivative using the formula ``$($math_finite_op)``.
+		"""
 		function $finite_diff_name(Ωₕ::AbstractMeshType, dim_val::Val; vector_cache = __vector(Ωₕ))
 			diff_matrix = $diff_name(Ωₕ, dim_val)
 			$weights_func!(vector_cache, Ωₕ, dim_val)
@@ -169,19 +223,27 @@ for config in op_configs
 	end
 
 	# --- Aliases for x, y, z directions ---
+	# ❗️ FIX: Call the helper function to generate the aliases safely.
 	for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
-		diff_alias_op_name = Symbol(config.diff_alias, suffix)
-		finite_diff_alias_op_name = Symbol(config.finite_diff_alias, suffix)
-
-		@eval begin
-			@inline $(diff_alias_op_name)(arg) = $diff_name(arg, Val($i))
-			@inline $(finite_diff_alias_op_name)(arg) = $finite_diff_name(arg, Val($i))
-		end
+		direction = _BRAMBLE_var2label[i]
+		_define_directional_alias(diff_name, Symbol(diff_alias, suffix), dir_string_lowercase, direction, i)
+		_define_directional_alias(finite_diff_name, Symbol(finite_diff_alias, suffix), dir_string_lowercase, direction, i)
 	end
 
 	# --- Aliases for gradient tuples ---
-	for (grad_op, base_op) in [(config.grad_alias, diff_name), (config.finite_grad_alias, finite_diff_name)]
+	# This loop is fine because the `i` is inside the generated function's body (`ntuple(i->...`)),
+	# not being interpolated from the outer scope.
+	for (grad_op, base_op) in [(grad_alias, diff_name), (finite_grad_alias, finite_diff_name)]
 		@eval begin
+			@doc """
+				$($(QuoteNode(grad_op)))(arg)
+
+			Computes the $($dir_string_lowercase) gradient of `arg`, returning a tuple of
+			operators/elements for each spatial dimension.
+
+			For a 2D space, `$($(QuoteNode(grad_op)))(uₕ)` is equivalent to
+			`($($(QuoteNode(base_op)))(uₕ, Val(1)), $($(QuoteNode(base_op)))(uₕ, Val(2)))`.
+			"""
 			@inline $grad_op(arg) = $grad_op(arg, Val(dim(mesh(space(arg)))))
 			@inline $grad_op(arg, ::Val{1}) = $base_op(arg, Val(1))
 			@inline $grad_op(arg, ::Val{D}) where D = ntuple(i -> $base_op(arg, Val(i)), Val(D))

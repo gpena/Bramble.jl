@@ -1,7 +1,12 @@
 # Functions to help create ScalarGridSpace instante
 """
-	struct CompositeGridSpace{Spaces<:NTuple{N,AbstractSpaceType{<:Any}}} <: AbstractSpaceType{N}
-	end
+	$(TYPEDEF)
+
+A `CompositeGridSpace` represents a grid space that is formed by composing `N` individual sub-spaces.
+
+# Fields
+
+$(FIELDS)
 """
 mutable struct CompositeGridSpace{N,Spaces<:NTuple{N,AbstractSpaceType{<:Any}}} <: AbstractSpaceType{N}
 	spaces::Spaces
