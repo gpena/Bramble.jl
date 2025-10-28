@@ -37,7 +37,7 @@ export box, interval, ×, dim, topo_dim
 export domain, markers, labels
 
 # Mesh handling
-export mesh, hₘₐₓ, iterative_refinement!, change_points, npoints
+export mesh, hₘₐₓ, iterative_refinement!, change_points, npoints, points
 
 # Space handling
 export gridspace, element
