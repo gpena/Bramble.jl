@@ -15,7 +15,9 @@ allpages = [home,
 makedocs(; format = Documenter.HTML(),
 		 sitename = "Bramble.jl",
 		 pages = allpages,
-		 authors = "Gonçalo Pena")
+		 modules = [Bramble],
+		 authors = "Gonçalo Pena",
+		 doctest = false)
 
 deploydocs(;
 		   repo = "github.com/gpena/Bramble.jl",

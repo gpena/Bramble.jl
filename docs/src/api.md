@@ -22,6 +22,8 @@ mesh
 points
 hₘₐₓ
 npoints
+change_points!
+iterative_refinement!
 ```
 
 ## Space
@@ -30,6 +32,7 @@ npoints
 gridspace
 element
 mesh(Wₕ::AbstractSpaceType)
+ndofs
 ```
 
 ### Interpolation operators
