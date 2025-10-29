@@ -121,80 +121,80 @@ end
 	f_2d = x -> x[1]^2 + x[2]^2 - 0.5 >= 0
 	f_3d = x -> x[1] + x[2] + x[3] - 1.0 == 0
 	test_funcs = (f_1d, f_2d, f_3d)
-end
 
-@compile_workload begin
-	# === Boundary Symbols ===
-	get_boundary_symbols(X1)
-	get_boundary_symbols(X2)
-	get_boundary_symbols(X3)
+	@compile_workload begin
+		# === Boundary Symbols ===
+		get_boundary_symbols(X1)
+		get_boundary_symbols(X2)
+		get_boundary_symbols(X3)
 
-	# Iterate through representative sets (1D, 2D, 3D)
-	for X_set in test_sets
-		D = dim(X_set)
-		T = eltype(X_set)
-		f_for_dim = D <= length(test_funcs) ? test_funcs[D] : test_funcs[1] # Select function
-		boundary_syms = get_boundary_symbols(X_set)
-		sym1 = boundary_syms[1]
-		sym_tuple = D > 1 ? (boundary_syms[1], boundary_syms[2]) : (boundary_syms[1],)
+		# Iterate through representative sets (1D, 2D, 3D)
+		for X_set in test_sets
+			D = dim(X_set)
+			T = eltype(X_set)
+			f_for_dim = D <= length(test_funcs) ? test_funcs[D] : test_funcs[1] # Select function
+			boundary_syms = get_boundary_symbols(X_set)
+			sym1 = boundary_syms[1]
+			sym_tuple = D > 1 ? (boundary_syms[1], boundary_syms[2]) : (boundary_syms[1],)
 
-		process_identifier(X_set, f_for_dim)
-		process_identifier(X_set, sym1)
-		process_identifier(X_set, sym_tuple)
+			process_identifier(X_set, f_for_dim)
+			process_identifier(X_set, sym1)
+			process_identifier(X_set, sym_tuple)
 
-		try
-			process_identifier(X_set, 123)
-		catch
-		end
-
-		# === create_markers ===
-		m_func = markers(X_set, :m_func => f_for_dim)
-		m_sym = markers(X_set, :m_sym => sym1)
-		m_tup = markers(X_set, :m_tup => sym_tuple)
-		m_mixed = markers(X_set, :m_func => f_for_dim, :m_sym => sym1, :m_tup => sym_tuple)
-		m_empty = markers(X_set)
-
-		# === Domain Constructors ===
-		# Default constructor
-		d_def = domain(X_set)
-
-		# Constructor with marker tuple
-		d_tup = domain(X_set, m_mixed)
-
-		# Constructor with varargs pairs
-		d_vp = domain(X_set, :m_func => f_for_dim, :m_sym => sym1)
-
-		# === Domain Accessors ===
-		domains_to_test = (d_def, d_tup, d_vp)
-		for dom in domains_to_test
-			set(dom)
-
-			dim(dom)
-			eltype(dom)
-			dim(typeof(dom))
-			eltype(typeof(dom))
-			if dim(dom) > 0
-				projection(dom, 1)
+			try
+				process_identifier(X_set, 123)
+			catch
 			end
 
-			# Test marker accessors
-			mks = marker_identifiers(dom)
-			sbs = marker_symbols(dom)
-			tds = marker_tuples(dom)
-			fds = marker_conditions(dom)
+			# === create_markers ===
+			m_func = markers(X_set, :m_func => f_for_dim)
+			m_sym = markers(X_set, :m_sym => sym1)
+			m_tup = markers(X_set, :m_tup => sym_tuple)
+			m_mixed = markers(X_set, :m_func => f_for_dim, :m_sym => sym1, :m_tup => sym_tuple)
+			m_empty = markers(X_set)
 
-			# Iterate through generators to force compilation
-			collect(mks)
-			collect(sbs)
-			collect(tds)
-			collect(fds)
+			# === Domain Constructors ===
+			# Default constructor
+			d_def = domain(X_set)
+
+			# Constructor with marker tuple
+			d_tup = domain(X_set, m_mixed)
+
+			# Constructor with varargs pairs
+			d_vp = domain(X_set, :m_func => f_for_dim, :m_sym => sym1)
+
+			# === Domain Accessors ===
+			domains_to_test = (d_def, d_tup, d_vp)
+			for dom in domains_to_test
+				set(dom)
+
+				dim(dom)
+				eltype(dom)
+				dim(typeof(dom))
+				eltype(typeof(dom))
+				if dim(dom) > 0
+					projection(dom, 1)
+				end
+
+				# Test marker accessors
+				mks = marker_identifiers(dom)
+				sbs = marker_symbols(dom)
+				tds = marker_tuples(dom)
+				fds = marker_conditions(dom)
+
+				# Iterate through generators to force compilation
+				collect(mks)
+				collect(sbs)
+				collect(tds)
+				collect(fds)
+			end
+
+			# === Show Methods ===
+			# Create specific Marker instances
+			marker_func = Marker(:a, embed_function(X_set, f_for_dim))
+			marker_sym = Marker(:b, sym1)
+			marker_tup = Marker(:c, sym_tuple)
 		end
-
-		# === Show Methods ===
-		# Create specific Marker instances
-		marker_func = Marker(:a, embed_function(X_set, f_for_dim))
-		marker_sym = Marker(:b, sym1)
-		marker_tup = Marker(:c, sym_tuple)
+		@info "Domains: complete"
 	end
-	@info "Domains: complete"
 end

@@ -1,4 +1,3 @@
-
 function _precompile_common_interface(Ωₕ)
 	# Ensure types are concrete for precompilation
 	idx_cart = first(indices(Ωₕ))
@@ -67,8 +66,8 @@ end
 
 @setup_workload begin
 	# --- Common Setup ---
-	const _PrecompileBackendType = Bramble.backend
-	const _PrecompilePointType = Float64
+	_PrecompileBackendType = Bramble.backend
+	_PrecompilePointType = Float64
 	_backend_inst = _PrecompileBackendType()
 
 	# --- 1D Setup ---
@@ -86,27 +85,27 @@ end
 	mesh2D = mesh(domain2D, (10, 10), (true, true))
 	mesh3D = mesh(domain3D, (5, 5, 5), (true, true, true))
 	mesh2D_nonuniform = mesh(domain2D, (10, 10), (false, false))
-end
 
-@compile_workload begin
-	# --- 1D Workload ---
-	_precompile_common_interface(_Ωₕ1D)
-	_precompile_mutating_interface!(_Ωₕ1D, _dm1D)
+	@compile_workload begin
+		# --- 1D Workload ---
+		_precompile_common_interface(_Ωₕ1D)
+		_precompile_mutating_interface!(_Ωₕ1D, _dm1D)
 
-	# 1D-specific calls from original file
-	set_points!(deepcopy(_Ωₕ1D), points(_Ωₕ1D))
-	index_in_marker(_Ωₕ1D, :left)
+		# 1D-specific calls from original file
+		set_points!(deepcopy(_Ωₕ1D), points(_Ωₕ1D))
+		index_in_marker(_Ωₕ1D, :left)
 
-	# --- nD Workload ---
-	_precompile_common_interface(mesh2D)
-	_precompile_mutating_interface!(mesh2D, markers2D)
+		# --- nD Workload ---
+		_precompile_common_interface(mesh2D)
+		_precompile_mutating_interface!(mesh2D, markers2D)
 
-	_precompile_common_interface(mesh3D)
-	_precompile_mutating_interface!(mesh3D, markers3D)
+		_precompile_common_interface(mesh3D)
+		_precompile_mutating_interface!(mesh3D, markers3D)
 
-	_precompile_common_interface(mesh2D_nonuniform)
+		_precompile_common_interface(mesh2D_nonuniform)
 
-	boundary_symbol_to_dict(indices(_Ωₕ1D))
+		boundary_symbol_to_dict(indices(_Ωₕ1D))
 
-	@info "Bramble mesh precompilation complete."
+		@info "Bramble mesh precompilation complete."
+	end
 end

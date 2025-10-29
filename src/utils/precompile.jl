@@ -9,37 +9,37 @@ using Bramble: interval, embed_function
 	backend_sparse64 = backend(vector_type = SparseVector{Float64,Int}, matrix_type = SparseMatrixCSC{Float64,Int})
 	backend_dense32 = backend(vector_type = Vector{Float32}, matrix_type = Matrix{Float32})
 	backend_sparse32 = backend(vector_type = SparseVector{Float32,Int32}, matrix_type = SparseMatrixCSC{Float32,Int32}) # Note Int32 for Sparse*
-end
 
-@compile_workload begin
-	u = Vector{Float64}(undef, 3)
-	v = Vector{Float64}(undef, 3)
-	w = Vector{Float64}(undef, 3)
-	_dot(u, v, w)
-	# Backend constructor itself (the keyword method implicitly calls the inner one)
-	backend(vector_type = Vector{ComplexF64}, matrix_type = Matrix{ComplexF64})
+	@compile_workload begin
+		u = Vector{Float64}(undef, 3)
+		v = Vector{Float64}(undef, 3)
+		w = Vector{Float64}(undef, 3)
+		_dot(u, v, w)
+		# Backend constructor itself (the keyword method implicitly calls the inner one)
+		backend(vector_type = Vector{ComplexF64}, matrix_type = Matrix{ComplexF64})
 
-	# vector for various backends and a typical size
-	vector(backend_default, 10)
-	vector(backend_dense64, 10)
-	vector(backend_sparse64, 10)
-	vector(backend_dense32, 10)
-	vector(backend_sparse32, 10)
+		# vector for various backends and a typical size
+		vector(backend_default, 10)
+		vector(backend_dense64, 10)
+		vector(backend_sparse64, 10)
+		vector(backend_dense32, 10)
+		vector(backend_sparse32, 10)
 
-	# matrix for various backends and typical sizes
-	matrix(backend_default, 5, 5)
-	matrix(backend_dense64, 5, 5)
-	matrix(backend_sparse64, 5, 5)
-	matrix(backend_dense32, 5, 5)
-	matrix(backend_sparse32, 5, 5)
+		# matrix for various backends and typical sizes
+		matrix(backend_default, 5, 5)
+		matrix(backend_dense64, 5, 5)
+		matrix(backend_sparse64, 5, 5)
+		matrix(backend_dense32, 5, 5)
+		matrix(backend_sparse32, 5, 5)
 
-	# Test zero dimensions too
-	vector(backend_default, 0)
-	matrix(backend_default, 0, 5)
-	matrix(backend_default, 5, 0)
-	matrix(backend_default, 0, 0)
+		# Test zero dimensions too
+		vector(backend_default, 0)
+		matrix(backend_default, 0, 5)
+		matrix(backend_default, 5, 0)
+		matrix(backend_default, 0, 0)
 
-	@info "Backend: complete" # Specific message
+		@info "Backend: complete" # Specific message
+	end
 end
 
 # precompile bramblefunctions
@@ -80,45 +80,46 @@ end
 	pt2d_f32 = Float32.(pt2d)
 	pt3d_f32 = Float32.(pt3d)
 	test_points_f32 = (pt1d_f32, pt2d_f32, pt3d_f32)
-end # @setup_workload
 
-@compile_workload begin
-	# Loop through dimensions 1, 2, 3
-	for D in 1:3
-		X_set = test_sets[D]          # CartesianProduct for space
-		f_space = test_space_funcs[D] # Space-only function
-		ft_spacetime = test_spacetime_funcs[D] # Space-time function
-		test_pt = test_points[D]      # Point for calling (Float64)
-		test_pt_f32 = test_points_f32[D] # Point for calling (Float32)
+	@compile_workload begin
+		# Loop through dimensions 1, 2, 3
+		for D in 1:3
+			X_set = test_sets[D]          # CartesianProduct for space
+			f_space = test_space_funcs[D] # Space-only function
+			ft_spacetime = test_spacetime_funcs[D] # Space-time function
+			test_pt = test_points[D]      # Point for calling (Float64)
+			test_pt_f32 = test_points_f32[D] # Point for calling (Float32)
 
-		# === Test embed_function (function interface) ===
-		bf_func_space = embed_function(X_set, f_space)
-		bf_func_spacetime = embed_function(X_set, I_time, ft_spacetime)
+			# === Test embed_function (function interface) ===
+			bf_func_space = embed_function(X_set, f_space)
+			bf_func_spacetime = embed_function(X_set, I_time, ft_spacetime)
 
-		# === Test BrambleFunction Calls ===
-		# Test space-only functions (hastime=false)
-		if D == 1
-			bf_func_space(test_pt)      # Call with Number (correct type)
-			bf_func_space(pt1d_f32)     # Call with Number (needs convert)
-		else
-			bf_func_space(test_pt...)   # Call with splatted tuple NTuple{D, Float64}
-			bf_func_space(test_pt)      # Call with tuple NTuple{D, Float64}
-			bf_func_space(test_pt_f32)  # Call with tuple NTuple{D, Float32} (needs convert)
-		end
+			# === Test BrambleFunction Calls ===
+			# Test space-only functions (hastime=false)
+			if D == 1
+				bf_func_space(test_pt)      # Call with Number (correct type)
+				bf_func_space(pt1d_f32)     # Call with Number (needs convert)
+			else
+				bf_func_space(test_pt...)   # Call with splatted tuple NTuple{D, Float64}
+				bf_func_space(test_pt)      # Call with tuple NTuple{D, Float64}
+				bf_func_space(test_pt_f32)  # Call with tuple NTuple{D, Float32} (needs convert)
+			end
 
-		# Test space-time functions (hastime=true)
-		# Calling with time 't' returns the inner space-only BrambleFunction
-		inner_bf = bf_func_spacetime(test_time)
-		# Now call the inner function with spatial points
-		if D == 1
-			inner_bf(test_pt)
-			inner_bf(pt1d_f32)
-		else
-			inner_bf(test_pt...)
-			inner_bf(test_pt)
-			inner_bf(test_pt_f32)
-		end
-	end # loop D
+			# Test space-time functions (hastime=true)
+			# Calling with time 't' returns the inner space-only BrambleFunction
+			inner_bf = bf_func_spacetime(test_time)
+			# Now call the inner function with spatial points
+			if D == 1
+				inner_bf(test_pt)
+				inner_bf(pt1d_f32)
+			else
+				inner_bf(test_pt...)
+				inner_bf(test_pt)
+				inner_bf(test_pt_f32)
+			end
+		end # loop D
 
-	@info "BrambleFunction and embeddings: complete"
+		@info "BrambleFunction and embeddings: complete"
+	end
 end
+
