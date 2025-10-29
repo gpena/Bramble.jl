@@ -106,6 +106,6 @@ end
 
 		boundary_symbol_to_dict(indices(_Ωₕ1D))
 
-		@info "Bramble mesh precompilation complete."
+		@info "Mesh precompilation complete."
 	end
 end

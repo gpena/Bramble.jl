@@ -106,4 +106,3 @@ function assemble!(A::AbstractMatrix, a::BilinearForm; dirichlet_labels = nothin
 		end
 	end
 end
-
