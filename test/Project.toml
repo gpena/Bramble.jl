@@ -1,6 +1,5 @@
 [deps]
 Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
-Bramble = "72287966-2ff3-4442-8755-61ed245be5f7"
 ILUZero = "88f59080-6952-5380-9ea5-54057fb9a43f"
 IncompleteLU = "40713840-3770-5561-ab4c-a76e7d0d7895"
 JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
