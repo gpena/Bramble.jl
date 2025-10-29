@@ -2,8 +2,6 @@ name: CI
 on:
   - push
   - pull_request
-env:
-  JULIA_NUM_THREADS: 2
 jobs:
   test:
     name: Julia ${{ matrix.version }} - ${{ matrix.os }}
@@ -45,6 +43,9 @@ jobs:
   docs:
     name: Build and Deploy Documentation
     runs-on: ubuntu-latest
+    # Add this permissions block to allow pushing to gh-pages
+    permissions:
+      contents: write
     # This job only needs to run on one Julia version
     steps:
       # 1. Check out the repository code
