@@ -4,13 +4,13 @@
 		I = interval(0, 1)
 		cart = reduce(×, ntuple(i -> I, d))
 		Ω = domain(cart)
-		sol = embed_function(Ω, x -> exp(sum(x)))
-		rhs = embed_function(Ω, x -> -d * sol(x))
+		sol(x) = exp(sum(x))
 
 		nPoints = ntuple(i -> 4, d)
 		unif = ntuple(i -> true, d)
 		Ωₕ = mesh(Ω, nPoints, unif)
 		Wₕ = gridspace(Ωₕ)
+
 		return Ω, sol, Wₕ
 	end
 
@@ -32,6 +32,7 @@
 
 			dirichlet_conditions = dirichlet_constraints(set(Ω), :boundary => x -> sol(x))
 			dirichlet_conditions_time = dirichlet_constraints(set(Ω), interval(0, 1), :boundary => x -> sol(x))
+
 			A = assemble(bform)
 			assemble(bform, dirichlet_labels = :boundary)
 			assemble!(A, bform)
@@ -47,9 +48,9 @@
 			assemble!(F, lform)
 			assemble!(F, lform, dirichlet_conditions = dirichlet_conditions)
 
-			dirichlet_bc_symmetrize!(A, F, Ωₕ, :boundary, dropzeros = false)
+			dirichlet_bc_symmetrize!(A, F, Ωₕ, :boundary)
 			dirichlet_bc_symmetrize!(A, F, Ωₕ, :boundary, dropzeros = true)
 		end
-		@info "Form precompilation complete."
+		@info "Form: complete."
 	end
 end

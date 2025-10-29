@@ -106,6 +106,6 @@ end
 
 		boundary_symbol_to_dict(indices(_Ωₕ1D))
 
-		@info "Mesh precompilation complete."
+		@info "Mesh: complete."
 	end
 end
