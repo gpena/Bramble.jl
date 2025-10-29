@@ -5,5 +5,4 @@ This package provides a set of functions to create and solve discretization prob
 
 ---
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://gpena.github.io/Bramble.jl/)
-
 [![CI](https://github.com/gpena/Bramble.jl/workflows/CI/badge.svg)](https://github.com/gpena/Bramble.jl/actions?query=workflow%3ACI++)
