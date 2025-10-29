@@ -2,6 +2,8 @@ name: CI
 on:
   - push
   - pull_request
+env:
+  JULIA_NUM_THREADS: 2
 jobs:
   test:
     name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
@@ -11,66 +13,55 @@ jobs:
       matrix:
         version:
           - "1.10.10"
-          - "1.11.0"
-          - "1.12.0"
         os:
           - macOS-latest
         arch:
           - x64
     steps:
-      # 1. Check out the repository code
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      # 2. Set up the specified Julia version
-      - name: Set up Julia
-        uses: julia-actions/setup-julia@v2
+      - uses: actions/checkout@v3
+      - uses: julia-actions/setup-julia@v1
         with:
-          version: ${{ matrix.julia-version }}
-
-      # 3. Cache dependencies for faster builds
-      - name: Cache Julia dependencies
-        uses: julia-actions/cache@v2
-
-      # 4. Install the package's dependencies
-      - name: Install dependencies
-        run: julia -e 'using Pkg; Pkg.instantiate()'
-
-      # 5. Run the tests
-      - name: Run tests
-        run: julia -e 'using Pkg; Pkg.test()'
+          version: ${{ matrix.version }}
+          arch: ${{ matrix.arch }}
+          include-all-prereleases: true
+      - uses: actions/cache@v3
+        env:
+          cache-name: cache-artifacts
+        with:
+          path: ~/.julia/artifacts
+          key: ${{ runner.os }}-test-${{ env.cache-name }}-${{ hashFiles('**/Project.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-test-${{ env.cache-name }}-
+            ${{ runner.os }}-test-
+            ${{ runner.os }}-
+      - uses: julia-actions/julia-buildpkg@latest
+      - uses: julia-actions/julia-runtest@latest
+      - uses: julia-actions/julia-processcoverage@v1
+      - uses: codecov/codecov-action@v4
+        with:
+          file: lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false # or true if you want CI to fail when Codecov fails
   docs:
-    name: Build and Deploy Documentation
+    name: Documentation
     runs-on: ubuntu-latest
-    # This job only needs to run on one Julia version
     steps:
-      # 1. Check out the repository code
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      # 2. Set up Julia (e.g., v1.10)
-      - name: Set up Julia
-        uses: julia-actions/setup-julia@v2
+      - uses: actions/checkout@v2
+      - uses: julia-actions/setup-julia@v1
         with:
-          version: "1.10"
-
-      # 3. Cache dependencies
-      - name: Cache Julia dependencies
-        uses: julia-actions/cache@v2
-
-      # 4. Install documentation dependencies
-      #    This is the most critical step for an unregistered package.
-      - name: Install documentation dependencies
-        run: |
+          version: "1.10.5"
+      - run: |
+          julia --project=docs docs/nursery.jl
+      - run: |
           julia --project=docs -e '
             using Pkg
-            Pkg.develop(path=".")  # Installs Bramble.jl from the current directory
-            Pkg.instantiate()'
-
-      # 5. Build and deploy the documentation
-      #    The GITHUB_TOKEN is automatically provided by GitHub Actions.
-      #    Documenter.jl will detect it's in a CI environment and use it.
-      - name: Build and deploy
+            Pkg.add("Documenter")
+            Pkg.add("Bramble")
+            Pkg.instantiate()
+            using Documenter
+            using Bramble'
+      - run: julia --project=docs docs/make.jl
         env:
+          PYTHON: ""
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: julia --project=docs docs/make.jl
+          DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
