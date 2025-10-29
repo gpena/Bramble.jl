@@ -43,25 +43,37 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false # or true if you want CI to fail when Codecov fails
   docs:
-    name: Documentation
+    name: Build and Deploy Documentation
     runs-on: ubuntu-latest
+    # This job only needs to run on one Julia version
     steps:
-      - uses: actions/checkout@v2
-      - uses: julia-actions/setup-julia@v1
+      # 1. Check out the repository code
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # 2. Set up Julia (e.g., v1.10)
+      - name: Set up Julia
+        uses: julia-actions/setup-julia@v2
         with:
-          version: "1.10.5"
-      - run: |
-          julia --project=docs docs/nursery.jl
-      - run: |
+          version: "1.10.10"
+
+      # 3. Cache dependencies
+      - name: Cache Julia dependencies
+        uses: julia-actions/cache@v2
+
+      # 4. Install documentation dependencies
+      #    This is the most critical step for an unregistered package.
+      - name: Install documentation dependencies
+        run: |
           julia --project=docs -e '
             using Pkg
-            Pkg.add("Documenter")
-            Pkg.add("Bramble")
-            Pkg.instantiate()
-            using Documenter
-            using Bramble'
-      - run: julia --project=docs docs/make.jl
+            Pkg.develop(path=".")  # Installs Bramble.jl from the current directory
+            Pkg.instantiate()'
+
+      # 5. Build and deploy the documentation
+      #    The GITHUB_TOKEN is automatically provided by GitHub Actions.
+      #    Documenter.jl will detect it's in a CI environment and use it.
+      - name: Build and deploy
         env:
-          PYTHON: ""
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
+        run: julia --project=docs docs/make.jl
