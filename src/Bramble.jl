@@ -16,12 +16,12 @@ using SparseArrays: SparseMatrixCSC, AbstractSparseMatrix, spdiagm, rowvals, nnz
 using FunctionWrappers: FunctionWrapper
 using MacroTools: @capture, isexpr
 
-using StaticArrays
+using StaticArrays: @SVector, SVector
 
 using OrderedCollections: LittleDict, OrderedDict, freeze
 using Base.Threads: @threads
 using UnPack: @unpack
-using MuladdMacro
+using MuladdMacro: @muladd
 
 using LinearAlgebra: norm, Diagonal, mul!, I, dot, transpose, Transpose
 import LinearAlgebra: ⋅
@@ -34,7 +34,6 @@ using Integrals: solve, IntegralFunction, IntegralProblem, QuadGKJL, CubatureJLh
 
 # domain/interval handling functions
 export box, interval, ×, dim, topo_dim
-
 export domain, markers, labels
 
 # Mesh handling
@@ -42,7 +41,6 @@ export mesh, hₘₐₓ, iterative_refinement!, change_points, npoints, points
 
 # Space handling
 export gridspace, element
-
 export Rₕ, Rₕ!, avgₕ, avgₕ!
 export ndofs
 
