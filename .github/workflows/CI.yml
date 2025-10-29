@@ -65,9 +65,14 @@ jobs:
       #    This is the most critical step for an unregistered package.
       - name: Install documentation dependencies
         run: |
+          # First, instantiate the main package's dependencies
+          julia --project=. -e 'using Pkg; Pkg.instantiate()'
+
+          # Then, activate the docs environment, develop the main package,
+          # and instantiate the docs-specific dependencies.
           julia --project=docs -e '
             using Pkg
-            Pkg.develop(path=".")  # Installs Bramble.jl from the current directory
+            Pkg.develop(path=".")
             Pkg.instantiate()'
 
       # 5. Build and deploy the documentation
