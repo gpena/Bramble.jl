@@ -67,11 +67,11 @@ jobs:
       - name: Install documentation dependencies
         run: |
           # First, instantiate the main package's dependencies
-          julia --project=. -e 'using Pkg; Pkg.instantiate()'
+          julia --color=yes --project=. -e 'using Pkg; Pkg.instantiate()'
 
           # Then, activate the docs environment, develop the main package,
           # and instantiate the docs-specific dependencies.
-          julia --project=docs -e '
+          julia --color=yes --project=docs -e '
             using Pkg
             Pkg.develop(path=".")
             Pkg.instantiate()'
