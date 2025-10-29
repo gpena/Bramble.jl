@@ -39,7 +39,7 @@ function _precompile_common_interface(Ωₕ)
 	hₘₐₓ(Ωₕ)
 
 	# Indexing
-	is_boundary_index(idx_cart, indices(Ωₕ))
+	is_boundary_index(indices(Ωₕ), idx_cart)
 	boundary_indices(Ωₕ)
 	interior_indices(Ωₕ)
 
