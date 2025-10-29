@@ -2,6 +2,7 @@ using Pkg
 Pkg.activate(".")
 using Bramble
 using Documenter
+using DocStringExtensions
 #using LiveServer; servedocs()
 
 home = "Home" => "index.md"

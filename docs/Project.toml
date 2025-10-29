@@ -1,5 +1,6 @@
 [deps]
 Bramble = "72287966-2ff3-4442-8755-61ed245be5f7"
+DocStringExtensions = "ffbed154-4ef7-542d-bbb7-c09d3a79fcae"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 DocumenterTools = "35a29f4d-8980-5a13-9543-d66fff28ecb8"
 LiveServer = "16fef848-5104-11e9-1b77-fb7a48bbb589"
