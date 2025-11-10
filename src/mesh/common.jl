@@ -1,7 +1,21 @@
 """
-	 $(TYPEDEF)
+	AbstractMeshType{D}
 
-Abstract type for meshes. Meshes are only parametrized by their dimension `D`.
+Abstract supertype for all mesh types in Bramble. The type parameter `D` represents
+the spatial dimension of the mesh (1, 2, or 3).
+
+All concrete mesh types must implement the AbstractMeshType interface, including:
+
+  - `eltype`, `dim`, `topo_dim`, `indices`, `backend`, `markers`
+  - `points`, `point`, `half_points`, `half_point`
+  - `spacing`, `half_spacing`, `forward_spacing`
+
+# Related Types
+
+  - Meshes are created from a [Domain](@ref) using the [`mesh`](@ref) function.
+  - See [MeshMarkers](@ref) for marker management on meshes.
+
+See also: [`Mesh1D`](@ref), [`MeshnD`](@ref), [`Domain`](@ref)
 """
 abstract type AbstractMeshType{D} end
 
@@ -13,15 +27,27 @@ efficient methods for 1D vs. nD cases based on the type of the input.
 abstract type Dimension end
 
 struct OneDimensional <: Dimension end
-struct NDimensional <: Dimension end
+struct TwoDimensional <: Dimension end
+struct ThreeDimensional <: Dimension end
+struct MultiDimensional <: Dimension end
 
 # Helper functions to select the correct dimension type based on input type.
-dimension_one_or_all(::Type{<:Int}) = OneDimensional()
-dimension_one_or_all(::Type{<:NTuple{D}}) where D = NDimensional()
+@inline dimension_one_or_all(::Type{<:Int}) = OneDimensional()
+@inline dimension_one_or_all(::Type{<:Union{NTuple,SVector}}) = MultiDimensional()
 
-dimension(::Type{<:NTuple{1}}) = OneDimensional()
-dimension(::Type{<:NTuple{2}}) = TwoDimensional()
-dimension(::Type{<:NTuple{3}}) = ThreeDimensional()
+"""
+	dimension(::Type{<:NTuple{D}}) -> Dimension
+	dimension(::Type{<:SVector{D}}) -> Dimension
+
+Maps a tuple or SVector type to its corresponding dimension type for compile-time dispatch.
+Used internally for efficient method selection in `generate_indices` and similar functions.
+"""
+@inline dimension(::Type{<:NTuple{1}}) = OneDimensional()
+@inline dimension(::Type{<:NTuple{2}}) = TwoDimensional()
+@inline dimension(::Type{<:NTuple{3}}) = ThreeDimensional()
+@inline dimension(::Type{<:SVector{1}}) = OneDimensional()
+@inline dimension(::Type{<:SVector{2}}) = TwoDimensional()
+@inline dimension(::Type{<:SVector{3}}) = ThreeDimensional()
 
 """
 	generate_indices([::Dimension], pts)
@@ -30,7 +56,8 @@ Returns the `CartesianIndices` of a mesh with `pts[i]` in each direction or just
 """
 @inline generate_indices(pts::PointsType) where PointsType = generate_indices(dimension_one_or_all(PointsType), pts)
 @inline generate_indices(::OneDimensional, pts) = CartesianIndices((pts,))
-@inline generate_indices(::NDimensional, pts) = CartesianIndices(ntuple(i -> 1:pts[i], length(pts)))
+@inline generate_indices(::MultiDimensional, pts::NTuple{D}) where D = CartesianIndices(ntuple(i -> 1:pts[i], Val(D)))
+@inline generate_indices(::MultiDimensional, pts::SVector{D}) where D = CartesianIndices(ntuple(i -> 1:pts[i], Val(D)))
 
 #------------------------------------------------------------------------------------------#
 # AbstractMeshType Getters and Indexing Helpers
@@ -82,7 +109,7 @@ false
 """
 function is_boundary_index(idxs::CartesianIndices{D}, idx) where D
 	_idx = CartesianIndex(idx) # Iterate over each dimension (axis) of the Cartesian domain. 
-	for i in 1:D
+	@inbounds for i in 1:D
 		axis = idxs.indices[i]
 		# A point is on the boundary if its coordinate along any axis of length > 1 
 		# matches the first or last element of that axis range. 
@@ -134,7 +161,7 @@ CartesianIndices((1:1, 2:4))
 	original_ranges = indices.indices
 
 	interior_ranges_tuple = ntuple(Val(D)) do i
-		r = original_ranges[i]
+		@inbounds r = original_ranges[i]
 
 		if length(r) <= 1
 			return r
@@ -183,8 +210,11 @@ This function is a required part of the [AbstractMeshType](@ref) interface. Can 
 Returns the topological dimension `Ωₕ`.
 """
 @inline function topo_dim(Ωₕ::AbstractMeshType{D}) where D
-	terms = ntuple(i -> ifelse(npoints(Ωₕ(i)) == 1, false, true), Val(D))
-	return sum(terms)
+	count = 0
+	@inbounds for i in 1:D
+		npoints(Ωₕ(i)) > 1 && (count += 1)
+	end
+	return count
 end
 
 """
