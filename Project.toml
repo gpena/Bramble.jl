@@ -1,7 +1,7 @@
 name = "Bramble"
 uuid = "72287966-2ff3-4442-8755-61ed245be5f7"
-authors = ["Gonçalo Pena <goncalo.pena@uc.pt>"]
 version = "1.1.0"
+authors = ["Gonçalo Pena <goncalo.pena@uc.pt>"]
 
 [deps]
 Cubature = "667455a9-e2ce-5579-9412-b964f529a492"
