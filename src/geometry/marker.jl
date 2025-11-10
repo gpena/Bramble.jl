@@ -153,11 +153,20 @@ from a collection of pairs. Returns a tuple containing the set of symbol markers
 and the set of tuple markers.
 =========================================================================#
 function _extract_identifier_markers(pairs::Tuple)
-	# Filter pairs where the identifier is a single Symbol. 
-	symbols = Set{Marker{Symbol}}(Marker(p.first, p.second) for p in pairs if p.second isa Symbol)
+	# Pre-allocate with size hint for better performance
+	symbols = Set{Marker{Symbol}}()
+	tuples = Set{Marker{Set{Symbol}}}()
+	sizehint!(symbols, length(pairs))
+	sizehint!(tuples, length(pairs))
 
-	# Filter pairs where the identifier is a Tuple of Symbols, converting the Tuple to a Set. 
-	tuples = Set{Marker{Set{Symbol}}}(Marker(p.first, Set(p.second)) for p in pairs if p.second isa NTuple{N,Symbol} where N)
+	# Single pass through pairs
+	for p in pairs
+		if p.second isa Symbol
+			push!(symbols, Marker(p.first, p.second))
+		elseif p.second isa NTuple{N,Symbol} where N
+			push!(tuples, Marker(p.first, Set(p.second)))
+		end
+	end
 
 	return symbols, tuples
 end
@@ -192,13 +201,18 @@ function _pairs_to_set_conditions(FinalType::Type, space_domain::CartesianProduc
 	# Determine the concrete type of the BrambleFunction for the Set, which improves type stability. 
 	BrambleFuncType = BrambleFunction{ArgsT,false,FinalType,typeof(space_domain)}
 
-	# Create a generator that processes only pairs with a function identifier.
-	# This avoids creating an intermediate array.
-	generator = (Marker(p.first, process_identifier(space_domain, p.second; FinalType))
-				 for p in pairs if p.second isa Function)
+	# Pre-allocate with size hint
+	result = Set{Marker{BrambleFuncType}}()
+	sizehint!(result, length(pairs))
 
-	# Collect the results from the generator into a Set.
-	return Set{Marker{BrambleFuncType}}(generator)
+	# Single pass, avoiding double iteration
+	@inbounds for p in pairs
+		if p.second isa Function
+			push!(result, Marker(p.first, process_identifier(space_domain, p.second; FinalType)))
+		end
+	end
+
+	return result
 end
 
 function _pairs_to_set_conditions(FinalType::Type, space_domain::CartesianProduct{D,T}, time_domain::CartesianProduct{1,T}, pairs) where {D,T}
@@ -206,10 +220,18 @@ function _pairs_to_set_conditions(FinalType::Type, space_domain::CartesianProduc
 	SpaceFuncType = BrambleFunction{SpaceArgsT,false,FinalType,typeof(space_domain)}
 	BrambleFuncType = BrambleFunction{T,true,SpaceFuncType,typeof(time_domain)}
 
-	generator = (Marker(p.first, process_identifier(space_domain, time_domain, p.second; FinalType))
-				 for p in pairs if p.second isa Function)
+	# Pre-allocate with size hint
+	result = Set{Marker{BrambleFuncType}}()
+	sizehint!(result, length(pairs))
 
-	return Set{Marker{BrambleFuncType}}(generator)
+	# Single pass, avoiding double iteration
+	@inbounds for p in pairs
+		if p.second isa Function
+			push!(result, Marker(p.first, process_identifier(space_domain, time_domain, p.second; FinalType)))
+		end
+	end
+
+	return result
 end
 
 @inline function process_identifier(space_domain::CartesianProduct, identifier::F; FinalType = Bool) where {F<:Function}
@@ -251,17 +273,18 @@ Returns a lazy generator that yields time-evaluated markers.
 This is the core of the lazy evaluation. It iterates over the original conditions and yields new [Marker](@ref) objects with their functions evaluated at `edm.evaluation_time`, but only when requested.
 """
 function conditions(edm::EvaluatedDomainMarkers)
-	return (begin
-				bramble_func = identifier(marker)
-				t = edm.evaluation_time
+	t = edm.evaluation_time
+	return (_evaluate_marker_at_time(marker, t) for marker in conditions(edm.original_markers))
+end
 
-				if applicable(bramble_func, t)
-					Marker(label(marker), bramble_func(t))
-				else
-					marker
-				end
-			end
-			for marker in conditions(edm.original_markers))
+# Helper function to avoid closure allocation in the generator
+@inline function _evaluate_marker_at_time(marker, t)
+	bramble_func = identifier(marker)
+	if applicable(bramble_func, t)
+		return Marker(label(marker), bramble_func(t))
+	else
+		return marker
+	end
 end
 
 """
@@ -278,3 +301,107 @@ julia> time_dep_markers = markers(space_domain, time_domain, :moving_front => (x
 ```
 """
 (dm::DomainMarkers)(t::Number) = EvaluatedDomainMarkers(dm, t)
+
+"""
+	Base.show(io::IO, m::Marker)
+
+Custom display for Marker objects.
+"""
+function Base.show(io::IO, m::Marker{F}) where F
+	if F <: Symbol
+		print(io, "Marker(:$(m.label) => :$(m.identifier))")
+	elseif F <: Set{Symbol}
+		syms = join(m.identifier, ", ")
+		print(io, "Marker(:$(m.label) => ($syms))")
+	else
+		print(io, "Marker(:$(m.label) => <function>)")
+	end
+end
+
+"""
+	Base.show(io::IO, dm::DomainMarkers)
+
+Custom display for DomainMarkers objects with detailed marker information and colors.
+"""
+function Base.show(io::IO, dm::DomainMarkers)
+	pp = PrettyPrinter(io)
+
+	n_sym = length(dm.symbols)
+	n_tup = length(dm.tuples)
+	n_cond = length(dm.conditions)
+	total = n_sym + n_tup + n_cond
+
+	if pp.compact
+		# Compact mode for arrays/collections
+		print(io, "DomainMarkers($total total)")
+	else
+		# Detailed mode
+		if total == 0
+			print_empty_message(pp, "DomainMarkers: (empty)")
+			return
+		end
+
+		print_header(pp, "DomainMarkers:")
+		println(io, " with $total marker$(total == 1 ? "" : "s"):")
+
+		pp_indented = with_indent(pp, 1)
+
+		# Show symbol markers
+		if n_sym > 0
+			print_section_header(pp_indented, "Symbol markers ($n_sym):")
+			pp_double_indent = with_indent(pp, 2)
+			for m in dm.symbols
+				print_key_value(pp_double_indent, ":$(label(m))", ":$(identifier(m))")
+			end
+		end
+
+		# Show tuple markers
+		if n_tup > 0
+			print_section_header(pp_indented, "Tuple markers ($n_tup):")
+			pp_double_indent = with_indent(pp, 2)
+			for m in dm.tuples
+				print_indent(pp_double_indent)
+				printstyled(io, ":$(label(m))"; color = :green)
+				print(io, " => (")
+				syms = sort!(collect(identifier(m)))
+				for (i, s) in enumerate(syms)
+					printstyled(io, ":$s"; color = :blue)
+					i < length(syms) && print(io, ", ")
+				end
+				println(io, ")")
+			end
+		end
+
+		# Show condition markers
+		if n_cond > 0
+			print_section_header(pp_indented, "Function markers ($n_cond):")
+			pp_double_indent = with_indent(pp, 2)
+			for m in dm.conditions
+				bf = identifier(m)
+				print_indent(pp_double_indent)
+				printstyled(io, ":$(label(m))"; color = :green)
+				print(io, " => ")
+				printstyled(io, "<function>"; color = :magenta)
+				has_time(bf) && printstyled(io, " (time-dependent)"; color = :red)
+				println(io)
+			end
+		end
+
+		# Remove trailing newline
+		remove_trailing_newline(io)
+	end
+end
+
+"""
+	Base.length(dm::DomainMarkers)
+
+Returns the total number of markers in a DomainMarkers object.
+"""
+Base.length(dm::DomainMarkers) = length(dm.symbols) + length(dm.tuples) + length(dm.conditions)
+
+"""
+	Base.isempty(dm::DomainMarkers)
+
+Checks if a DomainMarkers object contains any markers.
+"""
+Base.isempty(dm::DomainMarkers) = isempty(dm.symbols) && isempty(dm.tuples) && isempty(dm.conditions)
