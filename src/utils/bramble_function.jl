@@ -33,8 +33,18 @@ Internal helper to determine the expected argument type for a function based on 
   - If the domain is 1D (e.g., a line), the argument type is a scalar `T`.
   - If the domain is D-dimensional, the argument type is an `NTuple{D,T}`.
   - `T` is the element type of the domain `X`.
+
+# Examples
+
+```julia
+X_1d = interval(0.0, 1.0)  # D=1, T=Float64
+_get_args_type(X_1d)  # Returns Float64
+
+X_2d = interval(0.0, 1.0) × interval(0.0, 1.0)  # D=2, T=Float64  
+_get_args_type(X_2d)  # Returns NTuple{2,Float64}
+```
 """
-function _get_args_type(X)
+@inline function _get_args_type(X)
 	D = dim(X)
 	T = eltype(X)
 	return ifelse(D == 1, T, NTuple{D,T})
@@ -121,9 +131,10 @@ end
 # to the appropriate `_convert_and_wrap` helper for type conversion before evaluation.
 @inline (f::BrambleFunction{AT})(x::Number) where {AT<:Number} = _convert_and_wrap(f, x, Val(1), AT) #f.wrapped(convert(AT, x))
 @inline (f::BrambleFunction{T,false})(coords::NTuple{D,T}) where {D,T<:AbstractFloat} = _convert_and_wrap(f, coords, Val(D), T)
+@inline (f::BrambleFunction{T,false})(coords::SVector{D,T}) where {D,T<:AbstractFloat} = _convert_and_wrap(f, coords, Val(D), T)
 @inline (f::BrambleFunction{T,false})(coords::T) where {T<:AbstractFloat} = _convert_and_wrap(f, coords, Val(1), T)
 @inline (f::BrambleFunction{NTuple{D,T},false})(coords::Tuple) where {D,T} = _convert_and_wrap(f, coords, Val(D), T)
-@inline (f::BrambleFunction{NTuple{D,T},false})(coords::SVector{D,T}) where {D,T} = _convert_and_wrap(f, ntuple(i->coords[i], Val(D)), Val(D), T)
+@inline (f::BrambleFunction{NTuple{D,T},false})(coords::SVector{D,T}) where {D,T} = _convert_and_wrap(f, Tuple(coords), Val(D), T)
 @inline (f::BrambleFunction{NTuple{D,T},false})(coords::Vararg{Number,D}) where {D,T} = _convert_and_wrap(f, coords, Val(D), T)
 
 """
@@ -139,15 +150,41 @@ Creates a [BrambleFunction](@ref) for a function `func` defined over `space_doma
 	$(SIGNATURES)
 
 Internal implementation for embedding a time-dependent function `f(x, t)`. When this function is called with a specific time `t_val`, it returns another space-only [BrambleFunction](@ref), which represents the spatial function `f(x, t_val)` at that fixed time.
+
+# Arguments
+
+  - `space_domain`: The spatial domain (CartesianProduct)
+  - `time_domain`: The time domain (1D CartesianProduct)
+  - `f`: A function `f(x, t)` that takes spatial and time coordinates
+  - `FinalCoType`: The return type of `f` (optional, defaults to element type of time domain)
+
+# Returns
+
+A `BrambleFunction{ArgType,true,CoType,typeof(time_domain)}` where calling it with time `t` returns a space-only `BrambleFunction`.
+
+# Examples
+
+```julia
+Ω = interval(0.0, 1.0)
+I = interval(0.0, 10.0)
+f(x, t) = sin(x * t)
+bf = _embed_withtime(Ω, I, f)
+bf_at_t5 = bf(5.0)  # Returns BrambleFunction for f(x, 5.0)
+bf_at_t5(0.5)       # Evaluates sin(0.5 * 5.0)
+```
 """
 function _embed_withtime(space_domain, time_domain::CartesianProduct{1}, f; FinalCoType = eltype(time_domain))
 	# Create a function of time `t` that returns a spatial BrambleFunction.
+	# Base.Fix2 partially applies the second argument, creating f_t(x) = f(x, t)
 	_f(t) = _embed_notime(space_domain, Base.Fix2(f, t), CoType = FinalCoType)
 
-	# To determine the codomain type, we evaluate `_f` at a sample time point.
-	CoType = typeof(_f(sum(tails(time_domain)) * 0.5))
+	# To determine the codomain type, we evaluate `_f` at a sample time point (center of time domain).
+	CoType = typeof(_f(center(time_domain)))
 	# Wrap the time-dependent function `_f`.
-	return bramble_function_with_domain(_f, time_domain, true, CoType, domain = time_domain)
+	ArgType = _get_args_type(time_domain)
+	BFType = BrambleFunction{ArgType,true,CoType,typeof(time_domain)}
+
+	return bramble_function_with_domain(_f, time_domain, true, CoType, domain = time_domain)::BFType
 end
 
 """
@@ -165,7 +202,7 @@ argstype(::Type{FunctionWrapper{CoType,Tuple{}}}) where CoType = Nothing
 
 Extracts the codomain type `CoType` from a `FunctionWrapper` instance or type.
 """
-codomaintype(::FunctionWrapper{CoType}) where CoType = CoType
-codomaintype(::FunctionWrapper{CoType,Tuple{}}) where CoType = Nothing
-codomaintype(::Type{FunctionWrapper{CoType}}) where CoType = CoType
+codomaintype(::FunctionWrapper{CoType,Tuple{ArgsType}}) where {CoType,ArgsType} = CoType
+codomaintype(::FunctionWrapper{CoType,Tuple{}}) where CoType = CoType  # Not Nothing!
+codomaintype(::Type{FunctionWrapper{CoType,Tuple{ArgsType}}}) where {CoType,ArgsType} = CoType
 codomaintype(::Type{FunctionWrapper{CoType,Tuple{}}}) where CoType = CoType
