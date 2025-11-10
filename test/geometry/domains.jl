@@ -1,6 +1,7 @@
 using Bramble: Marker, BrambleFunction, DomainMarkers, dim
 using Bramble: get_boundary_symbols, label, identifier, domain, set, markers, labels
-using Bramble: marker_identifiers, _embed_notime, process_identifier, marker_symbols, marker_tuples, marker_conditions
+using Bramble: marker_identifiers, _embed_notime, process_identifier, marker_symbols, marker_tuples, marker_conditions, label_identifiers, symbols, label_symbols, label_tuples, conditions, label_conditions
+using StaticArrays
 
 # --- Test Suite ---
 
@@ -153,11 +154,89 @@ using Bramble: marker_identifiers, _embed_notime, process_identifier, marker_sym
 		proj1 = projection(Ω, 1)
 		proj2 = projection(Ω, 2)
 		@test proj1 isa CartesianProduct{1,Float32}
-		@test proj1.box == ((0.0f0, 1.0f0),)
+		# Updated: SVector comparison instead of tuple
+		@test proj1.box[1] == (0.0f0, 1.0f0)
 		@test proj2 isa CartesianProduct{1,Float32}
-		@test proj2.box == ((2.0f0, 3.0f0),)
+		@test proj2.box[1] == (2.0f0, 3.0f0)
+	end
+
+	@testset "SVector Integration" begin
+		# Test that domains with D ≤ 4 use SVector
+		@test I1D.box isa SVector{1}
+		@test I2D.box isa SVector{2}
+		@test I3D.box isa SVector{3}
+
+		# Test that domains with D > 4 use NTuple
+		I5D = interval(0.0, 1.0) × interval(2.0, 3.0) × interval(4.0, 5.0) ×
+			  interval(6.0, 7.0) × interval(8.0, 9.0)
+		@test I5D.box isa SVector{5}
 	end
 end # End Domain System Tests
+
+@testset "DomainMarkers Additional Functions" begin
+	I2D = interval(0.0, 1.0) × interval(2.0, 3.0)
+
+	# Test label accessor functions on DomainMarkers
+	dm = markers(I2D,
+				 :sym1 => :left,
+				 :sym2 => :right,
+				 :tup1 => (:top, :bottom),
+				 :cond1 => x -> x[1] > 0.5)
+
+	@testset "Label Accessors" begin
+		# label_identifiers
+		all_labels = Set(collect(label_identifiers(dm)))
+		@test all_labels == Set([:sym1, :sym2, :tup1, :cond1])
+
+		# label_symbols
+		sym_labels = Set(collect(label_symbols(dm)))
+		@test sym_labels == Set([:sym1, :sym2])
+
+		# label_tuples
+		tup_labels = Set(collect(label_tuples(dm)))
+		@test tup_labels == Set([:tup1])
+
+		# label_conditions
+		cond_labels = Set(collect(label_conditions(dm)))
+		@test cond_labels == Set([:cond1])
+	end
+
+	@testset "DomainMarkers Utilities" begin
+		# Test length
+		@test length(dm) == 4
+
+		# Test isempty
+		@test !isempty(dm)
+		dm_empty = markers(I2D)
+		@test isempty(dm_empty)
+		@test length(dm_empty) == 0
+	end
+
+	@testset "EvaluatedDomainMarkers" begin
+		# Create time-dependent markers
+		dm_time = markers(I2D, interval(0.0, 1.0),
+						  :moving => (x, t) -> x[1] > t,
+						  :static => :left)
+
+		# Evaluate at t = 0.3
+		dm_eval = dm_time(0.3)
+		@test dm_eval isa Bramble.EvaluatedDomainMarkers
+
+		# Check that symbol markers are preserved
+		@test length(collect(symbols(dm_eval))) == 1
+
+		# Check that conditions are lazily evaluated
+		conds = collect(conditions(dm_eval))
+		@test length(conds) == 1
+
+		# Test the evaluated function
+		moving_marker = first(conds)
+		@test label(moving_marker) == :moving
+		bf_static = identifier(moving_marker)
+		@test bf_static((0.5, 2.5)) == true  # 0.5 > 0.3
+		@test bf_static((0.2, 2.5)) == false  # 0.2 < 0.3
+	end
+end
 
 @testset "Time-Dependent Marker Functions" begin
 	func_time = (x, t) -> x[1] > t
