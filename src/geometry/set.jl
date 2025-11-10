@@ -9,10 +9,10 @@ A type representing the cartesian product of `D` closed intervals in a space wit
 $(FIELDS)
 """
 struct CartesianProduct{D,T}
-	"a tuple of `D` pairs, where each pair represents the bounds `(min, max)` of an interval"
-	box::NTuple{D,Tuple{T,T}}
-	"a tuple of `D` boolean values indicating whether each dimension is collapsed (i.e., min = max)"
-	collapsed::NTuple{D,Bool}
+	"a container of `D` pairs, where each pair represents the bounds `(min, max)` of an interval"
+	box::SVector{D,Tuple{T,T}}
+	"a container of `D` boolean values indicating whether each dimension is collapsed (i.e., min = max)"
+	collapsed::SVector{D,Bool}
 end
 
 """
@@ -46,7 +46,9 @@ The inputs are converted to floating-point numbers. It also accepts an existing 
 	@assert _x <= _y
 
 	_is_collapsed = is_collapsed(_x, _y)
-	return CartesianProduct{1,typeof(_x)}(((_x, _y),), (_is_collapsed,))
+	box = SVector{1}(((_x, _y),))
+	collapsed = SVector{1}((_is_collapsed,))
+	return CartesianProduct{1,typeof(_x)}(box, collapsed)
 end
 
 @inline interval(x::CartesianProduct{1}) = interval(x(1)...)
@@ -56,7 +58,12 @@ end
 
 Creates a collapsed 1D [CartesianProduct](@ref) representing the point ``[x, x]``.
 """
-@inline point(x) = (_x = float(x); return CartesianProduct{1,typeof(_x)}(((_x, _x),), (true,)))
+@inline function point(x)
+	_x = float(x)
+	box = SVector{1}(((_x, _x),))
+	collapsed = SVector{1}((true,))
+	return CartesianProduct{1,typeof(_x)}(box, collapsed)
+end
 
 """
 	cartesian_product(x, y)
@@ -77,8 +84,9 @@ Returns a [CartesianProduct](@ref).
 	# Convert all coordinates to floating-point numbers.
 	_box = ntuple(i -> float.(box[i]), D)
 	# Pre-compute whether each dimension is collapsed.
-	_collapsed_flags = ntuple(i -> is_collapsed(_box[i]...) ? true : false, D)
-	return CartesianProduct{D,eltype(_box[1])}(_box, _collapsed_flags)
+	_collapsed_flags = ntuple(i -> is_collapsed(_box[i]...), D)
+
+	return CartesianProduct{D,eltype(_box[1])}(SVector(_box), SVector(_collapsed_flags))
 end
 
 @inline cartesian_product(X::CartesianProduct) = X
@@ -95,16 +103,21 @@ and `NTuple` (for D-dimensions).
 
 @inline function box(a::NTuple{D}, b::NTuple{D}) where D
 	# Create the box coordinates by taking the min and max for each dimension.
-	box_coords = Base.ntuple(Val(D)) do i
-		return float.((min(a[i], b[i]), max(a[i], b[i])))
-	end
+	box_coords = ntuple(i -> float.((min(a[i], b[i]), max(a[i], b[i]))), Val(D))
 
 	# Determine which dimensions are collapsed.
-	collapsed_flags = Base.ntuple(Val(D)) do i
-		return is_collapsed(box_coords[i]...)
-	end
+	collapsed_flags = ntuple(i -> is_collapsed(box_coords[i]...), Val(D))
 
-	return CartesianProduct(box_coords, collapsed_flags)
+	return CartesianProduct{D,eltype(box_coords[1])}(SVector(box_coords), SVector(collapsed_flags))
+end
+
+"""
+	center(cp::CartesianProduct{D,T}) -> SVector{D,T}
+
+Returns the center point of a CartesianProduct domain.
+"""
+@inline function center(cp::CartesianProduct{D,T}) where {D,T}
+	return SVector{D,T}(ntuple(i -> muladd(T(0.5), cp.box[i][2], T(0.5) * cp.box[i][1]), Val(D)))
 end
 
 """
@@ -122,8 +135,8 @@ julia> Y = cartesian_product(((0.0, 1.0), (4.0, 5.0)));
 """
 @inline function (X::CartesianProduct)(i)
 	@unpack box = X
-	@assert i in eachindex(box) "Index $i is out of bounds for a CartesianProduct of dimension $(dim(X))."
-	return box[i]
+	@boundscheck @assert i in eachindex(box) "Index $i is out of bounds for a CartesianProduct of dimension $(dim(X))."
+	return @inbounds box[i]
 end
 
 """
@@ -169,7 +182,7 @@ julia> Y = cartesian_product(((0, 1), (4, 5)));
 
 Returns the topological dimension of a [CartesianProduct](@ref). The depends on the dimension of the [CartesianProduct](@ref) and the number of collapsed dimensions.
 """
-@inline topo_dim(X::CartesianProduct{D}) where D = (D - sum(X.collapsed))
+@inline @fastmath topo_dim(X::CartesianProduct{D}) where D = (D - sum(X.collapsed))
 
 """
 	tails(X::CartesianProduct, i)
@@ -212,16 +225,13 @@ Computes the [CartesianProduct](@ref) of two [CartesianProduct](@ref)s X and Y. 
 X × Y
 ```
 """
-@generated function ×(X::CartesianProduct{D1,T}, Y::CartesianProduct{D2,T}) where {D1,D2,T}
-	# At compile time, generate an expression to concatenate the box tuples. 
-	new_box_expr = :(tuple(X.box..., Y.box...))
+@inline function ×(X::CartesianProduct{D1,T}, Y::CartesianProduct{D2,T}) where {D1,D2,T}
+	D = D1 + D2
+	# Concatenate boxes and collapsed flags using vcat (works for both SVector and NTuple)
+	new_box = vcat(X.box, Y.box)
+	new_collapsed = vcat(X.collapsed, Y.collapsed)
 
-	# At compile time, generate an expression to concatenate the collapsed flag tuples. 
-	new_collapsed_expr = :(tuple(X.collapsed..., Y.collapsed...))
-
-	ResultType = CartesianProduct{D1 + D2,T}
-
-	return :($ResultType($new_box_expr, $new_collapsed_expr))
+	return CartesianProduct{D,T}(new_box, new_collapsed)
 end
 
 """
@@ -238,3 +248,68 @@ Determines the type of a coordinate point within a `CartesianProduct` space. Ret
 """
 @inline point_type(X::CartesianProduct{1,T}) where T = T
 @inline point_type(X::CartesianProduct{D,T}) where {D,T} = NTuple{D,T}
+
+"""
+	Base.show(io::IO, X::CartesianProduct)
+
+Custom display for CartesianProduct objects, showing dimension info and collapsed status with colors.
+"""
+function Base.show(io::IO, X::CartesianProduct{D,T}) where {D,T}
+	pp = PrettyPrinter(io)
+
+	if pp.compact
+		# Compact display for arrays/collections
+		if D == 1
+			collapsed = X.collapsed[1]
+			if collapsed
+				print(io, "Point(", X.box[1][1], ")")
+			else
+				print(io, "[", X.box[1][1], ", ", X.box[1][2], "]")
+			end
+		else
+			for i in 1:D
+				i > 1 && print(io, " × ")
+				if X.collapsed[i]
+					print(io, X.box[i][1])
+				else
+					print(io, "[", X.box[i][1], ", ", X.box[i][2], "]")
+				end
+			end
+		end
+	else
+		# Detailed display
+		topodim = topo_dim(X)
+
+		if D == 1
+			collapsed = X.collapsed[1]
+			print_colored(pp, "CartesianProduct{$D,$T}"; bold = true, color = :cyan)
+			print(io, ": ")
+			if collapsed
+				print_colored(pp, "Point"; color = :yellow)
+				print(io, " at ")
+				print_value(pp, X.box[1][1])
+			else
+				print_colored(pp, "Interval"; color = :yellow)
+				print(io, " ")
+				print_interval(pp, X.box[1][1], X.box[1][2])
+			end
+		else
+			# Header with topological dimension info
+			print_colored(pp, "CartesianProduct{$D,$T}"; bold = true, color = :cyan)
+			if topodim < D
+				print_colored(pp, " (topological dim $topodim)"; color = :yellow)
+			end
+			println(io, ":")
+
+			# Show each dimension
+			pp_indented = with_indent(pp, 1)
+			for i in 1:D
+				label = get_dimension_label(i)
+				print_dimension_info(pp_indented, label, X.box[i][1], X.box[i][2], X.collapsed[i])
+			end
+
+			# Remove trailing newline
+			remove_trailing_newline(io)
+		end
+	end
+end
