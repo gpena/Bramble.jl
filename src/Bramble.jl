@@ -74,6 +74,7 @@ include("utils/macros.jl")
 include("utils/backend.jl")
 include("utils/linear_algebra.jl")
 
+include("geometry/pretty_print.jl")
 include("geometry/set.jl")
 include("utils/bramble_function.jl")
 
@@ -82,6 +83,7 @@ include("geometry/domain.jl")
 
 include("mesh/common.jl")
 include("mesh/marker.jl")
+include("mesh/pretty_print.jl")
 include("mesh/mesh1d.jl")
 include("mesh/meshnd.jl")
 
@@ -107,5 +109,5 @@ include("exporter/types.jl")
 include("exporter/exporter_vtk.jl")
 
 =#
-include("precompile.jl")
+#include("precompile.jl")
 end
