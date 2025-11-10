@@ -43,7 +43,7 @@ function _precompile_common_interface(Ωₕ)
 	interior_indices(Ωₕ)
 
 	# Iterators
-	for iterator_func in (points_iterator, half_points_iterator, spacings_iterator, half_spacings_iterator, cell_measures_iterator)
+	for iterator_func in (points_iterator, half_points_iterator, spacings_iterator, half_spacings_iterator, cell_measures_iterator, forward_spacings_iterator)
 		iter = iterator_func(Ωₕ)
 		!isempty(iter) && first(iter)
 	end
@@ -52,6 +52,19 @@ function _precompile_common_interface(Ωₕ)
 	if D > 1
 		Ωₕ(1) # Test accessor for sub-mesh
 	end
+
+	# Additional accessors
+	set(Ωₕ)
+	topo_dim(Ωₕ)
+	is_collapsed(Ωₕ(1))
+
+	# Forward spacing
+	if D == 1
+		idx_scalar = idx_tup[1]
+		forward_spacing(Ωₕ, idx_scalar)
+	end
+	forward_spacing(Ωₕ, idx_cart)
+	#forward_spacing(Ωₕ, idx_tup)
 end
 
 function _precompile_mutating_interface!(Ωₕ, dm)
@@ -94,6 +107,12 @@ end
 		# 1D-specific calls from original file
 		set_points!(deepcopy(_Ωₕ1D), points(_Ωₕ1D))
 		index_in_marker(_Ωₕ1D, :left)
+
+		# Test boundary_indices on both mesh and indices
+		boundary_indices(_Ωₕ1D)
+		boundary_indices(indices(_Ωₕ1D))
+		interior_indices(_Ωₕ1D)
+		interior_indices(indices(_Ωₕ1D))
 
 		# --- nD Workload ---
 		_precompile_common_interface(mesh2D)

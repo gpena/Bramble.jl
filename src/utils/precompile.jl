@@ -11,10 +11,26 @@ using Bramble: interval, embed_function
 	backend_sparse32 = backend(vector_type = SparseVector{Float32,Int32}, matrix_type = SparseMatrixCSC{Float32,Int32}) # Note Int32 for Sparse*
 
 	@compile_workload begin
+		# Linear algebra utilities
 		u = Vector{Float64}(undef, 3)
 		v = Vector{Float64}(undef, 3)
 		w = Vector{Float64}(undef, 3)
+		fill!(u, 1.0)
+		fill!(v, 2.0)
+		fill!(w, 0.5)
 		_dot(u, v, w)
+		_inner_product(u, w, v)
+
+		# Test with Float32
+		u_f32 = Vector{Float32}(undef, 3)
+		v_f32 = Vector{Float32}(undef, 3)
+		w_f32 = Vector{Float32}(undef, 3)
+		fill!(u_f32, 1.0f0)
+		fill!(v_f32, 2.0f0)
+		fill!(w_f32, 0.5f0)
+		_dot(u_f32, v_f32, w_f32)
+		_inner_product(u_f32, w_f32, v_f32)
+
 		# Backend constructor itself (the keyword method implicitly calls the inner one)
 		backend(vector_type = Vector{ComplexF64}, matrix_type = Matrix{ComplexF64})
 
@@ -37,6 +53,25 @@ using Bramble: interval, embed_function
 		matrix(backend_default, 0, 5)
 		matrix(backend_default, 5, 0)
 		matrix(backend_default, 0, 0)
+
+		# Test backend utility functions
+		using Bramble: backend_types, vector_type, matrix_type, backend_eye, backend_zeros
+
+		backend_types(backend_default)
+		backend_types(typeof(backend_default))
+		vector_type(backend_default)
+		matrix_type(backend_default)
+		eltype(backend_default)
+		eltype(typeof(backend_default))
+
+		# backend_eye and backend_zeros
+		backend_eye(backend_default, 5)
+		backend_zeros(backend_default, 5)
+
+		# Test _serial_for! and _parallel_for!
+		test_vec = Vector{Float64}(undef, 10)
+		_serial_for!(test_vec, 1:10, i -> Float64(i^2))
+		_parallel_for!(test_vec, 1:10, i -> Float64(i^2))
 
 		@info "Backend: complete" # Specific message
 	end
@@ -118,6 +153,27 @@ end
 				inner_bf(test_pt_f32)
 			end
 		end # loop D
+
+		# Test has_time, argstype, codomaintype
+		using Bramble: has_time, argstype, codomaintype, _get_args_type
+
+		bf_notime = embed_function(X1, f_space1d)
+		bf_withtime = embed_function(X1, I_time, ft_spacetime1d)
+
+		has_time(bf_notime)
+		has_time(typeof(bf_notime))
+		has_time(bf_withtime)
+		has_time(typeof(bf_withtime))
+
+		argstype(bf_notime.wrapped)
+		codomaintype(bf_notime.wrapped)
+
+		_get_args_type(X1)
+		_get_args_type(X2)
+		_get_args_type(X3)
+
+		# Test with BrambleFunction input (identity operation)
+		embed_function(X1, bf_notime)
 
 		@info "BrambleFunction and embeddings: complete"
 	end
