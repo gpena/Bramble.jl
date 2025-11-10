@@ -1,7 +1,7 @@
 import Bramble: indices, change_points!, npoints, dim, spacing, half_spacings, generate_indices, boundary_symbol_to_dict, markers, backend, set_indices!, points, set_points!, set_markers!, point, half_point,
 				half_spacing, iterative_refinement!
 import Bramble: cell_measure, hₘₐₓ, half_points, boundary_indices, interior_indices
-import Bramble: DomainMarkers, Mesh1D, Backend, points_iterator, half_points_iterator, spacings_iterator, cell_measures_iterator, half_spacings_iterator
+import Bramble: DomainMarkers, Mesh1D, Backend, points_iterator, half_points_iterator, spacings_iterator, cell_measures_iterator, half_spacings_iterator, forward_spacing, forward_spacings_iterator, MeshMarkers
 import Base: diff
 
 @testset "Mesh1D Tests" begin
@@ -282,6 +282,57 @@ import Base: diff
 			Ωₕ_copy2 = deepcopy(Ωₕ)
 			change_points!(Ωₕ_copy2, dm, new_pts_valid)
 			@test points(Ωₕ_copy2) ≈ new_pts_valid
+		end
+	end
+
+	@testset "Additional Mesh1D Functions" begin
+		Ω = create_test_domain(0.0, 4.0)
+		Ωₕ = mesh(Ω, 5, true; backend = backend()) # [0, 1, 2, 3, 4]
+
+		@testset "Mesh Accessors" begin
+			# Test set accessor
+			@test set(Ωₕ) == interval(0.0, 4.0)
+
+			# Test is_collapsed
+			@test is_collapsed(Ωₕ) == false
+
+			# Collapsed mesh
+			Ω_pt = create_test_domain(1.0, 1.0)
+			Ωₕ_pt = mesh(Ω_pt, 1, true; backend = backend())
+			@test is_collapsed(Ωₕ_pt) == true
+			@test spacing(Ωₕ_pt, 1) == 0.0
+			@test forward_spacing(Ωₕ_pt, 1) == 0.0
+		end
+
+		@testset "Boundary Indices" begin
+			@test boundary_indices(Ωₕ) == (CartesianIndex(1), CartesianIndex(5))
+
+			# Test on indices directly
+			idx = indices(Ωₕ)
+			bounds = boundary_indices(idx)
+			@test bounds == (CartesianIndex(1), CartesianIndex(5))
+		end
+
+		@testset "Forward Spacing Edge Cases" begin
+			# Test forward_spacing at boundaries
+			@test forward_spacing(Ωₕ, 1) ≈ 1.0  # pts[2] - pts[1]
+			@test forward_spacing(Ωₕ, 5) ≈ 1.0  # pts[5] - pts[4] (backward at end)
+			@test forward_spacing(Ωₕ, CartesianIndex(3)) ≈ 1.0
+		end
+
+		@testset "Mesh Callable" begin
+			# Test that mesh(i) returns itself for 1D
+			@test Ωₕ(1) === Ωₕ
+			@test Ωₕ(999) === Ωₕ  # Any value returns itself
+		end
+
+		@testset "Type Stability" begin
+			# Test eltype on type
+			@test eltype(typeof(Ωₕ)) == Float64
+			@test eltype(Ωₕ) == Float64
+
+			# Test dim on type
+			@test dim(typeof(Ωₕ)) == 1
 		end
 	end
 end

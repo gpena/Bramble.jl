@@ -328,4 +328,130 @@ using LinearAlgebra: hypot
 			Ωₕ_3d_marked = mesh(Ω_3d_marked, npts_3d, (true, true, true); backend = backend()) # Pts: x=[0,1,2], y=[0,1,2,3], z=[0,1]
 		end
 	end # Dimension D=3 Testset
+
+	@testset "Additional MeshnD Functions" begin
+		@testset "Iterator Functions (D=2)" begin
+			intervals_2d = ((0.0, 2.0), (0.0, 2.0))
+			Ω_2d = create_test_nd_domain(intervals_2d)
+			Ωₕ = mesh(Ω_2d, (3, 3), (true, true); backend = backend()) # 3x3 uniform
+
+			# points_iterator
+			pts_iter = points_iterator(Ωₕ)
+			@test length(pts_iter) == 9
+			pts_collected = collect(pts_iter)
+			@test pts_collected[1] == (0.0, 0.0)
+			@test pts_collected[end] == (2.0, 2.0)
+
+			# half_points_iterator
+			hp_iter = half_points_iterator(Ωₕ)
+			@test length(hp_iter) == 4 * 4  # (n+1) × (n+1)
+
+			# spacings_iterator
+			sp_iter = spacings_iterator(Ωₕ)
+			@test length(sp_iter) == 9
+
+			# forward_spacings_iterator
+			fsp_iter = forward_spacings_iterator(Ωₕ)
+			@test length(fsp_iter) == 9
+
+			# half_spacings_iterator
+			hsp_iter = half_spacings_iterator(Ωₕ)
+			@test length(hsp_iter) == 9
+
+			# cell_measures_iterator
+			cm_iter = cell_measures_iterator(Ωₕ)
+			cm_collected = collect(cm_iter)
+			@test length(cm_collected) == 9
+			# Corner cells should have measure 0.5*0.5 = 0.25
+			@test cm_collected[1] ≈ 0.25
+		end
+
+		@testset "Submesh Access" begin
+			intervals_2d = ((0.0, 1.0), (2.0, 3.0))
+			Ω = create_test_nd_domain(intervals_2d)
+			Ωₕ = mesh(Ω, (5, 6), (true, true); backend = backend())
+
+			# Test submesh access with bounds checking
+			@test Ωₕ(1) isa Mesh1D
+			@test Ωₕ(2) isa Mesh1D
+			@test_throws BoundsError Ωₕ(0)
+			@test_throws BoundsError Ωₕ(3)
+
+			# Verify submesh properties
+			@test npoints(Ωₕ(1)) == 5
+			@test npoints(Ωₕ(2)) == 6
+		end
+
+		@testset "Type Stability (D=2 and D=3)" begin
+			intervals_2d = ((0.0, 1.0), (0.0, 1.0))
+			Ω_2d = create_test_nd_domain(intervals_2d)
+			Ωₕ_2d = mesh(Ω_2d, (3, 3), (true, true); backend = backend())
+
+			# Test eltype on type
+			@test eltype(typeof(Ωₕ_2d)) == Float64
+			@test eltype(Ωₕ_2d) == Float64
+
+			# Test dim on type
+			@test dim(typeof(Ωₕ_2d)) == 2
+
+			intervals_3d = ((0.0, 1.0), (0.0, 1.0), (0.0, 1.0))
+			Ω_3d = create_test_nd_domain(intervals_3d)
+			Ωₕ_3d = mesh(Ω_3d, (2, 2, 2), (true, true, true); backend = backend())
+			@test dim(typeof(Ωₕ_3d)) == 3
+		end
+
+		@testset "Mesh Accessors" begin
+			intervals_2d = ((0.0, 1.0), (0.0, 1.0))
+			Ω = create_test_nd_domain(intervals_2d)
+			Ωₕ = mesh(Ω, (4, 4), (true, true); backend = backend())
+
+			# Test set accessor
+			@test set(Ωₕ) == interval(0.0, 1.0) × interval(0.0, 1.0)
+
+			# Test backend accessor
+			@test backend(Ωₕ) isa Backend
+
+			# Test indices accessor
+			@test indices(Ωₕ) == CartesianIndices((4, 4))
+
+			# Test markers accessor
+			@test markers(Ωₕ) isa MeshMarkers
+		end
+
+		@testset "Topological Dimension" begin
+			# 2D mesh
+			intervals_2d = ((0.0, 1.0), (0.0, 1.0))
+			Ω_2d = create_test_nd_domain(intervals_2d)
+			Ωₕ_2d = mesh(Ω_2d, (3, 3), (true, true); backend = backend())
+			@test topo_dim(Ωₕ_2d) == 2
+
+			# 1D line in 2D space (collapsed in one dimension)
+			intervals_line = ((0.0, 1.0), (0.5, 0.5))
+			Ω_line = create_test_nd_domain(intervals_line)
+			Ωₕ_line = mesh(Ω_line, (5, 1), (true, true); backend = backend())
+			@test dim(Ωₕ_line) == 2
+			@test topo_dim(Ωₕ_line) == 1  # Only 1 non-collapsed dimension
+		end
+
+		@testset "_apply_hs_logic Helper" begin
+			# Test the helper function for collapsed dimensions
+			using Bramble: _apply_hs_logic
+
+			@test _apply_hs_logic(0.0) == 1.0  # Zero becomes one
+			@test _apply_hs_logic(0.5) == 0.5  # Non-zero stays same
+			@test _apply_hs_logic(2.0) == 2.0
+		end
+
+		@testset "forward_spacing" begin
+			intervals_2d = ((0.0, 2.0), (0.0, 2.0))
+			Ω = create_test_nd_domain(intervals_2d)
+			Ωₕ = mesh(Ω, (3, 3), (true, true); backend = backend())
+
+			# Test forward_spacing
+			@test forward_spacing(Ωₕ, (1, 1)) == (1.0, 1.0)
+			@test forward_spacing(Ωₕ, (2, 2)) == (1.0, 1.0)
+			@test forward_spacing(Ωₕ, (3, 3)) == (1.0, 1.0)  # Uses backward at boundaries
+			@test forward_spacing(Ωₕ, CartesianIndex(2, 1)) == (1.0, 1.0)
+		end
+	end
 end # Main Testset
