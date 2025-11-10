@@ -11,6 +11,12 @@ This struct is a fundamental building block, bundling a geometric entity (a [Car
 # Fields
 
 $(FIELDS)
+
+# Related Types
+
+  - Use [`mesh`](@ref) to discretize a [Domain](@ref) into a computational mesh ([Mesh1D](@ref) or [MeshnD](@ref)).
+  - See [CartesianProduct](@ref) for the underlying geometric representation.
+  - See [DomainMarkers](@ref) for marker management.
 """
 struct Domain{SetType,MarkersType} <: DomainBaseType
 	"the geometric set defining the domain's extent (e.g., a [CartesianProduct](@ref))."
@@ -189,3 +195,108 @@ Returns a tuple of default boundary symbols for a [CartesianProduct](@ref).
 @inline get_boundary_symbols(::CartesianProduct{1}) = (:left, :right)
 @inline get_boundary_symbols(::CartesianProduct{2}) = (:bottom, :top, :left, :right)
 @inline get_boundary_symbols(::CartesianProduct{3}) = (:bottom, :top, :back, :front, :left, :right)
+
+"""
+	Base.show(io::IO, Ω::Domain)
+
+Custom display for Domain objects, combining set and marker information with colors.
+"""
+function Base.show(io::IO, Ω::Domain)
+	pp = PrettyPrinter(io)
+
+	if pp.compact
+		# Compact mode for arrays/collections
+		print(io, "Domain{$(dim(Ω))D, $(eltype(Ω))}:")
+	else
+		# Detailed mode
+		X = set(Ω)
+		dm = markers(Ω)
+
+		# Header
+		printstyled(io, "Domain"; bold = true, color = :cyan)
+		print(io, " {")
+		printstyled(io, "$(dim(Ω))D", color = :yellow)
+		print(io, ", ")
+		printstyled(io, "$(eltype(Ω))", color = :yellow)
+		println(io, "}:")
+
+		# Set information
+		println(io)
+		pp_indented = with_indent(pp, 1)
+		print_section_header(pp_indented, "Set:")
+
+		D = dim(X)
+		topodim = topo_dim(X)
+		pp_double_indent = with_indent(pp, 2)
+
+		if D == 1
+			collapsed = X.collapsed[1]
+			print(io, "    ")
+			if collapsed
+				print_colored(pp, "Point", color = :yellow)
+				print(io, " at ")
+				print_value(pp, X.box[1][1])
+			else
+				print_colored(pp, "Interval", color = :yellow)
+				print(io, " ")
+				print_interval(pp, X.box[1][1], X.box[1][2])
+			end
+			println(io)
+		else
+			if topodim < D
+				print(io, "    ")
+				print_colored(pp, "Topological dimension: $topodim", color = :yellow)
+				println(io)
+			end
+
+			for i in 1:D
+				label = get_dimension_label(i)
+				print_dimension_info(pp_double_indent, label, X.box[i][1], X.box[i][2], X.collapsed[i])
+			end
+		end
+
+		# Markers information
+		println(io)
+		print_section_header(pp_indented, "Markers:")
+
+		n_sym = length(dm.symbols)
+		n_tup = length(dm.tuples)
+		n_cond = length(dm.conditions)
+		total = n_sym + n_tup + n_cond
+
+		if total == 0
+			print(io, "    ")
+			print_empty_message(pp, "(none)")
+			println(io)
+		else
+			# Show summary counts
+			print(io, "    ")
+			print_colored(pp, "$total marker$(total == 1 ? "" : "s")", color = :yellow)
+			print(io, " (")
+			# Build parts string without intermediate array allocation
+			first = true
+			if n_sym > 0
+				print(io, "$n_sym symbol$(n_sym == 1 ? "" : "s")")
+				first = false
+			end
+			if n_tup > 0
+				first || print(io, ", ")
+				print(io, "$n_tup tuple$(n_tup == 1 ? "" : "s")")
+				first = false
+			end
+			if n_cond > 0
+				first || print(io, ", ")
+				print(io, "$n_cond function$(n_cond == 1 ? "" : "s")")
+			end
+			println(io, ")")
+
+			# Show marker labels
+			print(io, "    ")
+			print_labels_list(pp, collect(labels(Ω)))
+			println(io)
+		end
+
+		# Remove trailing newline
+		remove_trailing_newline(io)
+	end
+end
