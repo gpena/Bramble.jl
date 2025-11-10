@@ -10,6 +10,9 @@ using Bramble: interval, embed_function
 	# Basic Float64 interval (most common case via interval())
 	I_f64 = interval(-3.0, 10.0)
 
+	# Collapsed interval (point)
+	I_collapsed = interval(1.0, 1.0)
+
 	# Basic Int intervals/products (using cartesian_product(NTuple))
 	I_int = cartesian_product(((0, 1),))         # 1D Int
 	R2_int = cartesian_product(((0, 1), (2, 3))) # 2D Int
@@ -75,6 +78,21 @@ using Bramble: interval, embed_function
 			# tails(P)
 			tails(P)
 
+			# set() accessor
+			set(P)
+
+			# topo_dim and center
+			topo_dim(P)
+			center(P)
+
+			# is_collapsed for 1D
+			if D == 1
+				is_collapsed(P)
+			end
+
+			# point_type
+			point_type(P)
+
 			# projection(P, i)
 			for i in 1:D
 				proj = projection(P, i) # Creates CartesianProduct{1}
@@ -91,6 +109,11 @@ using Bramble: interval, embed_function
 				last(P)
 			end
 		end
+
+		# Test collapsed intervals specifically
+		is_collapsed(I_collapsed)
+		is_collapsed(1.0, 1.0)
+		is_collapsed(0.0, 1.0)
 
 		# --- Operations ---
 		# × operator (already created R2_f64, R3_f64, R4_f64 above)
@@ -187,7 +210,25 @@ end
 				collect(sbs)
 				collect(tds)
 				collect(fds)
+
+				# Test label accessors
+				collect(labels(dom))
+				collect(label_identifiers(dom))
+				collect(label_symbols(dom))
+				collect(label_tuples(dom))
+				collect(label_conditions(dom))
 			end
+
+			# Test DomainMarkers utilities
+			length(m_mixed)
+			isempty(m_mixed)
+			isempty(m_empty)
+
+			# Test label accessors on DomainMarkers directly
+			collect(label_identifiers(m_mixed))
+			collect(label_symbols(m_mixed))
+			collect(label_tuples(m_mixed))
+			collect(label_conditions(m_mixed))
 
 			# === Show Methods ===
 			# Create specific Marker instances
