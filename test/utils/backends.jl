@@ -1,5 +1,6 @@
 using Bramble: Backend, backend, vector, matrix, vector_type, matrix_type
 using SparseArrays
+using LinearAlgebra: diag
 
 @testset "Backand Tests" begin
 	@testset "Backend Constructor" begin
@@ -114,5 +115,64 @@ using SparseArrays
 		M_zero_col_dense = matrix(be_dense, m, 0)
 		@test M_zero_col_dense isa Matrix{Float64}
 		@test size(M_zero_col_dense) == (m, 0)
+	end
+
+	@testset "backend_types" begin
+		using Bramble: backend_types
+
+		be_default = backend()
+		T, VT, MT, BType = backend_types(be_default)
+		@test T === Float64
+		@test VT === Vector{Float64}
+		@test MT === SparseMatrixCSC{Float64,Int}
+		@test BType === Backend{Vector{Float64},SparseMatrixCSC{Float64,Int}}
+
+		# Test on type
+		T2, VT2, MT2, BType2 = backend_types(typeof(be_default))
+		@test T2 === Float64
+		@test VT2 === Vector{Float64}
+		@test MT2 === SparseMatrixCSC{Float64,Int}
+		@test BType2 === Backend{Vector{Float64},SparseMatrixCSC{Float64,Int}}
+
+		# Test Float32 backend
+		be_f32 = backend(vector_type = Vector{Float32}, matrix_type = Matrix{Float32})
+		T_f32, VT_f32, MT_f32, _ = backend_types(be_f32)
+		@test T_f32 === Float32
+		@test VT_f32 === Vector{Float32}
+		@test MT_f32 === Matrix{Float32}
+	end
+
+	@testset "eltype on Backend" begin
+		be_default = backend()
+		@test eltype(be_default) === Float64
+		@test eltype(typeof(be_default)) === Float64
+
+		be_f32 = backend(vector_type = Vector{Float32}, matrix_type = Matrix{Float32})
+		@test eltype(be_f32) === Float32
+		@test eltype(typeof(be_f32)) === Float32
+
+		be_complex = backend(vector_type = Vector{ComplexF64}, matrix_type = Matrix{ComplexF64})
+		@test eltype(be_complex) === ComplexF64
+	end
+
+	@testset "backend_eye and backend_zeros" begin
+		using Bramble: backend_eye, backend_zeros
+		using SparseArrays: I as SparseI
+
+		n = 5
+		be_default = backend()
+
+		# Test backend_eye
+		I_mat = backend_eye(be_default, n)
+		@test I_mat isa SparseMatrixCSC{Float64,Int}
+		@test size(I_mat) == (n, n)
+		@test diag(I_mat) == ones(n)
+		@test nnz(I_mat) == n
+
+		# Test backend_zeros
+		Z_mat = backend_zeros(be_default, n)
+		@test Z_mat isa SparseMatrixCSC{Float64,Int}
+		@test size(Z_mat) == (n, n)
+		@test nnz(Z_mat) == 0
 	end
 end # Top level testset

@@ -136,5 +136,109 @@ begin
 				@test codomaintype(bf2t_func.wrapped) == ExpectedInnerCoType
 			end
 		end # End Embed Time-Dependent
+
+		@testset "has_time" begin
+			using Bramble: has_time
+
+			bf_notime = embed_function(Ω1, f1)
+			@test has_time(bf_notime) == false
+			@test has_time(typeof(bf_notime)) == false
+
+			bf_withtime = embed_function(Ω1, I, f1t)
+			@test has_time(bf_withtime) == true
+			@test has_time(typeof(bf_withtime)) == true
+		end
+
+		@testset "argstype and codomaintype" begin
+			bf1 = embed_function(Ω1, f1)
+			@test argstype(bf1.wrapped) == Float64
+			@test codomaintype(bf1.wrapped) == Float64
+
+			bf2 = embed_function(Ω2, f2)
+			@test argstype(bf2.wrapped) == NTuple{2,Float64}
+			@test codomaintype(bf2.wrapped) == Float64
+
+			bf3 = embed_function(Ω3, f3)
+			@test argstype(bf3.wrapped) == NTuple{3,Float32}
+			@test codomaintype(bf3.wrapped) == Float32
+		end
+
+		@testset "Edge Cases and Type Conversions" begin
+			# Test with SVector inputs
+			using StaticArrays
+			bf2 = embed_function(Ω2, f2)
+			sv = SVector(0.5, 12.0)
+			@test bf2(sv) ≈ 0.5 + 12.0^2
+
+			# Test identity function
+			identity_bf = embed_function(Ω1, identity)
+			@test identity_bf(0.7) ≈ 0.7
+
+			# Test constant function
+			const_func = x -> 42.0
+			const_bf = embed_function(Ω1, const_func)
+			@test const_bf(0.1) ≈ 42.0
+			@test const_bf(0.9) ≈ 42.0
+
+			# Test zero function
+			zero_func = x -> 0.0
+			zero_bf = embed_function(Ω1, zero_func)
+			@test zero_bf(0.5) ≈ 0.0
+
+			# Test 2D constant
+			const_2d = x -> 100.0
+			const_2d_bf = embed_function(Ω2, const_2d)
+			@test const_2d_bf((0.5, 15.0)) ≈ 100.0
+
+			# Test with integer arithmetic conversion
+			int_func = x -> Int(round(10 * x))
+			float_bf = embed_function(Ω1, int_func)
+			@test float_bf(0.3) == 3
+		end
+
+		@testset "embed_function with BrambleFunction input" begin
+			# Test that embed_function returns same instance for BrambleFunction input
+			bf1 = embed_function(Ω1, f1)
+			bf1_again = embed_function(Ω1, bf1)
+			@test bf1_again === bf1
+		end
+
+		@testset "Time-Dependent Edge Cases" begin
+			# Test with constant time function
+			const_time = (x, t) -> x + 5.0
+			bf_const_time = embed_function(Ω1, I, const_time)
+			bf_at_t0 = bf_const_time(0.0)
+			bf_at_t1 = bf_const_time(1.0)
+			@test bf_at_t0(0.5) ≈ 5.5
+			@test bf_at_t1(0.5) ≈ 5.5  # Same result regardless of t
+
+			# Test with time-only dependence
+			time_only = (x, t) -> t^2
+			bf_time_only = embed_function(Ω1, I, time_only)
+			bf_at_t05 = bf_time_only(0.5)
+			@test bf_at_t05(0.0) ≈ 0.25
+			@test bf_at_t05(1.0) ≈ 0.25  # Same result regardless of x
+
+			# Test separable function
+			separable = (x, t) -> x * t
+			bf_sep = embed_function(Ω1, I, separable)
+			bf_sep_t2 = bf_sep(2.0)
+			@test bf_sep_t2(0.5) ≈ 1.0
+			@test bf_sep_t2(0.25) ≈ 0.5
+		end
+
+		@testset "Complex Functions" begin
+			# Test with more complex mathematical operations
+			complex_func_1d = x -> sin(π * x) + cos(2π * x)
+			bf_complex = embed_function(Ω1, complex_func_1d)
+			@test bf_complex(0.0) ≈ sin(0) + cos(0) ≈ 1.0
+			@test bf_complex(0.5) ≈ sin(π * 0.5) + cos(π) ≈ 0.0
+
+			# Test 2D complex function
+			complex_func_2d = x -> sqrt(x[1]^2 + x[2]^2)  # Distance from origin
+			bf_complex_2d = embed_function(Ω2, complex_func_2d)
+			@test bf_complex_2d((0.0, 10.0)) ≈ 10.0
+			@test bf_complex_2d((1.0, 10.0)) ≈ sqrt(1.0 + 100.0)
+		end
 	end # End Testset
 end
