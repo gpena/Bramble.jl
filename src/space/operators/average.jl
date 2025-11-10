@@ -10,7 +10,7 @@
 @inline @propagate_inbounds _compute_average(::Backward, ::Val{false}, in_val, in_prev) = (in_val + in_prev) * 0.5
 @inline @propagate_inbounds _compute_average(::Backward, ::Val{true}, in_val) = in_val * 0.5
 
-function _average_engine!(out, in_ref, dims::NTuple{D,Int}, dir::GridDirection, ::Val{AVG_DIM}) where {D,AVG_DIM}
+@inbounds function _average_engine!(out, in_ref, dims::NTuple{D,Int}, dir::GridDirection, ::Val{AVG_DIM}) where {D,AVG_DIM}
 	li = LinearIndices(dims)
 	step_cartesian = CartesianIndex(ntuple(i -> i == AVG_DIM ? 1 : 0, D))
 	full_axes = axes(li)
@@ -19,12 +19,12 @@ function _average_engine!(out, in_ref, dims::NTuple{D,Int}, dir::GridDirection, 
 		interior_axes = ntuple(d -> d == AVG_DIM ? (first(full_axes[d]):(last(full_axes[d]) - 1)) : full_axes[d], D)
 		boundary_axes = ntuple(d -> d == AVG_DIM ? (last(full_axes[d]):last(full_axes[d])) : full_axes[d], D)
 
-		@inbounds @simd for I in CartesianIndices(interior_axes)
+		@simd for I in CartesianIndices(interior_axes)
 			idx, idx_next = li[I], li[I + step_cartesian]
 			out[idx] = _compute_average(dir, Val(false), in_ref[idx_next], in_ref[idx])
 		end
 
-		@inbounds @simd for I in CartesianIndices(boundary_axes)
+		@simd for I in CartesianIndices(boundary_axes)
 			idx = li[I]
 			out[idx] = _compute_average(dir, Val(true), in_ref[idx])
 		end
@@ -32,12 +32,12 @@ function _average_engine!(out, in_ref, dims::NTuple{D,Int}, dir::GridDirection, 
 		interior_axes = ntuple(d -> d == AVG_DIM ? ((first(full_axes[d]) + 1):last(full_axes[d])) : full_axes[d], D)
 		boundary_axes = ntuple(d -> d == AVG_DIM ? (first(full_axes[d]):first(full_axes[d])) : full_axes[d], D)
 
-		@inbounds @simd for I in CartesianIndices(interior_axes)
+		@simd for I in CartesianIndices(interior_axes)
 			idx, idx_prev = li[I], li[I - step_cartesian]
 			out[idx] = _compute_average(dir, Val(false), in_ref[idx], in_ref[idx_prev])
 		end
 
-		@inbounds @simd for I in CartesianIndices(boundary_axes)
+		@simd for I in CartesianIndices(boundary_axes)
 			idx = li[I]
 			out[idx] = _compute_average(dir, Val(true), in_ref[idx])
 		end

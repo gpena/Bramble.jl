@@ -6,7 +6,7 @@
 @inline _Eye(::Type{MType}, npts::Int, ::Val{0}) where MType<:SparseMatrixCSC = Eye{eltype(MType)}(npts)
 @inline _Eye(::Type{MType}, npts::Int, ::Val{i}) where {i,MType<:SparseMatrixCSC} = spdiagm(i => Ones(eltype(MType), npts - abs(i)))
 
-@inline function _recursive_shift(Ωₕ::AbstractMeshType, ::Val{1}, ::Val{DIFF_DIM}, ::Val{i}) where {DIFF_DIM,i}
+@inline @inbounds function _recursive_shift(Ωₕ::AbstractMeshType, ::Val{1}, ::Val{DIFF_DIM}, ::Val{i}) where {DIFF_DIM,i}
 	dims = npoints(Ωₕ, Tuple)
 	MType = matrix_type(backend(Ωₕ))
 
@@ -17,7 +17,7 @@
 	end
 end
 
-@inline function _recursive_shift(Ωₕ::AbstractMeshType, ::Val{D}, ::Val{DIFF_DIM}, ::Val{i}) where {D,DIFF_DIM,i}
+@inline @inbounds function _recursive_shift(Ωₕ::AbstractMeshType, ::Val{D}, ::Val{DIFF_DIM}, ::Val{i}) where {D,DIFF_DIM,i}
 	dims = npoints(Ωₕ, Tuple)
 	MType = matrix_type(backend(Ωₕ))
 

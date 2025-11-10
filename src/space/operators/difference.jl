@@ -10,7 +10,10 @@ struct Forward <: GridDirection end
 struct Backward <: GridDirection end
 
 # --- Core Difference Computation ---
-@inline _get_h_val(h::AbstractVector, i::Int) = h[i]
+@inline function _get_h_val(h::AbstractVector, i::Int)
+	@assert 1 <= i <= length(h) "Index $i out of bounds for spacing vector of length $(length(h))."
+	return h[i]
+end
 @inline _get_h_val(h::F, i::Int) where {F<:Function} = h(i)
 
 # Case 1: Simple difference (h is Nothing)
@@ -28,7 +31,7 @@ struct Backward <: GridDirection end
 @inline @propagate_inbounds _compute_difference(::Backward, ::Val{true}, cur, h, i) = cur / _get_h_val(h, 2)
 
 # --- Unified Difference Engine ---
-function _difference_engine!(out, in_ref, h, dims::NTuple{D,Int}, dir::GridDirection, ::Val{DIFF_DIM}) where {D,DIFF_DIM}
+@inbounds function _difference_engine!(out, in_ref, h, dims::NTuple{D,Int}, dir::GridDirection, ::Val{DIFF_DIM}) where {D,DIFF_DIM}
 	li = LinearIndices(dims)
 	step_cartesian = CartesianIndex(ntuple(i -> i == DIFF_DIM ? 1 : 0, D))
 	full_axes = axes(li)
@@ -37,12 +40,12 @@ function _difference_engine!(out, in_ref, h, dims::NTuple{D,Int}, dir::GridDirec
 		interior_axes = ntuple(d -> d == DIFF_DIM ? (first(full_axes[d]):(last(full_axes[d]) - 1)) : full_axes[d], D)
 		boundary_axes = ntuple(d -> d == DIFF_DIM ? (last(full_axes[d]):last(full_axes[d])) : full_axes[d], D)
 
-		@inbounds @simd for I in CartesianIndices(interior_axes)
+		@simd for I in CartesianIndices(interior_axes)
 			idx, idx_next = li[I], li[I + step_cartesian]
 			out[idx] = _compute_difference(dir, Val(false), in_ref[idx_next], in_ref[idx], h, I[DIFF_DIM])
 		end
 
-		@inbounds @simd for I in CartesianIndices(boundary_axes)
+		@simd for I in CartesianIndices(boundary_axes)
 			idx = li[I]
 			out[idx] = _compute_difference(dir, Val(true), in_ref[idx], h, I[DIFF_DIM])
 		end
@@ -50,11 +53,11 @@ function _difference_engine!(out, in_ref, h, dims::NTuple{D,Int}, dir::GridDirec
 		interior_axes = ntuple(d -> d == DIFF_DIM ? ((first(full_axes[d]) + 1):last(full_axes[d])) : full_axes[d], D)
 		boundary_axes = ntuple(d -> d == DIFF_DIM ? (first(full_axes[d]):first(full_axes[d])) : full_axes[d], D)
 
-		@inbounds @simd for I in CartesianIndices(interior_axes)
+		@simd for I in CartesianIndices(interior_axes)
 			idx, idx_prev = li[I], li[I - step_cartesian]
 			out[idx] = _compute_difference(dir, Val(false), in_ref[idx], in_ref[idx_prev], h, I[DIFF_DIM])
 		end
-		@inbounds @simd for I in CartesianIndices(boundary_axes)
+		@simd for I in CartesianIndices(boundary_axes)
 			idx = li[I]
 			out[idx] = _compute_difference(dir, Val(true), in_ref[idx], h, 1)
 		end
