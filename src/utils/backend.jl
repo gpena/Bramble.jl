@@ -132,7 +132,7 @@ Constructs a square `n` x `n` sparse identity matrix associated with the given [
 
 Constructs a square `n` x `n` sparse matrix of zeros associated with the given [Backend](@ref) instance.
 """
-@inline backend_zeros(backend::Backend, n) = _backend_zeros(matrix_type{backend}, n)
+@inline backend_zeros(backend::Backend, n) = _backend_zeros(matrix_type(backend), n)
 @inline _backend_zeros(::Type{<:SparseMatrixCSC{T,Int}}, n) where T = spzeros(T, n, n)
 
 """
