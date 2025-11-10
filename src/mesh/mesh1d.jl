@@ -39,7 +39,14 @@ end
 @inline is_collapsed(Ωₕ::Mesh1D) = Ωₕ.collapsed
 
 @inline points(Ωₕ::Mesh1D) = Ωₕ.pts
-@inline point(Ωₕ::Mesh1D, i) = points(Ωₕ)[i]
+
+@inline function point(Ωₕ::Mesh1D, i)
+	idx = i isa CartesianIndex ? i[1] : i
+	@assert 1 <= idx <= npoints(Ωₕ) "Index $i out of bounds for Mesh1D with $(npoints(Ωₕ)) points."
+
+	return @inbounds points(Ωₕ)[idx]
+end
+
 @inline points_iterator(Ωₕ::Mesh1D) = Ωₕ.pts
 
 @inline half_points(Ωₕ::Mesh1D) = Ωₕ.half_pts
@@ -95,6 +102,7 @@ Overrides the spacings in Ωₕ.
 @inline hₘₐₓ(Ωₕ::Mesh1D) = maximum(spacings_iterator(Ωₕ))
 
 @inline @inbounds function spacing(Ωₕ::Mesh1D, i::Int)
+	@assert 1 <= i <= npoints(Ωₕ) "Index $i out of bounds for Mesh1D with $(npoints(Ωₕ)) points."
 	# If the mesh is degenerate (collapsed to a single point), the spacing is zero.
 	if is_collapsed(Ωₕ)
 		return eltype(Ωₕ)(0.0)
@@ -112,9 +120,11 @@ Overrides the spacings in Ωₕ.
 	return pts[i] - pts[i-1]
 end
 
-@inline spacing(Ωₕ::Mesh1D, i::CartesianIndex{1}) = spacing(Ωₕ, i[1])
+@inline @inbounds spacing(Ωₕ::Mesh1D, i::CartesianIndex{1}) = spacing(Ωₕ, i[1])
 
 @inline @inbounds function forward_spacing(Ωₕ::Mesh1D, i::Int)
+	@assert 1 <= i <= npoints(Ωₕ) "Index $i out of bounds for Mesh1D with $(npoints(Ωₕ)) points."
+
 	# If the mesh is degenerate (a single point), the spacing is zero.
 	if is_collapsed(Ωₕ)
 		return zero(eltype(Ωₕ))
@@ -134,24 +144,39 @@ end
 	return pts[i+1] - pts[i]
 end
 
-@inline forward_spacing(Ωₕ::Mesh1D, i::CartesianIndex{1}) = forward_spacing(Ωₕ, i[1])
+@inline @inbounds forward_spacing(Ωₕ::Mesh1D, i::CartesianIndex{1}) = forward_spacing(Ωₕ, i[1])
 
-@inline half_point(Ωₕ::Mesh1D, i::Int) = Ωₕ.half_pts[i]
+@inline @inbounds function half_point(Ωₕ::Mesh1D, i::Int)
+	@assert 1 <= i <= npoints(Ωₕ) + 1 "Index $i out of bounds for Mesh1D with $(npoints(Ωₕ)) points."
+	return Ωₕ.half_pts[i]
+end
 
 @inline spacings_iterator(Ωₕ::Mesh1D) = (spacing(Ωₕ, i) for i in eachindex(points(Ωₕ)))
 @inline forward_spacings_iterator(Ωₕ::Mesh1D) = (forward_spacing(Ωₕ, i) for i in eachindex(points(Ωₕ)))
 
-@inline half_spacing(Ωₕ::Mesh1D, i::Int) = Ωₕ.half_spacings[i]
+@inline @inbounds function half_spacing(Ωₕ::Mesh1D, i::Int)
+	@assert 1 <= i <= npoints(Ωₕ) "Index $i out of bounds for Mesh1D with $(npoints(Ωₕ)) points."
+	return Ωₕ.half_spacings[i]
+end
 
-@inline half_spacing(Ωₕ::Mesh1D, idx::CartesianIndex{1}) = half_spacing(Ωₕ, idx[1])
-@inline cell_measure(Ωₕ::Mesh1D, i) = half_spacing(Ωₕ, i)
+@inline @inbounds half_spacing(Ωₕ::Mesh1D, idx::CartesianIndex{1}) = half_spacing(Ωₕ, idx[1])
+
+@inline @inbounds function cell_measure(Ωₕ::Mesh1D, i)
+	idx = i isa CartesianIndex ? i[1] : i
+	@assert 1 <= idx <= npoints(Ωₕ) "Index $i out of bounds for Mesh1D with $(npoints(Ωₕ)) points."
+
+	return half_spacing(Ωₕ, idx)
+end
 
 @inline half_spacings_iterator(Ωₕ::Mesh1D) = Ωₕ.half_spacings
 @inline half_points_iterator(Ωₕ::Mesh1D) = Ωₕ.half_pts
 @inline cell_measures_iterator(Ωₕ::Mesh1D) = half_spacings_iterator(Ωₕ)
 
-_generate_random_points!(v) = (rand!(v); sort!(v); return)
-
+@inline function _generate_random_points!(v)
+	rand!(v)
+	sort!(v)  # In-place sort
+	return nothing
+end
 # Internal function to populate a vector `x` with grid point coordinates over a 1D interval `I`.
 @inline @inbounds @muladd function _points!(x, I::CartesianProduct{1}, unif::Bool)
 	# Get the number of points and the interval's element type and bounds.
@@ -170,7 +195,7 @@ _generate_random_points!(v) = (rand!(v); sort!(v); return)
 		# For a uniform grid, calculate the constant step size `h`.
 		h = (b - a) / (npts - 1)
 		# Populate the grid points using an arithmetic progression.
-		@simd for i in eachindex(x)
+		@simd ivdep for i in eachindex(x)
 			x[i] = a + (i - 1) * h
 		end
 	else
@@ -189,7 +214,7 @@ _generate_random_points!(v) = (rand!(v); sort!(v); return)
 end
 
 # Calculates the "half points" (cell centers) for a 1D mesh.
-@inline @muladd function half_points!(x, Ωₕ)
+@inline @inbounds @muladd function half_points!(x, Ωₕ)
 	n = npoints(Ωₕ)
 	pts = points(Ωₕ)
 
@@ -199,7 +224,7 @@ end
 	x[n+1] = pts[n]
 
 	# For the interior, each half-point is the midpoint between two adjacent grid points.
-	@inbounds @simd for i in 2:n
+	@simd ivdep for i in 2:n
 		x[i] = (pts[i] + pts[i-1]) * 0.5
 	end
 
@@ -216,7 +241,7 @@ end
 
 	# For interior points, the cell width is the average of the spacings of the two adjacent intervals.
 	# This corresponds to the distance between the cell's half-points.
-	@inbounds @simd for i in 2:(n - 1)
+	@simd ivdep for i in 2:(n - 1)
 		x[i] = (spacing(Ωₕ, i) + spacing(Ωₕ, i+1)) * 0.5
 	end
 
@@ -286,10 +311,12 @@ function iterative_refinement!(Ωₕ::Mesh1D)
 	new_points = vector(backend(Ωₕ), N_new)
 	old_points = points(Ωₕ)
 
-	# Place the original points at the odd indices of the new array.
-	@views @inbounds new_points[1:2:end] .= old_points
-	# Place the new midpoints at the even indices of the new array. ✨
-	@views @muladd @inbounds new_points[2:2:end] .= (old_points[1:(end - 1)] .+ old_points[2:end]) .* 0.5
+	@inbounds for i in 1:N_old
+		new_points[2i-1] = old_points[i]
+		if i < N_old
+			@muladd new_points[2i] = (old_points[i] + old_points[i+1]) * 0.5
+		end
+	end
 
 	# Generate new indices for the refined mesh.
 	new_indices = generate_indices(N_new)
@@ -332,4 +359,53 @@ function change_points!(Ωₕ::Mesh1D, pts)
 	# Call the helper function that handles updating the points and all derived quantities.
 	set_points!(Ωₕ, pts)
 	return
+end
+
+"""
+	Base.show(io::IO, Ωₕ::Mesh1D)
+
+Custom display for Mesh1D objects with detailed mesh information and colors.
+"""
+function Base.show(io::IO, Ωₕ::Mesh1D{BT,CI,VT,T}) where {BT,CI,VT,T}
+	pp = PrettyPrinter(io)
+
+	if pp.compact
+		# Compact display for arrays/collections
+		print(io, "Mesh1D{", npoints(Ωₕ), " pts}")
+		return
+	end
+
+	# Detailed display
+	n_pts = npoints(Ωₕ)
+	topodim = topo_dim(Ωₕ)
+	collapsed = is_collapsed(Ωₕ)
+
+	# Header
+	print_mesh_header(pp, "Mesh1D", 1, T, n_pts)
+	println(io)
+
+	# Summary line
+	print_mesh_summary(pp, n_pts, topodim, collapsed)
+
+	# Domain information
+	print_mesh_domain_info(pp, set(Ωₕ))
+
+	# Spacing information
+	if !collapsed
+		# Determine if mesh is uniform by checking spacing variance
+		pts = points(Ωₕ)
+		if n_pts > 1
+			spacings = [pts[i] - pts[i-1] for i in 2:n_pts]
+			is_uniform = all(s -> abs(s - spacings[1]) < 1e-10, spacings)
+		else
+			is_uniform = true
+		end
+		print_mesh_spacing_info(pp, is_uniform, hₘₐₓ(Ωₕ))
+	end
+
+	# Markers information
+	print_mesh_markers(pp, markers(Ωₕ))
+
+	# Remove trailing newline
+	remove_trailing_newline(io)
 end
