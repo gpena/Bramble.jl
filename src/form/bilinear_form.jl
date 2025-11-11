@@ -1,3 +1,43 @@
+#=
+# bilinear_form.jl
+
+This file implements bilinear forms for finite element assembly.
+
+## Mathematical Background
+
+A bilinear form is a mapping:
+```math
+a : W_h × V_h → ℝ
+```
+
+where W_h and V_h are the trial and test spaces respectively.
+
+## Usage Pattern
+
+```julia
+# Define spaces
+Wₕ = gridspace(Ωₕ)  # Trial space
+Vₕ = gridspace(Ωₕ)  # Test space (often same as trial)
+
+# Create bilinear form (e.g., stiffness matrix)
+a = form(Wₕ, Vₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+
+# Assemble system matrix
+A = assemble(a)
+
+# With Dirichlet conditions
+A = assemble(a, dirichlet_labels=:boundary)
+```
+
+## Performance Considerations
+
+- Assembly uses FunctionWrappers for type stability
+- Specialized sparse matrix handling for boundary conditions
+- Bit manipulation for fast Dirichlet index processing
+
+See also: [`BilinearForm`](@ref), [`assemble`](@ref), [`form`](@ref)
+=#
+
 """
 	BilinearFormType
 
@@ -9,7 +49,7 @@ abstract type BilinearFormType end
 	struct BilinearForm{TrialType,TestType,F} <: BilinearFormType
 		trial_space::TrialType
 		test_space::TestType
-		form_expr::F
+		form_expression::F
 	end
 
 Structure to store the data associated with a bilinear form
@@ -21,7 +61,35 @@ a \\colon & W_h \\times V_h &\\longrightarrow &\\mathbb{R} \\\\
 \\end{array}
 ```
 
-The field `form_expr` has the expression of the form and the remaining fields store the trial and test spaces ``W_h`` and ``V_h``.
+The field `form_expression` has the expression of the form and the remaining fields
+store the trial and test spaces ``W_h`` and ``V_h``.
+
+# Fields
+
+  - `trial_space::TrialType` - The trial space W_h
+  - `test_space::TestType` - The test space V_h
+  - `form_expression::F` - Function defining a(u,v)
+
+# Example
+
+```julia
+# Stiffness matrix for Poisson equation
+Wₕ = gridspace(Ωₕ)
+a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+
+# Assemble
+A = assemble(a)
+
+# With Dirichlet boundary conditions
+A = assemble(a, dirichlet_labels = :boundary)
+
+# Evaluate form on specific functions
+uₕ = element(Wₕ)
+vₕ = element(Wₕ)
+result = a(uₕ, vₕ)  # Returns scalar
+```
+
+See also: [`form`](@ref), [`assemble`](@ref), [`trial_space`](@ref), [`test_space`](@ref)
 """
 struct BilinearForm{TrialType,TestType,F} <: BilinearFormType
 	trial_space::TrialType
@@ -50,6 +118,14 @@ Returns a bilinear form from a given expression and trial and test spaces.
 """
 @inline form(Wₕ::AbstractSpaceType, Vₕ::AbstractSpaceType, f::F) where F = BilinearForm{typeof(Wₕ),typeof(Vₕ),F}(Wₕ, Vₕ, f)
 
+"""
+	(a::BilinearForm)(u, v)
+
+Callable interface for evaluating a bilinear form on given functions.
+
+Returns the scalar value a(u,v) where u and v are elements from the trial
+and test spaces respectively.
+"""
 @inline (a::BilinearForm)(u, v) = a.form_expression(u, v)
 
 """
@@ -72,6 +148,7 @@ _assemble!(A::AbstractMatrix, a::BilinearForm) = (copyto!(A, assemble(a)))
 Returns the assembled matrix of a bilinear form with imposed constraints.
 """
 function assemble(a::BilinearForm; dirichlet_labels = nothing)
+	_validate_dirichlet_labels(dirichlet_labels)
 	A = _assemble(a)
 	if dirichlet_labels !== nothing
 		if dirichlet_labels isa Symbol
@@ -80,8 +157,6 @@ function assemble(a::BilinearForm; dirichlet_labels = nothing)
 			if !isempty(dirichlet_labels)
 				dirichlet_bc!(A, mesh(trial_space(a)), dirichlet_labels...)
 			end
-		else
-			error("dirichlet_labels must be nothing, a Symbol, or a Tuple of Symbols")
 		end
 	end
 	return A
@@ -93,6 +168,7 @@ end
 Copies the assembled matrix of a bilinear form and imposes the Dirichlet constraints to a given matrix `A`.
 """
 function assemble!(A::AbstractMatrix, a::BilinearForm; dirichlet_labels = nothing)
+	_validate_dirichlet_labels(dirichlet_labels)
 	_assemble!(A, a)
 	if dirichlet_labels !== nothing
 		if dirichlet_labels isa Symbol
@@ -101,8 +177,6 @@ function assemble!(A::AbstractMatrix, a::BilinearForm; dirichlet_labels = nothin
 			if !isempty(dirichlet_labels)
 				dirichlet_bc!(A, mesh(trial_space(a)), dirichlet_labels...)
 			end
-		else
-			error("dirichlet_labels must be nothing, a Symbol, or a Tuple of Symbols")
 		end
 	end
 end
