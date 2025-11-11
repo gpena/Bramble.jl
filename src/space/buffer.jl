@@ -1,3 +1,50 @@
+#=
+# buffer.jl
+
+This file implements an efficient buffer management system for temporary vector allocation.
+
+## Problem
+
+In iterative numerical methods, temporary vectors are frequently needed for intermediate 
+calculations. Naive allocation creates garbage collection pressure and hurts performance:
+
+```julia
+for iter in 1:1000
+    temp = zeros(n)  # Allocates 1000 times! ❌
+    # ... use temp ...
+end
+```
+
+## Solution
+
+The buffer pool pattern:
+1. Pre-allocate a pool of reusable vectors
+2. Lock a buffer when in use
+3. Unlock when done
+4. Reuse the same memory across iterations
+
+```julia
+buffer_pool = simple_space_buffer(backend, n, nbuffers=5)
+for iter in 1:1000
+    temp = get_buffer(buffer_pool)  # Reuses memory! ✅
+    # ... use temp ...
+    release_buffer!(buffer_pool, temp)
+end
+```
+
+## Performance Impact
+
+- **Without buffers**: ~1000 allocations, frequent GC pauses
+- **With buffers**: 5 allocations total, no GC during iteration
+
+This is especially important for:
+- Iterative solvers (CG, GMRES, etc.)
+- Time-stepping schemes
+- Newton's method and nonlinear solvers
+
+See also: [`VectorBuffer`](@ref), [`GridSpaceBuffer`](@ref), [`simple_space_buffer`](@ref)
+=#
+
 """
 	$(TYPEDEF)
 
@@ -24,15 +71,13 @@ The following definitions make a [VectorBuffer](@ref) behave like a standard Jul
 @forward VectorBuffer.vector (Base.size, Base.length, Base.firstindex, Base.lastindex, Base.iterate, Base.eltype)
 
 @inline @propagate_inbounds function getindex(u::VectorBuffer, i)
-	@unpack vector = u
-	@boundscheck checkbounds(vector, i)
-	return getindex(vector, i)
+	@boundscheck checkbounds(u.vector, i)
+	return u.vector[i]
 end
 
 @inline @propagate_inbounds function setindex!(u::VectorBuffer, val, i)
-	@unpack vector = u
-	@boundscheck checkbounds(vector, i)
-	setindex!(vector, val, i)
+	@boundscheck checkbounds(u.vector, i)
+	u.vector[i] = val
 	return
 end
 
@@ -71,7 +116,26 @@ Marks the [VectorBuffer](@ref) as available (unlocks it).
 """
 @inline unlock!(buffer::VectorBuffer) = (buffer.in_use = false; return)
 
-# Define a type alias for the ordered dictionary that will hold the buffers.
+"""
+	BufferType{T,VectorType}
+
+Type alias for an ordered dictionary that maps integer keys to [VectorBuffer](@ref) instances.
+
+This is the underlying storage container for [GridSpaceBuffer](@ref), allowing efficient
+lookup and iteration over the buffer pool.
+
+# Type Parameters
+- `T`: Element type of the vectors (e.g., `Float64`)
+- `VectorType`: Type of the underlying vector container (e.g., `Vector{Float64}`)
+
+# Example
+```julia
+buffer_dict = BufferType{Float64, Vector{Float64}}()
+buffer_dict[1] = VectorBuffer(zeros(100), false)
+```
+
+See also: [`VectorBuffer`](@ref), [`GridSpaceBuffer`](@ref)
+"""
 const BufferType{T,VectorType} = OrderedDict{Int,VectorBuffer{T,VectorType}}
 
 """

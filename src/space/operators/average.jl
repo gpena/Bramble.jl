@@ -4,6 +4,53 @@
 #                                                             #
 ###############################################################
 
+#=
+# average.jl
+
+This file implements averaging operators for staggered grid computations.
+
+## Mathematical Formulation
+
+For a function uₕ on a grid, the average operator ⟨·⟩ computes the mean value between 
+adjacent grid points:
+
+**Forward average** (at point xᵢ):
+    ⟨u⟩ᵢᶠ = (uᵢ + uᵢ₊₁) / 2
+
+**Backward average** (at point xᵢ):
+    ⟨u⟩ᵢᵇ = (uᵢ + uᵢ₋₁) / 2
+
+At boundary points where no neighbor exists:
+    ⟨u⟩ᵢ = uᵢ / 2
+
+## Use Cases
+
+Averaging is essential for:
+1. **Staggered grids**: Transfer variables between cell centers and faces
+2. **Discontinuous Galerkin**: Compute interface values
+3. **Finite difference**: Approximate derivatives at intermediate points
+4. **Conservative schemes**: Maintain flux conservation
+
+## Example
+
+```julia
+# Average velocity from cell centers to faces
+u_face = ⟨u⟩ᶠ(Vₕ, dim)  # Forward average in dimension dim
+
+# Average pressure from faces to centers  
+p_center = ⟨p⟩ᵇ(Pₕ, dim)  # Backward average in dimension dim
+```
+
+## Implementation Details
+
+- Uses `@simd` for vectorization
+- Separate loops for interior (2-point average) and boundary (1-point)
+- Direction (Forward/Backward) controlled via trait dispatch
+- Boundary handling: halve the value (maintains consistency with operator algebra)
+
+See also: [`_compute_average`](@ref), [`add_half_shift`](@ref), [`Forward`](@ref), [`Backward`](@ref)
+=#
+
 @inline @propagate_inbounds _compute_average(::Forward, ::Val{false}, in_next, in_val) = (in_next + in_val) * 0.5
 @inline @propagate_inbounds _compute_average(::Forward, ::Val{true}, in_val) = in_val * 0.5
 

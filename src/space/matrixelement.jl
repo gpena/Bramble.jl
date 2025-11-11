@@ -1,3 +1,51 @@
+#=
+# matrixelement.jl
+
+This file implements the MatrixElement type - a matrix-valued function on a finite element space.
+
+## Mathematical Interpretation
+
+A MatrixElement represents a linear operator T : Vₕ → Wₕ as a matrix. If {φᵢ} is a basis 
+for Vₕ and {ψⱼ} is a basis for Wₕ, then:
+
+    T = [Tᵢⱼ] where Tᵢⱼ = ⟨T(φⱼ), ψᵢ⟩
+
+Common use cases:
+- **Identity operator**: I : Vₕ → Vₕ (default)
+- **Projection operators**: Πₕ : V → Vₕ
+- **Interpolation operators**: Iₕ : C(Ω) → Vₕ
+- **Restriction/prolongation**: R : Vₕ → Vₕ/₂ or P : Vₕ/₂ → Vₕ
+
+## Design Rationale
+
+MatrixElement differs from VectorElement in that:
+1. It represents operators, not functions
+2. It stores a matrix, not point values
+3. Composition is matrix multiplication, not pointwise operations
+
+This enables:
+- Efficient operator composition: (A ∘ B)ₕ = Aₕ * Bₕ
+- Precomputed transformations for performance
+- Reusable operators across multiple solves
+
+## Example
+
+```julia
+# Create identity operator
+Iₕ = elements(Vₕ)  # Returns MatrixElement with identity matrix
+
+# Create interpolation operator
+A = compute_interpolation_matrix(...)
+Tₕ = elements(Vₕ, A)
+
+# Apply operator to vector element
+uₕ = elements(Vₕ, u_values)
+v_values = Tₕ.data * uₕ.data
+```
+
+See also: [`MatrixElement`](@ref), [`VectorElement`](@ref), [`elements`](@ref)
+=#
+
 """
 	elements(Wₕ::AbstractSpaceType, [A::AbstractMatrix])
 
@@ -66,6 +114,28 @@ Copies the coefficients of [MatrixElement](@ref) `Vₕ` into [MatrixElement](@re
 @inline Base.@propagate_inbounds setindex!(Uₕ::MatrixElement, v, I::Vararg{Int,N}) where N = (setindex!(Uₕ.data, v, I...); return)
 @inline Base.@propagate_inbounds setindex!(Uₕ::MatrixElement, v, I::NTuple{N,Int}) where N = (setindex!(Uₕ.data, v, I...); return)
 
+"""
+	VecOrMatElem{S,T}
+
+Type alias for a union of [VectorElement](@ref) and [MatrixElement](@ref).
+
+This is used in function signatures that accept either vectors or matrices from
+the same function space, particularly in inner product calculations.
+
+# Type Parameters
+- `S`: The space type (e.g., `ScalarGridSpace{...}`)
+- `T`: The element type (e.g., `Float64`)
+
+# Example
+```julia
+# This function accepts either VectorElement or MatrixElement
+function my_inner_product(uₕ::VecOrMatElem, vₕ::VecOrMatElem)
+	# ... implementation ...
+end
+```
+
+See also: [`VectorElement`](@ref), [`MatrixElement`](@ref), [`innerₕ`](@ref)
+"""
 const VecOrMatElem{S,T} = Union{VectorElement{S,T},MatrixElement{S,T}}
 
 """

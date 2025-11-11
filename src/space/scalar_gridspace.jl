@@ -199,9 +199,40 @@ end
 @inline mesh_type(::Type{<:ScalarGridSpace{D,T,VT,MT,MType}}) where {D,T,VT,MT,MType} = MType
 
 """
-	weights(Wₕ::ScalarGridSpace, [::InnerProductType], [i])
+	weights(Wₕ::ScalarGridSpace)
+	weights(Wₕ::ScalarGridSpace, ::InnerProductType)
+	weights(Wₕ::ScalarGridSpace, ::InnerProductType, i::Int)
 
-Returns the weights associated with the functionspace. A second argument can be supplied detailing the type of weights.
+Returns the pre-computed weight vectors for discrete inner products.
+
+The weights are diagonal matrices (stored as vectors) used in computing discrete 
+``L^2`` inner products. They represent cell measures or staggered grid spacings.
+
+# Methods
+
+1. `weights(Wₕ)` - Returns the full [SpaceWeights](@ref) struct
+2. `weights(Wₕ, Innerh())` - Returns weights for standard ``L^2`` inner product (cell volumes)
+3. `weights(Wₕ, Innerplus())` - Returns tuple of weights for modified inner products (all directions)
+4. `weights(Wₕ, Innerplus(), i)` - Returns weights for modified inner product in direction `i`
+
+# Examples
+```julia
+Wₕ = gridspace(Ωₕ)
+
+# Get all weights
+w = weights(Wₕ)  # Returns SpaceWeights{D, VT}
+
+# Get standard L² weights
+w_h = weights(Wₕ, Innerh())  # Vector of cell volumes
+
+# Get modified inner product weights for x-direction
+w_plus_x = weights(Wₕ, Innerplus(), 1)  # Vector for x-direction
+
+# Use in inner product
+result = dot(uₕ.data, w_h, vₕ.data)  # Weighted inner product
+```
+
+See also: [`SpaceWeights`](@ref), [`Innerh`](@ref), [`Innerplus`](@ref), [`innerₕ`](@ref)
 """
 @inline weights(Wₕ::ScalarGridSpace) = Wₕ.weights
 @inline weights(Wₕ::ScalarGridSpace, ::Innerh) = weights(Wₕ).innerh
@@ -209,12 +240,45 @@ Returns the weights associated with the functionspace. A second argument can be 
 @inline weights(Wₕ::ScalarGridSpace, ::Innerh, i) = weights(Wₕ, Innerh())
 @inline weights(Wₕ::ScalarGridSpace, ::Innerplus, i) = weights(Wₕ, Innerplus())[i]
 
+"""
+	dim(Wₕ::ScalarGridSpace)
+
+Returns the spatial dimension of the function space (1, 2, or 3).
+
+See also: [`ndofs`](@ref), [`mesh`](@ref)
+"""
 @inline dim(Wₕ::ScalarGridSpace) = dim(mesh(Wₕ))
 @inline dim(::Type{W}) where W<:ScalarGridSpace = dim(mesh_type(W))
 
+"""
+	ndofs(Wₕ::ScalarGridSpace)
+	ndofs(Wₕ::ScalarGridSpace, ::Type{Tuple})
+
+Returns the number of degrees of freedom (grid points) in the space.
+
+# Methods
+- `ndofs(Wₕ)` - Returns total number of DOFs as an integer
+- `ndofs(Wₕ, Tuple)` - Returns DOFs per dimension as a tuple (Nₓ, Nᵧ, Nᵤ)
+
+# Example
+```julia
+Wₕ = gridspace(Ωₕ)
+n = ndofs(Wₕ)        # Total DOFs (e.g., 10000 for 100×100 grid)
+dims = ndofs(Wₕ, Tuple)  # Per dimension (e.g., (100, 100))
+```
+
+See also: [`npoints`](@ref), [`dim`](@ref)
+"""
 @inline ndofs(Wₕ::ScalarGridSpace) = npoints(mesh(Wₕ))
 @inline ndofs(Wₕ::ScalarGridSpace, ::Type{Tuple}) = npoints(mesh(Wₕ), Tuple)
 
+"""
+	eltype(Wₕ::ScalarGridSpace)
+
+Returns the element type of vectors in this space (e.g., `Float64`).
+
+See also: [`backend`](@ref)
+"""
 @inline eltype(Wₕ::ScalarGridSpace) = eltype(backend(Wₕ))
 @inline eltype(::Type{W}) where W<:ScalarGridSpace = eltype(mesh_type(W))
 

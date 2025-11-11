@@ -103,7 +103,31 @@ function Base.similar(bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{VectorEleme
 	return element(space(vec_elem), similar(values(vec_elem)))
 end
 
-# --- Helper functions to find a VectorElement instance within a broadcast expression ---
+"""
+	_find_vec_in_broadcast(bc)
+
+Internal helper to extract a [VectorElement](@ref) from a broadcast expression.
+
+Recursively searches through the arguments of a broadcast expression tree to find 
+a `VectorElement` instance. This is used by the broadcasting machinery to determine 
+which function space should be used for the result.
+
+# Arguments
+- `bc`: A broadcast expression, tuple of arguments, or individual value
+
+# Returns
+- The first `VectorElement` found in the expression tree
+- `nothing` if no `VectorElement` is found
+
+# Implementation Notes
+Uses multiple dispatch to handle:
+- `Broadcasted` objects: Extract and search arguments
+- `Tuple`s: Recursively search each element
+- `VectorElement`: Return immediately (found!)
+- Other types: Return `nothing` and continue searching
+
+This enables broadcasts like `uₕ .+ vₕ .* 2` to automatically preserve the space information.
+"""
 _find_vec_in_broadcast(bc::Broadcast.Broadcasted) = _find_vec_in_broadcast(bc.args)
 _find_vec_in_broadcast(args::Tuple) = _find_vec_in_broadcast(_find_vec_in_broadcast(args[1]), Base.tail(args))
 _find_vec_in_broadcast(x::VectorElement) = x
@@ -146,30 +170,115 @@ end
 """
 	$(TYPEDEF)
 
-Helper struct to bundle a function with its mesh. This allows passing both as a single callable object, `pe(idx)`, which evaluates the function at the physical coordinates corresponding to the grid index `idx`.
+Helper struct to bundle a function with its mesh for pointwise evaluation.
+
+This allows passing both a function and its mesh as a single callable object. When called 
+with a grid index `idx`, it evaluates the function at the physical coordinates corresponding 
+to that index.
 
 # Fields
 
 $(FIELDS)
+
+# Callable Interface
+
+A `PointwiseEvaluator` is callable:
+```julia
+pe = PointwiseEvaluator(f, Ωₕ)
+value = pe(idx)  # Equivalent to f(point(Ωₕ, idx))
+```
+
+This abstraction is used internally by the restriction operator [`Rₕ`](@ref) to evaluate 
+continuous functions at discrete grid points.
+
+# Example
+```julia
+# Define a function in physical coordinates
+f(x) = sin(x[1]) * cos(x[2])
+
+# Create evaluator
+pe = PointwiseEvaluator(f, Ωₕ)
+
+# Evaluate at grid point (i, j)
+value = pe(CartesianIndex(i, j))  # Computes f([xᵢ, yⱼ])
+```
+
+See also: [`Rₕ`](@ref), [`Rₕ!`](@ref), [`point`](@ref)
 """
 struct PointwiseEvaluator{F,M}
+	"the function to evaluate at grid points"
 	func::F
+	"the mesh providing the mapping from indices to physical coordinates"
 	mesh::M
 end
 
+"""
+	func(pe::PointwiseEvaluator)
+
+Returns the function stored in the [PointwiseEvaluator](@ref).
+"""
 @inline func(pe::PointwiseEvaluator) = pe.func
+
+"""
+	mesh(pe::PointwiseEvaluator)
+
+Returns the mesh stored in the [PointwiseEvaluator](@ref).
+"""
 @inline mesh(pe::PointwiseEvaluator) = pe.mesh
 
+"""
+	(pe::PointwiseEvaluator)(idx)
+
+Evaluate the function at the physical coordinates of grid index `idx`.
+
+# Arguments
+- `idx`: Grid index (e.g., `CartesianIndex(i, j)`)
+
+# Returns
+The function value at the physical point corresponding to `idx`.
+
+# Example
+```julia
+pe = PointwiseEvaluator(f, Ωₕ)
+value = pe(CartesianIndex(5, 10))  # Evaluates f at physical point (x₅, y₁₀)
+```
+"""
 (pe::PointwiseEvaluator)(idx) = func(pe)(point(mesh(pe), idx))
 
 """
-	Rₕ!(uₕ::VectorElement, f; markers)
+	Rₕ!(uₕ::VectorElement, f; markers=())
 
 In-place version of the restriction operator [Rₕ](@ref).
+
+Evaluates function `f` at grid points and stores the result directly in `uₕ`,
+avoiding allocation of a new vector.
+
+# Arguments
+- `uₕ::VectorElement`: Pre-allocated vector element to store the result
+- `f`: Function to evaluate at grid points (signature: `f(x::SVector) -> Number`)
+- `markers::NTuple{N,Symbol}`: Optional tuple of marker symbols to restrict evaluation to specific regions
+
+# Example
+```julia
+Wₕ = gridspace(Ωₕ)
+uₕ = element(Wₕ)
+
+# Evaluate f at all grid points, storing result in uₕ
+f(x) = sin(x[1]) * cos(x[2])
+Rₕ!(uₕ, f)
+
+# Equivalent to: uₕ = Rₕ(Wₕ, f)
+```
+
+!!! warning "Marker-based restriction"
+    The `markers` keyword argument is experimental and may not work correctly in all cases.
+    For production code, use full grid restriction (default) or verify behavior with tests.
+
+See also: [`Rₕ`](@ref), [`element`](@ref)
 """
 @inline function Rₕ!(uₕ::VectorElement{ST}, f; markers::NTuple{N,Symbol} = NTuple{0,Symbol}()) where {N,ST}
 	if N > 0
-		@warn "Check that restricting to markers is working properly"
+		@debug "Using marker-based restriction" markers
 	end
 
 	@unpack data, space = uₕ

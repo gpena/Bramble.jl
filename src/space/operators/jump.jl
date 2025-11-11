@@ -4,6 +4,56 @@
 #                                                                            #
 ##############################################################################
 
+#=
+# jump.jl
+
+This file implements jump operators for discontinuous Galerkin and interface computations.
+
+## Mathematical Formulation
+
+The jump ⟦·⟧ measures the discontinuity of a function across element interfaces:
+
+**Forward jump** (at interface xᵢ₊½):
+    ⟦u⟧ᵢ₊½ᶠ = uᵢ₊₁ - uᵢ
+
+**Backward jump** (at interface xᵢ₋½):
+    ⟦u⟧ᵢ₋½ᵇ = uᵢ - uᵢ₋₁
+
+## Physical Interpretation
+
+Jumps quantify:
+1. **Discontinuities**: Size of jumps in DG methods
+2. **Flux differences**: Change in flux across interfaces
+3. **Shock strength**: Magnitude of discontinuities in hyperbolic PDEs
+4. **Penalty terms**: Used in interior penalty methods
+
+## Relationship to Differences
+
+The jump is equivalent to a first-order difference, but conceptually:
+- **Difference**: Approximates derivatives (∂u/∂x ≈ Δu/Δx)
+- **Jump**: Measures discontinuities (⟦u⟧ = u⁺ - u⁻)
+
+Mathematically, for uniform grids:
+    ⟦u⟧ᵢ = Δuᵢ = uᵢ₊₁ - uᵢ
+
+## Example - DG Method
+
+```julia
+# Interior penalty term: σ ∫⟦uₕ⟧² ds
+u_jump = jump₊(uₕ, dim)  # Jump at all interfaces
+penalty = penalty_parameter * sum(u_jump.^2 .* face_measure)
+```
+
+## Implementation Strategy
+
+Uses metaprogramming to generate:
+- In-place applicators: `jump_dim!`
+- Matrix operators: Returns difference matrices
+- Multiple dispatch on direction traits
+
+See also: [`jump₊`](@ref), [`jump₋`](@ref), [`_jump_operator`](@ref), [`difference_shift`](@ref)
+=#
+
 # --- Unified Matrix Operator Implementation ---
 function _jump_operator(Ωₕ::AbstractMeshType, ::Forward, ::Val{JUMP_DIM}) where JUMP_DIM
 	return difference_shift(Ωₕ, Val(JUMP_DIM), Val(1), Val(0))

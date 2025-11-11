@@ -1,3 +1,43 @@
+#=
+# linear_form.jl
+
+This file implements linear forms for finite element assembly.
+
+## Mathematical Background
+
+A linear form is a mapping:
+```math
+l : W_h → ℝ
+```
+
+where W_h is the test space.
+
+## Usage Pattern
+
+```julia
+# Define space
+Wₕ = gridspace(Ωₕ)
+
+# Create linear form (e.g., load vector)
+l = form(Wₕ, v -> innerₕ(f, v))
+
+# Assemble load vector
+F = assemble(l)
+
+# With Dirichlet conditions
+F = assemble(l, dirichlet_conditions, dirichlet_labels=:boundary)
+```
+
+## Assembly Strategies
+
+- `DefaultAssembly`: Standard approach using VectorElement
+- `InPlaceAssembly`: In-place computation for reduced allocations
+- `OperatorsAssembly`: Uses IdentityOperator instead of VectorElement
+- `AutoDetect`: Automatic strategy selection (experimental)
+
+See also: [`LinearForm`](@ref), [`assemble`](@ref), [`form`](@ref)
+=#
+
 """
 	LinearFormType
 
@@ -5,9 +45,52 @@ Abstract type for linear forms.
 """
 abstract type LinearFormType end
 
+"""
+	DefaultAssembly
+
+Assembly strategy that evaluates the linear form by passing a [VectorElement](@ref)
+to the form expression. This is the standard and most flexible approach.
+
+# Example
+
+```julia
+l = form(Wₕ, v -> innerₕ(f, v), strategy = DefaultAssembly())
+```
+
+See also: [`InPlaceAssembly`](@ref), [`OperatorsAssembly`](@ref), [`AutoDetect`](@ref)
+"""
 struct DefaultAssembly end
+
+"""
+	InPlaceAssembly
+
+Assembly strategy for in-place computation. The form expression should accept
+two arguments: `(output_vector, operator)` and modify `output_vector` directly.
+
+This strategy is useful for reducing allocations in iterative solvers.
+
+See also: [`DefaultAssembly`](@ref), [`assemble!`](@ref)
+"""
 struct InPlaceAssembly end
+
+"""
+	OperatorsAssembly
+
+Assembly strategy that passes an [`IdentityOperator`](@ref) to the form expression
+instead of a [VectorElement](@ref). Useful for operator-based formulations.
+
+See also: [`DefaultAssembly`](@ref), [`IdentityOperator`](@ref)
+"""
 struct OperatorsAssembly end
+
+"""
+	AutoDetect
+
+Automatic detection of the most appropriate assembly strategy based on the form
+expression signature. Currently not fully implemented.
+
+See also: [`DefaultAssembly`](@ref)
+"""
 struct AutoDetect end
 
 """
@@ -16,7 +99,7 @@ struct AutoDetect end
 		form_expr::F
 	end
 
-Structure to store the data associated with a llinear form
+Structure to store the data associated with a linear form
 
 ```math
 \\begin{array}{rcll}
@@ -41,9 +124,28 @@ Returns the test space of a linear form.
 test_space(l::LinearForm) = l.test_space
 
 """
-	form(Wₕ::AbstractSpaceType, f)
+	form(Wₕ::AbstractSpaceType, f; strategy=DefaultAssembly(), verbose=false)
 
-Returns a linear form from a given expression `f`` and a test space `Wₕ`.
+Returns a linear form from a given expression `f` and a test space `Wₕ`.
+
+# Arguments
+
+  - `Wₕ::AbstractSpaceType`: The test space
+  - `f`: Function defining the linear form expression
+  - `strategy`: Assembly strategy (default: `DefaultAssembly()`)
+  - `verbose::Bool`: If `true`, logs the selected assembly strategy
+
+# Returns
+
+A `LinearForm` object ready for assembly.
+
+# Example
+
+```julia
+Wₕ = gridspace(Ωₕ)
+f = x -> sin(π*x[1])
+l = form(Wₕ, v -> innerₕ(f, v), verbose = true)
+```
 """
 @inline function form(Wₕ::AbstractSpaceType, _f::F; strategy = DefaultAssembly(), verbose::Bool = false) where F
 	available_strategy = []
@@ -80,11 +182,29 @@ Returns a linear form from a given expression `f`` and a test space `Wₕ`.
 	f = _form_expr2fwrapper(_f, Wₕ, strategy)
 
 	if verbose
-		println("Linear form will be assembled using $(strategy) strategy.")
+		@info "Linear form will be assembled using $(strategy) strategy."
 	end
 	return LinearForm{typeof(Wₕ),typeof(f),typeof(strategy)}(Wₕ, f, strategy)
 end
 
+"""
+	_form_expr2fwrapper(f, S, strategy)
+
+Internal helper to wrap form expressions in FunctionWrappers for type stability.
+
+Converts the user-provided function `f` into a type-stable FunctionWrapper based on
+the selected assembly strategy. This eliminates dynamic dispatch and improves performance.
+
+# Arguments
+
+  - `f`: The form expression function
+  - `S`: The test space
+  - `strategy`: The assembly strategy (determines wrapper signature)
+
+# Returns
+
+A FunctionWrapper with appropriate type signature for the given strategy.
+"""
 _form_expr2fwrapper(f, S, _::DefaultAssembly) = FunctionWrapper{Vector{eltype(S)},Tuple{typeof(elements(S))}}(f)
 _form_expr2fwrapper(f, S, _::OperatorsAssembly) = FunctionWrapper{Vector{eltype(S)},Tuple{typeof(IdentityOperator(S))}}(f)
 _form_expr2fwrapper(f, S, _::InPlaceAssembly) = FunctionWrapper{Nothing,Tuple{Vector{eltype(S)},typeof(IdentityOperator(S))}}(f)
@@ -124,6 +244,7 @@ In-place assemble of a linear form into a given [VectorElement](@ref).
 Returns the assembled linear form with imposed constraints as a vector of numbers.
 """
 function assemble(l::LinearForm, dirichlet_conditions::DomainMarkers; dirichlet_labels = nothing)
+	_validate_dirichlet_labels(dirichlet_labels)
 	vec = assemble(l)
 
 	Wₕ = test_space(l)
@@ -137,8 +258,6 @@ function assemble(l::LinearForm, dirichlet_conditions::DomainMarkers; dirichlet_
 			if !isempty(dirichlet_labels)
 				dirichlet_bc!(vec, mesh(test_space(l)), dirichlet_conditions, dirichlet_labels...)
 			end
-		else
-			error("dirichlet_labels must be nothing, a Symbol, or a Tuple of Symbols")
 		end
 	end
 	return vec
@@ -150,6 +269,7 @@ end
 In-place assemble of a linear form with imposed constraints into a given vector.
 """
 function assemble!(vec::AbstractVector, l::LinearForm; dirichlet_conditions::DomainMarkers = dirichlet_constraints(test_space(l)), dirichlet_labels = nothing)
+	_validate_dirichlet_labels(dirichlet_labels)
 	_assemble!(vec, l)
 
 	Wₕ = test_space(l)
@@ -163,8 +283,6 @@ function assemble!(vec::AbstractVector, l::LinearForm; dirichlet_conditions::Dom
 			if !isempty(dirichlet_labels)
 				dirichlet_bc!(vec, mesh(test_space(l)), dirichlet_conditions, dirichlet_labels...)
 			end
-		else
-			error("dirichlet_labels must be nothing, a Symbol, or a Tuple of Symbols")
 		end
 	end
 	return nothing

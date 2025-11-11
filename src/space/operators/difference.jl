@@ -4,6 +4,75 @@
 #                                                                            #
 ##############################################################################
 
+#=
+# difference.jl
+
+This file implements difference and finite difference operators for grid functions.
+
+## Mathematical Formulation
+
+### Simple Difference Operators (no grid spacing)
+
+**Forward difference**:
+	Δ₊uᵢ = uᵢ₊₁ - uᵢ
+
+**Backward difference**:
+	Δ₋uᵢ = uᵢ - uᵢ₋₁
+
+### Finite Difference Operators (with grid spacing h)
+
+**Forward finite difference** (approximates ∂u/∂x at xᵢ):
+	δ₊uᵢ = (uᵢ₊₁ - uᵢ) / hᵢ
+
+**Backward finite difference** (approximates ∂u/∂x at xᵢ):
+	δ₋uᵢ = (uᵢ - uᵢ₋₁) / hᵢ
+
+## Boundary Treatment
+
+At domain boundaries where neighbors don't exist:
+- **Forward at last point**: Δ₊uₙ = -uₙ (enforces zero beyond boundary)
+- **Backward at first point**: Δ₋u₁ = u₁ (enforces zero before boundary)
+
+This convention:
+1. Maintains operator size consistency
+2. Respects homogeneous Dirichlet-like conditions
+3. Ensures matrix operators remain well-defined
+
+## Grid Spacing Support
+
+The operators support:
+- **Uniform grids**: `h` is a scalar or nothing
+- **Non-uniform grids**: `h` is a vector of local spacings
+- **Adaptive spacing**: `h` is a function `h(i)` returning spacing at index i
+
+## Use Cases
+
+**Simple differences**: Measure changes without physical units
+```julia
+Δu = Δ₊(uₕ, dim)  # Dimensionless change
+```
+
+**Finite differences**: Approximate derivatives with physical meaning
+```julia
+∂u_∂x = δ₊(uₕ, dim, mesh)  # Has units of [u]/[x]
+```
+
+## Performance Optimizations
+
+- `@propagate_inbounds`: Eliminates bounds checking in inner loops
+- `@simd`: Enables SIMD vectorization
+- `@muladd`: Fuses multiply-add operations (a-b)/h → (a-b)*inv_h
+- Separate loops for interior (2-point stencil) and boundary (1-point)
+
+## Accuracy
+
+These are first-order accurate methods:
+- Truncation error: O(h) for first derivatives
+- For higher accuracy, see centered differences or higher-order stencils
+
+See also: [`Δ₊`](@ref), [`Δ₋`](@ref), [`δ₊`](@ref), [`δ₋`](@ref), [`Forward`](@ref), [`Backward`](@ref)
+=#
+
 # --- Type System for Dispatch ---
 abstract type GridDirection end
 struct Forward <: GridDirection end
@@ -28,7 +97,7 @@ end
 @inline @propagate_inbounds _compute_difference(::Forward, ::Val{true}, cur, h, i) = -cur / _get_h_val(h, i)
 
 @inline @propagate_inbounds @muladd _compute_difference(::Backward, ::Val{false}, cur, prev, h, i) = (cur - prev) / _get_h_val(h, i)
-@inline @propagate_inbounds _compute_difference(::Backward, ::Val{true}, cur, h, i) = cur / _get_h_val(h, 2)
+@inline @propagate_inbounds _compute_difference(::Backward, ::Val{true}, cur, h, i) = cur / _get_h_val(h, 2) # or is it _get_h_val(h, 1)
 
 # --- Unified Difference Engine ---
 @inbounds function _difference_engine!(out, in_ref, h, dims::NTuple{D,Int}, dir::GridDirection, ::Val{DIFF_DIM}) where {D,DIFF_DIM}

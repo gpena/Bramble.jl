@@ -1,6 +1,65 @@
-# A constant tuple storing subscript symbols for x, y, z coordinates.
-# Used for creating nicely formatted output, like labels in plots or printed variable names (e.g., Dₓ).
+#=
+# gridspace.jl
+
+This file defines the core abstractions for function spaces on structured grids.
+
+## Key Components
+
+- **Abstract Types**: `AbstractSpaceType`, `ComponentStyle`, `InnerProductType`
+- **Element Types**: `VectorElement`, `MatrixElement` - wrappers for grid functions and operators
+- **Interface Functions**: Required methods for any concrete space implementation
+
+## Design Philosophy
+
+The space framework uses Julia's type system and multiple dispatch to:
+1. Maintain type stability through compile-time information (`Val`, type parameters)
+2. Enable specialized implementations for scalar vs vector fields (`ComponentStyle`)
+3. Support different discrete inner products (`InnerProductType`)
+4. Provide a clean separation between data (vectors/matrices) and context (spaces)
+
+## Usage Pattern
+
+```julia
+# Create a space from a mesh
+Wₕ = gridspace(Ωₕ)
+
+# Create elements (grid functions)
+uₕ = element(Wₕ)
+uₕ = Rₕ(Wₕ, x -> sin(x[1]))
+
+# Apply operators
+vₕ = D₊ₓ(uₕ)  # Differentiate in x
+wₕ = M₋ᵧ(vₕ)  # Average in y
+
+# Compute inner products
+norm = normₕ(uₕ)
+ip = innerₕ(uₕ, vₕ)
+```
+
+See also: [`ScalarGridSpace`](@ref), [`VectorElement`](@ref), [`MatrixElement`](@ref)
+=#
+
+"""
+Subscript Unicode symbols for x, y, z coordinates used in operator notation.
+
+These symbols are used to generate directional operator aliases via metaprogramming.
+
+# Examples
+- `D₊ₓ` - forward difference in x-direction
+- `M₋ᵧ` - backward average in y-direction
+- `jump₊₂` - forward jump in z-direction
+
+See also: [`_BRAMBLE_var2label`](@ref)
+"""
 const _BRAMBLE_var2symbol = ("ₓ", "ᵧ", "₂")
+
+"""
+Coordinate axis labels used in documentation and error messages.
+
+Corresponds to the x, y, and z spatial dimensions (1st, 2nd, and 3rd dimensions).
+
+See also: [`_BRAMBLE_var2symbol`](@ref)
+"""
 const _BRAMBLE_var2label = ("x", "y", "z")
 """
 	AbstractSpaceType{N}
@@ -47,19 +106,178 @@ struct MatrixElement{S,T,MT<:AbstractMatrix{T}} <: AbstractMatrix{T}
 	space::S
 end
 
-#=
-The `ComponentStyle` and `InnerProductType` hierarchies are a common Julia pattern
-for **compile-time dispatch**. Instead of using `if/else` checks, functions can
-specialize their behavior by dispatching on these types, leading to more efficient
-and extensible code. ✨
-=#
+"""
+	ComponentStyle
+
+Abstract type for compile-time dispatch on the number of field components in a function space.
+
+The `ComponentStyle` hierarchy is used to specialize algorithms for scalar fields (single component) 
+versus vector fields (multiple components). This pattern enables efficient code generation through 
+Julia's multiple dispatch, avoiding runtime `if/else` checks.
+
+# Subtypes
+- [`SingleComponent`](@ref): For scalar fields (e.g., temperature, pressure)
+- [`MultiComponent{D}`](@ref): For vector fields with `D` components (e.g., velocity, displacement)
+
+# Usage
+```julia
+ComponentStyle(typeof(Wₕ))  # Returns SingleComponent() or MultiComponent{D}()
+```
+
+# Example
+```julia
+Wₕ = gridspace(Ωₕ)  # Scalar space
+ComponentStyle(typeof(Wₕ))  # Returns SingleComponent()
+
+# Dispatch example
+to_matrix(uₕ, ::SingleComponent) = # ... scalar implementation
+to_matrix(uₕ, ::MultiComponent{D}) where D = # ... vector implementation
+```
+
+See also: [`SingleComponent`](@ref), [`MultiComponent`](@ref), [`to_matrix`](@ref)
+"""
 abstract type ComponentStyle end
+
+"""
+	SingleComponent <: ComponentStyle
+
+Indicates a function space for scalar fields (single component per grid point).
+
+This is the component style for spaces representing scalar quantities such as 
+temperature, pressure, or density, where each grid point has a single value.
+
+# Example
+```julia
+Wₕ = gridspace(Ωₕ)  # Creates a scalar grid space
+ComponentStyle(typeof(Wₕ))  # Returns SingleComponent()
+
+uₕ = element(Wₕ)  # Vector has npoints(Ωₕ) entries
+```
+
+See also: [`ComponentStyle`](@ref), [`MultiComponent`](@ref), [`ScalarGridSpace`](@ref)
+"""
 struct SingleComponent <: ComponentStyle end
+
+"""
+	MultiComponent{D} <: ComponentStyle
+
+Indicates a function space for vector fields with `D` components per grid point.
+
+This component style is used for vector-valued quantities such as velocity, 
+displacement, or force fields, where each grid point stores `D` scalar values.
+
+# Type Parameter
+- `D::Int`: Number of vector components (typically equal to spatial dimension)
+
+# Example
+```julia
+# Create a 2D vector space (e.g., for velocity field)
+Wₕ = gridspace(Ωₕ)
+Vₕ = CompositeGridSpace((Wₕ, Wₕ))  # 2-component vector space
+ComponentStyle(typeof(Vₕ))  # Returns MultiComponent{2}()
+
+uₕ = element(Vₕ)  # Vector has 2 * npoints(Ωₕ) entries
+```
+
+See also: [`ComponentStyle`](@ref), [`SingleComponent`](@ref), [`CompositeGridSpace`](@ref)
+"""
 struct MultiComponent{D} <: ComponentStyle end
 
-# --- Type System for Dispatch ---
+"""
+	InnerProductType
+
+Abstract type for selecting which discrete inner product formula to use.
+
+Different inner product types correspond to different weight distributions on the grid,
+used in various finite difference schemes and stability analyses. The choice of inner
+product affects energy estimates and numerical stability properties.
+
+# Subtypes
+- [`Innerh`](@ref): Standard ``L^2`` inner product using cell measures (volumes)
+- [`Innerplus`](@ref): Modified inner product using staggered grid spacings
+
+# Background
+In finite difference methods, different inner products arise naturally from:
+- Summation-by-parts (SBP) operators
+- Energy method stability analysis
+- Discrete integration formulas
+
+The standard inner product (`Innerh`) uses cell volumes as weights, while the 
+modified inner products (`Innerplus`) use combinations of forward/backward spacings,
+appearing in discrete energy estimates for difference operators.
+
+# Usage
+```julia
+# Compute standard L² inner product
+result = innerₕ(uₕ, vₕ)  # Uses Innerh() internally
+
+# Compute modified inner product in x-direction
+result = inner₊ₓ(uₕ, vₕ)  # Uses Innerplus() internally
+```
+
+See also: [`Innerh`](@ref), [`Innerplus`](@ref), [`innerₕ`](@ref), [`inner₊ₓ`](@ref)
+"""
 abstract type InnerProductType end
+
+"""
+	Innerplus <: InnerProductType
+
+Selector for modified discrete ``L^2`` inner products using staggered grid spacings.
+
+These inner products use a combination of forward spacings ``h_i`` and centered cell 
+widths ``h_{i+1/2}``, appearing naturally in energy estimates for finite difference 
+operators. Different spatial directions may have different weight formulas.
+
+The modified inner products are essential for:
+- Proving discrete energy stability
+- Analyzing discrete conservation properties
+- Constructing stable finite difference schemes
+
+# Mathematical Form
+For a 2D grid in the x-direction:
+```math
+(u_h, v_h)_{+x} = \\sum_{i,j} h_{x,i} h_{y,j+1/2} u_h(x_i, y_j) v_h(x_i, y_j)
+```
+
+# Example
+```julia
+# These functions use Innerplus internally
+result_x = inner₊ₓ(uₕ, vₕ)  # Modified inner product, x-direction
+result_y = inner₊ᵧ(uₕ, vₕ)  # Modified inner product, y-direction
+```
+
+See also: [`InnerProductType`](@ref), [`Innerh`](@ref), [`inner₊ₓ`](@ref), [`weights`](@ref)
+"""
 struct Innerplus <: InnerProductType end
+
+"""
+	Innerh <: InnerProductType
+
+Selector for the standard discrete ``L^2`` inner product weighted by cell measures.
+
+The weights are the volumes (1D: lengths, 2D: areas, 3D: volumes) of grid cells,
+denoted ``|\\square_k|``. This is the most common inner product for finite difference
+methods and corresponds to the trapezoid rule for integration on non-uniform grids.
+
+# Mathematical Form
+For a 2D grid:
+```math
+(u_h, v_h)_h = \\sum_{i,j} |\\square_{i,j}| u_h(x_i, y_j) v_h(x_i, y_j)
+```
+
+where ``|\\square_{i,j}|`` is the area of the cell centered at ``(x_i, y_j)``.
+
+# Example
+```julia
+# Compute L² inner product
+result = innerₕ(uₕ, vₕ)  # Uses Innerh() internally
+
+# Compute L² norm
+norm_value = normₕ(uₕ)  # Equivalent to sqrt(innerₕ(uₕ, uₕ))
+```
+
+See also: [`InnerProductType`](@ref), [`Innerplus`](@ref), [`innerₕ`](@ref), [`normₕ`](@ref)
+"""
 struct Innerh <: InnerProductType end
 
 #=

@@ -77,7 +77,11 @@ For [VectorElement](@ref)s, it is defined as
 """
 	inner₊ᵧ(uₕ::VecOrMatElem, vₕ::VecOrMatElem)
 
-Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ` and `vₕ` associated with the second variable. It accepts
+Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ` and `vₕ` 
+associated with the second variable (y-direction). It accepts arguments of type 
+[VectorElement](@ref) or [MatrixElement](@ref), in any order.
+
+For [VectorElement](@ref)s, it is defined as
 
   - 2D case
 
