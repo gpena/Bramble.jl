@@ -7,13 +7,14 @@ Computes the Kronecker product (tensor product) of matrices `A` and `B`.
 This operator is used extensively in constructing multidimensional shift operators.
 
 # Example
+
 ```julia
 I₂ = Eye(2)
 I₃ = Eye(3)
 result = I₂ ⊗ I₃  # 6×6 identity matrix
 ```
 
-See also: [`kron`](@ref), [`shift`](@ref)
+See also: [`shift`](@ref)
 """
 @inline ⊗(A, B) = kron(A, B)
 
@@ -26,22 +27,25 @@ Creates either an identity matrix (`i=0`) or a matrix with ones on the `i`-th di
 The `Val{i}` allows compile-time specialization for the diagonal offset.
 
 # Arguments
-- `MType`: Matrix type to construct
-- `npts::Int`: Size of the square matrix
-- `::Val{i}`: Diagonal offset (0 = main diagonal, 1 = superdiagonal, -1 = subdiagonal)
+
+  - `MType`: Matrix type to construct
+  - `npts::Int`: Size of the square matrix
+  - `::Val{i}`: Diagonal offset (0 = main diagonal, 1 = superdiagonal, -1 = subdiagonal)
 
 # Returns
-- For `i=0`: Identity matrix of size `npts × npts`
-- For `i≠0`: Matrix with ones on the `i`-th diagonal, zeros elsewhere
+
+  - For `i=0`: Identity matrix of size `npts × npts`
+  - For `i≠0`: Matrix with ones on the `i`-th diagonal, zeros elsewhere
 
 # Example
+
 ```julia
 _Eye(Matrix{Float64}, 5, Val(0))   # 5×5 identity
 _Eye(Matrix{Float64}, 5, Val(1))   # 5×5 with ones on superdiagonal
 _Eye(Matrix{Float64}, 5, Val(-1))  # 5×5 with ones on subdiagonal
 ```
 
-See also: [`shift`](@ref), [`Eye`](@ref)
+See also: [`shift`](@ref)
 """
 @inline _Eye(::Type{MType}, npts::Int, ::Val{0}) where {MType<:AbstractMatrix} = Eye{eltype(MType)}(npts)
 @inline _Eye(::Type{MType}, npts::Int, ::Val{i}) where {i,MType<:AbstractMatrix} = spdiagm(i => Ones(eltype(MType), npts - abs(i)))
