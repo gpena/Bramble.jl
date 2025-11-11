@@ -1,3 +1,40 @@
+#=
+# dirichlet_constraints.jl
+
+This file implements Dirichlet boundary condition handling for finite element assembly.
+
+## Mathematical Background
+
+Dirichlet boundary conditions impose constraints of the form:
+```math
+u(x) = g(x) \\quad \\text{for } x \\in \\Gamma_D
+```
+
+where Γ_D is the Dirichlet boundary and g is the prescribed function.
+
+## Usage Pattern
+
+```julia
+# Define boundary conditions
+bc = dirichlet_constraints(Ωₕ, :left => x -> 0.0, :right => x -> 1.0)
+
+# Apply to matrix and vector
+dirichlet_bc!(A, mesh(Wₕ), :left, :right)
+dirichlet_bc!(F, mesh(Wₕ), bc, :left, :right)
+
+# Symmetrize system after BCs
+symmetrize!(A, F, mesh(Wₕ), :left, :right)
+```
+
+## Performance Optimizations
+
+- BitVector chunk-based processing (64 bits at a time)
+- Direct sparse matrix CSC structure manipulation
+- SIMD-friendly loops for cache efficiency
+
+See also: [`dirichlet_constraints`](@ref), [`dirichlet_bc!`](@ref), [`symmetrize!`](@ref)
+=#
+
 """
 	$(TYPEDEF)
 
@@ -37,7 +74,23 @@ function dirichlet_constraints(cartesian_product, I::CartesianProduct{1}, pairs:
 	_create_generic_markers(T, domain, I, pairs...)
 end
 
-# Helper to extract element type and domain from different sources
+"""
+	_get_eltype_and_domain(cartesian_product)
+
+Internal helper to extract element type and spatial domain from either a
+`CartesianProduct` or `ScalarGridSpace`.
+
+# Arguments
+
+  - `cartesian_product`: Either a `CartesianProduct` domain or a `ScalarGridSpace`
+
+# Returns
+
+  - `(T, domain)` where `T` is the element type and `domain` is the `CartesianProduct`
+
+This helper enables a unified interface for `dirichlet_constraints` that accepts
+both mesh domains and grid spaces.
+"""
 _get_eltype_and_domain(X::CartesianProduct{D,T}) where {D,T} = (T, X)
 _get_eltype_and_domain(Wₕ::ScalarGridSpace) = (eltype(Wₕ), set(mesh(Wₕ)))
 
@@ -47,6 +100,23 @@ _get_eltype_and_domain(Wₕ::ScalarGridSpace) = (eltype(Wₕ), set(mesh(Wₕ)))
 	Creates a single Dirichlet boundary constraint with function `f` with the label `:dirichlet`.
 """
 @inline dirichlet_constraints(X::CartesianProduct, f::F) where F<:Function = dirichlet_constraints(X, :boundary => f)
+
+"""
+    _validate_dirichlet_labels(labels)
+
+Internal helper to validate dirichlet_labels parameter.
+
+Ensures that `labels` is either `nothing`, a `Symbol`, or a `Tuple` of `Symbol`s.
+Throws an error if the validation fails.
+
+This function is used by both `bilinear_form.jl` and `linear_form.jl` to validate
+the `dirichlet_labels` keyword argument before applying boundary conditions.
+"""
+function _validate_dirichlet_labels(labels)
+    if labels !== nothing && !(labels isa Symbol || labels isa Tuple)
+        error("dirichlet_labels must be nothing, a Symbol, or a Tuple of Symbols")
+    end
+end
 
 #==============================================================================
 						APPLYING DIRICHLET BOUNDARY CONDITIONS
@@ -152,6 +222,24 @@ function _dirichlet_bc_indices!(A::SparseMatrixCSC, index_in_marker::BitVector)
 	end
 end
 
+"""
+	_function_in_linear_indices(func, Ωₕ, i)
+
+Internal helper to evaluate a function at a grid point given its linear index.
+
+Converts linear index `i` to Cartesian indices and evaluates `func` at the
+corresponding physical point in mesh `Ωₕ`.
+
+# Arguments
+
+  - `func`: Function to evaluate (typically a boundary condition function)
+  - `Ωₕ`: The mesh
+  - `i`: Linear index into the mesh points
+
+# Returns
+
+The value of `func` at the `i`-th mesh point.
+"""
 _function_in_linear_indices(func, Ωₕ, i) = func(point(Ωₕ, indices(Ωₕ)[i]))
 
 function _dirichlet_bc_indices!(v::AbstractVector, Ωₕ::AbstractMeshType, index_in_marker::BitVector, func::BrambleFunction)
