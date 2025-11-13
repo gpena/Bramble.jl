@@ -1,21 +1,43 @@
-name: API workflow
+# .github/workflows/CI.yml
 
-on: [push, pull_request]
+name: CI
+on:
+  push:
+    branches: [main, master] # Adjust to your default branch
+  pull_request:
+    branches: [main, master] # Adjust to your default branch
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
-    name: Test python API
     steps:
-      - uses: actions/checkout@v4
-      - name: Install requirements
-        run: pip install -r requirements.txt
-      - name: Run tests and collect coverage
-        run: pytest --cov .
-      - name: Upload coverage reports to Codecov
-        run: |
-          # Replace `linux` below with the appropriate OS
-          # Options are `alpine`, `linux`, `macos`, `windows`
-          curl -Os https://cli.codecov.io/latest/linux/codecov
-          chmod +x codecov
-          ./codecov --verbose upload-process --fail-on-error -t ${{ secrets.CODECOV_TOKEN }} -n 'service'-${{ github.run_id }} -F service -f coverage-service.xml
+      # 1. Check out the repository
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 2. Set up the Julia environment
+      - name: Setup Julia
+        uses: julia-actions/setup-julia@v2
+        with:
+          version: "1" # Use '1' for the latest stable 1.x release
+
+      # 3. Install project dependencies
+      - name: Instantiate project
+        run: julia --project -e 'using Pkg; Pkg.instantiate()'
+
+      # 4. Run tests and generate coverage files
+      - name: Run tests
+        run: julia --project -e 'using Pkg; Pkg.test(coverage=true)'
+
+      # 5. Process coverage data
+      # This step collects the .cov files and generates an lcov.info file
+      - name: Process coverage
+        uses: julia-actions/julia-processcoverage@v1
+
+      # 6. Upload coverage report to Codecov
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          # This token is set in your GitHub repository secrets
+          token: ${{ secrets.CODECOV_TOKEN }}
+          # The uploader will automatically find the lcov.info file
