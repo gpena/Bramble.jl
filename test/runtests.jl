@@ -29,6 +29,7 @@ if __bramble_with_unit_tests
 		@testset "Meshes" begin
 			include("mesh/mesh1d.jl")
 			include("mesh/meshnd.jl")
+			include("mesh/meshes.jl")
 		end
 
 		@testset "Grid spaces" begin
@@ -40,13 +41,19 @@ if __bramble_with_unit_tests
 			include("space/jump.jl")
 			include("space/average.jl")
 			include("space/inner_product.jl")
-			include("space/coverage_edge_cases.jl")
+			include("space/linear_operators.jl")
 		end
 
 		@testset "Forms" begin
 			include("form/dirichlet_constraints.jl")
 			include("form/forms.jl")
+			include("form/linear_forms.jl")
+			include("form/bilinear_forms.jl")
 		end
+
+		#=@testset "Exporters" begin
+			include("exporters/exporter_coverage.jl")
+		end=#
 	end
 end
 
