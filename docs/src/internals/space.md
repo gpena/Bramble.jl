@@ -18,6 +18,7 @@ Pages = [
     "space/operators/difference.jl",
     "space/operators/jump.jl",
     "space/operators/average.jl",
+    "space/operators/linear_operators.jl",
     "space/inner_product.jl"
 ]
 ```
