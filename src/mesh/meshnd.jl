@@ -182,14 +182,14 @@ end
 @generate_mesh_iterator_func forward_spacings_iterator
 @generate_mesh_iterator_func half_spacings_iterator
 
-@inline _apply_hs_logic(value::T) where T = ifelse(iszero(value), one(T), value)
+# Note: _apply_hs_logic is now defined in mesh_common_methods.jl
 
 @inline npoints(Ωₕ::MeshnD) = prod(npoints(Ωₕ, Tuple))
 @inline @inbounds npoints(Ωₕ::MeshnD{D}, ::Type{Tuple}) where D = ntuple(i -> npoints(Ωₕ(i)), Val(D))
 
 @inline function hₘₐₓ(Ωₕ::MeshnD{D}) where D
 	max_h = zero(eltype(Ωₕ))
-	@inbounds for idx in indices(Ωₕ)
+	@inbounds @simd for idx in indices(Ωₕ)
 		h_tuple = spacing(Ωₕ, idx)
 		h_diag = sqrt(sum(x -> x*x, h_tuple))
 		max_h = max(max_h, h_diag)
