@@ -242,7 +242,7 @@ show(io::IO, op::VectorOperator) = print(io, "0")
 #########################################
 
 """
-	IdentityOperator{S} <: OperatorType
+	IdentityOperator
 
 Represents the identity operator `I` that maps each element to itself.
 
