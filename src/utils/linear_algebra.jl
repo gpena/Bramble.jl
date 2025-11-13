@@ -34,7 +34,7 @@ Performs a serial (non-parallel) iteration over the specified indices, applying 
 function _serial_for!(v, idxs, f)
 	# This is a standard, single-threaded for loop that serves as the non-parallel
 	# counterpart to `_parallel_for!`.
-	for idx in idxs
+	@inbounds @simd for idx in idxs
 		v[idx] = f(idx)
 	end
 	# The function returns `nothing`.
