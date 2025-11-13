@@ -188,6 +188,17 @@ l = form(Wₕ, v -> innerₕ(f, v), verbose = true)
 end
 
 """
+	(l::LinearForm)(u)
+
+Callable interface for evaluating a linear form on given elements.
+
+Returns the scalar value l(u) where u is an element from the test space.
+"""
+#TODO: improve this to actually evaluate the form on u
+@inline (l::LinearForm)(u::VectorElement) = dot(l.form_expr(elements(test_space(l))), u.data)
+@inline (l::LinearForm)(u::MatrixElement) = l.form_expr(u)
+
+"""
 	_form_expr2fwrapper(f, S, strategy)
 
 Internal helper to wrap form expressions in FunctionWrappers for type stability.
