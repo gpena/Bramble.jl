@@ -56,7 +56,7 @@ The provided `:label` should match one of the labels used when creating the [Abs
 #@inline dirichlet_constraints(Wₕ::AbstractSpaceType, pairs::Pair...) = _create_generic_markers(eltype(Wₕ), set(mesh(Wₕ)), pairs...)
 #@inline dirichlet_constraints(Wₕ::AbstractSpaceType, I::CartesianProduct{1}, pairs::Pair...) = _create_generic_markers(eltype(Wₕ), set(mesh(Wₕ)), I, pairs...)
 """
-	dirichlet_constraints(cartesian_product, [I::CartesianProduct{1}], pairs...)
+	dirichlet_constraints(_set, [I::CartesianProduct{1}], pairs...)
 
 Creates Dirichlet boundary constraints.
 
@@ -64,12 +64,14 @@ Each `pair` is of the form `:label => func`, where `:label` identifies the bound
 
 The `cartesian_product` can be a `CartesianProduct` mesh domain or an `ScalarGridSpace` from which the mesh can be extracted. The `:label` must match a label in the mesh definition.
 """
-function dirichlet_constraints(cartesian_product, pairs::Pair...)
+function dirichlet_constraints(input, pairs::Pair...)
+	cartesian_product = input isa ScalarGridSpace ? set(mesh(input)) : set(input)
 	T, domain = _get_eltype_and_domain(cartesian_product)
 	_create_generic_markers(T, domain, pairs...)
 end
 
-function dirichlet_constraints(cartesian_product, I::CartesianProduct{1}, pairs::Pair...)
+function dirichlet_constraints(input, I::CartesianProduct{1}, pairs::Pair...)
+	cartesian_product = input isa ScalarGridSpace ? set(mesh(input)) : set(input)
 	T, domain = _get_eltype_and_domain(cartesian_product)
 	_create_generic_markers(T, domain, I, pairs...)
 end
@@ -102,7 +104,7 @@ _get_eltype_and_domain(Wₕ::ScalarGridSpace) = (eltype(Wₕ), set(mesh(Wₕ)))
 @inline dirichlet_constraints(X::CartesianProduct, f::F) where F<:Function = dirichlet_constraints(X, :boundary => f)
 
 """
-    _validate_dirichlet_labels(labels)
+	_validate_dirichlet_labels(labels)
 
 Internal helper to validate dirichlet_labels parameter.
 
@@ -113,9 +115,9 @@ This function is used by both `bilinear_form.jl` and `linear_form.jl` to validat
 the `dirichlet_labels` keyword argument before applying boundary conditions.
 """
 function _validate_dirichlet_labels(labels)
-    if labels !== nothing && !(labels isa Symbol || labels isa Tuple)
-        error("dirichlet_labels must be nothing, a Symbol, or a Tuple of Symbols")
-    end
+	if labels !== nothing && !(labels isa Symbol || labels isa Tuple)
+		error("dirichlet_labels must be nothing, a Symbol, or a Tuple of Symbols")
+	end
 end
 
 #==============================================================================
