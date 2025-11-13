@@ -41,9 +41,8 @@ end
 @inline points(Ωₕ::Mesh1D) = Ωₕ.pts
 
 @inline function point(Ωₕ::Mesh1D, i)
-	idx = i isa CartesianIndex ? i[1] : i
-	@assert 1 <= idx <= npoints(Ωₕ) "Index $i out of bounds for Mesh1D with $(npoints(Ωₕ)) points."
-
+	idx = _extract_linear_index(i)
+	_check_point_bounds(Ωₕ, idx, "point")
 	return @inbounds points(Ωₕ)[idx]
 end
 
@@ -102,69 +101,37 @@ Overrides the spacings in Ωₕ.
 @inline hₘₐₓ(Ωₕ::Mesh1D) = maximum(spacings_iterator(Ωₕ))
 
 @inline @inbounds function spacing(Ωₕ::Mesh1D, i::Int)
-	@assert 1 <= i <= npoints(Ωₕ) "Index $i out of bounds for Mesh1D with $(npoints(Ωₕ)) points."
-	# If the mesh is degenerate (collapsed to a single point), the spacing is zero.
-	if is_collapsed(Ωₕ)
-		return eltype(Ωₕ)(0.0)
-	end
-
-	# Get the vector of grid point coordinates.
-	pts = points(Ωₕ)
-
-	# Handle the boundary case for the first point (i=1). Since there is no i-1, we define its spacing as the distance to the next point.
-	if i == 1
-		return pts[2] - pts[1]
-	end
-
-	# For all other interior and right-boundary points, calculate the standard backward spacing.
-	return pts[i] - pts[i-1]
+	_check_point_bounds(Ωₕ, i, "spacing")
+	return _compute_backward_spacing_1d(points(Ωₕ), i, is_collapsed(Ωₕ), eltype(Ωₕ))
 end
 
-@inline @inbounds spacing(Ωₕ::Mesh1D, i::CartesianIndex{1}) = spacing(Ωₕ, i[1])
+@inline @inbounds spacing(Ωₕ::Mesh1D, i::CartesianIndex{1}) = spacing(Ωₕ, _extract_linear_index(i))
 
 @inline @inbounds function forward_spacing(Ωₕ::Mesh1D, i::Int)
-	@assert 1 <= i <= npoints(Ωₕ) "Index $i out of bounds for Mesh1D with $(npoints(Ωₕ)) points."
-
-	# If the mesh is degenerate (a single point), the spacing is zero.
-	if is_collapsed(Ωₕ)
-		return zero(eltype(Ωₕ))
-	end
-
-	# Get the vector of grid point coordinates and the total number of points.
-	pts = points(Ωₕ)
-	N = npoints(Ωₕ)
-
-	# Handle the boundary case for the last point (i=N). Since there is no i+1,
-	# we define its spacing as the distance to the previous point (backward spacing).
-	if i == N
-		return pts[N] - pts[N-1]
-	end
-
-	# For all other points, calculate the standard forward spacing.
-	return pts[i+1] - pts[i]
+	_check_point_bounds(Ωₕ, i, "forward_spacing")
+	return _compute_forward_spacing_1d(points(Ωₕ), i, npoints(Ωₕ), is_collapsed(Ωₕ), eltype(Ωₕ))
 end
 
-@inline @inbounds forward_spacing(Ωₕ::Mesh1D, i::CartesianIndex{1}) = forward_spacing(Ωₕ, i[1])
+@inline @inbounds forward_spacing(Ωₕ::Mesh1D, i::CartesianIndex{1}) = forward_spacing(Ωₕ, _extract_linear_index(i))
 
 @inline @inbounds function half_point(Ωₕ::Mesh1D, i::Int)
-	@assert 1 <= i <= npoints(Ωₕ) + 1 "Index $i out of bounds for Mesh1D with $(npoints(Ωₕ)) points."
+	_check_half_point_bounds(Ωₕ, i)
 	return Ωₕ.half_pts[i]
 end
 
-@inline spacings_iterator(Ωₕ::Mesh1D) = (spacing(Ωₕ, i) for i in eachindex(points(Ωₕ)))
-@inline forward_spacings_iterator(Ωₕ::Mesh1D) = (forward_spacing(Ωₕ, i) for i in eachindex(points(Ωₕ)))
+@inline spacings_iterator(Ωₕ::Mesh1D) = _spacing_generator(Ωₕ, spacing)
+@inline forward_spacings_iterator(Ωₕ::Mesh1D) = _spacing_generator(Ωₕ, forward_spacing)
 
 @inline @inbounds function half_spacing(Ωₕ::Mesh1D, i::Int)
-	@assert 1 <= i <= npoints(Ωₕ) "Index $i out of bounds for Mesh1D with $(npoints(Ωₕ)) points."
+	_check_point_bounds(Ωₕ, i, "half_spacing")
 	return Ωₕ.half_spacings[i]
 end
 
-@inline @inbounds half_spacing(Ωₕ::Mesh1D, idx::CartesianIndex{1}) = half_spacing(Ωₕ, idx[1])
+@inline @inbounds half_spacing(Ωₕ::Mesh1D, idx::CartesianIndex{1}) = half_spacing(Ωₕ, _extract_linear_index(idx))
 
 @inline @inbounds function cell_measure(Ωₕ::Mesh1D, i)
-	idx = i isa CartesianIndex ? i[1] : i
-	@assert 1 <= idx <= npoints(Ωₕ) "Index $i out of bounds for Mesh1D with $(npoints(Ωₕ)) points."
-
+	idx = _extract_linear_index(i)
+	_check_point_bounds(Ωₕ, idx, "cell_measure")
 	return half_spacing(Ωₕ, idx)
 end
 
@@ -311,7 +278,7 @@ function iterative_refinement!(Ωₕ::Mesh1D)
 	new_points = vector(backend(Ωₕ), N_new)
 	old_points = points(Ωₕ)
 
-	@inbounds for i in 1:N_old
+	@inbounds @simd for i in 1:N_old
 		new_points[2i-1] = old_points[i]
 		if i < N_old
 			@muladd new_points[2i] = (old_points[i] + old_points[i+1]) * 0.5
