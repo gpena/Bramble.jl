@@ -1,6 +1,6 @@
 # .github/workflows/CI.yml
 
-name: CI
+name: Code Coverage
 on:
   push:
     branches: [main, master] # Adjust to your default branch
