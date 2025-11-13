@@ -108,23 +108,27 @@ end
 
 Internal helper to extract a [VectorElement](@ref) from a broadcast expression.
 
-Recursively searches through the arguments of a broadcast expression tree to find 
-a `VectorElement` instance. This is used by the broadcasting machinery to determine 
+Recursively searches through the arguments of a broadcast expression tree to find
+a `VectorElement` instance. This is used by the broadcasting machinery to determine
 which function space should be used for the result.
 
 # Arguments
-- `bc`: A broadcast expression, tuple of arguments, or individual value
+
+  - `bc`: A broadcast expression, tuple of arguments, or individual value
 
 # Returns
-- The first `VectorElement` found in the expression tree
-- `nothing` if no `VectorElement` is found
+
+  - The first `VectorElement` found in the expression tree
+  - `nothing` if no `VectorElement` is found
 
 # Implementation Notes
+
 Uses multiple dispatch to handle:
-- `Broadcasted` objects: Extract and search arguments
-- `Tuple`s: Recursively search each element
-- `VectorElement`: Return immediately (found!)
-- Other types: Return `nothing` and continue searching
+
+  - `Broadcasted` objects: Extract and search arguments
+  - `Tuple`s: Recursively search each element
+  - `VectorElement`: Return immediately (found!)
+  - Other types: Return `nothing` and continue searching
 
 This enables broadcasts like `uₕ .+ vₕ .* 2` to automatically preserve the space information.
 """
@@ -136,15 +140,21 @@ _find_vec_in_broadcast(::Tuple{}) = nothing # End of recursion
 _find_vec_in_broadcast(a::VectorElement, rest) = a # Found one
 _find_vec_in_broadcast(::Any, rest) = _find_vec_in_broadcast(rest) # Keep searching
 
-#=
 function *(uₕ::VectorElement, Vₕ::NTuple{D,VectorElement}) where D
-	Zₕ = ntuple(i-> similar(Vₕ[i]), D)
+	Zₕ = ntuple(i -> similar(Vₕ[i]), D)
 	for i in 1:D
 		Zₕ[i].data .= uₕ.data .* Vₕ[i].data
 	end
 	return Zₕ
 end
-=#
+
+function *(a::Number, Vₕ::NTuple{D,VectorElement}) where D
+	Zₕ = ntuple(i -> similar(Vₕ[i]), D)
+	for i in 1:D
+		Zₕ[i].data .= a .* Vₕ[i].data
+	end
+	return Zₕ
+end
 
 ########################
 #                      #
@@ -172,8 +182,8 @@ end
 
 Helper struct to bundle a function with its mesh for pointwise evaluation.
 
-This allows passing both a function and its mesh as a single callable object. When called 
-with a grid index `idx`, it evaluates the function at the physical coordinates corresponding 
+This allows passing both a function and its mesh as a single callable object. When called
+with a grid index `idx`, it evaluates the function at the physical coordinates corresponding
 to that index.
 
 # Fields
@@ -183,15 +193,17 @@ $(FIELDS)
 # Callable Interface
 
 A `PointwiseEvaluator` is callable:
+
 ```julia
 pe = PointwiseEvaluator(f, Ωₕ)
 value = pe(idx)  # Equivalent to f(point(Ωₕ, idx))
 ```
 
-This abstraction is used internally by the restriction operator [`Rₕ`](@ref) to evaluate 
+This abstraction is used internally by the restriction operator [`Rₕ`](@ref) to evaluate
 continuous functions at discrete grid points.
 
 # Example
+
 ```julia
 # Define a function in physical coordinates
 f(x) = sin(x[1]) * cos(x[2])
@@ -232,12 +244,15 @@ Returns the mesh stored in the [PointwiseEvaluator](@ref).
 Evaluate the function at the physical coordinates of grid index `idx`.
 
 # Arguments
-- `idx`: Grid index (e.g., `CartesianIndex(i, j)`)
+
+  - `idx`: Grid index (e.g., `CartesianIndex(i, j)`)
 
 # Returns
+
 The function value at the physical point corresponding to `idx`.
 
 # Example
+
 ```julia
 pe = PointwiseEvaluator(f, Ωₕ)
 value = pe(CartesianIndex(5, 10))  # Evaluates f at physical point (x₅, y₁₀)
@@ -254,11 +269,13 @@ Evaluates function `f` at grid points and stores the result directly in `uₕ`,
 avoiding allocation of a new vector.
 
 # Arguments
-- `uₕ::VectorElement`: Pre-allocated vector element to store the result
-- `f`: Function to evaluate at grid points (signature: `f(x::SVector) -> Number`)
-- `markers::NTuple{N,Symbol}`: Optional tuple of marker symbols to restrict evaluation to specific regions
+
+  - `uₕ::VectorElement`: Pre-allocated vector element to store the result
+  - `f`: Function to evaluate at grid points (signature: `f(x::SVector) -> Number`)
+  - `markers::NTuple{N,Symbol}`: Optional tuple of marker symbols to restrict evaluation to specific regions
 
 # Example
+
 ```julia
 Wₕ = gridspace(Ωₕ)
 uₕ = element(Wₕ)
@@ -271,8 +288,9 @@ Rₕ!(uₕ, f)
 ```
 
 !!! warning "Marker-based restriction"
-    The `markers` keyword argument is experimental and may not work correctly in all cases.
-    For production code, use full grid restriction (default) or verify behavior with tests.
+
+	The `markers` keyword argument is experimental and may not work correctly in all cases.
+	For production code, use full grid restriction (default) or verify behavior with tests.
 
 See also: [`Rₕ`](@ref), [`element`](@ref)
 """
