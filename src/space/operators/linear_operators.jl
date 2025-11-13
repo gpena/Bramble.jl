@@ -58,7 +58,7 @@ _process_scalar(f::FunctionWrapper{T,Tuple{}}) where T<:Number = "$(f())"
 _process_scalar(f::FunctionWrapper{CoType,Tuple{}}) where CoType = "uₕ"
 
 """
-	OperatorType <: BrambleType
+	OperatorType
 
 Abstract base type for all operators acting on finite element spaces.
 
@@ -81,7 +81,7 @@ All operator types must implement:
   - `space(op)`: Return the underlying grid space
   - `show(io, op)`: Display representation
 """
-abstract type OperatorType <: BrambleType end
+abstract type OperatorType end
 
 """
 	ScalarOperatorType <: OperatorType

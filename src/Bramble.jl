@@ -98,6 +98,7 @@ include("space/operators/shift.jl")
 include("space/operators/difference.jl")
 include("space/operators/jump.jl")
 include("space/operators/average.jl")
+include("space/operators/linear_operators.jl")
 include("space/inner_product.jl")
 
 include("form/dirichlet_constraints.jl")
