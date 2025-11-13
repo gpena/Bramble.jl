@@ -3,15 +3,19 @@ using Bramble: matrix, vector
 using Bramble: interval, embed_function
 
 @setup_workload begin
-	# Define common backend configurations to precompile
+	# ESSENTIAL: Float64 only
 	backend_default = backend() # Vector{Float64}, SparseMatrixCSC{Float64,Int}
 	backend_dense64 = backend(vector_type = Vector{Float64}, matrix_type = Matrix{Float64})
 	backend_sparse64 = backend(vector_type = SparseVector{Float64,Int}, matrix_type = SparseMatrixCSC{Float64,Int})
-	backend_dense32 = backend(vector_type = Vector{Float32}, matrix_type = Matrix{Float32})
-	backend_sparse32 = backend(vector_type = SparseVector{Float32,Int32}, matrix_type = SparseMatrixCSC{Float32,Int32}) # Note Int32 for Sparse*
+
+	# EXTENDED: Float32 variants
+	if BRAMBLE_EXTENDED_PRECOMPILE
+		backend_dense32 = backend(vector_type = Vector{Float32}, matrix_type = Matrix{Float32})
+		backend_sparse32 = backend(vector_type = SparseVector{Float32,Int32}, matrix_type = SparseMatrixCSC{Float32,Int32})
+	end
 
 	@compile_workload begin
-		# Linear algebra utilities
+		# ESSENTIAL: Linear algebra utilities with Float64
 		u = Vector{Float64}(undef, 3)
 		v = Vector{Float64}(undef, 3)
 		w = Vector{Float64}(undef, 3)
@@ -21,32 +25,38 @@ using Bramble: interval, embed_function
 		_dot(u, v, w)
 		_inner_product(u, w, v)
 
-		# Test with Float32
-		u_f32 = Vector{Float32}(undef, 3)
-		v_f32 = Vector{Float32}(undef, 3)
-		w_f32 = Vector{Float32}(undef, 3)
-		fill!(u_f32, 1.0f0)
-		fill!(v_f32, 2.0f0)
-		fill!(w_f32, 0.5f0)
-		_dot(u_f32, v_f32, w_f32)
-		_inner_product(u_f32, w_f32, v_f32)
-
-		# Backend constructor itself (the keyword method implicitly calls the inner one)
-		backend(vector_type = Vector{ComplexF64}, matrix_type = Matrix{ComplexF64})
-
-		# vector for various backends and a typical size
+		# ESSENTIAL: vector/matrix for Float64 backends
 		vector(backend_default, 10)
 		vector(backend_dense64, 10)
 		vector(backend_sparse64, 10)
-		vector(backend_dense32, 10)
-		vector(backend_sparse32, 10)
 
-		# matrix for various backends and typical sizes
 		matrix(backend_default, 5, 5)
 		matrix(backend_dense64, 5, 5)
 		matrix(backend_sparse64, 5, 5)
-		matrix(backend_dense32, 5, 5)
-		matrix(backend_sparse32, 5, 5)
+
+		# EXTENDED: Float32 and other types
+		if BRAMBLE_EXTENDED_PRECOMPILE
+			# Test with Float32
+			u_f32 = Vector{Float32}(undef, 3)
+			v_f32 = Vector{Float32}(undef, 3)
+			w_f32 = Vector{Float32}(undef, 3)
+			fill!(u_f32, 1.0f0)
+			fill!(v_f32, 2.0f0)
+			fill!(w_f32, 0.5f0)
+			_dot(u_f32, v_f32, w_f32)
+			_inner_product(u_f32, w_f32, v_f32)
+
+			# Backend constructor itself (the keyword method implicitly calls the inner one)
+			backend(vector_type = Vector{ComplexF64}, matrix_type = Matrix{ComplexF64})
+
+			# vector for Float32 backends
+			vector(backend_dense32, 10)
+			vector(backend_sparse32, 10)
+
+			# matrix for Float32 backends
+			matrix(backend_dense32, 5, 5)
+			matrix(backend_sparse32, 5, 5)
+		end
 
 		# Test zero dimensions too
 		vector(backend_default, 0)
@@ -72,8 +82,6 @@ using Bramble: interval, embed_function
 		test_vec = Vector{Float64}(undef, 10)
 		_serial_for!(test_vec, 1:10, i -> Float64(i^2))
 		_parallel_for!(test_vec, 1:10, i -> Float64(i^2))
-
-		@info "Backend: complete" # Specific message
 	end
 end
 
@@ -85,7 +93,9 @@ end
 	X1 = I_f64 # Alias for clarity
 	X2 = X1 × interval(0.0, 2.0)
 	X3 = X2 × interval(-0.5, 0.5)
-	test_sets = (X1, X2, X3) # Sets for testing (1D, 2D, 3D)
+
+	# ESSENTIAL: 1D only
+	test_sets = BRAMBLE_EXTENDED_PRECOMPILE ? (X1, X2, X3) : (X1,) # Sets for testing (1D, 2D, 3D)
 
 	# Representative time interval
 	I_time = interval(0.0, 1.0) # Float64 time interval
@@ -117,8 +127,9 @@ end
 	test_points_f32 = (pt1d_f32, pt2d_f32, pt3d_f32)
 
 	@compile_workload begin
-		# Loop through dimensions 1, 2, 3
-		for D in 1:3
+		# Loop through dimensions (1 only in essential mode, 1-3 in extended)
+		max_dim = BRAMBLE_EXTENDED_PRECOMPILE ? 3 : 1
+		for D in 1:max_dim
 			X_set = test_sets[D]          # CartesianProduct for space
 			f_space = test_space_funcs[D] # Space-only function
 			ft_spacetime = test_spacetime_funcs[D] # Space-time function
@@ -174,8 +185,6 @@ end
 
 		# Test with BrambleFunction input (identity operation)
 		embed_function(X1, bf_notime)
-
-		@info "BrambleFunction and embeddings: complete"
 	end
 end
 

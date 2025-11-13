@@ -15,7 +15,9 @@
 	end
 
 	@compile_workload begin
-		for dim in 1:3
+		# ESSENTIAL: 1D only
+		max_dim = BRAMBLE_EXTENDED_PRECOMPILE ? 3 : 1
+		for dim in 1:max_dim
 			Ω, sol, Wₕ = poisson(dim)
 			Ωₕ = mesh(Wₕ)
 
@@ -51,6 +53,5 @@
 			dirichlet_bc_symmetrize!(A, F, Ωₕ, :boundary)
 			dirichlet_bc_symmetrize!(A, F, Ωₕ, :boundary, dropzeros = true)
 		end
-		@info "Form: complete."
 	end
 end

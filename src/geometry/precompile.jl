@@ -2,8 +2,15 @@ using Bramble: interval, embed_function
 
 @setup_workload begin
 	# --- Basic Types and Intervals ---
-	# Representative points including different types
-	pts = [-1, -1.0, 0, 0.0, 1 // 2, Float32(π)]
+	# ESSENTIAL: Float64 only, common types
+	pts_essential = [-1.0, 0.0, 1.0]
+
+	# EXTENDED: Include Int, Float32, Rational
+	pts_extended = [-1, -1.0, 0, 0.0, 1 // 2, Float32(π)]
+
+	# Use essential by default
+	pts = BRAMBLE_EXTENDED_PRECOMPILE ? pts_extended : pts_essential
+
 	# Combinations for interval creation (ensuring start <= end)
 	combinations = ((pts[i], pts[j]) for i in eachindex(pts) for j in eachindex(pts) if isless(pts[i], pts[j]) || pts[i] == pts[j])
 
@@ -13,21 +20,21 @@ using Bramble: interval, embed_function
 	# Collapsed interval (point)
 	I_collapsed = interval(1.0, 1.0)
 
-	# Basic Int intervals/products (using cartesian_product(NTuple))
+	# ESSENTIAL: Only Float64 1D
+	products_essential = (I_f64, cartesian_product(I_f64))
+
+	# EXTENDED: Add Int, Float32, multi-dimensional
 	I_int = cartesian_product(((0, 1),))         # 1D Int
 	R2_int = cartesian_product(((0, 1), (2, 3))) # 2D Int
-
-	# Basic Float32 product
 	R2_f32 = cartesian_product(((0.0f0, 1.0f0), (2.0f0, 3.0f0))) # 2D Float32
-
-	# --- Higher Dimensional Products (Float64) ---
-	R1_f64 = cartesian_product(I_f64) # Essentially I_f64 but via cartesian_product
+	R1_f64 = cartesian_product(I_f64)
 	R2_f64 = R1_f64 × interval(0.0, 1.0)
 	R3_f64 = R2_f64 × interval(2.0, 3.0)
-	R4_f64 = R1_f64 × R3_f64 # Test product of non-1D products
+	R4_f64 = R1_f64 × R3_f64
+	products_extended = (I_f64, R1_f64, I_int, R2_int, R2_f32, R2_f64, R3_f64, R4_f64)
 
 	# Collection of representative products
-	products = (I_f64, R1_f64, I_int, R2_int, R2_f32, R2_f64, R3_f64, R4_f64)
+	products = BRAMBLE_EXTENDED_PRECOMPILE ? products_extended : products_essential
 
 	@compile_workload begin
 		# --- Constructors ---
@@ -119,15 +126,25 @@ using Bramble: interval, embed_function
 		# × operator (already created R2_f64, R3_f64, R4_f64 above)
 		I_int × I_int
 
-		# Add Float32 x Float32
-		cartesian_product(((0.0f0, 1.0f0),)) × cartesian_product(((2.0f0, 3.0f0),))
+		# ESSENTIAL: 1D only
+		Ii = ntuple(j -> I_f64, 1)
+		Ω = reduce(×, Ii)
+		projection(Ω, 1)
+		tails(Ω)
+		tails(Ω, 1)
 
-		for i in 1:3
-			Ii = ntuple(j -> I_f64, i) # Tuple of intervals
-			Ω = reduce(×, Ii)
-			projection(Ω, 1)
-			tails(Ω)
-			tails(Ω, 1)
+		# EXTENDED: Float32 and multi-dimensional
+		if BRAMBLE_EXTENDED_PRECOMPILE
+			# Add Float32 x Float32
+			cartesian_product(((0.0f0, 1.0f0),)) × cartesian_product(((2.0f0, 3.0f0),))
+
+			for i in 2:3
+				Ii = ntuple(j -> I_f64, i) # Tuple of intervals
+				Ω = reduce(×, Ii)
+				projection(Ω, 1)
+				tails(Ω)
+				tails(Ω, 1)
+			end
 		end
 	end
 end
@@ -137,7 +154,9 @@ end
 	X1 = I_f64
 	X2 = X1 × interval(0.0, 2.0)
 	X3 = X2 × interval(-0.5, 0.5)
-	test_sets = (X1, X2, X3)
+
+	# ESSENTIAL: 1D only
+	test_sets = BRAMBLE_EXTENDED_PRECOMPILE ? (X1, X2, X3) : (X1,)
 
 	# --- Define helper functions needed ---
 	f_1d = x -> x[1] - 0.0 <= 0
@@ -236,6 +255,5 @@ end
 			marker_sym = Marker(:b, sym1)
 			marker_tup = Marker(:c, sym_tuple)
 		end
-		@info "Domains: complete"
 	end
 end

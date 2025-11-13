@@ -83,24 +83,14 @@ end
 	_PrecompilePointType = Float64
 	_backend_inst = _PrecompileBackendType()
 
-	# --- 1D Setup ---
+	# --- ESSENTIAL: 1D Setup ---
 	_I = interval(zero(_PrecompilePointType), one(_PrecompilePointType))
 	_dm1D = markers(_I, :left => :left, :right => :right)
 	_Ω1D = domain(_I, _dm1D)
 	_Ωₕ1D = mesh(_Ω1D, 5, true; backend = _backend_inst)
 
-	# --- nD Setup ---
-	domain2D = domain(box((0, 0), (1, 1)))
-	domain3D = domain(box((0, 0, 0), (1, 1, 1)))
-	markers2D = markers(domain2D)
-	markers3D = markers(domain3D)
-
-	mesh2D = mesh(domain2D, (10, 10), (true, true))
-	mesh3D = mesh(domain3D, (5, 5, 5), (true, true, true))
-	mesh2D_nonuniform = mesh(domain2D, (10, 10), (false, false))
-
 	@compile_workload begin
-		# --- 1D Workload ---
+		# --- ESSENTIAL: 1D Workload ---
 		_precompile_common_interface(_Ωₕ1D)
 		_precompile_mutating_interface!(_Ωₕ1D, _dm1D)
 
@@ -114,17 +104,26 @@ end
 		interior_indices(_Ωₕ1D)
 		interior_indices(indices(_Ωₕ1D))
 
-		# --- nD Workload ---
-		_precompile_common_interface(mesh2D)
-		_precompile_mutating_interface!(mesh2D, markers2D)
-
-		_precompile_common_interface(mesh3D)
-		_precompile_mutating_interface!(mesh3D, markers3D)
-
-		_precompile_common_interface(mesh2D_nonuniform)
-
 		boundary_symbol_to_dict(indices(_Ωₕ1D))
 
-		@info "Mesh: complete."
+		# --- EXTENDED: nD Workload ---
+		if BRAMBLE_EXTENDED_PRECOMPILE
+			domain2D = domain(box((0, 0), (1, 1)))
+			domain3D = domain(box((0, 0, 0), (1, 1, 1)))
+			markers2D = markers(domain2D)
+			markers3D = markers(domain3D)
+
+			mesh2D = mesh(domain2D, (10, 10), (true, true))
+			mesh3D = mesh(domain3D, (5, 5, 5), (true, true, true))
+			mesh2D_nonuniform = mesh(domain2D, (10, 10), (false, false))
+
+			_precompile_common_interface(mesh2D)
+			_precompile_mutating_interface!(mesh2D, markers2D)
+
+			_precompile_common_interface(mesh3D)
+			_precompile_mutating_interface!(mesh3D, markers3D)
+
+			_precompile_common_interface(mesh2D_nonuniform)
+		end
 	end
 end
