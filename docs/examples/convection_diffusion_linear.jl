@@ -39,7 +39,7 @@ function solve_convection_diffusion(problem::LinearConvectionDiffusionProblem, n
 	avgₕ!(uₕ, rhs)
 
 	lₕ = form(Wₕ, v -> innerₕ(uₕ, v))
-	F = assemble(lₕ, bcs, dirichlet_labels = :boundary)
+	F = assemble(lₕ, dirichlet_conditions = bcs, dirichlet_labels = :boundary)
 
 	prob = LinearProblem(A, F)
 	solh = solve(prob, KrylovJL_GMRES(), Pl = ilu(A, τ = 0.0001))

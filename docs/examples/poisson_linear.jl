@@ -1,6 +1,5 @@
 using Bramble
 import Bramble: domain
-import Bramble: embed_function
 import LinearSolve: LinearProblem, solve, KrylovJL_GMRES
 import IncompleteLU: ilu
 
@@ -35,7 +34,7 @@ function solve_poisson(poisson::SimpleScalarPDEProblem, nPoints::NTuple, unif::N
 	avgₕ!(uₕ, rhs)
 
 	lₕ = form(Wₕ, vₕ -> innerₕ(uₕ, vₕ))
-	F = assemble(lₕ, bcs, dirichlet_labels = :boundary)
+	F = assemble(lₕ, dirichlet_conditions = bcs, dirichlet_labels = :boundary)
 
 	prec = ilu(A, τ = 0.001)
 	prob = LinearProblem(A, F)

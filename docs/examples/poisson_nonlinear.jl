@@ -74,7 +74,7 @@ function solve_poisson_nl(poisson_nl::PoissonNLProblem, nPoints::NTuple{D,Int}, 
 	avgₕ!(u₀, rhs)
 
 	lₕ = form(Wₕ, vₕ -> innerₕ(u₀, vₕ))
-	F = assemble(lₕ, bcs, dirichlet_labels = :boundary)
+	F = assemble(lₕ, dirichlet_conditions = bcs, dirichlet_labels = :boundary)
 
 	αₕ = u -> D == 1 ? α.(M₋ₕ(u)) : sum(ntuple(i -> α.(M₋ₕ(u)[i]), D)) ./ D
 	aₕ = form(Wₕ, Wₕ, (U, V) -> inner₊(αₕ(uₙ) * ∇₋ₕ(U), ∇₋ₕ(V)))
