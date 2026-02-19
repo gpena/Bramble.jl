@@ -33,14 +33,14 @@ using Integrals: solve, IntegralFunction, IntegralProblem, QuadGKJL, CubatureJLh
 #using WriteVTK
 
 # domain/interval handling functions
-export box, interval, ×, dim, topo_dim
+export box, interval, ×, dim, topo_dim, tails
 export domain, markers, labels
 
 # Mesh handling
-export mesh, hₘₐₓ, iterative_refinement!, change_points, npoints, points
+export mesh, hₘₐₓ, iterative_refinement!, change_points, npoints, points, set
 
 # Space handling
-export gridspace, element
+export gridspace, element, space
 export Rₕ, Rₕ!, avgₕ, avgₕ!
 export ndofs
 
@@ -110,5 +110,5 @@ include("exporter/types.jl")
 include("exporter/exporter_vtk.jl")
 =#
 
-include("precompile.jl")
+#include("precompile.jl")
 end
