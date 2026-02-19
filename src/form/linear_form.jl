@@ -225,7 +225,7 @@ _form_expr2fwrapper(f, S, _::InPlaceAssembly) = FunctionWrapper{Nothing,Tuple{Ve
 
 Returns the assembled linear form as a vector.
 """
-@inline assemble(l::LinearForm) = _assemble(l, l.strategy)
+#@inline assemble(l::LinearForm) = _assemble(l, l.strategy)
 @inline _assemble(l::LinearForm, ::DefaultAssembly) = l.form_expr(elements(test_space(l)))
 #@inline _assemble(l::LinearForm, ::OperatorsAssembly) = l.form_expr(IdentityOperator(test_space(l)))
 #@inline _assemble(l::LinearForm, ::InPlaceAssembly) = @error "Please call `assemble!(x, l)` instead of `assemble(l)`"
@@ -236,7 +236,7 @@ Returns the assembled linear form as a vector.
 
 In-place assemble of a linear form into a given vector.
 """
-@inline _assemble!(x::AbstractVector, l::LinearForm) = _assemble!(x, l, l.strategy)
+#@inline _assemble!(x::AbstractVector, l::LinearForm) = _assemble!(x, l, l.strategy)
 
 @inline _assemble!(x::AbstractVector, l::LinearForm, ::DefaultAssembly) = x .= l.form_expr(elements(test_space(l)))
 #@inline _assemble!(x::AbstractVector, l::LinearForm, ::OperatorsAssembly) = x .= l.form_expr(IdentityOperator(test_space(l)))
@@ -250,13 +250,13 @@ In-place assemble of a linear form into a given [VectorElement](@ref).
 @inline _assemble!(uₕ::VectorElement, l::LinearForm) = (assemble!(values(uₕ), l); return nothing)
 
 """
-	assemble(l::LinearForm, dirichlet_conditions::DomainMarkers, [dirichlet_labels])
+	assemble(l::LinearForm, [dirichlet_conditions], [dirichlet_labels])
 
 Returns the assembled linear form with imposed constraints as a vector of numbers.
 """
-function assemble(l::LinearForm, dirichlet_conditions::DomainMarkers; dirichlet_labels = nothing)
+function assemble(l::LinearForm; dirichlet_conditions::Union{DomainMarkers,EvaluatedDomainMarkers} = dirichlet_constraints(test_space(l)), dirichlet_labels = nothing)
 	_validate_dirichlet_labels(dirichlet_labels)
-	vec = assemble(l)
+	vec = _assemble(l, l.strategy)
 
 	Wₕ = test_space(l)
 	Ωₕ = mesh(Wₕ)
@@ -275,13 +275,13 @@ function assemble(l::LinearForm, dirichlet_conditions::DomainMarkers; dirichlet_
 end
 
 """
-	assemble!(vec::AbstractVector, l::LinearForm; dirichlet_conditions::DomainMarkers, [dirichlet_labels])
+	assemble!(vec::AbstractVector, l::LinearForm; [dirichlet_conditions], [dirichlet_labels])
 
 In-place assemble of a linear form with imposed constraints into a given vector.
 """
-function assemble!(vec::AbstractVector, l::LinearForm; dirichlet_conditions::DomainMarkers = dirichlet_constraints(test_space(l)), dirichlet_labels = nothing)
+function assemble!(vec::AbstractVector, l::LinearForm; dirichlet_conditions::Union{DomainMarkers,EvaluatedDomainMarkers} = dirichlet_constraints(test_space(l)), dirichlet_labels = nothing)
 	_validate_dirichlet_labels(dirichlet_labels)
-	_assemble!(vec, l)
+	_assemble!(vec, l, l.strategy)
 
 	Wₕ = test_space(l)
 	Ωₕ = mesh(Wₕ)

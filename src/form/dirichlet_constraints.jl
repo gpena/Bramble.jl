@@ -161,6 +161,21 @@ function dirichlet_bc!(v::AbstractVector, Ωₕ::AbstractMeshType, bcs::Dirichle
 	return
 end
 
+function dirichlet_bc!(v::AbstractVector, Ωₕ::AbstractMeshType, bcs::EvaluatedDomainMarkers, labels::Symbol...)
+	isempty(labels) && return
+
+	for marker in conditions(bcs)
+		current_label = label(marker)
+		if current_label in labels
+			func = identifier(marker)
+			marker_indices = index_in_marker(Ωₕ, current_label)
+			_dirichlet_bc_indices!(v, Ωₕ, marker_indices, func)
+		end
+	end
+
+	return
+end
+
 """
 	_dirichlet_bc_indices!(A, marker_indices)
 
