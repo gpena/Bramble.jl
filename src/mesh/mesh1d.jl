@@ -329,6 +329,26 @@ function change_points!(Ωₕ::Mesh1D, pts)
 end
 
 """
+	Base.copy(Ωₕ::Mesh1D)
+
+Creates a copy of the mesh `Ωₕ`. The copy is shallow with respect to the immutable fields
+(`set`, `indices`, `backend`, `collapsed`), but deep with respect to the mutable data fields
+(`pts`, `half_pts`, `half_spacings`, `markers`) which are copied.
+"""
+function Base.copy(Ωₕ::Mesh1D)
+	return Mesh1D(
+		Ωₕ.set,
+		deepcopy(Ωₕ.markers),
+		Ωₕ.indices,
+		Ωₕ.backend,
+		copy(Ωₕ.pts),
+		copy(Ωₕ.half_pts),
+		copy(Ωₕ.half_spacings),
+		Ωₕ.collapsed
+	)
+end
+
+"""
 	Base.show(io::IO, Ωₕ::Mesh1D)
 
 Custom display for Mesh1D objects with detailed mesh information and colors.

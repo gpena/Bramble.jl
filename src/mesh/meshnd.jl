@@ -251,6 +251,21 @@ function change_points!(Ωₕ::MeshnD{D}, domain_markers::DomainMarkers, pts) wh
 end
 
 """
+	Base.copy(Ωₕ::MeshnD)
+
+Creates a copy of the mesh `Ωₕ`. The copy is shallow with respect to the immutable fields
+(`set`, `indices`, `backend`), but deep with respect to the mutable data fields
+(`submeshes`, `markers`) which are copied.
+"""
+function Base.copy(Ωₕ::MeshnD{D}) where {D}
+	return MeshnD(Ωₕ.set,
+				  deepcopy(Ωₕ.markers),
+				  Ωₕ.indices,
+				  Ωₕ.backend,
+				  map(copy, Ωₕ.submeshes))
+end
+
+"""
 	Base.show(io::IO, Ωₕ::MeshnD)
 
 Custom display for MeshnD objects with detailed mesh information and colors.
