@@ -182,12 +182,12 @@ end
 			bcs = dirichlet_constraints(set(X), :left => x -> 0.0, :right => x -> 1.0)
 
 			# Assemble with conditions
-			F1 = assemble(l, bcs)
+			F1 = assemble(l, dirichlet_conditions = bcs)
 			@test F1 isa AbstractVector
 			@test length(F1) == ndofs(Wh)
 
 			# Test with dirichlet_labels parameter
-			F2 = assemble(l, bcs, dirichlet_labels = :left)
+			F2 = assemble(l, dirichlet_conditions = bcs, dirichlet_labels = :left)
 			@test F2 isa AbstractVector
 			@test length(F2) == ndofs(Wh)
 
@@ -273,7 +273,7 @@ end
 			fh = element(Wh)
 			Rₕ!(fh, x -> 1.0)
 			l = form(Wh, v -> innerₕ(fh, v))
-			F = assemble(l, bcs)
+			F = assemble(l, dirichlet_conditions = bcs)
 			@test F isa AbstractVector
 		end
 	end
@@ -299,7 +299,7 @@ end
 		l = form(Wh, v -> innerₕ(fh, v))
 
 		bcs = dirichlet_constraints(set(X), :boundary => x -> 0.0)
-		F = assemble(l, bcs, dirichlet_labels = :boundary)
+		F = assemble(l, dirichlet_conditions = bcs, dirichlet_labels = :boundary)
 
 		# Solve
 		u = A \ F
