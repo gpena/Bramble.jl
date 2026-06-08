@@ -94,10 +94,10 @@ end
 
 # Case 2: Finite difference (h is provided)
 @inline @propagate_inbounds @muladd _compute_difference(::Forward, ::Val{false}, next, cur, h, i) = (next - cur) / _get_h_val(h, i)
-@inline @propagate_inbounds _compute_difference(::Forward, ::Val{true}, cur, h, i) = -cur / _get_h_val(h, i)
+@inline @propagate_inbounds _compute_difference(::Forward, ::Val{true}, cur, h, i) = 0#-0*cur / _get_h_val(h, i)
 
 @inline @propagate_inbounds @muladd _compute_difference(::Backward, ::Val{false}, cur, prev, h, i) = (cur - prev) / _get_h_val(h, i)
-@inline @propagate_inbounds _compute_difference(::Backward, ::Val{true}, cur, h, i) = cur / _get_h_val(h, 2) # or is it _get_h_val(h, 1)
+@inline @propagate_inbounds _compute_difference(::Backward, ::Val{true}, cur, h, i) = 0#*cur / _get_h_val(h, 2) # or is it _get_h_val(h, 1)
 
 # --- Unified Difference Engine ---
 @inbounds function _difference_engine!(out, in_ref, h, dims::NTuple{D,Int}, dir::GridDirection, ::Val{DIFF_DIM}) where {D,DIFF_DIM}
@@ -128,7 +128,7 @@ end
 		end
 		@simd for I in CartesianIndices(boundary_axes)
 			idx = li[I]
-			out[idx] = _compute_difference(dir, Val(true), in_ref[idx], h, 1)
+			out[idx] = _compute_difference(dir, Val(true), in_ref[idx], h, I[DIFF_DIM])
 		end
 	end
 end
@@ -154,7 +154,12 @@ function _derivative_weights!(v::AbstractVector, Ωₕ::AbstractMeshType, spacin
 	li = LinearIndices(dims)
 
 	@inbounds @simd for I in CartesianIndices(dims)
-		v[li[I]] = inv(spacings_1d(I[DIFF_DIM]))
+		x = spacings_1d(I[DIFF_DIM])
+		if x == 0
+			v[li[I]] = zero(eltype(v))
+		else
+			v[li[I]] = inv(x)
+		end
 	end
 	return
 end
@@ -185,7 +190,7 @@ op_configs = [
 	 diff_name = :forward_difference,
 	 finite_diff_name = :forward_finite_difference,
 	 weights_func! = :forward_derivative_weights!,
-	 spacing_func = :forward_spacing,
+	 spacing_func = :forward_spacing_for_derivative,
 	 diff_alias = :diff₊,
 	 finite_diff_alias = :D₊,
 	 grad_alias = :diff₊ₕ,
@@ -197,7 +202,7 @@ op_configs = [
 	 diff_name = :backward_difference,
 	 finite_diff_name = :backward_finite_difference,
 	 weights_func! = :backward_derivative_weights!,
-	 spacing_func = :spacing,
+	 spacing_func = :spacing_for_derivative,
 	 diff_alias = :diff₋,
 	 finite_diff_alias = :D₋,
 	 grad_alias = :diff₋ₕ,

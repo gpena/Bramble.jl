@@ -15,13 +15,13 @@ For a function uₕ on a grid, the average operator ⟨·⟩ computes the mean v
 adjacent grid points:
 
 **Forward average** (at point xᵢ):
-    ⟨u⟩ᵢᶠ = (uᵢ + uᵢ₊₁) / 2
+	⟨u⟩ᵢᶠ = (uᵢ + uᵢ₊₁) / 2
 
 **Backward average** (at point xᵢ):
-    ⟨u⟩ᵢᵇ = (uᵢ + uᵢ₋₁) / 2
+	⟨u⟩ᵢᵇ = (uᵢ + uᵢ₋₁) / 2
 
 At boundary points where no neighbor exists:
-    ⟨u⟩ᵢ = uᵢ / 2
+	⟨u⟩ᵢ = uᵢ / 2
 
 ## Use Cases
 
@@ -52,10 +52,10 @@ See also: [`_compute_average`](@ref), [`add_half_shift`](@ref), [`Forward`](@ref
 =#
 
 @inline @propagate_inbounds _compute_average(::Forward, ::Val{false}, in_next, in_val) = (in_next + in_val) * 0.5
-@inline @propagate_inbounds _compute_average(::Forward, ::Val{true}, in_val) = in_val * 0.5
+@inline @propagate_inbounds _compute_average(::Forward, ::Val{true}, in_val) = 0#in_val * 0.5
 
 @inline @propagate_inbounds _compute_average(::Backward, ::Val{false}, in_val, in_prev) = (in_val + in_prev) * 0.5
-@inline @propagate_inbounds _compute_average(::Backward, ::Val{true}, in_val) = in_val * 0.5
+@inline @propagate_inbounds _compute_average(::Backward, ::Val{true}, in_val) = 0#in_val * 0.5
 
 @inbounds function _average_engine!(out, in_ref, dims::NTuple{D,Int}, dir::GridDirection, ::Val{AVG_DIM}) where {D,AVG_DIM}
 	li = LinearIndices(dims)
@@ -102,6 +102,25 @@ end
 function _average_operator(Ωₕ::AbstractMeshType, ::Backward, ::Val{AVG_DIM}) where AVG_DIM
 	return add_half_shift(Ωₕ, Val(AVG_DIM), Val(0), Val(-1))
 end
+
+function _average_weights!(v::AbstractVector, Ωₕ::AbstractMeshType, dir::GridDirection, ::Val{DIFF_DIM}) where DIFF_DIM
+	dims = npoints(Ωₕ, Tuple)
+
+	@assert 1 <= DIFF_DIM <= dim(Ωₕ) "The differentiation dimension must be between 1 and $(dim(Ωₕ))."
+
+	li = LinearIndices(dims)
+
+	@inbounds @simd for I in CartesianIndices(dims)
+		idx = I[DIFF_DIM]
+		if dir isa Forward
+			v[li[I]] = idx == dims[DIFF_DIM] ? zero(eltype(v)) : one(eltype(v))
+		else # Backward
+			v[li[I]] = idx == 1 ? zero(eltype(v)) : one(eltype(v))
+		end
+	end
+	return
+end
+
 # Configuration array for average operators, expanded with descriptive strings.
 op_configs = [
 	(direction = Forward(),
@@ -153,7 +172,18 @@ for config in op_configs
 
 		Constructs or applies the $($dir_string_lowercase) averaging operator, representing the operation ``$($math_op)``.
 		"""
-		@inline $average_name(Ωₕ::AbstractMeshType, dim_val::Val) = _average_operator(Ωₕ, $dir_instance, dim_val)
+		@inline function $average_name(Ωₕ::AbstractMeshType, dim_val::Val; vector_cache = __vector(Ωₕ))
+			avg_matrix = _average_operator(Ωₕ, $dir_instance, dim_val)
+			_average_weights!(vector_cache, Ωₕ, $dir_instance, dim_val)
+			return Diagonal(vector_cache) * avg_matrix
+		end
+
+		#@inline function $average_name(Ωₕ::AbstractMeshType, dim_val::Val)
+		#avg_matrix = _average_operator(Ωₕ, $dir_instance, dim_val)
+		#_average_weights!(vector_cache, Ωₕ, spacing_func, dim_val)
+		#return Diagonal(vector_cache) * avg_matrix
+		#	return _average_operator(Ωₕ, $dir_instance, dim_val)
+		#end
 
 		# --- Generic applicators ---
 		@inline $average_name(Wₕ::AbstractSpaceType, dim_val::Val) = elements(Wₕ, $average_name(mesh(Wₕ), dim_val))
