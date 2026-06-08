@@ -38,7 +38,7 @@ function solve_poisson(poisson::SimpleScalarPDEProblem, nPoints::NTuple, unif::N
 
 	prec = ilu(A, τ = 0.001)
 	prob = LinearProblem(A, F)
-	solₕ = solve(prob, KrylovJL_GMRES(), Pl = prec, verbose = false)
+	solₕ = solve(prob, KrylovJL_GMRES(), Pl = prec, reltol = 1e-13, abstol = 1e-13, verbose = false)
 
 	uₕ .= solₕ.u
 	F .= uₕ

@@ -37,7 +37,6 @@ function fixed_point!(matrix, rhs, aₕ, uₚᵣₑᵥ, uₙₑₓₜ, coeff)
 	linsolve = init(prob)
 
 	for i in 1:2000
-		uₚᵣₑᵥ .= coeff(uₙₑₓₜ)
 		assemble!(matrix, aₕ, dirichlet_labels = :boundary)
 
 		uₚᵣₑᵥ .= uₙₑₓₜ
@@ -46,7 +45,7 @@ function fixed_point!(matrix, rhs, aₕ, uₚᵣₑᵥ, uₙₑₓₜ, coeff)
 		end
 
 		linsolve.A = matrix
-		sol = solve!(linsolve)
+		sol = solve!(linsolve; reltol = 1e-13, abstol = 1e-13)
 
 		uₙₑₓₜ .= sol
 		uₚᵣₑᵥ .-= uₙₑₓₜ
