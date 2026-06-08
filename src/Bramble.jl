@@ -11,7 +11,7 @@ import Base: *, +, -, /, ^, @propagate_inbounds, @_inline_meta
 
 using Random: rand!
 
-using SparseArrays: SparseMatrixCSC, AbstractSparseMatrix, spdiagm, rowvals, nnz, dropzeros!, nzrange, spzeros, nonzeros
+using SparseArrays: SparseMatrixCSC, AbstractSparseMatrix, spdiagm, rowvals, nnz, dropzeros!, nzrange, spzeros, nonzeros, sparse
 
 using FunctionWrappers: FunctionWrapper
 using MacroTools: @capture, isexpr
@@ -40,7 +40,7 @@ export domain, markers, labels
 export mesh, hₘₐₓ, iterative_refinement!, change_points, npoints, points, set
 
 # Space handling
-export gridspace, element, space
+export gridspace, element, space, CompositeGridSpace
 export Rₕ, Rₕ!, avgₕ, avgₕ!
 export ndofs
 
@@ -102,8 +102,12 @@ include("space/operators/linear_operators.jl")
 include("space/inner_product.jl")
 
 include("form/dirichlet_constraints.jl")
-include("form/bilinear_form.jl")
-include("form/linear_form.jl")
+include("form/sparse_backend.jl")
+include("form/common.jl")
+
+include("form/grid_coloring.jl")
+include("form/bilinear.jl")
+include("form/linear.jl")
 
 #=
 include("exporter/types.jl")
