@@ -11,8 +11,6 @@ Coverage improvements for:
 import Bramble: points
 
 @testset "LinearForm Extended Tests" begin
-	# TODO: Re-enable 1D and 2D Dirichlet BC tests when linear forms' assemble accepts dirichlet_labels
-	#=
 	@testset "1D: LinearForm with Dirichlet BCs" begin
 		N = 10
 		I = interval(-1.0, 1.0)
@@ -55,7 +53,6 @@ import Bramble: points
 			@test F_both isa AbstractVector
 			@test length(F_both) == ndofs(Wh)
 		end
-
 	end
 
 	@testset "2D: LinearForm with Dirichlet BCs" begin
@@ -69,7 +66,7 @@ import Bramble: points
 							  :left => x -> x[1] < 0.01,
 							  :right => x -> x[1] > 0.99))
 
-		Mh = mesh(X, N, false)
+		Mh = mesh(X, (N, N), (false, false))
 		Wh = gridspace(Mh)
 
 		# Source term
@@ -100,7 +97,6 @@ import Bramble: points
 			@test length(F) == ndofs(Wh)
 		end
 	end
-	=#
 	@testset "LinearForm Accessor Functions" begin
 		N = 5
 		I = interval(0.0, 1.0)
@@ -245,7 +241,7 @@ import Bramble: points
 		end
 
 		@testset "3D with Dirichlet BCs" begin
-			F_bc = assemble(l#=, dirichlet_labels = :boundary=#)
+			F_bc = assemble(l, dirichlet_labels = :boundary)
 			@test F_bc isa AbstractVector
 			@test length(F_bc) == ndofs(Wh)
 		end
@@ -253,7 +249,7 @@ import Bramble: points
 		@testset "3D with boundary conditions" begin
 			bcs = dirichlet_constraints(X, :boundary => x -> 0.0)
 
-			F = assemble(l#=, dirichlet_conditions = bcs=#)
+			F = assemble(l, dirichlet_conditions = bcs)
 			@test F isa AbstractVector
 			@test length(F) == ndofs(Wh)
 		end
@@ -270,7 +266,7 @@ import Bramble: points
 
 		l = form(Wh, v -> innerₕ(fh, v))
 
-		F_empty = assemble(l#=, dirichlet_labels = ()=#)
+		F_empty = assemble(l, dirichlet_labels = ())
 		F_none = assemble(l)
 
 		# Empty tuple should be equivalent to no BCs

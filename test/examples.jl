@@ -19,7 +19,6 @@ println("")
 
 		test_poisson(poisson(3), 5, (i -> 2^i + 1, i -> 2^i + 2, i -> 2^i + 3), ntuple(i -> true, 3))
 	end
-
 	@testset "Nonlinear Poisson equation" begin
 		test_poisson_nl(poisson_nl(1), 10, (i -> 2^i + 1,), ntuple(i -> true, 1))
 		test_poisson_nl(poisson_nl(1), 10, (i -> 2^i + 1,), ntuple(i -> false, 1))
@@ -28,7 +27,6 @@ println("")
 
 		test_poisson_nl(poisson_nl(3), 5, (i -> 2^i + 1, i -> 2^i + 2, i -> 2^i + 1), ntuple(i -> true, 3))
 	end
-
 	@testset "Linear convection-diffusion equation" begin
 		test_conv_diff(convection_diffusion(1), 10, (i -> 2^i + 1,), ntuple(i -> true, 1))
 		test_conv_diff(convection_diffusion(1), 100, (i -> 20 * i,), (false,))
