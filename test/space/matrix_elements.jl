@@ -190,8 +190,8 @@ import LinearAlgebra: Diagonal
 
 		# Test U * v
 		Z_el = A_el * v_el
-		@test Z_el.data ≈ A * Diagonal(v)
-		@test Z_el isa MatrixElement
+		@test Z_el.data ≈ A * v
+		@test Z_el isa VectorElement
 
 		# Test tuple versions
 		#=

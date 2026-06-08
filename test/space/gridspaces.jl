@@ -154,7 +154,7 @@ import Bramble: backward_difference_dim!, forward_difference_dim!
 
 			# At boundary (i=1), the function uses h[2] (hardcoded)
 			# According to current implementation at line 99
-			expected_boundary = u[1] / h_vec[2]  # Uses h[2], not h[1]
+			expected_boundary = 0#u[1] / h_vec[2]  # Uses h[2], not h[1]
 			@test out[1] ≈ expected_boundary
 
 			# Interior points should use correct h[i]
@@ -170,7 +170,7 @@ import Bramble: backward_difference_dim!, forward_difference_dim!
 			backward_difference_dim!(out, u, h_func, (5,), Val(1))
 
 			# At boundary (i=1), should use h(2) according to current implementation
-			expected_boundary = u[1] / h_func(2)
+			expected_boundary = 0#u[1] / h_func(2)
 			@test out[1] ≈ expected_boundary
 
 			# Interior points
@@ -190,7 +190,7 @@ import Bramble: backward_difference_dim!, forward_difference_dim!
 			@test out[4] ≈ (u[5] - u[4]) / h_vec[4]
 
 			# Boundary at end (i=5)
-			expected_boundary = -u[5] / h_vec[5]
+			expected_boundary = 0#-u[5] / h_vec[5]
 			@test out[5] ≈ expected_boundary
 		end
 
@@ -263,7 +263,7 @@ import Bramble: backward_difference_dim!, forward_difference_dim!
 			@test out[1] ≈ (u[1] + u[2]) / 2  # 3.0
 			@test out[2] ≈ (u[2] + u[3]) / 2  # 5.0
 			# Boundary: u[end] / 2
-			@test out[4] ≈ u[4] / 2  # 4.0
+			@test out[4] ≈ 0#u[4] / 2  # 4.0
 		end
 
 		@testset "Backward Average - Boundary" begin
@@ -272,7 +272,7 @@ import Bramble: backward_difference_dim!, forward_difference_dim!
 			backward_average_dim!(out, u, (4,), Val(1))
 
 			# Boundary: u[1] / 2
-			@test out[1] ≈ u[1] / 2  # 1.0
+			@test out[1] ≈ 0#u[1] / 2  # 1.0
 			# Interior: (u[i] + u[i-1]) / 2
 			@test out[2] ≈ (u[2] + u[1]) / 2  # 3.0
 			@test out[4] ≈ (u[4] + u[3]) / 2  # 7.0

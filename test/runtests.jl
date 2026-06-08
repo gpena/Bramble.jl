@@ -16,23 +16,23 @@ const __bramble_with_unit_tests = true
 
 if __bramble_with_unit_tests
 	@testset verbose=true "Core library" begin
-		@testset "Backends and BrambleFunctions" begin
+		@testset verbose=true "Backends and BrambleFunctions" begin
 			include("utils/bramble_functions.jl")
 			include("utils/backends.jl")
 		end
 
-		@testset "Sets and Domains" begin
+		@testset verbose=true "Sets and Domains" begin
 			include("geometry/sets.jl")
 			include("geometry/domains.jl")
 		end
 
-		@testset "Meshes" begin
+		@testset verbose=true "Meshes" begin
 			include("mesh/mesh1d.jl")
 			include("mesh/meshnd.jl")
 			include("mesh/meshes.jl")
 		end
 
-		@testset "Grid spaces" begin
+		@testset verbose=true "Grid spaces" begin
 			include("space/buffers.jl")
 			include("space/gridspaces.jl")
 			include("space/vector_elements.jl")
@@ -46,9 +46,11 @@ if __bramble_with_unit_tests
 
 		@testset "Forms" begin
 			include("form/dirichlet_constraints.jl")
+			include("form/grid_coloring.jl")
 			include("form/forms.jl")
 			include("form/linear_forms.jl")
 			include("form/bilinear_forms.jl")
+			include("form/composite_forms.jl")
 		end
 
 		#=@testset "Exporters" begin

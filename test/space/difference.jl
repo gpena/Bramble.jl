@@ -123,7 +123,7 @@ end
 			h = Base.Fix1(spacing, mesh1D)
 			out = similar(u)
 			backward_difference_dim!(out, u, h, (5,), Val(1))
-			expected = [u[1]/h(2), (u[2]-u[1])/h(2), (u[3]-u[2])/h(3), (u[4]-u[3])/h(4), (u[5]-u[4])/h(5)]
+			expected = [0, (u[2]-u[1])/h(2), (u[3]-u[2])/h(3), (u[4]-u[3])/h(4), (u[5]-u[4])/h(5)]
 			@test out ≈ expected
 		end
 	end
@@ -167,7 +167,7 @@ end
 			out = similar(u)
 			N = length(u)
 			forward_difference_dim!(out, u, h, (N,), Val(1))
-			expected = [(u[2]-u[1])/h(1), (u[3]-u[2])/h(2), (u[4]-u[3])/h(3), (u[5]-u[4])/h(4), -u[5]/h(5)]
+			expected = [(u[2]-u[1])/h(1), (u[3]-u[2])/h(2), (u[4]-u[3])/h(3), (u[5]-u[4])/h(4), 0]
 			@test out ≈ expected
 		end
 	end

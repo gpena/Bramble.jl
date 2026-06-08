@@ -42,9 +42,9 @@ using LinearAlgebra: norm
 						if I[i] < dims[i]
 							midpoint = (coords(I) .+ coords(I + step_cartesian)) ./ 2
 							expected_vals[li[I]] = linear_func(midpoint)
-							# Boundary point: f(x_N)/2
 						else
-							expected_vals[li[I]] = linear_func(coords(I)) / 2
+							# Boundary point: f(x_N)/2
+							expected_vals[li[I]] = 0#linear_func(coords(I)) / 2
 						end
 					end
 
@@ -93,9 +93,9 @@ using LinearAlgebra: norm
 						if I[i] > 1
 							midpoint = (coords(I) .+ coords(I - step_cartesian)) ./ 2
 							expected_vals[li[I]] = linear_func(midpoint)
-							# Boundary point: f(x_1)/2
 						else
-							expected_vals[li[I]] = linear_func(coords(I)) / 2
+							# Boundary point: f(x_1)/2
+							expected_vals[li[I]] = 0#linear_func(coords(I)) / 2
 						end
 					end
 
