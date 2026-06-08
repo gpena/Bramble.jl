@@ -106,6 +106,14 @@ Overrides the spacings in Ωₕ.
 end
 
 @inline @inbounds spacing(Ωₕ::Mesh1D, i::CartesianIndex{1}) = spacing(Ωₕ, _extract_linear_index(i))
+@inline @inbounds function spacing_for_derivative(Ωₕ::Mesh1D, idx)
+	i = idx isa CartesianIndex{1} ? _extract_linear_index(idx) : idx
+	if i == 1
+		zero(eltype(Ωₕ))
+	else
+		spacing(Ωₕ, i)
+	end
+end
 
 @inline @inbounds function forward_spacing(Ωₕ::Mesh1D, i::Int)
 	_check_point_bounds(Ωₕ, i, "forward_spacing")
@@ -113,6 +121,15 @@ end
 end
 
 @inline @inbounds forward_spacing(Ωₕ::Mesh1D, i::CartesianIndex{1}) = forward_spacing(Ωₕ, _extract_linear_index(i))
+@inline @inbounds function forward_spacing_for_derivative(Ωₕ::Mesh1D, idx)
+	i = idx isa CartesianIndex{1} ? _extract_linear_index(idx) : idx
+
+	if i == npoints(Ωₕ)
+		zero(eltype(Ωₕ))
+	else
+		forward_spacing(Ωₕ, i)
+	end
+end
 
 @inline @inbounds function half_point(Ωₕ::Mesh1D, i::Int)
 	_check_half_point_bounds(Ωₕ, i)
@@ -336,16 +353,14 @@ Creates a copy of the mesh `Ωₕ`. The copy is shallow with respect to the immu
 (`pts`, `half_pts`, `half_spacings`, `markers`) which are copied.
 """
 function Base.copy(Ωₕ::Mesh1D)
-	return Mesh1D(
-		Ωₕ.set,
-		deepcopy(Ωₕ.markers),
-		Ωₕ.indices,
-		Ωₕ.backend,
-		copy(Ωₕ.pts),
-		copy(Ωₕ.half_pts),
-		copy(Ωₕ.half_spacings),
-		Ωₕ.collapsed
-	)
+	return Mesh1D(Ωₕ.set,
+				  deepcopy(Ωₕ.markers),
+				  Ωₕ.indices,
+				  Ωₕ.backend,
+				  copy(Ωₕ.pts),
+				  copy(Ωₕ.half_pts),
+				  copy(Ωₕ.half_spacings),
+				  Ωₕ.collapsed)
 end
 
 """

@@ -77,8 +77,8 @@ For [VectorElement](@ref)s, it is defined as
 """
 	inner₊ᵧ(uₕ::VecOrMatElem, vₕ::VecOrMatElem)
 
-Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ` and `vₕ` 
-associated with the second variable (y-direction). It accepts arguments of type 
+Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ` and `vₕ`
+associated with the second variable (y-direction). It accepts arguments of type
 [VectorElement](@ref) or [MatrixElement](@ref), in any order.
 
 For [VectorElement](@ref)s, it is defined as
@@ -116,7 +116,15 @@ function _generate_inner_plus_body(u_type, v_type, result_kind::Symbol)
 	dim_u = get_dimension_from_type(u_type)
 	dim_v = get_dimension_from_type(v_type)
 
-	D = if !isnothing(dim_u) && !isnothing(dim_v)
+	u_is_tuple = u_type <: NTuple
+	v_is_tuple = v_type <: NTuple
+
+	# Prefer tuple arity when tuples are provided (e.g., inner₊((a,b), (c,d)) even in 1D).
+	D = if u_type <: NTuple
+		dim_u
+	elseif v_type <: NTuple
+		dim_v
+	elseif !isnothing(dim_u) && !isnothing(dim_v)
 		dim_u == dim_v ? dim_u : return :(throw(DimensionMismatch("Dimensions $dim_u and $dim_v do not match")))
 	elseif !isnothing(dim_u)
 		dim_u
@@ -126,13 +134,23 @@ function _generate_inner_plus_body(u_type, v_type, result_kind::Symbol)
 		return :(throw(ArgumentError("Could not determine dimension from input types $u_type and $v_type")))
 	end
 
-	u_is_tuple = u_type <: NTuple
-	v_is_tuple = v_type <: NTuple
+	# Direction count for the underlying space (fallback to 1 if unknown).
+	# For tuple inputs we want the *spatial* dimension of the element type, not
+	# the tuple arity (which can exceed the mesh dimension in mixed terms such as
+	# `(Dx*u, Mx*u)` on 1D meshes).
+	u_elem_dim = u_is_tuple ? get_dimension_from_type(u_type.parameters[2]) : nothing
+	v_elem_dim = v_is_tuple ? get_dimension_from_type(v_type.parameters[2]) : nothing
+	mesh_dim = something(u_elem_dim,
+						 v_elem_dim,
+						 (!u_is_tuple && !isnothing(dim_u)) ? dim_u : nothing,
+						 (!v_is_tuple && !isnothing(dim_v)) ? dim_v : nothing,
+						 1)
 
 	terms = map(1:D) do i
 		u_component = u_is_tuple ? :(uₕ[$i]) : :uₕ
 		v_component = v_is_tuple ? :(vₕ[$i]) : :vₕ
-		:(_directional_inner_plus($u_component, $v_component, Val($i)))
+		dir = min(i, mesh_dim) # avoid out-of-bounds when tuples are longer than spatial dim
+		:(_directional_inner_plus($u_component, $v_component, Val($dir)))
 	end
 
 	if result_kind === :sum

@@ -8,7 +8,7 @@ This file implements the MatrixElement type - a matrix-valued function on a fini
 A MatrixElement represents a linear operator T : Vₕ → Wₕ as a matrix. If {φᵢ} is a basis 
 for Vₕ and {ψⱼ} is a basis for Wₕ, then:
 
-    T = [Tᵢⱼ] where Tᵢⱼ = ⟨T(φⱼ), ψᵢ⟩
+	T = [Tᵢⱼ] where Tᵢⱼ = ⟨T(φⱼ), ψᵢ⟩
 
 Common use cases:
 - **Identity operator**: I : Vₕ → Vₕ (default)
@@ -123,10 +123,12 @@ This is used in function signatures that accept either vectors or matrices from
 the same function space, particularly in inner product calculations.
 
 # Type Parameters
-- `S`: The space type (e.g., `ScalarGridSpace{...}`)
-- `T`: The element type (e.g., `Float64`)
+
+  - `S`: The space type (e.g., `ScalarGridSpace{...}`)
+  - `T`: The element type (e.g., `Float64`)
 
 # Example
+
 ```julia
 # This function accepts either VectorElement or MatrixElement
 function my_inner_product(uₕ::VecOrMatElem, vₕ::VecOrMatElem)
@@ -159,8 +161,8 @@ end
 Returns a new [MatrixElement](@ref) calculated by multiplying each coefficient of [VectorElement](@ref) `vₕ` with the corresponding column of `Uₕ`.
 """
 @inline function Base.:*(Uₕ::MatrixElement, vₕ::VectorElement)
-	Zₕ = similar(Uₕ)
-	mul!(Zₕ.data, Uₕ.data, Diagonal(vₕ.data))
+	Zₕ = similar(vₕ)
+	Zₕ.data .= Uₕ.data * vₕ.data
 
 	return Zₕ
 end
