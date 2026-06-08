@@ -65,13 +65,13 @@ Each `pair` is of the form `:label => func`, where `:label` identifies the bound
 The `cartesian_product` can be a `CartesianProduct` mesh domain or an `ScalarGridSpace` from which the mesh can be extracted. The `:label` must match a label in the mesh definition.
 """
 function dirichlet_constraints(input, pairs::Pair...)
-	cartesian_product = input isa ScalarGridSpace ? set(mesh(input)) : set(input)
+	cartesian_product = input isa ScalarGridSpace ? set(mesh(input)) : (input isa CompositeGridSpace ? set(mesh(input.spaces[1])) : set(input))
 	T, domain = _get_eltype_and_domain(cartesian_product)
 	_create_generic_markers(T, domain, pairs...)
 end
 
 function dirichlet_constraints(input, I::CartesianProduct{1}, pairs::Pair...)
-	cartesian_product = input isa ScalarGridSpace ? set(mesh(input)) : set(input)
+	cartesian_product = input isa ScalarGridSpace ? set(mesh(input)) : (input isa CompositeGridSpace ? set(mesh(input.spaces[1])) : set(input))
 	T, domain = _get_eltype_and_domain(cartesian_product)
 	_create_generic_markers(T, domain, I, pairs...)
 end
@@ -138,6 +138,53 @@ function dirichlet_bc!(A::AbstractMatrix, Ωₕ::AbstractMeshType, labels::Symbo
 	for p in labels
 		vec_bool = index_in_marker(Ωₕ, p)
 		_dirichlet_bc_indices!(A, vec_bool)
+	end
+end
+
+# Overloads for ScalarGridSpace / AbstractSpaceType (single component)
+@inline function dirichlet_bc!(A::AbstractMatrix, space::ScalarGridSpace, labels::Symbol...)
+	return dirichlet_bc!(A, mesh(space), labels...)
+end
+
+@inline function dirichlet_bc!(v::AbstractVector, space::ScalarGridSpace, bcs, labels::Symbol...)
+	return dirichlet_bc!(v, mesh(space), bcs, labels...)
+end
+
+# Overloads for CompositeGridSpace
+function dirichlet_bc!(A::AbstractMatrix, space::CompositeGridSpace, labels::Symbol...)
+	total_dofs = ndofs(space)
+	global_vec_bool = BitVector(undef, total_dofs)
+
+	offsets = Int[0]
+	for sp in space.spaces
+		push!(offsets, offsets[end] + ndofs(sp))
+	end
+
+	for p in labels
+		fill!(global_vec_bool, false)
+		for c in eachindex(space.spaces)
+			sp = space.spaces[c]
+			offset = offsets[c]
+			vec_bool_c = index_in_marker(mesh(sp), p)
+			for i in 1:ndofs(sp)
+				global_vec_bool[offset + i] = vec_bool_c[i]
+			end
+		end
+		_dirichlet_bc_indices!(A, global_vec_bool)
+	end
+end
+
+function dirichlet_bc!(v::AbstractVector, space::CompositeGridSpace, bcs, labels::Symbol...)
+	offsets = Int[0]
+	for sp in space.spaces
+		push!(offsets, offsets[end] + ndofs(sp))
+	end
+
+	for c in eachindex(space.spaces)
+		sp = space.spaces[c]
+		offset = offsets[c]
+		v_view = view(v, (offset + 1):(offset + ndofs(sp)))
+		dirichlet_bc!(v_view, mesh(sp), bcs, labels...)
 	end
 end
 
