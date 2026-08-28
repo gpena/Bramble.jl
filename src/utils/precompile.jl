@@ -25,6 +25,13 @@ using Bramble: interval, embed_function
 		_dot(u, v, w)
 		_inner_product(u, w, v)
 
+		# Matrix weighted inner product (used during assembly)
+		A = Matrix{Float64}(undef, 3, 3)
+		B = Matrix{Float64}(undef, 3, 3)
+		fill!(A, 1.0)
+		fill!(B, 2.0)
+		_inner_product(A, w, B)
+
 		# ESSENTIAL: vector/matrix for Float64 backends
 		vector(backend_default, 10)
 		vector(backend_dense64, 10)
@@ -94,8 +101,8 @@ end
 	X2 = X1 × interval(0.0, 2.0)
 	X3 = X2 × interval(-0.5, 0.5)
 
-	# ESSENTIAL: 1D only
-	test_sets = BRAMBLE_EXTENDED_PRECOMPILE ? (X1, X2, X3) : (X1,) # Sets for testing (1D, 2D, 3D)
+	# ESSENTIAL: 1D and 2D; EXTENDED: 1D, 2D, and 3D
+	test_sets = BRAMBLE_EXTENDED_PRECOMPILE ? (X1, X2, X3) : (X1, X2) # Sets for testing
 
 	# Representative time interval
 	I_time = interval(0.0, 1.0) # Float64 time interval
@@ -127,8 +134,8 @@ end
 	test_points_f32 = (pt1d_f32, pt2d_f32, pt3d_f32)
 
 	@compile_workload begin
-		# Loop through dimensions (1 only in essential mode, 1-3 in extended)
-		max_dim = BRAMBLE_EXTENDED_PRECOMPILE ? 3 : 1
+		# Loop through dimensions (1-2 in essential mode, 1-3 in extended)
+		max_dim = BRAMBLE_EXTENDED_PRECOMPILE ? 3 : 2
 		for D in 1:max_dim
 			X_set = test_sets[D]          # CartesianProduct for space
 			f_space = test_space_funcs[D] # Space-only function
@@ -145,16 +152,17 @@ end
 			if D == 1
 				bf_func_space(test_pt)      # Call with Number (correct type)
 				bf_func_space(pt1d_f32)     # Call with Number (needs convert)
+				bf_func_space((test_pt,))
+				bf_func_space([test_pt])
 			else
 				bf_func_space(test_pt...)   # Call with splatted tuple NTuple{D, Float64}
 				bf_func_space(test_pt)      # Call with tuple NTuple{D, Float64}
 				bf_func_space(test_pt_f32)  # Call with tuple NTuple{D, Float32} (needs convert)
+				bf_func_space(collect(test_pt)) # Vector dispatch
 			end
 
 			# Test space-time functions (hastime=true)
-			# Calling with time 't' returns the inner space-only BrambleFunction
 			inner_bf = bf_func_spacetime(test_time)
-			# Now call the inner function with spatial points
 			if D == 1
 				inner_bf(test_pt)
 				inner_bf(pt1d_f32)
@@ -163,6 +171,9 @@ end
 				inner_bf(test_pt)
 				inner_bf(test_pt_f32)
 			end
+
+			# Direct (x, t) call
+			bf_func_spacetime(test_pt, test_time)
 		end # loop D
 
 		# Test has_time, argstype, codomaintype

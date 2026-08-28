@@ -122,6 +122,15 @@ using Bramble: interval, embed_function
 		is_collapsed(1.0, 1.0)
 		is_collapsed(0.0, 1.0)
 
+		# --- Point Containment (in / ∈) ---
+		0.0 in I_f64
+		(0.0,) in I_f64
+		[0.0] in I_f64
+		SVector(0.0) in I_f64
+		(0.0, 0.5) in R2_f64
+		[0.0, 0.5] in R2_f64
+		SVector(0.0, 0.5) in R2_f64
+
 		# --- Operations ---
 		# × operator (already created R2_f64, R3_f64, R4_f64 above)
 		I_int × I_int
@@ -254,6 +263,28 @@ end
 			marker_func = Marker(:a, embed_function(X_set, f_for_dim))
 			marker_sym = Marker(:b, sym1)
 			marker_tup = Marker(:c, sym_tuple)
+
+			# Precompile REPL display (custom pretty printers)
+			io_buf = IOBuffer()
+			show(io_buf, X_set)
+			show(io_buf, MIME"text/plain"(), X_set)
+			show(io_buf, d_vp)
+			show(io_buf, MIME"text/plain"(), d_vp)
+			show(io_buf, m_mixed)
+			show(io_buf, marker_func)
+			show(io_buf, marker_sym)
+			show(io_buf, marker_tup)
+
+			# Point containment on Domain
+			0.0 in d_def
+			center(d_def)
+			tails(d_def)
 		end
+
+		# Time-dependent Domain & evaluation at time t
+		I_time = interval(0.0, 1.0)
+		d_spacetime = domain(X1, I_time, :moving => ((x, t) -> x > t), :left => :left)
+		d_at_t = d_spacetime(0.5)
+		collect(labels(d_at_t))
 	end
 end
