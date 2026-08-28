@@ -144,21 +144,21 @@ end
 # A macro for functions of the form: func(Ωₕ) -> ntuple(...)
 macro generate_mesh_ntuple_func(fname)
 	return esc(quote
-				   @inline @inbounds $fname(Ωₕ::MeshnD{D}) where {D} = ntuple(i -> $fname(Ωₕ(i)), Val(D))
+				   @inline $fname(Ωₕ::MeshnD{D}) where {D} = ntuple(i -> $fname(Ωₕ(i)), Val(D))
 			   end)
 end
 
 # A macro for functions of the form: func(Ωₕ, idx) -> ntuple(...)
 macro generate_mesh_ntuple_func_with_idx(fname)
 	return esc(quote
-				   @inline @inbounds $fname(Ωₕ::MeshnD{D}, idx) where {D} = ntuple(i -> $fname(Ωₕ(i), idx[i]), Val(D))
+				   @inline $fname(Ωₕ::MeshnD{D}, idx) where {D} = ntuple(i -> $fname(Ωₕ(i), idx[i]), Val(D))
 			   end)
 end
 
 # A macro for functions of the form: func(Ωₕ) -> Iterators.product(...)
 macro generate_mesh_iterator_func(fname)
 	return esc(quote
-				   @inline @inbounds $fname(Ωₕ::MeshnD{D}) where {D} = Iterators.product(ntuple(i -> $fname(Ωₕ(i)), Val(D))...)
+				   @inline $fname(Ωₕ::MeshnD{D}) where {D} = Iterators.product(ntuple(i -> $fname(Ωₕ(i)), Val(D))...)
 			   end)
 end
 
@@ -175,6 +175,14 @@ end
 
 @inline half_spacing(Ωₕ::MeshnD{D}, idx) where D = ntuple(i -> _apply_hs_logic(half_spacing(Ωₕ(i), idx[i])), Val(D))
 
+"""
+	cell_measures(Ωₕ::MeshnD)
+
+Returns the per-axis cell widths as an `NTuple{D}` of vectors. The measure of an
+individual cell is the product of its per-axis widths; see [`cell_measure`](@ref).
+"""
+@inline cell_measures(Ωₕ::MeshnD{D}) where D = ntuple(i -> cell_measures(Ωₕ(i)), Val(D))
+
 # Iterator wrappers
 @generate_mesh_iterator_func points_iterator
 @generate_mesh_iterator_func half_points_iterator
@@ -182,10 +190,8 @@ end
 @generate_mesh_iterator_func forward_spacings_iterator
 @generate_mesh_iterator_func half_spacings_iterator
 
-# Note: _apply_hs_logic is now defined in mesh_common_methods.jl
-
 @inline npoints(Ωₕ::MeshnD) = prod(npoints(Ωₕ, Tuple))
-@inline @inbounds npoints(Ωₕ::MeshnD{D}, ::Type{Tuple}) where D = ntuple(i -> npoints(Ωₕ(i)), Val(D))
+@inline npoints(Ωₕ::MeshnD{D}, ::Type{Tuple}) where D = ntuple(i -> npoints(Ωₕ(i)), Val(D))
 
 @inline function hₘₐₓ(Ωₕ::MeshnD{D}) where D
 	max_h = zero(eltype(Ωₕ))
@@ -217,8 +223,6 @@ function locate_cell(Ωₕ::MeshnD{D}, x::Tuple) where D
 	indices_tuple = ntuple(i -> locate_cell(Ωₕ(i), x[i]), Val(D))
 	return CartesianIndex(indices_tuple)
 end
-
-@inline locate_cell(Ωₕ::MeshnD{D}, x::AbstractVector) where D = locate_cell(Ωₕ, Tuple(x))
 
 @inline cell_measures_iterator(Ωₕ::MeshnD) = (cell_measure(Ωₕ, idx) for idx in indices(Ωₕ))
 
@@ -309,9 +313,6 @@ function Base.show(io::IO, Ωₕ::MeshnD{D,BT,CI,SM,T}) where {D,BT,CI,SM,T}
 
 	# Markers information
 	print_mesh_markers(pp, markers(Ωₕ))
-
-	# Submesh details (optional, can be toggled)
-	# print_submesh_info(pp, Ωₕ.submeshes, false)
 
 	# Remove trailing newline
 	remove_trailing_newline(io)

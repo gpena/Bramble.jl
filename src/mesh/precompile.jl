@@ -1,3 +1,24 @@
+# 1D meshes are indexed by a scalar, nD meshes by the index tuple.
+function _precompile_indexed_ops(Ωₕ::AbstractMeshType{1}, idx_tup)
+	i = idx_tup[1]
+	point(Ωₕ, i)
+	spacing(Ωₕ, i)
+	half_spacing(Ωₕ, i)
+	half_point(Ωₕ, i)
+	cell_measure(Ωₕ, i)
+	forward_spacing(Ωₕ, i)
+	return nothing
+end
+
+function _precompile_indexed_ops(Ωₕ::AbstractMeshType, idx_tup)
+	point(Ωₕ, idx_tup)
+	spacing(Ωₕ, idx_tup)
+	half_spacing(Ωₕ, idx_tup)
+	half_point(Ωₕ, idx_tup)
+	cell_measure(Ωₕ, idx_tup)
+	return nothing
+end
+
 function _precompile_common_interface(Ωₕ)
 	# Ensure types are concrete for precompilation
 	idx_cart = first(indices(Ωₕ))
@@ -15,22 +36,10 @@ function _precompile_common_interface(Ωₕ)
 	npoints(Ωₕ)
 	npoints(Ωₕ, Tuple)
 
-	# Points
+	# Points. Dispatch on the dimension rather than branching on `dim(Ωₕ) == 1`, so that
+	# inference never has to consider the nD signatures for a 1D mesh (and vice versa).
 	points(Ωₕ)
-	if dim(Ωₕ) == 1
-		_idx = idx_tup[1]
-		point(Ωₕ, _idx)
-		spacing(Ωₕ, _idx)
-		half_spacing(Ωₕ, _idx)
-		half_point(Ωₕ, _idx)
-		cell_measure(Ωₕ, _idx)
-	else
-		point(Ωₕ, idx_tup)
-		spacing(Ωₕ, idx_tup)
-		half_spacing(Ωₕ, idx_tup)
-		half_point(Ωₕ, idx_tup)
-		cell_measure(Ωₕ, idx_tup)
-	end
+	_precompile_indexed_ops(Ωₕ, idx_tup)
 
 	point(Ωₕ, idx_cart)
 	spacing(Ωₕ, idx_cart)
@@ -58,13 +67,7 @@ function _precompile_common_interface(Ωₕ)
 	topo_dim(Ωₕ)
 	is_collapsed(Ωₕ(1))
 
-	# Forward spacing
-	if D == 1
-		idx_scalar = idx_tup[1]
-		forward_spacing(Ωₕ, idx_scalar)
-	end
 	forward_spacing(Ωₕ, idx_cart)
-	#forward_spacing(Ωₕ, idx_tup)
 end
 
 function _precompile_mutating_interface!(Ωₕ, dm)

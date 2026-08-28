@@ -7,5 +7,5 @@ CollapsedDocStrings = false
 ```@autodocs
 Modules = [Bramble]
 Public = false
-Pages = ["mesh/common.jl", "mesh/marker.jl", "mesh/mesh1d.jl", "mesh/meshnd.jl"]
+Pages = ["mesh/interface.jl", "mesh/marker.jl", "mesh/mesh1d.jl", "mesh/meshnd.jl", "mesh/pretty_print.jl"]
 ```

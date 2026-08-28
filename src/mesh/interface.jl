@@ -43,30 +43,11 @@ See also: [`Mesh1D`](@ref), [`MeshnD`](@ref), [`Domain`](@ref)
 abstract type AbstractMeshType{D} end
 
 #------------------------------------------------------------------------------------------#
-# Dimension Traits (Backwards-Compatibility & Explicit Dispatch)
-#------------------------------------------------------------------------------------------#
-
-"""
-	Dimension
-
-Abstract base type for dimension traits used in compile-time dispatch.
-"""
-abstract type Dimension end
-
-struct OneDimensional <: Dimension end
-struct TwoDimensional <: Dimension end
-struct ThreeDimensional <: Dimension end
-struct MultiDimensional <: Dimension end
-
-@inline dimension_one_or_all(::Type{<:Int}) = OneDimensional()
-@inline dimension_one_or_all(::Type{<:Union{NTuple, SVector}}) = MultiDimensional()
-
-#------------------------------------------------------------------------------------------#
 # Cartesian Index Generation & Boundary Queries
 #------------------------------------------------------------------------------------------#
 
 """
-	generate_indices([::Dimension], pts)
+	generate_indices(pts)
 
 Returns the `CartesianIndices` of a mesh with `pts[i]` points in each direction.
 
@@ -76,10 +57,6 @@ returns multi-dimensional `CartesianIndices`.
 @inline generate_indices(pts::Int) = CartesianIndices((pts,))
 @inline generate_indices(pts::NTuple{D, Int}) where D = CartesianIndices(pts)
 @inline generate_indices(pts::SVector{D, Int}) where D = CartesianIndices(Tuple(pts))
-@inline generate_indices(::OneDimensional, pts::Int) = CartesianIndices((pts,))
-@inline generate_indices(::MultiDimensional, pts::NTuple{D}) where D = CartesianIndices(ntuple(i -> 1:pts[i], Val(D)))
-@inline generate_indices(::MultiDimensional, pts::SVector{D}) where D = CartesianIndices(ntuple(i -> 1:pts[i], Val(D)))
-@inline generate_indices(pts::PointsType) where PointsType = generate_indices(dimension_one_or_all(PointsType), pts)
 
 """
 	is_boundary_index(idxs::CartesianIndices, idx)
@@ -182,9 +159,10 @@ Overrides the indices in `Ωₕ`. Used internally during mesh refinement.
 # Bounds Checking & Internal Helpers
 #------------------------------------------------------------------------------------------#
 
+@noinline _throw_mesh_bounds_error(Ωₕ, idx) = throw(BoundsError(Ωₕ, idx))
+
 @inline function _check_point_bounds(Ωₕ::AbstractMeshType, idx::Int, location::String = "point")
-	n = npoints(Ωₕ)
-	@assert 1 <= idx <= n "Index $idx out of bounds for $location access in mesh with $n points."
+	@boundscheck 1 <= idx <= npoints(Ωₕ) || _throw_mesh_bounds_error(Ωₕ, idx)
 	return nothing
 end
 
@@ -193,16 +171,15 @@ end
 end
 
 @inline function _check_point_bounds(Ωₕ::AbstractMeshType{D}, idx::CartesianIndex{D}, location::String = "point") where D
-	npts = npoints(Ωₕ, Tuple)
-	for i in 1:D
-		@assert 1 <= idx[i] <= npts[i] "Index $idx[$i] out of bounds for $location access in dimension $i (max $(npts[i]))."
+	@boundscheck begin
+		npts = npoints(Ωₕ, Tuple)
+		all(i -> 1 <= idx[i] <= npts[i], 1:D) || _throw_mesh_bounds_error(Ωₕ, idx)
 	end
 	return nothing
 end
 
 @inline function _check_half_point_bounds(Ωₕ::AbstractMeshType, idx::Int)
-	n = npoints(Ωₕ)
-	@assert 1 <= idx <= n + 1 "Index $idx out of bounds for half-point access (valid range: 1 to $(n+1))."
+	@boundscheck 1 <= idx <= npoints(Ωₕ) + 1 || _throw_mesh_bounds_error(Ωₕ, idx)
 	return nothing
 end
 
@@ -211,10 +188,6 @@ end
 @inline _extract_linear_index(idx::CartesianIndex{1}) = idx[1]
 @inline _spacing_generator(Ωₕ::AbstractMeshType, spacing_func) = (spacing_func(Ωₕ, i) for i in 1:npoints(Ωₕ))
 @inline _apply_hs_logic(value::T) where T = ifelse(iszero(value), one(T), value)
-
-function _bounds_check_error_message(idx, n, mesh_type::String = "mesh")
-	return "Index $idx out of bounds for $mesh_type with $n points."
-end
 
 # 1D spacing reference routines
 # A mesh with fewer than two points has no interval to measure, so every spacing is zero.
@@ -320,7 +293,7 @@ Returns the coordinates of the mesh points:
 
 See also: [`point`](@ref), [`points_iterator`](@ref).
 """
-@inline points(Ωₕ::AbstractMeshType) = error("Interface function 'points' not implemented for mesh of type $(typeof(Ωₕ)).")
+function points end
 
 """
 	point(Ωₕ::AbstractMeshType, idx)
@@ -331,14 +304,14 @@ Returns the coordinate point at index `idx` (linear integer, tuple `(i, j)`, or 
 
 Direct indexing `Ωₕ[idx]` is also supported.
 """
-@inline point(Ωₕ::AbstractMeshType, idx) = error("Interface function 'point' not implemented for mesh of type $(typeof(Ωₕ)).")
+function point end
 
 """
 	points_iterator(Ωₕ::AbstractMeshType)
 
 Returns an iterator yielding coordinate points across the entire mesh.
 """
-@inline points_iterator(Ωₕ::AbstractMeshType) = error("Interface function 'points_iterator' not implemented for mesh of type $(typeof(Ωₕ)).")
+function points_iterator end
 
 """
 	half_points(Ωₕ::AbstractMeshType)
@@ -348,21 +321,21 @@ Returns the precomputed cell centers (half-points) for each coordinate axis:
 x_{i+1/2} = \\frac{x_i + x_{i+1}}{2}, \\quad i = 1, \\dots, N-1.
 ```
 """
-@inline half_points(Ωₕ::AbstractMeshType) = error("Interface function 'half_points' not implemented for mesh of type $(typeof(Ωₕ)).")
+function half_points end
 
 """
 	half_point(Ωₕ::AbstractMeshType, idx)
 
 Returns the cell center (half-point) coordinate corresponding to index `idx`.
 """
-@inline half_point(Ωₕ::AbstractMeshType, idx) = error("Interface function 'half_point' not implemented for mesh of type $(typeof(Ωₕ)).")
+function half_point end
 
 """
 	half_points_iterator(Ωₕ::AbstractMeshType)
 
 Returns an iterator over cell center (half-point) coordinates.
 """
-@inline half_points_iterator(Ωₕ::AbstractMeshType) = error("Interface function 'half_points_iterator' not implemented for mesh of type $(typeof(Ωₕ)).")
+function half_points_iterator end
 
 """
 	spacing(Ωₕ::AbstractMeshType, idx)
@@ -370,14 +343,14 @@ Returns an iterator over cell center (half-point) coordinates.
 Returns the backward spacing ``h_i = x_i - x_{i-1}`` at index `idx` (for ``i=1``, returns ``x_2 - x_1``).
 For nD meshes, returns a tuple of backward spacings along each axis.
 """
-@inline spacing(Ωₕ::AbstractMeshType, idx) = error("Interface function 'spacing' not implemented for mesh of type $(typeof(Ωₕ)).")
+function spacing end
 
 """
 	spacings_iterator(Ωₕ::AbstractMeshType)
 
 Returns an iterator over backward spacings across mesh points.
 """
-@inline spacings_iterator(Ωₕ::AbstractMeshType) = error("Interface function 'spacings_iterator' not implemented for mesh of type $(typeof(Ωₕ)).")
+function spacings_iterator end
 
 """
 	forward_spacing(Ωₕ::AbstractMeshType, idx)
@@ -385,35 +358,35 @@ Returns an iterator over backward spacings across mesh points.
 Returns the forward spacing ``h_{i+1} = x_{i+1} - x_i`` at index `idx` (for ``i=N``, returns ``x_N - x_{N-1}``).
 For nD meshes, returns a tuple of forward spacings along each axis.
 """
-@inline forward_spacing(Ωₕ::AbstractMeshType, idx) = error("Interface function 'forward_spacing' not implemented for mesh of type $(typeof(Ωₕ)).")
+function forward_spacing end
 
 """
 	forward_spacings_iterator(Ωₕ::AbstractMeshType)
 
 Returns an iterator over forward spacings across mesh points.
 """
-@inline forward_spacings_iterator(Ωₕ::AbstractMeshType) = error("Interface function 'forward_spacings_iterator' not implemented for mesh of type $(typeof(Ωₕ)).")
+function forward_spacings_iterator end
 
 """
 	half_spacings(Ωₕ::AbstractMeshType)
 
 Returns the cell widths (half-spacings) ``h_{i+1/2} = \\frac{h_i + h_{i+1}}{2}`` along each axis.
 """
-@inline half_spacings(Ωₕ::AbstractMeshType) = error("Interface function 'half_spacings' not implemented for mesh of type $(typeof(Ωₕ)).")
+function half_spacings end
 
 """
 	half_spacing(Ωₕ::AbstractMeshType, idx)
 
 Returns the cell width (half-spacing) at index `idx`.
 """
-@inline half_spacing(Ωₕ::AbstractMeshType, idx) = error("Interface function 'half_spacing' not implemented for mesh of type $(typeof(Ωₕ)).")
+function half_spacing end
 
 """
 	half_spacings_iterator(Ωₕ::AbstractMeshType)
 
 Returns an iterator over cell widths (half-spacings).
 """
-@inline half_spacings_iterator(Ωₕ::AbstractMeshType) = error("Interface function 'half_spacings_iterator' not implemented for mesh of type $(typeof(Ωₕ)).")
+function half_spacings_iterator end
 
 """
 	npoints(Ωₕ::AbstractMeshType, [::Type{Tuple}])
@@ -421,8 +394,7 @@ Returns an iterator over cell widths (half-spacings).
 Returns the total number of points in `Ωₕ`.
 When passing `Tuple` as the second argument, returns a tuple with the number of points along each dimension.
 """
-@inline npoints(Ωₕ::AbstractMeshType) = error("Interface function 'npoints' not implemented for mesh of type $(typeof(Ωₕ)).")
-@inline npoints(Ωₕ::AbstractMeshType, ::Type{Tuple}) = error("Interface function 'npoints' not implemented for mesh of type $(typeof(Ωₕ)).")
+function npoints end
 
 """
 	hₘₐₓ(Ωₕ::AbstractMeshType)
@@ -432,7 +404,7 @@ Returns the maximum diagonal stepsize across all cells in the mesh:
 h_{\\max} = \\max_{idx} \\| (h_{1, idx_1}, \\dots, h_{D, idx_D}) \\|_2.
 ```
 """
-@inline hₘₐₓ(Ωₕ::AbstractMeshType) = error("Interface function 'hₘₐₓ' not implemented for mesh of type $(typeof(Ωₕ)).")
+function hₘₐₓ end
 
 """
 	hₘᵢₙ(Ωₕ::AbstractMeshType)
@@ -441,7 +413,7 @@ Returns the minimum stepsize across all cells in the mesh:
 - In 1D: ``\\min_i (x_i - x_{i-1})``.
 - In nD: ``\\min_{d=1}^D \\min_{idx_d} (x_{d, idx_d} - x_{d, idx_d-1})``.
 """
-@inline hₘᵢₙ(Ωₕ::AbstractMeshType) = error("Interface function 'hₘᵢₙ' not implemented for mesh of type $(typeof(Ωₕ)).")
+function hₘᵢₙ end
 
 """
 	cell_measure(Ωₕ::AbstractMeshType, idx)
@@ -451,14 +423,14 @@ Returns the control volume (length, area, or volume) of the cell centered at ind
 \\text{meas}(\\square_{idx}) = \\prod_{d=1}^D h_{d, idx_d+1/2}.
 ```
 """
-@inline cell_measure(Ωₕ::AbstractMeshType, idx) = error("Interface function 'cell_measure' not implemented for mesh of type $(typeof(Ωₕ)).")
+function cell_measure end
 
 """
 	cell_measures_iterator(Ωₕ::AbstractMeshType)
 
 Returns an iterator yielding the volume/measure of each cell in the mesh.
 """
-@inline cell_measures_iterator(Ωₕ::AbstractMeshType) = error("Interface function 'cell_measures_iterator' not implemented for mesh of type $(typeof(Ωₕ)).")
+function cell_measures_iterator end
 
 """
 	iterative_refinement!(Ωₕ::AbstractMeshType, [domain_markers::DomainMarkers])
@@ -466,8 +438,7 @@ Returns an iterator yielding the volume/measure of each cell in the mesh.
 Refines the mesh `Ωₕ` in-place by halving each existing cell (inserting new points at midpoints).
 If domain markers are supplied, they are re-evaluated onto the refined grid points.
 """
-@inline iterative_refinement!(Ωₕ::AbstractMeshType) = error("Interface function 'iterative_refinement!' not implemented for mesh of type $(typeof(Ωₕ)).")
-@inline iterative_refinement!(Ωₕ::AbstractMeshType, domain_markers::DomainMarkers) = error("Interface function 'iterative_refinement!' not implemented for mesh of type $(typeof(Ωₕ)).")
+function iterative_refinement! end
 
 """
 	change_points!(Ωₕ::AbstractMeshType, [domain_markers::DomainMarkers], pts)
@@ -475,8 +446,7 @@ If domain markers are supplied, they are re-evaluated onto the refined grid poin
 Updates the coordinates of mesh `Ωₕ` in-place using new point coordinates in `pts`,
 recalculating all cached half-points and cell spacings.
 """
-@inline change_points!(Ωₕ::AbstractMeshType, pts) = error("Interface function 'change_points!' not implemented for mesh of type $(typeof(Ωₕ)).")
-@inline change_points!(Ωₕ::AbstractMeshType, ::DomainMarkers, pts) = error("Interface function 'change_points!' not implemented for mesh of type $(typeof(Ωₕ)).")
+function change_points! end
 
 #------------------------------------------------------------------------------------------#
 # Uniformity Query
@@ -615,8 +585,7 @@ Locates the cell containing continuous coordinate `x`:
 locate_cell(Ωₕ, 0.35)  # returns 4 (interval [0.3, 0.4])
 ```
 """
-@inline locate_cell(Ωₕ::AbstractMeshType{1}, x::Real) = error("Interface function 'locate_cell' not implemented for $(typeof(Ωₕ)).")
-@inline locate_cell(Ωₕ::AbstractMeshType{D}, x::Tuple) where D = error("Interface function 'locate_cell' not implemented for $(typeof(Ωₕ)).")
+function locate_cell end
 @inline locate_cell(Ωₕ::AbstractMeshType{D}, x::AbstractVector) where D = locate_cell(Ωₕ, Tuple(x))
 
 """

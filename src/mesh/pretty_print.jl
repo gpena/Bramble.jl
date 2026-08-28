@@ -53,34 +53,12 @@ end
 
 Prints the domain information for a mesh.
 """
-function print_mesh_domain_info(pp::PrettyPrinter, set::CartesianProduct{D,T}) where {D,T}
+function print_mesh_domain_info(pp::PrettyPrinter, set::CartesianProduct)
 	print_indent(pp)
 	printstyled(pp.io, "Domain: "; color = :light_black)
-
-	if D == 1
-		a, b = set.box[1]
-		collapsed = set.collapsed[1]
-		if collapsed
-			printstyled(pp.io, "Point($a)"; color = :green)
-		else
-			print(pp.io, "[")
-			printstyled(pp.io, "$a, $b"; color = :green)
-			print(pp.io, "]")
-		end
-	else
-		for i in 1:D
-			i > 1 && print(pp.io, " × ")
-			a, b = set.box[i]
-			collapsed = set.collapsed[i]
-			if collapsed
-				printstyled(pp.io, "$a"; color = :green)
-			else
-				print(pp.io, "[")
-				printstyled(pp.io, "$a, $b"; color = :green)
-				print(pp.io, "]")
-			end
-		end
-	end
+	# Reuse the CartesianProduct compact `show`, which already renders
+	# `[a, b] × [c, d]` and collapses degenerate axes to a single value.
+	show(IOContext(pp.io, :compact => true), set)
 	println(pp.io)
 end
 
@@ -157,34 +135,3 @@ function print_mesh_markers(pp::PrettyPrinter, mesh_markers::MeshMarkers)
 	println(pp.io)
 end
 
-"""
-	print_submesh_info(pp::PrettyPrinter, submeshes::NTuple{D}, show_details::Bool=false) where D
-
-Prints information about submeshes in an nD mesh.
-"""
-function print_submesh_info(pp::PrettyPrinter, submeshes::NTuple{D}, show_details::Bool = false) where D
-	if !show_details
-		return
-	end
-
-	println(pp.io)
-	print_section_header(with_indent(pp, 1), "Submeshes:")
-	println(pp.io)
-
-	pp_indented = with_indent(pp, 2)
-	for i in 1:D
-		label = get_dimension_label(i)
-		submesh = submeshes[i]
-		npts = npoints(submesh)
-		a, b = tails(set(submesh))
-
-		print_indent(pp_indented)
-		printstyled(pp.io, "$label"; color = :green)
-		print(pp.io, ": ")
-		printstyled(pp.io, "$npts points"; color = :blue)
-		print(pp.io, " on [")
-		printstyled(pp.io, "$a, $b"; color = :magenta)
-		print(pp.io, "]")
-		println(pp.io)
-	end
-end

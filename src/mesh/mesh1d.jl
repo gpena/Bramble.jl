@@ -106,7 +106,13 @@ Overrides the spacings in Ωₕ.
 @inline eltype(::Mesh1D{BT}) where BT = eltype(BT)
 @inline eltype(::Type{<:Mesh1D{BT}}) where BT = eltype(BT)
 
-@inline (Ωₕ::Mesh1D)(_) = Ωₕ
+"""
+	(Ωₕ::Mesh1D)(i::Integer)
+
+Returns the `i`-th submesh of `Ωₕ`. A 1D mesh is its own only submesh, so this returns
+`Ωₕ` itself; it exists so that generic `D`-dimensional code can index uniformly.
+"""
+@inline (Ωₕ::Mesh1D)(::Integer) = Ωₕ
 
 @inline npoints(Ωₕ::Mesh1D) = length(points(Ωₕ))
 @inline npoints(Ωₕ::Mesh1D, ::Type{Tuple}) = (npoints(Ωₕ),)
@@ -114,13 +120,13 @@ Overrides the spacings in Ωₕ.
 @inline hₘₐₓ(Ωₕ::Mesh1D) = maximum(spacings_iterator(Ωₕ))
 @inline hₘᵢₙ(Ωₕ::Mesh1D) = minimum(spacings_iterator(Ωₕ))
 
-@inline @inbounds function spacing(Ωₕ::Mesh1D, i::Int)
+@inline function spacing(Ωₕ::Mesh1D, i::Int)
 	_check_point_bounds(Ωₕ, i, "spacing")
 	return _compute_backward_spacing_1d(points(Ωₕ), i, is_collapsed(Ωₕ), eltype(Ωₕ))
 end
 
-@inline @inbounds spacing(Ωₕ::Mesh1D, i::CartesianIndex{1}) = spacing(Ωₕ, _extract_linear_index(i))
-@inline @inbounds function spacing_for_derivative(Ωₕ::Mesh1D, idx)
+@inline spacing(Ωₕ::Mesh1D, i::CartesianIndex{1}) = spacing(Ωₕ, _extract_linear_index(i))
+@inline function spacing_for_derivative(Ωₕ::Mesh1D, idx)
 	i = idx isa CartesianIndex{1} ? _extract_linear_index(idx) : idx
 	if i == 1
 		zero(eltype(Ωₕ))
@@ -129,13 +135,13 @@ end
 	end
 end
 
-@inline @inbounds function forward_spacing(Ωₕ::Mesh1D, i::Int)
+@inline function forward_spacing(Ωₕ::Mesh1D, i::Int)
 	_check_point_bounds(Ωₕ, i, "forward_spacing")
 	return _compute_forward_spacing_1d(points(Ωₕ), i, npoints(Ωₕ), is_collapsed(Ωₕ), eltype(Ωₕ))
 end
 
-@inline @inbounds forward_spacing(Ωₕ::Mesh1D, i::CartesianIndex{1}) = forward_spacing(Ωₕ, _extract_linear_index(i))
-@inline @inbounds function forward_spacing_for_derivative(Ωₕ::Mesh1D, idx)
+@inline forward_spacing(Ωₕ::Mesh1D, i::CartesianIndex{1}) = forward_spacing(Ωₕ, _extract_linear_index(i))
+@inline function forward_spacing_for_derivative(Ωₕ::Mesh1D, idx)
 	i = idx isa CartesianIndex{1} ? _extract_linear_index(idx) : idx
 
 	if i == npoints(Ωₕ)
@@ -145,7 +151,7 @@ end
 	end
 end
 
-@inline @inbounds function half_point(Ωₕ::Mesh1D, i::Int)
+@inline function half_point(Ωₕ::Mesh1D, i::Int)
 	_check_half_point_bounds(Ωₕ, i)
 	return Ωₕ.half_pts[i]
 end
@@ -153,14 +159,14 @@ end
 @inline spacings_iterator(Ωₕ::Mesh1D) = _spacing_generator(Ωₕ, spacing)
 @inline forward_spacings_iterator(Ωₕ::Mesh1D) = _spacing_generator(Ωₕ, forward_spacing)
 
-@inline @inbounds function half_spacing(Ωₕ::Mesh1D, i::Int)
+@inline function half_spacing(Ωₕ::Mesh1D, i::Int)
 	_check_point_bounds(Ωₕ, i, "half_spacing")
 	return Ωₕ.half_spacings[i]
 end
 
-@inline @inbounds half_spacing(Ωₕ::Mesh1D, idx::CartesianIndex{1}) = half_spacing(Ωₕ, _extract_linear_index(idx))
+@inline half_spacing(Ωₕ::Mesh1D, idx::CartesianIndex{1}) = half_spacing(Ωₕ, _extract_linear_index(idx))
 
-@inline @inbounds function cell_measure(Ωₕ::Mesh1D, i)
+@inline function cell_measure(Ωₕ::Mesh1D, i)
 	idx = _extract_linear_index(i)
 	_check_point_bounds(Ωₕ, idx, "cell_measure")
 	return half_spacing(Ωₕ, idx)
@@ -176,7 +182,7 @@ end
 	return nothing
 end
 # Internal function to populate a vector `x` with grid point coordinates over a 1D interval `I`.
-@inline @inbounds function _points!(x, I::CartesianProduct{1}, unif::Bool)
+@inline function _points!(x, I::CartesianProduct{1}, unif::Bool)
 	# Get the number of points and the interval's element type and bounds.
 	npts = length(x)
 	T = eltype(I)
@@ -213,7 +219,7 @@ end
 end
 
 # Calculates the "half points" (cell centers) for a 1D mesh.
-@inline @inbounds function half_points!(x, Ωₕ)
+@inline function half_points!(x, Ωₕ)
 	n = npoints(Ωₕ)
 	pts = points(Ωₕ)
 
@@ -231,7 +237,7 @@ end
 end
 
 # Calculates the "half spacings" (cell widths/measures) for a 1D mesh.
-@inline @inbounds function half_spacing!(x, Ωₕ)
+@inline function half_spacing!(x, Ωₕ)
 	n = npoints(Ωₕ)
 
 	# The boundary cell widths are defined as half of the spacing of the first/last interval.

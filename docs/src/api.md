@@ -22,6 +22,7 @@ matrix_type
 backend_types
 backend_eye
 backend_zeros
+metal_backend
 ```
 
 ### Function Embedding
@@ -81,6 +82,7 @@ submeshes
 ### Points and Spacings
 
 ```@docs
+npoints
 points
 half_points
 half_point
@@ -94,6 +96,7 @@ stepsize
 locate_cell
 normal_vector
 cell_measure
+cell_measures
 is_uniform
 ```
 
