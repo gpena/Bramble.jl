@@ -15,11 +15,11 @@ In this tutorial, you will learn how to:
 
 ---
 
-## 1. Sets and Intervals (`CartesianProduct`)
+## 1. Sets and intervals
 
 At the core of the geometry system is `CartesianProduct{D, T}`, which represents the Cartesian product of $D$ closed intervals in $\mathbb{R}^D$ with coordinate type `T`.
 
-### 1.1 Creating 1D Intervals
+### 1.1 Creating 1D intervals
 
 Use [`interval`](@ref) to define closed intervals $[a, b] \subset \mathbb{R}$:
 
@@ -39,7 +39,7 @@ P = point(0.5)
 B = box(1.5, 0.2)       # [0.2, 1.5]
 ```
 
-### 1.2 Multi-Dimensional Sets via the Tensor Product Operator `×`
+### 1.2 Multi-dimensional sets via the tensor product operator `×`
 
 Multi-dimensional hyper-rectangles are constructed intuitively by taking the tensor product of lower-dimensional sets using the `×` (`\times<tab>`) operator:
 
@@ -60,7 +60,7 @@ Alternatively, you can construct products directly using tuples of interval pair
 
 ---
 
-## 2. Querying Geometric Properties
+## 2. Querying geometric properties
 
 `Bramble.jl` provides a comprehensive, type-stable query interface:
 
@@ -85,7 +85,7 @@ center(X)         # (1.0, 0.0)
 proj_x = projection(X, 1)  # interval(0.0, 2.0)
 ```
 
-### Point Containment (`in` / `∈`)
+### Point containment (`in` / `∈`)
 
 Check whether a point lies within a `CartesianProduct`:
 
@@ -103,7 +103,7 @@ X = interval(0.0, 1.0) × interval(0.0, 1.0)
 
 ---
 
-## 3. Collapsed and Lower-Dimensional Geometries
+## 3. Collapsed and lower-dimensional geometries
 
 A dimension is considered **collapsed** if its interval is degenerate ($a = b$). Bramble accurately tracks collapsed dimensions without heap allocations, enabling seamless modeling of lower-dimensional surfaces or interfaces embedded in higher-dimensional spaces:
 
@@ -121,11 +121,11 @@ line_in_2d.collapsed[2]  # true  (y-axis is collapsed)
 
 ---
 
-## 4. Boundary Markers (`markers` and `@markers`)
+## 4. Boundary markers
 
 PDE boundary conditions require tagging specific domain boundaries (e.g., Dirichlet, Neumann, Robin, inflow/outflow).
 
-### 4.1 Boundary Symbol Conventions
+### 4.1 Boundary symbol conventions
 
 For a $D$-dimensional domain, the standard boundary facets are:
 - **1D**: `:left`, `:right`
@@ -139,7 +139,7 @@ get_boundary_symbols(2)
 # (:bottom, :top, :left, :right)
 ```
 
-### 4.2 Creating Markers with `markers` and `@markers`
+### 4.2 Creating markers
 
 Markers are defined as `:label => identifier` pairs where `identifier` can be a single boundary symbol, a tuple of symbols, or a boolean function:
 
@@ -167,7 +167,7 @@ collect(labels(m2))
 # [:inflow, :outflow, :wall]
 ```
 
-### 4.3 Function-Based (Level-Set) and Time-Dependent Markers
+### 4.3 Function-based and time-dependent markers
 
 You can also define internal or geometric subset markers using boolean condition functions, as well as time-dependent markers:
 
@@ -193,7 +193,7 @@ m_evaluated = m_time(1.5)
 
 ---
 
-## 5. Computational Domains (`Domain`)
+## 5. Computational domains
 
 A [`Domain`](@ref) joins a geometric set (`CartesianProduct`) with its boundary markers into a single unified object:
 
@@ -212,7 +212,7 @@ geom = interval(0.0, 1.0) × interval(0.0, 1.0)
 Ω_default = domain(geom)
 ```
 
-### 5.1 Domain Trait Delegation
+### 5.1 Domain traits
 
 `Domain` automatically delegates geometric and marker methods directly:
 
@@ -231,9 +231,9 @@ collect(labels(Ω)) # [:dirichlet, :neumann]
 
 ---
 
-## 6. Practical Examples
+## 6. Practical examples
 
-### Example 1: 1D Rod with Mixed Boundary Conditions
+### Example 1: 1D Rod with mixed boundary conditions
 
 Consider heat conduction along a 1D rod $\Omega = [0, L]$ with $L = 10.0$, fixed temperature at $x = 0$ (`:left`) and insulated end at $x = L$ (`:right`):
 
@@ -257,7 +257,7 @@ println("Active Labels: ", collect(labels(rod)))
 
 ---
 
-### Example 2: 2D Channel Flow Domain
+### Example 2: 2D channel flow domain
 
 Consider fluid flow in a rectangular channel $[0, 5] \times [0, 1]$ with an inflow on the left, outflow on the right, and no-slip walls on top and bottom:
 
@@ -280,7 +280,7 @@ println("Channel labels: ", collect(labels(channel)))
 
 ---
 
-### Example 3: 3D Heat Sink Domain
+### Example 3: 3D heat sink domain
 
 Consider heat dissipation across a 3D block $[0, 2] \times [0, 2] \times [0, 1]$ subjected to a bottom heat source, top convective cooling, and insulated lateral walls:
 
