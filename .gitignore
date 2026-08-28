@@ -36,3 +36,4 @@ playground/
 build/
 research/
 test_code_warntype/
+.agents/
