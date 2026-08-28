@@ -3,27 +3,18 @@ module Bramble
 #using StyledStrings: styled, @styled_str
 
 using DocStringExtensions
-using Base: remove_linenums!
 
-import Base: eltype, similar, length, copyto!, axes, materialize!
+import Base: eltype, length
 import Base: show, first, last, getindex, setindex!, iterate, size, ndims, firstindex, lastindex
-import Base: *, +, -, /, ^, @propagate_inbounds, @_inline_meta
 
-using Random: rand!
-
-using SparseArrays: SparseMatrixCSC, SparseVector, AbstractSparseMatrix, spdiagm, rowvals, nnz, dropzeros!, nzrange, spzeros, nonzeros, sparse
+using SparseArrays: SparseMatrixCSC, SparseVector, spdiagm, spzeros
 
 using FunctionWrappers: FunctionWrapper
 
-using StaticArrays: @SVector, SVector
+using StaticArrays: SVector
 
-using Base.Threads: @threads
+using LinearAlgebra: Diagonal, I, transpose
 
-using LinearAlgebra: norm, Diagonal, mul!, I, dot, transpose, Transpose
-import LinearAlgebra: ⋅
-
-using FillArrays: Ones, Eye
-#using WriteVTK
 
 # Utilities
 export backend, metal_backend, vector, matrix, vector_type, matrix_type, backend_types, backend_eye, backend_zeros
