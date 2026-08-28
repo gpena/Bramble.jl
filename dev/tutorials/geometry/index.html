@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Geometry Tutorial · Bramble.jl</title><meta name="title" content="Geometry Tutorial · Bramble.jl"/><meta property="og:title" content="Geometry Tutorial · Bramble.jl"/><meta property="twitter:title" content="Geometry Tutorial · Bramble.jl"/><meta name="description" content="Documentation for Bramble.jl."/><meta property="og:description" content="Documentation for Bramble.jl."/><meta property="twitter:description" content="Documentation for Bramble.jl."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img src="../../assets/logo.svg" alt="Bramble.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">Bramble.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li class="is-active"><a class="tocitem" href>Geometry Tutorial</a><ul class="internal"><li><a class="tocitem" href="#1.-Sets-and-Intervals-(CartesianProduct)"><span>1. Sets and Intervals (<code>CartesianProduct</code>)</span></a></li><li><a class="tocitem" href="#2.-Querying-Geometric-Properties"><span>2. Querying Geometric Properties</span></a></li><li><a class="tocitem" href="#3.-Collapsed-and-Lower-Dimensional-Geometries"><span>3. Collapsed and Lower-Dimensional Geometries</span></a></li><li><a class="tocitem" href="#4.-Boundary-Markers-(markers-and-@markers)"><span>4. Boundary Markers (<code>markers</code> and <code>@markers</code>)</span></a></li><li><a class="tocitem" href="#5.-Computational-Domains-(Domain)"><span>5. Computational Domains (<code>Domain</code>)</span></a></li><li><a class="tocitem" href="#6.-Practical-Examples"><span>6. Practical Examples</span></a></li></ul></li></ul></li><li><span class="tocitem">Documentation</span><ul><li><a class="tocitem" href="../../api/">API Reference</a></li><li><input class="collapse-toggle" id="menuitem-3-2" type="checkbox"/><label class="tocitem" for="menuitem-3-2"><span class="docs-label">Internals</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../internals/utils/">Utilities</a></li><li><a class="tocitem" href="../../internals/geometry/">Geometry</a></li></ul></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Tutorials</a></li><li class="is-active"><a href>Geometry Tutorial</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Geometry Tutorial</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/tutorials/geometry.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="tutorial_geometry"><a class="docs-heading-anchor" href="#tutorial_geometry">Geometry Tutorial</a><a id="tutorial_geometry-1"></a><a class="docs-heading-anchor-permalink" href="#tutorial_geometry" title="Permalink"></a></h1><p><code>Bramble.jl</code> provides a high-performance, zero-allocation geometric modeling subsystem designed for partial differential equations (PDEs) and numerical discretization schemes on Cartesian and tensor-product meshes.</p><p>In this tutorial, you will learn how to:</p><ol><li><p>Construct 1D intervals and multi-dimensional <a href="../../internals/geometry/#Bramble.CartesianProduct"><code>CartesianProduct</code></a>s.</p></li><li><p>Handle collapsed (lower-dimensional) geometries.</p></li><li><p>Query spatial and topological dimensions, bounds, centers, and containment.</p></li><li><p>Define boundary labels and markers with <a href="../../api/#Bramble.markers"><code>markers</code></a> and <a href="../../api/#Bramble.@markers"><code>@markers</code></a>.</p></li><li><p>Build complete computational <a href="../../internals/geometry/#Bramble.Domain"><code>Domain</code></a>s ready for mesh generation and PDE solvers.</p></li></ol><hr/><h2 id="1.-Sets-and-Intervals-(CartesianProduct)"><a class="docs-heading-anchor" href="#1.-Sets-and-Intervals-(CartesianProduct)">1. Sets and Intervals (<code>CartesianProduct</code>)</a><a id="1.-Sets-and-Intervals-(CartesianProduct)-1"></a><a class="docs-heading-anchor-permalink" href="#1.-Sets-and-Intervals-(CartesianProduct)" title="Permalink"></a></h2><p>At the core of the geometry system is <code>CartesianProduct{D, T}</code>, which represents the Cartesian product of <span>$D$</span> closed intervals in <span>$\mathbb{R}^D$</span> with coordinate type <code>T</code>.</p><h3 id="1.1-Creating-1D-Intervals"><a class="docs-heading-anchor" href="#1.1-Creating-1D-Intervals">1.1 Creating 1D Intervals</a><a id="1.1-Creating-1D-Intervals-1"></a><a class="docs-heading-anchor-permalink" href="#1.1-Creating-1D-Intervals" title="Permalink"></a></h3><p>Use <a href="../../api/#Bramble.interval"><code>interval</code></a> to define closed intervals <span>$[a, b] \subset \mathbb{R}$</span>:</p><pre><code class="language-julia hljs">using Bramble
+
+# Define the interval [0.0, 1.0]
+I = interval(0.0, 1.0)
+
+# Automatic conversion of integer bounds to floating point
+I_int = interval(0, 2)  # CartesianProduct{1, Float64}
+
+# Create a single degenerate point [0.5, 0.5]
+P = point(0.5)
+
+# Bounding box of any two numbers (ordered automatically)
+B = box(1.5, 0.2)       # [0.2, 1.5]</code></pre><h3 id="1.2-Multi-Dimensional-Sets-via-the-Tensor-Product-Operator"><a class="docs-heading-anchor" href="#1.2-Multi-Dimensional-Sets-via-the-Tensor-Product-Operator">1.2 Multi-Dimensional Sets via the Tensor Product Operator <code>×</code></a><a id="1.2-Multi-Dimensional-Sets-via-the-Tensor-Product-Operator-1"></a><a class="docs-heading-anchor-permalink" href="#1.2-Multi-Dimensional-Sets-via-the-Tensor-Product-Operator" title="Permalink"></a></h3><p>Multi-dimensional hyper-rectangles are constructed intuitively by taking the tensor product of lower-dimensional sets using the <code>×</code> (<code>\times&lt;tab&gt;</code>) operator:</p><pre><code class="language-julia hljs"># 2D Unit square: [0, 1] × [0, 1]
+Ω_2d = interval(0.0, 1.0) × interval(0.0, 1.0)
+
+# 3D Cuboid: [-1, 1] × [0, 2] × [0, 0.5]
+Ω_3d = interval(-1.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 0.5)</code></pre><p>Alternatively, you can construct products directly using tuples of interval pairs:</p><pre><code class="language-julia hljs"># Direct tuple construction
+Ω_2d = cartesian_product(((0.0, 1.0), (0.0, 2.0)))</code></pre><hr/><h2 id="2.-Querying-Geometric-Properties"><a class="docs-heading-anchor" href="#2.-Querying-Geometric-Properties">2. Querying Geometric Properties</a><a id="2.-Querying-Geometric-Properties-1"></a><a class="docs-heading-anchor-permalink" href="#2.-Querying-Geometric-Properties" title="Permalink"></a></h2><p><code>Bramble.jl</code> provides a comprehensive, type-stable query interface:</p><pre><code class="language-julia hljs">X = interval(0.0, 2.0) × interval(-1.0, 1.0)
+
+# Spatial embedding dimension (D = 2)
+dim(X)            # 2
+
+# Topological dimension
+topo_dim(X)       # 2
+
+# Interval bounds
+tails(X)          # ((0.0, 2.0), (-1.0, 1.0))
+tails(X, 1)       # (0.0, 2.0)  -- bounds in dimension 1
+tails(X, 2)       # (-1.0, 1.0) -- bounds in dimension 2
+
+# Geometric center
+center(X)         # (1.0, 0.0)
+
+# 1D projection onto a specific axis
+proj_x = projection(X, 1)  # interval(0.0, 2.0)</code></pre><h3 id="Point-Containment-(in-/-)"><a class="docs-heading-anchor" href="#Point-Containment-(in-/-)">Point Containment (<code>in</code> / <code>∈</code>)</a><a id="Point-Containment-(in-/-)-1"></a><a class="docs-heading-anchor-permalink" href="#Point-Containment-(in-/-)" title="Permalink"></a></h3><p>Check whether a point lies within a <code>CartesianProduct</code>:</p><pre><code class="language-julia hljs"># In 1D:
+I = interval(0.0, 1.0)
+0.5 ∈ I           # true
+1.5 ∈ I           # false
+
+# In 2D (supports Tuples, SVector, and Vectors):
+X = interval(0.0, 1.0) × interval(0.0, 1.0)
+(0.5, 0.5) ∈ X    # true
+(1.2, 0.3) ∈ X    # false</code></pre><hr/><h2 id="3.-Collapsed-and-Lower-Dimensional-Geometries"><a class="docs-heading-anchor" href="#3.-Collapsed-and-Lower-Dimensional-Geometries">3. Collapsed and Lower-Dimensional Geometries</a><a id="3.-Collapsed-and-Lower-Dimensional-Geometries-1"></a><a class="docs-heading-anchor-permalink" href="#3.-Collapsed-and-Lower-Dimensional-Geometries" title="Permalink"></a></h2><p>A dimension is considered <strong>collapsed</strong> if its interval is degenerate (<span>$a = b$</span>). Bramble accurately tracks collapsed dimensions without heap allocations, enabling seamless modeling of lower-dimensional surfaces or interfaces embedded in higher-dimensional spaces:</p><pre><code class="language-julia hljs"># 1D line embedded in 2D space: x ∈ [0, 1], y = 0
+line_in_2d = interval(0.0, 1.0) × point(0.0)
+
+dim(line_in_2d)       # 2 (spatial embedding dimension)
+topo_dim(line_in_2d)  # 1 (topological dimension)
+
+# Check if individual dimensions are collapsed
+line_in_2d.collapsed[1]  # false (x-axis is extended)
+line_in_2d.collapsed[2]  # true  (y-axis is collapsed)</code></pre><hr/><h2 id="4.-Boundary-Markers-(markers-and-@markers)"><a class="docs-heading-anchor" href="#4.-Boundary-Markers-(markers-and-@markers)">4. Boundary Markers (<code>markers</code> and <code>@markers</code>)</a><a id="4.-Boundary-Markers-(markers-and-@markers)-1"></a><a class="docs-heading-anchor-permalink" href="#4.-Boundary-Markers-(markers-and-@markers)" title="Permalink"></a></h2><p>PDE boundary conditions require tagging specific domain boundaries (e.g., Dirichlet, Neumann, Robin, inflow/outflow).</p><h3 id="4.1-Boundary-Symbol-Conventions"><a class="docs-heading-anchor" href="#4.1-Boundary-Symbol-Conventions">4.1 Boundary Symbol Conventions</a><a id="4.1-Boundary-Symbol-Conventions-1"></a><a class="docs-heading-anchor-permalink" href="#4.1-Boundary-Symbol-Conventions" title="Permalink"></a></h3><p>For a <span>$D$</span>-dimensional domain, the standard boundary facets are:</p><ul><li><p><strong>1D</strong>: <code>:left</code>, <code>:right</code></p></li><li><p><strong>2D</strong>: <code>:bottom</code>, <code>:top</code>, <code>:left</code>, <code>:right</code></p></li><li><p><strong>3D</strong>: <code>:bottom</code>, <code>:top</code>, <code>:back</code>, <code>:front</code>, <code>:left</code>, <code>:right</code></p></li></ul><p>You can inspect standard boundary symbols using <a href="../../api/#Bramble.get_boundary_symbols"><code>get_boundary_symbols</code></a>:</p><pre><code class="language-julia hljs">get_boundary_symbols(2)
+# (:bottom, :top, :left, :right)</code></pre><h3 id="4.2-Creating-Markers"><a class="docs-heading-anchor" href="#4.2-Creating-Markers">4.2 Creating Markers</a><a id="4.2-Creating-Markers-1"></a><a class="docs-heading-anchor-permalink" href="#4.2-Creating-Markers" title="Permalink"></a></h3><p>Markers are defined as <code>:label =&gt; :identifier</code> pairs where <code>:identifier</code> can be a single boundary symbol, a tuple of symbols, or a boolean function:</p><pre><code class="language-julia hljs">geom = interval(0.0, 5.0) × interval(0.0, 1.0)
+
+# Define markers on the geometry:
+m = markers(
+    geom,
+    :inflow  =&gt; :left,
+    :outflow =&gt; :right,
+    :wall    =&gt; (:top, :bottom)
+)
+
+# Retrieve all defined labels
+collect(labels(m))
+# [:inflow, :outflow, :wall]</code></pre><hr/><h2 id="5.-Computational-Domains-(Domain)"><a class="docs-heading-anchor" href="#5.-Computational-Domains-(Domain)">5. Computational Domains (<code>Domain</code>)</a><a id="5.-Computational-Domains-(Domain)-1"></a><a class="docs-heading-anchor-permalink" href="#5.-Computational-Domains-(Domain)" title="Permalink"></a></h2><p>A <a href="../../internals/geometry/#Bramble.Domain"><code>Domain</code></a> joins a geometric set (<code>CartesianProduct</code>) with its boundary markers into a single unified object:</p><pre><code class="language-julia hljs"># 1. Define geometry
+geom = interval(0.0, 1.0) × interval(0.0, 1.0)
+
+# 2. Construct domain with inline boundary markers
+Ω = domain(
+    geom,
+    :dirichlet =&gt; (:left, :right),
+    :neumann   =&gt; (:top, :bottom)
+)
+
+# Or create a default domain marking all external boundaries as :boundary
+Ω_default = domain(geom)</code></pre><h3 id="5.1-Domain-Trait-Delegation"><a class="docs-heading-anchor" href="#5.1-Domain-Trait-Delegation">5.1 Domain Trait Delegation</a><a id="5.1-Domain-Trait-Delegation-1"></a><a class="docs-heading-anchor-permalink" href="#5.1-Domain-Trait-Delegation" title="Permalink"></a></h3><p><code>Domain</code> automatically delegates geometric and marker methods directly:</p><pre><code class="language-julia hljs">dim(Ω)            # 2
+topo_dim(Ω)       # 2
+tails(Ω)          # ((0.0, 1.0), (0.0, 1.0))
+center(Ω)         # (0.5, 0.5)
+(0.5, 0.5) ∈ Ω    # true
+
+# Access underlying set and markers
+set(Ω)            # CartesianProduct{2, Float64}
+markers(Ω)        # DomainMarkers
+collect(labels(Ω)) # [:dirichlet, :neumann]</code></pre><hr/><h2 id="6.-Practical-Examples"><a class="docs-heading-anchor" href="#6.-Practical-Examples">6. Practical Examples</a><a id="6.-Practical-Examples-1"></a><a class="docs-heading-anchor-permalink" href="#6.-Practical-Examples" title="Permalink"></a></h2><h3 id="Example-1:-1D-Rod-with-Mixed-Boundary-Conditions"><a class="docs-heading-anchor" href="#Example-1:-1D-Rod-with-Mixed-Boundary-Conditions">Example 1: 1D Rod with Mixed Boundary Conditions</a><a id="Example-1:-1D-Rod-with-Mixed-Boundary-Conditions-1"></a><a class="docs-heading-anchor-permalink" href="#Example-1:-1D-Rod-with-Mixed-Boundary-Conditions" title="Permalink"></a></h3><p>Consider heat conduction along a 1D rod <span>$\Omega = [0, L]$</span> with <span>$L = 10.0$</span>, fixed temperature at <span>$x = 0$</span> (<code>:left</code>) and insulated end at <span>$x = L$</span> (<code>:right</code>):</p><p><img src="../../assets/geometry_example1_1d_rod.svg" alt="1D Rod Domain"/></p><pre><code class="language-julia hljs">L = 10.0
+rod_geom = interval(0.0, L)
+
+# Define domain with Dirichlet left boundary and Neumann right boundary
+rod = domain(
+    rod_geom,
+    :dirichlet =&gt; :left,
+    :neumann   =&gt; :right
+)
+
+println(&quot;Domain: &quot;, rod)
+println(&quot;Dimension: &quot;, dim(rod))
+println(&quot;Active Labels: &quot;, collect(labels(rod)))</code></pre><hr/><h3 id="Example-2:-2D-Channel-Flow-Domain"><a class="docs-heading-anchor" href="#Example-2:-2D-Channel-Flow-Domain">Example 2: 2D Channel Flow Domain</a><a id="Example-2:-2D-Channel-Flow-Domain-1"></a><a class="docs-heading-anchor-permalink" href="#Example-2:-2D-Channel-Flow-Domain" title="Permalink"></a></h3><p>Consider fluid flow in a rectangular channel <span>$[0, 5] \times [0, 1]$</span> with an inflow on the left, outflow on the right, and no-slip walls on top and bottom:</p><p><img src="../../assets/geometry_example2_2d_channel.svg" alt="2D Channel Flow Domain"/></p><pre><code class="language-julia hljs">channel_geom = interval(0.0, 5.0) × interval(0.0, 1.0)
+
+channel = domain(
+    channel_geom,
+    :inflow  =&gt; :left,
+    :outflow =&gt; :right,
+    :wall    =&gt; (:top, :bottom)
+)
+
+@assert dim(channel) == 2
+@assert (2.5, 0.5) ∈ channel
+println(&quot;Channel labels: &quot;, collect(labels(channel)))</code></pre><hr/><h3 id="Example-3:-3D-Heat-Sink-Domain"><a class="docs-heading-anchor" href="#Example-3:-3D-Heat-Sink-Domain">Example 3: 3D Heat Sink Domain</a><a id="Example-3:-3D-Heat-Sink-Domain-1"></a><a class="docs-heading-anchor-permalink" href="#Example-3:-3D-Heat-Sink-Domain" title="Permalink"></a></h3><p>Consider heat dissipation across a 3D block <span>$[0, 2] \times [0, 2] \times [0, 1]$</span> subjected to a bottom heat source, top convective cooling, and insulated lateral walls:</p><p><img src="../../assets/geometry_example3_3d_heatsink.svg" alt="3D Heat Sink Domain"/></p><pre><code class="language-julia hljs">sink_geom = interval(0.0, 2.0) × interval(0.0, 2.0) × interval(0.0, 1.0)
+
+sink = domain(
+    sink_geom,
+    :heat_source =&gt; :bottom,
+    :convection  =&gt; :top,
+    :insulated   =&gt; (:left, :right, :front, :back)
+)
+
+println(&quot;3D Domain Center: &quot;, center(sink))
+println(&quot;Active Labels: &quot;, collect(labels(sink)))</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../">« Home</a><a class="docs-footer-nextpage" href="../../api/">API Reference »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Friday 28 August 2026 12:34">Friday 28 August 2026</span>. Using Julia version 1.14.0-DEV.3059.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
