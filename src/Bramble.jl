@@ -21,7 +21,7 @@ using Random: rand!
 
 using PrecompileTools: @setup_workload, @compile_workload
 using Preferences: @load_preference
-using Integrals: IntegralProblem, IntegralFunction, solve, HCubatureJL
+using QuadGK: gauss
 
 # Utilities
 export backend, metal_backend, vector, matrix, vector_type, matrix_type, backend_types, backend_eye, backend_zeros

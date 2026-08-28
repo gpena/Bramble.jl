@@ -321,4 +321,80 @@ end
 		@test mats_avg[1][2, 2] ≈ 2.0
 		@test mats_avg[2][2, 2] ≈ 5.0
 	end
+
+@testset "avgₕ quadrature" begin
+	import Bramble: _gauss_rule, AVG_QUAD_POINTS, values
+	using StaticArrays
+
+	Ωₕ = mesh(domain(interval(0.0, 1.0)), 40, false)   # non-uniform
+	W  = gridspace(Ωₕ)
+	u  = element(W)
+	f(x) = exp(-sum(x))
+
+	# exact cell averages of exp(-x) over [xᵢ₋₁ᐟ₂, xᵢ₊₁ᐟ₂]
+	xh = half_points(Ωₕ)
+	exact = [(exp(-xh[i]) - exp(-xh[i + 1])) / (xh[i + 1] - xh[i]) for i in 1:npoints(Ωₕ)]
+
+	@testset "converges in the number of points" begin
+		errs = map(1:4) do nq
+			avgₕ!(u, f; quad_points = nq)
+			maximum(abs, values(u) .- exact)
+		end
+		# The mesh is randomly non-uniform, so assert the trend and generous
+		# bounds rather than tight magic constants.
+		@test errs[1] > errs[2] > errs[3]
+		@test errs[1] < 1e-3             # 1 point is the midpoint rule
+		@test errs[2] < 1e-7
+		@test errs[4] < 1e-10
+
+		# the shipped default must reach machine precision on this integrand
+		avgₕ!(u, f)
+		@test maximum(abs, values(u) .- exact) < 1e-11
+
+		@test_throws ArgumentError avgₕ!(u, f; quad_points = 0)
+	end
+
+	@testset "rule is exact for polynomials of degree 2N-1" begin
+		# with N points the rule must integrate x^(2N-1) exactly
+		for nq in 1:4
+			deg = 2nq - 1
+			g(x) = sum(x)^deg
+			avgₕ!(u, g; quad_points = nq)
+			ex = [(xh[i + 1]^(deg + 1) - xh[i]^(deg + 1)) / ((deg + 1) * (xh[i + 1] - xh[i]))
+				  for i in 1:npoints(Ωₕ)]
+			@test maximum(abs, values(u) .- ex) < 1e-12
+		end
+	end
+
+	@testset "rule construction is free for IEEE floats" begin
+		for T in (Float64, Float32)
+			nodes, wts = _gauss_rule(Val(3), T)
+			@test nodes isa SVector{3,T}
+			@test wts isa SVector{3,T}
+			@test sum(wts) ≈ one(T)
+			# folded to a constant at compile time, so obtaining it allocates nothing
+			get_rule() = _gauss_rule(Val(3), T)
+			get_rule()
+			@test (@allocated get_rule()) == 0
+		end
+
+		# BigFloat keeps the run-time path: its precision is a run-time setting.
+		nb, wb = _gauss_rule(Val(3), BigFloat)
+		@test eltype(nb) === BigFloat
+		@test abs(sum(wb) - one(BigFloat)) < 1e-50
+	end
+
+	@testset "allocations do not grow with the grid" begin
+		function avg_bytes(n)
+			Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (n, n))
+			W2 = gridspace(Ω2); u2 = element(W2)
+			avgₕ!(u2, f); avgₕ!(u2, f)
+			return @allocated avgₕ!(u2, f)
+		end
+		small = avg_bytes(16)
+		large = avg_bytes(128)          # 64x the degrees of freedom
+		@test large <= 2 * small
+	end
+end
+
 end

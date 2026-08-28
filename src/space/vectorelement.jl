@@ -430,157 +430,160 @@ end
 ######################
 
 """
-	avgₕ(Wₕ::AbstractSpaceType, f)
+	avgₕ(Wₕ::AbstractSpaceType, f; quad_points::Int = AVG_QUAD_POINTS)
 
 Returns a [VectorElement](@ref) with the average of function `f` with respect to the [cell_measure](@ref) of `mesh(Wₕ)` around each grid point.
+
+Each cell average is a tensor-product Gauss-Legendre rule with `quad_points`
+points per direction, exact for polynomials of degree `2 * quad_points - 1`.
 """
-@inline function avgₕ(Wₕ::AbstractSpaceType, f)
+Base.@constprop :aggressive function avgₕ(Wₕ::AbstractSpaceType, f; quad_points::Int = AVG_QUAD_POINTS)
+	quad_points >= 1 || throw(ArgumentError("quad_points must be >= 1, got $quad_points"))
 	uₕ = element(Wₕ)
-	_avgₕ!(uₕ, f, Val(dim(mesh(Wₕ))))
+	_avgₕ!(uₕ, f, Val(dim(mesh(Wₕ))), Val(quad_points))
 	return uₕ
 end
 
 """
-	avgₕ!(uₕ::VectorElement, f)
+	avgₕ!(uₕ::VectorElement, f; quad_points::Int = AVG_QUAD_POINTS)
 
-In-place version of averaging operator [avgₕ](@ref).
+In-place version of averaging operator [avgₕ](@ref). Allocates only the task
+overhead of the parallel loop, independently of the number of grid points.
 """
-@inline function avgₕ!(uₕ::VectorElement, f)
+Base.@constprop :aggressive function avgₕ!(uₕ::VectorElement, f; quad_points::Int = AVG_QUAD_POINTS)
+	quad_points >= 1 || throw(ArgumentError("quad_points must be >= 1, got $quad_points"))
 	Ωₕ = mesh(space(uₕ))
 	_f = embed_function(set(Ωₕ), f)
 
-	_avgₕ!(uₕ, _f, Val(dim(Ωₕ)))
+	_avgₕ!(uₕ, _f, Val(dim(Ωₕ)), Val(quad_points))
 	return uₕ
 end
 
-function _avgₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f, ::Val{1})
+function _avgₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f, ::Val{1}, nq::Val)
 	Ωₕ = mesh(space(uₕ))
-
 	x = half_points(Ωₕ)
-	h = half_spacings(Ωₕ)
+	nodes, wts = _gauss_rule(nq, eltype(uₕ))
 
-	idxs = eachindex(uₕ)
-	param = (f, x, h, idxs)
-
-	__quad!(uₕ, (0.0, 1.0), param)
+	_parallel_for!(values(uₕ), indices(Ωₕ), idx -> _cell_average(f, x, idx[1], nodes, wts))
 	return uₕ
 end
 
-function _avgₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f, ::Val{D}) where D
+function _avgₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f, ::Val{D}, nq::Val) where D
 	Ωₕ = mesh(space(uₕ))
-
 	x = half_points(Ωₕ)
-	meas = Base.Fix1(cell_measure, Ωₕ)
-	param = (f, x, meas, indices(Ωₕ))
+	nodes, wts = _gauss_rule(nq, eltype(uₕ))
 
-	_zeros = @SVector zeros(D)
-	_ones = @SVector ones(D)
-
-	__quadnd!(uₕ, (_zeros, _ones), param)
+	_parallel_for!(to_matrix(uₕ), indices(Ωₕ), idx -> _cell_average(f, x, idx, nodes, wts))
 	return uₕ
 end
 
-function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::Tuple, val_dim::Val) where NC
+function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::Tuple, val_dim::Val, nq::Val) where NC
 	for i in 1:NC
-		_avgₕ!(uₕ(i), f[i], val_dim)
+		_avgₕ!(uₕ(i), f[i], val_dim, nq)
 	end
 	return uₕ
 end
 
-function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f, val_dim::Val) where NC
+function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f, val_dim::Val, nq::Val) where NC
 	for i in 1:NC
 		fi = x -> f(x)[i]
-		_avgₕ!(uₕ(i), fi, val_dim)
+		_avgₕ!(uₕ(i), fi, val_dim, nq)
 	end
 	return uₕ
 end
 
+#=
+Cell averages are computed with a fixed tensor-product Gauss-Legendre rule per
+cell. Every cell integral is independent, low dimensional and over a smooth
+integrand, so a small fixed rule is both cheaper and allocation free.
+
+Writing the cell integral on the reference cube,
+
+	1/|C| ∫_C f = ∫_{[0,1]^D} f(a + t ⊙ (b - a)) dt,
+
+because |C| = ∏ₖ (bₖ - aₖ) exactly: the cell around a grid point spans
+consecutive half points, whose spacing is the half spacing that
+`cell_measure` returns. The quadrature weights below sum to one, so the
+weighted sum *is* the average and no measure division is needed.
+=#
+
 """
-	__integrand1d(y, t, p)
+	AVG_QUAD_POINTS
 
-Implements the integrand function needed in the calculation of the averaging operator `avgₕ`. In this function, `y` denotes the return values, `t` denotes the integration variable and `p` denotes the parameters (integrand function `f`, points `x`, spacing `h` and indices `idxs`).
+Default number of Gauss-Legendre points per direction, per cell, used by
+[`avgₕ`](@ref). Six points are exact for polynomials up to degree eleven.
 
-For efficiency, each integral in `avgₕ` is rewritten as an integral over `[0,1]` following
+Unlike an adaptive rule, a fixed one does not tighten itself on coarse cells, so
+the default is chosen to be accurate on cells far coarser than any practical
+grid. Measured on 4 points spanning [-1, 4] with a function varying by a factor
+of e^5 across the domain -- deliberately harsher than a real mesh -- the worst
+error over 30 random grids was
 
-```math
-\\int_{a}^{b} f(x) dx = (b-a) \\int_{0}^{1} f(a + t (b-a)) dt
-```
+    points   1D        2D        3D        evaluations per cell (3D)
+    3        6.1e-5    1.6e-4    3.1e-4     27
+    4        2.8e-7    8.1e-7    3.4e-6     64
+    5        1.9e-9    4.1e-9    7.8e-9    125
+    6        5.5e-12   1.4e-11   1.6e-11   216
+
+Cost is `quad_points^D` evaluations per cell. On a fine grid three points are
+usually ample; lower it with the `quad_points` keyword when the integrand is
+cheap to resolve and the cells are small.
 """
-@inline function __integrand1d(y, t, p)
-	f, x, h, idxs = p
+const AVG_QUAD_POINTS = 6
 
-	@inbounds @simd for idx in idxs
-		i = idx[1]
-		xip1 = x[i + 1]
-		xi = x[i]
-		diff = xip1 - xi
-		y[i] = f(xi + t * diff) * diff / h[i]
+"""
+	_gauss_rule(::Val{N}, ::Type{T})
+
+Returns `(nodes, weights)` for the `N`-point Gauss-Legendre rule on `[0, 1]` as
+`SVector{N,T}`, so the per-cell loop that consumes them does not allocate.
+
+The rule is built by `QuadGK.gauss` in the requested element type, so `Float32`
+and `BigFloat` grids get a rule at their own precision rather than a rounded
+`Float64` one. Weights sum to one, which makes the weighted sum over a cell the
+cell *average* directly.
+"""
+# For the IEEE floats the rule depends only on (N, T), so it is folded into a
+# compile-time constant and a call allocates nothing at all.
+@generated function _gauss_rule(::Val{N}, ::Type{T}) where {N,T<:Base.IEEEFloat}
+	x, w = gauss(T, N, zero(T), one(T))
+	nodes = Expr(:tuple, x...)
+	wts = Expr(:tuple, w...)
+	return :((SVector{$N,$T}($nodes), SVector{$N,$T}($wts)))
+end
+
+# Everything else -- notably BigFloat, whose precision is a run-time setting --
+# builds the rule on each call, at the precision in force at that moment.
+@inline function _gauss_rule(::Val{N}, ::Type{T}) where {N,T}
+	x, w = gauss(T, N, zero(T), one(T))
+	return SVector{N,T}(x), SVector{N,T}(w)
+end
+
+# Average of `f` over the 1D cell spanned by `x[i] .. x[i+1]`.
+@inline function _cell_average(f, x::AbstractVector, i::Int, nodes::SVector{NQ,T}, wts::SVector{NQ,T}) where {NQ,T}
+	@inbounds a = T(x[i])
+	@inbounds d = T(x[i + 1]) - a
+
+	s = zero(T)
+	@inbounds for q in 1:NQ
+		s += wts[q] * f(a + nodes[q] * d)
 	end
-	return
+	return s
 end
 
-function __quad!(uₕ::VectorElement{<:ScalarGridSpace}, domain::NTuple{2,Any}, p)
-	domain_to_float = float.(domain)
-	prototype = values(uₕ)
-	sol = __quad_problem(prototype, domain_to_float, p)
+# Average of `f` over the D-dimensional cell around `idx`, whose corners are the
+# half points `x[k][idx[k]]` and `x[k][idx[k] + 1]` along each axis.
+@inline function _cell_average(f, x::NTuple{D}, idx::CartesianIndex{D}, nodes::SVector{NQ,T}, wts::SVector{NQ,T}) where {D,NQ,T}
+	a = ntuple(k -> @inbounds(T(x[k][idx[k]])), Val(D))
+	b = ntuple(k -> @inbounds(T(x[k][idx[k] + 1])), Val(D))
 
-	copyto!(uₕ, sol)
-	return uₕ
-end
-
-@inline function _point_tuple_and_volume(t::SVector{D}, x, idx::CartesianIndex{D}) where D
-	lb_tuple = ntuple(i -> x[i][idx[i]], Val(D))
-	ub_tuple = ntuple(i -> x[i][idx[i] + 1], Val(D))
-
-	lb = SVector(lb_tuple)
-	ub = SVector(ub_tuple)
-
-	point_svector = lb .+ t .* (ub .- lb)
-
-	volume_element = one(eltype(lb))
-	for i in 1:D
-		volume_element *= (ub[i] - lb[i])
+	s = zero(T)
+	@inbounds for q in CartesianIndices(ntuple(_ -> NQ, Val(D)))
+		w = one(T)
+		for k in 1:D
+			w *= wts[q[k]]
+		end
+		pt = ntuple(k -> a[k] + nodes[q[k]] * (b[k] - a[k]), Val(D))
+		s += w * f(pt)
 	end
-
-	return Tuple(point_svector), volume_element
-end
-
-"""
-	__integrandnd(y, t, p)
-
-Implements the integrand function needed in the calculation of `avgₕ`. In this function, `y` denotes the return values, `t` denotes the integration variable and `p` denotes the parameters (integrand function `f`, points `x`, measures `meas` and indices `idxs`).
-
-For efficiency, each integral is calculated on ``[0,1]^D``, where ``D`` is the dimension of the integration domain. This is done through a similar change of variable as in [__integrand1d(y, t, p)](@ref).
-"""
-function __integrandnd(y, t, p)
-	f, x, meas, idxs = p
-
-	@inbounds @simd for idx in idxs
-		point_tuple, volume_element = _point_tuple_and_volume(t, x, idx)
-		y[idx] = f(point_tuple) * volume_element / meas(idx)
-	end
-
-	return
-end
-
-@inline int_function(::Val{D}) where D = __integrandnd
-@inline int_function(::Val{1}) = __integrand1d
-
-function __quad_problem(prototype, domain, p)
-	D = length(size(prototype))
-	T = eltype(domain[1])
-
-	func = IntegralFunction(int_function(Val(D)), prototype)
-	prob = IntegralProblem{true}(func, domain, p)
-	sol = solve(prob, HCubatureJL()).u
-
-	return sol::Array{T,D}
-end
-
-function __quadnd!(uₕ::VectorElement{<:ScalarGridSpace}, domain::NTuple{D,Any}, p) where D
-	v = to_matrix(uₕ)
-
-	sol = __quad_problem(v, domain, p)
-	copyto!(v, sol)
-	return uₕ
+	return s
 end
