@@ -1,3 +1,8 @@
+# NOTE: this file is not currently included (see src/Bramble.jl) and still refers to
+# BRAMBLE_EXTENDED_PRECOMPILE, which was removed when the per-subsystem precompile
+# workloads were consolidated into src/precompile.jl. Fold these calls into the
+# workload there when space/ and form/ are re-enabled; the tiering no longer exists.
+
 
 @setup_workload begin
 	function poisson(d::Int)

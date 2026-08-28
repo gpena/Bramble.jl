@@ -37,3 +37,4 @@ build/
 research/
 test_code_warntype/
 .agents/
+LocalPreferences.toml
