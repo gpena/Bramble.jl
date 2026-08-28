@@ -65,9 +65,12 @@ if __bramble_with_unit_tests
 			include("mesh/meshes.jl")
 		end
 
-#=
 		@testset verbose=true "Grid spaces" begin
 			include("space/buffers.jl")
+		end
+
+#=
+		@testset verbose=true "Grid spaces (rest of space/, still disabled)" begin
 			include("space/gridspaces.jl")
 			include("space/vector_elements.jl")
 			include("space/matrix_elements.jl")

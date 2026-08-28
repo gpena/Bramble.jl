@@ -1,178 +1,146 @@
 #=
 # buffer.jl
 
-This file implements an efficient buffer management system for temporary vector allocation.
-
-## Problem
-
-In iterative numerical methods, temporary vectors are frequently needed for intermediate 
-calculations. Naive allocation creates garbage collection pressure and hurts performance:
+A pool of reusable vectors, so that iterative methods can take scratch space
+without allocating on every iteration.
 
 ```julia
+pool = simple_space_buffer(backend(), n; nbuffers = 2)
+
 for iter in 1:1000
-    temp = zeros(n)  # Allocates 1000 times! ❌
-    # ... use temp ...
+    with_buffer(pool) do tmp
+        # `tmp` is an n-element vector owned by the pool
+    end                       # returned to the pool automatically
 end
 ```
 
-## Solution
-
-The buffer pool pattern:
-1. Pre-allocate a pool of reusable vectors
-2. Lock a buffer when in use
-3. Unlock when done
-4. Reuse the same memory across iterations
+`with_buffer` is the preferred entry point: the buffer is released even if the
+body throws. The lower-level pair is also available when the lifetime cannot be
+expressed as a block,
 
 ```julia
-buffer_pool = simple_space_buffer(backend, n, nbuffers=5)
-for iter in 1:1000
-    temp = get_buffer(buffer_pool)  # Reuses memory! ✅
-    # ... use temp ...
-    release_buffer!(buffer_pool, temp)
-end
+tmp, key = vector_buffer(pool)
+# ...
+unlock!(pool, key)
 ```
 
-## Performance Impact
+but then releasing is the caller's responsibility.
 
-- **Without buffers**: ~1000 allocations, frequent GC pauses
-- **With buffers**: 5 allocations total, no GC during iteration
+A buffer is tracked by its integer key into `pool.buffer`; `pool.free` is a
+stack of keys that are *probably* available, used to avoid scanning the pool on
+every acquisition. `in_use` on the buffer itself remains the single source of
+truth, so a stale entry on the stack is simply skipped.
 
-This is especially important for:
-- Iterative solvers (CG, GMRES, etc.)
-- Time-stepping schemes
-- Newton's method and nonlinear solvers
+!!! warning
+    A pool is not thread-safe. Give each thread its own pool rather than
+    sharing one, or guard access with a lock.
 
-See also: [`VectorBuffer`](@ref), [`GridSpaceBuffer`](@ref), [`simple_space_buffer`](@ref)
+See also: [`VectorBuffer`](@ref), [`GridSpaceBuffer`](@ref), [`with_buffer`](@ref)
 =#
 
 """
 	$(TYPEDEF)
 
-A simple, mutable wrapper around a vector, designed to be part of a buffer pool to avoid repeated memory allocations during iterative computations.
+A vector together with a flag recording whether it is currently lent out.
 
-The `in_use` flag acts as a simple locking mechanism to track whether the buffer's data is currently being used in a computation.
+This is a plain wrapper, not an `AbstractVector`: the pool hands callers the
+underlying vector via [`vector`](@ref), so the buffer itself is never indexed.
 
 # Fields
 
 $(FIELDS)
 """
-mutable struct VectorBuffer{T,VT<:AbstractVector{T}} <: AbstractVector{T}
+mutable struct VectorBuffer{T,VT<:AbstractVector{T}}
 	"the underlying vector that holds the data."
 	vector::VT
-	"a boolean flag indicating if the buffer is currently locked (in use)."
+	"whether the buffer is currently lent out."
 	in_use::Bool
-end
-
-#=
-The following definitions make a [VectorBuffer](@ref) behave like a standard Julia vector.
-- `@forward` delegates common vector methods (like `size`, `length`, `iterate`) directly to the inner `vector` field.
-- `getindex` and `setindex!` are implemented to allow direct element access `u[i]`. This improves usability, allowing buffers to be used in place of regular vectors.
-=#
-@forward VectorBuffer.vector (Base.size, Base.length, Base.firstindex, Base.lastindex, Base.iterate, Base.eltype)
-
-@inline @propagate_inbounds function getindex(u::VectorBuffer, i)
-	@boundscheck checkbounds(u.vector, i)
-	return u.vector[i]
-end
-
-@inline @propagate_inbounds function setindex!(u::VectorBuffer, val, i)
-	@boundscheck checkbounds(u.vector, i)
-	u.vector[i] = val
-	return
 end
 
 """
 	vector_buffer(b::Backend, n::Int)
 
-Creates a single [VectorBuffer](@ref) of size `n`, associated with a computational backend `b`. The buffer is initialized as unlocked (`in_use = false`).
+Creates a single unlocked [`VectorBuffer`](@ref) of length `n` on backend `b`.
 """
 @inline vector_buffer(b::Backend, n::Int) = VectorBuffer{eltype(b),vector_type(b)}(vector(b, n), false)
 
 """
 	in_use(buffer::VectorBuffer)
 
-Checks if the [VectorBuffer](@ref) is currently marked as in use (locked).
+Returns `true` if the [`VectorBuffer`](@ref) is currently lent out.
 """
 @inline in_use(buffer::VectorBuffer) = buffer.in_use
 
 """
 	vector(buffer::VectorBuffer)
 
-Returns the underlying vector stored in the [VectorBuffer](@ref).
+Returns the vector held by the [`VectorBuffer`](@ref).
 """
 @inline vector(buffer::VectorBuffer) = buffer.vector
 
 """
 	lock!(buffer::VectorBuffer)
 
-Marks the [VectorBuffer](@ref) as currently in use (locks it).
+Marks the [`VectorBuffer`](@ref) as lent out.
 """
 @inline lock!(buffer::VectorBuffer) = (buffer.in_use = true; return)
 
 """
 	unlock!(buffer::VectorBuffer)
 
-Marks the [VectorBuffer](@ref) as available (unlocks it).
+Marks the [`VectorBuffer`](@ref) as available.
 """
 @inline unlock!(buffer::VectorBuffer) = (buffer.in_use = false; return)
 
 """
 	BufferType{T,VectorType}
 
-Type alias for an ordered dictionary that maps integer keys to [VectorBuffer](@ref) instances.
+The storage backing a [`GridSpaceBuffer`](@ref): a `Vector` of
+[`VectorBuffer`](@ref)s indexed by their integer key.
 
-This is the underlying storage container for [GridSpaceBuffer](@ref), allowing efficient
-lookup and iteration over the buffer pool.
-
-# Type Parameters
-- `T`: Element type of the vectors (e.g., `Float64`)
-- `VectorType`: Type of the underlying vector container (e.g., `Vector{Float64}`)
-
-# Example
-```julia
-buffer_dict = BufferType{Float64, Vector{Float64}}()
-buffer_dict[1] = VectorBuffer(zeros(100), false)
-```
-
-See also: [`VectorBuffer`](@ref), [`GridSpaceBuffer`](@ref)
+# Type parameters
+- `T`: element type of the vectors (e.g. `Float64`).
+- `VectorType`: the vector container (e.g. `Vector{Float64}`).
 """
 const BufferType{T,VectorType} = Vector{VectorBuffer{T,VectorType}}
 
 """
 	$(TYPEDEF)
 
-Manages a pool of reusable [VectorBuffer](@ref)s for a specific grid size and backend.
-
-This structure is the core of the buffer management system. It holds a `Vector` of [VectorBuffer](@ref)s, allowing temporary vectors to be efficiently reused, thus minimizing memory allocation during iterative computations.
+A pool of reusable [`VectorBuffer`](@ref)s, all of length `npts`, on a common backend.
 
 # Fields
 
 $(FIELDS)
 """
 struct GridSpaceBuffer{BT,VT,T}
-	"a `Vector` containing each [VectorBuffer](@ref) in the pool."
+	"every [`VectorBuffer`](@ref) in the pool, indexed by its key."
 	buffer::BufferType{T,VT}
-	"the computational backend associated with the buffers."
+	"a stack of keys that are probably free; `in_use` remains authoritative."
+	free::Vector{Int}
+	"the backend the buffers are allocated on."
 	backend::BT
-	"the size (`npts`) of the vectors managed by this buffer pool."
+	"the length of every vector in the pool."
 	npts::Int
 end
 
 """
-	simple_space_buffer(b::Backend, npts::Int; nbuffers::Int = 0)
+	simple_space_buffer(b::Backend, npts::Int; nbuffers::Int = 1)
 
-Creates a [GridSpaceBuffer](@ref) pool, optionally pre-allocating a number of buffers. "Warming up" the pool by pre-allocating buffers can improve performance on the first few iterations.
+Creates a [`GridSpaceBuffer`](@ref) of `npts`-element vectors on backend `b`,
+pre-allocating `nbuffers` of them.
+
+The pool grows on demand, so `nbuffers` is only a warm start.
 """
 function simple_space_buffer(b::Backend, npts::Int; nbuffers::Int = 1)
-	# Ensure a non-negative number of buffers is requested.
-	@assert nbuffers >= 0 "Number of buffers must be non-negative."
+	nbuffers >= 0 || throw(ArgumentError("nbuffers must be non-negative, got $nbuffers."))
+	npts >= 0 || throw(ArgumentError("npts must be non-negative, got $npts."))
 
-	# Determine the concrete types for the buffer system from the backend.
 	T, VT, _, BT = backend_types(b)
-	# Create the main buffer pool structure with an empty vector.
-	space_buffer = GridSpaceBuffer{BT,VT,T}(BufferType{T,VT}(), b, npts)
+	space_buffer = GridSpaceBuffer{BT,VT,T}(BufferType{T,VT}(), Int[], b, npts)
 
-	# Pre-allocate the requested number of buffers.
+	sizehint!(space_buffer.buffer, nbuffers)
+	sizehint!(space_buffer.free, nbuffers)
 	for _ in 1:nbuffers
 		add_buffer!(space_buffer)
 	end
@@ -183,84 +151,108 @@ end
 """
 	add_buffer!(space_buffer::GridSpaceBuffer)
 
-Dynamically adds one new, available [VectorBuffer](@ref) to the pool. This is called when a request is made for a buffer but all existing ones are in use.
+Appends one new, unlocked [`VectorBuffer`](@ref) to the pool and returns
+`(vector, key)` for it.
 """
 function add_buffer!(space_buffer::GridSpaceBuffer)
-	(; buffer, backend, npts) = space_buffer
+	(; buffer, free, backend, npts) = space_buffer
+
 	buf = vector_buffer(backend, npts)
 	push!(buffer, buf)
-	return vector(buf), length(buffer)
+	key = length(buffer)
+	push!(free, key)
+
+	return vector(buf), key
 end
 
 """
 	nbuffers(space_buffer::GridSpaceBuffer)
 
-Returns the total number of buffers (both locked and unlocked) currently in the pool.
+Returns the number of buffers in the pool, locked and unlocked alike.
 """
-@inline function nbuffers(space_buffer::GridSpaceBuffer)
-	(; buffer) = space_buffer
-
-	return length(buffer)
-end
+@inline nbuffers(space_buffer::GridSpaceBuffer) = length(space_buffer.buffer)
 
 """
 	lock!(space_buffer::GridSpaceBuffer, i)
 
-Locks the `i`-th buffer in the pool and returns the underlying vector for immediate use.
+Locks the `i`-th buffer and returns its vector.
+
+The key is left on the free stack and skipped when it next comes up, so this
+stays O(1).
 """
 @inline function lock!(space_buffer::GridSpaceBuffer, i)
-	(; buffer) = space_buffer
-	b = buffer[i]
-
+	b = space_buffer.buffer[i]
 	lock!(b)
-	# Return the vector for convenient chaining, e.g., `my_vec = lock!(pool, 1)`.
 	return vector(b)
 end
 
 """
 	unlock!(space_buffer::GridSpaceBuffer, i)
 
-Unlocks the `i`-th buffer in the pool, marking it as available for reuse.
+Releases the `i`-th buffer back to the pool.
+
+Releasing a buffer that is already free is a no-op, so a double release cannot
+put the same key on the free stack twice.
 """
 @inline function unlock!(space_buffer::GridSpaceBuffer, i)
-	(; buffer) = space_buffer
-	b = buffer[i]
-
+	b = space_buffer.buffer[i]
+	in_use(b) || return          # already free: nothing to do
 	unlock!(b)
+	push!(space_buffer.free, i)
 	return
 end
 
 """
 	vector_buffer(space_buffer::GridSpaceBuffer)
 
-Retrieves an available vector from the buffer pool.
-
-This is the main function for acquiring a temporary vector. It first searches for any unlocked buffer. If all existing buffers are locked, it transparently allocates a new one and adds it to the pool. The function returns the vector itself and its integer key, which must be used later to `unlock!` it. The buffer is marked as locked upon retrieval.
+Takes a free vector from the pool, growing it if every buffer is in use, and
+returns `(vector, key)`. The buffer is locked on return; pass `key` to
+[`unlock!`](@ref) when finished, or prefer [`with_buffer`](@ref), which releases
+it for you.
 """
 function vector_buffer(space_buffer::GridSpaceBuffer)
-	(; buffer) = space_buffer
+	(; buffer, free) = space_buffer
 
-	# Search for the first available (unlocked) buffer.
-	key_free_buffer = 0
-	for (key, buf) in enumerate(buffer)
-		if !in_use(buf)
-			key_free_buffer = key
-			break # Stop searching once a free one is found.
+	# Pop candidate keys until one is genuinely free; entries can be stale
+	# because lock!(pool, i) does not remove i from the stack.
+	while !isempty(free)
+		key = pop!(free)
+		b = buffer[key]
+		if !in_use(b)
+			lock!(b)
+			return vector(b), key
 		end
 	end
 
-	# Determine which key to lock.
-	key_to_lock = 0
-	if key_free_buffer == 0
-		# Case 1: No free buffers were found. The pool must grow.
-		# Add a new buffer to the pool.
-		_, new_key = add_buffer!(space_buffer)
-		key_to_lock = new_key
-	else
-		# Case 2: A free buffer was found.
-		key_to_lock = key_free_buffer
-	end
+	# Everything is in use, so grow the pool. add_buffer! pushes the new key
+	# onto the free stack; take it straight back off.
+	_, key = add_buffer!(space_buffer)
+	pop!(free)
+	lock!(buffer[key])
 
-	# Lock the chosen buffer and return it along with its key.
-	return lock!(space_buffer, key_to_lock), key_to_lock
+	return vector(buffer[key]), key
+end
+
+"""
+	with_buffer(f, space_buffer::GridSpaceBuffer)
+
+Calls `f(v)` with a vector borrowed from the pool and returns its result,
+releasing the buffer afterwards even if `f` throws.
+
+# Examples
+
+```julia
+total = with_buffer(pool) do tmp
+    tmp .= 1.0
+    sum(tmp)
+end
+```
+"""
+function with_buffer(f, space_buffer::GridSpaceBuffer)
+	v, key = vector_buffer(space_buffer)
+	try
+		return f(v)
+	finally
+		unlock!(space_buffer, key)
+	end
 end

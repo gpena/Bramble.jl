@@ -86,8 +86,9 @@ include("mesh/pretty_print.jl")
 include("mesh/mesh1d.jl")
 include("mesh/meshnd.jl")
 
-#=
 include("space/buffer.jl")
+
+#=
 include("space/gridspace.jl")
 include("space/scalar_gridspace.jl")
 include("space/vector_gridspace.jl")
