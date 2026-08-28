@@ -58,7 +58,6 @@ set
 ### Markers and Domains
 
 ```@docs
-@markers
 markers
 domain
 labels

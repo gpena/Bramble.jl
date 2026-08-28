@@ -61,7 +61,7 @@ using StaticArrays
 		@test process_identifier(I1D, func1) isa BrambleFunction
 	end
 
-	@testset "Create Markers & @markers Macro" begin
+	@testset "Create Markers" begin
 		# Empty call
 		dm_empty = markers(I1D)
 		@test dm_empty isa DomainMarkers
@@ -82,11 +82,6 @@ using StaticArrays
 		@test dm_mixed isa DomainMarkers
 		@test length(dm_mixed) == 6
 		@test !isempty(dm_mixed)
-
-		# @markers macro
-		dm_macro = @markers(I2D, :left => :left, :top => :top)
-		@test dm_macro isa DomainMarkers
-		@test length(symbols(dm_macro)) == 2
 
 		# Duplicate labels (different identifiers kept)
 		dm_dup_label = markers(I1D, :boundary => :left, :boundary => :right)
@@ -278,5 +273,95 @@ using StaticArrays
 		show(io, Ω_empty)
 		str_d_empty = String(take!(io))
 		@test occursin("(none)", str_d_empty)
+
+		# 2D domain with markers — show (hits n_tup path)
+		Ω_2d = domain(I2D, :wall => (:top, :bottom))
+		show(io, Ω_2d)
+		str_2d = String(take!(io))
+		@test occursin("Domain", str_2d)
+		@test occursin("Markers:", str_2d)
+
+		# 3D domain — triggers the D>1 branch in Base.show
+		Ω_3d = domain(I3D, :dirichlet => :left)
+		show(io, Ω_3d)
+		str_3d = String(take!(io))
+		@test occursin("z:", str_3d)
+
+		# 3D domain with collapsed dimension — triggers topodim < D branch
+		I3D_c = interval(0.0, 1.0) × interval(0.0, 1.0) × point(0.5)
+		Ω_3d_c = domain(I3D_c)
+		show(io, Ω_3d_c)
+		str_3d_c = String(take!(io))
+		@test occursin("Topological dimension", str_3d_c)
+	end
+
+	@testset "Domain delegation (center, tails, is_collapsed, projection, in)" begin
+		Ω_1d = domain(interval(0.0, 4.0))
+		Ω_2d = domain(interval(0.0, 2.0) × interval(1.0, 3.0))
+
+		# center (line 204)
+		@test center(Ω_1d)[1] ≈ 2.0
+		@test center(Ω_2d)[1] ≈ 1.0 && center(Ω_2d)[2] ≈ 2.0
+
+		# in (line 211)
+		@test 2.0 ∈ Ω_1d
+		@test 5.0 ∉ Ω_1d
+		@test (1.0, 2.0) ∈ Ω_2d
+		@test (5.0, 2.0) ∉ Ω_2d
+
+		# tails (lines 218-219)
+		@test tails(Ω_1d) == (0.0, 4.0)
+		@test tails(Ω_1d, 1) == (0.0, 4.0)
+		@test tails(Ω_2d) == ((0.0, 2.0), (1.0, 3.0))
+		@test tails(Ω_2d, 1) == (0.0, 2.0)
+		@test tails(Ω_2d, 2) == (1.0, 3.0)
+
+		# is_collapsed on 1D Domain (line 226)
+		@test !is_collapsed(Ω_1d)
+		Ω_pt = domain(point(0.5))
+		@test is_collapsed(Ω_pt)
+
+		# projection (line 235)
+		@test projection(Ω_2d, 1) == interval(0.0, 2.0)
+		@test projection(Ω_2d, 2) == interval(1.0, 3.0)
+
+		# Domain(i) call — delegates to CartesianProduct(i) returning (min, max) tuple (line 228)
+		@test Ω_2d(1) == (0.0, 2.0)
+		@test Ω_2d(2) == (1.0, 3.0)
+
+		# get_boundary_symbols on Domain (line 246)
+		@test get_boundary_symbols(Ω_1d) == (:left, :right)
+		@test get_boundary_symbols(Ω_2d) == (:bottom, :top, :left, :right)
+
+		# get_boundary_symbols on Domain type (line 254)
+		@test get_boundary_symbols(typeof(Ω_1d)) == (:left, :right)
+		@test get_boundary_symbols(typeof(Ω_2d)) == (:bottom, :top, :left, :right)
+	end
+
+	@testset "EvaluatedDomainMarkers labels and _evaluate_marker_at_time fallback" begin
+		using Bramble: EvaluatedDomainMarkers, label_identifiers, label_symbols, label_tuples, label_conditions
+
+		I_time = interval(0.0, 1.0)
+		I_space = interval(0.0, 1.0)
+
+		# markers with a time-independent condition (non-applicable at time t → fallback line 258)
+		# Use a static boolean function — applicable(f, t) will be false since it takes (x::Float64)
+		staticfunc = x -> x > 0.5
+		dm = markers(I_space, :region => staticfunc)
+		edm = dm(0.5)  # evaluates time-dependent markers; condition not applicable to scalar t
+		@test edm isa EvaluatedDomainMarkers
+
+		# labels on EvaluatedDomainMarkers (line 263)
+		lbls = collect(labels(edm))
+		@test :region ∈ lbls
+
+		# label_symbols, label_tuples, label_conditions on EvaluatedDomainMarkers
+		dm2 = markers(I_space, :left => :left, :wall => (:top, :bottom), :region => staticfunc)
+		edm2 = dm2(0.0)
+		@test :left ∈ collect(label_symbols(edm2))
+		@test :wall ∈ collect(label_tuples(edm2))
+		@test :region ∈ collect(label_conditions(edm2))
+		@test length(edm2) == 3
+		@test !isempty(edm2)
 	end
 end

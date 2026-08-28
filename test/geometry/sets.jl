@@ -319,4 +319,129 @@ using StaticArrays
 		str_R2c = String(take!(io_det))
 		@test occursin("topological dim 1", str_R2c)
 	end
+
+	@testset "Point containment — AbstractVector and fallback" begin
+		I = interval(0.0, 1.0)
+		R2 = interval(0.0, 2.0) × interval(-1.0, 1.0)
+
+		# AbstractVector path (line 220)
+		@test [0.5] ∈ I
+		@test [1.5] ∉ I
+		@test [0.5, 0.0] ∈ R2
+		@test [2.5, 0.0] ∉ R2
+		@test [0.5, 0.0, 0.0] ∉ R2  # wrong dimension → false (line 220 length check)
+
+		# Fallback dispatch for non-numeric, non-tuple input (line 221)
+		@test ("hello" ∈ I) == false
+		@test (:sym ∈ R2) == false
+	end
+
+	@testset "Pretty-print helpers" begin
+		using Bramble: PrettyPrinter, with_indent, print_indent, print_colored, println_colored,
+					  print_header, print_section_header, print_subsection_header,
+					  print_key_value, print_label, print_value, print_interval,
+					  print_dimension_info, print_empty_message, print_marker_summary,
+					  print_labels_list, get_dimension_label
+
+		io = IOBuffer()
+		pp0 = PrettyPrinter(io, false, 0)
+		pp1 = with_indent(pp0, 1)
+		pp2 = with_indent(pp0, 2)
+
+		# print_indent: level 0 → no output
+		print_indent(pp0)
+		@test isempty(String(take!(io)))
+
+		# print_indent: level 1 → two spaces
+		print_indent(pp1)
+		@test String(take!(io)) == "  "
+
+		# print_colored: default color
+		print_colored(pp0, "hello")
+		@test occursin("hello", String(take!(io)))
+
+		# print_colored: with color
+		print_colored(pp0, "world"; color = :blue)
+		@test occursin("world", String(take!(io)))
+
+		# println_colored
+		println_colored(pp0, "line"; color = :green)
+		@test occursin("line", String(take!(io)))
+
+		# print_header without type_info
+		print_header(pp0, "Header")
+		@test occursin("Header", String(take!(io)))
+
+		# print_header with type_info
+		print_header(pp0, "Title", "Float64")
+		str = String(take!(io))
+		@test occursin("Title", str) && occursin("Float64", str)
+
+		# print_section_header
+		print_section_header(pp0, "Section:")
+		@test occursin("Section:", String(take!(io)))
+
+		# print_subsection_header without count
+		print_subsection_header(pp0, "Sub", 0)
+		@test occursin("Sub", String(take!(io)))
+
+		# print_subsection_header with count
+		print_subsection_header(pp0, "Sub", 3)
+		@test occursin("(3)", String(take!(io)))
+
+		# print_key_value
+		print_key_value(pp0, "key", "val")
+		str = String(take!(io))
+		@test occursin("key", str) && occursin("val", str)
+
+		# print_label
+		print_label(pp0, :boundary)
+		@test occursin(":boundary", String(take!(io)))
+
+		# print_value
+		print_value(pp0, 3.14)
+		@test occursin("3.14", String(take!(io)))
+
+		# print_interval — normal
+		print_interval(pp0, 0.0, 1.0)
+		@test occursin("0.0, 1.0", String(take!(io)))
+
+		# print_interval — collapsed
+		print_interval(pp0, 0.5, 0.5; collapsed = true)
+		str = String(take!(io))
+		@test occursin("collapsed", str)
+
+		# print_dimension_info
+		print_dimension_info(pp0, "x", 0.0, 1.0, false)
+		str = String(take!(io))
+		@test occursin("x", str) && occursin("0.0", str)
+
+		# print_empty_message
+		print_empty_message(pp0)
+		@test occursin("none", String(take!(io)))
+
+		# print_marker_summary — all types
+		print_marker_summary(pp0, 2, 1, 0)
+		str = String(take!(io))
+		@test occursin("2 symbols", str) && occursin("1 tuple", str)
+
+		# print_marker_summary — single marker (singular)
+		print_marker_summary(pp0, 1, 0, 0)
+		@test occursin("1 marker", String(take!(io)))
+
+		# print_marker_summary — condition only
+		print_marker_summary(pp0, 0, 0, 2)
+		@test occursin("2 functions", String(take!(io)))
+
+		# print_labels_list
+		print_labels_list(pp0, [:a, :b, :c])
+		str = String(take!(io))
+		@test occursin(":a", str) && occursin(":b", str) && occursin(":c", str)
+
+		# get_dimension_label
+		@test get_dimension_label(1) == "x"
+		@test get_dimension_label(2) == "y"
+		@test get_dimension_label(3) == "z"
+		@test get_dimension_label(7) == "x7"  # beyond precomputed table
+	end
 end

@@ -10,7 +10,7 @@ In this tutorial, you will learn how to:
 1. Construct 1D intervals and multi-dimensional [`CartesianProduct`](@ref)s.
 2. Handle collapsed (lower-dimensional) geometries.
 3. Query spatial and topological dimensions, bounds, centers, and containment.
-4. Define boundary labels and markers with [`markers`](@ref) and [`@markers`](@ref).
+4. Define boundary labels and markers with [`markers`](@ref).
 5. Build complete computational [`Domain`](@ref)s ready for mesh generation and PDE solvers.
 
 ---
@@ -147,6 +147,7 @@ Markers are defined as `:label => identifier` pairs where `identifier` can be a 
 geom = interval(0.0, 5.0) × interval(0.0, 1.0)
 
 # 1. Using the markers() constructor
+# Define markers using pairs of :label => boundary_spec
 m1 = markers(
     geom,
     :inflow  => :left,
@@ -154,16 +155,8 @@ m1 = markers(
     :wall    => (:top, :bottom)
 )
 
-# 2. Using the @markers macro for concise syntax
-m2 = @markers(
-    geom,
-    :inflow  => :left,
-    :outflow => :right,
-    :wall    => (:top, :bottom)
-)
-
 # Retrieve all defined labels
-collect(labels(m2))
+collect(labels(m1))
 # [:inflow, :outflow, :wall]
 ```
 
@@ -173,7 +166,7 @@ You can also define internal or geometric subset markers using boolean condition
 
 ```julia
 # Condition-based marker: tag a subsection of the boundary or domain
-m_cond = @markers(
+m_cond = markers(
     geom,
     :inflow    => :left,
     :hot_spot  => (p -> p[1] > 2.5 && p[2] ≈ 0.0)
@@ -181,7 +174,7 @@ m_cond = @markers(
 
 # Time-dependent markers:
 time_span = interval(0.0, 10.0)
-m_time = @markers(
+m_time = markers(
     geom,
     time_span,
     :moving_source => ((p, t) -> norm(p .- [t, 0.5]) < 0.2)

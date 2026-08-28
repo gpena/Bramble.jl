@@ -275,15 +275,6 @@ Evaluates a time-dependent [`DomainMarkers`](@ref) object at a specific time `t`
 (dm::DomainMarkers)(t::Number) = EvaluatedDomainMarkers(dm, t)
 
 """
-	@markers(space_set, [time_set], pairs...)
-
-Convenience macro for constructing a [`DomainMarkers`](@ref) instance.
-"""
-macro markers(args...)
-	return esc(:(markers($(args...))))
-end
-
-"""
 	Base.show(io::IO, m::Marker)
 
 Custom display for [`Marker`](@ref) objects.

@@ -224,3 +224,69 @@ using StaticArrays
 		@test occursin("time-dependent", String(take!(io)))
 	end
 end
+@testset "BrambleFunction: additional coverage" begin
+	using Bramble: _get_args_type, argstype, codomaintype, BrambleFunction, CartesianProduct
+	using Bramble: FunctionWrapper  # re-accessed via Bramble internals
+
+	Ω1 = interval(0.0, 1.0)
+	Ω2 = interval(0.0, 1.0) × interval(0.0, 1.0)
+	dom = domain(Ω1)
+
+	@testset "_get_args_type: Type-level dispatch (lines 36-40)" begin
+		@test _get_args_type(CartesianProduct{1,Float64}) === Float64
+		@test _get_args_type(CartesianProduct{2,Float64}) === NTuple{2,Float64}
+		@test _get_args_type(typeof(dom)) === Float64  # Domain{CartesianProduct{1,Float64}}
+		@test _get_args_type(domain(Ω2)) === NTuple{2,Float64}  # Domain instance dispatch
+	end
+
+	@testset "argstype / codomaintype on Type (lines 141-143, 151-153)" begin
+		# Construct via embed_function and access wrapped FunctionWrapper internals
+		f1 = x -> 2.0 * x
+		bf1 = embed_function(Ω1, f1)
+
+		# FunctionWrapper with type-level dispatch (lines 142, 152)
+		@test argstype(typeof(bf1.wrapped)) === Float64
+		@test codomaintype(typeof(bf1.wrapped)) === Float64
+
+		# argstype/codomaintype on instance (covered by existing tests; add type-level)
+		@test argstype(bf1.wrapped) === Float64
+		@test codomaintype(bf1.wrapped) === Float64
+	end
+
+	@testset "embed_function on Domain and SVector dispatch (lines 72-85)" begin
+		# 2D SVector dispatch (line 100)
+		f2 = x -> x[1] + x[2]
+		bf2 = embed_function(Ω2, f2)
+		@test bf2(SVector(0.3, 0.7)) ≈ 1.0
+
+		# 2D SVector with different element type (line 101)
+		@test bf2(SVector{2,Float32}(0.3f0, 0.7f0)) ≈ 1.0f0
+
+		# AbstractVector for 2D (line 102)
+		@test bf2([0.5, 0.5]) ≈ 1.0
+	end
+
+	@testset "BrambleFunction show with time-dependent" begin
+		f1(x) = 2.0 * x
+		f1t(x, t) = (1.0 + t) * x
+		I = interval(0.0, 2.0)
+		bf1t = embed_function(Ω1, I, f1t)
+
+		io = IOBuffer()
+		show(io, bf1t)
+		str = String(take!(io))
+		@test occursin("time-dependent", str)
+
+		show(IOContext(io, :compact => true), bf1t)
+		@test occursin("time-dependent", String(take!(io)))
+	end
+
+	@testset "_get_domains parsing tests (lines 72-87)" begin
+		using Bramble: _get_domains
+		@test _get_domains(:Ω) == (:Ω, nothing)
+		@test _get_domains(:(Ω × I)) == (:Ω, :I)
+		@test _get_domains(:(domain(X))) == (:(domain(X)), nothing)
+		@test_throws ErrorException _get_domains(:(a = 1))
+		@test_throws ErrorException _get_domains(123)
+	end
+end

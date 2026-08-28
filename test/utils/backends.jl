@@ -280,3 +280,51 @@ const MockGPUMatrix{T} = MockGPUArray{T,2}
 		@test occursin("Backend{Float64}", String(take!(io)))
 	end
 end
+@testset "Backend: additional coverage" begin
+	@testset "vector_type / matrix_type on Type (lines 19, 27)" begin
+		BE = Backend{Vector{Float64}, SparseMatrixCSC{Float64,Int}}
+		@test vector_type(BE) === Vector{Float64}
+		@test matrix_type(BE) === SparseMatrixCSC{Float64,Int}
+	end
+
+	@testset "generic vector/matrix fallback (lines 81-91, 102-112)" begin
+		struct SizeConstructibleVec{T} <: AbstractVector{T}
+			data::Vector{T}
+		end
+		SizeConstructibleVec{T}(n::Integer) where T = SizeConstructibleVec{T}(zeros(T, n))
+		Base.size(v::SizeConstructibleVec) = size(v.data)
+		Base.getindex(v::SizeConstructibleVec, i) = v.data[i]
+
+		struct SizeConstructibleMat{T} <: AbstractMatrix{T}
+			data::Matrix{T}
+		end
+		SizeConstructibleMat{T}(n::Integer, m::Integer) where T = SizeConstructibleMat{T}(zeros(T, n, m))
+		Base.size(v::SizeConstructibleMat) = size(v.data)
+		Base.getindex(v::SizeConstructibleMat, i, j) = v.data[i,j]
+
+		be_custom = backend(vector_type = SizeConstructibleVec{Float64},
+		                    matrix_type = SizeConstructibleMat{Float64})
+
+		v = vector(be_custom, 5)
+		@test v isa SizeConstructibleVec{Float64}
+		@test length(v) == 5
+
+		M = matrix(be_custom, 3, 4)
+		@test M isa SizeConstructibleMat{Float64}
+		@test size(M) == (3, 4)
+
+		# Types that fail both undef and size constructor -> trigger _throw_vector_error & _throw_matrix_error
+		struct UnconstructibleVec{T} <: AbstractVector{T} end
+		struct UnconstructibleMat{T} <: AbstractMatrix{T} end
+
+		be_fail = backend(vector_type = UnconstructibleVec{Float64},
+		                  matrix_type = UnconstructibleMat{Float64})
+		@test_throws ErrorException vector(be_fail, 5)
+		@test_throws ErrorException matrix(be_fail, 3, 4)
+	end
+
+	@testset "metal_backend stub error" begin
+		@test_throws ErrorException metal_backend()
+		@test_throws ErrorException metal_backend(Float32)
+	end
+end

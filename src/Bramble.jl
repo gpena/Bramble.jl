@@ -21,7 +21,7 @@ export backend, metal_backend, vector, matrix, vector_type, matrix_type, backend
 export BrambleFunction, embed_function, has_time
 
 # domain/interval handling functions
-export box, interval, ×, dim, topo_dim, tails, point, cartesian_product, center, projection, is_collapsed, point_type, get_boundary_symbols, @markers, set
+export box, interval, ×, dim, topo_dim, tails, point, cartesian_product, center, projection, is_collapsed, point_type, get_boundary_symbols, set
 export domain, markers, labels
 #=
 # Mesh handling
