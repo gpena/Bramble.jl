@@ -1,28 +1,27 @@
 """
-	struct Backend{VT<:AbstractVector,MT<:AbstractMatrix}
+	$(TYPEDEF)
 
-A structure containing types and configuration for backend linear algebra objects. This structure has no fields, only types.
+A singleton structure containing type-level configuration for backend linear algebra objects.
+This structure has no fields, only type parameters `VT` and `MT`.
 
 This allows specifying the desired concrete types for vectors and matrices
 (e.g., dense `Vector`, sparse `SparseVector`, different element types like
-`Float32` or `Float64`).
+`Float32`, `Float64`, or custom GPU arrays).
 """
 struct Backend{VT<:AbstractVector,MT<:AbstractMatrix} end
 
 """
-	vector_type(backend::Backend)
+	$(SIGNATURES)
 
-Returns the vector type (`VT`) associated with the given [Backend](@ref) instance or type.
-This function is useful for extracting the underlying vector type used by a specific backend.
+Returns the vector type (`VT`) associated with the given [`Backend`](@ref) instance or type.
 """
 @inline vector_type(::Backend{VT,MT}) where {VT,MT} = VT
 @inline vector_type(::Type{<:Backend{VT,MT}}) where {VT,MT} = VT
 
 """
-	matrix_type(backend::Backend)
+	$(SIGNATURES)
 
-Returns the matrix type (`MT`) associated with the given [Backend](@ref) instance or type.
-This function is useful for extracting the underlying matrix type used by a specific backend.
+Returns the matrix type (`MT`) associated with the given [`Backend`](@ref) instance or type.
 """
 @inline matrix_type(::Backend{VT,MT}) where {VT,MT} = MT
 @inline matrix_type(::Type{<:Backend{VT,MT}}) where {VT,MT} = MT
@@ -30,11 +29,11 @@ This function is useful for extracting the underlying matrix type used by a spec
 """
 	$(SIGNATURES)
 
-Create a linear algebra [Backend](@ref) using keyword arguments.
+Creates a linear algebra [`Backend`](@ref) using keyword arguments.
 
-Defaults to standard dense `Float64` vectors and `SparseMatrixCSC` matrices, ensuring the provided
-`vector_type` and `matrix_type` are constructible with the intended dimensions
-via standard patterns like `T(undef, dims...)` or `T(dims...)`.
+Defaults to standard dense `Float64` vectors and `SparseMatrixCSC` matrices:
+- `vector_type = Vector{Float64}`
+- `matrix_type = SparseMatrixCSC{Float64,Int}`
 
 # Examples
 
@@ -42,104 +41,110 @@ via standard patterns like `T(undef, dims...)` or `T(dims...)`.
 julia> dense_sparse = backend() # Default backend (Dense-Sparse Float64)
 
 julia> using SparseArrays;
-	   SVec{T} = SparseVector{T,Int};
-	   SMat{T} = SparseMatrixCSC{T,Int};
-	   T64 = Float64
+       SVec{T} = SparseVector{T,Int};
+       SMat{T} = SparseMatrixCSC{T,Int};
+       T64 = Float64;
 
-julia> sparse_sparse = backend(vector_type = SVec{T64}, matrix_type = SMat{T64}) # Sparse-Sparse Float64 backend
+julia> sparse_sparse = backend(vector_type = SVec{T64}, matrix_type = SMat{T64})
 
 julia> T32 = Float32;
-	   dense32 = backend(vector_type = Vector{T32}, matrix_type = SMat{T32}) # Dense-Sparse Float32 backend
-
+       dense32 = backend(vector_type = Vector{T32}, matrix_type = SMat{T32})
 ```
 """
 @inline backend(; vector_type = Vector{Float64}, matrix_type = SparseMatrixCSC{Float64,Int}) = Backend{vector_type,matrix_type}()
 
 """
-	backend_types(backend::Backend)
+	$(SIGNATURES)
 
 Returns a tuple with the backend associated types:
-
-  - the element type of `VT`,
-  - the type `VT`,
-  - the type `MT`,
-  - the concrete backend type `Backend{VT,MT}`.
-
-This is useful for extracting type information from either a [Backend](@ref) type or instance.
+1. Element type of `VT`
+2. Vector type `VT`
+3. Matrix type `MT`
+4. Concrete backend type `Backend{VT,MT}`
 """
 @inline backend_types(backend::Backend{VT,MT}) where {VT,MT} = eltype(VT), VT, MT, typeof(backend)
 @inline backend_types(::Type{<:Backend{VT,MT}}) where {VT,MT} = eltype(VT), VT, MT, Backend{VT,MT}
 
-"""
-	vector(backend::Backend, n::Integer)
+@noinline function _throw_vector_error(VT, n, e_undef, e_size)
+	error("Cannot create vector of type $VT with size $n. Tried T(undef, n) (failed: $e_undef) and T(n) (failed: $e_size).")
+end
 
-Create a vector of the type `VT` associated with the given [Backend](@ref) instance with length `n`.
-"""
+@noinline function _throw_matrix_error(MT, n, m, e_undef, e_size)
+	error("Cannot create matrix of type $MT with size ($n, $m). Tried T(undef, n, m) (failed: $e_undef) and T(n, m) (failed: $e_size).")
+end
 
+"""
+	$(SIGNATURES)
+
+Creates a vector of type `VT` associated with the given [`Backend`](@ref) instance with length `n`.
+"""
 function vector(::Backend{VT,MT}, n::Integer) where {VT,MT}
 	try
-		# Attempt to construct the vector using `VT(undef, n)`.
 		return VT(undef, n)
 	catch e_undef
 		try
-			# If the first method fails, try `VT(n)`.
-			# Some vector types might not support `undef` initialization
-			# and may use a different constructor signature.
 			return VT(n)
 		catch e_size
-			# If both construction attempts fail, throw an error.
-			error("Cannot create vector of type $VT with size $n. Tried T(undef, n) (failed: $e_undef) and T(n) (failed: $e_size).")
+			_throw_vector_error(VT, n, e_undef, e_size)
 		end
 	end
 end
 
-# Specialized method for standard `Vector` types for performance.
-# This avoids the overhead of `try-catch` for the most common case.
-@inline vector(::Backend{VT,MT}, n::Integer) where {MT,T,VT<:Vector{T}} = Vector{T}(undef, n)
+# Specialized zero-overhead methods for dense (CPU/GPU) and sparse types
+@inline vector(::Backend{VT,MT}, n::Integer) where {MT,T,VT<:DenseVector{T}} = VT(undef, n)
+@inline vector(::Backend{VT,MT}, n::Integer) where {MT,T,Ti,VT<:SparseVector{T,Ti}} = spzeros(T, Ti, n)
 
 """
-	matrix(backend::Backend, n::Integer, m::Integer)
+	$(SIGNATURES)
 
-Create a matrix of the type `MT` associated with the given [Backend](@ref) instance with dimensions `n` x `m`.
+Creates a matrix of type `MT` associated with the given [`Backend`](@ref) instance with dimensions `n` × `m`.
 """
-function matrix(backend::Backend, n::Integer, m::Integer)
-	_, _, MT = backend_types(backend)
+function matrix(backend::Backend{VT,MT}, n::Integer, m::Integer) where {VT,MT}
 	try
-		# Attempt to construct the matrix using `MT(undef, n, m)`.
 		return MT(undef, n, m)
 	catch e_undef
 		try
-			# Fallback to `MT(n, m)` if the `undef` constructor is not supported.
 			return MT(n, m)
 		catch e_size
-			# If both attempts fail, provide a detailed error message
-			# to assist in debugging backend configurations.
-			error("Cannot create matrix of type $MT with size ($n, $m). Tried T(undef, n, m) (failed: $e_undef) and T(n, m) (failed: $e_size).")
+			_throw_matrix_error(MT, n, m, e_undef, e_size)
 		end
 	end
 end
 
-"""
-	backend_eye(backend::Backend, n)
-
-Constructs a square `n` x `n` sparse identity matrix associated with the given [Backend](@ref) instance.
-"""
-@inline backend_eye(backend::Backend, n) = _backend_eye(matrix_type(backend), n)
-@inline _backend_eye(::Type{<:SparseMatrixCSC{T,Int}}, n) where T = spdiagm(0 => Ones(T, n))
+# Specialized zero-overhead methods for dense (CPU/GPU) and sparse types
+@inline matrix(::Backend{VT,MT}, n::Integer, m::Integer) where {VT,T,MT<:DenseMatrix{T}} = MT(undef, n, m)
+@inline matrix(::Backend{VT,MT}, n::Integer, m::Integer) where {VT,T,Ti,MT<:SparseMatrixCSC{T,Ti}} = spzeros(T, Ti, n, m)
 
 """
-	backend_zeros(backend::Backend, n)
+	$(SIGNATURES)
 
-Constructs a square `n` x `n` sparse matrix of zeros associated with the given [Backend](@ref) instance.
+Constructs an `n` × `n` identity matrix associated with the given [`Backend`](@ref) instance.
 """
-@inline backend_zeros(backend::Backend, n) = _backend_zeros(matrix_type(backend), n)
-@inline _backend_zeros(::Type{<:SparseMatrixCSC{T,Int}}, n) where T = spzeros(T, n, n)
+@inline backend_eye(backend::Backend, n::Integer) = _backend_eye(matrix_type(backend), n)
+@inline _backend_eye(::Type{<:SparseMatrixCSC{T,Ti}}, n::Integer) where {T,Ti} = spdiagm(n, n, 0 => fill(one(T), n))
+@inline _backend_eye(::Type{<:Matrix{T}}, n::Integer) where T = Matrix{T}(I, n, n)
 
 """
-	eltype(backend::Backend)
+	$(SIGNATURES)
 
-Returns the element type of the vector type (`VT`) used in the given [Backend](@ref) type or instance.
-This function allows querying the underlying element type stored in the backend's vector representation.
+Constructs an `n` × `n` zero matrix associated with the given [`Backend`](@ref) instance.
 """
-@inline eltype(backend::Backend{VT,MT}) where {VT,MT} = eltype(typeof(backend))
-@inline eltype(::Type{<:Backend{VT,MT}}) where {VT,MT} = eltype(VT)
+@inline backend_zeros(backend::Backend, n::Integer) = _backend_zeros(matrix_type(backend), n)
+@inline _backend_zeros(::Type{<:SparseMatrixCSC{T,Ti}}, n::Integer) where {T,Ti} = spzeros(T, Ti, n, n)
+@inline _backend_zeros(::Type{MT}, n::Integer) where {T,MT<:AbstractMatrix{T}} = fill!(MT(undef, n, n), zero(T))
+
+"""
+	$(SIGNATURES)
+
+Returns the coordinate/element type of the vector type (`VT`) used in the given [`Backend`](@ref).
+"""
+@inline Base.eltype(backend::Backend{VT,MT}) where {VT,MT} = eltype(typeof(backend))
+@inline Base.eltype(::Type{<:Backend{VT,MT}}) where {VT,MT} = eltype(VT)
+
+function Base.show(io::IO, be::Backend{VT,MT}) where {VT,MT}
+	if get(io, :compact, false)
+		print(io, "Backend{$(eltype(be))}")
+	else
+		print(io, "Backend(vector = $VT, matrix = $MT)")
+	end
+end

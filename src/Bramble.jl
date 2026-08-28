@@ -11,7 +11,7 @@ import Base: *, +, -, /, ^, @propagate_inbounds, @_inline_meta
 
 using Random: rand!
 
-using SparseArrays: SparseMatrixCSC, AbstractSparseMatrix, spdiagm, rowvals, nnz, dropzeros!, nzrange, spzeros, nonzeros, sparse
+using SparseArrays: SparseMatrixCSC, SparseVector, AbstractSparseMatrix, spdiagm, rowvals, nnz, dropzeros!, nzrange, spzeros, nonzeros, sparse
 
 using FunctionWrappers: FunctionWrapper
 using MacroTools: @capture, isexpr
@@ -32,10 +32,14 @@ using Cubature
 using Integrals: solve, IntegralFunction, IntegralProblem, QuadGKJL, CubatureJLh, BatchIntegralFunction
 #using WriteVTK
 
-# domain/interval handling functions
-export box, interval, ×, dim, topo_dim, tails, point, cartesian_product, center, projection, is_collapsed, point_type, get_boundary_symbols, @markers
-export domain, markers, labels
+# Utilities
+export backend, vector, matrix, vector_type, matrix_type, backend_types, backend_eye, backend_zeros
+export BrambleFunction, embed_function, has_time
 
+# domain/interval handling functions
+export box, interval, ×, dim, topo_dim, tails, point, cartesian_product, center, projection, is_collapsed, point_type, get_boundary_symbols, @markers, set
+export domain, markers, labels
+#=
 # Mesh handling
 export mesh, hₘₐₓ, iterative_refinement!, change_points, npoints, points, set
 
@@ -64,7 +68,7 @@ export ⋅
 
 export dirichlet_constraints
 export form, assemble, assemble!
-
+=#
 #=
 # Exporters
 export ExporterVTK, addScalarDataset!, datasets, save2file, close
@@ -76,10 +80,9 @@ include("utils/linear_algebra.jl")
 
 include("geometry/pretty_print.jl")
 include("geometry/set.jl")
-include("utils/bramble_function.jl")
-
 include("geometry/marker.jl")
 include("geometry/domain.jl")
+include("utils/bramble_function.jl")
 #=
 include("mesh/common.jl")
 include("mesh/marker.jl")

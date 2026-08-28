@@ -11,14 +11,16 @@ using Test
 using Bramble
 
 const __bramble_with_examples = false
-const __bramble_with_quality = false
+const __bramble_with_quality = true
 const __bramble_with_unit_tests = true
 
 if __bramble_with_unit_tests
 	@testset verbose=true "Core library" begin
-		@testset verbose=true "Backends and BrambleFunctions" begin
-			include("utils/bramble_functions.jl")
+		@testset verbose=true "Utilities" begin
+			include("utils/macros.jl")
 			include("utils/backends.jl")
+			include("utils/linear_algebra.jl")
+			include("utils/bramble_functions.jl")
 		end
 
 		@testset verbose=true "Sets and Domains" begin

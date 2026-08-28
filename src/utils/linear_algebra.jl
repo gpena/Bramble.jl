@@ -1,66 +1,62 @@
+@noinline function _throw_dot_dim_error(lu::Integer, lv::Integer, lw::Integer)
+	throw(DimensionMismatch("Vectors must have matching lengths, but got lengths ($lu, $lv, $lw)."))
+end
+
 """
 	$(SIGNATURES)
 
-Parallel implementation of a for loop that modifies array `v` in-place.
+Parallel implementation of a for-loop that modifies array `v` in-place using static thread scheduling.
 
 # Arguments
-
-  - `v`: Array to be modified in-place
-  - `idxs`: Iterable of indices to process
-  - `f`: Function that takes an index and returns the value to be stored at that index
+- `v`: Array to be modified in-place
+- `idxs`: Iterable of indices to process
+- `f`: Function that takes an index and returns the value to be stored at that index
 """
 function _parallel_for!(v, idxs, f)
-	# This loop iterates over the indices in `idxs` across multiple threads.
-	# For each index `idx`, it computes `f(idx)` and assigns the result to `v[idx]`.
-	# The `@threads` macro from Julia's standard library `Threads` is used to enable multi-threading.
-	Threads.@threads for idx in idxs
-		v[idx] = f(idx)
+	Threads.@threads :static for idx in idxs
+		@inbounds v[idx] = f(idx)
 	end
-	# The function returns `nothing` as it modifies `v` in-place.
-	return
+	return nothing
 end
 
 """
 	$(SIGNATURES)
 
-Performs a serial (non-parallel) iteration over the specified indices, applying a function `f` to modify vector `v` in-place.
+Performs a serial (single-threaded) iteration over the specified indices, applying a function `f` to modify array `v` in-place.
 
 # Arguments
-
-  - `v`: Vector to be modified in-place
-  - `idxs`: Indices to iterate over
-  - `f`: Function to be applied at each index
+- `v`: Array to be modified in-place
+- `idxs`: Indices to iterate over
+- `f`: Function to be applied at each index
 """
-function _serial_for!(v, idxs, f)
-	# This is a standard, single-threaded for loop that serves as the non-parallel
-	# counterpart to `_parallel_for!`.
-	@inbounds @simd for idx in idxs
+@inline function _serial_for!(v, idxs, f)
+	@inbounds for idx in idxs
 		v[idx] = f(idx)
 	end
-	# The function returns `nothing`.
-	return
+	return nothing
 end
 
 ##################################################################################
 #                                                                                #
-#   some helper functions to calculate the inner products in discrete spaces     #
+#   Helper functions to calculate inner products in discrete spaces               #
 #                                                                                #
 ##################################################################################
+
 """
 	$(SIGNATURES)
 
-Computes the element-wise product of three vectors `u`, `v`, and `w` and sums the results.
-This is equivalent to the mathematical operation `∑ᵢ uᵢ * vᵢ * wᵢ`. It is used as an
-optimized implementation for the weighted inner product of vectors.
+Computes the weighted element-wise dot product of three vectors:
+``\\sum_{i} u_i \\cdot v_i \\cdot w_i``
 
-The `@fastmath` macro allows for aggressive floating-point optimizations, and `@simd`
-instructs the compiler to vectorize the loop if possible.
+Uses SIMD and fused multiply-add operations for maximal performance without allocations.
 """
-@inline function _dot(u::VT, v::VT, w::VT) where {T,VT<:AbstractVector{T}}
+@inline function _dot(u::AbstractVector, v::AbstractVector, w::AbstractVector)
+	(length(u) == length(v) == length(w)) || _throw_dot_dim_error(length(u), length(v), length(w))
+	T = promote_type(eltype(u), eltype(v), eltype(w))
 	s = zero(T)
 
-	@fastmath @simd for i in eachindex(u, v, w)
-		@inbounds s += u[i] * v[i] * w[i]
+	@inbounds @simd for i in eachindex(u, v, w)
+		s = muladd(T(u[i]) * T(v[i]), T(w[i]), s)
 	end
 
 	return s
@@ -69,14 +65,10 @@ end
 """
 	$(SIGNATURES)
 
-Computes the inner product between `u` and `v` with respect to the vector weights `h`. Variables `u` and `v` can be either vectors or matrices.
+Computes the weighted inner product ``\\langle u, v \\rangle_h``.
 
-There is a specialized version when `u` and `v` are vectors.
+- For vectors `u` and `v` with weights `h`, computes ``\\sum_i u_i h_i v_i`` via [`_dot`](@ref).
+- For matrices `u` and `v`, computes ``v^T \\operatorname{diag}(h) u``.
 """
-# This is the generic implementation for the weighted inner product, often written as `⟨u, v⟩_h`.
-# It computes `transpose(v) * (Diagonal(h) * u)`, which works for both vectors and matrices `u` and `v`.
-@inline _inner_product(u, h, v) = transpose(v) * (Diagonal(h) * u)
-
-# This is a specialized and highly optimized version for when `u`, `h`, and `v` are all vectors.
-# It avoids the overhead of matrix operations by calling the `_dot` function.
-@inline _inner_product(u::VT, h::VT, v::VT) where {T,VT<:AbstractVector{T}} = _dot(u, h, v)
+@inline _inner_product(u::AbstractVector, h::AbstractVector, v::AbstractVector) = _dot(u, h, v)
+@inline _inner_product(u::AbstractMatrix, h::AbstractVector, v::AbstractMatrix) = transpose(v) * (Diagonal(h) * u)

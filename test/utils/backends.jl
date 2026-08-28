@@ -1,8 +1,25 @@
-using Bramble: Backend, backend, vector, matrix, vector_type, matrix_type
+using Test
+using Bramble
+using Bramble: Backend, backend, vector, matrix, vector_type, matrix_type, backend_types, backend_eye, backend_zeros
 using SparseArrays
-using LinearAlgebra: diag
+using LinearAlgebra: diag, I
 
-@testset "Backand Tests" begin
+# A lightweight mock GPU array wrapper that simulates GPU vendor arrays (like MtlArray/CuArray)
+struct MockGPUArray{T,N} <: DenseArray{T,N}
+	data::Array{T,N}
+end
+MockGPUArray{T,N}(::UndefInitializer, dims::Vararg{Integer,N}) where {T,N} = MockGPUArray(Array{T,N}(undef, dims...))
+MockGPUArray{T,N}(::UndefInitializer, dims::NTuple{N,Integer}) where {T,N} = MockGPUArray(Array{T,N}(undef, dims))
+Base.size(A::MockGPUArray) = size(A.data)
+Base.getindex(A::MockGPUArray, i::Int...) = getindex(A.data, i...)
+Base.setindex!(A::MockGPUArray, v, i::Int...) = setindex!(A.data, v, i...)
+Base.IndexStyle(::Type{<:MockGPUArray}) = IndexLinear()
+Base.fill!(A::MockGPUArray{T}, v) where T = (fill!(A.data, v); A)
+
+const MockGPUVector{T} = MockGPUArray{T,1}
+const MockGPUMatrix{T} = MockGPUArray{T,2}
+
+@testset "Backend Tests" begin
 	@testset "Backend Constructor" begin
 		# Test default Backend
 		be_default = backend()
@@ -38,20 +55,20 @@ using LinearAlgebra: diag
 	@testset "vector" begin
 		n = 15
 
-		# Default Backend (Vector{Float64}) - uses T(undef, n)
+		# Default Backend (Vector{Float64})
 		be_default = backend()
 		v_default = vector(be_default, n)
 		@test v_default isa Vector{Float64}
 		@test length(v_default) == n
 		@test eltype(v_default) === Float64
 
-		# Sparse Backend (SparseVector{Float64, Int}) - uses T(n)
+		# Sparse Backend (SparseVector{Float64, Int})
 		be_sparse = backend(vector_type = SparseVector{Float64,Int}, matrix_type = SparseMatrixCSC{Float64,Int})
 		v_sparse = vector(be_sparse, n)
 		@test v_sparse isa SparseVector{Float64,Int}
 		@test length(v_sparse) == n
 		@test eltype(v_sparse) === Float64
-		@test nnz(v_sparse) == 0 # SparseVector(n) creates an empty vector
+		@test nnz(v_sparse) == 0
 
 		# Dense Float32 Backend
 		be_f32 = backend(vector_type = Vector{Float32}, matrix_type = Matrix{Float32})
@@ -73,15 +90,15 @@ using LinearAlgebra: diag
 	@testset "matrix" begin
 		m, n = 10, 20
 
-		# Default Backend (SparseMatrixCSC{Float64, Int}) - uses T(m, n)
+		# Default Backend (SparseMatrixCSC{Float64, Int})
 		be_default = backend()
 		M_default = matrix(be_default, m, n)
 		@test M_default isa SparseMatrixCSC{Float64,Int}
 		@test size(M_default) == (m, n)
 		@test eltype(M_default) === Float64
-		@test nnz(M_default) == 0 # SparseMatrixCSC(m, n) creates an empty matrix
+		@test nnz(M_default) == 0
 
-		# Dense Backend (Matrix{Float64}) - uses T(undef, m, n)
+		# Dense Backend (Matrix{Float64})
 		be_dense = backend(vector_type = Vector{Float64}, matrix_type = Matrix{Float64})
 		M_dense = matrix(be_dense, m, n)
 		@test M_dense isa Matrix{Float64}
@@ -117,9 +134,58 @@ using LinearAlgebra: diag
 		@test size(M_zero_col_dense) == (m, 0)
 	end
 
-	@testset "backend_types" begin
-		using Bramble: backend_types
+	@testset "GPU-Agnostic Backend (Mock GPU Array)" begin
+		be_gpu = backend(vector_type = MockGPUVector{Float32}, matrix_type = MockGPUMatrix{Float32})
+		@test vector_type(be_gpu) === MockGPUVector{Float32}
+		@test matrix_type(be_gpu) === MockGPUMatrix{Float32}
+		@test eltype(be_gpu) === Float32
 
+		v_gpu = vector(be_gpu, 25)
+		@test v_gpu isa MockGPUVector{Float32}
+		@test length(v_gpu) == 25
+
+		m_gpu = matrix(be_gpu, 10, 20)
+		@test m_gpu isa MockGPUMatrix{Float32}
+		@test size(m_gpu) == (10, 20)
+
+		z_gpu = backend_zeros(be_gpu, 8)
+		@test z_gpu isa MockGPUMatrix{Float32}
+		@test size(z_gpu) == (8, 8)
+		@test all(z_gpu .== 0.0f0)
+	end
+
+	# Conditional test for Metal on macOS without requiring it as a project dependency
+	if Sys.isapple()
+		metal_pkg = Base.find_package("Metal")
+		if metal_pkg !== nothing
+			try
+				@eval using Metal
+				if isdefined(Main, :Metal) && Metal.functional()
+					@testset "Metal GPU Backend (macOS Apple Silicon)" begin
+						be_metal = backend(vector_type = MtlVector{Float32}, matrix_type = MtlMatrix{Float32})
+						@test vector_type(be_metal) === MtlVector{Float32}
+						@test matrix_type(be_metal) === MtlMatrix{Float32}
+
+						v = vector(be_metal, 10)
+						@test v isa MtlVector{Float32}
+						@test length(v) == 10
+
+						m = matrix(be_metal, 5, 5)
+						@test m isa MtlMatrix{Float32}
+						@test size(m) == (5, 5)
+
+						z = backend_zeros(be_metal, 4)
+						@test z isa MtlMatrix{Float32}
+						@test size(z) == (4, 4)
+					end
+				end
+			catch e
+				@info "Metal is installed but initialization skipped in this environment" exception=e
+			end
+		end
+	end
+
+	@testset "backend_types" begin
 		be_default = backend()
 		T, VT, MT, BType = backend_types(be_default)
 		@test T === Float64
@@ -156,23 +222,61 @@ using LinearAlgebra: diag
 	end
 
 	@testset "backend_eye and backend_zeros" begin
-		using Bramble: backend_eye, backend_zeros
-		using SparseArrays: I as SparseI
-
 		n = 5
 		be_default = backend()
+		be_dense = backend(vector_type = Vector{Float64}, matrix_type = Matrix{Float64})
 
-		# Test backend_eye
-		I_mat = backend_eye(be_default, n)
-		@test I_mat isa SparseMatrixCSC{Float64,Int}
-		@test size(I_mat) == (n, n)
-		@test diag(I_mat) == ones(n)
-		@test nnz(I_mat) == n
+		# Sparse backend_eye
+		I_sparse = backend_eye(be_default, n)
+		@test I_sparse isa SparseMatrixCSC{Float64,Int}
+		@test size(I_sparse) == (n, n)
+		@test diag(I_sparse) == ones(n)
+		@test nnz(I_sparse) == n
 
-		# Test backend_zeros
-		Z_mat = backend_zeros(be_default, n)
-		@test Z_mat isa SparseMatrixCSC{Float64,Int}
-		@test size(Z_mat) == (n, n)
-		@test nnz(Z_mat) == 0
+		# Dense backend_eye
+		I_dense = backend_eye(be_dense, n)
+		@test I_dense isa Matrix{Float64}
+		@test size(I_dense) == (n, n)
+		@test I_dense == Matrix{Float64}(I, n, n)
+
+		# Sparse backend_zeros
+		Z_sparse = backend_zeros(be_default, n)
+		@test Z_sparse isa SparseMatrixCSC{Float64,Int}
+		@test size(Z_sparse) == (n, n)
+		@test nnz(Z_sparse) == 0
+
+		# Dense backend_zeros
+		Z_dense = backend_zeros(be_dense, n)
+		@test Z_dense isa Matrix{Float64}
+		@test size(Z_dense) == (n, n)
+		@test all(Z_dense .== 0.0)
 	end
-end # Top level testset
+
+	@testset "Type Stability & Allocations" begin
+		be = backend()
+		@inferred backend()
+		@inferred vector_type(be)
+		@inferred matrix_type(be)
+		@inferred eltype(be)
+		@inferred backend_types(be)
+
+		# Backend constructor is zero-allocation singleton
+		@test (@allocated backend()) == 0
+		@test (@allocated vector_type(be)) == 0
+		@test (@allocated matrix_type(be)) == 0
+		@test (@allocated eltype(be)) == 0
+		@test (@allocated backend_types(be)) == 0
+	end
+
+	@testset "Display / Show" begin
+		be = backend()
+		io = IOBuffer()
+		show(io, be)
+		str = String(take!(io))
+		@test occursin("Backend", str)
+		@test occursin("vector = Vector{Float64}", str)
+
+		show(IOContext(io, :compact => true), be)
+		@test occursin("Backend{Float64}", String(take!(io)))
+	end
+end

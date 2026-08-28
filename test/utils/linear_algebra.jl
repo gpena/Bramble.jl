@@ -1,5 +1,8 @@
+using Test
+using Bramble
 using Bramble: _dot, _inner_product, _parallel_for!, _serial_for!
-using LinearAlgebra: Diagonal
+using LinearAlgebra: Diagonal, dot
+using StaticArrays
 
 @testset "Linear Algebra Utilities" begin
 	@testset "_dot function" begin
@@ -11,7 +14,7 @@ using LinearAlgebra: Diagonal
 		result = _dot(u, v, w)
 		expected = (1.0 * 4.0 * 2.0) + (2.0 * 5.0 * 2.0) + (3.0 * 6.0 * 2.0)
 		@test result ≈ expected
-		@test result ≈ 56.0
+		@test result ≈ 64.0
 
 		# Test with zeros
 		u_zero = [0.0, 0.0, 0.0]
@@ -29,10 +32,25 @@ using LinearAlgebra: Diagonal
 		w_f32 = Float32[2.0, 2.0, 2.0]
 		result_f32 = _dot(u_f32, v_f32, w_f32)
 		@test result_f32 isa Float32
-		@test result_f32 ≈ 56.0f0
+		@test result_f32 ≈ 64.0f0
+
+		# Test mixed types (Float32 and Float64)
+		result_mixed = _dot(u_f32, v, w_f32)
+		@test result_mixed isa Float64
+		@test result_mixed ≈ 64.0
 
 		# Test single element
 		@test _dot([2.0], [3.0], [4.0]) ≈ 24.0
+
+		# Test dimension mismatch error
+		@test_throws DimensionMismatch _dot([1.0, 2.0], [1.0, 2.0, 3.0], [1.0, 2.0])
+
+		# Test SVector (zero allocations)
+		sv_u = SVector(1.0, 2.0, 3.0)
+		sv_v = SVector(4.0, 5.0, 6.0)
+		sv_w = SVector(2.0, 2.0, 2.0)
+		@test _dot(sv_u, sv_v, sv_w) ≈ 64.0
+		@test (@allocated _dot(sv_u, sv_v, sv_w)) == 0
 
 		# Test larger vectors
 		n = 100
@@ -52,13 +70,11 @@ using LinearAlgebra: Diagonal
 
 		# Using the specialized vector version
 		result = _inner_product(u, h, v)
-		# Should compute ∑ᵢ uᵢ * hᵢ * vᵢ
 		expected = (1.0 * 0.5 * 4.0) + (2.0 * 1.0 * 5.0) + (3.0 * 1.5 * 6.0)
 		@test result ≈ expected
-		@test result ≈ 2.0 + 10.0 + 27.0
 		@test result ≈ 39.0
 
-		# Test symmetry (not exactly symmetric due to h in middle)
+		# Test symmetry
 		result2 = _inner_product(v, h, u)
 		@test result2 ≈ expected
 
@@ -74,10 +90,17 @@ using LinearAlgebra: Diagonal
 		result_f32 = _inner_product(u_f32, h_f32, v_f32)
 		@test result_f32 isa Float32
 		@test result_f32 ≈ 39.0f0
+
+		# SVector zero allocations
+		sv_u = SVector(1.0, 2.0, 3.0)
+		sv_h = SVector(0.5, 1.0, 1.5)
+		sv_v = SVector(4.0, 5.0, 6.0)
+		@test _inner_product(sv_u, sv_h, sv_v) ≈ 39.0
+		@test (@allocated _inner_product(sv_u, sv_h, sv_v)) == 0
 	end
 
 	@testset "_inner_product generic version" begin
-		# Test with matrices (falls back to generic implementation)
+		# Test with matrices
 		U = [1.0 2.0; 3.0 4.0]
 		H = [0.5, 1.0]
 		V = [5.0 6.0; 7.0 8.0]
@@ -86,7 +109,7 @@ using LinearAlgebra: Diagonal
 		expected = transpose(V) * (Diagonal(H) * U)
 		@test result ≈ expected
 
-		# Test with single column matrices (behaves like vectors but uses generic path)
+		# Test with single column matrices
 		u_mat = reshape([1.0, 2.0, 3.0], 3, 1)
 		h_vec = [0.5, 1.0, 1.5]
 		v_mat = reshape([4.0, 5.0, 6.0], 3, 1)
@@ -162,18 +185,11 @@ using LinearAlgebra: Diagonal
 		@test v_serial ≈ v_parallel
 	end
 
-	@testset "Performance: serial vs parallel" begin
-		# Note: This is more of a smoke test than a performance test
-		# Just verify both methods work and produce same results
-		n = 1000
-		v_serial = zeros(n)
-		v_parallel = zeros(n)
-		idxs = 1:n
-		f = i -> sqrt(Float64(i)) + log(Float64(i) + 1)
-
-		_serial_for!(v_serial, idxs, f)
-		_parallel_for!(v_parallel, idxs, f)
-
-		@test v_serial ≈ v_parallel
+	@testset "Type Stability" begin
+		u = [1.0, 2.0, 3.0]
+		v = [4.0, 5.0, 6.0]
+		w = [2.0, 2.0, 2.0]
+		@inferred _dot(u, v, w)
+		@inferred _inner_product(u, w, v)
 	end
 end
