@@ -186,10 +186,13 @@ npoints(M, Tuple)  # (39, 39)
 For moving-boundary problems or non-uniform smoothing:
 
 ```julia
-# Supply new coordinates for a 1D mesh
-new_pts = [0.0, 0.1, 0.3, 0.6, 1.0]
+# Supply new coordinates for a 1D mesh (matching the 11 points of Ωₕ)
+new_pts = range(0.0, 1.0, length=npoints(Ωₕ)) |> collect
 change_points!(Ωₕ, new_pts)
 
-# Or update points and re-evaluate markers
+# Or update points and re-evaluate markers for a multi-dimensional mesh
+nx, ny = npoints(M, Tuple)
+new_x_pts = range(0.0, 1.0, length=nx) |> collect
+new_y_pts = range(0.0, 1.0, length=ny) |> collect
 change_points!(M, markers(X), (new_x_pts, new_y_pts))
 ```
