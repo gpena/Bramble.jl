@@ -24,4 +24,5 @@ deploydocs(;
 		   repo = "github.com/gpena/Bramble.jl.git",
 		   devbranch = "main",
 		   branch = "gh-pages",
+		   versions = nothing,
 		   push_preview = true)
