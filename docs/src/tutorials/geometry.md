@@ -139,15 +139,23 @@ get_boundary_symbols(2)
 # (:bottom, :top, :left, :right)
 ```
 
-### 4.2 Creating Markers
+### 4.2 Creating Markers with `markers` and `@markers`
 
-Markers are defined as `:label => :identifier` pairs where `:identifier` can be a single boundary symbol, a tuple of symbols, or a boolean function:
+Markers are defined as `:label => identifier` pairs where `identifier` can be a single boundary symbol, a tuple of symbols, or a boolean function:
 
 ```julia
 geom = interval(0.0, 5.0) × interval(0.0, 1.0)
 
-# Define markers on the geometry:
-m = markers(
+# 1. Using the markers() constructor
+m1 = markers(
+    geom,
+    :inflow  => :left,
+    :outflow => :right,
+    :wall    => (:top, :bottom)
+)
+
+# 2. Using the @markers macro for concise syntax
+m2 = @markers(
     geom,
     :inflow  => :left,
     :outflow => :right,
@@ -155,8 +163,32 @@ m = markers(
 )
 
 # Retrieve all defined labels
-collect(labels(m))
+collect(labels(m2))
 # [:inflow, :outflow, :wall]
+```
+
+### 4.3 Function-Based (Level-Set) and Time-Dependent Markers
+
+You can also define internal or geometric subset markers using boolean condition functions, as well as time-dependent markers:
+
+```julia
+# Condition-based marker: tag a subsection of the boundary or domain
+m_cond = @markers(
+    geom,
+    :inflow    => :left,
+    :hot_spot  => (p -> p[1] > 2.5 && p[2] ≈ 0.0)
+)
+
+# Time-dependent markers:
+time_span = interval(0.0, 10.0)
+m_time = @markers(
+    geom,
+    time_span,
+    :moving_source => ((p, t) -> norm(p .- [t, 0.5]) < 0.2)
+)
+
+# Evaluate time-dependent markers at time t = 1.5
+m_evaluated = m_time(1.5)
 ```
 
 ---
