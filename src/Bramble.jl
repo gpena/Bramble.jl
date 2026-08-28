@@ -26,7 +26,7 @@ using FillArrays: Ones, Eye
 #using WriteVTK
 
 # Utilities
-export backend, vector, matrix, vector_type, matrix_type, backend_types, backend_eye, backend_zeros
+export backend, metal_backend, vector, matrix, vector_type, matrix_type, backend_types, backend_eye, backend_zeros
 export BrambleFunction, embed_function, has_time
 
 # domain/interval handling functions

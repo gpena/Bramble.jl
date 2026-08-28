@@ -148,3 +148,24 @@ function Base.show(io::IO, be::Backend{VT,MT}) where {VT,MT}
 		print(io, "Backend(vector = $VT, matrix = $MT)")
 	end
 end
+
+"""
+	metal_backend(T::Type = Float32)
+
+Returns a Metal GPU [`Backend`](@ref) using Apple Metal arrays via
+[Metal.jl](https://github.com/JuliaGPU/Metal.jl).
+
+Requires loading `Metal.jl` alongside `Bramble.jl`:
+
+```julia
+using Bramble, Metal
+b = metal_backend()           # Float32 GPU backend
+b = metal_backend(Float16)    # half-precision
+```
+
+!!! note
+    `Float64` is not supported on Apple Silicon GPUs. Use `Float32` or `Float16`.
+"""
+function metal_backend(T::Type = Float32)
+	error("metal_backend requires Metal.jl. Add `using Metal` before calling this function.")
+end
