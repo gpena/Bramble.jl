@@ -318,9 +318,13 @@ import Base: diff
 			@test npoints(Ωₕ_many) == 1
 			@test points(Ωₕ_many) == [3.0]
 
-			# A genuine interval reduced to a single point uses the lower bound.
+			# A genuine interval reduced to a single point uses the lower bound,
+			# and has zero spacing rather than reading past the end of the vector.
 			Ωₕ_one = mesh(create_test_domain(2.0, 5.0), 1, true; backend = backend())
 			@test points(Ωₕ_one) == [2.0]
+			@test spacing(Ωₕ_one, 1) == 0.0
+			@test forward_spacing(Ωₕ_one, 1) == 0.0
+			@test hₘₐₓ(Ωₕ_one) == 0.0
 		end
 
 		@testset "Boundary Indices" begin

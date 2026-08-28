@@ -217,8 +217,9 @@ function _bounds_check_error_message(idx, n, mesh_type::String = "mesh")
 end
 
 # 1D spacing reference routines
+# A mesh with fewer than two points has no interval to measure, so every spacing is zero.
 @inline function _compute_backward_spacing_1d(pts::AbstractVector, i::Int, collapsed::Bool, T::Type)
-	if collapsed
+	if collapsed || length(pts) < 2
 		return zero(T)
 	elseif i == 1
 		return pts[2] - pts[1]
@@ -228,7 +229,7 @@ end
 end
 
 @inline function _compute_forward_spacing_1d(pts::AbstractVector, i::Int, N::Int, collapsed::Bool, T::Type)
-	if collapsed
+	if collapsed || N < 2
 		return zero(T)
 	elseif i == N
 		return pts[N] - pts[N-1]
