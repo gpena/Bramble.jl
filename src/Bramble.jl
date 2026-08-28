@@ -33,7 +33,7 @@ using Integrals: solve, IntegralFunction, IntegralProblem, QuadGKJL, CubatureJLh
 #using WriteVTK
 
 # domain/interval handling functions
-export box, interval, ×, dim, topo_dim, tails
+export box, interval, ×, dim, topo_dim, tails, point, cartesian_product, center, projection, is_collapsed, point_type, get_boundary_symbols, @markers
 export domain, markers, labels
 
 # Mesh handling
@@ -80,7 +80,7 @@ include("utils/bramble_function.jl")
 
 include("geometry/marker.jl")
 include("geometry/domain.jl")
-
+#=
 include("mesh/common.jl")
 include("mesh/marker.jl")
 include("mesh/pretty_print.jl")
@@ -106,9 +106,10 @@ include("form/sparse_backend.jl")
 include("form/common.jl")
 
 include("form/grid_coloring.jl")
+include("form/block_extract.jl")  # block extraction for CoupledBilinearForm
 include("form/bilinear.jl")
 include("form/linear.jl")
-
+=#
 #=
 include("exporter/types.jl")
 include("exporter/exporter_vtk.jl")

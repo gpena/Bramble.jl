@@ -1,8 +1,7 @@
-
 """
 	$(TYPEDEF)
 
-A type representing the cartesian product of `D` closed intervals in a space with element type `T`.
+A type representing the Cartesian product of `D` closed intervals in a space with element type `T`.
 
 # Fields
 
@@ -15,39 +14,43 @@ struct CartesianProduct{D,T}
 	collapsed::SVector{D,Bool}
 end
 
-"""
-	is_collapsed(a::T, b::T)
-	is_collapsed(X::CartesianProduct{1})
+@noinline _throw_bounds_error(X::CartesianProduct, i) = throw(BoundsError(X, i))
+@noinline _throw_interval_error(x, y) = throw(ArgumentError("Invalid interval: expected x <= y, but got x = $x, y = $y"))
+@noinline _throw_box_error(box) = throw(ArgumentError("Invalid box: Each tuple must satisfy x[1] <= x[2]. Found box: $box"))
 
-Checks if a 1D [CartesianProduct](@ref) or two numbers are "collapsed" (i.e., degenerate).
-
-  - For two numbers `a` and `b`, it returns `true` if they are approximately equal using `isapprox`.
-  - For a 1-dimensional [CartesianProduct](@ref), it returns the pre-computed collapse status stored in `X.collapsed[1]`.
 """
-@inline is_collapsed(a::T, b::T) where T<:Number = isapprox(a, b)
+	$(SIGNATURES)
+
+Checks if a 1D [`CartesianProduct`](@ref) or two numbers are "collapsed" (i.e., degenerate).
+
+- For two numbers `a` and `b`, returns `true` if `isapprox(a, b)`.
+- For a 1-dimensional [`CartesianProduct`](@ref), returns `X.collapsed[1]`.
+"""
+@inline is_collapsed(a::T, b::T) where {T<:Number} = isapprox(a, b)
+@inline is_collapsed(a::Number, b::Number) = isapprox(promote(a, b)...)
 @inline is_collapsed(X::CartesianProduct{1}) = X.collapsed[1]
 
 """
-	set(X::CartesianProduct)
+	$(SIGNATURES)
 
-Returns the [CartesianProduct](@ref) itself. This can be useful for functions that expect a domain object and might receive either the object or a wrapper.
+Returns the [`CartesianProduct`](@ref) itself (identity operation).
 """
 @inline set(X::CartesianProduct) = X
 
 """
 	$(SIGNATURES)
 
-Constructs a 1-dimensional [CartesianProduct](@ref) representing the closed interval ``[x, y]``.
-The inputs are converted to floating-point numbers. It also accepts an existing 1D [CartesianProduct](@ref) as a single argument.
+Constructs a 1-dimensional [`CartesianProduct`](@ref) representing the closed interval ``[x, y]``.
+Inputs are converted to floating-point numbers.
 """
-@inline function interval(x, y)
+@inline function interval(x::Number, y::Number)
 	_x = float(x)
 	_y = float(y)
-	@assert _x <= _y
+	_x <= _y || _throw_interval_error(x, y)
 
 	_is_collapsed = is_collapsed(_x, _y)
-	box = SVector{1}(((_x, _y),))
-	collapsed = SVector{1}((_is_collapsed,))
+	box = SVector{1,Tuple{typeof(_x),typeof(_x)}}(((_x, _y),))
+	collapsed = SVector{1,Bool}((_is_collapsed,))
 	return CartesianProduct{1,typeof(_x)}(box, collapsed)
 end
 
@@ -56,162 +59,116 @@ end
 """
 	$(SIGNATURES)
 
-Creates a collapsed 1D [CartesianProduct](@ref) representing the point ``[x, x]``.
+Creates a collapsed 1D [`CartesianProduct`](@ref) representing the point ``[x, x]``.
 """
-@inline function point(x)
+@inline function point(x::Number)
 	_x = float(x)
-	box = SVector{1}(((_x, _x),))
-	collapsed = SVector{1}((true,))
+	box = SVector{1,Tuple{typeof(_x),typeof(_x)}}(((_x, _x),))
+	collapsed = SVector{1,Bool}((true,))
 	return CartesianProduct{1,typeof(_x)}(box, collapsed)
 end
 
 """
-	cartesian_product(x, y)
-	cartesian_product(box)
+	$(SIGNATURES)
 
-Returns a [CartesianProduct](@ref).
+Returns a [`CartesianProduct`](@ref) from coordinates or intervals.
 
-  - If `D` tuples are provided in `box`, it returns a `D`-dimensional [CartesianProduct](@ref).
-  - If two values `x` and `y` are provided, it returns a `1`-dimensional [CartesianProduct](@ref) to represent the interval [`x`,`y`].
+- If two scalar values `x` and `y` are provided, returns a 1D [`CartesianProduct`](@ref) representing ``[x, y]``.
+- If an `NTuple{D, Tuple{T,T}}` is provided, returns a `D`-dimensional [`CartesianProduct`](@ref).
 """
-@inline cartesian_product(x, y) = interval(x, y)
+@inline cartesian_product(x::Number, y::Number) = interval(x, y)
 
 @inline function cartesian_product(box::NTuple{D,Tuple{T,T}}) where {D,T}
-	# Check that all intervals are valid (min <= max).
-	predicate_result = all(x -> x[1] <= x[2], box)
-	@assert predicate_result===true "Invalid box: Each tuple must satisfy x[1] <= x[2]. Check for non-compliant pairs or unexpected values. Found box: $box"
+	all(i -> box[i][1] <= box[i][2], 1:D) || _throw_box_error(box)
 
-	# Convert all coordinates to floating-point numbers.
-	_box = ntuple(i -> float.(box[i]), D)
-	# Pre-compute whether each dimension is collapsed.
-	_collapsed_flags = ntuple(i -> is_collapsed(_box[i]...), D)
+	_box = ntuple(i -> (float(box[i][1]), float(box[i][2])), Val(D))
+	_collapsed_flags = ntuple(i -> is_collapsed(_box[i]...), Val(D))
+	FloatT = typeof(_box[1][1])
 
-	return CartesianProduct{D,eltype(_box[1])}(SVector(_box), SVector(_collapsed_flags))
+	return CartesianProduct{D,FloatT}(SVector{D,Tuple{FloatT,FloatT}}(_box), SVector{D,Bool}(_collapsed_flags))
 end
 
 @inline cartesian_product(X::CartesianProduct) = X
 
 """
-	box(a::Number, b::Number)
-	box(a::NTuple, b::NTuple)
+	$(SIGNATURES)
 
-Creates a [CartesianProduct](@ref) from two points `a` and `b`, which define the corners of the box.
-The component intervals are defined as ``[\\min(a_i, bᵢ), \\max(a_i, b_i)]``. It accepts both numbers (for 1D)
-and `NTuple` (for D-dimensions).
+Creates a [`CartesianProduct`](@ref) from two points `a` and `b`, defining opposite corners of the bounding box.
+Intervals are constructed as ``[\\min(a_i, b_i), \\max(a_i, b_i)]``.
 """
-@inline box(a::Number, b::Number) = interval(a, b)
+@inline box(a::Number, b::Number) = interval(min(a, b), max(a, b))
 
-@inline function box(a::NTuple{D}, b::NTuple{D}) where D
-	# Create the box coordinates by taking the min and max for each dimension.
-	box_coords = ntuple(i -> float.((min(a[i], b[i]), max(a[i], b[i]))), Val(D))
-
-	# Determine which dimensions are collapsed.
+@inline function box(a::NTuple{D}, b::NTuple{D}) where {D}
+	box_coords = ntuple(i -> (float(min(a[i], b[i])), float(max(a[i], b[i]))), Val(D))
 	collapsed_flags = ntuple(i -> is_collapsed(box_coords[i]...), Val(D))
+	FloatT = typeof(box_coords[1][1])
 
-	return CartesianProduct{D,eltype(box_coords[1])}(SVector(box_coords), SVector(collapsed_flags))
+	return CartesianProduct{D,FloatT}(SVector{D,Tuple{FloatT,FloatT}}(box_coords), SVector{D,Bool}(collapsed_flags))
 end
 
 """
-	center(cp::CartesianProduct{D,T}) -> SVector{D,T}
+	$(SIGNATURES)
 
-Returns the center point of a CartesianProduct domain.
+Returns the center point of a [`CartesianProduct`](@ref) domain as an `SVector{D,T}`.
 """
 @inline function center(cp::CartesianProduct{D,T}) where {D,T}
-	return SVector{D,T}(ntuple(i -> muladd(T(0.5), cp.box[i][2], T(0.5) * cp.box[i][1]), Val(D)))
+	return SVector{D,T}(ntuple(i -> (cp.box[i][1] + cp.box[i][2]) * T(0.5), Val(D)))
 end
 
 """
 	(X::CartesianProduct)(i)
 
-Returns the `i`-th [interval](@ref) (or [point](@ref)) in the [CartesianProduct](@ref).
-
-# Example
-
-```jldoctest
-julia> Y = cartesian_product(((0.0, 1.0), (4.0, 5.0)));
-	   Y(2)
-(4.0, 5.0)
-```
+Returns the `i`-th interval (or point bounds) in the [`CartesianProduct`](@ref) as a `Tuple{T,T}`.
 """
-@inline function (X::CartesianProduct)(i)
-	@unpack box = X
-	@boundscheck @assert i in eachindex(box) "Index $i is out of bounds for a CartesianProduct of dimension $(dim(X))."
-	return @inbounds box[i]
+@inline function (X::CartesianProduct{D})(i::Integer) where {D}
+	@boundscheck (1 <= i <= D) || _throw_bounds_error(X, i)
+	return @inbounds X.box[i]
 end
 
 """
-	eltype(X::CartesianProduct)
+	$(SIGNATURES)
 
-Returns the element type of a [CartesianProduct](@ref). Can be applied directly to the type of the [CartesianProduct](@ref).
-
-# Example
-
-```jldoctest
-julia> X = cartesian_product(0, 1);
-	   eltype(X)
-Float64
-```
+Returns the coordinate element type `T` of a [`CartesianProduct`](@ref).
 """
 @inline eltype(::CartesianProduct{D,T}) where {D,T} = T
 @inline eltype(::Type{<:CartesianProduct{D,T}}) where {D,T} = T
 
 """
-	dim(X::CartesianProduct)
+	$(SIGNATURES)
 
-Returns the dimension of the space where the [CartesianProduct](@ref) is embedded. Can be applied directly to the type of the [CartesianProduct](@ref).
-
-# Examples
-
-```jldoctest
-julia> X = cartesian_product(0, 1);
-	   dim(X)
-1
-```
-
-```jldoctest
-julia> Y = cartesian_product(((0, 1), (4, 5)));
-	   dim(Y)
-2
-```
+Returns the spatial dimension `D` where the [`CartesianProduct`](@ref) is embedded.
 """
-@inline dim(::CartesianProduct{D}) where D = D
-@inline dim(::Type{<:CartesianProduct{D}}) where D = D
+@inline dim(::CartesianProduct{D}) where {D} = D
+@inline dim(::Type{<:CartesianProduct{D}}) where {D} = D
 
 """
-	topo_dim(X::CartesianProduct)
+	$(SIGNATURES)
 
-Returns the topological dimension of a [CartesianProduct](@ref). The depends on the dimension of the [CartesianProduct](@ref) and the number of collapsed dimensions.
+Returns the topological dimension of a [`CartesianProduct`](@ref) (embedded dimension minus collapsed dimensions).
 """
-@inline @fastmath topo_dim(X::CartesianProduct{D}) where D = (D - sum(X.collapsed))
-
-"""
-	tails(X::CartesianProduct, i)
-
-Returns the `i`-th component interval of the [CartesianProduct](@ref) `X` as a `Tuple`. This is an alias for `X(i)`.
-"""
-@inline function tails(X::CartesianProduct, i)
-	@unpack box = X
-	@assert i in eachindex(box)
-	return X(i)
-end
+@inline topo_dim(X::CartesianProduct{D}) where {D} = D - sum(X.collapsed)
 
 """
-	tails(X::CartesianProduct)
+	$(SIGNATURES)
 
-Returns the component sets of a [CartesianProduct](@ref):
+Returns the `i`-th component interval of [`CartesianProduct`](@ref) `X` as a `Tuple{T,T}`. Alias for `X(i)`.
+"""
+@inline tails(X::CartesianProduct, i::Integer) = X(i)
 
-  - for a one-dimensional [CartesianProduct](@ref) (`D=1`), returns the single component set.
-  - for a `D`-dimensional [CartesianProduct](@ref), returns a tuple containing all component sets.
+"""
+	$(SIGNATURES)
+
+Returns the component sets of a [`CartesianProduct`](@ref):
+- for a 1D product (`D=1`), returns the single interval tuple `(min, max)`.
+- for a `D`-dimensional product, returns an `NTuple{D, Tuple{T,T}}` of all component intervals.
 """
 @inline tails(X::CartesianProduct{1}) = X(1)
-@inline tails(X::CartesianProduct{D}) where D = ntuple(i -> X(i), Val(D))
+@inline tails(X::CartesianProduct{D}) where {D} = ntuple(i -> X(i), Val(D))
 
 """
-	first(X::CartesianProduct{1})
-	last(X::CartesianProduct{1})
+	$(SIGNATURES)
 
-Return the first and last elements of a one-dimensional [CartesianProduct](@ref), respectively.
-These methods extend `Base.first` and `Base.last` for `CartesianProduct{1}`` types.
+Return the lower (`first`) and upper (`last`) bounds of a one-dimensional [`CartesianProduct`](@ref).
 """
 @inline first(X::CartesianProduct{1}) = first(X(1))
 @inline last(X::CartesianProduct{1}) = last(X(1))
@@ -219,40 +176,44 @@ These methods extend `Base.first` and `Base.last` for `CartesianProduct{1}`` typ
 """
 	×(X::CartesianProduct, Y::CartesianProduct)
 
-Computes the [CartesianProduct](@ref) of two [CartesianProduct](@ref)s X and Y. The new dimension will be the sum of the dimensions of `X` and `Y`. Can be used as
-
-```julia
-X × Y
-```
+Computes the tensor product of two [`CartesianProduct`](@ref)s `X` and `Y`.
+The resulting dimension is `dim(X) + dim(Y)` with promoted element type.
 """
-@inline function ×(X::CartesianProduct{D1,T}, Y::CartesianProduct{D2,T}) where {D1,D2,T}
+@inline function ×(X::CartesianProduct{D1,T1}, Y::CartesianProduct{D2,T2}) where {D1,D2,T1,T2}
 	D = D1 + D2
-	# Concatenate boxes and collapsed flags using vcat (works for both SVector and NTuple)
-	new_box = vcat(X.box, Y.box)
+	T = promote_type(T1, T2)
+	if T === T1 === T2
+		new_box = vcat(X.box, Y.box)
+	else
+		new_box = SVector{D,Tuple{T,T}}(ntuple(i -> i <= D1 ? (T(X.box[i][1]), T(X.box[i][2])) : (T(Y.box[i - D1][1]), T(Y.box[i - D1][2])), Val(D)))
+	end
 	new_collapsed = vcat(X.collapsed, Y.collapsed)
 
 	return CartesianProduct{D,T}(new_box, new_collapsed)
 end
 
 """
-	projection(X::CartesianProduct, i)
+	$(SIGNATURES)
 
-Returns the `i`-th component interval of `X`` as a new 1D [CartesianProduct](@ref).
+Returns the `i`-th component interval of `X` as a new 1D [`CartesianProduct`](@ref).
 """
-@inline projection(X::CartesianProduct, i) = interval(X(i)...)
+@inline projection(X::CartesianProduct, i::Integer) = interval(X(i)...)
 
 """
-	point_type(X::CartesianProduct)
+	$(SIGNATURES)
 
-Determines the type of a coordinate point within a `CartesianProduct` space. Returns `T` for 1D spaces and `NTuple{D,T}` for D-dimensional spaces.
+Determines the coordinate point type within a [`CartesianProduct`](@ref) space.
+Returns `T` for 1D spaces and `NTuple{D,T}` for `D`-dimensional spaces.
 """
-@inline point_type(X::CartesianProduct{1,T}) where T = T
-@inline point_type(X::CartesianProduct{D,T}) where {D,T} = NTuple{D,T}
+@inline point_type(::CartesianProduct{1,T}) where {T} = T
+@inline point_type(::CartesianProduct{D,T}) where {D,T} = NTuple{D,T}
+@inline point_type(::Type{<:CartesianProduct{1,T}}) where {T} = T
+@inline point_type(::Type{<:CartesianProduct{D,T}}) where {D,T} = NTuple{D,T}
 
 """
 	Base.show(io::IO, X::CartesianProduct)
 
-Custom display for CartesianProduct objects, showing dimension info and collapsed status with colors.
+Custom display for [`CartesianProduct`](@ref) objects, showing dimension information, bounds, and collapsed status with colors.
 """
 function Base.show(io::IO, X::CartesianProduct{D,T}) where {D,T}
 	pp = PrettyPrinter(io)

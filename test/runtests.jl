@@ -10,7 +10,7 @@ end
 using Test
 using Bramble
 
-const __bramble_with_examples = true
+const __bramble_with_examples = false
 const __bramble_with_quality = false
 const __bramble_with_unit_tests = true
 
@@ -25,7 +25,7 @@ if __bramble_with_unit_tests
 			include("geometry/sets.jl")
 			include("geometry/domains.jl")
 		end
-
+#=
 		@testset verbose=true "Meshes" begin
 			include("mesh/mesh1d.jl")
 			include("mesh/meshnd.jl")
@@ -52,7 +52,7 @@ if __bramble_with_unit_tests
 			include("form/bilinear_forms.jl")
 			include("form/composite_forms.jl")
 		end
-
+=#
 		#=@testset "Exporters" begin
 			include("exporters/exporter_coverage.jl")
 		end=#

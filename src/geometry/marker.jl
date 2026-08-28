@@ -1,36 +1,33 @@
 """
 	$(TYPEDEF)
 
-Represents a labeled region or boundary of a domain.
+Represents a labeled region or boundary of a computational domain.
 
-Each `Marker` consists of a `label` (a `Symbol`) and an `identifier`. The `identifier` specifies how to locate the marked region. It can be:
-
-  - A `Symbol` for predefined boundaries (e.g., `:left`, `:top`).
-  - A `Set{Symbol}` for collections of predefined boundaries.
-  - A function (wrapped in a `BrambleFunction`) that acts as a level-set, returning `true` for points inside the marked region.
+Each `Marker` consists of a `label` (a `Symbol`) and an `identifier`. The `identifier` specifies how to locate the marked region:
+- A `Symbol` for predefined boundaries (e.g., `:left`, `:top`).
+- A `Set{Symbol}` for collections of predefined boundaries (e.g., `Set([:top, :right])`).
+- A function (wrapped in a `BrambleFunction`) that acts as a characteristic or level-set function returning `true` for points in the marked region.
 
 # Fields
 
 $(FIELDS)
 """
 struct Marker{F}
-	"A `Symbol` used to name the marked region (e.g., `:inlet`, `:wall`)."
+	"A `Symbol` naming the marked region (e.g., `:inlet`, `:wall`, `:boundary`)."
 	label::Symbol
-	"The object that identifies the region (`Symbol`, `Set{Symbol}`, or `BrambleFunction`)."
+	"The object identifying the region (`Symbol`, `Set{Symbol}`, or `BrambleFunction`)."
 	identifier::F
 end
 
 """
 	MarkerPair{F}
 
-A type alias for `Pair{Symbol, F}`, representing a convenient way to define a marker.
-For example: `:boundary => :left`.
+A type alias for `Pair{Symbol, F}`, representing a convenient way to define a marker (e.g., `:boundary => :left`).
 """
 const MarkerPair{F} = Pair{Symbol,F}
 
 """
-	label(m::Marker)
-	label(m::MarkerPair)
+	$(SIGNATURES)
 
 Returns the `Symbol` label of a `Marker` or `MarkerPair`.
 """
@@ -38,10 +35,9 @@ Returns the `Symbol` label of a `Marker` or `MarkerPair`.
 @inline label(m::MarkerPair) = first(m)
 
 """
-	identifier(m::Marker)
-	identifier(m::MarkerPair)
+	$(SIGNATURES)
 
-Returns the identifier (`Symbol`, `Set`, or function) of a `Marker` or `MarkerPair`.
+Returns the identifier (`Symbol`, `Set{Symbol}`, or function) of a `Marker` or `MarkerPair`.
 """
 @inline identifier(m::Marker) = m.identifier
 @inline identifier(m::MarkerPair) = last(m)
@@ -49,9 +45,7 @@ Returns the identifier (`Symbol`, `Set`, or function) of a `Marker` or `MarkerPa
 """
 	$(TYPEDEF)
 
-A container that categorizes and stores all markers for a given domain.
-
-See [`markers`](@ref) for construction and [`get_boundary_symbols`](@ref) for available predefined boundary symbols.
+A container that categorizes and stores all markers for a given computational domain.
 
 # Fields
 
@@ -67,79 +61,73 @@ struct DomainMarkers{BFType}
 end
 
 """
-	symbols(domain_markers::DomainMarkers)
+	$(SIGNATURES)
 
-Gets the set of single-symbol markers from a [DomainMarkers](@ref) object.
+Returns the set of single-symbol markers from a [`DomainMarkers`](@ref) object.
 """
 @inline symbols(domain_markers::DomainMarkers) = domain_markers.symbols
 
 """
-	tuples(domain_markers::DomainMarkers)
+	$(SIGNATURES)
 
-Gets the set of symbol-tuple markers from a [DomainMarkers](@ref) object.
+Returns the set of symbol-tuple markers from a [`DomainMarkers`](@ref) object.
 """
 @inline tuples(domain_markers::DomainMarkers) = domain_markers.tuples
 
 """
-	conditions(domain_markers::DomainMarkers)
+	$(SIGNATURES)
 
-Gets the set of function-based markers from a [DomainMarkers](@ref) object.
+Returns the set of function condition markers from a [`DomainMarkers`](@ref) object.
 """
 @inline conditions(domain_markers::DomainMarkers) = domain_markers.conditions
 
 """
-	label_identifiers(domain_markers::DomainMarkers)
+	$(SIGNATURES)
 
-Returns a generator that yields the label of every marker in the [DomainMarkers](@ref) collection.
+Returns a generator that yields the label (`Symbol`) of every marker in the [`DomainMarkers`](@ref) collection.
 """
 @inline function label_identifiers(domain_markers::DomainMarkers)
 	@unpack symbols, tuples, conditions = domain_markers
 	return (label(marker)::Symbol for marker in Iterators.flatten((symbols, tuples, conditions)))
 end
 
+@inline labels(domain_markers::DomainMarkers) = label_identifiers(domain_markers)
+
 """
-	label_symbols(domain_markers::DomainMarkers)
+	$(SIGNATURES)
 
 Returns a generator that yields the labels from the single-symbol markers.
 """
 @inline label_symbols(domain_markers::DomainMarkers) = (label(marker)::Symbol for marker in symbols(domain_markers))
 
 """
-	label_tuples(domain_markers::DomainMarkers) 
+	$(SIGNATURES)
 
 Returns a generator that yields the labels from the symbol-tuple markers.
 """
 @inline label_tuples(domain_markers::DomainMarkers) = (label(marker)::Symbol for marker in tuples(domain_markers))
 
 """
-	label_conditions(domain_markers::DomainMarkers)
+	$(SIGNATURES)
 
-Returns a generator that yields the labels from the function-based markers.
+Returns a generator that yields the labels from the function-based condition markers.
 """
 @inline label_conditions(domain_markers::DomainMarkers) = (label(marker)::Symbol for marker in conditions(domain_markers))
 
 """
-	markers(space_set, [time_set], pairs...)
+	$(SIGNATURES)
 
-Constructs a [DomainMarkers](@ref) object from a series of `label => identifier` pairs.
+Constructs a [`DomainMarkers`](@ref) object from a series of `label => identifier` pairs.
 
 The `identifier` can be a `Symbol`, a `Tuple` of `Symbol`s, or a `Function`.
-The full list of predefined boundary symbols can be found via [`get_boundary_symbols`](@ref).
 
 # Example
 
 ```jldoctest
 julia> I = cartesian_product(0.0, 1.0);
-	   tuples = (:corners => (:top, :right), :all_boundary => (:top, :right, :left, :bottom));
-	   ids = (:left_boundary => :left, tuples..., :internal => x -> 0.2 < x < 0.8);
-	   m = markers(I, ids...);
-
+julia> m = markers(I, :left_boundary => :left, :internal => x -> 0.2 < x < 0.8);
 julia> length(m.symbols)
 1
-
-julia> length(m.tuples)
-2
-
 julia> length(m.conditions)
 1
 ```
@@ -153,17 +141,15 @@ from a collection of pairs. Returns a tuple containing the set of symbol markers
 and the set of tuple markers.
 =========================================================================#
 function _extract_identifier_markers(pairs::Tuple)
-	# Pre-allocate with size hint for better performance
 	symbols = Set{Marker{Symbol}}()
 	tuples = Set{Marker{Set{Symbol}}}()
 	sizehint!(symbols, length(pairs))
 	sizehint!(tuples, length(pairs))
 
-	# Single pass through pairs
 	for p in pairs
 		if p.second isa Symbol
 			push!(symbols, Marker(p.first, p.second))
-		elseif p.second isa NTuple{N,Symbol} where N
+		elseif p.second isa NTuple{N,Symbol} where {N}
 			push!(tuples, Marker(p.first, Set(p.second)))
 		end
 	end
@@ -175,10 +161,7 @@ end
 Creates DomainMarkers from pairs, handling spatial domains.
 =========================================================================#
 function _create_generic_markers(FinalType::Type, space_domain::CartesianProduct, pairs::Pair...)
-	# First, separate out the markers that use Symbols or Tuples of Symbols as identifiers. 
 	symbols, tuples = _extract_identifier_markers(pairs)
-
-	# Next, process the markers that use functions as identifiers. 
 	conditions = _pairs_to_set_conditions(FinalType, space_domain, pairs)
 
 	return DomainMarkers(symbols, tuples, conditions)
@@ -195,17 +178,12 @@ function _create_generic_markers(FinalType::Type, space_domain::CartesianProduct
 end
 
 function _pairs_to_set_conditions(FinalType::Type, space_domain::CartesianProduct{D,T}, pairs) where {D,T}
-	# Determine the expected argument type for a spatial function on this domain. 
 	ArgsT = point_type(space_domain)
-
-	# Determine the concrete type of the BrambleFunction for the Set, which improves type stability. 
 	BrambleFuncType = BrambleFunction{ArgsT,false,FinalType,typeof(space_domain)}
 
-	# Pre-allocate with size hint
 	result = Set{Marker{BrambleFuncType}}()
 	sizehint!(result, length(pairs))
 
-	# Single pass, avoiding double iteration
 	@inbounds for p in pairs
 		if p.second isa Function
 			push!(result, Marker(p.first, process_identifier(space_domain, p.second; FinalType)))
@@ -220,11 +198,9 @@ function _pairs_to_set_conditions(FinalType::Type, space_domain::CartesianProduc
 	SpaceFuncType = BrambleFunction{SpaceArgsT,false,FinalType,typeof(space_domain)}
 	BrambleFuncType = BrambleFunction{T,true,SpaceFuncType,typeof(time_domain)}
 
-	# Pre-allocate with size hint
 	result = Set{Marker{BrambleFuncType}}()
 	sizehint!(result, length(pairs))
 
-	# Single pass, avoiding double iteration
 	@inbounds for p in pairs
 		if p.second isa Function
 			push!(result, Marker(p.first, process_identifier(space_domain, time_domain, p.second; FinalType)))
@@ -243,22 +219,21 @@ end
 end
 
 @inline process_identifier(::CartesianProduct, identifier::Symbol) = identifier
-@inline process_identifier(::CartesianProduct, identifier::NTuple{N,Symbol}) where N = Set(identifier)
+@inline process_identifier(::CartesianProduct, identifier::NTuple{N,Symbol}) where {N} = Set(identifier)
 
 """
 	$(TYPEDEF)
 
-A lazy, view-like wrapper that represents a [DomainMarkers](@ref) object evaluated
-at a specific time `t`.
-
-This struct avoids allocating a new collection for time-evaluated functions. Instead, it generates the time-independent functions on-the-fly when the `conditions` are iterated over. It shares the `symbols` and `tuples` directly from the original object.
+A lazy, view-like wrapper representing a [`DomainMarkers`](@ref) object evaluated at a specific time `t`.
 
 # Fields
 
 $(FIELDS)
 """
 struct EvaluatedDomainMarkers{M<:DomainMarkers,T<:Number}
+	"the original time-dependent DomainMarkers instance."
 	original_markers::M
+	"the evaluation timestamp."
 	evaluation_time::T
 end
 
@@ -266,18 +241,15 @@ symbols(edm::EvaluatedDomainMarkers) = symbols(edm.original_markers)
 tuples(edm::EvaluatedDomainMarkers) = tuples(edm.original_markers)
 
 """
-	conditions(edm::EvaluatedDomainMarkers)
+	$(SIGNATURES)
 
-Returns a lazy generator that yields time-evaluated markers.
-
-This is the core of the lazy evaluation. It iterates over the original conditions and yields new [Marker](@ref) objects with their functions evaluated at `edm.evaluation_time`, but only when requested.
+Returns a lazy generator that yields time-evaluated markers at `edm.evaluation_time`.
 """
 function conditions(edm::EvaluatedDomainMarkers)
 	t = edm.evaluation_time
 	return (_evaluate_marker_at_time(marker, t) for marker in conditions(edm.original_markers))
 end
 
-# Helper function to avoid closure allocation in the generator
 @inline function _evaluate_marker_at_time(marker, t)
 	bramble_func = identifier(marker)
 	if applicable(bramble_func, t)
@@ -287,27 +259,36 @@ end
 	end
 end
 
+label_identifiers(edm::EvaluatedDomainMarkers) = (label(m)::Symbol for m in Iterators.flatten((symbols(edm), tuples(edm), conditions(edm))))
+labels(edm::EvaluatedDomainMarkers) = label_identifiers(edm)
+label_symbols(edm::EvaluatedDomainMarkers) = (label(m)::Symbol for m in symbols(edm))
+label_tuples(edm::EvaluatedDomainMarkers) = (label(m)::Symbol for m in tuples(edm))
+label_conditions(edm::EvaluatedDomainMarkers) = (label(m)::Symbol for m in conditions(edm))
+Base.length(edm::EvaluatedDomainMarkers) = length(edm.original_markers)
+Base.isempty(edm::EvaluatedDomainMarkers) = isempty(edm.original_markers)
+
 """
 	(dm::DomainMarkers)(t::Number)
 
-Evaluates a time-dependent [DomainMarkers](@ref) object at a specific time `t`. This function returns a new, time-independent [DomainMarkers](@ref) object.
-
-# Example
-
-```jldoctest
-julia> time_dep_markers = markers(space_domain, time_domain, :moving_front => (x, t) -> x[1] > t);
-	   markers_at_0_5 = time_dep_markers(0.5)# Symbol and Tuple markers are time-agnostic, so they are preserved.
-
-```
+Evaluates a time-dependent [`DomainMarkers`](@ref) object at a specific time `t`.
 """
 (dm::DomainMarkers)(t::Number) = EvaluatedDomainMarkers(dm, t)
 
 """
+	@markers(space_set, [time_set], pairs...)
+
+Convenience macro for constructing a [`DomainMarkers`](@ref) instance.
+"""
+macro markers(args...)
+	return esc(:(markers($(args...))))
+end
+
+"""
 	Base.show(io::IO, m::Marker)
 
-Custom display for Marker objects.
+Custom display for [`Marker`](@ref) objects.
 """
-function Base.show(io::IO, m::Marker{F}) where F
+function Base.show(io::IO, m::Marker{F}) where {F}
 	if F <: Symbol
 		print(io, "Marker(:$(m.label) => :$(m.identifier))")
 	elseif F <: Set{Symbol}
@@ -321,7 +302,7 @@ end
 """
 	Base.show(io::IO, dm::DomainMarkers)
 
-Custom display for DomainMarkers objects with detailed marker information and colors.
+Custom display for [`DomainMarkers`](@ref) objects with colored formatting.
 """
 function Base.show(io::IO, dm::DomainMarkers)
 	pp = PrettyPrinter(io)
@@ -395,13 +376,13 @@ end
 """
 	Base.length(dm::DomainMarkers)
 
-Returns the total number of markers in a DomainMarkers object.
+Returns the total number of markers in a [`DomainMarkers`](@ref) object.
 """
 Base.length(dm::DomainMarkers) = length(dm.symbols) + length(dm.tuples) + length(dm.conditions)
 
 """
 	Base.isempty(dm::DomainMarkers)
 
-Checks if a DomainMarkers object contains any markers.
+Checks if a [`DomainMarkers`](@ref) object contains zero markers.
 """
 Base.isempty(dm::DomainMarkers) = isempty(dm.symbols) && isempty(dm.tuples) && isempty(dm.conditions)

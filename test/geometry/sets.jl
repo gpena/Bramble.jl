@@ -1,5 +1,6 @@
+using Test
+using Bramble
 using Bramble: CartesianProduct
-using Bramble: interval, cartesian_product, projection, dim, tails, ×, point, set, eltype, topo_dim, center, is_collapsed, point_type, first, last
 using StaticArrays
 
 @testset "CartesianProduct Tests" begin
@@ -7,11 +8,9 @@ using StaticArrays
 		# interval constructor (Float64 default)
 		I_f64 = interval(-3.0, 10.0)
 		@test I_f64 isa CartesianProduct{1,Float64}
-		@test I_f64.box isa SVector{1}  # Now SVector for D=1
+		@test I_f64.box isa SVector{1}
 		@test I_f64.box[1] == (-3.0, 10.0)
 		@test all(isapprox.(I_f64.box[1], (-3.0, 10.0)))
-
-		# Test collapsed flag
 		@test I_f64.collapsed[1] == false
 
 		# interval constructor (Int -> Float64)
@@ -20,14 +19,19 @@ using StaticArrays
 		@test I_int.box[1] == (-3.0, 10.0)
 		@test all(isapprox.(I_int.box[1], (-3.0, 10.0)))
 
+		# interval constructor (Float32)
+		I_f32 = interval(0.0f0, 1.0f0)
+		@test I_f32 isa CartesianProduct{1,Float32}
+		@test eltype(I_f32) === Float32
+
 		# interval edge case: zero width
 		I_zero = interval(5.5, 5.5)
 		@test I_zero isa CartesianProduct{1,Float64}
 		@test all(isapprox.(I_zero.box[1], (5.5, 5.5)))
-		@test I_zero.collapsed[1] == true  # Should be marked as collapsed
+		@test I_zero.collapsed[1] == true
 
 		# interval constructor assertion x <= y
-		@test_throws AssertionError interval(10, 1)
+		@test_throws ArgumentError interval(10, 1)
 
 		# interval from CartesianProduct{1}
 		I_f64_again = interval(I_f64)
@@ -39,20 +43,23 @@ using StaticArrays
 		@test cp_f64 isa CartesianProduct{1,Float64}
 		@test all(isapprox.(cp_f64.box[1], (-3.0, 10.0)))
 
-		# cartesian_product(NTuple) - Int 
+		# cartesian_product(NTuple) - Int
 		cp_int_2d = cartesian_product(((0, 1), (4, 5)))
 		@test cp_int_2d isa CartesianProduct{2,Float64}
-		@test cp_int_2d.box isa SVector{2}  # SVector for D=2
+		@test cp_int_2d.box isa SVector{2}
 		@test cp_int_2d.box[1] == (0.0, 1.0)
 		@test cp_int_2d.box[2] == (4.0, 5.0)
 
-		# cartesian_product(NTuple) - Float32 
+		# cartesian_product(NTuple) - Float32
 		cp_f32_3d = cartesian_product(((0.0f0, 1.0f0), (2.0f0, 3.0f0), (-1.0f0, 0.0f0)))
 		@test cp_f32_3d isa CartesianProduct{3,Float32}
-		@test cp_f32_3d.box isa SVector{3}  # SVector for D=3
+		@test cp_f32_3d.box isa SVector{3}
 		@test cp_f32_3d.box[1] == (0.0f0, 1.0f0)
 		@test cp_f32_3d.box[2] == (2.0f0, 3.0f0)
 		@test cp_f32_3d.box[3] == (-1.0f0, 0.0f0)
+
+		# cartesian_product invalid assertion
+		@test_throws ArgumentError cartesian_product(((1.0, 0.0), (2.0, 3.0)))
 
 		# cartesian_product(CartesianProduct) identity
 		cp_id = cartesian_product(cp_int_2d)
@@ -64,20 +71,34 @@ using StaticArrays
 		@test P_f64.box[1] == (3.5, 3.5)
 		@test P_f64.collapsed[1] == true
 
+		P_f32 = point(2.0f0)
+		@test P_f32 isa CartesianProduct{1,Float32}
+		@test eltype(P_f32) === Float32
+
 		# box constructors
 		B1d = box(1.0, 5.0)
 		@test B1d isa CartesianProduct{1,Float64}
 		@test B1d.box[1] == (1.0, 5.0)
 
+		B1d_rev = box(5.0, 1.0)
+		@test B1d_rev isa CartesianProduct{1,Float64}
+		@test B1d_rev.box[1] == (1.0, 5.0)
+
 		B2d = box((0.0, 2.0), (1.0, 3.0))
 		@test B2d isa CartesianProduct{2,Float64}
-		@test B2d.box[1] == (0.0, 1.0)  # min/max
+		@test B2d.box[1] == (0.0, 1.0)
 		@test B2d.box[2] == (2.0, 3.0)
 
-		# box with reversed points (should compute min/max correctly)
+		# box with reversed points
 		B2d_rev = box((5.0, 10.0), (2.0, 8.0))
 		@test B2d_rev.box[1] == (2.0, 5.0)
 		@test B2d_rev.box[2] == (8.0, 10.0)
+
+		B3d = box((0.0, 1.0, 2.0), (3.0, -1.0, 5.0))
+		@test B3d isa CartesianProduct{3,Float64}
+		@test B3d.box[1] == (0.0, 3.0)
+		@test B3d.box[2] == (-1.0, 1.0)
+		@test B3d.box[3] == (2.0, 5.0)
 	end
 
 	@testset "Accessors and Properties" begin
@@ -112,11 +133,11 @@ using StaticArrays
 
 		# topo_dim with collapsed dimensions
 		P_collapsed = point(1.0)
-		@test topo_dim(P_collapsed) === 0  # Point has topological dim 0
+		@test topo_dim(P_collapsed) === 0
 
-		I_line = I × point(2.0)  # Line in 2D
+		I_line = I × point(2.0)
 		@test dim(I_line) === 2
-		@test topo_dim(I_line) === 1  # Only 1 non-collapsed dimension
+		@test topo_dim(I_line) === 1
 
 		# center
 		@test center(I) ≈ SVector(0.5)
@@ -127,12 +148,16 @@ using StaticArrays
 		@test is_collapsed(I) == false
 		@test is_collapsed(P_collapsed) == true
 		@test is_collapsed(1.0, 1.0) == true
+		@test is_collapsed(1, 1.0) == true
 		@test is_collapsed(0.0, 1.0) == false
 
 		# point_type
 		@test point_type(I) === Float64
+		@test point_type(typeof(I)) === Float64
 		@test point_type(R2) === NTuple{2,Float64}
+		@test point_type(typeof(R2)) === NTuple{2,Float64}
 		@test point_type(R3) === NTuple{3,Float64}
+		@test point_type(typeof(R3)) === NTuple{3,Float64}
 
 		# Call syntax (X(i))
 		@test all(isapprox.(I(1), (0.0, 1.0)))
@@ -141,18 +166,18 @@ using StaticArrays
 		@test all(isapprox.(R3(1), (0.0, 1.0)))
 		@test all(isapprox.(R3(2), (2.0, 3.0)))
 		@test all(isapprox.(R3(3), (4.0, 5.0)))
-		@test_throws AssertionError I(2)
-		@test_throws AssertionError R2(0)
-		@test_throws AssertionError R3(4)
+		@test_throws BoundsError I(2)
+		@test_throws BoundsError R2(0)
+		@test_throws BoundsError R3(4)
 
 		# tails(X, i)
 		@test all(isapprox.(tails(I, 1), (0.0, 1.0)))
 		@test all(isapprox.(tails(R2, 1), (0.0, 1.0)))
 		@test all(isapprox.(tails(R2, 2), (2.0, 3.0)))
 		@test all(isapprox.(tails(R3, 3), (4.0, 5.0)))
-		@test_throws AssertionError tails(I, 2)
-		@test_throws AssertionError tails(R2, 0)
-		@test_throws AssertionError tails(R3, 4)
+		@test_throws BoundsError tails(I, 2)
+		@test_throws BoundsError tails(R2, 0)
+		@test_throws BoundsError tails(R3, 4)
 
 		# tails(X)
 		@test all(isapprox.(tails(I), (0.0, 1.0)))
@@ -166,25 +191,24 @@ using StaticArrays
 		@test_throws MethodError last(R3)
 	end
 
-	@testset "Operations" begin
+	@testset "Operations and Mixed Promotions" begin
 		I1 = interval(0.0, 1.0)
 		I2 = interval(2.0, 3.0)
 		I3_int = interval(4, 5)
-		R2 = cartesian_product(((10, 11), (12, 13)))
+		I_f32 = interval(0.0f0, 1.0f0)
 
-		# × operator (Float64 x Float64) - 2D uses SVector
+		# × operator (Float64 x Float64)
 		P1 = I1 × I2
 		@test P1 isa CartesianProduct{2,Float64}
 		@test dim(P1) == 2
 		@test P1.box isa SVector{2}
 		@test tails(P1) == ((0.0, 1.0), (2.0, 3.0))
 
-		# × operator (Float64 x Float64 x Float64) - 3D uses SVector
-		P2 = I1 × I2 × I3_int
-		@test P2 isa CartesianProduct{3,Float64}
-		@test dim(P2) == 3
-		@test P2.box isa SVector{3}
-		@test tails(P2) == ((0.0, 1.0), (2.0, 3.0), (4.0, 5.0))
+		# × operator with mixed types (Float32 x Float64)
+		P_mixed = I_f32 × I1
+		@test P_mixed isa CartesianProduct{2,Float64}
+		@test eltype(P_mixed) === Float64
+		@test tails(P_mixed) == ((0.0, 1.0), (0.0, 1.0))
 
 		# × operator creating 5D
 		I4 = interval(6.0, 7.0)
@@ -214,42 +238,85 @@ using StaticArrays
 		@test dim(proj3) == 1
 		@test all(isapprox.(tails(proj3), (4.0, 5.0)))
 
-		# projection index out of bounds
-		@test_throws AssertionError projection(P_proj, 4)
-		@test_throws AssertionError projection(P_proj, 0)
+		@test_throws BoundsError projection(P_proj, 4)
+		@test_throws BoundsError projection(P_proj, 0)
 	end
 
-	# Include original tests for regression checking
-	@testset "Original Tests" begin
-		I = interval(-3.0, 10.0)
+	@testset "Zero-Allocation & Type Inference" begin
+		I1 = interval(0.0, 1.0)
+		I2 = interval(2.0, 3.0)
+		cp2 = I1 × I2
+		cp3 = I1 × I2 × interval(4.0, 5.0)
 
-		@test isapprox(I.box[1][1], -3.0)
-		@test isapprox(I.box[1][2], 10.0)
-		@test dim(I) == 1
+		# Type inference
+		@inferred interval(0.0, 1.0)
+		@inferred point(0.5)
+		@inferred box(0.0, 1.0)
+		@inferred box((0.0, 1.0), (2.0, 3.0))
+		@inferred center(cp2)
+		@inferred center(cp3)
+		@inferred dim(cp3)
+		@inferred eltype(cp3)
+		@inferred topo_dim(cp3)
+		@inferred projection(cp3, 2)
+		@inferred tails(cp3, 1)
+		@inferred tails(cp3)
+		@inferred cp2(1)
+		@inferred is_collapsed(I1)
+		@inferred is_collapsed(point(1.0))
+		@inferred I1 × I2
 
-		I2 = interval(70.0, 100.0)
+		# Allocations: Zero heap allocations for core operations
+		@test (@allocated interval(0.0, 1.0)) == 0
+		@test (@allocated point(0.5)) == 0
+		@test (@allocated box(0.0, 1.0)) == 0
+		@test (@allocated box((0.0, 1.0), (2.0, 3.0))) == 0
+		@test (@allocated center(cp2)) == 0
+		@test (@allocated topo_dim(cp3)) == 0
+		@test (@allocated projection(cp3, 2)) == 0
+		@test (@allocated tails(cp3)) == 0
+		@test (@allocated tails(cp3, 1)) == 0
+		@test (@allocated cp2(1)) == 0
+		@test (@allocated (I1 × I2)) == 0
+	end
 
-		set_2d = I × I2
-		Ω2_x = projection(set_2d, 1)
-		Ω2_y = projection(set_2d, 2)
+	@testset "Display / Show" begin
+		I = interval(0.0, 1.0)
+		P = point(2.5)
+		R2 = I × interval(2.0, 3.0)
+		R2_collapsed = I × point(3.0)
 
-		@test isapprox(Ω2_y.box[1][1], 70.0)
-		@test isapprox(Ω2_x.box[1][1], -3.0)
-		@test isapprox(Ω2_y.box[1][2], 100.0)
-		@test isapprox(Ω2_x.box[1][2], 10.0)
+		# Compact mode
+		io_compact = IOBuffer()
+		show(IOContext(io_compact, :compact => true), I)
+		@test occursin("[0.0, 1.0]", String(take!(io_compact)))
 
-		I3 = interval(-15.0, -1.0)
+		show(IOContext(io_compact, :compact => true), P)
+		@test occursin("Point(2.5)", String(take!(io_compact)))
 
-		set_3d = I × I2 × I3
-		Ω3_x = projection(set_3d, 1)
-		Ω3_y = projection(set_3d, 2)
-		Ω3_z = projection(set_3d, 3)
+		show(IOContext(io_compact, :compact => true), R2)
+		@test occursin("[0.0, 1.0] × [2.0, 3.0]", String(take!(io_compact)))
 
-		@test isapprox(Ω3_x.box[1][1], -3.0)
-		@test isapprox(Ω3_x.box[1][2], 10.0)
-		@test isapprox(Ω3_y.box[1][1], 70.0)
-		@test isapprox(Ω3_y.box[1][2], 100.0)
-		@test isapprox(Ω3_z.box[1][1], -15.0)
-		@test isapprox(Ω3_z.box[1][2], -1.0)
+		show(IOContext(io_compact, :compact => true), R2_collapsed)
+		@test occursin("[0.0, 1.0] × 3.0", String(take!(io_compact)))
+
+		# Detailed multiline mode
+		io_det = IOBuffer()
+		show(io_det, I)
+		str_I = String(take!(io_det))
+		@test occursin("CartesianProduct{1,Float64}", str_I)
+		@test occursin("Interval", str_I)
+
+		show(io_det, P)
+		str_P = String(take!(io_det))
+		@test occursin("Point", str_P)
+
+		show(io_det, R2)
+		str_R2 = String(take!(io_det))
+		@test occursin("CartesianProduct{2,Float64}", str_R2)
+
+		show(io_det, R2_collapsed)
+		str_R2c = String(take!(io_det))
+		@test occursin("topological dim 1", str_R2c)
 	end
 end
