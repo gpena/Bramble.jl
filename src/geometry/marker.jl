@@ -143,8 +143,9 @@ and the set of tuple markers.
 function _extract_identifier_markers(pairs::Tuple)
 	symbols = Set{Marker{Symbol}}()
 	tuples = Set{Marker{Set{Symbol}}}()
-	sizehint!(symbols, length(pairs))
-	sizehint!(tuples, length(pairs))
+	n = length(pairs)
+	sizehint!(symbols, n ÷ 2 + 1)
+	sizehint!(tuples,  n ÷ 2 + 1)
 
 	for p in pairs
 		if p.second isa Symbol
@@ -184,7 +185,7 @@ function _pairs_to_set_conditions(FinalType::Type, space_domain::CartesianProduc
 	result = Set{Marker{BrambleFuncType}}()
 	sizehint!(result, length(pairs))
 
-	@inbounds for p in pairs
+	for p in pairs
 		if p.second isa Function
 			push!(result, Marker(p.first, process_identifier(space_domain, p.second; FinalType)))
 		end
@@ -201,7 +202,7 @@ function _pairs_to_set_conditions(FinalType::Type, space_domain::CartesianProduc
 	result = Set{Marker{BrambleFuncType}}()
 	sizehint!(result, length(pairs))
 
-	@inbounds for p in pairs
+	for p in pairs
 		if p.second isa Function
 			push!(result, Marker(p.first, process_identifier(space_domain, time_domain, p.second; FinalType)))
 		end
@@ -237,8 +238,19 @@ struct EvaluatedDomainMarkers{M<:DomainMarkers,T<:Number}
 	evaluation_time::T
 end
 
-symbols(edm::EvaluatedDomainMarkers) = symbols(edm.original_markers)
-tuples(edm::EvaluatedDomainMarkers) = tuples(edm.original_markers)
+"""
+	$(SIGNATURES)
+
+Returns the set of single-symbol markers from an [`EvaluatedDomainMarkers`](@ref) object.
+"""
+@inline symbols(edm::EvaluatedDomainMarkers) = symbols(edm.original_markers)
+
+"""
+	$(SIGNATURES)
+
+Returns the set of symbol-tuple markers from an [`EvaluatedDomainMarkers`](@ref) object.
+"""
+@inline tuples(edm::EvaluatedDomainMarkers) = tuples(edm.original_markers)
 
 """
 	$(SIGNATURES)
@@ -251,21 +263,61 @@ function conditions(edm::EvaluatedDomainMarkers)
 end
 
 @inline function _evaluate_marker_at_time(marker, t)
-	bramble_func = identifier(marker)
-	if applicable(bramble_func, t)
-		return Marker(label(marker), bramble_func(t))
-	else
-		return marker
-	end
+	bf = identifier(marker)
+	return Marker(label(marker), _eval_bf_at_time(Val(has_time(bf)), bf, t))
 end
 
-label_identifiers(edm::EvaluatedDomainMarkers) = (label(m)::Symbol for m in Iterators.flatten((symbols(edm), tuples(edm), conditions(edm))))
-labels(edm::EvaluatedDomainMarkers) = label_identifiers(edm)
-label_symbols(edm::EvaluatedDomainMarkers) = (label(m)::Symbol for m in symbols(edm))
-label_tuples(edm::EvaluatedDomainMarkers) = (label(m)::Symbol for m in tuples(edm))
-label_conditions(edm::EvaluatedDomainMarkers) = (label(m)::Symbol for m in conditions(edm))
-Base.length(edm::EvaluatedDomainMarkers) = length(edm.original_markers)
-Base.isempty(edm::EvaluatedDomainMarkers) = isempty(edm.original_markers)
+@inline _eval_bf_at_time(::Val{true},  bf, t) = bf(t)
+@inline _eval_bf_at_time(::Val{false}, bf, t) = bf
+
+"""
+	$(SIGNATURES)
+
+Returns a generator that yields the label (`Symbol`) of every marker in an [`EvaluatedDomainMarkers`](@ref) collection.
+"""
+@inline label_identifiers(edm::EvaluatedDomainMarkers) = (label(m)::Symbol for m in Iterators.flatten((symbols(edm), tuples(edm), conditions(edm))))
+
+"""
+	$(SIGNATURES)
+
+Returns a generator that yields the labels of all markers in an [`EvaluatedDomainMarkers`](@ref) collection.
+"""
+@inline labels(edm::EvaluatedDomainMarkers) = label_identifiers(edm)
+
+"""
+	$(SIGNATURES)
+
+Returns a generator that yields the labels of the single-symbol markers in an [`EvaluatedDomainMarkers`](@ref) collection.
+"""
+@inline label_symbols(edm::EvaluatedDomainMarkers) = (label(m)::Symbol for m in symbols(edm))
+
+"""
+	$(SIGNATURES)
+
+Returns a generator that yields the labels of the symbol-tuple markers in an [`EvaluatedDomainMarkers`](@ref) collection.
+"""
+@inline label_tuples(edm::EvaluatedDomainMarkers) = (label(m)::Symbol for m in tuples(edm))
+
+"""
+	$(SIGNATURES)
+
+Returns a generator that yields the labels of the function-based condition markers in an [`EvaluatedDomainMarkers`](@ref) collection.
+"""
+@inline label_conditions(edm::EvaluatedDomainMarkers) = (label(m)::Symbol for m in conditions(edm))
+
+"""
+	$(SIGNATURES)
+
+Returns the total number of markers in an [`EvaluatedDomainMarkers`](@ref) object.
+"""
+@inline Base.length(edm::EvaluatedDomainMarkers) = length(edm.original_markers)
+
+"""
+	$(SIGNATURES)
+
+Returns `true` if an [`EvaluatedDomainMarkers`](@ref) object contains zero markers.
+"""
+@inline Base.isempty(edm::EvaluatedDomainMarkers) = isempty(edm.original_markers)
 
 """
 	(dm::DomainMarkers)(t::Number)

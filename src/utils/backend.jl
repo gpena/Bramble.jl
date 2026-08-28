@@ -123,6 +123,14 @@ Constructs an `n` × `n` identity matrix associated with the given [`Backend`](@
 @inline backend_eye(backend::Backend, n::Integer) = _backend_eye(matrix_type(backend), n)
 @inline _backend_eye(::Type{<:SparseMatrixCSC{T,Ti}}, n::Integer) where {T,Ti} = spdiagm(n, n, 0 => fill(one(T), n))
 @inline _backend_eye(::Type{<:Matrix{T}}, n::Integer) where T = Matrix{T}(I, n, n)
+function _backend_eye(::Type{MT}, n::Integer) where {T,MT<:AbstractMatrix{T}}
+	A = MT(undef, n, n)
+	fill!(A, zero(T))
+	for i in 1:n
+		A[i, i] = one(T)
+	end
+	return A
+end
 
 """
 	$(SIGNATURES)

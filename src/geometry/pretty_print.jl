@@ -219,7 +219,14 @@ end
 
 Removes the trailing newline from output.
 """
-@inline remove_trailing_newline(io::IO) = print(io, "\b")
+function remove_trailing_newline(io::IO)
+	if io isa IOBuffer
+		s = String(take!(io))
+		print(io, endswith(s, '\n') ? chop(s) : s)
+	else
+		print(io, "\b")
+	end
+end
 
 # Precomputed dimension labels to avoid repeated allocations
 const DIMENSION_LABELS = ("x", "y", "z", "w", "v", "u")

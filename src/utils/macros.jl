@@ -54,12 +54,12 @@ size(c)    # Returns (3,) (calls size(c.data))
 """
 macro forward(ex, fs)
 	if !(Meta.isexpr(ex, :.) && length(ex.args) == 2 && ex.args[2] isa QuoteNode)
-		error("Syntax: @forward T.x f, g, h")
+		error("Syntax: @forward T.x f  or  @forward T.x (f, g, h)")
 	end
 	T = esc(ex.args[1])
 	field = ex.args[2].value
 	fs = Meta.isexpr(fs, :tuple) ? map(esc, fs.args) : [esc(fs)]
-	:($([:($f(x::$T, args...; kwargs...) = (Base.@_inline_meta; $f(x.$field, args...; kwargs...)))
+	:($([:(@inline $f(x::$T, args...; kwargs...) = $f(x.$field, args...; kwargs...))
 		 for f in fs]...);
 	nothing)
 end

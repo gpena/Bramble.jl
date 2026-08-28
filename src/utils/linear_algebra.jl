@@ -13,6 +13,7 @@ Parallel implementation of a for-loop that modifies array `v` in-place using sta
 - `f`: Function that takes an index and returns the value to be stored at that index
 """
 function _parallel_for!(v, idxs, f)
+	# :static partitions work evenly across threads — lower overhead for uniform workloads
 	Threads.@threads :static for idx in idxs
 		@inbounds v[idx] = f(idx)
 	end
@@ -71,4 +72,8 @@ Computes the weighted inner product ``\\langle u, v \\rangle_h``.
 - For matrices `u` and `v`, computes ``v^T \\operatorname{diag}(h) u``.
 """
 @inline _inner_product(u::AbstractVector, h::AbstractVector, v::AbstractVector) = _dot(u, h, v)
-@inline _inner_product(u::AbstractMatrix, h::AbstractVector, v::AbstractMatrix) = transpose(v) * (Diagonal(h) * u)
+function _inner_product(u::AbstractMatrix, h::AbstractVector, v::AbstractMatrix)
+	tmp = similar(u)
+	mul!(tmp, Diagonal(h), u)
+	return transpose(v) * tmp
+end

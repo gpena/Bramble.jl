@@ -13,7 +13,7 @@ using FunctionWrappers: FunctionWrapper
 
 using StaticArrays: SVector
 
-using LinearAlgebra: Diagonal, I, transpose
+using LinearAlgebra: Diagonal, I, transpose, mul!
 
 
 # Utilities

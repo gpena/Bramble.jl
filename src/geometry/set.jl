@@ -78,7 +78,7 @@ Returns a [`CartesianProduct`](@ref) from coordinates or intervals.
 """
 @inline cartesian_product(x::Number, y::Number) = interval(x, y)
 
-@inline function cartesian_product(box::NTuple{D,Tuple{T,T}}) where {D,T}
+@inline function cartesian_product(box::NTuple{D,Tuple{Any,Any}}) where {D}
 	all(i -> box[i][1] <= box[i][2], 1:D) || _throw_box_error(box)
 
 	_box = ntuple(i -> (float(box[i][1]), float(box[i][2])), Val(D))

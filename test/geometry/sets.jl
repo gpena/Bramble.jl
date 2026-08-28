@@ -331,6 +331,12 @@ using StaticArrays
 		@test [2.5, 0.0] ∉ R2
 		@test [0.5, 0.0, 0.0] ∉ R2  # wrong dimension → false (line 220 length check)
 
+		# SVector path (goes through AbstractVector dispatch)
+		@test SVector(0.5) ∈ I
+		@test SVector(1.5) ∉ I
+		@test SVector(0.5, 0.0) ∈ R2
+		@test SVector(2.5, 0.0) ∉ R2
+
 		# Fallback dispatch for non-numeric, non-tuple input (line 221)
 		@test ("hello" ∈ I) == false
 		@test (:sym ∈ R2) == false

@@ -364,4 +364,21 @@ using StaticArrays
 		@test length(edm2) == 3
 		@test !isempty(edm2)
 	end
+
+	@testset "get_boundary_symbols by integer" begin
+		@test get_boundary_symbols(1) == (:left, :right)
+		@test get_boundary_symbols(2) == (:bottom, :top, :left, :right)
+		@test get_boundary_symbols(3) == (:bottom, :top, :back, :front, :left, :right)
+		@test_throws ErrorException get_boundary_symbols(4)
+	end
+
+	@testset "Four-argument domain constructor (space + time)" begin
+		I_space = interval(0.0, 1.0) × interval(0.0, 1.0)
+		I_time  = interval(0.0, 2.0)
+		f = (x, t) -> x[1] > t
+		Ω = domain(I_space, I_time, :moving => f, :fixed => :left)
+		@test set(Ω) === I_space
+		@test dim(Ω) == 2
+		@test length(Ω) == 2
+	end
 end

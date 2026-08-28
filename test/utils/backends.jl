@@ -152,6 +152,13 @@ const MockGPUMatrix{T} = MockGPUArray{T,2}
 		@test z_gpu isa MockGPUMatrix{Float32}
 		@test size(z_gpu) == (8, 8)
 		@test all(z_gpu .== 0.0f0)
+
+		eye_gpu = backend_eye(be_gpu, 5)
+		@test eye_gpu isa MockGPUMatrix{Float32}
+		@test size(eye_gpu) == (5, 5)
+		@test eye_gpu[1, 1] == 1.0f0
+		@test eye_gpu[1, 2] == 0.0f0
+		@test eye_gpu[3, 3] == 1.0f0
 	end
 
 	# Conditional test for Metal on macOS without requiring it as a project dependency

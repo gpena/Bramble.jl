@@ -37,7 +37,9 @@ Internal helper to determine the expected argument type for a function based on 
 @inline _get_args_type(::Type{<:CartesianProduct{D,T}}) where {D,T} = NTuple{D,T}
 @inline _get_args_type(X::Domain) = _get_args_type(set(X))
 @inline _get_args_type(::Type{<:Domain{S}}) where S = _get_args_type(S)
-@inline _get_args_type(X) = (dim(X) == 1) ? eltype(X) : NTuple{dim(X),eltype(X)}
+@inline _get_args_type(X) = _get_args_type_d(Val(dim(X)), eltype(X))
+@inline _get_args_type_d(::Val{1}, ::Type{T}) where T = T
+@inline _get_args_type_d(::Val{D}, ::Type{T}) where {D,T} = NTuple{D,T}
 
 """
 	$(SIGNATURES)
@@ -94,13 +96,12 @@ end
 @inline (f::BrambleFunction{AT,false})(coords::SVector{1}) where {AT<:Number} = f.wrapped(convert(AT, coords[1]))
 @inline (f::BrambleFunction{AT,false})(coords::AbstractVector) where {AT<:Number} = f.wrapped(convert(AT, coords[1]))
 
-# --- Functor Call Dispatches for Multi-D Functions (ArgsType <: NTuple{D,T}) ---
-@inline (f::BrambleFunction{NTuple{D,T},false})(coords::NTuple{D,T}) where {D,T} = f.wrapped(coords)
-@inline (f::BrambleFunction{NTuple{D,T},false})(coords::Tuple) where {D,T} = f.wrapped(NTuple{D,T}(coords))
-@inline (f::BrambleFunction{NTuple{D,T},false})(coords::SVector{D,T}) where {D,T} = f.wrapped(Tuple(coords))
-@inline (f::BrambleFunction{NTuple{D,T},false})(coords::SVector{D}) where {D,T} = f.wrapped(NTuple{D,T}(Tuple(coords)))
-@inline (f::BrambleFunction{NTuple{D,T},false})(coords::AbstractVector) where {D,T} = f.wrapped(ntuple(i -> T(coords[i]), Val(D)))
-@inline (f::BrambleFunction{NTuple{D,T},false})(coords::Vararg{Number,D}) where {D,T} = f.wrapped(NTuple{D,T}(coords))
+# --- Functor Call Dispatches for Multi-D Functions (ArgsType <: Tuple) ---
+@inline (f::BrambleFunction{AT,false})(coords::AT) where {AT<:Tuple} = f.wrapped(coords)
+@inline (f::BrambleFunction{AT,false})(coords::Tuple) where {AT<:Tuple} = f.wrapped(convert(AT, coords))
+@inline (f::BrambleFunction{AT,false})(coords::SVector) where {AT<:Tuple} = f.wrapped(convert(AT, Tuple(coords)))
+@inline (f::BrambleFunction{AT,false})(coords::AbstractVector) where {AT<:Tuple} = f.wrapped(convert(AT, Tuple(coords)))
+@inline (f::BrambleFunction{AT,false})(coords::Number...) where {AT<:Tuple} = f.wrapped(convert(AT, coords))
 
 # --- Functor Call Dispatches for Time-Dependent Functions (hastime=true) ---
 @inline (f::BrambleFunction{ArgsType,true})(t::Number) where {ArgsType} = f.wrapped(convert(ArgsType, t))

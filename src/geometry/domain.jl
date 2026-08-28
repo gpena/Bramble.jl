@@ -251,6 +251,10 @@ Returns a tuple of default boundary symbols for a [`CartesianProduct`](@ref) or 
 @inline get_boundary_symbols(::Type{<:CartesianProduct{2}}) = (:bottom, :top, :left, :right)
 @inline get_boundary_symbols(::Type{<:CartesianProduct{3}}) = (:bottom, :top, :back, :front, :left, :right)
 @inline get_boundary_symbols(D::Integer) = get_boundary_symbols(CartesianProduct{D})
+@noinline function get_boundary_symbols(::Type{<:CartesianProduct{D}}) where D
+	error("get_boundary_symbols is not defined for $(D)D domains. " *
+		  "Provide explicit boundary names via the markers() interface.")
+end
 @inline get_boundary_symbols(::Type{<:Domain{SetType}}) where {SetType} = get_boundary_symbols(SetType)
 
 """
