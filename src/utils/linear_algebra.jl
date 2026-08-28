@@ -55,7 +55,7 @@ Uses SIMD and fused multiply-add operations for maximal performance without allo
 	T = promote_type(eltype(u), eltype(v), eltype(w))
 	s = zero(T)
 
-	@inbounds @simd for i in eachindex(u, v, w)
+	@inbounds @simd for i in 1:length(u)
 		s = muladd(T(u[i]) * T(v[i]), T(w[i]), s)
 	end
 

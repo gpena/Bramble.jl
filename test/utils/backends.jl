@@ -261,11 +261,11 @@ const MockGPUMatrix{T} = MockGPUArray{T,2}
 		@inferred backend_types(be)
 
 		# Backend constructor is zero-allocation singleton
-		@test (@allocated backend()) == 0
-		@test (@allocated vector_type(be)) == 0
-		@test (@allocated matrix_type(be)) == 0
-		@test (@allocated eltype(be)) == 0
-		@test (@allocated backend_types(be)) == 0
+		@test_allocs backend()
+		@test_allocs vector_type(be)
+		@test_allocs matrix_type(be)
+		@test_allocs eltype(be)
+		@test_allocs backend_types(be)
 	end
 
 	@testset "Display / Show" begin

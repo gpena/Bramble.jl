@@ -225,14 +225,14 @@ using StaticArrays
 		@inferred Base.length(Ω)
 		@inferred Base.isempty(Ω)
 
-		@test (@allocated set(Ω)) == 0
-		@test (@allocated dim(Ω)) == 0
-		@test (@allocated eltype(Ω)) == 0
-		@test (@allocated topo_dim(Ω)) == 0
-		@test (@allocated projection(Ω, 1)) == 0
-		@test (@allocated get_boundary_symbols(Ω)) == 0
-		@test (@allocated Base.length(Ω)) == 0
-		@test (@allocated Base.isempty(Ω)) == 0
+		@test_allocs set(Ω)
+		@test_allocs dim(Ω)
+		@test_allocs eltype(Ω)
+		@test_allocs topo_dim(Ω)
+		@test_allocs projection(Ω, 1)
+		@test_allocs get_boundary_symbols(Ω)
+		@test_allocs Base.length(Ω)
+		@test_allocs Base.isempty(Ω)
 	end
 
 	@testset "Display / Show" begin

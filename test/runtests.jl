@@ -10,6 +10,37 @@ end
 using Test
 using Bramble
 
+@inline function alloc_test(f::F, args...) where {F}
+	f(args...) # warm up
+	return @allocated(f(args...))
+end
+
+# Allocation test helper: uses function barrier to avoid @testset closure boxing
+macro test_allocs(call_expr)
+	if Meta.isexpr(call_expr, :call)
+		fn = call_expr.args[1]
+		args = call_expr.args[2:end]
+		quote
+			if Base.JLOptions().code_coverage == 0
+				@test alloc_test($(esc(fn)), $(map(esc, args)...)) == 0
+			else
+				@test_skip "Allocations test skipped under code coverage"
+			end
+		end
+	else
+		quote
+			if Base.JLOptions().code_coverage == 0
+				let
+					$(esc(call_expr))
+					@test (@allocated $(esc(call_expr))) == 0
+				end
+			else
+				@test_skip "Allocations test skipped under code coverage"
+			end
+		end
+	end
+end
+
 const __bramble_with_examples = false
 const __bramble_with_quality = true
 const __bramble_with_unit_tests = true

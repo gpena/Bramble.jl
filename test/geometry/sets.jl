@@ -267,17 +267,17 @@ using StaticArrays
 		@inferred I1 × I2
 
 		# Allocations: Zero heap allocations for core operations
-		@test (@allocated interval(0.0, 1.0)) == 0
-		@test (@allocated point(0.5)) == 0
-		@test (@allocated box(0.0, 1.0)) == 0
-		@test (@allocated box((0.0, 1.0), (2.0, 3.0))) == 0
-		@test (@allocated center(cp2)) == 0
-		@test (@allocated topo_dim(cp3)) == 0
-		@test (@allocated projection(cp3, 2)) == 0
-		@test (@allocated tails(cp3)) == 0
-		@test (@allocated tails(cp3, 1)) == 0
-		@test (@allocated cp2(1)) == 0
-		@test (@allocated (I1 × I2)) == 0
+		@test_allocs interval(0.0, 1.0)
+		@test_allocs point(0.5)
+		@test_allocs box(0.0, 1.0)
+		@test_allocs box((0.0, 1.0), (2.0, 3.0))
+		@test_allocs center(cp2)
+		@test_allocs topo_dim(cp3)
+		@test_allocs projection(cp3, 2)
+		@test_allocs tails(cp3)
+		@test_allocs tails(cp3, 1)
+		@test_allocs cp2(1)
+		@test_allocs (I1 × I2)
 	end
 
 	@testset "Display / Show" begin

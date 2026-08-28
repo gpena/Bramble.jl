@@ -47,14 +47,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: ['1.11', 'nightly']
-        os: [ubuntu-latest, macOS-latest, windows-latest]
+        version: ["1.11", "1.12", "nightly"]
+        os: [macOS-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
         with:
           version: ${{ matrix.version }}
       - uses: julia-actions/cache@v2
+        with:
+          cache-compiled: "true"
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
       - uses: julia-actions/julia-processcoverage@v1

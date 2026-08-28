@@ -50,7 +50,7 @@ using StaticArrays
 		sv_v = SVector(4.0, 5.0, 6.0)
 		sv_w = SVector(2.0, 2.0, 2.0)
 		@test _dot(sv_u, sv_v, sv_w) ≈ 64.0
-		@test (@allocated _dot(sv_u, sv_v, sv_w)) == 0
+		@test_allocs _dot(sv_u, sv_v, sv_w)
 
 		# Test larger vectors
 		n = 100
@@ -96,7 +96,7 @@ using StaticArrays
 		sv_h = SVector(0.5, 1.0, 1.5)
 		sv_v = SVector(4.0, 5.0, 6.0)
 		@test _inner_product(sv_u, sv_h, sv_v) ≈ 39.0
-		@test (@allocated _inner_product(sv_u, sv_h, sv_v)) == 0
+		@test_allocs _inner_product(sv_u, sv_h, sv_v)
 	end
 
 	@testset "_inner_product generic version" begin

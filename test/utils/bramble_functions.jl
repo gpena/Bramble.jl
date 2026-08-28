@@ -204,7 +204,7 @@ using StaticArrays
 		@inferred bf2((0.5, 10.5))
 
 		# Calling a 1D scalar FunctionWrapper incurs 0 heap allocations
-		@test (@allocated bf1(0.5)) == 0
+		@test_allocs bf1(0.5)
 	end
 
 	@testset "Display / Show" begin
