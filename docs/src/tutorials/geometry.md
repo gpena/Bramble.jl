@@ -2,7 +2,7 @@
 CurrentModule = Bramble
 ```
 
-# [Geometry Tutorial](@id tutorial_geometry)
+# [Geometry tutorial](@id tutorial_geometry)
 
 `Bramble.jl` provides a high-performance, zero-allocation geometric modeling subsystem designed for partial differential equations (PDEs) and numerical discretization schemes on Cartesian and tensor-product meshes.
 
@@ -226,7 +226,7 @@ collect(labels(Ω)) # [:dirichlet, :neumann]
 
 ## 6. Practical examples
 
-### Example 1: 1D Rod with mixed boundary conditions
+### Example 1: 1D rod with mixed boundary conditions
 
 Consider heat conduction along a 1D rod $\Omega = [0, L]$ with $L = 10.0$, fixed temperature at $x = 0$ (`:left`) and insulated end at $x = L$ (`:right`):
 

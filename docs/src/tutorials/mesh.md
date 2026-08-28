@@ -2,7 +2,7 @@
 CurrentModule = Bramble
 ```
 
-# [Mesh Tutorial](@id tutorial_mesh)
+# [Mesh tutorial](@id tutorial_mesh)
 
 `Bramble.jl` provides structured, zero-allocation Cartesian and tensor-product mesh representations optimized for finite difference, finite volume, and mimetic discretization schemes.
 
@@ -16,7 +16,7 @@ In this tutorial, you will learn how to:
 
 ---
 
-## 1. Constructing Meshes
+## 1. Constructing meshes
 
 Meshes in `Bramble.jl` are built on top of computational [`Domain`](@ref)s. The primary entry point is the [`mesh`](@ref) function.
 
@@ -72,9 +72,9 @@ y_mesh = Ωₕ_2d(2)  # 1D submesh in y-direction
 
 ---
 
-## 2. Accessing Grid Coordinates and Metric Properties
+## 2. Accessing grid coordinates and metric properties
 
-### 2.1 Points and Coordinates
+### 2.1 Points and coordinates
 
 - **`points(Ωₕ)`**: Returns the coordinate vector (1D) or tuple of coordinate vectors (nD).
 - **`point(Ωₕ, idx)`** or direct indexing **`Ωₕ[idx]`**: Evaluates the coordinate at linear index `i`, coordinate tuple `(i, j)`, or `CartesianIndex(i, j)`.
@@ -88,7 +88,7 @@ p3_alt = point(Ωₕ, 3)
 p_ij = Ωₕ[2, 5]     # Coordinate tuple (x₂, y₅)
 ```
 
-### 2.2 Half-Points (Cell Centers)
+### 2.2 Half-points (cell centers)
 
 Finite volume and staggered-grid methods frequently require cell midpoints $x_{i+1/2}$:
 
@@ -98,7 +98,7 @@ hp = half_points(Ωₕ)
 hp_i = half_point(Ωₕ, 3)  # x_{3+1/2}
 ```
 
-### 2.3 Spacings and Cell Measures
+### 2.3 Spacings and cell measures
 
 - **`spacing(Ωₕ, i)`**: Backward spacing $h_i = x_i - x_{i-1}$ (for $i=1$, returns $x_2 - x_1$).
 - **`forward_spacing(Ωₕ, i)`**: Forward spacing $h_{i+1} = x_{i+1} - x_i$.
@@ -119,7 +119,7 @@ vol = cell_measure(Ωₕ_2d, (3, 4))
 
 ---
 
-## 3. Boundary and Interior Indexing
+## 3. Boundary and interior indexing
 
 `Bramble.jl` leverages Julia's native `CartesianIndices` for zero-overhead, multi-dimensional grid navigation:
 
@@ -139,7 +139,7 @@ is_boundary = is_boundary_index(Ωₕ_2d, CartesianIndex(1, 5))  # true
 
 ---
 
-## 4. Markers on Meshes
+## 4. Markers on meshes
 
 When creating a mesh from a labeled [`Domain`](@ref), markers are projected onto the grid points as highly efficient `BitVector`s:
 
@@ -165,11 +165,11 @@ is_obs  = index_in_marker(M, :obstacle)
 
 ---
 
-## 5. Mesh Adaptation and Modification
+## 5. Mesh adaptation and modification
 
 Meshes in `Bramble.jl` are mutable structures designed for adaptive algorithms:
 
-### 5.1 In-Place Mesh Refinement (`iterative_refinement!`)
+### 5.1 In-place mesh refinement (`iterative_refinement!`)
 
 Halves every cell by inserting new points at each cell midpoint, simultaneously updating indices and reapplying domain markers:
 
@@ -181,7 +181,7 @@ iterative_refinement!(M)
 npoints(M, Tuple)  # (39, 39)
 ```
 
-### 5.2 Relocating Mesh Coordinates (`change_points!`)
+### 5.2 Relocating mesh coordinates (`change_points!`)
 
 For moving-boundary problems or non-uniform smoothing:
 

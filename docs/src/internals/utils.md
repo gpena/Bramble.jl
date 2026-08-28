@@ -12,7 +12,7 @@ Public = false
 Pages = ["utils/backend.jl", ]
 ```
 
-## Linear Algebra
+## Linear algebra
 
 ```@autodocs
 Modules = [Bramble]
@@ -20,7 +20,7 @@ Public = false
 Pages = ["utils/linear_algebra.jl", ]
 ```
 
-## Bramble Function
+## Bramble function
 
 ```@autodocs
 Modules = [Bramble]

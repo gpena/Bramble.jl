@@ -3,7 +3,7 @@ CollapsedDocStrings = false
 CurrentModule = Bramble
 ```
 
-# API Reference
+# API reference
 
 Documentation for `Bramble.jl`'s public API.
 
@@ -11,7 +11,7 @@ Documentation for `Bramble.jl`'s public API.
 
 ## Utilities
 
-### Linear Algebra Backends
+### Linear algebra backends
 
 ```@docs
 backend
@@ -25,7 +25,7 @@ backend_zeros
 metal_backend
 ```
 
-### Function Embedding
+### Function embedding
 
 ```@docs
 BrambleFunction
@@ -37,7 +37,7 @@ has_time
 
 ## Geometry
 
-### Sets and Intervals (`CartesianProduct`)
+### Sets and intervals (`CartesianProduct`)
 
 ```@docs
 interval
@@ -56,7 +56,7 @@ get_boundary_symbols
 set
 ```
 
-### Markers and Domains
+### Markers and domains
 
 ```@docs
 markers
@@ -68,7 +68,7 @@ labels
 
 ## Meshes
 
-### Mesh Types and Constructors
+### Mesh types and constructors
 
 ```@docs
 AbstractMeshType
@@ -79,7 +79,7 @@ mesh
 submeshes
 ```
 
-### Points and Spacings
+### Points and spacings
 
 ```@docs
 npoints
@@ -100,7 +100,7 @@ cell_measures
 is_uniform
 ```
 
-### Mesh Iterators
+### Mesh iterators
 
 ```@docs
 points_iterator
@@ -111,7 +111,7 @@ half_spacings_iterator
 cell_measures_iterator
 ```
 
-### Mesh Indexing and Boundaries
+### Mesh indexing and boundaries
 
 ```@docs
 indices
@@ -121,7 +121,7 @@ is_boundary_index
 index_in_marker
 ```
 
-### Mesh Adaptation and Mutation
+### Mesh adaptation and mutation
 
 ```@docs
 iterative_refinement!
