@@ -89,12 +89,18 @@ end
 	_Ω1D = domain(_I, _dm1D)
 	_Ωₕ1D = mesh(_Ω1D, 5, true; backend = _backend_inst)
 
+	# --- ESSENTIAL: 2D Setup ---
+	_domain2D = domain(box((0.0, 0.0), (1.0, 1.0)))
+	_markers2D = markers(_domain2D)
+	_mesh2D = mesh(_domain2D, (5, 5), (true, true); backend = _backend_inst)
+	_mesh2D_nonuniform = mesh(_domain2D, (5, 5), (false, false); backend = _backend_inst)
+
 	@compile_workload begin
 		# --- ESSENTIAL: 1D Workload ---
 		_precompile_common_interface(_Ωₕ1D)
 		_precompile_mutating_interface!(_Ωₕ1D, _dm1D)
 
-		# 1D-specific calls from original file
+		# 1D-specific calls
 		set_points!(deepcopy(_Ωₕ1D), points(_Ωₕ1D))
 		index_in_marker(_Ωₕ1D, :left)
 
@@ -103,27 +109,27 @@ end
 		boundary_indices(indices(_Ωₕ1D))
 		interior_indices(_Ωₕ1D)
 		interior_indices(indices(_Ωₕ1D))
-
 		boundary_symbol_to_dict(indices(_Ωₕ1D))
 
-		# --- EXTENDED: nD Workload ---
+		# --- ESSENTIAL: 2D Workload ---
+		_precompile_common_interface(_mesh2D)
+		_precompile_mutating_interface!(_mesh2D, _markers2D)
+		_precompile_common_interface(_mesh2D_nonuniform)
+		boundary_indices(_mesh2D)
+		interior_indices(_mesh2D)
+
+		# Direct indexing & show
+		_mesh2D[1, 1]
+		_ = sprint(show, _mesh2D)
+
+		# --- EXTENDED: 3D Workload ---
 		if BRAMBLE_EXTENDED_PRECOMPILE
-			domain2D = domain(box((0, 0), (1, 1)))
-			domain3D = domain(box((0, 0, 0), (1, 1, 1)))
-			markers2D = markers(domain2D)
+			domain3D = domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)))
 			markers3D = markers(domain3D)
-
-			mesh2D = mesh(domain2D, (10, 10), (true, true))
-			mesh3D = mesh(domain3D, (5, 5, 5), (true, true, true))
-			mesh2D_nonuniform = mesh(domain2D, (10, 10), (false, false))
-
-			_precompile_common_interface(mesh2D)
-			_precompile_mutating_interface!(mesh2D, markers2D)
+			mesh3D = mesh(domain3D, (4, 4, 4), (true, true, true); backend = _backend_inst)
 
 			_precompile_common_interface(mesh3D)
 			_precompile_mutating_interface!(mesh3D, markers3D)
-
-			_precompile_common_interface(mesh2D_nonuniform)
 		end
 	end
 end
