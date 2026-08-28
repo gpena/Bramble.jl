@@ -36,7 +36,7 @@ point(Ωₕ, (10, 15))  # Returns (x₁₀, y₁₅)
 
 See also: [`Mesh1D`](@ref), [`submeshes`](@ref), [`mesh`](@ref)
 """
-mutable struct MeshnD{D,BT<:Backend,CI<:CartesianIndices{D},M1T<:AbstractMeshType{1},T} <: AbstractMeshType{D}
+mutable struct MeshnD{D,BT<:Backend,CI<:CartesianIndices{D},SM<:Tuple,T} <: AbstractMeshType{D}
 	"the D-dimensional CartesianProduct (hyperrectangle) defining the geometric domain."
 	set::CartesianProduct{D,T}
 	"a dictionary mapping `Symbol` labels to `BitVector`s, marking grid points."
@@ -45,8 +45,8 @@ mutable struct MeshnD{D,BT<:Backend,CI<:CartesianIndices{D},M1T<:AbstractMeshTyp
 	indices::CI
 	"the computational backend used for linear algebra operations."
 	backend::BT
-	"a tuple of `D` `Mesh1D` objects, representing the grid along each spatial dimension."
-	submeshes::NTuple{D,M1T}
+	"a tuple of `D` 1D mesh objects, representing the grid along each spatial dimension."
+	submeshes::SM
 end
 
 """
@@ -273,7 +273,7 @@ end
 
 Custom display for MeshnD objects with detailed mesh information and colors.
 """
-function Base.show(io::IO, Ωₕ::MeshnD{D,BT,CI,M1T,T}) where {D,BT,CI,M1T,T}
+function Base.show(io::IO, Ωₕ::MeshnD{D,BT,CI,SM,T}) where {D,BT,CI,SM,T}
 	pp = PrettyPrinter(io)
 
 	if pp.compact

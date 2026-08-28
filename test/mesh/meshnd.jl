@@ -433,6 +433,23 @@ using LinearAlgebra: hypot
 			@test topo_dim(Ωₕ_line) == 1  # Only 1 non-collapsed dimension
 		end
 
+		@testset "Collapsed dimension keeps its coordinate" begin
+			# A line y = 5 embedded in 2D: the collapsed axis must sit at 5, not 0.
+			Ω_line = create_test_nd_domain(((0.0, 1.0), (5.0, 5.0)))
+			Ωₕ_line = mesh(Ω_line, (3, 4), (true, true); backend = backend())
+
+			@test npoints(Ωₕ_line, Tuple) == (3, 1)
+			@test point(Ωₕ_line, (1, 1)) == (0.0, 5.0)
+			@test point(Ωₕ_line, (3, 1)) == (1.0, 5.0)
+			@test all(p -> p[2] == 5.0, points_iterator(Ωₕ_line))
+
+			# A single point embedded in 3D.
+			Ω_pt = create_test_nd_domain(((2.0, 2.0), (3.0, 3.0), (4.0, 4.0)))
+			Ωₕ_pt = mesh(Ω_pt, (5, 5, 5), (true, true, true); backend = backend())
+			@test npoints(Ωₕ_pt, Tuple) == (1, 1, 1)
+			@test point(Ωₕ_pt, (1, 1, 1)) == (2.0, 3.0, 4.0)
+		end
+
 		@testset "_apply_hs_logic Helper" begin
 			# Test the helper function for collapsed dimensions
 			using Bramble: _apply_hs_logic

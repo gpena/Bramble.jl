@@ -20,7 +20,7 @@ In this tutorial, you will learn how to:
 
 Meshes in `Bramble.jl` are built on top of computational [`Domain`](@ref)s. The primary entry point is the [`mesh`](@ref) function.
 
-### 1.1 One-Dimensional Meshes (`Mesh1D`)
+### 1.1 One-dimensional meshes
 
 To construct a 1D mesh with $N$ points over an interval $[a, b]$:
 
@@ -48,7 +48,7 @@ is_uniform(Ωₕ)          # true
 is_uniform(Ωₕ_nonunif)   # false
 ```
 
-### 1.2 Multi-Dimensional Tensor-Product Meshes (`MeshnD`)
+### 1.2 Multi-dimensional tensor-product meshes
 
 For 2D and 3D domains, `Bramble.jl` constructs a [`MeshnD`](@ref) as a Cartesian product of 1D submeshes. This allows $O(N_x + N_y + N_z)$ coordinate storage while providing full $O(N_x \times N_y \times N_z)$ grid traversal:
 

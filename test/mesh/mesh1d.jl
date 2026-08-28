@@ -304,6 +304,25 @@ import Base: diff
 			@test forward_spacing(Ωₕ_pt, 1) == 0.0
 		end
 
+		@testset "Single-point mesh sits at the interval location" begin
+			# A collapsed interval [c, c] must be meshed at c, not at the origin.
+			for c in (1.0, 3.0, -2.5)
+				Ωₕ_c = mesh(create_test_domain(c, c), 1, true; backend = backend())
+				@test npoints(Ωₕ_c) == 1
+				@test points(Ωₕ_c) == [c]
+				@test point(Ωₕ_c, 1) == c
+			end
+
+			# Requesting more points on a collapsed interval still yields the one point.
+			Ωₕ_many = mesh(create_test_domain(3.0, 3.0), 7, true; backend = backend())
+			@test npoints(Ωₕ_many) == 1
+			@test points(Ωₕ_many) == [3.0]
+
+			# A genuine interval reduced to a single point uses the lower bound.
+			Ωₕ_one = mesh(create_test_domain(2.0, 5.0), 1, true; backend = backend())
+			@test points(Ωₕ_one) == [2.0]
+		end
+
 		@testset "Boundary Indices" begin
 			@test boundary_indices(Ωₕ) == (CartesianIndex(1), CartesianIndex(5))
 

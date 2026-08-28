@@ -182,9 +182,10 @@ end
 	T = eltype(I)
 	a, b = tails(I)
 
-	# Handle the trivial case of a single point mesh.
+	# Handle the trivial case of a single point mesh. The point sits at the lower
+	# bound of the interval (for a collapsed interval a == b, so this is the point itself).
 	if npts == 1
-		x .= zero(T)
+		x .= a
 		return
 	end
 

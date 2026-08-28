@@ -21,21 +21,21 @@ macro test_allocs(call_expr)
 		fn = call_expr.args[1]
 		args = call_expr.args[2:end]
 		quote
-			if Base.JLOptions().code_coverage == 0
+			if Base.JLOptions().code_coverage == 0 && VERSION >= v"1.12"
 				@test alloc_test($(esc(fn)), $(map(esc, args)...)) == 0
 			else
-				@test_skip "Allocations test skipped under code coverage"
+				@test_skip "Allocations test skipped under code coverage or earlier Julia version"
 			end
 		end
 	else
 		quote
-			if Base.JLOptions().code_coverage == 0
+			if Base.JLOptions().code_coverage == 0 && VERSION >= v"1.12"
 				let
 					$(esc(call_expr))
 					@test (@allocated $(esc(call_expr))) == 0
 				end
 			else
-				@test_skip "Allocations test skipped under code coverage"
+				@test_skip "Allocations test skipped under code coverage or earlier Julia version"
 			end
 		end
 	end
