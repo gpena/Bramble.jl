@@ -47,7 +47,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: ["1.11", "1.12", "nightly"]
+        version: ["1.12", "nightly"]
         os: [macOS-latest]
     steps:
       - uses: actions/checkout@v4
