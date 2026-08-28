@@ -53,6 +53,15 @@ Symbolic backward gradient operator.
 ∇₋ₕ(op::LazyOp{D}) where D = grad_backward(op)
 
 """
+    ∇₋ₕ(ops::Tuple)
+
+Applies the backward gradient component-wise to a **tuple** of scalar symbolic
+functions (e.g. the velocity components `(u1, u2)` of a composite space).
+Returns a tuple of gradient tuples, one per component.
+"""
+∇₋ₕ(ops::Tuple) = map(grad_backward, ops)
+
+"""
     ∇₊ₕ(op::LazyOp{D}) where D
 
 Symbolic forward gradient operator.

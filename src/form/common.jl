@@ -129,6 +129,29 @@ An AST node representing the symbolic test function \$v\$ in a form.
 struct TestFunction{D} <: LazyOp{D} end
 
 """
+    IndexedTrialFunction{D} <: LazyOp{D}
+
+An AST node representing the symbolic trial function for a specific **component**
+of a composite trial space. Carries a runtime `component_idx` identifying which
+leaf scalar space (1-based, depth-first order) it belongs to. Used by
+`CoupledBilinearForm` to route stencil contributions to the correct block.
+"""
+struct IndexedTrialFunction{D} <: LazyOp{D}
+    component_idx::Int
+end
+
+"""
+    IndexedTestFunction{D} <: LazyOp{D}
+
+An AST node representing the symbolic test function for a specific **component**
+of a composite test space. Carries a runtime `component_idx`. Used by
+`CoupledBilinearForm` to route stencil contributions to the correct block.
+"""
+struct IndexedTestFunction{D} <: LazyOp{D}
+    component_idx::Int
+end
+
+"""
     SourceFunction{D,F} <: LazyOp{D}
 
 An AST node representing a source term defined by a continuous function.
@@ -184,6 +207,8 @@ include("operators/inner.jl")
 
 @inline local_stencil(::TrialFunction{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int) where D = ((zero_offset(Val(D)), 1.0),)
 @inline local_stencil(::TestFunction{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int) where D = ((zero_offset(Val(D)), 1.0),)
+@inline local_stencil(::IndexedTrialFunction{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int) where D = ((zero_offset(Val(D)), 1.0),)
+@inline local_stencil(::IndexedTestFunction{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int) where D = ((zero_offset(Val(D)), 1.0),)
 
 @inline function local_stencil(op::SourceFunction{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int) where D
 	m = mesh(space)
@@ -227,6 +252,8 @@ end
 
 resolve_ast(op::TrialFunction) = op
 resolve_ast(op::TestFunction) = op
+resolve_ast(op::IndexedTrialFunction) = op
+resolve_ast(op::IndexedTestFunction) = op
 resolve_ast(op::SourceFunction) = op
 resolve_ast(op::SourceVector) = op
 
@@ -254,6 +281,8 @@ resolve_ast(op::Any) = op
 
 is_symbolic(::TrialFunction) = true
 is_symbolic(::TestFunction) = true
+is_symbolic(::IndexedTrialFunction) = true
+is_symbolic(::IndexedTestFunction) = true
 is_symbolic(::SourceFunction) = true
 is_symbolic(::SourceVector) = true
 is_symbolic(op::BilinearProduct) = true

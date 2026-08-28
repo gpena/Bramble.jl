@@ -65,13 +65,25 @@ Each `pair` is of the form `:label => func`, where `:label` identifies the bound
 The `cartesian_product` can be a `CartesianProduct` mesh domain or an `ScalarGridSpace` from which the mesh can be extracted. The `:label` must match a label in the mesh definition.
 """
 function dirichlet_constraints(input, pairs::Pair...)
-	cartesian_product = input isa ScalarGridSpace ? set(mesh(input)) : (input isa CompositeGridSpace ? set(mesh(input.spaces[1])) : set(input))
+	cartesian_product = if input isa ScalarGridSpace
+		set(mesh(input))
+	elseif input isa CompositeGridSpace
+		set(mesh(first_space(input)))  # recursive: first leaf space
+	else
+		set(input)
+	end
 	T, domain = _get_eltype_and_domain(cartesian_product)
 	_create_generic_markers(T, domain, pairs...)
 end
 
 function dirichlet_constraints(input, I::CartesianProduct{1}, pairs::Pair...)
-	cartesian_product = input isa ScalarGridSpace ? set(mesh(input)) : (input isa CompositeGridSpace ? set(mesh(input.spaces[1])) : set(input))
+	cartesian_product = if input isa ScalarGridSpace
+		set(mesh(input))
+	elseif input isa CompositeGridSpace
+		set(mesh(first_space(input)))
+	else
+		set(input)
+	end
 	T, domain = _get_eltype_and_domain(cartesian_product)
 	_create_generic_markers(T, domain, I, pairs...)
 end
@@ -150,21 +162,18 @@ end
 	return dirichlet_bc!(v, mesh(space), bcs, labels...)
 end
 
-# Overloads for CompositeGridSpace
+# Overloads for CompositeGridSpace — handles both flat and hierarchical spaces
+# using collect_leaf_spaces_offsets for recursive flattening.
 function dirichlet_bc!(A::AbstractMatrix, space::CompositeGridSpace, labels::Symbol...)
 	total_dofs = ndofs(space)
 	global_vec_bool = BitVector(undef, total_dofs)
 
-	offsets = Int[0]
-	for sp in space.spaces
-		push!(offsets, offsets[end] + ndofs(sp))
-	end
+	# collect_leaf_spaces_offsets is defined in block_extract.jl
+	leaf_info = collect_leaf_spaces_offsets(space)
 
 	for p in labels
 		fill!(global_vec_bool, false)
-		for c in eachindex(space.spaces)
-			sp = space.spaces[c]
-			offset = offsets[c]
+		for (sp, offset) in leaf_info
 			vec_bool_c = index_in_marker(mesh(sp), p)
 			for i in 1:ndofs(sp)
 				global_vec_bool[offset + i] = vec_bool_c[i]
@@ -175,14 +184,9 @@ function dirichlet_bc!(A::AbstractMatrix, space::CompositeGridSpace, labels::Sym
 end
 
 function dirichlet_bc!(v::AbstractVector, space::CompositeGridSpace, bcs, labels::Symbol...)
-	offsets = Int[0]
-	for sp in space.spaces
-		push!(offsets, offsets[end] + ndofs(sp))
-	end
+	leaf_info = collect_leaf_spaces_offsets(space)
 
-	for c in eachindex(space.spaces)
-		sp = space.spaces[c]
-		offset = offsets[c]
+	for (sp, offset) in leaf_info
 		v_view = view(v, (offset + 1):(offset + ndofs(sp)))
 		dirichlet_bc!(v_view, mesh(sp), bcs, labels...)
 	end

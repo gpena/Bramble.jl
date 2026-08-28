@@ -1,21 +1,25 @@
 using Bramble
 using Documenter
-#using LiveServer; servedocs()
 
 home = "Home" => "index.md"
-internals = "Internals" => ["internals/utils.md", "internals/geometry.md", "internals/mesh.md", "internals/space.md", "internals/form.md"]
-examples = "Examples" => ["examples/poisson_linear.md", "examples/poisson_nonlinear.md"]
+tutorials = "Tutorials" => ["tutorials/geometry.md"]
+internals = "Internals" => ["internals/utils.md", "internals/geometry.md"]
 documentation = "Documentation" => ["api.md", internals]
-allpages = [home,
-	examples,
-	documentation]
 
-makedocs(; format = Documenter.HTML(),
+allpages = [
+	home,
+	tutorials,
+	documentation,
+]
+
+makedocs(; format = Documenter.HTML(; prettyurls = get(ENV, "CI", nothing) == "true"),
 		 sitename = "Bramble.jl",
 		 pages = allpages,
-		 authors = "Gonçalo Pena")
+		 authors = "Gonçalo Pena",
+		 warnonly = [:cross_references, :missing_docs])
 
 deploydocs(;
-		   repo = "github.com/gpena/Bramble.jl",
-		   versions = nothing,
-		   branch = "gh-pages")
+		   repo = "github.com/gpena/Bramble.jl.git",
+		   devbranch = "main",
+		   branch = "gh-pages",
+		   push_preview = true)

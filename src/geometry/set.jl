@@ -211,6 +211,16 @@ Returns `T` for 1D spaces and `NTuple{D,T}` for `D`-dimensional spaces.
 @inline point_type(::Type{<:CartesianProduct{D,T}}) where {D,T} = NTuple{D,T}
 
 """
+	Base.in(x, X::CartesianProduct)
+
+Returns `true` if point `x` is contained in the closed [`CartesianProduct`](@ref) domain.
+"""
+@inline Base.in(x::Number, X::CartesianProduct{1}) = (X.box[1][1] <= x <= X.box[1][2])
+@inline Base.in(x::Tuple{Vararg{Number,D}}, X::CartesianProduct{D}) where {D} = all(i -> (X.box[i][1] <= x[i] <= X.box[i][2]), 1:D)
+@inline Base.in(x::AbstractVector{<:Number}, X::CartesianProduct{D}) where {D} = length(x) == D && all(i -> (X.box[i][1] <= x[i] <= X.box[i][2]), 1:D)
+@inline Base.in(x, X::CartesianProduct) = false
+
+"""
 	Base.show(io::IO, X::CartesianProduct)
 
 Custom display for [`CartesianProduct`](@ref) objects, showing dimension information, bounds, and collapsed status with colors.

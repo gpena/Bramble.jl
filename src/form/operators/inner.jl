@@ -87,6 +87,40 @@ inner₊(left::LazyOp{1}, right::LazyOp{1}) = BilinearProduct{1,InnerPlus{1},typ
 inner₊(left::NTuple{D,LazyOp{D}}, right::NTuple{D,LazyOp{D}}) where D = inner_plus(left, right)
 
 """
+    inner₊(left::Union{IndexedTrialFunction{D},IndexedTestFunction{D}}, right::BackwardDifference{D,Dim}) where {D,Dim}
+    inner₊(left::BackwardDifference{D,Dim}, right::Union{IndexedTrialFunction{D},IndexedTestFunction{D}}) where {D,Dim}
+
+Direction-inferring `inner₊` for **coupled forms only**: uses the `InnerPlus{Dim}` weight
+matching the dimension of the `BackwardDifference` operator. This is needed for
+pressure-velocity coupling terms like `inner₊(p, D₋ₓ(v[1]))` and `inner₊(p, D₋ᵧ(v[2]))`,
+where `p` is an `IndexedTrialFunction` (a symbolic scalar field).
+
+These overloads are intentionally restricted to `IndexedTrialFunction`/`IndexedTestFunction`
+leaves so they **do not** conflict with the standard `inner₊(D₋ₓ(u), D₋ₓ(v))` usage.
+"""
+inner₊(left::Union{IndexedTrialFunction{D},IndexedTestFunction{D}}, right::BackwardDifference{D,Dim}) where {D,Dim} =
+    BilinearProduct{D,InnerPlus{Dim},typeof(left),typeof(right)}(left, right)
+inner₊(left::BackwardDifference{D,Dim}, right::Union{IndexedTrialFunction{D},IndexedTestFunction{D}}) where {D,Dim} =
+    BilinearProduct{D,InnerPlus{Dim},typeof(left),typeof(right)}(left, right)
+
+
+"""
+    inner₊(left::NTuple{N,<:Tuple}, right::NTuple{N,<:Tuple}) where N
+
+Vector-field `inner₊`: sums per-component inner products.
+Used when `left` and `right` are **tuples of gradient tuples**, e.g.
+`inner₊(∇₋ₕ(u), ∇₋ₕ(v))` where `u = (u1, u2)` is a velocity tuple.
+Each element pair `(left[k], right[k])` is a `D`-tuple of `LazyOp` (a gradient),
+which dispatches to the existing `inner₊(::NTuple{D,LazyOp}, ::NTuple{D,LazyOp})`.
+
+This overload is intentionally restricted to `NTuple{N,<:Tuple}` so it does **not**
+interfere with `inner₊(NTuple{D,VectorElement}, NTuple{D,VectorElement})` handled by
+the `@generated` method in `inner_product.jl`.
+"""
+inner₊(left::NTuple{N,<:Tuple}, right::NTuple{N,<:Tuple}) where N = foldl(+, map(inner₊, left, right))
+
+
+"""
     inner₊ₓ(left::LazyOp{D}, right::LazyOp{D}) where D
     inner₊ᵧ(left::LazyOp{D}, right::LazyOp{D}) where D
     inner₊₂(left::LazyOp{D}, right::LazyOp{D}) where D
@@ -96,6 +130,7 @@ Constructs directional modified \$L^2_+\$ inner products in x, y, and z directio
 inner₊ₓ(left::LazyOp{D}, right::LazyOp{D}) where D = BilinearProduct{D,InnerPlus{1},typeof(left),typeof(right)}(left, right)
 inner₊ᵧ(left::LazyOp{D}, right::LazyOp{D}) where D = BilinearProduct{D,InnerPlus{2},typeof(left),typeof(right)}(left, right)
 inner₊₂(left::LazyOp{D}, right::LazyOp{D}) where D = BilinearProduct{D,InnerPlus{3},typeof(left),typeof(right)}(left, right)
+
 
 @inline function source_number(l::Number, ::Val{D}) where D
 	f = x -> l

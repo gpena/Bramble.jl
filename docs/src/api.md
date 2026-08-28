@@ -3,109 +3,63 @@ CollapsedDocStrings = false
 CurrentModule = Bramble
 ```
 
-# API
+# API Reference
 
 Documentation for `Bramble.jl`'s public API.
 
-## Geometry and mesh
+---
+
+## Utilities
+
+### Linear Algebra Backends
 
 ```@docs
-box
+backend
+vector
+matrix
+vector_type
+matrix_type
+backend_types
+backend_eye
+backend_zeros
+```
+
+### Function Embedding
+
+```@docs
+BrambleFunction
+embed_function
+has_time
+```
+
+---
+
+## Geometry
+
+### Sets and Intervals (`CartesianProduct`)
+
+```@docs
 interval
+point
+box
+cartesian_product
 ×
 dim
 topo_dim
+tails
+center
+projection
+is_collapsed
+point_type
+get_boundary_symbols
+set
+```
+
+### Markers and Domains
+
+```@docs
+@markers
 markers
 domain
 labels
-mesh
-points
-hₘₐₓ
-npoints
-change_points!
-iterative_refinement!
-```
-
-## Space
-
-```@docs
-gridspace
-element
-mesh(Wₕ::AbstractSpaceType)
-ndofs
-```
-
-### Interpolation operators
-
-```@docs
-avgₕ
-avgₕ!
-Rₕ
-Rₕ!
-```
-
-### Differential operators
-
-```@docs
-diff₋ₓ
-diff₋ᵧ
-diff₋₂
-diff₋ₕ
-diff₊ₓ
-diff₊ᵧ
-diff₊₂
-diff₊ₕ
-D₋ₓ
-D₋ᵧ
-D₋₂
-∇₋ₕ
-D₊ₓ
-D₊ᵧ
-D₊₂
-∇₊ₕ
-jump₋ₓ
-jump₋ᵧ
-jump₋₂
-jump₋ₕ
-jump₊ₓ
-jump₊ᵧ
-jump₊₂
-jump₊ₕ
-```
-
-### Average operators
-
-```@docs
-M₋ₓ
-M₋ᵧ
-M₋₂
-M₋ₕ
-M₊ₓ
-M₊ᵧ
-M₊₂
-M₊ₕ
-```
-
-### Inner products and norms
-
-```@docs
-innerₕ
-inner₊ₓ
-inner₊ᵧ
-inner₊₂
-inner₊
-normₕ
-norm₊
-snorm₁ₕ
-norm₁ₕ
-```
-
-## Form
-
-```@docs
-dirichlet_constraints
-form
-assemble
-assemble!
-symmetrize!
 ```

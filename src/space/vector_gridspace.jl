@@ -26,11 +26,15 @@ ComponentStyle(::Type{<:CompositeGridSpace{N}}) where N = MultiComponent{ncompon
 @inline ndofs(Wₕ::CompositeGridSpace, ::Type{Tuple}) = map(ndofs, Wₕ.spaces)
 
 @inline first_space(Wₕ::ScalarGridSpace) = Wₕ
-@inline first_space(Wₕ::CompositeGridSpace) = Wₕ.spaces[1]
+# Recursive: always return the first leaf ScalarGridSpace
+@inline first_space(Wₕ::CompositeGridSpace) = first_space(Wₕ.spaces[1])
 
-# Overload product operator for space construction
+# Overload product operator for space construction.
+# Scalar × Scalar → 2-element flat composite (unchanged behaviour).
+# CompositeGridSpace × anything → hierarchical composite (no flattening),
+# enabling forms like form(Vh × Wh, Vh × Wh, ((u,p),(v,q)) -> ...).
 @inline ×(X::AbstractSpaceType, Y::AbstractSpaceType) = CompositeGridSpace((X, Y))
-@inline ×(X::CompositeGridSpace, Y::AbstractSpaceType) = CompositeGridSpace((X.spaces..., Y))
-@inline ×(X::AbstractSpaceType, Y::CompositeGridSpace) = CompositeGridSpace((X, Y.spaces...))
-@inline ×(X::CompositeGridSpace, Y::CompositeGridSpace) = CompositeGridSpace((X.spaces..., Y.spaces...))
+@inline ×(X::CompositeGridSpace, Y::AbstractSpaceType) = CompositeGridSpace((X, Y))
+@inline ×(X::AbstractSpaceType, Y::CompositeGridSpace) = CompositeGridSpace((X, Y))
+@inline ×(X::CompositeGridSpace, Y::CompositeGridSpace) = CompositeGridSpace((X, Y))
 

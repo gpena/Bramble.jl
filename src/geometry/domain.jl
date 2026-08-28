@@ -12,7 +12,7 @@ $(FIELDS)
 
 # Related Types
 
-- Use [`mesh`](@ref) to discretize a [`Domain`](@ref) into a computational mesh.
+- Use `mesh` to discretize a [`Domain`](@ref) into a computational mesh.
 - See [`CartesianProduct`](@ref) for the underlying geometric representation.
 - See [`DomainMarkers`](@ref) for marker management.
 """
@@ -199,6 +199,37 @@ Returns `true` if [`Domain`](@ref) `Ω` has no markers attached.
 """
 	$(SIGNATURES)
 
+Returns the center point of [`Domain`](@ref) `Ω` as an `SVector{D,T}`.
+"""
+@inline center(Ω::Domain) = center(set(Ω))
+
+"""
+	Base.in(x, Ω::Domain)
+
+Returns `true` if point `x` is contained in the closed [`Domain`](@ref) `Ω`.
+"""
+@inline Base.in(x, Ω::Domain) = x ∈ set(Ω)
+
+"""
+	$(SIGNATURES)
+
+Returns the boundary tails/intervals of the underlying set of [`Domain`](@ref) `Ω`.
+"""
+@inline tails(Ω::Domain) = tails(set(Ω))
+@inline tails(Ω::Domain, i::Integer) = tails(set(Ω), i)
+
+"""
+	$(SIGNATURES)
+
+Returns whether the underlying set of [`Domain`](@ref) `Ω` is collapsed.
+"""
+@inline is_collapsed(Ω::Domain) = is_collapsed(set(Ω))
+
+@inline (Ω::Domain)(i::Integer) = set(Ω)(i)
+
+"""
+	$(SIGNATURES)
+
 Returns the `i`-th 1D [`CartesianProduct`](@ref) component of the set associated with [`Domain`](@ref) `Ω`.
 """
 @inline projection(Ω::Domain, i::Integer) = projection(set(Ω), i)
@@ -219,6 +250,7 @@ Returns a tuple of default boundary symbols for a [`CartesianProduct`](@ref) or 
 @inline get_boundary_symbols(::Type{<:CartesianProduct{1}}) = (:left, :right)
 @inline get_boundary_symbols(::Type{<:CartesianProduct{2}}) = (:bottom, :top, :left, :right)
 @inline get_boundary_symbols(::Type{<:CartesianProduct{3}}) = (:bottom, :top, :back, :front, :left, :right)
+@inline get_boundary_symbols(D::Integer) = get_boundary_symbols(CartesianProduct{D})
 @inline get_boundary_symbols(::Type{<:Domain{SetType}}) where {SetType} = get_boundary_symbols(SetType)
 
 """
