@@ -50,10 +50,18 @@ topo_dim(line_in_2d)  # 1 (topological dimension)
 # Check if individual dimensions are collapsed
 line_in_2d.collapsed[1]  # false (x-axis is extended)
 line_in_2d.collapsed[2]  # true  (y-axis is collapsed)</code></pre><hr/><h2 id="4.-Boundary-Markers-(markers-and-@markers)"><a class="docs-heading-anchor" href="#4.-Boundary-Markers-(markers-and-@markers)">4. Boundary Markers (<code>markers</code> and <code>@markers</code>)</a><a id="4.-Boundary-Markers-(markers-and-@markers)-1"></a><a class="docs-heading-anchor-permalink" href="#4.-Boundary-Markers-(markers-and-@markers)" title="Permalink"></a></h2><p>PDE boundary conditions require tagging specific domain boundaries (e.g., Dirichlet, Neumann, Robin, inflow/outflow).</p><h3 id="4.1-Boundary-Symbol-Conventions"><a class="docs-heading-anchor" href="#4.1-Boundary-Symbol-Conventions">4.1 Boundary Symbol Conventions</a><a id="4.1-Boundary-Symbol-Conventions-1"></a><a class="docs-heading-anchor-permalink" href="#4.1-Boundary-Symbol-Conventions" title="Permalink"></a></h3><p>For a <span>$D$</span>-dimensional domain, the standard boundary facets are:</p><ul><li><p><strong>1D</strong>: <code>:left</code>, <code>:right</code></p></li><li><p><strong>2D</strong>: <code>:bottom</code>, <code>:top</code>, <code>:left</code>, <code>:right</code></p></li><li><p><strong>3D</strong>: <code>:bottom</code>, <code>:top</code>, <code>:back</code>, <code>:front</code>, <code>:left</code>, <code>:right</code></p></li></ul><p>You can inspect standard boundary symbols using <a href="../../api/#Bramble.get_boundary_symbols"><code>get_boundary_symbols</code></a>:</p><pre><code class="language-julia hljs">get_boundary_symbols(2)
-# (:bottom, :top, :left, :right)</code></pre><h3 id="4.2-Creating-Markers"><a class="docs-heading-anchor" href="#4.2-Creating-Markers">4.2 Creating Markers</a><a id="4.2-Creating-Markers-1"></a><a class="docs-heading-anchor-permalink" href="#4.2-Creating-Markers" title="Permalink"></a></h3><p>Markers are defined as <code>:label =&gt; :identifier</code> pairs where <code>:identifier</code> can be a single boundary symbol, a tuple of symbols, or a boolean function:</p><pre><code class="language-julia hljs">geom = interval(0.0, 5.0) × interval(0.0, 1.0)
+# (:bottom, :top, :left, :right)</code></pre><h3 id="4.2-Creating-Markers-with-markers-and-@markers"><a class="docs-heading-anchor" href="#4.2-Creating-Markers-with-markers-and-@markers">4.2 Creating Markers with <code>markers</code> and <code>@markers</code></a><a id="4.2-Creating-Markers-with-markers-and-@markers-1"></a><a class="docs-heading-anchor-permalink" href="#4.2-Creating-Markers-with-markers-and-@markers" title="Permalink"></a></h3><p>Markers are defined as <code>:label =&gt; identifier</code> pairs where <code>identifier</code> can be a single boundary symbol, a tuple of symbols, or a boolean function:</p><pre><code class="language-julia hljs">geom = interval(0.0, 5.0) × interval(0.0, 1.0)
 
-# Define markers on the geometry:
-m = markers(
+# 1. Using the markers() constructor
+m1 = markers(
+    geom,
+    :inflow  =&gt; :left,
+    :outflow =&gt; :right,
+    :wall    =&gt; (:top, :bottom)
+)
+
+# 2. Using the @markers macro for concise syntax
+m2 = @markers(
     geom,
     :inflow  =&gt; :left,
     :outflow =&gt; :right,
@@ -61,8 +69,24 @@ m = markers(
 )
 
 # Retrieve all defined labels
-collect(labels(m))
-# [:inflow, :outflow, :wall]</code></pre><hr/><h2 id="5.-Computational-Domains-(Domain)"><a class="docs-heading-anchor" href="#5.-Computational-Domains-(Domain)">5. Computational Domains (<code>Domain</code>)</a><a id="5.-Computational-Domains-(Domain)-1"></a><a class="docs-heading-anchor-permalink" href="#5.-Computational-Domains-(Domain)" title="Permalink"></a></h2><p>A <a href="../../internals/geometry/#Bramble.Domain"><code>Domain</code></a> joins a geometric set (<code>CartesianProduct</code>) with its boundary markers into a single unified object:</p><pre><code class="language-julia hljs"># 1. Define geometry
+collect(labels(m2))
+# [:inflow, :outflow, :wall]</code></pre><h3 id="4.3-Function-Based-(Level-Set)-and-Time-Dependent-Markers"><a class="docs-heading-anchor" href="#4.3-Function-Based-(Level-Set)-and-Time-Dependent-Markers">4.3 Function-Based (Level-Set) and Time-Dependent Markers</a><a id="4.3-Function-Based-(Level-Set)-and-Time-Dependent-Markers-1"></a><a class="docs-heading-anchor-permalink" href="#4.3-Function-Based-(Level-Set)-and-Time-Dependent-Markers" title="Permalink"></a></h3><p>You can also define internal or geometric subset markers using boolean condition functions, as well as time-dependent markers:</p><pre><code class="language-julia hljs"># Condition-based marker: tag a subsection of the boundary or domain
+m_cond = @markers(
+    geom,
+    :inflow    =&gt; :left,
+    :hot_spot  =&gt; (p -&gt; p[1] &gt; 2.5 &amp;&amp; p[2] ≈ 0.0)
+)
+
+# Time-dependent markers:
+time_span = interval(0.0, 10.0)
+m_time = @markers(
+    geom,
+    time_span,
+    :moving_source =&gt; ((p, t) -&gt; norm(p .- [t, 0.5]) &lt; 0.2)
+)
+
+# Evaluate time-dependent markers at time t = 1.5
+m_evaluated = m_time(1.5)</code></pre><hr/><h2 id="5.-Computational-Domains-(Domain)"><a class="docs-heading-anchor" href="#5.-Computational-Domains-(Domain)">5. Computational Domains (<code>Domain</code>)</a><a id="5.-Computational-Domains-(Domain)-1"></a><a class="docs-heading-anchor-permalink" href="#5.-Computational-Domains-(Domain)" title="Permalink"></a></h2><p>A <a href="../../internals/geometry/#Bramble.Domain"><code>Domain</code></a> joins a geometric set (<code>CartesianProduct</code>) with its boundary markers into a single unified object:</p><pre><code class="language-julia hljs"># 1. Define geometry
 geom = interval(0.0, 1.0) × interval(0.0, 1.0)
 
 # 2. Construct domain with inline boundary markers
@@ -115,4 +139,4 @@ sink = domain(
 )
 
 println(&quot;3D Domain Center: &quot;, center(sink))
-println(&quot;Active Labels: &quot;, collect(labels(sink)))</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../">« Home</a><a class="docs-footer-nextpage" href="../../api/">API Reference »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Friday 28 August 2026 12:45">Friday 28 August 2026</span>. Using Julia version 1.14.0-DEV.3059.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+println(&quot;Active Labels: &quot;, collect(labels(sink)))</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../">« Home</a><a class="docs-footer-nextpage" href="../../api/">API Reference »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Friday 28 August 2026 12:53">Friday 28 August 2026</span>. Using Julia version 1.14.0-DEV.3059.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
