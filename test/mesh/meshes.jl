@@ -6,7 +6,7 @@ Focus on edge cases, marker combinations, and complex interactions
 
 import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD
 
-@testset "Geometry Modules Coverage" begin
+@testset "Meshes Modules Coverage" begin
 	@testset "Domain Edge Cases" begin
 		@testset "1D Domain variations" begin
 			I = interval(-1.0, 2.0)
