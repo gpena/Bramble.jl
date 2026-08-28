@@ -3,12 +3,14 @@ using Documenter
 
 home = "Home" => "index.md"
 tutorials = "Tutorials" => ["tutorials/geometry.md"]
+# examples = "Examples" => ["examples/poisson_linear.md", "examples/poisson_nonlinear.md"]
 internals = "Internals" => ["internals/utils.md", "internals/geometry.md"]
 documentation = "Documentation" => ["api.md", internals]
 
 allpages = [
 	home,
 	tutorials,
+	# examples,
 	documentation,
 ]
 
