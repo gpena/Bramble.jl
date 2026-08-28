@@ -135,6 +135,7 @@ buffer_dict[1] = VectorBuffer(zeros(100), false)
 ```
 
 See also: [`VectorBuffer`](@ref), [`GridSpaceBuffer`](@ref)
+"""
 const BufferType{T,VectorType} = Vector{VectorBuffer{T,VectorType}}
 
 """

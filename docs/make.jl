@@ -17,7 +17,7 @@ allpages = [
 makedocs(; format = Documenter.HTML(; prettyurls = get(ENV, "CI", nothing) == "true"),
 		 sitename = "Bramble.jl",
 		 pages = allpages,
-		 authors = "Gonçalo Pena",
+		 authors = "Gonçalo Pena and Gemini",
 		 warnonly = [:cross_references, :missing_docs])
 
 deploydocs(;
