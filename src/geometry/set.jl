@@ -44,14 +44,14 @@ Constructs a 1-dimensional [`CartesianProduct`](@ref) representing the closed in
 Inputs are converted to floating-point numbers.
 """
 @inline function interval(x::Number, y::Number)
-	_x = float(x)
-	_y = float(y)
+	T = promote_type(typeof(float(x)), typeof(float(y)))
+	_x, _y = T(x), T(y)
 	_x <= _y || _throw_interval_error(x, y)
 
 	_is_collapsed = is_collapsed(_x, _y)
-	box = SVector{1,Tuple{typeof(_x),typeof(_x)}}(((_x, _y),))
+	box = SVector{1,Tuple{T,T}}(((_x, _y),))
 	collapsed = SVector{1,Bool}((_is_collapsed,))
-	return CartesianProduct{1,typeof(_x)}(box, collapsed)
+	return CartesianProduct{1,T}(box, collapsed)
 end
 
 @inline interval(x::CartesianProduct{1}) = interval(x(1)...)
@@ -81,9 +81,10 @@ Returns a [`CartesianProduct`](@ref) from coordinates or intervals.
 @inline function cartesian_product(box::NTuple{D,Tuple{Any,Any}}) where {D}
 	all(i -> box[i][1] <= box[i][2], 1:D) || _throw_box_error(box)
 
-	_box = ntuple(i -> (float(box[i][1]), float(box[i][2])), Val(D))
+	_box_f = ntuple(i -> (float(box[i][1]), float(box[i][2])), Val(D))
+	FloatT = mapreduce(t -> promote_type(typeof(t[1]), typeof(t[2])), promote_type, _box_f)
+	_box = ntuple(i -> (FloatT(_box_f[i][1]), FloatT(_box_f[i][2])), Val(D))
 	_collapsed_flags = ntuple(i -> is_collapsed(_box[i]...), Val(D))
-	FloatT = typeof(_box[1][1])
 
 	return CartesianProduct{D,FloatT}(SVector{D,Tuple{FloatT,FloatT}}(_box), SVector{D,Bool}(_collapsed_flags))
 end

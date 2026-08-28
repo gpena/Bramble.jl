@@ -250,7 +250,13 @@ Returns a tuple of default boundary symbols for a [`CartesianProduct`](@ref) or 
 @inline get_boundary_symbols(::Type{<:CartesianProduct{1}}) = (:left, :right)
 @inline get_boundary_symbols(::Type{<:CartesianProduct{2}}) = (:bottom, :top, :left, :right)
 @inline get_boundary_symbols(::Type{<:CartesianProduct{3}}) = (:bottom, :top, :back, :front, :left, :right)
-@inline get_boundary_symbols(D::Integer) = get_boundary_symbols(CartesianProduct{D})
+function get_boundary_symbols(D::Integer)
+	D == 1 && return (:left, :right)
+	D == 2 && return (:bottom, :top, :left, :right)
+	D == 3 && return (:bottom, :top, :back, :front, :left, :right)
+	error("get_boundary_symbols is not defined for $(D)D domains. " *
+		  "Provide explicit boundary names via the markers() interface.")
+end
 @noinline function get_boundary_symbols(::Type{<:CartesianProduct{D}}) where D
 	error("get_boundary_symbols is not defined for $(D)D domains. " *
 		  "Provide explicit boundary names via the markers() interface.")
@@ -330,25 +336,7 @@ function Base.show(io::IO, Ω::Domain)
 			print_empty_message(pp, "(none)")
 			println(io)
 		else
-			# Show summary counts
-			print(io, "    ")
-			print_colored(pp, "$total marker$(total == 1 ? "" : "s")", color = :yellow)
-			print(io, " (")
-			first = true
-			if n_sym > 0
-				print(io, "$n_sym symbol$(n_sym == 1 ? "" : "s")")
-				first = false
-			end
-			if n_tup > 0
-				first || print(io, ", ")
-				print(io, "$n_tup tuple$(n_tup == 1 ? "" : "s")")
-				first = false
-			end
-			if n_cond > 0
-				first || print(io, ", ")
-				print(io, "$n_cond function$(n_cond == 1 ? "" : "s")")
-			end
-			println(io, ")")
+			print_marker_summary(with_indent(pp, 2), n_sym, n_tup, n_cond)
 
 			# Show marker labels
 			print(io, "    ")

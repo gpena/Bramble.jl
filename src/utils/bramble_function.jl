@@ -81,8 +81,6 @@ function _get_domains(domain_spec)
 		else
 			error("Invalid domain format: Unexpected expression '$expr'. Expected a symbol, function call, or product (like `Ω × I`).")
 		end
-	elseif domain_spec isa Symbol
-		return domain_spec, nothing
 	else
 		error("Invalid domain format: Input '$domain_spec' (type $(typeof(domain_spec))) is not a Symbol or Expr.")
 	end
@@ -115,6 +113,7 @@ Embeds a Julia function into a [`BrambleFunction`](@ref) defined over `space_dom
 @inline embed_function(space_domain, func) = _embed_notime(space_domain, func)
 @inline embed_function(space_domain, func::BrambleFunction) = func
 @inline embed_function(space_domain, time_domain::CartesianProduct{1}, func) = _embed_withtime(space_domain, time_domain, func)
+@inline embed_function(space_domain, ::CartesianProduct{1}, func::BrambleFunction) = func
 
 """
 	$(SIGNATURES)

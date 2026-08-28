@@ -220,12 +220,9 @@ end
 Removes the trailing newline from output.
 """
 function remove_trailing_newline(io::IO)
-	if io isa IOBuffer
-		s = String(take!(io))
-		print(io, endswith(s, '\n') ? chop(s) : s)
-	else
-		print(io, "\b")
-	end
+	io isa IOBuffer || return
+	s = String(take!(io))
+	print(io, endswith(s, '\n') ? chop(s) : s)
 end
 
 # Precomputed dimension labels to avoid repeated allocations

@@ -221,6 +221,7 @@ end
 
 @inline process_identifier(::CartesianProduct, identifier::Symbol) = identifier
 @inline process_identifier(::CartesianProduct, identifier::NTuple{N,Symbol}) where {N} = Set(identifier)
+@inline process_identifier(::CartesianProduct, identifier::AbstractVector{Symbol}) = Set(identifier)
 
 """
 	$(TYPEDEF)
@@ -255,11 +256,11 @@ Returns the set of symbol-tuple markers from an [`EvaluatedDomainMarkers`](@ref)
 """
 	$(SIGNATURES)
 
-Returns a lazy generator that yields time-evaluated markers at `edm.evaluation_time`.
+Returns a vector of condition markers evaluated at `edm.evaluation_time`.
 """
 function conditions(edm::EvaluatedDomainMarkers)
 	t = edm.evaluation_time
-	return (_evaluate_marker_at_time(marker, t) for marker in conditions(edm.original_markers))
+	return [_evaluate_marker_at_time(marker, t) for marker in conditions(edm.original_markers)]
 end
 
 @inline function _evaluate_marker_at_time(marker, t)

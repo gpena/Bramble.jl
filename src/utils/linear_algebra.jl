@@ -49,7 +49,7 @@ end
 Computes the weighted element-wise dot product of three vectors:
 ``\\sum_{i} u_i \\cdot v_i \\cdot w_i``
 
-Uses SIMD and fused multiply-add operations for maximal performance without allocations.
+Uses SIMD and `muladd` for the outer accumulation (`u_i * v_i * w_i + s`); inner products are not FMA-fused.
 """
 @inline function _dot(u::AbstractVector, v::AbstractVector, w::AbstractVector)
 	(length(u) == length(v) == length(w)) || _throw_dot_dim_error(length(u), length(v), length(w))
@@ -75,5 +75,5 @@ Computes the weighted inner product ``\\langle u, v \\rangle_h``.
 function _inner_product(u::AbstractMatrix, h::AbstractVector, v::AbstractMatrix)
 	tmp = similar(u)
 	mul!(tmp, Diagonal(h), u)
-	return transpose(v) * tmp
+	return v' * tmp
 end
