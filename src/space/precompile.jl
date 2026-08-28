@@ -58,7 +58,7 @@ end
 
 			# --- Grid space basics ---
 			space_weights(test_mesh)
-			Wh = gridspace(test_mesh, cache_bwd = true, cache_avg = true)
+			Wh = gridspace(test_mesh)
 			weights(Wh)
 			mesh(Wh)
 			eltype(Wh)
@@ -66,10 +66,6 @@ end
 			ndofs(Wh)
 			weights(Wh, Innerh(), 1)
 			weights(Wh, Innerplus(), 1)
-			has_backward_difference_matrix(Wh)
-			backward_difference_matrix(Wh, 1)
-			has_average_matrix(Wh)
-			average_matrix(Wh, 1)
 
 			# --- Vector elements ---
 			W = gridspace(test_mesh)

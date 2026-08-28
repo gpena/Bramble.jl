@@ -85,7 +85,7 @@ center(X)         # (1.0, 0.0)
 proj_x = projection(X, 1)  # interval(0.0, 2.0)
 ```
 
-### Point containment (`in` / `∈`)
+### Point containment
 
 Check whether a point lies within a `CartesianProduct`:
 

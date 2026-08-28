@@ -67,6 +67,8 @@ if __bramble_with_unit_tests
 
 		@testset verbose=true "Grid spaces" begin
 			include("space/buffers.jl")
+			include("space/gridspaces.jl")
+			include("space/vector_elements.jl")
 		end
 
 #=

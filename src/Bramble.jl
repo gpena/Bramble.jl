@@ -11,7 +11,7 @@ using SparseArrays: SparseMatrixCSC, SparseVector, spdiagm, spzeros
 
 using FunctionWrappers: FunctionWrapper
 
-using StaticArrays: SVector
+using StaticArrays: SVector, @SVector
 
 using LinearAlgebra: Diagonal, I, transpose, mul!
 
@@ -21,6 +21,7 @@ using Random: rand!
 
 using PrecompileTools: @setup_workload, @compile_workload
 using Preferences: @load_preference
+using Integrals: IntegralProblem, IntegralFunction, solve, HCubatureJL
 
 # Utilities
 export backend, metal_backend, vector, matrix, vector_type, matrix_type, backend_types, backend_eye, backend_zeros
@@ -32,17 +33,19 @@ export domain, markers, labels
 
 # Mesh handling
 export AbstractMeshType, Mesh1D, MeshnD, MeshMarkers
-export mesh, submeshes, hₘₐₓ, hₘᵢₙ, stepsize, locate_cell, normal_vector, iterative_refinement!, change_points!, set_points!
+export mesh, mesh_type, submeshes, hₘₐₓ, hₘᵢₙ, stepsize, locate_cell, normal_vector, iterative_refinement!, change_points!, set_points!
 export npoints, points, point, half_points, half_point
 export spacing, forward_spacing, half_spacing, half_spacings, cell_measure, cell_measures
 export spacings_iterator, forward_spacings_iterator, half_spacings_iterator, points_iterator, half_points_iterator, cell_measures_iterator
 export indices, boundary_indices, interior_indices, is_boundary_index, index_in_marker, is_uniform
 
-#=
 # Space handling
-export gridspace, element, space, CompositeGridSpace
+export gridspace, vector_gridspace, space, spaces, ScalarGridSpace, CompositeGridSpace, VectorGridSpace
+export ndofs, ncomponents, weights
+export VectorElement, element, to_matrix, values, values!, component, components
 export Rₕ, Rₕ!, avgₕ, avgₕ!
-export ndofs
+
+#=
 
 export innerₕ
 export inner₊, inner₊ₓ, inner₊ᵧ, inner₊₂
@@ -87,12 +90,12 @@ include("mesh/mesh1d.jl")
 include("mesh/meshnd.jl")
 
 include("space/buffer.jl")
-
-#=
 include("space/gridspace.jl")
 include("space/scalar_gridspace.jl")
 include("space/vector_gridspace.jl")
 include("space/vectorelement.jl")
+
+#=
 
 include("space/matrixelement.jl")
 include("space/operators/shift.jl")

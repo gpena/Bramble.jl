@@ -88,7 +88,7 @@ p3_alt = point(Ωₕ, 3)
 p_ij = Ωₕ[2, 5]     # Coordinate tuple (x₂, y₅)
 ```
 
-### 2.2 Half-points (cell centers)
+### 2.2 Half-points and cell centers
 
 Finite volume and staggered-grid methods frequently require cell midpoints $x_{i+1/2}$:
 
@@ -169,7 +169,7 @@ is_obs  = index_in_marker(M, :obstacle)
 
 Meshes in `Bramble.jl` are mutable structures designed for adaptive algorithms:
 
-### 5.1 In-place mesh refinement (`iterative_refinement!`)
+### 5.1 In-place mesh refinement
 
 Halves every cell by inserting new points at each cell midpoint, simultaneously updating indices and reapplying domain markers:
 
@@ -181,7 +181,7 @@ iterative_refinement!(M)
 npoints(M, Tuple)  # (39, 39)
 ```
 
-### 5.2 Relocating mesh coordinates (`change_points!`)
+### 5.2 Relocating mesh coordinates
 
 For moving-boundary problems or non-uniform smoothing:
 

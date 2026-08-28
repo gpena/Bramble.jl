@@ -1,4 +1,4 @@
-import Bramble: VectorElement, spacing, points, half_points, space, values, ndofs, values!, _func2array!, ComponentStyle, half_spacings_iterator, half_points_iterator, indices, point
+import Bramble: VectorElement, spacing, points, half_points, space, values, ndofs, values!, _func2array!, half_spacings_iterator, half_points_iterator, indices, point
 using LinearAlgebra: norm
 
 valid_interior_range(i::Int, dims::NTuple{D}) where D = ntuple(k -> k == i ? (2:dims[k]) : (1:dims[k]), Val(D))
@@ -239,7 +239,7 @@ end
 				# Reference calculation
 				w = Array{Float64,D}(undef, dims)
 				test_function_idx(idx) = test_function(point(mesh(Wₕ), idx))
-				_func2array!(ComponentStyle(typeof(Wₕ)), w, test_function_idx, indices(mesh(Wₕ)))
+				_func2array!(w, test_function_idx, indices(mesh(Wₕ)))
 
 				w_flat = reshape(w, prod(dims))
 				@test norm(values(uₕ) - w_flat) < 1e-15
@@ -256,38 +256,69 @@ end
 				@test @views norm(u_reshaped[interior...] - w[interior...]) < 1e-4
 			end
 
-			@testset "∇₋ₕ (Backward Difference Gradient)" begin
-				function get_gradient_component(der, i, dims, D)
-					data = D == 1 ? der.data : der[i].data
-					return reshape(data, dims)
-				end
-
-				@testset "Gradient of a Constant" begin
-					uₕ .= 1.0
-					der = ∇₋ₕ(uₕ)
-					for i in 1:D
-						grad_comp = get_gradient_component(der, i, dims, D)
-						interior = valid_interior_range(i, dims)
-						@test @views norm(grad_comp[interior...]) < 1e-14
-					end
-				end
-
-				@testset "Gradient of Linear Functions" begin
-					for component in 1:D
-						# Test with f(x) = x[component]
-						Rₕ!(uₕ, x -> x[component])
-						der = ∇₋ₕ(uₕ)
-
-						for i in 1:D
-							grad_comp = get_gradient_component(der, i, dims, D)
-							interior = valid_interior_range(i, dims)
-							# The derivative should be 1 if i==component, and 0 otherwise.
-							expected = (i == component) ? 1.0 : 0.0
-							@test @views norm(grad_comp[interior...] .- expected) < 1e-14
-						end
-					end
-				end
-			end
+			# Defer ∇₋ₕ tests until space/operators/difference.jl is enabled
 		end
+	end
+
+	@testset "Component Indexing & Multi-Component Spaces" begin
+		m = mesh(domain(box((0, 0), (1, 1))), (5, 6), (true, true))
+		W = gridspace(m)
+		V = W^2
+
+		u_vec = element(V)
+		@test length(u_vec) == 2 * ndofs(W)
+		@test ncomponents(space(u_vec)) == 2
+
+		# Component extraction via functor call u(i) and component(u, i)
+		u1 = u_vec(1)
+		u2 = u_vec(2)
+		@test u1 isa VectorElement
+		@test u2 isa VectorElement
+		@test space(u1) === W
+		@test space(u2) === W
+		@test length(u1) == ndofs(W)
+		@test length(u2) == ndofs(W)
+		@test component(u_vec, 1) === u1 || values(component(u_vec, 1)) == values(u1)
+
+		# components() tuple
+		comps = components(u_vec)
+		@test length(comps) == 2
+		@test comps[1] isa VectorElement
+		@test comps[2] isa VectorElement
+
+		# Scalar space component indexing
+		u_scal = element(W, 3.0)
+		@test u_scal(1) === u_scal
+		@test component(u_scal, 1) === u_scal
+		@test components(u_scal) === (u_scal,)
+		@test_throws BoundsError u_scal(2)
+		@test_throws BoundsError u_vec(0)
+		@test_throws BoundsError u_vec(3)
+
+		# In-place mutation through component views
+		u1 .= 10.0
+		u2 .= 25.0
+		@test all(==(10.0), values(u_vec)[1:ndofs(W)])
+		@test all(==(25.0), values(u_vec)[ndofs(W)+1:2*ndofs(W)])
+
+		# to_matrix on multi-component elements
+		mats = to_matrix(u_vec)
+		@test mats isa Tuple
+		@test length(mats) == 2
+		@test size(mats[1]) == (5, 6)
+		@test size(mats[2]) == (5, 6)
+		@test all(==(10.0), mats[1])
+		@test all(==(25.0), mats[2])
+
+		# Multi-component Rₕ
+		Rₕ!(u_vec, (x -> x[1], x -> x[2]))
+		@test mats[1][1, 1] ≈ m[1, 1][1]
+		@test mats[2][1, 1] ≈ m[1, 1][2]
+
+		# Multi-component avgₕ
+		u_avg = avgₕ(V, (x -> 2.0, x -> 5.0))
+		mats_avg = to_matrix(u_avg)
+		@test mats_avg[1][2, 2] ≈ 2.0
+		@test mats_avg[2][2, 2] ≈ 5.0
 	end
 end

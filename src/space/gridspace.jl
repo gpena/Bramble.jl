@@ -5,7 +5,7 @@ This file defines the core abstractions for function spaces on structured grids.
 
 ## Key Components
 
-- **Abstract Types**: `AbstractSpaceType`, `ComponentStyle`, `InnerProductType`
+- **Abstract Types**: `AbstractSpaceType`, `InnerProductType`
 - **Element Types**: `VectorElement`, `MatrixElement` - wrappers for grid functions and operators
 - **Interface Functions**: Required methods for any concrete space implementation
 
@@ -13,7 +13,7 @@ This file defines the core abstractions for function spaces on structured grids.
 
 The space framework uses Julia's type system and multiple dispatch to:
 1. Maintain type stability through compile-time information (`Val`, type parameters)
-2. Enable specialized implementations for scalar vs vector fields (`ComponentStyle`)
+2. Enable specialized implementations for scalar vs vector fields via `AbstractSpaceType{N}`
 3. Support different discrete inner products (`InnerProductType`)
 4. Provide a clean separation between data (vectors/matrices) and context (spaces)
 
@@ -106,82 +106,7 @@ struct MatrixElement{S,T,MT<:AbstractMatrix{T}} <: AbstractMatrix{T}
 	space::S
 end
 
-"""
-	ComponentStyle
 
-Abstract type for compile-time dispatch on the number of field components in a function space.
-
-The `ComponentStyle` hierarchy is used to specialize algorithms for scalar fields (single component) 
-versus vector fields (multiple components). This pattern enables efficient code generation through 
-Julia's multiple dispatch, avoiding runtime `if/else` checks.
-
-# Subtypes
-- [`SingleComponent`](@ref): For scalar fields (e.g., temperature, pressure)
-- [`MultiComponent{D}`](@ref): For vector fields with `D` components (e.g., velocity, displacement)
-
-# Usage
-```julia
-ComponentStyle(typeof(Wₕ))  # Returns SingleComponent() or MultiComponent{D}()
-```
-
-# Example
-```julia
-Wₕ = gridspace(Ωₕ)  # Scalar space
-ComponentStyle(typeof(Wₕ))  # Returns SingleComponent()
-
-# Dispatch example
-to_matrix(uₕ, ::SingleComponent) = # ... scalar implementation
-to_matrix(uₕ, ::MultiComponent{D}) where D = # ... vector implementation
-```
-
-See also: [`SingleComponent`](@ref), [`MultiComponent`](@ref), [`to_matrix`](@ref)
-"""
-abstract type ComponentStyle end
-
-"""
-	SingleComponent <: ComponentStyle
-
-Indicates a function space for scalar fields (single component per grid point).
-
-This is the component style for spaces representing scalar quantities such as 
-temperature, pressure, or density, where each grid point has a single value.
-
-# Example
-```julia
-Wₕ = gridspace(Ωₕ)  # Creates a scalar grid space
-ComponentStyle(typeof(Wₕ))  # Returns SingleComponent()
-
-uₕ = element(Wₕ)  # Vector has npoints(Ωₕ) entries
-```
-
-See also: [`ComponentStyle`](@ref), [`MultiComponent`](@ref), [`ScalarGridSpace`](@ref)
-"""
-struct SingleComponent <: ComponentStyle end
-
-"""
-	MultiComponent{D} <: ComponentStyle
-
-Indicates a function space for vector fields with `D` components per grid point.
-
-This component style is used for vector-valued quantities such as velocity, 
-displacement, or force fields, where each grid point stores `D` scalar values.
-
-# Type Parameter
-- `D::Int`: Number of vector components (typically equal to spatial dimension)
-
-# Example
-```julia
-# Create a 2D vector space (e.g., for velocity field)
-Wₕ = gridspace(Ωₕ)
-Vₕ = CompositeGridSpace((Wₕ, Wₕ))  # 2-component vector space
-ComponentStyle(typeof(Vₕ))  # Returns MultiComponent{2}()
-
-uₕ = element(Vₕ)  # Vector has 2 * npoints(Ωₕ) entries
-```
-
-See also: [`ComponentStyle`](@ref), [`SingleComponent`](@ref), [`CompositeGridSpace`](@ref)
-"""
-struct MultiComponent{D} <: ComponentStyle end
 
 """
 	InnerProductType
@@ -316,24 +241,6 @@ end
 end
 
 """
-	backward_difference_matrix(Wₕ::AbstractSpaceType, i)
-
-Returns the backward difference matrix for the `i`-th dimension of the space `Wₕ`.
-"""
-@inline function backward_difference_matrix(Wₕ::AbstractSpaceType, i)
-	error("Interface function 'backward_difference_matrix' not implemented for $(typeof(Wₕ))")
-end
-
-"""
-	average_matrix(Wₕ::AbstractSpaceType, i)
-
-Returns the averaging matrix for the `i`-th dimension of the space `Wₕ`.
-"""
-@inline function average_matrix(Wₕ::AbstractSpaceType, i)
-	error("Interface function 'average_matrix' not implemented for $(typeof(Wₕ))")
-end
-
-"""
 	vector_buffer(Wₕ::AbstractSpaceType)
 
 Returns the [GridSpaceBuffer](@ref) used for efficient memory management in the space `Wₕ`.
@@ -342,23 +249,7 @@ Returns the [GridSpaceBuffer](@ref) used for efficient memory management in the 
 	error("Interface function 'vector_buffer' not implemented for $(typeof(Wₕ))")
 end
 
-"""
-	has_backward_difference_matrix(Wₕ::AbstractSpaceType)
 
-Checks if the backward difference matrices have been computed and stored for `Wₕ`.
-"""
-@inline function has_backward_difference_matrix(Wₕ::AbstractSpaceType)
-	error("Interface function 'has_backward_difference_matrix' not implemented for $(typeof(Wₕ))")
-end
-
-"""
-	has_average_matrix(Wₕ::AbstractSpaceType)
-
-Checks if the averaging matrices have been computed and stored for `Wₕ`.
-"""
-@inline function has_average_matrix(Wₕ::AbstractSpaceType)
-	error("Interface function 'has_average_matrix' not implemented for $(typeof(Wₕ))")
-end
 
 """
 	$(TYPEDSIGNATURES)
@@ -402,3 +293,22 @@ end
 @inline function eltype(::Type{W}) where W<:AbstractSpaceType
 	error("Interface function 'eltype' not implemented for this space type.")
 end
+
+"""
+	ncomponents(Wₕ::AbstractSpaceType)
+	ncomponents(::Type{<:AbstractSpaceType})
+
+Returns the number of field components of the function space (e.g. 1 for scalar, D for vector).
+"""
+@inline ncomponents(::AbstractSpaceType{N}) where N = N
+@inline ncomponents(::Type{<:AbstractSpaceType{N}}) where N = N
+
+
+
+"""
+	spaces(Wₕ::AbstractSpaceType)
+
+Returns the constituent subspace(s) of `Wₕ` as a tuple.
+"""
+@inline spaces(Wₕ::AbstractSpaceType) = (Wₕ,)
+

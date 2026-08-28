@@ -37,7 +37,7 @@ has_time
 
 ## Geometry
 
-### Sets and intervals (`CartesianProduct`)
+### Sets and intervals
 
 ```@docs
 interval
@@ -128,3 +128,44 @@ iterative_refinement!
 change_points!
 set_points!
 ```
+
+---
+
+## Grid spaces
+
+### Function spaces
+
+```@docs
+ScalarGridSpace
+CompositeGridSpace
+gridspace
+vector_gridspace
+```
+
+### Space properties and degrees of freedom
+
+```@docs
+ndofs
+weights
+spaces
+```
+
+### Vector elements and grid functions
+
+```@docs
+VectorElement
+element
+to_matrix
+component
+components
+```
+
+### Restriction and averaging operators
+
+```@docs
+Rₕ
+Rₕ!
+avgₕ
+avgₕ!
+```
+

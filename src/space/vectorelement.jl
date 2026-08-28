@@ -7,16 +7,15 @@ Returns the coefficients of the [VectorElement](@ref) `uₕ`.
 @inline values(uₕ::VectorElement) = uₕ.data
 
 """
-	to_matrix(uₕ::VectorElement, [::ComponentStyle])
+	to_matrix(uₕ::VectorElement)
 
 Reshapes the flat coefficient vector of `uₕ` into a multidimensional array that matches the logical layout of the grid points.
 
-  - For a `SingleComponent` space, this returns a D-dimensional array.
-  - For a `MultiComponent` space, it returns a tuple of D arrays, one for each component.
+  - For a scalar space, this returns a D-dimensional array.
+  - For an N-component vector space, it returns an N-tuple of arrays, one for each component.
 """
-@inline to_matrix(uₕ::VectorElement{ST}) where ST = to_matrix(uₕ, ComponentStyle(ST))
-@inline to_matrix(uₕ::VectorElement, ::SingleComponent) = Base.ReshapedArray(values(uₕ), npoints(mesh(space(uₕ)), Tuple), ())
-@inline to_matrix(uₕ::VectorElement, ::MultiComponent{D}) where D = ntuple(i -> to_matrix(uₕ(i), SingleComponent()), Val(D))
+@inline to_matrix(uₕ::VectorElement{<:ScalarGridSpace}) = Base.ReshapedArray(values(uₕ), npoints(mesh(space(uₕ)), Tuple), ())
+@inline to_matrix(uₕ::VectorElement{<:CompositeGridSpace{N}}) where N = ntuple(i -> to_matrix(uₕ(i)), Val(N))
 
 """
 	values!(uₕ::VectorElement, s)
@@ -37,6 +36,77 @@ Returns the grid space associated with [VectorElement](@ref) `uₕ`.
 # to behave like a standard Julia vector (e.g., support `size`, `length`, `eltype`).
 @forward VectorElement.data (Base.size, Base.length, Base.firstindex, Base.lastindex, Base.iterate, Base.eltype, Base.axes, Base.ndims, Bramble.show)
 @forward VectorElement.space (Bramble.mesh,)
+
+
+
+# ==============================================================================
+# Component Indexing
+# ==============================================================================
+
+"""
+	component_range(Wₕ::CompositeGridSpace{N}, i::Int) where N
+
+Returns the degree-of-freedom index range for the `i`-th constituent space of composite space `Wₕ`.
+"""
+@inline function component_range(Wₕ::CompositeGridSpace{N}, i::Int) where N
+	@boundscheck (1 <= i <= N) || throw(BoundsError(Wₕ, i))
+	subs = spaces(Wₕ)
+	start_idx = 1
+	for k in 1:(i - 1)
+		start_idx += ndofs(subs[k])
+	end
+	end_idx = start_idx + ndofs(subs[i]) - 1
+	return start_idx:end_idx
+end
+
+"""
+	(uₕ::VectorElement)(i::Int)
+	component(uₕ::VectorElement, i::Int)
+
+Extracts a [`VectorElement`](@ref) view of the `i`-th field component of `uₕ`.
+
+For a [`CompositeGridSpace`](@ref), this creates a lightweight, zero-copy view of the
+`i`-th component's degrees of freedom. Mutating the returned component modifies `uₕ` in-place.
+
+For a scalar [`ScalarGridSpace`](@ref), `uₕ(1)` returns `uₕ`.
+
+# Examples
+```julia
+Vₕ = Wₕ^2
+uₕ = element(Vₕ)
+u_x = uₕ(1)
+u_y = uₕ(2)
+
+# In-place component assignment
+u_x .= 1.0
+```
+"""
+@inline function (uₕ::VectorElement{<:CompositeGridSpace})(i::Int)
+	rng = component_range(space(uₕ), i)
+	subspace = spaces(space(uₕ))[i]
+	v_data = @views values(uₕ)[rng]
+	return VectorElement(v_data, subspace)
+end
+
+@inline function (uₕ::VectorElement{<:ScalarGridSpace})(i::Int)
+	@boundscheck i == 1 || throw(BoundsError(uₕ, i))
+	return uₕ
+end
+
+"""
+	component(uₕ::VectorElement, i::Int)
+
+Extracts a [`VectorElement`](@ref) view of the `i`-th field component of `uₕ`. Alias for `uₕ(i)`.
+"""
+@inline component(uₕ::VectorElement, i::Int) = uₕ(i)
+
+"""
+	components(uₕ::VectorElement)
+
+Returns an `NTuple` of [`VectorElement`](@ref) views for all components of `uₕ`.
+"""
+@inline components(uₕ::VectorElement{<:CompositeGridSpace{N}}) where N = ntuple(i -> uₕ(i), Val(N))
+@inline components(uₕ::VectorElement{<:ScalarGridSpace}) = (uₕ,)
 
 # Constructor for VectorElement
 """
@@ -82,7 +152,7 @@ end
 @inline Base.@propagate_inbounds setindex!(uₕ::VectorElement, val, i) = (setindex!(uₕ.data, val, i); return)
 
 # Create a new, uninitialized VectorElement with the same space as the input.
-@inline Base.similar(uₕ::VectorElement) = element(space(uₕ))#===============##===============#
+@inline Base.similar(uₕ::VectorElement) = element(space(uₕ))
 
 # Broadcasting
 
@@ -91,16 +161,16 @@ Base.BroadcastStyle(::Type{<:VectorElement}) = Broadcast.ArrayStyle{VectorElemen
 
 # Define how to create a `similar` container for the broadcast result, preserving the space.
 function Base.similar(bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{VectorElement}}, ::Type{ElType}) where ElType
-	# Find a VectorElement within the broadcast expression to extract its space.
 	vec_elem = _find_vec_in_broadcast(bc)
-	# Create a new element on the same space with a similar data array of the correct element type.
-	return element(space(vec_elem), similar(values(vec_elem), ElType))
+	vec_elem === nothing && throw(ArgumentError("No VectorElement found in broadcast expression"))
+	return VectorElement(similar(values(vec_elem), ElType), space(vec_elem))
 end
 
 # Version without a specified ElType.
 function Base.similar(bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{VectorElement}})
 	vec_elem = _find_vec_in_broadcast(bc)
-	return element(space(vec_elem), similar(values(vec_elem)))
+	vec_elem === nothing && throw(ArgumentError("No VectorElement found in broadcast expression"))
+	return VectorElement(similar(values(vec_elem)), space(vec_elem))
 end
 
 """
@@ -140,7 +210,7 @@ _find_vec_in_broadcast(::Tuple{}) = nothing # End of recursion
 _find_vec_in_broadcast(a::VectorElement, rest) = a # Found one
 _find_vec_in_broadcast(::Any, rest) = _find_vec_in_broadcast(rest) # Keep searching
 
-function *(uₕ::VectorElement, Vₕ::NTuple{D,VectorElement}) where D
+function Base.:*(uₕ::VectorElement, Vₕ::NTuple{D,VectorElement}) where D
 	Zₕ = ntuple(i -> similar(Vₕ[i]), D)
 	for i in 1:D
 		Zₕ[i].data .= uₕ.data .* Vₕ[i].data
@@ -148,13 +218,16 @@ function *(uₕ::VectorElement, Vₕ::NTuple{D,VectorElement}) where D
 	return Zₕ
 end
 
-function *(a::Number, Vₕ::NTuple{D,VectorElement}) where D
+function Base.:*(a::Number, Vₕ::NTuple{D,VectorElement}) where D
 	Zₕ = ntuple(i -> similar(Vₕ[i]), D)
 	for i in 1:D
 		Zₕ[i].data .= a .* Vₕ[i].data
 	end
 	return Zₕ
 end
+
+@inline Base.:*(Vₕ::NTuple{D,VectorElement}, a::Number) where D = a * Vₕ
+@inline Base.:*(Vₕ::NTuple{D,VectorElement}, uₕ::VectorElement) where D = uₕ * Vₕ
 
 ########################
 #                      #
@@ -164,18 +237,19 @@ end
 
 # Workhorse function for the restriction operator: evaluates a function `g`
 # point-by-point over the grid indices and stores the result in `u`.
-function _func2array!(::SingleComponent, u, g, mesh_indices::NTuple)
+function _func2array!(u::AbstractArray, g, mesh_indices::NTuple)
 	u .= zero(eltype(u))
 	# Iterate over all specified indices in the mesh.
-	@inbounds @simd for idxs in mesh_indices
-		_apply!(u, g, idxs)
+	@inbounds for idxs in mesh_indices
+		_parallel_for!(u, idxs, g)
 	end
+	return u
 end
 
 # Optimized version for CartesianIndices, enabling parallel execution.
-@inline _func2array!(::SingleComponent, u, g, mesh_indices::CartesianIndices) = (_parallel_for!(u, mesh_indices, g))
+@inline _func2array!(u::AbstractArray, g, mesh_indices::CartesianIndices) = (_parallel_for!(u, mesh_indices, g))
 # Placeholder for multi-component version.
-@inline _func2array!(::MultiComponent{D}, u, f, mesh) where D = nothing
+@inline _func2array!(u::Tuple, f, mesh) = nothing
 
 """
 	$(TYPEDEF)
@@ -294,59 +368,51 @@ Rₕ!(uₕ, f)
 
 See also: [`Rₕ`](@ref), [`element`](@ref)
 """
-@inline function Rₕ!(uₕ::VectorElement{ST}, f; markers::NTuple{N,Symbol} = NTuple{0,Symbol}()) where {N,ST}
+@inline function Rₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f; markers::NTuple{N,Symbol} = NTuple{0,Symbol}()) where N
 	if N > 0
 		@debug "Using marker-based restriction" markers
 	end
 
-	(; data, space) = uₕ
+	(; space) = uₕ
 	Ωₕ = mesh(space)
 
-	CStyle = ComponentStyle(ST)
-	u = to_matrix(uₕ, CStyle)
+	u = to_matrix(uₕ)
 
 	g = PointwiseEvaluator(f, Ωₕ)
 
 	if N == 0
-		_func2array!(CStyle, u, g, indices(Ωₕ))
-		return
+		_func2array!(u, g, indices(Ωₕ))
+		return uₕ
 	end
 
-	mesh_indices = ntuple(i->marker(Ωₕ, markers[i]), Val(N))
-	_func2array!(CStyle, u, g, mesh_indices)
+	mesh_indices = ntuple(i -> index_in_marker(Ωₕ, markers[i]), Val(N))
+	_func2array!(u, g, mesh_indices)
+	return uₕ
 end
 
-#@inline fuse_markers(_::Nothing, _::Nothing) = ()
-#@inline fuse_markers(marker::Symbol, _::Nothing) = (marker,)
-#@inline fuse_markers(_::Nothing, markers::NTuple{N,Symbol}) where N = markers
-#@inline fuse_markers(marker::Symbol, markers::NTuple{N,Symbol}) where N = (marker, markers...)
+@inline function Rₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::Tuple; markers::NTuple{N,Symbol} = NTuple{0,Symbol}()) where {NC,N}
+	for i in 1:NC
+		Rₕ!(uₕ(i), f[i]; markers = markers)
+	end
+	return uₕ
+end
+
+@inline function Rₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f; markers::NTuple{N,Symbol} = NTuple{0,Symbol}()) where {NC,N}
+	for i in 1:NC
+		fi = x -> f(x)[i]
+		Rₕ!(uₕ(i), fi; markers = markers)
+	end
+	return uₕ
+end
 
 """
 	Rₕ(Wₕ::AbstractSpaceType, f)
 
-Standard nodal restriction operator. It returns a [VectorElement](@ref) with the result of evaluating the function `f` at the points of `mesh(Wₕ)`. It is defined as follows
-
-  - 1D case
-
-```math
-\\textrm{R}ₕ f(x_i) = f(x_i), \\, i = 1,\\dots,N
-```
-
-  - 2D case
-
-```math
-\\textrm{R}ₕ f(x_i, y_j)= f(x_i, y_j), \\, i = 1,\\dots,N_x,  j = 1,\\dots,N_y
-```
-
-  - 3D case
-
-```math
-\\textrm{R}ₕ f(x_i, y_j, z_l)= f(x_i, y_j, z_l), \\, i = 1,\\dots,N_x,  j = 1,\\dots,N_y, l = 1,\\dots,N_z
-```
+Standard nodal restriction operator. It returns a [VectorElement](@ref) with the result of evaluating the function `f` at the points of `mesh(Wₕ)`.
 """
 function Rₕ(Wₕ::AbstractSpaceType, f; markers::NTuple{N,Symbol} = NTuple{0,Symbol}()) where N
 	uₕ = element(Wₕ)
-	Rₕ!(uₕ, f, markers = markers)
+	Rₕ!(uₕ, f; markers = markers)
 	return uₕ
 end
 
@@ -359,32 +425,11 @@ end
 """
 	avgₕ(Wₕ::AbstractSpaceType, f)
 
-Returns a [VectorElement](@ref) with the average of function `f` with respect to the [cell_measure](@ref) of `mesh(Wₕ)` around each grid point. It is defined as follows
-
-  - 1D case
-
-```math
-\\textrm{avg}ₕ f(x_i) = \\frac{1}{|\\square_i|} \\int_{\\square_i} f(x) dx, \\, i = 1,\\dots,N
-```
-
-  - 2D case
-
-```math
-\\textrm{avg}ₕ f(x_i, y_j) = \\frac{1}{|\\square_{i,j}|} \\iint_{\\square_{i,j}} f(x,y) dA, \\, i = 1,\\dots,N_x,  j = 1,\\dots,N_y
-```
-
-  - 3D case
-
-```math
-\\textrm{avg}ₕ f(x_i, y_j, z_l) = \\frac{1}{|\\square_{i,j,l}|} \\iiint_{\\square_{i,j,l}} f(x,y,z) dV, \\, i = 1,\\dots,N_x,  j = 1,\\dots,N_y, l = 1,\\dots,N_z
-```
-
-Please check the implementations of functions [cell_measure](@ref cell_measure(Ωₕ::Mesh1D, i)) (for the `1`-dimensional case) and [cell_measure](@ref cell_measure(Ωₕ::MeshnD, i)) (for the `n`-dimensional cases).
+Returns a [VectorElement](@ref) with the average of function `f` with respect to the [cell_measure](@ref) of `mesh(Wₕ)` around each grid point.
 """
 @inline function avgₕ(Wₕ::AbstractSpaceType, f)
 	uₕ = element(Wₕ)
-	ST = typeof(space(uₕ))
-	_avgₕ!(ComponentStyle(ST), uₕ, f, Val(dim(mesh(Wₕ))))
+	_avgₕ!(uₕ, f, Val(dim(mesh(Wₕ))))
 	return uₕ
 end
 
@@ -393,15 +438,15 @@ end
 
 In-place version of averaging operator [avgₕ](@ref).
 """
-@inline function avgₕ!(uₕ::VectorElement{ST}, f) where ST
+@inline function avgₕ!(uₕ::VectorElement, f)
 	Ωₕ = mesh(space(uₕ))
 	_f = embed_function(set(Ωₕ), f)
 
-	_avgₕ!(ComponentStyle(ST), uₕ, _f, Val(dim(Ωₕ)))
-	return
+	_avgₕ!(uₕ, _f, Val(dim(Ωₕ)))
+	return uₕ
 end
 
-function _avgₕ!(::SingleComponent, uₕ::VectorElement{ST}, f, ::Val{1}) where ST
+function _avgₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f, ::Val{1})
 	Ωₕ = mesh(space(uₕ))
 
 	x = half_points(Ωₕ)
@@ -410,15 +455,11 @@ function _avgₕ!(::SingleComponent, uₕ::VectorElement{ST}, f, ::Val{1}) where
 	idxs = eachindex(uₕ)
 	param = (f, x, h, idxs)
 
-	__quad!(ComponentStyle(ST), uₕ, (0, 1), param)
-	return
+	__quad!(uₕ, (0.0, 1.0), param)
+	return uₕ
 end
 
-function _avgₕ!(::MultiComponent{N}, uₕ::VectorElement{ST}, f, ::Val{1}) where {N,ST}
-	return
-end
-
-function _avgₕ!(::SingleComponent, uₕ::VectorElement{ST}, f, ::Val{D}) where {D,ST}
+function _avgₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f, ::Val{D}) where D
 	Ωₕ = mesh(space(uₕ))
 
 	x = half_points(Ωₕ)
@@ -428,12 +469,23 @@ function _avgₕ!(::SingleComponent, uₕ::VectorElement{ST}, f, ::Val{D}) where
 	_zeros = @SVector zeros(D)
 	_ones = @SVector ones(D)
 
-	__quadnd!(ComponentStyle(ST), uₕ, (_zeros, _ones), param)
-	return
+	__quadnd!(uₕ, (_zeros, _ones), param)
+	return uₕ
 end
 
-function _avgₕ!(::MultiComponent{N}, uₕ::VectorElement{ST}, f, ::Val{D}) where {N,D,ST}
-	return
+function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::Tuple, val_dim::Val) where NC
+	for i in 1:NC
+		_avgₕ!(uₕ(i), f[i], val_dim)
+	end
+	return uₕ
+end
+
+function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f, val_dim::Val) where NC
+	for i in 1:NC
+		fi = x -> f(x)[i]
+		_avgₕ!(uₕ(i), fi, val_dim)
+	end
+	return uₕ
 end
 
 """
@@ -460,17 +512,13 @@ For efficiency, each integral in `avgₕ` is rewritten as an integral over `[0,1
 	return
 end
 
-function __quad!(::SingleComponent, uₕ::VectorElement, domain::NTuple{2}, p::ParamType) where ParamType
+function __quad!(uₕ::VectorElement{<:ScalarGridSpace}, domain::NTuple{2,Any}, p)
 	domain_to_float = float.(domain)
 	prototype = values(uₕ)
 	sol = __quad_problem(prototype, domain_to_float, p)
 
 	copyto!(uₕ, sol)
-	return
-end
-
-function __quad!(::MultiComponent{N}, uₕ::VectorElement, domain::NTuple{2}, p::ParamType) where {N,ParamType}
-	return
+	return uₕ
 end
 
 @inline function _point_tuple_and_volume(t::SVector{D}, x, idx::CartesianIndex{D}) where D
@@ -517,19 +565,15 @@ function __quad_problem(prototype, domain, p)
 
 	func = IntegralFunction(int_function(Val(D)), prototype)
 	prob = IntegralProblem{true}(func, domain, p)
-	sol = solve(prob, CubatureJLh()).u
+	sol = solve(prob, HCubatureJL()).u
 
 	return sol::Array{T,D}
 end
 
-function __quadnd!(::SingleComponent, uₕ::VectorElement, domain::NTuple{S,SV}, p::ParamType) where {S,SV,ParamType}
-	v = to_matrix(uₕ, SingleComponent())
+function __quadnd!(uₕ::VectorElement{<:ScalarGridSpace}, domain::NTuple{D,Any}, p) where D
+	v = to_matrix(uₕ)
 
 	sol = __quad_problem(v, domain, p)
 	copyto!(v, sol)
-	return
-end
-
-function __quadnd!(::MultiComponent{N}, uₕ::VectorElement, domain::NTuple{D}, p::ParamType) where {N,D,ParamType}
-	return
+	return uₕ
 end

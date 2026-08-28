@@ -89,51 +89,37 @@ Here, ``|\\cdot|`` denotes the measure of the set (length, area, or volume). See
 """
 struct ScalarGridSpace{D,T,                               # Dimension and Element Type
 					   VT<:AbstractVector{T},             # Vector Type
-					   MT<:AbstractMatrix{T},             # Matrix Type
 					   MType<:AbstractMeshType{D},
-					   BT<:Backend{VT,MT}} <: AbstractSpaceType{1}
+					   BT<:Backend} <: AbstractSpaceType{1}
 	"the underlying mesh of the grid space."
 	mesh::MType
 	"a [SpaceWeights](@ref) object holding vectors for various discrete inner products."
 	weights::SpaceWeights{D,VT}
-	"a tuple of matrices for the backward difference operator in each dimension."
-	backward_difference_matrix::NTuple{D,MT}
-	"a flag indicating if the difference matrices have been computed and stored."
-	has_backward_difference_matrix::Bool
-	"a tuple of matrices for the averaging operator in each dimension."
-	average_matrix::NTuple{D,MT}
-	"a flag indicating if the averaging matrices have been computed and stored."
-	has_average_matrix::Bool
 	"a [GridSpaceBuffer](@ref) for efficient reuse of temporary vectors, minimizing memory allocations."
 	vector_buffer::GridSpaceBuffer{BT,VT,T}
 end
 
 """
-	gridspace(Ωₕ::AbstractMeshType{D}; cache_avg = false, cache_bwd = true)
+	gridspace(Ωₕ::AbstractMeshType{D}; nbuffers::Int = 1) where D
 
-Constructor for a [ScalarGridSpace](@ref) defined on the mesh `Ωₕ`. This builds the weights for the inner products mentioned in [ScalarGridSpace](@ref) as well as the differentiation matrices associated with the grid points of mesh `Ωₕ`.
-The keyword arguments `cache_avg` and `cache_bwd` can be used to indicate if the average and backward difference matrices should be precomputed and stored in the space (default is `true` for `cache_bwd` and `false` for `cache_avg`).
+Constructor for a [ScalarGridSpace](@ref) defined on the mesh `Ωₕ`. This builds the weights for the inner products mentioned in [ScalarGridSpace](@ref) and initializes a memory pool for scratch vectors.
 """
-function gridspace(Ωₕ::AbstractMeshType{D}; cache_avg = false, cache_bwd = true) where D
+function gridspace(Ωₕ::AbstractMeshType{D}; nbuffers::Int = 1) where D
 	b = backend(Ωₕ)
 	npts = npoints(Ωₕ)
 
 	weights = space_weights(Ωₕ)
-	diff_matrices = cache_bwd ? backward_difference_matrices(Ωₕ) : empty_matrix_cache(Ωₕ)
-	avg_matrices = cache_avg ? average_matrices(Ωₕ) : empty_matrix_cache(Ωₕ)
-
-	space_buffer = simple_space_buffer(b, npts, nbuffers = 1)
+	space_buffer = simple_space_buffer(b, npts; nbuffers = nbuffers)
 
 	MType = typeof(Ωₕ)
-	T, VT, MT, BT = backend_types(b)
+	T, VT, _, BT = backend_types(b)
 
-	return ScalarGridSpace{D,T,VT,MT,MType,BT}(Ωₕ, weights, diff_matrices, cache_bwd, avg_matrices, cache_avg, space_buffer)
+	return ScalarGridSpace{D,T,VT,MType,BT}(Ωₕ, weights, space_buffer)
 end
 
 ncomponents(::Type{<:ScalarGridSpace}) = 1
 
-ComponentStyle(::Type) = SingleComponent()
-ComponentStyle(::Type{<:ScalarGridSpace}) = SingleComponent()
+
 
 @inline __vector(Ωₕ) = vector(backend(Ωₕ), npoints(Ωₕ))
 
@@ -179,24 +165,12 @@ function space_weights(Ωₕ::AbstractMeshType{D}) where D
 	return SpaceWeights{D,typeof(inner_h_vec)}(inner_h_vec, innerplus)
 end
 
-function backward_difference_matrices(Ωₕ::AbstractMeshType{D}) where D
-	vector = __vector(Ωₕ)
-	return ntuple(i -> backward_finite_difference(Ωₕ, Val(i), vector_cache = vector), Val(D))
-end
-
-@inline average_matrices(Ωₕ::AbstractMeshType{D}) where D = ntuple(i -> _create_average_matrix(Ωₕ, i), Val(D))
-@inline empty_matrix_cache(Ωₕ::AbstractMeshType{D}) where D = ntuple(i -> shift(Ωₕ, Val(1), Val(0)), Val(D))
-
 # Implementation of the interface functions for AbstractSpaceType
 @inline mesh(Wₕ::ScalarGridSpace) = Wₕ.mesh
-@inline backward_difference_matrix(Wₕ::ScalarGridSpace, i) = Wₕ.backward_difference_matrix[i]
-@inline average_matrix(Wₕ::ScalarGridSpace, i) = Wₕ.average_matrix[i]
 @inline vector_buffer(Wₕ::ScalarGridSpace) = Wₕ.vector_buffer
-@inline has_backward_difference_matrix(Wₕ::ScalarGridSpace) = Wₕ.has_backward_difference_matrix
-@inline has_average_matrix(Wₕ::ScalarGridSpace) = Wₕ.has_average_matrix
 @inline backend(Wₕ::ScalarGridSpace) = backend(mesh(Wₕ))
 @inline mesh_type(Wₕ::ScalarGridSpace) = typeof(mesh(Wₕ))
-@inline mesh_type(::Type{<:ScalarGridSpace{D,T,VT,MT,MType}}) where {D,T,VT,MT,MType} = MType
+@inline mesh_type(::Type{<:ScalarGridSpace{<:Any,<:Any,<:Any,MType}}) where MType = MType
 
 """
 	weights(Wₕ::ScalarGridSpace)
@@ -232,7 +206,7 @@ w_plus_x = weights(Wₕ, Innerplus(), 1)  # Vector for x-direction
 result = dot(uₕ.data, w_h, vₕ.data)  # Weighted inner product
 ```
 
-See also: [`SpaceWeights`](@ref), [`Innerh`](@ref), [`Innerplus`](@ref), [`innerₕ`](@ref)
+See also: [`SpaceWeights`](@ref), [`Innerh`](@ref), [`Innerplus`](@ref), `innerₕ`
 """
 @inline weights(Wₕ::ScalarGridSpace) = Wₕ.weights
 @inline weights(Wₕ::ScalarGridSpace, ::Innerh) = weights(Wₕ).innerh
@@ -287,15 +261,21 @@ See also: [`backend`](@ref)
 
 Builds the weights for the standard discrete ``L^2`` inner product, ``inner_h(\\cdot, \\cdot)``, on the space of grid functions, following the order of the points provided by `indices(Ωₕ)`. The values are stored in vector `u`.
 """
-function _innerh_weights!(u, Ωₕ::AbstractMeshType)
-	f = Base.Fix1(cell_measure, Ωₕ)
+function _innerh_weights!(u, Ωₕ::AbstractMeshType{1})
 	idxs = indices(Ωₕ)
-	dims = npoints(Ωₕ, Tuple)
+	@inbounds @simd for idx in idxs
+		i = idx[1]
+		u[i] = cell_measure(Ωₕ, i)
+	end
+	return nothing
+end
 
+function _innerh_weights!(u, Ωₕ::AbstractMeshType{D}) where D
+	cell_measures_per_component = ntuple(k -> [cell_measure(Ωₕ(k), j[1]) for j in indices(Ωₕ(k))], Val(D))
+	dims = npoints(Ωₕ, Tuple)
 	v = Base.ReshapedArray(u, dims, ())
-	_parallel_for!(v, idxs, f)
-	# it should be 
-	# _parallel_map!(f, v, idxs)
+	__innerplus_weights!(v, cell_measures_per_component)
+	return nothing
 end
 
 """
@@ -340,12 +320,8 @@ function _innerplus_mean_weights!(u::VT, Ωₕ, component::Int = 1) where VT
 	return nothing
 end
 
-@inline @generated function __prod(diags::NTuple{D,VT}, I) where {D,VT}
-	res = :(one(eltype(VT)))
-	for i in 1:D
-		res = :(@inbounds(diags[$i][I[$i]]) * $res)
-	end
-	return res
+@inline function __prod(diags::NTuple{D,Any}, I) where D
+	return prod(ntuple(i -> @inbounds(diags[i][I[i]]), Val(D)))
 end
 
 """
