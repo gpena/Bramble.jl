@@ -36,7 +36,7 @@ point(Ωₕ, (10, 15))  # Returns (x₁₀, y₁₅)
 
 See also: [`Mesh1D`](@ref), [`submeshes`](@ref), [`mesh`](@ref)
 """
-mutable struct MeshnD{D,BT<:Backend,CI,M1T<:AbstractMeshType{1},T} <: AbstractMeshType{D}
+mutable struct MeshnD{D,BT<:Backend,CI<:CartesianIndices{D},M1T<:AbstractMeshType{1},T} <: AbstractMeshType{D}
 	"the D-dimensional CartesianProduct (hyperrectangle) defining the geometric domain."
 	set::CartesianProduct{D,T}
 	"a dictionary mapping `Symbol` labels to `BitVector`s, marking grid points."

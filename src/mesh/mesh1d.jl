@@ -17,7 +17,7 @@ For future reference, the entries of vector `pts` are
 x_i, \\, i=1,\\dots,N.
 ```
 """
-mutable struct Mesh1D{BT<:Backend,CI,VT<:AbstractVector,T} <: AbstractMeshType{1}
+mutable struct Mesh1D{BT<:Backend,CI<:CartesianIndices{1},VT<:AbstractVector,T} <: AbstractMeshType{1}
 	"the geometric domain, a 1D CartesianProduct (interval), over which the mesh is defined."
 	set::CartesianProduct{1,T}
 	"a dictionary mapping `Symbol` labels to `BitVector`s, marking specific points on the mesh."

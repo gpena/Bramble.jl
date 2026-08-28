@@ -282,7 +282,7 @@ end
 		end
 
 		# Time-dependent Domain & evaluation at time t
-		I_time = interval(0.0, 1.0)
+		local I_time = interval(0.0, 1.0)
 		d_spacetime = domain(X1, I_time, :moving => ((x, t) -> x > t), :left => :left)
 		d_at_t = d_spacetime(0.5)
 		collect(labels(d_at_t))
