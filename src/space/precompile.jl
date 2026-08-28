@@ -1,9 +1,7 @@
-# NOTE: this file is not currently included (see src/Bramble.jl) and still refers to
-# BRAMBLE_EXTENDED_PRECOMPILE, which was removed when the per-subsystem precompile
-# workloads were consolidated into src/precompile.jl. Fold these calls into the
-# workload there when space/ and form/ are re-enabled; the tiering no longer exists.
+# NOTE: this file is not currently included by src/Bramble.jl (space/ is commented
+# out there). Fold these calls into src/precompile.jl when space/ is re-enabled.
 
-# --- Precompilation Workload ---
+# --- Buffers ------------------------------------------------------------- #
 @compile_workload begin
 	precompile_backend = backend()
 	precompile_vector_len = 10
@@ -46,149 +44,35 @@
 	add_buffer!(gsb)
 end
 
-# precompile gridspace basics - ESSENTIAL: 1D only
+# --- Grid spaces, vector elements, Rₕ / avgₕ ----------------------------- #
 @setup_workload begin
-	T = Float64
 	_interval = interval(0, 1)
 
 	@compile_workload begin
-		# Essential: 1D Float64 only
-		D = 1
-		S = reduce(×, ntuple(i -> _interval, D))
-		X = domain(S)
-		dims_tuple = ntuple(i -> 3, D)
-		unif_tuple = ntuple(i -> true, D)
-		test_mesh = mesh(X, dims_tuple, unif_tuple)
-		space_weights(test_mesh)
-		Wh = gridspace(test_mesh, cache_bwd = true, cache_avg = true)
-		w = weights(Wh)
-		mesh(Wh)
-		eltype(Wh)
-		dim(Wh)
-		ndofs(Wh)
-		weights(Wh, Innerh(), 1)
-		weights(Wh, Innerplus(), 1)
-		weights(Wh)
-		has_backward_difference_matrix(Wh)
-		backward_difference_matrix(Wh, 1)
-		has_average_matrix(Wh)
-		average_matrix(Wh, 1)
-
-		# Extended: 2D and 3D
-		if BRAMBLE_EXTENDED_PRECOMPILE
-			for D in (2, 3)
-				S = reduce(×, ntuple(i -> _interval, D))
-				X = domain(S)
-				dims_tuple = ntuple(i -> 3, D)
-				unif_tuple = ntuple(i -> true, D)
-				test_mesh = mesh(X, dims_tuple, unif_tuple)
-				space_weights(test_mesh)
-				Wh = gridspace(test_mesh, cache_bwd = true, cache_avg = true)
-				w = weights(Wh)
-				mesh(Wh)
-				eltype(Wh)
-				dim(Wh)
-				ndofs(Wh)
-				weights(Wh, Innerh(), 1)
-				weights(Wh, Innerplus(), 1)
-				weights(Wh)
-				has_backward_difference_matrix(Wh)
-				backward_difference_matrix(Wh, 1)
-				has_average_matrix(Wh)
-				average_matrix(Wh, 1)
-			end
-		end
-	end
-
-	# Essential: 1D vector element operations
-	D = 1
-	S = reduce(×, ntuple(i -> _interval, D))
-	X = domain(S)
-	dims_tuple = ntuple(i -> 3, D)
-	unif_tuple = ntuple(i -> true, D)
-	test_mesh = mesh(X, dims_tuple, unif_tuple)
-	W = gridspace(test_mesh)
-	v_data = collect(Float64, 1:3)
-	v_data2 = fill(2.0, 3)
-	α = 3.0
-	β = 2
-
-	# Constructors
-	u1 = element(W)
-	u2 = element(W, α)
-
-	v_data = deepcopy(values(u2))
-	u3 = element(W, v_data)
-	u4 = element(W, β) # Int constructor
-
-	# Getters/Setters
-	s = space(u3)
-	vals = values(u3)
-	values!(u1, vals)
-
-	# Forwarded methods (exercise them)
-	len = length(u3)
-	et = eltype(u3)
-	sz = size(u3)
-	fi = firstindex(u3)
-	li = lastindex(u3)
-	iter_sum = sum(u3) # Test iteration
-	msh = mesh(u3)
-
-	# ndims
-	nd = ndims(VectorElement)
-
-	# Indexing
-	val_at_1 = u3[1]
-	u3[2] = 99.0
-	u3[3] = 99 # Set Int
-
-	# Similar
-	s1 = similar(u3)
-
-	# Copyto!
-	z = element(W)
-	copyto!(z, u3)
-	copyto!(z, v_data)
-
-	# Arithmetic Operators
-	r1 = α .+ u3
-	r2 = u3 .+ α
-	r3 = u3 + u2
-	r4 = α * u3
-	r5 = u3 * α
-	r6 = u3 .* u2
-	r7 = u3 - u2
-	r8 = u3 .- α
-	r9 = α .- u3
-	r10 = u3 ./ β
-	r11 = β ./ u3
-	r12 = u3 ./ u2
-	r13 = u3 .^ β
-	r15 = u3 .^ u2
-
-	# Broadcasting
-	w = element(W)
-	copyto!(w, Base.broadcasted(identity, u3))
-	# materialize! / fused broadcast
-	w .= u3 .+ u2 .* α
-	w .= β # Scalar assignment
-	w .= u3 ./ β
-
-	# Other common operations (example)
-	nrm = norm(u3)
-
-	# Extended: 2D and 3D vector elements
-	if BRAMBLE_EXTENDED_PRECOMPILE
-		for D in (2, 3)
+		for D in 1:3
 			S = reduce(×, ntuple(i -> _interval, D))
 			X = domain(S)
 			dims_tuple = ntuple(i -> 3, D)
 			unif_tuple = ntuple(i -> true, D)
 			test_mesh = mesh(X, dims_tuple, unif_tuple)
+
+			# --- Grid space basics ---
+			space_weights(test_mesh)
+			Wh = gridspace(test_mesh, cache_bwd = true, cache_avg = true)
+			weights(Wh)
+			mesh(Wh)
+			eltype(Wh)
+			dim(Wh)
+			ndofs(Wh)
+			weights(Wh, Innerh(), 1)
+			weights(Wh, Innerplus(), 1)
+			has_backward_difference_matrix(Wh)
+			backward_difference_matrix(Wh, 1)
+			has_average_matrix(Wh)
+			average_matrix(Wh, 1)
+
+			# --- Vector elements ---
 			W = gridspace(test_mesh)
-			v_data = collect(Float64, 1:3)
-			v_data2 = fill(2.0, 3)
 			α = 3.0
 			β = 2
 
@@ -201,29 +85,29 @@ end
 			u4 = element(W, β) # Int constructor
 
 			# Getters/Setters
-			s = space(u3)
+			space(u3)
 			vals = values(u3)
 			values!(u1, vals)
 
 			# Forwarded methods (exercise them)
-			len = length(u3)
-			et = eltype(u3)
-			sz = size(u3)
-			fi = firstindex(u3)
-			li = lastindex(u3)
-			iter_sum = sum(u3) # Test iteration
-			msh = mesh(u3)
+			length(u3)
+			eltype(u3)
+			size(u3)
+			firstindex(u3)
+			lastindex(u3)
+			sum(u3) # Test iteration
+			mesh(u3)
 
 			# ndims
-			nd = ndims(VectorElement)
+			ndims(VectorElement)
 
 			# Indexing
-			val_at_1 = u3[1]
+			u3[1]
 			u3[2] = 99.0
 			u3[3] = 99 # Set Int
 
 			# Similar
-			s1 = similar(u3)
+			similar(u3)
 
 			# Copyto!
 			z = element(W)
@@ -231,20 +115,20 @@ end
 			copyto!(z, v_data)
 
 			# Arithmetic Operators
-			r1 = α .+ u3
-			r2 = u3 .+ α
-			r3 = u3 + u2
-			r4 = α * u3
-			r5 = u3 * α
-			r6 = u3 .* u2
-			r7 = u3 - u2
-			r8 = u3 .- α
-			r9 = α .- u3
-			r10 = u3 ./ β
-			r11 = β ./ u3
-			r12 = u3 ./ u2
-			r13 = u3 .^ β
-			r15 = u3 .^ u2
+			α .+ u3
+			u3 .+ α
+			u3 + u2
+			α * u3
+			u3 * α
+			u3 .* u2
+			u3 - u2
+			u3 .- α
+			α .- u3
+			u3 ./ β
+			β ./ u3
+			u3 ./ u2
+			u3 .^ β
+			u3 .^ u2
 
 			# Broadcasting
 			w = element(W)
@@ -255,56 +139,25 @@ end
 			w .= u3 ./ β
 
 			# Other common operations (example)
-			nrm = norm(u3)
-		end
-	end
+			norm(u3)
 
-	# Essential: 1D Rₕ and avgₕ
-	D = 1
-	S = reduce(×, ntuple(i -> _interval, D))
-	X = domain(S)
-	dims_tuple = ntuple(i -> 3, D)
-	unif_tuple = ntuple(i -> true, D)
-	test_mesh = mesh(X, dims_tuple, unif_tuple)
-	W = gridspace(test_mesh)
-
-	u_example = element(W, 1.0)
-
-	ax = axes(u_example)
-	mat_u = to_matrix(u_example)
-
-	f = x->x[1]
-	u_r = Rₕ(W, f)
-	Rₕ!(u_example, f)
-
-	u_avg = avgₕ(W, f)
-	avgₕ!(u_example, f)
-
-	# Extended: 2D and 3D
-	if BRAMBLE_EXTENDED_PRECOMPILE
-		for D in (2, 3)
-			S = reduce(×, ntuple(i -> _interval, D))
-			X = domain(S)
-			dims_tuple = ntuple(i -> 3, D)
-			unif_tuple = ntuple(i -> true, D)
-			test_mesh = mesh(X, dims_tuple, unif_tuple)
-			W = gridspace(test_mesh)
-
+			# --- Rₕ and avgₕ ---
 			u_example = element(W, 1.0)
 
-			ax = axes(u_example)
-			mat_u = to_matrix(u_example)
+			axes(u_example)
+			to_matrix(u_example)
 
-			f = x->x[1]
-			u_r = Rₕ(W, f)
+			f = x -> x[1]
+			Rₕ(W, f)
 			Rₕ!(u_example, f)
 
-			u_avg = avgₕ(W, f)
+			avgₕ(W, f)
 			avgₕ!(u_example, f)
 		end
 	end
 end
 
+# --- Difference / jump / average operators -------------------------------- #
 @setup_workload begin
 	I0 = interval(0, 1)
 	ops(::Val{1}) = (diff₋ₓ, diff₊ₓ, D₋ₓ, D₊ₓ, jump₋ₓ, jump₊ₓ, M₋ₓ, M₊ₓ)
@@ -322,117 +175,59 @@ end
 	tuple_ops() = (diff₋ₕ, diff₊ₕ, ∇₋ₕ, ∇₊ₕ, jump₋ₕ, jump₊ₕ, M₋ₕ, M₊ₕ)
 
 	@compile_workload begin
-		# Essential: 1D operators only
-		i = 1
-		X = domain(reduce(×, ntuple(j -> I0, i)))
-		M = mesh(X, ntuple(j -> 4, i), ntuple(j -> false, i))
+		for i in 1:3
+			X = domain(reduce(×, ntuple(j -> I0, i)))
+			M = mesh(X, ntuple(j -> 4, i), ntuple(j -> false, i))
 
-		Wh = gridspace(M)
-		uh = element(Wh)
-		wh = element(Wh)
-		Uh = elements(Wh)
-		Vh = elements(Wh)
+			Wh = gridspace(M)
+			uh = element(Wh)
+			wh = element(Wh)
+			Uh = elements(Wh)
+			Vh = elements(Wh)
 
-		for op in (.-, .*, ./, .+)
-			op(uh, wh)
-		end
-
-		for op in (.-, .*, ./, .+)
-			op(uh, 1.0)
-			op(1.0, uh)
-		end
-
-		uh .= 1.0
-		uh .= 1.0 .* wh .+ wh .- .+wh ./ 1.0
-
-		Rₕ!(uh, x->x[1]), avgₕ!(uh, x->x[1])
-		Rₕ(Wh, x->x[1]), avgₕ(Wh, x->x[1])
-
-		Uh.data[1, 1] = 1.0
-		Uh .= 1.0
-		Uh .= 1.0 .* Vh .+ Vh .- .+Vh ./ 1.0
-
-		uh * Uh
-		Uh * uh
-
-		for op in (+, -, *)
-			op(Uh, Vh)
-		end
-
-		for op in (.+, .-, .*, ./, .^)
-			op(1.0, Uh)
-			op(Uh, 1.0)
-		end
-
-		gen_ops = ops(Val(i))
-
-		for op in gen_ops
-			op(Wh), op(uh), op(Uh)
-		end
-
-		for tup_ops in tuple_ops()
-			tup_ops(Wh), tup_ops(uh), tup_ops(Uh)
-		end
-
-		z = ∇₋ₕ(uh)
-		normₕ(uh), snorm₁ₕ(uh), norm₁ₕ(uh), norm₊(z)
-
-		# Extended: 2D and 3D operators
-		if BRAMBLE_EXTENDED_PRECOMPILE
-			for i in 2:3
-				X = domain(reduce(×, ntuple(j -> I0, i)))
-				M = mesh(X, ntuple(j -> 4, i), ntuple(j -> false, i))
-
-				Wh = gridspace(M)
-				uh = element(Wh)
-				wh = element(Wh)
-				Uh = elements(Wh)
-				Vh = elements(Wh)
-
-				for op in (.-, .*, ./, .+)
-					op(uh, wh)
-				end
-
-				for op in (.-, .*, ./, .+)
-					op(uh, 1.0)
-					op(1.0, uh)
-				end
-
-				uh .= 1.0
-				uh .= 1.0 .* wh .+ wh .- .+wh ./ 1.0
-
-				Rₕ!(uh, x->x[1]), avgₕ!(uh, x->x[1])
-				Rₕ(Wh, x->x[1]), avgₕ(Wh, x->x[1])
-
-				Uh.data[1, 1] = 1.0
-				Uh .= 1.0
-				Uh .= 1.0 .* Vh .+ Vh .- .+Vh ./ 1.0
-
-				uh * Uh
-				Uh * uh
-
-				for op in (+, -, *)
-					op(Uh, Vh)
-				end
-
-				for op in (.+, .-, .*, ./, .^)
-					op(1.0, Uh)
-					op(Uh, 1.0)
-				end
-
-				gen_ops = ops(Val(i))
-
-				for op in gen_ops
-					op(Wh), op(uh), op(Uh)
-				end
-
-				for tup_ops in tuple_ops()
-					tup_ops(Wh), tup_ops(uh), tup_ops(Uh)
-				end
-
-				z = ∇₋ₕ(uh)
-				normₕ(uh), snorm₁ₕ(uh), norm₁ₕ(uh), norm₊(z)
+			for op in (.-, .*, ./, .+)
+				op(uh, wh)
 			end
+
+			for op in (.-, .*, ./, .+)
+				op(uh, 1.0)
+				op(1.0, uh)
+			end
+
+			uh .= 1.0
+			uh .= 1.0 .* wh .+ wh .- .+wh ./ 1.0
+
+			Rₕ!(uh, x->x[1]), avgₕ!(uh, x->x[1])
+			Rₕ(Wh, x->x[1]), avgₕ(Wh, x->x[1])
+
+			Uh.data[1, 1] = 1.0
+			Uh .= 1.0
+			Uh .= 1.0 .* Vh .+ Vh .- .+Vh ./ 1.0
+
+			uh * Uh
+			Uh * uh
+
+			for op in (+, -, *)
+				op(Uh, Vh)
+			end
+
+			for op in (.+, .-, .*, ./, .^)
+				op(1.0, Uh)
+				op(Uh, 1.0)
+			end
+
+			gen_ops = ops(Val(i))
+
+			for op in gen_ops
+				op(Wh), op(uh), op(Uh)
+			end
+
+			for tup_ops in tuple_ops()
+				tup_ops(Wh), tup_ops(uh), tup_ops(Uh)
+			end
+
+			z = ∇₋ₕ(uh)
+			normₕ(uh), snorm₁ₕ(uh), norm₁ₕ(uh), norm₊(z)
 		end
 	end
 end

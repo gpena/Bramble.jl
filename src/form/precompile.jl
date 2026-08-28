@@ -1,8 +1,5 @@
-# NOTE: this file is not currently included (see src/Bramble.jl) and still refers to
-# BRAMBLE_EXTENDED_PRECOMPILE, which was removed when the per-subsystem precompile
-# workloads were consolidated into src/precompile.jl. Fold these calls into the
-# workload there when space/ and form/ are re-enabled; the tiering no longer exists.
-
+# NOTE: this file is not currently included by src/Bramble.jl (form/ is commented
+# out there). Fold these calls into src/precompile.jl when form/ is re-enabled.
 
 @setup_workload begin
 	function poisson(d::Int)
@@ -20,9 +17,7 @@
 	end
 
 	@compile_workload begin
-		# ESSENTIAL: 1D only
-		max_dim = BRAMBLE_EXTENDED_PRECOMPILE ? 3 : 1
-		for dim in 1:max_dim
+		for dim in 1:3
 			Ω, sol, Wₕ = poisson(dim)
 			Ωₕ = mesh(Wₕ)
 
