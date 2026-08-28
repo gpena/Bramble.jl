@@ -1,42 +1,60 @@
 name: CI
 on:
   push:
-    branches:
-      - main
+    branches: [main]
     tags: ["*"]
   pull_request:
   workflow_dispatch:
 
 concurrency:
-  # Skip intermediate builds: always.
-  # Cancel intermediate builds: only if it is a pull request build.
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
+  cancel-in-progress: true
+
+env:
+  JULIA_NUM_THREADS: auto
+  JULIA_NUM_PRECOMPILE_TASKS: auto
 
 jobs:
+  changes:
+    name: Detect Changed Files
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+      docs: ${{ steps.filter.outputs.docs }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            code:
+              - 'src/**'
+              - 'test/**'
+              - 'Project.toml'
+              - '.github/workflows/CI.yml'
+            docs:
+              - 'docs/**'
+              - 'src/**'
+              - 'Project.toml'
+              - '*.md'
+
   test:
-    name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }}
+    needs: changes
+    if: ${{ needs.changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch' }}
+    name: Julia ${{ matrix.version }} - ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        version:
-          - "1.11"
-          - "1"
-        os:
-          - ubuntu-latest
-          - macOS-latest
-          - windows-latest
-        arch:
-          - x64
+        version: ['1.11', '1']
+        os: [ubuntu-latest, macOS-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
         with:
           version: ${{ matrix.version }}
-          arch: ${{ matrix.arch }}
       - uses: julia-actions/cache@v2
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
@@ -47,34 +65,9 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
 
-  test-nightly:
-    name: Julia nightly - ${{ matrix.os }} - ${{ matrix.arch }}
-    runs-on: ${{ matrix.os }}
-    permissions:
-      contents: read
-    continue-on-error: true # Allow nightly job to fail without blocking CI
-    strategy:
-      fail-fast: false
-      matrix:
-        version:
-          - "nightly"
-        os:
-          - ubuntu-latest
-          - macOS-latest
-          - windows-latest
-        arch:
-          - x64
-    steps:
-      - uses: actions/checkout@v4
-      - uses: julia-actions/setup-julia@v2
-        with:
-          version: ${{ matrix.version }}
-          arch: ${{ matrix.arch }}
-      - uses: julia-actions/cache@v2
-      - uses: julia-actions/julia-buildpkg@v1
-      - uses: julia-actions/julia-runtest@v1
-
   docs:
+    needs: changes
+    if: ${{ needs.changes.outputs.docs == 'true' || github.event_name == 'workflow_dispatch' }}
     name: Documentation
     runs-on: ubuntu-latest
     permissions:
