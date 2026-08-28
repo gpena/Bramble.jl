@@ -117,44 +117,39 @@ function gridspace(Ωₕ::AbstractMeshType{D}; nbuffers::Int = 1) where D
 	return ScalarGridSpace{D,T,VT,MType,BT}(Ωₕ, weights, space_buffer)
 end
 
-ncomponents(::Type{<:ScalarGridSpace}) = 1
-
-
-
-@inline __vector(Ωₕ) = vector(backend(Ωₕ), npoints(Ωₕ))
+# Allocates a work vector sized to a mesh. Typed rather than generic: with an
+# untyped signature this also admits spaces, for which npoints has no method.
+@inline __vector(Ωₕ::AbstractMeshType) = vector(backend(Ωₕ), npoints(Ωₕ))
 
 function space_weights(Ωₕ::AbstractMeshType{D}) where D
 	# Initialize a tuple of D vectors. Each vector will store the final weights for one spatial direction (e.g., x, y, z).
 	innerplus = ntuple(i -> __vector(Ωₕ), Val(D))
 
-	# Initialize a temporary tuple of D vectors to hold intermediate calculations
-	# for each component of the grid.
-	innerplus_per_component = ntuple(j -> __vector(Ωₕ(j)), Val(D))
+	# Per-axis factors. Neither depends on the direction `i` being assembled, so each
+	# is computed once here rather than D times inside the loop below:
+	#   `main[k]`  applies to the axis aligned with the difference direction,
+	#   `mean[k]`  applies to every transverse axis.
+	main = ntuple(k -> __vector(Ωₕ(k)), Val(D))
+	mean = ntuple(k -> __vector(Ωₕ(k)), Val(D))
+	for k in 1:D
+		_innerplus_weights!(main[k], Ωₕ, k)
+		_innerplus_mean_weights!(mean[k], Ωₕ, k)
+	end
 
 	# Retrieve the number of grid points in each dimension as a tuple (e.g., (Nx, Ny)).
 	npts_tuple = npoints(Ωₕ, Tuple)
 
-	# --- Loop to compute the `innerplus` weights ---
-	# The outer loop iterates over the primary direction 'i' of the finite difference.
+	# Assemble the weights for each difference direction `i` by taking the aligned
+	# factor on axis `i` and the mean factor on all the others.
 	for i in 1:D
-		# The inner loop computes the geometric factors for each component 'k'.
-		for k in 1:D
-			if k == i
-				# For the component 'k' that aligns with the primary direction 'i',
-				# calculate the main stencil weights.
-				_innerplus_weights!(innerplus_per_component[k], Ωₕ, k)
-			else
-				# For transverse directions (k != i), calculate the mean weights.
-				_innerplus_mean_weights!(innerplus_per_component[k], Ωₕ, k)
-			end
-		end
+		factors = ntuple(k -> k == i ? main[k] : mean[k], Val(D))
 
 		# Create a D-dimensional array view of the flat `innerplus[i]` vector to
 		# allow for efficient multidimensional operations.
 		v = Base.ReshapedArray(innerplus[i], npts_tuple, ())
 
 		# Combine the per-component factors into the final weight for direction 'i'.
-		__innerplus_weights!(v, innerplus_per_component)
+		__innerplus_weights!(v, factors)
 	end
 
 	# --- Compute the `inner_h` weights (cell volumes) ---
@@ -188,6 +183,8 @@ The weights are diagonal matrices (stored as vectors) used in computing discrete
 2. `weights(Wₕ, Innerh())` - Returns weights for standard ``L^2`` inner product (cell volumes)
 3. `weights(Wₕ, Innerplus())` - Returns tuple of weights for modified inner products (all directions)
 4. `weights(Wₕ, Innerplus(), i)` - Returns weights for modified inner product in direction `i`
+5. `weights(Wₕ, Innerh(), i)` - Same as `weights(Wₕ, Innerh())`; the cell measures do not
+   depend on a direction, so `i` is accepted and ignored for interface symmetry
 
 # Examples
 ```julia
@@ -221,8 +218,8 @@ Returns the spatial dimension of the function space (1, 2, or 3).
 
 See also: [`ndofs`](@ref), [`mesh`](@ref)
 """
-@inline dim(Wₕ::ScalarGridSpace) = dim(mesh(Wₕ))
-@inline dim(::Type{W}) where W<:ScalarGridSpace = dim(mesh_type(W))
+@inline dim(::ScalarGridSpace{D}) where D = D
+@inline dim(::Type{<:ScalarGridSpace{D}}) where D = D
 
 """
 	ndofs(Wₕ::ScalarGridSpace)
@@ -253,8 +250,8 @@ Returns the element type of vectors in this space (e.g., `Float64`).
 
 See also: [`backend`](@ref)
 """
-@inline eltype(Wₕ::ScalarGridSpace) = eltype(backend(Wₕ))
-@inline eltype(::Type{W}) where W<:ScalarGridSpace = eltype(mesh_type(W))
+@inline eltype(::ScalarGridSpace{D,T}) where {D,T} = T
+@inline eltype(::Type{<:ScalarGridSpace{D,T}}) where {D,T} = T
 
 """
 	_innerh_weights!(u, Ωₕ::AbstractMeshType)

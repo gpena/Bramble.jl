@@ -74,7 +74,7 @@ end
 		@test u3 isa VectorElement
 		@test space(u3) === W
 		@test values(u3) == v_init
-		@test_throws AssertionError element(W, collect(1.0:5.0))
+		@test_throws DimensionMismatch element(W, collect(1.0:5.0))
 
 		u4 = element(W, 3) # Test with Int
 		@test u4 isa VectorElement

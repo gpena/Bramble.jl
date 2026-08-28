@@ -34,7 +34,11 @@ Returns the grid space associated with [VectorElement](@ref) `uₕ`.
 
 # Forward array-like methods to the `data` field. This allows a VectorElement
 # to behave like a standard Julia vector (e.g., support `size`, `length`, `eltype`).
-@forward VectorElement.data (Base.size, Base.length, Base.firstindex, Base.lastindex, Base.iterate, Base.eltype, Base.axes, Base.ndims, Bramble.show)
+@forward VectorElement.data (Base.size, Bramble.show)
+
+# A VectorElement wraps a vector, so indexing is linear; without this the
+# AbstractArray default of IndexCartesian() is used.
+@inline Base.IndexStyle(::Type{<:VectorElement}) = IndexLinear()
 @forward VectorElement.space (Bramble.mesh,)
 
 
@@ -141,7 +145,8 @@ Returns a [VectorElement](@ref) for a grid space `Wₕ` with the same coefficien
 """
 @inline function element(Wₕ::AbstractSpaceType, v::AbstractVector)
 	# Ensure the provided vector has the correct number of DoFs.
-	@assert length(v) == ndofs(Wₕ) "Input vector length does not match the number of degrees of freedom in the space."
+	length(v) == ndofs(Wₕ) || throw(DimensionMismatch(
+		"input vector has length $(length(v)), but the space has $(ndofs(Wₕ)) degrees of freedom."))
 	elem = element(Wₕ)
 	copyto!(elem, v)
 	return elem
@@ -149,7 +154,7 @@ end
 
 # Enable array-like indexing `uₕ[i]` for VectorElement.
 @inline Base.@propagate_inbounds getindex(uₕ::VectorElement, i) = getindex(uₕ.data, i)
-@inline Base.@propagate_inbounds setindex!(uₕ::VectorElement, val, i) = (setindex!(uₕ.data, val, i); return)
+@inline Base.@propagate_inbounds setindex!(uₕ::VectorElement, val, i) = setindex!(uₕ.data, val, i)
 
 # Create a new, uninitialized VectorElement with the same space as the input.
 @inline Base.similar(uₕ::VectorElement) = element(space(uₕ))
@@ -248,8 +253,10 @@ end
 
 # Optimized version for CartesianIndices, enabling parallel execution.
 @inline _func2array!(u::AbstractArray, g, mesh_indices::CartesianIndices) = (_parallel_for!(u, mesh_indices, g))
-# Placeholder for multi-component version.
-@inline _func2array!(u::Tuple, f, mesh) = nothing
+# Multi-component elements are handled by dispatching per component in `Rₕ!`,
+# so a tuple should never reach this function.
+@noinline _func2array!(::Tuple, f, mesh) = throw(ArgumentError(
+	"_func2array! received a tuple; multi-component restriction dispatches per component in Rₕ!."))
 
 """
 	$(TYPEDEF)

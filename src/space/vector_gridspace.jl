@@ -32,9 +32,6 @@ Type alias for a `CompositeGridSpace{N}`, representing a vector-valued function 
 """
 const VectorGridSpace{N} = CompositeGridSpace{N}
 
-ncomponents(::Type{<:CompositeGridSpace{N}}) where N = N
-
-
 # ==============================================================================
 # Constructors
 # ==============================================================================
@@ -145,6 +142,3 @@ end
 # CompositeGridSpace × anything → hierarchical composite (no flattening),
 # enabling forms like form(Vh × Wh, Vh × Wh, ((u,p),(v,q)) -> ...).
 @inline ×(X::AbstractSpaceType, Y::AbstractSpaceType) = CompositeGridSpace((X, Y))
-@inline ×(X::CompositeGridSpace, Y::AbstractSpaceType) = CompositeGridSpace((X, Y))
-@inline ×(X::AbstractSpaceType, Y::CompositeGridSpace) = CompositeGridSpace((X, Y))
-@inline ×(X::CompositeGridSpace, Y::CompositeGridSpace) = CompositeGridSpace((X, Y))

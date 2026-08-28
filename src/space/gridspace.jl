@@ -208,8 +208,9 @@ struct Innerh <: InnerProductType end
 #=
 The following functions define the **mandatory interface** for any concrete subtype
 of `AbstractSpaceType`. Any struct that subtypes `AbstractSpaceType` must implement
-these methods to be considered a valid function space in this framework. The default
-implementations throw an error, guiding developers to provide the correct implementation.
+these methods to be considered a valid function space in this framework. They are
+declared without methods, so a space that omits one fails with a `MethodError` naming
+the exact missing signature.
 =#
 
 """
@@ -224,30 +225,21 @@ Returns the function space `Wₕ` itself.
 
 Returns the underlying mesh object associated with the function space `Wₕ`.
 """
-@inline function mesh(Wₕ::AbstractSpaceType)
-	error("Interface function 'mesh' not implemented for $(typeof(Wₕ))")
-end
+function mesh end
 
 """
 	mesh_type(Wₕ::AbstractSpaceType)
 
 Returns the type of the mesh associated with the function space `Wₕ`. Also works if the argument is the type of the space.
 """
-@inline function mesh_type(Wₕ::AbstractSpaceType)
-	error("Interface function 'mesh_type' not implemented for $(typeof(Wₕ))")
-end
-@inline function mesh_type(::Type{<:AbstractSpaceType})
-	error("Interface function 'mesh_type' not implemented for this space type.")
-end
+function mesh_type end
 
 """
 	vector_buffer(Wₕ::AbstractSpaceType)
 
 Returns the [GridSpaceBuffer](@ref) used for efficient memory management in the space `Wₕ`.
 """
-@inline function vector_buffer(Wₕ::AbstractSpaceType)
-	error("Interface function 'vector_buffer' not implemented for $(typeof(Wₕ))")
-end
+function vector_buffer end
 
 
 
@@ -256,18 +248,14 @@ end
 
 Returns the computational backend associated with the space `Wₕ`.
 """
-@inline function backend(Wₕ::AbstractSpaceType)
-	error("Interface function 'backend' not implemented for $(typeof(Wₕ))")
-end
+function backend end
 
 """
 	dim(Wₕ::AbstractSpaceType)
 
 Returns the spatial dimension of the mesh associated with the functionpace `Wₕ`.
 """
-@inline function dim(Wₕ::AbstractSpaceType)
-	error("Interface function 'dim' not implemented for $(typeof(Wₕ))")
-end
+function dim end
 
 """
 	ndofs(Wₕ::AbstractSpaceType, [::Type{Tuple}])
@@ -275,24 +263,7 @@ end
 Returns the total number of degrees of freedom (DOFs) in the function space `Wₕ`.
 If `Tuple` is passed, it returns a tuple with the number of DOFs in each dimension.
 """
-@inline function ndofs(Wₕ::AbstractSpaceType)
-	error("Interface function 'ndofs' not implemented for $(typeof(Wₕ))")
-end
-@inline function ndofs(Wₕ::AbstractSpaceType, ::Type{Tuple})
-	error("Interface function 'ndofs' not implemented for $(typeof(Wₕ))")
-end
-
-"""
-	eltype(Wₕ::AbstractSpaceType)
-
-Returns the element type (e.g., `Float64`) of the data in the function space `Wₕ`. It also works if the argument is the type of the space.
-"""
-@inline function eltype(Wₕ::AbstractSpaceType)
-	error("Interface function 'eltype' not implemented for $(typeof(Wₕ))")
-end
-@inline function eltype(::Type{W}) where W<:AbstractSpaceType
-	error("Interface function 'eltype' not implemented for this space type.")
-end
+function ndofs end
 
 """
 	ncomponents(Wₕ::AbstractSpaceType)
