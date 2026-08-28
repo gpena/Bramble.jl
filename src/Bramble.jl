@@ -14,22 +14,16 @@ using Random: rand!
 using SparseArrays: SparseMatrixCSC, SparseVector, AbstractSparseMatrix, spdiagm, rowvals, nnz, dropzeros!, nzrange, spzeros, nonzeros, sparse
 
 using FunctionWrappers: FunctionWrapper
-using MacroTools: @capture, isexpr
 
 using StaticArrays: @SVector, SVector
 
 using OrderedCollections: LittleDict, OrderedDict, freeze
 using Base.Threads: @threads
-using UnPack: @unpack
-using MuladdMacro: @muladd
 
 using LinearAlgebra: norm, Diagonal, mul!, I, dot, transpose, Transpose
 import LinearAlgebra: ⋅
 
 using FillArrays: Ones, Eye
-
-using Cubature
-using Integrals: solve, IntegralFunction, IntegralProblem, QuadGKJL, CubatureJLh, BatchIntegralFunction
 #using WriteVTK
 
 # Utilities

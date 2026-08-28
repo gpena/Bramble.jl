@@ -53,9 +53,12 @@ size(c)    # Returns (3,) (calls size(c.data))
   - Supports both regular and keyword arguments
 """
 macro forward(ex, fs)
-	@capture(ex, T_.field_) || error("Syntax: @forward T.x f, g, h")
-	T = esc(T)
-	fs = isexpr(fs, :tuple) ? map(esc, fs.args) : [esc(fs)]
+	if !(Meta.isexpr(ex, :.) && length(ex.args) == 2 && ex.args[2] isa QuoteNode)
+		error("Syntax: @forward T.x f, g, h")
+	end
+	T = esc(ex.args[1])
+	field = ex.args[2].value
+	fs = Meta.isexpr(fs, :tuple) ? map(esc, fs.args) : [esc(fs)]
 	:($([:($f(x::$T, args...; kwargs...) = (Base.@_inline_meta; $f(x.$field, args...; kwargs...)))
 		 for f in fs]...);
 	nothing)

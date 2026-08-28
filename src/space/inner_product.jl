@@ -229,8 +229,8 @@ Returns the discrete version of the standard ``H^1`` seminorm of [VectorElement]
 |\\textrm{u}_h|_{1h} \\vcentcolon = \\Vert \\nabla_h \\textrm{u}_h \\Vert_h
 ```
 """
-@muladd function snorm₁ₕ(uₕ::VectorElement)
-	@unpack data, space = uₕ
+function snorm₁ₕ(uₕ::VectorElement)
+	(; data, space) = uₕ
 	Ωₕ = mesh(space)
 	dims = ndofs(space, Tuple)
 	D = dim(Ωₕ)

@@ -299,7 +299,7 @@ See also: [`Rₕ`](@ref), [`element`](@ref)
 		@debug "Using marker-based restriction" markers
 	end
 
-	@unpack data, space = uₕ
+	(; data, space) = uₕ
 	Ωₕ = mesh(space)
 
 	CStyle = ComponentStyle(ST)
@@ -447,7 +447,7 @@ For efficiency, each integral in `avgₕ` is rewritten as an integral over `[0,1
 \\int_{a}^{b} f(x) dx = (b-a) \\int_{0}^{1} f(a + t (b-a)) dt
 ```
 """
-@inline @muladd function __integrand1d(y, t, p)
+@inline function __integrand1d(y, t, p)
 	f, x, h, idxs = p
 
 	@inbounds @simd for idx in idxs
@@ -473,7 +473,7 @@ function __quad!(::MultiComponent{N}, uₕ::VectorElement, domain::NTuple{2}, p:
 	return
 end
 
-@inline @muladd function _point_tuple_and_volume(t::SVector{D}, x, idx::CartesianIndex{D}) where D
+@inline function _point_tuple_and_volume(t::SVector{D}, x, idx::CartesianIndex{D}) where D
 	lb_tuple = ntuple(i -> x[i][idx[i]], Val(D))
 	ub_tuple = ntuple(i -> x[i][idx[i] + 1], Val(D))
 

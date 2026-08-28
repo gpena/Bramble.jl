@@ -93,10 +93,10 @@ end
 @inline @propagate_inbounds _compute_difference(::Backward, ::Val{true}, cur, ::Nothing, i) = cur
 
 # Case 2: Finite difference (h is provided)
-@inline @propagate_inbounds @muladd _compute_difference(::Forward, ::Val{false}, next, cur, h, i) = (next - cur) / _get_h_val(h, i)
+@inline @propagate_inbounds _compute_difference(::Forward, ::Val{false}, next, cur, h, i) = (next - cur) / _get_h_val(h, i)
 @inline @propagate_inbounds _compute_difference(::Forward, ::Val{true}, cur, h, i) = 0#-0*cur / _get_h_val(h, i)
 
-@inline @propagate_inbounds @muladd _compute_difference(::Backward, ::Val{false}, cur, prev, h, i) = (cur - prev) / _get_h_val(h, i)
+@inline @propagate_inbounds _compute_difference(::Backward, ::Val{false}, cur, prev, h, i) = (cur - prev) / _get_h_val(h, i)
 @inline @propagate_inbounds _compute_difference(::Backward, ::Val{true}, cur, h, i) = 0#*cur / _get_h_val(h, 2) # or is it _get_h_val(h, 1)
 
 # --- Unified Difference Engine ---

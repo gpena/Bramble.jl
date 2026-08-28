@@ -87,7 +87,7 @@ Returns the set of function condition markers from a [`DomainMarkers`](@ref) obj
 Returns a generator that yields the label (`Symbol`) of every marker in the [`DomainMarkers`](@ref) collection.
 """
 @inline function label_identifiers(domain_markers::DomainMarkers)
-	@unpack symbols, tuples, conditions = domain_markers
+	(; symbols, tuples, conditions) = domain_markers
 	return (label(marker)::Symbol for marker in Iterators.flatten((symbols, tuples, conditions)))
 end
 

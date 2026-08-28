@@ -185,7 +185,7 @@ function _set_markers_symbols!(mesh_markers::MeshMarkers, symbols, Ωₕ)
 
 	# Iterate over each marker defined by a symbol or set of symbols.
 	for marker in symbols
-		@unpack label, identifier = marker
+		(; label, identifier) = marker
 
 		# Get the boolean vector for the current marker label.
 		target_marker_set = mesh_markers[label]
@@ -238,7 +238,7 @@ Iterates through all function-based markers and applies them to the mesh.
 function _set_markers_conditions!(mesh_markers::MeshMarkers, conditions, Ωₕ)
 	# Loop through each marker that is defined by a condition (function).
 	for marker in conditions
-		@unpack label, identifier = marker
+		(; label, identifier) = marker
 		# Call the helper function to evaluate the condition for the entire mesh.
 		__process_condition!(mesh_markers[label], identifier, Ωₕ)
 	end

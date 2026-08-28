@@ -162,7 +162,7 @@ end
 	return nothing
 end
 # Internal function to populate a vector `x` with grid point coordinates over a 1D interval `I`.
-@inline @inbounds @muladd function _points!(x, I::CartesianProduct{1}, unif::Bool)
+@inline @inbounds function _points!(x, I::CartesianProduct{1}, unif::Bool)
 	# Get the number of points and the interval's element type and bounds.
 	npts = length(x)
 	T = eltype(I)
@@ -198,7 +198,7 @@ end
 end
 
 # Calculates the "half points" (cell centers) for a 1D mesh.
-@inline @inbounds @muladd function half_points!(x, Ωₕ)
+@inline @inbounds function half_points!(x, Ωₕ)
 	n = npoints(Ωₕ)
 	pts = points(Ωₕ)
 
@@ -216,7 +216,7 @@ end
 end
 
 # Calculates the "half spacings" (cell widths/measures) for a 1D mesh.
-@inline @inbounds @muladd function half_spacing!(x, Ωₕ)
+@inline @inbounds function half_spacing!(x, Ωₕ)
 	n = npoints(Ωₕ)
 
 	# The boundary cell widths are defined as half of the spacing of the first/last interval.
@@ -235,7 +235,7 @@ end
 # Internal constructor function for creating a 1D mesh.
 function _mesh(Ω::Domain{CartesianProduct{1,T}}, npts::Tuple{Int}, unif::Tuple{Bool}, backend) where T
 	# Unpack the domain's set and markers, and the number of points.
-	@unpack set, markers = Ω
+	(; set, markers) = Ω
 	n_points, = npts
 
 	# Check if the domain is a single point (topological dimension is 0).
@@ -298,7 +298,7 @@ function iterative_refinement!(Ωₕ::Mesh1D)
 	@inbounds @simd for i in 1:N_old
 		new_points[2i-1] = old_points[i]
 		if i < N_old
-			@muladd new_points[2i] = (old_points[i] + old_points[i+1]) * 0.5
+			new_points[2i] = (old_points[i] + old_points[i+1]) * 0.5
 		end
 	end
 

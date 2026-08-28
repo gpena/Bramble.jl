@@ -186,7 +186,7 @@ end
 Dynamically adds one new, available [VectorBuffer](@ref) to the pool. This is called when a request is made for a buffer but all existing ones are in use.
 """
 function add_buffer!(space_buffer::GridSpaceBuffer)
-	@unpack buffer, backend, npts = space_buffer
+	(; buffer, backend, npts) = space_buffer
 
 	# The key for the new buffer is simply the next integer.
 	n = length(buffer) + 1
@@ -202,7 +202,7 @@ end
 Returns the total number of buffers (both locked and unlocked) currently in the pool.
 """
 @inline function nbuffers(space_buffer::GridSpaceBuffer)
-	@unpack buffer = space_buffer
+	(; buffer) = space_buffer
 
 	return length(buffer)
 end
@@ -213,7 +213,7 @@ end
 Locks the `i`-th buffer in the pool and returns the underlying vector for immediate use.
 """
 @inline function lock!(space_buffer::GridSpaceBuffer, i)
-	@unpack buffer = space_buffer
+	(; buffer) = space_buffer
 	b = buffer[i]
 
 	lock!(b)
@@ -227,7 +227,7 @@ end
 Unlocks the `i`-th buffer in the pool, marking it as available for reuse.
 """
 @inline function unlock!(space_buffer::GridSpaceBuffer, i)
-	@unpack buffer = space_buffer
+	(; buffer) = space_buffer
 	b = buffer[i]
 
 	unlock!(b)
@@ -242,7 +242,7 @@ Retrieves an available vector from the buffer pool.
 This is the main function for acquiring a temporary vector. It first searches for any unlocked buffer. If all existing buffers are locked, it transparently allocates a new one and adds it to the pool. The function returns the vector itself and its integer key, which must be used later to `unlock!` it. The buffer is marked as locked upon retrieval.
 """
 function vector_buffer(space_buffer::GridSpaceBuffer)
-	@unpack buffer = space_buffer
+	(; buffer) = space_buffer
 
 	# Search for the first available (unlocked) buffer.
 	key_free_buffer = 0
