@@ -32,10 +32,14 @@ every acquisition. `in_use` on the buffer itself remains the single source of
 truth, so a stale entry on the stack is simply skipped.
 
 !!! warning
-    A pool is not thread-safe. Give each thread its own pool rather than
-    sharing one, or guard access with a lock.
+    A `GridSpaceBuffer` has a single owner and is not safe to share between
+    tasks. Wrap it in a [`SharedBuffer`](@ref), which gives each task its own
+    pool. Do not index workspaces by `Threads.threadid()`: a task can migrate
+    between threads at a yield point, and a buffer borrowed on one thread would
+    then be released into a different thread's pool.
 
-See also: [`VectorBuffer`](@ref), [`GridSpaceBuffer`](@ref), [`with_buffer`](@ref)
+See also: [`VectorBuffer`](@ref), [`GridSpaceBuffer`](@ref), [`SharedBuffer`](@ref),
+[`with_buffer`](@ref)
 =#
 
 """
@@ -125,14 +129,19 @@ struct GridSpaceBuffer{BT,VT,T}
 end
 
 """
-	simple_space_buffer(b::Backend, npts::Int; nbuffers::Int = 1)
+	simple_space_buffer(b::Backend, npts::Int; nbuffers::Int = 3)
 
 Creates a [`GridSpaceBuffer`](@ref) of `npts`-element vectors on backend `b`,
 pre-allocating `nbuffers` of them.
 
-The pool grows on demand, so `nbuffers` is only a warm start.
+`nbuffers` is a warm start rather than a cap: the right value is the deepest
+nesting of temporaries you expect, and the pool allocates one more vector the
+first time it is exceeded.
+
+A pool has a single owner. To share one across tasks, wrap it in a
+[`SharedBuffer`](@ref).
 """
-function simple_space_buffer(b::Backend, npts::Int; nbuffers::Int = 1)
+function simple_space_buffer(b::Backend, npts::Int; nbuffers::Int = 3)
 	nbuffers >= 0 || throw(ArgumentError("nbuffers must be non-negative, got $nbuffers."))
 	npts >= 0 || throw(ArgumentError("npts must be non-negative, got $npts."))
 
@@ -256,3 +265,114 @@ function with_buffer(f, space_buffer::GridSpaceBuffer)
 		unlock!(space_buffer, key)
 	end
 end
+
+#=========================================================================
+Sharing a pool between tasks
+=========================================================================#
+
+"""
+	$(TYPEDEF)
+
+A buffer pool that is safe to share between tasks.
+
+A [`GridSpaceBuffer`](@ref) has a single owner: two tasks borrowing from one
+concurrently would be handed the same vector. A `SharedBuffer` instead gives
+each task its own pool, created the first time that task asks for a buffer.
+
+The pools live in task-local storage, so they follow the task rather than the
+thread. This matters because a task can migrate between threads at any yield
+point: keying workspaces on `Threads.threadid()` looks equivalent and is not,
+since a buffer borrowed on one thread would then be released into a different
+thread's pool.
+
+The cost is one pool per task, which is what you want when tasks are long
+lived — `Threads.@threads` creates one task per thread, so a 4-thread loop
+holds 4 pools no matter how many iterations it runs. Spawning one task per
+work item instead would create one pool per item; prefer spawning per chunk.
+
+# Fields
+
+$(FIELDS)
+
+# Examples
+
+```julia
+shared = SharedBuffer(backend(), npoints(Ωₕ); nbuffers = 3)
+
+Threads.@threads for i in 1:n
+    with_buffer(shared) do tmp
+        # `tmp` belongs to this task alone
+    end
+end
+```
+
+See also: [`GridSpaceBuffer`](@ref), [`with_buffer`](@ref)
+"""
+mutable struct SharedBuffer{BT,VT,T}
+	"the backend each task's pool is allocated on."
+	backend::BT
+	"the length of every vector handed out."
+	npts::Int
+	"how many vectors each task's pool starts with."
+	nbuffers::Int
+end
+
+"""
+	SharedBuffer(b::Backend, npts::Int; nbuffers::Int = 3)
+
+Creates a [`SharedBuffer`](@ref) handing out `npts`-element vectors on backend `b`,
+giving each task a pool warm-started with `nbuffers` of them.
+"""
+function SharedBuffer(b::Backend, npts::Int; nbuffers::Int = 3)
+	nbuffers >= 0 || throw(ArgumentError("nbuffers must be non-negative, got $nbuffers."))
+	npts >= 0 || throw(ArgumentError("npts must be non-negative, got $npts."))
+
+	T, VT, _, BT = backend_types(b)
+	return SharedBuffer{BT,VT,T}(b, npts, nbuffers)
+end
+
+"""
+	pool(shared::SharedBuffer)
+
+Returns the calling task's [`GridSpaceBuffer`](@ref), creating it on first use.
+"""
+@inline function pool(shared::SharedBuffer{BT,VT,T}) where {BT,VT,T}
+	# task_local_storage() is an IdDict, and SharedBuffer is mutable, so the
+	# object itself is a stable key unique to this SharedBuffer.
+	return get!(task_local_storage(), shared) do
+		simple_space_buffer(shared.backend, shared.npts; nbuffers = shared.nbuffers)
+	end::GridSpaceBuffer{BT,VT,T}
+end
+
+"""
+	with_buffer(f, shared::SharedBuffer)
+
+Calls `f(v)` with a vector borrowed from the calling task's pool, releasing it
+afterwards even if `f` throws.
+"""
+@inline with_buffer(f, shared::SharedBuffer) = with_buffer(f, pool(shared))
+
+"""
+	vector_buffer(shared::SharedBuffer)
+
+Borrows a vector from the calling task's pool, returning `(vector, key)`.
+
+Release it with `unlock!(shared, key)` **from the same task**; a key is only
+meaningful to the pool it came from. Prefer [`with_buffer`](@ref), which cannot
+get this wrong.
+"""
+@inline vector_buffer(shared::SharedBuffer) = vector_buffer(pool(shared))
+
+"""
+	unlock!(shared::SharedBuffer, i)
+
+Releases key `i` back to the calling task's pool.
+"""
+@inline unlock!(shared::SharedBuffer, i) = unlock!(pool(shared), i)
+
+"""
+	nbuffers(shared::SharedBuffer)
+
+Returns the number of buffers in the calling task's pool.
+"""
+@inline nbuffers(shared::SharedBuffer) = nbuffers(pool(shared))

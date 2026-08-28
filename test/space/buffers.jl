@@ -1,5 +1,5 @@
 using Bramble: vector_buffer, in_use, vector, lock!, unlock!, VectorBuffer, GridSpaceBuffer,
-			   simple_space_buffer, add_buffer!, nbuffers, with_buffer, Backend
+			   simple_space_buffer, add_buffer!, nbuffers, with_buffer, SharedBuffer, pool, Backend
 
 @testset "Buffer Management Tests" begin
 	test_backend = backend()
@@ -212,4 +212,98 @@ using Bramble: vector_buffer, in_use, vector, lock!, unlock!, VectorBuffer, Grid
 			@test large < 8 * small
 		end
 	end
+
+	@testset "SharedBuffer (task-local pools)" begin
+		@testset "Construction" begin
+			s = SharedBuffer(test_backend, test_vector_len; nbuffers = 3)
+			@test s isa SharedBuffer{BackendType,TestVecType,Float64}
+			@test s.npts == test_vector_len
+			@test s.nbuffers == 3
+
+			@test_throws ArgumentError SharedBuffer(test_backend, test_vector_len; nbuffers = -1)
+			@test_throws ArgumentError SharedBuffer(test_backend, -1)
+		end
+
+		@testset "Borrowing" begin
+			s = SharedBuffer(test_backend, test_vector_len; nbuffers = 3)
+
+			r = with_buffer(s) do v
+				@test v isa TestVecType
+				@test length(v) == test_vector_len
+				fill!(v, 3.0)
+				sum(v)
+			end
+			@test r == 3.0 * test_vector_len
+
+			# The task's pool is warm-started with nbuffers and reused.
+			@test nbuffers(s) == 3
+			@test all(!in_use, pool(s).buffer)
+
+			# Nested borrows must not alias, and must not grow past nbuffers.
+			with_buffer(s) do a
+				with_buffer(s) do b
+					with_buffer(s) do c
+						@test length(unique(objectid.((a, b, c)))) == 3
+					end
+				end
+			end
+			@test nbuffers(s) == 3
+			@test all(!in_use, pool(s).buffer)
+
+			# Manual pair, and release on throw.
+			v, k = vector_buffer(s)
+			@test in_use(pool(s).buffer[k])
+			unlock!(s, k)
+			@test !in_use(pool(s).buffer[k])
+
+			@test_throws ErrorException with_buffer(s) do v
+				error("boom")
+			end
+			@test all(!in_use, pool(s).buffer)
+		end
+
+		@testset "Each task gets its own pool" begin
+			s = SharedBuffer(test_backend, test_vector_len; nbuffers = 1)
+			mine = objectid(pool(s))
+
+			other = fetch(Threads.@spawn objectid(pool(s)))
+			@test other != mine
+
+			# ... and two SharedBuffers never share a pool within one task.
+			s2 = SharedBuffer(test_backend, test_vector_len; nbuffers = 1)
+			@test objectid(pool(s2)) != mine
+		end
+
+		# Two tasks must never be handed the same vector. Each tags its buffer,
+		# spins, then checks the tag survived.
+		function collisions(spawner, n)
+			s = SharedBuffer(test_backend, 64; nbuffers = 2)
+			bad = Threads.Atomic{Int}(0)
+			spawner(n) do i
+				with_buffer(s) do v
+					@inbounds v[1] = Float64(i)
+					yield()                     # invite migration / interleaving
+					for _ in 1:100 end
+					@inbounds v[1] == Float64(i) || Threads.atomic_add!(bad, 1)
+				end
+			end
+			return bad[]
+		end
+
+		static_spawn(f, n) = Threads.@threads :static for i in 1:n
+			f(i)
+		end
+		dynamic_spawn(f, n) = foreach(wait, [Threads.@spawn f(i) for i in 1:n])
+
+		@testset "Concurrent borrowing is safe (@threads :static)" begin
+			@test collisions(static_spawn, 2_000) == 0
+		end
+
+		@testset "Concurrent borrowing is safe under task migration (@spawn)" begin
+			# This is the case that corrupts a threadid()-indexed workspace: the
+			# yield above lets a task resume on a different thread.
+			@test collisions(dynamic_spawn, 2_000) == 0
+		end
+	end
+
 end
