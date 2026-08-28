@@ -135,22 +135,21 @@ buffer_dict[1] = VectorBuffer(zeros(100), false)
 ```
 
 See also: [`VectorBuffer`](@ref), [`GridSpaceBuffer`](@ref)
-"""
-const BufferType{T,VectorType} = OrderedDict{Int,VectorBuffer{T,VectorType}}
+const BufferType{T,VectorType} = Vector{VectorBuffer{T,VectorType}}
 
 """
 	$(TYPEDEF)
 
 Manages a pool of reusable [VectorBuffer](@ref)s for a specific grid size and backend.
 
-This structure is the core of the buffer management system. It holds an `OrderedDict` of [VectorBuffer](@ref)s, allowing temporary vectors to be efficiently reused, thus minimizing memory allocation during iterative computations.
+This structure is the core of the buffer management system. It holds a `Vector` of [VectorBuffer](@ref)s, allowing temporary vectors to be efficiently reused, thus minimizing memory allocation during iterative computations.
 
 # Fields
 
 $(FIELDS)
 """
 struct GridSpaceBuffer{BT,VT,T}
-	"an `OrderedDict` mapping an integer key to each [VectorBuffer](@ref) in the pool."
+	"a `Vector` containing each [VectorBuffer](@ref) in the pool."
 	buffer::BufferType{T,VT}
 	"the computational backend associated with the buffers."
 	backend::BT
@@ -169,7 +168,7 @@ function simple_space_buffer(b::Backend, npts::Int; nbuffers::Int = 1)
 
 	# Determine the concrete types for the buffer system from the backend.
 	T, VT, _, BT = backend_types(b)
-	# Create the main buffer pool structure with an empty dictionary.
+	# Create the main buffer pool structure with an empty vector.
 	space_buffer = GridSpaceBuffer{BT,VT,T}(BufferType{T,VT}(), b, npts)
 
 	# Pre-allocate the requested number of buffers.
@@ -187,13 +186,9 @@ Dynamically adds one new, available [VectorBuffer](@ref) to the pool. This is ca
 """
 function add_buffer!(space_buffer::GridSpaceBuffer)
 	(; buffer, backend, npts) = space_buffer
-
-	# The key for the new buffer is simply the next integer.
-	n = length(buffer) + 1
-	buffer[n] = vector_buffer(backend, npts)
-
-	# Return the new vector and its key.
-	return vector(buffer[n]), n
+	buf = vector_buffer(backend, npts)
+	push!(buffer, buf)
+	return vector(buf), length(buffer)
 end
 
 """
@@ -246,7 +241,7 @@ function vector_buffer(space_buffer::GridSpaceBuffer)
 
 	# Search for the first available (unlocked) buffer.
 	key_free_buffer = 0
-	for (key, buf) in buffer
+	for (key, buf) in enumerate(buffer)
 		if !in_use(buf)
 			key_free_buffer = key
 			break # Stop searching once a free one is found.

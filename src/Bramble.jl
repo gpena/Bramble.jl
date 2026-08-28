@@ -17,7 +17,6 @@ using FunctionWrappers: FunctionWrapper
 
 using StaticArrays: @SVector, SVector
 
-using OrderedCollections: LittleDict, OrderedDict, freeze
 using Base.Threads: @threads
 
 using LinearAlgebra: norm, Diagonal, mul!, I, dot, transpose, Transpose
