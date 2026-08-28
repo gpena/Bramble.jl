@@ -235,4 +235,43 @@ using LinearAlgebra: norm
 			@test ndofs(SystemSpace) == 3 * ndofs(W)
 		end
 	end
+
+	@testset "Int and Val component counts agree" begin
+		W = gridspace(mesh2d)
+
+		# The two spellings must produce the same type for every N.
+		for n in 1:4
+			@test typeof(gridspace(mesh2d, n)) === typeof(gridspace(mesh2d, Val(n)))
+			@test typeof(W^n) === typeof(W^Val(n))
+		end
+
+		# N == 1 collapses to the scalar space rather than a one-component composite.
+		@test gridspace(mesh2d, 1) isa ScalarGridSpace
+		@test gridspace(mesh2d, Val(1)) isa ScalarGridSpace
+		@test (W^1) === W
+		@test (W^Val(1)) === W
+
+		# The generic element interface still works on that scalar result.
+		u = element(W^1)
+		@test u(1) === u
+		@test components(u) === (u,)
+
+		@test_throws ArgumentError gridspace(mesh2d, 0)
+		@test_throws ArgumentError W^0
+
+		# A literal component count must stay type stable; a runtime one need not.
+		lit2(Ω)  = gridspace(Ω, 2)
+		lit5(Ω)  = gridspace(Ω, 5)
+		pow2(Wx) = Wx^2
+		@test isconcretetype(Base.return_types(lit2,  (typeof(mesh2d),))[1])
+		@test isconcretetype(Base.return_types(lit5,  (typeof(mesh2d),))[1])
+		@test isconcretetype(Base.return_types(pow2,  (typeof(W),))[1])
+		@test isconcretetype(Base.return_types(gridspace, (typeof(mesh2d), Val{3}))[1])
+
+		# Components share one scalar space, so weights are computed once.
+		V = gridspace(mesh2d, Val(3))
+		@test all(sp === spaces(V)[1] for sp in spaces(V))
+		@test ndofs(V) == 3 * ndofs(W)
+	end
+
 end

@@ -42,26 +42,28 @@ const VectorGridSpace{N} = CompositeGridSpace{N}
 
 Constructs a vector function space with `N` components on mesh `Ωₕ`.
 The underlying scalar space and its weights are computed once and shared across components.
+
+`N == 1` yields the [`ScalarGridSpace`](@ref) itself rather than a one-component
+composite, for both spellings. The element interface is uniform either way:
+`uₕ(1)` and `components(uₕ)` work on a scalar element.
+
+The `Val` form is always type stable. The `Int` form is stable wherever `N` is a
+literal or otherwise constant-foldable, and returns a small `Union` when `N` is
+only known at run time; prefer `Val` on hot paths.
 """
 function gridspace(Ωₕ::AbstractMeshType, ::Val{N}; nbuffers::Int = 1) where N
 	W = gridspace(Ωₕ; nbuffers = nbuffers)
 	return CompositeGridSpace(ntuple(_ -> W, Val(N)))
 end
 
-function gridspace(Ωₕ::AbstractMeshType, N::Int; nbuffers::Int = 1)
+@inline gridspace(Ωₕ::AbstractMeshType, ::Val{1}; nbuffers::Int = 1) = gridspace(Ωₕ; nbuffers = nbuffers)
+
+# Forwarding to the Val method keeps a single implementation and makes the two
+# spellings agree by construction; :aggressive recovers type stability whenever
+# the caller's N is a constant.
+Base.@constprop :aggressive function gridspace(Ωₕ::AbstractMeshType, N::Int; nbuffers::Int = 1)
 	N >= 1 || throw(ArgumentError("Number of components N must be >= 1, got $N"))
-	return if N == 1
-		gridspace(Ωₕ; nbuffers = nbuffers)
-	elseif N == 2
-		gridspace(Ωₕ, Val(2); nbuffers = nbuffers)
-	elseif N == 3
-		gridspace(Ωₕ, Val(3); nbuffers = nbuffers)
-	elseif N == 4
-		gridspace(Ωₕ, Val(4); nbuffers = nbuffers)
-	else
-		W = gridspace(Ωₕ; nbuffers = nbuffers)
-		CompositeGridSpace(ntuple(_ -> W, N))
-	end
+	return gridspace(Ωₕ, Val(N); nbuffers = nbuffers)
 end
 
 """
@@ -80,21 +82,15 @@ it defaults to the spatial dimension of the mesh (`dim(Ωₕ)`).
 
 Constructs an `N`-component vector grid space from a scalar grid space `Wₕ` using mathematical exponentiation syntax:
 `Vₕ = Wₕ^2` or `Vₕ = Wₕ^dim(mesh)`.
+
+`Wₕ^1` is `Wₕ`, for both the `Int` and `Val` spellings.
 """
 @inline Base.:^(Wₕ::ScalarGridSpace, ::Val{N}) where N = CompositeGridSpace(ntuple(_ -> Wₕ, Val(N)))
-function Base.:^(Wₕ::ScalarGridSpace, N::Int)
+@inline Base.:^(Wₕ::ScalarGridSpace, ::Val{1}) = Wₕ
+
+Base.@constprop :aggressive function Base.:^(Wₕ::ScalarGridSpace, N::Int)
 	N >= 1 || throw(ArgumentError("Power N must be >= 1, got $N"))
-	return if N == 1
-		Wₕ
-	elseif N == 2
-		Wₕ^Val(2)
-	elseif N == 3
-		Wₕ^Val(3)
-	elseif N == 4
-		Wₕ^Val(4)
-	else
-		CompositeGridSpace(ntuple(_ -> Wₕ, N))
-	end
+	return Wₕ^Val(N)
 end
 
 # ==============================================================================
