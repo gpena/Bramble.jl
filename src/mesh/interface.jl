@@ -267,12 +267,27 @@ X = domain(interval(0, 1) × interval(4, 5))
 @inline mesh(Ω::Domain, npts::NTuple{D,Int}; uniform::NTuple{D,Bool} = ntuple(_ -> true, Val(D)), backend = backend()) where D = _mesh(Ω, npts, uniform, backend)
 
 #------------------------------------------------------------------------------------------#
+#------------------------------------------------------------------------------------------#
 # Required Interface Methods
 #------------------------------------------------------------------------------------------#
 
+"""
+	dim(Ωₕ::AbstractMeshType)
+	dim(::Type{<:AbstractMeshType})
+
+Returns the spatial dimension ``D`` of the domain where `Ωₕ` is embedded.
+"""
 @inline dim(::AbstractMeshType{D}) where D = D
 @inline dim(::Type{<:AbstractMeshType{D}}) where D = D
 
+"""
+	topo_dim(Ωₕ::AbstractMeshType)
+
+Returns the topological dimension of `Ωₕ`.
+
+The topological dimension counts the number of coordinate axes with more than one point,
+identifying degenerate or collapsed dimensions (e.g. lines or points embedded in 2D/3D).
+"""
 @inline function topo_dim(Ωₕ::AbstractMeshType{D}) where D
 	count = 0
 	@inbounds for i in 1:D
@@ -281,6 +296,12 @@ X = domain(interval(0, 1) × interval(4, 5))
 	return count
 end
 
+"""
+	eltype(Ωₕ::AbstractMeshType)
+	eltype(::Type{<:AbstractMeshType})
+
+Returns the floating-point coordinate element type of the points in `Ωₕ`.
+"""
 function eltype(Ωₕ::AbstractMeshType)
 	error("Interface function 'eltype' not implemented for mesh of type $(typeof(Ωₕ)).")
 end
@@ -289,34 +310,161 @@ function eltype(::Type{<:AbstractMeshType})
 	error("Interface function 'eltype(::Type{...})' not implemented for mesh type.")
 end
 
+"""
+	points(Ωₕ::AbstractMeshType)
+
+Returns the coordinates of the mesh points:
+- For 1D meshes (`Mesh1D`): returns a coordinate vector `Vector{T}` of length ``N_x``.
+- For nD meshes (`MeshnD`): returns an `NTuple{D, Vector{T}}` containing the 1D coordinate vectors along each axis.
+
+See also: [`point`](@ref), [`points_iterator`](@ref).
+"""
 @inline points(Ωₕ::AbstractMeshType) = error("Interface function 'points' not implemented for mesh of type $(typeof(Ωₕ)).")
+
+"""
+	point(Ωₕ::AbstractMeshType, idx)
+
+Returns the coordinate point at index `idx` (linear integer, tuple `(i, j)`, or `CartesianIndex`):
+- For 1D meshes: scalar coordinate ``x_i``.
+- For nD meshes: coordinate tuple ``(x_{i_1}, \\dots, x_{i_D})``.
+
+Direct indexing `Ωₕ[idx]` is also supported.
+"""
 @inline point(Ωₕ::AbstractMeshType, idx) = error("Interface function 'point' not implemented for mesh of type $(typeof(Ωₕ)).")
+
+"""
+	points_iterator(Ωₕ::AbstractMeshType)
+
+Returns an iterator yielding coordinate points across the entire mesh.
+"""
 @inline points_iterator(Ωₕ::AbstractMeshType) = error("Interface function 'points_iterator' not implemented for mesh of type $(typeof(Ωₕ)).")
 
+"""
+	half_points(Ωₕ::AbstractMeshType)
+
+Returns the precomputed cell centers (half-points) for each coordinate axis:
+```math
+x_{i+1/2} = \\frac{x_i + x_{i+1}}{2}, \\quad i = 1, \\dots, N-1.
+```
+"""
 @inline half_points(Ωₕ::AbstractMeshType) = error("Interface function 'half_points' not implemented for mesh of type $(typeof(Ωₕ)).")
+
+"""
+	half_point(Ωₕ::AbstractMeshType, idx)
+
+Returns the cell center (half-point) coordinate corresponding to index `idx`.
+"""
 @inline half_point(Ωₕ::AbstractMeshType, idx) = error("Interface function 'half_point' not implemented for mesh of type $(typeof(Ωₕ)).")
+
+"""
+	half_points_iterator(Ωₕ::AbstractMeshType)
+
+Returns an iterator over cell center (half-point) coordinates.
+"""
 @inline half_points_iterator(Ωₕ::AbstractMeshType) = error("Interface function 'half_points_iterator' not implemented for mesh of type $(typeof(Ωₕ)).")
 
+"""
+	spacing(Ωₕ::AbstractMeshType, idx)
+
+Returns the backward spacing ``h_i = x_i - x_{i-1}`` at index `idx` (for ``i=1``, returns ``x_2 - x_1``).
+For nD meshes, returns a tuple of backward spacings along each axis.
+"""
 @inline spacing(Ωₕ::AbstractMeshType, idx) = error("Interface function 'spacing' not implemented for mesh of type $(typeof(Ωₕ)).")
+
+"""
+	spacings_iterator(Ωₕ::AbstractMeshType)
+
+Returns an iterator over backward spacings across mesh points.
+"""
 @inline spacings_iterator(Ωₕ::AbstractMeshType) = error("Interface function 'spacings_iterator' not implemented for mesh of type $(typeof(Ωₕ)).")
 
+"""
+	forward_spacing(Ωₕ::AbstractMeshType, idx)
+
+Returns the forward spacing ``h_{i+1} = x_{i+1} - x_i`` at index `idx` (for ``i=N``, returns ``x_N - x_{N-1}``).
+For nD meshes, returns a tuple of forward spacings along each axis.
+"""
 @inline forward_spacing(Ωₕ::AbstractMeshType, idx) = error("Interface function 'forward_spacing' not implemented for mesh of type $(typeof(Ωₕ)).")
+
+"""
+	forward_spacings_iterator(Ωₕ::AbstractMeshType)
+
+Returns an iterator over forward spacings across mesh points.
+"""
 @inline forward_spacings_iterator(Ωₕ::AbstractMeshType) = error("Interface function 'forward_spacings_iterator' not implemented for mesh of type $(typeof(Ωₕ)).")
 
+"""
+	half_spacings(Ωₕ::AbstractMeshType)
+
+Returns the cell widths (half-spacings) ``h_{i+1/2} = \\frac{h_i + h_{i+1}}{2}`` along each axis.
+"""
 @inline half_spacings(Ωₕ::AbstractMeshType) = error("Interface function 'half_spacings' not implemented for mesh of type $(typeof(Ωₕ)).")
+
+"""
+	half_spacing(Ωₕ::AbstractMeshType, idx)
+
+Returns the cell width (half-spacing) at index `idx`.
+"""
 @inline half_spacing(Ωₕ::AbstractMeshType, idx) = error("Interface function 'half_spacing' not implemented for mesh of type $(typeof(Ωₕ)).")
+
+"""
+	half_spacings_iterator(Ωₕ::AbstractMeshType)
+
+Returns an iterator over cell widths (half-spacings).
+"""
 @inline half_spacings_iterator(Ωₕ::AbstractMeshType) = error("Interface function 'half_spacings_iterator' not implemented for mesh of type $(typeof(Ωₕ)).")
 
+"""
+	npoints(Ωₕ::AbstractMeshType, [::Type{Tuple}])
+
+Returns the total number of points in `Ωₕ`.
+When passing `Tuple` as the second argument, returns a tuple with the number of points along each dimension.
+"""
 @inline npoints(Ωₕ::AbstractMeshType) = error("Interface function 'npoints' not implemented for mesh of type $(typeof(Ωₕ)).")
 @inline npoints(Ωₕ::AbstractMeshType, ::Type{Tuple}) = error("Interface function 'npoints' not implemented for mesh of type $(typeof(Ωₕ)).")
 
+"""
+	hₘₐₓ(Ωₕ::AbstractMeshType)
+
+Returns the maximum diagonal stepsize across all cells in the mesh:
+```math
+h_{\\max} = \\max_{idx} \\| (h_{1, idx_1}, \\dots, h_{D, idx_D}) \\|_2.
+```
+"""
 @inline hₘₐₓ(Ωₕ::AbstractMeshType) = error("Interface function 'hₘₐₓ' not implemented for mesh of type $(typeof(Ωₕ)).")
+
+"""
+	cell_measure(Ωₕ::AbstractMeshType, idx)
+
+Returns the control volume (length, area, or volume) of the cell centered at index `idx`:
+```math
+\\text{meas}(\\square_{idx}) = \\prod_{d=1}^D h_{d, idx_d+1/2}.
+```
+"""
 @inline cell_measure(Ωₕ::AbstractMeshType, idx) = error("Interface function 'cell_measure' not implemented for mesh of type $(typeof(Ωₕ)).")
+
+"""
+	cell_measures_iterator(Ωₕ::AbstractMeshType)
+
+Returns an iterator yielding the volume/measure of each cell in the mesh.
+"""
 @inline cell_measures_iterator(Ωₕ::AbstractMeshType) = error("Interface function 'cell_measures_iterator' not implemented for mesh of type $(typeof(Ωₕ)).")
 
+"""
+	iterative_refinement!(Ωₕ::AbstractMeshType, [domain_markers::DomainMarkers])
+
+Refines the mesh `Ωₕ` in-place by halving each existing cell (inserting new points at midpoints).
+If domain markers are supplied, they are re-evaluated onto the refined grid points.
+"""
 @inline iterative_refinement!(Ωₕ::AbstractMeshType) = error("Interface function 'iterative_refinement!' not implemented for mesh of type $(typeof(Ωₕ)).")
 @inline iterative_refinement!(Ωₕ::AbstractMeshType, domain_markers::DomainMarkers) = error("Interface function 'iterative_refinement!' not implemented for mesh of type $(typeof(Ωₕ)).")
 
+"""
+	change_points!(Ωₕ::AbstractMeshType, [domain_markers::DomainMarkers], pts)
+
+Updates the coordinates of mesh `Ωₕ` in-place using new point coordinates in `pts`,
+recalculating all cached half-points and cell spacings.
+"""
 @inline change_points!(Ωₕ::AbstractMeshType, pts) = error("Interface function 'change_points!' not implemented for mesh of type $(typeof(Ωₕ)).")
 @inline change_points!(Ωₕ::AbstractMeshType, ::DomainMarkers, pts) = error("Interface function 'change_points!' not implemented for mesh of type $(typeof(Ωₕ)).")
 
