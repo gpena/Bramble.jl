@@ -77,7 +77,7 @@ include("geometry/marker.jl")
 include("geometry/domain.jl")
 include("utils/bramble_function.jl")
 
-include("mesh/common.jl")
+include("mesh/interface.jl")
 include("mesh/marker.jl")
 include("mesh/pretty_print.jl")
 include("mesh/mesh1d.jl")
