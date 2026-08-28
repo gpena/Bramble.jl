@@ -16,6 +16,9 @@ using StaticArrays: SVector
 using LinearAlgebra: Diagonal, I, transpose, mul!
 
 
+import Base: copy
+using Random: rand!
+
 # Utilities
 export backend, metal_backend, vector, matrix, vector_type, matrix_type, backend_types, backend_eye, backend_zeros
 export BrambleFunction, embed_function, has_time
@@ -23,10 +26,16 @@ export BrambleFunction, embed_function, has_time
 # domain/interval handling functions
 export box, interval, ×, dim, topo_dim, tails, point, cartesian_product, center, projection, is_collapsed, point_type, get_boundary_symbols, set
 export domain, markers, labels
-#=
-# Mesh handling
-export mesh, hₘₐₓ, iterative_refinement!, change_points, npoints, points, set
 
+# Mesh handling
+export AbstractMeshType, Mesh1D, MeshnD, MeshMarkers
+export mesh, submeshes, hₘₐₓ, iterative_refinement!, change_points!, set_points!
+export npoints, points, point, half_points, half_point
+export spacing, forward_spacing, half_spacing, half_spacings, cell_measure, cell_measures
+export spacings_iterator, forward_spacings_iterator, half_spacings_iterator, points_iterator, half_points_iterator, cell_measures_iterator
+export indices, boundary_indices, interior_indices, is_boundary_index, index_in_marker, is_uniform
+
+#=
 # Space handling
 export gridspace, element, space, CompositeGridSpace
 export Rₕ, Rₕ!, avgₕ, avgₕ!
@@ -67,13 +76,14 @@ include("geometry/set.jl")
 include("geometry/marker.jl")
 include("geometry/domain.jl")
 include("utils/bramble_function.jl")
-#=
+
 include("mesh/common.jl")
 include("mesh/marker.jl")
 include("mesh/pretty_print.jl")
 include("mesh/mesh1d.jl")
 include("mesh/meshnd.jl")
 
+#=
 include("space/buffer.jl")
 include("space/gridspace.jl")
 include("space/scalar_gridspace.jl")

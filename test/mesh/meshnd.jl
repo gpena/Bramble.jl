@@ -453,5 +453,67 @@ using LinearAlgebra: hypot
 			@test forward_spacing(Ωₕ, (3, 3)) == (1.0, 1.0)  # Uses backward at boundaries
 			@test forward_spacing(Ωₕ, CartesianIndex(2, 1)) == (1.0, 1.0)
 		end
+
+		@testset "Direct Indexing (getindex)" begin
+			intervals_2d = ((0.0, 2.0), (0.0, 4.0))
+			Ω = create_test_nd_domain(intervals_2d)
+			Ωₕ = mesh(Ω, (3, 5))
+
+			@test Ωₕ[1, 1] == (0.0, 0.0)
+			@test Ωₕ[2, 3] == (1.0, 2.0)
+			@test Ωₕ[CartesianIndex(3, 5)] == (2.0, 4.0)
+		end
+
+		@testset "Pretty Printing (show)" begin
+			intervals_2d = ((0.0, 1.0), (0.0, 2.0))
+			Ω = create_test_nd_domain(intervals_2d)
+			Ωₕ = mesh(Ω, (4, 4))
+
+			buf = IOBuffer()
+			show(buf, Ωₕ)
+			str = String(take!(buf))
+			@test occursin("MeshnD", str)
+			@test occursin("16 points", str)
+
+			# Compact
+			show(IOContext(buf, :compact => true), Ωₕ)
+			str_c = String(take!(buf))
+			@test occursin("MeshnD", str_c)
+
+			# Mixed uniform and non-uniform display (lines 104-110 of pretty_print.jl)
+			Ωₕ_mixed = mesh(Ω, (4, 4), (true, false))
+			show(buf, Ωₕ_mixed)
+			str_mixed = String(take!(buf))
+			@test occursin("mixed", str_mixed)
+
+			# Collapsed 1D in 2D display (lines 41-45, 76 of pretty_print.jl)
+			Ω_col = create_test_nd_domain(((0.0, 1.0), (0.5, 0.5)))
+			Ωₕ_col = mesh(Ω_col, (4, 1), (true, true))
+			show(buf, Ωₕ_col)
+			str_col = String(take!(buf))
+			@test occursin("topological dim", str_col)
+
+			# Mesh without markers (lines 130-134 of pretty_print.jl)
+			empty_markers_mesh = mesh(domain(interval(0.0, 1.0)), 3)
+			empty!(markers(empty_markers_mesh))
+			show(buf, empty_markers_mesh)
+			str_nomk = String(take!(buf))
+			@test occursin("(none)", str_nomk)
+
+			# Collapsed 1D mesh display (line 64 of pretty_print.jl)
+			Ωₕ_1d_pt = mesh(domain(interval(1.0, 1.0)), 1)
+			show(buf, Ωₕ_1d_pt)
+			str_1d_pt = String(take!(buf))
+			@test occursin("Point", str_1d_pt)
+		end
+
+		@testset "Convenience Constructors (default uniform)" begin
+			intervals_2d = ((0.0, 1.0), (0.0, 1.0))
+			Ω = create_test_nd_domain(intervals_2d)
+			Ωₕ = mesh(Ω, (5, 5))
+			@test Ωₕ isa MeshnD
+			@test npoints(Ωₕ) == 25
+			@test is_uniform(Ωₕ)
+		end
 	end
 end # Main Testset

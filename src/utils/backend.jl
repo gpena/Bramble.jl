@@ -175,5 +175,6 @@ b = metal_backend(Float16)    # half-precision
     `Float64` is not supported on Apple Silicon GPUs. Use `Float32` or `Float16`.
 """
 function metal_backend(T::Type = Float32)
-	error("metal_backend requires Metal.jl. Add `using Metal` before calling this function.")
+	return _metal_backend(T)
 end
+_metal_backend(::Type) = error("metal_backend requires Metal.jl. Add `using Metal` before calling this function.")

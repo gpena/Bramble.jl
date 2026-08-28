@@ -138,7 +138,7 @@ This function handles three types of markers:
 # Ωₕ.markers now contains BitVectors for :inlet, :outlet, :walls, :obstacle
 ```
 
-See also: [`DomainMarkers`](@ref), [`MeshMarkers`](@ref)    # Initialize a dictionary to hold the boolean vectors for each marker label.
+See also: [`DomainMarkers`](@ref), [`MeshMarkers`](@ref)
 """
 function set_markers!(Ωₕ::AbstractMeshType, domain_markers)
 	# Initialize a dictionary to hold the boolean vectors for each marker label.
@@ -175,7 +175,7 @@ end
 """
 	_set_markers_symbols!(mesh_markers, symbols, Ωₕ)
 
-Processes markers that are identified by predefined symbols (e.g., `:left`, `:top`) or sets of those symbols.
+Processes markers that are identified by predefined symbols (e.g., `:left`, `:top`) or sets/tuples of those symbols.
 """
 function _set_markers_symbols!(mesh_markers::MeshMarkers, symbols, Ωₕ)
 	# Create a map from predefined boundary symbols to their corresponding CartesianIndices.
@@ -192,18 +192,13 @@ function _set_markers_symbols!(mesh_markers::MeshMarkers, symbols, Ωₕ)
 
 		# Case 1: The identifier is a single symbol (e.g., :left).
 		if identifier isa Symbol
-			# Look up the CartesianIndices for this boundary symbol.
 			idxs = symbol_to_index_map[identifier]
-			# Mark these indices in the boolean vector.
 			_mark_indices!(target_marker_set, linear_indices, idxs)
 
-			# Case 2: The identifier is a Set of symbols (e.g., Set([:top, :right])).
-		elseif identifier isa Set
-			# Iterate through each symbol in the set.
+		# Case 2: The identifier is a Set or Tuple of symbols (e.g., (:top, :right)).
+		elseif identifier isa Union{Set,Tuple}
 			for id in identifier
-				# Look up the CartesianIndices for each symbol.
 				idxs = symbol_to_index_map[id]
-				# Mark the corresponding indices.
 				_mark_indices!(target_marker_set, linear_indices, idxs)
 			end
 		end

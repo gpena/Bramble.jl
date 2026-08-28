@@ -331,7 +331,12 @@ end
 	end
 
 	@testset "metal_backend stub error" begin
-		@test_throws ErrorException metal_backend()
-		@test_throws ErrorException metal_backend(Float32)
+		if isdefined(Main, :Metal)
+			@test metal_backend() isa Backend
+			@test metal_backend(Float32) isa Backend
+		else
+			@test_throws ErrorException metal_backend()
+			@test_throws ErrorException metal_backend(Float32)
+		end
 	end
 end

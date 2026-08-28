@@ -189,33 +189,20 @@ end
 
 @inline function hₘₐₓ(Ωₕ::MeshnD{D}) where D
 	max_h = zero(eltype(Ωₕ))
-	@inbounds @simd for idx in indices(Ωₕ)
+	@inbounds for idx in indices(Ωₕ)
 		h_tuple = spacing(Ωₕ, idx)
-		h_diag = sqrt(sum(x -> x*x, h_tuple))
+		h_diag = hypot(h_tuple...)
 		max_h = max(max_h, h_diag)
 	end
 	return max_h
 end
 
-@inline @generated function cell_measure(Ωₕ::MeshnD{D}, idx) where D
-	if D == 0
-		return :(1)
-	end
-
-	mesh_component_expr_1 = Expr(:call, :Ωₕ, 1)
-	index_component_expr_1 = Expr(:ref, :idx, 1)
-	current_product_expr = Expr(:call, :half_spacing, mesh_component_expr_1, index_component_expr_1)
-
-	for i in 2:D
-		mesh_component_expr_i = Expr(:call, :Ωₕ, i)
-		index_component_expr_i = Expr(:ref, :idx, i)
-		term_i_expr = Expr(:call, :half_spacing, mesh_component_expr_i, index_component_expr_i)
-
-		current_product_expr = Expr(:call, :*, current_product_expr, term_i_expr)
-	end
-
-	return current_product_expr
+@inline function cell_measure(Ωₕ::MeshnD{D}, idx) where D
+	return prod(ntuple(i -> half_spacing(Ωₕ(i), idx[i]), Val(D)))
 end
+
+@inline Base.getindex(Ωₕ::MeshnD, idx::CartesianIndex) = point(Ωₕ, idx)
+@inline Base.getindex(Ωₕ::MeshnD, idx...) = point(Ωₕ, idx)
 
 @inline cell_measures_iterator(Ωₕ::MeshnD) = (cell_measure(Ωₕ, idx) for idx in indices(Ωₕ))
 
@@ -285,8 +272,8 @@ function Base.show(io::IO, Ωₕ::MeshnD{D,BT,CI,M1T,T}) where {D,BT,CI,M1T,T}
 	n_total = npoints(Ωₕ)
 	topodim = topo_dim(Ωₕ)
 
-	# Check if any dimension is collapsed
-	collapsed = any(n -> n == 1, npts_tuple)
+	# Check if all dimensions are collapsed (topological dimension is 0)
+	collapsed = (topodim == 0)
 
 	# Header
 	print_mesh_header(pp, "MeshnD", D, T, npts_tuple)
@@ -300,18 +287,7 @@ function Base.show(io::IO, Ωₕ::MeshnD{D,BT,CI,M1T,T}) where {D,BT,CI,M1T,T}
 
 	# Spacing information
 	if !collapsed
-		# Determine uniformity for each dimension
-		uniform_tuple = ntuple(D) do i
-			submesh = Ωₕ(i)
-			pts = points(submesh)
-			n = length(pts)
-			if n > 1
-				spacings = [pts[j] - pts[j-1] for j in 2:n]
-				all(s -> abs(s - spacings[1]) < 1e-10, spacings)
-			else
-				true
-			end
-		end
+		uniform_tuple = ntuple(i -> is_uniform(Ωₕ(i)), Val(D))
 		print_mesh_spacing_info(pp, uniform_tuple, hₘₐₓ(Ωₕ))
 	end
 

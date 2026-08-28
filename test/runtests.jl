@@ -58,13 +58,14 @@ if __bramble_with_unit_tests
 			include("geometry/sets.jl")
 			include("geometry/domains.jl")
 		end
-#=
+
 		@testset verbose=true "Meshes" begin
 			include("mesh/mesh1d.jl")
 			include("mesh/meshnd.jl")
 			include("mesh/meshes.jl")
 		end
 
+#=
 		@testset verbose=true "Grid spaces" begin
 			include("space/buffers.jl")
 			include("space/gridspaces.jl")

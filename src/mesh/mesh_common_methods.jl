@@ -331,14 +331,18 @@ This is a common query that can be useful for optimizations or validation.
 `true` if all spacings are approximately equal, `false` otherwise
 """
 function is_uniform(Ωₕ::AbstractMeshType{1}; tol = 1e-10)
-	if npoints(Ωₕ) <= 1
+	n = npoints(Ωₕ)
+	if n <= 1
 		return true
 	end
 
-	spacings = collect(spacings_iterator(Ωₕ))
-	h_ref = first(spacings)
-
-	return all(h -> abs(h - h_ref) < tol, spacings)
+	h_ref = spacing(Ωₕ, 1)
+	@inbounds for i in 2:n
+		if abs(spacing(Ωₕ, i) - h_ref) >= tol
+			return false
+		end
+	end
+	return true
 end
 
 function is_uniform(Ωₕ::AbstractMeshType{D}; tol = 1e-10) where D

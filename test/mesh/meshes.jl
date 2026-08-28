@@ -176,9 +176,9 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD
 
 			Mh = mesh(X, 20, false)
 			@test Mh isa Mesh1D
-
-			Wh = gridspace(Mh)
-			@test !isnothing(Wh)
+			@test npoints(Mh) == 20
+			@test haskey(markers(Mh), :left)
+			@test haskey(markers(Mh), :right)
 		end
 
 		@testset "2D Domain to Mesh" begin
@@ -189,9 +189,8 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD
 
 			Mh = mesh(X, (6, 6), (false, false))
 			@test Mh isa MeshnD
-
-			Wh = gridspace(Mh)
-			@test !isnothing(Wh)
+			@test npoints(Mh) == 36
+			@test haskey(markers(Mh), :boundary)
 		end
 
 		@testset "3D Domain to Mesh (small)" begin
@@ -201,9 +200,7 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD
 
 			Mh = mesh(X, (3, 3, 3), (false, false, false))
 			@test Mh isa MeshnD
-
-			Wh = gridspace(Mh)
-			@test !isnothing(Wh)
+			@test npoints(Mh) == 27
 		end
 	end
 
@@ -220,11 +217,13 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD
 		m = markers(X)
 		@test !isnothing(m)
 
-		# Test that markers can be used with dirichlet_constraints
-		bcs = dirichlet_constraints(set(X),
-									:left => x -> 0.0,
-									:right => x -> 1.0)
-		@test !isnothing(bcs)
+		Mh = mesh(X, (5, 5), (true, true))
+		@test haskey(markers(Mh), :left)
+		@test haskey(markers(Mh), :right)
+		@test haskey(markers(Mh), :bottom)
+		@test haskey(markers(Mh), :top)
+		@test any(markers(Mh)[:left])
+		@test any(markers(Mh)[:right])
 	end
 
 	@testset "Empty and Trivial Cases" begin

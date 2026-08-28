@@ -334,5 +334,32 @@ import Base: diff
 			# Test dim on type
 			@test dim(typeof(Ωₕ)) == 1
 		end
+
+		@testset "Direct Indexing (getindex)" begin
+			@test Ωₕ[1] ≈ 0.0
+			@test Ωₕ[3] ≈ 2.0
+			@test Ωₕ[CartesianIndex(5)] ≈ 4.0
+		end
+
+		@testset "Pretty Printing (show)" begin
+			buf = IOBuffer()
+			show(buf, Ωₕ)
+			str = String(take!(buf))
+			@test occursin("Mesh1D", str)
+			@test occursin("5 points", str)
+
+			# Compact
+			show(IOContext(buf, :compact => true), Ωₕ)
+			str_c = String(take!(buf))
+			@test occursin("Mesh1D{5 pts}", str_c)
+		end
+
+		@testset "Convenience Constructors" begin
+			Ω_c = create_test_domain(0.0, 1.0)
+			Ωₕ_default = mesh(Ω_c, 10)
+			@test Ωₕ_default isa Mesh1D
+			@test npoints(Ωₕ_default) == 10
+			@test is_uniform(Ωₕ_default)
+		end
 	end
 end

@@ -363,6 +363,9 @@ function Base.copy(Ωₕ::Mesh1D)
 				  Ωₕ.collapsed)
 end
 
+@inline Base.getindex(Ωₕ::Mesh1D, i::Int) = point(Ωₕ, i)
+@inline Base.getindex(Ωₕ::Mesh1D, i::CartesianIndex{1}) = point(Ωₕ, i)
+
 """
 	Base.show(io::IO, Ωₕ::Mesh1D)
 
@@ -394,15 +397,7 @@ function Base.show(io::IO, Ωₕ::Mesh1D{BT,CI,VT,T}) where {BT,CI,VT,T}
 
 	# Spacing information
 	if !collapsed
-		# Determine if mesh is uniform by checking spacing variance
-		pts = points(Ωₕ)
-		if n_pts > 1
-			spacings = [pts[i] - pts[i-1] for i in 2:n_pts]
-			is_uniform = all(s -> abs(s - spacings[1]) < 1e-10, spacings)
-		else
-			is_uniform = true
-		end
-		print_mesh_spacing_info(pp, is_uniform, hₘₐₓ(Ωₕ))
+		print_mesh_spacing_info(pp, is_uniform(Ωₕ), hₘₐₓ(Ωₕ))
 	end
 
 	# Markers information

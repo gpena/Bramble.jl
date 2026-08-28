@@ -29,7 +29,7 @@ b32 = metal_backend(Float32)   # same
 b16 = metal_backend(Float16)   # half-precision
 ```
 """
-function Bramble.metal_backend(T::Type{<:Union{Float16, Float32}} = Float32)
+function Bramble._metal_backend(::Type{T}) where {T <: Union{Float16, Float32}}
 	return Backend{MtlVector{T}, MtlMatrix{T}}()
 end
 

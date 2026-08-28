@@ -143,55 +143,31 @@ Returns a `CartesianIndices` object representing the interior region of the mesh
 #------------------------------------------------------------------------------------------#
 
 """
-	mesh(Ω::Domain, npts::Int, unif::Bool; backend = backend())
-	mesh(Ω::Domain, npts::NTuple{D}, unif::NTuple{D}; backend = backend())
+	$(SIGNATURES)
 
 Returns a [Mesh1D](@ref) or a [MeshnD](@ref) (``D=2,3``) defined on the [Domain](@ref) `Ω`.
 
-The number of points for each coordinate projection mesh are given in the tuple `npts`.
-The distribution of points on the submeshes are encoded in the tuple `unif`.
-
-For future reference, the mesh points are denoted as
-
-  - 1D mesh, with `npts` = ``N_x``
-
-```math
-x_i, \\, i=1,\\dots,N.
-```
-
-  - 2D mesh, with `npts` = (``N_x``, ``N_y``)
-
-```math
-(x_i,y_j), \\, i=1,\\dots,N_x, \\, j=1,\\dots,N_y
-```
-
-  - 3D mesh, with `npts` = (``N_x``, ``N_y``, ``N_z``)
-
-```math
-(x_i,y_j,z_l), \\, i=1,\\dots,N_x, \\, j=1,\\dots,N_y, \\, l=1,\\dots,N_z.
-```
-
-# Arguments
-
-  - `Ω::Domain`: The domain on which to create the mesh
-  - `npts`: Number of points (Int for 1D, NTuple for nD)
-  - `unif`: Uniform spacing flag (Bool for 1D, NTuple for nD)
-  - `backend`: Linear algebra backend (optional, defaults to default backend)
+The number of points for each coordinate projection mesh are given in `npts`.
+The distribution of points on the submeshes are encoded in `unif` (or keyword `uniform`, default `true`).
 
 # Examples
 
 ```julia
-I = interval(0, 1);
-Ωₕ = mesh(domain(I), 10, true);
-```
+I = interval(0.0, 1.0)
+Ωₕ = mesh(domain(I), 10) # uniform by default
+Ωₕ_nonunif = mesh(domain(I), 10, false) # explicit non-uniform
 
-```julia
-X = domain(interval(0, 1) × interval(4, 5));
-Ωₕ = mesh(X, (10, 15), (true, false))
+X = domain(interval(0, 1) × interval(4, 5))
+Ωₕ_2d = mesh(X, (10, 15)) # uniform by default
+Ωₕ_mixed = mesh(X, (10, 15), (true, false))
 ```
 """
 @inline mesh(Ω::Domain, npts::NTuple{D,Int}, unif::NTuple{D,Bool}; backend = backend()) where D = _mesh(Ω, npts, unif, backend)
 @inline mesh(Ω::Domain{CartesianProduct{1,T}}, npts::Int, unif::Bool; backend = backend()) where T = _mesh(Ω, (npts,), (unif,), backend)
+
+# Convenience methods with default uniform=true
+@inline mesh(Ω::Domain{CartesianProduct{1,T}}, npts::Int; uniform::Bool = true, backend = backend()) where T = _mesh(Ω, (npts,), (uniform,), backend)
+@inline mesh(Ω::Domain, npts::NTuple{D,Int}; uniform::NTuple{D,Bool} = ntuple(_ -> true, Val(D)), backend = backend()) where D = _mesh(Ω, npts, uniform, backend)
 
 #------------------------------------------------------------------------------------------#
 # Required Interface Methods (Must be implemented by concrete subtypes)
@@ -536,12 +512,12 @@ with volume ``h_{x,i+1/2} h_{y,j+1/2} h_{z,l+1/2}``, where `idx` = ``(i,j,l)``.
 end
 
 """
-	cell_measure_iterator(Ωₕ::AbstractMeshType)
+	cell_measures_iterator(Ωₕ::AbstractMeshType)
 
 Returns an iterator for the measure of the cells.
 """
-@inline function cell_measure_iterator(Ωₕ::AbstractMeshType)
-	error("Interface function 'cell_measure_iterator' not implemented for mesh of type $(typeof(Ωₕ)).")
+@inline function cell_measures_iterator(Ωₕ::AbstractMeshType)
+	error("Interface function 'cell_measures_iterator' not implemented for mesh of type $(typeof(Ωₕ)).")
 end
 
 """
