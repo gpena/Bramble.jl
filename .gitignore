@@ -37,5 +37,5 @@ build/
 research/
 test_code_warntype/
 .agents/
-.claude/skills/
+.claude/
 LocalPreferences.toml
