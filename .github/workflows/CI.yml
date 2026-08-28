@@ -12,7 +12,6 @@ concurrency:
 
 env:
   JULIA_NUM_THREADS: auto
-  JULIA_NUM_PRECOMPILE_TASKS: auto
 
 jobs:
   changes:
