@@ -255,4 +255,106 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD
 			@test Mh isa Mesh1D
 		end
 	end
+
+	@testset "Extended Interface Methods" begin
+		@testset "1D Mesh Extended Interface" begin
+			I = interval(0.0, 1.0)
+			M1 = mesh(domain(I), 11)
+
+			# Collection interface
+			@test size(M1) == (11,)
+			@test size(M1, 1) == 11
+			@test length(M1) == 11
+			@test axes(M1) == (Base.OneTo(11),)
+			@test axes(M1, 1) == Base.OneTo(11)
+			@test firstindex(M1) == 1
+			@test M1[begin] == 0.0
+			@test lastindex(M1) == 11
+			@test M1[end] == 1.0
+			@test count(_ -> true, M1) == 11
+
+			# Stepsize and metrics
+			@test stepsize(M1) ≈ 0.1
+			@test stepsize(M1, 1) ≈ 0.1
+			@test hₘₐₓ(M1) ≈ 0.1
+			@test hₘᵢₙ(M1) ≈ 0.1
+
+			# locate_cell
+			@test locate_cell(M1, -0.5) == 1
+			@test locate_cell(M1, 0.0) == 1
+			@test locate_cell(M1, 0.35) == 4
+			@test locate_cell(M1, 1.0) == 10
+			@test locate_cell(M1, 1.5) == 10
+
+			# normal_vector
+			@test normal_vector(M1, :left) == SVector{1, Float64}(-1.0)
+			@test normal_vector(M1, :right) == SVector{1, Float64}(1.0)
+			@test_throws ArgumentError normal_vector(M1, :unknown)
+		end
+
+		@testset "2D Mesh Extended Interface" begin
+			I = interval(0.0, 1.0)
+			J = interval(0.0, 2.0)
+			M2 = mesh(domain(I × J), (11, 21))
+
+			# Collection interface
+			@test size(M2) == (11, 21)
+			@test size(M2, 1) == 11
+			@test size(M2, 2) == 21
+			@test length(M2) == 231
+			@test axes(M2) == (Base.OneTo(11), Base.OneTo(21))
+			@test axes(M2, 1) == Base.OneTo(11)
+			@test axes(M2, 2) == Base.OneTo(21)
+			@test firstindex(M2) == CartesianIndex(1, 1)
+			@test M2[begin] == (0.0, 0.0)
+			@test lastindex(M2) == CartesianIndex(11, 21)
+			@test M2[end] == (1.0, 2.0)
+			@test count(_ -> true, M2) == 231
+
+			# Stepsize and metrics
+			@test stepsize(M2) == (stepsize(M2(1)), stepsize(M2(2)))
+			@test stepsize(M2, 1) ≈ 0.1
+			@test stepsize(M2, 2) ≈ 0.1
+			@test hₘₐₓ(M2) ≈ hypot(0.1, 0.1)
+			@test hₘᵢₙ(M2) ≈ 0.1
+
+			# Non-uniform stepsize error assertion
+			M2_nu = mesh(domain(I × J), (11, 21), (false, false))
+			@test_throws AssertionError stepsize(M2_nu)
+
+			# locate_cell
+			@test locate_cell(M2, (0.35, 1.05)) == CartesianIndex(4, 11)
+			@test locate_cell(M2, [0.35, 1.05]) == CartesianIndex(4, 11)
+
+			# normal_vector
+			@test normal_vector(M2, :left) == SVector{2, Float64}(-1.0, 0.0)
+			@test normal_vector(M2, :right) == SVector{2, Float64}(1.0, 0.0)
+			@test normal_vector(M2, :bottom) == SVector{2, Float64}(0.0, -1.0)
+			@test normal_vector(M2, :top) == SVector{2, Float64}(0.0, 1.0)
+			@test_throws ArgumentError normal_vector(M2, :invalid)
+		end
+
+		@testset "3D Mesh Extended Interface" begin
+			I = interval(0.0, 1.0)
+			M3 = mesh(domain(I × I × I), (5, 5, 5))
+
+			@test size(M3) == (5, 5, 5)
+			@test length(M3) == 125
+			@test stepsize(M3) == (0.25, 0.25, 0.25)
+			@test hₘₐₓ(M3) ≈ hypot(0.25, 0.25, 0.25)
+			@test hₘᵢₙ(M3) ≈ 0.25
+
+			# Points in 1D submesh are [0.0, 0.25, 0.5, 0.75, 1.0]
+			# For coordinate 0.5, the bounding cell index is 3 (interval [0.5, 0.75])
+			@test locate_cell(M3, (0.5, 0.5, 0.5)) == CartesianIndex(3, 3, 3)
+			@test locate_cell(M3, (0.1, 0.3, 0.8)) == CartesianIndex(1, 2, 4)
+
+			@test normal_vector(M3, :back) == SVector{3, Float64}(-1.0, 0.0, 0.0)
+			@test normal_vector(M3, :front) == SVector{3, Float64}(1.0, 0.0, 0.0)
+			@test normal_vector(M3, :left) == SVector{3, Float64}(0.0, -1.0, 0.0)
+			@test normal_vector(M3, :right) == SVector{3, Float64}(0.0, 1.0, 0.0)
+			@test normal_vector(M3, :bottom) == SVector{3, Float64}(0.0, 0.0, -1.0)
+			@test normal_vector(M3, :top) == SVector{3, Float64}(0.0, 0.0, 1.0)
+		end
+	end
 end

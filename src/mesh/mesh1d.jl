@@ -48,6 +48,19 @@ end
 
 @inline points_iterator(Ωₕ::Mesh1D) = Ωₕ.pts
 
+function locate_cell(Ωₕ::Mesh1D, x::Real)
+	pts = Ωₕ.pts
+	n = length(pts)
+	n <= 1 && return 1
+	if x <= pts[1]
+		return 1
+	elseif x >= pts[n]
+		return n - 1
+	end
+	idx = searchsortedlast(pts, x)
+	return clamp(idx, 1, n - 1)
+end
+
 @inline half_points(Ωₕ::Mesh1D) = Ωₕ.half_pts
 @inline half_spacings(Ωₕ::Mesh1D) = Ωₕ.half_spacings
 @inline cell_measures(Ωₕ::Mesh1D) = half_spacings(Ωₕ)
@@ -99,6 +112,7 @@ Overrides the spacings in Ωₕ.
 @inline npoints(Ωₕ::Mesh1D, ::Type{Tuple}) = (npoints(Ωₕ),)
 
 @inline hₘₐₓ(Ωₕ::Mesh1D) = maximum(spacings_iterator(Ωₕ))
+@inline hₘᵢₙ(Ωₕ::Mesh1D) = minimum(spacings_iterator(Ωₕ))
 
 @inline @inbounds function spacing(Ωₕ::Mesh1D, i::Int)
 	_check_point_bounds(Ωₕ, i, "spacing")

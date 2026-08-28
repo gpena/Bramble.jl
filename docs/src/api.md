@@ -89,6 +89,10 @@ forward_spacing
 half_spacing
 half_spacings
 hₘₐₓ
+hₘᵢₙ
+stepsize
+locate_cell
+normal_vector
 cell_measure
 is_uniform
 ```

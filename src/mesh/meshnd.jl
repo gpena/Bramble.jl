@@ -197,12 +197,28 @@ end
 	return max_h
 end
 
+@inline function hₘᵢₙ(Ωₕ::MeshnD{D}) where D
+	min_h = typemax(eltype(Ωₕ))
+	@inbounds for i in 1:D
+		sub_min = hₘᵢₙ(Ωₕ(i))
+		min_h = min(min_h, sub_min)
+	end
+	return min_h
+end
+
 @inline function cell_measure(Ωₕ::MeshnD{D}, idx) where D
 	return prod(ntuple(i -> half_spacing(Ωₕ(i), idx[i]), Val(D)))
 end
 
 @inline Base.getindex(Ωₕ::MeshnD, idx::CartesianIndex) = point(Ωₕ, idx)
 @inline Base.getindex(Ωₕ::MeshnD, idx...) = point(Ωₕ, idx)
+
+function locate_cell(Ωₕ::MeshnD{D}, x::Tuple) where D
+	indices_tuple = ntuple(i -> locate_cell(Ωₕ(i), x[i]), Val(D))
+	return CartesianIndex(indices_tuple)
+end
+
+@inline locate_cell(Ωₕ::MeshnD{D}, x::AbstractVector) where D = locate_cell(Ωₕ, Tuple(x))
 
 @inline cell_measures_iterator(Ωₕ::MeshnD) = (cell_measure(Ωₕ, idx) for idx in indices(Ωₕ))
 

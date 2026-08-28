@@ -5,7 +5,7 @@ module Bramble
 using DocStringExtensions
 
 import Base: eltype, length
-import Base: show, first, last, getindex, setindex!, iterate, size, ndims, firstindex, lastindex
+import Base: show, first, last, getindex, setindex!, iterate, size, ndims, firstindex, lastindex, axes, eachindex
 
 using SparseArrays: SparseMatrixCSC, SparseVector, spdiagm, spzeros
 
@@ -29,7 +29,7 @@ export domain, markers, labels
 
 # Mesh handling
 export AbstractMeshType, Mesh1D, MeshnD, MeshMarkers
-export mesh, submeshes, hₘₐₓ, iterative_refinement!, change_points!, set_points!
+export mesh, submeshes, hₘₐₓ, hₘᵢₙ, stepsize, locate_cell, normal_vector, iterative_refinement!, change_points!, set_points!
 export npoints, points, point, half_points, half_point
 export spacing, forward_spacing, half_spacing, half_spacings, cell_measure, cell_measures
 export spacings_iterator, forward_spacings_iterator, half_spacings_iterator, points_iterator, half_points_iterator, cell_measures_iterator
