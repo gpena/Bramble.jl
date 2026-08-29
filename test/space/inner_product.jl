@@ -214,3 +214,30 @@ end
         @test _get_h_val(Base.Fix1(getindex, h), 2) == 0.25
     end
 end
+
+@testset "The H¹ seminorm is the ₊ norm of the gradient" begin
+    # snorm₁ₕ(uₕ) == norm₊(∇₋ₕ(uₕ)) is the definition of the discrete H¹ seminorm, and
+    # snorm₁ₕ computes it without materialising the gradient. The two routes must agree
+    # in every dimension, on uniform and non-uniform grids.
+    meshes = (("1D uniform", mesh(domain(interval(0.0, 1.0)), 21, true)),
+        ("1D non-uniform", mesh(domain(interval(0.0, 1.0)), 21, false)),
+        ("2D",
+            mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 9), (true, false))),
+        ("3D",
+            mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 6),
+                (true, false, true))))
+
+    for (lbl, Ωₕ) in meshes
+        @testset "$lbl" begin
+            Wₕ = gridspace(Ωₕ)
+            f = Ωₕ isa Bramble.Mesh1D ? (x -> sin(3x) + x) : (x -> sin(3x[1]) + x[end]^2)
+            uₕ = Rₕ(Wₕ, f)
+
+            @test snorm₁ₕ(uₕ) ≈ norm₊(∇₋ₕ(uₕ))
+            # the H¹ norm is built from the two of them
+            @test norm₁ₕ(uₕ)^2 ≈ normₕ(uₕ)^2 + snorm₁ₕ(uₕ)^2
+            # a constant has zero gradient, so zero seminorm
+            @test snorm₁ₕ(Rₕ(Wₕ, x -> 1.0)) ≈ 0.0 atol=1e-14
+        end
+    end
+end

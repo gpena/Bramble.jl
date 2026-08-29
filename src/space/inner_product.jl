@@ -296,11 +296,17 @@ end
 """
 	snorm₁ₕ(uₕ::VectorElement)
 
-Returns the discrete version of the standard ``H^1`` seminorm of [VectorElement](@ref) `uₕ`.
+Returns the discrete ``H^1`` seminorm of the grid function `uₕ`,
 
 ```math
-|\\textrm{u}_h|_{1h} \\vcentcolon = \\Vert \\nabla_h \\textrm{u}_h \\Vert_h
+|\\textrm{u}_h|_{1h} \\vcentcolon = \\Vert \\nabla_h \\textrm{u}_h \\Vert_+
 ```
+
+so that `snorm₁ₕ(uₕ) == norm₊(∇₋ₕ(uₕ))` in one, two and three dimensions. The argument is
+the grid function itself; the backward gradient is taken internally, and without
+materialising it, so this allocates nothing.
+
+See also: [`norm₁ₕ`](@ref), [`norm₊`](@ref), [`∇₋ₕ`](@ref).
 """
 @inline snorm₁ₕ(uₕ::VectorElement{<:ScalarGridSpace}) = sqrt(_snorm₁ₕ_sq(uₕ))
 
