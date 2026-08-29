@@ -232,40 +232,51 @@ Returns the discrete version of the standard ``H^1`` seminorm of [VectorElement]
 |\\textrm{u}_h|_{1h} \\vcentcolon = \\Vert \\nabla_h \\textrm{u}_h \\Vert_h
 ```
 """
-function snorm₁ₕ(uₕ::VectorElement)
-    (; data, space) = uₕ
-    Ωₕ = mesh(space)
-    dims = ndofs(space, Tuple)
-    D = dim(Ωₕ)
+# The squared seminorm along one direction. `d` arrives as a `Val` so the stencil step
+# is built at compile time, and the spacing, weight and step are read once per direction
+# rather than once per grid point.
+#
+# The boundary slice contributes nothing: the backward difference is truncated to zero
+# there, so its square is zero. Only the interior is walked.
+@inline function _seminorm_sq_along(data, space, Ωₕ, li, ::Val{d}, ::Val{D}) where {d, D}
+    h = backward_spacings_for_derivative(Ωₕ(d))
+    w = weights(space, Innerplus(), d)
+    step = _stencil_step(Val(d), Val(D))
+    interior, _ = _stencil_ranges(axes(li), Val(d), Backward())
 
-    total_seminorm_sq = 0.0
-    li = LinearIndices(dims)
-
-    @fastmath @inbounds @simd for I in CartesianIndices(dims)
-        local_seminorm_sq_at_I = 0.0
-
-        for d in 1:D
-            val_at_I = data[li[I]]
-            h = Base.Fix1(spacing, Ωₕ(d))
-
-            diff_val = if I[d] > 1
-                step_cartesian = CartesianIndex(ntuple(i -> i == d ? 1 : 0, D))
-                val_at_prev = data[li[I - step_cartesian]]
-                _compute_difference(Backward(), Val(false), val_at_I, val_at_prev, h, I[d])
-            else
-                _compute_difference(Backward(), Val(true), val_at_I, h, I[d])
-            end
-
-            weight_d = weights(space, Innerplus(), d)[li[I]]
-
-            local_seminorm_sq_at_I += weight_d * diff_val^2
-        end
-        total_seminorm_sq += local_seminorm_sq_at_I
+    s = zero(eltype(data))
+    @inbounds @simd for I in CartesianIndices(interior)
+        idx = li[I]
+        δ = (data[idx] - data[li[I - step]]) / h[I[d]]
+        s = muladd(w[idx], δ * δ, s)
     end
 
-    # returns norm₊(∇₋ₕ(uₕ))
-    return sqrt(total_seminorm_sq)
+    return s
 end
+
+# `D` is taken from the space's type parameter rather than from `dim(Ωₕ)`: building a
+# `Val` out of a value returned at run time is a dynamic dispatch, which cost 224 bytes
+# per call on a 2D grid.
+# Summed by recursion on `Val(d)` rather than through `ntuple`: the closure `ntuple`
+# needs captures four locals, and capturing them cost a small allocation per call.
+@inline _sum_dirs(data, space, Ωₕ, li, ::Val{0}, ::Val{D}) where {D} = zero(eltype(data))
+@inline _sum_dirs(
+    data, space, Ωₕ, li, ::Val{d}, ::Val{D}) where {d, D} = _seminorm_sq_along(
+    data, space, Ωₕ, li, Val(d), Val(D)) +
+                                                            _sum_dirs(
+    data, space, Ωₕ, li, Val(d - 1), Val(D))
+
+@inline function _snorm₁ₕ_sq(uₕ::VectorElement{<:ScalarGridSpace{D}}) where {D}
+    (; data, space) = uₕ
+    Ωₕ = mesh(space)
+    li = LinearIndices(npoints(Ωₕ, Tuple))
+    return _sum_dirs(data, space, Ωₕ, li, Val(D), Val(D))
+end
+
+@inline _snorm₁ₕ_sq(uₕ::VectorElement{<:CompositeGridSpace{NC}}) where {NC} = sum(ntuple(
+    i -> _snorm₁ₕ_sq(components(uₕ)[i]), Val(NC)))
+
+@inline snorm₁ₕ(uₕ::VectorElement) = sqrt(_snorm₁ₕ_sq(uₕ))
 
 """
 	norm₁ₕ(uₕ::VectorElement)
@@ -276,4 +287,6 @@ Returns the discrete version of the standard ``H^1`` norm of [VectorElement](@re
 \\Vert \\textrm{u}_h \\Vert_{1h} \\vcentcolon = \\sqrt{ \\Vert \\textrm{u}_h \\Vert_h^2 +  \\Vert \\nabla_h \\textrm{u}_h \\Vert_h^2   }
 ```
 """
-@inline norm₁ₕ(uₕ::VectorElement) = sqrt(normₕ(uₕ)^2 + snorm₁ₕ(uₕ)^2)
+# Built from the squared quantities directly: sqrt(normₕ)^2 would take two square roots
+# and square them straight back up.
+@inline norm₁ₕ(uₕ::VectorElement) = sqrt(innerₕ(uₕ, uₕ) + _snorm₁ₕ_sq(uₕ))
