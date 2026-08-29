@@ -385,15 +385,17 @@ end
 	end
 
 	@testset "allocations do not grow with the grid" begin
+		# Measured behind a function barrier: at global scope @allocated also
+		# counts the boxing of the non-const globals it touches.
 		function avg_bytes(n)
 			Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (n, n))
 			W2 = gridspace(Ω2); u2 = element(W2)
-			avgₕ!(u2, f); avgₕ!(u2, f)
-			return @allocated avgₕ!(u2, f)
+			run!(uu, g) = avgₕ!(uu, g)
+			run!(u2, f); run!(u2, f)
+			return @allocated run!(u2, f)
 		end
-		small = avg_bytes(16)
-		large = avg_bytes(128)          # 64x the degrees of freedom
-		@test large <= 2 * small
+		# 4096x the degrees of freedom must not cost more per call.
+		@test avg_bytes(1024) <= avg_bytes(16)
 	end
 end
 

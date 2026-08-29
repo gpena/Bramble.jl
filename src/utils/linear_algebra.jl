@@ -3,9 +3,30 @@
 end
 
 """
+	PARALLEL_FOR_MIN
+
+Below this many indices, [`_parallel_for!`](@ref) runs serially.
+
+`Threads.@threads` allocates its tasks on every call, and on a short loop that
+setup costs more than the work it distributes. Measured on 4 threads with the
+cell-average kernel, serial against threaded, in microseconds:
+
+    indices     16      64     256    1024    4096   16384
+    serial     3.8    15.4    61.5   246.4   985.0  3941.2
+    threaded  16.0    25.3    44.3   133.6   436.3  1597.3
+
+so threading starts paying somewhere between 64 and 256. Running short loops
+serially also makes them allocation free, which matters when the caller is a
+time-stepping loop invoking this once per step.
+"""
+const PARALLEL_FOR_MIN = 256
+
+"""
 	$(SIGNATURES)
 
-Parallel implementation of a for-loop that modifies array `v` in-place using static thread scheduling.
+Applies `f` across `idxs`, writing into `v` in place, using static thread
+scheduling once there is enough work to be worth it and running serially
+otherwise. See [`PARALLEL_FOR_MIN`](@ref).
 
 # Arguments
 - `v`: Array to be modified in-place
@@ -13,6 +34,18 @@ Parallel implementation of a for-loop that modifies array `v` in-place using sta
 - `f`: Function that takes an index and returns the value to be stored at that index
 """
 function _parallel_for!(v, idxs, f)
+	# A single thread, or too little work to amortise spawning tasks: the serial
+	# path is both faster and allocation free.
+	if Threads.nthreads() == 1 || length(idxs) < PARALLEL_FOR_MIN
+		return _serial_for!(v, idxs, f)
+	end
+	return _threaded_for!(v, idxs, f)
+end
+
+# Kept in its own function on purpose. `Threads.@threads` builds a closure over
+# the loop body, and having it in the same body as the serial branch makes that
+# closure allocate even on calls that never reach it.
+@noinline function _threaded_for!(v, idxs, f)
 	# :static partitions work evenly across threads — lower overhead for uniform workloads
 	Threads.@threads :static for idx in idxs
 		@inbounds v[idx] = f(idx)
