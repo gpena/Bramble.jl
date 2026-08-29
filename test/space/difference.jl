@@ -205,3 +205,46 @@ end
         @testset "Forward" test_operator_matrix_equivalence(forward_ops)
     end
 end
+
+@testset "Shift operators have the documented tensor-product form" begin
+    # The `shift` docstring states the per-direction Kronecker forms that
+    # `_recursive_shift` generalises. These assert them, so the docstring cannot drift
+    # from the code the way the commented block it replaced could.
+    # Eye comes through Bramble rather than FillArrays, which is not a test dependency.
+    import Bramble: shift, _Eye, ⊗, matrix_type, backend, Eye
+
+    Ωₕ1 = mesh(domain(interval(0.0, 1.0)), 5, true)
+    Ωₕ2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 3), (true, true))
+    Ωₕ3 = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (3, 4, 2),
+        (true, true, true))
+    M1, M2, M3 = matrix_type(backend(Ωₕ1)), matrix_type(backend(Ωₕ2)),
+    matrix_type(backend(Ωₕ3))
+    nₓ, n_y = npoints(Ωₕ2, Tuple)
+    aₓ, a_y, a_z = npoints(Ωₕ3, Tuple)
+
+    for i in (-2, -1, 1, 2)
+        @testset "shift by $i" begin
+            @test shift(Ωₕ1, Val(1), Val(i)) == _Eye(M1, 5, Val(i))
+            @test shift(Ωₕ2, Val(1), Val(i)) == Eye{Float64}(n_y) ⊗ _Eye(M2, nₓ, Val(i))
+            @test shift(Ωₕ2, Val(2), Val(i)) == _Eye(M2, n_y, Val(i)) ⊗ Eye{Float64}(nₓ)
+            @test shift(Ωₕ3, Val(3), Val(i)) ==
+                  _Eye(M3, a_z, Val(i)) ⊗ Eye{Float64}(aₓ * a_y)
+        end
+    end
+
+    @testset "a zero shift is the identity of the whole grid" begin
+        for Ωₕ in (Ωₕ1, Ωₕ2, Ωₕ3), d in 1:dim(Ωₕ)
+
+            @test shift(Ωₕ, Val(d), Val(0)) == Eye{Float64}(npoints(Ωₕ))
+        end
+    end
+
+    @testset "the stencil is truncated, not wrapped" begin
+        # n - |i| nonzeros per line of the 1D factor, so nothing wraps from the last
+        # point back to the first.
+        S = Matrix(shift(Ωₕ1, Val(1), Val(1)))
+        @test count(!iszero, S) == 5 - 1
+        @test all(S[i, i + 1] == 1.0 for i in 1:4)
+        @test S[5, 1] == 0.0
+    end
+end
