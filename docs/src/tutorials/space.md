@@ -127,12 +127,12 @@ Calling a vector element as a function `uₕ(i)` or using `component(uₕ, i)` r
 ```julia
 uₕ = element(Vₕ)
 
-# Extract component views
-u_x = uₕ(1)
-u_y = uₕ(2)
+# Extract component views using coordinate subscripts ("ₓ", "ᵧ", "₂")
+uₓ = uₕ(1)
+uᵧ = uₕ(2)
 
 # Alternative named accessor
-u_x = component(uₕ, 1)
+uₓ = component(uₕ, 1)
 ```
 
 ### Degree-of-freedom ranges
@@ -153,8 +153,8 @@ Component extraction uses zero-copy array views into the parent degree-of-freedo
 
 ```julia
 # Assign values directly to components
-u_x .= 1.5
-u_y .= -2.0
+uₓ .= 1.5
+uᵧ .= -2.0
 
 # The parent vector reflects the updates immediately
 values(uₕ)
@@ -167,7 +167,9 @@ For scalar spaces, `uₕ(1)` or `component(uₕ, 1)` cleanly returns `uₕ` itse
 All components can be extracted simultaneously as a tuple using `components`:
 
 ```julia
-u_x, u_y = components(uₕ)
+uₓ, uᵧ = components(uₕ)
+# or using numeric index subscripts:
+u₁, u₂ = components(uₕ)
 ```
 
 ---
@@ -197,7 +199,7 @@ For multi-component vector elements, `to_matrix` returns a tuple of reshaped arr
 
 ```julia
 mats = to_matrix(uₕ)
-# mats is a Tuple containing (to_matrix(u_x), to_matrix(u_y))
+# mats is a Tuple containing (to_matrix(uₓ), to_matrix(uᵧ))
 
 size(mats[1])  # (5, 5)
 size(mats[2])  # (5, 5)
