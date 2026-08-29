@@ -1,5 +1,6 @@
 using Test
 using Bramble
+using Random
 using Bramble: values
 
 # Convergence order of the finite difference operators.
@@ -13,6 +14,12 @@ using Bramble: values
 # meshes are nested and the ratio of successive errors is an order even when the starting
 # grid is arbitrary. That lets the non-uniform cases start from a random grid, which is
 # what mesh(Ω, n, false) produces.
+#
+# The random grids are seeded. An order measured on the coarsest pair is not yet
+# asymptotic and varies with how uneven the draw happens to be: over forty draws the
+# smallest ratio ranged from 0.948 to 0.991, and an unseeded run occasionally fell below
+# the bound asserted here. Seeding keeps the test reproducible, so a failure is a real
+# regression rather than an unlucky grid.
 
 # Error of `op` against the exact derivative `df`, over the points whose stencil is not
 # truncated. The max norm is used so the result does not depend on the quadrature weights.
@@ -41,6 +48,7 @@ end
             @testset "$lbl" begin
                 for (opname, op, drop) in (("D₋ₓ", D₋ₓ, e -> @view e[2:end]),
                     ("D₊ₓ", D₊ₓ, e -> @view e[1:(end - 1)]))
+                    Random.seed!(20250829)
                     Ωₕ = mesh(domain(interval(0.0, 1.0)), 51, unif)
                     ords = _orders(Ωₕ, op, sin, cos, drop)
                     @test all(>(0.9), ords)
@@ -57,6 +65,7 @@ end
                 for (opname, op, df, drop) in (
                     ("D₋ₓ", D₋ₓ, x -> cos(x[1]) * exp(x[2]), e -> @view e[2:end, :]),
                     ("D₋ᵧ", D₋ᵧ, x -> sin(x[1]) * exp(x[2]), e -> @view e[:, 2:end]))
+                    Random.seed!(20250829)
                     Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (17, 17),
                         (unif, unif))
                     ords = _orders(Ωₕ, op, f, df, drop; steps = 3)

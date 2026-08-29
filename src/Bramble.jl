@@ -103,6 +103,8 @@ include("space/gridspace.jl")
 include("space/scalar_gridspace.jl")
 include("space/vector_gridspace.jl")
 include("space/vectorelement.jl")
+include("space/restriction.jl")
+include("space/cell_average.jl")
 
 include("space/operators/shift.jl")
 include("space/operators/difference.jl")
