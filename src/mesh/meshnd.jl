@@ -171,6 +171,16 @@ end
 @generate_mesh_ntuple_func half_points
 @generate_mesh_ntuple_func half_spacings
 
+"""
+	spacings(Ωₕ::MeshnD)
+
+Returns the per-axis backward spacings as an `NTuple{D}` of vectors, where
+`spacings(Ωₕ)[d][i]` is [`spacing`](@ref)`(Ωₕ(d), i)`.
+
+See also: [`half_spacings`](@ref), [`cell_measures`](@ref).
+"""
+@generate_mesh_ntuple_func spacings
+
 # ntuple wrappers with an index
 @generate_mesh_ntuple_func_with_idx point
 @generate_mesh_ntuple_func_with_idx half_point

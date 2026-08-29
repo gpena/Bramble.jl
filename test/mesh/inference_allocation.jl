@@ -39,6 +39,18 @@ using Bramble: spacings
         @test @inferred(cell_measure(Ωₕ1, 3)) isa Float64
         @test @inferred(spacings(Ωₕ1)) isa AbstractVector
 
+        # the per-axis vectors, which every nD mesh answers as an NTuple of vectors
+        for (Ωₕ, D) in ((Ωₕ2, 2), (Ωₕ3, 3))
+            @test @inferred(spacings(Ωₕ)) isa NTuple{D, Vector{Float64}}
+            @test @inferred(half_spacings(Ωₕ)) isa NTuple{D, Vector{Float64}}
+            @test @inferred(cell_measures(Ωₕ)) isa NTuple{D, Vector{Float64}}
+            @test @inferred(points(Ωₕ)) isa NTuple{D, Vector{Float64}}
+            # the same shape as its siblings, and the entries `spacing` reports
+            @test map(length, spacings(Ωₕ)) == map(length, half_spacings(Ωₕ))
+            @test all(spacings(Ωₕ)[d][i] == spacing(Ωₕ(d), i)
+            for d in 1:D for i in 1:npoints(Ωₕ(d)))
+        end
+
         @test @inferred(point(Ωₕ2, CartesianIndex(2, 3))) isa NTuple{2, Float64}
         @test @inferred(cell_measure(Ωₕ2, CartesianIndex(2, 3))) isa Float64
         @test @inferred(point(Ωₕ3, CartesianIndex(2, 3, 4))) isa NTuple{3, Float64}
@@ -59,6 +71,8 @@ using Bramble: spacings
         @test_allocs half_point(Ωₕ1, 3)
         @test_allocs cell_measure(Ωₕ1, 3)
         @test_allocs spacings(Ωₕ1)
+        @test_allocs spacings(Ωₕ2)
+        @test_allocs spacings(Ωₕ3)
         @test_allocs npoints(Ωₕ1)
         @test_allocs hₘₐₓ(Ωₕ1)
         @test_allocs hₘᵢₙ(Ωₕ1)
