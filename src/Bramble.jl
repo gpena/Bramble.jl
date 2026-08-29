@@ -103,20 +103,16 @@ include("space/vector_gridspace.jl")
 include("space/vectorelement.jl")
 
 #=
-
-include("space/matrixelement.jl")
-include("space/operators/shift.jl")
 include("space/operators/difference.jl")
 include("space/operators/jump.jl")
 include("space/operators/average.jl")
-include("space/operators/linear_operators.jl")
 include("space/inner_product.jl")
 
 include("form/dirichlet_constraints.jl")
 include("form/sparse_backend.jl")
 include("form/common.jl")
 
-include("form/grid_coloring.jl")
+#include("form/grid_coloring.jl")
 include("form/block_extract.jl")  # block extraction for CoupledBilinearForm
 include("form/bilinear.jl")
 include("form/linear.jl")

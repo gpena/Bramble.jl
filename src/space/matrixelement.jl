@@ -46,6 +46,7 @@ v_values = Tₕ.data * uₕ.data
 See also: [`MatrixElement`](@ref), [`VectorElement`](@ref), [`elements`](@ref)
 =#
 
+#=
 """
 	elements(Wₕ::AbstractSpaceType, [A::AbstractMatrix])
 
@@ -231,3 +232,4 @@ for op in (:+, :-, :*, :/)
         end
     end
 end
+=#

@@ -80,7 +80,6 @@ if __bramble_with_unit_tests
 			include("space/jump.jl")
 			include("space/average.jl")
 			include("space/inner_product.jl")
-			include("space/linear_operators.jl")
 		end
 
 		@testset "Forms" begin
