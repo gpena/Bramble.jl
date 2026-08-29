@@ -66,7 +66,7 @@ end
 # example is defined and available in the current scope.
 
 # Configuration array for jump operators, expanded with descriptive strings.
-op_configs = [
+const _JUMP_OP_CONFIGS = [
     (direction = Forward(),
         jump_name = :forward_jump,
         jump_alias = :jump₊,
@@ -82,7 +82,7 @@ op_configs = [
 ]
 
 # Metaprogramming loop to generate all specified jump operators.
-for config in op_configs
+for config in _JUMP_OP_CONFIGS
     # Extract ALL values from `config` to avoid scope issues with @eval.
     dir_instance = config.direction
     jump_name = config.jump_name
@@ -98,18 +98,17 @@ for config in op_configs
 
           Low-level, in-place function to compute the $($dir_string_lowercase) jump of vector `in` along dimension `jump_dim`, storing the result in `out`. This function computes ``$($math_op)``.
           """
-        function $(Symbol(jump_name, :_dim!))(out, in, h, dims::NTuple{D, Int},
-                jump_dim::Val{DIFF_DIM}) where {D, DIFF_DIM}
-            @assert 1 <= DIFF_DIM <= D "Dimension must be between 1 and $D."
-            @assert length(out) == length(in) == prod(dims) "Vector and grid dimensions must match."
-            in_ref = (out === in) ? copy(in) : in
-            _difference_engine!(out, in_ref, nothing, dims, $dir_instance, jump_dim)
-            return
-        end
-
         function $(Symbol(jump_name, :_dim!))(
-                out, in, dims::NTuple{D, Int}, jump_dim::Val{DIFF_DIM}) where {D, DIFF_DIM}
-            return $(Symbol(jump_name, :_dim!))(out, in, nothing, dims, jump_dim)
+                out, in, dims::NTuple{D, Int}, jump_dim::Val{JUMP_DIM}) where {D, JUMP_DIM}
+            1 <= JUMP_DIM <= D ||
+                throw(ArgumentError("jump dimension $JUMP_DIM is not between 1 and $D"))
+            length(out) == length(in) == prod(dims) ||
+                throw(DimensionMismatch("out, in and prod(dims) must agree"))
+            # Writing into the input would corrupt the stencil part way through.
+            in_ref = (out === in) ? copy(in) : in
+            # A jump is an unscaled difference, so the engine takes no spacing.
+            _difference_engine!(out, in_ref, nothing, dims, $dir_instance, jump_dim)
+            return nothing
         end
 
         # --- Matrix operator functions ---
@@ -139,8 +138,8 @@ for config in op_configs
             jump_name, Symbol(jump_alias, suffix), dir_string_lowercase, direction, i)
     end
 
-    # --- Aliases for vectorial jump tuples ---
-    for (vectorial_jump_op, base_op) in [(vectorial_jump_alias, jump_name),]
+    # --- Alias for the vectorial jump tuple ---
+    let vectorial_jump_op = vectorial_jump_alias, base_op = jump_name
         @eval begin
             @doc """
                	$($(QuoteNode(vectorial_jump_op)))(arg)
@@ -151,7 +150,7 @@ for config in op_configs
                For a 2D space, `$($(QuoteNode(vectorial_jump_op)))(uₕ)` is equivalent to
                `($($(QuoteNode(base_op)))(uₕ, Val(1)), $($(QuoteNode(base_op)))(uₕ, Val(2)))`.
                """
-            @inline $vectorial_jump_op(arg) = $vectorial_jump_op(arg, Val(dim(mesh(space(arg)))))
+            @inline $vectorial_jump_op(arg) = $vectorial_jump_op(arg, Val(dim(_op_mesh(arg))))
             @inline $vectorial_jump_op(arg, ::Val{1}) = $base_op(arg, Val(1))
             @inline $vectorial_jump_op(arg, ::Val{D}) where {D} = ntuple(i -> $base_op(arg, Val(i)), Val(D))
         end

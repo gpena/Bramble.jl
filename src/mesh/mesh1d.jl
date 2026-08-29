@@ -281,7 +281,7 @@ end
 # Calculates the "half spacings" (cell widths/measures) for a 1D mesh.
 # Fills `x` with the backward spacings of `Ωₕ`. Must run before half_spacing!, which
 # reads them back through `spacing`.
-@inline function spacing!(x, Ωₕ)
+@inline function spacing!(x, Ωₕ::Mesh1D)
     pts = points(Ωₕ)
     n = length(pts)
     T = eltype(Ωₕ)

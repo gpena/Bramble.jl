@@ -88,77 +88,103 @@ struct Backward <: GridDirection end
 end
 @inline _get_h_val(h::F, i::Int) where {F <: Function} = h(i)
 
-# Case 1: Simple difference (h is Nothing)
+# The kernels take the point and its neighbour in that order, whichever direction the
+# stencil runs, so that the engine can hand them `(cur, other)` without knowing which
+# is which. `Val{false}` is an interior point, which has a neighbour; `Val{true}` is
+# the one boundary slice that does not, where the stencil is truncated.
+#
+# Unscaled, h === nothing: the plain difference.
 @inline @propagate_inbounds _compute_difference(
-    ::Forward, ::Val{false}, next, cur, ::Nothing, i) = next - cur
+    ::Forward, ::Val{false}, cur, other, ::Nothing, i) = other - cur
+@inline @propagate_inbounds _compute_difference(
+    ::Backward, ::Val{false}, cur, other, ::Nothing, i) = cur - other
 @inline @propagate_inbounds _compute_difference(
     ::Forward, ::Val{true}, cur, ::Nothing, i) = -cur
-
-@inline @propagate_inbounds _compute_difference(
-    ::Backward, ::Val{false}, cur, prev, ::Nothing, i) = cur - prev
 @inline @propagate_inbounds _compute_difference(
     ::Backward, ::Val{true}, cur, ::Nothing, i) = cur
 
-# Case 2: Finite difference (h is provided)
+# Scaled by the grid spacing: the finite difference.
 @inline @propagate_inbounds _compute_difference(
-    ::Forward, ::Val{false}, next, cur, h, i) = (next - cur) / _get_h_val(h, i)
-@inline @propagate_inbounds _compute_difference(::Forward, ::Val{true}, cur, h, i) = 0#-0*cur / _get_h_val(h, i)
+    ::Forward, ::Val{false}, cur, other, h, i) = (other - cur) / _get_h_val(h, i)
+@inline @propagate_inbounds _compute_difference(
+    ::Backward, ::Val{false}, cur, other, h, i) = (cur - other) / _get_h_val(h, i)
 
+# The finite difference has no one-sided stencil at the boundary, so it is zero there.
+# `zero(cur)` rather than a literal keeps the element type of the grid.
 @inline @propagate_inbounds _compute_difference(
-    ::Backward, ::Val{false}, cur, prev, h, i) = (cur - prev) / _get_h_val(h, i)
-@inline @propagate_inbounds _compute_difference(::Backward, ::Val{true}, cur, h, i) = 0#*cur / _get_h_val(h, 2) # or is it _get_h_val(h, 1)
+    ::Forward, ::Val{true}, cur, h, i) = zero(cur)
+@inline @propagate_inbounds _compute_difference(
+    ::Backward, ::Val{true}, cur, h, i) = zero(cur)
+
+# --- Argument handling shared by every operator ---------------------------------- #
+# The operators accept a mesh, a grid space or a grid function, and the vectorial aliases
+# need the spatial dimension of whichever was passed. Going through `space` alone would
+# reject a mesh, which the scalar aliases do accept.
+@inline _op_mesh(Ωₕ::AbstractMeshType) = Ωₕ
+@inline _op_mesh(Wₕ::AbstractSpaceType) = mesh(Wₕ)
+@inline _op_mesh(uₕ::VectorElement) = mesh(space(uₕ))
+
+# --- Shared stencil traversal --------------------------------------------------- #
+# The difference and the average walk the grid identically: one pass over the interior,
+# where every point has a neighbour along the stencil direction, and one over the single
+# boundary slice, where it does not. Only the per-point kernel differs, so the traversal
+# is written once here and both engines below use it.
+
+# The unit step along `DIM`.
+@inline _stencil_step(::Val{DIM}, ::Val{D}) where {DIM, D} = CartesianIndex(ntuple(
+    i -> i == DIM ? 1 : 0, Val(D)))
+
+# The neighbour of `I`: ahead of it for a forward stencil, behind it for a backward one.
+@inline _neighbour(::Forward, I, step) = I + step
+@inline _neighbour(::Backward, I, step) = I - step
+
+# The interior and boundary index ranges, as tuples of ranges to build
+# `CartesianIndices` from. A forward stencil reaches past the last slice along `DIM`, a
+# backward one past the first.
+@inline function _stencil_ranges(full_axes::NTuple{D, Any}, ::Val{DIM}, ::Forward) where {
+        D, DIM}
+    interior = ntuple(
+        d -> d == DIM ? (first(full_axes[d]):(last(full_axes[d]) - 1)) : full_axes[d],
+        Val(D))
+    boundary = ntuple(
+        d -> d == DIM ? (last(full_axes[d]):last(full_axes[d])) : full_axes[d], Val(D))
+    return interior, boundary
+end
+
+@inline function _stencil_ranges(full_axes::NTuple{D, Any}, ::Val{DIM}, ::Backward) where {
+        D, DIM}
+    interior = ntuple(
+        d -> d == DIM ? ((first(full_axes[d]) + 1):last(full_axes[d])) : full_axes[d],
+        Val(D))
+    boundary = ntuple(
+        d -> d == DIM ? (first(full_axes[d]):first(full_axes[d])) : full_axes[d], Val(D))
+    return interior, boundary
+end
 
 # --- Unified Difference Engine ---
-# `h` carries a type parameter on purpose. Julia does not specialise on an
-# argument of function type unless the body calls it directly, and this body only
-# forwards it to _get_h_val. Without `H` the spacing callable stays boxed and each
-# element pays a dynamic dispatch: measured 13768 us and 6.4 MB against 29 us and
-# no allocation on a 100000-point 1D grid.
+# `h` carries a type parameter on purpose. Julia does not specialise on an argument of
+# function type unless the body calls it directly, and this body only forwards it to
+# _get_h_val. Without `H` the spacing callable stays boxed and each element pays a
+# dynamic dispatch: measured 13768 us and 6.4 MB against 29 us and no allocation on a
+# 100000-point 1D grid.
 function _difference_engine!(out, in_ref, h::H, dims::NTuple{D, Int},
-        dir::GridDirection, ::Val{DIFF_DIM}) where {H, D, DIFF_DIM}
+        dir::GridDirection, ::Val{DIM}) where {H, D, DIM}
     li = LinearIndices(dims)
-    step_cartesian = CartesianIndex(ntuple(i -> i == DIFF_DIM ? 1 : 0, D))
-    full_axes = axes(li)
+    step = _stencil_step(Val(DIM), Val(D))
+    interior, boundary = _stencil_ranges(axes(li), Val(DIM), dir)
 
-    if dir isa Forward
-        interior_axes = ntuple(
-            d -> d == DIFF_DIM ? (first(full_axes[d]):(last(full_axes[d]) - 1)) :
-                 full_axes[d],
-            D)
-        boundary_axes = ntuple(
-            d -> d == DIFF_DIM ?
-                 (last(full_axes[d]):last(full_axes[d])) : full_axes[d], D)
-
-        @inbounds @simd for I in CartesianIndices(interior_axes)
-            idx, idx_next = li[I], li[I + step_cartesian]
-            out[idx] = _compute_difference(
-                dir, Val(false), in_ref[idx_next], in_ref[idx], h, I[DIFF_DIM])
-        end
-
-        @inbounds @simd for I in CartesianIndices(boundary_axes)
-            idx = li[I]
-            out[idx] = _compute_difference(dir, Val(true), in_ref[idx], h, I[DIFF_DIM])
-        end
-    else # Backward
-        interior_axes = ntuple(
-            d -> d == DIFF_DIM ? ((first(full_axes[d]) + 1):last(full_axes[d])) :
-                 full_axes[d],
-            D)
-        boundary_axes = ntuple(
-            d -> d == DIFF_DIM ?
-                 (first(full_axes[d]):first(full_axes[d])) :
-                 full_axes[d], D)
-
-        @inbounds @simd for I in CartesianIndices(interior_axes)
-            idx, idx_prev = li[I], li[I - step_cartesian]
-            out[idx] = _compute_difference(
-                dir, Val(false), in_ref[idx], in_ref[idx_prev], h, I[DIFF_DIM])
-        end
-        @inbounds @simd for I in CartesianIndices(boundary_axes)
-            idx = li[I]
-            out[idx] = _compute_difference(dir, Val(true), in_ref[idx], h, I[DIFF_DIM])
-        end
+    @inbounds @simd for I in CartesianIndices(interior)
+        idx, other = li[I], li[_neighbour(dir, I, step)]
+        out[idx] = _compute_difference(
+            dir, Val(false), in_ref[idx], in_ref[other], h, I[DIM])
     end
+
+    @inbounds @simd for I in CartesianIndices(boundary)
+        idx = li[I]
+        out[idx] = _compute_difference(dir, Val(true), in_ref[idx], h, I[DIM])
+    end
+
+    return nothing
 end
 
 function difference_shift(Ωₕ::AbstractMeshType, ::Val{DIFF_DIM}, ::Val{first},
@@ -217,7 +243,7 @@ function _define_directional_alias(
 end
 
 # Configuration array to define forward and backward difference operators.
-op_configs = [
+const _DIFFERENCE_OP_CONFIGS = [
     (direction = Forward(),
         diff_name = :forward_difference,
         finite_diff_name = :forward_finite_difference,
@@ -247,7 +273,7 @@ op_configs = [
 ]
 
 # Metaprogramming loop to generate all specified difference operators.
-for config in op_configs
+for config in _DIFFERENCE_OP_CONFIGS
     # Extract ALL values from `config` into local variables here.
     dir_instance = config.direction
     diff_name = config.diff_name
@@ -364,7 +390,7 @@ for config in op_configs
                For a 2D space, `$($(QuoteNode(grad_op)))(uₕ)` is equivalent to
                `($($(QuoteNode(base_op)))(uₕ, Val(1)), $($(QuoteNode(base_op)))(uₕ, Val(2)))`.
                """
-            @inline $grad_op(arg) = $grad_op(arg, Val(dim(mesh(space(arg)))))
+            @inline $grad_op(arg) = $grad_op(arg, Val(dim(_op_mesh(arg))))
             @inline $grad_op(arg, ::Val{1}) = $base_op(arg, Val(1))
             @inline $grad_op(arg, ::Val{D}) where {D} = ntuple(i -> $base_op(arg, Val(i)), Val(D))
         end

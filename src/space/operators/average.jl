@@ -51,60 +51,39 @@ p_center = ⟨p⟩ᵇ(Pₕ, dim)  # Backward average in dimension dim
 See also: [`_compute_average`](@ref), [`add_half_shift`](@ref), [`Forward`](@ref), [`Backward`](@ref)
 =#
 
-@inline @propagate_inbounds _compute_average(::Forward, ::Val{false}, in_next, in_val) = (in_next +
-                                                                                          in_val) *
-                                                                                         0.5
-@inline @propagate_inbounds _compute_average(::Forward, ::Val{true}, in_val) = 0#in_val * 0.5
+# Both directions average a point with its neighbour, so one method covers them. The
+# kernels take `(cur, other)` in that order, matching _compute_difference, and the
+# engine below hands them the pair without knowing which way the stencil runs.
+#
+# Dividing by 2 rather than multiplying by 0.5 keeps the element type: a Float32 grid
+# would otherwise be promoted through Float64 on every point.
+@inline @propagate_inbounds _compute_average(
+    ::GridDirection, ::Val{false}, cur, other) = (cur + other) / 2
 
-@inline @propagate_inbounds _compute_average(::Backward, ::Val{false}, in_val, in_prev) = (in_val +
-                                                                                           in_prev) *
-                                                                                          0.5
-@inline @propagate_inbounds _compute_average(::Backward, ::Val{true}, in_val) = 0#in_val * 0.5
+# The one boundary slice has no neighbour, so the average is truncated to zero there.
+# `zero(cur)` rather than a literal keeps the element type of the grid.
+@inline @propagate_inbounds _compute_average(::GridDirection, ::Val{true}, cur) = zero(cur)
 
+# The traversal is shared with the difference engine; see _stencil_ranges in
+# operators/difference.jl.
 function _average_engine!(out, in_ref, dims::NTuple{D, Int}, dir::GridDirection,
-        ::Val{AVG_DIM}) where {D, AVG_DIM}
+        ::Val{DIM}) where {D, DIM}
     li = LinearIndices(dims)
-    step_cartesian = CartesianIndex(ntuple(i -> i == AVG_DIM ? 1 : 0, D))
-    full_axes = axes(li)
+    step = _stencil_step(Val(DIM), Val(D))
+    interior, boundary = _stencil_ranges(axes(li), Val(DIM), dir)
 
-    if dir isa Forward
-        interior_axes = ntuple(
-            d -> d == AVG_DIM ? (first(full_axes[d]):(last(full_axes[d]) - 1)) :
-                 full_axes[d],
-            D)
-        boundary_axes = ntuple(
-            d -> d == AVG_DIM ? (last(full_axes[d]):last(full_axes[d])) :
-                 full_axes[d], D)
-
-        @inbounds @simd for I in CartesianIndices(interior_axes)
-            idx, idx_next = li[I], li[I + step_cartesian]
-            out[idx] = _compute_average(dir, Val(false), in_ref[idx_next], in_ref[idx])
-        end
-
-        @inbounds @simd for I in CartesianIndices(boundary_axes)
-            idx = li[I]
-            out[idx] = _compute_average(dir, Val(true), in_ref[idx])
-        end
-    else # Backward
-        interior_axes = ntuple(
-            d -> d == AVG_DIM ? ((first(full_axes[d]) + 1):last(full_axes[d])) :
-                 full_axes[d],
-            D)
-        boundary_axes = ntuple(
-            d -> d == AVG_DIM ?
-                 (first(full_axes[d]):first(full_axes[d])) :
-                 full_axes[d], D)
-
-        @inbounds @simd for I in CartesianIndices(interior_axes)
-            idx, idx_prev = li[I], li[I - step_cartesian]
-            out[idx] = _compute_average(dir, Val(false), in_ref[idx], in_ref[idx_prev])
-        end
-
-        @inbounds @simd for I in CartesianIndices(boundary_axes)
-            idx = li[I]
-            out[idx] = _compute_average(dir, Val(true), in_ref[idx])
-        end
+    @inbounds @simd for I in CartesianIndices(interior)
+        idx = li[I]
+        out[idx] = _compute_average(
+            dir, Val(false), in_ref[idx], in_ref[li[_neighbour(dir, I, step)]])
     end
+
+    @inbounds @simd for I in CartesianIndices(boundary)
+        idx = li[I]
+        out[idx] = _compute_average(dir, Val(true), in_ref[idx])
+    end
+
+    return nothing
 end
 
 function add_half_shift(Ωₕ::AbstractMeshType, ::Val{DIFF_DIM}, ::Val{first},
@@ -141,7 +120,7 @@ function _average_weights!(v::AbstractVector, Ωₕ::AbstractMeshType,
 end
 
 # Configuration array for average operators, expanded with descriptive strings.
-op_configs = [
+const _AVERAGE_OP_CONFIGS = [
     (direction = Forward(),
         average_name = :forward_average,
         average_alias = :M₊,
@@ -157,7 +136,7 @@ op_configs = [
 ]
 
 # Metaprogramming loop to generate all specified average operators.
-for config in op_configs
+for config in _AVERAGE_OP_CONFIGS
     # Extract ALL values from `config` to avoid scope issues with @eval.
     dir_instance = config.direction
     average_name = config.average_name
@@ -237,7 +216,7 @@ for config in op_configs
                For a 2D space, `$($(QuoteNode(vectorial_average_op)))(uₕ)` is equivalent to
                `($($(QuoteNode(base_op)))(uₕ, Val(1)), $($(QuoteNode(base_op)))(uₕ, Val(2)))`.
                """
-            @inline $vectorial_average_op(arg) = $vectorial_average_op(arg, Val(dim(mesh(space(arg)))))
+            @inline $vectorial_average_op(arg) = $vectorial_average_op(arg, Val(dim(_op_mesh(arg))))
             @inline $vectorial_average_op(arg, ::Val{1}) = $base_op(arg, Val(1))
             @inline $vectorial_average_op(arg, ::Val{D}) where {D} = ntuple(i -> $base_op(arg, Val(i)), Val(D))
         end
