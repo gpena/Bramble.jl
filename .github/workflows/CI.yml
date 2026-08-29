@@ -57,7 +57,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: ["1.12", "1.13", "nightly"]
+        version: ["1.12", "~1.13.0-0", "nightly"]
         os: [ubuntu-latest, macOS-latest]
     steps:
       - uses: actions/checkout@v4
