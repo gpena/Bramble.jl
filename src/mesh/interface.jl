@@ -166,27 +166,11 @@ Overrides the indices in `Ωₕ`. Used internally during mesh refinement.
     return nothing
 end
 
-@inline function _check_point_bounds(Ωₕ::AbstractMeshType, idx::CartesianIndex{1}, location::String = "point")
-    _check_point_bounds(Ωₕ, idx[1], location)
-end
-
-@inline function _check_point_bounds(Ωₕ::AbstractMeshType{D}, idx::CartesianIndex{D},
-        location::String = "point") where {D}
-    @boundscheck begin
-        npts = npoints(Ωₕ, Tuple)
-        all(i -> 1 <= idx[i] <= npts[i], 1:D) || _throw_mesh_bounds_error(Ωₕ, idx)
-    end
-    return nothing
-end
-
 @inline function _check_half_point_bounds(Ωₕ::AbstractMeshType, idx::Int)
     @boundscheck 1 <= idx <= npoints(Ωₕ) + 1 || _throw_mesh_bounds_error(Ωₕ, idx)
     return nothing
 end
 
-@inline _handle_collapsed_spacing(Ωₕ::AbstractMeshType, default_value) = is_collapsed(Ωₕ) ?
-                                                                         zero(eltype(Ωₕ)) :
-                                                                         default_value
 @inline _extract_linear_index(idx::Int) = idx
 @inline _extract_linear_index(idx::CartesianIndex{1}) = idx[1]
 @inline _spacing_generator(Ωₕ::AbstractMeshType, spacing_func) = (spacing_func(Ωₕ, i)

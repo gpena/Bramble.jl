@@ -367,3 +367,137 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD
         end
     end
 end
+
+# A mesh type that implements nothing, used to reach the interface fallbacks.
+struct BareMesh <: Bramble.AbstractMeshType{1} end
+
+@testset "Mesh interface coverage" begin
+    import Bramble: generate_indices, interior_indices, _extract_linear_index,
+                    spacing_for_derivative, forward_spacing_for_derivative,
+                    cell_measures, normal_vector
+    using StaticArrays
+
+    Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
+    Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (4, 3), (true, true))
+
+    @testset "generate_indices accepts an SVector of counts" begin
+        @test generate_indices(SVector(4, 3)) == CartesianIndices((4, 3))
+        @test generate_indices((4, 3)) == generate_indices(SVector(4, 3))
+        @test generate_indices(5) == CartesianIndices((5,))
+    end
+
+    @testset "interior_indices leaves a collapsed axis alone" begin
+        # an axis with one point cannot lose its boundary, so the range passes through
+        Ωc = mesh(domain(interval(0.0, 1.0) × interval(2.0, 2.0)), (5, 1), (true, true))
+        ii = interior_indices(Ωc)
+        @test size(ii, 2) == 1                 # the collapsed axis is untouched
+        @test size(ii, 1) == 3                 # the other axis loses both ends
+    end
+
+    @testset "out-of-range indices throw BoundsError" begin
+        @test_throws BoundsError point(Ωₕ, 99)
+        @test_throws BoundsError point(Ωₕ, 0)
+        @test_throws BoundsError point(Ω2, CartesianIndex(99, 1))
+        @test_throws BoundsError point(Ω2, CartesianIndex(1, 99))
+        @test_throws BoundsError half_point(Ωₕ, 99)
+
+        # the CartesianIndex{1} path on a 1D mesh
+        @test point(Ωₕ, CartesianIndex(2)) == point(Ωₕ, 2)
+        @test _extract_linear_index(CartesianIndex(3)) == 3
+        @test _extract_linear_index(3) == 3
+    end
+
+    @testset "interface fallbacks error on a type that implements nothing" begin
+        @test_throws ErrorException eltype(BareMesh())
+        @test_throws ErrorException eltype(BareMesh)
+    end
+
+    @testset "collection interface" begin
+        @test firstindex(Ωₕ) == 1
+        @test lastindex(Ωₕ) == npoints(Ωₕ)
+        @test firstindex(Ω2, 1) == 1
+        @test firstindex(Ω2, 2) == 1
+        @test lastindex(Ω2, 1) == size(Ω2, 1)
+        @test lastindex(Ω2, 2) == size(Ω2, 2)
+    end
+
+    @testset "unknown boundary symbols are rejected in every dimension" begin
+        Ω3 = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (3, 3, 3), (true, true, true))
+        @test_throws ArgumentError normal_vector(Ωₕ, :nonsense)
+        @test_throws ArgumentError normal_vector(Ω2, :nonsense)
+        @test_throws ArgumentError normal_vector(Ω3, :nonsense)
+        @test normal_vector(Ω3, :front) == SVector(1.0, 0.0, 0.0)
+    end
+
+    @testset "cell_measures returns every cell width" begin
+        @test cell_measures(Ωₕ) == half_spacings(Ωₕ)
+        @test length(cell_measures(Ωₕ)) == npoints(Ωₕ)
+
+        cm = cell_measures(Ω2)
+        @test cm isa NTuple{2, Any}
+        @test cm[1] == cell_measures(Ω2(1))
+        @test cm[2] == cell_measures(Ω2(2))
+    end
+
+    @testset "CartesianIndex forms of the spacings" begin
+        for i in 1:npoints(Ωₕ)
+            @test spacing(Ωₕ, CartesianIndex(i)) == spacing(Ωₕ, i)
+            @test half_spacing(Ωₕ, CartesianIndex(i)) == half_spacing(Ωₕ, i)
+            @test forward_spacing(Ωₕ, CartesianIndex(i)) == forward_spacing(Ωₕ, i)
+        end
+    end
+
+    @testset "derivative spacings vanish at the missing neighbour" begin
+        N = npoints(Ωₕ)
+        # backward difference has no neighbour at the first point
+        @test spacing_for_derivative(Ωₕ, 1) == 0
+        @test spacing_for_derivative(Ωₕ, 2) == spacing(Ωₕ, 2)
+        @test spacing_for_derivative(Ωₕ, CartesianIndex(2)) == spacing(Ωₕ, 2)
+        # forward difference has none at the last
+        @test forward_spacing_for_derivative(Ωₕ, N) == 0
+        @test forward_spacing_for_derivative(Ωₕ, 1) == forward_spacing(Ωₕ, 1)
+        @test forward_spacing_for_derivative(Ωₕ, CartesianIndex(1)) == forward_spacing(Ωₕ, 1)
+    end
+
+    @testset "copy is deep in the data and shallow in the geometry" begin
+        c1 = copy(Ωₕ)
+        @test c1 isa Mesh1D
+        @test points(c1) == points(Ωₕ)
+        @test points(c1) !== points(Ωₕ)          # data copied
+        @test set(c1) === set(Ωₕ)                # geometry shared
+        @test markers(c1) !== markers(Ωₕ)
+        points(c1)[1] = -99.0
+        @test points(Ωₕ)[1] != -99.0             # the original is untouched
+
+        c2 = copy(Ω2)
+        @test c2 isa MeshnD
+        @test npoints(c2, Tuple) == npoints(Ω2, Tuple)
+        @test c2(1) !== Ω2(1)                    # submeshes copied
+        @test points(c2(1)) == points(Ω2(1))
+    end
+
+    @testset "refinement is a no-op where there is nothing to refine" begin
+        # collapsed mesh: a single point, so no interval to halve
+        Ωpt = mesh(domain(interval(3.0, 3.0)), 1, true)
+        @test npoints(Ωpt) == 1
+        iterative_refinement!(Ωpt)
+        @test npoints(Ωpt) == 1
+        iterative_refinement!(Ωpt, markers(domain(interval(3.0, 3.0))))
+        @test npoints(Ωpt) == 1
+
+        # single point on a non-degenerate interval: not collapsed, but still
+        # has no interval to halve, so refinement must leave it untouched
+        Ω1 = mesh(domain(interval(0.0, 1.0)), 1, true)
+        @test !Bramble.is_collapsed(Ω1)
+        @test npoints(Ω1) == 1
+        iterative_refinement!(Ω1)
+        @test npoints(Ω1) == 1
+        @test point(Ω1, 1) == 0.0
+
+        # a normal mesh does refine
+        Ωr = mesh(domain(interval(0.0, 1.0)), 4, true)
+        iterative_refinement!(Ωr)
+        @test npoints(Ωr) == 2 * 4 - 1
+    end
+end
+
