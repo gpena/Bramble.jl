@@ -70,6 +70,33 @@ Performs a serial (single-threaded) iteration over the specified indices, applyi
 	return nothing
 end
 
+"""
+	$(SIGNATURES)
+
+Applies `g` only at the indices selected by `masks`, writing into `v` in place
+and leaving every unselected entry at zero.
+
+Each mask is a `BitVector` over the linear indices of `v`, as returned by
+`index_in_marker`; several masks act as a union. Marked sets are usually small
+boundary strips, so this runs serially: the selection test costs more than the
+kernel for most markers, and threading a short scattered write does not pay.
+
+# Arguments
+- `v`: Array to be modified in-place
+- `masks`: Tuple of `BitVector`s over `LinearIndices(v)`
+- `g`: Function that takes an index and returns the value to be stored there
+"""
+function _masked_for!(v, masks::Tuple, g)
+	fill!(v, zero(eltype(v)))
+	lin = LinearIndices(v)
+	for mask in masks
+		@inbounds for idx in CartesianIndices(v)
+			mask[lin[idx]] && (v[idx] = g(idx))
+		end
+	end
+	return nothing
+end
+
 #=========================================================================
 Scattering a tuple-valued kernel across several arrays.
 

@@ -486,3 +486,61 @@ end
 	end
 end
 
+@testset "Rₕ / avgₕ interface" begin
+	import Bramble: values, index_in_marker
+
+	Ω  = domain(interval(0.0, 1.0), :left => :left, :right => :right)
+	Ωₕ = mesh(Ω, 6, true)
+	W  = gridspace(Ωₕ)
+
+	@testset "markers restrict the written entries" begin
+		# index_in_marker returns a BitVector mask over the linear indices, not a
+		# list of indices; iterating it would feed `true`/`false` to the kernel.
+		@test index_in_marker(Ωₕ, :left) == Bool[1, 0, 0, 0, 0, 0]
+
+		u = element(W)
+		Rₕ!(u, x -> 1.0; markers = (:left,))
+		@test values(u) == [1.0, 0, 0, 0, 0, 0]
+
+		# several markers act as a union
+		Rₕ!(u, x -> 1.0; markers = (:left, :right))
+		@test values(u) == [1.0, 0, 0, 0, 0, 1.0]
+
+		# avgₕ takes the same keyword
+		v = element(W)
+		avgₕ!(v, x -> 1.0; markers = (:right,))
+		@test values(v)[1:5] == zeros(5)
+		@test values(v)[6] ≈ 1.0
+
+		w = avgₕ(W, x -> 1.0; markers = (:left,))
+		@test w[1] ≈ 1.0
+		@test values(w)[2:6] == zeros(5)
+	end
+
+	@testset "f receives a scalar in 1D and a tuple in nD" begin
+		seen = Ref{Any}(nothing)
+		u1 = element(W)
+		Rₕ!(u1, x -> (seen[] = x; 0.0))
+		@test seen[] isa Float64          # documented: never an SVector
+
+		Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 4))
+		W2 = gridspace(Ω2); u2 = element(W2)
+		seen2 = Ref{Any}(nothing)
+		Rₕ!(u2, x -> (seen2[] = x; 0.0))
+		@test seen2[] isa Tuple{Float64,Float64}
+
+		seen3 = Ref{Any}(nothing)
+		avgₕ!(u2, x -> (seen3[] = x; 0.0))
+		@test seen3[] isa Tuple{Float64,Float64}
+	end
+
+	@testset "keyword sets" begin
+		kw(f) = Set(vcat([collect(Base.kwarg_decl(m)) for m in methods(f)]...))
+		# markers is shared; quad_points belongs only to the quadrature-based operator
+		@test :markers in kw(Rₕ) && :markers in kw(Rₕ!)
+		@test :markers in kw(avgₕ) && :markers in kw(avgₕ!)
+		@test :quad_points in kw(avgₕ) && :quad_points in kw(avgₕ!)
+		@test !(:quad_points in kw(Rₕ)) && !(:quad_points in kw(Rₕ!))
+	end
+end
+

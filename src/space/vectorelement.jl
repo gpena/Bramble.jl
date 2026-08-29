@@ -20,9 +20,12 @@ Reshapes the flat coefficient vector of `uₕ` into a multidimensional array tha
 """
 	values!(uₕ::VectorElement, s)
 
-Copies the values of `s` into the coefficients of [VectorElement](@ref) `uₕ`.
+Copies the values of `s` into the coefficients of [VectorElement](@ref) `uₕ`. Returns `nothing`.
 """
-@inline values!(uₕ::VectorElement, s) = copyto!(values(uₕ), s)
+@inline function values!(uₕ::VectorElement, s)
+	copyto!(values(uₕ), s)
+	return nothing
+end
 
 """
 	space(uₕ::VectorElement)
@@ -256,19 +259,14 @@ end
 #                      #
 ########################
 
-# Workhorse function for the restriction operator: evaluates a function `g`
-# point-by-point over the grid indices and stores the result in `u`.
-function _func2array!(u::AbstractArray, g, mesh_indices::NTuple)
-	u .= zero(eltype(u))
-	# Iterate over all specified indices in the mesh.
-	@inbounds for idxs in mesh_indices
-		_parallel_for!(u, idxs, g)
-	end
-	return nothing
-end
+# Marker-restricted evaluation. `index_in_marker` hands back a BitVector mask
+# over the linear indices, not a list of indices, so this must test the mask
+# rather than iterate it -- iterating a BitVector yields `true`/`false`, which
+# previously reached the kernel as an index.
+@inline _func2array!(u::AbstractArray, g, masks::NTuple) = _masked_for!(u, masks, g)
 
-# Optimized version for CartesianIndices, enabling parallel execution.
-@inline _func2array!(u::AbstractArray, g, mesh_indices::CartesianIndices) = (_parallel_for!(u, mesh_indices, g))
+# Whole-grid evaluation, which can run in parallel.
+@inline _func2array!(u::AbstractArray, g, mesh_indices::CartesianIndices) = _parallel_for!(u, mesh_indices, g)
 # Multi-component elements are handled by dispatching per component in `Rₕ!`,
 # so a tuple should never reach this function.
 @noinline _func2array!(::Tuple, f, mesh) = throw(ArgumentError(
@@ -359,38 +357,42 @@ value = pe(CartesianIndex(5, 10))  # Evaluates f at physical point (x₅, y₁�
 (pe::PointwiseEvaluator)(idx) = func(pe)(point(mesh(pe), idx))
 
 """
-	Rₕ!(uₕ::VectorElement, f; markers=())
+	Rₕ!(uₕ::VectorElement, f; markers = ())
 
-In-place version of the restriction operator [Rₕ](@ref).
-
-Evaluates function `f` at grid points and stores the result directly in `uₕ`,
-avoiding allocation of a new vector.
+In-place version of the restriction operator [`Rₕ`](@ref). Evaluates `f` at the
+grid points and writes the result into `uₕ`. Returns `nothing`.
 
 # Arguments
 
-  - `uₕ::VectorElement`: Pre-allocated vector element to store the result
-  - `f`: Function to evaluate at grid points (signature: `f(x::SVector) -> Number`)
-  - `markers::NTuple{N,Symbol}`: Optional tuple of marker symbols to restrict evaluation to specific regions
+  - `uₕ::VectorElement`: pre-allocated element to write into.
+  - `f`: function of one grid point. It receives a scalar on a 1D mesh and an
+    `NTuple{D}` on a `D`-dimensional one -- never an `SVector`.
 
-# Example
+# Keywords
+
+  - `markers::NTuple{N,Symbol}`: restrict evaluation to the named marked
+    regions, leaving every other entry zero. Several markers act as a union.
+
+# Examples
 
 ```julia
-Wₕ = gridspace(Ωₕ)
-uₕ = element(Wₕ)
+Rₕ!(uₕ, x -> sin(x))                  # 1D: x is a Float64
+Rₕ!(uₕ, x -> sin(x[1]) * cos(x[2]))   # 2D: x is a Tuple{Float64,Float64}
 
-# Evaluate f at all grid points, storing result in uₕ
-f(x) = sin(x[1]) * cos(x[2])
-Rₕ!(uₕ, f)
-
-# Equivalent to: uₕ = Rₕ(Wₕ, f)
+# only the points carrying the :left marker; the rest stay zero
+Rₕ!(uₕ, x -> 1.0; markers = (:left,))
 ```
 
-!!! warning "Marker-based restriction"
+For an `N`-component element either shape of `f` works and both give the same
+result; the single vector-valued function is evaluated once per grid point,
+whereas the tuple evaluates each component function separately:
 
-	The `markers` keyword argument is experimental and may not work correctly in all cases.
-	For production code, use full grid restriction (default) or verify behavior with tests.
+```julia
+Rₕ!(uₕ, (f₁, f₂))                     # one function per component
+Rₕ!(uₕ, x -> (f₁(x), f₂(x)))          # one function returning all components
+```
 
-See also: [`Rₕ`](@ref), [`element`](@ref)
+See also: [`Rₕ`](@ref), [`avgₕ!`](@ref), [`element`](@ref)
 """
 @inline function Rₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f; markers::NTuple{N,Symbol} = NTuple{0,Symbol}()) where N
 	if N > 0
@@ -447,9 +449,36 @@ end
 end
 
 """
-	Rₕ(Wₕ::AbstractSpaceType, f)
+	Rₕ(Wₕ::AbstractSpaceType, f; markers = ())
 
 Standard nodal restriction operator. It returns a [VectorElement](@ref) with the result of evaluating the function `f` at the points of `mesh(Wₕ)`.
+
+# The shape of `f`
+
+`f` is called with the coordinates of one grid point: a scalar for a 1D mesh and
+an `NTuple{D}` for a `D`-dimensional one. It is never passed an `SVector`.
+
+```julia
+Rₕ(Wₕ, x -> sin(x))                # 1D:  x is a Float64
+Rₕ(Wₕ, x -> sin(x[1]) * x[2])      # 2D:  x is a Tuple{Float64,Float64}
+```
+
+For an `N`-component space either form works and both give the same result:
+
+```julia
+Rₕ(Vₕ, (f₁, f₂))                   # one function per component
+Rₕ(Vₕ, x -> (f₁(x), f₂(x)))        # one function returning all components
+```
+
+Prefer the second when the components share work: it is evaluated once per grid
+point, while the first evaluates each component function separately.
+
+`markers` restricts evaluation to the named marked regions, leaving every other
+entry zero. [`avgₕ`](@ref) takes the same keyword; it additionally takes
+`quad_points`, which has no meaning here because nodal restriction involves no
+quadrature.
+
+See also: [`Rₕ!`](@ref), [`avgₕ`](@ref).
 """
 function Rₕ(Wₕ::AbstractSpaceType, f; markers::NTuple{N,Symbol} = NTuple{0,Symbol}()) where N
 	uₕ = element(Wₕ)
@@ -464,32 +493,58 @@ end
 ######################
 
 """
-	avgₕ(Wₕ::AbstractSpaceType, f; quad_points::Int = AVG_QUAD_POINTS)
+	avgₕ(Wₕ::AbstractSpaceType, f; quad_points = AVG_QUAD_POINTS, markers = ())
 
 Returns a [VectorElement](@ref) with the average of function `f` with respect to the [cell_measure](@ref) of `mesh(Wₕ)` around each grid point.
 
 Each cell average is a tensor-product Gauss-Legendre rule with `quad_points`
 points per direction, exact for polynomials of degree `2 * quad_points - 1`.
+
+# The shape of `f`
+
+As for [`Rₕ`](@ref), `f` receives the coordinates of a point: a scalar on a 1D
+mesh and an `NTuple{D}` on a `D`-dimensional one, never an `SVector`. For an
+`N`-component space either a tuple of functions or a single function returning
+all components works, and both give the same result.
+
+# Keywords
+
+  - `quad_points`: points per direction, per cell. Has no counterpart in
+    [`Rₕ`](@ref), which involves no quadrature.
+  - `markers`: restrict evaluation to the named marked regions, as in
+    [`Rₕ`](@ref), leaving every other entry zero.
 """
-Base.@constprop :aggressive function avgₕ(Wₕ::AbstractSpaceType, f; quad_points::Int = AVG_QUAD_POINTS)
-	quad_points >= 1 || throw(ArgumentError("quad_points must be >= 1, got $quad_points"))
+Base.@constprop :aggressive function avgₕ(Wₕ::AbstractSpaceType, f; quad_points::Int = AVG_QUAD_POINTS, markers::NTuple{N,Symbol} = NTuple{0,Symbol}()) where N
 	uₕ = element(Wₕ)
-	_avgₕ!(uₕ, f, Val(dim(mesh(Wₕ))), Val(quad_points))
+	avgₕ!(uₕ, f; quad_points = quad_points, markers = markers)
 	return uₕ
 end
 
 """
-	avgₕ!(uₕ::VectorElement, f; quad_points::Int = AVG_QUAD_POINTS)
+	avgₕ!(uₕ::VectorElement, f; quad_points = AVG_QUAD_POINTS, markers = ())
 
-In-place version of averaging operator [`avgₕ`](@ref). Allocates only the task
-overhead of the parallel loop, independently of the number of grid points.
+In-place version of the averaging operator [`avgₕ`](@ref). Returns `nothing`.
 
-`f` is called directly rather than wrapped, so it specialises and inlines into
-the quadrature loop. This is the form to use inside a time-stepping loop.
+Allocates only the task overhead of the parallel loop, independently of the
+number of grid points, and `f` is called directly rather than wrapped so that it
+specialises and inlines into the quadrature loop. This is the form to use inside
+a time-stepping loop.
+
+`f` and the keywords are as described for [`avgₕ`](@ref).
+
+See also: [`avgₕ`](@ref), [`Rₕ!`](@ref)
 """
-Base.@constprop :aggressive function avgₕ!(uₕ::VectorElement, f; quad_points::Int = AVG_QUAD_POINTS)
+Base.@constprop :aggressive function avgₕ!(uₕ::VectorElement, f; quad_points::Int = AVG_QUAD_POINTS, markers::NTuple{N,Symbol} = NTuple{0,Symbol}()) where N
 	quad_points >= 1 || throw(ArgumentError("quad_points must be >= 1, got $quad_points"))
 	Ωₕ = mesh(space(uₕ))
+
+	if N > 0
+		masks = ntuple(i -> index_in_marker(Ωₕ, markers[i]), Val(N))
+		nodes, wts = _gauss_rule(Val(quad_points), eltype(uₕ))
+		x = half_points(Ωₕ)
+		_masked_for!(to_matrix(uₕ), masks, _cell_average_kernel(f, x, nodes, wts, Val(dim(Ωₕ))))
+		return nothing
+	end
 
 	# `f` is passed through unwrapped on purpose. Embedding it in a
 	# BrambleFunction gives a fixed compiled signature at the cost of an
@@ -502,8 +557,8 @@ end
 
 # A one-component space is a scalar space, so an NC-tuple of functions with
 # NC == 1 must still work.
-@inline avgₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f::Tuple{Any}; quad_points::Int = AVG_QUAD_POINTS) =
-	avgₕ!(uₕ, f[1]; quad_points = quad_points)
+@inline avgₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f::Tuple{Any}; quad_points::Int = AVG_QUAD_POINTS, markers::NTuple{N,Symbol} = NTuple{0,Symbol}()) where N =
+	avgₕ!(uₕ, f[1]; quad_points = quad_points, markers = markers)
 
 function _avgₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f, ::Val{1}, nq::Val)
 	Ωₕ = mesh(space(uₕ))
@@ -630,6 +685,11 @@ end
 	end
 	return s
 end
+
+# Kernel form of the cell average: closes over the geometry and the rule so it
+# can be handed to a generic index loop.
+@inline _cell_average_kernel(f, x, nodes, wts, ::Val{1}) = idx -> _cell_average(f, x, idx[1], nodes, wts)
+@inline _cell_average_kernel(f, x, nodes, wts, ::Val{D}) where D = idx -> _cell_average(f, x, idx, nodes, wts)
 
 # Average of a vector valued `f` over the cell around `idx`, one value per
 # component. `f` is evaluated once per quadrature node instead of once per node
