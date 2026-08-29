@@ -39,3 +39,4 @@ test_code_warntype/
 .agents/
 .claude/
 LocalPreferences.toml
+AGENTS.md
