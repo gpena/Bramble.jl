@@ -502,3 +502,71 @@ struct BareMesh <: Bramble.AbstractMeshType{1} end
         @test npoints(Ωr) == 2 * 4 - 1
     end
 end
+
+@testset "Cached spacings stay consistent with the points" begin
+    import Bramble: spacings, spacings!, spacing!, backward_spacings_for_derivative,
+                    forward_spacings_for_derivative
+
+    # The invariant the cache has to hold, stated independently of the cache itself.
+    backward(pts, i) = i == 1 ? pts[2] - pts[1] : pts[i] - pts[i - 1]
+
+    @testset "agrees with the accessors on construction" begin
+        for unif in (true, false), n in (2, 5, 17)
+
+            Ωₕ = mesh(domain(interval(0.0, 1.0)), n, unif)
+            pts = points(Ωₕ)
+            @test length(spacings(Ωₕ)) == npoints(Ωₕ)
+            @test all(spacings(Ωₕ)[i] ≈ backward(pts, i) for i in 1:n)
+            @test all(spacing(Ωₕ, i) == spacings(Ωₕ)[i] for i in 1:n)
+            # forward_spacing reads the same vector one entry along
+            @test all(forward_spacing(Ωₕ, i) == spacings(Ωₕ)[i == n ? n : i + 1]
+            for i in 1:n)
+        end
+    end
+
+    @testset "rebuilt by every path that changes the points" begin
+        Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
+
+        iterative_refinement!(Ωₕ)
+        @test length(spacings(Ωₕ)) == npoints(Ωₕ) == 9
+        @test all(spacings(Ωₕ)[i] ≈ backward(points(Ωₕ), i) for i in 1:9)
+
+        # change_points! keeps the point count, so the replacement has to match.
+        new_pts = [0.0, 0.05, 0.1, 0.2, 0.4, 0.5, 0.7, 0.9, 1.0]
+        change_points!(Ωₕ, new_pts)
+        @test points(Ωₕ) == new_pts
+        @test all(spacings(Ωₕ)[i] ≈ backward(points(Ωₕ), i) for i in 1:9)
+
+        # half_spacings are derived from the spacings, so they must agree too
+        @test half_spacing(Ωₕ, 1) ≈ spacings(Ωₕ)[1] * 0.5
+        @test half_spacing(Ωₕ, 3) ≈ (spacings(Ωₕ)[3] + spacings(Ωₕ)[4]) * 0.5
+    end
+
+    @testset "copy is independent" begin
+        Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
+        c = copy(Ωₕ)
+        @test spacings(c) == spacings(Ωₕ)
+        @test spacings(c) !== spacings(Ωₕ)
+        change_points!(c, [0.0, 0.1, 0.2, 0.7, 1.0])
+        @test spacings(c) != spacings(Ωₕ)
+        @test all(spacings(Ωₕ)[i] ≈ backward(points(Ωₕ), i) for i in 1:5)
+    end
+
+    @testset "collapsed mesh has zero spacing" begin
+        Ωc = mesh(domain(interval(3.0, 3.0)), 1, true)
+        @test spacings(Ωc) == [0.0]
+        @test spacing(Ωc, 1) == 0.0
+    end
+
+    @testset "derivative views select the right entries" begin
+        Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, false)
+        n = npoints(Ωₕ)
+        bwd = backward_spacings_for_derivative(Ωₕ)
+        fwd = forward_spacings_for_derivative(Ωₕ)
+        # Entry 1 of bwd and the last of fwd are not meaningful; the engines never read
+        # them, so only the interior stencil is asserted here.
+        @test all(bwd[i] == Bramble.spacing_for_derivative(Ωₕ, i) for i in 2:n)
+        @test all(fwd[i] == Bramble.forward_spacing_for_derivative(Ωₕ, i)
+        for i in 1:(n - 1))
+    end
+end

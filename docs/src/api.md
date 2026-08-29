@@ -89,6 +89,7 @@ half_point
 spacing
 forward_spacing
 half_spacing
+spacings
 half_spacings
 hₘₐₓ
 hₘᵢₙ

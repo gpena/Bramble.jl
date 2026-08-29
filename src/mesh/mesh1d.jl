@@ -33,6 +33,8 @@ mutable struct Mesh1D{BT <: Backend, CI <: CartesianIndices{1}, VT <: AbstractVe
     half_pts::VT
     "a vector of pre-computed cell widths, ``h_{i+1/2}``."
     half_spacings::VT
+    "a vector of pre-computed backward spacings, ``h_i = x_i - x_{i-1}``, with `h_1 = x_2 - x_1`."
+    spacings::VT
     "a boolean flag indicating if the domain is degenerate (a single point)."
     collapsed::Bool
 end
@@ -64,12 +66,22 @@ end
 
 @inline half_points(Ωₕ::Mesh1D) = Ωₕ.half_pts
 @inline half_spacings(Ωₕ::Mesh1D) = Ωₕ.half_spacings
+
+"""
+	spacings(Ωₕ::Mesh1D)
+
+Returns the cached vector of backward spacings, where `spacings(Ωₕ)[i]` is
+[`spacing`](@ref)`(Ωₕ, i)`. It is recomputed by [`set_points!`](@ref) whenever the
+grid points change.
+"""
+@inline spacings(Ωₕ::Mesh1D) = Ωₕ.spacings
+@inline spacings!(Ωₕ::Mesh1D, v) = (Ωₕ.spacings = v; return)
 @inline cell_measures(Ωₕ::Mesh1D) = half_spacings(Ωₕ)
 
 """
 	set_points!(Ωₕ::Mesh1D, pts)
 
-Overrides the points in Ωₕ. This function recalculates the cached [half_points](@ref) and [half_spacings](@ref).
+Overrides the points in Ωₕ. This function recalculates the cached [spacings](@ref), [half_points](@ref) and [half_spacings](@ref).
 """
 @inline function set_points!(Ωₕ::Mesh1D, pts)
     # Directly update the grid point coordinates with the new vector.
@@ -79,6 +91,10 @@ Overrides the points in Ωₕ. This function recalculates the cached [half_point
     # to match the size of the new points vector.
     half_points!(Ωₕ, vector(backend(Ωₕ), length(pts) + 1))
     half_spacings!(Ωₕ, vector(backend(Ωₕ), length(pts)))
+    spacings!(Ωₕ, vector(backend(Ωₕ), length(pts)))
+
+    # The spacings come first: half_spacing! below reads them back through `spacing`.
+    spacing!(spacings(Ωₕ), Ωₕ)
 
     # Re-compute the cell centers (half_pts) using the new grid points.
     half_points!(half_points(Ωₕ), Ωₕ)
@@ -123,7 +139,7 @@ Returns the `i`-th submesh of `Ωₕ`. A 1D mesh is its own only submesh, so thi
 
 @inline function spacing(Ωₕ::Mesh1D, i::Int)
     _check_point_bounds(Ωₕ, i, "spacing")
-    return _compute_backward_spacing_1d(points(Ωₕ), i, is_collapsed(Ωₕ), eltype(Ωₕ))
+    return @inbounds spacings(Ωₕ)[i]
 end
 
 @inline spacing(Ωₕ::Mesh1D, i::CartesianIndex{1}) = spacing(Ωₕ, _extract_linear_index(i))
@@ -136,10 +152,34 @@ end
     end
 end
 
+"""
+	backward_spacings_for_derivative(Ωₕ::Mesh1D)
+
+Returns a vector `h` with `h[i] == `[`spacing_for_derivative`](@ref)`(Ωₕ, i)` for every
+`i > 1`. Entry 1 is not meaningful: the backward difference has no stencil at the first
+point and the engines handle that point separately.
+"""
+@inline backward_spacings_for_derivative(Ωₕ::Mesh1D) = spacings(Ωₕ)
+
+"""
+	forward_spacings_for_derivative(Ωₕ::Mesh1D)
+
+Returns a vector `h` with `h[i] == `[`forward_spacing_for_derivative`](@ref)`(Ωₕ, i)` for
+every `i < npoints(Ωₕ)`, as a view onto the cached spacings, since
+`forward_spacing(Ωₕ, i) == spacing(Ωₕ, i + 1)` there. The last entry is not meaningful,
+for the same reason as above.
+"""
+@inline function forward_spacings_for_derivative(Ωₕ::Mesh1D)
+    h = spacings(Ωₕ)
+    return @inbounds @view h[min(2, length(h)):end]
+end
+
 @inline function forward_spacing(Ωₕ::Mesh1D, i::Int)
     _check_point_bounds(Ωₕ, i, "forward_spacing")
-    return _compute_forward_spacing_1d(
-        points(Ωₕ), i, npoints(Ωₕ), is_collapsed(Ωₕ), eltype(Ωₕ))
+    # forward_spacing(i) is spacing(i + 1) away from the last point, and repeats the
+    # final interval at it, which is exactly what the cached vector already holds.
+    n = npoints(Ωₕ)
+    return @inbounds spacings(Ωₕ)[i == n ? n : i + 1]
 end
 
 @inline forward_spacing(Ωₕ::Mesh1D, i::CartesianIndex{1}) = forward_spacing(Ωₕ, _extract_linear_index(i))
@@ -239,6 +279,29 @@ end
 end
 
 # Calculates the "half spacings" (cell widths/measures) for a 1D mesh.
+# Fills `x` with the backward spacings of `Ωₕ`. Must run before half_spacing!, which
+# reads them back through `spacing`.
+@inline function spacing!(x, Ωₕ)
+    pts = points(Ωₕ)
+    n = length(pts)
+    T = eltype(Ωₕ)
+
+    if is_collapsed(Ωₕ) || n < 2
+        fill!(x, zero(T))
+        return
+    end
+
+    # Deferring to the shared helper keeps the boundary convention, where the first
+    # point repeats the first interval, in a single place. This runs once per
+    # set_points!, not per operator application, so the branch inside costs nothing
+    # that matters.
+    @inbounds for i in 1:n
+        x[i] = _compute_backward_spacing_1d(pts, i, false, T)
+    end
+
+    return
+end
+
 @inline function half_spacing!(x, Ωₕ)
     n = npoints(Ωₕ)
 
@@ -280,16 +343,19 @@ function _mesh(Ω::Domain{CartesianProduct{1, T}}, npts::Tuple{Int}, unif::Tuple
     # Allocate vectors for derived quantities (cell centers and widths).
     _half_pts = vector(backend, n_points + 1)
     _half_spacings = vector(backend, n_points)
+    _spacings = vector(backend, n_points)
 
     # Generate the CartesianIndices for the grid.
     idxs = generate_indices(n_points)
 
     # Instantiate the Mesh1D struct with initial (empty) markers.
     mesh_markers = MeshMarkers()
-    mesh = Mesh1D(
-        set, mesh_markers, idxs, backend, pts, _half_pts, _half_spacings, is_collapsed)
+    mesh = Mesh1D(set, mesh_markers, idxs, backend, pts, _half_pts, _half_spacings,
+        _spacings, is_collapsed)
 
-    # Now, calculate the derived geometric quantities for the newly created mesh.
+    # Now, calculate the derived geometric quantities for the newly created mesh. The
+    # spacings come first: half_spacing! reads them back through `spacing`.
+    spacing!(spacings(mesh), mesh)
     half_points!(half_points(mesh), mesh)
     half_spacing!(half_spacings(mesh), mesh)
 
@@ -384,6 +450,7 @@ function Base.copy(Ωₕ::Mesh1D)
         copy(Ωₕ.pts),
         copy(Ωₕ.half_pts),
         copy(Ωₕ.half_spacings),
+        copy(Ωₕ.spacings),
         Ωₕ.collapsed)
 end
 

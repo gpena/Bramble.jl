@@ -179,6 +179,9 @@ for i in 1:npoints(Ωₕ))
 
 # 1D spacing reference routines
 # A mesh with fewer than two points has no interval to measure, so every spacing is zero.
+# The single definition of the backward spacing convention, including the boundary case
+# where the first point has no interval behind it and repeats the first one. Mesh1D fills
+# its cache with this; forward_spacing then reads that cache one entry along.
 @inline function _compute_backward_spacing_1d(pts::AbstractVector, i::Int, collapsed::Bool, T::Type)
     if collapsed || length(pts) < 2
         return zero(T)
@@ -186,17 +189,6 @@ for i in 1:npoints(Ωₕ))
         return pts[2] - pts[1]
     else
         return pts[i] - pts[i - 1]
-    end
-end
-
-@inline function _compute_forward_spacing_1d(
-        pts::AbstractVector, i::Int, N::Int, collapsed::Bool, T::Type)
-    if collapsed || N < 2
-        return zero(T)
-    elseif i == N
-        return pts[N] - pts[N - 1]
-    else
-        return pts[i + 1] - pts[i]
     end
 end
 

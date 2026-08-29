@@ -40,7 +40,8 @@ export AbstractMeshType, Mesh1D, MeshnD, MeshMarkers
 export mesh, mesh_type, submeshes, hₘₐₓ, hₘᵢₙ, stepsize, locate_cell, normal_vector,
        iterative_refinement!, change_points!, set_points!
 export npoints, points, point, half_points, half_point
-export spacing, forward_spacing, half_spacing, half_spacings, cell_measure, cell_measures
+export spacing, forward_spacing, half_spacing, spacings, half_spacings, cell_measure,
+       cell_measures
 export spacings_iterator, forward_spacings_iterator, half_spacings_iterator,
        points_iterator, half_points_iterator, cell_measures_iterator
 export indices, boundary_indices, interior_indices, is_boundary_index, index_in_marker,
