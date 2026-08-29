@@ -15,7 +15,7 @@ This tutorial introduces:
 
 ## 1. Constructing scalar grid spaces
 
-A scalar grid space represents discrete scalar fields over a mesh. To create a scalar space, call `gridspace` on a mesh:
+A scalar grid space represents discrete scalar fields over a mesh. To create a scalar space, call `gridspace` on a mesh $\Omega_h$:
 
 ```julia
 using Bramble
@@ -24,26 +24,26 @@ using Bramble
 Ω = domain(box((0.0, 0.0), (1.0, 1.0)))
 
 # 2. Discretize into a uniform 5 × 5 mesh with periodic boundary conditions
-m = mesh(Ω, (5, 5), (true, true))
+Ωₕ = mesh(Ω, (5, 5), (true, true))
 
 # 3. Construct a scalar grid space on the mesh
-W = gridspace(m)
+Wₕ = gridspace(Ωₕ)
 ```
 
-The resulting space `W` is an instance of `ScalarGridSpace`.
+The resulting space `Wₕ` is an instance of `ScalarGridSpace`.
 
 ### Degrees of freedom and quadrature weights
 
-The number of degrees of freedom in `W` corresponds to the total number of grid points in the mesh:
+The number of degrees of freedom in `Wₕ` corresponds to the total number of grid points in the mesh:
 
 ```julia
-ndofs(W)  # returns 25 (5 * 5)
+ndofs(Wₕ)  # returns 25 (5 * 5)
 ```
 
 To perform numerical integration and compute inner products, each degree of freedom has an associated quadrature weight given by the cell measure around that point:
 
 ```julia
-w = weights(W)
+w = weights(Wₕ)
 length(w)  # 25
 ```
 
@@ -59,27 +59,27 @@ The simplest way to create a vector grid space of dimension $D$ is using exponen
 
 ```julia
 # A 2-component vector space (e.g., 2D velocity space)
-V = W^2
+Vₕ = Wₕ^2
 ```
 
 Alternatively, `vector_gridspace` can be constructed directly from a mesh:
 
 ```julia
-V = vector_gridspace(m, 2)
+Vₕ = vector_gridspace(Ωₕ, 2)
 ```
 
 ### Inspecting composite spaces
 
 ```julia
-ncomponents(V)  # 2
-ndofs(V)        # 50 (2 * 25)
-spaces(V)       # (W, W)
+ncomponents(Vₕ)  # 2
+ndofs(Vₕ)        # 50 (2 * 25)
+spaces(Vₕ)       # (Wₕ, Wₕ)
 ```
 
 Composite spaces can also be constructed from distinct constituent spaces:
 
 ```julia
-V_custom = CompositeGridSpace((W, W))
+V_custom = CompositeGridSpace((Wₕ, Wₕ))
 ```
 
 ---
@@ -94,11 +94,11 @@ You can instantiate uninitialized elements, elements filled with a constant, or 
 
 ```julia
 # Uninitialized vector element
-u = element(W)
+uₕ = element(Wₕ)
 
 # Element initialized to a constant value
-u_zero = element(W, 0.0)
-u_ones = element(W, 1.0)
+u_zero = element(Wₕ, 0.0)
+u_ones = element(Wₕ, 1.0)
 ```
 
 ### Array operations and broadcasting
@@ -106,12 +106,12 @@ u_ones = element(W, 1.0)
 Because `VectorElement <: AbstractVector`, it supports standard vector indexing, length queries, and arithmetic:
 
 ```julia
-u[1] = 42.0
-length(u)  # 25
+uₕ[1] = 42.0
+length(uₕ)  # 25
 
 # Broadcasting preserves the parent space without unnecessary allocations
-v = element(W, 2.0)
-w = 3.0 .* u .+ v
+vₕ = element(Wₕ, 2.0)
+wₕ = 3.0 .* uₕ .+ vₕ
 ```
 
 ---
@@ -122,17 +122,29 @@ When working with vector fields in a `CompositeGridSpace`, you often need to ins
 
 ### Functor call syntax and component views
 
-Calling a vector element as a function `u(i)` or using `component(u, i)` returns a `VectorElement` representing the $i$-th component:
+Calling a vector element as a function `uₕ(i)` or using `component(uₕ, i)` returns a `VectorElement` representing the $i$-th component:
 
 ```julia
-u_vec = element(V)
+uₕ = element(Vₕ)
 
 # Extract component views
-u_x = u_vec(1)
-u_y = u_vec(2)
+u_x = uₕ(1)
+u_y = uₕ(2)
 
 # Alternative named accessor
-u_x = component(u_vec, 1)
+u_x = component(uₕ, 1)
+```
+
+### Degree-of-freedom ranges
+
+To retrieve the degree-of-freedom index ranges occupied by components in the underlying flat vector, use `component_range` or `component_ranges`:
+
+```julia
+# Range of component 1: 1:25
+rng1 = component_range(Vₕ, 1)
+
+# All component ranges as a tuple: (1:25, 26:50)
+rngs = component_ranges(Vₕ)
 ```
 
 ### Zero-copy view semantics
@@ -145,17 +157,17 @@ u_x .= 1.5
 u_y .= -2.0
 
 # The parent vector reflects the updates immediately
-values(u_vec)
+values(uₕ)
 ```
 
-For scalar spaces, `u(1)` or `component(u, 1)` cleanly returns `u` itself.
+For scalar spaces, `uₕ(1)` or `component(uₕ, 1)` cleanly returns `uₕ` itself.
 
 ### Tuple destructuring
 
 All components can be extracted simultaneously as a tuple using `components`:
 
 ```julia
-u_x, u_y = components(u_vec)
+u_x, u_y = components(uₕ)
 ```
 
 ---
@@ -169,21 +181,22 @@ The `to_matrix` function reshapes the flat coefficient vector into a multidimens
 ### Scalar elements
 
 ```julia
-u_grid = to_matrix(u)
+u_scal = element(Wₕ, 0.0)
+u_grid = to_matrix(u_scal)
 size(u_grid)  # (5, 5)
 
 # Access value at grid point (i, j)
 u_grid[2, 3] = 10.0
 ```
 
-Because `to_matrix` returns a `Base.ReshapedArray` view of the underlying vector, mutating `u_grid` modifies `u` in-place with zero memory allocation.
+Because `to_matrix` returns a `Base.ReshapedArray` view of the underlying vector, mutating `u_grid` modifies `u_scal` in-place with zero memory allocation.
 
 ### Multi-component elements
 
 For multi-component vector elements, `to_matrix` returns a tuple of reshaped arrays, one for each component:
 
 ```julia
-mats = to_matrix(u_vec)
+mats = to_matrix(uₕ)
 # mats is a Tuple containing (to_matrix(u_x), to_matrix(u_y))
 
 size(mats[1])  # (5, 5)
@@ -203,10 +216,10 @@ The nodal restriction operator $R_h$ evaluates a continuous function $f(x)$ at t
 f(x) = sin(2π * x[1]) * cos(2π * x[2])
 
 # Allocate and project
-u_proj = Rₕ(W, f)
+u_proj = Rₕ(Wₕ, f)
 
 # In-place projection into an existing element
-Rₕ!(u, f)
+Rₕ!(u_proj, f)
 ```
 
 ### Projecting vector-valued functions
@@ -218,11 +231,11 @@ For multi-component spaces, $R_h$ accepts either a tuple of scalar functions or 
 fx(x) = x[1]
 fy(x) = 2 * x[2]
 
-Rₕ!(u_vec, (fx, fy))
+Rₕ!(uₕ, (fx, fy))
 
 # Or a function returning a tuple/vector
 f_vel(x) = (sin(x[1]), cos(x[2]))
-Rₕ!(u_vec, f_vel)
+Rₕ!(uₕ, f_vel)
 ```
 
 ---
@@ -237,18 +250,18 @@ The cell averaging operator $\mathrm{avg}_h$ integrates a function $f$ over each
 \mathrm{avg}_h f(x_i) = \frac{1}{|\square_i|} \int_{\square_i} f(x) \, dx
 ```
 
-In Bramble, $\mathrm{avg}_h$ uses adaptive multidimensional quadrature via `Integrals.jl`:
+In Bramble, $\mathrm{avg}_h$ uses a tensor-product Gauss-Legendre rule (by default `AVG_QUAD_POINTS = 6`, exact for polynomials up to degree eleven):
 
 ```julia
 # Compute cell-averaged element
-u_avg = avgₕ(W, x -> exp(-x[1] - x[2]))
+u_avg = avgₕ(Wₕ, x -> exp(-x[1] - x[2]))
 
 # In-place version
-avgₕ!(u, x -> exp(-x[1] - x[2]))
+avgₕ!(u_avg, x -> exp(-x[1] - x[2]))
 ```
 
 For multi-component spaces, averages can likewise be computed across components:
 
 ```julia
-u_vec_avg = avgₕ(V, (x -> 1.0, x -> 2.0 * x[1]))
+vₕ = avgₕ(Vₕ, (x -> 1.0, x -> 2.0 * x[1]))
 ```

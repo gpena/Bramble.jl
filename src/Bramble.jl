@@ -42,7 +42,7 @@ export indices, boundary_indices, interior_indices, is_boundary_index, index_in_
 # Space handling
 export gridspace, vector_gridspace, space, spaces, ScalarGridSpace, CompositeGridSpace, VectorGridSpace
 export ndofs, ncomponents, weights
-export VectorElement, element, to_matrix, values, values!, component, components
+export VectorElement, element, to_matrix, values, values!, component, components, component_range, component_ranges
 export Rₕ, Rₕ!, avgₕ, avgₕ!
 
 #=

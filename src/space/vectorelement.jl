@@ -54,13 +54,23 @@ Returns the degree-of-freedom index range for the `i`-th constituent space of co
 """
 @inline function component_range(Wₕ::CompositeGridSpace{N}, i::Int) where N
 	@boundscheck (1 <= i <= N) || throw(BoundsError(Wₕ, i))
+	return @inbounds component_ranges(Wₕ)[i]
+end
+
+"""
+	component_ranges(Wₕ::CompositeGridSpace{N}) where N
+
+Returns an `NTuple{N, UnitRange{Int}}` containing the degree-of-freedom ranges for all `N` components.
+"""
+@inline function component_ranges(Wₕ::CompositeGridSpace{N}) where N
 	subs = spaces(Wₕ)
-	start_idx = 1
-	for k in 1:(i - 1)
-		start_idx += ndofs(subs[k])
-	end
-	end_idx = start_idx + ndofs(subs[i]) - 1
-	return start_idx:end_idx
+	# `ntuple` over `Val(N)` and `cumsum` on a tuple both unroll, so this is a
+	# handful of adds with no loop and no allocation. Sizes are summed rather
+	# than assumed equal: subspaces of the same *type* can still hold different
+	# numbers of degrees of freedom, so nothing here may be inferred from types.
+	ns = ntuple(i -> ndofs(subs[i]), Val(N))
+	stops = cumsum(ns)
+	return ntuple(i -> (stops[i] - ns[i] + 1):stops[i], Val(N))
 end
 
 """
@@ -109,7 +119,13 @@ Extracts a [`VectorElement`](@ref) view of the `i`-th field component of `uₕ`.
 
 Returns an `NTuple` of [`VectorElement`](@ref) views for all components of `uₕ`.
 """
-@inline components(uₕ::VectorElement{<:CompositeGridSpace{N}}) where N = ntuple(i -> uₕ(i), Val(N))
+@inline function components(uₕ::VectorElement{<:CompositeGridSpace{N}}) where N
+	ranges = component_ranges(space(uₕ))
+	subs = spaces(space(uₕ))
+	raw = values(uₕ)
+	return ntuple(i -> VectorElement(@views(raw[ranges[i]]), subs[i]), Val(N))
+end
+
 @inline components(uₕ::VectorElement{<:ScalarGridSpace}) = (uₕ,)
 
 # Constructor for VectorElement
@@ -258,6 +274,7 @@ end
 @noinline _func2array!(::Tuple, f, mesh) = throw(ArgumentError(
 	"_func2array! received a tuple; multi-component restriction dispatches per component in Rₕ!."))
 
+
 """
 	$(TYPEDEF)
 
@@ -389,7 +406,7 @@ See also: [`Rₕ`](@ref), [`element`](@ref)
 
 	if N == 0
 		_func2array!(u, g, indices(Ωₕ))
-		return uₕ
+		return nothing
 	end
 
 	mesh_indices = ntuple(i -> index_in_marker(Ωₕ, markers[i]), Val(N))
@@ -397,18 +414,35 @@ See also: [`Rₕ`](@ref), [`element`](@ref)
 	return nothing
 end
 
+# A one-component space is a scalar space, so generic code that builds an
+# NC-tuple of functions still works when NC == 1.
+@inline Rₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f::Tuple{Any}; markers::NTuple{N,Symbol} = NTuple{0,Symbol}()) where N =
+	Rₕ!(uₕ, f[1]; markers = markers)
+
+# One function per component: each is already independent, so restrict each
+# component with its own function.
 @inline function Rₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::Tuple; markers::NTuple{N,Symbol} = NTuple{0,Symbol}()) where {NC,N}
-	for i in 1:NC
-		Rₕ!(uₕ(i), f[i]; markers = markers)
-	end
+	comps = components(uₕ)
+	ntuple(i -> Rₕ!(comps[i], f[i]; markers = markers), Val(NC))
 	return nothing
 end
 
+# A single function returning all components: evaluate it once per point and
+# scatter, rather than once per component.
 @inline function Rₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f; markers::NTuple{N,Symbol} = NTuple{0,Symbol}()) where {NC,N}
-	for i in 1:NC
-		fi = x -> f(x)[i]
-		Rₕ!(uₕ(i), fi; markers = markers)
-	end
+	N == 0 || return _Rₕ_markers!(uₕ, f, markers)
+
+	Ωₕ = mesh(space(uₕ))
+	mats = ntuple(i -> to_matrix(components(uₕ)[i]), Val(NC))
+	_scatter_for!(mats, indices(Ωₕ), PointwiseEvaluator(f, Ωₕ))
+	return nothing
+end
+
+# Marker-restricted variant keeps the per-component path, which already handles
+# the marker index sets.
+@noinline function _Rₕ_markers!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f, markers) where NC
+	comps = components(uₕ)
+	ntuple(i -> Rₕ!(comps[i], x -> f(x)[i]; markers = markers), Val(NC))
 	return nothing
 end
 
@@ -447,7 +481,7 @@ end
 """
 	avgₕ!(uₕ::VectorElement, f; quad_points::Int = AVG_QUAD_POINTS)
 
-In-place version of averaging operator [avgₕ](@ref). Allocates only the task
+In-place version of averaging operator [`avgₕ`](@ref). Allocates only the task
 overhead of the parallel loop, independently of the number of grid points.
 
 `f` is called directly rather than wrapped, so it specialises and inlines into
@@ -465,6 +499,11 @@ Base.@constprop :aggressive function avgₕ!(uₕ::VectorElement, f; quad_points
 	_avgₕ!(uₕ, f, Val(dim(Ωₕ)), Val(quad_points))
 	return nothing
 end
+
+# A one-component space is a scalar space, so an NC-tuple of functions with
+# NC == 1 must still work.
+@inline avgₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f::Tuple{Any}; quad_points::Int = AVG_QUAD_POINTS) =
+	avgₕ!(uₕ, f[1]; quad_points = quad_points)
 
 function _avgₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f, ::Val{1}, nq::Val)
 	Ωₕ = mesh(space(uₕ))
@@ -485,17 +524,20 @@ function _avgₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f, ::Val{D}, nq::Val) 
 end
 
 function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::Tuple, val_dim::Val, nq::Val) where NC
-	for i in 1:NC
-		_avgₕ!(uₕ(i), f[i], val_dim, nq)
-	end
+	comps = components(uₕ)
+	ntuple(i -> _avgₕ!(comps[i], f[i], val_dim, nq), Val(NC))
 	return nothing
 end
 
-function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f, val_dim::Val, nq::Val) where NC
-	for i in 1:NC
-		fi = x -> f(x)[i]
-		_avgₕ!(uₕ(i), fi, val_dim, nq)
-	end
+# A single function returning all components: average it in one pass over the
+# grid rather than once per component.
+function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f, ::Val{D}, nq::Val) where {NC,D}
+	Ωₕ = mesh(space(uₕ))
+	x = half_points(Ωₕ)
+	nodes, wts = _gauss_rule(nq, eltype(uₕ))
+	mats = ntuple(i -> to_matrix(components(uₕ)[i]), Val(NC))
+
+	_scatter_for!(mats, indices(Ωₕ), idx -> _cell_average(f, x, idx, nodes, wts, Val(NC)))
 	return nothing
 end
 
@@ -585,6 +627,26 @@ end
 	s = zero(T)
 	@inbounds for q in 1:NQ
 		s += wts[q] * f(a + nodes[q] * d)
+	end
+	return s
+end
+
+# Average of a vector valued `f` over the cell around `idx`, one value per
+# component. `f` is evaluated once per quadrature node instead of once per node
+# per component; the accumulator is a tuple and every operation on it broadcasts
+# over `NC` isbits values, so nothing allocates.
+@inline function _cell_average(f, x::NTuple{D}, idx::CartesianIndex{D}, nodes::SVector{NQ,T}, wts::SVector{NQ,T}, ::Val{NC}) where {D,NQ,T,NC}
+	a = ntuple(k -> @inbounds(T(x[k][idx[k]])), Val(D))
+	b = ntuple(k -> @inbounds(T(x[k][idx[k] + 1])), Val(D))
+
+	s = ntuple(_ -> zero(T), Val(NC))
+	@inbounds for q in CartesianIndices(ntuple(_ -> NQ, Val(D)))
+		w = one(T)
+		for k in 1:D
+			w *= wts[q[k]]
+		end
+		pt = ntuple(k -> a[k] + nodes[q[k]] * (b[k] - a[k]), Val(D))
+		s = s .+ w .* f(pt)
 	end
 	return s
 end

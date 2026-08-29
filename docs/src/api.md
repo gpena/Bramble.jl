@@ -158,6 +158,8 @@ element
 to_matrix
 component
 components
+component_range
+component_ranges
 ```
 
 ### Restriction and averaging operators

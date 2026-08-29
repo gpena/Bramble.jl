@@ -146,21 +146,21 @@ When creating a mesh from a labeled [`Domain`](@ref), markers are projected onto
 ```julia
 # Domain with boundary and obstacle markers
 I = interval(0.0, 1.0)
-X = domain(I × I,
+Ω = domain(I × I,
            :left_inlet => :left,
            :right_outlet => :right,
            :walls => (:top, :bottom),
            :obstacle => x -> (x[1]-0.5)^2 + (x[2]-0.5)^2 < 0.15^2)
 
 # Generate mesh
-M = mesh(X, (20, 20))
+Ωₕ = mesh(Ω, (20, 20))
 
 # Query markers
-m_dict = markers(M)
+m_dict = markers(Ωₕ)
 
 # Retrieve bit-vector for a specific label
-is_wall = index_in_marker(M, :walls)
-is_obs  = index_in_marker(M, :obstacle)
+is_wall = index_in_marker(Ωₕ, :walls)
+is_obs  = index_in_marker(Ωₕ, :obstacle)
 ```
 
 ---
@@ -175,10 +175,10 @@ Halves every cell by inserting new points at each cell midpoint, simultaneously 
 
 ```julia
 # Refine mesh in-place
-iterative_refinement!(M)
+iterative_refinement!(Ωₕ)
 
 # Point count increases: (2N_x - 1) × (2N_y - 1)
-npoints(M, Tuple)  # (39, 39)
+npoints(Ωₕ, Tuple)  # (39, 39)
 ```
 
 ### 5.2 Relocating mesh coordinates
@@ -191,8 +191,8 @@ new_pts = range(0.0, 1.0, length=npoints(Ωₕ)) |> collect
 change_points!(Ωₕ, new_pts)
 
 # Or update points and re-evaluate markers for a multi-dimensional mesh
-nx, ny = npoints(M, Tuple)
+nx, ny = npoints(Ωₕ, Tuple)
 new_x_pts = range(0.0, 1.0, length=nx) |> collect
 new_y_pts = range(0.0, 1.0, length=ny) |> collect
-change_points!(M, markers(X), (new_x_pts, new_y_pts))
+change_points!(Ωₕ, markers(Ω), (new_x_pts, new_y_pts))
 ```

@@ -280,6 +280,11 @@ end
 		@test length(u2) == ndofs(W)
 		@test component(u_vec, 1) === u1 || values(component(u_vec, 1)) == values(u1)
 
+		# Component ranges
+		@test component_range(V, 1) == 1:ndofs(W)
+		@test component_range(V, 2) == (ndofs(W) + 1):(2 * ndofs(W))
+		@test component_ranges(V) == (1:ndofs(W), (ndofs(W) + 1):(2 * ndofs(W)))
+
 		# components() tuple
 		comps = components(u_vec)
 		@test length(comps) == 2
@@ -400,3 +405,84 @@ end
 end
 
 end
+
+@testset "Composite components and single-pass evaluation" begin
+	import Bramble: component_range, component_ranges, components, values, ndofs, spaces
+
+	W5 = gridspace(mesh(domain(interval(0.0, 1.0)), 5, true))
+	W9 = gridspace(mesh(domain(interval(0.0, 1.0)), 9, true))
+
+	@testset "Heterogeneous composites are indexed by cumulative size" begin
+		# Subspaces of the same *type* can hold different numbers of degrees of
+		# freedom, so component ranges must be summed, never inferred from types.
+		V = W5 × W9
+		@test ndofs(V) == 14
+		@test component_range(V, 1) == 1:5
+		@test component_range(V, 2) == 6:14
+		@test component_ranges(V) == (1:5, 6:14)
+
+		u = element(V, 0.0)
+		cs = components(u)
+		@test length.(cs) == (5, 9)
+
+		# Writing through one component must not touch the other.
+		cs[1] .= 1.0
+		@test all(==(1.0), values(u)[1:5])
+		@test all(==(0.0), values(u)[6:14])
+
+		@test_throws BoundsError component_range(V, 3)
+	end
+
+	@testset "One function per component equals one vector-valued function" begin
+		Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (8, 8))
+		W = gridspace(Ωₕ)
+		for NC in (2, 3, 4)
+			V = W^Val(NC)
+			fvec = x -> ntuple(k -> sin(k * x[1]) + cos(k * x[2]), Val(NC))
+			ftup = ntuple(k -> (x -> sin(k * x[1]) + cos(k * x[2])), Val(NC))
+
+			a = element(V); b = element(V)
+			Rₕ!(a, fvec); Rₕ!(b, ftup)
+			@test values(a) == values(b)
+
+			c = element(V); d = element(V)
+			avgₕ!(c, fvec); avgₕ!(d, ftup)
+			@test values(c) == values(d)
+		end
+	end
+
+	@testset "A one-tuple of functions works on a scalar space" begin
+		Ωₕ = mesh(domain(interval(0.0, 1.0)), 8, true)
+		W = gridspace(Ωₕ)
+		f = x -> 2.0
+
+		u1 = element(W); u2 = element(W)
+		Rₕ!(u1, f); Rₕ!(u2, (f,))
+		@test values(u1) == values(u2)
+
+		v1 = element(W); v2 = element(W)
+		avgₕ!(v1, f); avgₕ!(v2, (f,))
+		@test values(v1) == values(v2)
+	end
+
+	@testset "In-place operators return nothing" begin
+		Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 6))
+		W = gridspace(Ωₕ); V = W^Val(2)
+		u = element(W); uv = element(V)
+		f = x -> 1.0
+		ft = (x -> 1.0, x -> 2.0)
+		fv = x -> (1.0, 2.0)
+
+		@test Rₕ!(u, f) === nothing
+		@test Rₕ!(uv, ft) === nothing
+		@test Rₕ!(uv, fv) === nothing
+		@test avgₕ!(u, f) === nothing
+		@test avgₕ!(uv, ft) === nothing
+		@test avgₕ!(uv, fv) === nothing
+
+		# the allocating forms still hand back the element
+		@test Rₕ(W, f) isa VectorElement
+		@test avgₕ(W, f) isa VectorElement
+	end
+end
+
