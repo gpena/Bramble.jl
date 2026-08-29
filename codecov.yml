@@ -9,6 +9,8 @@
 ignore:
   - "src/precompile.jl"
   - "src/**/precompile.jl"
+  - "ext"
+  - "ext/**/*"
 
 coverage:
   status:
