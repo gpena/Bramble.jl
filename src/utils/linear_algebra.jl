@@ -5,21 +5,36 @@ end
 """
 	PARALLEL_FOR_MIN
 
-Below this many indices, [`_parallel_for!`](@ref) runs serially.
+Default work threshold below which [`_parallel_for!`](@ref) runs serially. It
+counts *evaluations*, not indices: a caller whose kernel does more than one
+function evaluation per index passes a proportionally smaller `min_work`.
 
-`Threads.@threads` allocates its tasks on every call, and on a short loop that
-setup costs more than the work it distributes. Measured on 4 threads with the
-cell-average kernel, serial against threaded, in microseconds:
+`Threads.@threads` allocates and spawns its tasks on every call, which costs a
+roughly constant ~125 us on 8 threads regardless of loop length. Below the point
+where the serial loop exceeds that, threading is pure loss. Measured on 8
+threads, serial against threaded, in microseconds:
 
-    indices     16      64     256    1024    4096   16384
-    serial     3.8    15.4    61.5   246.4   985.0  3941.2
-    threaded  16.0    25.3    44.3   133.6   436.3  1597.3
+    indices          5000    10000    20000    40000    80000   160000
+    f(x) = 2x
+      serial          3.9      7.7     17.7     35.4     70.6    142.5
+      threaded      125.5    126.4    130.4    133.5    142.6    159.2
+    f(x) = sin(x)exp(-x)
+      serial         82.9    115.9    309.2    581.6   1018.3   1856.5
+      threaded      135.2    156.5    178.6    225.0    281.7    519.9
 
-so threading starts paying somewhere between 64 and 256. Running short loops
-serially also makes them allocation free, which matters when the caller is a
-time-stepping loop invoking this once per step.
+so the crossover is near 16000 indices for one cheap evaluation per index, and
+proportionally lower for a kernel that does more work per index.
+
+The previous value of 256 came from a 4-thread measurement of the cell-average
+kernel, which does `quad_points^D` evaluations per index. That is the most
+favourable case for threading, and applying its threshold to `Rₕ!`, which does
+one evaluation per index, made `Rₕ!` up to 22x slower than serial on grids
+below a few thousand points.
+
+Running short loops serially also makes them allocation free, which matters when
+the caller is a time-stepping loop invoking this once per step.
 """
-const PARALLEL_FOR_MIN = 256
+const PARALLEL_FOR_MIN = 16_384
 
 """
 	$(SIGNATURES)
@@ -33,10 +48,10 @@ otherwise. See [`PARALLEL_FOR_MIN`](@ref).
 - `idxs`: Iterable of indices to process
 - `f`: Function that takes an index and returns the value to be stored at that index
 """
-function _parallel_for!(v, idxs, f)
+function _parallel_for!(v, idxs, f; min_work::Int = PARALLEL_FOR_MIN)
     # A single thread, or too little work to amortise spawning tasks: the serial
     # path is both faster and allocation free.
-    if Threads.nthreads() == 1 || length(idxs) < PARALLEL_FOR_MIN
+    if Threads.nthreads() == 1 || length(idxs) < min_work
         return _serial_for!(v, idxs, f)
     end
     return _threaded_for!(v, idxs, f)
@@ -134,8 +149,8 @@ Applies `g` across `idxs` and scatters each returned tuple over the arrays in
 - `idxs`: Iterable of indices to process
 - `g`: Function taking an index and returning a tuple of values, one per array
 """
-function _scatter_for!(mats::Tuple, idxs, g)
-    if Threads.nthreads() == 1 || length(idxs) < PARALLEL_FOR_MIN
+function _scatter_for!(mats::Tuple, idxs, g; min_work::Int = PARALLEL_FOR_MIN)
+    if Threads.nthreads() == 1 || length(idxs) < min_work
         @inbounds for idx in idxs
             _write_components!(mats, g(idx), idx)
         end

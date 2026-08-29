@@ -409,12 +409,19 @@ end
             # The property under test is that the cost is O(1) in the number of grid
             # points, not that it is byte-for-byte identical: the threaded path's task
             # setup varies slightly with the iteration space, and by Julia version.
-            # 4096x the degrees of freedom must stay within a small constant factor,
-            # where anything proportional to the grid would be four orders larger.
-            small = avg_bytes(16)      # 256 degrees of freedom
+            # 1024x the degrees of freedom must stay within a small constant factor,
+            # where anything proportional to the grid would be three orders larger.
+            #
+            # Both sizes have to sit on the same side of the threading threshold.
+            # Straddling it compares a serial call against a threaded one and so
+            # measures the threshold rather than the scaling. See PARALLEL_FOR_MIN.
+            small = avg_bytes(32)      # 1_024 degrees of freedom
             large = avg_bytes(1024)    # 1_048_576 degrees of freedom
             @test large < 4 * small
             @test large < 100_000      # proportional would be ~8 MB
+
+            # Below the threshold the serial path runs, and its cost is O(1) too.
+            @test avg_bytes(8) == avg_bytes(16)
         end
     end
 end
@@ -573,7 +580,9 @@ end
 
     # The single-pass scatter only threads above PARALLEL_FOR_MIN indices, so a
     # grid large enough to cross that threshold is needed to exercise it at all.
-    n = 20                                   # 400 > PARALLEL_FOR_MIN
+    # Derived from the constant rather than hardcoded, so that raising the
+    # threshold cannot silently turn this into a test of the serial path.
+    n = ceil(Int, sqrt(PARALLEL_FOR_MIN)) + 1
     @test n * n > PARALLEL_FOR_MIN
     Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (n, n))
     W = gridspace(Ωₕ)

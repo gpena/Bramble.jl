@@ -586,12 +586,20 @@ end
     markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {N} = avgₕ!(
     uₕ, f[1]; quad_points = quad_points, markers = markers)
 
+# Evaluations per grid point for a tensor-product rule of `NQ` points per
+# direction on a `D`-dimensional mesh. The threading threshold in
+# `_parallel_for!` counts evaluations, so a kernel this expensive per index
+# reaches the crossover at proportionally fewer indices.
+@inline _avg_min_work(::Val{D}, ::Val{NQ}) where {D, NQ} = max(
+    1, cld(PARALLEL_FOR_MIN, NQ^D))
+
 function _avgₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f, ::Val{1}, nq::Val)
     Ωₕ = mesh(space(uₕ))
     x = half_points(Ωₕ)
     nodes, wts = _gauss_rule(nq, eltype(uₕ))
 
-    _parallel_for!(values(uₕ), indices(Ωₕ), idx -> _cell_average(f, x, idx[1], nodes, wts))
+    _parallel_for!(values(uₕ), indices(Ωₕ), idx -> _cell_average(f, x, idx[1], nodes, wts);
+        min_work = _avg_min_work(Val(1), nq))
     return nothing
 end
 
@@ -600,7 +608,8 @@ function _avgₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f, ::Val{D}, nq::Val) 
     x = half_points(Ωₕ)
     nodes, wts = _gauss_rule(nq, eltype(uₕ))
 
-    _parallel_for!(to_matrix(uₕ), indices(Ωₕ), idx -> _cell_average(f, x, idx, nodes, wts))
+    _parallel_for!(to_matrix(uₕ), indices(Ωₕ), idx -> _cell_average(f, x, idx, nodes, wts);
+        min_work = _avg_min_work(Val(D), nq))
     return nothing
 end
 
@@ -619,7 +628,8 @@ function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f, ::Val{D}, nq
     nodes, wts = _gauss_rule(nq, eltype(uₕ))
     mats = ntuple(i -> to_matrix(components(uₕ)[i]), Val(NC))
 
-    _scatter_for!(mats, indices(Ωₕ), idx -> _cell_average(f, x, idx, nodes, wts, Val(NC)))
+    _scatter_for!(mats, indices(Ωₕ), idx -> _cell_average(f, x, idx, nodes, wts, Val(NC));
+        min_work = _avg_min_work(Val(D), nq))
     return nothing
 end
 
