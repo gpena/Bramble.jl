@@ -26,8 +26,6 @@ Returns the discrete ``L^2`` inner product of the grid functions `uₕ` and `v�
 ```
 """
 @inline innerₕ(uₕ::VectorElement, vₕ::VectorElement) = _dot(uₕ.data, weights(space(uₕ), Innerh()), vₕ.data)
-@inline innerₕ(Uₕ::VecOrMatElem, Vₕ::VecOrMatElem) = _inner_product(
-    Uₕ.data, weights(space(Uₕ), Innerh()), Vₕ.data)
 
 """
 	normₕ(uₕ::VectorElement)
@@ -44,12 +42,12 @@ Returns the discrete ``L^2`` norm of the grid function `uₕ`, defined as
 #                 Discrete Modified L² Inner Product and Norm                  #
 ################################################################################
 
-@inline function _directional_inner_plus(uₕ::VecOrMatElem, vₕ::VecOrMatElem, _::Val{DIM}) where {DIM}
+@inline function _directional_inner_plus(uₕ::VectorElement, vₕ::VectorElement, _::Val{DIM}) where {DIM}
     return _inner_product(uₕ.data, weights(space(uₕ), Innerplus(), DIM), vₕ.data)
 end
 
 """
-	inner₊ₓ(uₕ::VecOrMatElem, vₕ::VecOrMatElem)
+	inner₊ₓ(uₕ::VectorElement, vₕ::VectorElement)
 
 Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ` and `vₕ` associated with the first variable. It accepts arguments of type [VectorElement](@ref) or [MatrixElement](@ref), in any order.
 
@@ -73,10 +71,10 @@ For [VectorElement](@ref)s, it is defined as
 (\\textrm{u}_h, \\textrm{v}_h)_{+x} \\vcentcolon = \\sum_{i=1}^{N_x}\\sum_{j=1}^{N_y}\\sum_{l=1}^{N_z}   h_{x,i} h_{y,j+1/2} h_{z,l+1/2}  \\textrm{u}_h(x_i,y_j,z_l) \\textrm{v}_h(x_i,y_j,z_l).
 ```
 """
-@inline inner₊ₓ(uₕ::VecOrMatElem, vₕ::VecOrMatElem) = _directional_inner_plus(uₕ, vₕ, Val(1))
+@inline inner₊ₓ(uₕ::VectorElement, vₕ::VectorElement) = _directional_inner_plus(uₕ, vₕ, Val(1))
 
 """
-	inner₊ᵧ(uₕ::VecOrMatElem, vₕ::VecOrMatElem)
+	inner₊ᵧ(uₕ::VectorElement, vₕ::VectorElement)
 
 Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ` and `vₕ`
 associated with the second variable (y-direction). It accepts arguments of type
@@ -96,10 +94,10 @@ For [VectorElement](@ref)s, it is defined as
 (\\textrm{u}_h, \\textrm{v}_h)_{+y} \\vcentcolon = \\sum_{i=1}^{N_x}\\sum_{j=1}^{N_y}\\sum_{l=1}^{N_z}   h_{x,i+1/2} h_{y,j} h_{z,l+1/2} \\textrm{u}_h(x_i,y_j,z_l) \\textrm{v}_h(x_i,y_j,z_l).
 ```
 """
-@inline inner₊ᵧ(uₕ::VecOrMatElem, vₕ::VecOrMatElem) = _directional_inner_plus(uₕ, vₕ, Val(2))
+@inline inner₊ᵧ(uₕ::VectorElement, vₕ::VectorElement) = _directional_inner_plus(uₕ, vₕ, Val(2))
 
 """
-	inner₊₂(uₕ::VecOrMatElem, vₕ::VecOrMatElem)
+	inner₊₂(uₕ::VectorElement, vₕ::VectorElement)
 
 Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ` and `vₕ` associated with the `z` variable
 
@@ -107,10 +105,10 @@ Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ`
 (\\textrm{u}_h, \\textrm{v}_h)_{+z} \\vcentcolon = \\sum_{i=1}^{N_x}\\sum_{j=1}^{N_y}\\sum_{l=1}^{N_z}  h_{x,i+1/2} h_{y,j+1/2} h_{z,l} \\textrm{u}_h(x_i,y_j,z_l) \\textrm{v}_h(x_i,y_j,z_l).
 ```
 """
-@inline inner₊₂(uₕ::VecOrMatElem, vₕ::VecOrMatElem) = _directional_inner_plus(uₕ, vₕ, Val(3))
+@inline inner₊₂(uₕ::VectorElement, vₕ::VectorElement) = _directional_inner_plus(uₕ, vₕ, Val(3))
 
 get_dimension_from_type(::Type{<:NTuple{D, Any}}) where {D} = D
-get_dimension_from_type(::Type{<:VecOrMatElem{S}}) where {S} = dim(mesh_type(S))
+get_dimension_from_type(::Type{<:VectorElement{S}}) where {S} = dim(mesh_type(S))
 get_dimension_from_type(::Type) = nothing
 
 function _generate_inner_plus_body(u_type, v_type, result_kind::Symbol)
@@ -165,7 +163,7 @@ function _generate_inner_plus_body(u_type, v_type, result_kind::Symbol)
 end
 
 """
-	inner₊(uₕ::VecOrMatElem, vₕ::VecOrMatElem, [::Type{Tuple}])
+	inner₊(uₕ::VectorElement, vₕ::VectorElement, [::Type{Tuple}])
 	inner₊(uₕ::NTuple{D}, vₕ::NTuple{D})
 
 Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ` and `vₕ`. It accepts arguments of type [VectorElement](@ref) or [MatrixElement](@ref), in any order.
@@ -194,7 +192,7 @@ For [VectorElement](@ref)s, the definition is given by
 (\\textrm{u}_h, \\textrm{v}_h)_+ \\vcentcolon = (\\textrm{u}_h, \\textrm{v}_h)_{+x} + (\\textrm{u}_h, \\textrm{v}_h)_{+y} + (\\textrm{u}_h, \\textrm{v}_h)_{+z}.
 ```
 
-See the definitions of [inner₊ₓ](@ref inner₊ₓ(uₕ::VecOrMatElem, vₕ::VecOrMatElem)), [inner₊ᵧ](@ref inner₊ᵧ(uₕ::VecOrMatElem, vₕ::VecOrMatElem)) and [inner₊₂](@ref inner₊₂(uₕ::VecOrMatElem, vₕ::VecOrMatElem)) for more details.
+See the definitions of [inner₊ₓ](@ref inner₊ₓ(uₕ::VectorElement, vₕ::VectorElement)), [inner₊ᵧ](@ref inner₊ᵧ(uₕ::VectorElement, vₕ::VectorElement)) and [inner₊₂](@ref inner₊₂(uₕ::VectorElement, vₕ::VectorElement)) for more details.
 """
 @generated inner₊(uₕ, vₕ) = :($(_generate_inner_plus_body(uₕ, vₕ, :sum)))
 @generated inner₊(uₕ, vₕ, ::Type{Tuple}) = :($(_generate_inner_plus_body(uₕ, vₕ, :tuple)))
