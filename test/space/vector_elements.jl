@@ -544,3 +544,49 @@ end
 	end
 end
 
+@testset "Threaded scatter path" begin
+	import Bramble: values, PARALLEL_FOR_MIN, components
+
+	# The single-pass scatter only threads above PARALLEL_FOR_MIN indices, so a
+	# grid large enough to cross that threshold is needed to exercise it at all.
+	n = 20                                   # 400 > PARALLEL_FOR_MIN
+	@test n * n > PARALLEL_FOR_MIN
+	Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (n, n))
+	W  = gridspace(Ωₕ)
+
+	for NC in (2, 3)
+		V = W^Val(NC)
+		fvec = x -> ntuple(k -> sin(k * x[1]) + cos(k * x[2]), Val(NC))
+		ftup = ntuple(k -> (x -> sin(k * x[1]) + cos(k * x[2])), Val(NC))
+
+		# threaded scatter must agree with the per-component route exactly
+		a = element(V); b = element(V)
+		Rₕ!(a, fvec); Rₕ!(b, ftup)
+		@test values(a) == values(b)
+
+		c = element(V); d = element(V)
+		avgₕ!(c, fvec); avgₕ!(d, ftup)
+		@test values(c) == values(d)
+
+		# every component was written; nothing left at the uninitialised value
+		@test all(isfinite, values(a))
+		@test length(components(a)) == NC
+	end
+end
+
+@testset "Quadrature rule fallback for an unsupported element type" begin
+	import Bramble: _gauss_rule
+
+	# An isbits float that QuadGK cannot build a rule for must fall back to the
+	# run-time path at generation time rather than breaking precompilation.
+	primitive type OddFloat <: AbstractFloat 64 end
+	@test isbitstype(OddFloat)
+	@test_throws Exception _gauss_rule(Val(3), OddFloat)
+
+	# the supported types are unaffected
+	for T in (Float32, Float64)
+		nodes, wts = _gauss_rule(Val(3), T)
+		@test sum(wts) ≈ one(T)
+	end
+end
+

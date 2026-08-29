@@ -274,4 +274,27 @@ using LinearAlgebra: norm
 		@test ndofs(V) == 3 * ndofs(W)
 	end
 
+
+	@testset "Interface fallbacks on AbstractSpaceType" begin
+		# These are @inline one-liners that get fully inlined, so line coverage
+		# never sees them; they still need exercising.
+		import Bramble: space, spaces, ncomponents, AbstractSpaceType
+
+		W = gridspace(mesh2d)
+		@test space(W) === W
+		@test spaces(W) === (W,)
+		@test ncomponents(W) == 1
+		@test ncomponents(typeof(W)) == 1
+
+		V = W^Val(3)
+		@test ncomponents(V) == 3
+		@test ncomponents(typeof(V)) == 3
+		@test length(spaces(V)) == 3
+		@test all(sp === W for sp in spaces(V))
+
+		# a composite is itself an AbstractSpaceType
+		@test V isa AbstractSpaceType
+		@test space(V) === V
+	end
+
 end

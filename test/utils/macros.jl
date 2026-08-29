@@ -131,3 +131,17 @@ end
 		@test custom_square(nh) == 25
 	end
 end
+
+@testset "@forward rejects malformed syntax" begin
+    # The macro must reject anything that is not `T.field`, with a message that
+    # shows the accepted forms.
+    err = try
+        @eval @forward NotAFieldAccess (Base.size,)
+        nothing
+    catch e
+        e
+    end
+    @test err !== nothing
+    @test occursin("@forward T.x", sprint(showerror, err))
+end
+
