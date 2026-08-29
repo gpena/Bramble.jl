@@ -1,3 +1,6 @@
+@noinline _throw_domain_dim_mismatch(d::Int,
+    D::Int) = throw(DimensionMismatch("the domain is $(d)-dimensional but npts and unif have length $D"))
+
 """
 	MeshnD{D,BT,CI,M1T,T}
 
@@ -89,7 +92,7 @@ This function orchestrates the creation of a structured multidimensional mesh. I
 """
 function _mesh(Ω::Domain, npts::NTuple{D, Int}, unif::NTuple{D, Bool}, backend) where {D}
     # Ensure the dimension of the domain matches the length of the input tuples.
-    @assert dim(Ω) == D "Domain dimension and length of npts/unif do not match."
+    dim(Ω) == D || _throw_domain_dim_mismatch(dim(Ω), D)
     _set = set(Ω)
 
     # Adjust the number of points for any collapsed dimensions. For example, if a domain

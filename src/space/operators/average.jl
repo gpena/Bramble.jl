@@ -104,7 +104,7 @@ function _average_weights!(v::AbstractVector, Ωₕ::AbstractMeshType,
         dir::GridDirection, ::Val{DIFF_DIM}) where {DIFF_DIM}
     dims = npoints(Ωₕ, Tuple)
 
-    @assert 1 <= DIFF_DIM <= dim(Ωₕ) "The differentiation dimension must be between 1 and $(dim(Ωₕ))."
+    1 <= DIFF_DIM <= dim(Ωₕ) || _throw_stencil_dim_error(DIFF_DIM, dim(Ωₕ))
 
     li = LinearIndices(dims)
 
@@ -154,8 +154,9 @@ for config in _AVERAGE_OP_CONFIGS
           """
         function $(Symbol(average_name, :_dim!))(out, in, h, dims::NTuple{D, Int},
                 average_dim::Val{DIFF_DIM}) where {D, DIFF_DIM}
-            @assert 1 <= DIFF_DIM <= D "Dimension must be between 1 and $D."
-            @assert length(out) == length(in) == prod(dims) "Vector and grid dimensions must match."
+            1 <= DIFF_DIM <= D || _throw_stencil_dim_error(DIFF_DIM, D)
+            length(out) == length(in) == prod(dims) ||
+                _throw_stencil_size_error(length(out), length(in), dims)
             in_ref = (out === in) ? copy(in) : in
             _average_engine!(out, in_ref, dims, $dir_instance, average_dim)
             return

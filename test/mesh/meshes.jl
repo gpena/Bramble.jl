@@ -329,7 +329,7 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD
 
             # Non-uniform stepsize error assertion
             M2_nu = mesh(domain(I × J), (11, 21), (false, false))
-            @test_throws AssertionError stepsize(M2_nu)
+            @test_throws ArgumentError stepsize(M2_nu)
 
             # locate_cell
             @test locate_cell(M2, (0.35, 1.05)) == CartesianIndex(4, 11)

@@ -161,6 +161,8 @@ Overrides the indices in `Ωₕ`. Used internally during mesh refinement.
 
 @noinline _throw_mesh_bounds_error(Ωₕ, idx) = throw(BoundsError(Ωₕ, idx))
 
+@noinline _throw_not_uniform() = throw(ArgumentError("stepsize is only defined for a uniform mesh; use spacing(Ωₕ, idx) on a non-uniform one"))
+
 @inline function _check_point_bounds(Ωₕ::AbstractMeshType, idx::Int, location::String = "point")
     @boundscheck 1 <= idx <= npoints(Ωₕ) || _throw_mesh_bounds_error(Ωₕ, idx)
     return nothing
@@ -545,13 +547,13 @@ Throws an error if the mesh is not uniform.
 See also: [`is_uniform`](@ref), [`spacing`](@ref).
 """
 @inline function stepsize(Ωₕ::AbstractMeshType{1})
-    @assert is_uniform(Ωₕ) "stepsize(Ωₕ) is only valid for uniform meshes; use spacing(Ωₕ, idx) for non-uniform meshes."
+    is_uniform(Ωₕ) || _throw_not_uniform()
     npoints(Ωₕ) <= 1 && return zero(eltype(Ωₕ))
     return spacing(Ωₕ, 2)
 end
 
 @inline function stepsize(Ωₕ::AbstractMeshType{D}) where {D}
-    @assert is_uniform(Ωₕ) "stepsize(Ωₕ) is only valid for uniform meshes; use spacing(Ωₕ, idx) for non-uniform meshes."
+    is_uniform(Ωₕ) || _throw_not_uniform()
     return ntuple(i -> stepsize(Ωₕ(i)), Val(D))
 end
 

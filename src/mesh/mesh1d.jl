@@ -39,6 +39,9 @@ mutable struct Mesh1D{BT <: Backend, CI <: CartesianIndices{1}, VT <: AbstractVe
     collapsed::Bool
 end
 
+@noinline _throw_point_count_mismatch(expected::Int,
+    got::Int) = throw(DimensionMismatch("change_points! keeps the point count: the mesh has $expected points and $got were given"))
+
 @inline is_collapsed(Ωₕ::Mesh1D) = Ωₕ.collapsed
 
 @inline points(Ωₕ::Mesh1D) = Ωₕ.pts
@@ -446,7 +449,7 @@ end
 function change_points!(Ωₕ::Mesh1D, pts)
     npts = npoints(Ωₕ)
     # Ensure the new points vector has the same size as the old one.
-    @assert npts == length(pts) "The number of new points must match the number of points in the mesh."
+    npts == length(pts) || _throw_point_count_mismatch(npts, length(pts))
 
     # Call the helper function that handles updating the points and all derived quantities.
     set_points!(Ωₕ, pts)

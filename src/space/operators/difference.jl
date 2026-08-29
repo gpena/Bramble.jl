@@ -116,6 +116,16 @@ end
 @inline @propagate_inbounds _compute_difference(
     ::Backward, ::Val{true}, cur, h, i) = zero(cur)
 
+# --- Argument validation shared by every operator --------------------------------- #
+# Thrown rather than asserted: these check caller arguments, and an @assert reports a
+# size mismatch as an AssertionError, which is not what a caller should have to catch.
+@noinline _throw_stencil_dim_error(dim::Int,
+    D::Int) = throw(ArgumentError("the stencil direction must be between 1 and $D, got $dim"))
+
+@noinline function _throw_stencil_size_error(lout::Int, lin::Int, dims)
+    throw(DimensionMismatch("out has $lout entries and in has $lin, but the grid $(dims) has $(prod(dims))"))
+end
+
 # --- Argument handling shared by every operator ---------------------------------- #
 # The operators accept a mesh, a grid space or a grid function, and the vectorial aliases
 # need the spatial dimension of whichever was passed. Going through `space` alone would
@@ -228,7 +238,7 @@ function _derivative_weights!(v::AbstractVector, Ωₕ::AbstractMeshType,
         spacing_func, ::Val{DIFF_DIM}) where {DIFF_DIM}
     dims = npoints(Ωₕ, Tuple)
 
-    @assert 1 <= DIFF_DIM <= dim(Ωₕ) "The differentiation dimension must be between 1 and $(dim(Ωₕ))."
+    1 <= DIFF_DIM <= dim(Ωₕ) || _throw_stencil_dim_error(DIFF_DIM, dim(Ωₕ))
 
     spacings_1d = Base.Fix1(spacing_func, Ωₕ(DIFF_DIM))
     li = LinearIndices(dims)
@@ -340,8 +350,9 @@ for config in _DIFFERENCE_OP_CONFIGS
           """
         function $(Symbol(diff_name, :_dim!))(out, in, h, dims::NTuple{D, Int},
                 diff_dim::Val{DIFF_DIM}) where {D, DIFF_DIM}
-            @assert 1 <= DIFF_DIM <= D "Differentiation dimension must be between 1 and $D."
-            @assert length(out) == length(in) == prod(dims) "Vector and grid dimensions must match."
+            1 <= DIFF_DIM <= D || _throw_stencil_dim_error(DIFF_DIM, D)
+            length(out) == length(in) == prod(dims) ||
+                _throw_stencil_size_error(length(out), length(in), dims)
             in_ref = (out === in) ? copy(in) : in
             _difference_engine!(out, in_ref, h, dims, $dir_instance, diff_dim)
             return
