@@ -408,7 +408,15 @@ See also: [`Rₕ`](@ref), [`avgₕ!`](@ref), [`element`](@ref)
 
     u = to_matrix(uₕ)
 
-    g = PointwiseEvaluator(f, Ωₕ)
+    # A `let` closure rather than `PointwiseEvaluator(f, Ωₕ)`. The two are
+    # semantically identical, but the struct's call operator is compiled as its
+    # own instance for every new `f` instead of being inlined into the index
+    # loop, which measured 48.8 ms against 6.3 ms per previously unseen closure
+    # on a 21-point 1D space. Run time is unchanged. Adding `@inline` to the
+    # call operator does not recover it.
+    g = let f = f, Ωₕ = Ωₕ
+        idx -> f(point(Ωₕ, idx))
+    end
 
     if N == 0
         _func2array!(u, g, indices(Ωₕ))
@@ -442,7 +450,11 @@ end
 
     Ωₕ = mesh(space(uₕ))
     mats = ntuple(i -> to_matrix(components(uₕ)[i]), Val(NC))
-    _scatter_for!(mats, indices(Ωₕ), PointwiseEvaluator(f, Ωₕ))
+    # See the note in the scalar `Rₕ!` above.
+    g = let f = f, Ωₕ = Ωₕ
+        idx -> f(point(Ωₕ, idx))
+    end
+    _scatter_for!(mats, indices(Ωₕ), g)
     return nothing
 end
 
