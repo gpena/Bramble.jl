@@ -106,8 +106,13 @@ end
 @inline @propagate_inbounds _compute_difference(::Backward, ::Val{true}, cur, h, i) = 0#*cur / _get_h_val(h, 2) # or is it _get_h_val(h, 1)
 
 # --- Unified Difference Engine ---
-@inbounds function _difference_engine!(out, in_ref, h, dims::NTuple{D, Int},
-        dir::GridDirection, ::Val{DIFF_DIM}) where {D, DIFF_DIM}
+# `h` carries a type parameter on purpose. Julia does not specialise on an
+# argument of function type unless the body calls it directly, and this body only
+# forwards it to _get_h_val. Without `H` the spacing callable stays boxed and each
+# element pays a dynamic dispatch: measured 13768 us and 6.4 MB against 29 us and
+# no allocation on a 100000-point 1D grid.
+function _difference_engine!(out, in_ref, h::H, dims::NTuple{D, Int},
+        dir::GridDirection, ::Val{DIFF_DIM}) where {H, D, DIFF_DIM}
     li = LinearIndices(dims)
     step_cartesian = CartesianIndex(ntuple(i -> i == DIFF_DIM ? 1 : 0, D))
     full_axes = axes(li)
@@ -121,13 +126,13 @@ end
             d -> d == DIFF_DIM ?
                  (last(full_axes[d]):last(full_axes[d])) : full_axes[d], D)
 
-        @simd for I in CartesianIndices(interior_axes)
+        @inbounds @simd for I in CartesianIndices(interior_axes)
             idx, idx_next = li[I], li[I + step_cartesian]
             out[idx] = _compute_difference(
                 dir, Val(false), in_ref[idx_next], in_ref[idx], h, I[DIFF_DIM])
         end
 
-        @simd for I in CartesianIndices(boundary_axes)
+        @inbounds @simd for I in CartesianIndices(boundary_axes)
             idx = li[I]
             out[idx] = _compute_difference(dir, Val(true), in_ref[idx], h, I[DIFF_DIM])
         end
@@ -141,12 +146,12 @@ end
                  (first(full_axes[d]):first(full_axes[d])) :
                  full_axes[d], D)
 
-        @simd for I in CartesianIndices(interior_axes)
+        @inbounds @simd for I in CartesianIndices(interior_axes)
             idx, idx_prev = li[I], li[I - step_cartesian]
             out[idx] = _compute_difference(
                 dir, Val(false), in_ref[idx], in_ref[idx_prev], h, I[DIFF_DIM])
         end
-        @simd for I in CartesianIndices(boundary_axes)
+        @inbounds @simd for I in CartesianIndices(boundary_axes)
             idx = li[I]
             out[idx] = _compute_difference(dir, Val(true), in_ref[idx], h, I[DIFF_DIM])
         end

@@ -158,3 +158,59 @@ import Bramble: half_spacings_iterator
         end
     end
 end
+
+@testset "Dimension resolution in inner₊" begin
+    import Bramble: get_dimension_from_type, _get_h_val
+
+    W1 = gridspace(mesh(domain(interval(0.0, 1.0)), 5, true))
+    W2 = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 5), (
+        true, true)))
+    u1 = Rₕ(W1, x -> x)
+    u2 = Rₕ(W2, x -> x[1])
+    v2 = Rₕ(W2, x -> x[2])
+
+    @testset "get_dimension_from_type" begin
+        @test get_dimension_from_type(typeof((u2, u2))) == 2
+        @test get_dimension_from_type(typeof(u2)) == 2
+        # Anything else carries no dimension.
+        @test get_dimension_from_type(Vector{Float64}) === nothing
+        @test get_dimension_from_type(Float64) === nothing
+    end
+
+    @testset "tuple arity wins on either side" begin
+        # A tuple on the left is already covered elsewhere; this is the branch
+        # where only the right argument is a tuple.
+        @test inner₊(u2, (v2, v2)) ≈ inner₊((u2, u2), v2)
+        @test inner₊(u2, (v2, v2)) ≈ sum(inner₊(u2, v2, Tuple))
+    end
+
+    @testset "one side carries no dimension" begin
+        # The dimension is taken from whichever argument has one; the call then
+        # fails on the element type rather than on dimension resolution.
+        @test_throws MethodError inner₊(u2, [1.0, 2.0])
+        @test_throws MethodError inner₊([1.0, 2.0], u2)
+    end
+
+    @testset "unresolvable and mismatched dimensions report properly" begin
+        # Both of these used to raise UndefVarError: the message was interpolated
+        # inside the quoted expression, so it was evaluated at run time where the
+        # generator's locals no longer exist.
+        @test_throws ArgumentError inner₊(1.0, 2.0)
+        @test_throws DimensionMismatch inner₊(u1, u2)
+
+        err = try
+            inner₊(u1, u2)
+        catch e
+            e
+        end
+        @test occursin("1", err.msg) && occursin("2", err.msg)
+    end
+
+    @testset "_get_h_val accepts a raw spacing vector" begin
+        h = [0.5, 0.25, 0.125]
+        @test _get_h_val(h, 1) == 0.5
+        @test _get_h_val(h, 3) == 0.125
+        # The callable form is what the engines actually pass.
+        @test _get_h_val(Base.Fix1(getindex, h), 2) == 0.25
+    end
+end

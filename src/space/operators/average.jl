@@ -61,7 +61,7 @@ See also: [`_compute_average`](@ref), [`add_half_shift`](@ref), [`Forward`](@ref
                                                                                           0.5
 @inline @propagate_inbounds _compute_average(::Backward, ::Val{true}, in_val) = 0#in_val * 0.5
 
-@inbounds function _average_engine!(out, in_ref, dims::NTuple{D, Int}, dir::GridDirection,
+function _average_engine!(out, in_ref, dims::NTuple{D, Int}, dir::GridDirection,
         ::Val{AVG_DIM}) where {D, AVG_DIM}
     li = LinearIndices(dims)
     step_cartesian = CartesianIndex(ntuple(i -> i == AVG_DIM ? 1 : 0, D))
@@ -76,12 +76,12 @@ See also: [`_compute_average`](@ref), [`add_half_shift`](@ref), [`Forward`](@ref
             d -> d == AVG_DIM ? (last(full_axes[d]):last(full_axes[d])) :
                  full_axes[d], D)
 
-        @simd for I in CartesianIndices(interior_axes)
+        @inbounds @simd for I in CartesianIndices(interior_axes)
             idx, idx_next = li[I], li[I + step_cartesian]
             out[idx] = _compute_average(dir, Val(false), in_ref[idx_next], in_ref[idx])
         end
 
-        @simd for I in CartesianIndices(boundary_axes)
+        @inbounds @simd for I in CartesianIndices(boundary_axes)
             idx = li[I]
             out[idx] = _compute_average(dir, Val(true), in_ref[idx])
         end
@@ -95,12 +95,12 @@ See also: [`_compute_average`](@ref), [`add_half_shift`](@ref), [`Forward`](@ref
                  (first(full_axes[d]):first(full_axes[d])) :
                  full_axes[d], D)
 
-        @simd for I in CartesianIndices(interior_axes)
+        @inbounds @simd for I in CartesianIndices(interior_axes)
             idx, idx_prev = li[I], li[I - step_cartesian]
             out[idx] = _compute_average(dir, Val(false), in_ref[idx], in_ref[idx_prev])
         end
 
-        @simd for I in CartesianIndices(boundary_axes)
+        @inbounds @simd for I in CartesianIndices(boundary_axes)
             idx = li[I]
             out[idx] = _compute_average(dir, Val(true), in_ref[idx])
         end

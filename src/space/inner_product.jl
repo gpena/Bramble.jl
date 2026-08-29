@@ -125,13 +125,17 @@ function _generate_inner_plus_body(u_type, v_type, result_kind::Symbol)
         dim_v
     elseif !isnothing(dim_u) && !isnothing(dim_v)
         dim_u == dim_v ? dim_u :
-        return :(throw(DimensionMismatch("Dimensions $dim_u and $dim_v do not match")))
+        # The message is built here and spliced in as a String. Writing the
+        # interpolation inside the quoted string would defer it to run time,
+        # where dim_u and dim_v do not exist, and the call would raise
+        # UndefVarError instead of the intended error.
+        return :(throw(DimensionMismatch($("Dimensions $dim_u and $dim_v do not match"))))
     elseif !isnothing(dim_u)
         dim_u
     elseif !isnothing(dim_v)
         dim_v
     else
-        return :(throw(ArgumentError("Could not determine dimension from input types $u_type and $v_type")))
+        return :(throw(ArgumentError($("Could not determine dimension from input types $u_type and $v_type"))))
     end
 
     # Direction count for the underlying space (fallback to 1 if unknown).
