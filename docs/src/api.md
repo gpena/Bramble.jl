@@ -197,6 +197,18 @@ D₊₂
 ∇₊ₕ
 ```
 
+The forward difference over the averaged spacing, which is the one that satisfies
+the discrete summation-by-parts identity
+``(\textrm{Dstar}_{+x} u_h, v_h)_h = -(u_h, D_{-x} v_h)_{+x}`` for grid functions
+`vₕ` vanishing on the boundary.
+
+```@docs
+Dstar₊ₓ
+Dstar₊ᵧ
+Dstar₊₂
+Dstar₊ₕ
+```
+
 Jumps across an interface.
 
 ```@docs

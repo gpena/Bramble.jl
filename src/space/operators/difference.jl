@@ -116,6 +116,51 @@ end
 @inline @propagate_inbounds _compute_difference(
     ::Backward, ::Val{true}, cur, h, i) = zero(cur)
 
+# --- The starred forward difference ----------------------------------------------- #
+#
+#   Dstar₊(uₕ)(i) = (u(xᵢ₊₁) - u(xᵢ)) / ((hᵢ + hᵢ₊₁) / 2)
+#
+# The forward difference divided by the averaged spacing rather than by the forward
+# spacing. Away from the boundary that denominator is the width of the cell around xᵢ,
+# so this and `D₊` differ only in what they scale by, but the averaged form is what makes
+# the discrete integration-by-parts identity close.
+#
+# The denominator is read lazily off the mesh's cached spacings rather than stored: entry
+# i needs `spacings[i]` and `spacings[i+1]`, so a vector of its own would be a third copy
+# of the axis to keep in step with refinement, for two loads it already has.
+
+"""
+	StarSpacings(h)
+
+Lazy view of the averaged spacings ``(h_i + h_{i+1})/2`` over a mesh's cached backward
+spacings `h`, which is what [`Dstar₊ₓ`](@ref) divides by.
+
+Entry `i` reads `h[i]` and `h[i+1]`, so it is defined for `i < length(h)`. That is exactly
+the range the forward stencil's interior covers; the last point has no forward neighbour
+and the engine truncates it to zero without consulting this.
+"""
+struct StarSpacings{T, V <: AbstractVector{T}} <: AbstractVector{T}
+    h::V
+end
+
+@inline Base.size(s::StarSpacings) = (length(s.h) - 1,)
+@inline Base.@propagate_inbounds function Base.getindex(s::StarSpacings, i::Int)
+    @boundscheck 1 <= i < length(s.h) || throw(BoundsError(s, i))
+    return @inbounds (s.h[i] + s.h[i + 1]) / 2
+end
+
+"""
+	star_spacings(Ωₕ::Mesh1D)
+
+Returns the averaged spacings ``(h_i + h_{i+1})/2`` of `Ωₕ` as a [`StarSpacings`](@ref)
+view over its cached backward spacings. Allocates nothing.
+
+Away from the first point this equals [`half_spacing`](@ref)`(Ωₕ, i)`. At `i = 1` it does
+not: the cached `h₁` repeats the first interval, so this gives ``x_2 - x_1`` where the cell
+width gives half of it, the boundary cell being a half cell.
+"""
+@inline star_spacings(Ωₕ::Mesh1D) = StarSpacings(spacings(Ωₕ))
+
 # --- Argument validation shared by every operator --------------------------------- #
 # Thrown rather than asserted: these check caller arguments, and an @assert reports a
 # size mismatch as an AssertionError, which is not what a caller should have to catch.
@@ -165,7 +210,9 @@ end
 # is written once here and both engines below use it.
 
 # The unit step along `DIM`.
-@inline _stencil_step(::Val{DIM}, ::Val{D}) where {DIM, D} = CartesianIndex(ntuple(
+@inline _stencil_step(
+    ::Val{DIM}, ::Val{D}) where {
+    DIM, D} = CartesianIndex(ntuple(
     i -> i == DIM ? 1 : 0, Val(D)))
 
 # The neighbour of `I`: ahead of it for a forward stencil, behind it for a backward one.
@@ -423,7 +470,8 @@ for config in _DIFFERENCE_OP_CONFIGS
 
           Constructs the **unscaled** $($dir_string_lowercase) difference operator, representing the operation ``$($math_op)``.
           """
-        @inline $diff_name(Ωₕ::AbstractMeshType, dim_val::Val) = _difference_operator(
+        @inline $diff_name(
+            Ωₕ::AbstractMeshType, dim_val::Val) = _difference_operator(
             Ωₕ, $dir_instance, dim_val)
 
         @doc """
@@ -493,3 +541,76 @@ for config in _DIFFERENCE_OP_CONFIGS
     _define_vectorial_alias(finite_diff_name, finite_grad_alias, dir_string_lowercase,
         "finite difference")
 end
+
+# --- Dstar₊: the forward difference over the averaged spacing ---------------------- #
+
+"""
+	forward_star_difference(uₕ::VectorElement, dim_val::Val)
+
+The forward difference of `uₕ` along `dim_val`, divided by the averaged spacing:
+
+```math
+\\textrm{Dstar}_{+}(\\textrm{u}_h)(i) =
+    \\frac{\\textrm{u}_h(x_{i+1}) - \\textrm{u}_h(x_i)}{(h_i + h_{i+1})/2}
+```
+
+Reached through [`Dstar₊ₓ`](@ref) and its siblings. Unlike the other difference families
+this one takes a grid function only, not a mesh or a grid space: there is no matrix form.
+
+The last point has no forward neighbour, so it is truncated to zero, as in
+[`D₊ₓ`](@ref).
+
+See also: [`star_spacings`](@ref), [`D₊ₓ`](@ref).
+"""
+function forward_star_difference(
+        uₕ::VectorElement{<:ScalarGridSpace}, dim_val::Val{DIM}) where {DIM}
+    vₕ = similar(uₕ)
+    h = star_spacings(_op_mesh(uₕ)(DIM))
+    _apply_stencil!(vₕ, uₕ, h, Forward(), dim_val)
+    return vₕ
+end
+
+# A composite grid function is differenced one component at a time; every component
+# shares the mesh, so the denominator is built once.
+function forward_star_difference(
+        uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val{DIM}) where {DIM}
+    vₕ = similar(uₕ)
+    h = star_spacings(_op_mesh(uₕ)(DIM))
+    _apply_componentwise!(
+        (v, u) -> _apply_stencil!(v, u, h, Forward(), dim_val), vₕ, uₕ)
+    return vₕ
+end
+
+# The directional aliases are written out rather than generated: the shared generator
+# documents its aliases as taking a mesh, a grid space or a grid function, and this
+# family takes only the last.
+for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
+    alias = Symbol(:Dstar₊, suffix)
+    direction = _BRAMBLE_var2label[i]
+    @eval begin
+        @doc """
+          	$($(QuoteNode(alias)))(uₕ::VectorElement)
+
+          The forward difference of `uₕ` along the `$($direction)` direction over the
+          averaged spacing, ``\\\\frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}``.
+
+          Alias for `forward_star_difference(uₕ, Val($($i)))`. Takes a grid function only;
+          there is no matrix form. The last point along `$($direction)` is truncated to
+          zero.
+          """
+        @inline $alias(uₕ::VectorElement) = forward_star_difference(uₕ, Val($i))
+    end
+end
+
+"""
+	Dstar₊ₕ(uₕ::VectorElement)
+
+The starred forward difference of `uₕ` along every coordinate, as a tuple with one grid
+function per spatial dimension. On a one-dimensional mesh it returns that single entry
+rather than a one-tuple.
+"""
+@inline Dstar₊ₕ(uₕ::VectorElement) = Dstar₊ₕ(uₕ, Val(dim(_op_mesh(uₕ))))
+@inline Dstar₊ₕ(uₕ::VectorElement, ::Val{1}) = forward_star_difference(uₕ, Val(1))
+@inline Dstar₊ₕ(
+    uₕ::VectorElement, ::Val{D}) where {D} = ntuple(
+    i -> forward_star_difference(uₕ, Val(i)), Val(D))

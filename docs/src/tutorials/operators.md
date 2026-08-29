@@ -146,7 +146,7 @@ values(diff₊ₓ(uₕ))[end] # -1.0,  which is -u₅, not 0
 values(diff₋ₓ(uₕ))[1]   # 0.0,   which is u₁, and u₁ happens to be 0 here
 ```
 
-Section 6 shows why this matters in practice.
+Section 8 shows why this matters in practice.
 
 In two or more dimensions, directional operators apply along the coordinate lines of the tensor grid, and each directional family truncates along its corresponding boundary slice:
 
@@ -293,7 +293,62 @@ full ``H^1`` norm, which is why the last identity holds. `inner₊` and its per-
 forms use the staggered weights instead, which is what the energy estimates for these
 schemes are written in.
 
-## 7. A convergence study, and the boundary
+## 7. Summation by parts, and `Dstar₊ₓ`
+
+Continuous integration by parts, ``\int u' v = -\int u v'`` for ``v`` vanishing on the
+boundary, has a discrete counterpart, and which forward difference it holds for is not
+the obvious one. The operator that satisfies it is `Dstar₊ₓ`: the forward difference
+divided by the **averaged** spacing rather than by the forward spacing,
+
+```math
+\textrm{Dstar}_{+x}(u_h)(i) = \frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}
+```
+
+with the last point truncated to zero, as `D₊ₓ` is. On a uniform grid ``h_i = h_{i+1}``
+and it coincides with `D₊ₓ`; the two differ only where the spacing varies:
+
+```julia
+Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
+set_points!(Ωₕ, [0.0, 0.1, 0.3, 0.7, 1.0])
+uₕ = Rₕ(gridspace(Ωₕ), x -> x^2)
+
+values(D₊ₓ(uₕ))      # [0.1, 0.4,      1.0,      1.7,      0.0]
+values(Dstar₊ₓ(uₕ))  # [0.1, 0.533333, 1.333333, 1.457143, 0.0]
+```
+
+The identity is
+
+```math
+(\textrm{Dstar}_{+x} u_h,\, v_h)_h = -(u_h,\, D_{-x} v_h)_{+x}
+```
+
+for any `vₕ` that vanishes on the boundary. Note which product sits on each side: the
+left is `innerₕ`, weighted by the cell measures, and the right is `inner₊ₓ`, weighted by
+the staggered ones. Only `vₕ` has to vanish; `uₕ` is unconstrained, since the boundary
+term the identity discards is a product of the two.
+
+```julia
+Ωₕ = mesh(domain(interval(0.0, 1.0)), 21, false)   # a random, non-uniform grid
+Wₕ = gridspace(Ωₕ)
+uₕ = Rₕ(Wₕ, x -> cos(x) + 0.7)                     # not zero at the boundary
+vₕ = Rₕ(Wₕ, x -> sin(pi * x))                      # zero at both ends
+
+innerₕ(Dstar₊ₓ(uₕ), vₕ)   # -0.31719453
+-inner₊ₓ(uₕ, D₋ₓ(vₕ))     # -0.31719453,  equal to machine precision
+
+innerₕ(D₊ₓ(uₕ), vₕ)       # -0.31029831,  the ordinary forward difference does not
+```
+
+It holds per coordinate in two and three dimensions as well, with `Dstar₊ᵧ`, `Dstar₊₂`
+and their inner products. `Dstar₊ₕ` returns all coordinates at once, as `∇₊ₕ` does.
+
+This is why the operator exists. Energy estimates for these schemes are derived by
+moving a difference from one factor to the other, and that step is exact only with this
+pairing: with `D₊ₓ` it leaves a residual that does not vanish under refinement, since it
+is a difference of quadrature weights and not a truncation error. Unlike the other
+difference families, `Dstar₊` takes a grid function only — it has no matrix form.
+
+## 8. A convergence study, and the boundary
 
 `D₋ₓ` is first order, so the error against a known derivative should fall by a factor of
 ten each time the grid is refined by ten. Measuring it naively does not show that:
@@ -338,3 +393,5 @@ in place silently halves the observed order.
   unscaled differences and jumps act as though the missing neighbour were zero.
 - The truncated slice is where the boundary condition goes. Ignoring it costs half an
   order of convergence.
+- `Dstar₊ₓ` is the forward difference over the averaged spacing. It is the one that
+  satisfies discrete summation by parts against `D₋ₓ`, and it has no matrix form.

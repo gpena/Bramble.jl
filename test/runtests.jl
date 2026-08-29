@@ -75,6 +75,7 @@ if __bramble_with_unit_tests
 
         @testset verbose=true "Operators" begin
             include("space/difference.jl")
+            include("space/star_difference.jl")
             include("space/jump.jl")
             include("space/average.jl")
             include("space/inner_product.jl")
