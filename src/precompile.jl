@@ -219,6 +219,44 @@ function _pc_geometry()
     return nothing
 end
 
+# Grid space construction and the two restriction operators.
+#
+# Rₕ and avgₕ specialise on the caller's function type, so the method instances
+# cached for the closures below are never reused by a user's own function. What
+# this workload does cache is everything around them, which dominates: the grid
+# space and buffer construction, the generated Gauss rule, the parallel-for
+# skeleton and the vector element arithmetic are all closure-independent. On a
+# 21-point 1D space that is a first avgₕ of 1.76 s against 0.02 s, and a first
+# grid space of 0.29 s against 0.02 s.
+#
+# The residual per-closure cost stays: roughly 50 ms for Rₕ and 10 ms for avgₕ.
+# Embedding f in a BrambleFunction would erase the closure type and remove even
+# that, but it also blocks inlining into the quadrature loop and costs about 2x
+# at run time, which is the wrong trade for a time-stepping loop. See the note
+# in avgₕ!.
+function _pc_space_session(Ωₕ, f, g)
+    Wₕ = gridspace(Ωₕ)
+
+    uₕ = Rₕ(Wₕ, f)
+    vₕ = avgₕ(Wₕ, f)
+    Rₕ!(uₕ, g)
+    avgₕ!(vₕ, g)
+
+    Vₕ = gridspace(Ωₕ, Val(2))
+    wₕ = Rₕ(Vₕ, (f, g))
+    avgₕ(Vₕ, (f, g))
+
+    uₕ .+ vₕ
+    2 .* uₕ
+    sum(uₕ)
+    length(uₕ)
+    eltype(uₕ)
+    similar(uₕ)
+    copy(uₕ)
+
+    return Wₕ, uₕ, wₕ
+end
+
 # --- Workload ------------------------------------------------------------ #
 
 if PRECOMPILE_WORKLOAD
@@ -269,6 +307,11 @@ if PRECOMPILE_WORKLOAD
                 (x, t) -> x[1] * x[2] * t, (0.5, 1.0))
             _pc_bramble_function(S3, I_time, x -> x[1] + x[2] + x[3],
                 (x, t) -> (x[1] + x[2] + x[3]) * t, (0.5, 0.5, 0.5))
+
+            # Grid spaces and restriction operators, in 1D, 2D and 3D.
+            _pc_space_session(Ωₕ1, x -> x + 1.0, x -> 2x)
+            _pc_space_session(Ωₕ2, x -> x[1] * x[2], x -> x[1] + x[2])
+            _pc_space_session(Ωₕ3, x -> x[1] * x[2] * x[3], x -> x[1] + x[2] + x[3])
 
             # Markers and domains, including evaluation of a space-time domain.
             for X in (I1, S2)
