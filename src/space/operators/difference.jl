@@ -234,24 +234,30 @@ function _difference_operator(Ωₕ::AbstractMeshType, ::Backward, ::Val{DIFF_DI
     return difference_shift(Ωₕ, Val(DIFF_DIM), Val(0), Val(-1))
 end
 
+# `spacing_func` carries a type parameter so Julia specialises on it. An argument of
+# function type is not specialised on unless the body calls it directly, and this one used
+# to be wrapped in a `Base.Fix1` instead, so the closure stayed boxed and every grid point
+# paid a dynamic dispatch: 12047 us and 6.5 MB on a 450x450 grid against 322 us and no
+# allocation once the parameter is named and the submesh is hoisted.
+#
+# It is the per-index function rather than the mesh's cached spacing vector on purpose.
+# The vector's truncated entry is not meaningful, whereas `spacing_for_derivative` returns
+# zero there, and this loop covers every index and turns that zero into a zero weight. The
+# engines can use the vector because they visit the truncated slice separately.
 function _derivative_weights!(v::AbstractVector, Ωₕ::AbstractMeshType,
-        spacing_func, ::Val{DIFF_DIM}) where {DIFF_DIM}
+        spacing_func::F, ::Val{DIFF_DIM}) where {F, DIFF_DIM}
     dims = npoints(Ωₕ, Tuple)
 
     1 <= DIFF_DIM <= dim(Ωₕ) || _throw_stencil_dim_error(DIFF_DIM, dim(Ωₕ))
 
-    spacings_1d = Base.Fix1(spacing_func, Ωₕ(DIFF_DIM))
+    sub = Ωₕ(DIFF_DIM)
     li = LinearIndices(dims)
 
     @inbounds @simd for I in CartesianIndices(dims)
-        x = spacings_1d(I[DIFF_DIM])
-        if x == 0
-            v[li[I]] = zero(eltype(v))
-        else
-            v[li[I]] = inv(x)
-        end
+        x = spacing_func(sub, I[DIFF_DIM])
+        v[li[I]] = iszero(x) ? zero(eltype(v)) : inv(x)
     end
-    return
+    return nothing
 end
 
 """

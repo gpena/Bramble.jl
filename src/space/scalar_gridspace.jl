@@ -287,17 +287,12 @@ function _innerplus_weights!(u::VT, Ωₕ, component = 1) where {VT}
     T = eltype(VT)
     mesh_component = Ωₕ(component)
 
-    f = Base.Fix1(spacing, mesh_component)
-    idxs = indices(mesh_component)
-
-    @inbounds @simd for idx in idxs
-        i = idx[1]
-
-        u[i] = f(i)
-    end
+    # These weights are the mesh's backward spacings with the first entry zeroed, which
+    # the mesh now caches, so this is a copy rather than a call per point.
+    copyto!(u, spacings(mesh_component))
 
     @inbounds u[1] = zero(T)
-    return
+    return nothing
 end
 
 """
