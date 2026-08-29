@@ -146,7 +146,7 @@ values(diff₊ₓ(uₕ))[end] # -1.0,  which is -u₅, not 0
 values(diff₋ₓ(uₕ))[1]   # 0.0,   which is u₁, and u₁ happens to be 0 here
 ```
 
-Section 8 shows why this matters in practice.
+Section 9 shows why this matters in practice.
 
 In two or more dimensions, directional operators apply along the coordinate lines of the tensor grid, and each directional family truncates along its corresponding boundary slice:
 
@@ -348,7 +348,70 @@ pairing: with `D₊ₓ` it leaves a residual that does not vanish under refineme
 is a difference of quadrature weights and not a truncation error. Unlike the other
 difference families, `Dstar₊` takes a grid function only — it has no matrix form.
 
-## 8. A convergence study, and the boundary
+## 8. The centered difference, `Dcₓ`
+
+Both one-sided differences reach one point; the centered one reaches both ways, and
+divides by the whole span its stencil covers:
+
+```math
+\textrm{Dc}_x(u_h)(i) = \frac{u_{i+1} - u_{i-1}}{h_i + h_{i+1}}
+    = \frac{u_{i+1} - u_{i-1}}{x_{i+1} - x_{i-1}}
+```
+
+It is the only operator here that truncates on **two** slices, since neither the first
+nor the last point has a neighbour on both sides.
+
+```julia
+Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
+set_points!(Ωₕ, [0.0, 0.1, 0.3, 0.7, 1.0])
+uₕ = Rₕ(gridspace(Ωₕ), x -> x^2)
+
+values(D₋ₓ(uₕ))   # [0.0, 0.1, 0.4, 1.0, 1.7]
+values(D₊ₓ(uₕ))   # [0.1, 0.4, 1.0, 1.7, 0.0]
+values(Dcₓ(uₕ))   # [0.0, 0.3, 0.8, 1.3, 0.0]
+```
+
+Writing the denominator as ``x_{i+1} - x_{i-1}`` rather than as a pair of spacings buys
+two properties that hold on **any** grid, not only a uniform one.
+
+First, it reproduces an affine function's derivative exactly, since numerator and
+denominator are then the same quantity:
+
+```julia
+values(Dcₓ(Rₕ(Wₕ, x -> 3x + 1)))   # [0.0, 3.0, 3.0, ..., 3.0, 0.0]
+```
+
+Second, it is skew-symmetric in `innerₕ` for grid functions vanishing on the boundary:
+
+```julia
+Ωₕ = mesh(domain(interval(0.0, 1.0)), 41, false)   # a random, non-uniform grid
+Wₕ = gridspace(Ωₕ)
+uₕ = Rₕ(Wₕ, x -> sin(pi * x))
+vₕ = Rₕ(Wₕ, x -> sin(2pi * x) * x * (1 - x))       # both zero at both ends
+
+innerₕ(Dcₓ(uₕ), vₕ)    #  0.21019221
+-innerₕ(uₕ, Dcₓ(vₕ))   #  0.21019221,  equal to machine precision
+```
+
+The reason is the same cancellation that gives `Dstar₊ₓ` its identity in section 7:
+`innerₕ` weights point ``i`` by the cell measure ``(h_i + h_{i+1})/2``, which is exactly
+half the centered denominator. The weights cancel, and the left side collapses to
+
+```math
+\tfrac{1}{2} \sum_i (u_{i+1} - u_{i-1})\, v_i
+```
+
+which shifting the index by one turns into minus the right side. Unlike the `Dstar₊ₓ`
+identity, which needs only `vₕ` to vanish, this one needs both: the discarded boundary
+term is symmetric in the two.
+
+Accuracy follows the usual rule: the centered difference approximates the derivative at
+the midpoint of its stencil, which is ``x_i`` only when the two spacings match. So it is
+second order on a uniform grid and first order otherwise, where the one-sided differences
+are first order on both. As with `Dstar₊ₓ`, `Dcₓ` takes a grid function only and has no
+matrix form; `Dcₕ` gives every coordinate at once.
+
+## 9. A convergence study, and the boundary
 
 `D₋ₓ` is first order, so the error against a known derivative should fall by a factor of
 ten each time the grid is refined by ten. Measuring it naively does not show that:
@@ -389,9 +452,13 @@ in place silently halves the observed order.
   once. `∇₋ₕ` is the discrete gradient.
 - A grid function in gives a grid function out; a mesh or grid space in gives the sparse
   matrix.
-- Each operator truncates on one slice. The finite differences are zero there, the
-  unscaled differences and jumps act as though the missing neighbour were zero.
+- Each one-sided operator truncates on one slice, and the centered one on two. The
+  finite differences are zero there, the unscaled differences and jumps act as though
+  the missing neighbour were zero.
 - The truncated slice is where the boundary condition goes. Ignoring it costs half an
   order of convergence.
 - `Dstar₊ₓ` is the forward difference over the averaged spacing. It is the one that
   satisfies discrete summation by parts against `D₋ₓ`, and it has no matrix form.
+- `Dcₓ` is the centered difference over the span its stencil covers. It is exact on
+  affine functions and skew-symmetric in `innerₕ` on any grid, and truncates on two
+  slices rather than one.

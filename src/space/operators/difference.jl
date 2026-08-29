@@ -78,6 +78,11 @@ abstract type GridDirection end
 struct Forward <: GridDirection end
 struct Backward <: GridDirection end
 
+# The centered stencil reads both neighbours rather than one, so it is truncated on two
+# boundary slices rather than one. `_average_engine!` and the shared `_stencil_ranges`
+# take a one-sided direction only; the centered traversal is separate, below.
+struct Centered <: GridDirection end
+
 # --- Core Difference Computation ---
 # @boundscheck rather than @assert: this runs once per grid point and the engine's
 # loops are marked @inbounds, which elides the former and cannot elide the latter.
@@ -115,6 +120,17 @@ end
     ::Forward, ::Val{true}, cur, h, i) = zero(cur)
 @inline @propagate_inbounds _compute_difference(
     ::Backward, ::Val{true}, cur, h, i) = zero(cur)
+
+# Centered, taking the two neighbours in grid order rather than a point and its
+# neighbour. `h` is the averaged spacing, the same view `Dstar₊` divides by, because
+#
+#     x_{i+1} - x_{i-1} = h_i + h_{i+1} = 2 h*_i
+#
+# so the centered denominator is twice it and one lazy view serves both operators.
+@inline @propagate_inbounds _compute_difference(
+    ::Centered, ::Val{false}, back, fwd, h, i) = (fwd - back) / (2 * _get_h_val(h, i))
+@inline @propagate_inbounds _compute_difference(
+    ::Centered, ::Val{true}, cur, h, i) = zero(cur)
 
 # --- The starred forward difference ----------------------------------------------- #
 #
@@ -263,6 +279,51 @@ function _difference_engine!(out, in_ref, h::H, dims::NTuple{D, Int},
     @inbounds @simd for I in CartesianIndices(boundary)
         idx = li[I]
         out[idx] = _compute_difference(dir, Val(true), in_ref[idx], h, I[DIM])
+    end
+
+    return nothing
+end
+
+# --- Centered traversal ---------------------------------------------------------- #
+# A centered stencil reaches both ways, so its interior is the slice with a neighbour on
+# each side and it truncates on two boundary slices rather than one. That is a different
+# shape from `_stencil_ranges`, whose two-value result the one-sided engines and the
+# average engine destructure, so it is written separately rather than folded in.
+@inline function _centered_stencil_ranges(full_axes::NTuple{D, Any}, ::Val{DIM}) where {
+        D, DIM}
+    interior = ntuple(
+        d -> d == DIM ? ((first(full_axes[d]) + 1):(last(full_axes[d]) - 1)) : full_axes[d],
+        Val(D))
+    lo = ntuple(
+        d -> d == DIM ? (first(full_axes[d]):first(full_axes[d])) : full_axes[d], Val(D))
+    hi = ntuple(
+        d -> d == DIM ? (last(full_axes[d]):last(full_axes[d])) : full_axes[d], Val(D))
+    return interior, lo, hi
+end
+
+# `h` carries a type parameter for the same reason it does in the one-sided engine: an
+# argument of function type that the body only forwards is not specialised on, and the
+# spacing would be boxed for every grid point.
+function _difference_engine!(out, in_ref, h::H, dims::NTuple{D, Int},
+        dir::Centered, ::Val{DIM}) where {H, D, DIM}
+    li = LinearIndices(dims)
+    step = _stencil_step(Val(DIM), Val(D))
+    interior, lo, hi = _centered_stencil_ranges(axes(li), Val(DIM))
+
+    @inbounds @simd for I in CartesianIndices(interior)
+        idx = li[I]
+        back, fwd = li[I - step], li[I + step]
+        out[idx] = _compute_difference(
+            dir, Val(false), in_ref[back], in_ref[fwd], h, I[DIM])
+    end
+
+    # Both end slices at once. Iterating the two range tuples costs nothing: they have
+    # the same type, so the loop unrolls.
+    for boundary in (lo, hi)
+        @inbounds @simd for I in CartesianIndices(boundary)
+            idx = li[I]
+            out[idx] = _compute_difference(dir, Val(true), in_ref[idx], h, I[DIM])
+        end
     end
 
     return nothing
@@ -614,3 +675,76 @@ rather than a one-tuple.
 @inline Dstar₊ₕ(
     uₕ::VectorElement, ::Val{D}) where {D} = ntuple(
     i -> forward_star_difference(uₕ, Val(i)), Val(D))
+
+# --- Dc: the centered difference -------------------------------------------------- #
+
+"""
+	centered_difference(uₕ::VectorElement, dim_val::Val)
+
+The centered difference of `uₕ` along `dim_val`:
+
+```math
+\\textrm{Dc}(\\textrm{u}_h)(i) =
+    \\frac{\\textrm{u}_h(x_{i+1}) - \\textrm{u}_h(x_{i-1})}{h_i + h_{i+1}}
+```
+
+Reached through [`Dcₓ`](@ref) and its siblings. Like [`Dstar₊ₓ`](@ref), and unlike the
+one-sided families, this takes a grid function only: there is no matrix form.
+
+The denominator is ``x_{i+1} - x_{i-1}``, so the operator reproduces the derivative of an
+affine function exactly on any grid, uniform or not. Both the first and the last point
+lack a neighbour on one side, so both are truncated to zero.
+
+See also: [`star_spacings`](@ref), [`D₋ₓ`](@ref), [`D₊ₓ`](@ref).
+"""
+function centered_difference(
+        uₕ::VectorElement{<:ScalarGridSpace}, dim_val::Val{DIM}) where {DIM}
+    vₕ = similar(uₕ)
+    h = star_spacings(_op_mesh(uₕ)(DIM))
+    _apply_stencil!(vₕ, uₕ, h, Centered(), dim_val)
+    return vₕ
+end
+
+# As for the other operators, a composite grid function is differenced one component at a
+# time; every component shares the mesh, so the denominator is built once.
+function centered_difference(
+        uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val{DIM}) where {DIM}
+    vₕ = similar(uₕ)
+    h = star_spacings(_op_mesh(uₕ)(DIM))
+    _apply_componentwise!(
+        (v, u) -> _apply_stencil!(v, u, h, Centered(), dim_val), vₕ, uₕ)
+    return vₕ
+end
+
+# Written out rather than generated, for the same reason `Dstar₊` is: the shared
+# generator documents its aliases as taking a mesh, a grid space or a grid function, and
+# this family takes only the last.
+for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
+    alias = Symbol(:Dc, suffix)
+    direction = _BRAMBLE_var2label[i]
+    @eval begin
+        @doc """
+          	$($(QuoteNode(alias)))(uₕ::VectorElement)
+
+          The centered difference of `uₕ` along the `$($direction)` direction,
+          ``\\\\frac{u_{i+1} - u_{i-1}}{h_i + h_{i+1}}``.
+
+          Alias for `centered_difference(uₕ, Val($($i)))`. Takes a grid function only;
+          there is no matrix form. The first and last points along `$($direction)` are
+          truncated to zero.
+          """
+        @inline $alias(uₕ::VectorElement) = centered_difference(uₕ, Val($i))
+    end
+end
+
+"""
+	Dcₕ(uₕ::VectorElement)
+
+The centered difference of `uₕ` along every coordinate, as a tuple with one grid function
+per spatial dimension. On a one-dimensional mesh it returns that single entry rather than
+a one-tuple.
+"""
+@inline Dcₕ(uₕ::VectorElement) = Dcₕ(uₕ, Val(dim(_op_mesh(uₕ))))
+@inline Dcₕ(uₕ::VectorElement, ::Val{1}) = centered_difference(uₕ, Val(1))
+@inline Dcₕ(uₕ::VectorElement, ::Val{D}) where {D} = ntuple(
+    i -> centered_difference(uₕ, Val(i)), Val(D))

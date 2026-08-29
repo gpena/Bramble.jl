@@ -209,6 +209,17 @@ Dstar₊₂
 Dstar₊ₕ
 ```
 
+The centered difference, over the span its stencil covers. It reproduces the derivative
+of an affine function exactly on any grid, and is skew-symmetric in `innerₕ` for grid
+functions vanishing on the boundary.
+
+```@docs
+Dcₓ
+Dcᵧ
+Dc₂
+Dcₕ
+```
+
 Jumps across an interface.
 
 ```@docs
