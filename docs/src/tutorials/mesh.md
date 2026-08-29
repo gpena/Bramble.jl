@@ -74,6 +74,89 @@ y_mesh = Ωₕ_2d(2)  # 1D submesh in y-direction
 
 ## 2. Accessing grid coordinates and metric properties
 
+```@raw html
+<figure style="margin:1.5em 0;text-align:center">
+<svg viewBox="0 0 780 360" width="100%" style="max-width:780px;font-family:system-ui,-apple-system,'Segoe UI',sans-serif" role="img"
+     aria-label="One-dimensional staggered mesh showing grid points, half points, cells, spacing and forward spacing.">
+  <defs>
+    <marker id="bl" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 z" fill="#8b5cf6"/></marker>
+    <marker id="blr" markerWidth="9" markerHeight="9" refX="1" refY="3" orient="auto"><path d="M8,0 L0,3 L8,6 z" fill="#8b5cf6"/></marker>
+    <marker id="rd" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 z" fill="#ef4444"/></marker>
+    <marker id="rdr" markerWidth="9" markerHeight="9" refX="1" refY="3" orient="auto"><path d="M8,0 L0,3 L8,6 z" fill="#ef4444"/></marker>
+    <marker id="gn" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 z" fill="#10b981"/></marker>
+    <marker id="gnr" markerWidth="9" markerHeight="9" refX="1" refY="3" orient="auto"><path d="M8,0 L0,3 L8,6 z" fill="#10b981"/></marker>
+  </defs>
+
+  <!-- cells: [half_points[i], half_points[i+1]] -->
+  <g stroke="#3b82f6" stroke-opacity="0.55" fill="#3b82f6">
+    <rect x="90"  y="165" width="60"  height="52" fill-opacity="0.20"/>
+    <rect x="150" y="165" width="180" height="52" fill-opacity="0.10"/>
+    <rect x="330" y="165" width="240" height="52" fill-opacity="0.20"/>
+    <rect x="570" y="165" width="120" height="52" fill-opacity="0.10"/>
+  </g>
+
+  <!-- axis -->
+  <line x1="90" y1="191" x2="690" y2="191" stroke="currentColor" stroke-width="1.6"/>
+
+  <!-- half points: open squares, N+1 of them -->
+  <g fill="#fff" stroke="#3b82f6" stroke-width="2">
+    <rect x="84"  y="185" width="12" height="12"/><rect x="144" y="185" width="12" height="12"/>
+    <rect x="324" y="185" width="12" height="12"/><rect x="564" y="185" width="12" height="12"/>
+    <rect x="684" y="185" width="12" height="12"/>
+  </g>
+  <g fill="#3b82f6" font-size="12" text-anchor="middle">
+    <text x="90" y="157">1</text><text x="150" y="157">2</text><text x="330" y="157">3</text>
+    <text x="570" y="157">4</text><text x="690" y="157">5</text>
+  </g>
+  <text x="90" y="137" font-size="13" fill="#3b82f6" text-anchor="start">half_points(Ωₕ) — N+1 cell interfaces</text>
+
+  <!-- grid points -->
+  <g fill="currentColor">
+    <circle cx="90" cy="191" r="5"/><circle cx="210" cy="191" r="5"/>
+    <circle cx="450" cy="191" r="5"/><circle cx="690" cy="191" r="5"/>
+  </g>
+  <g font-size="15" text-anchor="middle" fill="currentColor">
+    <text x="90" y="241">x₁</text><text x="210" y="241">x₂</text>
+    <text x="450" y="241">x₃</text><text x="690" y="241">x₄</text>
+  </g>
+  <g font-size="12" text-anchor="middle" fill="currentColor" opacity="0.65">
+    <text x="90" y="258">0.0</text><text x="210" y="258">0.2</text>
+    <text x="450" y="258">0.6</text><text x="690" y="258">1.0</text>
+  </g>
+
+  <!-- cell_measure / half_spacing of the cell around x₃ -->
+  <line x1="330" y1="112" x2="570" y2="112" stroke="#8b5cf6" stroke-width="1.6" marker-start="url(#blr)" marker-end="url(#bl)"/>
+  <line x1="330" y1="112" x2="330" y2="165" stroke="#8b5cf6" stroke-width="1" stroke-dasharray="3 3"/>
+  <line x1="570" y1="112" x2="570" y2="165" stroke="#8b5cf6" stroke-width="1" stroke-dasharray="3 3"/>
+  <text x="450" y="103" font-size="13" fill="#8b5cf6" text-anchor="middle">cell_measure(Ωₕ, 3) = half_spacing(Ωₕ, 3) = 0.4</text>
+
+  <!-- spacing (backward) -->
+  <line x1="90" y1="292" x2="210" y2="292" stroke="#ef4444" stroke-width="1.6" marker-start="url(#rdr)" marker-end="url(#rd)"/>
+  <text x="150" y="311" font-size="13" fill="#ef4444" text-anchor="middle">spacing(Ωₕ, 2) = x₂ − x₁ = 0.2</text>
+
+  <!-- forward_spacing -->
+  <line x1="210" y1="336" x2="450" y2="336" stroke="#10b981" stroke-width="1.6" marker-start="url(#gnr)" marker-end="url(#gn)"/>
+  <text x="330" y="355" font-size="13" fill="#10b981" text-anchor="middle">forward_spacing(Ωₕ, 2) = x₃ − x₂ = 0.4</text>
+</svg>
+</figure>
+```
+
+The mesh above is `[0.0, 0.2, 0.6, 1.0]`, deliberately non-uniform. Four conventions are
+worth reading off it, because they are the ones that most often surprise:
+
+  - **`half_points` has `N + 1` entries, not `N`.** They are the cell interfaces, and the
+    first and last *coincide with* `x₁` and `x_N` rather than being extrapolated outside
+    the domain. Here they are `[0.0, 0.1, 0.4, 0.8, 1.0]`.
+  - **The cell around `xᵢ` spans `half_points[i] .. half_points[i+1]`**, and its width is
+    exactly `half_spacing(Ωₕ, i)`, which is what `cell_measure(Ωₕ, i)` returns. The four
+    cells here measure `[0.1, 0.3, 0.4, 0.2]` and sum to the domain length.
+  - **Boundary cells are half-width.** `x₁` and `x_N` sit on the edge of their own cell,
+    not at its centre, which is why the first and last measures are the smallest.
+  - **`spacing` looks backward and `forward_spacing` looks forward**, so
+    `spacing(Ωₕ, i) = xᵢ − xᵢ₋₁` and `forward_spacing(Ωₕ, i) = xᵢ₊₁ − xᵢ`. Each has one
+    special case at the boundary where the neighbour is missing: `spacing(Ωₕ, 1)` returns
+    `x₂ − x₁` and `forward_spacing(Ωₕ, N)` returns `x_N − x_{N−1}`.
+
 ### 2.1 Points and coordinates
 
 - **`points(Ωₕ)`**: Returns the coordinate vector (1D) or tuple of coordinate vectors (nD).
@@ -118,6 +201,77 @@ vol = cell_measure(Ωₕ_2d, (3, 4))
 ```
 
 ---
+
+```@raw html
+<figure style="margin:1.5em 0;text-align:center">
+<svg viewBox="0 0 700 380" width="100%" style="max-width:700px;font-family:system-ui,-apple-system,'Segoe UI',sans-serif" role="img"
+     aria-label="Two-dimensional tensor-product mesh: the cell around a grid point is the product of its per-axis cell widths.">
+  <defs>
+    <marker id="p2" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 z" fill="#8b5cf6"/></marker>
+    <marker id="p2r" markerWidth="9" markerHeight="9" refX="1" refY="3" orient="auto"><path d="M8,0 L0,3 L8,6 z" fill="#8b5cf6"/></marker>
+  </defs>
+
+  <!-- every cell, tiling the domain -->
+  <g stroke="#3b82f6" stroke-opacity="0.35" fill="none">
+    <g fill="#3b82f6" fill-opacity="0.07">
+      <rect x="80"  y="245" width="48"  height="55"/><rect x="128" y="245" width="144" height="55"/>
+      <rect x="272" y="245" width="192" height="55"/><rect x="464" y="245" width="96"  height="55"/>
+      <rect x="80"  y="135" width="48"  height="110"/><rect x="128" y="135" width="144" height="110"/>
+      <rect x="464" y="135" width="96"  height="110"/>
+      <rect x="80"  y="80"  width="48"  height="55"/><rect x="128" y="80"  width="144" height="55"/>
+      <rect x="272" y="80"  width="192" height="55"/><rect x="464" y="80"  width="96"  height="55"/>
+    </g>
+    <!-- the highlighted cell around (x₃, y₂) -->
+    <rect x="272" y="135" width="192" height="110" fill="#8b5cf6" fill-opacity="0.20" stroke="#8b5cf6" stroke-opacity="0.9" stroke-width="1.6"/>
+  </g>
+
+  <!-- grid lines through the points -->
+  <g stroke="currentColor" stroke-opacity="0.30" stroke-width="1">
+    <line x1="80" y1="80" x2="80" y2="300"/><line x1="176" y1="80" x2="176" y2="300"/>
+    <line x1="368" y1="80" x2="368" y2="300"/><line x1="560" y1="80" x2="560" y2="300"/>
+    <line x1="80" y1="300" x2="560" y2="300"/><line x1="80" y1="190" x2="560" y2="190"/>
+    <line x1="80" y1="80"  x2="560" y2="80"/>
+  </g>
+
+  <!-- grid points -->
+  <g fill="currentColor">
+    <circle cx="80" cy="300" r="4"/><circle cx="176" cy="300" r="4"/><circle cx="368" cy="300" r="4"/><circle cx="560" cy="300" r="4"/>
+    <circle cx="80" cy="190" r="4"/><circle cx="176" cy="190" r="4"/><circle cx="560" cy="190" r="4"/>
+    <circle cx="80" cy="80"  r="4"/><circle cx="176" cy="80"  r="4"/><circle cx="368" cy="80"  r="4"/><circle cx="560" cy="80"  r="4"/>
+  </g>
+  <circle cx="368" cy="190" r="5.5" fill="#8b5cf6"/>
+  <text x="380" y="182" font-size="14" fill="#8b5cf6">(x₃, y₂)</text>
+
+  <!-- axis labels -->
+  <g font-size="14" text-anchor="middle" fill="currentColor">
+    <text x="80" y="323">x₁</text><text x="176" y="323">x₂</text><text x="368" y="323">x₃</text><text x="560" y="323">x₄</text>
+    <text x="62" y="305">y₁</text><text x="62" y="195">y₂</text><text x="62" y="85">y₃</text>
+  </g>
+
+  <!-- per-axis widths of the highlighted cell -->
+  <line x1="272" y1="352" x2="464" y2="352" stroke="#8b5cf6" stroke-width="1.6" marker-start="url(#p2r)" marker-end="url(#p2)"/>
+  <text x="368" y="371" font-size="13" fill="#8b5cf6" text-anchor="middle">half_spacing(Ωₕ(1), 3) = 0.4</text>
+  <line x1="612" y1="135" x2="612" y2="245" stroke="#8b5cf6" stroke-width="1.6" marker-start="url(#p2r)" marker-end="url(#p2)"/>
+  <text x="622" y="194" font-size="13" fill="#8b5cf6" text-anchor="start">half_spacing(Ωₕ(2), 2)</text>
+  <text x="622" y="211" font-size="13" fill="#8b5cf6" text-anchor="start">= 0.5</text>
+</svg>
+</figure>
+```
+
+An `n`-dimensional mesh is a tensor product of 1D meshes, and every quantity above is
+built the same way. The cell around `(xᵢ, yⱼ)` is the rectangle spanned by the two
+per-axis intervals, so its measure is the product of the per-axis widths:
+
+```julia
+cell_measure(Ωₕ, CartesianIndex(3, 2))          # 0.2
+half_spacing(Ωₕ(1), 3) * half_spacing(Ωₕ(2), 2)  # 0.2 — the same number
+```
+
+`Ωₕ(k)` is the 1D submesh along axis `k`, so anything documented for a 1D mesh applies to
+it directly. As in one dimension the cells tile the domain exactly — here the twelve cell
+measures sum to the area `1.0` — and the cells touching a boundary are correspondingly
+thinner along that axis.
+
 
 ## 3. Boundary and interior indexing
 
