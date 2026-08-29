@@ -220,6 +220,17 @@ Dc₂
 Dcₕ
 ```
 
+The cross-weighted centered difference, the same two one-sided differences weighted by
+the opposite spacings. It reproduces the derivative of a quadratic exactly on any
+grid, and so is second order on a non-uniform one where `Dcₓ` is first.
+
+```@docs
+Dₕₓ
+Dₕᵧ
+Dₕ₂
+∇ₕ
+```
+
 Jumps across an interface.
 
 ```@docs

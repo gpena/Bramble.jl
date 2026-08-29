@@ -77,6 +77,7 @@ if __bramble_with_unit_tests
             include("space/difference.jl")
             include("space/star_difference.jl")
             include("space/centered_difference.jl")
+            include("space/cross_weighted_difference.jl")
             include("space/jump.jl")
             include("space/average.jl")
             include("space/inner_product.jl")

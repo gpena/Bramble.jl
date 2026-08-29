@@ -78,10 +78,18 @@ abstract type GridDirection end
 struct Forward <: GridDirection end
 struct Backward <: GridDirection end
 
-# The centered stencil reads both neighbours rather than one, so it is truncated on two
+# A centered stencil reads both neighbours rather than one, so it is truncated on two
 # boundary slices rather than one. `_average_engine!` and the shared `_stencil_ranges`
-# take a one-sided direction only; the centered traversal is separate, below.
-struct Centered <: GridDirection end
+# take a one-sided direction only; the centered traversal is separate, below, and both
+# centered operators share it.
+abstract type CenteredStencil <: GridDirection end
+
+# Divides by the whole span the stencil covers, xᵢ₊₁ - xᵢ₋₁.
+struct Centered <: CenteredStencil end
+
+# Weights the two one-sided differences by the *opposite* spacings, which is what makes
+# it second order on a non-uniform grid where `Centered` is first.
+struct CrossWeighted <: CenteredStencil end
 
 # --- Core Difference Computation ---
 # @boundscheck rather than @assert: this runs once per grid point and the engine's
@@ -121,16 +129,37 @@ end
 @inline @propagate_inbounds _compute_difference(
     ::Backward, ::Val{true}, cur, h, i) = zero(cur)
 
-# Centered, taking the two neighbours in grid order rather than a point and its
-# neighbour. `h` is the averaged spacing, the same view `Dstar₊` divides by, because
+# The centered kernels take the three points of their stencil in grid order, rather than
+# a point and its neighbour. `Centered` does not read the middle one; it is passed anyway
+# so that both centered operators can share one traversal.
+#
+# `h` is the averaged spacing, the same view `Dstar₊` divides by, because
 #
 #     x_{i+1} - x_{i-1} = h_i + h_{i+1} = 2 h*_i
 #
 # so the centered denominator is twice it and one lazy view serves both operators.
 @inline @propagate_inbounds _compute_difference(
-    ::Centered, ::Val{false}, back, fwd, h, i) = (fwd - back) / (2 * _get_h_val(h, i))
+    ::Centered, ::Val{false}, back, _, fwd, h, i) = (fwd - back) / (2 * _get_h_val(h, i))
+
+# The cross-weighted kernel needs the two spacings separately rather than their sum, so
+# its `h` is the mesh's cached spacings themselves:
+#
+#     Dₕ(u)(i) = [h_i (u_{i+1} - u_i) / h_{i+1} + h_{i+1} (u_i - u_{i-1}) / h_i]
+#                / (h_i + h_{i+1})
+#
+# which is the backward differences at x_{i+1} and at x_i weighted by h_i and h_{i+1}
+# respectively. Reading h[i+1] is in range because the interior stops at the last point
+# that has a forward neighbour.
+@inline @propagate_inbounds function _compute_difference(
+        ::CrossWeighted, ::Val{false}, back, cur, fwd, h, i)
+    hᵢ = _get_h_val(h, i)
+    hᵢ₊₁ = _get_h_val(h, i + 1)
+    return (hᵢ * (fwd - cur) / hᵢ₊₁ + hᵢ₊₁ * (cur - back) / hᵢ) / (hᵢ + hᵢ₊₁)
+end
+
+# Neither has a stencil on either end slice, so both are zero there.
 @inline @propagate_inbounds _compute_difference(
-    ::Centered, ::Val{true}, cur, h, i) = zero(cur)
+    ::CenteredStencil, ::Val{true}, cur, h, i) = zero(cur)
 
 # --- The starred forward difference ----------------------------------------------- #
 #
@@ -305,7 +334,7 @@ end
 # argument of function type that the body only forwards is not specialised on, and the
 # spacing would be boxed for every grid point.
 function _difference_engine!(out, in_ref, h::H, dims::NTuple{D, Int},
-        dir::Centered, ::Val{DIM}) where {H, D, DIM}
+        dir::CenteredStencil, ::Val{DIM}) where {H, D, DIM}
     li = LinearIndices(dims)
     step = _stencil_step(Val(DIM), Val(D))
     interior, lo, hi = _centered_stencil_ranges(axes(li), Val(DIM))
@@ -314,7 +343,7 @@ function _difference_engine!(out, in_ref, h::H, dims::NTuple{D, Int},
         idx = li[I]
         back, fwd = li[I - step], li[I + step]
         out[idx] = _compute_difference(
-            dir, Val(false), in_ref[back], in_ref[fwd], h, I[DIM])
+            dir, Val(false), in_ref[back], in_ref[idx], in_ref[fwd], h, I[DIM])
     end
 
     # Both end slices at once. Iterating the two range tuples costs nothing: they have
@@ -748,3 +777,86 @@ a one-tuple.
 @inline Dcₕ(uₕ::VectorElement, ::Val{1}) = centered_difference(uₕ, Val(1))
 @inline Dcₕ(uₕ::VectorElement, ::Val{D}) where {D} = ntuple(
     i -> centered_difference(uₕ, Val(i)), Val(D))
+
+# --- Dₕ: the cross-weighted centered difference ----------------------------------- #
+
+"""
+	cross_weighted_difference(uₕ::VectorElement, dim_val::Val)
+
+The cross-weighted centered difference of `uₕ` along `dim_val`:
+
+```math
+\\textrm{D}_{h}(\\textrm{u}_h)(i) =
+    \\frac{h_i}{h_i + h_{i+1}}\\, \\textrm{D}_{-}\\textrm{u}_h(x_{i+1}) +
+    \\frac{h_{i+1}}{h_i + h_{i+1}}\\, \\textrm{D}_{-}\\textrm{u}_h(x_i)
+```
+
+Reached through [`Dₕₓ`](@ref) and its siblings. Like [`Dcₓ`](@ref), and unlike the
+one-sided families, this takes a grid function only: there is no matrix form.
+
+It is the same two one-sided differences [`Dcₓ`](@ref) combines, weighted by the opposite
+spacings. That is the combination which cancels the leading truncation term on a
+non-uniform grid, so this is second order where `Dcₓ` is first, and the two coincide when
+the spacing is constant.
+
+The first and the last point each lack a neighbour on one side, so both are truncated to
+zero.
+
+See also: [`Dcₓ`](@ref), [`D₋ₓ`](@ref).
+"""
+function cross_weighted_difference(
+        uₕ::VectorElement{<:ScalarGridSpace}, dim_val::Val{DIM}) where {DIM}
+    vₕ = similar(uₕ)
+    h = spacings(_op_mesh(uₕ)(DIM))
+    _apply_stencil!(vₕ, uₕ, h, CrossWeighted(), dim_val)
+    return vₕ
+end
+
+# As for the other operators, a composite grid function is differenced one component at a
+# time; every component shares the mesh, so the spacings are fetched once.
+function cross_weighted_difference(
+        uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val{DIM}) where {DIM}
+    vₕ = similar(uₕ)
+    h = spacings(_op_mesh(uₕ)(DIM))
+    _apply_componentwise!(
+        (v, u) -> _apply_stencil!(v, u, h, CrossWeighted(), dim_val), vₕ, uₕ)
+    return vₕ
+end
+
+# Written out rather than generated, for the same reason `Dstar₊` and `Dc` are: the shared
+# generator documents its aliases as taking a mesh, a grid space or a grid function, and
+# this family takes only the last.
+for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
+    alias = Symbol(:Dₕ, suffix)
+    direction = _BRAMBLE_var2label[i]
+    @eval begin
+        @doc """
+          	$($(QuoteNode(alias)))(uₕ::VectorElement)
+
+          The cross-weighted centered difference of `uₕ` along the `$($direction)`
+          direction, the backward differences at ``x_{i+1}`` and ``x_i`` weighted by
+          ``h_i`` and ``h_{i+1}``.
+
+          Alias for `cross_weighted_difference(uₕ, Val($($i)))`. Second order on a
+          non-uniform grid, where [`Dc$($suffix)`](@ref) is first. Takes a grid function
+          only; there is no matrix form. The first and last points along `$($direction)`
+          are truncated to zero.
+          """
+        @inline $alias(uₕ::VectorElement) = cross_weighted_difference(uₕ, Val($i))
+    end
+end
+
+"""
+	∇ₕ(uₕ::VectorElement)
+
+The cross-weighted centered difference of `uₕ` along every coordinate, as a tuple with one
+grid function per spatial dimension. On a one-dimensional mesh it returns that single entry
+rather than a one-tuple.
+
+The centered counterpart of [`∇₋ₕ`](@ref) and [`∇₊ₕ`](@ref), built from [`Dₕₓ`](@ref)
+rather than from the one-sided differences.
+"""
+@inline ∇ₕ(uₕ::VectorElement) = ∇ₕ(uₕ, Val(dim(_op_mesh(uₕ))))
+@inline ∇ₕ(uₕ::VectorElement, ::Val{1}) = cross_weighted_difference(uₕ, Val(1))
+@inline ∇ₕ(uₕ::VectorElement, ::Val{D}) where {D} = ntuple(
+    i -> cross_weighted_difference(uₕ, Val(i)), Val(D))

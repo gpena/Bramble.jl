@@ -146,7 +146,7 @@ values(diff₊ₓ(uₕ))[end] # -1.0,  which is -u₅, not 0
 values(diff₋ₓ(uₕ))[1]   # 0.0,   which is u₁, and u₁ happens to be 0 here
 ```
 
-Section 9 shows why this matters in practice.
+Section 10 shows why this matters in practice.
 
 In two or more dimensions, directional operators apply along the coordinate lines of the tensor grid, and each directional family truncates along its corresponding boundary slice:
 
@@ -411,7 +411,51 @@ second order on a uniform grid and first order otherwise, where the one-sided di
 are first order on both. As with `Dstar₊ₓ`, `Dcₓ` takes a grid function only and has no
 matrix form; `Dcₕ` gives every coordinate at once.
 
-## 9. A convergence study, and the boundary
+## 9. Second order on a non-uniform grid, `Dₕₓ`
+
+`Dcₓ` is second order only on a uniform grid. The fix is to take the same two one-sided
+differences and weight them by the **opposite** spacings:
+
+```math
+\textrm{D}_{hx}(u_h)(i) = \frac{h_i}{h_i + h_{i+1}}\, D_{-x} u_h(x_{i+1})
+                        + \frac{h_{i+1}}{h_i + h_{i+1}}\, D_{-x} u_h(x_i)
+```
+
+Compare that with `Dcₓ`, which is the same combination with the weights the other way
+round. When ``h_i = h_{i+1}`` the two agree, and both reduce to the mean of ``D_{-x}`` and
+``D_{+x}``; they part company only where the spacing varies.
+
+The swap buys exactness on quadratics rather than only on affine functions, on any grid.
+With ``u = x^2`` the weighted sum telescopes to ``2 x_i (h_i + h_{i+1})``, and the
+denominator cancels:
+
+```julia
+Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
+set_points!(Ωₕ, [0.0, 0.1, 0.3, 0.7, 1.0])
+uₕ = Rₕ(gridspace(Ωₕ), x -> x^2)
+
+values(Dcₓ(uₕ))   # [0.0, 0.3, 0.8, 1.3, 0.0]
+values(Dₕₓ(uₕ))   # [0.0, 0.2, 0.6, 1.4, 0.0]
+2 .* points(Ωₕ)   # [0.0, 0.2, 0.6, 1.4, 2.0]    ← Dₕₓ hits it exactly
+```
+
+That one order of extra exactness is one order of extra accuracy. Differencing ``\sin``
+against ``\cos`` on a random grid, refined by halving every interval so the grids stay
+nested:
+
+| ``n`` | `Dcₓ` error | order | `Dₕₓ` error | order |
+|--:|--:|--:|--:|--:|
+| 21 | 3.52e-02 | | 2.95e-03 | |
+| 41 | 1.78e-02 | 0.99 | 1.30e-03 | 1.18 |
+| 81 | 8.94e-03 | 0.99 | 3.32e-04 | 1.97 |
+| 161 | 4.48e-03 | 1.00 | 8.36e-05 | 1.99 |
+
+`Dₕₓ` is not skew-symmetric, so `Dcₓ` remains the one to reach for when the scheme needs
+that structure and `Dₕₓ` the one to reach for when it needs the order. Both truncate on
+two slices, both take a grid function only, and `∇ₕ` gives every coordinate at once, the
+centered counterpart of `∇₋ₕ` and `∇₊ₕ`.
+
+## 10. A convergence study, and the boundary
 
 `D₋ₓ` is first order, so the error against a known derivative should fall by a factor of
 ten each time the grid is refined by ten. Measuring it naively does not show that:
@@ -462,3 +506,6 @@ in place silently halves the observed order.
 - `Dcₓ` is the centered difference over the span its stencil covers. It is exact on
   affine functions and skew-symmetric in `innerₕ` on any grid, and truncates on two
   slices rather than one.
+- `Dₕₓ` weights the same two one-sided differences by the opposite spacings. It is
+  exact on quadratics, and so second order on a non-uniform grid where `Dcₓ` is
+  first, but it is not skew-symmetric.
