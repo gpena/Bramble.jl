@@ -237,6 +237,16 @@ end
 function _pc_space_session(Ωₕ, f, g)
     Wₕ = gridspace(Ωₕ)
 
+    # Grid space queries. space_weights runs once per grid space at
+    # construction, so it is only reached here through gridspace itself.
+    weights(Wₕ)
+    weights(Wₕ, Innerh(), 1)
+    weights(Wₕ, Innerplus(), 1)
+    ndofs(Wₕ)
+    dim(Wₕ)
+    eltype(Wₕ)
+    mesh(Wₕ)
+
     uₕ = Rₕ(Wₕ, f)
     vₕ = avgₕ(Wₕ, f)
     Rₕ!(uₕ, g)
@@ -246,6 +256,28 @@ function _pc_space_session(Ωₕ, f, g)
     wₕ = Rₕ(Vₕ, (f, g))
     avgₕ(Vₕ, (f, g))
 
+    # Element constructors, including the scalar fills, which take a separate
+    # path from the copy of an existing coefficient vector.
+    element(Wₕ)
+    aₕ = element(Wₕ, 3.0)
+    element(Wₕ, 2)                   # Int fill converts to eltype
+    bₕ = element(Wₕ, deepcopy(values(aₕ)))
+
+    space(bₕ)
+    values!(uₕ, values(bₕ))
+    copyto!(uₕ, bₕ)
+    copyto!(uₕ, values(bₕ))
+
+    uₕ[1]
+    uₕ[2] = 99.0
+    uₕ[3] = 99                       # Int setindex converts
+
+    axes(uₕ)
+    to_matrix(uₕ)
+    size(uₕ)
+    firstindex(uₕ)
+    lastindex(uₕ)
+
     uₕ .+ vₕ
     2 .* uₕ
     sum(uₕ)
@@ -254,7 +286,34 @@ function _pc_space_session(Ωₕ, f, g)
     similar(uₕ)
     copy(uₕ)
 
+    # Fused broadcasting, scalar assignment and division each lower differently.
+    uₕ .= bₕ .+ aₕ .* 2.0
+    uₕ .= 2
+    uₕ .= bₕ ./ 2
+
     return Wₕ, uₕ, wₕ
+end
+
+# Buffer pool. Not reachable from a grid space session: gridspace allocates its
+# buffers lazily, so the lock, release and grow paths are only compiled here.
+function _pc_space_buffers(be)
+    vb = vector_buffer(be, 10)
+    in_use(vb)
+    vector(vb)
+    lock!(vb)
+    unlock!(vb)
+
+    gsb = simple_space_buffer(be, 10; nbuffers = 2)
+    nbuffers(gsb)
+    add_buffer!(gsb)
+
+    v, key = vector_buffer(gsb)      # hands back a locked buffer
+    other = key == 1 ? 2 : 1
+    lock!(gsb, other)
+    unlock!(gsb, other)
+    unlock!(gsb, key)
+
+    return nothing
 end
 
 # --- Workload ------------------------------------------------------------ #
@@ -312,6 +371,7 @@ if PRECOMPILE_WORKLOAD
             _pc_space_session(Ωₕ1, x -> x + 1.0, x -> 2x)
             _pc_space_session(Ωₕ2, x -> x[1] * x[2], x -> x[1] + x[2])
             _pc_space_session(Ωₕ3, x -> x[1] * x[2] * x[3], x -> x[1] + x[2] + x[3])
+            _pc_space_buffers(be)
 
             # Markers and domains, including evaluation of a space-time domain.
             for X in (I1, S2)
