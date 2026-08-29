@@ -3,9 +3,11 @@ using Documenter
 
 home = "Home" => "index.md"
 tutorials = "Tutorials" =>
-    ["tutorials/geometry.md", "tutorials/mesh.md", "tutorials/space.md"]
+    ["tutorials/geometry.md", "tutorials/mesh.md", "tutorials/space.md",
+        "tutorials/operators.md"]
 # examples = "Examples" => ["examples/poisson_linear.md", "examples/poisson_nonlinear.md"]
-internals = "Internals" => ["internals/utils.md", "internals/geometry.md"]
+internals = "Internals" => ["internals/utils.md", "internals/geometry.md",
+    "internals/mesh.md", "internals/space.md"]
 documentation = "Documentation" => ["api.md", internals]
 
 allpages = [

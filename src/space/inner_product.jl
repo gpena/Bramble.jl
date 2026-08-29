@@ -5,7 +5,7 @@
 """
 	innerₕ(uₕ::VectorElement, vₕ::VectorElement)
 
-Returns the discrete ``L^2`` inner product of the grid functions `uₕ` and `vₕ`. Also accepts [MatrixElement](@ref) as any of the arguments.
+Returns the discrete ``L^2`` inner product of the grid functions `uₕ` and `vₕ`, weighting each point by its cell measure.
 
   - 1D case
 
@@ -49,7 +49,7 @@ end
 """
 	inner₊ₓ(uₕ::VectorElement, vₕ::VectorElement)
 
-Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ` and `vₕ` associated with the first variable. It accepts arguments of type [VectorElement](@ref) or [MatrixElement](@ref), in any order.
+Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ` and `vₕ` associated with the first variable.
 
 For [VectorElement](@ref)s, it is defined as
 
@@ -77,8 +77,7 @@ For [VectorElement](@ref)s, it is defined as
 	inner₊ᵧ(uₕ::VectorElement, vₕ::VectorElement)
 
 Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ` and `vₕ`
-associated with the second variable (y-direction). It accepts arguments of type
-[VectorElement](@ref) or [MatrixElement](@ref), in any order.
+associated with the second variable, the ``y`` direction.
 
 For [VectorElement](@ref)s, it is defined as
 
@@ -170,11 +169,11 @@ end
 	inner₊(uₕ::VectorElement, vₕ::VectorElement, [::Type{Tuple}])
 	inner₊(uₕ::NTuple{D}, vₕ::NTuple{D})
 
-Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ` and `vₕ`. It accepts arguments of type [VectorElement](@ref) or [MatrixElement](@ref), in any order.
+Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ` and `vₕ`.
 
 If the `Tuple` argument is given, it returns `D`-tuple of all ``\\textrm{inner}_{x_i,+}`` applied to its input arguments, where `D` is the topological dimension of the mesh associated with the elements.
 
-If `NTuple`s of [VectorElement](@ref) or [MatrixElement](@ref) are passed as input arguments, it returns the sum of all inner products ``(\\textrm{u}_h[i],\\textrm{v}_h[i])_{+x_i}``.
+If `NTuple`s of [VectorElement](@ref) are passed as input arguments, it returns the sum of all inner products ``(\\textrm{u}_h[i],\\textrm{v}_h[i])_{+x_i}``.
 
 For [VectorElement](@ref)s, the definition is given by
 

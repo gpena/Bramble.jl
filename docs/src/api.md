@@ -172,3 +172,67 @@ avgₕ
 avgₕ!
 ```
 
+
+## Difference, jump and average operators
+
+The unscaled difference and its finite difference counterpart, per coordinate and over
+every coordinate at once. See the [operators tutorial](tutorials/operators.md).
+
+```@docs
+diff₋ₓ
+diff₋ᵧ
+diff₋₂
+diff₋ₕ
+diff₊ₓ
+diff₊ᵧ
+diff₊₂
+diff₊ₕ
+D₋ₓ
+D₋ᵧ
+D₋₂
+∇₋ₕ
+D₊ₓ
+D₊ᵧ
+D₊₂
+∇₊ₕ
+```
+
+Jumps across an interface.
+
+```@docs
+jump₋ₓ
+jump₋ᵧ
+jump₋₂
+jump₋ₕ
+jump₊ₓ
+jump₊ᵧ
+jump₊₂
+jump₊ₕ
+```
+
+Averages of a point with its neighbour.
+
+```@docs
+M₋ₓ
+M₋ᵧ
+M₋₂
+M₋ₕ
+M₊ₓ
+M₊ᵧ
+M₊₂
+M₊ₕ
+```
+
+## Inner products and norms
+
+```@docs
+innerₕ
+inner₊
+inner₊ₓ
+inner₊ᵧ
+inner₊₂
+normₕ
+norm₁ₕ
+snorm₁ₕ
+norm₊
+```

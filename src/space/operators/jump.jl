@@ -134,8 +134,8 @@ for config in _JUMP_OP_CONFIGS
     # Use the robust helper function to generate aliases and their docstrings.
     for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
         direction = _BRAMBLE_var2label[i]
-        _define_directional_alias(
-            jump_name, Symbol(jump_alias, suffix), dir_string_lowercase, direction, i)
+        _define_directional_alias(jump_name, Symbol(jump_alias, suffix),
+            dir_string_lowercase, direction, i, "jump", math_op)
     end
 
     # --- Alias for the vectorial jump tuple ---

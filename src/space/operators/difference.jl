@@ -220,14 +220,30 @@ function _derivative_weights!(v::AbstractVector, Ωₕ::AbstractMeshType,
     return
 end
 
+"""
+	_define_directional_alias(base_op_name, alias_name, dir_string, suffix,
+	                          direction_index, what, formula)
+
+Defines `alias_name(arg)` as `base_op_name(arg, Val(direction_index))` and attaches a
+docstring to it.
+
+`what` names the quantity, such as `"finite difference"`, and `formula` is the LaTeX for
+it. Both are needed because the four operator families share this generator: describing
+every alias as a "difference" would be wrong for the averages and the jumps, and would
+not separate the unscaled difference from the finite difference.
+"""
 function _define_directional_alias(
-        base_op_name, alias_name, dir_string, suffix, direction_index)
+        base_op_name, alias_name, dir_string, suffix, direction_index, what, formula)
     # 1. Construct the docstring content.
     doc_string = """
      	$alias_name(arg)
 
-     Alias for `$base_op_name(arg, Val($direction_index))`. Computes the
-     `$dir_string` difference in the `$suffix`-direction.
+     The `$dir_string` $what along the `$suffix` direction, ``$formula``. The unscaled
+     difference is not divided by the grid spacing; the finite difference is.
+
+     Alias for `$base_op_name(arg, Val($direction_index))`. `arg` is a mesh, a grid space
+     or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+     third applies it and returns a `VectorElement`.
      """
 
     # 2. Construct the function definition as an expression.
@@ -369,10 +385,10 @@ for config in _DIFFERENCE_OP_CONFIGS
     # ❗️ FIX: Call the helper function to generate the aliases safely.
     for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
         direction = _BRAMBLE_var2label[i]
-        _define_directional_alias(
-            diff_name, Symbol(diff_alias, suffix), dir_string_lowercase, direction, i)
+        _define_directional_alias(diff_name, Symbol(diff_alias, suffix),
+            dir_string_lowercase, direction, i, "unscaled difference", math_op)
         _define_directional_alias(finite_diff_name, Symbol(finite_diff_alias, suffix),
-            dir_string_lowercase, direction, i)
+            dir_string_lowercase, direction, i, "finite difference", math_finite_op)
     end
 
     # --- Aliases for gradient tuples ---

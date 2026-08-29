@@ -143,6 +143,15 @@ Returns the `i`-th submesh of `Ωₕ`. A 1D mesh is its own only submesh, so thi
 end
 
 @inline spacing(Ωₕ::Mesh1D, i::CartesianIndex{1}) = spacing(Ωₕ, _extract_linear_index(i))
+"""
+	spacing_for_derivative(Ωₕ::Mesh1D, idx) -> eltype(Ωₕ)
+
+Returns the spacing that a backward finite difference divides by at `idx`, which is
+[`spacing`](@ref)`(Ωₕ, idx)` everywhere except the first point, where the difference has
+no stencil and this is zero.
+
+See also: [`forward_spacing_for_derivative`](@ref), [`spacings`](@ref).
+"""
 @inline function spacing_for_derivative(Ωₕ::Mesh1D, idx)
     i = idx isa CartesianIndex{1} ? _extract_linear_index(idx) : idx
     if i == 1
@@ -183,6 +192,15 @@ end
 end
 
 @inline forward_spacing(Ωₕ::Mesh1D, i::CartesianIndex{1}) = forward_spacing(Ωₕ, _extract_linear_index(i))
+"""
+	forward_spacing_for_derivative(Ωₕ::Mesh1D, idx) -> eltype(Ωₕ)
+
+Returns the spacing that a forward finite difference divides by at `idx`, which is
+[`forward_spacing`](@ref)`(Ωₕ, idx)` everywhere except the last point, where the
+difference has no stencil and this is zero.
+
+See also: [`spacing_for_derivative`](@ref), [`spacings`](@ref).
+"""
 @inline function forward_spacing_for_derivative(Ωₕ::Mesh1D, idx)
     i = idx isa CartesianIndex{1} ? _extract_linear_index(idx) : idx
 

@@ -200,8 +200,8 @@ for config in _AVERAGE_OP_CONFIGS
     # Use the robust helper function to generate aliases and their docstrings.
     for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
         direction = _BRAMBLE_var2label[i]
-        _define_directional_alias(
-            average_name, Symbol(average_alias, suffix), dir_string_lowercase, direction, i)
+        _define_directional_alias(average_name, Symbol(average_alias, suffix),
+            dir_string_lowercase, direction, i, "average", math_op)
     end
 
     # --- Aliases for vectorial average tuples ---
