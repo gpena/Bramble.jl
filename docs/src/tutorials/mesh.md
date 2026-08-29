@@ -353,6 +353,78 @@ iterative_refinement!(Ωₕ)
 npoints(Ωₕ, Tuple)  # (39, 39)
 ```
 
+```@raw html
+<figure>
+<svg viewBox="0 0 740 210" width="100%" style="max-width:740px;height:auto;font-family:system-ui,-apple-system,'Segoe UI',sans-serif"
+     xmlns="http://www.w3.org/2000/svg" role="img"
+     aria-label="Diagram showing dyadic iterative_refinement! on a 1D mesh: coarse mesh with N=5 points splits into 2N-1=9 points by inserting midpoints.">
+  <defs>
+    <marker id="refineArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#10b981"/>
+    </marker>
+  </defs>
+
+  <!-- Level 0: Coarse Mesh (N = 5) -->
+  <text x="40" y="28" font-size="13" font-weight="bold" fill="currentColor">Coarse mesh: N = 5 points</text>
+  <line x1="40" y1="55" x2="680" y2="55" stroke="currentColor" stroke-width="1.5"/>
+
+  <!-- 5 Coarse points -->
+  <circle cx="40"  cy="55" r="5" fill="#3b82f6" stroke="currentColor" stroke-width="1"/>
+  <circle cx="200" cy="55" r="5" fill="#3b82f6" stroke="currentColor" stroke-width="1"/>
+  <circle cx="360" cy="55" r="5" fill="#3b82f6" stroke="currentColor" stroke-width="1"/>
+  <circle cx="520" cy="55" r="5" fill="#3b82f6" stroke="currentColor" stroke-width="1"/>
+  <circle cx="680" cy="55" r="5" fill="#3b82f6" stroke="currentColor" stroke-width="1"/>
+
+  <text x="40"  y="78" font-size="11" fill="#3b82f6" font-weight="bold" text-anchor="middle">x₁</text>
+  <text x="200" y="78" font-size="11" fill="#3b82f6" font-weight="bold" text-anchor="middle">x₂</text>
+  <text x="360" y="78" font-size="11" fill="#3b82f6" font-weight="bold" text-anchor="middle">x₃</text>
+  <text x="520" y="78" font-size="11" fill="#3b82f6" font-weight="bold" text-anchor="middle">x₄</text>
+  <text x="680" y="78" font-size="11" fill="#3b82f6" font-weight="bold" text-anchor="middle">x₅</text>
+
+  <!-- Midpoint insertion indicators -->
+  <path d="M 120 70 L 120 120" stroke="#10b981" stroke-width="1.5" stroke-dasharray="3,3" marker-end="url(#refineArrow)"/>
+  <path d="M 280 70 L 280 120" stroke="#10b981" stroke-width="1.5" stroke-dasharray="3,3" marker-end="url(#refineArrow)"/>
+  <path d="M 440 70 L 440 120" stroke="#10b981" stroke-width="1.5" stroke-dasharray="3,3" marker-end="url(#refineArrow)"/>
+  <path d="M 600 70 L 600 120" stroke="#10b981" stroke-width="1.5" stroke-dasharray="3,3" marker-end="url(#refineArrow)"/>
+
+  <text x="360" y="102" font-size="12" font-weight="bold" fill="#10b981" text-anchor="middle">iterative_refinement!(Ωₕ)</text>
+
+  <!-- Level 1: Refined Mesh (2N - 1 = 9) -->
+  <text x="40" y="135" font-size="13" font-weight="bold" fill="currentColor">Refined mesh: 2N - 1 = 9 points</text>
+  <line x1="40" y1="160" x2="680" y2="160" stroke="currentColor" stroke-width="1.5"/>
+
+  <!-- Original nodes (Blue) -->
+  <circle cx="40"  cy="160" r="4.5" fill="#3b82f6" stroke="currentColor" stroke-width="1"/>
+  <circle cx="200" cy="160" r="4.5" fill="#3b82f6" stroke="currentColor" stroke-width="1"/>
+  <circle cx="360" cy="160" r="4.5" fill="#3b82f6" stroke="currentColor" stroke-width="1"/>
+  <circle cx="520" cy="160" r="4.5" fill="#3b82f6" stroke="currentColor" stroke-width="1"/>
+  <circle cx="680" cy="160" r="4.5" fill="#3b82f6" stroke="currentColor" stroke-width="1"/>
+
+  <!-- Inserted midpoints (Green) -->
+  <circle cx="120" cy="160" r="4.5" fill="#10b981" stroke="currentColor" stroke-width="1"/>
+  <circle cx="280" cy="160" r="4.5" fill="#10b981" stroke="currentColor" stroke-width="1"/>
+  <circle cx="440" cy="160" r="4.5" fill="#10b981" stroke="currentColor" stroke-width="1"/>
+  <circle cx="600" cy="160" r="4.5" fill="#10b981" stroke="currentColor" stroke-width="1"/>
+
+  <text x="40"  y="185" font-size="10" fill="#3b82f6" text-anchor="middle">x'₁</text>
+  <text x="120" y="185" font-size="10" fill="#10b981" font-weight="bold" text-anchor="middle">x'₂</text>
+  <text x="200" y="185" font-size="10" fill="#3b82f6" text-anchor="middle">x'₃</text>
+  <text x="280" y="185" font-size="10" fill="#10b981" font-weight="bold" text-anchor="middle">x'₄</text>
+  <text x="360" y="185" font-size="10" fill="#3b82f6" text-anchor="middle">x'₅</text>
+  <text x="440" y="185" font-size="10" fill="#10b981" font-weight="bold" text-anchor="middle">x'₆</text>
+  <text x="520" y="185" font-size="10" fill="#3b82f6" text-anchor="middle">x'₇</text>
+  <text x="600" y="185" font-size="10" fill="#10b981" font-weight="bold" text-anchor="middle">x'₈</text>
+  <text x="680" y="185" font-size="10" fill="#3b82f6" text-anchor="middle">x'₉</text>
+
+  <!-- Legend -->
+  <circle cx="520" cy="28" r="4" fill="#3b82f6"/>
+  <text x="530" y="32" font-size="11" fill="currentColor">original vertices</text>
+  <circle cx="620" cy="28" r="4" fill="#10b981"/>
+  <text x="630" y="32" font-size="11" fill="currentColor">new midpoints</text>
+</svg>
+</figure>
+```
+
 ### 5.2 Relocating mesh coordinates
 
 For moving-boundary problems or non-uniform smoothing:

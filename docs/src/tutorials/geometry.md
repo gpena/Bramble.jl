@@ -139,6 +139,73 @@ get_boundary_symbols(2)
 # (:bottom, :top, :left, :right)
 ```
 
+```@raw html
+<figure>
+<svg viewBox="0 0 780 280" width="100%" style="max-width:780px;height:auto;font-family:system-ui,-apple-system,'Segoe UI',sans-serif"
+     xmlns="http://www.w3.org/2000/svg" role="img"
+     aria-label="Diagram of standard boundary symbols in 2D (:left, :right, :bottom, :top) and 3D (:left, :right, :bottom, :top, :front, :back).">
+  <!-- Panel 1: 2D Domain -->
+  <g transform="translate(30, 20)">
+    <rect x="0" y="0" width="320" height="240" rx="6" fill="none" stroke="currentColor" stroke-opacity="0.2" stroke-width="1"/>
+    <text x="160" y="28" font-size="14" font-weight="bold" fill="currentColor" text-anchor="middle">2D boundary facets</text>
+
+    <!-- 2D Box -->
+    <rect x="80" y="70" width="160" height="120" fill="currentColor" fill-opacity="0.05" stroke="currentColor" stroke-width="2"/>
+
+    <!-- Labels -->
+    <!-- :top -->
+    <text x="160" y="58" font-size="12" font-weight="bold" fill="#ef4444" text-anchor="middle">:top (y_max)</text>
+    <line x1="80" y1="70" x2="240" y2="70" stroke="#ef4444" stroke-width="3"/>
+
+    <!-- :bottom -->
+    <text x="160" y="210" font-size="12" font-weight="bold" fill="#ef4444" text-anchor="middle">:bottom (y_min)</text>
+    <line x1="80" y1="190" x2="240" y2="190" stroke="#ef4444" stroke-width="3"/>
+
+    <!-- :left -->
+    <text x="30" y="134" font-size="12" font-weight="bold" fill="#3b82f6" text-anchor="middle">:left</text>
+    <text x="30" y="148" font-size="10" fill="#3b82f6" text-anchor="middle">(x_min)</text>
+    <line x1="80" y1="70" x2="80" y2="190" stroke="#3b82f6" stroke-width="3"/>
+
+    <!-- :right -->
+    <text x="285" y="134" font-size="12" font-weight="bold" fill="#3b82f6" text-anchor="middle">:right</text>
+    <text x="285" y="148" font-size="10" fill="#3b82f6" text-anchor="middle">(x_max)</text>
+    <line x1="240" y1="70" x2="240" y2="190" stroke="#3b82f6" stroke-width="3"/>
+  </g>
+
+  <!-- Panel 2: 3D Isometric Domain -->
+  <g transform="translate(410, 20)">
+    <rect x="0" y="0" width="340" height="240" rx="6" fill="none" stroke="currentColor" stroke-opacity="0.2" stroke-width="1"/>
+    <text x="170" y="28" font-size="14" font-weight="bold" fill="currentColor" text-anchor="middle">3D boundary facets</text>
+
+    <!-- Isometric Box Coordinates -->
+    <!-- Back/interior edges dashed -->
+    <line x1="130" y1="70"  x2="130" y2="150" stroke="currentColor" stroke-dasharray="3,3" stroke-width="1" stroke-opacity="0.4"/>
+    <line x1="70"  y1="190" x2="130" y2="150" stroke="currentColor" stroke-dasharray="3,3" stroke-width="1" stroke-opacity="0.4"/>
+    <line x1="130" y1="150" x2="250" y2="150" stroke="currentColor" stroke-dasharray="3,3" stroke-width="1" stroke-opacity="0.4"/>
+
+    <!-- Top face -->
+    <polygon points="70,110 130,70 250,70 190,110" fill="#ef4444" fill-opacity="0.1" stroke="#ef4444" stroke-width="1.5"/>
+    <text x="160" y="94" font-size="11" font-weight="bold" fill="#ef4444" text-anchor="middle">:top (z_max)</text>
+
+    <!-- Right face -->
+    <polygon points="190,110 250,70 250,150 190,190" fill="#3b82f6" fill-opacity="0.1" stroke="#3b82f6" stroke-width="1.5"/>
+    <text x="225" y="135" font-size="11" font-weight="bold" fill="#3b82f6" text-anchor="middle">:right</text>
+
+    <!-- Front face -->
+    <polygon points="70,110 190,110 190,190 70,190" fill="#10b981" fill-opacity="0.1" stroke="#10b981" stroke-width="1.5"/>
+    <text x="130" y="155" font-size="11" font-weight="bold" fill="#10b981" text-anchor="middle">:front (y_max)</text>
+
+    <!-- Left callout -->
+    <text x="35" y="150" font-size="11" font-weight="bold" fill="#3b82f6" text-anchor="middle">:left</text>
+    <!-- Back callout -->
+    <text x="190" y="60" font-size="11" font-weight="bold" fill="#10b981" text-anchor="middle">:back (y_min)</text>
+    <!-- Bottom callout -->
+    <text x="130" y="215" font-size="11" font-weight="bold" fill="#ef4444" text-anchor="middle">:bottom (z_min)</text>
+  </g>
+</svg>
+</figure>
+```
+
 ### 4.2 Creating markers
 
 Markers are defined as `:label => identifier` pairs where `identifier` can be a single boundary symbol, a tuple of symbols, or a boolean function:

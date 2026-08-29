@@ -148,6 +148,101 @@ values(diff₋ₓ(uₕ))[1]   # 0.0,   which is u₁, and u₁ happens to be 0 h
 
 Section 6 shows why this matters in practice.
 
+In two or more dimensions, directional operators apply along the coordinate lines of the tensor grid, and each directional family truncates along its corresponding boundary slice:
+
+```@raw html
+<figure>
+<svg viewBox="0 0 740 310" width="100%" style="max-width:740px;height:auto;font-family:system-ui,-apple-system,'Segoe UI',sans-serif"
+     xmlns="http://www.w3.org/2000/svg" role="img"
+     aria-label="A 4 by 4 two-dimensional tensor-product grid showing the directional backward stencils D_-x (horizontal) and D_-y (vertical), and the boundary slices where each directional difference is truncated to zero.">
+  <defs>
+    <marker id="arrowRed" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#ef4444"/>
+    </marker>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#3b82f6"/>
+    </marker>
+  </defs>
+
+  <!-- Left boundary slice shaded (D_-x truncated) -->
+  <rect x="50" y="40" width="40" height="210" rx="6" fill="#ef4444" fill-opacity="0.12" stroke="#ef4444" stroke-dasharray="3,3" stroke-width="1"/>
+  <text x="70" y="30" font-size="11" font-weight="bold" fill="#ef4444" text-anchor="middle">D₋ₓ = 0</text>
+  <text x="70" y="265" font-size="10" fill="#ef4444" text-anchor="middle">i = 1 slice</text>
+
+  <!-- Bottom boundary slice shaded (D_-y truncated) -->
+  <rect x="50" y="210" width="250" height="40" rx="6" fill="#3b82f6" fill-opacity="0.12" stroke="#3b82f6" stroke-dasharray="3,3" stroke-width="1"/>
+  <text x="315" y="234" font-size="11" font-weight="bold" fill="#3b82f6">D₋ᵧ = 0 (j = 1 slice)</text>
+
+  <!-- 4x4 Grid lines -->
+  <!-- Horizontal lines (y = const) -->
+  <line x1="70" y1="70"  x2="280" y2="70"  stroke="currentColor" stroke-opacity="0.3" stroke-width="1.2"/>
+  <line x1="70" y1="120" x2="280" y2="120" stroke="currentColor" stroke-opacity="0.3" stroke-width="1.2"/>
+  <line x1="70" y1="170" x2="280" y2="170" stroke="currentColor" stroke-opacity="0.3" stroke-width="1.2"/>
+  <line x1="70" y1="230" x2="280" y2="230" stroke="currentColor" stroke-opacity="0.3" stroke-width="1.2"/>
+
+  <!-- Vertical lines (x = const) -->
+  <line x1="70"  y1="70" x2="70"  y2="230" stroke="currentColor" stroke-opacity="0.3" stroke-width="1.2"/>
+  <line x1="140" y1="70" x2="140" y2="230" stroke="currentColor" stroke-opacity="0.3" stroke-width="1.2"/>
+  <line x1="210" y1="70" x2="210" y2="230" stroke="currentColor" stroke-opacity="0.3" stroke-width="1.2"/>
+  <line x1="280" y1="70" x2="280" y2="230" stroke="currentColor" stroke-opacity="0.3" stroke-width="1.2"/>
+
+  <!-- Grid vertices -->
+  <!-- row 4 (j=4) -->
+  <circle cx="70"  cy="70" r="3.5" fill="currentColor"/>
+  <circle cx="140" cy="70" r="3.5" fill="currentColor"/>
+  <circle cx="210" cy="70" r="3.5" fill="currentColor"/>
+  <circle cx="280" cy="70" r="3.5" fill="currentColor"/>
+  <!-- row 3 (j=3) -->
+  <circle cx="70"  cy="120" r="3.5" fill="currentColor"/>
+  <circle cx="140" cy="120" r="3.5" fill="currentColor"/>
+  <circle cx="210" cy="120" r="3.5" fill="currentColor"/>
+  <circle cx="280" cy="120" r="3.5" fill="currentColor"/>
+  <!-- row 2 (j=2) -->
+  <circle cx="70"  cy="170" r="3.5" fill="currentColor"/>
+  <circle cx="140" cy="170" r="3.5" fill="currentColor"/>
+  <circle cx="210" cy="170" r="3.5" fill="currentColor"/>
+  <circle cx="280" cy="170" r="3.5" fill="currentColor"/>
+  <!-- row 1 (j=1) -->
+  <circle cx="70"  cy="230" r="3.5" fill="currentColor"/>
+  <circle cx="140" cy="230" r="3.5" fill="currentColor"/>
+  <circle cx="210" cy="230" r="3.5" fill="currentColor"/>
+  <circle cx="280" cy="230" r="3.5" fill="currentColor"/>
+
+  <!-- Stencils at interior point (i=3, j=3), located at (210, 120) -->
+  <circle cx="210" cy="120" r="6" fill="#10b981" stroke="currentColor" stroke-width="1.5"/>
+  <text x="210" y="110" font-size="11" font-weight="bold" fill="#10b981" text-anchor="middle">(i, j)</text>
+
+  <!-- Horizontal backward stencil D_-x: reaching from (210, 120) to (140, 120) -->
+  <path d="M 204 120 L 148 120" stroke="#ef4444" stroke-width="2.2" fill="none" marker-end="url(#arrowRed)"/>
+  <text x="175" y="135" font-size="11" font-weight="bold" fill="#ef4444" text-anchor="middle">D₋ₓ</text>
+
+  <!-- Vertical backward stencil D_-y: reaching from (210, 120) down to (210, 170) -->
+  <path d="M 210 126 L 210 162" stroke="#3b82f6" stroke-width="2.2" fill="none" marker-end="url(#arrowBlue)"/>
+  <text x="225" y="150" font-size="11" font-weight="bold" fill="#3b82f6">D₋ᵧ</text>
+
+  <!-- Legend & Explanation on Right Side -->
+  <g transform="translate(440, 50)">
+    <rect x="0" y="0" width="280" height="190" rx="6" fill="none" stroke="currentColor" stroke-opacity="0.2" stroke-width="1"/>
+    <text x="140" y="25" font-size="13" font-weight="bold" fill="currentColor" text-anchor="middle">2D Directional Stencils</text>
+
+    <!-- Entry 1: D_-x -->
+    <line x1="20" y1="55" x2="50" y2="55" stroke="#ef4444" stroke-width="2.5"/>
+    <text x="60" y="58" font-size="12" font-weight="bold" fill="#ef4444">D₋ₓ(uₕ)[i, j]</text>
+    <text x="60" y="73" font-size="11" fill="currentColor" opacity="0.8">= (u[i, j] - u[i-1, j]) / hₓ,ᵢ</text>
+    <text x="60" y="88" font-size="11" fill="#ef4444">Zero on left boundary (i = 1)</text>
+
+    <!-- Entry 2: D_-y -->
+    <line x1="20" y1="120" x2="50" y2="120" stroke="#3b82f6" stroke-width="2.5"/>
+    <text x="60" y="123" font-size="12" font-weight="bold" fill="#3b82f6">D₋ᵧ(uₕ)[i, j]</text>
+    <text x="60" y="138" font-size="11" fill="currentColor" opacity="0.8">= (u[i, j] - u[i, j-1]) / hᵧ,ⱼ</text>
+    <text x="60" y="153" font-size="11" fill="#3b82f6">Zero on bottom boundary (j = 1)</text>
+
+    <text x="140" y="178" font-size="11" fill="#10b981" font-weight="bold" text-anchor="middle">∇₋ₕ(uₕ) = (D₋ₓ(uₕ), D₋ᵧ(uₕ))</text>
+  </g>
+</svg>
+</figure>
+```
+
 ## 4. Operators as matrices
 
 Passing a mesh or a grid space, rather than a grid function, returns the operator itself
