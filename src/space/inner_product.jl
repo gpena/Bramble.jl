@@ -223,15 +223,6 @@ and for `NTuple`s of [VectorElement](@ref)s it returns
 ################################################################################
 #                        Discrete H¹ Norm and Seminorm                         #
 ################################################################################
-"""
-	snorm₁ₕ(uₕ::VectorElement)
-
-Returns the discrete version of the standard ``H^1`` seminorm of [VectorElement](@ref) `uₕ`.
-
-```math
-|\\textrm{u}_h|_{1h} \\vcentcolon = \\Vert \\nabla_h \\textrm{u}_h \\Vert_h
-```
-"""
 # The squared seminorm along one direction. `d` arrives as a `Val` so the stencil step
 # is built at compile time, and the spacing, weight and step are read once per direction
 # rather than once per grid point.
@@ -276,6 +267,15 @@ end
 @inline _snorm₁ₕ_sq(uₕ::VectorElement{<:CompositeGridSpace{NC}}) where {NC} = sum(ntuple(
     i -> _snorm₁ₕ_sq(components(uₕ)[i]), Val(NC)))
 
+"""
+	snorm₁ₕ(uₕ::VectorElement)
+
+Returns the discrete version of the standard ``H^1`` seminorm of [VectorElement](@ref) `uₕ`.
+
+```math
+|\\textrm{u}_h|_{1h} \\vcentcolon = \\Vert \\nabla_h \\textrm{u}_h \\Vert_h
+```
+"""
 @inline snorm₁ₕ(uₕ::VectorElement) = sqrt(_snorm₁ₕ_sq(uₕ))
 
 """
@@ -286,7 +286,8 @@ Returns the discrete version of the standard ``H^1`` norm of [VectorElement](@re
 ```math
 \\Vert \\textrm{u}_h \\Vert_{1h} \\vcentcolon = \\sqrt{ \\Vert \\textrm{u}_h \\Vert_h^2 +  \\Vert \\nabla_h \\textrm{u}_h \\Vert_h^2   }
 ```
+
+Built from the squared quantities directly: taking `normₕ` and `snorm₁ₕ` and squaring
+them back up would compute two square roots only to undo them.
 """
-# Built from the squared quantities directly: sqrt(normₕ)^2 would take two square roots
-# and square them straight back up.
 @inline norm₁ₕ(uₕ::VectorElement) = sqrt(innerₕ(uₕ, uₕ) + _snorm₁ₕ_sq(uₕ))
