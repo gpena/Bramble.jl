@@ -64,6 +64,7 @@ if __bramble_with_unit_tests
             include("mesh/mesh1d.jl")
             include("mesh/meshnd.jl")
             include("mesh/meshes.jl")
+            include("mesh/inference_allocation.jl")
         end
 
         @testset verbose=true "Grid spaces" begin
@@ -78,6 +79,7 @@ if __bramble_with_unit_tests
             include("space/average.jl")
             include("space/inner_product.jl")
             include("space/composite_operators.jl")
+            include("space/inference_allocation.jl")
         end
 
         #=
