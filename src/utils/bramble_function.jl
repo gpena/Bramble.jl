@@ -152,10 +152,8 @@ Extracts the argument type `ArgsType` from a `FunctionWrapper`.
 """
 @inline argstype(::FunctionWrapper{
     CoType, Tuple{ArgsType}}) where {CoType, ArgsType} = ArgsType
-@inline argstype(::FunctionWrapper{CoType, Tuple{}}) where {CoType} = Nothing
 @inline argstype(::Type{FunctionWrapper{
     CoType, Tuple{ArgsType}}}) where {CoType, ArgsType} = ArgsType
-@inline argstype(::Type{FunctionWrapper{CoType, Tuple{}}}) where {CoType} = Nothing
 
 """
 	$(SIGNATURES)
@@ -164,10 +162,8 @@ Extracts the codomain type `CoType` from a `FunctionWrapper`.
 """
 @inline codomaintype(::FunctionWrapper{
     CoType, Tuple{ArgsType}}) where {CoType, ArgsType} = CoType
-@inline codomaintype(::FunctionWrapper{CoType, Tuple{}}) where {CoType} = CoType
 @inline codomaintype(::Type{FunctionWrapper{
     CoType, Tuple{ArgsType}}}) where {CoType, ArgsType} = CoType
-@inline codomaintype(::Type{FunctionWrapper{CoType, Tuple{}}}) where {CoType} = CoType
 
 function Base.show(io::IO, bf::BrambleFunction{
         ArgsType, hastime, CoType}) where {ArgsType, hastime, CoType}

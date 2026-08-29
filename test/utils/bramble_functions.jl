@@ -297,3 +297,33 @@ end
         @test_throws ErrorException _get_domains(123)
     end
 end
+
+@testset "BrambleFunction interface coverage" begin
+    @testset "_get_args_type falls back to dim/eltype" begin
+        # A mesh is neither a CartesianProduct nor a Domain, so it resolves through
+        # the generic Val(dim(X))/eltype(X) path rather than a set-specific method.
+        Ω1 = mesh(domain(interval(0.0, 1.0)), 5, true)
+        @test Bramble._get_args_type(Ω1) === Float64
+
+        Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 4), (true, true))
+        @test Bramble._get_args_type(Ω2) === NTuple{2, Float64}
+
+        # Same answers as the set-based methods for the equivalent domains.
+        @test Bramble._get_args_type(Ω1) === Bramble._get_args_type(interval(0.0, 1.0))
+        @test Bramble._get_args_type(Ω2) ===
+              Bramble._get_args_type(interval(0.0, 1.0) × interval(0.0, 1.0))
+    end
+
+    @testset "embed_function is idempotent on an existing BrambleFunction" begin
+        X = interval(0.0, 1.0)
+        I = interval(0.0, 1.0)
+        bf = embed_function(X, x -> 2x)
+
+        # Re-embedding must return the same object, not wrap it a second time,
+        # both with and without a time domain.
+        @test embed_function(X, bf) === bf
+        @test embed_function(X, I, bf) === bf
+        @test !has_time(embed_function(X, I, bf))
+        @test embed_function(X, I, bf)(2.0) == 4.0
+    end
+end

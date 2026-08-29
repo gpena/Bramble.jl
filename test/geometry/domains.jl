@@ -62,6 +62,9 @@ using StaticArrays
     @testset "Process Identifier Function" begin
         @test process_identifier(I1D, :left) === :left
         @test process_identifier(I2D, (:top, :right)) == Set((:top, :right))
+        # a vector of symbols normalises to the same Set as the tuple form
+        @test process_identifier(I2D, [:top, :right]) == Set((:top, :right))
+        @test process_identifier(I2D, [:top, :right]) == process_identifier(I2D, (:top, :right))
         @test process_identifier(I1D, func1) isa BrambleFunction
     end
 
@@ -386,5 +389,42 @@ using StaticArrays
         @test set(Ω) === I_space
         @test dim(Ω) == 2
         @test length(Ω) == 2
+    end
+end
+
+@testset "Domain interface coverage" begin
+    @testset "get_boundary_symbols beyond 3D" begin
+        # There is no canonical naming for the faces of a 4D box, so both the
+        # value-based and the type-based entry points refuse rather than guess.
+        X4 = interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0) ×
+             interval(0.0, 1.0)
+        @test dim(X4) == 4
+        @test_throws ErrorException get_boundary_symbols(4)
+        @test_throws ErrorException get_boundary_symbols(typeof(X4))
+
+        # The supported dimensions resolve identically through every entry point.
+        @test get_boundary_symbols(1) == (:left, :right)
+        @test get_boundary_symbols(2) == (:bottom, :top, :left, :right)
+        @test get_boundary_symbols(3) == (:bottom, :top, :back, :front, :left, :right)
+
+        I = interval(0.0, 1.0)
+        @test get_boundary_symbols(I) == get_boundary_symbols(typeof(I))
+        @test get_boundary_symbols(typeof(domain(I))) == get_boundary_symbols(typeof(I))
+
+        X2 = I × I
+        @test get_boundary_symbols(X2) == get_boundary_symbols(typeof(X2))
+        X3 = I × I × I
+        @test get_boundary_symbols(X3) == get_boundary_symbols(typeof(X3))
+    end
+
+    @testset "show renders a collapsed 1D set as a point" begin
+        out = sprint(show, domain(interval(3.0, 3.0)))
+        @test occursin("Point", out)
+        @test occursin("3.0", out)
+        @test !occursin("Interval", out)
+
+        out2 = sprint(show, domain(interval(0.0, 1.0)))
+        @test occursin("Interval", out2)
+        @test !occursin("Point", out2)
     end
 end
