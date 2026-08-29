@@ -208,8 +208,10 @@ using Bramble: vector_buffer, in_use, vector, lock!, unlock!, VectorBuffer, Grid
 
 			small = per_acquire(25)
 			large = per_acquire(800)
-			# 32x the pool must not cost anywhere near 32x per acquisition.
-			@test large < 8 * small
+			# 32x the pool must not cost anywhere near 32x per acquisition. This is a
+			# wall-clock smoke test on a shared runner, so the bound is deliberately
+			# loose: a linear scan would show ~32x, while the free stack shows ~1x.
+			@test large < 20 * small
 		end
 	end
 

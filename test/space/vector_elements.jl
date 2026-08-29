@@ -399,8 +399,15 @@ end
 			run!(u2, f); run!(u2, f)
 			return @allocated run!(u2, f)
 		end
-		# 4096x the degrees of freedom must not cost more per call.
-		@test avg_bytes(1024) <= avg_bytes(16)
+		# The property under test is that the cost is O(1) in the number of grid
+		# points, not that it is byte-for-byte identical: the threaded path's task
+		# setup varies slightly with the iteration space, and by Julia version.
+		# 4096x the degrees of freedom must stay within a small constant factor,
+		# where anything proportional to the grid would be four orders larger.
+		small = avg_bytes(16)      # 256 degrees of freedom
+		large = avg_bytes(1024)    # 1_048_576 degrees of freedom
+		@test large < 4 * small
+		@test large < 100_000      # proportional would be ~8 MB
 	end
 end
 
