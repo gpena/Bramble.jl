@@ -1,0 +1,22 @@
+# Codecov configuration for Bramble.jl.
+#
+# The precompilation workloads run while the package is being precompiled, not
+# while the test suite runs, so they never appear in the coverage data the tests
+# produce. Coverage.jl reports a file with no data as fully uncovered, which
+# counts several hundred lines of workload against the total even though the
+# workload is exercised on every single build. Excluding them measures the
+# library rather than the build step.
+ignore:
+  - "src/precompile.jl"
+  - "src/**/precompile.jl"
+
+coverage:
+  status:
+    project:
+      default:
+        # Small drops are usually noise from a method that happened not to be
+        # compiled in a given run, not a real regression.
+        threshold: 1%
+    patch:
+      default:
+        threshold: 1%
