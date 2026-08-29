@@ -306,18 +306,16 @@ for config in op_configs
         end
 
         # --- Generic applicators ---
-        @inline $diff_name(Wₕ::AbstractSpaceType, dim_val::Val) = elements(Wₕ, $diff_name(mesh(Wₕ), dim_val))
+        @inline $diff_name(Wₕ::AbstractSpaceType, dim_val::Val) = $diff_name(
+            mesh(Wₕ), dim_val)
         function $diff_name(uₕ::VectorElement, dim_val::Val)
             vₕ = similar(uₕ)
             dims = ndofs(space(uₕ), Tuple)
             _difference_engine!(vₕ.data, uₕ.data, nothing, dims, $dir_instance, dim_val)
             return vₕ
         end
-        @inline $diff_name(Uₕ::MatrixElement, dim_val::Val) = $diff_name(space(Uₕ), dim_val) *
-                                                              Uₕ
-
-        @inline $finite_diff_name(Wₕ::AbstractSpaceType, dim_val::Val) = elements(
-            Wₕ, $finite_diff_name(mesh(Wₕ), dim_val))
+        @inline $finite_diff_name(Wₕ::AbstractSpaceType, dim_val::Val) = $finite_diff_name(
+            mesh(Wₕ), dim_val)
         function $finite_diff_name(uₕ::VectorElement, dim_val::Val{DIM}) where {DIM}
             vₕ = similar(uₕ)
             dims = ndofs(space(uₕ), Tuple)
@@ -325,8 +323,6 @@ for config in op_configs
             _difference_engine!(vₕ.data, uₕ.data, spacings, dims, $dir_instance, dim_val)
             return vₕ
         end
-        @inline $finite_diff_name(Uₕ::MatrixElement, dim_val::Val) = $finite_diff_name(space(Uₕ), dim_val) *
-                                                                     Uₕ
     end
 
     # --- Aliases for x, y, z directions ---

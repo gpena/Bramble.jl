@@ -15,8 +15,10 @@ using FunctionWrappers: FunctionWrapper
 using StaticArrays: SVector, @SVector
 
 using LinearAlgebra: Diagonal, I, transpose, mul!
+using FillArrays: Eye, Ones
 
 import Base: copy
+using Base: @propagate_inbounds
 using Random: rand!
 
 using PrecompileTools: @setup_workload, @compile_workload
@@ -52,8 +54,6 @@ export VectorElement, element, to_matrix, values, values!, component, components
        component_range, component_ranges
 export Rₕ, Rₕ!, avgₕ, avgₕ!
 
-#=
-
 export innerₕ
 export inner₊, inner₊ₓ, inner₊ᵧ, inner₊₂
 export snorm₁ₕ, norm₁ₕ, norm₊, normₕ
@@ -70,6 +70,7 @@ export jump₊ₓ, jump₊ᵧ, jump₊₂, jump₊ₕ
 export M₋ₓ, M₋ᵧ, M₋₂, M₋ₕ
 export M₊ₓ, M₊ᵧ, M₊₂, M₊ₕ
 
+#=
 export ⋅
 
 export dirichlet_constraints
@@ -102,11 +103,13 @@ include("space/scalar_gridspace.jl")
 include("space/vector_gridspace.jl")
 include("space/vectorelement.jl")
 
-#=
+include("space/operators/shift.jl")
 include("space/operators/difference.jl")
 include("space/operators/jump.jl")
 include("space/operators/average.jl")
 include("space/inner_product.jl")
+
+#=
 
 include("form/dirichlet_constraints.jl")
 include("form/sparse_backend.jl")

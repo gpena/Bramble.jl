@@ -1,4 +1,3 @@
-#=
 """
 	⊗(A, B)
 
@@ -104,7 +103,6 @@ function shift(Ωₕ::AbstractMeshType, ::Val{SHIFT_DIM}, ::Val{i}) where {SHIFT
 
     return _recursive_shift(Ωₕ, Val(dim(Ωₕ)), Val(SHIFT_DIM), Val(i))
 end
-=#
 
 #=
 This code shall remain to clarify the definition of each shift function

@@ -359,7 +359,7 @@ to Dirichlet nodes.
 The algorithm goes as follows: for any given row `i` where Dirichlet boundary conditions have been applied
 
 	- calculate `dᵢ = cᵢ .* F`, where `cᵢ` is the `i`-th column of `A`;
-	- replace `F` by substracting `dᵢ` to `F` (except for the `i`-th component)
+	- replace `F` by subtracting `dᵢ` to `F` (except for the `i`-th component)
 	- replace all elements in the `i`-th column of `A` (except the `i`-th by zero).
 """
 function symmetrize!(A::AbstractMatrix, F::AbstractVector, Ωₕ::AbstractMeshType, labels::Symbol...)

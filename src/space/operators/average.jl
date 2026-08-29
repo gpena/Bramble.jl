@@ -207,16 +207,14 @@ for config in op_configs
         #end
 
         # --- Generic applicators ---
-        @inline $average_name(Wₕ::AbstractSpaceType, dim_val::Val) = elements(
-            Wₕ, $average_name(mesh(Wₕ), dim_val))
+        @inline $average_name(Wₕ::AbstractSpaceType, dim_val::Val) = $average_name(
+            mesh(Wₕ), dim_val)
         function $average_name(uₕ::VectorElement, dim_val::Val)
             vₕ = similar(uₕ)
             dims = ndofs(space(uₕ), Tuple)
             _average_engine!(vₕ.data, uₕ.data, dims, $dir_instance, dim_val)
             return vₕ
         end
-        @inline $average_name(Uₕ::MatrixElement, dim_val::Val) = $average_name(space(Uₕ), dim_val) *
-                                                                 Uₕ
     end
 
     # --- Aliases for x, y, z directions ---

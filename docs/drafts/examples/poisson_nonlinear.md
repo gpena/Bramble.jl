@@ -81,7 +81,7 @@ Wₕ = gridspace(Ωₕ)
 bcs = dirichlet_constraints(X, :boundary => x -> sol(x))
 ```
 
-Now we define an auxiliar element to store the approximate solution `uₙ` and calculate the right hand side `u₀` using the average interpolator for our future linear system.
+Now we define an auxiliary element to store the approximate solution `uₙ` and calculate the right hand side `u₀` using the average interpolator for our future linear system.
 
 ```julia
 uₙ = element(Wₕ, 0)

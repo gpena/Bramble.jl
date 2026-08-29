@@ -1,4 +1,4 @@
-import Bramble: MatrixElement, elements, space, eltype, ⊗, _Eye, shift, npoints, spacing
+import Bramble: space, eltype, ⊗, _Eye, shift, npoints, spacing
 using Bramble: backward_difference_dim!, forward_difference_dim!
 import SparseArrays: issparse, sprand, spdiagm, spzeros
 

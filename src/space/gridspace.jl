@@ -6,7 +6,7 @@ This file defines the core abstractions for function spaces on structured grids.
 ## Key Components
 
 - **Abstract Types**: `AbstractSpaceType`, `InnerProductType`
-- **Element Types**: `VectorElement`, `MatrixElement` - wrappers for grid functions and operators
+- **Element Types**: `VectorElement` - wrapper for grid functions
 - **Interface Functions**: Required methods for any concrete space implementation
 
 ## Design Philosophy
@@ -36,7 +36,7 @@ norm = normₕ(uₕ)
 ip = innerₕ(uₕ, vₕ)
 ```
 
-See also: [`ScalarGridSpace`](@ref), [`VectorElement`](@ref), [`MatrixElement`](@ref)
+See also: [`ScalarGridSpace`](@ref), [`VectorElement`](@ref)
 =#
 
 """
@@ -84,24 +84,6 @@ $(FIELDS)
 struct VectorElement{S, T, VT <: AbstractVector{T}} <: AbstractVector{T}
     "the raw vector data containing the degrees of freedom."
     data::VT
-    "the parent function space to which this vector belongs."
-    space::S
-end
-
-"""
-	$(TYPEDEF)
-
-Represents a **discrete linear operator** (a matrix) that acts on a function space.
-
-Similar to , this container bundles a raw matrix (`data`) with its parent `space`. This is used to represent discretization matrices from methods like finite differences (e.g., a differentiation or averaging matrix). Subtyping `AbstractMatrix` allows it to be used like a standard Julia matrix.
-
-# Fields
-
-$(FIELDS)
-"""
-struct MatrixElement{S, T, MT <: AbstractMatrix{T}} <: AbstractMatrix{T}
-    "the matrix data representing the linear operator."
-    data::MT
     "the parent function space to which this vector belongs."
     space::S
 end

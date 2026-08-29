@@ -121,15 +121,14 @@ for config in op_configs
         @inline $jump_name(Ωₕ::AbstractMeshType, dim_val::Val) = _jump_operator(Ωₕ, $dir_instance, dim_val)
 
         # --- Generic applicators ---
-        @inline $jump_name(Wₕ::AbstractSpaceType, dim_val::Val) = elements(Wₕ, $jump_name(mesh(Wₕ), dim_val))
+        @inline $jump_name(Wₕ::AbstractSpaceType, dim_val::Val) = $jump_name(
+            mesh(Wₕ), dim_val)
         function $jump_name(uₕ::VectorElement, dim_val::Val)
             vₕ = similar(uₕ)
             dims = ndofs(space(uₕ), Tuple)
             _difference_engine!(vₕ.data, uₕ.data, nothing, dims, $dir_instance, dim_val)
             return vₕ
         end
-        @inline $jump_name(Uₕ::MatrixElement, dim_val::Val) = $jump_name(space(Uₕ), dim_val) *
-                                                              Uₕ
     end
 
     # --- Aliases for x, y, z directions ---

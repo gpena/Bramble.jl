@@ -72,17 +72,14 @@ if __bramble_with_unit_tests
             include("space/vector_elements.jl")
         end
 
-        #=
-		@testset verbose=true "Grid spaces (rest of space/, still disabled)" begin
-			include("space/gridspaces.jl")
-			include("space/vector_elements.jl")
-			include("space/matrix_elements.jl")
-			include("space/difference.jl")
-			include("space/jump.jl")
-			include("space/average.jl")
-			include("space/inner_product.jl")
-		end
+        @testset verbose=true "Operators" begin
+            include("space/difference.jl")
+            include("space/jump.jl")
+            include("space/average.jl")
+            include("space/inner_product.jl")
+        end
 
+        #=
 		@testset "Forms" begin
 			include("form/dirichlet_constraints.jl")
 			include("form/grid_coloring.jl")
