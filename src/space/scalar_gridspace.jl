@@ -121,6 +121,20 @@ end
 # untyped signature this also admits spaces, for which npoints has no method.
 @inline __vector(Ωₕ::AbstractMeshType) = vector(backend(Ωₕ), npoints(Ωₕ))
 
+# One dimension has no transverse direction, so two of the four full-length vectors the
+# general method builds are dead weight: the mean factor is never selected, since `k == i`
+# always holds, and the product over a single factor is a copy. Filling the weight vector
+# directly drops both, along with the two passes that fill them.
+function space_weights(Ωₕ::AbstractMeshType{1})
+    innerplus₁ = __vector(Ωₕ)
+    _innerplus_weights!(innerplus₁, Ωₕ, 1)
+
+    inner_h_vec = __vector(Ωₕ)
+    _innerh_weights!(inner_h_vec, Ωₕ)
+
+    return SpaceWeights{1, typeof(inner_h_vec)}(inner_h_vec, (innerplus₁,))
+end
+
 function space_weights(Ωₕ::AbstractMeshType{D}) where {D}
     # Initialize a tuple of D vectors. Each vector will store the final weights for one spatial direction (e.g., x, y, z).
     innerplus = ntuple(i -> __vector(Ωₕ), Val(D))

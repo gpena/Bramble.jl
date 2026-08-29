@@ -326,3 +326,53 @@ using LinearAlgebra: norm
         @test Vv[lastindex(Vv)] === Vv[3]
     end
 end
+
+@testset "1D inner-product weights on awkward grids" begin
+    # space_weights has a one-dimensional method, because two of the four full-length
+    # vectors the general method builds are dead there: the transverse factor is never
+    # selected when there is no transverse direction, and the product over a single
+    # factor is a copy.
+    #
+    # These assert the weights against the mesh rather than against the general method,
+    # so they hold whichever method produces them. The grids are chosen rather than drawn
+    # so the spacing ratio is genuinely extreme; `mesh(Ω, n, false)` gives a random grid,
+    # which is not.
+    import Bramble: Innerh, Innerplus, set_points!
+
+    grids = Dict(
+        "uniform" => n -> collect(range(0.0, 1.0, length = n)),
+        "graded t^4" => n -> [(k / (n - 1))^4 for k in 0:(n - 1)],
+        "clustered ends" => n -> [0.5 * (1 - cos(pi * k / (n - 1))) for k in 0:(n - 1)],
+        "one tiny cell" =>
+            n -> (v = collect(range(0.0, 1.0, length = n));
+                v[2] = v[1] + 1e-9;
+                v))
+
+    for n in (3, 17, 64), lbl in sort(collect(keys(grids)))
+
+        @testset "n=$n $lbl" begin
+            Ωₕ = mesh(domain(interval(0.0, 1.0)), n, true)
+            set_points!(Ωₕ, grids[lbl](n))
+            Wₕ = gridspace(Ωₕ)
+
+            wh = weights(Wₕ, Innerh())
+            wp = weights(Wₕ, Innerplus(), 1)
+
+            @test length(wh) == n
+            @test length(wp) == n
+
+            # the cell-measure weights are the cell measures
+            @test all(wh[i] == cell_measure(Ωₕ, i) for i in 1:n)
+
+            # the staggered weights are the backward spacings, truncated to zero at the
+            # first point where the backward stencil has none
+            @test wp[1] == 0.0
+            @test all(wp[i] == spacing(Ωₕ, i) for i in 2:n)
+
+            # and they are what the inner products actually use
+            uₕ = Rₕ(Wₕ, x -> x^2 + 1)
+            @test innerₕ(uₕ, uₕ) ≈ sum(wh[i] * Bramble.values(uₕ)[i]^2 for i in 1:n)
+            @test inner₊(uₕ, uₕ) ≈ sum(wp[i] * Bramble.values(uₕ)[i]^2 for i in 1:n)
+        end
+    end
+end
