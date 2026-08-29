@@ -422,7 +422,8 @@ struct BareMesh <: Bramble.AbstractMeshType{1} end
     end
 
     @testset "unknown boundary symbols are rejected in every dimension" begin
-        Ω3 = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (3, 3, 3), (true, true, true))
+        box3 = box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))
+        Ω3 = mesh(domain(box3), (3, 3, 3), (true, true, true))
         @test_throws ArgumentError normal_vector(Ωₕ, :nonsense)
         @test_throws ArgumentError normal_vector(Ω2, :nonsense)
         @test_throws ArgumentError normal_vector(Ω3, :nonsense)
@@ -456,7 +457,8 @@ struct BareMesh <: Bramble.AbstractMeshType{1} end
         # forward difference has none at the last
         @test forward_spacing_for_derivative(Ωₕ, N) == 0
         @test forward_spacing_for_derivative(Ωₕ, 1) == forward_spacing(Ωₕ, 1)
-        @test forward_spacing_for_derivative(Ωₕ, CartesianIndex(1)) == forward_spacing(Ωₕ, 1)
+        @test forward_spacing_for_derivative(Ωₕ, CartesianIndex(1)) ==
+              forward_spacing(Ωₕ, 1)
     end
 
     @testset "copy is deep in the data and shallow in the geometry" begin
@@ -500,4 +502,3 @@ struct BareMesh <: Bramble.AbstractMeshType{1} end
         @test npoints(Ωr) == 2 * 4 - 1
     end
 end
-

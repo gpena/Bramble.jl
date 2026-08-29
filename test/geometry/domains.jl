@@ -64,7 +64,8 @@ using StaticArrays
         @test process_identifier(I2D, (:top, :right)) == Set((:top, :right))
         # a vector of symbols normalises to the same Set as the tuple form
         @test process_identifier(I2D, [:top, :right]) == Set((:top, :right))
-        @test process_identifier(I2D, [:top, :right]) == process_identifier(I2D, (:top, :right))
+        @test process_identifier(I2D, [:top, :right]) ==
+              process_identifier(I2D, (:top, :right))
         @test process_identifier(I1D, func1) isa BrambleFunction
     end
 
