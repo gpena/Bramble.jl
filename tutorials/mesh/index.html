@@ -38,30 +38,30 @@ facets = boundary_indices(Ωₕ_2d)
 # Test whether an index lies on the domain boundary
 is_boundary = is_boundary_index(Ωₕ_2d, CartesianIndex(1, 5))  # true</code></pre><hr/><h2 id="4.-Markers-on-meshes"><a class="docs-heading-anchor" href="#4.-Markers-on-meshes">4. Markers on meshes</a><a id="4.-Markers-on-meshes-1"></a><a class="docs-heading-anchor-permalink" href="#4.-Markers-on-meshes" title="Permalink"></a></h2><p>When creating a mesh from a labeled <a href="../../internals/geometry/#Bramble.Domain"><code>Domain</code></a>, markers are projected onto the grid points as highly efficient <code>BitVector</code>s:</p><pre><code class="language-julia hljs"># Domain with boundary and obstacle markers
 I = interval(0.0, 1.0)
-X = domain(I × I,
+Ω = domain(I × I,
            :left_inlet =&gt; :left,
            :right_outlet =&gt; :right,
            :walls =&gt; (:top, :bottom),
            :obstacle =&gt; x -&gt; (x[1]-0.5)^2 + (x[2]-0.5)^2 &lt; 0.15^2)
 
 # Generate mesh
-M = mesh(X, (20, 20))
+Ωₕ = mesh(Ω, (20, 20))
 
 # Query markers
-m_dict = markers(M)
+m_dict = markers(Ωₕ)
 
 # Retrieve bit-vector for a specific label
-is_wall = index_in_marker(M, :walls)
-is_obs  = index_in_marker(M, :obstacle)</code></pre><hr/><h2 id="5.-Mesh-adaptation-and-modification"><a class="docs-heading-anchor" href="#5.-Mesh-adaptation-and-modification">5. Mesh adaptation and modification</a><a id="5.-Mesh-adaptation-and-modification-1"></a><a class="docs-heading-anchor-permalink" href="#5.-Mesh-adaptation-and-modification" title="Permalink"></a></h2><p>Meshes in <code>Bramble.jl</code> are mutable structures designed for adaptive algorithms:</p><h3 id="5.1-In-place-mesh-refinement"><a class="docs-heading-anchor" href="#5.1-In-place-mesh-refinement">5.1 In-place mesh refinement</a><a id="5.1-In-place-mesh-refinement-1"></a><a class="docs-heading-anchor-permalink" href="#5.1-In-place-mesh-refinement" title="Permalink"></a></h3><p>Halves every cell by inserting new points at each cell midpoint, simultaneously updating indices and reapplying domain markers:</p><pre><code class="language-julia hljs"># Refine mesh in-place
-iterative_refinement!(M)
+is_wall = index_in_marker(Ωₕ, :walls)
+is_obs  = index_in_marker(Ωₕ, :obstacle)</code></pre><hr/><h2 id="5.-Mesh-adaptation-and-modification"><a class="docs-heading-anchor" href="#5.-Mesh-adaptation-and-modification">5. Mesh adaptation and modification</a><a id="5.-Mesh-adaptation-and-modification-1"></a><a class="docs-heading-anchor-permalink" href="#5.-Mesh-adaptation-and-modification" title="Permalink"></a></h2><p>Meshes in <code>Bramble.jl</code> are mutable structures designed for adaptive algorithms:</p><h3 id="5.1-In-place-mesh-refinement"><a class="docs-heading-anchor" href="#5.1-In-place-mesh-refinement">5.1 In-place mesh refinement</a><a id="5.1-In-place-mesh-refinement-1"></a><a class="docs-heading-anchor-permalink" href="#5.1-In-place-mesh-refinement" title="Permalink"></a></h3><p>Halves every cell by inserting new points at each cell midpoint, simultaneously updating indices and reapplying domain markers:</p><pre><code class="language-julia hljs"># Refine mesh in-place
+iterative_refinement!(Ωₕ)
 
 # Point count increases: (2N_x - 1) × (2N_y - 1)
-npoints(M, Tuple)  # (39, 39)</code></pre><h3 id="5.2-Relocating-mesh-coordinates"><a class="docs-heading-anchor" href="#5.2-Relocating-mesh-coordinates">5.2 Relocating mesh coordinates</a><a id="5.2-Relocating-mesh-coordinates-1"></a><a class="docs-heading-anchor-permalink" href="#5.2-Relocating-mesh-coordinates" title="Permalink"></a></h3><p>For moving-boundary problems or non-uniform smoothing:</p><pre><code class="language-julia hljs"># Supply new coordinates for a 1D mesh (matching the 11 points of Ωₕ)
+npoints(Ωₕ, Tuple)  # (39, 39)</code></pre><h3 id="5.2-Relocating-mesh-coordinates"><a class="docs-heading-anchor" href="#5.2-Relocating-mesh-coordinates">5.2 Relocating mesh coordinates</a><a id="5.2-Relocating-mesh-coordinates-1"></a><a class="docs-heading-anchor-permalink" href="#5.2-Relocating-mesh-coordinates" title="Permalink"></a></h3><p>For moving-boundary problems or non-uniform smoothing:</p><pre><code class="language-julia hljs"># Supply new coordinates for a 1D mesh (matching the 11 points of Ωₕ)
 new_pts = range(0.0, 1.0, length=npoints(Ωₕ)) |&gt; collect
 change_points!(Ωₕ, new_pts)
 
 # Or update points and re-evaluate markers for a multi-dimensional mesh
-nx, ny = npoints(M, Tuple)
+nx, ny = npoints(Ωₕ, Tuple)
 new_x_pts = range(0.0, 1.0, length=nx) |&gt; collect
 new_y_pts = range(0.0, 1.0, length=ny) |&gt; collect
-change_points!(M, markers(X), (new_x_pts, new_y_pts))</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../geometry/">« Geometry tutorial</a><a class="docs-footer-nextpage" href="../space/">Grid spaces and discrete functions »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Saturday 29 August 2026 00:27">Saturday 29 August 2026</span>. Using Julia version 1.14.0-DEV.3063.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+change_points!(Ωₕ, markers(Ω), (new_x_pts, new_y_pts))</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../geometry/">« Geometry tutorial</a><a class="docs-footer-nextpage" href="../space/">Grid spaces and discrete functions »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Saturday 29 August 2026 00:55">Saturday 29 August 2026</span>. Using Julia version 1.14.0-DEV.3063.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
