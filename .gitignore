@@ -40,3 +40,4 @@ test_code_warntype/
 .claude/
 LocalPreferences.toml
 AGENTS.md
+polygonal_mesh_plan.md
