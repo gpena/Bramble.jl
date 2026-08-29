@@ -215,23 +215,7 @@ for config in _AVERAGE_OP_CONFIGS
             dir_string_lowercase, direction, i, "average", math_op)
     end
 
-    # --- Aliases for vectorial average tuples ---
-    for (vectorial_average_op, base_op) in [(vectorial_average_alias, average_name),]
-        @eval begin
-            @doc """
-               	$($(QuoteNode(vectorial_average_op)))(arg)
-
-               Computes the vectorial $($dir_string_lowercase) average of `arg`, returning a tuple of
-               operators/elements for each spatial dimension.
-
-               For a 2D space, `$($(QuoteNode(vectorial_average_op)))(uₕ)` is equivalent to
-               `($($(QuoteNode(base_op)))(uₕ, Val(1)), $($(QuoteNode(base_op)))(uₕ, Val(2)))`.
-               """
-            @inline $vectorial_average_op(arg) = $vectorial_average_op(arg, Val(dim(_op_mesh(arg))))
-            @inline $vectorial_average_op(arg, ::Val{1}) = $base_op(arg, Val(1))
-            @inline $vectorial_average_op(arg, ::Val{D}) where {D} = ntuple(i -> $base_op(arg, Val(i)), Val(D))
-        end
-    end
+    # --- Alias for the vectorial average tuple ---
+    _define_vectorial_alias(average_name, vectorial_average_alias, dir_string_lowercase,
+        "average")
 end
-
-@inline _create_average_matrix(Ωₕ::AbstractMeshType, i::Int) = backward_average(Ωₕ, Val(i))

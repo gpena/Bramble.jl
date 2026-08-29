@@ -91,22 +91,5 @@ for config in _JUMP_OP_CONFIGS
     end
 
     # --- Alias for the vectorial jump tuple ---
-    let vectorial_jump_op = vectorial_jump_alias, base_op = jump_name
-        @eval begin
-            @doc """
-               	$($(QuoteNode(vectorial_jump_op)))(arg)
-
-               The $($dir_string_lowercase) jump of `arg` along every coordinate, as a tuple
-               with one entry per spatial dimension. On a one-dimensional mesh it returns
-               that single entry rather than a one-tuple.
-
-               For a 2D space, `$($(QuoteNode(vectorial_jump_op)))(uₕ)` is
-               `($($(QuoteNode(base_op)))(uₕ, Val(1)), $($(QuoteNode(base_op)))(uₕ, Val(2)))`.
-               """
-            @inline $vectorial_jump_op(arg) = $vectorial_jump_op(arg, Val(dim(_op_mesh(arg))))
-            @inline $vectorial_jump_op(arg, ::Val{1}) = $base_op(arg, Val(1))
-            @inline $vectorial_jump_op(arg, ::Val{D}) where {D} = ntuple(
-                i -> $base_op(arg, Val(i)), Val(D))
-        end
-    end
+    _define_vectorial_alias(jump_name, vectorial_jump_alias, dir_string_lowercase, "jump")
 end

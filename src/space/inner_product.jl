@@ -2,6 +2,29 @@
 #                      Discrete L² Inner Product and Norm                      #
 ################################################################################
 
+#=
+Which argument each product accepts, and why they differ.
+
+  innerₕ, normₕ, norm₁ₕ, snorm₁ₕ   a grid function on a scalar space
+  inner₊, norm₊                    a tuple of grid functions, one per direction
+
+The cell-measure product weights one value per grid point, so it is defined for a
+scalar grid function. A component of a composite grid function is itself a scalar
+grid function -- `components(uₕ)[i]` has a ScalarGridSpace -- so those are accepted
+and are the way to take the product of one component.
+
+The staggered product weights a different direction per entry, so its argument is a
+tuple with one grid function per direction: the gradient ∇₋ₕ(uₕ) is exactly that
+shape. In one dimension a one-tuple and the grid function coincide, so the scalar
+form is accepted there.
+
+A composite grid function is deliberately not accepted by either. It is a stack of
+scalar functions with no single weighting of its own, and summing over its
+components is a choice the caller should make explicitly rather than have inferred.
+The operators are the other way round: Rₕ, avgₕ and every difference, jump and
+average apply componentwise and take any grid function.
+=#
+
 """
 	innerₕ(uₕ::VectorElement, vₕ::VectorElement)
 
@@ -25,7 +48,9 @@ Returns the discrete ``L^2`` inner product of the grid functions `uₕ` and `v�
 (\\textrm{u}_h, \\textrm{v}_h)_h \\vcentcolon = \\sum_{i=1}^{N_x} \\sum_{j=1}^{N_y}  \\sum_{l=1}^{N_z}  |\\square_{i,j,l}| \\textrm{u}_h(x_i,y_j) \\textrm{v}_h(x_i,y_j)
 ```
 """
-@inline innerₕ(uₕ::VectorElement, vₕ::VectorElement) = _dot(uₕ.data, weights(space(uₕ), Innerh()), vₕ.data)
+@inline innerₕ(uₕ::VectorElement{<:ScalarGridSpace},
+    vₕ::VectorElement{<:ScalarGridSpace}) = _dot(
+    uₕ.data, weights(space(uₕ), Innerh()), vₕ.data)
 
 """
 	normₕ(uₕ::VectorElement)
@@ -36,13 +61,14 @@ Returns the discrete ``L^2`` norm of the grid function `uₕ`, defined as
 \\Vert \\textrm{u}_h \\Vert_h \\vcentcolon = \\sqrt{(\\textrm{u}_h, \\textrm{u}_h)_h}
 ```
 """
-@inline normₕ(uₕ::VectorElement) = sqrt(innerₕ(uₕ, uₕ))
+@inline normₕ(uₕ::VectorElement{<:ScalarGridSpace}) = sqrt(innerₕ(uₕ, uₕ))
 
 ################################################################################
 #                 Discrete Modified L² Inner Product and Norm                  #
 ################################################################################
 
-@inline function _directional_inner_plus(uₕ::VectorElement, vₕ::VectorElement, _::Val{DIM}) where {DIM}
+@inline function _directional_inner_plus(uₕ::VectorElement{<:ScalarGridSpace},
+        vₕ::VectorElement{<:ScalarGridSpace}, _::Val{DIM}) where {DIM}
     return _inner_product(uₕ.data, weights(space(uₕ), Innerplus(), DIM), vₕ.data)
 end
 
@@ -71,7 +97,8 @@ For [VectorElement](@ref)s, it is defined as
 (\\textrm{u}_h, \\textrm{v}_h)_{+x} \\vcentcolon = \\sum_{i=1}^{N_x}\\sum_{j=1}^{N_y}\\sum_{l=1}^{N_z}   h_{x,i} h_{y,j+1/2} h_{z,l+1/2}  \\textrm{u}_h(x_i,y_j,z_l) \\textrm{v}_h(x_i,y_j,z_l).
 ```
 """
-@inline inner₊ₓ(uₕ::VectorElement, vₕ::VectorElement) = _directional_inner_plus(uₕ, vₕ, Val(1))
+@inline inner₊ₓ(uₕ::VectorElement{<:ScalarGridSpace},
+    vₕ::VectorElement{<:ScalarGridSpace}) = _directional_inner_plus(uₕ, vₕ, Val(1))
 
 """
 	inner₊ᵧ(uₕ::VectorElement, vₕ::VectorElement)
@@ -93,7 +120,8 @@ For [VectorElement](@ref)s, it is defined as
 (\\textrm{u}_h, \\textrm{v}_h)_{+y} \\vcentcolon = \\sum_{i=1}^{N_x}\\sum_{j=1}^{N_y}\\sum_{l=1}^{N_z}   h_{x,i+1/2} h_{y,j} h_{z,l+1/2} \\textrm{u}_h(x_i,y_j,z_l) \\textrm{v}_h(x_i,y_j,z_l).
 ```
 """
-@inline inner₊ᵧ(uₕ::VectorElement, vₕ::VectorElement) = _directional_inner_plus(uₕ, vₕ, Val(2))
+@inline inner₊ᵧ(uₕ::VectorElement{<:ScalarGridSpace},
+    vₕ::VectorElement{<:ScalarGridSpace}) = _directional_inner_plus(uₕ, vₕ, Val(2))
 
 """
 	inner₊₂(uₕ::VectorElement, vₕ::VectorElement)
@@ -104,7 +132,8 @@ Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ`
 (\\textrm{u}_h, \\textrm{v}_h)_{+z} \\vcentcolon = \\sum_{i=1}^{N_x}\\sum_{j=1}^{N_y}\\sum_{l=1}^{N_z}  h_{x,i+1/2} h_{y,j+1/2} h_{z,l} \\textrm{u}_h(x_i,y_j,z_l) \\textrm{v}_h(x_i,y_j,z_l).
 ```
 """
-@inline inner₊₂(uₕ::VectorElement, vₕ::VectorElement) = _directional_inner_plus(uₕ, vₕ, Val(3))
+@inline inner₊₂(uₕ::VectorElement{<:ScalarGridSpace},
+    vₕ::VectorElement{<:ScalarGridSpace}) = _directional_inner_plus(uₕ, vₕ, Val(3))
 
 get_dimension_from_type(::Type{<:NTuple{D, Any}}) where {D} = D
 get_dimension_from_type(::Type{<:VectorElement{S}}) where {S} = dim(mesh_type(S))
@@ -264,9 +293,6 @@ end
     return _sum_dirs(data, space, Ωₕ, li, Val(D), Val(D))
 end
 
-@inline _snorm₁ₕ_sq(uₕ::VectorElement{<:CompositeGridSpace{NC}}) where {NC} = sum(ntuple(
-    i -> _snorm₁ₕ_sq(components(uₕ)[i]), Val(NC)))
-
 """
 	snorm₁ₕ(uₕ::VectorElement)
 
@@ -276,7 +302,7 @@ Returns the discrete version of the standard ``H^1`` seminorm of [VectorElement]
 |\\textrm{u}_h|_{1h} \\vcentcolon = \\Vert \\nabla_h \\textrm{u}_h \\Vert_h
 ```
 """
-@inline snorm₁ₕ(uₕ::VectorElement) = sqrt(_snorm₁ₕ_sq(uₕ))
+@inline snorm₁ₕ(uₕ::VectorElement{<:ScalarGridSpace}) = sqrt(_snorm₁ₕ_sq(uₕ))
 
 """
 	norm₁ₕ(uₕ::VectorElement)
@@ -290,4 +316,5 @@ Returns the discrete version of the standard ``H^1`` norm of [VectorElement](@re
 Built from the squared quantities directly: taking `normₕ` and `snorm₁ₕ` and squaring
 them back up would compute two square roots only to undo them.
 """
-@inline norm₁ₕ(uₕ::VectorElement) = sqrt(innerₕ(uₕ, uₕ) + _snorm₁ₕ_sq(uₕ))
+@inline norm₁ₕ(uₕ::VectorElement{<:ScalarGridSpace}) = sqrt(
+    innerₕ(uₕ, uₕ) + _snorm₁ₕ_sq(uₕ))

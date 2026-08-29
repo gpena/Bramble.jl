@@ -266,6 +266,7 @@ it. Both are needed because the four operator families share this generator: des
 every alias as a "difference" would be wrong for the averages and the jumps, and would
 not separate the unscaled difference from the finite difference.
 """
+
 function _define_directional_alias(
         base_op_name, alias_name, dir_string, suffix, direction_index, what, formula)
     # 1. Construct the docstring content.
@@ -290,6 +291,43 @@ function _define_directional_alias(
 
     # 4. Evaluate the final, complete expression in the module's global scope.
     Core.eval(@__MODULE__, final_expr)
+end
+
+"""
+	_define_vectorial_alias(base_op_name, alias_name, dir_string, what)
+
+Defines the `ₕ` alias that applies `base_op_name` along every coordinate and returns a
+tuple, one entry per spatial dimension. On a one-dimensional mesh it returns that single
+entry rather than a one-tuple.
+
+The counterpart of `_define_directional_alias` for the tuple-valued aliases
+(`∇₋ₕ`, `diff₋ₕ`, `jump₋ₕ`, `M₋ₕ`). The three operator families generated the same three
+methods independently before this existed.
+"""
+function _define_vectorial_alias(base_op_name, alias_name, dir_string, what)
+    doc_string = """
+     	$alias_name(arg)
+
+     The $dir_string $what of `arg` along every coordinate, as a tuple with one entry per
+     spatial dimension. On a one-dimensional mesh it returns that single entry rather than
+     a one-tuple.
+
+     For a 2D space, `$alias_name(uₕ)` is
+     `($base_op_name(uₕ, Val(1)), $base_op_name(uₕ, Val(2)))`. `arg` is a mesh, a grid
+     space or a [`VectorElement`](@ref), as for `$base_op_name`.
+     """
+
+    # Built one at a time, as in _define_directional_alias: @doc takes a single
+    # definition, and only the entry point carries the docstring.
+    entry = :(@inline $(alias_name)(arg) = $(alias_name)(arg, Val(dim(_op_mesh(arg)))))
+    one_d = :(@inline $(alias_name)(arg, ::Val{1}) = $(base_op_name)(arg, Val(1)))
+    n_d = :(@inline $(alias_name)(arg, ::Val{D}) where {D} = ntuple(
+        i -> $(base_op_name)(arg, Val(i)), Val(D)))
+
+    Core.eval(@__MODULE__,
+        Expr(:macrocall, GlobalRef(Core, Symbol("@doc")), nothing, doc_string, entry))
+    Core.eval(@__MODULE__, one_d)
+    Core.eval(@__MODULE__, n_d)
 end
 
 # Configuration array to define forward and backward difference operators.
@@ -444,23 +482,8 @@ for config in _DIFFERENCE_OP_CONFIGS
     end
 
     # --- Aliases for gradient tuples ---
-    # This loop is fine because the `i` is inside the generated function's body (`ntuple(i->...`)),
-    # not being interpolated from the outer scope.
-    for (grad_op, base_op) in [
-        (grad_alias, diff_name), (finite_grad_alias, finite_diff_name)]
-        @eval begin
-            @doc """
-               	$($(QuoteNode(grad_op)))(arg)
-
-               Computes the $($dir_string_lowercase) gradient of `arg`, returning a tuple of
-               operators/elements for each spatial dimension.
-
-               For a 2D space, `$($(QuoteNode(grad_op)))(uₕ)` is equivalent to
-               `($($(QuoteNode(base_op)))(uₕ, Val(1)), $($(QuoteNode(base_op)))(uₕ, Val(2)))`.
-               """
-            @inline $grad_op(arg) = $grad_op(arg, Val(dim(_op_mesh(arg))))
-            @inline $grad_op(arg, ::Val{1}) = $base_op(arg, Val(1))
-            @inline $grad_op(arg, ::Val{D}) where {D} = ntuple(i -> $base_op(arg, Val(i)), Val(D))
-        end
-    end
+    _define_vectorial_alias(diff_name, grad_alias, dir_string_lowercase,
+        "unscaled difference")
+    _define_vectorial_alias(finite_diff_name, finite_grad_alias, dir_string_lowercase,
+        "finite difference")
 end
