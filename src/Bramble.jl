@@ -5,7 +5,8 @@ module Bramble
 using DocStringExtensions
 
 import Base: eltype, length
-import Base: show, first, last, getindex, setindex!, iterate, size, ndims, firstindex, lastindex, axes, eachindex
+import Base: show, first, last, getindex, setindex!, iterate, size, ndims, firstindex,
+             lastindex, axes, eachindex
 
 using SparseArrays: SparseMatrixCSC, SparseVector, spdiagm, spzeros
 
@@ -15,7 +16,6 @@ using StaticArrays: SVector, @SVector
 
 using LinearAlgebra: Diagonal, I, transpose, mul!
 
-
 import Base: copy
 using Random: rand!
 
@@ -24,25 +24,32 @@ using Preferences: @load_preference
 using QuadGK: gauss
 
 # Utilities
-export backend, metal_backend, vector, matrix, vector_type, matrix_type, backend_types, backend_eye, backend_zeros
+export backend, metal_backend, vector, matrix, vector_type, matrix_type, backend_types,
+       backend_eye, backend_zeros
 export BrambleFunction, embed_function, has_time
 
 # domain/interval handling functions
-export box, interval, ×, dim, topo_dim, tails, point, cartesian_product, center, projection, is_collapsed, point_type, get_boundary_symbols, set
+export box, interval, ×, dim, topo_dim, tails, point, cartesian_product, center, projection,
+       is_collapsed, point_type, get_boundary_symbols, set
 export domain, markers, labels
 
 # Mesh handling
 export AbstractMeshType, Mesh1D, MeshnD, MeshMarkers
-export mesh, mesh_type, submeshes, hₘₐₓ, hₘᵢₙ, stepsize, locate_cell, normal_vector, iterative_refinement!, change_points!, set_points!
+export mesh, mesh_type, submeshes, hₘₐₓ, hₘᵢₙ, stepsize, locate_cell, normal_vector,
+       iterative_refinement!, change_points!, set_points!
 export npoints, points, point, half_points, half_point
 export spacing, forward_spacing, half_spacing, half_spacings, cell_measure, cell_measures
-export spacings_iterator, forward_spacings_iterator, half_spacings_iterator, points_iterator, half_points_iterator, cell_measures_iterator
-export indices, boundary_indices, interior_indices, is_boundary_index, index_in_marker, is_uniform
+export spacings_iterator, forward_spacings_iterator, half_spacings_iterator,
+       points_iterator, half_points_iterator, cell_measures_iterator
+export indices, boundary_indices, interior_indices, is_boundary_index, index_in_marker,
+       is_uniform
 
 # Space handling
-export gridspace, vector_gridspace, space, spaces, ScalarGridSpace, CompositeGridSpace, VectorGridSpace
+export gridspace, vector_gridspace, space, spaces, ScalarGridSpace, CompositeGridSpace,
+       VectorGridSpace
 export ndofs, ncomponents, weights
-export VectorElement, element, to_matrix, values, values!, component, components, component_range, component_ranges
+export VectorElement, element, to_matrix, values, values!, component, components,
+       component_range, component_ranges
 export Rₕ, Rₕ!, avgₕ, avgₕ!
 
 #=

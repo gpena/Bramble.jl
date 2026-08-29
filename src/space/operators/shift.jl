@@ -47,39 +47,45 @@ _Eye(Matrix{Float64}, 5, Val(-1))  # 5×5 with ones on subdiagonal
 
 See also: [`shift`](@ref)
 """
-@inline _Eye(::Type{MType}, npts::Int, ::Val{0}) where {MType<:AbstractMatrix} = Eye{eltype(MType)}(npts)
-@inline _Eye(::Type{MType}, npts::Int, ::Val{i}) where {i,MType<:AbstractMatrix} = spdiagm(i => Ones(eltype(MType), npts - abs(i)))
+@inline _Eye(::Type{MType}, npts::Int, ::Val{0}) where {MType <:
+                                                        AbstractMatrix} = Eye{eltype(MType)}(npts)
+@inline _Eye(::Type{MType}, npts::Int, ::Val{i}) where {
+    i, MType <: AbstractMatrix} = spdiagm(i => Ones(eltype(MType), npts - abs(i)))
 
-@inline _Eye(::Type{MType}, npts::Int, ::Val{0}) where MType<:SparseMatrixCSC = Eye{eltype(MType)}(npts)
-@inline _Eye(::Type{MType}, npts::Int, ::Val{i}) where {i,MType<:SparseMatrixCSC} = spdiagm(i => Ones(eltype(MType), npts - abs(i)))
+@inline _Eye(::Type{MType}, npts::Int, ::Val{0}) where {MType <:
+                                                        SparseMatrixCSC} = Eye{eltype(MType)}(npts)
+@inline _Eye(::Type{MType}, npts::Int, ::Val{i}) where {
+    i, MType <: SparseMatrixCSC} = spdiagm(i => Ones(eltype(MType), npts - abs(i)))
 
-@inline @inbounds function _recursive_shift(Ωₕ::AbstractMeshType, ::Val{1}, ::Val{DIFF_DIM}, ::Val{i}) where {DIFF_DIM,i}
-	dims = npoints(Ωₕ, Tuple)
-	MType = matrix_type(backend(Ωₕ))
+@inline @inbounds function _recursive_shift(
+        Ωₕ::AbstractMeshType, ::Val{1}, ::Val{DIFF_DIM}, ::Val{i}) where {DIFF_DIM, i}
+    dims = npoints(Ωₕ, Tuple)
+    MType = matrix_type(backend(Ωₕ))
 
-	if DIFF_DIM == 1
-		return _Eye(MType, dims[1], Val(i))
-	else
-		return Eye{eltype(MType)}(dims[1])
-	end
+    if DIFF_DIM == 1
+        return _Eye(MType, dims[1], Val(i))
+    else
+        return Eye{eltype(MType)}(dims[1])
+    end
 end
 
-@inline @inbounds function _recursive_shift(Ωₕ::AbstractMeshType, ::Val{D}, ::Val{DIFF_DIM}, ::Val{i}) where {D,DIFF_DIM,i}
-	dims = npoints(Ωₕ, Tuple)
-	MType = matrix_type(backend(Ωₕ))
+@inline @inbounds function _recursive_shift(
+        Ωₕ::AbstractMeshType, ::Val{D}, ::Val{DIFF_DIM}, ::Val{i}) where {D, DIFF_DIM, i}
+    dims = npoints(Ωₕ, Tuple)
+    MType = matrix_type(backend(Ωₕ))
 
-	# Determine the operator for the current (outermost) dimension D.
-	if DIFF_DIM == D
-		op_current = _Eye(MType, dims[D], Val(i))
-	else
-		op_current = Eye{eltype(MType)}(dims[D])
-	end
+    # Determine the operator for the current (outermost) dimension D.
+    if DIFF_DIM == D
+        op_current = _Eye(MType, dims[D], Val(i))
+    else
+        op_current = Eye{eltype(MType)}(dims[D])
+    end
 
-	# Recurse on the inner dimensions (from D-1 down to 1).
-	op_lower_dims = _recursive_shift(Ωₕ, Val(D - 1), Val(DIFF_DIM), Val(i))
+    # Recurse on the inner dimensions (from D-1 down to 1).
+    op_lower_dims = _recursive_shift(Ωₕ, Val(D - 1), Val(DIFF_DIM), Val(i))
 
-	# Combine them: M_D ⊗ (M_{D-1} ⊗ ...)
-	return op_current ⊗ op_lower_dims
+    # Combine them: M_D ⊗ (M_{D-1} ⊗ ...)
+    return op_current ⊗ op_lower_dims
 end
 
 """
@@ -90,12 +96,12 @@ Creates a shift operator on a D-dimensional mesh.
   - `SHIFT_DIM`: The dimension along which to apply the shift (e.g., 1 for x, 2 for y).
   - `i`: The shift amount (e.g., -1 for a backward shift).
 """
-function shift(Ωₕ::AbstractMeshType, ::Val{SHIFT_DIM}, ::Val{i}) where {SHIFT_DIM,i}
-	if i == 0
-		return Eye{eltype(eltype(Ωₕ))}(npoints(Ωₕ))
-	end
+function shift(Ωₕ::AbstractMeshType, ::Val{SHIFT_DIM}, ::Val{i}) where {SHIFT_DIM, i}
+    if i == 0
+        return Eye{eltype(eltype(Ωₕ))}(npoints(Ωₕ))
+    end
 
-	return _recursive_shift(Ωₕ, Val(dim(Ωₕ)), Val(SHIFT_DIM), Val(i))
+    return _recursive_shift(Ωₕ, Val(dim(Ωₕ)), Val(SHIFT_DIM), Val(i))
 end
 
 #=

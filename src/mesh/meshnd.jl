@@ -36,17 +36,18 @@ point(Ωₕ, (10, 15))  # Returns (x₁₀, y₁₅)
 
 See also: [`Mesh1D`](@ref), [`submeshes`](@ref), [`mesh`](@ref)
 """
-mutable struct MeshnD{D,BT<:Backend,CI<:CartesianIndices{D},SM<:Tuple,T} <: AbstractMeshType{D}
-	"the D-dimensional CartesianProduct (hyperrectangle) defining the geometric domain."
-	set::CartesianProduct{D,T}
-	"a dictionary mapping `Symbol` labels to `BitVector`s, marking grid points."
-	markers::MeshMarkers
-	"the `CartesianIndices` for the full D-dimensional grid, allowing for multi-dimensional indexing."
-	indices::CI
-	"the computational backend used for linear algebra operations."
-	backend::BT
-	"a tuple of `D` 1D mesh objects, representing the grid along each spatial dimension."
-	submeshes::SM
+mutable struct MeshnD{D, BT <: Backend, CI <: CartesianIndices{D}, SM <: Tuple, T} <:
+               AbstractMeshType{D}
+    "the D-dimensional CartesianProduct (hyperrectangle) defining the geometric domain."
+    set::CartesianProduct{D, T}
+    "a dictionary mapping `Symbol` labels to `BitVector`s, marking grid points."
+    markers::MeshMarkers
+    "the `CartesianIndices` for the full D-dimensional grid, allowing for multi-dimensional indexing."
+    indices::CI
+    "the computational backend used for linear algebra operations."
+    backend::BT
+    "a tuple of `D` 1D mesh objects, representing the grid along each spatial dimension."
+    submeshes::SM
 end
 
 """
@@ -64,12 +65,12 @@ This function takes a D-dimensional [Domain](@ref) and generates a tuple of `D` 
   - `backend`: The linear algebra backend.
 """
 @inline function submeshes(Ω::Domain, npts, unif, backend)
-	# Use ntuple for a type-stable way to generate the tuple of 1D meshes.
-	# For each dimension `i` from 1 to D:
-	# 1. `projection(Ω, i)` gets the i-th 1D interval from the domain's set.
-	# 2. `domain(...)` wraps it in a Domain object.
-	# 3. `mesh(...)` creates the corresponding Mesh1D for that dimension.
-	return ntuple(i -> mesh(domain(projection(Ω, i)), npts[i], unif[i], backend = backend), Val(dim(Ω)))
+    # Use ntuple for a type-stable way to generate the tuple of 1D meshes.
+    # For each dimension `i` from 1 to D:
+    # 1. `projection(Ω, i)` gets the i-th 1D interval from the domain's set.
+    # 2. `domain(...)` wraps it in a Domain object.
+    # 3. `mesh(...)` creates the corresponding Mesh1D for that dimension.
+    return ntuple(i -> mesh(domain(projection(Ω, i)), npts[i], unif[i], backend = backend), Val(dim(Ω)))
 end
 
 """
@@ -86,42 +87,42 @@ This function orchestrates the creation of a structured multidimensional mesh. I
   - `unif`: An `NTuple{D, Bool}` specifying if the grid is uniform in each dimension.
   - `backend`: The linear algebra backend.
 """
-function _mesh(Ω::Domain, npts::NTuple{D,Int}, unif::NTuple{D,Bool}, backend) where D
-	# Ensure the dimension of the domain matches the length of the input tuples.
-	@assert dim(Ω) == D "Domain dimension and length of npts/unif do not match."
-	_set = set(Ω)
+function _mesh(Ω::Domain, npts::NTuple{D, Int}, unif::NTuple{D, Bool}, backend) where {D}
+    # Ensure the dimension of the domain matches the length of the input tuples.
+    @assert dim(Ω) == D "Domain dimension and length of npts/unif do not match."
+    _set = set(Ω)
 
-	# Adjust the number of points for any collapsed dimensions. For example, if a domain
-	# is a line in 3D space, the two collapsed dimensions will have npts = 1.
-	npts_with_collapsed = ntuple(i -> is_collapsed(_set(i)...) ? 1 : npts[i], Val(D))
+    # Adjust the number of points for any collapsed dimensions. For example, if a domain
+    # is a line in 3D space, the two collapsed dimensions will have npts = 1.
+    npts_with_collapsed = ntuple(i -> is_collapsed(_set(i)...) ? 1 : npts[i], Val(D))
 
-	# Generate the CartesianIndices for the full D-dimensional grid.
-	idxs = generate_indices(npts_with_collapsed)
+    # Generate the CartesianIndices for the full D-dimensional grid.
+    idxs = generate_indices(npts_with_collapsed)
 
-	# Create the tuple of 1D submeshes that form the basis of the tensor-product grid.
-	_submeshes = submeshes(Ω, npts_with_collapsed, unif, backend)
+    # Create the tuple of 1D submeshes that form the basis of the tensor-product grid.
+    _submeshes = submeshes(Ω, npts_with_collapsed, unif, backend)
 
-	# Instantiate the MeshnD object with an empty marker dictionary.
-	mesh_markers = MeshMarkers()
-	output_mesh = MeshnD(_set, mesh_markers, idxs, backend, _submeshes)
+    # Instantiate the MeshnD object with an empty marker dictionary.
+    mesh_markers = MeshMarkers()
+    output_mesh = MeshnD(_set, mesh_markers, idxs, backend, _submeshes)
 
-	# Now that the mesh object is created, populate its markers based on the domain's markers.
-	set_markers!(output_mesh, markers(Ω))
+    # Now that the mesh object is created, populate its markers based on the domain's markers.
+    set_markers!(output_mesh, markers(Ω))
 
-	return output_mesh
+    return output_mesh
 end
 
-@inline eltype(::MeshnD{D,BT}) where {D,BT} = eltype(BT)
-@inline eltype(::Type{<:MeshnD{D,BT}}) where {D,BT} = eltype(BT)
+@inline eltype(::MeshnD{D, BT}) where {D, BT} = eltype(BT)
+@inline eltype(::Type{<:MeshnD{D, BT}}) where {D, BT} = eltype(BT)
 
 """
 	(Ωₕ::MeshnD)(i)
 
 Returns the `i`-th submesh of `Ωₕ`.
 """
-@inline function (Ωₕ::MeshnD{D})(i) where D
-	@boundscheck 1 <= i <= D || throw(BoundsError(Ωₕ.submeshes, i))
-	return @inbounds Ωₕ.submeshes[i]
+@inline function (Ωₕ::MeshnD{D})(i) where {D}
+    @boundscheck 1 <= i <= D || throw(BoundsError(Ωₕ.submeshes, i))
+    return @inbounds Ωₕ.submeshes[i]
 end
 
 #------------------------------------------------------------------------------------------#
@@ -143,23 +144,23 @@ end
 
 # A macro for functions of the form: func(Ωₕ) -> ntuple(...)
 macro generate_mesh_ntuple_func(fname)
-	return esc(quote
-				   @inline $fname(Ωₕ::MeshnD{D}) where {D} = ntuple(i -> $fname(Ωₕ(i)), Val(D))
-			   end)
+    return esc(quote
+        @inline $fname(Ωₕ::MeshnD{D}) where {D} = ntuple(i -> $fname(Ωₕ(i)), Val(D))
+    end)
 end
 
 # A macro for functions of the form: func(Ωₕ, idx) -> ntuple(...)
 macro generate_mesh_ntuple_func_with_idx(fname)
-	return esc(quote
-				   @inline $fname(Ωₕ::MeshnD{D}, idx) where {D} = ntuple(i -> $fname(Ωₕ(i), idx[i]), Val(D))
-			   end)
+    return esc(quote
+        @inline $fname(Ωₕ::MeshnD{D}, idx) where {D} = ntuple(i -> $fname(Ωₕ(i), idx[i]), Val(D))
+    end)
 end
 
 # A macro for functions of the form: func(Ωₕ) -> Iterators.product(...)
 macro generate_mesh_iterator_func(fname)
-	return esc(quote
-				   @inline $fname(Ωₕ::MeshnD{D}) where {D} = Iterators.product(ntuple(i -> $fname(Ωₕ(i)), Val(D))...)
-			   end)
+    return esc(quote
+        @inline $fname(Ωₕ::MeshnD{D}) where {D} = Iterators.product(ntuple(i -> $fname(Ωₕ(i)), Val(D))...)
+    end)
 end
 
 # ntuple wrappers
@@ -173,7 +174,8 @@ end
 @generate_mesh_ntuple_func_with_idx spacing
 @generate_mesh_ntuple_func_with_idx forward_spacing
 
-@inline half_spacing(Ωₕ::MeshnD{D}, idx) where D = ntuple(i -> _apply_hs_logic(half_spacing(Ωₕ(i), idx[i])), Val(D))
+@inline half_spacing(Ωₕ::MeshnD{D}, idx) where {D} = ntuple(
+    i -> _apply_hs_logic(half_spacing(Ωₕ(i), idx[i])), Val(D))
 
 """
 	cell_measures(Ωₕ::MeshnD)
@@ -181,7 +183,7 @@ end
 Returns the per-axis cell widths as an `NTuple{D}` of vectors. The measure of an
 individual cell is the product of its per-axis widths; see [`cell_measure`](@ref).
 """
-@inline cell_measures(Ωₕ::MeshnD{D}) where D = ntuple(i -> cell_measures(Ωₕ(i)), Val(D))
+@inline cell_measures(Ωₕ::MeshnD{D}) where {D} = ntuple(i -> cell_measures(Ωₕ(i)), Val(D))
 
 # Iterator wrappers
 @generate_mesh_iterator_func points_iterator
@@ -191,70 +193,70 @@ individual cell is the product of its per-axis widths; see [`cell_measure`](@ref
 @generate_mesh_iterator_func half_spacings_iterator
 
 @inline npoints(Ωₕ::MeshnD) = prod(npoints(Ωₕ, Tuple))
-@inline npoints(Ωₕ::MeshnD{D}, ::Type{Tuple}) where D = ntuple(i -> npoints(Ωₕ(i)), Val(D))
+@inline npoints(Ωₕ::MeshnD{D}, ::Type{Tuple}) where {D} = ntuple(i -> npoints(Ωₕ(i)), Val(D))
 
-@inline function hₘₐₓ(Ωₕ::MeshnD{D}) where D
-	max_h = zero(eltype(Ωₕ))
-	@inbounds for idx in indices(Ωₕ)
-		h_tuple = spacing(Ωₕ, idx)
-		h_diag = hypot(h_tuple...)
-		max_h = max(max_h, h_diag)
-	end
-	return max_h
+@inline function hₘₐₓ(Ωₕ::MeshnD{D}) where {D}
+    max_h = zero(eltype(Ωₕ))
+    @inbounds for idx in indices(Ωₕ)
+        h_tuple = spacing(Ωₕ, idx)
+        h_diag = hypot(h_tuple...)
+        max_h = max(max_h, h_diag)
+    end
+    return max_h
 end
 
-@inline function hₘᵢₙ(Ωₕ::MeshnD{D}) where D
-	min_h = typemax(eltype(Ωₕ))
-	@inbounds for i in 1:D
-		sub_min = hₘᵢₙ(Ωₕ(i))
-		min_h = min(min_h, sub_min)
-	end
-	return min_h
+@inline function hₘᵢₙ(Ωₕ::MeshnD{D}) where {D}
+    min_h = typemax(eltype(Ωₕ))
+    @inbounds for i in 1:D
+        sub_min = hₘᵢₙ(Ωₕ(i))
+        min_h = min(min_h, sub_min)
+    end
+    return min_h
 end
 
-@inline function cell_measure(Ωₕ::MeshnD{D}, idx) where D
-	return prod(ntuple(i -> half_spacing(Ωₕ(i), idx[i]), Val(D)))
+@inline function cell_measure(Ωₕ::MeshnD{D}, idx) where {D}
+    return prod(ntuple(i -> half_spacing(Ωₕ(i), idx[i]), Val(D)))
 end
 
 @inline Base.getindex(Ωₕ::MeshnD, idx::CartesianIndex) = point(Ωₕ, idx)
 @inline Base.getindex(Ωₕ::MeshnD, idx...) = point(Ωₕ, idx)
 
-function locate_cell(Ωₕ::MeshnD{D}, x::Tuple) where D
-	indices_tuple = ntuple(i -> locate_cell(Ωₕ(i), x[i]), Val(D))
-	return CartesianIndex(indices_tuple)
+function locate_cell(Ωₕ::MeshnD{D}, x::Tuple) where {D}
+    indices_tuple = ntuple(i -> locate_cell(Ωₕ(i), x[i]), Val(D))
+    return CartesianIndex(indices_tuple)
 end
 
 @inline cell_measures_iterator(Ωₕ::MeshnD) = (cell_measure(Ωₕ, idx) for idx in indices(Ωₕ))
 
-function iterative_refinement!(Ωₕ::MeshnD{D}) where D
-	@inbounds for i in 1:D
-		iterative_refinement!(Ωₕ(i))
-	end
-	return
+function iterative_refinement!(Ωₕ::MeshnD{D}) where {D}
+    @inbounds for i in 1:D
+        iterative_refinement!(Ωₕ(i))
+    end
+    return
 end
 
-function iterative_refinement!(Ωₕ::MeshnD{D}, domain_markers::DomainMarkers) where D
-	iterative_refinement!(Ωₕ)
+function iterative_refinement!(Ωₕ::MeshnD{D}, domain_markers::DomainMarkers) where {D}
+    iterative_refinement!(Ωₕ)
 
-	npts = npoints(Ωₕ, Tuple)
-	idxs = generate_indices(npts)
+    npts = npoints(Ωₕ, Tuple)
+    idxs = generate_indices(npts)
 
-	set_indices!(Ωₕ, idxs)
-	set_markers!(Ωₕ, domain_markers)
-	return
+    set_indices!(Ωₕ, idxs)
+    set_markers!(Ωₕ, domain_markers)
+    return
 end
 
-function change_points!(Ωₕ::MeshnD{D}, pts) where D
-	@inbounds for i in 1:D
-		change_points!(Ωₕ(i), pts[i])
-	end
-	return
+function change_points!(Ωₕ::MeshnD{D}, pts) where {D}
+    @inbounds for i in 1:D
+        change_points!(Ωₕ(i), pts[i])
+    end
+    return
 end
 
-function change_points!(Ωₕ::MeshnD{D}, domain_markers::DomainMarkers, pts) where D
-	change_points!(Ωₕ, pts)
-	set_markers!(Ωₕ, domain_markers)
-	return
+function change_points!(Ωₕ::MeshnD{D}, domain_markers::DomainMarkers, pts) where {D}
+    change_points!(Ωₕ, pts)
+    set_markers!(Ωₕ, domain_markers)
+    return
 end
 
 """
@@ -265,11 +267,11 @@ Creates a copy of the mesh `Ωₕ`. The copy is shallow with respect to the immu
 (`submeshes`, `markers`) which are copied.
 """
 function Base.copy(Ωₕ::MeshnD{D}) where {D}
-	return MeshnD(Ωₕ.set,
-				  deepcopy(Ωₕ.markers),
-				  Ωₕ.indices,
-				  Ωₕ.backend,
-				  map(copy, Ωₕ.submeshes))
+    return MeshnD(Ωₕ.set,
+        deepcopy(Ωₕ.markers),
+        Ωₕ.indices,
+        Ωₕ.backend,
+        map(copy, Ωₕ.submeshes))
 end
 
 """
@@ -277,43 +279,43 @@ end
 
 Custom display for MeshnD objects with detailed mesh information and colors.
 """
-function Base.show(io::IO, Ωₕ::MeshnD{D,BT,CI,SM,T}) where {D,BT,CI,SM,T}
-	pp = PrettyPrinter(io)
+function Base.show(io::IO, Ωₕ::MeshnD{D, BT, CI, SM, T}) where {D, BT, CI, SM, T}
+    pp = PrettyPrinter(io)
 
-	if pp.compact
-		# Compact display for arrays/collections
-		npts_tuple = npoints(Ωₕ, Tuple)
-		print(io, "MeshnD{$(D)D, ", prod(npts_tuple), " pts}")
-		return
-	end
+    if pp.compact
+        # Compact display for arrays/collections
+        npts_tuple = npoints(Ωₕ, Tuple)
+        print(io, "MeshnD{$(D)D, ", prod(npts_tuple), " pts}")
+        return
+    end
 
-	# Detailed display
-	npts_tuple = npoints(Ωₕ, Tuple)
-	n_total = npoints(Ωₕ)
-	topodim = topo_dim(Ωₕ)
+    # Detailed display
+    npts_tuple = npoints(Ωₕ, Tuple)
+    n_total = npoints(Ωₕ)
+    topodim = topo_dim(Ωₕ)
 
-	# Check if all dimensions are collapsed (topological dimension is 0)
-	collapsed = (topodim == 0)
+    # Check if all dimensions are collapsed (topological dimension is 0)
+    collapsed = (topodim == 0)
 
-	# Header
-	print_mesh_header(pp, "MeshnD", D, T, npts_tuple)
-	println(io)
+    # Header
+    print_mesh_header(pp, "MeshnD", D, T, npts_tuple)
+    println(io)
 
-	# Summary line
-	print_mesh_summary(pp, npts_tuple, topodim, collapsed)
+    # Summary line
+    print_mesh_summary(pp, npts_tuple, topodim, collapsed)
 
-	# Domain information
-	print_mesh_domain_info(pp, set(Ωₕ))
+    # Domain information
+    print_mesh_domain_info(pp, set(Ωₕ))
 
-	# Spacing information
-	if !collapsed
-		uniform_tuple = ntuple(i -> is_uniform(Ωₕ(i)), Val(D))
-		print_mesh_spacing_info(pp, uniform_tuple, hₘₐₓ(Ωₕ))
-	end
+    # Spacing information
+    if !collapsed
+        uniform_tuple = ntuple(i -> is_uniform(Ωₕ(i)), Val(D))
+        print_mesh_spacing_info(pp, uniform_tuple, hₘₐₓ(Ωₕ))
+    end
 
-	# Markers information
-	print_mesh_markers(pp, markers(Ωₕ))
+    # Markers information
+    print_mesh_markers(pp, markers(Ωₕ))
 
-	# Remove trailing newline
-	remove_trailing_newline(io)
+    # Remove trailing newline
+    remove_trailing_newline(io)
 end

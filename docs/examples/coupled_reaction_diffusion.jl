@@ -57,11 +57,12 @@ function solve_reaction_diffusion(N)
     # 1. Domain and Mesh setup
     I = interval(0.0, 1.0)
     Ω = I × I
-    X_domain = domain(Ω, markers(Ω,
-        :bottom => x -> x[2] < 1 / N / 2,
-        :top => x -> x[2] > 1 - 1 / N / 2,
-        :left => x -> x[1] < 1 / N / 2,
-        :right => x -> x[1] > 1 - 1 / N / 2))
+    X_domain = domain(Ω,
+        markers(Ω,
+            :bottom => x -> x[2] < 1 / N / 2,
+            :top => x -> x[2] > 1 - 1 / N / 2,
+            :left => x -> x[1] < 1 / N / 2,
+            :right => x -> x[1] > 1 - 1 / N / 2))
 
     Mh = mesh(X_domain, (N, N), (true, true))
     Wh = gridspace(Mh)
@@ -90,8 +91,10 @@ function solve_reaction_diffusion(N)
     #   p represents the trial function in Wh,
     #   v = (v[1], v[2]) represents test functions in Vh,
     #   q represents the test function in Wh.
-    a = form(X, X, ((u, p), (v, q)) ->
-    # Diffusion terms: -Δu1, -Δu2, -Δu3
+    a = form(X,
+        X,
+        ((u, p), (v, q)) ->
+        # Diffusion terms: -Δu1, -Δu2, -Δu3
         inner₊(∇₋ₕ(u), ∇₋ₕ(v)) + inner₊(∇₋ₕ(p), ∇₋ₕ(q)) +
         # Diagonal linear reaction terms
         innerₕ(u[1], v[1]) + innerₕ(u[2], v[2]) + innerₕ(p, q) +
@@ -115,20 +118,23 @@ function solve_reaction_diffusion(N)
     F = [assemble(l1); assemble(l2); assemble(l3)]
 
     # 6. Apply Boundary Conditions
-    boundary_mask = Bramble.index_in_marker(Mh, :left) .| Bramble.index_in_marker(Mh, :right) .| Bramble.index_in_marker(Mh, :bottom) .| Bramble.index_in_marker(Mh, :top)
+    boundary_mask = Bramble.index_in_marker(Mh, :left) .|
+                    Bramble.index_in_marker(Mh, :right) .|
+                    Bramble.index_in_marker(Mh, :bottom) .|
+                    Bramble.index_in_marker(Mh, :top)
 
     global_vec_bool = BitVector(undef, 3n)
     fill!(global_vec_bool, false)
     for i in 1:n
         if boundary_mask[i]
             global_vec_bool[i] = true
-            global_vec_bool[n+i] = true
-            global_vec_bool[2n+i] = true
+            global_vec_bool[n + i] = true
+            global_vec_bool[2n + i] = true
 
             # Dirichlet boundary values are 0.0
             F[i] = 0.0
-            F[n+i] = 0.0
-            F[2n+i] = 0.0
+            F[n + i] = 0.0
+            F[2n + i] = 0.0
         end
     end
 
@@ -141,8 +147,8 @@ function solve_reaction_diffusion(N)
 
     # 8. Extract solutions and compute errors
     u1_sol = sol[1:n]
-    u2_sol = sol[n+1:2n]
-    u3_sol = sol[2n+1:end]
+    u2_sol = sol[(n + 1):2n]
+    u3_sol = sol[(2n + 1):end]
 
     u1_exact = element(Wh)
     Rₕ!(u1_exact, u1_ex)

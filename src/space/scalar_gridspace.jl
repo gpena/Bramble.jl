@@ -11,11 +11,11 @@ $(FIELDS)
 
 For a detailed explanation of the mathematical formulas corresponding to these weights, please refer to the documentation for [ScalarGridSpace](@ref).
 """
-struct SpaceWeights{D,VT<:AbstractVector}
-	"weight vector for the standard discrete ``L^2`` inner product (`:innerₕ`), based on cell measures (``|\\square_k|``)."
-	innerh::VT
-	"a tuple of weight vectors for modified, staggered inner products (`:inner₊ₓ`, `:inner₊ᵧ`, etc.), with one vector for each spatial dimension."
-	innerplus::NTuple{D,VT}
+struct SpaceWeights{D, VT <: AbstractVector}
+    "weight vector for the standard discrete ``L^2`` inner product (`:innerₕ`), based on cell measures (``|\\square_k|``)."
+    innerh::VT
+    "a tuple of weight vectors for modified, staggered inner products (`:inner₊ₓ`, `:inner₊ᵧ`, etc.), with one vector for each spatial dimension."
+    innerplus::NTuple{D, VT}
 end
 
 """
@@ -87,16 +87,16 @@ Here, ``|\\cdot|`` denotes the measure of the set (length, area, or volume). See
 (u_h, v_h)_{+z} = \\sum_{i=1}^{N_x}\\sum_{j=1}^{N_y}\\sum_{l=1}^{N_z} h_{x,i+1/2} h_{y,j+1/2} h_{z,l} u_h(x_i,y_j,z_l) v_h(x_i,y_j,z_l)
 ```
 """
-struct ScalarGridSpace{D,T,                               # Dimension and Element Type
-					   VT<:AbstractVector{T},             # Vector Type
-					   MType<:AbstractMeshType{D},
-					   BT<:Backend} <: AbstractSpaceType{1}
-	"the underlying mesh of the grid space."
-	mesh::MType
-	"a [SpaceWeights](@ref) object holding vectors for various discrete inner products."
-	weights::SpaceWeights{D,VT}
-	"a [GridSpaceBuffer](@ref) for efficient reuse of temporary vectors, minimizing memory allocations."
-	vector_buffer::GridSpaceBuffer{BT,VT,T}
+struct ScalarGridSpace{D, T,                               # Dimension and Element Type
+    VT <: AbstractVector{T},             # Vector Type
+    MType <: AbstractMeshType{D},
+    BT <: Backend} <: AbstractSpaceType{1}
+    "the underlying mesh of the grid space."
+    mesh::MType
+    "a [SpaceWeights](@ref) object holding vectors for various discrete inner products."
+    weights::SpaceWeights{D, VT}
+    "a [GridSpaceBuffer](@ref) for efficient reuse of temporary vectors, minimizing memory allocations."
+    vector_buffer::GridSpaceBuffer{BT, VT, T}
 end
 
 """
@@ -104,60 +104,60 @@ end
 
 Constructor for a [ScalarGridSpace](@ref) defined on the mesh `Ωₕ`. This builds the weights for the inner products mentioned in [ScalarGridSpace](@ref) and initializes a memory pool for scratch vectors.
 """
-function gridspace(Ωₕ::AbstractMeshType{D}; nbuffers::Int = 1) where D
-	b = backend(Ωₕ)
-	npts = npoints(Ωₕ)
+function gridspace(Ωₕ::AbstractMeshType{D}; nbuffers::Int = 1) where {D}
+    b = backend(Ωₕ)
+    npts = npoints(Ωₕ)
 
-	weights = space_weights(Ωₕ)
-	space_buffer = simple_space_buffer(b, npts; nbuffers = nbuffers)
+    weights = space_weights(Ωₕ)
+    space_buffer = simple_space_buffer(b, npts; nbuffers = nbuffers)
 
-	MType = typeof(Ωₕ)
-	T, VT, _, BT = backend_types(b)
+    MType = typeof(Ωₕ)
+    T, VT, _, BT = backend_types(b)
 
-	return ScalarGridSpace{D,T,VT,MType,BT}(Ωₕ, weights, space_buffer)
+    return ScalarGridSpace{D, T, VT, MType, BT}(Ωₕ, weights, space_buffer)
 end
 
 # Allocates a work vector sized to a mesh. Typed rather than generic: with an
 # untyped signature this also admits spaces, for which npoints has no method.
 @inline __vector(Ωₕ::AbstractMeshType) = vector(backend(Ωₕ), npoints(Ωₕ))
 
-function space_weights(Ωₕ::AbstractMeshType{D}) where D
-	# Initialize a tuple of D vectors. Each vector will store the final weights for one spatial direction (e.g., x, y, z).
-	innerplus = ntuple(i -> __vector(Ωₕ), Val(D))
+function space_weights(Ωₕ::AbstractMeshType{D}) where {D}
+    # Initialize a tuple of D vectors. Each vector will store the final weights for one spatial direction (e.g., x, y, z).
+    innerplus = ntuple(i -> __vector(Ωₕ), Val(D))
 
-	# Per-axis factors. Neither depends on the direction `i` being assembled, so each
-	# is computed once here rather than D times inside the loop below:
-	#   `main[k]`  applies to the axis aligned with the difference direction,
-	#   `mean[k]`  applies to every transverse axis.
-	main = ntuple(k -> __vector(Ωₕ(k)), Val(D))
-	mean = ntuple(k -> __vector(Ωₕ(k)), Val(D))
-	for k in 1:D
-		_innerplus_weights!(main[k], Ωₕ, k)
-		_innerplus_mean_weights!(mean[k], Ωₕ, k)
-	end
+    # Per-axis factors. Neither depends on the direction `i` being assembled, so each
+    # is computed once here rather than D times inside the loop below:
+    #   `main[k]`  applies to the axis aligned with the difference direction,
+    #   `mean[k]`  applies to every transverse axis.
+    main = ntuple(k -> __vector(Ωₕ(k)), Val(D))
+    mean = ntuple(k -> __vector(Ωₕ(k)), Val(D))
+    for k in 1:D
+        _innerplus_weights!(main[k], Ωₕ, k)
+        _innerplus_mean_weights!(mean[k], Ωₕ, k)
+    end
 
-	# Retrieve the number of grid points in each dimension as a tuple (e.g., (Nx, Ny)).
-	npts_tuple = npoints(Ωₕ, Tuple)
+    # Retrieve the number of grid points in each dimension as a tuple (e.g., (Nx, Ny)).
+    npts_tuple = npoints(Ωₕ, Tuple)
 
-	# Assemble the weights for each difference direction `i` by taking the aligned
-	# factor on axis `i` and the mean factor on all the others.
-	for i in 1:D
-		factors = ntuple(k -> k == i ? main[k] : mean[k], Val(D))
+    # Assemble the weights for each difference direction `i` by taking the aligned
+    # factor on axis `i` and the mean factor on all the others.
+    for i in 1:D
+        factors = ntuple(k -> k == i ? main[k] : mean[k], Val(D))
 
-		# Create a D-dimensional array view of the flat `innerplus[i]` vector to
-		# allow for efficient multidimensional operations.
-		v = Base.ReshapedArray(innerplus[i], npts_tuple, ())
+        # Create a D-dimensional array view of the flat `innerplus[i]` vector to
+        # allow for efficient multidimensional operations.
+        v = Base.ReshapedArray(innerplus[i], npts_tuple, ())
 
-		# Combine the per-component factors into the final weight for direction 'i'.
-		__innerplus_weights!(v, factors)
-	end
+        # Combine the per-component factors into the final weight for direction 'i'.
+        __innerplus_weights!(v, factors)
+    end
 
-	# --- Compute the `inner_h` weights (cell volumes) ---
-	inner_h_vec = __vector(Ωₕ)
-	_innerh_weights!(inner_h_vec, Ωₕ)
+    # --- Compute the `inner_h` weights (cell volumes) ---
+    inner_h_vec = __vector(Ωₕ)
+    _innerh_weights!(inner_h_vec, Ωₕ)
 
-	# Return the computed weights wrapped in a dedicated `SpaceWeights` struct.
-	return SpaceWeights{D,typeof(inner_h_vec)}(inner_h_vec, innerplus)
+    # Return the computed weights wrapped in a dedicated `SpaceWeights` struct.
+    return SpaceWeights{D, typeof(inner_h_vec)}(inner_h_vec, innerplus)
 end
 
 # Implementation of the interface functions for AbstractSpaceType
@@ -165,7 +165,8 @@ end
 @inline vector_buffer(Wₕ::ScalarGridSpace) = Wₕ.vector_buffer
 @inline backend(Wₕ::ScalarGridSpace) = backend(mesh(Wₕ))
 @inline mesh_type(Wₕ::ScalarGridSpace) = typeof(mesh(Wₕ))
-@inline mesh_type(::Type{<:ScalarGridSpace{<:Any,<:Any,<:Any,MType}}) where MType = MType
+@inline mesh_type(::Type{<:ScalarGridSpace{
+    <:Any, <:Any, <:Any, MType}}) where {MType} = MType
 
 """
 	weights(Wₕ::ScalarGridSpace)
@@ -218,8 +219,8 @@ Returns the spatial dimension of the function space (1, 2, or 3).
 
 See also: [`ndofs`](@ref), [`mesh`](@ref)
 """
-@inline dim(::ScalarGridSpace{D}) where D = D
-@inline dim(::Type{<:ScalarGridSpace{D}}) where D = D
+@inline dim(::ScalarGridSpace{D}) where {D} = D
+@inline dim(::Type{<:ScalarGridSpace{D}}) where {D} = D
 
 """
 	ndofs(Wₕ::ScalarGridSpace)
@@ -250,8 +251,8 @@ Returns the element type of vectors in this space (e.g., `Float64`).
 
 See also: [`backend`](@ref)
 """
-@inline eltype(::ScalarGridSpace{D,T}) where {D,T} = T
-@inline eltype(::Type{<:ScalarGridSpace{D,T}}) where {D,T} = T
+@inline eltype(::ScalarGridSpace{D, T}) where {D, T} = T
+@inline eltype(::Type{<:ScalarGridSpace{D, T}}) where {D, T} = T
 
 """
 	_innerh_weights!(u, Ωₕ::AbstractMeshType)
@@ -259,20 +260,22 @@ See also: [`backend`](@ref)
 Builds the weights for the standard discrete ``L^2`` inner product, ``inner_h(\\cdot, \\cdot)``, on the space of grid functions, following the order of the points provided by `indices(Ωₕ)`. The values are stored in vector `u`.
 """
 function _innerh_weights!(u, Ωₕ::AbstractMeshType{1})
-	idxs = indices(Ωₕ)
-	@inbounds @simd for idx in idxs
-		i = idx[1]
-		u[i] = cell_measure(Ωₕ, i)
-	end
-	return nothing
+    idxs = indices(Ωₕ)
+    @inbounds @simd for idx in idxs
+        i = idx[1]
+        u[i] = cell_measure(Ωₕ, i)
+    end
+    return nothing
 end
 
-function _innerh_weights!(u, Ωₕ::AbstractMeshType{D}) where D
-	cell_measures_per_component = ntuple(k -> [cell_measure(Ωₕ(k), j[1]) for j in indices(Ωₕ(k))], Val(D))
-	dims = npoints(Ωₕ, Tuple)
-	v = Base.ReshapedArray(u, dims, ())
-	__innerplus_weights!(v, cell_measures_per_component)
-	return nothing
+function _innerh_weights!(u, Ωₕ::AbstractMeshType{D}) where {D}
+    cell_measures_per_component = ntuple(
+        k -> [cell_measure(Ωₕ(k), j[1])
+              for j in indices(Ωₕ(k))], Val(D))
+    dims = npoints(Ωₕ, Tuple)
+    v = Base.ReshapedArray(u, dims, ())
+    __innerplus_weights!(v, cell_measures_per_component)
+    return nothing
 end
 
 """
@@ -280,21 +283,21 @@ end
 
 Builds a set of weights based on the spacings, associated with the `component`-th direction, for the modified discrete ``L^2`` inner product on the space of grid functions, following the order of the points provided by `indices(Ωₕ)`. The values are stored in vector `u`.
 """
-function _innerplus_weights!(u::VT, Ωₕ, component = 1) where VT
-	T = eltype(VT)
-	mesh_component = Ωₕ(component)
+function _innerplus_weights!(u::VT, Ωₕ, component = 1) where {VT}
+    T = eltype(VT)
+    mesh_component = Ωₕ(component)
 
-	f = Base.Fix1(spacing, mesh_component)
-	idxs = indices(mesh_component)
+    f = Base.Fix1(spacing, mesh_component)
+    idxs = indices(mesh_component)
 
-	@inbounds @simd for idx in idxs
-		i = idx[1]
+    @inbounds @simd for idx in idxs
+        i = idx[1]
 
-		u[i] = f(i)
-	end
+        u[i] = f(i)
+    end
 
-	@inbounds u[1] = zero(T)
-	return
+    @inbounds u[1] = zero(T)
+    return
 end
 
 """
@@ -303,22 +306,22 @@ end
 Builds a set of weights based on the half spacings, associated with the `component`-th direction, for the modified discrete ``L^2`` inner product on the space of grid functions, following the order of the [points](@ref). The values are stored in vector `u`.
 for each component.
 """
-function _innerplus_mean_weights!(u::VT, Ωₕ, component::Int = 1) where VT
-	T = eltype(VT)
-	u[1] = zero(T)
-	mesh_component = Ωₕ(component)
-	N = npoints(mesh_component)
+function _innerplus_mean_weights!(u::VT, Ωₕ, component::Int = 1) where {VT}
+    T = eltype(VT)
+    u[1] = zero(T)
+    mesh_component = Ωₕ(component)
+    N = npoints(mesh_component)
 
-	@inbounds @simd for i in 2:(N - 1)
-		u[i] = half_spacing(mesh_component, i)
-	end
+    @inbounds @simd for i in 2:(N - 1)
+        u[i] = half_spacing(mesh_component, i)
+    end
 
-	@inbounds u[N] = zero(T)
-	return nothing
+    @inbounds u[N] = zero(T)
+    return nothing
 end
 
-@inline function __prod(diags::NTuple{D,Any}, I) where D
-	return prod(ntuple(i -> @inbounds(diags[i][I[i]]), Val(D)))
+@inline function __prod(diags::NTuple{D, Any}, I) where {D}
+    return prod(ntuple(i -> @inbounds(diags[i][I[i]]), Val(D)))
 end
 
 """
@@ -327,7 +330,7 @@ end
 Builds the weights for the modified discrete ``L^2`` inner product on the space of grid functions [ScalarGridSpace](@ref). The result is stored in vector `v`.
 """
 function __innerplus_weights!(v, innerplus_per_component)
-	idxs = CartesianIndices(v)
-	f = Base.Fix1(__prod, innerplus_per_component)
-	_parallel_for!(v, idxs, f)
+    idxs = CartesianIndices(v)
+    f = Base.Fix1(__prod, innerplus_per_component)
+    _parallel_for!(v, idxs, f)
 end

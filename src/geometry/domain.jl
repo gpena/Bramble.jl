@@ -16,11 +16,11 @@ $(FIELDS)
 - See [`CartesianProduct`](@ref) for the underlying geometric representation.
 - See [`DomainMarkers`](@ref) for marker management.
 """
-struct Domain{SetType,MarkersType} <: DomainBaseType
-	"the geometric set defining the domain's extent (e.g., a [`CartesianProduct`](@ref))."
-	set::SetType
-	"a [`DomainMarkers`](@ref) object containing all labeled regions for this domain."
-	markers::MarkersType
+struct Domain{SetType, MarkersType} <: DomainBaseType
+    "the geometric set defining the domain's extent (e.g., a [`CartesianProduct`](@ref))."
+    set::SetType
+    "a [`DomainMarkers`](@ref) object containing all labeled regions for this domain."
+    markers::MarkersType
 end
 
 """
@@ -64,7 +64,8 @@ Returns a generator that yields the labels (`Symbol`) of all markers associated 
 Returns a generator that yields the identifiers (`Symbol`, `Set{Symbol}`, or `BrambleFunction`) of all markers in the [`Domain`](@ref) `Ω`.
 """
 @inline function marker_identifiers(Ω::Domain)
-	return (identifier(marker) for marker in Iterators.flatten((symbols(Ω), tuples(Ω), conditions(Ω))))
+    return (identifier(marker)
+    for marker in Iterators.flatten((symbols(Ω), tuples(Ω), conditions(Ω))))
 end
 
 """
@@ -73,7 +74,7 @@ end
 Returns a generator yielding the identifiers of single-symbol markers.
 """
 @inline function marker_symbols(Ω::Domain)
-	return (identifier(marker) for marker in symbols(Ω))
+    return (identifier(marker) for marker in symbols(Ω))
 end
 
 """
@@ -82,7 +83,7 @@ end
 Returns a generator yielding the identifiers of symbol-tuple markers.
 """
 @inline function marker_tuples(Ω::Domain)
-	return (identifier(marker) for marker in tuples(Ω))
+    return (identifier(marker) for marker in tuples(Ω))
 end
 
 """
@@ -91,7 +92,7 @@ end
 Returns a generator yielding the identifiers (functions) of condition-based markers.
 """
 @inline function marker_conditions(Ω::Domain)
-	return (identifier(marker) for marker in conditions(Ω))
+    return (identifier(marker) for marker in conditions(Ω))
 end
 
 """
@@ -132,10 +133,12 @@ Returns a [`Domain`](@ref) from a [`CartesianProduct`](@ref).
 - `domain(X, pairs...)`: Constructs a domain with markers defined by label-identifier pairs.
 - `domain(space_set, time_set, pairs...)`: Constructs a spatio-temporal domain.
 """
-@inline domain(X::CartesianProduct) = Domain(X, markers(X, :boundary => get_boundary_symbols(X)))
+@inline domain(X::CartesianProduct) = Domain(X, markers(X, :boundary =>
+    get_boundary_symbols(X)))
 @inline domain(X::CartesianProduct, markers::DomainMarkers) = Domain(X, markers)
 @inline domain(X::CartesianProduct, pairs::Pair...) = domain(X, markers(X, pairs...))
-@inline domain(space_set::CartesianProduct, time_set::CartesianProduct{1}, pairs::Pair...) = domain(space_set, markers(space_set, time_set, pairs...))
+@inline domain(space_set::CartesianProduct, time_set::CartesianProduct{1}, pairs::Pair...) = domain(
+    space_set, markers(space_set, time_set, pairs...))
 
 """
 	(Ω::Domain)(t::Number)
@@ -246,20 +249,22 @@ Returns a tuple of default boundary symbols for a [`CartesianProduct`](@ref) or 
 @inline get_boundary_symbols(Ω::Domain) = get_boundary_symbols(set(Ω))
 @inline get_boundary_symbols(::CartesianProduct{1}) = (:left, :right)
 @inline get_boundary_symbols(::CartesianProduct{2}) = (:bottom, :top, :left, :right)
-@inline get_boundary_symbols(::CartesianProduct{3}) = (:bottom, :top, :back, :front, :left, :right)
+@inline get_boundary_symbols(::CartesianProduct{3}) = (
+    :bottom, :top, :back, :front, :left, :right)
 @inline get_boundary_symbols(::Type{<:CartesianProduct{1}}) = (:left, :right)
 @inline get_boundary_symbols(::Type{<:CartesianProduct{2}}) = (:bottom, :top, :left, :right)
-@inline get_boundary_symbols(::Type{<:CartesianProduct{3}}) = (:bottom, :top, :back, :front, :left, :right)
+@inline get_boundary_symbols(::Type{<:CartesianProduct{3}}) = (
+    :bottom, :top, :back, :front, :left, :right)
 function get_boundary_symbols(D::Integer)
-	D == 1 && return (:left, :right)
-	D == 2 && return (:bottom, :top, :left, :right)
-	D == 3 && return (:bottom, :top, :back, :front, :left, :right)
-	error("get_boundary_symbols is not defined for $(D)D domains. " *
-		  "Provide explicit boundary names via the markers() interface.")
+    D == 1 && return (:left, :right)
+    D == 2 && return (:bottom, :top, :left, :right)
+    D == 3 && return (:bottom, :top, :back, :front, :left, :right)
+    error("get_boundary_symbols is not defined for $(D)D domains. " *
+          "Provide explicit boundary names via the markers() interface.")
 end
-@noinline function get_boundary_symbols(::Type{<:CartesianProduct{D}}) where D
-	error("get_boundary_symbols is not defined for $(D)D domains. " *
-		  "Provide explicit boundary names via the markers() interface.")
+@noinline function get_boundary_symbols(::Type{<:CartesianProduct{D}}) where {D}
+    error("get_boundary_symbols is not defined for $(D)D domains. " *
+          "Provide explicit boundary names via the markers() interface.")
 end
 @inline get_boundary_symbols(::Type{<:Domain{SetType}}) where {SetType} = get_boundary_symbols(SetType)
 
@@ -269,82 +274,83 @@ end
 Custom display for [`Domain`](@ref) objects, combining set geometry and marker information with colors.
 """
 function Base.show(io::IO, Ω::Domain)
-	pp = PrettyPrinter(io)
+    pp = PrettyPrinter(io)
 
-	if pp.compact
-		# Compact mode for arrays/collections
-		print(io, "Domain{$(dim(Ω))D, $(eltype(Ω))}:")
-	else
-		# Detailed mode
-		X = set(Ω)
-		dm = markers(Ω)
+    if pp.compact
+        # Compact mode for arrays/collections
+        print(io, "Domain{$(dim(Ω))D, $(eltype(Ω))}:")
+    else
+        # Detailed mode
+        X = set(Ω)
+        dm = markers(Ω)
 
-		# Header
-		printstyled(io, "Domain"; bold = true, color = :cyan)
-		print(io, " {")
-		printstyled(io, "$(dim(Ω))D", color = :yellow)
-		print(io, ", ")
-		printstyled(io, "$(eltype(Ω))", color = :yellow)
-		println(io, "}:")
+        # Header
+        printstyled(io, "Domain"; bold = true, color = :cyan)
+        print(io, " {")
+        printstyled(io, "$(dim(Ω))D", color = :yellow)
+        print(io, ", ")
+        printstyled(io, "$(eltype(Ω))", color = :yellow)
+        println(io, "}:")
 
-		# Set information
-		println(io)
-		pp_indented = with_indent(pp, 1)
-		print_section_header(pp_indented, "Set:")
+        # Set information
+        println(io)
+        pp_indented = with_indent(pp, 1)
+        print_section_header(pp_indented, "Set:")
 
-		D = dim(X)
-		topodim = topo_dim(X)
-		pp_double_indent = with_indent(pp, 2)
+        D = dim(X)
+        topodim = topo_dim(X)
+        pp_double_indent = with_indent(pp, 2)
 
-		if D == 1
-			collapsed = X.collapsed[1]
-			print(io, "    ")
-			if collapsed
-				print_colored(pp, "Point", color = :yellow)
-				print(io, " at ")
-				print_value(pp, X.box[1][1])
-			else
-				print_colored(pp, "Interval", color = :yellow)
-				print(io, " ")
-				print_interval(pp, X.box[1][1], X.box[1][2])
-			end
-			println(io)
-		else
-			if topodim < D
-				print(io, "    ")
-				print_colored(pp, "Topological dimension: $topodim", color = :yellow)
-				println(io)
-			end
+        if D == 1
+            collapsed = X.collapsed[1]
+            print(io, "    ")
+            if collapsed
+                print_colored(pp, "Point", color = :yellow)
+                print(io, " at ")
+                print_value(pp, X.box[1][1])
+            else
+                print_colored(pp, "Interval", color = :yellow)
+                print(io, " ")
+                print_interval(pp, X.box[1][1], X.box[1][2])
+            end
+            println(io)
+        else
+            if topodim < D
+                print(io, "    ")
+                print_colored(pp, "Topological dimension: $topodim", color = :yellow)
+                println(io)
+            end
 
-			for i in 1:D
-				label = get_dimension_label(i)
-				print_dimension_info(pp_double_indent, label, X.box[i][1], X.box[i][2], X.collapsed[i])
-			end
-		end
+            for i in 1:D
+                label = get_dimension_label(i)
+                print_dimension_info(
+                    pp_double_indent, label, X.box[i][1], X.box[i][2], X.collapsed[i])
+            end
+        end
 
-		# Markers information
-		println(io)
-		print_section_header(pp_indented, "Markers:")
+        # Markers information
+        println(io)
+        print_section_header(pp_indented, "Markers:")
 
-		n_sym = length(symbols(Ω))
-		n_tup = length(tuples(Ω))
-		n_cond = length(conditions(Ω))
-		total = n_sym + n_tup + n_cond
+        n_sym = length(symbols(Ω))
+        n_tup = length(tuples(Ω))
+        n_cond = length(conditions(Ω))
+        total = n_sym + n_tup + n_cond
 
-		if total == 0
-			print(io, "    ")
-			print_empty_message(pp, "(none)")
-			println(io)
-		else
-			print_marker_summary(with_indent(pp, 2), n_sym, n_tup, n_cond)
+        if total == 0
+            print(io, "    ")
+            print_empty_message(pp, "(none)")
+            println(io)
+        else
+            print_marker_summary(with_indent(pp, 2), n_sym, n_tup, n_cond)
 
-			# Show marker labels
-			print(io, "    ")
-			print_labels_list(pp, collect(labels(Ω)))
-			println(io)
-		end
+            # Show marker labels
+            print(io, "    ")
+            print_labels_list(pp, collect(labels(Ω)))
+            println(io)
+        end
 
-		# Remove trailing newline
-		remove_trailing_newline(io)
-	end
+        # Remove trailing newline
+        remove_trailing_newline(io)
+    end
 end

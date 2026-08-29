@@ -55,23 +55,23 @@ For scalar input (`Int`), returns 1D `CartesianIndices`. For tuple/vector input,
 returns multi-dimensional `CartesianIndices`.
 """
 @inline generate_indices(pts::Int) = CartesianIndices((pts,))
-@inline generate_indices(pts::NTuple{D, Int}) where D = CartesianIndices(pts)
-@inline generate_indices(pts::SVector{D, Int}) where D = CartesianIndices(Tuple(pts))
+@inline generate_indices(pts::NTuple{D, Int}) where {D} = CartesianIndices(pts)
+@inline generate_indices(pts::SVector{D, Int}) where {D} = CartesianIndices(Tuple(pts))
 
 """
 	is_boundary_index(idxs::CartesianIndices, idx)
 
 Checks if a given index `idx` lies on the boundary of a `CartesianIndices` domain.
 """
-function is_boundary_index(idxs::CartesianIndices{D}, idx) where D
-	_idx = CartesianIndex(idx)
-	@inbounds for i in 1:D
-		axis = idxs.indices[i]
-		if length(axis) > 1 && (_idx[i] == first(axis) || _idx[i] == last(axis))
-			return true
-		end
-	end
-	return false
+function is_boundary_index(idxs::CartesianIndices{D}, idx) where {D}
+    _idx = CartesianIndex(idx)
+    @inbounds for i in 1:D
+        axis = idxs.indices[i]
+        if length(axis) > 1 && (_idx[i] == first(axis) || _idx[i] == last(axis))
+            return true
+        end
+    end
+    return false
 end
 
 """
@@ -80,8 +80,8 @@ end
 Returns all boundary facets of a `CartesianIndices` domain as a tuple of `CartesianIndices`.
 """
 @inline function boundary_indices(idxs::CartesianIndices)
-	tup = boundary_symbol_to_cartesian(idxs)
-	return ntuple(i -> tup[i], length(tup))
+    tup = boundary_symbol_to_cartesian(idxs)
+    return ntuple(i -> tup[i], length(tup))
 end
 
 """
@@ -90,19 +90,19 @@ end
 Computes the `CartesianIndices` representing the interior of a given domain, excluding
 all boundary points. Dimensions with a length of one or less remain unchanged.
 """
-@inline function interior_indices(indices::CartesianIndices{D}) where D
-	original_ranges = indices.indices
+@inline function interior_indices(indices::CartesianIndices{D}) where {D}
+    original_ranges = indices.indices
 
-	interior_ranges_tuple = ntuple(Val(D)) do i
-		@inbounds r = original_ranges[i]
-		if length(r) <= 1
-			return r
-		else
-			(first(r) + 1):(last(r) - 1)
-		end
-	end
+    interior_ranges_tuple = ntuple(Val(D)) do i
+        @inbounds r = original_ranges[i]
+        if length(r) <= 1
+            return r
+        else
+            (first(r) + 1):(last(r) - 1)
+        end
+    end
 
-	return CartesianIndices(interior_ranges_tuple)
+    return CartesianIndices(interior_ranges_tuple)
 end
 
 #------------------------------------------------------------------------------------------#
@@ -162,53 +162,58 @@ Overrides the indices in `Ωₕ`. Used internally during mesh refinement.
 @noinline _throw_mesh_bounds_error(Ωₕ, idx) = throw(BoundsError(Ωₕ, idx))
 
 @inline function _check_point_bounds(Ωₕ::AbstractMeshType, idx::Int, location::String = "point")
-	@boundscheck 1 <= idx <= npoints(Ωₕ) || _throw_mesh_bounds_error(Ωₕ, idx)
-	return nothing
+    @boundscheck 1 <= idx <= npoints(Ωₕ) || _throw_mesh_bounds_error(Ωₕ, idx)
+    return nothing
 end
 
 @inline function _check_point_bounds(Ωₕ::AbstractMeshType, idx::CartesianIndex{1}, location::String = "point")
-	_check_point_bounds(Ωₕ, idx[1], location)
+    _check_point_bounds(Ωₕ, idx[1], location)
 end
 
-@inline function _check_point_bounds(Ωₕ::AbstractMeshType{D}, idx::CartesianIndex{D}, location::String = "point") where D
-	@boundscheck begin
-		npts = npoints(Ωₕ, Tuple)
-		all(i -> 1 <= idx[i] <= npts[i], 1:D) || _throw_mesh_bounds_error(Ωₕ, idx)
-	end
-	return nothing
+@inline function _check_point_bounds(Ωₕ::AbstractMeshType{D}, idx::CartesianIndex{D},
+        location::String = "point") where {D}
+    @boundscheck begin
+        npts = npoints(Ωₕ, Tuple)
+        all(i -> 1 <= idx[i] <= npts[i], 1:D) || _throw_mesh_bounds_error(Ωₕ, idx)
+    end
+    return nothing
 end
 
 @inline function _check_half_point_bounds(Ωₕ::AbstractMeshType, idx::Int)
-	@boundscheck 1 <= idx <= npoints(Ωₕ) + 1 || _throw_mesh_bounds_error(Ωₕ, idx)
-	return nothing
+    @boundscheck 1 <= idx <= npoints(Ωₕ) + 1 || _throw_mesh_bounds_error(Ωₕ, idx)
+    return nothing
 end
 
-@inline _handle_collapsed_spacing(Ωₕ::AbstractMeshType, default_value) = is_collapsed(Ωₕ) ? zero(eltype(Ωₕ)) : default_value
+@inline _handle_collapsed_spacing(Ωₕ::AbstractMeshType, default_value) = is_collapsed(Ωₕ) ?
+                                                                         zero(eltype(Ωₕ)) :
+                                                                         default_value
 @inline _extract_linear_index(idx::Int) = idx
 @inline _extract_linear_index(idx::CartesianIndex{1}) = idx[1]
-@inline _spacing_generator(Ωₕ::AbstractMeshType, spacing_func) = (spacing_func(Ωₕ, i) for i in 1:npoints(Ωₕ))
-@inline _apply_hs_logic(value::T) where T = ifelse(iszero(value), one(T), value)
+@inline _spacing_generator(Ωₕ::AbstractMeshType, spacing_func) = (spacing_func(Ωₕ, i)
+for i in 1:npoints(Ωₕ))
+@inline _apply_hs_logic(value::T) where {T} = ifelse(iszero(value), one(T), value)
 
 # 1D spacing reference routines
 # A mesh with fewer than two points has no interval to measure, so every spacing is zero.
 @inline function _compute_backward_spacing_1d(pts::AbstractVector, i::Int, collapsed::Bool, T::Type)
-	if collapsed || length(pts) < 2
-		return zero(T)
-	elseif i == 1
-		return pts[2] - pts[1]
-	else
-		return pts[i] - pts[i-1]
-	end
+    if collapsed || length(pts) < 2
+        return zero(T)
+    elseif i == 1
+        return pts[2] - pts[1]
+    else
+        return pts[i] - pts[i - 1]
+    end
 end
 
-@inline function _compute_forward_spacing_1d(pts::AbstractVector, i::Int, N::Int, collapsed::Bool, T::Type)
-	if collapsed || N < 2
-		return zero(T)
-	elseif i == N
-		return pts[N] - pts[N-1]
-	else
-		return pts[i+1] - pts[i]
-	end
+@inline function _compute_forward_spacing_1d(
+        pts::AbstractVector, i::Int, N::Int, collapsed::Bool, T::Type)
+    if collapsed || N < 2
+        return zero(T)
+    elseif i == N
+        return pts[N] - pts[N - 1]
+    else
+        return pts[i + 1] - pts[i]
+    end
 end
 
 #------------------------------------------------------------------------------------------#
@@ -235,10 +240,15 @@ X = domain(interval(0, 1) × interval(4, 5))
 Ωₕ_mixed = mesh(X, (10, 15), (true, false))
 ```
 """
-@inline mesh(Ω::Domain, npts::NTuple{D,Int}, unif::NTuple{D,Bool}; backend = backend()) where D = _mesh(Ω, npts, unif, backend)
-@inline mesh(Ω::Domain{CartesianProduct{1,T}}, npts::Int, unif::Bool; backend = backend()) where T = _mesh(Ω, (npts,), (unif,), backend)
-@inline mesh(Ω::Domain{CartesianProduct{1,T}}, npts::Int; uniform::Bool = true, backend = backend()) where T = _mesh(Ω, (npts,), (uniform,), backend)
-@inline mesh(Ω::Domain, npts::NTuple{D,Int}; uniform::NTuple{D,Bool} = ntuple(_ -> true, Val(D)), backend = backend()) where D = _mesh(Ω, npts, uniform, backend)
+@inline mesh(Ω::Domain, npts::NTuple{D, Int}, unif::NTuple{D, Bool}; backend = backend()) where {D} = _mesh(
+    Ω, npts, unif, backend)
+@inline mesh(Ω::Domain{CartesianProduct{1, T}}, npts::Int, unif::Bool; backend = backend()) where {T} = _mesh(
+    Ω, (npts,), (unif,), backend)
+@inline mesh(Ω::Domain{CartesianProduct{1, T}}, npts::Int;
+    uniform::Bool = true, backend = backend()) where {T} = _mesh(Ω, (npts,), (uniform,), backend)
+@inline mesh(
+    Ω::Domain, npts::NTuple{D, Int}; uniform::NTuple{D, Bool} = ntuple(_ -> true, Val(D)),
+    backend = backend()) where {D} = _mesh(Ω, npts, uniform, backend)
 
 #------------------------------------------------------------------------------------------#
 #------------------------------------------------------------------------------------------#
@@ -251,8 +261,8 @@ X = domain(interval(0, 1) × interval(4, 5))
 
 Returns the spatial dimension ``D`` of the domain where `Ωₕ` is embedded.
 """
-@inline dim(::AbstractMeshType{D}) where D = D
-@inline dim(::Type{<:AbstractMeshType{D}}) where D = D
+@inline dim(::AbstractMeshType{D}) where {D} = D
+@inline dim(::Type{<:AbstractMeshType{D}}) where {D} = D
 
 """
 	topo_dim(Ωₕ::AbstractMeshType)
@@ -262,12 +272,12 @@ Returns the topological dimension of `Ωₕ`.
 The topological dimension counts the number of coordinate axes with more than one point,
 identifying degenerate or collapsed dimensions (e.g. lines or points embedded in 2D/3D).
 """
-@inline function topo_dim(Ωₕ::AbstractMeshType{D}) where D
-	count = 0
-	@inbounds for i in 1:D
-		npoints(Ωₕ(i)) > 1 && (count += 1)
-	end
-	return count
+@inline function topo_dim(Ωₕ::AbstractMeshType{D}) where {D}
+    count = 0
+    @inbounds for i in 1:D
+        npoints(Ωₕ(i)) > 1 && (count += 1)
+    end
+    return count
 end
 
 """
@@ -277,11 +287,11 @@ end
 Returns the floating-point coordinate element type of the points in `Ωₕ`.
 """
 function eltype(Ωₕ::AbstractMeshType)
-	error("Interface function 'eltype' not implemented for mesh of type $(typeof(Ωₕ)).")
+    error("Interface function 'eltype' not implemented for mesh of type $(typeof(Ωₕ)).")
 end
 
 function eltype(::Type{<:AbstractMeshType})
-	error("Interface function 'eltype(::Type{...})' not implemented for mesh type.")
+    error("Interface function 'eltype(::Type{...})' not implemented for mesh type.")
 end
 
 """
@@ -458,22 +468,22 @@ function change_points! end
 Checks if the mesh has uniform spacing (within numerical tolerance).
 """
 function is_uniform(Ωₕ::AbstractMeshType{1}; tol = 1e-10)
-	n = npoints(Ωₕ)
-	if n <= 1
-		return true
-	end
+    n = npoints(Ωₕ)
+    if n <= 1
+        return true
+    end
 
-	h_ref = spacing(Ωₕ, 1)
-	@inbounds for i in 2:n
-		if abs(spacing(Ωₕ, i) - h_ref) >= tol
-			return false
-		end
-	end
-	return true
+    h_ref = spacing(Ωₕ, 1)
+    @inbounds for i in 2:n
+        if abs(spacing(Ωₕ, i) - h_ref) >= tol
+            return false
+        end
+    end
+    return true
 end
 
-function is_uniform(Ωₕ::AbstractMeshType{D}; tol = 1e-10) where D
-	return all(i -> is_uniform(Ωₕ(i); tol = tol), 1:D)
+function is_uniform(Ωₕ::AbstractMeshType{D}; tol = 1e-10) where {D}
+    return all(i -> is_uniform(Ωₕ(i); tol = tol), 1:D)
 end
 
 #------------------------------------------------------------------------------------------#
@@ -512,7 +522,7 @@ Returns the axes of the mesh's `CartesianIndices`.
 Returns the first valid index of `Ωₕ`.
 """
 @inline Base.firstindex(::AbstractMeshType{1}) = 1
-@inline Base.firstindex(Ωₕ::AbstractMeshType{D}) where D = first(indices(Ωₕ))
+@inline Base.firstindex(Ωₕ::AbstractMeshType{D}) where {D} = first(indices(Ωₕ))
 @inline Base.firstindex(Ωₕ::AbstractMeshType, d::Integer) = 1
 
 """
@@ -522,7 +532,7 @@ Returns the first valid index of `Ωₕ`.
 Returns the last valid index of `Ωₕ`.
 """
 @inline Base.lastindex(Ωₕ::AbstractMeshType{1}) = npoints(Ωₕ)
-@inline Base.lastindex(Ωₕ::AbstractMeshType{D}) where D = last(indices(Ωₕ))
+@inline Base.lastindex(Ωₕ::AbstractMeshType{D}) where {D} = last(indices(Ωₕ))
 @inline Base.lastindex(Ωₕ::AbstractMeshType, d::Integer) = size(Ωₕ, d)
 
 """
@@ -531,14 +541,14 @@ Returns the last valid index of `Ωₕ`.
 Iterates over all grid points of `Ωₕ`, returning coordinates `point(Ωₕ, idx)` for each index.
 """
 @inline function Base.iterate(Ωₕ::AbstractMeshType{1}, state = 1)
-	state > npoints(Ωₕ) && return nothing
-	return (point(Ωₕ, state), state + 1)
+    state > npoints(Ωₕ) && return nothing
+    return (point(Ωₕ, state), state + 1)
 end
 
-@inline function Base.iterate(Ωₕ::AbstractMeshType{D}, state = iterate(indices(Ωₕ))) where D
-	state === nothing && return nothing
-	idx, next_state = state
-	return (point(Ωₕ, idx), iterate(indices(Ωₕ), next_state))
+@inline function Base.iterate(Ωₕ::AbstractMeshType{D}, state = iterate(indices(Ωₕ))) where {D}
+    state === nothing && return nothing
+    idx, next_state = state
+    return (point(Ωₕ, idx), iterate(indices(Ωₕ), next_state))
 end
 
 #------------------------------------------------------------------------------------------#
@@ -559,14 +569,14 @@ Throws an error if the mesh is not uniform.
 See also: [`is_uniform`](@ref), [`spacing`](@ref).
 """
 @inline function stepsize(Ωₕ::AbstractMeshType{1})
-	@assert is_uniform(Ωₕ) "stepsize(Ωₕ) is only valid for uniform meshes; use spacing(Ωₕ, idx) for non-uniform meshes."
-	npoints(Ωₕ) <= 1 && return zero(eltype(Ωₕ))
-	return spacing(Ωₕ, 2)
+    @assert is_uniform(Ωₕ) "stepsize(Ωₕ) is only valid for uniform meshes; use spacing(Ωₕ, idx) for non-uniform meshes."
+    npoints(Ωₕ) <= 1 && return zero(eltype(Ωₕ))
+    return spacing(Ωₕ, 2)
 end
 
-@inline function stepsize(Ωₕ::AbstractMeshType{D}) where D
-	@assert is_uniform(Ωₕ) "stepsize(Ωₕ) is only valid for uniform meshes; use spacing(Ωₕ, idx) for non-uniform meshes."
-	return ntuple(i -> stepsize(Ωₕ(i)), Val(D))
+@inline function stepsize(Ωₕ::AbstractMeshType{D}) where {D}
+    @assert is_uniform(Ωₕ) "stepsize(Ωₕ) is only valid for uniform meshes; use spacing(Ωₕ, idx) for non-uniform meshes."
+    return ntuple(i -> stepsize(Ωₕ(i)), Val(D))
 end
 
 @inline stepsize(Ωₕ::AbstractMeshType, d::Integer) = stepsize(Ωₕ(d))
@@ -586,7 +596,7 @@ locate_cell(Ωₕ, 0.35)  # returns 4 (interval [0.3, 0.4])
 ```
 """
 function locate_cell end
-@inline locate_cell(Ωₕ::AbstractMeshType{D}, x::AbstractVector) where D = locate_cell(Ωₕ, Tuple(x))
+@inline locate_cell(Ωₕ::AbstractMeshType{D}, x::AbstractVector) where {D} = locate_cell(Ωₕ, Tuple(x))
 
 """
 	normal_vector(::AbstractMeshType{D}, symbol::Symbol)
@@ -615,28 +625,28 @@ boundary facet label (`:left`, `:right`, `:bottom`, `:top`, `:front`, `:back`).
 
 See also: [`get_boundary_symbols`](@ref).
 """
-@inline normal_vector(::AbstractMeshType{D}, symbol::Symbol) where D = normal_vector(Val(D), symbol)
+@inline normal_vector(::AbstractMeshType{D}, symbol::Symbol) where {D} = normal_vector(Val(D), symbol)
 
 @inline function normal_vector(::Val{1}, symbol::Symbol)
-	symbol === :left  && return SVector{1, Float64}(-1.0)
-	symbol === :right && return SVector{1, Float64}(1.0)
-	throw(ArgumentError("Unknown 1D boundary symbol: :$symbol. Expected :left or :right."))
+    symbol === :left && return SVector{1, Float64}(-1.0)
+    symbol === :right && return SVector{1, Float64}(1.0)
+    throw(ArgumentError("Unknown 1D boundary symbol: :$symbol. Expected :left or :right."))
 end
 
 @inline function normal_vector(::Val{2}, symbol::Symbol)
-	symbol === :left   && return SVector{2, Float64}(-1.0, 0.0)
-	symbol === :right  && return SVector{2, Float64}(1.0, 0.0)
-	symbol === :bottom && return SVector{2, Float64}(0.0, -1.0)
-	symbol === :top    && return SVector{2, Float64}(0.0, 1.0)
-	throw(ArgumentError("Unknown 2D boundary symbol: :$symbol. Expected :left, :right, :bottom, or :top."))
+    symbol === :left && return SVector{2, Float64}(-1.0, 0.0)
+    symbol === :right && return SVector{2, Float64}(1.0, 0.0)
+    symbol === :bottom && return SVector{2, Float64}(0.0, -1.0)
+    symbol === :top && return SVector{2, Float64}(0.0, 1.0)
+    throw(ArgumentError("Unknown 2D boundary symbol: :$symbol. Expected :left, :right, :bottom, or :top."))
 end
 
 @inline function normal_vector(::Val{3}, symbol::Symbol)
-	symbol === :back   && return SVector{3, Float64}(-1.0, 0.0, 0.0)
-	symbol === :front  && return SVector{3, Float64}(1.0, 0.0, 0.0)
-	symbol === :left   && return SVector{3, Float64}(0.0, -1.0, 0.0)
-	symbol === :right  && return SVector{3, Float64}(0.0, 1.0, 0.0)
-	symbol === :bottom && return SVector{3, Float64}(0.0, 0.0, -1.0)
-	symbol === :top    && return SVector{3, Float64}(0.0, 0.0, 1.0)
-	throw(ArgumentError("Unknown 3D boundary symbol: :$symbol. Expected :left, :right, :bottom, :top, :front, or :back."))
+    symbol === :back && return SVector{3, Float64}(-1.0, 0.0, 0.0)
+    symbol === :front && return SVector{3, Float64}(1.0, 0.0, 0.0)
+    symbol === :left && return SVector{3, Float64}(0.0, -1.0, 0.0)
+    symbol === :right && return SVector{3, Float64}(0.0, 1.0, 0.0)
+    symbol === :bottom && return SVector{3, Float64}(0.0, 0.0, -1.0)
+    symbol === :top && return SVector{3, Float64}(0.0, 0.0, 1.0)
+    throw(ArgumentError("Unknown 3D boundary symbol: :$symbol. Expected :left, :right, :bottom, :top, :front, or :back."))
 end

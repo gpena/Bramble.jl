@@ -54,11 +54,11 @@ underlying vector via [`vector`](@ref), so the buffer itself is never indexed.
 
 $(FIELDS)
 """
-mutable struct VectorBuffer{T,VT<:AbstractVector{T}}
-	"the underlying vector that holds the data."
-	vector::VT
-	"whether the buffer is currently lent out."
-	in_use::Bool
+mutable struct VectorBuffer{T, VT <: AbstractVector{T}}
+    "the underlying vector that holds the data."
+    vector::VT
+    "whether the buffer is currently lent out."
+    in_use::Bool
 end
 
 """
@@ -66,7 +66,7 @@ end
 
 Creates a single unlocked [`VectorBuffer`](@ref) of length `n` on backend `b`.
 """
-@inline vector_buffer(b::Backend, n::Int) = VectorBuffer{eltype(b),vector_type(b)}(vector(b, n), false)
+@inline vector_buffer(b::Backend, n::Int) = VectorBuffer{eltype(b), vector_type(b)}(vector(b, n), false)
 
 """
 	in_use(buffer::VectorBuffer)
@@ -106,7 +106,7 @@ The storage backing a [`GridSpaceBuffer`](@ref): a `Vector` of
 - `T`: element type of the vectors (e.g. `Float64`).
 - `VectorType`: the vector container (e.g. `Vector{Float64}`).
 """
-const BufferType{T,VectorType} = Vector{VectorBuffer{T,VectorType}}
+const BufferType{T, VectorType} = Vector{VectorBuffer{T, VectorType}}
 
 """
 	$(TYPEDEF)
@@ -117,15 +117,15 @@ A pool of reusable [`VectorBuffer`](@ref)s, all of length `npts`, on a common ba
 
 $(FIELDS)
 """
-struct GridSpaceBuffer{BT,VT,T}
-	"every [`VectorBuffer`](@ref) in the pool, indexed by its key."
-	buffer::BufferType{T,VT}
-	"a stack of keys that are probably free; `in_use` remains authoritative."
-	free::Vector{Int}
-	"the backend the buffers are allocated on."
-	backend::BT
-	"the length of every vector in the pool."
-	npts::Int
+struct GridSpaceBuffer{BT, VT, T}
+    "every [`VectorBuffer`](@ref) in the pool, indexed by its key."
+    buffer::BufferType{T, VT}
+    "a stack of keys that are probably free; `in_use` remains authoritative."
+    free::Vector{Int}
+    "the backend the buffers are allocated on."
+    backend::BT
+    "the length of every vector in the pool."
+    npts::Int
 end
 
 """
@@ -142,19 +142,19 @@ A pool has a single owner. To share one across tasks, wrap it in a
 [`SharedBuffer`](@ref).
 """
 function simple_space_buffer(b::Backend, npts::Int; nbuffers::Int = 3)
-	nbuffers >= 0 || throw(ArgumentError("nbuffers must be non-negative, got $nbuffers."))
-	npts >= 0 || throw(ArgumentError("npts must be non-negative, got $npts."))
+    nbuffers >= 0 || throw(ArgumentError("nbuffers must be non-negative, got $nbuffers."))
+    npts >= 0 || throw(ArgumentError("npts must be non-negative, got $npts."))
 
-	T, VT, _, BT = backend_types(b)
-	space_buffer = GridSpaceBuffer{BT,VT,T}(BufferType{T,VT}(), Int[], b, npts)
+    T, VT, _, BT = backend_types(b)
+    space_buffer = GridSpaceBuffer{BT, VT, T}(BufferType{T, VT}(), Int[], b, npts)
 
-	sizehint!(space_buffer.buffer, nbuffers)
-	sizehint!(space_buffer.free, nbuffers)
-	for _ in 1:nbuffers
-		add_buffer!(space_buffer)
-	end
+    sizehint!(space_buffer.buffer, nbuffers)
+    sizehint!(space_buffer.free, nbuffers)
+    for _ in 1:nbuffers
+        add_buffer!(space_buffer)
+    end
 
-	return space_buffer
+    return space_buffer
 end
 
 """
@@ -164,14 +164,14 @@ Appends one new, unlocked [`VectorBuffer`](@ref) to the pool and returns
 `(vector, key)` for it.
 """
 function add_buffer!(space_buffer::GridSpaceBuffer)
-	(; buffer, free, backend, npts) = space_buffer
+    (; buffer, free, backend, npts) = space_buffer
 
-	buf = vector_buffer(backend, npts)
-	push!(buffer, buf)
-	key = length(buffer)
-	push!(free, key)
+    buf = vector_buffer(backend, npts)
+    push!(buffer, buf)
+    key = length(buffer)
+    push!(free, key)
 
-	return vector(buf), key
+    return vector(buf), key
 end
 
 """
@@ -190,9 +190,9 @@ The key is left on the free stack and skipped when it next comes up, so this
 stays O(1).
 """
 @inline function lock!(space_buffer::GridSpaceBuffer, i)
-	b = space_buffer.buffer[i]
-	lock!(b)
-	return vector(b)
+    b = space_buffer.buffer[i]
+    lock!(b)
+    return vector(b)
 end
 
 """
@@ -204,11 +204,11 @@ Releasing a buffer that is already free is a no-op, so a double release cannot
 put the same key on the free stack twice.
 """
 @inline function unlock!(space_buffer::GridSpaceBuffer, i)
-	b = space_buffer.buffer[i]
-	in_use(b) || return          # already free: nothing to do
-	unlock!(b)
-	push!(space_buffer.free, i)
-	return
+    b = space_buffer.buffer[i]
+    in_use(b) || return          # already free: nothing to do
+    unlock!(b)
+    push!(space_buffer.free, i)
+    return
 end
 
 """
@@ -220,26 +220,26 @@ returns `(vector, key)`. The buffer is locked on return; pass `key` to
 it for you.
 """
 function vector_buffer(space_buffer::GridSpaceBuffer)
-	(; buffer, free) = space_buffer
+    (; buffer, free) = space_buffer
 
-	# Pop candidate keys until one is genuinely free; entries can be stale
-	# because lock!(pool, i) does not remove i from the stack.
-	while !isempty(free)
-		key = pop!(free)
-		b = buffer[key]
-		if !in_use(b)
-			lock!(b)
-			return vector(b), key
-		end
-	end
+    # Pop candidate keys until one is genuinely free; entries can be stale
+    # because lock!(pool, i) does not remove i from the stack.
+    while !isempty(free)
+        key = pop!(free)
+        b = buffer[key]
+        if !in_use(b)
+            lock!(b)
+            return vector(b), key
+        end
+    end
 
-	# Everything is in use, so grow the pool. add_buffer! pushes the new key
-	# onto the free stack; take it straight back off.
-	_, key = add_buffer!(space_buffer)
-	pop!(free)
-	lock!(buffer[key])
+    # Everything is in use, so grow the pool. add_buffer! pushes the new key
+    # onto the free stack; take it straight back off.
+    _, key = add_buffer!(space_buffer)
+    pop!(free)
+    lock!(buffer[key])
 
-	return vector(buffer[key]), key
+    return vector(buffer[key]), key
 end
 
 """
@@ -258,12 +258,12 @@ end
 ```
 """
 function with_buffer(f, space_buffer::GridSpaceBuffer)
-	v, key = vector_buffer(space_buffer)
-	try
-		return f(v)
-	finally
-		unlock!(space_buffer, key)
-	end
+    v, key = vector_buffer(space_buffer)
+    try
+        return f(v)
+    finally
+        unlock!(space_buffer, key)
+    end
 end
 
 #=========================================================================
@@ -308,13 +308,13 @@ end
 
 See also: [`GridSpaceBuffer`](@ref), [`with_buffer`](@ref)
 """
-mutable struct SharedBuffer{BT,VT,T}
-	"the backend each task's pool is allocated on."
-	backend::BT
-	"the length of every vector handed out."
-	npts::Int
-	"how many vectors each task's pool starts with."
-	nbuffers::Int
+mutable struct SharedBuffer{BT, VT, T}
+    "the backend each task's pool is allocated on."
+    backend::BT
+    "the length of every vector handed out."
+    npts::Int
+    "how many vectors each task's pool starts with."
+    nbuffers::Int
 end
 
 """
@@ -324,11 +324,11 @@ Creates a [`SharedBuffer`](@ref) handing out `npts`-element vectors on backend `
 giving each task a pool warm-started with `nbuffers` of them.
 """
 function SharedBuffer(b::Backend, npts::Int; nbuffers::Int = 3)
-	nbuffers >= 0 || throw(ArgumentError("nbuffers must be non-negative, got $nbuffers."))
-	npts >= 0 || throw(ArgumentError("npts must be non-negative, got $npts."))
+    nbuffers >= 0 || throw(ArgumentError("nbuffers must be non-negative, got $nbuffers."))
+    npts >= 0 || throw(ArgumentError("npts must be non-negative, got $npts."))
 
-	T, VT, _, BT = backend_types(b)
-	return SharedBuffer{BT,VT,T}(b, npts, nbuffers)
+    T, VT, _, BT = backend_types(b)
+    return SharedBuffer{BT, VT, T}(b, npts, nbuffers)
 end
 
 """
@@ -336,12 +336,12 @@ end
 
 Returns the calling task's [`GridSpaceBuffer`](@ref), creating it on first use.
 """
-@inline function pool(shared::SharedBuffer{BT,VT,T}) where {BT,VT,T}
-	# task_local_storage() is an IdDict, and SharedBuffer is mutable, so the
-	# object itself is a stable key unique to this SharedBuffer.
-	return get!(task_local_storage(), shared) do
-		simple_space_buffer(shared.backend, shared.npts; nbuffers = shared.nbuffers)
-	end::GridSpaceBuffer{BT,VT,T}
+@inline function pool(shared::SharedBuffer{BT, VT, T}) where {BT, VT, T}
+    # task_local_storage() is an IdDict, and SharedBuffer is mutable, so the
+    # object itself is a stable key unique to this SharedBuffer.
+    return get!(task_local_storage(), shared) do
+        simple_space_buffer(shared.backend, shared.npts; nbuffers = shared.nbuffers)
+    end::GridSpaceBuffer{BT, VT, T}
 end
 
 """

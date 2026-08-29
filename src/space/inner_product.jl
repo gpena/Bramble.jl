@@ -26,7 +26,8 @@ Returns the discrete ``L^2`` inner product of the grid functions `uₕ` and `v�
 ```
 """
 @inline innerₕ(uₕ::VectorElement, vₕ::VectorElement) = _dot(uₕ.data, weights(space(uₕ), Innerh()), vₕ.data)
-@inline innerₕ(Uₕ::VecOrMatElem, Vₕ::VecOrMatElem) = _inner_product(Uₕ.data, weights(space(Uₕ), Innerh()), Vₕ.data)
+@inline innerₕ(Uₕ::VecOrMatElem, Vₕ::VecOrMatElem) = _inner_product(
+    Uₕ.data, weights(space(Uₕ), Innerh()), Vₕ.data)
 
 """
 	normₕ(uₕ::VectorElement)
@@ -43,8 +44,8 @@ Returns the discrete ``L^2`` norm of the grid function `uₕ`, defined as
 #                 Discrete Modified L² Inner Product and Norm                  #
 ################################################################################
 
-@inline function _directional_inner_plus(uₕ::VecOrMatElem, vₕ::VecOrMatElem, _::Val{DIM}) where DIM
-	return _inner_product(uₕ.data, weights(space(uₕ), Innerplus(), DIM), vₕ.data)
+@inline function _directional_inner_plus(uₕ::VecOrMatElem, vₕ::VecOrMatElem, _::Val{DIM}) where {DIM}
+    return _inner_product(uₕ.data, weights(space(uₕ), Innerplus(), DIM), vₕ.data)
 end
 
 """
@@ -108,58 +109,59 @@ Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ`
 """
 @inline inner₊₂(uₕ::VecOrMatElem, vₕ::VecOrMatElem) = _directional_inner_plus(uₕ, vₕ, Val(3))
 
-get_dimension_from_type(::Type{<:NTuple{D,Any}}) where D = D
-get_dimension_from_type(::Type{<:VecOrMatElem{S}}) where S = dim(mesh_type(S))
+get_dimension_from_type(::Type{<:NTuple{D, Any}}) where {D} = D
+get_dimension_from_type(::Type{<:VecOrMatElem{S}}) where {S} = dim(mesh_type(S))
 get_dimension_from_type(::Type) = nothing
 
 function _generate_inner_plus_body(u_type, v_type, result_kind::Symbol)
-	dim_u = get_dimension_from_type(u_type)
-	dim_v = get_dimension_from_type(v_type)
+    dim_u = get_dimension_from_type(u_type)
+    dim_v = get_dimension_from_type(v_type)
 
-	u_is_tuple = u_type <: NTuple
-	v_is_tuple = v_type <: NTuple
+    u_is_tuple = u_type <: NTuple
+    v_is_tuple = v_type <: NTuple
 
-	# Prefer tuple arity when tuples are provided (e.g., inner₊((a,b), (c,d)) even in 1D).
-	D = if u_type <: NTuple
-		dim_u
-	elseif v_type <: NTuple
-		dim_v
-	elseif !isnothing(dim_u) && !isnothing(dim_v)
-		dim_u == dim_v ? dim_u : return :(throw(DimensionMismatch("Dimensions $dim_u and $dim_v do not match")))
-	elseif !isnothing(dim_u)
-		dim_u
-	elseif !isnothing(dim_v)
-		dim_v
-	else
-		return :(throw(ArgumentError("Could not determine dimension from input types $u_type and $v_type")))
-	end
+    # Prefer tuple arity when tuples are provided (e.g., inner₊((a,b), (c,d)) even in 1D).
+    D = if u_type <: NTuple
+        dim_u
+    elseif v_type <: NTuple
+        dim_v
+    elseif !isnothing(dim_u) && !isnothing(dim_v)
+        dim_u == dim_v ? dim_u :
+        return :(throw(DimensionMismatch("Dimensions $dim_u and $dim_v do not match")))
+    elseif !isnothing(dim_u)
+        dim_u
+    elseif !isnothing(dim_v)
+        dim_v
+    else
+        return :(throw(ArgumentError("Could not determine dimension from input types $u_type and $v_type")))
+    end
 
-	# Direction count for the underlying space (fallback to 1 if unknown).
-	# For tuple inputs we want the *spatial* dimension of the element type, not
-	# the tuple arity (which can exceed the mesh dimension in mixed terms such as
-	# `(Dx*u, Mx*u)` on 1D meshes).
-	u_elem_dim = u_is_tuple ? get_dimension_from_type(u_type.parameters[2]) : nothing
-	v_elem_dim = v_is_tuple ? get_dimension_from_type(v_type.parameters[2]) : nothing
-	mesh_dim = something(u_elem_dim,
-						 v_elem_dim,
-						 (!u_is_tuple && !isnothing(dim_u)) ? dim_u : nothing,
-						 (!v_is_tuple && !isnothing(dim_v)) ? dim_v : nothing,
-						 1)
+    # Direction count for the underlying space (fallback to 1 if unknown).
+    # For tuple inputs we want the *spatial* dimension of the element type, not
+    # the tuple arity (which can exceed the mesh dimension in mixed terms such as
+    # `(Dx*u, Mx*u)` on 1D meshes).
+    u_elem_dim = u_is_tuple ? get_dimension_from_type(u_type.parameters[2]) : nothing
+    v_elem_dim = v_is_tuple ? get_dimension_from_type(v_type.parameters[2]) : nothing
+    mesh_dim = something(u_elem_dim,
+        v_elem_dim,
+        (!u_is_tuple && !isnothing(dim_u)) ? dim_u : nothing,
+        (!v_is_tuple && !isnothing(dim_v)) ? dim_v : nothing,
+        1)
 
-	terms = map(1:D) do i
-		u_component = u_is_tuple ? :(uₕ[$i]) : :uₕ
-		v_component = v_is_tuple ? :(vₕ[$i]) : :vₕ
-		dir = min(i, mesh_dim) # avoid out-of-bounds when tuples are longer than spatial dim
-		:(_directional_inner_plus($u_component, $v_component, Val($dir)))
-	end
+    terms = map(1:D) do i
+        u_component = u_is_tuple ? :(uₕ[$i]) : :uₕ
+        v_component = v_is_tuple ? :(vₕ[$i]) : :vₕ
+        dir = min(i, mesh_dim) # avoid out-of-bounds when tuples are longer than spatial dim
+        :(_directional_inner_plus($u_component, $v_component, Val($dir)))
+    end
 
-	if result_kind === :sum
-		return :(+($(terms...)))
-	elseif result_kind === :tuple
-		return :($(Expr(:tuple, terms...)))
-	else
-		return :(throw(ArgumentError("Invalid result kind for code generation.")))
-	end
+    if result_kind === :sum
+        return :(+($(terms...)))
+    elseif result_kind === :tuple
+        return :($(Expr(:tuple, terms...)))
+    else
+        return :(throw(ArgumentError("Invalid result kind for code generation.")))
+    end
 end
 
 """
@@ -215,7 +217,7 @@ and for `NTuple`s of [VectorElement](@ref)s it returns
 \\Vert \\textrm{u}_h \\Vert_+ \\vcentcolon = \\sqrt{ \\sum_{i=1}^D(\\textrm{u}_h[i],\\textrm{u}_h[i])_{+,x_i}}.
 ```
 """
-@inline norm₊(uₕ::Union{VectorElement,NTuple{<:Any,VectorElement}}) = sqrt(inner₊(uₕ, uₕ))
+@inline norm₊(uₕ::Union{VectorElement, NTuple{<:Any, VectorElement}}) = sqrt(inner₊(uₕ, uₕ))
 
 ################################################################################
 #                        Discrete H¹ Norm and Seminorm                         #
@@ -230,38 +232,38 @@ Returns the discrete version of the standard ``H^1`` seminorm of [VectorElement]
 ```
 """
 function snorm₁ₕ(uₕ::VectorElement)
-	(; data, space) = uₕ
-	Ωₕ = mesh(space)
-	dims = ndofs(space, Tuple)
-	D = dim(Ωₕ)
+    (; data, space) = uₕ
+    Ωₕ = mesh(space)
+    dims = ndofs(space, Tuple)
+    D = dim(Ωₕ)
 
-	total_seminorm_sq = 0.0
-	li = LinearIndices(dims)
+    total_seminorm_sq = 0.0
+    li = LinearIndices(dims)
 
-	@fastmath @inbounds @simd for I in CartesianIndices(dims)
-		local_seminorm_sq_at_I = 0.0
+    @fastmath @inbounds @simd for I in CartesianIndices(dims)
+        local_seminorm_sq_at_I = 0.0
 
-		for d in 1:D
-			val_at_I = data[li[I]]
-			h = Base.Fix1(spacing, Ωₕ(d))
+        for d in 1:D
+            val_at_I = data[li[I]]
+            h = Base.Fix1(spacing, Ωₕ(d))
 
-			diff_val = if I[d] > 1
-				step_cartesian = CartesianIndex(ntuple(i -> i == d ? 1 : 0, D))
-				val_at_prev = data[li[I - step_cartesian]]
-				_compute_difference(Backward(), Val(false), val_at_I, val_at_prev, h, I[d])
-			else
-				_compute_difference(Backward(), Val(true), val_at_I, h, I[d])
-			end
+            diff_val = if I[d] > 1
+                step_cartesian = CartesianIndex(ntuple(i -> i == d ? 1 : 0, D))
+                val_at_prev = data[li[I - step_cartesian]]
+                _compute_difference(Backward(), Val(false), val_at_I, val_at_prev, h, I[d])
+            else
+                _compute_difference(Backward(), Val(true), val_at_I, h, I[d])
+            end
 
-			weight_d = weights(space, Innerplus(), d)[li[I]]
+            weight_d = weights(space, Innerplus(), d)[li[I]]
 
-			local_seminorm_sq_at_I += weight_d * diff_val^2
-		end
-		total_seminorm_sq += local_seminorm_sq_at_I
-	end
+            local_seminorm_sq_at_I += weight_d * diff_val^2
+        end
+        total_seminorm_sq += local_seminorm_sq_at_I
+    end
 
-	# returns norm₊(∇₋ₕ(uₕ))
-	return sqrt(total_seminorm_sq)
+    # returns norm₊(∇₋ₕ(uₕ))
+    return sqrt(total_seminorm_sq)
 end
 
 """

@@ -24,28 +24,29 @@ julia> boundary_symbol_to_cartesian(CartesianIndices((1:3, 1:4)))
 
 See also: [`boundary_symbol_to_dict`](@ref), [`set_markers!`](@ref)
 """
-@inline boundary_symbol_to_cartesian(indices::CartesianIndices{1}) = (; :left => first(indices), :right => last(indices))
+@inline boundary_symbol_to_cartesian(indices::CartesianIndices{1}) = (;
+    :left => first(indices), :right => last(indices))
 
 function boundary_symbol_to_cartesian(indices::CartesianIndices{2})
-	N, M = size(indices)
+    N, M = size(indices)
 
-	return (;
-			:left => indices[1:1, 1:M],
-			:right => indices[N:N, 1:M],
-			:top => indices[1:N, M:M],
-			:bottom => indices[1:N, 1:1])
+    return (;
+        :left => indices[1:1, 1:M],
+        :right => indices[N:N, 1:M],
+        :top => indices[1:N, M:M],
+        :bottom => indices[1:N, 1:1])
 end
 
 function boundary_symbol_to_cartesian(indices::CartesianIndices{3})
-	N, M, K = size(indices)
+    N, M, K = size(indices)
 
-	return (;
-			:left => indices[1:N, 1:1, 1:K],
-			:right => indices[1:N, M:M, 1:K],
-			:top => indices[1:N, 1:M, K:K],
-			:bottom => indices[1:N, 1:M, 1:1],
-			:front => indices[N:N, 1:M, 1:K],
-			:back => indices[1:1, 1:M, 1:K])
+    return (;
+        :left => indices[1:N, 1:1, 1:K],
+        :right => indices[1:N, M:M, 1:K],
+        :top => indices[1:N, 1:M, K:K],
+        :bottom => indices[1:N, 1:M, 1:1],
+        :front => indices[N:N, 1:M, 1:K],
+        :back => indices[1:1, 1:M, 1:K])
 end
 
 """
@@ -53,14 +54,16 @@ end
 
 	Returns a dictionary connecting the facet labels of a set to the corresponding `CartesianIndices` (see [`boundary_symbol_to_cartesian`](@ref)).
 """
-boundary_symbol_to_dict(indices::CartesianIndices) = Dict(pairs(boundary_symbol_to_cartesian(indices)))
+function boundary_symbol_to_dict(indices::CartesianIndices)
+    Dict(pairs(boundary_symbol_to_cartesian(indices)))
+end
 
 """
 	$(TYPEDEF)
 
 Efficient storage type for mesh markers as a `Dict` of `Symbols`. For each label, a BitVector is assigned that determines, for a given index, if the corresponding geometric point is identified by the marker.
 """
-const MeshMarkers = Dict{Symbol,BitVector}
+const MeshMarkers = Dict{Symbol, BitVector}
 
 """
 	process_label_for_mesh!(npts, markers_mesh, set_labels)
@@ -79,9 +82,9 @@ prepares the storage for later marking which points belong to which labeled regi
   - `set_labels`: An iterator or collection of `Symbol` labels to initialize.
 """
 @inline function process_label_for_mesh!(npts, markers_mesh::MeshMarkers, set_labels)
-	@inbounds for label in set_labels
-		markers_mesh[label] = falses(npts)
-	end
+    @inbounds for label in set_labels
+        markers_mesh[label] = falses(npts)
+    end
 end
 
 """
@@ -95,18 +98,18 @@ a [MeshMarkers](@ref) dictionary where each label is a key associated with a `Bi
 of `false`s, ready to be populated.
 """
 function _init_mesh_markers(Ωₕ::AbstractMeshType, domain_markers::DomainMarkers)
-	# Create an empty dictionary to store the mesh markers.
-	markers_mesh = MeshMarkers()
-	# Get the total number of points in the mesh.
-	npts = npoints(Ωₕ)
+    # Create an empty dictionary to store the mesh markers.
+    markers_mesh = MeshMarkers()
+    # Get the total number of points in the mesh.
+    npts = npoints(Ωₕ)
 
-	# Initialize boolean vectors for each category of marker labels.
-	process_label_for_mesh!(npts, markers_mesh, label_symbols(domain_markers))
-	process_label_for_mesh!(npts, markers_mesh, label_tuples(domain_markers))
-	process_label_for_mesh!(npts, markers_mesh, label_conditions(domain_markers))
+    # Initialize boolean vectors for each category of marker labels.
+    process_label_for_mesh!(npts, markers_mesh, label_symbols(domain_markers))
+    process_label_for_mesh!(npts, markers_mesh, label_tuples(domain_markers))
+    process_label_for_mesh!(npts, markers_mesh, label_conditions(domain_markers))
 
-	# Return the fully initialized (but empty) markers dictionary.
-	return markers_mesh
+    # Return the fully initialized (but empty) markers dictionary.
+    return markers_mesh
 end
 
 """
@@ -141,18 +144,18 @@ This function handles three types of markers:
 See also: [`DomainMarkers`](@ref), [`MeshMarkers`](@ref)
 """
 function set_markers!(Ωₕ::AbstractMeshType, domain_markers)
-	# Initialize a dictionary to hold the boolean vectors for each marker label.
-	mesh_markers = _init_mesh_markers(Ωₕ, domain_markers)
+    # Initialize a dictionary to hold the boolean vectors for each marker label.
+    mesh_markers = _init_mesh_markers(Ωₕ, domain_markers)
 
-	# Process markers identified by single symbols (e.g., :left) and tuples/sets (e.g., (:top, :right)).
-	_set_markers_symbols!(mesh_markers, symbols(domain_markers), Ωₕ)
-	_set_markers_symbols!(mesh_markers, tuples(domain_markers), Ωₕ)
+    # Process markers identified by single symbols (e.g., :left) and tuples/sets (e.g., (:top, :right)).
+    _set_markers_symbols!(mesh_markers, symbols(domain_markers), Ωₕ)
+    _set_markers_symbols!(mesh_markers, tuples(domain_markers), Ωₕ)
 
-	# Process markers identified by user-defined functions (level-set conditions).
-	_set_markers_conditions!(mesh_markers, conditions(domain_markers), Ωₕ)
+    # Process markers identified by user-defined functions (level-set conditions).
+    _set_markers_conditions!(mesh_markers, conditions(domain_markers), Ωₕ)
 
-	# Assign the populated markers dictionary to the mesh object.
-	Ωₕ.markers = mesh_markers
+    # Assign the populated markers dictionary to the mesh object.
+    Ωₕ.markers = mesh_markers
 end
 
 """
@@ -163,13 +166,13 @@ A utility function to efficiently update a boolean marker vector.
 It sets the value to `true` at the linear positions corresponding to the `CartesianIndex` or collection of `CartesianIndices` provided in `indices_to_mark`.
 """
 @inline function _mark_indices!(marker_set::AbstractVector{Bool}, linear_indices, idx::CartesianIndex)
-	@inbounds marker_set[linear_indices[idx]] = true
+    @inbounds marker_set[linear_indices[idx]] = true
 end
 
 @inline function _mark_indices!(marker_set::AbstractVector{Bool}, linear_indices, indices_to_mark)
-	@inbounds for idx in indices_to_mark
-		marker_set[linear_indices[idx]] = true
-	end
+    @inbounds for idx in indices_to_mark
+        marker_set[linear_indices[idx]] = true
+    end
 end
 
 """
@@ -178,31 +181,31 @@ end
 Processes markers that are identified by predefined symbols (e.g., `:left`, `:top`) or sets/tuples of those symbols.
 """
 function _set_markers_symbols!(mesh_markers::MeshMarkers, symbols, Ωₕ)
-	# Create a map from predefined boundary symbols to their corresponding CartesianIndices.
-	symbol_to_index_map = boundary_symbol_to_dict(indices(Ωₕ))
-	# Create a converter from Cartesian to linear indices for efficient array access.
-	linear_indices = LinearIndices(npoints(Ωₕ, Tuple))
+    # Create a map from predefined boundary symbols to their corresponding CartesianIndices.
+    symbol_to_index_map = boundary_symbol_to_dict(indices(Ωₕ))
+    # Create a converter from Cartesian to linear indices for efficient array access.
+    linear_indices = LinearIndices(npoints(Ωₕ, Tuple))
 
-	# Iterate over each marker defined by a symbol or set of symbols.
-	for marker in symbols
-		(; label, identifier) = marker
+    # Iterate over each marker defined by a symbol or set of symbols.
+    for marker in symbols
+        (; label, identifier) = marker
 
-		# Get the boolean vector for the current marker label.
-		target_marker_set = mesh_markers[label]
+        # Get the boolean vector for the current marker label.
+        target_marker_set = mesh_markers[label]
 
-		# Case 1: The identifier is a single symbol (e.g., :left).
-		if identifier isa Symbol
-			idxs = symbol_to_index_map[identifier]
-			_mark_indices!(target_marker_set, linear_indices, idxs)
+        # Case 1: The identifier is a single symbol (e.g., :left).
+        if identifier isa Symbol
+            idxs = symbol_to_index_map[identifier]
+            _mark_indices!(target_marker_set, linear_indices, idxs)
 
-		# Case 2: The identifier is a Set or Tuple of symbols (e.g., (:top, :right)).
-		elseif identifier isa Union{Set,Tuple}
-			for id in identifier
-				idxs = symbol_to_index_map[id]
-				_mark_indices!(target_marker_set, linear_indices, idxs)
-			end
-		end
-	end
+            # Case 2: The identifier is a Set or Tuple of symbols (e.g., (:top, :right)).
+        elseif identifier isa Union{Set, Tuple}
+            for id in identifier
+                idxs = symbol_to_index_map[id]
+                _mark_indices!(target_marker_set, linear_indices, idxs)
+            end
+        end
+    end
 end
 
 """
@@ -214,15 +217,15 @@ It iterates through every point in the mesh, evaluates the `identifier` function
 at that point's coordinates, and sets the marker to `true` if the function returns `true`.
 """
 function __process_condition!(mesh_marker, identifier, Ωₕ)
-	linear_indices = LinearIndices(npoints(Ωₕ, Tuple))
-	# Loop over every CartesianIndex in the mesh.
-	@inbounds for idx in indices(Ωₕ)
-		# Check if the function `identifier(point)` returns true.
-		if identifier(point(Ωₕ, idx))
-			# If it does, mark this point's linear index as true.
-			mesh_marker[linear_indices[idx]] = true
-		end
-	end
+    linear_indices = LinearIndices(npoints(Ωₕ, Tuple))
+    # Loop over every CartesianIndex in the mesh.
+    @inbounds for idx in indices(Ωₕ)
+        # Check if the function `identifier(point)` returns true.
+        if identifier(point(Ωₕ, idx))
+            # If it does, mark this point's linear index as true.
+            mesh_marker[linear_indices[idx]] = true
+        end
+    end
 end
 
 """
@@ -231,12 +234,12 @@ end
 Iterates through all function-based markers and applies them to the mesh.
 """
 function _set_markers_conditions!(mesh_markers::MeshMarkers, conditions, Ωₕ)
-	# Loop through each marker that is defined by a condition (function).
-	for marker in conditions
-		(; label, identifier) = marker
-		# Call the helper function to evaluate the condition for the entire mesh.
-		__process_condition!(mesh_markers[label], identifier, Ωₕ)
-	end
+    # Loop through each marker that is defined by a condition (function).
+    for marker in conditions
+        (; label, identifier) = marker
+        # Call the helper function to evaluate the condition for the entire mesh.
+        __process_condition!(mesh_markers[label], identifier, Ωₕ)
+    end
 
-	return nothing
+    return nothing
 end

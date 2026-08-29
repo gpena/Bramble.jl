@@ -11,11 +11,12 @@ struct ParallelWorkspace{D}
     color_groups::Vector{Vector{CartesianIndex{D}}}
     thread_buffers::Vector{Vector{Float64}}
 
-    function ParallelWorkspace{D}(color_groups::Vector{Vector{CartesianIndex{D}}}) where D
+    function ParallelWorkspace{D}(color_groups::Vector{Vector{CartesianIndex{D}}}) where {D}
         new{D}(color_groups, Vector{Float64}[])
     end
 
-    function ParallelWorkspace{D}(color_groups::Vector{Vector{CartesianIndex{D}}}, thread_buffers::Vector{Vector{Float64}}) where D
+    function ParallelWorkspace{D}(color_groups::Vector{Vector{CartesianIndex{D}}},
+            thread_buffers::Vector{Vector{Float64}}) where {D}
         new{D}(color_groups, thread_buffers)
     end
 end
@@ -32,7 +33,7 @@ Represents a bilinear form defined over a trial space and test space.
 - `f::FType`: The user-defined lambda function representing the form.
 - `workspace::ParallelWorkspace{D}`: Preallocated coordinate partitions for lock-free parallel assembly.
 """
-struct BilinearForm{D,TrialSpace,TestSpace,ExprType<:LazyOp{D},FType}
+struct BilinearForm{D, TrialSpace, TestSpace, ExprType <: LazyOp{D}, FType}
     trial_space::TrialSpace
     test_space::TestSpace
     ast::ExprType
@@ -82,9 +83,7 @@ struct CoupledBilinearForm{D}
 end
 
 trial_space(form::CoupledBilinearForm) = form.trial_space
-test_space(form::CoupledBilinearForm)  = form.test_space
-
-
+test_space(form::CoupledBilinearForm) = form.test_space
 
 @inline (form::BilinearForm)(u, v) = dot(v, assemble(form) * u)
 
@@ -93,7 +92,9 @@ test_space(form::CoupledBilinearForm)  = form.test_space
 
 Fully resolves grid coefficient functions and scales inside the bilinear form's AST.
 """
-@inline resolve_form_ast(form::BilinearForm{D,TrialSpace,TestSpace,ExprType,FType}) where {D,TrialSpace,TestSpace,ExprType,FType} = resolve_ast(form.f(TrialFunction{D}(), TestFunction{D}()))
+@inline resolve_form_ast(form::BilinearForm{D, TrialSpace, TestSpace, ExprType,
+    FType}) where {D, TrialSpace, TestSpace, ExprType, FType} = resolve_ast(form.f(
+    TrialFunction{D}(), TestFunction{D}()))
 
 """
     form(Wₕ, Vₕ, f; stride_multiplier::Int = 1)
@@ -116,7 +117,7 @@ a = form(X, X, ((u, p), (v, q)) ->
     inner₊(p, D₋ₓ(v[1])) + inner₊(p, D₋ᵧ(v[2])))
 ```
 """
-function form(Wₕ, Vₕ, f; stride_multiplier::Int=1)
+function form(Wₕ, Vₕ, f; stride_multiplier::Int = 1)
     D = dim(Wₕ)
     ast = f(TrialFunction{D}(), TestFunction{D}())
 
@@ -128,7 +129,7 @@ function form(Wₕ, Vₕ, f; stride_multiplier::Int=1)
     lin_indices = LinearIndices(grid_inds)
 
     # Evaluate the stencil at a representative interior node to discover off_v bounds
-    center_I = grid_inds[length(grid_inds)÷2+1]
+    center_I = grid_inds[length(grid_inds) ÷ 2 + 1]
     center_lin_idx = lin_indices[center_I]
     sample_stencil = local_stencil(ast, sp, center_I, mesh_markers, center_lin_idx)
 
@@ -159,7 +160,8 @@ function form(Wₕ, Vₕ, f; stride_multiplier::Int=1)
 
     workspace = ParallelWorkspace{D}(color_groups)
 
-    return BilinearForm{D,typeof(Wₕ),typeof(Vₕ),typeof(ast),typeof(f)}(Wₕ, Vₕ, ast, f, workspace)
+    return BilinearForm{D, typeof(Wₕ), typeof(Vₕ), typeof(ast), typeof(f)}(
+        Wₕ, Vₕ, ast, f, workspace)
 end
 
 """
@@ -170,7 +172,7 @@ Detected when both spaces have at least one component that is itself a `Composit
 The lambda `f` receives a tuple of symbolic trial args and a tuple of test args matching
 the block structure of `trial_space` and `test_space`.
 """
-function form(trial_space::CompositeGridSpace, test_space::CompositeGridSpace, f; stride_multiplier::Int=1)
+function form(trial_space::CompositeGridSpace, test_space::CompositeGridSpace, f; stride_multiplier::Int = 1)
     if is_hierarchical(trial_space) || is_hierarchical(test_space)
         return _build_coupled_bilinear_form(trial_space, test_space, f)
     else
@@ -184,7 +186,7 @@ function form(trial_space::CompositeGridSpace, test_space::CompositeGridSpace, f
         grid_inds = indices(Ωₕ)
         lin_indices = LinearIndices(grid_inds)
 
-        center_I = grid_inds[length(grid_inds)÷2+1]
+        center_I = grid_inds[length(grid_inds) ÷ 2 + 1]
         center_lin_idx = lin_indices[center_I]
         sample_stencil = local_stencil(ast, sp, center_I, mesh_markers, center_lin_idx)
 
@@ -210,7 +212,8 @@ function form(trial_space::CompositeGridSpace, test_space::CompositeGridSpace, f
         end
 
         workspace = ParallelWorkspace{D}(color_groups)
-        return BilinearForm{D,typeof(trial_space),typeof(test_space),typeof(ast),typeof(f)}(
+        return BilinearForm{
+            D, typeof(trial_space), typeof(test_space), typeof(ast), typeof(f)}(
             trial_space, test_space, ast, f, workspace)
     end
 end
@@ -227,24 +230,23 @@ function _build_coupled_bilinear_form(trial_space::CompositeGridSpace, test_spac
 
     # Generate symbolic trial/test args matching the hierarchical block structure
     trial_args = make_trial_args(trial_space, D)
-    test_args  = make_test_args(test_space,  D)
+    test_args = make_test_args(test_space, D)
 
     # Build full coupled AST
     ast = f(trial_args, test_args)
 
     # Flatten to leaf spaces for assembly
     trial_leaf_info = collect_leaf_spaces_offsets(trial_space)
-    test_leaf_info  = collect_leaf_spaces_offsets(test_space)
+    test_leaf_info = collect_leaf_spaces_offsets(test_space)
     NT = length(trial_leaf_info)
     NS = length(test_leaf_info)
 
     # Decompose AST into (NS × NT) block matrix
     block_asts = extract_block_asts(ast, NT, NS)
 
-    return CoupledBilinearForm{D}(trial_space, test_space, block_asts, trial_leaf_info, test_leaf_info)
+    return CoupledBilinearForm{D}(
+        trial_space, test_space, block_asts, trial_leaf_info, test_leaf_info)
 end
-
-
 
 # ==============================================================================
 # Utility Helpers
@@ -252,7 +254,7 @@ end
 
 @inline function add_to_sparse!(A::SparseMatrixCSC, row::Int, col::Int, val::Number)
     p1 = A.colptr[col]
-    p2 = A.colptr[col+1] - 1
+    p2 = A.colptr[col + 1] - 1
 
     if (p2 - p1) < 32
         idx = p1
@@ -286,7 +288,9 @@ end
 
 Allocates a sparse matrix with the correct sparsity pattern corresponding to the bilinear form.
 """
-function allocate_system_matrix(form::BilinearForm{D,TrialSpace,TestSpace,ExprType,FType}, ast=resolve_form_ast(form)) where {D,TrialSpace,TestSpace,ExprType,FType}
+function allocate_system_matrix(
+        form::BilinearForm{D, TrialSpace, TestSpace, ExprType, FType},
+        ast = resolve_form_ast(form)) where {D, TrialSpace, TestSpace, ExprType, FType}
     space = form.trial_space
     Ωₕ = mesh(space)
     mesh_markers = markers(Ωₕ)
@@ -313,20 +317,23 @@ function allocate_system_matrix(form::BilinearForm{D,TrialSpace,TestSpace,ExprTy
     return sparse(I_vec, J_vec, V_vec, n, n)
 end
 
-function allocate_system_matrix(form::BilinearForm{D,TrialSpace,TestSpace,ExprType,FType}, ast=resolve_form_ast(form)) where {D,TrialSpace<:CompositeGridSpace,TestSpace<:CompositeGridSpace,ExprType,FType}
+function allocate_system_matrix(
+        form::BilinearForm{D, TrialSpace, TestSpace, ExprType, FType},
+        ast = resolve_form_ast(form)) where {D, TrialSpace <: CompositeGridSpace,
+        TestSpace <: CompositeGridSpace, ExprType, FType}
     space = form.trial_space
     N = ncomponents(TrialSpace)
-    
+
     # Calculate DOF offsets for each subspace
     offsets = Int[0]
     for sp in space.spaces
         push!(offsets, offsets[end] + ndofs(sp))
     end
     total_dofs = offsets[end]
-    
+
     I_vec = Int[]
     J_vec = Int[]
-    
+
     # Iterate over each component space
     for c in 1:N
         sp = space.spaces[c]
@@ -334,7 +341,7 @@ function allocate_system_matrix(form::BilinearForm{D,TrialSpace,TestSpace,ExprTy
         Ωₕ = mesh(sp)
         mesh_markers = markers(Ωₕ)
         lin_indices = LinearIndices(indices(Ωₕ))
-        
+
         @inbounds for I in indices(Ωₕ)
             lin_idx = lin_indices[I]
             stencil = local_stencil(ast, sp, I, mesh_markers, lin_idx)
@@ -348,7 +355,7 @@ function allocate_system_matrix(form::BilinearForm{D,TrialSpace,TestSpace,ExprTy
             end
         end
     end
-    
+
     V_vec = zeros(eltype(space), length(I_vec))
     return sparse(I_vec, J_vec, V_vec, total_dofs, total_dofs)
 end
@@ -374,7 +381,7 @@ end
 
 Assembles the system matrix of the `BilinearForm` using parallel lock-free assembly. Optional `dirichlet_labels` applies boundary conditions to the matrix.
 """
-function assemble(form::BilinearForm; dirichlet_labels=nothing)
+function assemble(form::BilinearForm; dirichlet_labels = nothing)
     _validate_dirichlet_labels(dirichlet_labels)
     ast_resolved = resolve_form_ast(form)
     A = allocate_system_matrix(form, ast_resolved)
@@ -392,7 +399,8 @@ Performs sequential assembly of the `BilinearForm` directly into the preallocate
 # Helper Cores for Function Barrier Optimization
 # ==============================================================================
 
-function _assemble_bilinear_core!(A::SparseMatrixCSC, space, ast::AST_TYPE, lin_indices, mesh_markers) where {AST_TYPE}
+function _assemble_bilinear_core!(A::SparseMatrixCSC, space, ast::AST_TYPE,
+        lin_indices, mesh_markers) where {AST_TYPE}
     for I in indices(mesh(space))
         lin_idx = lin_indices[I]
         stencil = local_stencil(ast, space, I, mesh_markers, lin_idx)
@@ -411,7 +419,9 @@ function _assemble_bilinear_core!(A::SparseMatrixCSC, space, ast::AST_TYPE, lin_
     return A
 end
 
-function _assemble_bilinear_parallel_core!(A::SparseMatrixCSC, space, ast::AST_TYPE, lin_indices, mesh_markers, color_groups) where {AST_TYPE}
+function _assemble_bilinear_parallel_core!(
+        A::SparseMatrixCSC, space, ast::AST_TYPE, lin_indices,
+        mesh_markers, color_groups) where {AST_TYPE}
     num_colors = length(color_groups)
     num_threads = Threads.nthreads()
     for color_id in 1:num_colors
@@ -433,7 +443,8 @@ function _assemble_bilinear_parallel_core!(A::SparseMatrixCSC, space, ast::AST_T
                     Iv = I + CartesianIndex(off_v)
                     Iu = I + CartesianIndex(off_u)
 
-                    if checkbounds(Bool, lin_indices, Iv) && checkbounds(Bool, lin_indices, Iu)
+                    if checkbounds(Bool, lin_indices, Iv) &&
+                       checkbounds(Bool, lin_indices, Iu)
                         row = lin_indices[Iv]
                         col = lin_indices[Iu]
 
@@ -446,16 +457,17 @@ function _assemble_bilinear_parallel_core!(A::SparseMatrixCSC, space, ast::AST_T
     return A
 end
 
-function _assemble_bilinear_core!(A::SparseMatrixCSC, space::CompositeGridSpace{N}, ast::AST_TYPE, lin_indices, mesh_markers) where {N, AST_TYPE}
+function _assemble_bilinear_core!(A::SparseMatrixCSC, space::CompositeGridSpace{N},
+        ast::AST_TYPE, lin_indices, mesh_markers) where {N, AST_TYPE}
     offsets = Int[0]
     for sp in space.spaces
         push!(offsets, offsets[end] + ndofs(sp))
     end
-    
+
     for c in 1:N
         sp = space.spaces[c]
         offset = offsets[c]
-        
+
         for I in indices(mesh(sp))
             lin_idx = lin_indices[I]
             stencil = local_stencil(ast, sp, I, mesh_markers, lin_idx)
@@ -467,10 +479,10 @@ function _assemble_bilinear_core!(A::SparseMatrixCSC, space::CompositeGridSpace{
                 if checkbounds(Bool, lin_indices, Iv) && checkbounds(Bool, lin_indices, Iu)
                     row_local = lin_indices[Iv]
                     col_local = lin_indices[Iu]
-                    
+
                     row_global = row_local + offset
                     col_global = col_local + offset
-                    
+
                     add_to_sparse!(A, row_global, col_global, weight)
                 end
             end
@@ -479,10 +491,12 @@ function _assemble_bilinear_core!(A::SparseMatrixCSC, space::CompositeGridSpace{
     return A
 end
 
-function _assemble_bilinear_parallel_core!(A::SparseMatrixCSC, space::CompositeGridSpace{N}, ast::AST_TYPE, lin_indices, mesh_markers, color_groups) where {N, AST_TYPE}
+function _assemble_bilinear_parallel_core!(
+        A::SparseMatrixCSC, space::CompositeGridSpace{N}, ast::AST_TYPE,
+        lin_indices, mesh_markers, color_groups) where {N, AST_TYPE}
     num_colors = length(color_groups)
     num_threads = Threads.nthreads()
-    
+
     offsets = Int[0]
     for sp in space.spaces
         push!(offsets, offsets[end] + ndofs(sp))
@@ -501,21 +515,22 @@ function _assemble_bilinear_parallel_core!(A::SparseMatrixCSC, space::CompositeG
             for idx in start_idx:end_idx
                 I = color_group[idx]
                 lin_idx = lin_indices[I]
-                
+
                 for c in 1:N
                     sp = space.spaces[c]
                     offset = offsets[c]
-                    
+
                     stencil = local_stencil(ast, sp, I, mesh_markers, lin_idx)
 
                     for (off_u, off_v, weight) in stencil
                         Iv = I + CartesianIndex(off_v)
                         Iu = I + CartesianIndex(off_u)
 
-                        if checkbounds(Bool, lin_indices, Iv) && checkbounds(Bool, lin_indices, Iu)
+                        if checkbounds(Bool, lin_indices, Iv) &&
+                           checkbounds(Bool, lin_indices, Iu)
                             row_local = lin_indices[Iv]
                             col_local = lin_indices[Iu]
-                            
+
                             row_global = row_local + offset
                             col_global = col_local + offset
 
@@ -529,8 +544,10 @@ function _assemble_bilinear_parallel_core!(A::SparseMatrixCSC, space::CompositeG
     return A
 end
 
-function assemble!(A::SparseMatrixCSC, form::BilinearForm{D,TrialSpace,TestSpace,ExprType,FType}; dirichlet_labels=nothing, ast=resolve_form_ast(form)) where {D,TrialSpace,TestSpace,ExprType,FType}
-
+function assemble!(
+        A::SparseMatrixCSC, form::BilinearForm{D, TrialSpace, TestSpace, ExprType, FType};
+        dirichlet_labels = nothing,
+        ast = resolve_form_ast(form)) where {D, TrialSpace, TestSpace, ExprType, FType}
     _validate_dirichlet_labels(dirichlet_labels)
     fill!(nonzeros(A), 0.0)
     space = form.trial_space
@@ -549,7 +566,9 @@ end
 
 Performs multi-threaded parallel assembly using lock-free multi-coloring partition, strictly allocation-free at runtime.
 """
-function assemble_parallel!(A::SparseMatrixCSC, form::BilinearForm{D,TrialSpace,TestSpace,ExprType,FType}, ast=resolve_form_ast(form)) where {D,TrialSpace,TestSpace,ExprType,FType}
+function assemble_parallel!(
+        A::SparseMatrixCSC, form::BilinearForm{D, TrialSpace, TestSpace, ExprType, FType},
+        ast = resolve_form_ast(form)) where {D, TrialSpace, TestSpace, ExprType, FType}
 
     # Reset tracking arrays in place without reallocating
     fill!(nonzeros(A), 0.0)
@@ -562,7 +581,8 @@ function assemble_parallel!(A::SparseMatrixCSC, form::BilinearForm{D,TrialSpace,
     # Retrieve preallocated coloring groups directly from the workspace field
     color_groups = form.workspace.color_groups
 
-    _assemble_bilinear_parallel_core!(A, space, ast, lin_indices, mesh_markers, color_groups)
+    _assemble_bilinear_parallel_core!(
+        A, space, ast, lin_indices, mesh_markers, color_groups)
 
     return A
 end
@@ -578,26 +598,27 @@ Allocates a sparse matrix for the coupled block system. The sparsity pattern is
 determined by scanning all non-zero block ASTs and collecting the (row, col) pairs
 they can contribute to (including their global DOF offsets).
 """
-function allocate_system_matrix(form::CoupledBilinearForm{D}) where D
+function allocate_system_matrix(form::CoupledBilinearForm{D}) where {D}
     NS = size(form.block_asts, 1)
     NT = size(form.block_asts, 2)
 
-    total_test_dofs  = sum(info -> ndofs(info[1]), form.test_leaf_info)
+    total_test_dofs = sum(info -> ndofs(info[1]), form.test_leaf_info)
     total_trial_dofs = sum(info -> ndofs(info[1]), form.trial_leaf_info)
 
     I_vec = Int[]
     J_vec = Int[]
 
     for i in 1:NS, j in 1:NT
+
         ast_ij = form.block_asts[i, j]
         ast_ij === nothing && continue
 
-        sp_test, offset_row  = form.test_leaf_info[i]
+        sp_test, offset_row = form.test_leaf_info[i]
         sp_trial, offset_col = form.trial_leaf_info[j]
 
         Ωₕ = mesh(sp_test)
         mesh_markers = markers(Ωₕ)
-        lin_indices  = LinearIndices(indices(Ωₕ))
+        lin_indices = LinearIndices(indices(Ωₕ))
 
         for I in indices(Ωₕ)
             lin_idx = lin_indices[I]
@@ -641,7 +662,7 @@ Each non-null block `(i,j)` is assembled separately using the appropriate leaf
 scalar spaces and global DOF offsets, then contributions are added to the
 preallocated sparse matrix with the correct (row, col) block positions.
 """
-function assemble(form::CoupledBilinearForm{D}; dirichlet_labels=nothing) where D
+function assemble(form::CoupledBilinearForm{D}; dirichlet_labels = nothing) where {D}
     _validate_dirichlet_labels(dirichlet_labels)
 
     A = allocate_system_matrix(form)
@@ -649,20 +670,22 @@ function assemble(form::CoupledBilinearForm{D}; dirichlet_labels=nothing) where 
     NT = size(form.block_asts, 2)
 
     for i in 1:NS, j in 1:NT
+
         ast_ij = form.block_asts[i, j]
         ast_ij === nothing && continue
 
         # Resolve any lazy grid coefficients in this block's AST
         ast_resolved = resolve_ast(ast_ij)
 
-        sp_test, offset_row  = form.test_leaf_info[i]
+        sp_test, offset_row = form.test_leaf_info[i]
         sp_trial, offset_col = form.trial_leaf_info[j]
 
         Ωₕ = mesh(sp_test)
         mesh_markers = markers(Ωₕ)
-        lin_indices  = LinearIndices(indices(Ωₕ))
+        lin_indices = LinearIndices(indices(Ωₕ))
 
-        _assemble_coupled_block!(A, ast_resolved, sp_test, lin_indices, mesh_markers, offset_row, offset_col)
+        _assemble_coupled_block!(
+            A, ast_resolved, sp_test, lin_indices, mesh_markers, offset_row, offset_col)
     end
 
     apply_dirichlet_labels!(A, form, dirichlet_labels)
@@ -677,7 +700,7 @@ the full sparse matrix `A`. Contributions are offset by `offset_row` (test DOFs)
 and `offset_col` (trial DOFs).
 """
 function _assemble_coupled_block!(A::SparseMatrixCSC, ast, sp, lin_indices, mesh_markers,
-                                   offset_row::Int, offset_col::Int)
+        offset_row::Int, offset_col::Int)
     for I in indices(mesh(sp))
         lin_idx = lin_indices[I]
         stencil = local_stencil(ast, sp, I, mesh_markers, lin_idx)

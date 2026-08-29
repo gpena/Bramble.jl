@@ -1,5 +1,5 @@
 @noinline function _throw_dot_dim_error(lu::Integer, lv::Integer, lw::Integer)
-	throw(DimensionMismatch("Vectors must have matching lengths, but got lengths ($lu, $lv, $lw)."))
+    throw(DimensionMismatch("Vectors must have matching lengths, but got lengths ($lu, $lv, $lw)."))
 end
 
 """
@@ -34,23 +34,23 @@ otherwise. See [`PARALLEL_FOR_MIN`](@ref).
 - `f`: Function that takes an index and returns the value to be stored at that index
 """
 function _parallel_for!(v, idxs, f)
-	# A single thread, or too little work to amortise spawning tasks: the serial
-	# path is both faster and allocation free.
-	if Threads.nthreads() == 1 || length(idxs) < PARALLEL_FOR_MIN
-		return _serial_for!(v, idxs, f)
-	end
-	return _threaded_for!(v, idxs, f)
+    # A single thread, or too little work to amortise spawning tasks: the serial
+    # path is both faster and allocation free.
+    if Threads.nthreads() == 1 || length(idxs) < PARALLEL_FOR_MIN
+        return _serial_for!(v, idxs, f)
+    end
+    return _threaded_for!(v, idxs, f)
 end
 
 # Kept in its own function on purpose. `Threads.@threads` builds a closure over
 # the loop body, and having it in the same body as the serial branch makes that
 # closure allocate even on calls that never reach it.
 @noinline function _threaded_for!(v, idxs, f)
-	# :static partitions work evenly across threads — lower overhead for uniform workloads
-	Threads.@threads :static for idx in idxs
-		@inbounds v[idx] = f(idx)
-	end
-	return nothing
+    # :static partitions work evenly across threads — lower overhead for uniform workloads
+    Threads.@threads :static for idx in idxs
+        @inbounds v[idx] = f(idx)
+    end
+    return nothing
 end
 
 """
@@ -64,10 +64,10 @@ Performs a serial (single-threaded) iteration over the specified indices, applyi
 - `f`: Function to be applied at each index
 """
 @inline function _serial_for!(v, idxs, f)
-	@inbounds for idx in idxs
-		v[idx] = f(idx)
-	end
-	return nothing
+    @inbounds for idx in idxs
+        v[idx] = f(idx)
+    end
+    return nothing
 end
 
 """
@@ -87,14 +87,14 @@ kernel for most markers, and threading a short scattered write does not pay.
 - `g`: Function that takes an index and returns the value to be stored there
 """
 function _masked_for!(v, masks::Tuple, g)
-	fill!(v, zero(eltype(v)))
-	lin = LinearIndices(v)
-	for mask in masks
-		@inbounds for idx in CartesianIndices(v)
-			mask[lin[idx]] && (v[idx] = g(idx))
-		end
-	end
-	return nothing
+    fill!(v, zero(eltype(v)))
+    lin = LinearIndices(v)
+    for mask in masks
+        @inbounds for idx in CartesianIndices(v)
+            mask[lin[idx]] && (v[idx] = g(idx))
+        end
+    end
+    return nothing
 end
 
 #=========================================================================
@@ -119,8 +119,8 @@ Unrolled by recursion on the tuple, so there is no loop and no allocation.
 """
 @inline _write_components!(::Tuple{}, ::Tuple, idx) = nothing
 @inline function _write_components!(mats::Tuple, vals::Tuple, idx)
-	@inbounds mats[1][idx] = vals[1]
-	return _write_components!(Base.tail(mats), Base.tail(vals), idx)
+    @inbounds mats[1][idx] = vals[1]
+    return _write_components!(Base.tail(mats), Base.tail(vals), idx)
 end
 
 """
@@ -135,22 +135,22 @@ Applies `g` across `idxs` and scatters each returned tuple over the arrays in
 - `g`: Function taking an index and returning a tuple of values, one per array
 """
 function _scatter_for!(mats::Tuple, idxs, g)
-	if Threads.nthreads() == 1 || length(idxs) < PARALLEL_FOR_MIN
-		@inbounds for idx in idxs
-			_write_components!(mats, g(idx), idx)
-		end
-		return nothing
-	end
-	return _threaded_scatter_for!(mats, idxs, g)
+    if Threads.nthreads() == 1 || length(idxs) < PARALLEL_FOR_MIN
+        @inbounds for idx in idxs
+            _write_components!(mats, g(idx), idx)
+        end
+        return nothing
+    end
+    return _threaded_scatter_for!(mats, idxs, g)
 end
 
 # Separate function for the same reason as `_threaded_for!`: sharing a body with
 # the serial branch makes the `@threads` closure allocate even when unused.
 @noinline function _threaded_scatter_for!(mats::Tuple, idxs, g)
-	Threads.@threads :static for idx in idxs
-		@inbounds _write_components!(mats, g(idx), idx)
-	end
-	return nothing
+    Threads.@threads :static for idx in idxs
+        @inbounds _write_components!(mats, g(idx), idx)
+    end
+    return nothing
 end
 
 ##################################################################################
@@ -168,15 +168,16 @@ Computes the weighted element-wise dot product of three vectors:
 Uses SIMD and `muladd` for the outer accumulation (`u_i * v_i * w_i + s`); inner products are not FMA-fused.
 """
 @inline function _dot(u::AbstractVector, v::AbstractVector, w::AbstractVector)
-	(length(u) == length(v) == length(w)) || _throw_dot_dim_error(length(u), length(v), length(w))
-	T = promote_type(eltype(u), eltype(v), eltype(w))
-	s = zero(T)
+    (length(u) == length(v) == length(w)) ||
+        _throw_dot_dim_error(length(u), length(v), length(w))
+    T = promote_type(eltype(u), eltype(v), eltype(w))
+    s = zero(T)
 
-	@inbounds @simd for i in 1:length(u)
-		s = muladd(T(u[i]) * T(v[i]), T(w[i]), s)
-	end
+    @inbounds @simd for i in 1:length(u)
+        s = muladd(T(u[i]) * T(v[i]), T(w[i]), s)
+    end
 
-	return s
+    return s
 end
 
 """
@@ -189,7 +190,7 @@ Computes the weighted inner product ``\\langle u, v \\rangle_h``.
 """
 @inline _inner_product(u::AbstractVector, h::AbstractVector, v::AbstractVector) = _dot(u, h, v)
 function _inner_product(u::AbstractMatrix, h::AbstractVector, v::AbstractMatrix)
-	tmp = similar(u)
-	mul!(tmp, Diagonal(h), u)
-	return v' * tmp
+    tmp = similar(u)
+    mul!(tmp, Diagonal(h), u)
+    return v' * tmp
 end

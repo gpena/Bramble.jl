@@ -13,7 +13,7 @@ Returns a flat list of `(scalar_space, global_dof_offset)` pairs by walking the
 is the cumulative count of DOFs from all preceding leaf spaces.
 """
 function collect_leaf_spaces_offsets(space::CompositeGridSpace)
-    result = Tuple{Any,Int}[]
+    result = Tuple{Any, Int}[]
     offset_ref = Ref(0)
     _collect_leaf_spaces_offsets!(result, space, offset_ref)
     return result
@@ -69,7 +69,7 @@ U, P = make_trial_args(X, 2)
 # P =  IndexedTrialFunction{2}(3)
 ```
 """
-function make_trial_args(space::CompositeGridSpace{NT}, D::Int) where NT
+function make_trial_args(space::CompositeGridSpace{NT}, D::Int) where {NT}
     counter = Ref(1)
     return ntuple(k -> _make_trial_arg(space.spaces[k], counter, D), Val(NT))
 end
@@ -80,7 +80,7 @@ function _make_trial_arg(sp::ScalarGridSpace, counter::Ref{Int}, D::Int)
     return IndexedTrialFunction{D}(idx)
 end
 
-function _make_trial_arg(sp::CompositeGridSpace{N}, counter::Ref{Int}, D::Int) where N
+function _make_trial_arg(sp::CompositeGridSpace{N}, counter::Ref{Int}, D::Int) where {N}
     return ntuple(k -> _make_trial_arg(sp.spaces[k], counter, D), Val(N))
 end
 
@@ -89,7 +89,7 @@ end
 
 Same as `make_trial_args` but produces `IndexedTestFunction{D}` nodes.
 """
-function make_test_args(space::CompositeGridSpace{NS}, D::Int) where NS
+function make_test_args(space::CompositeGridSpace{NS}, D::Int) where {NS}
     counter = Ref(1)
     return ntuple(k -> _make_test_arg(space.spaces[k], counter, D), Val(NS))
 end
@@ -100,7 +100,7 @@ function _make_test_arg(sp::ScalarGridSpace, counter::Ref{Int}, D::Int)
     return IndexedTestFunction{D}(idx)
 end
 
-function _make_test_arg(sp::CompositeGridSpace{N}, counter::Ref{Int}, D::Int) where N
+function _make_test_arg(sp::CompositeGridSpace{N}, counter::Ref{Int}, D::Int) where {N}
     return ntuple(k -> _make_test_arg(sp.spaces[k], counter, D), Val(N))
 end
 
@@ -130,13 +130,13 @@ its `component_idx`. Raises an error if no indexed trial function is found.
 """
 find_trial_component(op::IndexedTrialFunction) = op.component_idx
 find_trial_component(op::BackwardDifference) = find_trial_component(op.inner_op)
-find_trial_component(op::ForwardDifference)  = find_trial_component(op.inner_op)
-find_trial_component(op::OperatorScale)      = find_trial_component(op.inner_op)
-find_trial_component(op::GridFunctionScale)  = find_trial_component(op.inner_op)
-find_trial_component(op::BackwardAverage)    = find_trial_component(op.inner_op)
-find_trial_component(op::ForwardAverage)     = find_trial_component(op.inner_op)
-find_trial_component(op::RegionRestriction)  = find_trial_component(op.inner_op)
-find_trial_component(op::BilinearProduct)    = find_trial_component(op.left_op)
+find_trial_component(op::ForwardDifference) = find_trial_component(op.inner_op)
+find_trial_component(op::OperatorScale) = find_trial_component(op.inner_op)
+find_trial_component(op::GridFunctionScale) = find_trial_component(op.inner_op)
+find_trial_component(op::BackwardAverage) = find_trial_component(op.inner_op)
+find_trial_component(op::ForwardAverage) = find_trial_component(op.inner_op)
+find_trial_component(op::RegionRestriction) = find_trial_component(op.inner_op)
+find_trial_component(op::BilinearProduct) = find_trial_component(op.left_op)
 
 """
     find_test_component(op) -> Int
@@ -145,14 +145,14 @@ Walks a bilinear term AST to find the `IndexedTestFunction` leaf and returns
 its `component_idx`.
 """
 find_test_component(op::IndexedTestFunction) = op.component_idx
-find_test_component(op::BackwardDifference)  = find_test_component(op.inner_op)
-find_test_component(op::ForwardDifference)   = find_test_component(op.inner_op)
-find_test_component(op::OperatorScale)       = find_test_component(op.inner_op)
-find_test_component(op::GridFunctionScale)   = find_test_component(op.inner_op)
-find_test_component(op::BackwardAverage)     = find_test_component(op.inner_op)
-find_test_component(op::ForwardAverage)      = find_test_component(op.inner_op)
-find_test_component(op::RegionRestriction)   = find_test_component(op.inner_op)
-find_test_component(op::BilinearProduct)     = find_test_component(op.right_op)
+find_test_component(op::BackwardDifference) = find_test_component(op.inner_op)
+find_test_component(op::ForwardDifference) = find_test_component(op.inner_op)
+find_test_component(op::OperatorScale) = find_test_component(op.inner_op)
+find_test_component(op::GridFunctionScale) = find_test_component(op.inner_op)
+find_test_component(op::BackwardAverage) = find_test_component(op.inner_op)
+find_test_component(op::ForwardAverage) = find_test_component(op.inner_op)
+find_test_component(op::RegionRestriction) = find_test_component(op.inner_op)
+find_test_component(op::BilinearProduct) = find_test_component(op.right_op)
 
 """
     extract_block_asts(ast::LazyOp{D}, NT::Int, NS::Int) -> Matrix{Any}
@@ -165,7 +165,7 @@ test component `i` (row block) and trial component `j` (column block), or
 The decomposition relies on the `IndexedTrialFunction` and `IndexedTestFunction`
 leaves carried by each `BilinearProduct` term.
 """
-function extract_block_asts(ast::LazyOp{D}, NT::Int, NS::Int) where D
+function extract_block_asts(ast::LazyOp{D}, NT::Int, NS::Int) where {D}
     terms = flatten_sum(ast)
     blocks = Matrix{Any}(nothing, NS, NT)
 

@@ -6,12 +6,12 @@
 Prints a colored header for mesh objects.
 """
 function print_mesh_header(pp::PrettyPrinter, mesh_type::String, D::Int, T::Type, npts)
-	printstyled(pp.io, mesh_type; bold = true, color = :cyan)
-	print(pp.io, " {")
-	printstyled(pp.io, "$(D)D"; color = :yellow)
-	print(pp.io, ", ")
-	printstyled(pp.io, "$T"; color = :yellow)
-	print(pp.io, "}")
+    printstyled(pp.io, mesh_type; bold = true, color = :cyan)
+    print(pp.io, " {")
+    printstyled(pp.io, "$(D)D"; color = :yellow)
+    print(pp.io, ", ")
+    printstyled(pp.io, "$T"; color = :yellow)
+    print(pp.io, "}")
 end
 
 """
@@ -20,32 +20,32 @@ end
 Prints a summary line for mesh properties (number of points, topology).
 """
 function print_mesh_summary(pp::PrettyPrinter, npts, topodim::Int, collapsed::Bool)
-	print_indent(pp)
+    print_indent(pp)
 
-	# Print number of points
-	if npts isa Tuple
-		total_pts = prod(npts)
-		printstyled(pp.io, "$total_pts points"; color = :blue)
-		print(pp.io, " (")
-		for (i, n) in enumerate(npts)
-			print(pp.io, n)
-			i < length(npts) && print(pp.io, " × ")
-		end
-		print(pp.io, ")")
-	else
-		printstyled(pp.io, "$npts points"; color = :blue)
-	end
+    # Print number of points
+    if npts isa Tuple
+        total_pts = prod(npts)
+        printstyled(pp.io, "$total_pts points"; color = :blue)
+        print(pp.io, " (")
+        for (i, n) in enumerate(npts)
+            print(pp.io, n)
+            i < length(npts) && print(pp.io, " × ")
+        end
+        print(pp.io, ")")
+    else
+        printstyled(pp.io, "$npts points"; color = :blue)
+    end
 
-	# Print topological dimension if relevant
-	if collapsed
-		print(pp.io, " • ")
-		printstyled(pp.io, "collapsed"; color = :light_black)
-	elseif topodim < (npts isa Tuple ? length(npts) : 1)
-		print(pp.io, " • ")
-		printstyled(pp.io, "topological dim $topodim"; color = :yellow)
-	end
+    # Print topological dimension if relevant
+    if collapsed
+        print(pp.io, " • ")
+        printstyled(pp.io, "collapsed"; color = :light_black)
+    elseif topodim < (npts isa Tuple ? length(npts) : 1)
+        print(pp.io, " • ")
+        printstyled(pp.io, "topological dim $topodim"; color = :yellow)
+    end
 
-	println(pp.io)
+    println(pp.io)
 end
 
 """
@@ -54,12 +54,12 @@ end
 Prints the domain information for a mesh.
 """
 function print_mesh_domain_info(pp::PrettyPrinter, set::CartesianProduct)
-	print_indent(pp)
-	printstyled(pp.io, "Domain: "; color = :light_black)
-	# Reuse the CartesianProduct compact `show`, which already renders
-	# `[a, b] × [c, d]` and collapses degenerate axes to a single value.
-	show(IOContext(pp.io, :compact => true), set)
-	println(pp.io)
+    print_indent(pp)
+    printstyled(pp.io, "Domain: "; color = :light_black)
+    # Reuse the CartesianProduct compact `show`, which already renders
+    # `[a, b] × [c, d]` and collapses degenerate axes to a single value.
+    show(IOContext(pp.io, :compact => true), set)
+    println(pp.io)
 end
 
 """
@@ -67,33 +67,35 @@ end
 
 Prints mesh spacing information.
 """
-function print_mesh_spacing_info(pp::PrettyPrinter, uniform::Union{Bool,Tuple{Vararg{Bool}}}, hmax)
-	print_indent(pp)
-	printstyled(pp.io, "Spacing: "; color = :light_black)
+function print_mesh_spacing_info(
+        pp::PrettyPrinter, uniform::Union{
+            Bool, Tuple{Vararg{Bool}}}, hmax)
+    print_indent(pp)
+    printstyled(pp.io, "Spacing: "; color = :light_black)
 
-	if uniform isa Bool
-		print(pp.io, uniform ? "uniform" : "non-uniform")
-	else
-		# For multidimensional meshes
-		all_uniform = all(uniform)
-		if all_uniform
-			print(pp.io, "uniform")
-		else
-			print(pp.io, "mixed (")
-			for (i, u) in enumerate(uniform)
-				label = get_dimension_label(i)
-				print(pp.io, "$label: ", u ? "uniform" : "non-uniform")
-				i < length(uniform) && print(pp.io, ", ")
-			end
-			print(pp.io, ")")
-		end
-	end
+    if uniform isa Bool
+        print(pp.io, uniform ? "uniform" : "non-uniform")
+    else
+        # For multidimensional meshes
+        all_uniform = all(uniform)
+        if all_uniform
+            print(pp.io, "uniform")
+        else
+            print(pp.io, "mixed (")
+            for (i, u) in enumerate(uniform)
+                label = get_dimension_label(i)
+                print(pp.io, "$label: ", u ? "uniform" : "non-uniform")
+                i < length(uniform) && print(pp.io, ", ")
+            end
+            print(pp.io, ")")
+        end
+    end
 
-	print(pp.io, " • ")
-	printstyled(pp.io, "h"; color = :magenta)
-	print(pp.io, "ₘₐₓ = ")
-	printstyled(pp.io, "$(round(hmax, digits=6))"; color = :blue)
-	println(pp.io)
+    print(pp.io, " • ")
+    printstyled(pp.io, "h"; color = :magenta)
+    print(pp.io, "ₘₐₓ = ")
+    printstyled(pp.io, "$(round(hmax, digits=6))"; color = :blue)
+    println(pp.io)
 end
 
 """
@@ -102,36 +104,35 @@ end
 Prints marker information for a mesh.
 """
 function print_mesh_markers(pp::PrettyPrinter, mesh_markers::MeshMarkers)
-	n_markers = length(mesh_markers)
+    n_markers = length(mesh_markers)
 
-	if n_markers == 0
-		print_indent(pp)
-		printstyled(pp.io, "Markers: "; color = :light_black)
-		printstyled(pp.io, "(none)"; color = :light_black)
-		println(pp.io)
-		return
-	end
+    if n_markers == 0
+        print_indent(pp)
+        printstyled(pp.io, "Markers: "; color = :light_black)
+        printstyled(pp.io, "(none)"; color = :light_black)
+        println(pp.io)
+        return
+    end
 
-	print_indent(pp)
-	printstyled(pp.io, "Markers: "; color = :light_black)
-	printstyled(pp.io, "$n_markers label$(n_markers == 1 ? "" : "s")"; color = :yellow)
-	print(pp.io, " • ")
+    print_indent(pp)
+    printstyled(pp.io, "Markers: "; color = :light_black)
+    printstyled(pp.io, "$n_markers label$(n_markers == 1 ? "" : "s")"; color = :yellow)
+    print(pp.io, " • ")
 
-	# Print labels
-	labels_list = collect(keys(mesh_markers))
-	for (i, label) in enumerate(labels_list)
-		printstyled(pp.io, ":$label"; color = :green)
+    # Print labels
+    labels_list = collect(keys(mesh_markers))
+    for (i, label) in enumerate(labels_list)
+        printstyled(pp.io, ":$label"; color = :green)
 
-		# Count marked points
-		marked_count = count(mesh_markers[label])
-		if marked_count > 0
-			print(pp.io, " (")
-			printstyled(pp.io, "$marked_count"; color = :blue)
-			print(pp.io, ")")
-		end
+        # Count marked points
+        marked_count = count(mesh_markers[label])
+        if marked_count > 0
+            print(pp.io, " (")
+            printstyled(pp.io, "$marked_count"; color = :blue)
+            print(pp.io, ")")
+        end
 
-		i < length(labels_list) && print(pp.io, ", ")
-	end
-	println(pp.io)
+        i < length(labels_list) && print(pp.io, ", ")
+    end
+    println(pp.io)
 end
-

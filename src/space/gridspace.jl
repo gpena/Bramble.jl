@@ -81,11 +81,11 @@ This is a wrapper that bundles the raw numerical data (the vector `data`) with i
 
 $(FIELDS)
 """
-struct VectorElement{S,T,VT<:AbstractVector{T}} <: AbstractVector{T}
-	"the raw vector data containing the degrees of freedom."
-	data::VT
-	"the parent function space to which this vector belongs."
-	space::S
+struct VectorElement{S, T, VT <: AbstractVector{T}} <: AbstractVector{T}
+    "the raw vector data containing the degrees of freedom."
+    data::VT
+    "the parent function space to which this vector belongs."
+    space::S
 end
 
 """
@@ -99,14 +99,12 @@ Similar to , this container bundles a raw matrix (`data`) with its parent `space
 
 $(FIELDS)
 """
-struct MatrixElement{S,T,MT<:AbstractMatrix{T}} <: AbstractMatrix{T}
-	"the matrix data representing the linear operator."
-	data::MT
-	"the parent function space to which this vector belongs."
-	space::S
+struct MatrixElement{S, T, MT <: AbstractMatrix{T}} <: AbstractMatrix{T}
+    "the matrix data representing the linear operator."
+    data::MT
+    "the parent function space to which this vector belongs."
+    space::S
 end
-
-
 
 """
 	InnerProductType
@@ -241,8 +239,6 @@ Returns the [GridSpaceBuffer](@ref) used for efficient memory management in the 
 """
 function vector_buffer end
 
-
-
 """
 	$(TYPEDSIGNATURES)
 
@@ -271,10 +267,8 @@ function ndofs end
 
 Returns the number of field components of the function space (e.g. 1 for scalar, D for vector).
 """
-@inline ncomponents(::AbstractSpaceType{N}) where N = N
-@inline ncomponents(::Type{<:AbstractSpaceType{N}}) where N = N
-
-
+@inline ncomponents(::AbstractSpaceType{N}) where {N} = N
+@inline ncomponents(::Type{<:AbstractSpaceType{N}}) where {N} = N
 
 """
 	spaces(Wₕ::AbstractSpaceType)
@@ -282,4 +276,3 @@ Returns the number of field components of the function space (e.g. 1 for scalar,
 Returns the constituent subspace(s) of `Wₕ` as a tuple.
 """
 @inline spaces(Wₕ::AbstractSpaceType) = (Wₕ,)
-

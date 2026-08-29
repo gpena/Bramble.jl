@@ -65,27 +65,27 @@ Each `pair` is of the form `:label => func`, where `:label` identifies the bound
 The `cartesian_product` can be a `CartesianProduct` mesh domain or an `ScalarGridSpace` from which the mesh can be extracted. The `:label` must match a label in the mesh definition.
 """
 function dirichlet_constraints(input, pairs::Pair...)
-	cartesian_product = if input isa ScalarGridSpace
-		set(mesh(input))
-	elseif input isa CompositeGridSpace
-		set(mesh(first_space(input)))  # recursive: first leaf space
-	else
-		set(input)
-	end
-	T, domain = _get_eltype_and_domain(cartesian_product)
-	_create_generic_markers(T, domain, pairs...)
+    cartesian_product = if input isa ScalarGridSpace
+        set(mesh(input))
+    elseif input isa CompositeGridSpace
+        set(mesh(first_space(input)))  # recursive: first leaf space
+    else
+        set(input)
+    end
+    T, domain = _get_eltype_and_domain(cartesian_product)
+    _create_generic_markers(T, domain, pairs...)
 end
 
 function dirichlet_constraints(input, I::CartesianProduct{1}, pairs::Pair...)
-	cartesian_product = if input isa ScalarGridSpace
-		set(mesh(input))
-	elseif input isa CompositeGridSpace
-		set(mesh(first_space(input)))
-	else
-		set(input)
-	end
-	T, domain = _get_eltype_and_domain(cartesian_product)
-	_create_generic_markers(T, domain, I, pairs...)
+    cartesian_product = if input isa ScalarGridSpace
+        set(mesh(input))
+    elseif input isa CompositeGridSpace
+        set(mesh(first_space(input)))
+    else
+        set(input)
+    end
+    T, domain = _get_eltype_and_domain(cartesian_product)
+    _create_generic_markers(T, domain, I, pairs...)
 end
 
 """
@@ -105,7 +105,7 @@ Internal helper to extract element type and spatial domain from either a
 This helper enables a unified interface for `dirichlet_constraints` that accepts
 both mesh domains and grid spaces.
 """
-_get_eltype_and_domain(X::CartesianProduct{D,T}) where {D,T} = (T, X)
+_get_eltype_and_domain(X::CartesianProduct{D, T}) where {D, T} = (T, X)
 _get_eltype_and_domain(Wₕ::ScalarGridSpace) = (eltype(Wₕ), set(mesh(Wₕ)))
 
 """
@@ -113,7 +113,9 @@ _get_eltype_and_domain(Wₕ::ScalarGridSpace) = (eltype(Wₕ), set(mesh(Wₕ)))
 
 	Creates a single Dirichlet boundary constraint with function `f` with the label `:dirichlet`.
 """
-@inline dirichlet_constraints(X::CartesianProduct, f::F) where F<:Function = dirichlet_constraints(X, :boundary => f)
+@inline dirichlet_constraints(X::CartesianProduct, f::F) where {F <:
+                                                                Function} = dirichlet_constraints(
+    X, :boundary => f)
 
 """
 	_validate_dirichlet_labels(labels)
@@ -127,9 +129,9 @@ This function is used by both `bilinear_form.jl` and `linear_form.jl` to validat
 the `dirichlet_labels` keyword argument before applying boundary conditions.
 """
 function _validate_dirichlet_labels(labels)
-	if labels !== nothing && !(labels isa Symbol || labels isa Tuple)
-		error("dirichlet_labels must be nothing, a Symbol, or a Tuple of Symbols")
-	end
+    if labels !== nothing && !(labels isa Symbol || labels isa Tuple)
+        error("dirichlet_labels must be nothing, a Symbol, or a Tuple of Symbols")
+    end
 end
 
 #==============================================================================
@@ -147,49 +149,49 @@ For each index `i` associated with the given Dirichlet `labels`, this function:
  2. Sets the diagonal element `A[i, i]` to one.
 """
 function dirichlet_bc!(A::AbstractMatrix, Ωₕ::AbstractMeshType, labels::Symbol...)
-	for p in labels
-		vec_bool = index_in_marker(Ωₕ, p)
-		_dirichlet_bc_indices!(A, vec_bool)
-	end
+    for p in labels
+        vec_bool = index_in_marker(Ωₕ, p)
+        _dirichlet_bc_indices!(A, vec_bool)
+    end
 end
 
 # Overloads for ScalarGridSpace / AbstractSpaceType (single component)
 @inline function dirichlet_bc!(A::AbstractMatrix, space::ScalarGridSpace, labels::Symbol...)
-	return dirichlet_bc!(A, mesh(space), labels...)
+    return dirichlet_bc!(A, mesh(space), labels...)
 end
 
 @inline function dirichlet_bc!(v::AbstractVector, space::ScalarGridSpace, bcs, labels::Symbol...)
-	return dirichlet_bc!(v, mesh(space), bcs, labels...)
+    return dirichlet_bc!(v, mesh(space), bcs, labels...)
 end
 
 # Overloads for CompositeGridSpace — handles both flat and hierarchical spaces
 # using collect_leaf_spaces_offsets for recursive flattening.
 function dirichlet_bc!(A::AbstractMatrix, space::CompositeGridSpace, labels::Symbol...)
-	total_dofs = ndofs(space)
-	global_vec_bool = BitVector(undef, total_dofs)
+    total_dofs = ndofs(space)
+    global_vec_bool = BitVector(undef, total_dofs)
 
-	# collect_leaf_spaces_offsets is defined in block_extract.jl
-	leaf_info = collect_leaf_spaces_offsets(space)
+    # collect_leaf_spaces_offsets is defined in block_extract.jl
+    leaf_info = collect_leaf_spaces_offsets(space)
 
-	for p in labels
-		fill!(global_vec_bool, false)
-		for (sp, offset) in leaf_info
-			vec_bool_c = index_in_marker(mesh(sp), p)
-			for i in 1:ndofs(sp)
-				global_vec_bool[offset + i] = vec_bool_c[i]
-			end
-		end
-		_dirichlet_bc_indices!(A, global_vec_bool)
-	end
+    for p in labels
+        fill!(global_vec_bool, false)
+        for (sp, offset) in leaf_info
+            vec_bool_c = index_in_marker(mesh(sp), p)
+            for i in 1:ndofs(sp)
+                global_vec_bool[offset + i] = vec_bool_c[i]
+            end
+        end
+        _dirichlet_bc_indices!(A, global_vec_bool)
+    end
 end
 
 function dirichlet_bc!(v::AbstractVector, space::CompositeGridSpace, bcs, labels::Symbol...)
-	leaf_info = collect_leaf_spaces_offsets(space)
+    leaf_info = collect_leaf_spaces_offsets(space)
 
-	for (sp, offset) in leaf_info
-		v_view = view(v, (offset + 1):(offset + ndofs(sp)))
-		dirichlet_bc!(v_view, mesh(sp), bcs, labels...)
-	end
+    for (sp, offset) in leaf_info
+        v_view = view(v, (offset + 1):(offset + ndofs(sp)))
+        dirichlet_bc!(v_view, mesh(sp), bcs, labels...)
+    end
 end
 
 """
@@ -198,33 +200,33 @@ end
 Apply Dirichlet boundary conditions to vector `v` using the [DirichletConstraint](@ref) object `bcs` and the mesh `Ωₕ`.
 """
 function dirichlet_bc!(v::AbstractVector, Ωₕ::AbstractMeshType, bcs::DirichletConstraint, labels::Symbol...)
-	isempty(labels) && return
+    isempty(labels) && return
 
-	for marker in conditions(bcs)
-		current_label = label(marker)
-		if current_label in labels
-			func = identifier(marker)
-			marker_indices = index_in_marker(Ωₕ, current_label)
-			_dirichlet_bc_indices!(v, Ωₕ, marker_indices, func)
-		end
-	end
+    for marker in conditions(bcs)
+        current_label = label(marker)
+        if current_label in labels
+            func = identifier(marker)
+            marker_indices = index_in_marker(Ωₕ, current_label)
+            _dirichlet_bc_indices!(v, Ωₕ, marker_indices, func)
+        end
+    end
 
-	return
+    return
 end
 
 function dirichlet_bc!(v::AbstractVector, Ωₕ::AbstractMeshType, bcs::EvaluatedDomainMarkers, labels::Symbol...)
-	isempty(labels) && return
+    isempty(labels) && return
 
-	for marker in conditions(bcs)
-		current_label = label(marker)
-		if current_label in labels
-			func = identifier(marker)
-			marker_indices = index_in_marker(Ωₕ, current_label)
-			_dirichlet_bc_indices!(v, Ωₕ, marker_indices, func)
-		end
-	end
+    for marker in conditions(bcs)
+        current_label = label(marker)
+        if current_label in labels
+            func = identifier(marker)
+            marker_indices = index_in_marker(Ωₕ, current_label)
+            _dirichlet_bc_indices!(v, Ωₕ, marker_indices, func)
+        end
+    end
 
-	return
+    return
 end
 
 """
@@ -233,25 +235,25 @@ end
 Internal helper to apply Dirichlet boundary conditions to matrix `A` for a given set of indices.
 """
 function _dirichlet_bc_indices!(A::AbstractMatrix, index_in_marker::BitVector)
-	T = eltype(A)
+    T = eltype(A)
 
-	chunks = index_in_marker.chunks
-	@inbounds for (chunk_idx, chunk) in enumerate(chunks)
-		chunk == zero(UInt64) && continue # Skip chunks with no Dirichlet nodes
+    chunks = index_in_marker.chunks
+    @inbounds for (chunk_idx, chunk) in enumerate(chunks)
+        chunk == zero(UInt64) && continue # Skip chunks with no Dirichlet nodes
 
-		offset = (chunk_idx - 1) * 64
-		temp_chunk = chunk
-		while temp_chunk != zero(UInt64)
-			bit_pos = trailing_zeros(temp_chunk)
-			i = offset + bit_pos + 1
+        offset = (chunk_idx - 1) * 64
+        temp_chunk = chunk
+        while temp_chunk != zero(UInt64)
+            bit_pos = trailing_zeros(temp_chunk)
+            i = offset + bit_pos + 1
 
-			# Zero out the i-th row and set diagonal to one
-			@views A[i, :] .= zero(T)
-			A[i, i] = one(T)
+            # Zero out the i-th row and set diagonal to one
+            @views A[i, :] .= zero(T)
+            A[i, i] = one(T)
 
-			temp_chunk &= temp_chunk - 1 # Clear the processed bit
-		end
-	end
+            temp_chunk &= temp_chunk - 1 # Clear the processed bit
+        end
+    end
 end
 
 """
@@ -261,33 +263,33 @@ Applies Dirichlet boundary conditions to a sparse matrix `A` by directly manipul
 its CSC data structure for high performance.
 """
 function _dirichlet_bc_indices!(A::SparseMatrixCSC, index_in_marker::BitVector)
-	T = eltype(A)
-	rows = rowvals(A)
-	vals = nonzeros(A)
+    T = eltype(A)
+    rows = rowvals(A)
+    vals = nonzeros(A)
 
-	# 1. Zero out non-zero values in Dirichlet rows
-	@inbounds for j in axes(A, 2)
-		@simd for i in nzrange(A, j)
-			if index_in_marker[rows[i]]
-				vals[i] = zero(T)
-			end
-		end
-	end
+    # 1. Zero out non-zero values in Dirichlet rows
+    @inbounds for j in axes(A, 2)
+        @simd for i in nzrange(A, j)
+            if index_in_marker[rows[i]]
+                vals[i] = zero(T)
+            end
+        end
+    end
 
-	# 2. Set diagonal elements to one for all Dirichlet rows
-	chunks = index_in_marker.chunks
-	@inbounds for (chunk_idx, chunk) in enumerate(chunks)
-		chunk == zero(UInt64) && continue
+    # 2. Set diagonal elements to one for all Dirichlet rows
+    chunks = index_in_marker.chunks
+    @inbounds for (chunk_idx, chunk) in enumerate(chunks)
+        chunk == zero(UInt64) && continue
 
-		offset = (chunk_idx - 1) * 64
-		temp_chunk = chunk
-		while temp_chunk != zero(UInt64)
-			bit_pos = trailing_zeros(temp_chunk)
-			i = offset + bit_pos + 1
-			A[i, i] = one(T)
-			temp_chunk &= temp_chunk - 1
-		end
-	end
+        offset = (chunk_idx - 1) * 64
+        temp_chunk = chunk
+        while temp_chunk != zero(UInt64)
+            bit_pos = trailing_zeros(temp_chunk)
+            i = offset + bit_pos + 1
+            A[i, i] = one(T)
+            temp_chunk &= temp_chunk - 1
+        end
+    end
 end
 
 """
@@ -310,38 +312,41 @@ The value of `func` at the `i`-th mesh point.
 """
 _function_in_linear_indices(func, Ωₕ, i) = func(point(Ωₕ, indices(Ωₕ)[i]))
 
-function _dirichlet_bc_indices!(v::AbstractVector, Ωₕ::AbstractMeshType, index_in_marker::BitVector, func::BrambleFunction)
-	g = PointwiseEvaluator(func, Ωₕ)
-	cart_indices = indices(Ωₕ)
+function _dirichlet_bc_indices!(v::AbstractVector, Ωₕ::AbstractMeshType,
+        index_in_marker::BitVector, func::BrambleFunction)
+    g = PointwiseEvaluator(func, Ωₕ)
+    cart_indices = indices(Ωₕ)
 
-	chunks = index_in_marker.chunks
-	@inbounds for (chunk_idx, chunk) in enumerate(chunks)
-		chunk == zero(UInt64) && continue
+    chunks = index_in_marker.chunks
+    @inbounds for (chunk_idx, chunk) in enumerate(chunks)
+        chunk == zero(UInt64) && continue
 
-		offset = (chunk_idx - 1) * 64
-		temp_chunk = chunk
-		while temp_chunk != zero(UInt64)
-			bit_pos = trailing_zeros(temp_chunk)
-			idx = offset + bit_pos + 1
-			v[idx] = g(cart_indices[idx])
-			temp_chunk &= temp_chunk - 1
-		end
-	end
+        offset = (chunk_idx - 1) * 64
+        temp_chunk = chunk
+        while temp_chunk != zero(UInt64)
+            bit_pos = trailing_zeros(temp_chunk)
+            idx = offset + bit_pos + 1
+            v[idx] = g(cart_indices[idx])
+            temp_chunk &= temp_chunk - 1
+        end
+    end
 
-	return
+    return
 end
 
 #==============================================================================
 					SYMMETRIZATION OF THE LINEAR SYSTEM
 ==============================================================================#
 
-function dirichlet_bc_symmetrize!(A::AbstractMatrix, F::AbstractVector, Ωₕ::AbstractMeshType, labels::Symbol...; dropzeros = false)
-	dirichlet_bc!(A, Ωₕ, labels...)
-	symmetrize!(A, F, Ωₕ, labels...)
+function dirichlet_bc_symmetrize!(
+        A::AbstractMatrix, F::AbstractVector, Ωₕ::AbstractMeshType,
+        labels::Symbol...; dropzeros = false)
+    dirichlet_bc!(A, Ωₕ, labels...)
+    symmetrize!(A, F, Ωₕ, labels...)
 
-	if dropzeros && A isa SparseMatrixCSC
-		dropzeros!(A)
-	end
+    if dropzeros && A isa SparseMatrixCSC
+        dropzeros!(A)
+    end
 end
 
 """
@@ -358,62 +363,62 @@ The algorithm goes as follows: for any given row `i` where Dirichlet boundary co
 	- replace all elements in the `i`-th column of `A` (except the `i`-th by zero).
 """
 function symmetrize!(A::AbstractMatrix, F::AbstractVector, Ωₕ::AbstractMeshType, labels::Symbol...)
-	for p in labels
-		marker_indices = index_in_marker(Ωₕ, p)
-		symmetrize!(A, F, marker_indices)
-	end
+    for p in labels
+        marker_indices = index_in_marker(Ωₕ, p)
+        symmetrize!(A, F, marker_indices)
+    end
 end
 
 # Generic implementation for dense matrices
 function symmetrize!(A::AbstractMatrix, F::AbstractVector, index_in_marker::BitVector)
-	dirichlet_indices = findall(index_in_marker)
-	T = eltype(A)
+    dirichlet_indices = findall(index_in_marker)
+    T = eltype(A)
 
-	for i in dirichlet_indices
-		dirichlet_val = F[i]
-		for k in axes(A, 1)
-			if i != k
-				F[k] -= A[k, i] * dirichlet_val
-				A[k, i] = zero(T)
-			end
-		end
-	end
+    for i in dirichlet_indices
+        dirichlet_val = F[i]
+        for k in axes(A, 1)
+            if i != k
+                F[k] -= A[k, i] * dirichlet_val
+                A[k, i] = zero(T)
+            end
+        end
+    end
 
-	return
+    return
 end
 
 # Implementation for sparse matrices
 function symmetrize!(A::SparseMatrixCSC, F::AbstractVector, index_in_marker::BitVector)
-	T = eltype(A)
-	rows = rowvals(A)
-	vals = nonzeros(A)
+    T = eltype(A)
+    rows = rowvals(A)
+    vals = nonzeros(A)
 
-	chunks = index_in_marker.chunks
-	@inbounds for (chunk_idx, chunk) in enumerate(chunks)
-		chunk == zero(UInt64) && continue
+    chunks = index_in_marker.chunks
+    @inbounds for (chunk_idx, chunk) in enumerate(chunks)
+        chunk == zero(UInt64) && continue
 
-		offset = (chunk_idx - 1) * 64
-		temp_chunk = chunk
-		while temp_chunk != zero(UInt64)
-			bit_pos = trailing_zeros(temp_chunk)
-			i = offset + bit_pos + 1
+        offset = (chunk_idx - 1) * 64
+        temp_chunk = chunk
+        while temp_chunk != zero(UInt64)
+            bit_pos = trailing_zeros(temp_chunk)
+            i = offset + bit_pos + 1
 
-			dirichlet_val = F[i]
+            dirichlet_val = F[i]
 
-			# Update F and zero out column `i` using sparse structure
-			@simd for k_ptr in nzrange(A, i)
-				row_k = rows[k_ptr]
-				F[row_k] -= vals[k_ptr] * dirichlet_val
-				vals[k_ptr] = zero(T)
-			end
+            # Update F and zero out column `i` using sparse structure
+            @simd for k_ptr in nzrange(A, i)
+                row_k = rows[k_ptr]
+                F[row_k] -= vals[k_ptr] * dirichlet_val
+                vals[k_ptr] = zero(T)
+            end
 
-			# Restore diagonal and RHS vector value
-			A[i, i] = one(T)
-			F[i] = dirichlet_val
+            # Restore diagonal and RHS vector value
+            A[i, i] = one(T)
+            F[i] = dirichlet_val
 
-			temp_chunk &= temp_chunk - 1
-		end
-	end
+            temp_chunk &= temp_chunk - 1
+        end
+    end
 
-	return
+    return
 end
