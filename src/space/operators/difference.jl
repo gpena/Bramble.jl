@@ -124,6 +124,30 @@ end
 @inline _op_mesh(Wₕ::AbstractSpaceType) = mesh(Wₕ)
 @inline _op_mesh(uₕ::VectorElement) = mesh(space(uₕ))
 
+# A composite grid function is a stack of scalar ones, so an operator applies to each
+# component in turn. Their `components` are views onto the parent, so writing into the
+# components of `similar(uₕ)` fills it.
+#
+# The grid shape has to come from the mesh. `ndofs(space, Tuple)` gives it for a scalar
+# space but gives the per-component dof counts for a composite one, so using it here
+# addressed prod(ndofs) slots into a vector holding ndofs of them: a 3-component 4x6
+# space addressed 13824 slots into 72, which segfaulted under the engines' @inbounds.
+@inline _grid_dims(uₕ::VectorElement) = npoints(_op_mesh(uₕ), Tuple)
+
+@inline function _apply_stencil!(vₕ::VectorElement{<:ScalarGridSpace},
+        uₕ::VectorElement{<:ScalarGridSpace}, h, dir::GridDirection, dim_val::Val)
+    _difference_engine!(vₕ.data, uₕ.data, h, _grid_dims(uₕ), dir, dim_val)
+    return nothing
+end
+
+# `f!` is the single-component applicator; it is called once per component.
+@inline function _apply_componentwise!(f!, vₕ::VectorElement{<:CompositeGridSpace{NC}},
+        uₕ::VectorElement{<:CompositeGridSpace{NC}}) where {NC}
+    vc, uc = components(vₕ), components(uₕ)
+    ntuple(i -> (f!(vc[i], uc[i]); nothing), Val(NC))
+    return nothing
+end
+
 # --- Shared stencil traversal --------------------------------------------------- #
 # The difference and the average walk the grid identically: one pass over the interior,
 # where every point has a neighbour along the stencil direction, and one over the single
@@ -361,22 +385,39 @@ for config in _DIFFERENCE_OP_CONFIGS
         # --- Generic applicators ---
         @inline $diff_name(Wₕ::AbstractSpaceType, dim_val::Val) = $diff_name(
             mesh(Wₕ), dim_val)
-        function $diff_name(uₕ::VectorElement, dim_val::Val)
+        function $diff_name(uₕ::VectorElement{<:ScalarGridSpace}, dim_val::Val)
             vₕ = similar(uₕ)
-            dims = ndofs(space(uₕ), Tuple)
-            _difference_engine!(vₕ.data, uₕ.data, nothing, dims, $dir_instance, dim_val)
+            _apply_stencil!(vₕ, uₕ, nothing, $dir_instance, dim_val)
+            return vₕ
+        end
+
+        # A composite grid function is differenced one component at a time.
+        function $diff_name(uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val)
+            vₕ = similar(uₕ)
+            _apply_componentwise!(
+                (v, u) -> _apply_stencil!(v, u, nothing, $dir_instance, dim_val), vₕ, uₕ)
             return vₕ
         end
         @inline $finite_diff_name(Wₕ::AbstractSpaceType, dim_val::Val) = $finite_diff_name(
             mesh(Wₕ), dim_val)
-        function $finite_diff_name(uₕ::VectorElement, dim_val::Val{DIM}) where {DIM}
+        function $finite_diff_name(
+                uₕ::VectorElement{<:ScalarGridSpace}, dim_val::Val{DIM}) where {DIM}
             vₕ = similar(uₕ)
-            dims = ndofs(space(uₕ), Tuple)
             # The mesh caches its spacings, so hand the engine that vector rather
             # than a callable: indexing it is 3.6x faster than one call per grid
             # point, and it needs no allocation of its own.
-            h = $spacings_func(mesh(space(uₕ))(DIM))
-            _difference_engine!(vₕ.data, uₕ.data, h, dims, $dir_instance, dim_val)
+            h = $spacings_func(_op_mesh(uₕ)(DIM))
+            _apply_stencil!(vₕ, uₕ, h, $dir_instance, dim_val)
+            return vₕ
+        end
+
+        # Every component shares the mesh, so the spacings are fetched once.
+        function $finite_diff_name(
+                uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val{DIM}) where {DIM}
+            vₕ = similar(uₕ)
+            h = $spacings_func(_op_mesh(uₕ)(DIM))
+            _apply_componentwise!(
+                (v, u) -> _apply_stencil!(v, u, h, $dir_instance, dim_val), vₕ, uₕ)
             return vₕ
         end
     end

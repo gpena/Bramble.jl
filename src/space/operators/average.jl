@@ -188,10 +188,20 @@ for config in _AVERAGE_OP_CONFIGS
         # --- Generic applicators ---
         @inline $average_name(Wₕ::AbstractSpaceType, dim_val::Val) = $average_name(
             mesh(Wₕ), dim_val)
-        function $average_name(uₕ::VectorElement, dim_val::Val)
+        function $average_name(uₕ::VectorElement{<:ScalarGridSpace}, dim_val::Val)
             vₕ = similar(uₕ)
-            dims = ndofs(space(uₕ), Tuple)
-            _average_engine!(vₕ.data, uₕ.data, dims, $dir_instance, dim_val)
+            _average_engine!(
+                vₕ.data, uₕ.data, _grid_dims(uₕ), $dir_instance, dim_val)
+            return vₕ
+        end
+
+        # A composite grid function is averaged one component at a time.
+        function $average_name(uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val)
+            vₕ = similar(uₕ)
+            _apply_componentwise!(
+                (v, u) -> _average_engine!(
+                    v.data, u.data, _grid_dims(u), $dir_instance, dim_val),
+                vₕ, uₕ)
             return vₕ
         end
     end
