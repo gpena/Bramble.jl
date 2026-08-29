@@ -1,8 +1,8 @@
 #===========================================================================#
 # The restriction operator Rₕ.
 #
-# Evaluates a function at the grid points. Split from vectorelement.jl, whose
-# concern is the element itself rather than the operators that build one.
+# Evaluates a function at the grid points. It lives with the other operators rather
+# than with the element it produces, alongside the stencil families and avgₕ.
 #===========================================================================#
 
 ########################

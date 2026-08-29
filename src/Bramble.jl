@@ -103,9 +103,11 @@ include("space/gridspace.jl")
 include("space/scalar_gridspace.jl")
 include("space/vector_gridspace.jl")
 include("space/vectorelement.jl")
-include("space/restriction.jl")
-include("space/cell_average.jl")
 
+# Rₕ and avgₕ come first: they need only the element, while the stencil operators below
+# share a traversal defined in difference.jl.
+include("space/operators/restriction.jl")
+include("space/operators/cell_average.jl")
 include("space/operators/shift.jl")
 include("space/operators/difference.jl")
 include("space/operators/jump.jl")

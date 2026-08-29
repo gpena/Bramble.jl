@@ -2,7 +2,10 @@
 # The cell average operator avgₕ, and its quadrature.
 #
 # Averages a function over the cell around each grid point with a tensor-product
-# Gauss-Legendre rule. Split from vectorelement.jl for the same reason as restriction.jl.
+# Gauss-Legendre rule.
+#
+# Distinct from operators/average.jl, which is the two-point average of a grid point with
+# its neighbour. That one is a stencil; this one integrates over a cell.
 #===========================================================================#
 
 ######################
