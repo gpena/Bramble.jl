@@ -32,11 +32,19 @@ jobs:
               - 'Project.toml'
               - '.github/workflows/CI.yml'
               - 'codecov.yml'
+              - '_typos.toml'
             docs:
               - 'docs/**'
               - 'src/**'
               - 'Project.toml'
               - '*.md'
+
+  spelling:
+    name: Spell check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: crate-ci/typos@v1.49.0
 
   test:
     needs: changes
@@ -49,7 +57,7 @@ jobs:
       fail-fast: false
       matrix:
         version: ["1.12", "nightly"]
-        os: [macOS-latest]
+        os: [ubuntu-latest, macOS-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
@@ -60,12 +68,34 @@ jobs:
           cache-compiled: "true"
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
+        env:
+          BRAMBLE_TEST_GROUP: unit
       - uses: julia-actions/julia-processcoverage@v1
       - uses: codecov/codecov-action@v5
         with:
           files: lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
+
+  quality:
+    needs: changes
+    if: ${{ needs.changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch' }}
+    name: Quality (Aqua & JET)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.12"
+      - uses: julia-actions/cache@v2
+        with:
+          cache-compiled: "true"
+      - uses: julia-actions/julia-buildpkg@v1
+      - uses: julia-actions/julia-runtest@v1
+        env:
+          BRAMBLE_TEST_GROUP: quality
 
   format:
     needs: changes

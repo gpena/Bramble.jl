@@ -42,8 +42,9 @@ macro test_allocs(call_expr)
 end
 
 const __bramble_with_examples = false
-const __bramble_with_quality = true
-const __bramble_with_unit_tests = true
+const __bramble_test_group = get(ENV, "BRAMBLE_TEST_GROUP", "all")
+const __bramble_with_quality = __bramble_test_group in ("all", "quality")
+const __bramble_with_unit_tests = __bramble_test_group in ("all", "unit")
 
 if __bramble_with_unit_tests
     @testset verbose=true "Core library" begin

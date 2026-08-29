@@ -1,0 +1,7 @@
+# Typos configuration for Bramble.jl
+[default.extend-words]
+ndofs = "ndofs"
+npoints = "npoints"
+submesh = "submesh"
+submeshes = "submeshes"
+dirichlet = "dirichlet"
