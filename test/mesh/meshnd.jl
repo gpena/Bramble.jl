@@ -534,3 +534,64 @@ using LinearAlgebra: hypot
         end
     end
 end # Main Testset
+
+@testset "Refinement leaves the mesh self-consistent" begin
+    # iterative_refinement! refines each submesh, and each of those regenerates its own
+    # indices. The parent holds a CartesianIndices spanning the whole grid, which has to
+    # be rebuilt too. It was not: npoints reported the refined count while indices still
+    # spanned the old one, so everything that iterates indices(Ωₕ) wrote only the old
+    # index set and left the rest of a grid function holding whatever was in the fresh
+    # allocation. On a 5x4 grid that was 20 of 63 entries written and 43 left as garbage,
+    # which showed up downstream as NaN and values around 1e297.
+    #
+    # The two-argument form, which also takes markers, always rebuilt the indices; only
+    # the one-argument form was affected.
+
+    @testset "indices track npoints after refinement" begin
+        for npts in ((5, 4), (3, 4, 5))
+            D = length(npts)
+            Ω = D == 2 ? domain(interval(0.0, 1.0) × interval(0.0, 1.0)) :
+                domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)))
+            Ωₕ = mesh(Ω, npts, ntuple(_ -> true, D))
+
+            for _ in 1:2
+                iterative_refinement!(Ωₕ)
+                @test size(indices(Ωₕ)) == npoints(Ωₕ, Tuple)
+                @test length(indices(Ωₕ)) == npoints(Ωₕ)
+                @test npoints(Ωₕ) == prod(npoints(Ωₕ, Tuple))
+            end
+        end
+    end
+
+    @testset "a grid function on a refined mesh is fully written" begin
+        # The observable consequence: with a stale index set, Rₕ leaves entries
+        # untouched, so the result does not match the function it restricted.
+        for npts in ((5, 4), (3, 4, 5))
+            D = length(npts)
+            Ω = D == 2 ? domain(interval(0.0, 1.0) × interval(0.0, 1.0)) :
+                domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)))
+            Ωₕ = mesh(Ω, npts, ntuple(_ -> true, D))
+            iterative_refinement!(Ωₕ)
+
+            Wₕ = gridspace(Ωₕ)
+            f = x -> sum(x)
+            uₕ = Rₕ(Wₕ, f)
+
+            @test length(Bramble.values(uₕ)) == npoints(Ωₕ)
+            @test !any(isnan, Bramble.values(uₕ))
+            # every entry equals f at its own point, so none was left unwritten
+            @test all(Bramble.values(uₕ)[i] ≈ f(point(Ωₕ, idx))
+            for (i, idx) in enumerate(indices(Ωₕ)))
+            # the full range of the domain is reached
+            @test maximum(Bramble.values(uₕ)) ≈ Float64(D)
+        end
+    end
+
+    @testset "the marker form stays consistent too" begin
+        Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
+        Ωₕ = mesh(Ω, (5, 4), (true, true))
+        iterative_refinement!(Ωₕ, markers(Ω))
+        @test size(indices(Ωₕ)) == npoints(Ωₕ, Tuple)
+        @test length(indices(Ωₕ)) == npoints(Ωₕ)
+    end
+end

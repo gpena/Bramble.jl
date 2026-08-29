@@ -80,6 +80,7 @@ if __bramble_with_unit_tests
             include("space/inner_product.jl")
             include("space/composite_operators.jl")
             include("space/inference_allocation.jl")
+            include("space/convergence.jl")
         end
 
         #=

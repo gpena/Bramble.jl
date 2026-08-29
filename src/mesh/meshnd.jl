@@ -235,18 +235,22 @@ function iterative_refinement!(Ωₕ::MeshnD{D}) where {D}
     @inbounds for i in 1:D
         iterative_refinement!(Ωₕ(i))
     end
-    return
+
+    # Each submesh regenerated its own indices, but the parent holds a CartesianIndices
+    # spanning the whole grid and it has to be rebuilt from the new sizes. Without this
+    # the mesh is left inconsistent: npoints reports the refined count while indices
+    # still spans the old one, so everything that iterates indices(Ωₕ), which is every
+    # restriction and every operator, writes only the old index set and leaves the rest
+    # of a grid function holding whatever was in the fresh allocation.
+    set_indices!(Ωₕ, generate_indices(npoints(Ωₕ, Tuple)))
+    return nothing
 end
 
 function iterative_refinement!(Ωₕ::MeshnD{D}, domain_markers::DomainMarkers) where {D}
     iterative_refinement!(Ωₕ)
-
-    npts = npoints(Ωₕ, Tuple)
-    idxs = generate_indices(npts)
-
-    set_indices!(Ωₕ, idxs)
+    # The markers are BitVectors sized to the old grid, so they are rebuilt too.
     set_markers!(Ωₕ, domain_markers)
-    return
+    return nothing
 end
 
 function change_points!(Ωₕ::MeshnD{D}, pts) where {D}
