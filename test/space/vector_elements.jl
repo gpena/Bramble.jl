@@ -597,3 +597,86 @@ end
 	end
 end
 
+@testset "Tuple-of-elements arithmetic and remaining paths" begin
+	import Bramble: values, space_type, _find_vec_in_broadcast, _func2array!,
+					_cell_average_kernel, _gauss_rule, VectorElement
+
+	Ωₕ = mesh(domain(interval(0.0, 1.0)), 6, true)
+	W  = gridspace(Ωₕ)
+
+	@testset "scaling and multiplying a tuple of elements" begin
+		u = element(W, 3.0)
+		v = (element(W, 2.0), element(W, 5.0))
+
+		# uₕ * (v₁, v₂) multiplies componentwise
+		z = u * v
+		@test z isa NTuple{2,VectorElement}
+		@test values(z[1]) == fill(6.0, 6)
+		@test values(z[2]) == fill(15.0, 6)
+
+		# a * (v₁, v₂) and the two reversed forms
+		z2 = 2.0 * v
+		@test values(z2[1]) == fill(4.0, 6)
+		@test values(z2[2]) == fill(10.0, 6)
+		@test values((v * 2.0)[1]) == values(z2[1])
+		@test values((v * u)[2]) == values(z[2])
+
+		# the originals are untouched
+		@test values(v[1]) == fill(2.0, 6)
+		@test values(u) == fill(3.0, 6)
+	end
+
+	@testset "space_type" begin
+		u = element(W)
+		@test space_type(typeof(u)) === typeof(W)
+	end
+
+	@testset "broadcast helper bottoms out on an empty tuple" begin
+		@test _find_vec_in_broadcast(()) === nothing
+		@test _find_vec_in_broadcast((1, 2.0, :a)) === nothing
+		u = element(W)
+		@test _find_vec_in_broadcast((1, u, 2)) === u
+	end
+
+	@testset "_func2array! rejects a tuple target" begin
+		# multi-component restriction dispatches per component, so a tuple must
+		# never reach the workhorse
+		@test_throws ArgumentError _func2array!((zeros(3), zeros(3)), identity, indices(Ωₕ))
+	end
+
+	@testset "marker-restricted restriction on a composite element" begin
+		Ω  = domain(interval(0.0, 1.0), :left => :left, :right => :right)
+		Ω2 = mesh(Ω, 6, true)
+		W2 = gridspace(Ω2); V = W2^Val(2)
+
+		uv = element(V)
+		Rₕ!(uv, x -> (1.0, 2.0); markers = (:left,))
+		c = components(uv)
+		@test values(c[1]) == [1.0, 0, 0, 0, 0, 0]
+		@test values(c[2]) == [2.0, 0, 0, 0, 0, 0]
+
+		# a tuple of functions takes the per-component route with the same result
+		wv = element(V)
+		Rₕ!(wv, (x -> 1.0, x -> 2.0); markers = (:left,))
+		@test values(wv) == values(uv)
+	end
+
+	@testset "marker-restricted averaging in more than one dimension" begin
+		Ω2 = domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom)
+		Ωh = mesh(Ω2, (5, 5), (true, true))
+		Wh = gridspace(Ωh)
+
+		u = element(Wh)
+		avgₕ!(u, x -> 1.0; markers = (:bottom,))
+		marked = index_in_marker(Ωh, :bottom)
+		@test all(values(u)[i] ≈ 1.0 for i in eachindex(values(u)) if marked[i])
+		@test all(values(u)[i] == 0.0 for i in eachindex(values(u)) if !marked[i])
+		@test any(marked)
+
+		# the nD kernel form is what the masked path uses
+		nodes, wts = _gauss_rule(Val(3), Float64)
+		k = _cell_average_kernel(x -> 1.0, half_points(Ωh), nodes, wts, Val(2))
+		@test k(first(indices(Ωh))) ≈ 1.0
+	end
+end
+

@@ -297,4 +297,33 @@ using LinearAlgebra: norm
 		@test space(V) === V
 	end
 
+
+	@testset "Composite constructors and collection interface" begin
+		import Bramble: CompositeGridSpace, vector_gridspace, spaces
+
+		W = gridspace(mesh2d)
+
+		# the {N}-only inner constructor
+		V = CompositeGridSpace{2}((W, W))
+		@test V isa CompositeGridSpace{2}
+		@test length(V) == 2
+		@test spaces(V) === (W, W)
+
+		# vector_gridspace with an explicit Val
+		Vv = vector_gridspace(mesh2d, Val(3))
+		@test Vv isa CompositeGridSpace{3}
+		@test all(sp === spaces(Vv)[1] for sp in spaces(Vv))
+
+        # firstindex / lastindex / eachindex / keys
+		# Note: firstindex is an @inline method whose body is the literal 1, so
+		# Julia emits no coverage point for it and it reads as uncovered however
+		# it is called. It is exercised here regardless.
+		@test firstindex(Vv) == 1
+		@test lastindex(Vv) == 3
+		@test eachindex(Vv) == 1:3
+		@test keys(Vv) == 1:3
+		@test Vv[firstindex(Vv)] === Vv[1]
+		@test Vv[lastindex(Vv)] === Vv[3]
+	end
+
 end
