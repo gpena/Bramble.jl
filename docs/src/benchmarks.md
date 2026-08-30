@@ -5,9 +5,9 @@ All measurements below are run on **1,000,000 grid points** per dimension setup 
 
 ## Recorded Baselines
 
-| Commit | Date | Summary | File |
-|---|---|---|---|
-| `0b9a62b` | 2026-08-30 | test: run the allocation assertions under coverage instead of skipping them | `baseline_0b9a62b.json` |
+| Commit | Julia | Date | Summary | File |
+|---|:---:|:---:|---|---|
+| `0b9a62b` | `1.12.7` | 2026-08-30 | test: run the allocation assertions under coverage instead of skipping them | `baseline_0b9a62b.json` |
 
 ## Comparative Timings & Allocations
 
@@ -33,7 +33,7 @@ document.addEventListener("DOMContentLoaded", function() {
         data: {
             labels: ["Dcₓ", "D₋ᵧ", "D₋ₓ", "M₋ₓ"],
             datasets: [{
-    label: '0b9a62b (2026-08-30)',
+    label: '0b9a62b (Julia 1.12.7)',
     data: [257.21, 161.42, 203.71, 171.42],
     backgroundColor: 'rgba(54, 162, 235, 0.85)',
     borderColor: 'rgb(54, 162, 235)',
@@ -93,7 +93,7 @@ document.addEventListener("DOMContentLoaded", function() {
         data: {
             labels: ["D₋₂", "innerₕ", "∇₋ₕ"],
             datasets: [{
-    label: '0b9a62b (2026-08-30)',
+    label: '0b9a62b (Julia 1.12.7)',
     data: [200.92, 240.25, 694.08],
     backgroundColor: 'rgba(54, 162, 235, 0.85)',
     borderColor: 'rgb(54, 162, 235)',
@@ -154,7 +154,7 @@ document.addEventListener("DOMContentLoaded", function() {
         data: {
             labels: ["innerₕ", "norm₁ₕ", "normₕ", "snorm₁ₕ"],
             datasets: [{
-    label: '0b9a62b (2026-08-30)',
+    label: '0b9a62b (Julia 1.12.7)',
     data: [242.04, 790.25, 190.0, 578.08],
     backgroundColor: 'rgba(54, 162, 235, 0.85)',
     borderColor: 'rgb(54, 162, 235)',
@@ -214,7 +214,7 @@ document.addEventListener("DOMContentLoaded", function() {
         data: {
             labels: ["Rₕ 1D (allocates its output)", "Rₕ! 1D", "avgₕ! 1D"],
             datasets: [{
-    label: '0b9a62b (2026-08-30)',
+    label: '0b9a62b (Julia 1.12.7)',
     data: [2.87, 2.87, 16.27],
     backgroundColor: 'rgba(54, 162, 235, 0.85)',
     borderColor: 'rgb(54, 162, 235)',
@@ -273,7 +273,7 @@ document.addEventListener("DOMContentLoaded", function() {
         data: {
             labels: ["D₋ₓ (3 components)", "∇₋ₕ (3 components)"],
             datasets: [{
-    label: '0b9a62b (2026-08-30)',
+    label: '0b9a62b (Julia 1.12.7)',
     data: [0.71, 1.43],
     backgroundColor: 'rgba(54, 162, 235, 0.85)',
     borderColor: 'rgb(54, 162, 235)',
@@ -333,7 +333,7 @@ document.addEventListener("DOMContentLoaded", function() {
         data: {
             labels: ["gridspace 2D", "gridspace 3D", "hₘₐₓ 3D"],
             datasets: [{
-    label: '0b9a62b (2026-08-30)',
+    label: '0b9a62b (Julia 1.12.7)',
     data: [0.37, 1.63, 0.0],
     backgroundColor: 'rgba(54, 162, 235, 0.85)',
     borderColor: 'rgb(54, 162, 235)',
@@ -378,7 +378,7 @@ document.addEventListener("DOMContentLoaded", function() {
 To record performance on a new commit or after an optimization pass, run:
 
 ```bash
-julia --project=benchmark benchmark/benchmarks.jl --save benchmark/baseline_$(git rev-parse --short HEAD).json
+julia --project=benchmark benchmark/benchmarks.jl --save benchmark/baselines/baseline_$(git rev-parse --short HEAD).json
 ```
 
 Rebuilding the documentation (`julia -e 'using Pkg; Pkg.activate("docs"); include("docs/make.jl")'`) will automatically discover all `baseline_*.json` files and append new comparison columns, delta calculations, and chart series.

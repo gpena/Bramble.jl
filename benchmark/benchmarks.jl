@@ -163,6 +163,7 @@ function main(args = ARGS)
     println("tuning...")
     tune!(SUITE)
     results = run(SUITE; verbose = true)
+    append!(results.tags, ["julia:$(VERSION)", "os:$(Sys.KERNEL)", "arch:$(Sys.ARCH)"])
 
     println("\ntimings (median)")
     for (gname, group) in sort(collect(results), by = first)
@@ -180,15 +181,20 @@ function main(args = ARGS)
     i = findfirst(==("--save"), args)
     if i !== nothing && i < length(args)
         BenchmarkTools.save(args[i + 1], results)
-        println("\nsaved baseline to ", args[i + 1])
+        println("\nsaved baseline to ", args[i + 1], " (Julia $VERSION)")
     end
 
     j = findfirst(==("--compare"), args)
     if j !== nothing && j < length(args)
         baseline = BenchmarkTools.load(args[j + 1])[1]
-        println("\nagainst ", args[j + 1], " (regressions and improvements only)")
+        base_jl = "unknown"
+        for t in baseline.tags
+            startswith(string(t), "julia:") &&
+                (base_jl = replace(string(t), "julia:" => ""))
+        end
+        println("\nagainst ", args[j + 1], " (baseline: Julia $base_jl, current: Julia $VERSION)")
         jdg = judge(minimum(results), minimum(baseline))
-        for (gname, group) in leaves(jdg)
+        for (gname, group) in BenchmarkTools.leaves(jdg)
             group.time != :invariant && println("  ", join(gname, " / "), "  time ",
                 group.time, "  memory ", group.memory)
         end

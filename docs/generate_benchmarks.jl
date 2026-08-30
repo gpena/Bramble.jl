@@ -63,14 +63,17 @@ function _select_unit(max_ns::Real)
 end
 
 function generate_benchmarks_markdown(
-        benchmark_dir = normpath(joinpath(@__DIR__, "..", "benchmark")),
+        benchmark_dir = normpath(joinpath(@__DIR__, "..", "benchmark", "baselines")),
         output_path = normpath(joinpath(@__DIR__, "src", "benchmarks.md"))
 )
     json_files = String[]
-    if isdir(benchmark_dir)
-        for f in readdir(benchmark_dir)
-            if endswith(f, ".json") && startswith(f, "baseline_")
-                push!(json_files, joinpath(benchmark_dir, f))
+    for dir in (benchmark_dir, normpath(joinpath(@__DIR__, "..", "benchmark")))
+        if isdir(dir)
+            for f in readdir(dir)
+                if endswith(f, ".json") && startswith(f, "baseline_")
+                    p = joinpath(dir, f)
+                    p in json_files || push!(json_files, p)
+                end
             end
         end
     end
@@ -87,11 +90,11 @@ function generate_benchmarks_markdown(
 
     if isempty(json_files)
         println(io, "> [!NOTE]")
-        println(io, "> No saved benchmark baselines were found in `benchmark/`.")
+        println(io, "> No saved benchmark baselines were found in `benchmark/baselines/`.")
         println(io, "> To run and save a baseline locally on AC power:")
         println(io, "> ```bash")
         println(io,
-            "> julia --project=benchmark benchmark/benchmarks.jl --save benchmark/baseline_\$(git rev-parse --short HEAD).json")
+            "> julia --project=benchmark benchmark/benchmarks.jl --save benchmark/baselines/baseline_\$(git rev-parse --short HEAD).json")
         println(io, "> ```")
         open(output_path, "w") do f
             write(f, String(take!(io)))
@@ -107,8 +110,14 @@ function generate_benchmarks_markdown(
         commit = m !== nothing ? m.captures[1] : replace(fname, ".json" => "")
         info = _get_commit_info(commit)
         data = BenchmarkTools.load(path)[1]
-        push!(runs, (commit = commit, date = info.date,
-            message = info.message, data = data, path = path))
+        julia_ver = "unknown"
+        for t in data.tags
+            startswith(string(t), "julia:") &&
+                (julia_ver = replace(string(t), "julia:" => ""))
+        end
+        push!(runs,
+            (commit = commit, date = info.date,
+                message = info.message, julia = julia_ver, data = data, path = path))
     end
 
     println(io, "## Recorded Baselines")
@@ -118,12 +127,12 @@ function generate_benchmarks_markdown(
             "Comparing **$(length(runs))** recorded baselines. The earliest run (`$(runs[1].commit)`) serves as reference baseline for relative speedup/slowdown calculations.")
         println(io)
     end
-    println(io, "| Commit | Date | Summary | File |")
-    println(io, "|---|---|---|---|")
+    println(io, "| Commit | Julia | Date | Summary | File |")
+    println(io, "|---|:---:|:---:|---|---|")
     for (idx, r) in enumerate(runs)
         tag = idx == 1 && length(runs) >= 2 ? " *(baseline)*" : ""
         msg = isempty(r.message) ? "Baseline" : r.message
-        println(io, "| `$(r.commit)`$tag | $(r.date) | $msg | `$(basename(r.path))` |")
+        println(io, "| `$(r.commit)`$tag | `$(r.julia)` | $(r.date) | $msg | `$(basename(r.path))` |")
     end
     println(io)
 
@@ -238,7 +247,7 @@ function generate_benchmarks_markdown(
                 vals_str = "[" * join(vals, ", ") * "]"
                 push!(datasets_js, """
                 {
-                    label: '$(r.commit) ($(r.date))',
+                    label: '$(r.commit) (Julia $(r.julia))',
                     data: $vals_str,
                     backgroundColor: '$bg_color',
                     borderColor: '$border_color',
@@ -307,7 +316,7 @@ document.addEventListener("DOMContentLoaded", function() {
     println(io)
     println(io, "```bash")
     println(io,
-        "julia --project=benchmark benchmark/benchmarks.jl --save benchmark/baseline_\$(git rev-parse --short HEAD).json")
+        "julia --project=benchmark benchmark/benchmarks.jl --save benchmark/baselines/baseline_\$(git rev-parse --short HEAD).json")
     println(io, "```")
     println(io)
     println(io,

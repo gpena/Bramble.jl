@@ -50,6 +50,8 @@ Manifest.toml
 benchmark/*
 !benchmark/benchmarks.jl
 !benchmark/Project.toml
+!benchmark/baselines/
+!benchmark/baselines/*.json
 playground/
 build/
 research/
