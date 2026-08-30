@@ -96,6 +96,7 @@ if __bramble_with_unit_tests
 
         @testset verbose=true "Forms" begin
             include("form/dirichlet_constraints.jl")
+            include("form/difference_ast.jl")
         end
 
         #=

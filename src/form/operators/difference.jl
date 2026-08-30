@@ -72,6 +72,14 @@ Symbolic forward gradient operator.
 """
 ∇₊ₕ(op::LazyOp{D}) where {D} = grad_forward(op)
 
+"""
+    ∇₊ₕ(ops::Tuple)
+
+Applies the forward gradient component-wise to a **tuple** of scalar symbolic
+functions, as `∇₋ₕ` does. Returns a tuple of gradient tuples, one per component.
+"""
+∇₊ₕ(ops::Tuple) = map(grad_forward, ops)
+
 # AST-based difference operators (distinct names)
 
 """
@@ -140,10 +148,24 @@ end
 # Direct integration helpers for linear_operators.jl
 # ==============================================================================
 
+"""
+	DifferenceNode{D, Dim}
+
+Either one-sided difference node over a `D`-dimensional space, differencing along `Dim`.
+
+The two carry the same parameters, so anything that reads only the *direction* off the
+node is written against this alias and stays symmetric between them by construction.
+
+Not everything can be: `inner₊` takes backward differences alone, because the staggered
+weights it carries are the ones the summation-by-parts identity pairs with a backward
+difference. Use this alias where the distinction genuinely does not arise.
+"""
+const DifferenceNode{D, Dim} = Union{BackwardDifference{D, Dim}, ForwardDifference{D, Dim}}
+
 # `backward_difference_matrix` was never a function — no revision of the package defines
-# it. The generated name for the backward difference *including* its 1/h weights, which is
-# what this node stands for, is `backward_finite_difference`, and it wants the direction as
-# a `Val`; `Dim` here is a plain `Int`.
+# it. The generated names for the differences *including* their 1/h weights, which is what
+# these nodes stand for, are `backward_finite_difference` and `forward_finite_difference`,
+# and they want the direction as a `Val`; `Dim` here is a plain `Int`.
 #
 # The scale is `1` rather than `1.0` so that it promotes against whatever element type the
 # space has, instead of dragging a Float32 or an extended-precision assembly up to Float64.
@@ -152,6 +174,9 @@ function Bramble.get_derivative_matrix_and_scale(
     return backward_finite_difference(W, Val(Dim)), 1
 end
 
-function Bramble.get_innermost_dim(op::BackwardDifference{D, Dim}) where {D, Dim}
-    return Dim
+function Bramble.get_derivative_matrix_and_scale(
+        op::ForwardDifference{D, Dim}, W) where {D, Dim}
+    return forward_finite_difference(W, Val(Dim)), 1
 end
+
+Bramble.get_innermost_dim(op::DifferenceNode{D, Dim}) where {D, Dim} = Dim

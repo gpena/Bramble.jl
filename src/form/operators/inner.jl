@@ -109,6 +109,14 @@ matching the dimension of the `BackwardDifference` operator. This is needed for
 pressure-velocity coupling terms like `inner₊(p, D₋ₓ(v[1]))` and `inner₊(p, D₋ᵧ(v[2]))`,
 where `p` is an `IndexedTrialFunction` (a symbolic scalar field).
 
+Backward differences only — `D₋ₓ`, `D₋ᵧ`, `D₋₂` — and deliberately not the forward ones.
+This is the one place the two nodes are not interchangeable, and the restriction is
+mathematical rather than an omission: `inner₊` carries the staggered weights of the
+summation-by-parts identity `innerₕ(Dstar₊(uₕ), vₕ) == -inner₊(uₕ, D₋(vₕ))`, which pairs
+those weights with a backward difference. A forward difference sits on the other
+staggering, so `InnerPlus` is not the weight that belongs with it. Anything reading only
+the *direction* off a difference node uses the `DifferenceNode` alias and does cover both.
+
 These overloads are intentionally restricted to `IndexedTrialFunction`/`IndexedTestFunction`
 leaves so they **do not** conflict with the standard `inner₊(D₋ₓ(u), D₋ₓ(v))` usage.
 """
