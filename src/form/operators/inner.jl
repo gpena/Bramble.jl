@@ -303,3 +303,17 @@ function resolve_ast(op::LinearProduct{D, InnerType}) where {D, InnerType}
         D, InnerType, typeof(resolve_ast(op.left_op)), typeof(resolve_ast(op.right_op))}(
         resolve_ast(op.left_op), resolve_ast(op.right_op))
 end
+
+# Disambiguation for the empty tuple.
+#
+# The overloads below are written over `NTuple{D, …}` for several element types — LazyOp
+# nodes, VectorElements, Functions, Numbers — and any two of them overlap at `D = 0`,
+# where `Tuple{}` satisfies both and neither signature is more specific. That is ten
+# ambiguous pairs, which Aqua fails on.
+#
+# One method for `Tuple{}` settles all of them. It throws rather than returning zero: an
+# empty tuple carries no direction to integrate over, so reaching here means a caller
+# built a form with no components, and a silent zero would hide that.
+@noinline function inner₊(::Tuple{}, ::Tuple{})
+    throw(ArgumentError("inner₊ needs at least one component; got two empty tuples"))
+end

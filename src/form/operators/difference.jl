@@ -140,10 +140,16 @@ end
 # Direct integration helpers for linear_operators.jl
 # ==============================================================================
 
+# `backward_difference_matrix` was never a function — no revision of the package defines
+# it. The generated name for the backward difference *including* its 1/h weights, which is
+# what this node stands for, is `backward_finite_difference`, and it wants the direction as
+# a `Val`; `Dim` here is a plain `Int`.
+#
+# The scale is `1` rather than `1.0` so that it promotes against whatever element type the
+# space has, instead of dragging a Float32 or an extended-precision assembly up to Float64.
 function Bramble.get_derivative_matrix_and_scale(
-        op::BackwardDifference{
-            D, Dim}, W) where {D, Dim}
-    return backward_difference_matrix(W, Dim), 1.0
+        op::BackwardDifference{D, Dim}, W) where {D, Dim}
+    return backward_finite_difference(W, Val(Dim)), 1
 end
 
 function Bramble.get_innermost_dim(op::BackwardDifference{D, Dim}) where {D, Dim}

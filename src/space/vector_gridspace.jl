@@ -146,3 +146,48 @@ end
 # CompositeGridSpace × anything → hierarchical composite (no flattening),
 # enabling forms like form(Vh × Wh, Vh × Wh, ((u,p),(v,q)) -> ...).
 @inline ×(X::AbstractSpaceType, Y::AbstractSpaceType) = CompositeGridSpace((X, Y))
+
+#===========================================================================#
+# Walking a composite space's leaves
+#
+# A `CompositeGridSpace` may nest, so the scalar spaces underneath it form a tree. Several
+# things need that tree flattened together with each leaf's offset into the global vector
+# of degrees of freedom: imposing Dirichlet conditions, and extracting the blocks of a
+# coupled form.
+#
+# The result is a tuple, not a vector, and that is the point. The leaves have different
+# concrete types, so a `Vector` of them can only be `Vector{Tuple{Any, Int}}`, and then
+# everything read through a leaf — its mesh, its dof count, the marker mask — is
+# dynamically typed. A tuple keeps each leaf's type, so the loop over it unrolls and the
+# work compiles. It also allocates nothing.
+#===========================================================================#
+
+"""
+	leaf_spaces_offsets(Wₕ) -> Tuple
+
+The scalar spaces underneath `Wₕ` paired with their offsets into the global degree of
+freedom vector, depth first and left to right, as a tuple of `(space, offset)`.
+
+A scalar space is its own only leaf, at offset zero.
+"""
+@inline leaf_spaces_offsets(Wₕ) = first(_leaf_spaces_offsets(Wₕ, 0))
+
+@inline _leaf_spaces_offsets(Wₕ::ScalarGridSpace, offset::Int) = (
+    ((Wₕ, offset),), offset + ndofs(Wₕ))
+@inline _leaf_spaces_offsets(Wₕ::CompositeGridSpace, offset::Int) = _leaves_of(
+    Wₕ.spaces, offset)
+
+@inline _leaves_of(::Tuple{}, offset::Int) = ((), offset)
+@inline function _leaves_of(spaces::Tuple, offset::Int)
+    head, next = _leaf_spaces_offsets(first(spaces), offset)
+    tail, final = _leaves_of(Base.tail(spaces), next)
+    return ((head..., tail...), final)
+end
+
+"""
+	n_leaf_spaces(Wₕ) -> Int
+
+The number of scalar spaces underneath `Wₕ`, counting through any nesting.
+"""
+@inline n_leaf_spaces(::ScalarGridSpace) = 1
+@inline n_leaf_spaces(Wₕ::CompositeGridSpace) = sum(n_leaf_spaces, Wₕ.spaces)

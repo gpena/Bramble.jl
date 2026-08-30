@@ -151,34 +151,85 @@ end
     return dirichlet_bc!(v, mesh(space), bcs, labels...)
 end
 
-# Overloads for CompositeGridSpace — handles both flat and hierarchical spaces
-# using collect_leaf_spaces_offsets for recursive flattening.
+# Overloads for CompositeGridSpace — handles both flat and hierarchical spaces.
+#
+# `leaf_spaces_offsets` (space/vector_gridspace.jl) answers with a tuple, so the leaves
+# keep their concrete types and the loops below unroll rather than dispatching per leaf.
+# It matters: with the leaves in a `Vector{Tuple{Any, Int}}` the innermost assignment
+# boxed a Bool on every degree of freedom, 39,646 allocations and 809 KB for one call on a
+# 60x60 grid with three components.
+#
+# The masks are per leaf and the rows are global, so a leaf's mask is consulted through
+# its offset rather than copied into a mask over the whole system. That is what keeps the
+# call allocation free: `index_in_marker` hands back the mesh's stored BitVector, and
+# nothing else is built.
+
+# Whether global row `r` falls in any leaf's marked set. Recursive over the tuple of
+# leaves, so it unrolls to a handful of comparisons.
+@inline _row_marked(::Tuple{}, r::Int) = false
+
+@inline function _row_marked(entries::Tuple, r::Int)
+    mask, offset, n = first(entries)
+    i = r - offset
+    (1 <= i <= n) && @inbounds(mask[i]) && return true
+    return _row_marked(Base.tail(entries), r)
+end
+
+@inline _leaf_entries(leaves::Tuple, label::Symbol) = map(
+    e -> (index_in_marker(mesh(first(e)), label), last(e), ndofs(first(e))), leaves)
+
 function dirichlet_bc!(A::AbstractMatrix, space::CompositeGridSpace, labels::Symbol...)
-    total_dofs = ndofs(space)
-    global_vec_bool = BitVector(undef, total_dofs)
-
-    # collect_leaf_spaces_offsets is defined in block_extract.jl
-    leaf_info = collect_leaf_spaces_offsets(space)
-
+    leaves = leaf_spaces_offsets(space)
     for p in labels
-        fill!(global_vec_bool, false)
-        for (sp, offset) in leaf_info
-            vec_bool_c = index_in_marker(mesh(sp), p)
-            for i in 1:ndofs(sp)
-                global_vec_bool[offset + i] = vec_bool_c[i]
+        _dirichlet_bc_rows!(A, _leaf_entries(leaves, p))
+    end
+    return nothing
+end
+
+# Dense: one pass over the marked rows of each leaf.
+function _dirichlet_bc_rows!(A::AbstractMatrix, entries::Tuple)
+    T = eltype(A)
+    for (mask, offset, n) in entries
+        @inbounds for i in 1:n
+            if mask[i]
+                r = offset + i
+                @views A[r, :] .= zero(T)
+                A[r, r] = one(T)
             end
         end
-        _dirichlet_bc_indices!(A, global_vec_bool)
     end
+    return nothing
+end
+
+# Sparse: a single sweep of the stored values, testing each row against every leaf, then
+# the diagonals. Sweeping once per leaf instead would cost `nnz` per component.
+function _dirichlet_bc_rows!(A::SparseMatrixCSC, entries::Tuple)
+    T = eltype(A)
+    rows = rowvals(A)
+    vals = nonzeros(A)
+
+    @inbounds for j in axes(A, 2)
+        for k in nzrange(A, j)
+            _row_marked(entries, rows[k]) && (vals[k] = zero(T))
+        end
+    end
+
+    for (mask, offset, n) in entries
+        @inbounds for i in 1:n
+            if mask[i]
+                r = offset + i
+                A[r, r] = one(T)
+            end
+        end
+    end
+    return nothing
 end
 
 function dirichlet_bc!(v::AbstractVector, space::CompositeGridSpace, bcs, labels::Symbol...)
-    leaf_info = collect_leaf_spaces_offsets(space)
-
-    for (sp, offset) in leaf_info
-        v_view = view(v, (offset + 1):(offset + ndofs(sp)))
-        dirichlet_bc!(v_view, mesh(sp), bcs, labels...)
+    for (sp, offset) in leaf_spaces_offsets(space)
+        dirichlet_bc!(view(v, (offset + 1):(offset + ndofs(sp))), mesh(sp), bcs, labels...)
     end
+    return nothing
 end
 
 """

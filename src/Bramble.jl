@@ -8,7 +8,12 @@ import Base: eltype, length
 import Base: show, first, last, getindex, setindex!, iterate, size, ndims, firstindex,
              lastindex, axes, eachindex
 
-using SparseArrays: SparseMatrixCSC, SparseVector, spdiagm, spzeros
+# `rowvals`, `nonzeros`, `nzrange`, `sparse` and `dropzeros` are for the form layer: it
+# edits sparse structure directly when imposing Dirichlet rows, and the import here is
+# selective, so a name missing from this list is simply undefined in the module. That is
+# what `dirichlet_bc!` hit on its first run — `UndefVarError: rowvals`.
+using SparseArrays: SparseMatrixCSC, SparseVector, spdiagm, spzeros,
+                    rowvals, nonzeros, nzrange, sparse, dropzeros, dropzeros!
 
 using FunctionWrappers: FunctionWrapper
 
@@ -73,10 +78,11 @@ export jumpₓ, jumpᵧ, jump₂, jumpₕ
 export M₋ₓ, M₋ᵧ, M₋₂, M₋ₕ
 export M₊ₓ, M₊ᵧ, M₊₂, M₊ₕ
 
+export dirichlet_constraints, dirichlet_bc!, symmetrize!, DirichletConstraint
+
 #=
 export ⋅
 
-export dirichlet_constraints
 export form, assemble, assemble!
 =#
 #=
@@ -117,14 +123,25 @@ include("space/operators/jump.jl")
 include("space/operators/average.jl")
 include("space/inner_product.jl")
 
-#=
-
-include("form/dirichlet_constraints.jl")
-include("form/sparse_backend.jl")
+# The form layer is being brought back a file at a time, auxiliary files first so that
+# every name is defined before the file that consumes it.
+#
+# common.jl carries the symbolic AST nodes — TrialFunction, TestFunction, their indexed
+# forms and SourceFunction — all subtypes of the LazyOp restored in
+# space/operators/linear_operators.jl.
 include("form/common.jl")
 
+# block_extract.jl adds block extraction for CoupledBilinearForm and, with it,
+# `collect_leaf_spaces_offsets`, which walks a nested space's leaves and their dof offsets.
+include("form/block_extract.jl")
+
+# dirichlet_constraints.jl comes last of the three: it is the user-facing one, and its
+# composite methods are what need `collect_leaf_spaces_offsets` above.
+include("form/dirichlet_constraints.jl")
+
+#=
+
 #include("form/grid_coloring.jl")
-include("form/block_extract.jl")  # block extraction for CoupledBilinearForm
 include("form/bilinear.jl")
 include("form/linear.jl")
 =#

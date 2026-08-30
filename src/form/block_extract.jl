@@ -12,33 +12,12 @@ Returns a flat list of `(scalar_space, global_dof_offset)` pairs by walking the
 `CompositeGridSpace` hierarchy in depth-first (left-to-right) order. The offset
 is the cumulative count of DOFs from all preceding leaf spaces.
 """
-function collect_leaf_spaces_offsets(space::CompositeGridSpace)
-    result = Tuple{Any, Int}[]
-    offset_ref = Ref(0)
-    _collect_leaf_spaces_offsets!(result, space, offset_ref)
-    return result
-end
-
-function _collect_leaf_spaces_offsets!(result, sp::ScalarGridSpace, offset_ref::Ref{Int})
-    push!(result, (sp, offset_ref[]))
-    offset_ref[] += ndofs(sp)
-    return
-end
-
-function _collect_leaf_spaces_offsets!(result, sp::CompositeGridSpace, offset_ref::Ref{Int})
-    for sub_sp in sp.spaces
-        _collect_leaf_spaces_offsets!(result, sub_sp, offset_ref)
-    end
-    return
-end
-
-"""
-    n_leaf_spaces(space) -> Int
-
-Returns the total number of leaf scalar spaces in a (possibly hierarchical) composite space.
-"""
-n_leaf_spaces(sp::ScalarGridSpace) = 1
-n_leaf_spaces(sp::CompositeGridSpace) = sum(n_leaf_spaces, sp.spaces)
+# The traversal itself is a grid space concern, not a form one — it reads nothing but
+# `ScalarGridSpace`, `CompositeGridSpace` and `ndofs` — and lives in
+# space/vector_gridspace.jl as `leaf_spaces_offsets`, which answers with a tuple and so
+# stays type stable. This is the vector-shaped view of it, for code that wants to index or
+# iterate the leaves dynamically.
+collect_leaf_spaces_offsets(space::CompositeGridSpace) = collect(leaf_spaces_offsets(space))
 
 """
     is_hierarchical(space) -> Bool

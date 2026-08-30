@@ -94,6 +94,10 @@ if __bramble_with_unit_tests
             include("space/autodiff.jl")
         end
 
+        @testset verbose=true "Forms" begin
+            include("form/dirichlet_constraints.jl")
+        end
+
         #=
 		@testset "Forms" begin
 			include("form/dirichlet_constraints.jl")
