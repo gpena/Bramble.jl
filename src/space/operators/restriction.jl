@@ -254,9 +254,30 @@ quadrature.
 
 See also: [`Rₕ!`](@ref), [`avgₕ`](@ref).
 """
+# The coefficient type of a restriction is the one `f` returns, promoted against the
+# backend's. Promoted rather than taken outright so that an integer-valued `f` still gives
+# a Float64 element on a Float64 backend, while a ForwardDiff.Dual-valued one gives a Dual
+# element over the same, undifferentiated, Float64 mesh.
+#
+# The type is read from one evaluation at the first grid point. That is one extra call to
+# `f` per restriction, against inferring it, which would have to guess at a return type
+# the compiler may not know.
+@inline _scalar_value_type(::Type{T}) where {T} = T
+@inline _scalar_value_type(::Type{T}) where {T <: Tuple} = eltype(T)
+
+@inline _restricted_value_type(f, p) = _scalar_value_type(typeof(f(p)))
+@inline _restricted_value_type(f::Tuple, p) = promote_type(map(
+    g -> _scalar_value_type(typeof(g(p))), f)...)
+
+@inline function _restriction_eltype(Wₕ::AbstractSpaceType, f)
+    Ωₕ = mesh(Wₕ)
+    p = point(Ωₕ, first(indices(Ωₕ)))
+    return promote_type(eltype(backend(Wₕ)), _restricted_value_type(f, p))
+end
+
 function Rₕ(Wₕ::AbstractSpaceType, f; markers::NTuple{N, Symbol} = NTuple{
         0, Symbol}()) where {N}
-    uₕ = element(Wₕ)
+    uₕ = element(Wₕ, _restriction_eltype(Wₕ, f))
     Rₕ!(uₕ, f; markers = markers)
     return uₕ
 end

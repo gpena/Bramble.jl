@@ -86,6 +86,7 @@ if __bramble_with_unit_tests
             include("space/inference_allocation.jl")
             include("space/convergence.jl")
             include("space/element_type.jl")
+            include("space/autodiff.jl")
         end
 
         #=

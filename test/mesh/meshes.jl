@@ -325,7 +325,11 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD
             @test stepsize(M2, 1) ≈ 0.1
             @test stepsize(M2, 2) ≈ 0.1
             @test hₘₐₓ(M2) ≈ hypot(0.1, 0.1)
-            @test hₘᵢₙ(M2) ≈ 0.1
+            # hₘᵢₙ is the diagonal of the smallest cell, matching hₘₐₓ; the smallest
+            # extent along one coordinate is that submesh's own hₘᵢₙ
+            @test hₘᵢₙ(M2) ≈ hypot(0.1, 0.1)
+            @test hₘᵢₙ(M2(1)) ≈ 0.1
+            @test hₘᵢₙ(M2(2)) ≈ 0.1
 
             # Non-uniform stepsize error assertion
             M2_nu = mesh(domain(I × J), (11, 21), (false, false))
@@ -351,7 +355,8 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD
             @test length(M3) == 125
             @test stepsize(M3) == (0.25, 0.25, 0.25)
             @test hₘₐₓ(M3) ≈ hypot(0.25, 0.25, 0.25)
-            @test hₘᵢₙ(M3) ≈ 0.25
+            @test hₘᵢₙ(M3) ≈ hypot(0.25, 0.25, 0.25)
+            @test all(hₘᵢₙ(M3(d)) ≈ 0.25 for d in 1:3)
 
             # Points in 1D submesh are [0.0, 0.25, 0.5, 0.75, 1.0]
             # For coordinate 0.5, the bounding cell index is 3 (interval [0.5, 0.75])

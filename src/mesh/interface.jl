@@ -218,15 +218,19 @@ X = domain(interval(0, 1) × interval(4, 5))
 Ωₕ_mixed = mesh(X, (10, 15), (true, false))
 ```
 """
-@inline mesh(Ω::Domain, npts::NTuple{D, Int}, unif::NTuple{D, Bool}; backend = backend()) where {D} = _mesh(
-    Ω, npts, unif, backend)
-@inline mesh(Ω::Domain{CartesianProduct{1, T}}, npts::Int, unif::Bool; backend = backend()) where {T} = _mesh(
-    Ω, (npts,), (unif,), backend)
-@inline mesh(Ω::Domain{CartesianProduct{1, T}}, npts::Int;
-    uniform::Bool = true, backend = backend()) where {T} = _mesh(Ω, (npts,), (uniform,), backend)
+# The backend defaults to one over the domain's own element type rather than always to
+# Float64, so a Float32 domain gives a Float32 mesh. The element type is a property of the
+# storage, and the storage should follow the geometry it is built on; passing `backend`
+# explicitly still overrides it, which is how a mesh gets a type the domain does not have.
+@inline mesh(Ω::Domain, npts::NTuple{D, Int}, unif::NTuple{D, Bool};
+    backend = backend(eltype(Ω))) where {D} = _mesh(Ω, npts, unif, backend)
+@inline mesh(Ω::Domain{CartesianProduct{1, T}}, npts::Int, unif::Bool;
+    backend = backend(eltype(Ω))) where {T} = _mesh(Ω, (npts,), (unif,), backend)
+@inline mesh(Ω::Domain{CartesianProduct{1, T}}, npts::Int; uniform::Bool = true,
+    backend = backend(eltype(Ω))) where {T} = _mesh(Ω, (npts,), (uniform,), backend)
 @inline mesh(
     Ω::Domain, npts::NTuple{D, Int}; uniform::NTuple{D, Bool} = ntuple(_ -> true, Val(D)),
-    backend = backend()) where {D} = _mesh(Ω, npts, uniform, backend)
+    backend = backend(eltype(Ω))) where {D} = _mesh(Ω, npts, uniform, backend)
 
 #------------------------------------------------------------------------------------------#
 #------------------------------------------------------------------------------------------#
@@ -397,9 +401,17 @@ function hₘₐₓ end
 """
 	hₘᵢₙ(Ωₕ::AbstractMeshType)
 
-Returns the minimum stepsize across all cells in the mesh:
+Returns the diagonal of the smallest cell in the mesh, the counterpart of [`hₘₐₓ`](@ref):
 - In 1D: ``\\min_i (x_i - x_{i-1})``.
-- In nD: ``\\min_{d=1}^D \\min_{idx_d} (x_{d, idx_d} - x_{d, idx_d-1})``.
+- In nD:
+
+```math
+h_{\\min} = \\min_{idx} \\| (h_{1, idx_1}, \\dots, h_{D, idx_D}) \\|_2.
+```
+
+This is a diagonal rather than an edge length, so that `hₘₐₓ` and `hₘᵢₙ` measure the same
+kind of quantity. For the smallest extent along one coordinate, ask that submesh:
+`hₘᵢₙ(Ωₕ(i))`.
 """
 function hₘᵢₙ end
 

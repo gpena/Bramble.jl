@@ -55,6 +55,17 @@ julia> T32 = Float32;
     Float64, Int}) = Backend{vector_type, matrix_type}()
 
 """
+	backend(::Type{T})
+
+The default dense-vector, sparse-matrix backend over the element type `T`.
+
+`backend(Float64)` is what `backend()` returns. The single-argument form exists so that a
+mesh can take its element type from the domain it is built on rather than always being
+`Float64`: `mesh` defaults its backend to `backend(eltype(Ω))`.
+"""
+@inline backend(::Type{T}) where {T} = Backend{Vector{T}, SparseMatrixCSC{T, Int}}()
+
+"""
 	$(SIGNATURES)
 
 Returns a tuple with the backend associated types:

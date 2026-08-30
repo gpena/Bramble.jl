@@ -157,9 +157,36 @@ Returns a [VectorElement](@ref) for grid space `Wₕ` with uninitialized compone
     return VectorElement{ST, T, VT}(vector(b, ndofs(Wₕ)), Wₕ)
 end
 
-# Constructor with a fill value `α`.
+"""
+	element(Wₕ::AbstractSpaceType, ::Type{T})
+
+Returns a [VectorElement](@ref) for grid space `Wₕ` holding coefficients of type `T`,
+with uninitialized components.
+
+The coefficients of a grid function and the coordinates of the mesh under it are two
+different things, and this is where they part company. `element(Wₕ)` takes its type from
+the backend, which is the mesh's own; this takes whatever is asked for, and the container
+follows through `similar`, so a `Vector` backend gives a `Vector{T}` and a device array
+gives a device array of `T`.
+
+The case this exists for is automatic differentiation: a `ForwardDiff.Dual` grid function
+over an ordinary `Float64` mesh, so that the geometry is not differentiated along with the
+field. See [`Rₕ`](@ref), which uses it to give back an element of whatever type the
+restricted function returns.
+"""
+@inline function element(Wₕ::AbstractSpaceType, ::Type{T}) where {T}
+    b = backend(Wₕ)
+    # `similar` on an empty prototype rather than a `Vector{T}` literal, so the container
+    # type stays the backend's and only the element type changes.
+    v = similar(vector(b, 0), T, ndofs(Wₕ))
+    return VectorElement{typeof(Wₕ), T, typeof(v)}(v, Wₕ)
+end
+
+# Constructor with a fill value `α`. The element type is promoted rather than taken from
+# `α` outright, so `element(Wₕ, 2)` still gives a Float64 element on a Float64 backend
+# while `element(Wₕ, dual)` gives a Dual one.
 function element(Wₕ::AbstractSpaceType, α::Number)
-    uₕ = element(Wₕ)
+    uₕ = element(Wₕ, promote_type(eltype(backend(Wₕ)), typeof(α)))
     fill!(uₕ, α)
     return uₕ
 end
@@ -173,7 +200,7 @@ Returns a [VectorElement](@ref) for a grid space `Wₕ` with the same coefficien
     # Ensure the provided vector has the correct number of DoFs.
     length(v) == ndofs(Wₕ) || throw(DimensionMismatch(
         "input vector has length $(length(v)), but the space has $(ndofs(Wₕ)) degrees of freedom."))
-    elem = element(Wₕ)
+    elem = element(Wₕ, promote_type(eltype(backend(Wₕ)), eltype(v)))
     copyto!(elem, v)
     return elem
 end
@@ -183,7 +210,15 @@ end
 @inline Base.@propagate_inbounds setindex!(uₕ::VectorElement, val, i) = setindex!(uₕ.data, val, i)
 
 # Create a new, uninitialized VectorElement with the same space as the input.
-@inline Base.similar(uₕ::VectorElement) = element(space(uₕ))
+#
+# The result keeps `uₕ`'s own coefficient type, not the space's. Every operator allocates
+# its output with this, so going back to the backend's type here would mean a Dual-valued
+# grid function differenced into a Float64 one, which fails on the first store. For an
+# element built the ordinary way the two coincide, so nothing changes for a Float64 run.
+@inline function Base.similar(uₕ::VectorElement)
+    v = similar(values(uₕ))
+    return VectorElement{typeof(space(uₕ)), eltype(v), typeof(v)}(v, space(uₕ))
+end
 
 # Broadcasting
 

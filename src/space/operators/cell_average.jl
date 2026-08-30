@@ -36,10 +36,13 @@ all components works, and both give the same result.
   - `markers`: restrict evaluation to the named marked regions, as in
     [`Rₕ`](@ref), leaving every other entry zero.
 """
+# The coefficient type comes from `f`, as it does in `Rₕ`, and for the same reason: the
+# average of a Dual-valued function is Dual-valued, over a mesh that stays Float64. The
+# quadrature weights are the mesh's type and promote against it.
 Base.@constprop :aggressive function avgₕ(
         Wₕ::AbstractSpaceType, f; quad_points::Int = AVG_QUAD_POINTS,
         markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {N}
-    uₕ = element(Wₕ)
+    uₕ = element(Wₕ, _restriction_eltype(Wₕ, f))
     avgₕ!(uₕ, f; quad_points = quad_points, markers = markers)
     return uₕ
 end
@@ -66,7 +69,11 @@ Base.@constprop :aggressive function avgₕ!(
 
     if N > 0
         masks = ntuple(i -> index_in_marker(Ωₕ, markers[i]), Val(N))
-        nodes, wts = _gauss_rule(Val(quad_points), eltype(uₕ))
+        # The rule is built in the mesh's element type, not the grid function's: the
+        # nodes and weights are geometry, and the Gauss rule is tabulated for real
+        # types only. A Dual-valued grid function integrates against a Float64 rule
+        # and the product promotes, which is what makes avgₕ differentiable.
+        nodes, wts = _gauss_rule(Val(quad_points), eltype(mesh(space(uₕ))))
         x = half_points(Ωₕ)
         _masked_for!(to_matrix(uₕ), masks, _cell_average_kernel(
             f, x, nodes, wts, Val(dim(Ωₕ))))
@@ -99,7 +106,7 @@ end
 function _avgₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f, ::Val{1}, nq::Val)
     Ωₕ = mesh(space(uₕ))
     x = half_points(Ωₕ)
-    nodes, wts = _gauss_rule(nq, eltype(uₕ))
+    nodes, wts = _gauss_rule(nq, eltype(mesh(space(uₕ))))
 
     _parallel_for!(values(uₕ), indices(Ωₕ), idx -> _cell_average(f, x, idx[1], nodes, wts);
         min_work = _avg_min_work(Val(1), nq))
@@ -109,7 +116,7 @@ end
 function _avgₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f, ::Val{D}, nq::Val) where {D}
     Ωₕ = mesh(space(uₕ))
     x = half_points(Ωₕ)
-    nodes, wts = _gauss_rule(nq, eltype(uₕ))
+    nodes, wts = _gauss_rule(nq, eltype(mesh(space(uₕ))))
 
     _parallel_for!(to_matrix(uₕ), indices(Ωₕ), idx -> _cell_average(f, x, idx, nodes, wts);
         min_work = _avg_min_work(Val(D), nq))
@@ -128,7 +135,7 @@ function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f, ::Val{D}, nq
         NC, D}
     Ωₕ = mesh(space(uₕ))
     x = half_points(Ωₕ)
-    nodes, wts = _gauss_rule(nq, eltype(uₕ))
+    nodes, wts = _gauss_rule(nq, eltype(mesh(space(uₕ))))
     mats = ntuple(i -> to_matrix(components(uₕ)[i]), Val(NC))
 
     _scatter_for!(mats, indices(Ωₕ), idx -> _cell_average(f, x, idx, nodes, wts, Val(NC));

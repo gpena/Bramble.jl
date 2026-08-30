@@ -212,6 +212,15 @@ width gives half of it, the boundary cell being a half cell.
 @noinline _throw_stencil_dim_error(dim::Int,
     D::Int) = throw(ArgumentError("the stencil direction must be between 1 and $D, got $dim"))
 
+# A centered stencil reads both neighbours, so it needs a point on each side and is
+# undefined on a mesh with fewer than three points along the direction it differences.
+# Without this the operator returns all zeros — every point being truncated — which is a
+# plausible-looking answer to a question that has none, and the kind of silent result that
+# halves a measured convergence order without failing anything.
+@noinline function _throw_centered_too_few_points(dim::Int, n::Int)
+    throw(ArgumentError("a centered difference along direction $dim needs at least 3 points there, got $n"))
+end
+
 @noinline function _throw_stencil_size_error(lout::Int, lin::Int, dims)
     throw(DimensionMismatch("out has $lout entries and in has $lin, but the grid $(dims) has $(prod(dims))"))
 end
@@ -742,8 +751,10 @@ See also: [`star_spacings`](@ref), [`D₋ₓ`](@ref), [`D₊ₓ`](@ref).
 """
 function centered_difference(
         uₕ::VectorElement{<:ScalarGridSpace}, dim_val::Val{DIM}) where {DIM}
+    sub = _op_mesh(uₕ)(DIM)
+    npoints(sub) >= 3 || _throw_centered_too_few_points(DIM, npoints(sub))
     vₕ = similar(uₕ)
-    h = star_spacings(_op_mesh(uₕ)(DIM))
+    h = star_spacings(sub)
     _apply_stencil!(vₕ, uₕ, h, Centered(), dim_val)
     return vₕ
 end
@@ -752,8 +763,10 @@ end
 # time; every component shares the mesh, so the denominator is built once.
 function centered_difference(
         uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val{DIM}) where {DIM}
+    sub = _op_mesh(uₕ)(DIM)
+    npoints(sub) >= 3 || _throw_centered_too_few_points(DIM, npoints(sub))
     vₕ = similar(uₕ)
-    h = star_spacings(_op_mesh(uₕ)(DIM))
+    h = star_spacings(sub)
     _apply_componentwise!(
         (v, u) -> _apply_stencil!(v, u, h, Centered(), dim_val), vₕ, uₕ)
     return vₕ
@@ -774,7 +787,8 @@ for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
 
           Alias for `centered_difference(uₕ, Val($($i)))`. Takes a grid function only;
           there is no matrix form. The first and last points along `$($direction)` are
-          truncated to zero.
+          truncated to zero, so the mesh needs at least three points along `$($direction)`
+          and an `ArgumentError` is thrown when it has fewer.
 
           Accepts a grid function of a scalar or of a composite grid space. On a composite
           one the operator is applied to each component in turn, and the result is the
@@ -827,8 +841,10 @@ See also: [`Dcₓ`](@ref), [`D₋ₓ`](@ref).
 """
 function cross_weighted_difference(
         uₕ::VectorElement{<:ScalarGridSpace}, dim_val::Val{DIM}) where {DIM}
+    sub = _op_mesh(uₕ)(DIM)
+    npoints(sub) >= 3 || _throw_centered_too_few_points(DIM, npoints(sub))
     vₕ = similar(uₕ)
-    h = spacings(_op_mesh(uₕ)(DIM))
+    h = spacings(sub)
     _apply_stencil!(vₕ, uₕ, h, CrossWeighted(), dim_val)
     return vₕ
 end
@@ -837,8 +853,10 @@ end
 # time; every component shares the mesh, so the spacings are fetched once.
 function cross_weighted_difference(
         uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val{DIM}) where {DIM}
+    sub = _op_mesh(uₕ)(DIM)
+    npoints(sub) >= 3 || _throw_centered_too_few_points(DIM, npoints(sub))
     vₕ = similar(uₕ)
-    h = spacings(_op_mesh(uₕ)(DIM))
+    h = spacings(sub)
     _apply_componentwise!(
         (v, u) -> _apply_stencil!(v, u, h, CrossWeighted(), dim_val), vₕ, uₕ)
     return vₕ
@@ -861,7 +879,8 @@ for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
           Alias for `cross_weighted_difference(uₕ, Val($($i)))`. Second order on a
           non-uniform grid, where [`Dc$($suffix)`](@ref) is first. Takes a grid function
           only; there is no matrix form. The first and last points along `$($direction)`
-          are truncated to zero.
+          are truncated to zero, so the mesh needs at least three points along
+          `$($direction)` and an `ArgumentError` is thrown when it has fewer.
 
           Accepts a grid function of a scalar or of a composite grid space. On a composite
           one the operator is applied to each component in turn, and the result is the

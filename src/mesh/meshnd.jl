@@ -219,14 +219,15 @@ individual cell is the product of its per-axis widths; see [`cell_measure`](@ref
 # prod(Nd) cells into D lookups.
 @inline hₘₐₓ(Ωₕ::MeshnD{D}) where {D} = hypot(ntuple(i -> hₘₐₓ(Ωₕ(i)), Val(D))...)
 
-@inline function hₘᵢₙ(Ωₕ::MeshnD{D}) where {D}
-    min_h = typemax(eltype(Ωₕ))
-    @inbounds for i in 1:D
-        sub_min = hₘᵢₙ(Ωₕ(i))
-        min_h = min(min_h, sub_min)
-    end
-    return min_h
-end
+# The diagonal of the smallest cell, the counterpart of `hₘₐₓ` above and computed the same
+# way: `hypot` is increasing in each argument and the per-axis index sets are independent,
+# so the minimum over the whole index set sits at the per-axis minima.
+#
+# This is a diagonal, not an edge length. It used to be the smallest per-axis spacing,
+# which made hₘₐₓ and hₘᵢₙ measure two different things: on a 33x33 grid over
+# [0,1]x[0,1e-8] the pair read 0.031 and 3.1e-10, one a diagonal and one an edge. For a
+# per-axis extent, ask a submesh: `hₘᵢₙ(Ωₕ(i))`.
+@inline hₘᵢₙ(Ωₕ::MeshnD{D}) where {D} = hypot(ntuple(i -> hₘᵢₙ(Ωₕ(i)), Val(D))...)
 
 @inline function cell_measure(Ωₕ::MeshnD{D}, idx) where {D}
     return prod(ntuple(i -> half_spacing(Ωₕ(i), idx[i]), Val(D)))
