@@ -1,6 +1,7 @@
 using Test
 using Bramble
 using Random
+using Supposition
 using Bramble: values
 
 # Mixed differences commute.
@@ -87,6 +88,55 @@ using Bramble: values
 
         for (op1, op2) in ((D₋ₓ, D₋ᵧ), (Dcₓ, Dcᵧ), (Dₕₓ, Dₕᵧ), (M₋ₓ, D₊ᵧ))
             @test values(op1(op2(cₕ))) ≈ values(op2(op1(cₕ)))
+        end
+    end
+
+    @testset "arbitrary random grids and fields (Supposition)" begin
+        positive_h = Data.Floats{Float64}(; minimum = 0.01, maximum = 10.0,
+            nans = false, infs = false)
+        field_val = Data.Floats{Float64}(; minimum = -100.0, maximum = 100.0,
+            nans = false, infs = false)
+
+        @check function check_commutation_2d(
+                hx = Data.Vectors(positive_h; min_size = 3, max_size = 7),
+                hy = Data.Vectors(positive_h; min_size = 3, max_size = 7),
+                u_raw = Data.Vectors(field_val; min_size = 64, max_size = 64)
+        )
+            nx = length(hx) + 1
+            ny = length(hy) + 1
+            pts_x = zeros(Float64, nx)
+            for i in 1:length(hx)
+                pts_x[i + 1] = pts_x[i] + hx[i]
+            end
+            pts_x ./= pts_x[end]
+
+            pts_y = zeros(Float64, ny)
+            for j in 1:length(hy)
+                pts_y[j + 1] = pts_y[j] + hy[j]
+            end
+            pts_y ./= pts_y[end]
+
+            Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (nx, ny),
+                (false, false))
+            set_points!(Ωₕ(1), pts_x)
+            set_points!(Ωₕ(2), pts_y)
+            Wₕ = gridspace(Ωₕ)
+
+            total = nx * ny
+            u_mat = reshape(copy(u_raw[1:total]), nx, ny)
+            uₕ = element(Wₕ, vec(u_mat))
+
+            all_commute = true
+            for (_, op1, _, op2) in PAIRS_2D
+                res1 = values(op1(op2(uₕ)))
+                res2 = values(op2(op1(uₕ)))
+                scale = max(maximum(abs, res1), maximum(abs, res2), 1.0)
+                if !isapprox(res1, res2; atol = 1e-10 * scale, rtol = 1e-10)
+                    all_commute = false
+                    break
+                end
+            end
+            all_commute
         end
     end
 

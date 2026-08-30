@@ -1,4 +1,6 @@
 import Bramble: half_spacings_iterator
+using Supposition
+
 @testset "Inner Products and Norms" begin
     for D in 1:3
         dims, Wh, u = setup_test_grid(Val(D))
@@ -237,7 +239,61 @@ end
             # the H¹ norm is built from the two of them
             @test norm₁ₕ(uₕ)^2 ≈ normₕ(uₕ)^2 + snorm₁ₕ(uₕ)^2
             # a constant has zero gradient, so zero seminorm
-            @test snorm₁ₕ(Rₕ(Wₕ, x -> 1.0)) ≈ 0.0 atol=1e-14
+            @test snorm₁ₕ(Rₕ(Wₕ, x -> 1.0)) ≈ 0.0 atol = 1e-14
+        end
+    end
+
+    @testset "arbitrary random grids and fields (Supposition)" begin
+        positive_h = Data.Floats{Float64}(; minimum = 0.01, maximum = 10.0,
+            nans = false, infs = false)
+        field_val = Data.Floats{Float64}(; minimum = -100.0, maximum = 100.0,
+            nans = false, infs = false)
+
+        @check function check_sobolev_identities_2d(
+                hx = Data.Vectors(positive_h; min_size = 3, max_size = 8),
+                hy = Data.Vectors(positive_h; min_size = 3, max_size = 8),
+                u_raw = Data.Vectors(field_val; min_size = 81, max_size = 81)
+        )
+            nx = length(hx) + 1
+            ny = length(hy) + 1
+            pts_x = zeros(Float64, nx)
+            for i in 1:length(hx)
+                pts_x[i + 1] = pts_x[i] + hx[i]
+            end
+            pts_x ./= pts_x[end]
+
+            pts_y = zeros(Float64, ny)
+            for j in 1:length(hy)
+                pts_y[j + 1] = pts_y[j] + hy[j]
+            end
+            pts_y ./= pts_y[end]
+
+            Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (nx, ny),
+                (false, false))
+            set_points!(Ωₕ(1), pts_x)
+            set_points!(Ωₕ(2), pts_y)
+            Wₕ = gridspace(Ωₕ)
+
+            total = nx * ny
+            u_mat = reshape(copy(u_raw[1:total]), nx, ny)
+            uₕ = element(Wₕ, vec(u_mat))
+
+            # normₕ² == innerₕ(u, u)
+            n_sq = normₕ(uₕ)^2
+            inn = innerₕ(uₕ, uₕ)
+            ok1 = isapprox(n_sq, inn; atol = 1e-10 * max(n_sq, 1.0), rtol = 1e-10)
+
+            # snorm₁ₕ(uₕ) == norm₊(∇₋ₕ(uₕ))
+            sn = snorm₁ₕ(uₕ)
+            grad_norm = norm₊(∇₋ₕ(uₕ))
+            ok2 = isapprox(sn, grad_norm; atol = 1e-10 * max(sn, 1.0), rtol = 1e-10)
+
+            # norm₁ₕ(uₕ)² == normₕ(uₕ)² + snorm₁ₕ(uₕ)²
+            h1_sq = norm₁ₕ(uₕ)^2
+            sum_sq = n_sq + sn^2
+            ok3 = isapprox(h1_sq, sum_sq; atol = 1e-10 * max(h1_sq, 1.0), rtol = 1e-10)
+
+            ok1 && ok2 && ok3
         end
     end
 end
