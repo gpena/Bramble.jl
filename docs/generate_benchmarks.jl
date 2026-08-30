@@ -6,10 +6,9 @@ using Dates
 function _get_commit_info(commit_hash::AbstractString)
     try
         msg = readchomp(`git log -1 --format="%s" $commit_hash`)
-        date = readchomp(`git log -1 --format="%cd" --date=short $commit_hash`)
-        return (date = date, message = msg)
+        return (message = msg,)
     catch
-        return (date = "unknown", message = "")
+        return (message = "",)
     end
 end
 
@@ -62,6 +61,90 @@ function _select_unit(max_ns::Real)
     end
 end
 
+function _render_svg_barchart(
+        gname, sorted_bnames, runs, max_time_ns, unit_label, unit_divisor)
+    palette = ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4"]
+    max_val = max_time_ns / unit_divisor
+    magnitude = 10.0^floor(log10(max(max_val, 1e-6)))
+    norm = max_val / magnitude
+    nice_norm = norm <= 1.0 ? 1.0 :
+                (norm <= 1.5 ? 1.5 :
+                 (norm <= 2.0 ? 2.0 : (norm <= 3.0 ? 3.0 : (norm <= 5.0 ? 5.0 : 10.0))))
+    axis_max = nice_norm * magnitude
+
+    num_runs = length(runs)
+    bar_h = num_runs == 1 ? 18 : 14
+    bar_gap = 3
+    run_group_h = num_runs * bar_h + (num_runs - 1) * bar_gap
+    row_gap = 16
+    total_row_h = run_group_h + row_gap
+
+    label_w = 210
+    bar_area_w = 380
+    chart_w = label_w + bar_area_w + 120
+    top_m = 50
+    bottom_m = 35
+    total_h = top_m + length(sorted_bnames) * total_row_h + bottom_m
+
+    io = IOBuffer()
+    println(io,
+        "<div style=\"width:100%; max-width:$(chart_w)px; margin:1.5em auto; overflow-x:auto; background:var(--documenter-bg, #fff); border:1px solid rgba(128,128,128,0.2); border-radius:8px; padding:1em;\">")
+    println(io,
+        "<svg viewBox=\"0 0 $chart_w $total_h\" width=\"100%\" style=\"font-family:-apple-system, BlinkMacSystemFont, juliamono, monospace; display:block;\">")
+
+    # Legend
+    leg_x = label_w + 10
+    leg_y = 25
+    for (idx, r) in enumerate(runs)
+        c = palette[mod1(idx, length(palette))]
+        println(io, "<rect x=\"$leg_x\" y=\"$(leg_y - 10)\" width=\"12\" height=\"12\" rx=\"2\" fill=\"$c\" />")
+        println(io,
+            "<text x=\"$(leg_x + 16)\" y=\"$leg_y\" font-size=\"12\" fill=\"currentColor\" opacity=\"0.9\">$(r.commit) (Julia $(r.julia))</text>")
+        leg_x += 180
+    end
+
+    # Grid lines & ticks
+    for frac in 0.0:0.25:1.0
+        gx = label_w + 10 + frac * bar_area_w
+        tick_val = round(frac * axis_max; digits = 1)
+        println(io,
+            "<line x1=\"$gx\" y1=\"$(top_m - 10)\" x2=\"$gx\" y2=\"$(total_h - bottom_m + 5)\" stroke=\"rgba(128,128,128,0.2)\" stroke-dasharray=\"3,3\" />")
+        println(io,
+            "<text x=\"$gx\" y=\"$(total_h - bottom_m + 20)\" font-size=\"11\" fill=\"currentColor\" opacity=\"0.6\" text-anchor=\"middle\">$tick_val $unit_label</text>")
+    end
+
+    # Rows
+    y = top_m + 10
+    for bname in sorted_bnames
+        mid_y = y + run_group_h / 2 + 4
+        println(io,
+            "<text x=\"$label_w\" y=\"$mid_y\" font-size=\"12\" font-weight=\"bold\" fill=\"currentColor\" text-anchor=\"end\">$bname</text>")
+        for (idx, r) in enumerate(runs)
+            by = y + (idx - 1) * (bar_h + bar_gap)
+            c = palette[mod1(idx, length(palette))]
+            if haskey(r.data, gname) && haskey(r.data[gname], bname)
+                m = median(r.data[gname][bname])
+                t_val = time(m) / unit_divisor
+                bw = max(2.0, (t_val / axis_max) * bar_area_w)
+                bx = label_w + 10
+                t_str = string(round(t_val; digits = 1), " ", unit_label)
+                println(io,
+                    "<rect x=\"$bx\" y=\"$by\" width=\"$bw\" height=\"$bar_h\" rx=\"3\" fill=\"$c\" opacity=\"0.9\">")
+                println(io, "<title>$(r.commit) (Julia $(r.julia)): $t_str</title></rect>")
+                println(io,
+                    "<text x=\"$(bx + bw + 6)\" y=\"$(by + bar_h - 3)\" font-size=\"11\" fill=\"currentColor\" opacity=\"0.85\">$t_str</text>")
+            else
+                bx = label_w + 10
+                println(io,
+                    "<text x=\"$bx\" y=\"$(by + bar_h - 3)\" font-size=\"11\" fill=\"currentColor\" opacity=\"0.4\">—</text>")
+            end
+        end
+        y += total_row_h
+    end
+    println(io, "</svg></div>")
+    return String(take!(io))
+end
+
 function generate_benchmarks_markdown(
         benchmark_dir = normpath(joinpath(@__DIR__, "..", "benchmark", "baselines")),
         output_path = normpath(joinpath(@__DIR__, "src", "benchmarks.md"))
@@ -112,12 +195,12 @@ function generate_benchmarks_markdown(
         data = BenchmarkTools.load(path)[1]
         julia_ver = "unknown"
         for t in data.tags
-            startswith(string(t), "julia:") &&
-                (julia_ver = replace(string(t), "julia:" => ""))
+            if startswith(string(t), "julia:")
+                julia_ver = replace(string(t), "julia:" => "")
+            end
         end
-        push!(runs,
-            (commit = commit, date = info.date,
-                message = info.message, julia = julia_ver, data = data, path = path))
+        push!(runs, (commit = commit, message = info.message,
+            julia = julia_ver, data = data, path = path))
     end
 
     println(io, "## Recorded Baselines")
@@ -127,12 +210,12 @@ function generate_benchmarks_markdown(
             "Comparing **$(length(runs))** recorded baselines. The earliest run (`$(runs[1].commit)`) serves as reference baseline for relative speedup/slowdown calculations.")
         println(io)
     end
-    println(io, "| Commit | Julia | Date | Summary | File |")
-    println(io, "|---|:---:|:---:|---|---|")
+    println(io, "| Commit | Julia | Summary | File |")
+    println(io, "|---|:---:|---|---|")
     for (idx, r) in enumerate(runs)
         tag = idx == 1 && length(runs) >= 2 ? " *(baseline)*" : ""
         msg = isempty(r.message) ? "Baseline" : r.message
-        println(io, "| `$(r.commit)`$tag | `$(r.julia)` | $(r.date) | $msg | `$(basename(r.path))` |")
+        println(io, "| `$(r.commit)`$tag | `$(r.julia)` | $msg | `$(basename(r.path))` |")
     end
     println(io)
 
@@ -155,16 +238,6 @@ function generate_benchmarks_markdown(
     for g in sort(collect(all_groups))
         g in ordered_groups || push!(ordered_groups, g)
     end
-
-    chart_id = 0
-    palette = [
-        ("rgba(54, 162, 235, 0.85)", "rgb(54, 162, 235)"),
-        ("rgba(75, 192, 192, 0.85)", "rgb(75, 192, 192)"),
-        ("rgba(255, 159, 64, 0.85)", "rgb(255, 159, 64)"),
-        ("rgba(153, 102, 255, 0.85)", "rgb(153, 102, 255)"),
-        ("rgba(255, 99, 132, 0.85)", "rgb(255, 99, 132)"),
-        ("rgba(201, 203, 207, 0.85)", "rgb(201, 203, 207)")
-    ]
 
     println(io, "## Comparative Timings & Allocations")
     println(io)
@@ -225,86 +298,13 @@ function generate_benchmarks_markdown(
         end
         println(io)
 
-        # Interactive Chart.js for all groups
+        # Pure inline SVG bar chart
         if !isempty(sorted_bnames)
-            chart_id += 1
-            cid = "benchmark_chart_$chart_id"
-            labels_js = "[" * join(["\"$b\"" for b in sorted_bnames], ", ") * "]"
             unit_label, unit_divisor = _select_unit(max_time_ns)
-
-            datasets_js = []
-            for (idx, r) in enumerate(runs)
-                bg_color, border_color = palette[mod1(idx, length(palette))]
-                vals = []
-                for bname in sorted_bnames
-                    if haskey(r.data, gname) && haskey(r.data[gname], bname)
-                        m = median(r.data[gname][bname])
-                        push!(vals, string(round(time(m) / unit_divisor, digits = 2)))
-                    else
-                        push!(vals, "null")
-                    end
-                end
-                vals_str = "[" * join(vals, ", ") * "]"
-                push!(datasets_js, """
-                {
-                    label: '$(r.commit) (Julia $(r.julia))',
-                    data: $vals_str,
-                    backgroundColor: '$bg_color',
-                    borderColor: '$border_color',
-                    borderWidth: 1
-                }
-                """)
-            end
-            all_datasets = "[" * join(datasets_js, ",\n") * "]"
-
+            svg_html = _render_svg_barchart(
+                gname, sorted_bnames, runs, max_time_ns, unit_label, unit_divisor)
             println(io, "```@raw html")
-            if chart_id == 1
-                println(io, "<script src=\"https://cdn.jsdelivr.net/npm/chart.js\"></script>")
-            end
-            println(io,
-                """
-<div style="width: 100%; max-width: 820px; margin: 1.5em auto; background: var(--documenter-bg, #fff); padding: 1.2em; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-  <canvas id="$cid"></canvas>
-</div>
-<script>
-document.addEventListener("DOMContentLoaded", function() {
-    var ctx = document.getElementById('$cid').getContext('2d');
-    new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: $labels_js,
-            datasets: $all_datasets
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                title: {
-                    display: true,
-                    text: '$(titlecase(gname)) - Median Execution Time ($unit_label)'
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            if (context.parsed.y === null) return context.dataset.label + ': (not measured)';
-                            return context.dataset.label + ': ' + context.parsed.y + ' $unit_label';
-                        }
-                    }
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    title: {
-                        display: true,
-                        text: 'Time ($unit_label)'
-                    }
-                }
-            }
-        }
-    });
-});
-</script>
-""")
+            println(io, svg_html)
             println(io, "```")
             println(io)
         end
@@ -320,7 +320,7 @@ document.addEventListener("DOMContentLoaded", function() {
     println(io, "```")
     println(io)
     println(io,
-        "Rebuilding the documentation (`julia -e 'using Pkg; Pkg.activate(\"docs\"); include(\"docs/make.jl\")'`) will automatically discover all `baseline_*.json` files and append new comparison columns, delta calculations, and chart series.")
+        "Rebuilding the documentation (`julia -e 'using Pkg; Pkg.activate(\"docs\"); include(\"docs/make.jl\")'`) will automatically discover all `baseline_*.json` files and append new comparison columns, delta calculations, and charts.")
 
     open(output_path, "w") do f
         write(f, String(take!(io)))
