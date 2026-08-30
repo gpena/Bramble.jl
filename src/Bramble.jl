@@ -110,6 +110,7 @@ include("space/vectorelement.jl")
 # share a traversal defined in difference.jl.
 include("space/operators/restriction.jl")
 include("space/operators/cell_average.jl")
+include("space/operators/linear_operators.jl")
 include("space/operators/shift.jl")
 include("space/operators/difference.jl")
 include("space/operators/jump.jl")
