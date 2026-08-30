@@ -14,6 +14,13 @@
 #                    #
 ######################
 
+# The coefficient type of the result comes from `f`, as it does in `Rₕ` and for the same
+# reason: the average of a Dual-valued function is Dual-valued, over a mesh that stays
+# Float64. The quadrature weights are the mesh's type and promote against it.
+#
+# Placed above the docstring, not between it and the definition. A comment there detaches
+# the docstring from `avgₕ` and binds it to nothing, which the exported-names-are-
+# documented check in test/quality catches.
 """
 	avgₕ(Wₕ::AbstractSpaceType, f; quad_points = AVG_QUAD_POINTS, markers = ())
 
@@ -36,9 +43,6 @@ all components works, and both give the same result.
   - `markers`: restrict evaluation to the named marked regions, as in
     [`Rₕ`](@ref), leaving every other entry zero.
 """
-# The coefficient type comes from `f`, as it does in `Rₕ`, and for the same reason: the
-# average of a Dual-valued function is Dual-valued, over a mesh that stays Float64. The
-# quadrature weights are the mesh's type and promote against it.
 Base.@constprop :aggressive function avgₕ(
         Wₕ::AbstractSpaceType, f; quad_points::Int = AVG_QUAD_POINTS,
         markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {N}

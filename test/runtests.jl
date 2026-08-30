@@ -112,6 +112,7 @@ end
 if __bramble_with_quality
     @testset verbose=true "\nQuality" begin
         include("quality/aqua.jl")
+        include("quality/docstrings.jl")
         include("quality/jet.jl")
     end
 end

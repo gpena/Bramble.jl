@@ -21,7 +21,12 @@ makedocs(; format = Documenter.HTML(; prettyurls = get(ENV, "CI", nothing) == "t
     sitename = "Bramble.jl",
     pages = allpages,
     authors = "Gonçalo Pena and Gemini",
-    warnonly = [:cross_references, :missing_docs])
+    # `missing_docs` stays a warning: Documenter reports every internal helper it cannot
+    # find a page for, so making it an error would mean adding `@docs` stubs to silence it
+    # rather than because they help. The rule that matters — every *exported* name has a
+    # docstring — is enforced in test/quality/docstrings.jl instead, where it has no false
+    # positives. A broken `@ref` is always a real mistake, so that one is an error.
+    warnonly = [:missing_docs])
 
 deploydocs(;
     repo = "github.com/gpena/Bramble.jl.git",

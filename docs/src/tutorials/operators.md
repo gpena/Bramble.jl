@@ -60,25 +60,30 @@ gradient and has that extra name for it.
 
 An operator takes a [`VectorElement`](@ref) and returns a new one on the same space.
 
-```julia
-using Bramble
+```@setup operators
+using Bramble, Random
+using Bramble: values
+# The non-uniform meshes further down are drawn at random, so the page is seeded to make
+# every build produce the same numbers.
+Random.seed!(20260830)
+```
 
+```@repl operators
+using Bramble
 Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
 Wₕ = gridspace(Ωₕ)
-
-points(Ωₕ)       # [0.0, 0.25, 0.5, 0.75, 1.0]
-spacings(Ωₕ)     # [0.25, 0.25, 0.25, 0.25, 0.25]
-
+points(Ωₕ)
+spacings(Ωₕ)
 uₕ = Rₕ(Wₕ, x -> x^2)
-values(uₕ)       # [0.0, 0.0625, 0.25, 0.5625, 1.0]
+values(uₕ)
 ```
 
 The four backward operators on that grid function:
 
-```julia
-values(diff₋ₓ(uₕ))   # [0.0, 0.0625, 0.1875, 0.3125, 0.4375]
-values(D₋ₓ(uₕ))      # [0.0, 0.25,   0.75,   1.25,   1.75  ]
-values(M₋ₓ(uₕ))      # [0.0, 0.03125, 0.15625, 0.40625, 0.78125]
+```@repl operators
+values(diff₋ₓ(uₕ))
+values(D₋ₓ(uₕ))
+values(M₋ₓ(uₕ))
 ```
 
 Reading the second entry of each: `diff₋ₓ` gives ``u_2 - u_1 = 0.0625``, `D₋ₓ` divides
@@ -86,9 +91,9 @@ that by ``h_2 = 0.25`` to get ``0.25``, and `M₋ₓ` averages ``(u_1 + u_2)/2 =
 
 The jump has no backward form, so it matches the *forward* unscaled difference instead:
 
-```julia
-values(diff₊ₓ(uₕ))   # [0.0625, 0.1875, 0.3125, 0.4375, -1.0]
-values(jumpₓ(uₕ))    # [0.0625, 0.1875, 0.3125, 0.4375, -1.0]
+```@repl operators
+values(diff₊ₓ(uₕ))
+values(jumpₓ(uₕ))
 ```
 
 entry for entry, as section 1 said it would.
@@ -154,12 +159,14 @@ The finite difference is **zero** on its truncated slice, because there is no on
 stencil to divide by a spacing. The unscaled difference and the jump instead behave as
 if the missing neighbour were zero, which is what makes them agree with their matrices:
 
-```julia
-values(D₋ₓ(uₕ))[1]      # 0.0,   the backward finite difference is truncated at x₁
-values(D₊ₓ(uₕ))[end]    # 0.0,   and the forward one at x₅
+The backward finite difference is truncated at ``x_1`` and the forward one at ``x_5``,
+while the unscaled differences act as though the missing neighbour were zero:
 
-values(diff₊ₓ(uₕ))[end] # -1.0,  which is -u₅, not 0
-values(diff₋ₓ(uₕ))[1]   # 0.0,   which is u₁, and u₁ happens to be 0 here
+```@repl operators
+values(D₋ₓ(uₕ))[1]
+values(D₊ₓ(uₕ))[end]
+values(diff₊ₓ(uₕ))[end]   # -u₅, not 0
+values(diff₋ₓ(uₕ))[1]     # u₁, and u₁ happens to be 0 here
 ```
 
 Section 10 shows why this matters in practice.
@@ -264,9 +271,9 @@ In two or more dimensions, directional operators apply along the coordinate line
 Passing a mesh or a grid space, rather than a grid function, returns the operator itself
 as a sparse matrix:
 
-```julia
-A = D₋ₓ(Wₕ)                       # SparseMatrixCSC{Float64, Int64}
-A * values(uₕ) ≈ values(D₋ₓ(uₕ))  # true
+```@repl operators
+A = D₋ₓ(Wₕ)
+A * values(uₕ) ≈ values(D₋ₓ(uₕ))
 ```
 
 Both routes give the same answer. Applying the operator directly to `uₕ` is the fast
@@ -279,13 +286,12 @@ The `ₕ` suffix applies the operator along every coordinate and returns a tuple
 entry per dimension. On a one-dimensional mesh it returns the single element itself
 rather than a one-tuple.
 
-```julia
+```@repl operators
 Ω₂ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 4), (true, true))
 W₂ = gridspace(Ω₂)
 vₕ = Rₕ(W₂, x -> x[1] + 2x[2])
-
-g = ∇₋ₕ(vₕ)      # a 2-tuple
-length(g)        # 2
+g = ∇₋ₕ(vₕ)
+length(g)
 ```
 
 Away from the truncated slices, `g[1]` is `1.0` and `g[2]` is `2.0`, the two partial
@@ -297,11 +303,11 @@ derivatives of ``x + 2y``. The same suffix works for the other families as `diff
 The discrete inner product weights each point by its cell measure, and the norms are
 built from it:
 
-```julia
-innerₕ(uₕ, uₕ)                                    # 0.22070312
-normₕ(uₕ)                                         # 0.46979051
-normₕ(uₕ)^2 ≈ innerₕ(uₕ, uₕ)                      # true
-norm₁ₕ(uₕ)^2 ≈ normₕ(uₕ)^2 + snorm₁ₕ(uₕ)^2        # true
+```@repl operators
+innerₕ(uₕ, uₕ)
+normₕ(uₕ)
+normₕ(uₕ)^2 ≈ innerₕ(uₕ, uₕ)
+norm₁ₕ(uₕ)^2 ≈ normₕ(uₕ)^2 + snorm₁ₕ(uₕ)^2
 ```
 
 `normₕ` is the discrete ``L^2`` norm, `snorm₁ₕ` the ``H^1`` seminorm, and `norm₁ₕ` the
@@ -323,13 +329,12 @@ divided by the **averaged** spacing rather than by the forward spacing,
 with the last point truncated to zero, as `D₊ₓ` is. On a uniform grid ``h_i = h_{i+1}``
 and it coincides with `D₊ₓ`; the two differ only where the spacing varies:
 
-```julia
-Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
-set_points!(Ωₕ, [0.0, 0.1, 0.3, 0.7, 1.0])
-uₕ = Rₕ(gridspace(Ωₕ), x -> x^2)
-
-values(D₊ₓ(uₕ))      # [0.1, 0.4,      1.0,      1.7,      0.0]
-values(Dstar₊ₓ(uₕ))  # [0.1, 0.533333, 1.333333, 1.457143, 0.0]
+```@repl operators
+Ωₙ = mesh(domain(interval(0.0, 1.0)), 5, true)
+set_points!(Ωₙ, [0.0, 0.1, 0.3, 0.7, 1.0])
+uₙ = Rₕ(gridspace(Ωₙ), x -> x^2)
+values(D₊ₓ(uₙ))
+values(Dstar₊ₓ(uₙ))
 ```
 
 The identity is
@@ -343,16 +348,14 @@ left is `innerₕ`, weighted by the cell measures, and the right is `inner₊ₓ
 the staggered ones. Only `vₕ` has to vanish; `uₕ` is unconstrained, since the boundary
 term the identity discards is a product of the two.
 
-```julia
-Ωₕ = mesh(domain(interval(0.0, 1.0)), 21, false)   # a random, non-uniform grid
-Wₕ = gridspace(Ωₕ)
-uₕ = Rₕ(Wₕ, x -> cos(x) + 0.7)                     # not zero at the boundary
-vₕ = Rₕ(Wₕ, x -> sin(pi * x))                      # zero at both ends
-
-innerₕ(Dstar₊ₓ(uₕ), vₕ)   # -0.31719453
--inner₊ₓ(uₕ, D₋ₓ(vₕ))     # -0.31719453,  equal to machine precision
-
-innerₕ(D₊ₓ(uₕ), vₕ)       # -0.31029831,  the ordinary forward difference does not
+```@repl operators
+Ωᵣ = mesh(domain(interval(0.0, 1.0)), 21, false)   # a random, non-uniform grid
+Wᵣ = gridspace(Ωᵣ)
+aₕ = Rₕ(Wᵣ, x -> cos(x) + 0.7)                     # not zero at the boundary
+bₕ = Rₕ(Wᵣ, x -> sin(pi * x))                      # zero at both ends
+innerₕ(Dstar₊ₓ(aₕ), bₕ)
+-inner₊ₓ(aₕ, D₋ₓ(bₕ))                              # equal to machine precision
+innerₕ(D₊ₓ(aₕ), bₕ)                                # D₊ₓ does not agree
 ```
 
 It holds per coordinate in two and three dimensions as well, with `Dstar₊ᵧ`, `Dstar₊₂`
@@ -377,14 +380,10 @@ divides by the whole span its stencil covers:
 It is the only operator here that truncates on **two** slices, since neither the first
 nor the last point has a neighbour on both sides.
 
-```julia
-Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
-set_points!(Ωₕ, [0.0, 0.1, 0.3, 0.7, 1.0])
-uₕ = Rₕ(gridspace(Ωₕ), x -> x^2)
-
-values(D₋ₓ(uₕ))   # [0.0, 0.1, 0.4, 1.0, 1.7]
-values(D₊ₓ(uₕ))   # [0.1, 0.4, 1.0, 1.7, 0.0]
-values(Dcₓ(uₕ))   # [0.0, 0.3, 0.8, 1.3, 0.0]
+```@repl operators
+values(D₋ₓ(uₙ))
+values(D₊ₓ(uₙ))
+values(Dcₓ(uₙ))
 ```
 
 Writing the denominator as ``x_{i+1} - x_{i-1}`` rather than as a pair of spacings buys
@@ -393,20 +392,19 @@ two properties that hold on **any** grid, not only a uniform one.
 First, it reproduces an affine function's derivative exactly, since numerator and
 denominator are then the same quantity:
 
-```julia
-values(Dcₓ(Rₕ(Wₕ, x -> 3x + 1)))   # [0.0, 3.0, 3.0, ..., 3.0, 0.0]
+```@repl operators
+values(Dcₓ(Rₕ(gridspace(Ωₙ), x -> 3x + 1)))
 ```
 
 Second, it is skew-symmetric in `innerₕ` for grid functions vanishing on the boundary:
 
-```julia
-Ωₕ = mesh(domain(interval(0.0, 1.0)), 41, false)   # a random, non-uniform grid
-Wₕ = gridspace(Ωₕ)
-uₕ = Rₕ(Wₕ, x -> sin(pi * x))
-vₕ = Rₕ(Wₕ, x -> sin(2pi * x) * x * (1 - x))       # both zero at both ends
-
-innerₕ(Dcₓ(uₕ), vₕ)    #  0.21019221
--innerₕ(uₕ, Dcₓ(vₕ))   #  0.21019221,  equal to machine precision
+```@repl operators
+Ωₛ = mesh(domain(interval(0.0, 1.0)), 41, false)   # a random, non-uniform grid
+Wₛ = gridspace(Ωₛ)
+pₕ = Rₕ(Wₛ, x -> sin(pi * x))
+qₕ = Rₕ(Wₛ, x -> sin(2pi * x) * x * (1 - x))       # both zero at both ends
+innerₕ(Dcₓ(pₕ), qₕ)
+-innerₕ(pₕ, Dcₓ(qₕ))                               # equal to machine precision
 ```
 
 The reason is the same cancellation that gives `Dstar₊ₓ` its identity in section 7:
@@ -445,14 +443,10 @@ The swap buys exactness on quadratics rather than only on affine functions, on a
 With ``u = x^2`` the weighted sum telescopes to ``2 x_i (h_i + h_{i+1})``, and the
 denominator cancels:
 
-```julia
-Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
-set_points!(Ωₕ, [0.0, 0.1, 0.3, 0.7, 1.0])
-uₕ = Rₕ(gridspace(Ωₕ), x -> x^2)
-
-values(Dcₓ(uₕ))   # [0.0, 0.3, 0.8, 1.3, 0.0]
-values(Dₕₓ(uₕ))   # [0.0, 0.2, 0.6, 1.4, 0.0]
-2 .* points(Ωₕ)   # [0.0, 0.2, 0.6, 1.4, 2.0]    ← Dₕₓ hits it exactly
+```@repl operators
+values(Dcₓ(uₙ))
+values(Dₕₓ(uₙ))
+2 .* points(Ωₙ)   # Dₕₓ hits this exactly, away from the two truncated points
 ```
 
 That one order of extra exactness is one order of extra accuracy. Differencing ``\sin``
@@ -476,13 +470,13 @@ centered counterpart of `∇₋ₕ` and `∇₊ₕ`.
 `D₋ₓ` is first order, so the error against a known derivative should fall by a factor of
 ten each time the grid is refined by ten. Measuring it naively does not show that:
 
-```julia
+```@example operators
 for n in (11, 101, 1001, 10001)
-    Ωₙ = mesh(domain(interval(0.0, 1.0)), n, true)
-    Wₙ = gridspace(Ωₙ)
-    uₙ = Rₕ(Wₙ, sin)
-    eₙ = D₋ₓ(uₙ) - Rₕ(Wₙ, cos)
-    @show n, normₕ(eₙ)
+    Ω = mesh(domain(interval(0.0, 1.0)), n, true)
+    W = gridspace(Ω)
+    u = Rₕ(W, sin)
+    e = D₋ₓ(u) - Rₕ(W, cos)
+    println(n, "  ", normₕ(e))
 end
 ```
 
