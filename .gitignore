@@ -43,7 +43,13 @@ Manifest.toml
 *.mp4
 
 # other stuff
-benchmark/
+# Scratch benchmarking stays ignored, but the committed regression suite does not: an
+# uncommitted benchmark suite cannot be a baseline for anyone else. The directory is
+# excluded by its contents rather than as a whole, since git does not descend into an
+# excluded directory and the negations below would never be reached.
+benchmark/*
+!benchmark/benchmarks.jl
+!benchmark/Project.toml
 playground/
 build/
 research/

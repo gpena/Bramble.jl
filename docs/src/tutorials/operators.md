@@ -70,11 +70,11 @@ Random.seed!(20260830)
 
 ```@repl operators
 using Bramble
-Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
-Wₕ = gridspace(Ωₕ)
+Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true);
+Wₕ = gridspace(Ωₕ);
 points(Ωₕ)
 spacings(Ωₕ)
-uₕ = Rₕ(Wₕ, x -> x^2)
+uₕ = Rₕ(Wₕ, x -> x^2);
 values(uₕ)
 ```
 
@@ -272,7 +272,8 @@ Passing a mesh or a grid space, rather than a grid function, returns the operato
 as a sparse matrix:
 
 ```@repl operators
-A = D₋ₓ(Wₕ)
+A = D₋ₓ(Wₕ);
+typeof(A)
 A * values(uₕ) ≈ values(D₋ₓ(uₕ))
 ```
 
@@ -287,10 +288,10 @@ entry per dimension. On a one-dimensional mesh it returns the single element its
 rather than a one-tuple.
 
 ```@repl operators
-Ω₂ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 4), (true, true))
-W₂ = gridspace(Ω₂)
-vₕ = Rₕ(W₂, x -> x[1] + 2x[2])
-g = ∇₋ₕ(vₕ)
+Ω₂ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 4), (true, true));
+W₂ = gridspace(Ω₂);
+vₕ = Rₕ(W₂, x -> x[1] + 2x[2]);
+g = ∇₋ₕ(vₕ);
 length(g)
 ```
 
@@ -330,9 +331,9 @@ with the last point truncated to zero, as `D₊ₓ` is. On a uniform grid ``h_i 
 and it coincides with `D₊ₓ`; the two differ only where the spacing varies:
 
 ```@repl operators
-Ωₙ = mesh(domain(interval(0.0, 1.0)), 5, true)
+Ωₙ = mesh(domain(interval(0.0, 1.0)), 5, true);
 set_points!(Ωₙ, [0.0, 0.1, 0.3, 0.7, 1.0])
-uₙ = Rₕ(gridspace(Ωₙ), x -> x^2)
+uₙ = Rₕ(gridspace(Ωₙ), x -> x^2);
 values(D₊ₓ(uₙ))
 values(Dstar₊ₓ(uₙ))
 ```
@@ -349,10 +350,10 @@ the staggered ones. Only `vₕ` has to vanish; `uₕ` is unconstrained, since th
 term the identity discards is a product of the two.
 
 ```@repl operators
-Ωᵣ = mesh(domain(interval(0.0, 1.0)), 21, false)   # a random, non-uniform grid
-Wᵣ = gridspace(Ωᵣ)
-aₕ = Rₕ(Wᵣ, x -> cos(x) + 0.7)                     # not zero at the boundary
-bₕ = Rₕ(Wᵣ, x -> sin(pi * x))                      # zero at both ends
+Ωᵣ = mesh(domain(interval(0.0, 1.0)), 21, false);   # a random, non-uniform grid
+Wᵣ = gridspace(Ωᵣ);
+aₕ = Rₕ(Wᵣ, x -> cos(x) + 0.7);                     # not zero at the boundary
+bₕ = Rₕ(Wᵣ, x -> sin(pi * x));                      # zero at both ends
 innerₕ(Dstar₊ₓ(aₕ), bₕ)
 -inner₊ₓ(aₕ, D₋ₓ(bₕ))                              # equal to machine precision
 innerₕ(D₊ₓ(aₕ), bₕ)                                # D₊ₓ does not agree
@@ -399,10 +400,10 @@ values(Dcₓ(Rₕ(gridspace(Ωₙ), x -> 3x + 1)))
 Second, it is skew-symmetric in `innerₕ` for grid functions vanishing on the boundary:
 
 ```@repl operators
-Ωₛ = mesh(domain(interval(0.0, 1.0)), 41, false)   # a random, non-uniform grid
-Wₛ = gridspace(Ωₛ)
-pₕ = Rₕ(Wₛ, x -> sin(pi * x))
-qₕ = Rₕ(Wₛ, x -> sin(2pi * x) * x * (1 - x))       # both zero at both ends
+Ωₛ = mesh(domain(interval(0.0, 1.0)), 41, false);   # a random, non-uniform grid
+Wₛ = gridspace(Ωₛ);
+pₕ = Rₕ(Wₛ, x -> sin(pi * x));
+qₕ = Rₕ(Wₛ, x -> sin(2pi * x) * x * (1 - x));       # both zero at both ends
 innerₕ(Dcₓ(pₕ), qₕ)
 -innerₕ(pₕ, Dcₓ(qₕ))                               # equal to machine precision
 ```

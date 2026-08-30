@@ -21,8 +21,10 @@ function _has_docstring(name::Symbol)
 end
 
 # Names re-exported from Base or another package are documented there, not here.
-_is_ours(name::Symbol) = isdefined(Bramble, name) &&
-                         parentmodule(getproperty(Bramble, name)) === Bramble
+function _is_ours(name::Symbol)
+    isdefined(Bramble, name) &&
+        parentmodule(getproperty(Bramble, name)) === Bramble
+end
 
 @testset "Every exported name is documented" begin
     exported = filter(!=(:Bramble), names(Bramble))
