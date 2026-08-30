@@ -10,20 +10,62 @@ between two cells rather than to a direction of travel across it, so
 other side and give the same numbers shifted by one index.</p><h3 id="1.1-How-the-names-are-built"><a class="docs-heading-anchor" href="#1.1-How-the-names-are-built">1.1 How the names are built</a><a id="1.1-How-the-names-are-built-1"></a><a class="docs-heading-anchor-permalink" href="#1.1-How-the-names-are-built" title="Permalink"></a></h3><p>A name is a stem, a direction, and a coordinate:</p><table><tr><th style="text-align: left">Piece</th><th style="text-align: left">Meaning</th></tr><tr><td style="text-align: left"><code>diff</code></td><td style="text-align: left">unscaled difference</td></tr><tr><td style="text-align: left"><code>D</code></td><td style="text-align: left">finite difference</td></tr><tr><td style="text-align: left"><code>jump</code></td><td style="text-align: left">jump</td></tr><tr><td style="text-align: left"><code>M</code></td><td style="text-align: left">average</td></tr><tr><td style="text-align: left"><code>₋</code></td><td style="text-align: left">backward: the stencil reaches to <span>$i-1$</span></td></tr><tr><td style="text-align: left"><code>₊</code></td><td style="text-align: left">forward: the stencil reaches to <span>$i+1$</span></td></tr><tr><td style="text-align: left"><code>ₓ</code>, <code>ᵧ</code>, <code>₂</code></td><td style="text-align: left">along the first, second or third coordinate</td></tr><tr><td style="text-align: left"><code>ₕ</code></td><td style="text-align: left">every coordinate at once, returning a tuple</td></tr></table><p>So <code>D₋ₓ</code> is the backward finite difference along <span>$x$</span>, <code>M₊ᵧ</code> the forward average along
 <span>$y$</span>, and <code>∇₋ₕ</code> the backward finite difference in every coordinate, which is the discrete
 gradient and has that extra name for it.</p><p><code>jump</code> takes no direction, for the reason given above: it is <code>jumpₓ</code>, <code>jumpᵧ</code>, <code>jump₂</code> and
-<code>jumpₕ</code>.</p><h2 id="2.-Applying-an-operator"><a class="docs-heading-anchor" href="#2.-Applying-an-operator">2. Applying an operator</a><a id="2.-Applying-an-operator-1"></a><a class="docs-heading-anchor-permalink" href="#2.-Applying-an-operator" title="Permalink"></a></h2><p>An operator takes a <a href="../../api/#Bramble.VectorElement"><code>VectorElement</code></a> and returns a new one on the same space.</p><pre><code class="language-julia hljs">using Bramble
-
-Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
-Wₕ = gridspace(Ωₕ)
-
-points(Ωₕ)       # [0.0, 0.25, 0.5, 0.75, 1.0]
-spacings(Ωₕ)     # [0.25, 0.25, 0.25, 0.25, 0.25]
-
-uₕ = Rₕ(Wₕ, x -&gt; x^2)
-values(uₕ)       # [0.0, 0.0625, 0.25, 0.5625, 1.0]</code></pre><p>The four backward operators on that grid function:</p><pre><code class="language-julia hljs">values(diff₋ₓ(uₕ))   # [0.0, 0.0625, 0.1875, 0.3125, 0.4375]
-values(D₋ₓ(uₕ))      # [0.0, 0.25,   0.75,   1.25,   1.75  ]
-values(M₋ₓ(uₕ))      # [0.0, 0.03125, 0.15625, 0.40625, 0.78125]</code></pre><p>Reading the second entry of each: <code>diff₋ₓ</code> gives <span>$u_2 - u_1 = 0.0625$</span>, <code>D₋ₓ</code> divides
-that by <span>$h_2 = 0.25$</span> to get <span>$0.25$</span>, and <code>M₋ₓ</code> averages <span>$(u_1 + u_2)/2 = 0.03125$</span>.</p><p>The jump has no backward form, so it matches the <em>forward</em> unscaled difference instead:</p><pre><code class="language-julia hljs">values(diff₊ₓ(uₕ))   # [0.0625, 0.1875, 0.3125, 0.4375, -1.0]
-values(jumpₓ(uₕ))    # [0.0625, 0.1875, 0.3125, 0.4375, -1.0]</code></pre><p>entry for entry, as section 1 said it would.</p><h2 id="3.-What-happens-at-the-boundary"><a class="docs-heading-anchor" href="#3.-What-happens-at-the-boundary">3. What happens at the boundary</a><a id="3.-What-happens-at-the-boundary-1"></a><a class="docs-heading-anchor-permalink" href="#3.-What-happens-at-the-boundary" title="Permalink"></a></h2><p>Every operator has one slice where its stencil runs off the grid: the first point for a
+<code>jumpₕ</code>.</p><h2 id="2.-Applying-an-operator"><a class="docs-heading-anchor" href="#2.-Applying-an-operator">2. Applying an operator</a><a id="2.-Applying-an-operator-1"></a><a class="docs-heading-anchor-permalink" href="#2.-Applying-an-operator" title="Permalink"></a></h2><p>An operator takes a <a href="../../api/#Bramble.VectorElement"><code>VectorElement</code></a> and returns a new one on the same space.</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; using Bramble</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)</code><code class="nohighlight hljs ansi" style="display:block;"><span class="sgr36"><span class="sgr1">Mesh1D</span></span> {<span class="sgr33">1D</span>, <span class="sgr33">Float64</span>}
+<span class="sgr34">5 points</span>
+<span class="sgr90">Domain: </span>[0.0, 1.0]
+<span class="sgr90">Spacing: </span>uniform • <span class="sgr35">h</span>ₘₐₓ = <span class="sgr34">0.25</span>
+<span class="sgr90">Markers: </span><span class="sgr33">1 label</span> • <span class="sgr32">:boundary</span> (<span class="sgr34">2</span>)</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; Wₕ = gridspace(Ωₕ)</code><code class="nohighlight hljs ansi" style="display:block;">ScalarGridSpace{1, Float64, Vector{Float64}, Mesh1D{Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}}, CartesianIndices{1, Tuple{Base.OneTo{Int64}}}, Vector{Float64}, Float64}, Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}}}(<span class="sgr36"><span class="sgr1">Mesh1D</span></span> {<span class="sgr33">1D</span>, <span class="sgr33">Float64</span>}
+<span class="sgr34">5 points</span>
+<span class="sgr90">Domain: </span>[0.0, 1.0]
+<span class="sgr90">Spacing: </span>uniform • <span class="sgr35">h</span>ₘₐₓ = <span class="sgr34">0.25</span>
+<span class="sgr90">Markers: </span><span class="sgr33">1 label</span> • <span class="sgr32">:boundary</span> (<span class="sgr34">2</span>)
+, Bramble.SpaceWeights{1, Vector{Float64}}([0.125, 0.25, 0.25, 0.25, 0.125], ([0.0, 0.25, 0.25, 0.25, 0.25],)), Bramble.GridSpaceBuffer{Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}}, Vector{Float64}, Float64}(Bramble.VectorBuffer{Float64, Vector{Float64}}[Bramble.VectorBuffer{Float64, Vector{Float64}}([0.0, 0.0, 0.0, 0.0, 0.0], false)], [1], Backend(vector = Vector{Float64}, matrix = SparseArrays.SparseMatrixCSC{Float64, Int64}), 5))</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; points(Ωₕ)</code><code class="nohighlight hljs ansi" style="display:block;">5-element Vector{Float64}:
+ 0.0
+ 0.25
+ 0.5
+ 0.75
+ 1.0</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; spacings(Ωₕ)</code><code class="nohighlight hljs ansi" style="display:block;">5-element Vector{Float64}:
+ 0.25
+ 0.25
+ 0.25
+ 0.25
+ 0.25</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; uₕ = Rₕ(Wₕ, x -&gt; x^2)</code><code class="nohighlight hljs ansi" style="display:block;">5-element VectorElement{ScalarGridSpace{1, Float64, Vector{Float64}, Mesh1D{Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}}, CartesianIndices{1, Tuple{Base.OneTo{Int64}}}, Vector{Float64}, Float64}, Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}}}, Float64, Vector{Float64}}:
+ 0.0
+ 0.0625
+ 0.25
+ 0.5625
+ 1.0</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; values(uₕ)</code><code class="nohighlight hljs ansi" style="display:block;">5-element Vector{Float64}:
+ 0.0
+ 0.0625
+ 0.25
+ 0.5625
+ 1.0</code></pre><p>The four backward operators on that grid function:</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; values(diff₋ₓ(uₕ))</code><code class="nohighlight hljs ansi" style="display:block;">5-element Vector{Float64}:
+ 0.0
+ 0.0625
+ 0.1875
+ 0.3125
+ 0.4375</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; values(D₋ₓ(uₕ))</code><code class="nohighlight hljs ansi" style="display:block;">5-element Vector{Float64}:
+ 0.0
+ 0.25
+ 0.75
+ 1.25
+ 1.75</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; values(M₋ₓ(uₕ))</code><code class="nohighlight hljs ansi" style="display:block;">5-element Vector{Float64}:
+ 0.0
+ 0.03125
+ 0.15625
+ 0.40625
+ 0.78125</code></pre><p>Reading the second entry of each: <code>diff₋ₓ</code> gives <span>$u_2 - u_1 = 0.0625$</span>, <code>D₋ₓ</code> divides
+that by <span>$h_2 = 0.25$</span> to get <span>$0.25$</span>, and <code>M₋ₓ</code> averages <span>$(u_1 + u_2)/2 = 0.03125$</span>.</p><p>The jump has no backward form, so it matches the <em>forward</em> unscaled difference instead:</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; values(diff₊ₓ(uₕ))</code><code class="nohighlight hljs ansi" style="display:block;">5-element Vector{Float64}:
+  0.0625
+  0.1875
+  0.3125
+  0.4375
+ -1.0</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; values(jumpₓ(uₕ))</code><code class="nohighlight hljs ansi" style="display:block;">5-element Vector{Float64}:
+  0.0625
+  0.1875
+  0.3125
+  0.4375
+ -1.0</code></pre><p>entry for entry, as section 1 said it would.</p><h2 id="3.-What-happens-at-the-boundary"><a class="docs-heading-anchor" href="#3.-What-happens-at-the-boundary">3. What happens at the boundary</a><a id="3.-What-happens-at-the-boundary-1"></a><a class="docs-heading-anchor-permalink" href="#3.-What-happens-at-the-boundary" title="Permalink"></a></h2><p>Every operator has one slice where its stencil runs off the grid: the first point for a
 backward operator, the last for a forward one. There is no neighbour there, so the
 stencil is truncated, and the two difference families truncate differently.</p><figure>
 <svg viewBox="0 0 720 250" width="100%" style="max-width: 720px; height: auto;"
@@ -74,11 +116,8 @@ stencil is truncated, and the two difference families truncate differently.</p><
 </svg>
 </figure><p>The finite difference is <strong>zero</strong> on its truncated slice, because there is no one-sided
 stencil to divide by a spacing. The unscaled difference and the jump instead behave as
-if the missing neighbour were zero, which is what makes them agree with their matrices:</p><pre><code class="language-julia hljs">values(D₋ₓ(uₕ))[1]      # 0.0,   the backward finite difference is truncated at x₁
-values(D₊ₓ(uₕ))[end]    # 0.0,   and the forward one at x₅
-
-values(diff₊ₓ(uₕ))[end] # -1.0,  which is -u₅, not 0
-values(diff₋ₓ(uₕ))[1]   # 0.0,   which is u₁, and u₁ happens to be 0 here</code></pre><p>Section 10 shows why this matters in practice.</p><p>In two or more dimensions, directional operators apply along the coordinate lines of the tensor grid, and each directional family truncates along its corresponding boundary slice:</p><figure>
+if the missing neighbour were zero, which is what makes them agree with their matrices:</p><p>The backward finite difference is truncated at <span>$x_1$</span> and the forward one at <span>$x_5$</span>,
+while the unscaled differences act as though the missing neighbour were zero:</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; values(D₋ₓ(uₕ))[1]</code><code class="nohighlight hljs ansi" style="display:block;">0.0</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; values(D₊ₓ(uₕ))[end]</code><code class="nohighlight hljs ansi" style="display:block;">0.0</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; values(diff₊ₓ(uₕ))[end]   # -u₅, not 0</code><code class="nohighlight hljs ansi" style="display:block;">-1.0</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; values(diff₋ₓ(uₕ))[1]     # u₁, and u₁ happens to be 0 here</code><code class="nohighlight hljs ansi" style="display:block;">0.0</code></pre><p>Section 10 shows why this matters in practice.</p><p>In two or more dimensions, directional operators apply along the coordinate lines of the tensor grid, and each directional family truncates along its corresponding boundary slice:</p><figure>
 <svg viewBox="0 0 740 310" width="100%" style="max-width:740px;height:auto;font-family:system-ui,-apple-system,'Segoe UI',sans-serif"
      xmlns="http://www.w3.org/2000/svg" role="img"
      aria-label="A 4 by 4 two-dimensional tensor-product grid showing the directional backward stencils D_-x (horizontal) and D_-y (vertical), and the boundary slices where each directional difference is truncated to zero.">
@@ -168,46 +207,122 @@ values(diff₋ₓ(uₕ))[1]   # 0.0,   which is u₁, and u₁ happens to be 0 h
   </g>
 </svg>
 </figure><h2 id="4.-Operators-as-matrices"><a class="docs-heading-anchor" href="#4.-Operators-as-matrices">4. Operators as matrices</a><a id="4.-Operators-as-matrices-1"></a><a class="docs-heading-anchor-permalink" href="#4.-Operators-as-matrices" title="Permalink"></a></h2><p>Passing a mesh or a grid space, rather than a grid function, returns the operator itself
-as a sparse matrix:</p><pre><code class="language-julia hljs">A = D₋ₓ(Wₕ)                       # SparseMatrixCSC{Float64, Int64}
-A * values(uₕ) ≈ values(D₋ₓ(uₕ))  # true</code></pre><p>Both routes give the same answer. Applying the operator directly to <code>uₕ</code> is the fast
+as a sparse matrix:</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; A = D₋ₓ(Wₕ)</code><code class="nohighlight hljs ansi" style="display:block;">5×5 SparseArrays.SparseMatrixCSC{Float64, Int64} with 9 stored entries:
+  0.0    ⋅     ⋅     ⋅    ⋅
+ -4.0   4.0    ⋅     ⋅    ⋅
+   ⋅   -4.0   4.0    ⋅    ⋅
+   ⋅     ⋅   -4.0   4.0   ⋅
+   ⋅     ⋅     ⋅   -4.0  4.0</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; A * values(uₕ) ≈ values(D₋ₓ(uₕ))</code><code class="nohighlight hljs ansi" style="display:block;">true</code></pre><p>Both routes give the same answer. Applying the operator directly to <code>uₕ</code> is the fast
 path and is what a time-stepping loop should use; the matrix is what to reach for when
 assembling a linear system, and it is also how the test suite checks the fast path.</p><h2 id="5.-Gradients-and-the-other-vectorial-forms"><a class="docs-heading-anchor" href="#5.-Gradients-and-the-other-vectorial-forms">5. Gradients and the other vectorial forms</a><a id="5.-Gradients-and-the-other-vectorial-forms-1"></a><a class="docs-heading-anchor-permalink" href="#5.-Gradients-and-the-other-vectorial-forms" title="Permalink"></a></h2><p>The <code>ₕ</code> suffix applies the operator along every coordinate and returns a tuple with one
 entry per dimension. On a one-dimensional mesh it returns the single element itself
-rather than a one-tuple.</p><pre><code class="language-julia hljs">Ω₂ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 4), (true, true))
-W₂ = gridspace(Ω₂)
-vₕ = Rₕ(W₂, x -&gt; x[1] + 2x[2])
-
-g = ∇₋ₕ(vₕ)      # a 2-tuple
-length(g)        # 2</code></pre><p>Away from the truncated slices, <code>g[1]</code> is <code>1.0</code> and <code>g[2]</code> is <code>2.0</code>, the two partial
+rather than a one-tuple.</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; Ω₂ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 4), (true, true))</code><code class="nohighlight hljs ansi" style="display:block;"><span class="sgr36"><span class="sgr1">MeshnD</span></span> {<span class="sgr33">2D</span>, <span class="sgr33">Float64</span>}
+<span class="sgr34">16 points</span> (4 × 4)
+<span class="sgr90">Domain: </span>[0.0, 1.0] × [0.0, 1.0]
+<span class="sgr90">Spacing: </span>uniform • <span class="sgr35">h</span>ₘₐₓ = <span class="sgr34">0.471405</span>
+<span class="sgr90">Markers: </span><span class="sgr33">1 label</span> • <span class="sgr32">:boundary</span> (<span class="sgr34">12</span>)</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; W₂ = gridspace(Ω₂)</code><code class="nohighlight hljs ansi" style="display:block;">ScalarGridSpace{2, Float64, Vector{Float64}, MeshnD{2, Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}}, CartesianIndices{2, Tuple{Base.OneTo{Int64}, Base.OneTo{Int64}}}, Tuple{Mesh1D{Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}}, CartesianIndices{1, Tuple{Base.OneTo{Int64}}}, Vector{Float64}, Float64}, Mesh1D{Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}}, CartesianIndices{1, Tuple{Base.OneTo{Int64}}}, Vector{Float64}, Float64}}, Float64}, Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}}}(<span class="sgr36"><span class="sgr1">MeshnD</span></span> {<span class="sgr33">2D</span>, <span class="sgr33">Float64</span>}
+<span class="sgr34">16 points</span> (4 × 4)
+<span class="sgr90">Domain: </span>[0.0, 1.0] × [0.0, 1.0]
+<span class="sgr90">Spacing: </span>uniform • <span class="sgr35">h</span>ₘₐₓ = <span class="sgr34">0.471405</span>
+<span class="sgr90">Markers: </span><span class="sgr33">1 label</span> • <span class="sgr32">:boundary</span> (<span class="sgr34">12</span>)
+, Bramble.SpaceWeights{2, Vector{Float64}}([0.027777777777777776, 0.05555555555555555, 0.05555555555555556, 0.02777777777777778, 0.05555555555555555, 0.1111111111111111, 0.11111111111111112, 0.05555555555555556, 0.05555555555555556, 0.11111111111111112, 0.11111111111111113, 0.055555555555555566, 0.02777777777777778, 0.05555555555555556, 0.055555555555555566, 0.027777777777777783], ([0.0, 0.0, 0.0, 0.0, 0.0, 0.1111111111111111, 0.1111111111111111, 0.11111111111111112, 0.0, 0.11111111111111112, 0.11111111111111112, 0.11111111111111113, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.1111111111111111, 0.11111111111111112, 0.0, 0.0, 0.1111111111111111, 0.11111111111111112, 0.0, 0.0, 0.11111111111111112, 0.11111111111111113, 0.0])), Bramble.GridSpaceBuffer{Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}}, Vector{Float64}, Float64}(Bramble.VectorBuffer{Float64, Vector{Float64}}[Bramble.VectorBuffer{Float64, Vector{Float64}}([5.0e-324, 4.243991582e-314, 0.0, 1.5e-323, 8.487983164e-314, 0.0, 2.5e-323, 1.2731974746e-313, 0.0, 3.5e-323, 1.69759663277e-313, 0.0, 4.4e-323, 2.12199579097e-313, 0.0, 5.4e-323], false)], [1], Backend(vector = Vector{Float64}, matrix = SparseArrays.SparseMatrixCSC{Float64, Int64}), 16))</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; vₕ = Rₕ(W₂, x -&gt; x[1] + 2x[2])</code><code class="nohighlight hljs ansi" style="display:block;">16-element VectorElement{ScalarGridSpace{2, Float64, Vector{Float64}, MeshnD{2, Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}}, CartesianIndices{2, Tuple{Base.OneTo{Int64}, Base.OneTo{Int64}}}, Tuple{Mesh1D{Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}}, CartesianIndices{1, Tuple{Base.OneTo{Int64}}}, Vector{Float64}, Float64}, Mesh1D{Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}}, CartesianIndices{1, Tuple{Base.OneTo{Int64}}}, Vector{Float64}, Float64}}, Float64}, Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}}}, Float64, Vector{Float64}}:
+ 0.0
+ 0.3333333333333333
+ 0.6666666666666666
+ 1.0
+ 0.6666666666666666
+ 1.0
+ 1.3333333333333333
+ 1.6666666666666665
+ 1.3333333333333333
+ 1.6666666666666665
+ 2.0
+ 2.333333333333333
+ 2.0
+ 2.3333333333333335
+ 2.6666666666666665
+ 3.0</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; g = ∇₋ₕ(vₕ)</code><code class="nohighlight hljs ansi" style="display:block;">([0.0, 1.0, 1.0, 1.0, 0.0, 1.0000000000000002, 0.9999999999999998, 0.9999999999999997, 0.0, 0.9999999999999998, 1.0000000000000004, 0.999999999999999, 0.0, 1.0000000000000004, 0.9999999999999991, 1.0000000000000002], [0.0, 0.0, 0.0, 0.0, 2.0, 2.0000000000000004, 2.0, 1.9999999999999996, 2.0, 1.9999999999999996, 2.0000000000000004, 1.9999999999999996, 2.0, 2.0000000000000004, 1.9999999999999993, 2.0000000000000004])</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; length(g)</code><code class="nohighlight hljs ansi" style="display:block;">2</code></pre><p>Away from the truncated slices, <code>g[1]</code> is <code>1.0</code> and <code>g[2]</code> is <code>2.0</code>, the two partial
 derivatives of <span>$x + 2y$</span>. The same suffix works for the other families as <code>diff₋ₕ</code>,
 <code>jumpₕ</code> and <code>M₋ₕ</code>, and all of them accept a mesh, a grid space or a grid function.</p><h2 id="6.-Inner-products-and-norms"><a class="docs-heading-anchor" href="#6.-Inner-products-and-norms">6. Inner products and norms</a><a id="6.-Inner-products-and-norms-1"></a><a class="docs-heading-anchor-permalink" href="#6.-Inner-products-and-norms" title="Permalink"></a></h2><p>The discrete inner product weights each point by its cell measure, and the norms are
-built from it:</p><pre><code class="language-julia hljs">innerₕ(uₕ, uₕ)                                    # 0.22070312
-normₕ(uₕ)                                         # 0.46979051
-normₕ(uₕ)^2 ≈ innerₕ(uₕ, uₕ)                      # true
-norm₁ₕ(uₕ)^2 ≈ normₕ(uₕ)^2 + snorm₁ₕ(uₕ)^2        # true</code></pre><p><code>normₕ</code> is the discrete <span>$L^2$</span> norm, <code>snorm₁ₕ</code> the <span>$H^1$</span> seminorm, and <code>norm₁ₕ</code> the
+built from it:</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; innerₕ(uₕ, uₕ)</code><code class="nohighlight hljs ansi" style="display:block;">0.220703125</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; normₕ(uₕ)</code><code class="nohighlight hljs ansi" style="display:block;">0.4697905118241534</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; normₕ(uₕ)^2 ≈ innerₕ(uₕ, uₕ)</code><code class="nohighlight hljs ansi" style="display:block;">true</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; norm₁ₕ(uₕ)^2 ≈ normₕ(uₕ)^2 + snorm₁ₕ(uₕ)^2</code><code class="nohighlight hljs ansi" style="display:block;">true</code></pre><p><code>normₕ</code> is the discrete <span>$L^2$</span> norm, <code>snorm₁ₕ</code> the <span>$H^1$</span> seminorm, and <code>norm₁ₕ</code> the
 full <span>$H^1$</span> norm, which is why the last identity holds. <code>inner₊</code> and its per-coordinate
 forms use the staggered weights instead, which is what the energy estimates for these
 schemes are written in.</p><h2 id="7.-Summation-by-parts,-and-Dstarₓ"><a class="docs-heading-anchor" href="#7.-Summation-by-parts,-and-Dstarₓ">7. Summation by parts, and <code>Dstar₊ₓ</code></a><a id="7.-Summation-by-parts,-and-Dstarₓ-1"></a><a class="docs-heading-anchor-permalink" href="#7.-Summation-by-parts,-and-Dstarₓ" title="Permalink"></a></h2><p>Continuous integration by parts, <span>$\int u&#39; v = -\int u v&#39;$</span> for <span>$v$</span> vanishing on the
 boundary, has a discrete counterpart, and which forward difference it holds for is not
 the obvious one. The operator that satisfies it is <code>Dstar₊ₓ</code>: the forward difference
 divided by the <strong>averaged</strong> spacing rather than by the forward spacing,</p><p class="math-container">\[\textrm{Dstar}_{+x}(u_h)(i) = \frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}\]</p><p>with the last point truncated to zero, as <code>D₊ₓ</code> is. On a uniform grid <span>$h_i = h_{i+1}$</span>
-and it coincides with <code>D₊ₓ</code>; the two differ only where the spacing varies:</p><pre><code class="language-julia hljs">Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
-set_points!(Ωₕ, [0.0, 0.1, 0.3, 0.7, 1.0])
-uₕ = Rₕ(gridspace(Ωₕ), x -&gt; x^2)
-
-values(D₊ₓ(uₕ))      # [0.1, 0.4,      1.0,      1.7,      0.0]
-values(Dstar₊ₓ(uₕ))  # [0.1, 0.533333, 1.333333, 1.457143, 0.0]</code></pre><p>The identity is</p><p class="math-container">\[(\textrm{Dstar}_{+x} u_h,\, v_h)_h = -(u_h,\, D_{-x} v_h)_{+x}\]</p><p>for any <code>vₕ</code> that vanishes on the boundary. Note which product sits on each side: the
+and it coincides with <code>D₊ₓ</code>; the two differ only where the spacing varies:</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; Ωₙ = mesh(domain(interval(0.0, 1.0)), 5, true)</code><code class="nohighlight hljs ansi" style="display:block;"><span class="sgr36"><span class="sgr1">Mesh1D</span></span> {<span class="sgr33">1D</span>, <span class="sgr33">Float64</span>}
+<span class="sgr34">5 points</span>
+<span class="sgr90">Domain: </span>[0.0, 1.0]
+<span class="sgr90">Spacing: </span>uniform • <span class="sgr35">h</span>ₘₐₓ = <span class="sgr34">0.25</span>
+<span class="sgr90">Markers: </span><span class="sgr33">1 label</span> • <span class="sgr32">:boundary</span> (<span class="sgr34">2</span>)</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; set_points!(Ωₙ, [0.0, 0.1, 0.3, 0.7, 1.0])</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; uₙ = Rₕ(gridspace(Ωₙ), x -&gt; x^2)</code><code class="nohighlight hljs ansi" style="display:block;">5-element VectorElement{ScalarGridSpace{1, Float64, Vector{Float64}, Mesh1D{Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}}, CartesianIndices{1, Tuple{Base.OneTo{Int64}}}, Vector{Float64}, Float64}, Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}}}, Float64, Vector{Float64}}:
+ 0.0
+ 0.010000000000000002
+ 0.09
+ 0.48999999999999994
+ 1.0</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; values(D₊ₓ(uₙ))</code><code class="nohighlight hljs ansi" style="display:block;">5-element Vector{Float64}:
+ 0.10000000000000002
+ 0.39999999999999997
+ 0.9999999999999999
+ 1.6999999999999997
+ 0.0</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; values(Dstar₊ₓ(uₙ))</code><code class="nohighlight hljs ansi" style="display:block;">5-element Vector{Float64}:
+ 0.10000000000000002
+ 0.5333333333333333
+ 1.333333333333333
+ 1.4571428571428573
+ 0.0</code></pre><p>The identity is</p><p class="math-container">\[(\textrm{Dstar}_{+x} u_h,\, v_h)_h = -(u_h,\, D_{-x} v_h)_{+x}\]</p><p>for any <code>vₕ</code> that vanishes on the boundary. Note which product sits on each side: the
 left is <code>innerₕ</code>, weighted by the cell measures, and the right is <code>inner₊ₓ</code>, weighted by
 the staggered ones. Only <code>vₕ</code> has to vanish; <code>uₕ</code> is unconstrained, since the boundary
-term the identity discards is a product of the two.</p><pre><code class="language-julia hljs">Ωₕ = mesh(domain(interval(0.0, 1.0)), 21, false)   # a random, non-uniform grid
-Wₕ = gridspace(Ωₕ)
-uₕ = Rₕ(Wₕ, x -&gt; cos(x) + 0.7)                     # not zero at the boundary
-vₕ = Rₕ(Wₕ, x -&gt; sin(pi * x))                      # zero at both ends
-
-innerₕ(Dstar₊ₓ(uₕ), vₕ)   # -0.31719453
--inner₊ₓ(uₕ, D₋ₓ(vₕ))     # -0.31719453,  equal to machine precision
-
-innerₕ(D₊ₓ(uₕ), vₕ)       # -0.31029831,  the ordinary forward difference does not</code></pre><p>It holds per coordinate in two and three dimensions as well, with <code>Dstar₊ᵧ</code>, <code>Dstar₊₂</code>
+term the identity discards is a product of the two.</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; Ωᵣ = mesh(domain(interval(0.0, 1.0)), 21, false)   # a random, non-uniform grid</code><code class="nohighlight hljs ansi" style="display:block;"><span class="sgr36"><span class="sgr1">Mesh1D</span></span> {<span class="sgr33">1D</span>, <span class="sgr33">Float64</span>}
+<span class="sgr34">21 points</span>
+<span class="sgr90">Domain: </span>[0.0, 1.0]
+<span class="sgr90">Spacing: </span>non-uniform • <span class="sgr35">h</span>ₘₐₓ = <span class="sgr34">0.141116</span>
+<span class="sgr90">Markers: </span><span class="sgr33">1 label</span> • <span class="sgr32">:boundary</span> (<span class="sgr34">2</span>)</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; Wᵣ = gridspace(Ωᵣ)</code><code class="nohighlight hljs ansi" style="display:block;">ScalarGridSpace{1, Float64, Vector{Float64}, Mesh1D{Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}}, CartesianIndices{1, Tuple{Base.OneTo{Int64}}}, Vector{Float64}, Float64}, Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}}}(<span class="sgr36"><span class="sgr1">Mesh1D</span></span> {<span class="sgr33">1D</span>, <span class="sgr33">Float64</span>}
+<span class="sgr34">21 points</span>
+<span class="sgr90">Domain: </span>[0.0, 1.0]
+<span class="sgr90">Spacing: </span>non-uniform • <span class="sgr35">h</span>ₘₐₓ = <span class="sgr34">0.141116</span>
+<span class="sgr90">Markers: </span><span class="sgr33">1 label</span> • <span class="sgr32">:boundary</span> (<span class="sgr34">2</span>)
+, Bramble.SpaceWeights{1, Vector{Float64}}([0.001357901928782379, 0.05532987920570953, 0.0927753378833906, 0.07612266470571166, 0.04031293440229522, 0.010125186240390383, 0.05050727140918193, 0.09771859474794586, 0.07982199206972529, 0.03159512516766272  …  0.051393091354235754, 0.005569808548594735, 0.024245098848928892, 0.03989745518254734, 0.023274288461807346, 0.07682547915978472, 0.07899444759001706, 0.05557860991331115, 0.05120162367759079, 0.004059657676870665], ([0.0, 0.002715803857564758, 0.1079439545538543, 0.07760672121292689, 0.07463860819849644, 0.005987260606094003, 0.014263111874686762, 0.0867514309436771, 0.10868575855221463, 0.05095822558723595  …  0.09435507890294248, 0.008431103805529028, 0.0027085132916604415, 0.04578168440619734, 0.03401322595889733, 0.012535350964717362, 0.14111560735485207, 0.01687328782518205, 0.09428393200144025, 0.00811931535374133],)), Bramble.GridSpaceBuffer{Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}}, Vector{Float64}, Float64}(Bramble.VectorBuffer{Float64, Vector{Float64}}[Bramble.VectorBuffer{Float64, Vector{Float64}}([6.91542359198273e-310, 6.91542873223934e-310, 6.91542872849946e-310, 6.91542855838514e-310, 6.91542873223934e-310, 6.9154287858751e-310, 6.9154235538195e-310, 6.91542873223934e-310, 6.9154287858751e-310, 6.91542872849946e-310  …  6.91542855838514e-310, 6.9154313718969e-310, 6.9154313718969e-310, 6.91542873376896e-310, 6.9154235919938e-310, 6.9154235919938e-310, 6.91542873223934e-310, 6.91542855838514e-310, 6.91542855838514e-310, 6.91541643729084e-310], false)], [1], Backend(vector = Vector{Float64}, matrix = SparseArrays.SparseMatrixCSC{Float64, Int64}), 21))</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; aₕ = Rₕ(Wᵣ, x -&gt; cos(x) + 0.7)                     # not zero at the boundary</code><code class="nohighlight hljs ansi" style="display:block;">21-element VectorElement{ScalarGridSpace{1, Float64, Vector{Float64}, Mesh1D{Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}}, CartesianIndices{1, Tuple{Base.OneTo{Int64}}}, Vector{Float64}, Float64}, Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}}}, Float64, Vector{Float64}}:
+ 1.7
+ 1.6999963122069701
+ 1.693883454479408
+ 1.682330150189258
+ 1.6656390596659416
+ 1.6640657505790353
+ 1.6601786259024047
+ 1.6323610111265283
+ 1.5876439291737654
+ 1.5630340309538164
+ ⋮
+ 1.499358759464408
+ 1.4977284082450786
+ 1.4692950631003558
+ 1.4471234629267744
+ 1.438732918914658
+ 1.3365933750403367
+ 1.3234906996986144
+ 1.247116589935823
+ 1.2403023058681397</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; bₕ = Rₕ(Wᵣ, x -&gt; sin(pi * x))                      # zero at both ends</code><code class="nohighlight hljs ansi" style="display:block;">21-element VectorElement{ScalarGridSpace{1, Float64, Vector{Float64}, Mesh1D{Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}}, CartesianIndices{1, Tuple{Base.OneTo{Int64}}}, Vector{Float64}, Float64}, Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}}}, Float64, Vector{Float64}}:
+ 0.0
+ 0.008531845935208865
+ 0.34068734744188967
+ 0.5575707715888656
+ 0.7351857705963382
+ 0.7478053063135673
+ 0.7767941730069348
+ 0.91763841678367
+ 0.9977393575497687
+ 0.9956937572490262
+ ⋮
+ 0.8986223274456165
+ 0.8948567264729913
+ 0.8216402675629478
+ 0.7561613401496092
+ 0.7298114032781651
+ 0.36601037815301696
+ 0.31618861851928837
+ 0.025504815529317704
+ 1.2246467991473532e-16</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; innerₕ(Dstar₊ₓ(aₕ), bₕ)</code><code class="nohighlight hljs ansi" style="display:block;">-0.3224302783078163</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; -inner₊ₓ(aₕ, D₋ₓ(bₕ))                              # equal to machine precision</code><code class="nohighlight hljs ansi" style="display:block;">-0.32243027830781656</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; innerₕ(D₊ₓ(aₕ), bₕ)                                # D₊ₓ does not agree</code><code class="nohighlight hljs ansi" style="display:block;">-0.31334878829556</code></pre><p>It holds per coordinate in two and three dimensions as well, with <code>Dstar₊ᵧ</code>, <code>Dstar₊₂</code>
 and their inner products. <code>Dstar₊ₕ</code> returns all coordinates at once, as <code>∇₊ₕ</code> does.</p><p>This is why the operator exists. Energy estimates for these schemes are derived by
 moving a difference from one factor to the other, and that step is exact only with this
 pairing: with <code>D₊ₓ</code> it leaves a residual that does not vanish under refinement, since it
@@ -215,21 +330,78 @@ is a difference of quadrature weights and not a truncation error. Unlike the oth
 difference families, <code>Dstar₊</code> takes a grid function only — it has no matrix form.</p><h2 id="8.-The-centered-difference,-Dcₓ"><a class="docs-heading-anchor" href="#8.-The-centered-difference,-Dcₓ">8. The centered difference, <code>Dcₓ</code></a><a id="8.-The-centered-difference,-Dcₓ-1"></a><a class="docs-heading-anchor-permalink" href="#8.-The-centered-difference,-Dcₓ" title="Permalink"></a></h2><p>Both one-sided differences reach one point; the centered one reaches both ways, and
 divides by the whole span its stencil covers:</p><p class="math-container">\[\textrm{Dc}_x(u_h)(i) = \frac{u_{i+1} - u_{i-1}}{h_i + h_{i+1}}
     = \frac{u_{i+1} - u_{i-1}}{x_{i+1} - x_{i-1}}\]</p><p>It is the only operator here that truncates on <strong>two</strong> slices, since neither the first
-nor the last point has a neighbour on both sides.</p><pre><code class="language-julia hljs">Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
-set_points!(Ωₕ, [0.0, 0.1, 0.3, 0.7, 1.0])
-uₕ = Rₕ(gridspace(Ωₕ), x -&gt; x^2)
-
-values(D₋ₓ(uₕ))   # [0.0, 0.1, 0.4, 1.0, 1.7]
-values(D₊ₓ(uₕ))   # [0.1, 0.4, 1.0, 1.7, 0.0]
-values(Dcₓ(uₕ))   # [0.0, 0.3, 0.8, 1.3, 0.0]</code></pre><p>Writing the denominator as <span>$x_{i+1} - x_{i-1}$</span> rather than as a pair of spacings buys
+nor the last point has a neighbour on both sides.</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; values(D₋ₓ(uₙ))</code><code class="nohighlight hljs ansi" style="display:block;">5-element Vector{Float64}:
+ 0.0
+ 0.10000000000000002
+ 0.39999999999999997
+ 0.9999999999999999
+ 1.6999999999999997</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; values(D₊ₓ(uₙ))</code><code class="nohighlight hljs ansi" style="display:block;">5-element Vector{Float64}:
+ 0.10000000000000002
+ 0.39999999999999997
+ 0.9999999999999999
+ 1.6999999999999997
+ 0.0</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; values(Dcₓ(uₙ))</code><code class="nohighlight hljs ansi" style="display:block;">5-element Vector{Float64}:
+ 0.0
+ 0.3
+ 0.7999999999999999
+ 1.3
+ 0.0</code></pre><p>Writing the denominator as <span>$x_{i+1} - x_{i-1}$</span> rather than as a pair of spacings buys
 two properties that hold on <strong>any</strong> grid, not only a uniform one.</p><p>First, it reproduces an affine function&#39;s derivative exactly, since numerator and
-denominator are then the same quantity:</p><pre><code class="language-julia hljs">values(Dcₓ(Rₕ(Wₕ, x -&gt; 3x + 1)))   # [0.0, 3.0, 3.0, ..., 3.0, 0.0]</code></pre><p>Second, it is skew-symmetric in <code>innerₕ</code> for grid functions vanishing on the boundary:</p><pre><code class="language-julia hljs">Ωₕ = mesh(domain(interval(0.0, 1.0)), 41, false)   # a random, non-uniform grid
-Wₕ = gridspace(Ωₕ)
-uₕ = Rₕ(Wₕ, x -&gt; sin(pi * x))
-vₕ = Rₕ(Wₕ, x -&gt; sin(2pi * x) * x * (1 - x))       # both zero at both ends
-
-innerₕ(Dcₓ(uₕ), vₕ)    #  0.21019221
--innerₕ(uₕ, Dcₓ(vₕ))   #  0.21019221,  equal to machine precision</code></pre><p>The reason is the same cancellation that gives <code>Dstar₊ₓ</code> its identity in section 7:
+denominator are then the same quantity:</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; values(Dcₓ(Rₕ(gridspace(Ωₙ), x -&gt; 3x + 1)))</code><code class="nohighlight hljs ansi" style="display:block;">5-element Vector{Float64}:
+ 0.0
+ 3.0
+ 2.9999999999999996
+ 3.0000000000000004
+ 0.0</code></pre><p>Second, it is skew-symmetric in <code>innerₕ</code> for grid functions vanishing on the boundary:</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; Ωₛ = mesh(domain(interval(0.0, 1.0)), 41, false)   # a random, non-uniform grid</code><code class="nohighlight hljs ansi" style="display:block;"><span class="sgr36"><span class="sgr1">Mesh1D</span></span> {<span class="sgr33">1D</span>, <span class="sgr33">Float64</span>}
+<span class="sgr34">41 points</span>
+<span class="sgr90">Domain: </span>[0.0, 1.0]
+<span class="sgr90">Spacing: </span>non-uniform • <span class="sgr35">h</span>ₘₐₓ = <span class="sgr34">0.080207</span>
+<span class="sgr90">Markers: </span><span class="sgr33">1 label</span> • <span class="sgr32">:boundary</span> (<span class="sgr34">2</span>)</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; Wₛ = gridspace(Ωₛ)</code><code class="nohighlight hljs ansi" style="display:block;">ScalarGridSpace{1, Float64, Vector{Float64}, Mesh1D{Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}}, CartesianIndices{1, Tuple{Base.OneTo{Int64}}}, Vector{Float64}, Float64}, Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}}}(<span class="sgr36"><span class="sgr1">Mesh1D</span></span> {<span class="sgr33">1D</span>, <span class="sgr33">Float64</span>}
+<span class="sgr34">41 points</span>
+<span class="sgr90">Domain: </span>[0.0, 1.0]
+<span class="sgr90">Spacing: </span>non-uniform • <span class="sgr35">h</span>ₘₐₓ = <span class="sgr34">0.080207</span>
+<span class="sgr90">Markers: </span><span class="sgr33">1 label</span> • <span class="sgr32">:boundary</span> (<span class="sgr34">2</span>)
+, Bramble.SpaceWeights{1, Vector{Float64}}([0.038776046061648806, 0.0502810444255547, 0.04717062421042567, 0.04790029568050852, 0.01631241676703271, 0.006765772585023144, 0.009075377923572325, 0.043471274211144106, 0.050237306185959174, 0.02686541455548397  …  0.019792593825032012, 0.0186949763122351, 0.011687595484461133, 0.045567323048090747, 0.04096071671473139, 0.020242474875252048, 0.04232733217357848, 0.026814995816656362, 0.020935964331967094, 0.01706300057679966], ([0.0, 0.07755209212329761, 0.023009996727811788, 0.07133125169303955, 0.024469339667977485, 0.008155493866087937, 0.005376051303958351, 0.0127747045431863, 0.07416784387910191, 0.026306768492816435  …  0.014642863801472394, 0.02494232384859163, 0.012447628775878572, 0.010927562193043694, 0.0802070839031378, 0.0017143495263249875, 0.03877060022417911, 0.04588406412297785, 0.007745927510334871, 0.03412600115359932],)), Bramble.GridSpaceBuffer{Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}}, Vector{Float64}, Float64}(Bramble.VectorBuffer{Float64, Vector{Float64}}[Bramble.VectorBuffer{Float64, Vector{Float64}}([6.9154243013361e-310, 6.9154243013361e-310, 6.9154243013361e-310, 6.9154243013361e-310, 6.9154243013361e-310, 6.9154243013361e-310, 6.9154243013361e-310, 6.9154243013361e-310, 6.9154243013361e-310, 6.9154243013361e-310  …  6.9154243013361e-310, 6.9154243013361e-310, 6.9154243013361e-310, 6.9154243013361e-310, 6.9154243013361e-310, 6.9154243013361e-310, 6.9154243013361e-310, 6.9154243013361e-310, 6.9154243013361e-310, 6.9153737409986e-310], false)], [1], Backend(vector = Vector{Float64}, matrix = SparseArrays.SparseMatrixCSC{Float64, Int64}), 41))</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; pₕ = Rₕ(Wₛ, x -&gt; sin(pi * x))</code><code class="nohighlight hljs ansi" style="display:block;">41-element VectorElement{ScalarGridSpace{1, Float64, Vector{Float64}, Mesh1D{Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}}, CartesianIndices{1, Tuple{Base.OneTo{Int64}}}, Vector{Float64}, Float64}, Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}}}, Float64, Vector{Float64}}:
+ 0.0
+ 0.2412338831545065
+ 0.310695938856308
+ 0.5141521643918184
+ 0.5785024599414671
+ 0.5992090546315759
+ 0.6126444507050977
+ 0.6438620229396798
+ 0.8031359874832923
+ 0.8495783465821514
+ ⋮
+ 0.6655974847776855
+ 0.635911289951877
+ 0.6090472497853652
+ 0.39207011798569896
+ 0.38710987903849164
+ 0.27221439261986
+ 0.13116549784243006
+ 0.10700473421125016
+ 1.2246467991473532e-16</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; qₕ = Rₕ(Wₛ, x -&gt; sin(2pi * x) * x * (1 - x))       # both zero at both ends</code><code class="nohighlight hljs ansi" style="display:block;">41-element VectorElement{ScalarGridSpace{1, Float64, Vector{Float64}, Mesh1D{Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}}, CartesianIndices{1, Tuple{Base.OneTo{Int64}}}, Vector{Float64}, Float64}, Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}}}, Float64, Vector{Float64}}:
+  0.0
+  0.03349534440187201
+  0.05342289792474759
+  0.12554571369030412
+  0.14892733129376845
+  0.15609252373151747
+  0.1606010684871521
+  0.17054157884052276
+  0.1997516346461079
+  0.19602751476199143
+  ⋮
+ -0.17692107498757728
+ -0.16808944353081814
+ -0.15940602814060917
+ -0.08064439901224
+ -0.07889373092650237
+ -0.04193829456448074
+ -0.010433445259690675
+ -0.007013554592419757
+ -0.0</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; innerₕ(Dcₓ(pₕ), qₕ)</code><code class="nohighlight hljs ansi" style="display:block;">0.21082197004504277</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; -innerₕ(pₕ, Dcₓ(qₕ))                               # equal to machine precision</code><code class="nohighlight hljs ansi" style="display:block;">0.21082197004504272</code></pre><p>The reason is the same cancellation that gives <code>Dstar₊ₓ</code> its identity in section 7:
 <code>innerₕ</code> weights point <span>$i$</span> by the cell measure <span>$(h_i + h_{i+1})/2$</span>, which is exactly
 half the centered denominator. The weights cancel, and the left side collapses to</p><p class="math-container">\[\tfrac{1}{2} \sum_i (u_{i+1} - u_{i-1})\, v_i\]</p><p>which shifting the index by one turns into minus the right side. Unlike the <code>Dstar₊ₓ</code>
 identity, which needs only <code>vₕ</code> to vanish, this one needs both: the discarded boundary
@@ -243,25 +415,37 @@ differences and weight them by the <strong>opposite</strong> spacings:</p><p cla
 round. When <span>$h_i = h_{i+1}$</span> the two agree, and both reduce to the mean of <span>$D_{-x}$</span> and
 <span>$D_{+x}$</span>; they part company only where the spacing varies.</p><p>The swap buys exactness on quadratics rather than only on affine functions, on any grid.
 With <span>$u = x^2$</span> the weighted sum telescopes to <span>$2 x_i (h_i + h_{i+1})$</span>, and the
-denominator cancels:</p><pre><code class="language-julia hljs">Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
-set_points!(Ωₕ, [0.0, 0.1, 0.3, 0.7, 1.0])
-uₕ = Rₕ(gridspace(Ωₕ), x -&gt; x^2)
-
-values(Dcₓ(uₕ))   # [0.0, 0.3, 0.8, 1.3, 0.0]
-values(Dₕₓ(uₕ))   # [0.0, 0.2, 0.6, 1.4, 0.0]
-2 .* points(Ωₕ)   # [0.0, 0.2, 0.6, 1.4, 2.0]    ← Dₕₓ hits it exactly</code></pre><p>That one order of extra exactness is one order of extra accuracy. Differencing <span>$\sin$</span>
+denominator cancels:</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; values(Dcₓ(uₙ))</code><code class="nohighlight hljs ansi" style="display:block;">5-element Vector{Float64}:
+ 0.0
+ 0.3
+ 0.7999999999999999
+ 1.3
+ 0.0</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; values(Dₕₓ(uₙ))</code><code class="nohighlight hljs ansi" style="display:block;">5-element Vector{Float64}:
+ 0.0
+ 0.2
+ 0.5999999999999999
+ 1.3999999999999997
+ 0.0</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; 2 .* points(Ωₙ)   # Dₕₓ hits this exactly, away from the two truncated points</code><code class="nohighlight hljs ansi" style="display:block;">5-element Vector{Float64}:
+ 0.0
+ 0.2
+ 0.6
+ 1.4
+ 2.0</code></pre><p>That one order of extra exactness is one order of extra accuracy. Differencing <span>$\sin$</span>
 against <span>$\cos$</span> on a random grid, refined by halving every interval so the grids stay
 nested:</p><table><tr><th style="text-align: right"><span>$n$</span></th><th style="text-align: right"><code>Dcₓ</code> error</th><th style="text-align: right">order</th><th style="text-align: right"><code>Dₕₓ</code> error</th><th style="text-align: right">order</th></tr><tr><td style="text-align: right">21</td><td style="text-align: right">3.52e-02</td><td style="text-align: right"></td><td style="text-align: right">2.95e-03</td><td style="text-align: right"></td></tr><tr><td style="text-align: right">41</td><td style="text-align: right">1.78e-02</td><td style="text-align: right">0.99</td><td style="text-align: right">1.30e-03</td><td style="text-align: right">1.18</td></tr><tr><td style="text-align: right">81</td><td style="text-align: right">8.94e-03</td><td style="text-align: right">0.99</td><td style="text-align: right">3.32e-04</td><td style="text-align: right">1.97</td></tr><tr><td style="text-align: right">161</td><td style="text-align: right">4.48e-03</td><td style="text-align: right">1.00</td><td style="text-align: right">8.36e-05</td><td style="text-align: right">1.99</td></tr></table><p><code>Dₕₓ</code> is not skew-symmetric, so <code>Dcₓ</code> remains the one to reach for when the scheme needs
 that structure and <code>Dₕₓ</code> the one to reach for when it needs the order. Both truncate on
 two slices, both take a grid function only, and <code>∇ₕ</code> gives every coordinate at once, the
 centered counterpart of <code>∇₋ₕ</code> and <code>∇₊ₕ</code>.</p><h2 id="10.-A-convergence-study,-and-the-boundary"><a class="docs-heading-anchor" href="#10.-A-convergence-study,-and-the-boundary">10. A convergence study, and the boundary</a><a id="10.-A-convergence-study,-and-the-boundary-1"></a><a class="docs-heading-anchor-permalink" href="#10.-A-convergence-study,-and-the-boundary" title="Permalink"></a></h2><p><code>D₋ₓ</code> is first order, so the error against a known derivative should fall by a factor of
 ten each time the grid is refined by ten. Measuring it naively does not show that:</p><pre><code class="language-julia hljs">for n in (11, 101, 1001, 10001)
-    Ωₙ = mesh(domain(interval(0.0, 1.0)), n, true)
-    Wₙ = gridspace(Ωₙ)
-    uₙ = Rₕ(Wₙ, sin)
-    eₙ = D₋ₓ(uₙ) - Rₕ(Wₙ, cos)
-    @show n, normₕ(eₙ)
-end</code></pre><table><tr><th style="text-align: right"><span>$n$</span></th><th style="text-align: right">every point</th><th style="text-align: right">order</th><th style="text-align: right">interior only</th><th style="text-align: right">order</th></tr><tr><td style="text-align: right">11</td><td style="text-align: right">0.317349</td><td style="text-align: right"></td><td style="text-align: right">0.026650</td><td style="text-align: right"></td></tr><tr><td style="text-align: right">101</td><td style="text-align: right">0.100034</td><td style="text-align: right">0.50</td><td style="text-align: right">0.002617</td><td style="text-align: right">1.01</td></tr><tr><td style="text-align: right">1001</td><td style="text-align: right">0.031624</td><td style="text-align: right">0.50</td><td style="text-align: right">0.000261</td><td style="text-align: right">1.00</td></tr><tr><td style="text-align: right">10001</td><td style="text-align: right">0.010000</td><td style="text-align: right">0.50</td><td style="text-align: right">0.000026</td><td style="text-align: right">1.00</td></tr></table><p>Over every point the observed order is one half, not one. The cause is section 3:
+    Ω = mesh(domain(interval(0.0, 1.0)), n, true)
+    W = gridspace(Ω)
+    u = Rₕ(W, sin)
+    e = D₋ₓ(u) - Rₕ(W, cos)
+    println(n, &quot;  &quot;, normₕ(e))
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">11  0.22500131738444287
+101  0.07075844941899423
+1001  0.022362202707526486
+10001  0.007071116010228156</code></pre><table><tr><th style="text-align: right"><span>$n$</span></th><th style="text-align: right">every point</th><th style="text-align: right">order</th><th style="text-align: right">interior only</th><th style="text-align: right">order</th></tr><tr><td style="text-align: right">11</td><td style="text-align: right">0.317349</td><td style="text-align: right"></td><td style="text-align: right">0.026650</td><td style="text-align: right"></td></tr><tr><td style="text-align: right">101</td><td style="text-align: right">0.100034</td><td style="text-align: right">0.50</td><td style="text-align: right">0.002617</td><td style="text-align: right">1.01</td></tr><tr><td style="text-align: right">1001</td><td style="text-align: right">0.031624</td><td style="text-align: right">0.50</td><td style="text-align: right">0.000261</td><td style="text-align: right">1.00</td></tr><tr><td style="text-align: right">10001</td><td style="text-align: right">0.010000</td><td style="text-align: right">0.50</td><td style="text-align: right">0.000026</td><td style="text-align: right">1.00</td></tr></table><p>Over every point the observed order is one half, not one. The cause is section 3:
 <code>D₋ₓ(uₙ)[1]</code> is <code>0.0</code> while <span>$\cos(0) = 1$</span>, so that one point contributes an error of
 <span>$1$</span> no matter how fine the grid is. It carries a weight of about <span>$h/2$</span> in the
 discrete norm, so it alone contributes about <span>$\sqrt{h/2}$</span>, which is exactly the half
@@ -280,4 +464,4 @@ satisfies discrete summation by parts against <code>D₋ₓ</code>, and it has n
 affine functions and skew-symmetric in <code>innerₕ</code> on any grid, and truncates on two
 slices rather than one.</li><li><code>Dₕₓ</code> weights the same two one-sided differences by the opposite spacings. It is
 exact on quadratics, and so second order on a non-uniform grid where <code>Dcₓ</code> is
-first, but it is not skew-symmetric.</li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../space/">« Grid spaces and discrete functions</a><a class="docs-footer-nextpage" href="../../api/">API reference »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Sunday 30 August 2026 01:52">Sunday 30 August 2026</span>. Using Julia version 1.14.0-DEV.3066.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+first, but it is not skew-symmetric.</li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../space/">« Grid spaces and discrete functions</a><a class="docs-footer-nextpage" href="../../api/">API reference »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Sunday 30 August 2026 02:47">Sunday 30 August 2026</span>. Using Julia version 1.14.0-DEV.3066.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
