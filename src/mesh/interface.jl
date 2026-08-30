@@ -198,6 +198,10 @@ end
 # High-Level Mesh Constructor Dispatch
 #------------------------------------------------------------------------------------------#
 
+# The backend defaults to one over the domain's own element type rather than always to
+# Float64, so a Float32 domain gives a Float32 mesh. The element type is a property of the
+# storage, and the storage should follow the geometry it is built on; passing `backend`
+# explicitly still overrides it, which is how a mesh gets a type the domain does not have.
 """
 	$(SIGNATURES)
 
@@ -218,10 +222,6 @@ X = domain(interval(0, 1) × interval(4, 5))
 Ωₕ_mixed = mesh(X, (10, 15), (true, false))
 ```
 """
-# The backend defaults to one over the domain's own element type rather than always to
-# Float64, so a Float32 domain gives a Float32 mesh. The element type is a property of the
-# storage, and the storage should follow the geometry it is built on; passing `backend`
-# explicitly still overrides it, which is how a mesh gets a type the domain does not have.
 @inline mesh(Ω::Domain, npts::NTuple{D, Int}, unif::NTuple{D, Bool};
     backend = backend(eltype(Ω))) where {D} = _mesh(Ω, npts, unif, backend)
 @inline mesh(Ω::Domain{CartesianProduct{1, T}}, npts::Int, unif::Bool;

@@ -197,16 +197,16 @@ and `BigFloat` grids get a rule at their own precision rather than a rounded
 `Float64` one. Weights sum to one, which makes the weighted sum over a cell the
 cell *average* directly.
 """
-# When `T` is an isbits float its precision is fixed by the type, so the rule
-# depends only on (N, T) and is folded into a compile-time constant: obtaining it
-# then costs nothing at all. This covers Float16/32/64 and equally the stack
-# allocated extended precision types such as Double64 or Float64x2.
-#
-# Anything else -- notably BigFloat, whose precision is a run-time setting that
-# must not be baked in at compile time -- falls back to building the rule per
-# call, at the precision in force at that moment. The same fallback catches an
-# isbits type that QuadGK cannot construct a rule for.
 @generated function _gauss_rule(::Val{N}, ::Type{T}) where {N, T}
+    # When `T` is an isbits float its precision is fixed by the type, so the rule
+    # depends only on (N, T) and is folded into a compile-time constant: obtaining it
+    # then costs nothing at all. This covers Float16/32/64 and equally the stack
+    # allocated extended precision types such as Double64 or Float64x2.
+    #
+    # Anything else -- notably BigFloat, whose precision is a run-time setting that
+    # must not be baked in at compile time -- falls back to building the rule per
+    # call, at the precision in force at that moment. The same fallback catches an
+    # isbits type that QuadGK cannot construct a rule for.
     if isbitstype(T)
         try
             x, w = gauss(T, N, zero(T), one(T))

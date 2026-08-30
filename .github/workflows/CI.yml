@@ -137,6 +137,8 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: julia-actions/setup-julia@v2
         with:
           version: "nightly"

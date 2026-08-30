@@ -390,11 +390,6 @@ function assemble(form::BilinearForm; dirichlet_labels = nothing)
     return A
 end
 
-"""
-    assemble!(A::SparseMatrixCSC, form::BilinearForm; dirichlet_labels = nothing, ast = resolve_form_ast(form))
-
-Performs sequential assembly of the `BilinearForm` directly into the preallocated sparse matrix `A`.
-"""
 # ==============================================================================
 # Helper Cores for Function Barrier Optimization
 # ==============================================================================
@@ -544,6 +539,11 @@ function _assemble_bilinear_parallel_core!(
     return A
 end
 
+"""
+    assemble!(A::SparseMatrixCSC, form::BilinearForm; dirichlet_labels = nothing, ast = resolve_form_ast(form))
+
+Performs sequential assembly of the `BilinearForm` directly into the preallocated sparse matrix `A`.
+"""
 function assemble!(
         A::SparseMatrixCSC, form::BilinearForm{D, TrialSpace, TestSpace, ExprType, FType};
         dirichlet_labels = nothing,

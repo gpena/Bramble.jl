@@ -5,7 +5,7 @@ using Dates
 
 function _get_commit_info(commit_hash::AbstractString)
     try
-        msg = readchomp(`git log -1 --format="%s" $commit_hash`)
+        msg = readchomp(pipeline(`git log -1 --format="%s" $commit_hash`, stderr = devnull))
         return (message = msg,)
     catch
         return (message = "",)
