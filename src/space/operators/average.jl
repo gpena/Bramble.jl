@@ -86,10 +86,13 @@ function _average_engine!(out, in_ref, dims::NTuple{D, Int}, dir::GridDirection,
     return nothing
 end
 
+# Divided by 2 rather than multiplied by 0.5, for the reason given at `_compute_average`:
+# the literal is a Float64 and promotes the whole matrix. On a Float32 backend everything
+# else in the library stayed Float32 and only the averaging matrices came back Float64.
 function add_half_shift(Ωₕ::AbstractMeshType, ::Val{DIFF_DIM}, ::Val{first},
         ::Val{second}) where {DIFF_DIM, first, second}
-    return (shift(Ωₕ, Val(DIFF_DIM), Val(first)) + shift(Ωₕ, Val(DIFF_DIM), Val(second))) *
-           0.5
+    return (shift(Ωₕ, Val(DIFF_DIM), Val(first)) + shift(Ωₕ, Val(DIFF_DIM), Val(second))) /
+           2
 end
 
 function _average_operator(Ωₕ::AbstractMeshType, ::Forward, ::Val{AVG_DIM}) where {AVG_DIM}

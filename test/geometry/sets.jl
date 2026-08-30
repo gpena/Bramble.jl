@@ -452,3 +452,30 @@ using StaticArrays
         @test get_dimension_label(7) == "x7"  # beyond precomputed table
     end
 end
+
+@testset "Containment tests do not allocate" begin
+    # `x in X` is called per point when a marker condition is evaluated over a mesh, so a
+    # heap allocation here is one per grid point. The vector method reduced over `1:D`
+    # with a closure capturing the vector, which allocated 80 bytes a call; it is unrolled
+    # over Val(D) instead.
+    X1 = interval(0.0, 1.0)
+    X2 = interval(0.0, 1.0) × interval(0.0, 2.0)
+    X3 = box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))
+    v2, v3 = [0.5, 1.0], [0.5, 0.5, 0.5]
+
+    contains(x, X) = x in X
+
+    @test_allocs contains(0.5, X1)
+    @test_allocs contains((0.5, 1.0), X2)
+    @test_allocs contains((0.5, 0.5, 0.5), X3)
+    @test_allocs contains(v2, X2)
+    @test_allocs contains(v3, X3)
+
+    # the unrolled form still answers correctly, including the length mismatch
+    @test v2 in X2
+    @test !([2.0, 1.0] in X2)
+    @test !([0.5] in X2)
+    @test !([0.5, 1.0, 0.5] in X2)
+    @test [0.0, 0.0] in X2          # closed at the corner
+    @test [1.0, 2.0] in X2
+end

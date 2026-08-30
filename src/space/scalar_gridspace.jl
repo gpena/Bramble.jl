@@ -283,9 +283,9 @@ function _innerh_weights!(u, Ωₕ::AbstractMeshType{1})
 end
 
 function _innerh_weights!(u, Ωₕ::AbstractMeshType{D}) where {D}
-    cell_measures_per_component = ntuple(
-        k -> [cell_measure(Ωₕ(k), j[1])
-              for j in indices(Ωₕ(k))], Val(D))
+    # The submeshes already hold these, so they are read rather than rebuilt: the
+    # comprehension this replaces allocated one vector per axis on every call.
+    cell_measures_per_component = ntuple(k -> cell_measures(Ωₕ(k)), Val(D))
     dims = npoints(Ωₕ, Tuple)
     v = Base.ReshapedArray(u, dims, ())
     __innerplus_weights!(v, cell_measures_per_component)

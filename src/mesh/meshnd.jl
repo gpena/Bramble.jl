@@ -208,15 +208,16 @@ individual cell is the product of its per-axis widths; see [`cell_measure`](@ref
 @inline npoints(Ωₕ::MeshnD) = prod(npoints(Ωₕ, Tuple))
 @inline npoints(Ωₕ::MeshnD{D}, ::Type{Tuple}) where {D} = ntuple(i -> npoints(Ωₕ(i)), Val(D))
 
-@inline function hₘₐₓ(Ωₕ::MeshnD{D}) where {D}
-    max_h = zero(eltype(Ωₕ))
-    @inbounds for idx in indices(Ωₕ)
-        h_tuple = spacing(Ωₕ, idx)
-        h_diag = hypot(h_tuple...)
-        max_h = max(max_h, h_diag)
-    end
-    return max_h
-end
+# The diagonal of the largest cell. On a tensor-product mesh the spacing along axis d does
+# not depend on the other coordinates, and `hypot` is increasing in each argument, so the
+# maximum over the whole index set is attained at the per-axis maxima and there is no need
+# to visit every cell:
+#
+#     max_idx ‖(h₁,ᵢ₁, …, h_D,i_D)‖₂ = hypot(hₘₐₓ(Ωₕ(1)), …, hₘₐₓ(Ωₕ(D)))
+#
+# Each submesh reads its own maximum off its cached spacings, which turns a pass over
+# prod(Nd) cells into D lookups.
+@inline hₘₐₓ(Ωₕ::MeshnD{D}) where {D} = hypot(ntuple(i -> hₘₐₓ(Ωₕ(i)), Val(D))...)
 
 @inline function hₘᵢₙ(Ωₕ::MeshnD{D}) where {D}
     min_h = typemax(eltype(Ωₕ))

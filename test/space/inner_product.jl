@@ -241,3 +241,24 @@ end
         end
     end
 end
+
+@testset "inner₊ accepts a one-element tuple" begin
+    # In 1D the one-element tuple and the bare grid function denote the same thing, and
+    # inner₊ accepts both. It used to accept only the second: the generated body read the
+    # element type off `u_type.parameters[2]`, which does not exist for `Tuple{V}`, so a
+    # 1-tuple raised a BoundsError from inside code generation rather than returning a
+    # number.
+    Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, true)
+    Wₕ = gridspace(Ωₕ)
+    uₕ = Rₕ(Wₕ, sin)
+    vₕ = Rₕ(Wₕ, cos)
+
+    @test inner₊((uₕ,), (vₕ,)) ≈ inner₊(uₕ, vₕ)
+    @test inner₊((uₕ,), (uₕ,)) ≈ inner₊(uₕ, uₕ)
+    @test norm₊((uₕ,)) ≈ norm₊(uₕ)
+    @test @inferred(inner₊((uₕ,), (vₕ,))) isa Float64
+
+    # the tuple arity still wins over the mesh dimension for genuine mixed terms, which
+    # is what the element-type lookup is there to keep separate
+    @test inner₊((uₕ, vₕ), (uₕ, vₕ)) ≈ inner₊ₓ(uₕ, uₕ) + inner₊ₓ(vₕ, vₕ)
+end

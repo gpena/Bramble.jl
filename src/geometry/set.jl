@@ -226,9 +226,14 @@ Returns `true` if point `x` is contained in the closed [`CartesianProduct`](@ref
 @inline Base.in(x::Number, X::CartesianProduct{1}) = (X.box[1][1] <= x <= X.box[1][2])
 @inline Base.in(x::Tuple{Vararg{Number, D}}, X::CartesianProduct{D}) where {D} = all(
     i -> (X.box[i][1] <= x[i] <= X.box[i][2]), 1:D)
-@inline Base.in(x::AbstractVector{<:Number}, X::CartesianProduct{D}) where {D} = length(x) ==
-                                                                                 D && all(
-    i -> (X.box[i][1] <= x[i] <= X.box[i][2]), 1:D)
+
+# Unrolled over `Val(D)` rather than reduced over `1:D`. The tuple method above closes over
+# a tuple and costs nothing, but closing over an `AbstractVector` that way allocated 80
+# bytes per call, which is a heap allocation on every containment test against a vector.
+@inline function Base.in(x::AbstractVector{<:Number}, X::CartesianProduct{D}) where {D}
+    length(x) == D || return false
+    return all(ntuple(i -> (X.box[i][1] <= x[i] <= X.box[i][2]), Val(D)))
+end
 @inline Base.in(x, X::CartesianProduct) = false
 
 """

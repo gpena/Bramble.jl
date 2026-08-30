@@ -78,12 +78,14 @@ if __bramble_with_unit_tests
             include("space/star_difference.jl")
             include("space/centered_difference.jl")
             include("space/cross_weighted_difference.jl")
+            include("space/commutation.jl")
             include("space/jump.jl")
             include("space/average.jl")
             include("space/inner_product.jl")
             include("space/composite_operators.jl")
             include("space/inference_allocation.jl")
             include("space/convergence.jl")
+            include("space/element_type.jl")
         end
 
         #=

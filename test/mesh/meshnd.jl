@@ -1,5 +1,6 @@
 using Bramble: is_boundary_index, CartesianProduct, MeshnD, Backend, backend
 using LinearAlgebra: hypot
+using Random
 
 # --- Test Suite ---
 @testset "MeshnD Tests" begin
@@ -594,4 +595,27 @@ end # Main Testset
         @test size(indices(Ωₕ)) == npoints(Ωₕ, Tuple)
         @test length(indices(Ωₕ)) == npoints(Ωₕ)
     end
+end
+
+@testset "hₘₐₓ is the diagonal of the largest cell" begin
+    # hₘₐₓ is computed per axis and combined with hypot, rather than by visiting every
+    # cell. The two agree because the spacing along one axis does not depend on the other
+    # coordinates and hypot is increasing in each argument, but that is a property of the
+    # tensor-product structure and deserves to be pinned rather than assumed.
+    Random.seed!(20260830)
+    for (dims, X) in (((7, 9), interval(0.0, 1.0) × interval(0.0, 2.0)),
+        ((5, 6, 4), box((0.0, 0.0, 0.0), (1.0, 2.0, 3.0))))
+        D = length(dims)
+        for unif in (true, false)
+            Ωₕ = mesh(domain(X), dims, ntuple(_ -> unif, D))
+            brute = maximum(hypot(spacing(Ωₕ, idx)...) for idx in indices(Ωₕ))
+            @test hₘₐₓ(Ωₕ) == brute
+            @test hₘₐₓ(Ωₕ) ≈ hypot(ntuple(i -> hₘₐₓ(Ωₕ(i)), D)...)
+        end
+    end
+
+    # and it costs nothing, which is the point of computing it this way
+    Ωₕ = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (30, 30, 30),
+        (true, true, true))
+    @test_allocs hₘₐₓ(Ωₕ)
 end

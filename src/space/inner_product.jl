@@ -139,6 +139,19 @@ get_dimension_from_type(::Type{<:NTuple{D, Any}}) where {D} = D
 get_dimension_from_type(::Type{<:VectorElement{S}}) where {S} = dim(mesh_type(S))
 get_dimension_from_type(::Type) = nothing
 
+# The spatial dimension of a tuple's *elements*, which is not the tuple's arity: a mixed
+# term such as (Dx*u, Mx*u) on a one-dimensional mesh is a 2-tuple whose elements are 1D.
+#
+# Read off the first element through `fieldtypes`, which is public and defined for every
+# tuple type. Reading `.parameters[2]` instead threw a BoundsError on a 1-tuple, since
+# `Tuple{VectorElement{…}}` has one parameter, and did so from inside a generated
+# function, so `inner₊((uₕ,), (vₕ,))` failed at code generation rather than returning a
+# number.
+function _tuple_element_dim(::Type{T}) where {T <: Tuple}
+    ft = fieldtypes(T)
+    return isempty(ft) ? nothing : get_dimension_from_type(first(ft))
+end
+
 function _generate_inner_plus_body(u_type, v_type, result_kind::Symbol)
     dim_u = get_dimension_from_type(u_type)
     dim_v = get_dimension_from_type(v_type)
@@ -170,8 +183,8 @@ function _generate_inner_plus_body(u_type, v_type, result_kind::Symbol)
     # For tuple inputs we want the *spatial* dimension of the element type, not
     # the tuple arity (which can exceed the mesh dimension in mixed terms such as
     # `(Dx*u, Mx*u)` on 1D meshes).
-    u_elem_dim = u_is_tuple ? get_dimension_from_type(u_type.parameters[2]) : nothing
-    v_elem_dim = v_is_tuple ? get_dimension_from_type(v_type.parameters[2]) : nothing
+    u_elem_dim = u_is_tuple ? _tuple_element_dim(u_type) : nothing
+    v_elem_dim = v_is_tuple ? _tuple_element_dim(v_type) : nothing
     mesh_dim = something(u_elem_dim,
         v_elem_dim,
         (!u_is_tuple && !isnothing(dim_u)) ? dim_u : nothing,
