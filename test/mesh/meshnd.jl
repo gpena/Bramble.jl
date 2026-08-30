@@ -1,6 +1,7 @@
 using Bramble: is_boundary_index, CartesianProduct, MeshnD, Backend, backend
 using LinearAlgebra: hypot
 using Random
+using Supposition
 
 # --- Test Suite ---
 @testset "MeshnD Tests" begin
@@ -594,6 +595,46 @@ end # Main Testset
         iterative_refinement!(Ωₕ, markers(Ω))
         @test size(indices(Ωₕ)) == npoints(Ωₕ, Tuple)
         @test length(indices(Ωₕ)) == npoints(Ωₕ)
+    end
+
+    @testset "arbitrary grid refinement invariants (Supposition)" begin
+        @check function check_refinement_invariants_2d(
+                nx = Data.Integers(3, 8),
+                ny = Data.Integers(3, 8)
+        )
+            Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (nx, ny),
+                (false, false))
+            old_px = copy(points(Ωₕ(1)))
+            old_py = copy(points(Ωₕ(2)))
+
+            iterative_refinement!(Ωₕ)
+
+            new_nx = 2 * nx - 1
+            new_ny = 2 * ny - 1
+
+            ok_dims = npoints(Ωₕ, Tuple) == (new_nx, new_ny)
+            ok_total = npoints(Ωₕ) == new_nx * new_ny
+            ok_indices = size(indices(Ωₕ)) == (new_nx, new_ny) &&
+                         length(indices(Ωₕ)) == new_nx * new_ny
+
+            px = points(Ωₕ(1))
+            ok_px_odd = px[1:2:end] == old_px
+            ok_px_mid = isapprox(
+                px[2:2:end], (old_px[1:(end - 1)] .+ old_px[2:end]) ./ 2; atol = 1e-12)
+            ok_px_mono = all(diff(px) .> 0)
+            ok_px_ends = (px[1] == old_px[1]) && (px[end] == old_px[end])
+
+            py = points(Ωₕ(2))
+            ok_py_odd = py[1:2:end] == old_py
+            ok_py_mid = isapprox(
+                py[2:2:end], (old_py[1:(end - 1)] .+ old_py[2:end]) ./ 2; atol = 1e-12)
+            ok_py_mono = all(diff(py) .> 0)
+            ok_py_ends = (py[1] == old_py[1]) && (py[end] == old_py[end])
+
+            ok_dims && ok_total && ok_indices &&
+                ok_px_odd && ok_px_mid && ok_px_mono && ok_px_ends &&
+                ok_py_odd && ok_py_mid && ok_py_mono && ok_py_ends
+        end
     end
 end
 
