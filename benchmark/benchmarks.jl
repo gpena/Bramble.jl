@@ -39,7 +39,11 @@
 
 using BenchmarkTools
 using Bramble
-using Bramble: values
+
+# Nothing is imported beyond `Bramble` itself. PkgBenchmark and AirspeedVelocity `include`
+# this file, so whatever it brings in lands in the including module, and `using Bramble`
+# already makes `values` ambiguous there against `Base.values` — Bramble exports its own.
+# Nothing below calls `values`, so the benchmarks do not depend on that resolving.
 
 const SUITE = BenchmarkGroup()
 
