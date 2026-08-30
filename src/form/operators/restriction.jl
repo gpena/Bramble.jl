@@ -45,12 +45,21 @@ end
 # Zero-Allocation Stencil Evaluators
 # ==============================================================================
 
+# `markers` is optional throughout the stencil evaluators — every other node takes it and
+# ignores it, and callers with nothing to restrict by pass `nothing`. Only this node reads
+# it, so only this node has to say what an absent table means: no point is marked. The
+# `:interior` region is then the whole grid, and every other region is empty, which is what
+# `haskey` returning `false` already gave for a table that simply lacked the key.
+@inline _is_marked(::Nothing, ::Symbol, ::Int) = false
+@inline _is_marked(markers, region::Symbol, lin_idx::Int) = haskey(markers, region) &&
+                                                            markers[region][lin_idx]
+
 @inline function local_stencil(
         op::RegionRestriction, space, I::CartesianIndex{D}, markers, lin_idx::Int) where {D}
     if op.region === :interior
-        in_region = !(haskey(markers, :boundary) && markers[:boundary][lin_idx])
+        in_region = !_is_marked(markers, :boundary, lin_idx)
     else
-        in_region = haskey(markers, op.region) && markers[op.region][lin_idx]
+        in_region = _is_marked(markers, op.region, lin_idx)
     end
 
     if in_region

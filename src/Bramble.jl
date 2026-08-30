@@ -8,12 +8,12 @@ import Base: eltype, length
 import Base: show, first, last, getindex, setindex!, iterate, size, ndims, firstindex,
              lastindex, axes, eachindex
 
-# `rowvals`, `nonzeros`, `nzrange`, `sparse` and `dropzeros` are for the form layer: it
+# `rowvals`, `nonzeros`, `nzrange` and `sparse` are for the form layer: it
 # edits sparse structure directly when imposing Dirichlet rows, and the import here is
 # selective, so a name missing from this list is simply undefined in the module. That is
 # what `dirichlet_bc!` hit on its first run — `UndefVarError: rowvals`.
 using SparseArrays: SparseMatrixCSC, SparseVector, spdiagm, spzeros,
-                    rowvals, nonzeros, nzrange, sparse, dropzeros, dropzeros!
+                    rowvals, nonzeros, nzrange, sparse
 
 using FunctionWrappers: FunctionWrapper
 

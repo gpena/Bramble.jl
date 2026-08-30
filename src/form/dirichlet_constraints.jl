@@ -376,15 +376,24 @@ end
 					SYMMETRIZATION OF THE LINEAR SYSTEM
 ==============================================================================#
 
+"""
+	dirichlet_bc_symmetrize!(A, F, Ωₕ, labels...)
+
+Imposes the Dirichlet conditions on `A` and then symmetrizes the system, in that order.
+
+The stored zeros this leaves behind stay stored. There used to be a `dropzeros` option to
+strip them, and it is gone rather than merely defaulted off: the sparsity pattern of an
+assembled operator is the stencil's, known ahead of time and shared with every matrix
+assembled the same way. Dropping entries makes the pattern depend on the boundary data, and
+every later write to a dropped position stops being a value update and becomes a structural
+insert, which rebuilds the column. Keeping explicit zeros costs one stored value each and
+keeps the pattern fixed, which is the cheaper side of that trade by a wide margin.
+"""
 function dirichlet_bc_symmetrize!(
-        A::AbstractMatrix, F::AbstractVector, Ωₕ::AbstractMeshType,
-        labels::Symbol...; dropzeros = false)
+        A::AbstractMatrix, F::AbstractVector, Ωₕ::AbstractMeshType, labels::Symbol...)
     dirichlet_bc!(A, Ωₕ, labels...)
     symmetrize!(A, F, Ωₕ, labels...)
-
-    if dropzeros && A isa SparseMatrixCSC
-        dropzeros!(A)
-    end
+    return nothing
 end
 
 """

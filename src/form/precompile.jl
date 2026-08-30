@@ -52,7 +52,7 @@
             assemble!(F, lform, dirichlet_conditions = dirichlet_conditions)
 
             dirichlet_bc_symmetrize!(A, F, Ωₕ, :boundary)
-            dirichlet_bc_symmetrize!(A, F, Ωₕ, :boundary, dropzeros = true)
+            dirichlet_bc_symmetrize!(A, F, Ωₕ, :boundary)
         end
     end
 end

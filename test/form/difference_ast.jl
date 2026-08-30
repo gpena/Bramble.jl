@@ -1,6 +1,7 @@
 using Test
 using Bramble
 using Bramble: IdentityOperator, IndexedTrialFunction, IndexedTestFunction,
+               TrialFunction, TestFunction,
                BackwardDifference, ForwardDifference, DifferenceNode,
                get_derivative_matrix_and_scale, get_innermost_dim, is_symbolic,
                resolve_ast, find_trial_component, find_test_component,
@@ -86,14 +87,19 @@ using Bramble: IdentityOperator, IndexedTrialFunction, IndexedTestFunction,
         @test hasmethod(inner₊, Tuple{IndexedTestFunction{2}, BD})
         @test hasmethod(inner₊, Tuple{BD, IndexedTrialFunction{2}})
 
-        # There is no symbolic method for the forward node. Dispatch does not stop there,
-        # though: it falls through to the numeric `inner₊(uₕ, vₕ)` over grid functions,
-        # which is not a symbolic method at all.
+        # There is no symbolic method for the forward node, and none of the
+        # direction-inferring ones accept it. It used to fall through to the *numeric*
+        # `inner₊(uₕ, vₕ)` over grid functions and fail there, complaining about types the
+        # caller never wrote; the guard in inner.jl now catches it as a usage error.
         for T in (FD, typeof(D₊ᵧ(id)))
             m = which(inner₊, Tuple{IndexedTrialFunction{2}, T})
             @test !occursin("ForwardDifference", string(m.sig))
-            @test occursin("inner_product.jl", string(m.file))
+            @test occursin("form/operators/inner.jl", replace(string(m.file), "\\" => "/"))
         end
+
+        u2, v2 = TrialFunction{2}(), TestFunction{2}()
+        @test_throws ArgumentError inner₊(u2, D₊ₓ(v2))
+        @test_throws ArgumentError inner₊(D₊ₓ(u2), D₊ₓ(v2))
     end
 
     @testset "the rest of the AST treats them the same" begin

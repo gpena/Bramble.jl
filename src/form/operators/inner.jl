@@ -87,46 +87,109 @@ function innerₕ(left::LazyOp{D}, right::LazyOp{D}) where {D}
     BilinearProduct{D, InnerH, typeof(left), typeof(right)}(left, right)
 end
 
+# There is deliberately no `innerₕ` over gradient tuples. `inner₊` has one because its
+# weights are directional and the tuple is what supplies the directions; `InnerH` carries a
+# single weight, so summing the components is a plain sum with nothing to infer, and it is
+# written out at the call site rather than hidden behind the same spelling as the scalar
+# product.
+
 """
     inner₊(left::LazyOp{1}, right::LazyOp{1})
     inner₊(left::NTuple{D,LazyOp{D}}, right::NTuple{D,LazyOp{D}}) where D
 
 Constructs a symbolic modified \$L^2_+\$ inner product between `left` and `right`.
 """
-function inner₊(left::LazyOp{1}, right::LazyOp{1})
-    BilinearProduct{1, InnerPlus{1}, typeof(left), typeof(right)}(left, right)
-end
 function inner₊(left::NTuple{D, LazyOp{D}}, right::NTuple{D, LazyOp{D}}) where {D}
     inner_plus(left, right)
 end
 
 """
-    inner₊(left::Union{IndexedTrialFunction{D},IndexedTestFunction{D}}, right::BackwardDifference{D,Dim}) where {D,Dim}
-    inner₊(left::BackwardDifference{D,Dim}, right::Union{IndexedTrialFunction{D},IndexedTestFunction{D}}) where {D,Dim}
+    inner₊(left::BackwardDifference{D,Dim}, right::BackwardDifference{D,Dim}) where {D,Dim}
 
-Direction-inferring `inner₊` for **coupled forms only**: uses the `InnerPlus{Dim}` weight
-matching the dimension of the `BackwardDifference` operator. This is needed for
-pressure-velocity coupling terms like `inner₊(p, D₋ₓ(v[1]))` and `inner₊(p, D₋ᵧ(v[2]))`,
-where `p` is an `IndexedTrialFunction` (a symbolic scalar field).
+`inner₊` of two backward differences taken along the *same* direction, which is the weight
+the product carries: `InnerPlus{Dim}`.
 
-Backward differences only — `D₋ₓ`, `D₋ᵧ`, `D₋₂` — and deliberately not the forward ones.
-This is the one place the two nodes are not interchangeable, and the restriction is
-mathematical rather than an omission: `inner₊` carries the staggered weights of the
-summation-by-parts identity `innerₕ(Dstar₊(uₕ), vₕ) == -inner₊(uₕ, D₋(vₕ))`, which pairs
-those weights with a backward difference. A forward difference sits on the other
-staggering, so `InnerPlus` is not the weight that belongs with it. Anything reading only
-the *direction* off a difference node uses the `DifferenceNode` alias and does cover both.
+In one dimension there is only one direction, so `inner₊(left, right)` above already
+answers. Above one dimension a bare `inner₊` of two operators names no direction, and the
+weights are directional — so the direction is read off the nodes, exactly as the coupled
+overloads below read it. This is what makes `inner₊(D₋ₓ(u), D₋ₓ(v))` mean what it reads as.
 
-These overloads are intentionally restricted to `IndexedTrialFunction`/`IndexedTestFunction`
-leaves so they **do not** conflict with the standard `inner₊(D₋ₓ(u), D₋ₓ(v))` usage.
+Backward differences only, as everywhere `inner₊` meets a difference: the weights are those
+of the summation-by-parts identity, which pairs them with a backward difference.
 """
-function inner₊(left::Union{IndexedTrialFunction{D}, IndexedTestFunction{D}},
+function inner₊(left::BackwardDifference{D, Dim},
         right::BackwardDifference{D, Dim}) where {D, Dim}
     BilinearProduct{D, InnerPlus{Dim}, typeof(left), typeof(right)}(left, right)
 end
-function inner₊(left::BackwardDifference{D, Dim},
-        right::Union{IndexedTrialFunction{D}, IndexedTestFunction{D}}) where {D, Dim}
+
+"""
+    inner₊(left::LazyOp{D}, right::LazyOp{D}) where {D}
+
+Symbolic `inner₊` of two operators neither of which names a direction.
+
+In one dimension there is only one direction to name, so this is the product, with weight
+`InnerPlus{1}`. Above one dimension the weights are directional and nothing here supplies
+the direction, so it is an error — and one worth spelling out, because without this method
+the call does not fail here at all: dispatch falls through to the *numeric* `inner₊` over
+grid functions in `space/inner_product.jl`, whose `@generated` body then complains about
+types the caller never mentioned.
+
+The `D` is a type parameter, so the branch folds away and neither case pays for the other.
+Writing it as one method rather than a `LazyOp{1}` pair keeps it from tying with the
+single-sided methods below, which in one dimension are equally specific.
+"""
+function inner₊(left::LazyOp{D}, right::LazyOp{D}) where {D}
+    D == 1 && return BilinearProduct{1, InnerPlus{1}, typeof(left), typeof(right)}(
+        left, right)
+    return _inner₊_no_direction(left, right, D)
+end
+
+@noinline function _inner₊_no_direction(left, right, D::Int)
+    throw(ArgumentError(
+        "inner₊ of two symbolic operators in $D dimensions names no direction, and its " *
+        "weights are directional. Write inner₊ₓ, inner₊ᵧ or inner₊₂ for a specific one, " *
+        "pass gradient tuples such as inner₊(∇₋ₕ(u), ∇₋ₕ(v)) to sum over all of them, or " *
+        "difference both sides along the same direction as in inner₊(D₋ₓ(u), D₋ₓ(v)). " *
+        "Got $(typeof(left)) and $(typeof(right))."))
+end
+
+"""
+    inner₊(left::LazyOp{D}, right::BackwardDifference{D,Dim}) where {D,Dim}
+    inner₊(left::BackwardDifference{D,Dim}, right::LazyOp{D}) where {D,Dim}
+
+`inner₊` where one side is a backward difference and the other is not: the difference names
+the direction, so the product carries `InnerPlus{Dim}`.
+
+This is what `inner₊(u, D₋ₓ(v))` means — the common form, and the one the coupled
+pressure-velocity terms are written in, `inner₊(p, D₋ₓ(v[1]))` with `p` a symbolic scalar
+field. It is not restricted to the indexed leaves: a plain `TrialFunction` reads the
+direction off the difference just as an `IndexedTrialFunction` does.
+
+Backward differences only, as everywhere `inner₊` meets a difference.
+"""
+function inner₊(left::LazyOp{D}, right::BackwardDifference{D, Dim}) where {D, Dim}
     BilinearProduct{D, InnerPlus{Dim}, typeof(left), typeof(right)}(left, right)
+end
+function inner₊(left::BackwardDifference{D, Dim}, right::LazyOp{D}) where {D, Dim}
+    BilinearProduct{D, InnerPlus{Dim}, typeof(left), typeof(right)}(left, right)
+end
+
+"""
+    inner₊(left::BackwardDifference{D,Dim1}, right::BackwardDifference{D,Dim2}) where {D,Dim1,Dim2}
+
+Rejects `inner₊` of two backward differences taken along *different* directions.
+
+Each side names a direction and they disagree, so there is no one weight the product
+carries. This also has to be written out rather than left to dispatch: with a difference on
+either side, the two single-sided methods above tie, and the pair would be an ambiguity
+rather than an error the caller can read.
+"""
+@noinline function inner₊(left::BackwardDifference{D, Dim1},
+        right::BackwardDifference{D, Dim2}) where {D, Dim1, Dim2}
+    throw(ArgumentError(
+        "inner₊ of backward differences along different directions ($Dim1 and $Dim2) " *
+        "names no single weight. Difference both sides along the same direction, or " *
+        "write inner₊ₓ, inner₊ᵧ or inner₊₂ for the one you mean."))
 end
 
 """
