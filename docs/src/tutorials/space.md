@@ -10,6 +10,7 @@ This tutorial introduces:
 - **Logical grid layouts** via reshaped matrix views
 - **Nodal projection and restriction** ($R_h$)
 - **Cell averaging operators** ($\mathrm{avg}_h$)
+- **Discrete inner products and norms** (`innerₕ`, `normₕ`, `norm₁ₕ`, `snorm₁ₕ`)
 
 ---
 
@@ -424,3 +425,86 @@ For multi-component spaces, averages can likewise be computed across components:
 ```julia
 vₕ = avgₕ(Vₕ, (x -> 1.0, x -> 2.0 * x[1]))
 ```
+
+---
+
+## 7. Discrete inner products and norms
+
+In continuous analysis, function spaces like ``L^2(\Omega)`` and ``H^1(\Omega)`` are equipped with inner products and norms:
+```math
+(u, v)_{L^2} = \int_\Omega u(x) v(x) \, dx, \quad \|u\|_{L^2} = \sqrt{(u, u)_{L^2}}, \quad |u|_{H^1}^2 = \int_\Omega |\nabla u|^2 \, dx.
+```
+
+In Bramble, discrete functions in a `ScalarGridSpace` or `CompositeGridSpace` have direct discrete counterparts that weight grid values by cell measures and quadrature weights.
+
+### The discrete ``L^2`` inner product and norm
+
+The primary discrete inner product is `innerₕ(uₕ, vₕ)`. It weights each point by its cell measure ``w_i = |\square_i|``:
+```math
+(u_h, v_h)_h = \sum_i w_i \, u_h(x_i) v_h(x_i).
+```
+
+The discrete ``L^2`` norm `normₕ(uₕ)` is induced by `innerₕ`:
+```math
+\|u_h\|_h = \sqrt{(u_h, u_h)_h}.
+```
+
+```julia
+using Bramble
+
+Ωₕ = mesh(domain(interval(0.0, 1.0)), 100, true)
+Wₕ = gridspace(Ωₕ)
+uₕ = Rₕ(Wₕ, sin)
+vₕ = Rₕ(Wₕ, cos)
+
+# Discrete L2 inner product and norm
+innerₕ(uₕ, vₕ)
+normₕ(uₕ)
+
+# Exact norm identity: ‖uₕ‖ₕ² == (uₕ, uₕ)ₕ
+normₕ(uₕ)^2 ≈ innerₕ(uₕ, uₕ)
+```
+
+### Discrete Sobolev norms: ``H^1`` seminorm and full ``H^1`` norm
+
+Bramble provides discrete ``H^1`` Sobolev norms based on the forward discrete gradient ``\nabla_{+h}``:
+* `snorm₁ₕ(uₕ)`: the discrete ``H^1`` seminorm ``|u_h|_{1,h}``, defined as:
+  ```math
+  |u_h|_{1,h}^2 = \|\nabla_{+h} u_h\|_h^2 = \sum_{d=1}^D \|D_{+x_d} u_h\|_h^2.
+  ```
+* `norm₁ₕ(uₕ)`: the full discrete ``H^1`` norm, satisfying the Pythagorean identity:
+  ```math
+  \|u_h\|_{1,h}^2 = \|u_h\|_h^2 + |u_h|_{1,h}^2.
+  ```
+
+```julia
+# Discrete H¹ seminorm and full H¹ norm
+snorm₁ₕ(uₕ)
+norm₁ₕ(uₕ)
+
+# Verification of identity
+norm₁ₕ(uₕ)^2 ≈ normₕ(uₕ)^2 + snorm₁ₕ(uₕ)^2
+```
+
+### Inner products on composite (vector) spaces
+
+For vector-valued grid functions in a `CompositeGridSpace` (such as velocities or gradients), `innerₕ` sums the discrete inner products across all components:
+```math
+(\mathbf{u}_h, \mathbf{v}_h)_h = \sum_{c=1}^{\mathrm{NC}} (u_{h,c}, v_{h,c})_h.
+```
+
+```julia
+Vₕ = Wₕ^2
+u_vec = Rₕ(Vₕ, (x -> sin(x), x -> cos(x)))
+
+normₕ(u_vec)^2 ≈ normₕ(u_vec[1])^2 + normₕ(u_vec[2])^2
+```
+
+### Staggered weights and directional inner products
+
+Energy estimates in finite difference schemes often balance flux differences against intermediate values at cell faces. Bramble provides staggered inner products:
+* `inner₊(uₕ, vₕ)`: inner product using staggered forward weights.
+* Coordinate-specific forms: `inner₊ₓ`, `inner₊ᵧ`, `inner₊₂`.
+
+These staggered inner products form the exact algebraic pairing needed for summation by parts (discussed in detail in the [Difference, jump and average operators](operators.md) tutorial).
+

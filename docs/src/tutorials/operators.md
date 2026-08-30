@@ -1,14 +1,14 @@
 # Difference, jump and average operators
 
 Bramble provides the finite difference building blocks that discrete schemes are written
-in: differences, jumps, averages, and the inner products and norms that go with them.
+in: differences, jumps, averages, and their algebraic structures.
 This tutorial covers:
 
 1. The four operator families and how their names are built.
 2. Applying an operator to a grid function, and what happens at the boundary.
 3. The same operator as a sparse matrix.
 4. Gradients and the other vectorial forms.
-5. Inner products and norms.
+5. Summation by parts and skew-symmetry.
 6. A convergence study, and the boundary effect that will otherwise spoil it.
 
 Every number below was produced by the code shown.
@@ -169,7 +169,7 @@ values(diff₊ₓ(uₕ))[end]   # -u₅, not 0
 values(diff₋ₓ(uₕ))[1]     # u₁, and u₁ happens to be 0 here
 ```
 
-Section 10 shows why this matters in practice.
+Section 9 shows why this matters in practice.
 
 In two or more dimensions, directional operators apply along the coordinate lines of the tensor grid, and each directional family truncates along its corresponding boundary slice:
 
@@ -299,24 +299,7 @@ Away from the truncated slices, `g[1]` is `1.0` and `g[2]` is `2.0`, the two par
 derivatives of ``x + 2y``. The same suffix works for the other families as `diff₋ₕ`,
 `jumpₕ` and `M₋ₕ`, and all of them accept a mesh, a grid space or a grid function.
 
-## 6. Inner products and norms
-
-The discrete inner product weights each point by its cell measure, and the norms are
-built from it:
-
-```@repl operators
-innerₕ(uₕ, uₕ)
-normₕ(uₕ)
-normₕ(uₕ)^2 ≈ innerₕ(uₕ, uₕ)
-norm₁ₕ(uₕ)^2 ≈ normₕ(uₕ)^2 + snorm₁ₕ(uₕ)^2
-```
-
-`normₕ` is the discrete ``L^2`` norm, `snorm₁ₕ` the ``H^1`` seminorm, and `norm₁ₕ` the
-full ``H^1`` norm, which is why the last identity holds. `inner₊` and its per-coordinate
-forms use the staggered weights instead, which is what the energy estimates for these
-schemes are written in.
-
-## 7. Summation by parts, and `Dstar₊ₓ`
+## 6. Summation by parts, and `Dstar₊ₓ`
 
 Continuous integration by parts, ``\int u' v = -\int u v'`` for ``v`` vanishing on the
 boundary, has a discrete counterpart, and which forward difference it holds for is not
@@ -368,7 +351,7 @@ pairing: with `D₊ₓ` it leaves a residual that does not vanish under refineme
 is a difference of quadrature weights and not a truncation error. Unlike the other
 difference families, `Dstar₊` takes a grid function only — it has no matrix form.
 
-## 8. The centered difference, `Dcₓ`
+## 7. The centered difference, `Dcₓ`
 
 Both one-sided differences reach one point; the centered one reaches both ways, and
 divides by the whole span its stencil covers:
@@ -408,7 +391,7 @@ innerₕ(Dcₓ(pₕ), qₕ)
 -innerₕ(pₕ, Dcₓ(qₕ))                               # equal to machine precision
 ```
 
-The reason is the same cancellation that gives `Dstar₊ₓ` its identity in section 7:
+The reason is the same cancellation that gives `Dstar₊ₓ` its identity in section 6:
 `innerₕ` weights point ``i`` by the cell measure ``(h_i + h_{i+1})/2``, which is exactly
 half the centered denominator. The weights cancel, and the left side collapses to
 
@@ -426,7 +409,7 @@ second order on a uniform grid and first order otherwise, where the one-sided di
 are first order on both. As with `Dstar₊ₓ`, `Dcₓ` takes a grid function only and has no
 matrix form; `Dcₕ` gives every coordinate at once.
 
-## 9. Second order on a non-uniform grid, `Dₕₓ`
+## 8. Second order on a non-uniform grid, `Dₕₓ`
 
 `Dcₓ` is second order only on a uniform grid. The fix is to take the same two one-sided
 differences and weight them by the **opposite** spacings:
@@ -466,7 +449,7 @@ that structure and `Dₕₓ` the one to reach for when it needs the order. Both 
 two slices, both take a grid function only, and `∇ₕ` gives every coordinate at once, the
 centered counterpart of `∇₋ₕ` and `∇₊ₕ`.
 
-## 10. A convergence study, and the boundary
+## 9. A convergence study, and the boundary
 
 `D₋ₓ` is first order, so the error against a known derivative should fall by a factor of
 ten each time the grid is refined by ten. Measuring it naively does not show that:
@@ -498,26 +481,3 @@ Excluding that single truncated point recovers the expected first order. So when
 measuring convergence, or assembling a scheme, treat the truncated slice explicitly:
 that is where the boundary condition belongs, and leaving the operator's truncated value
 in place silently halves the observed order.
-
-## Summary
-
-- Four families: `diff` unscaled, `D` divided by the spacing, `jump` for interface terms,
-  `M` for averages. `jump` is the only one with no backward form: it is ``u_{i+1} - u_i``
-  and names an interface, not a direction.
-- `₋` and `₊` choose the direction, `ₓ`/`ᵧ`/`₂` the coordinate, `ₕ` every coordinate at
-  once. `∇₋ₕ` is the discrete gradient.
-- A grid function in gives a grid function out; a mesh or grid space in gives the sparse
-  matrix.
-- Each one-sided operator truncates on one slice, and the centered one on two. The
-  finite differences are zero there, the unscaled differences and jumps act as though
-  the missing neighbour were zero.
-- The truncated slice is where the boundary condition goes. Ignoring it costs half an
-  order of convergence.
-- `Dstar₊ₓ` is the forward difference over the averaged spacing. It is the one that
-  satisfies discrete summation by parts against `D₋ₓ`, and it has no matrix form.
-- `Dcₓ` is the centered difference over the span its stencil covers. It is exact on
-  affine functions and skew-symmetric in `innerₕ` on any grid, and truncates on two
-  slices rather than one.
-- `Dₕₓ` weights the same two one-sided differences by the opposite spacings. It is
-  exact on quadratics, and so second order on a non-uniform grid where `Dcₓ` is
-  first, but it is not skew-symmetric.
