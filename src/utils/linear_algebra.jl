@@ -48,7 +48,14 @@ otherwise. See [`PARALLEL_FOR_MIN`](@ref).
 - `idxs`: Iterable of indices to process
 - `f`: Function that takes an index and returns the value to be stored at that index
 """
-function _parallel_for!(v, idxs, f; min_work::Int = PARALLEL_FOR_MIN)
+# `@inline` is load-bearing, not decoration. Without it this function allocated 64 bytes
+# on every call that took the serial branch, so `Rₕ!` cost 64 B and `avgₕ!` 128 B on grids
+# too small to thread, forever, however often they were called. The cause is the
+# `Threads.nthreads()` call: it is opaque to the compiler, and its presence stopped the
+# escape analysis proving that the arguments handed to the `@noinline` threaded branch
+# never actually go there. Inlining resolves the branch in the caller's context instead,
+# and the serial path becomes allocation free.
+@inline function _parallel_for!(v, idxs, f; min_work::Int = PARALLEL_FOR_MIN)
     # A single thread, or too little work to amortise spawning tasks: the serial
     # path is both faster and allocation free.
     if Threads.nthreads() == 1 || length(idxs) < min_work
@@ -149,7 +156,8 @@ Applies `g` across `idxs` and scatters each returned tuple over the arrays in
 - `idxs`: Iterable of indices to process
 - `g`: Function taking an index and returning a tuple of values, one per array
 """
-function _scatter_for!(mats::Tuple, idxs, g; min_work::Int = PARALLEL_FOR_MIN)
+# `@inline` for the same reason as `_parallel_for!` above.
+@inline function _scatter_for!(mats::Tuple, idxs, g; min_work::Int = PARALLEL_FOR_MIN)
     if Threads.nthreads() == 1 || length(idxs) < min_work
         @inbounds for idx in idxs
             _write_components!(mats, g(idx), idx)
