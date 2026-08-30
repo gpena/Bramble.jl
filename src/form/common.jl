@@ -113,8 +113,6 @@ end
 # ==============================================================================
 # 2. Abstract Syntax Tree (AST) Nodes
 # ==============================================================================
-# 2. Abstract Syntax Tree (AST) Nodes
-# ==============================================================================
 
 """
     TrialFunction{D} <: LazyOp{D}
@@ -166,6 +164,16 @@ end
     SourceVector{D,VType} <: LazyOp{D}
 
 An AST node representing a source term defined by a discrete vector of values.
+
+Note the division of labour with [`GridFunctionScale`](@ref), which also carries values per
+grid point. A `SourceFunction` holds a function of *position*, `f(x)`, evaluated at the
+point. A `Function` inside a `GridFunctionScale` is something else entirely: a
+**zero-argument thunk** returning the vector or number to scale by, called as `f()` both
+here and in `resolve_ast`. It defers building that vector until the form is resolved.
+
+So `(x -> x[1]) * D₋ₓ(u)` does not do what it reads as — the thunk call fails, because the
+function wants a point. A function of position belongs in a `SourceFunction`, or should be
+restricted to the grid with `Rₕ` first and passed as the vector it becomes.
 """
 struct SourceVector{D, VType <: AbstractVector} <: LazyOp{D}
     vec::VType
