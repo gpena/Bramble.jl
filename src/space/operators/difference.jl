@@ -406,7 +406,7 @@ docstring to it.
 
 `what` names the quantity, such as `"finite difference"`, and `formula` is the LaTeX for
 it. Both are needed because the four operator families share this generator: describing
-every alias as a "difference" would be wrong for the averages and the jumps, and would
+every alias as a "difference" would be wrong for the averages, and would
 not separate the unscaled difference from the finite difference.
 """
 
@@ -448,8 +448,8 @@ tuple, one entry per spatial dimension. On a one-dimensional mesh it returns tha
 entry rather than a one-tuple.
 
 The counterpart of `_define_directional_alias` for the tuple-valued aliases
-(`∇₋ₕ`, `diff₋ₕ`, `jump₋ₕ`, `M₋ₕ`). The three operator families generated the same three
-methods independently before this existed.
+(`∇₋ₕ`, `diff₋ₕ`, `M₋ₕ`). The operator families generated the same three methods
+independently before this existed.
 """
 function _define_vectorial_alias(base_op_name, alias_name, dir_string, what)
     doc_string = """

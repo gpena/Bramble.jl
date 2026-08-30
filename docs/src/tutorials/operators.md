@@ -21,12 +21,18 @@ There are four families. Two of them differ only by a division:
 |:--|:--|:--|
 | unscaled difference | a plain difference | ``u_i - u_{i-1}`` |
 | finite difference | divided by the spacing, so it approximates ``\partial u / \partial x`` | ``\dfrac{u_i - u_{i-1}}{h_i}`` |
-| jump | the same arithmetic as the unscaled difference, used where the intent is a discontinuity across an interface | ``u_i - u_{i-1}`` |
+| jump | the same arithmetic as the unscaled forward difference, used where the intent is a discontinuity across an interface | ``u_{i+1} - u_i`` |
 | average | the mean of a point and its neighbour | ``\dfrac{u_{i-1} + u_i}{2}`` |
 
-The jump and the unscaled difference compute the same numbers. They are separate names
-because they play different roles in a scheme, and reading `jump₋ₓ` in a penalty term
-says something that `diff₋ₓ` does not.
+The jump and the unscaled forward difference compute the same numbers. They are separate
+names because they play different roles in a scheme, and reading `jumpₓ` in a penalty term
+says something that `diff₊ₓ` does not.
+
+The jump is also the one family with no backward form. A jump belongs to the interface
+between two cells rather than to a direction of travel across it, so
+``\llbracket u \rrbracket = u_{i+1} - u_i`` at the interface between ``x_i`` and
+``x_{i+1}`` is a single quantity; a backward jump would name that same interface from the
+other side and give the same numbers shifted by one index.
 
 ### 1.1 How the names are built
 
@@ -44,8 +50,11 @@ A name is a stem, a direction, and a coordinate:
 | `ₕ` | every coordinate at once, returning a tuple |
 
 So `D₋ₓ` is the backward finite difference along ``x``, `M₊ᵧ` the forward average along
-``y``, and `jump₋ₕ` the backward jump along every coordinate. The backward finite
-difference in every coordinate is the discrete gradient, and has the extra name `∇₋ₕ`.
+``y``, and `∇₋ₕ` the backward finite difference in every coordinate, which is the discrete
+gradient and has that extra name for it.
+
+`jump` takes no direction, for the reason given above: it is `jumpₓ`, `jumpᵧ`, `jump₂` and
+`jumpₕ`.
 
 ## 2. Applying an operator
 
@@ -70,12 +79,19 @@ The four backward operators on that grid function:
 values(diff₋ₓ(uₕ))   # [0.0, 0.0625, 0.1875, 0.3125, 0.4375]
 values(D₋ₓ(uₕ))      # [0.0, 0.25,   0.75,   1.25,   1.75  ]
 values(M₋ₓ(uₕ))      # [0.0, 0.03125, 0.15625, 0.40625, 0.78125]
-values(jump₋ₓ(uₕ))   # [0.0, 0.0625, 0.1875, 0.3125, 0.4375]
 ```
 
 Reading the second entry of each: `diff₋ₓ` gives ``u_2 - u_1 = 0.0625``, `D₋ₓ` divides
 that by ``h_2 = 0.25`` to get ``0.25``, and `M₋ₓ` averages ``(u_1 + u_2)/2 = 0.03125``.
-`jump₋ₓ` matches `diff₋ₓ` entry for entry, as section 1 said it would.
+
+The jump has no backward form, so it matches the *forward* unscaled difference instead:
+
+```julia
+values(diff₊ₓ(uₕ))   # [0.0625, 0.1875, 0.3125, 0.4375, -1.0]
+values(jumpₓ(uₕ))    # [0.0625, 0.1875, 0.3125, 0.4375, -1.0]
+```
+
+entry for entry, as section 1 said it would.
 
 ## 3. What happens at the boundary
 
@@ -274,7 +290,7 @@ length(g)        # 2
 
 Away from the truncated slices, `g[1]` is `1.0` and `g[2]` is `2.0`, the two partial
 derivatives of ``x + 2y``. The same suffix works for the other families as `diff₋ₕ`,
-`jump₋ₕ` and `M₋ₕ`, and all of them accept a mesh, a grid space or a grid function.
+`jumpₕ` and `M₋ₕ`, and all of them accept a mesh, a grid space or a grid function.
 
 ## 6. Inner products and norms
 
@@ -491,7 +507,8 @@ in place silently halves the observed order.
 ## Summary
 
 - Four families: `diff` unscaled, `D` divided by the spacing, `jump` for interface terms,
-  `M` for averages.
+  `M` for averages. `jump` is the only one with no backward form: it is ``u_{i+1} - u_i``
+  and names an interface, not a direction.
 - `₋` and `₊` choose the direction, `ₓ`/`ᵧ`/`₂` the coordinate, `ₕ` every coordinate at
   once. `∇₋ₕ` is the discrete gradient.
 - A grid function in gives a grid function out; a mesh or grid space in gives the sparse

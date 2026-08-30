@@ -50,11 +50,11 @@ const F32_BACKEND = backend(vector_type = Vector{Float32},
         @test eltype(values(uₕ)) === Float32
         @test eltype(values(avgₕ(Wₕ, x -> sin(x[1]) * x[2]))) === Float32
 
-        for op in (diff₋ₓ, diff₊ₓ, D₋ₓ, D₊ₓ, jump₋ₓ, jump₊ₓ, M₋ₓ, M₊ₓ,
+        for op in (diff₋ₓ, diff₊ₓ, D₋ₓ, D₊ₓ, jumpₓ, M₋ₓ, M₊ₓ,
             Dstar₊ₓ, Dcₓ, Dₕₓ, D₋ᵧ, M₊ᵧ, Dcᵧ, Dₕᵧ)
             @test eltype(values(op(uₕ))) === Float32
         end
-        for op in (∇₋ₕ, ∇₊ₕ, Dstar₊ₕ, Dcₕ, ∇ₕ, M₋ₕ, jump₋ₕ)
+        for op in (∇₋ₕ, ∇₊ₕ, Dstar₊ₕ, Dcₕ, ∇ₕ, M₋ₕ, jumpₕ)
             @test all(g -> eltype(values(g)) === Float32, op(uₕ))
         end
     end
@@ -65,7 +65,7 @@ const F32_BACKEND = backend(vector_type = Vector{Float32},
         Ωₕ = mesh(domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)), (6, 7),
             (true, false); backend = F32_BACKEND)
 
-        for op in (D₋ₓ, D₊ₓ, diff₋ₓ, diff₊ₓ, jump₋ₓ, jump₊ₓ, M₋ₓ, M₊ₓ, M₋ᵧ, M₊ᵧ)
+        for op in (D₋ₓ, D₊ₓ, diff₋ₓ, diff₊ₓ, jumpₓ, M₋ₓ, M₊ₓ, M₋ᵧ, M₊ᵧ)
             @test eltype(op(Ωₕ)) === Float32
         end
     end

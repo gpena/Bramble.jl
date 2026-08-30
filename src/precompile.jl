@@ -319,13 +319,13 @@ end
 
 # `const` so that each tuple has a concrete type and the loops below stay
 # inferable, the same reason the operator config tables are `const`.
-const _PC_OPS_X = (diff₋ₓ, diff₊ₓ, D₋ₓ, D₊ₓ, jump₋ₓ, jump₊ₓ, M₋ₓ, M₊ₓ, Dstar₊ₓ, Dcₓ, Dₕₓ)
-const _PC_OPS_Y = (diff₋ᵧ, diff₊ᵧ, D₋ᵧ, D₊ᵧ, jump₋ᵧ, jump₊ᵧ, M₋ᵧ, M₊ᵧ, Dstar₊ᵧ, Dcᵧ, Dₕᵧ)
-const _PC_OPS_Z = (diff₋₂, diff₊₂, D₋₂, D₊₂, jump₋₂, jump₊₂, M₋₂, M₊₂, Dstar₊₂, Dc₂, Dₕ₂)
+const _PC_OPS_X = (diff₋ₓ, diff₊ₓ, D₋ₓ, D₊ₓ, jumpₓ, M₋ₓ, M₊ₓ, Dstar₊ₓ, Dcₓ, Dₕₓ)
+const _PC_OPS_Y = (diff₋ᵧ, diff₊ᵧ, D₋ᵧ, D₊ᵧ, jumpᵧ, M₋ᵧ, M₊ᵧ, Dstar₊ᵧ, Dcᵧ, Dₕᵧ)
+const _PC_OPS_Z = (diff₋₂, diff₊₂, D₋₂, D₊₂, jump₂, M₋₂, M₊₂, Dstar₊₂, Dc₂, Dₕ₂)
 
 # The vectorial aliases, which return a bare element in 1D and a tuple above it,
 # so both returns get compiled.
-const _PC_OPS_ALL = (∇₋ₕ, ∇₊ₕ, diff₋ₕ, diff₊ₕ, jump₋ₕ, jump₊ₕ, M₋ₕ, M₊ₕ, Dstar₊ₕ, Dcₕ, ∇ₕ)
+const _PC_OPS_ALL = (∇₋ₕ, ∇₊ₕ, diff₋ₕ, diff₊ₕ, jumpₕ, M₋ₕ, M₊ₕ, Dstar₊ₕ, Dcₕ, ∇ₕ)
 
 # Applied with a plain loop over the tuple, which inference unrolls into a static
 # call per operator. Going through `foreach` and a closure instead leaves the

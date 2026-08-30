@@ -46,9 +46,9 @@ const _COVERING = Base.JLOptions().code_coverage != 0
     @testset "operators are type stable" begin
         # scalar operators, per direction, in each dimension
         for (lbl, uₕ, ops) in (
-            ("1D", uₕ1, (diff₋ₓ, diff₊ₓ, D₋ₓ, D₊ₓ, jump₋ₓ, jump₊ₓ, M₋ₓ, M₊ₓ)),
-            ("2D", uₕ2, (diff₋ᵧ, diff₊ᵧ, D₋ᵧ, D₊ᵧ, jump₋ᵧ, jump₊ᵧ, M₋ᵧ, M₊ᵧ)),
-            ("3D", uₕ3, (diff₋₂, diff₊₂, D₋₂, D₊₂, jump₋₂, jump₊₂, M₋₂, M₊₂)))
+            ("1D", uₕ1, (diff₋ₓ, diff₊ₓ, D₋ₓ, D₊ₓ, jumpₓ, M₋ₓ, M₊ₓ)),
+            ("2D", uₕ2, (diff₋ᵧ, diff₊ᵧ, D₋ᵧ, D₊ᵧ, jumpᵧ, M₋ᵧ, M₊ᵧ)),
+            ("3D", uₕ3, (diff₋₂, diff₊₂, D₋₂, D₊₂, jump₂, M₋₂, M₊₂)))
             @testset "$lbl" begin
                 for op in ops
                     @test @inferred(op(uₕ)) isa VectorElement
@@ -58,7 +58,7 @@ const _COVERING = Base.JLOptions().code_coverage != 0
 
         # the tuple-valued aliases: a bare element in 1D, an NTuple above it
         @test @inferred(∇₋ₕ(uₕ1)) isa VectorElement
-        for op in (∇₋ₕ, ∇₊ₕ, diff₋ₕ, diff₊ₕ, jump₋ₕ, jump₊ₕ, M₋ₕ, M₊ₕ)
+        for op in (∇₋ₕ, ∇₊ₕ, diff₋ₕ, diff₊ₕ, jumpₕ, M₋ₕ, M₊ₕ)
             @test @inferred(op(uₕ2)) isa NTuple{2, VectorElement}
             @test @inferred(op(uₕ3)) isa NTuple{3, VectorElement}
         end
@@ -153,9 +153,9 @@ const _COVERING = Base.JLOptions().code_coverage != 0
             @test_skip "Allocation comparison skipped under code coverage"
         else
             for (lbl, uₕ, ops) in (
-                ("1D", uₕ1, (diff₋ₓ, D₋ₓ, M₋ₓ, jump₋ₓ)),
-                ("2D", uₕ2, (diff₋ᵧ, D₋ᵧ, M₋ᵧ, jump₋ᵧ)),
-                ("3D", uₕ3, (diff₋₂, D₋₂, M₋₂, jump₋₂)))
+                ("1D", uₕ1, (diff₋ₓ, D₋ₓ, M₋ₓ, jumpₓ)),
+                ("2D", uₕ2, (diff₋ᵧ, D₋ᵧ, M₋ᵧ, jumpᵧ)),
+                ("3D", uₕ3, (diff₋₂, D₋₂, M₋₂, jump₂)))
                 @testset "$lbl" begin
                     baseline = alloc_test(similar, uₕ)
                     for op in ops

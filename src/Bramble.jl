@@ -68,8 +68,7 @@ export Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂, Dstar₊ₕ
 export Dcₓ, Dcᵧ, Dc₂, Dcₕ
 export Dₕₓ, Dₕᵧ, Dₕ₂, ∇ₕ
 
-export jump₋ₓ, jump₋ᵧ, jump₋₂, jump₋ₕ
-export jump₊ₓ, jump₊ᵧ, jump₊₂, jump₊ₕ
+export jumpₓ, jumpᵧ, jump₂, jumpₕ
 
 export M₋ₓ, M₋ᵧ, M₋₂, M₋ₕ
 export M₊ₓ, M₊ᵧ, M₊₂, M₊ₕ

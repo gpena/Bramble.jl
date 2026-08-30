@@ -47,7 +47,7 @@ These symbols are used to generate directional operator aliases via metaprogramm
 # Examples
 - `D₊ₓ` - forward difference in x-direction
 - `M₋ᵧ` - backward average in y-direction
-- `jump₊₂` - forward jump in z-direction
+- `jump₂` - jump in the z-direction
 
 See also: [`_BRAMBLE_var2label`](@ref)
 """

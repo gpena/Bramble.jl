@@ -231,17 +231,15 @@ Dₕ₂
 ∇ₕ
 ```
 
-Jumps across an interface.
+Jumps across an interface, ``\llbracket u \rrbracket = u_{i+1} - u_i``. There is one
+of these rather than a forward and a backward pair: a jump belongs to the interface
+between two cells, not to a direction of travel across it.
 
 ```@docs
-jump₋ₓ
-jump₋ᵧ
-jump₋₂
-jump₋ₕ
-jump₊ₓ
-jump₊ᵧ
-jump₊₂
-jump₊ₕ
+jumpₓ
+jumpᵧ
+jump₂
+jumpₕ
 ```
 
 Averages of a point with its neighbour.

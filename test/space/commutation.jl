@@ -33,7 +33,7 @@ using Bramble: values
         ("M₋ₓ", M₋ₓ, "D₋ᵧ", D₋ᵧ),
         ("M₊ₓ", M₊ₓ, "M₋ᵧ", M₋ᵧ),
         ("diff₋ₓ", diff₋ₓ, "diff₊ᵧ", diff₊ᵧ),
-        ("jump₋ₓ", jump₋ₓ, "jump₊ᵧ", jump₊ᵧ))
+        ("jumpₓ", jumpₓ, "jumpᵧ", jumpᵧ))
 
     @testset "2D" begin
         for (lbl, unif) in (("uniform", true), ("random", false))
