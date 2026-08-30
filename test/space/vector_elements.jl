@@ -1,6 +1,7 @@
 import Bramble: VectorElement, spacing, points, half_points, space, values, ndofs, values!,
                 _func2array!, half_spacings_iterator, half_points_iterator, indices, point
 using LinearAlgebra: norm
+using SparseArrays
 
 function valid_interior_range(i::Int, dims::NTuple{D}) where {D}
     ntuple(k -> k == i ? (2:dims[k]) : (1:dims[k]), Val(D))
@@ -756,4 +757,42 @@ end
             @test values(avgₕ(Vₕ, f_all; quad_points = 3)) ≈ values(from_tuple) rtol=1e-8
         end
     end
+end
+
+@testset "the quadrature rule is built once per call, not once per point" begin
+    # `avgₕ!` fetches the Gauss rule inside its kernel where `_gauss_rule` folds to a
+    # compile-time constant, and hoists it out of the loop where it does not. Getting that
+    # predicate wrong is silent: the answers stay correct and the cost moves from once per
+    # call to once per grid point.
+    #
+    # `isbitstype(T)` is not the predicate. `Double64` is isbits, `_gauss_rule` takes its
+    # folding branch for it, and the branch does not fold — building the rule costs
+    # thousands of bytes per call. Fetching inside then charged that per grid point.
+    #
+    # BigFloat is used here because it cannot fold either, needs no extra dependency, and
+    # makes the two costs easy to separate: the rule is a large constant and the
+    # arithmetic is a much smaller per-point cost.
+    rule_cost = (_gauss_rule(Val(6), BigFloat); @allocated _gauss_rule(Val(6), BigFloat))
+    @test rule_cost > 10_000     # it really is expensive, so the test is not vacuous
+
+    function avg_bytes(n)
+        be = backend(vector_type = Vector{BigFloat},
+            matrix_type = SparseArrays.SparseMatrixCSC{BigFloat, Int})
+        Ωₕ = mesh(domain(interval(BigFloat(0), BigFloat(1))), n, true; backend = be)
+        uₕ = element(gridspace(Ωₕ))
+        avgₕ!(uₕ, sin)
+        return @allocated avgₕ!(uₕ, sin)
+    end
+
+    a64, a128 = avg_bytes(64), avg_bytes(128)
+    marginal = (a128 - a64) / 64          # bytes per additional grid point
+
+    # If the rule were rebuilt per point the marginal cost would be at least one rule
+    # build; it is the BigFloat arithmetic instead, which is far cheaper.
+    @test marginal < rule_cost / 10
+
+    # and a folding type pays no per-point cost at all
+    W64(n) = gridspace(mesh(domain(interval(0.0, 1.0)), n, true))
+    b64(n) = (u = element(W64(n)); avgₕ!(u, sin); @allocated avgₕ!(u, sin))
+    @test b64(64) == b64(1024)
 end

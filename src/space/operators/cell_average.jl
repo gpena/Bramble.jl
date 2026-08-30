@@ -260,7 +260,21 @@ end
 # run-time setting, so `_gauss_rule` cannot fold and builds the rule per call; fetching
 # inside the kernel would rebuild it at every grid point. There the rule is still built
 # once and captured, which is what the old code did for every type.
-@inline _rule_folds(::Type{T}) where {T} = Val(isbitstype(T))
+# Whether `_gauss_rule` reduces to a compile-time constant for `T`, and so can be called
+# from inside the kernel rather than hoisted out of it.
+#
+# This is a whitelist, not `isbitstype(T)`, and the difference matters. `Double64` is an
+# isbits type, and `_gauss_rule` takes its constant-folding branch for it, but the branch
+# does not actually fold: building the `SVector{6,Double64}` costs 3184 bytes per call. On
+# the fetch-inside path that is paid once per grid point rather than once per call —
+# measured at 2977 B per point against 0 for `Float64` — which is a far worse trade than
+# the 96 bytes per thread the fetch-inside path saves.
+#
+# There is no way to ask the compiler whether a call will fold, so the safe default is to
+# capture, and only the types measured to fold opt in. A new extended-precision type gets
+# the old behaviour, which costs it nothing it was not already paying.
+@inline _rule_folds(::Type{<:Union{Float16, Float32, Float64}}) = Val(true)
+@inline _rule_folds(::Type{T}) where {T} = Val(false)
 
 @inline _cell_average_kernel(
     f, x, nq::Val, ::Type{T}, ::Val{1}, ::Val{true}) where {T} = idx -> _cell_average(
