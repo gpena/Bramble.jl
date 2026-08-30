@@ -47,6 +47,10 @@ Returns the discrete ``L^2`` inner product of the grid functions `uₕ` and `v�
 ```math
 (\\textrm{u}_h, \\textrm{v}_h)_h \\vcentcolon = \\sum_{i=1}^{N_x} \\sum_{j=1}^{N_y}  \\sum_{l=1}^{N_z}  |\\square_{i,j,l}| \\textrm{u}_h(x_i,y_j) \\textrm{v}_h(x_i,y_j)
 ```
+
+Defined for grid functions of a [`ScalarGridSpace`](@ref) only. A grid function of a
+composite grid space is rejected at dispatch; take a scalar component of it with
+[`components`](@ref) first, which is itself a scalar grid function and is accepted.
 """
 @inline innerₕ(uₕ::VectorElement{<:ScalarGridSpace},
     vₕ::VectorElement{<:ScalarGridSpace}) = _dot(
@@ -60,6 +64,10 @@ Returns the discrete ``L^2`` norm of the grid function `uₕ`, defined as
 ```math
 \\Vert \\textrm{u}_h \\Vert_h \\vcentcolon = \\sqrt{(\\textrm{u}_h, \\textrm{u}_h)_h}
 ```
+
+Defined for grid functions of a [`ScalarGridSpace`](@ref) only. A grid function of a
+composite grid space is rejected at dispatch; take a scalar component of it with
+[`components`](@ref) first, which is itself a scalar grid function and is accepted.
 """
 @inline normₕ(uₕ::VectorElement{<:ScalarGridSpace}) = sqrt(innerₕ(uₕ, uₕ))
 
@@ -96,6 +104,10 @@ For [VectorElement](@ref)s, it is defined as
 ```math
 (\\textrm{u}_h, \\textrm{v}_h)_{+x} \\vcentcolon = \\sum_{i=1}^{N_x}\\sum_{j=1}^{N_y}\\sum_{l=1}^{N_z}   h_{x,i} h_{y,j+1/2} h_{z,l+1/2}  \\textrm{u}_h(x_i,y_j,z_l) \\textrm{v}_h(x_i,y_j,z_l).
 ```
+
+Defined for grid functions of a [`ScalarGridSpace`](@ref) only. A grid function of a
+composite grid space is rejected at dispatch; take a scalar component of it with
+[`components`](@ref) first, which is itself a scalar grid function and is accepted.
 """
 @inline inner₊ₓ(uₕ::VectorElement{<:ScalarGridSpace},
     vₕ::VectorElement{<:ScalarGridSpace}) = _directional_inner_plus(uₕ, vₕ, Val(1))
@@ -119,6 +131,10 @@ For [VectorElement](@ref)s, it is defined as
 ```math
 (\\textrm{u}_h, \\textrm{v}_h)_{+y} \\vcentcolon = \\sum_{i=1}^{N_x}\\sum_{j=1}^{N_y}\\sum_{l=1}^{N_z}   h_{x,i+1/2} h_{y,j} h_{z,l+1/2} \\textrm{u}_h(x_i,y_j,z_l) \\textrm{v}_h(x_i,y_j,z_l).
 ```
+
+Defined for grid functions of a [`ScalarGridSpace`](@ref) only. A grid function of a
+composite grid space is rejected at dispatch; take a scalar component of it with
+[`components`](@ref) first, which is itself a scalar grid function and is accepted.
 """
 @inline inner₊ᵧ(uₕ::VectorElement{<:ScalarGridSpace},
     vₕ::VectorElement{<:ScalarGridSpace}) = _directional_inner_plus(uₕ, vₕ, Val(2))
@@ -131,6 +147,10 @@ Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ`
 ```math
 (\\textrm{u}_h, \\textrm{v}_h)_{+z} \\vcentcolon = \\sum_{i=1}^{N_x}\\sum_{j=1}^{N_y}\\sum_{l=1}^{N_z}  h_{x,i+1/2} h_{y,j+1/2} h_{z,l} \\textrm{u}_h(x_i,y_j,z_l) \\textrm{v}_h(x_i,y_j,z_l).
 ```
+
+Defined for grid functions of a [`ScalarGridSpace`](@ref) only. A grid function of a
+composite grid space is rejected at dispatch; take a scalar component of it with
+[`components`](@ref) first, which is itself a scalar grid function and is accepted.
 """
 @inline inner₊₂(uₕ::VectorElement{<:ScalarGridSpace},
     vₕ::VectorElement{<:ScalarGridSpace}) = _directional_inner_plus(uₕ, vₕ, Val(3))
@@ -238,6 +258,11 @@ For [VectorElement](@ref)s, the definition is given by
 ```
 
 See the definitions of [inner₊ₓ](@ref inner₊ₓ(uₕ::VectorElement, vₕ::VectorElement)), [inner₊ᵧ](@ref inner₊ᵧ(uₕ::VectorElement, vₕ::VectorElement)) and [inner₊₂](@ref inner₊₂(uₕ::VectorElement, vₕ::VectorElement)) for more details.
+
+Defined for grid functions of a [`ScalarGridSpace`](@ref) only, and for tuples whose
+entries are such grid functions. A grid function of a composite grid space raises a
+`MethodError`; take a scalar component of it with [`components`](@ref) first, which is
+itself a scalar grid function and is accepted.
 """
 @generated inner₊(uₕ, vₕ) = :($(_generate_inner_plus_body(uₕ, vₕ, :sum)))
 @generated inner₊(uₕ, vₕ, ::Type{Tuple}) = :($(_generate_inner_plus_body(uₕ, vₕ, :tuple)))
@@ -259,6 +284,11 @@ and for `NTuple`s of [VectorElement](@ref)s it returns
 ```math
 \\Vert \\textrm{u}_h \\Vert_+ \\vcentcolon = \\sqrt{ \\sum_{i=1}^D(\\textrm{u}_h[i],\\textrm{u}_h[i])_{+,x_i}}.
 ```
+
+Defined for grid functions of a [`ScalarGridSpace`](@ref) only, and for tuples whose
+entries are such grid functions. A grid function of a composite grid space raises a
+`MethodError`; take a scalar component of it with [`components`](@ref) first, which is
+itself a scalar grid function and is accepted.
 """
 @inline norm₊(uₕ::Union{VectorElement, NTuple{<:Any, VectorElement}}) = sqrt(inner₊(uₕ, uₕ))
 
@@ -320,6 +350,10 @@ the grid function itself; the backward gradient is taken internally, and without
 materialising it, so this allocates nothing.
 
 See also: [`norm₁ₕ`](@ref), [`norm₊`](@ref), [`∇₋ₕ`](@ref).
+
+Defined for grid functions of a [`ScalarGridSpace`](@ref) only. A grid function of a
+composite grid space is rejected at dispatch; take a scalar component of it with
+[`components`](@ref) first, which is itself a scalar grid function and is accepted.
 """
 @inline snorm₁ₕ(uₕ::VectorElement{<:ScalarGridSpace}) = sqrt(_snorm₁ₕ_sq(uₕ))
 
@@ -334,6 +368,10 @@ Returns the discrete version of the standard ``H^1`` norm of [VectorElement](@re
 
 Built from the squared quantities directly: taking `normₕ` and `snorm₁ₕ` and squaring
 them back up would compute two square roots only to undo them.
+
+Defined for grid functions of a [`ScalarGridSpace`](@ref) only. A grid function of a
+composite grid space is rejected at dispatch; take a scalar component of it with
+[`components`](@ref) first, which is itself a scalar grid function and is accepted.
 """
 @inline norm₁ₕ(uₕ::VectorElement{<:ScalarGridSpace}) = sqrt(
     innerₕ(uₕ, uₕ) + _snorm₁ₕ_sq(uₕ))

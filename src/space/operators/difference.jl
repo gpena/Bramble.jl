@@ -422,6 +422,10 @@ function _define_directional_alias(
      Alias for `$base_op_name(arg, Val($direction_index))`. `arg` is a mesh, a grid space
      or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
      third applies it and returns a `VectorElement`.
+
+     Accepts a grid function of a scalar or of a composite grid space. On a composite one
+     the operator is applied to each component in turn, and the result is the composite
+     grid function whose components are those results.
      """
 
     # 2. Construct the function definition as an expression.
@@ -458,6 +462,9 @@ function _define_vectorial_alias(base_op_name, alias_name, dir_string, what)
      For a 2D space, `$alias_name(uₕ)` is
      `($base_op_name(uₕ, Val(1)), $base_op_name(uₕ, Val(2)))`. `arg` is a mesh, a grid
      space or a [`VectorElement`](@ref), as for `$base_op_name`.
+
+     Accepts a grid function of a scalar or of a composite grid space, componentwise on
+     the latter: each entry of the tuple is then itself a composite grid function.
      """
 
     # Built one at a time, as in _define_directional_alias: @doc takes a single
@@ -687,6 +694,10 @@ for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
           Alias for `forward_star_difference(uₕ, Val($($i)))`. Takes a grid function only;
           there is no matrix form. The last point along `$($direction)` is truncated to
           zero.
+
+          Accepts a grid function of a scalar or of a composite grid space. On a composite
+          one the operator is applied to each component in turn, and the result is the
+          composite grid function whose components are those results.
           """
         @inline $alias(uₕ::VectorElement) = forward_star_difference(uₕ, Val($i))
     end
@@ -698,6 +709,9 @@ end
 The starred forward difference of `uₕ` along every coordinate, as a tuple with one grid
 function per spatial dimension. On a one-dimensional mesh it returns that single entry
 rather than a one-tuple.
+
+Accepts a grid function of a scalar or of a composite grid space, componentwise on the
+latter: each entry of the tuple is then itself a composite grid function.
 """
 @inline Dstar₊ₕ(uₕ::VectorElement) = Dstar₊ₕ(uₕ, Val(dim(_op_mesh(uₕ))))
 @inline Dstar₊ₕ(uₕ::VectorElement, ::Val{1}) = forward_star_difference(uₕ, Val(1))
@@ -761,6 +775,10 @@ for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
           Alias for `centered_difference(uₕ, Val($($i)))`. Takes a grid function only;
           there is no matrix form. The first and last points along `$($direction)` are
           truncated to zero.
+
+          Accepts a grid function of a scalar or of a composite grid space. On a composite
+          one the operator is applied to each component in turn, and the result is the
+          composite grid function whose components are those results.
           """
         @inline $alias(uₕ::VectorElement) = centered_difference(uₕ, Val($i))
     end
@@ -772,6 +790,9 @@ end
 The centered difference of `uₕ` along every coordinate, as a tuple with one grid function
 per spatial dimension. On a one-dimensional mesh it returns that single entry rather than
 a one-tuple.
+
+Accepts a grid function of a scalar or of a composite grid space, componentwise on the
+latter: each entry of the tuple is then itself a composite grid function.
 """
 @inline Dcₕ(uₕ::VectorElement) = Dcₕ(uₕ, Val(dim(_op_mesh(uₕ))))
 @inline Dcₕ(uₕ::VectorElement, ::Val{1}) = centered_difference(uₕ, Val(1))
@@ -841,6 +862,10 @@ for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
           non-uniform grid, where [`Dc$($suffix)`](@ref) is first. Takes a grid function
           only; there is no matrix form. The first and last points along `$($direction)`
           are truncated to zero.
+
+          Accepts a grid function of a scalar or of a composite grid space. On a composite
+          one the operator is applied to each component in turn, and the result is the
+          composite grid function whose components are those results.
           """
         @inline $alias(uₕ::VectorElement) = cross_weighted_difference(uₕ, Val($i))
     end
@@ -855,6 +880,9 @@ rather than a one-tuple.
 
 The centered counterpart of [`∇₋ₕ`](@ref) and [`∇₊ₕ`](@ref), built from [`Dₕₓ`](@ref)
 rather than from the one-sided differences.
+
+Accepts a grid function of a scalar or of a composite grid space, componentwise on the
+latter: each entry of the tuple is then itself a composite grid function.
 """
 @inline ∇ₕ(uₕ::VectorElement) = ∇ₕ(uₕ, Val(dim(_op_mesh(uₕ))))
 @inline ∇ₕ(uₕ::VectorElement, ::Val{1}) = cross_weighted_difference(uₕ, Val(1))
