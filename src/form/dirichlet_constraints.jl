@@ -233,38 +233,40 @@ function dirichlet_bc!(v::AbstractVector, space::CompositeGridSpace, bcs, labels
 end
 
 """
-	dirichlet_bc!(v::AbstractVector, Ωₕ::AbstractMeshType, bcs::DirichletConstraint, labels::Symbol...)
+	ConstraintMarkers
 
-Apply Dirichlet boundary conditions to vector `v` using the [DirichletConstraint](@ref) object `bcs` and the mesh `Ωₕ`.
+Either shape a set of Dirichlet conditions arrives in: the constraints themselves, or the
+same constraints already evaluated at a point in time.
+
+The two are distinct types — `EvaluatedDomainMarkers` holds the original alongside the
+timestamp — but they answer `conditions`, `label` and `identifier` identically, and nothing
+that applies a condition needs to tell them apart. There used to be two byte-identical
+methods, one per type.
 """
-function dirichlet_bc!(v::AbstractVector, Ωₕ::AbstractMeshType, bcs::DirichletConstraint, labels::Symbol...)
-    isempty(labels) && return
+const ConstraintMarkers = Union{DomainMarkers, EvaluatedDomainMarkers}
+
+"""
+	dirichlet_bc!(v, Ωₕ, bcs, labels...)
+
+Writes the Dirichlet values into `v` at the points `labels` marks.
+
+`bcs` may be the constraints or a time-evaluated form of them; see [`ConstraintMarkers`](@ref).
+Only the marked entries are touched, and the work is proportional to how many there are
+rather than to the size of the grid — a boundary in a volume is a small fraction of it.
+"""
+function dirichlet_bc!(v::AbstractVector, Ωₕ::AbstractMeshType, bcs::ConstraintMarkers,
+        labels::Symbol...)
+    isempty(labels) && return nothing
 
     for marker in conditions(bcs)
         current_label = label(marker)
         if current_label in labels
-            func = identifier(marker)
-            marker_indices = index_in_marker(Ωₕ, current_label)
-            _dirichlet_bc_indices!(v, Ωₕ, marker_indices, func)
+            _dirichlet_bc_indices!(v, Ωₕ, index_in_marker(Ωₕ, current_label),
+                identifier(marker))
         end
     end
 
-    return
-end
-
-function dirichlet_bc!(v::AbstractVector, Ωₕ::AbstractMeshType, bcs::EvaluatedDomainMarkers, labels::Symbol...)
-    isempty(labels) && return
-
-    for marker in conditions(bcs)
-        current_label = label(marker)
-        if current_label in labels
-            func = identifier(marker)
-            marker_indices = index_in_marker(Ωₕ, current_label)
-            _dirichlet_bc_indices!(v, Ωₕ, marker_indices, func)
-        end
-    end
-
-    return
+    return nothing
 end
 
 """
@@ -409,6 +411,14 @@ The algorithm goes as follows: for any given row `i` where Dirichlet boundary co
 	- replace `F` by subtracting `dᵢ` to `F` (except for the `i`-th component)
 	- replace all elements in the `i`-th column of `A` (except the `i`-th by zero).
 """
+# A scalar space carries its mesh, and every other entry point here takes one. `symmetrize!`
+# did not, so `dirichlet_bc!(A, Wₕ, :bottom)` worked while `symmetrize!(A, F, Wₕ, :bottom)`
+# was a MethodError — for a pair of calls that are almost always written together.
+@inline function symmetrize!(A::AbstractMatrix, F::AbstractVector, Wₕ::ScalarGridSpace,
+        labels::Symbol...)
+    return symmetrize!(A, F, mesh(Wₕ), labels...)
+end
+
 function symmetrize!(A::AbstractMatrix, F::AbstractVector, Ωₕ::AbstractMeshType,
         labels::Symbol...)
     for p in labels

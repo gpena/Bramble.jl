@@ -150,6 +150,56 @@ _tri(m) = spdiagm(0 => fill(4.0, m), 1 => fill(-1.0, m - 1), -1 => fill(-1.0, m 
         @test count(iszero, nonzeros(Aw)) > 0
     end
 
+    @testset "the interface takes a mesh, a scalar space or a composite space" begin
+        # All three entry points now accept all three, which they did not: `symmetrize!`
+        # was the one that rejected a `ScalarGridSpace`, so `dirichlet_bc!(A, Wₕ, :bottom)`
+        # worked while `symmetrize!(A, F, Wₕ, :bottom)` was a MethodError — for two calls
+        # that are almost always written together.
+        bcs = dirichlet_constraints(set(Ωₕ), :bottom => (x -> 7.0))
+        for (holder, nd) in ((Ωₕ, n), (Wₕ, n), (Vₕ, ndofs(Vₕ)))
+            A = blockdiag(ntuple(_ -> _tri(n), nd ÷ n)...)
+            F = ones(nd)
+            dirichlet_bc!(A, holder, :bottom)
+            symmetrize!(A, F, holder, :bottom)
+            @test issymmetric(A)
+
+            v = zeros(nd)
+            dirichlet_bc!(v, holder, bcs, :bottom)
+            @test any(==(7.0), v)
+        end
+
+        # a scalar space and its mesh give the same answer
+        Aw, Fw = _tri(n), ones(n)
+        Am, Fm = _tri(n), ones(n)
+        symmetrize!(Aw, Fw, Wₕ, :bottom)
+        symmetrize!(Am, Fm, Ωₕ, :bottom)
+        @test Aw == Am
+        @test Fw == Fm
+    end
+
+    @testset "constraints and time-evaluated constraints share one method" begin
+        # `EvaluatedDomainMarkers` holds the original alongside a timestamp, so it is a
+        # distinct type — but it answers `conditions`, `label` and `identifier`
+        # identically, and applying a condition never needs to tell the two apart. There
+        # used to be two byte-identical methods, one per type.
+        tb = dirichlet_constraints(set(Ωₕ), interval(0.0, 1.0),
+            :bottom => ((x, t) -> t * x[1] + 1))
+        ev = tb(0.5)
+        @test ev isa Bramble.EvaluatedDomainMarkers
+
+        @test which(dirichlet_bc!, Tuple{
+            Vector{Float64}, typeof(Ωₕ), typeof(tb), Symbol}) ===
+              which(dirichlet_bc!, Tuple{Vector{Float64}, typeof(Ωₕ), typeof(ev), Symbol})
+
+        v = zeros(n)
+        dirichlet_bc!(v, Ωₕ, ev, :bottom)
+        marked = index_in_marker(Ωₕ, :bottom)
+        pts = [Bramble.point(Ωₕ, Bramble.indices(Ωₕ)[i]) for i in 1:n if marked[i]]
+        vals = v[marked]
+        @test !isempty(pts)
+        @test all(vals[k] ≈ 0.5 * pts[k][1] + 1 for k in eachindex(pts))
+    end
+
     @testset "allocation free, scalar and composite, dense and sparse" begin
         # It runs once per step of a time loop. The dense path used to allocate a
         # `findall` vector that grew with the boundary; both paths now walk the mask's set
