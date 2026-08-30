@@ -1,7 +1,8 @@
 using Test
 using Bramble
 using Random
-using Bramble: values, components, star_spacings, StarSpacings
+using Supposition
+using Bramble: values, components, star_spacings, StarSpacings, submeshes
 
 # The starred forward difference and the identity it exists for.
 #
@@ -183,6 +184,96 @@ using Bramble: values, components, star_spacings, StarSpacings
             @test sbp(nonzero, zero_bdry)      # uₕ need not vanish
             @test !sbp(zero_bdry, nonzero)     # vₕ must
             @test !sbp(nonzero, nonzero)
+        end
+
+        @testset "arbitrary random grids and fields (Supposition)" begin
+            positive_h = Data.Floats{Float64}(; minimum = 0.01, maximum = 10.0,
+                nans = false, infs = false)
+            field_val = Data.Floats{Float64}(; minimum = -100.0, maximum = 100.0,
+                nans = false, infs = false)
+
+            # 1D: arbitrary non-uniform mesh and unconstrained u vs boundary-vanishing v
+            @check function check_sbp_1d(
+                    h = Data.Vectors(positive_h; min_size = 2, max_size = 30),
+                    u_raw = Data.Vectors(field_val; min_size = 31, max_size = 31),
+                    v_raw = Data.Vectors(field_val; min_size = 31, max_size = 31)
+            )
+                n = length(h) + 1
+                pts = zeros(Float64, n)
+                for i in 1:length(h)
+                    pts[i + 1] = pts[i] + h[i]
+                end
+                pts ./= pts[end]
+
+                Ωₕ = mesh(domain(interval(0.0, 1.0)), n, false)
+                set_points!(Ωₕ, pts)
+                Wₕ = gridspace(Ωₕ)
+
+                u_vals = copy(u_raw[1:n])
+                v_vals = copy(v_raw[1:n])
+                v_vals[1] = 0.0
+                v_vals[end] = 0.0
+
+                uₕ = element(Wₕ, u_vals)
+                vₕ = element(Wₕ, v_vals)
+
+                lhs = innerₕ(Dstar₊ₓ(uₕ), vₕ)
+                rhs = -inner₊ₓ(uₕ, D₋ₓ(vₕ))
+                scale = max(abs(lhs), abs(rhs), 1.0)
+                isapprox(lhs, rhs; atol = 1e-10 * scale, rtol = 1e-10)
+            end
+
+            # 2D: arbitrary non-uniform tensor product mesh and fields across coordinates
+            @check function check_sbp_2d(
+                    hx = Data.Vectors(positive_h; min_size = 2, max_size = 8),
+                    hy = Data.Vectors(positive_h; min_size = 2, max_size = 8),
+                    u_raw = Data.Vectors(field_val; min_size = 81, max_size = 81),
+                    v_raw = Data.Vectors(field_val; min_size = 81, max_size = 81)
+            )
+                nx = length(hx) + 1
+                ny = length(hy) + 1
+                pts_x = zeros(Float64, nx)
+                for i in 1:length(hx)
+                    pts_x[i + 1] = pts_x[i] + hx[i]
+                end
+                pts_x ./= pts_x[end]
+
+                pts_y = zeros(Float64, ny)
+                for j in 1:length(hy)
+                    pts_y[j + 1] = pts_y[j] + hy[j]
+                end
+                pts_y ./= pts_y[end]
+
+                Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (nx, ny),
+                    (false, false))
+                set_points!(Ωₕ(1), pts_x)
+                set_points!(Ωₕ(2), pts_y)
+                Wₕ = gridspace(Ωₕ)
+
+                total = nx * ny
+                u_mat = reshape(copy(u_raw[1:total]), nx, ny)
+                v_mat = reshape(copy(v_raw[1:total]), nx, ny)
+
+                v_mat[1, :] .= 0.0
+                v_mat[end, :] .= 0.0
+                v_mat[:, 1] .= 0.0
+                v_mat[:, end] .= 0.0
+
+                uₕ = element(Wₕ, vec(u_mat))
+                vₕ = element(Wₕ, vec(v_mat))
+
+                lhs_x = innerₕ(Dstar₊ₓ(uₕ), vₕ)
+                rhs_x = -inner₊ₓ(uₕ, D₋ₓ(vₕ))
+                scale_x = max(abs(lhs_x), abs(rhs_x), 1.0)
+                ok_x = isapprox(lhs_x, rhs_x; atol = 1e-10 * scale_x, rtol = 1e-10)
+
+                lhs_y = innerₕ(Dstar₊ᵧ(uₕ), vₕ)
+                rhs_y = -inner₊ᵧ(uₕ, D₋ᵧ(vₕ))
+                scale_y = max(abs(lhs_y), abs(rhs_y), 1.0)
+                ok_y = isapprox(lhs_y, rhs_y; atol = 1e-10 * scale_y, rtol = 1e-10)
+
+                ok_x && ok_y
+            end
         end
     end
 end
