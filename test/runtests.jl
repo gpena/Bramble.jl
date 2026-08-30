@@ -98,6 +98,7 @@ if __bramble_with_unit_tests
             include("form/dirichlet_constraints.jl")
             include("form/difference_ast.jl")
             include("form/operators.jl")
+            include("form/symmetrize.jl")
         end
 
         #=

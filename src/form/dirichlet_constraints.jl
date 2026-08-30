@@ -409,63 +409,96 @@ The algorithm goes as follows: for any given row `i` where Dirichlet boundary co
 	- replace `F` by subtracting `dᵢ` to `F` (except for the `i`-th component)
 	- replace all elements in the `i`-th column of `A` (except the `i`-th by zero).
 """
-function symmetrize!(A::AbstractMatrix, F::AbstractVector, Ωₕ::AbstractMeshType, labels::Symbol...)
+function symmetrize!(A::AbstractMatrix, F::AbstractVector, Ωₕ::AbstractMeshType,
+        labels::Symbol...)
     for p in labels
-        marker_indices = index_in_marker(Ωₕ, p)
-        symmetrize!(A, F, marker_indices)
+        symmetrize!(A, F, index_in_marker(Ωₕ, p), 0)
     end
+    return nothing
+end
+
+"""
+	symmetrize!(A, F, Wₕ::CompositeGridSpace, labels...)
+
+Symmetrizes a coupled system, one leaf space at a time.
+
+The counterpart of the composite `dirichlet_bc!`, and it works the same way: each leaf's
+marker mask is read at that leaf's offset into the global system rather than gathered into
+a mask over the whole of it, so the call allocates nothing. `leaf_spaces_offsets` answers
+with a tuple, so the loop unrolls and every read through a leaf keeps its concrete type.
+
+Without this method a composite space met a `MethodError` here while `dirichlet_bc!`
+accepted it — the two have to agree, since a system is rarely constrained by one and not
+the other.
+"""
+function symmetrize!(A::AbstractMatrix, F::AbstractVector, Wₕ::CompositeGridSpace,
+        labels::Symbol...)
+    for p in labels
+        for (sp, offset) in leaf_spaces_offsets(Wₕ)
+            symmetrize!(A, F, index_in_marker(mesh(sp), p), offset)
+        end
+    end
+    return nothing
+end
+
+# Walking the set bits of the mask, rather than the mask itself. The marked set is a
+# boundary and the grid is a volume, so it is sparse in the extreme — 60 of 3,600 degrees
+# of freedom on a 60x60 grid marked `:bottom`. Testing every bit would do 3,600 tests to
+# find 60; skipping whole zero chunks and then walking set bits with `trailing_zeros` does
+# work proportional to what is marked.
+#
+# `offset` is where this mask's leaf starts in the global system: the mask is per leaf and
+# the matrix is the whole coupled system. Zero for a scalar space.
+@inline function _each_marked(f::F, mask::BitVector, offset::Int) where {F}
+    @inbounds for (chunk_idx, chunk) in enumerate(mask.chunks)
+        chunk == zero(UInt64) && continue
+        base = offset + (chunk_idx - 1) * 64
+        rest = chunk
+        while rest != zero(UInt64)
+            f(base + trailing_zeros(rest) + 1)
+            rest &= rest - 1
+        end
+    end
+    return nothing
 end
 
 # Generic implementation for dense matrices
-function symmetrize!(A::AbstractMatrix, F::AbstractVector, index_in_marker::BitVector)
-    dirichlet_indices = findall(index_in_marker)
+function symmetrize!(A::AbstractMatrix, F::AbstractVector, mask::BitVector, offset::Int = 0)
     T = eltype(A)
-
-    for i in dirichlet_indices
+    # `findall(mask)` used to build the index vector here — 576 B on a 60x60 grid, and
+    # growing with the boundary. The bit walk needs none.
+    _each_marked(mask, offset) do i
         dirichlet_val = F[i]
-        for k in axes(A, 1)
+        @inbounds for k in axes(A, 1)
             if i != k
                 F[k] -= A[k, i] * dirichlet_val
                 A[k, i] = zero(T)
             end
         end
     end
-
-    return
+    return nothing
 end
 
 # Implementation for sparse matrices
-function symmetrize!(A::SparseMatrixCSC, F::AbstractVector, index_in_marker::BitVector)
+function symmetrize!(A::SparseMatrixCSC, F::AbstractVector, mask::BitVector,
+        offset::Int = 0)
     T = eltype(A)
     rows = rowvals(A)
     vals = nonzeros(A)
 
-    chunks = index_in_marker.chunks
-    @inbounds for (chunk_idx, chunk) in enumerate(chunks)
-        chunk == zero(UInt64) && continue
+    _each_marked(mask, offset) do i
+        dirichlet_val = F[i]
 
-        offset = (chunk_idx - 1) * 64
-        temp_chunk = chunk
-        while temp_chunk != zero(UInt64)
-            bit_pos = trailing_zeros(temp_chunk)
-            i = offset + bit_pos + 1
-
-            dirichlet_val = F[i]
-
-            # Update F and zero out column `i` using sparse structure
-            @simd for k_ptr in nzrange(A, i)
-                row_k = rows[k_ptr]
-                F[row_k] -= vals[k_ptr] * dirichlet_val
-                vals[k_ptr] = zero(T)
-            end
-
-            # Restore diagonal and RHS vector value
-            A[i, i] = one(T)
-            F[i] = dirichlet_val
-
-            temp_chunk &= temp_chunk - 1
+        # Update F and zero out column `i` using sparse structure
+        @inbounds @simd for k_ptr in nzrange(A, i)
+            row_k = rows[k_ptr]
+            F[row_k] -= vals[k_ptr] * dirichlet_val
+            vals[k_ptr] = zero(T)
         end
-    end
 
-    return
+        # Restore diagonal and RHS vector value
+        A[i, i] = one(T)
+        F[i] = dirichlet_val
+    end
+    return nothing
 end
