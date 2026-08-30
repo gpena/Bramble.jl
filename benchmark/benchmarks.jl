@@ -108,19 +108,36 @@ let Ωₕ2 = _mesh2(), Ωₕ3 = _mesh3()
     g["hₘₐₓ 3D"] = @benchmarkable hₘₐₓ($Ωₕ3)
 end
 
+# --- 7. jumps and averages ------------------------------------------------ #
+let uₕ2 = Rₕ(gridspace(_mesh2()), x -> sin(x[1]) * x[2]),
+    uₕ3 = Rₕ(gridspace(_mesh3()), x -> sin(x[1]) + x[3])
+
+    g = SUITE["jumps & averages"] = BenchmarkGroup()
+    g["jumpₓ 2D"] = @benchmarkable jumpₓ($uₕ2)
+    g["jumpᵧ 2D"] = @benchmarkable jumpᵧ($uₕ2)
+    g["M₊ₓ 2D"] = @benchmarkable M₊ₓ($uₕ2)
+    g["M₊ᵧ 2D"] = @benchmarkable M₊ᵧ($uₕ2)
+    g["jump₂ 3D"] = @benchmarkable jump₂($uₕ3)
+    g["M₊₂ 3D"] = @benchmarkable M₊₂($uₕ3)
+end
+
+# --- 8. startup latency & TTFX -------------------------------------------- #
+let cmd_load = `julia --project=. --startup-file=no -e "using Bramble"`,
+    cmd_ttfx = `julia --project=. --startup-file=no -e "using Bramble; m = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (10, 10), (true, true)); W = gridspace(m); u = element(W); D₋ₓ(u)"`
+
+    g = SUITE["startup & latency"] = BenchmarkGroup()
+    g["using Bramble"] = @benchmarkable run($cmd_load) samples=3 evals=1
+    g["TTFX (load + first operator)"] = @benchmarkable run($cmd_ttfx) samples=3 evals=1
+end
+
 # --- allocation bounds, which are the part worth gating ------------------- #
 #
 # The number an operator is allowed to allocate is one output vector: the
 # `similar` inside it, and nothing else. These are the exact counts as of
 # writing, not upper bounds with slack, because the failure mode being guarded
-# is a closure starting to box, which shows up as allocation *per grid point*
-# and so blows through any sensible slack immediately.
-#
-# The counts are the measured ones, so a Julia upgrade that changes how many objects a
-# `similar` costs will trip this. That is intended: it forces someone to look, which is
-# the only way an exact bound stays exact.
+# against is a type instability that silently spills memory on every cell.
 const ALLOCATION_BOUNDS = Dict(
-    # one output vector each
+    # contiguous-direction difference: 3 allocs for similar(::VectorElement)
     ("operators 2D", "D₋ₓ") => 3,
     ("operators 2D", "D₋ᵧ") => 3,
     ("operators 2D", "M₋ₓ") => 3,
@@ -134,7 +151,14 @@ const ALLOCATION_BOUNDS = Dict(
     ("inner products 2D", "snorm₁ₕ") => 0,
     ("inner products 2D", "norm₁ₕ") => 0,
     ("operators 3D", "innerₕ") => 0,
-    ("construction", "hₘₐₓ 3D") => 0)
+    ("construction", "hₘₐₓ 3D") => 0,
+    # jumps and averages
+    ("jumps & averages", "jumpₓ 2D") => 3,
+    ("jumps & averages", "jumpᵧ 2D") => 3,
+    ("jumps & averages", "M₊ₓ 2D") => 3,
+    ("jumps & averages", "M₊ᵧ 2D") => 3,
+    ("jumps & averages", "jump₂ 3D") => 3,
+    ("jumps & averages", "M₊₂ 3D") => 3)
 
 """
 	check_allocations(results)

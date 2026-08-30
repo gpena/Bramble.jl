@@ -223,10 +223,12 @@ function generate_benchmarks_markdown(
     group_order = [
         "operators 2D",
         "operators 3D",
+        "jumps & averages",
         "inner products 2D",
         "restriction",
         "composite",
-        "construction"
+        "construction",
+        "startup & latency"
     ]
     all_groups = Set{String}()
     for r in runs
