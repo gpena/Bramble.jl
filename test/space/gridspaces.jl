@@ -5,6 +5,7 @@ using Bramble: __prod, _innerplus_weights!, spacing, _innerh_weights!,
                SpaceWeights
 using Bramble: Innerh, Innerplus
 using LinearAlgebra: norm
+using Supposition
 
 @testset "Scalar and Vector GridSpaces" begin
     mesh1d = mesh(domain(interval(0, 1)), 10, true)
@@ -373,6 +374,47 @@ end
             uₕ = Rₕ(Wₕ, x -> x^2 + 1)
             @test innerₕ(uₕ, uₕ) ≈ sum(wh[i] * Bramble.values(uₕ)[i]^2 for i in 1:n)
             @test inner₊(uₕ, uₕ) ≈ sum(wp[i] * Bramble.values(uₕ)[i]^2 for i in 1:n)
+        end
+    end
+
+    @testset "domain measure and partition of unity (Supposition)" begin
+        positive_float = Data.Floats{Float64}(; minimum = 0.1, maximum = 10.0,
+            nans = false, infs = false)
+        coord_float = Data.Floats{Float64}(; minimum = -10.0, maximum = 10.0,
+            nans = false, infs = false)
+
+        @check function check_domain_measure_2d(
+                a1 = coord_float,
+                len1 = positive_float,
+                a2 = coord_float,
+                len2 = positive_float,
+                nx = Data.Integers(3, 10),
+                ny = Data.Integers(3, 10)
+        )
+            b1 = a1 + len1
+            b2 = a2 + len2
+            vol = len1 * len2
+
+            Ωₕ = mesh(
+                domain(interval(a1, b1) × interval(a2, b2)), (nx, ny), (false, false))
+            Wₕ = gridspace(Ωₕ)
+
+            wh = weights(Wₕ, Innerh())
+
+            # 1. Sum of cell measures equals total domain volume
+            sum_wh = sum(wh)
+            ok_vol = isapprox(sum_wh, vol; atol = 1e-11 * vol, rtol = 1e-11)
+
+            # 2. Each cell measure is strictly positive
+            ok_pos = all(wh .> 0)
+
+            # 3. L² norm of constant function 1 equals sqrt(volume)
+            u_one = element(Wₕ, 1.0)
+            norm_one = normₕ(u_one)
+            ok_norm = isapprox(
+                norm_one, sqrt(vol); atol = 1e-11 * sqrt(vol), rtol = 1e-11)
+
+            ok_vol && ok_pos && ok_norm
         end
     end
 end
