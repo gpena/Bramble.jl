@@ -2,6 +2,7 @@ import Bramble: CartesianProduct, DirichletConstraint, label_conditions, embed_f
                 symbols, labels, DomainMarkers, tuples, conditions, identifier,
                 EvaluatedDomainMarkers, BrambleFunction, label, markers, point,
                 index_in_marker
+using Supposition
 
 @testset "Dirichlet Constraints Tests" begin
     # --- Setup ---
@@ -310,5 +311,46 @@ using LinearAlgebra: I as LinearAlgebraI
         @test @inferred(Bramble.leaf_spaces_offsets(Vt)) isa Tuple
         @test isconcretetype(typeof(Bramble.leaf_spaces_offsets(Vt)))
         @test traversal_bytes(Vt) == 0
+    end
+
+    @testset "Dirichlet application invariance on arbitrary fields (Supposition)" begin
+        field_val = Data.Floats{Float64}(; minimum = -100.0, maximum = 100.0,
+            nans = false, infs = false)
+
+        @check function check_dirichlet_invariance_2d(
+                nx = Data.Integers(4, 10),
+                ny = Data.Integers(4, 10),
+                v_raw = Data.Vectors(field_val; min_size = 100, max_size = 100)
+        )
+            Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0),
+                :bottom => :bottom, :top => :top)
+            Ωₕ = mesh(Ω, (nx, ny), (false, false))
+            Wₕ = gridspace(Ωₕ)
+            n = ndofs(Wₕ)
+
+            v = copy(v_raw[1:n])
+            v_orig = copy(v)
+
+            bcs = dirichlet_constraints(set(Ωₕ), :bottom => (x -> 2.5 * x[1] + 1.0))
+            dirichlet_bc!(v, Wₕ, bcs, :bottom)
+
+            marked = index_in_marker(Ωₕ, :bottom)
+            pts = [point(Ωₕ, idx) for idx in indices(Ωₕ)]
+
+            # 1. Marked boundary nodes match prescribed values
+            ok_marked = all(
+                isapprox(v[i], 2.5 * pts[i][1] + 1.0; atol = 1e-12)
+            for i in 1:n if marked[i])
+
+            # 2. Unmarked nodes remain strictly bitwise unchanged
+            ok_unmarked = all(v[i] == v_orig[i] for i in 1:n if !marked[i])
+
+            # 3. Idempotence: applying again produces identical result
+            v_after = copy(v)
+            dirichlet_bc!(v_after, Wₕ, bcs, :bottom)
+            ok_idem = (v_after == v)
+
+            ok_marked && ok_unmarked && ok_idem
+        end
     end
 end
