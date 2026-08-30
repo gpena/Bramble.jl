@@ -102,6 +102,27 @@ _tri(m) = spdiagm(0 => fill(4.0, m), 1 => fill(-1.0, m - 1), -1 => fill(-1.0, m 
         end)
     end
 
+    @testset "a boundary value that is zero but still varying" begin
+        # `symmetrize!` skips the elimination when the boundary value is zero, which is
+        # only sound under AD because `iszero` on a Dual tests the partials as well as the
+        # value. A Dual that is 0.0 here with derivative 1.0 must NOT take the short path —
+        # narrowing that test to `iszero(value(x))` would silently drop this derivative.
+        #
+        # F is built so that at a = 1.3 every entry is exactly zero with unit sensitivity.
+        @test _matches_fd(a -> begin
+            A = _tri(n)
+            F = fill(a - 1.3, n)
+            dirichlet_bc!(A, Ωₕ, :bottom)
+            symmetrize!(A, F, Ωₕ, :bottom)
+            sum(F)
+        end)
+
+        # the value really is zero-with-derivative at the point being differentiated
+        d = ForwardDiff.Dual{ForwardDiff.Tag{typeof(identity), Float64}}(0.0, 1.0)
+        @test ForwardDiff.value(d) == 0.0
+        @test !iszero(d)
+    end
+
     @testset "a gradient, not just a derivative" begin
         function J(p)
             bcs = dirichlet_constraints(set(Ωₕ),

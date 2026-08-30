@@ -150,6 +150,43 @@ _tri(m) = spdiagm(0 => fill(4.0, m), 1 => fill(-1.0, m - 1), -1 => fill(-1.0, m 
         @test count(iszero, nonzeros(Aw)) > 0
     end
 
+    @testset "the diagonal, found in the sweep or put back afterwards" begin
+        # The diagonal is written where the sweep finds it rather than through
+        # `A[i, i] = one(T)` afterwards, which would binary search the column for an entry
+        # the loop has just walked past. Both paths have to end up in the same place.
+        A, F = _tri(n), collect(1.0:n)
+        dirichlet_bc!(A, Ωₕ, :bottom)          # leaves a stored diagonal
+        symmetrize!(A, F, Ωₕ, :bottom)
+        marked = index_in_marker(Ωₕ, :bottom)
+        @test all(A[i, i] == 1.0 for i in 1:n if marked[i])
+
+        # a matrix that stores no diagonal at all: the fallback has to supply it
+        B = spzeros(n, n)
+        for j in 1:n
+            B[mod1(j + 1, n), j] = 2.0
+        end
+        @test !any(B[i, i] != 0 for i in 1:n if marked[i])
+        symmetrize!(B, collect(1.0:n), Ωₕ, :bottom)
+        @test all(B[i, i] == 1.0 for i in 1:n if marked[i])
+    end
+
+    @testset "homogeneous conditions take the short path to the same answer" begin
+        # A zero boundary value contributes nothing to F, so the elimination is skipped —
+        # worth about 12% on the conditions that are most common. The result must not
+        # depend on which branch was taken.
+        Az, Fz = _tri(n), zeros(n)
+        dirichlet_bc!(Az, Ωₕ, :bottom)
+        symmetrize!(Az, Fz, Ωₕ, :bottom)
+        @test issymmetric(Az)
+        @test all(iszero, Fz)
+
+        # the matrix is the same one an inhomogeneous condition produces: only F differs
+        An, Fn = _tri(n), collect(1.0:n)
+        dirichlet_bc!(An, Ωₕ, :bottom)
+        symmetrize!(An, Fn, Ωₕ, :bottom)
+        @test Az == An
+    end
+
     @testset "the interface takes a mesh, a scalar space or a composite space" begin
         # All three entry points now accept all three, which they did not: `symmetrize!`
         # was the one that rejected a `ScalarGridSpace`, so `dirichlet_bc!(A, Wₕ, :bottom)`
