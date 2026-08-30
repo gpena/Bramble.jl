@@ -237,10 +237,33 @@ end
 @inline _restricted_value_type(f::Tuple, p) = promote_type(map(
     g -> _scalar_value_type(typeof(g(p))), f)...)
 
-@inline function _restriction_eltype(Wₕ::AbstractSpaceType, f)
+# Where to sample `f` to learn its return type. With markers it has to be a point the
+# caller actually selected: `f` need not be defined anywhere else, and probing the first
+# grid point regardless turned working calls into errors — `Rₕ(Wₕ, x -> sqrt(x - 0.5);
+# markers = (:right,))` threw a DomainError at x = 0 while `Rₕ!` with the same arguments
+# succeeded, since the in-place form never probes.
+#
+# If no index is marked, nothing is written and the element type cannot matter, so the
+# first grid point is as good as any.
+@inline _probe_point(Ωₕ, ::NTuple{0, Symbol}) = point(Ωₕ, first(indices(Ωₕ)))
+
+function _probe_point(Ωₕ, markers::NTuple{N, Symbol}) where {N}
+    idxs = indices(Ωₕ)
+    lin = LinearIndices(idxs)
+    for m in markers
+        mask = index_in_marker(Ωₕ, m)
+        @inbounds for idx in idxs
+            mask[lin[idx]] && return point(Ωₕ, idx)
+        end
+    end
+    return point(Ωₕ, first(idxs))
+end
+
+@inline function _restriction_eltype(Wₕ::AbstractSpaceType, f,
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {N}
     Ωₕ = mesh(Wₕ)
-    p = point(Ωₕ, first(indices(Ωₕ)))
-    return promote_type(eltype(backend(Wₕ)), _restricted_value_type(f, p))
+    return promote_type(
+        eltype(backend(Wₕ)), _restricted_value_type(f, _probe_point(Ωₕ, markers)))
 end
 
 """
@@ -277,7 +300,7 @@ See also: [`Rₕ!`](@ref), [`avgₕ`](@ref).
 """
 function Rₕ(Wₕ::AbstractSpaceType, f; markers::NTuple{N, Symbol} = NTuple{
         0, Symbol}()) where {N}
-    uₕ = element(Wₕ, _restriction_eltype(Wₕ, f))
+    uₕ = element(Wₕ, _restriction_eltype(Wₕ, f, markers))
     Rₕ!(uₕ, f; markers = markers)
     return uₕ
 end

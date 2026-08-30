@@ -117,6 +117,26 @@ function _masked_for!(v, masks::Tuple, g)
     return nothing
 end
 
+# The masked counterpart of `_scatter_for!`, standing to it as `_masked_for!` stands to
+# `_parallel_for!`: writes only where a mask selects, leaving every other entry zero.
+#
+# Serial by construction. The marked region is a boundary slice in every use so far, which
+# is O(n^(D-1)) against the O(n^D) of the whole grid, and threading it would cost more than
+# it saves.
+function _masked_scatter_for!(mats::Tuple, masks::Tuple, g)
+    for m in mats
+        fill!(m, zero(eltype(m)))
+    end
+    first_mat = first(mats)
+    lin = LinearIndices(first_mat)
+    for mask in masks
+        @inbounds for idx in CartesianIndices(first_mat)
+            mask[lin[idx]] && _write_components!(mats, g(idx), idx)
+        end
+    end
+    return nothing
+end
+
 #=========================================================================
 Scattering a tuple-valued kernel across several arrays.
 

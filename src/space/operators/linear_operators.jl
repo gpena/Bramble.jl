@@ -188,8 +188,11 @@ show(io::IO, ::ZeroOperator) = print(io, "0")
 # form layer settles on, written so as not to be ambiguous, rather than restored blind.
 
 @inline Base.:+(op1::LazyOp{D}, op2::LazyOp{D}) where {D} = OperatorAdd(op1, op2)
-@inline Base.:-(op1::LazyOp{D}, op2::LazyOp{D}) where {D} = op1 +
-                                                            OperatorScale(-one(Float64), op2)
+# `-1` rather than `-one(Float64)`: the factor promotes against whatever the space's
+# element type is, instead of baking a Float64 into the tree and dragging a Float32 or
+# extended-precision assembly up to Float64 with it. Same defect as the `* 0.5` that used
+# to promote the averaging matrices.
+@inline Base.:-(op1::LazyOp{D}, op2::LazyOp{D}) where {D} = op1 + OperatorScale(-1, op2)
 
 @inline Base.:*(c::Number, op::LazyOp) = OperatorScale(c, op)
 @inline Base.:*(op::LazyOp, c::Number) = OperatorScale(c, op)

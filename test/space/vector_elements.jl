@@ -796,3 +796,62 @@ end
     b64(n) = (u = element(W64(n)); avgₕ!(u, sin); @allocated avgₕ!(u, sin))
     @test b64(64) == b64(1024)
 end
+
+@testset "marker-restricted Rₕ and avgₕ only evaluate f where the markers select" begin
+    # `Rₕ` and `avgₕ` learn the coefficient type by evaluating `f` once. That probe has to
+    # land on a point the caller selected: `f` need not be defined anywhere else.
+    #
+    # Probing the first grid point regardless turned working calls into errors, and made
+    # the out-of-place forms disagree with the in-place ones, which never probe.
+    Ωₕ = mesh(domain(interval(0.0, 1.0), :right => :right), 11, true)
+    Wₕ = gridspace(Ωₕ)
+    Vₕ = gridspace(Ωₕ, Val(2))
+    right_half(x) = sqrt(x - 0.5)          # a DomainError anywhere left of 0.5
+
+    uₕ = Rₕ(Wₕ, right_half; markers = (:right,))
+    ref = element(Wₕ)
+    Rₕ!(ref, right_half; markers = (:right,))
+    @test values(uₕ) == values(ref)
+
+    @test values(avgₕ(Wₕ, right_half; markers = (:right,))) isa AbstractVector
+
+    # composite, both shapes of f
+    @test values(Rₕ(Vₕ, (right_half, right_half); markers = (:right,))) isa AbstractVector
+
+    # and the unmarked path is unchanged
+    @test values(Rₕ(Wₕ, sin)) ≈ [sin(x) for x in points(Ωₕ)]
+end
+
+@testset "marker-restricted avgₕ! on a composite space" begin
+    # The marked branch used to hand `to_matrix(uₕ)` to `_masked_for!` unconditionally.
+    # For a composite grid function that is an NTuple of matrices rather than one array,
+    # and the scalar kernel was built where the composite one is needed, so the call
+    # raised a MethodError. Both shapes of `f` are covered, and they must agree.
+    Ωₕ = mesh(domain(interval(0.0, 1.0), :right => :right), 11, true)
+    Vₕ = gridspace(Ωₕ, Val(2))
+
+    from_tuple = element(Vₕ)
+    avgₕ!(from_tuple, (sin, cos); markers = (:right,))
+    from_single = element(Vₕ)
+    avgₕ!(from_single, x -> (sin(x), cos(x)); markers = (:right,))
+    @test values(from_single) ≈ values(from_tuple)
+    @test values(avgₕ(Vₕ, x -> (sin(x), cos(x)); markers = (:right,))) ≈ values(from_tuple)
+
+    # the mask is respected: marked entries written, the rest left at zero
+    mask = index_in_marker(Ωₕ, :right)
+    for k in 1:2
+        vals = values(components(from_tuple)[k])
+        @test any(vals[i] != 0 for i in eachindex(vals) if mask[i])
+        @test all(vals[i] == 0 for i in eachindex(vals) if !mask[i])
+    end
+
+    # 2D as well, where to_matrix really is multidimensional
+    Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
+        (5, 5), (true, true))
+    V2 = gridspace(Ω2, Val(2))
+    c2 = element(V2)
+    avgₕ!(c2, x -> (sin(x[1]), cos(x[2])); markers = (:bottom,))
+    t2 = element(V2)
+    avgₕ!(t2, (x -> sin(x[1]), x -> cos(x[2])); markers = (:bottom,))
+    @test values(c2) ≈ values(t2)
+end

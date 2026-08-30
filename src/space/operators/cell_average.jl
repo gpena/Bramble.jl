@@ -46,7 +46,7 @@ all components works, and both give the same result.
 Base.@constprop :aggressive function avgₕ(
         Wₕ::AbstractSpaceType, f; quad_points::Int = AVG_QUAD_POINTS,
         markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {N}
-    uₕ = element(Wₕ, _restriction_eltype(Wₕ, f))
+    uₕ = element(Wₕ, _restriction_eltype(Wₕ, f, markers))
     avgₕ!(uₕ, f; quad_points = quad_points, markers = markers)
     return uₕ
 end
@@ -77,10 +77,8 @@ Base.@constprop :aggressive function avgₕ!(
         # nodes and weights are geometry, and the Gauss rule is tabulated for real
         # types only. A Dual-valued grid function integrates against a Float64 rule
         # and the product promotes, which is what makes avgₕ differentiable.
-        x = half_points(Ωₕ)
-        T = eltype(Ωₕ)
-        _masked_for!(to_matrix(uₕ), masks,
-            _cell_average_kernel(f, x, Val(quad_points), T, Val(dim(Ωₕ)), _rule_folds(T)))
+        _avg_masked!(uₕ, f, masks, half_points(Ωₕ), eltype(Ωₕ), Val(quad_points),
+            Val(dim(Ωₕ)))
         return nothing
     end
 
@@ -90,6 +88,35 @@ Base.@constprop :aggressive function avgₕ!(
     # measured 2.3x slower on the grids in the test suite. It also matches
     # `avgₕ`, which has always passed the raw function.
     _avgₕ!(uₕ, f, Val(dim(Ωₕ)), Val(quad_points))
+    return nothing
+end
+
+# The marked branch, split the same way the unmarked `_avgₕ!` family is. It used to be a
+# single `_masked_for!(to_matrix(uₕ), …)` call, which is wrong for a composite grid
+# function twice over: `to_matrix` answers with an NTuple of matrices there, not one array,
+# and the scalar kernel was built where the composite one is needed. `avgₕ!` on a composite
+# space with markers raised a MethodError as a result.
+@inline function _avg_masked!(uₕ::VectorElement{<:ScalarGridSpace}, f, masks, x,
+        ::Type{T}, nq::Val, dv::Val) where {T}
+    _masked_for!(to_matrix(uₕ), masks, _cell_average_kernel(
+        f, x, nq, T, dv, _rule_folds(T)))
+    return nothing
+end
+
+# One function per component: each is a scalar restriction over the same mask.
+@inline function _avg_masked!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::Tuple, masks,
+        x, ::Type{T}, nq::Val, dv::Val) where {NC, T}
+    comps = components(uₕ)
+    ntuple(i -> (_avg_masked!(comps[i], f[i], masks, x, T, nq, dv); nothing), Val(NC))
+    return nothing
+end
+
+# A single function returning every component: one masked pass, scattering the tuple.
+@inline function _avg_masked!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f, masks, x,
+        ::Type{T}, nq::Val, dv::Val) where {NC, T}
+    mats = ntuple(i -> to_matrix(components(uₕ)[i]), Val(NC))
+    _masked_scatter_for!(mats, masks,
+        _cell_average_kernel(f, x, nq, T, dv, Val(NC), _rule_folds(T)))
     return nothing
 end
 
