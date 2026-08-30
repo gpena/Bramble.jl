@@ -106,6 +106,11 @@ end
 
 Walks a bilinear term AST to find the `IndexedTrialFunction` leaf and returns
 its `component_idx`. Raises an error if no indexed trial function is found.
+
+A `BilinearProduct` is searched on its **left**, and `find_test_component` searches the
+right: a coupled form is written trial first, test second, as `innerₕ(u, v)`. Writing the
+two the other way round is not detected and cannot be — both sides are operators, and which
+one is the trial is exactly what the indexed leaf records.
 """
 find_trial_component(op::IndexedTrialFunction) = op.component_idx
 find_trial_component(op::BackwardDifference) = find_trial_component(op.inner_op)
@@ -132,6 +137,26 @@ find_test_component(op::BackwardAverage) = find_test_component(op.inner_op)
 find_test_component(op::ForwardAverage) = find_test_component(op.inner_op)
 find_test_component(op::RegionRestriction) = find_test_component(op.inner_op)
 find_test_component(op::BilinearProduct) = find_test_component(op.right_op)
+
+# The docstrings above promise an error when a term carries no indexed leaf, and without
+# these that error is a `MethodError` naming an internal function — which happens for two
+# quite different mistakes. Either the form was built from plain `TrialFunction`s rather
+# than the indexed ones `make_trial_args` hands out, so it is not a coupled form at all; or
+# it was written test-first, and the search reached the wrong kind of leaf on the side it
+# looked at. Both are usage errors, and the message says which.
+@noinline function find_trial_component(op::LazyOp)
+    throw(ArgumentError(
+        "no IndexedTrialFunction in this term: got $(typeof(op)). A coupled form is " *
+        "built from the arguments `make_trial_args` and `make_test_args` return, and is " *
+        "written trial first — innerₕ(u, v), not innerₕ(v, u)."))
+end
+
+@noinline function find_test_component(op::LazyOp)
+    throw(ArgumentError(
+        "no IndexedTestFunction in this term: got $(typeof(op)). A coupled form is " *
+        "built from the arguments `make_trial_args` and `make_test_args` return, and is " *
+        "written test second — innerₕ(u, v), not innerₕ(v, u)."))
+end
 
 """
     extract_block_asts(ast::LazyOp{D}, NT::Int, NS::Int) -> Matrix{Any}
