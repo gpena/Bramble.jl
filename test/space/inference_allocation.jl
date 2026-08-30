@@ -17,8 +17,8 @@ using Bramble: values, components, _difference_engine!, _average_engine!,
 # None of it was visible to the suite, because line coverage does not see any of it.
 
 # Allocation of a call, behind a function barrier so the closure cannot box anything.
-# `alloc_test` comes from runtests.jl.
-const _COVERING = Base.JLOptions().code_coverage != 0
+# `alloc_test` comes from runtests.jl. These run under code coverage too; see the note on
+# `@test_allocs` there for why they no longer skip.
 
 @testset "Space inference and allocation" begin
     Ωₕ1 = mesh(domain(interval(0.0, 1.0)), 64, false)
@@ -131,36 +131,28 @@ const _COVERING = Base.JLOptions().code_coverage != 0
         # so only a callable exercises this. The property is that the cost does not grow
         # with the grid: measured 32 B at both sizes below with the type parameter, and
         # 57,328 then 516,080 without it.
-        if _COVERING
-            @test_skip "Allocation comparison skipped under code coverage"
-        else
-            function callable_bytes(n)
-                Ωₙ = mesh(domain(interval(0.0, 1.0)), n, true)
-                uₙ = Rₕ(gridspace(Ωₙ), sin)
-                vₙ = similar(uₙ)
-                hf = Base.Fix1(Bramble.spacing_for_derivative, Ωₙ)
-                run!(o, i) = _difference_engine!(o, i, hf, (n,), Backward(), Val(1))
-                alloc_test(run!, values(vₙ), values(uₙ))
-            end
-            @test callable_bytes(1024) == callable_bytes(8192)
+        function callable_bytes(n)
+            Ωₙ = mesh(domain(interval(0.0, 1.0)), n, true)
+            uₙ = Rₕ(gridspace(Ωₙ), sin)
+            vₙ = similar(uₙ)
+            hf = Base.Fix1(Bramble.spacing_for_derivative, Ωₙ)
+            run!(o, i) = _difference_engine!(o, i, hf, (n,), Backward(), Val(1))
+            alloc_test(run!, values(vₙ), values(uₙ))
         end
+        @test callable_bytes(1024) == callable_bytes(8192)
     end
 
     @testset "operators allocate their output and nothing else" begin
         # The exact property, not a bound: applying an operator costs one `similar`.
         # It is what fails first when a closure starts boxing or a temporary creeps in.
-        if _COVERING
-            @test_skip "Allocation comparison skipped under code coverage"
-        else
-            for (lbl, uₕ, ops) in (
-                ("1D", uₕ1, (diff₋ₓ, D₋ₓ, M₋ₓ, jumpₓ)),
-                ("2D", uₕ2, (diff₋ᵧ, D₋ᵧ, M₋ᵧ, jumpᵧ)),
-                ("3D", uₕ3, (diff₋₂, D₋₂, M₋₂, jump₂)))
-                @testset "$lbl" begin
-                    baseline = alloc_test(similar, uₕ)
-                    for op in ops
-                        @test alloc_test(op, uₕ) == baseline
-                    end
+        for (lbl, uₕ, ops) in (
+            ("1D", uₕ1, (diff₋ₓ, D₋ₓ, M₋ₓ, jumpₓ)),
+            ("2D", uₕ2, (diff₋ᵧ, D₋ᵧ, M₋ᵧ, jumpᵧ)),
+            ("3D", uₕ3, (diff₋₂, D₋₂, M₋₂, jump₂)))
+            @testset "$lbl" begin
+                baseline = alloc_test(similar, uₕ)
+                for op in ops
+                    @test alloc_test(op, uₕ) == baseline
                 end
             end
         end
@@ -169,23 +161,19 @@ const _COVERING = Base.JLOptions().code_coverage != 0
     @testset "in-place restriction costs the same at every grid size" begin
         # Rₕ! and avgₕ! allocate a small constant. The property that matters is that it
         # is constant: anything proportional to the grid would be per-step garbage.
-        if _COVERING
-            @test_skip "Allocation comparison skipped under code coverage"
-        else
-            function inplace_bytes(n)
-                W = gridspace(mesh(domain(interval(0.0, 1.0)), n, true))
-                u = element(W)
-                (alloc_test(Rₕ!, u, sin), alloc_test(avgₕ!, u, sin))
-            end
-            # Both sizes stay below the threading thresholds, which are
-            # PARALLEL_FOR_MIN for Rₕ! and PARALLEL_FOR_MIN / quad_points for avgₕ!.
-            # Straddling one of them compares a serial call against a threaded one and
-            # measures the threshold rather than the scaling: avgₕ! at 4096 points
-            # allocates 2080 bytes for its tasks against 128 serial.
-            @test 2048 < Bramble.PARALLEL_FOR_MIN ÷ Bramble.AVG_QUAD_POINTS
-            small = inplace_bytes(16)
-            large = inplace_bytes(2048)          # 128x the degrees of freedom
-            @test small == large
+        function inplace_bytes(n)
+            W = gridspace(mesh(domain(interval(0.0, 1.0)), n, true))
+            u = element(W)
+            (alloc_test(Rₕ!, u, sin), alloc_test(avgₕ!, u, sin))
         end
+        # Both sizes stay below the threading thresholds, which are
+        # PARALLEL_FOR_MIN for Rₕ! and PARALLEL_FOR_MIN / quad_points for avgₕ!.
+        # Straddling one of them compares a serial call against a threaded one and
+        # measures the threshold rather than the scaling: avgₕ! at 4096 points
+        # allocates 2080 bytes for its tasks against 128 serial.
+        @test 2048 < Bramble.PARALLEL_FOR_MIN ÷ Bramble.AVG_QUAD_POINTS
+        small = inplace_bytes(16)
+        large = inplace_bytes(2048)          # 128x the degrees of freedom
+        @test small == large
     end
 end

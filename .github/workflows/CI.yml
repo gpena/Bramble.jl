@@ -51,6 +51,10 @@ jobs:
     if: ${{ needs.changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch' }}
     name: Julia ${{ matrix.version }} - ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    # nightly is a canary, not a gate. The allocation assertions now run under coverage
+    # rather than skipping, so a change in how a future Julia accounts for allocations
+    # would fail them; that is worth learning about without blocking the branch.
+    continue-on-error: ${{ matrix.version == 'nightly' }}
     permissions:
       contents: read
       id-token: write

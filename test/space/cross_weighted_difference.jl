@@ -173,11 +173,7 @@ using Bramble: values, components
         @test @inferred(Dₕᵧ(u2)) isa VectorElement
         @test @inferred(∇ₕ(u2)) isa NTuple{2, VectorElement}
 
-        if Base.JLOptions().code_coverage == 0
-            @test alloc_test(Dₕₓ, u1) == alloc_test(similar, u1)
-            @test alloc_test(Dₕᵧ, u2) == alloc_test(similar, u2)
-        else
-            @test_skip "Allocation comparison skipped under code coverage"
-        end
+        @test alloc_test(Dₕₓ, u1) == alloc_test(similar, u1)
+        @test alloc_test(Dₕᵧ, u2) == alloc_test(similar, u2)
     end
 end

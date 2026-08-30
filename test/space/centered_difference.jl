@@ -179,12 +179,8 @@ using Bramble: values, components
         @test @inferred(Dcᵧ(u2)) isa VectorElement
         @test @inferred(Dcₕ(u2)) isa NTuple{2, VectorElement}
 
-        if Base.JLOptions().code_coverage == 0
-            @test alloc_test(Dcₓ, u1) == alloc_test(similar, u1)
-            @test alloc_test(Dcᵧ, u2) == alloc_test(similar, u2)
-        else
-            @test_skip "Allocation comparison skipped under code coverage"
-        end
+        @test alloc_test(Dcₓ, u1) == alloc_test(similar, u1)
+        @test alloc_test(Dcᵧ, u2) == alloc_test(similar, u2)
     end
 
     @testset "skew-symmetry in innerₕ" begin

@@ -15,27 +15,32 @@ using Bramble
     return @allocated(f(args...))
 end
 
-# Allocation test helper: uses function barrier to avoid @testset closure boxing
+# Allocation test helper: uses a function barrier to avoid @testset closure boxing.
+#
+# These run under code coverage as well. They used to skip there, on the assumption that
+# the instrumentation would perturb the counts, and that assumption cost the suite its
+# allocation guarantees exactly where they were most useful: CI runs with coverage, so
+# every one of them was skipped there and only ever checked by hand locally.
+#
+# Measured on Julia 1.12 with --code-coverage=user, the counts are identical either way,
+# and the whole suite passes with 0 failures. If a future Julia does perturb them, these
+# will fail rather than quietly not run, which is the outcome to prefer: the boxing
+# regressions this suite exists to catch are invisible to both JET's optimisation analysis
+# and AllocCheck — a reproduction of the original bug allocating 23,824 B against 0 B for
+# the fix draws no report from either — so a runtime count is the only thing that sees
+# them.
 macro test_allocs(call_expr)
     if Meta.isexpr(call_expr, :call)
         fn = call_expr.args[1]
         args = call_expr.args[2:end]
         quote
-            if Base.JLOptions().code_coverage == 0
-                @test alloc_test($(esc(fn)), $(map(esc, args)...)) == 0
-            else
-                @test_skip "Allocations test skipped under code coverage"
-            end
+            @test alloc_test($(esc(fn)), $(map(esc, args)...)) == 0
         end
     else
         quote
-            if Base.JLOptions().code_coverage == 0
-                let
-                    $(esc(call_expr))
-                    @test (@allocated $(esc(call_expr))) == 0
-                end
-            else
-                @test_skip "Allocations test skipped under code coverage"
+            let
+                $(esc(call_expr))
+                @test (@allocated $(esc(call_expr))) == 0
             end
         end
     end

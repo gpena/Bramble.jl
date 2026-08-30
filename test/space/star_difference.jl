@@ -118,12 +118,8 @@ using Bramble: values, components, star_spacings, StarSpacings
 
         # the denominator is a lazy view over the cached spacings, so it costs nothing
         @test_allocs star_spacings(Ωₕ1)
-        if Base.JLOptions().code_coverage == 0
-            @test alloc_test(Dstar₊ₓ, u1) == alloc_test(similar, u1)
-            @test alloc_test(Dstar₊ᵧ, u2) == alloc_test(similar, u2)
-        else
-            @test_skip "Allocation comparison skipped under code coverage"
-        end
+        @test alloc_test(Dstar₊ₓ, u1) == alloc_test(similar, u1)
+        @test alloc_test(Dstar₊ᵧ, u2) == alloc_test(similar, u2)
     end
 
     @testset "summation by parts" begin
