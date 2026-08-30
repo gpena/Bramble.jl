@@ -1,5 +1,292 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Benchmarks · Bramble.jl</title><meta name="title" content="Benchmarks · Bramble.jl"/><meta property="og:title" content="Benchmarks · Bramble.jl"/><meta property="twitter:title" content="Benchmarks · Bramble.jl"/><meta name="description" content="Documentation for Bramble.jl."/><meta property="og:description" content="Documentation for Bramble.jl."/><meta property="twitter:description" content="Documentation for Bramble.jl."/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../"><img src="../assets/logo.svg" alt="Bramble.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../">Bramble.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../tutorials/geometry/">Geometry tutorial</a></li><li><a class="tocitem" href="../tutorials/mesh/">Mesh tutorial</a></li><li><a class="tocitem" href="../tutorials/space/">Grid spaces and discrete functions</a></li><li><a class="tocitem" href="../tutorials/operators/">Difference, jump and average operators</a></li></ul></li><li class="is-active"><a class="tocitem" href>Benchmarks</a></li><li><span class="tocitem">Documentation</span><ul><li><a class="tocitem" href="../api/">API reference</a></li><li><input class="collapse-toggle" id="menuitem-4-2" type="checkbox"/><label class="tocitem" for="menuitem-4-2"><span class="docs-label">Internals</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../internals/utils/">Utilities</a></li><li><a class="tocitem" href="../internals/geometry/">Geometry</a></li><li><a class="tocitem" href="../internals/mesh/">Mesh</a></li><li><a class="tocitem" href="../internals/space/">Spaces</a></li></ul></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Benchmarks</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Benchmarks</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/benchmarks.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Performance-and-Benchmarks"><a class="docs-heading-anchor" href="#Performance-and-Benchmarks">Performance &amp; Benchmarks</a><a id="Performance-and-Benchmarks-1"></a><a class="docs-heading-anchor-permalink" href="#Performance-and-Benchmarks" title="Permalink"></a></h1><p>Bramble tracks memory allocations and performance regressions with a dedicated regression suite in <code>benchmark/benchmarks.jl</code>.
-All measurements below are run on <strong>1,000,000 grid points</strong> per dimension setup (e.g. <span>$1000 \times 1000$</span> in 2D, <span>$100 \times 100 \times 100$</span> in 3D).</p><blockquote><p>[!NOTE]
-No saved benchmark baselines were found in <code>benchmark/</code>.
-To run and save a baseline locally on AC power:</p><pre><code class="language-bash hljs">julia --project=benchmark benchmark/benchmarks.jl --save benchmark/baseline_$(git rev-parse --short HEAD).json</code></pre></blockquote></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../tutorials/operators/">« Difference, jump and average operators</a><a class="docs-footer-nextpage" href="../api/">API reference »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Sunday 30 August 2026 11:06">Sunday 30 August 2026</span>. Using Julia version 1.14.0-DEV.3066.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Benchmarks · Bramble.jl</title><meta name="title" content="Benchmarks · Bramble.jl"/><meta property="og:title" content="Benchmarks · Bramble.jl"/><meta property="twitter:title" content="Benchmarks · Bramble.jl"/><meta name="description" content="Documentation for Bramble.jl."/><meta property="og:description" content="Documentation for Bramble.jl."/><meta property="twitter:description" content="Documentation for Bramble.jl."/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../"><img src="../assets/logo.svg" alt="Bramble.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../">Bramble.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../tutorials/geometry/">Geometry tutorial</a></li><li><a class="tocitem" href="../tutorials/mesh/">Mesh tutorial</a></li><li><a class="tocitem" href="../tutorials/space/">Grid spaces and discrete functions</a></li><li><a class="tocitem" href="../tutorials/operators/">Difference, jump and average operators</a></li></ul></li><li class="is-active"><a class="tocitem" href>Benchmarks</a><ul class="internal"><li><a class="tocitem" href="#Recorded-Baselines"><span>Recorded Baselines</span></a></li><li><a class="tocitem" href="#Comparative-Timings-and-Allocations"><span>Comparative Timings &amp; Allocations</span></a></li><li><a class="tocitem" href="#How-to-Add-New-Benchmark-Runs"><span>How to Add New Benchmark Runs</span></a></li></ul></li><li><span class="tocitem">Documentation</span><ul><li><a class="tocitem" href="../api/">API reference</a></li><li><input class="collapse-toggle" id="menuitem-4-2" type="checkbox"/><label class="tocitem" for="menuitem-4-2"><span class="docs-label">Internals</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../internals/utils/">Utilities</a></li><li><a class="tocitem" href="../internals/geometry/">Geometry</a></li><li><a class="tocitem" href="../internals/mesh/">Mesh</a></li><li><a class="tocitem" href="../internals/space/">Spaces</a></li></ul></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Benchmarks</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Benchmarks</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/benchmarks.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Performance-and-Benchmarks"><a class="docs-heading-anchor" href="#Performance-and-Benchmarks">Performance &amp; Benchmarks</a><a id="Performance-and-Benchmarks-1"></a><a class="docs-heading-anchor-permalink" href="#Performance-and-Benchmarks" title="Permalink"></a></h1><p>Bramble tracks memory allocations and performance regressions with a dedicated regression suite in <code>benchmark/benchmarks.jl</code>.
+All measurements below are run on <strong>1,000,000 grid points</strong> per dimension setup (e.g. <span>$1000 \times 1000$</span> in 2D, <span>$100 \times 100 \times 100$</span> in 3D).</p><h2 id="Recorded-Baselines"><a class="docs-heading-anchor" href="#Recorded-Baselines">Recorded Baselines</a><a id="Recorded-Baselines-1"></a><a class="docs-heading-anchor-permalink" href="#Recorded-Baselines" title="Permalink"></a></h2><table><tr><th style="text-align: right">Commit</th><th style="text-align: center">Julia</th><th style="text-align: center">Date</th><th style="text-align: right">Summary</th><th style="text-align: right">File</th></tr><tr><td style="text-align: right"><code>0b9a62b</code></td><td style="text-align: center"><code>1.12.7</code></td><td style="text-align: center">unknown</td><td style="text-align: right">Baseline</td><td style="text-align: right"><code>baseline_0b9a62b.json</code></td></tr></table><h2 id="Comparative-Timings-and-Allocations"><a class="docs-heading-anchor" href="#Comparative-Timings-and-Allocations">Comparative Timings &amp; Allocations</a><a id="Comparative-Timings-and-Allocations-1"></a><a class="docs-heading-anchor-permalink" href="#Comparative-Timings-and-Allocations" title="Permalink"></a></h2><h3 id="Operators-2D"><a class="docs-heading-anchor" href="#Operators-2D">Operators 2D</a><a id="Operators-2D-1"></a><a class="docs-heading-anchor-permalink" href="#Operators-2D" title="Permalink"></a></h3><table><tr><th style="text-align: right">Benchmark</th><th style="text-align: center"><code>0b9a62b</code> Time</th><th style="text-align: center">Allocs</th><th style="text-align: center">Memory</th></tr><tr><td style="text-align: right"><strong><code>Dcₓ</code></strong></td><td style="text-align: center">257.2 μs</td><td style="text-align: center">3</td><td style="text-align: center">7.64 MiB</td></tr><tr><td style="text-align: right"><strong><code>D₋ᵧ</code></strong></td><td style="text-align: center">161.4 μs</td><td style="text-align: center">3</td><td style="text-align: center">7.64 MiB</td></tr><tr><td style="text-align: right"><strong><code>D₋ₓ</code></strong></td><td style="text-align: center">203.7 μs</td><td style="text-align: center">3</td><td style="text-align: center">7.64 MiB</td></tr><tr><td style="text-align: right"><strong><code>M₋ₓ</code></strong></td><td style="text-align: center">171.4 μs</td><td style="text-align: center">3</td><td style="text-align: center">7.64 MiB</td></tr></table><script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<div style="width: 100%; max-width: 820px; margin: 1.5em auto; background: var(--documenter-bg, #fff); padding: 1.2em; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+  <canvas id="benchmark_chart_1"></canvas>
+</div>
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    var ctx = document.getElementById('benchmark_chart_1').getContext('2d');
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ["Dcₓ", "D₋ᵧ", "D₋ₓ", "M₋ₓ"],
+            datasets: [{
+    label: '0b9a62b (Julia 1.12.7)',
+    data: [257.21, 161.42, 203.71, 171.42],
+    backgroundColor: 'rgba(54, 162, 235, 0.85)',
+    borderColor: 'rgb(54, 162, 235)',
+    borderWidth: 1
+}
+]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Operators 2D - Median Execution Time (μs)'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            if (context.parsed.y === null) return context.dataset.label + ': (not measured)';
+                            return context.dataset.label + ': ' + context.parsed.y + ' μs';
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Time (μs)'
+                    }
+                }
+            }
+        }
+    });
+});
+</script>
+<h3 id="Operators-3D"><a class="docs-heading-anchor" href="#Operators-3D">Operators 3D</a><a id="Operators-3D-1"></a><a class="docs-heading-anchor-permalink" href="#Operators-3D" title="Permalink"></a></h3><table><tr><th style="text-align: right">Benchmark</th><th style="text-align: center"><code>0b9a62b</code> Time</th><th style="text-align: center">Allocs</th><th style="text-align: center">Memory</th></tr><tr><td style="text-align: right"><strong><code>D₋₂</code></strong></td><td style="text-align: center">200.9 μs</td><td style="text-align: center">3</td><td style="text-align: center">7.64 MiB</td></tr><tr><td style="text-align: right"><strong><code>innerₕ</code></strong></td><td style="text-align: center">240.2 μs</td><td style="text-align: center">0</td><td style="text-align: center">0 B</td></tr><tr><td style="text-align: right"><strong><code>∇₋ₕ</code></strong></td><td style="text-align: center">694.1 μs</td><td style="text-align: center">15</td><td style="text-align: center">22.92 MiB</td></tr></table><div style="width: 100%; max-width: 820px; margin: 1.5em auto; background: var(--documenter-bg, #fff); padding: 1.2em; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+  <canvas id="benchmark_chart_2"></canvas>
+</div>
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    var ctx = document.getElementById('benchmark_chart_2').getContext('2d');
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ["D₋₂", "innerₕ", "∇₋ₕ"],
+            datasets: [{
+    label: '0b9a62b (Julia 1.12.7)',
+    data: [200.92, 240.25, 694.08],
+    backgroundColor: 'rgba(54, 162, 235, 0.85)',
+    borderColor: 'rgb(54, 162, 235)',
+    borderWidth: 1
+}
+]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Operators 3D - Median Execution Time (μs)'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            if (context.parsed.y === null) return context.dataset.label + ': (not measured)';
+                            return context.dataset.label + ': ' + context.parsed.y + ' μs';
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Time (μs)'
+                    }
+                }
+            }
+        }
+    });
+});
+</script>
+<h3 id="Inner-Products-2D"><a class="docs-heading-anchor" href="#Inner-Products-2D">Inner Products 2D</a><a id="Inner-Products-2D-1"></a><a class="docs-heading-anchor-permalink" href="#Inner-Products-2D" title="Permalink"></a></h3><table><tr><th style="text-align: right">Benchmark</th><th style="text-align: center"><code>0b9a62b</code> Time</th><th style="text-align: center">Allocs</th><th style="text-align: center">Memory</th></tr><tr><td style="text-align: right"><strong><code>innerₕ</code></strong></td><td style="text-align: center">242.0 μs</td><td style="text-align: center">0</td><td style="text-align: center">0 B</td></tr><tr><td style="text-align: right"><strong><code>norm₁ₕ</code></strong></td><td style="text-align: center">790.2 μs</td><td style="text-align: center">0</td><td style="text-align: center">0 B</td></tr><tr><td style="text-align: right"><strong><code>normₕ</code></strong></td><td style="text-align: center">190.0 μs</td><td style="text-align: center">0</td><td style="text-align: center">0 B</td></tr><tr><td style="text-align: right"><strong><code>snorm₁ₕ</code></strong></td><td style="text-align: center">578.1 μs</td><td style="text-align: center">0</td><td style="text-align: center">0 B</td></tr></table><div style="width: 100%; max-width: 820px; margin: 1.5em auto; background: var(--documenter-bg, #fff); padding: 1.2em; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+  <canvas id="benchmark_chart_3"></canvas>
+</div>
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    var ctx = document.getElementById('benchmark_chart_3').getContext('2d');
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ["innerₕ", "norm₁ₕ", "normₕ", "snorm₁ₕ"],
+            datasets: [{
+    label: '0b9a62b (Julia 1.12.7)',
+    data: [242.04, 790.25, 190.0, 578.08],
+    backgroundColor: 'rgba(54, 162, 235, 0.85)',
+    borderColor: 'rgb(54, 162, 235)',
+    borderWidth: 1
+}
+]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Inner Products 2D - Median Execution Time (μs)'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            if (context.parsed.y === null) return context.dataset.label + ': (not measured)';
+                            return context.dataset.label + ': ' + context.parsed.y + ' μs';
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Time (μs)'
+                    }
+                }
+            }
+        }
+    });
+});
+</script>
+<h3 id="Restriction"><a class="docs-heading-anchor" href="#Restriction">Restriction</a><a id="Restriction-1"></a><a class="docs-heading-anchor-permalink" href="#Restriction" title="Permalink"></a></h3><table><tr><th style="text-align: right">Benchmark</th><th style="text-align: center"><code>0b9a62b</code> Time</th><th style="text-align: center">Allocs</th><th style="text-align: center">Memory</th></tr><tr><td style="text-align: right"><strong><code>Rₕ 1D (allocates its output)</code></strong></td><td style="text-align: center">2.87 ms</td><td style="text-align: center">6</td><td style="text-align: center">7.64 MiB</td></tr><tr><td style="text-align: right"><strong><code>Rₕ! 1D</code></strong></td><td style="text-align: center">2.87 ms</td><td style="text-align: center">3</td><td style="text-align: center">64 B</td></tr><tr><td style="text-align: right"><strong><code>avgₕ! 1D</code></strong></td><td style="text-align: center">16.27 ms</td><td style="text-align: center">2</td><td style="text-align: center">128 B</td></tr></table><div style="width: 100%; max-width: 820px; margin: 1.5em auto; background: var(--documenter-bg, #fff); padding: 1.2em; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+  <canvas id="benchmark_chart_4"></canvas>
+</div>
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    var ctx = document.getElementById('benchmark_chart_4').getContext('2d');
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ["Rₕ 1D (allocates its output)", "Rₕ! 1D", "avgₕ! 1D"],
+            datasets: [{
+    label: '0b9a62b (Julia 1.12.7)',
+    data: [2.87, 2.87, 16.27],
+    backgroundColor: 'rgba(54, 162, 235, 0.85)',
+    borderColor: 'rgb(54, 162, 235)',
+    borderWidth: 1
+}
+]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Restriction - Median Execution Time (ms)'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            if (context.parsed.y === null) return context.dataset.label + ': (not measured)';
+                            return context.dataset.label + ': ' + context.parsed.y + ' ms';
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Time (ms)'
+                    }
+                }
+            }
+        }
+    });
+});
+</script>
+<h3 id="Composite"><a class="docs-heading-anchor" href="#Composite">Composite</a><a id="Composite-1"></a><a class="docs-heading-anchor-permalink" href="#Composite" title="Permalink"></a></h3><table><tr><th style="text-align: right">Benchmark</th><th style="text-align: center"><code>0b9a62b</code> Time</th><th style="text-align: center">Allocs</th><th style="text-align: center">Memory</th></tr><tr><td style="text-align: right"><strong><code>D₋ₓ (3 components)</code></strong></td><td style="text-align: center">711.0 μs</td><td style="text-align: center">3</td><td style="text-align: center">22.89 MiB</td></tr><tr><td style="text-align: right"><strong><code>∇₋ₕ (3 components)</code></strong></td><td style="text-align: center">1.43 ms</td><td style="text-align: center">10</td><td style="text-align: center">45.78 MiB</td></tr></table><div style="width: 100%; max-width: 820px; margin: 1.5em auto; background: var(--documenter-bg, #fff); padding: 1.2em; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+  <canvas id="benchmark_chart_5"></canvas>
+</div>
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    var ctx = document.getElementById('benchmark_chart_5').getContext('2d');
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ["D₋ₓ (3 components)", "∇₋ₕ (3 components)"],
+            datasets: [{
+    label: '0b9a62b (Julia 1.12.7)',
+    data: [0.71, 1.43],
+    backgroundColor: 'rgba(54, 162, 235, 0.85)',
+    borderColor: 'rgb(54, 162, 235)',
+    borderWidth: 1
+}
+]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Composite - Median Execution Time (ms)'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            if (context.parsed.y === null) return context.dataset.label + ': (not measured)';
+                            return context.dataset.label + ': ' + context.parsed.y + ' ms';
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Time (ms)'
+                    }
+                }
+            }
+        }
+    });
+});
+</script>
+<h3 id="Construction"><a class="docs-heading-anchor" href="#Construction">Construction</a><a id="Construction-1"></a><a class="docs-heading-anchor-permalink" href="#Construction" title="Permalink"></a></h3><table><tr><th style="text-align: right">Benchmark</th><th style="text-align: center"><code>0b9a62b</code> Time</th><th style="text-align: center">Allocs</th><th style="text-align: center">Memory</th></tr><tr><td style="text-align: right"><strong><code>gridspace 2D</code></strong></td><td style="text-align: center">368.8 μs</td><td style="text-align: center">38</td><td style="text-align: center">30.59 MiB</td></tr><tr><td style="text-align: right"><strong><code>gridspace 3D</code></strong></td><td style="text-align: center">1.63 ms</td><td style="text-align: center">44</td><td style="text-align: center">38.21 MiB</td></tr><tr><td style="text-align: right"><strong><code>hₘₐₓ 3D</code></strong></td><td style="text-align: center">153.0 ns</td><td style="text-align: center">0</td><td style="text-align: center">0 B</td></tr></table><div style="width: 100%; max-width: 820px; margin: 1.5em auto; background: var(--documenter-bg, #fff); padding: 1.2em; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+  <canvas id="benchmark_chart_6"></canvas>
+</div>
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    var ctx = document.getElementById('benchmark_chart_6').getContext('2d');
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ["gridspace 2D", "gridspace 3D", "hₘₐₓ 3D"],
+            datasets: [{
+    label: '0b9a62b (Julia 1.12.7)',
+    data: [0.37, 1.63, 0.0],
+    backgroundColor: 'rgba(54, 162, 235, 0.85)',
+    borderColor: 'rgb(54, 162, 235)',
+    borderWidth: 1
+}
+]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Construction - Median Execution Time (ms)'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            if (context.parsed.y === null) return context.dataset.label + ': (not measured)';
+                            return context.dataset.label + ': ' + context.parsed.y + ' ms';
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Time (ms)'
+                    }
+                }
+            }
+        }
+    });
+});
+</script>
+<h2 id="How-to-Add-New-Benchmark-Runs"><a class="docs-heading-anchor" href="#How-to-Add-New-Benchmark-Runs">How to Add New Benchmark Runs</a><a id="How-to-Add-New-Benchmark-Runs-1"></a><a class="docs-heading-anchor-permalink" href="#How-to-Add-New-Benchmark-Runs" title="Permalink"></a></h2><p>To record performance on a new commit or after an optimization pass, run:</p><pre><code class="language-bash hljs">julia --project=benchmark benchmark/benchmarks.jl --save benchmark/baselines/baseline_$(git rev-parse --short HEAD).json</code></pre><p>Rebuilding the documentation (<code>julia -e &#39;using Pkg; Pkg.activate(&quot;docs&quot;); include(&quot;docs/make.jl&quot;)&#39;</code>) will automatically discover all <code>baseline_*.json</code> files and append new comparison columns, delta calculations, and chart series.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../tutorials/operators/">« Difference, jump and average operators</a><a class="docs-footer-nextpage" href="../api/">API reference »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Sunday 30 August 2026 11:14">Sunday 30 August 2026</span>. Using Julia version 1.14.0-DEV.3066.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
