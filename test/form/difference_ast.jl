@@ -60,6 +60,7 @@ using Bramble: IdentityOperator, IndexedTrialFunction, IndexedTestFunction,
         function mentioning(needle)
             found = Set{Symbol}()
             for nm in names(Bramble; all = true)
+                startswith(string(nm), '#') && continue
                 isdefined(Bramble, nm) || continue
                 f = getfield(Bramble, nm)
                 f isa Function || continue
