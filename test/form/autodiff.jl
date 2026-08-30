@@ -1,0 +1,174 @@
+using Test
+using Bramble
+using ForwardDiff
+using SparseArrays
+using LinearAlgebra: issymmetric
+
+# Differentiating through the constrained linear system.
+#
+# There are two independent things one might differentiate here, and they were not in the
+# same state.
+#
+#   - the *system*: the matrix and right-hand side carry `ForwardDiff.Dual` coefficients,
+#     and the constraints are applied to them. This already worked — `dirichlet_bc!` and
+#     `symmetrize!` read `zero(T)`/`one(T)` off `eltype(A)` and are otherwise generic — but
+#     nothing checked, and a `\\` through both is the shape an adjoint actually has.
+#
+#   - the *boundary data*: the parameter being differentiated sits inside the condition
+#     itself, `x -> a * x[1]`. This did not work. The conditions are stored in a
+#     `Set{Marker{BrambleFunction{…, CoType, …}}}` whose concrete element type is what
+#     keeps applying them allocation free, and `CoType` was the *domain's* element type —
+#     so a Float64 domain could carry only Float64 boundary values, and a Dual-returning
+#     condition met `MethodError: no method matching Float64(::Dual)` inside the wrapper.
+#     It is now the type the conditions return, promoted against the domain's, which is the
+#     rule `Rₕ` already used.
+#
+# As in test/space/autodiff.jl, each case is checked against a central difference of the
+# same functional in plain Float64 — so it tests that the derivative is right, not merely
+# that it ran.
+
+_fd(f, a; h = 1e-6) = (f(a + h) - f(a - h)) / (2h)
+function _matches_fd(f, a = 1.3; rtol = 1e-5)
+    isapprox(ForwardDiff.derivative(f, a), _fd(f, a);
+        rtol = rtol)
+end
+
+_tri(m) = spdiagm(0 => fill(4.0, m), 1 => fill(-1.0, m - 1), -1 => fill(-1.0, m - 1))
+
+@testset "Automatic differentiation through the constraints" begin
+    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
+        (5, 5), (true, true))
+    Wₕ = gridspace(Ωₕ)
+    Vₕ = gridspace(Ωₕ, Val(3))
+    n = ndofs(Wₕ)
+
+    @testset "a Dual-valued system" begin
+        @test _matches_fd(a -> begin
+            A = a .* _tri(n)
+            dirichlet_bc!(A, Ωₕ, :bottom)
+            sum(A)
+        end)
+
+        @test _matches_fd(a -> begin
+            A, F = a .* _tri(n), a .* ones(n)
+            dirichlet_bc!(A, Ωₕ, :bottom)
+            symmetrize!(A, F, Ωₕ, :bottom)
+            sum(A) + sum(F)
+        end)
+
+        # the shape that matters: a solve with both applied
+        @test _matches_fd(a -> begin
+            A, F = a .* _tri(n), a .* collect(1.0:n)
+            dirichlet_bc!(A, Ωₕ, :bottom)
+            symmetrize!(A, F, Ωₕ, :bottom)
+            sum(A \ F)
+        end)
+
+        # and the same through a composite space
+        @test _matches_fd(a -> begin
+            A = a .* blockdiag(_tri(n), _tri(n), _tri(n))
+            F = a .* collect(1.0:(3n))
+            dirichlet_bc!(A, Vₕ, :bottom)
+            symmetrize!(A, F, Vₕ, :bottom)
+            sum(A \ F)
+        end)
+    end
+
+    @testset "Dual-valued boundary data" begin
+        @test _matches_fd(a -> begin
+            bcs = dirichlet_constraints(set(Ωₕ), :bottom => (x -> a * x[1] + a^2))
+            v = zeros(typeof(a), n)
+            dirichlet_bc!(v, Ωₕ, bcs, :bottom)
+            sum(v)
+        end)
+
+        # through a composite space, where the value lands in every leaf
+        @test _matches_fd(a -> begin
+            bcs = dirichlet_constraints(set(Ωₕ), :bottom => (x -> a * sin(x[1])))
+            v = zeros(typeof(a), 3n)
+            dirichlet_bc!(v, Vₕ, bcs, :bottom)
+            sum(v)
+        end)
+
+        # and end to end: the boundary data feeds a solve
+        @test _matches_fd(a -> begin
+            A = _tri(n)
+            F = zeros(typeof(a), n)
+            F .= collect(1.0:n)
+            bcs = dirichlet_constraints(set(Ωₕ), :bottom => (x -> a * x[1] + 1))
+            dirichlet_bc!(A, Ωₕ, :bottom)
+            dirichlet_bc!(F, Ωₕ, bcs, :bottom)
+            sum(Matrix(A) \ F)
+        end)
+    end
+
+    @testset "a gradient, not just a derivative" begin
+        function J(p)
+            bcs = dirichlet_constraints(set(Ωₕ),
+                :bottom => (x -> p[1] * x[1] + p[2] * x[1]^2))
+            v = zeros(eltype(p), n)
+            dirichlet_bc!(v, Ωₕ, bcs, :bottom)
+            return sum(abs2, v)
+        end
+        p0 = [1.3, 0.7]
+        g = ForwardDiff.gradient(J, p0)
+        @test length(g) == 2
+        for k in 1:2
+            e = zeros(2)
+            e[k] = 1e-6
+            @test isapprox(g[k], (J(p0 .+ e) - J(p0 .- e)) / 2e-6; rtol = 1e-5)
+        end
+    end
+
+    @testset "the element type is inferred, not imposed" begin
+        cotype(bcs) = typeof(Bramble.identifier(first(Bramble.conditions(bcs)))).parameters[3]
+
+        # a plain condition is unchanged
+        @test cotype(dirichlet_constraints(set(Ωₕ), :bottom => (x -> 7.0))) === Float64
+
+        # promoted against the domain's type, not replacing it: an integer-valued
+        # condition still gives Float64 on a Float64 domain
+        @test cotype(dirichlet_constraints(set(Ωₕ), :bottom => (x -> 1))) === Float64
+
+        # a condition need not be defined at the probe point — it is only ever applied
+        # where its label marks — so a probe that throws falls back to the domain's type.
+        # This is the trap Rₕ hit with `x -> sqrt(x - 0.5)`.
+        @test cotype(dirichlet_constraints(set(Ωₕ),
+            :bottom => (x -> sqrt(x[1] - 0.5)))) === Float64
+        @test_nowarn dirichlet_constraints(set(Ωₕ), :bottom => (x -> sqrt(x[1] - 0.5)))
+
+        # a Dual-returning condition carries a Dual
+        a = ForwardDiff.Dual{ForwardDiff.Tag{typeof(identity), Float64}}(1.3, 1.0)
+        @test cotype(dirichlet_constraints(set(Ωₕ), :bottom => (x -> a * x[1]))) <:
+              ForwardDiff.Dual
+
+        # the mesh underneath stays undifferentiated
+        @test eltype(Ωₕ) === Float64
+    end
+
+    @testset "the time-dependent constraints too" begin
+        @test _matches_fd(a -> begin
+            bcs = dirichlet_constraints(set(Ωₕ), interval(0.0, 1.0),
+                :bottom => ((x, t) -> a * t * x[1] + a))
+            v = zeros(typeof(a), n)
+            dirichlet_bc!(v, Ωₕ, bcs(0.5), :bottom)
+            sum(v)
+        end)
+    end
+
+    @testset "applying a plain constraint still allocates nothing" begin
+        # The inference happens once, when the constraints are built. The hot path is
+        # untouched, and has to stay so.
+        function bytes()
+            Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
+                (24, 24), (true, true))
+            W = gridspace(Ω)
+            m = ndofs(W)
+            bcs = dirichlet_constraints(set(Ω), :bottom => (x -> 7.0))
+            v = zeros(m)
+            dirichlet_bc!(v, Ω, bcs, :bottom)
+            return @allocated dirichlet_bc!(v, Ω, bcs, :bottom)
+        end
+        @test bytes() == 0
+    end
+end

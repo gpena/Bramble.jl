@@ -52,27 +52,70 @@ Each `pair` is of the form `:label => func`, where `:label` identifies the bound
 The `cartesian_product` can be a `CartesianProduct` mesh domain or an `ScalarGridSpace` from which the mesh can be extracted. The `:label` must match a label in the mesh definition.
 """
 function dirichlet_constraints(input, pairs::Pair...)
-    cartesian_product = if input isa ScalarGridSpace
-        set(mesh(input))
-    elseif input isa CompositeGridSpace
-        set(mesh(first_space(input)))  # recursive: first leaf space
-    else
-        set(input)
-    end
-    T, domain = _get_eltype_and_domain(cartesian_product)
-    _create_generic_markers(T, domain, pairs...)
+    domain = _constraint_domain(input)
+    T, _ = _get_eltype_and_domain(domain)
+    return _create_generic_markers(_constraint_value_type(T, domain, pairs), domain,
+        pairs...)
 end
 
 function dirichlet_constraints(input, I::CartesianProduct{1}, pairs::Pair...)
-    cartesian_product = if input isa ScalarGridSpace
-        set(mesh(input))
-    elseif input isa CompositeGridSpace
-        set(mesh(first_space(input)))
-    else
-        set(input)
+    domain = _constraint_domain(input)
+    T, _ = _get_eltype_and_domain(domain)
+    return _create_generic_markers(_constraint_value_type(T, domain, pairs, I), domain, I,
+        pairs...)
+end
+
+@inline _constraint_domain(input::ScalarGridSpace) = set(mesh(input))
+# recursive: the first leaf space. Every leaf of a composite space shares the domain, so
+# which one is asked does not matter.
+@inline _constraint_domain(input::CompositeGridSpace) = set(mesh(first_space(input)))
+@inline _constraint_domain(input) = set(input)
+
+#===========================================================================#
+# The element type a constraint stores its values in
+#
+# The conditions are held in a `Set{Marker{BrambleFunction{…, CoType, …}}}`, and the
+# concrete element type is the whole point of the wrapper: it is what keeps applying a
+# constraint allocation free. So `CoType` has to be settled when the constraints are built.
+#
+# It used to be the domain's own element type, which made a `Float64` domain able to carry
+# only `Float64` boundary values, and that is exactly what blocks differentiating with
+# respect to boundary data: a `ForwardDiff.Dual`-returning condition met
+# `MethodError: no method matching Float64(::Dual)` inside the wrapper.
+#
+# The rule is now the one `Rₕ` already uses (space/operators/restriction.jl): the type the
+# functions return, promoted against the domain's rather than replacing it, so an
+# integer-valued condition still gives `Float64` on a `Float64` domain while a Dual-valued
+# one gives a Dual over the same, undifferentiated, geometry.
+#
+# Learning it costs one extra call per condition. `Rₕ` reads it from a grid point; there is
+# no mesh here, so it is read at the domain's lower corner. A condition need not be defined
+# there — it is only ever applied on the part of the boundary its label marks — so a probe
+# that throws falls back to the domain's type, which is exactly the old behaviour. That
+# keeps a condition like `x -> sqrt(x[1] - 0.5)` working, the same trap `Rₕ` hit.
+#===========================================================================#
+
+@inline _probe_at(X::CartesianProduct{1}) = first(first(tails(X)))
+@inline _probe_at(X::CartesianProduct) = map(first, tails(X))
+
+@inline function _probed_type(f, args...)
+    try
+        return typeof(f(args...))
+    catch
+        return Union{}          # promotes away, leaving the domain's type
     end
-    T, domain = _get_eltype_and_domain(cartesian_product)
-    _create_generic_markers(T, domain, I, pairs...)
+end
+
+function _constraint_value_type(::Type{T}, domain, pairs, I = nothing) where {T}
+    p = _probe_at(domain)
+    t = I === nothing ? nothing : first(first(tails(I)))
+    R = T
+    for pair in pairs
+        f = pair.second
+        f isa Function || continue
+        R = promote_type(R, t === nothing ? _probed_type(f, p) : _probed_type(f, p, t))
+    end
+    return R
 end
 
 """

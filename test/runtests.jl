@@ -99,6 +99,7 @@ if __bramble_with_unit_tests
             include("form/difference_ast.jl")
             include("form/operators.jl")
             include("form/symmetrize.jl")
+            include("form/autodiff.jl")
         end
 
         #=
