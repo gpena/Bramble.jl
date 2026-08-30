@@ -58,12 +58,18 @@ _mesh1() = mesh(domain(interval(0.0, 1.0)), N1, true)
 _mesh2() = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), N2, (true, true))
 _mesh3() = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), N3, (true, true, true))
 
-# --- 1. restriction, on the threaded branch ------------------------------- #
-let Wₕ = gridspace(_mesh1()), uₕ = element(gridspace(_mesh1()))
+# --- 1. restriction & cell-averaging across 1D, 2D, 3D -------------------- #
+let W1 = gridspace(_mesh1()), u1 = element(W1), W2 = gridspace(_mesh2()), u2 = element(W2),
+    W3 = gridspace(_mesh3()), u3 = element(W3)
+
     g = SUITE["restriction"] = BenchmarkGroup()
-    g["Rₕ! 1D"] = @benchmarkable Rₕ!($uₕ, sin)
-    g["avgₕ! 1D"] = @benchmarkable avgₕ!($uₕ, sin)
-    g["Rₕ 1D (allocates its output)"] = @benchmarkable Rₕ($Wₕ, sin)
+    g["Rₕ! 1D"] = @benchmarkable Rₕ!($u1, sin)
+    g["avgₕ! 1D"] = @benchmarkable avgₕ!($u1, sin)
+    g["Rₕ! 2D"] = @benchmarkable Rₕ!($u2, x -> sin(x[1]) * x[2])
+    g["avgₕ! 2D"] = @benchmarkable avgₕ!($u2, x->sin(x[1])*x[2]) samples=5 evals=1
+    g["Rₕ! 3D"] = @benchmarkable Rₕ!($u3, x -> sin(x[1]) + x[3])
+    g["avgₕ! 3D"] = @benchmarkable avgₕ!($u3, x->sin(x[1])+x[3]) samples=3 evals=1
+    g["Rₕ 1D (allocates its output)"] = @benchmarkable Rₕ($W1, sin)
 end
 
 # --- 2. the stencil engine, both directions ------------------------------- #

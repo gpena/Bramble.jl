@@ -704,9 +704,56 @@ end
         @test all(values(u)[i] == 0.0 for i in eachindex(values(u)) if !marked[i])
         @test any(marked)
 
-        # the nD kernel form is what the masked path uses
-        nodes, wts = _gauss_rule(Val(3), Float64)
-        k = _cell_average_kernel(x -> 1.0, half_points(Ωh), nodes, wts, Val(2))
+        # the nD kernel form is what the masked path uses. It takes the quadrature order
+        # and element type rather than a built rule, and fetches the rule itself.
+        k = _cell_average_kernel(x -> 1.0, half_points(Ωh), Val(3), Float64, Val(2),
+            Val(true))
         @test k(first(indices(Ωh))) ≈ 1.0
+
+        # and it does not carry the rule. `_gauss_rule` is @generated and folds to an
+        # SVector literal for an isbits element type, so the kernel closes over the
+        # geometry only. It used to hold `nodes` and `wts` inline, 48 bytes each, and
+        # `Threads.@threads` copies the closure once per thread, so those 96 bytes were
+        # paid per thread on every call.
+        nodes, wts = _gauss_rule(Val(3), Float64)
+        carrying = let f = (x -> 1.0), x = half_points(Ωh), nodes = nodes, wts = wts
+            idx -> Bramble._cell_average(f, x, idx, nodes, wts)
+        end
+        @test sizeof(k) < sizeof(carrying)
+        @test k(first(indices(Ωh))) ≈ carrying(first(indices(Ωh)))
+    end
+end
+
+@testset "avgₕ on a composite space, single vector-valued function" begin
+    # A composite grid function can be averaged either from a tuple of functions, one per
+    # component, or from a single function returning all components. The two must agree.
+    #
+    # In one dimension the second form raised a MethodError: a 1D mesh answers
+    # `half_points` with a plain vector rather than a one-tuple of vectors, and the
+    # composite kernel only had a method for the D-dimensional shape. The tuple form was
+    # unaffected, because it dispatches to the scalar path once per component, which is
+    # why nothing caught it.
+    for (lbl, Ωₕ, fs, f_all) in (
+        ("1D", mesh(domain(interval(0.0, 1.0)), 17, true),
+        (sin, cos), x -> (sin(x), cos(x))),
+        (
+        "2D", mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 8), (true, false)),
+        (x -> sin(x[1]), x -> cos(x[2])), x -> (sin(x[1]), cos(x[2]))))
+        @testset "$lbl" begin
+            Vₕ = gridspace(Ωₕ, Val(2))
+
+            from_tuple = element(Vₕ)
+            avgₕ!(from_tuple, fs)
+            from_single = element(Vₕ)
+            avgₕ!(from_single, f_all)
+            @test values(from_single) ≈ values(from_tuple)
+
+            # and the out-of-place form agrees with both
+            @test values(avgₕ(Vₕ, f_all)) ≈ values(from_tuple)
+            @test values(avgₕ(Vₕ, fs)) ≈ values(from_tuple)
+
+            # the quadrature order still reaches the composite path
+            @test values(avgₕ(Vₕ, f_all; quad_points = 3)) ≈ values(from_tuple) rtol=1e-8
+        end
     end
 end

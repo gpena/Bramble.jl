@@ -77,10 +77,10 @@ Base.@constprop :aggressive function avgₕ!(
         # nodes and weights are geometry, and the Gauss rule is tabulated for real
         # types only. A Dual-valued grid function integrates against a Float64 rule
         # and the product promotes, which is what makes avgₕ differentiable.
-        nodes, wts = _gauss_rule(Val(quad_points), eltype(mesh(space(uₕ))))
         x = half_points(Ωₕ)
-        _masked_for!(to_matrix(uₕ), masks, _cell_average_kernel(
-            f, x, nodes, wts, Val(dim(Ωₕ))))
+        T = eltype(Ωₕ)
+        _masked_for!(to_matrix(uₕ), masks,
+            _cell_average_kernel(f, x, Val(quad_points), T, Val(dim(Ωₕ)), _rule_folds(T)))
         return nothing
     end
 
@@ -110,9 +110,10 @@ end
 function _avgₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f, ::Val{1}, nq::Val)
     Ωₕ = mesh(space(uₕ))
     x = half_points(Ωₕ)
-    nodes, wts = _gauss_rule(nq, eltype(mesh(space(uₕ))))
+    T = eltype(Ωₕ)
 
-    _parallel_for!(values(uₕ), indices(Ωₕ), idx -> _cell_average(f, x, idx[1], nodes, wts);
+    _parallel_for!(values(uₕ), indices(Ωₕ),
+        _cell_average_kernel(f, x, nq, T, Val(1), _rule_folds(T));
         min_work = _avg_min_work(Val(1), nq))
     return nothing
 end
@@ -120,9 +121,10 @@ end
 function _avgₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f, ::Val{D}, nq::Val) where {D}
     Ωₕ = mesh(space(uₕ))
     x = half_points(Ωₕ)
-    nodes, wts = _gauss_rule(nq, eltype(mesh(space(uₕ))))
+    T = eltype(Ωₕ)
 
-    _parallel_for!(to_matrix(uₕ), indices(Ωₕ), idx -> _cell_average(f, x, idx, nodes, wts);
+    _parallel_for!(to_matrix(uₕ), indices(Ωₕ),
+        _cell_average_kernel(f, x, nq, T, Val(D), _rule_folds(T));
         min_work = _avg_min_work(Val(D), nq))
     return nothing
 end
@@ -139,10 +141,11 @@ function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f, ::Val{D}, nq
         NC, D}
     Ωₕ = mesh(space(uₕ))
     x = half_points(Ωₕ)
-    nodes, wts = _gauss_rule(nq, eltype(mesh(space(uₕ))))
+    T = eltype(Ωₕ)
     mats = ntuple(i -> to_matrix(components(uₕ)[i]), Val(NC))
 
-    _scatter_for!(mats, indices(Ωₕ), idx -> _cell_average(f, x, idx, nodes, wts, Val(NC));
+    _scatter_for!(mats, indices(Ωₕ),
+        _cell_average_kernel(f, x, nq, T, Val(D), Val(NC), _rule_folds(T));
         min_work = _avg_min_work(Val(D), nq))
     return nothing
 end
@@ -238,12 +241,80 @@ end
     return s
 end
 
-# Kernel form of the cell average: closes over the geometry and the rule so it
-# can be handed to a generic index loop.
-@inline _cell_average_kernel(f, x, nodes, wts, ::Val{1}) = idx -> _cell_average(
-    f, x, idx[1], nodes, wts)
-@inline _cell_average_kernel(f, x, nodes, wts, ::Val{D}) where {D} = idx -> _cell_average(
-    f, x, idx, nodes, wts)
+# Kernel form of the cell average: closes over the geometry so it can be handed to a
+# generic index loop.
+#
+# The quadrature rule is fetched inside the kernel rather than closed over, wherever it is
+# a compile-time constant. `_gauss_rule` is `@generated` and folds to an `SVector` literal
+# for any isbits element type, so the call costs nothing and the closure does not have to
+# carry the rule.
+#
+# It carried 96 bytes of it before: `SVector{6,Float64}` is isbits, so `nodes` and `wts`
+# were stored inline by value, 48 bytes each, where the mesh and the half-points vector
+# cost 8 bytes apiece as pointers. `Threads.@threads` gives each task its own copy of the
+# closure, so those 96 bytes were paid once per thread on every call — measured as the
+# whole of the per-thread gap between `avgₕ!` at 472 B and `Rₕ!` at 376 B. The closure is
+# now 16 bytes rather than 104, and the loop runs within noise of the old one.
+#
+# `BigFloat` is the exception the `Val{false}` methods exist for. Its precision is a
+# run-time setting, so `_gauss_rule` cannot fold and builds the rule per call; fetching
+# inside the kernel would rebuild it at every grid point. There the rule is still built
+# once and captured, which is what the old code did for every type.
+@inline _rule_folds(::Type{T}) where {T} = Val(isbitstype(T))
+
+@inline _cell_average_kernel(
+    f, x, nq::Val, ::Type{T}, ::Val{1}, ::Val{true}) where {T} = idx -> _cell_average(
+    f, x, idx[1], _gauss_rule(nq, T)...)
+@inline _cell_average_kernel(
+    f, x, nq::Val, ::Type{T}, ::Val{D}, ::Val{true}) where {D, T} = idx -> _cell_average(
+    f, x, idx, _gauss_rule(nq, T)...)
+
+@inline function _cell_average_kernel(
+        f, x, nq::Val, ::Type{T}, ::Val{1}, ::Val{false}) where {T}
+    nodes, wts = _gauss_rule(nq, T)
+    return idx -> _cell_average(f, x, idx[1], nodes, wts)
+end
+@inline function _cell_average_kernel(
+        f, x, nq::Val, ::Type{T}, ::Val{D}, ::Val{false}) where {D, T}
+    nodes, wts = _gauss_rule(nq, T)
+    return idx -> _cell_average(f, x, idx, nodes, wts)
+end
+
+# The composite form, one value per component.
+@inline _cell_average_kernel(f, x, nq::Val, ::Type{T}, ::Val{1}, ::Val{NC},
+    ::Val{true}) where {T, NC} = idx -> _cell_average(
+    f, x, idx[1], _gauss_rule(nq, T)..., Val(NC))
+@inline _cell_average_kernel(f, x, nq::Val, ::Type{T}, ::Val{D}, ::Val{NC},
+    ::Val{true}) where {D, T, NC} = idx -> _cell_average(
+    f, x, idx, _gauss_rule(nq, T)..., Val(NC))
+@inline function _cell_average_kernel(
+        f, x, nq::Val, ::Type{T}, ::Val{1}, ::Val{NC}, ::Val{false}) where {T, NC}
+    nodes, wts = _gauss_rule(nq, T)
+    return idx -> _cell_average(f, x, idx[1], nodes, wts, Val(NC))
+end
+@inline function _cell_average_kernel(
+        f, x, nq::Val, ::Type{T}, ::Val{D}, ::Val{NC}, ::Val{false}) where {D, T, NC}
+    nodes, wts = _gauss_rule(nq, T)
+    return idx -> _cell_average(f, x, idx, nodes, wts, Val(NC))
+end
+
+# The one-dimensional composite case. A 1D mesh answers `half_points` with a plain vector
+# rather than a one-tuple of vectors, so the D-dimensional method below does not match it
+# and this one is needed: without it, `avgₕ!` on a composite space over a 1D mesh, given a
+# single function returning all components, raised a MethodError. The per-component tuple
+# form with a tuple of functions was unaffected, since it dispatches to the scalar path
+# once per component.
+@inline function _cell_average(f, x::AbstractVector, i::Int, nodes::SVector{NQ, T},
+        wts::SVector{NQ, T}, ::Val{NC}) where {NQ, T, NC}
+    @inbounds a = T(x[i])
+    @inbounds b = T(x[i + 1])
+
+    s = ntuple(_ -> zero(T), Val(NC))
+    @inbounds for q in 1:NQ
+        s = s .+ wts[q] .* f(a + nodes[q] * (b - a))
+    end
+    return s
+end
 
 # Average of a vector valued `f` over the cell around `idx`, one value per
 # component. `f` is evaluated once per quadrature node instead of once per node
