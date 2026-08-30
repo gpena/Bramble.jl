@@ -1,6 +1,7 @@
 import Bramble: space, eltype, ⊗, _Eye, shift, npoints, spacing
 using Bramble: backward_difference_dim!, forward_difference_dim!
 import SparseArrays: issparse, sprand, spdiagm, spzeros
+using Supposition
 
 # Backward difference operators
 backward_ops(::Val{1}) = (diff₋ₓ, D₋ₓ)
@@ -203,6 +204,91 @@ end
     @testset "Operator vs. Matrix Application" begin
         @testset "Backward" test_operator_matrix_equivalence(backward_ops)
         @testset "Forward" test_operator_matrix_equivalence(forward_ops)
+
+        @testset "arbitrary random grids and fields (Supposition)" begin
+            positive_h = Data.Floats{Float64}(; minimum = 0.01, maximum = 10.0,
+                nans = false, infs = false)
+            field_val = Data.Floats{Float64}(; minimum = -100.0, maximum = 100.0,
+                nans = false, infs = false)
+
+            # 1D equivalence: matrix-free stencil loop == sparse matrix multiplication
+            @check function check_operator_matrix_1d(
+                    h = Data.Vectors(positive_h; min_size = 3, max_size = 25),
+                    u_raw = Data.Vectors(field_val; min_size = 26, max_size = 26)
+            )
+                n = length(h) + 1
+                pts = zeros(Float64, n)
+                for i in 1:length(h)
+                    pts[i + 1] = pts[i] + h[i]
+                end
+                pts ./= pts[end]
+
+                Ωₕ = mesh(domain(interval(0.0, 1.0)), n, false)
+                set_points!(Ωₕ, pts)
+                Wₕ = gridspace(Ωₕ)
+
+                u_vals = copy(u_raw[1:n])
+                uₕ = element(Wₕ, u_vals)
+
+                ops = (D₋ₓ, D₊ₓ, diff₋ₓ, diff₊ₓ)
+                all_ok = true
+                for op in ops
+                    v1 = values(op(uₕ))
+                    v2 = op(Wₕ) * u_vals
+                    scale = max(maximum(abs, v1), maximum(abs, v2), 1.0)
+                    if !isapprox(v1, v2; atol = 1e-10 * scale, rtol = 1e-10)
+                        all_ok = false
+                        break
+                    end
+                end
+                all_ok
+            end
+
+            # 2D equivalence across all coordinate difference operators
+            @check function check_operator_matrix_2d(
+                    hx = Data.Vectors(positive_h; min_size = 3, max_size = 7),
+                    hy = Data.Vectors(positive_h; min_size = 3, max_size = 7),
+                    u_raw = Data.Vectors(field_val; min_size = 64, max_size = 64)
+            )
+                nx = length(hx) + 1
+                ny = length(hy) + 1
+                pts_x = zeros(Float64, nx)
+                for i in 1:length(hx)
+                    pts_x[i + 1] = pts_x[i] + hx[i]
+                end
+                pts_x ./= pts_x[end]
+
+                pts_y = zeros(Float64, ny)
+                for j in 1:length(hy)
+                    pts_y[j + 1] = pts_y[j] + hy[j]
+                end
+                pts_y ./= pts_y[end]
+
+                Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (nx, ny),
+                    (false, false))
+                set_points!(Ωₕ(1), pts_x)
+                set_points!(Ωₕ(2), pts_y)
+                Wₕ = gridspace(Ωₕ)
+
+                total = nx * ny
+                u_mat = reshape(copy(u_raw[1:total]), nx, ny)
+                u_vec = vec(u_mat)
+                uₕ = element(Wₕ, u_vec)
+
+                ops = (D₋ₓ, D₊ₓ, diff₋ₓ, diff₊ₓ, D₋ᵧ, D₊ᵧ, diff₋ᵧ, diff₊ᵧ)
+                all_ok = true
+                for op in ops
+                    v1 = values(op(uₕ))
+                    v2 = op(Wₕ) * u_vec
+                    scale = max(maximum(abs, v1), maximum(abs, v2), 1.0)
+                    if !isapprox(v1, v2; atol = 1e-10 * scale, rtol = 1e-10)
+                        all_ok = false
+                        break
+                    end
+                end
+                all_ok
+            end
+        end
     end
 end
 
