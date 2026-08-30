@@ -1,7 +1,8 @@
 using Test
 using Bramble
 
-# Every exported name carries a docstring.
+# Properties of the exported surface: every exported name carries a docstring, and no
+# exported name shadows a different function of the same name in Base.
 #
 # Documenter's `missing_docs` check is the wrong tool for this: it reports every internal
 # helper it cannot find a page for, so turning it into an error would mean adding `@docs`
@@ -42,4 +43,34 @@ end
         @info "exported names with no docstring" undocumented
     end
     @test isempty(undocumented)
+end
+
+@testset "No exported name shadows a different Base function" begin
+    # Exporting a name that Base also exports, bound to a *different* function, makes that
+    # name ambiguous for the whole session: after `using Bramble` a call to it raises an
+    # UndefVarError naming two modules, and the user loses the Base one everywhere.
+    #
+    # `values` was in exactly that position. It is defined as a method on `Base.values`
+    # now, which is an extension rather than a new function, and not piracy because
+    # `VectorElement` belongs to this package.
+    #
+    # A name Base defines but does not export (`tails`) is fine: `using Bramble` resolves
+    # it to this package's without ambiguity.
+    clashes = Symbol[]
+    for n in names(Bramble)
+        n === :Bramble && continue
+        (isdefined(Base, n) && isdefined(Bramble, n)) || continue
+        Base.isexported(Base, n) || continue
+        getproperty(Bramble, n) === getproperty(Base, n) || push!(clashes, n)
+    end
+    if !isempty(clashes)
+        @info "exported names shadowing a different Base function" clashes
+    end
+    @test isempty(clashes)
+
+    # the case that motivated this: both meanings reachable after `using Bramble`
+    @test Bramble.values === Base.values
+    @test collect(values(Dict(1 => 2))) == [2]
+    Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
+    @test values(Rₕ(gridspace(Ωₕ), x -> x^2)) ≈ [0.0, 0.0625, 0.25, 0.5625, 1.0]
 end

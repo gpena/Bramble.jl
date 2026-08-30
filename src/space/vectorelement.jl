@@ -7,12 +7,17 @@
 # restriction.jl and cell_average.jl.
 #===========================================================================#
 
+# Extends `Base.values` rather than defining a `Bramble.values` of its own. As a separate
+# function it was a second binding exported under the same name, so `using Bramble` made
+# `values` ambiguous with `Base.values` for the whole session: a user who then called
+# `values(some_dict)` got an UndefVarError about two modules exporting different bindings.
+# Extending Base is not piracy here, `VectorElement` being ours.
 """
 	values(uₕ::VectorElement)
 
 Returns the coefficients of the [VectorElement](@ref) `uₕ`.
 """
-@inline values(uₕ::VectorElement) = uₕ.data
+@inline Base.values(uₕ::VectorElement) = uₕ.data
 
 """
 	to_matrix(uₕ::VectorElement)
