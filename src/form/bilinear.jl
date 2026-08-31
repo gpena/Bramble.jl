@@ -251,47 +251,75 @@ function allocate_system_matrix(
     return sparse(I_vec, J_vec, V_vec, n, n)
 end
 
+# Which entries a term can reach, block by block.
+#
+# The version this replaces walked `space.spaces` with one offset used for both the row and
+# the column, so the pattern it built had diagonal blocks and nothing else — and
+# `add_to_sparse!` searches for an entry and returns quietly when it is missing, so every
+# off-diagonal contribution was dropped without a word. `innerₕ(u(1), v(2))` assembled to
+# zeros.
+function _pattern_term!(I_vec::Vector{Int}, J_vec::Vector{Int}, term::TERM, trial_leaf,
+        test_leaf, row_offset::Int, col_offset::Int) where {TERM}
+    Ωₕ = mesh(test_leaf)
+    mesh_markers = markers(Ωₕ)
+    lin_indices = LinearIndices(indices(Ωₕ))
+
+    @inbounds for I in indices(Ωₕ)
+        stencil = local_stencil(term, test_leaf, I, mesh_markers, lin_indices[I])
+
+        for (off_u, off_v, _) in stencil
+            Iv = I + CartesianIndex(off_v)
+            Iu = I + CartesianIndex(off_u)
+
+            if checkbounds(Bool, lin_indices, Iv) && checkbounds(Bool, lin_indices, Iu)
+                push!(I_vec, lin_indices[Iv] + row_offset)
+                push!(J_vec, lin_indices[Iu] + col_offset)
+            end
+        end
+    end
+    return nothing
+end
+
+function _pattern_blocks!(I_vec::Vector{Int}, J_vec::Vector{Int}, op::OperatorAdd,
+        trial_leaves, test_leaves)
+    _pattern_blocks!(I_vec, J_vec, op.left_op, trial_leaves, test_leaves)
+    _pattern_blocks!(I_vec, J_vec, op.right_op, trial_leaves, test_leaves)
+    return nothing
+end
+
+function _pattern_blocks!(I_vec::Vector{Int}, J_vec::Vector{Int}, term::TERM,
+        trial_leaves, test_leaves) where {TERM}
+    blk = block_of(term, length(trial_leaves), length(test_leaves))
+
+    if blk === nothing
+        for c in 1:min(length(trial_leaves), length(test_leaves))
+            _pattern_term!(I_vec, J_vec, term, first(trial_leaves[c]),
+                first(test_leaves[c]), last(test_leaves[c]), last(trial_leaves[c]))
+        end
+        return nothing
+    end
+
+    tc, sc = blk
+    _pattern_term!(I_vec, J_vec, term, first(trial_leaves[tc]), first(test_leaves[sc]),
+        last(test_leaves[sc]), last(trial_leaves[tc]))
+    return nothing
+end
+
 function allocate_system_matrix(
         form::BilinearForm{D, TrialSpace, TestSpace, FType},
         ast = resolve_form_ast(form)) where {D, TrialSpace <: CompositeGridSpace,
         TestSpace <: CompositeGridSpace, FType}
-    space = form.trial_space
-    N = ncomponents(TrialSpace)
-
-    # Calculate DOF offsets for each subspace
-    offsets = Int[0]
-    for sp in space.spaces
-        push!(offsets, offsets[end] + ndofs(sp))
-    end
-    total_dofs = offsets[end]
+    trial_leaves = leaf_spaces_offsets(form.trial_space)
+    test_leaves = leaf_spaces_offsets(form.test_space)
 
     I_vec = Int[]
     J_vec = Int[]
+    _pattern_blocks!(I_vec, J_vec, ast, trial_leaves, test_leaves)
 
-    # Iterate over each component space
-    for c in 1:N
-        sp = space.spaces[c]
-        offset = offsets[c]
-        Ωₕ = mesh(sp)
-        mesh_markers = markers(Ωₕ)
-        lin_indices = LinearIndices(indices(Ωₕ))
-
-        @inbounds for I in indices(Ωₕ)
-            lin_idx = lin_indices[I]
-            stencil = local_stencil(ast, sp, I, mesh_markers, lin_idx)
-            for (off_u, off_v, _) in stencil
-                Iv = I + CartesianIndex(off_v)
-                Iu = I + CartesianIndex(off_u)
-                if checkbounds(Bool, lin_indices, Iv) && checkbounds(Bool, lin_indices, Iu)
-                    push!(I_vec, lin_indices[Iv] + offset)
-                    push!(J_vec, lin_indices[Iu] + offset)
-                end
-            end
-        end
-    end
-
-    V_vec = _zeros_of(_assembled_eltype(ast, first_space(space)), length(I_vec))
-    return sparse(I_vec, J_vec, V_vec, total_dofs, total_dofs)
+    ncols = ndofs(form.trial_space)
+    nrows = ndofs(form.test_space)
+    V_vec = _zeros_of(_assembled_eltype(ast, first_space(form.trial_space)), length(I_vec))
+    return sparse(I_vec, J_vec, V_vec, nrows, ncols)
 end
 
 # ==============================================================================
@@ -328,23 +356,75 @@ end
 # Helper Cores for Function Barrier Optimization
 # ==============================================================================
 
-function _assemble_bilinear_core!(A::SparseMatrixCSC, space, ast::AST_TYPE,
-        lin_indices, mesh_markers) where {AST_TYPE}
-    for I in indices(mesh(space))
-        lin_idx = lin_indices[I]
-        stencil = local_stencil(ast, space, I, mesh_markers, lin_idx)
+# The scalar case: one block, no offsets.
+function _assemble_bilinear_core!(A::SparseMatrixCSC, trial_space, test_space,
+        ast::AST_TYPE) where {AST_TYPE}
+    _scatter_block!(A, ast, trial_space, 0, 0)
+    return A
+end
+
+# One term into one block, serially. `row_offset` comes from the test leaf and `col_offset`
+# from the trial leaf: a matrix row is indexed by the test function.
+function _scatter_block!(A::SparseMatrixCSC, term::TERM, sp, row_offset::Int,
+        col_offset::Int) where {TERM}
+    Ωₕ = mesh(sp)
+    mesh_markers = markers(Ωₕ)
+    lin_indices = LinearIndices(indices(Ωₕ))
+
+    @inbounds for I in indices(Ωₕ)
+        stencil = local_stencil(term, sp, I, mesh_markers, lin_indices[I])
 
         for (off_u, off_v, weight) in stencil
             Iv = I + CartesianIndex(off_v)
             Iu = I + CartesianIndex(off_u)
 
             if checkbounds(Bool, lin_indices, Iv) && checkbounds(Bool, lin_indices, Iu)
-                row = lin_indices[Iv]
-                col = lin_indices[Iu]
-                add_to_sparse!(A, row, col, weight)
+                add_to_sparse!(A, lin_indices[Iv] + row_offset,
+                    lin_indices[Iu] + col_offset, weight)
             end
         end
     end
+    return A
+end
+
+# Walk the sum and send each term to the blocks it belongs to. The same shape as
+# `_route_terms!` on the vector side, and for the same reason: recursing keeps each term
+# concretely typed at its own call, where flattening into a vector makes every one a dynamic
+# read.
+#
+# A term naming neither side goes to the diagonal blocks, since `Σᵢ innerₕ(uᵢ, vᵢ)` is block
+# diagonal and not full. A term naming both goes to one block, off-diagonal included — which
+# is what the version this replaces could not do: it walked the top-level components with a
+# single offset for row and column, so off-diagonal terms had nowhere to land and
+# `add_to_sparse!` dropped them in silence.
+function _assemble_blocks!(A::SparseMatrixCSC, op::OperatorAdd, trial_leaves, test_leaves)
+    _assemble_blocks!(A, op.left_op, trial_leaves, test_leaves)
+    _assemble_blocks!(A, op.right_op, trial_leaves, test_leaves)
+    return A
+end
+
+function _assemble_blocks!(A::SparseMatrixCSC, term::TERM, trial_leaves,
+        test_leaves) where {TERM}
+    blk = block_of(term, length(trial_leaves), length(test_leaves))
+
+    if blk === nothing
+        for c in 1:min(length(trial_leaves), length(test_leaves))
+            _scatter_block!(A, term, first(test_leaves[c]), last(test_leaves[c]),
+                last(trial_leaves[c]))
+        end
+        return A
+    end
+
+    tc, sc = blk
+    _scatter_block!(A, term, first(test_leaves[sc]), last(test_leaves[sc]),
+        last(trial_leaves[tc]))
+    return A
+end
+
+function _assemble_bilinear_core!(A::SparseMatrixCSC, trial_space::CompositeGridSpace,
+        test_space::CompositeGridSpace, ast::AST_TYPE) where {AST_TYPE}
+    _assemble_blocks!(A, ast, leaf_spaces_offsets(trial_space),
+        leaf_spaces_offsets(test_space))
     return A
 end
 
@@ -357,11 +437,12 @@ end
 #
 # Taken from an evaluated stencil rather than from `stencil_offsets`, which refuses a
 # `BilinearProduct` on purpose: its offsets are pairs, and what is wanted here is one side.
-function _bilinear_colour_strides(ast::AST_TYPE, sp, lin_indices, mesh_markers,
-        ::Val{D}) where {AST_TYPE, D}
-    grid_inds = indices(mesh(sp))
+function _bilinear_colour_strides(ast::AST_TYPE, sp, ::Val{D}) where {AST_TYPE, D}
+    Ωₕ = mesh(sp)
+    grid_inds = indices(Ωₕ)
+    lin_indices = LinearIndices(grid_inds)
     I = grid_inds[length(grid_inds) ÷ 2 + 1]
-    stencil = local_stencil(ast, sp, I, mesh_markers, lin_indices[I])
+    stencil = local_stencil(ast, sp, I, markers(Ωₕ), lin_indices[I])
     isempty(stencil) && return ntuple(_ -> 1, D)
 
     lo = stencil[1][2]
@@ -374,12 +455,12 @@ function _bilinear_colour_strides(ast::AST_TYPE, sp, lin_indices, mesh_markers,
 end
 
 # One colour, threaded, writing straight into the matrix. The colouring is what makes that
-# safe; `add_to_sparse!` is a search into a column, so two threads landing on one entry would
-# race on the value.
-@noinline function _sweep_bilinear_colour!(A::SparseMatrixCSC, sp, ast::AST_TYPE, idxs,
-        lin_indices, mesh_markers, row_offset::Int, col_offset::Int) where {AST_TYPE}
+# safe: `add_to_sparse!` searches a column and updates in place, so two threads landing on
+# one entry would race on the value.
+@noinline function _sweep_bilinear_colour!(A::SparseMatrixCSC, sp, term::TERM, idxs,
+        lin_indices, mesh_markers, row_offset::Int, col_offset::Int) where {TERM}
     Threads.@threads for I in idxs
-        stencil = local_stencil(ast, sp, I, mesh_markers, lin_indices[I])
+        stencil = local_stencil(term, sp, I, mesh_markers, lin_indices[I])
 
         for (off_u, off_v, weight) in stencil
             Iv = I + CartesianIndex(off_v)
@@ -397,62 +478,83 @@ end
 # Every colour in turn, as strided sub-grids rather than a materialised list of indices. The
 # version this replaces binned the whole grid into a `Vector{Vector{CartesianIndex}}` at
 # construction — 9.3 MB at 90,000 degrees of freedom, before a single entry was assembled.
-function _sweep_bilinear!(A::SparseMatrixCSC, sp, ast::AST_TYPE, strides, lin_indices,
-        mesh_markers, row_offset::Int, col_offset::Int) where {AST_TYPE}
-    grid_inds = indices(mesh(sp))
+function _sweep_bilinear!(A::SparseMatrixCSC, sp, term::TERM, strides, row_offset::Int,
+        col_offset::Int) where {TERM}
+    Ωₕ = mesh(sp)
+    grid_inds = indices(Ωₕ)
+    lin_indices = LinearIndices(grid_inds)
+    mesh_markers = markers(Ωₕ)
 
     if prod(strides) == 1
-        _sweep_bilinear_colour!(A, sp, ast, grid_inds, lin_indices, mesh_markers,
+        _sweep_bilinear_colour!(A, sp, term, grid_inds, lin_indices, mesh_markers,
             row_offset, col_offset)
         return A
     end
 
     for c in CartesianIndices(strides)
-        _sweep_bilinear_colour!(A, sp, ast, _colour_subgrid(grid_inds, c, strides),
+        _sweep_bilinear_colour!(A, sp, term, _colour_subgrid(grid_inds, c, strides),
             lin_indices, mesh_markers, row_offset, col_offset)
     end
     return A
 end
 
-function _assemble_bilinear_parallel_core!(
-        A::SparseMatrixCSC, space, ast::AST_TYPE, lin_indices,
-        mesh_markers, strides) where {AST_TYPE}
-    _sweep_bilinear!(A, space, ast, strides, lin_indices, mesh_markers, 0, 0)
+# The threaded counterpart of `_assemble_blocks!`, term outside and grid inside for the same
+# reason the vector side is: routing per point redoes the component walk at every one.
+function _assemble_blocks_parallel!(A::SparseMatrixCSC, op::OperatorAdd, trial_leaves,
+        test_leaves, dim_val::Val)
+    _assemble_blocks_parallel!(A, op.left_op, trial_leaves, test_leaves, dim_val)
+    _assemble_blocks_parallel!(A, op.right_op, trial_leaves, test_leaves, dim_val)
     return A
 end
 
-# The composite case, still block diagonal and still walking the top-level components rather
-# than the leaves — both of which the routing work replaces. Kept only so the colouring
-# change lands on its own.
-function _assemble_bilinear_parallel_core!(
-        A::SparseMatrixCSC, space::CompositeGridSpace{N}, ast::AST_TYPE,
-        lin_indices, mesh_markers, strides) where {N, AST_TYPE}
-    offset = 0
-    for c in 1:N
-        sp = space.spaces[c]
-        _sweep_bilinear!(A, sp, ast, strides, lin_indices, mesh_markers, offset, offset)
-        offset += ndofs(sp)
+function _assemble_blocks_parallel!(A::SparseMatrixCSC, term::TERM, trial_leaves,
+        test_leaves, dim_val::Val) where {TERM}
+    blk = block_of(term, length(trial_leaves), length(test_leaves))
+
+    if blk === nothing
+        for c in 1:min(length(trial_leaves), length(test_leaves))
+            sp = first(test_leaves[c])
+            _sweep_bilinear!(A, sp, term, _bilinear_colour_strides(term, sp, dim_val),
+                last(test_leaves[c]), last(trial_leaves[c]))
+        end
+        return A
     end
+
+    tc, sc = blk
+    sp = first(test_leaves[sc])
+    _sweep_bilinear!(A, sp, term, _bilinear_colour_strides(term, sp, dim_val),
+        last(test_leaves[sc]), last(trial_leaves[tc]))
+    return A
+end
+
+function _assemble_bilinear_parallel_core!(A::SparseMatrixCSC, trial_space, test_space,
+        ast::AST_TYPE, dim_val::Val) where {AST_TYPE}
+    _sweep_bilinear!(A, trial_space, ast,
+        _bilinear_colour_strides(ast, trial_space, dim_val), 0, 0)
+    return A
+end
+
+function _assemble_bilinear_parallel_core!(A::SparseMatrixCSC,
+        trial_space::CompositeGridSpace, test_space::CompositeGridSpace,
+        ast::AST_TYPE, dim_val::Val) where {AST_TYPE}
+    _assemble_blocks_parallel!(A, ast, leaf_spaces_offsets(trial_space),
+        leaf_spaces_offsets(test_space), dim_val)
     return A
 end
 
 """
     assemble!(A::SparseMatrixCSC, form::BilinearForm; dirichlet_labels = nothing, ast = resolve_form_ast(form))
 
-Performs sequential assembly of the `BilinearForm` directly into the preallocated sparse matrix `A`.
+Assembles the `BilinearForm` serially into the preallocated sparse matrix `A`.
 """
 function assemble!(
         A::SparseMatrixCSC, form::BilinearForm{D, TrialSpace, TestSpace, FType};
         dirichlet_labels = nothing,
         ast = resolve_form_ast(form)) where {D, TrialSpace, TestSpace, FType}
     _validate_dirichlet_labels(dirichlet_labels)
-    fill!(nonzeros(A), 0.0)
-    space = form.trial_space
-    Ωₕ = mesh(space)
-    mesh_markers = markers(Ωₕ)
-    lin_indices = LinearIndices(indices(Ωₕ))
+    fill!(nonzeros(A), zero(eltype(nonzeros(A))))
 
-    _assemble_bilinear_core!(A, space, ast, lin_indices, mesh_markers)
+    _assemble_bilinear_core!(A, form.trial_space, form.test_space, ast)
 
     apply_dirichlet_labels!(A, form, dirichlet_labels)
     return A
@@ -461,25 +563,15 @@ end
 """
     assemble_parallel!(A::SparseMatrixCSC, form::BilinearForm, ast = resolve_form_ast(form))
 
-Performs multi-threaded parallel assembly using lock-free multi-coloring partition, strictly allocation-free at runtime.
+Assembles the `BilinearForm` into `A` across threads, one colour of the grid at a time.
 """
 function assemble_parallel!(
         A::SparseMatrixCSC, form::BilinearForm{D, TrialSpace, TestSpace, FType},
         ast = resolve_form_ast(form)) where {D, TrialSpace, TestSpace, FType}
-
-    # Reset tracking arrays in place without reallocating
-    fill!(nonzeros(A), 0.0)
-
-    space = form.trial_space
-    Ωₕ = mesh(space)
-    mesh_markers = markers(Ωₕ)
-    lin_indices = LinearIndices(indices(Ωₕ))
-
-    strides = _bilinear_colour_strides(
-        ast, first_space(space), lin_indices, mesh_markers, Val(D))
+    fill!(nonzeros(A), zero(eltype(nonzeros(A))))
 
     _assemble_bilinear_parallel_core!(
-        A, space, ast, lin_indices, mesh_markers, strides)
+        A, form.trial_space, form.test_space, ast, Val(D))
 
     return A
 end

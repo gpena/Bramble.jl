@@ -116,6 +116,7 @@ if __bramble_with_unit_tests
             include("form/operators.jl")
             include("form/inner_products.jl")
             include("form/linear.jl")
+            include("form/bilinear.jl")
             include("form/extended_operators.jl")
             include("form/symmetrize.jl")
             include("form/autodiff.jl")

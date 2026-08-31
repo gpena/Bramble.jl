@@ -205,6 +205,83 @@ end
 test_component_or_nothing(::Any) = nothing
 
 """
+    trial_component_or_nothing(op) -> Union{Int, Nothing}
+
+The trial component `op` is written against, or `nothing` when it names none.
+
+The trial-side mirror of [`test_component_or_nothing`](@ref), and needed for the same
+reason one step further on: a bilinear form's term belongs to a *block*, which takes a
+component from each side. A term naming neither is the same integrand in every diagonal
+block; a term naming both is one block; and a term naming one but not the other is not
+something the mathematics can express, so it is an error rather than a guess.
+"""
+trial_component_or_nothing(op::IndexedTrialFunction) = op.component_idx
+trial_component_or_nothing(op::BilinearProduct) = trial_component_or_nothing(op.left_op)
+trial_component_or_nothing(op::BackwardDifference) = trial_component_or_nothing(op.inner_op)
+trial_component_or_nothing(op::ForwardDifference) = trial_component_or_nothing(op.inner_op)
+trial_component_or_nothing(op::CenteredDifference) = trial_component_or_nothing(op.inner_op)
+trial_component_or_nothing(op::StarDifference) = trial_component_or_nothing(op.inner_op)
+function trial_component_or_nothing(op::CrossWeightedDifference)
+    trial_component_or_nothing(op.inner_op)
+end
+trial_component_or_nothing(op::JumpNode) = trial_component_or_nothing(op.inner_op)
+trial_component_or_nothing(op::BackwardAverage) = trial_component_or_nothing(op.inner_op)
+trial_component_or_nothing(op::ForwardAverage) = trial_component_or_nothing(op.inner_op)
+trial_component_or_nothing(op::ShiftNode) = trial_component_or_nothing(op.inner_op)
+trial_component_or_nothing(op::OperatorScale) = trial_component_or_nothing(op.inner_op)
+trial_component_or_nothing(op::GridFunctionScale) = trial_component_or_nothing(op.inner_op)
+trial_component_or_nothing(op::RegionRestriction) = trial_component_or_nothing(op.inner_op)
+
+function trial_component_or_nothing(op::OperatorAdd)
+    l = trial_component_or_nothing(op.left_op)
+    r = trial_component_or_nothing(op.right_op)
+    l === r && return l
+    return _throw_mixed_components(l, r)
+end
+
+trial_component_or_nothing(::Any) = nothing
+
+"""
+    block_of(term, nblocks_trial, nblocks_test) -> Union{Nothing, Tuple{Int, Int}}
+
+The `(trial, test)` block `term` belongs to, or `nothing` when it belongs to every diagonal
+block.
+
+A term naming neither side is the same integrand on each block, which for a matrix means the
+diagonal — `Σᵢ innerₕ(uᵢ, vᵢ)` is block diagonal, not full. A term naming both is one block.
+A term naming one and not the other is refused: `innerₕ(u(1), v)` is not something written
+in a variational formulation, and reading it as a whole row or column of blocks would be a
+guess about what was meant.
+"""
+function block_of(term, nblocks_trial::Int, nblocks_test::Int)
+    tc = trial_component_or_nothing(term)
+    sc = test_component_or_nothing(term)
+
+    tc === nothing && sc === nothing && return nothing
+    (tc === nothing || sc === nothing) && _throw_half_named_block(tc, sc)
+
+    1 <= tc <= nblocks_trial || _throw_block_out_of_range("trial", tc, nblocks_trial)
+    1 <= sc <= nblocks_test || _throw_block_out_of_range("test", sc, nblocks_test)
+    return (tc, sc)
+end
+
+@noinline function _throw_half_named_block(tc, sc)
+    named, missing_side = tc === nothing ? ("test", "trial") : ("trial", "test")
+    throw(ArgumentError(
+        "a term of this form names its $named component but not its $missing_side one. " *
+        "A block of a bilinear form takes a component from each side: write " *
+        "innerₕ(u(i), v(j)) for one block, or innerₕ(u, v) for the same integrand on " *
+        "every diagonal block."))
+end
+
+@noinline function _throw_block_out_of_range(side::String, c::Int, n::Int)
+    throw(ArgumentError(
+        "a term of this form names $side component $c, and that side has $n blocks. " *
+        "Components are numbered 1 to $n; a term written for a wider space contributes " *
+        "nothing here, which is why this is an error rather than an empty block."))
+end
+
+"""
     routes_by_component(op) -> Bool
 
 Whether `op` names components anywhere inside it, and so has to be split across the blocks
