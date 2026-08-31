@@ -224,7 +224,7 @@ end
 # Rₕ and avgₕ specialise on the caller's function type, so the method instances
 # cached for the closures below are never reused by a user's own function. What
 # this workload does cache is everything around them, which dominates: the grid
-# space and buffer construction, the generated Gauss rule, the parallel-for
+# space construction, the generated Gauss rule, the parallel-for
 # skeleton and the vector element arithmetic are all closure-independent. On a
 # 21-point 1D space that is a first avgₕ of 1.76 s against 0.02 s, and a first
 # grid space of 0.29 s against 0.02 s.
@@ -414,28 +414,6 @@ function _pc_operator_session(uₕ, cₕ, dim_val::Val)
     kₕ = components(cₕ)[1]
     _pc_directional_ops(kₕ, dim_val)
     _pc_inner_products(kₕ, dim_val)
-    return nothing
-end
-
-# Buffer pool. Not reachable from a grid space session: gridspace allocates its
-# buffers lazily, so the lock, release and grow paths are only compiled here.
-function _pc_space_buffers(be)
-    vb = vector_buffer(be, 10)
-    in_use(vb)
-    vector(vb)
-    lock!(vb)
-    unlock!(vb)
-
-    gsb = simple_space_buffer(be, 10; nbuffers = 2)
-    nbuffers(gsb)
-    add_buffer!(gsb)
-
-    v, key = vector_buffer(gsb)      # hands back a locked buffer
-    other = key == 1 ? 2 : 1
-    lock!(gsb, other)
-    unlock!(gsb, other)
-    unlock!(gsb, key)
-
     return nothing
 end
 
@@ -755,7 +733,6 @@ if PRECOMPILE_WORKLOAD
             _pc_operator_session(e1, c1, Val(1))
             _pc_operator_session(e2, c2, Val(2))
             _pc_operator_session(e3, c3, Val(3))
-            _pc_space_buffers(be)
 
             # The symbolic layer. Not reachable from the space sessions: a LazyOp tree is
             # built from IdentityOperator and the trial/test leaves, not from a grid
