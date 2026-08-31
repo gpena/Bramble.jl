@@ -134,7 +134,7 @@ struct TestFunction{D} <: LazyOp{D} end
 An AST node representing the symbolic trial function for a specific **component**
 of a composite trial space. Carries a runtime `component_idx` identifying which
 leaf scalar space (1-based, depth-first order) it belongs to. Used by
-`CoupledBilinearForm` to route stencil contributions to the correct block.
+a coupled form to route stencil contributions to the correct block.
 """
 struct IndexedTrialFunction{D} <: LazyOp{D}
     component_idx::Int
@@ -145,7 +145,7 @@ end
 
 An AST node representing the symbolic test function for a specific **component**
 of a composite test space. Carries a runtime `component_idx`. Used by
-`CoupledBilinearForm` to route stencil contributions to the correct block.
+a coupled form to route stencil contributions to the correct block.
 """
 struct IndexedTestFunction{D} <: LazyOp{D}
     component_idx::Int

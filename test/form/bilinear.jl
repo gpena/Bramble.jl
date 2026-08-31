@@ -138,6 +138,46 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
         end
     end
 
+    @testset "nesting is just more leaves" begin
+        # A composite of composites needs no separate type and no separate constructor. Its
+        # blocks are numbered by leaf, so a two-by-two nesting is four blocks addressed
+        # `u(1)` through `u(4)` — the same spelling a flat space uses, and the same one
+        # `linear.jl` uses for a right-hand side.
+        #
+        # There used to be a `CoupledBilinearForm` reached only when a space was
+        # hierarchical, taking its expression as nested tuples: `((u, p), (v, q)) -> ...`.
+        # It was the only way to reach an off-diagonal block, which is why a flat space
+        # could not have one.
+        nested = Bramble.CompositeGridSpace((gridspace(Ωₕ, Val(2)), gridspace(Ωₕ, Val(2))))
+        @test length(Bramble.leaf_spaces_offsets(nested)) == 4
+        @test ndofs(nested) == 4n
+
+        blk(A, i, j) = Matrix(A)[((i - 1) * n + 1):(i * n), ((j - 1) * n + 1):(j * n)]
+
+        A = assemble(form(nested, nested, (u, v) -> innerₕ(u(1), v(3))))
+        @test blk(A, 3, 1) ≈ H
+        for i in 1:4, j in 1:4
+
+            (i == 3 && j == 1) && continue
+            @test all(iszero, blk(A, i, j))
+        end
+
+        Ad = assemble(form(nested, nested, (u, v) -> innerₕ(u, v)))
+        for i in 1:4
+            @test blk(Ad, i, i) ≈ H
+        end
+
+        a = form(nested, nested, (u, v) -> innerₕ(u(2), v(4)) + innerₕ(u, v))
+        Ap = assemble(a)
+        As = similar(sparse(Ap))
+        assemble!(As, a)
+        @test Matrix(As) ≈ Matrix(Ap)
+
+        # and the range check counts leaves, not top-level components
+        @test_throws ArgumentError assemble(form(nested, nested,
+            (u, v) -> innerₕ(u(1), v(5))))
+    end
+
     @testset "a term has to name both components or neither" begin
         Vₕ = gridspace(Ωₕ, Val(2))
 

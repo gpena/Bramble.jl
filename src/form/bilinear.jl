@@ -41,36 +41,8 @@ Returns the test space of the bilinear form.
 """
 test_space(form::BilinearForm) = form.test_space
 
-# ==============================================================================
-# CoupledBilinearForm (off-diagonal block coupling)
-# ==============================================================================
-
-"""
-    CoupledBilinearForm{D}
-
-A bilinear form on a **hierarchical** composite trial/test space, supporting
-full off-diagonal coupling between different field components. The user-provided
-lambda receives named tuple arguments matching the block structure, and the
-assembled matrix contains all coupling blocks.
-
-# Fields
-- `trial_space`: hierarchical `CompositeGridSpace` for the trial field.
-- `test_space`: hierarchical `CompositeGridSpace` for the test field.
-- `block_asts`: `(n_test_leaves × n_trial_leaves)` matrix of per-block ASTs (or `nothing`).
-- `trial_leaf_info`: flat list of `(ScalarGridSpace, dof_offset)` pairs for trial.
-- `test_leaf_info`: flat list of `(ScalarGridSpace, dof_offset)` pairs for test.
-"""
-struct CoupledBilinearForm{D}
-    trial_space::Any
-    test_space::Any
-    block_asts::Matrix{Any}           # (n_test_leaves, n_trial_leaves)
-    trial_leaf_info::Vector{Any}      # Vector of (ScalarGridSpace, Int)
-    test_leaf_info::Vector{Any}       # Vector of (ScalarGridSpace, Int)
-end
-
-trial_space(form::CoupledBilinearForm) = form.trial_space
-test_space(form::CoupledBilinearForm) = form.test_space
-
+# `a(uₕ, vₕ) = vᵀ A u`. Assembles a whole matrix per call, which is what makes it a
+# convenience rather than something to put in a loop.
 @inline (form::BilinearForm)(u, v) = dot(v, assemble(form) * u)
 
 """
@@ -86,22 +58,22 @@ Fully resolves grid coefficient functions and scales inside the bilinear form's 
 """
     form(Wₕ, Vₕ, f)
 
-Constructs a `BilinearForm` over the trial space `Wₕ` and test space `Vₕ` using the bilinear expression `f`.
+Constructs a `BilinearForm` over the trial space `Wₕ` and the test space `Vₕ` from the
+bilinear expression `f`, a function of a trial and a test argument.
 
-The constructor evaluates the stencil of the operator at a representative node to compute the safe multi-coloring stride needed for race-free parallel assembly.
-
-If both `Wₕ` and `Vₕ` are **hierarchical** `CompositeGridSpace`s (i.e. their top-level components are themselves `CompositeGridSpace`s), the lambda `f` is expected to accept **tuple arguments** matching the block structure (e.g. `((u, p), (v, q)) -> ...`), and a `CoupledBilinearForm` is returned instead.
+A composite space needs no separate constructor and no separate type. Its blocks are
+addressed by leaf index, `u(i)` and `v(j)`, whatever the nesting: `leaf_spaces_offsets`
+flattens a space of spaces into leaves, so a two-by-two nesting is four blocks numbered one
+to four. A term naming neither side is the same integrand on every diagonal block, and one
+naming both is the single block it belongs to, off-diagonal included.
 
 # Examples
 ```julia
-# 1D Poisson bilinear form: a(u, v) = (∇u, ∇v)
-a = form(Wh, Wh, (u, v) -> inner₊(D₋ₓ(u), D₋ₓ(v)))
+# a(u, v) = (∇₋ₕu, ∇₋ₕv)₊
+a = form(Wₕ, Wₕ, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
 
-# Coupled Stokes form on X = (Vh × Wh):
-a = form(X, X, ((u, p), (v, q)) ->
-    inner₊(∇₋ₕ(u), ∇₋ₕ(v)) +
-    innerₕ(D₋ₓ(u[1]), q) + innerₕ(D₋ᵧ(u[2]), q) +
-    inner₊(p, D₋ₓ(v[1])) + inner₊(p, D₋ᵧ(v[2])))
+# a coupled system, one term per block
+a = form(Vₕ, Vₕ, (u, v) -> inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + innerₕ(u(2), v(1)))
 ```
 """
 function form(Wₕ, Vₕ, f)
@@ -113,59 +85,6 @@ function form(Wₕ, Vₕ, f)
     _validate_form_expression(f(TrialFunction{D}(), TestFunction{D}()), Val(D))
 
     return BilinearForm{D, typeof(Wₕ), typeof(Vₕ), typeof(f)}(Wₕ, Vₕ, f)
-end
-
-"""
-    form(trial_space::CompositeGridSpace, test_space::CompositeGridSpace, f)
-
-Specialized constructor for coupled bilinear forms on hierarchical composite spaces.
-Detected when both spaces have at least one component that is itself a `CompositeGridSpace`.
-The lambda `f` receives a tuple of symbolic trial args and a tuple of test args matching
-the block structure of `trial_space` and `test_space`.
-"""
-function form(trial_space::CompositeGridSpace, test_space::CompositeGridSpace, f)
-    if is_hierarchical(trial_space) || is_hierarchical(test_space)
-        return _build_coupled_bilinear_form(trial_space, test_space, f)
-    else
-        # Fall through to the general constructor. Which blocks a term reaches is decided
-        # at assembly, not here.
-        D = dim(trial_space)
-        _validate_form_expression(f(TrialFunction{D}(), TestFunction{D}()), Val(D))
-
-        return BilinearForm{
-            D, typeof(trial_space), typeof(test_space), typeof(f)}(
-            trial_space, test_space, f)
-    end
-end
-
-"""
-    _build_coupled_bilinear_form(trial_space, test_space, f)
-
-Internal constructor for `CoupledBilinearForm`. Generates indexed symbolic arguments
-matching the block hierarchy, calls the lambda to build the full AST, then decomposes
-it into per-block sub-ASTs using `extract_block_asts`.
-"""
-function _build_coupled_bilinear_form(trial_space::CompositeGridSpace, test_space::CompositeGridSpace, f)
-    D = dim(trial_space)
-
-    # Generate symbolic trial/test args matching the hierarchical block structure
-    trial_args = make_trial_args(trial_space, D)
-    test_args = make_test_args(test_space, D)
-
-    # Build full coupled AST
-    ast = f(trial_args, test_args)
-
-    # Flatten to leaf spaces for assembly
-    trial_leaf_info = collect_leaf_spaces_offsets(trial_space)
-    test_leaf_info = collect_leaf_spaces_offsets(test_space)
-    NT = length(trial_leaf_info)
-    NS = length(test_leaf_info)
-
-    # Decompose AST into (NS × NT) block matrix
-    block_asts = extract_block_asts(ast, NT, NS)
-
-    return CoupledBilinearForm{D}(
-        trial_space, test_space, block_asts, trial_leaf_info, test_leaf_info)
 end
 
 # ==============================================================================
@@ -573,137 +492,5 @@ function assemble_parallel!(
     _assemble_bilinear_parallel_core!(
         A, form.trial_space, form.test_space, ast, Val(D))
 
-    return A
-end
-
-# ==============================================================================
-# CoupledBilinearForm Assembly
-# ==============================================================================
-
-"""
-    allocate_system_matrix(form::CoupledBilinearForm)
-
-Allocates a sparse matrix for the coupled block system. The sparsity pattern is
-determined by scanning all non-zero block ASTs and collecting the (row, col) pairs
-they can contribute to (including their global DOF offsets).
-"""
-function allocate_system_matrix(form::CoupledBilinearForm{D}) where {D}
-    NS = size(form.block_asts, 1)
-    NT = size(form.block_asts, 2)
-
-    total_test_dofs = sum(info -> ndofs(info[1]), form.test_leaf_info)
-    total_trial_dofs = sum(info -> ndofs(info[1]), form.trial_leaf_info)
-
-    I_vec = Int[]
-    J_vec = Int[]
-
-    for i in 1:NS, j in 1:NT
-
-        ast_ij = form.block_asts[i, j]
-        ast_ij === nothing && continue
-
-        sp_test, offset_row = form.test_leaf_info[i]
-        sp_trial, offset_col = form.trial_leaf_info[j]
-
-        Ωₕ = mesh(sp_test)
-        mesh_markers = markers(Ωₕ)
-        lin_indices = LinearIndices(indices(Ωₕ))
-
-        for I in indices(Ωₕ)
-            lin_idx = lin_indices[I]
-            stencil = local_stencil(ast_ij, sp_test, I, mesh_markers, lin_idx)
-
-            for (off_u, off_v, _) in stencil
-                Iv = I + CartesianIndex(off_v)
-                Iu = I + CartesianIndex(off_u)
-                if checkbounds(Bool, lin_indices, Iv) && checkbounds(Bool, lin_indices, Iu)
-                    push!(I_vec, lin_indices[Iv] + offset_row)
-                    push!(J_vec, lin_indices[Iu] + offset_col)
-                end
-            end
-        end
-    end
-
-    V_vec = zeros(Float64, length(I_vec))
-    return sparse(I_vec, J_vec, V_vec, total_test_dofs, total_trial_dofs)
-end
-
-"""
-    apply_dirichlet_labels!(A::AbstractMatrix, form::CoupledBilinearForm, dirichlet_labels)
-
-Applies Dirichlet boundary conditions to the assembled coupled system matrix.
-"""
-function apply_dirichlet_labels!(A::AbstractMatrix, form::CoupledBilinearForm, dirichlet_labels)
-    if dirichlet_labels !== nothing
-        if dirichlet_labels isa Symbol
-            dirichlet_bc!(A, form.trial_space, dirichlet_labels)
-        elseif dirichlet_labels isa Tuple && !isempty(dirichlet_labels)
-            dirichlet_bc!(A, form.trial_space, dirichlet_labels...)
-        end
-    end
-end
-
-"""
-    assemble(form::CoupledBilinearForm; dirichlet_labels = nothing)
-
-Assembles the full coupled block system matrix for the `CoupledBilinearForm`.
-Each non-null block `(i,j)` is assembled separately using the appropriate leaf
-scalar spaces and global DOF offsets, then contributions are added to the
-preallocated sparse matrix with the correct (row, col) block positions.
-"""
-function assemble(form::CoupledBilinearForm{D}; dirichlet_labels = nothing) where {D}
-    _validate_dirichlet_labels(dirichlet_labels)
-
-    A = allocate_system_matrix(form)
-    NS = size(form.block_asts, 1)
-    NT = size(form.block_asts, 2)
-
-    for i in 1:NS, j in 1:NT
-
-        ast_ij = form.block_asts[i, j]
-        ast_ij === nothing && continue
-
-        # Resolve any lazy grid coefficients in this block's AST
-        ast_resolved = resolve_ast(ast_ij)
-
-        sp_test, offset_row = form.test_leaf_info[i]
-        sp_trial, offset_col = form.trial_leaf_info[j]
-
-        Ωₕ = mesh(sp_test)
-        mesh_markers = markers(Ωₕ)
-        lin_indices = LinearIndices(indices(Ωₕ))
-
-        _assemble_coupled_block!(
-            A, ast_resolved, sp_test, lin_indices, mesh_markers, offset_row, offset_col)
-    end
-
-    apply_dirichlet_labels!(A, form, dirichlet_labels)
-    return A
-end
-
-"""
-    _assemble_coupled_block!(A, ast, sp, lin_indices, mesh_markers, offset_row, offset_col)
-
-Core loop for assembling a single `(i,j)` block of a `CoupledBilinearForm` into
-the full sparse matrix `A`. Contributions are offset by `offset_row` (test DOFs)
-and `offset_col` (trial DOFs).
-"""
-function _assemble_coupled_block!(A::SparseMatrixCSC, ast, sp, lin_indices, mesh_markers,
-        offset_row::Int, offset_col::Int)
-    for I in indices(mesh(sp))
-        lin_idx = lin_indices[I]
-        stencil = local_stencil(ast, sp, I, mesh_markers, lin_idx)
-
-        for (off_u, off_v, weight) in stencil
-            Iv = I + CartesianIndex(off_v)
-            Iu = I + CartesianIndex(off_u)
-
-            if checkbounds(Bool, lin_indices, Iv) && checkbounds(Bool, lin_indices, Iu)
-                row = lin_indices[Iv] + offset_row
-                col = lin_indices[Iu] + offset_col
-                add_to_sparse!(A, row, col, weight)
-            end
-        end
-    end
     return A
 end

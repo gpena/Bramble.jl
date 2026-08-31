@@ -142,7 +142,7 @@ include("space/inner_product.jl")
 # space/operators/linear_operators.jl.
 include("form/common.jl")
 
-# block_extract.jl adds block extraction for CoupledBilinearForm and, with it,
+# block_extract.jl adds the component walks a coupled form routes by and, with it,
 # `collect_leaf_spaces_offsets`, which walks a nested space's leaves and their dof offsets.
 # component.jl indexes a node by component, and needs every node type in its signatures, so
 # it comes after common.jl and the operator files it includes.
