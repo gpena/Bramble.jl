@@ -56,16 +56,16 @@ jobs:
 
       - uses: julia-actions/julia-buildpkg@v1
 
-      # Only the two expensive backends. ReverseDiff and PolyesterForwardDiff are declared
-      # in test/Project.toml and run on every push — they cost 1.1 s between them. Mooncake
-      # and Enzyme are installed here instead so that an ordinary test run never resolves
-      # them. Failing to add one is not fatal: the test file skips a backend it cannot
+      # ReverseDiff is declared in test/Project.toml and runs on every push. These three
+      # are installed here so an ordinary test run never resolves them: Mooncake and Enzyme
+      # because they are slow to compile, PolyesterForwardDiff because it adds nothing
+      # ForwardDiff does not cover and nests threading inside kernels that already thread. Failing to add one is not fatal: the test file skips a backend it cannot
       # load, and the run still reports on the others.
       - name: Add the expensive differentiation backends
         run: |
           julia --project=test -e '
             using Pkg
-            for p in ("Mooncake", "Enzyme")
+            for p in ("PolyesterForwardDiff", "Mooncake", "Enzyme")
                 try
                     Pkg.add(p)
                 catch err

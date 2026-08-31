@@ -153,6 +153,9 @@ end
 
 if __bramble_with_ad_backends
     @testset verbose=true "AD backends (expensive)" begin
+        # autodiff_backends.jl first: it defines `check_backend` and `_have`, which this
+        # reuses so both files check every backend the same way.
+        __bramble_with_unit_tests || include("space/autodiff_backends.jl")
         include("space/autodiff_heavy.jl")
     end
 end
