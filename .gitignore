@@ -92,3 +92,8 @@ test_code_warntype/
 LocalPreferences.toml
 AGENTS.md
 polygonal_mesh_plan.md
+
+# The manual is written and built outside version control, by request.
+# This covers its sources, its LaTeX build products and the design preview.
+manual/
+docs/manual_design_preview.html
