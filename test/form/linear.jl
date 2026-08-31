@@ -1,12 +1,13 @@
 using Test
 using Bramble
 using ForwardDiff
-using LinearAlgebra: Diagonal, diag, dot
+using LinearAlgebra: Diagonal, diag, dot, I
 using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_space,
                element, resolve_form_ast, apply_dirichlet_conditions!, LinearProduct,
                values, ParallelWorkspace, TestFunction, TrialFunction,
                IndexedTestFunction, IndexedTrialFunction, test_component_or_nothing,
-               routes_by_component, component, components
+               routes_by_component, component, components, _colour_strides,
+               stencil_offsets, ndofs, Innerh, Innerplus
 
 # Assembling the right-hand side of a system.
 #
@@ -271,16 +272,32 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
     end
 
     @testset "the parallel path agrees with the serial one" begin
-        # Not the default, and the docstring says why — slower at every size measured. It
-        # still has to give the same answer.
-        #
         # Note what this does and does not establish. `Pkg.test()` runs on one thread unless
-        # the environment says otherwise, and on one thread the threaded core is a degenerate
-        # case: the per-thread buffers and the cross-thread reduction never actually race. CI
-        # sets JULIA_NUM_THREADS=auto, so it is exercised there. The concurrent assertions
-        # below are skipped rather than passed when only one thread is available, so a
+        # the environment says otherwise, and on one thread the sweep is a degenerate case:
+        # the colours never actually run concurrently, so nothing can race. CI sets
+        # JULIA_NUM_THREADS=auto, so it is exercised there. The concurrent assertions below
+        # are skipped rather than passed when only one thread is available, so a
         # single-threaded run cannot claim to have tested concurrency.
         @info "parallel assembly tested on $(Threads.nthreads()) thread(s)"
+
+        @testset "the colouring the sweep partitions by" begin
+            # Two points of one colour must have disjoint write footprints, so the stride is
+            # the span of the reach plus one.
+            @test _colour_strides([(0,)]) == (1,)
+            @test _colour_strides([(0,), (-1,)]) == (2,)
+            @test _colour_strides([(-1, 0), (0, 0), (1, 0)]) == (3, 1)
+            @test _colour_strides([(0, -1), (0, 0)]) == (1, 2)
+            @test _colour_strides(NTuple{2, Int}[]) == (1, 1)
+
+            # and read off a real form, an operator reaching only its own point gives one
+            # colour — the whole grid in a single flat pass — while a difference gives two
+            plain = _colour_strides(stencil_offsets(resolve_form_ast(
+                form(Wₕ, v -> innerₕ(uₕ, v)))))
+            wide = _colour_strides(stencil_offsets(resolve_form_ast(
+                form(Wₕ, v -> innerₕ(uₕ, D₋ₓ(v))))))
+            @test prod(plain) == 1
+            @test prod(wide) == 2
+        end
 
         for (nm, sp, u) in (("scalar", Wₕ, uₕ),
             ("composite", Vₕ, Rₕ(Vₕ, (x -> sin(x[1]), x -> cos(x[2])))(1)))
@@ -291,10 +308,40 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
             @test bp ≈ bs
         end
 
+        # The sweep accumulates where the version before it overwrote from a reduction, so a
+        # vector assembled into twice has to give the same answer and not double it.
+        lfr = form(Wₕ, v -> innerₕ(uₕ, v))
+        br = zeros(ndofs(Wₕ))
+        assemble_parallel!(br, lfr)
+        first_pass = copy(br)
+        assemble_parallel!(br, lfr)
+        @test br ≈ first_pass
+
+        @testset "differentiating through the parallel sweep" begin
+            # The per-thread buffers this path used to carry were `Vector{Float64}`
+            # outright, so a Dual-valued assembly could not take it at all. Nothing in the
+            # sweep names an element type now, so it can.
+            Ωa = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (12, 12),
+                (true, true))
+            Wa = gridspace(Ωa)
+            resid(w, into!) = begin
+                uu = element(Wa, w)
+                bb = zeros(eltype(w), ndofs(Wa))
+                into!(bb, form(Wa, v -> innerₕ(uu, v)))
+                sum(bb)
+            end
+            w0 = fill(0.5, ndofs(Wa))
+            gp = ForwardDiff.gradient(w -> resid(w, assemble_parallel!), w0)
+            gs = ForwardDiff.gradient(w -> resid(w, (bb, f) -> assemble!(bb, f)), w0)
+
+            @test gp ≈ gs
+            @test all(isfinite, gp)
+            @test !all(iszero, gp)
+        end
+
         if Threads.nthreads() > 1
-            # More work than threads, so every thread gets a chunk and the reduction has
-            # something to combine. A race in the scatter, or a buffer left unzeroed, shows
-            # here and nowhere else.
+            # More work than threads, so every thread gets a chunk of every colour. A race
+            # in the scatter shows here and nowhere else.
             Ωb = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (40, 40),
                 (true, true))
             Wb = gridspace(Ωb)
@@ -310,19 +357,107 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
             assemble_parallel!(bp2, lfb)
             @test bp2 == bp
 
-            # and the coupled path under threads
+            # A form whose test argument carries differences colours into more than one
+            # group, so the sweep takes the strided path rather than the single flat pass.
+            # Every one of these is a distinct arrangement of the routing, and the
+            # single-colour cases above exercise none of them.
+            for (cnm, g) in (
+                ("one difference", v -> innerₕ(ub, D₋ₓ(v))),
+                ("a linear combination", v -> innerₕ(ub, v + 2 * D₋ₓ(v) - M₋ₓ(v))),
+                ("innerₕ and inner₊ mixed", v -> innerₕ(ub, v) + inner₊(ub, D₋ₓ(v))),
+                ("differences in both directions",
+                v -> innerₕ(ub, D₋ₓ(v)) + innerₕ(ub, D₋ᵧ(v))))
+                lfw = form(Wb, g)
+                @test prod(_colour_strides(stencil_offsets(resolve_form_ast(lfw)))) > 1
+                bw = assemble(lfw)
+                bwp = similar(bw)
+                assemble_parallel!(bwp, lfw)
+                @test bwp ≈ bw
+            end
+
+            # and the coupled path under threads, in each of its arrangements: the terms
+            # written out per component, the shorthand that sums them, a routed term
+            # carrying operators, and a term whose source and test components differ
             Vb = gridspace(Ωb, Val(2))
             uv2 = Rₕ(Vb, (x -> x[1], x -> 10 * x[1]))
-            lfc = form(Vb, v -> innerₕ(uv2(1), v(1)) + innerₕ(uv2(2), v(2)))
-            bc = assemble(lfc)
-            bcp = similar(bc)
-            assemble_parallel!(bcp, lfc)
-            @test bcp ≈ bc
+            cv = components(uv2)
+            for (cnm, g) in (
+                ("per component", v -> innerₕ(cv[1], v(1)) + innerₕ(cv[2], v(2))),
+                ("the shorthand", v -> innerₕ(uv2, v)),
+                ("the shorthand with operators", v -> innerₕ(uv2, v + D₋ₓ(v))),
+                ("routed, with operators",
+                v -> innerₕ(cv[1], v(1) + 2 * D₋ₓ(v(1))) + innerₕ(cv[2], v(2))),
+                ("crossed components", v -> innerₕ(cv[1], v(2))),
+                ("a routed term beside an unrouted one",
+                v -> innerₕ(cv[1], v(1)) + innerₕ(uv2, v)))
+                lfc = form(Vb, g)
+                bc = assemble(lfc)
+                bcp = similar(bc)
+                assemble_parallel!(bcp, lfc)
+                @test bcp ≈ bc
+            end
         else
             @test_skip "concurrency not exercised: only one thread available"
             @test_skip "repeatability under threads not exercised"
+            @test_skip "multi-colour parallel path under threads not exercised"
             @test_skip "coupled parallel path under threads not exercised"
         end
+    end
+
+    @testset "the symbolic assembly is the matrix expression" begin
+        # A linear form is `v -> (Au, v)` for some operator `A` and inner product, so its
+        # assembled vector has to be `Aᵀ H u` exactly: `H` the diagonal weight matrix of the
+        # inner product, `A` the operator's own sparse matrix. Both are built by code that
+        # shares nothing with `local_stencil`, which is what makes this an independent check
+        # rather than a restatement — the two agree or one of them is wrong.
+        n = ndofs(Wₕ)
+        uu = values(uₕ)
+        Hh = Diagonal(collect(weights(Wₕ, Innerh())))
+        Hpx = Diagonal(collect(weights(Wₕ, Innerplus(), 1)))
+        Dx = Matrix(D₋ₓ(Wₕ))
+        Mx = Matrix(M₋ₓ(Wₕ))
+        Idm = Matrix(1.0I, n, n)
+
+        @test assemble(form(Wₕ, v -> innerₕ(uₕ, v))) ≈ Hh * uu
+        @test assemble(form(Wₕ, v -> innerₕ(uₕ, D₋ₓ(v)))) ≈ transpose(Dx) * (Hh * uu)
+        @test assemble(form(Wₕ, v -> innerₕ(uₕ, M₋ₓ(v)))) ≈ transpose(Mx) * (Hh * uu)
+        @test assemble(form(Wₕ, v -> inner₊ₓ(uₕ, D₋ₓ(v)))) ≈ transpose(Dx) * (Hpx * uu)
+
+        # a linear combination of operators in the test argument is the same combination of
+        # their matrices, and inner products of different kinds add
+        @test assemble(form(Wₕ, v -> innerₕ(uₕ, v + 2 * D₋ₓ(v) - M₋ₓ(v)))) ≈
+              transpose(Idm + 2 * Dx - Mx) * (Hh * uu)
+        @test assemble(form(Wₕ, v -> innerₕ(uₕ, v) + inner₊ₓ(uₕ, D₋ₓ(v)))) ≈
+              Hh * uu + transpose(Dx) * (Hpx * uu)
+
+        # and the Jacobian of a nonlinear residual is the same expression with the
+        # nonlinearity's own derivative on the diagonal. This is the shape a Newton step
+        # needs, so it is worth pinning: differentiating the assembly agrees with assembling
+        # the derivative.
+        resid(g) = w -> begin
+            b = zeros(eltype(w), n)
+            assemble!(b, form(Wₕ, v -> g(element(Wₕ, w .^ 2), v)))
+            b
+        end
+        w0 = collect(range(0.3, 1.7; length = n))
+        dg = Diagonal(2 .* w0)
+
+        @test ForwardDiff.jacobian(resid((s, v) -> innerₕ(s, v)), w0) ≈ Hh * dg
+        @test ForwardDiff.jacobian(resid((s, v) -> innerₕ(s, D₋ₓ(v))), w0) ≈
+              transpose(Dx) * Hh * dg
+        @test ForwardDiff.jacobian(resid((s, v) -> inner₊ₓ(s, D₋ₓ(v))), w0) ≈
+              transpose(Dx) * Hpx * dg
+
+        # the Jacobian's sparsity is the stencil's, which is what makes a sparse-AD colouring
+        # unnecessary here: the pattern is known from the AST before anything is evaluated
+        Jd = ForwardDiff.jacobian(resid((s, v) -> innerₕ(s, v)), w0)
+        Jw = ForwardDiff.jacobian(resid((s, v) -> innerₕ(s, D₋ₓ(v))), w0)
+        offs_d = length(stencil_offsets(resolve_form_ast(
+            form(Wₕ, v -> innerₕ(uₕ, v)))))
+        offs_w = length(stencil_offsets(resolve_form_ast(
+            form(Wₕ, v -> innerₕ(uₕ, D₋ₓ(v))))))
+        @test maximum(i -> count(!iszero, Jd[i, :]), 1:n) == offs_d
+        @test maximum(i -> count(!iszero, Jw[i, :]), 1:n) == offs_w
     end
 
     @testset "Dirichlet conditions" begin

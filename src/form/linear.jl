@@ -41,11 +41,13 @@ Fully resolves grid coefficient functions and scales inside the linear form's AS
     FType}) where {D, TestSpace, ExprType, FType} = resolve_ast(form.f(TestFunction{D}()))
 
 """
-    form(Wₕ, f; stride_multiplier::Int = 1)
+    form(Wₕ, f)
 
 Constructs a `LinearForm` over the test space `Wₕ` using the linear expression `f`.
 
-The constructor evaluates the stencil of the operator at a representative node to compute the safe multi-coloring stride needed for race-free parallel assembly.
+Construction is cheap: it resolves nothing and measures nothing. What a parallel assembly
+needs to partition the grid is read from the AST when it assembles — see
+`_colour_strides`.
 
 # Examples
 ```julia
@@ -53,52 +55,21 @@ The constructor evaluates the stencil of the operator at a representative node t
 l = form(Wh, v -> innerₕ(fh, v))
 ```
 """
-function form(Wₕ, f; stride_multiplier::Int = 1)
+function form(Wₕ, f)
     D = dim(Wₕ)
     ast = f(TestFunction{D}())
 
-    # Extract mesh characteristics to discover stencil bounds upfront
-    sp = first_space(Wₕ)
-    Ωₕ = mesh(sp)
-    mesh_markers = markers(Ωₕ)
-    grid_inds = indices(Ωₕ)
-    lin_indices = LinearIndices(grid_inds)
-
-    # Evaluate the stencil at a representative interior node to discover off_v bounds
-    center_I = grid_inds[length(grid_inds) ÷ 2 + 1]
-    center_lin_idx = lin_indices[center_I]
-    sample_stencil = local_stencil(ast, sp, center_I, mesh_markers, center_lin_idx)
-
-    # For a linear form, the stencil yields (off_v, weight) tuples
-    first_off_v = sample_stencil[1][1]
-    min_v = first_off_v
-    max_v = first_off_v
-
-    for (off_v, _) in sample_stencil
-        min_v = min.(min_v, off_v)
-        max_v = max.(max_v, off_v)
-    end
-
-    # Compute mathematical safe strides and apply optional inflation
-    base_strides = max_v .- min_v .+ 1
-    strides = base_strides .* stride_multiplier
-    stride_tuple = Tuple(strides)
-    num_colors = prod(stride_tuple)
-
-    # Group grid coordinates by color identifier
-    color_groups = [CartesianIndex{D}[] for _ in 1:num_colors]
-    linear_mapper = LinearIndices(stride_tuple)
-
-    for I in grid_inds
-        color_coord = ntuple(d -> mod(I[d] - 1, stride_tuple[d]) + 1, D)
-        color_id = linear_mapper[color_coord...]
-        push!(color_groups[color_id], I)
-    end
-
-    # Preallocate thread-local buffers for parallel reduction
-    num_threads = Threads.nthreads()
-    thread_buffers = [zeros(Float64, ndofs(Wₕ)) for _ in 1:num_threads]
-    workspace = ParallelWorkspace{D}(color_groups, thread_buffers)
+    # No colouring and no buffers built here, on purpose. Both used to be: every `form`
+    # call evaluated a sample stencil, binned the whole grid into a
+    # `Vector{Vector{CartesianIndex{D}}}` one `push!` at a time, and allocated a
+    # full-length `Float64` buffer per thread — 64 MB at a million degrees of freedom on
+    # eight threads, paid whether or not the caller ever assembled in parallel. The bins
+    # were then never read by anything, and the buffers are what made the parallel path
+    # slower than the serial one at every size.
+    #
+    # The partition is a property of the AST and the grid, both of which assembly has in
+    # hand, so it is computed there instead and costs nothing here.
+    workspace = ParallelWorkspace{D}(Vector{CartesianIndex{D}}[])
 
     return LinearForm{D, typeof(Wₕ), typeof(ast), typeof(f)}(Wₕ, ast, f, workspace)
 end
@@ -138,13 +109,19 @@ end
 Assembles the system vector of the `LinearForm`, applying `dirichlet_conditions` on the
 regions `dirichlet_labels` names when both are given.
 
-Assembles serially. It used to call [`assemble_parallel!`](@ref), and that was slower at
-every size measured — 76x at 2,500 degrees of freedom, 3.0x at 250,000, 2.7x at 810,000,
-on four threads. The ratio narrows with size but does not cross over, and the reason is
-structural rather than a tuning problem: that routine gives each thread a full-length
-buffer and reduces them afterwards, so it pays O(n · threads) of memory traffic against
-the O(n · stencil) the assembly itself costs. A linear form's stencil is one to three
-entries, so the reduction dominates however large the problem gets.
+Assembles serially. [`assemble_parallel!`](@ref) is the threaded counterpart, and which of
+the two wins depends on the size of the problem. On four threads the parallel sweep runs
+1.2x to 2.2x faster from roughly 250,000 degrees of freedom upward, and loses below about
+100,000, where spawning the tasks costs more than the whole sweep.
+
+`assemble` does not pick between them. The threshold moves with the thread count, the
+dimension and the form, so the choice belongs to the caller rather than to a constant
+compiled in here.
+
+For most of this package's history the parallel path lost at *every* size — 76x at 2,500
+degrees of freedom, 3.0x at 250,000 — because it gave each thread a full-length buffer and
+reduced them afterwards, paying O(n · threads) of memory traffic against the O(n · stencil)
+the assembly itself costs. The buffers are gone; see `_colour_strides`.
 """
 function assemble(form::LinearForm; dirichlet_conditions = nothing,
         dirichlet_labels = nothing)
@@ -205,49 +182,94 @@ function _assemble_linear_core!(
     return b
 end
 
-function _assemble_linear_parallel_core!(b::Vector, space, ast::AST_TYPE, lin_indices,
-        mesh_markers, thread_buffers) where {AST_TYPE}
-    num_threads = Threads.nthreads()
+# ==============================================================================
+# The partition a parallel assembly walks
+# ==============================================================================
 
-    # Reset existing thread-local buffers in parallel
-    Threads.@threads for t in 1:num_threads
-        fill!(thread_buffers[t], 0.0)
+"""
+	_colour_strides(offsets) -> NTuple{D, Int}
+
+The per-dimension stride separating grid points a parallel assembly may write at the same
+time, for an operator reaching `offsets`.
+
+Two points of one colour differ by a multiple of the stride in some dimension, so by at
+least `span + 1` there, while each writes a footprint `span` wide about itself. More than a
+width apart, the footprints cannot overlap: no two points in a colour ever target the same
+row, and the sweep needs no coordination of any kind.
+
+An operator reaching only its own point — `innerₕ(fₕ, v)`, and every form whose test
+argument carries no difference — strides by 1 in every dimension, so it has one colour: the
+whole grid in a single flat parallel pass.
+"""
+@inline function _colour_strides(offsets::Vector{NTuple{D, Int}}) where {D}
+    isempty(offsets) && return ntuple(_ -> 1, D)
+
+    lo = first(offsets)
+    hi = first(offsets)
+    for o in offsets
+        lo = min.(lo, o)
+        hi = max.(hi, o)
     end
+    return hi .- lo .+ 1
+end
 
-    # Parallel loop over the grid's contiguous indices with coarse chunking
-    grid_inds = indices(mesh(space))
-    len = length(grid_inds)
-    chunk_size = ceil(Int, len / num_threads)
+# One colour of `grid_inds`, as a strided sub-grid rather than a materialised list of
+# indices. The colouring is a range, so it costs nothing to build — the version this
+# replaces binned every index into a vector of vectors — and the writes within a colour
+# still run in ascending order.
+@inline function _colour_subgrid(grid_inds::CartesianIndices{D}, c::CartesianIndex{D},
+        strides::NTuple{D, Int}) where {D}
+    return CartesianIndices(ntuple(d -> c[d]:strides[d]:last(axes(grid_inds, d)), D))
+end
 
-    Threads.@threads for tid in 1:num_threads
-        local_b = thread_buffers[tid]
-        start_idx = (tid - 1) * chunk_size + 1
-        end_idx = min(tid * chunk_size, len)
+# The threaded pass over one colour, writing straight into `b`.
+#
+# `AbstractVector` rather than `Vector`, and no element type named anywhere, so a
+# Dual-valued assembly takes this path as readily as a Float64 one. The per-thread buffers
+# this replaces were `Vector{Float64}` outright, which is what stopped the parallel path
+# differentiating at all — the same defect, read the type from the data and not from the
+# space, that `Rₕ` and `dirichlet_constraints` each had.
+@noinline function _sweep_colour!(b::AbstractVector, sp, term::TERM, idxs, lin_indices,
+        mesh_markers, offset::Int) where {TERM}
+    Threads.@threads for I in idxs
+        stencil = local_stencil(term, sp, I, mesh_markers, lin_indices[I])
 
-        for idx in start_idx:end_idx
-            I = grid_inds[idx]
-            lin_idx = lin_indices[I]
-            stencil = local_stencil(ast, space, I, mesh_markers, lin_idx)
+        for (off_v, weight) in stencil
+            Iv = I + CartesianIndex(off_v)
 
-            for (off_v, weight) in stencil
-                Iv = I + CartesianIndex(off_v)
-
-                if checkbounds(Bool, lin_indices, Iv)
-                    row = lin_indices[Iv]
-                    @inbounds local_b[row] += weight
-                end
+            if checkbounds(Bool, lin_indices, Iv)
+                @inbounds b[lin_indices[Iv] + offset] += weight
             end
         end
     end
+    return nothing
+end
 
-    # Reduce thread-local buffers into the destination vector b in parallel
-    Threads.@threads for row in 1:length(b)
-        val = 0.0
-        for t in 1:num_threads
-            @inbounds val += thread_buffers[t][row]
-        end
-        @inbounds b[row] = val
+# Every colour in turn. Written as a loop over an explicitly passed grid rather than as a
+# higher-order function taking the sweep as a closure, which is not a style choice: the
+# closure captured the `sp` of the caller's `for (sp, offset) in leaves`, and a closure over
+# a loop variable is boxed, so `local_stencil` became a dynamic call at every grid point of
+# every leaf. It cost a composite assembly 7x — measured at 0.08x of serial, against 1.9x
+# for the same form on a scalar space, which is how the boxing was found.
+function _sweep_parallel!(b::AbstractVector, sp, term::TERM, grid_inds, strides,
+        lin_indices, mesh_markers, offset::Int) where {TERM}
+    if prod(strides) == 1
+        _sweep_colour!(b, sp, term, grid_inds, lin_indices, mesh_markers, offset)
+        return b
     end
+
+    for c in CartesianIndices(strides)
+        _sweep_colour!(b, sp, term, _colour_subgrid(grid_inds, c, strides), lin_indices,
+            mesh_markers, offset)
+    end
+    return b
+end
+
+function _assemble_linear_parallel_core!(b::AbstractVector, space, ast::AST_TYPE,
+        lin_indices, mesh_markers) where {AST_TYPE}
+    strides = _colour_strides(stencil_offsets(ast))
+    _sweep_parallel!(b, space, ast, indices(mesh(space)), strides, lin_indices,
+        mesh_markers, 0)
     return b
 end
 
@@ -301,16 +323,52 @@ function _route_terms!(b::Vector, term::TERM, leaves, lin_indices,
     return b
 end
 
+# The threaded counterpart of `_route_terms!`, and deliberately the same shape: term
+# outside, grid inside.
+#
+# The obvious parallel shape is the other order — one pass over the grid, routing every term
+# at each point — and it measured 0.08x of the serial sweep at a million degrees of freedom,
+# against 1.9x for a comparable form on a scalar space. Routing per point redoes the
+# component walk and the leaf search at every point; routing per term hoists both out of the
+# grid loop and leaves each sweep a tight, concretely typed one. The order of the two loops
+# is the whole of the difference.
+#
+# Strides come from the term rather than from the whole form, so a term reaching only its own
+# point still sweeps in a single colour even when some other term in the same form does not.
+function _route_terms_parallel!(b::AbstractVector, op::OperatorAdd, leaves, lin_indices,
+        mesh_markers)
+    _route_terms_parallel!(b, op.left_op, leaves, lin_indices, mesh_markers)
+    _route_terms_parallel!(b, op.right_op, leaves, lin_indices, mesh_markers)
+    return b
+end
+
+function _route_terms_parallel!(b::AbstractVector, term::TERM, leaves, lin_indices,
+        mesh_markers) where {TERM}
+    target = test_component_or_nothing(term)
+    strides = _colour_strides(stencil_offsets(term))
+
+    for (c, leaf) in enumerate(leaves)
+        (target === nothing || target == c) || continue
+        sp = first(leaf)
+        _sweep_parallel!(
+            b, sp, term, indices(mesh(sp)), strides, lin_indices, mesh_markers,
+            last(leaf))
+    end
+    return b
+end
+
 # The threaded core's counterpart of `_route_terms!`: one point, every term, routed to the
 # blocks each belongs to. Recursive for the same reason — no vector, nothing dynamic.
-function _route_point!(dest::Vector, op::OperatorAdd, leaves, I, lin_idx::Int, lin_indices,
+function _route_point!(
+        dest::AbstractVector, op::OperatorAdd, leaves, I, lin_idx::Int, lin_indices,
         mesh_markers)
     _route_point!(dest, op.left_op, leaves, I, lin_idx, lin_indices, mesh_markers)
     _route_point!(dest, op.right_op, leaves, I, lin_idx, lin_indices, mesh_markers)
     return dest
 end
 
-function _route_point!(dest::Vector, term::TERM, leaves, I, lin_idx::Int, lin_indices,
+function _route_point!(
+        dest::AbstractVector, term::TERM, leaves, I, lin_idx::Int, lin_indices,
         mesh_markers) where {TERM}
     target = test_component_or_nothing(term)
     for (c, leaf) in enumerate(leaves)
@@ -325,7 +383,7 @@ end
 # `_scatter_term!`: a term read out of a `Vector{Any}` is only concretely typed once it is
 # an argument.
 @inline function _scatter_point!(
-        dest::Vector, term::TERM, sp, I, lin_idx::Int, lin_indices,
+        dest::AbstractVector, term::TERM, sp, I, lin_idx::Int, lin_indices,
         mesh_markers, offset::Int) where {TERM}
     stencil = local_stencil(term, sp, I, mesh_markers, lin_idx)
     for (off_v, weight) in stencil
@@ -357,46 +415,24 @@ function _scatter_term!(b::Vector, sp, term::TERM, lin_indices, mesh_markers,
     return b
 end
 
-function _assemble_linear_parallel_core!(
-        b::Vector, space::CompositeGridSpace{N}, ast::AST_TYPE,
-        lin_indices, mesh_markers, thread_buffers) where {N, AST_TYPE}
-    num_threads = Threads.nthreads()
-
-    # Reset existing thread-local buffers in parallel
-    Threads.@threads for t in 1:num_threads
-        fill!(thread_buffers[t], 0.0)
-    end
-
-    # See the serial core for why this is `leaf_spaces_offsets` and not an accumulated
-    # Vector of offsets.
+function _assemble_linear_parallel_core!(b::AbstractVector,
+        space::CompositeGridSpace{N}, ast::AST_TYPE,
+        lin_indices, mesh_markers) where {N, AST_TYPE}
     leaves = leaf_spaces_offsets(space)
+    strides = _colour_strides(stencil_offsets(ast))
 
-    # Parallel loop over the grid's contiguous indices with coarse chunking
-    grid_inds = indices(mesh(first(first(leaves))))
-    len = length(grid_inds)
-    chunk_size = ceil(Int, len / num_threads)
-
-    Threads.@threads for tid in 1:num_threads
-        local_b = thread_buffers[tid]
-        start_idx = (tid - 1) * chunk_size + 1
-        end_idx = min(tid * chunk_size, len)
-
-        for idx in start_idx:end_idx
-            I = grid_inds[idx]
-            lin_idx = lin_indices[I]
-
-            _route_point!(local_b, ast, leaves, I, lin_idx, lin_indices, mesh_markers)
+    # The same split the serial core makes: a form whose terms mean the same thing on every
+    # block sweeps each leaf with the whole AST, and one whose terms name components has to
+    # be routed term by term.
+    if !routes_by_component(ast)
+        for (sp, offset) in leaves
+            _sweep_parallel!(b, sp, ast, indices(mesh(sp)), strides, lin_indices,
+                mesh_markers, offset)
         end
+        return b
     end
 
-    # Reduce thread-local buffers into the destination vector b in parallel
-    Threads.@threads for row in 1:length(b)
-        val = 0.0
-        for t in 1:num_threads
-            @inbounds val += thread_buffers[t][row]
-        end
-        @inbounds b[row] = val
-    end
+    _route_terms_parallel!(b, ast, leaves, lin_indices, mesh_markers)
     return b
 end
 
@@ -409,7 +445,7 @@ function assemble!(b::Vector, form::LinearForm{D, TestSpace, ExprType, FType};
         dirichlet_labels = nothing,
         ast = resolve_form_ast(form)) where {D, TestSpace, ExprType, FType}
     _validate_dirichlet_labels(dirichlet_labels)
-    fill!(b, 0.0)
+    fill!(b, zero(eltype(b)))
     space = form.test_space
     Ωₕ = mesh(space)
     mesh_markers = markers(Ωₕ)
@@ -422,26 +458,26 @@ function assemble!(b::Vector, form::LinearForm{D, TestSpace, ExprType, FType};
 end
 
 """
-    assemble_parallel!(b::Vector, form::LinearForm, ast = resolve_form_ast(form))
+    assemble_parallel!(b, form::LinearForm, ast = resolve_form_ast(form))
 
-Performs multi-threaded parallel assembly of the `LinearForm` into `b` using lock-free multi-coloring partitions.
+Assembles the `LinearForm` into `b` across threads, writing directly and without
+coordination by taking one colour of the grid at a time.
+
+See `_colour_strides` for why that is safe, and [`assemble`](@ref) for when it is
+worth choosing over the serial sweep.
 """
-function assemble_parallel!(b::Vector, form::LinearForm{D, TestSpace, ExprType, FType},
+function assemble_parallel!(b::AbstractVector,
+        form::LinearForm{D, TestSpace, ExprType, FType},
         ast = resolve_form_ast(form)) where {D, TestSpace, ExprType, FType}
     space = form.test_space
     Ωₕ = mesh(space)
     mesh_markers = markers(Ωₕ)
     lin_indices = LinearIndices(indices(Ωₕ))
 
-    thread_buffers = form.workspace.thread_buffers
-
-    # Safeguard against dynamic thread count changes (ensure enough buffers exist)
-    while length(thread_buffers) < Threads.nthreads()
-        push!(thread_buffers, zeros(Float64, length(b)))
-    end
-
-    _assemble_linear_parallel_core!(
-        b, space, ast, lin_indices, mesh_markers, thread_buffers)
+    # The sweep accumulates, where the version this replaces overwrote `b` from the buffer
+    # reduction, so `b` has to start at zero.
+    fill!(b, zero(eltype(b)))
+    _assemble_linear_parallel_core!(b, space, ast, lin_indices, mesh_markers)
 
     return b
 end

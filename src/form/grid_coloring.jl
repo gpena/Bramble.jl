@@ -45,32 +45,14 @@ function partition_grid_by_colors(grid_indices::CartesianIndices{D}, strides::Ca
     return color_groups
 end
 
-"""
-    assemble_matrix_parallel!(A, grid_indices, ast_operator)
-
-Helper function showing the pattern of lock-free parallel assembly of matrix `A` using grid coloring.
-"""
-function assemble_matrix_parallel!(A, grid_indices, ast_operator)
-
-    # 1. Ask the AST for the test function offsets
-    # e.g., for D_{-x}, this might return [CartesianIndex(0), CartesianIndex(-1)]
-    offsets = get_test_offsets(ast_operator)
-
-    # 2. Compute periodic bounds and bin the grid
-    strides = compute_safe_strides(offsets)
-    color_groups = partition_grid_by_colors(grid_indices, strides)
-
-    # 3. Assemble!
-    for color_group in color_groups
-        # IMPLICIT THREAD BARRIER: Wait for the previous color to finish
-
-        # All evaluations in this loop are strictly independent.
-        # No two threads will ever target the same matrix row.
-        Threads.@threads for I in color_group
-            # Your zero-allocation AST tuple generator
-            evaluate_and_add!(A, ast_operator, I)
-        end
-    end
-
-    return A
-end
+# `assemble_matrix_parallel!` used to sit here, described as "showing the pattern of
+# lock-free parallel assembly". It called `get_test_offsets` and `evaluate_and_add!`,
+# neither of which exists anywhere in the package, so it could never have run — the sixth
+# name of that kind found in `src/form/`. The pattern it sketched is now carried out for
+# real by `_sweep_parallel!` in linear.jl, from `stencil_offsets` rather than from an
+# invented query.
+#
+# `compute_safe_strides` and `partition_grid_by_colors` above are the same computation as
+# linear.jl's `_colour_strides`, and `partition_grid_by_colors` materialises what the
+# strided sweep now expresses as a range. They are kept because bilinear.jl colours a
+# matrix assembly too, and consolidating the three belongs with unlocking that file.
