@@ -494,12 +494,12 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         # Everything above went through `assemble`. Evaluation is the other way a form gets
         # used, and it has to agree: `l(vₕ)` and `evaluate!` both resolve from `f`, so a
         # coefficient changed between two calls is read again.
-        ue = Rₕ(Wₕ, x -> 1.0)
+        uev = Rₕ(Wₕ, x -> 1.0)
         wₕ = Rₕ(Wₕ, x -> 1.0)
-        lfe = form(Wₕ, v -> innerₕ(ue, v))
+        lfe = form(Wₕ, v -> innerₕ(uev, v))
 
         first_value = lfe(wₕ)
-        values(ue) .= 5.0
+        values(uev) .= 5.0
         @test lfe(wₕ) ≈ 5 * first_value
 
         # and a rebound element, which only a fresh resolve can see

@@ -70,7 +70,7 @@ is working space, overwritten each call, and one vector serves the whole run.
 
 Pass `ast` as well to resolve the expression once across the loop; resolving is 160 B per
 call otherwise. That caches the expression, so the loop must write through the same elements
-rather than rebind them — see the note above [`assemble!`](@ref) for what a reused `ast` does
+rather than rebind them — see the note above `assemble!` for what a reused `ast` does
 and does not notice.
 
 Returns the value rather than `scratch`, which departs from the rule that a mutating
