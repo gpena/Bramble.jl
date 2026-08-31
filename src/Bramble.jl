@@ -19,7 +19,7 @@ using FunctionWrappers: FunctionWrapper
 
 using StaticArrays: SVector, @SVector
 
-using LinearAlgebra: Diagonal, I, transpose, mul!
+using LinearAlgebra: Diagonal, I, transpose, mul!, dot
 using FillArrays: Eye, Ones
 
 import Base: copy
@@ -159,11 +159,16 @@ include("form/block_extract.jl")
 # composite methods are what need `collect_leaf_spaces_offsets` above.
 include("form/dirichlet_constraints.jl")
 
+# linear.jl assembles a right-hand side. It comes after dirichlet_constraints.jl, whose
+# `dirichlet_bc!` it applies, and after parallel_workspace.jl, whose type it names in a
+# struct field — which is why that type had to leave bilinear.jl before this file could be
+# unlocked on its own.
+include("form/linear.jl")
+
 #=
 
 #include("form/grid_coloring.jl")
 include("form/bilinear.jl")
-include("form/linear.jl")
 =#
 #=
 include("exporter/types.jl")

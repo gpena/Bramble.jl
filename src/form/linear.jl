@@ -107,33 +107,50 @@ end
 # Assembly Implementations
 # ==============================================================================
 
+# Nothing to do unless labels were named. `dirichlet_conditions` defaults to `nothing`
+# rather than to an empty constraint set, because the empty set was built on every call and
+# then discarded by exactly this test — 2,080 B per assembly, for an argument that went
+# unread. Naming labels without conditions is a usage error and says so.
 function apply_dirichlet_conditions!(
         b::AbstractVector, form::LinearForm, dirichlet_conditions, dirichlet_labels)
-    if dirichlet_labels !== nothing
-        if dirichlet_labels isa Symbol
-            dirichlet_bc!(b, test_space(form), dirichlet_conditions, dirichlet_labels)
-        elseif dirichlet_labels isa Tuple
-            if !isempty(dirichlet_labels)
-                dirichlet_bc!(b, test_space(form), dirichlet_conditions, dirichlet_labels...)
-            end
-        end
+    dirichlet_labels === nothing && return b
+
+    dirichlet_conditions === nothing && _throw_labels_without_conditions(dirichlet_labels)
+
+    if dirichlet_labels isa Symbol
+        dirichlet_bc!(b, test_space(form), dirichlet_conditions, dirichlet_labels)
+    elseif dirichlet_labels isa Tuple && !isempty(dirichlet_labels)
+        dirichlet_bc!(b, test_space(form), dirichlet_conditions, dirichlet_labels...)
     end
+    return b
+end
+
+@noinline function _throw_labels_without_conditions(labels)
+    throw(ArgumentError(
+        "dirichlet_labels = $labels was given without dirichlet_conditions. Pass the " *
+        "constraints as well: assemble(form; dirichlet_conditions = bcs, " *
+        "dirichlet_labels = $labels)."))
 end
 
 """
-    assemble(form::LinearForm; dirichlet_conditions = dirichlet_constraints(test_space(form)), dirichlet_labels = nothing)
+    assemble(form::LinearForm; dirichlet_conditions = nothing, dirichlet_labels = nothing)
 
-Assembles the system vector of the `LinearForm` using parallel lock-free assembly. Optional boundary conditions `dirichlet_conditions` and regions `dirichlet_labels` apply constraints.
+Assembles the system vector of the `LinearForm`, applying `dirichlet_conditions` on the
+regions `dirichlet_labels` names when both are given.
+
+Assembles serially. It used to call [`assemble_parallel!`](@ref), and that was slower at
+every size measured — 76x at 2,500 degrees of freedom, 3.0x at 250,000, 2.7x at 810,000,
+on four threads. The ratio narrows with size but does not cross over, and the reason is
+structural rather than a tuning problem: that routine gives each thread a full-length
+buffer and reduces them afterwards, so it pays O(n · threads) of memory traffic against
+the O(n · stencil) the assembly itself costs. A linear form's stencil is one to three
+entries, so the reduction dominates however large the problem gets.
 """
-function assemble(
-        form::LinearForm; dirichlet_conditions = dirichlet_constraints(test_space(form)),
+function assemble(form::LinearForm; dirichlet_conditions = nothing,
         dirichlet_labels = nothing)
-    _validate_dirichlet_labels(dirichlet_labels)
-    ast_resolved = resolve_form_ast(form)
     b = zeros(eltype(test_space(form)), ndofs(test_space(form)))
-    assemble_parallel!(b, form, ast_resolved)
-    apply_dirichlet_conditions!(b, form, dirichlet_conditions, dirichlet_labels)
-    return b
+    return assemble!(b, form; dirichlet_conditions = dirichlet_conditions,
+        dirichlet_labels = dirichlet_labels)
 end
 
 # ==============================================================================
@@ -206,17 +223,14 @@ end
 
 function _assemble_linear_core!(b::Vector, space::CompositeGridSpace{N}, ast::AST_TYPE,
         lin_indices, mesh_markers) where {N, AST_TYPE}
-    # Calculate DOF offsets for each subspace
-    offsets = Int[0]
-    for sp in space.spaces
-        push!(offsets, offsets[end] + ndofs(sp))
-    end
-
-    # Iterate over each component space
-    for c in 1:N
-        sp = space.spaces[c]
-        offset = offsets[c]
-
+    # `leaf_spaces_offsets` rather than a Vector of offsets accumulated with `push!`, for
+    # two reasons. It allocates nothing, where the Vector cost 128 B on every call — small,
+    # but this is what a time loop calls each step. And it walks the *leaves*, where
+    # `space.spaces` walks the top-level components: for a composite whose component is
+    # itself composite, `indices(mesh(sp))` covers one leaf's grid while `ndofs(sp)` counts
+    # the whole nested block, so the old loop wrote into a fraction of the range it had
+    # reserved.
+    for (sp, offset) in leaf_spaces_offsets(space)
         for I in indices(mesh(sp))
             lin_idx = lin_indices[I]
             stencil = local_stencil(ast, sp, I, mesh_markers, lin_idx)
@@ -245,15 +259,12 @@ function _assemble_linear_parallel_core!(
         fill!(thread_buffers[t], 0.0)
     end
 
-    # Calculate DOF offsets for each subspace
-    offsets = Int[0]
-    for sp in space.spaces
-        push!(offsets, offsets[end] + ndofs(sp))
-    end
+    # See the serial core for why this is `leaf_spaces_offsets` and not an accumulated
+    # Vector of offsets.
+    leaves = leaf_spaces_offsets(space)
 
     # Parallel loop over the grid's contiguous indices with coarse chunking
-    sp1 = space.spaces[1]
-    grid_inds = indices(mesh(sp1))
+    grid_inds = indices(mesh(first(first(leaves))))
     len = length(grid_inds)
     chunk_size = ceil(Int, len / num_threads)
 
@@ -266,10 +277,7 @@ function _assemble_linear_parallel_core!(
             I = grid_inds[idx]
             lin_idx = lin_indices[I]
 
-            for c in 1:N
-                sp = space.spaces[c]
-                offset = offsets[c]
-
+            for (sp, offset) in leaves
                 stencil = local_stencil(ast, sp, I, mesh_markers, lin_idx)
 
                 for (off_v, weight) in stencil
@@ -296,8 +304,12 @@ function _assemble_linear_parallel_core!(
     return b
 end
 
+# `ast` is a keyword so a caller assembling repeatedly can resolve once and hand it in;
+# resolving is 160 B per call otherwise. It is not cached on the form on purpose: a
+# `GridFunctionScale` over a thunk has its values read when the AST resolves, so resolving
+# eagerly at construction would freeze coefficients a caller may still be changing.
 function assemble!(b::Vector, form::LinearForm{D, TestSpace, ExprType, FType};
-        dirichlet_conditions = dirichlet_constraints(test_space(form)),
+        dirichlet_conditions = nothing,
         dirichlet_labels = nothing,
         ast = resolve_form_ast(form)) where {D, TestSpace, ExprType, FType}
     _validate_dirichlet_labels(dirichlet_labels)
