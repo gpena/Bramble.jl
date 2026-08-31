@@ -145,6 +145,10 @@ include("form/common.jl")
 
 # block_extract.jl adds block extraction for CoupledBilinearForm and, with it,
 # `collect_leaf_spaces_offsets`, which walks a nested space's leaves and their dof offsets.
+# matrix_structure.jl reads the sparsity pattern off a built AST, so it needs every node
+# type that carries a stencil — which means after common.jl and its operator includes.
+include("form/matrix_structure.jl")
+
 include("form/block_extract.jl")
 
 # dirichlet_constraints.jl comes last of the three: it is the user-facing one, and its
