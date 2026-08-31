@@ -215,13 +215,6 @@ Returns the type of the mesh associated with the function space `Wₕ`. Also wor
 function mesh_type end
 
 """
-	vector_buffer(Wₕ::AbstractSpaceType)
-
-Returns the [`GridSpaceBuffer`](@ref) used for efficient memory management in the space `Wₕ`.
-"""
-function vector_buffer end
-
-"""
 	$(TYPEDSIGNATURES)
 
 Returns the computational backend associated with the space `Wₕ`.

@@ -41,8 +41,8 @@ const VectorGridSpace{N} = CompositeGridSpace{N}
 # ==============================================================================
 
 """
-	gridspace(Ωₕ::AbstractMeshType, ::Val{N}; nbuffers::Int = 1) where N
-	gridspace(Ωₕ::AbstractMeshType, N::Int; nbuffers::Int = 1)
+	gridspace(Ωₕ::AbstractMeshType, ::Val{N}) where N
+	gridspace(Ωₕ::AbstractMeshType, N::Int)
 
 Constructs a vector function space with `N` components on mesh `Ωₕ`.
 The underlying scalar space and its weights are computed once and shared across components.
@@ -55,33 +55,33 @@ The `Val` form is always type stable. The `Int` form is stable wherever `N` is a
 literal or otherwise constant-foldable, and returns a small `Union` when `N` is
 only known at run time; prefer `Val` on hot paths.
 """
-function gridspace(Ωₕ::AbstractMeshType, ::Val{N}; nbuffers::Int = 1) where {N}
-    W = gridspace(Ωₕ; nbuffers = nbuffers)
+function gridspace(Ωₕ::AbstractMeshType, ::Val{N}) where {N}
+    W = gridspace(Ωₕ)
     return CompositeGridSpace(ntuple(_ -> W, Val(N)))
 end
 
-@inline gridspace(Ωₕ::AbstractMeshType, ::Val{1}; nbuffers::Int = 1) = gridspace(Ωₕ; nbuffers = nbuffers)
+@inline gridspace(Ωₕ::AbstractMeshType, ::Val{1}) = gridspace(Ωₕ)
 
 # Forwarding to the Val method keeps a single implementation and makes the two
 # spellings agree by construction; :aggressive recovers type stability whenever
 # the caller's N is a constant.
-Base.@constprop :aggressive function gridspace(Ωₕ::AbstractMeshType, N::Int; nbuffers::Int = 1)
+Base.@constprop :aggressive function gridspace(Ωₕ::AbstractMeshType, N::Int)
     N >= 1 || throw(ArgumentError("Number of components N must be >= 1, got $N"))
-    return gridspace(Ωₕ, Val(N); nbuffers = nbuffers)
+    return gridspace(Ωₕ, Val(N))
 end
 
 """
-	vector_gridspace(Ωₕ::AbstractMeshType, [N = dim(Ωₕ)]; nbuffers::Int = 1)
+	vector_gridspace(Ωₕ::AbstractMeshType, [N = dim(Ωₕ)])
 
 Convenience constructor for a vector grid space on mesh `Ωₕ`. If `N` is omitted,
 it defaults to the spatial dimension of the mesh (`dim(Ωₕ)`).
 """
-@inline vector_gridspace(Ωₕ::AbstractMeshType; nbuffers::Int = 1) = gridspace(
-    Ωₕ, Val(dim(Ωₕ)); nbuffers = nbuffers)
-@inline vector_gridspace(Ωₕ::AbstractMeshType, ::Val{N}; nbuffers::Int = 1) where {N} = gridspace(
-    Ωₕ, Val(N); nbuffers = nbuffers)
-@inline vector_gridspace(Ωₕ::AbstractMeshType, N::Int; nbuffers::Int = 1) = gridspace(
-    Ωₕ, N; nbuffers = nbuffers)
+@inline vector_gridspace(Ωₕ::AbstractMeshType) = gridspace(
+    Ωₕ, Val(dim(Ωₕ)))
+@inline vector_gridspace(Ωₕ::AbstractMeshType, ::Val{N}) where {N} = gridspace(
+    Ωₕ, Val(N))
+@inline vector_gridspace(Ωₕ::AbstractMeshType, N::Int) = gridspace(
+    Ωₕ, N)
 
 """
 	^(Wₕ::ScalarGridSpace, ::Val{N}) where N
@@ -115,7 +115,6 @@ end
 @inline eltype(::Type{<:CompositeGridSpace{
     <:Any, Spaces}}) where {Spaces} = eltype(fieldtype(Spaces, 1))
 @inline backend(Wₕ::CompositeGridSpace) = backend(first_space(Wₕ))
-@inline vector_buffer(Wₕ::CompositeGridSpace) = vector_buffer(first_space(Wₕ))
 @inline ndofs(Wₕ::CompositeGridSpace) = sum(ndofs, Wₕ.spaces)
 @inline ndofs(Wₕ::CompositeGridSpace, ::Type{Tuple}) = map(ndofs, Wₕ.spaces)
 

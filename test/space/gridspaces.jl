@@ -94,7 +94,7 @@ using Supposition
             @test isimmutable(W1)
 
             # Verify cached matrices are NOT stored on the struct
-            @test propertynames(W1) == (:mesh, :weights, :vector_buffer)
+            @test propertynames(W1) == (:mesh, :weights)
             @test !hasfield(ScalarGridSpace, :backward_difference_matrix)
             @test !hasfield(ScalarGridSpace, :average_matrix)
             @test !hasfield(ScalarGridSpace, :has_backward_difference_matrix)
@@ -125,8 +125,6 @@ using Supposition
             @test ndofs(W2, Tuple) == (5, 6)
             @test ndofs(W3) == 64
             @test ndofs(W3, Tuple) == (4, 4, 4)
-
-            @test vector_buffer(W1) isa Bramble.GridSpaceBuffer
         end
 
         @testset "Weights Accessors" begin
@@ -193,7 +191,6 @@ using Supposition
             @test eltype(V) === Float64
             @test eltype(typeof(V)) === Float64
             @test backend(V) === backend(mesh2d)
-            @test vector_buffer(V) === vector_buffer(W)
             @test ncomponents(V) == 2
             @test ncomponents(typeof(V)) == 2
 

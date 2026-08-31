@@ -89,32 +89,33 @@ Here, ``|\\cdot|`` denotes the measure of the set (length, area, or volume). See
 """
 struct ScalarGridSpace{D, T,                               # Dimension and Element Type
     VT <: AbstractVector{T},             # Vector Type
-    MType <: AbstractMeshType{D},
-    BT <: Backend} <: AbstractSpaceType{1}
+    MType <: AbstractMeshType{D}} <: AbstractSpaceType{1}
     "the underlying mesh of the grid space."
     mesh::MType
     "a [`SpaceWeights`](@ref) object holding vectors for various discrete inner products."
     weights::SpaceWeights{D, VT}
-    "a [`GridSpaceBuffer`](@ref) for efficient reuse of temporary vectors, minimizing memory allocations."
-    vector_buffer::GridSpaceBuffer{BT, VT, T}
 end
 
 """
-	gridspace(Ωₕ::AbstractMeshType{D}; nbuffers::Int = 1) where D
+	gridspace(Ωₕ::AbstractMeshType{D}) where D
 
-Constructor for a [`ScalarGridSpace`](@ref) defined on the mesh `Ωₕ`. This builds the weights for the inner products mentioned in [`ScalarGridSpace`](@ref) and initializes a memory pool for scratch vectors.
+Constructor for a [`ScalarGridSpace`](@ref) defined on the mesh `Ωₕ`, building the weights
+for the inner products [`ScalarGridSpace`](@ref) lists.
+
+A space used to carry a pool of scratch vectors as well, sized to the mesh and warm-started
+with one. Nothing ever drew from it: no operator, no projection and no assembly called
+`vector_buffer`, so every space paid a full-length vector — 8 MB at a million degrees of
+freedom, a third of what building the space allocated — for a pool with no reader. The
+in-place operators are what made it redundant: `D₋ₓ!(vₕ, uₕ)` gives the caller an explicit
+destination, which beats a hidden pool with lock and release semantics.
 """
-function gridspace(Ωₕ::AbstractMeshType{D}; nbuffers::Int = 1) where {D}
-    b = backend(Ωₕ)
-    npts = npoints(Ωₕ)
-
+function gridspace(Ωₕ::AbstractMeshType{D}) where {D}
     weights = space_weights(Ωₕ)
-    space_buffer = simple_space_buffer(b, npts; nbuffers = nbuffers)
 
     MType = typeof(Ωₕ)
-    T, VT, _, BT = backend_types(b)
+    T, VT, _, _ = backend_types(backend(Ωₕ))
 
-    return ScalarGridSpace{D, T, VT, MType, BT}(Ωₕ, weights, space_buffer)
+    return ScalarGridSpace{D, T, VT, MType}(Ωₕ, weights)
 end
 
 # Allocates a work vector sized to a mesh. Typed rather than generic: with an
@@ -176,7 +177,6 @@ end
 
 # Implementation of the interface functions for AbstractSpaceType
 @inline mesh(Wₕ::ScalarGridSpace) = Wₕ.mesh
-@inline vector_buffer(Wₕ::ScalarGridSpace) = Wₕ.vector_buffer
 @inline backend(Wₕ::ScalarGridSpace) = backend(mesh(Wₕ))
 @inline mesh_type(Wₕ::ScalarGridSpace) = typeof(mesh(Wₕ))
 @inline mesh_type(::Type{<:ScalarGridSpace{
