@@ -51,10 +51,11 @@ jobs:
     if: ${{ needs.changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch' }}
     name: Julia ${{ matrix.version }} - ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    # nightly is a canary, not a gate. The allocation assertions now run under coverage
-    # rather than skipping, so a change in how a future Julia accounts for allocations
-    # would fail them; that is worth learning about without blocking the branch.
-    continue-on-error: ${{ matrix.version == 'nightly' }}
+    # nightly and the 1.13 pre-release are canaries, not gates: what they catch is a future
+    # Julia changing under us, which is worth learning about without blocking the branch.
+    # `1.12` is the only version whose failure means Bramble is broken. Promote
+    # `~1.13.0-0` out of this when it goes final.
+    continue-on-error: ${{ matrix.version != '1.12' }}
     permissions:
       contents: read
       id-token: write
@@ -74,11 +75,35 @@ jobs:
         with:
           cache-compiled: "true"
       - uses: julia-actions/julia-buildpkg@v1
+      # Coverage is collected on one job only: the release version on Linux.
+      #
+      # `julia-runtest` instruments by default, so this used to be all six. That was
+      # redundant — the line data is the same whichever Julia or OS produced it, so five of
+      # the six uploads told Codecov what the sixth already had — and it made every job pay
+      # the instrumentation.
+      #
+      # It also broke the branch. `CoverageTools.process_cov` reads a `.cov` line by taking
+      # `line[1:9]` as the hit count, which throws `BoundsError: attempt to access empty
+      # String at index [1:9]` as soon as a line comes back empty. That happened on
+      # 1.13.0-0 on macOS while processing `src/form/linear.jl.cov` — inside the action,
+      # not in Bramble — and the pre-release was gating at the time, so a third-party
+      # parser's assumption failed the build.
+      #
+      # What this gives up: the allocation assertions no longer run under coverage anywhere
+      # but here. They run either way — `test/runtests.jl` stopped skipping them under
+      # instrumentation on purpose — so what is lost is only the chance of a *pre-release*
+      # Julia revealing that it accounts for allocations differently under coverage. The
+      # release job still checks that, which is where it matters.
       - uses: julia-actions/julia-runtest@v1
+        with:
+          coverage: ${{ matrix.version == '1.12' && matrix.os == 'ubuntu-latest' }}
         env:
           BRAMBLE_TEST_GROUP: unit
+
       - uses: julia-actions/julia-processcoverage@v1
+        if: matrix.version == '1.12' && matrix.os == 'ubuntu-latest'
       - uses: codecov/codecov-action@v5
+        if: matrix.version == '1.12' && matrix.os == 'ubuntu-latest'
         with:
           files: lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}
