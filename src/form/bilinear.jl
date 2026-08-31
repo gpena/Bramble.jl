@@ -128,6 +128,22 @@ end
 # Dispatching on `::Type{T}` settles which one, and the vector comes back concrete.
 @inline _zeros_of(::Type{T}, n::Int) where {T} = zeros(T, n)
 
+# Whether an earlier entry of this stencil already named the same pair of offsets.
+#
+# The pattern wants each position once, however many terms write a value there. A form like
+# `innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v))` has both products contributing at `(0, 0)`, so
+# its stencil is five entries over four distinct pairs — a fifth of the coordinates it
+# generated were the same entry twice, and `sparse!` then paid to sort and merge them.
+#
+# A linear scan over the entries already seen, which is the whole stencil: a handful, not a
+# collection worth a set.
+@inline function _offsets_seen_before(stencil, k::Int, off_u, off_v)
+    @inbounds for l in 1:(k - 1)
+        stencil[l][1] == off_u && stencil[l][2] == off_v && return true
+    end
+    return false
+end
+
 # How many entries the pattern can hold at most: one interior stencil's worth per grid
 # point. An upper bound, because truncation at a boundary drops entries and never adds any.
 #
@@ -164,7 +180,11 @@ function allocate_system_matrix(
     @inbounds for I in indices(Ωₕ)
         lin_idx = lin_indices[I]
         stencil = local_stencil(ast, space, I, mesh_markers, lin_idx)
-        for (off_u, off_v, _) in stencil
+
+        for k in eachindex(stencil)
+            off_u, off_v, _ = stencil[k]
+            _offsets_seen_before(stencil, k, off_u, off_v) && continue
+
             Iv = I + CartesianIndex(off_v)
             Iu = I + CartesianIndex(off_u)
             if checkbounds(Bool, lin_indices, Iv) && checkbounds(Bool, lin_indices, Iu)
@@ -205,7 +225,10 @@ function _pattern_term!(I_vec::Vector{Int}, J_vec::Vector{Int}, term::TERM, tria
     @inbounds for I in indices(Ωₕ)
         stencil = local_stencil(term, test_leaf, I, mesh_markers, lin_indices[I])
 
-        for (off_u, off_v, _) in stencil
+        for k in eachindex(stencil)
+            off_u, off_v, _ = stencil[k]
+            _offsets_seen_before(stencil, k, off_u, off_v) && continue
+
             Iv = I + CartesianIndex(off_v)
             Iu = I + CartesianIndex(off_u)
 
