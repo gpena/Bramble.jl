@@ -916,8 +916,16 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         @test evaluate!(scratchv, lfv, wc) ≈ lfv(wc)
         @test_throws ArgumentError evaluate!(scratchv, lfv, values(wc))
 
-        # and it allocates nothing once the AST is resolved outside the loop
-        evaluate!(scratch, lf, uₕ; ast = ast)
-        @test @allocated(evaluate!(scratch, lf, uₕ; ast = ast)) == 0
+        # and it allocates nothing once the AST is resolved outside the loop.
+        #
+        # Behind a barrier, like every other allocation assertion here. Written at testset
+        # top level this read 0 on 1.12 and 16 on nightly, which is the keyword box the
+        # older compiler happened to elide — a property of where the measurement was taken,
+        # not of `evaluate!`.
+        function _evaluate_bytes(scratch, lf, v, ast)
+            evaluate!(scratch, lf, v; ast = ast)
+            return @allocated evaluate!(scratch, lf, v; ast = ast)
+        end
+        @test _evaluate_bytes(scratch, lf, uₕ, ast) == 0
     end
 end
