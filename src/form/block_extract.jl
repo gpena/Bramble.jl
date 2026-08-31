@@ -120,6 +120,10 @@ find_trial_component(op::GridFunctionScale) = find_trial_component(op.inner_op)
 find_trial_component(op::BackwardAverage) = find_trial_component(op.inner_op)
 find_trial_component(op::ForwardAverage) = find_trial_component(op.inner_op)
 find_trial_component(op::RegionRestriction) = find_trial_component(op.inner_op)
+find_trial_component(op::CenteredDifference) = find_trial_component(op.inner_op)
+find_trial_component(op::StarDifference) = find_trial_component(op.inner_op)
+find_trial_component(op::CrossWeightedDifference) = find_trial_component(op.inner_op)
+find_trial_component(op::JumpNode) = find_trial_component(op.inner_op)
 find_trial_component(op::BilinearProduct) = find_trial_component(op.left_op)
 
 """
@@ -136,6 +140,10 @@ find_test_component(op::GridFunctionScale) = find_test_component(op.inner_op)
 find_test_component(op::BackwardAverage) = find_test_component(op.inner_op)
 find_test_component(op::ForwardAverage) = find_test_component(op.inner_op)
 find_test_component(op::RegionRestriction) = find_test_component(op.inner_op)
+find_test_component(op::CenteredDifference) = find_test_component(op.inner_op)
+find_test_component(op::StarDifference) = find_test_component(op.inner_op)
+find_test_component(op::CrossWeightedDifference) = find_test_component(op.inner_op)
+find_test_component(op::JumpNode) = find_test_component(op.inner_op)
 find_test_component(op::BilinearProduct) = find_test_component(op.right_op)
 
 # The docstrings above promise an error when a term carries no indexed leaf, and without

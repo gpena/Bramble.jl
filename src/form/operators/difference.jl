@@ -180,3 +180,215 @@ function Bramble.get_derivative_matrix_and_scale(
 end
 
 Bramble.get_innermost_dim(op::DifferenceNode{D, Dim}) where {D, Dim} = Dim
+
+# ==============================================================================
+# The remaining difference families
+# ==============================================================================
+#
+# Three more differences, each a symbolic counterpart of an operator the space layer
+# already provides on grid functions. Unlike the one-sided pair above, none of the three
+# has a matrix form in the space layer — `Dcₓ(Ωₕ)` is a MethodError, only `Dcₓ(uₕ)` exists
+# — so these nodes are the only route from those operators into an assembled form, and
+# they assemble through their stencils rather than through `get_derivative_matrix_and_scale`.
+#
+# The boundary convention is the one the one-sided nodes already use: the offsets stay and
+# the coefficients go to zero. A truncated point contributes nothing while the stencil
+# keeps the same shape, which is what lets the assembly loop stay branch-free.
+#
+# Writing `h` for `spacing` (xᵢ - xᵢ₋₁) and `hf` for `forward_spacing` (xᵢ₊₁ - xᵢ), as the
+# space layer's own docstrings do.
+
+"""
+    CenteredDifference{D,Dim,OpType<:LazyOp{D}} <: LazyOp{D}
+
+An AST node for the centered difference along `Dim`,
+
+```math
+Dc(u)_i = \\frac{u_{i+1} - u_{i-1}}{h_i + h_{i+1}}
+```
+
+Truncated at both ends of `Dim`, having no neighbour on one side.
+"""
+struct CenteredDifference{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
+    inner_op::OpType
+end
+
+"""
+    StarDifference{D,Dim,OpType<:LazyOp{D}} <: LazyOp{D}
+
+An AST node for the starred forward difference along `Dim`,
+
+```math
+D^{*}_{+}(u)_i = \\frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}
+```
+
+The forward difference over the *averaged* spacing rather than the forward one, which is
+what makes the discrete integration by parts close. Truncated at the far end of `Dim`.
+"""
+struct StarDifference{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
+    inner_op::OpType
+end
+
+"""
+    CrossWeightedDifference{D,Dim,OpType<:LazyOp{D}} <: LazyOp{D}
+
+An AST node for the cross-weighted centered difference along `Dim`,
+
+```math
+D_h(u)_i = \\frac{h_i}{h_i + h_{i+1}} D_{-}(u)_{i+1}
+         + \\frac{h_{i+1}}{h_i + h_{i+1}} D_{-}(u)_i
+```
+
+The same two one-sided differences the centered difference combines, weighted by the
+*opposite* spacings. That swap is what makes it second order on a non-uniform grid where
+`Dc` is first, and the two coincide when the spacing is constant. Truncated at both ends.
+"""
+struct CrossWeightedDifference{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
+    inner_op::OpType
+end
+
+"""
+    Dcₓ(op::LazyOp{D}) where D
+    Dcᵧ(op::LazyOp{D}) where D
+    Dc₂(op::LazyOp{D}) where D
+
+Symbolic centered differences in the coordinate directions.
+"""
+Dcₓ(op::LazyOp{D}) where {D} = CenteredDifference{D, 1, typeof(op)}(op)
+Dcᵧ(op::LazyOp{D}) where {D} = CenteredDifference{D, 2, typeof(op)}(op)
+Dc₂(op::LazyOp{D}) where {D} = CenteredDifference{D, 3, typeof(op)}(op)
+
+"""
+    Dstar₊ₓ(op::LazyOp{D}) where D
+    Dstar₊ᵧ(op::LazyOp{D}) where D
+    Dstar₊₂(op::LazyOp{D}) where D
+
+Symbolic starred forward differences in the coordinate directions.
+"""
+Dstar₊ₓ(op::LazyOp{D}) where {D} = StarDifference{D, 1, typeof(op)}(op)
+Dstar₊ᵧ(op::LazyOp{D}) where {D} = StarDifference{D, 2, typeof(op)}(op)
+Dstar₊₂(op::LazyOp{D}) where {D} = StarDifference{D, 3, typeof(op)}(op)
+
+"""
+    Dₕₓ(op::LazyOp{D}) where D
+    Dₕᵧ(op::LazyOp{D}) where D
+    Dₕ₂(op::LazyOp{D}) where D
+
+Symbolic cross-weighted centered differences in the coordinate directions.
+"""
+Dₕₓ(op::LazyOp{D}) where {D} = CrossWeightedDifference{D, 1, typeof(op)}(op)
+Dₕᵧ(op::LazyOp{D}) where {D} = CrossWeightedDifference{D, 2, typeof(op)}(op)
+Dₕ₂(op::LazyOp{D}) where {D} = CrossWeightedDifference{D, 3, typeof(op)}(op)
+
+"""
+    Dcₕ(op::LazyOp{D}) where D
+    Dstar₊ₕ(op::LazyOp{D}) where D
+    ∇ₕ(op::LazyOp{D}) where D
+
+The vector forms: every direction at once, as a `D`-tuple of nodes. In one dimension there
+is only one direction, so the node itself is returned rather than a one-element tuple —
+as `∇₋ₕ` and `∇₊ₕ` already do.
+"""
+Dcₕ(op::LazyOp{1}) = Dcₓ(op)
+function Dcₕ(op::LazyOp{D}) where {D}
+    ntuple(
+        dim -> CenteredDifference{D, dim, typeof(op)}(op), Val(D))
+end
+
+Dstar₊ₕ(op::LazyOp{1}) = Dstar₊ₓ(op)
+function Dstar₊ₕ(op::LazyOp{D}) where {D}
+    ntuple(
+        dim -> StarDifference{D, dim, typeof(op)}(op), Val(D))
+end
+
+∇ₕ(op::LazyOp{1}) = Dₕₓ(op)
+function ∇ₕ(op::LazyOp{D}) where {D}
+    ntuple(
+        dim -> CrossWeightedDifference{D, dim, typeof(op)}(op), Val(D))
+end
+
+# --- Stencils --------------------------------------------------------------------- #
+
+@inline function local_stencil(op::CenteredDifference{D, Dim}, space,
+        I::CartesianIndex{D}, markers, lin_idx::Int) where {D, Dim}
+    inner = local_stencil(op.inner_op, space, I, markers, lin_idx)
+    m = mesh(space)
+    dims = npoints(m, Tuple)
+
+    # no neighbour on one side at either end
+    mask = (I[Dim] == 1 || I[Dim] == dims[Dim]) ? 0.0 : 1.0
+    c = mask / (get_spacing(m, I, Dim) + get_forward_spacing(m, I, Dim))
+
+    forward = scale_stencil(shift_stencil(inner, Val(Dim), Val(1)), c)
+    backward = scale_stencil(shift_stencil(inner, Val(Dim), Val(-1)), -c)
+    return concatenate_stencils(forward, backward)
+end
+
+@inline function local_stencil(op::StarDifference{D, Dim}, space, I::CartesianIndex{D},
+        markers, lin_idx::Int) where {D, Dim}
+    inner = local_stencil(op.inner_op, space, I, markers, lin_idx)
+    m = mesh(space)
+    dims = npoints(m, Tuple)
+
+    mask = I[Dim] == dims[Dim] ? 0.0 : 1.0
+    # the averaged spacing, which is what the starred difference divides by
+    c = 2 * mask / (get_spacing(m, I, Dim) + get_forward_spacing(m, I, Dim))
+
+    forward = scale_stencil(shift_stencil(inner, Val(Dim), Val(1)), c)
+    here = scale_stencil(inner, -c)
+    return concatenate_stencils(forward, here)
+end
+
+# Expanding the definition over the two one-sided differences gives a three-point stencil.
+# With S = h + hf,
+#
+#   D_h(u)_i = h/(S·hf) · u_{i+1} + (hf/(S·h) - h/(S·hf)) · u_i - hf/(S·h) · u_{i-1}
+#
+# which is where the two coefficients below come from: `a` is the weight of the forward
+# neighbour and `b` the magnitude of the backward one.
+@inline function local_stencil(op::CrossWeightedDifference{D, Dim}, space,
+        I::CartesianIndex{D}, markers, lin_idx::Int) where {D, Dim}
+    inner = local_stencil(op.inner_op, space, I, markers, lin_idx)
+    m = mesh(space)
+    dims = npoints(m, Tuple)
+
+    mask = (I[Dim] == 1 || I[Dim] == dims[Dim]) ? 0.0 : 1.0
+    h = get_spacing(m, I, Dim)
+    hf = get_forward_spacing(m, I, Dim)
+    total = h + hf
+
+    a = mask * h / (total * hf)
+    b = mask * hf / (total * h)
+
+    forward = scale_stencil(shift_stencil(inner, Val(Dim), Val(1)), a)
+    here = scale_stencil(inner, b - a)
+    backward = scale_stencil(shift_stencil(inner, Val(Dim), Val(-1)), -b)
+    return concatenate_stencils(concatenate_stencils(forward, here), backward)
+end
+
+# --- Traits ----------------------------------------------------------------------- #
+
+"""
+	ExtendedDifferenceNode{D, Dim}
+
+The three difference nodes that have no matrix form in the space layer, differencing along
+`Dim`. Grouped so that everything reading only the direction off a node covers all of them
+at once, as [`DifferenceNode`](@ref) does for the one-sided pair.
+"""
+const ExtendedDifferenceNode{D, Dim} = Union{CenteredDifference{D, Dim},
+    StarDifference{D, Dim}, CrossWeightedDifference{D, Dim}}
+
+Bramble.get_innermost_dim(op::ExtendedDifferenceNode{D, Dim}) where {D, Dim} = Dim
+
+function resolve_ast(op::CenteredDifference{D, Dim}) where {D, Dim}
+    inner = resolve_ast(op.inner_op)
+    return CenteredDifference{D, Dim, typeof(inner)}(inner)
+end
+function resolve_ast(op::StarDifference{D, Dim}) where {D, Dim}
+    inner = resolve_ast(op.inner_op)
+    return StarDifference{D, Dim, typeof(inner)}(inner)
+end
+function resolve_ast(op::CrossWeightedDifference{D, Dim}) where {D, Dim}
+    inner = resolve_ast(op.inner_op)
+    return CrossWeightedDifference{D, Dim, typeof(inner)}(inner)
+end

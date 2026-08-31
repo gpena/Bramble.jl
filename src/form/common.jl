@@ -206,6 +206,7 @@ source_function(f, ::Val{D}) where {D} = SourceFunction{D, typeof(f)}(f)
 
 # Import modularized operator and product logic
 include("operators/difference.jl")
+include("operators/jump.jl")
 include("operators/average.jl")
 include("operators/restriction.jl")
 include("operators/inner.jl")
@@ -326,3 +327,8 @@ is_symbolic(op::ForwardAverage) = is_symbolic(op.inner_op)
 is_symbolic(op::ShiftNode) = is_symbolic(op.inner_op)
 
 is_symbolic(op::RegionRestriction) = is_symbolic(op.inner_op)
+
+is_symbolic(op::CenteredDifference) = is_symbolic(op.inner_op)
+is_symbolic(op::StarDifference) = is_symbolic(op.inner_op)
+is_symbolic(op::CrossWeightedDifference) = is_symbolic(op.inner_op)
+is_symbolic(op::JumpNode) = is_symbolic(op.inner_op)
