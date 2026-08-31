@@ -286,11 +286,27 @@ end
                     SourceVector{D, typeof(l[dim].data)}(l[dim].data), r[dim]),
                 Val(D)))
     else
-        res = similar(first(l).values)
-        res .= 0
-        inner₊!(res, l, r)
-        return res
+        return _inner₊_numeric_tuple_unsupported(r)
     end
+end
+
+# The branch above used to try to evaluate the product numerically, and could not have: it
+# read `first(l).values` where a `VectorElement` stores `data`, and called `inner₊!`, which
+# no revision of the package defines. Two names that were never going to resolve, in a
+# branch nothing reached — the same shape as `backward_difference_matrix`.
+#
+# What it would have meant is also unclear. It is entered when `r` is a tuple of operators
+# carrying no trial or test function, so there is nothing for the product to be a form *in*;
+# `∇₋ₕ(IdentityOperator(Wₕ))` has no argument to differentiate. So this says so rather than
+# guessing at an implementation, and the symbolic branch above — the one that is actually
+# used — is untouched.
+@noinline function _inner₊_numeric_tuple_unsupported(r)
+    throw(ArgumentError(
+        "inner₊ of a tuple of grid functions against a tuple of non-symbolic operators " *
+        "has no definition: the right-hand side carries no trial or test function, so " *
+        "there is nothing for the product to be a form in. Got $(typeof(r)). Pair the " *
+        "grid functions with a symbolic gradient such as ∇₋ₕ(u), or take the numeric " *
+        "inner₊ of two grid functions directly."))
 end
 
 function inner₊ₓ(l::Function, r::LazyOp{D}) where {D}
