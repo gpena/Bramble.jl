@@ -215,4 +215,28 @@ using Bramble: TrialFunction, TestFunction, IndexedTrialFunction, IndexedTestFun
         @test is_symbolic((D₋ₓ(id), D₋ₓ(u)))     # and so is a tuple
         @test !is_symbolic((D₋ₓ(id), M₊ᵧ(id)))
     end
+
+    @testset "the parallel workspace both assembly files share" begin
+        # A colouring of the grid into independent groups: no two indices within a group
+        # write to the same matrix entry, so a group can be walked without synchronisation.
+        #
+        # It lives in form/parallel_workspace.jl rather than in bilinear.jl, where it began.
+        # `linear.jl` names it as the type of a `LinearForm` field, and a struct definition
+        # resolves its field types when it is defined rather than when it is called — so
+        # while the type sat in bilinear.jl, linear.jl could not be unlocked on its own.
+        groups = [[CartesianIndex(1, 1), CartesianIndex(1, 3)], [CartesianIndex(2, 2)]]
+
+        w = Bramble.ParallelWorkspace{2}(groups)
+        @test w.color_groups === groups
+        @test isempty(w.thread_buffers)          # the one-argument form allocates none
+
+        buffers = [zeros(4), zeros(4)]
+        wb = Bramble.ParallelWorkspace{2}(groups, buffers)
+        @test wb.color_groups === groups
+        @test wb.thread_buffers === buffers
+
+        # the dimension is a type parameter, so a mismatched index set does not compile
+        @test Bramble.ParallelWorkspace{2} !== Bramble.ParallelWorkspace{3}
+        @test_throws MethodError Bramble.ParallelWorkspace{3}(groups)
+    end
 end

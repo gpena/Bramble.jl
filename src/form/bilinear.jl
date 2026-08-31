@@ -2,24 +2,9 @@
 # Struct Definitions
 # ==============================================================================
 
-"""
-    ParallelWorkspace{D}
-
-Preallocated structure containing coordinate indices partitioned into lock-free/independent color groups.
-"""
-struct ParallelWorkspace{D}
-    color_groups::Vector{Vector{CartesianIndex{D}}}
-    thread_buffers::Vector{Vector{Float64}}
-
-    function ParallelWorkspace{D}(color_groups::Vector{Vector{CartesianIndex{D}}}) where {D}
-        new{D}(color_groups, Vector{Float64}[])
-    end
-
-    function ParallelWorkspace{D}(color_groups::Vector{Vector{CartesianIndex{D}}},
-            thread_buffers::Vector{Vector{Float64}}) where {D}
-        new{D}(color_groups, thread_buffers)
-    end
-end
+# `ParallelWorkspace` moved to form/parallel_workspace.jl. `linear.jl` names it as the type
+# of a `LinearForm` field, which has to resolve when the struct is defined rather than when
+# it is called, so keeping it here made unlocking that file alone impossible.
 
 """
     BilinearForm{D,TrialSpace,TestSpace,ExprType,FType}

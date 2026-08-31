@@ -149,6 +149,10 @@ include("form/common.jl")
 # type that carries a stencil — which means after common.jl and its operator includes.
 include("form/stencil_pattern.jl")
 
+# Shared by both assembly files, so it belongs to neither. Included ahead of them because
+# `linear.jl` names the type in a struct field, which resolves at definition time.
+include("form/parallel_workspace.jl")
+
 include("form/block_extract.jl")
 
 # dirichlet_constraints.jl comes last of the three: it is the user-facing one, and its

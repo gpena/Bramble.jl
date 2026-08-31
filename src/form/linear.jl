@@ -3,8 +3,8 @@
 # Struct Definitions
 # ==============================================================================
 
-# Note: If ParallelWorkspace is already defined in your bilinear.jl file within
-# the same module, you can omit this duplicate struct definition.
+# `ParallelWorkspace` lives in form/parallel_workspace.jl, included before both
+# assembly files, so this file no longer depends on bilinear.jl for it.
 """
     LinearForm{D,TestSpace,ExprType,FType}
 
