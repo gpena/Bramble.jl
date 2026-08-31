@@ -404,6 +404,160 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         end
     end
 
+    @testset "what a reassembly notices" begin
+        # The AST is resolved on every `assemble` rather than cached on the form, so a form
+        # assembled twice around a change to its source gives two different vectors. That is
+        # the whole reason it is not cached, and it is worth pinning: the alternative would
+        # freeze coefficients a caller is still changing.
+        us = Rₕ(Wₕ, x -> 1.0)
+        lfs = form(Wₕ, v -> innerₕ(us, v))
+
+        first_sum = sum(assemble(lfs))
+        values(us) .= 5.0
+        @test sum(assemble(lfs)) ≈ 5 * first_sum
+
+        # and a rebinding is seen too, since the closure reads the binding at resolve time
+        global _rebound = Rₕ(Wₕ, x -> 1.0)
+        lfr = form(Wₕ, v -> innerₕ(_rebound, v))
+        before = sum(assemble(lfr))
+        global _rebound = Rₕ(Wₕ, x -> 5.0)
+        @test sum(assemble(lfr)) ≈ 5 * before
+
+        # A scalar coefficient is live too, and by a different route from the element: the
+        # closure reads it when `resolve_form_ast` calls `f`, so it is the *rebuilding* of
+        # the tree that picks it up, not a shared array. Nothing about the element changes
+        # here — only the number in front of it.
+        global _alpha = 2.0
+        ua_scalar = Rₕ(Wₕ, x -> 1.0)
+        lfa_scalar = form(Wₕ, v -> innerₕ(_alpha * ua_scalar, v))
+        at_two = sum(assemble(lfa_scalar))
+        global _alpha = 10.0
+        @test sum(assemble(lfa_scalar)) ≈ 5 * at_two
+
+        # both at once: a scalar and the element it scales
+        global _alpha = 3.0
+        values(ua_scalar) .= 2.0
+        @test sum(assemble(lfa_scalar)) ≈ 3 * at_two   # 3 x 2 against 2 x 1
+
+        # `assemble!` overwrites its destination rather than accumulating into it
+        d = zeros(ndofs(Wₕ))
+        assemble!(d, lfs)
+        once = copy(d)
+        assemble!(d, lfs)
+        @test d ≈ once
+
+        # Handing in a resolved `ast` caches the expression, which is the point of the
+        # keyword and also its one sharp edge. A resolved tree references the source's
+        # values, so writing through them is still seen...
+        ua = Rₕ(Wₕ, x -> 1.0)
+        lfa = form(Wₕ, v -> innerₕ(ua, v))
+        ast = resolve_form_ast(lfa)
+        assemble!(d, lfa; ast = ast)
+        @test sum(d) ≈ first_sum
+        values(ua) .= 5.0
+        assemble!(d, lfa; ast = ast)
+        @test sum(d) ≈ 5 * first_sum
+
+        # ...but replacing what the tree points at is not. This is the documented
+        # limitation, asserted so it cannot drift into being a silent one.
+        global _frozen = Rₕ(Wₕ, x -> 1.0)
+        lff = form(Wₕ, v -> innerₕ(_frozen, v))
+        stale_ast = resolve_form_ast(lff)
+        global _frozen = Rₕ(Wₕ, x -> 5.0)
+
+        assemble!(d, lff; ast = stale_ast)
+        with_stale = sum(d)
+        assemble!(d, lff)
+        with_fresh = sum(d)
+
+        @test with_fresh ≈ 5 * before          # resolving afresh sees the new element
+        @test with_stale ≈ before              # the cached one still reads the old
+        @test !isapprox(with_stale, with_fresh)
+
+        # A scalar cannot be rescued by indirection, which is the part worth pinning: `r[]`
+        # is dereferenced when the closure runs, so a plain number reaches the scale node and
+        # a cached tree has nothing left to re-read.
+        r = Ref(2.0)
+        ur = Rₕ(Wₕ, x -> 1.0)
+        lfref = form(Wₕ, v -> innerₕ(r[] * ur, v))
+        ref_ast = resolve_form_ast(lfref)
+        assemble!(d, lfref; ast = ref_ast)
+        ref_before = sum(d)
+        r[] = 10.0
+        assemble!(d, lfref; ast = ref_ast)
+        @test sum(d) ≈ ref_before               # frozen, Ref or not
+        assemble!(d, lfref)
+        @test sum(d) ≈ 5 * ref_before           # and live again once resolved afresh
+    end
+
+    @testset "evaluation sees live coefficients too" begin
+        # Everything above went through `assemble`. Evaluation is the other way a form gets
+        # used, and it has to agree: `l(vₕ)` and `evaluate!` both resolve from `f`, so a
+        # coefficient changed between two calls is read again.
+        ue = Rₕ(Wₕ, x -> 1.0)
+        wₕ = Rₕ(Wₕ, x -> 1.0)
+        lfe = form(Wₕ, v -> innerₕ(ue, v))
+
+        first_value = lfe(wₕ)
+        values(ue) .= 5.0
+        @test lfe(wₕ) ≈ 5 * first_value
+
+        # and a rebound element, which only a fresh resolve can see
+        global _ev_rebound = Rₕ(Wₕ, x -> 1.0)
+        lfer = form(Wₕ, v -> innerₕ(_ev_rebound, v))
+        before_rebind = lfer(wₕ)
+        global _ev_rebound = Rₕ(Wₕ, x -> 5.0)
+        @test lfer(wₕ) ≈ 5 * before_rebind
+
+        # a live scalar, through evaluation rather than assembly
+        global _ev_alpha = 2.0
+        us = Rₕ(Wₕ, x -> 1.0)
+        lfes = form(Wₕ, v -> innerₕ(_ev_alpha * us, v))
+        at_two = lfes(wₕ)
+        global _ev_alpha = 10.0
+        @test lfes(wₕ) ≈ 5 * at_two
+
+        # `evaluate!` agrees with the functor on every one of those
+        scratch = zeros(ndofs(Wₕ))
+        @test evaluate!(scratch, lfes, wₕ) ≈ lfes(wₕ)
+        @test evaluate!(scratch, lfer, wₕ) ≈ lfer(wₕ)
+
+        # The documented loop: a resolved `ast` reused across calls, with the source written
+        # through rather than rebound. This is the combination `evaluate!`'s docstring
+        # recommends, so it is the one worth asserting stays live.
+        ul = Rₕ(Wₕ, x -> 1.0)
+        lfl = form(Wₕ, v -> innerₕ(ul, v))
+        ast = resolve_form_ast(lfl)
+        loop_first = evaluate!(scratch, lfl, wₕ; ast = ast)
+        Rₕ!(ul, x -> 5.0)                        # written through, as the docstring says
+        @test evaluate!(scratch, lfl, wₕ; ast = ast) ≈ 5 * loop_first
+
+        # and the other half of that recommendation: a scalar is not live under a reused
+        # `ast`, which is why the docstring tells a loop that changes one to resolve afresh
+        global _loop_alpha = 2.0
+        uk = Rₕ(Wₕ, x -> 1.0)
+        lfk = form(Wₕ, v -> innerₕ(_loop_alpha * uk, v))
+        kast = resolve_form_ast(lfk)
+        frozen_first = evaluate!(scratch, lfk, wₕ; ast = kast)
+        global _loop_alpha = 10.0
+        @test evaluate!(scratch, lfk, wₕ; ast = kast) ≈ frozen_first   # frozen
+        @test evaluate!(scratch, lfk, wₕ) ≈ 5 * frozen_first           # live when resolved
+    end
+
+    @testset "a form's expression is checked when it is built" begin
+        # The `ast` field that used to hold a resolved tree was read by nothing, but its type
+        # parameter did one useful thing: it rejected an expression that does not describe an
+        # operator. Dropping the field kept the check and gave it a message.
+        @test fieldnames(typeof(form(Wₕ, v -> innerₕ(uₕ, v)))) ==
+              (:test_space, :f, :workspace)
+
+        @test_throws ArgumentError form(Wₕ, v -> 42)
+        @test_throws ArgumentError form(Wₕ, v -> "not an operator")
+
+        # and an expression built over a different dimension than the space it is given
+        @test_throws ArgumentError form(Wₕ, v -> innerₕ(uₕ, TestFunction{3}()))
+    end
+
     @testset "the symbolic assembly is the matrix expression" begin
         # A linear form is `v -> (Au, v)` for some operator `A` and inner product, so its
         # assembled vector has to be `Aᵀ H u` exactly: `H` the diagonal weight matrix of the

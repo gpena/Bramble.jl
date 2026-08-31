@@ -6,19 +6,29 @@
 # `ParallelWorkspace` lives in form/parallel_workspace.jl, included before both
 # assembly files, so this file no longer depends on bilinear.jl for it.
 """
-    LinearForm{D,TestSpace,ExprType,FType}
+    LinearForm{D,TestSpace,FType}
 
 Represents a linear form defined over a test space.
 
 # Fields
 - `test_space::TestSpace`: The space for the test function.
-- `ast::ExprType`: The symbolic expression AST representation of the form.
-- `f::FType`: The user-defined lambda function representing the form.
+- `f::FType`: The expression, as a function of a test argument.
 - `workspace::ParallelWorkspace{D}`: Preallocated coordinate partitions for lock-free parallel assembly.
+
+The expression is kept as `f` and not as a resolved tree, which is what makes a coefficient
+live: [`resolve_form_ast`](@ref) calls it afresh on every assembly, so an element rebound or
+a scalar changed between two assemblies is read again. A tree built once at construction
+would have frozen both.
+
+There used to be an `ast` field holding exactly such a tree. Nothing ever read it —
+`resolve_form_ast` has always gone through `f` — so it was a snapshot sitting beside the live
+path, inviting anyone optimising later to reach for it and quietly lose liveness. What it did
+earn was a check: `ExprType <: LazyOp{D}` rejected an expression that did not build an
+operator tree at construction rather than at first assembly. That check is kept, spelled out
+in `form` where it can say what went wrong.
 """
-struct LinearForm{D, TestSpace, ExprType <: LazyOp{D}, FType}
+struct LinearForm{D, TestSpace, FType}
     test_space::TestSpace
-    ast::ExprType
     f::FType
     workspace::ParallelWorkspace{D}
 end
@@ -59,7 +69,9 @@ the same form against a changing `vₕ` at every step. This is that loop's versi
 is working space, overwritten each call, and one vector serves the whole run.
 
 Pass `ast` as well to resolve the expression once across the loop; resolving is 160 B per
-call otherwise.
+call otherwise. That caches the expression, so the loop must write through the same elements
+rather than rebind them — see the note above [`assemble!`](@ref) for what a reused `ast` does
+and does not notice.
 
 Returns the value rather than `scratch`, which departs from the rule that a mutating
 function with a single destination returns it. The departure is the point: `scratch` is not
@@ -71,7 +83,7 @@ l = form(Wₕ, v -> innerₕ(fₕ, v))
 scratch = zeros(ndofs(Wₕ))
 ast = resolve_form_ast(l)
 for step in 1:nsteps
-    # ... uₕ changes ...
+    Rₕ!(fₕ, source_at(step))          # written through, not rebound
     value = evaluate!(scratch, l, uₕ; ast = ast)
 end
 ```
@@ -95,8 +107,25 @@ end
 
 Fully resolves grid coefficient functions and scales inside the linear form's AST.
 """
-@inline resolve_form_ast(form::LinearForm{D, TestSpace, ExprType,
-    FType}) where {D, TestSpace, ExprType, FType} = resolve_ast(form.f(TestFunction{D}()))
+@inline resolve_form_ast(form::LinearForm{D, TestSpace,
+    FType}) where {D, TestSpace,
+    FType} = resolve_ast(form.f(TestFunction{D}()))
+
+@inline _validate_form_expression(::LazyOp{D}, ::Val{D}) where {D} = nothing
+
+@noinline function _validate_form_expression(bad, ::Val{D}) where {D}
+    throw(ArgumentError(
+        "a linear form's expression has to build an operator over its test argument, and " *
+        "this one returned a $(typeof(bad)). Write it as a function of the test argument — " *
+        "`v -> innerₕ(fₕ, v)` — rather than as a value."))
+end
+
+@noinline function _validate_form_expression(::LazyOp{E}, ::Val{D}) where {E, D}
+    throw(ArgumentError(
+        "a linear form's expression is $(E)-dimensional and its test space is $(D). The " *
+        "operators in the expression have to come from the same space the form is built " *
+        "over."))
+end
 
 """
     form(Wₕ, f)
@@ -115,7 +144,12 @@ l = form(Wh, v -> innerₕ(fh, v))
 """
 function form(Wₕ, f)
     D = dim(Wₕ)
-    ast = f(TestFunction{D}())
+
+    # Built and discarded, for the error rather than for the tree. Assembly resolves from `f`
+    # every time, so nothing here needs keeping; what is worth having is that an expression
+    # which does not describe an operator fails at `form` rather than at the first
+    # `assemble`, which is much further from the mistake.
+    _validate_form_expression(f(TestFunction{D}()), Val(D))
 
     # No colouring and no buffers built here, on purpose. Both used to be: every `form`
     # call evaluated a sample stencil, binned the whole grid into a
@@ -129,7 +163,7 @@ function form(Wₕ, f)
     # hand, so it is computed there instead and costs nothing here.
     workspace = ParallelWorkspace{D}(Vector{CartesianIndex{D}}[])
 
-    return LinearForm{D, typeof(Wₕ), typeof(ast), typeof(f)}(Wₕ, ast, f, workspace)
+    return LinearForm{D, typeof(Wₕ), typeof(f)}(Wₕ, f, workspace)
 end
 
 # ==============================================================================
@@ -498,10 +532,31 @@ end
 # resolving is 160 B per call otherwise. It is not cached on the form on purpose: a
 # `GridFunctionScale` over a thunk has its values read when the AST resolves, so resolving
 # eagerly at construction would freeze coefficients a caller may still be changing.
-function assemble!(b::Vector, form::LinearForm{D, TestSpace, ExprType, FType};
+#
+# Passing `ast` yourself takes that freeze back on deliberately, and it is worth knowing
+# exactly how far it reaches. A resolved tree holds a *reference* to a source element's
+# values, so mutating them in place is still seen:
+#
+#     Rₕ!(uₕ, g)                              # a reused `ast` picks this up
+#     values(uₕ) .= 5.0                       # so does writing the values directly
+#
+# What it does not see is anything that replaced what the tree points at — rebinding the
+# source to a new element, or changing a scalar the expression captured:
+#
+#     uₕ = Rₕ(Wₕ, g)                          # a reused `ast` still reads the old element
+#     α = 10.0                                # a reused `ast` still scales by the old α
+#
+# Both were measured: 1.0 against 5.0 for the rebinding, 2.0 against 10.0 for the scalar. A
+# `Ref` does not rescue the scalar either — `r[]` is dereferenced when the closure runs, so a
+# plain number reaches the scale node and the indirection is already gone.
+#
+# So the keyword is for a loop that writes through the same elements, which is what a
+# time-stepping scheme does with `Rₕ!`. A loop that rebinds them, or that changes a scalar,
+# should let each call resolve.
+function assemble!(b::Vector, form::LinearForm{D, TestSpace, FType};
         dirichlet_conditions = nothing,
         dirichlet_labels = nothing,
-        ast = resolve_form_ast(form)) where {D, TestSpace, ExprType, FType}
+        ast = resolve_form_ast(form)) where {D, TestSpace, FType}
     _validate_dirichlet_labels(dirichlet_labels)
     fill!(b, zero(eltype(b)))
     space = form.test_space
@@ -525,8 +580,8 @@ See `_colour_strides` for why that is safe, and [`assemble`](@ref) for when it i
 worth choosing over the serial sweep.
 """
 function assemble_parallel!(b::AbstractVector,
-        form::LinearForm{D, TestSpace, ExprType, FType},
-        ast = resolve_form_ast(form)) where {D, TestSpace, ExprType, FType}
+        form::LinearForm{D, TestSpace, FType},
+        ast = resolve_form_ast(form)) where {D, TestSpace, FType}
     space = form.test_space
     Ωₕ = mesh(space)
     mesh_markers = markers(Ωₕ)
