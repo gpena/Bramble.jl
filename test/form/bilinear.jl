@@ -1,5 +1,6 @@
 using Test
 using Bramble
+using ForwardDiff
 using LinearAlgebra: Diagonal, I
 using SparseArrays: sparse, nnz, nonzeros
 using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, trial_space,
@@ -199,6 +200,37 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
         @test block_of(innerₕ(u(1), v(2)), 2, 2) == (1, 2)
         @test block_of(innerₕ(u, v), 2, 2) === nothing
         @test_throws ArgumentError block_of(innerₕ(u(1), v), 2, 2)
+    end
+
+    @testset "an assembled matrix differentiates" begin
+        # A coefficient in the integrand: a(u, v) = ∫ c·u·v, so A = H·diag(c) and the
+        # derivative of `sum(A)` with respect to `cᵢ` is `Hᵢᵢ`. Checked against that rather
+        # than against itself, so a gradient of the wrong thing cannot pass.
+        Vₕ = gridspace(Ωₕ, Val(2))
+        c1 = fill(1.0, n)
+        scalar_form(w) = form(Wₕ, Wₕ, (u, v) -> innerₕ(Bramble.element(Wₕ, w) * u, v))
+
+        @test ForwardDiff.gradient(w -> sum(assemble(scalar_form(w))), c1) ≈ diag(H)
+
+        # the element type follows the data — the matrix has to be able to hold a Dual, and
+        # taking it from the space instead is what made this impossible
+        wd = ForwardDiff.Dual.(c1, 1.0)
+        @test eltype(assemble(scalar_form(wd))) <: ForwardDiff.Dual
+
+        # the serial path as well as the threaded one
+        @test ForwardDiff.gradient(c1) do w
+            a = scalar_form(w)
+            A = allocate_system_matrix(a)
+            assemble!(A, a)
+            sum(A)
+        end ≈ diag(H)
+
+        # and through the block routing, where a wrong component would show up as a
+        # derivative in a block that should not have one
+        @test ForwardDiff.gradient(c1) do w
+            sum(assemble(form(Vₕ, Vₕ,
+                (u, v) -> innerₕ(Bramble.element(Wₕ, w) * u(1), v(1)) + innerₕ(u(2), v(2)))))
+        end ≈ diag(H)
     end
 
     @testset "construction is cheap" begin
