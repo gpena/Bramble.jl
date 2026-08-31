@@ -4,16 +4,18 @@ using Random
 using SparseArrays
 using Bramble: IdentityOperator, ZeroOperator, TrialFunction, TestFunction,
                IndexedTrialFunction, SourceVector, LazyOp,
-               stencil_offsets, matrix_structure, local_stencil,
-               MatrixStructure, DiagonalStructure, TridiagonalStructure, SparseStructure,
-               shift_op, restrict_to, source_function
+               stencil_offsets, local_stencil, shift_op, restrict_to, source_function
 
 # Reading the sparsity pattern off an AST before assembling it.
 #
 # Every node reaches a fixed set of neighbours, and that set is a property of the tree
 # rather than of the grid point: truncation at a boundary zeroes the coefficients and keeps
-# the offsets. So the pattern — and with it the narrowest matrix type that can hold the
-# operator — is known before a single entry is computed.
+# the offsets. So the pattern is known before a single entry is computed, which is what lets
+# the backend's matrix be preallocated with exactly that pattern — after which assembly only
+# ever updates stored values instead of performing structural inserts.
+#
+# It deliberately stops at the pattern and does not pick a matrix type: that belongs to the
+# backend, which carries it as a type parameter.
 #
 # The tests below check the prediction against two independent things: the offsets
 # `local_stencil` actually produces, and the diagonals the assembled matrix actually
@@ -32,7 +34,7 @@ function _stencil_at(node, Wₕ, I, lin)
     for e in local_stencil(node, Wₕ, I, nothing, lin[I])))
 end
 
-@testset "Matrix structure from the stencil" begin
+@testset "Stencil patterns" begin
     Random.seed!(20260831)
     Ωₕ1 = mesh(domain(interval(0.0, 1.0)), 9, false)
     Ωₕ2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6), (true, false))
@@ -86,38 +88,27 @@ end
             source_function(sin, Val(1)), SourceVector{1, Vector{Float64}}([1.0]),
             id1, ZeroOperator(Wₕ1))
             @test stencil_offsets(op) == [(0,)]
-            @test matrix_structure(op) isa DiagonalStructure
         end
-
-        # and in more dimensions the origin is still the origin, so still Diagonal — which
-        # is the case worth catching: a mass-like term in 2D really is diagonal
         @test stencil_offsets(id2) == [(0, 0)]
-        @test matrix_structure(id2) isa DiagonalStructure
-        @test matrix_structure(3 * id2) isa DiagonalStructure
+        @test stencil_offsets(3 * id2) == [(0, 0)]
     end
 
-    @testset "classification" begin
-        @test matrix_structure(D₋ₓ(id1)) isa TridiagonalStructure
-        @test matrix_structure(Dcₓ(id1)) isa TridiagonalStructure     # reaches ±1
-        @test matrix_structure(Dₕₓ(id1)) isa TridiagonalStructure     # three point
-        @test matrix_structure(D₋ₓ(id1) + D₊ₓ(id1)) isa TridiagonalStructure
+    @testset "how far each node reaches" begin
+        # a one-sided operator reaches its own side and no further; the centered one skips
+        # its centre; the cross-weighted one does not
+        @test sort(stencil_offsets(D₋ₓ(id1))) == [(-1,), (0,)]
+        @test sort(stencil_offsets(D₊ₓ(id1))) == [(0,), (1,)]
+        @test sort(stencil_offsets(Dcₓ(id1))) == [(-1,), (1,)]
+        @test sort(stencil_offsets(Dₕₓ(id1))) == [(-1,), (0,), (1,)]
+        @test sort(stencil_offsets(jumpₓ(id1))) == [(0,), (1,)]
 
-        # reaching two points either side is no longer tridiagonal
+        # composing widens, and the widening is the sum of the two reaches
         @test sort(stencil_offsets(D₋ₓ(D₋ₓ(id1)))) == [(-2,), (-1,), (0,)]
-        @test matrix_structure(D₋ₓ(D₋ₓ(id1))) isa SparseStructure
 
-        # a pure shift lands off the diagonal
+        # a shift moves the reach without widening it
         @test stencil_offsets(shift_op(id1, 1, 2)) == [(2,)]
-        @test matrix_structure(shift_op(id1, 1, 2)) isa SparseStructure
-        @test matrix_structure(shift_op(id1, 1, 1)) isa TridiagonalStructure
-        @test matrix_structure(shift_op(id1, 1, 0)) isa DiagonalStructure
-
-        # Above one dimension a narrow stencil is still sparse, and that is the point: a
-        # five-point stencil has offsets ±1 and ±nₓ, so its band is 2nₓ+1 wide and almost
-        # all zero. A banded format would store far more than a sparse one.
-        @test matrix_structure(D₋ₓ(id2)) isa SparseStructure
-        @test matrix_structure(Dcᵧ(id2)) isa SparseStructure
-        @test matrix_structure(D₋ₓ(id2) + D₋ᵧ(id2)) isa SparseStructure
+        @test length(stencil_offsets(shift_op(D₋ₓ(id1), 1, 3))) ==
+              length(stencil_offsets(D₋ₓ(id1)))
     end
 
     @testset "how each node changes the reach" begin
@@ -161,13 +152,6 @@ end
             for i in 1:npoints(Ωₕ1)
                 @test _stencil_at(node, Wₕ1, CartesianIndex(i), lin1) == predicted
             end
-        end
-    end
-
-    @testset "the structure types" begin
-        for T in (DiagonalStructure, TridiagonalStructure, SparseStructure)
-            @test T <: MatrixStructure
-            @test T() isa MatrixStructure
         end
     end
 end

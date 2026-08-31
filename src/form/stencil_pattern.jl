@@ -1,56 +1,29 @@
-# matrix_structure.jl
+# stencil_pattern.jl
 #
-# What shape of matrix an operator assembles into, read off its AST before assembling it.
+# Which grid offsets an operator reaches, read off its AST before assembling it.
 #
 # Every node here reaches a fixed set of neighbours: a backward difference reads the point
 # and the one before it, a cross-weighted difference reads three in a row, an average reads
 # two. Those offsets are a property of the tree, not of the grid point — truncation at a
 # boundary zeroes the coefficients and keeps the offsets, which is what makes the set well
 # defined. So the sparsity pattern of the assembled matrix is known before a single entry
-# is computed, and with it the narrowest LinearAlgebra type that can hold the operator.
+# is computed.
 #
-# The payoff is uneven, and worth stating plainly because the obvious generalisation is a
-# trap. `Diagonal` is a large win wherever it applies: O(n) storage against O(nnz), an O(n)
-# matrix-vector product, and a solve that is elementwise division. `Tridiagonal` in one
-# dimension is a large win too — the Thomas algorithm is O(n) against sparse LU with
-# fill-in. Above one dimension it inverts. A 2D five-point stencil has offsets ±1 and ±nₓ,
-# so the *band* is 2nₓ + 1 wide while each row holds five entries: a banded format would
-# store the whole band, including the zeros between the diagonals, and lose badly to
-# sparse. Hence the rule below is not "map bandwidth to a banded type"; it is `Diagonal`
-# whenever nothing but the origin is touched, `Tridiagonal` only in one dimension, and
-# `SparseMatrixCSC` for everything else.
-
-"""
-	MatrixStructure
-
-The shape of matrix an operator assembles into: [`DiagonalStructure`](@ref),
-[`TridiagonalStructure`](@ref) or [`SparseStructure`](@ref).
-"""
-abstract type MatrixStructure end
-
-"""
-	DiagonalStructure <: MatrixStructure
-
-The operator touches no neighbour, so it assembles into a `Diagonal`.
-"""
-struct DiagonalStructure <: MatrixStructure end
-
-"""
-	TridiagonalStructure <: MatrixStructure
-
-A one-dimensional operator reaching at most one point either side, so it assembles into a
-`Tridiagonal`.
-"""
-struct TridiagonalStructure <: MatrixStructure end
-
-"""
-	SparseStructure <: MatrixStructure
-
-Anything else. Above one dimension this is the right answer even for a narrow stencil: the
-band between the diagonals of a five-point stencil is `2nₓ + 1` wide and almost entirely
-zero, so a banded format stores far more than a sparse one.
-"""
-struct SparseStructure <: MatrixStructure end
+# What that is for is preallocation. The pattern of an assembled operator is the stencil's,
+# and building the backend's matrix with exactly that pattern means assembly only ever
+# updates stored values and never performs a structural insert — which rebuilds a column.
+# It is the same fact the removal of the `dropzeros` option rested on: the pattern is known
+# ahead of time and is worth keeping fixed.
+#
+# What this deliberately does NOT do is choose a matrix type. An earlier version classified
+# operators into `Diagonal`, `Tridiagonal` or sparse, and that was wrong twice over. It is
+# circumstantial — a diagonal operator is a special case that rarely survives being part of
+# a real form — and, more importantly, the matrix type is not the form layer's to decide.
+# `Backend{VT, MT}` carries it as a type parameter and `matrix(backend, n, m)` builds it,
+# which is the whole point of the backend: a Metal backend must get a GPU matrix, and
+# handing back a `Tridiagonal` because the stencil happened to be narrow would break that
+# contract. The offsets inform how the backend's matrix is preallocated; they do not
+# override what it is.
 
 """
 	stencil_offsets(op) -> Vector{NTuple{D, Int}}
@@ -145,25 +118,4 @@ stencil_offsets(op::RegionRestriction) = stencil_offsets(op.inner_op)
 function stencil_offsets(op::OperatorAdd)
     sort!(union(
         stencil_offsets(op.left_op), stencil_offsets(op.right_op)))
-end
-
-# --- classification ------------------------------------------------------------------ #
-
-"""
-	matrix_structure(op) -> MatrixStructure
-
-The narrowest matrix type the operator `op` assembles into, from the offsets it reaches.
-
-`Diagonal` when it touches nothing but the point itself. `Tridiagonal` when the space is
-one-dimensional and it reaches at most one point either side. `SparseMatrixCSC` otherwise —
-including for a narrow stencil in two or three dimensions, where the band between the
-diagonals is mostly zero and a banded format would store more than a sparse one.
-"""
-function matrix_structure(op::LazyOp{D}) where {D}
-    offsets = stencil_offsets(op)
-    origin = ntuple(_ -> 0, D)
-
-    all(==(origin), offsets) && return DiagonalStructure()
-    D == 1 && all(o -> -1 <= o[1] <= 1, offsets) && return TridiagonalStructure()
-    return SparseStructure()
 end
