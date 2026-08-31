@@ -51,14 +51,19 @@ const __bramble_test_group = get(ENV, "BRAMBLE_TEST_GROUP", "all")
 const __bramble_with_quality = __bramble_test_group in ("all", "quality", "full")
 const __bramble_with_unit_tests = __bramble_test_group in ("all", "unit", "full")
 
-# The automatic differentiation backend survey is deliberately outside "all", so neither a
-# local `Pkg.test()` nor the per-push CI pays for it. Enzyme and Mooncake are expensive to
-# install and slow to compile — the six checks take over a minute of which almost all is
-# compilation — and what they establish changes only when a backend changes, not when
-# Bramble does. The weekly workflow runs `full`, which is this plus everything else.
+# The differentiation backend survey is split by what it costs, measured per backend:
 #
-# The file itself skips any backend that is absent from the environment, so running this
-# group without installing them is harmless rather than an error.
+#   ForwardDiff 0.3 s   ReverseDiff 0.5 s   PolyesterForwardDiff 0.6 s
+#   Mooncake   25.1 s   Enzyme     33.2 s
+#
+# So the three cheap ones run with the unit tests — 3.3 s between them, load included —
+# and the two that spend almost a minute compiling on first call live behind this group.
+# What they establish changes when a *backend* changes rather than when Bramble does, so
+# paying that per push would be paying it for nothing almost every time. The weekly
+# workflow runs `full`, which is this plus everything else.
+#
+# Either file skips a backend absent from the environment, so running a group without one
+# installed reports a skip rather than an error.
 const __bramble_with_ad_backends = __bramble_test_group in ("ad", "full")
 
 if __bramble_with_unit_tests
@@ -103,6 +108,7 @@ if __bramble_with_unit_tests
             include("space/convergence.jl")
             include("space/element_type.jl")
             include("space/autodiff.jl")
+            include("space/autodiff_backends.jl")
         end
 
         @testset verbose=true "Forms" begin
@@ -146,7 +152,7 @@ if __bramble_with_quality
 end
 
 if __bramble_with_ad_backends
-    @testset verbose=true "AD backends" begin
-        include("space/autodiff_backends.jl")
+    @testset verbose=true "AD backends (expensive)" begin
+        include("space/autodiff_heavy.jl")
     end
 end

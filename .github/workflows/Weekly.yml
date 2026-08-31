@@ -2,11 +2,11 @@ name: Weekly
 
 # Everything the per-push CI deliberately leaves out, once a week.
 #
-# The automatic differentiation backend survey is the reason this exists. Enzyme and
-# Mooncake are expensive to install and slow to compile — the six checks take over a minute
-# of which almost all is compilation — and what they establish changes when a *backend*
-# changes, not when Bramble does. Paying that on every push would be paying it for nothing
-# almost every time.
+# Enzyme and Mooncake are the reason this exists. They spend 58 seconds compiling on first
+# call between them, against 1.1 s for ReverseDiff and PolyesterForwardDiff, which run on
+# every push instead. What the expensive pair establishes changes when a *backend* changes
+# rather than when Bramble does, so paying it per push would be paying it for nothing almost
+# every time.
 #
 # So this is a canary rather than a gate: it is not required for a merge, and a failure here
 # most often means an upstream release moved rather than that Bramble regressed. Read it
@@ -56,14 +56,16 @@ jobs:
 
       - uses: julia-actions/julia-buildpkg@v1
 
-      # Installed here rather than in test/Project.toml so that an ordinary test run never
-      # resolves them. Failing to add one is not fatal: the test file skips a backend it
-      # cannot load, and the run still reports on the others.
-      - name: Add the differentiation backends
+      # Only the two expensive backends. ReverseDiff and PolyesterForwardDiff are declared
+      # in test/Project.toml and run on every push — they cost 1.1 s between them. Mooncake
+      # and Enzyme are installed here instead so that an ordinary test run never resolves
+      # them. Failing to add one is not fatal: the test file skips a backend it cannot
+      # load, and the run still reports on the others.
+      - name: Add the expensive differentiation backends
         run: |
           julia --project=test -e '
             using Pkg
-            for p in ("ReverseDiff", "PolyesterForwardDiff", "Mooncake", "Enzyme")
+            for p in ("Mooncake", "Enzyme")
                 try
                     Pkg.add(p)
                 catch err
