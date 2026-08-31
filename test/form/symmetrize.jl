@@ -36,10 +36,10 @@ _tri(m) = spdiagm(0 => fill(4.0, m), 1 => fill(-1.0, m - 1), -1 => fill(-1.0, m 
         F = collect(1.0:n)
         @test issymmetric(A)
 
-        dirichlet_bc!(A, Ωₕ, :bottom)
+        @test dirichlet_bc!(A, Ωₕ, :bottom) === A
         @test !issymmetric(A)              # rows zeroed, columns untouched
 
-        symmetrize!(A, F, Ωₕ, :bottom)
+        @test symmetrize!(A, F, Ωₕ, :bottom) === nothing
         @test issymmetric(A)
     end
 

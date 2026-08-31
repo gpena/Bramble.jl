@@ -101,7 +101,7 @@ using LinearAlgebra: I as LinearAlgebraI
     @testset "matrix rows, scalar space" begin
         A = _eye(nW)
         A[1, 2] = 5.0                      # an off-diagonal that must be cleared
-        dirichlet_bc!(A, Wₕ, :bottom)
+        @test dirichlet_bc!(A, Wₕ, :bottom) === A
         for i in 1:nW
             if marked[i]
                 @test A[i, i] == 1.0
@@ -115,14 +115,14 @@ using LinearAlgebra: I as LinearAlgebraI
         As, Ad = _eye(nW), _full(nW)
         As[2, 3] = 4.0
         Ad[2, 3] = 4.0
-        dirichlet_bc!(As, Wₕ, :bottom)
-        dirichlet_bc!(Ad, Wₕ, :bottom)
+        @test dirichlet_bc!(As, Wₕ, :bottom) === As
+        @test dirichlet_bc!(Ad, Wₕ, :bottom) === Ad
         @test Matrix(As) == Ad
     end
 
     @testset "matrix rows, composite space" begin
         A = _eye(nV)
-        dirichlet_bc!(A, Vₕ, :bottom)
+        @test dirichlet_bc!(A, Vₕ, :bottom) === A
         # a composite space is the scalar one repeated per component: the marked rows are
         # the marked scalar rows shifted by each component's offset
         for c in 0:2, i in 1:nW
@@ -140,12 +140,12 @@ using LinearAlgebra: I as LinearAlgebraI
         bcs = dirichlet_constraints(set(Ωₕ), :bottom => (x -> 7.0))
 
         v = fill(-1.0, nW)
-        dirichlet_bc!(v, Wₕ, bcs, :bottom)
+        @test dirichlet_bc!(v, Wₕ, bcs, :bottom) === v
         @test all(v[i] == 7.0 for i in 1:nW if marked[i])
         @test all(v[i] == -1.0 for i in 1:nW if !marked[i])   # untouched elsewhere
 
         w = fill(-1.0, nV)
-        dirichlet_bc!(w, Vₕ, bcs, :bottom)
+        @test dirichlet_bc!(w, Vₕ, bcs, :bottom) === w
         for c in 0:2
             block = view(w, (c * nW + 1):((c + 1) * nW))
             @test block == v          # every component gets the scalar answer
@@ -155,7 +155,7 @@ using LinearAlgebra: I as LinearAlgebraI
     @testset "the condition is evaluated at the right points" begin
         bcs = dirichlet_constraints(set(Ωₕ), :bottom => (x -> x[1] + 10x[2]))
         v = zeros(nW)
-        dirichlet_bc!(v, Wₕ, bcs, :bottom)
+        @test dirichlet_bc!(v, Wₕ, bcs, :bottom) === v
         pts = [point(Ωₕ, idx) for idx in indices(Ωₕ)]
         for i in 1:nW
             marked[i] && @test v[i] ≈ pts[i][1] + 10pts[i][2]
@@ -164,7 +164,7 @@ using LinearAlgebra: I as LinearAlgebraI
 
     @testset "several labels" begin
         A = _eye(nW)
-        dirichlet_bc!(A, Wₕ, :bottom, :top)
+        @test dirichlet_bc!(A, Wₕ, :bottom, :top) === A
         both = index_in_marker(Ωₕ, :bottom) .| index_in_marker(Ωₕ, :top)
         for i in 1:nW
             both[i] && @test A[i, i] == 1.0
@@ -175,11 +175,11 @@ using LinearAlgebra: I as LinearAlgebraI
     @testset "no labels, or a label that marks nothing, changes nothing" begin
         A0 = _eye(nW)
         A1 = copy(A0)
-        dirichlet_bc!(A1, Wₕ)                 # no labels at all
+        @test dirichlet_bc!(A1, Wₕ) === A1                 # no labels at all
         @test A1 == A0
         v0 = fill(3.0, nW)
         bcs = dirichlet_constraints(set(Ωₕ), :bottom => (x -> 7.0))
-        dirichlet_bc!(v0, Wₕ, bcs)            # no labels
+        @test dirichlet_bc!(v0, Wₕ, bcs) === v0            # no labels
         @test all(==(3.0), v0)
     end
 

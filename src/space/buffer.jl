@@ -87,14 +87,14 @@ Returns the vector held by the [`VectorBuffer`](@ref).
 
 Marks the [`VectorBuffer`](@ref) as lent out.
 """
-@inline lock!(buffer::VectorBuffer) = (buffer.in_use = true; return)
+@inline lock!(buffer::VectorBuffer) = (buffer.in_use = true; return nothing)
 
 """
 	unlock!(buffer::VectorBuffer)
 
 Marks the [`VectorBuffer`](@ref) as available.
 """
-@inline unlock!(buffer::VectorBuffer) = (buffer.in_use = false; return)
+@inline unlock!(buffer::VectorBuffer) = (buffer.in_use = false; return nothing)
 
 """
 	BufferType{T,VectorType}
@@ -205,10 +205,10 @@ put the same key on the free stack twice.
 """
 @inline function unlock!(space_buffer::GridSpaceBuffer, i)
     b = space_buffer.buffer[i]
-    in_use(b) || return          # already free: nothing to do
+    in_use(b) || return nothing          # already free: nothing to do
     unlock!(b)
     push!(space_buffer.free, i)
-    return
+    return nothing
 end
 
 """

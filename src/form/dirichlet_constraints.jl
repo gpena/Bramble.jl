@@ -183,6 +183,7 @@ function dirichlet_bc!(A::AbstractMatrix, Ωₕ::AbstractMeshType, labels::Symbo
         vec_bool = index_in_marker(Ωₕ, p)
         _dirichlet_bc_indices!(A, vec_bool)
     end
+    return A
 end
 
 # Overloads for ScalarGridSpace / AbstractSpaceType (single component)
@@ -226,7 +227,7 @@ function dirichlet_bc!(A::AbstractMatrix, space::CompositeGridSpace, labels::Sym
     for p in labels
         _dirichlet_bc_rows!(A, _leaf_entries(leaves, p))
     end
-    return nothing
+    return A
 end
 
 # Dense: one pass over the marked rows of each leaf.
@@ -241,7 +242,7 @@ function _dirichlet_bc_rows!(A::AbstractMatrix, entries::Tuple)
             end
         end
     end
-    return nothing
+    return A
 end
 
 # Sparse: a single sweep of the stored values, testing each row against every leaf, then
@@ -265,14 +266,14 @@ function _dirichlet_bc_rows!(A::SparseMatrixCSC, entries::Tuple)
             end
         end
     end
-    return nothing
+    return A
 end
 
 function dirichlet_bc!(v::AbstractVector, space::CompositeGridSpace, bcs, labels::Symbol...)
     for (sp, offset) in leaf_spaces_offsets(space)
         dirichlet_bc!(view(v, (offset + 1):(offset + ndofs(sp))), mesh(sp), bcs, labels...)
     end
-    return nothing
+    return v
 end
 
 """
@@ -299,7 +300,7 @@ rather than to the size of the grid — a boundary in a volume is a small fracti
 """
 function dirichlet_bc!(v::AbstractVector, Ωₕ::AbstractMeshType, bcs::ConstraintMarkers,
         labels::Symbol...)
-    isempty(labels) && return nothing
+    isempty(labels) && return v
 
     for marker in conditions(bcs)
         current_label = label(marker)
@@ -309,7 +310,7 @@ function dirichlet_bc!(v::AbstractVector, Ωₕ::AbstractMeshType, bcs::Constrai
         end
     end
 
-    return nothing
+    return v
 end
 
 """
@@ -337,6 +338,7 @@ function _dirichlet_bc_indices!(A::AbstractMatrix, index_in_marker::BitVector)
             temp_chunk &= temp_chunk - 1 # Clear the processed bit
         end
     end
+    return A
 end
 
 """
@@ -373,6 +375,7 @@ function _dirichlet_bc_indices!(A::SparseMatrixCSC, index_in_marker::BitVector)
             temp_chunk &= temp_chunk - 1
         end
     end
+    return A
 end
 
 """
@@ -414,7 +417,7 @@ function _dirichlet_bc_indices!(v::AbstractVector, Ωₕ::AbstractMeshType,
         end
     end
 
-    return
+    return v
 end
 
 #==============================================================================
@@ -467,7 +470,6 @@ function symmetrize!(A::AbstractMatrix, F::AbstractVector, Ωₕ::AbstractMeshTy
     for p in labels
         symmetrize!(A, F, index_in_marker(Ωₕ, p), 0)
     end
-    return nothing
 end
 
 """
@@ -491,7 +493,6 @@ function symmetrize!(A::AbstractMatrix, F::AbstractVector, Wₕ::CompositeGridSp
             symmetrize!(A, F, index_in_marker(mesh(sp), p), offset)
         end
     end
-    return nothing
 end
 
 # Walking the set bits of the mask, rather than the mask itself. The marked set is a
@@ -512,7 +513,6 @@ end
             rest &= rest - 1
         end
     end
-    return nothing
 end
 
 # Generic implementation for dense matrices
@@ -529,7 +529,6 @@ function symmetrize!(A::AbstractMatrix, F::AbstractVector, mask::BitVector, offs
             end
         end
     end
-    return nothing
 end
 
 # Implementation for sparse matrices
@@ -578,5 +577,4 @@ function symmetrize!(A::SparseMatrixCSC, F::AbstractVector, mask::BitVector,
 
         diagonal_found || (A[i, i] = one(T))
     end
-    return nothing
 end
