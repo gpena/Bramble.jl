@@ -501,15 +501,17 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         b = assemble(lfc)
 
         @test lfc(uₕ) ≈ sum(b .* values(uₕ))
-        @test lfc(uₕ; ast = astc) ≈ lfc(uₕ)
 
-        # Behind a barrier, because the keyword handling itself shows up as a few dozen
-        # bytes at top level. What matters is that no full-length vector is built.
-        function _contract_allocs(lf, v, ast)
-            lf(v; ast = ast)
-            return @allocated lf(v; ast = ast)
+        # The functor takes no `ast` on purpose, so it resolves every call and cannot be
+        # allocation free. What it must not do is build a full-length vector, which is what
+        # this pins: the bound is a fraction of one, not zero. Behind a barrier, because at
+        # top level over globals the call itself reports bytes it does not spend.
+        function _contract_allocs(lf, v)
+            lf(v)
+            return @allocated lf(v)
         end
-        @test _contract_allocs(lfc, uₕ, astc) == 0
+        @test _contract_allocs(lfc, uₕ) < 8 * n ÷ 100
+        @test assemble(lfc) ≈ b                     # and the vector path still works
 
         # Every arrangement has to agree with assembling and contracting by hand, not just
         # the simple one: the composite cores are separate code from the scalar one.
@@ -539,16 +541,16 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         # element of its own every time the tree is rebuilt. Caching the tree avoids it,
         # which is the same trade as the liveness one above.
         lfd = form(Wₕ, v -> innerₕ(D₋ₓ(uₕ), v))
-        astd = resolve_form_ast(lfd)
         @test lfd(uₕ) ≈ sum(assemble(lfd) .* values(uₕ))
-        @test _contract_allocs(lfd, uₕ, astd) == 0
 
-        function _resolve_allocs(lf, v)
-            lf(v)
-            return @allocated lf(v)
-        end
-        @test _resolve_allocs(lfd, uₕ) >= 8 * n     # one full-length element, from D₋ₓ
-        @test _resolve_allocs(lfc, uₕ) < 8 * n      # a plain source resolves for nothing
+        @test _contract_allocs(lfd, uₕ) >= 8 * n    # one full-length element, from D₋ₓ
+
+        # and hoisting the operator out of the form removes it, which is the documented
+        # remedy rather than caching the tree
+        duₕ = D₋ₓ(uₕ)
+        lfh = form(Wₕ, v -> innerₕ(duₕ, v))
+        @test lfh(uₕ) ≈ lfd(uₕ)
+        @test _contract_allocs(lfh, uₕ) < 8 * n ÷ 100
     end
 
     @testset "evaluation sees live coefficients too" begin

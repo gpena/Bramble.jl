@@ -48,7 +48,25 @@ test_space(form::LinearForm) = form.test_space
 # the blocks line up with the components the form routes its terms to, so a vector assembled
 # for one component ordering contracts against another without complaint. Requiring a
 # `VectorElement` makes the caller name the space it belongs to.
-@inline function (form::LinearForm)(vₕ::VectorElement; ast = resolve_form_ast(form))
+# Deliberately one argument. `assemble!` and `evaluate!` take an `ast` keyword so a caller
+# assembling in a loop can resolve once; this does not, because here it buys nothing worth an
+# interface: measured from 2,500 to 1,000,000 degrees of freedom, resolving a form over a
+# plain grid function is below the resolution of the clock and the keyword changed the total
+# by 0.01%. What it costs is the 160 B of the tree, per call, which is why the loop-shaped
+# entry points keep it and the convenience one does not.
+#
+# The exception is a source carrying an operator, where resolving *computes*: `D₋ₓ(fₕ)` on
+# grid data is 349 us and a full-length element at a million degrees of freedom, and the
+# keyword would have saved 18.8%. Hoisting it out of the form is the better answer and needs
+# no keyword at all —
+#
+#     dfₕ = D₋ₓ(fₕ)                          # once, and visibly
+#     l = form(Wₕ, v -> innerₕ(dfₕ, v))      # the source is plain data again
+#
+# which also keeps the form live with respect to `dfₕ`'s values, where a cached tree would
+# not.
+@inline function (form::LinearForm)(vₕ::VectorElement)
+    ast = resolve_form_ast(form)
     space = form.test_space
     Ωₕ = mesh(space)
     T = promote_type(_assembled_eltype(ast, space), eltype(values(vₕ)))
@@ -74,11 +92,11 @@ Use this when the assembled vector is wanted as well as the value — a Newton s
 residual and its norm, and assembling once serves both. `scratch` is overwritten on every
 call and holds the right-hand side when this returns.
 
-For the value *alone*, call the form instead: `form(vₕ; ast = ast)` fuses the contraction
-into the assembly walk and is faster — 1,528 us against 2,143 us at a million degrees of
-freedom, because it makes one pass where this writes a full-length vector and then reads it
-back. Both are allocation free when the AST is resolved outside the loop; the difference is
-memory traffic, not allocation.
+For the value *alone*, call the form instead: `form(vₕ)` fuses the contraction into the
+assembly walk and is faster — 1,528 us against 2,143 us at a million degrees of freedom,
+because it makes one pass where this writes a full-length vector and then reads it back. It
+takes no `ast`, so it resolves on every call and allocates the 160 B of the tree; this is
+the one to reach for when a loop must allocate nothing at all.
 
 Pass `ast` as well to resolve the expression once across the loop; resolving is 160 B per
 call otherwise. That caches the expression, so the loop must write through the same elements
