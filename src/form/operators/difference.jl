@@ -162,23 +162,6 @@ difference. Use this alias where the distinction genuinely does not arise.
 """
 const DifferenceNode{D, Dim} = Union{BackwardDifference{D, Dim}, ForwardDifference{D, Dim}}
 
-# `backward_difference_matrix` was never a function — no revision of the package defines
-# it. The generated names for the differences *including* their 1/h weights, which is what
-# these nodes stand for, are `backward_finite_difference` and `forward_finite_difference`,
-# and they want the direction as a `Val`; `Dim` here is a plain `Int`.
-#
-# The scale is `1` rather than `1.0` so that it promotes against whatever element type the
-# space has, instead of dragging a Float32 or an extended-precision assembly up to Float64.
-function Bramble.get_derivative_matrix_and_scale(
-        op::BackwardDifference{D, Dim}, W) where {D, Dim}
-    return backward_finite_difference(W, Val(Dim)), 1
-end
-
-function Bramble.get_derivative_matrix_and_scale(
-        op::ForwardDifference{D, Dim}, W) where {D, Dim}
-    return forward_finite_difference(W, Val(Dim)), 1
-end
-
 Bramble.get_innermost_dim(op::DifferenceNode{D, Dim}) where {D, Dim} = Dim
 
 # ==============================================================================
@@ -186,10 +169,8 @@ Bramble.get_innermost_dim(op::DifferenceNode{D, Dim}) where {D, Dim} = Dim
 # ==============================================================================
 #
 # Three more differences, each a symbolic counterpart of an operator the space layer
-# already provides on grid functions. Unlike the one-sided pair above, none of the three
-# has a matrix form in the space layer — `Dcₓ(Ωₕ)` is a MethodError, only `Dcₓ(uₕ)` exists
-# — so these nodes are the only route from those operators into an assembled form, and
-# they assemble through their stencils rather than through `get_derivative_matrix_and_scale`.
+# already provides. These nodes assemble through their stencils; the space layer's matrix
+# forms of the same three operators are what those stencils are tested against.
 #
 # The boundary convention is the one the one-sided nodes already use: the offsets stay and
 # the coefficients go to zero. A truncated point contributes nothing while the stencil
@@ -371,9 +352,9 @@ end
 """
 	ExtendedDifferenceNode{D, Dim}
 
-The three difference nodes that have no matrix form in the space layer, differencing along
-`Dim`. Grouped so that everything reading only the direction off a node covers all of them
-at once, as [`DifferenceNode`](@ref) does for the one-sided pair.
+The three difference nodes that are neither one-sided nor a jump, differencing along `Dim`.
+Grouped so that everything reading only the direction off a node covers all of them at
+once, as `DifferenceNode` does for the one-sided pair.
 """
 const ExtendedDifferenceNode{D, Dim} = Union{CenteredDifference{D, Dim},
     StarDifference{D, Dim}, CrossWeightedDifference{D, Dim}}

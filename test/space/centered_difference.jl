@@ -20,6 +20,11 @@ using Bramble: values, components
 # u_{i+1} - u_{i-1} against v_i. That cancellation is the reason to divide by this
 # denominator rather than by the two spacings separately.
 
+# The operators as matrices, for `test_operator_matrix_equivalence` (test/space/difference.jl).
+centered_ops(::Val{1}) = (Dcₓ,)
+centered_ops(::Val{2}) = (Dcₓ, Dcᵧ)
+centered_ops(::Val{3}) = (Dcₓ, Dcᵧ, Dc₂)
+
 @testset "Centered difference" begin
     @testset "matches the definition" begin
         for (lbl, unif) in (("uniform", true), ("random", false))
@@ -347,5 +352,23 @@ using Bramble: values, components
                 ok_x && ok_y
             end
         end
+    end
+
+    @testset "the matrix and the grid function agree" begin
+        # `diag(1/(hᵢ + hᵢ₊₁))` times `shift₊₁ - shift₋₁`, which is the stencil skipping
+        # its own centre.
+        test_operator_matrix_equivalence(centered_ops)
+
+        Ωm = mesh(domain(interval(0.0, 1.0)), 7, false)
+        @test Dcₓ(gridspace(Ωm)) == Dcₓ(Ωm)
+
+        # both ends are truncated, so both end rows are empty
+        n = npoints(Ωm)
+        M = Matrix(Dcₓ(Ωm))
+        @test all(iszero, M[1, :])
+        @test all(iszero, M[n, :])
+
+        # and a mesh too short for the stencil is refused, as the grid function form is
+        @test_throws ArgumentError Dcₓ(mesh(domain(interval(0.0, 1.0)), 2, true))
     end
 end

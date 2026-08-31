@@ -348,8 +348,9 @@ and their inner products. `Dstar₊ₕ` returns all coordinates at once, as `∇
 This is why the operator exists. Energy estimates for these schemes are derived by
 moving a difference from one factor to the other, and that step is exact only with this
 pairing: with `D₊ₓ` it leaves a residual that does not vanish under refinement, since it
-is a difference of quadrature weights and not a truncation error. Unlike the other
-difference families, `Dstar₊` takes a grid function only — it has no matrix form.
+is a difference of quadrature weights and not a truncation error. Like the other
+difference families, `Dstar₊` can also be had as a sparse matrix: `Dstar₊ₓ(Wₕ)` is
+`diag(2/(hᵢ + hᵢ₊₁))` times the unscaled forward difference, with an empty last row.
 
 ## 7. The centered difference, `Dcₓ`
 
@@ -406,8 +407,9 @@ term is symmetric in the two.
 Accuracy follows the usual rule: the centered difference approximates the derivative at
 the midpoint of its stencil, which is ``x_i`` only when the two spacings match. So it is
 second order on a uniform grid and first order otherwise, where the one-sided differences
-are first order on both. As with `Dstar₊ₓ`, `Dcₓ` takes a grid function only and has no
-matrix form; `Dcₕ` gives every coordinate at once.
+are first order on both. Like every other family, `Dcₓ` accepts a mesh or a grid space for
+the matrix and a grid function to apply it; `Dcₕ` gives every coordinate at once. Both end
+rows of the matrix are empty, which is the truncation.
 
 ## 8. Second order on a non-uniform grid, `Dₕₓ`
 

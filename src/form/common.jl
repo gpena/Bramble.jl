@@ -165,7 +165,7 @@ end
 
 An AST node representing a source term defined by a discrete vector of values.
 
-Note the division of labour with [`GridFunctionScale`](@ref), which also carries values per
+Note the division of labour with `GridFunctionScale`, which also carries values per
 grid point. A `SourceFunction` holds a function of *position*, `f(x)`, evaluated at the
 point. A `Function` inside a `GridFunctionScale` is something else entirely: a
 **zero-argument thunk** returning the vector or number to scale by, called as `f()` both

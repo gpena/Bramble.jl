@@ -3,9 +3,8 @@ using Bramble
 using Bramble: IdentityOperator, IndexedTrialFunction, IndexedTestFunction,
                TrialFunction, TestFunction,
                BackwardDifference, ForwardDifference, DifferenceNode,
-               get_derivative_matrix_and_scale, get_innermost_dim, is_symbolic,
+               get_innermost_dim, is_symbolic,
                resolve_ast, find_trial_component, find_test_component,
-               backward_finite_difference, forward_finite_difference,
                grad_backward, grad_forward
 
 # The two one-sided difference nodes of the symbolic layer.
@@ -27,30 +26,11 @@ using Bramble: IdentityOperator, IndexedTrialFunction, IndexedTestFunction,
 
     BD, FD = typeof(D₋ₓ(id)), typeof(D₊ₓ(id))
 
-    @testset "both resolve to the matrix they stand for" begin
-        # each node carries its direction, and resolves to the difference *including* its
-        # 1/h weights — the same matrix the space layer builds directly
-        for (op, want, dim) in ((D₋ₓ(id), backward_finite_difference(Wₕ, Val(1)), 1),
-            (D₊ₓ(id), forward_finite_difference(Wₕ, Val(1)), 1),
-            (D₋ᵧ(id), backward_finite_difference(Wₕ, Val(2)), 2),
-            (D₊ᵧ(id), forward_finite_difference(Wₕ, Val(2)), 2))
-            mat, scale = get_derivative_matrix_and_scale(op, Wₕ)
-            @test mat == want
-            @test get_innermost_dim(op) == dim
-
-            # `1`, not `1.0`: the scale has to promote against the space's element type
-            # rather than dragging a Float32 assembly up to Float64
-            @test scale === 1
-            @test scale isa Integer
-        end
-    end
-
     @testset "the scaling nodes recurse through both alike" begin
         for op in (D₋ₓ(id), D₊ₓ(id))
-            _, s = get_derivative_matrix_and_scale(2 * op, Wₕ)
-            @test s == 2
             @test get_innermost_dim(2 * op) == 1
             @test get_innermost_dim(op / 4) == 1
+            @test get_innermost_dim(7 * (op / 4)) == 1
         end
     end
 

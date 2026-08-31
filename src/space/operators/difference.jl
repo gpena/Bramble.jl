@@ -660,8 +660,8 @@ The forward difference of `uₕ` along `dim_val`, divided by the averaged spacin
     \\frac{\\textrm{u}_h(x_{i+1}) - \\textrm{u}_h(x_i)}{(h_i + h_{i+1})/2}
 ```
 
-Reached through [`Dstar₊ₓ`](@ref) and its siblings. Unlike the other difference families
-this one takes a grid function only, not a mesh or a grid space: there is no matrix form.
+Reached through [`Dstar₊ₓ`](@ref) and its siblings, and takes a mesh, a grid space or a
+grid function as the other difference families do.
 
 The last point has no forward neighbour, so it is truncated to zero, as in
 [`D₊ₓ`](@ref).
@@ -700,15 +700,16 @@ for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
           The forward difference of `uₕ` along the `$($direction)` direction over the
           averaged spacing, ``\\\\frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}``.
 
-          Alias for `forward_star_difference(uₕ, Val($($i)))`. Takes a grid function only;
-          there is no matrix form. The last point along `$($direction)` is truncated to
-          zero.
+          Alias for `forward_star_difference(arg, Val($($i)))`. `arg` is a mesh, a grid
+          space or a [`VectorElement`](@ref): the first two give the operator as a sparse
+          matrix, the third applies it and returns a `VectorElement`. The last point along
+          `$($direction)` is truncated to zero.
 
           Accepts a grid function of a scalar or of a composite grid space. On a composite
           one the operator is applied to each component in turn, and the result is the
           composite grid function whose components are those results.
           """
-        @inline $alias(uₕ::VectorElement) = forward_star_difference(uₕ, Val($i))
+        @inline $alias(arg) = forward_star_difference(arg, Val($i))
     end
 end
 
@@ -740,8 +741,8 @@ The centered difference of `uₕ` along `dim_val`:
     \\frac{\\textrm{u}_h(x_{i+1}) - \\textrm{u}_h(x_{i-1})}{h_i + h_{i+1}}
 ```
 
-Reached through [`Dcₓ`](@ref) and its siblings. Like [`Dstar₊ₓ`](@ref), and unlike the
-one-sided families, this takes a grid function only: there is no matrix form.
+Reached through [`Dcₓ`](@ref) and its siblings, and takes a mesh, a grid space or a grid
+function as the other difference families do.
 
 The denominator is ``x_{i+1} - x_{i-1}``, so the operator reproduces the derivative of an
 affine function exactly on any grid, uniform or not. Both the first and the last point
@@ -785,8 +786,10 @@ for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
           The centered difference of `uₕ` along the `$($direction)` direction,
           ``\\\\frac{u_{i+1} - u_{i-1}}{h_i + h_{i+1}}``.
 
-          Alias for `centered_difference(uₕ, Val($($i)))`. Takes a grid function only;
-          there is no matrix form. The first and last points along `$($direction)` are
+          Alias for `centered_difference(arg, Val($($i)))`. `arg` is a mesh, a grid space
+          or a [`VectorElement`](@ref): the first two give the operator as a sparse
+          matrix, the third applies it and returns a `VectorElement`.
+          The first and last points along `$($direction)` are
           truncated to zero, so the mesh needs at least three points along `$($direction)`
           and an `ArgumentError` is thrown when it has fewer.
 
@@ -794,7 +797,7 @@ for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
           one the operator is applied to each component in turn, and the result is the
           composite grid function whose components are those results.
           """
-        @inline $alias(uₕ::VectorElement) = centered_difference(uₕ, Val($i))
+        @inline $alias(arg) = centered_difference(arg, Val($i))
     end
 end
 
@@ -826,8 +829,8 @@ The cross-weighted centered difference of `uₕ` along `dim_val`:
     \\frac{h_{i+1}}{h_i + h_{i+1}}\\, \\textrm{D}_{-}\\textrm{u}_h(x_i)
 ```
 
-Reached through [`Dₕₓ`](@ref) and its siblings. Like [`Dcₓ`](@ref), and unlike the
-one-sided families, this takes a grid function only: there is no matrix form.
+Reached through [`Dₕₓ`](@ref) and its siblings, and takes a mesh, a grid space or a grid
+function as the other difference families do.
 
 It is the same two one-sided differences [`Dcₓ`](@ref) combines, weighted by the opposite
 spacings. That is the combination which cancels the leading truncation term on a
@@ -876,9 +879,11 @@ for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
           direction, the backward differences at ``x_{i+1}`` and ``x_i`` weighted by
           ``h_i`` and ``h_{i+1}``.
 
-          Alias for `cross_weighted_difference(uₕ, Val($($i)))`. Second order on a
-          non-uniform grid, where [`Dc$($suffix)`](@ref) is first. Takes a grid function
-          only; there is no matrix form. The first and last points along `$($direction)`
+          Alias for `cross_weighted_difference(arg, Val($($i)))`. Second order on a
+          non-uniform grid, where [`Dc$($suffix)`](@ref) is first. `arg` is a mesh, a grid space
+          or a [`VectorElement`](@ref): the first two give the operator as a sparse
+          matrix, the third applies it and returns a `VectorElement`.
+          The first and last points along `$($direction)`
           are truncated to zero, so the mesh needs at least three points along
           `$($direction)` and an `ArgumentError` is thrown when it has fewer.
 
@@ -886,7 +891,7 @@ for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
           one the operator is applied to each component in turn, and the result is the
           composite grid function whose components are those results.
           """
-        @inline $alias(uₕ::VectorElement) = cross_weighted_difference(uₕ, Val($i))
+        @inline $alias(arg) = cross_weighted_difference(arg, Val($i))
     end
 end
 
@@ -907,3 +912,120 @@ latter: each entry of the tuple is then itself a composite grid function.
 @inline ∇ₕ(uₕ::VectorElement, ::Val{1}) = cross_weighted_difference(uₕ, Val(1))
 @inline ∇ₕ(uₕ::VectorElement, ::Val{D}) where {D} = ntuple(
     i -> cross_weighted_difference(uₕ, Val(i)), Val(D))
+
+# ==============================================================================
+# Matrix forms for the three centred families
+# ==============================================================================
+#
+# `Dstar₊`, `Dc` and `Dₕ` had grid-function forms only, so of the eight operator families
+# five could be had as a matrix and three could not. That asymmetry had to be explained in
+# every one of their docstrings, and it left the form layer's nodes for them with nothing
+# to be checked against.
+#
+# Each is a diagonal scaling of unscaled difference matrices this file already builds, so
+# none needs a new traversal:
+#
+#     Dstar₊ = diag(2/(hᵢ + hᵢ₊₁))                  · (shift₊₁ - shift₀)
+#     Dc     = diag(1/(hᵢ + hᵢ₊₁))                  · (shift₊₁ - shift₋₁)
+#     Dₕ     = diag(hᵢ/((hᵢ+hᵢ₊₁)hᵢ₊₁))             · diff₊
+#            + diag(hᵢ₊₁/((hᵢ+hᵢ₊₁)hᵢ))             · diff₋
+#
+# The cross-weighted one falls out of its own definition: it is D₋ at xᵢ₊₁ weighted by hᵢ
+# and D₋ at xᵢ weighted by hᵢ₊₁, over their sum, and D₋(u)ᵢ₊₁ is diff₊(u)ᵢ/hᵢ₊₁ while
+# D₋(u)ᵢ is diff₋(u)ᵢ/hᵢ. So the two weights above are what is left after dividing through.
+#
+# The weights read the mesh's cached `spacings` rather than `spacing_for_derivative`. The
+# cached vector repeats the first interval in h₁ instead of zeroing it, and that repeated
+# value is the one the grid-function kernels use, so reading it is what makes the matrix
+# agree with them at the first point. Truncation is applied by index here instead, which
+# is also what the form layer's stencils do.
+
+# Returns `w`, as a mutating function with a single destination does, so that the builders
+# below can write `Diagonal(_extended_weights!(cache, …))` rather than filling the cache on
+# one line and reaching for it on the next.
+@inline function _extended_weights!(w::AbstractVector, Ωₕ::AbstractMeshType,
+        ::Val{DIFF_DIM}, weight::F) where {F, DIFF_DIM}
+    1 <= DIFF_DIM <= dim(Ωₕ) || _throw_stencil_dim_error(DIFF_DIM, dim(Ωₕ))
+
+    dims = npoints(Ωₕ, Tuple)
+    h = spacings(Ωₕ(DIFF_DIM))
+    n = dims[DIFF_DIM]
+    li = LinearIndices(dims)
+
+    @inbounds for I in CartesianIndices(dims)
+        w[li[I]] = weight(h, I[DIFF_DIM], n)
+    end
+    return w
+end
+
+# Each returns zero wherever its stencil would need a neighbour the grid does not have,
+# which truncates that slice of the matrix to an empty row.
+@inline _star_weight(h, i, n) = i == n ? zero(eltype(h)) : 2 / (h[i] + h[i + 1])
+@inline _centered_weight(h, i, n) = (i == 1 || i == n) ? zero(eltype(h)) :
+                                    inv(h[i] + h[i + 1])
+@inline _cross_forward_weight(h, i, n) = (i == 1 || i == n) ? zero(eltype(h)) :
+                                         h[i] / ((h[i] + h[i + 1]) * h[i + 1])
+@inline _cross_backward_weight(h, i, n) = (i == 1 || i == n) ? zero(eltype(h)) :
+                                          h[i + 1] / ((h[i] + h[i + 1]) * h[i])
+
+"""
+	forward_star_difference(Ωₕ::AbstractMeshType, dim_val::Val)
+
+The starred forward difference along `dim_val`, as a sparse matrix.
+
+The forward difference scaled by the averaged spacing instead of the forward one. The last
+point along the direction has no forward neighbour, so its row is empty.
+"""
+function forward_star_difference(Ωₕ::AbstractMeshType, dim_val::Val;
+        vector_cache = __vector(Ωₕ))
+    w = _extended_weights!(vector_cache, Ωₕ, dim_val, _star_weight)
+    return Diagonal(w) * _difference_operator(Ωₕ, Forward(), dim_val)
+end
+
+"""
+	centered_difference(Ωₕ::AbstractMeshType, dim_val::Val)
+
+The centered difference along `dim_val`, as a sparse matrix.
+
+Reaches one point either side, so both end rows are empty and the mesh needs at least three
+points along the direction.
+"""
+function centered_difference(Ωₕ::AbstractMeshType, dim_val::Val{DIM};
+        vector_cache = __vector(Ωₕ)) where {DIM}
+    n = npoints(Ωₕ(DIM))
+    n >= 3 || _throw_centered_too_few_points(DIM, n)
+
+    w = _extended_weights!(vector_cache, Ωₕ, dim_val, _centered_weight)
+    return Diagonal(w) * difference_shift(Ωₕ, dim_val, Val(1), Val(-1))
+end
+
+"""
+	cross_weighted_difference(Ωₕ::AbstractMeshType, dim_val::Val)
+
+The cross-weighted centered difference along `dim_val`, as a sparse matrix.
+
+A three-point stencil, so both end rows are empty and the mesh needs at least three points
+along the direction. Built as the two one-sided differences it is defined from, each under
+its own diagonal weight.
+"""
+function cross_weighted_difference(Ωₕ::AbstractMeshType, dim_val::Val{DIM};
+        vector_cache = __vector(Ωₕ)) where {DIM}
+    n = npoints(Ωₕ(DIM))
+    n >= 3 || _throw_centered_too_few_points(DIM, n)
+
+    forward = Diagonal(_extended_weights!(vector_cache, Ωₕ, dim_val,
+        _cross_forward_weight)) * _difference_operator(Ωₕ, Forward(), dim_val)
+
+    # the product above is materialised, so the cache is free to be rewritten
+    backward = Diagonal(_extended_weights!(vector_cache, Ωₕ, dim_val,
+        _cross_backward_weight)) * _difference_operator(Ωₕ, Backward(), dim_val)
+    return forward + backward
+end
+
+# A grid space carries its mesh, as for every other family here.
+@inline forward_star_difference(Wₕ::AbstractSpaceType, dim_val::Val) = forward_star_difference(
+    mesh(Wₕ), dim_val)
+@inline centered_difference(Wₕ::AbstractSpaceType, dim_val::Val) = centered_difference(
+    mesh(Wₕ), dim_val)
+@inline cross_weighted_difference(Wₕ::AbstractSpaceType, dim_val::Val) = cross_weighted_difference(
+    mesh(Wₕ), dim_val)

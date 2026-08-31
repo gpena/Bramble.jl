@@ -57,8 +57,12 @@ end
                 Wₕ = gridspace(Ωₕ)
                 id = IdentityOperator(Wₕ)
                 uₕ = Rₕ(Wₕ, x -> x^3 + sin(3x) + 1)
+                # the four new families, and the four that were already here — with
+                # `get_derivative_matrix_and_scale` gone, this is what pins the one-sided
+                # nodes to the operators they stand for
                 for (node, op) in ((jumpₓ(id), jumpₓ), (Dcₓ(id), Dcₓ),
-                    (Dstar₊ₓ(id), Dstar₊ₓ), (Dₕₓ(id), Dₕₓ))
+                    (Dstar₊ₓ(id), Dstar₊ₓ), (Dₕₓ(id), Dₕₓ),
+                    (D₋ₓ(id), D₋ₓ), (D₊ₓ(id), D₊ₓ), (M₋ₓ(id), M₋ₓ), (M₊ₓ(id), M₊ₓ))
                     got, escaped = apply_stencil(node, Wₕ, uₕ)
                     @test got ≈ values(op(uₕ)) rtol=1e-12
                     @test escaped == 0

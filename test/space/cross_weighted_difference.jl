@@ -17,6 +17,11 @@ using Bramble: values, components
 # 2x_i(h_i + h_{i+1}) over h_i + h_{i+1}. Dc does not do this unless the grid is uniform,
 # which is the whole difference between the two operators.
 
+# The operators as matrices, for `test_operator_matrix_equivalence` (test/space/difference.jl).
+cross_weighted_ops(::Val{1}) = (Dₕₓ,)
+cross_weighted_ops(::Val{2}) = (Dₕₓ, Dₕᵧ)
+cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
+
 @testset "Cross-weighted centered difference" begin
     @testset "matches the definition" begin
         for (lbl, unif) in (("uniform", true), ("random", false))
@@ -175,5 +180,25 @@ using Bramble: values, components
 
         @test alloc_test(Dₕₓ, u1) == alloc_test(similar, u1)
         @test alloc_test(Dₕᵧ, u2) == alloc_test(similar, u2)
+    end
+
+    @testset "the matrix and the grid function agree" begin
+        # Not one diagonal scaling of one difference, unlike the other two: it is the two
+        # one-sided differences it is defined from, each under its own weight —
+        # `diag(hᵢ/((hᵢ+hᵢ₊₁)hᵢ₊₁))·diff₊ + diag(hᵢ₊₁/((hᵢ+hᵢ₊₁)hᵢ))·diff₋`. That is worth
+        # checking against the kernel rather than trusting the algebra.
+        test_operator_matrix_equivalence(cross_weighted_ops)
+
+        Ωm = mesh(domain(interval(0.0, 1.0)), 7, false)
+        @test Dₕₓ(gridspace(Ωm)) == Dₕₓ(Ωm)
+
+        n = npoints(Ωm)
+        M = Matrix(Dₕₓ(Ωm))
+        @test all(iszero, M[1, :])
+        @test all(iszero, M[n, :])
+        # three points wide in the interior, where the other two are two
+        @test count(!iszero, M[4, :]) == 3
+
+        @test_throws ArgumentError Dₕₓ(mesh(domain(interval(0.0, 1.0)), 2, true))
     end
 end

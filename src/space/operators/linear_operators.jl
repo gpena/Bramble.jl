@@ -31,9 +31,14 @@ Left out, and why:
     `weights(Wₕ, Innerplus(), i)`. Rewriting them against the current interface is work
     the form layer does not need done to load.
 
-`get_derivative_matrix_and_scale` and `get_innermost_dim` are kept, unlike the rest of
-that group: `src/form/operators/difference.jl` adds methods to both, so the functions have
-to exist for it to extend them.
+`get_innermost_dim` is kept, unlike the rest of that group:
+`src/form/operators/difference.jl` adds methods to it, so the function has to exist for it
+to extend them. Its companion `get_derivative_matrix_and_scale` was kept alongside it for
+a while and then removed: nothing ever called it — not `src/`, and not `bilinear.jl` or
+`linear.jl` either — so it was a matrix-assembly path with no assembler. The form layer
+assembles from `local_stencil`. If a matrix path is wanted when `bilinear.jl` returns, it
+should be written against what that file actually needs rather than against a guess, and
+every operator family now has a matrix form to build it from.
 
 The arithmetic below is written as `Base.:*` and so on rather than as bare `*`. Bramble
 does not import those operators, so a bare definition would create a `Bramble.*` distinct
@@ -208,15 +213,7 @@ show(io::IO, ::ZeroOperator) = print(io, "0")
 #
 # `src/form/operators/difference.jl` adds the methods for its own difference nodes; what
 # lives here is the declaration and the recursion through the two scaling nodes, which
-# belong to this algebra rather than to the form layer.
-
-"""
-	get_derivative_matrix_and_scale(op::LazyOp, Wₕ)
-
-The matrix of the derivative `op` represents, together with the accumulated scaling to
-apply to it. Recurses through the scaling nodes down to the difference node that answers.
-"""
-function get_derivative_matrix_and_scale end
+# belongs to this algebra rather than to the form layer.
 
 """
 	get_innermost_dim(op::LazyOp)
@@ -224,16 +221,6 @@ function get_derivative_matrix_and_scale end
 The coordinate direction of the difference node at the bottom of `op`.
 """
 function get_innermost_dim end
-
-function get_derivative_matrix_and_scale(op::OperatorScale, Wₕ)
-    mat, s = get_derivative_matrix_and_scale(op.inner_op, Wₕ)
-    return mat, s * op.scalar
-end
-
-function get_derivative_matrix_and_scale(op::GridFunctionScale, Wₕ)
-    mat, s = get_derivative_matrix_and_scale(op.inner_op, Wₕ)
-    return mat, s .* op.grid_function
-end
 
 @inline get_innermost_dim(op::OperatorScale) = get_innermost_dim(op.inner_op)
 @inline get_innermost_dim(op::GridFunctionScale) = get_innermost_dim(op.inner_op)

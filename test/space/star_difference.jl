@@ -15,6 +15,11 @@ using Bramble: values, components, star_spacings, StarSpacings, submeshes
 #
 # whenever vₕ vanishes on the boundary.
 
+# The operators as matrices, for `test_operator_matrix_equivalence` (test/space/difference.jl).
+star_ops(::Val{1}) = (Dstar₊ₓ,)
+star_ops(::Val{2}) = (Dstar₊ₓ, Dstar₊ᵧ)
+star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
+
 @testset "Starred forward difference" begin
     @testset "the averaged spacing it divides by" begin
         for (lbl, unif) in (("uniform", true), ("random", false))
@@ -275,5 +280,19 @@ using Bramble: values, components, star_spacings, StarSpacings, submeshes
                 ok_x && ok_y
             end
         end
+    end
+
+    @testset "the matrix and the grid function agree" begin
+        # This family had no matrix form until the three centred ones were given one. It is
+        # a diagonal scaling of the unscaled forward difference — `diag(2/(hᵢ + hᵢ₊₁))`
+        # times it — so the two routes have to give the same numbers.
+        test_operator_matrix_equivalence(star_ops)
+
+        Ωm = mesh(domain(interval(0.0, 1.0)), 7, false)
+        @test Dstar₊ₓ(gridspace(Ωm)) == Dstar₊ₓ(Ωm)     # a space answers as its mesh does
+
+        # the truncated point is an empty row, matching the zero the grid function gets
+        n = npoints(Ωm)
+        @test all(iszero, Matrix(Dstar₊ₓ(Ωm))[n, :])
     end
 end
