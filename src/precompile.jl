@@ -447,8 +447,9 @@ end
 # here. Measured in a fresh session before this was added, the form paths cost about 580 ms
 # of first-call latency, of which `stencil_offsets` alone was 176 ms.
 #
-# Assembly itself is still locked, so `form`, `assemble` and `assemble!` are absent — the
-# template for them is in form/precompile.jl, to be folded in when those files return.
+# Assembly is covered below, in 1D and 2D. `form/precompile.jl` holds an older template for
+# it; that one is mostly bilinear, which is still locked, and its `assemble` calls use a
+# positional signature the code no longer has, so it was written fresh rather than folded in.
 
 # Every node kind, built over one space, plus the traits each one answers. Returns a tree
 # with a trial and a test leaf so the caller can reach the products.
@@ -584,6 +585,100 @@ function _pc_form_dirichlet(Ωₕ::AbstractMeshType, Wₕ, Vₕ, be, label::Symb
     return nothing
 end
 
+# Assembly. `_assemble_linear_core!`, `_scatter_term!`, `_route_terms!` and `_sweep_colour!`
+# are each parameterised on the AST type, so a form shape this workload never names compiles
+# from scratch on the caller's first `assemble` — nothing above reaches them, because the
+# stencil session evaluates `local_stencil` directly and never drives a loop over the grid.
+#
+# Measured in a fresh session before this was added, the shapes below cost 1,032 ms of
+# first-call latency in 1D and 2D together.
+#
+# 3D is deliberately absent, as it is in the sessions above. Its shapes are the most
+# expensive to reach — 78 to 114 ms apiece — but they are also three more specialisations of
+# every core, and the build pays for them whether or not the caller ever works in 3D.
+#
+# One call per shape rather than a loop over a tuple of closures. A loop makes the closure
+# type a union at the call site and compiles one generic version, which is not the code the
+# caller will run: the same mistake read 0.005 ms for 40 ms of work when it was made in the
+# harness that measured this.
+function _pc_assemble_shape(Wₕ, g, b)
+    lf = form(Wₕ, g)
+    ast = resolve_form_ast(lf)
+
+    test_space(lf)
+    stencil_offsets(ast)
+    _colour_strides(stencil_offsets(ast))
+    _assembled_eltype(ast, Wₕ)
+
+    assemble(lf)
+    assemble!(b, lf; ast = ast)
+    return nothing
+end
+
+# The threaded sweep as well. Worth having for the two shapes that fix its specialisations:
+# one reaching only its own point, which colours into a single flat pass, and one reaching a
+# neighbour, which takes the strided path instead.
+function _pc_assemble_shape_threaded(Wₕ, g, b)
+    _pc_assemble_shape(Wₕ, g, b)
+
+    lf = form(Wₕ, g)
+    assemble_parallel!(b, lf, resolve_form_ast(lf))
+    return nothing
+end
+
+# A composite form reaches two more cores: the per-leaf sweep for terms that mean the same
+# thing on every block, and `_route_terms!` for terms that name a component.
+function _pc_assemble_composite(Vₕ, g, b)
+    lf = form(Vₕ, g)
+    ast = resolve_form_ast(lf)
+
+    routes_by_component(ast)
+    assemble(lf)
+    assemble!(b, lf; ast = ast)
+    return nothing
+end
+
+# The transverse directions, which only exist above 1D.
+_pc_assemble_directional(Wₕ, uₕ, b, ::Val{1}) = nothing
+
+function _pc_assemble_directional(Wₕ, uₕ, b, ::Val{2})
+    _pc_assemble_shape(Wₕ, v -> innerₕ(uₕ, D₋ᵧ(v)), b)
+    return nothing
+end
+
+function _pc_form_assembly(Ωₕ::AbstractMeshType, Wₕ, Vₕ, label::Symbol, f,
+        dim_val::Val{D}) where {D}
+    uₕ = Rₕ(Wₕ, f)
+    b = zeros(eltype(Wₕ), ndofs(Wₕ))
+    bv = zeros(eltype(Vₕ), ndofs(Vₕ))
+
+    # one colour, then two
+    _pc_assemble_shape_threaded(Wₕ, v -> innerₕ(uₕ, v), b)
+    _pc_assemble_shape_threaded(Wₕ, v -> innerₕ(uₕ, D₋ₓ(v)), b)
+
+    # the other weight, a sum of two kinds of inner product, and a linear combination in the
+    # test argument — the three shapes a form is most likely to be written as
+    _pc_assemble_shape(Wₕ, v -> inner₊ₓ(uₕ, D₋ₓ(v)), b)
+    _pc_assemble_shape(Wₕ, v -> innerₕ(uₕ, v) + inner₊ₓ(uₕ, D₋ₓ(v)), b)
+    _pc_assemble_shape(Wₕ, v -> innerₕ(uₕ, v + 2 * D₋ₓ(v) - M₋ₓ(v)), b)
+    _pc_assemble_directional(Wₕ, uₕ, b, dim_val)
+
+    # written out per component, the shorthand that sums them, and a routed term carrying
+    # operators
+    uv = Rₕ(Vₕ, (f, f))
+    c = components(uv)
+    _pc_assemble_composite(Vₕ, v -> innerₕ(c[1], v(1)) + innerₕ(c[2], v(2)), bv)
+    _pc_assemble_composite(Vₕ, v -> innerₕ(uv, v), bv)
+    _pc_assemble_composite(
+        Vₕ, v -> innerₕ(c[1], v(1) + D₋ₓ(v(1))) + innerₕ(c[2], v(2)), bv)
+
+    # and the constrained right-hand side, which is a different path from the bare one
+    bcs = dirichlet_constraints(set(Ωₕ), label => f)
+    assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet_conditions = bcs,
+        dirichlet_labels = label)
+    return nothing
+end
+
 function _pc_form_session(Ωₕ::AbstractMeshType, be, label::Symbol, f, ft, I_time,
         dim_val::Val{D}) where {D}
     Wₕ = gridspace(Ωₕ)
@@ -593,6 +688,7 @@ function _pc_form_session(Ωₕ::AbstractMeshType, be, label::Symbol, f, ft, I_t
     _pc_form_stencils(Ωₕ, Wₕ, id, u, v, label)
     _pc_form_blocks(Vₕ, dim_val)
     _pc_form_dirichlet(Ωₕ, Wₕ, Vₕ, be, label, f, ft, I_time)
+    _pc_form_assembly(Ωₕ, Wₕ, Vₕ, label, f, dim_val)
 
     # the composite space reaches the same nodes through a different space type
     _pc_form_ast(Vₕ, dim_val)
