@@ -260,19 +260,97 @@ function _assemble_linear_core!(b::Vector, space::CompositeGridSpace{N}, ast::AS
     # itself composite, `indices(mesh(sp))` covers one leaf's grid while `ndofs(sp)` counts
     # the whole nested block, so the old loop wrote into a fraction of the range it had
     # reserved.
-    for (sp, offset) in leaf_spaces_offsets(space)
-        for I in indices(mesh(sp))
-            lin_idx = lin_indices[I]
-            stencil = local_stencil(ast, sp, I, mesh_markers, lin_idx)
+    leaves = leaf_spaces_offsets(space)
 
-            for (off_v, weight) in stencil
-                Iv = I + CartesianIndex(off_v)
+    # A form written without component indices means the same integrand in every block, and
+    # takes the path that allocates nothing. A form that names components —
+    # `innerₕ(uₕ(1), v(1)) + innerₕ(uₕ(2), v(2))` — has to be split, and splitting builds a
+    # vector of terms, so the question is asked once here rather than paid for always.
+    if !routes_by_component(ast)
+        for (sp, offset) in leaves
+            _scatter_term!(b, sp, ast, lin_indices, mesh_markers, offset)
+        end
+        return b
+    end
 
-                if checkbounds(Bool, lin_indices, Iv)
-                    row_local = lin_indices[Iv]
-                    row_global = row_local + offset
-                    @inbounds b[row_global] += weight
-                end
+    _route_terms!(b, ast, leaves, lin_indices, mesh_markers)
+    return b
+end
+
+# Walk the sum and send each term to the blocks it belongs to.
+#
+# Recursing the tree rather than calling `flatten_sum` and iterating the result: that answers
+# with a `Vector{Any}`, which allocates and makes every term a dynamic read. Recursing keeps
+# each term concretely typed at its own call, so this is inferable end to end and costs
+# nothing — 544 B per assembly became 0.
+function _route_terms!(b::Vector, op::OperatorAdd, leaves, lin_indices, mesh_markers)
+    _route_terms!(b, op.left_op, leaves, lin_indices, mesh_markers)
+    _route_terms!(b, op.right_op, leaves, lin_indices, mesh_markers)
+    return b
+end
+
+function _route_terms!(b::Vector, term::TERM, leaves, lin_indices,
+        mesh_markers) where {TERM}
+    target = test_component_or_nothing(term)
+    for (c, leaf) in enumerate(leaves)
+        # a term naming a component goes to that block alone; one naming none goes to every
+        # block, so the two spellings can be mixed in a single form
+        (target === nothing || target == c) || continue
+        _scatter_term!(b, first(leaf), term, lin_indices, mesh_markers, last(leaf))
+    end
+    return b
+end
+
+# The threaded core's counterpart of `_route_terms!`: one point, every term, routed to the
+# blocks each belongs to. Recursive for the same reason — no vector, nothing dynamic.
+function _route_point!(dest::Vector, op::OperatorAdd, leaves, I, lin_idx::Int, lin_indices,
+        mesh_markers)
+    _route_point!(dest, op.left_op, leaves, I, lin_idx, lin_indices, mesh_markers)
+    _route_point!(dest, op.right_op, leaves, I, lin_idx, lin_indices, mesh_markers)
+    return dest
+end
+
+function _route_point!(dest::Vector, term::TERM, leaves, I, lin_idx::Int, lin_indices,
+        mesh_markers) where {TERM}
+    target = test_component_or_nothing(term)
+    for (c, leaf) in enumerate(leaves)
+        (target === nothing || target == c) || continue
+        _scatter_point!(dest, term, first(leaf), I, lin_idx, lin_indices, mesh_markers,
+            last(leaf))
+    end
+    return dest
+end
+
+# One point's contribution, behind a function barrier for the same reason as
+# `_scatter_term!`: a term read out of a `Vector{Any}` is only concretely typed once it is
+# an argument.
+@inline function _scatter_point!(
+        dest::Vector, term::TERM, sp, I, lin_idx::Int, lin_indices,
+        mesh_markers, offset::Int) where {TERM}
+    stencil = local_stencil(term, sp, I, mesh_markers, lin_idx)
+    for (off_v, weight) in stencil
+        Iv = I + CartesianIndex(off_v)
+        if checkbounds(Bool, lin_indices, Iv)
+            @inbounds dest[lin_indices[Iv] + offset] += weight
+        end
+    end
+    return dest
+end
+
+# The scatter, behind a function barrier. `flatten_sum` answers with a `Vector{Any}`, so a
+# term read out of it is only concretely typed once it is an argument: without this
+# `local_stencil` would be a dynamic call at every grid point rather than once per term.
+function _scatter_term!(b::Vector, sp, term::TERM, lin_indices, mesh_markers,
+        offset::Int) where {TERM}
+    for I in indices(mesh(sp))
+        lin_idx = lin_indices[I]
+        stencil = local_stencil(term, sp, I, mesh_markers, lin_idx)
+
+        for (off_v, weight) in stencil
+            Iv = I + CartesianIndex(off_v)
+
+            if checkbounds(Bool, lin_indices, Iv)
+                @inbounds b[lin_indices[Iv] + offset] += weight
             end
         end
     end
@@ -307,19 +385,7 @@ function _assemble_linear_parallel_core!(
             I = grid_inds[idx]
             lin_idx = lin_indices[I]
 
-            for (sp, offset) in leaves
-                stencil = local_stencil(ast, sp, I, mesh_markers, lin_idx)
-
-                for (off_v, weight) in stencil
-                    Iv = I + CartesianIndex(off_v)
-
-                    if checkbounds(Bool, lin_indices, Iv)
-                        row_local = lin_indices[Iv]
-                        row_global = row_local + offset
-                        @inbounds local_b[row_global] += weight
-                    end
-                end
-            end
+            _route_point!(local_b, ast, leaves, I, lin_idx, lin_indices, mesh_markers)
         end
     end
 

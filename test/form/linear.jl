@@ -3,9 +3,10 @@ using Bramble
 using ForwardDiff
 using LinearAlgebra: Diagonal, diag
 using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_space,
-               element,
-               resolve_form_ast, apply_dirichlet_conditions!, LinearProduct, values,
-               ParallelWorkspace
+               element, resolve_form_ast, apply_dirichlet_conditions!, LinearProduct,
+               values, ParallelWorkspace, TestFunction, TrialFunction,
+               IndexedTestFunction, IndexedTrialFunction, test_component_or_nothing,
+               routes_by_component
 
 # Assembling the right-hand side of a system.
 #
@@ -98,16 +99,130 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         @test bp ≈ bn
     end
 
+    @testset "a coupled right-hand side, one term per component" begin
+        # `v(i)` gives the i-th component of the symbolic test function, so a coupled form
+        # reads the way an indexed grid function does:
+        #
+        #     form(Vₕ, v -> innerₕ(uₕ(1), v(1)) + innerₕ(uₕ(2), v(2)))
+        #
+        # Three things had to exist for that. `TestFunction` was not callable at all.
+        # `block_extract.jl` routed a `BilinearProduct` to its block but not a
+        # `LinearProduct`, so a coupled *right-hand side* could not be routed. And the
+        # composite core assembled one AST into every block, which is the opposite of what a
+        # per-component form means.
+        m = ndofs(Wₕ)
+        uv = Rₕ(Vₕ, (x -> x[1], x -> 10 * x[1]))
+        nblocks = ndofs(Vₕ) ÷ m
+        blocks(b) = [sum(b[(k * m + 1):((k + 1) * m)]) for k in 0:(nblocks - 1)]
+
+        @testset "v(i) is the indexed test function" begin
+            v = TestFunction{2}()
+            @test v(2) === IndexedTestFunction{2}(2)
+            @test TrialFunction{2}()(1) === IndexedTrialFunction{2}(1)
+        end
+
+        @testset "each term lands in its own block" begin
+            # ∫x = 0.5 into the first block, ∫10x = 5.0 into the second
+            b = assemble(form(Vₕ, v -> innerₕ(uv(1), v(1)) + innerₕ(uv(2), v(2))))
+            @test blocks(b) ≈ [0.5, 5.0]
+
+            # one term alone reaches only its own block
+            @test blocks(assemble(form(Vₕ, v -> innerₕ(uv(2), v(2))))) ≈ [0.0, 5.0]
+        end
+
+        @testset "a form naming no component still reaches every block" begin
+            # The prior behaviour, which has to keep working: the same integrand in each.
+            @test blocks(assemble(form(Vₕ, v -> innerₕ(uv(1), v)))) ≈ [0.5, 0.5]
+
+            # and the two spellings mix, because routing is decided per term
+            mixed = assemble(form(Vₕ, v -> innerₕ(uv(1), v) + innerₕ(uv(2), v(2))))
+            @test blocks(mixed) ≈ [0.5, 0.5 + 5.0]
+        end
+
+        @testset "the routing query" begin
+            v = TestFunction{2}()
+            @test test_component_or_nothing(innerₕ(uv(1), v(2))) == 2
+            @test test_component_or_nothing(innerₕ(uv(1), v)) === nothing
+            @test test_component_or_nothing(innerₕ(uv(1), D₋ₓ(v(2)))) == 2
+
+            # asked once per assembly, to keep an un-indexed form off the routing branch
+            @test routes_by_component(innerₕ(uv(1), v(1)) + innerₕ(uv(2), v(2)))
+            @test !routes_by_component(innerₕ(uv(1), v))
+            @test routes_by_component(innerₕ(uv(1), v) + innerₕ(uv(2), v(2)))
+        end
+
+        @testset "and it costs nothing" begin
+            # The routing recurses the AST rather than calling `flatten_sum`, which answers
+            # with a Vector{Any}: that allocated 544 B per assembly and made every term a
+            # dynamic read.
+            function bytes(mk)
+                Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (8, 8),
+                    (true, true))
+                V = gridspace(Ω, Val(3))
+                u = Rₕ(V, ntuple(_ -> (x -> x[1] + x[2]), 3))
+                lf = form(V, mk(u))
+                ast = resolve_form_ast(lf)
+                b = zeros(ndofs(V))
+                assemble!(b, lf; ast = ast)
+                return @allocated assemble!(b, lf; ast = ast)
+            end
+            @test bytes(u -> (v -> innerₕ(u(1), v))) == 0
+            @test bytes(u -> (v -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)))) == 0
+        end
+    end
+
     @testset "the parallel path agrees with the serial one" begin
-        # It is not the default, and the docstring says why — it was slower at every size
-        # measured. It still has to give the same answer.
-        for (nm, sp, u) in (("scalar", Wₕ, uₕ), (
-            "composite", Vₕ, Rₕ(Vₕ, (x -> sin(x[1]), x -> cos(x[2])))(1)))
+        # Not the default, and the docstring says why — slower at every size measured. It
+        # still has to give the same answer.
+        #
+        # Note what this does and does not establish. `Pkg.test()` runs on one thread unless
+        # the environment says otherwise, and on one thread the threaded core is a degenerate
+        # case: the per-thread buffers and the cross-thread reduction never actually race. CI
+        # sets JULIA_NUM_THREADS=auto, so it is exercised there. The concurrent assertions
+        # below are skipped rather than passed when only one thread is available, so a
+        # single-threaded run cannot claim to have tested concurrency.
+        @info "parallel assembly tested on $(Threads.nthreads()) thread(s)"
+
+        for (nm, sp, u) in (("scalar", Wₕ, uₕ),
+            ("composite", Vₕ, Rₕ(Vₕ, (x -> sin(x[1]), x -> cos(x[2])))(1)))
             lf = form(sp, v -> innerₕ(u, v))
             bs = assemble(lf)
             bp = similar(bs)
             @test assemble_parallel!(bp, lf) === bp
             @test bp ≈ bs
+        end
+
+        if Threads.nthreads() > 1
+            # More work than threads, so every thread gets a chunk and the reduction has
+            # something to combine. A race in the scatter, or a buffer left unzeroed, shows
+            # here and nowhere else.
+            Ωb = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (40, 40),
+                (true, true))
+            Wb = gridspace(Ωb)
+            ub = Rₕ(Wb, x -> x[1] * x[2] + 1)
+            lfb = form(Wb, v -> innerₕ(ub, v))
+            bs = assemble(lfb)
+            bp = similar(bs)
+            assemble_parallel!(bp, lfb)
+            @test bp ≈ bs
+
+            # repeated runs agree with each other, which a race would break
+            bp2 = similar(bs)
+            assemble_parallel!(bp2, lfb)
+            @test bp2 == bp
+
+            # and the coupled path under threads
+            Vb = gridspace(Ωb, Val(2))
+            uv2 = Rₕ(Vb, (x -> x[1], x -> 10 * x[1]))
+            lfc = form(Vb, v -> innerₕ(uv2(1), v(1)) + innerₕ(uv2(2), v(2)))
+            bc = assemble(lfc)
+            bcp = similar(bc)
+            assemble_parallel!(bcp, lfc)
+            @test bcp ≈ bc
+        else
+            @test_skip "concurrency not exercised: only one thread available"
+            @test_skip "repeatability under threads not exercised"
+            @test_skip "coupled parallel path under threads not exercised"
         end
     end
 

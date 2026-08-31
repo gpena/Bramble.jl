@@ -145,6 +145,56 @@ find_test_component(op::StarDifference) = find_test_component(op.inner_op)
 find_test_component(op::CrossWeightedDifference) = find_test_component(op.inner_op)
 find_test_component(op::JumpNode) = find_test_component(op.inner_op)
 find_test_component(op::BilinearProduct) = find_test_component(op.right_op)
+# A linear form's term is a LinearProduct, and its test function is on the right just as a
+# bilinear product's is. Without this a coupled *right-hand side* could not be routed to its
+# block at all, though the machinery for the matrix was already here.
+find_test_component(op::LinearProduct) = find_test_component(op.right_op)
+
+"""
+    test_component_or_nothing(op) -> Union{Int, Nothing}
+
+The component `op` is written against, or `nothing` when it names none.
+
+The counterpart of [`find_test_component`](@ref) for code that has to *ask* rather than
+assume — assembling a composite right-hand side, where a term built from an indexed test
+function belongs to one block while a term built from a plain one belongs to all of them.
+Written out rather than wrapping the throwing form in a `try`, because it is asked once per
+term per assembly and an assembly happens every step of a time loop.
+"""
+test_component_or_nothing(op::IndexedTestFunction) = op.component_idx
+test_component_or_nothing(op::LinearProduct) = test_component_or_nothing(op.right_op)
+test_component_or_nothing(op::BilinearProduct) = test_component_or_nothing(op.right_op)
+test_component_or_nothing(op::BackwardDifference) = test_component_or_nothing(op.inner_op)
+test_component_or_nothing(op::ForwardDifference) = test_component_or_nothing(op.inner_op)
+test_component_or_nothing(op::CenteredDifference) = test_component_or_nothing(op.inner_op)
+test_component_or_nothing(op::StarDifference) = test_component_or_nothing(op.inner_op)
+function test_component_or_nothing(op::CrossWeightedDifference)
+    test_component_or_nothing(op.inner_op)
+end
+test_component_or_nothing(op::JumpNode) = test_component_or_nothing(op.inner_op)
+test_component_or_nothing(op::BackwardAverage) = test_component_or_nothing(op.inner_op)
+test_component_or_nothing(op::ForwardAverage) = test_component_or_nothing(op.inner_op)
+test_component_or_nothing(op::ShiftNode) = test_component_or_nothing(op.inner_op)
+test_component_or_nothing(op::OperatorScale) = test_component_or_nothing(op.inner_op)
+test_component_or_nothing(op::GridFunctionScale) = test_component_or_nothing(op.inner_op)
+test_component_or_nothing(op::RegionRestriction) = test_component_or_nothing(op.inner_op)
+test_component_or_nothing(::Any) = nothing
+
+"""
+    routes_by_component(op) -> Bool
+
+Whether `op` names components anywhere inside it, and so has to be split across the blocks
+of a composite space rather than assembled into all of them.
+
+Asked once per assembly, before any splitting happens, so that a form written without
+component indices keeps the path that allocates nothing: splitting means `flatten_sum`,
+which builds a vector.
+"""
+function routes_by_component(op::OperatorAdd)
+    routes_by_component(op.left_op) ||
+        routes_by_component(op.right_op)
+end
+routes_by_component(op) = test_component_or_nothing(op) !== nothing
 
 # The docstrings above promise an error when a term carries no indexed leaf, and without
 # these that error is a `MethodError` naming an internal function — which happens for two

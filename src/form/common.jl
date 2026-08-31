@@ -184,6 +184,21 @@ end
 # ==============================================================================
 
 """
+    (u::TrialFunction{D})(i::Int)
+    (v::TestFunction{D})(i::Int)
+
+The `i`-th component of a symbolic trial or test function over a composite space, as an
+[`IndexedTrialFunction`](@ref) or [`IndexedTestFunction`](@ref).
+
+This is what lets a coupled form be written the way a grid function is indexed —
+`innerₕ(uₕ(1), v(1)) + innerₕ(uₕ(2), v(2))` — rather than through `make_trial_args` and
+`make_test_args`. The two spellings produce the same nodes; this one keeps the component
+index next to the term that uses it.
+"""
+@inline (::TrialFunction{D})(i::Int) where {D} = IndexedTrialFunction{D}(i)
+@inline (::TestFunction{D})(i::Int) where {D} = IndexedTestFunction{D}(i)
+
+"""
     trial_function(::Val{D}) where D
 
 Constructs a `TrialFunction` of dimension `D`.
