@@ -143,6 +143,7 @@ for config in _AVERAGE_OP_CONFIGS
     # Extract ALL values from `config` to avoid scope issues with @eval.
     dir_instance = config.direction
     average_name = config.average_name
+    average_name! = Symbol(average_name, :!)
     average_alias = config.average_alias
     vectorial_average_alias = config.vectorial_average_alias
     dir_string_lowercase = config.dir_string_lowercase
@@ -190,24 +191,30 @@ for config in _AVERAGE_OP_CONFIGS
         #end
 
         # --- Generic applicators ---
+        #
+        # As for the differences, the in-place forms hold the work and the allocating ones
+        # are one line each on top of them.
         @inline $average_name(Wₕ::AbstractSpaceType, dim_val::Val) = $average_name(
             mesh(Wₕ), dim_val)
-        function $average_name(uₕ::VectorElement{<:ScalarGridSpace}, dim_val::Val)
-            vₕ = similar(uₕ)
-            _average_engine!(
-                vₕ.data, uₕ.data, _grid_dims(uₕ), $dir_instance, dim_val)
+
+        function $average_name!(vₕ::VectorElement{<:ScalarGridSpace},
+                uₕ::VectorElement{<:ScalarGridSpace}, dim_val::Val)
+            _average_engine!(vₕ.data, uₕ.data, _grid_dims(uₕ), $dir_instance, dim_val)
             return vₕ
         end
 
         # A composite grid function is averaged one component at a time.
-        function $average_name(uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val)
-            vₕ = similar(uₕ)
+        function $average_name!(vₕ::VectorElement{<:CompositeGridSpace},
+                uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val)
             _apply_componentwise!(
                 (v, u) -> _average_engine!(
                     v.data, u.data, _grid_dims(u), $dir_instance, dim_val),
                 vₕ, uₕ)
             return vₕ
         end
+
+        @inline $average_name(uₕ::VectorElement, dim_val::Val) = $average_name!(
+            similar(uₕ), uₕ, dim_val)
     end
 
     # --- Aliases for x, y, z directions ---
@@ -215,6 +222,8 @@ for config in _AVERAGE_OP_CONFIGS
     for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
         direction = _BRAMBLE_var2label[i]
         _define_directional_alias(average_name, Symbol(average_alias, suffix),
+            dir_string_lowercase, direction, i, "average", math_op)
+        _define_directional_alias!(average_name!, Symbol(average_alias, suffix, :!),
             dir_string_lowercase, direction, i, "average", math_op)
     end
 

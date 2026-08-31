@@ -66,17 +66,29 @@ export snorm₁ₕ, norm₁ₕ, norm₊, normₕ
 
 export diff₋ₓ, diff₋ᵧ, diff₋₂, diff₋ₕ
 export diff₊ₓ, diff₊ᵧ, diff₊₂, diff₊ₕ
+# The in-place forms. Each writes into its first argument and returns it, so the allocating
+# form above is one call to it on a `similar`.
+export diff₋ₓ!, diff₋ᵧ!, diff₋₂!
+export diff₊ₓ!, diff₊ᵧ!, diff₊₂!
 
 export D₋ₓ, D₋ᵧ, D₋₂, ∇₋ₕ
 export D₊ₓ, D₊ᵧ, D₊₂, ∇₊ₕ
+export D₋ₓ!, D₋ᵧ!, D₋₂!
+export D₊ₓ!, D₊ᵧ!, D₊₂!
 export Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂, Dstar₊ₕ
+export Dstar₊ₓ!, Dstar₊ᵧ!, Dstar₊₂!
 export Dcₓ, Dcᵧ, Dc₂, Dcₕ
+export Dcₓ!, Dcᵧ!, Dc₂!
 export Dₕₓ, Dₕᵧ, Dₕ₂, ∇ₕ
+export Dₕₓ!, Dₕᵧ!, Dₕ₂!
 
 export jumpₓ, jumpᵧ, jump₂, jumpₕ
+export jumpₓ!, jumpᵧ!, jump₂!
 
 export M₋ₓ, M₋ᵧ, M₋₂, M₋ₕ
 export M₊ₓ, M₊ᵧ, M₊₂, M₊ₕ
+export M₋ₓ!, M₋ᵧ!, M₋₂!
+export M₊ₓ!, M₊ᵧ!, M₊₂!
 
 export dirichlet_constraints, dirichlet_bc!, symmetrize!, DirichletConstraint
 

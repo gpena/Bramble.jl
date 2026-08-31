@@ -407,6 +407,45 @@ function _derivative_weights!(v::AbstractVector, Ωₕ::AbstractMeshType,
 end
 
 """
+	_define_directional_alias!(base_op_name, alias_name, dir_string, suffix,
+	                           direction_index, what, formula)
+
+Defines `alias_name(vₕ, uₕ)` as `base_op_name(vₕ, uₕ, Val(direction_index))` and attaches a
+docstring to it.
+
+The in-place sibling of `_define_directional_alias`. Two generators rather than one
+because the shapes differ: the allocating alias takes a single argument that may be a mesh,
+a space or a grid function, while this one takes a destination and a source and is only ever
+about grid functions.
+"""
+function _define_directional_alias!(
+        base_op_name, alias_name, dir_string, suffix, direction_index, what, formula)
+    doc_string = """
+     	$alias_name(vₕ, uₕ)
+
+     The `$dir_string` $what of `uₕ` along the `$suffix` direction, ``$formula``, written
+     into `vₕ`.
+
+     The in-place form of [`$(replace(String(alias_name), "!" => ""))`](@ref): it allocates
+     nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+     `normₕ($alias_name(vₕ, uₕ))`.
+
+     `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+     object — every stencil here reads a neighbour of the point it writes, so aliasing them
+     would read values that have already been overwritten.
+
+     Alias for `$base_op_name(vₕ, uₕ, Val($direction_index))`. Accepts a grid function of a
+     scalar or of a composite grid space, componentwise on the latter.
+     """
+
+    func_def_expr = :(@inline $(alias_name)(vₕ, uₕ) = $(base_op_name)(
+        vₕ, uₕ, Val($(direction_index))))
+    final_expr = Expr(
+        :macrocall, GlobalRef(Core, Symbol("@doc")), nothing, doc_string, func_def_expr)
+    Core.eval(@__MODULE__, final_expr)
+end
+
+"""
 	_define_directional_alias(base_op_name, alias_name, dir_string, suffix,
 	                          direction_index, what, formula)
 
@@ -418,7 +457,6 @@ it. Both are needed because the four operator families share this generator: des
 every alias as a "difference" would be wrong for the averages, and would
 not separate the unscaled difference from the finite difference.
 """
-
 function _define_directional_alias(
         base_op_name, alias_name, dir_string, suffix, direction_index, what, formula)
     # 1. Construct the docstring content.
@@ -525,6 +563,8 @@ for config in _DIFFERENCE_OP_CONFIGS
     dir_instance = config.direction
     diff_name = config.diff_name
     finite_diff_name = config.finite_diff_name
+    diff_name! = Symbol(diff_name, :!)
+    finite_diff_name! = Symbol(finite_diff_name, :!)
     weights_func! = config.weights_func!
     spacing_func = config.spacing_func
     spacings_func = config.spacings_func
@@ -592,26 +632,35 @@ for config in _DIFFERENCE_OP_CONFIGS
         end
 
         # --- Generic applicators ---
+        #
+        # The in-place forms hold the work and the allocating ones are one line each on top
+        # of them, rather than the two being written out separately. `_apply_stencil!` was
+        # always the core; what was missing was a public name for it.
         @inline $diff_name(Wₕ::AbstractSpaceType, dim_val::Val) = $diff_name(
             mesh(Wₕ), dim_val)
-        function $diff_name(uₕ::VectorElement{<:ScalarGridSpace}, dim_val::Val)
-            vₕ = similar(uₕ)
+
+        function $diff_name!(vₕ::VectorElement{<:ScalarGridSpace},
+                uₕ::VectorElement{<:ScalarGridSpace}, dim_val::Val)
             _apply_stencil!(vₕ, uₕ, nothing, $dir_instance, dim_val)
             return vₕ
         end
 
         # A composite grid function is differenced one component at a time.
-        function $diff_name(uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val)
-            vₕ = similar(uₕ)
+        function $diff_name!(vₕ::VectorElement{<:CompositeGridSpace},
+                uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val)
             _apply_componentwise!(
                 (v, u) -> _apply_stencil!(v, u, nothing, $dir_instance, dim_val), vₕ, uₕ)
             return vₕ
         end
+
+        @inline $diff_name(uₕ::VectorElement, dim_val::Val) = $diff_name!(
+            similar(uₕ), uₕ, dim_val)
+
         @inline $finite_diff_name(Wₕ::AbstractSpaceType, dim_val::Val) = $finite_diff_name(
             mesh(Wₕ), dim_val)
-        function $finite_diff_name(
+
+        function $finite_diff_name!(vₕ::VectorElement{<:ScalarGridSpace},
                 uₕ::VectorElement{<:ScalarGridSpace}, dim_val::Val{DIM}) where {DIM}
-            vₕ = similar(uₕ)
             # The mesh caches its spacings, so hand the engine that vector rather
             # than a callable: indexing it is 3.6x faster than one call per grid
             # point, and it needs no allocation of its own.
@@ -621,14 +670,16 @@ for config in _DIFFERENCE_OP_CONFIGS
         end
 
         # Every component shares the mesh, so the spacings are fetched once.
-        function $finite_diff_name(
+        function $finite_diff_name!(vₕ::VectorElement{<:CompositeGridSpace},
                 uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val{DIM}) where {DIM}
-            vₕ = similar(uₕ)
             h = $spacings_func(_op_mesh(uₕ)(DIM))
             _apply_componentwise!(
                 (v, u) -> _apply_stencil!(v, u, h, $dir_instance, dim_val), vₕ, uₕ)
             return vₕ
         end
+
+        @inline $finite_diff_name(uₕ::VectorElement, dim_val::Val) = $finite_diff_name!(
+            similar(uₕ), uₕ, dim_val)
     end
 
     # --- Aliases for x, y, z directions ---
@@ -637,7 +688,12 @@ for config in _DIFFERENCE_OP_CONFIGS
         direction = _BRAMBLE_var2label[i]
         _define_directional_alias(diff_name, Symbol(diff_alias, suffix),
             dir_string_lowercase, direction, i, "unscaled difference", math_op)
+        _define_directional_alias!(diff_name!, Symbol(diff_alias, suffix, :!),
+            dir_string_lowercase, direction, i, "unscaled difference", math_op)
         _define_directional_alias(finite_diff_name, Symbol(finite_diff_alias, suffix),
+            dir_string_lowercase, direction, i, "finite difference", math_finite_op)
+        _define_directional_alias!(
+            finite_diff_name!, Symbol(finite_diff_alias, suffix, :!),
             dir_string_lowercase, direction, i, "finite difference", math_finite_op)
     end
 
@@ -668,9 +724,8 @@ The last point has no forward neighbour, so it is truncated to zero, as in
 
 See also: [`star_spacings`](@ref), [`D₊ₓ`](@ref).
 """
-function forward_star_difference(
+function forward_star_difference!(vₕ::VectorElement{<:ScalarGridSpace},
         uₕ::VectorElement{<:ScalarGridSpace}, dim_val::Val{DIM}) where {DIM}
-    vₕ = similar(uₕ)
     h = star_spacings(_op_mesh(uₕ)(DIM))
     _apply_stencil!(vₕ, uₕ, h, Forward(), dim_val)
     return vₕ
@@ -678,14 +733,16 @@ end
 
 # A composite grid function is differenced one component at a time; every component
 # shares the mesh, so the denominator is built once.
-function forward_star_difference(
+function forward_star_difference!(vₕ::VectorElement{<:CompositeGridSpace},
         uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val{DIM}) where {DIM}
-    vₕ = similar(uₕ)
     h = star_spacings(_op_mesh(uₕ)(DIM))
     _apply_componentwise!(
         (v, u) -> _apply_stencil!(v, u, h, Forward(), dim_val), vₕ, uₕ)
     return vₕ
 end
+
+@inline forward_star_difference(uₕ::VectorElement, dim_val::Val) = forward_star_difference!(
+    similar(uₕ), uₕ, dim_val)
 
 # The directional aliases are written out rather than generated: the shared generator
 # documents its aliases as taking a mesh, a grid space or a grid function, and this
@@ -710,6 +767,15 @@ for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
           composite grid function whose components are those results.
           """
         @inline $alias(arg) = forward_star_difference(arg, Val($i))
+
+        @doc """
+          	$($(QuoteNode(alias)))!(vₕ, uₕ)
+
+          The in-place form of [`$($(QuoteNode(alias)))`](@ref): writes into `vₕ` and
+          returns it, allocating nothing. `vₕ` and `uₕ` must belong to the same space and
+          must not be the same object.
+          """
+        @inline $(Symbol(alias, :!))(vₕ, uₕ) = forward_star_difference!(vₕ, uₕ, Val($i))
     end
 end
 
@@ -750,11 +816,10 @@ lack a neighbour on one side, so both are truncated to zero.
 
 See also: [`star_spacings`](@ref), [`D₋ₓ`](@ref), [`D₊ₓ`](@ref).
 """
-function centered_difference(
+function centered_difference!(vₕ::VectorElement{<:ScalarGridSpace},
         uₕ::VectorElement{<:ScalarGridSpace}, dim_val::Val{DIM}) where {DIM}
     sub = _op_mesh(uₕ)(DIM)
     npoints(sub) >= 3 || _throw_centered_too_few_points(DIM, npoints(sub))
-    vₕ = similar(uₕ)
     h = star_spacings(sub)
     _apply_stencil!(vₕ, uₕ, h, Centered(), dim_val)
     return vₕ
@@ -762,16 +827,17 @@ end
 
 # As for the other operators, a composite grid function is differenced one component at a
 # time; every component shares the mesh, so the denominator is built once.
-function centered_difference(
+function centered_difference!(vₕ::VectorElement{<:CompositeGridSpace},
         uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val{DIM}) where {DIM}
     sub = _op_mesh(uₕ)(DIM)
     npoints(sub) >= 3 || _throw_centered_too_few_points(DIM, npoints(sub))
-    vₕ = similar(uₕ)
     h = star_spacings(sub)
     _apply_componentwise!(
         (v, u) -> _apply_stencil!(v, u, h, Centered(), dim_val), vₕ, uₕ)
     return vₕ
 end
+
+@inline centered_difference(uₕ::VectorElement, dim_val::Val) = centered_difference!(similar(uₕ), uₕ, dim_val)
 
 # Written out rather than generated, for the same reason `Dstar₊` is: the shared
 # generator documents its aliases as taking a mesh, a grid space or a grid function, and
@@ -798,6 +864,15 @@ for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
           composite grid function whose components are those results.
           """
         @inline $alias(arg) = centered_difference(arg, Val($i))
+
+        @doc """
+          	$($(QuoteNode(alias)))!(vₕ, uₕ)
+
+          The in-place form of [`$($(QuoteNode(alias)))`](@ref): writes into `vₕ` and
+          returns it, allocating nothing. `vₕ` and `uₕ` must belong to the same space and
+          must not be the same object.
+          """
+        @inline $(Symbol(alias, :!))(vₕ, uₕ) = centered_difference!(vₕ, uₕ, Val($i))
     end
 end
 
@@ -842,11 +917,10 @@ zero.
 
 See also: [`Dcₓ`](@ref), [`D₋ₓ`](@ref).
 """
-function cross_weighted_difference(
+function cross_weighted_difference!(vₕ::VectorElement{<:ScalarGridSpace},
         uₕ::VectorElement{<:ScalarGridSpace}, dim_val::Val{DIM}) where {DIM}
     sub = _op_mesh(uₕ)(DIM)
     npoints(sub) >= 3 || _throw_centered_too_few_points(DIM, npoints(sub))
-    vₕ = similar(uₕ)
     h = spacings(sub)
     _apply_stencil!(vₕ, uₕ, h, CrossWeighted(), dim_val)
     return vₕ
@@ -854,16 +928,18 @@ end
 
 # As for the other operators, a composite grid function is differenced one component at a
 # time; every component shares the mesh, so the spacings are fetched once.
-function cross_weighted_difference(
+function cross_weighted_difference!(vₕ::VectorElement{<:CompositeGridSpace},
         uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val{DIM}) where {DIM}
     sub = _op_mesh(uₕ)(DIM)
     npoints(sub) >= 3 || _throw_centered_too_few_points(DIM, npoints(sub))
-    vₕ = similar(uₕ)
     h = spacings(sub)
     _apply_componentwise!(
         (v, u) -> _apply_stencil!(v, u, h, CrossWeighted(), dim_val), vₕ, uₕ)
     return vₕ
 end
+
+@inline cross_weighted_difference(uₕ::VectorElement, dim_val::Val) = cross_weighted_difference!(
+    similar(uₕ), uₕ, dim_val)
 
 # Written out rather than generated, for the same reason `Dstar₊` and `Dc` are: the shared
 # generator documents its aliases as taking a mesh, a grid space or a grid function, and
@@ -892,6 +968,15 @@ for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
           composite grid function whose components are those results.
           """
         @inline $alias(arg) = cross_weighted_difference(arg, Val($i))
+
+        @doc """
+          	$($(QuoteNode(alias)))!(vₕ, uₕ)
+
+          The in-place form of [`$($(QuoteNode(alias)))`](@ref): writes into `vₕ` and
+          returns it, allocating nothing. `vₕ` and `uₕ` must belong to the same space and
+          must not be the same object.
+          """
+        @inline $(Symbol(alias, :!))(vₕ, uₕ) = cross_weighted_difference!(vₕ, uₕ, Val($i))
     end
 end
 

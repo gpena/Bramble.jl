@@ -61,6 +61,17 @@ forward difference are the same quantity. The name records which of the two is m
 """
 @inline jump(arg, dim_val::Val) = forward_difference(arg, dim_val)
 
+"""
+	jump!(vₕ, uₕ, dim_val::Val)
+
+The jump across the interfaces along `dim_val`, written into `vₕ`, which is returned.
+
+Forwards to `forward_difference!`, as the allocating form forwards to
+`forward_difference`: a jump across an interface and an unscaled forward difference
+are the same quantity.
+"""
+@inline jump!(vₕ, uₕ, dim_val::Val) = forward_difference!(vₕ, uₕ, dim_val)
+
 # The aliases are written out rather than taken from `_define_directional_alias` and
 # `_define_vectorial_alias`: those generators put a direction word into the docstring
 # ("The `forward` jump along …"), and there is no direction to name here.
@@ -86,6 +97,15 @@ for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
           though it were zero, as in [`diff₊$($suffix)`](@ref).
           """
         @inline $alias(arg) = jump(arg, Val($i))
+
+        @doc """
+          	$($(QuoteNode(alias)))!(vₕ, uₕ)
+
+          The in-place form of [`$($(QuoteNode(alias)))`](@ref): writes the jump into `vₕ`
+          and returns it, allocating nothing. `vₕ` and `uₕ` must belong to the same space
+          and must not be the same object.
+          """
+        @inline $(Symbol(alias, :!))(vₕ, uₕ) = jump!(vₕ, uₕ, Val($i))
     end
 end
 

@@ -86,6 +86,7 @@ if __bramble_with_unit_tests
             include("space/commutation.jl")
             include("space/jump.jl")
             include("space/average.jl")
+            include("space/inplace_operators.jl")
             include("space/inner_product.jl")
             include("space/composite_operators.jl")
             include("space/inference_allocation.jl")
