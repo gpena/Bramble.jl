@@ -128,6 +128,19 @@ end
 # Dispatching on `::Type{T}` settles which one, and the vector comes back concrete.
 @inline _zeros_of(::Type{T}, n::Int) where {T} = zeros(T, n)
 
+# How many entries the pattern can hold at most: one interior stencil's worth per grid
+# point. An upper bound, because truncation at a boundary drops entries and never adds any.
+#
+# Worth computing because `push!` grows by doubling: filling two 1,250,000-element vectors
+# cost 28.4 MB each where the data is 9.5 MB, so a third of the pattern's memory was
+# reallocation. `sizehint!` is the whole fix for that part.
+function _pattern_upper_bound(ast::AST_TYPE, sp, mesh_markers, lin_indices) where {AST_TYPE}
+    grid_inds = indices(mesh(sp))
+    npts = length(grid_inds)
+    I = grid_inds[length(grid_inds) ÷ 2 + 1]
+    return npts * length(local_stencil(ast, sp, I, mesh_markers, lin_indices[I]))
+end
+
 """
     allocate_system_matrix(form::BilinearForm, ast = resolve_form_ast(form))
 
@@ -144,6 +157,9 @@ function allocate_system_matrix(
 
     I_vec = Int[]
     J_vec = Int[]
+    hint = _pattern_upper_bound(ast, space, mesh_markers, lin_indices)
+    sizehint!(I_vec, hint)
+    sizehint!(J_vec, hint)
 
     @inbounds for I in indices(Ωₕ)
         lin_idx = lin_indices[I]
@@ -166,8 +182,11 @@ function allocate_system_matrix(
     # `Union{Vector{Float64}, Matrix{Float64}}` and `sparse` had no method for half of it.
     # JET found that; nothing else would have, since the bad half is unreachable in
     # practice.
+    # `sparse!` rather than `sparse`: it uses the coordinate vectors as its own scratch
+    # instead of copying them, and they are discarded here either way. Worth 13.4 MB of the
+    # 64.9 the pattern cost at 250,000 degrees of freedom.
     V_vec = _zeros_of(_assembled_eltype(ast, space), length(I_vec))
-    return sparse(I_vec, J_vec, V_vec, n, n)
+    return sparse!(I_vec, J_vec, V_vec, n, n, +)
 end
 
 # Which entries a term can reach, block by block.
@@ -233,12 +252,22 @@ function allocate_system_matrix(
 
     I_vec = Int[]
     J_vec = Int[]
+
+    # One block's worth per block is the bound: a term reaching every diagonal block reaches
+    # as many as there are leaves, and one naming a block reaches exactly one.
+    sp = first(first(test_leaves))
+    Ωₛ = mesh(sp)
+    hint = length(test_leaves) *
+           _pattern_upper_bound(ast, sp, markers(Ωₛ), LinearIndices(indices(Ωₛ)))
+    sizehint!(I_vec, hint)
+    sizehint!(J_vec, hint)
+
     _pattern_blocks!(I_vec, J_vec, ast, trial_leaves, test_leaves)
 
     ncols = ndofs(form.trial_space)
     nrows = ndofs(form.test_space)
     V_vec = _zeros_of(_assembled_eltype(ast, first_space(form.trial_space)), length(I_vec))
-    return sparse(I_vec, J_vec, V_vec, nrows, ncols)
+    return sparse!(I_vec, J_vec, V_vec, nrows, ncols, +)
 end
 
 # ==============================================================================
@@ -259,6 +288,36 @@ end
 
 """
     assemble(form::BilinearForm; dirichlet_labels = nothing)
+
+Allocates a matrix with the form's sparsity pattern and assembles into it.
+
+**Call this once, then assemble into what it returns.** Building the sparsity pattern is by
+far the larger half of the work — at 250,000 degrees of freedom it is 9,700 us and 52 MB
+against 1,500 us and nothing to fill the matrix — and the pattern does not change between
+assemblies. So a time loop or a Newton iteration written with `assemble` pays for the same
+pattern on every step:
+
+```julia
+A = assemble(a)                        # once: pattern, allocation and the first fill
+for step in 1:nsteps
+    Rₕ!(cₕ, coefficient_at(step))      # written through, so the form still sees it
+    assemble!(A, a)                    # or assemble_parallel!(A, a)
+end
+```
+
+which is seven times cheaper per step. It assumes the pattern stays the same, which it does
+as long as the form's operators do: a coefficient changes values, not which entries exist.
+
+`assemble!` also takes an `ast`, and for a form like the one above there is no reason to use
+it — resolving is 11 us against 550 to assemble, and 288 bytes. It earns its place in one
+case, where a *coefficient* carries an operator: `innerₕ(D₋ₓ(cₕ) * u, v)` recomputes
+`D₋ₓ(cₕ)` on every resolve, 2 MB of it, where the same operator on the test argument is
+symbolic and free. Hoisting is the better answer there, and keeps the form live —
+
+```julia
+dcₕ = D₋ₓ(cₕ)                          # computed once, and still written through
+a = form(Wₕ, Wₕ, (u, v) -> innerₕ(dcₕ * u, v))
+```
 
 Assembles the system matrix of the `BilinearForm` using parallel lock-free assembly. Optional `dirichlet_labels` applies boundary conditions to the matrix.
 """

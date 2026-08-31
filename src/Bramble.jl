@@ -13,7 +13,7 @@ import Base: show, first, last, getindex, setindex!, iterate, size, ndims, first
 # selective, so a name missing from this list is simply undefined in the module. That is
 # what `dirichlet_bc!` hit on its first run — `UndefVarError: rowvals`.
 using SparseArrays: SparseMatrixCSC, SparseVector, spdiagm, spzeros,
-                    rowvals, nonzeros, nzrange, sparse
+                    rowvals, nonzeros, nzrange, sparse, sparse!
 
 using FunctionWrappers: FunctionWrapper
 

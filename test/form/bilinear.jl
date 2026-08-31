@@ -233,6 +233,46 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
         end ≈ diag(H)
     end
 
+    @testset "assemble once, then assemble into it" begin
+        # The pattern is the expensive half and does not change between assemblies, so the
+        # intended shape of a loop is `assemble` once and `assemble!` after. This pins that
+        # the second path agrees with the first and costs nothing.
+        cₕ = Rₕ(Wₕ, x -> 1.0)
+        a = form(Wₕ, Wₕ, (u, v) -> innerₕ(cₕ * u, v))
+
+        A = assemble(a)
+        first_sum = sum(A)
+        assemble!(A, a)
+        @test sum(A) ≈ first_sum                     # idempotent, so it overwrites
+
+        # a coefficient written through is seen, and the pattern is untouched by it
+        nnz_before = nnz(A)
+        Rₕ!(cₕ, x -> 3.0)
+        assemble!(A, a)
+        @test sum(A) ≈ 3 * first_sum
+        @test nnz(A) == nnz_before
+
+        # The loop body needs no `ast`: resolving a form over a plain coefficient is 11 us
+        # against 550 to assemble it. What it costs is a few hundred bytes, not a vector.
+        function _loop_bytes(A, a)
+            assemble!(A, a)
+            return @allocated assemble!(A, a)
+        end
+        @test _loop_bytes(A, a) < 8 * n
+
+        # It earns its place only when a coefficient carries an operator, where resolving
+        # recomputes a whole element every call.
+        dcₕ = D₋ₓ(cₕ)
+        aop = form(Wₕ, Wₕ, (u, v) -> innerₕ(dcₕ * u, v))
+        Aop = assemble(aop)
+        @test _loop_bytes(Aop, aop) < 8 * n          # hoisted, so nothing is recomputed
+
+        ainline = form(Wₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(cₕ) * u, v))
+        Ain = assemble(ainline)
+        @test _loop_bytes(Ain, ainline) >= 8 * n     # inline, so an element per call
+        @test Matrix(Ain) ≈ Matrix(Aop)              # and the two agree
+    end
+
     @testset "construction is cheap" begin
         # `form` used to evaluate a sample stencil and bin the whole grid into a vector of
         # vectors before anything was assembled — 9,271,600 B at 90,000 degrees of freedom.
