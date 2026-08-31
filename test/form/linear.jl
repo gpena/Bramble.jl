@@ -1,12 +1,12 @@
 using Test
 using Bramble
 using ForwardDiff
-using LinearAlgebra: Diagonal, diag
+using LinearAlgebra: Diagonal, diag, dot
 using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_space,
                element, resolve_form_ast, apply_dirichlet_conditions!, LinearProduct,
                values, ParallelWorkspace, TestFunction, TrialFunction,
                IndexedTestFunction, IndexedTrialFunction, test_component_or_nothing,
-               routes_by_component
+               routes_by_component, component, components
 
 # Assembling the right-hand side of a system.
 #
@@ -168,6 +168,105 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
             end
             @test bytes(u -> (v -> innerₕ(u(1), v))) == 0
             @test bytes(u -> (v -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)))) == 0
+        end
+    end
+
+    @testset "a linear combination of products, each over a combination of operators" begin
+        # The shape a linear form actually has: a linear combination of inner products, and
+        # inside each one a linear combination of operators applied to the test function.
+        #
+        # This testset exists because the simpler cases all passed while this one was
+        # silently wrong. `innerₕ(uₕ, v)` on a composite space was right; adding an operator
+        # sum inside the argument was not, because `test_component_or_nothing` had no
+        # `OperatorAdd` method, so a sum *inside* one product routed to no component and
+        # broadcast to every block. It summed to a plausible number.
+        #
+        # The check is the defining property of an assembled right-hand side rather than a
+        # hand-computed integral: b is the vector for which bᵀw is the form evaluated at w,
+        # so the same combination applied numerically through the space layer to a grid
+        # function must give bᵀw. That validates the whole path — routing, offsets, weights
+        # and truncation — against code that has nothing to do with assembly.
+        Ωf = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 11), (true, false))
+        Wf = gridspace(Ωf)
+        Vf = gridspace(Ωf, Val(3))
+
+        @testset "scalar" begin
+            g1 = Rₕ(Wf, x -> x[1] + 2x[2])
+            g2 = Rₕ(Wf, x -> exp(x[1]))
+            g3 = Rₕ(Wf, x -> 1 + x[2]^2)
+            w = Rₕ(Wf, x -> sin(3x[1]) * cos(2x[2]) + 1)
+
+            b = assemble(form(Wf,
+                v -> innerₕ(g1, v + 2 * D₋ₓ(v) - M₋ₓ(v)) +
+                     inner₊ₓ(g2, D₋ᵧ(v) + jumpₓ(v)) +
+                     innerₕ(g3, 3 * M₊ᵧ(v) - Dₕₓ(v))))
+
+            reference = innerₕ(g1, w + 2 * D₋ₓ(w) - M₋ₓ(w)) +
+                        inner₊ₓ(g2, D₋ᵧ(w) + jumpₓ(w)) +
+                        innerₕ(g3, 3 * M₊ᵧ(w) - Dₕₓ(w))
+
+            @test dot(b, values(w)) ≈ reference
+            @test !iszero(reference)          # the identity is not being met by both sides
+        end                                   # being zero
+
+        @testset "composite, through the shorthand" begin
+            gv = Rₕ(Vf, (x -> x[1] + 2x[2], x -> exp(x[1]), x -> 1 + x[2]^2))
+            wv = Rₕ(Vf, (x -> sin(3x[1]) + 1, x -> cos(2x[2]) + 2, x -> x[1] * x[2] + 1))
+
+            b = assemble(form(Vf, v -> innerₕ(gv, v + 2 * D₋ₓ(v) - M₋ₓ(v))))
+            reference = sum(innerₕ(components(gv)[c],
+                                (w = components(wv)[c]; w + 2 * D₋ₓ(w) - M₋ₓ(w)))
+            for c in 1:3)
+
+            @test dot(b, values(wv)) ≈ reference
+            @test !iszero(reference)
+        end
+
+        @testset "the shorthand equals writing the components out" begin
+            # Which is the property that makes it a shorthand rather than a second meaning.
+            uv = Rₕ(Vf, (x -> x[1], x -> 100 * x[1], x -> x[2]))
+            for (short, long) in (
+                (v -> innerₕ(uv, v),
+                v -> innerₕ(uv(1), v(1)) + innerₕ(uv(2), v(2)) + innerₕ(uv(3), v(3))),
+                (v -> innerₕ(uv, v + D₋ₓ(v)),
+                v -> innerₕ(uv(1), v(1) + D₋ₓ(v(1))) +
+                     innerₕ(uv(2), v(2) + D₋ₓ(v(2))) +
+                     innerₕ(uv(3), v(3) + D₋ₓ(v(3)))),
+                (v -> innerₕ(uv, v + 2 * D₋ₓ(v) - M₋ₓ(v)),
+                v -> innerₕ(uv(1), v(1) + 2 * D₋ₓ(v(1)) - M₋ₓ(v(1))) +
+                     innerₕ(uv(2), v(2) + 2 * D₋ₓ(v(2)) - M₋ₓ(v(2))) +
+                     innerₕ(uv(3), v(3) + 2 * D₋ₓ(v(3)) - M₋ₓ(v(3)))),
+                (v -> inner₊ₓ(uv, v - M₊ᵧ(v)),
+                v -> inner₊ₓ(uv(1), v(1) - M₊ᵧ(v(1))) +
+                     inner₊ₓ(uv(2), v(2) - M₊ᵧ(v(2))) +
+                     inner₊ₓ(uv(3), v(3) - M₊ᵧ(v(3)))))
+                @test assemble(form(Vf, short)) ≈ assemble(form(Vf, long))
+            end
+
+            # and the components really are distinguishable, so the check has teeth: the
+            # bug it guards against put every component into every block, which agrees with
+            # the truth whenever the components integrate to the same thing
+            b = assemble(form(Vf, v -> innerₕ(uv, v)))
+            m = ndofs(Wf)
+            @test [sum(b[(k * m + 1):((k + 1) * m)]) for k in 0:2] ≈ [0.5, 50.0, 0.5]
+        end
+
+        @testset "the index distributes through the expression" begin
+            v = TestFunction{2}()
+            @test (v + D₋ₓ(v))(1) == v(1) + D₋ₓ(v(1))
+            @test (3 * M₋ᵧ(v))(2) == 3 * M₋ᵧ(v(2))
+            @test (v + 2 * D₋ₓ(v) - M₋ₓ(v))(2) ==
+                  v(2) + 2 * D₋ₓ(v(2)) - M₋ₓ(v(2))
+            @test v(1)(2) === IndexedTestFunction{2}(2)      # re-indexing replaces
+
+            # a sum inside one product takes the component its sides agree on
+            @test test_component_or_nothing(innerₕ(Rₕ(Wf, x -> 1.0), v(2) + D₋ₓ(v(2)))) == 2
+            @test test_component_or_nothing(innerₕ(Rₕ(Wf, x -> 1.0), v + D₋ₓ(v))) ===
+                  nothing
+
+            # and sides naming different components are ill-formed rather than ambiguous
+            @test_throws ArgumentError test_component_or_nothing(
+                innerₕ(Rₕ(Wf, x -> 1.0), v(1) + v(2)))
         end
     end
 

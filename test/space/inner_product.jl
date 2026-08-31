@@ -317,4 +317,33 @@ end
     # the tuple arity still wins over the mesh dimension for genuine mixed terms, which
     # is what the element-type lookup is there to keep separate
     @test inner₊((uₕ, vₕ), (uₕ, vₕ)) ≈ inner₊ₓ(uₕ, uₕ) + inner₊ₓ(vₕ, vₕ)
+
+    @testset "on a composite space, the product space's inner product" begin
+        # The inner product of a product space is the sum of the components' — the only
+        # meaning it can have, which is why accepting a composite is not ambiguous. It used
+        # to be rejected at dispatch, on the grounds that the meaning would depend on the
+        # argument; it does not.
+        Ωc = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (12, 12), (true, true))
+        Vc = gridspace(Ωc, Val(3))
+        uv = Rₕ(Vc, (x -> x[1], x -> x[2], x -> 1.0))
+        vv = Rₕ(Vc, (x -> 1.0, x -> 1.0, x -> 1.0))
+
+        byhand = sum(innerₕ(Bramble.components(uv)[c], Bramble.components(vv)[c])
+        for c in 1:3)
+        @test innerₕ(uv, vv) ≈ byhand
+        @test innerₕ(uv, vv) ≈ 0.5 + 0.5 + 1.0        # ∫x + ∫y + ∫1 over the unit square
+
+        # the norm follows from it
+        @test normₕ(uv) ≈ sqrt(innerₕ(uv, uv))
+        @test normₕ(uv) ≈ sqrt(sum(normₕ(Bramble.components(uv)[c])^2 for c in 1:3))
+
+        # a mismatch in the number of components is an error rather than a silent answer
+        V2 = gridspace(Ωc, Val(2))
+        @test_throws DimensionMismatch innerₕ(uv, Rₕ(V2, (x -> 1.0, x -> 1.0)))
+
+        # and the scalar case is untouched
+        Wc = gridspace(Ωc)
+        u1 = Rₕ(Wc, x -> x[1])
+        @test innerₕ(u1, Rₕ(Wc, x -> 1.0)) ≈ 0.5
+    end
 end

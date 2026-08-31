@@ -178,6 +178,30 @@ test_component_or_nothing(op::ShiftNode) = test_component_or_nothing(op.inner_op
 test_component_or_nothing(op::OperatorScale) = test_component_or_nothing(op.inner_op)
 test_component_or_nothing(op::GridFunctionScale) = test_component_or_nothing(op.inner_op)
 test_component_or_nothing(op::RegionRestriction) = test_component_or_nothing(op.inner_op)
+# A sum *inside* one inner product — `innerₕ(uₕ, v + 2 * D₋ₓ(v) - M₋ₓ(v))` — is still one
+# term of the form, and every test leaf in it names the same component or none. So the
+# component of a sum is the component its sides agree on.
+#
+# Without this the `::Any` fallback answered `nothing` and the term broadcast to every block,
+# so a coupled form with an operator sum in its test slot put every component's source into
+# every block. It summed to something plausible and was wrong.
+function test_component_or_nothing(op::OperatorAdd)
+    l = test_component_or_nothing(op.left_op)
+    r = test_component_or_nothing(op.right_op)
+    l === r && return l
+    return _throw_mixed_components(l, r)
+end
+
+# Sides naming different components cannot be one term of one block. It is ill-formed rather
+# than ambiguous — `innerₕ(uₕ, v(1) + v(2))` is not a component of anything — and silence
+# here is what produced the bug above, so it is an error.
+@noinline function _throw_mixed_components(l, r)
+    throw(ArgumentError(
+        "the two sides of a sum inside one inner product name different components " *
+        "($l and $r). Each inner product belongs to one component: write the sum of " *
+        "products instead, innerₕ(u, v(1)) + innerₕ(u, v(2))."))
+end
+
 test_component_or_nothing(::Any) = nothing
 
 """

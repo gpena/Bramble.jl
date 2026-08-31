@@ -145,6 +145,10 @@ include("form/common.jl")
 
 # block_extract.jl adds block extraction for CoupledBilinearForm and, with it,
 # `collect_leaf_spaces_offsets`, which walks a nested space's leaves and their dof offsets.
+# component.jl indexes a node by component, and needs every node type in its signatures, so
+# it comes after common.jl and the operator files it includes.
+include("form/component.jl")
+
 # stencil_pattern.jl reads the sparsity pattern off a built AST, so it needs every node
 # type that carries a stencil — which means after common.jl and its operator includes.
 include("form/stencil_pattern.jl")

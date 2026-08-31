@@ -48,13 +48,33 @@ Returns the discrete ``L^2`` inner product of the grid functions `uₕ` and `v�
 (\\textrm{u}_h, \\textrm{v}_h)_h \\vcentcolon = \\sum_{i=1}^{N_x} \\sum_{j=1}^{N_y}  \\sum_{l=1}^{N_z}  |\\square_{i,j,l}| \\textrm{u}_h(x_i,y_j) \\textrm{v}_h(x_i,y_j)
 ```
 
-Defined for grid functions of a [`ScalarGridSpace`](@ref) only. A grid function of a
-composite grid space is rejected at dispatch; take a scalar component of it with
-[`components`](@ref) first, which is itself a scalar grid function and is accepted.
+On a [`CompositeGridSpace`](@ref) it is the inner product of the product space, the sum of
+the component-wise products:
+
+```math
+(\\textrm{u}_h, \\textrm{v}_h)_h = \\sum_{c=1}^{N_c} (\\textrm{u}_h^{(c)}, \\textrm{v}_h^{(c)})_h
+```
+
+which is the only meaning it can have, so there is nothing ambiguous about accepting one.
+The two grid functions must have the same number of components.
 """
 @inline innerₕ(uₕ::VectorElement{<:ScalarGridSpace},
     vₕ::VectorElement{<:ScalarGridSpace}) = _dot(
     uₕ.data, weights(space(uₕ), Innerh()), vₕ.data)
+
+# Summed over the components, unrolled because `NC` is a type parameter, so this costs no
+# more than writing the sum out by hand.
+@inline function innerₕ(uₕ::VectorElement{<:CompositeGridSpace{NC}},
+        vₕ::VectorElement{<:CompositeGridSpace{NC}}) where {NC}
+    uc, vc = components(uₕ), components(vₕ)
+    return sum(ntuple(c -> innerₕ(uc[c], vc[c]), Val(NC)))
+end
+
+@noinline function innerₕ(uₕ::VectorElement{<:CompositeGridSpace{N}},
+        vₕ::VectorElement{<:CompositeGridSpace{M}}) where {N, M}
+    throw(DimensionMismatch(
+        "innerₕ needs the same number of components on both sides; got $N and $M"))
+end
 
 """
 	normₕ(uₕ::VectorElement)
@@ -65,11 +85,11 @@ Returns the discrete ``L^2`` norm of the grid function `uₕ`, defined as
 \\Vert \\textrm{u}_h \\Vert_h \\vcentcolon = \\sqrt{(\\textrm{u}_h, \\textrm{u}_h)_h}
 ```
 
-Defined for grid functions of a [`ScalarGridSpace`](@ref) only. A grid function of a
-composite grid space is rejected at dispatch; take a scalar component of it with
-[`components`](@ref) first, which is itself a scalar grid function and is accepted.
+On a [`CompositeGridSpace`](@ref) it is the norm of the product space, which follows from
+the inner product there: the square root of the sum of the components' squared norms.
 """
 @inline normₕ(uₕ::VectorElement{<:ScalarGridSpace}) = sqrt(innerₕ(uₕ, uₕ))
+@inline normₕ(uₕ::VectorElement{<:CompositeGridSpace}) = sqrt(innerₕ(uₕ, uₕ))
 
 ################################################################################
 #                 Discrete Modified L² Inner Product and Norm                  #

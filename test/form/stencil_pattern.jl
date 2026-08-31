@@ -4,7 +4,8 @@ using Random
 using SparseArrays
 using Bramble: IdentityOperator, ZeroOperator, TrialFunction, TestFunction,
                IndexedTrialFunction, SourceVector, LazyOp,
-               stencil_offsets, local_stencil, shift_op, restrict_to, source_function
+               stencil_offsets, local_stencil, shift_op, restrict_to, source_function,
+               TrialFunction, TestFunction, LinearProduct, BilinearProduct
 
 # Reading the sparsity pattern off an AST before assembling it.
 #
@@ -153,5 +154,29 @@ end
                 @test _stencil_at(node, Wₕ1, CartesianIndex(i), lin1) == predicted
             end
         end
+    end
+
+    @testset "the products" begin
+        # These are the only nodes assembly ever evaluates, and neither had a method until
+        # the parallel assembly needed to ask what an assembled form reaches.
+        u, v = TrialFunction{1}(), TestFunction{1}()
+        uh = Rₕ(Wₕ1, sin)
+
+        # A linear product contracts its left factor away — `multiply_stencils_linear`
+        # keeps only the right offsets — so its reach is the test side's.
+        @test stencil_offsets(innerₕ(uh, v)) == [(0,)]
+        @test sort(stencil_offsets(innerₕ(uh, D₋ₓ(v)))) == [(-1,), (0,)]
+        @test sort(stencil_offsets(inner₊(uh, D₋ₓ(v)))) == [(-1,), (0,)]
+
+        # which is what tells a parallel assembly whether its writes can overlap: a form
+        # whose reach is the origin alone scatters one value per row and needs no
+        # coordination, whatever weight it carries.
+        @test stencil_offsets(inner₊(uh, v)) == [(0,)]
+        @test sort(stencil_offsets(innerₕ(uh, v) + innerₕ(uh, D₋ₓ(v)))) == [(-1,), (0,)]
+
+        # A bilinear product pairs a row offset with a column offset, so what it reaches is
+        # a set of pairs and does not fit this shape. It says so rather than answering with
+        # half the truth.
+        @test_throws ArgumentError stencil_offsets(innerₕ(D₋ₓ(u), D₋ₓ(v)))
     end
 end
