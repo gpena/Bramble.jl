@@ -7,23 +7,24 @@
 # it is called, so keeping it here made unlocking that file alone impossible.
 
 """
-    BilinearForm{D,TrialSpace,TestSpace,ExprType,FType}
+    BilinearForm{D,TrialSpace,TestSpace,FType}
 
 Represents a bilinear form defined over a trial space and test space.
 
 # Fields
 - `trial_space::TrialSpace`: The space for the trial function.
 - `test_space::TestSpace`: The space for the test function.
-- `ast::ExprType`: The symbolic expression AST representation of the form.
-- `f::FType`: The user-defined lambda function representing the form.
-- `workspace::ParallelWorkspace{D}`: Preallocated coordinate partitions for lock-free parallel assembly.
+- `f::FType`: The expression, as a function of a trial and a test argument.
+
+The expression is kept as `f` rather than as a resolved tree, which is what makes a
+coefficient live: [`resolve_form_ast`](@ref) calls it afresh on every assembly. A stored
+tree was there and read by nothing, exactly as in `LinearForm`; the partition a parallel
+assembly walks was built here too, and is now derived where it is used.
 """
-struct BilinearForm{D, TrialSpace, TestSpace, ExprType <: LazyOp{D}, FType}
+struct BilinearForm{D, TrialSpace, TestSpace, FType}
     trial_space::TrialSpace
     test_space::TestSpace
-    ast::ExprType
     f::FType
-    workspace::ParallelWorkspace{D}
 end
 
 """
@@ -77,12 +78,13 @@ test_space(form::CoupledBilinearForm) = form.test_space
 
 Fully resolves grid coefficient functions and scales inside the bilinear form's AST.
 """
-@inline resolve_form_ast(form::BilinearForm{D, TrialSpace, TestSpace, ExprType,
-    FType}) where {D, TrialSpace, TestSpace, ExprType, FType} = resolve_ast(form.f(
+@inline resolve_form_ast(form::BilinearForm{D, TrialSpace, TestSpace,
+    FType}) where {
+    D, TrialSpace, TestSpace, FType} = resolve_ast(form.f(
     TrialFunction{D}(), TestFunction{D}()))
 
 """
-    form(Wₕ, Vₕ, f; stride_multiplier::Int = 1)
+    form(Wₕ, Vₕ, f)
 
 Constructs a `BilinearForm` over the trial space `Wₕ` and test space `Vₕ` using the bilinear expression `f`.
 
@@ -102,104 +104,37 @@ a = form(X, X, ((u, p), (v, q)) ->
     inner₊(p, D₋ₓ(v[1])) + inner₊(p, D₋ᵧ(v[2])))
 ```
 """
-function form(Wₕ, Vₕ, f; stride_multiplier::Int = 1)
+function form(Wₕ, Vₕ, f)
     D = dim(Wₕ)
-    ast = f(TrialFunction{D}(), TestFunction{D}())
 
-    # Extract mesh characteristics to discover stencil bounds upfront
-    sp = first_space(Wₕ)
-    Ωₕ = mesh(sp)
-    mesh_markers = markers(Ωₕ)
-    grid_inds = indices(Ωₕ)
-    lin_indices = LinearIndices(grid_inds)
+    # Built and discarded, for the error rather than for the tree: an expression that does
+    # not describe an operator fails here rather than at the first `assemble`. Nothing is
+    # kept, because assembly resolves from `f` every time — see `LinearForm`.
+    _validate_form_expression(f(TrialFunction{D}(), TestFunction{D}()), Val(D))
 
-    # Evaluate the stencil at a representative interior node to discover off_v bounds
-    center_I = grid_inds[length(grid_inds) ÷ 2 + 1]
-    center_lin_idx = lin_indices[center_I]
-    sample_stencil = local_stencil(ast, sp, center_I, mesh_markers, center_lin_idx)
-
-    first_off_v = sample_stencil[1][2]
-    min_v = first_off_v
-    max_v = first_off_v
-
-    for (_, off_v, _) in sample_stencil
-        min_v = min.(min_v, off_v)
-        max_v = max.(max_v, off_v)
-    end
-
-    # Compute mathematical safe strides and apply optional inflation
-    base_strides = max_v .- min_v .+ 1
-    strides = base_strides .* stride_multiplier
-    stride_tuple = Tuple(strides)
-    num_colors = prod(stride_tuple)
-
-    # Group grid coordinates by color identifier
-    color_groups = [CartesianIndex{D}[] for _ in 1:num_colors]
-    linear_mapper = LinearIndices(stride_tuple)
-
-    for I in grid_inds
-        color_coord = ntuple(d -> mod(I[d] - 1, stride_tuple[d]) + 1, D)
-        color_id = linear_mapper[color_coord...]
-        push!(color_groups[color_id], I)
-    end
-
-    workspace = ParallelWorkspace{D}(color_groups)
-
-    return BilinearForm{D, typeof(Wₕ), typeof(Vₕ), typeof(ast), typeof(f)}(
-        Wₕ, Vₕ, ast, f, workspace)
+    return BilinearForm{D, typeof(Wₕ), typeof(Vₕ), typeof(f)}(Wₕ, Vₕ, f)
 end
 
 """
-    form(trial_space::CompositeGridSpace, test_space::CompositeGridSpace, f; stride_multiplier=1)
+    form(trial_space::CompositeGridSpace, test_space::CompositeGridSpace, f)
 
 Specialized constructor for coupled bilinear forms on hierarchical composite spaces.
 Detected when both spaces have at least one component that is itself a `CompositeGridSpace`.
 The lambda `f` receives a tuple of symbolic trial args and a tuple of test args matching
 the block structure of `trial_space` and `test_space`.
 """
-function form(trial_space::CompositeGridSpace, test_space::CompositeGridSpace, f; stride_multiplier::Int = 1)
+function form(trial_space::CompositeGridSpace, test_space::CompositeGridSpace, f)
     if is_hierarchical(trial_space) || is_hierarchical(test_space)
         return _build_coupled_bilinear_form(trial_space, test_space, f)
     else
-        # Fall through to the general form constructor (block-diagonal behaviour)
+        # Fall through to the general constructor. Which blocks a term reaches is decided
+        # at assembly, not here.
         D = dim(trial_space)
-        ast = f(TrialFunction{D}(), TestFunction{D}())
+        _validate_form_expression(f(TrialFunction{D}(), TestFunction{D}()), Val(D))
 
-        sp = first_space(trial_space)
-        Ωₕ = mesh(sp)
-        mesh_markers = markers(Ωₕ)
-        grid_inds = indices(Ωₕ)
-        lin_indices = LinearIndices(grid_inds)
-
-        center_I = grid_inds[length(grid_inds) ÷ 2 + 1]
-        center_lin_idx = lin_indices[center_I]
-        sample_stencil = local_stencil(ast, sp, center_I, mesh_markers, center_lin_idx)
-
-        first_off_v = sample_stencil[1][2]
-        min_v = first_off_v
-        max_v = first_off_v
-        for (_, off_v, _) in sample_stencil
-            min_v = min.(min_v, off_v)
-            max_v = max.(max_v, off_v)
-        end
-
-        base_strides = max_v .- min_v .+ 1
-        strides = base_strides .* stride_multiplier
-        stride_tuple = Tuple(strides)
-        num_colors = prod(stride_tuple)
-
-        color_groups = [CartesianIndex{D}[] for _ in 1:num_colors]
-        linear_mapper = LinearIndices(stride_tuple)
-        for I in grid_inds
-            color_coord = ntuple(d -> mod(I[d] - 1, stride_tuple[d]) + 1, D)
-            color_id = linear_mapper[color_coord...]
-            push!(color_groups[color_id], I)
-        end
-
-        workspace = ParallelWorkspace{D}(color_groups)
         return BilinearForm{
-            D, typeof(trial_space), typeof(test_space), typeof(ast), typeof(f)}(
-            trial_space, test_space, ast, f, workspace)
+            D, typeof(trial_space), typeof(test_space), typeof(f)}(
+            trial_space, test_space, f)
     end
 end
 
@@ -268,14 +203,20 @@ end
     end
 end
 
+# `zeros(T, n)` with `T` a value rather than a literal type matches two methods —
+# `zeros(::Type, ::Integer)` giving a vector and `zeros(::Integer, ::Integer)` giving a
+# matrix — so the result infers as a union and `sparse` has no method for half of it.
+# Dispatching on `::Type{T}` settles which one, and the vector comes back concrete.
+@inline _zeros_of(::Type{T}, n::Int) where {T} = zeros(T, n)
+
 """
     allocate_system_matrix(form::BilinearForm, ast = resolve_form_ast(form))
 
 Allocates a sparse matrix with the correct sparsity pattern corresponding to the bilinear form.
 """
 function allocate_system_matrix(
-        form::BilinearForm{D, TrialSpace, TestSpace, ExprType, FType},
-        ast = resolve_form_ast(form)) where {D, TrialSpace, TestSpace, ExprType, FType}
+        form::BilinearForm{D, TrialSpace, TestSpace, FType},
+        ast = resolve_form_ast(form)) where {D, TrialSpace, TestSpace, FType}
     space = form.trial_space
     Ωₕ = mesh(space)
     mesh_markers = markers(Ωₕ)
@@ -298,14 +239,22 @@ function allocate_system_matrix(
         end
     end
 
-    V_vec = zeros(eltype(form.trial_space), length(I_vec))
+    # The element type is the one the form's own weights have, promoted against the space's
+    # — the same rule `assemble` uses for a right-hand side, and for the same two reasons.
+    # It is what lets a `Dual` through, and taking it from the space instead left it
+    # inferred as a union: `zeros(eltype(space), n)` can be `zeros(n₁, n₂)` when `eltype`
+    # of an unconstrained type parameter is not known to be a type, so `V_vec` came out as
+    # `Union{Vector{Float64}, Matrix{Float64}}` and `sparse` had no method for half of it.
+    # JET found that; nothing else would have, since the bad half is unreachable in
+    # practice.
+    V_vec = _zeros_of(_assembled_eltype(ast, space), length(I_vec))
     return sparse(I_vec, J_vec, V_vec, n, n)
 end
 
 function allocate_system_matrix(
-        form::BilinearForm{D, TrialSpace, TestSpace, ExprType, FType},
+        form::BilinearForm{D, TrialSpace, TestSpace, FType},
         ast = resolve_form_ast(form)) where {D, TrialSpace <: CompositeGridSpace,
-        TestSpace <: CompositeGridSpace, ExprType, FType}
+        TestSpace <: CompositeGridSpace, FType}
     space = form.trial_space
     N = ncomponents(TrialSpace)
 
@@ -341,7 +290,7 @@ function allocate_system_matrix(
         end
     end
 
-    V_vec = zeros(eltype(space), length(I_vec))
+    V_vec = _zeros_of(_assembled_eltype(ast, first_space(space)), length(I_vec))
     return sparse(I_vec, J_vec, V_vec, total_dofs, total_dofs)
 end
 
@@ -399,127 +348,90 @@ function _assemble_bilinear_core!(A::SparseMatrixCSC, space, ast::AST_TYPE,
     return A
 end
 
+# The safe stride for a matrix assembly, read from a sample stencil.
+#
+# A bilinear stencil writes to `(I + off_v, I + off_u)`, so two points collide on an entry
+# only if their *row* footprints overlap: rows disjoint implies entries disjoint whatever the
+# columns do. So the span of the test-side offsets is enough, which is the same quantity
+# `_colour_strides` computes for a vector assembly.
+#
+# Taken from an evaluated stencil rather than from `stencil_offsets`, which refuses a
+# `BilinearProduct` on purpose: its offsets are pairs, and what is wanted here is one side.
+function _bilinear_colour_strides(ast::AST_TYPE, sp, lin_indices, mesh_markers,
+        ::Val{D}) where {AST_TYPE, D}
+    grid_inds = indices(mesh(sp))
+    I = grid_inds[length(grid_inds) ÷ 2 + 1]
+    stencil = local_stencil(ast, sp, I, mesh_markers, lin_indices[I])
+    isempty(stencil) && return ntuple(_ -> 1, D)
+
+    lo = stencil[1][2]
+    hi = stencil[1][2]
+    for (_, off_v, _) in stencil
+        lo = min.(lo, off_v)
+        hi = max.(hi, off_v)
+    end
+    return hi .- lo .+ 1
+end
+
+# One colour, threaded, writing straight into the matrix. The colouring is what makes that
+# safe; `add_to_sparse!` is a search into a column, so two threads landing on one entry would
+# race on the value.
+@noinline function _sweep_bilinear_colour!(A::SparseMatrixCSC, sp, ast::AST_TYPE, idxs,
+        lin_indices, mesh_markers, row_offset::Int, col_offset::Int) where {AST_TYPE}
+    Threads.@threads for I in idxs
+        stencil = local_stencil(ast, sp, I, mesh_markers, lin_indices[I])
+
+        for (off_u, off_v, weight) in stencil
+            Iv = I + CartesianIndex(off_v)
+            Iu = I + CartesianIndex(off_u)
+
+            if checkbounds(Bool, lin_indices, Iv) && checkbounds(Bool, lin_indices, Iu)
+                add_to_sparse!(A, lin_indices[Iv] + row_offset,
+                    lin_indices[Iu] + col_offset, weight)
+            end
+        end
+    end
+    return nothing
+end
+
+# Every colour in turn, as strided sub-grids rather than a materialised list of indices. The
+# version this replaces binned the whole grid into a `Vector{Vector{CartesianIndex}}` at
+# construction — 9.3 MB at 90,000 degrees of freedom, before a single entry was assembled.
+function _sweep_bilinear!(A::SparseMatrixCSC, sp, ast::AST_TYPE, strides, lin_indices,
+        mesh_markers, row_offset::Int, col_offset::Int) where {AST_TYPE}
+    grid_inds = indices(mesh(sp))
+
+    if prod(strides) == 1
+        _sweep_bilinear_colour!(A, sp, ast, grid_inds, lin_indices, mesh_markers,
+            row_offset, col_offset)
+        return A
+    end
+
+    for c in CartesianIndices(strides)
+        _sweep_bilinear_colour!(A, sp, ast, _colour_subgrid(grid_inds, c, strides),
+            lin_indices, mesh_markers, row_offset, col_offset)
+    end
+    return A
+end
+
 function _assemble_bilinear_parallel_core!(
         A::SparseMatrixCSC, space, ast::AST_TYPE, lin_indices,
-        mesh_markers, color_groups) where {AST_TYPE}
-    num_colors = length(color_groups)
-    num_threads = Threads.nthreads()
-    for color_id in 1:num_colors
-        color_group = color_groups[color_id]
-        len = length(color_group)
-        chunk_size = ceil(Int, len / num_threads)
-
-        # Coarse-grained parallel chunking to minimize thread task creation overhead and false sharing
-        Threads.@threads for tid in 1:num_threads
-            start_idx = (tid - 1) * chunk_size + 1
-            end_idx = min(tid * chunk_size, len)
-
-            for idx in start_idx:end_idx
-                I = color_group[idx]
-                lin_idx = lin_indices[I]
-                stencil = local_stencil(ast, space, I, mesh_markers, lin_idx)
-
-                for (off_u, off_v, weight) in stencil
-                    Iv = I + CartesianIndex(off_v)
-                    Iu = I + CartesianIndex(off_u)
-
-                    if checkbounds(Bool, lin_indices, Iv) &&
-                       checkbounds(Bool, lin_indices, Iu)
-                        row = lin_indices[Iv]
-                        col = lin_indices[Iu]
-
-                        add_to_sparse!(A, row, col, weight)
-                    end
-                end
-            end
-        end
-    end
+        mesh_markers, strides) where {AST_TYPE}
+    _sweep_bilinear!(A, space, ast, strides, lin_indices, mesh_markers, 0, 0)
     return A
 end
 
-function _assemble_bilinear_core!(A::SparseMatrixCSC, space::CompositeGridSpace{N},
-        ast::AST_TYPE, lin_indices, mesh_markers) where {N, AST_TYPE}
-    offsets = Int[0]
-    for sp in space.spaces
-        push!(offsets, offsets[end] + ndofs(sp))
-    end
-
-    for c in 1:N
-        sp = space.spaces[c]
-        offset = offsets[c]
-
-        for I in indices(mesh(sp))
-            lin_idx = lin_indices[I]
-            stencil = local_stencil(ast, sp, I, mesh_markers, lin_idx)
-
-            for (off_u, off_v, weight) in stencil
-                Iv = I + CartesianIndex(off_v)
-                Iu = I + CartesianIndex(off_u)
-
-                if checkbounds(Bool, lin_indices, Iv) && checkbounds(Bool, lin_indices, Iu)
-                    row_local = lin_indices[Iv]
-                    col_local = lin_indices[Iu]
-
-                    row_global = row_local + offset
-                    col_global = col_local + offset
-
-                    add_to_sparse!(A, row_global, col_global, weight)
-                end
-            end
-        end
-    end
-    return A
-end
-
+# The composite case, still block diagonal and still walking the top-level components rather
+# than the leaves — both of which the routing work replaces. Kept only so the colouring
+# change lands on its own.
 function _assemble_bilinear_parallel_core!(
         A::SparseMatrixCSC, space::CompositeGridSpace{N}, ast::AST_TYPE,
-        lin_indices, mesh_markers, color_groups) where {N, AST_TYPE}
-    num_colors = length(color_groups)
-    num_threads = Threads.nthreads()
-
-    offsets = Int[0]
-    for sp in space.spaces
-        push!(offsets, offsets[end] + ndofs(sp))
-    end
-
-    for color_id in 1:num_colors
-        color_group = color_groups[color_id]
-        len = length(color_group)
-        chunk_size = ceil(Int, len / num_threads)
-
-        # Coarse-grained parallel chunking
-        Threads.@threads for tid in 1:num_threads
-            start_idx = (tid - 1) * chunk_size + 1
-            end_idx = min(tid * chunk_size, len)
-
-            for idx in start_idx:end_idx
-                I = color_group[idx]
-                lin_idx = lin_indices[I]
-
-                for c in 1:N
-                    sp = space.spaces[c]
-                    offset = offsets[c]
-
-                    stencil = local_stencil(ast, sp, I, mesh_markers, lin_idx)
-
-                    for (off_u, off_v, weight) in stencil
-                        Iv = I + CartesianIndex(off_v)
-                        Iu = I + CartesianIndex(off_u)
-
-                        if checkbounds(Bool, lin_indices, Iv) &&
-                           checkbounds(Bool, lin_indices, Iu)
-                            row_local = lin_indices[Iv]
-                            col_local = lin_indices[Iu]
-
-                            row_global = row_local + offset
-                            col_global = col_local + offset
-
-                            add_to_sparse!(A, row_global, col_global, weight)
-                        end
-                    end
-                end
-            end
-        end
+        lin_indices, mesh_markers, strides) where {N, AST_TYPE}
+    offset = 0
+    for c in 1:N
+        sp = space.spaces[c]
+        _sweep_bilinear!(A, sp, ast, strides, lin_indices, mesh_markers, offset, offset)
+        offset += ndofs(sp)
     end
     return A
 end
@@ -530,9 +442,9 @@ end
 Performs sequential assembly of the `BilinearForm` directly into the preallocated sparse matrix `A`.
 """
 function assemble!(
-        A::SparseMatrixCSC, form::BilinearForm{D, TrialSpace, TestSpace, ExprType, FType};
+        A::SparseMatrixCSC, form::BilinearForm{D, TrialSpace, TestSpace, FType};
         dirichlet_labels = nothing,
-        ast = resolve_form_ast(form)) where {D, TrialSpace, TestSpace, ExprType, FType}
+        ast = resolve_form_ast(form)) where {D, TrialSpace, TestSpace, FType}
     _validate_dirichlet_labels(dirichlet_labels)
     fill!(nonzeros(A), 0.0)
     space = form.trial_space
@@ -552,8 +464,8 @@ end
 Performs multi-threaded parallel assembly using lock-free multi-coloring partition, strictly allocation-free at runtime.
 """
 function assemble_parallel!(
-        A::SparseMatrixCSC, form::BilinearForm{D, TrialSpace, TestSpace, ExprType, FType},
-        ast = resolve_form_ast(form)) where {D, TrialSpace, TestSpace, ExprType, FType}
+        A::SparseMatrixCSC, form::BilinearForm{D, TrialSpace, TestSpace, FType},
+        ast = resolve_form_ast(form)) where {D, TrialSpace, TestSpace, FType}
 
     # Reset tracking arrays in place without reallocating
     fill!(nonzeros(A), 0.0)
@@ -563,11 +475,11 @@ function assemble_parallel!(
     mesh_markers = markers(Ωₕ)
     lin_indices = LinearIndices(indices(Ωₕ))
 
-    # Retrieve preallocated coloring groups directly from the workspace field
-    color_groups = form.workspace.color_groups
+    strides = _bilinear_colour_strides(
+        ast, first_space(space), lin_indices, mesh_markers, Val(D))
 
     _assemble_bilinear_parallel_core!(
-        A, space, ast, lin_indices, mesh_markers, color_groups)
+        A, space, ast, lin_indices, mesh_markers, strides)
 
     return A
 end

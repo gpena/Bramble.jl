@@ -168,11 +168,8 @@ include("form/dirichlet_constraints.jl")
 # unlocked on its own.
 include("form/linear.jl")
 
-#=
-
 #include("form/grid_coloring.jl")
 include("form/bilinear.jl")
-=#
 #=
 include("exporter/types.jl")
 include("exporter/exporter_vtk.jl")
