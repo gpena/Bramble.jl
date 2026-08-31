@@ -490,6 +490,67 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         @test sum(d) ≈ 5 * ref_before           # and live again once resolved afresh
     end
 
+    @testset "the functor contracts without building the vector" begin
+        # `l(vₕ)` answers with a number, and used to allocate a whole right-hand side to
+        # get it: `dot(assemble(form), values(vₕ))`. The walk now multiplies each stencil
+        # weight by `v` at the row it would have written to, so the same sum is taken as it
+        # goes and no vector is built.
+        n = ndofs(Wₕ)
+        lfc = form(Wₕ, v -> innerₕ(uₕ, v))
+        astc = resolve_form_ast(lfc)
+        b = assemble(lfc)
+
+        @test lfc(uₕ) ≈ sum(b .* values(uₕ))
+        @test lfc(uₕ; ast = astc) ≈ lfc(uₕ)
+
+        # Behind a barrier, because the keyword handling itself shows up as a few dozen
+        # bytes at top level. What matters is that no full-length vector is built.
+        function _contract_allocs(lf, v, ast)
+            lf(v; ast = ast)
+            return @allocated lf(v; ast = ast)
+        end
+        @test _contract_allocs(lfc, uₕ, astc) == 0
+
+        # Every arrangement has to agree with assembling and contracting by hand, not just
+        # the simple one: the composite cores are separate code from the scalar one.
+        Vc = gridspace(Ωₕ, Val(3))
+        uc = Rₕ(Vc, (x -> 1.0, x -> 100.0, x -> 10000.0))
+        wc = Rₕ(Vc, (x -> 2.0, x -> 3.0, x -> 5.0))
+        cc = components(uc)
+        for (nm, g) in (
+            ("scalar, a difference", v -> innerₕ(uₕ, D₋ₓ(v))),
+            ("scalar, a linear combination", v -> innerₕ(uₕ, v + 2 * D₋ₓ(v) - M₋ₓ(v))),
+            ("scalar, two kinds summed", v -> innerₕ(uₕ, v) + inner₊ₓ(uₕ, D₋ₓ(v))))
+            lfx = form(Wₕ, g)
+            @test lfx(uₕ) ≈ sum(assemble(lfx) .* values(uₕ))
+        end
+        for (nm, g) in (
+            ("composite shorthand", v -> innerₕ(uc, v)),
+            ("composite per component", v -> innerₕ(cc[1], v(1)) + innerₕ(cc[2], v(2))),
+            ("composite routed with operators",
+            v -> innerₕ(cc[1], v(1) + D₋ₓ(v(1))) + innerₕ(cc[3], v(3))),
+            ("composite crossed", v -> innerₕ(cc[1], v(2))))
+            lfx = form(Vc, g)
+            @test lfx(wc) ≈ sum(assemble(lfx) .* values(wc))
+        end
+
+        # A source carrying an operator is the one case that still allocates, and it is the
+        # resolve rather than the contraction: `D₋ₓ(uₕ)` is evaluated eagerly into an
+        # element of its own every time the tree is rebuilt. Caching the tree avoids it,
+        # which is the same trade as the liveness one above.
+        lfd = form(Wₕ, v -> innerₕ(D₋ₓ(uₕ), v))
+        astd = resolve_form_ast(lfd)
+        @test lfd(uₕ) ≈ sum(assemble(lfd) .* values(uₕ))
+        @test _contract_allocs(lfd, uₕ, astd) == 0
+
+        function _resolve_allocs(lf, v)
+            lf(v)
+            return @allocated lf(v)
+        end
+        @test _resolve_allocs(lfd, uₕ) >= 8 * n     # one full-length element, from D₋ₓ
+        @test _resolve_allocs(lfc, uₕ) < 8 * n      # a plain source resolves for nothing
+    end
+
     @testset "evaluation sees live coefficients too" begin
         # Everything above went through `assemble`. Evaluation is the other way a form gets
         # used, and it has to agree: `l(vₕ)` and `evaluate!` both resolve from `f`, so a
