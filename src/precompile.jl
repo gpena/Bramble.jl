@@ -439,6 +439,166 @@ function _pc_space_buffers(be)
     return nothing
 end
 
+# --- The form layer ------------------------------------------------------ #
+#
+# The symbolic layer is not reachable from the space sessions above: a `LazyOp` tree is
+# built from `IdentityOperator` and the trial/test leaves rather than from a grid function,
+# so none of its constructors, stencil evaluators or traits are inferred by anything else
+# here. Measured in a fresh session before this was added, the form paths cost about 580 ms
+# of first-call latency, of which `stencil_offsets` alone was 176 ms.
+#
+# Assembly itself is still locked, so `form`, `assemble` and `assemble!` are absent — the
+# template for them is in form/precompile.jl, to be folded in when those files return.
+
+# Every node kind, built over one space, plus the traits each one answers. Returns a tree
+# with a trial and a test leaf so the caller can reach the products.
+function _pc_form_ast(Wₕ, ::Val{D}) where {D}
+    id = IdentityOperator(Wₕ)
+    z = ZeroOperator(Wₕ)
+    u, v = TrialFunction{D}(), TestFunction{D}()
+    p, q = IndexedTrialFunction{D}(1), IndexedTestFunction{D}(1)
+
+    for leaf in (id, z, u, v, p, q, source_function(x -> 1.0, Val(D)))
+        is_symbolic(leaf)
+        resolve_ast(leaf)
+    end
+
+    # the one-sided families, the averages, the shift and the restriction
+    for op in (D₋ₓ(id), D₊ₓ(id), M₋ₓ(id), M₊ₓ(id), jumpₓ(id),
+        Dcₓ(id), Dstar₊ₓ(id), Dₕₓ(id))
+        is_symbolic(op)
+        resolve_ast(op)
+        get_innermost_dim(op)
+        stencil_offsets(op)
+    end
+    shift_op(id, 1, 1)
+    restrict_to(:interior, D₋ₓ(id))
+
+    # scaling, sums and the vector forms
+    scaled = 3 * D₋ₓ(id)
+    summed = D₋ₓ(id) + D₊ₓ(id)
+    resolve_ast(scaled)
+    resolve_ast(summed)
+    stencil_offsets(summed)
+    ∇₋ₕ(id)
+    ∇₊ₕ(id)
+    ∇ₕ(id)
+    jumpₕ(id)
+    Dcₕ(id)
+    Dstar₊ₕ(id)
+    M₋ₕ(id)
+    M₊ₕ(id)
+
+    return id, u, v
+end
+
+# The products, and the stencils they evaluate to. This is the path assembly will take.
+function _pc_form_stencils(Ωₕ::AbstractMeshType, Wₕ, id, u, v, label::Symbol)
+    idx = indices(Ωₕ)
+    lin = LinearIndices(idx)
+    I = first(idx)
+    mk = markers(Ωₕ)
+
+    # bilinear and linear products, each weight kind
+    for prod in (innerₕ(D₋ₓ(id), D₋ₓ(id)), inner₊ₓ(M₋ₓ(id), M₋ₓ(id)),
+        innerₕ(id, D₋ₓ(id)))
+        local_stencil(prod, Wₕ, I, nothing, lin[I])
+        local_stencil(prod, Wₕ, I, mk, lin[I])
+        resolve_ast(prod)
+    end
+
+    # every node kind evaluated once, with and without a marker table — the restriction is
+    # the only node that reads it, and `nothing` is a separate method there
+    for op in (id, D₋ₓ(id), D₊ₓ(id), M₋ₓ(id), jumpₓ(id), Dcₓ(id), Dstar₊ₓ(id), Dₕₓ(id),
+        shift_op(id, 1, 1), 3 * D₋ₓ(id), D₋ₓ(id) + D₊ₓ(id),
+        restrict_to(:interior, id), restrict_to(label, id))
+        local_stencil(op, Wₕ, I, nothing, lin[I])
+        local_stencil(op, Wₕ, I, mk, lin[I])
+    end
+
+    # the symbolic inner products over trial and test leaves, including the tuple forms
+    innerₕ(u, v)
+    innerₕ(2.0, v)
+    innerₕ(x -> 1.0, v)
+    inner₊(u, D₋ₓ(v))
+    inner₊(D₋ₓ(u), D₋ₓ(v))
+    inner₊(∇₋ₕ(u), ∇₋ₕ(v))
+    inner₊ₓ(u, v)
+    inner₊ᵧ(u, v)
+    return nothing
+end
+
+# Block extraction for a coupled form: the symbolic arguments, and the split into blocks.
+function _pc_form_blocks(Vₕ, ::Val{D}) where {D}
+    U = make_trial_args(Vₕ, D)
+    V = make_test_args(Vₕ, D)
+    is_hierarchical(Vₕ)
+    n = n_leaf_spaces(Vₕ)
+    collect_leaf_spaces_offsets(Vₕ)
+    leaf_spaces_offsets(Vₕ)
+
+    a = innerₕ(D₋ₓ(U[1]), D₋ₓ(V[1])) + innerₕ(U[2], V[2])
+    flatten_sum(a)
+    find_trial_component(a.left_op)
+    find_test_component(a.left_op)
+    extract_block_asts(a, n, n)
+    return nothing
+end
+
+# The constraints, and applying them. Every path: matrix and vector, scalar and composite.
+function _pc_form_dirichlet(Ωₕ::AbstractMeshType, Wₕ, Vₕ, be, label::Symbol, f, ft,
+        I_time)
+    bcs = dirichlet_constraints(set(Ωₕ), label => f)
+    dirichlet_constraints(Wₕ, label => f)
+    dirichlet_constraints(Vₕ, label => f)
+    tbcs = dirichlet_constraints(set(Ωₕ), I_time, label => ft)
+    ev = tbcs(0.5)
+    symbols(bcs)
+    conditions(bcs)
+
+    n, nv = ndofs(Wₕ), ndofs(Vₕ)
+    A = matrix(be, n, n)
+    A .= 0
+    for i in 1:n
+        A[i, i] = 1.0
+    end
+    Av = matrix(be, nv, nv)
+    Av .= 0
+    for i in 1:nv
+        Av[i, i] = 1.0
+    end
+    F, Fv = ones(n), ones(nv)
+
+    dirichlet_bc!(A, Ωₕ, label)
+    dirichlet_bc!(A, Wₕ, label)
+    dirichlet_bc!(Av, Vₕ, label)
+    dirichlet_bc!(F, Ωₕ, bcs, label)
+    dirichlet_bc!(F, Ωₕ, ev, label)
+    dirichlet_bc!(F, Wₕ, bcs, label)
+    dirichlet_bc!(Fv, Vₕ, bcs, label)
+
+    symmetrize!(A, F, Ωₕ, label)
+    symmetrize!(A, F, Wₕ, label)
+    symmetrize!(Av, Fv, Vₕ, label)
+    dirichlet_bc_symmetrize!(A, F, Ωₕ, label)
+    return nothing
+end
+
+function _pc_form_session(Ωₕ::AbstractMeshType, be, label::Symbol, f, ft, I_time,
+        dim_val::Val{D}) where {D}
+    Wₕ = gridspace(Ωₕ)
+    Vₕ = gridspace(Ωₕ, Val(2))
+
+    id, u, v = _pc_form_ast(Wₕ, dim_val)
+    _pc_form_stencils(Ωₕ, Wₕ, id, u, v, label)
+    _pc_form_blocks(Vₕ, dim_val)
+    _pc_form_dirichlet(Ωₕ, Wₕ, Vₕ, be, label, f, ft, I_time)
+
+    # the composite space reaches the same nodes through a different space type
+    _pc_form_ast(Vₕ, dim_val)
+    return nothing
+end
+
 # --- Workload ------------------------------------------------------------ #
 
 if PRECOMPILE_WORKLOAD
@@ -500,6 +660,14 @@ if PRECOMPILE_WORKLOAD
             _pc_operator_session(e2, c2, Val(2))
             _pc_operator_session(e3, c3, Val(3))
             _pc_space_buffers(be)
+
+            # The symbolic layer. Not reachable from the space sessions: a LazyOp tree is
+            # built from IdentityOperator and the trial/test leaves, not from a grid
+            # function.
+            _pc_form_session(Ωₕ1, be, :left, x -> x + 1.0, (x, t) -> (x + 1.0) * t,
+                I_time, Val(1))
+            _pc_form_session(Ωₕ2, be, :wall, x -> x[1] * x[2],
+                (x, t) -> x[1] * x[2] * t, I_time, Val(2))
 
             # Markers and domains, including evaluation of a space-time domain.
             for X in (I1, S2)

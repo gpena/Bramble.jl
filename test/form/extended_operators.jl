@@ -216,6 +216,20 @@ end
             @test is_symbolic(f(u))            # symbolic through the wrapper
         end
 
+        # Every node that names a direction answers for it, not only the differences. The
+        # averages, the shift and the restriction had no method until the precompilation
+        # workload called the trait across every node kind and met a MethodError on the
+        # averages — the kind of gap nothing else was going to find, since the trait has no
+        # caller in the unlocked code.
+        for (f, dim) in ((M₋ₓ, 1), (M₊ₓ, 1), (M₋ᵧ, 2), (M₊ᵧ, 2), (M₋₂, 3), (M₊₂, 3))
+            @test get_innermost_dim(f(id)) == dim
+        end
+        @test get_innermost_dim(Bramble.shift_op(id, 2, 3)) == 2
+        @test get_innermost_dim(restrict_to(:interior, M₋ᵧ(id))) == 2
+        @test get_innermost_dim(restrict_to(:bottom, D₋ₓ(id))) == 1
+        @test M₋ₓ(id) isa Bramble.AverageNode
+        @test M₊ᵧ(id) isa Bramble.AverageNode
+
         # the three without a matrix form are grouped, so anything reading only the
         # direction covers all of them
         @test Dcₓ(id) isa ExtendedDifferenceNode
