@@ -128,8 +128,9 @@ let uₕ2 = Rₕ(gridspace(_mesh2()), x -> sin(x[1]) * x[2]),
 end
 
 # --- 8. startup latency & TTFX -------------------------------------------- #
-let cmd_load = `julia --project=. --startup-file=no -e "using Bramble"`,
-    cmd_ttfx = `julia --project=. --startup-file=no -e "using Bramble; m = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (10, 10), (true, true)); W = gridspace(m); u = element(W); D₋ₓ(u)"`
+let jl = Base.julia_cmd(),
+    cmd_load = `$jl --project=. --startup-file=no -e "using Bramble"`,
+    cmd_ttfx = `$jl --project=. --startup-file=no -e "using Bramble; m = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (10, 10), (true, true)); W = gridspace(m); u = element(W); D₋ₓ(u)"`
 
     g = SUITE["startup & latency"] = BenchmarkGroup()
     g["using Bramble"] = @benchmarkable run($cmd_load) samples=3 evals=1
@@ -190,6 +191,7 @@ function check_allocations(results)
 end
 
 function main(args = ARGS)
+    set_zero_subnormals(true)
     println("tuning...")
     tune!(SUITE)
     results = run(SUITE; verbose = true)
