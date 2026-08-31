@@ -101,5 +101,6 @@ Multi-threaded assembly in `Bramble.jl` uses a lock-free multi-coloring partitio
 ```@autodocs
 Modules = [Bramble]
 Public = false
-Pages = ["form/dirichlet_constraints.jl", "form/linear.jl", "form/bilinear.jl", "form/grid_coloring.jl"]
+Pages = ["form/dirichlet_constraints.jl", "form/linear.jl", "form/bilinear.jl",
+         "form/block_extract.jl", "form/component.jl", "form/stencil_pattern.jl"]
 ```

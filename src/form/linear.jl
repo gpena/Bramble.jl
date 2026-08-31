@@ -3,8 +3,6 @@
 # Struct Definitions
 # ==============================================================================
 
-# `ParallelWorkspace` lives in form/parallel_workspace.jl, included before both
-# assembly files, so this file no longer depends on bilinear.jl for it.
 """
     LinearForm{D,TestSpace,FType}
 
@@ -13,7 +11,6 @@ Represents a linear form defined over a test space.
 # Fields
 - `test_space::TestSpace`: The space for the test function.
 - `f::FType`: The expression, as a function of a test argument.
-- `workspace::ParallelWorkspace{D}`: Preallocated coordinate partitions for lock-free parallel assembly.
 
 The expression is kept as `f` and not as a resolved tree, which is what makes a coefficient
 live: [`resolve_form_ast`](@ref) calls it afresh on every assembly, so an element rebound or
@@ -30,7 +27,6 @@ in `form` where it can say what went wrong.
 struct LinearForm{D, TestSpace, FType}
     test_space::TestSpace
     f::FType
-    workspace::ParallelWorkspace{D}
 end
 
 """
@@ -182,19 +178,16 @@ function form(Wₕ, f)
     # `assemble`, which is much further from the mistake.
     _validate_form_expression(f(TestFunction{D}()), Val(D))
 
-    # No colouring and no buffers built here, on purpose. Both used to be: every `form`
-    # call evaluated a sample stencil, binned the whole grid into a
-    # `Vector{Vector{CartesianIndex{D}}}` one `push!` at a time, and allocated a
-    # full-length `Float64` buffer per thread — 64 MB at a million degrees of freedom on
-    # eight threads, paid whether or not the caller ever assembled in parallel. The bins
-    # were then never read by anything, and the buffers are what made the parallel path
+    # No colouring and no buffers built here. Every `form` call used to evaluate a sample
+    # stencil, bin the whole grid into a `Vector{Vector{CartesianIndex{D}}}` one `push!` at
+    # a time, and allocate a full-length `Float64` buffer per thread — 64 MB at a million
+    # degrees of freedom on eight threads, paid whether or not the caller ever assembled in
+    # parallel. Nothing read the bins, and the buffers are what made the parallel path
     # slower than the serial one at every size.
     #
     # The partition is a property of the AST and the grid, both of which assembly has in
-    # hand, so it is computed there instead and costs nothing here.
-    workspace = ParallelWorkspace{D}(Vector{CartesianIndex{D}}[])
-
-    return LinearForm{D, typeof(Wₕ), typeof(f)}(Wₕ, f, workspace)
+    # hand, so it is derived there and costs nothing here.
+    return LinearForm{D, typeof(Wₕ), typeof(f)}(Wₕ, f)
 end
 
 # ==============================================================================
@@ -445,9 +438,9 @@ end
 
 # Walk the sum and send each term to the blocks it belongs to.
 #
-# Recursing the tree rather than calling `flatten_sum` and iterating the result: that answers
-# with a `Vector{Any}`, which allocates and makes every term a dynamic read. Recursing keeps
-# each term concretely typed at its own call, so this is inferable end to end and costs
+# Recursing the tree rather than flattening it into a vector of terms first. A flattened
+# vector is a `Vector{Any}`, which allocates and makes every term a dynamic read; recursing
+# keeps each term concretely typed at its own call, so this is inferable end to end and costs
 # nothing — 544 B per assembly became 0.
 function _route_terms!(b::Vector, op::OperatorAdd, leaves, lin_indices, mesh_markers)
     _route_terms!(b, op.left_op, leaves, lin_indices, mesh_markers)
@@ -535,9 +528,9 @@ function _contract_term(sp, term::TERM, lin_indices, mesh_markers, offset::Int,
     return acc
 end
 
-# The counterpart of `_route_terms!`. Recursive rather than over `flatten_sum` for the same
-# reason, and threading `acc` through the recursion rather than summing the branches keeps
-# the accumulator type fixed across the whole walk.
+# The counterpart of `_route_terms!`. Recursive rather than over a flattened vector for the
+# same reason, and threading `acc` through the recursion rather than summing the branches
+# keeps the accumulator type fixed across the whole walk.
 function _route_terms_contract(op::OperatorAdd, leaves, lin_indices, mesh_markers, v, acc)
     acc = _route_terms_contract(op.left_op, leaves, lin_indices, mesh_markers, v, acc)
     return _route_terms_contract(op.right_op, leaves, lin_indices, mesh_markers, v, acc)
@@ -628,9 +621,9 @@ end
     return dest
 end
 
-# The scatter, behind a function barrier. `flatten_sum` answers with a `Vector{Any}`, so a
-# term read out of it is only concretely typed once it is an argument: without this
-# `local_stencil` would be a dynamic call at every grid point rather than once per term.
+# The scatter, behind a function barrier: a term is only concretely typed once it is an
+# argument, so without this `local_stencil` would be a dynamic call at every grid point
+# rather than once per term.
 function _scatter_term!(b::Vector, sp, term::TERM, lin_indices, mesh_markers,
         offset::Int) where {TERM}
     for I in indices(mesh(sp))

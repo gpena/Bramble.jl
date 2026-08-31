@@ -142,8 +142,8 @@ include("space/inner_product.jl")
 # space/operators/linear_operators.jl.
 include("form/common.jl")
 
-# block_extract.jl adds the component walks a coupled form routes by and, with it,
-# `collect_leaf_spaces_offsets`, which walks a nested space's leaves and their dof offsets.
+# block_extract.jl adds the component walks a coupled form routes by: which component a term
+# names on each side, and the block that pair picks out.
 # component.jl indexes a node by component, and needs every node type in its signatures, so
 # it comes after common.jl and the operator files it includes.
 include("form/component.jl")
@@ -153,22 +153,17 @@ include("form/component.jl")
 include("form/stencil_pattern.jl")
 
 # Shared by both assembly files, so it belongs to neither. Included ahead of them because
-# `linear.jl` names the type in a struct field, which resolves at definition time.
-include("form/parallel_workspace.jl")
 
 include("form/block_extract.jl")
 
 # dirichlet_constraints.jl comes last of the three: it is the user-facing one, and its
-# composite methods are what need `collect_leaf_spaces_offsets` above.
+# composite methods are what need the component walks above.
 include("form/dirichlet_constraints.jl")
 
 # linear.jl assembles a right-hand side. It comes after dirichlet_constraints.jl, whose
-# `dirichlet_bc!` it applies, and after parallel_workspace.jl, whose type it names in a
-# struct field — which is why that type had to leave bilinear.jl before this file could be
-# unlocked on its own.
+# `dirichlet_bc!` it applies.
 include("form/linear.jl")
 
-#include("form/grid_coloring.jl")
 include("form/bilinear.jl")
 #=
 include("exporter/types.jl")

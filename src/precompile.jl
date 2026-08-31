@@ -509,18 +509,16 @@ end
 
 # Block extraction for a coupled form: the symbolic arguments, and the split into blocks.
 function _pc_form_blocks(Vₕ, ::Val{D}) where {D}
-    U = make_trial_args(Vₕ, D)
-    V = make_test_args(Vₕ, D)
-    is_hierarchical(Vₕ)
     n = n_leaf_spaces(Vₕ)
-    collect_leaf_spaces_offsets(Vₕ)
-    leaf_spaces_offsets(Vₕ)
+    leaves = leaf_spaces_offsets(Vₕ)
 
-    a = innerₕ(D₋ₓ(U[1]), D₋ₓ(V[1])) + innerₕ(U[2], V[2])
-    flatten_sum(a)
-    find_trial_component(a.left_op)
-    find_test_component(a.left_op)
-    extract_block_asts(a, n, n)
+    u, v = TrialFunction{D}(), TestFunction{D}()
+    a = innerₕ(D₋ₓ(u(1)), D₋ₓ(v(1))) + innerₕ(u(2), v(2))
+
+    routes_by_component(a)
+    trial_component_or_nothing(a.left_op)
+    test_component_or_nothing(a.left_op)
+    block_of(a.left_op, n, n)
     return nothing
 end
 

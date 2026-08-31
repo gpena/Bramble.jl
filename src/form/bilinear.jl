@@ -2,7 +2,6 @@
 # Struct Definitions
 # ==============================================================================
 
-# `ParallelWorkspace` moved to form/parallel_workspace.jl. `linear.jl` names it as the type
 # of a `LinearForm` field, which has to resolve when the struct is defined rather than when
 # it is called, so keeping it here made unlocking that file alone impossible.
 

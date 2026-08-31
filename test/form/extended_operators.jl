@@ -5,7 +5,8 @@ using Bramble: IdentityOperator, TrialFunction, IndexedTrialFunction, IndexedTes
                LazyOp, JumpNode, CenteredDifference, StarDifference,
                CrossWeightedDifference, ExtendedDifferenceNode,
                local_stencil, resolve_ast, is_symbolic, get_innermost_dim,
-               find_trial_component, find_test_component, values, indices, restrict_to
+               trial_component_or_nothing, test_component_or_nothing, values, indices,
+               restrict_to
 
 # The four remaining operator families, as symbolic nodes: the jump, the centered
 # difference, the starred forward difference and the cross-weighted centered difference.
@@ -240,9 +241,9 @@ end
         # and the block walk reaches its leaf through every one of them
         p, q = IndexedTrialFunction{2}(2), IndexedTestFunction{2}(3)
         for f in (jumpₓ, Dcₓ, Dstar₊ₓ, Dₕₓ)
-            @test find_trial_component(f(p)) == 2
-            @test find_test_component(f(q)) == 3
-            @test find_trial_component(restrict_to(:interior, f(p))) == 2
+            @test trial_component_or_nothing(f(p)) == 2
+            @test test_component_or_nothing(f(q)) == 3
+            @test trial_component_or_nothing(restrict_to(:interior, f(p))) == 2
         end
     end
 

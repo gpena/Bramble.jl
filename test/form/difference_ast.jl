@@ -4,7 +4,7 @@ using Bramble: IdentityOperator, IndexedTrialFunction, IndexedTestFunction,
                TrialFunction, TestFunction,
                BackwardDifference, ForwardDifference, DifferenceNode,
                get_innermost_dim, is_symbolic,
-               resolve_ast, find_trial_component, find_test_component,
+               resolve_ast, trial_component_or_nothing, test_component_or_nothing,
                grad_backward, grad_forward
 
 # The two one-sided difference nodes of the symbolic layer.
@@ -96,10 +96,10 @@ using Bramble: IdentityOperator, IndexedTrialFunction, IndexedTestFunction,
         # looking for — so it is those the nodes wrap here, not the identity.
         u, v = IndexedTrialFunction{2}(3), IndexedTestFunction{2}(2)
         for D in (D₋ₓ, D₊ₓ, D₋ᵧ, D₊ᵧ)
-            @test find_trial_component(D(u)) == 3
-            @test find_test_component(D(v)) == 2
-            @test find_trial_component(7 * D(u)) == 3
-            @test find_test_component(7 * D(v)) == 2
+            @test trial_component_or_nothing(D(u)) == 3
+            @test test_component_or_nothing(D(v)) == 2
+            @test trial_component_or_nothing(7 * D(u)) == 3
+            @test test_component_or_nothing(7 * D(v)) == 2
         end
 
         # a symbolic leaf makes the whole node symbolic, either way round

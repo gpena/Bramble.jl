@@ -245,12 +245,6 @@ using LinearAlgebra: I as LinearAlgebraI
         dirichlet_bc!(Af, flat, :bottom)
         @test An == Af
 
-        # the vector-shaped view of the same walk, which the form layer's block
-        # extraction indexes into
-        collected = Bramble.collect_leaf_spaces_offsets(nested)
-        @test collected isa Vector
-        @test Tuple(collected) == leaves
-
         bcs = dirichlet_constraints(set(Ωₕ), :bottom => (x -> 7.0))
         vn, vf = fill(3.0, 4n), fill(3.0, 4n)
         dirichlet_bc!(vn, nested, bcs, :bottom)

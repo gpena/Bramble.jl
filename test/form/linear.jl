@@ -4,7 +4,7 @@ using ForwardDiff
 using LinearAlgebra: Diagonal, diag, dot, I
 using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_space,
                element, resolve_form_ast, apply_dirichlet_conditions!, LinearProduct,
-               values, ParallelWorkspace, TestFunction, TrialFunction,
+               values, TestFunction, TrialFunction,
                IndexedTestFunction, IndexedTrialFunction, test_component_or_nothing,
                routes_by_component, component, components, _colour_strides,
                stencil_offsets, ndofs, Innerh, Innerplus, evaluate!
@@ -32,7 +32,6 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         lf = form(Wₕ, v -> innerₕ(uₕ, v))
         @test lf isa LinearForm
         @test test_space(lf) === Wₕ
-        @test lf.workspace isa ParallelWorkspace{2}
         @test resolve_form_ast(lf) isa LinearProduct
     end
 
@@ -153,7 +152,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         end
 
         @testset "and it costs nothing" begin
-            # The routing recurses the AST rather than calling `flatten_sum`, which answers
+            # The routing recurses the AST rather than flattening it first, which answers
             # with a Vector{Any}: that allocated 544 B per assembly and made every term a
             # dynamic read.
             function bytes(mk)
@@ -677,7 +676,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         # parameter did one useful thing: it rejected an expression that does not describe an
         # operator. Dropping the field kept the check and gave it a message.
         @test fieldnames(typeof(form(Wₕ, v -> innerₕ(uₕ, v)))) ==
-              (:test_space, :f, :workspace)
+              (:test_space, :f)
 
         @test_throws ArgumentError form(Wₕ, v -> 42)
         @test_throws ArgumentError form(Wₕ, v -> "not an operator")
