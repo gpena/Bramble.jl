@@ -48,8 +48,18 @@ end
 
 const __bramble_with_examples = false
 const __bramble_test_group = get(ENV, "BRAMBLE_TEST_GROUP", "all")
-const __bramble_with_quality = __bramble_test_group in ("all", "quality")
-const __bramble_with_unit_tests = __bramble_test_group in ("all", "unit")
+const __bramble_with_quality = __bramble_test_group in ("all", "quality", "full")
+const __bramble_with_unit_tests = __bramble_test_group in ("all", "unit", "full")
+
+# The automatic differentiation backend survey is deliberately outside "all", so neither a
+# local `Pkg.test()` nor the per-push CI pays for it. Enzyme and Mooncake are expensive to
+# install and slow to compile — the six checks take over a minute of which almost all is
+# compilation — and what they establish changes only when a backend changes, not when
+# Bramble does. The weekly workflow runs `full`, which is this plus everything else.
+#
+# The file itself skips any backend that is absent from the environment, so running this
+# group without installing them is harmless rather than an error.
+const __bramble_with_ad_backends = __bramble_test_group in ("ad", "full")
 
 if __bramble_with_unit_tests
     @testset verbose=true "Core library" begin
@@ -132,5 +142,11 @@ if __bramble_with_quality
         include("quality/aqua.jl")
         include("quality/exports.jl")
         include("quality/jet.jl")
+    end
+end
+
+if __bramble_with_ad_backends
+    @testset verbose=true "AD backends" begin
+        include("space/autodiff_backends.jl")
     end
 end

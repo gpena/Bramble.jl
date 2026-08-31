@@ -1,0 +1,103 @@
+name: Weekly
+
+# Everything the per-push CI deliberately leaves out, once a week.
+#
+# The automatic differentiation backend survey is the reason this exists. Enzyme and
+# Mooncake are expensive to install and slow to compile — the six checks take over a minute
+# of which almost all is compilation — and what they establish changes when a *backend*
+# changes, not when Bramble does. Paying that on every push would be paying it for nothing
+# almost every time.
+#
+# So this is a canary rather than a gate: it is not required for a merge, and a failure here
+# most often means an upstream release moved rather than that Bramble regressed. Read it
+# that way before hunting in `src/`.
+#
+# The backends are added at run time rather than declared in `test/Project.toml`, which
+# keeps Enzyme out of the dependency graph of every ordinary test run. `autodiff_backends.jl`
+# skips any backend it cannot find, so the group is harmless without them.
+
+on:
+  schedule:
+    # Mondays, 04:00 UTC — after CompatHelper's nightly run, so a compat bump it opens has
+    # already landed or not by the time this decides what to install.
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+env:
+  JULIA_NUM_THREADS: auto
+
+jobs:
+  full:
+    name: Full suite (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macOS-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.12"
+
+      - uses: julia-actions/cache@v2
+        with:
+          cache-compiled: "true"
+
+      - uses: julia-actions/julia-buildpkg@v1
+
+      # Installed here rather than in test/Project.toml so that an ordinary test run never
+      # resolves them. Failing to add one is not fatal: the test file skips a backend it
+      # cannot load, and the run still reports on the others.
+      - name: Add the differentiation backends
+        run: |
+          julia --project=test -e '
+            using Pkg
+            for p in ("ReverseDiff", "PolyesterForwardDiff", "Mooncake", "Enzyme")
+                try
+                    Pkg.add(p)
+                catch err
+                    @warn "could not add $p; its checks will be skipped" exception=err
+                end
+            end'
+
+      - uses: julia-actions/julia-runtest@v1
+        env:
+          BRAMBLE_TEST_GROUP: full
+
+  docs:
+    name: Docs build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.12"
+      - uses: julia-actions/cache@v2
+      # A broken `@ref` is an error the test suite cannot see: a docstring is only
+      # cross-referenced when it is rendered, so nothing catches it until the docs are
+      # built. Two have slipped through already.
+      - name: Build the documentation
+        run: |
+          julia --project=docs -e '
+            using Pkg
+            Pkg.develop(PackageSpec(path = pwd()))
+            Pkg.instantiate()'
+          julia --project=docs docs/make.jl
+        env:
+          GKSwstype: "100"
