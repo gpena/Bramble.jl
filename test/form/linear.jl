@@ -607,6 +607,71 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         @test evaluate!(scratch, lfk, wₕ) ≈ 5 * frozen_first           # live when resolved
     end
 
+    @testset "constant, function and tuple sources" begin
+        # The source of a linear form need not be a grid function. A number and a function
+        # both work, and an integer promotes rather than forcing the output's element type —
+        # the same rule that lets a Dual through.
+        Wc = gridspace(Ωₕ)
+        one_over_Ω = 1.0                       # the mesh has measure 1, so ∫c = c
+
+        @test sum(assemble(form(Wc, v -> innerₕ(1, v)))) ≈ one_over_Ω
+        @test eltype(assemble(form(Wc, v -> innerₕ(1, v)))) === Float64
+        @test sum(assemble(form(Wc, v -> innerₕ(2.5, v)))) ≈ 2.5
+        @test sum(assemble(form(Wc, v -> innerₕ(x -> 1.0, v)))) ≈ one_over_Ω
+
+        # and they mix with a grid-function source in one form
+        gₕ = Rₕ(Wc, x -> 3.0)
+        @test sum(assemble(form(Wc, v -> innerₕ(1.0, v) + innerₕ(gₕ, v)))) ≈ 4.0
+
+        Vt = gridspace(Ωₕ, Val(2))
+        nb = ndofs(Wc)
+        blk(b) = [sum(b[((k - 1) * nb + 1):(k * nb)]) for k in 1:(length(b) ÷ nb)]
+
+        # On a composite space a source naming no component goes to every block, which is
+        # the rule that lets the two spellings mix.
+        @test blk(assemble(form(Vt, v -> innerₕ(1.0, v)))) ≈ [1.0, 1.0]
+        @test blk(assemble(form(Vt, v -> innerₕ(1.0, v(1))))) ≈ [1.0, 0.0]
+
+        # A tuple reads one entry per component, the way `Rₕ(Vₕ, (f, g))` already does.
+        @test blk(assemble(form(Vt, v -> innerₕ((1.0, 2.0), v)))) ≈ [1.0, 2.0]
+        @test blk(assemble(form(Vt, v -> innerₕ((x -> 1.0, x -> 2.0), v)))) ≈ [1.0, 2.0]
+
+        # which agrees with writing the components out
+        @test assemble(form(Vt, v -> innerₕ((1.0, 2.0), v))) ≈
+              assemble(form(Vt, v -> innerₕ(1.0, v(1)) + innerₕ(2.0, v(2))))
+
+        # an empty tuple names nothing, and says so
+        @test_throws ArgumentError form(Vt, v -> innerₕ((), v))
+    end
+
+    @testset "a component the space does not have is an error" begin
+        # It used to contribute nothing, in silence. On a two-block space
+        # `innerₕ(1.0, v(3))` assembled to zeros, and summed with a valid term it dropped
+        # itself and kept the other, so a form written for a wider space quietly produced a
+        # narrower answer instead of complaining.
+        Vt = gridspace(Ωₕ, Val(2))
+        b = zeros(ndofs(Vt))
+
+        @test_throws ArgumentError assemble(form(Vt, v -> innerₕ(1.0, v(3))))
+        @test_throws ArgumentError assemble(form(Vt, v -> innerₕ(1.0, v(0))))
+        @test_throws ArgumentError assemble(form(Vt,
+            v -> innerₕ(1.0, v(1)) + innerₕ(2.0, v(9))))
+
+        # every route has to agree: the vector, the in-place vector, the contraction, and
+        # the threaded sweep are four separate walks over the same terms
+        lf3 = form(Vt, v -> innerₕ(1.0, v(3)))
+        wt = Rₕ(Vt, (x -> 1.0, x -> 1.0))
+        @test_throws ArgumentError assemble!(b, lf3)
+        @test_throws ArgumentError lf3(wt)
+        @test_throws ArgumentError assemble_parallel!(b, lf3)
+
+        # and a tuple longer than the space is the same mistake, caught the same way
+        @test_throws ArgumentError assemble(form(Vt, v -> innerₕ((1.0, 2.0, 3.0), v)))
+
+        # while a valid one still works, so the guard is not simply rejecting everything
+        @test sum(assemble(form(Vt, v -> innerₕ(1.0, v(2))))) ≈ 1.0
+    end
+
     @testset "a form's expression is checked when it is built" begin
         # The `ast` field that used to hold a resolved tree was read by nothing, but its type
         # parameter did one useful thing: it rejected an expression that does not describe an

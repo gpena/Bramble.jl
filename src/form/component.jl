@@ -111,4 +111,23 @@ for (f, W) in ((:innerₕ, :InnerH), (:inner₊, :(InnerPlus{1})),
         comps = components(l)
         return foldl(+, ntuple(c -> $f(comps[c], component(r, c)), Val(NC)))
     end
+
+    # A tuple reads the same way, one entry per component, which is how `Rₕ` already takes
+    # a composite source: `Rₕ(Vₕ, (f, g))`. So `innerₕ((f, g), v)` is the form-level spelling
+    # of the same thing, and covers a tuple of numbers as readily as a tuple of functions —
+    # both are sources the scalar case already accepts.
+    #
+    # Unlike the `VectorElement` method above, a tuple carries no space, so its length is
+    # only a claim about how many components the form has. A claim that turns out wrong is
+    # caught where the space is known, in `_route_terms!`, which used to drop such a term
+    # in silence.
+    @eval @inline function $f(l::NTuple{NC, Any}, r::LazyOp{D}) where {NC, D}
+        return foldl(+, ntuple(c -> $f(l[c], component(r, c)), Val(NC)))
+    end
+
+    @eval @noinline function $f(::Tuple{}, ::LazyOp)
+        throw(ArgumentError(
+            "an empty tuple names no components, so there is nothing to sum. Give one " *
+            "entry per component of the test space."))
+    end
 end

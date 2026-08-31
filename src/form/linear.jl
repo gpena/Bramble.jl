@@ -422,6 +422,27 @@ function _assemble_linear_core!(b::Vector, space::CompositeGridSpace{N}, ast::AS
     return b
 end
 
+# A term naming a component the space does not have used to contribute nothing, in silence:
+# the loops below match `target` against each leaf in turn, so a target past the end simply
+# never matched. On a two-block space `innerₕ(1.0, v(3))` assembled to zeros, and
+# `innerₕ(1.0, v(1)) + innerₕ(2.0, v(9))` dropped the second term and kept the first.
+#
+# That is the failure mode the composite tests exist to prevent, so it is checked once per
+# term rather than left to the reader of the answer.
+@inline _check_component(::Nothing, ::Int) = nothing
+
+@inline function _check_component(target::Int, nblocks::Int)
+    1 <= target <= nblocks || _throw_component_out_of_range(target, nblocks)
+    return nothing
+end
+
+@noinline function _throw_component_out_of_range(target::Int, nblocks::Int)
+    throw(ArgumentError(
+        "a term of this form names component $target, and its test space has $nblocks. " *
+        "Components are numbered 1 to $nblocks; a term written for a space with more of " *
+        "them contributes nothing here, which is why this is an error rather than a zero."))
+end
+
 # Walk the sum and send each term to the blocks it belongs to.
 #
 # Recursing the tree rather than calling `flatten_sum` and iterating the result: that answers
@@ -437,6 +458,7 @@ end
 function _route_terms!(b::Vector, term::TERM, leaves, lin_indices,
         mesh_markers) where {TERM}
     target = test_component_or_nothing(term)
+    _check_component(target, length(leaves))
     for (c, leaf) in enumerate(leaves)
         # a term naming a component goes to that block alone; one naming none goes to every
         # block, so the two spellings can be mixed in a single form
@@ -524,6 +546,7 @@ end
 function _route_terms_contract(term::TERM, leaves, lin_indices, mesh_markers,
         v, acc::T) where {TERM, T}
     target = test_component_or_nothing(term)
+    _check_component(target, length(leaves))
     for (c, leaf) in enumerate(leaves)
         (target === nothing || target == c) || continue
         acc = _contract_term(first(leaf), term, lin_indices, mesh_markers, last(leaf),
@@ -554,6 +577,7 @@ end
 function _route_terms_parallel!(b::AbstractVector, term::TERM, leaves, lin_indices,
         mesh_markers) where {TERM}
     target = test_component_or_nothing(term)
+    _check_component(target, length(leaves))
     strides = _colour_strides(stencil_offsets(term))
 
     for (c, leaf) in enumerate(leaves)
