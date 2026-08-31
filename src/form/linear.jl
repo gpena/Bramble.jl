@@ -148,9 +148,39 @@ entries, so the reduction dominates however large the problem gets.
 """
 function assemble(form::LinearForm; dirichlet_conditions = nothing,
         dirichlet_labels = nothing)
-    b = zeros(eltype(test_space(form)), ndofs(test_space(form)))
-    return assemble!(b, form; dirichlet_conditions = dirichlet_conditions,
+    ast = resolve_form_ast(form)
+    space = test_space(form)
+    b = zeros(_assembled_eltype(ast, space), ndofs(space))
+    return assemble!(b, form; ast = ast, dirichlet_conditions = dirichlet_conditions,
         dirichlet_labels = dirichlet_labels)
+end
+
+# The element type of the assembled vector is the one the form's own weights have, promoted
+# against the space's — not the space's outright.
+#
+# It used to be `eltype(test_space(form))`, which made a Float64 space able to assemble only
+# Float64 right-hand sides, and that is what blocked differentiating an assembled residual.
+# Writing a `ForwardDiff.Dual` weight into a Float64 vector met
+# `MethodError: no method matching Float64(::Dual)`. It is the same rule `Rₕ` uses and the
+# same defect `dirichlet_constraints` had: read the type from the data, not from the space.
+#
+# Promoted rather than taken outright, so an integer-valued source still assembles into
+# Float64 on a Float64 space, while a Dual-valued one gives a Dual over the same,
+# undifferentiated, geometry. Read from one stencil evaluation, which is one extra call per
+# assembly against inferring a type the compiler may not know.
+function _assembled_eltype(ast, space)
+    T = eltype(space)
+    sp = first_space(space)
+    Ωₕ = mesh(sp)
+    grid_inds = indices(Ωₕ)
+    lin_indices = LinearIndices(grid_inds)
+
+    # An interior point, so a truncated stencil does not decide the type. A restriction can
+    # still answer with nothing, in which case the space's type is all there is to go on.
+    I = grid_inds[length(grid_inds) ÷ 2 + 1]
+    st = local_stencil(ast, sp, I, markers(Ωₕ), lin_indices[I])
+    isempty(st) && return T
+    return promote_type(T, typeof(last(first(st))))
 end
 
 # ==============================================================================

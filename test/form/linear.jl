@@ -1,6 +1,9 @@
 using Test
 using Bramble
+using ForwardDiff
+using LinearAlgebra: Diagonal, diag
 using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_space,
+               element,
                resolve_form_ast, apply_dirichlet_conditions!, LinearProduct, values,
                ParallelWorkspace
 
@@ -191,6 +194,57 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         end
         @test composite_bytes(8) == 0
         @test composite_bytes(16) == 0
+    end
+
+    @testset "differentiating an assembled residual" begin
+        # The shape a nonlinear solve has: build the residual of a form, and let the solver
+        # differentiate it with respect to the coefficient vector to get a Jacobian.
+        #
+        # This did not work. `assemble` allocated its output with `eltype(test_space(form))`
+        # — the *space's* element type — so a Float64 space could only assemble a Float64
+        # right-hand side, and writing a Dual weight into it met
+        # `MethodError: no method matching Float64(::Dual)`. The type now comes from the
+        # form's own weights, promoted against the space's, which is the rule `Rₕ` already
+        # used and the same defect `dirichlet_constraints` had.
+        u0 = values(uₕ)
+
+        @testset "with respect to a parameter in the source" begin
+            J(a) = sum(assemble(form(Wₕ, v -> innerₕ(Rₕ(Wₕ, x -> a * (x[1] + x[2])), v))))
+            h = 1e-6
+            @test isapprox(ForwardDiff.derivative(J, 1.3), (J(1.3 + h) - J(1.3 - h)) / 2h;
+                rtol = 1e-5)
+        end
+
+        @testset "the Jacobian of a nonlinear residual" begin
+            # innerₕ(u², v) assembles the vector with entries |□ᵢ| uᵢ², so its Jacobian is
+            # diagonal with 2 |□ᵢ| uᵢ. Checked against that closed form rather than against
+            # a finite difference, which is a stronger statement.
+            residual(u) = assemble(form(Wₕ, v -> innerₕ(element(Wₕ, u .* u), v)))
+            Jm = ForwardDiff.jacobian(residual, u0)
+
+            @test size(Jm) == (n, n)
+            @test Jm ≈ Diagonal(diag(Jm))
+
+            measures = assemble(form(Wₕ, v -> innerₕ(element(Wₕ, ones(n)), v)))
+            @test diag(Jm) ≈ 2 .* measures .* u0
+
+            # and the undifferentiated path is untouched
+            @test eltype(residual(u0)) === Float64
+        end
+
+        @testset "and with the constraints applied, as a solve would" begin
+            bcs = dirichlet_constraints(set(Ωₕ), :bottom => (x -> 0.0))
+            res(u) = assemble(form(Wₕ, v -> innerₕ(element(Wₕ, u .* u), v));
+                dirichlet_conditions = bcs, dirichlet_labels = :bottom)
+            Jb = ForwardDiff.jacobian(res, u0)
+            @test size(Jb) == (n, n)
+
+            # a pinned value does not depend on the coefficients, so its row is zero —
+            # which is what a solver needs in order not to move it
+            marked = index_in_marker(Ωₕ, :bottom)
+            @test any(marked)
+            @test all(iszero, Jb[marked, :])
+        end
     end
 
     @testset "the functor contracts against a vector" begin
