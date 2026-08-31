@@ -82,14 +82,14 @@ end
 """
 	func(pe::PointwiseEvaluator)
 
-Returns the function stored in the [PointwiseEvaluator](@ref).
+Returns the function stored in the [`PointwiseEvaluator`](@ref).
 """
 @inline func(pe::PointwiseEvaluator) = pe.func
 
 """
 	mesh(pe::PointwiseEvaluator)
 
-Returns the mesh stored in the [PointwiseEvaluator](@ref).
+Returns the mesh stored in the [`PointwiseEvaluator`](@ref).
 """
 @inline mesh(pe::PointwiseEvaluator) = pe.mesh
 
@@ -269,7 +269,7 @@ end
 """
 	Rₕ(Wₕ::AbstractSpaceType, f; markers = ())
 
-Standard nodal restriction operator. It returns a [VectorElement](@ref) with the result of evaluating the function `f` at the points of `mesh(Wₕ)`.
+Standard nodal restriction operator. It returns a [`VectorElement`](@ref) with the result of evaluating the function `f` at the points of `mesh(Wₕ)`.
 
 # The shape of `f`
 

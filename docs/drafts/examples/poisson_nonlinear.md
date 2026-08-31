@@ -143,7 +143,7 @@ function fixed_point!(matrix, rhs, aₕ, uₚᵣₑᵥ, uₙₑₓₜ, coeff)
 end
 ```
 
-and we implemented a simple stopping criteria based on the [norm₁ₕ](@ref) of the difference between two consecutive iterations. Finally, we just need to call the fixed point function and we are done
+and we implemented a simple stopping criteria based on the [`norm₁ₕ`](@ref) of the difference between two consecutive iterations. Finally, we just need to call the fixed point function and we are done
 
 ```julia
 fixed_point!(A, F, aₕ, u₀, uₙ, αₕ)

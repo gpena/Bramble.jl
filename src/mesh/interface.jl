@@ -35,8 +35,8 @@ All concrete mesh types must implement the AbstractMeshType interface, including
 
 # Related Types
 
-  - Meshes are created from a [Domain](@ref) using the [`mesh`](@ref) function.
-  - See [MeshMarkers](@ref) for marker management on meshes.
+  - Meshes are created from a [`Domain`](@ref) using the [`mesh`](@ref) function.
+  - See [`MeshMarkers`](@ref) for marker management on meshes.
 
 See also: [`Mesh1D`](@ref), [`MeshnD`](@ref), [`Domain`](@ref)
 """
@@ -126,7 +126,7 @@ Returns the `CartesianIndices` associated with the points of mesh `Ωₕ`.
 """
 	backend(Ωₕ::AbstractMeshType)
 
-Returns the linear algebra [Backend](@ref) associated with the mesh `Ωₕ`.
+Returns the linear algebra [`Backend`](@ref) associated with the mesh `Ωₕ`.
 """
 @inline backend(Ωₕ::AbstractMeshType) = Ωₕ.backend
 
@@ -205,7 +205,7 @@ end
 """
 	$(SIGNATURES)
 
-Returns a [Mesh1D](@ref) or a [MeshnD](@ref) (``D=2,3``) defined on the [Domain](@ref) `Ω`.
+Returns a [`Mesh1D`](@ref) or a [`MeshnD`](@ref) (``D=2,3``) defined on the [`Domain`](@ref) `Ω`.
 
 The number of points for each coordinate direction is given in `npts`.
 The distribution of points on the submeshes is given by `unif` (or keyword `uniform`, default `true`).

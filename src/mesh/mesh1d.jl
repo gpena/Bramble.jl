@@ -84,7 +84,7 @@ grid points change.
 """
 	set_points!(Ωₕ::Mesh1D, pts)
 
-Overrides the points in Ωₕ. This function recalculates the cached [spacings](@ref), [half_points](@ref) and [half_spacings](@ref).
+Overrides the points in Ωₕ. This function recalculates the cached [`spacings`](@ref), [`half_points`](@ref) and [`half_spacings`](@ref).
 """
 @inline function set_points!(Ωₕ::Mesh1D, pts)
     # Directly update the grid point coordinates with the new vector.

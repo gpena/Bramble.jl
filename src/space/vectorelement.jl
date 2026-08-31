@@ -15,7 +15,7 @@
 """
 	values(uₕ::VectorElement)
 
-Returns the coefficients of the [VectorElement](@ref) `uₕ`.
+Returns the coefficients of the [`VectorElement`](@ref) `uₕ`.
 """
 @inline Base.values(uₕ::VectorElement) = uₕ.data
 
@@ -34,7 +34,7 @@ Reshapes the flat coefficient vector of `uₕ` into a multidimensional array tha
 """
 	values!(uₕ::VectorElement, s)
 
-Copies the values of `s` into the coefficients of [VectorElement](@ref) `uₕ`. Returns `uₕ`.
+Copies the values of `s` into the coefficients of [`VectorElement`](@ref) `uₕ`. Returns `uₕ`.
 """
 @inline function values!(uₕ::VectorElement, s)
     copyto!(values(uₕ), s)
@@ -44,7 +44,7 @@ end
 """
 	space(uₕ::VectorElement)
 
-Returns the grid space associated with [VectorElement](@ref) `uₕ`.
+Returns the grid space associated with [`VectorElement`](@ref) `uₕ`.
 """
 @inline space(uₕ::VectorElement) = uₕ.space
 @inline space_type(::Type{<:VectorElement{S}}) where {S} = S
@@ -147,7 +147,7 @@ end
 """
 	element(Wₕ::AbstractSpaceType, [α::Number])
 
-Returns a [VectorElement](@ref) for grid space `Wₕ` with uninitialized components. if ``\\alpha`` is provided, the components are initialized to ``\\alpha``.
+Returns a [`VectorElement`](@ref) for grid space `Wₕ` with uninitialized components. if ``\alpha`` is provided, the components are initialized to ``\alpha``.
 """
 @inline function element(Wₕ::AbstractSpaceType)
     # Get the backend (e.g., CPU, GPU) from the space.
@@ -165,7 +165,7 @@ end
 """
 	element(Wₕ::AbstractSpaceType, ::Type{T})
 
-Returns a [VectorElement](@ref) for grid space `Wₕ` holding coefficients of type `T`,
+Returns a [`VectorElement`](@ref) for grid space `Wₕ` holding coefficients of type `T`,
 with uninitialized components.
 
 The coefficients of a grid function and the coordinates of the mesh under it are two
@@ -199,7 +199,7 @@ end
 """
 	element(Wₕ::AbstractSpaceType, v::AbstractVector)
 
-Returns a [VectorElement](@ref) for a grid space `Wₕ` with the same coefficients of `v`.
+Returns a [`VectorElement`](@ref) for a grid space `Wₕ` with the same coefficients of `v`.
 """
 @inline function element(Wₕ::AbstractSpaceType, v::AbstractVector)
     # Ensure the provided vector has the correct number of DoFs.
@@ -250,7 +250,7 @@ end
 """
 	_find_vec_in_broadcast(bc)
 
-Internal helper to extract a [VectorElement](@ref) from a broadcast expression.
+Internal helper to extract a [`VectorElement`](@ref) from a broadcast expression.
 
 Recursively searches through the arguments of a broadcast expression tree to find
 a `VectorElement` instance. This is used by the broadcasting machinery to determine

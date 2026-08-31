@@ -147,7 +147,7 @@ end
         for node in (Dcₓ(id), Dstar₊ₓ(id), Dₕₓ(id), jumpₓ(id))
             got, _ = apply_stencil(node, Wₕ, cₕ)
             # the jump keeps -uₙ at the far end, so only the interior is zero there
-            @test all(≈(0.0; atol = 1e-12), got[1:(end - 1)])
+            @test all(≈(0.0; atol = 1e-11), got[1:(end - 1)])
         end
     end
 

@@ -78,7 +78,7 @@ prepares the storage for later marking which points belong to which labeled regi
 # Arguments
 
   - `npts`: The total number of points in the mesh.
-  - `markers_mesh`: The [MeshMarkers](@ref) dictionary to be modified in-place.
+  - `markers_mesh`: The [`MeshMarkers`](@ref) dictionary to be modified in-place.
   - `set_labels`: An iterator or collection of `Symbol` labels to initialize.
 """
 @inline function process_label_for_mesh!(npts, markers_mesh::MeshMarkers, set_labels)
@@ -90,11 +90,11 @@ end
 """
 	_init_mesh_markers(Ωₕ, domain_markers)
 
-Internal helper function to create and initialize the [MeshMarkers](@ref) dictionary.
+Internal helper function to create and initialize the [`MeshMarkers`](@ref) dictionary.
 
-This function extracts all unique labels from the provided [DomainMarkers](@ref) object,
+This function extracts all unique labels from the provided [`DomainMarkers`](@ref) object,
 which can come from symbol-, tuple-, or condition-based markers. It then prepares
-a [MeshMarkers](@ref) dictionary where each label is a key associated with a `BitVector`
+a [`MeshMarkers`](@ref) dictionary where each label is a key associated with a `BitVector`
 of `false`s, ready to be populated.
 """
 function _init_mesh_markers(Ωₕ::AbstractMeshType, domain_markers::DomainMarkers)

@@ -85,7 +85,7 @@ end
 
 Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ` and `vₕ` associated with the first variable.
 
-For [VectorElement](@ref)s, it is defined as
+For [`VectorElement`](@ref)s, it is defined as
 
   - 1D case
 
@@ -118,7 +118,7 @@ composite grid space is rejected at dispatch; take a scalar component of it with
 Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ` and `vₕ`
 associated with the second variable, the ``y`` direction.
 
-For [VectorElement](@ref)s, it is defined as
+For [`VectorElement`](@ref)s, it is defined as
 
   - 2D case
 
@@ -235,9 +235,9 @@ Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ`
 
 If the `Tuple` argument is given, it returns `D`-tuple of all ``\\textrm{inner}_{x_i,+}`` applied to its input arguments, where `D` is the topological dimension of the mesh associated with the elements.
 
-If `NTuple`s of [VectorElement](@ref) are passed as input arguments, it returns the sum of all inner products ``(\\textrm{u}_h[i],\\textrm{v}_h[i])_{+x_i}``.
+If `NTuple`s of [`VectorElement`](@ref) are passed as input arguments, it returns the sum of all inner products ``(\\textrm{u}_h[i],\\textrm{v}_h[i])_{+x_i}``.
 
-For [VectorElement](@ref)s, the definition is given by
+For [`VectorElement`](@ref)s, the definition is given by
 
   - 1D case
 
@@ -271,15 +271,15 @@ itself a scalar grid function and is accepted.
 	norm₊(uₕ::VectorElement)
 	norm₊(uₕ::NTuple{D,VectorElement})
 
-Returns the discrete modified ``L^2`` norm of the grid function `uₕ`. It also accepts a `NTuple` of [VectorElement](@ref)s.
+Returns the discrete modified ``L^2`` norm of the grid function `uₕ`. It also accepts a `NTuple` of [`VectorElement`](@ref)s.
 
-For [VectorElement](@ref)s `uₕ`, it is defined as
+For [`VectorElement`](@ref)s `uₕ`, it is defined as
 
 ```math
 \\Vert \\textrm{u}_h \\Vert_+ = \\sqrt{(\\textrm{u}_h,\\textrm{u}_h)_+}.
 ```
 
-and for `NTuple`s of [VectorElement](@ref)s it returns
+and for `NTuple`s of [`VectorElement`](@ref)s it returns
 
 ```math
 \\Vert \\textrm{u}_h \\Vert_+ \\vcentcolon = \\sqrt{ \\sum_{i=1}^D(\\textrm{u}_h[i],\\textrm{u}_h[i])_{+,x_i}}.
@@ -360,7 +360,7 @@ composite grid space is rejected at dispatch; take a scalar component of it with
 """
 	norm₁ₕ(uₕ::VectorElement)
 
-Returns the discrete version of the standard ``H^1`` norm of [VectorElement](@ref) `uₕ`.
+Returns the discrete version of the standard ``H^1`` norm of [`VectorElement`](@ref) `uₕ`.
 
 ```math
 \\Vert \\textrm{u}_h \\Vert_{1h} \\vcentcolon = \\sqrt{ \\Vert \\textrm{u}_h \\Vert_h^2 +  \\Vert \\nabla_h \\textrm{u}_h \\Vert_h^2   }

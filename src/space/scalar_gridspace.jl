@@ -9,7 +9,7 @@ This struct holds the diagonal elements (weights) needed to compute different ty
 
 $(FIELDS)
 
-For a detailed explanation of the mathematical formulas corresponding to these weights, please refer to the documentation for [ScalarGridSpace](@ref).
+For a detailed explanation of the mathematical formulas corresponding to these weights, please refer to the documentation for [`ScalarGridSpace`](@ref).
 """
 struct SpaceWeights{D, VT <: AbstractVector}
     "weight vector for the standard discrete ``L^2`` inner product (`:innerₕ`), based on cell measures (``|\\square_k|``)."
@@ -93,16 +93,16 @@ struct ScalarGridSpace{D, T,                               # Dimension and Eleme
     BT <: Backend} <: AbstractSpaceType{1}
     "the underlying mesh of the grid space."
     mesh::MType
-    "a [SpaceWeights](@ref) object holding vectors for various discrete inner products."
+    "a [`SpaceWeights`](@ref) object holding vectors for various discrete inner products."
     weights::SpaceWeights{D, VT}
-    "a [GridSpaceBuffer](@ref) for efficient reuse of temporary vectors, minimizing memory allocations."
+    "a [`GridSpaceBuffer`](@ref) for efficient reuse of temporary vectors, minimizing memory allocations."
     vector_buffer::GridSpaceBuffer{BT, VT, T}
 end
 
 """
 	gridspace(Ωₕ::AbstractMeshType{D}; nbuffers::Int = 1) where D
 
-Constructor for a [ScalarGridSpace](@ref) defined on the mesh `Ωₕ`. This builds the weights for the inner products mentioned in [ScalarGridSpace](@ref) and initializes a memory pool for scratch vectors.
+Constructor for a [`ScalarGridSpace`](@ref) defined on the mesh `Ωₕ`. This builds the weights for the inner products mentioned in [`ScalarGridSpace`](@ref) and initializes a memory pool for scratch vectors.
 """
 function gridspace(Ωₕ::AbstractMeshType{D}; nbuffers::Int = 1) where {D}
     b = backend(Ωₕ)
@@ -194,7 +194,7 @@ The weights are diagonal matrices (stored as vectors) used in computing discrete
 
 # Methods
 
-1. `weights(Wₕ)` - Returns the full [SpaceWeights](@ref) struct
+1. `weights(Wₕ)` - Returns the full [`SpaceWeights`](@ref) struct
 2. `weights(Wₕ, Innerh())` - Returns weights for standard ``L^2`` inner product (cell volumes)
 3. `weights(Wₕ, Innerplus())` - Returns tuple of weights for modified inner products (all directions)
 4. `weights(Wₕ, Innerplus(), i)` - Returns weights for modified inner product in direction `i`
@@ -312,7 +312,7 @@ end
 """
 	_innerplus_mean_weights!(u::VT, Ωₕ, component::Int = 1) where VT
 
-Builds a set of weights based on the half spacings, associated with the `component`-th direction, for the modified discrete ``L^2`` inner product on the space of grid functions, following the order of the [points](@ref). The values are stored in vector `u`.
+Builds a set of weights based on the half spacings, associated with the `component`-th direction, for the modified discrete ``L^2`` inner product on the space of grid functions, following the order of the [`points`](@ref). The values are stored in vector `u`.
 for each component.
 """
 function _innerplus_mean_weights!(u::VT, Ωₕ, component::Int = 1) where {VT}
@@ -336,7 +336,7 @@ end
 """
 	__innerplus_weights!(v, innerplus_per_component)
 
-Builds the weights for the modified discrete ``L^2`` inner product on the space of grid functions [ScalarGridSpace](@ref). The result is stored in vector `v`.
+Builds the weights for the modified discrete ``L^2`` inner product on the space of grid functions [`ScalarGridSpace`](@ref). The result is stored in vector `v`.
 """
 function __innerplus_weights!(v, innerplus_per_component)
     idxs = CartesianIndices(v)

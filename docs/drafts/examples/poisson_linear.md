@@ -120,7 +120,7 @@ X = I × I
 Ωₕ = mesh(Ω, (10, 20), (true, false))
 ```
 
-The first three lines create a [Domain](@ref) object, while the third generates a mesh with 10 and 20 points along the $x$ and $y$ directions, respectively. The last input argument encodes that we want a uniform grid in the $x$ axis and random generated points in the $y$ axis.
+The first three lines create a [`Domain`](@ref) object, while the third generates a mesh with 10 and 20 points along the $x$ and $y$ directions, respectively. The last input argument encodes that we want a uniform grid in the $x$ axis and random generated points in the $y$ axis.
 
 We now move on to define the Dirichlet constraints associated with that condition. We impose the expression of the exact solution to the whole domain boundary:
 
@@ -143,7 +143,7 @@ A = assemble(aₕ, dirichlet_labels = :boundary)
 
 In this case, we provide to the `assemble` function the information on boundary conditions in order to have this information encoded in matrix `A`.
 
-Next, we create an [VectorElement](@ref) in the gridspace whose components are calculated by the averaging operator [avgₕ](@ref)
+Next, we create an [`VectorElement`](@ref) in the gridspace whose components are calculated by the averaging operator [`avgₕ`](@ref)
 
 ```julia
 uₕ = element(Wₕ)
@@ -166,7 +166,7 @@ solₕ = solve(prob, KrylovJL_GMRES(), Pl = prec, verbose = false)
 uₕ .= solₕ.u
 ```
 
-and calculate the solution. If we want to calculate the error associated with this approximate solution (w.r.t [norm₁ₕ](@ref)), we can follow with
+and calculate the solution. If we want to calculate the error associated with this approximate solution (w.r.t [`norm₁ₕ`](@ref)), we can follow with
 
 ```julia
 F .= uₕ

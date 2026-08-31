@@ -75,7 +75,7 @@ abstract type AbstractSpaceType{N} end
 
 Represents a **grid function** (a vector) that belongs to a specific function space.
 
-This is a wrapper that bundles the raw numerical data (the vector `data`) with its parent `space`. The `space` provides the essential context, such as the underlying mesh and associated operators. By subtyping `AbstractVector`, a [VectorElement](@ref) can be used just like a regular Julia vector in most operations.
+This is a wrapper that bundles the raw numerical data (the vector `data`) with its parent `space`. The `space` provides the essential context, such as the underlying mesh and associated operators. By subtyping `AbstractVector`, a [`VectorElement`](@ref) can be used just like a regular Julia vector in most operations.
 
 # Fields
 
@@ -217,7 +217,7 @@ function mesh_type end
 """
 	vector_buffer(Wₕ::AbstractSpaceType)
 
-Returns the [GridSpaceBuffer](@ref) used for efficient memory management in the space `Wₕ`.
+Returns the [`GridSpaceBuffer`](@ref) used for efficient memory management in the space `Wₕ`.
 """
 function vector_buffer end
 

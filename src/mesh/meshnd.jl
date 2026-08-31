@@ -58,11 +58,11 @@ end
 
 Creates the component 1D submeshes for a tensor-product grid.
 
-This function takes a D-dimensional [Domain](@ref) and generates a tuple of `D` independent [Mesh1D](@ref) objects. Each submesh corresponds to one of the spatial dimensions of the original domain.
+This function takes a D-dimensional [`Domain`](@ref) and generates a tuple of `D` independent [`Mesh1D`](@ref) objects. Each submesh corresponds to one of the spatial dimensions of the original domain.
 
 # Arguments
 
-  - `Ω`: The D-dimensional [Domain](@ref).
+  - `Ω`: The D-dimensional [`Domain`](@ref).
   - `npts`: A tuple containing the number of points for each dimension.
   - `unif`: A tuple of booleans indicating if the grid is uniform in each dimension.
   - `backend`: The linear algebra backend.
@@ -81,11 +81,11 @@ end
 
 Internal constructor for a D-dimensional, tensor-product `MeshnD`.
 
-This function orchestrates the creation of a structured multidimensional mesh. It first builds the underlying 1D submeshes for each dimension and then combines them into a single [MeshnD](@ref) object. It also handles the important edge case of "collapsed" dimensions (where an interval is just a point), forcing the number of grid points in that dimension to be 1.
+This function orchestrates the creation of a structured multidimensional mesh. It first builds the underlying 1D submeshes for each dimension and then combines them into a single [`MeshnD`](@ref) object. It also handles the important edge case of "collapsed" dimensions (where an interval is just a point), forcing the number of grid points in that dimension to be 1.
 
 # Arguments
 
-  - `Ω`: The D-dimensional [Domain](@ref) to be meshed.
+  - `Ω`: The D-dimensional [`Domain`](@ref) to be meshed.
   - `npts`: An `NTuple{D, Int}` specifying the number of points in each dimension.
   - `unif`: An `NTuple{D, Bool}` specifying if the grid is uniform in each dimension.
   - `backend`: The linear algebra backend.

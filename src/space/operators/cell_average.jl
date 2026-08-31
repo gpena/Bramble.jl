@@ -24,7 +24,7 @@
 """
 	avgₕ(Wₕ::AbstractSpaceType, f; quad_points = AVG_QUAD_POINTS, markers = ())
 
-Returns a [VectorElement](@ref) with the average of function `f` with respect to the [cell_measure](@ref) of `mesh(Wₕ)` around each grid point.
+Returns a [`VectorElement`](@ref) with the average of function `f` with respect to the [`cell_measure`](@ref) of `mesh(Wₕ)` around each grid point.
 
 Each cell average is a tensor-product Gauss-Legendre rule with `quad_points`
 points per direction, exact for polynomials of degree `2 * quad_points - 1`.
