@@ -7,7 +7,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
                values, ParallelWorkspace, TestFunction, TrialFunction,
                IndexedTestFunction, IndexedTrialFunction, test_component_or_nothing,
                routes_by_component, component, components, _colour_strides,
-               stencil_offsets, ndofs, Innerh, Innerplus
+               stencil_offsets, ndofs, Innerh, Innerplus, evaluate!
 
 # Assembling the right-hand side of a system.
 #
@@ -599,8 +599,43 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
     @testset "the functor contracts against a vector" begin
         lf = form(Wₕ, v -> innerₕ(uₕ, v))
         b = assemble(lf)
-        w = values(Rₕ(Wₕ, x -> 1.0))
-        @test lf(w) ≈ sum(b)              # against the all-ones vector, the sum
-        @test lf(values(uₕ)) ≈ sum(b .* values(uₕ))
+        ones_el = Rₕ(Wₕ, x -> 1.0)
+        @test lf(ones_el) ≈ sum(b)        # against the all-ones element, the sum
+        @test lf(uₕ) ≈ sum(b .* values(uₕ))
+
+        # A bare vector is refused rather than contracted. Its length carries no claim about
+        # whether its blocks match the components a form routes to, so accepting one would
+        # make a composite mismatch silent.
+        @test_throws ArgumentError lf(values(uₕ))
+        @test_throws ArgumentError lf(fill(1.0, ndofs(Wₕ)))
+
+        # on a composite space, where the components have to line up with the blocks rather
+        # than merely add up to the right length
+        Vc = gridspace(Ωₕ, Val(2))
+        uc = Rₕ(Vc, (x -> 1.0, x -> 3.0))
+        wc = Rₕ(Vc, (x -> 2.0, x -> 5.0))
+        lfv = form(Vc, v -> innerₕ(uc, v))
+        @test lfv(wc) ≈ sum(assemble(lfv) .* values(wc))
+        @test_throws ArgumentError lfv(values(wc))
+
+        # `evaluate!` agrees, and reuses its scratch rather than assembling afresh
+        scratch = zeros(ndofs(Wₕ))
+        @test evaluate!(scratch, lf, uₕ) ≈ lf(uₕ)
+        @test scratch ≈ b                          # the scratch holds the assembled vector
+
+        # repeatable, so the scratch is rewritten rather than accumulated into
+        @test evaluate!(scratch, lf, uₕ) ≈ evaluate!(scratch, lf, uₕ)
+
+        # resolving once across a loop gives the same answer as resolving per call
+        ast = resolve_form_ast(lf)
+        @test evaluate!(scratch, lf, uₕ; ast = ast) ≈ lf(uₕ)
+
+        scratchv = zeros(ndofs(Vc))
+        @test evaluate!(scratchv, lfv, wc) ≈ lfv(wc)
+        @test_throws ArgumentError evaluate!(scratchv, lfv, values(wc))
+
+        # and it allocates nothing once the AST is resolved outside the loop
+        evaluate!(scratch, lf, uₕ; ast = ast)
+        @test @allocated(evaluate!(scratch, lf, uₕ; ast = ast)) == 0
     end
 end

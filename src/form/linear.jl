@@ -30,7 +30,65 @@ Returns the test space of the linear form.
 """
 test_space(form::LinearForm) = form.test_space
 
-@inline (form::LinearForm)(v) = dot(assemble(form), v)
+# A linear form is a functional on its test space, so what it contracts against is an
+# element of that space.
+#
+# `dot` would take a bare `Vector` of the right length just as happily, and on a composite
+# space that is precisely where it goes quietly wrong: the length says nothing about whether
+# the blocks line up with the components the form routes its terms to, so a vector assembled
+# for one component ordering contracts against another without complaint. Requiring a
+# `VectorElement` makes the caller name the space it belongs to.
+@inline (form::LinearForm)(vₕ::VectorElement) = dot(assemble(form), values(vₕ))
+
+@noinline function (form::LinearForm)(v::AbstractVector)
+    throw(ArgumentError(
+        "a linear form contracts against an element of its test space, not a bare vector: " *
+        "the length of a vector says nothing about whether its blocks match the components " *
+        "the form routes to. Name the space first, with l(element(test_space(l), v))."))
+end
+
+"""
+    evaluate!(scratch, form::LinearForm, vₕ; ast = resolve_form_ast(form))
+
+Evaluates `form` at `vₕ`, assembling into `scratch` rather than into a fresh vector, and
+returns the value.
+
+`form(vₕ)` allocates a full-length vector on every call, because it assembles one. That is
+nothing once and wasteful in a loop — a time-stepping scheme or a Newton iteration evaluates
+the same form against a changing `vₕ` at every step. This is that loop's version: `scratch`
+is working space, overwritten each call, and one vector serves the whole run.
+
+Pass `ast` as well to resolve the expression once across the loop; resolving is 160 B per
+call otherwise.
+
+Returns the value rather than `scratch`, which departs from the rule that a mutating
+function with a single destination returns it. The departure is the point: `scratch` is not
+the result here, it is the space the result was computed in.
+
+# Examples
+```julia
+l = form(Wₕ, v -> innerₕ(fₕ, v))
+scratch = zeros(ndofs(Wₕ))
+ast = resolve_form_ast(l)
+for step in 1:nsteps
+    # ... uₕ changes ...
+    value = evaluate!(scratch, l, uₕ; ast = ast)
+end
+```
+"""
+@inline function evaluate!(scratch::AbstractVector, form::LinearForm, vₕ::VectorElement;
+        ast = resolve_form_ast(form))
+    assemble!(scratch, form; ast = ast)
+    return dot(scratch, values(vₕ))
+end
+
+@noinline function evaluate!(::AbstractVector, ::LinearForm, v::AbstractVector; kwargs...)
+    throw(ArgumentError(
+        "a linear form contracts against an element of its test space, not a bare vector: " *
+        "the length of a vector says nothing about whether its blocks match the components " *
+        "the form routes to. Name the space first, with " *
+        "evaluate!(scratch, l, element(test_space(l), v))."))
+end
 
 """
     resolve_form_ast(form::LinearForm)
