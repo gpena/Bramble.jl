@@ -34,11 +34,11 @@ Reshapes the flat coefficient vector of `uₕ` into a multidimensional array tha
 """
 	values!(uₕ::VectorElement, s)
 
-Copies the values of `s` into the coefficients of [VectorElement](@ref) `uₕ`. Returns `nothing`.
+Copies the values of `s` into the coefficients of [VectorElement](@ref) `uₕ`. Returns `uₕ`.
 """
 @inline function values!(uₕ::VectorElement, s)
     copyto!(values(uₕ), s)
-    return nothing
+    return uₕ
 end
 
 """

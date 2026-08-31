@@ -47,14 +47,13 @@ Base.@constprop :aggressive function avgₕ(
         Wₕ::AbstractSpaceType, f; quad_points::Int = AVG_QUAD_POINTS,
         markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {N}
     uₕ = element(Wₕ, _restriction_eltype(Wₕ, f, markers))
-    avgₕ!(uₕ, f; quad_points = quad_points, markers = markers)
-    return uₕ
+    return avgₕ!(uₕ, f; quad_points = quad_points, markers = markers)
 end
 
 """
 	avgₕ!(uₕ::VectorElement, f; quad_points = AVG_QUAD_POINTS, markers = ())
 
-In-place version of the averaging operator [`avgₕ`](@ref). Returns `nothing`.
+In-place version of the averaging operator [`avgₕ`](@ref). Returns `uₕ`.
 
 Allocates only the task overhead of the parallel loop, independently of the
 number of grid points, and `f` is called directly rather than wrapped so that it
@@ -79,7 +78,7 @@ Base.@constprop :aggressive function avgₕ!(
         # and the product promotes, which is what makes avgₕ differentiable.
         _avg_masked!(uₕ, f, masks, half_points(Ωₕ), eltype(Ωₕ), Val(quad_points),
             Val(dim(Ωₕ)))
-        return nothing
+        return uₕ
     end
 
     # `f` is passed through unwrapped on purpose. Embedding it in a
@@ -88,7 +87,7 @@ Base.@constprop :aggressive function avgₕ!(
     # measured 2.3x slower on the grids in the test suite. It also matches
     # `avgₕ`, which has always passed the raw function.
     _avgₕ!(uₕ, f, Val(dim(Ωₕ)), Val(quad_points))
-    return nothing
+    return uₕ
 end
 
 # The marked branch, split the same way the unmarked `_avgₕ!` family is. It used to be a

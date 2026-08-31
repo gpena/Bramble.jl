@@ -119,7 +119,7 @@ value = pe(CartesianIndex(5, 10))  # Evaluates f at physical point (x₅, y₁�
 	Rₕ!(uₕ::VectorElement, f; markers = ())
 
 In-place version of the restriction operator [`Rₕ`](@ref). Evaluates `f` at the
-grid points and writes the result into `uₕ`. Returns `nothing`.
+grid points and writes the result into `uₕ`. Returns `uₕ`.
 
 # Arguments
 
@@ -176,12 +176,12 @@ See also: [`Rₕ`](@ref), [`avgₕ!`](@ref), [`element`](@ref)
 
     if N == 0
         _func2array!(u, g, indices(Ωₕ))
-        return nothing
+        return uₕ
     end
 
     mesh_indices = ntuple(i -> index_in_marker(Ωₕ, markers[i]), Val(N))
     _func2array!(u, g, mesh_indices)
-    return nothing
+    return uₕ
 end
 
 # A one-component space is a scalar space, so generic code that builds an
@@ -195,7 +195,7 @@ end
         markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {NC, N}
     comps = components(uₕ)
     ntuple(i -> Rₕ!(comps[i], f[i]; markers = markers), Val(NC))
-    return nothing
+    return uₕ
 end
 
 # A single function returning all components: evaluate it once per point and
@@ -211,7 +211,7 @@ end
         idx -> f(point(Ωₕ, idx))
     end
     _scatter_for!(mats, indices(Ωₕ), g)
-    return nothing
+    return uₕ
 end
 
 # Marker-restricted variant keeps the per-component path, which already handles
@@ -219,7 +219,7 @@ end
 @noinline function _Rₕ_markers!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f, markers) where {NC}
     comps = components(uₕ)
     ntuple(i -> Rₕ!(comps[i], x -> f(x)[i]; markers = markers), Val(NC))
-    return nothing
+    return uₕ
 end
 
 # The coefficient type of a restriction is the one `f` returns, promoted against the
@@ -301,6 +301,5 @@ See also: [`Rₕ!`](@ref), [`avgₕ`](@ref).
 function Rₕ(Wₕ::AbstractSpaceType, f; markers::NTuple{N, Symbol} = NTuple{
         0, Symbol}()) where {N}
     uₕ = element(Wₕ, _restriction_eltype(Wₕ, f, markers))
-    Rₕ!(uₕ, f; markers = markers)
-    return uₕ
+    return Rₕ!(uₕ, f; markers = markers)
 end

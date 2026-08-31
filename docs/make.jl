@@ -22,7 +22,11 @@ allpages = [
     documentation
 ]
 
-makedocs(; format = Documenter.HTML(; prettyurls = get(ENV, "CI", nothing) == "true"),
+makedocs(;
+    format = Documenter.HTML(;
+        prettyurls = get(ENV, "CI", nothing) == "true",
+        size_threshold = 400 * 1024,
+        size_threshold_warn = 250 * 1024),
     sitename = "Bramble.jl",
     pages = allpages,
     authors = "Gonçalo Pena and Gemini",

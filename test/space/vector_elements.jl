@@ -90,13 +90,11 @@ end
     @testset "Getters and Setters" begin
         u = element(W, 1.0:4.0)
         @test space(u) === W
-        @test values(u) == collect(1.0:4.0)
-
-        values!(u, fill(2.0, 4))
+        @test values!(u, fill(2.0, 4)) === u
         @test values(u) == fill(2.0, 4)
 
         # Test copyto! alias
-        copyto!(u, fill(3.0, 4))
+        @test copyto!(u, fill(3.0, 4)) === u
         @test values(u) == fill(3.0, 4)
     end
 
@@ -504,12 +502,12 @@ end
         ft = (x -> 1.0, x -> 2.0)
         fv = x -> (1.0, 2.0)
 
-        @test Rₕ!(u, f) === nothing
-        @test Rₕ!(uv, ft) === nothing
-        @test Rₕ!(uv, fv) === nothing
-        @test avgₕ!(u, f) === nothing
-        @test avgₕ!(uv, ft) === nothing
-        @test avgₕ!(uv, fv) === nothing
+        @test Rₕ!(u, f) === u
+        @test Rₕ!(uv, ft) === uv
+        @test Rₕ!(uv, fv) === uv
+        @test avgₕ!(u, f) === u
+        @test avgₕ!(uv, ft) === uv
+        @test avgₕ!(uv, fv) === uv
 
         # the allocating forms still hand back the element
         @test Rₕ(W, f) isa VectorElement

@@ -46,7 +46,7 @@ jump₂(op::LazyOp{D}) where {D} = JumpNode{D, 3, typeof(op)}(op)
 """
     jumpₕ(op::LazyOp{D}) where D
 
-Every direction at once, as a `D`-tuple of [`JumpNode`](@ref)s. In one dimension the node
+Every direction at once, as a `D`-tuple of `JumpNode`s. In one dimension the node
 itself, not a one-element tuple.
 """
 jumpₕ(op::LazyOp{1}) = jumpₓ(op)
