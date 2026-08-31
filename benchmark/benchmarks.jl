@@ -73,7 +73,7 @@ let W1 = gridspace(_mesh1()), u1 = element(W1), W2 = gridspace(_mesh2()), u2 = e
 end
 
 # --- 2. the stencil engine, both directions ------------------------------- #
-let Wₕ = gridspace(_mesh2()), uₕ = Rₕ(gridspace(_mesh2()), x -> sin(x[1]) * x[2])
+let Wₕ = gridspace(_mesh2()), uₕ = Rₕ(Wₕ, x -> sin(x[1]) * x[2])
     g = SUITE["operators 2D"] = BenchmarkGroup()
     g["D₋ₓ"] = @benchmarkable D₋ₓ($uₕ)            # along the contiguous direction
     g["D₋ᵧ"] = @benchmarkable D₋ᵧ($uₕ)            # across it
