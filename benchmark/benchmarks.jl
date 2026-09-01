@@ -306,7 +306,20 @@ function main(args = ARGS)
     println("tuning...")
     tune!(SUITE)
     results = run(SUITE; verbose = true)
-    append!(results.tags, ["julia:$(VERSION)", "os:$(Sys.KERNEL)", "arch:$(Sys.ARCH)"])
+    # The thread count belongs in the tags as much as the Julia version does.
+    # Without it, two baselines are indistinguishable while measuring different
+    # code: `_parallel_for!` takes its serial branch on one thread and allocates
+    # nothing, and allocates one task set — 22 allocations — on more. Comparing a
+    # single-threaded baseline against a four-threaded run therefore reports a
+    # memory regression on every threaded path, which is what
+    # baseline_15f5e3b.json against baseline_5f9b8af.json did: `Rₕ! 1D` moved
+    # from 0 allocations to 22, and nothing had changed but the thread count.
+    #
+    # Baselines saved before this tag existed carry no thread count. The ones in
+    # `baselines/` read 0 allocations for `Rₕ!`, so they were single-threaded.
+    append!(results.tags,
+        ["julia:$(VERSION)", "os:$(Sys.KERNEL)", "arch:$(Sys.ARCH)",
+            "threads:$(Threads.nthreads())"])
 
     println("\ntimings (median)")
     for (gname, group) in sort(collect(results), by = first)
@@ -335,7 +348,15 @@ function main(args = ARGS)
             startswith(string(t), "julia:") &&
                 (base_jl = replace(string(t), "julia:" => ""))
         end
-        println("\nagainst ", args[j + 1], " (baseline: Julia $base_jl, current: Julia $VERSION)")
+        base_th = "unknown"
+        for t in baseline.tags
+            startswith(string(t), "threads:") &&
+                (base_th = replace(string(t), "threads:" => ""))
+        end
+        println("\nagainst ", args[j + 1], " (baseline: Julia $base_jl on $base_th ",
+            "thread(s), current: Julia $VERSION on $(Threads.nthreads()))")
+        base_th == string(Threads.nthreads()) ||
+            @warn "thread counts differ, so memory on every threaded path is not comparable" baseline=base_th current=Threads.nthreads()
         jdg = judge(minimum(results), minimum(baseline))
         for (gname, group) in BenchmarkTools.leaves(jdg)
             group.time != :invariant && println("  ", join(gname, " / "), "  time ",
