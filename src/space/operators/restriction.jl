@@ -115,6 +115,12 @@ value = pe(CartesianIndex(5, 10))  # Evaluates f at physical point (x₅, y₁�
 """
 (pe::PointwiseEvaluator)(idx) = func(pe)(point(mesh(pe), idx))
 
+@inline _scatter_comp!(::Tuple{}, ::Tuple, i::Int) = nothing
+@inline function _scatter_comp!(raws::Tuple, vals::Tuple, i::Int)
+    @inbounds raws[1][i] = vals[1]
+    return _scatter_comp!(Base.tail(raws), Base.tail(vals), i)
+end
+
 """
 	Rₕ!(uₕ::VectorElement, f; markers = ())
 
@@ -161,26 +167,25 @@ See also: [`Rₕ`](@ref), [`avgₕ!`](@ref), [`element`](@ref)
 
     (; space) = uₕ
     Ωₕ = mesh(space)
-
-    u = to_matrix(uₕ)
-
-    # A `let` closure rather than `PointwiseEvaluator(f, Ωₕ)`. The two are
-    # semantically identical, but the struct's call operator is compiled as its
-    # own instance for every new `f` instead of being inlined into the index
-    # loop, which measured 48.8 ms against 6.3 ms per previously unseen closure
-    # on a 21-point 1D space. Run time is unchanged. Adding `@inline` to the
-    # call operator does not recover it.
-    g = let f = f, Ωₕ = Ωₕ
-        idx -> f(point(Ωₕ, idx))
-    end
+    raw = values(uₕ)
+    idxs = indices(Ωₕ)
 
     if N == 0
-        _func2array!(u, g, indices(Ωₕ))
+        @inbounds for i in 1:length(idxs)
+            raw[i] = f(point(Ωₕ, idxs[i]))
+        end
         return uₕ
     end
 
-    mesh_indices = ntuple(i -> index_in_marker(Ωₕ, markers[i]), Val(N))
-    _func2array!(u, g, mesh_indices)
+    fill!(raw, zero(eltype(raw)))
+    for m in markers
+        mask = index_in_marker(Ωₕ, m)
+        @inbounds for i in 1:length(idxs)
+            if mask[i]
+                raw[i] = f(point(Ωₕ, idxs[i]))
+            end
+        end
+    end
     return uₕ
 end
 
@@ -202,23 +207,31 @@ end
 # scatter, rather than once per component.
 @inline function Rₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f;
         markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {NC, N}
-    N == 0 || return _Rₕ_markers!(uₕ, f, markers)
-
     Ωₕ = mesh(space(uₕ))
-    mats = ntuple(i -> to_matrix(components(uₕ)[i]), Val(NC))
-    # See the note in the scalar `Rₕ!` above.
-    g = let f = f, Ωₕ = Ωₕ
-        idx -> f(point(Ωₕ, idx))
-    end
-    _scatter_for!(mats, indices(Ωₕ), g)
-    return uₕ
-end
-
-# Marker-restricted variant keeps the per-component path, which already handles
-# the marker index sets.
-@noinline function _Rₕ_markers!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f, markers) where {NC}
     comps = components(uₕ)
-    ntuple(i -> Rₕ!(comps[i], x -> f(x)[i]; markers = markers), Val(NC))
+    raws = ntuple(i -> values(comps[i]), Val(NC))
+    idxs = indices(Ωₕ)
+
+    if N == 0
+        @inbounds for i in 1:length(idxs)
+            vals = f(point(Ωₕ, idxs[i]))
+            _scatter_comp!(raws, vals, i)
+        end
+        return uₕ
+    end
+
+    for raw in raws
+        fill!(raw, zero(eltype(raw)))
+    end
+    for m in markers
+        mask = index_in_marker(Ωₕ, m)
+        @inbounds for i in 1:length(idxs)
+            if mask[i]
+                vals = f(point(Ωₕ, idxs[i]))
+                _scatter_comp!(raws, vals, i)
+            end
+        end
+    end
     return uₕ
 end
 
