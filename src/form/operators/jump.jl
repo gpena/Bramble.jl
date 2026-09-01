@@ -58,10 +58,10 @@ jumpₕ(op::LazyOp{D}) where {D} = ntuple(dim -> JumpNode{D, dim, typeof(op)}(op
     dims = npoints(mesh(space), Tuple)
 
     # only the forward term goes; the local one stays, which is the -uₙ convention
-    reach = I[Dim] == dims[Dim] ? 0.0 : 1.0
+    reach = I[Dim] == dims[Dim] ? 0 : 1
 
     forward = scale_stencil(shift_stencil(inner, Val(Dim), Val(1)), reach)
-    here = scale_stencil(inner, -1.0)
+    here = scale_stencil(inner, -1)
     return concatenate_stencils(forward, here)
 end
 

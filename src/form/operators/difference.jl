@@ -109,7 +109,7 @@ D₊₂(op::LazyOp{D}) where {D} = ForwardDifference{D, 3, typeof(op)}(op)
     m = mesh(space)
     h = get_spacing(m, I, Dim)
 
-    mask = I[Dim] == 1 ? 0.0 : 1.0
+    mask = I[Dim] == 1 ? 0 : 1
     t1 = scale_stencil(inner, mask / h)
 
     inner_shifted = shift_stencil(inner, Val(Dim), Val(-1))
@@ -125,7 +125,7 @@ end
     dims = npoints(m, Tuple)
     h = get_forward_spacing(m, I, Dim)
 
-    mask = I[Dim] == dims[Dim] ? 0.0 : 1.0
+    mask = I[Dim] == dims[Dim] ? 0 : 1
     inner_shifted = shift_stencil(inner, Val(Dim), Val(1))
     t1 = scale_stencil(inner_shifted, mask / h)
     t2 = scale_stencil(inner, -mask / h)
@@ -297,7 +297,7 @@ end
     dims = npoints(m, Tuple)
 
     # no neighbour on one side at either end
-    mask = (I[Dim] == 1 || I[Dim] == dims[Dim]) ? 0.0 : 1.0
+    mask = (I[Dim] == 1 || I[Dim] == dims[Dim]) ? 0 : 1
     c = mask / (get_spacing(m, I, Dim) + get_forward_spacing(m, I, Dim))
 
     forward = scale_stencil(shift_stencil(inner, Val(Dim), Val(1)), c)
@@ -311,7 +311,7 @@ end
     m = mesh(space)
     dims = npoints(m, Tuple)
 
-    mask = I[Dim] == dims[Dim] ? 0.0 : 1.0
+    mask = I[Dim] == dims[Dim] ? 0 : 1
     # the averaged spacing, which is what the starred difference divides by
     c = 2 * mask / (get_spacing(m, I, Dim) + get_forward_spacing(m, I, Dim))
 
@@ -333,7 +333,7 @@ end
     m = mesh(space)
     dims = npoints(m, Tuple)
 
-    mask = (I[Dim] == 1 || I[Dim] == dims[Dim]) ? 0.0 : 1.0
+    mask = (I[Dim] == 1 || I[Dim] == dims[Dim]) ? 0 : 1
     h = get_spacing(m, I, Dim)
     hf = get_forward_spacing(m, I, Dim)
     total = h + hf

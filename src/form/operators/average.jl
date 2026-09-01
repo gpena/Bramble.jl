@@ -121,7 +121,8 @@ M₊ₕ(op::LazyOp{D}) where {D} = vectorial_avg_forward(op)
         markers, lin_idx::Int) where {D, Dim}
     inner = local_stencil(op.inner_op, space, I, markers, lin_idx)
 
-    mask = I[Dim] == 1 ? 0.0 : 0.5
+    T = eltype(space)
+    mask = I[Dim] == 1 ? zero(T) : T(1) / 2
     t1 = scale_stencil(inner, mask)
 
     inner_shifted = shift_stencil(inner, Val(Dim), Val(-1))
@@ -136,7 +137,8 @@ end
     m = mesh(space)
     dims = npoints(m, Tuple)
 
-    mask = I[Dim] == dims[Dim] ? 0.0 : 0.5
+    T = eltype(space)
+    mask = I[Dim] == dims[Dim] ? zero(T) : T(1) / 2
     inner_shifted = shift_stencil(inner, Val(Dim), Val(1))
     t1 = scale_stencil(inner_shifted, mask)
     t2 = scale_stencil(inner, mask)

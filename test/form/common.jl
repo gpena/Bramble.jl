@@ -8,7 +8,7 @@ using Bramble: TrialFunction, TestFunction, IndexedTrialFunction, IndexedTestFun
                zero_offset, shift_offset, get_spacing, get_forward_spacing,
                get_half_spacing, shift_stencil, concatenate_stencils, scale_stencil,
                multiply_stencils_bilinear, multiply_stencils_linear,
-               restrict_to, shift_op, values
+               restrict_to, shift_op, values, form, assemble
 
 # The AST leaves, the stencil algebra under them, and the two traits every node answers.
 #
@@ -214,5 +214,36 @@ using Bramble: TrialFunction, TestFunction, IndexedTrialFunction, IndexedTestFun
         @test is_symbolic(D₋ₓ(u) + D₋ₓ(id))
         @test is_symbolic((D₋ₓ(id), D₋ₓ(u)))     # and so is a tuple
         @test !is_symbolic((D₋ₓ(id), M₊ᵧ(id)))
+    end
+end
+
+@testset "the element type survives assembly" begin
+    # A `Float32` space assembled a `Float64` vector and a `Float64` matrix, silently,
+    # because the stencil leaves returned a literal `1.0` and the boundary masks a literal
+    # `0.0`/`1.0`. `_assembled_eltype` promotes the space's type against the weight it finds,
+    # and `promote_type(Float32, Float64)` is `Float64`, so single precision was widened at
+    # every point of every form — including on the Metal backend, whose arrays are Float32.
+    #
+    # The weights are now typed: a unit weight is the integer `1`, which carries no precision
+    # claim and promotes to whatever it multiplies, and the averages take ½ from
+    # `eltype(space)` rather than from a literal. Both branches of each mask keep one type, so
+    # the weight does not infer as a union.
+    #
+    # Every stencil shape is checked, because each builds its weight differently: the
+    # identity from a leaf, the difference by dividing a mask by a spacing, the average from
+    # a halved mask, the jump from a reach plus a `-1`.
+    for T in (Float32, Float64)
+        Ωₕ = mesh(domain(interval(T(0), T(1)) × interval(T(0), T(1))), (6, 6), (true, true))
+        Wₕ = gridspace(Ωₕ)
+        @test eltype(Ωₕ) === T
+        fₕ = Rₕ(Wₕ, x -> sin(x[1]) * x[2])
+
+        for e in (v -> innerₕ(fₕ, v), v -> innerₕ(fₕ, D₋ₓ(v)), v -> innerₕ(fₕ, M₋ₓ(v)),
+            v -> innerₕ(fₕ, jumpₓ(v)), v -> inner₊ₓ(fₕ, D₋ₓ(v)))
+            @test eltype(assemble(form(Wₕ, e))) === T
+        end
+
+        @test eltype(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v)))) === T
+        @test eltype(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v))))) === T
     end
 end

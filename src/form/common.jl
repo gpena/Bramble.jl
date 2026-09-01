@@ -221,14 +221,14 @@ include("operators/inner.jl")
 
 @inline local_stencil(
     ::TrialFunction{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int) where {D} = ((
-    zero_offset(Val(D)), 1.0),)
+    zero_offset(Val(D)), 1),)
 @inline local_stencil(
     ::TestFunction{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int) where {D} = ((
-    zero_offset(Val(D)), 1.0),)
+    zero_offset(Val(D)), 1),)
 @inline local_stencil(::IndexedTrialFunction{D}, space, I::CartesianIndex{D},
-    markers, lin_idx::Int) where {D} = ((zero_offset(Val(D)), 1.0),)
+    markers, lin_idx::Int) where {D} = ((zero_offset(Val(D)), 1),)
 @inline local_stencil(::IndexedTestFunction{D}, space, I::CartesianIndex{D},
-    markers, lin_idx::Int) where {D} = ((zero_offset(Val(D)), 1.0),)
+    markers, lin_idx::Int) where {D} = ((zero_offset(Val(D)), 1),)
 
 @inline function local_stencil(
         op::SourceFunction{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int) where {D}
@@ -269,10 +269,10 @@ end
 end
 
 @inline local_stencil(op::IdentityOperator{D}, space, I::CartesianIndex{D},
-    markers, lin_idx::Int) where {D} = ((zero_offset(Val(D)), 1.0),)
+    markers, lin_idx::Int) where {D} = ((zero_offset(Val(D)), 1),)
 @inline local_stencil(
     op::ZeroOperator{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int) where {D} = ((
-    zero_offset(Val(D)), 0.0),)
+    zero_offset(Val(D)), 0),)
 
 # ==============================================================================
 # 5. AST Resolution & Thunk Eval
