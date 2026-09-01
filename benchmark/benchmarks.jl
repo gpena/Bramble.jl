@@ -46,6 +46,23 @@ using DoubleFloats: Double64
 # already makes `values` ambiguous there against `Base.values` — Bramble exports its own.
 # Nothing below calls `values`, so the benchmarks do not depend on that resolving.
 
+# Battery power means CPU frequency scaling and thermal throttling, so a timing
+# taken on battery is not comparable with one taken on AC, and a baseline saved
+# from one silently poisons every later `--compare`. Checked here rather than left
+# to whoever runs it, because it was missed once: baseline_5f9b8af.json was
+# recorded on battery and had to be withdrawn.
+#
+# Only macOS is checked. CI runners are mains-powered and there is no portable
+# way to ask, so anything else is assumed fine rather than blocked.
+function _on_ac_power()
+    Sys.isapple() || return true
+    try
+        return !occursin("Battery Power", read(`pmset -g batt`, String))
+    catch
+        return true
+    end
+end
+
 const SUITE = BenchmarkGroup()
 
 # Sizes are chosen to sit above the threading threshold where that is the point
@@ -303,6 +320,10 @@ end
 
 function main(args = ARGS)
     set_zero_subnormals(true)
+    ac = _on_ac_power()
+    ac || @warn string("running on battery power: frequency scaling and thermal ",
+        "throttling make these timings unreliable, and --save is refused. ",
+        "Allocation counts are unaffected and still gated.")
     println("tuning...")
     tune!(SUITE)
     results = run(SUITE; verbose = true)
@@ -319,7 +340,7 @@ function main(args = ARGS)
     # `baselines/` read 0 allocations for `Rₕ!`, so they were single-threaded.
     append!(results.tags,
         ["julia:$(VERSION)", "os:$(Sys.KERNEL)", "arch:$(Sys.ARCH)",
-            "threads:$(Threads.nthreads())"])
+            "threads:$(Threads.nthreads())", "power:$(ac ? "ac" : "battery")"])
 
     println("\ntimings (median)")
     for (gname, group) in sort(collect(results), by = first)
@@ -336,6 +357,8 @@ function main(args = ARGS)
 
     i = findfirst(==("--save"), args)
     if i !== nothing && i < length(args)
+        ac || error("refusing to save a baseline recorded on battery power. Plug in " *
+                    "and re-run; the allocation gate above is still valid.")
         BenchmarkTools.save(args[i + 1], results)
         println("\nsaved baseline to ", args[i + 1], " (Julia $VERSION)")
     end
