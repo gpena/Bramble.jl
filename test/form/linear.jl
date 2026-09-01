@@ -915,15 +915,40 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         @test evaluate!(scratchv, lfv, wc) ≈ lfv(wc)
         @test_throws ArgumentError evaluate!(scratchv, lfv, values(wc))
 
-        # and it allocates nothing once the AST is resolved outside the loop.
+        # and it allocates nothing per call, once the AST is resolved outside the loop.
         #
-        # Behind a barrier, like every other allocation assertion here. Written at testset
-        # top level this read 0 on 1.12 and 16 on nightly, which is the keyword box the
-        # older compiler happened to elide — a property of where the measurement was taken,
-        # not of `evaluate!`.
+        # Behind a barrier, like every other allocation assertion here: measured at testset
+        # top level this reports the bytes of the surrounding closure rather than of the
+        # call.
+        #
+        # One callsite, measured three times, and the steady state is what is asserted.
+        #
+        # On Julia nightly the first measurement at any given callsite carries a one-time
+        # 16 bytes and every later one is 0. The raw triples:
+        #
+        #     1.14.0-DEV.3077  (16, 0, 0)
+        #     1.13.0-rc3       ( 0, 0, 0)
+        #     1.12.7           ( 0, 0, 0)
+        #
+        # The cost is per-callsite, not per-process, which is why neither of the simpler
+        # fixes works. A plain warmup call does not absorb it — the warmup's return value is
+        # unused, so the `dot` inside it can be optimised away — and neither does a
+        # discarded `@allocated` written as a second statement, because that is a different
+        # callsite and pays its own one-time 16 bytes. Repeating one callsite is what
+        # reaches the steady state.
+        #
+        # It is `dot`, and it is upstream rather than anything here. `assemble!(; ast)`
+        # measures 0 on the same build, a bare `dot(::Vector{Float64}, ::Vector{Float64})`
+        # reproduces the identical (16, 0, 0) with no Bramble in the picture, and
+        # `@allocated` over a non-allocating expression is 0 on all three, so it is not the
+        # macro. An earlier version of this comment blamed the `ast` keyword box; that was
+        # wrong, and the keyword has nothing to do with it.
+        #
+        # What is under test is that a time loop calling this does not allocate, and the
+        # steady state is exactly that property.
         function _evaluate_bytes(scratch, lf, v, ast)
             evaluate!(scratch, lf, v; ast = ast)
-            return @allocated evaluate!(scratch, lf, v; ast = ast)
+            return minimum(ntuple(_ -> @allocated(evaluate!(scratch, lf, v; ast = ast)), 3))
         end
         @test _evaluate_bytes(scratch, lf, uₕ, ast) == 0
     end
