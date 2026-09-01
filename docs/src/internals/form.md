@@ -145,5 +145,18 @@ would race on the value, not just on the structure.
 ```@autodocs
 Modules = [Bramble]
 Public = false
-Pages = ["form/dirichlet_constraints.jl", "form/linear.jl", "form/bilinear.jl"]
+Pages = [
+    "form/common.jl",
+    "form/component.jl",
+    "form/block_extract.jl",
+    "form/stencil_pattern.jl",
+    "form/operators/average.jl",
+    "form/operators/difference.jl",
+    "form/operators/inner.jl",
+    "form/operators/jump.jl",
+    "form/operators/restriction.jl",
+    "form/dirichlet_constraints.jl",
+    "form/linear.jl",
+    "form/bilinear.jl"
+]
 ```

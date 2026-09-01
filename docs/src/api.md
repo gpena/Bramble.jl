@@ -268,3 +268,39 @@ norm₁ₕ
 snorm₁ₕ
 norm₊
 ```
+
+---
+
+## Forms
+
+Linear and bilinear forms, their assembly, and the boundary conditions applied to an
+assembled system. See the [forms tutorial](tutorials/form.md).
+
+### Building a form
+
+```@docs
+form
+```
+
+### Assembling
+
+`assemble` allocates its result; the mutating forms refill one that already exists, which is
+what a time loop wants. `allocate_system_matrix` builds a matrix's sparsity pattern once so
+that `assemble!` can refill it without allocating.
+
+```@docs
+assemble
+assemble!
+assemble_parallel!
+allocate_system_matrix
+evaluate!
+```
+
+### Dirichlet conditions
+
+```@docs
+DirichletConstraint
+dirichlet_constraints
+dirichlet_bc!
+symmetrize!
+```
