@@ -113,6 +113,7 @@ if __bramble_with_unit_tests
             include("mesh/mesh1d.jl")
             include("mesh/meshnd.jl")
             include("mesh/meshes.jl")
+            include("mesh/markers.jl")
             include("mesh/inference_allocation.jl")
         end
 
@@ -147,6 +148,7 @@ if __bramble_with_unit_tests
             include("form/linear.jl")
             include("form/bilinear.jl")
             include("form/symmetry.jl")
+            include("form/markers.jl")
             include("form/extended_operators.jl")
             include("form/symmetrize.jl")
             include("form/autodiff.jl")

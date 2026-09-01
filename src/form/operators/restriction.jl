@@ -54,6 +54,14 @@ end
 @inline _is_marked(markers, region::Symbol, lin_idx::Int) = haskey(markers, region) &&
                                                             markers[region][lin_idx]
 
+# A tuple of regions is a union, not an intersection: `restrict_to((:bottom, :left), u)`
+# means either counts, matching what several `markers = (...)` labels mean everywhere else
+# in the package (`Rₕ!`, `dirichlet_bc!`, the numeric `innerₕ`). Chaining single-region
+# `RegionRestriction`s instead would give the intersection, which is a different — and much
+# less useful — condition.
+@inline _is_marked(markers, regions::NTuple{N, Symbol}, lin_idx::Int) where {N} = any(
+    r -> _is_marked(markers, r, lin_idx), regions)
+
 @inline function local_stencil(
         op::RegionRestriction, space, I::CartesianIndex{D}, markers, lin_idx::Int) where {D}
     if op.region === :interior

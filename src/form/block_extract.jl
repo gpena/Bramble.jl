@@ -157,3 +157,61 @@ function routes_by_component(op::OperatorAdd)
         routes_by_component(op.right_op)
 end
 routes_by_component(op) = test_component_or_nothing(op) !== nothing
+
+"""
+    _collect_region_labels(op) -> NTuple{N,Symbol}
+
+Every marker label a `RegionRestriction` anywhere in `op` names — from `restrict_to` calls
+written directly, or from the `markers = (...)` keyword on `innerₕ`/`inner₊` and friends,
+which is sugar for the same node (point 50). Flattened into one tuple; a term naming several
+restrictions (nested, or one on each side of a product) reports all of them, since every one
+has to exist on every leaf the term reaches for assembly to mean what it says.
+
+Recurses the same way [`trial_component_or_nothing`](@ref)/[`test_component_or_nothing`](@ref)
+do, so a marker nested behind any operator those already see through is found here too.
+"""
+function _collect_region_labels(op::RegionRestriction)
+    (
+        _region_labels(op.region)..., _collect_region_labels(op.inner_op)...)
+end
+
+_region_labels(region::Symbol) = (region,)
+_region_labels(region::NTuple{N, Symbol}) where {N} = region
+
+for W in (:BackwardDifference, :ForwardDifference, :CenteredDifference,
+    :StarDifference, :CrossWeightedDifference, :BackwardAverage,
+    :ForwardAverage, :ShiftNode, :JumpNode, :OperatorScale, :GridFunctionScale)
+    @eval _collect_region_labels(op::$W) = _collect_region_labels(op.inner_op)
+end
+
+function _collect_region_labels(op::Union{BilinearProduct, LinearProduct, OperatorAdd})
+    (_collect_region_labels(op.left_op)..., _collect_region_labels(op.right_op)...)
+end
+
+_collect_region_labels(op) = ()
+
+"""
+    _validate_term_markers(term, mesh_markers, context::String)
+
+Throws if `term` names, via `restrict_to` or `markers = (...)`, a label that does not exist
+in `mesh_markers` — the mesh a term is about to be scattered against. Checked once, while the
+sparsity pattern is built (`allocate_system_matrix`/`_pattern_term!`), rather than left to
+`RegionRestriction`'s own `local_stencil`: that answers `false` for a missing key the same way
+it does for "not marked", so a typo'd or leaf-missing label would otherwise assemble to a
+silent all-zero contribution instead of failing loudly.
+"""
+function _validate_term_markers(term, mesh_markers, context::String)
+    for label in _collect_region_labels(term)
+        haskey(mesh_markers, label) || _throw_marker_not_on_space(label, context)
+    end
+    return nothing
+end
+
+@noinline function _throw_marker_not_on_space(label::Symbol, context::String)
+    throw(ArgumentError(
+        "the marker :$label is not defined on $context. A marker named in restrict_to or " *
+        "markers = (...) must exist on every space a term reaches — if it is only defined " *
+        "on some of a composite space's leaves, write the term per component instead, one " *
+        "innerₕ(u(i), v(i)) per leaf with that leaf's own markers, rather than one term " *
+        "naming a marker not every leaf it reaches has."))
+end

@@ -237,13 +237,17 @@ import Base: diff
         Ωₕ = mesh(Ω, npts, true; backend = backend())
 
         # Test marker retrieval before explicit setting (should be done by constructor)
+        # :boundary/:interior are always present too now (test/mesh/markers.jl covers them).
         @test Set(keys(markers(Ωₕ))) ==
-              Set([:Dirichlet, :Neumann, :Mixed, :LowerHalf, :PointMarker])
+              Set([
+            :Dirichlet, :Neumann, :Mixed, :LowerHalf, :PointMarker, :boundary, :interior])
 
         # Test explicit call to set_markers! (should ideally yield the same)
         set_markers!(Ωₕ, dm) # Recalculate
+        # :boundary/:interior are always present too now (test/mesh/markers.jl covers them).
         @test Set(keys(markers(Ωₕ))) ==
-              Set([:Dirichlet, :Neumann, :Mixed, :LowerHalf, :PointMarker])
+              Set([
+            :Dirichlet, :Neumann, :Mixed, :LowerHalf, :PointMarker, :boundary, :interior])
     end
 
     @testset "Mesh Modification" begin

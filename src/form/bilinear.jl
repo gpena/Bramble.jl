@@ -188,6 +188,7 @@ function allocate_system_matrix(
     space = form.trial_space
     Ωₕ = mesh(space)
     mesh_markers = markers(Ωₕ)
+    _validate_term_markers(ast, mesh_markers, "the form's space")
     lin_indices = LinearIndices(indices(Ωₕ))
     n = length(lin_indices)
 
@@ -240,6 +241,7 @@ function _pattern_term!(I_vec::Vector{Int}, J_vec::Vector{Int}, term::TERM, tria
         test_leaf, row_offset::Int, col_offset::Int) where {TERM}
     Ωₕ = mesh(test_leaf)
     mesh_markers = markers(Ωₕ)
+    _validate_term_markers(term, mesh_markers, "one of the composite space's leaves")
     lin_indices = LinearIndices(indices(Ωₕ))
 
     @inbounds for I in indices(Ωₕ)

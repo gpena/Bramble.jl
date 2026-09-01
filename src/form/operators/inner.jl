@@ -64,27 +64,66 @@ end
 # User-Facing API & Overloads
 # ==============================================================================
 
+#=
+`markers`, on every `innerₕ`/`inner₊`/`inner₊ₓ`/`inner₊ᵧ`/`inner₊₂` below (both the bilinear
+forms and the linear, source-term ones), restricts the product to the union of the labelled
+regions — a mask on which grid points the assembled term contributes to at all, the symbolic
+counterpart of the numeric `markers` keyword on `space/inner_product.jl`'s versions of the
+same names (point 11).
+
+It is implemented by wrapping the freshly built `BilinearProduct`/`LinearProduct` in
+`RegionRestriction` (`restrict_to`) — not a new AST node. That node already returns an empty
+stencil off-region and the term's own stencil on it, which *is* the mask this needs, and it
+is already known to every existing AST walker: block routing
+(`trial_component_or_nothing`/`test_component_or_nothing`), `resolve_ast`, `is_symbolic`. A
+bespoke marker node was considered and rejected for exactly this reason during point 13 (see
+`form/symmetry.jl`'s "AST wrapper node" note) — reusing `RegionRestriction` sidesteps that
+risk entirely, since nothing new needs teaching to any of those walkers.
+=#
+
+@inline _restrict_by_markers(prod::LazyOp{D}, ::NTuple{0, Symbol}) where {D} = prod
+
+# A single marker unwraps to a bare `Symbol` region rather than a one-element tuple, so it
+# matches `restrict_to`'s own convention exactly — including `:interior`, which is a keyword
+# `RegionRestriction` special-cases only when `region` is literally a `Symbol`, not a tuple
+# containing one.
+@inline function _restrict_by_markers(prod::LazyOp{D}, markers::NTuple{1, Symbol}) where {D}
+    RegionRestriction{D, Symbol, typeof(prod)}(markers[1], prod)
+end
+
+@inline function _restrict_by_markers(
+        prod::LazyOp{D}, markers::NTuple{N, Symbol}) where {D, N}
+    RegionRestriction{D, typeof(markers), typeof(prod)}(markers, prod)
+end
+
 """
     inner_plus(left::NTuple{D,LazyOp{D}}, right::NTuple{D,LazyOp{D}}) where D
 
 Constructs the sum of directional modified \$L^2_+\$ inner products across all dimensions.
 """
-function inner_plus(left::NTuple{D, LazyOp{D}}, right::NTuple{D, LazyOp{D}}) where {D}
+function inner_plus(left::NTuple{D, LazyOp{D}}, right::NTuple{D, LazyOp{D}};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
     terms = ntuple(
         dim -> BilinearProduct{D, InnerPlus{dim}, typeof(left[dim]), typeof(right[dim])}(left[dim], right[dim]),
         Val(D))
-    return foldl(+, terms)
+    return _restrict_by_markers(foldl(+, terms), markers)
 end
 
 # Support both scalar and NTuple combinations in standard inner products:
 
 """
-    innerₕ(left::LazyOp{D}, right::LazyOp{D}) where D
+    innerₕ(left::LazyOp{D}, right::LazyOp{D}; markers = ()) where D
 
 Constructs a symbolic \$L^2\$ bilinear inner product between `left` and `right`.
+
+`markers` restricts the assembled term to the union of the labelled regions — a mask on
+which grid points it contributes to at all, the symbolic counterpart of the `markers`
+keyword on the numeric `innerₕ` in `space/inner_product.jl`.
 """
-function innerₕ(left::LazyOp{D}, right::LazyOp{D}) where {D}
-    BilinearProduct{D, InnerH, typeof(left), typeof(right)}(left, right)
+function innerₕ(left::LazyOp{D}, right::LazyOp{D};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
+    _restrict_by_markers(
+        BilinearProduct{D, InnerH, typeof(left), typeof(right)}(left, right), markers)
 end
 
 # There is deliberately no `innerₕ` over gradient tuples. `inner₊` has one because its
@@ -94,13 +133,16 @@ end
 # product.
 
 """
-    inner₊(left::LazyOp{1}, right::LazyOp{1})
-    inner₊(left::NTuple{D,LazyOp{D}}, right::NTuple{D,LazyOp{D}}) where D
+    inner₊(left::LazyOp{1}, right::LazyOp{1}; markers = ())
+    inner₊(left::NTuple{D,LazyOp{D}}, right::NTuple{D,LazyOp{D}}; markers = ()) where D
 
 Constructs a symbolic modified \$L^2_+\$ inner product between `left` and `right`.
+
+`markers` restricts the sum as it does for [`innerₕ`](@ref).
 """
-function inner₊(left::NTuple{D, LazyOp{D}}, right::NTuple{D, LazyOp{D}}) where {D}
-    inner_plus(left, right)
+function inner₊(left::NTuple{D, LazyOp{D}}, right::NTuple{D, LazyOp{D}};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
+    inner_plus(left, right; markers = markers)
 end
 
 """
@@ -116,10 +158,14 @@ overloads below read it. This is what makes `inner₊(D₋ₓ(u), D₋ₓ(v))` m
 
 Backward differences only, as everywhere `inner₊` meets a difference: the weights are those
 of the summation-by-parts identity, which pairs them with a backward difference.
+
+`markers` restricts the sum as it does for [`innerₕ`](@ref).
 """
 function inner₊(left::BackwardDifference{D, Dim},
-        right::BackwardDifference{D, Dim}) where {D, Dim}
-    BilinearProduct{D, InnerPlus{Dim}, typeof(left), typeof(right)}(left, right)
+        right::BackwardDifference{D, Dim};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, Dim, N}
+    _restrict_by_markers(
+        BilinearProduct{D, InnerPlus{Dim}, typeof(left), typeof(right)}(left, right), markers)
 end
 
 """
@@ -137,10 +183,13 @@ types the caller never mentioned.
 The `D` is a type parameter, so the branch folds away and neither case pays for the other.
 Writing it as one method rather than a `LazyOp{1}` pair keeps it from tying with the
 single-sided methods below, which in one dimension are equally specific.
+
+`markers` restricts the sum as it does for [`innerₕ`](@ref).
 """
-function inner₊(left::LazyOp{D}, right::LazyOp{D}) where {D}
-    D == 1 && return BilinearProduct{1, InnerPlus{1}, typeof(left), typeof(right)}(
-        left, right)
+function inner₊(left::LazyOp{D}, right::LazyOp{D};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
+    D == 1 && return _restrict_by_markers(
+        BilinearProduct{1, InnerPlus{1}, typeof(left), typeof(right)}(left, right), markers)
     return _inner₊_no_direction(left, right, D)
 end
 
@@ -166,12 +215,18 @@ field. It is not restricted to the indexed leaves: a plain `TrialFunction` reads
 direction off the difference just as an `IndexedTrialFunction` does.
 
 Backward differences only, as everywhere `inner₊` meets a difference.
+
+`markers` restricts the sum as it does for [`innerₕ`](@ref).
 """
-function inner₊(left::LazyOp{D}, right::BackwardDifference{D, Dim}) where {D, Dim}
-    BilinearProduct{D, InnerPlus{Dim}, typeof(left), typeof(right)}(left, right)
+function inner₊(left::LazyOp{D}, right::BackwardDifference{D, Dim};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, Dim, N}
+    _restrict_by_markers(
+        BilinearProduct{D, InnerPlus{Dim}, typeof(left), typeof(right)}(left, right), markers)
 end
-function inner₊(left::BackwardDifference{D, Dim}, right::LazyOp{D}) where {D, Dim}
-    BilinearProduct{D, InnerPlus{Dim}, typeof(left), typeof(right)}(left, right)
+function inner₊(left::BackwardDifference{D, Dim}, right::LazyOp{D};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, Dim, N}
+    _restrict_by_markers(
+        BilinearProduct{D, InnerPlus{Dim}, typeof(left), typeof(right)}(left, right), markers)
 end
 
 """
@@ -185,7 +240,8 @@ either side, the two single-sided methods above tie, and the pair would be an am
 rather than an error the caller can read.
 """
 @noinline function inner₊(left::BackwardDifference{D, Dim1},
-        right::BackwardDifference{D, Dim2}) where {D, Dim1, Dim2}
+        right::BackwardDifference{D, Dim2};
+        markers::NTuple{M, Symbol} = NTuple{0, Symbol}()) where {D, Dim1, Dim2, M}
     throw(ArgumentError(
         "inner₊ of backward differences along different directions ($Dim1 and $Dim2) " *
         "names no single weight. Difference both sides along the same direction, or " *
@@ -204,9 +260,13 @@ which dispatches to the existing `inner₊(::NTuple{D,LazyOp}, ::NTuple{D,LazyOp
 This overload is intentionally restricted to `NTuple{N,<:Tuple}` so it does **not**
 interfere with `inner₊(NTuple{D,VectorElement}, NTuple{D,VectorElement})` handled by
 the `@generated` method in `inner_product.jl`.
+
+`markers` restricts the whole sum, not each component separately, as it does for
+[`innerₕ`](@ref).
 """
-function inner₊(left::NTuple{N, <:Tuple}, right::NTuple{N, <:Tuple}) where {N}
-    foldl(+, map(inner₊, left, right))
+function inner₊(left::NTuple{N, <:Tuple}, right::NTuple{N, <:Tuple};
+        markers::NTuple{M, Symbol} = NTuple{0, Symbol}()) where {N, M}
+    _restrict_by_markers(foldl(+, map(inner₊, left, right)), markers)
 end
 
 """
@@ -215,15 +275,23 @@ end
     inner₊₂(left::LazyOp{D}, right::LazyOp{D}) where D
 
 Constructs directional modified \$L^2_+\$ inner products in x, y, and z directions.
+
+`markers` restricts the sum as it does for [`innerₕ`](@ref).
 """
-function inner₊ₓ(left::LazyOp{D}, right::LazyOp{D}) where {D}
-    BilinearProduct{D, InnerPlus{1}, typeof(left), typeof(right)}(left, right)
+function inner₊ₓ(left::LazyOp{D}, right::LazyOp{D};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
+    _restrict_by_markers(
+        BilinearProduct{D, InnerPlus{1}, typeof(left), typeof(right)}(left, right), markers)
 end
-function inner₊ᵧ(left::LazyOp{D}, right::LazyOp{D}) where {D}
-    BilinearProduct{D, InnerPlus{2}, typeof(left), typeof(right)}(left, right)
+function inner₊ᵧ(left::LazyOp{D}, right::LazyOp{D};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
+    _restrict_by_markers(
+        BilinearProduct{D, InnerPlus{2}, typeof(left), typeof(right)}(left, right), markers)
 end
-function inner₊₂(left::LazyOp{D}, right::LazyOp{D}) where {D}
-    BilinearProduct{D, InnerPlus{3}, typeof(left), typeof(right)}(left, right)
+function inner₊₂(left::LazyOp{D}, right::LazyOp{D};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
+    _restrict_by_markers(
+        BilinearProduct{D, InnerPlus{3}, typeof(left), typeof(right)}(left, right), markers)
 end
 
 @inline function source_number(l::Number, ::Val{D}) where {D}
@@ -231,60 +299,83 @@ end
     return SourceFunction{D, typeof(f)}(f)
 end
 
-# Linear Forms (e.g. innerₕ(f, v) where f is a Function, Number, or VectorElement and v is TestFunction)
-function innerₕ(l::Function, r::LazyOp{D}) where {D}
-    LinearProduct{D, InnerH, SourceFunction{D, typeof(l)}, typeof(r)}(
-        SourceFunction{
-            D, typeof(l)}(l), r)
+# Linear Forms (e.g. innerₕ(f, v) where f is a Function, Number, or VectorElement and v is
+# TestFunction). `markers` restricts each the same way it does the bilinear forms above — a
+# mask on which grid points the source term contributes to at all.
+function innerₕ(l::Function, r::LazyOp{D};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
+    _restrict_by_markers(
+        LinearProduct{D, InnerH, SourceFunction{D, typeof(l)}, typeof(r)}(
+            SourceFunction{D, typeof(l)}(l), r),
+        markers)
 end
-function innerₕ(l::Number, r::LazyOp{D}) where {D}
-    let sf = source_number(l, Val(D))
-        LinearProduct{D, InnerH, typeof(sf), typeof(r)}(sf, r)
-    end
+function innerₕ(l::Number, r::LazyOp{D};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
+    sf = source_number(l, Val(D))
+    _restrict_by_markers(
+        LinearProduct{D, InnerH, typeof(sf), typeof(r)}(sf, r), markers)
 end
-function innerₕ(l::VectorElement, r::LazyOp{D}) where {D}
-    LinearProduct{D, InnerH, SourceVector{D, typeof(l.data)}, typeof(r)}(
-        SourceVector{D, typeof(l.data)}(l.data), r)
-end
-
-function inner₊(l::Function, r::LazyOp{D}) where {D}
-    LinearProduct{D, InnerPlus{1}, SourceFunction{D, typeof(l)}, typeof(r)}(
-        SourceFunction{
-            D, typeof(l)}(l), r)
-end
-function inner₊(l::Number, r::LazyOp{D}) where {D}
-    let sf = source_number(l, Val(D))
-        LinearProduct{D, InnerPlus{1}, typeof(sf), typeof(r)}(sf, r)
-    end
-end
-function inner₊(l::VectorElement, r::LazyOp{D}) where {D}
-    LinearProduct{D, InnerPlus{1}, SourceVector{D, typeof(l.data)}, typeof(r)}(
-        SourceVector{D, typeof(l.data)}(l.data), r)
+function innerₕ(l::VectorElement, r::LazyOp{D};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
+    _restrict_by_markers(
+        LinearProduct{D, InnerH, SourceVector{D, typeof(l.data)}, typeof(r)}(
+            SourceVector{D, typeof(l.data)}(l.data), r),
+        markers)
 end
 
-function inner₊(l::NTuple{D, Function}, r::NTuple{D, LazyOp{D}}) where {D}
-    foldl(+,
-        ntuple(
-            dim -> LinearProduct{
-                D, InnerPlus{dim}, SourceFunction{D, typeof(l[dim])}, typeof(r[dim])}(
-                SourceFunction{D, typeof(l[dim])}(l[dim]), r[dim]),
-            Val(D)))
+function inner₊(l::Function, r::LazyOp{D};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
+    _restrict_by_markers(
+        LinearProduct{D, InnerPlus{1}, SourceFunction{D, typeof(l)}, typeof(r)}(
+            SourceFunction{D, typeof(l)}(l), r),
+        markers)
 end
-function inner₊(l::NTuple{D, Number}, r::NTuple{D, LazyOp{D}}) where {D}
-    foldl(+,
-        ntuple(
-            dim -> let sf = source_number(l[dim], Val(D))
-                LinearProduct{D, InnerPlus{dim}, typeof(sf), typeof(r[dim])}(sf, r[dim])
-            end, Val(D)))
+function inner₊(l::Number, r::LazyOp{D};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
+    sf = source_number(l, Val(D))
+    _restrict_by_markers(
+        LinearProduct{D, InnerPlus{1}, typeof(sf), typeof(r)}(sf, r), markers)
 end
-@inline function inner₊(l::NTuple{D, VectorElement}, r::NTuple{D, LazyOp{D}}) where {D}
-    if is_symbolic(r)
-        return foldl(+,
+function inner₊(l::VectorElement, r::LazyOp{D};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
+    _restrict_by_markers(
+        LinearProduct{D, InnerPlus{1}, SourceVector{D, typeof(l.data)}, typeof(r)}(
+            SourceVector{D, typeof(l.data)}(l.data), r),
+        markers)
+end
+
+function inner₊(l::NTuple{D, Function}, r::NTuple{D, LazyOp{D}};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
+    _restrict_by_markers(
+        foldl(+,
             ntuple(
                 dim -> LinearProduct{
-                    D, InnerPlus{dim}, SourceVector{D, typeof(l[dim].data)}, typeof(r[dim])}(
-                    SourceVector{D, typeof(l[dim].data)}(l[dim].data), r[dim]),
-                Val(D)))
+                    D, InnerPlus{dim}, SourceFunction{D, typeof(l[dim])}, typeof(r[dim])}(
+                    SourceFunction{D, typeof(l[dim])}(l[dim]), r[dim]),
+                Val(D))),
+        markers)
+end
+function inner₊(l::NTuple{D, Number}, r::NTuple{D, LazyOp{D}};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
+    _restrict_by_markers(
+        foldl(+,
+            ntuple(
+                dim -> let sf = source_number(l[dim], Val(D))
+                    LinearProduct{D, InnerPlus{dim}, typeof(sf), typeof(r[dim])}(sf, r[dim])
+                end, Val(D))),
+        markers)
+end
+@inline function inner₊(l::NTuple{D, VectorElement}, r::NTuple{D, LazyOp{D}};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
+    if is_symbolic(r)
+        return _restrict_by_markers(
+            foldl(+,
+                ntuple(
+                    dim -> LinearProduct{D, InnerPlus{dim},
+                        SourceVector{D, typeof(l[dim].data)}, typeof(r[dim])}(
+                        SourceVector{D, typeof(l[dim].data)}(l[dim].data), r[dim]),
+                    Val(D))),
+            markers)
     else
         return _inner₊_numeric_tuple_unsupported(r)
     end
@@ -309,49 +400,64 @@ end
         "inner₊ of two grid functions directly."))
 end
 
-function inner₊ₓ(l::Function, r::LazyOp{D}) where {D}
-    LinearProduct{D, InnerPlus{1}, SourceFunction{D, typeof(l)}, typeof(r)}(
-        SourceFunction{
-            D, typeof(l)}(l), r)
+function inner₊ₓ(l::Function, r::LazyOp{D};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
+    _restrict_by_markers(
+        LinearProduct{D, InnerPlus{1}, SourceFunction{D, typeof(l)}, typeof(r)}(
+            SourceFunction{D, typeof(l)}(l), r),
+        markers)
 end
-function inner₊ᵧ(l::Function, r::LazyOp{D}) where {D}
-    LinearProduct{D, InnerPlus{2}, SourceFunction{D, typeof(l)}, typeof(r)}(
-        SourceFunction{
-            D, typeof(l)}(l), r)
+function inner₊ᵧ(l::Function, r::LazyOp{D};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
+    _restrict_by_markers(
+        LinearProduct{D, InnerPlus{2}, SourceFunction{D, typeof(l)}, typeof(r)}(
+            SourceFunction{D, typeof(l)}(l), r),
+        markers)
 end
-function inner₊₂(l::Function, r::LazyOp{D}) where {D}
-    LinearProduct{D, InnerPlus{3}, SourceFunction{D, typeof(l)}, typeof(r)}(
-        SourceFunction{
-            D, typeof(l)}(l), r)
-end
-
-function inner₊ₓ(l::Number, r::LazyOp{D}) where {D}
-    let sf = source_number(l, Val(D))
-        LinearProduct{D, InnerPlus{1}, typeof(sf), typeof(r)}(sf, r)
-    end
-end
-function inner₊ᵧ(l::Number, r::LazyOp{D}) where {D}
-    let sf = source_number(l, Val(D))
-        LinearProduct{D, InnerPlus{2}, typeof(sf), typeof(r)}(sf, r)
-    end
-end
-function inner₊₂(l::Number, r::LazyOp{D}) where {D}
-    let sf = source_number(l, Val(D))
-        LinearProduct{D, InnerPlus{3}, typeof(sf), typeof(r)}(sf, r)
-    end
+function inner₊₂(l::Function, r::LazyOp{D};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
+    _restrict_by_markers(
+        LinearProduct{D, InnerPlus{3}, SourceFunction{D, typeof(l)}, typeof(r)}(
+            SourceFunction{D, typeof(l)}(l), r),
+        markers)
 end
 
-function inner₊ₓ(l::VectorElement, r::LazyOp{D}) where {D}
-    LinearProduct{D, InnerPlus{1}, SourceVector{D, typeof(l.data)}, typeof(r)}(
-        SourceVector{D, typeof(l.data)}(l.data), r)
+function inner₊ₓ(l::Number, r::LazyOp{D};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
+    sf = source_number(l, Val(D))
+    _restrict_by_markers(LinearProduct{D, InnerPlus{1}, typeof(sf), typeof(r)}(sf, r), markers)
 end
-function inner₊ᵧ(l::VectorElement, r::LazyOp{D}) where {D}
-    LinearProduct{D, InnerPlus{2}, SourceVector{D, typeof(l.data)}, typeof(r)}(
-        SourceVector{D, typeof(l.data)}(l.data), r)
+function inner₊ᵧ(l::Number, r::LazyOp{D};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
+    sf = source_number(l, Val(D))
+    _restrict_by_markers(LinearProduct{D, InnerPlus{2}, typeof(sf), typeof(r)}(sf, r), markers)
 end
-function inner₊₂(l::VectorElement, r::LazyOp{D}) where {D}
-    LinearProduct{D, InnerPlus{3}, SourceVector{D, typeof(l.data)}, typeof(r)}(
-        SourceVector{D, typeof(l.data)}(l.data), r)
+function inner₊₂(l::Number, r::LazyOp{D};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
+    sf = source_number(l, Val(D))
+    _restrict_by_markers(LinearProduct{D, InnerPlus{3}, typeof(sf), typeof(r)}(sf, r), markers)
+end
+
+function inner₊ₓ(l::VectorElement, r::LazyOp{D};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
+    _restrict_by_markers(
+        LinearProduct{D, InnerPlus{1}, SourceVector{D, typeof(l.data)}, typeof(r)}(
+            SourceVector{D, typeof(l.data)}(l.data), r),
+        markers)
+end
+function inner₊ᵧ(l::VectorElement, r::LazyOp{D};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
+    _restrict_by_markers(
+        LinearProduct{D, InnerPlus{2}, SourceVector{D, typeof(l.data)}, typeof(r)}(
+            SourceVector{D, typeof(l.data)}(l.data), r),
+        markers)
+end
+function inner₊₂(l::VectorElement, r::LazyOp{D};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
+    _restrict_by_markers(
+        LinearProduct{D, InnerPlus{3}, SourceVector{D, typeof(l.data)}, typeof(r)}(
+            SourceVector{D, typeof(l.data)}(l.data), r),
+        markers)
 end
 
 # ==============================================================================
@@ -423,6 +529,15 @@ end
 # One method for `Tuple{}` settles all of them. It throws rather than returning zero: an
 # empty tuple carries no direction to integrate over, so reaching here means a caller
 # built a form with no components, and a silent zero would hide that.
-@noinline function inner₊(::Tuple{}, ::Tuple{})
+#=
+Needs its own `markers` keyword, not just the positional disambiguation: with `markers` added
+to every `NTuple{D,...}` overload above, they all tie again at `D = 0` specifically for the
+*keyword-call* dispatch (`Tuple{}` matches `NTuple{0,LazyOp{0}}`, `NTuple{0,Function}`,
+`NTuple{0,Number}`, `NTuple{0,VectorElement}` and `NTuple{0,<:Tuple}` identically), even
+though the plain positional call already resolves through this method with no keywords at
+all. Aqua's ambiguity check is what caught it.
+=#
+@noinline function inner₊(::Tuple{}, ::Tuple{};
+        markers::NTuple{M, Symbol} = NTuple{0, Symbol}()) where {M}
     throw(ArgumentError("inner₊ needs at least one component; got two empty tuples"))
 end

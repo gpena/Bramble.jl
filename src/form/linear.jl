@@ -692,6 +692,7 @@ function assemble!(b::Vector, form::LinearForm{D, TestSpace, FType};
     space = form.test_space
     Ωₕ = mesh(space)
     mesh_markers = markers(Ωₕ)
+    _validate_term_markers(ast, mesh_markers, "the form's space")
     lin_indices = LinearIndices(indices(Ωₕ))
 
     _assemble_linear_core!(b, space, ast, lin_indices, mesh_markers)
@@ -732,6 +733,7 @@ function assemble_parallel!(b::AbstractVector,
     space = form.test_space
     Ωₕ = mesh(space)
     mesh_markers = markers(Ωₕ)
+    _validate_term_markers(ast, mesh_markers, "the form's space")
     lin_indices = LinearIndices(indices(Ωₕ))
 
     # The sweep accumulates, where the version this replaces overwrote `b` from the buffer

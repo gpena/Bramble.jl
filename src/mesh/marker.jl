@@ -154,8 +154,77 @@ function set_markers!(Ωₕ::AbstractMeshType, domain_markers)
     # Process markers identified by user-defined functions (level-set conditions).
     _set_markers_conditions!(mesh_markers, conditions(domain_markers), Ωₕ)
 
+    # `:boundary`/`:interior` are reserved, always-available markers — see the note above
+    # `_ensure_geometric_markers!`.
+    _ensure_geometric_markers!(mesh_markers, Ωₕ)
+
     # Assign the populated markers dictionary to the mesh object.
     Ωₕ.markers = mesh_markers
+end
+
+#=
+Every mesh carries `:boundary` and `:interior`, computed from the mesh's own shape rather
+than from anything the user registered — every other label depends on a `domain(...)` call
+naming it, and a mesh built with only custom labels (or none at all) had neither. That gap
+was silent and wrong in one specific way: `RegionRestriction`'s `local_stencil`
+(form/operators/restriction.jl) reads `:interior` as "not `:boundary`", and when no
+`:boundary` key exists, `haskey` returning `false` for every point made `:interior` silently
+mean *the whole domain* rather than throwing or refusing.
+
+`:boundary` is computed via `boundary_symbol_to_dict` — the same face ranges `domain(X)`'s
+zero-argument convenience already marks via `get_boundary_symbols` — rather than via
+`is_boundary_index`, which answers a related but *not* identical question: it excludes a
+degenerate (length-1) dimension from making a point count as boundary (right, for
+`interior_indices`'s purpose — a degenerate axis has nothing to shrink), where the face-based
+definition marks `:left` and `:right` at the same single point regardless. A collapsed 1D
+mesh (a single point) surfaces the difference directly, and existing tests already rely on
+the face-based answer through `domain(X)`. Matching it exactly, rather than introducing a
+second, diverging definition of "boundary", is what keeps this addition non-breaking.
+`:interior` is then genuinely new — no pre-existing convention to match — so it is simply the
+logical complement, consistent with what the `:interior`-as-"not `:boundary`" special case
+already meant.
+=#
+
+"""
+    _ensure_geometric_markers!(mesh_markers, Ωₕ)
+
+Seeds `:boundary`/`:interior` from the mesh's own geometry, but only where the domain did not
+already register a label under that name: `:boundary`/`:interior` were already usable as
+ordinary custom label names before this existed (`test/mesh/meshes.jl`'s "2D Domain to Mesh"
+has a `:boundary` defined by its own tolerance-based condition, for instance), so this adds a
+default rather than reserving the name outright. When the two happen to disagree — the
+existing label does not describe the same set of points the geometric one would — that is
+worth knowing about even though it is not an error: `restrict_to(:interior, ...)`/
+`restrict_to(:boundary, ...)` elsewhere in the package assume the geometric meaning, and a
+mesh whose `:boundary` means something else will not behave the way those call sites expect.
+"""
+function _ensure_geometric_markers!(mesh_markers::MeshMarkers, Ωₕ::AbstractMeshType)
+    linear_indices = LinearIndices(npoints(Ωₕ, Tuple))
+    boundary_set = falses(npoints(Ωₕ))
+    for idxs in values(boundary_symbol_to_dict(indices(Ωₕ)))
+        _mark_indices!(boundary_set, linear_indices, idxs)
+    end
+
+    _default_geometric_marker!(mesh_markers, :boundary, boundary_set)
+    _default_geometric_marker!(mesh_markers, :interior, .!boundary_set)
+    return nothing
+end
+
+function _default_geometric_marker!(mesh_markers::MeshMarkers, label::Symbol, geometric::BitVector)
+    if haskey(mesh_markers, label)
+        mesh_markers[label] == geometric || _warn_geometric_marker_mismatch(label)
+    else
+        mesh_markers[label] = geometric
+    end
+    return nothing
+end
+
+@noinline function _warn_geometric_marker_mismatch(label::Symbol)
+    @warn ":$label is defined here to mean something other than the mesh's own geometric " *
+          "$(label === :boundary ? "boundary" : "interior") — every boundary face for " *
+          ":boundary, its complement for :interior. restrict_to(:$label, ...) and " *
+          "innerₕ(...; markers = (:$label,)) will use this mesh's own definition, not the " *
+          "geometric one; give the custom label a different name to avoid the ambiguity."
 end
 
 """

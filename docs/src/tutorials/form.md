@@ -262,6 +262,46 @@ Whether threading pays depends on the size, and not always in the obvious direct
 assembly is memory-bound, so the gain flattens well before the thread count does. The
 [benchmarks](../benchmarks.md) page carries the measurements.
 
+## 8. Restricting a term to part of the mesh
+
+`innerₕ`, `inner₊` and the directional products all take a `markers` keyword, restricting the
+sum to the union of the regions the labels name — the same idea as `restrict_to`, spelled at
+the call site rather than wrapping an argument:
+
+```@example forms
+a_left = form(Wd, Wd, (u, v) -> innerₕ(u, v; markers = (:left,)))
+size(assemble(a_left))
+```
+
+Every mesh also carries `:boundary` and `:interior` automatically, computed from its own
+shape rather than needing any label set up in `domain(...)`:
+
+```@example forms
+a_boundary = form(Wd, Wd, (u, v) -> innerₕ(u, v; markers = (:boundary,)))
+size(assemble(a_boundary))
+```
+
+This is a masked *sum* of the existing cell measures — not a surface integral, and the two
+are not interchangeable; a masked `innerₕ` scales like `h` and vanishes under refinement,
+where a true boundary integral does not. `markers` is for the former; a Neumann or Robin
+term needing the latter is a separate, not-yet-built piece (`inner_Γ`).
+
+A marker that does not exist anywhere the term reaches is a loud error rather than a silent
+all-zero contribution — `RegionRestriction`'s own per-point check cannot tell "nothing here
+is marked" from "no such marker", so this is caught once, before assembling anything:
+
+```@example forms
+try
+    assemble(form(Wd, Wd, (u, v) -> innerₕ(u, v; markers = (:nope,))))
+catch e
+    println(e)
+end
+```
+
+On a composite space, a marker used without naming a component reaches every diagonal block,
+and has to exist on every leaf that reaches — write the term per component, each with its own
+markers, if it does not.
+
 ## Where to go next
 
 The [internals page on forms](../internals/form.md) documents the colouring and the stencil
