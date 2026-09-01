@@ -1,3 +1,4 @@
 [deps]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 Bramble = "72287966-2ff3-4442-8755-61ed245be5f7"
+DoubleFloats = "497a8b3b-efae-58df-a0af-a86822472b78"

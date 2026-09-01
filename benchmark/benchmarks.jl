@@ -1,7 +1,7 @@
 #===========================================================================#
 # Performance regression suite.
 #
-# Six benchmarks, chosen to cover the paths where every slowdown found so far
+# Ten groups, chosen to cover the paths where every slowdown found so far
 # actually appeared, rather than to cover the API. Run it before tagging:
 #
 #     julia --project=benchmark benchmark/benchmarks.jl
@@ -39,6 +39,7 @@
 
 using BenchmarkTools
 using Bramble
+using DoubleFloats: Double64
 
 # Nothing is imported beyond `Bramble` itself. PkgBenchmark and AirspeedVelocity `include`
 # this file, so whatever it brings in lands in the including module, and `using Bramble`
@@ -137,6 +138,90 @@ let jl = Base.julia_cmd(),
     g["TTFX (load + first operator)"] = @benchmarkable run($cmd_ttfx) samples=3 evals=1
 end
 
+# --- 9. form assembly ----------------------------------------------------- #
+#
+# `form`, `assemble` and friends are not exported, so they are reached through
+# `Bramble.` rather than imported: the note at the top of this file keeps the
+# including module free of everything but `Bramble` itself.
+#
+# The matrix path uses a smaller grid than the vector path. Matrix assembly costs
+# an order more than a vector fill at the same size, and what is being watched
+# here is the allocation count and the shape of the cost, neither of which needs
+# a million degrees of freedom to show a regression.
+let W1 = gridspace(_mesh1()), f1 = Rₕ(W1, sin), v1 = Rₕ(W1, cos),
+    l1 = Bramble.form(W1, v -> innerₕ(f1, v)),
+    b1 = Bramble.assemble(l1), ast1 = Bramble.resolve_form_ast(l1),
+    W2 = gridspace(_mesh2()), f2 = Rₕ(W2, x -> sin(x[1]) * x[2]),
+    l2 = Bramble.form(W2, v -> innerₕ(f2, v)),
+    b2 = Bramble.assemble(l2), ast2 = Bramble.resolve_form_ast(l2),
+    Wm = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)),
+        (300, 300), (true, true))),
+    am = Bramble.form(Wm, Wm, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v))),
+    Am = Bramble.assemble(am), astm = Bramble.resolve_form_ast(am)
+
+    g = SUITE["forms"] = BenchmarkGroup()
+
+    # construction, which built the whole AST eagerly until recently: a linear
+    # form cost 48 MB and a bilinear one 9.3 MB, where both are now under 400 KB.
+    #
+    # These two measure 0.001 ns, which is BenchmarkTools reporting that the call
+    # was optimised away: a form is now three stored fields and nothing else, so
+    # there is no work left to elide. Kept as a regression guard rather than a
+    # measurement — reintroduce eager work and the number stops being zero.
+    g["form (linear, 2D)"] = @benchmarkable Bramble.form($W2, v -> innerₕ($f2, v))
+    g["form (bilinear, 2D)"] = @benchmarkable Bramble.form(
+        $Wm, $Wm, (u, v) -> innerₕ(u, v))
+
+    # filling a vector that already exists, which is the time-loop call
+    g["assemble! 1D"] = @benchmarkable Bramble.assemble!($b1, $l1; ast = $ast1)
+    # `assemble_parallel!` takes the AST positionally where `assemble!` takes it as a
+    # keyword — an inconsistency between the two entry points, not a typo here.
+    g["assemble_parallel! 1D"] = @benchmarkable Bramble.assemble_parallel!(
+        $b1, $l1, $ast1)
+    g["assemble! 2D"] = @benchmarkable Bramble.assemble!($b2, $l2; ast = $ast2)
+    g["assemble_parallel! 2D"] = @benchmarkable Bramble.assemble_parallel!(
+        $b2, $l2, $ast2)
+
+    # the fused contraction builds no vector at all, so it must allocate nothing
+    g["l(vₕ) 1D"] = @benchmarkable $l1($v1)
+    g["evaluate! 1D"] = @benchmarkable Bramble.evaluate!($b1, $l1, $v1; ast = $ast1)
+
+    # the matrix: the pattern is built once, then refilled in place
+    g["allocate_system_matrix 2D"] = @benchmarkable Bramble.allocate_system_matrix($am) samples=5 evals=1
+    g["assemble! (matrix) 2D"] = @benchmarkable Bramble.assemble!(
+        $Am, $am; ast = $astm) samples=5 evals=1
+end
+
+# --- 10. the same work in three precisions -------------------------------- #
+#
+# Until the stencil weights were typed, a Float32 form assembled a Float64
+# vector, so timing single precision measured double precision and this
+# comparison could not have meant anything. It can now.
+#
+# 1D and 100,000 points: above PARALLEL_FOR_MIN, and small enough that Double64,
+# which is software arithmetic and an order slower, does not dominate the suite.
+# `avgₕ!` is the expensive one either way — six quadrature nodes per point — and
+# it is the path where `_gauss_rule` is built per call for an extended type.
+let N = 100_000
+    g = SUITE["precision 1D"] = BenchmarkGroup()
+
+    for (lbl, T) in (("Float32", Float32), ("Float64", Float64),
+        ("Double64", Double64))
+        Ω = mesh(domain(interval(T(0), T(1))), N, true)
+        W = gridspace(Ω)
+        u = element(W)
+        fₕ = Rₕ(W, sin)
+        l = Bramble.form(W, v -> innerₕ(fₕ, v))
+        b = Bramble.assemble(l)
+        ast = Bramble.resolve_form_ast(l)
+
+        g["Rₕ! $lbl"] = @benchmarkable Rₕ!($u, sin)
+        g["avgₕ! $lbl"] = @benchmarkable avgₕ!($u, sin) samples=20
+        g["assemble! $lbl"] = @benchmarkable Bramble.assemble!($b, $l; ast = $ast)
+        g["innerₕ $lbl"] = @benchmarkable innerₕ($fₕ, $fₕ)
+    end
+end
+
 # --- allocation bounds, which are the part worth gating ------------------- #
 #
 # The number an operator is allowed to allocate is one output vector: the
@@ -165,7 +250,33 @@ const ALLOCATION_BOUNDS = Dict(
     ("jumps & averages", "M₊ₓ 2D") => 3,
     ("jumps & averages", "M₊ᵧ 2D") => 3,
     ("jumps & averages", "jump₂ 3D") => 3,
-    ("jumps & averages", "M₊₂ 3D") => 3)
+    ("jumps & averages", "M₊₂ 3D") => 3,
+    # form assembly. Only the zeros are gated, deliberately: `assemble_parallel!`
+    # and `Rₕ!`/`avgₕ!` allocate one task set per call, so their counts move with
+    # the thread count, and `allocate_system_matrix` builds three coordinate
+    # vectors whose count can move with the Julia version. Those are printed
+    # every run and read by a person, which is how the `restriction` group is
+    # already treated.
+    #
+    # A vector fill into a buffer that exists allocates nothing, and neither does
+    # refilling a sparse matrix whose pattern is fixed. The contraction is the
+    # sharpest of them: `l(vₕ)` builds no vector at all, and was 721,168 B before
+    # it was fused.
+    ("forms", "assemble! 1D") => 0,
+    ("forms", "assemble! 2D") => 0,
+    ("forms", "assemble! (matrix) 2D") => 0,
+    ("forms", "evaluate! 1D") => 0,
+    ("forms", "l(vₕ) 1D") => 0,
+    ("forms", "form (linear, 2D)") => 0,
+    ("forms", "form (bilinear, 2D)") => 0,
+    # the same assembly in three precisions: none of them may allocate, and the
+    # reduction is the path where a widened element type would show first
+    ("precision 1D", "assemble! Float32") => 0,
+    ("precision 1D", "assemble! Float64") => 0,
+    ("precision 1D", "assemble! Double64") => 0,
+    ("precision 1D", "innerₕ Float32") => 0,
+    ("precision 1D", "innerₕ Float64") => 0,
+    ("precision 1D", "innerₕ Double64") => 0)
 
 """
 	check_allocations(results)
