@@ -98,7 +98,7 @@ end
 @inline function _avg_masked!(uₕ::VectorElement{<:ScalarGridSpace}, f, masks, x,
         ::Type{T}, nq::Val, dv::Val) where {T}
     _masked_for!(to_matrix(uₕ), masks, _cell_average_kernel(
-        f, x, nq, T, dv, _rule_folds(T)))
+        f, x, nq, T, dv))
     return nothing
 end
 
@@ -115,7 +115,7 @@ end
         ::Type{T}, nq::Val, dv::Val) where {NC, T}
     mats = ntuple(i -> to_matrix(components(uₕ)[i]), Val(NC))
     _masked_scatter_for!(mats, masks,
-        _cell_average_kernel(f, x, nq, T, dv, Val(NC), _rule_folds(T)))
+        _cell_average_kernel(f, x, nq, T, dv, Val(NC)))
     return nothing
 end
 
@@ -139,7 +139,7 @@ function _avgₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f, ::Val{1}, nq::Val)
     T = eltype(Ωₕ)
 
     _parallel_for!(values(uₕ), indices(Ωₕ),
-        _cell_average_kernel(f, x, nq, T, Val(1), _rule_folds(T));
+        _cell_average_kernel(f, x, nq, T, Val(1));
         min_work = _avg_min_work(Val(1), nq))
     return nothing
 end
@@ -150,7 +150,7 @@ function _avgₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f, ::Val{D}, nq::Val) 
     T = eltype(Ωₕ)
 
     _parallel_for!(to_matrix(uₕ), indices(Ωₕ),
-        _cell_average_kernel(f, x, nq, T, Val(D), _rule_folds(T));
+        _cell_average_kernel(f, x, nq, T, Val(D));
         min_work = _avg_min_work(Val(D), nq))
     return nothing
 end
@@ -171,7 +171,7 @@ function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f, ::Val{D}, nq
     mats = ntuple(i -> to_matrix(components(uₕ)[i]), Val(NC))
 
     _scatter_for!(mats, indices(Ωₕ),
-        _cell_average_kernel(f, x, nq, T, Val(D), Val(NC), _rule_folds(T));
+        _cell_average_kernel(f, x, nq, T, Val(D), Val(NC));
         min_work = _avg_min_work(Val(D), nq))
     return nothing
 end
@@ -270,70 +270,49 @@ end
 # Kernel form of the cell average: closes over the geometry so it can be handed to a
 # generic index loop.
 #
-# The quadrature rule is fetched inside the kernel rather than closed over, wherever it is
-# a compile-time constant. `_gauss_rule` is `@generated` and folds to an `SVector` literal
-# for any isbits element type, so the call costs nothing and the closure does not have to
-# carry the rule.
+# The quadrature rule is built once, outside the kernel, and captured by it. That costs
+# `SVector{6,T}` twice — 96 bytes for `Float64`, stored inline because it is isbits — and
+# `Threads.@threads` gives each task its own copy of the closure, so it is paid once per
+# thread per call. Measured as the per-thread gap between `avgₕ!` at 472 B and `Rₕ!` at
+# 376 B.
 #
-# It carried 96 bytes of it before: `SVector{6,Float64}` is isbits, so `nodes` and `wts`
-# were stored inline by value, 48 bytes each, where the mesh and the half-points vector
-# cost 8 bytes apiece as pointers. `Threads.@threads` gives each task its own copy of the
-# closure, so those 96 bytes were paid once per thread on every call — measured as the
-# whole of the per-thread gap between `avgₕ!` at 472 B and `Rₕ!` at 376 B. The closure is
-# now 16 bytes rather than 104, and the loop runs within noise of the old one.
+# It used to be fetched *inside* the kernel for `Float16`/`Float32`/`Float64`, to avoid
+# exactly that: `_gauss_rule` is `@generated` and folds to an `SVector` literal, so the
+# closure shrank to 16 bytes from 104 and the loop ran within noise of the old one.
 #
-# `BigFloat` is the exception the `Val{false}` methods exist for. Its precision is a
-# run-time setting, so `_gauss_rule` cannot fold and builds the rule per call; fetching
-# inside the kernel would rebuild it at every grid point. There the rule is still built
-# once and captured, which is what the old code did for every type.
-# Whether `_gauss_rule` reduces to a compile-time constant for `T`, and so can be called
-# from inside the kernel rather than hoisted out of it.
+# That fold is not guaranteed, and on x86_64 Linux it does not happen. CI measured `avgₕ!`
+# at exactly 80 bytes per grid point — 83,887,904 B on a 1024x1024 mesh, against a 100,000
+# bound — while the same commit measured 0 B per point on aarch64 macOS. Both the serial
+# and the threaded path showed it, so it is codegen, not threading.
 #
-# This is a whitelist, not `isbitstype(T)`, and the difference matters. `Double64` is an
-# isbits type, and `_gauss_rule` takes its constant-folding branch for it, but the branch
-# does not actually fold: building the `SVector{6,Double64}` costs 3184 bytes per call. On
-# the fetch-inside path that is paid once per grid point rather than once per call —
-# measured at 2977 B per point against 0 for `Float64` — which is a far worse trade than
-# the 96 bytes per thread the fetch-inside path saves.
+# What made it expensive to diagnose: a probe that built the kernel and called it directly
+# reported the fold surviving *on the failing machine*. Calling the closure on its own
+# folds; inlining it into `_parallel_for!`'s loop does not. So the probe has to measure the
+# real path, and the test now does.
 #
-# There is no way to ask the compiler whether a call will fold, so the safe default is to
-# capture, and only the types measured to fold opt in. A new extended-precision type gets
-# the old behaviour, which costs it nothing it was not already paying.
-@inline _rule_folds(::Type{<:Union{Float16, Float32, Float64}}) = Val(true)
-@inline _rule_folds(::Type{T}) where {T} = Val(false)
-
-@inline _cell_average_kernel(
-    f, x, nq::Val, ::Type{T}, ::Val{1}, ::Val{true}) where {T} = idx -> _cell_average(
-    f, x, idx[1], _gauss_rule(nq, T)...)
-@inline _cell_average_kernel(
-    f, x, nq::Val, ::Type{T}, ::Val{D}, ::Val{true}) where {D, T} = idx -> _cell_average(
-    f, x, idx, _gauss_rule(nq, T)...)
-
-@inline function _cell_average_kernel(
-        f, x, nq::Val, ::Type{T}, ::Val{1}, ::Val{false}) where {T}
+# The trade was therefore 96 bytes per thread against 80 MiB per million points on one of
+# the two architectures we test, decided by an inlining budget nothing can query. Capturing
+# is what the code did for every type before the split, and it is what the extended types
+# always needed: `BigFloat`'s precision is a run-time setting so `_gauss_rule` cannot fold
+# at all, and `Double64` is isbits and takes the folding branch without folding, costing
+# 3184 bytes per call — 2977 B per grid point on the fetch-inside path.
+@inline function _cell_average_kernel(f, x, nq::Val, ::Type{T}, ::Val{1}) where {T}
     nodes, wts = _gauss_rule(nq, T)
     return idx -> _cell_average(f, x, idx[1], nodes, wts)
 end
-@inline function _cell_average_kernel(
-        f, x, nq::Val, ::Type{T}, ::Val{D}, ::Val{false}) where {D, T}
+@inline function _cell_average_kernel(f, x, nq::Val, ::Type{T}, ::Val{D}) where {D, T}
     nodes, wts = _gauss_rule(nq, T)
     return idx -> _cell_average(f, x, idx, nodes, wts)
 end
 
 # The composite form, one value per component.
-@inline _cell_average_kernel(f, x, nq::Val, ::Type{T}, ::Val{1}, ::Val{NC},
-    ::Val{true}) where {T, NC} = idx -> _cell_average(
-    f, x, idx[1], _gauss_rule(nq, T)..., Val(NC))
-@inline _cell_average_kernel(f, x, nq::Val, ::Type{T}, ::Val{D}, ::Val{NC},
-    ::Val{true}) where {D, T, NC} = idx -> _cell_average(
-    f, x, idx, _gauss_rule(nq, T)..., Val(NC))
 @inline function _cell_average_kernel(
-        f, x, nq::Val, ::Type{T}, ::Val{1}, ::Val{NC}, ::Val{false}) where {T, NC}
+        f, x, nq::Val, ::Type{T}, ::Val{1}, ::Val{NC}) where {T, NC}
     nodes, wts = _gauss_rule(nq, T)
     return idx -> _cell_average(f, x, idx[1], nodes, wts, Val(NC))
 end
 @inline function _cell_average_kernel(
-        f, x, nq::Val, ::Type{T}, ::Val{D}, ::Val{NC}, ::Val{false}) where {D, T, NC}
+        f, x, nq::Val, ::Type{T}, ::Val{D}, ::Val{NC}) where {D, T, NC}
     nodes, wts = _gauss_rule(nq, T)
     return idx -> _cell_average(f, x, idx, nodes, wts, Val(NC))
 end

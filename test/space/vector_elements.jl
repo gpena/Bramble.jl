@@ -417,35 +417,27 @@ end
             small = avg_bytes(32)      # 1_024 degrees of freedom
             large = avg_bytes(1024)    # 1_048_576 degrees of freedom
 
-            # Instrumentation, not assertion. This pair has failed on CI at 80 MiB — which
-            # is 80 bytes per grid point, the size of rebuilding the quadrature rule at
-            # every one — while passing on the same Julia and platform locally. The
-            # `Val(true)` kernel path calls `_gauss_rule` *inside* the per-index closure
-            # and relies on the `@generated` function folding to a constant; constant
-            # folding depends on the inlining budget, and CI runs `--check-bounds=yes`,
-            # which changes it.
+            # Instrumentation, not assertion. This pair failed on CI at 83,887,904 B,
+            # which is exactly 80 bytes per grid point plus the 1,824 B of fixed cost
+            # measured locally: the quadrature rule rebuilt at every point. It reproduced
+            # only on x86_64 Linux — aarch64 macOS measured 0 B per point on the same
+            # commit — because the kernel relied on `@generated _gauss_rule` folding to a
+            # literal, and that fold happens on one architecture and not the other.
             #
-            # So report whether the fold survived, rather than leaving the next failure to
-            # be guessed at again. `_gauss_rule_runtime` or `gauss` appearing in the
-            # closure's typed code means it did not.
-            let Ωd = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (32, 32)),
-                idx = CartesianIndex(2, 2)
-
-                g = Bramble._cell_average_kernel(
-                    f, Bramble.half_points(Ωd), Val(6), Float64, Val(2), Val(true))
-                g(idx)
-                per_index = @allocated g(idx)
-                Bramble._gauss_rule(Val(6), Float64)
-                rule = @allocated Bramble._gauss_rule(Val(6), Float64)
-                typed = string(first(code_typed(g, (typeof(idx),)))[1])
-                survived = !occursin("gauss", typed)
-
+            # The kernel now captures the rule instead of fetching it inside, so there is
+            # no fold to depend on. What is reported is the per-point cost implied by the
+            # two measurements above, which is the quantity actually under test.
+            #
+            # An earlier version of this probe built a kernel and called it directly, and
+            # reported the fold surviving on the very job that was failing — calling the
+            # closure on its own folds where inlining it into `_parallel_for!` does not.
+            # Hence measuring the real path rather than a stand-in for it.
+            let per_point = (large - small) / (1_048_576 - 1_024)
                 @info "avgₕ! allocation diagnostic: " *
                       "small=$small large=$large " *
+                      "per_point=$per_point " *
                       "check_bounds=$(Base.JLOptions().check_bounds) " *
-                      "threads=$(Threads.nthreads()) " *
-                      "rule_folds=$(Bramble._rule_folds(Float64)) " *
-                      "rule_bytes=$rule per_index=$per_index fold_survived=$survived"
+                      "threads=$(Threads.nthreads())"
             end
 
             @test large < 4 * small
@@ -736,21 +728,25 @@ end
         @test any(marked)
 
         # the nD kernel form is what the masked path uses. It takes the quadrature order
-        # and element type rather than a built rule, and fetches the rule itself.
-        k = _cell_average_kernel(x -> 1.0, half_points(Ωh), Val(3), Float64, Val(2),
-            Val(true))
+        # and element type rather than a built rule, and builds it once.
+        k = _cell_average_kernel(x -> 1.0, half_points(Ωh), Val(3), Float64, Val(2))
         @test k(first(indices(Ωh))) ≈ 1.0
 
-        # and it does not carry the rule. `_gauss_rule` is @generated and folds to an
-        # SVector literal for an isbits element type, so the kernel closes over the
-        # geometry only. It used to hold `nodes` and `wts` inline, 48 bytes each, and
-        # `Threads.@threads` copies the closure once per thread, so those 96 bytes were
-        # paid per thread on every call.
+        # It carries the rule, deliberately, so it is the same size as a closure written to
+        # capture it by hand. It used to fetch the rule inside instead, which made it 96
+        # bytes smaller — `nodes` and `wts` are isbits and stored inline, 48 bytes each,
+        # and `Threads.@threads` copies the closure once per thread — by relying on
+        # `_gauss_rule` being `@generated` and folding to an `SVector` literal.
+        #
+        # That fold is not guaranteed. On Julia 1.13 / x86_64 it did not happen, the rule
+        # was rebuilt at every grid point, and `avgₕ!` measured 83,887,904 B on a 1024x1024
+        # mesh against a 100,000 bound. 96 bytes per thread per call is the price of not
+        # depending on an inlining budget nothing can query.
         nodes, wts = _gauss_rule(Val(3), Float64)
         carrying = let f = (x -> 1.0), x = half_points(Ωh), nodes = nodes, wts = wts
             idx -> Bramble._cell_average(f, x, idx, nodes, wts)
         end
-        @test sizeof(k) < sizeof(carrying)
+        @test sizeof(k) == sizeof(carrying)
         @test k(first(indices(Ωh))) ≈ carrying(first(indices(Ωh)))
     end
 end
