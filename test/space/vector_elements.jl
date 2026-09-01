@@ -1,7 +1,14 @@
 import Bramble: VectorElement, spacing, points, half_points, space, values, ndofs, values!,
-                _func2array!, half_spacings_iterator, half_points_iterator, indices, point
+                half_spacings_iterator, half_points_iterator, indices, point
 using LinearAlgebra: norm
 using SparseArrays
+
+@inline function _func2array!(u::AbstractArray, g, mesh_indices)
+    @inbounds for idx in mesh_indices
+        u[idx] = g(idx)
+    end
+    return u
+end
 
 function valid_interior_range(i::Int, dims::NTuple{D}) where {D}
     ntuple(k -> k == i ? (2:dims[k]) : (1:dims[k]), Val(D))
@@ -651,7 +658,7 @@ end
 end
 
 @testset "Tuple-of-elements arithmetic and remaining paths" begin
-    import Bramble: values, space_type, _find_vec_in_broadcast, _func2array!,
+    import Bramble: values, space_type, _find_vec_in_broadcast,
                     _cell_average_kernel, _gauss_rule, VectorElement
 
     Ωₕ = mesh(domain(interval(0.0, 1.0)), 6, true)
@@ -722,12 +729,6 @@ end
         @test _find_vec_in_broadcast((1, 2.0, :a)) === nothing
         u = element(W)
         @test _find_vec_in_broadcast((1, u, 2)) === u
-    end
-
-    @testset "_func2array! rejects a tuple target" begin
-        # multi-component restriction dispatches per component, so a tuple must
-        # never reach the workhorse
-        @test_throws ArgumentError _func2array!((zeros(3), zeros(3)), identity, indices(Ωₕ))
     end
 
     @testset "marker-restricted restriction on a composite element" begin

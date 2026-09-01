@@ -11,18 +11,6 @@
 #                      #
 ########################
 
-# Marker-restricted evaluation. `index_in_marker` hands back a BitVector mask
-# over the linear indices, not a list of indices, so this must test the mask
-# rather than iterate it -- iterating a BitVector yields `true`/`false`, which
-# previously reached the kernel as an index.
-@inline _func2array!(u::AbstractArray, g, masks::NTuple) = _masked_for!(u, masks, g)
-
-# Whole-grid evaluation, which can run in parallel.
-@inline _func2array!(u::AbstractArray, g, mesh_indices::CartesianIndices) = _parallel_for!(u, mesh_indices, g)
-# Multi-component elements are handled by dispatching per component in `Rₕ!`,
-# so a tuple should never reach this function.
-@noinline _func2array!(::Tuple, f, mesh) = throw(ArgumentError(
-    "_func2array! received a tuple; multi-component restriction dispatches per component in Rₕ!."))
 
 """
 	$(TYPEDEF)
@@ -169,24 +157,36 @@ See also: [`Rₕ`](@ref), [`avgₕ!`](@ref), [`element`](@ref)
     Ωₕ = mesh(space)
     raw = values(uₕ)
     idxs = indices(Ωₕ)
+    n = length(idxs)
 
     if N == 0
-        @inbounds for i in 1:length(idxs)
-            raw[i] = f(point(Ωₕ, idxs[i]))
+        if Threads.nthreads() == 1 || n < PARALLEL_FOR_MIN
+            @inbounds for i in 1:n
+                raw[i] = f(point(Ωₕ, idxs[i]))
+            end
+            return uₕ
         end
+        _threaded_Rₕ!(raw, Ωₕ, idxs, f)
         return uₕ
     end
 
     fill!(raw, zero(eltype(raw)))
     for m in markers
         mask = index_in_marker(Ωₕ, m)
-        @inbounds for i in 1:length(idxs)
+        @inbounds for i in 1:n
             if mask[i]
                 raw[i] = f(point(Ωₕ, idxs[i]))
             end
         end
     end
     return uₕ
+end
+
+@noinline function _threaded_Rₕ!(raw, Ωₕ, idxs, f)
+    Threads.@threads :static for i in 1:length(idxs)
+        @inbounds raw[i] = f(point(Ωₕ, idxs[i]))
+    end
+    return nothing
 end
 
 # A one-component space is a scalar space, so generic code that builds an
@@ -211,12 +211,17 @@ end
     comps = components(uₕ)
     raws = ntuple(i -> values(comps[i]), Val(NC))
     idxs = indices(Ωₕ)
+    n = length(idxs)
 
     if N == 0
-        @inbounds for i in 1:length(idxs)
-            vals = f(point(Ωₕ, idxs[i]))
-            _scatter_comp!(raws, vals, i)
+        if Threads.nthreads() == 1 || n < PARALLEL_FOR_MIN
+            @inbounds for i in 1:n
+                vals = f(point(Ωₕ, idxs[i]))
+                _scatter_comp!(raws, vals, i)
+            end
+            return uₕ
         end
+        _threaded_scatter_Rₕ!(raws, Ωₕ, idxs, f)
         return uₕ
     end
 
@@ -225,7 +230,7 @@ end
     end
     for m in markers
         mask = index_in_marker(Ωₕ, m)
-        @inbounds for i in 1:length(idxs)
+        @inbounds for i in 1:n
             if mask[i]
                 vals = f(point(Ωₕ, idxs[i]))
                 _scatter_comp!(raws, vals, i)
@@ -233,6 +238,14 @@ end
         end
     end
     return uₕ
+end
+
+@noinline function _threaded_scatter_Rₕ!(raws, Ωₕ, idxs, f)
+    Threads.@threads :static for i in 1:length(idxs)
+        vals = f(point(Ωₕ, idxs[i]))
+        _scatter_comp!(raws, vals, i)
+    end
+    return nothing
 end
 
 # The coefficient type of a restriction is the one `f` returns, promoted against the
