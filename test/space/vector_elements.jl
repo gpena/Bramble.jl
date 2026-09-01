@@ -696,6 +696,22 @@ end
         @test all(space((2.0 * v)[i]) === space(v[i]) for i in 1:2)
     end
 
+    @testset "an inhomogeneous tuple restriction stays concrete" begin
+        # `_scalar_value_type` read the element type of a tuple return with `eltype`, and
+        # `eltype(Tuple{Float64, Int})` is `Real` — abstract, so the element was allocated as
+        # a `Vector{Real}` of boxed pointers with no contiguity and no SIMD. An integer
+        # literal among the components was enough: `x -> (1.0, 2)` measured `eltype = Real`.
+        #
+        # It promotes the field types now, which is what the arithmetic would have given.
+        Ω = mesh(domain(interval(0.0, 1.0)), 6, true)
+        V = gridspace(Ω)^Val(2)
+
+        @test eltype(values(Rₕ(V, x -> (1.0, 2)))) === Float64
+        @test eltype(values(Rₕ(V, x -> (1.0, 2.0)))) === Float64
+        @test eltype(values(Rₕ(V, x -> (1, 2)))) === Float64      # promoted against the space
+        @test values(Rₕ(V, x -> (1.0, 2))) == values(Rₕ(V, x -> (1.0, 2.0)))
+    end
+
     @testset "space_type" begin
         u = element(W)
         @test space_type(typeof(u)) === typeof(W)

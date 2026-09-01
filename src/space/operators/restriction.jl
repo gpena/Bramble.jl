@@ -231,7 +231,14 @@ end
 # `f` per restriction, against inferring it, which would have to guess at a return type
 # the compiler may not know.
 @inline _scalar_value_type(::Type{T}) where {T} = T
-@inline _scalar_value_type(::Type{T}) where {T <: Tuple} = eltype(T)
+# `eltype` of a tuple type is the join of its fields, so `eltype(Tuple{Float64, Int})` is
+# `Real` — abstract, which would make `element(Wₕ, Real)` allocate a `Vector{Real}` of boxed
+# pointers with no contiguity and no SIMD. An integer literal among the components is enough
+# to trigger it: `Rₕ(Vₕ, x -> (1.0, 2))` measured `eltype = Real`.
+#
+# `promote_type` over the field types gives what the arithmetic would give anyway — `Float64`
+# there — and is unchanged for a homogeneous tuple.
+@inline _scalar_value_type(::Type{T}) where {T <: Tuple} = promote_type(fieldtypes(T)...)
 
 @inline _restricted_value_type(f, p) = _scalar_value_type(typeof(f(p)))
 @inline _restricted_value_type(f::Tuple, p) = promote_type(map(
