@@ -44,6 +44,8 @@ jobs:
   spelling:
     name: Spell check
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: crate-ci/typos@v1.49.0
