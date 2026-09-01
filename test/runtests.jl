@@ -154,19 +154,9 @@ if __bramble_with_unit_tests
             include("form/stencil_pattern.jl")
         end
 
-        #=
-		@testset "Forms" begin
-			include("form/dirichlet_constraints.jl")
-			include("form/grid_coloring.jl")
-			include("form/forms.jl")
-			include("form/linear_forms.jl")
-			include("form/bilinear_forms.jl")
-			include("form/composite_forms.jl")
-		end
-=#
-        #=@testset "Exporters" begin
-			include("exporters/exporter_coverage.jl")
-		end=#
+        @testset verbose=true "Exporters" begin
+            include("exporters/vtk_export.jl")
+        end
     end
 end
 

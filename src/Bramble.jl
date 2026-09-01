@@ -104,10 +104,12 @@ export form, assemble, assemble!, assemble_parallel!, allocate_system_matrix, ev
 #=
 export ⋅
 =#
-#=
-# Exporters
-export ExporterVTK, addScalarDataset!, datasets, save2file, close
-=#
+
+# `export_vtk` is documented and defined here, in the main package, and errors by default;
+# `ext/BrambleVTKExt.jl` overrides the internal `_export_vtk` it calls. Same idiom as
+# `metal_backend`, so the docstring lives in one place and a caller without WriteVTK loaded
+# gets a message that says so, not a bare `MethodError`.
+export export_vtk
 
 include("utils/macros.jl")
 include("utils/backend.jl")
@@ -172,10 +174,8 @@ include("form/dirichlet_constraints.jl")
 include("form/linear.jl")
 
 include("form/bilinear.jl")
-#=
-include("exporter/types.jl")
-include("exporter/exporter_vtk.jl")
-=#
+
+include("exporters/vtk_export.jl")
 
 include("precompile.jl")
 end

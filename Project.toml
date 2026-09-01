@@ -22,10 +22,12 @@ StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 MakieCore = "20f20a25-4f0e-4fdf-b5d1-57303727442b"
 Meshes = "eacbb407-ea5a-433e-ab97-5258b1ca43fa"
 Metal = "dde4c033-4e86-420c-a63e-0dd931031962"
+WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
 
 [extensions]
 BrambleMeshesExt = ["Meshes", "MakieCore"]
 BrambleMetalExt = "Metal"
+BrambleVTKExt = "WriteVTK"
 
 [compat]
 DocStringExtensions = "0.9"
@@ -38,6 +40,7 @@ PrecompileTools = "1"
 Preferences = "1"
 QuadGK = "2.11.3"
 StaticArrays = "1"
+WriteVTK = "1"
 julia = "1.12"
 
 [extras]
