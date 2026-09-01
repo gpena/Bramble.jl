@@ -25,6 +25,35 @@ The operators are the other way round: Rₕ, avgₕ and every difference, jump a
 average apply componentwise and take any grid function.
 =#
 
+#=
+`markers`, on `innerₕ` and the directional products, follows the `Rₕ!`/`avgₕ!`
+`markers::NTuple{N,Symbol} = NTuple{0,Symbol}()` precedent exactly: the default empty tuple
+is a zero-cost, compile-time-known branch to the original unmasked sum, and a non-empty tuple
+restricts the sum to the union of the labelled regions' points.
+
+This is a *masked sum of the existing cell measures*, not a surface integral — the two are
+not interchangeable and differ by a factor of `h`. Measured on a 5×5 uniform mesh of the unit
+square, restricted to `:bottom`: the masked sum here gives 0.125, which scales like `h` and
+vanishes under refinement, where the true boundary integral `∫_Γ u v ds` gives 1.0 and is
+mesh-independent. See `inner_Γ` below and point 11 of `docs/form-unlock-plan.md`.
+=#
+
+@inline function _combined_mask(Ωₕ, markers::NTuple{1, Symbol})
+    return index_in_marker(Ωₕ, markers[1])
+end
+
+# `N > 1`: the stored per-marker masks are combined by union into a fresh `BitVector`, since
+# a sum (unlike `Rₕ!`'s per-marker write) must not double-count a point two markers both
+# cover. `N == 1` above skips this allocation, since the mesh's own stored mask can be read
+# directly without being unioned with anything.
+function _combined_mask(Ωₕ, markers::NTuple{N, Symbol}) where {N}
+    mask = copy(index_in_marker(Ωₕ, markers[1]))
+    for k in 2:N
+        mask .|= index_in_marker(Ωₕ, markers[k])
+    end
+    return mask
+end
+
 """
 	innerₕ(uₕ::VectorElement, vₕ::VectorElement)
 
@@ -57,23 +86,58 @@ the component-wise products:
 
 which is the only meaning it can have, so there is nothing ambiguous about accepting one.
 The two grid functions must have the same number of components.
+
+`markers` restricts the sum to the union of the labelled regions' points — a masked sum of
+the same cell measures, not a surface integral; see the note above `_combined_mask`.
 """
-@inline innerₕ(uₕ::VectorElement{<:ScalarGridSpace},
-    vₕ::VectorElement{<:ScalarGridSpace}) = _dot(
-    uₕ.data, weights(space(uₕ), Innerh()), vₕ.data)
+@inline function innerₕ(uₕ::VectorElement{<:ScalarGridSpace},
+        vₕ::VectorElement{<:ScalarGridSpace};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {N}
+    N == 0 && return _dot(uₕ.data, weights(space(uₕ), Innerh()), vₕ.data)
+    mask = _combined_mask(mesh(space(uₕ)), markers)
+    return _dot_masked(uₕ.data, weights(space(uₕ), Innerh()), vₕ.data, mask)
+end
 
 # Summed over the components, unrolled because `NC` is a type parameter, so this costs no
-# more than writing the sum out by hand.
+# more than writing the sum out by hand. `markers` threads through unchanged: each component
+# is restricted to the same regions.
 @inline function innerₕ(uₕ::VectorElement{<:CompositeGridSpace{NC}},
-        vₕ::VectorElement{<:CompositeGridSpace{NC}}) where {NC}
+        vₕ::VectorElement{<:CompositeGridSpace{NC}};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {NC, N}
     uc, vc = components(uₕ), components(vₕ)
-    return sum(ntuple(c -> innerₕ(uc[c], vc[c]), Val(NC)))
+    return sum(ntuple(c -> innerₕ(uc[c], vc[c]; markers = markers), Val(NC)))
 end
 
 @noinline function innerₕ(uₕ::VectorElement{<:CompositeGridSpace{N}},
         vₕ::VectorElement{<:CompositeGridSpace{M}}) where {N, M}
     throw(DimensionMismatch(
         "innerₕ needs the same number of components on both sides; got $N and $M"))
+end
+
+"""
+	inner_Γ(uₕ::VectorElement, vₕ::VectorElement, labels::Symbol...)
+
+Placeholder for the true, ``(D-1)``-dimensional boundary integral ``\\int_\\Gamma u\\,v\\,ds``
+over the mesh regions `labels` name.
+
+**Not the same quantity as `innerₕ(uₕ, vₕ; markers = labels)`.** That is a masked sum of the
+existing cell measures — a ``D``-dimensional quantity restricted to a set of points — and it
+scales like `h`, vanishing under refinement: 0.125 on a 5×5 mesh of the unit square restricted
+to `:bottom`. This function is meant for the mesh-independent surface integral a Neumann or
+Robin term needs — 1.0 on that same mesh and region — which is a genuinely different quantity,
+not a bug in the other one. See point 11 of `docs/form-unlock-plan.md`.
+
+**Not yet implemented.** No ``(D-1)``-dimensional surface quadrature weight exists anywhere in
+the package today — only `Innerh` (cell measures) and `Innerplus` (directional, still
+``D``-dimensional). This always throws until that weight is built; kept unexported until it
+does something.
+"""
+function inner_Γ(uₕ::VectorElement, vₕ::VectorElement, labels::Symbol...)
+    throw(ErrorException(
+        "inner_Γ (the true boundary integral) is not yet implemented: no (D-1)-dimensional " *
+        "surface quadrature weight exists in the package. innerₕ(uₕ, vₕ; markers = labels) " *
+        "computes a related but NOT equivalent quantity — a masked sum of cell measures that " *
+        "scales like h and vanishes under refinement, not a mesh-independent surface integral."))
 end
 
 """
@@ -96,8 +160,13 @@ the inner product there: the square root of the sum of the components' squared n
 ################################################################################
 
 @inline function _directional_inner_plus(uₕ::VectorElement{<:ScalarGridSpace},
-        vₕ::VectorElement{<:ScalarGridSpace}, _::Val{DIM}) where {DIM}
-    return _inner_product(uₕ.data, weights(space(uₕ), Innerplus(), DIM), vₕ.data)
+        vₕ::VectorElement{<:ScalarGridSpace}, _::Val{DIM};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {DIM, N}
+    N == 0 &&
+        return _inner_product(uₕ.data, weights(space(uₕ), Innerplus(), DIM), vₕ.data)
+    mask = _combined_mask(mesh(space(uₕ)), markers)
+    return _inner_product_masked(
+        uₕ.data, weights(space(uₕ), Innerplus(), DIM), vₕ.data, mask)
 end
 
 """
@@ -128,9 +197,13 @@ For [`VectorElement`](@ref)s, it is defined as
 Defined for grid functions of a [`ScalarGridSpace`](@ref) only. A grid function of a
 composite grid space is rejected at dispatch; take a scalar component of it with
 [`components`](@ref) first, which is itself a scalar grid function and is accepted.
+
+`markers` restricts the sum as it does for [`innerₕ`](@ref) — a masked sum, not a surface
+integral.
 """
 @inline inner₊ₓ(uₕ::VectorElement{<:ScalarGridSpace},
-    vₕ::VectorElement{<:ScalarGridSpace}) = _directional_inner_plus(uₕ, vₕ, Val(1))
+    vₕ::VectorElement{<:ScalarGridSpace}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {N} = _directional_inner_plus(
+    uₕ, vₕ, Val(1); markers = markers)
 
 """
 	inner₊ᵧ(uₕ::VectorElement, vₕ::VectorElement)
@@ -155,9 +228,13 @@ For [`VectorElement`](@ref)s, it is defined as
 Defined for grid functions of a [`ScalarGridSpace`](@ref) only. A grid function of a
 composite grid space is rejected at dispatch; take a scalar component of it with
 [`components`](@ref) first, which is itself a scalar grid function and is accepted.
+
+`markers` restricts the sum as it does for [`innerₕ`](@ref) — a masked sum, not a surface
+integral.
 """
 @inline inner₊ᵧ(uₕ::VectorElement{<:ScalarGridSpace},
-    vₕ::VectorElement{<:ScalarGridSpace}) = _directional_inner_plus(uₕ, vₕ, Val(2))
+    vₕ::VectorElement{<:ScalarGridSpace}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {N} = _directional_inner_plus(
+    uₕ, vₕ, Val(2); markers = markers)
 
 """
 	inner₊₂(uₕ::VectorElement, vₕ::VectorElement)
@@ -171,9 +248,13 @@ Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ`
 Defined for grid functions of a [`ScalarGridSpace`](@ref) only. A grid function of a
 composite grid space is rejected at dispatch; take a scalar component of it with
 [`components`](@ref) first, which is itself a scalar grid function and is accepted.
+
+`markers` restricts the sum as it does for [`innerₕ`](@ref) — a masked sum, not a surface
+integral.
 """
 @inline inner₊₂(uₕ::VectorElement{<:ScalarGridSpace},
-    vₕ::VectorElement{<:ScalarGridSpace}) = _directional_inner_plus(uₕ, vₕ, Val(3))
+    vₕ::VectorElement{<:ScalarGridSpace}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {N} = _directional_inner_plus(
+    uₕ, vₕ, Val(3); markers = markers)
 
 get_dimension_from_type(::Type{<:NTuple{D, Any}}) where {D} = D
 get_dimension_from_type(::Type{<:VectorElement{S}}) where {S} = dim(mesh_type(S))

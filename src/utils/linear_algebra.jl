@@ -231,6 +231,37 @@ Computes the weighted inner product ``\\langle u, v \\rangle_h``.
 """
 @inline _inner_product(u::AbstractVector, h::AbstractVector, v::AbstractVector) = _dot(u, h, v)
 
+"""
+	$(SIGNATURES)
+
+As [`_dot`](@ref), restricted to the indices `mask` marks:
+``\\sum_{i \\,:\\, mask_i} u_i \\cdot v_i \\cdot w_i``.
+
+No `@simd`: the branch on `mask[i]` rules it out, the same tradeoff
+`symmetrize!` (form/dirichlet_constraints.jl) makes for the same reason.
+"""
+@inline function _dot_masked(
+        u::AbstractVector, v::AbstractVector, w::AbstractVector, mask::BitVector)
+    (length(u) == length(v) == length(w)) ||
+        _throw_dot_dim_error(length(u), length(v), length(w))
+    T = promote_type(eltype(u), eltype(v), eltype(w))
+    s = zero(T)
+
+    @inbounds for i in 1:length(u)
+        mask[i] && (s = muladd(T(u[i]) * T(v[i]), T(w[i]), s))
+    end
+
+    return s
+end
+
+"""
+	$(SIGNATURES)
+
+As [`_inner_product`](@ref), restricted to the indices `mask` marks.
+"""
+@inline _inner_product_masked(u::AbstractVector, h::AbstractVector, v::AbstractVector,
+    mask::BitVector) = _dot_masked(u, h, v, mask)
+
 # Production code never reaches this: `_directional_inner_plus` passes `uₕ.data`, a vector,
 # and so does the composite path through its components. The callers are `precompile.jl` and
 # the testset that pins its semantics. It also allocates twice — `similar(u)` and then the

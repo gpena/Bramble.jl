@@ -347,3 +347,76 @@ end
         @test innerₕ(u1, Rₕ(Wc, x -> 1.0)) ≈ 0.5
     end
 end
+
+# Point 11: a masked sum of the existing cell measures, restricted by `markers`, is *not* a
+# surface integral — it is O(h) times one, and every test here is written to keep that
+# distinction visible rather than only assert a number.
+@testset verbose=true "Masked boundary inner products (markers)" begin
+    S = interval(0.0, 1.0) × interval(0.0, 1.0)
+    Ωₕ = mesh(domain(S, :bottom => :bottom, :left => :left), (5, 5), (true, true))
+    Wₕ = gridspace(Ωₕ)
+    uₕ = Rₕ(Wₕ, x -> 1.0)
+    vₕ = Rₕ(Wₕ, x -> 1.0)
+
+    @testset "matches the measured figure from the plan" begin
+        # docs/form-unlock-plan.md, point 11: masked sum on a 5×5 mesh restricted to
+        # :bottom reads 0.125, against 1.0 for the true (not yet implemented) boundary
+        # integral over the same region — not interchangeable, and this is the number that
+        # makes the distinction concrete rather than asserted in prose.
+        @test innerₕ(uₕ, vₕ; markers = (:bottom,)) ≈ 0.125
+    end
+
+    @testset "the empty default matches the unmasked sum exactly" begin
+        @test innerₕ(uₕ, vₕ; markers = ()) == innerₕ(uₕ, vₕ)
+        @test inner₊ₓ(uₕ, vₕ; markers = ()) == inner₊ₓ(uₕ, vₕ)
+    end
+
+    @testset "several markers act as a union, not a double-counted sum" begin
+        mask = Bramble.index_in_marker(Ωₕ, :bottom) .| Bramble.index_in_marker(Ωₕ, :left)
+        w = Bramble.weights(Wₕ, Bramble.Innerh())
+        byhand = sum(w[i] for i in eachindex(w) if mask[i])
+        @test innerₕ(uₕ, vₕ; markers = (:bottom, :left)) ≈ byhand
+        # a mesh point on both :bottom and :left (the corner) must count once
+        @test innerₕ(uₕ, vₕ; markers = (:bottom, :left)) <
+              innerₕ(uₕ, vₕ; markers = (:bottom,)) + innerₕ(uₕ, vₕ; markers = (:left,))
+    end
+
+    @testset "threads through a composite space, one component at a time" begin
+        Vₕ = Wₕ^Val(2)
+        Uc = Rₕ(Vₕ, x -> (1.0, 2.0))
+        Vc = Rₕ(Vₕ, x -> (1.0, 2.0))
+        c1, c2 = Bramble.components(Uc)
+        byhand = innerₕ(c1, c1; markers = (:bottom,)) + innerₕ(c2, c2; markers = (:bottom,))
+        @test innerₕ(Uc, Vc; markers = (:bottom,)) ≈ byhand
+    end
+
+    @testset "the directional products mask the same way" begin
+        wx = Bramble.weights(Wₕ, Bramble.Innerplus(), 1)
+        mask = Bramble.index_in_marker(Ωₕ, :left)
+        byhand = sum(wx[i] for i in eachindex(wx) if mask[i])
+        @test inner₊ₓ(uₕ, vₕ; markers = (:left,)) ≈ byhand
+    end
+
+    @testset "the masked sum shrinks under refinement; it is not a surface integral" begin
+        # The whole point of point 11's decision: this quantity is O(h) times the boundary
+        # integral it is easily mistaken for, and a decreasing sequence under refinement is
+        # what tells the two apart, not the single 0.125 figure alone.
+        vals = map((5, 10, 20, 40)) do n
+            Ω = mesh(domain(S, :bottom => :bottom), (n, n), (true, true))
+            W = gridspace(Ω)
+            w = Rₕ(W, x -> 1.0)
+            innerₕ(w, w; markers = (:bottom,))
+        end
+        @test issorted(vals; rev = true)
+        @test vals[end] < vals[1] / 4
+    end
+
+    @testset "inner_Γ is a documented placeholder, not a silent wrong answer" begin
+        @test_throws ErrorException Bramble.inner_Γ(uₕ, vₕ, :bottom)
+        try
+            Bramble.inner_Γ(uₕ, vₕ, :bottom)
+        catch e
+            @test occursin("not yet implemented", sprint(showerror, e))
+        end
+    end
+end
