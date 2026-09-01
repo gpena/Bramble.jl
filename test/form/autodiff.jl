@@ -1,8 +1,10 @@
 using Test
 using Bramble
 using ForwardDiff
+using ReverseDiff
+using DifferentiationInterface
 using SparseArrays
-using LinearAlgebra: issymmetric
+using LinearAlgebra: issymmetric, norm
 
 # Differentiating through the constrained linear system.
 #
@@ -184,4 +186,78 @@ using LinearAlgebra: issymmetric
         end
         @test bytes() == 0
     end
+end
+
+@testset "reverse mode through an assembled residual" begin
+    # The backend survey in test/space/autodiff_backends.jl establishes that ReverseDiff can
+    # differentiate the *space* layer — `Rₕ` and an operator. It says nothing about the form
+    # layer, and assembly is a different proposition: `assemble` allocates its vector from
+    # `_assembled_eltype` and then a stencil engine writes into it point by point, so the
+    # tracked type has to survive both the allocation and the scatter.
+    #
+    # Written through DifferentiationInterface for the same reason the survey is: it is the
+    # layer a caller reaches for, and adding a backend is one more entry rather than another
+    # block speaking another API.
+    Ωₕ = mesh(domain(interval(0.0, 1.0)), 8, true)
+    Wₕ = gridspace(Ωₕ)
+
+    resid = p -> begin
+        cₕ = Rₕ(Wₕ, x -> p[1] * sin(x) + p[2] * x^2)
+        return sum(assemble(form(Wₕ, v -> innerₕ(cₕ, v))))
+    end
+    p0 = [1.3, 0.7]
+
+    # a central difference, so a wrong gradient fails rather than merely a thrown one
+    h = 1e-6
+    fd = [(resid(p0 .+ h .* (1:2 .== i)) - resid(p0 .- h .* (1:2 .== i))) / 2h for i in 1:2]
+
+    gf = DifferentiationInterface.gradient(resid, AutoForwardDiff(), p0)
+    gr = DifferentiationInterface.gradient(resid, AutoReverseDiff(), p0)
+
+    @test isapprox(gf, fd; rtol = 1e-5)
+    @test isapprox(gr, fd; rtol = 1e-5)
+    @test isapprox(gf, gr; rtol = 1e-10)
+end
+
+@testset "a Jacobian through the coupled routing" begin
+    # Each block's entries come from its own coefficients, so the Jacobian of the assembled
+    # vector is block diagonal. A routing error does not give a wrong number — it puts mass
+    # in a block that should be empty, which is invisible to any test that only checks
+    # values.
+    Ωₕ = mesh(domain(interval(0.0, 1.0)), 8, true)
+    Wₕ = gridspace(Ωₕ)
+    Vₕ = Wₕ^Val(2)
+    n = ndofs(Wₕ)
+    w0 = collect(range(0.5, 1.5, length = ndofs(Vₕ)))
+
+    routed = w -> begin
+        c = element(Vₕ, eltype(w))
+        values(c) .= w
+        return assemble(form(Vₕ, v -> innerₕ(c(1), v(1)) + inner₊ₓ(D₋ₓ(c(2)), D₋ₓ(v(2)))))
+    end
+
+    Jf = DifferentiationInterface.jacobian(routed, AutoForwardDiff(), w0)
+    Jr = DifferentiationInterface.jacobian(routed, AutoReverseDiff(), w0)
+
+    @test size(Jf) == (ndofs(Vₕ), ndofs(Vₕ))
+    @test isapprox(Jf, Jr; rtol = 1e-10)
+
+    # the off-diagonal blocks are empty, exactly
+    @test norm(Jf[1:n, (n + 1):(2n)]) == 0
+    @test norm(Jf[(n + 1):(2n), 1:n]) == 0
+    @test norm(Jr[1:n, (n + 1):(2n)]) == 0
+    @test norm(Jr[(n + 1):(2n), 1:n]) == 0
+
+    # and the assertion above bites: a form that deliberately crosses the blocks puts its
+    # mass off the diagonal and none on it. Without this the four tests above would pass on
+    # a Jacobian that was empty for some other reason.
+    crossed = w -> begin
+        c = element(Vₕ, eltype(w))
+        values(c) .= w
+        return assemble(form(Vₕ, v -> innerₕ(c(2), v(1))))
+    end
+    Jx = DifferentiationInterface.jacobian(crossed, AutoForwardDiff(), w0)
+
+    @test norm(Jx[1:n, (n + 1):(2n)]) > 0
+    @test norm(Jx[1:n, 1:n]) == 0
 end
