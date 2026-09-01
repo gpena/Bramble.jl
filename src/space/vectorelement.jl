@@ -286,21 +286,32 @@ _find_vec_in_broadcast(::Tuple{}) = nothing # End of recursion
 _find_vec_in_broadcast(a::VectorElement, rest) = a # Found one
 _find_vec_in_broadcast(::Any, rest) = _find_vec_in_broadcast(rest) # Keep searching
 
-function Base.:*(uₕ::VectorElement, vₕ::NTuple{D, VectorElement}) where {D}
-    zₕ = ntuple(i -> similar(vₕ[i]), D)
-    for i in 1:D
-        zₕ[i].data .= uₕ.data .* vₕ[i].data
-    end
-    return zₕ
-end
+# Both of these delegate to broadcasting rather than filling a tuple allocated up front.
+#
+# The type of `a * vₕ` is the type of the product, and `similar(vₕ[i])` gives the type of
+# `vₕ[i]` alone — it copies the operand and drops the scalar. So a `Dual` scalar against a
+# `Float64` element allocated `Vector{Float64}` and then threw on the first store:
+#
+#     julia> ForwardDiff.Dual{Nothing}(2.0, 1.0) * (uₕ, vₕ)
+#     ERROR: MethodError: no method matching Float64(::ForwardDiff.Dual{...})
+#
+# `similar(::Broadcasted, ElType)` already computes the promoted type, and the scalar case
+# needs no method here at all: a `VectorElement` is an `AbstractVector`, so Base's own
+# `a * A == a .* A` covers it and has always promoted correctly. These two reimplemented
+# that by hand for tuples and lost the promotion — the sixth instance of an element type
+# taken from somewhere other than the data.
+#
+# `vₕ[i] .* uₕ` rather than `uₕ .* vₕ[i]`: the broadcast picks the space off the first
+# `VectorElement` it finds, and the code this replaces took it from `vₕ[i]`. The product is
+# the same either way.
+#
+# `Val(D)` so the tuple is built unrolled, with `D` a static parameter rather than a count
+# passed at run time.
+@inline Base.:*(uₕ::VectorElement, vₕ::NTuple{D, VectorElement}) where {D} = ntuple(
+    i -> vₕ[i] .* uₕ, Val(D))
 
-function Base.:*(a::Number, vₕ::NTuple{D, VectorElement}) where {D}
-    zₕ = ntuple(i -> similar(vₕ[i]), D)
-    for i in 1:D
-        zₕ[i].data .= a .* vₕ[i].data
-    end
-    return zₕ
-end
+@inline Base.:*(a::Number, vₕ::NTuple{D, VectorElement}) where {D} = ntuple(
+    i -> a .* vₕ[i], Val(D))
 
 @inline Base.:*(Vₕ::NTuple{D, VectorElement}, a::Number) where {D} = a * Vₕ
 @inline Base.:*(Vₕ::NTuple{D, VectorElement}, uₕ::VectorElement) where {D} = uₕ * Vₕ

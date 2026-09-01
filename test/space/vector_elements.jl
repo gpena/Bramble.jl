@@ -677,6 +677,23 @@ end
         # the originals are untouched
         @test values(v[1]) == fill(2.0, 6)
         @test values(u) == fill(3.0, 6)
+
+        # the result takes the type of the product, not of the tuple. Both of these
+        # allocated their output with `similar(vₕ[i])`, which copies the element's type and
+        # drops the other operand's, so a wider scalar was truncated into a narrower vector
+        # — and a Dual scalar threw outright, which is what found this. They delegate to
+        # broadcasting now, where `similar(::Broadcasted, ElType)` promotes.
+        Ω32 = mesh(domain(interval(0.0f0, 1.0f0)), 6, true)
+        W32 = gridspace(Ω32)
+        v32 = (element(W32, 2.0f0), element(W32, 5.0f0))
+        @test eltype(values(v32[1])) === Float32
+        @test eltype(values((2.0 * v32)[1])) === Float64        # Float64 scalar widens it
+        @test eltype(values((2.0f0 * v32)[1])) === Float32       # Float32 leaves it alone
+        @test values((2.0 * v32)[2]) ≈ fill(10.0, 6)
+
+        # and the space comes from the tuple's elements, as it did before
+        @test all(space((u * v)[i]) === space(v[i]) for i in 1:2)
+        @test all(space((2.0 * v)[i]) === space(v[i]) for i in 1:2)
     end
 
     @testset "space_type" begin

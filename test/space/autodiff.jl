@@ -26,6 +26,29 @@ using Bramble: values, components
 # Each test compares against a central difference of the same functional evaluated in
 # plain Float64, so it checks the derivative is right, not merely that it ran.
 
+@testset "a scalar times a tuple of elements differentiates" begin
+    # `a * (uₕ, vₕ)` allocated its output with `similar(vₕ[i])`, taking the element type from
+    # the tuple and dropping the scalar's, so a Dual scalar was written into a
+    # `Vector{Float64}`:
+    #
+    #     ERROR: MethodError: no method matching Float64(::ForwardDiff.Dual{...})
+    #
+    # It threw rather than silently losing the derivative, which is the better failure, but
+    # it made `a * (uₕ, vₕ)` unusable under AD. Both tuple methods delegate to broadcasting
+    # now. The same held for a Dual-valued `VectorElement` on the left.
+    Ωₕ = mesh(domain(interval(0.0, 1.0)), 8, true)
+    Wₕ = gridspace(Ωₕ)
+    tup = (Rₕ(Wₕ, x -> x), Rₕ(Wₕ, x -> 2x))
+
+    scaled(a) = sum(values((a * tup)[1])) + sum(values((a * tup)[2]))
+    @test _matches_fd(scaled)
+    @test eltype(values((ForwardDiff.Dual{Nothing}(2.0, 1.0) * tup)[1])) <: ForwardDiff.Dual
+
+    # a Dual-valued element on the left of the tuple, which takes the other method
+    weighted(a) = sum(values(((a * Rₕ(Wₕ, x -> 3.0)) * tup)[1]))
+    @test _matches_fd(weighted)
+end
+
 @testset "Automatic differentiation" begin
     Ωₕ1 = mesh(domain(interval(0.0, 1.0)), 21, true)
     Ωₕ2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 8), (true, false))
