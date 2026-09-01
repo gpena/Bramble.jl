@@ -57,7 +57,8 @@ using Bramble: form, assemble, trial_space, test_space
 
     @testset "different trial and test space objects can never be symmetric" begin
         Wₕ2 = gridspace(Ωₕ)
-        @test trial_space(form(Wₕ, Wₕ, (u, v) -> u)) === test_space(form(Wₕ, Wₕ, (u, v) -> u))
+        @test trial_space(form(Wₕ, Wₕ, (u, v) -> u)) ===
+              test_space(form(Wₕ, Wₕ, (u, v) -> u))
 
         e = form(Wₕ, Wₕ2, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
         @test !issymmetric(e)

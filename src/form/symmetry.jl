@@ -29,8 +29,10 @@ the expression at all, and answer `false` immediately otherwise.
 =#
 
 _same_operator_shape(::TrialFunction{D}, ::TestFunction{D}) where {D} = true
-_same_operator_shape(a::IndexedTrialFunction{D}, b::IndexedTestFunction{D}) where {D} = a.component_idx ==
-                                                                                         b.component_idx
+function _same_operator_shape(a::IndexedTrialFunction{D}, b::IndexedTestFunction{D}) where {D}
+    a.component_idx ==
+    b.component_idx
+end
 
 # Every other node wraps one (or two) inner operators, and that inner operator is exactly
 # where a trial/test pair stops being the same Julia type: `D₋ₓ(u)` is a
@@ -42,35 +44,46 @@ _same_operator_shape(a::IndexedTrialFunction{D}, b::IndexedTestFunction{D}) wher
 for W in (:BackwardDifference, :ForwardDifference, :CenteredDifference,
     :StarDifference, :CrossWeightedDifference, :BackwardAverage,
     :ForwardAverage, :ShiftNode, :JumpNode)
-    @eval _same_operator_shape(a::$W{D, Dim}, b::$W{D, Dim}) where {D, Dim} = _same_operator_shape(
+    @eval _same_operator_shape(a::$W{D, Dim}, b::$W{
+        D, Dim}) where {D, Dim} = _same_operator_shape(
         a.inner_op, b.inner_op)
 end
 
 # The region a restriction names is a field, not a type parameter with a fixed set of
 # values, so it is compared explicitly rather than folded into the `where` clause.
-_same_operator_shape(a::RegionRestriction{D}, b::RegionRestriction{D}) where {D} = a.region ===
-                                                                                    b.region &&
-                                                                                    _same_operator_shape(
-    a.inner_op, b.inner_op)
+function _same_operator_shape(a::RegionRestriction{D}, b::RegionRestriction{D}) where {D}
+    a.region ===
+    b.region &&
+        _same_operator_shape(
+            a.inner_op, b.inner_op)
+end
 
-_same_operator_shape(a::OperatorScale{D}, b::OperatorScale{D}) where {D} = a.scalar ==
-                                                                            b.scalar &&
-                                                                            _same_operator_shape(
-    a.inner_op, b.inner_op)
+function _same_operator_shape(a::OperatorScale{D}, b::OperatorScale{D}) where {D}
+    a.scalar ==
+    b.scalar &&
+        _same_operator_shape(
+            a.inner_op, b.inner_op)
+end
 
 # By identity, not value: a coefficient compares equal here only when both sides close over
 # the identical object, which is what happens when `L` is written once and applied twice —
 # see the module-level note above. A numerically equal but distinct array is not this case.
-_same_operator_shape(a::GridFunctionScale{D}, b::GridFunctionScale{D}) where {D} = a.grid_function ===
-                                                                                    b.grid_function &&
-                                                                                    _same_operator_shape(
-    a.inner_op, b.inner_op)
+function _same_operator_shape(a::GridFunctionScale{D}, b::GridFunctionScale{D}) where {D}
+    a.grid_function ===
+    b.grid_function &&
+        _same_operator_shape(
+            a.inner_op, b.inner_op)
+end
 
-_same_operator_shape(a::OperatorAdd{D}, b::OperatorAdd{D}) where {D} = _same_operator_shape(
-    a.left_op, b.left_op) && _same_operator_shape(a.right_op, b.right_op)
+function _same_operator_shape(a::OperatorAdd{D}, b::OperatorAdd{D}) where {D}
+    _same_operator_shape(
+        a.left_op, b.left_op) && _same_operator_shape(a.right_op, b.right_op)
+end
 
-_same_operator_shape(a::IdentityOperator{D}, b::IdentityOperator{D}) where {D} = a.space ===
-                                                                                  b.space
+function _same_operator_shape(a::IdentityOperator{D}, b::IdentityOperator{D}) where {D}
+    a.space ===
+    b.space
+end
 _same_operator_shape(a::ZeroOperator{D}, b::ZeroOperator{D}) where {D} = a.space === b.space
 
 # Anything else — different node types, a Trial/Test pair with mismatched indices, or a
@@ -93,12 +106,14 @@ _same_operator_shape(a, b) = false
     assigns = Expr[]
     slot = Matrix{Symbol}(undef, N, N)
     for i in 1:N, j in i:N
+
         s = Symbol(:w_, i, :_, j)
         push!(assigns, :($s = stencil[$i][2] * stencil[$j][2] * vol))
         slot[i, j] = s
     end
     exprs = Expr[]
     for i in 1:N, j in 1:N
+
         s = i <= j ? slot[i, j] : slot[j, i]
         push!(exprs, :((stencil[$i][1], stencil[$j][1], $s)))
     end
