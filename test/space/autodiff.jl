@@ -151,7 +151,7 @@ using Bramble: values, components
         for (nm, op) in (("D₋ₓ", D₋ₓ), ("M₋ₓ", M₋ₓ), ("jumpₓ", jumpₓ))
             @testset "$nm" begin
                 @test _matches_fd(a -> sum(op(Ωₕ1) *
-                                                          values(Rₕ(Wₕ1, x -> a * sin(x)))))
+                                           values(Rₕ(Wₕ1, x -> a * sin(x)))))
             end
         end
     end
