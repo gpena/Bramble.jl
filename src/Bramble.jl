@@ -92,10 +92,17 @@ export M₊ₓ!, M₊ᵧ!, M₊₂!
 
 export dirichlet_constraints, dirichlet_bc!, symmetrize!, DirichletConstraint
 
+# The form layer. Every name here carries a docstring, which `test/quality/exports.jl`
+# requires of anything exported.
+#
+# `resolve_form_ast` is deliberately not among them. `assemble!(b, l)` re-resolves the
+# expression on every call, which is what keeps a form's coefficients live; passing a
+# resolved `ast` freezes rebinding, so it is an optimisation with a semantic cost rather
+# than the normal way to call this, and it stays reachable as `Bramble.resolve_form_ast`.
+export form, assemble, assemble!, assemble_parallel!, allocate_system_matrix, evaluate!
+
 #=
 export ⋅
-
-export form, assemble, assemble!
 =#
 #=
 # Exporters
