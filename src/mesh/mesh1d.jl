@@ -87,14 +87,17 @@ grid points change.
 Overrides the points in Ωₕ. This function recalculates the cached [`spacings`](@ref), [`half_points`](@ref) and [`half_spacings`](@ref).
 """
 @inline function set_points!(Ωₕ::Mesh1D, pts)
-    # Directly update the grid point coordinates with the new vector.
-    Ωₕ.pts = pts
+    n = length(pts)
 
-    # Re-allocate the storage vectors for the derived geometric quantities
-    # to match the size of the new points vector.
-    half_points!(Ωₕ, vector(backend(Ωₕ), length(pts) + 1))
-    half_spacings!(Ωₕ, vector(backend(Ωₕ), length(pts)))
-    spacings!(Ωₕ, vector(backend(Ωₕ), length(pts)))
+    if length(Ωₕ.pts) == n
+        Ωₕ.pts .= pts
+    else
+        Ωₕ.pts = pts
+        set_indices!(Ωₕ, generate_indices(n))
+        half_points!(Ωₕ, vector(backend(Ωₕ), n + 1))
+        half_spacings!(Ωₕ, vector(backend(Ωₕ), n))
+        spacings!(Ωₕ, vector(backend(Ωₕ), n))
+    end
 
     # The spacings come first: half_spacing! below reads them back through `spacing`.
     spacing!(spacings(Ωₕ), Ωₕ)
@@ -105,7 +108,6 @@ Overrides the points in Ωₕ. This function recalculates the cached [`spacings`
     # Re-compute the cell widths (half_spacings) using the new grid points.
     half_spacing!(half_spacings(Ωₕ), Ωₕ)
 
-    # The function modifies the mesh in-place and returns nothing.
     return
 end
 
