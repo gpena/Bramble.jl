@@ -8,7 +8,7 @@ home = "Home" => "index.md"
 tutorials = "Tutorials" =>
     ["tutorials/geometry.md", "tutorials/mesh.md", "tutorials/space.md",
         "tutorials/operators.md", "tutorials/form.md", "tutorials/vtk_export.md",
-        "tutorials/pgfplots_export.md"]
+        "tutorials/pgfplots_export.md", "tutorials/plotting.md"]
 # examples = "Examples" => ["examples/poisson_linear.md", "examples/poisson_nonlinear.md"]
 benchmarks = "Benchmarks" => "benchmarks.md"
 internals = "Internals" => ["internals/utils.md", "internals/geometry.md",

@@ -92,4 +92,5 @@ nothing # hide
 
 A full VTK file is usually more than a single plot going into a LaTeX document needs. For
 that, the [PGFPlots export tutorial](pgfplots_export.md) writes the plain text table
-`pgfplots` reads directly, with no external package at all.
+`pgfplots` reads directly, with no external package at all. And for a plot inside the
+current Julia session, with no file at all, see [Plotting directly](plotting.md).
