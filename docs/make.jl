@@ -11,7 +11,7 @@ tutorials = "Tutorials" =>
 # examples = "Examples" => ["examples/poisson_linear.md", "examples/poisson_nonlinear.md"]
 benchmarks = "Benchmarks" => "benchmarks.md"
 internals = "Internals" => ["internals/utils.md", "internals/geometry.md",
-    "internals/mesh.md", "internals/space.md"]
+    "internals/mesh.md", "internals/space.md", "internals/form.md"]
 documentation = "Documentation" => ["api.md", internals]
 
 allpages = [
