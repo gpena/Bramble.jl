@@ -10,8 +10,8 @@ This document tracks all in-place mutating functions (`!`) in Bramble.jl, their 
 | :--- | :--- | :---: | :--- | :---: |
 | `set_points!(Ωₕ, pts)` | Mesh `Mesh1D` | **0 B** (was ~2.8 KB) | Reuses existing cached vectors via `Ωₕ.pts .= pts` | 🟢 Zero-Alloc |
 | `Rₕ!(uₕ, f)` | `VectorElement` | **0 B** (was 112 – 144 B) | Directly writes to `values(uₕ)` with unrolled tuple scatter | 🟢 Zero-Alloc |
-| `avgₕ!(uₕ, f)` | `VectorElement` | **144 – 320 B** | Eliminate `to_matrix` & `_cell_average_kernel` closure | 🟡 Next Up |
-| `dirichlet_bc!(v, Wₕ, bcs, …)` | Vector `v` | **112 – 176 B** | Eliminate `Set{Marker}` iterator and `SubArray` view | ⚪ Backlog |
+| `avgₕ!(uₕ, f)` | `VectorElement` | **0 B** (was 144 – 320 B) | Direct linear writes, unrolled tuple scatter, thresholded parallel | 🟢 Zero-Alloc |
+| `dirichlet_bc!(v, Wₕ, bcs, …)` | Vector `v` | **112 – 176 B** | Eliminate `Set{Marker}` iterator and `SubArray` view | 🟡 Next Up |
 | `assemble!(b, form; ast=ast)` | Vector `b` | **32 – 96 B** | Add positional `ast` overload to bypass kwarg box | ⚪ Backlog |
 | `assemble_parallel!(b/A, …)` | Vector / Matrix | **480 – 1,488 B** | `Threads.@threads` task scheduling ($O(1)$) | 🟢 Acceptable |
 | `D₋ₓ!(v, u)`, `Dcₓ!`, `Dstar₊ₓ!`, `Dₕₓ!` | Grid element `v` | **0 B** | Verified zero allocation | 🟢 Zero-Alloc |
