@@ -583,44 +583,6 @@ function _route_terms_parallel!(b::AbstractVector, term::TERM, leaves, lin_indic
     return b
 end
 
-# The threaded core's counterpart of `_route_terms!`: one point, every term, routed to the
-# blocks each belongs to. Recursive for the same reason — no vector, nothing dynamic.
-function _route_point!(
-        dest::AbstractVector, op::OperatorAdd, leaves, I, lin_idx::Int, lin_indices,
-        mesh_markers)
-    _route_point!(dest, op.left_op, leaves, I, lin_idx, lin_indices, mesh_markers)
-    _route_point!(dest, op.right_op, leaves, I, lin_idx, lin_indices, mesh_markers)
-    return dest
-end
-
-function _route_point!(
-        dest::AbstractVector, term::TERM, leaves, I, lin_idx::Int, lin_indices,
-        mesh_markers) where {TERM}
-    target = test_component_or_nothing(term)
-    for (c, leaf) in enumerate(leaves)
-        (target === nothing || target == c) || continue
-        _scatter_point!(dest, term, first(leaf), I, lin_idx, lin_indices, mesh_markers,
-            last(leaf))
-    end
-    return dest
-end
-
-# One point's contribution, behind a function barrier for the same reason as
-# `_scatter_term!`: a term read out of a `Vector{Any}` is only concretely typed once it is
-# an argument.
-@inline function _scatter_point!(
-        dest::AbstractVector, term::TERM, sp, I, lin_idx::Int, lin_indices,
-        mesh_markers, offset::Int) where {TERM}
-    stencil = local_stencil(term, sp, I, mesh_markers, lin_idx)
-    for (off_v, weight) in stencil
-        Iv = I + CartesianIndex(off_v)
-        if checkbounds(Bool, lin_indices, Iv)
-            @inbounds dest[lin_indices[Iv] + offset] += weight
-        end
-    end
-    return dest
-end
-
 # The scatter, behind a function barrier: a term is only concretely typed once it is an
 # argument, so without this `local_stencil` would be a dynamic call at every grid point
 # rather than once per term.

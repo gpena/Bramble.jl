@@ -138,7 +138,7 @@ See also: [`⊗`](@ref), [`diff₋ₓ`](@ref).
 """
 function shift(Ωₕ::AbstractMeshType, ::Val{SHIFT_DIM}, ::Val{i}) where {SHIFT_DIM, i}
     if i == 0
-        return Eye{eltype(eltype(Ωₕ))}(npoints(Ωₕ))
+        return Eye{eltype(Ωₕ)}(npoints(Ωₕ))
     end
 
     return _recursive_shift(Ωₕ, Val(dim(Ωₕ)), Val(SHIFT_DIM), Val(i))

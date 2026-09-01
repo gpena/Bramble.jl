@@ -230,6 +230,14 @@ Computes the weighted inner product ``\\langle u, v \\rangle_h``.
 - For matrices `u` and `v`, computes ``v^T \\operatorname{diag}(h) u``.
 """
 @inline _inner_product(u::AbstractVector, h::AbstractVector, v::AbstractVector) = _dot(u, h, v)
+
+# Production code never reaches this: `_directional_inner_plus` passes `uₕ.data`, a vector,
+# and so does the composite path through its components. The callers are `precompile.jl` and
+# the testset that pins its semantics. It also allocates twice — `similar(u)` and then the
+# product, 15,008 B where the result is 512 — so if it is ever given a real caller, a 5-arg
+# `mul!` is the fix. Kept because deleting a tested utility on a reachability argument is a
+# decision to take deliberately, and that argument was already wrong once: this method's
+# test was missed by a sweep that only grepped `src/`.
 function _inner_product(u::AbstractMatrix, h::AbstractVector, v::AbstractMatrix)
     tmp = similar(u)
     mul!(tmp, Diagonal(h), u)

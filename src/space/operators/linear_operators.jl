@@ -61,8 +61,14 @@ without performing it, so that a form can be written as an expression and assemb
 """
 abstract type LazyOp{D} <: OperatorType end
 
-@inline space(op::OperatorType) = op.space
-@inline eltype(op::OperatorType) = eltype(space(op))
+# `space` is answered by the two nodes that can answer it, not by the abstract supertype.
+#
+# It used to be `space(op::OperatorType) = op.space`, which accepted all 23 concrete nodes
+# and worked for two of them. `IdentityOperator` and `ZeroOperator` carry a space; the other
+# 21 do not, so it threw a `FieldError` for almost everything in its own signature —
+# `TestFunction` has no fields at all. `eltype(op) = eltype(space(op))` inherited the same
+# reach and had no callers, so it is gone; assembly asks `_assembled_eltype(ast, space)`,
+# taking the space as an argument precisely because a symbolic node has none to give.
 
 # --- The nodes ------------------------------------------------------------------- #
 
@@ -86,6 +92,9 @@ end
 
 @inline IdentityOperator(space::AbstractSpaceType) = IdentityOperator{
     dim(space), typeof(space)}(space)
+
+@inline space(op::IdentityOperator) = op.space
+@inline space(op::ZeroOperator) = op.space
 @inline ZeroOperator(space::AbstractSpaceType) = ZeroOperator{
     dim(space), typeof(space)}(space)
 
