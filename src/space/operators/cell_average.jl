@@ -505,6 +505,108 @@ end
     return s
 end
 
+# 2D specialized scalar cell average
+@inline function _cell_average(f, x::NTuple{2}, idx::CartesianIndex{2},
+        nodes::SVector{NQ, T}, wts::SVector{NQ, T}) where {NQ, T}
+    @inbounds i, j = idx[1], idx[2]
+    @inbounds a1 = T(x[1][i])
+    @inbounds d1 = T(x[1][i + 1]) - a1
+    @inbounds a2 = T(x[2][j])
+    @inbounds d2 = T(x[2][j + 1]) - a2
+
+    s = zero(T)
+    @inbounds for q2 in 1:NQ
+        w2 = wts[q2]
+        p2 = a2 + nodes[q2] * d2
+        for q1 in 1:NQ
+            w1 = wts[q1] * w2
+            p1 = a1 + nodes[q1] * d1
+            s += w1 * f((p1, p2))
+        end
+    end
+    return s
+end
+
+# 2D specialized composite cell average
+@inline function _cell_average(
+        f, x::NTuple{2}, idx::CartesianIndex{2}, nodes::SVector{NQ, T},
+        wts::SVector{NQ, T}, ::Val{NC}) where {NQ, T, NC}
+    @inbounds i, j = idx[1], idx[2]
+    @inbounds a1 = T(x[1][i])
+    @inbounds d1 = T(x[1][i + 1]) - a1
+    @inbounds a2 = T(x[2][j])
+    @inbounds d2 = T(x[2][j + 1]) - a2
+
+    s = ntuple(_ -> zero(T), Val(NC))
+    @inbounds for q2 in 1:NQ
+        w2 = wts[q2]
+        p2 = a2 + nodes[q2] * d2
+        for q1 in 1:NQ
+            w1 = wts[q1] * w2
+            p1 = a1 + nodes[q1] * d1
+            s = s .+ w1 .* f((p1, p2))
+        end
+    end
+    return s
+end
+
+# 3D specialized scalar cell average
+@inline function _cell_average(f, x::NTuple{3}, idx::CartesianIndex{3},
+        nodes::SVector{NQ, T}, wts::SVector{NQ, T}) where {NQ, T}
+    @inbounds i, j, k = idx[1], idx[2], idx[3]
+    @inbounds a1 = T(x[1][i])
+    @inbounds d1 = T(x[1][i + 1]) - a1
+    @inbounds a2 = T(x[2][j])
+    @inbounds d2 = T(x[2][j + 1]) - a2
+    @inbounds a3 = T(x[3][k])
+    @inbounds d3 = T(x[3][k + 1]) - a3
+
+    s = zero(T)
+    @inbounds for q3 in 1:NQ
+        w3 = wts[q3]
+        p3 = a3 + nodes[q3] * d3
+        for q2 in 1:NQ
+            w23 = wts[q2] * w3
+            p2 = a2 + nodes[q2] * d2
+            for q1 in 1:NQ
+                w1 = wts[q1] * w23
+                p1 = a1 + nodes[q1] * d1
+                s += w1 * f((p1, p2, p3))
+            end
+        end
+    end
+    return s
+end
+
+# 3D specialized composite cell average
+@inline function _cell_average(
+        f, x::NTuple{3}, idx::CartesianIndex{3}, nodes::SVector{NQ, T},
+        wts::SVector{NQ, T}, ::Val{NC}) where {NQ, T, NC}
+    @inbounds i, j, k = idx[1], idx[2], idx[3]
+    @inbounds a1 = T(x[1][i])
+    @inbounds d1 = T(x[1][i + 1]) - a1
+    @inbounds a2 = T(x[2][j])
+    @inbounds d2 = T(x[2][j + 1]) - a2
+    @inbounds a3 = T(x[3][k])
+    @inbounds d3 = T(x[3][k + 1]) - a3
+
+    s = ntuple(_ -> zero(T), Val(NC))
+    @inbounds for q3 in 1:NQ
+        w3 = wts[q3]
+        p3 = a3 + nodes[q3] * d3
+        for q2 in 1:NQ
+            w23 = wts[q2] * w3
+            p2 = a2 + nodes[q2] * d2
+            for q1 in 1:NQ
+                w1 = wts[q1] * w23
+                p1 = a1 + nodes[q1] * d1
+                s = s .+ w1 .* f((p1, p2, p3))
+            end
+        end
+    end
+    return s
+end
+
 # Average of a vector valued `f` over the cell around `idx`, one value per
 # component. `f` is evaluated once per quadrature node instead of once per node
 # per component; the accumulator is a tuple and every operation on it broadcasts
