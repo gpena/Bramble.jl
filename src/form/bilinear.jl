@@ -157,9 +157,30 @@ function _pattern_upper_bound(ast::AST_TYPE, sp, mesh_markers, lin_indices) wher
 end
 
 """
-    allocate_system_matrix(form::BilinearForm, ast = resolve_form_ast(form))
+    allocate_system_matrix(form::BilinearForm, ast = resolve_form_ast(form)) -> SparseMatrixCSC
 
-Allocates a sparse matrix with the correct sparsity pattern corresponding to the bilinear form.
+Builds the sparse matrix a `BilinearForm` assembles into: the right size, the right sparsity
+pattern, and every stored value zero.
+
+The pattern follows from the stencil rather than from the numbers, so it is known before any
+value is computed, and it does not change while the mesh and the expression do not. That is
+what makes the two-step idiom worth using — build the pattern once, outside a time loop, and
+refill it inside:
+
+```julia
+A = allocate_system_matrix(a)
+for step in 1:nsteps
+    assemble!(A, a)          # refills the values, allocates nothing
+    # …
+end
+```
+
+against calling [`assemble`](@ref) each step, which allocates a new matrix every time.
+
+Only the structure is computed here. The entries are all zero on return, so a matrix from
+this is not usable until `assemble!` has filled it.
+
+See also [`assemble`](@ref) and [`assemble!`](@ref).
 """
 function allocate_system_matrix(
         form::BilinearForm{D, TrialSpace, TestSpace, FType},
@@ -561,9 +582,23 @@ function assemble!(
 end
 
 """
-    assemble_parallel!(A::SparseMatrixCSC, form::BilinearForm, ast = resolve_form_ast(form))
+    assemble_parallel!(A::SparseMatrixCSC, form::BilinearForm, ast = resolve_form_ast(form)) -> A
 
-Assembles the `BilinearForm` into `A` across threads, one colour of the grid at a time.
+Refills `A` with the assembled `form` across threads, and returns it. `A` must already carry
+the right sparsity pattern, from [`allocate_system_matrix`](@ref) or a previous
+[`assemble`](@ref).
+
+Colouring is what makes this correct rather than merely fast. Filling an entry goes through a
+column search and an in-place update, so two threads landing on the same entry would race on
+the *value*, not just on the structure.
+
+A matrix colours on the **test side alone**. A bilinear stencil writes to
+`(I + off_v, I + off_u)`, so two points collide on an entry only if their row footprints
+overlap — rows disjoint implies entries disjoint, whatever the columns do — which is the same
+span a vector assembly uses.
+
+Takes `ast` positionally, matching the vector form and unlike the keyword on
+[`assemble!`](@ref).
 """
 function assemble_parallel!(
         A::SparseMatrixCSC, form::BilinearForm{D, TrialSpace, TestSpace, FType},

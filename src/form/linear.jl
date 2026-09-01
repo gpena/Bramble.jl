@@ -624,31 +624,65 @@ function _assemble_linear_parallel_core!(b::AbstractVector,
     return b
 end
 
-# `ast` is a keyword so a caller assembling repeatedly can resolve once and hand it in;
-# resolving is 160 B per call otherwise. It is not cached on the form on purpose: a
-# `GridFunctionScale` over a thunk has its values read when the AST resolves, so resolving
-# eagerly at construction would freeze coefficients a caller may still be changing.
-#
-# Passing `ast` yourself takes that freeze back on deliberately, and it is worth knowing
-# exactly how far it reaches. A resolved tree holds a *reference* to a source element's
-# values, so mutating them in place is still seen:
-#
-#     Rₕ!(uₕ, g)                              # a reused `ast` picks this up
-#     values(uₕ) .= 5.0                       # so does writing the values directly
-#
-# What it does not see is anything that replaced what the tree points at — rebinding the
-# source to a new element, or changing a scalar the expression captured:
-#
-#     uₕ = Rₕ(Wₕ, g)                          # a reused `ast` still reads the old element
-#     α = 10.0                                # a reused `ast` still scales by the old α
-#
-# Both were measured: 1.0 against 5.0 for the rebinding, 2.0 against 10.0 for the scalar. A
-# `Ref` does not rescue the scalar either — `r[]` is dereferenced when the closure runs, so a
-# plain number reaches the scale node and the indirection is already gone.
-#
-# So the keyword is for a loop that writes through the same elements, which is what a
-# time-stepping scheme does with `Rₕ!`. A loop that rebinds them, or that changes a scalar,
-# should let each call resolve.
+# Not cached on the form on purpose: a `GridFunctionScale` over a thunk has its values read
+# when the AST resolves, so resolving eagerly at construction would freeze coefficients a
+# caller may still be changing. Resolving per call costs 160 B.
+
+"""
+    assemble!(b::Vector, form::LinearForm; dirichlet_conditions = nothing,
+              dirichlet_labels = nothing, ast = resolve_form_ast(form)) -> b
+
+Refills `b` with the assembled `form` and returns it, allocating nothing.
+
+This is the call a time loop wants. [`assemble`](@ref) allocates a fresh vector on every
+step; `assemble!` writes into one that already exists, and a vector fill into an existing
+buffer measures 0 bytes.
+
+By default the form's expression is re-evaluated on each call, which is what keeps its
+coefficients **live**: overwrite a source grid function between steps and the next
+`assemble!` sees the new values, with no need to rebuild the form.
+
+# Arguments
+
+  - `b`: the vector to refill. Its length must be `ndofs(test_space(form))`.
+  - `form`: the linear form to assemble.
+
+# Keywords
+
+  - `dirichlet_conditions`, `dirichlet_labels`: boundary values to impose after assembling,
+    and the labels to impose them on. Both default to `nothing`, which imposes nothing.
+  - `ast`: a resolved expression tree, to hoist the walk out of a loop.
+
+## What passing `ast` gives up
+
+Resolving once and reusing it saves the walk, and takes on a freeze that is worth knowing
+the shape of. A resolved tree holds a *reference* to a source element's values, so writing
+through them is still seen:
+
+```julia
+Rₕ!(uₕ, g)                # a reused `ast` picks this up
+values(uₕ) .= 5.0         # so does writing the values directly
+```
+
+What it does not see is anything that replaced what the tree points at — rebinding a source
+to a new element, or a scalar the expression captured:
+
+```julia
+uₕ = Rₕ(Wₕ, g)            # a reused `ast` still reads the old element
+α = 10.0                  # a reused `ast` still scales by the old α
+```
+
+Both were measured: 1.0 against 5.0 for the rebinding, 2.0 against 10.0 for the scalar. A
+`Ref` does not rescue the scalar either, because `r[]` is dereferenced when the closure runs,
+so a plain number reaches the scale node and the indirection is already gone.
+
+So pass `ast` for a loop that writes through the same elements, which is what a
+time-stepping scheme does with `Rₕ!`. A loop that rebinds them, or that changes a scalar,
+should let each call resolve.
+
+See also [`assemble`](@ref), [`assemble_parallel!`](@ref) for the threaded sweep, and
+[`evaluate!`](@ref) when the contraction is wanted alongside the vector.
+"""
 function assemble!(b::Vector, form::LinearForm{D, TestSpace, FType};
         dirichlet_conditions = nothing,
         dirichlet_labels = nothing,
@@ -667,13 +701,30 @@ function assemble!(b::Vector, form::LinearForm{D, TestSpace, FType};
 end
 
 """
-    assemble_parallel!(b, form::LinearForm, ast = resolve_form_ast(form))
+    assemble_parallel!(b, form::LinearForm, ast = resolve_form_ast(form)) -> b
 
-Assembles the `LinearForm` into `b` across threads, writing directly and without
-coordination by taking one colour of the grid at a time.
+Refills `b` with the assembled `form` across threads, and returns it.
 
-See `_colour_strides` for why that is safe, and [`assemble`](@ref) for when it is
-worth choosing over the serial sweep.
+Takes no locks and needs none. The grid is partitioned by *stride*: the offsets a term's
+stencil reaches give the width of the footprint one point writes, and two points at least
+that far apart cannot overlap, so every point of one stride is written concurrently with
+nothing to coordinate. Colours are swept in turn, and the count is `prod(strides)`.
+
+The common case is a single colour. A form whose test argument carries no difference —
+`innerₕ(fₕ, v)` — reaches only its own point, so the stride is 1 in every direction and the
+whole grid goes in one flat parallel pass. A two-dimensional gradient term reaches one point
+back along each axis, giving four colours.
+
+Whether it pays depends on the size, and assembly is memory-bound, so the gain flattens well
+before the thread count does: on four threads of an Apple M2 a one-dimensional
+`innerₕ(u, v)` over a million points measures about 2.0x, against 1.30x for a STREAM triad
+on the same machine, while a two-dimensional `innerₕ(u, v)` is already saturated at one
+thread. Below roughly 250,000 degrees of freedom the serial sweep wins.
+
+Unlike the serial [`assemble!`](@ref) this takes `ast` positionally rather than as a
+keyword.
+
+See also [`assemble!`](@ref) for the serial sweep and for what passing `ast` freezes.
 """
 function assemble_parallel!(b::AbstractVector,
         form::LinearForm{D, TestSpace, FType},
