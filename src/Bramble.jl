@@ -14,6 +14,7 @@ using FunctionWrappers: FunctionWrapper
 using StaticArrays: SVector, @SVector
 
 using LinearAlgebra: Diagonal, I, transpose, mul!, dot
+import LinearAlgebra: issymmetric, isposdef
 using FillArrays: Eye, Ones
 
 import Base: copy
@@ -88,6 +89,7 @@ export M₊ₓ!, M₊ᵧ!, M₊₂!
 
 export dirichlet_constraints, dirichlet_bc!, symmetrize!, DirichletConstraint
 export form, assemble, assemble!, assemble_parallel!, allocate_system_matrix, evaluate!
+export issymmetric, isposdef
 
 export export_vtk
 export export_pgfplots
@@ -129,6 +131,7 @@ include("form/block_extract.jl")
 include("form/dirichlet_constraints.jl")
 include("form/linear.jl")
 include("form/bilinear.jl")
+include("form/symmetry.jl")
 
 include("exporters/vtk_export.jl")
 include("exporters/pgfplots_export.jl")

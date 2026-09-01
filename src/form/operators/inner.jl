@@ -358,12 +358,34 @@ end
 # Zero-Allocation Stencil Evaluators
 # ==============================================================================
 
+#=
+`_same_operator_shape` (form/symmetry.jl) answers, for `innerₕ(L(u), L(v))` with the same `L`
+on both sides, that `op.left_op` and `op.right_op` are the same operator chain up to
+substituting `TrialFunction` for `TestFunction` at the leaves — which is exactly the
+condition under which `local_stencil(op.left_op, …)` and `local_stencil(op.right_op, …)`
+compute the identical tuple of `(offset, coefficient)` pairs. The two are then multiplied
+pairwise regardless, so half of those products — `left[i][2]*left[j][2]` and
+`left[j][2]*left[i][2]` — are the same number computed twice.
+`multiply_stencils_bilinear_symmetric` computes each such product once and reuses it for
+both `(i, j)` and `(j, i)`, so the fast path below runs `local_stencil` on one side only and
+still returns the same `N²`-entry tuple `multiply_stencils_bilinear` would have, just with
+`N(N+1)/2` multiplications behind it instead of `N²`.
+
+This check depends only on `op.left_op`/`op.right_op`'s structure, not on which space the
+trial and test argument range over — unlike `issymmetric`/`isposdef` (form/symmetry.jl),
+which additionally require the same space, it answers a strictly local question ("do the two
+sides compute the same numbers here") and is safe regardless.
+=#
 @inline function local_stencil(
         op::BilinearProduct{D, InnerType}, space, I::CartesianIndex{D},
         markers, lin_idx::Int) where {D, InnerType}
+    vol = compute_weight(InnerType(), space, I, lin_idx)
+    if _same_operator_shape(op.left_op, op.right_op)
+        stencil = local_stencil(op.left_op, space, I, markers, lin_idx)
+        return multiply_stencils_bilinear_symmetric(stencil, vol)
+    end
     left_stencil = local_stencil(op.left_op, space, I, markers, lin_idx)
     right_stencil = local_stencil(op.right_op, space, I, markers, lin_idx)
-    vol = compute_weight(InnerType(), space, I, lin_idx)
     return multiply_stencils_bilinear(left_stencil, right_stencil, vol)
 end
 

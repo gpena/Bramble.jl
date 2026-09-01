@@ -131,6 +131,26 @@ Inside a time loop, build the pattern once outside it and call `assemble!` withi
 a matrix whose pattern is fixed allocates nothing, where `assemble` allocates a new matrix
 every step.
 
+`a` above is `innerₕ(L(u), L(v))` with the same `D₋ₓ` on both sides, which is symmetric —
+and, since the quadrature weight `inner₊ₓ` carries is positive, positive semi-definite —
+purely by that construction. `issymmetric`/`isposdef` answer this from the expression alone,
+without assembling anything:
+
+```@example forms
+using LinearAlgebra: issymmetric, isposdef
+issymmetric(a), isposdef(a)
+```
+
+```@example forms
+c = form(Wₕ, Wₕ, (u, v) -> inner₊(u, D₋ₓ(v)))
+issymmetric(c)  # different operators either side — not this pattern
+```
+
+Knowing this before assembling is what makes a positive answer worth something: it says
+`cholesky` is worth trying on the result rather than a general factorization, at a cost —
+a few nanoseconds, against tens of microseconds to assemble even this small a matrix — close
+enough to free that there is no reason not to check.
+
 ## 5. Dirichlet conditions, and a Poisson problem
 
 Boundary conditions come in two pieces, because a matrix and a right-hand side need different
@@ -172,7 +192,24 @@ Eight parts in ten thousand on 33 points, which is second order behaving itself.
 
 Imposing conditions by replacing rows destroys symmetry, and a symmetric solver will want it
 back. `symmetrize!` moves the constrained columns onto the right-hand side, restoring
-symmetry and leaving the solution unchanged.
+symmetry and leaving the solution unchanged:
+
+```@example forms
+issymmetric(ad)          # true — the form is symmetric by construction, before any boundary condition
+```
+
+```@example forms
+issymmetric(Matrix(Ad))  # false — dirichlet_bc! zeroed rows, not columns
+```
+
+```@example forms
+symmetrize!(Ad, bd, Ωd, :left, :right)
+issymmetric(Matrix(Ad))  # true again, and the solution above is unchanged
+```
+
+`issymmetric(ad)` is a claim about the expression `ad`, not about any one matrix that gets
+assembled from it — it says nothing about what `dirichlet_bc!` alone leaves behind, which is
+exactly why the middle line above answers `false` even though the first one answers `true`.
 
 ## 6. Coupled systems
 

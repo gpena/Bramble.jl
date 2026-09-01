@@ -305,6 +305,16 @@ dirichlet_bc!
 symmetrize!
 ```
 
+### Structural properties
+
+Whether a `BilinearForm` is symmetric, or symmetric positive semi-definite, by construction
+— a cheap, symbolic check on its expression, answered before any matrix is assembled.
+
+```@docs
+issymmetric(::BilinearForm)
+isposdef(::BilinearForm)
+```
+
 ---
 
 ## Exporters
