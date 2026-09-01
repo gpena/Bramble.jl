@@ -416,6 +416,38 @@ end
             # measures the threshold rather than the scaling. See PARALLEL_FOR_MIN.
             small = avg_bytes(32)      # 1_024 degrees of freedom
             large = avg_bytes(1024)    # 1_048_576 degrees of freedom
+
+            # Instrumentation, not assertion. This pair has failed on CI at 80 MiB — which
+            # is 80 bytes per grid point, the size of rebuilding the quadrature rule at
+            # every one — while passing on the same Julia and platform locally. The
+            # `Val(true)` kernel path calls `_gauss_rule` *inside* the per-index closure
+            # and relies on the `@generated` function folding to a constant; constant
+            # folding depends on the inlining budget, and CI runs `--check-bounds=yes`,
+            # which changes it.
+            #
+            # So report whether the fold survived, rather than leaving the next failure to
+            # be guessed at again. `_gauss_rule_runtime` or `gauss` appearing in the
+            # closure's typed code means it did not.
+            let Ωd = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (32, 32)),
+                idx = CartesianIndex(2, 2)
+
+                g = Bramble._cell_average_kernel(
+                    f, Bramble.half_points(Ωd), Val(6), Float64, Val(2), Val(true))
+                g(idx)
+                per_index = @allocated g(idx)
+                Bramble._gauss_rule(Val(6), Float64)
+                rule = @allocated Bramble._gauss_rule(Val(6), Float64)
+                typed = string(first(code_typed(g, (typeof(idx),)))[1])
+                survived = !occursin("gauss", typed)
+
+                @info "avgₕ! allocation diagnostic: " *
+                      "small=$small large=$large " *
+                      "check_bounds=$(Base.JLOptions().check_bounds) " *
+                      "threads=$(Threads.nthreads()) " *
+                      "rule_folds=$(Bramble._rule_folds(Float64)) " *
+                      "rule_bytes=$rule per_index=$per_index fold_survived=$survived"
+            end
+
             @test large < 4 * small
             @test large < 100_000      # proportional would be ~8 MB
 
