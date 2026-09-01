@@ -1,0 +1,129 @@
+using Test
+using Bramble
+
+# Plain text, so unlike the VTK export test, the byte content itself is exactly what is
+# under test — there is no library on the other end whose correctness can be assumed.
+# Two facts matter most: the header/column layout for the 1D table format, and the
+# blank-line placement for the 2D `surf`/`mesh` format, which is the single most common
+# mistake when writing this by hand (miss it, and pgfplots connects points across rows
+# that should not be connected, into a shredded zigzag instead of a surface).
+
+@testset "PGFPlots export" begin
+    @testset "1D: header, columns, and values" begin
+        Ωₕ = mesh(domain(interval(0.0, 1.0)), 4, true)
+        Wₕ = gridspace(Ωₕ)
+        uₕ = Rₕ(Wₕ, x -> x)
+        vₕ = Rₕ(Wₕ, x -> 2x)
+
+        mktempdir() do dir
+            f = export_pgfplots(joinpath(dir, "t"), Ωₕ, "u" => uₕ, "v" => vₕ)
+            @test isfile(f)
+            @test endswith(f, ".dat")
+
+            lines = readlines(f)
+            @test lines[1] == "x u v"
+            @test length(lines) == 1 + ndofs(Wₕ)
+
+            rows = [parse.(Float64, split(l)) for l in lines[2:end]]
+            xs = points(Ωₕ)
+            for (i, row) in enumerate(rows)
+                @test row == [xs[i], xs[i], 2xs[i]]
+            end
+        end
+    end
+
+    @testset "1D: a composite field expands into one column per component" begin
+        Ωₕ = mesh(domain(interval(0.0, 1.0)), 4, true)
+        Wₕ = gridspace(Ωₕ)
+        Vₕ = Wₕ^Val(2)
+        cₕ = Rₕ(Vₕ, x -> (x, 10x))
+
+        mktempdir() do dir
+            f = export_pgfplots(joinpath(dir, "t"), Ωₕ, "u" => cₕ)
+            lines = readlines(f)
+            @test lines[1] == "x u_1 u_2"
+            row2 = parse.(Float64, split(lines[2]))
+            @test row2[2] ≈ row2[1]           # u_1 = x
+            @test row2[3] ≈ 10 * row2[1]       # u_2 = 10x
+        end
+    end
+
+    @testset "1D: a raw array of the wrong length is refused" begin
+        Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
+        mktempdir() do dir
+            @test_throws "has length 3, but the mesh has 5 points" export_pgfplots(
+                joinpath(dir, "t"), Ωₕ, "u" => [1.0, 2.0, 3.0])
+        end
+    end
+
+    @testset "2D: exact blank-line placement between scan lines" begin
+        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (3, 4), (true, true))
+        Wₕ = gridspace(Ωₕ)
+        uₕ = Rₕ(Wₕ, x -> x[1] + 10x[2])
+
+        mktempdir() do dir
+            f = export_pgfplots(joinpath(dir, "t"), Ωₕ, "u" => uₕ)
+            lines = readlines(f)
+
+            @test startswith(lines[1], "%")   # a comment line, which pgfplots skips
+
+            # 3 scan lines of 4 rows each, separated by exactly one blank line, with no
+            # leading or trailing blank line.
+            body = lines[2:end]
+            @test count(==(""), body) == 2
+            @test body[1] != ""
+            @test body[end] != ""
+
+            blanks = findall(==(""), body)
+            @test blanks == [5, 10]   # after row 4 and after row 9 of a 4-row scan line
+
+            # every value on a blank-separated block shares the same x — the outer,
+            # blank-line-grouped coordinate — and every block's y values sweep the full
+            # inner axis in order.
+            x, y = points(Ωₕ)
+            blocks = [body[1:4], body[6:9], body[11:14]]
+            for (k, block) in enumerate(blocks)
+                rows = [parse.(Float64, split(l)) for l in block]
+                @test all(r -> r[1] ≈ x[k], rows)
+                @test [r[2] for r in rows] ≈ y
+                @test [r[3] for r in rows] ≈ [x[k] + 10y[j] for j in eachindex(y)]
+            end
+        end
+    end
+
+    @testset "2D: more than one field, and a composite field, are both refused" begin
+        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (3, 4), (true, true))
+        Wₕ = gridspace(Ωₕ)
+        uₕ = Rₕ(Wₕ, x -> x[1])
+        Vₕ = Wₕ^Val(2)
+        cₕ = Rₕ(Vₕ, x -> (x[1], x[2]))
+
+        mktempdir() do dir
+            @test_throws "one scalar field per 2D file" export_pgfplots(
+                joinpath(dir, "t"), Ωₕ, "u" => uₕ, "v" => uₕ)
+            @test_throws "one scalar field per 2D file" export_pgfplots(
+                joinpath(dir, "t"), Ωₕ, "velocity" => cₕ)
+        end
+    end
+
+    @testset "a 3D mesh is refused, pointing at export_vtk" begin
+        Ωₕ = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (3, 3, 3),
+            (true, true, true))
+        Wₕ = gridspace(Ωₕ)
+        uₕ = Rₕ(Wₕ, x -> x[1])
+        mktempdir() do dir
+            @test_throws "use export_vtk instead" export_pgfplots(
+                joinpath(dir, "t"), Ωₕ, "u" => uₕ)
+        end
+    end
+
+    @testset "the single-element shorthand" begin
+        Ωₕ = mesh(domain(interval(0.0, 1.0)), 4, true)
+        Wₕ = gridspace(Ωₕ)
+        uₕ = Rₕ(Wₕ, sin)
+        mktempdir() do dir
+            f = export_pgfplots(joinpath(dir, "t"), uₕ)
+            @test readlines(f)[1] == "x u"
+        end
+    end
+end

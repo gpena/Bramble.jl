@@ -112,6 +112,10 @@ export ⋅
 # gets a message that says so, not a bare `MethodError`.
 export export_vtk
 
+# `export_pgfplots` needs no weak dependency at all — the format is plain whitespace-
+# separated text, so writing it is ordinary `Base` I/O.
+export export_pgfplots
+
 include("utils/macros.jl")
 include("utils/backend.jl")
 include("utils/linear_algebra.jl")
@@ -177,6 +181,7 @@ include("form/linear.jl")
 include("form/bilinear.jl")
 
 include("exporters/vtk_export.jl")
+include("exporters/pgfplots_export.jl")
 
 include("precompile.jl")
 end

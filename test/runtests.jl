@@ -156,6 +156,7 @@ if __bramble_with_unit_tests
 
         @testset verbose=true "Exporters" begin
             include("exporters/vtk_export.jl")
+            include("exporters/pgfplots_export.jl")
         end
     end
 end

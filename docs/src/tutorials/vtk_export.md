@@ -87,3 +87,9 @@ f1 = Rₕ(W1, sin)
 export_vtk(joinpath(mktempdir(), "curve"), f1)
 nothing # hide
 ```
+
+## Where to go next
+
+A full VTK file is usually more than a single plot going into a LaTeX document needs. For
+that, the [PGFPlots export tutorial](pgfplots_export.md) writes the plain text table
+`pgfplots` reads directly, with no external package at all.
