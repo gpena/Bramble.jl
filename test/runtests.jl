@@ -9,6 +9,7 @@ end
 
 using Test
 using Bramble
+using SparseArrays: spdiagm
 
 @inline function alloc_test(f::F, args...) where {F}
     f(args...) # warm up
@@ -45,6 +46,22 @@ macro test_allocs(call_expr)
         end
     end
 end
+
+# Two comparison helpers, shared by the files that need them rather than defined in each.
+#
+# They used to be duplicated verbatim — `_fd` in space/autodiff.jl and form/autodiff.jl,
+# `_tri` in form/symmetrize.jl and form/autodiff.jl. Every test file is included into
+# `Main`, so the second definition overwrote the first and Julia warned three times per
+# run. The copies were identical, so nothing misbehaved; the hazard was that editing one
+# copy would hand the other file a definition it never wrote, with include order silently
+# picking the winner.
+
+# Central difference of a scalar functional, to compare an AD derivative against. Every
+# AD test checks the derivative against this rather than merely checking that it ran.
+_fd(f, a; h = 1e-6) = (f(a + h) - f(a - h)) / (2h)
+
+# A symmetric, structurally symmetric operator to constrain.
+_tri(m) = spdiagm(0 => fill(4.0, m), 1 => fill(-1.0, m - 1), -1 => fill(-1.0, m - 1))
 
 const __bramble_with_examples = false
 const __bramble_test_group = get(ENV, "BRAMBLE_TEST_GROUP", "all")

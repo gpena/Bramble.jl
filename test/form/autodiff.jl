@@ -27,13 +27,10 @@ using LinearAlgebra: issymmetric
 # same functional in plain Float64 — so it tests that the derivative is right, not merely
 # that it ran.
 
-_fd(f, a; h = 1e-6) = (f(a + h) - f(a - h)) / (2h)
 function _matches_fd(f, a = 1.3; rtol = 1e-5)
     isapprox(ForwardDiff.derivative(f, a), _fd(f, a);
         rtol = rtol)
 end
-
-_tri(m) = spdiagm(0 => fill(4.0, m), 1 => fill(-1.0, m - 1), -1 => fill(-1.0, m - 1))
 
 @testset "Automatic differentiation through the constraints" begin
     Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),

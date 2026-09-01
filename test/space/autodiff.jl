@@ -26,9 +26,6 @@ using Bramble: values, components
 # Each test compares against a central difference of the same functional evaluated in
 # plain Float64, so it checks the derivative is right, not merely that it ran.
 
-# Central difference of a scalar functional, for comparison.
-_fd(f, a; h = 1e-6) = (f(a + h) - f(a - h)) / (2h)
-
 # `f` must be a scalar functional of one parameter, evaluated through the library.
 function _matches_finite_difference(f, a = 1.3; rtol = 1e-5)
     return isapprox(ForwardDiff.derivative(f, a), _fd(f, a); rtol = rtol)

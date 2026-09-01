@@ -19,9 +19,6 @@ using LinearAlgebra: issymmetric
 #   - the dense path called `findall(mask)` to list the marked indices, allocating a vector
 #     that grows with the boundary. Both paths now walk the mask's set bits.
 
-# a symmetric, structurally symmetric operator to constrain
-_tri(m) = spdiagm(0 => fill(4.0, m), 1 => fill(-1.0, m - 1), -1 => fill(-1.0, m - 1))
-
 @testset "Symmetrizing the constrained system" begin
     Ωₕ = mesh(
         domain(interval(0.0, 1.0) × interval(0.0, 1.0),
