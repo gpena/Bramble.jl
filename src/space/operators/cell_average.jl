@@ -64,60 +64,17 @@ a time-stepping loop.
 
 See also: [`avgₕ`](@ref), [`Rₕ!`](@ref)
 """
-Base.@constprop :aggressive function avgₕ!(
-        uₕ::VectorElement, f; quad_points::Int = AVG_QUAD_POINTS,
-        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {N}
-    quad_points >= 1 || throw(ArgumentError("quad_points must be >= 1, got $quad_points"))
-    Ωₕ = mesh(space(uₕ))
+@inline avgₕ!(uₕ::VectorElement{<:ScalarGridSpace{D}}, f::Tuple{Any}) where {D} =
+    avgₕ!(uₕ, f[1])
 
-    if N > 0
-        masks = ntuple(i -> index_in_marker(Ωₕ, markers[i]), Val(N))
-        # The rule is built in the mesh's element type, not the grid function's: the
-        # nodes and weights are geometry, and the Gauss rule is tabulated for real
-        # types only. A Dual-valued grid function integrates against a Float64 rule
-        # and the product promotes, which is what makes avgₕ differentiable.
-        _avg_masked!(uₕ, f, masks, half_points(Ωₕ), eltype(Ωₕ), Val(quad_points),
-            Val(dim(Ωₕ)))
-        return uₕ
-    end
+@inline avgₕ!(uₕ::VectorElement{<:ScalarGridSpace{D}}, f::F) where {D, F} =
+    _avgₕ!(uₕ, f, Val(D), Val(AVG_QUAD_POINTS))
 
-    # `f` is passed through unwrapped on purpose. Embedding it in a
-    # BrambleFunction gives a fixed compiled signature at the cost of an
-    # indirect call, which stops `f` inlining into the quadrature loop and
-    # measured 2.3x slower on the grids in the test suite. It also matches
-    # `avgₕ`, which has always passed the raw function.
-    _avgₕ!(uₕ, f, Val(dim(Ωₕ)), Val(quad_points))
-    return uₕ
-end
+@inline avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::Tuple) where {NC} =
+    _avgₕ!(uₕ, f, Val(dim(mesh(space(uₕ)))), Val(AVG_QUAD_POINTS))
 
-# The marked branch, split the same way the unmarked `_avgₕ!` family is. It used to be a
-# single `_masked_for!(to_matrix(uₕ), …)` call, which is wrong for a composite grid
-# function twice over: `to_matrix` answers with an NTuple of matrices there, not one array,
-# and the scalar kernel was built where the composite one is needed. `avgₕ!` on a composite
-# space with markers raised a MethodError as a result.
-@inline function _avg_masked!(uₕ::VectorElement{<:ScalarGridSpace}, f, masks, x,
-        ::Type{T}, nq::Val, dv::Val) where {T}
-    _masked_for!(to_matrix(uₕ), masks, _cell_average_kernel(
-        f, x, nq, T, dv))
-    return nothing
-end
-
-# One function per component: each is a scalar restriction over the same mask.
-@inline function _avg_masked!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::Tuple, masks,
-        x, ::Type{T}, nq::Val, dv::Val) where {NC, T}
-    comps = components(uₕ)
-    ntuple(i -> (_avg_masked!(comps[i], f[i], masks, x, T, nq, dv); nothing), Val(NC))
-    return nothing
-end
-
-# A single function returning every component: one masked pass, scattering the tuple.
-@inline function _avg_masked!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f, masks, x,
-        ::Type{T}, nq::Val, dv::Val) where {NC, T}
-    mats = ntuple(i -> to_matrix(components(uₕ)[i]), Val(NC))
-    _masked_scatter_for!(mats, masks,
-        _cell_average_kernel(f, x, nq, T, dv, Val(NC)))
-    return nothing
-end
+@inline avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::F) where {NC, F} =
+    _avgₕ!(uₕ, f, Val(dim(mesh(space(uₕ)))), Val(AVG_QUAD_POINTS))
 
 # A one-component space is a scalar space, so an NC-tuple of functions with
 # NC == 1 must still work.
@@ -126,54 +83,267 @@ end
     markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {N} = avgₕ!(
     uₕ, f[1]; quad_points = quad_points, markers = markers)
 
+Base.@constprop :aggressive function avgₕ!(
+        uₕ::VectorElement, f; quad_points::Int = AVG_QUAD_POINTS,
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {N}
+    quad_points >= 1 || throw(ArgumentError("quad_points must be >= 1, got $quad_points"))
+    Ωₕ = mesh(space(uₕ))
+    D = dim(Ωₕ)
+
+    if N > 0
+        return _avg_masked!(uₕ, f, markers, Val(D), Val(quad_points))
+    end
+
+    return _avgₕ!(uₕ, f, Val(D), Val(quad_points))
+end
+
 # Evaluations per grid point for a tensor-product rule of `NQ` points per
-# direction on a `D`-dimensional mesh. The threading threshold in
-# `_parallel_for!` counts evaluations, so a kernel this expensive per index
-# reaches the crossover at proportionally fewer indices.
+# direction on a `D`-dimensional mesh. The threading threshold counts
+# evaluations, so a kernel this expensive per index reaches the crossover
+# at proportionally fewer indices.
 @inline _avg_min_work(::Val{D}, ::Val{NQ}) where {D, NQ} = max(
     1, cld(PARALLEL_FOR_MIN, NQ^D))
 
-function _avgₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f, ::Val{1}, nq::Val)
-    Ωₕ = mesh(space(uₕ))
+@inline function _avgₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f::F, ::Val{1}, nq::Val{NQ}) where {F, NQ}
+    (; space) = uₕ
+    Ωₕ = mesh(space)
     x = half_points(Ωₕ)
     T = eltype(Ωₕ)
+    raw = values(uₕ)
+    idxs = indices(Ωₕ)
+    n = length(idxs)
+    nodes, wts = _gauss_rule(nq, T)
 
-    _parallel_for!(values(uₕ), indices(Ωₕ),
-        _cell_average_kernel(f, x, nq, T, Val(1));
-        min_work = _avg_min_work(Val(1), nq))
+    if Threads.nthreads() == 1 || n < _avg_min_work(Val(1), nq)
+        @inbounds for i in 1:n
+            raw[i] = _cell_average(f, x, idxs[i][1], nodes, wts)
+        end
+        return uₕ
+    end
+    _threaded_avgₕ!(raw, f, x, idxs, nodes, wts, Val(1))
+    return uₕ
+end
+
+@noinline function _threaded_avgₕ!(raw, f::F, x, idxs, nodes::SVector{NQ, T},
+        wts::SVector{NQ, T}, ::Val{1}) where {F, NQ, T}
+    Threads.@threads :static for i in 1:length(idxs)
+        @inbounds raw[i] = _cell_average(f, x, idxs[i][1], nodes, wts)
+    end
     return nothing
 end
 
-function _avgₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f, ::Val{D}, nq::Val) where {D}
-    Ωₕ = mesh(space(uₕ))
+@inline function _avgₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f::F, ::Val{D}, nq::Val{NQ}) where {F, D, NQ}
+    (; space) = uₕ
+    Ωₕ = mesh(space)
     x = half_points(Ωₕ)
     T = eltype(Ωₕ)
+    raw = values(uₕ)
+    idxs = indices(Ωₕ)
+    n = length(idxs)
+    nodes, wts = _gauss_rule(nq, T)
 
-    _parallel_for!(to_matrix(uₕ), indices(Ωₕ),
-        _cell_average_kernel(f, x, nq, T, Val(D));
-        min_work = _avg_min_work(Val(D), nq))
+    if Threads.nthreads() == 1 || n < _avg_min_work(Val(D), nq)
+        @inbounds for i in 1:n
+            raw[i] = _cell_average(f, x, idxs[i], nodes, wts)
+        end
+        return uₕ
+    end
+    _threaded_avgₕ!(raw, f, x, idxs, nodes, wts, Val(D))
+    return uₕ
+end
+
+@noinline function _threaded_avgₕ!(raw, f::F, x, idxs, nodes::SVector{NQ, T},
+        wts::SVector{NQ, T}, ::Val{D}) where {F, D, NQ, T}
+    Threads.@threads :static for i in 1:length(idxs)
+        @inbounds raw[i] = _cell_average(f, x, idxs[i], nodes, wts)
+    end
     return nothing
 end
 
-function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::Tuple, val_dim::Val, nq::Val) where {NC}
+# Composite space: one function per component
+@inline function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::Tuple, ::Val{D}, nq::Val{NQ}) where {NC, D, NQ}
     comps = components(uₕ)
-    ntuple(i -> _avgₕ!(comps[i], f[i], val_dim, nq), Val(NC))
-    return nothing
+    ntuple(i -> _avgₕ!(comps[i], f[i], Val(D), nq), Val(NC))
+    return uₕ
 end
 
-# A single function returning all components: average it in one pass over the
-# grid rather than once per component.
-function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f, ::Val{D}, nq::Val) where {
-        NC, D}
+@inline function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::Tuple, ::Val{1}, nq::Val{NQ}) where {NC, NQ}
+    comps = components(uₕ)
+    ntuple(i -> _avgₕ!(comps[i], f[i], Val(1), nq), Val(NC))
+    return uₕ
+end
+
+# Composite space: single vector-valued function returning all components
+@inline function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f, ::Val{1}, nq::Val{NQ}) where {NC, NQ}
     Ωₕ = mesh(space(uₕ))
     x = half_points(Ωₕ)
     T = eltype(Ωₕ)
-    mats = ntuple(i -> to_matrix(components(uₕ)[i]), Val(NC))
+    comps = components(uₕ)
+    raws = ntuple(i -> values(comps[i]), Val(NC))
+    idxs = indices(Ωₕ)
+    n = length(idxs)
+    nodes, wts = _gauss_rule(nq, T)
 
-    _scatter_for!(mats, indices(Ωₕ),
-        _cell_average_kernel(f, x, nq, T, Val(D), Val(NC));
-        min_work = _avg_min_work(Val(D), nq))
+    if Threads.nthreads() == 1 || n < _avg_min_work(Val(1), nq)
+        @inbounds for i in 1:n
+            vals = _cell_average(f, x, idxs[i][1], nodes, wts, Val(NC))
+            _scatter_comp!(raws, vals, i)
+        end
+        return uₕ
+    end
+    _threaded_scatter_avgₕ!(raws, f, x, idxs, nodes, wts, Val(1), Val(NC))
+    return uₕ
+end
+
+@inline function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f, ::Val{D}, nq::Val{NQ}) where {NC, D, NQ}
+    Ωₕ = mesh(space(uₕ))
+    x = half_points(Ωₕ)
+    T = eltype(Ωₕ)
+    comps = components(uₕ)
+    raws = ntuple(i -> values(comps[i]), Val(NC))
+    idxs = indices(Ωₕ)
+    n = length(idxs)
+    nodes, wts = _gauss_rule(nq, T)
+
+    if Threads.nthreads() == 1 || n < _avg_min_work(Val(D), nq)
+        @inbounds for i in 1:n
+            vals = _cell_average(f, x, idxs[i], nodes, wts, Val(NC))
+            _scatter_comp!(raws, vals, i)
+        end
+        return uₕ
+    end
+    _threaded_scatter_avgₕ!(raws, f, x, idxs, nodes, wts, Val(D), Val(NC))
+    return uₕ
+end
+
+@noinline function _threaded_scatter_avgₕ!(raws, f, x, idxs, nodes::SVector{NQ, T},
+        wts::SVector{NQ, T}, ::Val{1}, ::Val{NC}) where {NQ, T, NC}
+    Threads.@threads :static for i in 1:length(idxs)
+        vals = _cell_average(f, x, idxs[i][1], nodes, wts, Val(NC))
+        _scatter_comp!(raws, vals, i)
+    end
     return nothing
+end
+
+@noinline function _threaded_scatter_avgₕ!(raws, f, x, idxs, nodes::SVector{NQ, T},
+        wts::SVector{NQ, T}, ::Val{D}, ::Val{NC}) where {D, NQ, T, NC}
+    Threads.@threads :static for i in 1:length(idxs)
+        vals = _cell_average(f, x, idxs[i], nodes, wts, Val(NC))
+        _scatter_comp!(raws, vals, i)
+    end
+    return nothing
+end
+
+@inline function _avg_masked!(uₕ::VectorElement{<:ScalarGridSpace}, f,
+        markers::NTuple{N, Symbol}, ::Val{1}, nq::Val{NQ}) where {N, NQ}
+    (; space) = uₕ
+    Ωₕ = mesh(space)
+    x = half_points(Ωₕ)
+    T = eltype(Ωₕ)
+    raw = values(uₕ)
+    idxs = indices(Ωₕ)
+    n = length(idxs)
+    nodes, wts = _gauss_rule(nq, T)
+
+    fill!(raw, zero(eltype(raw)))
+    for m in markers
+        mask = index_in_marker(Ωₕ, m)
+        @inbounds for i in 1:n
+            if mask[i]
+                raw[i] = _cell_average(f, x, idxs[i][1], nodes, wts)
+            end
+        end
+    end
+    return uₕ
+end
+
+@inline function _avg_masked!(uₕ::VectorElement{<:ScalarGridSpace}, f,
+        markers::NTuple{N, Symbol}, ::Val{D}, nq::Val{NQ}) where {N, D, NQ}
+    (; space) = uₕ
+    Ωₕ = mesh(space)
+    x = half_points(Ωₕ)
+    T = eltype(Ωₕ)
+    raw = values(uₕ)
+    idxs = indices(Ωₕ)
+    n = length(idxs)
+    nodes, wts = _gauss_rule(nq, T)
+
+    fill!(raw, zero(eltype(raw)))
+    for m in markers
+        mask = index_in_marker(Ωₕ, m)
+        @inbounds for i in 1:n
+            if mask[i]
+                raw[i] = _cell_average(f, x, idxs[i], nodes, wts)
+            end
+        end
+    end
+    return uₕ
+end
+
+@inline function _avg_masked!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::Tuple,
+        markers::NTuple{N, Symbol}, ::Val{D}, nq::Val{NQ}) where {NC, N, D, NQ}
+    comps = components(uₕ)
+    ntuple(i -> _avg_masked!(comps[i], f[i], markers, Val(D), nq), Val(NC))
+    return uₕ
+end
+
+@inline function _avg_masked!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::Tuple,
+        markers::NTuple{N, Symbol}, ::Val{1}, nq::Val{NQ}) where {NC, N, NQ}
+    comps = components(uₕ)
+    ntuple(i -> _avg_masked!(comps[i], f[i], markers, Val(1), nq), Val(NC))
+    return uₕ
+end
+
+@inline function _avg_masked!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f,
+        markers::NTuple{N, Symbol}, ::Val{1}, nq::Val{NQ}) where {NC, N, NQ}
+    Ωₕ = mesh(space(uₕ))
+    x = half_points(Ωₕ)
+    T = eltype(Ωₕ)
+    comps = components(uₕ)
+    raws = ntuple(i -> values(comps[i]), Val(NC))
+    idxs = indices(Ωₕ)
+    n = length(idxs)
+    nodes, wts = _gauss_rule(nq, T)
+
+    for raw in raws
+        fill!(raw, zero(eltype(raw)))
+    end
+    for m in markers
+        mask = index_in_marker(Ωₕ, m)
+        @inbounds for i in 1:n
+            if mask[i]
+                vals = _cell_average(f, x, idxs[i][1], nodes, wts, Val(NC))
+                _scatter_comp!(raws, vals, i)
+            end
+        end
+    end
+    return uₕ
+end
+
+@inline function _avg_masked!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f,
+        markers::NTuple{N, Symbol}, ::Val{D}, nq::Val{NQ}) where {NC, N, D, NQ}
+    Ωₕ = mesh(space(uₕ))
+    x = half_points(Ωₕ)
+    T = eltype(Ωₕ)
+    comps = components(uₕ)
+    raws = ntuple(i -> values(comps[i]), Val(NC))
+    idxs = indices(Ωₕ)
+    n = length(idxs)
+    nodes, wts = _gauss_rule(nq, T)
+
+    for raw in raws
+        fill!(raw, zero(eltype(raw)))
+    end
+    for m in markers
+        mask = index_in_marker(Ωₕ, m)
+        @inbounds for i in 1:n
+            if mask[i]
+                vals = _cell_average(f, x, idxs[i], nodes, wts, Val(NC))
+                _scatter_comp!(raws, vals, i)
+            end
+        end
+    end
+    return uₕ
 end
 
 #=
