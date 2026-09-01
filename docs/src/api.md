@@ -304,3 +304,14 @@ dirichlet_constraints
 dirichlet_bc!
 symmetrize!
 ```
+
+---
+
+## Exporters
+
+Writing a mesh and its grid functions to a file a viewer can open. See the
+[VTK export tutorial](tutorials/vtk_export.md).
+
+```@docs
+export_vtk
+```
