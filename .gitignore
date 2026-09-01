@@ -97,3 +97,7 @@ polygonal_mesh_plan.md
 # This covers its sources, its LaTeX build products and the design preview.
 manual/
 docs/manual_design_preview.html
+
+# Working notes for the form-layer unlock, paired with the tracker artifact. Kept out of
+# version control by request: the history and the open questions live here, not on GitHub.
+docs/form-unlock-plan.md
