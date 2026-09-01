@@ -32,6 +32,11 @@ manual/*.aux
 manual/*.bbl
 manual/*.blg
 manual/*.fdb_latexmk
+
+# The latexmk configuration itself, at the root as well as inside manual/. It only exists
+# to build the manual, and everything to do with the manual stays out of version control.
+# No leading slash, so it matches at any depth.
+.latexmkrc
 manual/*.fls
 manual/*.idx
 manual/*.ilg
