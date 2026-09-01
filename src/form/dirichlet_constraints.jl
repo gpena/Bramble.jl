@@ -400,7 +400,6 @@ _function_in_linear_indices(func, Ωₕ, i) = func(point(Ωₕ, indices(Ωₕ)[i
 
 function _dirichlet_bc_indices!(v::AbstractVector, Ωₕ::AbstractMeshType,
         index_in_marker::BitVector, func::BrambleFunction)
-    g = PointwiseEvaluator(func, Ωₕ)
     cart_indices = indices(Ωₕ)
 
     chunks = index_in_marker.chunks
@@ -412,7 +411,7 @@ function _dirichlet_bc_indices!(v::AbstractVector, Ωₕ::AbstractMeshType,
         while temp_chunk != zero(UInt64)
             bit_pos = trailing_zeros(temp_chunk)
             idx = offset + bit_pos + 1
-            v[idx] = g(cart_indices[idx])
+            v[idx] = func(point(Ωₕ, cart_indices[idx]))
             temp_chunk &= temp_chunk - 1
         end
     end

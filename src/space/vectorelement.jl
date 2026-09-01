@@ -47,7 +47,26 @@ end
 Returns the grid space associated with [`VectorElement`](@ref) `uₕ`.
 """
 @inline space(uₕ::VectorElement) = uₕ.space
+
+"""
+	space_type(::Type{<:VectorElement})
+	space_type(uₕ::VectorElement)
+
+Returns the concrete [`AbstractSpaceType`](@ref) associated with a [`VectorElement`](@ref) type or instance.
+
+# Examples
+
+```julia
+Wₕ = gridspace(Ωₕ)
+uₕ = element(Wₕ)
+space_type(typeof(uₕ)) === typeof(Wₕ)  # true
+space_type(uₕ) === typeof(Wₕ)          # true
+```
+
+See also: [`space`](@ref), [`VectorElement`](@ref)
+"""
 @inline space_type(::Type{<:VectorElement{S}}) where {S} = S
+@inline space_type(uₕ::VectorElement) = space_type(typeof(uₕ))
 
 # Forward array-like methods to the `data` field. This allows a VectorElement
 # to behave like a standard Julia vector (e.g., support `size`, `length`, `eltype`).

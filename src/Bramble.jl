@@ -53,7 +53,8 @@ export indices, boundary_indices, interior_indices, is_boundary_index, index_in_
        is_uniform
 
 # Space handling
-export gridspace, vector_gridspace, space, spaces, ScalarGridSpace, CompositeGridSpace,
+export gridspace, vector_gridspace, space, space_type, spaces, ScalarGridSpace,
+       CompositeGridSpace,
        VectorGridSpace
 export ndofs, ncomponents, weights
 export VectorElement, element, to_matrix, values, values!, component, components,
