@@ -30,7 +30,7 @@ b16 = metal_backend(Float16)   # half-precision
 ```
 """
 function Bramble._metal_backend(::Type{T}) where {T <: Union{Float16, Float32}}
-	return Backend{MtlVector{T}, MtlMatrix{T}}()
+    return Backend{MtlVector{T}, MtlMatrix{T}}()
 end
 
 # ---------------------------------------------------------------------------
@@ -38,25 +38,26 @@ end
 # ---------------------------------------------------------------------------
 
 @inline function vector(::Backend{VT, MT}, n::Integer) where {T, VT <: MtlVector{T}, MT}
-	return MtlArray{T}(undef, n)
+    return MtlArray{T}(undef, n)
 end
 
-@inline function matrix(::Backend{VT, MT}, n::Integer, m::Integer) where {T, VT, MT <: MtlMatrix{T}}
-	return MtlArray{T}(undef, n, m)
+@inline function matrix(::Backend{VT, MT}, n::Integer, m::Integer) where {
+        T, VT, MT <: MtlMatrix{T}}
+    return MtlArray{T}(undef, n, m)
 end
 
 # ---------------------------------------------------------------------------
 # backend_eye / backend_zeros — Metal-specific implementations
 # ---------------------------------------------------------------------------
 
-function _backend_eye(::Type{MtlMatrix{T}}, n::Integer) where T
-	return mtl(Matrix{T}(I, n, n))
+function _backend_eye(::Type{MtlMatrix{T}}, n::Integer) where {T}
+    return mtl(Matrix{T}(I, n, n))
 end
 
-function _backend_zeros(::Type{MtlMatrix{T}}, n::Integer) where T
-	out = MtlArray{T}(undef, n, n)
-	Metal.fill!(out, zero(T))
-	return out
+function _backend_zeros(::Type{MtlMatrix{T}}, n::Integer) where {T}
+    out = MtlArray{T}(undef, n, n)
+    Metal.fill!(out, zero(T))
+    return out
 end
 
 end # module BrambleMetalExt

@@ -64,17 +64,16 @@ a time-stepping loop.
 
 See also: [`avgₕ`](@ref), [`Rₕ!`](@ref)
 """
-@inline avgₕ!(uₕ::VectorElement{<:ScalarGridSpace{D}}, f::Tuple{Any}) where {D} =
-    avgₕ!(uₕ, f[1])
+@inline avgₕ!(uₕ::VectorElement{<:ScalarGridSpace{D}}, f::Tuple{Any}) where {D} = avgₕ!(uₕ, f[1])
 
-@inline avgₕ!(uₕ::VectorElement{<:ScalarGridSpace{D}}, f::F) where {D, F} =
-    _avgₕ!(uₕ, f, Val(D), Val(AVG_QUAD_POINTS))
+@inline avgₕ!(uₕ::VectorElement{<:ScalarGridSpace{D}}, f::F) where {D, F} = _avgₕ!(
+    uₕ, f, Val(D), Val(AVG_QUAD_POINTS))
 
-@inline avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::Tuple) where {NC} =
-    _avgₕ!(uₕ, f, Val(dim(mesh(space(uₕ)))), Val(AVG_QUAD_POINTS))
+@inline avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::Tuple) where {NC} = _avgₕ!(
+    uₕ, f, Val(dim(mesh(space(uₕ)))), Val(AVG_QUAD_POINTS))
 
-@inline avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::F) where {NC, F} =
-    _avgₕ!(uₕ, f, Val(dim(mesh(space(uₕ)))), Val(AVG_QUAD_POINTS))
+@inline avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::F) where {NC, F} = _avgₕ!(
+    uₕ, f, Val(dim(mesh(space(uₕ)))), Val(AVG_QUAD_POINTS))
 
 # A one-component space is a scalar space, so an NC-tuple of functions with
 # NC == 1 must still work.
@@ -104,7 +103,8 @@ end
 @inline _avg_min_work(::Val{D}, ::Val{NQ}) where {D, NQ} = max(
     1, cld(PARALLEL_FOR_MIN, NQ^D))
 
-@inline function _avgₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f::F, ::Val{1}, nq::Val{NQ}) where {F, NQ}
+@inline function _avgₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f::F, ::Val{1}, nq::Val{NQ}) where {
+        F, NQ}
     (; space) = uₕ
     Ωₕ = mesh(space)
     x = half_points(Ωₕ)
@@ -132,7 +132,8 @@ end
     return nothing
 end
 
-@inline function _avgₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f::F, ::Val{D}, nq::Val{NQ}) where {F, D, NQ}
+@inline function _avgₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f::F, ::Val{D}, nq::Val{NQ}) where {
+        F, D, NQ}
     (; space) = uₕ
     Ωₕ = mesh(space)
     x = half_points(Ωₕ)
@@ -161,20 +162,23 @@ end
 end
 
 # Composite space: one function per component
-@inline function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::Tuple, ::Val{D}, nq::Val{NQ}) where {NC, D, NQ}
+@inline function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}},
+        f::Tuple, ::Val{D}, nq::Val{NQ}) where {NC, D, NQ}
     comps = components(uₕ)
     ntuple(i -> _avgₕ!(comps[i], f[i], Val(D), nq), Val(NC))
     return uₕ
 end
 
-@inline function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::Tuple, ::Val{1}, nq::Val{NQ}) where {NC, NQ}
+@inline function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}},
+        f::Tuple, ::Val{1}, nq::Val{NQ}) where {NC, NQ}
     comps = components(uₕ)
     ntuple(i -> _avgₕ!(comps[i], f[i], Val(1), nq), Val(NC))
     return uₕ
 end
 
 # Composite space: single vector-valued function returning all components
-@inline function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f, ::Val{1}, nq::Val{NQ}) where {NC, NQ}
+@inline function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f, ::Val{1}, nq::Val{NQ}) where {
+        NC, NQ}
     Ωₕ = mesh(space(uₕ))
     x = half_points(Ωₕ)
     T = eltype(Ωₕ)
@@ -195,7 +199,8 @@ end
     return uₕ
 end
 
-@inline function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f, ::Val{D}, nq::Val{NQ}) where {NC, D, NQ}
+@inline function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f, ::Val{D}, nq::Val{NQ}) where {
+        NC, D, NQ}
     Ωₕ = mesh(space(uₕ))
     x = half_points(Ωₕ)
     T = eltype(Ωₕ)
