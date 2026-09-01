@@ -6,10 +6,6 @@ import Base: eltype, length
 import Base: show, first, last, getindex, setindex!, iterate, size, ndims, firstindex,
              lastindex, axes, eachindex
 
-# `rowvals`, `nonzeros`, `nzrange` and `sparse` are for the form layer: it
-# edits sparse structure directly when imposing Dirichlet rows, and the import here is
-# selective, so a name missing from this list is simply undefined in the module. That is
-# what `dirichlet_bc!` hit on its first run — `UndefVarError: rowvals`.
 using SparseArrays: SparseMatrixCSC, SparseVector, spdiagm, spzeros,
                     rowvals, nonzeros, nzrange, sparse, sparse!
 
@@ -65,8 +61,6 @@ export snorm₁ₕ, norm₁ₕ, norm₊, normₕ
 
 export diff₋ₓ, diff₋ᵧ, diff₋₂, diff₋ₕ
 export diff₊ₓ, diff₊ᵧ, diff₊₂, diff₊ₕ
-# The in-place forms. Each writes into its first argument and returns it, so the allocating
-# form above is one call to it on a `similar`.
 export diff₋ₓ!, diff₋ᵧ!, diff₋₂!
 export diff₊ₓ!, diff₊ᵧ!, diff₊₂!
 
@@ -74,10 +68,13 @@ export D₋ₓ, D₋ᵧ, D₋₂, ∇₋ₕ
 export D₊ₓ, D₊ᵧ, D₊₂, ∇₊ₕ
 export D₋ₓ!, D₋ᵧ!, D₋₂!
 export D₊ₓ!, D₊ᵧ!, D₊₂!
+
 export Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂, Dstar₊ₕ
 export Dstar₊ₓ!, Dstar₊ᵧ!, Dstar₊₂!
+
 export Dcₓ, Dcᵧ, Dc₂, Dcₕ
 export Dcₓ!, Dcᵧ!, Dc₂!
+
 export Dₕₓ, Dₕᵧ, Dₕ₂, ∇ₕ
 export Dₕₓ!, Dₕᵧ!, Dₕ₂!
 
@@ -90,24 +87,9 @@ export M₋ₓ!, M₋ᵧ!, M₋₂!
 export M₊ₓ!, M₊ᵧ!, M₊₂!
 
 export dirichlet_constraints, dirichlet_bc!, symmetrize!, DirichletConstraint
-
-# The form layer. Every name here carries a docstring, which `test/quality/exports.jl`
-# requires of anything exported.
-#
-# `resolve_form_ast` is deliberately not among them. `assemble!(b, l)` re-resolves the
-# expression on every call, which is what keeps a form's coefficients live; passing a
-# resolved `ast` freezes rebinding, so it is an optimisation with a semantic cost rather
-# than the normal way to call this, and it stays reachable as `Bramble.resolve_form_ast`.
 export form, assemble, assemble!, assemble_parallel!, allocate_system_matrix, evaluate!
 
-# `export_vtk` is documented and defined here, in the main package, and errors by default;
-# `ext/BrambleVTKExt.jl` overrides the internal `_export_vtk` it calls. Same idiom as
-# `metal_backend`, so the docstring lives in one place and a caller without WriteVTK loaded
-# gets a message that says so, not a bare `MethodError`.
 export export_vtk
-
-# `export_pgfplots` needs no weak dependency at all — the format is plain whitespace-
-# separated text, so writing it is ordinary `Base` I/O.
 export export_pgfplots
 
 include("utils/macros.jl")
@@ -131,8 +113,6 @@ include("space/scalar_gridspace.jl")
 include("space/vector_gridspace.jl")
 include("space/vectorelement.jl")
 
-# Rₕ and avgₕ come first: they need only the element, while the stencil operators below
-# share a traversal defined in difference.jl.
 include("space/operators/restriction.jl")
 include("space/operators/cell_average.jl")
 include("space/operators/linear_operators.jl")
