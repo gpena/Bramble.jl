@@ -26,11 +26,6 @@ using Bramble: values, components
 # Each test compares against a central difference of the same functional evaluated in
 # plain Float64, so it checks the derivative is right, not merely that it ran.
 
-# `f` must be a scalar functional of one parameter, evaluated through the library.
-function _matches_finite_difference(f, a = 1.3; rtol = 1e-5)
-    return isapprox(ForwardDiff.derivative(f, a), _fd(f, a); rtol = rtol)
-end
-
 @testset "Automatic differentiation" begin
     Ωₕ1 = mesh(domain(interval(0.0, 1.0)), 21, true)
     Ωₕ2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 8), (true, false))
@@ -58,35 +53,35 @@ end
     end
 
     @testset "restriction and cell averaging" begin
-        @test _matches_finite_difference(a -> innerₕ(Rₕ(Wₕ1, x -> a * sin(x)),
+        @test _matches_fd(a -> innerₕ(Rₕ(Wₕ1, x -> a * sin(x)),
             Rₕ(Wₕ1, x -> a * x)))
-        @test _matches_finite_difference(a -> innerₕ(avgₕ(Wₕ1, x -> a * sin(x)),
+        @test _matches_fd(a -> innerₕ(avgₕ(Wₕ1, x -> a * sin(x)),
             Rₕ(Wₕ1, x -> a * x)))
         # the quadrature rule is the mesh's type at every order, not the field's
         for nq in (2, 3, 6)
-            @test _matches_finite_difference(a -> innerₕ(
+            @test _matches_fd(a -> innerₕ(
                 avgₕ(Wₕ1, x -> a * sin(x); quad_points = nq), Rₕ(Wₕ1, x -> a * x)))
         end
 
         # the in-place forms, writing into an element allocated at the Dual type
-        @test _matches_finite_difference(function (a)
+        @test _matches_fd(function (a)
             uₕ = element(Wₕ1, typeof(a))
             Rₕ!(uₕ, x -> a * sin(x))
             return innerₕ(uₕ, uₕ)
         end)
-        @test _matches_finite_difference(function (a)
+        @test _matches_fd(function (a)
             uₕ = element(Wₕ1, typeof(a))
             avgₕ!(uₕ, x -> a * sin(x))
             return innerₕ(uₕ, uₕ)
         end)
 
         # element built from a scalar, and from an existing coefficient vector
-        @test _matches_finite_difference(a -> innerₕ(element(Wₕ1, a), element(Wₕ1, a)))
+        @test _matches_fd(a -> innerₕ(element(Wₕ1, a), element(Wₕ1, a)))
 
         # markers restrict evaluation and still differentiate
         Ωm = mesh(domain(interval(0.0, 1.0), :left => :left, :right => :right), 21, true)
         Wm = gridspace(Ωm)
-        @test _matches_finite_difference(a -> innerₕ(
+        @test _matches_fd(a -> innerₕ(
             avgₕ(Wm, x -> a * sin(x); markers = (:left, :right)), Rₕ(Wm, x -> a * x)))
     end
 
@@ -95,7 +90,7 @@ end
             ("diff₊ₓ", diff₊ₓ), ("jumpₓ", jumpₓ), ("M₋ₓ", M₋ₓ), ("M₊ₓ", M₊ₓ),
             ("Dstar₊ₓ", Dstar₊ₓ), ("Dcₓ", Dcₓ), ("Dₕₓ", Dₕₓ))
             @testset "$nm" begin
-                @test _matches_finite_difference(a -> innerₕ(
+                @test _matches_fd(a -> innerₕ(
                     op(Rₕ(Wₕ1, x -> a * sin(x) + a^2 * x)), Rₕ(Wₕ1, x -> x)))
             end
         end
@@ -104,7 +99,7 @@ end
         for (nm, op) in (("∇₋ₕ", ∇₋ₕ), ("∇₊ₕ", ∇₊ₕ), ("Dcₕ", Dcₕ), ("∇ₕ", ∇ₕ),
             ("Dstar₊ₕ", Dstar₊ₕ), ("M₋ₕ", M₋ₕ), ("jumpₕ", jumpₕ))
             @testset "$nm" begin
-                @test _matches_finite_difference(function (a)
+                @test _matches_fd(function (a)
                     g = op(Rₕ(Wₕ2, x -> a * sin(x[1]) * x[2] + a^2 * x[1]))
                     return inner₊(g, g)
                 end)
@@ -117,18 +112,18 @@ end
             ("snorm₁ₕ", snorm₁ₕ), ("norm₁ₕ", norm₁ₕ),
             ("inner₊", uₕ -> inner₊(uₕ, uₕ)), ("inner₊ₓ", uₕ -> inner₊ₓ(uₕ, uₕ)))
             @testset "$nm" begin
-                @test _matches_finite_difference(a -> f(Rₕ(Wₕ1,
+                @test _matches_fd(a -> f(Rₕ(Wₕ1,
                     x -> a * sin(x) + a^2 * x)))
             end
         end
-        @test _matches_finite_difference(a -> norm₊(∇₋ₕ(Rₕ(Wₕ2,
+        @test _matches_fd(a -> norm₊(∇₋ₕ(Rₕ(Wₕ2,
             x -> a * sin(x[1]) * x[2]))))
-        @test _matches_finite_difference(a -> inner₊ᵧ(Rₕ(Wₕ2, x -> a * x[1] * x[2]),
+        @test _matches_fd(a -> inner₊ᵧ(Rₕ(Wₕ2, x -> a * x[1] * x[2]),
             Rₕ(Wₕ2, x -> a * x[2])))
     end
 
     @testset "composite grid functions" begin
-        @test _matches_finite_difference(function (a)
+        @test _matches_fd(function (a)
             cₕ = Rₕ(Vₕ2, (x -> a * x[1], x -> a^2 * x[2]))
             dₕ = Dcₓ(cₕ)
             k1, k2 = components(dₕ)
@@ -137,12 +132,12 @@ end
     end
 
     @testset "element arithmetic and broadcasting" begin
-        @test _matches_finite_difference(function (a)
+        @test _matches_fd(function (a)
             uₕ = Rₕ(Wₕ1, x -> a * sin(x))
             vₕ = Rₕ(Wₕ1, x -> a * x)
             return innerₕ(uₕ + vₕ, 2 .* uₕ .* vₕ)
         end)
-        @test _matches_finite_difference(function (a)
+        @test _matches_fd(function (a)
             uₕ = Rₕ(Wₕ1, x -> a * sin(x))
             wₕ = similar(uₕ)
             wₕ .= uₕ
@@ -155,7 +150,7 @@ end
         # Dual vector promotes.
         for (nm, op) in (("D₋ₓ", D₋ₓ), ("M₋ₓ", M₋ₓ), ("jumpₓ", jumpₓ))
             @testset "$nm" begin
-                @test _matches_finite_difference(a -> sum(op(Ωₕ1) *
+                @test _matches_fd(a -> sum(op(Ωₕ1) *
                                                           values(Rₕ(Wₕ1, x -> a * sin(x)))))
             end
         end

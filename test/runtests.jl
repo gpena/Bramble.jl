@@ -10,6 +10,10 @@ end
 using Test
 using Bramble
 using SparseArrays: spdiagm
+# For `_matches_fd` below. This is the cheapest of the five AD backends to load (0.3 s,
+# see the survey note further down), and the unit group loads it anyway; a quality-only
+# run now pays that 0.3 s for nothing, which is the price of defining the helper once.
+using ForwardDiff
 
 @inline function alloc_test(f::F, args...) where {F}
     f(args...) # warm up
@@ -62,6 +66,14 @@ _fd(f, a; h = 1e-6) = (f(a + h) - f(a - h)) / (2h)
 
 # A symmetric, structurally symmetric operator to constrain.
 _tri(m) = spdiagm(0 => fill(4.0, m), 1 => fill(-1.0, m - 1), -1 => fill(-1.0, m - 1))
+
+# `f` must be a scalar functional of one parameter, evaluated through the library. Checks
+# that the AD derivative is right, not merely that it ran. Was `_matches_finite_difference`
+# in space/autodiff.jl and `_matches_fd` in form/autodiff.jl — same body, two names, so no
+# overwrite warning pointed at it.
+function _matches_fd(f, a = 1.3; rtol = 1e-5)
+    return isapprox(ForwardDiff.derivative(f, a), _fd(f, a); rtol = rtol)
+end
 
 const __bramble_with_examples = false
 const __bramble_test_group = get(ENV, "BRAMBLE_TEST_GROUP", "all")
