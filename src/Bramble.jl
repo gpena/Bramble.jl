@@ -1,7 +1,5 @@
 module Bramble
 
-#using StyledStrings: styled, @styled_str
-
 using DocStringExtensions
 
 import Base: eltype, length
@@ -102,10 +100,6 @@ export dirichlet_constraints, dirichlet_bc!, symmetrize!, DirichletConstraint
 # than the normal way to call this, and it stays reachable as `Bramble.resolve_form_ast`.
 export form, assemble, assemble!, assemble_parallel!, allocate_system_matrix, evaluate!
 
-#=
-export ⋅
-=#
-
 # `export_vtk` is documented and defined here, in the main package, and errors by default;
 # `ext/BrambleVTKExt.jl` overrides the internal `_export_vtk` it calls. Same idiom as
 # `metal_backend`, so the docstring lives in one place and a caller without WriteVTK loaded
@@ -148,36 +142,12 @@ include("space/operators/jump.jl")
 include("space/operators/average.jl")
 include("space/inner_product.jl")
 
-# The form layer is being brought back a file at a time, auxiliary files first so that
-# every name is defined before the file that consumes it.
-#
-# common.jl carries the symbolic AST nodes — TrialFunction, TestFunction, their indexed
-# forms and SourceFunction — all subtypes of the LazyOp restored in
-# space/operators/linear_operators.jl.
 include("form/common.jl")
-
-# block_extract.jl adds the component walks a coupled form routes by: which component a term
-# names on each side, and the block that pair picks out.
-# component.jl indexes a node by component, and needs every node type in its signatures, so
-# it comes after common.jl and the operator files it includes.
 include("form/component.jl")
-
-# stencil_pattern.jl reads the sparsity pattern off a built AST, so it needs every node
-# type that carries a stencil — which means after common.jl and its operator includes.
 include("form/stencil_pattern.jl")
-
-# Shared by both assembly files, so it belongs to neither. Included ahead of them because
-
 include("form/block_extract.jl")
-
-# dirichlet_constraints.jl comes last of the three: it is the user-facing one, and its
-# composite methods are what need the component walks above.
 include("form/dirichlet_constraints.jl")
-
-# linear.jl assembles a right-hand side. It comes after dirichlet_constraints.jl, whose
-# `dirichlet_bc!` it applies.
 include("form/linear.jl")
-
 include("form/bilinear.jl")
 
 include("exporters/vtk_export.jl")
