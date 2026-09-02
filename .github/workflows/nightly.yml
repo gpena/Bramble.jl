@@ -16,6 +16,11 @@ name: Nightly
 # 06:00 UTC, after CompatHelper's 00:00 run, for the same reason Weekly.yml picks its own
 # time after CompatHelper: a compat bump it opens has already landed or not by the time this
 # decides what to install.
+#
+# `test` runs the full version × os matrix — macOS included, even though CI.yml already gates
+# 1.12/~1.13.0-0 on macOS at push time — because this is the only place Julia nightly ever
+# runs on macOS at all, and a single shared matrix is simpler than carving macOS-nightly out
+# on its own.
 
 permissions:
   contents: read
@@ -34,8 +39,8 @@ env:
 
 jobs:
   test:
-    name: Julia ${{ matrix.version }} (ubuntu-latest)
-    runs-on: ubuntu-latest
+    name: Julia ${{ matrix.version }} (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     permissions:
       contents: read
@@ -44,6 +49,7 @@ jobs:
       fail-fast: false
       matrix:
         version: ["1.12", "~1.13.0-0", "nightly"]
+        os: [ubuntu-latest, macOS-latest]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -59,18 +65,18 @@ jobs:
 
       - uses: julia-actions/julia-buildpkg@v1
 
-      # Coverage is collected on one leg only: the release version, same as before the
-      # Linux/macOS split. See CI.yml's history for why only one job uploads at all.
+      # Coverage is collected on one leg only: Julia 1.12 on ubuntu-latest, same as before
+      # the Linux/macOS split. See CI.yml's history for why only one job uploads at all.
       - uses: julia-actions/julia-runtest@v1
         with:
-          coverage: ${{ matrix.version == '1.12' }}
+          coverage: ${{ matrix.version == '1.12' && matrix.os == 'ubuntu-latest' }}
         env:
           BRAMBLE_TEST_GROUP: unit
 
       - uses: julia-actions/julia-processcoverage@v1
-        if: matrix.version == '1.12'
+        if: matrix.version == '1.12' && matrix.os == 'ubuntu-latest'
       - uses: codecov/codecov-action@v5
-        if: matrix.version == '1.12'
+        if: matrix.version == '1.12' && matrix.os == 'ubuntu-latest'
         with:
           files: lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}
