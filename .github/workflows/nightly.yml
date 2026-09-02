@@ -1,0 +1,148 @@
+name: Nightly
+
+# Everything the per-push CI deliberately leaves off, once a day, plus Julia nightly itself.
+#
+# Julia nightly used to be a third entry in CI.yml's per-push matrix, `continue-on-error`d so
+# it never blocked a merge. That still meant a red canary next to every ordinary PR whenever
+# nightly moved under us, which had nothing to do with what the PR changed. Spelling,
+# formatting, quality (Aqua & JET) and the docs build/deploy moved out for the same reason,
+# even though those three are not canaries in the same sense — running them once a day
+# instead of on every push trades same-push feedback for a leaner, faster push CI, and a
+# failure here is caught and fixed the same day rather than the same minute.
+#
+# 06:00 UTC, after CompatHelper's 00:00 run, for the same reason Weekly.yml picks its own
+# time after CompatHelper: a compat bump it opens has already landed or not by the time this
+# decides what to install.
+
+permissions:
+  contents: read
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+env:
+  JULIA_NUM_THREADS: auto
+
+jobs:
+  test:
+    name: Julia nightly (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macOS-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "nightly"
+
+      - uses: julia-actions/cache@v2
+        with:
+          cache-compiled: "true"
+
+      - uses: julia-actions/julia-buildpkg@v1
+
+      - uses: julia-actions/julia-runtest@v1
+        env:
+          BRAMBLE_TEST_GROUP: unit
+
+  quality:
+    name: Quality (Aqua & JET)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.12"
+
+      - uses: julia-actions/cache@v2
+        with:
+          cache-compiled: "true"
+
+      - uses: julia-actions/julia-buildpkg@v1
+
+      - uses: julia-actions/julia-runtest@v1
+        env:
+          BRAMBLE_TEST_GROUP: quality
+
+  spelling:
+    name: Spell check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: crate-ci/typos@v1.49.0
+
+  format:
+    name: Format check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1"
+
+      - name: Check SciML style
+        run: |
+          julia --color=yes -e '
+            using Pkg
+            Pkg.activate(mktempdir())
+            Pkg.add("JuliaFormatter")
+            using JuliaFormatter
+            format(["src", "test"]; overwrite = false) && exit(0)
+            @error "Source is not SciML formatted. Run JuliaFormatter over src and test."
+            exit(1)'
+
+  docs:
+    name: Documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      statuses: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "nightly"
+
+      - uses: julia-actions/cache@v2
+
+      - name: Install dependencies
+        run: |
+          julia --color=yes --project=docs -e '
+            using Pkg
+            Pkg.develop(PackageSpec(path=pwd()))
+            Pkg.instantiate()'
+
+      - name: Build and deploy
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: julia --color=yes --project=docs docs/make.jl

@@ -1,4 +1,9 @@
 name: CI
+
+# The fast gate: only the Julia version matrix that actually tests Bramble's code. Spelling,
+# formatting, quality (Aqua & JET) and the docs build/deploy moved to nightly.yml, once a
+# day — see the comment there for why.
+
 permissions:
   contents: read
 on:
@@ -21,7 +26,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.filter.outputs.code }}
-      docs: ${{ steps.filter.outputs.docs }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -35,30 +39,18 @@ jobs:
               - '.github/workflows/CI.yml'
               - 'codecov.yml'
               - '_typos.toml'
-            docs:
-              - 'docs/**'
-              - 'src/**'
-              - 'Project.toml'
-              - '*.md'
-
-  spelling:
-    name: Spell check
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - uses: crate-ci/typos@v1.49.0
 
   test:
     needs: changes
     if: ${{ needs.changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch' }}
     name: Julia ${{ matrix.version }} - ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    # nightly and the 1.13 pre-release are canaries, not gates: what they catch is a future
-    # Julia changing under us, which is worth learning about without blocking the branch.
-    # `1.12` is the only version whose failure means Bramble is broken. Promote
-    # `~1.13.0-0` out of this when it goes final.
+    # The 1.13 pre-release is a canary, not a gate: what it catches is a future Julia
+    # changing under us, which is worth learning about without blocking the branch. `1.12`
+    # is the only version whose failure means Bramble is broken. Promote `~1.13.0-0` out of
+    # this when it goes final. `nightly` moved to its own daily-scheduled workflow
+    # (nightly.yml) — it changes underneath every push regardless of what Bramble does, so
+    # gating on it here meant a red canary on an unrelated PR as often as a real one.
     continue-on-error: ${{ matrix.version != '1.12' }}
     permissions:
       contents: read
@@ -66,7 +58,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: ["1.12", "~1.13.0-0", "nightly"]
+        version: ["1.12", "~1.13.0-0"]
         os: [ubuntu-latest, macOS-latest]
     steps:
       - uses: actions/checkout@v4
@@ -113,72 +105,3 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           use_oidc: true
           fail_ci_if_error: false
-
-  quality:
-    needs: changes
-    if: ${{ needs.changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch' }}
-    name: Quality (Aqua & JET)
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - uses: julia-actions/setup-julia@v2
-        with:
-          version: "1.12"
-      - uses: julia-actions/cache@v2
-        with:
-          cache-compiled: "true"
-      - uses: julia-actions/julia-buildpkg@v1
-      - uses: julia-actions/julia-runtest@v1
-        env:
-          BRAMBLE_TEST_GROUP: quality
-
-  format:
-    needs: changes
-    if: ${{ needs.changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch' }}
-    name: Format check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: julia-actions/setup-julia@v2
-        with:
-          version: "1"
-      - name: Check SciML style
-        run: |
-          julia --color=yes -e '
-            using Pkg
-            Pkg.activate(mktempdir())
-            Pkg.add("JuliaFormatter")
-            using JuliaFormatter
-            format(["src", "test"]; overwrite = false) && exit(0)
-            @error "Source is not SciML formatted. Run JuliaFormatter over src and test."
-            exit(1)'
-
-  docs:
-    needs: changes
-    if: ${{ needs.changes.outputs.docs == 'true' || github.event_name == 'workflow_dispatch' }}
-    name: Documentation
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      statuses: write
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: julia-actions/setup-julia@v2
-        with:
-          version: "nightly"
-      - uses: julia-actions/cache@v2
-      - name: Install dependencies
-        run: |
-          julia --color=yes --project=docs -e '
-            using Pkg
-            Pkg.develop(PackageSpec(path=pwd()))
-            Pkg.instantiate()'
-      - name: Build and deploy
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: julia --color=yes --project=docs docs/make.jl
