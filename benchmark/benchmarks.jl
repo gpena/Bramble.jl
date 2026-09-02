@@ -23,8 +23,11 @@
 #
 # ## Why these six
 #
-#   - Rₕ! and avgₕ! above PARALLEL_FOR_MIN, which is the threaded branch the
-#     test suite deliberately stays below so its allocation tests stay exact.
+#   - Rₕ! and avgₕ! on a Parallel()-backend space, the threaded branch the test
+#     suite otherwise stays off — the default Serial() backend — so its allocation
+#     tests stay exact. Point 22 removed the size threshold these two used to cross
+#     automatically; there is no longer a size to sit "above" at all, so reaching
+#     the threaded branch here means asking for it explicitly.
 #   - D₋ₓ and D₋ᵧ on a large 2D grid: the stencil engine along the contiguous
 #     direction and across it. The 2D case is the one that hid the derivative
 #     weights regression, which 1D did not show.
@@ -65,10 +68,10 @@ end
 
 const SUITE = BenchmarkGroup()
 
-# Sizes are chosen to sit above the threading threshold where that is the point
-# of the benchmark, and to stay large enough elsewhere that per-call overhead
-# does not dominate.
-const N1 = 1_000_000                      # 1D, comfortably above PARALLEL_FOR_MIN
+# Sizes are chosen to be large enough elsewhere that per-call overhead does not
+# dominate, and — where a group specifically wants the threaded branch — large
+# enough that a real per-call cost, not a task-spawn floor, is what gets measured.
+const N1 = 1_000_000                      # 1D, 1e6 points
 const N2 = (1000, 1000)                   # 2D, 1e6 points
 const N3 = (100, 100, 100)                # 3D, 1e6 points
 
@@ -76,9 +79,29 @@ _mesh1() = mesh(domain(interval(0.0, 1.0)), N1, true)
 _mesh2() = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), N2, (true, true))
 _mesh3() = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), N3, (true, true, true))
 
+# Point 22 (`Serial()`/`Parallel()` as an execution-policy trait chosen once on the
+# backend) removed the size threshold that used to make the meshes above auto-thread
+# Rₕ!/avgₕ!/gridspace's weight construction. `backend()` now defaults to `Serial()`
+# unconditionally, at any size. The three constructors below ask for `Parallel()`
+# explicitly, so the "restriction" and "construction" groups keep measuring the
+# threaded branch they were built to cover. Deliberately not used for form assembly:
+# `assemble!`/`assemble` read `execution_policy(space)` too, but the "forms" group's
+# existing entries measure the plain (serial) default on purpose, and reusing these
+# here would silently change what those numbers mean.
+const _PAR = backend(policy = Parallel())
+_mesh1_par() = mesh(domain(interval(0.0, 1.0)), N1, true; backend = _PAR)
+_mesh2_par() = mesh(
+    domain(interval(0.0, 1.0) × interval(0.0, 1.0)), N2, (true, true); backend = _PAR)
+_mesh3_par() = mesh(
+    domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), N3, (true, true, true); backend = _PAR)
+
 # --- 1. restriction & cell-averaging across 1D, 2D, 3D -------------------- #
-let W1 = gridspace(_mesh1()), u1 = element(W1), W2 = gridspace(_mesh2()), u2 = element(W2),
-    W3 = gridspace(_mesh3()), u3 = element(W3)
+let W1 = gridspace(_mesh1_par()), u1 = element(W1), W2 = gridspace(_mesh2_par()),
+    u2 = element(W2), W3 = gridspace(_mesh3_par()), u3 = element(W3),
+    # the plain default backend, which no longer threads at any size (see the note
+    # on _mesh1_par above) — the cost of that default is now real and worth tracking
+    # alongside the Parallel() numbers, not only the allocation-zero guarantee.
+    W1d = gridspace(_mesh1()), u1d = element(W1d)
 
     g = SUITE["restriction"] = BenchmarkGroup()
     g["Rₕ! 1D"] = @benchmarkable Rₕ!($u1, sin)
@@ -88,6 +111,8 @@ let W1 = gridspace(_mesh1()), u1 = element(W1), W2 = gridspace(_mesh2()), u2 = e
     g["Rₕ! 3D"] = @benchmarkable Rₕ!($u3, x -> sin(x[1]) + x[3])
     g["avgₕ! 3D"] = @benchmarkable avgₕ!($u3, x->sin(x[1])+x[3]) samples=3 evals=1
     g["Rₕ 1D (allocates its output)"] = @benchmarkable Rₕ($W1, sin)
+    g["Rₕ! 1D, Serial() backend (default)"] = @benchmarkable Rₕ!($u1d, sin)
+    g["avgₕ! 1D, Serial() backend (default)"] = @benchmarkable avgₕ!($u1d, sin)
 end
 
 # --- 2. the stencil engine, both directions ------------------------------- #
@@ -125,7 +150,10 @@ let Vₕ = gridspace(_mesh2(), Val(3))
 end
 
 # --- 6. construction ------------------------------------------------------ #
-let Ωₕ2 = _mesh2(), Ωₕ3 = _mesh3()
+# gridspace's weight construction (__innerplus_weights!) reads execution_policy(Ωₕ)
+# too, same reason as group 1 above — Parallel() explicitly, since the plain default
+# no longer threads at any size.
+let Ωₕ2 = _mesh2_par(), Ωₕ3 = _mesh3_par()
     g = SUITE["construction"] = BenchmarkGroup()
     g["gridspace 2D"] = @benchmarkable gridspace($Ωₕ2)   # builds the weights
     g["gridspace 3D"] = @benchmarkable gridspace($Ωₕ3)
@@ -174,7 +202,19 @@ let W1 = gridspace(_mesh1()), f1 = Rₕ(W1, sin), v1 = Rₕ(W1, cos),
     Wm = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)),
         (300, 300), (true, true))),
     am = Bramble.form(Wm, Wm, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v))),
-    Am = Bramble.assemble(am), astm = Bramble.resolve_form_ast(am)
+    Am = Bramble.assemble(am), astm = Bramble.resolve_form_ast(am),
+    # point 22: assemble!/assemble dispatch on execution_policy(space) now, a
+    # different code path from assemble_parallel! below, which always threads
+    # regardless of the backend. W1p/amp exercise that dispatch directly through
+    # assemble!/assemble themselves, so a regression that breaks the policy check
+    # (e.g. it silently stops mattering and one branch is always taken) shows up
+    # here, not only in the explicit-override entries.
+    W1p = gridspace(mesh(domain(interval(0.0, 1.0)), N1, true; backend = _PAR)),
+    f1p = Rₕ(W1p, sin), l1p = Bramble.form(W1p, v -> innerₕ(f1p, v)),
+    b1p = Bramble.assemble(l1p), ast1p = Bramble.resolve_form_ast(l1p),
+    Wmp = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)),
+        (300, 300), (true, true); backend = _PAR)),
+    amp = Bramble.form(Wmp, Wmp, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v)))
 
     g = SUITE["forms"] = BenchmarkGroup()
 
@@ -207,6 +247,19 @@ let W1 = gridspace(_mesh1()), f1 = Rₕ(W1, sin), v1 = Rₕ(W1, cos),
     g["allocate_system_matrix 2D"] = @benchmarkable Bramble.allocate_system_matrix($am) samples=5 evals=1
     g["assemble! (matrix) 2D"] = @benchmarkable Bramble.assemble!(
         $Am, $am; ast = $astm) samples=5 evals=1
+
+    # policy dispatch through assemble!/assemble, not assemble_parallel!'s override
+    g["assemble! 1D, Parallel() backend"] = @benchmarkable Bramble.assemble!(
+        $b1p, $l1p; ast = $ast1p)
+    # BilinearForm.assemble() used to call assemble_parallel! unconditionally; it now
+    # follows the trial space's backend the same way LinearForm.assemble always has.
+    # Both allocate a fresh matrix each call (assemble calls allocate_system_matrix
+    # internally), so neither is zero — read by a person, like allocate_system_matrix
+    # itself above.
+    g["assemble (BilinearForm), Serial() backend"] = @benchmarkable Bramble.assemble(
+        $am) samples=5 evals=1
+    g["assemble (BilinearForm), Parallel() backend"] = @benchmarkable Bramble.assemble(
+        $amp) samples=5 evals=1
 end
 
 # --- 10. the same work in three precisions -------------------------------- #
@@ -215,8 +268,10 @@ end
 # vector, so timing single precision measured double precision and this
 # comparison could not have meant anything. It can now.
 #
-# 1D and 100,000 points: above PARALLEL_FOR_MIN, and small enough that Double64,
-# which is software arithmetic and an order slower, does not dominate the suite.
+# 1D and 100,000 points, on the plain default (Serial()) backend deliberately — this
+# section is about precision, not threading, so execution policy is held fixed here.
+# Small enough that Double64, which is software arithmetic and an order slower, does
+# not dominate the suite.
 # `avgₕ!` is the expensive one either way — six quadrature nodes per point — and
 # it is the path where `_gauss_rule` is built per call for an extended type.
 let N = 100_000
@@ -246,6 +301,11 @@ end
 # writing, not upper bounds with slack, because the failure mode being guarded
 # against is a type instability that silently spills memory on every cell.
 const ALLOCATION_BOUNDS = Dict(
+    # the plain default (Serial()) backend guarantees exactly zero, unconditionally
+    # (point 22) — unlike the Parallel()-backend entries in this group, which move
+    # with the thread count and are printed rather than gated
+    ("restriction", "Rₕ! 1D, Serial() backend (default)") => 0,
+    ("restriction", "avgₕ! 1D, Serial() backend (default)") => 0,
     # contiguous-direction difference: 3 allocs for similar(::VectorElement)
     ("operators 2D", "D₋ₓ") => 3,
     ("operators 2D", "D₋ᵧ") => 3,
