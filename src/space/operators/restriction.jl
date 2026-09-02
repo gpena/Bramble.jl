@@ -49,28 +49,83 @@ Rₕ!(uₕ, x -> (f₁(x), f₂(x)))          # one function returning all compo
 
 See also: [`Rₕ`](@ref), [`avgₕ!`](@ref), [`element`](@ref)
 """
-@inline function Rₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f;
-        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {N}
-    if N > 0
-        @debug "Using marker-based restriction" markers
-    end
+@inline Rₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f::F) where {F} = _Rₕ_parallel!(uₕ, f)
+@inline Rₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::F) where {NC, F} = _Rₕ_scatter_parallel!(
+    uₕ, f)
 
+# The two plain methods just above exist so that the no-markers call -- by far the common
+# case, every time step of a PDE solve -- resolves directly to one of them, never touching
+# the keyword-sorter machinery the generic method further below generates. Going through that
+# machinery still cost 96 B here, no matter how the callee itself was typed, deep enough under
+# a keyword-taking caller that escape analysis gave up on the `_parallel_for!` closure
+# regardless. They stay more specific than the keyword method's bare `uₕ::VectorElement`, so
+# they take priority for a concrete Scalar/Composite element without colliding with the
+# keyword-sorter's own auto-generated no-kwarg stub. Matches `_avgₕ!`'s plain/keyword split.
+#
+# A function barrier, typing `f` as its own free parameter `F`. Takes `uₕ` itself and
+# re-derives `Ωₕ`/`raw`/`idxs` inside the typed function, rather than being handed
+# pre-extracted locals from an untyped caller.
+@inline function _Rₕ_parallel!(uₕ::VectorElement{<:ScalarGridSpace}, f::F) where {F}
     (; space) = uₕ
     Ωₕ = mesh(space)
     raw = values(uₕ)
     idxs = indices(Ωₕ)
     n = length(idxs)
+    _parallel_for!(raw, 1:n, i -> f(point(Ωₕ, idxs[i])))
+    return uₕ
+end
+
+@inline function _Rₕ_scatter_parallel!(
+        uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::F) where {NC, F}
+    Ωₕ = mesh(space(uₕ))
+    comps = components(uₕ)
+    raws = ntuple(i -> values(comps[i]), Val(NC))
+    idxs = indices(Ωₕ)
+    n = length(idxs)
+    _scatter_for!(raws, 1:n, i -> f(point(Ωₕ, idxs[i])))
+    return uₕ
+end
+
+# A one-component space is a scalar space, so generic code that builds an
+# NC-tuple of functions still works when NC == 1.
+@inline Rₕ!(uₕ::VectorElement{<:ScalarGridSpace{D}}, f::Tuple{Any}) where {D} = Rₕ!(uₕ, f[1])
+@inline Rₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f::Tuple{Any};
+    markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {N} = Rₕ!(uₕ, f[1]; markers = markers)
+
+# One function per component: each is already independent, so restrict each
+# component with its own function. No plain-method counterpart: this recurses into the
+# scalar `Rₕ!` per component, which already has the fast no-kwarg path above, so there is
+# nothing left to gain from also bypassing the kwsorter at this outer level.
+@inline function Rₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::Tuple;
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {NC, N}
+    comps = components(uₕ)
+    ntuple(i -> Rₕ!(comps[i], f[i]; markers = markers), Val(NC))
+    return uₕ
+end
+
+# The general keyword method, typed as broadly as `VectorElement` so it stays less specific
+# than every plain method above -- exactly the split `avgₕ!` uses. The `N == 0` case never
+# actually runs (the plain methods intercept a no-kwarg call before this method is even
+# looked up), but is kept as a fallback for an explicit `markers = ()`.
+Base.@constprop :aggressive function Rₕ!(uₕ::VectorElement, f;
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {N}
+    if N > 0
+        @debug "Using marker-based restriction" markers
+    end
 
     if N == 0
-        if Threads.nthreads() == 1 || n < PARALLEL_FOR_MIN
-            @inbounds for i in 1:n
-                raw[i] = f(point(Ωₕ, idxs[i]))
-            end
-            return uₕ
-        end
-        _threaded_Rₕ!(raw, Ωₕ, idxs, f)
-        return uₕ
+        return Rₕ!(uₕ, f)
     end
+
+    return _Rₕ_masked!(uₕ, f, markers)
+end
+
+function _Rₕ_masked!(uₕ::VectorElement{<:ScalarGridSpace}, f, markers::NTuple{N, Symbol}) where {N}
+    (; space) = uₕ
+    Ωₕ = mesh(space)
+    raw = values(uₕ)
+    idxs = indices(Ωₕ)
+    n = length(idxs)
 
     fill!(raw, zero(eltype(raw)))
     for m in markers
@@ -84,48 +139,13 @@ See also: [`Rₕ`](@ref), [`avgₕ!`](@ref), [`element`](@ref)
     return uₕ
 end
 
-@noinline function _threaded_Rₕ!(raw, Ωₕ, idxs, f)
-    Threads.@threads :static for i in 1:length(idxs)
-        @inbounds raw[i] = f(point(Ωₕ, idxs[i]))
-    end
-    return nothing
-end
-
-# A one-component space is a scalar space, so generic code that builds an
-# NC-tuple of functions still works when NC == 1.
-@inline Rₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f::Tuple{Any};
-    markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {N} = Rₕ!(uₕ, f[1]; markers = markers)
-
-# One function per component: each is already independent, so restrict each
-# component with its own function.
-@inline function Rₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::Tuple;
-        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {NC, N}
-    comps = components(uₕ)
-    ntuple(i -> Rₕ!(comps[i], f[i]; markers = markers), Val(NC))
-    return uₕ
-end
-
-# A single function returning all components: evaluate it once per point and
-# scatter, rather than once per component.
-@inline function Rₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f;
-        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {NC, N}
+function _Rₕ_masked!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f,
+        markers::NTuple{N, Symbol}) where {NC, N}
     Ωₕ = mesh(space(uₕ))
     comps = components(uₕ)
     raws = ntuple(i -> values(comps[i]), Val(NC))
     idxs = indices(Ωₕ)
     n = length(idxs)
-
-    if N == 0
-        if Threads.nthreads() == 1 || n < PARALLEL_FOR_MIN
-            @inbounds for i in 1:n
-                vals = f(point(Ωₕ, idxs[i]))
-                _scatter_comp!(raws, vals, i)
-            end
-            return uₕ
-        end
-        _threaded_scatter_Rₕ!(raws, Ωₕ, idxs, f)
-        return uₕ
-    end
 
     for raw in raws
         fill!(raw, zero(eltype(raw)))
@@ -140,14 +160,6 @@ end
         end
     end
     return uₕ
-end
-
-@noinline function _threaded_scatter_Rₕ!(raws, Ωₕ, idxs, f)
-    Threads.@threads :static for i in 1:length(idxs)
-        vals = f(point(Ωₕ, idxs[i]))
-        _scatter_comp!(raws, vals, i)
-    end
-    return nothing
 end
 
 # The coefficient type of a restriction is the one `f` returns, promoted against the

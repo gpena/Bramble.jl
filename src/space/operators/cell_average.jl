@@ -114,22 +114,9 @@ end
     n = length(idxs)
     nodes, wts = _gauss_rule(nq, T)
 
-    if Threads.nthreads() == 1 || n < _avg_min_work(Val(1), nq)
-        @inbounds for i in 1:n
-            raw[i] = _cell_average(f, x, idxs[i][1], nodes, wts)
-        end
-        return uₕ
-    end
-    _threaded_avgₕ!(raw, f, x, idxs, nodes, wts, Val(1))
+    _parallel_for!(raw, 1:n, i -> _cell_average(f, x, idxs[i][1], nodes, wts);
+        min_work = _avg_min_work(Val(1), nq))
     return uₕ
-end
-
-@noinline function _threaded_avgₕ!(raw, f::F, x, idxs, nodes::SVector{NQ, T},
-        wts::SVector{NQ, T}, ::Val{1}) where {F, NQ, T}
-    Threads.@threads :static for i in 1:length(idxs)
-        @inbounds raw[i] = _cell_average(f, x, idxs[i][1], nodes, wts)
-    end
-    return nothing
 end
 
 @inline function _avgₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f::F, ::Val{D}, nq::Val{NQ}) where {
@@ -143,22 +130,9 @@ end
     n = length(idxs)
     nodes, wts = _gauss_rule(nq, T)
 
-    if Threads.nthreads() == 1 || n < _avg_min_work(Val(D), nq)
-        @inbounds for i in 1:n
-            raw[i] = _cell_average(f, x, idxs[i], nodes, wts)
-        end
-        return uₕ
-    end
-    _threaded_avgₕ!(raw, f, x, idxs, nodes, wts, Val(D))
+    _parallel_for!(raw, 1:n, i -> _cell_average(f, x, idxs[i], nodes, wts);
+        min_work = _avg_min_work(Val(D), nq))
     return uₕ
-end
-
-@noinline function _threaded_avgₕ!(raw, f::F, x, idxs, nodes::SVector{NQ, T},
-        wts::SVector{NQ, T}, ::Val{D}) where {F, D, NQ, T}
-    Threads.@threads :static for i in 1:length(idxs)
-        @inbounds raw[i] = _cell_average(f, x, idxs[i], nodes, wts)
-    end
-    return nothing
 end
 
 # Composite space: one function per component
@@ -188,14 +162,8 @@ end
     n = length(idxs)
     nodes, wts = _gauss_rule(nq, T)
 
-    if Threads.nthreads() == 1 || n < _avg_min_work(Val(1), nq)
-        @inbounds for i in 1:n
-            vals = _cell_average(f, x, idxs[i][1], nodes, wts, Val(NC))
-            _scatter_comp!(raws, vals, i)
-        end
-        return uₕ
-    end
-    _threaded_scatter_avgₕ!(raws, f, x, idxs, nodes, wts, Val(1), Val(NC))
+    _scatter_for!(raws, 1:n, i -> _cell_average(f, x, idxs[i][1], nodes, wts, Val(NC));
+        min_work = _avg_min_work(Val(1), nq))
     return uₕ
 end
 
@@ -210,33 +178,9 @@ end
     n = length(idxs)
     nodes, wts = _gauss_rule(nq, T)
 
-    if Threads.nthreads() == 1 || n < _avg_min_work(Val(D), nq)
-        @inbounds for i in 1:n
-            vals = _cell_average(f, x, idxs[i], nodes, wts, Val(NC))
-            _scatter_comp!(raws, vals, i)
-        end
-        return uₕ
-    end
-    _threaded_scatter_avgₕ!(raws, f, x, idxs, nodes, wts, Val(D), Val(NC))
+    _scatter_for!(raws, 1:n, i -> _cell_average(f, x, idxs[i], nodes, wts, Val(NC));
+        min_work = _avg_min_work(Val(D), nq))
     return uₕ
-end
-
-@noinline function _threaded_scatter_avgₕ!(raws, f, x, idxs, nodes::SVector{NQ, T},
-        wts::SVector{NQ, T}, ::Val{1}, ::Val{NC}) where {NQ, T, NC}
-    Threads.@threads :static for i in 1:length(idxs)
-        vals = _cell_average(f, x, idxs[i][1], nodes, wts, Val(NC))
-        _scatter_comp!(raws, vals, i)
-    end
-    return nothing
-end
-
-@noinline function _threaded_scatter_avgₕ!(raws, f, x, idxs, nodes::SVector{NQ, T},
-        wts::SVector{NQ, T}, ::Val{D}, ::Val{NC}) where {D, NQ, T, NC}
-    Threads.@threads :static for i in 1:length(idxs)
-        vals = _cell_average(f, x, idxs[i], nodes, wts, Val(NC))
-        _scatter_comp!(raws, vals, i)
-    end
-    return nothing
 end
 
 @inline function _avg_masked!(uₕ::VectorElement{<:ScalarGridSpace}, f,
