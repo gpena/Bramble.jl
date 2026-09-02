@@ -13,7 +13,7 @@ using FunctionWrappers: FunctionWrapper
 
 using StaticArrays: SVector, @SVector
 
-using LinearAlgebra: Diagonal, I, transpose, mul!, dot
+using LinearAlgebra: Diagonal, I, transpose, dot
 import LinearAlgebra: issymmetric, isposdef
 using FillArrays: Eye, Ones
 

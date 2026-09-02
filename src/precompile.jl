@@ -134,7 +134,6 @@ function _pc_linear_algebra(be)
     w = fill(0.5, 4)
     _dot(u, v, w)
     _inner_product(u, w, v)
-    _inner_product(fill(1.0, 4, 4), w, fill(2.0, 4, 4))
 
     _serial_for!(similar(u), 1:4, i -> Float64(i))
     _cpu_threaded_for!(Serial(), similar(u), 1:4, i -> Float64(i))

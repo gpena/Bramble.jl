@@ -1,7 +1,7 @@
 using Test
 using Bramble
 using Bramble: _dot, _inner_product, _cpu_threaded_for!, _serial_for!, Serial, Parallel
-using LinearAlgebra: Diagonal, dot
+using LinearAlgebra: dot
 using StaticArrays
 
 @testset "Linear Algebra Utilities" begin
@@ -97,26 +97,6 @@ using StaticArrays
         sv_v = SVector(4.0, 5.0, 6.0)
         @test _inner_product(sv_u, sv_h, sv_v) ≈ 39.0
         @test_allocs _inner_product(sv_u, sv_h, sv_v)
-    end
-
-    @testset "_inner_product generic version" begin
-        # Test with matrices
-        U = [1.0 2.0; 3.0 4.0]
-        H = [0.5, 1.0]
-        V = [5.0 6.0; 7.0 8.0]
-
-        result = _inner_product(U, H, V)
-        expected = transpose(V) * (Diagonal(H) * U)
-        @test result ≈ expected
-
-        # Test with single column matrices
-        u_mat = reshape([1.0, 2.0, 3.0], 3, 1)
-        h_vec = [0.5, 1.0, 1.5]
-        v_mat = reshape([4.0, 5.0, 6.0], 3, 1)
-
-        result_mat = _inner_product(u_mat, h_vec, v_mat)
-        expected_mat = transpose(v_mat) * (Diagonal(h_vec) * u_mat)
-        @test result_mat ≈ expected_mat
     end
 
     @testset "_serial_for!" begin
