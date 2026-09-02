@@ -55,7 +55,7 @@ export ndofs, ncomponents, weights
 export VectorElement, element, to_matrix, values, values!, component, components,
        component_range, component_ranges
 export Rₕ, Rₕ!, avgₕ, avgₕ!
-export interpolate, interpolate!, interpolate_at, interpolation_matrix, πₕ
+export interpolate_at, interpolation_matrix, πₕ, πₕ!
 
 export innerₕ
 export inner₊, inner₊ₓ, inner₊ᵧ, inner₊₂

@@ -75,8 +75,8 @@ end
     @test all(isfinite, b3)
 
     # numeric consistency: innerₕ(πₕ(u), v(1)) scatters |cell_i| * interpolate_at(u, x_i) into
-    # block 1, so it must equal the numeric interpolate path times the weights directly
-    Ib1 = values(interpolate(Wbig, u_leaf2))
+    # block 1, so it must equal the numeric πₕ path times the weights directly
+    Ib1 = values(πₕ(Wbig, u_leaf2))
     w1 = weights(Wbig, Innerh())
     @test sum(b1[1:ndofs(Wbig)]) ≈ sum(Ib1 .* w1) atol=1e-8
 

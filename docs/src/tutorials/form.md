@@ -271,9 +271,9 @@ pair to constrain another block differently.
 The composite spaces above stack copies of *one* space — every leaf shares a mesh. A
 composite space can also be built directly from a tuple of leaves over different meshes,
 and then a term coupling two leaves needs a way to move a value from one leaf's grid to
-the other's: [`πₕ`](@ref), the symbolic form of [`interpolate`](@ref) (see the
-[operators tutorial](operators.md) for the numeric side and a diagram of the interpolant
-itself).
+the other's: [`πₕ`](@ref), one argument fewer than the numeric `πₕ`/[`πₕ!`](@ref) pair (see
+the [operators tutorial](operators.md) for the numeric side and a diagram of the
+interpolant itself) — the same name, told apart by dispatch rather than a different one.
 
 ```@raw html
 <figure>
@@ -329,6 +329,20 @@ from lives on leaf 2's own, coarser mesh — `πₕ` is what makes that a well-p
 expression rather than a size mismatch. This is exactly what makes a heterogeneous
 composite space useful for more than indexing: leaf 2 can represent one field at a
 resolution the problem calls for, and a term over leaf 1 can still read it.
+
+`πₕ` takes a grid function, never a trial or test function:
+
+```julia
+form(Vh, Vh, (u, v) -> innerₕ(πₕ(u), πₕ(v)))   # MethodError: no method matching πₕ(::TrialFunction{2})
+```
+
+`u`/`v` here are symbolic placeholders with no data of their own — `interpolate_at`, what
+`πₕ` is built from, needs concrete nodal values to blend, and a `TrialFunction`/
+`TestFunction` carries none. `πₕ(uₕ)` only ever wraps an already-evaluated
+[`VectorElement`](@ref) (`u(2)` above is exactly that: a component pulled out of a concrete
+`uv`, not the symbolic `u`). Reaching a trial/test function *inside* an interpolation needs
+a different, not-yet-built AST node — an interpolation *operator*, contributing the other
+mesh's corner weights directly to a bilinear stencil rather than to a source.
 
 ## 7. Threading, chosen once on the backend
 

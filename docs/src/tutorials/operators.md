@@ -487,10 +487,12 @@ in place silently halves the observed order.
 
 ## 10. Interpolation between different meshes
 
-Every operator so far maps a grid space to itself. [`interpolate`](@ref) is the one that
-does not: it moves a grid function from one mesh to a genuinely different one, which is
-what makes a heterogeneous composite space — one whose leaves are built over different
-meshes — useful for more than indexing.
+Every operator so far maps a grid space to itself. [`πₕ`](@ref) is the one that does not:
+it moves a grid function from one mesh to a genuinely different one, which is what makes a
+heterogeneous composite space — one whose leaves are built over different meshes — useful
+for more than indexing. Named after [`Rₕ`](@ref)/[`Rₕ!`](@ref)'s own convention: `πₕ`/`πₕ!`
+are the numeric pair here, and the same name `πₕ` — one argument fewer — is also the
+symbolic wrapper the next tutorial uses, told apart by argument count.
 
 The idea is the standard piecewise (multi)linear interpolant: to read a value at a
 physical point ``x``, find the source mesh's cell containing it
@@ -549,24 +551,24 @@ close ``x`` is to each one.
 
 The four weights always sum to ``1`` — a partition of unity — so the interpolant never
 overshoots the range of the four corner values. [`interpolate_at`](@ref) computes this
-directly at one point; [`interpolate`](@ref)/[`interpolate!`](@ref) apply it at every
-point of a destination space, and are exactly [`Rₕ`](@ref)/[`Rₕ!`](@ref) applied to the
-interpolant as an ordinary function of position — restricting a continuous function and
-interpolating a discrete one are the same mechanism, `interpolate` is just the case where
-that function happens to be another grid function's own interpolant:
+directly at one point; [`πₕ`](@ref)/[`πₕ!`](@ref) apply it at every point of a destination
+space, and are exactly [`Rₕ`](@ref)/[`Rₕ!`](@ref) applied to the interpolant as an ordinary
+function of position — restricting a continuous function and interpolating a discrete one
+are the same mechanism, `πₕ` is just the case where that function happens to be another
+grid function's own interpolant:
 
 ```@repl operators
 Ωbig = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (10, 10), (true, true));
 Ωsmall = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (4, 4), (true, true));
 Wbig, Wsmall = gridspace(Ωbig), gridspace(Ωsmall);
 src = Rₕ(Wsmall, x -> x[1] + x[2]);   # affine, so the interpolant is exact
-dest = interpolate(Wbig, src);
+dest = πₕ(Wbig, src);
 exact = Rₕ(Wbig, x -> x[1] + x[2]);
 maximum(abs, values(dest) .- values(exact))
 ```
 
-Once `interpolate` returns an ordinary [`VectorElement`](@ref), every operator above just
-applies to it as normal — `D₋ₓ(dest)`, `M₋ₓ(dest)`, a bilinear form, anything.
+Once `πₕ` returns an ordinary [`VectorElement`](@ref), every operator above just applies
+to it as normal — `D₋ₓ(dest)`, `M₋ₓ(dest)`, a bilinear form, anything.
 
 ### As a matrix
 
@@ -588,8 +590,9 @@ assembled directly from `locate_cell` rather than composed from `shift`.
 
 ### Composing symbolically, inside a form
 
-The symbolic counterpart is [`πₕ`](@ref): it wraps a grid function's interpolant as an
-AST source, so it composes with the same operators any other source does —
-`D₋ₓ(πₕ(uₕ))`, `M₋ₓ(πₕ(uₕ))` — and can appear on the left of [`innerₕ`](@ref) inside a
-[`form`](@ref). See the [forms tutorial](form.md) for a worked example against a
-heterogeneous composite space.
+The same name, one argument fewer, is also the symbolic counterpart: `πₕ(uₕ)` wraps a grid
+function's interpolant as an AST source, so it composes with the same operators any other
+source does — `D₋ₓ(πₕ(uₕ))`, `M₋ₓ(πₕ(uₕ))` — and can appear on the left of [`innerₕ`](@ref)
+inside a [`form`](@ref). Dispatch tells the two `πₕ` apart by argument count, `Wₕ`/`src`
+against `uₕ` alone, not by a different name. See the [forms tutorial](form.md) for a worked
+example against a heterogeneous composite space.

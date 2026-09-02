@@ -3,9 +3,12 @@
 #
 # Point 25: what makes a heterogeneous composite space (point 24) useful rather than
 # merely indexable — moving a grid function from one leaf's mesh to another's. The
-# numeric operators live here, alongside the other operators over `VectorElement`; the
-# symbolic AST wrapper `πₕ` lives in `form/operators/interpolation.jl`, since it needs
-# `SourceFunction`, which is not defined until `form/common.jl`.
+# numeric operators (πₕ/πₕ!) live here, alongside the other operators over
+# `VectorElement`, following the same `Xₕ`/`Xₕ!` pairing `Rₕ`/`Rₕ!` and `avgₕ`/`avgₕ!`
+# already use. `πₕ` also names the *symbolic* AST wrapper, one argument fewer — dispatch
+# tells the two apart by arity, not by a different name — which lives in
+# `form/operators/interpolation.jl` since it needs `SourceFunction`, not defined until
+# `form/common.jl`; that file adds a method to the same `πₕ`, it does not shadow it.
 #===========================================================================#
 
 """
@@ -23,13 +26,13 @@ outside the mesh is read against to the boundary cell, but the relative position
 weighted by is not itself clamped — so a point outside the mesh is a linear extrapolation
 along that boundary cell's own slope, not a constant hold of the boundary value.
 
-This is the building block both `interpolate!`/`interpolate` (below, the numeric operator)
-and [`πₕ`](@ref) (the symbolic one) use — `x -> interpolate_at(uₕ, x)` is itself a valid
-source function, usable anywhere one is accepted, including directly as [`Rₕ`](@ref)'s own
-argument: `interpolate` *is* `Rₕ` applied to this one function, not a separate mechanism.
-`Rₕ(Wₕ, f)` restricts an arbitrary continuous `f`; when `f` happens to be another grid
-function's own interpolant, restricting it is interpolating it, which is why `interpolate`
-generalises `Rₕ` for the case the source is discrete rather than a closed-form function.
+This is the building block both `πₕ!`/`πₕ` (below, the numeric operator) and the
+one-argument, symbolic `πₕ` use — `x -> interpolate_at(uₕ, x)` is itself a valid source
+function, usable anywhere one is accepted, including directly as [`Rₕ`](@ref)'s own argument:
+`πₕ(Wₕ, src)` *is* `Rₕ` applied to this one function, not a separate mechanism. `Rₕ(Wₕ, f)`
+restricts an arbitrary continuous `f`; when `f` happens to be another grid function's own
+interpolant, restricting it is interpolating it, which is why `πₕ` generalises `Rₕ` for the
+case the source is discrete rather than a closed-form function.
 """
 function interpolate_at(uₕ::VectorElement{<:ScalarGridSpace{1}}, x)
     Ωₕ = mesh(space(uₕ))
@@ -64,31 +67,34 @@ function interpolate_at(uₕ::VectorElement{<:ScalarGridSpace{D}}, x) where {D}
 end
 
 """
-	interpolate!(dest::VectorElement, src::VectorElement) -> dest
+	πₕ!(dest::VectorElement, src::VectorElement) -> dest
 
 Fills `dest` with the piecewise (multi)linear interpolant of `src`, sampled at `dest`'s own
-mesh points.
+mesh points — the in-place numeric interpolation operator, named after [`Rₕ!`](@ref)/
+[`avgₕ!`](@ref)'s own `Xₕ!` convention.
 
 Not a separate implementation: `interpolate_at(src, ·)` is itself a genuine function of a
 physical point — the interpolant, evaluable anywhere, not only at `src`'s own grid points —
-so this is exactly [`Rₕ!`](@ref)`(dest, x -> interpolate_at(src, x))`. `dest` and `src` may
-be built over entirely different meshes, which is the whole point; `Rₕ!` already handles
-"evaluate a function of a physical point at each of `dest`'s own grid points" for any
-function, interpolants included, threading or not following `dest`'s own backend
+so this is exactly `Rₕ!(dest, x -> interpolate_at(src, x))`. `dest` and `src` may be built
+over entirely different meshes, which is the whole point; `Rₕ!` already handles "evaluate a
+function of a physical point at each of `dest`'s own grid points" for any function,
+interpolants included, threading or not following `dest`'s own backend
 [`execution_policy`](@ref) the same way it always does.
 """
-@inline interpolate!(dest::VectorElement, src::VectorElement) = Rₕ!(
+@inline πₕ!(dest::VectorElement, src::VectorElement) = Rₕ!(
     dest, x -> interpolate_at(src, x))
 
 """
-	interpolate(Wₕ::ScalarGridSpace, src::VectorElement) -> VectorElement
+	πₕ(Wₕ::ScalarGridSpace, src::VectorElement) -> VectorElement
 
-`Rₕ(Wₕ, x -> interpolate_at(src, x))` — see [`interpolate!`](@ref). The element type is
-promoted from `Wₕ`'s and `src`'s own, the same rule `Rₕ` already applies to any source
-function, so interpolating a `Dual`-valued `src` gives a `Dual`-valued result on an
-undifferentiated `Wₕ`.
+`Rₕ(Wₕ, x -> interpolate_at(src, x))` — see [`πₕ!`](@ref). The same name as the one-argument,
+*symbolic* `πₕ(uₕ)` ([`source_function`](@ref) wrapper, `form/operators/interpolation.jl`):
+dispatch tells the two apart by argument count, not by a different name, the numeric pair
+following `Rₕ`/`Rₕ!`'s own naming exactly. The element type is promoted from `Wₕ`'s and
+`src`'s own, the same rule `Rₕ` already applies to any source function, so interpolating a
+`Dual`-valued `src` gives a `Dual`-valued result on an undifferentiated `Wₕ`.
 """
-@inline interpolate(Wₕ::ScalarGridSpace, src::VectorElement) = Rₕ(
+@inline πₕ(Wₕ::ScalarGridSpace, src::VectorElement) = Rₕ(
     Wₕ, x -> interpolate_at(src, x))
 
 # --- Triplet assembly shared by both dimensionalities of interpolation_matrix ---
@@ -144,9 +150,9 @@ end
 """
     interpolation_matrix(Wdest::ScalarGridSpace, Wsrc::ScalarGridSpace) -> SparseMatrixCSC
 
-The piecewise (multi)linear interpolant of [`interpolate`](@ref)/[`interpolate_at`](@ref) as
+The piecewise (multi)linear interpolant of [`πₕ`](@ref)/[`interpolate_at`](@ref) as
 a sparse matrix `P` rather than applied pointwise:
-`P * values(src) ≈ values(interpolate(Wdest, src))` for any `src::VectorElement` over
+`P * values(src) ≈ values(πₕ(Wdest, src))` for any `src::VectorElement` over
 `Wsrc`. `P` is `ndofs(Wdest) × ndofs(Wsrc)` — generally rectangular, since `Wdest` and
 `Wsrc` are (the whole point) built over different meshes — with at most ``2^D`` nonzero
 entries per row: the corner weights of the source cell [`locate_cell`](@ref) places that

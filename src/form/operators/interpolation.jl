@@ -1,7 +1,8 @@
 # interpolation.jl
-# The symbolic counterpart of interpolate_at/interpolate! (space/operators/interpolation.jl):
+# The symbolic counterpart of interpolate_at/πₕ!/πₕ (space/operators/interpolation.jl):
 # wraps a grid function's interpolant as a SourceFunction, so it composes with the rest of
-# the AST layer exactly the way any other source does.
+# the AST layer exactly the way any other source does. This is a second method of the same
+# `πₕ` the numeric layer defines (dispatch tells them apart by arity), not a separate name.
 
 """
 	πₕ(uₕ::VectorElement) -> LazyOp

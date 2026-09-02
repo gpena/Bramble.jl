@@ -179,19 +179,20 @@ avgₕ!
 ### Interpolation between grid spaces
 
 Moving a grid function from one mesh to another — the piecewise (multi)linear interpolant,
-numeric ([`interpolate_at`](@ref)/[`interpolate!`](@ref)/[`interpolate`](@ref)/
-[`interpolation_matrix`](@ref)) and symbolic ([`πₕ`](@ref), composable with
-[`D₋ₓ`](@ref)/[`M₋ₓ`](@ref)/... inside [`innerₕ`](@ref)). See the
-[operators tutorial](tutorials/operators.md) and the
-[forms tutorial](tutorials/form.md) for the pattern this exists for: a heterogeneous
+named after [`Rₕ`](@ref)/[`Rₕ!`](@ref)'s own `Xₕ`/`Xₕ!` convention: [`πₕ`](@ref)/[`πₕ!`](@ref)
+are the numeric operator (plus [`interpolate_at`](@ref), the single-point building block, and
+[`interpolation_matrix`](@ref), the same interpolant as a sparse matrix), and `πₕ` — one
+argument fewer — is also the *symbolic* wrapper, composable with
+[`D₋ₓ`](@ref)/[`M₋ₓ`](@ref)/... inside [`innerₕ`](@ref); dispatch tells the two apart by
+argument count, not by a different name. See the [operators tutorial](tutorials/operators.md)
+and the [forms tutorial](tutorials/form.md) for the pattern this exists for: a heterogeneous
 composite space whose leaves live on different meshes.
 
 ```@docs
 interpolate_at
-interpolate!
-interpolate
-interpolation_matrix
+πₕ!
 πₕ
+interpolation_matrix
 ```
 
 
