@@ -246,7 +246,10 @@ and means the diagonal, applied to every block.
 ## 7. Threading, chosen once on the backend
 
 `Rₕ!`, `avgₕ!`, gridspace construction and form assembly all thread the same way: `Serial()`
-or `Parallel()`, chosen once when the backend is built, rather than decided per call.
+or `Parallel()`, chosen once when the backend is built, rather than decided per call. See the
+[backend tutorial](backend.md) for backend construction in general — vector/matrix types
+included — and for how to choose between the two policies; this section only covers what the
+choice means for assembly specifically.
 
 ```@example forms
 Wₕ_par = gridspace(mesh(domain(interval(0.0, 1.0)), 33, true;

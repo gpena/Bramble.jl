@@ -20,6 +20,8 @@ In this tutorial, you will learn how to:
 
 Meshes in `Bramble.jl` are built on top of computational [`Domain`](@ref)s. The primary entry point is the [`mesh`](@ref) function.
 
+Every mesh also carries a linear-algebra [`Backend`](@ref) — chosen with the `backend` keyword below, or left to `mesh`'s own default of `backend(eltype(Ω))` — that fixes its vector/matrix types and whether threading-capable operations run serially or in parallel. See the [backend tutorial](backend.md) for the full picture; nothing below depends on it.
+
 ### 1.1 One-dimensional meshes
 
 To construct a 1D mesh with $N$ points over an interval $[a, b]$:
