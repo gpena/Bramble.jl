@@ -298,7 +298,8 @@ Writes the Dirichlet values into `v` at the points `labels` marks.
 Only the marked entries are touched, and the work is proportional to how many there are
 rather than to the size of the grid — a boundary in a volume is a small fraction of it.
 """
-@inline function dirichlet_bc!(v::AbstractVector, Ωₕ::AbstractMeshType, bcs::ConstraintMarkers,
+@inline function dirichlet_bc!(
+        v::AbstractVector, Ωₕ::AbstractMeshType, bcs::ConstraintMarkers,
         labels::NTuple{N, Symbol}, offset::Int = 0) where {N}
     isempty(labels) && return v
 
@@ -314,7 +315,7 @@ rather than to the size of the grid — a boundary in a volume is a small fracti
 end
 
 @inline dirichlet_bc!(v::AbstractVector, Ωₕ::AbstractMeshType, bcs::ConstraintMarkers,
-        labels::Symbol...) = dirichlet_bc!(v, Ωₕ, bcs, labels, 0)
+    labels::Symbol...) = dirichlet_bc!(v, Ωₕ, bcs, labels, 0)
 
 """
 	_dirichlet_bc_indices!(A, marker_indices)
