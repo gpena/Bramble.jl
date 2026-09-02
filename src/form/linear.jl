@@ -4,18 +4,20 @@
 # ==============================================================================
 
 """
-    LinearForm{D,TestSpace,FType,AST}
+    LinearForm{D,TestSpace,AST}
 
 Represents a linear form defined over a test space.
 
 # Fields
 - `test_space::TestSpace`: The space for the test function.
-- `f::FType`: The expression, as a function of a test argument.
 - `ast::AST`: The resolved expression tree.
 
 The form resolves its expression tree `ast` once at construction, referencing the underlying
 storage of any coefficient grid functions (`VectorElement`). In-place updates via `Rₕ!(fₕ, ...)`
 or `values(fₕ) .= ...` are automatically seen by subsequent assemblies with zero heap allocations.
+The expression itself is not kept: nothing downstream ever calls it again, only the AST it
+built once — the point that made `form` construction cheap is also what makes storing the
+closure needless.
 
 Constant scalar coefficients can be written directly as plain numbers (e.g. `2.5 * innerₕ(fₕ, v)`).
 `Ref` is only needed if you want a **dynamic scalar coefficient** that changes across iterations in a loop:
@@ -27,9 +29,8 @@ l = form(Wₕ, v -> α * innerₕ(fₕ, v))
 assemble!(b, l) # allocates 0 bytes and evaluates with α = 2.5
 ```
 """
-struct LinearForm{D, TestSpace, FType, AST}
+struct LinearForm{D, TestSpace, AST}
     test_space::TestSpace
-    f::FType
     ast::AST
 end
 
@@ -176,7 +177,7 @@ function form(Wₕ, f)
     raw_ast = f(TestFunction{D}())
     _validate_form_expression(raw_ast, Val(D))
     ast = resolve_ast(raw_ast)
-    return LinearForm{D, typeof(Wₕ), typeof(f), typeof(ast)}(Wₕ, f, ast)
+    return LinearForm{D, typeof(Wₕ), typeof(ast)}(Wₕ, ast)
 end
 
 # ==============================================================================
@@ -659,10 +660,10 @@ is a separate, lower-level entry point that always threads, ignoring the backend
 See also [`assemble`](@ref), [`assemble_parallel!`](@ref) for the threaded sweep regardless
 of policy, and [`evaluate!`](@ref) when the contraction is wanted alongside the vector.
 """
-function assemble!(b::AbstractVector, form::LinearForm{D, TestSpace, FType, AST};
+function assemble!(b::AbstractVector, form::LinearForm{D, TestSpace, AST};
         dirichlet_conditions = nothing,
         dirichlet_labels = nothing,
-        ast = form.ast) where {D, TestSpace, FType, AST}
+        ast = form.ast) where {D, TestSpace, AST}
     _validate_dirichlet_labels(dirichlet_labels)
     fill!(b, zero(eltype(b)))
     space = form.test_space
@@ -690,8 +691,8 @@ for forcing a threaded sweep explicitly (benchmarking, or a one-off comparison).
 `assemble!`, does not apply `dirichlet_conditions`.
 """
 function assemble_parallel!(b::AbstractVector,
-        form::LinearForm{D, TestSpace, FType, AST},
-        ast = form.ast) where {D, TestSpace, FType, AST}
+        form::LinearForm{D, TestSpace, AST},
+        ast = form.ast) where {D, TestSpace, AST}
     space = form.test_space
     Ωₕ = mesh(space)
     mesh_markers = markers(Ωₕ)

@@ -6,19 +6,20 @@
 # it is called, so keeping it here made unlocking that file alone impossible.
 
 """
-    BilinearForm{D,TrialSpace,TestSpace,FType,AST}
+    BilinearForm{D,TrialSpace,TestSpace,AST}
 
 Represents a bilinear form defined over a trial space and test space.
 
 # Fields
 - `trial_space::TrialSpace`: The space for the trial function.
 - `test_space::TestSpace`: The space for the test function.
-- `f::FType`: The expression, as a function of a trial and a test argument.
 - `ast::AST`: The resolved expression tree.
 
 The form resolves its expression tree `ast` once at construction, referencing the underlying
 storage of any coefficient grid functions (`VectorElement`). In-place updates via `Rₕ!(cₕ, ...)`
 or `values(cₕ) .= ...` are automatically seen by subsequent assemblies with zero heap allocations.
+The expression itself is not kept: nothing downstream ever calls it again, only the AST it
+built once.
 
 Constant scalar coefficients can be written directly as plain numbers (e.g. `2.0 * innerₕ(D₋ₓ(u), D₋ₓ(v))`).
 `Ref` is only needed if you want a **dynamic scalar coefficient** that changes across iterations in a loop:
@@ -30,10 +31,9 @@ a = form(Wₕ, Wₕ, (u, v) -> innerₕ(β * D₋ₓ(u), D₋ₓ(v)))
 assemble!(A, a) # allocates 0 bytes and evaluates with β = 3.0
 ```
 """
-struct BilinearForm{D, TrialSpace, TestSpace, FType, AST}
+struct BilinearForm{D, TrialSpace, TestSpace, AST}
     trial_space::TrialSpace
     test_space::TestSpace
-    f::FType
     ast::AST
 end
 
@@ -88,7 +88,7 @@ function form(Wₕ, Vₕ, f)
     raw_ast = f(TrialFunction{D}(), TestFunction{D}())
     _validate_form_expression(raw_ast, Val(D))
     ast = resolve_ast(raw_ast)
-    return BilinearForm{D, typeof(Wₕ), typeof(Vₕ), typeof(f), typeof(ast)}(Wₕ, Vₕ, f, ast)
+    return BilinearForm{D, typeof(Wₕ), typeof(Vₕ), typeof(ast)}(Wₕ, Vₕ, ast)
 end
 
 # ==============================================================================
@@ -188,8 +188,8 @@ this is not usable until `assemble!` has filled it.
 See also [`assemble`](@ref) and [`assemble!`](@ref).
 """
 function allocate_system_matrix(
-        form::BilinearForm{D, TrialSpace, TestSpace, FType, AST},
-        ast = form.ast) where {D, TrialSpace, TestSpace, FType, AST}
+        form::BilinearForm{D, TrialSpace, TestSpace, AST},
+        ast = form.ast) where {D, TrialSpace, TestSpace, AST}
     space = form.trial_space
     Ωₕ = mesh(space)
     mesh_markers = markers(Ωₕ)
@@ -294,9 +294,9 @@ function _pattern_blocks!(I_vec::Vector{Int}, J_vec::Vector{Int}, term::TERM,
 end
 
 function allocate_system_matrix(
-        form::BilinearForm{D, TrialSpace, TestSpace, FType, AST},
+        form::BilinearForm{D, TrialSpace, TestSpace, AST},
         ast = form.ast) where {D, TrialSpace <: CompositeGridSpace,
-        TestSpace <: CompositeGridSpace, FType, AST}
+        TestSpace <: CompositeGridSpace, AST}
     trial_leaves = leaf_spaces_offsets(form.trial_space)
     test_leaves = leaf_spaces_offsets(form.test_space)
 
@@ -588,9 +588,9 @@ By default `assemble!` uses the pre-resolved `form.ast` stored inside the form.
 - **Dynamic scalars**: Plain numbers work directly for constant scalars. To update a scalar dynamically across loop iterations, wrap it in a `Ref(val)` (e.g. `β = Ref(1.0); a = form(Wₕ, Wₕ, (u, v) -> innerₕ(β * D₋ₓ(u), D₋ₓ(v)))`). Mutating `β[] = new_val` evaluates live during assembly with 0 allocations.
 """
 function assemble!(
-        A::SparseMatrixCSC, form::BilinearForm{D, TrialSpace, TestSpace, FType, AST};
+        A::SparseMatrixCSC, form::BilinearForm{D, TrialSpace, TestSpace, AST};
         dirichlet_labels = nothing,
-        ast = form.ast) where {D, TrialSpace, TestSpace, FType, AST}
+        ast = form.ast) where {D, TrialSpace, TestSpace, AST}
     _validate_dirichlet_labels(dirichlet_labels)
     fill!(nonzeros(A), zero(eltype(nonzeros(A))))
 
@@ -626,8 +626,8 @@ Takes `ast` positionally, matching the vector form and unlike the keyword on
 [`assemble!`](@ref).
 """
 function assemble_parallel!(
-        A::SparseMatrixCSC, form::BilinearForm{D, TrialSpace, TestSpace, FType, AST},
-        ast = form.ast) where {D, TrialSpace, TestSpace, FType, AST}
+        A::SparseMatrixCSC, form::BilinearForm{D, TrialSpace, TestSpace, AST},
+        ast = form.ast) where {D, TrialSpace, TestSpace, AST}
     fill!(nonzeros(A), zero(eltype(nonzeros(A))))
 
     _assemble_bilinear_parallel_core!(

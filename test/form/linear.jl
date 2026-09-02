@@ -631,9 +631,10 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
     end
 
     @testset "a form's expression is checked when it is built" begin
-        # The `ast` field stores the pre-resolved tree
+        # The `ast` field stores the pre-resolved tree; the expression itself is not kept
+        # (point 59) since nothing downstream ever calls it again.
         @test fieldnames(typeof(form(Wₕ, v -> innerₕ(uₕ, v)))) ==
-              (:test_space, :f, :ast)
+              (:test_space, :ast)
 
         @test_throws ArgumentError form(Wₕ, v -> 42)
         @test_throws ArgumentError form(Wₕ, v -> "not an operator")
