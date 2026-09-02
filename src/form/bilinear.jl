@@ -369,14 +369,15 @@ dcₕ = D₋ₓ(cₕ)                          # computed once, and still writte
 a = form(Wₕ, Wₕ, (u, v) -> innerₕ(dcₕ * u, v))
 ```
 
-Assembles the system matrix of the `BilinearForm` using parallel lock-free assembly. Optional `dirichlet_labels` applies boundary conditions to the matrix.
+Runs serially or across threads following `form.trial_space`'s backend
+[`execution_policy`](@ref), the same as [`assemble!`](@ref) — [`Serial`](@ref) by default.
+Optional `dirichlet_labels` applies boundary conditions to the matrix.
 """
 function assemble(form::BilinearForm; dirichlet_labels = nothing)
     _validate_dirichlet_labels(dirichlet_labels)
     ast_resolved = form.ast
     A = allocate_system_matrix(form, ast_resolved)
-    assemble_parallel!(A, form, ast_resolved)
-    apply_dirichlet_labels!(A, form, dirichlet_labels)
+    assemble!(A, form; dirichlet_labels = dirichlet_labels, ast = ast_resolved)
     return A
 end
 
@@ -573,7 +574,12 @@ end
 """
     assemble!(A::SparseMatrixCSC, form::BilinearForm; dirichlet_labels = nothing, ast = form.ast)
 
-Assembles the `BilinearForm` serially into the preallocated sparse matrix `A`, allocating nothing (**0 bytes**).
+Assembles the `BilinearForm` into the preallocated sparse matrix `A`, allocating nothing (**0 bytes**).
+
+Runs serially or across threads following `form.trial_space`'s backend
+[`execution_policy`](@ref) — [`Serial`](@ref) (the default) or [`Parallel`](@ref).
+[`assemble_parallel!`](@ref) is a separate, lower-level entry point that always threads,
+ignoring the backend's policy.
 
 By default `assemble!` uses the pre-resolved `form.ast` stored inside the form.
 
@@ -588,7 +594,11 @@ function assemble!(
     _validate_dirichlet_labels(dirichlet_labels)
     fill!(nonzeros(A), zero(eltype(nonzeros(A))))
 
-    _assemble_bilinear_core!(A, form.trial_space, form.test_space, ast)
+    if execution_policy(form.trial_space) isa Serial
+        _assemble_bilinear_core!(A, form.trial_space, form.test_space, ast)
+    else
+        _assemble_bilinear_parallel_core!(A, form.trial_space, form.test_space, ast, Val(D))
+    end
 
     apply_dirichlet_labels!(A, form, dirichlet_labels)
     return A
@@ -597,9 +607,11 @@ end
 """
     assemble_parallel!(A::SparseMatrixCSC, form::BilinearForm, ast = resolve_form_ast(form)) -> A
 
-Refills `A` with the assembled `form` across threads, and returns it. `A` must already carry
-the right sparsity pattern, from [`allocate_system_matrix`](@ref) or a previous
-[`assemble`](@ref).
+Refills `A` with the assembled `form` across threads, and returns it, regardless of
+`form.trial_space`'s backend policy — a lower-level entry point than [`assemble!`](@ref) for
+forcing a threaded sweep explicitly (benchmarking, or a one-off forced comparison). `A` must
+already carry the right sparsity pattern, from [`allocate_system_matrix`](@ref) or a previous
+[`assemble`](@ref). Unlike `assemble!`, does not apply `dirichlet_labels`.
 
 Colouring is what makes this correct rather than merely fast. Filling an entry goes through a
 column search and an in-place update, so two threads landing on the same entry would race on

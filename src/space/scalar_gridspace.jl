@@ -164,7 +164,7 @@ function space_weights(Ωₕ::AbstractMeshType{D}) where {D}
         v = Base.ReshapedArray(innerplus[i], npts_tuple, ())
 
         # Combine the per-component factors into the final weight for direction 'i'.
-        __innerplus_weights!(v, factors)
+        __innerplus_weights!(execution_policy(Ωₕ), v, factors)
     end
 
     # --- Compute the `inner_h` weights (cell volumes) ---
@@ -178,6 +178,7 @@ end
 # Implementation of the interface functions for AbstractSpaceType
 @inline mesh(Wₕ::ScalarGridSpace) = Wₕ.mesh
 @inline backend(Wₕ::ScalarGridSpace) = backend(mesh(Wₕ))
+@inline execution_policy(Wₕ::ScalarGridSpace) = execution_policy(backend(Wₕ))
 @inline mesh_type(Wₕ::ScalarGridSpace) = typeof(mesh(Wₕ))
 @inline mesh_type(::Type{<:ScalarGridSpace{
     <:Any, <:Any, <:Any, MType}}) where {MType} = MType
@@ -288,7 +289,7 @@ function _innerh_weights!(u, Ωₕ::AbstractMeshType{D}) where {D}
     cell_measures_per_component = ntuple(k -> cell_measures(Ωₕ(k)), Val(D))
     dims = npoints(Ωₕ, Tuple)
     v = Base.ReshapedArray(u, dims, ())
-    __innerplus_weights!(v, cell_measures_per_component)
+    __innerplus_weights!(execution_policy(Ωₕ), v, cell_measures_per_component)
     return nothing
 end
 
@@ -334,12 +335,12 @@ end
 end
 
 """
-	__innerplus_weights!(v, innerplus_per_component)
+	__innerplus_weights!(policy, v, innerplus_per_component)
 
 Builds the weights for the modified discrete ``L^2`` inner product on the space of grid functions [`ScalarGridSpace`](@ref). The result is stored in vector `v`.
 """
-function __innerplus_weights!(v, innerplus_per_component)
+function __innerplus_weights!(policy, v, innerplus_per_component)
     idxs = CartesianIndices(v)
     f = Base.Fix1(__prod, innerplus_per_component)
-    _cpu_threaded_for!(v, idxs, f)
+    _cpu_threaded_for!(policy, v, idxs, f)
 end

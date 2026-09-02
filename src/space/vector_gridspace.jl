@@ -115,6 +115,7 @@ end
 @inline eltype(::Type{<:CompositeGridSpace{
     <:Any, Spaces}}) where {Spaces} = eltype(fieldtype(Spaces, 1))
 @inline backend(Wₕ::CompositeGridSpace) = backend(first_space(Wₕ))
+@inline execution_policy(Wₕ::CompositeGridSpace) = execution_policy(backend(Wₕ))
 @inline ndofs(Wₕ::CompositeGridSpace) = sum(ndofs, Wₕ.spaces)
 @inline ndofs(Wₕ::CompositeGridSpace, ::Type{Tuple}) = map(ndofs, Wₕ.spaces)
 

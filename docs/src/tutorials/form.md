@@ -243,20 +243,46 @@ Naming one and leaving the other open has no reading as mathematics — the term
 to every equation at once — so it is refused rather than guessed at. Naming neither is fine
 and means the diagonal, applied to every block.
 
-## 7. Threaded assembly
+## 7. Threading, chosen once on the backend
 
-`assemble_parallel!` fills the same vector using every available thread:
+`Rₕ!`, `avgₕ!`, gridspace construction and form assembly all thread the same way: `Serial()`
+or `Parallel()`, chosen once when the backend is built, rather than decided per call.
+
+```@example forms
+Wₕ_par = gridspace(mesh(domain(interval(0.0, 1.0)), 33, true;
+    backend = backend(policy = Parallel())))
+execution_policy(Wₕ_par)
+```
+
+There is no automatic size threshold. A `Parallel()` backend threads every eligible call,
+however small, however often a time loop repeats it — asking for `Parallel()` and getting it
+is the point, rather than a heuristic guessing on the caller's behalf whether a given call is
+big enough to be worth it. Pick `Serial()` (the default `backend()` already is) for small,
+frequently repeated calls instead.
+
+`assemble!`/`assemble` follow `test_space(form)`'s (or, for a `BilinearForm`, `trial_space`'s)
+policy directly, so the ordinary entry points already thread when the backend says to:
+
+```@example forms
+l_par = form(Wₕ_par, v -> innerₕ(Rₕ(Wₕ_par, x -> sin(π * x)), v))
+b_par = assemble(l_par)      # threads, because Wₕ_par's backend says Parallel()
+nothing # hide
+```
+
+`assemble_parallel!` still exists underneath, as a lower-level entry point that always
+threads regardless of the backend's policy — useful for a one-off forced comparison or a
+benchmark, not the everyday call:
 
 ```@example forms
 bp = similar(b)
-assemble_parallel!(bp, l)
+assemble_parallel!(bp, l)    # always threads, whatever l's own backend says
 bp ≈ b
 ```
 
-It takes no locks, and it needs none. Assembly partitions the grid by *stride*: the offsets a
-stencil reaches give the width of the footprint one point writes, and two points separated by
-at least that width cannot overlap. Points sharing a stride are therefore written
-concurrently with nothing to coordinate.
+Threading takes no locks, and needs none. Assembly partitions the grid by *stride*: the
+offsets a stencil reaches give the width of the footprint one point writes, and two points
+separated by at least that width cannot overlap. Points sharing a stride are therefore
+written concurrently with nothing to coordinate.
 
 The common case is one colour. A form whose test argument carries no difference — `innerₕ(fₕ, v)`
 above — reaches only its own point, so the stride is 1 in every direction and the whole grid
@@ -265,7 +291,8 @@ back along each axis, giving four colours swept in turn.
 
 Whether threading pays depends on the size, and not always in the obvious direction:
 assembly is memory-bound, so the gain flattens well before the thread count does. The
-[benchmarks](../benchmarks.md) page carries the measurements.
+[benchmarks](../benchmarks.md) page carries the measurements — that is what should decide
+which policy a backend is built with, not a guess.
 
 ## 8. Restricting a term to part of the mesh
 

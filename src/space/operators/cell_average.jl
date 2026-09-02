@@ -96,13 +96,6 @@ Base.@constprop :aggressive function avgₕ!(
     return _avgₕ!(uₕ, f, Val(D), Val(quad_points))
 end
 
-# Evaluations per grid point for a tensor-product rule of `NQ` points per
-# direction on a `D`-dimensional mesh. The threading threshold counts
-# evaluations, so a kernel this expensive per index reaches the crossover
-# at proportionally fewer indices.
-@inline _avg_min_work(::Val{D}, ::Val{NQ}) where {D, NQ} = max(
-    1, cld(CPU_THREADED_MIN, NQ^D))
-
 # A named, concretely-typed kernel for the quadrature loop's inner call, rather than an
 # anonymous closure over the same five captures (`f`, `x`, `idxs`, `nodes`, `wts`).
 #
@@ -146,8 +139,8 @@ end
     n = length(idxs)
     nodes, wts = _gauss_rule(nq, T)
 
-    _cpu_threaded_for!(raw, 1:n, _AvgKernel1(f, x, idxs, nodes, wts);
-        min_work = _avg_min_work(Val(1), nq))
+    _cpu_threaded_for!(execution_policy(space), raw, 1:n, _AvgKernel1(
+        f, x, idxs, nodes, wts))
     return uₕ
 end
 
@@ -162,8 +155,8 @@ end
     n = length(idxs)
     nodes, wts = _gauss_rule(nq, T)
 
-    _cpu_threaded_for!(raw, 1:n, _AvgKernelD(f, x, idxs, nodes, wts);
-        min_work = _avg_min_work(Val(D), nq))
+    _cpu_threaded_for!(execution_policy(space), raw, 1:n, _AvgKernelD(
+        f, x, idxs, nodes, wts))
     return uₕ
 end
 
@@ -209,7 +202,8 @@ end
 # Composite space: single vector-valued function returning all components
 @inline function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f, ::Val{1}, nq::Val{NQ}) where {
         NC, NQ}
-    Ωₕ = mesh(space(uₕ))
+    sp = space(uₕ)
+    Ωₕ = mesh(sp)
     x = half_points(Ωₕ)
     T = eltype(Ωₕ)
     comps = components(uₕ)
@@ -219,16 +213,16 @@ end
     nodes, wts = _gauss_rule(nq, T)
 
     _cpu_threaded_scatter_for!(
-        raws, 1:n,
+        execution_policy(sp), raws, 1:n,
         _AvgScatterKernel1{typeof(f), typeof(x), typeof(idxs), NQ, T, NC}(
-            f, x, idxs, nodes, wts);
-        min_work = _avg_min_work(Val(1), nq))
+            f, x, idxs, nodes, wts))
     return uₕ
 end
 
 @inline function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f, ::Val{D}, nq::Val{NQ}) where {
         NC, D, NQ}
-    Ωₕ = mesh(space(uₕ))
+    sp = space(uₕ)
+    Ωₕ = mesh(sp)
     x = half_points(Ωₕ)
     T = eltype(Ωₕ)
     comps = components(uₕ)
@@ -238,10 +232,9 @@ end
     nodes, wts = _gauss_rule(nq, T)
 
     _cpu_threaded_scatter_for!(
-        raws, 1:n,
+        execution_policy(sp), raws, 1:n,
         _AvgScatterKernelD{typeof(f), typeof(x), typeof(idxs), NQ, T, NC}(
-            f, x, idxs, nodes, wts);
-        min_work = _avg_min_work(Val(D), nq))
+            f, x, idxs, nodes, wts))
     return uₕ
 end
 

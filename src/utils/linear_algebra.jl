@@ -3,64 +3,28 @@
 end
 
 """
-	CPU_THREADED_MIN
-
-Default work threshold below which [`_cpu_threaded_for!`](@ref) runs serially. It
-counts *evaluations*, not indices: a caller whose kernel does more than one
-function evaluation per index passes a proportionally smaller `min_work`.
-
-`Threads.@threads` allocates and spawns its tasks on every call, which costs a
-roughly constant ~125 us on 8 threads regardless of loop length. Below the point
-where the serial loop exceeds that, threading is pure loss. Measured on 8
-threads, serial against threaded, in microseconds:
-
-    indices          5000    10000    20000    40000    80000   160000
-    f(x) = 2x
-      serial          3.9      7.7     17.7     35.4     70.6    142.5
-      threaded      125.5    126.4    130.4    133.5    142.6    159.2
-    f(x) = sin(x)exp(-x)
-      serial         82.9    115.9    309.2    581.6   1018.3   1856.5
-      threaded      135.2    156.5    178.6    225.0    281.7    519.9
-
-so the crossover is near 16000 indices for one cheap evaluation per index, and
-proportionally lower for a kernel that does more work per index.
-
-The previous value of 256 came from a 4-thread measurement of the cell-average
-kernel, which does `quad_points^D` evaluations per index. That is the most
-favourable case for threading, and applying its threshold to `Rₕ!`, which does
-one evaluation per index, made `Rₕ!` up to 22x slower than serial on grids
-below a few thousand points.
-
-Running short loops serially also makes them allocation free, which matters when
-the caller is a time-stepping loop invoking this once per step.
-"""
-const CPU_THREADED_MIN = 16_384
-
-"""
 	$(SIGNATURES)
 
-Applies `f` across `idxs`, writing into `v` in place, using static thread
-scheduling once there is enough work to be worth it and running serially
-otherwise. See [`CPU_THREADED_MIN`](@ref).
+Applies `f` across `idxs`, writing into `v` in place, either as a plain loop or across
+threads depending on `policy` -- [`Serial`](@ref) or [`Parallel`](@ref), read off a
+[`Backend`](@ref) via [`execution_policy`](@ref).
+
+Resolved by ordinary dispatch on `policy`'s type, not a runtime size check: there is no
+threshold below which a `Parallel` backend falls back to serial. That used to be
+`CPU_THREADED_MIN`, a threshold the caller could not see or override and that would have
+needed its own value per operation (`Rₕ!`'s crossover is not `avgₕ!`'s) -- removed together
+with the automatic switching it existed to drive. Choosing `Serial()` on the backend is now
+how a caller with many small, frequently repeated calls avoids `Threads.@threads`'s spawn
+cost, deterministically, rather than relying on a heuristic to guess it for them.
 
 # Arguments
+- `policy`: [`Serial`](@ref) or [`Parallel`](@ref)
 - `v`: Array to be modified in-place
 - `idxs`: Iterable of indices to process
 - `f`: Function that takes an index and returns the value to be stored at that index
 """
-@inline function _cpu_threaded_for!(v, idxs, f; min_work::Int = CPU_THREADED_MIN)
-    # `@inline` is load-bearing, not decoration. Without it this function allocated 64 bytes
-    # on every call that took the serial branch, so `Rₕ!` cost 64 B and `avgₕ!` 128 B on grids
-    # too small to thread, forever, however often they were called. The cause is the
-    # `Threads.nthreads()` call: it is opaque to the compiler, and its presence stopped the
-    # escape analysis proving that the arguments handed to the `@noinline` threaded branch
-    # never actually go there. Inlining resolves the branch in the caller's context instead,
-    # and the serial path becomes allocation free.
-    if Threads.nthreads() == 1 || length(idxs) < min_work
-        return _serial_for!(v, idxs, f)
-    end
-    return _threaded_for!(v, idxs, f)
-end
+@inline _cpu_threaded_for!(::Serial, v, idxs, f) = _serial_for!(v, idxs, f)
+@inline _cpu_threaded_for!(::Parallel, v, idxs, f) = _threaded_for!(v, idxs, f)
 
 # Kept in its own function on purpose. `Threads.@threads` builds a closure over
 # the loop body, and having it in the same body as the serial branch makes that
@@ -167,23 +131,23 @@ end
 	$(SIGNATURES)
 
 Applies `g` across `idxs` and scatters each returned tuple over the arrays in
-`mats`, threading on the same terms as [`_cpu_threaded_for!`](@ref).
+`mats`, dispatching on `policy` -- [`Serial`](@ref) or [`Parallel`](@ref) -- on the
+same terms as [`_cpu_threaded_for!`](@ref).
 
 # Arguments
+- `policy`: [`Serial`](@ref) or [`Parallel`](@ref)
 - `mats`: Tuple of arrays to be modified in-place, one per component
 - `idxs`: Iterable of indices to process
 - `g`: Function taking an index and returning a tuple of values, one per array
 """
-@inline function _cpu_threaded_scatter_for!(mats::Tuple, idxs, g; min_work::Int = CPU_THREADED_MIN)
-    # `@inline` for the same reason as `_cpu_threaded_for!` above.
-    if Threads.nthreads() == 1 || length(idxs) < min_work
-        @inbounds for idx in idxs
-            _write_components!(mats, g(idx), idx)
-        end
-        return nothing
+@inline function _cpu_threaded_scatter_for!(::Serial, mats::Tuple, idxs, g)
+    @inbounds for idx in idxs
+        _write_components!(mats, g(idx), idx)
     end
-    return _threaded_scatter_for!(mats, idxs, g)
+    return nothing
 end
+@inline _cpu_threaded_scatter_for!(::Parallel, mats::Tuple, idxs, g) = _threaded_scatter_for!(
+    mats, idxs, g)
 
 # Separate function for the same reason as `_threaded_for!`: sharing a body with
 # the serial branch makes the `@threads` closure allocate even when unused.

@@ -214,14 +214,14 @@ end
 Assembles the system vector of the `LinearForm`, applying `dirichlet_conditions` on the
 regions `dirichlet_labels` names when both are given.
 
-Assembles serially. [`assemble_parallel!`](@ref) is the threaded counterpart, and which of
-the two wins depends on the size of the problem. On four threads the parallel sweep runs
-1.2x to 2.2x faster from roughly 250,000 degrees of freedom upward, and loses below about
-100,000, where spawning the tasks costs more than the whole sweep.
-
-`assemble` does not pick between them. The threshold moves with the thread count, the
-dimension and the form, so the choice belongs to the caller rather than to a constant
-compiled in here.
+Runs serially or across threads following `test_space(form)`'s backend
+[`execution_policy`](@ref) — [`Serial`](@ref) (the default) or [`Parallel`](@ref), chosen
+once on the backend rather than picked per call: threading only pays from roughly 250,000
+degrees of freedom upward on four threads (1.2x–2.2x faster there) and loses below about
+100,000, where spawning the tasks costs more than the whole sweep — a threshold that moves
+with the thread count, the dimension and the form, so it belongs to whoever builds the
+backend, not to a constant compiled in here. [`assemble_parallel!`](@ref) always threads
+regardless of the backend's policy, for benchmarking or a one-off forced comparison.
 
 For most of this package's history the parallel path lost at *every* size — 76x at 2,500
 degrees of freedom, 3.0x at 250,000 — because it gave each thread a full-length buffer and
@@ -652,8 +652,12 @@ achieving zero heap allocations.
     and the labels to impose them on. Both default to `nothing`, which imposes nothing.
   - `ast`: an optional custom AST override (defaults to `form.ast`).
 
-See also [`assemble`](@ref), [`assemble_parallel!`](@ref) for the threaded sweep, and
-[`evaluate!`](@ref) when the contraction is wanted alongside the vector.
+Runs serially or across threads following `test_space(form)`'s backend
+[`execution_policy`](@ref) — [`Serial`](@ref) or [`Parallel`](@ref). [`assemble_parallel!`](@ref)
+is a separate, lower-level entry point that always threads, ignoring the backend's policy.
+
+See also [`assemble`](@ref), [`assemble_parallel!`](@ref) for the threaded sweep regardless
+of policy, and [`evaluate!`](@ref) when the contraction is wanted alongside the vector.
 """
 function assemble!(b::AbstractVector, form::LinearForm{D, TestSpace, FType, AST};
         dirichlet_conditions = nothing,
@@ -667,7 +671,11 @@ function assemble!(b::AbstractVector, form::LinearForm{D, TestSpace, FType, AST}
     _validate_term_markers(ast, mesh_markers, "the form's space")
     lin_indices = LinearIndices(indices(Ωₕ))
 
-    _assemble_linear_core!(b, space, ast, lin_indices, mesh_markers)
+    if execution_policy(space) isa Serial
+        _assemble_linear_core!(b, space, ast, lin_indices, mesh_markers)
+    else
+        _assemble_linear_parallel_core!(b, space, ast, lin_indices, mesh_markers)
+    end
 
     apply_dirichlet_conditions!(b, form, dirichlet_conditions, dirichlet_labels)
     return b
@@ -676,7 +684,10 @@ end
 """
     assemble_parallel!(b, form::LinearForm, ast = form.ast) -> b
 
-Refills `b` with the assembled `form` across threads, and returns it.
+Refills `b` with the assembled `form` across threads, and returns it, regardless of
+`test_space(form)`'s backend policy -- a lower-level entry point than [`assemble!`](@ref)
+for forcing a threaded sweep explicitly (benchmarking, or a one-off comparison). Unlike
+`assemble!`, does not apply `dirichlet_conditions`.
 """
 function assemble_parallel!(b::AbstractVector,
         form::LinearForm{D, TestSpace, FType, AST},

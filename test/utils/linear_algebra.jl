@@ -1,6 +1,6 @@
 using Test
 using Bramble
-using Bramble: _dot, _inner_product, _cpu_threaded_for!, _serial_for!
+using Bramble: _dot, _inner_product, _cpu_threaded_for!, _serial_for!, Serial, Parallel
 using LinearAlgebra: Diagonal, dot
 using StaticArrays
 
@@ -150,40 +150,46 @@ using StaticArrays
     end
 
     @testset "_cpu_threaded_for!" begin
-        n = 100
-        v = zeros(n)
-        idxs = 1:n
+        # Dispatched on policy now, not gated by size: both Serial() and Parallel() are
+        # exercised directly at every size below, rather than needing a grid large enough to
+        # cross a threshold (there is none left to cross).
+        for policy in (Serial(), Parallel())
+            n = 100
+            v = zeros(n)
+            idxs = 1:n
 
-        # Test parallel assignment
-        f = i -> Float64(i^2)
-        _cpu_threaded_for!(v, idxs, f)
-        @test v == [Float64(i^2) for i in 1:n]
+            f = i -> Float64(i^2)
+            _cpu_threaded_for!(policy, v, idxs, f)
+            @test v == [Float64(i^2) for i in 1:n]
 
-        # Test with partial indices
-        v2 = ones(n)
-        idxs_partial = 10:50
-        f2 = i -> Float64(i * 2)
-        _cpu_threaded_for!(v2, idxs_partial, f2)
-        @test v2[1:9] == ones(9)
-        @test v2[10:50] == [Float64(i * 2) for i in 10:50]
-        @test v2[51:100] == ones(50)
+            # Test with partial indices
+            v2 = ones(n)
+            idxs_partial = 10:50
+            f2 = i -> Float64(i * 2)
+            _cpu_threaded_for!(policy, v2, idxs_partial, f2)
+            @test v2[1:9] == ones(9)
+            @test v2[10:50] == [Float64(i * 2) for i in 10:50]
+            @test v2[51:100] == ones(50)
 
-        # Test with CartesianIndices
-        B = zeros(10, 10)
-        cart_idxs = CartesianIndices(B)
-        f3 = idx -> Float64(idx[1] * idx[2])
-        _cpu_threaded_for!(B, cart_idxs, f3)
-        for i in 1:10, j in 1:10
+            # Test with CartesianIndices
+            B = zeros(10, 10)
+            cart_idxs = CartesianIndices(B)
+            f3 = idx -> Float64(idx[1] * idx[2])
+            _cpu_threaded_for!(policy, B, cart_idxs, f3)
+            for i in 1:10, j in 1:10
 
-            @test B[i, j] ≈ Float64(i * j)
+                @test B[i, j] ≈ Float64(i * j)
+            end
         end
 
-        # Verify parallel gives same result as serial
+        # Verify Parallel() gives the same result as Serial()
+        n = 100
+        idxs = 1:n
         v_serial = zeros(n)
         v_parallel = zeros(n)
         f_test = i -> sin(Float64(i)) + cos(Float64(i))
-        _serial_for!(v_serial, idxs, f_test)
-        _cpu_threaded_for!(v_parallel, idxs, f_test)
+        _cpu_threaded_for!(Serial(), v_serial, idxs, f_test)
+        _cpu_threaded_for!(Parallel(), v_parallel, idxs, f_test)
         @test v_serial ≈ v_parallel
     end
 

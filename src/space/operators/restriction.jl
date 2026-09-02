@@ -72,18 +72,19 @@ See also: [`Rₕ`](@ref), [`avgₕ!`](@ref), [`element`](@ref)
     raw = values(uₕ)
     idxs = indices(Ωₕ)
     n = length(idxs)
-    _cpu_threaded_for!(raw, 1:n, i -> f(point(Ωₕ, idxs[i])))
+    _cpu_threaded_for!(execution_policy(space), raw, 1:n, i -> f(point(Ωₕ, idxs[i])))
     return uₕ
 end
 
 @inline function _Rₕ_scatter_parallel!(
         uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::F) where {NC, F}
-    Ωₕ = mesh(space(uₕ))
+    sp = space(uₕ)
+    Ωₕ = mesh(sp)
     comps = components(uₕ)
     raws = ntuple(i -> values(comps[i]), Val(NC))
     idxs = indices(Ωₕ)
     n = length(idxs)
-    _cpu_threaded_scatter_for!(raws, 1:n, i -> f(point(Ωₕ, idxs[i])))
+    _cpu_threaded_scatter_for!(execution_policy(sp), raws, 1:n, i -> f(point(Ωₕ, idxs[i])))
     return uₕ
 end
 

@@ -63,7 +63,7 @@ using Supposition
             npts_tup = npoints(mesh2d, Tuple)
             v = zeros(Float64, npts_tup)
             comp_weights = (rand(npts_tup[1]), rand(npts_tup[2]))
-            __innerplus_weights!(v, comp_weights)
+            __innerplus_weights!(Serial(), v, comp_weights)
 
             idx = CartesianIndex(3, 4)
             @test v[idx] ≈ comp_weights[1][idx[1]] * comp_weights[2][idx[2]]

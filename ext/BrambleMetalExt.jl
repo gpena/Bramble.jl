@@ -1,6 +1,6 @@
 module BrambleMetalExt
 
-using Bramble: Bramble, Backend, backend
+using Bramble: Bramble, Backend, backend, Serial, ExecutionPolicy
 using Metal: Metal, MtlArray, MtlMatrix, MtlVector, mtl
 using LinearAlgebra: I
 
@@ -11,7 +11,7 @@ import Bramble: vector, matrix, _backend_eye, _backend_zeros
 # ---------------------------------------------------------------------------
 
 """
-	metal_backend(T::Type = Float32)
+	metal_backend(T::Type = Float32; policy = Serial())
 
 Returns a [`Backend`](@ref) that uses Apple Metal GPU arrays via
 [Metal.jl](https://github.com/JuliaGPU/Metal.jl).
@@ -24,25 +24,26 @@ on Apple Silicon GPUs.
 
 ```julia
 using Bramble, Metal
-b   = metal_backend()          # Backend{MtlVector{Float32}, MtlMatrix{Float32}}
+b   = metal_backend()          # Backend{MtlVector{Float32}, MtlMatrix{Float32}, Serial}
 b32 = metal_backend(Float32)   # same
 b16 = metal_backend(Float16)   # half-precision
 ```
 """
-function Bramble._metal_backend(::Type{T}) where {T <: Union{Float16, Float32}}
-    return Backend{MtlVector{T}, MtlMatrix{T}}()
+function Bramble._metal_backend(
+        ::Type{T}, policy::ExecutionPolicy) where {T <: Union{Float16, Float32}}
+    return Backend{MtlVector{T}, MtlMatrix{T}, typeof(policy)}()
 end
 
 # ---------------------------------------------------------------------------
 # vector / matrix allocation — GPU-side construction
 # ---------------------------------------------------------------------------
 
-@inline function vector(::Backend{VT, MT}, n::Integer) where {T, VT <: MtlVector{T}, MT}
+@inline function vector(::Backend{VT, MT, EP}, n::Integer) where {T, VT <: MtlVector{T}, MT, EP}
     return MtlArray{T}(undef, n)
 end
 
-@inline function matrix(::Backend{VT, MT}, n::Integer, m::Integer) where {
-        T, VT, MT <: MtlMatrix{T}}
+@inline function matrix(::Backend{VT, MT, EP}, n::Integer, m::Integer) where {
+        T, VT, MT <: MtlMatrix{T}, EP}
     return MtlArray{T}(undef, n, m)
 end
 

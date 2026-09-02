@@ -15,6 +15,10 @@ Documentation for `Bramble.jl`'s public API.
 
 ```@docs
 backend
+ExecutionPolicy
+Serial
+Parallel
+execution_policy
 vector
 matrix
 vector_type

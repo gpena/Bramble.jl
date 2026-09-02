@@ -161,19 +161,23 @@ using Bramble: values, components, _difference_engine!, _average_engine!,
     @testset "in-place restriction costs the same at every grid size" begin
         # Rₕ! and avgₕ! allocate a small constant. The property that matters is that it
         # is constant: anything proportional to the grid would be per-step garbage.
-        function inplace_bytes(n)
-            W = gridspace(mesh(domain(interval(0.0, 1.0)), n, true))
+        function inplace_bytes(be, n)
+            W = gridspace(mesh(domain(interval(0.0, 1.0)), n, true; backend = be))
             u = element(W)
             (alloc_test(Rₕ!, u, sin), alloc_test(avgₕ!, u, sin))
         end
-        # Both sizes stay below the threading thresholds, which are
-        # CPU_THREADED_MIN for Rₕ! and CPU_THREADED_MIN / quad_points for avgₕ!.
-        # Straddling one of them compares a serial call against a threaded one and
-        # measures the threshold rather than the scaling: avgₕ! at 4096 points
-        # allocates 2080 bytes for its tasks against 128 serial.
-        @test 2048 < Bramble.CPU_THREADED_MIN ÷ Bramble.AVG_QUAD_POINTS
-        small = inplace_bytes(16)
-        large = inplace_bytes(2048)          # 128x the degrees of freedom
+
+        # No threading threshold left to straddle (point 22): a `Serial()` backend runs
+        # every grid size through the same plain loop, so both sizes give exactly 0 bytes,
+        # not merely the same as each other.
+        be_serial = backend(policy = Serial())
+        @test inplace_bytes(be_serial, 16) == (0, 0)
+        @test inplace_bytes(be_serial, 2048) == (0, 0)   # 128x the degrees of freedom
+
+        # `Parallel()` costs a small, size-independent constant (task spawn overhead).
+        be_parallel = backend(policy = Parallel())
+        small = inplace_bytes(be_parallel, 16)
+        large = inplace_bytes(be_parallel, 2048)
         @test small == large
     end
 end

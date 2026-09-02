@@ -114,9 +114,11 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
     end
 
     @testset "serial and parallel assembly agree" begin
-        # The serial and threaded paths are separate walks over the same terms, and
-        # `assemble` reaches only the threaded one — so a break in the serial path is
-        # invisible unless it is compared against the other. It was, once.
+        # The serial and threaded paths are separate walks over the same terms, so a break in
+        # the serial path is invisible unless it is compared against the other. It was, once.
+        # `assemble_parallel!` always threads regardless of the backend's policy (point 22),
+        # which is what makes it the right fixed reference here; `assemble!` on `Wₕ`'s
+        # default Serial() backend gives the serial answer.
         Vₕ = gridspace(Ωₕ, Val(2))
         V3 = gridspace(Ωₕ, Val(3))
 
@@ -132,11 +134,37 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
             ("blocks with operators", Vₕ,
             (u, v) -> inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + innerₕ(u(2), v(2))))
             a = form(sp, sp, g)
-            Apar = assemble(a)
-            Aser = similar(sparse(Apar))
-            assemble!(Aser, a)
+            Aser = assemble(a)
+            Apar = similar(sparse(Aser))
+            assemble_parallel!(Apar, a)
             @test Matrix(Aser) ≈ Matrix(Apar)
         end
+    end
+
+    @testset "assemble!/assemble follow the trial space's backend policy (point 22)" begin
+        # assemble!/assemble no longer hardcode parallel (the asymmetry this closed:
+        # assemble(a::BilinearForm) used to call assemble_parallel! unconditionally, the
+        # opposite default from LinearForm's serial-by-default assemble). Both now read
+        # form.trial_space's execution_policy, defaulting to Serial() like the vector form.
+        @test execution_policy(Wₕ) isa Serial
+        Ω_par = mesh(domain(S, :walls => get_boundary_symbols(S)), (9, 7), (true, true);
+            backend = backend(policy = Parallel()))
+        W_par = gridspace(Ω_par)
+        @test execution_policy(W_par) isa Parallel
+
+        a_serial = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
+        a_parallel = form(W_par, W_par, (u, v) -> innerₕ(u, v))
+
+        A_default = assemble(a_serial)
+        A_via_policy = assemble(a_parallel)
+        @test Matrix(A_via_policy) ≈ Matrix(A_default)
+
+        # Directly against assemble_parallel!, the lower-level entry point that always
+        # threads regardless of the backend's policy: a Parallel()-backend assemble must
+        # agree with it exactly.
+        A_forced_parallel = similar(sparse(A_via_policy))
+        assemble_parallel!(A_forced_parallel, a_parallel)
+        @test Matrix(A_via_policy) ≈ Matrix(A_forced_parallel)
     end
 
     @testset "nesting is just more leaves" begin

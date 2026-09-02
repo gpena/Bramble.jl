@@ -208,14 +208,14 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
         @test T === Float64
         @test VT === Vector{Float64}
         @test MT === SparseMatrixCSC{Float64, Int}
-        @test BType === Backend{Vector{Float64}, SparseMatrixCSC{Float64, Int}}
+        @test BType === Backend{Vector{Float64}, SparseMatrixCSC{Float64, Int}, Serial}
 
         # Test on type
         T2, VT2, MT2, BType2 = backend_types(typeof(be_default))
         @test T2 === Float64
         @test VT2 === Vector{Float64}
         @test MT2 === SparseMatrixCSC{Float64, Int}
-        @test BType2 === Backend{Vector{Float64}, SparseMatrixCSC{Float64, Int}}
+        @test BType2 === Backend{Vector{Float64}, SparseMatrixCSC{Float64, Int}, Serial}
 
         # Test Float32 backend
         be_f32 = backend(vector_type = Vector{Float32}, matrix_type = Matrix{Float32})
@@ -299,7 +299,7 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
 end
 @testset "Backend: additional coverage" begin
     @testset "vector_type / matrix_type on Type (lines 19, 27)" begin
-        BE = Backend{Vector{Float64}, SparseMatrixCSC{Float64, Int}}
+        BE = Backend{Vector{Float64}, SparseMatrixCSC{Float64, Int}, Serial}
         @test vector_type(BE) === Vector{Float64}
         @test matrix_type(BE) === SparseMatrixCSC{Float64, Int}
     end

@@ -131,6 +131,14 @@ Returns the linear algebra [`Backend`](@ref) associated with the mesh `Ωₕ`.
 @inline backend(Ωₕ::AbstractMeshType) = Ωₕ.backend
 
 """
+	execution_policy(Ωₕ::AbstractMeshType)
+
+Returns the [`ExecutionPolicy`](@ref) ([`Serial`](@ref) or [`Parallel`](@ref)) of the
+[`Backend`](@ref) associated with the mesh `Ωₕ`.
+"""
+@inline execution_policy(Ωₕ::AbstractMeshType) = execution_policy(backend(Ωₕ))
+
+"""
 	markers(Ωₕ::AbstractMeshType)
 
 Returns the `MeshMarkers` dictionary associated with the mesh `Ωₕ`.

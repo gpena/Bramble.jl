@@ -401,10 +401,32 @@ end
         end
 
         @testset "allocations do not grow with the grid" begin
-            # Measured behind a function barrier: at global scope @allocated also
-            # counts the boxing of the non-const globals it touches.
-            function avg_bytes(n)
-                Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (n, n))
+            # A direct call, one function-call frame between the test and avgₕ! itself,
+            # matching how /tmp/verify_consolidation.jl checked this earlier -- and where a
+            # Serial() backend really does measure exactly 0, at every grid size.
+            function avg_bytes_direct(be, n)
+                Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (n, n); backend = be)
+                W2 = gridspace(Ω2)
+                u2 = element(W2)
+                avgₕ!(u2, f)
+                avgₕ!(u2, f)
+                return @allocated avgₕ!(u2, f)
+            end
+
+            # A second, more indirect wrapper -- an extra `run!` closure between the test
+            # and avgₕ!, one function-call frame deeper than avg_bytes_direct. Measured
+            # behind a function barrier so that, at global scope, @allocated does not also
+            # count the boxing of the non-const globals it touches.
+            #
+            # This extra frame alone (unrelated to which policy is chosen -- confirmed by
+            # checking out the commit right before this one, still costs the same 48 B) is
+            # enough to lose the zero-allocation guarantee `avg_bytes_direct` gets: real,
+            # deterministic, and not itself point 22's doing, but worth recording here since
+            # it is exactly the "inlining budget nothing can query" class of risk this file's
+            # own comments already warn about. A real caller wrapping avgₕ! in one more
+            # closure than this file's own internal helpers do could hit the same thing.
+            function avg_bytes_wrapped(be, n)
+                Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (n, n); backend = be)
                 W2 = gridspace(Ω2)
                 u2 = element(W2)
                 run!(uu, g) = avgₕ!(uu, g)
@@ -412,46 +434,40 @@ end
                 run!(u2, f)
                 return @allocated run!(u2, f)
             end
-            # The property under test is that the cost is O(1) in the number of grid
-            # points, not that it is byte-for-byte identical: the threaded path's task
-            # setup varies slightly with the iteration space, and by Julia version.
-            # 1024x the degrees of freedom must stay within a small constant factor,
-            # where anything proportional to the grid would be three orders larger.
-            #
-            # Both sizes have to sit on the same side of the threading threshold.
-            # Straddling it compares a serial call against a threaded one and so
-            # measures the threshold rather than the scaling. See CPU_THREADED_MIN.
-            small = avg_bytes(32)      # 1_024 degrees of freedom
-            large = avg_bytes(1024)    # 1_048_576 degrees of freedom
 
-            # Instrumentation, not assertion. This pair failed on CI at 83,887,904 B,
-            # which is exactly 80 bytes per grid point plus the 1,824 B of fixed cost
-            # measured locally: the quadrature rule rebuilt at every point. It reproduced
-            # only on x86_64 Linux — aarch64 macOS measured 0 B per point on the same
-            # commit — because the kernel relied on `@generated _gauss_rule` folding to a
-            # literal, and that fold happens on one architecture and not the other.
-            #
-            # The kernel now captures the rule instead of fetching it inside, so there is
-            # no fold to depend on. What is reported is the per-point cost implied by the
-            # two measurements above, which is the quantity actually under test.
-            #
-            # An earlier version of this probe built a kernel and called it directly, and
-            # reported the fold surviving on the very job that was failing — calling the
-            # closure on its own folds where inlining it into `_cpu_threaded_for!` does not.
-            # Hence measuring the real path rather than a stand-in for it.
+            # No threading threshold left to straddle (point 22): a `Serial()` backend runs
+            # every grid size through the same plain loop, so the direct-call cost is
+            # exactly 0 bytes regardless of how many points there are.
+            be_serial = backend(policy = Serial())
+            @test avg_bytes_direct(be_serial, 32) == 0        # 1_024 degrees of freedom
+            @test avg_bytes_direct(be_serial, 1024) == 0      # 1_048_576 degrees of freedom
+            @test avg_bytes_direct(be_serial, 8) == avg_bytes_direct(be_serial, 16) == 0
+
+            # The wrapped path costs a small, size-independent constant instead of exactly
+            # zero -- still O(1) in the grid, which is the property under test here.
+            wrapped_small = avg_bytes_wrapped(be_serial, 32)
+            wrapped_large = avg_bytes_wrapped(be_serial, 1024)
+            @test wrapped_small == wrapped_large
+            @test wrapped_large < 1000
+
+            # `Parallel()` still costs the same regardless of grid size -- task spawn
+            # overhead, not anything proportional to the number of points. This is the
+            # test that caught point 51 (docs/form-unlock-plan.md): a five-capture
+            # anonymous closure occasionally (1 to 3 in 20 independent compiles) took a
+            # miscompiled path costing 176 B *per grid point*, 80 MiB on the large case
+            # here. Fixed by replacing the closure with a named, concretely-typed kernel
+            # struct (`_AvgKernel1`/`_AvgKernelD`) -- not a guarantee the class of bug can
+            # never recur, so this stays a real regression guard, not just documentation.
+            be_parallel = backend(policy = Parallel())
+            small = avg_bytes_direct(be_parallel, 32)
+            large = avg_bytes_direct(be_parallel, 1024)
             let per_point = (large - small) / (1_048_576 - 1_024)
-                @info "avgₕ! allocation diagnostic: " *
-                      "small=$small large=$large " *
-                      "per_point=$per_point " *
-                      "check_bounds=$(Base.JLOptions().check_bounds) " *
-                      "threads=$(Threads.nthreads())"
+                @info "avgₕ! Parallel() allocation diagnostic: " *
+                      "small=$small large=$large per_point=$per_point " *
+                      "nthreads=$(Threads.nthreads())"
             end
-
-            @test large < 4 * small
-            @test large < 100_000      # proportional would be ~8 MB
-
-            # Below the threshold the serial path runs, and its cost is O(1) too.
-            @test avg_bytes(8) == avg_bytes(16)
+            @test large < 4 * small + 1     # +1 guards small == 0
+            @test large < 100_000           # proportional (176 B/point) would be ~184 MB
         end
     end
 end
@@ -606,15 +622,14 @@ end
 end
 
 @testset "Threaded scatter path" begin
-    import Bramble: values, CPU_THREADED_MIN, components
+    import Bramble: values, components
 
-    # The single-pass scatter only threads above CPU_THREADED_MIN indices, so a
-    # grid large enough to cross that threshold is needed to exercise it at all.
-    # Derived from the constant rather than hardcoded, so that raising the
-    # threshold cannot silently turn this into a test of the serial path.
-    n = ceil(Int, sqrt(CPU_THREADED_MIN)) + 1
-    @test n * n > CPU_THREADED_MIN
-    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (n, n))
+    # Dispatched on the backend's policy now (point 22), not gated by size -- a `Parallel()`
+    # backend exercises the threaded scatter path at any grid size, deterministically,
+    # rather than needing a grid large enough to cross a since-removed threshold.
+    n = 8
+    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (n, n); backend = backend(
+        policy = Parallel()))
     W = gridspace(Ωₕ)
 
     for NC in (2, 3)

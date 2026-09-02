@@ -403,6 +403,38 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         end
     end
 
+    @testset "assemble!/assemble follow the test space's backend policy (point 22)" begin
+        # assemble!/assemble no longer hardcode serial: they read test_space(form)'s
+        # execution_policy and dispatch to the same serial/parallel cores assemble_parallel!
+        # uses, so a Parallel()-backend form threads through the plain assemble!/assemble
+        # call, not only through the separate assemble_parallel! entry point.
+        Ω_par = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
+            (8, 8), (true, true); backend = backend(policy = Parallel()))
+        W_par = gridspace(Ω_par)
+        u_par = Rₕ(W_par, x -> x[1] + x[2])
+        @test execution_policy(W_par) isa Parallel
+
+        lf_serial = form(Wₕ, v -> innerₕ(uₕ, v))
+        lf_parallel = form(W_par, v -> innerₕ(u_par, v))
+
+        b_default = assemble(lf_serial)
+        b_via_policy = assemble(lf_parallel)
+        @test b_via_policy ≈ b_default
+
+        bang_default = zeros(ndofs(Wₕ))
+        bang_via_policy = zeros(ndofs(W_par))
+        assemble!(bang_default, lf_serial)
+        assemble!(bang_via_policy, lf_parallel)
+        @test bang_via_policy ≈ bang_default
+
+        # Directly against assemble_parallel!, the lower-level entry point that always
+        # threads regardless of the backend's policy: a Parallel()-backend assemble! must
+        # agree with it exactly, not merely with the serial answer up to tolerance.
+        b_forced_parallel = similar(bang_via_policy)
+        assemble_parallel!(b_forced_parallel, lf_parallel)
+        @test bang_via_policy ≈ b_forced_parallel
+    end
+
     @testset "what a reassembly notices" begin
         # The AST is stored on the form and references the underlying VectorElement arrays,
         # so updating an element in-place via `values(us) .= ...` or `Rₕ!(us, ...)` is
