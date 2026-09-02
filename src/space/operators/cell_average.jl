@@ -101,7 +101,9 @@ end
 #
 # The two should be equivalent -- a Julia closure is already a concrete, compiler-generated
 # struct with the same fields -- and mostly are: `Rₕ!`'s equivalent closure, half the
-# captures, never showed this problem. This one, five captures deep inside `_cpu_threaded_for!`,
+# captures, never showed *this* problem (the allocation flake below). It did turn out to cost
+# real time for an unrelated reason, closed the same way -- see `_RₕKernel`, point 67. This one,
+# five captures deep inside `_cpu_threaded_for!`,
 # is a *closer call* for the compiler's inlining cost model, and closer calls are where an
 # "inlining budget nothing can query" (this file's own words, on the related `_gauss_rule`
 # fold) occasionally goes the wrong way -- point 51 in docs/form-unlock-plan.md measured it:

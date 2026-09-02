@@ -54,6 +54,22 @@ See also: [`Rₕ`](@ref), [`avgₕ!`](@ref), [`element`](@ref)
     NC, F} = _Rₕ_scatter_parallel!(
     uₕ, f)
 
+# A named, concretely-typed kernel for the per-point restriction call, rather than an
+# anonymous closure over the same three captures (`f`, `Ωₕ`, `idxs`).
+#
+# `avgₕ!` already made this move (`_AvgKernel1`/`_AvgKernelD`, point 51) for an allocation
+# flake that this closure, with fewer captures, never showed. It still cost real time: point
+# 53's investigation measured Rₕ! itself, closure and all, at ~16% slower than the identical
+# computation written as one flat loop with no closure indirection -- and a named struct
+# closes essentially the whole gap, the same lever point 51 already pulled for a different
+# reason (point 67). One fewer compiler decision between the data and the call either way.
+struct _RₕKernel{F, M, IX}
+    f::F
+    Ω::M
+    idxs::IX
+end
+@inline (k::_RₕKernel)(i) = k.f(point(k.Ω, k.idxs[i]))
+
 # The two plain methods just above exist so that the no-markers call -- by far the common
 # case, every time step of a PDE solve -- resolves directly to one of them, never touching
 # the keyword-sorter machinery the generic method further below generates. Going through that
@@ -72,7 +88,7 @@ See also: [`Rₕ`](@ref), [`avgₕ!`](@ref), [`element`](@ref)
     raw = values(uₕ)
     idxs = indices(Ωₕ)
     n = length(idxs)
-    _cpu_threaded_for!(execution_policy(space), raw, 1:n, i -> f(point(Ωₕ, idxs[i])))
+    _cpu_threaded_for!(execution_policy(space), raw, 1:n, _RₕKernel(f, Ωₕ, idxs))
     return uₕ
 end
 
@@ -84,7 +100,7 @@ end
     raws = ntuple(i -> values(comps[i]), Val(NC))
     idxs = indices(Ωₕ)
     n = length(idxs)
-    _cpu_threaded_scatter_for!(execution_policy(sp), raws, 1:n, i -> f(point(Ωₕ, idxs[i])))
+    _cpu_threaded_scatter_for!(execution_policy(sp), raws, 1:n, _RₕKernel(f, Ωₕ, idxs))
     return uₕ
 end
 
