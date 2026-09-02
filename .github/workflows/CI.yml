@@ -1,8 +1,8 @@
 name: CI
 
-# The fast gate: only the Julia version matrix that actually tests Bramble's code. Spelling,
-# formatting, quality (Aqua & JET) and the docs build/deploy moved to nightly.yml, once a
-# day — see the comment there for why.
+# The fast gate: only the Julia version matrix that actually tests Bramble's code, on macOS
+# only. Spelling, formatting, quality (Aqua & JET), the docs build/deploy, coverage upload,
+# and Linux itself all moved to nightly.yml, once a day — see the comment there for why.
 
 permissions:
   contents: read
@@ -48,18 +48,18 @@ jobs:
     # The 1.13 pre-release is a canary, not a gate: what it catches is a future Julia
     # changing under us, which is worth learning about without blocking the branch. `1.12`
     # is the only version whose failure means Bramble is broken. Promote `~1.13.0-0` out of
-    # this when it goes final. `nightly` moved to its own daily-scheduled workflow
-    # (nightly.yml) — it changes underneath every push regardless of what Bramble does, so
-    # gating on it here meant a red canary on an unrelated PR as often as a real one.
+    # this when it goes final. `nightly`, and Linux itself, moved to the daily-scheduled
+    # nightly.yml — Linux specifically because a Linux-only allocation flake in `avgₕ!`
+    # (an architecture-dependent `@generated` fold, not a real regression each time it
+    # shows up) meant a red gate on an unrelated PR too often to be worth blocking on.
     continue-on-error: ${{ matrix.version != '1.12' }}
     permissions:
       contents: read
-      id-token: write
     strategy:
       fail-fast: false
       matrix:
         version: ["1.12", "~1.13.0-0"]
-        os: [ubuntu-latest, macOS-latest]
+        os: [macOS-latest]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -71,37 +71,6 @@ jobs:
         with:
           cache-compiled: "true"
       - uses: julia-actions/julia-buildpkg@v1
-      # Coverage is collected on one job only: the release version on Linux.
-      #
-      # `julia-runtest` instruments by default, so this used to be all six. That was
-      # redundant — the line data is the same whichever Julia or OS produced it, so five of
-      # the six uploads told Codecov what the sixth already had — and it made every job pay
-      # the instrumentation.
-      #
-      # It also broke the branch. `CoverageTools.process_cov` reads a `.cov` line by taking
-      # `line[1:9]` as the hit count, which throws `BoundsError: attempt to access empty
-      # String at index [1:9]` as soon as a line comes back empty. That happened on
-      # 1.13.0-0 on macOS while processing `src/form/linear.jl.cov` — inside the action,
-      # not in Bramble — and the pre-release was gating at the time, so a third-party
-      # parser's assumption failed the build.
-      #
-      # What this gives up: the allocation assertions no longer run under coverage anywhere
-      # but here. They run either way — `test/runtests.jl` stopped skipping them under
-      # instrumentation on purpose — so what is lost is only the chance of a *pre-release*
-      # Julia revealing that it accounts for allocations differently under coverage. The
-      # release job still checks that, which is where it matters.
       - uses: julia-actions/julia-runtest@v1
-        with:
-          coverage: ${{ matrix.version == '1.12' && matrix.os == 'ubuntu-latest' }}
         env:
           BRAMBLE_TEST_GROUP: unit
-
-      - uses: julia-actions/julia-processcoverage@v1
-        if: matrix.version == '1.12' && matrix.os == 'ubuntu-latest'
-      - uses: codecov/codecov-action@v5
-        if: matrix.version == '1.12' && matrix.os == 'ubuntu-latest'
-        with:
-          files: lcov.info
-          token: ${{ secrets.CODECOV_TOKEN }}
-          use_oidc: true
-          fail_ci_if_error: false

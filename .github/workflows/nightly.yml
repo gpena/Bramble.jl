@@ -1,14 +1,17 @@
 name: Nightly
 
-# Everything the per-push CI deliberately leaves off, once a day, plus Julia nightly itself.
+# Everything the per-push CI.yml deliberately leaves off, once a day: Linux entirely, Julia
+# nightly, and the checks that are not canaries but don't need every-push feedback either.
 #
-# Julia nightly used to be a third entry in CI.yml's per-push matrix, `continue-on-error`d so
-# it never blocked a merge. That still meant a red canary next to every ordinary PR whenever
-# nightly moved under us, which had nothing to do with what the PR changed. Spelling,
-# formatting, quality (Aqua & JET) and the docs build/deploy moved out for the same reason,
-# even though those three are not canaries in the same sense — running them once a day
-# instead of on every push trades same-push feedback for a leaner, faster push CI, and a
-# failure here is caught and fixed the same day rather than the same minute.
+# CI.yml's push gate is macOS-only now. Linux moved here because of a Linux-only allocation
+# flake in `avgₕ!` (test/space/vector_elements.jl's "allocations do not grow with the grid"
+# — an architecture-dependent `@generated` fold, documented there, not a real regression each
+# time it fires) that turned an unrelated PR's gate red too often to be worth blocking pushes
+# on. Julia nightly changes underneath every push regardless of what Bramble does, so gating
+# on it meant the same kind of unrelated red gate. Spelling, formatting, quality (Aqua & JET)
+# and the docs build/deploy are not canaries in that sense, but moving them off every push
+# trades same-push feedback for a leaner, faster push CI — a failure here is caught and fixed
+# the same day rather than the same minute.
 #
 # 06:00 UTC, after CompatHelper's 00:00 run, for the same reason Weekly.yml picks its own
 # time after CompatHelper: a compat bump it opens has already landed or not by the time this
@@ -31,15 +34,16 @@ env:
 
 jobs:
   test:
-    name: Julia nightly (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    name: Julia ${{ matrix.version }} (ubuntu-latest)
+    runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
       contents: read
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macOS-latest]
+        version: ["1.12", "~1.13.0-0", "nightly"]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -47,7 +51,7 @@ jobs:
 
       - uses: julia-actions/setup-julia@v2
         with:
-          version: "nightly"
+          version: ${{ matrix.version }}
 
       - uses: julia-actions/cache@v2
         with:
@@ -55,9 +59,23 @@ jobs:
 
       - uses: julia-actions/julia-buildpkg@v1
 
+      # Coverage is collected on one leg only: the release version, same as before the
+      # Linux/macOS split. See CI.yml's history for why only one job uploads at all.
       - uses: julia-actions/julia-runtest@v1
+        with:
+          coverage: ${{ matrix.version == '1.12' }}
         env:
           BRAMBLE_TEST_GROUP: unit
+
+      - uses: julia-actions/julia-processcoverage@v1
+        if: matrix.version == '1.12'
+      - uses: codecov/codecov-action@v5
+        if: matrix.version == '1.12'
+        with:
+          files: lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+          use_oidc: true
+          fail_ci_if_error: false
 
   quality:
     name: Quality (Aqua & JET)
