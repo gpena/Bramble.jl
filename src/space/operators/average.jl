@@ -180,7 +180,7 @@ for config in _AVERAGE_OP_CONFIGS
         @inline function $average_name(Ωₕ::AbstractMeshType, dim_val::Val; vector_cache = __vector(Ωₕ))
             avg_matrix = _average_operator(Ωₕ, $dir_instance, dim_val)
             _average_weights!(vector_cache, Ωₕ, $dir_instance, dim_val)
-            return Diagonal(vector_cache) * avg_matrix
+            return vector_cache .* avg_matrix
         end
 
         #@inline function $average_name(Ωₕ::AbstractMeshType, dim_val::Val)

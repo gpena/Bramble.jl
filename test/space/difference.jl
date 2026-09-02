@@ -47,11 +47,11 @@ end
         B = [5 6; 7 8]
         @test (A ⊗ B) == kron(A, B)
 
-        MatrixType = typeof(SparseArrays.spzeros(T, 5, 5))
-        @test _Eye(MatrixType, 5, Val(0)) * ones(5) == ones(5)
+        be = backend(T)
+        @test _Eye(be, 5, Val(0)) * ones(5) == ones(5)
 
-        S_super = _Eye(MatrixType, 5, Val(1))
-        S_sub = _Eye(MatrixType, 5, Val(-2))
+        S_super = _Eye(be, 5, Val(1))
+        S_sub = _Eye(be, 5, Val(-2))
 
         @test S_super == spdiagm(1 => ones(4))
         @test S_sub == spdiagm(-2 => ones(3))
@@ -296,32 +296,34 @@ end
     # The `shift` docstring states the per-direction Kronecker forms that
     # `_recursive_shift` generalises. These assert them, so the docstring cannot drift
     # from the code the way the commented block it replaced could.
-    # Eye comes through Bramble rather than FillArrays, which is not a test dependency.
-    import Bramble: shift, _Eye, ⊗, matrix_type, backend, Eye
+    # Eye/Ones (FillArrays) are gone; _Eye now builds through the mesh's own backend
+    # (backend_eye/matrix_type), so the reference values below use the same backend.
+    import Bramble: shift, _Eye, ⊗, backend, backend_eye
 
     Ωₕ1 = mesh(domain(interval(0.0, 1.0)), 5, true)
     Ωₕ2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 3), (true, true))
     Ωₕ3 = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (3, 4, 2),
         (true, true, true))
-    M1, M2, M3 = matrix_type(backend(Ωₕ1)), matrix_type(backend(Ωₕ2)),
-    matrix_type(backend(Ωₕ3))
+    be1, be2, be3 = backend(Ωₕ1), backend(Ωₕ2), backend(Ωₕ3)
     nₓ, n_y = npoints(Ωₕ2, Tuple)
     aₓ, a_y, a_z = npoints(Ωₕ3, Tuple)
 
     for i in (-2, -1, 1, 2)
         @testset "shift by $i" begin
-            @test shift(Ωₕ1, Val(1), Val(i)) == _Eye(M1, 5, Val(i))
-            @test shift(Ωₕ2, Val(1), Val(i)) == Eye{Float64}(n_y) ⊗ _Eye(M2, nₓ, Val(i))
-            @test shift(Ωₕ2, Val(2), Val(i)) == _Eye(M2, n_y, Val(i)) ⊗ Eye{Float64}(nₓ)
+            @test shift(Ωₕ1, Val(1), Val(i)) == _Eye(be1, 5, Val(i))
+            @test shift(Ωₕ2, Val(1), Val(i)) ==
+                  backend_eye(be2, n_y) ⊗ _Eye(be2, nₓ, Val(i))
+            @test shift(Ωₕ2, Val(2), Val(i)) ==
+                  _Eye(be2, n_y, Val(i)) ⊗ backend_eye(be2, nₓ)
             @test shift(Ωₕ3, Val(3), Val(i)) ==
-                  _Eye(M3, a_z, Val(i)) ⊗ Eye{Float64}(aₓ * a_y)
+                  _Eye(be3, a_z, Val(i)) ⊗ backend_eye(be3, aₓ * a_y)
         end
     end
 
     @testset "a zero shift is the identity of the whole grid" begin
-        for Ωₕ in (Ωₕ1, Ωₕ2, Ωₕ3), d in 1:dim(Ωₕ)
+        for (Ωₕ, be) in ((Ωₕ1, be1), (Ωₕ2, be2), (Ωₕ3, be3)), d in 1:dim(Ωₕ)
 
-            @test shift(Ωₕ, Val(d), Val(0)) == Eye{Float64}(npoints(Ωₕ))
+            @test shift(Ωₕ, Val(d), Val(0)) == backend_eye(be, npoints(Ωₕ))
         end
     end
 

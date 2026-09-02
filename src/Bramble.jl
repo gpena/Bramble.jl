@@ -13,9 +13,8 @@ using FunctionWrappers: FunctionWrapper
 
 using StaticArrays: SVector, @SVector
 
-using LinearAlgebra: Diagonal, I, transpose, dot
+using LinearAlgebra: I, transpose, dot
 import LinearAlgebra: issymmetric, isposdef
-using FillArrays: Eye, Ones
 
 import Base: copy
 using Base: @propagate_inbounds

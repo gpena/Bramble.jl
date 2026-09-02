@@ -9,8 +9,8 @@ This operator is used extensively in constructing multidimensional shift operato
 # Example
 
 ```julia
-I₂ = Eye(2)
-I₃ = Eye(3)
+I₂ = I(2)
+I₃ = I(3)
 result = I₂ ⊗ I₃  # 6×6 identity matrix
 ```
 
@@ -19,61 +19,71 @@ See also: [`shift`](@ref)
 @inline ⊗(A, B) = kron(A, B)
 
 """
-	_Eye(::Type{MType}, npts, ::Val{i})
+	_Eye(be::Backend, npts, ::Val{i})
 
-Internal helper to create identity or shifted diagonal matrices.
-
-Creates either an identity matrix (`i=0`) or a matrix with ones on the `i`-th diagonal.
-The `Val{i}` allows compile-time specialization for the diagonal offset.
+Internal helper to create identity or shifted diagonal matrices, in the matrix type the
+backend `be` chose -- routed through [`backend_eye`](@ref)/`matrix_type(be)` rather than a
+package-specific lazy type, so the result always matches whatever `matrix_type` the caller's
+backend picked.
 
 # Arguments
 
-  - `MType`: Matrix type to construct
-  - `npts::Int`: Size of the square matrix
-  - `::Val{i}`: Diagonal offset (0 = main diagonal, 1 = superdiagonal, -1 = subdiagonal)
+  - `be::Backend`: the backend whose `matrix_type` the result is built in.
+  - `npts::Int`: Size of the square matrix.
+  - `::Val{i}`: Diagonal offset (0 = main diagonal, 1 = superdiagonal, -1 = subdiagonal).
 
 # Returns
 
-  - For `i=0`: Identity matrix of size `npts × npts`
-  - For `i≠0`: Matrix with ones on the `i`-th diagonal, zeros elsewhere
-
-# Example
-
-```julia
-_Eye(Matrix{Float64}, 5, Val(0))   # 5×5 identity
-_Eye(Matrix{Float64}, 5, Val(1))   # 5×5 with ones on superdiagonal
-_Eye(Matrix{Float64}, 5, Val(-1))  # 5×5 with ones on subdiagonal
-```
+  - For `i=0`: Identity matrix of size `npts × npts`.
+  - For `i≠0`: Matrix with ones on the `i`-th diagonal, zeros elsewhere.
 
 See also: [`shift`](@ref)
 """
-@inline _Eye(::Type{MType}, npts::Int, ::Val{0}) where {MType <:
-                                                        AbstractMatrix} = Eye{eltype(MType)}(npts)
-@inline _Eye(::Type{MType}, npts::Int, ::Val{i}) where {
-    i, MType <: AbstractMatrix} = spdiagm(i => Ones(eltype(MType), npts - abs(i)))
+@inline _Eye(be, npts::Int, ::Val{0}) = backend_eye(be, npts)
+@inline _Eye(be, npts::Int, ::Val{i}) where {i} = _shift_ones(
+    matrix_type(be), npts, i, npts - abs(i))
+
+# The three-way dispatch mirrors `_backend_eye` (backend.jl): a fast path for
+# `SparseMatrixCSC` and for dense `Matrix`, and a generic scalar-indexing fallback for
+# anything else. `spdiagm` alone carries the offset arithmetic, so the two fast paths only
+# differ in whether the sparse result is converted afterwards.
+@inline _shift_ones(::Type{<:SparseMatrixCSC{T, Ti}}, npts::Int, i::Int,
+    nz::Int) where {T, Ti} = spdiagm(npts, npts, i => fill(one(T), nz))
+@inline _shift_ones(::Type{<:Matrix{T}}, npts::Int, i::Int, nz::Int) where {T} = Matrix{T}(
+    spdiagm(npts, npts, i => fill(one(T), nz)))
+function _shift_ones(::Type{MT}, npts::Int, i::Int, nz::Int) where {
+        T, MT <: AbstractMatrix{T}}
+    A = MT(undef, npts, npts)
+    fill!(A, zero(T))
+    r0, c0 = i >= 0 ? (0, i) : (-i, 0)
+    for k in 1:nz
+        A[r0 + k, c0 + k] = one(T)
+    end
+    return A
+end
 
 @inline function _recursive_shift(
         Ωₕ::AbstractMeshType, ::Val{1}, ::Val{DIFF_DIM}, ::Val{i}) where {DIFF_DIM, i}
     dims = npoints(Ωₕ, Tuple)
-    MType = matrix_type(backend(Ωₕ))
+    be = backend(Ωₕ)
 
     if DIFF_DIM == 1
-        return _Eye(MType, dims[1], Val(i))
+        return _Eye(be, dims[1], Val(i))
     else
-        return Eye{eltype(MType)}(dims[1])
+        return backend_eye(be, dims[1])
     end
 end
 
 @inline function _recursive_shift(
         Ωₕ::AbstractMeshType, ::Val{D}, ::Val{DIFF_DIM}, ::Val{i}) where {D, DIFF_DIM, i}
     dims = npoints(Ωₕ, Tuple)
-    MType = matrix_type(backend(Ωₕ))
+    be = backend(Ωₕ)
 
     # Determine the operator for the current (outermost) dimension D.
     if DIFF_DIM == D
-        op_current = _Eye(MType, dims[D], Val(i))
+        op_current = _Eye(be, dims[D], Val(i))
     else
-        op_current = Eye{eltype(MType)}(dims[D])
+        op_current = backend_eye(be, dims[D])
     end
 
     # Recurse on the inner dimensions (from D-1 down to 1).
@@ -117,14 +127,14 @@ each of which the test suite checks against `shift`:
 
 ```julia
 # 1D
-shift(Ωₕ, Val(1), Val(i))  ==  _Eye(MType, nₓ, Val(i))
+shift(Ωₕ, Val(1), Val(i))  ==  _Eye(be, nₓ, Val(i))
 
 # 2D, on an nₓ × n_y grid
-shift(Ωₕ, Val(1), Val(i))  ==  Eye(n_y) ⊗ _Eye(MType, nₓ, Val(i))
-shift(Ωₕ, Val(2), Val(i))  ==  _Eye(MType, n_y, Val(i)) ⊗ Eye(nₓ)
+shift(Ωₕ, Val(1), Val(i))  ==  backend_eye(be, n_y) ⊗ _Eye(be, nₓ, Val(i))
+shift(Ωₕ, Val(2), Val(i))  ==  _Eye(be, n_y, Val(i)) ⊗ backend_eye(be, nₓ)
 
 # 3D, on an nₓ × n_y × n_z grid
-shift(Ωₕ, Val(3), Val(i))  ==  _Eye(MType, n_z, Val(i)) ⊗ Eye(nₓ * n_y)
+shift(Ωₕ, Val(3), Val(i))  ==  _Eye(be, n_z, Val(i)) ⊗ backend_eye(be, nₓ * n_y)
 ```
 
 `i == 0` short-circuits to the identity of the whole grid without building any Kronecker
@@ -138,7 +148,7 @@ See also: [`⊗`](@ref), [`diff₋ₓ`](@ref).
 """
 function shift(Ωₕ::AbstractMeshType, ::Val{SHIFT_DIM}, ::Val{i}) where {SHIFT_DIM, i}
     if i == 0
-        return Eye{eltype(Ωₕ)}(npoints(Ωₕ))
+        return backend_eye(backend(Ωₕ), npoints(Ωₕ))
     end
 
     return _recursive_shift(Ωₕ, Val(dim(Ωₕ)), Val(SHIFT_DIM), Val(i))
