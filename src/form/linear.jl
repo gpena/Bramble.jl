@@ -232,7 +232,12 @@ function assemble(form::LinearForm; dirichlet_conditions = nothing,
         dirichlet_labels = nothing, ast = form.ast)
     _validate_dirichlet_labels(dirichlet_labels)
     space = test_space(form)
-    b = zeros(_assembled_eltype(ast, space), ndofs(space))
+    # `values(element(space, T))` rather than `zeros(T, ndofs(space))`: the latter always
+    # gives a plain `Vector` regardless of what backend the space was built with, so a form
+    # over a sparse-vector or GPU backend silently assembled into a dense CPU array instead.
+    # `element` is the one place that already turns a space's `Backend` into a concrete
+    # container, so this reuses it rather than re-deriving the same construction here.
+    b = values(element(space, _assembled_eltype(ast, space)))
     return assemble!(b, form; ast = ast, dirichlet_conditions = dirichlet_conditions,
         dirichlet_labels = dirichlet_labels)
 end
@@ -270,7 +275,7 @@ end
 # ==============================================================================
 
 function _assemble_linear_core!(
-        b::Vector, space, ast::AST_TYPE, lin_indices, mesh_markers) where {AST_TYPE}
+        b::AbstractVector, space, ast::AST_TYPE, lin_indices, mesh_markers) where {AST_TYPE}
     for I in indices(mesh(space))
         lin_idx = lin_indices[I]
         stencil = local_stencil(ast, space, I, mesh_markers, lin_idx)
@@ -378,7 +383,8 @@ function _assemble_linear_parallel_core!(b::AbstractVector, space, ast::AST_TYPE
     return b
 end
 
-function _assemble_linear_core!(b::Vector, space::CompositeGridSpace{N}, ast::AST_TYPE,
+function _assemble_linear_core!(
+        b::AbstractVector, space::CompositeGridSpace{N}, ast::AST_TYPE,
         lin_indices, mesh_markers) where {N, AST_TYPE}
     # `leaf_spaces_offsets` rather than a Vector of offsets accumulated with `push!`, for
     # two reasons. It allocates nothing, where the Vector cost 128 B on every call — small,
@@ -431,13 +437,14 @@ end
 # vector is a `Vector{Any}`, which allocates and makes every term a dynamic read; recursing
 # keeps each term concretely typed at its own call, so this is inferable end to end and costs
 # nothing — 544 B per assembly became 0.
-function _route_terms!(b::Vector, op::OperatorAdd, leaves, lin_indices, mesh_markers)
+function _route_terms!(
+        b::AbstractVector, op::OperatorAdd, leaves, lin_indices, mesh_markers)
     _route_terms!(b, op.left_op, leaves, lin_indices, mesh_markers)
     _route_terms!(b, op.right_op, leaves, lin_indices, mesh_markers)
     return b
 end
 
-function _route_terms!(b::Vector, term::TERM, leaves, lin_indices,
+function _route_terms!(b::AbstractVector, term::TERM, leaves, lin_indices,
         mesh_markers) where {TERM}
     target = test_component_or_nothing(term)
     _check_component(target, length(leaves))
@@ -575,7 +582,7 @@ end
 # The scatter, behind a function barrier: a term is only concretely typed once it is an
 # argument, so without this `local_stencil` would be a dynamic call at every grid point
 # rather than once per term.
-function _scatter_term!(b::Vector, sp, term::TERM, lin_indices, mesh_markers,
+function _scatter_term!(b::AbstractVector, sp, term::TERM, lin_indices, mesh_markers,
         offset::Int) where {TERM}
     for I in indices(mesh(sp))
         lin_idx = lin_indices[I]
@@ -618,7 +625,7 @@ end
 # caller may still be changing. Resolving per call costs 160 B.
 
 """
-    assemble!(b::Vector, form::LinearForm; dirichlet_conditions = nothing,
+    assemble!(b::AbstractVector, form::LinearForm; dirichlet_conditions = nothing,
               dirichlet_labels = nothing, ast = form.ast) -> b
 
 Refills `b` with the assembled `form` and returns it, allocating nothing (**0 bytes**).
@@ -648,7 +655,7 @@ achieving zero heap allocations.
 See also [`assemble`](@ref), [`assemble_parallel!`](@ref) for the threaded sweep, and
 [`evaluate!`](@ref) when the contraction is wanted alongside the vector.
 """
-function assemble!(b::Vector, form::LinearForm{D, TestSpace, FType, AST};
+function assemble!(b::AbstractVector, form::LinearForm{D, TestSpace, FType, AST};
         dirichlet_conditions = nothing,
         dirichlet_labels = nothing,
         ast = form.ast) where {D, TestSpace, FType, AST}
