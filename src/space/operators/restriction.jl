@@ -50,7 +50,8 @@ Rₕ!(uₕ, x -> (f₁(x), f₂(x)))          # one function returning all compo
 See also: [`Rₕ`](@ref), [`avgₕ!`](@ref), [`element`](@ref)
 """
 @inline Rₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f::F) where {F} = _Rₕ_parallel!(uₕ, f)
-@inline Rₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::F) where {NC, F} = _Rₕ_scatter_parallel!(
+@inline Rₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::F) where {
+    NC, F} = _Rₕ_scatter_parallel!(
     uₕ, f)
 
 # The two plain methods just above exist so that the no-markers call -- by far the common
@@ -120,7 +121,8 @@ Base.@constprop :aggressive function Rₕ!(uₕ::VectorElement, f;
     return _Rₕ_masked!(uₕ, f, markers)
 end
 
-function _Rₕ_masked!(uₕ::VectorElement{<:ScalarGridSpace}, f, markers::NTuple{N, Symbol}) where {N}
+function _Rₕ_masked!(uₕ::VectorElement{<:ScalarGridSpace}, f, markers::NTuple{
+        N, Symbol}) where {N}
     (; space) = uₕ
     Ωₕ = mesh(space)
     raw = values(uₕ)
