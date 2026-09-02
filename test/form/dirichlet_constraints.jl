@@ -152,6 +152,94 @@ using LinearAlgebra: I as LinearAlgebraI
         end
     end
 
+    @testset "components restricts which leaf(-ves) a label binds to (point 45)" begin
+        # The Stokes-style case this exists for: constrain one field, leave another free.
+        @testset "matrix, one leaf only" begin
+            A = _eye(nV)
+            @test dirichlet_bc!(A, Vₕ, :bottom; components = 1) === A
+            for c in 0:2, i in 1:nW
+
+                row = c * nW + i
+                if c == 0 && marked[i]
+                    @test A[row, row] == 1.0
+                    @test count(!=(0.0), A[row, :]) == 1
+                else
+                    # leaves 2 and 3 (c = 1, 2) are untouched: still the identity
+                    @test A[row, row] == 1.0
+                    @test count(!=(0.0), A[row, :]) == 1
+                    @test A[row, :] == _eye(nV)[row, :]
+                end
+            end
+        end
+
+        @testset "matrix, several leaves named at once" begin
+            A = _eye(nV)
+            @test dirichlet_bc!(A, Vₕ, :bottom; components = (1, 3)) === A
+            for c in 0:2, i in 1:nW
+
+                row = c * nW + i
+                if c in (0, 2) && marked[i]
+                    @test A[row, row] == 1.0
+                    @test count(!=(0.0), A[row, :]) == 1
+                end
+            end
+            # leaf 2 (c = 1) never touched, whatever :bottom marks
+            @test A[(nW + 1):(2nW), :] == _eye(nV)[(nW + 1):(2nW), :]
+        end
+
+        @testset "vector, one leaf only" begin
+            bcs = dirichlet_constraints(set(Ωₕ), :bottom => (x -> 7.0))
+            w = fill(-1.0, nV)
+            @test dirichlet_bc!(w, Vₕ, bcs, :bottom; components = 2) === w
+            for c in 0:2
+                block = view(w, (c * nW + 1):((c + 1) * nW))
+                if c == 1
+                    @test all(block[i] == 7.0 for i in 1:nW if marked[i])
+                    @test all(block[i] == -1.0 for i in 1:nW if !marked[i])
+                else
+                    @test all(==(-1.0), block)   # untouched leaves
+                end
+            end
+        end
+
+        @testset "components = nothing matches the unrestricted default exactly" begin
+            A1, A2 = _eye(nV), _eye(nV)
+            dirichlet_bc!(A1, Vₕ, :bottom)
+            dirichlet_bc!(A2, Vₕ, :bottom; components = nothing)
+            @test A1 == A2
+        end
+
+        @testset "symmetrize! takes the same keyword" begin
+            A = Matrix(_eye(nV))
+            F = fill(2.0, nV)
+            A0 = copy(A)
+            symmetrize!(A, F, Vₕ, :bottom; components = 1)
+            # only leaf 1's marked rows/columns could have changed anything
+            for c in 1:2, i in 1:nW
+
+                row = c * nW + i
+                @test A[:, row] == A0[:, row]
+            end
+        end
+
+        @testset "an out-of-range component is a loud error, not a silent no-op" begin
+            A = _eye(nV)
+            @test_throws ArgumentError dirichlet_bc!(A, Vₕ, :bottom; components = 4)
+            @test_throws ArgumentError dirichlet_bc!(A, Vₕ, :bottom; components = 0)
+            @test_throws ArgumentError dirichlet_bc!(A, Vₕ, :bottom; components = (1, 5))
+        end
+
+        @testset "a scalar space only ever has leaf 1" begin
+            A = _eye(nW)
+            @test dirichlet_bc!(A, Wₕ, :bottom; components = 1) === A   # a no-op-equivalent ok
+            @test_throws ArgumentError dirichlet_bc!(_eye(nW), Wₕ, :bottom; components = 2)
+        end
+
+        @testset "dirichlet_components is not a Symbol or Int/Tuple mix-up" begin
+            @test_throws ErrorException dirichlet_bc!(_eye(nV), Vₕ, :bottom; components = :left)
+        end
+    end
+
     @testset "the condition is evaluated at the right points" begin
         bcs = dirichlet_constraints(set(Ωₕ), :bottom => (x -> x[1] + 10x[2]))
         v = zeros(nW)
@@ -277,10 +365,19 @@ using LinearAlgebra: I as LinearAlgebraI
             dirichlet_bc!(vw, W, bcs, :bottom)
             dirichlet_bc!(vv, V, bcs, :bottom)
 
+            dirichlet_bc!(Av, V, :bottom; components = 1)
+            dirichlet_bc!(vv, V, bcs, :bottom; components = 1)
+
             return (matrix_scalar = @allocated(dirichlet_bc!(Aw, W, :bottom)),
                 matrix_composite = @allocated(dirichlet_bc!(Av, V, :bottom)),
                 vector_scalar = @allocated(dirichlet_bc!(vw, W, bcs, :bottom)),
-                vector_composite = @allocated(dirichlet_bc!(vv, V, bcs, :bottom)))
+                vector_composite = @allocated(dirichlet_bc!(vv, V, bcs, :bottom)),
+                # `components` restricts the same tuple walk, not a fresh Vector — this must
+                # cost the same nothing as the unrestricted call above.
+                matrix_one_component = @allocated(dirichlet_bc!(
+                    Av, V, :bottom; components = 1)),
+                vector_one_component = @allocated(dirichlet_bc!(
+                    vv, V, bcs, :bottom; components = 1)))
         end
 
         for n in (10, 40)          # 16x the degrees of freedom apart
@@ -289,6 +386,8 @@ using LinearAlgebra: I as LinearAlgebraI
             @test c.matrix_composite == 0
             @test c.vector_scalar == 0
             @test c.vector_composite == 0
+            @test c.matrix_one_component == 0
+            @test c.vector_one_component == 0
         end
 
         # The traversal the composite paths walk is itself free, and type stable. Measured

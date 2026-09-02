@@ -324,13 +324,15 @@ end
 # Assembly Implementations
 # ==============================================================================
 
-function apply_dirichlet_labels!(A::AbstractMatrix, form::BilinearForm, dirichlet_labels)
+function apply_dirichlet_labels!(
+        A::AbstractMatrix, form::BilinearForm, dirichlet_labels, dirichlet_components = nothing)
     if dirichlet_labels !== nothing
         if dirichlet_labels isa Symbol
-            dirichlet_bc!(A, trial_space(form), dirichlet_labels)
+            dirichlet_bc!(A, trial_space(form), dirichlet_labels; components = dirichlet_components)
         elseif dirichlet_labels isa Tuple
             if !isempty(dirichlet_labels)
-                dirichlet_bc!(A, trial_space(form), dirichlet_labels...)
+                dirichlet_bc!(A, trial_space(form), dirichlet_labels...;
+                    components = dirichlet_components)
             end
         end
     end
@@ -371,13 +373,16 @@ a = form(Wₕ, Wₕ, (u, v) -> innerₕ(dcₕ * u, v))
 
 Runs serially or across threads following `form.trial_space`'s backend
 [`execution_policy`](@ref), the same as [`assemble!`](@ref) — [`Serial`](@ref) by default.
-Optional `dirichlet_labels` applies boundary conditions to the matrix.
+Optional `dirichlet_labels` applies boundary conditions to the matrix; `dirichlet_components`
+restricts which leaf(-ves) of a composite trial space they bind to — see
+[`dirichlet_bc!`](@ref).
 """
-function assemble(form::BilinearForm; dirichlet_labels = nothing)
+function assemble(form::BilinearForm; dirichlet_labels = nothing, dirichlet_components = nothing)
     _validate_dirichlet_labels(dirichlet_labels)
     ast_resolved = form.ast
     A = allocate_system_matrix(form, ast_resolved)
-    assemble!(A, form; dirichlet_labels = dirichlet_labels, ast = ast_resolved)
+    assemble!(A, form; dirichlet_labels = dirichlet_labels,
+        dirichlet_components = dirichlet_components, ast = ast_resolved)
     return A
 end
 
@@ -572,7 +577,7 @@ function _assemble_bilinear_parallel_core!(A::SparseMatrixCSC,
 end
 
 """
-    assemble!(A::SparseMatrixCSC, form::BilinearForm; dirichlet_labels = nothing, ast = form.ast)
+    assemble!(A::SparseMatrixCSC, form::BilinearForm; dirichlet_labels = nothing, dirichlet_components = nothing, ast = form.ast)
 
 Assembles the `BilinearForm` into the preallocated sparse matrix `A`, allocating nothing (**0 bytes**).
 
@@ -590,6 +595,7 @@ By default `assemble!` uses the pre-resolved `form.ast` stored inside the form.
 function assemble!(
         A::SparseMatrixCSC, form::BilinearForm{D, TrialSpace, TestSpace, AST};
         dirichlet_labels = nothing,
+        dirichlet_components = nothing,
         ast = form.ast) where {D, TrialSpace, TestSpace, AST}
     _validate_dirichlet_labels(dirichlet_labels)
     fill!(nonzeros(A), zero(eltype(nonzeros(A))))
@@ -600,7 +606,7 @@ function assemble!(
         _assemble_bilinear_parallel_core!(A, form.trial_space, form.test_space, ast, Val(D))
     end
 
-    apply_dirichlet_labels!(A, form, dirichlet_labels)
+    apply_dirichlet_labels!(A, form, dirichlet_labels, dirichlet_components)
     return A
 end
 

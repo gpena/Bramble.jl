@@ -113,6 +113,44 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
         @test all(iszero, blk(Aop, 2, 2))
     end
 
+    @testset "dirichlet_components: constrain one field, leave another free (point 45)" begin
+        # The motivating case: a Stokes-style system where leaf 1 ("velocity") gets a
+        # boundary condition and leaf 2 ("pressure") stays completely free. Before
+        # `dirichlet_components` existed, `dirichlet_labels` bound to every leaf sharing the
+        # named marker — there was no way to say "this leaf only" through `assemble`/
+        # `assemble!` at all.
+        Vₕ = gridspace(Ωₕ, Val(2))
+        a = form(Vₕ, Vₕ, (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)))
+        marked = index_in_marker(Ωₕ, :walls)
+
+        A = assemble(a; dirichlet_labels = :walls, dirichlet_components = 1)
+        blk(i, j) = Matrix(A)[((i - 1) * n + 1):(i * n), ((j - 1) * n + 1):(j * n)]
+
+        for i in 1:n
+            if marked[i]
+                @test blk(1, 1)[i, i] ≈ 1.0
+                @test count(!iszero, blk(1, 1)[i, :]) == 1
+            end
+        end
+        # leaf 2 (pressure) is untouched: still exactly the assembled H, no pinned rows
+        @test blk(2, 2) ≈ H
+
+        # assemble! into a pre-allocated matrix follows the same keyword
+        A2 = allocate_system_matrix(a)
+        assemble!(A2, a; dirichlet_labels = :walls, dirichlet_components = 1)
+        @test Matrix(A2) ≈ Matrix(A)
+
+        # without dirichlet_components, the same labels bind to every leaf that has the
+        # marker — this is the pre-existing, still-default behaviour, confirmed unchanged
+        Aboth = assemble(a; dirichlet_labels = :walls)
+        blk2(i, j) = Matrix(Aboth)[((i - 1) * n + 1):(i * n), ((j - 1) * n + 1):(j * n)]
+        for i in 1:n
+            if marked[i]
+                @test blk2(2, 2)[i, i] ≈ 1.0    # leaf 2 pinned too, unlike above
+            end
+        end
+    end
+
     @testset "serial and parallel assembly agree" begin
         # The serial and threaded paths are separate walks over the same terms, so a break in
         # the serial path is invisible unless it is compared against the other. It was, once.

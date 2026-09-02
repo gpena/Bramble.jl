@@ -734,6 +734,28 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
             dirichlet_conditions = bcs, dirichlet_labels = 3)
     end
 
+    @testset "dirichlet_components restricts labels to one leaf of a composite space (point 45)" begin
+        bcs = dirichlet_constraints(set(Ωₕ), :bottom => (x -> 5.0))
+        marked = index_in_marker(Ωₕ, :bottom)
+        uv = Rₕ(Vₕ, (x -> sin(x[1]), x -> cos(x[2])))
+        l = form(Vₕ, v -> innerₕ(uv(1), v(1)) + innerₕ(uv(2), v(2)))
+
+        b = assemble(l; dirichlet_conditions = bcs, dirichlet_labels = :bottom,
+            dirichlet_components = 1)
+        plain = assemble(l)
+
+        leaf1, leaf2 = view(b, 1:n), view(b, (n + 1):(2n))
+        plain2 = view(plain, (n + 1):(2n))
+
+        @test all(leaf1[i] ≈ 5.0 for i in 1:n if marked[i])   # leaf 1 constrained
+        @test leaf2 == plain2                                  # leaf 2 untouched
+        @test any(i -> marked[i] && leaf1[i] != view(plain, 1:n)[i], 1:n) # leaf 1 changed
+
+        # without dirichlet_components, the same labels bind to both leaves
+        b_both = assemble(l; dirichlet_conditions = bcs, dirichlet_labels = :bottom)
+        @test all(view(b_both, (n + 1):(2n))[i] ≈ 5.0 for i in 1:n if marked[i])
+    end
+
     @testset "allocations, which are part of the contract" begin
         # This is what a time loop calls every step. The assembly kernel itself is
         # allocation free; what used to cost was the two default arguments — an empty

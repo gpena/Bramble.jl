@@ -189,15 +189,18 @@ end
 # then discarded by exactly this test — 2,080 B per assembly, for an argument that went
 # unread. Naming labels without conditions is a usage error and says so.
 function apply_dirichlet_conditions!(
-        b::AbstractVector, form::LinearForm, dirichlet_conditions, dirichlet_labels)
+        b::AbstractVector, form::LinearForm, dirichlet_conditions, dirichlet_labels,
+        dirichlet_components = nothing)
     dirichlet_labels === nothing && return b
 
     dirichlet_conditions === nothing && _throw_labels_without_conditions(dirichlet_labels)
 
     if dirichlet_labels isa Symbol
-        dirichlet_bc!(b, test_space(form), dirichlet_conditions, dirichlet_labels)
+        dirichlet_bc!(b, test_space(form), dirichlet_conditions, dirichlet_labels;
+            components = dirichlet_components)
     elseif dirichlet_labels isa Tuple && !isempty(dirichlet_labels)
-        dirichlet_bc!(b, test_space(form), dirichlet_conditions, dirichlet_labels...)
+        dirichlet_bc!(b, test_space(form), dirichlet_conditions, dirichlet_labels...;
+            components = dirichlet_components)
     end
     return b
 end
@@ -210,10 +213,11 @@ end
 end
 
 """
-    assemble(form::LinearForm; dirichlet_conditions = nothing, dirichlet_labels = nothing)
+    assemble(form::LinearForm; dirichlet_conditions = nothing, dirichlet_labels = nothing, dirichlet_components = nothing)
 
 Assembles the system vector of the `LinearForm`, applying `dirichlet_conditions` on the
-regions `dirichlet_labels` names when both are given.
+regions `dirichlet_labels` names when both are given. `dirichlet_components` restricts which
+leaf(-ves) of a composite test space they bind to — see [`dirichlet_bc!`](@ref).
 
 Runs serially or across threads following `test_space(form)`'s backend
 [`execution_policy`](@ref) — [`Serial`](@ref) (the default) or [`Parallel`](@ref), chosen
@@ -230,7 +234,7 @@ reduced them afterwards, paying O(n · threads) of memory traffic against the O(
 the assembly itself costs. The buffers are gone; see `_colour_strides`.
 """
 function assemble(form::LinearForm; dirichlet_conditions = nothing,
-        dirichlet_labels = nothing, ast = form.ast)
+        dirichlet_labels = nothing, dirichlet_components = nothing, ast = form.ast)
     _validate_dirichlet_labels(dirichlet_labels)
     space = test_space(form)
     # `values(element(space, T))` rather than `zeros(T, ndofs(space))`: the latter always
@@ -240,7 +244,7 @@ function assemble(form::LinearForm; dirichlet_conditions = nothing,
     # container, so this reuses it rather than re-deriving the same construction here.
     b = values(element(space, _assembled_eltype(ast, space)))
     return assemble!(b, form; ast = ast, dirichlet_conditions = dirichlet_conditions,
-        dirichlet_labels = dirichlet_labels)
+        dirichlet_labels = dirichlet_labels, dirichlet_components = dirichlet_components)
 end
 
 # The element type of the assembled vector is the one the form's own weights have, promoted
@@ -627,7 +631,7 @@ end
 
 """
     assemble!(b::AbstractVector, form::LinearForm; dirichlet_conditions = nothing,
-              dirichlet_labels = nothing, ast = form.ast) -> b
+              dirichlet_labels = nothing, dirichlet_components = nothing, ast = form.ast) -> b
 
 Refills `b` with the assembled `form` and returns it, allocating nothing (**0 bytes**).
 
@@ -651,6 +655,8 @@ achieving zero heap allocations.
 
   - `dirichlet_conditions`, `dirichlet_labels`: boundary values to impose after assembling,
     and the labels to impose them on. Both default to `nothing`, which imposes nothing.
+  - `dirichlet_components`: restricts which leaf(-ves) of a composite `test_space(form)` the
+    labels bind to — see [`dirichlet_bc!`](@ref). `nothing` (the default) is every leaf.
   - `ast`: an optional custom AST override (defaults to `form.ast`).
 
 Runs serially or across threads following `test_space(form)`'s backend
@@ -663,6 +669,7 @@ of policy, and [`evaluate!`](@ref) when the contraction is wanted alongside the 
 function assemble!(b::AbstractVector, form::LinearForm{D, TestSpace, AST};
         dirichlet_conditions = nothing,
         dirichlet_labels = nothing,
+        dirichlet_components = nothing,
         ast = form.ast) where {D, TestSpace, AST}
     _validate_dirichlet_labels(dirichlet_labels)
     fill!(b, zero(eltype(b)))
@@ -678,7 +685,8 @@ function assemble!(b::AbstractVector, form::LinearForm{D, TestSpace, AST};
         _assemble_linear_parallel_core!(b, space, ast, lin_indices, mesh_markers)
     end
 
-    apply_dirichlet_conditions!(b, form, dirichlet_conditions, dirichlet_labels)
+    apply_dirichlet_conditions!(b, form, dirichlet_conditions, dirichlet_labels,
+        dirichlet_components)
     return b
 end
 

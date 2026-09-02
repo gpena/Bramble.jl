@@ -164,6 +164,64 @@ function _validate_dirichlet_labels(labels)
     end
 end
 
+#===========================================================================#
+# Restricting which leaf(-ves) of a composite space `dirichlet_labels` binds to
+#
+# `components` names leaves by their 1-based position in `leaf_spaces_offsets`, the same
+# depth-first, left-to-right order `u(1)`/`u(2)` addressing already uses elsewhere in the
+# form layer — so a Stokes-style `Wₕ = vector_gridspace(Ωₕ, Val(2))` (velocity, pressure)
+# constrains only velocity with `components = 1`, leaving the pressure block untouched.
+# `nothing` (the default) means every leaf, exactly today's unrestricted behaviour.
+#===========================================================================#
+
+function _validate_dirichlet_components(components, n_leaves::Int)
+    components === nothing && return nothing
+    if !(components isa Int || components isa Tuple)
+        error("dirichlet_components must be nothing, an Int, or a Tuple of Ints")
+    end
+    for c in (components isa Int ? (components,) : components)
+        c isa Int ||
+            error("dirichlet_components must be nothing, an Int, or a Tuple of Ints")
+        (1 <= c <= n_leaves) ||
+            _throw_dirichlet_component_out_of_range(c, n_leaves)
+    end
+    return nothing
+end
+
+@noinline function _throw_dirichlet_component_out_of_range(c::Int, n_leaves::Int)
+    throw(ArgumentError(
+        "dirichlet_components names leaf $c, but this space only has $n_leaves leaf " *
+        "space(s) — leaves are numbered 1 to $n_leaves, the same order u(1), u(2), ... " *
+        "addresses."))
+end
+
+# A scalar space has exactly one implicit leaf: `components` may only ask for it or ask for
+# nothing.
+@inline _validate_scalar_components(::Nothing) = nothing
+@inline _validate_scalar_components(components) = _validate_dirichlet_components(
+    components, 1)
+
+# Whether the leaf at 1-based position `i` is one `components` names — `nothing` means
+# every leaf, matching the unrestricted default.
+@inline _leaf_selected(::Nothing, i::Int) = true
+@inline _leaf_selected(components::Int, i::Int) = components == i
+@inline _leaf_selected(components::Tuple, i::Int) = i in components
+
+# Calls `f(sp, offset)` for each leaf `components` selects, walking the *full* tuple from
+# `leaf_spaces_offsets` `Base.tail`-recursively rather than building a filtered sub-tuple
+# first. A sub-tuple's length would depend on `components`, a runtime value, so the compiler
+# cannot give it one concrete type — precisely the "leaves in a `Vector{Tuple{Any,Int}}`"
+# boxing this file already avoids elsewhere; walking the untouched, statically-shaped tuple
+# and skipping unselected leaves keeps every leaf's own type and stays allocation free.
+# Same `f::F where {F}` pattern `_each_marked` already uses below for the same reason.
+@inline _each_selected_leaf(f::F, ::Tuple{}, components, i::Int = 1) where {F} = nothing
+@inline function _each_selected_leaf(f::F, leaves::Tuple, components, i::Int = 1) where {F}
+    sp, offset = first(leaves)
+    _leaf_selected(components, i) && f(sp, offset)
+    _each_selected_leaf(f, Base.tail(leaves), components, i + 1)
+    return nothing
+end
+
 #==============================================================================
 						APPLYING DIRICHLET BOUNDARY CONDITIONS
 ==============================================================================#
@@ -187,11 +245,16 @@ function dirichlet_bc!(A::AbstractMatrix, Ωₕ::AbstractMeshType, labels::Symbo
 end
 
 # Overloads for ScalarGridSpace / AbstractSpaceType (single component)
-@inline function dirichlet_bc!(A::AbstractMatrix, space::ScalarGridSpace, labels::Symbol...)
+@inline function dirichlet_bc!(
+        A::AbstractMatrix, space::ScalarGridSpace, labels::Symbol...;
+        components = nothing)
+    _validate_scalar_components(components)
     return dirichlet_bc!(A, mesh(space), labels...)
 end
 
-@inline function dirichlet_bc!(v::AbstractVector, space::ScalarGridSpace, bcs, labels::Symbol...)
+@inline function dirichlet_bc!(v::AbstractVector, space::ScalarGridSpace, bcs,
+        labels::Symbol...; components = nothing)
+    _validate_scalar_components(components)
     return dirichlet_bc!(v, mesh(space), bcs, labels...)
 end
 
@@ -208,32 +271,68 @@ end
 # call allocation free: `index_in_marker` hands back the mesh's stored BitVector, and
 # nothing else is built.
 
-# Whether global row `r` falls in any leaf's marked set. Recursive over the tuple of
-# leaves, so it unrolls to a handful of comparisons.
+# Whether global row `r` falls in any *selected* leaf's marked set. Recursive over the
+# tuple of leaves, so it unrolls to a handful of comparisons. An unselected leaf's own
+# `active` flag short-circuits it without touching its mask.
 @inline _row_marked(::Tuple{}, r::Int) = false
 
 @inline function _row_marked(entries::Tuple, r::Int)
-    mask, offset, n = first(entries)
-    i = r - offset
-    (1 <= i <= n) && @inbounds(mask[i]) && return true
+    mask, offset, n, active = first(entries)
+    if active
+        i = r - offset
+        (1 <= i <= n) && @inbounds(mask[i]) && return true
+    end
     return _row_marked(Base.tail(entries), r)
 end
 
-@inline _leaf_entries(leaves::Tuple, label::Symbol) = map(
-    e -> (index_in_marker(mesh(first(e)), label), last(e), ndofs(first(e))), leaves)
+# One entry per leaf, always — `components` never changes how many entries there are, only
+# each one's `active` flag, so this stays the same fully-unrolled shape whether or not a
+# caller restricts `components` (see `_each_selected_leaf` for why filtering the tuple
+# itself is the wrong move).
+@inline _leaf_entries(leaves::Tuple, label::Symbol, components) = _leaf_entries_impl(
+    leaves, label, components, 1)
+@inline _leaf_entries_impl(::Tuple{}, label::Symbol, components, i::Int) = ()
+@inline function _leaf_entries_impl(leaves::Tuple, label::Symbol, components, i::Int)
+    sp, offset = first(leaves)
+    entry = (index_in_marker(mesh(sp), label), offset, ndofs(sp),
+        _leaf_selected(components, i))
+    return (entry, _leaf_entries_impl(Base.tail(leaves), label, components, i + 1)...)
+end
 
-function dirichlet_bc!(A::AbstractMatrix, space::CompositeGridSpace, labels::Symbol...)
+"""
+	dirichlet_bc!(A::AbstractMatrix, space::CompositeGridSpace, labels::Symbol...; components = nothing)
+
+Applies Dirichlet boundary conditions to matrix `A` on the regions `labels` name, restricted
+to the leaf(-ves) `components` names — 1-based positions in `leaf_spaces_offsets(space)`, the
+same depth-first order `u(1)`/`u(2)` addressing already uses. `components = nothing` (the
+default) applies to every leaf, unchanged from before this keyword existed.
+
+This is what lets a coupled system constrain one field and leave another free — a Stokes
+problem prescribing velocity while leaving pressure unconstrained, say:
+
+```julia
+Wₕ = vector_gridspace(Ωₕ, Val(2))   # 1: velocity, 2: pressure
+dirichlet_bc!(A, Wₕ, :left, :right; components = 1)   # velocity only
+```
+
+Call again with a different `labels`/`components` pair for another field; each call only
+ever restricts which leaves it touches, so several calls compose.
+"""
+function dirichlet_bc!(A::AbstractMatrix, space::CompositeGridSpace, labels::Symbol...;
+        components = nothing)
     leaves = leaf_spaces_offsets(space)
+    _validate_dirichlet_components(components, length(leaves))
     for p in labels
-        _dirichlet_bc_rows!(A, _leaf_entries(leaves, p))
+        _dirichlet_bc_rows!(A, _leaf_entries(leaves, p, components))
     end
     return A
 end
 
-# Dense: one pass over the marked rows of each leaf.
+# Dense: one pass over the marked rows of each leaf, skipping unselected ones.
 function _dirichlet_bc_rows!(A::AbstractMatrix, entries::Tuple)
     T = eltype(A)
-    for (mask, offset, n) in entries
+    for (mask, offset, n, active) in entries
+        active || continue
         @inbounds for i in 1:n
             if mask[i]
                 r = offset + i
@@ -245,8 +344,8 @@ function _dirichlet_bc_rows!(A::AbstractMatrix, entries::Tuple)
     return A
 end
 
-# Sparse: a single sweep of the stored values, testing each row against every leaf, then
-# the diagonals. Sweeping once per leaf instead would cost `nnz` per component.
+# Sparse: a single sweep of the stored values, testing each row against every *selected*
+# leaf, then the diagonals. Sweeping once per leaf instead would cost `nnz` per component.
 function _dirichlet_bc_rows!(A::SparseMatrixCSC, entries::Tuple)
     T = eltype(A)
     rows = rowvals(A)
@@ -258,7 +357,8 @@ function _dirichlet_bc_rows!(A::SparseMatrixCSC, entries::Tuple)
         end
     end
 
-    for (mask, offset, n) in entries
+    for (mask, offset, n, active) in entries
+        active || continue
         @inbounds for i in 1:n
             if mask[i]
                 r = offset + i
@@ -269,8 +369,11 @@ function _dirichlet_bc_rows!(A::SparseMatrixCSC, entries::Tuple)
     return A
 end
 
-@inline function dirichlet_bc!(v::AbstractVector, space::CompositeGridSpace, bcs, labels::Symbol...)
-    for (sp, offset) in leaf_spaces_offsets(space)
+@inline function dirichlet_bc!(v::AbstractVector, space::CompositeGridSpace, bcs,
+        labels::Symbol...; components = nothing)
+    leaves = leaf_spaces_offsets(space)
+    _validate_dirichlet_components(components, length(leaves))
+    _each_selected_leaf(leaves, components) do sp, offset
         dirichlet_bc!(v, mesh(sp), bcs, labels, offset)
     end
     return v
@@ -464,7 +567,8 @@ The algorithm goes as follows: for any given row `i` where Dirichlet boundary co
 # did not, so `dirichlet_bc!(A, Wₕ, :bottom)` worked while `symmetrize!(A, F, Wₕ, :bottom)`
 # was a MethodError — for a pair of calls that are almost always written together.
 @inline function symmetrize!(A::AbstractMatrix, F::AbstractVector, Wₕ::ScalarGridSpace,
-        labels::Symbol...)
+        labels::Symbol...; components = nothing)
+    _validate_scalar_components(components)
     return symmetrize!(A, F, mesh(Wₕ), labels...)
 end
 
@@ -488,11 +592,18 @@ with a tuple, so the loop unrolls and every read through a leaf keeps its concre
 Without this method a composite space met a `MethodError` here while `dirichlet_bc!`
 accepted it — the two have to agree, since a system is rarely constrained by one and not
 the other.
+
+Takes the same `components` keyword as the composite `dirichlet_bc!`, restricting which
+leaf(-ves) `labels` binds to — 1-based positions in `leaf_spaces_offsets(Wₕ)`.
+`components = nothing` (the default) is every leaf, unchanged from before this keyword
+existed.
 """
 function symmetrize!(A::AbstractMatrix, F::AbstractVector, Wₕ::CompositeGridSpace,
-        labels::Symbol...)
+        labels::Symbol...; components = nothing)
+    leaves = leaf_spaces_offsets(Wₕ)
+    _validate_dirichlet_components(components, length(leaves))
     for p in labels
-        for (sp, offset) in leaf_spaces_offsets(Wₕ)
+        _each_selected_leaf(leaves, components) do sp, offset
             symmetrize!(A, F, index_in_marker(mesh(sp), p), offset)
         end
     end

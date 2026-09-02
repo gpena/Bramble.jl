@@ -243,6 +243,28 @@ Naming one and leaving the other open has no reading as mathematics — the term
 to every equation at once — so it is refused rather than guessed at. Naming neither is fine
 and means the diagonal, applied to every block.
 
+### Constraining one block, leaving another free
+
+`dirichlet_labels` on its own binds to every leaf sharing the named marker — fine when every
+block wants the same treatment, not when they don't. A Stokes-style system prescribing
+velocity while leaving pressure unconstrained needs `dirichlet_components` too: 1-based leaf
+positions, the same order `u(1)`/`u(2)` addressing already uses.
+
+```@example forms
+Ωc = domain(interval(0.0, 1.0), :left => :left, :right => :right)
+Ωdc = mesh(Ωc, 21, true)
+Vc = gridspace(Ωdc)^Val(2)           # 1: velocity-like, 2: pressure-like
+ac2 = form(Vc, Vc, (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)))
+Ac2 = assemble(ac2; dirichlet_labels = (:left, :right), dirichlet_components = 1)
+nothing # hide
+```
+
+Block 1 (rows `1:21`) has its boundary rows pinned; block 2 is untouched — still the plain
+assembled operator, no rows replaced at all. Leaving `dirichlet_components` at its default
+(`nothing`) applies the labels to every leaf, exactly as before this keyword existed; call
+`assemble!`/`dirichlet_bc!` again with a different `dirichlet_labels`/`dirichlet_components`
+pair to constrain another block differently.
+
 ## 7. Threading, chosen once on the backend
 
 `Rₕ!`, `avgₕ!`, gridspace construction and form assembly all thread the same way: `Serial()`
