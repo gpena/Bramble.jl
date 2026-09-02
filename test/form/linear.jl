@@ -99,6 +99,58 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         @test bp ≈ bn
     end
 
+    @testset "heterogeneous composite spaces: leaves over different-sized meshes (point 24)" begin
+        # `lin_indices`/`mesh_markers` used to be built once from the composite space's
+        # first leaf and handed to every leaf's own assembly walk. For a homogeneous
+        # composite every leaf shares one size, so nothing caught it; for a genuinely
+        # heterogeneous one — built directly from a tuple of differently-sized leaves,
+        # bypassing `gridspace(Ω, Val(N))`, which always broadcasts one shared mesh — any
+        # leaf past the first ran its own indices through leaf 1's (smaller or larger)
+        # `LinearIndices` and either threw `BoundsError` or, worse, read the wrong leaf's
+        # data at a coincidentally in-bounds index.
+        Ωbig = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (8, 8), (true, true))
+        Ωsmall = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (4, 4), (true, true))
+        Wbig, Wsmall = gridspace(Ωbig), gridspace(Ωsmall)
+        Vh = Bramble.CompositeGridSpace((Wbig, Wsmall))
+        @test ndofs(Vh) == ndofs(Wbig) + ndofs(Wsmall)
+
+        # non-constant, and different per leaf, so an index mix-up would misread a value
+        # rather than merely surviving by coincidence
+        uv = Rₕ(Vh, (x -> x[1] + x[2], x -> 2x[1] - x[2]))
+
+        # leaf 1 alone: already worked before this fix, kept as the reference case
+        b1 = assemble(form(Vh, v -> innerₕ(uv(1), v(1))))
+        expected1 = sum(values(Rₕ(Wbig, x -> x[1] + x[2])) .* weights(Wbig, Innerh()))
+        @test sum(b1) ≈ expected1
+        @test all(iszero, b1[(ndofs(Wbig) + 1):end])   # leaf 2's block untouched
+
+        # leaf 2 alone: this is exactly what used to throw BoundsError
+        b2 = assemble(form(Vh, v -> innerₕ(uv(2), v(2))))
+        expected2 = sum(values(Rₕ(Wsmall, x -> 2x[1] - x[2])) .* weights(Wsmall, Innerh()))
+        @test sum(b2[(ndofs(Wbig) + 1):end]) ≈ expected2
+        @test all(iszero, b2[1:ndofs(Wbig)])            # leaf 1's block untouched
+
+        # both together, routed — each block gets its own leaf's own answer
+        lboth = form(Vh, v -> innerₕ(uv(1), v(1)) + innerₕ(uv(2), v(2)))
+        bboth = assemble(lboth)
+        @test bboth[1:ndofs(Wbig)] ≈ b1[1:ndofs(Wbig)]
+        @test bboth[(ndofs(Wbig) + 1):end] ≈ b2[(ndofs(Wbig) + 1):end]
+
+        # contraction takes the same walk, so it needs the same fix independently:
+        # l(uv) = Σᵢ bᵢ uvᵢ, not Σᵢ bᵢ — uv is not constant here on purpose
+        @test lboth(uv) ≈ dot(bboth, values(uv))
+
+        # assemble! into a pre-allocated vector — the everyday, allocation-free call
+        b3 = similar(bboth)
+        assemble!(b3, lboth)
+        @test b3 ≈ bboth
+
+        # the parallel core walks leaves the same way and needs its own leaf's mesh too
+        bp = similar(bboth)
+        assemble_parallel!(bp, lboth)
+        @test bp ≈ bboth
+    end
+
     @testset "a coupled right-hand side, one term per component" begin
         # `v(i)` gives the i-th component of the symbolic test function, so a coupled form
         # reads the way an indexed grid function does:
@@ -307,6 +359,21 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
             @test bp ≈ bs
         end
 
+        # a heterogeneous leaf too (point 24): `_sweep_parallel!` derives its own
+        # `LinearIndices`/`markers` from whichever leaf it is handed, so this needs its own
+        # check independent of the two cases above — those never exercise a leaf whose mesh
+        # differs from `first_space(space)`'s. Written with `v(2)`, not `v`: an unindexed
+        # form broadcasts to *every* leaf using the same source, which only the two cases
+        # above can get away with, since every leaf there happens to share one size.
+        Ωhet_par = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (6, 6), (true, true))
+        Vhet_par = Bramble.CompositeGridSpace((gridspace(Ωₕ), gridspace(Ωhet_par)))
+        uhet_par = Rₕ(Vhet_par, (x -> sin(x[1]), x -> cos(x[2])))
+        lf_het = form(Vhet_par, v -> innerₕ(uhet_par(2), v(2)))
+        bs_het = assemble(lf_het)
+        bp_het = similar(bs_het)
+        @test assemble_parallel!(bp_het, lf_het) === bp_het
+        @test bp_het ≈ bs_het
+
         # The sweep accumulates where the version before it overwrote from a reduction, so a
         # vector assembled into twice has to give the same answer and not double it.
         lfr = form(Wₕ, v -> innerₕ(uₕ, v))
@@ -395,11 +462,35 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
                 assemble_parallel!(bcp, lfc)
                 @test bcp ≈ bc
             end
+
+            # A heterogeneous leaf under real concurrency (point 24), same "more work than
+            # threads" sizing as the homogeneous stress case above — a race in the scatter,
+            # or a colour built from the wrong leaf's `LinearIndices`, would show here.
+            Ωb_small = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (17, 17),
+                (true, true))
+            Vhet = Bramble.CompositeGridSpace((Wb, gridspace(Ωb_small)))
+            uhet = Rₕ(Vhet, (x -> x[1] * x[2] + 1, x -> x[1] - 2x[2]))
+            for (cnm, g) in (
+                ("per component", v -> innerₕ(uhet(1), v(1)) + innerₕ(uhet(2), v(2))),
+                ("routed, with operators",
+                v -> innerₕ(uhet(1), v(1) + 2 * D₋ₓ(v(1))) + innerₕ(uhet(2), v(2))))
+                lfh = form(Vhet, g)
+                bh = assemble(lfh)
+                bhp = similar(bh)
+                assemble_parallel!(bhp, lfh)
+                @test bhp ≈ bh
+
+                # repeated runs agree, which a race would break
+                bhp2 = similar(bh)
+                assemble_parallel!(bhp2, lfh)
+                @test bhp2 == bhp
+            end
         else
             @test_skip "concurrency not exercised: only one thread available"
             @test_skip "repeatability under threads not exercised"
             @test_skip "multi-colour parallel path under threads not exercised"
             @test_skip "coupled parallel path under threads not exercised"
+            @test_skip "heterogeneous composite parallel path under threads not exercised"
         end
     end
 
@@ -804,6 +895,49 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         end
         @test composite_bytes(8) == 0
         @test composite_bytes(16) == 0
+
+        # a heterogeneous leaf costs the same nothing (point 24): `_scatter_term!` now
+        # builds its own `LinearIndices`/`markers` from `mesh(sp)` per leaf instead of
+        # receiving them from the caller, once per leaf per term — not once per grid
+        # point — so it must not reopen the door to a per-point allocation the homogeneous
+        # case above doesn't have.
+        function heterogeneous_bytes(N)
+            Ωbig = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (N, N),
+                (true, true))
+            Ωsmall = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)),
+                (max(N ÷ 2, 3), max(N ÷ 2, 3)), (true, true))
+            V = Bramble.CompositeGridSpace((gridspace(Ωbig), gridspace(Ωsmall)))
+            uv = Rₕ(V, (x -> x[1] + x[2], x -> x[1] - x[2]))
+            lf = form(V, v -> innerₕ(uv(1), v(1)) + innerₕ(uv(2), v(2)))
+            ast = resolve_form_ast(lf)
+            b = zeros(ndofs(V))
+            assemble!(b, lf; ast = ast)
+            return @allocated assemble!(b, lf; ast = ast)
+        end
+        het8, het16 = heterogeneous_bytes(8), heterogeneous_bytes(16)
+        @test het8 == 0
+        @test het16 == 0
+        @test het8 == composite_bytes(8)         # literally the same as the homogeneous case
+        @test het16 == composite_bytes(16)
+
+        # and the parallel path's per-call cost doesn't grow just because the leaves
+        # differ in size — same thread-set allocation either way, not asserted at zero
+        # (that's tracked, not guaranteed, the same way the benchmark suite treats it)
+        function parallel_bytes(space, u1, u2)
+            lf = form(space, v -> innerₕ(u1(1), v(1)) + innerₕ(u2(2), v(2)))
+            b = zeros(ndofs(space))
+            assemble_parallel!(b, lf)               # warm up
+            return @allocated assemble_parallel!(b, lf)
+        end
+        Ωhc = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (8, 8), (true, true))
+        Vhomo = gridspace(Ωhc, Val(2))
+        uhomo = Rₕ(Vhomo, (x -> x[1] + x[2], x -> x[1] - x[2]))
+        Ωhc_small = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 4),
+            (true, true))
+        Vhet_alloc = Bramble.CompositeGridSpace((gridspace(Ωhc), gridspace(Ωhc_small)))
+        uhet_alloc = Rₕ(Vhet_alloc, (x -> x[1] + x[2], x -> x[1] - x[2]))
+        @test parallel_bytes(Vhet_alloc, uhet_alloc, uhet_alloc) ==
+              parallel_bytes(Vhomo, uhomo, uhomo)
     end
 
     @testset "differentiating an assembled residual" begin

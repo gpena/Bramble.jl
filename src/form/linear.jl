@@ -261,18 +261,44 @@ end
 # undifferentiated, geometry. Read from one stencil evaluation, which is one extra call per
 # assembly against inferring a type the compiler may not know.
 function _assembled_eltype(ast, space)
-    T = eltype(space)
-    sp = first_space(space)
+    return _probed_eltype(ast, space, eltype(space))
+end
+
+# Composite: a term naming a component belongs to *that* leaf's mesh alone, and probing it
+# against leaf 1's — the scalar method's whole approach — is only ever correct by
+# coincidence, when every leaf happens to share the scalar method's size. Heterogeneous
+# composites don't, and it throws `BoundsError` there rather than reading a nonsense value:
+# `local_stencil` for a term indexed to a leaf it wasn't built for is handed an index that
+# is valid for the *wrong* leaf's shape, and a term's own `VectorElement` data is sized to
+# the leaf it actually belongs to, not to whichever leaf happened to be probed. So this
+# walks the same term/component routing `_route_terms!` uses, and probes each term on the
+# one leaf it actually addresses.
+function _assembled_eltype(ast, space::CompositeGridSpace)
+    return _routed_eltype(ast, leaf_spaces_offsets(space), eltype(space))
+end
+
+# An interior point, so a truncated stencil does not decide the type. A restriction can
+# still answer with nothing, in which case the space's type is all there is to go on.
+function _probed_eltype(term, sp, T)
     Ωₕ = mesh(sp)
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
-
-    # An interior point, so a truncated stencil does not decide the type. A restriction can
-    # still answer with nothing, in which case the space's type is all there is to go on.
     I = grid_inds[length(grid_inds) ÷ 2 + 1]
-    st = local_stencil(ast, sp, I, markers(Ωₕ), lin_indices[I])
+    st = local_stencil(term, sp, I, markers(Ωₕ), lin_indices[I])
     isempty(st) && return T
     return promote_type(T, typeof(last(first(st))))
+end
+
+function _routed_eltype(op::OperatorAdd, leaves, T)
+    promote_type(
+        _routed_eltype(op.left_op, leaves, T), _routed_eltype(op.right_op, leaves, T))
+end
+
+function _routed_eltype(term, leaves, T)
+    target = test_component_or_nothing(term)
+    _check_component(target, length(leaves))
+    sp = target === nothing ? first(first(leaves)) : first(leaves[target])
+    return _probed_eltype(term, sp, T)
 end
 
 # ==============================================================================
@@ -367,7 +393,14 @@ end
 # every leaf. It cost a composite assembly 7x — measured at 0.08x of serial, against 1.9x
 # for the same form on a scalar space, which is how the boxing was found.
 function _sweep_parallel!(b::AbstractVector, sp, term::TERM, grid_inds, strides,
-        lin_indices, mesh_markers, offset::Int) where {TERM}
+        offset::Int) where {TERM}
+    # `sp`'s own mesh, not a value threaded in from a caller that may hold a different
+    # leaf's — computed once per leaf here (this is called once per leaf), then reused
+    # across every colour of that leaf.
+    Ωsp = mesh(sp)
+    lin_indices = LinearIndices(indices(Ωsp))
+    mesh_markers = markers(Ωsp)
+
     if prod(strides) == 1
         _sweep_colour!(b, sp, term, grid_inds, lin_indices, mesh_markers, offset)
         return b
@@ -383,8 +416,7 @@ end
 function _assemble_linear_parallel_core!(b::AbstractVector, space, ast::AST_TYPE,
         lin_indices, mesh_markers) where {AST_TYPE}
     strides = _colour_strides(stencil_offsets(ast))
-    _sweep_parallel!(b, space, ast, indices(mesh(space)), strides, lin_indices,
-        mesh_markers, 0)
+    _sweep_parallel!(b, space, ast, indices(mesh(space)), strides, 0)
     return b
 end
 
@@ -398,6 +430,12 @@ function _assemble_linear_core!(
     # itself composite, `indices(mesh(sp))` covers one leaf's grid while `ndofs(sp)` counts
     # the whole nested block, so the old loop wrote into a fraction of the range it had
     # reserved.
+    #
+    # `lin_indices`/`mesh_markers` above are the caller's — leaf 1's, since that is all
+    # `mesh(space)` can mean for a composite space — and are deliberately *not* forwarded
+    # from here on: a heterogeneous composite's leaves do not share a `LinearIndices`/marker
+    # set, so every function below this point derives its own from the leaf it is actually
+    # given (point 24).
     leaves = leaf_spaces_offsets(space)
 
     # A form written without component indices means the same integrand in every block, and
@@ -406,12 +444,12 @@ function _assemble_linear_core!(
     # vector of terms, so the question is asked once here rather than paid for always.
     if !routes_by_component(ast)
         for (sp, offset) in leaves
-            _scatter_term!(b, sp, ast, lin_indices, mesh_markers, offset)
+            _scatter_term!(b, sp, ast, offset)
         end
         return b
     end
 
-    _route_terms!(b, ast, leaves, lin_indices, mesh_markers)
+    _route_terms!(b, ast, leaves)
     return b
 end
 
@@ -442,22 +480,20 @@ end
 # vector is a `Vector{Any}`, which allocates and makes every term a dynamic read; recursing
 # keeps each term concretely typed at its own call, so this is inferable end to end and costs
 # nothing — 544 B per assembly became 0.
-function _route_terms!(
-        b::AbstractVector, op::OperatorAdd, leaves, lin_indices, mesh_markers)
-    _route_terms!(b, op.left_op, leaves, lin_indices, mesh_markers)
-    _route_terms!(b, op.right_op, leaves, lin_indices, mesh_markers)
+function _route_terms!(b::AbstractVector, op::OperatorAdd, leaves)
+    _route_terms!(b, op.left_op, leaves)
+    _route_terms!(b, op.right_op, leaves)
     return b
 end
 
-function _route_terms!(b::AbstractVector, term::TERM, leaves, lin_indices,
-        mesh_markers) where {TERM}
+function _route_terms!(b::AbstractVector, term::TERM, leaves) where {TERM}
     target = test_component_or_nothing(term)
     _check_component(target, length(leaves))
     for (c, leaf) in enumerate(leaves)
         # a term naming a component goes to that block alone; one naming none goes to every
         # block, so the two spellings can be mixed in a single form
         (target === nothing || target == c) || continue
-        _scatter_term!(b, first(leaf), term, lin_indices, mesh_markers, last(leaf))
+        _scatter_term!(b, first(leaf), term, last(leaf))
     end
     return b
 end
@@ -498,23 +534,28 @@ end
 
 function _contract_linear_core(space::CompositeGridSpace{N}, ast::AST_TYPE, lin_indices,
         mesh_markers, v::AbstractVector, acc::T) where {N, AST_TYPE, T}
-    # The same split the assembling core makes, for the same reasons.
+    # The same split the assembling core makes, for the same reasons. `lin_indices`/
+    # `mesh_markers` above are leaf 1's, deliberately unused past this point — see the note
+    # in `_assemble_linear_core!`.
     leaves = leaf_spaces_offsets(space)
 
     if !routes_by_component(ast)
         for (sp, offset) in leaves
-            acc = _contract_term(sp, ast, lin_indices, mesh_markers, offset, v, acc)
+            acc = _contract_term(sp, ast, offset, v, acc)
         end
         return acc
     end
 
-    return _route_terms_contract(ast, leaves, lin_indices, mesh_markers, v, acc)
+    return _route_terms_contract(ast, leaves, v, acc)
 end
 
 # The counterpart of `_scatter_term!`, and a function barrier for the same reason.
-function _contract_term(sp, term::TERM, lin_indices, mesh_markers, offset::Int,
+function _contract_term(sp, term::TERM, offset::Int,
         v::AbstractVector, acc::T) where {TERM, T}
-    for I in indices(mesh(sp))
+    Ωsp = mesh(sp)
+    lin_indices = LinearIndices(indices(Ωsp))
+    mesh_markers = markers(Ωsp)
+    for I in indices(Ωsp)
         lin_idx = lin_indices[I]
         stencil = local_stencil(term, sp, I, mesh_markers, lin_idx)
 
@@ -532,19 +573,17 @@ end
 # The counterpart of `_route_terms!`. Recursive rather than over a flattened vector for the
 # same reason, and threading `acc` through the recursion rather than summing the branches
 # keeps the accumulator type fixed across the whole walk.
-function _route_terms_contract(op::OperatorAdd, leaves, lin_indices, mesh_markers, v, acc)
-    acc = _route_terms_contract(op.left_op, leaves, lin_indices, mesh_markers, v, acc)
-    return _route_terms_contract(op.right_op, leaves, lin_indices, mesh_markers, v, acc)
+function _route_terms_contract(op::OperatorAdd, leaves, v, acc)
+    acc = _route_terms_contract(op.left_op, leaves, v, acc)
+    return _route_terms_contract(op.right_op, leaves, v, acc)
 end
 
-function _route_terms_contract(term::TERM, leaves, lin_indices, mesh_markers,
-        v, acc::T) where {TERM, T}
+function _route_terms_contract(term::TERM, leaves, v, acc::T) where {TERM, T}
     target = test_component_or_nothing(term)
     _check_component(target, length(leaves))
     for (c, leaf) in enumerate(leaves)
         (target === nothing || target == c) || continue
-        acc = _contract_term(first(leaf), term, lin_indices, mesh_markers, last(leaf),
-            v, acc)
+        acc = _contract_term(first(leaf), term, last(leaf), v, acc)
     end
     return acc
 end
@@ -561,15 +600,13 @@ end
 #
 # Strides come from the term rather than from the whole form, so a term reaching only its own
 # point still sweeps in a single colour even when some other term in the same form does not.
-function _route_terms_parallel!(b::AbstractVector, op::OperatorAdd, leaves, lin_indices,
-        mesh_markers)
-    _route_terms_parallel!(b, op.left_op, leaves, lin_indices, mesh_markers)
-    _route_terms_parallel!(b, op.right_op, leaves, lin_indices, mesh_markers)
+function _route_terms_parallel!(b::AbstractVector, op::OperatorAdd, leaves)
+    _route_terms_parallel!(b, op.left_op, leaves)
+    _route_terms_parallel!(b, op.right_op, leaves)
     return b
 end
 
-function _route_terms_parallel!(b::AbstractVector, term::TERM, leaves, lin_indices,
-        mesh_markers) where {TERM}
+function _route_terms_parallel!(b::AbstractVector, term::TERM, leaves) where {TERM}
     target = test_component_or_nothing(term)
     _check_component(target, length(leaves))
     strides = _colour_strides(stencil_offsets(term))
@@ -577,19 +614,20 @@ function _route_terms_parallel!(b::AbstractVector, term::TERM, leaves, lin_indic
     for (c, leaf) in enumerate(leaves)
         (target === nothing || target == c) || continue
         sp = first(leaf)
-        _sweep_parallel!(
-            b, sp, term, indices(mesh(sp)), strides, lin_indices, mesh_markers,
-            last(leaf))
+        _sweep_parallel!(b, sp, term, indices(mesh(sp)), strides, last(leaf))
     end
     return b
 end
 
 # The scatter, behind a function barrier: a term is only concretely typed once it is an
 # argument, so without this `local_stencil` would be a dynamic call at every grid point
-# rather than once per term.
-function _scatter_term!(b::AbstractVector, sp, term::TERM, lin_indices, mesh_markers,
-        offset::Int) where {TERM}
-    for I in indices(mesh(sp))
+# rather than once per term. `lin_indices`/`mesh_markers` come from `sp`'s own mesh, not
+# from a caller's — a caller only ever knows leaf 1's for a composite space (point 24).
+function _scatter_term!(b::AbstractVector, sp, term::TERM, offset::Int) where {TERM}
+    Ωsp = mesh(sp)
+    lin_indices = LinearIndices(indices(Ωsp))
+    mesh_markers = markers(Ωsp)
+    for I in indices(Ωsp)
         lin_idx = lin_indices[I]
         stencil = local_stencil(term, sp, I, mesh_markers, lin_idx)
 
@@ -607,6 +645,8 @@ end
 function _assemble_linear_parallel_core!(b::AbstractVector,
         space::CompositeGridSpace{N}, ast::AST_TYPE,
         lin_indices, mesh_markers) where {N, AST_TYPE}
+    # `lin_indices`/`mesh_markers` above are leaf 1's, deliberately unused past this point —
+    # see the note in `_assemble_linear_core!`.
     leaves = leaf_spaces_offsets(space)
     strides = _colour_strides(stencil_offsets(ast))
 
@@ -615,13 +655,12 @@ function _assemble_linear_parallel_core!(b::AbstractVector,
     # be routed term by term.
     if !routes_by_component(ast)
         for (sp, offset) in leaves
-            _sweep_parallel!(b, sp, ast, indices(mesh(sp)), strides, lin_indices,
-                mesh_markers, offset)
+            _sweep_parallel!(b, sp, ast, indices(mesh(sp)), strides, offset)
         end
         return b
     end
 
-    _route_terms_parallel!(b, ast, leaves, lin_indices, mesh_markers)
+    _route_terms_parallel!(b, ast, leaves)
     return b
 end
 
