@@ -55,23 +55,28 @@ length(b), sum(b)
 ```
 
 In a time loop the allocation is the part worth avoiding. `assemble!` refills a vector that
-already exists:
+already exists with zero allocations:
 
 ```@example forms
 assemble!(b, l)
 sum(b)
 ```
 
-`assemble!(b, l)` re-evaluates the expression on each call, which is deliberate: it is what
-keeps a form's coefficients *live*. If `fₕ` is overwritten between steps — the usual shape
-of a nonlinear iteration — the next `assemble!` sees the new values without the form being
-rebuilt.
+Forms store their resolved abstract syntax tree (`ast`) directly upon creation, retaining direct references to the underlying coefficient arrays.
 
-That also means the expression is walked again each time. Where a loop reuses a form whose
-coefficients are only ever mutated in place, `Bramble.resolve_form_ast` hoists that walk out
-of the loop and `assemble!(b, l; ast = ast)` reuses it. The cost is that rebinding is frozen:
-a resolved expression sees writes into `values(fₕ)` but not `fₕ = something_else`. It is an
-optimisation with a semantic price, which is why it is not the default and not exported.
+### Live grid coefficients and dynamic scalars
+
+- **Grid functions**: Overwrite a coefficient element in-place with `Rₕ!(fₕ, ...)` or `values(fₕ) .= ...` between steps, and the next `assemble!(b, l)` evaluates the new values live with **0 bytes allocated**, without needing to reconstruct the form.
+- **Scalar coefficients**: Constant scalar factors can be written directly as plain numbers (e.g. `2.5 * innerₕ(fₕ, v)`). A `Ref(val)` is only needed when you want a **dynamic scalar coefficient** that changes across loop iterations:
+
+```@example forms
+α = Ref(1.0)
+l_dyn = form(Wₕ, v -> α * innerₕ(fₕ, v))
+b_dyn = assemble(l_dyn)
+α[] = 2.0
+assemble!(b_dyn, l_dyn) # 0 bytes allocated, live 2x scaling
+sum(b_dyn) ≈ 2 * sum(b)
+```
 
 ## 3. Contracting without a vector
 

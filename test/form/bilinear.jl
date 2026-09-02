@@ -252,24 +252,22 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
         @test sum(A) ≈ 3 * first_sum
         @test nnz(A) == nnz_before
 
-        # The loop body needs no `ast`: resolving a form over a plain coefficient is 11 us
-        # against 550 to assemble it. What it costs is a few hundred bytes, not a vector.
+        # assemble! uses the pre-resolved ast stored in the form and allocates 0 bytes.
         function _loop_bytes(A, a)
             assemble!(A, a)
             return @allocated assemble!(A, a)
         end
-        @test _loop_bytes(A, a) < 8 * n
+        @test _loop_bytes(A, a) == 0
 
-        # It earns its place only when a coefficient carries an operator, where resolving
-        # recomputes a whole element every call.
+        # Coefficients with operators pre-resolve at form construction time and also allocate 0 bytes during assembly
         dcₕ = D₋ₓ(cₕ)
         aop = form(Wₕ, Wₕ, (u, v) -> innerₕ(dcₕ * u, v))
         Aop = assemble(aop)
-        @test _loop_bytes(Aop, aop) < 8 * n          # hoisted, so nothing is recomputed
+        @test _loop_bytes(Aop, aop) == 0
 
         ainline = form(Wₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(cₕ) * u, v))
         Ain = assemble(ainline)
-        @test _loop_bytes(Ain, ainline) >= 8 * n     # inline, so an element per call
+        @test _loop_bytes(Ain, ainline) == 0
         @test Matrix(Ain) ≈ Matrix(Aop)              # and the two agree
     end
 

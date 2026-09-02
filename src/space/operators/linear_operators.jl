@@ -212,6 +212,9 @@ show(io::IO, ::ZeroOperator) = print(io, "0")
 @inline Base.:*(op::LazyOp, c::Number) = OperatorScale(c, op)
 @inline Base.:/(op::LazyOp, c::Number) = OperatorScale(one(c) / c, op)
 
+@inline Base.:*(c::Base.RefValue{<:Number}, op::LazyOp) = OperatorScale(c, op)
+@inline Base.:*(op::LazyOp, c::Base.RefValue{<:Number}) = OperatorScale(c, op)
+
 @inline Base.:*(vₕ::AbstractVector, op::LazyOp) = GridFunctionScale(vₕ, op)
 @inline Base.:*(op::LazyOp, vₕ::AbstractVector) = GridFunctionScale(vₕ, op)
 

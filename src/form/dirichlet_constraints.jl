@@ -269,9 +269,9 @@ function _dirichlet_bc_rows!(A::SparseMatrixCSC, entries::Tuple)
     return A
 end
 
-function dirichlet_bc!(v::AbstractVector, space::CompositeGridSpace, bcs, labels::Symbol...)
+@inline function dirichlet_bc!(v::AbstractVector, space::CompositeGridSpace, bcs, labels::Symbol...)
     for (sp, offset) in leaf_spaces_offsets(space)
-        dirichlet_bc!(view(v, (offset + 1):(offset + ndofs(sp))), mesh(sp), bcs, labels...)
+        dirichlet_bc!(v, mesh(sp), bcs, labels, offset)
     end
     return v
 end
@@ -298,20 +298,23 @@ Writes the Dirichlet values into `v` at the points `labels` marks.
 Only the marked entries are touched, and the work is proportional to how many there are
 rather than to the size of the grid — a boundary in a volume is a small fraction of it.
 """
-function dirichlet_bc!(v::AbstractVector, Ωₕ::AbstractMeshType, bcs::ConstraintMarkers,
-        labels::Symbol...)
+@inline function dirichlet_bc!(v::AbstractVector, Ωₕ::AbstractMeshType, bcs::ConstraintMarkers,
+        labels::NTuple{N, Symbol}, offset::Int = 0) where {N}
     isempty(labels) && return v
 
     for marker in conditions(bcs)
         current_label = label(marker)
         if current_label in labels
             _dirichlet_bc_indices!(v, Ωₕ, index_in_marker(Ωₕ, current_label),
-                identifier(marker))
+                identifier(marker), offset)
         end
     end
 
     return v
 end
+
+@inline dirichlet_bc!(v::AbstractVector, Ωₕ::AbstractMeshType, bcs::ConstraintMarkers,
+        labels::Symbol...) = dirichlet_bc!(v, Ωₕ, bcs, labels, 0)
 
 """
 	_dirichlet_bc_indices!(A, marker_indices)
@@ -398,20 +401,20 @@ The value of `func` at the `i`-th mesh point.
 """
 _function_in_linear_indices(func, Ωₕ, i) = func(point(Ωₕ, indices(Ωₕ)[i]))
 
-function _dirichlet_bc_indices!(v::AbstractVector, Ωₕ::AbstractMeshType,
-        index_in_marker::BitVector, func::BrambleFunction)
+@inline function _dirichlet_bc_indices!(v::AbstractVector, Ωₕ::AbstractMeshType,
+        index_in_marker::BitVector, func::BrambleFunction, offset::Int = 0)
     cart_indices = indices(Ωₕ)
 
     chunks = index_in_marker.chunks
     @inbounds for (chunk_idx, chunk) in enumerate(chunks)
         chunk == zero(UInt64) && continue
 
-        offset = (chunk_idx - 1) * 64
+        chunk_offset = (chunk_idx - 1) * 64
         temp_chunk = chunk
         while temp_chunk != zero(UInt64)
             bit_pos = trailing_zeros(temp_chunk)
-            idx = offset + bit_pos + 1
-            v[idx] = func(point(Ωₕ, cart_indices[idx]))
+            idx = chunk_offset + bit_pos + 1
+            v[idx + offset] = func(point(Ωₕ, cart_indices[idx]))
             temp_chunk &= temp_chunk - 1
         end
     end

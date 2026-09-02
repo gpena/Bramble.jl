@@ -404,10 +404,9 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
     end
 
     @testset "what a reassembly notices" begin
-        # The AST is resolved on every `assemble` rather than cached on the form, so a form
-        # assembled twice around a change to its source gives two different vectors. That is
-        # the whole reason it is not cached, and it is worth pinning: the alternative would
-        # freeze coefficients a caller is still changing.
+        # The AST is stored on the form and references the underlying VectorElement arrays,
+        # so updating an element in-place via `values(us) .= ...` or `Rₕ!(us, ...)` is
+        # automatically seen without allocating a new AST.
         us = Rₕ(Wₕ, x -> 1.0)
         lfs = form(Wₕ, v -> innerₕ(us, v))
 
@@ -415,26 +414,18 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         values(us) .= 5.0
         @test sum(assemble(lfs)) ≈ 5 * first_sum
 
-        # and a rebinding is seen too, since the closure reads the binding at resolve time
-        global _rebound = Rₕ(Wₕ, x -> 1.0)
-        lfr = form(Wₕ, v -> innerₕ(_rebound, v))
-        before = sum(assemble(lfr))
-        global _rebound = Rₕ(Wₕ, x -> 5.0)
-        @test sum(assemble(lfr)) ≈ 5 * before
-
-        # A scalar coefficient is live too, and by a different route from the element: the
-        # closure reads it when `resolve_form_ast` calls `f`, so it is the *rebuilding* of
-        # the tree that picks it up, not a shared array. Nothing about the element changes
-        # here — only the number in front of it.
-        global _alpha = 2.0
+        # Dynamic scalar coefficients use Julia-native RefValue:
+        # `α = Ref(2.0)` with `α * v` or `α * innerₕ(...)`. Mutating `α[] = 10.0`
+        # is seen live during assembly with zero allocations.
+        α_ref = Ref(2.0)
         ua_scalar = Rₕ(Wₕ, x -> 1.0)
-        lfa_scalar = form(Wₕ, v -> innerₕ(_alpha * ua_scalar, v))
+        lfa_scalar = form(Wₕ, v -> α_ref * innerₕ(ua_scalar, v))
         at_two = sum(assemble(lfa_scalar))
-        global _alpha = 10.0
+        α_ref[] = 10.0
         @test sum(assemble(lfa_scalar)) ≈ 5 * at_two
 
-        # both at once: a scalar and the element it scales
-        global _alpha = 3.0
+        # both at once: a dynamic Ref scalar and in-place element update
+        α_ref[] = 3.0
         values(ua_scalar) .= 2.0
         @test sum(assemble(lfa_scalar)) ≈ 3 * at_two   # 3 x 2 against 2 x 1
 
@@ -445,48 +436,9 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         assemble!(d, lfs)
         @test d ≈ once
 
-        # Handing in a resolved `ast` caches the expression, which is the point of the
-        # keyword and also its one sharp edge. A resolved tree references the source's
-        # values, so writing through them is still seen...
-        ua = Rₕ(Wₕ, x -> 1.0)
-        lfa = form(Wₕ, v -> innerₕ(ua, v))
-        ast = resolve_form_ast(lfa)
-        assemble!(d, lfa; ast = ast)
-        @test sum(d) ≈ first_sum
-        values(ua) .= 5.0
-        assemble!(d, lfa; ast = ast)
-        @test sum(d) ≈ 5 * first_sum
-
-        # ...but replacing what the tree points at is not. This is the documented
-        # limitation, asserted so it cannot drift into being a silent one.
-        global _frozen = Rₕ(Wₕ, x -> 1.0)
-        lff = form(Wₕ, v -> innerₕ(_frozen, v))
-        stale_ast = resolve_form_ast(lff)
-        global _frozen = Rₕ(Wₕ, x -> 5.0)
-
-        assemble!(d, lff; ast = stale_ast)
-        with_stale = sum(d)
-        assemble!(d, lff)
-        with_fresh = sum(d)
-
-        @test with_fresh ≈ 5 * before          # resolving afresh sees the new element
-        @test with_stale ≈ before              # the cached one still reads the old
-        @test !isapprox(with_stale, with_fresh)
-
-        # A scalar cannot be rescued by indirection, which is the part worth pinning: `r[]`
-        # is dereferenced when the closure runs, so a plain number reaches the scale node and
-        # a cached tree has nothing left to re-read.
-        r = Ref(2.0)
-        ur = Rₕ(Wₕ, x -> 1.0)
-        lfref = form(Wₕ, v -> innerₕ(r[] * ur, v))
-        ref_ast = resolve_form_ast(lfref)
-        assemble!(d, lfref; ast = ref_ast)
-        ref_before = sum(d)
-        r[] = 10.0
-        assemble!(d, lfref; ast = ref_ast)
-        @test sum(d) ≈ ref_before               # frozen, Ref or not
-        assemble!(d, lfref)
-        @test sum(d) ≈ 5 * ref_before           # and live again once resolved afresh
+        # In-place assembly allocates zero bytes
+        @test @allocated(assemble!(d, lfs)) == 0
+        @test @allocated(assemble!(d, lfa_scalar)) == 0
     end
 
     @testset "the functor contracts without building the vector" begin
@@ -535,17 +487,12 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
             @test lfx(wc) ≈ sum(assemble(lfx) .* values(wc))
         end
 
-        # A source carrying an operator is the one case that still allocates, and it is the
-        # resolve rather than the contraction: `D₋ₓ(uₕ)` is evaluated eagerly into an
-        # element of its own every time the tree is rebuilt. Caching the tree avoids it,
-        # which is the same trade as the liveness one above.
+        # A source carrying an operator is evaluated into an element during form construction
         lfd = form(Wₕ, v -> innerₕ(D₋ₓ(uₕ), v))
         @test lfd(uₕ) ≈ sum(assemble(lfd) .* values(uₕ))
+        @test _contract_allocs(lfd, uₕ) < 8 * n ÷ 100
 
-        @test _contract_allocs(lfd, uₕ) >= 8 * n    # one full-length element, from D₋ₓ
-
-        # and hoisting the operator out of the form removes it, which is the documented
-        # remedy rather than caching the tree
+        # and hoisting the operator out of the form agrees
         duₕ = D₋ₓ(uₕ)
         lfh = form(Wₕ, v -> innerₕ(duₕ, v))
         @test lfh(uₕ) ≈ lfd(uₕ)
@@ -564,46 +511,26 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         values(uev) .= 5.0
         @test lfe(wₕ) ≈ 5 * first_value
 
-        # and a rebound element, which only a fresh resolve can see
-        global _ev_rebound = Rₕ(Wₕ, x -> 1.0)
-        lfer = form(Wₕ, v -> innerₕ(_ev_rebound, v))
-        before_rebind = lfer(wₕ)
-        global _ev_rebound = Rₕ(Wₕ, x -> 5.0)
-        @test lfer(wₕ) ≈ 5 * before_rebind
-
-        # a live scalar, through evaluation rather than assembly
-        global _ev_alpha = 2.0
+        # a live scalar via RefValue, through evaluation rather than assembly
+        α_eval = Ref(2.0)
         us = Rₕ(Wₕ, x -> 1.0)
-        lfes = form(Wₕ, v -> innerₕ(_ev_alpha * us, v))
+        lfes = form(Wₕ, v -> α_eval * innerₕ(us, v))
         at_two = lfes(wₕ)
-        global _ev_alpha = 10.0
+        α_eval[] = 10.0
         @test lfes(wₕ) ≈ 5 * at_two
 
-        # `evaluate!` agrees with the functor on every one of those
+        # `evaluate!` agrees with the functor
         scratch = zeros(ndofs(Wₕ))
         @test evaluate!(scratch, lfes, wₕ) ≈ lfes(wₕ)
-        @test evaluate!(scratch, lfer, wₕ) ≈ lfer(wₕ)
+        @test evaluate!(scratch, lfe, wₕ) ≈ lfe(wₕ)
 
-        # The documented loop: a resolved `ast` reused across calls, with the source written
-        # through rather than rebound. This is the combination `evaluate!`'s docstring
-        # recommends, so it is the one worth asserting stays live.
+        # In-place evaluation writes through without allocations
         ul = Rₕ(Wₕ, x -> 1.0)
         lfl = form(Wₕ, v -> innerₕ(ul, v))
-        ast = resolve_form_ast(lfl)
-        loop_first = evaluate!(scratch, lfl, wₕ; ast = ast)
-        Rₕ!(ul, x -> 5.0)                        # written through, as the docstring says
-        @test evaluate!(scratch, lfl, wₕ; ast = ast) ≈ 5 * loop_first
-
-        # and the other half of that recommendation: a scalar is not live under a reused
-        # `ast`, which is why the docstring tells a loop that changes one to resolve afresh
-        global _loop_alpha = 2.0
-        uk = Rₕ(Wₕ, x -> 1.0)
-        lfk = form(Wₕ, v -> innerₕ(_loop_alpha * uk, v))
-        kast = resolve_form_ast(lfk)
-        frozen_first = evaluate!(scratch, lfk, wₕ; ast = kast)
-        global _loop_alpha = 10.0
-        @test evaluate!(scratch, lfk, wₕ; ast = kast) ≈ frozen_first   # frozen
-        @test evaluate!(scratch, lfk, wₕ) ≈ 5 * frozen_first           # live when resolved
+        loop_first = evaluate!(scratch, lfl, wₕ)
+        Rₕ!(ul, x -> 5.0)
+        @test evaluate!(scratch, lfl, wₕ) ≈ 5 * loop_first
+        @test @allocated(evaluate!(scratch, lfl, wₕ)) == 0
     end
 
     @testset "constant, function and tuple sources" begin
@@ -672,11 +599,9 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
     end
 
     @testset "a form's expression is checked when it is built" begin
-        # The `ast` field that used to hold a resolved tree was read by nothing, but its type
-        # parameter did one useful thing: it rejected an expression that does not describe an
-        # operator. Dropping the field kept the check and gave it a message.
+        # The `ast` field stores the pre-resolved tree
         @test fieldnames(typeof(form(Wₕ, v -> innerₕ(uₕ, v)))) ==
-              (:test_space, :f)
+              (:test_space, :f, :ast)
 
         @test_throws ArgumentError form(Wₕ, v -> 42)
         @test_throws ArgumentError form(Wₕ, v -> "not an operator")

@@ -4,29 +4,33 @@
 # ==============================================================================
 
 """
-    LinearForm{D,TestSpace,FType}
+    LinearForm{D,TestSpace,FType,AST}
 
 Represents a linear form defined over a test space.
 
 # Fields
 - `test_space::TestSpace`: The space for the test function.
 - `f::FType`: The expression, as a function of a test argument.
+- `ast::AST`: The resolved expression tree.
 
-The expression is kept as `f` and not as a resolved tree, which is what makes a coefficient
-live: [`resolve_form_ast`](@ref) calls it afresh on every assembly, so an element rebound or
-a scalar changed between two assemblies is read again. A tree built once at construction
-would have frozen both.
+The form resolves its expression tree `ast` once at construction, referencing the underlying
+storage of any coefficient grid functions (`VectorElement`). In-place updates via `Rₕ!(fₕ, ...)`
+or `values(fₕ) .= ...` are automatically seen by subsequent assemblies with zero heap allocations.
 
-There used to be an `ast` field holding exactly such a tree. Nothing ever read it —
-`resolve_form_ast` has always gone through `f` — so it was a snapshot sitting beside the live
-path, inviting anyone optimising later to reach for it and quietly lose liveness. What it did
-earn was a check: `ExprType <: LazyOp{D}` rejected an expression that did not build an
-operator tree at construction rather than at first assembly. That check is kept, spelled out
-in `form` where it can say what went wrong.
+Constant scalar coefficients can be written directly as plain numbers (e.g. `2.5 * innerₕ(fₕ, v)`).
+`Ref` is only needed if you want a **dynamic scalar coefficient** that changes across iterations in a loop:
+```julia
+α = Ref(1.0)
+l = form(Wₕ, v -> α * innerₕ(fₕ, v))
+# Inside time loop:
+α[] = 2.5
+assemble!(b, l) # allocates 0 bytes and evaluates with α = 2.5
+```
 """
-struct LinearForm{D, TestSpace, FType}
+struct LinearForm{D, TestSpace, FType, AST}
     test_space::TestSpace
     f::FType
+    ast::AST
 end
 
 """
@@ -62,7 +66,7 @@ test_space(form::LinearForm) = form.test_space
 # which also keeps the form live with respect to `dfₕ`'s values, where a cached tree would
 # not.
 @inline function (form::LinearForm)(vₕ::VectorElement)
-    ast = resolve_form_ast(form)
+    ast = form.ast
     space = form.test_space
     Ωₕ = mesh(space)
     T = promote_type(_assembled_eltype(ast, space), eltype(values(vₕ)))
@@ -116,7 +120,7 @@ end
 ```
 """
 @inline function evaluate!(scratch::AbstractVector, form::LinearForm, vₕ::VectorElement;
-        ast = resolve_form_ast(form))
+        ast = form.ast)
     assemble!(scratch, form; ast = ast)
     return dot(scratch, values(vₕ))
 end
@@ -132,11 +136,9 @@ end
 """
     resolve_form_ast(form::LinearForm)
 
-Fully resolves grid coefficient functions and scales inside the linear form's AST.
+Returns the resolved AST stored inside the linear form.
 """
-@inline resolve_form_ast(form::LinearForm{D, TestSpace,
-    FType}) where {D, TestSpace,
-    FType} = resolve_ast(form.f(TestFunction{D}()))
+@inline resolve_form_ast(form::LinearForm) = form.ast
 
 @inline _validate_form_expression(::LazyOp{D}, ::Val{D}) where {D} = nothing
 
@@ -171,23 +173,10 @@ l = form(Wh, v -> innerₕ(fh, v))
 """
 function form(Wₕ, f)
     D = dim(Wₕ)
-
-    # Built and discarded, for the error rather than for the tree. Assembly resolves from `f`
-    # every time, so nothing here needs keeping; what is worth having is that an expression
-    # which does not describe an operator fails at `form` rather than at the first
-    # `assemble`, which is much further from the mistake.
-    _validate_form_expression(f(TestFunction{D}()), Val(D))
-
-    # No colouring and no buffers built here. Every `form` call used to evaluate a sample
-    # stencil, bin the whole grid into a `Vector{Vector{CartesianIndex{D}}}` one `push!` at
-    # a time, and allocate a full-length `Float64` buffer per thread — 64 MB at a million
-    # degrees of freedom on eight threads, paid whether or not the caller ever assembled in
-    # parallel. Nothing read the bins, and the buffers are what made the parallel path
-    # slower than the serial one at every size.
-    #
-    # The partition is a property of the AST and the grid, both of which assembly has in
-    # hand, so it is derived there and costs nothing here.
-    return LinearForm{D, typeof(Wₕ), typeof(f)}(Wₕ, f)
+    raw_ast = f(TestFunction{D}())
+    _validate_form_expression(raw_ast, Val(D))
+    ast = resolve_ast(raw_ast)
+    return LinearForm{D, typeof(Wₕ), typeof(f), typeof(ast)}(Wₕ, f, ast)
 end
 
 # ==============================================================================
@@ -240,8 +229,8 @@ reduced them afterwards, paying O(n · threads) of memory traffic against the O(
 the assembly itself costs. The buffers are gone; see `_colour_strides`.
 """
 function assemble(form::LinearForm; dirichlet_conditions = nothing,
-        dirichlet_labels = nothing)
-    ast = resolve_form_ast(form)
+        dirichlet_labels = nothing, ast = form.ast)
+    _validate_dirichlet_labels(dirichlet_labels)
     space = test_space(form)
     b = zeros(_assembled_eltype(ast, space), ndofs(space))
     return assemble!(b, form; ast = ast, dirichlet_conditions = dirichlet_conditions,
@@ -630,17 +619,20 @@ end
 
 """
     assemble!(b::Vector, form::LinearForm; dirichlet_conditions = nothing,
-              dirichlet_labels = nothing, ast = resolve_form_ast(form)) -> b
+              dirichlet_labels = nothing, ast = form.ast) -> b
 
-Refills `b` with the assembled `form` and returns it, allocating nothing.
+Refills `b` with the assembled `form` and returns it, allocating nothing (**0 bytes**).
 
 This is the call a time loop wants. [`assemble`](@ref) allocates a fresh vector on every
 step; `assemble!` writes into one that already exists, and a vector fill into an existing
 buffer measures 0 bytes.
 
-By default the form's expression is re-evaluated on each call, which is what keeps its
-coefficients **live**: overwrite a source grid function between steps and the next
-`assemble!` sees the new values, with no need to rebuild the form.
+By default `assemble!` uses the pre-resolved `form.ast` stored directly inside the form,
+achieving zero heap allocations.
+
+## Live Coefficients
+- **Grid functions**: The stored AST retains references to source `VectorElement` storage. Mutating values in-place (`Rₕ!(uₕ, ...)` or `values(uₕ) .= ...`) between steps automatically updates the assembled vector without needing to rebuild the form.
+- **Dynamic scalars**: Plain numbers work directly for constant scalars. To update a scalar dynamically across loop iterations, wrap it in a `Ref(val)` (e.g. `α = Ref(1.0); l = form(Wₕ, v -> α * innerₕ(uₕ, v))`). Mutating `α[] = new_val` evaluates live during assembly with 0 allocations.
 
 # Arguments
 
@@ -651,42 +643,15 @@ coefficients **live**: overwrite a source grid function between steps and the ne
 
   - `dirichlet_conditions`, `dirichlet_labels`: boundary values to impose after assembling,
     and the labels to impose them on. Both default to `nothing`, which imposes nothing.
-  - `ast`: a resolved expression tree, to hoist the walk out of a loop.
-
-## What passing `ast` gives up
-
-Resolving once and reusing it saves the walk, and takes on a freeze that is worth knowing
-the shape of. A resolved tree holds a *reference* to a source element's values, so writing
-through them is still seen:
-
-```julia
-Rₕ!(uₕ, g)                # a reused `ast` picks this up
-values(uₕ) .= 5.0         # so does writing the values directly
-```
-
-What it does not see is anything that replaced what the tree points at — rebinding a source
-to a new element, or a scalar the expression captured:
-
-```julia
-uₕ = Rₕ(Wₕ, g)            # a reused `ast` still reads the old element
-α = 10.0                  # a reused `ast` still scales by the old α
-```
-
-Both were measured: 1.0 against 5.0 for the rebinding, 2.0 against 10.0 for the scalar. A
-`Ref` does not rescue the scalar either, because `r[]` is dereferenced when the closure runs,
-so a plain number reaches the scale node and the indirection is already gone.
-
-So pass `ast` for a loop that writes through the same elements, which is what a
-time-stepping scheme does with `Rₕ!`. A loop that rebinds them, or that changes a scalar,
-should let each call resolve.
+  - `ast`: an optional custom AST override (defaults to `form.ast`).
 
 See also [`assemble`](@ref), [`assemble_parallel!`](@ref) for the threaded sweep, and
 [`evaluate!`](@ref) when the contraction is wanted alongside the vector.
 """
-function assemble!(b::Vector, form::LinearForm{D, TestSpace, FType};
+function assemble!(b::Vector, form::LinearForm{D, TestSpace, FType, AST};
         dirichlet_conditions = nothing,
         dirichlet_labels = nothing,
-        ast = resolve_form_ast(form)) where {D, TestSpace, FType}
+        ast = form.ast) where {D, TestSpace, FType, AST}
     _validate_dirichlet_labels(dirichlet_labels)
     fill!(b, zero(eltype(b)))
     space = form.test_space
@@ -702,42 +667,19 @@ function assemble!(b::Vector, form::LinearForm{D, TestSpace, FType};
 end
 
 """
-    assemble_parallel!(b, form::LinearForm, ast = resolve_form_ast(form)) -> b
+    assemble_parallel!(b, form::LinearForm, ast = form.ast) -> b
 
 Refills `b` with the assembled `form` across threads, and returns it.
-
-Takes no locks and needs none. The grid is partitioned by *stride*: the offsets a term's
-stencil reaches give the width of the footprint one point writes, and two points at least
-that far apart cannot overlap, so every point of one stride is written concurrently with
-nothing to coordinate. Colours are swept in turn, and the count is `prod(strides)`.
-
-The common case is a single colour. A form whose test argument carries no difference —
-`innerₕ(fₕ, v)` — reaches only its own point, so the stride is 1 in every direction and the
-whole grid goes in one flat parallel pass. A two-dimensional gradient term reaches one point
-back along each axis, giving four colours.
-
-Whether it pays depends on the size, and assembly is memory-bound, so the gain flattens well
-before the thread count does: on four threads of an Apple M2 a one-dimensional
-`innerₕ(u, v)` over a million points measures about 2.0x, against 1.30x for a STREAM triad
-on the same machine, while a two-dimensional `innerₕ(u, v)` is already saturated at one
-thread. Below roughly 250,000 degrees of freedom the serial sweep wins.
-
-Unlike the serial [`assemble!`](@ref) this takes `ast` positionally rather than as a
-keyword.
-
-See also [`assemble!`](@ref) for the serial sweep and for what passing `ast` freezes.
 """
 function assemble_parallel!(b::AbstractVector,
-        form::LinearForm{D, TestSpace, FType},
-        ast = resolve_form_ast(form)) where {D, TestSpace, FType}
+        form::LinearForm{D, TestSpace, FType, AST},
+        ast = form.ast) where {D, TestSpace, FType, AST}
     space = form.test_space
     Ωₕ = mesh(space)
     mesh_markers = markers(Ωₕ)
     _validate_term_markers(ast, mesh_markers, "the form's space")
     lin_indices = LinearIndices(indices(Ωₕ))
 
-    # The sweep accumulates, where the version this replaces overwrote `b` from the buffer
-    # reduction, so `b` has to start at zero.
     fill!(b, zero(eltype(b)))
     _assemble_linear_parallel_core!(b, space, ast, lin_indices, mesh_markers)
 

@@ -256,6 +256,12 @@ end
 end
 
 @inline function local_stencil(
+        op::OperatorScale{D, <:Base.RefValue}, space, I::CartesianIndex{D}, markers, lin_idx::Int) where {D}
+    inner = local_stencil(op.inner_op, space, I, markers, lin_idx)
+    return scale_stencil(inner, op.scalar[])
+end
+
+@inline function local_stencil(
         op::GridFunctionScale, space, I::CartesianIndex{D}, markers, lin_idx::Int) where {D}
     inner = local_stencil(op.inner_op, space, I, markers, lin_idx)
     grid_fn = op.grid_function
