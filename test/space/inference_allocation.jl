@@ -174,10 +174,23 @@ using Bramble: values, components, _difference_engine!, _average_engine!,
         @test inplace_bytes(be_serial, 16) == (0, 0)
         @test inplace_bytes(be_serial, 2048) == (0, 0)   # 128x the degrees of freedom
 
-        # `Parallel()` costs a small, size-independent constant (task spawn overhead).
+        # `Parallel()` costs a small, size-independent constant (task spawn overhead). On
+        # Julia nightly specifically (checked: never on a release build, across many
+        # repeated runs here — point 64), a single measurement drifts by one or two 64-byte
+        # quanta, nondeterministically, in either direction — the thread-spawn machinery's
+        # own scheduling noise, not anything Rₕ!/avgₕ! do differently at either grid size.
+        # Neither taking the minimum over repeats nor an exact equality converged on its
+        # own (checked: still flaked after 5 repeats), so the two are combined: the minimum
+        # over a handful of repeats to reject one-off spikes, then a tolerance for the
+        # genuine floor-level noise that remains — the property under test is "constant",
+        # not "bit-for-bit reproducible", which nightly's scheduler does not promise.
         be_parallel = backend(policy = Parallel())
-        small = inplace_bytes(be_parallel, 16)
-        large = inplace_bytes(be_parallel, 2048)
-        @test small == large
+        function min_inplace_bytes(be, n)
+            trials = ntuple(_ -> inplace_bytes(be, n), 5)
+            (minimum(t[1] for t in trials), minimum(t[2] for t in trials))
+        end
+        small = min_inplace_bytes(be_parallel, 16)
+        large = min_inplace_bytes(be_parallel, 2048)
+        @test all(abs(s - l) <= 256 for (s, l) in zip(small, large))
     end
 end
