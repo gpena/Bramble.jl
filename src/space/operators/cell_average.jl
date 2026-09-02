@@ -103,6 +103,38 @@ end
 @inline _avg_min_work(::Val{D}, ::Val{NQ}) where {D, NQ} = max(
     1, cld(CPU_THREADED_MIN, NQ^D))
 
+# A named, concretely-typed kernel for the quadrature loop's inner call, rather than an
+# anonymous closure over the same five captures (`f`, `x`, `idxs`, `nodes`, `wts`).
+#
+# The two should be equivalent -- a Julia closure is already a concrete, compiler-generated
+# struct with the same fields -- and mostly are: `Rₕ!`'s equivalent closure, half the
+# captures, never showed this problem. This one, five captures deep inside `_cpu_threaded_for!`,
+# is a *closer call* for the compiler's inlining cost model, and closer calls are where an
+# "inlining budget nothing can query" (this file's own words, on the related `_gauss_rule`
+# fold) occasionally goes the wrong way -- point 51 in docs/form-unlock-plan.md measured it:
+# 1 to 3 in 20 independent compiles landed on a path that cost 176 B *per grid point*, 80 MiB
+# on a million-point mesh, on otherwise identical code. A hand-written struct doesn't remove
+# that risk outright, but it is one fewer compiler decision between the data and the call --
+# no closure-capture-list inference, just field access on a type this file wrote down. Pay a
+# few named types now, deterministically, rather than gamble on an unobservable heuristic.
+struct _AvgKernel1{F, X, IX, NQ, T}
+    f::F
+    x::X
+    idxs::IX
+    nodes::SVector{NQ, T}
+    wts::SVector{NQ, T}
+end
+@inline (k::_AvgKernel1)(i) = _cell_average(k.f, k.x, k.idxs[i][1], k.nodes, k.wts)
+
+struct _AvgKernelD{F, X, IX, NQ, T}
+    f::F
+    x::X
+    idxs::IX
+    nodes::SVector{NQ, T}
+    wts::SVector{NQ, T}
+end
+@inline (k::_AvgKernelD)(i) = _cell_average(k.f, k.x, k.idxs[i], k.nodes, k.wts)
+
 @inline function _avgₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f::F, ::Val{1}, nq::Val{NQ}) where {
         F, NQ}
     (; space) = uₕ
@@ -114,7 +146,7 @@ end
     n = length(idxs)
     nodes, wts = _gauss_rule(nq, T)
 
-    _cpu_threaded_for!(raw, 1:n, i -> _cell_average(f, x, idxs[i][1], nodes, wts);
+    _cpu_threaded_for!(raw, 1:n, _AvgKernel1(f, x, idxs, nodes, wts);
         min_work = _avg_min_work(Val(1), nq))
     return uₕ
 end
@@ -130,7 +162,7 @@ end
     n = length(idxs)
     nodes, wts = _gauss_rule(nq, T)
 
-    _cpu_threaded_for!(raw, 1:n, i -> _cell_average(f, x, idxs[i], nodes, wts);
+    _cpu_threaded_for!(raw, 1:n, _AvgKernelD(f, x, idxs, nodes, wts);
         min_work = _avg_min_work(Val(D), nq))
     return uₕ
 end
@@ -150,6 +182,30 @@ end
     return uₕ
 end
 
+# Same reasoning as `_AvgKernel1`/`_AvgKernelD` above, for the tuple-valued (composite)
+# quadrature call.
+struct _AvgScatterKernel1{F, X, IX, NQ, T, NC}
+    f::F
+    x::X
+    idxs::IX
+    nodes::SVector{NQ, T}
+    wts::SVector{NQ, T}
+end
+@inline (k::_AvgScatterKernel1{
+    F, X, IX, NQ, T, NC})(i) where {F, X, IX, NQ, T, NC} = _cell_average(
+    k.f, k.x, k.idxs[i][1], k.nodes, k.wts, Val(NC))
+
+struct _AvgScatterKernelD{F, X, IX, NQ, T, NC}
+    f::F
+    x::X
+    idxs::IX
+    nodes::SVector{NQ, T}
+    wts::SVector{NQ, T}
+end
+@inline (k::_AvgScatterKernelD{
+    F, X, IX, NQ, T, NC})(i) where {F, X, IX, NQ, T, NC} = _cell_average(
+    k.f, k.x, k.idxs[i], k.nodes, k.wts, Val(NC))
+
 # Composite space: single vector-valued function returning all components
 @inline function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f, ::Val{1}, nq::Val{NQ}) where {
         NC, NQ}
@@ -163,7 +219,9 @@ end
     nodes, wts = _gauss_rule(nq, T)
 
     _cpu_threaded_scatter_for!(
-        raws, 1:n, i -> _cell_average(f, x, idxs[i][1], nodes, wts, Val(NC));
+        raws, 1:n,
+        _AvgScatterKernel1{typeof(f), typeof(x), typeof(idxs), NQ, T, NC}(
+            f, x, idxs, nodes, wts);
         min_work = _avg_min_work(Val(1), nq))
     return uₕ
 end
@@ -180,7 +238,9 @@ end
     nodes, wts = _gauss_rule(nq, T)
 
     _cpu_threaded_scatter_for!(
-        raws, 1:n, i -> _cell_average(f, x, idxs[i], nodes, wts, Val(NC));
+        raws, 1:n,
+        _AvgScatterKernelD{typeof(f), typeof(x), typeof(idxs), NQ, T, NC}(
+            f, x, idxs, nodes, wts);
         min_work = _avg_min_work(Val(D), nq))
     return uₕ
 end
