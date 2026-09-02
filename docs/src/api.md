@@ -176,6 +176,24 @@ avgₕ
 avgₕ!
 ```
 
+### Interpolation between grid spaces
+
+Moving a grid function from one mesh to another — the piecewise (multi)linear interpolant,
+numeric ([`interpolate_at`](@ref)/[`interpolate!`](@ref)/[`interpolate`](@ref)/
+[`interpolation_matrix`](@ref)) and symbolic ([`πₕ`](@ref), composable with
+[`D₋ₓ`](@ref)/[`M₋ₓ`](@ref)/... inside [`innerₕ`](@ref)). See the
+[operators tutorial](tutorials/operators.md) and the
+[forms tutorial](tutorials/form.md) for the pattern this exists for: a heterogeneous
+composite space whose leaves live on different meshes.
+
+```@docs
+interpolate_at
+interpolate!
+interpolate
+interpolation_matrix
+πₕ
+```
+
 
 ## Difference, jump and average operators
 

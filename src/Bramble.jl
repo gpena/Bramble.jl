@@ -55,6 +55,7 @@ export ndofs, ncomponents, weights
 export VectorElement, element, to_matrix, values, values!, component, components,
        component_range, component_ranges
 export Rₕ, Rₕ!, avgₕ, avgₕ!
+export interpolate, interpolate!, interpolate_at, interpolation_matrix, πₕ
 
 export innerₕ
 export inner₊, inner₊ₓ, inner₊ᵧ, inner₊₂
@@ -122,6 +123,7 @@ include("space/operators/shift.jl")
 include("space/operators/difference.jl")
 include("space/operators/jump.jl")
 include("space/operators/average.jl")
+include("space/operators/interpolation.jl")
 include("space/inner_product.jl")
 
 include("form/common.jl")

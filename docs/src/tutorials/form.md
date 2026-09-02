@@ -10,7 +10,8 @@ This tutorial covers:
 3. Contracting a form against a grid function without building a vector at all.
 4. Bilinear forms and the system matrix.
 5. Imposing Dirichlet conditions, and solving a Poisson problem.
-6. Coupled systems, where a term names which block it belongs to.
+6. Coupled systems, where a term names which block it belongs to, including a term that
+   reads from a leaf built over a different mesh.
 7. Threaded assembly, and why it needs no locks.
 
 Every number below was produced by the code shown.
@@ -264,6 +265,70 @@ assembled operator, no rows replaced at all. Leaving `dirichlet_components` at i
 (`nothing`) applies the labels to every leaf, exactly as before this keyword existed; call
 `assemble!`/`dirichlet_bc!` again with a different `dirichlet_labels`/`dirichlet_components`
 pair to constrain another block differently.
+
+### Interpolating between the leaves of a heterogeneous composite space
+
+The composite spaces above stack copies of *one* space — every leaf shares a mesh. A
+composite space can also be built directly from a tuple of leaves over different meshes,
+and then a term coupling two leaves needs a way to move a value from one leaf's grid to
+the other's: [`πₕ`](@ref), the symbolic form of [`interpolate`](@ref) (see the
+[operators tutorial](operators.md) for the numeric side and a diagram of the interpolant
+itself).
+
+```@raw html
+<figure>
+<svg viewBox="0 0 720 170" width="100%" style="max-width:640px;height:auto;font-family:system-ui,-apple-system,'Segoe UI',sans-serif"
+     xmlns="http://www.w3.org/2000/svg" role="img"
+     aria-label="A grid function on the small leaf is wrapped by pi-h into a source, which composes with D-x the same way any other source does, and is assembled by inner-h into the big leaf's block.">
+  <defs>
+    <marker id="arrowFlow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="currentColor"/>
+    </marker>
+  </defs>
+
+  <rect x="10"  y="55" width="160" height="60" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+  <text x="90" y="80" font-size="12" font-weight="bold" fill="currentColor" text-anchor="middle">uₕ on Wsmall</text>
+  <text x="90" y="98" font-size="11" fill="currentColor" opacity="0.75" text-anchor="middle">u(2), the small leaf</text>
+
+  <path d="M 175 85 L 225 85" stroke="currentColor" stroke-width="2" marker-end="url(#arrowFlow)"/>
+
+  <rect x="230" y="45" width="190" height="80" rx="8" fill="none" stroke="#8b5cf6" stroke-width="1.5"/>
+  <text x="325" y="70" font-size="12" font-weight="bold" fill="#8b5cf6" text-anchor="middle">πₕ(u(2))</text>
+  <text x="325" y="88" font-size="11" fill="currentColor" opacity="0.75" text-anchor="middle">a SourceFunction —</text>
+  <text x="325" y="103" font-size="11" fill="currentColor" opacity="0.75" text-anchor="middle">composes with D₋ₓ, M₋ₓ, ...</text>
+
+  <path d="M 425 85 L 475 85" stroke="currentColor" stroke-width="2" marker-end="url(#arrowFlow)"/>
+
+  <rect x="480" y="45" width="230" height="80" rx="8" fill="none" stroke="#10b981" stroke-width="1.5"/>
+  <text x="595" y="68" font-size="12" font-weight="bold" fill="#10b981" text-anchor="middle">innerₕ(πₕ(u(2)), v(1))</text>
+  <text x="595" y="86" font-size="11" fill="currentColor" opacity="0.75" text-anchor="middle">a LinearProduct: assembled</text>
+  <text x="595" y="101" font-size="11" fill="currentColor" opacity="0.75" text-anchor="middle">into Wbig's block, leaf 1</text>
+</svg>
+</figure>
+```
+
+`πₕ(uₕ)` reads exactly like any other source — it is one, an AST leaf wrapping
+`x -> interpolate_at(uₕ, x)` — so it composes with `D₋ₓ`, `M₋ₓ`, and the rest the same way
+`sin`, a `VectorElement`, or any other source does, and can sit on the left of `innerₕ`
+inside a coupled form:
+
+```@example forms
+Ωbig = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (8, 8), (true, true))
+Ωsmall = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (4, 4), (true, true))
+Wbig, Wsmall = gridspace(Ωbig), gridspace(Ωsmall)
+Vh = CompositeGridSpace((Wbig, Wsmall))
+uv = Rₕ(Vh, (x -> 0.0, x -> x[1] + x[2]))   # only the small leaf (2) carries data
+
+lh = form(Vh, v -> innerₕ(πₕ(uv(2)), v(1)) + innerₕ(D₋ₓ(πₕ(uv(2))), D₋ₓ(v(1))))
+b = assemble(lh)
+length(b) == ndofs(Vh)
+```
+
+The two terms land in the same block (leaf 1, `Wbig`) even though the source they read
+from lives on leaf 2's own, coarser mesh — `πₕ` is what makes that a well-posed
+expression rather than a size mismatch. This is exactly what makes a heterogeneous
+composite space useful for more than indexing: leaf 2 can represent one field at a
+resolution the problem calls for, and a term over leaf 1 can still read it.
 
 ## 7. Threading, chosen once on the backend
 

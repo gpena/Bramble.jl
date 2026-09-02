@@ -114,7 +114,16 @@ end
 """
     innerₕ(left::LazyOp{D}, right::LazyOp{D}; markers = ()) where D
 
-Constructs a symbolic \$L^2\$ bilinear inner product between `left` and `right`.
+Constructs a symbolic \$L^2\$ inner product between `left` and `right` — a `LinearProduct`
+(source × test) if `left` is *source-only* ([`_is_source_only`](@ref): a source, or a source
+wrapped in differences/averages/shifts/jumps/restrictions/scales, never a trial function),
+a `BilinearProduct` (trial × test) otherwise.
+
+This matters for a `LazyOp` `left` specifically — a bare `Function`/`Number`/`VectorElement`
+is never anything but a source, so those overloads below build a `LinearProduct`
+unconditionally, but `left` arriving already wrapped (`πₕ(uₕ)`, or `D₋ₓ(πₕ(uₕ))`, point 25)
+needs the check: the two AST shapes carry different stencil contracts, and building the
+wrong one is a structural mismatch, not merely a slower path.
 
 `markers` restricts the assembled term to the union of the labelled regions — a mask on
 which grid points it contributes to at all, the symbolic counterpart of the `markers`
@@ -122,8 +131,12 @@ keyword on the numeric `innerₕ` in `space/inner_product.jl`.
 """
 function innerₕ(left::LazyOp{D}, right::LazyOp{D};
         markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
-    _restrict_by_markers(
-        BilinearProduct{D, InnerH, typeof(left), typeof(right)}(left, right), markers)
+    prod = if _is_source_only(left)
+        LinearProduct{D, InnerH, typeof(left), typeof(right)}(left, right)
+    else
+        BilinearProduct{D, InnerH, typeof(left), typeof(right)}(left, right)
+    end
+    _restrict_by_markers(prod, markers)
 end
 
 # There is deliberately no `innerₕ` over gradient tuples. `inner₊` has one because its

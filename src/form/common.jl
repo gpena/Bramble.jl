@@ -213,6 +213,7 @@ include("operators/difference.jl")
 include("operators/jump.jl")
 include("operators/average.jl")
 include("operators/restriction.jl")
+include("operators/interpolation.jl")
 include("operators/inner.jl")
 
 # ==============================================================================
@@ -342,3 +343,55 @@ is_symbolic(op::CenteredDifference) = is_symbolic(op.inner_op)
 is_symbolic(op::StarDifference) = is_symbolic(op.inner_op)
 is_symbolic(op::CrossWeightedDifference) = is_symbolic(op.inner_op)
 is_symbolic(op::JumpNode) = is_symbolic(op.inner_op)
+
+"""
+    _is_source_only(op::LazyOp) -> Bool
+
+Whether a `LazyOp` subtree is *source-only*: built entirely from sources
+(`SourceFunction`/`SourceVector`) and the plain operators that wrap them, never bottoming
+out in a `TrialFunction`/`IndexedTrialFunction` leaf.
+
+`innerₕ`'s `l::Function`/`l::Number`/`l::VectorElement` overloads (`operators/inner.jl`)
+never need this: those three types are never anything *but* a source, so wrapping them in a
+`LinearProduct` is unconditional. The question only exists for an argument that already
+arrived as a `LazyOp` — `πₕ(uₕ)` ([`interpolate_at`](@ref), point 25) or `D₋ₓ(πₕ(uₕ))` are
+sources too, just already wrapped, and the generic `innerₕ(::LazyOp, ::LazyOp)` used to build
+a `BilinearProduct` regardless, which is the wrong AST shape for a `LinearForm`'s assembly
+walk — a `BilinearProduct`'s stencil carries a *pair* of offsets (trial and test), where
+`_scatter_term!` (`form/linear.jl`) expects one.
+
+A missing case defaults to `false` (the fallback `::LazyOp` method below) — conservative,
+since that is exactly the behaviour every node had before this predicate existed (always
+`BilinearProduct`) for anything not explicitly listed as source-only.
+"""
+_is_source_only(::TrialFunction) = false
+_is_source_only(::TestFunction) = false
+_is_source_only(::IndexedTrialFunction) = false
+_is_source_only(::IndexedTestFunction) = false
+_is_source_only(::SourceFunction) = true
+_is_source_only(::SourceVector) = true
+
+_is_source_only(op::BackwardDifference) = _is_source_only(op.inner_op)
+_is_source_only(op::ForwardDifference) = _is_source_only(op.inner_op)
+_is_source_only(op::CenteredDifference) = _is_source_only(op.inner_op)
+_is_source_only(op::StarDifference) = _is_source_only(op.inner_op)
+_is_source_only(op::CrossWeightedDifference) = _is_source_only(op.inner_op)
+
+_is_source_only(op::BackwardAverage) = _is_source_only(op.inner_op)
+_is_source_only(op::ForwardAverage) = _is_source_only(op.inner_op)
+_is_source_only(op::ShiftNode) = _is_source_only(op.inner_op)
+_is_source_only(op::JumpNode) = _is_source_only(op.inner_op)
+_is_source_only(op::RegionRestriction) = _is_source_only(op.inner_op)
+
+_is_source_only(op::OperatorScale) = _is_source_only(op.inner_op)
+_is_source_only(op::GridFunctionScale) = _is_source_only(op.inner_op)
+function _is_source_only(op::OperatorAdd)
+    _is_source_only(op.left_op) &&
+        _is_source_only(op.right_op)
+end
+
+# A product (whichever kind) is its own thing, not a bare source to route again.
+_is_source_only(::BilinearProduct) = false
+_is_source_only(::LinearProduct) = false
+
+_is_source_only(::LazyOp) = false

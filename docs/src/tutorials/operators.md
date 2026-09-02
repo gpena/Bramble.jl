@@ -10,6 +10,7 @@ This tutorial covers:
 4. Gradients and the other vectorial forms.
 5. Summation by parts and skew-symmetry.
 6. A convergence study, and the boundary effect that will otherwise spoil it.
+7. Interpolating a grid function onto a different mesh, numerically and symbolically.
 
 Every number below was produced by the code shown.
 
@@ -483,3 +484,112 @@ Excluding that single truncated point recovers the expected first order. So when
 measuring convergence, or assembling a scheme, treat the truncated slice explicitly:
 that is where the boundary condition belongs, and leaving the operator's truncated value
 in place silently halves the observed order.
+
+## 10. Interpolation between different meshes
+
+Every operator so far maps a grid space to itself. [`interpolate`](@ref) is the one that
+does not: it moves a grid function from one mesh to a genuinely different one, which is
+what makes a heterogeneous composite space — one whose leaves are built over different
+meshes — useful for more than indexing.
+
+The idea is the standard piecewise (multi)linear interpolant: to read a value at a
+physical point ``x``, find the source mesh's cell containing it
+([`locate_cell`](@ref)) and blend the values at that cell's corners, weighted by how
+close ``x`` is to each one.
+
+```@raw html
+<figure>
+<svg viewBox="0 0 720 330" width="100%" style="max-width:640px;height:auto;font-family:system-ui,-apple-system,'Segoe UI',sans-serif"
+     xmlns="http://www.w3.org/2000/svg" role="img"
+     aria-label="A single cell of the source mesh with its four corner values. A destination point inside the cell is blended from the four corners, weighted by its relative position within the cell along each coordinate.">
+  <defs>
+    <marker id="arrowPurple" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#8b5cf6"/>
+    </marker>
+  </defs>
+
+  <text x="300" y="24" font-size="12" font-weight="bold" fill="currentColor" text-anchor="middle">one cell of Wsrc's mesh</text>
+
+  <!-- the source cell -->
+  <rect x="150" y="50" width="300" height="200" fill="none" stroke="currentColor" stroke-opacity="0.5" stroke-width="1.5"/>
+
+  <!-- corner points -->
+  <circle cx="150" cy="50"  r="5" fill="currentColor"/>
+  <circle cx="450" cy="50"  r="5" fill="currentColor"/>
+  <circle cx="150" cy="250" r="5" fill="currentColor"/>
+  <circle cx="450" cy="250" r="5" fill="currentColor"/>
+  <text x="150" y="35" font-size="12" fill="currentColor" text-anchor="middle">u[i, j+1]</text>
+  <text x="450" y="35" font-size="12" fill="currentColor" text-anchor="middle">u[i+1, j+1]</text>
+  <text x="150" y="272" font-size="12" fill="currentColor" text-anchor="middle">u[i, j]</text>
+  <text x="450" y="272" font-size="12" fill="currentColor" text-anchor="middle">u[i+1, j]</text>
+
+  <!-- weight labels, each beside its own corner -->
+  <text x="150" y="90" font-size="11" fill="currentColor" opacity="0.75" text-anchor="middle">(1-tₓ)(1-t_y)</text>
+  <text x="450" y="90" font-size="11" fill="currentColor" opacity="0.75" text-anchor="middle">tₓ(1-t_y)</text>
+  <text x="150" y="235" font-size="11" fill="currentColor" opacity="0.75" text-anchor="middle">(1-tₓ)t_y</text>
+  <text x="450" y="235" font-size="11" fill="currentColor" opacity="0.75" text-anchor="middle">tₓ t_y</text>
+
+  <!-- destination point -->
+  <circle cx="330" cy="105" r="6" fill="#10b981" stroke="currentColor" stroke-width="1.2"/>
+  <text x="330" y="90" font-size="12" font-weight="bold" fill="#10b981" text-anchor="middle">x  (a point of Wdest)</text>
+
+  <!-- guide lines to the two edges, showing tx and ty -->
+  <line x1="330" y1="105" x2="330" y2="250" stroke="#8b5cf6" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <line x1="330" y1="105" x2="150" y2="105" stroke="#8b5cf6" stroke-width="1.5" stroke-dasharray="4,3"/>
+
+  <path d="M 150 285 L 330 285" stroke="#8b5cf6" stroke-width="2" fill="none" marker-end="url(#arrowPurple)"/>
+  <text x="240" y="303" font-size="12" fill="#8b5cf6" text-anchor="middle">tₓ = (x₁ - u[i]) / (u[i+1] - u[i])</text>
+
+  <path d="M 480 250 L 480 105" stroke="#8b5cf6" stroke-width="2" fill="none" marker-end="url(#arrowPurple)"/>
+  <text x="600" y="180" font-size="12" fill="#8b5cf6" text-anchor="middle">t_y, the same</text>
+  <text x="600" y="196" font-size="12" fill="#8b5cf6" text-anchor="middle">idea along y</text>
+</svg>
+</figure>
+```
+
+The four weights always sum to ``1`` — a partition of unity — so the interpolant never
+overshoots the range of the four corner values. [`interpolate_at`](@ref) computes this
+directly at one point; [`interpolate`](@ref)/[`interpolate!`](@ref) apply it at every
+point of a destination space, and are exactly [`Rₕ`](@ref)/[`Rₕ!`](@ref) applied to the
+interpolant as an ordinary function of position — restricting a continuous function and
+interpolating a discrete one are the same mechanism, `interpolate` is just the case where
+that function happens to be another grid function's own interpolant:
+
+```@repl operators
+Ωbig = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (10, 10), (true, true));
+Ωsmall = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (4, 4), (true, true));
+Wbig, Wsmall = gridspace(Ωbig), gridspace(Ωsmall);
+src = Rₕ(Wsmall, x -> x[1] + x[2]);   # affine, so the interpolant is exact
+dest = interpolate(Wbig, src);
+exact = Rₕ(Wbig, x -> x[1] + x[2]);
+maximum(abs, values(dest) .- values(exact))
+```
+
+Once `interpolate` returns an ordinary [`VectorElement`](@ref), every operator above just
+applies to it as normal — `D₋ₓ(dest)`, `M₋ₓ(dest)`, a bilinear form, anything.
+
+### As a matrix
+
+Like [`D₋ₓ`](@ref)`(Wₕ)` above, the interpolant is also available as a matrix — but
+between the *two* spaces rather than one, and rectangular rather than square, since
+`Wdest` and `Wsrc` generally carry a different number of degrees of freedom:
+
+```@repl operators
+P = interpolation_matrix(Wbig, Wsmall);
+size(P)
+P * values(src) ≈ values(dest)
+```
+
+Each row of `P` has at most ``2^D`` nonzero entries — one destination point's corner
+weights — so it is genuinely sparse, and it is always a `SparseMatrixCSC` regardless of
+either space's own backend `matrix_type`: unlike the shift-based matrices above, a
+destination point's source cell has no regular diagonal structure to exploit, so `P` is
+assembled directly from `locate_cell` rather than composed from `shift`.
+
+### Composing symbolically, inside a form
+
+The symbolic counterpart is [`πₕ`](@ref): it wraps a grid function's interpolant as an
+AST source, so it composes with the same operators any other source does —
+`D₋ₓ(πₕ(uₕ))`, `M₋ₓ(πₕ(uₕ))` — and can appear on the left of [`innerₕ`](@ref) inside a
+[`form`](@ref). See the [forms tutorial](form.md) for a worked example against a
+heterogeneous composite space.
