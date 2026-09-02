@@ -58,7 +58,7 @@ See also: [`Rₕ`](@ref), [`avgₕ!`](@ref), [`element`](@ref)
 # case, every time step of a PDE solve -- resolves directly to one of them, never touching
 # the keyword-sorter machinery the generic method further below generates. Going through that
 # machinery still cost 96 B here, no matter how the callee itself was typed, deep enough under
-# a keyword-taking caller that escape analysis gave up on the `_parallel_for!` closure
+# a keyword-taking caller that escape analysis gave up on the `_cpu_threaded_for!` closure
 # regardless. They stay more specific than the keyword method's bare `uₕ::VectorElement`, so
 # they take priority for a concrete Scalar/Composite element without colliding with the
 # keyword-sorter's own auto-generated no-kwarg stub. Matches `_avgₕ!`'s plain/keyword split.
@@ -72,7 +72,7 @@ See also: [`Rₕ`](@ref), [`avgₕ!`](@ref), [`element`](@ref)
     raw = values(uₕ)
     idxs = indices(Ωₕ)
     n = length(idxs)
-    _parallel_for!(raw, 1:n, i -> f(point(Ωₕ, idxs[i])))
+    _cpu_threaded_for!(raw, 1:n, i -> f(point(Ωₕ, idxs[i])))
     return uₕ
 end
 
@@ -83,7 +83,7 @@ end
     raws = ntuple(i -> values(comps[i]), Val(NC))
     idxs = indices(Ωₕ)
     n = length(idxs)
-    _scatter_for!(raws, 1:n, i -> f(point(Ωₕ, idxs[i])))
+    _cpu_threaded_scatter_for!(raws, 1:n, i -> f(point(Ωₕ, idxs[i])))
     return uₕ
 end
 

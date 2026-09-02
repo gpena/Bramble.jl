@@ -420,7 +420,7 @@ end
             #
             # Both sizes have to sit on the same side of the threading threshold.
             # Straddling it compares a serial call against a threaded one and so
-            # measures the threshold rather than the scaling. See PARALLEL_FOR_MIN.
+            # measures the threshold rather than the scaling. See CPU_THREADED_MIN.
             small = avg_bytes(32)      # 1_024 degrees of freedom
             large = avg_bytes(1024)    # 1_048_576 degrees of freedom
 
@@ -437,7 +437,7 @@ end
             #
             # An earlier version of this probe built a kernel and called it directly, and
             # reported the fold surviving on the very job that was failing — calling the
-            # closure on its own folds where inlining it into `_parallel_for!` does not.
+            # closure on its own folds where inlining it into `_cpu_threaded_for!` does not.
             # Hence measuring the real path rather than a stand-in for it.
             let per_point = (large - small) / (1_048_576 - 1_024)
                 @info "avgₕ! allocation diagnostic: " *
@@ -606,14 +606,14 @@ end
 end
 
 @testset "Threaded scatter path" begin
-    import Bramble: values, PARALLEL_FOR_MIN, components
+    import Bramble: values, CPU_THREADED_MIN, components
 
-    # The single-pass scatter only threads above PARALLEL_FOR_MIN indices, so a
+    # The single-pass scatter only threads above CPU_THREADED_MIN indices, so a
     # grid large enough to cross that threshold is needed to exercise it at all.
     # Derived from the constant rather than hardcoded, so that raising the
     # threshold cannot silently turn this into a test of the serial path.
-    n = ceil(Int, sqrt(PARALLEL_FOR_MIN)) + 1
-    @test n * n > PARALLEL_FOR_MIN
+    n = ceil(Int, sqrt(CPU_THREADED_MIN)) + 1
+    @test n * n > CPU_THREADED_MIN
     Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (n, n))
     W = gridspace(Ωₕ)
 

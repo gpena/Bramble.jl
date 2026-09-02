@@ -1,6 +1,6 @@
 using Test
 using Bramble
-using Bramble: _dot, _inner_product, _parallel_for!, _serial_for!
+using Bramble: _dot, _inner_product, _cpu_threaded_for!, _serial_for!
 using LinearAlgebra: Diagonal, dot
 using StaticArrays
 
@@ -149,21 +149,21 @@ using StaticArrays
         end
     end
 
-    @testset "_parallel_for!" begin
+    @testset "_cpu_threaded_for!" begin
         n = 100
         v = zeros(n)
         idxs = 1:n
 
         # Test parallel assignment
         f = i -> Float64(i^2)
-        _parallel_for!(v, idxs, f)
+        _cpu_threaded_for!(v, idxs, f)
         @test v == [Float64(i^2) for i in 1:n]
 
         # Test with partial indices
         v2 = ones(n)
         idxs_partial = 10:50
         f2 = i -> Float64(i * 2)
-        _parallel_for!(v2, idxs_partial, f2)
+        _cpu_threaded_for!(v2, idxs_partial, f2)
         @test v2[1:9] == ones(9)
         @test v2[10:50] == [Float64(i * 2) for i in 10:50]
         @test v2[51:100] == ones(50)
@@ -172,7 +172,7 @@ using StaticArrays
         B = zeros(10, 10)
         cart_idxs = CartesianIndices(B)
         f3 = idx -> Float64(idx[1] * idx[2])
-        _parallel_for!(B, cart_idxs, f3)
+        _cpu_threaded_for!(B, cart_idxs, f3)
         for i in 1:10, j in 1:10
 
             @test B[i, j] ≈ Float64(i * j)
@@ -183,7 +183,7 @@ using StaticArrays
         v_parallel = zeros(n)
         f_test = i -> sin(Float64(i)) + cos(Float64(i))
         _serial_for!(v_serial, idxs, f_test)
-        _parallel_for!(v_parallel, idxs, f_test)
+        _cpu_threaded_for!(v_parallel, idxs, f_test)
         @test v_serial ≈ v_parallel
     end
 

@@ -167,11 +167,11 @@ using Bramble: values, components, _difference_engine!, _average_engine!,
             (alloc_test(Rₕ!, u, sin), alloc_test(avgₕ!, u, sin))
         end
         # Both sizes stay below the threading thresholds, which are
-        # PARALLEL_FOR_MIN for Rₕ! and PARALLEL_FOR_MIN / quad_points for avgₕ!.
+        # CPU_THREADED_MIN for Rₕ! and CPU_THREADED_MIN / quad_points for avgₕ!.
         # Straddling one of them compares a serial call against a threaded one and
         # measures the threshold rather than the scaling: avgₕ! at 4096 points
         # allocates 2080 bytes for its tasks against 128 serial.
-        @test 2048 < Bramble.PARALLEL_FOR_MIN ÷ Bramble.AVG_QUAD_POINTS
+        @test 2048 < Bramble.CPU_THREADED_MIN ÷ Bramble.AVG_QUAD_POINTS
         small = inplace_bytes(16)
         large = inplace_bytes(2048)          # 128x the degrees of freedom
         @test small == large

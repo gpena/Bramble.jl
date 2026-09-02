@@ -101,7 +101,7 @@ end
 # evaluations, so a kernel this expensive per index reaches the crossover
 # at proportionally fewer indices.
 @inline _avg_min_work(::Val{D}, ::Val{NQ}) where {D, NQ} = max(
-    1, cld(PARALLEL_FOR_MIN, NQ^D))
+    1, cld(CPU_THREADED_MIN, NQ^D))
 
 @inline function _avgₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f::F, ::Val{1}, nq::Val{NQ}) where {
         F, NQ}
@@ -114,7 +114,7 @@ end
     n = length(idxs)
     nodes, wts = _gauss_rule(nq, T)
 
-    _parallel_for!(raw, 1:n, i -> _cell_average(f, x, idxs[i][1], nodes, wts);
+    _cpu_threaded_for!(raw, 1:n, i -> _cell_average(f, x, idxs[i][1], nodes, wts);
         min_work = _avg_min_work(Val(1), nq))
     return uₕ
 end
@@ -130,7 +130,7 @@ end
     n = length(idxs)
     nodes, wts = _gauss_rule(nq, T)
 
-    _parallel_for!(raw, 1:n, i -> _cell_average(f, x, idxs[i], nodes, wts);
+    _cpu_threaded_for!(raw, 1:n, i -> _cell_average(f, x, idxs[i], nodes, wts);
         min_work = _avg_min_work(Val(D), nq))
     return uₕ
 end
@@ -162,7 +162,8 @@ end
     n = length(idxs)
     nodes, wts = _gauss_rule(nq, T)
 
-    _scatter_for!(raws, 1:n, i -> _cell_average(f, x, idxs[i][1], nodes, wts, Val(NC));
+    _cpu_threaded_scatter_for!(
+        raws, 1:n, i -> _cell_average(f, x, idxs[i][1], nodes, wts, Val(NC));
         min_work = _avg_min_work(Val(1), nq))
     return uₕ
 end
@@ -178,7 +179,8 @@ end
     n = length(idxs)
     nodes, wts = _gauss_rule(nq, T)
 
-    _scatter_for!(raws, 1:n, i -> _cell_average(f, x, idxs[i], nodes, wts, Val(NC));
+    _cpu_threaded_scatter_for!(
+        raws, 1:n, i -> _cell_average(f, x, idxs[i], nodes, wts, Val(NC));
         min_work = _avg_min_work(Val(D), nq))
     return uₕ
 end
@@ -406,7 +408,7 @@ end
 #
 # What made it expensive to diagnose: a probe that built the kernel and called it directly
 # reported the fold surviving *on the failing machine*. Calling the closure on its own
-# folds; inlining it into `_parallel_for!`'s loop does not. So the probe has to measure the
+# folds; inlining it into `_cpu_threaded_for!`'s loop does not. So the probe has to measure the
 # real path, and the test now does.
 #
 # The trade was therefore 96 bytes per thread against 80 MiB per million points on one of

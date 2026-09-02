@@ -3,9 +3,9 @@
 end
 
 """
-	PARALLEL_FOR_MIN
+	CPU_THREADED_MIN
 
-Default work threshold below which [`_parallel_for!`](@ref) runs serially. It
+Default work threshold below which [`_cpu_threaded_for!`](@ref) runs serially. It
 counts *evaluations*, not indices: a caller whose kernel does more than one
 function evaluation per index passes a proportionally smaller `min_work`.
 
@@ -34,21 +34,21 @@ below a few thousand points.
 Running short loops serially also makes them allocation free, which matters when
 the caller is a time-stepping loop invoking this once per step.
 """
-const PARALLEL_FOR_MIN = 16_384
+const CPU_THREADED_MIN = 16_384
 
 """
 	$(SIGNATURES)
 
 Applies `f` across `idxs`, writing into `v` in place, using static thread
 scheduling once there is enough work to be worth it and running serially
-otherwise. See [`PARALLEL_FOR_MIN`](@ref).
+otherwise. See [`CPU_THREADED_MIN`](@ref).
 
 # Arguments
 - `v`: Array to be modified in-place
 - `idxs`: Iterable of indices to process
 - `f`: Function that takes an index and returns the value to be stored at that index
 """
-@inline function _parallel_for!(v, idxs, f; min_work::Int = PARALLEL_FOR_MIN)
+@inline function _cpu_threaded_for!(v, idxs, f; min_work::Int = CPU_THREADED_MIN)
     # `@inline` is load-bearing, not decoration. Without it this function allocated 64 bytes
     # on every call that took the serial branch, so `Rₕ!` cost 64 B and `avgₕ!` 128 B on grids
     # too small to thread, forever, however often they were called. The cause is the
@@ -117,8 +117,8 @@ function _masked_for!(v, masks::Tuple, g)
     return nothing
 end
 
-# The masked counterpart of `_scatter_for!`, standing to it as `_masked_for!` stands to
-# `_parallel_for!`: writes only where a mask selects, leaving every other entry zero.
+# The masked counterpart of `_cpu_threaded_scatter_for!`, standing to it as `_masked_for!` stands to
+# `_cpu_threaded_for!`: writes only where a mask selects, leaving every other entry zero.
 #
 # Serial by construction. The marked region is a boundary slice in every use so far, which
 # is O(n^(D-1)) against the O(n^D) of the whole grid, and threading it would cost more than
@@ -140,7 +140,7 @@ end
 #=========================================================================
 Scattering a tuple-valued kernel across several arrays.
 
-`_parallel_for!` writes one value per index into one array. When the kernel
+`_cpu_threaded_for!` writes one value per index into one array. When the kernel
 returns a tuple instead -- one value per component of a multi-component field --
 the alternative is to call it once per component and keep only the i-th result,
 which evaluates it `NC` times per index and discards `NC - 1` of every `NC`
@@ -167,15 +167,15 @@ end
 	$(SIGNATURES)
 
 Applies `g` across `idxs` and scatters each returned tuple over the arrays in
-`mats`, threading on the same terms as [`_parallel_for!`](@ref).
+`mats`, threading on the same terms as [`_cpu_threaded_for!`](@ref).
 
 # Arguments
 - `mats`: Tuple of arrays to be modified in-place, one per component
 - `idxs`: Iterable of indices to process
 - `g`: Function taking an index and returning a tuple of values, one per array
 """
-@inline function _scatter_for!(mats::Tuple, idxs, g; min_work::Int = PARALLEL_FOR_MIN)
-    # `@inline` for the same reason as `_parallel_for!` above.
+@inline function _cpu_threaded_scatter_for!(mats::Tuple, idxs, g; min_work::Int = CPU_THREADED_MIN)
+    # `@inline` for the same reason as `_cpu_threaded_for!` above.
     if Threads.nthreads() == 1 || length(idxs) < min_work
         @inbounds for idx in idxs
             _write_components!(mats, g(idx), idx)
