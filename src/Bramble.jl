@@ -3,7 +3,7 @@ module Bramble
 using DocStringExtensions
 
 import Base: eltype, length
-import Base: show, first, last, getindex, setindex!, iterate, size, ndims, firstindex,
+import Base: show, first, last, getindex, setindex!, iterate, size, firstindex,
              lastindex, axes, eachindex
 
 using SparseArrays: SparseMatrixCSC, spdiagm, spzeros,
@@ -11,9 +11,9 @@ using SparseArrays: SparseMatrixCSC, spdiagm, spzeros,
 
 using FunctionWrappers: FunctionWrapper
 
-using StaticArrays: SVector, @SVector
+using StaticArrays: SVector
 
-using LinearAlgebra: I, transpose, dot
+using LinearAlgebra: I, dot
 import LinearAlgebra: issymmetric, isposdef
 
 import Base: copy
