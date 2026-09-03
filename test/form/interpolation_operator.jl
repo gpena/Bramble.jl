@@ -6,7 +6,7 @@ using ForwardDiff
 using Bramble: CompositeGridSpace, form, assemble, assemble!, assemble_parallel!,
                allocate_system_matrix, weights, Innerh, Innerplus, TrialFunction,
                TestFunction, InterpolationNode, AbsoluteColumn, _trial_column,
-               _interp_src_space, _bears_interpolation, stencil_shift_trait,
+               _all_trial_interpolated, _check_interp_spaces, stencil_shift_trait,
                TranslationInvariantStencil, PointDependentStencil, shifted_inner_stencil,
                shift_stencil, local_stencil, markers, LinearProduct, shift_op, jumpₓ,
                resolve_form_ast
@@ -278,6 +278,50 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
             (u, v) -> innerₕ(πₕ(Wsmall, u(2)), v(1)) + innerₕ(u(1), v(2))))
     end
 
+    @testset "Mixed sums are refused" begin
+        # A term contributing *both* absolute columns and ordinary offsets: the offsets are
+        # still read out of the index space being walked, so the two leaves still have to
+        # share one. The first version of this file asked only whether an interpolation
+        # appeared anywhere in the term, which exempted the bare `u` along with it — and in
+        # the direction where the trial space is the larger one, the bare `u`'s column landed
+        # *in range* and simply wrong. Measured at 0.25 absolute error on a 5×9 block, with
+        # no error raised: the same silent-wrong answer point 69 exists to refuse.
+        Ω = domain(interval(0.0, 1.0))
+        Wbig = gridspace(mesh(Ω, 9, true))
+        Wsml = gridspace(mesh(Ω, 5, true))
+        Wt = gridspace(mesh(Ω, 11, true))
+
+        # the silent direction, and the loud one
+        @test_throws ArgumentError assemble(form(
+            Wbig, Wsml, (u, v) -> innerₕ(πₕ(Wbig, u) + u, v)))
+        @test_throws ArgumentError assemble(form(
+            Wsml, Wt, (u, v) -> innerₕ(πₕ(Wsml, u) + u, v)))
+        # under an outer operator, and with the plain factor on the left
+        @test_throws ArgumentError assemble(form(
+            Wbig, Wsml, (u, v) -> inner₊ₓ(D₋ₓ(πₕ(Wbig, u) + u), D₋ₓ(v))))
+        @test_throws ArgumentError assemble(form(
+            Wbig, Wsml, (u, v) -> innerₕ(u + πₕ(Wbig, u), v)))
+        # and at the pattern entry point, not only at assembly
+        @test_throws ArgumentError allocate_system_matrix(form(
+            Wbig, Wsml, (u, v) -> innerₕ(πₕ(Wbig, u) + u, v)))
+
+        # two interpolations in one term are both checked, so one from the wrong space is
+        # caught wherever it sits
+        @test_throws ArgumentError assemble(form(
+            Wbig, Wt, (u, v) -> innerₕ(πₕ(Wbig, u) + πₕ(Wsml, u), v)))
+        @test_throws ArgumentError assemble(form(
+            Wbig, Wt, (u, v) -> innerₕ(πₕ(Wbig, u), v) +
+                                inner₊ₓ(D₋ₓ(πₕ(Wsml, u)), D₋ₓ(v))))
+
+        # what must keep working: a sum of interpolations from the *same* space, and a mix on
+        # a single mesh, where the offsets are meaningful and `P` is the identity
+        P = interpolation_matrix(Wt, Wbig)
+        A = assemble(form(Wbig, Wt, (u, v) -> innerₕ(πₕ(Wbig, u) + πₕ(Wbig, u), v)))
+        @test A ≈ 2 * Hh(Wt) * P
+        A = assemble(form(Wt, Wt, (u, v) -> innerₕ(πₕ(Wt, u) + u, v)))
+        @test A ≈ 2 * Hh(Wt)
+    end
+
     @testset "Traits and stencils" begin
         Ω = domain(interval(0.0, 1.0))
         Wt = gridspace(mesh(Ω, 11, true))
@@ -287,18 +331,39 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
 
         @test node isa InterpolationNode
 
-        # which space a term interpolates from, under any tower of wrappers
-        @test _interp_src_space(node) === Ws
-        @test _interp_src_space(D₋ₓ(M₋ₓ(node))) === Ws
-        @test _interp_src_space(2.0 * node) === Ws
-        @test _interp_src_space(node + node) === Ws
-        @test _interp_src_space(u) === nothing
-        @test _interp_src_space(D₋ₓ(u)) === nothing
-        @test _bears_interpolation(innerₕ(node, v))
-        @test !_bears_interpolation(innerₕ(u, v))
+        # whether *every* trial column the term contributes is an absolute one, under any
+        # tower of wrappers. Not "does an interpolation appear anywhere" — see the mixed-sum
+        # testset below for why that distinction is the whole ballgame.
+        @test _all_trial_interpolated(node)
+        @test _all_trial_interpolated(D₋ₓ(M₋ₓ(node)))
+        @test _all_trial_interpolated(2.0 * node)
+        @test _all_trial_interpolated(node + node)
+        @test _all_trial_interpolated(innerₕ(node, v))
+        @test !_all_trial_interpolated(u)
+        @test !_all_trial_interpolated(D₋ₓ(u))
+        @test !_all_trial_interpolated(innerₕ(u, v))
+        # one summand interpolating is not enough, in either position
+        @test !_all_trial_interpolated(node + u)
+        @test !_all_trial_interpolated(u + node)
+        @test !_all_trial_interpolated(D₋ₓ(node + u))
+        @test !_all_trial_interpolated(innerₕ(node + u, v))
+        # a node contributing no trial column at all answers vacuously — there is nothing
+        # there that would need a mesh correspondence
+        @test _all_trial_interpolated(v)
+        @test _all_trial_interpolated(πₕ(Rₕ(Ws, x -> x)))
         # a linear product contracts its left factor away, so it contributes no column
-        @test _interp_src_space(innerₕ(πₕ(Rₕ(Ws, x -> x)), v)) === nothing
+        @test _all_trial_interpolated(innerₕ(πₕ(Rₕ(Ws, x -> x)), v))
         @test innerₕ(πₕ(Rₕ(Ws, x -> x)), v) isa LinearProduct
+
+        # every interpolation is validated against the leaf it writes into, not just the
+        # first one a walk finds
+        @test _check_interp_spaces(node, Ws) === nothing
+        @test _check_interp_spaces(D₋ₓ(node), Ws) === nothing
+        @test _check_interp_spaces(u, Ws) === nothing
+        @test_throws ArgumentError _check_interp_spaces(node, Wt)
+        @test_throws ArgumentError _check_interp_spaces(D₋ₓ(M₋ₓ(node)), Wt)
+        @test_throws ArgumentError _check_interp_spaces(πₕ(Wt, u) + node, Ws)
+        @test_throws ArgumentError _check_interp_spaces(node + πₕ(Wt, u), Ws)
 
         # the shift trait: an interpolation cannot be relabelled, a trial function can
         @test stencil_shift_trait(node) isa PointDependentStencil
@@ -428,7 +493,9 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         Ws = gridspace(mesh(Ω, 7, true))
         cₕ = Rₕ(Wt, x -> 1 + x)
         a = form(Ws, Wt, (u, v) -> innerₕ(cₕ * πₕ(Ws, u), v))
-        @test _interp_src_space(a.ast) === Ws
+        @test _all_trial_interpolated(a.ast)
+        @test _check_interp_spaces(a.ast, Ws) === nothing
+        @test_throws ArgumentError _check_interp_spaces(a.ast, Wt)
         @test assemble(a) ≈ Hh(Wt) * Diagonal(values(cₕ)) * interpolation_matrix(Wt, Ws)
     end
 end

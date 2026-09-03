@@ -184,50 +184,87 @@ function stencil_shift_trait(op::OperatorAdd)
         stencil_shift_trait(op.left_op), stencil_shift_trait(op.right_op))
 end
 
-# --- Which space a term interpolates from, if any ------------------------------------ #
+# --- Which trial contributions interpolate, and from where --------------------------- #
 #
-# `nothing` when the term's trial entries are ordinary offsets, and the source space itself
-# when they are absolute columns of another space (`AbsoluteColumn`, above). Two things want
-# this, and both need more than a yes/no: whether the two leaves of a coupled block may be
-# over different meshes at all, and — since they may — whether the space the interpolation
-# names is in fact the trial leaf whose columns the block writes into
-# (`_check_block_meshes`, point 69/61).
+# Two questions, and conflating them is a silent-wrong answer.
 #
-# Type-determined at every rung, so `_interp_src_space(term) === nothing` is a compile-time
-# constant and the branches it guards fold away.
-_interp_src_space(::LazyOp) = nothing
-_interp_src_space(op::InterpolationNode) = op.src_space
-_interp_src_space(op::BackwardDifference) = _interp_src_space(op.inner_op)
-_interp_src_space(op::ForwardDifference) = _interp_src_space(op.inner_op)
-_interp_src_space(op::CenteredDifference) = _interp_src_space(op.inner_op)
-_interp_src_space(op::StarDifference) = _interp_src_space(op.inner_op)
-_interp_src_space(op::CrossWeightedDifference) = _interp_src_space(op.inner_op)
-_interp_src_space(op::BackwardAverage) = _interp_src_space(op.inner_op)
-_interp_src_space(op::ForwardAverage) = _interp_src_space(op.inner_op)
-_interp_src_space(op::ShiftNode) = _interp_src_space(op.inner_op)
-_interp_src_space(op::JumpNode) = _interp_src_space(op.inner_op)
-_interp_src_space(op::RegionRestriction) = _interp_src_space(op.inner_op)
-_interp_src_space(op::OperatorScale) = _interp_src_space(op.inner_op)
-_interp_src_space(op::GridFunctionScale) = _interp_src_space(op.inner_op)
-function _interp_src_space(op::OperatorAdd)
-    _either_interp_space(
-        _interp_src_space(op.left_op), _interp_src_space(op.right_op))
+# `_all_trial_interpolated` asks whether **every** trial column the term contributes comes
+# from an interpolation. Only then is the term exempt from the cross-mesh refusal
+# (`_check_block_meshes`, point 69). A sum like `πₕ(Wsrc, u) + u` contributes absolute
+# columns from one summand and ordinary offsets from the other, and the offsets still need
+# the two leaves to share an index space. The first version of this file asked only "does an
+# interpolation appear anywhere in the term", which exempted the bare `u` along with the
+# interpolation and assembled it against wrong columns without a word — measured at 0.25
+# absolute error on a 5&times;9 block, in range and therefore silent, which is exactly the
+# failure point 69 exists to refuse.
+#
+# `_check_interp_spaces` then validates **each** interpolation in the term against the trial
+# leaf rather than one of them: the columns are numbered in that node's own `Wsrc` and written
+# into the trial leaf's column range, so every node has to agree with it, not just whichever
+# one a walk happened to find first.
+#
+# Both are decided by the operator's type alone, so each rung folds to a constant.
+
+# A node that contributes no trial column at all — a source, a test function — answers `true`
+# vacuously: there is nothing there needing a mesh correspondence.
+_all_trial_interpolated(::LazyOp) = false
+_all_trial_interpolated(::InterpolationNode) = true
+_all_trial_interpolated(::SourceFunction) = true
+_all_trial_interpolated(::SourceVector) = true
+_all_trial_interpolated(::TestFunction) = true
+_all_trial_interpolated(::IndexedTestFunction) = true
+
+_all_trial_interpolated(op::BackwardDifference) = _all_trial_interpolated(op.inner_op)
+_all_trial_interpolated(op::ForwardDifference) = _all_trial_interpolated(op.inner_op)
+_all_trial_interpolated(op::CenteredDifference) = _all_trial_interpolated(op.inner_op)
+_all_trial_interpolated(op::StarDifference) = _all_trial_interpolated(op.inner_op)
+_all_trial_interpolated(op::CrossWeightedDifference) = _all_trial_interpolated(op.inner_op)
+_all_trial_interpolated(op::BackwardAverage) = _all_trial_interpolated(op.inner_op)
+_all_trial_interpolated(op::ForwardAverage) = _all_trial_interpolated(op.inner_op)
+_all_trial_interpolated(op::ShiftNode) = _all_trial_interpolated(op.inner_op)
+_all_trial_interpolated(op::JumpNode) = _all_trial_interpolated(op.inner_op)
+_all_trial_interpolated(op::RegionRestriction) = _all_trial_interpolated(op.inner_op)
+_all_trial_interpolated(op::OperatorScale) = _all_trial_interpolated(op.inner_op)
+_all_trial_interpolated(op::GridFunctionScale) = _all_trial_interpolated(op.inner_op)
+
+# A sum needs *both* summands to interpolate — the whole point of this predicate.
+function _all_trial_interpolated(op::OperatorAdd)
+    _all_trial_interpolated(op.left_op) &&
+        _all_trial_interpolated(op.right_op)
 end
 
 # Only the trial side of a product contributes columns, so only the trial side is asked. A
-# linear product contributes none at all — its left factor is contracted away
+# linear product contributes none — its left factor is contracted away
 # (`multiply_stencils_linear`), which is why a source interpolation belongs there and an
 # operator one does not.
-_interp_src_space(op::BilinearProduct) = _interp_src_space(op.left_op)
-_interp_src_space(op::LinearProduct) = nothing
+_all_trial_interpolated(op::BilinearProduct) = _all_trial_interpolated(op.left_op)
+_all_trial_interpolated(op::LinearProduct) = true
 
-@inline _either_interp_space(::Nothing, ::Nothing) = nothing
-@inline _either_interp_space(a, ::Nothing) = a
-@inline _either_interp_space(::Nothing, b) = b
-# Both summands interpolate. Taking the left one is enough: the block they write into is one
-# block, so if they named different spaces the check on the way in would fail for one of them
-# whichever was reported.
-@inline _either_interp_space(a, b) = a
+# Validate every interpolation the term carries against the leaf whose columns it writes into.
+_check_interp_spaces(::Any, trial_leaf) = nothing
+function _check_interp_spaces(op::InterpolationNode, trial_leaf)
+    _check_one_interp_space(
+        op, op.src_space, trial_leaf)
+end
 
-# Whether the term's trial entries are absolute columns rather than offsets.
-_bears_interpolation(term) = _interp_src_space(term) !== nothing
+_check_interp_spaces(op::BackwardDifference, t) = _check_interp_spaces(op.inner_op, t)
+_check_interp_spaces(op::ForwardDifference, t) = _check_interp_spaces(op.inner_op, t)
+_check_interp_spaces(op::CenteredDifference, t) = _check_interp_spaces(op.inner_op, t)
+_check_interp_spaces(op::StarDifference, t) = _check_interp_spaces(op.inner_op, t)
+_check_interp_spaces(op::CrossWeightedDifference, t) = _check_interp_spaces(op.inner_op, t)
+_check_interp_spaces(op::BackwardAverage, t) = _check_interp_spaces(op.inner_op, t)
+_check_interp_spaces(op::ForwardAverage, t) = _check_interp_spaces(op.inner_op, t)
+_check_interp_spaces(op::ShiftNode, t) = _check_interp_spaces(op.inner_op, t)
+_check_interp_spaces(op::JumpNode, t) = _check_interp_spaces(op.inner_op, t)
+_check_interp_spaces(op::RegionRestriction, t) = _check_interp_spaces(op.inner_op, t)
+_check_interp_spaces(op::OperatorScale, t) = _check_interp_spaces(op.inner_op, t)
+_check_interp_spaces(op::GridFunctionScale, t) = _check_interp_spaces(op.inner_op, t)
+
+function _check_interp_spaces(op::OperatorAdd, t)
+    _check_interp_spaces(op.left_op, t)
+    _check_interp_spaces(op.right_op, t)
+    return nothing
+end
+
+_check_interp_spaces(op::BilinearProduct, t) = _check_interp_spaces(op.left_op, t)
+_check_interp_spaces(op::LinearProduct, t) = nothing

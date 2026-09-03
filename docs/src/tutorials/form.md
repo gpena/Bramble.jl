@@ -351,8 +351,13 @@ A *bilinear* term coupling two leaves over different meshes is a different matte
 refused:
 
 ```julia
-form(Vh, Vh, (u, v) -> innerₕ(u(2), v(1)))     # ArgumentError: ... over different meshes ...
+assemble(form(Vh, Vh, (u, v) -> innerₕ(u(2), v(1))))   # ArgumentError: ... over different meshes ...
 ```
+
+(The refusal is raised when the matrix is built, not when the form is written: `form` resolves
+the expression, and which leaves a term couples is a question about the spaces it is assembled
+against. `allocate_system_matrix` refuses it too, so neither entry point can be reached
+around.)
 
 A coupled block is assembled by walking the test leaf's grid and reading the trial column out
 of that same index space, so it needs the two leaves to agree on what an index means. Two
@@ -426,7 +431,7 @@ so pairing it with the wrong space would write into the wrong part of the matrix
 silent-wrong answer the cross-mesh refusal exists to prevent. It is checked, not assumed:
 
 ```julia
-form(Vh, Vh, (u, v) -> innerₕ(πₕ(Wbig, u(2)), v(1)))   # ArgumentError: ... not the trial function's ...
+assemble(form(Vh, Vh, (u, v) -> innerₕ(πₕ(Wbig, u(2)), v(1))))   # ArgumentError: ... not the trial function's ...
 ```
 
 The second is that the operator goes *outside*, never inside. `D₋ₓ(πₕ(Wsmall, u(2)))`
@@ -438,6 +443,42 @@ it is refused:
 ```julia
 form(Vh, Vh, (u, v) -> innerₕ(πₕ(Wsmall, D₋ₓ(u(2))), v(1)))   # ArgumentError: ... is a different operator ...
 ```
+
+### 6.2 What the operator does not do
+
+**Only the trial side.** `πₕ(Wsrc, v)` on a test function is refused, so interpolating
+*both* arguments — `innerₕ(πₕ(u), πₕ(v))`, the ``P^\top H P`` that would give a coarse
+space's mass matrix computed by a finer mesh's quadrature — is not available:
+
+```julia
+form(Wsmall, Wsmall, (u, v) -> innerₕ(πₕ(Wsmall, u), πₕ(Wsmall, v)))   # ArgumentError: ...
+```
+
+(This one *is* raised as the form is written — `πₕ` refuses the test function on the spot,
+before there is a matrix to assemble.)
+
+This is a limitation of `form`, not of the interpolation. A form has exactly two spaces, and
+the test space doubles as the mesh integrated over: rows come from it and so does the
+quadrature weight. ``P^\top H P`` needs *three* — trial and test both on `Wsrc`, quadrature on
+a mesh that is neither — and there is nowhere in `form(trial, test, f)` to say which the third
+one is. Adding a separate integration space is a larger change than this operator, so the
+one-sided case is what exists; the refusal names the restriction rather than assembling
+something else.
+
+**A mix of interpolated and plain trial factors in one term is refused.** Both kinds of entry
+can live in one stencil, but only the absolute ones are free of the two meshes agreeing on
+what an index means:
+
+```julia
+assemble(form(Wbig, Wsmall, (u, v) -> innerₕ(πₕ(Wbig, u) + u, v)))   # ArgumentError: ... over different meshes ...
+```
+
+The `πₕ(Wbig, u)` summand names columns of `Wbig` outright; the bare `u` beside it still reads
+its column out of the index space being walked, which is `Wsmall`'s. On leaves of one size
+that is fine and the sum assembles (`P` is then the identity). Across sizes it is the cross-mesh
+failure of the previous section exactly, and in one direction it used to be silent — the bare summand's column landed in range and wrong. Every interpolation in a term
+is checked against the leaf it writes into, too, so a sum carrying one from the right space and
+one from the wrong space is caught rather than half-assembled.
 
 ## 7. Threading, chosen once on the backend
 

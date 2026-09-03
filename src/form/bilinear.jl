@@ -199,14 +199,18 @@ end
 end
 
 @inline function _check_block_meshes(term, trial_leaf, test_leaf)
-    # Which space the term interpolates from, or `nothing`. Type-determined, so the method
-    # this selects is chosen at compile time and the other one is never in the way.
-    return _check_block_meshes(_interp_src_space(term), term, trial_leaf, test_leaf)
-end
+    # Every interpolation the term carries has to name the leaf whose columns it writes into.
+    # Checked first and unconditionally: it applies whether or not the rest of the term
+    # interpolates, and folds to nothing when no interpolation is present.
+    _check_interp_spaces(term, trial_leaf)
 
-# No interpolation: the block is assembled by reading the trial column out of the test leaf's
-# own index space, so the two leaves have to share one.
-@inline function _check_block_meshes(::Nothing, term, trial_leaf, test_leaf)
+    # The mesh correspondence is only dispensable when *every* trial column the term
+    # contributes is an absolute one. A term mixing the two — `πₕ(Wsrc, u) + u` — still reads
+    # the bare `u`'s column out of the index space being walked, so it still needs the two
+    # leaves to share one. Asking "does an interpolation appear anywhere" instead is what let
+    # such a mix assemble against wrong columns in silence.
+    _all_trial_interpolated(term) && return nothing
+
     Ωu = mesh(trial_leaf)
     Ωv = mesh(test_leaf)
     npoints(Ωu, Tuple) == npoints(Ωv, Tuple) || _throw_cross_mesh_block(term, Ωu, Ωv)
@@ -219,7 +223,7 @@ end
 # trial leaf's own column range. Get that pairing wrong and a too-small `Wsrc` writes into a
 # corner of the block while a too-large one runs past its end, which is the same silent-wrong
 # answer point 69 refused for the un-interpolated case. So it is checked, not assumed.
-@inline function _check_block_meshes(Wsrc, term, trial_leaf, test_leaf)
+@inline function _check_one_interp_space(term, Wsrc, trial_leaf)
     Ωsrc = mesh(Wsrc)
     Ωu = mesh(trial_leaf)
     npoints(Ωsrc, Tuple) == npoints(Ωu, Tuple) ||
