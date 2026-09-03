@@ -431,7 +431,21 @@ function allocate_system_matrix(
 
     ncols = ndofs(form.trial_space)
     nrows = ndofs(form.test_space)
-    V_vec = _zeros_of(_assembled_eltype(ast, first_space(form.trial_space)), length(I_vec))
+    # `first_space(form.trial_space)` used to be passed here, which is a *scalar* leaf —
+    # `_assembled_eltype` then dispatched to its generic, non-composite method, which probes
+    # the whole (possibly multi-leaf) `ast` with a single `local_stencil` call and reads only
+    # the type of that stencil's *first* entry. A `GridFunctionScale` coefficient (a
+    # `ForwardDiff.Dual`, differentiating through a coupled nonlinear system) contributed by a
+    # later leaf's term was invisible to that single probe: the matrix still allocated as
+    # `Float64`, and the first attempt to scatter a `Dual` value into it threw
+    # `MethodError: no method matching Float64(::Dual)` from deep inside `add_to_sparse!`,
+    # far from this line. Passing the composite space itself dispatches to the
+    # `CompositeGridSpace` method instead, which probes every term against the leaf it
+    # actually routes to and promotes across all of them — the same thing the scalar path
+    # above already gets from `promote_type(_assembled_eltype(ast, space), ...)`.
+    V_vec = _zeros_of(
+        promote_type(_assembled_eltype(ast, form.test_space), eltype(form.trial_space)),
+        length(I_vec))
     return sparse!(I_vec, J_vec, V_vec, nrows, ncols, +)
 end
 
