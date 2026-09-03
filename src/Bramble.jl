@@ -25,33 +25,58 @@ using Preferences: @load_preference
 using QuadGK: gauss
 
 # Utilities
-export backend, metal_backend, vector, matrix, vector_type, matrix_type, backend_types,
-       backend_eye, backend_zeros
+export backend, metal_backend, vector_type, matrix_type, backend_types
 export ExecutionPolicy, Serial, Parallel, execution_policy
-export BrambleFunction, embed_function, has_time
+export BrambleFunction
+
+# `vector`/`matrix` build a raw backend array (point 70): real API, but two of the most
+# generic nouns in the language, and a beginner's own top-level `vector = [...]` after
+# `using Bramble` errors rather than shadows. `Bramble.vector(...)` still reaches them.
+public vector, matrix
+# Backend-extension plumbing (point 70): identity/zero matrices tied to a `Backend`, and
+# the time-dependence machinery behind `embed_function`/`BrambleFunction`'s own markers use
+# — none of it appears in a tutorial, all of it documented for whoever writes a new mesh,
+# backend or marker.
+public backend_eye, backend_zeros, embed_function, has_time
 
 # domain/interval handling functions
 export box, interval, ×, dim, topo_dim, tails, point, cartesian_product, center, projection,
-       is_collapsed, point_type, get_boundary_symbols, set
+       get_boundary_symbols
 export domain, markers, labels
 
+# `set` is `CartesianProduct`'s identity accessor — real, but the single most generic noun
+# in the language, same reasoning as `vector`/`matrix` above. `is_collapsed`/`point_type`
+# are queries about a `CartesianProduct`'s own internal shape, reached while building
+# geometry helpers, not while using one (point 70).
+public set, is_collapsed, point_type
+
 # Mesh handling
-export AbstractMeshType, Mesh1D, MeshnD, MeshMarkers
-export mesh, mesh_type, submeshes, hₘₐₓ, hₘᵢₙ, stepsize, locate_cell, normal_vector,
+export Mesh1D, MeshnD
+export mesh, submeshes, hₘₐₓ, stepsize, locate_cell,
        iterative_refinement!, change_points!, set_points!
 export npoints, points, point, half_points, half_point
-export spacing, forward_spacing, half_spacing, spacings, half_spacings, cell_measure,
-       cell_measures
-export spacings_iterator, forward_spacings_iterator, half_spacings_iterator,
-       points_iterator, half_points_iterator, cell_measures_iterator
+export spacing, forward_spacing, half_spacing, spacings, cell_measure
 export indices, boundary_indices, interior_indices, is_boundary_index, index_in_marker,
        is_uniform
 
+# `AbstractMeshType`/`MeshMarkers` are extension points for a new mesh type, not everyday
+# vocabulary; `mesh_type`/`normal_vector`/`hₘᵢₙ`/`half_spacings`/`cell_measures` and the six
+# `*_iterator` functions are the same layer — real, tested, reached while implementing a
+# mesh or a boundary-facing operator rather than while using one (point 70).
+public AbstractMeshType, MeshMarkers
+public mesh_type, hₘᵢₙ, normal_vector, half_spacings, cell_measures
+public spacings_iterator, forward_spacings_iterator, half_spacings_iterator,
+       points_iterator, half_points_iterator, cell_measures_iterator
+
 # Space handling
-export gridspace, vector_gridspace, space, space_type, spaces, ScalarGridSpace,
-       CompositeGridSpace,
-       VectorGridSpace
+export gridspace, vector_gridspace, space, spaces, ScalarGridSpace,
+       CompositeGridSpace
 export ndofs, ncomponents, weights
+
+# `VectorGridSpace` is a type alias for `CompositeGridSpace{N}`; `space_type` reads a
+# space's type back off a `VectorElement`. Neither appears in a tutorial — both are for
+# code written *against* a space's type, not for building one (point 70).
+public VectorGridSpace, space_type
 export VectorElement, element, to_matrix, values, values!, component, components,
        component_range, component_ranges
 export Rₕ, Rₕ!, avgₕ, avgₕ!
@@ -88,8 +113,13 @@ export M₊ₓ, M₊ᵧ, M₊₂, M₊ₕ
 export M₋ₓ!, M₋ᵧ!, M₋₂!
 export M₊ₓ!, M₊ᵧ!, M₊₂!
 
-export dirichlet_constraints, dirichlet_bc!, symmetrize!, DirichletConstraint
+export dirichlet_constraints, dirichlet_bc!, symmetrize!
 export form, assemble, assemble!, assemble_parallel!, allocate_system_matrix, evaluate!
+
+# `DirichletConstraint` is `dirichlet_constraints(...)`'s own return type, reached for an
+# `isa` check rather than constructed by name — the tests already reach it as
+# `import Bramble: DirichletConstraint` rather than through `using` (point 70).
+public DirichletConstraint
 export issymmetric, isposdef
 
 export export_vtk

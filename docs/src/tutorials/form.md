@@ -179,8 +179,13 @@ nothing # hide
 `dirichlet_constraints` records the values, `dirichlet_bc!` applies them — to the matrix by
 replacing the constrained rows, and to the vector by writing the boundary values in:
 
+`set` reads the plain `CartesianProduct` back out of a domain, which `dirichlet_constraints`
+needs. It's `public` rather than exported (point 70) — reached with `Bramble.` rather than
+brought into scope by `using Bramble`, since the bare name is the single most generic noun in
+the language to hand every user's namespace by default:
+
 ```@example forms
-bcs = dirichlet_constraints(set(Ωd), :left => (x -> 0.0), :right => (x -> 0.0))
+bcs = dirichlet_constraints(Bramble.set(Ωd), :left => (x -> 0.0), :right => (x -> 0.0))
 dirichlet_bc!(Ad, Ωd, :left, :right)
 dirichlet_bc!(bd, Ωd, bcs, :left, :right)
 nothing # hide

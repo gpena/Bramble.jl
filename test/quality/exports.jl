@@ -1,8 +1,12 @@
 using Test
 using Bramble
 
-# Properties of the exported surface: every exported name carries a docstring, and no
-# exported name shadows a different function of the same name in Base.
+# Properties of the reachable surface: every exported or `public` name carries a docstring,
+# and none shadows a different function of the same name in Base.
+#
+# `names(Bramble)` (default `all = false`) already returns both kinds since Julia 1.11 — a
+# `public` name is documented API, just not brought into scope by a bare `using Bramble`
+# (point 70) — so this file needed no change to start covering it too.
 #
 # Documenter's `missing_docs` check is the wrong tool for this: it reports every internal
 # helper it cannot find a page for, so turning it into an error would mean adding `@docs`

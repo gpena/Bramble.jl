@@ -6,7 +6,7 @@ using Bramble: get_boundary_symbols, label, identifier, domain, symbols, tuples,
 using Bramble: marker_identifiers, _embed_notime, process_identifier, marker_symbols,
                marker_tuples, marker_conditions
 using Bramble: label_identifiers, label_symbols, label_tuples, label_conditions, point_type,
-               topo_dim
+               topo_dim, is_collapsed
 using StaticArrays
 
 @testset "Domains" begin

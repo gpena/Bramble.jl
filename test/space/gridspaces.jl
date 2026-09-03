@@ -4,6 +4,7 @@ using Bramble: __prod, _innerplus_weights!, spacing, _innerh_weights!,
                _innerplus_mean_weights!, __innerplus_weights!, half_spacing, space_weights,
                SpaceWeights
 using Bramble: Innerh, Innerplus
+using Bramble: VectorGridSpace, mesh_type
 using LinearAlgebra: norm
 using Supposition
 

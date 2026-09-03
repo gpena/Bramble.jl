@@ -1,7 +1,7 @@
 using Test
 using Bramble
 using SparseArrays
-using Bramble: values
+using Bramble: values, hₘᵢₙ
 
 # The element type of the backend survives the whole library.
 #

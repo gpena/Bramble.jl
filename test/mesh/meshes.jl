@@ -4,7 +4,8 @@ Test coverage for mesh module
 Focus on edge cases, marker combinations, and complex interactions
 """
 
-import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD
+import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, hₘᵢₙ,
+                is_collapsed
 
 @testset "Meshes" begin
     @testset "Domain edge cases" begin

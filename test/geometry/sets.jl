@@ -1,6 +1,6 @@
 using Test
 using Bramble
-using Bramble: CartesianProduct
+using Bramble: CartesianProduct, set, is_collapsed, point_type
 using StaticArrays
 
 @testset "CartesianProduct" begin

@@ -1,6 +1,6 @@
 using Test
 using Bramble
-using Bramble: spacings
+using Bramble: spacings, normal_vector, hₘᵢₙ
 
 # Type stability and allocation of the mesh interface.
 #

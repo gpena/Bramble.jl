@@ -283,8 +283,8 @@ tails(Ω)          # ((0.0, 1.0), (0.0, 1.0))
 center(Ω)         # (0.5, 0.5)
 (0.5, 0.5) ∈ Ω    # true
 
-# Access underlying set and markers
-set(Ω)            # CartesianProduct{2, Float64}
+# Access underlying set and markers — `set` is `public`, not exported, so it needs `Bramble.`
+Bramble.set(Ω)    # CartesianProduct{2, Float64}
 markers(Ω)        # DomainMarkers
 collect(labels(Ω)) # [:dirichlet, :neumann]
 ```
