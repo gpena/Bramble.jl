@@ -588,16 +588,16 @@ end
         "(form/operators/interpolation.jl)."))
 end
 
+# Called only on a `LinearProduct`'s own `left_op`, which is source-only by construction —
+# every constructor above chooses `LinearProduct` over `BilinearProduct` precisely by
+# checking `_is_source_only(left)` first. So the contraction below is unconditional, not a
+# branch: there is no non-source case to fall back to here.
 @inline function _contracted_left_stencil(op, space, I::CartesianIndex{D},
         markers, lin_idx::Int) where {D}
-    if _is_source_only(op)
-        stencil_shift_trait(op) isa PointDependentStencil ||
-            _throw_source_not_point_dependent(op)
-        stencil = local_stencil(op, space, I, markers, lin_idx)
-        return ((zero_offset(Val(D)), sum_stencil_values(stencil)),)
-    else
-        return local_stencil(op, space, I, markers, lin_idx)
-    end
+    stencil_shift_trait(op) isa PointDependentStencil ||
+        _throw_source_not_point_dependent(op)
+    stencil = local_stencil(op, space, I, markers, lin_idx)
+    return ((zero_offset(Val(D)), sum_stencil_values(stencil)),)
 end
 
 @inline function local_stencil(

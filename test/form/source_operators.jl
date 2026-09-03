@@ -233,6 +233,47 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
         @test !all(iszero, b)
     end
 
+    @testset "inner₊/inner₊₂ source-only left operand" begin
+        # `inner₊(left::LazyOp, right::BackwardDifference)` and its mirror, and the plain
+        # `inner₊ₓ`/`inner₊ᵧ`/`inner₊₂(left, right)` methods, all branch the same way
+        # `innerₕ` does: a `LinearProduct` when `left` is source-only, a `BilinearProduct`
+        # otherwise. Both branches are the same function, so the untested `LinearProduct`
+        # side is checked against the already-verified `BilinearProduct` side, contracted at
+        # a concrete vector equal to the source's own values — not a from-scratch oracle, but
+        # a genuinely independent code path (`_contracted_left_stencil` vs `local_stencil`
+        # on a `BilinearProduct`) computing what should be the identical number.
+        Ωₕ = mesh(domain(interval(0.0, 1.0)), 8, true)
+        Wₕ = gridspace(Ωₕ)
+        f = x -> x^2 + sin(2x)
+        sf = source_function(f, Val(1))
+        fₕ = Rₕ(Wₕ, f)
+
+        # inner₊(source, D₋ₓ(v)) — source-only left, direction named by the right side
+        b1 = assemble(form(Wₕ, v -> inner₊(sf, D₋ₓ(v))))
+        A1 = assemble(form(Wₕ, Wₕ, (u, v) -> inner₊(u, D₋ₓ(v))))
+        @test b1 ≈ A1 * values(fₕ)
+        @test !all(iszero, b1)
+
+        # inner₊(D₋ₓ(source), v) — source-only left wrapped in a difference, plain right
+        b2 = assemble(form(Wₕ, v -> inner₊(D₋ₓ(sf), v)))
+        A2 = assemble(form(Wₕ, Wₕ, (u, v) -> inner₊(D₋ₓ(u), v)))
+        @test b2 ≈ A2 * values(fₕ)
+        @test !all(iszero, b2)
+
+        # inner₊₂(source, v) — the plain directional (z) form, 3D since Dim = 3 needs D ≥ 3
+        Ω3 = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 3, 5),
+            (true, true, true))
+        W3 = gridspace(Ω3)
+        f3 = x -> x[1] + x[2]^2 - x[3]
+        sf3 = source_function(f3, Val(3))
+        f3ₕ = Rₕ(W3, f3)
+
+        b3 = assemble(form(W3, v -> inner₊₂(sf3, v)))
+        A3 = assemble(form(W3, W3, (u, v) -> inner₊₂(u, v)))
+        @test b3 ≈ A3 * values(f3ₕ)
+        @test !all(iszero, b3)
+    end
+
     @testset "Allocation contract" begin
         function refill_bytes(n, build)
             Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (n, n), (true, true))
