@@ -136,11 +136,34 @@ uv = Rₕ(Vh, (x -&gt; 0.0, x -&gt; x[1] + x[2]))   # only the small leaf (2) ca
 
 lh = form(Vh, v -&gt; innerₕ(πₕ(uv(2)), v(1)) + innerₕ(D₋ₓ(πₕ(uv(2))), D₋ₓ(v(1))))
 b = assemble(lh)
-length(b) == ndofs(Vh)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">true</code></pre><p>The two terms land in the same block (leaf 1, <code>Wbig</code>) even though the source they read
+
+# the differenced term is not a no-op: dropping it changes the answer
+b_plain = assemble(form(Vh, v -&gt; innerₕ(πₕ(uv(2)), v(1))))
+maximum(abs, b .- b_plain)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">0.14285714285714285</code></pre><p>The two terms land in the same block (leaf 1, <code>Wbig</code>) even though the source they read
 from lives on leaf 2&#39;s own, coarser mesh — <code>πₕ</code> is what makes that a well-posed
 expression rather than a size mismatch. This is exactly what makes a heterogeneous
 composite space useful for more than indexing: leaf 2 can represent one field at a
-resolution the problem calls for, and a term over leaf 1 can still read it.</p><p><code>πₕ</code> takes a grid function, never a trial or test function:</p><pre><code class="language-julia hljs">form(Vh, Vh, (u, v) -&gt; innerₕ(πₕ(u), πₕ(v)))   # MethodError: no method matching πₕ(::TrialFunction{2})</code></pre><p><code>u</code>/<code>v</code> here are symbolic placeholders with no data of their own — <code>interpolate_at</code>, what
+resolution the problem calls for, and a term over leaf 1 can still read it.</p><p>That last line is the check worth keeping, not <code>length(b) == ndofs(Vh)</code>. An earlier draft of
+this page showed the shape instead, and the differenced term contributed <em>exactly zero</em>: an
+operator wrapped around a source had its offsets discarded, so <code>D₋ₓ</code>&#39;s <code>+s/h</code> and <code>−s/h</code>
+cancelled. The page was green either way, because a zero vector has the right length and is
+perfectly finite. A worked example should show what it computes.</p><p>An operated source is worth a word on what it means. <code>innerₕ(D₋ₓ(f), v)</code> is
+<span>$\sum_i |\square_i| \, (D_{-x}f)_i \, v_i$</span> — the operator acts on the <em>source</em>, producing
+another grid function, which is then integrated against the test function. It agrees entry
+for entry with applying the numeric operator first:
+<code>assemble(form(Wₕ, v -&gt; innerₕ(D₋ₓ(fₕ), v)))</code> equals
+<code>values(D₋ₓ(fₕ)) .* weights(Wₕ, Innerh())</code>. That equivalence is what
+<code>test/form/source_operators.jl</code> pins, for every operator, against the numeric layer.</p><p>A <em>bilinear</em> term coupling two leaves over different meshes is a different matter, and it is
+refused:</p><pre><code class="language-julia hljs">form(Vh, Vh, (u, v) -&gt; innerₕ(u(2), v(1)))     # ArgumentError: ... over different meshes ...</code></pre><p>A coupled block is assembled by walking the test leaf&#39;s grid and reading the trial column out
+of that same index space, so it needs the two leaves to agree on what an index means. Two
+leaves over meshes of different sizes do not: index <code>(3, 3)</code> on an 8×8 grid and on a 4×4 grid
+name different points, and nothing in the term says how to get from one to the other. So there
+is no assembly to give, and the error says so rather than guessing — in one direction it used
+to overrun the trial block and throw from deep inside <code>sparse!</code>, and in the other it quietly
+filled in-range but wrong columns.</p><p>Coupling leaves that <em>share</em> a mesh is unaffected, which is every composite space built by
+repeating one space (<code>Wₕ^Val(2)</code>), including off-diagonal blocks.</p><p>What makes the linear case above legitimate is exactly what the bilinear case is missing:
+<code>πₕ</code> states the mapping between the two meshes. Supplying that on the trial side needs a
+symbolic interpolation <em>operator</em>, which does not exist yet.</p><p><code>πₕ</code> takes a grid function, never a trial or test function:</p><pre><code class="language-julia hljs">form(Vh, Vh, (u, v) -&gt; innerₕ(πₕ(u), πₕ(v)))   # MethodError: no method matching πₕ(::TrialFunction{2})</code></pre><p><code>u</code>/<code>v</code> here are symbolic placeholders with no data of their own — <code>interpolate_at</code>, what
 <code>πₕ</code> is built from, needs concrete nodal values to blend, and a <code>TrialFunction</code>/
 <code>TestFunction</code> carries none. <code>πₕ(uₕ)</code> only ever wraps an already-evaluated
 <a href="../../api/#Bramble.VectorElement"><code>VectorElement</code></a> (<code>u(2)</code> above is exactly that: a component pulled out of a concrete
@@ -189,4 +212,4 @@ end</code></pre><pre class="documenter-example-output"><code class="nohighlight 
 and has to exist on every leaf that reaches — write the term per component, each with its own
 markers, if it does not.</p><h2 id="Where-to-go-next"><a class="docs-heading-anchor" href="#Where-to-go-next">Where to go next</a><a id="Where-to-go-next-1"></a><a class="docs-heading-anchor-permalink" href="#Where-to-go-next" title="Permalink"></a></h2><p>The <a href="../../internals/form/">internals page on forms</a> documents the colouring and the stencil
 algebra underneath all of this, including how the matrix path colours on the test-side span
-alone.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../operators/">« Difference, jump and average operators</a><a class="docs-footer-nextpage" href="../vtk_export/">Writing VTK files »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Thursday 3 September 2026 00:03">Thursday 3 September 2026</span>. Using Julia version 1.14.0-DEV.3097.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+alone.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../operators/">« Difference, jump and average operators</a><a class="docs-footer-nextpage" href="../vtk_export/">Writing VTK files »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Thursday 3 September 2026 10:45">Thursday 3 September 2026</span>. Using Julia version 1.14.0-DEV.3100.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
