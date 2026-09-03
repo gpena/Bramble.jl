@@ -53,6 +53,11 @@ See also: [`Rₕ`](@ref), [`avgₕ!`](@ref), [`element`](@ref)
 @inline Rₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::F) where {
     NC, F} = _Rₕ_scatter_parallel!(
     uₕ, f)
+@inline function Rₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::Tuple) where {NC}
+    comps = components(uₕ)
+    ntuple(i -> Rₕ!(comps[i], f[i]), Val(NC))
+    return uₕ
+end
 
 # A named, concretely-typed kernel for the per-point restriction call, rather than an
 # anonymous closure over the same three captures (`f`, `Ωₕ`, `idxs`).
@@ -111,13 +116,11 @@ end
     markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {N} = Rₕ!(uₕ, f[1]; markers = markers)
 
 # One function per component: each is already independent, so restrict each
-# component with its own function. No plain-method counterpart: this recurses into the
-# scalar `Rₕ!` per component, which already has the fast no-kwarg path above, so there is
-# nothing left to gain from also bypassing the kwsorter at this outer level.
-@inline function Rₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::Tuple;
-        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {NC, N}
+# component with its own function. Masked restriction routes componentwise through _Rₕ_masked!.
+@inline function _Rₕ_masked!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::Tuple,
+        markers::NTuple{N, Symbol}) where {NC, N}
     comps = components(uₕ)
-    ntuple(i -> Rₕ!(comps[i], f[i]; markers = markers), Val(NC))
+    ntuple(i -> _Rₕ_masked!(comps[i], f[i], markers), Val(NC))
     return uₕ
 end
 
@@ -125,8 +128,8 @@ end
 # than every plain method above -- exactly the split `avgₕ!` uses. The `N == 0` case never
 # actually runs (the plain methods intercept a no-kwarg call before this method is even
 # looked up), but is kept as a fallback for an explicit `markers = ()`.
-Base.@constprop :aggressive function Rₕ!(uₕ::VectorElement, f;
-        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {N}
+Base.@constprop :aggressive function Rₕ!(uₕ::VectorElement, f::F;
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {F, N}
     if N > 0
         @debug "Using marker-based restriction" markers
     end
@@ -138,8 +141,8 @@ Base.@constprop :aggressive function Rₕ!(uₕ::VectorElement, f;
     return _Rₕ_masked!(uₕ, f, markers)
 end
 
-function _Rₕ_masked!(uₕ::VectorElement{<:ScalarGridSpace}, f, markers::NTuple{
-        N, Symbol}) where {N}
+function _Rₕ_masked!(uₕ::VectorElement{<:ScalarGridSpace}, f::F, markers::NTuple{
+        N, Symbol}) where {F, N}
     (; space) = uₕ
     Ωₕ = mesh(space)
     raw = values(uₕ)
@@ -158,8 +161,8 @@ function _Rₕ_masked!(uₕ::VectorElement{<:ScalarGridSpace}, f, markers::NTupl
     return uₕ
 end
 
-function _Rₕ_masked!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f,
-        markers::NTuple{N, Symbol}) where {NC, N}
+function _Rₕ_masked!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::F,
+        markers::NTuple{N, Symbol}) where {NC, F, N}
     Ωₕ = mesh(space(uₕ))
     comps = components(uₕ)
     raws = ntuple(i -> values(comps[i]), Val(NC))

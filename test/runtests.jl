@@ -15,9 +15,9 @@ using SparseArrays: spdiagm
 # run now pays that 0.3 s for nothing, which is the price of defining the helper once.
 using ForwardDiff
 
-@inline function alloc_test(f::F, args...) where {F}
-    f(args...) # warm up
-    return @allocated(f(args...))
+@inline function alloc_test(f::F, args...; kwargs...) where {F}
+    f(args...; kwargs...) # warm up
+    return @allocated(f(args...; kwargs...))
 end
 
 # Allocation test helper: uses a function barrier to avoid @testset closure boxing.

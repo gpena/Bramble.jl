@@ -39,12 +39,13 @@ all components works, and both give the same result.
 # Keywords
 
   - `quad_points`: points per direction, per cell. Has no counterpart in
-    [`Rₕ`](@ref), which involves no quadrature.
+    [`Rₕ`](@ref), which involves no quadrature. An `Int` or a `Val`; see
+    [`avgₕ!`](@ref) for what the difference costs.
   - `markers`: restrict evaluation to the named marked regions, as in
     [`Rₕ`](@ref), leaving every other entry zero.
 """
 Base.@constprop :aggressive function avgₕ(
-        Wₕ::AbstractSpaceType, f; quad_points::Int = AVG_QUAD_POINTS,
+        Wₕ::AbstractSpaceType, f; quad_points::Union{Integer, Val} = Val(AVG_QUAD_POINTS),
         markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {N}
     uₕ = element(Wₕ, _restriction_eltype(Wₕ, f, markers))
     return avgₕ!(uₕ, f; quad_points = quad_points, markers = markers)
@@ -62,6 +63,15 @@ a time-stepping loop.
 
 `f` and the keywords are as described for [`avgₕ`](@ref).
 
+`quad_points` accepts a plain `Int` or a `Val`. A `Val` (the keyword's own default,
+`Val(AVG_QUAD_POINTS)`) is a compile-time constant the quadrature rule specialises
+on directly, so it costs nothing beyond the parallel loop's own task overhead — the
+same is true of the positional form `avgₕ!(uₕ, f, Val(n))`, which skips the keyword
+sorter entirely. A runtime `Int` is genuinely dynamic and cannot specialise the same
+way, so it costs a small, constant allocation (tens of bytes, not the per-point cost
+this docstring's first paragraph is about) to box the resulting `Val` — acceptable
+for an occasional call, worth avoiding with `Val` inside a hot loop.
+
 See also: [`avgₕ`](@ref), [`Rₕ!`](@ref)
 """
 @inline avgₕ!(uₕ::VectorElement{<:ScalarGridSpace{D}}, f::Tuple{Any}) where {D} = avgₕ!(uₕ, f[1])
@@ -75,25 +85,52 @@ See also: [`avgₕ`](@ref), [`Rₕ!`](@ref)
 @inline avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::F) where {NC, F} = _avgₕ!(
     uₕ, f, Val(dim(mesh(space(uₕ)))), Val(AVG_QUAD_POINTS))
 
+@inline avgₕ!(uₕ::VectorElement{<:ScalarGridSpace{D}}, f::F, nq::Val{NQ}) where {
+    D, F, NQ} = _avgₕ!(
+    uₕ, f, Val(D), nq)
+
+@inline avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::Tuple, nq::Val{NQ}) where {
+    NC, NQ} = _avgₕ!(
+    uₕ, f, Val(dim(mesh(space(uₕ)))), nq)
+
+@inline avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::F, nq::Val{NQ}) where {
+    NC, F, NQ} = _avgₕ!(
+    uₕ, f, Val(dim(mesh(space(uₕ)))), nq)
+
 # A one-component space is a scalar space, so an NC-tuple of functions with
 # NC == 1 must still work.
 @inline avgₕ!(
-    uₕ::VectorElement{<:ScalarGridSpace}, f::Tuple{Any}; quad_points::Int = AVG_QUAD_POINTS,
+    uₕ::VectorElement{<:ScalarGridSpace}, f::Tuple{Any}; quad_points::Union{Integer, Val} = Val(AVG_QUAD_POINTS),
     markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {N} = avgₕ!(
     uₕ, f[1]; quad_points = quad_points, markers = markers)
 
+# `NQ` is a compile-time constant here (a type parameter), so the check folds away same as
+# `_is_source_only`'s own branches do — it costs nothing on the path this exists to keep
+# allocation-free. Without it, `quad_points = Val(0)` reached QuadGK's own "Gauss rules
+# require positive order" instead of this function's own message, for the keyword path only
+# (the direct positional `avgₕ!(uₕ, f, Val(n))` escape hatch stays unchecked, matching every
+# other internal call that already hard-codes a known-good `Val` without validating it).
+@inline function _to_quad_val(nq::Val{NQ}) where {NQ}
+    NQ >= 1 || throw(ArgumentError("quad_points must be >= 1, got $NQ"))
+    return nq
+end
+@inline function _to_quad_val(nq::Integer)
+    nq >= 1 || throw(ArgumentError("quad_points must be >= 1, got $nq"))
+    return Val(Int(nq))
+end
+
 Base.@constprop :aggressive function avgₕ!(
-        uₕ::VectorElement, f; quad_points::Int = AVG_QUAD_POINTS,
-        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {N}
-    quad_points >= 1 || throw(ArgumentError("quad_points must be >= 1, got $quad_points"))
+        uₕ::VectorElement, f::F; quad_points::Union{Integer, Val} = Val(AVG_QUAD_POINTS),
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {F, N}
+    nq = _to_quad_val(quad_points)
     Ωₕ = mesh(space(uₕ))
     D = dim(Ωₕ)
 
     if N > 0
-        return _avg_masked!(uₕ, f, markers, Val(D), Val(quad_points))
+        return _avg_masked!(uₕ, f, markers, Val(D), nq)
     end
 
-    return _avgₕ!(uₕ, f, Val(D), Val(quad_points))
+    return _avgₕ!(uₕ, f, Val(D), nq)
 end
 
 # A named, concretely-typed kernel for the quadrature loop's inner call, rather than an
@@ -240,8 +277,8 @@ end
     return uₕ
 end
 
-@inline function _avg_masked!(uₕ::VectorElement{<:ScalarGridSpace}, f,
-        markers::NTuple{N, Symbol}, ::Val{1}, nq::Val{NQ}) where {N, NQ}
+@inline function _avg_masked!(uₕ::VectorElement{<:ScalarGridSpace}, f::F,
+        markers::NTuple{N, Symbol}, ::Val{1}, nq::Val{NQ}) where {F, N, NQ}
     (; space) = uₕ
     Ωₕ = mesh(space)
     x = half_points(Ωₕ)
@@ -263,8 +300,8 @@ end
     return uₕ
 end
 
-@inline function _avg_masked!(uₕ::VectorElement{<:ScalarGridSpace}, f,
-        markers::NTuple{N, Symbol}, ::Val{D}, nq::Val{NQ}) where {N, D, NQ}
+@inline function _avg_masked!(uₕ::VectorElement{<:ScalarGridSpace}, f::F,
+        markers::NTuple{N, Symbol}, ::Val{D}, nq::Val{NQ}) where {F, N, D, NQ}
     (; space) = uₕ
     Ωₕ = mesh(space)
     x = half_points(Ωₕ)
@@ -300,8 +337,8 @@ end
     return uₕ
 end
 
-@inline function _avg_masked!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f,
-        markers::NTuple{N, Symbol}, ::Val{1}, nq::Val{NQ}) where {NC, N, NQ}
+@inline function _avg_masked!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::F,
+        markers::NTuple{N, Symbol}, ::Val{1}, nq::Val{NQ}) where {NC, F, N, NQ}
     Ωₕ = mesh(space(uₕ))
     x = half_points(Ωₕ)
     T = eltype(Ωₕ)
@@ -326,8 +363,8 @@ end
     return uₕ
 end
 
-@inline function _avg_masked!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f,
-        markers::NTuple{N, Symbol}, ::Val{D}, nq::Val{NQ}) where {NC, N, D, NQ}
+@inline function _avg_masked!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::F,
+        markers::NTuple{N, Symbol}, ::Val{D}, nq::Val{NQ}) where {NC, F, N, D, NQ}
     Ωₕ = mesh(space(uₕ))
     x = half_points(Ωₕ)
     T = eltype(Ωₕ)

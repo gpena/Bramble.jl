@@ -192,5 +192,23 @@ using Bramble: values, components, _difference_engine!, _average_engine!,
         small = min_inplace_bytes(be_parallel, 16)
         large = min_inplace_bytes(be_parallel, 2048)
         @test all(abs(s - l) <= 256 for (s, l) in zip(small, large))
+
+        # Zero-allocation guarantees for masked, composite tuple, and Val quadrature paths
+        d = domain(box((0.0, 0.0), (1.0, 1.0)), :left => :left)
+        Ω = mesh(d, (8, 8))
+        W = gridspace(Ω)
+        V = gridspace(Ω, Val(2))
+        u = element(W)
+        v = element(V)
+        f(x) = sin(x[1]) * cos(x[2])
+        f_tup = (f, f)
+
+        @test alloc_test(Rₕ!, u, f; markers = (:left,)) == 0
+        @test alloc_test(avgₕ!, u, f; markers = (:left,)) == 0
+        @test alloc_test(Rₕ!, v, f_tup) == 0
+        @test alloc_test(avgₕ!, u, f, Val(3)) == 0
+        @test alloc_test(avgₕ!, u, f; quad_points = Val(3)) == 0
+        @test alloc_test(Rₕ!, v, f_tup; markers = (:left,)) == 0
+        @test alloc_test(avgₕ!, v, f_tup; markers = (:left,)) == 0
     end
 end
