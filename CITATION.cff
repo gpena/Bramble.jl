@@ -5,7 +5,7 @@ authors:
   given-names: "Gonçalo"
   orcid: "https://orcid.org/0000-0003-0552-8069"
 title: "Bramble.jl"
-version: 1.1.1
+version: 2.0.0
 doi: 10.5281/zenodo.17582286
-date-released: 2025-11-11
+date-released: 2026-09-03
 url: "https://github.com/gpena/Bramble.jl"

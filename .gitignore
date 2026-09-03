@@ -106,8 +106,3 @@ docs/manual_design_preview.html
 # Working notes for the form-layer unlock, paired with the tracker artifact. Kept out of
 # version control by request: the history and the open questions live here, not on GitHub.
 docs/form-unlock-plan.md
-
-# Scratch audit notes, same reasoning: working notes, not something that belongs in the
-# repository's history.
-INPLACE_ALLOCATION_AUDIT.md
-AUDIT_REPORT.md

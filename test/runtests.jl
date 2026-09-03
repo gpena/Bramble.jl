@@ -96,19 +96,19 @@ const __bramble_with_ad_backends = __bramble_test_group in ("ad", "full")
 
 if __bramble_with_unit_tests
     @testset verbose=true "Core library" begin
-        @testset verbose=true "Utilities" begin
+        @testset "Utilities" begin
             include("utils/macros.jl")
             include("utils/backends.jl")
             include("utils/linear_algebra.jl")
             include("utils/bramble_functions.jl")
         end
 
-        @testset verbose=true "Sets and Domains" begin
+        @testset "Sets and Domains" begin
             include("geometry/sets.jl")
             include("geometry/domains.jl")
         end
 
-        @testset verbose=true "Meshes" begin
+        @testset "Meshes" begin
             include("mesh/mesh1d.jl")
             include("mesh/meshnd.jl")
             include("mesh/meshes.jl")
@@ -116,12 +116,12 @@ if __bramble_with_unit_tests
             include("mesh/inference_allocation.jl")
         end
 
-        @testset verbose=true "Grid spaces" begin
+        @testset "Grid spaces" begin
             include("space/gridspaces.jl")
             include("space/vector_elements.jl")
         end
 
-        @testset verbose=true "Operators" begin
+        @testset "Operators" begin
             include("space/difference.jl")
             include("space/star_difference.jl")
             include("space/centered_difference.jl")
@@ -140,7 +140,7 @@ if __bramble_with_unit_tests
             include("space/autodiff_backends.jl")
         end
 
-        @testset verbose=true "Forms" begin
+        @testset "Forms" begin
             include("form/dirichlet_constraints.jl")
             include("form/difference_ast.jl")
             include("form/operators.jl")
@@ -162,7 +162,7 @@ if __bramble_with_unit_tests
             include("form/stencil_pattern.jl")
         end
 
-        @testset verbose=true "Exporters" begin
+        @testset "Exporters" begin
             include("exporters/vtk_export.jl")
             include("exporters/pgfplots_export.jl")
         end
