@@ -387,8 +387,10 @@ function _mesh(Ω::Domain{CartesianProduct{1, T}}, npts::Tuple{Int}, unif::Tuple
     return mesh
 end
 
-# Refines a 1D mesh in-place by inserting a new point at the midpoint of each interval.
-function iterative_refinement!(Ωₕ::Mesh1D)
+# The geometric refinement alone, with markers left untouched — shared by both public
+# methods below, neither of which wants the *other*'s marker handling as an intermediate
+# step of its own.
+function _refine_indices!(Ωₕ::Mesh1D)
     # Do nothing if the mesh is just a single point.
     if is_collapsed(Ωₕ)
         return
@@ -424,6 +426,35 @@ function iterative_refinement!(Ωₕ::Mesh1D)
     return
 end
 
+# Refines a 1D mesh in-place by inserting a new point at the midpoint of each interval.
+function iterative_refinement!(Ωₕ::Mesh1D)
+    # Same two no-op cases `_refine_indices!` itself checks — mirrored here, not just
+    # inherited from calling it, so a mesh with nothing to refine also gets no marker
+    # rebuild: `_refine_indices!` returning "did nothing" is not visible to its caller, and
+    # rebuilding markers anyway would drop a mesh's custom labels for no reason at all.
+    (is_collapsed(Ωₕ) || npoints(Ωₕ) <= 1) && return
+
+    # The old markers dict is sized for the old grid and would otherwise be left silently
+    # wrong rather than merely absent — see the identical note in `MeshnD`'s own
+    # one-argument `iterative_refinement!` (meshnd.jl). `:boundary`/`:interior` need no
+    # domain and are rebuilt unconditionally; anything else is dropped with a warning
+    # rather than kept incorrect. The two-argument form below does not route through this
+    # method at all, precisely so it never triggers the warning on its own account.
+    old_markers = markers(Ωₕ)
+    extra_labels = setdiff(keys(old_markers), (:boundary, :interior))
+    isempty(extra_labels) ||
+        @warn "iterative_refinement!(Ωₕ) refined a mesh carrying custom markers " *
+              "$(Tuple(extra_labels)); those are dropped, not re-evaluated onto the new " *
+              "points, because there is no domain here to re-derive them from. Call " *
+              "iterative_refinement!(Ωₕ, domain_markers) instead to keep them."
+
+    _refine_indices!(Ωₕ)
+    fresh_markers = MeshMarkers()
+    _ensure_geometric_markers!(fresh_markers, Ωₕ)
+    Ωₕ.markers = fresh_markers
+    return
+end
+
 # Refines a 1D mesh and then reapplies the domain markers to the new set of points.
 function iterative_refinement!(Ωₕ::Mesh1D, domain_markers::DomainMarkers)
     # Do nothing if the mesh is collapsed.
@@ -432,7 +463,7 @@ function iterative_refinement!(Ωₕ::Mesh1D, domain_markers::DomainMarkers)
     end
 
     # First, perform the geometric refinement of the mesh.
-    iterative_refinement!(Ωₕ)
+    _refine_indices!(Ωₕ)
     # Then, update the markers based on the new, denser grid.
     set_markers!(Ωₕ, domain_markers)
     return

@@ -106,7 +106,21 @@ end
 
 # Mesh mutation is a separate pass so the queries above stay on a pristine mesh.
 function _pc_mesh_mutation(Ωₕ, dm)
-    iterative_refinement!(deepcopy(Ωₕ))
+    # The one-argument path is for a mesh with no custom labels to begin with — every
+    # `Ωₕ` reaching this function carries `dm`'s own, so calling it directly would warn
+    # (correctly) about dropping them, on every precompile. Strip them first so this
+    # exercises the intended, warning-free case; the two-argument call right below already
+    # exercises the marked-mesh path. An `MeshnD` carries labels twice over — once on the
+    # ND mesh itself, once more on each dimension's own `Mesh1D` submesh — so both need
+    # clearing, not just the outer one.
+    bare = deepcopy(Ωₕ)
+    bare.markers = MeshMarkers()
+    if bare isa MeshnD
+        for sm in bare.submeshes
+            sm.markers = MeshMarkers()
+        end
+    end
+    iterative_refinement!(bare)
     iterative_refinement!(deepcopy(Ωₕ), dm)
     pts = points(Ωₕ)
     change_points!(deepcopy(Ωₕ), pts)
