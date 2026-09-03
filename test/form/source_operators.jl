@@ -24,8 +24,8 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
 # `values(Op(Rₕ(Wₕ, f))) .* weights`. Each is paired with a negative control, because a zero
 # vector satisfies `isfinite`, `isa` and `≈ 0` alike — that is exactly how this went unnoticed.
 
-@testset "operators over sources in linear forms" begin
-    @testset "every operator matches the numeric layer, 1D non-uniform" begin
+@testset "Source operators" begin
+    @testset "1D numeric equivalence" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, false)
         Wₕ = gridspace(Ωₕ)
         f = x -> x^2 + sin(3x)
@@ -41,7 +41,7 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
         end
     end
 
-    @testset "2D, both directions, on a mesh non-uniform in one of them" begin
+    @testset "2D directional equivalence" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 6), (false, true))
         Wₕ = gridspace(Ωₕ)
         f = x -> x[1]^2 + sin(3x[2])
@@ -59,7 +59,7 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
         end
     end
 
-    @testset "nesting, scaling and sums compose" begin
+    @testset "Composition & scaling" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 6), (false, true))
         Wₕ = gridspace(Ωₕ)
         f = x -> x[1]^2 + sin(3x[2])
@@ -93,7 +93,7 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
         end
     end
 
-    @testset "a grid function scaling the source is read at the shifted point too" begin
+    @testset "Shifted coefficient scaling" begin
         # `GridFunctionScale` has the same defect as the source it wraps: its coefficient is
         # read at the current point, so a relabelled offset carries the wrong one. Under a
         # difference the two readings differ, which is what makes this a real check.
@@ -115,7 +115,7 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
         @test !isapprox(b, values(cₕ) .* values(D₋ₓ(fₕ)) .* w)
     end
 
-    @testset "a shift off the grid reads as zero, matching the truncation convention" begin
+    @testset "Boundary truncation" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 6, true)
         Wₕ = gridspace(Ωₕ)
         f = x -> x + 1
@@ -130,7 +130,7 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
         @test !all(iszero, b)
     end
 
-    @testset "a region restriction masks the value" begin
+    @testset "Region restriction" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 6), (true, true))
         Wₕ = gridspace(Ωₕ)
         f = x -> x[1] + x[2] + 1
@@ -146,7 +146,7 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
         @test all(i -> b[i] ≈ full[i] || iszero(b[i]), eachindex(b))
     end
 
-    @testset "a VectorElement source behaves as a SourceVector under an operator" begin
+    @testset "VectorElement source" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 5), (true, false))
         Wₕ = gridspace(Ωₕ)
         f = x -> x[1] * x[2] + x[1]
@@ -159,7 +159,7 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
         @test !all(iszero, b)
     end
 
-    @testset "the interpolated source, which is what made this reachable (point 25)" begin
+    @testset "Interpolated source" begin
         Ωbig = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (8, 8), (true, true))
         Ωsmall = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 4), (true, true))
         Wbig, Wsmall = gridspace(Ωbig), gridspace(Ωsmall)
@@ -180,7 +180,7 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
         @test !all(iszero, bc)                      # it contributed nothing before this fix
     end
 
-    @testset "the plain source path is unchanged" begin
+    @testset "Plain source regression" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 6), (true, true))
         Wₕ = gridspace(Ωₕ)
         f = x -> x[1] + x[2]
@@ -193,7 +193,7 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
         @test assemble(form(Wₕ, v -> innerₕ(2.0, v))) ≈ 2.0 .* w
     end
 
-    @testset "the test side keeps its offsets — this fix is only about the left" begin
+    @testset "Test-side offsets" begin
         # `innerₕ(f, D₋ₓ(v))` is the discrete adjoint: the coefficient at grid point J picks
         # up contributions from both I = J and I = J+1, which is exactly what the test-side
         # offsets are for. It must NOT be collapsed the way the source side is.
@@ -208,7 +208,7 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
         @test !all(iszero, b)
     end
 
-    @testset "allocations, which are part of the contract" begin
+    @testset "Allocation contract" begin
         function refill_bytes(n, build)
             Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (n, n), (true, true))
             Wₕ = gridspace(Ωₕ)
@@ -231,7 +231,7 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
         end
     end
 
-    @testset "differentiating through an operated source" begin
+    @testset "Source differentiation" begin
         # the element type comes from the data, so a Dual-valued source stays Dual through
         # the value path exactly as it does through the stencil path
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, true)
@@ -249,7 +249,7 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
         @test !iszero(g[1])
     end
 
-    @testset "a node _is_source_only accepts but cannot value is a loud error" begin
+    @testset "Invalid source node error" begin
         # the fallback exists so that a future node added to `_is_source_only` without a
         # `_source_value` twin fails with a message rather than silently mis-assembling,
         # which is the failure mode this whole testset exists to prevent

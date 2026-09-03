@@ -11,7 +11,7 @@ jump_ops(::Val{1}) = (jumpₓ,)
 jump_ops(::Val{2}) = (jumpₓ, jumpᵧ, jump_ops(Val(1))...)
 jump_ops(::Val{3}) = (jumpₓ, jump₂, jump_ops(Val(2))...)
 
-@testset "Jump Operators" begin
+@testset "Jump operators" begin
     for D in 1:3
         @testset "$D-Dimensional Tests" begin
             dims, Wₕ, uₕ = setup_test_grid(Val(D))
@@ -68,7 +68,7 @@ jump_ops(::Val{3}) = (jumpₓ, jump₂, jump_ops(Val(2))...)
         end
     end
 
-    @testset "There is no directional variant" begin
+    @testset "No directional variant" begin
         # The ₋/₊ pair was removed: a backward jump names the same interface as the
         # forward one seen from the other side, so it was the same numbers shifted by an
         # index rather than a second operator.
@@ -82,11 +82,11 @@ jump_ops(::Val{3}) = (jumpₓ, jump₂, jump_ops(Val(2))...)
         end
     end
 
-    @testset "Operator vs. Matrix Application" begin
+    @testset "Operator vs matrix" begin
         test_operator_matrix_equivalence(jump_ops)
     end
 
-    @testset "Discrete Leibniz product rule with average (Supposition)" begin
+    @testset "Leibniz product rule" begin
         positive_h = Data.Floats{Float64}(; minimum = 0.01, maximum = 10.0,
             nans = false, infs = false)
         field_val = Data.Floats{Float64}(; minimum = -100.0, maximum = 100.0,

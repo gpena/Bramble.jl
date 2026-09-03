@@ -19,7 +19,7 @@ using LinearAlgebra: issymmetric
 #   - the dense path called `findall(mask)` to list the marked indices, allocating a vector
 #     that grows with the boundary. Both paths now walk the mask's set bits.
 
-@testset "Symmetrizing the constrained system" begin
+@testset "Symmetrizing constraints" begin
     Ωₕ = mesh(
         domain(interval(0.0, 1.0) × interval(0.0, 1.0),
             :bottom => :bottom, :top => :top),
@@ -28,7 +28,7 @@ using LinearAlgebra: issymmetric
     Vₕ = gridspace(Ωₕ, Val(3))
     n = ndofs(Wₕ)
 
-    @testset "it is what restores symmetry, and only after the rows are set" begin
+    @testset "Symmetry restoration" begin
         A = _tri(n)
         F = collect(1.0:n)
         @test issymmetric(A)
@@ -40,7 +40,7 @@ using LinearAlgebra: issymmetric
         @test issymmetric(A)
     end
 
-    @testset "the constrained solve returns the boundary values" begin
+    @testset "Constrained solve values" begin
         A = _tri(n)
         F = collect(1.0:n)
         dirichlet_bc!(A, Ωₕ, :bottom)
@@ -54,7 +54,7 @@ using LinearAlgebra: issymmetric
         end
     end
 
-    @testset "dense and sparse agree" begin
+    @testset "Dense & sparse agreement" begin
         As, Fs = _tri(n), collect(1.0:n)
         Ad, Fd = Matrix(_tri(n)), collect(1.0:n)
         for (A, F) in ((As, Fs), (Ad, Fd))
@@ -65,7 +65,7 @@ using LinearAlgebra: issymmetric
         @test Fd == Fs
     end
 
-    @testset "a composite system is the scalar one, block by block" begin
+    @testset "Composite block equivalence" begin
         Av = blockdiag(_tri(n), _tri(n), _tri(n))
         Fv = repeat(collect(1.0:n), 3)
         dirichlet_bc!(Av, Vₕ, :bottom)
@@ -86,7 +86,7 @@ using LinearAlgebra: issymmetric
         @test all(iszero, Av[(n + 1):(2n), 1:n])
     end
 
-    @testset "the offsets are right under nesting" begin
+    @testset "Nested leaf offsets" begin
         # a composite of composites must still see each leaf at its own offset
         inner = gridspace(Ωₕ, Val(2))
         nested = Bramble.CompositeGridSpace((Wₕ, inner, Wₕ))
@@ -105,7 +105,7 @@ using LinearAlgebra: issymmetric
         @test Fn == Ff
     end
 
-    @testset "several labels, and none" begin
+    @testset "Multiple & zero labels" begin
         A2, F2 = _tri(n), collect(1.0:n)
         dirichlet_bc!(A2, Ωₕ, :bottom, :top)
         symmetrize!(A2, F2, Ωₕ, :bottom, :top)
@@ -128,7 +128,7 @@ using LinearAlgebra: issymmetric
         @test F0 == Fbefore
     end
 
-    @testset "the wrapper does both, in order" begin
+    @testset "Wrapper execution order" begin
         Aw, Fw = _tri(n), collect(1.0:n)
         Bramble.dirichlet_bc_symmetrize!(Aw, Fw, Ωₕ, :bottom)
 
@@ -147,7 +147,7 @@ using LinearAlgebra: issymmetric
         @test count(iszero, nonzeros(Aw)) > 0
     end
 
-    @testset "the diagonal, found in the sweep or put back afterwards" begin
+    @testset "Diagonal preservation" begin
         # The diagonal is written where the sweep finds it rather than through
         # `A[i, i] = one(T)` afterwards, which would binary search the column for an entry
         # the loop has just walked past. Both paths have to end up in the same place.
@@ -167,7 +167,7 @@ using LinearAlgebra: issymmetric
         @test all(B[i, i] == 1.0 for i in 1:n if marked[i])
     end
 
-    @testset "homogeneous conditions take the short path to the same answer" begin
+    @testset "Homogeneous conditions" begin
         # A zero boundary value contributes nothing to F, so the elimination is skipped —
         # worth about 12% on the conditions that are most common. The result must not
         # depend on which branch was taken.
@@ -184,7 +184,7 @@ using LinearAlgebra: issymmetric
         @test Az == An
     end
 
-    @testset "the interface takes a mesh, a scalar space or a composite space" begin
+    @testset "Interface types" begin
         # All three entry points now accept all three, which they did not: `symmetrize!`
         # was the one that rejected a `ScalarGridSpace`, so `dirichlet_bc!(A, Wₕ, :bottom)`
         # worked while `symmetrize!(A, F, Wₕ, :bottom)` was a MethodError — for two calls
@@ -211,7 +211,7 @@ using LinearAlgebra: issymmetric
         @test Fw == Fm
     end
 
-    @testset "constraints and time-evaluated constraints share one method" begin
+    @testset "Constraint method sharing" begin
         # `EvaluatedDomainMarkers` holds the original alongside a timestamp, so it is a
         # distinct type — but it answers `conditions`, `label` and `identifier`
         # identically, and applying a condition never needs to tell the two apart. There
@@ -234,7 +234,7 @@ using LinearAlgebra: issymmetric
         @test all(vals[k] ≈ 0.5 * pts[k][1] + 1 for k in eachindex(pts))
     end
 
-    @testset "allocation free, scalar and composite, dense and sparse" begin
+    @testset "Zero allocations" begin
         # It runs once per step of a time loop. The dense path used to allocate a
         # `findall` vector that grew with the boundary; both paths now walk the mask's set
         # bits, which also does work proportional to what is marked rather than to the

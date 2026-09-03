@@ -16,8 +16,8 @@ using Bramble: IndexedTrialFunction, IndexedTestFunction, TrialFunction, TestFun
 # `CoupledBilinearForm` reached only for a space of spaces. Routing by leaf index reaches
 # off-diagonal blocks for any composite, so none of it had a caller left.
 
-@testset "Coupled form block extraction" begin
-    @testset "finding the component through every node it can hide behind" begin
+@testset "Block extraction" begin
+    @testset "Component search" begin
         # The walk descends to the leaf, so every node that wraps one has to pass the
         # question through. A node missed here reports `nothing`, and a term reporting
         # `nothing` goes to every diagonal block rather than the one it names — which is
@@ -40,7 +40,7 @@ using Bramble: IndexedTrialFunction, IndexedTestFunction, TrialFunction, TestFun
         @test test_component_or_nothing(innerₕ(u, v)) == 2
     end
 
-    @testset "a term with no indexed leaf names no component" begin
+    @testset "Unindexed terms" begin
         # Not an error: a form written without component indices is the same integrand on
         # every block, which is how the two spellings mix in one form.
         u, v = TrialFunction{2}(), TestFunction{2}()
@@ -52,7 +52,7 @@ using Bramble: IndexedTrialFunction, IndexedTestFunction, TrialFunction, TestFun
         @test routes_by_component(innerₕ(u(1), v(1)))
     end
 
-    @testset "a sum inside one product agrees with itself or is an error" begin
+    @testset "Sum consistency" begin
         # `innerₕ(uₕ, v(2) + D₋ₓ(v(2)))` is one term of one block, so its sides have to
         # name the same component. Sides naming different ones are not a component of
         # anything, and answering `nothing` there is what let a term broadcast to every
@@ -67,7 +67,7 @@ using Bramble: IndexedTrialFunction, IndexedTestFunction, TrialFunction, TestFun
         @test_throws ArgumentError trial_component_or_nothing(u(1) + u(3))
     end
 
-    @testset "the block a term belongs to" begin
+    @testset "Block routing" begin
         u, v = TrialFunction{2}(), TestFunction{2}()
 
         # both sides named: one block, column from the trial, row from the test

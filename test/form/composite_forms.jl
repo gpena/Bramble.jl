@@ -4,7 +4,7 @@ using SparseArrays
 using LinearAlgebra
 using Bramble: Innerplus, backward_difference_matrix, weights, CompositeGridSpace
 
-@testset "CompositeGridSpace & Forms Assembly" begin
+@testset "Composite forms assembly" begin
     # 1. Setup
     N = 10
     I = interval(-1.0, 1.0)
@@ -15,7 +15,7 @@ using Bramble: Innerplus, backward_difference_matrix, weights, CompositeGridSpac
     # Cartesian product space
     Vh = Wh × Wh
 
-    @testset "Composite Space Properties" begin
+    @testset "Composite space" begin
         @test Vh isa CompositeGridSpace{2}
         @test ndofs(Vh) == 2 * ndofs(Wh)
         @test dim(Vh) == dim(Wh)
@@ -24,7 +24,7 @@ using Bramble: Innerplus, backward_difference_matrix, weights, CompositeGridSpac
         @test ndofs(Vh, Tuple) == (ndofs(Wh), ndofs(Wh))
     end
 
-    @testset "Bilinear Form Block Diagonal Assembly" begin
+    @testset "Bilinear block diagonal" begin
         # Composite bilinear form: ∫ ∇u · ∇v dx
         a = form(Vh, Vh, (u, v) -> inner₊(D₋ₓ(u), D₋ₓ(v)))
         A = assemble(a)
@@ -49,7 +49,7 @@ using Bramble: Innerplus, backward_difference_matrix, weights, CompositeGridSpac
         @test norm(A21) == 0.0
     end
 
-    @testset "Bilinear Form with Dirichlet BCs" begin
+    @testset "Bilinear Dirichlet BCs" begin
         a = form(Vh, Vh, (u, v) -> inner₊(D₋ₓ(u), D₋ₓ(v)))
         A_bc = assemble(a, dirichlet_labels = (:left, :right))
 
@@ -64,7 +64,7 @@ using Bramble: Innerplus, backward_difference_matrix, weights, CompositeGridSpac
         @test norm(A_bc[(n + 1):end, 1:n]) == 0.0
     end
 
-    @testset "Linear Form Assembly" begin
+    @testset "Linear form assembly" begin
         # Composite linear form
         l = form(Vh, v -> innerₕ(1.0, v))
         b = assemble(l)
@@ -79,7 +79,7 @@ using Bramble: Innerplus, backward_difference_matrix, weights, CompositeGridSpac
         @test b[(n + 1):end] ≈ b_single
     end
 
-    @testset "Linear Form with Dirichlet BCs" begin
+    @testset "Linear Dirichlet BCs" begin
         l = form(Vh, v -> innerₕ(1.0, v))
         bcs = dirichlet_constraints(Vh, :left => x -> -5.0, :right => x -> 5.0)
 

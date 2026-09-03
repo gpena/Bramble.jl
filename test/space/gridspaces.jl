@@ -7,12 +7,12 @@ using Bramble: Innerh, Innerplus
 using LinearAlgebra: norm
 using Supposition
 
-@testset "Scalar and Vector GridSpaces" begin
+@testset "Grid spaces" begin
     mesh1d = mesh(domain(interval(0, 1)), 10, true)
     mesh2d = mesh(domain(box((0, 0), (0.5, 0.6))), (5, 6), (true, true))
     mesh3d = mesh(domain(box((0, 0, 0), (0.5, 0.6, 0.7))), (4, 4, 4), (true, true, true))
 
-    @testset "Weight Helper Functions" begin
+    @testset "Weight helpers" begin
         @testset "__prod" begin
             # Test D=1
             v1 = ([1.0, 2.0, 3.0],)
@@ -70,7 +70,7 @@ using Supposition
         end
     end
 
-    @testset "Space Weights Computation" begin
+    @testset "Weights computation" begin
         D2 = dim(mesh2d)
         b2 = backend(mesh2d)
         VT2 = vector_type(b2)
@@ -82,12 +82,12 @@ using Supposition
         @test all(length(w) == npoints(mesh2d) for w in sw2.innerplus)
     end
 
-    @testset "ScalarGridSpace Construction and Properties" begin
+    @testset "ScalarGridSpace" begin
         W1 = gridspace(mesh1d)
         W2 = gridspace(mesh2d)
         W3 = gridspace(mesh3d)
 
-        @testset "Types and Fields" begin
+        @testset "Types & fields" begin
             @test W1 isa ScalarGridSpace
             @test W2 isa ScalarGridSpace
             @test W3 isa ScalarGridSpace
@@ -101,7 +101,7 @@ using Supposition
             @test !hasfield(ScalarGridSpace, :has_average_matrix)
         end
 
-        @testset "Interface Accessors" begin
+        @testset "Accessors" begin
             @test mesh(W1) === mesh1d
             @test mesh(W2) === mesh2d
             @test mesh_type(W1) === typeof(mesh1d)
@@ -127,7 +127,7 @@ using Supposition
             @test ndofs(W3, Tuple) == (4, 4, 4)
         end
 
-        @testset "Weights Accessors" begin
+        @testset "Weight accessors" begin
             w_h = weights(W2, Innerh())
             @test w_h isa AbstractVector
             @test length(w_h) == 30
@@ -141,7 +141,7 @@ using Supposition
         end
     end
 
-    @testset "CompositeGridSpace / VectorGridSpace Construction and Properties" begin
+    @testset "CompositeGridSpace" begin
         W = gridspace(mesh2d)
 
         @testset "Constructors" begin
@@ -183,7 +183,7 @@ using Supposition
             @test V_vararg isa CompositeGridSpace{3}
         end
 
-        @testset "Interface Accessors" begin
+        @testset "Accessors" begin
             V = W^2
             @test mesh(V) === mesh2d
             @test mesh_type(V) === typeof(mesh2d)
@@ -204,7 +204,7 @@ using Supposition
             @test weights(V, Innerplus(), 1) === weights(W, Innerplus(), 1)
         end
 
-        @testset "Collection Interface" begin
+        @testset "Collection interface" begin
             W_a = gridspace(mesh1d)
             W_b = gridspace(mesh1d)
             V = CompositeGridSpace(W_a, W_b)
@@ -224,7 +224,7 @@ using Supposition
             @test collected[2] === W_b
         end
 
-        @testset "Hierarchical Spaces (for coupled problems like Stokes)" begin
+        @testset "Hierarchical spaces" begin
             # Vh (velocity, 2D) and Qh (pressure, 1D)
             Vh = W × W
             Qh = W
@@ -236,7 +236,7 @@ using Supposition
         end
     end
 
-    @testset "Int and Val component counts agree" begin
+    @testset "Component count agreement" begin
         W = gridspace(mesh2d)
 
         # The two spellings must produce the same type for every N.
@@ -274,7 +274,7 @@ using Supposition
         @test ndofs(V) == 3 * ndofs(W)
     end
 
-    @testset "Interface fallbacks on AbstractSpaceType" begin
+    @testset "Interface fallbacks" begin
         # These are @inline one-liners that get fully inlined, so line coverage
         # never sees them; they still need exercising.
         import Bramble: space, spaces, ncomponents, AbstractSpaceType
@@ -296,7 +296,7 @@ using Supposition
         @test space(V) === V
     end
 
-    @testset "Composite constructors and collection interface" begin
+    @testset "Composite collections" begin
         import Bramble: CompositeGridSpace, vector_gridspace, spaces
 
         W = gridspace(mesh2d)
@@ -325,7 +325,7 @@ using Supposition
     end
 end
 
-@testset "1D inner-product weights on awkward grids" begin
+@testset "Awkward grid weights" begin
     # space_weights has a one-dimensional method, because two of the four full-length
     # vectors the general method builds are dead there: the transverse factor is never
     # selected when there is no transverse direction, and the product over a single
@@ -374,7 +374,7 @@ end
         end
     end
 
-    @testset "domain measure and partition of unity (Supposition)" begin
+    @testset "Partition of unity" begin
         positive_float = Data.Floats{Float64}(; minimum = 0.1, maximum = 10.0,
             nans = false, infs = false)
         coord_float = Data.Floats{Float64}(; minimum = -10.0, maximum = 10.0,

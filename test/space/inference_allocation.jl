@@ -20,7 +20,7 @@ using Bramble: values, components, _difference_engine!, _average_engine!,
 # `alloc_test` comes from runtests.jl. These run under code coverage too; see the note on
 # `@test_allocs` there for why they no longer skip.
 
-@testset "Space inference and allocation" begin
+@testset "Inference & allocations" begin
     Ωₕ1 = mesh(domain(interval(0.0, 1.0)), 64, false)
     Ωₕ2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (8, 9), (true, false))
     Ωₕ3 = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 6),
@@ -33,7 +33,7 @@ using Bramble: values, components, _difference_engine!, _average_engine!,
     uₕ3 = Rₕ(Wₕ3, x -> sin(x[1]) + x[3])
     cₕ2 = Rₕ(Vₕ2, (x -> x[1], x -> x[2]))
 
-    @testset "construction and restriction are type stable" begin
+    @testset "Type stability (setup)" begin
         @test @inferred(gridspace(Ωₕ2)) isa Bramble.ScalarGridSpace
         @test @inferred(element(Wₕ2)) isa VectorElement
         @test @inferred(ndofs(Wₕ2)) isa Int
@@ -43,7 +43,7 @@ using Bramble: values, components, _difference_engine!, _average_engine!,
         @test @inferred(values(uₕ2)) isa AbstractVector
     end
 
-    @testset "operators are type stable" begin
+    @testset "Type stability (operators)" begin
         # scalar operators, per direction, in each dimension
         for (lbl, uₕ, ops) in (
             ("1D", uₕ1, (diff₋ₓ, diff₊ₓ, D₋ₓ, D₊ₓ, jumpₓ, M₋ₓ, M₊ₓ)),
@@ -68,7 +68,7 @@ using Bramble: values, components, _difference_engine!, _average_engine!,
         @test @inferred(∇₋ₕ(cₕ2)) isa NTuple{2, VectorElement}
     end
 
-    @testset "inner products and norms are type stable" begin
+    @testset "Type stability (inner products)" begin
         for (lbl, uₕ) in (("1D", uₕ1), ("2D", uₕ2), ("3D", uₕ3))
             @testset "$lbl" begin
                 @test @inferred(innerₕ(uₕ, uₕ)) isa Float64
@@ -85,7 +85,7 @@ using Bramble: values, components, _difference_engine!, _average_engine!,
         @test @inferred(inner₊ᵧ(uₕ2, uₕ2)) isa Float64
     end
 
-    @testset "inner products and norms do not allocate" begin
+    @testset "Zero allocations (inner products)" begin
         # A time-stepping loop evaluates these every step, so any allocation here is
         # per-step garbage.
         for (lbl, uₕ) in (("1D", uₕ1), ("2D", uₕ2), ("3D", uₕ3))
@@ -105,7 +105,7 @@ using Bramble: values, components, _difference_engine!, _average_engine!,
         @test_allocs snorm₁ₕ(c)
     end
 
-    @testset "the stencil engines do not allocate" begin
+    @testset "Zero allocations (stencils)" begin
         # The engines are the inner loop of every operator. `h` is passed both as
         # `nothing` and as the mesh's cached spacing vector, because those take different
         # dispatches and only the second ever boxed.
@@ -120,7 +120,7 @@ using Bramble: values, components, _difference_engine!, _average_engine!,
         @test_allocs avg!(values(vₕ), values(uₕ1))
     end
 
-    @testset "a callable spacing costs a constant, not one dispatch per point" begin
+    @testset "Callable spacing dispatch" begin
         # `h` may be a callable as well as a vector, and `_difference_engine!` names its
         # type so that Julia specialises on it. Julia does not specialise on an argument
         # of function type when the body only forwards it, which is what this does, so
@@ -142,7 +142,7 @@ using Bramble: values, components, _difference_engine!, _average_engine!,
         @test callable_bytes(1024) == callable_bytes(8192)
     end
 
-    @testset "operators allocate their output and nothing else" begin
+    @testset "Operator output allocation" begin
         # The exact property, not a bound: applying an operator costs one `similar`.
         # It is what fails first when a closure starts boxing or a temporary creeps in.
         for (lbl, uₕ, ops) in (
@@ -158,7 +158,7 @@ using Bramble: values, components, _difference_engine!, _average_engine!,
         end
     end
 
-    @testset "in-place restriction costs the same at every grid size" begin
+    @testset "In-place restriction scaling" begin
         # Rₕ! and avgₕ! allocate a small constant. The property that matters is that it
         # is constant: anything proportional to the grid would be per-step garbage.
         function inplace_bytes(be, n)

@@ -3,7 +3,7 @@ using Bramble
 using Bramble: CartesianProduct
 using StaticArrays
 
-@testset "CartesianProduct Tests" begin
+@testset "CartesianProduct" begin
     @testset "Constructors" begin
         # interval constructor (Float64 default)
         I_f64 = interval(-3.0, 10.0)
@@ -101,7 +101,7 @@ using StaticArrays
         @test B3d.box[3] == (2.0, 5.0)
     end
 
-    @testset "Accessors and Properties" begin
+    @testset "Accessors & properties" begin
         I = interval(0.0, 1.0)
         R2 = cartesian_product(((0, 1), (2, 3)))
         R3 = I × interval(2.0, 3.0) × interval(4.0, 5.0)
@@ -191,7 +191,7 @@ using StaticArrays
         @test_throws MethodError last(R3)
     end
 
-    @testset "Operations and Mixed Promotions" begin
+    @testset "Operations & promotions" begin
         I1 = interval(0.0, 1.0)
         I2 = interval(2.0, 3.0)
         I3_int = interval(4, 5)
@@ -242,7 +242,7 @@ using StaticArrays
         @test_throws BoundsError projection(P_proj, 0)
     end
 
-    @testset "Zero-Allocation & Type Inference" begin
+    @testset "Type stability & allocations" begin
         I1 = interval(0.0, 1.0)
         I2 = interval(2.0, 3.0)
         cp2 = I1 × I2
@@ -280,7 +280,7 @@ using StaticArrays
         @test_allocs (I1 × I2)
     end
 
-    @testset "Display / Show" begin
+    @testset "Show" begin
         I = interval(0.0, 1.0)
         P = point(2.5)
         R2 = I × interval(2.0, 3.0)
@@ -320,7 +320,7 @@ using StaticArrays
         @test occursin("topological dim 1", str_R2c)
     end
 
-    @testset "Point containment — AbstractVector and fallback" begin
+    @testset "Point containment" begin
         I = interval(0.0, 1.0)
         R2 = interval(0.0, 2.0) × interval(-1.0, 1.0)
 
@@ -342,7 +342,7 @@ using StaticArrays
         @test (:sym ∈ R2) == false
     end
 
-    @testset "Pretty-print helpers" begin
+    @testset "Pretty print" begin
         using Bramble: PrettyPrinter, with_indent, print_indent, print_colored,
                        println_colored,
                        print_header, print_section_header, print_subsection_header,
@@ -453,7 +453,7 @@ using StaticArrays
     end
 end
 
-@testset "Containment tests do not allocate" begin
+@testset "Containment allocations" begin
     # `x in X` is called per point when a marker condition is evaluated over a mesh, so a
     # heap allocation here is one per grid point. The vector method reduced over `1:D`
     # with a closure capturing the vector, which allocated 80 bytes a call; it is unrolled

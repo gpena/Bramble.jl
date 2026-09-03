@@ -19,8 +19,8 @@ using Bramble: values
 const F32_BACKEND = backend(vector_type = Vector{Float32},
     matrix_type = SparseMatrixCSC{Float32, Int})
 
-@testset "The backend element type is preserved" begin
-    @testset "meshes and grid spaces" begin
+@testset "Element type preservation" begin
+    @testset "Meshes & spaces" begin
         @test eltype(F32_BACKEND) === Float32
 
         Ωₕ1 = mesh(domain(interval(0.0f0, 1.0f0)), 11, true; backend = F32_BACKEND)
@@ -41,7 +41,7 @@ const F32_BACKEND = backend(vector_type = Vector{Float32},
         @test eltype(gridspace(Ωₕ2, Val(2))) === Float32
     end
 
-    @testset "grid functions and operators" begin
+    @testset "Functions & operators" begin
         Ωₕ = mesh(domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)), (6, 7),
             (true, false); backend = F32_BACKEND)
         Wₕ = gridspace(Ωₕ)
@@ -59,7 +59,7 @@ const F32_BACKEND = backend(vector_type = Vector{Float32},
         end
     end
 
-    @testset "the matrix forms" begin
+    @testset "Matrix forms" begin
         # The averaging matrices are where the Float64 literal was: every other family
         # was already exact, so a bound on all of them would not have caught it.
         Ωₕ = mesh(domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)), (6, 7),
@@ -70,7 +70,7 @@ const F32_BACKEND = backend(vector_type = Vector{Float32},
         end
     end
 
-    @testset "inner products and norms" begin
+    @testset "Inner products & norms" begin
         Ωₕ = mesh(domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)), (6, 7),
             (true, false); backend = F32_BACKEND)
         Wₕ = gridspace(Ωₕ)

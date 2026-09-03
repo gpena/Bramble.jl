@@ -1,6 +1,6 @@
 using Aqua
 
-@testset "Aqua analysis" begin
+@testset "Aqua" begin
     # Julia 1.14-DEV (nightly) has an upstream bug where Aqua's unbound_args inspection
     # fails on standard Type{<:T} method signatures. Run unbound_args on stable releases.
     test_unbound = isempty(VERSION.prerelease)

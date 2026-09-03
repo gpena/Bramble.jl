@@ -4,7 +4,7 @@ using Random
 using Supposition
 
 # --- Test Suite ---
-@testset "MeshnD Tests" begin
+@testset "MeshND" begin
     # Helper function to create a simple nD domain
     function create_test_nd_domain(intervals::NTuple{D, Tuple{Float64, Float64}}; markers = nothing) where {D}
         nd_intervals = map(t -> interval(t[1], t[2]), intervals)
@@ -23,8 +23,8 @@ using Supposition
         return prod
     end
 
-    @testset "Helper Functions (D>1)" begin
-        @testset "boundary_symbol_to_dict (D=2)" begin
+    @testset "Helpers" begin
+        @testset "boundary_symbol_to_dict 2D" begin
             indices = CartesianIndices((4, 5)) # N=4, M=5
             dict = boundary_symbol_to_dict(indices)
             @test dict[:left] == CartesianIndices((1:1, 1:5))
@@ -33,7 +33,7 @@ using Supposition
             @test dict[:top] == CartesianIndices((1:4, 5:5))
         end
 
-        @testset "boundary_symbol_to_dict (D=3)" begin
+        @testset "boundary_symbol_to_dict 3D" begin
             indices = CartesianIndices((3, 4, 5)) # N=3, M=4, K=5
             dict = boundary_symbol_to_dict(indices)
             @test dict[:left] == CartesianIndices((1:3, 1:1, 1:5))
@@ -44,7 +44,7 @@ using Supposition
             @test dict[:front] == CartesianIndices((3:3, 1:4, 1:5))
         end
 
-        @testset "is_boundary_index (D=2)" begin
+        @testset "is_boundary_index 2D" begin
             idxs = CartesianIndices((3, 4))
             @test is_boundary_index(idxs, CartesianIndex(1, 1)) == true
             @test is_boundary_index(idxs, CartesianIndex(1, 2)) == true
@@ -61,7 +61,7 @@ using Supposition
             @test is_boundary_index(idxs, (2, 2)) == false
         end
 
-        @testset "is_boundary_index (D=3)" begin
+        @testset "is_boundary_index 3D" begin
             idxs = CartesianIndices((3, 4, 2))
             @test is_boundary_index(idxs, CartesianIndex(1, 1, 1)) == true # Corner
             @test is_boundary_index(idxs, CartesianIndex(2, 2, 1)) == true # On face z=1
@@ -84,7 +84,7 @@ using Supposition
         end
     end # Helper Functions Testset
 
-    @testset "Dimension D=2" begin
+    @testset "2D" begin
         D = 2
         npts_2d = (4, 5) # Nx=4, Ny=5
         intervals_2d = ((0.0, 3.0), (0.0, 4.0)) # dx=1.0, dy=1.0
@@ -92,7 +92,7 @@ using Supposition
         Ωₕ_2d_unif = mesh(Ω_2d, npts_2d, (true, true); backend = backend())
         Ωₕ_2d_nonunif = mesh(Ω_2d, npts_2d, (false, true); backend = backend())
 
-        @testset "Construction and Basic Properties (D=2)" begin
+        @testset "Construction & properties" begin
             @test Ωₕ_2d_unif isa MeshnD{2}
             @test backend(Ωₕ_2d_unif) isa Backend
             @test eltype(Ωₕ_2d_unif) == Float64
@@ -122,7 +122,7 @@ using Supposition
             @test pts_y ≈ range(intervals_2d[2][1], intervals_2d[2][2], length = npts_2d[2])
         end
 
-        @testset "Geometric Properties (D=2, Uniform)" begin
+        @testset "Geometric properties" begin
             # Points: x = [0,1,2,3], y = [0,1,2,3,4]
             @test points(Ωₕ_2d_unif(1)) ≈ [0.0, 1.0, 2.0, 3.0]
             @test points(Ωₕ_2d_unif(2)) ≈ [0.0, 1.0, 2.0, 3.0, 4.0]
@@ -177,7 +177,7 @@ using Supposition
             @test half_point(Ωₕ_2d_unif, CartesianIndex(3, 4)) == (1.5, 2.5) # hp_x[3], hp_y[4]
         end
 
-        @testset "Index Subsets (D=2)" begin
+        @testset "Index subsets" begin
             idxs = indices(Ωₕ_2d_unif) # (4, 5)
             int_indices = collect(interior_indices(Ωₕ_2d_unif))
 
@@ -199,7 +199,7 @@ using Supposition
             @test !(CartesianIndex(3, 5) in int_indices)
         end
 
-        @testset "Marker Setting (D=2)" begin
+        @testset "Marker setting" begin
             Ω_2d_dummy = create_test_nd_set(intervals_2d)
 
             dm_2d = markers(Ω_2d_dummy,
@@ -211,7 +211,7 @@ using Supposition
             Ωₕ_2d_marked = mesh(Ω_2d_marked, npts_2d, (true, true); backend = backend()) # Pts: x=[0,1,2,3], y=[0,1,2,3,4]
         end
 
-        @testset "Mesh Modification (D=2)" begin
+        @testset "Modification" begin
             Ω_2d_dummy = create_test_nd_set(intervals_2d)
 
             # Setup for modification tests
@@ -241,14 +241,14 @@ using Supposition
         end
     end # Dimension D=2 Testset
 
-    @testset "Dimension D=3" begin
+    @testset "3D" begin
         D = 3
         npts_3d = (3, 4, 2) # Nx=3, Ny=4, Nz=2
         intervals_3d = ((0.0, 2.0), (0.0, 3.0), (0.0, 1.0)) # dx=1.0, dy=1.0, dz=1.0
         Ω_3d = create_test_nd_domain(intervals_3d)
         Ωₕ_3d_unif = mesh(Ω_3d, npts_3d, (true, true, true); backend = backend())
 
-        @testset "Construction and Basic Properties (D=3)" begin
+        @testset "Construction & properties" begin
             @test Ωₕ_3d_unif isa MeshnD{3}
             @test backend(Ωₕ_3d_unif) isa Backend
             @test eltype(Ωₕ_3d_unif) == Float64
@@ -265,7 +265,7 @@ using Supposition
             @test npoints(Ωₕ_3d_unif(3)) == npts_3d[3]
         end
 
-        @testset "Geometric Properties (D=3, Uniform)" begin
+        @testset "Geometric properties" begin
             # Points: x = [0,1,2], y = [0,1,2,3], z = [0,1]
             @test points(Ωₕ_3d_unif(1)) ≈ [0.0, 1.0, 2.0]
             @test points(Ωₕ_3d_unif(2)) ≈ [0.0, 1.0, 2.0, 3.0]
@@ -292,7 +292,7 @@ using Supposition
             @test cell_measure(Ωₕ_3d_unif, (3, 4, 2)) ≈ 0.5 * 0.5 * 0.5 == 0.125
         end
 
-        @testset "Index Subsets (D=3)" begin
+        @testset "Index subsets" begin
             idxs = indices(Ωₕ_3d_unif) # (3, 4, 2)
             bnd_indices = collect(boundary_indices(Ωₕ_3d_unif))
             int_indices = collect(interior_indices(Ωₕ_3d_unif))
@@ -320,7 +320,7 @@ using Supposition
             @test !(CartesianIndex(3, 5, 3) in int_indices_lg)
         end
 
-        @testset "Marker Setting (D=3)" begin
+        @testset "Marker setting" begin
             _set = create_test_nd_set(intervals_3d)
             dm_3d = markers(_set,
                 :BottomFace => :bottom,
@@ -331,8 +331,8 @@ using Supposition
         end
     end # Dimension D=3 Testset
 
-    @testset "Additional MeshnD Functions" begin
-        @testset "Iterator Functions (D=2)" begin
+    @testset "Additional methods" begin
+        @testset "Iterators" begin
             intervals_2d = ((0.0, 2.0), (0.0, 2.0))
             Ω_2d = create_test_nd_domain(intervals_2d)
             Ωₕ = mesh(Ω_2d, (3, 3), (true, true); backend = backend()) # 3x3 uniform
@@ -368,7 +368,7 @@ using Supposition
             @test cm_collected[1] ≈ 0.25
         end
 
-        @testset "Submesh Access" begin
+        @testset "Submesh access" begin
             intervals_2d = ((0.0, 1.0), (2.0, 3.0))
             Ω = create_test_nd_domain(intervals_2d)
             Ωₕ = mesh(Ω, (5, 6), (true, true); backend = backend())
@@ -384,7 +384,7 @@ using Supposition
             @test npoints(Ωₕ(2)) == 6
         end
 
-        @testset "Type Stability (D=2 and D=3)" begin
+        @testset "Type stability" begin
             intervals_2d = ((0.0, 1.0), (0.0, 1.0))
             Ω_2d = create_test_nd_domain(intervals_2d)
             Ωₕ_2d = mesh(Ω_2d, (3, 3), (true, true); backend = backend())
@@ -402,7 +402,7 @@ using Supposition
             @test dim(typeof(Ωₕ_3d)) == 3
         end
 
-        @testset "Mesh Accessors" begin
+        @testset "Accessors" begin
             intervals_2d = ((0.0, 1.0), (0.0, 1.0))
             Ω = create_test_nd_domain(intervals_2d)
             Ωₕ = mesh(Ω, (4, 4), (true, true); backend = backend())
@@ -420,7 +420,7 @@ using Supposition
             @test markers(Ωₕ) isa MeshMarkers
         end
 
-        @testset "Topological Dimension" begin
+        @testset "Topological dimension" begin
             # 2D mesh
             intervals_2d = ((0.0, 1.0), (0.0, 1.0))
             Ω_2d = create_test_nd_domain(intervals_2d)
@@ -435,7 +435,7 @@ using Supposition
             @test topo_dim(Ωₕ_line) == 1  # Only 1 non-collapsed dimension
         end
 
-        @testset "Collapsed dimension keeps its coordinate" begin
+        @testset "Collapsed dimension" begin
             # A line y = 5 embedded in 2D: the collapsed axis must sit at 5, not 0.
             Ω_line = create_test_nd_domain(((0.0, 1.0), (5.0, 5.0)))
             Ωₕ_line = mesh(Ω_line, (3, 4), (true, true); backend = backend())
@@ -452,7 +452,7 @@ using Supposition
             @test point(Ωₕ_pt, (1, 1, 1)) == (2.0, 3.0, 4.0)
         end
 
-        @testset "_apply_hs_logic Helper" begin
+        @testset "_apply_hs_logic" begin
             # Test the helper function for collapsed dimensions
             using Bramble: _apply_hs_logic
 
@@ -473,7 +473,7 @@ using Supposition
             @test forward_spacing(Ωₕ, CartesianIndex(2, 1)) == (1.0, 1.0)
         end
 
-        @testset "Direct Indexing (getindex)" begin
+        @testset "Indexing" begin
             intervals_2d = ((0.0, 2.0), (0.0, 4.0))
             Ω = create_test_nd_domain(intervals_2d)
             Ωₕ = mesh(Ω, (3, 5))
@@ -483,7 +483,7 @@ using Supposition
             @test Ωₕ[CartesianIndex(3, 5)] == (2.0, 4.0)
         end
 
-        @testset "Pretty Printing (show)" begin
+        @testset "Show" begin
             intervals_2d = ((0.0, 1.0), (0.0, 2.0))
             Ω = create_test_nd_domain(intervals_2d)
             Ωₕ = mesh(Ω, (4, 4))
@@ -526,7 +526,7 @@ using Supposition
             @test occursin("Point", str_1d_pt)
         end
 
-        @testset "Convenience Constructors (default uniform)" begin
+        @testset "Convenience constructors" begin
             intervals_2d = ((0.0, 1.0), (0.0, 1.0))
             Ω = create_test_nd_domain(intervals_2d)
             Ωₕ = mesh(Ω, (5, 5))
@@ -537,7 +537,7 @@ using Supposition
     end
 end # Main Testset
 
-@testset "Refinement leaves the mesh self-consistent" begin
+@testset "Refinement consistency" begin
     # iterative_refinement! refines each submesh, and each of those regenerates its own
     # indices. The parent holds a CartesianIndices spanning the whole grid, which has to
     # be rebuilt too. It was not: npoints reported the refined count while indices still
@@ -549,7 +549,7 @@ end # Main Testset
     # The two-argument form, which also takes markers, always rebuilt the indices; only
     # the one-argument form was affected.
 
-    @testset "indices track npoints after refinement" begin
+    @testset "Index tracking" begin
         for npts in ((5, 4), (3, 4, 5))
             D = length(npts)
             Ω = D == 2 ? domain(interval(0.0, 1.0) × interval(0.0, 1.0)) :
@@ -565,7 +565,7 @@ end # Main Testset
         end
     end
 
-    @testset "a grid function on a refined mesh is fully written" begin
+    @testset "Refined grid function" begin
         # The observable consequence: with a stale index set, Rₕ leaves entries
         # untouched, so the result does not match the function it restricted.
         for npts in ((5, 4), (3, 4, 5))
@@ -589,7 +589,7 @@ end # Main Testset
         end
     end
 
-    @testset "the marker form stays consistent too" begin
+    @testset "Marker consistency" begin
         Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
         Ωₕ = mesh(Ω, (5, 4), (true, true))
         iterative_refinement!(Ωₕ, markers(Ω))
@@ -597,7 +597,7 @@ end # Main Testset
         @test length(indices(Ωₕ)) == npoints(Ωₕ)
     end
 
-    @testset "arbitrary grid refinement invariants (Supposition)" begin
+    @testset "Refinement invariants" begin
         @check function check_refinement_invariants_2d(
                 nx = Data.Integers(3, 8),
                 ny = Data.Integers(3, 8)
@@ -638,7 +638,7 @@ end # Main Testset
     end
 end
 
-@testset "hₘₐₓ is the diagonal of the largest cell" begin
+@testset "hₘₐₓ diagonal" begin
     # hₘₐₓ is computed per axis and combined with hypot, rather than by visiting every
     # cell. The two agree because the spacing along one axis does not depend on the other
     # coordinates and hypot is increasing in each argument, but that is a property of the

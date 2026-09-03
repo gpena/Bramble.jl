@@ -26,7 +26,7 @@ using Bramble: values, components
 # Each test compares against a central difference of the same functional evaluated in
 # plain Float64, so it checks the derivative is right, not merely that it ran.
 
-@testset "a scalar times a tuple of elements differentiates" begin
+@testset "Scalar-tuple product differentiation" begin
     # `a * (uₕ, vₕ)` allocated its output with `similar(vₕ[i])`, taking the element type from
     # the tuple and dropping the scalar's, so a Dual scalar was written into a
     # `Vector{Float64}`:
@@ -55,7 +55,7 @@ end
     Wₕ1, Wₕ2 = gridspace(Ωₕ1), gridspace(Ωₕ2)
     Vₕ2 = gridspace(Ωₕ2, Val(2))
 
-    @testset "the mesh is not differentiated with the field" begin
+    @testset "Non-differentiated mesh" begin
         # The point of the whole exercise: Dual coefficients over Float64 geometry.
         a = ForwardDiff.Dual{ForwardDiff.Tag{typeof(identity), Float64}}(1.3, 1.0)
         uₕ = Rₕ(Wₕ1, x -> a * sin(x))
@@ -75,7 +75,7 @@ end
         @test eltype(values(D₋ₓ(vₕ))) === Float64
     end
 
-    @testset "restriction and cell averaging" begin
+    @testset "Restriction & cell-averaging" begin
         @test _matches_fd(a -> innerₕ(Rₕ(Wₕ1, x -> a * sin(x)),
             Rₕ(Wₕ1, x -> a * x)))
         @test _matches_fd(a -> innerₕ(avgₕ(Wₕ1, x -> a * sin(x)),
@@ -108,7 +108,7 @@ end
             avgₕ(Wm, x -> a * sin(x); markers = (:left, :right)), Rₕ(Wm, x -> a * x)))
     end
 
-    @testset "every difference, jump and average operator" begin
+    @testset "Difference, jump & average" begin
         for (nm, op) in (("D₋ₓ", D₋ₓ), ("D₊ₓ", D₊ₓ), ("diff₋ₓ", diff₋ₓ),
             ("diff₊ₓ", diff₊ₓ), ("jumpₓ", jumpₓ), ("M₋ₓ", M₋ₓ), ("M₊ₓ", M₊ₓ),
             ("Dstar₊ₓ", Dstar₊ₓ), ("Dcₓ", Dcₓ), ("Dₕₓ", Dₕₓ))
@@ -130,7 +130,7 @@ end
         end
     end
 
-    @testset "inner products and norms" begin
+    @testset "Inner products & norms" begin
         for (nm, f) in (("innerₕ", uₕ -> innerₕ(uₕ, uₕ)), ("normₕ", normₕ),
             ("snorm₁ₕ", snorm₁ₕ), ("norm₁ₕ", norm₁ₕ),
             ("inner₊", uₕ -> inner₊(uₕ, uₕ)), ("inner₊ₓ", uₕ -> inner₊ₓ(uₕ, uₕ)))
@@ -145,7 +145,7 @@ end
             Rₕ(Wₕ2, x -> a * x[2])))
     end
 
-    @testset "composite grid functions" begin
+    @testset "Composite grid functions" begin
         @test _matches_fd(function (a)
             cₕ = Rₕ(Vₕ2, (x -> a * x[1], x -> a^2 * x[2]))
             dₕ = Dcₓ(cₕ)
@@ -154,7 +154,7 @@ end
         end)
     end
 
-    @testset "element arithmetic and broadcasting" begin
+    @testset "Arithmetic & broadcasting" begin
         @test _matches_fd(function (a)
             uₕ = Rₕ(Wₕ1, x -> a * sin(x))
             vₕ = Rₕ(Wₕ1, x -> a * x)
@@ -168,7 +168,7 @@ end
         end)
     end
 
-    @testset "the matrix forms, against a Dual coefficient vector" begin
+    @testset "Dual matrix products" begin
         # The matrices are built from the mesh, so they stay Float64; the product with a
         # Dual vector promotes.
         for (nm, op) in (("D₋ₓ", D₋ₓ), ("M₋ₓ", M₋ₓ), ("jumpₓ", jumpₓ))
@@ -179,7 +179,7 @@ end
         end
     end
 
-    @testset "a gradient, not just a derivative" begin
+    @testset "Multi-variable gradient" begin
         # Several parameters at once, which is the shape an optimisation actually has.
         function J(p)
             uₕ = Rₕ(Wₕ1, x -> p[1] * sin(x) + p[2] * x^2)

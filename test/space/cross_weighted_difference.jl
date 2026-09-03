@@ -22,8 +22,8 @@ cross_weighted_ops(::Val{1}) = (Dₕₓ,)
 cross_weighted_ops(::Val{2}) = (Dₕₓ, Dₕᵧ)
 cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
 
-@testset "Cross-weighted centered difference" begin
-    @testset "matches the definition" begin
+@testset "Cross-weighted difference" begin
+    @testset "Definition match" begin
         for (lbl, unif) in (("uniform", true), ("random", false))
             @testset "$lbl" begin
                 Random.seed!(20260830)
@@ -43,7 +43,7 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
         end
     end
 
-    @testset "truncated at both ends" begin
+    @testset "Truncation at ends" begin
         Random.seed!(20260830)
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 7), (true, false))
         Wₕ = gridspace(Ωₕ)
@@ -61,7 +61,7 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
         @test !any(iszero, ry[:, 2:(end - 1)])
     end
 
-    @testset "coincides with Dc on a uniform grid" begin
+    @testset "Uniform Dc agreement" begin
         # Both are the mean of D₋ and D₊ there; they part company only where the two
         # spacings differ.
         Ωu = mesh(domain(interval(0.0, 1.0)), 21, true)
@@ -74,7 +74,7 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
         @test !isapprox(values(Dₕₓ(ur)), values(Dcₓ(ur)))
     end
 
-    @testset "exact on quadratics, on any grid" begin
+    @testset "Exact on quadratics" begin
         # The property that separates it from Dc, and the reason for the second order
         # below. Dc reproduces affine functions on any grid; this reproduces quadratics.
         for (lbl, unif) in (("uniform", true), ("random", false))
@@ -115,7 +115,7 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
         end
     end
 
-    @testset "convergence order" begin
+    @testset "Convergence order" begin
         # Second order on both, which is the point: Dc is first order on a non-uniform
         # grid and this is not.
         function orders(unif; steps = 4)
@@ -140,7 +140,7 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
         @test all(>(1.0), orand)
     end
 
-    @testset "the whole family" begin
+    @testset "Directional family" begin
         Random.seed!(20260830)
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6), (true, false))
         Wₕ = gridspace(Ωₕ)
@@ -168,7 +168,7 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
         end
     end
 
-    @testset "type stable and allocates only its output" begin
+    @testset "Type stability & allocations" begin
         Ωₕ1 = mesh(domain(interval(0.0, 1.0)), 33, false)
         Ωₕ2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 8), (true, false))
         u1 = Rₕ(gridspace(Ωₕ1), sin)
@@ -182,7 +182,7 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
         @test alloc_test(Dₕᵧ, u2) == alloc_test(similar, u2)
     end
 
-    @testset "the matrix and the grid function agree" begin
+    @testset "Matrix agreement" begin
         # Not one diagonal scaling of one difference, unlike the other two: it is the two
         # one-sided differences it is defined from, each under its own weight —
         # `diag(hᵢ/((hᵢ+hᵢ₊₁)hᵢ₊₁))·diff₊ + diag(hᵢ₊₁/((hᵢ+hᵢ₊₁)hᵢ))·diff₋`. That is worth

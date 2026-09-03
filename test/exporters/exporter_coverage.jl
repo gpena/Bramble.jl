@@ -8,8 +8,8 @@ Focus on basic VTK export functionality for 2D and 3D meshes
 (Note: 1D export is not supported by ExporterVTK)
 """
 
-@testset "VTK Exporter Coverage" begin
-    @testset "2D VTK Export - Basic" begin
+@testset "Exporter coverage" begin
+    @testset "2D basic" begin
         I = interval(0.0, 1.0)
         Ω = I × I
         X = domain(Ω)
@@ -39,7 +39,7 @@ Focus on basic VTK export functionality for 2D and 3D meshes
         end
     end
 
-    @testset "2D VTK Export - Multiple Datasets" begin
+    @testset "2D multiple datasets" begin
         I = interval(0.0, 1.0)
         Ω = I × I
         X = domain(Ω)
@@ -69,7 +69,7 @@ Focus on basic VTK export functionality for 2D and 3D meshes
         end
     end
 
-    @testset "2D VTK Export - Zero Solution" begin
+    @testset "2D zero solution" begin
         I = interval(0.0, 1.0)
         Ω = I × I
         X = domain(Ω)
@@ -93,7 +93,7 @@ Focus on basic VTK export functionality for 2D and 3D meshes
         end
     end
 
-    @testset "3D VTK Export - Small Mesh" begin
+    @testset "3D small mesh" begin
         I = interval(0.0, 1.0)
         Ω = I × I × I
         X = domain(Ω)
@@ -118,7 +118,7 @@ Focus on basic VTK export functionality for 2D and 3D meshes
         end
     end
 
-    @testset "VTK Exporter Helper Functions" begin
+    @testset "Helpers" begin
         I = interval(0.0, 1.0)
         Ω = I × I
         X = domain(Ω)

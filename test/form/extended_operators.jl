@@ -48,8 +48,8 @@ function apply_stencil(node, Wₕ, uₕ)
     return out, escaped
 end
 
-@testset "Extended symbolic operators" begin
-    @testset "each stencil reproduces its space-layer operator" begin
+@testset "Extended operators" begin
+    @testset "Operator reproduction" begin
         Random.seed!(20260831)
 
         @testset "1D" begin
@@ -87,7 +87,7 @@ end
             end
         end
 
-        @testset "3D, every direction" begin
+        @testset "3D directions" begin
             Ωₕ = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 4),
                 (false, true, false))
             Wₕ = gridspace(Ωₕ)
@@ -102,7 +102,7 @@ end
         end
     end
 
-    @testset "the boundary conventions differ, and deliberately" begin
+    @testset "Boundary conventions" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, false)
         Wₕ = gridspace(Ωₕ)
         id = IdentityOperator(Wₕ)
@@ -131,7 +131,7 @@ end
         @test any(!iszero, coeffs(Dstar₊ₓ(id), at_start, 1))
     end
 
-    @testset "the stencils have the shape the formulas do" begin
+    @testset "Stencil shapes" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 7, false)
         Wₕ = gridspace(Ωₕ)
         id = IdentityOperator(Wₕ)
@@ -152,7 +152,7 @@ end
         end
     end
 
-    @testset "composing with the other nodes" begin
+    @testset "Node composition" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 6), (true, false))
         Wₕ = gridspace(Ωₕ)
         id = IdentityOperator(Wₕ)
@@ -173,7 +173,7 @@ end
         @test got3 ≈ 3 .* values(Dₕₓ(uₕ)) rtol=1e-12
     end
 
-    @testset "the vector forms" begin
+    @testset "Vector forms" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6), (true, false))
         Wₕ = gridspace(Ωₕ)
         id = IdentityOperator(Wₕ)
@@ -198,7 +198,7 @@ end
         @test ∇ₕ(id1) === Dₕₓ(id1)
     end
 
-    @testset "the traits every node answers" begin
+    @testset "Trait responses" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 5), (true, true))
         Wₕ = gridspace(Ωₕ)
         id = IdentityOperator(Wₕ)
@@ -247,7 +247,7 @@ end
         end
     end
 
-    @testset "over a composite space" begin
+    @testset "Composite space" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 5), (true, false))
         Wₕ = gridspace(Ωₕ)
         Vₕ = gridspace(Ωₕ, Val(3))

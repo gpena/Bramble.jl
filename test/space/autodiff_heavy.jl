@@ -13,7 +13,7 @@ using Bramble: values
 #
 # `check_backend` and `_have` come from autodiff_backends.jl, which the group includes first.
 
-@testset "AD backends, expensive" begin
+@testset "AD backends (slow)" begin
     @testset "PolyesterForwardDiff" begin
         # Here rather than in the per-push group for two reasons. It exercises no Bramble
         # path ForwardDiff does not — the same Dual arithmetic, chunked across threads — so
@@ -38,7 +38,7 @@ using Bramble: values
         end
     end
 
-    @testset "Enzyme, and the two annotations it needs" begin
+    @testset "Enzyme annotations" begin
         if _have(:Enzyme)
             @eval import Enzyme
 
@@ -66,7 +66,7 @@ using Bramble: values
         end
     end
 
-    @testset "Zygote is out of scope, and this records why" begin
+    @testset "Zygote out of scope" begin
         if _have(:Zygote)
             @eval import Zygote
             # Not a limitation of the `!` forms: the allocating `D₋ₓ` writes into a

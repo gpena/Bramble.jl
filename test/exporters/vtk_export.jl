@@ -16,7 +16,7 @@ using WriteVTK
 # header, in plain text ahead of the compressed appended data.
 
 @testset "VTK export" begin
-    @testset "a 1D mesh, which the exporter this replaces refused" begin
+    @testset "1D export" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 6, true)
         Wₕ = gridspace(Ωₕ)
         uₕ = Rₕ(Wₕ, sin)
@@ -35,7 +35,7 @@ using WriteVTK
         end
     end
 
-    @testset "a 2D mesh, mesh-and-fields and the single-element shorthand" begin
+    @testset "2D export" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 4), (true, true))
         Wₕ = gridspace(Ωₕ)
         uₕ = Rₕ(Wₕ, x -> sin(x[1]) * x[2])
@@ -50,7 +50,7 @@ using WriteVTK
         end
     end
 
-    @testset "a composite element becomes one multi-component field" begin
+    @testset "Composite field" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 4), (true, true))
         Wₕ = gridspace(Ωₕ)
         Vₕ = Wₕ^Val(2)
@@ -63,7 +63,7 @@ using WriteVTK
         end
     end
 
-    @testset "3D, and a raw array alongside an element in one call" begin
+    @testset "3D export" begin
         Ωₕ = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (3, 4, 3),
             (true, true, true))
         Wₕ = gridspace(Ωₕ)

@@ -33,7 +33,7 @@ function _ops(::Val{3})
 end
 
 @testset "In-place operators" begin
-    @testset "each agrees with its allocating form, and returns its target" begin
+    @testset "Allocating agreement" begin
         Random.seed!(20260831)
         Ωs = (mesh(domain(interval(0.0, 1.0)), 9, false),
             mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 7), (true, false)),
@@ -68,7 +68,7 @@ end
         end
     end
 
-    @testset "the destination is written in full, not merged into" begin
+    @testset "Destination overwrite" begin
         # Every one of these truncates a boundary slice to zero. If a `!` form skipped
         # those entries instead of writing them, whatever was in the destination would
         # survive — and with a fresh `similar` that is uninitialised memory, so the
@@ -90,7 +90,7 @@ end
         end
     end
 
-    @testset "allocation free, where the allocating form allocates its result" begin
+    @testset "Zero allocations" begin
         # The reason the forms exist. Measured inside a function on concrete locals.
         function counts()
             Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (24, 24),
@@ -115,7 +115,7 @@ end
         @test all(>(0), allocating)             # the comparison is not vacuous
     end
 
-    @testset "a composite destination must match the source" begin
+    @testset "Composite matching" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 7, true)
         Wₕ = gridspace(Ωₕ)
         Vₕ = gridspace(Ωₕ, Val(2))

@@ -15,7 +15,7 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
 # built by code that shares nothing with `local_stencil` — the operator's own sparse form and
 # the inner product's own weights — so the two agree or one of them is wrong.
 
-@testset verbose=true "Bilinear forms" begin
+@testset "Bilinear forms" begin
     S = interval(0.0, 1.0) × interval(0.0, 1.0)
     Ωₕ = mesh(domain(S, :walls => get_boundary_symbols(S)), (9, 7), (true, true))
     Wₕ = gridspace(Ωₕ)
@@ -27,7 +27,7 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
     Mx = Matrix(M₋ₓ(Wₕ))
     Idm = Matrix(1.0I, n, n)
 
-    @testset "the assembled matrix is the matrix expression" begin
+    @testset "Matrix expression equivalence" begin
         @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v)))) ≈ H
         @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(u), v)))) ≈ H * Dx
         @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, D₋ₓ(v))))) ≈
@@ -46,7 +46,7 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
               transpose(Idm + 2 * Dx) * H
     end
 
-    @testset "the entry points agree" begin
+    @testset "Entry point agreement" begin
         a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
         Apar = assemble(a)
         Aser = similar(sparse(Apar))
@@ -75,7 +75,7 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
         end
     end
 
-    @testset "blocks of a composite system" begin
+    @testset "Composite blocks" begin
         Vₕ = gridspace(Ωₕ, Val(2))
         blk(A, i, j) = Matrix(A)[((i - 1) * n + 1):(i * n), ((j - 1) * n + 1):(j * n)]
 
@@ -113,7 +113,7 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
         @test all(iszero, blk(Aop, 2, 2))
     end
 
-    @testset "dirichlet_components: constrain one field, leave another free (point 45)" begin
+    @testset "dirichlet_components restriction" begin
         # The motivating case: a Stokes-style system where leaf 1 ("velocity") gets a
         # boundary condition and leaf 2 ("pressure") stays completely free. Before
         # `dirichlet_components` existed, `dirichlet_labels` bound to every leaf sharing the
@@ -151,7 +151,7 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
         end
     end
 
-    @testset "serial and parallel assembly agree" begin
+    @testset "Serial vs parallel agreement" begin
         # The serial and threaded paths are separate walks over the same terms, so a break in
         # the serial path is invisible unless it is compared against the other. It was, once.
         # `assemble_parallel!` always threads regardless of the backend's policy (point 22),
@@ -179,7 +179,7 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
         end
     end
 
-    @testset "assemble!/assemble follow the trial space's backend policy (point 22)" begin
+    @testset "Backend policy" begin
         # assemble!/assemble no longer hardcode parallel (the asymmetry this closed:
         # assemble(a::BilinearForm) used to call assemble_parallel! unconditionally, the
         # opposite default from LinearForm's serial-by-default assemble). Both now read
@@ -205,7 +205,7 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
         @test Matrix(A_via_policy) ≈ Matrix(A_forced_parallel)
     end
 
-    @testset "nesting is just more leaves" begin
+    @testset "Nested leaf traversal" begin
         # A composite of composites needs no separate type and no separate constructor. Its
         # blocks are numbered by leaf, so a two-by-two nesting is four blocks addressed
         # `u(1)` through `u(4)` — the same spelling a flat space uses, and the same one
@@ -245,7 +245,7 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
             (u, v) -> innerₕ(u(1), v(5))))
     end
 
-    @testset "a term has to name both components or neither" begin
+    @testset "Component naming rules" begin
         Vₕ = gridspace(Ωₕ, Val(2))
 
         # `innerₕ(u(1), v)` is not something written in a variational formulation, and
@@ -268,7 +268,7 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
         @test_throws ArgumentError block_of(innerₕ(u(1), v), 2, 2)
     end
 
-    @testset "an assembled matrix differentiates" begin
+    @testset "Matrix differentiation" begin
         # A coefficient in the integrand: a(u, v) = ∫ c·u·v, so A = H·diag(c) and the
         # derivative of `sum(A)` with respect to `cᵢ` is `Hᵢᵢ`. Checked against that rather
         # than against itself, so a gradient of the wrong thing cannot pass.
@@ -299,7 +299,7 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
         end ≈ diag(H)
     end
 
-    @testset "assemble once, then assemble into it" begin
+    @testset "In-place reassembly" begin
         # The pattern is the expensive half and does not change between assemblies, so the
         # intended shape of a loop is `assemble` once and `assemble!` after. This pins that
         # the second path agrees with the first and costs nothing.
@@ -337,7 +337,7 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
         @test Matrix(Ain) ≈ Matrix(Aop)              # and the two agree
     end
 
-    @testset "construction is cheap" begin
+    @testset "Form construction" begin
         # `form` used to evaluate a sample stencil and bin the whole grid into a vector of
         # vectors before anything was assembled — 9,271,600 B at 90,000 degrees of freedom.
         # The colouring is a property of the AST and the grid, so it is derived where it is

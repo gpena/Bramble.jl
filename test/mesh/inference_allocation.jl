@@ -11,14 +11,14 @@ using Bramble: spacings
 #
 # @test_allocs is skipped under coverage, since the instrumentation allocates.
 
-@testset "Mesh inference and allocation" begin
+@testset "Inference & allocations" begin
     Ωₕ1 = mesh(domain(interval(0.0, 1.0)), 64, false)
     Ωₕ2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (8, 9), (true, false))
     Ωₕ3 = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 6),
         (true, false, true))
     Ωu = mesh(domain(interval(0.0, 1.0)), 32, true)     # uniform, for stepsize
 
-    @testset "geometry accessors are type stable" begin
+    @testset "Type stability" begin
         for (lbl, Ωₕ) in (("1D", Ωₕ1), ("2D", Ωₕ2), ("3D", Ωₕ3))
             @testset "$lbl" begin
                 @test @inferred(npoints(Ωₕ)) isa Int
@@ -61,7 +61,7 @@ using Bramble: spacings
         @test @inferred(stepsize(Ωu)) isa Float64
     end
 
-    @testset "geometry accessors do not allocate" begin
+    @testset "Zero allocations" begin
         # Reading geometry is on the inner loop of every operator, so none of it may
         # allocate. All of these measured 0 B when the tests were written.
         @test_allocs point(Ωₕ1, 3)

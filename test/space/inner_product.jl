@@ -1,7 +1,7 @@
 import Bramble: half_spacings_iterator
 using Supposition
 
-@testset "Inner Products and Norms" begin
+@testset "Inner products & norms" begin
     for D in 1:3
         dims, Wh, u = setup_test_grid(Val(D))
 
@@ -49,7 +49,7 @@ using Supposition
         end
     end
 
-    @testset "1D Tests" begin
+    @testset "1D" begin
         dims_1d, Wₕ_1d, u1 = setup_test_grid(Val(1))
         domain_length = 5.0 # Domain is [-1, 4]
 
@@ -57,7 +57,7 @@ using Supposition
         u3 = similar(u1)
         Rₕ!(u3, x->x)
 
-        @testset "L² inner product (innerₕ)" begin
+        @testset "innerₕ" begin
             # (1, 2) = ∫ 1*2 dx = 2 * length = 2 * 5 = 10
             @test innerₕ(u1, u2) ≈ 2.0 * domain_length
 
@@ -66,7 +66,7 @@ using Supposition
             @test normₕ(u1) ≈ sqrt(domain_length)
         end
 
-        @testset "Modified L² inner product (inner₊)" begin
+        @testset "inner₊" begin
             # In 1D, inner₊ should equal inner₊ₓ
             @test inner₊(u1, u2) ≈ inner₊ₓ(u1, u2)
 
@@ -80,7 +80,7 @@ using Supposition
             @test norm₊(u1)^2 ≈ inner₊(u1, u1)
         end
 
-        @testset "H¹ Norms (norm₁ₕ)" begin
+        @testset "norm₁ₕ" begin
             # For u(x) = 2x, u'(x) = 2.
             Rₕ!(u1, x->2x)
             # |u|²_1h = ||∇u||²₊ ≈ ∫ (2)^2 dx = 4 * length = 4 * 5 = 20
@@ -91,7 +91,7 @@ using Supposition
         end
     end
 
-    @testset "2D Tests" begin
+    @testset "2D" begin
         dims_2d, Wₕ_2d, u1 = setup_test_grid(Val(2))
         domain_area = 25.0 # Domain is [-1, 4] x [-1, 4]
 
@@ -101,7 +101,7 @@ using Supposition
         Rₕ!(ux, x->x[1])
         Rₕ!(uy, x->x[2])
 
-        @testset "L² and Modified L² products" begin
+        @testset "L² and modified L²" begin
             # (1, 2) = ∫∫ 1*2 dx dy = 2 * area = 50
             @test innerₕ(u1, u2) ≈ 2.0 * domain_area
             @test normₕ(u1) ≈ sqrt(domain_area)
@@ -110,7 +110,7 @@ using Supposition
             @test inner₊(ux, uy) ≈ inner₊ₓ(ux, uy) + inner₊ᵧ(ux, uy)
         end
 
-        @testset "Tuple and NTuple methods" begin
+        @testset "Tuple methods" begin
             res_tuple = inner₊(ux, uy, Tuple)
             @test res_tuple isa NTuple{2, Float64}
             @test res_tuple[1] ≈ inner₊ₓ(ux, uy)
@@ -122,7 +122,7 @@ using Supposition
             @test inner₊(U, V) ≈ expected
         end
 
-        @testset "H¹ Norms (norm₁ₕ)" begin
+        @testset "norm₁ₕ" begin
             # For u(x,y) = x + 2y, ∇u = (1, 2)
             Rₕ!(u1, x -> x[1] + 2*x[2])
 
@@ -134,7 +134,7 @@ using Supposition
         end
     end
 
-    @testset "3D Tests" begin
+    @testset "3D" begin
         dims_3d, Wₕ_3d, u1 = setup_test_grid(Val(3))
         domain_volume = 125.0 # Domain is [-1, 4]³
 
@@ -142,13 +142,13 @@ using Supposition
         uz = similar(u1)
         Rₕ!(uz, x -> x[3])
 
-        @testset "L² and Modified L² products" begin
+        @testset "L² and modified L²" begin
             @test innerₕ(u1, u2) ≈ 2.0 * domain_volume
             @test normₕ(u1) ≈ sqrt(domain_volume)
             @test inner₊(u1, uz) ≈ inner₊ₓ(u1, uz) + inner₊ᵧ(u1, uz) + inner₊₂(u1, uz)
         end
 
-        @testset "H¹ Norms (norm₁ₕ)" begin
+        @testset "norm₁ₕ" begin
             # For u(x,y,z) = x+2y+3z, ∇u = (1, 2, 3)
             Rₕ!(u1, x -> x[1] + 2x[2] + 3x[3])
             expected_value_snorm = sum(i^2 *
@@ -161,7 +161,7 @@ using Supposition
     end
 end
 
-@testset "Dimension resolution in inner₊" begin
+@testset "inner₊ dimension" begin
     import Bramble: get_dimension_from_type, _get_h_val
 
     W1 = gridspace(mesh(domain(interval(0.0, 1.0)), 5, true))
@@ -179,21 +179,21 @@ end
         @test get_dimension_from_type(Float64) === nothing
     end
 
-    @testset "tuple arity wins on either side" begin
+    @testset "Tuple arity precedence" begin
         # A tuple on the left is already covered elsewhere; this is the branch
         # where only the right argument is a tuple.
         @test inner₊(u2, (v2, v2)) ≈ inner₊((u2, u2), v2)
         @test inner₊(u2, (v2, v2)) ≈ sum(inner₊(u2, v2, Tuple))
     end
 
-    @testset "one side carries no dimension" begin
+    @testset "Single-sided dimension" begin
         # The dimension is taken from whichever argument has one; the call then
         # fails on the element type rather than on dimension resolution.
         @test_throws MethodError inner₊(u2, [1.0, 2.0])
         @test_throws MethodError inner₊([1.0, 2.0], u2)
     end
 
-    @testset "unresolvable and mismatched dimensions report properly" begin
+    @testset "Dimension mismatches" begin
         # Both of these used to raise UndefVarError: the message was interpolated
         # inside the quoted expression, so it was evaluated at run time where the
         # generator's locals no longer exist.
@@ -208,7 +208,7 @@ end
         @test occursin("1", err.msg) && occursin("2", err.msg)
     end
 
-    @testset "_get_h_val accepts a raw spacing vector" begin
+    @testset "_get_h_val" begin
         h = [0.5, 0.25, 0.125]
         @test _get_h_val(h, 1) == 0.5
         @test _get_h_val(h, 3) == 0.125
@@ -217,7 +217,7 @@ end
     end
 end
 
-@testset "The H¹ seminorm is the ₊ norm of the gradient" begin
+@testset "H¹ seminorm gradient" begin
     # snorm₁ₕ(uₕ) == norm₊(∇₋ₕ(uₕ)) is the definition of the discrete H¹ seminorm, and
     # snorm₁ₕ computes it without materialising the gradient. The two routes must agree
     # in every dimension, on uniform and non-uniform grids.
@@ -243,7 +243,7 @@ end
         end
     end
 
-    @testset "arbitrary random grids and fields (Supposition)" begin
+    @testset "Random grids (Supposition)" begin
         positive_h = Data.Floats{Float64}(; minimum = 0.01, maximum = 10.0,
             nans = false, infs = false)
         field_val = Data.Floats{Float64}(; minimum = -100.0, maximum = 100.0,
@@ -298,7 +298,7 @@ end
     end
 end
 
-@testset "inner₊ accepts a one-element tuple" begin
+@testset "One-element tuple inner₊" begin
     # In 1D the one-element tuple and the bare grid function denote the same thing, and
     # inner₊ accepts both. It used to accept only the second: the generated body read the
     # element type off `u_type.parameters[2]`, which does not exist for `Tuple{V}`, so a
@@ -318,7 +318,7 @@ end
     # is what the element-type lookup is there to keep separate
     @test inner₊((uₕ, vₕ), (uₕ, vₕ)) ≈ inner₊ₓ(uₕ, uₕ) + inner₊ₓ(vₕ, vₕ)
 
-    @testset "on a composite space, the product space's inner product" begin
+    @testset "Composite space inner product" begin
         # The inner product of a product space is the sum of the components' — the only
         # meaning it can have, which is why accepting a composite is not ambiguous. It used
         # to be rejected at dispatch, on the grounds that the meaning would depend on the
@@ -351,14 +351,14 @@ end
 # Point 11: a masked sum of the existing cell measures, restricted by `markers`, is *not* a
 # surface integral — it is O(h) times one, and every test here is written to keep that
 # distinction visible rather than only assert a number.
-@testset verbose=true "Masked boundary inner products (markers)" begin
+@testset "Masked inner products" begin
     S = interval(0.0, 1.0) × interval(0.0, 1.0)
     Ωₕ = mesh(domain(S, :bottom => :bottom, :left => :left), (5, 5), (true, true))
     Wₕ = gridspace(Ωₕ)
     uₕ = Rₕ(Wₕ, x -> 1.0)
     vₕ = Rₕ(Wₕ, x -> 1.0)
 
-    @testset "matches the measured figure from the plan" begin
+    @testset "Figure match" begin
         # docs/form-unlock-plan.md, point 11: masked sum on a 5×5 mesh restricted to
         # :bottom reads 0.125, against 1.0 for the true (not yet implemented) boundary
         # integral over the same region — not interchangeable, and this is the number that
@@ -366,12 +366,12 @@ end
         @test innerₕ(uₕ, vₕ; markers = (:bottom,)) ≈ 0.125
     end
 
-    @testset "the empty default matches the unmasked sum exactly" begin
+    @testset "Empty default agreement" begin
         @test innerₕ(uₕ, vₕ; markers = ()) == innerₕ(uₕ, vₕ)
         @test inner₊ₓ(uₕ, vₕ; markers = ()) == inner₊ₓ(uₕ, vₕ)
     end
 
-    @testset "several markers act as a union, not a double-counted sum" begin
+    @testset "Marker union" begin
         mask = Bramble.index_in_marker(Ωₕ, :bottom) .| Bramble.index_in_marker(Ωₕ, :left)
         w = Bramble.weights(Wₕ, Bramble.Innerh())
         byhand = sum(w[i] for i in eachindex(w) if mask[i])
@@ -381,7 +381,7 @@ end
               innerₕ(uₕ, vₕ; markers = (:bottom,)) + innerₕ(uₕ, vₕ; markers = (:left,))
     end
 
-    @testset "threads through a composite space, one component at a time" begin
+    @testset "Composite threading" begin
         Vₕ = Wₕ^Val(2)
         Uc = Rₕ(Vₕ, x -> (1.0, 2.0))
         Vc = Rₕ(Vₕ, x -> (1.0, 2.0))
@@ -390,14 +390,14 @@ end
         @test innerₕ(Uc, Vc; markers = (:bottom,)) ≈ byhand
     end
 
-    @testset "the directional products mask the same way" begin
+    @testset "Directional masking" begin
         wx = Bramble.weights(Wₕ, Bramble.Innerplus(), 1)
         mask = Bramble.index_in_marker(Ωₕ, :left)
         byhand = sum(wx[i] for i in eachindex(wx) if mask[i])
         @test inner₊ₓ(uₕ, vₕ; markers = (:left,)) ≈ byhand
     end
 
-    @testset "the masked sum shrinks under refinement; it is not a surface integral" begin
+    @testset "Refinement scaling" begin
         # The whole point of point 11's decision: this quantity is O(h) times the boundary
         # integral it is easily mistaken for, and a decreasing sequence under refinement is
         # what tells the two apart, not the single 0.125 figure alone.
@@ -411,7 +411,7 @@ end
         @test vals[end] < vals[1] / 4
     end
 
-    @testset "inner_Γ is a documented placeholder, not a silent wrong answer" begin
+    @testset "inner_Γ placeholder" begin
         @test_throws ErrorException Bramble.inner_Γ(uₕ, vₕ, :bottom)
         try
             Bramble.inner_Γ(uₕ, vₕ, :bottom)

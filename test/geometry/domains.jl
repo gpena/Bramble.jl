@@ -1,7 +1,7 @@
 using Test
 using Bramble
 using Bramble: Marker, MarkerPair, BrambleFunction, Domain, DomainMarkers,
-               EvaluatedDomainMarkers, dim, set, markers, labels
+               EvaluatedDomainMarkers, dim, set, markers, labels, CartesianProduct
 using Bramble: get_boundary_symbols, label, identifier, domain, symbols, tuples, conditions
 using Bramble: marker_identifiers, _embed_notime, process_identifier, marker_symbols,
                marker_tuples, marker_conditions
@@ -9,7 +9,7 @@ using Bramble: label_identifiers, label_symbols, label_tuples, label_conditions,
                topo_dim
 using StaticArrays
 
-@testset "Domain System Tests" begin
+@testset "Domains" begin
     # --- Setup Test Data ---
     I1D = interval(0.0, 1.0)
     I2D = interval(0.0f0, 1.0f0) × interval(2.0f0, 3.0f0) # Float32
@@ -19,7 +19,7 @@ using StaticArrays
     func2 = x -> x[2] < 2.5
     func3 = x -> x[1] == 0.0
 
-    @testset "Marker and MarkerPair" begin
+    @testset "Marker & MarkerPair" begin
         m_sym = Marker(:boundary, :left)
         m_tup = Marker(:corners, Set((:top, :right)))
         bf_func1 = _embed_notime(I1D, func1; CoType = eltype(I1D))
@@ -40,7 +40,7 @@ using StaticArrays
         @test identifier(pair_sym) === :left
     end
 
-    @testset "Boundary Symbols" begin
+    @testset "Boundary symbols" begin
         @test get_boundary_symbols(I1D) == (:left, :right)
         @test get_boundary_symbols(I2D) == (:bottom, :top, :left, :right)
         @test get_boundary_symbols(I3D) == (:bottom, :top, :back, :front, :left, :right)
@@ -59,7 +59,7 @@ using StaticArrays
         @test get_boundary_symbols(typeof(Ω1)) == (:left, :right)
     end
 
-    @testset "Process Identifier Function" begin
+    @testset "process_identifier" begin
         @test process_identifier(I1D, :left) === :left
         @test process_identifier(I2D, (:top, :right)) == Set((:top, :right))
         # a vector of symbols normalises to the same Set as the tuple form
@@ -69,7 +69,7 @@ using StaticArrays
         @test process_identifier(I1D, func1) isa BrambleFunction
     end
 
-    @testset "Create Markers" begin
+    @testset "create_markers" begin
         # Empty call
         dm_empty = markers(I1D)
         @test dm_empty isa DomainMarkers
@@ -101,7 +101,7 @@ using StaticArrays
         @test length(dm_dup_marker.symbols) == 1
     end
 
-    @testset "Domain Construction & Traits" begin
+    @testset "Construction & traits" begin
         # Default constructor
         Ω1_def = domain(I1D)
         @test set(Ω1_def) === I1D
@@ -139,7 +139,7 @@ using StaticArrays
         @test length(Ω_empty) == 0
     end
 
-    @testset "Domain Accessors and Iterators" begin
+    @testset "Accessors & iterators" begin
         Ω = domain(I2D,
             :bnd_left => :left,
             :corners => (:top, :right),
@@ -174,7 +174,7 @@ using StaticArrays
         @test proj2.box[1] == (2.0f0, 3.0f0)
     end
 
-    @testset "Time-Dependent Domain and EvaluatedDomainMarkers" begin
+    @testset "Time dependence" begin
         I_space = interval(0.0, 1.0) × interval(0.0, 1.0)
         I_time = interval(0.0, 2.0)
         func_time = (x, t) -> x[1] > t
@@ -216,7 +216,7 @@ using StaticArrays
         @test length(Ω_eval) == 2
     end
 
-    @testset "Type Inference & Performance" begin
+    @testset "Type stability & allocations" begin
         Ω = domain(I2D, :left => :left, :right => :right)
         @inferred set(Ω)
         @inferred dim(Ω)
@@ -238,7 +238,7 @@ using StaticArrays
         @test_allocs Base.isempty(Ω)
     end
 
-    @testset "Display / Show" begin
+    @testset "Show" begin
         # Marker show
         m_s = Marker(:left, :left)
         m_t = Marker(:corner, Set([:top, :right]))
@@ -303,7 +303,7 @@ using StaticArrays
         @test occursin("Topological dimension", str_3d_c)
     end
 
-    @testset "Domain delegation (center, tails, is_collapsed, projection, in)" begin
+    @testset "Delegation" begin
         Ω_1d = domain(interval(0.0, 4.0))
         Ω_2d = domain(interval(0.0, 2.0) × interval(1.0, 3.0))
 
@@ -346,7 +346,7 @@ using StaticArrays
         @test get_boundary_symbols(typeof(Ω_2d)) == (:bottom, :top, :left, :right)
     end
 
-    @testset "EvaluatedDomainMarkers labels and _evaluate_marker_at_time fallback" begin
+    @testset "EvaluatedDomainMarkers" begin
         using Bramble: EvaluatedDomainMarkers, label_identifiers, label_symbols,
                        label_tuples, label_conditions
 
@@ -375,14 +375,14 @@ using StaticArrays
         @test !isempty(edm2)
     end
 
-    @testset "get_boundary_symbols by integer" begin
+    @testset "get_boundary_symbols" begin
         @test get_boundary_symbols(1) == (:left, :right)
         @test get_boundary_symbols(2) == (:bottom, :top, :left, :right)
         @test get_boundary_symbols(3) == (:bottom, :top, :back, :front, :left, :right)
         @test_throws ErrorException get_boundary_symbols(4)
     end
 
-    @testset "Four-argument domain constructor (space + time)" begin
+    @testset "Space-time constructor" begin
         I_space = interval(0.0, 1.0) × interval(0.0, 1.0)
         I_time = interval(0.0, 2.0)
         f = (x, t) -> x[1] > t
@@ -393,8 +393,8 @@ using StaticArrays
     end
 end
 
-@testset "Domain interface coverage" begin
-    @testset "get_boundary_symbols beyond 3D" begin
+@testset "Interface coverage" begin
+    @testset "Higher dimensions" begin
         # There is no canonical naming for the faces of a 4D box, so both the
         # value-based and the type-based entry points refuse rather than guess.
         X4 = interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0) ×
@@ -418,7 +418,7 @@ end
         @test get_boundary_symbols(X3) == get_boundary_symbols(typeof(X3))
     end
 
-    @testset "show renders a collapsed 1D set as a point" begin
+    @testset "Collapsed set show" begin
         out = sprint(show, domain(interval(3.0, 3.0)))
         @test occursin("Point", out)
         @test occursin("3.0", out)

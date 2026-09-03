@@ -46,7 +46,7 @@ using Bramble: SourceFunction, TrialFunction, TestFunction, LinearProduct,
     @test !_is_source_only(innerₕ(uₕ, v))
 end
 
-@testset "innerₕ dispatch: πₕ(u) as a LazyOp source builds a LinearProduct, not Bilinear (point 25)" begin
+@testset "innerₕ source dispatch" begin
     Ωbig = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (8, 8), (true, true))
     Ωsmall = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (4, 4), (true, true))
     Wbig, Wsmall = gridspace(Ωbig), gridspace(Ωsmall)
@@ -96,7 +96,7 @@ end
     @test resolve_form_ast(lf_bilinear) isa BilinearProduct
 end
 
-@testset "inner₊ family dispatch: the same _is_source_only fix, applied (point 60)" begin
+@testset "inner₊ source dispatch" begin
     # innerₕ's fix (_is_source_only) was applied only to innerₕ itself when point 25 landed;
     # inner_plus/inner₊/inner₊ₓ/inner₊ᵧ/inner₊₂ had the identical structural bug — every one
     # of them built a BilinearProduct unconditionally too. Fixed the same way, checked the
@@ -158,7 +158,7 @@ end
     @test ast_bilinear_grad.right_op isa BilinearProduct
 end
 
-@testset "the parallel path agrees with the serial one" begin
+@testset "Parallel vs serial agreement" begin
     @info "interpolation composition tested on $(Threads.nthreads()) thread(s)"
 
     Ωbig = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (10, 10), (true, true))

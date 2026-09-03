@@ -15,7 +15,7 @@ using Bramble: values, components, ndofs, _grid_dims, _op_mesh
 # These tests pin the invariant rather than the symptom, so they hold whatever the
 # internals do later.
 
-@testset "Operators on composite grid functions" begin
+@testset "Composite operators" begin
     scalar_ops = (
         ("diff₋", diff₋ₓ, diff₋ᵧ, diff₋₂),
         ("diff₊", diff₊ₓ, diff₊ᵧ, diff₊₂),
@@ -41,7 +41,7 @@ using Bramble: values, components, ndofs, _grid_dims, _op_mesh
     # the wrong slot cannot pass by coincidence.
     component_fn(k, D) = D == 1 ? (x -> sin(k * x) + k) : (x -> sin(k * x[1]) + k * x[end])
 
-    @testset "the shape handed to the engines is the grid, not the dof count" begin
+    @testset "Grid shape vs dof count" begin
         # The direct regression guard on the cause.
         for (lbl, Ωₕ, D) in meshes
             Wₕ = gridspace(Ωₕ)
@@ -57,7 +57,7 @@ using Bramble: values, components, ndofs, _grid_dims, _op_mesh
         end
     end
 
-    @testset "componentwise equality" begin
+    @testset "Componentwise equality" begin
         for (lbl, Ωₕ, D) in meshes
             @testset "$lbl" begin
                 Wₕ = gridspace(Ωₕ)
@@ -84,7 +84,7 @@ using Bramble: values, components, ndofs, _grid_dims, _op_mesh
         end
     end
 
-    @testset "vectorial forms" begin
+    @testset "Vectorial forms" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 5), (true, false))
         Wₕ = gridspace(Ωₕ)
         Vₕ = gridspace(Ωₕ, Val(2))
@@ -105,7 +105,7 @@ using Bramble: values, components, ndofs, _grid_dims, _op_mesh
         end
     end
 
-    @testset "a one-component composite matches the scalar space" begin
+    @testset "One-component composite" begin
         # NC == 1 is the boundary between the two dispatches and must not be special.
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, false)
         Wₕ = gridspace(Ωₕ)
@@ -118,7 +118,7 @@ using Bramble: values, components, ndofs, _grid_dims, _op_mesh
         end
     end
 
-    @testset "the result is a new element, not a view of the input" begin
+    @testset "New element allocation" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 6, true)
         Vₕ = gridspace(Ωₕ, Val(2))
         uₕ = Rₕ(Vₕ, (x -> x, x -> x^2))

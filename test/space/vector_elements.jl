@@ -62,7 +62,7 @@ function setup_test_grid(::Val{D}) where {D}
     return dims, Wₕ, uₕ
 end
 
-@testset "VectorElement Tests" begin
+@testset "Vector elements" begin
     # Setup a mock space
     W = gridspace(mesh(domain(box(0, 1)), 4, true))
 
@@ -94,7 +94,7 @@ end
         @test eltype(u4) == Float64
     end
 
-    @testset "Getters and Setters" begin
+    @testset "Getters & setters" begin
         u = element(W, 1.0:4.0)
         @test space(u) === W
         @test values!(u, fill(2.0, 4)) === u
@@ -105,7 +105,7 @@ end
         @test values(u) == fill(3.0, 4)
     end
 
-    @testset "Forwarded Methods" begin
+    @testset "Forwarded methods" begin
         u = element(W, 1.0:4.0)
         @test size(u) == (4,)
         @test length(u) == 4
@@ -192,7 +192,7 @@ end
         @test all(==(5.0), values(w))
     end
 
-    @testset "Arithmetic Operators" begin
+    @testset "Arithmetic" begin
         u_data = collect(1.0:4.0)
         v_data = fill(2.0, 4)
         u = element(W, u_data)
@@ -235,13 +235,13 @@ end
     end
 end
 
-@testset "PDE Operators (Rₕ, avgₕ, ∇₋ₕ)" begin
+@testset "PDE operators" begin
     for D in 1:3
         @testset "$D-Dimensional Tests" begin
             dims, Wₕ, uₕ = setup_test_grid(Val(D))
             @test length(uₕ) == prod(dims)
 
-            @testset "Rₕ! (Projection)" begin
+            @testset "Rₕ!" begin
                 test_function(x) = exp(-sum(x))
                 Rₕ!(uₕ, test_function)
 
@@ -254,7 +254,7 @@ end
                 @test norm(values(uₕ) - w_flat) < 1e-15
             end
 
-            @testset "avgₕ! (Cell-Average)" begin
+            @testset "avgₕ!" begin
                 avgₕ!(uₕ, x -> exp(-sum(x)))
 
                 w = Array{Float64, D}(undef, dims)
@@ -269,7 +269,7 @@ end
         end
     end
 
-    @testset "Component Indexing & Multi-Component Spaces" begin
+    @testset "Component indexing" begin
         m = mesh(domain(box((0, 0), (1, 1))), (5, 6), (true, true))
         W = gridspace(m)
         V = W^2
@@ -350,7 +350,7 @@ end
         exact = [(exp(-xh[i]) - exp(-xh[i + 1])) / (xh[i + 1] - xh[i])
                  for i in 1:npoints(Ωₕ)]
 
-        @testset "converges in the number of points" begin
+        @testset "Convergence" begin
             errs = map(1:4) do nq
                 avgₕ!(u, f; quad_points = nq)
                 maximum(abs, values(u) .- exact)
@@ -369,7 +369,7 @@ end
             @test_throws ArgumentError avgₕ!(u, f; quad_points = 0)
         end
 
-        @testset "rule is exact for polynomials of degree 2N-1" begin
+        @testset "Exact degree" begin
             # with N points the rule must integrate x^(2N-1) exactly
             for nq in 1:4
                 deg = 2nq - 1
@@ -382,7 +382,7 @@ end
             end
         end
 
-        @testset "rule construction is free for IEEE floats" begin
+        @testset "Rule construction" begin
             for T in (Float64, Float32)
                 nodes, wts = _gauss_rule(Val(3), T)
                 @test nodes isa SVector{3, T}
@@ -400,7 +400,7 @@ end
             @test abs(sum(wb) - one(BigFloat)) < 1e-50
         end
 
-        @testset "allocations do not grow with the grid" begin
+        @testset "Allocation scaling" begin
             # A direct call, one function-call frame between the test and avgₕ! itself,
             # matching how /tmp/verify_consolidation.jl checked this earlier -- and where a
             # Serial() backend really does measure exactly 0, at every grid size.
@@ -472,13 +472,13 @@ end
     end
 end
 
-@testset "Composite components and single-pass evaluation" begin
+@testset "Composite evaluation" begin
     import Bramble: component_range, component_ranges, components, values, ndofs, spaces
 
     W5 = gridspace(mesh(domain(interval(0.0, 1.0)), 5, true))
     W9 = gridspace(mesh(domain(interval(0.0, 1.0)), 9, true))
 
-    @testset "Heterogeneous composites are indexed by cumulative size" begin
+    @testset "Cumulative indexing" begin
         # Subspaces of the same *type* can hold different numbers of degrees of
         # freedom, so component ranges must be summed, never inferred from types.
         V = W5 × W9
@@ -499,7 +499,7 @@ end
         @test_throws BoundsError component_range(V, 3)
     end
 
-    @testset "One function per component equals one vector-valued function" begin
+    @testset "Vector vs component functions" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (8, 8))
         W = gridspace(Ωₕ)
         for NC in (2, 3, 4)
@@ -521,7 +521,7 @@ end
         end
     end
 
-    @testset "A one-tuple of functions works on a scalar space" begin
+    @testset "One-tuple functions" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 8, true)
         W = gridspace(Ωₕ)
         f = x -> 2.0
@@ -539,7 +539,7 @@ end
         @test values(v1) == values(v2)
     end
 
-    @testset "In-place operators return nothing" begin
+    @testset "In-place return" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 6))
         W = gridspace(Ωₕ)
         V = W^Val(2)
@@ -562,14 +562,14 @@ end
     end
 end
 
-@testset "Rₕ / avgₕ interface" begin
+@testset "Rₕ & avgₕ interface" begin
     import Bramble: values, index_in_marker
 
     Ω = domain(interval(0.0, 1.0), :left => :left, :right => :right)
     Ωₕ = mesh(Ω, 6, true)
     W = gridspace(Ωₕ)
 
-    @testset "markers restrict the written entries" begin
+    @testset "Marker restriction" begin
         # index_in_marker returns a BitVector mask over the linear indices, not a
         # list of indices; iterating it would feed `true`/`false` to the kernel.
         @test index_in_marker(Ωₕ, :left) == Bool[1, 0, 0, 0, 0, 0]
@@ -593,7 +593,7 @@ end
         @test values(w)[2:6] == zeros(5)
     end
 
-    @testset "f receives a scalar in 1D and a tuple in nD" begin
+    @testset "Argument types" begin
         seen = Ref{Any}(nothing)
         u1 = element(W)
         Rₕ!(u1, x -> (seen[] = x; 0.0))
@@ -611,7 +611,7 @@ end
         @test seen3[] isa Tuple{Float64, Float64}
     end
 
-    @testset "keyword sets" begin
+    @testset "Keyword sets" begin
         kw(f) = Set(vcat([collect(Base.kwarg_decl(m)) for m in methods(f)]...))
         # markers is shared; quad_points belongs only to the quadrature-based operator
         @test :markers in kw(Rₕ) && :markers in kw(Rₕ!)
@@ -621,7 +621,7 @@ end
     end
 end
 
-@testset "Threaded scatter path" begin
+@testset "Threaded scatter" begin
     import Bramble: values, components
 
     # Dispatched on the backend's policy now (point 22), not gated by size -- a `Parallel()`
@@ -656,7 +656,7 @@ end
     end
 end
 
-@testset "Quadrature rule fallback for an unsupported element type" begin
+@testset "Quadrature fallback" begin
     import Bramble: _gauss_rule
 
     # An isbits float that QuadGK cannot build a rule for must fall back to the
@@ -672,14 +672,14 @@ end
     end
 end
 
-@testset "Tuple-of-elements arithmetic and remaining paths" begin
+@testset "Tuple arithmetic" begin
     import Bramble: values, space_type, _find_vec_in_broadcast,
                     _cell_average_kernel, _gauss_rule, VectorElement
 
     Ωₕ = mesh(domain(interval(0.0, 1.0)), 6, true)
     W = gridspace(Ωₕ)
 
-    @testset "scaling and multiplying a tuple of elements" begin
+    @testset "Tuple scaling" begin
         u = element(W, 3.0)
         v = (element(W, 2.0), element(W, 5.0))
 
@@ -718,7 +718,7 @@ end
         @test all(space((2.0 * v)[i]) === space(v[i]) for i in 1:2)
     end
 
-    @testset "an inhomogeneous tuple restriction stays concrete" begin
+    @testset "Inhomogeneous restriction" begin
         # `_scalar_value_type` read the element type of a tuple return with `eltype`, and
         # `eltype(Tuple{Float64, Int})` is `Real` — abstract, so the element was allocated as
         # a `Vector{Real}` of boxed pointers with no contiguity and no SIMD. An integer
@@ -739,14 +739,14 @@ end
         @test space_type(typeof(u)) === typeof(W)
     end
 
-    @testset "broadcast helper bottoms out on an empty tuple" begin
+    @testset "Empty broadcast" begin
         @test _find_vec_in_broadcast(()) === nothing
         @test _find_vec_in_broadcast((1, 2.0, :a)) === nothing
         u = element(W)
         @test _find_vec_in_broadcast((1, u, 2)) === u
     end
 
-    @testset "marker-restricted restriction on a composite element" begin
+    @testset "Composite marker restriction" begin
         Ω = domain(interval(0.0, 1.0), :left => :left, :right => :right)
         Ω2 = mesh(Ω, 6, true)
         W2 = gridspace(Ω2)
@@ -764,7 +764,7 @@ end
         @test values(wv) == values(uv)
     end
 
-    @testset "marker-restricted averaging in more than one dimension" begin
+    @testset "nD marker averaging" begin
         Ω2 = domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom)
         Ωh = mesh(Ω2, (5, 5), (true, true))
         Wh = gridspace(Ωh)
@@ -800,7 +800,7 @@ end
     end
 end
 
-@testset "avgₕ on a composite space, single vector-valued function" begin
+@testset "Composite vector avgₕ" begin
     # A composite grid function can be averaged either from a tuple of functions, one per
     # component, or from a single function returning all components. The two must agree.
     #
@@ -834,7 +834,7 @@ end
     end
 end
 
-@testset "the quadrature rule is built once per call, not once per point" begin
+@testset "Quadrature reuse" begin
     # `avgₕ!` fetches the Gauss rule inside its kernel where `_gauss_rule` folds to a
     # compile-time constant, and hoists it out of the loop where it does not. Getting that
     # predicate wrong is silent: the answers stay correct and the cost moves from once per
@@ -872,7 +872,7 @@ end
     @test b64(64) == b64(1024)
 end
 
-@testset "marker-restricted Rₕ and avgₕ only evaluate f where the markers select" begin
+@testset "Selective evaluation" begin
     # `Rₕ` and `avgₕ` learn the coefficient type by evaluating `f` once. That probe has to
     # land on a point the caller selected: `f` need not be defined anywhere else.
     #
@@ -897,7 +897,7 @@ end
     @test values(Rₕ(Wₕ, sin)) ≈ [sin(x) for x in points(Ωₕ)]
 end
 
-@testset "marker-restricted avgₕ! on a composite space" begin
+@testset "Composite avgₕ! restriction" begin
     # The marked branch used to hand `to_matrix(uₕ)` to `_masked_for!` unconditionally.
     # For a composite grid function that is an NTuple of matrices rather than one array,
     # and the scalar kernel was built where the composite one is needed, so the call

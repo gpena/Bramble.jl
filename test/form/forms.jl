@@ -8,7 +8,7 @@ import SparseArrays: issparse
 
 import LinearAlgebra: diag, issymmetric, norm
 
-@testset "BilinearForm Construction and Accessors" begin
+@testset "BilinearForm accessors" begin
     N = 5
     I = interval(-1.0, 4.0)
 
@@ -39,8 +39,8 @@ import LinearAlgebra: diag, issymmetric, norm
     @test u ≈ sin.(points(Mh))
 end
 
-@testset "Form Module Coverage Tests" begin
-    @testset "BilinearForm: Basic API Coverage" begin
+@testset "Form coverage" begin
+    @testset "BilinearForm API" begin
         # Test 1D case which is well supported
         N = 10
         I = interval(0.0, 1.0)
@@ -48,7 +48,7 @@ end
         Mh = mesh(X, N, false)
         Wh = gridspace(Mh)
 
-        @testset "Form construction and accessors" begin
+        @testset "Construction & accessors" begin
             # Test basic construction
             a = form(Wh, Wh, (u, v) -> innerₕ(u, v))
             @test a isa BilinearForm
@@ -113,7 +113,7 @@ end
             @test A_copy ≈ A
         end
 
-        @testset "Different bilinear forms" begin
+        @testset "Bilinear form variants" begin
             # Mass matrix
             a_mass = form(Wh, Wh, (u, v) -> innerₕ(u, v))
             M = assemble(a_mass)
@@ -132,14 +132,14 @@ end
         end
     end
 
-    @testset "LinearForm: Basic API Coverage" begin
+    @testset "LinearForm API" begin
         N = 10
         I = interval(0.0, 1.0)
         X = domain(I, markers(I, :left => x -> x[1] < 0.05, :right => x -> x[1] > 0.95))
         Mh = mesh(X, N, false)
         Wh = gridspace(Mh)
 
-        @testset "Form construction and accessors" begin
+        @testset "Construction & accessors" begin
             fh = element(Wh)
             Rₕ!(fh, x -> exp(x[1]))
 
@@ -163,7 +163,7 @@ end
             @test result > 0  # Positive integrand
         end
 
-        @testset "Assembly without BCs" begin
+        @testset "Assembly unconstrained" begin
             fh = element(Wh)
             Rₕ!(fh, x -> sin(π*x[1]))
 
@@ -174,7 +174,7 @@ end
             @test length(F) == ndofs(Wh)
         end
 
-        @testset "Assembly with Dirichlet conditions" begin
+        @testset "Assembly with Dirichlet" begin
             fh = element(Wh)
             Rₕ!(fh, x -> 1.0)
 
@@ -211,7 +211,7 @@ end
             @test F_copy ≈ F
         end
 
-        @testset "Different linear forms" begin
+        @testset "Linear form variants" begin
             # L2 load vector
             fh = element(Wh)
             Rₕ!(fh, x -> exp(-x[1]))
@@ -228,7 +228,7 @@ end
         end
     end
 
-    @testset "Dirichlet Constraints: Additional Coverage" begin
+    @testset "Dirichlet coverage" begin
         I = interval(0.0, 1.0)
         X = domain(I,
             markers(I,
@@ -246,7 +246,7 @@ end
             @test length(label_conditions(bcs)) == 2
         end
 
-        @testset "Different value functions" begin
+        @testset "Value functions" begin
             # Constant value
             bcs1 = dirichlet_constraints(set(X), :left => x -> 1.0)
             @test bcs1 isa DirichletConstraint
@@ -260,7 +260,7 @@ end
             @test bcs3 isa DirichletConstraint
         end
 
-        @testset "Integration with forms" begin
+        @testset "Form integration" begin
             Mh = mesh(X, 10, false)
             Wh = gridspace(Mh)
 
@@ -281,7 +281,7 @@ end
         end
     end
 
-    @testset "Complete FEM Workflow Coverage" begin
+    @testset "FEM workflow" begin
         # Test complete workflow to ensure all parts work together
         N = 20
         I = interval(0.0, 1.0)

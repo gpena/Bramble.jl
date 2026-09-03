@@ -32,7 +32,7 @@ function test_operator_matrix_equivalence(op_generator)
     end
 end
 
-@testset "Finite Difference Operators" begin
+@testset "Finite differences" begin
     import LinearAlgebra: Diagonal, UniformScaling
     import LinearAlgebra: I as identity_matrix
 
@@ -42,7 +42,7 @@ end
     mesh3D = mesh(domain(box((0, 1, 2), (4, 5, 6))), (4, 5, 4), (true, true, true))
     T = Float64
 
-    @testset "Helper Operators" begin
+    @testset "Helper operators" begin
         A = [1 2; 3 4]
         B = [5 6; 7 8]
         @test (A ⊗ B) == kron(A, B)
@@ -59,7 +59,7 @@ end
         @test S_sub * [1, 2, 3, 4, 5] == [0, 0, 1, 2, 3]
     end
 
-    @testset "Shift Operators" begin
+    @testset "Shift operators" begin
         for val in [-1, 1]
             name = val == 1 ? "Forward" : "Backward"
             @testset "$name Shifts" begin
@@ -89,8 +89,8 @@ end
         end
     end
 
-    @testset "Backward Difference" begin
-        @testset "In-place Calculation" begin
+    @testset "Backward difference" begin
+        @testset "In-place calculation" begin
             # 1D
             u_1d = T[1, 2, 4, 8, 16]
             out_1d = similar(u_1d)
@@ -133,7 +133,7 @@ end
                 1, 1]
         end
 
-        @testset "In-place Finite Difference" begin
+        @testset "In-place difference" begin
             u = T[2, 3, 5, 9, 8]
             h = Base.Fix1(spacing, mesh1D)
             out = similar(u)
@@ -144,8 +144,8 @@ end
         end
     end
 
-    @testset "Forward Difference" begin
-        @testset "In-place Calculation" begin
+    @testset "Forward difference" begin
+        @testset "In-place calculation" begin
             # 1D
             u_1d = T[1, 2, 4, 8, 16]
             out_1d = similar(u_1d)
@@ -189,7 +189,7 @@ end
                 -10, -11, -12, -10, -11, -12, -13]
         end
 
-        @testset "In-place Finite Difference" begin
+        @testset "In-place difference" begin
             u = T[2, 3, 5, 9, 8]
             h = Base.Fix1(spacing, mesh1D)
             out = similar(u)
@@ -201,11 +201,11 @@ end
         end
     end
 
-    @testset "Operator vs. Matrix Application" begin
+    @testset "Operator vs matrix" begin
         @testset "Backward" test_operator_matrix_equivalence(backward_ops)
         @testset "Forward" test_operator_matrix_equivalence(forward_ops)
 
-        @testset "arbitrary random grids and fields (Supposition)" begin
+        @testset "Random grids (Supposition)" begin
             positive_h = Data.Floats{Float64}(; minimum = 0.01, maximum = 10.0,
                 nans = false, infs = false)
             field_val = Data.Floats{Float64}(; minimum = -100.0, maximum = 100.0,
@@ -292,7 +292,7 @@ end
     end
 end
 
-@testset "Shift operators have the documented tensor-product form" begin
+@testset "Shift tensor product" begin
     # The `shift` docstring states the per-direction Kronecker forms that
     # `_recursive_shift` generalises. These assert them, so the docstring cannot drift
     # from the code the way the commented block it replaced could.
@@ -320,14 +320,14 @@ end
         end
     end
 
-    @testset "a zero shift is the identity of the whole grid" begin
+    @testset "Zero shift identity" begin
         for (Ωₕ, be) in ((Ωₕ1, be1), (Ωₕ2, be2), (Ωₕ3, be3)), d in 1:dim(Ωₕ)
 
             @test shift(Ωₕ, Val(d), Val(0)) == backend_eye(be, npoints(Ωₕ))
         end
     end
 
-    @testset "the stencil is truncated, not wrapped" begin
+    @testset "Truncated stencil" begin
         # n - |i| nonzeros per line of the 1D factor, so nothing wraps from the last
         # point back to the first.
         S = Matrix(shift(Ωₕ1, Val(1), Val(1)))

@@ -8,7 +8,7 @@ import Bramble: DomainMarkers, Mesh1D, Backend, points_iterator, half_points_ite
                 forward_spacing, forward_spacings_iterator, MeshMarkers
 import Base: diff
 
-@testset "Mesh1D Tests" begin
+@testset "Mesh1D" begin
     function create_test_domain(a = 0.0, b = 1.0; markers = nothing)
         I = interval(a, b)
 
@@ -19,13 +19,13 @@ import Base: diff
         end
     end
 
-    @testset "Helper Functions" begin
+    @testset "Helpers" begin
         @testset "generate_indices" begin
             @test generate_indices(5) == CartesianIndices((5,))
             @test generate_indices(1) == CartesianIndices((1,))
         end
 
-        @testset "boundary_symbol_to_dict (D=1)" begin
+        @testset "boundary_symbol_to_dict" begin
             indices = CartesianIndices((10,))
             dict = boundary_symbol_to_dict(indices)
             @test dict[:left] == CartesianIndex(1)
@@ -38,13 +38,13 @@ import Base: diff
         end
     end
 
-    @testset "Mesh Construction and Basic Properties" begin
+    @testset "Construction & properties" begin
         Ω = create_test_domain(0.0, 2.0)
         npts = 5
         Ωₕ_unif = mesh(Ω, npts, true; backend = backend())
         Ωₕ_nonunif = mesh(Ω, npts, false; backend = backend())
 
-        @testset "Uniform Mesh" begin
+        @testset "Uniform mesh" begin
             @test Ωₕ_unif isa Mesh1D
             @test backend(Ωₕ_unif) isa Backend
             @test eltype(Ωₕ_unif) == Float64
@@ -60,7 +60,7 @@ import Base: diff
             @test collect(points_iterator(Ωₕ_unif)) ≈ [0.0, 0.5, 1.0, 1.5, 2.0]
         end
 
-        @testset "Non-Uniform Mesh" begin
+        @testset "Non-uniform mesh" begin
             @test Ωₕ_nonunif isa Mesh1D
             @test backend(Ωₕ_nonunif) isa Backend
             @test eltype(Ωₕ_nonunif) == Float64
@@ -80,7 +80,7 @@ import Base: diff
             @test collect(points_iterator(Ωₕ_nonunif)) ≈ pts_nonunif
         end
 
-        @testset "set_points! and set_indices!" begin
+        @testset "set_points! & set_indices!" begin
             Ω = create_test_domain(0.0, 1.0)
             Ωₕ = mesh(Ω, 3, true; backend = backend()) # [0.0, 0.5, 1.0]
 
@@ -96,7 +96,7 @@ import Base: diff
         end
     end
 
-    @testset "Geometric Properties" begin
+    @testset "Geometric properties" begin
         npts = 5
         Ω_unif = create_test_domain(0.0, 4.0) # Step = 1.0
         Ωₕ_unif = mesh(Ω_unif, npts, true; backend = backend()) # Pts: 0, 1, 2, 3, 4
@@ -201,7 +201,7 @@ import Base: diff
         end
     end
 
-    @testset "Index Subsets" begin
+    @testset "Index subsets" begin
         npts = 5
         Ω = create_test_domain(0.0, 1.0)
         Ωₕ = mesh(Ω, npts, true; backend = backend())
@@ -220,7 +220,7 @@ import Base: diff
         @test interior_indices(inds) == CartesianIndices((2:9,))
     end
 
-    @testset "Marker Setting" begin
+    @testset "Marker setting" begin
         I = interval(0, 1)
 
         # Define markers
@@ -250,7 +250,7 @@ import Base: diff
             :Dirichlet, :Neumann, :Mixed, :LowerHalf, :PointMarker, :boundary, :interior])
     end
 
-    @testset "Mesh Modification" begin
+    @testset "Modification" begin
         @testset "iterative_refinement!" begin
             dm = markers(interval(0, 1),
                 :BC => :left,
@@ -301,11 +301,11 @@ import Base: diff
         end
     end
 
-    @testset "Additional Mesh1D Functions" begin
+    @testset "Additional methods" begin
         Ω = create_test_domain(0.0, 4.0)
         Ωₕ = mesh(Ω, 5, true; backend = backend()) # [0, 1, 2, 3, 4]
 
-        @testset "Mesh Accessors" begin
+        @testset "Accessors" begin
             # Test set accessor
             @test set(Ωₕ) == interval(0.0, 4.0)
 
@@ -320,7 +320,7 @@ import Base: diff
             @test forward_spacing(Ωₕ_pt, 1) == 0.0
         end
 
-        @testset "Single-point mesh sits at the interval location" begin
+        @testset "Single-point mesh" begin
             # A collapsed interval [c, c] must be meshed at c, not at the origin.
             for c in (1.0, 3.0, -2.5)
                 Ωₕ_c = mesh(create_test_domain(c, c), 1, true; backend = backend())
@@ -343,7 +343,7 @@ import Base: diff
             @test hₘₐₓ(Ωₕ_one) == 0.0
         end
 
-        @testset "Boundary Indices" begin
+        @testset "Boundary indices" begin
             @test boundary_indices(Ωₕ) == (CartesianIndex(1), CartesianIndex(5))
 
             # Test on indices directly
@@ -352,20 +352,20 @@ import Base: diff
             @test bounds == (CartesianIndex(1), CartesianIndex(5))
         end
 
-        @testset "Forward Spacing Edge Cases" begin
+        @testset "Spacing edge cases" begin
             # Test forward_spacing at boundaries
             @test forward_spacing(Ωₕ, 1) ≈ 1.0  # pts[2] - pts[1]
             @test forward_spacing(Ωₕ, 5) ≈ 1.0  # pts[5] - pts[4] (backward at end)
             @test forward_spacing(Ωₕ, CartesianIndex(3)) ≈ 1.0
         end
 
-        @testset "Mesh Callable" begin
+        @testset "Mesh callable" begin
             # Test that mesh(i) returns itself for 1D
             @test Ωₕ(1) === Ωₕ
             @test Ωₕ(999) === Ωₕ  # Any value returns itself
         end
 
-        @testset "Type Stability" begin
+        @testset "Type stability" begin
             # Test eltype on type
             @test eltype(typeof(Ωₕ)) == Float64
             @test eltype(Ωₕ) == Float64
@@ -374,13 +374,13 @@ import Base: diff
             @test dim(typeof(Ωₕ)) == 1
         end
 
-        @testset "Direct Indexing (getindex)" begin
+        @testset "Indexing" begin
             @test Ωₕ[1] ≈ 0.0
             @test Ωₕ[3] ≈ 2.0
             @test Ωₕ[CartesianIndex(5)] ≈ 4.0
         end
 
-        @testset "Pretty Printing (show)" begin
+        @testset "Show" begin
             buf = IOBuffer()
             show(buf, Ωₕ)
             str = String(take!(buf))
@@ -393,7 +393,7 @@ import Base: diff
             @test occursin("Mesh1D{5 pts}", str_c)
         end
 
-        @testset "Convenience Constructors" begin
+        @testset "Convenience constructors" begin
             Ω_c = create_test_domain(0.0, 1.0)
             Ωₕ_default = mesh(Ω_c, 10)
             @test Ωₕ_default isa Mesh1D

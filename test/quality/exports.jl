@@ -27,7 +27,7 @@ function _is_ours(name::Symbol)
         parentmodule(getproperty(Bramble, name)) === Bramble
 end
 
-@testset "Every exported name is documented" begin
+@testset "Docstrings exist" begin
     exported = filter(!=(:Bramble), names(Bramble))
     @test !isempty(exported)
 
@@ -45,7 +45,7 @@ end
     @test isempty(undocumented)
 end
 
-@testset "No exported name shadows a different Base function" begin
+@testset "Base shadowing" begin
     # Exporting a name that Base also exports, bound to a *different* function, makes that
     # name ambiguous for the whole session: after `using Bramble` a call to it raises an
     # UndefVarError naming two modules, and the user loses the Base one everywhere.

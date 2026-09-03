@@ -21,7 +21,7 @@ star_ops(::Val{2}) = (Dstar₊ₓ, Dstar₊ᵧ)
 star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
 
 @testset "Starred forward difference" begin
-    @testset "the averaged spacing it divides by" begin
+    @testset "Averaged spacing" begin
         for (lbl, unif) in (("uniform", true), ("random", false))
             @testset "$lbl" begin
                 Random.seed!(20260830)
@@ -44,7 +44,7 @@ star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
         end
     end
 
-    @testset "matches the definition" begin
+    @testset "Definition match" begin
         for (lbl, unif) in (("uniform", true), ("random", false))
             @testset "$lbl" begin
                 Random.seed!(20260830)
@@ -65,7 +65,7 @@ star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
         end
     end
 
-    @testset "exact on the functions it is exact on" begin
+    @testset "Exactness" begin
         # a constant differences to zero, and x differences to one, in every direction
         Ωₕ = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (5, 6, 4),
             (true, true, true))
@@ -84,7 +84,7 @@ star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
         end
     end
 
-    @testset "the whole family" begin
+    @testset "Directional family" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6), (true, false))
         Wₕ = gridspace(Ωₕ)
         Vₕ = gridspace(Ωₕ, Val(2))
@@ -111,7 +111,7 @@ star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
         end
     end
 
-    @testset "type stable and allocates only its output" begin
+    @testset "Type stability & allocations" begin
         Ωₕ1 = mesh(domain(interval(0.0, 1.0)), 33, false)
         Ωₕ2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 8), (true, false))
         u1 = Rₕ(gridspace(Ωₕ1), sin)
@@ -128,7 +128,7 @@ star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
         @test alloc_test(Dstar₊ᵧ, u2) == alloc_test(similar, u2)
     end
 
-    @testset "summation by parts" begin
+    @testset "Summation by parts" begin
         # innerₕ(Dstar₊(uₕ), vₕ) == -inner₊(uₕ, D₋(vₕ)) when vₕ vanishes on the boundary.
         #
         # Only vₕ has to vanish: the boundary term of the discrete integration by parts
@@ -152,7 +152,7 @@ star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
             end
         end
 
-        @testset "2D and 3D, every direction" begin
+        @testset "2D & 3D directions" begin
             u2 = x -> cos(x[1]) + 0.7 + 0.3x[2]^2 + 0.2x[1] * x[2]
             v2 = x -> sin(pi * x[1]) * sin(pi * x[2])
             u3 = x -> cos(x[1]) + 0.7 + 0.3x[2]^2 + 0.4x[3] + 0.2x[1] * x[3]
@@ -177,7 +177,7 @@ star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
             end
         end
 
-        @testset "it needs vₕ to vanish, and only vₕ" begin
+        @testset "Boundary vanishing" begin
             Ωₕ = mesh(domain(interval(0.0, 1.0)), 101, true)
             Wₕ = gridspace(Ωₕ)
             zero_bdry = Rₕ(Wₕ, x -> sin(pi * x))
@@ -191,7 +191,7 @@ star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
             @test !sbp(nonzero, nonzero)
         end
 
-        @testset "arbitrary random grids and fields (Supposition)" begin
+        @testset "Random grids (Supposition)" begin
             positive_h = Data.Floats{Float64}(; minimum = 0.01, maximum = 10.0,
                 nans = false, infs = false)
             field_val = Data.Floats{Float64}(; minimum = -100.0, maximum = 100.0,
@@ -282,7 +282,7 @@ star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
         end
     end
 
-    @testset "the matrix and the grid function agree" begin
+    @testset "Matrix agreement" begin
         # This family had no matrix form until the three centred ones were given one. It is
         # a diagonal scaling of the unscaled forward difference — `diag(2/(hᵢ + hᵢ₊₁))`
         # times it — so the two routes have to give the same numbers.

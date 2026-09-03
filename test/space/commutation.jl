@@ -22,7 +22,7 @@ using Bramble: values
 # differences write a zero on their truncated slice, and a zero differences to zero from
 # either side, so the identity is exact everywhere rather than only in the interior.
 
-@testset "Directional operators commute" begin
+@testset "Operator commutation" begin
     # One from each family, so the pairs cross families as well as directions.
     PAIRS_2D = (("D₋ₓ", D₋ₓ, "D₋ᵧ", D₋ᵧ),
         ("D₊ₓ", D₊ₓ, "D₋ᵧ", D₋ᵧ),
@@ -54,7 +54,7 @@ using Bramble: values
         end
     end
 
-    @testset "3D, all three pairs of directions" begin
+    @testset "3D direction pairs" begin
         for (lbl, unif) in (("uniform", true), ("random", false))
             @testset "$lbl" begin
                 Random.seed!(20260830)
@@ -77,7 +77,7 @@ using Bramble: values
         end
     end
 
-    @testset "on composite grid functions" begin
+    @testset "Composite grid functions" begin
         # The composite dispatch applies the operator to each component in turn, so it
         # must commute for the same reason. This is the path that once wrote out of
         # bounds, so it is worth exercising here too.
@@ -91,7 +91,7 @@ using Bramble: values
         end
     end
 
-    @testset "arbitrary random grids and fields (Supposition)" begin
+    @testset "Random grids (Supposition)" begin
         positive_h = Data.Floats{Float64}(; minimum = 0.01, maximum = 10.0,
             nans = false, infs = false)
         field_val = Data.Floats{Float64}(; minimum = -100.0, maximum = 100.0,
@@ -140,7 +140,7 @@ using Bramble: values
         end
     end
 
-    @testset "the test is not vacuous" begin
+    @testset "Non-vacuous check" begin
         # Two operators along the SAME direction do not commute in general, so a version
         # of the check that compared any two operators would pass for the wrong reason.
         Random.seed!(20260830)

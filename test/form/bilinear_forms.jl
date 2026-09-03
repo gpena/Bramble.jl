@@ -10,8 +10,8 @@ Coverage improvements for:
 
 import Bramble: points
 
-@testset "BilinearForm Extended Tests" begin
-    @testset "1D: BilinearForm with Dirichlet BCs" begin
+@testset "BilinearForm extended" begin
+    @testset "1D Dirichlet BCs" begin
         N = 10
         I = interval(-1.0, 1.0)
         X = domain(I, markers(I, :left => x -> x[1] < -0.99, :right => x -> x[1] > 0.99))
@@ -21,7 +21,7 @@ import Bramble: points
         # Stiffness matrix: ∫ ∇u·∇v dx
         a = form(Wh, Wh, (u, v) -> inner₊(D₋ₓ(u), D₋ₓ(v)))
 
-        @testset "Assembly with Symbol label" begin
+        @testset "Symbol label" begin
             A_left = assemble(a, dirichlet_labels = :left)
             @test A_left isa AbstractMatrix
             @test size(A_left) == (ndofs(Wh), ndofs(Wh))
@@ -31,7 +31,7 @@ import Bramble: points
             @test size(A_right) == (ndofs(Wh), ndofs(Wh))
         end
 
-        @testset "Assembly with Tuple of labels" begin
+        @testset "Tuple of labels" begin
             A_both = assemble(a, dirichlet_labels = (:left, :right))
             @test A_both isa AbstractMatrix
             @test size(A_both) == (ndofs(Wh), ndofs(Wh))
@@ -41,7 +41,7 @@ import Bramble: points
             @test all(diag(A_both) .> 0)
         end
 
-        @testset "Assembly without BCs vs with BCs" begin
+        @testset "Unconstrained vs constrained" begin
             A_no_bc = assemble(a)
             A_with_bc = assemble(a, dirichlet_labels = :left)
 
@@ -53,7 +53,7 @@ import Bramble: points
         end
     end
 
-    @testset "2D: BilinearForm with Dirichlet BCs" begin
+    @testset "2D Dirichlet BCs" begin
         N = 5
         I = interval(0.0, 1.0)
         Ω = I × I
@@ -71,13 +71,13 @@ import Bramble: points
         # Laplacian stiffness matrix
         a = form(Wh, Wh, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
 
-        @testset "2D assembly with single boundary" begin
+        @testset "Single boundary" begin
             A_bottom = assemble(a, dirichlet_labels = :bottom)
             @test A_bottom isa AbstractMatrix
             @test size(A_bottom) == (ndofs(Wh), ndofs(Wh))
         end
 
-        @testset "2D assembly with multiple boundaries" begin
+        @testset "Multiple boundaries" begin
             A_all = assemble(a, dirichlet_labels = (:bottom, :top, :left, :right))
             @test A_all isa AbstractMatrix
             @test size(A_all) == (ndofs(Wh), ndofs(Wh))
@@ -86,7 +86,7 @@ import Bramble: points
             @test issparse(A_all)
         end
 
-        @testset "2D empty label tuple" begin
+        @testset "Empty label tuple" begin
             A_empty = assemble(a, dirichlet_labels = ())
             A_none = assemble(a)
 
@@ -95,7 +95,7 @@ import Bramble: points
         end
     end
 
-    @testset "BilinearForm Accessors" begin
+    @testset "Accessors" begin
         N = 5
         I = interval(0.0, 1.0)
         Mh = mesh(domain(I), N, false)
@@ -108,7 +108,7 @@ import Bramble: points
         @test test_space(a) === Vh
     end
 
-    @testset "BilinearForm Callable Interface" begin
+    @testset "Callable interface" begin
         N = 8
         I = interval(0.0, π)
         Mh = mesh(domain(I), N, true)
@@ -137,7 +137,7 @@ import Bramble: points
         @test abs(result - expected) < 1e-5
     end
 
-    @testset "BilinearForm In-place Assembly" begin
+    @testset "In-place assembly" begin
         N = 6
         I = interval(-1.0, 1.0)
         Mh = mesh(domain(I), N, false)
@@ -145,7 +145,7 @@ import Bramble: points
 
         a = form(Wh, Wh, (u, v) -> inner₊(D₋ₓ(u), D₋ₓ(v)))
 
-        @testset "assemble! without BCs" begin
+        @testset "assemble! unconstrained" begin
             A = assemble(a)
             A_preallocated = similar(A)
             fill!(A_preallocated, 0)
@@ -155,7 +155,7 @@ import Bramble: points
             @test A_preallocated ≈ A
         end
 
-        @testset "assemble! with BCs" begin
+        @testset "assemble! constrained" begin
             X = domain(I, markers(I, :boundary => x -> abs(x[1]) > 0.99))
             Mh_bc = mesh(X, N, false)
             Wh_bc = gridspace(Mh_bc)
@@ -172,7 +172,7 @@ import Bramble: points
         end
     end
 
-    @testset "Different Bilinear Form Types" begin
+    @testset "Form types" begin
         N = 7
         I = interval(0.0, 1.0)
         Mh = mesh(domain(I), N, false)
@@ -196,7 +196,7 @@ import Bramble: points
             @test size(A_stiff) == (ndofs(Wh), ndofs(Wh))
         end
 
-        @testset "Mixed derivative terms" begin
+        @testset "Mixed derivatives" begin
             a_mixed = form(Wh, Wh, (u, v) -> inner₊(M₋ₕ(u), D₋ₓ(v)))
             A_mixed = assemble(a_mixed)
 
@@ -205,7 +205,7 @@ import Bramble: points
         end
     end
 
-    @testset "3D BilinearForm" begin
+    @testset "3D form" begin
         N = 3  # Small for 3D
         I = interval(0.0, 1.0)
         Ω = I × I × I
@@ -224,7 +224,7 @@ import Bramble: points
             @test issparse(A)
         end
 
-        @testset "3D with Dirichlet BCs" begin
+        @testset "3D Dirichlet BCs" begin
             A_bc = assemble(a, dirichlet_labels = :boundary)
             @test A_bc isa AbstractMatrix
             @test size(A_bc) == (ndofs(Wh), ndofs(Wh))

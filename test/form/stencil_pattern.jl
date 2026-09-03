@@ -44,7 +44,7 @@ end
     lin1 = LinearIndices(Bramble.indices(Ωₕ1))
     lin2 = LinearIndices(Bramble.indices(Ωₕ2))
 
-    @testset "the prediction matches the stencil it predicts" begin
+    @testset "Prediction match" begin
         @testset "1D" begin
             I = CartesianIndex(5)
             for (nm, node) in (("identity", id1), ("D₋ₓ", D₋ₓ(id1)), ("D₊ₓ", D₊ₓ(id1)),
@@ -57,7 +57,7 @@ end
             end
         end
 
-        @testset "2D, both directions" begin
+        @testset "2D directions" begin
             I = CartesianIndex(3, 3)
             for (nm, node) in (("identity", id2), ("D₋ₓ", D₋ₓ(id2)), ("D₋ᵧ", D₋ᵧ(id2)),
                 ("M₊ᵧ", M₊ᵧ(id2)), ("jumpᵧ", jumpᵧ(id2)), ("Dcᵧ", Dcᵧ(id2)),
@@ -69,7 +69,7 @@ end
         end
     end
 
-    @testset "the prediction matches the assembled matrix" begin
+    @testset "Matrix prediction match" begin
         # The independent check: every family has a matrix form, so the predicted offsets
         # can be compared against the diagonals the matrix actually occupies rather than
         # against another prediction.
@@ -84,7 +84,7 @@ end
         end
     end
 
-    @testset "the leaves touch nothing but the point" begin
+    @testset "Leaf reach" begin
         for op in (TrialFunction{1}(), TestFunction{1}(), IndexedTrialFunction{1}(1),
             source_function(sin, Val(1)), SourceVector{1, Vector{Float64}}([1.0]),
             id1, ZeroOperator(Wₕ1))
@@ -94,7 +94,7 @@ end
         @test stencil_offsets(3 * id2) == [(0, 0)]
     end
 
-    @testset "how far each node reaches" begin
+    @testset "Node reach bounds" begin
         # a one-sided operator reaches its own side and no further; the centered one skips
         # its centre; the cross-weighted one does not
         @test sort(stencil_offsets(D₋ₓ(id1))) == [(-1,), (0,)]
@@ -112,7 +112,7 @@ end
               length(stencil_offsets(D₋ₓ(id1)))
     end
 
-    @testset "how each node changes the reach" begin
+    @testset "Reach transformation" begin
         base = stencil_offsets(D₋ₓ(id1))
 
         # scaling does not widen it
@@ -143,7 +143,7 @@ end
         @test summed == base
     end
 
-    @testset "the offsets are the same at every grid point" begin
+    @testset "Uniform point offsets" begin
         # What the whole approach rests on: a truncated point keeps its offsets and zeroes
         # its coefficients, so one prediction covers the grid. If a node ever truncated by
         # dropping entries instead, the pattern would depend on position and this would
@@ -156,7 +156,7 @@ end
         end
     end
 
-    @testset "the products" begin
+    @testset "Product patterns" begin
         # These are the only nodes assembly ever evaluates, and neither had a method until
         # the parallel assembly needed to ask what an assembled form reaches.
         u, v = TrialFunction{1}(), TestFunction{1}()

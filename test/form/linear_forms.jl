@@ -10,8 +10,8 @@ Coverage improvements for:
 
 import Bramble: points
 
-@testset "LinearForm Extended Tests" begin
-    @testset "1D: LinearForm with Dirichlet BCs" begin
+@testset "LinearForm extended" begin
+    @testset "1D Dirichlet BCs" begin
         N = 10
         I = interval(-1.0, 1.0)
         X = domain(I, markers(I, :left => x -> x[1] < -0.99, :right => x -> x[1] > 0.99))
@@ -25,19 +25,19 @@ import Bramble: points
         # Linear form: ∫ f·v dx
         l = form(Wh, v -> innerₕ(fh, v))
 
-        @testset "Assembly with Symbol label" begin
+        @testset "Symbol label" begin
             F_left = assemble(l, dirichlet_labels = :left)
             @test F_left isa AbstractVector
             @test length(F_left) == ndofs(Wh)
         end
 
-        @testset "Assembly with Tuple of labels" begin
+        @testset "Tuple of labels" begin
             F_both = assemble(l, dirichlet_labels = (:left, :right))
             @test F_both isa AbstractVector
             @test length(F_both) == ndofs(Wh)
         end
 
-        @testset "Assembly with dirichlet_conditions" begin
+        @testset "dirichlet_conditions" begin
             # Define Dirichlet conditions
             bcs = dirichlet_constraints(X, :left => x -> 1.0, :right => x -> 2.0)
 
@@ -46,7 +46,7 @@ import Bramble: points
             @test length(F_cond) == ndofs(Wh)
         end
 
-        @testset "Assembly with both conditions and labels" begin
+        @testset "Conditions and labels" begin
             bcs = dirichlet_constraints(X, :left => x -> 1.0)
 
             F_both = assemble(l, dirichlet_conditions = bcs, dirichlet_labels = :right)
@@ -55,7 +55,7 @@ import Bramble: points
         end
     end
 
-    @testset "2D: LinearForm with Dirichlet BCs" begin
+    @testset "2D Dirichlet BCs" begin
         N = 5
         I = interval(0.0, 1.0)
         Ω = I × I
@@ -76,19 +76,19 @@ import Bramble: points
 
         l = form(Wh, v -> innerₕ(fh, v))
 
-        @testset "2D assembly with single boundary" begin
+        @testset "Single boundary" begin
             F = assemble(l, dirichlet_labels = :bottom)
             @test F isa AbstractVector
             @test length(F) == ndofs(Wh)
         end
 
-        @testset "2D assembly with multiple boundaries" begin
+        @testset "Multiple boundaries" begin
             F = assemble(l, dirichlet_labels = (:bottom, :top, :left, :right))
             @test F isa AbstractVector
             @test length(F) == ndofs(Wh)
         end
 
-        @testset "2D with boundary conditions" begin
+        @testset "Boundary conditions" begin
             bcs = dirichlet_constraints(X,
                 :bottom => x -> 0.0,
                 :top => x -> 1.0)
@@ -98,7 +98,7 @@ import Bramble: points
             @test length(F) == ndofs(Wh)
         end
     end
-    @testset "LinearForm Accessor Functions" begin
+    @testset "Accessors" begin
         N = 5
         I = interval(0.0, 1.0)
         Mh = mesh(domain(I), N, false)
@@ -113,7 +113,7 @@ import Bramble: points
         @test l.test_space === Wh
     end
 
-    @testset "LinearForm Callable Interface" begin
+    @testset "Callable interface" begin
         N = 8
         I = interval(0.0, π)
         Mh = mesh(domain(I), N, true)
@@ -137,7 +137,7 @@ import Bramble: points
         @test abs(result - expected) < 0.1
     end
 
-    @testset "LinearForm In-place Assembly" begin
+    @testset "In-place assembly" begin
         N = 6
         I = interval(-1.0, 1.0)
         Mh = mesh(domain(I), N, false)
@@ -148,7 +148,7 @@ import Bramble: points
 
         l = form(Wh, v -> innerₕ(fh, v))
 
-        @testset "assemble! without BCs" begin
+        @testset "assemble! unconstrained" begin
             F = assemble(l)
             F_preallocated = similar(F)
             fill!(F_preallocated, 0)
@@ -158,7 +158,7 @@ import Bramble: points
             @test F_preallocated ≈ F
         end
 
-        @testset "assemble! with BCs" begin
+        @testset "assemble! constrained" begin
             X = domain(I, markers(I, :boundary => x -> abs(x[1]) > 0.99))
             Mh_bc = mesh(X, N, false)
             Wh_bc = gridspace(Mh_bc)
@@ -180,7 +180,7 @@ import Bramble: points
         end
     end
 
-    @testset "Different Source Terms" begin
+    @testset "Source terms" begin
         N = 7
         I = interval(0.0, 1.0)
         Mh = mesh(domain(I), N, false)
@@ -221,7 +221,7 @@ import Bramble: points
         end
     end
 
-    @testset "3D LinearForm" begin
+    @testset "3D form" begin
         N = 3  # Small for 3D
         I = interval(0.0, 1.0)
         Ω = I × I × I
@@ -241,13 +241,13 @@ import Bramble: points
             @test length(F) == ndofs(Wh)
         end
 
-        @testset "3D with Dirichlet BCs" begin
+        @testset "3D Dirichlet BCs" begin
             F_bc = assemble(l, dirichlet_labels = :boundary)
             @test F_bc isa AbstractVector
             @test length(F_bc) == ndofs(Wh)
         end
 
-        @testset "3D with boundary conditions" begin
+        @testset "3D boundary conditions" begin
             bcs = dirichlet_constraints(X, :boundary => x -> 0.0)
 
             F = assemble(l, dirichlet_conditions = bcs)

@@ -9,7 +9,7 @@ using Bramble
 # that should not be connected, into a shredded zigzag instead of a surface).
 
 @testset "PGFPlots export" begin
-    @testset "1D: header, columns, and values" begin
+    @testset "1D format" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 4, true)
         Wₕ = gridspace(Ωₕ)
         uₕ = Rₕ(Wₕ, x -> x)
@@ -32,7 +32,7 @@ using Bramble
         end
     end
 
-    @testset "1D: a composite field expands into one column per component" begin
+    @testset "1D composite" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 4, true)
         Wₕ = gridspace(Ωₕ)
         Vₕ = Wₕ^Val(2)
@@ -48,7 +48,7 @@ using Bramble
         end
     end
 
-    @testset "1D: a raw array of the wrong length is refused" begin
+    @testset "1D wrong length" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
         mktempdir() do dir
             @test_throws "has length 3, but the mesh has 5 points" export_pgfplots(
@@ -56,7 +56,7 @@ using Bramble
         end
     end
 
-    @testset "2D: exact blank-line placement between scan lines" begin
+    @testset "2D scanlines" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (3, 4), (true, true))
         Wₕ = gridspace(Ωₕ)
         uₕ = Rₕ(Wₕ, x -> x[1] + 10x[2])
@@ -91,7 +91,7 @@ using Bramble
         end
     end
 
-    @testset "2D: more than one field, and a composite field, are both refused" begin
+    @testset "2D field constraints" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (3, 4), (true, true))
         Wₕ = gridspace(Ωₕ)
         uₕ = Rₕ(Wₕ, x -> x[1])
@@ -106,7 +106,7 @@ using Bramble
         end
     end
 
-    @testset "a 3D mesh is refused, pointing at export_vtk" begin
+    @testset "3D refusal" begin
         Ωₕ = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (3, 3, 3),
             (true, true, true))
         Wₕ = gridspace(Ωₕ)
@@ -117,7 +117,7 @@ using Bramble
         end
     end
 
-    @testset "the single-element shorthand" begin
+    @testset "Single-element shorthand" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 4, true)
         Wₕ = gridspace(Ωₕ)
         uₕ = Rₕ(Wₕ, sin)

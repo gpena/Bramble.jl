@@ -28,14 +28,14 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
     uₕ = Rₕ(Wₕ, x -> x[1] + x[2])
     n = ndofs(Wₕ)
 
-    @testset "what it builds" begin
+    @testset "Construction" begin
         lf = form(Wₕ, v -> innerₕ(uₕ, v))
         @test lf isa LinearForm
         @test test_space(lf) === Wₕ
         @test resolve_form_ast(lf) isa LinearProduct
     end
 
-    @testset "what it assembles" begin
+    @testset "Assembly" begin
         # ∫(x + y) over the unit square is 1, and the assembled vector's entries are the
         # cell measures times the coefficients, so it sums to exactly that.
         b = assemble(form(Wₕ, v -> innerₕ(uₕ, v)))
@@ -60,7 +60,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         @test b2 ≈ b
     end
 
-    @testset "over a composite space" begin
+    @testset "Composite space" begin
         # The composite core walks the components and assembles the *same* AST into each
         # block at its offset. So a form written against one source puts that source in
         # every component: ∫x over the unit square is 0.5, and the assembled vector sums to
@@ -77,7 +77,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         @test b[1:m] ≈ b[(m + 1):(2m)]
     end
 
-    @testset "a nested composite space covers every block" begin
+    @testset "Nested composite space" begin
         # The cores used to walk `space.spaces`, the top-level components, and reserve
         # `ndofs(sp)` for each. For a component that is itself composite that reserved the
         # whole nested block while `indices(mesh(sp))` covered one leaf's grid, so the
@@ -99,7 +99,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         @test bp ≈ bn
     end
 
-    @testset "heterogeneous composite spaces: leaves over different-sized meshes (point 24)" begin
+    @testset "Heterogeneous composite spaces" begin
         # `lin_indices`/`mesh_markers` used to be built once from the composite space's
         # first leaf and handed to every leaf's own assembly walk. For a homogeneous
         # composite every leaf shares one size, so nothing caught it; for a genuinely
@@ -151,7 +151,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         @test bp ≈ bboth
     end
 
-    @testset "a coupled right-hand side, one term per component" begin
+    @testset "Coupled right-hand side" begin
         # `v(i)` gives the i-th component of the symbolic test function, so a coupled form
         # reads the way an indexed grid function does:
         #
@@ -167,13 +167,13 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         nblocks = ndofs(Vₕ) ÷ m
         blocks(b) = [sum(b[(k * m + 1):((k + 1) * m)]) for k in 0:(nblocks - 1)]
 
-        @testset "v(i) is the indexed test function" begin
+        @testset "Indexed test function" begin
             v = TestFunction{2}()
             @test v(2) === IndexedTestFunction{2}(2)
             @test TrialFunction{2}()(1) === IndexedTrialFunction{2}(1)
         end
 
-        @testset "each term lands in its own block" begin
+        @testset "Block placement" begin
             # ∫x = 0.5 into the first block, ∫10x = 5.0 into the second
             b = assemble(form(Vₕ, v -> innerₕ(uv(1), v(1)) + innerₕ(uv(2), v(2))))
             @test blocks(b) ≈ [0.5, 5.0]
@@ -182,7 +182,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
             @test blocks(assemble(form(Vₕ, v -> innerₕ(uv(2), v(2))))) ≈ [0.0, 5.0]
         end
 
-        @testset "a form naming no component still reaches every block" begin
+        @testset "Unindexed broadcast" begin
             # The prior behaviour, which has to keep working: the same integrand in each.
             @test blocks(assemble(form(Vₕ, v -> innerₕ(uv(1), v)))) ≈ [0.5, 0.5]
 
@@ -191,7 +191,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
             @test blocks(mixed) ≈ [0.5, 0.5 + 5.0]
         end
 
-        @testset "the routing query" begin
+        @testset "Routing query" begin
             v = TestFunction{2}()
             @test test_component_or_nothing(innerₕ(uv(1), v(2))) == 2
             @test test_component_or_nothing(innerₕ(uv(1), v)) === nothing
@@ -203,7 +203,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
             @test routes_by_component(innerₕ(uv(1), v) + innerₕ(uv(2), v(2)))
         end
 
-        @testset "and it costs nothing" begin
+        @testset "Zero-cost routing" begin
             # The routing recurses the AST rather than flattening it first, which answers
             # with a Vector{Any}: that allocated 544 B per assembly and made every term a
             # dynamic read.
@@ -223,7 +223,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         end
     end
 
-    @testset "a linear combination of products, each over a combination of operators" begin
+    @testset "Linear combination of products" begin
         # The shape a linear form actually has: a linear combination of inner products, and
         # inside each one a linear combination of operators applied to the test function.
         #
@@ -242,7 +242,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         Wf = gridspace(Ωf)
         Vf = gridspace(Ωf, Val(3))
 
-        @testset "scalar" begin
+        @testset "Scalar" begin
             g1 = Rₕ(Wf, x -> x[1] + 2x[2])
             g2 = Rₕ(Wf, x -> exp(x[1]))
             g3 = Rₕ(Wf, x -> 1 + x[2]^2)
@@ -261,7 +261,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
             @test !iszero(reference)          # the identity is not being met by both sides
         end                                   # being zero
 
-        @testset "composite, through the shorthand" begin
+        @testset "Composite shorthand" begin
             gv = Rₕ(Vf, (x -> x[1] + 2x[2], x -> exp(x[1]), x -> 1 + x[2]^2))
             wv = Rₕ(Vf, (x -> sin(3x[1]) + 1, x -> cos(2x[2]) + 2, x -> x[1] * x[2] + 1))
 
@@ -274,7 +274,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
             @test !iszero(reference)
         end
 
-        @testset "the shorthand equals writing the components out" begin
+        @testset "Shorthand equivalence" begin
             # Which is the property that makes it a shorthand rather than a second meaning.
             uv = Rₕ(Vf, (x -> x[1], x -> 100 * x[1], x -> x[2]))
             for (short, long) in (
@@ -303,7 +303,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
             @test [sum(b[(k * m + 1):((k + 1) * m)]) for k in 0:2] ≈ [0.5, 50.0, 0.5]
         end
 
-        @testset "the index distributes through the expression" begin
+        @testset "Index distribution" begin
             v = TestFunction{2}()
             @test (v + D₋ₓ(v))(1) == v(1) + D₋ₓ(v(1))
             @test (3 * M₋ᵧ(v))(2) == 3 * M₋ᵧ(v(2))
@@ -322,7 +322,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         end
     end
 
-    @testset "the parallel path agrees with the serial one" begin
+    @testset "Parallel vs serial agreement" begin
         # Note what this does and does not establish. `Pkg.test()` runs on one thread unless
         # the environment says otherwise, and on one thread the sweep is a degenerate case:
         # the colours never actually run concurrently, so nothing can race. CI sets
@@ -331,7 +331,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         # single-threaded run cannot claim to have tested concurrency.
         @info "parallel assembly tested on $(Threads.nthreads()) thread(s)"
 
-        @testset "the colouring the sweep partitions by" begin
+        @testset "Sweep colouring" begin
             # Two points of one colour must have disjoint write footprints, so the stride is
             # the span of the reach plus one.
             @test _colour_strides([(0,)]) == (1,)
@@ -383,7 +383,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         assemble_parallel!(br, lfr)
         @test br ≈ first_pass
 
-        @testset "differentiating through the parallel sweep" begin
+        @testset "Parallel differentiation" begin
             # The per-thread buffers this path used to carry were `Vector{Float64}`
             # outright, so a Dual-valued assembly could not take it at all. Nothing in the
             # sweep names an element type now, so it can.
@@ -494,7 +494,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         end
     end
 
-    @testset "assemble!/assemble follow the test space's backend policy (point 22)" begin
+    @testset "Backend policy" begin
         # assemble!/assemble no longer hardcode serial: they read test_space(form)'s
         # execution_policy and dispatch to the same serial/parallel cores assemble_parallel!
         # uses, so a Parallel()-backend form threads through the plain assemble!/assemble
@@ -526,7 +526,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         @test bang_via_policy ≈ b_forced_parallel
     end
 
-    @testset "what a reassembly notices" begin
+    @testset "Reassembly" begin
         # The AST is stored on the form and references the underlying VectorElement arrays,
         # so updating an element in-place via `values(us) .= ...` or `Rₕ!(us, ...)` is
         # automatically seen without allocating a new AST.
@@ -564,7 +564,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         @test @allocated(assemble!(d, lfa_scalar)) == 0
     end
 
-    @testset "the functor contracts without building the vector" begin
+    @testset "Direct contraction" begin
         # `l(vₕ)` answers with a number, and used to allocate a whole right-hand side to
         # get it: `dot(assemble(form), values(vₕ))`. The walk now multiplies each stencil
         # weight by `v` at the row it would have written to, so the same sum is taken as it
@@ -622,7 +622,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         @test _contract_allocs(lfh, uₕ) < 8 * n ÷ 100
     end
 
-    @testset "evaluation sees live coefficients too" begin
+    @testset "Live coefficient evaluation" begin
         # Everything above went through `assemble`. Evaluation is the other way a form gets
         # used, and it has to agree: `l(vₕ)` and `evaluate!` both resolve from `f`, so a
         # coefficient changed between two calls is read again.
@@ -656,7 +656,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         @test @allocated(evaluate!(scratch, lfl, wₕ)) == 0
     end
 
-    @testset "constant, function and tuple sources" begin
+    @testset "Source variants" begin
         # The source of a linear form need not be a grid function. A number and a function
         # both work, and an integer promotes rather than forcing the output's element type —
         # the same rule that lets a Dual through.
@@ -693,7 +693,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         @test_throws ArgumentError form(Vt, v -> innerₕ((), v))
     end
 
-    @testset "a component the space does not have is an error" begin
+    @testset "Invalid component error" begin
         # It used to contribute nothing, in silence. On a two-block space
         # `innerₕ(1.0, v(3))` assembled to zeros, and summed with a valid term it dropped
         # itself and kept the other, so a form written for a wider space quietly produced a
@@ -721,7 +721,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         @test sum(assemble(form(Vt, v -> innerₕ(1.0, v(2))))) ≈ 1.0
     end
 
-    @testset "a form's expression is checked when it is built" begin
+    @testset "Expression validation" begin
         # The `ast` field stores the pre-resolved tree; the expression itself is not kept
         # (point 59) since nothing downstream ever calls it again.
         @test fieldnames(typeof(form(Wₕ, v -> innerₕ(uₕ, v)))) ==
@@ -734,7 +734,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         @test_throws ArgumentError form(Wₕ, v -> innerₕ(uₕ, TestFunction{3}()))
     end
 
-    @testset "the symbolic assembly is the matrix expression" begin
+    @testset "Matrix expression equivalence" begin
         # A linear form is `v -> (Au, v)` for some operator `A` and inner product, so its
         # assembled vector has to be `Aᵀ H u` exactly: `H` the diagonal weight matrix of the
         # inner product, `A` the operator's own sparse matrix. Both are built by code that
@@ -825,7 +825,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
             dirichlet_conditions = bcs, dirichlet_labels = 3)
     end
 
-    @testset "dirichlet_components restricts labels to one leaf of a composite space (point 45)" begin
+    @testset "dirichlet_components restriction" begin
         bcs = dirichlet_constraints(set(Ωₕ), :bottom => (x -> 5.0))
         marked = index_in_marker(Ωₕ, :bottom)
         uv = Rₕ(Vₕ, (x -> sin(x[1]), x -> cos(x[2])))
@@ -847,7 +847,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         @test all(view(b_both, (n + 1):(2n))[i] ≈ 5.0 for i in 1:n if marked[i])
     end
 
-    @testset "allocations, which are part of the contract" begin
+    @testset "Allocation contract" begin
         # This is what a time loop calls every step. The assembly kernel itself is
         # allocation free; what used to cost was the two default arguments — an empty
         # constraint set at 2,080 B and the AST resolution at 160 B, both recomputed per
@@ -953,7 +953,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         @test abs(het - homo) <= 256
     end
 
-    @testset "differentiating an assembled residual" begin
+    @testset "Assembled residual differentiation" begin
         # The shape a nonlinear solve has: build the residual of a form, and let the solver
         # differentiate it with respect to the coefficient vector to get a Jacobian.
         #
@@ -965,14 +965,14 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         # used and the same defect `dirichlet_constraints` had.
         u0 = values(uₕ)
 
-        @testset "with respect to a parameter in the source" begin
+        @testset "Source parameter differentiation" begin
             J(a) = sum(assemble(form(Wₕ, v -> innerₕ(Rₕ(Wₕ, x -> a * (x[1] + x[2])), v))))
             h = 1e-6
             @test isapprox(ForwardDiff.derivative(J, 1.3), (J(1.3 + h) - J(1.3 - h)) / 2h;
                 rtol = 1e-5)
         end
 
-        @testset "the Jacobian of a nonlinear residual" begin
+        @testset "Nonlinear residual Jacobian" begin
             # innerₕ(u², v) assembles the vector with entries |□ᵢ| uᵢ², so its Jacobian is
             # diagonal with 2 |□ᵢ| uᵢ. Checked against that closed form rather than against
             # a finite difference, which is a stronger statement.
@@ -989,7 +989,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
             @test eltype(residual(u0)) === Float64
         end
 
-        @testset "and with the constraints applied, as a solve would" begin
+        @testset "Constrained Jacobian" begin
             bcs = dirichlet_constraints(set(Ωₕ), :bottom => (x -> 0.0))
             res(u) = assemble(form(Wₕ, v -> innerₕ(element(Wₕ, u .* u), v));
                 dirichlet_conditions = bcs, dirichlet_labels = :bottom)
@@ -1004,7 +1004,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         end
     end
 
-    @testset "the functor contracts against a vector" begin
+    @testset "Vector contraction" begin
         lf = form(Wₕ, v -> innerₕ(uₕ, v))
         b = assemble(lf)
         ones_el = Rₕ(Wₕ, x -> 1.0)

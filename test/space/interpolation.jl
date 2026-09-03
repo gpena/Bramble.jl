@@ -11,8 +11,8 @@ using Bramble
 # the value on a *different* mesh — the whole point of point 25 (moving a grid function
 # between two leaves of a heterogeneous composite space).
 
-@testset "Interpolation (point 25)" begin
-    @testset "1D: exact for affine functions, including on a non-uniform mesh" begin
+@testset "Interpolation" begin
+    @testset "1D exact on affine" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, false)   # non-uniform
         uₕ = Rₕ(gridspace(Ωₕ), x -> 2x + 3)
 
@@ -25,7 +25,7 @@ using Bramble
         @test interpolate_at(uₕ, pt) ≈ 2pt + 3 atol=1e-12
     end
 
-    @testset "2D: exact for affine functions" begin
+    @testset "2D exact on affine" begin
         Ωₕ = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (6, 7), (true, true))
         uₕ = Rₕ(gridspace(Ωₕ), x -> 2x[1] - 3x[2] + 1)
 
@@ -34,7 +34,7 @@ using Bramble
         end
     end
 
-    @testset "a point outside the mesh extrapolates along the boundary cell's slope" begin
+    @testset "Boundary extrapolation" begin
         # locate_cell clamps which cell is read to the boundary one, but not the relative
         # position x is weighted by within it — so a point outside the mesh continues the
         # boundary cell's own affine trend rather than holding a constant value. For a
@@ -46,7 +46,7 @@ using Bramble
         @test interpolate_at(uₕ, 1.7) ≈ 5 * 1.7 + 1 atol=1e-12
     end
 
-    @testset "πₕ/πₕ! move a grid function across DIFFERENT meshes" begin
+    @testset "Cross-mesh interpolation" begin
         Ωbig = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (10, 10), (true, true))
         Ωsmall = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (4, 4), (true, true))
         Wbig, Wsmall = gridspace(Ωbig), gridspace(Ωsmall)
@@ -66,7 +66,7 @@ using Bramble
         @test values(dest2) ≈ values(dest)
     end
 
-    @testset "interpolation_matrix agrees with πₕ, in 1D and 2D" begin
+    @testset "Matrix agreement" begin
         # P * values(src) is exactly the same computation πₕ performs pointwise —
         # same corner-weight arithmetic, just emitted as triplets instead of accumulated —
         # so the two must agree to the last bit, not merely approximately.
@@ -98,7 +98,7 @@ using Bramble
         @test all(≈(1), vec(sum(P2, dims = 2)))
     end
 
-    @testset "composes with the numeric difference/average operators" begin
+    @testset "Operator composition" begin
         # once πₕ returns an ordinary VectorElement, every existing numeric
         # operator just works on it — no separate mechanism needed.
         Ωbig = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (8, 8), (true, true))

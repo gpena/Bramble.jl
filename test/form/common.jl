@@ -18,7 +18,7 @@ using Bramble: TrialFunction, TestFunction, IndexedTrialFunction, IndexedTestFun
 # `multiply_stencils_bilinear` is how a trial stencil and a test stencil become matrix
 # entries — and none of them had ever run.
 
-@testset "AST nodes and the stencil algebra" begin
+@testset "AST & stencil algebra" begin
     Ωₕ1 = mesh(domain(interval(0.0, 1.0)), 9, false)
     Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6), (true, false))
     Wₕ1, Wₕ = gridspace(Ωₕ1), gridspace(Ωₕ)
@@ -27,7 +27,7 @@ using Bramble: TrialFunction, TestFunction, IndexedTrialFunction, IndexedTestFun
     lin = LinearIndices(Bramble.indices(Ωₕ))[I]
     O = (0, 0)
 
-    @testset "offsets" begin
+    @testset "Offsets" begin
         @test zero_offset(Val(1)) == (0,)
         @test zero_offset(Val(2)) == (0, 0)
         @test zero_offset(Val(3)) == (0, 0, 0)
@@ -38,7 +38,7 @@ using Bramble: TrialFunction, TestFunction, IndexedTrialFunction, IndexedTestFun
         @test shift_offset((1, 1), 1, 0) == (1, 1)          # a zero shift is identity
     end
 
-    @testset "spacings, per direction" begin
+    @testset "Directional spacings" begin
         # In one dimension the mesh answers with a number and in more with a tuple, so the
         # accessors have to pick a component out of either.
         i1 = CartesianIndex(4)
@@ -57,7 +57,7 @@ using Bramble: TrialFunction, TestFunction, IndexedTrialFunction, IndexedTestFun
         @test get_spacing(Ωₕ, I, 1) != get_spacing(Ωₕ, I, 2)
     end
 
-    @testset "combining stencils" begin
+    @testset "Stencil combination" begin
         s1 = ((O, 2.0), ((1, 0), 3.0))
         s2 = (((0, 1), 5.0),)
 
@@ -91,7 +91,7 @@ using Bramble: TrialFunction, TestFunction, IndexedTrialFunction, IndexedTestFun
         @test all(e -> length(e) == 3, b)
     end
 
-    @testset "the leaves each evaluate to a unit stencil at the point" begin
+    @testset "Unit leaf stencils" begin
         for op in (TrialFunction{2}(), TestFunction{2}(),
             IndexedTrialFunction{2}(1), IndexedTestFunction{2}(2), id)
             @test local_stencil(op, Wₕ, I, nothing, lin) == ((O, 1.0),)
@@ -103,7 +103,7 @@ using Bramble: TrialFunction, TestFunction, IndexedTrialFunction, IndexedTestFun
               (((0,), 1.0),)
     end
 
-    @testset "the source nodes carry a value rather than a coefficient" begin
+    @testset "Source node values" begin
         # a function of position, evaluated at the point
         f = x -> x[1] + 10x[2]
         sf = source_function(f, Val(2))
@@ -118,7 +118,7 @@ using Bramble: TrialFunction, TestFunction, IndexedTrialFunction, IndexedTestFun
         @test local_stencil(sv, Wₕ, I, nothing, lin) == ((O, vec[lin]),)
     end
 
-    @testset "the constructors" begin
+    @testset "Constructors" begin
         @test trial_function(Val(2)) === TrialFunction{2}()
         @test test_function(Val(3)) === TestFunction{3}()
         @test source_function(sin, Val(1)) isa SourceFunction{1}
@@ -126,7 +126,7 @@ using Bramble: TrialFunction, TestFunction, IndexedTrialFunction, IndexedTestFun
         @test IndexedTestFunction{2}(4).component_idx == 4
     end
 
-    @testset "the combining nodes" begin
+    @testset "Combining nodes" begin
         a = local_stencil(id + id, Wₕ, I, nothing, lin)
         @test a == ((O, 1.0), (O, 1.0))          # concatenated, not summed: assembly adds
 
@@ -139,7 +139,7 @@ using Bramble: TrialFunction, TestFunction, IndexedTrialFunction, IndexedTestFun
         @test local_stencil(uₕ * id, Wₕ, I, nothing, lin) == ((O, values(uₕ)[lin]),)
     end
 
-    @testset "a Function in a GridFunctionScale is a thunk, not a field" begin
+    @testset "GridFunctionScale thunk" begin
         # The distinction the SourceVector docstring spells out: `SourceFunction` holds a
         # function of position; a `Function` here is a zero-argument thunk returning the
         # values to scale by, so that building them can wait until the form is resolved.
@@ -217,7 +217,7 @@ using Bramble: TrialFunction, TestFunction, IndexedTrialFunction, IndexedTestFun
     end
 end
 
-@testset "the element type survives assembly" begin
+@testset "Element type preservation" begin
     # A `Float32` space assembled a `Float64` vector and a `Float64` matrix, silently,
     # because the stencil leaves returned a literal `1.0` and the boundary masks a literal
     # `0.0`/`1.0`. `_assembled_eltype` promotes the space's type against the weight it finds,

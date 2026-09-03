@@ -3,7 +3,7 @@ import Bramble: forward_average, backward_average
 import Bramble: forward_average_dim!, backward_average_dim!
 using LinearAlgebra: norm
 
-@testset "Averaging Operators" begin
+@testset "Averaging operators" begin
     # Backward average operators
     backward_average_ops(::Val{1}) = (M₋ₓ,)
     backward_average_ops(::Val{2}) = (M₋ₓ, M₋ᵧ)
@@ -30,7 +30,7 @@ using LinearAlgebra: norm
             linear_func(x) = sum(coeffs[i] * x[i] for i in 1:D)
             Rₕ!(uₕ, linear_func)
 
-            @testset "Forward Average (M₊)" begin
+            @testset "Forward average (M₊)" begin
                 for i in 1:D
                     # --- Calculate the analytical expected result ---
                     expected_vals = similar(uₕ.data)
@@ -81,7 +81,7 @@ using LinearAlgebra: norm
                 end
             end
 
-            @testset "Backward Average (M₋)" begin
+            @testset "Backward average (M₋)" begin
                 for i in 1:D
                     # --- Calculate the analytical expected result ---
                     expected_vals = similar(uₕ.data)
@@ -135,7 +135,7 @@ using LinearAlgebra: norm
         end
     end
 
-    @testset "Operator vs. Matrix Application" begin
+    @testset "Operator vs matrix" begin
         @testset "Forward" test_operator_matrix_equivalence(forward_average_ops)
         @testset "Backward" test_operator_matrix_equivalence(backward_average_ops)
     end

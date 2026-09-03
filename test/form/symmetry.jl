@@ -8,12 +8,12 @@ using Bramble: form, assemble, trial_space, test_space
 # trait's own reasoning) and, where it matters, a negative control confirming the check can
 # actually tell the two apart.
 
-@testset verbose=true "Structural symmetry / SPD detection" begin
+@testset "Symmetry & SPD detection" begin
     S = interval(0.0, 1.0) × interval(0.0, 1.0)
     Ωₕ = mesh(domain(S, :walls => get_boundary_symbols(S)), (9, 7), (true, true))
     Wₕ = gridspace(Ωₕ)
 
-    @testset "same L on both sides is symmetric, and the assembled matrix agrees" begin
+    @testset "Identical operators" begin
         a = form(Wₕ, Wₕ, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
         @test issymmetric(a)
         @test isposdef(a)
@@ -30,14 +30,14 @@ using Bramble: form, assemble, trial_space, test_space
         @test issymmetric(Matrix(assemble(c)))
     end
 
-    @testset "a mixed sum of different inner products stays symmetric" begin
+    @testset "Mixed inner products" begin
         d = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
         @test issymmetric(d)
         @test isposdef(d)
         @test issymmetric(Matrix(assemble(d)))
     end
 
-    @testset "scaling preserves symmetry but not positive-definiteness" begin
+    @testset "Scaling effects" begin
         a3 = form(Wₕ, Wₕ, (u, v) -> 2.0 * inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
         @test issymmetric(a3)
         @test isposdef(a3)
@@ -48,14 +48,14 @@ using Bramble: form, assemble, trial_space, test_space
         @test issymmetric(Matrix(assemble(a4)))
     end
 
-    @testset "different operators either side: negative control" begin
+    @testset "Different operators" begin
         b = form(Wₕ, Wₕ, (u, v) -> inner₊(u, D₋ₓ(v)))
         @test !issymmetric(b)
         @test !isposdef(b)
         @test !issymmetric(Matrix(assemble(b)))
     end
 
-    @testset "different trial and test space objects can never be symmetric" begin
+    @testset "Different spaces" begin
         Wₕ2 = gridspace(Ωₕ)
         @test trial_space(form(Wₕ, Wₕ, (u, v) -> u)) ===
               test_space(form(Wₕ, Wₕ, (u, v) -> u))

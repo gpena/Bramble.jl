@@ -6,8 +6,8 @@ Focus on edge cases, marker combinations, and complex interactions
 
 import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD
 
-@testset "Meshes Modules Coverage" begin
-    @testset "Domain Edge Cases" begin
+@testset "Meshes" begin
+    @testset "Domain edge cases" begin
         @testset "1D Domain variations" begin
             I = interval(-1.0, 2.0)
 
@@ -62,7 +62,7 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD
         end
     end
 
-    @testset "Marker Combinations" begin
+    @testset "Marker combinations" begin
         I = interval(0.0, 1.0)
 
         @testset "Disjoint markers" begin
@@ -100,7 +100,7 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD
         end
     end
 
-    @testset "Marker Evaluation" begin
+    @testset "Marker evaluation" begin
         I = interval(0.0, 1.0)
 
         @testset "Boolean marker functions" begin
@@ -137,7 +137,7 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD
         end
     end
 
-    @testset "Set Operations" begin
+    @testset "Set operations" begin
         @testset "1D Sets" begin
             I1 = interval(0.0, 1.0)
             I2 = interval(-1.0, 0.5)
@@ -175,7 +175,7 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD
         end
     end
 
-    @testset "Domain with Mesh Integration" begin
+    @testset "Mesh integration" begin
         @testset "1D Domain to Mesh" begin
             I = interval(0.0, π)
             X = domain(I, markers(I,
@@ -212,7 +212,7 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD
         end
     end
 
-    @testset "Marker Access and Queries" begin
+    @testset "Marker access & queries" begin
         I = interval(0.0, 1.0)
         Ω = I × I
 
@@ -235,7 +235,7 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD
         @test any(markers(Mh)[:right])
     end
 
-    @testset "Empty and Trivial Cases" begin
+    @testset "Empty & trivial cases" begin
         @testset "Domain without markers" begin
             I = interval(0.0, 1.0)
             X = domain(I)
@@ -265,7 +265,7 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD
         end
     end
 
-    @testset "Extended Interface Methods" begin
+    @testset "Extended interface" begin
         @testset "1D Mesh Extended Interface" begin
             I = interval(0.0, 1.0)
             M1 = mesh(domain(I), 11)
@@ -376,7 +376,7 @@ end
 # A mesh type that implements nothing, used to reach the interface fallbacks.
 struct BareMesh <: Bramble.AbstractMeshType{1} end
 
-@testset "Mesh interface coverage" begin
+@testset "Interface coverage" begin
     import Bramble: generate_indices, interior_indices, _extract_linear_index,
                     spacing_for_derivative, forward_spacing_for_derivative,
                     cell_measures, normal_vector
@@ -385,13 +385,13 @@ struct BareMesh <: Bramble.AbstractMeshType{1} end
     Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
     Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (4, 3), (true, true))
 
-    @testset "generate_indices accepts an SVector of counts" begin
+    @testset "generate_indices SVector" begin
         @test generate_indices(SVector(4, 3)) == CartesianIndices((4, 3))
         @test generate_indices((4, 3)) == generate_indices(SVector(4, 3))
         @test generate_indices(5) == CartesianIndices((5,))
     end
 
-    @testset "interior_indices leaves a collapsed axis alone" begin
+    @testset "interior_indices collapsed axis" begin
         # an axis with one point cannot lose its boundary, so the range passes through
         Ωc = mesh(domain(interval(0.0, 1.0) × interval(2.0, 2.0)), (5, 1), (true, true))
         ii = interior_indices(Ωc)
@@ -399,7 +399,7 @@ struct BareMesh <: Bramble.AbstractMeshType{1} end
         @test size(ii, 1) == 3                 # the other axis loses both ends
     end
 
-    @testset "out-of-range indices throw BoundsError" begin
+    @testset "Out-of-range indexing" begin
         @test_throws BoundsError point(Ωₕ, 99)
         @test_throws BoundsError point(Ωₕ, 0)
         @test_throws BoundsError point(Ω2, CartesianIndex(99, 1))
@@ -412,12 +412,12 @@ struct BareMesh <: Bramble.AbstractMeshType{1} end
         @test _extract_linear_index(3) == 3
     end
 
-    @testset "interface fallbacks error on a type that implements nothing" begin
+    @testset "Unimplemented fallback" begin
         @test_throws ErrorException eltype(BareMesh())
         @test_throws ErrorException eltype(BareMesh)
     end
 
-    @testset "collection interface" begin
+    @testset "Collection interface" begin
         @test firstindex(Ωₕ) == 1
         @test lastindex(Ωₕ) == npoints(Ωₕ)
         @test firstindex(Ω2, 1) == 1
@@ -426,7 +426,7 @@ struct BareMesh <: Bramble.AbstractMeshType{1} end
         @test lastindex(Ω2, 2) == size(Ω2, 2)
     end
 
-    @testset "unknown boundary symbols are rejected in every dimension" begin
+    @testset "Unknown boundary symbols" begin
         box3 = box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))
         Ω3 = mesh(domain(box3), (3, 3, 3), (true, true, true))
         @test_throws ArgumentError normal_vector(Ωₕ, :nonsense)
@@ -435,7 +435,7 @@ struct BareMesh <: Bramble.AbstractMeshType{1} end
         @test normal_vector(Ω3, :front) == SVector(1.0, 0.0, 0.0)
     end
 
-    @testset "cell_measures returns every cell width" begin
+    @testset "cell_measures widths" begin
         @test cell_measures(Ωₕ) == half_spacings(Ωₕ)
         @test length(cell_measures(Ωₕ)) == npoints(Ωₕ)
 
@@ -445,7 +445,7 @@ struct BareMesh <: Bramble.AbstractMeshType{1} end
         @test cm[2] == cell_measures(Ω2(2))
     end
 
-    @testset "CartesianIndex forms of the spacings" begin
+    @testset "CartesianIndex spacings" begin
         for i in 1:npoints(Ωₕ)
             @test spacing(Ωₕ, CartesianIndex(i)) == spacing(Ωₕ, i)
             @test half_spacing(Ωₕ, CartesianIndex(i)) == half_spacing(Ωₕ, i)
@@ -453,7 +453,7 @@ struct BareMesh <: Bramble.AbstractMeshType{1} end
         end
     end
 
-    @testset "derivative spacings vanish at the missing neighbour" begin
+    @testset "Missing neighbour spacings" begin
         N = npoints(Ωₕ)
         # backward difference has no neighbour at the first point
         @test spacing_for_derivative(Ωₕ, 1) == 0
@@ -466,7 +466,7 @@ struct BareMesh <: Bramble.AbstractMeshType{1} end
               forward_spacing(Ωₕ, 1)
     end
 
-    @testset "copy is deep in the data and shallow in the geometry" begin
+    @testset "copy deep vs shallow" begin
         c1 = copy(Ωₕ)
         @test c1 isa Mesh1D
         @test points(c1) == points(Ωₕ)
@@ -483,7 +483,7 @@ struct BareMesh <: Bramble.AbstractMeshType{1} end
         @test points(c2(1)) == points(Ω2(1))
     end
 
-    @testset "refinement is a no-op where there is nothing to refine" begin
+    @testset "Trivial refinement" begin
         # collapsed mesh: a single point, so no interval to halve
         Ωpt = mesh(domain(interval(3.0, 3.0)), 1, true)
         @test npoints(Ωpt) == 1
@@ -508,14 +508,14 @@ struct BareMesh <: Bramble.AbstractMeshType{1} end
     end
 end
 
-@testset "Cached spacings stay consistent with the points" begin
+@testset "Cached spacings" begin
     import Bramble: spacings, spacings!, spacing!, backward_spacings_for_derivative,
                     forward_spacings_for_derivative
 
     # The invariant the cache has to hold, stated independently of the cache itself.
     backward(pts, i) = i == 1 ? pts[2] - pts[1] : pts[i] - pts[i - 1]
 
-    @testset "agrees with the accessors on construction" begin
+    @testset "Accessor agreement" begin
         for unif in (true, false), n in (2, 5, 17)
 
             Ωₕ = mesh(domain(interval(0.0, 1.0)), n, unif)
@@ -529,7 +529,7 @@ end
         end
     end
 
-    @testset "rebuilt by every path that changes the points" begin
+    @testset "Point change rebuild" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
 
         iterative_refinement!(Ωₕ)
@@ -547,7 +547,7 @@ end
         @test half_spacing(Ωₕ, 3) ≈ (spacings(Ωₕ)[3] + spacings(Ωₕ)[4]) * 0.5
     end
 
-    @testset "copy is independent" begin
+    @testset "Independent copy" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
         c = copy(Ωₕ)
         @test spacings(c) == spacings(Ωₕ)
@@ -557,13 +557,13 @@ end
         @test all(spacings(Ωₕ)[i] ≈ backward(points(Ωₕ), i) for i in 1:5)
     end
 
-    @testset "collapsed mesh has zero spacing" begin
+    @testset "Collapsed mesh spacing" begin
         Ωc = mesh(domain(interval(3.0, 3.0)), 1, true)
         @test spacings(Ωc) == [0.0]
         @test spacing(Ωc, 1) == 0.0
     end
 
-    @testset "derivative views select the right entries" begin
+    @testset "Derivative views" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, false)
         n = npoints(Ωₕ)
         bwd = backward_spacings_for_derivative(Ωₕ)

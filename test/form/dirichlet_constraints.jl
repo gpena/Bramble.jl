@@ -4,12 +4,12 @@ import Bramble: CartesianProduct, DirichletConstraint, label_conditions, embed_f
                 index_in_marker
 using Supposition
 
-@testset "Dirichlet Constraints Tests" begin
+@testset "Dirichlet constraints" begin
     # --- Setup ---
     I = interval(0.0, 1.0)
     Ω = I × I
 
-    @testset "Boundary Constraints" begin
+    @testset "Boundary conditions" begin
         # Define some functions to use as boundary conditions
         f1 = x -> x[1]^2 + x[2]
         f2 = x -> 2 * x[2]
@@ -24,7 +24,7 @@ using Supposition
 
         # --- Tests ---
 
-        @testset "dirichlet_constraints constructor" begin
+        @testset "Constructor" begin
             bcs = dirichlet_constraints(Ω, :gamma_1 => x->bf1(x), :gamma_2 => x->bf2(x))
 
             @test bcs isa DirichletConstraint
@@ -51,7 +51,7 @@ using Supposition
         end
     end
 
-    @testset "Lazy Time Evaluation of DomainMarkers" begin
+    @testset "Lazy time evaluation" begin
         original_markers = markers(
             Ω, I, :moving_front => (x, t) -> x[1] > t, :moving_back => (x, t) -> x[1] < t)
         lazy_markers_at_t = EvaluatedDomainMarkers(original_markers, 0.75)
@@ -85,7 +85,7 @@ using LinearAlgebra: I as LinearAlgebraI
 # leaves with dof offsets, and every property below is that flattening being right. The
 # governing equivalence is that a composite space behaves exactly like the scalar space
 # repeated once per component, block by block.
-@testset "Applying Dirichlet conditions" begin
+@testset "Applying conditions" begin
     Ωₕ = mesh(
         domain(interval(0.0, 1.0) × interval(0.0, 1.0),
             :bottom => :bottom, :top => :top),
@@ -98,7 +98,7 @@ using LinearAlgebra: I as LinearAlgebraI
     _eye(n) = sparse(one(Float64) * LinearAlgebraI, n, n)
     _full(n) = Matrix(_eye(n))
 
-    @testset "matrix rows, scalar space" begin
+    @testset "Matrix rows (scalar)" begin
         A = _eye(nW)
         A[1, 2] = 5.0                      # an off-diagonal that must be cleared
         @test dirichlet_bc!(A, Wₕ, :bottom) === A
@@ -111,7 +111,7 @@ using LinearAlgebra: I as LinearAlgebraI
         @test any(marked)                  # the marker selects something
     end
 
-    @testset "dense and sparse agree" begin
+    @testset "Dense & sparse agreement" begin
         As, Ad = _eye(nW), _full(nW)
         As[2, 3] = 4.0
         Ad[2, 3] = 4.0
@@ -120,7 +120,7 @@ using LinearAlgebra: I as LinearAlgebraI
         @test Matrix(As) == Ad
     end
 
-    @testset "matrix rows, composite space" begin
+    @testset "Matrix rows (composite)" begin
         A = _eye(nV)
         @test dirichlet_bc!(A, Vₕ, :bottom) === A
         # a composite space is the scalar one repeated per component: the marked rows are
@@ -136,7 +136,7 @@ using LinearAlgebra: I as LinearAlgebraI
         @test nV == 3nW
     end
 
-    @testset "vector values, scalar and composite" begin
+    @testset "Vector values" begin
         bcs = dirichlet_constraints(set(Ωₕ), :bottom => (x -> 7.0))
 
         v = fill(-1.0, nW)
@@ -152,9 +152,9 @@ using LinearAlgebra: I as LinearAlgebraI
         end
     end
 
-    @testset "components restricts which leaf(-ves) a label binds to (point 45)" begin
+    @testset "Component restriction" begin
         # The Stokes-style case this exists for: constrain one field, leave another free.
-        @testset "matrix, one leaf only" begin
+        @testset "Matrix (single leaf)" begin
             A = _eye(nV)
             @test dirichlet_bc!(A, Vₕ, :bottom; components = 1) === A
             for c in 0:2, i in 1:nW
@@ -172,7 +172,7 @@ using LinearAlgebra: I as LinearAlgebraI
             end
         end
 
-        @testset "matrix, several leaves named at once" begin
+        @testset "Matrix (multiple leaves)" begin
             A = _eye(nV)
             @test dirichlet_bc!(A, Vₕ, :bottom; components = (1, 3)) === A
             for c in 0:2, i in 1:nW
@@ -187,7 +187,7 @@ using LinearAlgebra: I as LinearAlgebraI
             @test A[(nW + 1):(2nW), :] == _eye(nV)[(nW + 1):(2nW), :]
         end
 
-        @testset "vector, one leaf only" begin
+        @testset "Vector (single leaf)" begin
             bcs = dirichlet_constraints(set(Ωₕ), :bottom => (x -> 7.0))
             w = fill(-1.0, nV)
             @test dirichlet_bc!(w, Vₕ, bcs, :bottom; components = 2) === w
@@ -202,14 +202,14 @@ using LinearAlgebra: I as LinearAlgebraI
             end
         end
 
-        @testset "components = nothing matches the unrestricted default exactly" begin
+        @testset "Unrestricted default" begin
             A1, A2 = _eye(nV), _eye(nV)
             dirichlet_bc!(A1, Vₕ, :bottom)
             dirichlet_bc!(A2, Vₕ, :bottom; components = nothing)
             @test A1 == A2
         end
 
-        @testset "symmetrize! takes the same keyword" begin
+        @testset "symmetrize! keyword" begin
             A = Matrix(_eye(nV))
             F = fill(2.0, nV)
             A0 = copy(A)
@@ -222,25 +222,25 @@ using LinearAlgebra: I as LinearAlgebraI
             end
         end
 
-        @testset "an out-of-range component is a loud error, not a silent no-op" begin
+        @testset "Out-of-range component error" begin
             A = _eye(nV)
             @test_throws ArgumentError dirichlet_bc!(A, Vₕ, :bottom; components = 4)
             @test_throws ArgumentError dirichlet_bc!(A, Vₕ, :bottom; components = 0)
             @test_throws ArgumentError dirichlet_bc!(A, Vₕ, :bottom; components = (1, 5))
         end
 
-        @testset "a scalar space only ever has leaf 1" begin
+        @testset "Scalar single leaf" begin
             A = _eye(nW)
             @test dirichlet_bc!(A, Wₕ, :bottom; components = 1) === A   # a no-op-equivalent ok
             @test_throws ArgumentError dirichlet_bc!(_eye(nW), Wₕ, :bottom; components = 2)
         end
 
-        @testset "dirichlet_components is not a Symbol or Int/Tuple mix-up" begin
+        @testset "Component argument type" begin
             @test_throws ErrorException dirichlet_bc!(_eye(nV), Vₕ, :bottom; components = :left)
         end
     end
 
-    @testset "the condition is evaluated at the right points" begin
+    @testset "Evaluation points" begin
         bcs = dirichlet_constraints(set(Ωₕ), :bottom => (x -> x[1] + 10x[2]))
         v = zeros(nW)
         @test dirichlet_bc!(v, Wₕ, bcs, :bottom) === v
@@ -250,7 +250,7 @@ using LinearAlgebra: I as LinearAlgebraI
         end
     end
 
-    @testset "several labels" begin
+    @testset "Multiple labels" begin
         A = _eye(nW)
         @test dirichlet_bc!(A, Wₕ, :bottom, :top) === A
         both = index_in_marker(Ωₕ, :bottom) .| index_in_marker(Ωₕ, :top)
@@ -260,7 +260,7 @@ using LinearAlgebra: I as LinearAlgebraI
         @test count(both) > count(marked)     # :top really adds rows
     end
 
-    @testset "no labels, or a label that marks nothing, changes nothing" begin
+    @testset "Empty & missing labels" begin
         A0 = _eye(nW)
         A1 = copy(A0)
         @test dirichlet_bc!(A1, Wₕ) === A1                 # no labels at all
@@ -271,7 +271,7 @@ using LinearAlgebra: I as LinearAlgebraI
         @test all(==(3.0), v0)
     end
 
-    @testset "built from a set, a mesh or a space" begin
+    @testset "Set/mesh/space construction" begin
         # `dirichlet_constraints` takes whichever of the three the caller has to hand, and
         # digs out the underlying `CartesianProduct` itself. For a composite space that
         # means its first leaf — the constraint is over the domain, and every leaf of a
@@ -303,7 +303,7 @@ using LinearAlgebra: I as LinearAlgebraI
         end
     end
 
-    @testset "nested composite spaces" begin
+    @testset "Nested composite spaces" begin
         # A `CompositeGridSpace` may hold composite spaces, so the leaves form a tree
         # rather than a list. The traversal flattens it depth first, and the offsets have
         # to keep running across the nesting rather than restarting inside each branch.
@@ -340,7 +340,7 @@ using LinearAlgebra: I as LinearAlgebraI
         @test vn == vf
     end
 
-    @testset "allocation free, scalar and composite" begin
+    @testset "Zero allocations" begin
         # This runs once per step of a time loop, so it has to cost nothing beyond the
         # work itself. Two things had to go for that: the leaves used to come back in a
         # `Vector{Tuple{Any, Int}}`, which made every read through a leaf dynamic and
@@ -406,7 +406,7 @@ using LinearAlgebra: I as LinearAlgebraI
         @test traversal_bytes(Vt) == 0
     end
 
-    @testset "Dirichlet application invariance on arbitrary fields (Supposition)" begin
+    @testset "Arbitrary fields (Supposition)" begin
         field_val = Data.Floats{Float64}(; minimum = -100.0, maximum = 100.0,
             nans = false, infs = false)
 

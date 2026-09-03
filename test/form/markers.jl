@@ -9,33 +9,33 @@ using Bramble: dot
 # checked against either the numeric `markers` keyword (point 11) or a hand-built
 # reference, not just that assembly ran without error.
 
-@testset verbose=true "Symbolic markers keyword (point 50)" begin
+@testset "Symbolic markers" begin
     S = interval(0.0, 1.0) × interval(0.0, 1.0)
     Ωₕ = mesh(domain(S, :bottom => :bottom), (5, 5), (true, true))
     Wₕ = gridspace(Ωₕ)
     uₕ = Rₕ(Wₕ, x -> 1.0)
     vₕ = Rₕ(Wₕ, x -> 1.0)
 
-    @testset "matches the numeric layer's markers, and the plan's own 0.125 figure" begin
+    @testset "Numeric marker agreement" begin
         a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v; markers = (:bottom,)))
         assembled = dot(vₕ.data, assemble(a) * uₕ.data)
         @test assembled ≈ 0.125
         @test assembled ≈ innerₕ(uₕ, vₕ; markers = (:bottom,))
     end
 
-    @testset "markers = () matches the unrestricted form exactly" begin
+    @testset "Unrestricted match" begin
         a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v; markers = ()))
         b = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
         @test assemble(a) == assemble(b)
     end
 
-    @testset "the direction-inferring and explicit directional spellings agree" begin
+    @testset "Direction inference agreement" begin
         a1 = form(Wₕ, Wₕ, (u, v) -> inner₊(D₋ₓ(u), D₋ₓ(v); markers = (:bottom,)))
         a2 = form(Wₕ, Wₕ, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v); markers = (:bottom,)))
         @test assemble(a1) ≈ assemble(a2)
     end
 
-    @testset "a gradient-tuple inner₊ with markers assembles, restricted the same way" begin
+    @testset "Gradient tuple inner₊" begin
         a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v); markers = (:bottom,)))
         b = form(Wₕ, Wₕ,
             (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v); markers = (:bottom,)) +
@@ -43,7 +43,7 @@ using Bramble: dot
         @test assemble(a) ≈ assemble(b)
     end
 
-    @testset "linear (source-term) forms restrict the same way, VectorElement and Function agree" begin
+    @testset "Linear form restriction" begin
         fₕ = Rₕ(Wₕ, x -> π^2 * sin(π * x[1]))
         l1 = form(Wₕ, v -> innerₕ(fₕ, v; markers = (:bottom,)))
         l2 = form(Wₕ, v -> innerₕ(x -> π^2 * sin(π * x[1]), v; markers = (:bottom,)))
@@ -54,7 +54,7 @@ using Bramble: dot
         @test all(iszero, assemble(l1)[.!Ωₕ_bottom_mask])
     end
 
-    @testset "the reserved :boundary/:interior markers work with no domain setup at all" begin
+    @testset "Reserved markers" begin
         a_boundary = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v; markers = (:boundary,)))
         a_interior = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v; markers = (:interior,)))
         full = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
@@ -65,7 +65,7 @@ using Bramble: dot
               dot(vₕ.data, assemble(full) * uₕ.data)
     end
 
-    @testset "a marker that does not exist anywhere the term reaches is a loud error" begin
+    @testset "Unknown marker error" begin
         # Scalar space: assembling with a typo'd label, instead of silently assembling to
         # all zero (RegionRestriction's own local_stencil can't tell "not marked" from
         # "no such marker" — haskey failing looks like the former).
@@ -88,19 +88,19 @@ using Bramble: dot
         @test_throws ArgumentError assemble(d)
     end
 
-    @testset "a valid marker on a composite space assembles normally" begin
+    @testset "Composite space markers" begin
         Vₕ = Wₕ^Val(2)
         a = form(Vₕ, Vₕ,
             (u, v) -> innerₕ(u(1), v(1); markers = (:bottom,)) + innerₕ(u(2), v(2)))
         @test size(assemble(a)) == (2 * Bramble.ndofs(Wₕ), 2 * Bramble.ndofs(Wₕ))
     end
 
-    @testset "a direction mismatch still throws its helpful message with markers given" begin
+    @testset "Direction mismatch message" begin
         @test_throws ArgumentError form(
             Wₕ, Wₕ, (u, v) -> inner₊(D₋ₓ(u), D₋ᵧ(v); markers = (:bottom,)))
     end
 
-    @testset "the empty-tuple disambiguator still throws with markers given (regression: Aqua ambiguity)" begin
+    @testset "Empty-tuple disambiguator" begin
         @test_throws ArgumentError inner₊((), (); markers = (:bottom,))
     end
 end

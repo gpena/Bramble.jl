@@ -40,8 +40,8 @@ function _orders(Ωₕ, op, f, df, drop; steps = 4)
     return [log2(errs[k] / errs[k + 1]) for k in 1:(length(errs) - 1)]
 end
 
-@testset "Convergence order of the finite differences" begin
-    @testset "1D, first order away from the truncated point" begin
+@testset "Difference convergence" begin
+    @testset "1D order" begin
         # A backward difference has no stencil at the first point and a forward one none
         # at the last, so those are dropped. Both uniform and random starting grids.
         for (lbl, unif) in (("uniform", true), ("random", false))
@@ -58,7 +58,7 @@ end
         end
     end
 
-    @testset "2D, first order along each direction" begin
+    @testset "2D order" begin
         f = x -> sin(x[1]) * exp(x[2])
         for (lbl, unif) in (("uniform", true), ("random", false))
             @testset "$lbl" begin
@@ -76,7 +76,7 @@ end
         end
     end
 
-    @testset "including the truncated point halves the observed order" begin
+    @testset "Truncation boundary order" begin
         # The trap this exists to document. D₋ₓ is zero at the first point while the
         # derivative is not, so that one point contributes an O(1) error at every
         # refinement. It carries a weight of about h/2 in the discrete L² norm, so it

@@ -28,7 +28,7 @@ using Bramble: IdentityOperator, TrialFunction, TestFunction, IndexedTrialFuncti
     I = CartesianIndex(3, 3)
     lin = LinearIndices(Bramble.indices(Ωₕ))[I]
 
-    @testset "the stencil a product evaluates to" begin
+    @testset "Product stencils" begin
         # A bilinear product multiplies the trial stencil by the test stencil and weights
         # the result by the cell measure: every offset pair, with the two coefficients and
         # the weight multiplied together. This is what assembly consumes, and it had never
@@ -52,7 +52,7 @@ using Bramble: IdentityOperator, TrialFunction, TestFunction, IndexedTrialFuncti
         @test length(lst) == length(left)
     end
 
-    @testset "the weight each kind of product looks up" begin
+    @testset "Weight lookups" begin
         # InnerH reads the cell measure; InnerPlus reads that direction's staggered weight.
         @test compute_weight(InnerH(), Wₕ, I, lin) == weights(Wₕ, Innerh())[lin]
         for dim in 1:2
@@ -69,7 +69,7 @@ using Bramble: IdentityOperator, TrialFunction, TestFunction, IndexedTrialFuncti
         end
     end
 
-    @testset "a number, a function or a grid function on the left" begin
+    @testset "Left operands" begin
         # Each builds a LinearProduct wrapping the left operand in the right source node,
         # which is what lets a right-hand side be assembled.
         for (mk, T) in (((x -> x[1] + 1), SourceFunction), (3.5, SourceFunction),
@@ -92,7 +92,7 @@ using Bramble: IdentityOperator, TrialFunction, TestFunction, IndexedTrialFuncti
         @test only(local_stencil(p.left_op, Wₕ, I, nothing, lin))[2] == values(uₕ)[lin]
     end
 
-    @testset "the directional spellings, for every kind of left operand" begin
+    @testset "Directional spellings" begin
         # inner₊₂ in particular had no test at all, for any left operand.
         for f in (inner₊ₓ, inner₊ᵧ, inner₊₂)
             @test f(id, id) isa BilinearProduct
@@ -107,7 +107,7 @@ using Bramble: IdentityOperator, TrialFunction, TestFunction, IndexedTrialFuncti
         @test typeof(inner₊₂(id, id)).parameters[2] === InnerPlus{3}
     end
 
-    @testset "the tuple forms" begin
+    @testset "Tuple forms" begin
         # a gradient tuple against a gradient tuple: one product per direction, summed
         g = inner₊(∇₋ₕ(u), ∇₋ₕ(v))
         @test g === inner_plus(∇₋ₕ(u), ∇₋ₕ(v))
@@ -132,7 +132,7 @@ using Bramble: IdentityOperator, TrialFunction, TestFunction, IndexedTrialFuncti
         @test_throws ArgumentError inner₊((), ())
     end
 
-    @testset "a tuple against non-symbolic operators is refused" begin
+    @testset "Non-symbolic tuple refusal" begin
         # This branch used to read `first(l).values`, where a VectorElement stores `data`,
         # and call `inner₊!`, which no revision of the package defines — two names that
         # could never resolve, in a branch nothing reached. It is entered when the right
@@ -151,7 +151,7 @@ using Bramble: IdentityOperator, TrialFunction, TestFunction, IndexedTrialFuncti
         @test occursin("∇₋ₕ(u)", msg)
     end
 
-    @testset "resolving a product resolves both sides" begin
+    @testset "Bilateral resolution" begin
         # The products were the only nodes whose resolve_ast had never run.
         b = innerₕ(D₋ₓ(u), D₋ₓ(v))
         rb = resolve_ast(b)
@@ -172,7 +172,7 @@ using Bramble: IdentityOperator, TrialFunction, TestFunction, IndexedTrialFuncti
         @test resolve_ast(rb) isa BilinearProduct
     end
 
-    @testset "products are symbolic, and carry that upwards" begin
+    @testset "Symbolic property propagation" begin
         @test is_symbolic(innerₕ(u, v))
         @test is_symbolic(innerₕ(uₕ, v))
         @test is_symbolic(inner₊ₓ(2.0, v))

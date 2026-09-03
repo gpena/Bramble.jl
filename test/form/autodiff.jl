@@ -29,14 +29,14 @@ using LinearAlgebra: issymmetric, norm
 # same functional in plain Float64 — so it tests that the derivative is right, not merely
 # that it ran.
 
-@testset "Automatic differentiation through the constraints" begin
+@testset "Constraint differentiation" begin
     Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
         (5, 5), (true, true))
     Wₕ = gridspace(Ωₕ)
     Vₕ = gridspace(Ωₕ, Val(3))
     n = ndofs(Wₕ)
 
-    @testset "a Dual-valued system" begin
+    @testset "Dual system" begin
         @test _matches_fd(a -> begin
             A = a .* _tri(n)
             dirichlet_bc!(A, Ωₕ, :bottom)
@@ -68,7 +68,7 @@ using LinearAlgebra: issymmetric, norm
         end)
     end
 
-    @testset "Dual-valued boundary data" begin
+    @testset "Dual boundary data" begin
         @test _matches_fd(a -> begin
             bcs = dirichlet_constraints(set(Ωₕ), :bottom => (x -> a * x[1] + a^2))
             v = zeros(typeof(a), n)
@@ -96,7 +96,7 @@ using LinearAlgebra: issymmetric, norm
         end)
     end
 
-    @testset "a boundary value that is zero but still varying" begin
+    @testset "Vanishing boundary variation" begin
         # `symmetrize!` skips the elimination when the boundary value is zero, which is
         # only sound under AD because `iszero` on a Dual tests the partials as well as the
         # value. A Dual that is 0.0 here with derivative 1.0 must NOT take the short path —
@@ -117,7 +117,7 @@ using LinearAlgebra: issymmetric, norm
         @test !iszero(d)
     end
 
-    @testset "a gradient, not just a derivative" begin
+    @testset "Multi-variable gradient" begin
         function J(p)
             bcs = dirichlet_constraints(set(Ωₕ),
                 :bottom => (x -> p[1] * x[1] + p[2] * x[1]^2))
@@ -135,7 +135,7 @@ using LinearAlgebra: issymmetric, norm
         end
     end
 
-    @testset "the element type is inferred, not imposed" begin
+    @testset "Element type inference" begin
         cotype(bcs) = typeof(Bramble.identifier(first(Bramble.conditions(bcs)))).parameters[3]
 
         # a plain condition is unchanged
@@ -161,7 +161,7 @@ using LinearAlgebra: issymmetric, norm
         @test eltype(Ωₕ) === Float64
     end
 
-    @testset "the time-dependent constraints too" begin
+    @testset "Time-dependent constraints" begin
         @test _matches_fd(a -> begin
             bcs = dirichlet_constraints(set(Ωₕ), interval(0.0, 1.0),
                 :bottom => ((x, t) -> a * t * x[1] + a))
@@ -171,7 +171,7 @@ using LinearAlgebra: issymmetric, norm
         end)
     end
 
-    @testset "applying a plain constraint still allocates nothing" begin
+    @testset "Zero allocations (constraints)" begin
         # The inference happens once, when the constraints are built. The hot path is
         # untouched, and has to stay so.
         function bytes()
@@ -188,7 +188,7 @@ using LinearAlgebra: issymmetric, norm
     end
 end
 
-@testset "reverse mode through an assembled residual" begin
+@testset "Reverse-mode residual" begin
     # The backend survey in test/space/autodiff_backends.jl establishes that ReverseDiff can
     # differentiate the *space* layer — `Rₕ` and an operator. It says nothing about the form
     # layer, and assembly is a different proposition: `assemble` allocates its vector from
@@ -219,7 +219,7 @@ end
     @test isapprox(gf, gr; rtol = 1e-10)
 end
 
-@testset "a Jacobian through the coupled routing" begin
+@testset "Coupled routing Jacobian" begin
     # Each block's entries come from its own coefficients, so the Jacobian of the assembled
     # vector is block diagonal. A routing error does not give a wrong number — it puts mass
     # in a block that should be empty, which is invisible to any test that only checks

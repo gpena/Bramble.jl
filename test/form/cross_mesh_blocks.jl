@@ -22,13 +22,13 @@ using Bramble: CompositeGridSpace, form, assemble, assemble!, assemble_parallel!
 # interpolation operator, which is point 61 and is not built. Until then it is refused by
 # name, at every entry point.
 
-@testset "cross-mesh bilinear blocks are refused, not guessed at (point 69)" begin
+@testset "Cross-mesh blocks" begin
     Ωbig = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (6, 6), (true, true))
     Ωsmall = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (3, 3), (true, true))
     Wbig, Wsmall = gridspace(Ωbig), gridspace(Ωsmall)
     Vh = CompositeGridSpace((Wbig, Wsmall))
 
-    @testset "both directions refuse, through every entry point" begin
+    @testset "Entry point refusal" begin
         # the direction that used to throw from inside `sparse!`, and the one that used to
         # assemble silently wrong columns — the second is the reason this is a test and not
         # just a nicer error message
@@ -46,7 +46,7 @@ using Bramble: CompositeGridSpace, form, assemble, assemble!, assemble_parallel!
         @test_throws ArgumentError assemble_parallel!(A, a_bad)
     end
 
-    @testset "the message names the problem, not the symptom" begin
+    @testset "Error message precision" begin
         a = form(Vh, Vh, (u, v) -> innerₕ(u(2), v(1)))
         msg = try
             assemble(a)
@@ -60,7 +60,7 @@ using Bramble: CompositeGridSpace, form, assemble, assemble!, assemble_parallel!
         @test occursin("πₕ", msg)              # and what to do on the linear side instead
     end
 
-    @testset "an operator on either side does not smuggle it past the check" begin
+    @testset "Operator wrapper check" begin
         for g in ((u, v) -> inner₊ₓ(D₋ₓ(u(2)), D₋ₓ(v(1))),
             (u, v) -> innerₕ(M₋ₓ(u(1)), v(2)),
             (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(1)))   # one good term, one bad
@@ -68,7 +68,7 @@ using Bramble: CompositeGridSpace, form, assemble, assemble!, assemble_parallel!
         end
     end
 
-    @testset "what must keep working" begin
+    @testset "Permitted configurations" begin
         # diagonal blocks on the same heterogeneous space: each leaf couples to itself, so
         # the index spaces match by construction
         a_diag = form(Vh, Vh, (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)))
@@ -106,7 +106,7 @@ using Bramble: CompositeGridSpace, form, assemble, assemble!, assemble_parallel!
               (ndofs(Wₕ), ndofs(Wₕ))
     end
 
-    @testset "the matrix names its rows by the test space and columns by the trial one" begin
+    @testset "Row & column dimensions" begin
         # equal here, because the check above is what allows the form at all — asserted so
         # that a future cross-mesh operator (point 61) has something to change deliberately
         Wₕ = gridspace(Ωbig)
@@ -116,7 +116,7 @@ using Bramble: CompositeGridSpace, form, assemble, assemble!, assemble_parallel!
         @test size(A, 2) == ndofs(Bramble.trial_space(a))
     end
 
-    @testset "the linear side is unaffected — that is the case πₕ already makes well posed" begin
+    @testset "Linear side compatibility" begin
         # the same cross-mesh coupling in a LINEAR form is legitimate and works: πₕ supplies
         # the mapping the bilinear side lacks
         uv = Rₕ(Vh, (x -> 0.0, x -> x[1] + x[2]))

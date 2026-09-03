@@ -19,14 +19,14 @@ using Bramble: IdentityOperator, IndexedTrialFunction, IndexedTestFunction,
 # weights are the staggered ones of the summation-by-parts identity, and those pair with a
 # backward difference; a forward difference sits on the other staggering.
 
-@testset "Symbolic difference nodes" begin
+@testset "Difference nodes" begin
     Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6), (true, false))
     Wₕ = gridspace(Ωₕ)
     id = IdentityOperator(Wₕ)
 
     BD, FD = typeof(D₋ₓ(id)), typeof(D₊ₓ(id))
 
-    @testset "the scaling nodes recurse through both alike" begin
+    @testset "Scaling recursion" begin
         for op in (D₋ₓ(id), D₊ₓ(id))
             @test get_innermost_dim(2 * op) == 1
             @test get_innermost_dim(op / 4) == 1
@@ -34,7 +34,7 @@ using Bramble: IdentityOperator, IndexedTrialFunction, IndexedTestFunction,
         end
     end
 
-    @testset "every tool the backward node has, the forward node has" begin
+    @testset "Backward vs forward parity" begin
         # A structural guard rather than a list of cases: whatever generic function has a
         # method mentioning one node must have one mentioning the other. A method written
         # against the `DifferenceNode` alias satisfies it for both at once.
@@ -62,7 +62,7 @@ using Bramble: IdentityOperator, IndexedTrialFunction, IndexedTestFunction,
         @test isempty(forward_only)
     end
 
-    @testset "inner₊ is backward only, by design" begin
+    @testset "inner₊ backward-only" begin
         @test hasmethod(inner₊, Tuple{IndexedTrialFunction{2}, BD})
         @test hasmethod(inner₊, Tuple{IndexedTestFunction{2}, BD})
         @test hasmethod(inner₊, Tuple{BD, IndexedTrialFunction{2}})
@@ -82,7 +82,7 @@ using Bramble: IdentityOperator, IndexedTrialFunction, IndexedTestFunction,
         @test_throws ArgumentError inner₊(D₊ₓ(u2), D₊ₓ(v2))
     end
 
-    @testset "the rest of the AST treats them the same" begin
+    @testset "AST equivalence" begin
         for (bwd, fwd) in ((D₋ₓ(id), D₊ₓ(id)), (D₋ᵧ(id), D₊ᵧ(id)))
             @test is_symbolic(bwd) == is_symbolic(fwd) == false
             @test resolve_ast(bwd) isa BackwardDifference
@@ -110,7 +110,7 @@ using Bramble: IdentityOperator, IndexedTrialFunction, IndexedTestFunction,
         end
     end
 
-    @testset "gradients, in both directions and both shapes" begin
+    @testset "Gradient shapes" begin
         @test grad_backward(id) isa NTuple{2, BackwardDifference}
         @test grad_forward(id) isa NTuple{2, ForwardDifference}
         @test ∇₋ₕ(id) === grad_backward(id)

@@ -10,8 +10,8 @@ function least_squares_fit(x, y)
 end
 
 println("")
-@testset verbose=true "Examples" begin
-    @testset "Linear Poisson equation" begin
+@testset "Examples" begin
+    @testset "Linear Poisson" begin
         test_poisson(poisson(1), 10, (i -> 2^i + 1,), ntuple(i -> true, 1))
         test_poisson(poisson(1), 100, (i -> 20 * i,), (false,))
 
@@ -20,7 +20,7 @@ println("")
 
         test_poisson(poisson(3), 5, (i -> 2^i + 1, i -> 2^i + 2, i -> 2^i + 3), ntuple(i -> true, 3))
     end
-    @testset "Nonlinear Poisson equation" begin
+    @testset "Nonlinear Poisson" begin
         test_poisson_nl(poisson_nl(1), 10, (i -> 2^i + 1,), ntuple(i -> true, 1))
         test_poisson_nl(poisson_nl(1), 10, (i -> 2^i + 1,), ntuple(i -> false, 1))
 
@@ -28,7 +28,7 @@ println("")
 
         test_poisson_nl(poisson_nl(3), 5, (i -> 2^i + 1, i -> 2^i + 2, i -> 2^i + 1), ntuple(i -> true, 3))
     end
-    @testset "Linear convection-diffusion equation" begin
+    @testset "Convection-diffusion" begin
         test_conv_diff(convection_diffusion(1), 10, (i -> 2^i + 1,), ntuple(i -> true, 1))
         test_conv_diff(convection_diffusion(1), 100, (i -> 20 * i,), (false,))
 
@@ -39,7 +39,7 @@ println("")
             (i -> 2^i + 1, i -> 2^i + 2, i -> 2^i + 3), ntuple(i -> true, 3))
         #test_conv_diff(convection_diffusion(3), 6, (i->2^i+1, i->2^i+2, i->2^i+1), ntuple(i->false, 3)) # the linear solver takes a while to solve
     end
-    @testset "Coupled reaction-diffusion system" begin
+    @testset "Reaction-diffusion" begin
         grids = [8, 16, 32]
         u1_errs = Float64[]
         u2_errs = Float64[]

@@ -74,7 +74,7 @@ function check_backend(name, backend)
     end
 end
 
-@testset "AD backends, cheap" begin
+@testset "AD backends (fast)" begin
     check_backend("AutoForwardDiff", AutoForwardDiff())
 
     if _have(:ReverseDiff)
