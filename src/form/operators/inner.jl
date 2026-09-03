@@ -100,12 +100,22 @@ end
     inner_plus(left::NTuple{D,LazyOp{D}}, right::NTuple{D,LazyOp{D}}) where D
 
 Constructs the sum of directional modified \$L^2_+\$ inner products across all dimensions.
+
+Each dimension's term is a `LinearProduct` or a `BilinearProduct` independently, following
+[`_is_source_only`](@ref) on `left[dim]` exactly as [`innerₕ`](@ref) does — a gradient tuple
+of interpolated sources (`πₕ(u1), πₕ(u2)`, point 25) is source-only dimension by dimension.
 """
 function inner_plus(left::NTuple{D, LazyOp{D}}, right::NTuple{D, LazyOp{D}};
         markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
-    terms = ntuple(
-        dim -> BilinearProduct{D, InnerPlus{dim}, typeof(left[dim]), typeof(right[dim])}(left[dim], right[dim]),
-        Val(D))
+    terms = ntuple(Val(D)) do dim
+        if _is_source_only(left[dim])
+            LinearProduct{D, InnerPlus{dim}, typeof(left[dim]), typeof(right[dim])}(
+                left[dim], right[dim])
+        else
+            BilinearProduct{D, InnerPlus{dim}, typeof(left[dim]), typeof(right[dim])}(
+                left[dim], right[dim])
+        end
+    end
     return _restrict_by_markers(foldl(+, terms), markers)
 end
 
@@ -172,13 +182,22 @@ overloads below read it. This is what makes `inner₊(D₋ₓ(u), D₋ₓ(v))` m
 Backward differences only, as everywhere `inner₊` meets a difference: the weights are those
 of the summation-by-parts identity, which pairs them with a backward difference.
 
+A `LinearProduct` (source × test) if `left` is *source-only* ([`_is_source_only`](@ref)) —
+`inner₊(D₋ₓ(πₕ(u)), D₋ₓ(v))` (point 25) is this case, `left` a `BackwardDifference` wrapping
+an interpolated source rather than a trial function — a `BilinearProduct` otherwise, exactly
+as [`innerₕ`](@ref) decides.
+
 `markers` restricts the sum as it does for [`innerₕ`](@ref).
 """
 function inner₊(left::BackwardDifference{D, Dim},
         right::BackwardDifference{D, Dim};
         markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, Dim, N}
-    _restrict_by_markers(
-        BilinearProduct{D, InnerPlus{Dim}, typeof(left), typeof(right)}(left, right), markers)
+    prod = if _is_source_only(left)
+        LinearProduct{D, InnerPlus{Dim}, typeof(left), typeof(right)}(left, right)
+    else
+        BilinearProduct{D, InnerPlus{Dim}, typeof(left), typeof(right)}(left, right)
+    end
+    _restrict_by_markers(prod, markers)
 end
 
 """
@@ -201,8 +220,14 @@ single-sided methods below, which in one dimension are equally specific.
 """
 function inner₊(left::LazyOp{D}, right::LazyOp{D};
         markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
-    D == 1 && return _restrict_by_markers(
-        BilinearProduct{1, InnerPlus{1}, typeof(left), typeof(right)}(left, right), markers)
+    if D == 1
+        prod = if _is_source_only(left)
+            LinearProduct{1, InnerPlus{1}, typeof(left), typeof(right)}(left, right)
+        else
+            BilinearProduct{1, InnerPlus{1}, typeof(left), typeof(right)}(left, right)
+        end
+        return _restrict_by_markers(prod, markers)
+    end
     return _inner₊_no_direction(left, right, D)
 end
 
@@ -229,17 +254,29 @@ direction off the difference just as an `IndexedTrialFunction` does.
 
 Backward differences only, as everywhere `inner₊` meets a difference.
 
+A `LinearProduct` if `left` is *source-only* ([`_is_source_only`](@ref)), a `BilinearProduct`
+otherwise — exactly as [`innerₕ`](@ref) decides, so `inner₊(πₕ(u), D₋ₓ(v))` (point 25) builds
+the right AST shape too.
+
 `markers` restricts the sum as it does for [`innerₕ`](@ref).
 """
 function inner₊(left::LazyOp{D}, right::BackwardDifference{D, Dim};
         markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, Dim, N}
-    _restrict_by_markers(
-        BilinearProduct{D, InnerPlus{Dim}, typeof(left), typeof(right)}(left, right), markers)
+    prod = if _is_source_only(left)
+        LinearProduct{D, InnerPlus{Dim}, typeof(left), typeof(right)}(left, right)
+    else
+        BilinearProduct{D, InnerPlus{Dim}, typeof(left), typeof(right)}(left, right)
+    end
+    _restrict_by_markers(prod, markers)
 end
 function inner₊(left::BackwardDifference{D, Dim}, right::LazyOp{D};
         markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, Dim, N}
-    _restrict_by_markers(
-        BilinearProduct{D, InnerPlus{Dim}, typeof(left), typeof(right)}(left, right), markers)
+    prod = if _is_source_only(left)
+        LinearProduct{D, InnerPlus{Dim}, typeof(left), typeof(right)}(left, right)
+    else
+        BilinearProduct{D, InnerPlus{Dim}, typeof(left), typeof(right)}(left, right)
+    end
+    _restrict_by_markers(prod, markers)
 end
 
 """
@@ -289,22 +326,37 @@ end
 
 Constructs directional modified \$L^2_+\$ inner products in x, y, and z directions.
 
+A `LinearProduct` if `left` is *source-only* ([`_is_source_only`](@ref)), a `BilinearProduct`
+otherwise, exactly as [`innerₕ`](@ref) decides.
+
 `markers` restricts the sum as it does for [`innerₕ`](@ref).
 """
 function inner₊ₓ(left::LazyOp{D}, right::LazyOp{D};
         markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
-    _restrict_by_markers(
-        BilinearProduct{D, InnerPlus{1}, typeof(left), typeof(right)}(left, right), markers)
+    prod = if _is_source_only(left)
+        LinearProduct{D, InnerPlus{1}, typeof(left), typeof(right)}(left, right)
+    else
+        BilinearProduct{D, InnerPlus{1}, typeof(left), typeof(right)}(left, right)
+    end
+    _restrict_by_markers(prod, markers)
 end
 function inner₊ᵧ(left::LazyOp{D}, right::LazyOp{D};
         markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
-    _restrict_by_markers(
-        BilinearProduct{D, InnerPlus{2}, typeof(left), typeof(right)}(left, right), markers)
+    prod = if _is_source_only(left)
+        LinearProduct{D, InnerPlus{2}, typeof(left), typeof(right)}(left, right)
+    else
+        BilinearProduct{D, InnerPlus{2}, typeof(left), typeof(right)}(left, right)
+    end
+    _restrict_by_markers(prod, markers)
 end
 function inner₊₂(left::LazyOp{D}, right::LazyOp{D};
         markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
-    _restrict_by_markers(
-        BilinearProduct{D, InnerPlus{3}, typeof(left), typeof(right)}(left, right), markers)
+    prod = if _is_source_only(left)
+        LinearProduct{D, InnerPlus{3}, typeof(left), typeof(right)}(left, right)
+    else
+        BilinearProduct{D, InnerPlus{3}, typeof(left), typeof(right)}(left, right)
+    end
+    _restrict_by_markers(prod, markers)
 end
 
 @inline function source_number(l::Number, ::Val{D}) where {D}

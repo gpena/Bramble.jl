@@ -1,7 +1,7 @@
 using Test
 using Bramble
 using Bramble: SourceFunction, TrialFunction, TestFunction, LinearProduct,
-               BilinearProduct, resolve_form_ast, _is_source_only, Innerh
+               BilinearProduct, resolve_form_ast, _is_source_only, Innerh, OperatorAdd
 
 # πₕ(uₕ) wraps a grid function's interpolant as a genuine LazyOp source (SourceFunction), so
 # it composes with the same operators (D₋ₓ, M₋ₓ, ...) any other source does. The one thing
@@ -84,6 +84,63 @@ end
     # a BilinearProduct, exactly as it always has
     lf_bilinear = form(Wbig, Wbig, (u, w) -> innerₕ(D₋ₓ(u), D₋ₓ(w)))
     @test resolve_form_ast(lf_bilinear) isa BilinearProduct
+end
+
+@testset "inner₊ family dispatch: the same _is_source_only fix, applied (point 60)" begin
+    # innerₕ's fix (_is_source_only) was applied only to innerₕ itself when point 25 landed;
+    # inner_plus/inner₊/inner₊ₓ/inner₊ᵧ/inner₊₂ had the identical structural bug — every one
+    # of them built a BilinearProduct unconditionally too. Fixed the same way, checked the
+    # same way: each dispatch shape asserted directly, then assembled for real.
+    Ωbig = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (8, 8), (true, true))
+    Ωsmall = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (4, 4), (true, true))
+    Wbig, Wsmall = gridspace(Ωbig), gridspace(Ωsmall)
+    Vh = Bramble.CompositeGridSpace((Wbig, Wsmall))
+    uv = Rₕ(Vh, (x -> x[1] + x[2], x -> 2x[1] - x[2]))
+    u_leaf2 = uv(2)
+
+    # inner₊ₓ/inner₊ᵧ: πₕ(u) as a bare source, and composed with D₋ₓ (same-direction
+    # BackwardDifference×BackwardDifference case)
+    lfx = form(Vh, v -> innerₕ(uv(1), v(1)) + inner₊ₓ(πₕ(u_leaf2), v(1)))
+    @test resolve_form_ast(form(Vh, v -> inner₊ₓ(πₕ(u_leaf2), v(1)))) isa LinearProduct
+    @test resolve_form_ast(form(Vh, v -> inner₊ᵧ(πₕ(u_leaf2), v(1)))) isa LinearProduct
+    @test resolve_form_ast(form(Vh, v -> inner₊(D₋ₓ(πₕ(u_leaf2)), D₋ₓ(v(1))))) isa
+          LinearProduct
+    @test all(isfinite, assemble(lfx))
+
+    # a 1D source: inner₊'s own D == 1 no-direction branch
+    Ω1 = mesh(domain(interval(0.0, 1.0)), 9, false)
+    W1 = gridspace(Ω1)
+    u1 = Rₕ(W1, x -> x^2)
+    @test resolve_form_ast(form(W1, v -> inner₊(πₕ(u1), v))) isa LinearProduct
+    b1d = assemble(form(W1, v -> inner₊(πₕ(u1), v)))
+    @test all(isfinite, b1d)
+
+    # inner_plus over a gradient tuple of interpolated sources: each dimension routes
+    # independently, so the sum is (LinearProduct + LinearProduct), not a Bilinear mix
+    lf_grad = form(Vh, v -> inner₊((πₕ(u_leaf2), πₕ(u_leaf2)), (v(1), v(1))))
+    ast_grad = resolve_form_ast(lf_grad)
+    @test ast_grad isa OperatorAdd
+    @test ast_grad.left_op isa LinearProduct
+    @test ast_grad.right_op isa LinearProduct
+    @test all(isfinite, assemble(lf_grad))
+
+    # numeric consistency: inner₊ₓ(πₕ(u), v(1)) should agree with innerₕ(πₕ(u), v(1)) in the
+    # 1D-along-x case up to InnerPlus's own directional weight, so just check it is finite and
+    # non-trivial (not silently zero from a misrouted stencil)
+    bx = assemble(form(Vh, v -> inner₊ₓ(πₕ(u_leaf2), v(1))))
+    @test !all(iszero, bx)
+
+    # regression: an ordinary bilinear inner₊/inner₊ₓ/inner_plus, trial function either
+    # wrapped or not, still builds BilinearProduct exactly as before this fix
+    @test resolve_form_ast(form(Wbig, Wbig, (u, w) -> inner₊(D₋ₓ(u), D₋ₓ(w)))) isa
+          BilinearProduct
+    @test resolve_form_ast(form(Wbig, Wbig, (u, w) -> inner₊ₓ(u, w))) isa BilinearProduct
+    @test resolve_form_ast(form(W1, W1, (u, w) -> inner₊(u, w))) isa BilinearProduct
+    ast_bilinear_grad = resolve_form_ast(
+        form(Vh, Vh, (u, w) -> inner₊((u(1), u(1)), (w(1), w(1)))))
+    @test ast_bilinear_grad isa OperatorAdd
+    @test ast_bilinear_grad.left_op isa BilinearProduct
+    @test ast_bilinear_grad.right_op isa BilinearProduct
 end
 
 @testset "the parallel path agrees with the serial one" begin
