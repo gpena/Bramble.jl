@@ -560,10 +560,31 @@ sides compute the same numbers here") and is safe regardless.
     return multiply_stencils_bilinear(left_stencil, right_stencil, vol)
 end
 
+# The left factor of a linear product is contracted to a scalar:
+# `multiply_stencils_linear` keeps only the *right* operand's offsets and multiplies the
+# coefficients, so the assembly sums the left stencil's coefficients and discards where each
+# one sat. That is exact only when the left stencil is a single entry, at offset zero,
+# carrying the factor's true value at this point — an invariant the code relied on without
+# ever stating it, and which a source under an operator breaks: `D₋ₓ(f)` stencils as the
+# same value at two offsets with opposite signs, so the sum is zero.
+#
+# So a source-only left operand is contracted through `_source_value` (form/common.jl),
+# which evaluates the subtree by re-reading the source at the points the operator reaches,
+# rather than through the offset algebra. `_is_source_only` is decided by the operand's
+# type, so the branch folds away and a trial-function left operand pays nothing for it.
+@inline function _contracted_left_stencil(op, space, I::CartesianIndex{D},
+        markers, lin_idx::Int) where {D}
+    if _is_source_only(op)
+        return ((zero_offset(Val(D)), _source_value(op, space, I, markers)),)
+    else
+        return local_stencil(op, space, I, markers, lin_idx)
+    end
+end
+
 @inline function local_stencil(
         op::LinearProduct{D, InnerType}, space, I::CartesianIndex{D},
         markers, lin_idx::Int) where {D, InnerType}
-    left_stencil = local_stencil(op.left_op, space, I, markers, lin_idx)
+    left_stencil = _contracted_left_stencil(op.left_op, space, I, markers, lin_idx)
     right_stencil = local_stencil(op.right_op, space, I, markers, lin_idx)
     vol = compute_weight(InnerType(), space, I, lin_idx)
     return multiply_stencils_linear(left_stencil, right_stencil, vol)

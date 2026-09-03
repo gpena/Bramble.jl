@@ -321,7 +321,10 @@ uv = Rₕ(Vh, (x -> 0.0, x -> x[1] + x[2]))   # only the small leaf (2) carries 
 
 lh = form(Vh, v -> innerₕ(πₕ(uv(2)), v(1)) + innerₕ(D₋ₓ(πₕ(uv(2))), D₋ₓ(v(1))))
 b = assemble(lh)
-length(b) == ndofs(Vh)
+
+# the differenced term is not a no-op: dropping it changes the answer
+b_plain = assemble(form(Vh, v -> innerₕ(πₕ(uv(2)), v(1))))
+maximum(abs, b .- b_plain)
 ```
 
 The two terms land in the same block (leaf 1, `Wbig`) even though the source they read
@@ -329,6 +332,20 @@ from lives on leaf 2's own, coarser mesh — `πₕ` is what makes that a well-p
 expression rather than a size mismatch. This is exactly what makes a heterogeneous
 composite space useful for more than indexing: leaf 2 can represent one field at a
 resolution the problem calls for, and a term over leaf 1 can still read it.
+
+That last line is the check worth keeping, not `length(b) == ndofs(Vh)`. An earlier draft of
+this page showed the shape instead, and the differenced term contributed *exactly zero*: an
+operator wrapped around a source had its offsets discarded, so `D₋ₓ`'s `+s/h` and `−s/h`
+cancelled. The page was green either way, because a zero vector has the right length and is
+perfectly finite. A worked example should show what it computes.
+
+An operated source is worth a word on what it means. `innerₕ(D₋ₓ(f), v)` is
+``\sum_i |\square_i| \, (D_{-x}f)_i \, v_i`` — the operator acts on the *source*, producing
+another grid function, which is then integrated against the test function. It agrees entry
+for entry with applying the numeric operator first:
+`assemble(form(Wₕ, v -> innerₕ(D₋ₓ(fₕ), v)))` equals
+`values(D₋ₓ(fₕ)) .* weights(Wₕ, Innerh())`. That equivalence is what
+`test/form/source_operators.jl` pins, for every operator, against the numeric layer.
 
 `πₕ` takes a grid function, never a trial or test function:
 

@@ -147,6 +147,7 @@ if __bramble_with_unit_tests
             include("form/operators.jl")
             include("form/inner_products.jl")
             include("form/linear.jl")
+            include("form/source_operators.jl")
             include("form/interpolation.jl")
             include("form/bilinear.jl")
             include("form/symmetry.jl")

@@ -77,6 +77,21 @@ end
     end
 end
 
+# The value twin of the stencil above. Off-region the stencil is empty, which contributes
+# nothing; a value contributes nothing by being zero, which the assembly's `+=` treats the
+# same way. See `_source_value` in form/common.jl.
+@inline function _source_value(
+        op::RegionRestriction, space, I::CartesianIndex{D}, markers) where {D}
+    lin = _source_lin(space, I)
+    in_region = if op.region === :interior
+        !_is_marked(markers, :boundary, lin)
+    else
+        _is_marked(markers, op.region, lin)
+    end
+    v = _source_value(op.inner_op, space, I, markers)
+    return in_region ? v : zero(v)
+end
+
 # ==============================================================================
 # AST Resolution
 # ==============================================================================

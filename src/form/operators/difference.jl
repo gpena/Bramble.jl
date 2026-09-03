@@ -133,6 +133,33 @@ end
     return concatenate_stencils(t1, t2)
 end
 
+# --- Values, for a source-only subtree ---------------------------------------------- #
+#
+# The twin spelling of each stencil above: same mask, same spacing, but the inner subtree is
+# re-read at the neighbouring point instead of having its offset relabelled. See the note on
+# `_source_value` in form/common.jl for why a source needs this and a trial function does not.
+# The masked branch returns before reading the neighbour, so a truncated end never indexes
+# off the grid.
+
+@inline function _source_value(op::BackwardDifference{D, Dim}, space,
+        I::CartesianIndex{D}, markers) where {D, Dim}
+    v0 = _source_value(op.inner_op, space, I, markers)
+    h = get_spacing(mesh(space), I, Dim)
+    I[Dim] == 1 && return zero(v0 / h)
+    v1 = _source_value(op.inner_op, space, I - _stencil_step(Val(Dim), Val(D)), markers)
+    return (v0 - v1) / h
+end
+
+@inline function _source_value(op::ForwardDifference{D, Dim}, space,
+        I::CartesianIndex{D}, markers) where {D, Dim}
+    m = mesh(space)
+    v0 = _source_value(op.inner_op, space, I, markers)
+    h = get_forward_spacing(m, I, Dim)
+    I[Dim] == npoints(m, Tuple)[Dim] && return zero(v0 / h)
+    v1 = _source_value(op.inner_op, space, I + _stencil_step(Val(Dim), Val(D)), markers)
+    return (v1 - v0) / h
+end
+
 # ==============================================================================
 # AST Resolution
 # ==============================================================================
@@ -345,6 +372,50 @@ end
     here = scale_stencil(inner, b - a)
     backward = scale_stencil(shift_stencil(inner, Val(Dim), Val(-1)), -b)
     return concatenate_stencils(concatenate_stencils(forward, here), backward)
+end
+
+# The three extended differences, in value form. Same masks and coefficients as the
+# stencils directly above; see the note on `_source_value` in form/common.jl.
+
+@inline function _source_value(op::CenteredDifference{D, Dim}, space,
+        I::CartesianIndex{D}, markers) where {D, Dim}
+    m = mesh(space)
+    dims = npoints(m, Tuple)
+    v0 = _source_value(op.inner_op, space, I, markers)
+    c = 1 / (get_spacing(m, I, Dim) + get_forward_spacing(m, I, Dim))
+    (I[Dim] == 1 || I[Dim] == dims[Dim]) && return zero(v0 * c)
+    step = _stencil_step(Val(Dim), Val(D))
+    vf = _source_value(op.inner_op, space, I + step, markers)
+    vb = _source_value(op.inner_op, space, I - step, markers)
+    return c * (vf - vb)
+end
+
+@inline function _source_value(op::StarDifference{D, Dim}, space,
+        I::CartesianIndex{D}, markers) where {D, Dim}
+    m = mesh(space)
+    dims = npoints(m, Tuple)
+    v0 = _source_value(op.inner_op, space, I, markers)
+    c = 2 / (get_spacing(m, I, Dim) + get_forward_spacing(m, I, Dim))
+    I[Dim] == dims[Dim] && return zero(v0 * c)
+    vf = _source_value(op.inner_op, space, I + _stencil_step(Val(Dim), Val(D)), markers)
+    return c * (vf - v0)
+end
+
+@inline function _source_value(op::CrossWeightedDifference{D, Dim}, space,
+        I::CartesianIndex{D}, markers) where {D, Dim}
+    m = mesh(space)
+    dims = npoints(m, Tuple)
+    v0 = _source_value(op.inner_op, space, I, markers)
+    h = get_spacing(m, I, Dim)
+    hf = get_forward_spacing(m, I, Dim)
+    total = h + hf
+    a = h / (total * hf)
+    b = hf / (total * h)
+    (I[Dim] == 1 || I[Dim] == dims[Dim]) && return zero(v0 * a)
+    step = _stencil_step(Val(Dim), Val(D))
+    vf = _source_value(op.inner_op, space, I + step, markers)
+    vb = _source_value(op.inner_op, space, I - step, markers)
+    return a * vf + (b - a) * v0 - b * vb
 end
 
 # --- Traits ----------------------------------------------------------------------- #

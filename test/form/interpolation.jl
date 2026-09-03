@@ -67,12 +67,22 @@ end
     lf3 = form(Vh, v -> innerₕ(M₋ₓ(πₕ(u_leaf2)), v(1)))
     @test resolve_form_ast(lf3) isa LinearProduct
 
-    # and it actually assembles, rather than only type-checking
+    # and it actually assembles, rather than only type-checking.
+    #
+    # `!all(iszero, ...)` is the control this testset originally lacked: `isfinite` alone
+    # passed while `innerₕ(D₋ₓ(πₕ(u)), D₋ₓ(v))` assembled to exactly zero, because an
+    # operator over a source had its offsets discarded (see test/form/source_operators.jl).
     b1, b2, b3 = assemble(lf1), assemble(lf2), assemble(lf3)
     @test length(b1) == ndofs(Vh)
     @test all(isfinite, b1)
     @test all(isfinite, b2)
     @test all(isfinite, b3)
+    @test !all(iszero, b1)
+    @test !all(iszero, b2)
+    @test !all(iszero, b3)
+
+    # the averaged interpolant against the numeric layer, block 1: an oracle, not a shape check
+    @test b3[1:ndofs(Wbig)] ≈ values(M₋ₓ(πₕ(Wbig, u_leaf2))) .* weights(Wbig, Innerh())
 
     # numeric consistency: innerₕ(πₕ(u), v(1)) scatters |cell_i| * interpolate_at(u, x_i) into
     # block 1, so it must equal the numeric πₕ path times the weights directly
@@ -105,7 +115,9 @@ end
     @test resolve_form_ast(form(Vh, v -> inner₊ᵧ(πₕ(u_leaf2), v(1)))) isa LinearProduct
     @test resolve_form_ast(form(Vh, v -> inner₊(D₋ₓ(πₕ(u_leaf2)), D₋ₓ(v(1))))) isa
           LinearProduct
-    @test all(isfinite, assemble(lfx))
+    bx_all = assemble(lfx)
+    @test all(isfinite, bx_all)
+    @test !all(iszero, bx_all)          # the control: a dropped operator reads as zero
 
     # a 1D source: inner₊'s own D == 1 no-direction branch
     Ω1 = mesh(domain(interval(0.0, 1.0)), 9, false)
@@ -114,6 +126,7 @@ end
     @test resolve_form_ast(form(W1, v -> inner₊(πₕ(u1), v))) isa LinearProduct
     b1d = assemble(form(W1, v -> inner₊(πₕ(u1), v)))
     @test all(isfinite, b1d)
+    @test !all(iszero, b1d)
 
     # inner_plus over a gradient tuple of interpolated sources: each dimension routes
     # independently, so the sum is (LinearProduct + LinearProduct), not a Bilinear mix
@@ -122,7 +135,9 @@ end
     @test ast_grad isa OperatorAdd
     @test ast_grad.left_op isa LinearProduct
     @test ast_grad.right_op isa LinearProduct
-    @test all(isfinite, assemble(lf_grad))
+    b_grad = assemble(lf_grad)
+    @test all(isfinite, b_grad)
+    @test !all(iszero, b_grad)
 
     # numeric consistency: inner₊ₓ(πₕ(u), v(1)) should agree with innerₕ(πₕ(u), v(1)) in the
     # 1D-along-x case up to InnerPlus's own directional weight, so just check it is finite and

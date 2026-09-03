@@ -152,6 +152,41 @@ end
     return shift_stencil(inner, Val(Dim), op.shift_amount)
 end
 
+# --- Values, for a source-only subtree ---------------------------------------------- #
+#
+# Twins of the three stencils above, re-reading the inner subtree at the neighbouring point
+# rather than relabelling its offset. See the note on `_source_value` in form/common.jl.
+
+@inline function _source_value(op::BackwardAverage{D, Dim}, space,
+        I::CartesianIndex{D}, markers) where {D, Dim}
+    T = eltype(space)
+    v0 = _source_value(op.inner_op, space, I, markers)
+    I[Dim] == 1 && return zero(v0 * one(T) / 2)
+    v1 = _source_value(op.inner_op, space, I - _stencil_step(Val(Dim), Val(D)), markers)
+    return (v0 + v1) * (one(T) / 2)
+end
+
+@inline function _source_value(op::ForwardAverage{D, Dim}, space,
+        I::CartesianIndex{D}, markers) where {D, Dim}
+    T = eltype(space)
+    m = mesh(space)
+    v0 = _source_value(op.inner_op, space, I, markers)
+    I[Dim] == npoints(m, Tuple)[Dim] && return zero(v0 * one(T) / 2)
+    v1 = _source_value(op.inner_op, space, I + _stencil_step(Val(Dim), Val(D)), markers)
+    return (v1 + v0) * (one(T) / 2)
+end
+
+# A shift that lands off the grid reads as zero — the same "the missing neighbour is zero"
+# convention the truncated stencils use, and what the scatter's own bounds check does to a
+# relabelled offset that leaves the grid.
+@inline function _source_value(op::ShiftNode{D, Dim}, space,
+        I::CartesianIndex{D}, markers) where {D, Dim}
+    v0 = _source_value(op.inner_op, space, I, markers)
+    Ishift = I + _stencil_step(Val(Dim), Val(D)) * op.shift_amount
+    _in_grid(space, Ishift) || return zero(v0)
+    return _source_value(op.inner_op, space, Ishift, markers)
+end
+
 # ==============================================================================
 # AST Resolution
 # ==============================================================================
