@@ -162,12 +162,6 @@ end
 
 @inline components(uₕ::VectorElement{<:ScalarGridSpace}) = (uₕ,)
 
-@inline _scatter_comp!(::Tuple{}, ::Tuple, i::Int) = nothing
-@inline function _scatter_comp!(raws::Tuple, vals::Tuple, i::Int)
-    @inbounds raws[1][i] = vals[1]
-    return _scatter_comp!(Base.tail(raws), Base.tail(vals), i)
-end
-
 # Constructor for VectorElement
 """
 	element(Wₕ::AbstractSpaceType, [α::Number])

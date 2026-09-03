@@ -38,13 +38,13 @@ struct Parallel <: ExecutionPolicy end
 A singleton structure containing type-level configuration for backend linear algebra objects.
 This structure has no fields, only type parameters `VT`, `MT` and `EP`.
 
-This allows specifying the desired concrete types for vectors and matrices
-(e.g., dense `Vector`, sparse `SparseVector`, different element types like
-`Float32`, `Float64`, or custom GPU arrays), and the [`ExecutionPolicy`](@ref) --
-[`Serial`](@ref) or [`Parallel`](@ref) -- every threading-capable operation over this
-backend uses.
+This allows specifying the desired concrete types for dense vectors (CPU or GPU)
+and matrices (e.g., dense `Vector`, sparse or dense matrices like `SparseMatrixCSC` or `Matrix`,
+different element types like `Float32`, `Float64`, or custom GPU arrays), and the
+[`ExecutionPolicy`](@ref) -- [`Serial`](@ref) or [`Parallel`](@ref) -- every
+threading-capable operation over this backend uses.
 """
-struct Backend{VT <: AbstractVector, MT <: AbstractMatrix, EP <: ExecutionPolicy} end
+struct Backend{VT <: DenseVector, MT <: AbstractMatrix, EP <: ExecutionPolicy} end
 
 """
 	$(SIGNATURES)
@@ -86,14 +86,11 @@ Defaults to standard dense `Float64` vectors and `SparseMatrixCSC` matrices, run
 ```jldoctest
 julia> dense_sparse = backend() # Default backend (Dense-Sparse Float64, Serial)
 
+julia> dense_dense = backend(vector_type = Vector{Float64}, matrix_type = Matrix{Float64})
+
 julia> using SparseArrays;
-       SVec{T} = SparseVector{T,Int};
        SMat{T} = SparseMatrixCSC{T,Int};
-       T64 = Float64;
-
-julia> sparse_sparse = backend(vector_type = SVec{T64}, matrix_type = SMat{T64})
-
-julia> T32 = Float32;
+       T32 = Float32;
        dense32 = backend(vector_type = Vector{T32}, matrix_type = SMat{T32})
 
 julia> threaded = backend(policy = Parallel())
@@ -134,11 +131,11 @@ VT, MT,
 Backend{VT, MT, EP}
 
 @noinline function _throw_vector_error(VT, n, e_undef, e_size)
-    error("Cannot create vector of type $VT with size $n. Tried T(undef, n) (failed: $e_undef) and T(n) (failed: $e_size).")
+    error("Cannot create vector of type $VT with size $n. Tried $VT(undef, n) (failed: $e_undef) and $VT(n) (failed: $e_size).")
 end
 
 @noinline function _throw_matrix_error(MT, n, m, e_undef, e_size)
-    error("Cannot create matrix of type $MT with size ($n, $m). Tried T(undef, n, m) (failed: $e_undef) and T(n, m) (failed: $e_size).")
+    error("Cannot create matrix of type $MT with size ($n, $m). Tried $MT(undef, n, m) (failed: $e_undef) and $MT(n, m) (failed: $e_size).")
 end
 
 """
@@ -158,14 +155,10 @@ function vector(::Backend{VT, MT, EP}, n::Integer) where {VT, MT, EP}
     end
 end
 
-# Specialized zero-overhead methods for dense (CPU/GPU) and sparse types
+# Specialized zero-overhead method for standard Vector{T}
 @inline vector(::Backend{VT, MT, EP}, n::Integer) where {
-    MT, T, VT <: DenseVector{T}, EP} = VT(
+    MT, T, VT <: Vector{T}, EP} = VT(
     undef, n)
-@inline vector(
-    ::Backend{
-        VT, MT, EP}, n::Integer) where {
-    MT, T, Ti, VT <: SparseVector{T, Ti}, EP} = spzeros(T, Ti, n)
 
 """
 	$(SIGNATURES)
@@ -184,7 +177,7 @@ function matrix(backend::Backend{VT, MT, EP}, n::Integer, m::Integer) where {VT,
     end
 end
 
-# Specialized zero-overhead methods for dense (CPU/GPU) and sparse types
+# Specialized zero-overhead methods for dense (CPU/GPU) and sparse matrix types
 @inline matrix(::Backend{VT, MT, EP}, n::Integer, m::Integer) where {
     VT, T, MT <: DenseMatrix{T}, EP} = MT(undef, n, m)
 @inline matrix(::Backend{VT, MT, EP}, n::Integer,
@@ -196,8 +189,8 @@ end
 Constructs an `n` × `n` identity matrix associated with the given [`Backend`](@ref) instance.
 """
 @inline backend_eye(backend::Backend, n::Integer) = _backend_eye(matrix_type(backend), n)
-@inline _backend_eye(::Type{<:SparseMatrixCSC{T, Ti}}, n::Integer) where {T, Ti} = spdiagm(
-    n, n, 0 => fill(one(T), n))
+@inline _backend_eye(::Type{<:SparseMatrixCSC{T, Ti}}, n::Integer) where {
+    T, Ti} = SparseMatrixCSC{T, Ti}(I, n, n)
 @inline _backend_eye(::Type{<:Matrix{T}}, n::Integer) where {T} = Matrix{T}(I, n, n)
 function _backend_eye(::Type{MT}, n::Integer) where {T, MT <: AbstractMatrix{T}}
     A = MT(undef, n, n)
@@ -216,8 +209,13 @@ Constructs an `n` × `n` zero matrix associated with the given [`Backend`](@ref)
 @inline backend_zeros(backend::Backend, n::Integer) = _backend_zeros(matrix_type(backend), n)
 @inline _backend_zeros(::Type{<:SparseMatrixCSC{T, Ti}}, n::Integer) where {
     T, Ti} = spzeros(T, Ti, n, n)
-@inline _backend_zeros(::Type{MT}, n::Integer) where {T, MT <: AbstractMatrix{T}} = fill!(
-    MT(undef, n, n), zero(T))
+function _backend_zeros(::Type{MT}, n::Integer) where {T, MT <: AbstractMatrix{T}}
+    try
+        return fill!(MT(undef, n, n), zero(T))
+    catch
+        return fill!(MT(n, n), zero(T))
+    end
+end
 
 """
 	$(SIGNATURES)

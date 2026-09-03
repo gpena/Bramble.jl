@@ -319,7 +319,7 @@ end
         @inbounds for i in 1:n
             if mask[i]
                 vals = _cell_average(f, x, idxs[i][1], nodes, wts, Val(NC))
-                _scatter_comp!(raws, vals, i)
+                _write_components!(raws, vals, i)
             end
         end
     end
@@ -345,7 +345,7 @@ end
         @inbounds for i in 1:n
             if mask[i]
                 vals = _cell_average(f, x, idxs[i], nodes, wts, Val(NC))
-                _scatter_comp!(raws, vals, i)
+                _write_components!(raws, vals, i)
             end
         end
     end

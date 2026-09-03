@@ -133,7 +133,7 @@ function _pc_linear_algebra(be)
     v = fill(2.0, 4)
     w = fill(0.5, 4)
     _dot(u, v, w)
-    _inner_product(u, w, v)
+    _dot_masked(u, w, v, BitVector([true, false, true, false]))
 
     _serial_for!(similar(u), 1:4, i -> Float64(i))
     _cpu_threaded_for!(Serial(), similar(u), 1:4, i -> Float64(i))

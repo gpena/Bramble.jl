@@ -36,34 +36,62 @@ case the source is discrete rather than a closed-form function.
 """
 function interpolate_at(uₕ::VectorElement{<:ScalarGridSpace{1}}, x)
     Ωₕ = mesh(space(uₕ))
-    i = locate_cell(Ωₕ, x)
-    pts = points(Ωₕ)
-    lo, hi = pts[i], pts[i + 1]
-    t = hi > lo ? (x - lo) / (hi - lo) : zero(x - lo)
+    i, t = _interp_cell_frac(Ωₕ, x)
     return (1 - t) * uₕ[i] + t * uₕ[i + 1]
 end
 
 function interpolate_at(uₕ::VectorElement{<:ScalarGridSpace{D}}, x) where {D}
     Ωₕ = mesh(space(uₕ))
-    idx = locate_cell(Ωₕ, x)
+    idx, ts = _interp_cell_frac(Ωₕ, x)
     li = LinearIndices(indices(Ωₕ))
 
+    acc = zero(promote_type(eltype(uₕ), typeof(first(ts))))
+    for corner in CartesianIndices(ntuple(_ -> 0:1, Val(D)))
+        acc += _interp_corner_weight(ts, corner, Val(D)) * uₕ[li[idx + corner]]
+    end
+    return acc
+end
+
+# --- The corner blend, in one place ------------------------------------------------- #
+#
+# Which cell of `Ωₕ` holds `x`, and where inside it, per direction. Three callers want
+# exactly this and nothing more: `interpolate_at` above blends grid *values* with the
+# weights, `interpolation_matrix` emits them as matrix entries, and the symbolic
+# `InterpolationNode` (form/operators/interpolation.jl) emits them as stencil entries against
+# absolute trial columns. Factored so the three cannot drift: an interpolation that disagreed
+# with its own matrix depending on which spelling you reached for would be a bad bug to have.
+#
+# `locate_cell` clamps which cell an outside point is read against, and the fraction is *not*
+# clamped, so a point beyond the boundary extrapolates along that cell's slope — see
+# `interpolate_at`'s docstring.
+@inline function _interp_cell_frac(Ωₕ::AbstractMeshType{1}, x)
+    i = locate_cell(Ωₕ, x)
+    pts = points(Ωₕ)
+    lo, hi = pts[i], pts[i + 1]
+    t = hi > lo ? (x - lo) / (hi - lo) : zero(x - lo)
+    return i, t
+end
+
+@inline function _interp_cell_frac(Ωₕ::AbstractMeshType{D}, x) where {D}
+    idx = locate_cell(Ωₕ, x)
     ts = ntuple(Val(D)) do d
         pts = points(Ωₕ(d))
         i = idx[d]
         lo, hi = pts[i], pts[i + 1]
         hi > lo ? (x[d] - lo) / (hi - lo) : zero(x[d] - lo)
     end
+    return idx, ts
+end
 
-    acc = zero(promote_type(eltype(uₕ), typeof(first(ts))))
-    for corner in CartesianIndices(ntuple(_ -> 0:1, Val(D)))
-        w = one(eltype(ts))
-        for d in 1:D
-            w *= corner[d] == 1 ? ts[d] : (1 - ts[d])
-        end
-        acc += w * uₕ[li[idx + corner]]
+# The multilinear weight of one corner: `tᵈ` where the corner is on the far side of
+# direction `d`, `1 - tᵈ` where it is on the near side. Over all `2ᴰ` corners these sum to
+# one, which is what keeps the interpolant from overshooting.
+@inline function _interp_corner_weight(ts::NTuple{D}, corner, ::Val{D}) where {D}
+    w = one(eltype(ts))
+    for d in 1:D
+        w *= corner[d] == 1 ? ts[d] : (1 - ts[d])
     end
-    return acc
+    return w
 end
 
 """
@@ -106,12 +134,9 @@ following `Rₕ`/`Rₕ!`'s own naming exactly. The element type is promoted from
 function _interpolation_triplets!(rows, cols, vals, Ωdest::AbstractMeshType,
         Ωsrc::AbstractMeshType{1})
     li_dest = LinearIndices(indices(Ωdest))
-    pts = points(Ωsrc)
     for i in indices(Ωdest)
         x = point(Ωdest, i)
-        j = locate_cell(Ωsrc, x)
-        lo, hi = pts[j], pts[j + 1]
-        t = hi > lo ? (x - lo) / (hi - lo) : zero(x - lo)
+        j, t = _interp_cell_frac(Ωsrc, x)
         row = li_dest[i]
         push!(rows, row, row)
         push!(cols, j, j + 1)
@@ -125,24 +150,13 @@ function _interpolation_triplets!(rows, cols, vals, Ωdest::AbstractMeshType,
     li_src = LinearIndices(indices(Ωsrc))
     for I in indices(Ωdest)
         x = point(Ωdest, I)
-        idx = locate_cell(Ωsrc, x)
-
-        ts = ntuple(Val(D)) do d
-            pts = points(Ωsrc(d))
-            i = idx[d]
-            lo, hi = pts[i], pts[i + 1]
-            hi > lo ? (x[d] - lo) / (hi - lo) : zero(x[d] - lo)
-        end
+        idx, ts = _interp_cell_frac(Ωsrc, x)
 
         row = li_dest[I]
         for corner in CartesianIndices(ntuple(_ -> 0:1, Val(D)))
-            w = one(eltype(ts))
-            for d in 1:D
-                w *= corner[d] == 1 ? ts[d] : (1 - ts[d])
-            end
             push!(rows, row)
             push!(cols, li_src[idx + corner])
-            push!(vals, w)
+            push!(vals, _interp_corner_weight(ts, corner, Val(D)))
         end
     end
 end

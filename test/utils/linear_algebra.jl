@@ -1,6 +1,8 @@
 using Test
 using Bramble
-using Bramble: _dot, _inner_product, _cpu_threaded_for!, _serial_for!, Serial, Parallel
+using Bramble: _dot, _dot_masked,
+               _cpu_threaded_for!, _serial_for!, _cpu_threaded_scatter_for!,
+               _write_components!, Serial, Parallel
 using LinearAlgebra: dot
 using StaticArrays
 
@@ -60,43 +62,6 @@ using StaticArrays
         result_large = _dot(u_large, v_large, w_large)
         expected_large = 2.0 * sum(1:n)
         @test result_large ≈ expected_large
-    end
-
-    @testset "_inner_product vector version" begin
-        # Test weighted inner product for vectors
-        u = [1.0, 2.0, 3.0]
-        h = [0.5, 1.0, 1.5]
-        v = [4.0, 5.0, 6.0]
-
-        # Using the specialized vector version
-        result = _inner_product(u, h, v)
-        expected = (1.0 * 0.5 * 4.0) + (2.0 * 1.0 * 5.0) + (3.0 * 1.5 * 6.0)
-        @test result ≈ expected
-        @test result ≈ 39.0
-
-        # Test symmetry
-        result2 = _inner_product(v, h, u)
-        @test result2 ≈ expected
-
-        # Test with uniform weights
-        h_ones = ones(3)
-        result_uniform = _inner_product(u, h_ones, v)
-        @test result_uniform ≈ dot(u, v)
-
-        # Test Float32
-        u_f32 = Float32[1.0, 2.0, 3.0]
-        h_f32 = Float32[0.5, 1.0, 1.5]
-        v_f32 = Float32[4.0, 5.0, 6.0]
-        result_f32 = _inner_product(u_f32, h_f32, v_f32)
-        @test result_f32 isa Float32
-        @test result_f32 ≈ 39.0f0
-
-        # SVector zero allocations
-        sv_u = SVector(1.0, 2.0, 3.0)
-        sv_h = SVector(0.5, 1.0, 1.5)
-        sv_v = SVector(4.0, 5.0, 6.0)
-        @test _inner_product(sv_u, sv_h, sv_v) ≈ 39.0
-        @test_allocs _inner_product(sv_u, sv_h, sv_v)
     end
 
     @testset "_serial_for!" begin
@@ -173,11 +138,76 @@ using StaticArrays
         @test v_serial ≈ v_parallel
     end
 
+    @testset "_dot_masked" begin
+        u = [1.0, 2.0, 3.0, 4.0]
+        v = [2.0, 3.0, 4.0, 5.0]
+        w = [0.5, 1.0, 1.5, 2.0]
+
+        # Mask selecting elements 2 and 4
+        mask = BitVector([false, true, false, true])
+        expected = (2.0 * 3.0 * 1.0) + (4.0 * 5.0 * 2.0) # 6 + 40 = 46
+        @test _dot_masked(u, v, w, mask) ≈ expected
+
+        # All-true mask matches unmasked _dot
+        mask_all = trues(4)
+        @test _dot_masked(u, v, w, mask_all) ≈ _dot(u, v, w)
+
+        # All-false mask produces zero
+        mask_none = falses(4)
+        @test _dot_masked(u, v, w, mask_none) == 0.0
+
+        # Dimension mismatch on vectors
+        @test_throws DimensionMismatch _dot_masked([1.0], [1.0, 2.0], [1.0], mask_all)
+
+        # Dimension mismatch on mask length
+        @test_throws DimensionMismatch _dot_masked(u, v, w, BitVector([true, false]))
+
+        # StaticArrays allocation test
+        sv_u = SVector(1.0, 2.0, 3.0, 4.0)
+        sv_v = SVector(2.0, 3.0, 4.0, 5.0)
+        sv_w = SVector(0.5, 1.0, 1.5, 2.0)
+        @test _dot_masked(sv_u, sv_v, sv_w, mask) ≈ expected
+    end
+
+    @testset "_write_components! and _cpu_threaded_scatter_for!" begin
+        # Direct _write_components! recursion
+        a = zeros(3)
+        b = zeros(3)
+        c = zeros(3)
+        _write_components!((a, b, c), (10.0, 20.0, 30.0), 2)
+        @test a[2] == 10.0
+        @test b[2] == 20.0
+        @test c[2] == 30.0
+        @test _write_components!((), (), 1) === nothing
+
+        # _cpu_threaded_scatter_for! with Serial and Parallel
+        for policy in (Serial(), Parallel())
+            n = 50
+            m1 = zeros(n)
+            m2 = zeros(n)
+            g = i -> (Float64(i), Float64(2i))
+            _cpu_threaded_scatter_for!(policy, (m1, m2), 1:n, g)
+            @test m1 == [Float64(i) for i in 1:n]
+            @test m2 == [Float64(2i) for i in 1:n]
+        end
+
+        # Serial and Parallel match
+        n = 64
+        m1_s, m2_s = zeros(n), zeros(n)
+        m1_p, m2_p = zeros(n), zeros(n)
+        g_fn = i -> (sin(Float64(i)), cos(Float64(i)))
+        _cpu_threaded_scatter_for!(Serial(), (m1_s, m2_s), 1:n, g_fn)
+        _cpu_threaded_scatter_for!(Parallel(), (m1_p, m2_p), 1:n, g_fn)
+        @test m1_s ≈ m1_p
+        @test m2_s ≈ m2_p
+    end
+
     @testset "Type Stability" begin
         u = [1.0, 2.0, 3.0]
         v = [4.0, 5.0, 6.0]
         w = [2.0, 2.0, 2.0]
+        mask = BitVector([true, false, true])
         @inferred _dot(u, v, w)
-        @inferred _inner_product(u, w, v)
+        @inferred _dot_masked(u, v, w, mask)
     end
 end

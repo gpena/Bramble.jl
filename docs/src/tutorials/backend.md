@@ -51,9 +51,8 @@ element type as its first argument:
 using SparseArrays
 
 f32 = backend(Float32)                                    # Vector{Float32}, sparse Float32 matrix
-sparse_state = backend(vector_type = SparseVector{Float64, Int},
-    matrix_type = SparseMatrixCSC{Float64, Int})
-vector_type(sparse_state)
+dense_backend = backend(vector_type = Vector{Float64}, matrix_type = Matrix{Float64})
+matrix_type(dense_backend)
 ```
 
 `backend(T)` is what [`mesh`](@ref) uses when no backend is given at all — `mesh`

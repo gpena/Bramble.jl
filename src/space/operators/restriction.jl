@@ -174,7 +174,7 @@ function _Rₕ_masked!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f,
         @inbounds for i in 1:n
             if mask[i]
                 vals = f(point(Ωₕ, idxs[i]))
-                _scatter_comp!(raws, vals, i)
+                _write_components!(raws, vals, i)
             end
         end
     end

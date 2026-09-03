@@ -2,20 +2,16 @@
     throw(DimensionMismatch("Vectors must have matching lengths, but got lengths ($lu, $lv, $lw)."))
 end
 
+@noinline function _throw_dot_dim_error(lu::Integer, lv::Integer, lw::Integer, lm::Integer)
+    throw(DimensionMismatch("Vectors and mask must have matching lengths, but got lengths ($lu, $lv, $lw, $lm)."))
+end
+
 """
 	$(SIGNATURES)
 
 Applies `f` across `idxs`, writing into `v` in place, either as a plain loop or across
 threads depending on `policy` -- [`Serial`](@ref) or [`Parallel`](@ref), read off a
 [`Backend`](@ref) via [`execution_policy`](@ref).
-
-Resolved by ordinary dispatch on `policy`'s type, not a runtime size check: there is no
-threshold below which a `Parallel` backend falls back to serial. That used to be
-`CPU_THREADED_MIN`, a threshold the caller could not see or override and that would have
-needed its own value per operation (`Rₕ!`'s crossover is not `avgₕ!`'s) -- removed together
-with the automatic switching it existed to drive. Choosing `Serial()` on the backend is now
-how a caller with many small, frequently repeated calls avoids `Threads.@threads`'s spawn
-cost, deterministically, rather than relying on a heuristic to guess it for them.
 
 # Arguments
 - `policy`: [`Serial`](@ref) or [`Parallel`](@ref)
@@ -50,53 +46,6 @@ Performs a serial (single-threaded) iteration over the specified indices, applyi
 @inline function _serial_for!(v, idxs, f)
     @inbounds for idx in idxs
         v[idx] = f(idx)
-    end
-    return nothing
-end
-
-"""
-	$(SIGNATURES)
-
-Applies `g` only at the indices selected by `masks`, writing into `v` in place
-and leaving every unselected entry at zero.
-
-Each mask is a `BitVector` over the linear indices of `v`, as returned by
-`index_in_marker`; several masks act as a union. Marked sets are usually small
-boundary strips, so this runs serially: the selection test costs more than the
-kernel for most markers, and threading a short scattered write does not pay.
-
-# Arguments
-- `v`: Array to be modified in-place
-- `masks`: Tuple of `BitVector`s over `LinearIndices(v)`
-- `g`: Function that takes an index and returns the value to be stored there
-"""
-function _masked_for!(v, masks::Tuple, g)
-    fill!(v, zero(eltype(v)))
-    lin = LinearIndices(v)
-    for mask in masks
-        @inbounds for idx in CartesianIndices(v)
-            mask[lin[idx]] && (v[idx] = g(idx))
-        end
-    end
-    return nothing
-end
-
-# The masked counterpart of `_cpu_threaded_scatter_for!`, standing to it as `_masked_for!` stands to
-# `_cpu_threaded_for!`: writes only where a mask selects, leaving every other entry zero.
-#
-# Serial by construction. The marked region is a boundary slice in every use so far, which
-# is O(n^(D-1)) against the O(n^D) of the whole grid, and threading it would cost more than
-# it saves.
-function _masked_scatter_for!(mats::Tuple, masks::Tuple, g)
-    for m in mats
-        fill!(m, zero(eltype(m)))
-    end
-    first_mat = first(mats)
-    lin = LinearIndices(first_mat)
-    for mask in masks
-        @inbounds for idx in CartesianIndices(first_mat)
-            mask[lin[idx]] && _write_components!(mats, g(idx), idx)
-        end
     end
     return nothing
 end
@@ -170,8 +119,21 @@ end
 Computes the weighted element-wise dot product of three vectors:
 ``\\sum_{i} u_i \\cdot v_i \\cdot w_i``
 
-Uses SIMD and `muladd` for the outer accumulation (`u_i * v_i * w_i + s`); inner products are not FMA-fused.
+Uses SIMD and `muladd` for outer accumulation.
 """
+@inline function _dot(u::AbstractVector{T}, v::AbstractVector{T},
+        w::AbstractVector{T}) where {T}
+    (length(u) == length(v) == length(w)) ||
+        _throw_dot_dim_error(length(u), length(v), length(w))
+    s = zero(T)
+
+    @inbounds @simd for i in 1:length(u)
+        s = muladd(u[i] * v[i], w[i], s)
+    end
+
+    return s
+end
+
 @inline function _dot(u::AbstractVector, v::AbstractVector, w::AbstractVector)
     (length(u) == length(v) == length(w)) ||
         _throw_dot_dim_error(length(u), length(v), length(w))
@@ -188,38 +150,58 @@ end
 """
 	$(SIGNATURES)
 
-Computes the weighted inner product ``\\langle u, v \\rangle_h = \\sum_i u_i h_i v_i``, via
-[`_dot`](@ref).
-"""
-@inline _inner_product(u::AbstractVector, h::AbstractVector, v::AbstractVector) = _dot(u, h, v)
-
-"""
-	$(SIGNATURES)
-
 As [`_dot`](@ref), restricted to the indices `mask` marks:
 ``\\sum_{i \\,:\\, mask_i} u_i \\cdot v_i \\cdot w_i``.
 
-No `@simd`: the branch on `mask[i]` rules it out, the same tradeoff
-`symmetrize!` (form/dirichlet_constraints.jl) makes for the same reason.
+Uses `BitVector` word-level skipping (`mask.chunks`) and bit scanning (`trailing_zeros`)
+to traverse marked entries efficiently with zero allocations.
 """
 @inline function _dot_masked(
-        u::AbstractVector, v::AbstractVector, w::AbstractVector, mask::BitVector)
-    (length(u) == length(v) == length(w)) ||
-        _throw_dot_dim_error(length(u), length(v), length(w))
-    T = promote_type(eltype(u), eltype(v), eltype(w))
+        u::AbstractVector{T}, v::AbstractVector{T}, w::AbstractVector{T},
+        mask::BitVector) where {T}
+    n = length(u)
+    (n == length(v) == length(w) == length(mask)) ||
+        _throw_dot_dim_error(n, length(v), length(w), length(mask))
     s = zero(T)
 
-    @inbounds for i in 1:length(u)
-        mask[i] && (s = muladd(T(u[i]) * T(v[i]), T(w[i]), s))
+    chunks = mask.chunks
+    @inbounds for c in eachindex(chunks)
+        chunk = chunks[c]
+        chunk == 0 && continue
+        base_i = (c - 1) * 64
+        while chunk != 0
+            tz = trailing_zeros(chunk)
+            i = base_i + tz + 1
+            i > n && break
+            s = muladd(u[i] * v[i], w[i], s)
+            chunk &= chunk - 1
+        end
     end
 
     return s
 end
 
-"""
-	$(SIGNATURES)
+@inline function _dot_masked(
+        u::AbstractVector, v::AbstractVector, w::AbstractVector, mask::BitVector)
+    n = length(u)
+    (n == length(v) == length(w) == length(mask)) ||
+        _throw_dot_dim_error(n, length(v), length(w), length(mask))
+    T = promote_type(eltype(u), eltype(v), eltype(w))
+    s = zero(T)
 
-As [`_inner_product`](@ref), restricted to the indices `mask` marks.
-"""
-@inline _inner_product_masked(u::AbstractVector, h::AbstractVector, v::AbstractVector,
-    mask::BitVector) = _dot_masked(u, h, v, mask)
+    chunks = mask.chunks
+    @inbounds for c in eachindex(chunks)
+        chunk = chunks[c]
+        chunk == 0 && continue
+        base_i = (c - 1) * 64
+        while chunk != 0
+            tz = trailing_zeros(chunk)
+            i = base_i + tz + 1
+            i > n && break
+            s = muladd(T(u[i]) * T(v[i]), T(w[i]), s)
+            chunk &= chunk - 1
+        end
+    end
+
+    return s
+end

@@ -163,9 +163,9 @@ the inner product there: the square root of the sum of the components' squared n
         vₕ::VectorElement{<:ScalarGridSpace}, _::Val{DIM};
         markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {DIM, N}
     N == 0 &&
-        return _inner_product(uₕ.data, weights(space(uₕ), Innerplus(), DIM), vₕ.data)
+        return _dot(uₕ.data, weights(space(uₕ), Innerplus(), DIM), vₕ.data)
     mask = _combined_mask(mesh(space(uₕ)), markers)
-    return _inner_product_masked(
+    return _dot_masked(
         uₕ.data, weights(space(uₕ), Innerplus(), DIM), vₕ.data, mask)
 end
 

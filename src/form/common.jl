@@ -179,6 +179,23 @@ struct SourceVector{D, VType <: AbstractVector} <: LazyOp{D}
     vec::VType
 end
 
+"""
+    AbsoluteColumn
+
+A stencil entry's trial slot, naming a column of the trial space directly rather than an
+offset from the point being evaluated.
+
+Every other node's stencil says "this many points from here, on the mesh being walked", which
+is what lets `shift_stencil` compose operators by relabelling. An interpolation cannot say
+that: the trial degrees of freedom it reaches live on a *different* mesh, and which ones
+depends on where the point falls (`locate_cell`). So it names them outright, and the three
+bilinear consumers resolve the two kinds of entry by dispatch — see
+`form/operators/interpolation.jl` (point 61).
+"""
+struct AbsoluteColumn
+    col::Int
+end
+
 # ==============================================================================
 # 3. Form API & Bramble Standard Mapping
 # ==============================================================================
@@ -213,8 +230,8 @@ include("operators/difference.jl")
 include("operators/jump.jl")
 include("operators/average.jl")
 include("operators/restriction.jl")
-include("operators/interpolation.jl")
 include("operators/inner.jl")
+include("operators/interpolation.jl")
 
 # ==============================================================================
 # 4. Zero-Allocation Stencil Evaluators

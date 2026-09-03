@@ -46,11 +46,6 @@ size(c)    # Returns (3,) (calls size(c.data))
   - Forwarding mathematical operations to wrapped types
   - Reducing boilerplate for wrapper types
 
-# Notes
-
-  - This macro is taken from Lazy.jl
-  - Generated methods include `@inline` hint for optimization
-  - Supports both regular and keyword arguments
 """
 macro forward(ex, fs)
     if !(Meta.isexpr(ex, :.) && length(ex.args) == 2 && ex.args[2] isa QuoteNode)

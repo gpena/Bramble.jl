@@ -6,7 +6,7 @@ import Base: eltype, length
 import Base: show, first, last, getindex, setindex!, iterate, size, ndims, firstindex,
              lastindex, axes, eachindex
 
-using SparseArrays: SparseMatrixCSC, SparseVector, spdiagm, spzeros,
+using SparseArrays: SparseMatrixCSC, spdiagm, spzeros,
                     rowvals, nonzeros, nzrange, sparse, sparse!
 
 using FunctionWrappers: FunctionWrapper
