@@ -1,4 +1,4 @@
-<p align="center">
+<p align="left">
   <img src="docs/src/assets/logo.svg" alt="Bramble.jl logo" width="180">
 </p>
 
