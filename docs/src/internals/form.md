@@ -153,7 +153,6 @@ Pages = [
     "form/operators/average.jl",
     "form/operators/difference.jl",
     "form/operators/inner.jl",
-    "form/operators/interpolation.jl",
     "form/operators/jump.jl",
     "form/operators/restriction.jl",
     "form/dirichlet_constraints.jl",

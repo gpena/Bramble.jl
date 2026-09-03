@@ -64,7 +64,7 @@ end
         "integrated over."))
 end
 
-"""
+#=
     πₕ(Wsrc::ScalarGridSpace{D}, op::LazyOp{D}) -> InterpolationNode
 
 The interpolation operator from `Wsrc` onto whichever mesh the form integrates over, applied
@@ -73,16 +73,22 @@ to the trial function `op`.
 This is the bilinear counterpart of `πₕ(uₕ)`: that one interpolates a grid function whose
 values are already known, and belongs on the source side of a linear form; this one
 interpolates the *unknown*, and so contributes matrix columns. `innerₕ(πₕ(Wsrc, u), v)`
-assembles `Hᵥ · P`, with `P` the same matrix [`interpolation_matrix`](@ref) builds — computed
-a row at a time during the sweep rather than as a matrix product, which is what lets
-`assemble!` refill it allocating nothing.
+assembles `Hᵥ · P`, with `P` the same matrix `interpolation_matrix` builds — computed a row
+at a time during the sweep rather than as a matrix product, which is what lets `assemble!`
+refill it allocating nothing.
 
 Operators wrap it from the outside, acting on the mesh being integrated over:
-`inner₊(D₋ₓ(πₕ(Wsrc, u)), D₋ₓ(v))` is ``D_x^\\top H_+ D_x P``. Writing an operator *inside*
-is a different thing and is refused, since it would difference on the source mesh instead.
+`inner₊(D₋ₓ(πₕ(Wsrc, u)), D₋ₓ(v))` is `D_x^⊤ H_+ D_x P`. Writing an operator *inside* is a
+different thing and is refused, since it would difference on the source mesh instead.
 
 `op` must be a trial-function leaf, plain or indexed.
-"""
+
+Deliberately a plain comment, not a docstring: this API is expected to change (a one-argument
+`πₕ(op)` that infers its own space, and a test-side twin, are both under design) and is kept
+out of the rendered docs until it settles — see the "point 73" discussion in
+`docs/form-unlock-plan.md`. The code beneath is unaffected and fully supported; only the
+public documentation is deferred.
+=#
 function πₕ(Wsrc::ScalarGridSpace{D}, op::LazyOp{D}) where {D}
     op isa TrialFunction || op isa IndexedTrialFunction || _throw_interp_inner(op)
     return InterpolationNode{D, typeof(Wsrc), typeof(op)}(Wsrc, op)

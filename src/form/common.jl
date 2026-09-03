@@ -213,9 +213,8 @@ offset from the point being evaluated.
 Every other node's stencil says "this many points from here, on the mesh being walked", which
 is what lets `shift_stencil` compose operators by relabelling. An interpolation cannot say
 that: the trial degrees of freedom it reaches live on a *different* mesh, and which ones
-depends on where the point falls (`locate_cell`). So it names them outright, and the four
-bilinear consumers resolve the two kinds of entry by dispatch — see
-`form/operators/interpolation.jl` (point 61).
+depends on where the point falls (`locate_cell`). So it names them outright, and the bilinear
+consumers resolve the two kinds of entry by dispatch.
 """
 struct AbsoluteColumn
     col::Int
