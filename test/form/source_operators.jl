@@ -2,7 +2,7 @@ using Test
 using Bramble
 using ForwardDiff
 using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
-               _source_value, _is_source_only, values, form, assemble, assemble!
+               values, form, assemble, assemble!
 
 # An operator wrapped around a *source* in a linear form.
 #
@@ -14,10 +14,15 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
 # (`shift_stencil`), which is right for a translation-invariant node and wrong for a source,
 # whose coefficient *is* a value read at the current point.
 #
-# Before `_source_value` existed, `innerₕ(D₋ₓ(f), v)` assembled to exactly zero (the two
+# Before this was fixed (point 68), `innerₕ(D₋ₓ(f), v)` assembled to exactly zero (the two
 # relabelled copies of f(xᵢ) cancelled) and `innerₕ(M₋ₓ(f), v)` reproduced `innerₕ(f, v)`
 # (they summed back to f(xᵢ)) — the operator silently dropped either way. The forms tutorial
-# shipped an example of the first kind.
+# shipped an example of the first kind. The fix originally lived in a dedicated `_source_value`
+# ladder, one method per node, mirroring `local_stencil`'s masks and spacings by hand; point 71
+# retired that ladder onto `_contracted_left_stencil` reading the same subtree's own
+# `local_stencil`, correct once a source is marked `PointDependentStencil`
+# (`form/operators/interpolation.jl`) — this file's checks are unchanged either way, since they
+# pin the observable behaviour, not which mechanism produces it.
 #
 # Every check below is against the NUMERIC operator layer, which is a third, independent
 # implementation of the same arithmetic: `assemble(innerₕ(Op(f), v))` must equal
@@ -72,7 +77,14 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
         # relabelling an offset cannot do
         @test assemble(form(Wₕ, v -> innerₕ(D₋ₓ(M₋ᵧ(sf)), v))) ≈ values(D₋ₓ(M₋ᵧ(fₕ))) .* w
         @test assemble(form(Wₕ, v -> innerₕ(M₋ₓ(D₋ₓ(sf)), v))) ≈ values(M₋ₓ(D₋ₓ(fₕ))) .* w
-        @test assemble(form(Wₕ, v -> innerₕ(D₋ₓ(D₋ᵧ(sf)), v))) ≈ values(D₋ₓ(D₋ᵧ(fₕ))) .* w
+
+        # `f` is separable, x²  +  sin(3y), so its mixed difference is mathematically zero at
+        # every point — both sides here are machine-epsilon noise (~1e-16), not a value an
+        # unqualified `≈`'s relative tolerance can compare meaningfully; an `atol` this loose
+        # would swallow a real regression anywhere else in this file, where every other
+        # comparison is against a value orders of magnitude larger
+        @test isapprox(assemble(form(Wₕ, v -> innerₕ(D₋ₓ(D₋ᵧ(sf)), v))),
+            values(D₋ₓ(D₋ᵧ(fₕ))) .* w; atol = 1e-12)
 
         # scaling by a number, and by a Ref that a caller can rebind between assemblies
         @test assemble(form(Wₕ, v -> innerₕ(3 * D₋ₓ(sf), v))) ≈ 3 .* values(D₋ₓ(fₕ)) .* w
@@ -128,6 +140,19 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
                     for i in eachindex(w)]
         @test b ≈ expected
         @test !all(iszero, b)
+
+        # `shift_op` carries no mask of its own — every difference/average/jump does, and
+        # that mask is what makes clamping the shifted point safe for them (the clamped,
+        # possibly-wrong read gets multiplied by exactly zero). A shift by more than one point
+        # makes the distinction sharp: the wrongly-clamped answer would read the *boundary
+        # point's own value* rather than contribute zero, which a shift of amount 1 cannot
+        # tell apart from the correct answer at every row but the last.
+        b2 = assemble(form(Wₕ, v -> innerₕ(shift_op(sf, 1, 2), v)))
+        expected2 = [i + 2 <= length(w) ? values(fₕ)[i + 2] * w[i] : zero(eltype(w))
+                     for i in eachindex(w)]
+        wrongly_clamped = [values(fₕ)[min(i + 2, length(w))] * w[i] for i in eachindex(w)]
+        @test b2 ≈ expected2
+        @test !isapprox(b2, wrongly_clamped)
     end
 
     @testset "Region restriction" begin
@@ -250,10 +275,18 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
     end
 
     @testset "Invalid source node error" begin
-        # the fallback exists so that a future node added to `_is_source_only` without a
-        # `_source_value` twin fails with a message rather than silently assembling the
-        # wrong thing, which is the failure mode this whole testset exists to prevent
-        @test_throws ArgumentError _source_value(Bramble.TrialFunction{1}(), nothing,
-            CartesianIndex(1), nothing)
+        # `_is_source_only` and `stencil_shift_trait` are two independent ladders over the
+        # same node types (point 71): a source-only subtree is contracted by reading its own
+        # `local_stencil`, correct only because a source is marked `PointDependentStencil`.
+        # A future node accepted by the first ladder without a matching entry in the second
+        # would otherwise relabel offsets instead of re-reading the neighbour — the exact
+        # point-68 defect, reintroduced silently — so this checks it and throws instead. Not
+        # reachable through today's node types (every one that answers `true` to
+        # `_is_source_only` already answers `PointDependentStencil` here), so exercised
+        # directly rather than by constructing a form that hits it.
+        struct _UnmarkedSourceNode{D} <: Bramble.LazyOp{D} end
+        Bramble._is_source_only(::_UnmarkedSourceNode) = true
+        @test_throws ArgumentError Bramble._contracted_left_stencil(
+            _UnmarkedSourceNode{1}(), nothing, CartesianIndex(1), nothing, 1)
     end
 end

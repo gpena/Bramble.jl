@@ -158,14 +158,14 @@ end
 # alone, so the trait is a compile-time constant at every call and the branch it selects folds
 # away.
 #
-# A *source* is the other node this is true of, and it is deliberately left translation
-# invariant here: point 68 already fixed the same defect for sources by a separate route —
-# `_source_value` (form/common.jl), which a `LinearProduct` reaches through
-# `_contracted_left_stencil` instead of through the shift at all — and marking sources
-# point-dependent would change that behaviour rather than merely extend it. The two
-# mechanisms answer one question and one of them should go; which is a decision of its own,
-# with its own verification, not a side effect of this one.
+# A *source* is the other node this is true of — point 68's own defect, on the same
+# `local_stencil` relabelling assumption. Marking it here (point 71) is what let
+# `_contracted_left_stencil` (form/operators/inner.jl) stop re-deriving every operator's
+# masks and spacings by hand: a source-only subtree's own `local_stencil`, read through this
+# trait, already re-evaluates at each neighbour the way a value contraction needs.
 stencil_shift_trait(::InterpolationNode) = PointDependentStencil()
+stencil_shift_trait(::SourceFunction) = PointDependentStencil()
+stencil_shift_trait(::SourceVector) = PointDependentStencil()
 
 stencil_shift_trait(op::BackwardDifference) = stencil_shift_trait(op.inner_op)
 stencil_shift_trait(op::ForwardDifference) = stencil_shift_trait(op.inner_op)

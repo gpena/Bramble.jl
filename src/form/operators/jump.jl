@@ -67,16 +67,6 @@ jumpₕ(op::LazyOp{D}) where {D} = ntuple(dim -> JumpNode{D, dim, typeof(op)}(op
     return concatenate_stencils(forward, here)
 end
 
-# The value twin of the stencil above: the last point keeps the `-uₙ` convention, so the
-# forward term drops and the local one does not. See `_source_value` in form/common.jl.
-@inline function _source_value(op::JumpNode{D, Dim}, space,
-        I::CartesianIndex{D}, markers) where {D, Dim}
-    v0 = _source_value(op.inner_op, space, I, markers)
-    I[Dim] == npoints(mesh(space), Tuple)[Dim] && return -v0
-    vf = _source_value(op.inner_op, space, I + _stencil_step(Val(Dim), Val(D)), markers)
-    return vf - v0
-end
-
 function resolve_ast(op::JumpNode{D, Dim}) where {D, Dim}
     inner = resolve_ast(op.inner_op)
     return JumpNode{D, Dim, typeof(inner)}(inner)

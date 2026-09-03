@@ -568,14 +568,33 @@ end
 # ever stating it, and which a source under an operator breaks: `D₋ₓ(f)` stencils as the
 # same value at two offsets with opposite signs, so the sum is zero.
 #
-# So a source-only left operand is contracted through `_source_value` (form/common.jl),
-# which evaluates the subtree by re-reading the source at the points the operator reaches,
-# rather than through the offset algebra. `_is_source_only` is decided by the operand's
+# Fixed not by re-deriving each operator's arithmetic a second time (point 68's `_source_value`
+# did, one method per node, duplicating every mask and spacing `local_stencil` already has),
+# but by reading the source-only subtree's own `local_stencil` and discarding its offsets —
+# `sum_stencil_values` (form/common.jl). That reads correctly *because* of point 61's
+# `stencil_shift_trait`: a source is `PointDependentStencil`, so every neighbour a wrapping
+# operator reaches is obtained by re-evaluating the subtree at that neighbour's own point
+# (`shifted_inner_stencil`) rather than by relabelling today's offset onto it — which is
+# exactly the re-reading `_source_value` used to do by hand, now the same mechanism point 61
+# already needed for the interpolation operator. `_is_source_only` is decided by the operand's
 # type, so the branch folds away and a trial-function left operand pays nothing for it.
+@noinline function _throw_source_not_point_dependent(op)
+    throw(ArgumentError(
+        "`_is_source_only` accepted $(typeof(op)) as a source, but `stencil_shift_trait` " *
+        "does not mark it (or a node it wraps) `PointDependentStencil`. Contracting it would " *
+        "relabel offsets instead of re-reading the source at each neighbour — exactly the " *
+        "point-68 defect this check exists to catch loudly instead of assembling silently " *
+        "wrong. Add the missing `stencil_shift_trait` method next to the node's definition " *
+        "(form/operators/interpolation.jl)."))
+end
+
 @inline function _contracted_left_stencil(op, space, I::CartesianIndex{D},
         markers, lin_idx::Int) where {D}
     if _is_source_only(op)
-        return ((zero_offset(Val(D)), _source_value(op, space, I, markers)),)
+        stencil_shift_trait(op) isa PointDependentStencil ||
+            _throw_source_not_point_dependent(op)
+        stencil = local_stencil(op, space, I, markers, lin_idx)
+        return ((zero_offset(Val(D)), sum_stencil_values(stencil)),)
     else
         return local_stencil(op, space, I, markers, lin_idx)
     end

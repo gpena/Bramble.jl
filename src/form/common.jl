@@ -110,6 +110,31 @@ end
     return Expr(:tuple, exprs...)
 end
 
+"""
+    sum_stencil_values(stencil::Tuple)
+
+The sum of a stencil's coefficients, ignoring its offsets entirely.
+
+What [`_contracted_left_stencil`](@ref) (`form/operators/inner.jl`) needs from a source-only
+subtree's own `local_stencil`: not the offsets, which mean nothing for a value that
+contributes no matrix structure, only their total. `false` rather than `0` or `zero(T)` as
+the empty-stencil answer — [`RegionRestriction`](@ref) can legitimately produce `()` for a
+point outside its region, and there is no `T` to call `zero` on when there are no entries to
+read one from; `false` promotes to whatever numeric type the other entries (or, empty, the
+caller's own multiplication) turn out to have, the same trick `sum(f, itr; init = false)`
+plays, spelled as a `@generated` unrolled fold so the tuple length stays a compile-time
+constant like every other stencil-algebra primitive here.
+"""
+@generated function sum_stencil_values(stencil::Tuple)
+    N = length(stencil.parameters)
+    N == 0 && return :(false)
+    ex = :(stencil[1][end])
+    for i in 2:N
+        ex = :($ex + stencil[$i][end])
+    end
+    return ex
+end
+
 # ==============================================================================
 # 2. Abstract Syntax Tree (AST) Nodes
 # ==============================================================================
@@ -211,9 +236,9 @@ end
 # *value* at the point — for neither does adding one to an offset produce what the neighbour
 # holds. Such a node has to be re-evaluated at the shifted point instead, which is what this
 # trait selects between; `stencil_shift_trait`'s ladder lives in
-# `form/operators/interpolation.jl`, after every node type it has to answer for exists. Only
-# the interpolation is routed through it today — a source reaches the same end by the separate
-# `_source_value` path below (point 68), and that overlap is noted where the ladder is.
+# `form/operators/interpolation.jl`, after every node type it has to answer for exists —
+# marking a source point-dependent there (point 71) is also what a source-only subtree's own
+# contraction (`_contracted_left_stencil`, `form/operators/inner.jl`) reads its values through.
 #
 # A Holy trait rather than a `Bool` predicate on purpose: the choice is made by dispatch on a
 # singleton, so neither branch is ever compiled into the other's code path, and the
@@ -249,17 +274,38 @@ struct PointDependentStencil <: StencilShiftTrait end
 
 # The point `delta` steps away in direction `Dim`, clamped to the mesh.
 #
-# Clamping is safe at every caller: an operator that would reach outside masks its own
+# Clamping is safe at *most* callers: an operator that reaches outside masks its own
 # out-of-range half to a zero coefficient (`mask = I[Dim] == 1 ? 0 : 1` and its twins), so the
 # clamped point's entries are multiplied by zero and only ever contribute an explicit zero.
 # Evaluating without clamping is what is *not* safe — `point(m, I)` off the grid is out of
 # bounds, where the offsets a translation-invariant shift produces are merely filtered later.
+#
+# `ShiftNode` is the one caller this does not fully cover: it carries no mask of its own
+# (unlike every difference, average and jump), and relies for its offset path on the
+# assembly's own bounds check dropping an out-of-range *offset* — a fallback with nothing left
+# to check once a `PointDependentStencil` has already reduced the shift to a bare value. For a
+# *source* specifically, it checks [`_in_grid`](@ref) itself rather than trusting the clamp.
+# An interpolation is the other `PointDependentStencil` node and is unaffected: clamping is
+# its own already-correct behaviour (`locate_cell` extrapolates by design), so `ShiftNode`
+# only takes the `_in_grid` branch when its inner operand is source-only.
 @inline function _clamped_shift(m, I::CartesianIndex{D}, ::Val{Dim}, delta::Int) where {
         D, Dim}
     dims = npoints(m, Tuple)
     j = clamp(I[Dim] + delta, 1, dims[Dim])
     return CartesianIndex(ntuple(d -> d == Dim ? j : I[d], Val(D)))
 end
+
+"""
+    _in_grid(space, I::CartesianIndex) -> Bool
+
+Whether `I` names a real point of `space`'s mesh.
+
+The check [`ShiftNode`](@ref)'s own `local_stencil` makes for a `PointDependentStencil` inner
+operator, in place of trusting [`_clamped_shift`](@ref)'s clamp — see the note there for why
+that trust does not extend to this one caller.
+"""
+@inline _in_grid(space, I::CartesianIndex{D}) where {D} = checkbounds(
+    Bool, LinearIndices(indices(mesh(space))), I)
 
 """
     shifted_inner_stencil(inner_op, inner, space, I, markers, ::Val{Dim}, delta)
@@ -509,91 +555,9 @@ _is_source_only(::LinearProduct) = false
 
 _is_source_only(::LazyOp) = false
 
-#===========================================================================#
-# The *value* of a source-only subtree at a grid point.
-#
-# `local_stencil` describes an operator as `(offset, coefficient)` pairs relative to the
-# point being evaluated, and composes operators by *relabelling* those offsets
-# (`shift_stencil`) rather than re-evaluating the inner operator at the shifted point.
-# That is exact for anything translation-invariant — a trial function's stencil is the
-# same at every point, so relabelling and re-evaluating agree — and it is the whole
-# reason the stencil algebra works.
-#
-# A source is not translation-invariant. Its stencil coefficient *is* a value, read at the
-# current point (`op.func(point(m, I))`), so relabelling its offset does not change which
-# point it was read at. `D₋ₓ(f)` therefore stencils as `((0, f(xᵢ)/h), ((-1,), -f(xᵢ)/h))`
-# — the same value twice — and `multiply_stencils_linear` then contracts the left factor by
-# *summing its coefficients* (it keeps only the right operand's offsets), so the two
-# cancel and the term assembles to exactly zero. An average sums to `f(xᵢ)`, i.e. the
-# operator is silently dropped. Measured, before this existed: `innerₕ(D₋ₓ(f), v)` gave the
-# zero vector and `innerₕ(M₋ₓ(f), v)` reproduced `innerₕ(f, v)`.
-#
-# So a source-only subtree needs the other formulation: evaluate it to its *value* at the
-# point, re-reading the source at whatever neighbouring points the operator reaches. Each
-# method below mirrors the `local_stencil` of the same node — same masks, same spacings,
-# same boundary conventions — differing only in that it reads the source again instead of
-# relabelling a coefficient. Both spellings of every operator therefore have to agree, and
-# `test/form/source_operators.jl` pins each one against the numeric layer, which is a third,
-# independent implementation of the same arithmetic.
-#
-# `I` moves as the recursion descends, so the linear index is derived from it here rather
-# than threaded in: a shifted read needs the shifted index.
-#===========================================================================#
-
-@inline _source_lin(space, I) = LinearIndices(indices(mesh(space)))[I]
-
-@inline _in_grid(space, I::CartesianIndex{D}) where {D} = checkbounds(
-    Bool, LinearIndices(indices(mesh(space))), I)
-
-@inline function _source_value(
-        op::SourceFunction{D}, space, I::CartesianIndex{D}, markers) where {D}
-    return op.func(point(mesh(space), I))
-end
-
-@inline function _source_value(
-        op::SourceVector{D}, space, I::CartesianIndex{D}, markers) where {D}
-    return op.vec[_source_lin(space, I)]
-end
-
-@inline function _source_value(
-        op::OperatorAdd, space, I::CartesianIndex{D}, markers) where {D}
-    return _source_value(op.left_op, space, I, markers) +
-           _source_value(op.right_op, space, I, markers)
-end
-
-@inline function _source_value(
-        op::OperatorScale, space, I::CartesianIndex{D}, markers) where {D}
-    return op.scalar * _source_value(op.inner_op, space, I, markers)
-end
-
-@inline function _source_value(op::OperatorScale{D, <:Base.RefValue}, space,
-        I::CartesianIndex{D}, markers) where {D}
-    return op.scalar[] * _source_value(op.inner_op, space, I, markers)
-end
-
-# The coefficient is read at the point being evaluated, which under an outer difference is
-# the *shifted* point — the reading its `local_stencil` twin cannot give, since a relabelled
-# offset carries the coefficient found at the unshifted point.
-@inline function _source_value(
-        op::GridFunctionScale, space, I::CartesianIndex{D}, markers) where {D}
-    grid_fn = op.grid_function
-    lin = _source_lin(space, I)
-    local_val = if grid_fn isa Function
-        val = grid_fn()
-        val isa Number ? val : val[lin]
-    else
-        grid_fn isa Number ? grid_fn : grid_fn[lin]
-    end
-    return local_val * _source_value(op.inner_op, space, I, markers)
-end
-
-@noinline function _throw_no_source_value(op)
-    throw(ArgumentError(
-        "no _source_value method for $(typeof(op)). `_is_source_only` accepted this node " *
-        "as a source, so a linear form will try to contract it to a value, and every node " *
-        "it can accept needs a value spelling alongside its `local_stencil`. Add one next " *
-        "to that node's stencil method, mirroring its masks and spacings, and pin it " *
-        "against the numeric operator in test/form/source_operators.jl."))
-end
-
-_source_value(op::LazyOp, space, I, markers) = _throw_no_source_value(op)
+# The *value* of a source-only subtree at a grid point — `_contracted_left_stencil`
+# (form/operators/inner.jl) reads it from the subtree's own `local_stencil`, correctly
+# re-evaluated at every neighbour because a source is `PointDependentStencil`
+# (form/operators/interpolation.jl, point 71). No separate ladder here any more; point 68
+# fixed this defect first, by hand, one method per node — retired once point 61's shift
+# trait gave the same recursion a home that needed writing only once.

@@ -151,43 +151,40 @@ end
 @inline function local_stencil(op::ShiftNode{D, Dim}, space, I::CartesianIndex{D},
         markers, lin_idx::Int) where {D, Dim}
     inner = local_stencil(op.inner_op, space, I, markers, lin_idx)
-    return shifted_inner_stencil(op.inner_op, inner, space, I, markers, Val(Dim),
-        op.shift_amount)
+    return _shift_node_stencil(
+        stencil_shift_trait(op.inner_op), op, inner, space, I, markers)
 end
 
-# --- Values, for a source-only subtree ---------------------------------------------- #
+@inline _shift_node_stencil(::TranslationInvariantStencil, op::ShiftNode{D, Dim}, inner,
+    space, I::CartesianIndex{D}, markers) where {D, Dim} = shift_stencil(
+    inner, Val(Dim), op.shift_amount)
+
+# `shift_op` has no mask of its own — every other wrapper that reaches a neighbour
+# (differences, averages, jumps) computes one first and multiplies a clamped boundary read by
+# it, which is what makes `_clamped_shift`'s "clamp now, a zero mask absorbs it" contract safe
+# for them. Nothing here would absorb it for a *source*: relabelling an offset is safe
+# unclamped, since the caller's own bounds check drops the whole entry when the *offset* lands
+# out of range, but a source has already been reduced to a value by the time this runs, with
+# no offset left for that check. A source shifted off the grid therefore reads as zero here —
+# an empty stencil, the same "missing neighbour is zero" convention the masked stencils use,
+# mirroring how `RegionRestriction` already spells "contributes nothing here".
 #
-# Twins of the three stencils above, re-reading the inner subtree at the neighbouring point
-# rather than relabelling its offset. See the note on `_source_value` in form/common.jl.
-
-@inline function _source_value(op::BackwardAverage{D, Dim}, space,
-        I::CartesianIndex{D}, markers) where {D, Dim}
-    T = eltype(space)
-    v0 = _source_value(op.inner_op, space, I, markers)
-    I[Dim] == 1 && return zero(v0 * one(T) / 2)
-    v1 = _source_value(op.inner_op, space, I - _stencil_step(Val(Dim), Val(D)), markers)
-    return (v0 + v1) * (one(T) / 2)
-end
-
-@inline function _source_value(op::ForwardAverage{D, Dim}, space,
-        I::CartesianIndex{D}, markers) where {D, Dim}
-    T = eltype(space)
-    m = mesh(space)
-    v0 = _source_value(op.inner_op, space, I, markers)
-    I[Dim] == npoints(m, Tuple)[Dim] && return zero(v0 * one(T) / 2)
-    v1 = _source_value(op.inner_op, space, I + _stencil_step(Val(Dim), Val(D)), markers)
-    return (v1 + v0) * (one(T) / 2)
-end
-
-# A shift that lands off the grid reads as zero — the same "the missing neighbour is zero"
-# convention the truncated stencils use, and what the scatter's own bounds check does to a
-# relabelled offset that leaves the grid.
-@inline function _source_value(op::ShiftNode{D, Dim}, space,
-        I::CartesianIndex{D}, markers) where {D, Dim}
-    v0 = _source_value(op.inner_op, space, I, markers)
-    Ishift = I + _stencil_step(Val(Dim), Val(D)) * op.shift_amount
-    _in_grid(space, Ishift) || return zero(v0)
-    return _source_value(op.inner_op, space, Ishift, markers)
+# An interpolation is not a source, and clamping *is* its own correct behaviour: `locate_cell`
+# (`space/operators/interpolation.jl`) clamps every point it is given, in-grid or not, by
+# design — `πₕ`'s own docstring calls this extrapolation along the boundary cell's slope, not
+# a missing-neighbour convention to override. So only a source-only inner operand gets the
+# in-grid check; anything else falls through to the ordinary clamped re-evaluation.
+@inline function _shift_node_stencil(::PointDependentStencil, op::ShiftNode{D, Dim}, inner,
+        space, I::CartesianIndex{D}, markers) where {D, Dim}
+    if _is_source_only(op.inner_op)
+        Ishift = I + _stencil_step(Val(Dim), Val(D)) * op.shift_amount
+        _in_grid(space, Ishift) || return ()
+        return local_stencil(op.inner_op, space, Ishift, markers,
+            LinearIndices(indices(mesh(space)))[Ishift])
+    else
+        return shifted_inner_stencil(op.inner_op, inner, space, I, markers, Val(Dim),
+            op.shift_amount)
+    end
 end
 
 # ==============================================================================
