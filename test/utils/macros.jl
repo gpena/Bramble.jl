@@ -45,8 +45,8 @@ struct NumHolder
 end
 @forward NumHolder.num (custom_double, custom_square)
 
-@testset "@forward Macro Tests" begin
-    @testset "Basic Forwarding" begin
+@testset "@forward" begin
+    @testset "Basic forwarding" begin
         sw = SimpleWrapper([1.0, 2.0, 3.0, 4.0])
         @test length(sw) == 4
         @test size(sw) == (4,)
@@ -54,14 +54,14 @@ end
         @test size(sw) == size(sw.data)
     end
 
-    @testset "Single Function Forwarding" begin
+    @testset "Single function" begin
         nw_pos = NumberWrapper(5)
         nw_neg = NumberWrapper(-5)
         @test abs(nw_pos) == 5
         @test abs(nw_neg) == 5
     end
 
-    @testset "Multiple Functions" begin
+    @testset "Multiple functions" begin
         aw_1d = ArrayWrapper([1, 2, 3])
         aw_2d = ArrayWrapper([1 2; 3 4])
 
@@ -76,7 +76,7 @@ end
         @test ndims(aw_2d) == 2
     end
 
-    @testset "Forwarding with Arguments" begin
+    @testset "Arguments" begin
         vc = VectorContainer([10.0, 20.0, 30.0])
         @test vc[1] == 10.0
         @test vc[2] == 20.0
@@ -87,16 +87,14 @@ end
         @test vc.vec[2] == 25.0
     end
 
-    @testset "Forwarding Iterator Methods" begin
+    @testset "Iteration" begin
         iw = IterableWrapper(["a", "b", "c"])
         @test length(iw) == 3
         @test eltype(iw) == String
 
-        # Test iteration
         collected = collect(iw)
         @test collected == ["a", "b", "c"]
 
-        # Test for loop
         items = String[]
         for item in iw
             push!(items, item)
@@ -104,14 +102,14 @@ end
         @test items == ["a", "b", "c"]
     end
 
-    @testset "Forwarding with Keyword Arguments" begin
+    @testset "Keyword arguments" begin
         sw = StringWrapper("hello world foo")
         @test split(sw) == ["hello", "world", "foo"]
         @test split(sw, " ") == ["hello", "world", "foo"]
         @test split(sw, keepempty = false) == ["hello", "world", "foo"]
     end
 
-    @testset "Type Stability" begin
+    @testset "Type stability" begin
         tw_int = TypedWrapper(42)
         tw_float = TypedWrapper(3.14)
 
@@ -125,14 +123,14 @@ end
         @test z_float == 0.0
     end
 
-    @testset "Custom Functions" begin
+    @testset "Custom functions" begin
         nh = NumHolder(5)
         @test custom_double(nh) == 10
         @test custom_square(nh) == 25
     end
 end
 
-@testset "@forward rejects malformed syntax" begin
+@testset "Malformed syntax" begin
     # The macro must reject anything that is not `T.field`, with a message that
     # shows the accepted forms.
     err = try

@@ -24,9 +24,8 @@ Base.fill!(A::MockGPUArray{T}, v) where {T} = (fill!(A.data, v); A)
 const MockGPUVector{T} = MockGPUArray{T, 1}
 const MockGPUMatrix{T} = MockGPUArray{T, 2}
 
-@testset "Backend Tests" begin
-    @testset "Backend Constructor" begin
-        # Test default Backend
+@testset "Backend" begin
+    @testset "Constructor" begin
         be_default = backend()
         @test vector_type(be_default) === Vector{Float64}
         @test matrix_type(be_default) === SparseMatrixCSC{Float64, Int}
@@ -71,21 +70,18 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
     @testset "vector" begin
         n = 15
 
-        # Default Backend (Vector{Float64})
         be_default = backend()
         v_default = vector(be_default, n)
         @test v_default isa Vector{Float64}
         @test length(v_default) == n
         @test eltype(v_default) === Float64
 
-        # Dense Float32 Backend
         be_f32 = backend(vector_type = Vector{Float32}, matrix_type = Matrix{Float32})
         v_f32 = vector(be_f32, n)
         @test v_f32 isa Vector{Float32}
         @test length(v_f32) == n
         @test eltype(v_f32) === Float32
 
-        # Zero length vector
         v_zero = vector(be_default, 0)
         @test v_zero isa Vector{Float64}
         @test length(v_zero) == 0
@@ -94,7 +90,6 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
     @testset "matrix" begin
         m, n = 10, 20
 
-        # Default Backend (SparseMatrixCSC{Float64, Int})
         be_default = backend()
         M_default = matrix(be_default, m, n)
         @test M_default isa SparseMatrixCSC{Float64, Int}
@@ -102,14 +97,12 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
         @test eltype(M_default) === Float64
         @test nnz(M_default) == 0
 
-        # Dense Backend (Matrix{Float64})
         be_dense = backend(vector_type = Vector{Float64}, matrix_type = Matrix{Float64})
         M_dense = matrix(be_dense, m, n)
         @test M_dense isa Matrix{Float64}
         @test size(M_dense) == (m, n)
         @test eltype(M_dense) === Float64
 
-        # Sparse Matrix Float32 Backend
         be_f32_sparse = backend(vector_type = Vector{Float32},
             matrix_type = SparseMatrixCSC{Float32, Int32})
         M_f32 = matrix(be_f32_sparse, m, n)
@@ -117,7 +110,6 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
         @test size(M_f32) == (m, n)
         @test eltype(M_f32) === Float32
 
-        # Zero dimensions
         M_zero_row = matrix(be_default, 0, n)
         @test M_zero_row isa SparseMatrixCSC{Float64, Int}
         @test size(M_zero_row) == (0, n)
@@ -139,7 +131,7 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
         @test size(M_zero_col_dense) == (m, 0)
     end
 
-    @testset "GPU-Agnostic Backend (Mock GPU Array)" begin
+    @testset "Mock GPU backend" begin
         be_gpu = backend(vector_type = MockGPUVector{Float32}, matrix_type = MockGPUMatrix{Float32})
         @test vector_type(be_gpu) === MockGPUVector{Float32}
         @test matrix_type(be_gpu) === MockGPUMatrix{Float32}
@@ -173,7 +165,7 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
             try
                 @eval using Metal
                 if isdefined(Main, :Metal) && Metal.functional()
-                    @testset "Metal GPU Backend (macOS Apple Silicon)" begin
+                    @testset "Metal backend" begin
                         be_metal = backend(vector_type = MtlVector{Float32}, matrix_type = MtlMatrix{Float32})
                         @test vector_type(be_metal) === MtlVector{Float32}
                         @test matrix_type(be_metal) === MtlMatrix{Float32}
@@ -205,14 +197,12 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
         @test MT === SparseMatrixCSC{Float64, Int}
         @test BType === Backend{Vector{Float64}, SparseMatrixCSC{Float64, Int}, Serial}
 
-        # Test on type
         T2, VT2, MT2, BType2 = backend_types(typeof(be_default))
         @test T2 === Float64
         @test VT2 === Vector{Float64}
         @test MT2 === SparseMatrixCSC{Float64, Int}
         @test BType2 === Backend{Vector{Float64}, SparseMatrixCSC{Float64, Int}, Serial}
 
-        # Test Float32 backend
         be_f32 = backend(vector_type = Vector{Float32}, matrix_type = Matrix{Float32})
         T_f32, VT_f32, MT_f32, _ = backend_types(be_f32)
         @test T_f32 === Float32
@@ -220,7 +210,7 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
         @test MT_f32 === Matrix{Float32}
     end
 
-    @testset "eltype on Backend" begin
+    @testset "eltype" begin
         be_default = backend()
         @test eltype(be_default) === Float64
         @test eltype(typeof(be_default)) === Float64
@@ -233,38 +223,34 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
         @test eltype(be_complex) === ComplexF64
     end
 
-    @testset "backend_eye and backend_zeros" begin
+    @testset "Eye & zeros" begin
         n = 5
         be_default = backend()
         be_dense = backend(vector_type = Vector{Float64}, matrix_type = Matrix{Float64})
 
-        # Sparse backend_eye
         I_sparse = backend_eye(be_default, n)
         @test I_sparse isa SparseMatrixCSC{Float64, Int}
         @test size(I_sparse) == (n, n)
         @test diag(I_sparse) == ones(n)
         @test nnz(I_sparse) == n
 
-        # Dense backend_eye
         I_dense = backend_eye(be_dense, n)
         @test I_dense isa Matrix{Float64}
         @test size(I_dense) == (n, n)
         @test I_dense == Matrix{Float64}(I, n, n)
 
-        # Sparse backend_zeros
         Z_sparse = backend_zeros(be_default, n)
         @test Z_sparse isa SparseMatrixCSC{Float64, Int}
         @test size(Z_sparse) == (n, n)
         @test nnz(Z_sparse) == 0
 
-        # Dense backend_zeros
         Z_dense = backend_zeros(be_dense, n)
         @test Z_dense isa Matrix{Float64}
         @test size(Z_dense) == (n, n)
         @test all(Z_dense .== 0.0)
     end
 
-    @testset "Type Stability & Allocations" begin
+    @testset "Type stability & allocations" begin
         be = backend()
         @inferred backend()
         @inferred vector_type(be)
@@ -282,7 +268,7 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
         @test_allocs backend_types(be)
     end
 
-    @testset "Display / Show" begin
+    @testset "Show" begin
         be = backend()
         io = IOBuffer()
         show(io, be)
@@ -294,14 +280,14 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
         @test occursin("Backend{Float64}", String(take!(io)))
     end
 end
-@testset "Backend: additional coverage" begin
-    @testset "vector_type / matrix_type on Type (lines 19, 27)" begin
+@testset "Additional coverage" begin
+    @testset "Type-level accessors" begin
         BE = Backend{Vector{Float64}, SparseMatrixCSC{Float64, Int}, Serial}
         @test vector_type(BE) === Vector{Float64}
         @test matrix_type(BE) === SparseMatrixCSC{Float64, Int}
     end
 
-    @testset "generic vector/matrix fallback (lines 81-91, 102-112)" begin
+    @testset "Fallback constructors" begin
         struct SizeConstructibleVec{T} <: DenseVector{T}
             data::Vector{T}
         end
@@ -337,7 +323,7 @@ end
         @test_throws ErrorException matrix(be_fail, 3, 4)
     end
 
-    @testset "metal_backend stub error" begin
+    @testset "Metal stub" begin
         if isdefined(Main, :Metal)
             @test metal_backend() isa Backend
             @test metal_backend(Float32) isa Backend

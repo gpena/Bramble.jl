@@ -6,9 +6,8 @@ using Bramble: _dot, _dot_masked,
 using LinearAlgebra: dot
 using StaticArrays
 
-@testset "Linear Algebra Utilities" begin
-    @testset "_dot function" begin
-        # Test basic dot product
+@testset "Linear algebra" begin
+    @testset "_dot" begin
         u = [1.0, 2.0, 3.0]
         v = [4.0, 5.0, 6.0]
         w = [2.0, 2.0, 2.0]
@@ -18,17 +17,14 @@ using StaticArrays
         @test result ≈ expected
         @test result ≈ 64.0
 
-        # Test with zeros
         u_zero = [0.0, 0.0, 0.0]
         @test _dot(u_zero, v, w) ≈ 0.0
         @test _dot(u, u_zero, w) ≈ 0.0
         @test _dot(u, v, u_zero) ≈ 0.0
 
-        # Test with ones
         ones_vec = [1.0, 1.0, 1.0, 1.0]
         @test _dot(ones_vec, ones_vec, ones_vec) ≈ 4.0
 
-        # Test Float32
         u_f32 = Float32[1.0, 2.0, 3.0]
         v_f32 = Float32[4.0, 5.0, 6.0]
         w_f32 = Float32[2.0, 2.0, 2.0]
@@ -36,25 +32,20 @@ using StaticArrays
         @test result_f32 isa Float32
         @test result_f32 ≈ 64.0f0
 
-        # Test mixed types (Float32 and Float64)
         result_mixed = _dot(u_f32, v, w_f32)
         @test result_mixed isa Float64
         @test result_mixed ≈ 64.0
 
-        # Test single element
         @test _dot([2.0], [3.0], [4.0]) ≈ 24.0
 
-        # Test dimension mismatch error
         @test_throws DimensionMismatch _dot([1.0, 2.0], [1.0, 2.0, 3.0], [1.0, 2.0])
 
-        # Test SVector (zero allocations)
         sv_u = SVector(1.0, 2.0, 3.0)
         sv_v = SVector(4.0, 5.0, 6.0)
         sv_w = SVector(2.0, 2.0, 2.0)
         @test _dot(sv_u, sv_v, sv_w) ≈ 64.0
         @test_allocs _dot(sv_u, sv_v, sv_w)
 
-        # Test larger vectors
         n = 100
         u_large = collect(1.0:n)
         v_large = ones(n)
@@ -69,12 +60,10 @@ using StaticArrays
         v = zeros(n)
         idxs = 1:n
 
-        # Test simple assignment
         f = i -> Float64(i^2)
         _serial_for!(v, idxs, f)
         @test v == [Float64(i^2) for i in 1:n]
 
-        # Test with partial indices
         v2 = ones(n)
         idxs_partial = 3:7
         f2 = i -> Float64(i * 10)
@@ -83,7 +72,6 @@ using StaticArrays
         @test v2[3:7] == [30.0, 40.0, 50.0, 60.0, 70.0]
         @test v2[8:10] == [1.0, 1.0, 1.0]
 
-        # Test with CartesianIndices (2D array)
         A = zeros(3, 4)
         cart_idxs = CartesianIndices(A)
         f3 = idx -> Float64(idx[1] + idx[2])
@@ -107,7 +95,6 @@ using StaticArrays
             _cpu_threaded_for!(policy, v, idxs, f)
             @test v == [Float64(i^2) for i in 1:n]
 
-            # Test with partial indices
             v2 = ones(n)
             idxs_partial = 10:50
             f2 = i -> Float64(i * 2)
@@ -116,7 +103,6 @@ using StaticArrays
             @test v2[10:50] == [Float64(i * 2) for i in 10:50]
             @test v2[51:100] == ones(50)
 
-            # Test with CartesianIndices
             B = zeros(10, 10)
             cart_idxs = CartesianIndices(B)
             f3 = idx -> Float64(idx[1] * idx[2])
@@ -156,21 +142,16 @@ using StaticArrays
         mask_none = falses(4)
         @test _dot_masked(u, v, w, mask_none) == 0.0
 
-        # Dimension mismatch on vectors
         @test_throws DimensionMismatch _dot_masked([1.0], [1.0, 2.0], [1.0], mask_all)
-
-        # Dimension mismatch on mask length
         @test_throws DimensionMismatch _dot_masked(u, v, w, BitVector([true, false]))
 
-        # StaticArrays allocation test
         sv_u = SVector(1.0, 2.0, 3.0, 4.0)
         sv_v = SVector(2.0, 3.0, 4.0, 5.0)
         sv_w = SVector(0.5, 1.0, 1.5, 2.0)
         @test _dot_masked(sv_u, sv_v, sv_w, mask) ≈ expected
     end
 
-    @testset "_write_components! and _cpu_threaded_scatter_for!" begin
-        # Direct _write_components! recursion
+    @testset "Scattering" begin
         a = zeros(3)
         b = zeros(3)
         c = zeros(3)
@@ -180,7 +161,6 @@ using StaticArrays
         @test c[2] == 30.0
         @test _write_components!((), (), 1) === nothing
 
-        # _cpu_threaded_scatter_for! with Serial and Parallel
         for policy in (Serial(), Parallel())
             n = 50
             m1 = zeros(n)
@@ -202,7 +182,7 @@ using StaticArrays
         @test m2_s ≈ m2_p
     end
 
-    @testset "Type Stability" begin
+    @testset "Type stability" begin
         u = [1.0, 2.0, 3.0]
         v = [4.0, 5.0, 6.0]
         w = [2.0, 2.0, 2.0]
