@@ -251,8 +251,8 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
 
     @testset "Invalid source node error" begin
         # the fallback exists so that a future node added to `_is_source_only` without a
-        # `_source_value` twin fails with a message rather than silently mis-assembling,
-        # which is the failure mode this whole testset exists to prevent
+        # `_source_value` twin fails with a message rather than silently assembling the
+        # wrong thing, which is the failure mode this whole testset exists to prevent
         @test_throws ArgumentError _source_value(Bramble.TrialFunction{1}(), nothing,
             CartesianIndex(1), nothing)
     end
