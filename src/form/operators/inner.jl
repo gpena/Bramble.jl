@@ -360,8 +360,7 @@ function inner₊₂(left::LazyOp{D}, right::LazyOp{D};
 end
 
 @inline function source_number(l::Number, ::Val{D}) where {D}
-    f = x -> l
-    return SourceFunction{D, typeof(f)}(f)
+    return SourceConstant{D, typeof(l)}(l)
 end
 
 # Linear Forms (e.g. innerₕ(f, v) where f is a Function, Number, or VectorElement and v is

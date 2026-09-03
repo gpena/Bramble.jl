@@ -46,6 +46,7 @@ stencil_offsets(op::IndexedTrialFunction) = _origin(op)
 stencil_offsets(op::IndexedTestFunction) = _origin(op)
 stencil_offsets(op::SourceFunction) = _origin(op)
 stencil_offsets(op::SourceVector) = _origin(op)
+stencil_offsets(op::SourceConstant) = _origin(op)
 stencil_offsets(op::IdentityOperator) = _origin(op)
 stencil_offsets(op::ZeroOperator) = _origin(op)
 

@@ -2,7 +2,7 @@ using Test
 using Bramble
 using Bramble: IdentityOperator, TrialFunction, TestFunction, IndexedTrialFunction,
                IndexedTestFunction, LazyOp, BilinearProduct, LinearProduct,
-               InnerH, InnerPlus, SourceFunction, SourceVector,
+               InnerH, InnerPlus, SourceFunction, SourceVector, SourceConstant,
                local_stencil, resolve_ast, is_symbolic, source_number,
                inner_plus, compute_weight, weights, Innerh, Innerplus, values
 
@@ -72,7 +72,7 @@ using Bramble: IdentityOperator, TrialFunction, TestFunction, IndexedTrialFuncti
     @testset "Left operands" begin
         # Each builds a LinearProduct wrapping the left operand in the right source node,
         # which is what lets a right-hand side be assembled.
-        for (mk, T) in (((x -> x[1] + 1), SourceFunction), (3.5, SourceFunction),
+        for (mk, T) in (((x -> x[1] + 1), SourceFunction), (3.5, SourceConstant),
             (uₕ, SourceVector))
             for f in (innerₕ, inner₊, inner₊ₓ, inner₊ᵧ, inner₊₂)
                 p = f(mk, v)
@@ -81,9 +81,10 @@ using Bramble: IdentityOperator, TrialFunction, TestFunction, IndexedTrialFuncti
             end
         end
 
-        # a number becomes a constant function, not a stored vector
+        # a number becomes a SourceConstant, not a function wrapper or a stored vector —
+        # point 44's fix: skips point(m, I) entirely rather than computing and discarding it
         sf = source_number(7.25, Val(2))
-        @test sf isa SourceFunction{2}
+        @test sf isa SourceConstant{2}
         @test only(local_stencil(sf, Wₕ, I, nothing, lin))[2] == 7.25
 
         # and the grid function's coefficients are carried by reference, read at the point

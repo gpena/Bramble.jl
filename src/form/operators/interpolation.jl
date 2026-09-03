@@ -172,6 +172,7 @@ end
 stencil_shift_trait(::InterpolationNode) = PointDependentStencil()
 stencil_shift_trait(::SourceFunction) = PointDependentStencil()
 stencil_shift_trait(::SourceVector) = PointDependentStencil()
+stencil_shift_trait(::SourceConstant) = PointDependentStencil()
 
 stencil_shift_trait(op::BackwardDifference) = stencil_shift_trait(op.inner_op)
 stencil_shift_trait(op::ForwardDifference) = stencil_shift_trait(op.inner_op)
@@ -217,6 +218,7 @@ _all_trial_interpolated(::LazyOp) = false
 _all_trial_interpolated(::InterpolationNode) = true
 _all_trial_interpolated(::SourceFunction) = true
 _all_trial_interpolated(::SourceVector) = true
+_all_trial_interpolated(::SourceConstant) = true
 _all_trial_interpolated(::TestFunction) = true
 _all_trial_interpolated(::IndexedTestFunction) = true
 
