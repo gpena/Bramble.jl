@@ -76,6 +76,8 @@ function _pc_mesh_session(Ω, npts, unif, be, label::Symbol)
     half_spacings(Ωₕ)
     hₘₐₓ(Ωₕ)
     hₘᵢₙ(Ωₕ)
+    spacings(Ωₕ)
+    cell_measures(Ωₕ)
     is_uniform(Ωₕ)
     is_collapsed(Ωₕ(1))
 
@@ -246,6 +248,12 @@ function _pc_space_session(Ωₕ, f, g)
     dim(Wₕ)
     eltype(Wₕ)
     mesh(Wₕ)
+    mesh_type(Wₕ)
+    mesh_type(typeof(Wₕ))
+    vector_gridspace(Ωₕ)
+    Wₕ^2
+    Wₕ^Val(2)
+    Wₕ × Wₕ
 
     uₕ = Rₕ(Wₕ, f)
     vₕ = avgₕ(Wₕ, f)
@@ -253,8 +261,18 @@ function _pc_space_session(Ωₕ, f, g)
     avgₕ!(vₕ, g)
 
     Vₕ = gridspace(Ωₕ, Val(2))
+    mesh_type(Vₕ)
+    ncomponents(Vₕ)
+    spaces(Vₕ)
+    component_range(Vₕ, 1)
+    component_ranges(Vₕ)
     wₕ = Rₕ(Vₕ, (f, g))
     avgₕ(Vₕ, (f, g))
+    wₕ(1)
+    component(wₕ, 1)
+    to_matrix(wₕ)
+    space_type(uₕ)
+    space_type(wₕ)
 
     # Element constructors, including the scalar fills, which take a separate
     # path from the copy of an existing coefficient vector.
@@ -353,6 +371,34 @@ function _pc_directional_ops(uₕ, ::Val{3})
     return _pc_apply_each(_PC_OPS_Z, uₕ)
 end
 
+const _PC_OPS_X_INPLACE = (
+    diff₋ₓ!, diff₊ₓ!, D₋ₓ!, D₊ₓ!, jumpₓ!, M₋ₓ!, M₊ₓ!, Dstar₊ₓ!, Dcₓ!, Dₕₓ!)
+const _PC_OPS_Y_INPLACE = (
+    diff₋ᵧ!, diff₊ᵧ!, D₋ᵧ!, D₊ᵧ!, jumpᵧ!, M₋ᵧ!, M₊ᵧ!, Dstar₊ᵧ!, Dcᵧ!, Dₕᵧ!)
+const _PC_OPS_Z_INPLACE = (
+    diff₋₂!, diff₊₂!, D₋₂!, D₊₂!, jump₂!, M₋₂!, M₊₂!, Dstar₊₂!, Dc₂!, Dₕ₂!)
+
+function _pc_apply_each_inplace(ops, vₕ, uₕ)
+    for op in ops
+        op(vₕ, uₕ)
+    end
+    return nothing
+end
+
+function _pc_directional_ops_inplace(vₕ, uₕ, ::Val{1})
+    _pc_apply_each_inplace(_PC_OPS_X_INPLACE, vₕ, uₕ)
+end
+
+function _pc_directional_ops_inplace(vₕ, uₕ, ::Val{2})
+    _pc_directional_ops_inplace(vₕ, uₕ, Val(1))
+    return _pc_apply_each_inplace(_PC_OPS_Y_INPLACE, vₕ, uₕ)
+end
+
+function _pc_directional_ops_inplace(vₕ, uₕ, ::Val{3})
+    _pc_directional_ops_inplace(vₕ, uₕ, Val(2))
+    return _pc_apply_each_inplace(_PC_OPS_Z_INPLACE, vₕ, uₕ)
+end
+
 _pc_vectorial_ops(uₕ) = _pc_apply_each(_PC_OPS_ALL, uₕ)
 
 # innerₕ and the norms built on it take a grid function of a scalar space; inner₊
@@ -408,8 +454,14 @@ function _pc_operator_session(uₕ, cₕ, dim_val::Val)
     _pc_vectorial_ops(uₕ)
     _pc_inner_products(uₕ, dim_val)
 
+    v_out = similar(uₕ)
+    _pc_directional_ops_inplace(v_out, uₕ, dim_val)
+
     _pc_directional_ops(cₕ, dim_val)
     _pc_vectorial_ops(cₕ)
+
+    vc_out = similar(cₕ)
+    _pc_directional_ops_inplace(vc_out, cₕ, dim_val)
 
     kₕ = components(cₕ)[1]
     _pc_directional_ops(kₕ, dim_val)
@@ -425,9 +477,17 @@ end
 # here. Measured in a fresh session before this was added, the form paths cost about 580 ms
 # of first-call latency, of which `stencil_offsets` alone was 176 ms.
 #
-# Assembly is covered below, in 1D and 2D. `form/precompile.jl` holds an older template for
-# it; that one is mostly bilinear, which is still locked, and its `assemble` calls use a
-# positional signature the code no longer has, so it was written fresh rather than folded in.
+# Interpolation leaves are only defined over a scalar space.
+function _pc_form_ast_interp(Wₕ::ScalarGridSpace, u)
+    π_src = πₕ(element(Wₕ, 1.0))
+    is_symbolic(π_src)
+    resolve_ast(π_src)
+    π_node = πₕ(Wₕ, u)
+    is_symbolic(π_node)
+    resolve_ast(π_node)
+    return nothing
+end
+_pc_form_ast_interp(::AbstractSpaceType, u) = nothing
 
 # Every node kind, built over one space, plus the traits each one answers. Returns a tree
 # with a trial and a test leaf so the caller can reach the products.
@@ -441,6 +501,8 @@ function _pc_form_ast(Wₕ, ::Val{D}) where {D}
         is_symbolic(leaf)
         resolve_ast(leaf)
     end
+
+    _pc_form_ast_interp(Wₕ, u)
 
     # the one-sided families, the averages, the shift and the restriction
     for op in (D₋ₓ(id), D₊ₓ(id), M₋ₓ(id), M₊ₓ(id), jumpₓ(id),
@@ -588,6 +650,10 @@ function _pc_assemble_shape(Wₕ, g, b)
 
     assemble(lf)
     assemble!(b, lf; ast = ast)
+
+    vₕ = element(Wₕ, 1.0)
+    lf(vₕ)
+    evaluate!(b, lf, vₕ; ast = ast)
     return nothing
 end
 
@@ -599,6 +665,58 @@ function _pc_assemble_shape_threaded(Wₕ, g, b)
 
     lf = form(Wₕ, g)
     assemble_parallel!(b, lf, resolve_form_ast(lf))
+    return nothing
+end
+
+# Bilinear assembly shapes: allocation, matrix pattern, in-place, parallel,
+# Dirichlet boundary application, contraction, and structural symmetry.
+function _pc_assemble_bilinear_shape(Wₕ, g, label::Symbol)
+    bf = form(Wₕ, Wₕ, g)
+    ast = resolve_form_ast(bf)
+
+    trial_space(bf)
+    test_space(bf)
+    issymmetric(bf)
+    isposdef(bf)
+
+    A = allocate_system_matrix(bf, ast)
+    assemble!(A, bf; ast = ast)
+    assemble!(A, bf; dirichlet_labels = label, ast = ast)
+    assemble(bf)
+    assemble(bf; dirichlet_labels = label)
+
+    uₕ = element(Wₕ, 1.0)
+    bf(uₕ, uₕ)
+    return nothing
+end
+
+function _pc_assemble_bilinear_shape_threaded(Wₕ, g, label::Symbol)
+    _pc_assemble_bilinear_shape(Wₕ, g, label)
+
+    bf = form(Wₕ, Wₕ, g)
+    ast = resolve_form_ast(bf)
+    A = allocate_system_matrix(bf, ast)
+    assemble_parallel!(A, bf, ast)
+    return nothing
+end
+
+# A composite bilinear form reaches leaf block extraction, diagonal blocks,
+# and off-diagonal coupled sweeps.
+function _pc_assemble_bilinear_composite(Vₕ, g)
+    bf = form(Vₕ, Vₕ, g)
+    ast = resolve_form_ast(bf)
+
+    routes_by_component(ast)
+    A = allocate_system_matrix(bf, ast)
+    assemble!(A, bf; ast = ast)
+    assemble(bf)
+    return nothing
+end
+
+_pc_assemble_bilinear_directional(Wₕ, label, ::Val{1}) = nothing
+
+function _pc_assemble_bilinear_directional(Wₕ, label, ::Val{2})
+    _pc_assemble_bilinear_shape(Wₕ, (u, v) -> inner₊ᵧ(D₋ᵧ(u), D₋ᵧ(v)), label)
     return nothing
 end
 
@@ -652,6 +770,19 @@ function _pc_form_assembly(Ωₕ::AbstractMeshType, Wₕ, Vₕ, label::Symbol, f
     bcs = dirichlet_constraints(set(Ωₕ), label => f)
     assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet_conditions = bcs,
         dirichlet_labels = label)
+
+    # Bilinear forms: mass, stiffness, combination, and transverse
+    _pc_assemble_bilinear_shape_threaded(Wₕ, (u, v) -> innerₕ(u, v), label)
+    _pc_assemble_bilinear_shape_threaded(Wₕ, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)), label)
+    _pc_assemble_bilinear_shape(
+        Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)), label)
+    _pc_assemble_bilinear_directional(Wₕ, label, dim_val)
+
+    # Composite bilinear forms: diagonal and coupled
+    _pc_assemble_bilinear_composite(
+        Vₕ, (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)))
+    _pc_assemble_bilinear_composite(
+        Vₕ, (u, v) -> inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + innerₕ(u(2), v(1)))
     return nothing
 end
 
@@ -668,6 +799,38 @@ function _pc_form_session(Ωₕ::AbstractMeshType, be, label::Symbol, f, ft, I_t
 
     # the composite space reaches the same nodes through a different space type
     _pc_form_ast(Vₕ, dim_val)
+    return nothing
+end
+
+# Cross-mesh interpolation session: pointwise interpolant, in-place and allocating
+# projection, sparse matrix assembly, and form-level integration.
+function _pc_interpolation_session(Ω_src, Ω_dest)
+    W_src = gridspace(Ω_src)
+    W_dest = gridspace(Ω_dest)
+
+    u_src = Rₕ(W_src, x -> 1.0)
+    u_dest = element(W_dest)
+
+    interpolate_at(u_src, point(Ω_dest, first(indices(Ω_dest))))
+    πₕ!(u_dest, u_src)
+    πₕ(W_dest, u_src)
+    interpolation_matrix(W_dest, W_src)
+
+    assemble(form(W_dest, v -> innerₕ(πₕ(u_src), v)))
+    assemble(form(W_src, W_dest, (u, v) -> innerₕ(πₕ(W_src, u), v)))
+    return nothing
+end
+
+# Exporters session: PGFPlots 1D and 2D export.
+function _pc_exporters_session(Ω1, Ω2)
+    W1 = gridspace(Ω1)
+    W2 = gridspace(Ω2)
+    u1 = Rₕ(W1, x -> 1.0)
+    u2 = Rₕ(W2, x -> 1.0)
+    mktempdir() do d
+        export_pgfplots(joinpath(d, "out1.dat"), Ω1, "u" => u1)
+        export_pgfplots(joinpath(d, "out2.dat"), Ω2, "u" => u2)
+    end
     return nothing
 end
 
@@ -739,6 +902,15 @@ if PRECOMPILE_WORKLOAD
                 I_time, Val(1))
             _pc_form_session(Ωₕ2, be, :wall, x -> x[1] * x[2],
                 (x, t) -> x[1] * x[2] * t, I_time, Val(2))
+
+            # Cross-mesh interpolation sessions (1D and 2D).
+            Ωₕ1_fine = mesh(Ω1, 9, true; backend = be)
+            Ωₕ2_fine = mesh(Ω2, (6, 6), (true, true); backend = be)
+            _pc_interpolation_session(Ωₕ1, Ωₕ1_fine)
+            _pc_interpolation_session(Ωₕ2, Ωₕ2_fine)
+
+            # Exporters session (PGFPlots 1D and 2D).
+            _pc_exporters_session(Ωₕ1, Ωₕ2)
 
             # Markers and domains, including evaluation of a space-time domain.
             for X in (I1, S2)
