@@ -115,7 +115,7 @@ end
 
 The sum of a stencil's coefficients, ignoring its offsets entirely.
 
-What [`_contracted_left_stencil`](@ref) (`form/operators/inner.jl`) needs from a source-only
+What `_contracted_left_stencil` (`form/operators/inner.jl`) needs from a source-only
 subtree's own `local_stencil`: not the offsets, which mean nothing for a value that
 contributes no matrix structure, only their total. `false` rather than `0` or `zero(T)` as
 the empty-stencil answer — [`RegionRestriction`](@ref) can legitimately produce `()` for a
@@ -301,8 +301,8 @@ end
 Whether `I` names a real point of `space`'s mesh.
 
 The check [`ShiftNode`](@ref)'s own `local_stencil` makes for a `PointDependentStencil` inner
-operator, in place of trusting [`_clamped_shift`](@ref)'s clamp — see the note there for why
-that trust does not extend to this one caller.
+operator, in place of trusting `_clamped_shift`'s clamp — see the note there for why that
+trust does not extend to this one caller.
 """
 @inline _in_grid(space, I::CartesianIndex{D}) where {D} = checkbounds(
     Bool, LinearIndices(indices(mesh(space))), I)
