@@ -366,22 +366,78 @@ Coupling leaves that *share* a mesh is unaffected, which is every composite spac
 repeating one space (`Wₕ^Val(2)`), including off-diagonal blocks.
 
 What makes the linear case above legitimate is exactly what the bilinear case is missing:
-`πₕ` states the mapping between the two meshes. Supplying that on the trial side needs a
-symbolic interpolation *operator*, which does not exist yet.
+something that states the mapping between the two meshes. On the trial side that is the
+interpolation *operator*, `πₕ(Wsrc, u)`, and supplying it is what turns the refusal above into
+an assembly.
 
-`πₕ` takes a grid function, never a trial or test function:
+### 6.1 The interpolation operator, `πₕ(Wsrc, u)`
+
+One-argument `πₕ` takes a grid function, never a trial or test function:
 
 ```julia
 form(Vh, Vh, (u, v) -> innerₕ(πₕ(u), πₕ(v)))   # MethodError: no method matching πₕ(::TrialFunction{2})
 ```
 
-`u`/`v` here are symbolic placeholders with no data of their own — `interpolate_at`, what
-`πₕ` is built from, needs concrete nodal values to blend, and a `TrialFunction`/
+`u`/`v` there are symbolic placeholders with no data of their own — `interpolate_at`, what
+that `πₕ` is built from, needs concrete nodal values to blend, and a `TrialFunction`/
 `TestFunction` carries none. `πₕ(uₕ)` only ever wraps an already-evaluated
-[`VectorElement`](@ref) (`u(2)` above is exactly that: a component pulled out of a concrete
-`uv`, not the symbolic `u`). Reaching a trial/test function *inside* an interpolation needs
-a different, not-yet-built AST node — an interpolation *operator*, contributing the other
-mesh's corner weights directly to a bilinear stencil rather than to a source.
+[`VectorElement`](@ref) (`uv(2)` above is exactly that: a component pulled out of a concrete
+`uv`, not the symbolic `u`).
+
+The *unknown* is interpolated by a different node, which needs one more argument: the space
+the unknown lives on, since a trial function does not carry it.
+
+```@example forms
+a_coupled = form(Vh, Vh, (u, v) -> innerₕ(πₕ(Wsmall, u(2)), v(1)))
+A = assemble(a_coupled)
+size(A)
+```
+
+That off-diagonal block is `M · P`: the test leaf's own mass matrix times exactly the matrix
+[`interpolation_matrix`](@ref) builds. Both factors are things the tutorial can build for
+itself, so this is checkable rather than assertable:
+
+```@example forms
+nb, ns = ndofs(Wbig), ndofs(Wsmall)
+M = assemble(form(Wbig, Wbig, (u, v) -> innerₕ(u, v)))
+P = interpolation_matrix(Wbig, Wsmall)
+maximum(abs, A[1:nb, (nb + 1):(nb + ns)] - M * P)
+```
+
+Operators wrap it from the outside, and act on the mesh being integrated over — so the same
+identity holds with the leaf's stiffness matrix in place of its mass matrix:
+
+```@example forms
+K = assemble(form(Wbig, Wbig, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v))))
+A2 = assemble(form(Vh, Vh, (u, v) -> inner₊ₓ(D₋ₓ(πₕ(Wsmall, u(2))), D₋ₓ(v(1)))))
+maximum(abs, A2[1:nb, (nb + 1):(nb + ns)] - K * P)
+```
+
+That is the whole content of the operator: whatever the form would have assembled on the test
+leaf alone, applied to the interpolant of the unknown instead of to the unknown. It is
+computed a row at a time during the sweep rather than as a matrix product, which is what lets
+[`assemble!`](@ref) refill such a block allocating nothing.
+
+Two things about the operator are worth knowing before reaching for it.
+
+The first is that the space argument has to be the trial function's own. The columns `πₕ`
+names are numbered in `Wsrc`, and the block writes them into the trial leaf's column range,
+so pairing it with the wrong space would write into the wrong part of the matrix — the same
+silent-wrong answer the cross-mesh refusal exists to prevent. It is checked, not assumed:
+
+```julia
+form(Vh, Vh, (u, v) -> innerₕ(πₕ(Wbig, u(2)), v(1)))   # ArgumentError: ... not the trial function's ...
+```
+
+The second is that the operator goes *outside*, never inside. `D₋ₓ(πₕ(Wsmall, u(2)))`
+differences on the mesh being integrated over, which is what the assembled identity above
+says. `πₕ(Wsmall, D₋ₓ(u(2)))` would mean something else — difference on the source mesh
+first, then interpolate — and rather than quietly assemble one when the other was written,
+it is refused:
+
+```julia
+form(Vh, Vh, (u, v) -> innerₕ(πₕ(Wsmall, D₋ₓ(u(2))), v(1)))   # ArgumentError: ... is a different operator ...
+```
 
 ## 7. Threading, chosen once on the backend
 

@@ -179,13 +179,22 @@ avgₕ!
 ### Interpolation between grid spaces
 
 Moving a grid function from one mesh to another — the piecewise (multi)linear interpolant,
-named after [`Rₕ`](@ref)/[`Rₕ!`](@ref)'s own `Xₕ`/`Xₕ!` convention: [`πₕ`](@ref)/[`πₕ!`](@ref)
-are the numeric operator (plus [`interpolate_at`](@ref), the single-point building block, and
-[`interpolation_matrix`](@ref), the same interpolant as a sparse matrix), and `πₕ` — one
-argument fewer — is also the *symbolic* wrapper, composable with
-[`D₋ₓ`](@ref)/[`M₋ₓ`](@ref)/... inside [`innerₕ`](@ref); dispatch tells the two apart by
-argument count, not by a different name. See the [operators tutorial](tutorials/operators.md)
-and the [forms tutorial](tutorials/form.md) for the pattern this exists for: a heterogeneous
+named after [`Rₕ`](@ref)/[`Rₕ!`](@ref)'s own `Xₕ`/`Xₕ!` convention. One name, `πₕ`, with three
+methods that dispatch tells apart by what they are given rather than by different names:
+
+- `πₕ(Wₕ, uₕ)` and [`πₕ!`](@ref)`(dest, src)` — the **numeric** operator, interpolating a grid
+  function's values onto another space's mesh. [`interpolate_at`](@ref) is the single-point
+  building block both are written in terms of, and [`interpolation_matrix`](@ref) is the same
+  interpolant as a sparse matrix rather than applied pointwise.
+- `πₕ(uₕ)` — the **symbolic source**, wrapping a grid function's interpolant as an AST leaf,
+  composable with [`D₋ₓ`](@ref)/[`M₋ₓ`](@ref)/... inside [`innerₕ`](@ref). For the *known*
+  side of a linear form.
+- `πₕ(Wsrc, u)` — the **symbolic operator**, interpolating the *unknown*, and so contributing
+  matrix columns. For a bilinear term coupling two spaces over different meshes, which is
+  otherwise refused for want of anything saying how to map between them.
+
+See the [operators tutorial](tutorials/operators.md) and the
+[forms tutorial](tutorials/form.md) for the pattern this exists for: a heterogeneous
 composite space whose leaves live on different meshes.
 
 ```@docs

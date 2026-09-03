@@ -188,12 +188,108 @@ offset from the point being evaluated.
 Every other node's stencil says "this many points from here, on the mesh being walked", which
 is what lets `shift_stencil` compose operators by relabelling. An interpolation cannot say
 that: the trial degrees of freedom it reaches live on a *different* mesh, and which ones
-depends on where the point falls (`locate_cell`). So it names them outright, and the three
+depends on where the point falls (`locate_cell`). So it names them outright, and the four
 bilinear consumers resolve the two kinds of entry by dispatch — see
 `form/operators/interpolation.jl` (point 61).
 """
 struct AbsoluteColumn
     col::Int
+end
+
+# --- Whether an operator's stencil may be shifted by relabelling its offsets -------- #
+#
+# Every wrapper that reaches a neighbour — the differences, the averages, `Sₓ`, the jumps —
+# evaluates its inner operator **once**, at the point being visited, and then produces the
+# neighbour's contribution by adding a constant to the offsets (`shift_stencil`). That is
+# exact whenever the inner stencil is the same shape everywhere, which is to say for a trial
+# or test function however deeply wrapped: relabelling `(0,)` as `(-1,)` says precisely what
+# evaluating at `I - e` would have said, and evaluating once instead of twice is why an
+# operator tower costs nothing to compose.
+#
+# Two kinds of node break that. An interpolation's entries name absolute columns chosen by
+# `locate_cell` from the point's own coordinates, and a source's entries carry the function's
+# *value* at the point — for neither does adding one to an offset produce what the neighbour
+# holds. Such a node has to be re-evaluated at the shifted point instead, which is what this
+# trait selects between; `stencil_shift_trait`'s ladder lives in
+# `form/operators/interpolation.jl`, after every node type it has to answer for exists. Only
+# the interpolation is routed through it today — a source reaches the same end by the separate
+# `_source_value` path below (point 68), and that overlap is noted where the ladder is.
+#
+# A Holy trait rather than a `Bool` predicate on purpose: the choice is made by dispatch on a
+# singleton, so neither branch is ever compiled into the other's code path, and the
+# translation-invariant path stays the single `shift_stencil` call it is today.
+abstract type StencilShiftTrait end
+
+"""
+    TranslationInvariantStencil <: StencilShiftTrait
+
+The operator's stencil has the same shape at every point, so a neighbour's contribution is
+its own stencil with the offsets relabelled ([`shift_stencil`](@ref)).
+"""
+struct TranslationInvariantStencil <: StencilShiftTrait end
+
+"""
+    PointDependentStencil <: StencilShiftTrait
+
+The operator's stencil depends on *where* it is evaluated in a way relabelling cannot
+express, so a neighbour's contribution has to be obtained by evaluating the operator again at
+the neighbour's own point.
+"""
+struct PointDependentStencil <: StencilShiftTrait end
+
+# A sum is translation invariant only if both summands are.
+@inline _combine_shift_traits(
+    ::TranslationInvariantStencil, ::TranslationInvariantStencil) = TranslationInvariantStencil()
+@inline _combine_shift_traits(::StencilShiftTrait, ::StencilShiftTrait) = PointDependentStencil()
+
+@inline stencil_shift_trait(::LazyOp) = TranslationInvariantStencil()
+
+@inline _shift_delta(::Val{Delta}) where {Delta} = Delta
+@inline _shift_delta(delta::Int) = delta
+
+# The point `delta` steps away in direction `Dim`, clamped to the mesh.
+#
+# Clamping is safe at every caller: an operator that would reach outside masks its own
+# out-of-range half to a zero coefficient (`mask = I[Dim] == 1 ? 0 : 1` and its twins), so the
+# clamped point's entries are multiplied by zero and only ever contribute an explicit zero.
+# Evaluating without clamping is what is *not* safe — `point(m, I)` off the grid is out of
+# bounds, where the offsets a translation-invariant shift produces are merely filtered later.
+@inline function _clamped_shift(m, I::CartesianIndex{D}, ::Val{Dim}, delta::Int) where {
+        D, Dim}
+    dims = npoints(m, Tuple)
+    j = clamp(I[Dim] + delta, 1, dims[Dim])
+    return CartesianIndex(ntuple(d -> d == Dim ? j : I[d], Val(D)))
+end
+
+"""
+    shifted_inner_stencil(inner_op, inner, space, I, markers, ::Val{Dim}, delta)
+
+The stencil `inner_op` contributes `delta` points away in direction `Dim`, given `inner`, its
+stencil already evaluated at `I`.
+
+The one place the "shift by relabelling" assumption is made, so the one place a node that
+cannot be relabelled has to be handled: [`TranslationInvariantStencil`](@ref) relabels
+`inner`'s offsets and never touches `inner_op` again, [`PointDependentStencil`](@ref)
+discards `inner` and evaluates `inner_op` at the shifted point instead. Both produce a tuple
+of the same static length, since it is the same operator either way — so the callers'
+`concatenate_stencils` sees exactly the shape it always did.
+"""
+@inline function shifted_inner_stencil(inner_op, inner, space, I::CartesianIndex{D},
+        markers, ::Val{Dim}, delta) where {D, Dim}
+    return _shifted_inner_stencil(stencil_shift_trait(inner_op), inner_op, inner, space, I,
+        markers, Val(Dim), delta)
+end
+
+@inline _shifted_inner_stencil(::TranslationInvariantStencil, inner_op, inner, space,
+    I::CartesianIndex{D}, markers, ::Val{Dim}, delta) where {D, Dim} = shift_stencil(
+    inner, Val(Dim), delta)
+
+@inline function _shifted_inner_stencil(::PointDependentStencil, inner_op, inner, space,
+        I::CartesianIndex{D}, markers, ::Val{Dim}, delta) where {D, Dim}
+    m = mesh(space)
+    Ishift = _clamped_shift(m, I, Val(Dim), _shift_delta(delta))
+    return local_stencil(inner_op, space, Ishift, markers,
+        LinearIndices(indices(m))[Ishift])
 end
 
 # ==============================================================================

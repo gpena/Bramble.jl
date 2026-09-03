@@ -148,25 +148,86 @@ function _same_operator_shape(a::InterpolationNode{D}, b::InterpolationNode{D}) 
     a.src_space === b.src_space && _same_operator_shape(a.inner_op, b.inner_op)
 end
 
-# Whether a term interpolates on its trial side, and so names absolute columns rather than
-# offsets. Type-determined, so the branches it guards fold away.
-_bears_interpolation(::InterpolationNode) = true
-_bears_interpolation(::LazyOp) = false
-_bears_interpolation(op::BackwardDifference) = _bears_interpolation(op.inner_op)
-_bears_interpolation(op::ForwardDifference) = _bears_interpolation(op.inner_op)
-_bears_interpolation(op::CenteredDifference) = _bears_interpolation(op.inner_op)
-_bears_interpolation(op::StarDifference) = _bears_interpolation(op.inner_op)
-_bears_interpolation(op::CrossWeightedDifference) = _bears_interpolation(op.inner_op)
-_bears_interpolation(op::BackwardAverage) = _bears_interpolation(op.inner_op)
-_bears_interpolation(op::ForwardAverage) = _bears_interpolation(op.inner_op)
-_bears_interpolation(op::ShiftNode) = _bears_interpolation(op.inner_op)
-_bears_interpolation(op::JumpNode) = _bears_interpolation(op.inner_op)
-_bears_interpolation(op::RegionRestriction) = _bears_interpolation(op.inner_op)
-_bears_interpolation(op::OperatorScale) = _bears_interpolation(op.inner_op)
-_bears_interpolation(op::GridFunctionScale) = _bears_interpolation(op.inner_op)
-function _bears_interpolation(op::OperatorAdd)
-    _bears_interpolation(op.left_op) ||
-        _bears_interpolation(op.right_op)
+# --- The shift trait: which nodes carry something a relabelled offset cannot express -- #
+#
+# `stencil_shift_trait`'s base method (form/common.jl) says "translation invariant", which is
+# what a trial or test function is however deeply wrapped. An interpolation is not: its
+# entries name absolute columns picked by `locate_cell` from the point's own coordinates, and
+# adding one to an offset says nothing about which columns the neighbour reaches. This ladder
+# is what finds one under any tower of wrappers. Each method is decided by the operator's type
+# alone, so the trait is a compile-time constant at every call and the branch it selects folds
+# away.
+#
+# A *source* is the other node this is true of, and it is deliberately left translation
+# invariant here: point 68 already fixed the same defect for sources by a separate route —
+# `_source_value` (form/common.jl), which a `LinearProduct` reaches through
+# `_contracted_left_stencil` instead of through the shift at all — and marking sources
+# point-dependent would change that behaviour rather than merely extend it. The two
+# mechanisms answer one question and one of them should go; which is a decision of its own,
+# with its own verification, not a side effect of this one.
+stencil_shift_trait(::InterpolationNode) = PointDependentStencil()
+
+stencil_shift_trait(op::BackwardDifference) = stencil_shift_trait(op.inner_op)
+stencil_shift_trait(op::ForwardDifference) = stencil_shift_trait(op.inner_op)
+stencil_shift_trait(op::CenteredDifference) = stencil_shift_trait(op.inner_op)
+stencil_shift_trait(op::StarDifference) = stencil_shift_trait(op.inner_op)
+stencil_shift_trait(op::CrossWeightedDifference) = stencil_shift_trait(op.inner_op)
+stencil_shift_trait(op::BackwardAverage) = stencil_shift_trait(op.inner_op)
+stencil_shift_trait(op::ForwardAverage) = stencil_shift_trait(op.inner_op)
+stencil_shift_trait(op::ShiftNode) = stencil_shift_trait(op.inner_op)
+stencil_shift_trait(op::JumpNode) = stencil_shift_trait(op.inner_op)
+stencil_shift_trait(op::RegionRestriction) = stencil_shift_trait(op.inner_op)
+stencil_shift_trait(op::OperatorScale) = stencil_shift_trait(op.inner_op)
+stencil_shift_trait(op::GridFunctionScale) = stencil_shift_trait(op.inner_op)
+function stencil_shift_trait(op::OperatorAdd)
+    _combine_shift_traits(
+        stencil_shift_trait(op.left_op), stencil_shift_trait(op.right_op))
 end
-_bears_interpolation(op::BilinearProduct) = _bears_interpolation(op.left_op)
-_bears_interpolation(op::LinearProduct) = false
+
+# --- Which space a term interpolates from, if any ------------------------------------ #
+#
+# `nothing` when the term's trial entries are ordinary offsets, and the source space itself
+# when they are absolute columns of another space (`AbsoluteColumn`, above). Two things want
+# this, and both need more than a yes/no: whether the two leaves of a coupled block may be
+# over different meshes at all, and — since they may — whether the space the interpolation
+# names is in fact the trial leaf whose columns the block writes into
+# (`_check_block_meshes`, point 69/61).
+#
+# Type-determined at every rung, so `_interp_src_space(term) === nothing` is a compile-time
+# constant and the branches it guards fold away.
+_interp_src_space(::LazyOp) = nothing
+_interp_src_space(op::InterpolationNode) = op.src_space
+_interp_src_space(op::BackwardDifference) = _interp_src_space(op.inner_op)
+_interp_src_space(op::ForwardDifference) = _interp_src_space(op.inner_op)
+_interp_src_space(op::CenteredDifference) = _interp_src_space(op.inner_op)
+_interp_src_space(op::StarDifference) = _interp_src_space(op.inner_op)
+_interp_src_space(op::CrossWeightedDifference) = _interp_src_space(op.inner_op)
+_interp_src_space(op::BackwardAverage) = _interp_src_space(op.inner_op)
+_interp_src_space(op::ForwardAverage) = _interp_src_space(op.inner_op)
+_interp_src_space(op::ShiftNode) = _interp_src_space(op.inner_op)
+_interp_src_space(op::JumpNode) = _interp_src_space(op.inner_op)
+_interp_src_space(op::RegionRestriction) = _interp_src_space(op.inner_op)
+_interp_src_space(op::OperatorScale) = _interp_src_space(op.inner_op)
+_interp_src_space(op::GridFunctionScale) = _interp_src_space(op.inner_op)
+function _interp_src_space(op::OperatorAdd)
+    _either_interp_space(
+        _interp_src_space(op.left_op), _interp_src_space(op.right_op))
+end
+
+# Only the trial side of a product contributes columns, so only the trial side is asked. A
+# linear product contributes none at all — its left factor is contracted away
+# (`multiply_stencils_linear`), which is why a source interpolation belongs there and an
+# operator one does not.
+_interp_src_space(op::BilinearProduct) = _interp_src_space(op.left_op)
+_interp_src_space(op::LinearProduct) = nothing
+
+@inline _either_interp_space(::Nothing, ::Nothing) = nothing
+@inline _either_interp_space(a, ::Nothing) = a
+@inline _either_interp_space(::Nothing, b) = b
+# Both summands interpolate. Taking the left one is enough: the block they write into is one
+# block, so if they named different spaces the check on the way in would fail for one of them
+# whichever was reported.
+@inline _either_interp_space(a, b) = a
+
+# Whether the term's trial entries are absolute columns rather than offsets.
+_bears_interpolation(term) = _interp_src_space(term) !== nothing

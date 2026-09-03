@@ -151,6 +151,7 @@ if __bramble_with_unit_tests
             include("form/interpolation.jl")
             include("form/bilinear.jl")
             include("form/cross_mesh_blocks.jl")
+            include("form/interpolation_operator.jl")
             include("form/symmetry.jl")
             include("form/markers.jl")
             include("form/extended_operators.jl")

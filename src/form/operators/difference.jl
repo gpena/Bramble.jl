@@ -112,7 +112,8 @@ D₊₂(op::LazyOp{D}) where {D} = ForwardDifference{D, 3, typeof(op)}(op)
     mask = I[Dim] == 1 ? 0 : 1
     t1 = scale_stencil(inner, mask / h)
 
-    inner_shifted = shift_stencil(inner, Val(Dim), Val(-1))
+    inner_shifted = shifted_inner_stencil(op.inner_op, inner, space, I, markers,
+        Val(Dim), Val(-1))
     t2 = scale_stencil(inner_shifted, -mask / h)
 
     return concatenate_stencils(t1, t2)
@@ -126,7 +127,8 @@ end
     h = get_forward_spacing(m, I, Dim)
 
     mask = I[Dim] == dims[Dim] ? 0 : 1
-    inner_shifted = shift_stencil(inner, Val(Dim), Val(1))
+    inner_shifted = shifted_inner_stencil(op.inner_op, inner, space, I, markers,
+        Val(Dim), Val(1))
     t1 = scale_stencil(inner_shifted, mask / h)
     t2 = scale_stencil(inner, -mask / h)
 
@@ -327,8 +329,10 @@ end
     mask = (I[Dim] == 1 || I[Dim] == dims[Dim]) ? 0 : 1
     c = mask / (get_spacing(m, I, Dim) + get_forward_spacing(m, I, Dim))
 
-    forward = scale_stencil(shift_stencil(inner, Val(Dim), Val(1)), c)
-    backward = scale_stencil(shift_stencil(inner, Val(Dim), Val(-1)), -c)
+    forward = scale_stencil(
+        shifted_inner_stencil(op.inner_op, inner, space, I, markers, Val(Dim), Val(1)), c)
+    backward = scale_stencil(
+        shifted_inner_stencil(op.inner_op, inner, space, I, markers, Val(Dim), Val(-1)), -c)
     return concatenate_stencils(forward, backward)
 end
 
@@ -342,7 +346,8 @@ end
     # the averaged spacing, which is what the starred difference divides by
     c = 2 * mask / (get_spacing(m, I, Dim) + get_forward_spacing(m, I, Dim))
 
-    forward = scale_stencil(shift_stencil(inner, Val(Dim), Val(1)), c)
+    forward = scale_stencil(
+        shifted_inner_stencil(op.inner_op, inner, space, I, markers, Val(Dim), Val(1)), c)
     here = scale_stencil(inner, -c)
     return concatenate_stencils(forward, here)
 end
@@ -368,9 +373,11 @@ end
     a = mask * h / (total * hf)
     b = mask * hf / (total * h)
 
-    forward = scale_stencil(shift_stencil(inner, Val(Dim), Val(1)), a)
+    forward = scale_stencil(
+        shifted_inner_stencil(op.inner_op, inner, space, I, markers, Val(Dim), Val(1)), a)
     here = scale_stencil(inner, b - a)
-    backward = scale_stencil(shift_stencil(inner, Val(Dim), Val(-1)), -b)
+    backward = scale_stencil(
+        shifted_inner_stencil(op.inner_op, inner, space, I, markers, Val(Dim), Val(-1)), -b)
     return concatenate_stencils(concatenate_stencils(forward, here), backward)
 end
 

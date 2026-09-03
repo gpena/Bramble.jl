@@ -60,7 +60,9 @@ jumpₕ(op::LazyOp{D}) where {D} = ntuple(dim -> JumpNode{D, dim, typeof(op)}(op
     # only the forward term goes; the local one stays, which is the -uₙ convention
     reach = I[Dim] == dims[Dim] ? 0 : 1
 
-    forward = scale_stencil(shift_stencil(inner, Val(Dim), Val(1)), reach)
+    forward = scale_stencil(
+        shifted_inner_stencil(op.inner_op, inner, space, I, markers, Val(Dim), Val(1)),
+        reach)
     here = scale_stencil(inner, -1)
     return concatenate_stencils(forward, here)
 end

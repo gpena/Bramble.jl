@@ -125,7 +125,8 @@ M₊ₕ(op::LazyOp{D}) where {D} = vectorial_avg_forward(op)
     mask = I[Dim] == 1 ? zero(T) : T(1) / 2
     t1 = scale_stencil(inner, mask)
 
-    inner_shifted = shift_stencil(inner, Val(Dim), Val(-1))
+    inner_shifted = shifted_inner_stencil(op.inner_op, inner, space, I, markers,
+        Val(Dim), Val(-1))
     t2 = scale_stencil(inner_shifted, mask)
 
     return concatenate_stencils(t1, t2)
@@ -139,7 +140,8 @@ end
 
     T = eltype(space)
     mask = I[Dim] == dims[Dim] ? zero(T) : T(1) / 2
-    inner_shifted = shift_stencil(inner, Val(Dim), Val(1))
+    inner_shifted = shifted_inner_stencil(op.inner_op, inner, space, I, markers,
+        Val(Dim), Val(1))
     t1 = scale_stencil(inner_shifted, mask)
     t2 = scale_stencil(inner, mask)
 
@@ -149,7 +151,8 @@ end
 @inline function local_stencil(op::ShiftNode{D, Dim}, space, I::CartesianIndex{D},
         markers, lin_idx::Int) where {D, Dim}
     inner = local_stencil(op.inner_op, space, I, markers, lin_idx)
-    return shift_stencil(inner, Val(Dim), op.shift_amount)
+    return shifted_inner_stencil(op.inner_op, inner, space, I, markers, Val(Dim),
+        op.shift_amount)
 end
 
 # --- Values, for a source-only subtree ---------------------------------------------- #

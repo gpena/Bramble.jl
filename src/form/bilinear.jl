@@ -148,6 +148,26 @@ end
     return false
 end
 
+# Which column of the trial block a stencil entry's trial slot names, or `0` when it names
+# none of them.
+#
+# Two kinds of entry, resolved by dispatch on the slot rather than by a runtime flag. The
+# ordinary kind is an offset from the point being visited, read out of the index space being
+# walked and dropped when it falls off the grid — the boundary truncation the whole assembly
+# has always relied on. An interpolation's kind (`AbsoluteColumn`, point 61) is already a
+# column of the *source* space, chosen by `locate_cell`, and needs neither the arithmetic nor
+# the bounds check: `locate_cell` clamps to a real cell, so every column it names exists.
+#
+# `0` for "no column" rather than `nothing`: column indices are one-based, so the sentinel
+# cannot collide with an answer, and the callers stay free of a union to unwrap in their
+# innermost loop.
+@inline function _trial_column(lin_indices, I::CartesianIndex, off_u)
+    Iu = I + CartesianIndex(off_u)
+    return checkbounds(Bool, lin_indices, Iu) ? lin_indices[Iu] : 0
+end
+
+@inline _trial_column(lin_indices, I::CartesianIndex, off_u::AbsoluteColumn) = off_u.col
+
 # Whether a term's two leaves can be coupled at all.
 #
 # A coupled term is assembled by walking the *test* leaf's grid and reading the trial column
@@ -161,25 +181,69 @@ end
 # a smaller trial block overruns (a loud `ArgumentError` from `sparse!`, naming column
 # indices rather than the real problem) and a larger one lands on in-range but *wrong*
 # columns, silently. Neither is an answer to give, because the term has no meaning until
-# something says how to map between the two meshes. That something is a symbolic
-# interpolation operator (point 61), which is not built. So this refuses by name, which is
-# the only honest option in between — the same reasoning as "a missing component is an error,
-# not a zero".
+# something says how to map between the two meshes. That something is the symbolic
+# interpolation operator `πₕ(Wsrc, u)` (point 61), and a term that carries one is exempt from
+# this check for exactly that reason: its trial entries are absolute columns of `Wsrc`
+# (`AbsoluteColumn`, `_trial_column`), so it never does the index arithmetic this refuses.
+# Every other cross-mesh term is still refused by name, which is the only honest option — the
+# same reasoning as "a missing component is an error, not a zero".
 @noinline function _throw_cross_mesh_block(term, Ωu, Ωv)
     throw(ArgumentError(
         "a bilinear term coupling two leaves over different meshes has no assembly: the " *
         "trial leaf has $(npoints(Ωu, Tuple)) points and the test leaf $(npoints(Ωv, Tuple)), " *
         "so an index on one names no point on the other. Got $(typeof(term)). Couple leaves " *
-        "that share a mesh, or, on the source side of a *linear* form, move the field " *
-        "between meshes explicitly with πₕ — which is what makes that case well posed. The " *
-        "symbolic interpolation operator that would give a bilinear cross-mesh block a " *
-        "meaning is not implemented."))
+        "that share a mesh, or say how to map between them: wrap the trial function in the " *
+        "interpolation operator, `πₕ(Wtrial, u)`, which reads the trial field at the test " *
+        "mesh's own points and is what gives such a block a meaning. On the source side of a " *
+        "*linear* form, `πₕ(uₕ)` does the same for a field whose values are already known."))
 end
 
 @inline function _check_block_meshes(term, trial_leaf, test_leaf)
+    # Which space the term interpolates from, or `nothing`. Type-determined, so the method
+    # this selects is chosen at compile time and the other one is never in the way.
+    return _check_block_meshes(_interp_src_space(term), term, trial_leaf, test_leaf)
+end
+
+# No interpolation: the block is assembled by reading the trial column out of the test leaf's
+# own index space, so the two leaves have to share one.
+@inline function _check_block_meshes(::Nothing, term, trial_leaf, test_leaf)
     Ωu = mesh(trial_leaf)
     Ωv = mesh(test_leaf)
     npoints(Ωu, Tuple) == npoints(Ωv, Tuple) || _throw_cross_mesh_block(term, Ωu, Ωv)
+    return nothing
+end
+
+# An interpolating term names its columns outright, so the two leaves are free to be over
+# different meshes — that is the whole point of point 61. What is *not* free is which space
+# those columns belong to: they are numbered in `Wsrc`, and the block writes them into the
+# trial leaf's own column range. Get that pairing wrong and a too-small `Wsrc` writes into a
+# corner of the block while a too-large one runs past its end, which is the same silent-wrong
+# answer point 69 refused for the un-interpolated case. So it is checked, not assumed.
+@inline function _check_block_meshes(Wsrc, term, trial_leaf, test_leaf)
+    Ωsrc = mesh(Wsrc)
+    Ωu = mesh(trial_leaf)
+    npoints(Ωsrc, Tuple) == npoints(Ωu, Tuple) ||
+        _throw_interp_space_mismatch(term, Ωsrc, Ωu)
+    return nothing
+end
+
+@noinline function _throw_interp_space_mismatch(term, Ωsrc, Ωu)
+    throw(ArgumentError(
+        "the interpolation operator in a bilinear term names a space that is not the trial " *
+        "function's: `πₕ` was given a space over a mesh of $(npoints(Ωsrc, Tuple)) points, " *
+        "while the trial leaf this term assembles into has $(npoints(Ωu, Tuple)). Got " *
+        "$(typeof(term)). `πₕ(Wsrc, u)` interpolates *from* the space the trial function " *
+        "lives on, so `Wsrc` must be that space — the form's trial space, or, on a composite " *
+        "space, the leaf the index picks out: `πₕ(leaf, u(i))`."))
+end
+
+# A sum is checked term by term. The composite paths route each term to its block first and
+# so never reach here with a sum, but the scalar ones check the whole form's AST at once —
+# and there `_bears_interpolation` of the sum is true as soon as *one* summand interpolates,
+# which would exempt the others along with it.
+@inline function _check_block_meshes(op::OperatorAdd, trial_leaf, test_leaf)
+    _check_block_meshes(op.left_op, trial_leaf, test_leaf)
+    _check_block_meshes(op.right_op, trial_leaf, test_leaf)
     return nothing
 end
 
@@ -225,7 +289,12 @@ See also [`assemble`](@ref) and [`assemble!`](@ref).
 function allocate_system_matrix(
         form::BilinearForm{D, TrialSpace, TestSpace, AST},
         ast = form.ast) where {D, TrialSpace, TestSpace, AST}
-    space = form.trial_space
+    # The *test* space, because a matrix row is indexed by the test function and the
+    # quadrature weight belongs to the integral, which is over the test space's mesh. The
+    # composite path has always walked its test leaf (`first(test_leaves[…])`); the two
+    # spaces coincide in every form where one space serves both, so this only starts to
+    # matter — and only then differs — once an interpolating term makes them differ (point 61).
+    space = form.test_space
     _check_block_meshes(ast, form.trial_space, form.test_space)
     Ωₕ = mesh(space)
     mesh_markers = markers(Ωₕ)
@@ -248,10 +317,10 @@ function allocate_system_matrix(
             _offsets_seen_before(stencil, k, off_u, off_v) && continue
 
             Iv = I + CartesianIndex(off_v)
-            Iu = I + CartesianIndex(off_u)
-            if checkbounds(Bool, lin_indices, Iv) && checkbounds(Bool, lin_indices, Iu)
+            col = _trial_column(lin_indices, I, off_u)
+            if checkbounds(Bool, lin_indices, Iv) && col != 0
                 push!(I_vec, lin_indices[Iv])
-                push!(J_vec, lin_indices[Iu])
+                push!(J_vec, col)
             end
         end
     end
@@ -267,7 +336,8 @@ function allocate_system_matrix(
     # `sparse!` rather than `sparse`: it uses the coordinate vectors as its own scratch
     # instead of copying them, and they are discarded here either way. Worth 13.4 MB of the
     # 64.9 the pattern cost at 250,000 degrees of freedom.
-    V_vec = _zeros_of(_assembled_eltype(ast, space), length(I_vec))
+    V_vec = _zeros_of(
+        promote_type(_assembled_eltype(ast, space), eltype(form.trial_space)), length(I_vec))
     # rows are indexed by the test function and columns by the trial one. The check at the
     # top is what makes these equal; naming them separately keeps the shape honest rather
     # than resting on an `n` that happens to serve both.
@@ -296,11 +366,11 @@ function _pattern_term!(I_vec::Vector{Int}, J_vec::Vector{Int}, term::TERM, tria
             _offsets_seen_before(stencil, k, off_u, off_v) && continue
 
             Iv = I + CartesianIndex(off_v)
-            Iu = I + CartesianIndex(off_u)
+            col = _trial_column(lin_indices, I, off_u)
 
-            if checkbounds(Bool, lin_indices, Iv) && checkbounds(Bool, lin_indices, Iu)
+            if checkbounds(Bool, lin_indices, Iv) && col != 0
                 push!(I_vec, lin_indices[Iv] + row_offset)
-                push!(J_vec, lin_indices[Iu] + col_offset)
+                push!(J_vec, col + col_offset)
             end
         end
     end
@@ -435,7 +505,7 @@ end
 function _assemble_bilinear_core!(A::SparseMatrixCSC, trial_space, test_space,
         ast::AST_TYPE) where {AST_TYPE}
     _check_block_meshes(ast, trial_space, test_space)
-    _scatter_block!(A, ast, trial_space, 0, 0)
+    _scatter_block!(A, ast, test_space, 0, 0)
     return A
 end
 
@@ -452,11 +522,10 @@ function _scatter_block!(A::SparseMatrixCSC, term::TERM, sp, row_offset::Int,
 
         for (off_u, off_v, weight) in stencil
             Iv = I + CartesianIndex(off_v)
-            Iu = I + CartesianIndex(off_u)
+            col = _trial_column(lin_indices, I, off_u)
 
-            if checkbounds(Bool, lin_indices, Iv) && checkbounds(Bool, lin_indices, Iu)
-                add_to_sparse!(A, lin_indices[Iv] + row_offset,
-                    lin_indices[Iu] + col_offset, weight)
+            if checkbounds(Bool, lin_indices, Iv) && col != 0
+                add_to_sparse!(A, lin_indices[Iv] + row_offset, col + col_offset, weight)
             end
         end
     end
@@ -542,11 +611,10 @@ end
 
         for (off_u, off_v, weight) in stencil
             Iv = I + CartesianIndex(off_v)
-            Iu = I + CartesianIndex(off_u)
+            col = _trial_column(lin_indices, I, off_u)
 
-            if checkbounds(Bool, lin_indices, Iv) && checkbounds(Bool, lin_indices, Iu)
-                add_to_sparse!(A, lin_indices[Iv] + row_offset,
-                    lin_indices[Iu] + col_offset, weight)
+            if checkbounds(Bool, lin_indices, Iv) && col != 0
+                add_to_sparse!(A, lin_indices[Iv] + row_offset, col + col_offset, weight)
             end
         end
     end
@@ -610,8 +678,8 @@ end
 function _assemble_bilinear_parallel_core!(A::SparseMatrixCSC, trial_space, test_space,
         ast::AST_TYPE, dim_val::Val) where {AST_TYPE}
     _check_block_meshes(ast, trial_space, test_space)
-    _sweep_bilinear!(A, trial_space, ast,
-        _bilinear_colour_strides(ast, trial_space, dim_val), 0, 0)
+    _sweep_bilinear!(A, test_space, ast,
+        _bilinear_colour_strides(ast, test_space, dim_val), 0, 0)
     return A
 end
 
