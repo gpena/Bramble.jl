@@ -9,7 +9,9 @@ tutorials = "Tutorials" =>
     ["tutorials/geometry.md", "tutorials/mesh.md", "tutorials/backend.md",
         "tutorials/space.md", "tutorials/operators.md", "tutorials/form.md",
         "tutorials/vtk_export.md", "tutorials/pgfplots_export.md", "tutorials/plotting.md"]
-# examples = "Examples" => ["examples/poisson_linear.md", "examples/poisson_nonlinear.md"]
+examples = "Examples" =>
+    ["examples/poisson_linear.md", "examples/poisson_nonlinear.md",
+        "examples/convection_diffusion_linear.md", "examples/coupled_reaction_diffusion.md"]
 benchmarks = "Benchmarks" => "benchmarks.md"
 internals = "Internals" => ["internals/utils.md", "internals/geometry.md",
     "internals/mesh.md", "internals/space.md", "internals/form.md"]
@@ -18,7 +20,7 @@ documentation = "Documentation" => ["api.md", internals]
 allpages = [
     home,
     tutorials,
-    # examples,
+    examples,
     benchmarks,
     documentation
 ]

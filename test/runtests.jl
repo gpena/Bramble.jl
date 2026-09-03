@@ -75,7 +75,6 @@ function _matches_fd(f, a = 1.3; rtol = 1e-5)
     return isapprox(ForwardDiff.derivative(f, a), _fd(f, a); rtol = rtol)
 end
 
-const __bramble_with_examples = false
 const __bramble_test_group = get(ENV, "BRAMBLE_TEST_GROUP", "all")
 const __bramble_with_quality = __bramble_test_group in ("all", "quality", "full")
 const __bramble_with_unit_tests = __bramble_test_group in ("all", "unit", "full")
@@ -167,10 +166,6 @@ if __bramble_with_unit_tests
             include("exporters/pgfplots_export.jl")
         end
     end
-end
-
-if __bramble_with_examples
-    include("examples.jl")
 end
 
 if __bramble_with_quality
