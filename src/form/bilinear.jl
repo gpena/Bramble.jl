@@ -148,6 +148,41 @@ end
     return false
 end
 
+# Whether a term's two leaves can be coupled at all.
+#
+# A coupled term is assembled by walking the *test* leaf's grid and reading the trial column
+# out of that same index space, offset into the trial leaf's block:
+# `lin_indices[I + off_u] + col_offset`. That is only meaningful when the two leaves share an
+# index space — which they always did until heterogeneous composite spaces arrived, since a
+# space built by repeating one space (`Wₕ^Val(N)`) hands every leaf the same mesh object.
+#
+# On leaves over differently-sized meshes there is no correspondence between an index on one
+# and an index on the other, and the arithmetic fails in whichever direction the sizes run:
+# a smaller trial block overruns (a loud `ArgumentError` from `sparse!`, naming column
+# indices rather than the real problem) and a larger one lands on in-range but *wrong*
+# columns, silently. Neither is an answer to give, because the term has no meaning until
+# something says how to map between the two meshes. That something is a symbolic
+# interpolation operator (point 61), which is not built. So this refuses by name, which is
+# the only honest option in between — the same reasoning as "a missing component is an error,
+# not a zero".
+@noinline function _throw_cross_mesh_block(term, Ωu, Ωv)
+    throw(ArgumentError(
+        "a bilinear term coupling two leaves over different meshes has no assembly: the " *
+        "trial leaf has $(npoints(Ωu, Tuple)) points and the test leaf $(npoints(Ωv, Tuple)), " *
+        "so an index on one names no point on the other. Got $(typeof(term)). Couple leaves " *
+        "that share a mesh, or, on the source side of a *linear* form, move the field " *
+        "between meshes explicitly with πₕ — which is what makes that case well posed. The " *
+        "symbolic interpolation operator that would give a bilinear cross-mesh block a " *
+        "meaning is not implemented."))
+end
+
+@inline function _check_block_meshes(term, trial_leaf, test_leaf)
+    Ωu = mesh(trial_leaf)
+    Ωv = mesh(test_leaf)
+    npoints(Ωu, Tuple) == npoints(Ωv, Tuple) || _throw_cross_mesh_block(term, Ωu, Ωv)
+    return nothing
+end
+
 # How many entries the pattern can hold at most: one interior stencil's worth per grid
 # point. An upper bound, because truncation at a boundary drops entries and never adds any.
 #
@@ -191,6 +226,7 @@ function allocate_system_matrix(
         form::BilinearForm{D, TrialSpace, TestSpace, AST},
         ast = form.ast) where {D, TrialSpace, TestSpace, AST}
     space = form.trial_space
+    _check_block_meshes(ast, form.trial_space, form.test_space)
     Ωₕ = mesh(space)
     mesh_markers = markers(Ωₕ)
     _validate_term_markers(ast, mesh_markers, "the form's space")
@@ -232,7 +268,10 @@ function allocate_system_matrix(
     # instead of copying them, and they are discarded here either way. Worth 13.4 MB of the
     # 64.9 the pattern cost at 250,000 degrees of freedom.
     V_vec = _zeros_of(_assembled_eltype(ast, space), length(I_vec))
-    return sparse!(I_vec, J_vec, V_vec, n, n, +)
+    # rows are indexed by the test function and columns by the trial one. The check at the
+    # top is what makes these equal; naming them separately keeps the shape honest rather
+    # than resting on an `n` that happens to serve both.
+    return sparse!(I_vec, J_vec, V_vec, ndofs(form.test_space), ndofs(form.trial_space), +)
 end
 
 # Which entries a term can reach, block by block.
@@ -281,6 +320,7 @@ function _pattern_blocks!(I_vec::Vector{Int}, J_vec::Vector{Int}, term::TERM,
 
     if blk === nothing
         for c in 1:min(length(trial_leaves), length(test_leaves))
+            _check_block_meshes(term, first(trial_leaves[c]), first(test_leaves[c]))
             _pattern_term!(I_vec, J_vec, term, first(trial_leaves[c]),
                 first(test_leaves[c]), last(test_leaves[c]), last(trial_leaves[c]))
         end
@@ -288,6 +328,7 @@ function _pattern_blocks!(I_vec::Vector{Int}, J_vec::Vector{Int}, term::TERM,
     end
 
     tc, sc = blk
+    _check_block_meshes(term, first(trial_leaves[tc]), first(test_leaves[sc]))
     _pattern_term!(I_vec, J_vec, term, first(trial_leaves[tc]), first(test_leaves[sc]),
         last(test_leaves[sc]), last(trial_leaves[tc]))
     return nothing
@@ -393,6 +434,7 @@ end
 # The scalar case: one block, no offsets.
 function _assemble_bilinear_core!(A::SparseMatrixCSC, trial_space, test_space,
         ast::AST_TYPE) where {AST_TYPE}
+    _check_block_meshes(ast, trial_space, test_space)
     _scatter_block!(A, ast, trial_space, 0, 0)
     return A
 end
@@ -443,6 +485,7 @@ function _assemble_blocks!(A::SparseMatrixCSC, term::TERM, trial_leaves,
 
     if blk === nothing
         for c in 1:min(length(trial_leaves), length(test_leaves))
+            _check_block_meshes(term, first(trial_leaves[c]), first(test_leaves[c]))
             _scatter_block!(A, term, first(test_leaves[c]), last(test_leaves[c]),
                 last(trial_leaves[c]))
         end
@@ -450,6 +493,7 @@ function _assemble_blocks!(A::SparseMatrixCSC, term::TERM, trial_leaves,
     end
 
     tc, sc = blk
+    _check_block_meshes(term, first(trial_leaves[tc]), first(test_leaves[sc]))
     _scatter_block!(A, term, first(test_leaves[sc]), last(test_leaves[sc]),
         last(trial_leaves[tc]))
     return A
@@ -547,6 +591,7 @@ function _assemble_blocks_parallel!(A::SparseMatrixCSC, term::TERM, trial_leaves
 
     if blk === nothing
         for c in 1:min(length(trial_leaves), length(test_leaves))
+            _check_block_meshes(term, first(trial_leaves[c]), first(test_leaves[c]))
             sp = first(test_leaves[c])
             _sweep_bilinear!(A, sp, term, _bilinear_colour_strides(term, sp, dim_val),
                 last(test_leaves[c]), last(trial_leaves[c]))
@@ -555,6 +600,7 @@ function _assemble_blocks_parallel!(A::SparseMatrixCSC, term::TERM, trial_leaves
     end
 
     tc, sc = blk
+    _check_block_meshes(term, first(trial_leaves[tc]), first(test_leaves[sc]))
     sp = first(test_leaves[sc])
     _sweep_bilinear!(A, sp, term, _bilinear_colour_strides(term, sp, dim_val),
         last(test_leaves[sc]), last(trial_leaves[tc]))
@@ -563,6 +609,7 @@ end
 
 function _assemble_bilinear_parallel_core!(A::SparseMatrixCSC, trial_space, test_space,
         ast::AST_TYPE, dim_val::Val) where {AST_TYPE}
+    _check_block_meshes(ast, trial_space, test_space)
     _sweep_bilinear!(A, trial_space, ast,
         _bilinear_colour_strides(ast, trial_space, dim_val), 0, 0)
     return A

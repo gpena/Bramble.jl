@@ -347,6 +347,28 @@ for entry with applying the numeric operator first:
 `values(D₋ₓ(fₕ)) .* weights(Wₕ, Innerh())`. That equivalence is what
 `test/form/source_operators.jl` pins, for every operator, against the numeric layer.
 
+A *bilinear* term coupling two leaves over different meshes is a different matter, and it is
+refused:
+
+```julia
+form(Vh, Vh, (u, v) -> innerₕ(u(2), v(1)))     # ArgumentError: ... over different meshes ...
+```
+
+A coupled block is assembled by walking the test leaf's grid and reading the trial column out
+of that same index space, so it needs the two leaves to agree on what an index means. Two
+leaves over meshes of different sizes do not: index `(3, 3)` on an 8×8 grid and on a 4×4 grid
+name different points, and nothing in the term says how to get from one to the other. So there
+is no assembly to give, and the error says so rather than guessing — in one direction it used
+to overrun the trial block and throw from deep inside `sparse!`, and in the other it quietly
+filled in-range but wrong columns.
+
+Coupling leaves that *share* a mesh is unaffected, which is every composite space built by
+repeating one space (`Wₕ^Val(2)`), including off-diagonal blocks.
+
+What makes the linear case above legitimate is exactly what the bilinear case is missing:
+`πₕ` states the mapping between the two meshes. Supplying that on the trial side needs a
+symbolic interpolation *operator*, which does not exist yet.
+
 `πₕ` takes a grid function, never a trial or test function:
 
 ```julia
