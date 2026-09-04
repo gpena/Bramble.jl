@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Convection-diffusion equation · Bramble.jl</title><meta name="title" content="Convection-diffusion equation · Bramble.jl"/><meta property="og:title" content="Convection-diffusion equation · Bramble.jl"/><meta property="twitter:title" content="Convection-diffusion equation · Bramble.jl"/><meta name="description" content="Documentation for Bramble.jl."/><meta property="og:description" content="Documentation for Bramble.jl."/><meta property="twitter:description" content="Documentation for Bramble.jl."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img src="../../assets/logo.svg" alt="Bramble.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">Bramble.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../../tutorials/geometry/">Geometry tutorial</a></li><li><a class="tocitem" href="../../tutorials/mesh/">Mesh tutorial</a></li><li><a class="tocitem" href="../../tutorials/backend/">Backend tutorial</a></li><li><a class="tocitem" href="../../tutorials/space/">Grid spaces and discrete functions</a></li><li><a class="tocitem" href="../../tutorials/operators/">Difference, jump and average operators</a></li><li><a class="tocitem" href="../../tutorials/form/">Linear and bilinear forms</a></li><li><a class="tocitem" href="../../tutorials/autodiff/">Automatic differentiation tutorial</a></li><li><a class="tocitem" href="../../tutorials/vtk_export/">Writing VTK files</a></li><li><a class="tocitem" href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a></li><li><a class="tocitem" href="../../tutorials/plotting/">Plotting directly</a></li></ul></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../poisson_linear/">Linear Poisson equation</a></li><li><a class="tocitem" href="../poisson_nonlinear/">Nonlinear Poisson equation</a></li><li class="is-active"><a class="tocitem" href>Convection-diffusion equation</a><ul class="internal"><li><a class="tocitem" href="#Problem"><span>Problem</span></a></li><li><a class="tocitem" href="#Checking-the-answer"><span>Checking the answer</span></a></li></ul></li><li><a class="tocitem" href="../coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a></li></ul></li><li><a class="tocitem" href="../../benchmarks/">Benchmarks</a></li><li><span class="tocitem">Documentation</span><ul><li><a class="tocitem" href="../../api/">API reference</a></li><li><input class="collapse-toggle" id="menuitem-5-2" type="checkbox"/><label class="tocitem" for="menuitem-5-2"><span class="docs-label">Internals</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../internals/utils/">Utilities</a></li><li><a class="tocitem" href="../../internals/geometry/">Geometry</a></li><li><a class="tocitem" href="../../internals/mesh/">Mesh</a></li><li><a class="tocitem" href="../../internals/space/">Spaces</a></li><li><a class="tocitem" href="../../internals/form/">Forms</a></li><li><a class="tocitem" href="../../internals/autodiff/">Automatic differentiation</a></li><li><a class="tocitem" href="../../internals/exporters/">Exporters</a></li></ul></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Examples</a></li><li class="is-active"><a href>Convection-diffusion equation</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Convection-diffusion equation</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/examples/convection_diffusion_linear.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Convection-diffusion-equation"><a class="docs-heading-anchor" href="#Convection-diffusion-equation">Convection-diffusion equation</a><a id="Convection-diffusion-equation-1"></a><a class="docs-heading-anchor-permalink" href="#Convection-diffusion-equation" title="Permalink"></a></h1><p>One more linear operator, built the same way as the <a href="../poisson_linear/">Poisson example</a> — diffusion plus a constant convective term, in 1D, 2D and 3D. Every number and every plot below was produced by the code shown.</p><h2 id="Problem"><a class="docs-heading-anchor" href="#Problem">Problem</a><a id="Problem-1"></a><a class="docs-heading-anchor-permalink" href="#Problem" title="Permalink"></a></h2><p class="math-container">\[-\nabla \cdot (\epsilon \nabla u) + b \, \mathbf{1} \cdot \nabla u = g \text{ in } \Omega,
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Convection-diffusion equation · Bramble.jl</title><meta name="title" content="Convection-diffusion equation · Bramble.jl"/><meta property="og:title" content="Convection-diffusion equation · Bramble.jl"/><meta property="twitter:title" content="Convection-diffusion equation · Bramble.jl"/><meta name="description" content="Documentation for Bramble.jl."/><meta property="og:description" content="Documentation for Bramble.jl."/><meta property="twitter:description" content="Documentation for Bramble.jl."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img src="../../assets/logo.svg" alt="Bramble.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">Bramble.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../../tutorials/geometry/">Geometry tutorial</a></li><li><a class="tocitem" href="../../tutorials/mesh/">Mesh tutorial</a></li><li><a class="tocitem" href="../../tutorials/backend/">Backend tutorial</a></li><li><a class="tocitem" href="../../tutorials/space/">Grid spaces and discrete functions</a></li><li><a class="tocitem" href="../../tutorials/operators/">Difference, jump and average operators</a></li><li><a class="tocitem" href="../../tutorials/form/">Linear and bilinear forms</a></li><li><a class="tocitem" href="../../tutorials/autodiff/">Automatic differentiation tutorial</a></li><li><a class="tocitem" href="../../tutorials/vtk_export/">Writing VTK files</a></li><li><a class="tocitem" href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a></li><li><a class="tocitem" href="../../tutorials/plotting/">Plotting directly</a></li></ul></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../poisson_linear/">Linear Poisson equation</a></li><li><a class="tocitem" href="../poisson_nonlinear/">Nonlinear Poisson equation</a></li><li class="is-active"><a class="tocitem" href>Convection-diffusion equation</a><ul class="internal"><li><a class="tocitem" href="#Problem"><span>Problem</span></a></li><li><a class="tocitem" href="#Visualizing-the-solution"><span>Visualizing the solution</span></a></li><li><a class="tocitem" href="#Checking-the-answer"><span>Checking the answer</span></a></li></ul></li><li><a class="tocitem" href="../coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a></li></ul></li><li><a class="tocitem" href="../../benchmarks/">Benchmarks</a></li><li><span class="tocitem">Documentation</span><ul><li><a class="tocitem" href="../../api/">API reference</a></li><li><input class="collapse-toggle" id="menuitem-5-2" type="checkbox"/><label class="tocitem" for="menuitem-5-2"><span class="docs-label">Internals</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../internals/utils/">Utilities</a></li><li><a class="tocitem" href="../../internals/geometry/">Geometry</a></li><li><a class="tocitem" href="../../internals/mesh/">Mesh</a></li><li><a class="tocitem" href="../../internals/space/">Spaces</a></li><li><a class="tocitem" href="../../internals/form/">Forms</a></li><li><a class="tocitem" href="../../internals/autodiff/">Automatic differentiation</a></li><li><a class="tocitem" href="../../internals/exporters/">Exporters</a></li></ul></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Examples</a></li><li class="is-active"><a href>Convection-diffusion equation</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Convection-diffusion equation</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/examples/convection_diffusion_linear.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Convection-diffusion-equation"><a class="docs-heading-anchor" href="#Convection-diffusion-equation">Convection-diffusion equation</a><a id="Convection-diffusion-equation-1"></a><a class="docs-heading-anchor-permalink" href="#Convection-diffusion-equation" title="Permalink"></a></h1><p>One more linear operator, built the same way as the <a href="../poisson_linear/">Poisson example</a> — diffusion plus a constant convective term, in 1D, 2D and 3D. Every number and every plot below was produced by the code shown.</p><h2 id="Problem"><a class="docs-heading-anchor" href="#Problem">Problem</a><a id="Problem-1"></a><a class="docs-heading-anchor-permalink" href="#Problem" title="Permalink"></a></h2><p class="math-container">\[-\nabla \cdot (\epsilon \nabla u) + b \, \mathbf{1} \cdot \nabla u = g \text{ in } \Omega,
 \qquad u = u_{\text{exact}} \text{ on } \partial\Omega, \qquad \Omega = (0,1)^D\]</p><p>with a constant diffusion coefficient <span>$\epsilon$</span> and a constant convective speed <span>$b$</span> along every coordinate direction at once — the vector field <span>$b(1,\dots,1)$</span>. The manufactured solution is the same as the other two examples, <span>$u_{\text{exact}}(x) = e^{\sum_i x_i}$</span>, so <span>$g = -D\,(b+\epsilon)\,u_{\text{exact}}$</span>.</p><pre><code class="language-julia hljs">using Bramble
 
 ϵ, b = 1.0, 0.1
@@ -11,9 +11,9 @@ rhs(x) = -2 * sol(x) * (b + ϵ)
 Wₕ = gridspace(Ωₕ)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">ScalarGridSpace{2, Float64, Vector{Float64}, MeshnD{2, Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}, Serial}, CartesianIndices{2, Tuple{Base.OneTo{Int64}, Base.OneTo{Int64}}}, Tuple{Mesh1D{Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}, Serial}, CartesianIndices{1, Tuple{Base.OneTo{Int64}}}, Vector{Float64}, Float64}, Mesh1D{Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}, Serial}, CartesianIndices{1, Tuple{Base.OneTo{Int64}}}, Vector{Float64}, Float64}}, Float64}}(<span class="sgr36"><span class="sgr1">MeshnD</span></span> {<span class="sgr33">2D</span>, <span class="sgr33">Float64</span>}
 <span class="sgr34">576 points</span> (24 × 24)
 <span class="sgr90">Domain: </span>[0.0, 1.0] × [0.0, 1.0]
-<span class="sgr90">Spacing: </span>mixed (x: non-uniform, y: non-uniform) • <span class="sgr35">h</span>ₘₐₓ = <span class="sgr34">0.226085</span>
+<span class="sgr90">Spacing: </span>mixed (x: non-uniform, y: non-uniform) • <span class="sgr35">h</span>ₘₐₓ = <span class="sgr34">0.235226</span>
 <span class="sgr90">Markers: </span><span class="sgr33">2 labels</span> • <span class="sgr32">:boundary</span> (<span class="sgr34">92</span>), <span class="sgr32">:interior</span> (<span class="sgr34">484</span>)
-, Bramble.SpaceWeights{2, Vector{Float64}}([0.00029704127674222685, 0.0003116374014342625, 0.0002447916388010524, 0.0005284670078865382, 0.0005248444397652441, 0.0010560520020080817, 0.0008964173109690575, 8.525649654019556e-5, 0.00024207060510716578, 0.0005172019263103517  …  0.00023888270565736495, 0.0001767666741463859, 9.230018316242527e-5, 0.00036415370247433525, 0.0007507922477787774, 0.0004880885853853613, 0.0001326990802122104, 0.00015717288701831402, 0.00015122367638712415, 5.7434236733535626e-5], ([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0  …  0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0  …  0.0004777654113147299, 0.0003535333482927718, 0.00018460036632485054, 0.0007283074049486705, 0.0015015844955575549, 0.0009761771707707226, 0.0002653981604244208, 0.00031434577403662803, 0.0003024473527742483, 0.0])))</code></pre><p><code>inner₊(M₋ₕ(u), ∇₋ₕ(v))</code> is the convective term: <code>M₋ₕ</code> averages the trial function onto the same staggered points <code>∇₋ₕ</code> differences on, one pair per direction, and <code>inner₊</code>&#39;s own gradient-tuple overload sums them — the identical spelling whether <code>D</code> is 1 or 3, since <code>M₋ₕ</code>/<code>∇₋ₕ</code> collapse to a bare node instead of a one-element tuple in 1D and <code>inner₊</code> has a method for both:</p><pre><code class="language-julia hljs">bcs = dirichlet_constraints(Bramble.set(Ω), :boundary =&gt; sol)
+, Bramble.SpaceWeights{2, Vector{Float64}}([5.37824877148803e-5, 0.000245096070449802, 0.0003475307302238488, 0.0002398084403667965, 0.00012424935089663358, 0.00020887018108953662, 0.0002034670109563989, 4.007869386960334e-5, 0.00011184518087941722, 0.00011241010603876126  …  0.0015854856050094154, 0.0023776530565748763, 0.0035007139781495847, 0.0023908757533933024, 0.0004354801665276309, 0.0002636387849200556, 0.0015329120466972684, 0.0017999458216687515, 0.0010847057474867759, 0.0006620329396533337], ([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0  …  0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0  …  0.0031709712100188307, 0.0047553061131497525, 0.007001427956299169, 0.004781751506786605, 0.0008709603330552618, 0.0005272775698401112, 0.003065824093394537, 0.003599891643337503, 0.0021694114949735517, 0.0])))</code></pre><p><code>inner₊(M₋ₕ(u), ∇₋ₕ(v))</code> is the convective term: <code>M₋ₕ</code> averages the trial function onto the same staggered points <code>∇₋ₕ</code> differences on, one pair per direction, and <code>inner₊</code>&#39;s own gradient-tuple overload sums them — the identical spelling whether <code>D</code> is 1 or 3, since <code>M₋ₕ</code>/<code>∇₋ₕ</code> collapse to a bare node instead of a one-element tuple in 1D and <code>inner₊</code> has a method for both:</p><pre><code class="language-julia hljs">bcs = dirichlet_constraints(Bramble.set(Ω), :boundary =&gt; sol)
 
 a = form(Wₕ, Wₕ, (u, v) -&gt; ϵ * inner₊(∇₋ₕ(u), ∇₋ₕ(v)) + b * inner₊(M₋ₕ(u), ∇₋ₕ(v)))
 A = assemble(a; dirichlet_labels = :boundary)
@@ -24,7 +24,97 @@ l = form(Wₕ, v -&gt; innerₕ(gₕ, v))
 F = assemble(l; dirichlet_conditions = bcs, dirichlet_labels = :boundary)
 
 uₕ = element(Wₕ)
-uₕ .= A \ F</code></pre><h2 id="Checking-the-answer"><a class="docs-heading-anchor" href="#Checking-the-answer">Checking the answer</a><a id="Checking-the-answer-1"></a><a class="docs-heading-anchor-permalink" href="#Checking-the-answer" title="Permalink"></a></h2><p>The same pattern as the other two examples — one random coarse mesh per dimension, refined in place with <a href="../../api/#Bramble.iterative_refinement!"><code>iterative_refinement!</code></a>:</p><pre><code class="language-julia hljs">using Random
+uₕ .= A \ F</code></pre><h2 id="Visualizing-the-solution"><a class="docs-heading-anchor" href="#Visualizing-the-solution">Visualizing the solution</a><a id="Visualizing-the-solution-1"></a><a class="docs-heading-anchor-permalink" href="#Visualizing-the-solution" title="Permalink"></a></h2><script>
+  // See the module note above: hide `define` from Plotly's UMD wrapper so it attaches
+  // `window.Plotly` instead of registering as an anonymous AMD module.
+  window.__bramble_amd_define = window.define;
+  window.define = undefined;
+</script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<script>
+  window.define = window.__bramble_amd_define;
+
+  // Colour tokens read from the page's own theme, not hard-coded — Documenter stamps
+  // `theme--documenter-dark` on <html> when dark mode is active, light mode has no such
+  // class. Recomputed on every call so a caller can re-theme after a toggle.
+  window.bramblePlotlyTheme = function () {
+    const dark = document.documentElement.className.includes('documenter-dark');
+    return dark
+      ? { bg: 'rgba(0,0,0,0)', text: '#c3c2b7', grid: 'rgba(255,255,255,0.12)' }
+      : { bg: 'rgba(0,0,0,0)', text: '#52514e', grid: 'rgba(0,0,0,0.10)' };
+  };
+
+  // Every plot this page creates registers itself (div id + the function that
+  // reapplies theme-dependent layout colours) so one observer can repaint all of them
+  // together when the theme toggles, instead of each plot wiring its own observer.
+  window.__bramble_plotly_charts = window.__bramble_plotly_charts || [];
+  window.brambleRegisterPlotlyChart = function (divId, restyle) {
+    window.__bramble_plotly_charts.push({ divId, restyle });
+  };
+
+  if (!window.__bramble_plotly_theme_observer) {
+    window.__bramble_plotly_theme_observer = new MutationObserver(function () {
+      for (const { divId, restyle } of window.__bramble_plotly_charts) {
+        const layout = restyle();
+        Plotly.relayout(divId, layout);
+      }
+    });
+    window.__bramble_plotly_theme_observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class'],
+    });
+  }
+
+  // The layout-race fix (see the module note above): once per page, after everything
+  // (fonts included) has truly finished loading, force every plot created so far to
+  // resize against its now-final container.
+  if (!window.__bramble_plotly_load_fix_installed) {
+    window.__bramble_plotly_load_fix_installed = true;
+    const rescue = function () {
+      for (const { divId } of window.__bramble_plotly_charts) {
+        Plotly.Plots.resize(document.getElementById(divId));
+      }
+    };
+    const loaded = document.readyState === 'complete' ? Promise.resolve() :
+      new Promise((r) => window.addEventListener('load', r, { once: true }));
+    Promise.all([loaded, document.fonts.ready]).then(rescue);
+  }
+</script>
+
+<div id="bramble_sp_1" style="width:100%; max-width:480px; height:420px; margin: 1em 0;"></div>
+<script>
+(function () {
+  const theme = window.bramblePlotlyTheme();
+  const data = [{
+    type: 'heatmap',
+    x: [0.0,0.029708584101855506,0.13538714052413836,0.22167898869840397,0.26785347894902745,0.29031233846612603,0.3832300188771247,0.40270425382334196,0.40536884692520325,0.4644857389074557,0.46746238761181347,0.48354637325523053,0.5260111427641205,0.5746543414924461,0.6083688303992894,0.6575090860305446,0.7326208803581854,0.8404503637337956,0.8575639256585301,0.8632078065229662,0.8713412340780261,0.9433151475339379,0.9654032998360413,1.0],
+    y: [0.0,0.007241339746180797,0.008166788293061167,0.06482500728412388,0.12924463316872348,0.16545718292935319,0.24463487151965502,0.2951897559522907,0.30479130830280854,0.3189159953263928,0.33270334842252913,0.370414712992748,0.37240655746078455,0.38602632890976185,0.46972838523213045,0.6787830677203974,0.6913459825481851,0.6946612711969086,0.8067451165578716,0.8172176665514173,0.8675567000815366,0.9118122741389303,0.9234571000684035,1.0],
+    z: [[1.0,1.0301542868705191,1.1449799667032927,1.2481706366658079,1.3071556001706475,1.336844970931762,1.4670154325049554,1.495864430052656,1.4998556151749969,1.5911956884104914,1.5959391753394419,1.6218157797478698,1.6921690080737668,1.776516352781749,1.837431790132065,1.929978930524545,2.08052627878946,2.317410419408318,2.3574108649237795,2.370753427493585,2.390114407579927,2.568482217331139,2.6258464463966247,2.718281828459045],[1.0072676216472654,1.0376349432848413,1.153299023066448,1.2572395106361152,1.3166493675110436,1.3465501088197338,1.477673863208583,1.5067281013114555,1.510747533747854,1.602752615814195,1.6075298993801541,1.6335920740020642,1.7044555016838832,1.7894156032627881,1.8507709348284902,1.943988528671267,2.095630621294431,2.3342556078693564,2.374540423371917,2.3879778882275797,2.40747654299939,2.5871495634800756,2.6449270975076873,2.7380372723189224],[1.008200227476832,1.038594921362047,1.154366536407651,1.2584032284120956,1.3178676311522532,1.347795546836822,1.4790415373681607,1.5081221667665043,1.5121452364496843,1.604235611288155,1.6090172429859586,1.635103257783367,1.7060321507809624,1.79107086881503,1.8524826742544143,1.9457863178537775,2.097568897848254,2.336417128265345,2.376738520393985,2.3901881905259947,2.4097045552519485,2.5895449517670857,2.6473755698530437,2.7405723577985484],[1.066972295666803,1.0991248189616734,1.2216526079867487,1.331747223797447,1.3946601912835594,1.4263231236912663,1.5652334072174037,1.5960018579601953,1.6002585500356743,1.697707647045368,1.7027671037828784,1.7303683373792795,1.8054220399035787,1.89541019724192,1.9603930160804097,2.0591277460644912,2.2197689555554705,2.4726246095253805,2.515289164693873,2.529520462351984,2.550171419732608,2.740513671855903,2.801710290771364,2.9003314027803024],[1.1379684749513608,1.1722574995907393,1.3029322001930121,1.4203424510641673,1.487432677923787,1.5211988412864388,1.669348217176281,1.7021615219124264,1.7067011052027052,1.8106253159646626,1.8160209524059154,1.845456097231129,1.925496825639881,2.0214661291845633,2.090769261520958,2.1960719250368523,2.367413255923527,2.6371418082240665,2.682648700384259,2.6978279754798966,2.719854480213578,2.92287371199926,2.9881421776957047,3.0933190268195365],[1.1799324403872,1.2154757141866763,1.3509608979549448,1.472694194963847,1.5422540218570662,1.5772631145236082,1.730871367122593,1.7648928303446534,1.769599546430022,1.8773514395004067,1.8829457410116328,1.913464758405335,1.9964535067904932,2.095958367086136,2.167815064222154,2.276999469609709,2.4546622926159567,2.7343544860883364,2.7815405696403763,2.797279942438465,2.820119198490868,3.030633728150759,3.0983143519388476,3.207388911513861],[1.27715490243145,1.315634992312194,1.4622727291760953,1.594025688781735,1.6693122977029338,1.7072043004554884,1.8734604290666723,1.9102839557120999,1.9153783282444328,2.0320027470449493,2.038057789796057,2.071090275182593,2.1609134266729115,2.2686139362390807,2.3463907986001384,2.464573015971117,2.6568838260949947,2.95964973244913,3.010729836109026,3.027768043584173,3.0524919595694517,3.2803690066048397,3.353624342611581,3.4716669634067956],[1.3433812490902368,1.3838481629988253,1.5380691948182879,1.676644497397093,1.7558308673678054,1.795685900707709,1.9705567361463634,2.0092882231997806,2.014646555815076,2.137313568307466,2.14368234338626,2.1784263362467056,2.272903534165625,2.386184782411485,2.467992284874881,2.59230007897388,2.7945822172815244,3.113057836529321,3.1667902043629463,3.1847132257033226,3.2107212045384084,3.4504396343666657,3.5275049480009226,3.651688838094605],[1.3563419161718577,1.3971952149302145,1.5528992626273892,1.6928095586528138,1.772758973893855,1.8129980111451296,1.9895548368910516,2.028659532429961,2.0340694872862564,2.1579189438395607,2.164349081035525,2.1994278859871605,2.2948156946306466,2.409188848473319,2.491784842394102,2.617290946503456,2.8215236672068706,3.143072850696363,3.1973239834548077,3.215420082434551,3.241679241404941,3.4837160278836112,3.5615282051789197,3.686919583907282],[1.3756357602190807,1.4170645359296756,1.5749759099382359,1.7168736226560295,1.7979590050315732,1.8387697803990464,2.0178364943260516,2.057496848086187,2.0629836781744686,2.188593340041662,2.195114849444422,2.230692111426788,2.3274354803298296,2.443434050783363,2.5272038135416928,2.6544936889165163,2.8616299295252547,3.1877540941995006,3.242777572178154,3.2611313578414416,3.287764510196696,3.5332528945615316,3.6121774687242763,3.7393656895819722],[1.3947334872048254,1.4367316487025577,1.596827750965501,1.7406928242501611,1.8229027010117451,1.8642794345489517,2.045830670457683,2.0860410528913045,2.0916039720611344,2.218955982420332,2.2255679286258983,2.261638581638538,2.3597237188485347,2.4773311327308387,2.5622626669075026,2.6913180414911775,2.9013279771829943,3.231980060585437,3.2877679860865725,3.306376829146795,3.3333801566504477,3.582285282656203,3.6623112189266984,3.7912786938121923],[1.448335133530958,1.4919344145583149,1.6581631018865652,1.8075514972494524,1.8929183657405786,1.9358842380212162,2.124409757147648,2.166164477098761,2.171941060679053,2.304183693585195,2.3110495611980837,2.34850532615893,2.450356663278628,2.5724797190359445,2.6606721231107837,2.7946825549219008,3.0127572484892413,3.3561149259462173,3.4140486475322507,3.433373449834527,3.4614159197963796,3.719910488047345,3.8030282176652763,3.9369830749960077],[1.4512228668576272,1.494907764774456,1.6614669395983563,1.811152959696385,1.896689900132514,1.9397413356294924,2.1286426704253745,2.1704805306742427,2.1762686093885844,2.3087747444827755,2.315654276723679,2.3531846274067774,2.455238844804107,2.577605151057122,2.665973169885612,2.800250469146445,3.0187594929412525,3.362801497631257,3.4208506736169886,3.440213998934521,3.468312374260628,3.7273233958946537,3.8106077310352666,3.944832748023328],[1.4711234033801839,1.5153979120271834,1.6842349642672074,1.835972303373958,1.922681353074976,1.9663224579869574,2.157813883305139,2.20022467331347,2.206091998488953,2.3404140748766213,2.3473878051658166,2.3854321380435075,2.488884492682549,2.612927139903149,2.702505354356636,2.838621666486155,3.0601236390348685,3.408881178335163,3.4677258156325035,3.487354550292393,3.5158381266654875,3.778407714016189,3.8628403977015484,3.99892801482918],[1.5995596701800852,1.6476717596967012,1.831239147746895,1.996232338951324,2.0905145222664814,2.137966507519132,2.346183867725457,2.392296665893117,2.39867612325181,2.544723941316809,2.5523062634937124,2.5936706266158205,2.7061509253659413,2.841016773226346,2.93840902637434,3.0863975215919557,3.3272168572680516,3.706393113029699,3.770370695381871,3.79171193609996,3.822680898818286,4.108188095689179,4.200016936275115,4.34805398498647],[1.9714771176910302,2.0310522591328537,2.257823675000582,2.46144020221969,2.5777612935532437,2.6363003727642234,2.893091055243943,2.949963262909452,2.957831134885075,3.1379312212313266,3.1472816114270716,3.1982903008998127,3.3369855032440743,3.5032702425488784,3.623345410424923,3.8057820572431456,4.102598307621698,4.569731401605869,4.648519576972411,4.6747982677573185,4.712929300500465,5.064275732326466,5.177174824793204,5.359030424242342],[1.99640084634375,2.056689056967901,2.286316410680405,2.4925035701790255,2.6102915113487404,2.6695673528998958,2.9296038452281,2.987191717718947,2.9951585704691195,3.1775334882007558,3.187001642394289,3.2386531239924055,3.3790990408228825,3.547483167917953,3.6690725506208657,3.8538103601870777,4.154370787487537,4.627403046825972,4.7071816017951065,4.73379073361892,4.772401380579034,5.128194007620228,5.242538112642926,5.426780142936474],[2.0030304749018244,2.0635087529337968,2.2938956346070745,2.500766439798532,2.6189445445776403,2.6784163556102443,2.9393161576663664,2.9970944086601916,3.0050875731828453,3.188067615346572,3.197567077342521,3.2493895510352653,3.390301179331621,3.5592437624653437,3.6812359557878063,3.8665859305572714,4.1681424136563665,4.642744072303959,4.722786177795947,4.7494832458864265,4.788221505907047,5.1451971352457315,5.2599252806597026,5.44480134177532],[2.2406032027504024,2.3082358877529963,2.565842285131603,2.7972009240414843,2.9293784844164823,2.99589827061573,3.2877177184992727,3.3523472820649207,3.361288366396923,3.565962695298596,3.576588811702859,3.634557186017216,3.7921787151887787,3.981155673362794,4.11761563448737,4.324946599434038,4.6622665107553365,5.193174783419172,5.282727443545273,5.312597333251901,5.355940106080263,5.755365074590521,5.883746158655643,6.090590970823556],[2.2641913301447074,2.332518686715447,2.5928197275201175,2.8266056948698233,2.96017100383404,3.0273887505655233,3.3222759676141145,3.387584113199359,3.3966190362930777,3.6034464028292894,3.6141841402925636,3.67276180525255,3.8320415263944207,4.0230068813552355,4.160902145406987,4.37041416409115,4.7112826712160585,5.247780772656528,5.3382762932808925,5.368460784898662,5.412260130630681,5.815906095906133,5.94564865400627,6.154710148886872],[2.3810860332196784,2.4529008963028085,2.7265490309754963,2.972362278496657,3.1128071828335573,3.1834880473491753,3.4935731553501985,3.562249025151562,3.571749930373889,3.7892474126959295,3.80053924081651,3.8621396751117394,4.0296399463188095,4.230462604603915,4.375475962917573,4.595802683942299,4.95426462445052,5.518463901152554,5.613641159440967,5.645387858578525,5.6914546535008945,6.116028164652263,6.252516853258198,6.4724628960986825],[2.4888288890073436,2.563864320974738,2.849810735252352,3.1067076779934832,3.2534968741514168,3.3273710039423254,3.65145693668508,3.7232376891100665,3.7331682050414132,3.9605030413357745,3.9723057853342936,4.036693601525978,4.211774218533529,4.421686261991344,4.5732641332945745,4.803563723076134,5.17824322498598,5.767958610721333,5.867452976461347,5.900640198090685,5.9487977286670795,6.39265843872197,6.535363527766373,6.7653383431325755],[2.51798027015295,2.593883256219574,2.883156135128873,3.1430514048116844,3.29155837157738,3.366296886643369,3.6941682767763906,3.7667892687870688,3.7768359822464164,4.006832828379142,4.0187737676438475,4.083915881450795,4.261047958859934,4.473419548643316,4.626774133501717,4.859772783166365,5.238839621703942,5.83545207203858,5.936114994120153,5.9696920960658195,6.0184153613034175,6.467491303566744,6.611878418793259,6.844580012775162],[2.718281828459045,2.800249678509319,3.1123782374392026,3.3928795604648223,3.5532173149123483,3.6339213919506688,3.9877613922472075,4.0661810980503805,4.077030264042456,4.32531832532862,4.338212459651119,4.408552363196772,4.599792265328488,4.829072119726966,4.994657446148966,5.246226656153693,5.655456777264906,6.299374632159286,6.4081071163342305,6.444375961712812,6.4970045620626715,6.981858538091431,7.137790679563703,7.38905609893065]],
+    colorscale: 'Viridis',
+    colorbar: { tickfont: { color: theme.text } },
+  }];
+  const layout = {
+    title: { text: 'Convection-diffusion, 2D', font: { color: theme.text, size: 14 } },
+    paper_bgcolor: theme.bg,
+    plot_bgcolor: theme.bg,
+    font: { color: theme.text },
+    xaxis: { title: 'x', color: theme.text, gridcolor: theme.grid, zeroline: false },
+    yaxis: { title: 'y', color: theme.text, gridcolor: theme.grid, zeroline: false, scaleanchor: 'x' },
+    margin: { t: 40, l: 50, r: 20, b: 40 },
+  };
+  Plotly.newPlot('bramble_sp_1', data, layout, { displayModeBar: false, responsive: true });
+  window.brambleRegisterPlotlyChart('bramble_sp_1', function () {
+    const t = window.bramblePlotlyTheme();
+    return {
+      'font.color': t.text,
+      'xaxis.color': t.text, 'xaxis.gridcolor': t.grid,
+      'yaxis.color': t.text, 'yaxis.gridcolor': t.grid,
+      'title.font.color': t.text,
+    };
+  });
+})();
+</script>
+<h2 id="Checking-the-answer"><a class="docs-heading-anchor" href="#Checking-the-answer">Checking the answer</a><a id="Checking-the-answer-1"></a><a class="docs-heading-anchor-permalink" href="#Checking-the-answer" title="Permalink"></a></h2><p>The same pattern as the other two examples — one random coarse mesh per dimension, refined in place with <a href="../../api/#Bramble.iterative_refinement!"><code>iterative_refinement!</code></a>:</p><pre><code class="language-julia hljs">using Random
 
 function convdiff_series(D::Int; n0::Int = 5, levels::Int)
     sol_d(x) = exp(sum(x))
@@ -67,159 +157,126 @@ hs3, errs3 = convdiff_series(3; levels = 4)
 order1 = log(errs1[end - 1] / errs1[end]) / log(hs1[end - 1] / hs1[end])
 order2 = log(errs2[end - 1] / errs2[end]) / log(hs2[end - 1] / hs2[end])
 order3 = log(errs3[end - 1] / errs3[end]) / log(hs3[end - 1] / hs3[end])
-(order1, order2, order3)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(1.9999783962138686, 1.9987767350596424, 1.921853263682501)</code></pre><pre><code class="language-julia hljs">order1 &gt; 1.9 &amp;&amp; order2 &gt; 1.9 &amp;&amp; order3 &gt; 1.8</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">true</code></pre><pre><code class="language-julia hljs">convergence_plot([
-    (hs1, errs1, &quot;1D&quot;, &quot;#5B5FC7&quot;),
-    (hs2, errs2, &quot;2D&quot;, &quot;#0E7C86&quot;),
-    (hs3, errs3, &quot;3D&quot;, &quot;#B26A00&quot;),
-]; title = &quot;Convection-diffusion, ‖·‖₁ₕ&quot;)</code></pre><script>
-  // See the module note above: hide `define` from Chart.js's UMD wrapper so it attaches
-  // `window.Chart` instead of registering as an anonymous AMD module.
+(order1, order2, order3)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(1.9999783962138686, 1.9987767350596424, 1.921853263682501)</code></pre><pre><code class="language-julia hljs">order1 &gt; 1.9 &amp;&amp; order2 &gt; 1.9 &amp;&amp; order3 &gt; 1.8</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">true</code></pre><script>
+  // See the module note above: hide `define` from Plotly's UMD wrapper so it attaches
+  // `window.Plotly` instead of registering as an anonymous AMD module.
   window.__bramble_amd_define = window.define;
   window.define = undefined;
 </script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <script>
   window.define = window.__bramble_amd_define;
 
   // Colour tokens read from the page's own theme, not hard-coded — Documenter stamps
   // `theme--documenter-dark` on <html> when dark mode is active, light mode has no such
   // class. Recomputed on every call so a caller can re-theme after a toggle.
-  window.brambleChartTheme = function () {
+  window.bramblePlotlyTheme = function () {
     const dark = document.documentElement.className.includes('documenter-dark');
     return dark
-      ? { text: '#c3c2b7', grid: 'rgba(255,255,255,0.12)', axis: 'rgba(255,255,255,0.35)' }
-      : { text: '#52514e', grid: 'rgba(0,0,0,0.10)', axis: 'rgba(0,0,0,0.35)' };
+      ? { bg: 'rgba(0,0,0,0)', text: '#c3c2b7', grid: 'rgba(255,255,255,0.12)' }
+      : { bg: 'rgba(0,0,0,0)', text: '#52514e', grid: 'rgba(0,0,0,0.10)' };
   };
 
-  // Every chart this page creates registers itself (chart instance + the function that
-  // reapplies theme-dependent option colours) so one observer can repaint all of them
-  // together when the theme toggles, instead of each chart wiring its own observer.
-  window.__bramble_charts = window.__bramble_charts || [];
-  window.brambleRegisterChart = function (chart, restyle) {
-    window.__bramble_charts.push({ chart, restyle });
+  // Every plot this page creates registers itself (div id + the function that
+  // reapplies theme-dependent layout colours) so one observer can repaint all of them
+  // together when the theme toggles, instead of each plot wiring its own observer.
+  window.__bramble_plotly_charts = window.__bramble_plotly_charts || [];
+  window.brambleRegisterPlotlyChart = function (divId, restyle) {
+    window.__bramble_plotly_charts.push({ divId, restyle });
   };
 
-  if (!window.__bramble_theme_observer) {
-    window.__bramble_theme_observer = new MutationObserver(function () {
-      for (const { chart, restyle } of window.__bramble_charts) {
-        restyle(chart);
-        chart.update('none');
+  if (!window.__bramble_plotly_theme_observer) {
+    window.__bramble_plotly_theme_observer = new MutationObserver(function () {
+      for (const { divId, restyle } of window.__bramble_plotly_charts) {
+        const layout = restyle();
+        Plotly.relayout(divId, layout);
       }
     });
-    window.__bramble_theme_observer.observe(document.documentElement, {
+    window.__bramble_plotly_theme_observer.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ['class'],
     });
   }
 
   // The layout-race fix (see the module note above): once per page, after everything
-  // (fonts included) has truly finished loading, force every chart created so far to
-  // resize against its now-final container and relayout. `resize()` reads the actual
-  // current size; `update()` (not 'none' — this one may need to move real distance, not
-  // just recolour) redraws from it. A chart registered *after* window.load (later
-  // content on the same page) already has this page's final layout available at its own
-  // creation time, so it does not need the same rescue.
-  if (!window.__bramble_load_fix_installed) {
-    window.__bramble_load_fix_installed = true;
+  // (fonts included) has truly finished loading, force every plot created so far to
+  // resize against its now-final container.
+  if (!window.__bramble_plotly_load_fix_installed) {
+    window.__bramble_plotly_load_fix_installed = true;
     const rescue = function () {
-      for (const { chart } of window.__bramble_charts) {
-        chart.resize();
-        chart.update();
+      for (const { divId } of window.__bramble_plotly_charts) {
+        Plotly.Plots.resize(document.getElementById(divId));
       }
     };
-    // `window.load` does not wait for web fonts — those load asynchronously and can
-    // still swap in (reflowing text, and with it every container's width) afterwards.
-    // `document.fonts.ready` is the one signal that actually waits for that; checked
-    // live and found `load` alone left one chart still stuck at its pre-font-swap size
-    // while every other chart on the same page had already settled by the time `load`
-    // fired. Both awaited, in whichever order they resolve, before the rescue pass runs.
     const loaded = document.readyState === 'complete' ? Promise.resolve() :
       new Promise((r) => window.addEventListener('load', r, { once: true }));
-    const fontsReady = (document.fonts && document.fonts.ready) || Promise.resolve();
-    Promise.all([loaded, fontsReady]).then(rescue);
+    Promise.all([loaded, document.fonts.ready]).then(rescue);
   }
 </script>
 
-<div style="width:100%; max-width:480px; margin: 1em 0;">
-  <canvas id="bramble_cp_1" width="480" height="340"></canvas>
-</div>
+<div id="bramble_cp_1" style="width:100%; max-width:480px; height:340px; margin: 1em 0;"></div>
 <script>
 (function () {
-  const theme = window.brambleChartTheme();
-  const ctx = document.getElementById('bramble_cp_1').getContext('2d');
-  const chart = new Chart(ctx, {
-    type: 'scatter',
-    data: { datasets: [{
-  label: "1D",
-  data: [{x:0.4537346574443589,y:0.007321832869221185},{x:0.22686732872217952,y:0.0018702458334760464},{x:0.11343366436108976,y:0.00047001791626974246},{x:0.05671683218054491,y:0.00011765753065799848},{x:0.028358416090272454,y:2.9423939099950523e-5},{x:0.014179208045136282,y:7.356571333557699e-6},{x:0.007089604022568197,y:1.8391703740302698e-6}],
-  showLine: false,
-  pointBackgroundColor: "#5B5FC7",
-  pointBorderColor: "#5B5FC7",
-  pointRadius: 5,
-  pointHoverRadius: 7,
+  const theme = window.bramblePlotlyTheme();
+  const data = [{
+  name: "1D",
+  x: [0.4537346574443589,0.22686732872217952,0.11343366436108976,0.05671683218054491,0.028358416090272454,0.014179208045136282,0.007089604022568197],
+  y: [0.007321832869221185,0.0018702458334760464,0.00047001791626974246,0.00011765753065799848,2.9423939099950523e-5,7.356571333557699e-6,1.8391703740302698e-6],
+  mode: 'markers',
+  type: 'scatter',
+  marker: { color: "#5B5FC7", size: 8 },
 },
 {
-  label: "2D",
-  data: [{x:0.7281398631056489,y:0.03301860800855755},{x:0.3640699315528245,y:0.009089635054990315},{x:0.18203496577641226,y:0.002341481991224708},{x:0.09101748288820616,y:0.0005908586926789624},{x:0.045508741444103114,y:0.0001481360552753533},{x:0.0227543707220516,y:3.706542837345128e-5}],
-  showLine: false,
-  pointBackgroundColor: "#0E7C86",
-  pointBorderColor: "#0E7C86",
-  pointRadius: 5,
-  pointHoverRadius: 7,
+  name: "2D",
+  x: [0.7281398631056489,0.3640699315528245,0.18203496577641226,0.09101748288820616,0.045508741444103114,0.0227543707220516],
+  y: [0.03301860800855755,0.009089635054990315,0.002341481991224708,0.0005908586926789624,0.0001481360552753533,3.706542837345128e-5],
+  mode: 'markers',
+  type: 'scatter',
+  marker: { color: "#0E7C86", size: 8 },
 },
 {
-  label: "3D",
-  data: [{x:0.918047411794347,y:0.05275044235051192},{x:0.4590237058971735,y:0.023918148212606117},{x:0.22951185294858678,y:0.007046640601919106},{x:0.1147559264742934,y:0.0018597160629038796}],
-  showLine: false,
-  pointBackgroundColor: "#B26A00",
-  pointBorderColor: "#B26A00",
-  pointRadius: 5,
-  pointHoverRadius: 7,
+  name: "3D",
+  x: [0.918047411794347,0.4590237058971735,0.22951185294858678,0.1147559264742934],
+  y: [0.05275044235051192,0.023918148212606117,0.007046640601919106,0.0018597160629038796],
+  mode: 'markers',
+  type: 'scatter',
+  marker: { color: "#B26A00", size: 8 },
 },
 {
-  label: "slope 2",
-  data: [{x:0.007089604022568197,y:1.8391703740302698e-6}, {x:0.918047411794347,y:0.030839563713406345}],
-  showLine: true,
-  borderDash: [5,4],
-  borderWidth: 1.5,
-  pointRadius: 0,
-  borderColor: 'rgba(128,128,128,0.7)',
-}] },
-    options: {
-      responsive: true,
-      plugins: {
-        title: { display: true, text: "Convection-diffusion, ‖·‖₁ₕ", color: theme.text, font: { size: 13, weight: '600' } },
-        legend: { position: 'bottom', labels: { color: theme.text, boxWidth: 12, font: { size: 11 } } },
-      },
-      scales: {
-        x: {
-          type: 'logarithmic',
-          title: { display: true, text: 'h', color: theme.text },
-          ticks: { color: theme.text },
-          grid: { color: theme.grid },
-          border: { color: theme.axis },
-        },
-        y: {
-          type: 'logarithmic',
-          title: { display: true, text: 'error', color: theme.text },
-          ticks: { color: theme.text },
-          grid: { color: theme.grid },
-          border: { color: theme.axis },
-        },
-      },
+  name: "slope 2",
+  x: [0.007089604022568197, 0.918047411794347],
+  y: [1.8391703740302698e-6, 0.030839563713406345],
+  mode: 'lines',
+  type: 'scatter',
+  line: { dash: 'dash', width: 1.5, color: 'rgba(128,128,128,0.7)' },
+}];
+  const layout = {
+    title: { text: 'Convection-diffusion, ‖·‖₁ₕ', font: { color: theme.text, size: 13 } },
+    paper_bgcolor: theme.bg,
+    plot_bgcolor: theme.bg,
+    font: { color: theme.text },
+    legend: { orientation: 'h', y: -0.25, font: { color: theme.text, size: 11 } },
+    xaxis: {
+      type: 'log', title: { text: 'h', font: { color: theme.text } },
+      color: theme.text, gridcolor: theme.grid,
     },
-  });
-  window.brambleRegisterChart(chart, function (c) {
-    const t = window.brambleChartTheme();
-    c.options.plugins.title.color = t.text;
-    c.options.plugins.legend.labels.color = t.text;
-    for (const ax of ['x', 'y']) {
-      c.options.scales[ax].title.color = t.text;
-      c.options.scales[ax].ticks.color = t.text;
-      c.options.scales[ax].grid.color = t.grid;
-      c.options.scales[ax].border.color = t.axis;
-    }
+    yaxis: {
+      type: 'log', title: { text: 'error', font: { color: theme.text } },
+      color: theme.text, gridcolor: theme.grid,
+    },
+    margin: { t: 40, l: 60, r: 20, b: 40 },
+  };
+  Plotly.newPlot('bramble_cp_1', data, layout, { displayModeBar: false, responsive: true });
+  window.brambleRegisterPlotlyChart('bramble_cp_1', function () {
+    const t = window.bramblePlotlyTheme();
+    return {
+      'font.color': t.text,
+      'title.font.color': t.text,
+      'legend.font.color': t.text,
+      'xaxis.color': t.text, 'xaxis.gridcolor': t.grid, 'xaxis.title.font.color': t.text,
+      'yaxis.color': t.text, 'yaxis.gridcolor': t.grid, 'yaxis.title.font.color': t.text,
+    };
   });
 })();
 </script>
-<p>Second order in every dimension. The convective term does not change the rate — it changes the matrix from symmetric to non-symmetric (<code>inner₊(M₋ₕ(u), ∇₋ₕ(v)) ≠ inner₊(M₋ₕ(v), ∇₋ₕ(u))</code> in general), which is why this example does not also check <code>issymmetric</code>, unlike the <a href="../../tutorials/form/">forms tutorial</a>&#39;s pure-diffusion Poisson problem.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../poisson_nonlinear/">« Nonlinear Poisson equation</a><a class="docs-footer-nextpage" href="../coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Friday 4 September 2026 18:35">Friday 4 September 2026</span>. Using Julia version 1.12.7.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+<p>Second order in every dimension. The convective term does not change the rate — it changes the matrix from symmetric to non-symmetric (<code>inner₊(M₋ₕ(u), ∇₋ₕ(v)) ≠ inner₊(M₋ₕ(v), ∇₋ₕ(u))</code> in general), which is why this example does not also check <code>issymmetric</code>, unlike the <a href="../../tutorials/form/">forms tutorial</a>&#39;s pure-diffusion Poisson problem.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../poisson_nonlinear/">« Nonlinear Poisson equation</a><a class="docs-footer-nextpage" href="../coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Friday 4 September 2026 21:18">Friday 4 September 2026</span>. Using Julia version 1.12.7.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
