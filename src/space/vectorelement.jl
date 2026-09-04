@@ -13,14 +13,14 @@
 # `values(some_dict)` got an UndefVarError about two modules exporting different bindings.
 # Extending Base is not piracy here, `VectorElement` being ours.
 """
-	values(uₕ::VectorElement)
+    values(uₕ::VectorElement) -> AbstractVector
 
-Returns the coefficients of the [`VectorElement`](@ref) `uₕ`.
+Returns the coefficient vector containing the degrees of freedom of [`VectorElement`](@ref) `uₕ`.
 """
 @inline Base.values(uₕ::VectorElement) = uₕ.data
 
 """
-	to_matrix(uₕ::VectorElement)
+    to_matrix(uₕ::VectorElement)
 
 Reshapes the flat coefficient vector of `uₕ` into a multidimensional array that matches the logical layout of the grid points.
 
@@ -32,7 +32,7 @@ Reshapes the flat coefficient vector of `uₕ` into a multidimensional array tha
 @inline to_matrix(uₕ::VectorElement{<:CompositeGridSpace{N}}) where {N} = ntuple(i -> to_matrix(uₕ(i)), Val(N))
 
 """
-	values!(uₕ::VectorElement, s)
+    values!(uₕ::VectorElement, s) -> uₕ
 
 Copies the values of `s` into the coefficients of [`VectorElement`](@ref) `uₕ`. Returns `uₕ`.
 """
@@ -42,15 +42,15 @@ Copies the values of `s` into the coefficients of [`VectorElement`](@ref) `uₕ`
 end
 
 """
-	space(uₕ::VectorElement)
+    space(uₕ::VectorElement) -> AbstractSpaceType
 
 Returns the grid space associated with [`VectorElement`](@ref) `uₕ`.
 """
 @inline space(uₕ::VectorElement) = uₕ.space
 
 """
-	space_type(::Type{<:VectorElement})
-	space_type(uₕ::VectorElement)
+    space_type(::Type{<:VectorElement}) -> Type{<:AbstractSpaceType}
+    space_type(uₕ::VectorElement) -> Type{<:AbstractSpaceType}
 
 Returns the concrete [`AbstractSpaceType`](@ref) associated with a [`VectorElement`](@ref) type or instance.
 
@@ -82,7 +82,7 @@ See also: [`space`](@ref), [`VectorElement`](@ref)
 # ==============================================================================
 
 """
-	component_range(Wₕ::CompositeGridSpace{N}, i::Int) where N
+    component_range(Wₕ::CompositeGridSpace{N}, i::Int) where N -> UnitRange{Int}
 
 Returns the degree-of-freedom index range for the `i`-th constituent space of composite space `Wₕ`.
 """
@@ -92,7 +92,7 @@ Returns the degree-of-freedom index range for the `i`-th constituent space of co
 end
 
 """
-	component_ranges(Wₕ::CompositeGridSpace{N}) where N
+    component_ranges(Wₕ::CompositeGridSpace{N}) where N -> NTuple{N, UnitRange{Int}}
 
 Returns an `NTuple{N, UnitRange{Int}}` containing the degree-of-freedom ranges for all `N` components.
 """
@@ -108,8 +108,8 @@ Returns an `NTuple{N, UnitRange{Int}}` containing the degree-of-freedom ranges f
 end
 
 """
-	(uₕ::VectorElement)(i::Int)
-	component(uₕ::VectorElement, i::Int)
+    (uₕ::VectorElement)(i::Int) -> VectorElement
+    component(uₕ::VectorElement, i::Int) -> VectorElement
 
 Extracts a [`VectorElement`](@ref) view of the `i`-th field component of `uₕ`.
 
@@ -119,6 +119,7 @@ For a [`CompositeGridSpace`](@ref), this creates a lightweight, zero-copy view o
 For a scalar [`ScalarGridSpace`](@ref), `uₕ(1)` returns `uₕ`.
 
 # Examples
+
 ```julia
 Vₕ = Wₕ^2
 uₕ = element(Vₕ)
@@ -142,14 +143,14 @@ end
 end
 
 """
-	component(uₕ::VectorElement, i::Int)
+    component(uₕ::VectorElement, i::Int) -> VectorElement
 
 Extracts a [`VectorElement`](@ref) view of the `i`-th field component of `uₕ`. Alias for `uₕ(i)`.
 """
 @inline component(uₕ::VectorElement, i::Int) = uₕ(i)
 
 """
-	components(uₕ::VectorElement)
+    components(uₕ::VectorElement) -> Tuple
 
 Returns an `NTuple` of [`VectorElement`](@ref) views for all components of `uₕ`.
 """
@@ -164,9 +165,11 @@ end
 
 # Constructor for VectorElement
 """
-	element(Wₕ::AbstractSpaceType, [α::Number])
+    element(Wₕ::AbstractSpaceType) -> VectorElement
+    element(Wₕ::AbstractSpaceType, α::Number) -> VectorElement
 
-Returns a [`VectorElement`](@ref) for grid space `Wₕ` with uninitialized components. if ``\alpha`` is provided, the components are initialized to ``\alpha``.
+Returns a [`VectorElement`](@ref) for grid space `Wₕ` with uninitialized components.
+If `α` is provided, the components are initialized to `α`.
 """
 @inline function element(Wₕ::AbstractSpaceType)
     # Get the backend (e.g., CPU, GPU) from the space.
@@ -182,7 +185,7 @@ Returns a [`VectorElement`](@ref) for grid space `Wₕ` with uninitialized compo
 end
 
 """
-	element(Wₕ::AbstractSpaceType, ::Type{T})
+    element(Wₕ::AbstractSpaceType, ::Type{T}) -> VectorElement
 
 Returns a [`VectorElement`](@ref) for grid space `Wₕ` holding coefficients of type `T`,
 with uninitialized components.
@@ -216,9 +219,9 @@ function element(Wₕ::AbstractSpaceType, α::Number)
 end
 
 """
-	element(Wₕ::AbstractSpaceType, v::AbstractVector)
+    element(Wₕ::AbstractSpaceType, v::AbstractVector) -> VectorElement
 
-Returns a [`VectorElement`](@ref) for a grid space `Wₕ` with the same coefficients of `v`.
+Returns a [`VectorElement`](@ref) for a grid space `Wₕ` with the same coefficients as `v`.
 """
 @inline function element(Wₕ::AbstractSpaceType, v::AbstractVector)
     # Ensure the provided vector has the correct number of DoFs.
@@ -267,7 +270,7 @@ function Base.similar(bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{VectorEleme
 end
 
 """
-	_find_vec_in_broadcast(bc)
+    _find_vec_in_broadcast(bc)
 
 Internal helper to extract a [`VectorElement`](@ref) from a broadcast expression.
 
@@ -308,7 +311,7 @@ _find_vec_in_broadcast(::Any, rest) = _find_vec_in_broadcast(rest) # Keep search
 # Both of these delegate to broadcasting rather than filling a tuple allocated up front.
 #
 # The type of `a * vₕ` is the type of the product, and `similar(vₕ[i])` gives the type of
-# `vₕ[i]` alone — it copies the operand and drops the scalar. So a `Dual` scalar against a
+# `vₕ[i]` alone; it copies the operand and drops the scalar. So a `Dual` scalar against a
 # `Float64` element allocated `Vector{Float64}` and then threw on the first store:
 #
 #     julia> ForwardDiff.Dual{Nothing}(2.0, 1.0) * (uₕ, vₕ)
@@ -317,8 +320,8 @@ _find_vec_in_broadcast(::Any, rest) = _find_vec_in_broadcast(rest) # Keep search
 # `similar(::Broadcasted, ElType)` already computes the promoted type, and the scalar case
 # needs no method here at all: a `VectorElement` is an `AbstractVector`, so Base's own
 # `a * A == a .* A` covers it and has always promoted correctly. These two reimplemented
-# that by hand for tuples and lost the promotion — the sixth instance of an element type
-# taken from somewhere other than the data.
+# that by hand for tuples and lost the promotion, deriving the element type from the space
+# rather than the values.
 #
 # `vₕ[i] .* uₕ` rather than `uₕ .* vₕ[i]`: the broadcast picks the space off the first
 # `VectorElement` it finds, and the code this replaces took it from `vₕ[i]`. The product is

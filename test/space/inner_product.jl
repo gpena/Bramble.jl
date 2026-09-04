@@ -319,10 +319,8 @@ end
     @test inner₊((uₕ, vₕ), (uₕ, vₕ)) ≈ inner₊ₓ(uₕ, uₕ) + inner₊ₓ(vₕ, vₕ)
 
     @testset "Composite space inner product" begin
-        # The inner product of a product space is the sum of the components' — the only
-        # meaning it can have, which is why accepting a composite is not ambiguous. It used
-        # to be rejected at dispatch, on the grounds that the meaning would depend on the
-        # argument; it does not.
+        # The inner product of a product space is the sum of the components', the only
+        # natural definition across product components.
         Ωc = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (12, 12), (true, true))
         Vc = gridspace(Ωc, Val(3))
         uv = Rₕ(Vc, (x -> x[1], x -> x[2], x -> 1.0))
@@ -348,9 +346,9 @@ end
     end
 end
 
-# Point 11: a masked sum of the existing cell measures, restricted by `markers`, is *not* a
-# surface integral — it is O(h) times one, and every test here is written to keep that
-# distinction visible rather than only assert a number.
+# A masked sum of existing cell measures, restricted by `markers`, is a volumetric
+# masked sum rather than a codimension-1 surface integral. Every test here maintains
+# that distinction explicitly.
 @testset "Masked inner products" begin
     S = interval(0.0, 1.0) × interval(0.0, 1.0)
     Ωₕ = mesh(domain(S, :bottom => :bottom, :left => :left), (5, 5), (true, true))
@@ -359,10 +357,8 @@ end
     vₕ = Rₕ(Wₕ, x -> 1.0)
 
     @testset "Figure match" begin
-        # docs/form-unlock-plan.md, point 11: masked sum on a 5×5 mesh restricted to
-        # :bottom reads 0.125, against 1.0 for the true (not yet implemented) boundary
-        # integral over the same region — not interchangeable, and this is the number that
-        # makes the distinction concrete rather than asserted in prose.
+        # Masked sum on a 5×5 mesh restricted to :bottom evaluates to 0.125, distinguished
+        # from a codimension-1 boundary integral over the same region.
         @test innerₕ(uₕ, vₕ; markers = (:bottom,)) ≈ 0.125
     end
 

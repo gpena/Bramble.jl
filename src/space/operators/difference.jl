@@ -14,18 +14,18 @@ This file implements difference and finite difference operators for grid functio
 ### Simple difference operators (no grid spacing)
 
 **Forward difference**:
-	Δ₊uᵢ = uᵢ₊₁ - uᵢ
+    Δ₊uᵢ = uᵢ₊₁ - uᵢ
 
 **Backward difference**:
-	Δ₋uᵢ = uᵢ - uᵢ₋₁
+    Δ₋uᵢ = uᵢ - uᵢ₋₁
 
 ### Finite difference operators (with grid spacing h)
 
 **Forward finite difference** (approximates ∂u/∂x at xᵢ):
-	δ₊uᵢ = (uᵢ₊₁ - uᵢ) / hᵢ
+    δ₊uᵢ = (uᵢ₊₁ - uᵢ) / hᵢ
 
 **Backward finite difference** (approximates ∂u/∂x at xᵢ):
-	δ₋uᵢ = (uᵢ - uᵢ₋₁) / hᵢ
+    δ₋uᵢ = (uᵢ - uᵢ₋₁) / hᵢ
 
 ## Boundary treatment
 
@@ -175,7 +175,7 @@ end
 # of the axis to keep in step with refinement, for two loads it already has.
 
 """
-	StarSpacings(h)
+    StarSpacings(h)
 
 Lazy view of the averaged spacings ``(h_i + h_{i+1})/2`` over a mesh's cached backward
 spacings `h`, which is what [`Dstar₊ₓ`](@ref) divides by.
@@ -195,7 +195,7 @@ end
 end
 
 """
-	star_spacings(Ωₕ::Mesh1D)
+    star_spacings(Ωₕ::Mesh1D)
 
 Returns the averaged spacings ``(h_i + h_{i+1})/2`` of `Ωₕ` as a [`StarSpacings`](@ref)
 view over its cached backward spacings. Allocates nothing.
@@ -214,7 +214,7 @@ width gives half of it, the boundary cell being a half cell.
 
 # A centered stencil reads both neighbours, so it needs a point on each side and is
 # undefined on a mesh with fewer than three points along the direction it differences.
-# Without this the operator returns all zeros — every point being truncated — which is a
+# Without this the operator returns all zeros (every point being truncated), which is a
 # plausible-looking answer to a question that has none, and the kind of silent result that
 # halves a measured convergence order without failing anything.
 @noinline function _throw_centered_too_few_points(dim::Int, n::Int)
@@ -407,8 +407,8 @@ function _derivative_weights!(v::AbstractVector, Ωₕ::AbstractMeshType,
 end
 
 """
-	_define_directional_alias!(base_op_name, alias_name, dir_string, suffix,
-	                           direction_index, what, formula)
+    _define_directional_alias!(base_op_name, alias_name, dir_string, suffix,
+                               direction_index, what, formula)
 
 Defines `alias_name(vₕ, uₕ)` as `base_op_name(vₕ, uₕ, Val(direction_index))` and attaches a
 docstring to it.
@@ -421,22 +421,22 @@ about grid functions.
 function _define_directional_alias!(
         base_op_name, alias_name, dir_string, suffix, direction_index, what, formula)
     doc_string = """
-     	$alias_name(vₕ, uₕ)
+        $alias_name(vₕ, uₕ)
 
-     The `$dir_string` $what of `uₕ` along the `$suffix` direction, ``$formula``, written
-     into `vₕ`.
+    The `$dir_string` $what of `uₕ` along the `$suffix` direction, ``$formula``, written
+    into `vₕ`.
 
-     The in-place form of [`$(replace(String(alias_name), "!" => ""))`](@ref): it allocates
-     nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
-     `normₕ($alias_name(vₕ, uₕ))`.
+    The in-place form of [`$(replace(String(alias_name), "!" => ""))`](@ref): it allocates
+    nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+    `normₕ($alias_name(vₕ, uₕ))`.
 
-     `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
-     object — every stencil here reads a neighbour of the point it writes, so aliasing them
-     would read values that have already been overwritten.
+    `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+    object, as every stencil reads neighbours of the target coordinate; aliasing them
+    would read values that have already been overwritten.
 
-     Alias for `$base_op_name(vₕ, uₕ, Val($direction_index))`. Accepts a grid function of a
-     scalar or of a composite grid space, componentwise on the latter.
-     """
+    Alias for `$base_op_name(vₕ, uₕ, Val($direction_index))`. Accepts a grid function of a
+    scalar or of a composite grid space, componentwise on the latter.
+    """
 
     func_def_expr = :(@inline $(alias_name)(vₕ, uₕ) = $(base_op_name)(
         vₕ, uₕ, Val($(direction_index))))
@@ -446,8 +446,8 @@ function _define_directional_alias!(
 end
 
 """
-	_define_directional_alias(base_op_name, alias_name, dir_string, suffix,
-	                          direction_index, what, formula)
+    _define_directional_alias(base_op_name, alias_name, dir_string, suffix,
+                              direction_index, what, formula)
 
 Defines `alias_name(arg)` as `base_op_name(arg, Val(direction_index))` and attaches a
 docstring to it.
@@ -461,19 +461,19 @@ function _define_directional_alias(
         base_op_name, alias_name, dir_string, suffix, direction_index, what, formula)
     # 1. Construct the docstring content.
     doc_string = """
-     	$alias_name(arg)
+        $alias_name(arg)
 
-     The `$dir_string` $what along the `$suffix` direction, ``$formula``. The unscaled
-     difference is not divided by the grid spacing; the finite difference is.
+    The `$dir_string` $what along the `$suffix` direction, ``$formula``. The unscaled
+    difference is not divided by the grid spacing; the finite difference is.
 
-     Alias for `$base_op_name(arg, Val($direction_index))`. `arg` is a mesh, a grid space
-     or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
-     third applies it and returns a `VectorElement`.
+    Alias for `$base_op_name(arg, Val($direction_index))`. `arg` is a mesh, a grid space
+    or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+    third applies it and returns a `VectorElement`.
 
-     Accepts a grid function of a scalar or of a composite grid space. On a composite one
-     the operator is applied to each component in turn, and the result is the composite
-     grid function whose components are those results.
-     """
+    Accepts a grid function of a scalar or of a composite grid space. On a composite one
+    the operator is applied to each component in turn, and the result is the composite
+    grid function whose components are those results.
+    """
 
     # 2. Construct the function definition as an expression.
     func_def_expr = :(@inline $(alias_name)(arg) = $(base_op_name)(arg, Val($(direction_index))))
@@ -488,7 +488,7 @@ function _define_directional_alias(
 end
 
 """
-	_define_vectorial_alias(base_op_name, alias_name, dir_string, what)
+    _define_vectorial_alias(base_op_name, alias_name, dir_string, what)
 
 Defines the `ₕ` alias that applies `base_op_name` along every coordinate and returns a
 tuple, one entry per spatial dimension. On a one-dimensional mesh it returns that single
@@ -500,19 +500,19 @@ independently before this existed.
 """
 function _define_vectorial_alias(base_op_name, alias_name, dir_string, what)
     doc_string = """
-     	$alias_name(arg)
+        $alias_name(arg)
 
-     The $dir_string $what of `arg` along every coordinate, as a tuple with one entry per
-     spatial dimension. On a one-dimensional mesh it returns that single entry rather than
-     a one-tuple.
+    The $dir_string $what of `arg` along every coordinate, as a tuple with one entry per
+    spatial dimension. On a one-dimensional mesh it returns that single entry rather than
+    a one-tuple.
 
-     For a 2D space, `$alias_name(uₕ)` is
-     `($base_op_name(uₕ, Val(1)), $base_op_name(uₕ, Val(2)))`. `arg` is a mesh, a grid
-     space or a [`VectorElement`](@ref), as for `$base_op_name`.
+    For a 2D space, `$alias_name(uₕ)` is
+    `($base_op_name(uₕ, Val(1)), $base_op_name(uₕ, Val(2)))`. `arg` is a mesh, a grid
+    space or a [`VectorElement`](@ref), as for `$base_op_name`.
 
-     Accepts a grid function of a scalar or of a composite grid space, componentwise on
-     the latter: each entry of the tuple is then itself a composite grid function.
-     """
+    Accepts a grid function of a scalar or of a composite grid space, componentwise on
+    the latter: each entry of the tuple is then itself a composite grid function.
+    """
 
     # Built one at a time, as in _define_directional_alias: @doc takes a single
     # definition, and only the entry point carries the docstring.
@@ -581,10 +581,10 @@ for config in _DIFFERENCE_OP_CONFIGS
     @eval begin
         # --- In-place applicators ---
         @doc """
-          	$($(QuoteNode(Symbol(diff_name, :_dim!))))(out, in, [h], dims, diff_dim)
+            $($(QuoteNode(Symbol(diff_name, :_dim!))))(out, in, [h], dims, diff_dim)
 
-          Low-level, in-place function to compute the **unscaled** $($dir_string_lowercase) difference of vector `in` along dimension `diff_dim`, storing the result in `out`. This function computes ``$($math_op)``.
-          """
+        Low-level, in-place function to compute the **unscaled** $($dir_string_lowercase) difference of vector `in` along dimension `diff_dim`, storing the result in `out`. This function computes ``$($math_op)``.
+        """
         function $(Symbol(diff_name, :_dim!))(out, in, h, dims::NTuple{D, Int},
                 diff_dim::Val{DIFF_DIM}) where {D, DIFF_DIM}
             1 <= DIFF_DIM <= D || _throw_stencil_dim_error(DIFF_DIM, D)
@@ -602,29 +602,29 @@ for config in _DIFFERENCE_OP_CONFIGS
 
         # --- Weight calculation function ---
         @doc """
-          	$($(QuoteNode(weights_func!)))(v::AbstractVector, Ωₕ::AbstractMeshType, diff_dim::Val)
+            $($(QuoteNode(weights_func!)))(v::AbstractVector, Ωₕ::AbstractMeshType, diff_dim::Val)
 
-          Computes the geometric weights for the $($dir_string_lowercase) finite difference operator and stores them in-place in vector `v`.
-          """
+        Computes the geometric weights for the $($dir_string_lowercase) finite difference operator and stores them in-place in vector `v`.
+        """
         @inline function $weights_func!(v::AbstractVector, Ωₕ::AbstractMeshType, diff_dim::Val)
             _derivative_weights!(v, Ωₕ, $spacing_func, diff_dim)
         end
 
         # --- Matrix operator functions ---
         @doc """
-          	$($(QuoteNode(diff_name)))(arg, dim_val::Val)
+            $($(QuoteNode(diff_name)))(arg, dim_val::Val)
 
-          Constructs the **unscaled** $($dir_string_lowercase) difference operator, representing the operation ``$($math_op)``.
-          """
+        Constructs the **unscaled** $($dir_string_lowercase) difference operator, representing the operation ``$($math_op)``.
+        """
         @inline $diff_name(
             Ωₕ::AbstractMeshType, dim_val::Val) = _difference_operator(
             Ωₕ, $dir_instance, dim_val)
 
         @doc """
-          	$($(QuoteNode(finite_diff_name)))(arg, dim_val::Val)
+            $($(QuoteNode(finite_diff_name)))(arg, dim_val::Val)
 
-          Constructs the $($dir_string_lowercase) **finite difference** operator, which approximates the first derivative using the formula ``$($math_finite_op)``.
-          """
+        Constructs the $($dir_string_lowercase) **finite difference** operator, which approximates the first derivative using the formula ``$($math_finite_op)``.
+        """
         function $finite_diff_name(Ωₕ::AbstractMeshType, dim_val::Val; vector_cache = __vector(Ωₕ))
             diff_matrix = $diff_name(Ωₕ, dim_val)
             $weights_func!(vector_cache, Ωₕ, dim_val)
@@ -707,7 +707,7 @@ end
 # --- Dstar₊: the forward difference over the averaged spacing ---------------------- #
 
 """
-	forward_star_difference(uₕ::VectorElement, dim_val::Val)
+    forward_star_difference(uₕ::VectorElement, dim_val::Val)
 
 The forward difference of `uₕ` along `dim_val`, divided by the averaged spacing:
 
@@ -752,35 +752,35 @@ for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
     direction = _BRAMBLE_var2label[i]
     @eval begin
         @doc """
-          	$($(QuoteNode(alias)))(uₕ::VectorElement)
+            $($(QuoteNode(alias)))(uₕ::VectorElement)
 
-          The forward difference of `uₕ` along the `$($direction)` direction over the
-          averaged spacing, ``\\\\frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}``.
+        The forward difference of `uₕ` along the `$($direction)` direction over the
+        averaged spacing, ``\\\\frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}``.
 
-          Alias for `forward_star_difference(arg, Val($($i)))`. `arg` is a mesh, a grid
-          space or a [`VectorElement`](@ref): the first two give the operator as a sparse
-          matrix, the third applies it and returns a `VectorElement`. The last point along
-          `$($direction)` is truncated to zero.
+        Alias for `forward_star_difference(arg, Val($($i)))`. `arg` is a mesh, a grid
+        space or a [`VectorElement`](@ref): the first two give the operator as a sparse
+        matrix, the third applies it and returns a `VectorElement`. The last point along
+        `$($direction)` is truncated to zero.
 
-          Accepts a grid function of a scalar or of a composite grid space. On a composite
-          one the operator is applied to each component in turn, and the result is the
-          composite grid function whose components are those results.
-          """
+        Accepts a grid function of a scalar or of a composite grid space. On a composite
+        one the operator is applied to each component in turn, and the result is the
+        composite grid function whose components are those results.
+        """
         @inline $alias(arg) = forward_star_difference(arg, Val($i))
 
         @doc """
-          	$($(QuoteNode(alias)))!(vₕ, uₕ)
+            $($(QuoteNode(alias)))!(vₕ, uₕ)
 
-          The in-place form of [`$($(QuoteNode(alias)))`](@ref): writes into `vₕ` and
-          returns it, allocating nothing. `vₕ` and `uₕ` must belong to the same space and
-          must not be the same object.
-          """
+        The in-place form of [`$($(QuoteNode(alias)))`](@ref): writes into `vₕ` and
+        returns it, allocating nothing. `vₕ` and `uₕ` must belong to the same space and
+        must not be the same object.
+        """
         @inline $(Symbol(alias, :!))(vₕ, uₕ) = forward_star_difference!(vₕ, uₕ, Val($i))
     end
 end
 
 """
-	Dstar₊ₕ(uₕ::VectorElement)
+    Dstar₊ₕ(uₕ::VectorElement)
 
 The starred forward difference of `uₕ` along every coordinate, as a tuple with one grid
 function per spatial dimension. On a one-dimensional mesh it returns that single entry
@@ -798,7 +798,7 @@ latter: each entry of the tuple is then itself a composite grid function.
 # --- Dc: the centered difference -------------------------------------------------- #
 
 """
-	centered_difference(uₕ::VectorElement, dim_val::Val)
+    centered_difference(uₕ::VectorElement, dim_val::Val)
 
 The centered difference of `uₕ` along `dim_val`:
 
@@ -847,37 +847,37 @@ for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
     direction = _BRAMBLE_var2label[i]
     @eval begin
         @doc """
-          	$($(QuoteNode(alias)))(uₕ::VectorElement)
+            $($(QuoteNode(alias)))(uₕ::VectorElement)
 
-          The centered difference of `uₕ` along the `$($direction)` direction,
-          ``\\\\frac{u_{i+1} - u_{i-1}}{h_i + h_{i+1}}``.
+        The centered difference of `uₕ` along the `$($direction)` direction,
+        ``\\\\frac{u_{i+1} - u_{i-1}}{h_i + h_{i+1}}``.
 
-          Alias for `centered_difference(arg, Val($($i)))`. `arg` is a mesh, a grid space
-          or a [`VectorElement`](@ref): the first two give the operator as a sparse
-          matrix, the third applies it and returns a `VectorElement`.
-          The first and last points along `$($direction)` are
-          truncated to zero, so the mesh needs at least three points along `$($direction)`
-          and an `ArgumentError` is thrown when it has fewer.
+        Alias for `centered_difference(arg, Val($($i)))`. `arg` is a mesh, a grid space
+        or a [`VectorElement`](@ref): the first two give the operator as a sparse
+        matrix, the third applies it and returns a `VectorElement`.
+        The first and last points along `$($direction)` are
+        truncated to zero, so the mesh needs at least three points along `$($direction)`
+        and an `ArgumentError` is thrown when it has fewer.
 
-          Accepts a grid function of a scalar or of a composite grid space. On a composite
-          one the operator is applied to each component in turn, and the result is the
-          composite grid function whose components are those results.
-          """
+        Accepts a grid function of a scalar or of a composite grid space. On a composite
+        one the operator is applied to each component in turn, and the result is the
+        composite grid function whose components are those results.
+        """
         @inline $alias(arg) = centered_difference(arg, Val($i))
 
         @doc """
-          	$($(QuoteNode(alias)))!(vₕ, uₕ)
+            $($(QuoteNode(alias)))!(vₕ, uₕ)
 
-          The in-place form of [`$($(QuoteNode(alias)))`](@ref): writes into `vₕ` and
-          returns it, allocating nothing. `vₕ` and `uₕ` must belong to the same space and
-          must not be the same object.
-          """
+        The in-place form of [`$($(QuoteNode(alias)))`](@ref): writes into `vₕ` and
+        returns it, allocating nothing. `vₕ` and `uₕ` must belong to the same space and
+        must not be the same object.
+        """
         @inline $(Symbol(alias, :!))(vₕ, uₕ) = centered_difference!(vₕ, uₕ, Val($i))
     end
 end
 
 """
-	Dcₕ(uₕ::VectorElement)
+    Dcₕ(uₕ::VectorElement)
 
 The centered difference of `uₕ` along every coordinate, as a tuple with one grid function
 per spatial dimension. On a one-dimensional mesh it returns that single entry rather than
@@ -894,7 +894,7 @@ latter: each entry of the tuple is then itself a composite grid function.
 # --- Dₕ: the cross-weighted centered difference ----------------------------------- #
 
 """
-	cross_weighted_difference(uₕ::VectorElement, dim_val::Val)
+    cross_weighted_difference(uₕ::VectorElement, dim_val::Val)
 
 The cross-weighted centered difference of `uₕ` along `dim_val`:
 
@@ -949,39 +949,39 @@ for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
     direction = _BRAMBLE_var2label[i]
     @eval begin
         @doc """
-          	$($(QuoteNode(alias)))(uₕ::VectorElement)
+            $($(QuoteNode(alias)))(uₕ::VectorElement)
 
-          The cross-weighted centered difference of `uₕ` along the `$($direction)`
-          direction, the backward differences at ``x_{i+1}`` and ``x_i`` weighted by
-          ``h_i`` and ``h_{i+1}``.
+        The cross-weighted centered difference of `uₕ` along the `$($direction)`
+        direction, the backward differences at ``x_{i+1}`` and ``x_i`` weighted by
+        ``h_i`` and ``h_{i+1}``.
 
-          Alias for `cross_weighted_difference(arg, Val($($i)))`. Second order on a
-          non-uniform grid, where [`Dc$($suffix)`](@ref) is first. `arg` is a mesh, a grid space
-          or a [`VectorElement`](@ref): the first two give the operator as a sparse
-          matrix, the third applies it and returns a `VectorElement`.
-          The first and last points along `$($direction)`
-          are truncated to zero, so the mesh needs at least three points along
-          `$($direction)` and an `ArgumentError` is thrown when it has fewer.
+        Alias for `cross_weighted_difference(arg, Val($($i)))`. Second order on a
+        non-uniform grid, where [`Dc$($suffix)`](@ref) is first. `arg` is a mesh, a grid space
+        or a [`VectorElement`](@ref): the first two give the operator as a sparse
+        matrix, the third applies it and returns a `VectorElement`.
+        The first and last points along `$($direction)`
+        are truncated to zero, so the mesh needs at least three points along
+        `$($direction)` and an `ArgumentError` is thrown when it has fewer.
 
-          Accepts a grid function of a scalar or of a composite grid space. On a composite
-          one the operator is applied to each component in turn, and the result is the
-          composite grid function whose components are those results.
-          """
+        Accepts a grid function of a scalar or of a composite grid space. On a composite
+        one the operator is applied to each component in turn, and the result is the
+        composite grid function whose components are those results.
+        """
         @inline $alias(arg) = cross_weighted_difference(arg, Val($i))
 
         @doc """
-          	$($(QuoteNode(alias)))!(vₕ, uₕ)
+            $($(QuoteNode(alias)))!(vₕ, uₕ)
 
-          The in-place form of [`$($(QuoteNode(alias)))`](@ref): writes into `vₕ` and
-          returns it, allocating nothing. `vₕ` and `uₕ` must belong to the same space and
-          must not be the same object.
-          """
+        The in-place form of [`$($(QuoteNode(alias)))`](@ref): writes into `vₕ` and
+        returns it, allocating nothing. `vₕ` and `uₕ` must belong to the same space and
+        must not be the same object.
+        """
         @inline $(Symbol(alias, :!))(vₕ, uₕ) = cross_weighted_difference!(vₕ, uₕ, Val($i))
     end
 end
 
 """
-	∇ₕ(uₕ::VectorElement)
+    ∇ₕ(uₕ::VectorElement)
 
 The cross-weighted centered difference of `uₕ` along every coordinate, as a tuple with one
 grid function per spatial dimension. On a one-dimensional mesh it returns that single entry
@@ -1054,7 +1054,7 @@ end
                                           h[i + 1] / ((h[i] + h[i + 1]) * h[i])
 
 """
-	forward_star_difference(Ωₕ::AbstractMeshType, dim_val::Val)
+    forward_star_difference(Ωₕ::AbstractMeshType, dim_val::Val)
 
 The starred forward difference along `dim_val`, as a sparse matrix.
 
@@ -1068,7 +1068,7 @@ function forward_star_difference(Ωₕ::AbstractMeshType, dim_val::Val;
 end
 
 """
-	centered_difference(Ωₕ::AbstractMeshType, dim_val::Val)
+    centered_difference(Ωₕ::AbstractMeshType, dim_val::Val)
 
 The centered difference along `dim_val`, as a sparse matrix.
 
@@ -1085,7 +1085,7 @@ function centered_difference(Ωₕ::AbstractMeshType, dim_val::Val{DIM};
 end
 
 """
-	cross_weighted_difference(Ωₕ::AbstractMeshType, dim_val::Val)
+    cross_weighted_difference(Ωₕ::AbstractMeshType, dim_val::Val)
 
 The cross-weighted centered difference along `dim_val`, as a sparse matrix.
 

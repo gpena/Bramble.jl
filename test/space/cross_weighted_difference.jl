@@ -133,8 +133,8 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
 
         @test all(o -> abs(o - 2.0) < 0.05, orders(true))
 
-        # The coarsest random pair is not yet asymptotic — measured 1.18 there against
-        # 1.97 and better afterwards — so only the refined ones are held to second order.
+        # The coarsest random pair is not yet asymptotic (measured 1.18 there against
+        # 1.97 and better afterwards), so only the refined ones are held to second order.
         orand = orders(false)
         @test all(o -> abs(o - 2.0) < 0.1, orand[2:end])
         @test all(>(1.0), orand)
@@ -168,7 +168,7 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
         end
     end
 
-    @testset "Type stability & allocations" begin
+    @testset "Type stability and allocations" begin
         Ωₕ1 = mesh(domain(interval(0.0, 1.0)), 33, false)
         Ωₕ2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 8), (true, false))
         u1 = Rₕ(gridspace(Ωₕ1), sin)
@@ -184,7 +184,7 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
 
     @testset "Matrix agreement" begin
         # Not one diagonal scaling of one difference, unlike the other two: it is the two
-        # one-sided differences it is defined from, each under its own weight —
+        # one-sided differences it is defined from, each under its own weight:
         # `diag(hᵢ/((hᵢ+hᵢ₊₁)hᵢ₊₁))·diff₊ + diag(hᵢ₊₁/((hᵢ+hᵢ₊₁)hᵢ))·diff₋`. That is worth
         # checking against the kernel rather than trusting the algebra.
         test_operator_matrix_equivalence(cross_weighted_ops)

@@ -12,7 +12,7 @@
 ########################
 
 """
-	Rₕ!(uₕ::VectorElement, f; markers = ())
+    Rₕ!(uₕ::VectorElement, f; markers = ()) -> VectorElement
 
 In-place version of the restriction operator [`Rₕ`](@ref). Evaluates `f` at the
 grid points and writes the result into `uₕ`. Returns `uₕ`.
@@ -21,7 +21,7 @@ grid points and writes the result into `uₕ`. Returns `uₕ`.
 
   - `uₕ::VectorElement`: pre-allocated element to write into.
   - `f`: function of one grid point. It receives a scalar on a 1D mesh and an
-    `NTuple{D}` on a `D`-dimensional one -- never an `SVector`.
+    `NTuple{D}` on a `D`-dimensional one, never an `SVector`.
 
 # Keywords
 
@@ -59,15 +59,9 @@ See also: [`Rₕ`](@ref), [`avgₕ!`](@ref), [`element`](@ref)
     return uₕ
 end
 
-# A named, concretely-typed kernel for the per-point restriction call, rather than an
-# anonymous closure over the same three captures (`f`, `Ωₕ`, `idxs`).
-#
-# `avgₕ!` already made this move (`_AvgKernel1`/`_AvgKernelD`, point 51) for an allocation
-# flake that this closure, with fewer captures, never showed. It still cost real time: point
-# 53's investigation measured Rₕ! itself, closure and all, at ~16% slower than the identical
-# computation written as one flat loop with no closure indirection -- and a named struct
-# closes essentially the whole gap, the same lever point 51 already pulled for a different
-# reason (point 67). One fewer compiler decision between the data and the call either way.
+# A concretely typed kernel for per-point restriction calls, avoiding anonymous closure
+# captures over (`f`, `Ωₕ`, `idxs`). A named callable struct eliminates compiler indirection
+# and achieves performance parity with a flat loop.
 struct _RₕKernel{F, M, IX}
     f::F
     Ω::M
@@ -75,14 +69,10 @@ struct _RₕKernel{F, M, IX}
 end
 @inline (k::_RₕKernel)(i) = k.f(point(k.Ω, k.idxs[i]))
 
-# The two plain methods just above exist so that the no-markers call -- by far the common
-# case, every time step of a PDE solve -- resolves directly to one of them, never touching
-# the keyword-sorter machinery the generic method further below generates. Going through that
-# machinery still cost 96 B here, no matter how the callee itself was typed, deep enough under
-# a keyword-taking caller that escape analysis gave up on the `_cpu_threaded_for!` closure
-# regardless. They stay more specific than the keyword method's bare `uₕ::VectorElement`, so
-# they take priority for a concrete Scalar/Composite element without colliding with the
-# keyword-sorter's own auto-generated no-kwarg stub. Matches `_avgₕ!`'s plain/keyword split.
+# The two plain methods above ensure that unmasked restriction calls (the primary path
+# during time stepping) resolve directly without invoking Julia's keyword argument dispatch
+# machinery. They take precedence over the generic `uₕ::VectorElement` keyword method for
+# concrete scalar and composite elements.
 #
 # A function barrier, typing `f` as its own free parameter `F`. Takes `uₕ` itself and
 # re-derives `Ωₕ`/`raw`/`idxs` inside the typed function, rather than being handed
@@ -125,7 +115,7 @@ end
 end
 
 # The general keyword method, typed as broadly as `VectorElement` so it stays less specific
-# than every plain method above -- exactly the split `avgₕ!` uses. The `N == 0` case never
+# than every plain method above, matching the split `avgₕ!` uses. The `N == 0` case never
 # actually runs (the plain methods intercept a no-kwarg call before this method is even
 # looked up), but is kept as a fallback for an explicit `markers = ()`.
 Base.@constprop :aggressive function Rₕ!(uₕ::VectorElement, f::F;
@@ -193,24 +183,22 @@ end
 # `f` per restriction, against inferring it, which would have to guess at a return type
 # the compiler may not know.
 @inline _scalar_value_type(::Type{T}) where {T} = T
-# `eltype` of a tuple type is the join of its fields, so `eltype(Tuple{Float64, Int})` is
-# `Real` — abstract, which would make `element(Wₕ, Real)` allocate a `Vector{Real}` of boxed
-# pointers with no contiguity and no SIMD. An integer literal among the components is enough
-# to trigger it: `Rₕ(Vₕ, x -> (1.0, 2))` measured `eltype = Real`.
+# The `eltype` of a tuple type is the join of its field types, so `eltype(Tuple{Float64, Int})`
+# is `Real` (abstract), which would cause `element(Wₕ, Real)` to allocate boxed pointers
+# lacking memory contiguity and SIMD optimization. An integer literal among the components
+# is enough to trigger it: `Rₕ(Vₕ, x -> (1.0, 2))` would infer `eltype = Real`.
 #
-# `promote_type` over the field types gives what the arithmetic would give anyway — `Float64`
-# there — and is unchanged for a homogeneous tuple.
+# Calling `promote_type` across the component field types preserves concrete numeric types
+# (e.g. `Float64`), consistent with scalar arithmetic, and is unchanged for homogeneous tuples.
 @inline _scalar_value_type(::Type{T}) where {T <: Tuple} = promote_type(fieldtypes(T)...)
 
 @inline _restricted_value_type(f, p) = _scalar_value_type(typeof(f(p)))
 @inline _restricted_value_type(f::Tuple, p) = promote_type(map(
     g -> _scalar_value_type(typeof(g(p))), f)...)
 
-# Where to sample `f` to learn its return type. With markers it has to be a point the
-# caller actually selected: `f` need not be defined anywhere else, and probing the first
-# grid point regardless turned working calls into errors — `Rₕ(Wₕ, x -> sqrt(x - 0.5);
-# markers = (:right,))` threw a DomainError at x = 0 while `Rₕ!` with the same arguments
-# succeeded, since the in-place form never probes.
+# Selects a sample point where `f` is evaluated to determine its coefficient return type.
+# When markers are specified, the point must reside within the marked region because `f`
+# may be undefined outside this domain (e.g., functions valid only on a specific boundary).
 #
 # If no index is marked, nothing is written and the element type cannot matter, so the
 # first grid point is as good as any.
@@ -236,34 +224,35 @@ end
 end
 
 """
-	Rₕ(Wₕ::AbstractSpaceType, f; markers = ())
+    Rₕ(Wₕ::AbstractSpaceType, f; markers = ()) -> VectorElement
 
-Standard nodal restriction operator. It returns a [`VectorElement`](@ref) with the result of evaluating the function `f` at the points of `mesh(Wₕ)`.
+Standard nodal restriction operator. Evaluates `f` at the grid points of `mesh(Wₕ)`
+and returns the result as a [`VectorElement`](@ref).
 
-# The shape of `f`
+# Arguments
 
-`f` is called with the coordinates of one grid point: a scalar for a 1D mesh and
-an `NTuple{D}` for a `D`-dimensional one. It is never passed an `SVector`.
+  - `Wₕ::AbstractSpaceType`: grid space on which to restrict `f`.
+  - `f`: function of one grid point. It receives a scalar on a 1D mesh and an
+    `NTuple{D}` on a `D`-dimensional one, never an `SVector`.
+
+# Keywords
+
+  - `markers::NTuple{N,Symbol}`: restrict evaluation to the named marked
+    regions, leaving every other entry zero.
+
+# Examples
 
 ```julia
-Rₕ(Wₕ, x -> sin(x))                # 1D:  x is a Float64
-Rₕ(Wₕ, x -> sin(x[1]) * x[2])      # 2D:  x is a Tuple{Float64,Float64}
-```
+Rₕ(Wₕ, x -> sin(x))                # 1D: x is a Float64
+Rₕ(Wₕ, x -> sin(x[1]) * x[2])      # 2D: x is a Tuple{Float64,Float64}
 
-For an `N`-component space either form works and both give the same result:
-
-```julia
+# Vector-valued spaces:
 Rₕ(Vₕ, (f₁, f₂))                   # one function per component
 Rₕ(Vₕ, x -> (f₁(x), f₂(x)))        # one function returning all components
 ```
 
-Prefer the second when the components share work: it is evaluated once per grid
-point, while the first evaluates each component function separately.
-
-`markers` restricts evaluation to the named marked regions, leaving every other
-entry zero. [`avgₕ`](@ref) takes the same keyword; it additionally takes
-`quad_points`, which has no meaning here because nodal restriction involves no
-quadrature.
+Prefer `x -> (f₁(x), f₂(x))` when components share computation, as it evaluates
+once per grid point, whereas `(f₁, f₂)` evaluates each component function separately.
 
 See also: [`Rₕ!`](@ref), [`avgₕ`](@ref).
 """

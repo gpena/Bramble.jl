@@ -14,11 +14,11 @@ using Bramble: values
 #   PolyesterForwardDiff  works. Chunked ForwardDiff, so the same reasoning.
 #   ReverseDiff           works. Its tracked types flow through like Duals.
 #   Mooncake              works, with no configuration.
-#   Enzyme                works, with two annotations — see autodiff_heavy.jl.
+#   Enzyme                works, with two annotations (see autodiff_heavy.jl).
 #   Zygote                cannot. `setindex!` is unsupported, so it fails on the ordinary
 #                         path too, not merely on the `!` forms. Supporting it would mean
 #                         hand-written ChainRules rrules; out of scope by decision.
-#   Diffractor            cannot even load on Julia 1.12 — it overwrites a Compiler method
+#   Diffractor            cannot load on Julia 1.12: it overwrites a Compiler method
 #                         during precompilation and then overflows the stack.
 #
 # Written against DifferentiationInterface rather than each backend's own API. That is a
@@ -28,13 +28,13 @@ using Bramble: values
 #
 # This file holds the two that run on every push: ForwardDiff, and ReverseDiff for the
 # reverse direction. autodiff_heavy.jl holds the rest, which only the `ad` and `full` groups
-# reach — Mooncake and Enzyme because they spend 58 s compiling between them, and
+# reach: Mooncake and Enzyme because they spend 58 s compiling between them, and
 # PolyesterForwardDiff for a different reason.
 #
 # PolyesterForwardDiff exercises no Bramble path that ForwardDiff does not: it is the same
 # Dual arithmetic chunked across threads, so its marginal coverage here is close to nothing.
 # It also nests its threading inside kernels that already thread, and it is the one backend
-# that has failed in CI — on the macOS runner, where it passes locally at one and four
+# that has failed on specific CI runners, where it passes locally at one and four
 # threads. Weekly is the right place for a canary like that.
 
 _have(mod::Symbol) = Base.identify_package(String(mod)) !== nothing

@@ -702,7 +702,7 @@ end
         # the result takes the type of the product, not of the tuple. Both of these
         # allocated their output with `similar(vₕ[i])`, which copies the element's type and
         # drops the other operand's, so a wider scalar was truncated into a narrower vector
-        # — and a Dual scalar threw outright, which is what found this. They delegate to
+        # (and a Dual scalar threw outright, which is what revealed this). They delegate to
         # broadcasting now, where `similar(::Broadcasted, ElType)` promotes.
         Ω32 = mesh(domain(interval(0.0f0, 1.0f0)), 6, true)
         W32 = gridspace(Ω32)
@@ -719,9 +719,9 @@ end
 
     @testset "Inhomogeneous restriction" begin
         # `_scalar_value_type` read the element type of a tuple return with `eltype`, and
-        # `eltype(Tuple{Float64, Int})` is `Real` — abstract, so the element was allocated as
+        # `eltype(Tuple{Float64, Int})` is `Real` (abstract), so the element was allocated as
         # a `Vector{Real}` of boxed pointers with no contiguity and no SIMD. An integer
-        # literal among the components was enough: `x -> (1.0, 2)` measured `eltype = Real`.
+        # literal among the components was enough to trigger it.
         #
         # It promotes the field types now, which is what the arithmetic would have given.
         Ω = mesh(domain(interval(0.0, 1.0)), 6, true)
@@ -781,15 +781,7 @@ end
         @test k(first(indices(Ωh))) ≈ 1.0
 
         # It carries the rule, deliberately, so it is the same size as a closure written to
-        # capture it by hand. It used to fetch the rule inside instead, which made it 96
-        # bytes smaller — `nodes` and `wts` are isbits and stored inline, 48 bytes each,
-        # and `Threads.@threads` copies the closure once per thread — by relying on
-        # `_gauss_rule` being `@generated` and folding to a tuple literal.
-        #
-        # That fold is not guaranteed. On Julia 1.13 / x86_64 it did not happen, the rule
-        # was rebuilt at every grid point, and `avgₕ!` measured 83,887,904 B on a 1024x1024
-        # mesh against a 100,000 bound. 96 bytes per thread per call is the price of not
-        # depending on an inlining budget nothing can query.
+        # capture it by hand. Capturing avoids rebuilding the rule across different architectures.
         nodes, wts = _gauss_rule(Val(3), Float64)
         carrying = let f = (x -> 1.0), x = half_points(Ωh), nodes = nodes, wts = wts
             idx -> Bramble._cell_average(f, x, idx, nodes, wts)
@@ -840,8 +832,7 @@ end
     # call to once per grid point.
     #
     # `isbitstype(T)` is not the predicate. `Double64` is isbits, `_gauss_rule` takes its
-    # folding branch for it, and the branch does not fold — building the rule costs
-    # thousands of bytes per call. Fetching inside then charged that per grid point.
+    # folding branch for it, and building the rule costs thousands of bytes per call.
     #
     # BigFloat is used here because it cannot fold either, needs no extra dependency, and
     # makes the two costs easy to separate: the rule is a large constant and the

@@ -284,8 +284,8 @@ star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
 
     @testset "Matrix agreement" begin
         # This family had no matrix form until the three centred ones were given one. It is
-        # a diagonal scaling of the unscaled forward difference — `diag(2/(hᵢ + hᵢ₊₁))`
-        # times it — so the two routes have to give the same numbers.
+        # a diagonal scaling of the unscaled forward difference (specifically `diag(2/(hᵢ + hᵢ₊₁))`
+        # times it), so the two routes have to give the same numbers.
         test_operator_matrix_equivalence(star_ops)
 
         Ωm = mesh(domain(interval(0.0, 1.0)), 7, false)

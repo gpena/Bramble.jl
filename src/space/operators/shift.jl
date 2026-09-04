@@ -1,12 +1,12 @@
 """
-	⊗(A, B)
+    ⊗(A, B)
 
 Kronecker product operator (alias for `kron`).
 
 Computes the Kronecker product (tensor product) of matrices `A` and `B`.
 This operator is used extensively in constructing multidimensional shift operators.
 
-# Example
+# Examples
 
 ```julia
 I₂ = I(2)
@@ -19,10 +19,10 @@ See also: [`shift`](@ref)
 @inline ⊗(A, B) = kron(A, B)
 
 """
-	_Eye(be::Backend, npts, ::Val{i})
+    _Eye(be::Backend, npts, ::Val{i})
 
 Internal helper to create identity or shifted diagonal matrices, in the matrix type the
-backend `be` chose -- routed through [`backend_eye`](@ref)/`matrix_type(be)` rather than a
+backend `be` chose, routed through [`backend_eye`](@ref)/`matrix_type(be)` rather than a
 package-specific lazy type, so the result always matches whatever `matrix_type` the caller's
 backend picked.
 
@@ -94,7 +94,7 @@ end
 end
 
 """
-	shift(Ωₕ::AbstractMeshType, ::Val{SHIFT_DIM}, ::Val{i})
+    shift(Ωₕ::AbstractMeshType, ::Val{SHIFT_DIM}, ::Val{i})
 
 Returns the matrix that shifts a grid function by `i` points along direction
 `SHIFT_DIM`, as a sparse operator over the flattened degrees of freedom of `Ωₕ`.
@@ -106,7 +106,7 @@ Returns the matrix that shifts a grid function by `i` points along direction
     identity. The stencil is truncated at the boundary rather than wrapped, so the
     matrix has `n - |i|` nonzeros per direction rather than `n`.
 
-# The tensor-product structure
+# Tensor-Product Structure
 
 A mesh is a tensor product of its one-dimensional meshes, and its degrees of freedom are
 flattened in column-major order, so a shift along one direction is the identity in every

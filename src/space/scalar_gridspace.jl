@@ -1,5 +1,6 @@
 """
-	$(TYPEDEF)
+    SpaceWeights(innerh::VT, innerplus::NTuple{D, VT})
+    SpaceWeights{D, VT}(innerh::VT, innerplus::NTuple{D, VT})
 
 Holds the diagonal weight vectors for a grid space's discrete inner products, both the
 standard ``L^2`` weights and the staggered ones, precomputed once rather than recomputed
@@ -7,7 +8,8 @@ on every call.
 
 # Fields
 
-$(FIELDS)
+  - `innerh::VT`: weight vector for the standard discrete ``L^2`` inner product (`:innerₕ`), based on cell measures (``|\\square_k|``).
+  - `innerplus::NTuple{D, VT}`: tuple of weight vectors for modified, staggered inner products (`:inner₊ₓ`, `:inner₊ᵧ`, etc.), with one vector for each spatial dimension.
 
 For a detailed explanation of the mathematical formulas corresponding to these weights, please refer to the documentation for [`ScalarGridSpace`](@ref).
 """
@@ -19,7 +21,8 @@ struct SpaceWeights{D, VT <: AbstractVector}
 end
 
 """
-	$(TYPEDEF)
+    ScalarGridSpace(mesh::MType, weights::SpaceWeights{D, VT})
+    ScalarGridSpace{D, T, VT, MType}(mesh::MType, weights::SpaceWeights{D, VT})
 
 Represents a function space for **scalar fields** defined on a mesh.
 
@@ -28,7 +31,8 @@ A `ScalarGridSpace` pairs the mesh with the precomputed weight vectors
 
 # Fields
 
-$(FIELDS)
+  - `mesh::MType`: the underlying mesh of the grid space.
+  - `weights::SpaceWeights{D, VT}`: precomputed inner product weight vectors.
 
 ## Discrete inner products
 
@@ -98,17 +102,13 @@ struct ScalarGridSpace{D, T,                               # Dimension and Eleme
 end
 
 """
-	gridspace(Ωₕ::AbstractMeshType{D}) where D
+    gridspace(Ωₕ::AbstractMeshType{D}) -> ScalarGridSpace{D}
 
-Constructor for a [`ScalarGridSpace`](@ref) defined on the mesh `Ωₕ`, building the weights
-for the inner products [`ScalarGridSpace`](@ref) lists.
+Constructs a [`ScalarGridSpace`](@ref) defined on the mesh `Ωₕ`, precomputing the inner product
+weights listed in [`ScalarGridSpace`](@ref).
 
-A space used to carry a pool of scratch vectors as well, sized to the mesh and warm-started
-with one. Nothing ever drew from it: no operator, no projection and no assembly called
-`vector_buffer`, so every space paid a full-length vector — 8 MB at a million degrees of
-freedom, a third of what building the space allocated — for a pool with no reader. The
-in-place operators are what made it redundant: `D₋ₓ!(vₕ, uₕ)` gives the caller an explicit
-destination, which beats a hidden pool with lock and release semantics.
+Scratch memory is supplied explicitly by callers through in-place mutating operators
+(such as `D₋ₓ!(vₕ, uₕ)`), avoiding hidden internal vector buffers.
 """
 function gridspace(Ωₕ::AbstractMeshType{D}) where {D}
     weights = space_weights(Ωₕ)
@@ -185,11 +185,12 @@ end
     <:Any, <:Any, <:Any, MType}}) where {MType} = MType
 
 """
-	weights(Wₕ::ScalarGridSpace)
-	weights(Wₕ::ScalarGridSpace, ::InnerProductType)
-	weights(Wₕ::ScalarGridSpace, ::InnerProductType, i::Int)
+    weights(Wₕ::ScalarGridSpace) -> SpaceWeights
+    weights(Wₕ::ScalarGridSpace, ::Innerh) -> AbstractVector
+    weights(Wₕ::ScalarGridSpace, ::Innerplus) -> NTuple{D, AbstractVector}
+    weights(Wₕ::ScalarGridSpace, ::InnerProductType, i::Int) -> AbstractVector
 
-Returns the pre-computed weight vectors for discrete inner products.
+Returns the precomputed weight vectors for discrete inner products.
 
 The weights are diagonal matrices (stored as vectors) used in computing discrete 
 ``L^2`` inner products. They represent cell measures or staggered grid spacings.
@@ -204,6 +205,7 @@ The weights are diagonal matrices (stored as vectors) used in computing discrete
    depend on a direction, so `i` is accepted and ignored for interface symmetry
 
 # Examples
+
 ```julia
 Wₕ = gridspace(Ωₕ)
 
@@ -229,7 +231,8 @@ See also: [`SpaceWeights`](@ref), [`Innerh`](@ref), [`Innerplus`](@ref), `inner�
 @inline weights(Wₕ::ScalarGridSpace, ::Innerplus, i) = weights(Wₕ, Innerplus())[i]
 
 """
-	dim(Wₕ::ScalarGridSpace)
+    dim(Wₕ::ScalarGridSpace) -> Int
+    dim(::Type{<:ScalarGridSpace}) -> Int
 
 Returns the spatial dimension of the function space (1, 2, or 3).
 
@@ -239,16 +242,18 @@ See also: [`ndofs`](@ref), [`mesh`](@ref)
 @inline dim(::Type{<:ScalarGridSpace{D}}) where {D} = D
 
 """
-	ndofs(Wₕ::ScalarGridSpace)
-	ndofs(Wₕ::ScalarGridSpace, ::Type{Tuple})
+    ndofs(Wₕ::ScalarGridSpace) -> Int
+    ndofs(Wₕ::ScalarGridSpace, ::Type{Tuple}) -> NTuple{D, Int}
 
 Returns the number of degrees of freedom (grid points) in the space.
 
 # Methods
+
 - `ndofs(Wₕ)` - Returns total number of DOFs as an integer
 - `ndofs(Wₕ, Tuple)` - Returns DOFs per dimension as a tuple (Nₓ, Nᵧ, Nᵤ)
 
-# Example
+# Examples
+
 ```julia
 Wₕ = gridspace(Ωₕ)
 n = ndofs(Wₕ)        # Total DOFs (e.g., 10000 for 100×100 grid)
@@ -261,7 +266,8 @@ See also: [`npoints`](@ref), [`dim`](@ref)
 @inline ndofs(Wₕ::ScalarGridSpace, ::Type{Tuple}) = npoints(mesh(Wₕ), Tuple)
 
 """
-	eltype(Wₕ::ScalarGridSpace)
+    eltype(Wₕ::ScalarGridSpace) -> Type
+    eltype(::Type{<:ScalarGridSpace}) -> Type
 
 Returns the element type of vectors in this space (e.g., `Float64`).
 
@@ -271,7 +277,7 @@ See also: [`backend`](@ref)
 @inline eltype(::Type{<:ScalarGridSpace{D, T}}) where {D, T} = T
 
 """
-	_innerh_weights!(u, Ωₕ::AbstractMeshType)
+    _innerh_weights!(u, Ωₕ::AbstractMeshType)
 
 Builds the weights for the standard discrete ``L^2`` inner product, ``inner_h(\\cdot, \\cdot)``, on the space of grid functions, following the order of the points provided by `indices(Ωₕ)`. The values are stored in vector `u`.
 """
@@ -295,7 +301,7 @@ function _innerh_weights!(u, Ωₕ::AbstractMeshType{D}) where {D}
 end
 
 """
-	_innerplus_weights!(u::VT, Ωₕ, component = 1) where VT
+    _innerplus_weights!(u::VT, Ωₕ, component = 1) where VT
 
 Builds a set of weights based on the spacings, associated with the `component`-th direction, for the modified discrete ``L^2`` inner product on the space of grid functions, following the order of the points provided by `indices(Ωₕ)`. The values are stored in vector `u`.
 """
@@ -312,10 +318,9 @@ function _innerplus_weights!(u::VT, Ωₕ, component = 1) where {VT}
 end
 
 """
-	_innerplus_mean_weights!(u::VT, Ωₕ, component::Int = 1) where VT
+    _innerplus_mean_weights!(u::VT, Ωₕ, component::Int = 1) where VT
 
 Builds a set of weights based on the half spacings, associated with the `component`-th direction, for the modified discrete ``L^2`` inner product on the space of grid functions, following the order of the [`points`](@ref). The values are stored in vector `u`.
-for each component.
 """
 function _innerplus_mean_weights!(u::VT, Ωₕ, component::Int = 1) where {VT}
     T = eltype(VT)
@@ -336,7 +341,7 @@ end
 end
 
 """
-	__innerplus_weights!(policy, v, innerplus_per_component)
+    __innerplus_weights!(policy, v, innerplus_per_component)
 
 Builds the weights for the modified discrete ``L^2`` inner product on the space of grid functions [`ScalarGridSpace`](@ref). The result is stored in vector `v`.
 """

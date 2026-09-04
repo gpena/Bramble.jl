@@ -16,7 +16,7 @@ using Bramble: values
 @testset "AD backends (slow)" begin
     @testset "PolyesterForwardDiff" begin
         # Here rather than in the per-push group for two reasons. It exercises no Bramble
-        # path ForwardDiff does not — the same Dual arithmetic, chunked across threads — so
+        # path ForwardDiff does not (the same Dual arithmetic, chunked across threads), so
         # its marginal coverage is close to nothing. And it nests its own threading inside
         # kernels that already thread, which is the kind of thing that behaves differently
         # on a CI runner than on a laptop: it passes here at one and four threads and

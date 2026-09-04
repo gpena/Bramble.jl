@@ -3,13 +3,12 @@ using Bramble
 
 # `interpolate_at` is the piecewise (multi)linear interpolant of a grid function, evaluable
 # at any physical point, not only at its own mesh's points. `πₕ!`/`πₕ` are the numeric
-# interpolation operator, exactly `Rₕ!`/`Rₕ` applied to `x -> interpolate_at(src, x)` — named
+# interpolation operator, exactly `Rₕ!`/`Rₕ` applied to `x -> interpolate_at(src, x)`, named
 # after `Rₕ`/`Rₕ!`'s own convention, sharing the name `πₕ` with the one-argument symbolic
-# wrapper (form/operators/interpolation.jl), told apart by arity. The checks below are about
+# wrapper (form/operators/interpolation.jl), told apart by arity. The checks below verify
 # the interpolant's own correctness (exact on affine data, correct on a non-uniform mesh,
-# clamped rather than extrapolated past the boundary) plus the delegation actually landing
-# the value on a *different* mesh — the whole point of point 25 (moving a grid function
-# between two leaves of a heterogeneous composite space).
+# clamped rather than extrapolated past the boundary) and transfers between distinct meshes
+# (moving a grid function between two leaves of a heterogeneous composite space).
 
 @testset "Interpolation" begin
     @testset "1D exact on affine" begin
@@ -36,7 +35,7 @@ using Bramble
 
     @testset "Boundary extrapolation" begin
         # locate_cell clamps which cell is read to the boundary one, but not the relative
-        # position x is weighted by within it — so a point outside the mesh continues the
+        # position x is weighted by within it; so a point outside the mesh continues the
         # boundary cell's own affine trend rather than holding a constant value. For a
         # globally affine function that trend is the function itself, so this is exact
         # arbitrarily far outside the mesh too.
@@ -67,8 +66,8 @@ using Bramble
     end
 
     @testset "Matrix agreement" begin
-        # P * values(src) is exactly the same computation πₕ performs pointwise —
-        # same corner-weight arithmetic, just emitted as triplets instead of accumulated —
+        # P * values(src) is exactly the same computation πₕ performs pointwise:
+        # same corner-weight arithmetic, just emitted as triplets instead of accumulated,
         # so the two must agree to the last bit, not merely approximately.
         Ω1dest = mesh(domain(interval(0.0, 1.0)), 9, false)
         Ω1src = mesh(domain(interval(0.0, 1.0)), 5, true)
@@ -100,7 +99,7 @@ using Bramble
 
     @testset "Operator composition" begin
         # once πₕ returns an ordinary VectorElement, every existing numeric
-        # operator just works on it — no separate mechanism needed.
+        # operator just works on it with no separate mechanism needed.
         Ωbig = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (8, 8), (true, true))
         Ωsmall = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (3, 3), (true, true))
         Wbig, Wsmall = gridspace(Ωbig), gridspace(Ωsmall)
