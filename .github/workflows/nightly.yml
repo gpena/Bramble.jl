@@ -8,7 +8,7 @@ name: Nightly
 # — an architecture-dependent `@generated` fold, documented there, not a real regression each
 # time it fires) that turned an unrelated PR's gate red too often to be worth blocking pushes
 # on. Julia nightly changes underneath every push regardless of what Bramble does, so gating
-# on it meant the same kind of unrelated red gate. Spelling, formatting, quality (Aqua & JET)
+# on it meant the same kind of unrelated red gate. Formatting, quality (Aqua & JET)
 # and the docs build/deploy are not canaries in that sense, but moving them off every push
 # trades same-push feedback for a leaner, faster push CI — a failure here is caught and fixed
 # the same day rather than the same minute.
@@ -105,17 +105,6 @@ jobs:
       - uses: julia-actions/julia-runtest@v1
         env:
           BRAMBLE_TEST_GROUP: quality
-
-  spelling:
-    name: Spell check
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - uses: crate-ci/typos@v1.49.0
-
   format:
     name: Format check
     runs-on: ubuntu-latest

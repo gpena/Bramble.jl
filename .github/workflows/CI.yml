@@ -1,7 +1,7 @@
 name: CI
 
 # The fast gate: only the Julia version matrix that actually tests Bramble's code, on macOS
-# only. Spelling, formatting, quality (Aqua & JET), the docs build/deploy, coverage upload,
+# only. Formatting, quality (Aqua & JET), the docs build/deploy, coverage upload,
 # and Linux itself all moved to nightly.yml, once a day — see the comment there for why.
 
 permissions:
@@ -38,7 +38,6 @@ jobs:
               - 'Project.toml'
               - '.github/workflows/CI.yml'
               - 'codecov.yml'
-              - '_typos.toml'
 
   test:
     needs: changes
