@@ -399,8 +399,9 @@ function main(args = ARGS)
     # Baselines saved before this tag existed carry no thread count. The ones in
     # `baselines/` read 0 allocations for `Rₕ!`, so they were single-threaded.
     append!(results.tags,
-        ["julia:$(VERSION)", "os:$(Sys.KERNEL)", "arch:$(Sys.ARCH)",
-            "threads:$(Threads.nthreads())", "power:$(ac ? "ac" : "battery")"])
+        ["julia:$(VERSION)", "pkgversion:$(pkgversion(Bramble))", "os:$(Sys.KERNEL)",
+            "arch:$(Sys.ARCH)", "threads:$(Threads.nthreads())",
+            "power:$(ac ? "ac" : "battery")"])
 
     println("\ntimings (median)")
     for (gname, group) in sort(collect(results), by = first)
@@ -420,7 +421,8 @@ function main(args = ARGS)
         ac || error("refusing to save a baseline recorded on battery power. Plug in " *
                     "and re-run; the allocation gate above is still valid.")
         BenchmarkTools.save(args[i + 1], results)
-        println("\nsaved baseline to ", args[i + 1], " (Julia $VERSION)")
+        println("\nsaved baseline to ", args[i + 1],
+            " (Bramble $(pkgversion(Bramble)), Julia $VERSION)")
     end
 
     j = findfirst(==("--compare"), args)

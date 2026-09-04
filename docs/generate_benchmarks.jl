@@ -19,6 +19,20 @@ function _get_commit_info(commit_hash::AbstractString, path::AbstractString)
     end
 end
 
+# Baselines saved before benchmarks.jl started tagging `pkgversion:` carry no version in
+# their JSON. Retrace it the same way `_get_commit_info` retraces the commit message: read
+# Project.toml as it stood at that commit. Falls back to "unknown" outside a git checkout
+# or for a commit no longer reachable.
+function _get_pkg_version(commit_hash::AbstractString)
+    try
+        toml = readchomp(pipeline(`git show $(commit_hash):Project.toml`, stderr = devnull))
+        m = match(r"^version\s*=\s*\"([^\"]+)\""m, toml)
+        return m !== nothing ? m.captures[1] : "unknown"
+    catch
+        return "unknown"
+    end
+end
+
 function _format_time(t_ns::Real)
     if t_ns < 1_000
         return string(round(t_ns, digits = 1), " ns")
@@ -73,6 +87,11 @@ end
 const _BENCH_PALETTE = ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4",
     "#f97316"]
 
+# The package version is what a reader tracks progress against release to release; the
+# commit is what pins the measurement exactly, since several baselines can share a
+# version between releases. Show both, version first.
+_run_label(r) = "v$(r.version) ($(r.commit))"
+
 # Single run: a horizontal bar per benchmark. No trend to show, so no head-script emission
 # here — the caller (generate_benchmarks_markdown) emits chartjs_head() once for the page.
 function _render_chartjs_barchart_single(
@@ -112,7 +131,7 @@ function _render_chartjs_barchart_single(
         data: {
           labels: [$(join(labels, ","))],
           datasets: [{
-            label: "$(r.commit) (Julia $(r.julia))",
+            label: "$(_run_label(r)) (Julia $(r.julia))",
             data: [$(join(values, ","))],
             backgroundColor: [$(join(colors, ","))],
             borderRadius: 4,
@@ -150,26 +169,18 @@ function _render_chartjs_barchart_single(
     """
 end
 
-function _render_chartjs_trend_chart(
-        gname, sorted_bnames, runs, max_time_ns, min_time_ns, unit_label, unit_divisor)
-    num_runs = length(runs)
-
-    if num_runs == 1
-        return _render_chartjs_barchart_single(
-            gname, sorted_bnames, runs, max_time_ns, unit_label, unit_divisor)
-    end
-
+# One canvas's worth of a trend chart, for a fixed subset of a group's benchmark names.
+# Split out of `_render_chartjs_trend_chart` so a group with more series than the palette
+# has colors for (see there) can render as two of these side by side, each restarting the
+# palette from its own beginning rather than cycling into a color the other chart already
+# used.
+function _render_one_trend_canvas(
+        gname, bnames_subset, runs, use_normalized, unit_label, unit_divisor, max_width)
     chart_id = _next_bench_chart_id()
-
-    # If the operations in this group differ by more than 20x (e.g. 150ns vs 1.7ms), plot a
-    # normalized relative scale (T / T_baseline) instead of absolute time, so small operations
-    # are not flattened against a group's largest one.
-    use_normalized = (max_time_ns / max(min_time_ns, 1.0)) > 20.0
-
-    labels_js = "[" * join(("\"$(r.commit)\"" for r in runs), ",") * "]"
+    labels_js = "[" * join(("\"$(_run_label(r))\"" for r in runs), ",") * "]"
 
     datasets = String[]
-    for (idx, bname) in enumerate(sorted_bnames)
+    for (idx, bname) in enumerate(bnames_subset)
         color = _BENCH_PALETTE[mod1(idx, length(_BENCH_PALETTE))]
         pts = String[]
         t0 = 0.0
@@ -186,7 +197,7 @@ function _render_chartjs_trend_chart(
                              "$(round(abs(t_ns / t0 - 1) * 100, digits = 1))%" ) *
                             ")\"" :
                             "\"$(_format_time(t_ns))\""
-                push!(pts, """{x:"$(r.commit)",y:$(y_val),julia:"$(r.julia)",
+                push!(pts, """{x:"$(_run_label(r))",y:$(y_val),julia:"$(r.julia)",
                     detail:$(delta_str),allocs:$(allocs(m)),mem:"$(_format_memory(memory(m)))"}""")
             end
             # A run missing this benchmark contributes no point at all, rather than a `null`
@@ -214,7 +225,7 @@ function _render_chartjs_trend_chart(
 
     # The 1.0x reference line in normalized mode, flat across every commit.
     if use_normalized
-        ref_pts = join(("{x:\"$(r.commit)\",y:1}" for r in runs), ",")
+        ref_pts = join(("{x:\"$(_run_label(r))\",y:1}" for r in runs), ",")
         push!(datasets, """
             {
               label: "1.0x (ref)",
@@ -229,7 +240,7 @@ function _render_chartjs_trend_chart(
     y_title = use_normalized ? "relative to baseline" : unit_label
 
     return """
-    <div style="width:100%; max-width:560px;">
+    <div style="width:100%; max-width:$(max_width)px;">
       <canvas id="$chart_id" height="280"></canvas>
     </div>
     <script>
@@ -279,6 +290,42 @@ function _render_chartjs_trend_chart(
     """
 end
 
+function _render_chartjs_trend_chart(
+        gname, sorted_bnames, runs, max_time_ns, min_time_ns, unit_label, unit_divisor)
+    num_runs = length(runs)
+
+    if num_runs == 1
+        return _render_chartjs_barchart_single(
+            gname, sorted_bnames, runs, max_time_ns, unit_label, unit_divisor)
+    end
+
+    # If the operations in this group differ by more than 20x (e.g. 150ns vs 1.7ms), plot a
+    # normalized relative scale (T / T_baseline) instead of absolute time, so small operations
+    # are not flattened against a group's largest one.
+    use_normalized = (max_time_ns / max(min_time_ns, 1.0)) > 20.0
+
+    # Beyond one palette's worth of series (7), Chart.js repeats colors and two unrelated
+    # lines become visually indistinguishable — "restriction" (9 benchmarks) and "forms"
+    # (13) both hit this. Split into two side-by-side charts instead of cycling; each keeps
+    # its own distinct palette rather than inheriting where the other left off.
+    if length(sorted_bnames) > length(_BENCH_PALETTE)
+        mid = cld(length(sorted_bnames), 2)
+        left = _render_one_trend_canvas(
+            gname, sorted_bnames[1:mid], runs, use_normalized, unit_label, unit_divisor, 460)
+        right = _render_one_trend_canvas(gname, sorted_bnames[(mid + 1):end], runs,
+            use_normalized, unit_label, unit_divisor, 460)
+        return """
+        <div style="display:flex; flex-wrap:wrap; gap:1rem;">
+          <div style="flex:1 1 400px; min-width:320px;">$left</div>
+          <div style="flex:1 1 400px; min-width:320px;">$right</div>
+        </div>
+        """
+    end
+
+    return _render_one_trend_canvas(
+        gname, sorted_bnames, runs, use_normalized, unit_label, unit_divisor, 560)
+end
+
 function _render_table_html(gname, sorted_bnames, runs)
     num_runs = length(runs)
     io = IOBuffer()
@@ -292,7 +339,7 @@ function _render_table_html(gname, sorted_bnames, runs)
         for (idx, r) in enumerate(runs)
             ref_label = idx == 1 && num_runs >= 2 ? " (ref)" : ""
             println(io,
-                "<th style=\"padding:8px 6px; text-align:right;\"><code>$(r.commit)</code>$ref_label</th>")
+                "<th style=\"padding:8px 6px; text-align:right;\">v$(r.version) <code>$(r.commit)</code>$ref_label</th>")
             println(io, "<th style=\"padding:8px 6px; text-align:center;\">Allocs</th>")
         end
         if num_runs >= 2
@@ -303,11 +350,11 @@ function _render_table_html(gname, sorted_bnames, runs)
     else
         # Compact summary for 4+ runs (avoids horizontal blowout with 10-20 runs)
         println(io,
-            "<th style=\"padding:8px 6px; text-align:right;\">Base (<code>$(runs[1].commit)</code>)</th>")
+            "<th style=\"padding:8px 6px; text-align:right;\">Base (v$(runs[1].version) <code>$(runs[1].commit)</code>)</th>")
         println(io,
-            "<th style=\"padding:8px 6px; text-align:right;\">Prev (<code>$(runs[end-1].commit)</code>)</th>")
+            "<th style=\"padding:8px 6px; text-align:right;\">Prev (v$(runs[end-1].version) <code>$(runs[end-1].commit)</code>)</th>")
         println(io,
-            "<th style=\"padding:8px 6px; text-align:right;\">Latest (<code>$(runs[end].commit)</code>)</th>")
+            "<th style=\"padding:8px 6px; text-align:right;\">Latest (v$(runs[end].version) <code>$(runs[end].commit)</code>)</th>")
         println(io,
             "<th style=\"padding:8px 6px; text-align:center;\">Δ vs Base</th>")
         println(io,
@@ -469,14 +516,20 @@ function generate_benchmarks_markdown(
         info = _get_commit_info(commit, path)
         data = BenchmarkTools.load(path)[1]
         julia_ver = "unknown"
+        pkg_ver = nothing
         for t in data.tags
             if startswith(string(t), "julia:")
                 julia_ver = replace(string(t), "julia:" => "")
+            elseif startswith(string(t), "pkgversion:")
+                pkg_ver = replace(string(t), "pkgversion:" => "")
             end
         end
+        # Baselines saved before the `pkgversion:` tag existed carry none — retrace it
+        # from Project.toml at that commit instead of leaving it blank.
+        pkg_ver === nothing && (pkg_ver = _get_pkg_version(commit))
         push!(runs,
             (commit = commit, message = info.message, time = info.time,
-                julia = julia_ver, data = data, path = path))
+                julia = julia_ver, version = pkg_ver, data = data, path = path))
     end
     # Order runs chronologically by commit timestamp
     sort!(runs, by = r -> r.time)
@@ -485,15 +538,16 @@ function generate_benchmarks_markdown(
     println(io)
     if length(runs) >= 2
         println(io,
-            "Comparing **$(length(runs))** recorded baselines in chronological order. The earliest run (`$(runs[1].commit)`) is the reference baseline for relative speedup/slowdown calculations.")
+            "Comparing **$(length(runs))** recorded baselines in chronological order. The earliest run (v$(runs[1].version), `$(runs[1].commit)`) is the reference baseline for relative speedup/slowdown calculations.")
         println(io)
     end
-    println(io, "| Commit | Julia | Summary | File |")
-    println(io, "|---|:---:|---|---|")
+    println(io, "| Version | Commit | Julia | Summary | File |")
+    println(io, "|---|---|:---:|---|---|")
     for (idx, r) in enumerate(runs)
         tag = idx == 1 && length(runs) >= 2 ? " *(baseline)*" : ""
         msg = isempty(r.message) ? "Baseline" : r.message
-        println(io, "| `$(r.commit)`$tag | `$(r.julia)` | $msg | `$(basename(r.path))` |")
+        println(io,
+            "| v$(r.version)$tag | `$(r.commit)` | `$(r.julia)` | $msg | `$(basename(r.path))` |")
     end
     println(io)
 
