@@ -244,12 +244,10 @@ end
 # A sum is checked term by term. The composite paths route each term to its block first and
 # so never reach here with a sum, but the scalar ones check the whole form's AST at once —
 # and there `_bears_interpolation` of the sum is true as soon as *one* summand interpolates,
-# which would exempt the others along with it.
-@inline function _check_block_meshes(op::OperatorAdd, trial_leaf, test_leaf)
-    _check_block_meshes(op.left_op, trial_leaf, test_leaf)
-    _check_block_meshes(op.right_op, trial_leaf, test_leaf)
-    return nothing
-end
+# which would exempt the others along with it. Recursion shape shared via
+# `_visit_operator_add1` (form/common.jl).
+@inline _check_block_meshes(op::OperatorAdd, trial_leaf, test_leaf) = _visit_operator_add1(
+    _check_block_meshes, op, trial_leaf, test_leaf)
 
 # How many entries the pattern can hold at most: one interior stencil's worth per grid
 # point. An upper bound, because truncation at a boundary drops entries and never adds any.
@@ -381,11 +379,11 @@ function _pattern_term!(I_vec::Vector{Int}, J_vec::Vector{Int}, term::TERM, tria
     return nothing
 end
 
+# Recursion shape shared via `_visit_operator_add3` (form/common.jl).
 function _pattern_blocks!(I_vec::Vector{Int}, J_vec::Vector{Int}, op::OperatorAdd,
         trial_leaves, test_leaves)
-    _pattern_blocks!(I_vec, J_vec, op.left_op, trial_leaves, test_leaves)
-    _pattern_blocks!(I_vec, J_vec, op.right_op, trial_leaves, test_leaves)
-    return nothing
+    _visit_operator_add3(
+        _pattern_blocks!, I_vec, J_vec, op, trial_leaves, test_leaves)
 end
 
 function _pattern_blocks!(I_vec::Vector{Int}, J_vec::Vector{Int}, term::TERM,
@@ -559,11 +557,11 @@ end
 # diagonal and not full. A term naming both goes to one block, off-diagonal included — which
 # is what the version this replaces could not do: it walked the top-level components with a
 # single offset for row and column, so off-diagonal terms had nowhere to land and
-# `add_to_sparse!` dropped them in silence.
+# `add_to_sparse!` dropped them in silence. Recursion shape shared via `_visit_operator_add2`
+# (form/common.jl).
 function _assemble_blocks!(A::SparseMatrixCSC, op::OperatorAdd, trial_leaves, test_leaves)
-    _assemble_blocks!(A, op.left_op, trial_leaves, test_leaves)
-    _assemble_blocks!(A, op.right_op, trial_leaves, test_leaves)
-    return A
+    _visit_operator_add2(
+        _assemble_blocks!, A, op, trial_leaves, test_leaves)
 end
 
 function _assemble_blocks!(A::SparseMatrixCSC, term::TERM, trial_leaves,
@@ -664,11 +662,11 @@ end
 
 # The threaded counterpart of `_assemble_blocks!`, term outside and grid inside for the same
 # reason the vector side is: routing per point redoes the component walk at every one.
+# Recursion shape shared via `_visit_operator_add2` (form/common.jl).
 function _assemble_blocks_parallel!(A::SparseMatrixCSC, op::OperatorAdd, trial_leaves,
         test_leaves, dim_val::Val)
-    _assemble_blocks_parallel!(A, op.left_op, trial_leaves, test_leaves, dim_val)
-    _assemble_blocks_parallel!(A, op.right_op, trial_leaves, test_leaves, dim_val)
-    return A
+    _visit_operator_add2(
+        _assemble_blocks_parallel!, A, op, trial_leaves, test_leaves, dim_val)
 end
 
 function _assemble_blocks_parallel!(A::SparseMatrixCSC, term::TERM, trial_leaves,

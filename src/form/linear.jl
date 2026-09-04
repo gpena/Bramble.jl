@@ -474,16 +474,13 @@ end
         "them contributes nothing here, which is why this is an error rather than a zero."))
 end
 
-# Walk the sum and send each term to the blocks it belongs to.
-#
-# Recursing the tree rather than flattening it into a vector of terms first. A flattened
-# vector is a `Vector{Any}`, which allocates and makes every term a dynamic read; recursing
-# keeps each term concretely typed at its own call, so this is inferable end to end and costs
-# nothing — 544 B per assembly became 0.
+# Walk the sum and send each term to the blocks it belongs to. Recursing the tree rather
+# than flattening it into a vector of terms first — see `_visit_operator_add2`
+# (form/common.jl) for why, shared by every router of this shape. Measured here: 544 B per
+# assembly became 0.
 function _route_terms!(b::AbstractVector, op::OperatorAdd, leaves)
-    _route_terms!(b, op.left_op, leaves)
-    _route_terms!(b, op.right_op, leaves)
-    return b
+    _visit_operator_add2(
+        _route_terms!, b, op, leaves)
 end
 
 function _route_terms!(b::AbstractVector, term::TERM, leaves) where {TERM}
@@ -571,8 +568,10 @@ function _contract_term(sp, term::TERM, offset::Int,
 end
 
 # The counterpart of `_route_terms!`. Recursive rather than over a flattened vector for the
-# same reason, and threading `acc` through the recursion rather than summing the branches
-# keeps the accumulator type fixed across the whole walk.
+# same reason (`_visit_operator_add`, form/common.jl), but does not go through it: threading
+# `acc` through the recursion rather than discarding each branch's result keeps the
+# accumulator type fixed across the whole walk, which none of `_visit_operator_add`'s three
+# shapes do.
 function _route_terms_contract(op::OperatorAdd, leaves, v, acc)
     acc = _route_terms_contract(op.left_op, leaves, v, acc)
     return _route_terms_contract(op.right_op, leaves, v, acc)
@@ -601,9 +600,8 @@ end
 # Strides come from the term rather than from the whole form, so a term reaching only its own
 # point still sweeps in a single colour even when some other term in the same form does not.
 function _route_terms_parallel!(b::AbstractVector, op::OperatorAdd, leaves)
-    _route_terms_parallel!(b, op.left_op, leaves)
-    _route_terms_parallel!(b, op.right_op, leaves)
-    return b
+    _visit_operator_add2(
+        _route_terms_parallel!, b, op, leaves)
 end
 
 function _route_terms_parallel!(b::AbstractVector, term::TERM, leaves) where {TERM}

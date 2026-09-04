@@ -584,3 +584,50 @@ _is_source_only(::LazyOp) = false
 # (form/operators/interpolation.jl, point 71). No separate ladder here any more; point 68
 # fixed this defect first, by hand, one method per node — retired once point 61's shift
 # trait gave the same recursion a home that needed writing only once.
+
+# ==============================================================================
+# 7. Walking an OperatorAdd tree — shared by every router in linear.jl/bilinear.jl
+# ==============================================================================
+
+# Six functions across `linear.jl`/`bilinear.jl` (`_check_block_meshes`,
+# `_route_terms!`, `_route_terms_parallel!`, `_pattern_blocks!`, `_assemble_blocks!`,
+# `_assemble_blocks_parallel!`) walk a form's `OperatorAdd` tree to send each summand where
+# it belongs, all with the same shape: recurse left, recurse right, done. Recursing the tree
+# rather than flattening it into a vector of terms first, the same reason in each case — a
+# flattened vector is `Vector{Any}` and makes every term a dynamic read, where recursing
+# keeps each term concretely typed at its own call and costs nothing.
+#
+# They differ only in how many arguments sit before `op` and what (if anything) the caller
+# reads back — and nothing does: every call site above these six is a bare statement, the
+# return value always discarded. So the three shapes below return whatever the six already
+# return unread today. Three separate names rather than one overloaded on argument count:
+# with `rest...`/untyped leading arguments, overloads sharing a name are genuinely ambiguous
+# to the compiler (a call whose second *and* third arguments both happen to be `OperatorAdd`
+# matches two of the three signatures at once) — Aqua's ambiguity check catches this even
+# though no real call here ever hits it, and three names sidesteps the question rather than
+# resolving it with a disambiguating method nothing calls. Each is still picked at its call
+# site by hand, same as before; what moves out is only the recursion body, and
+# `@code_warntype` still sees ordinary calls to `f`, specialized on `F = typeof(f)` like any
+# other higher-order call in Julia.
+
+# `op` first, nothing to mutate: `_check_block_meshes`.
+@inline function _visit_operator_add1(f::F, op::OperatorAdd, rest...) where {F}
+    f(op.left_op, rest...)
+    f(op.right_op, rest...)
+    return nothing
+end
+
+# `op` second, one mutated argument returned unchanged: `_route_terms!`,
+# `_route_terms_parallel!`, `_assemble_blocks!`, `_assemble_blocks_parallel!`.
+@inline function _visit_operator_add2(f::F, first_arg, op::OperatorAdd, rest...) where {F}
+    f(first_arg, op.left_op, rest...)
+    f(first_arg, op.right_op, rest...)
+    return first_arg
+end
+
+# `op` third, two mutated arguments, nothing returned: `_pattern_blocks!`.
+@inline function _visit_operator_add3(f::F, a1, a2, op::OperatorAdd, rest...) where {F}
+    f(a1, a2, op.left_op, rest...)
+    f(a1, a2, op.right_op, rest...)
+    return nothing
+end
