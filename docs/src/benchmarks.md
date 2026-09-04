@@ -1,20 +1,11 @@
 # Performance and benchmarks
 
 Bramble tracks memory allocations and performance regressions with a dedicated regression suite in `benchmark/benchmarks.jl`.
-All measurements below are run on **1,000,000 grid points** per dimension setup (e.g. ``1000 \times 1000`` in 2D, ``100 \times 100 \times 100`` in 3D).
-
-## Recorded baselines
-
-Comparing **4** recorded baselines in chronological order. The earliest run (v2.0.0, `2dec0c7`) is the reference baseline for relative speedup/slowdown calculations.
-
-| Version | Commit | Julia | Summary | File |
-|---|---|:---:|---|---|
-| v2.0.0 *(baseline)* | `2dec0c7` | `1.12.7` | chore: bump version to 2.0.0 | `baseline_2dec0c7.json` |
-| v2.1.0 | `274ae7d` | `1.12.7` | chore: bump version to 2.1.0 | `baseline_274ae7d.json` |
-| v2.2.0 | `d7c2416` | `1.12.7` | Merge remote-tracking branch 'origin/main' | `baseline_d7c2416.json` |
-| v2.2.1 | `c66d0bf` | `1.12.7` | chore: bump version to 2.2.1 | `baseline_c66d0bf.json` |
+All measurements below are run on **1,000,000 grid points** per dimension setup (e.g. $1000 \times 1000$ in 2D, $100 \times 100 \times 100$ in 3D).
 
 ## Comparative timings and allocations
+
+Each chart below tracks one benchmark group across all **5** recorded baselines, in chronological release order, against the earliest run (v2.0.0) as the reference. Where a group's operations span more than a 20× range, the y-axis shows time relative to that reference instead of absolute time, so a cheap operation isn't flattened onto the same line as an expensive one. Hover any point for its exact time, Julia version, allocation count, and memory.
 
 ```@raw html
 <script>
@@ -78,77 +69,19 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 
 ### Operators 2D
 
-```@raw html
-<div style="display:flex; flex-wrap:wrap; gap:1.5rem; align-items:start; margin:1.2rem 0 2.5rem 0;">
-  <div style="flex:1 1 430px; min-width:320px; overflow-x:auto;">
-<table style="width:100%; border-collapse:collapse; font-size:12.5px; line-height:1.4;">
-<thead>
-<tr style="border-bottom:2px solid rgba(128,128,128,0.3);">
-<th style="padding:8px 6px; text-align:left;">Benchmark</th>
-<th style="padding:8px 6px; text-align:right;">Base (v2.0.0 <code>2dec0c7</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Prev (v2.2.0 <code>d7c2416</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Latest (v2.2.1 <code>c66d0bf</code>)</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Prev</th>
-<th style="padding:8px 6px; text-align:center;">Allocs</th>
-<th style="padding:8px 6px; text-align:right;">Memory</th>
-</tr>
-</thead>
-<tbody>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>Dcₓ</code></td>
-<td style="padding:7px 6px; text-align:right;">256.5 μs</td>
-<td style="padding:7px 6px; text-align:right;">278.6 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">254.1 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.9% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-8.8% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;">3</td>
-<td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>D₋ᵧ</code></td>
-<td style="padding:7px 6px; text-align:right;">162.0 μs</td>
-<td style="padding:7px 6px; text-align:right;">177.6 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">162.2 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-8.7% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;">3</td>
-<td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>D₋ₓ</code></td>
-<td style="padding:7px 6px; text-align:right;">204.0 μs</td>
-<td style="padding:7px 6px; text-align:right;">210.3 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">204.0 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-3.0% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;">3</td>
-<td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>M₋ₓ</code></td>
-<td style="padding:7px 6px; text-align:right;">172.0 μs</td>
-<td style="padding:7px 6px; text-align:right;">180.6 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">172.2 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-4.6% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;">3</td>
-<td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
-</tr>
-</tbody>
-</table>
+The finite-difference stencil engine on a 1000×1000 grid: the difference operator along the grid's contiguous storage direction (`D₋ₓ`) versus across it (`D₋ᵧ`), which access memory very differently and so can perform very differently.
 
-  </div>
-  <div style="flex:1 1 450px; min-width:340px;">
-<div id="bench_chart_1" style="width:100%; max-width:560px; height:280px;"></div>
+```@raw html
+<div style="width:100%; margin:1.2rem 0 2.5rem 0;">
+<div id="bench_chart_1" style="width:100%; height:300px;"></div>
 <script>
 (function () {
   const theme = window.bramblePlotlyTheme();
   const data = [{
   name: "Dcₓ",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [256.5,268.708,278.5625,254.125],
-  customdata: [["1.12.7","256.5 μs",3,"7.64 MiB"],["1.12.7","268.7 μs",3,"7.64 MiB"],["1.12.7","278.6 μs",3,"7.64 MiB"],["1.12.7","254.1 μs",3,"7.64 MiB"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [256.5,268.708,278.5625,254.125,256.833],
+  customdata: [["1.12.7","256.5 μs",3,"7.64 MiB"],["1.12.7","268.7 μs",3,"7.64 MiB"],["1.12.7","278.6 μs",3,"7.64 MiB"],["1.12.7","254.1 μs",3,"7.64 MiB"],["1.12.7","256.8 μs",3,"7.64 MiB"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#3b82f6", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -157,9 +90,9 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 },
 {
   name: "D₋ᵧ",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [161.958,162.209,177.6455,162.167],
-  customdata: [["1.12.7","162.0 μs",3,"7.64 MiB"],["1.12.7","162.2 μs",3,"7.64 MiB"],["1.12.7","177.6 μs",3,"7.64 MiB"],["1.12.7","162.2 μs",3,"7.64 MiB"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [161.958,162.209,177.6455,162.167,161.958],
+  customdata: [["1.12.7","162.0 μs",3,"7.64 MiB"],["1.12.7","162.2 μs",3,"7.64 MiB"],["1.12.7","177.6 μs",3,"7.64 MiB"],["1.12.7","162.2 μs",3,"7.64 MiB"],["1.12.7","162.0 μs",3,"7.64 MiB"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#10b981", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -168,9 +101,9 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 },
 {
   name: "D₋ₓ",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [204.042,205.208,210.291,203.958],
-  customdata: [["1.12.7","204.0 μs",3,"7.64 MiB"],["1.12.7","205.2 μs",3,"7.64 MiB"],["1.12.7","210.3 μs",3,"7.64 MiB"],["1.12.7","204.0 μs",3,"7.64 MiB"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [204.042,205.208,210.291,203.958,203.25],
+  customdata: [["1.12.7","204.0 μs",3,"7.64 MiB"],["1.12.7","205.2 μs",3,"7.64 MiB"],["1.12.7","210.3 μs",3,"7.64 MiB"],["1.12.7","204.0 μs",3,"7.64 MiB"],["1.12.7","203.2 μs",3,"7.64 MiB"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#f59e0b", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -179,9 +112,9 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 },
 {
   name: "M₋ₓ",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [171.959,161.458,180.583,172.209],
-  customdata: [["1.12.7","172.0 μs",3,"7.64 MiB"],["1.12.7","161.5 μs",3,"7.64 MiB"],["1.12.7","180.6 μs",3,"7.64 MiB"],["1.12.7","172.2 μs",3,"7.64 MiB"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [171.959,161.458,180.583,172.209,171.291],
+  customdata: [["1.12.7","172.0 μs",3,"7.64 MiB"],["1.12.7","161.5 μs",3,"7.64 MiB"],["1.12.7","180.6 μs",3,"7.64 MiB"],["1.12.7","172.2 μs",3,"7.64 MiB"],["1.12.7","171.3 μs",3,"7.64 MiB"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#8b5cf6", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -192,9 +125,12 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
     paper_bgcolor: theme.bg,
     plot_bgcolor: theme.bg,
     font: { color: theme.text },
-    legend: { orientation: 'h', y: -0.3, font: { color: theme.text, size: 11 } },
+    legend: {
+      orientation: 'v', x: 1.02, xanchor: 'left', y: 1, yanchor: 'top',
+      font: { color: theme.text, size: 11 },
+    },
     xaxis: {
-      type: 'category', categoryorder: 'array', categoryarray: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
+      type: 'category', categoryorder: 'array', categoryarray: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
       tickangle: -45, color: theme.text, gridcolor: theme.grid,
       tickfont: { family: 'monospace', size: 10 },
     },
@@ -202,7 +138,7 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
       title: { text: "μs", font: { color: theme.text } },
       color: theme.text, gridcolor: theme.grid,
     },
-    margin: { t: 20, l: 60, r: 20, b: 90 },
+    margin: { t: 20, l: 60, r: 160, b: 60 },
   };
   Plotly.newPlot('bench_chart_1', data, layout, { displayModeBar: false, responsive: true });
   window.brambleRegisterPlotlyChart('bench_chart_1', function () {
@@ -217,73 +153,24 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 })();
 </script>
 
-  </div>
 </div>
 ```
 
 ### Operators 3D
 
-```@raw html
-<div style="display:flex; flex-wrap:wrap; gap:1.5rem; align-items:start; margin:1.2rem 0 2.5rem 0;">
-  <div style="flex:1 1 430px; min-width:320px; overflow-x:auto;">
-<table style="width:100%; border-collapse:collapse; font-size:12.5px; line-height:1.4;">
-<thead>
-<tr style="border-bottom:2px solid rgba(128,128,128,0.3);">
-<th style="padding:8px 6px; text-align:left;">Benchmark</th>
-<th style="padding:8px 6px; text-align:right;">Base (v2.0.0 <code>2dec0c7</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Prev (v2.2.0 <code>d7c2416</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Latest (v2.2.1 <code>c66d0bf</code>)</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Prev</th>
-<th style="padding:8px 6px; text-align:center;">Allocs</th>
-<th style="padding:8px 6px; text-align:right;">Memory</th>
-</tr>
-</thead>
-<tbody>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>D₋₂</code></td>
-<td style="padding:7px 6px; text-align:right;">229.6 μs</td>
-<td style="padding:7px 6px; text-align:right;">228.6 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">227.4 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.9% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.5% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;">3</td>
-<td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>innerₕ</code></td>
-<td style="padding:7px 6px; text-align:right;">240.4 μs</td>
-<td style="padding:7px 6px; text-align:right;">240.7 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">239.0 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.6% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.7% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">0 B</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>∇₋ₕ</code></td>
-<td style="padding:7px 6px; text-align:right;">690.8 μs</td>
-<td style="padding:7px 6px; text-align:right;">685.9 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">701.3 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.5% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+2.3% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;">15</td>
-<td style="padding:7px 6px; text-align:right;">22.92 MiB</td>
-</tr>
-</tbody>
-</table>
+The same stencil engine in 3D (`D₋₂`), together with the inner product `innerₕ` and the full gradient `∇₋ₕ`.
 
-  </div>
-  <div style="flex:1 1 450px; min-width:340px;">
-<div id="bench_chart_2" style="width:100%; max-width:560px; height:280px;"></div>
+```@raw html
+<div style="width:100%; margin:1.2rem 0 2.5rem 0;">
+<div id="bench_chart_2" style="width:100%; height:300px;"></div>
 <script>
 (function () {
   const theme = window.bramblePlotlyTheme();
   const data = [{
   name: "D₋₂",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [229.584,212.792,228.583,227.416],
-  customdata: [["1.12.7","229.6 μs",3,"7.64 MiB"],["1.12.7","212.8 μs",3,"7.64 MiB"],["1.12.7","228.6 μs",3,"7.64 MiB"],["1.12.7","227.4 μs",3,"7.64 MiB"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [229.584,212.792,228.583,227.416,228.25],
+  customdata: [["1.12.7","229.6 μs",3,"7.64 MiB"],["1.12.7","212.8 μs",3,"7.64 MiB"],["1.12.7","228.6 μs",3,"7.64 MiB"],["1.12.7","227.4 μs",3,"7.64 MiB"],["1.12.7","228.2 μs",3,"7.64 MiB"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#3b82f6", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -292,9 +179,9 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 },
 {
   name: "innerₕ",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [240.375,240.292,240.666,239.041],
-  customdata: [["1.12.7","240.4 μs",0,"0 B"],["1.12.7","240.3 μs",0,"0 B"],["1.12.7","240.7 μs",0,"0 B"],["1.12.7","239.0 μs",0,"0 B"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [240.375,240.292,240.666,239.041,239.167],
+  customdata: [["1.12.7","240.4 μs",0,"0 B"],["1.12.7","240.3 μs",0,"0 B"],["1.12.7","240.7 μs",0,"0 B"],["1.12.7","239.0 μs",0,"0 B"],["1.12.7","239.2 μs",0,"0 B"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#10b981", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -303,9 +190,9 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 },
 {
   name: "∇₋ₕ",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [690.75,696.667,685.875,701.3335],
-  customdata: [["1.12.7","690.8 μs",15,"22.92 MiB"],["1.12.7","696.7 μs",15,"22.92 MiB"],["1.12.7","685.9 μs",15,"22.92 MiB"],["1.12.7","701.3 μs",15,"22.92 MiB"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [690.75,696.667,685.875,701.3335,687.125],
+  customdata: [["1.12.7","690.8 μs",15,"22.92 MiB"],["1.12.7","696.7 μs",15,"22.92 MiB"],["1.12.7","685.9 μs",15,"22.92 MiB"],["1.12.7","701.3 μs",15,"22.92 MiB"],["1.12.7","687.1 μs",15,"22.92 MiB"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#f59e0b", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -316,9 +203,12 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
     paper_bgcolor: theme.bg,
     plot_bgcolor: theme.bg,
     font: { color: theme.text },
-    legend: { orientation: 'h', y: -0.3, font: { color: theme.text, size: 11 } },
+    legend: {
+      orientation: 'v', x: 1.02, xanchor: 'left', y: 1, yanchor: 'top',
+      font: { color: theme.text, size: 11 },
+    },
     xaxis: {
-      type: 'category', categoryorder: 'array', categoryarray: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
+      type: 'category', categoryorder: 'array', categoryarray: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
       tickangle: -45, color: theme.text, gridcolor: theme.grid,
       tickfont: { family: 'monospace', size: 10 },
     },
@@ -326,7 +216,7 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
       title: { text: "μs", font: { color: theme.text } },
       color: theme.text, gridcolor: theme.grid,
     },
-    margin: { t: 20, l: 60, r: 20, b: 90 },
+    margin: { t: 20, l: 60, r: 160, b: 60 },
   };
   Plotly.newPlot('bench_chart_2', data, layout, { displayModeBar: false, responsive: true });
   window.brambleRegisterPlotlyChart('bench_chart_2', function () {
@@ -341,103 +231,24 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 })();
 </script>
 
-  </div>
 </div>
 ```
 
-### Jumps and Averages
+### Jumps and averages
+
+Jump and average operators across cell interfaces, in 2D and 3D.
 
 ```@raw html
-<div style="display:flex; flex-wrap:wrap; gap:1.5rem; align-items:start; margin:1.2rem 0 2.5rem 0;">
-  <div style="flex:1 1 430px; min-width:320px; overflow-x:auto;">
-<table style="width:100%; border-collapse:collapse; font-size:12.5px; line-height:1.4;">
-<thead>
-<tr style="border-bottom:2px solid rgba(128,128,128,0.3);">
-<th style="padding:8px 6px; text-align:left;">Benchmark</th>
-<th style="padding:8px 6px; text-align:right;">Base (v2.0.0 <code>2dec0c7</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Prev (v2.2.0 <code>d7c2416</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Latest (v2.2.1 <code>c66d0bf</code>)</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Prev</th>
-<th style="padding:8px 6px; text-align:center;">Allocs</th>
-<th style="padding:8px 6px; text-align:right;">Memory</th>
-</tr>
-</thead>
-<tbody>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>M₊ᵧ 2D</code></td>
-<td style="padding:7px 6px; text-align:right;">161.3 μs</td>
-<td style="padding:7px 6px; text-align:right;">161.6 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">161.0 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;">3</td>
-<td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>M₊₂ 3D</code></td>
-<td style="padding:7px 6px; text-align:right;">227.7 μs</td>
-<td style="padding:7px 6px; text-align:right;">228.5 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">228.3 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;">3</td>
-<td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>M₊ₓ 2D</code></td>
-<td style="padding:7px 6px; text-align:right;">161.6 μs</td>
-<td style="padding:7px 6px; text-align:right;">162.4 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">163.7 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.3% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.8% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;">3</td>
-<td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>jumpᵧ 2D</code></td>
-<td style="padding:7px 6px; text-align:right;">160.8 μs</td>
-<td style="padding:7px 6px; text-align:right;">161.0 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">161.2 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;">3</td>
-<td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>jump₂ 3D</code></td>
-<td style="padding:7px 6px; text-align:right;">227.3 μs</td>
-<td style="padding:7px 6px; text-align:right;">227.2 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">227.7 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;">3</td>
-<td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>jumpₓ 2D</code></td>
-<td style="padding:7px 6px; text-align:right;">161.5 μs</td>
-<td style="padding:7px 6px; text-align:right;">160.5 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">163.3 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.1% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.7% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;">3</td>
-<td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
-</tr>
-</tbody>
-</table>
-
-  </div>
-  <div style="flex:1 1 450px; min-width:340px;">
-<div id="bench_chart_3" style="width:100%; max-width:560px; height:280px;"></div>
+<div style="width:100%; margin:1.2rem 0 2.5rem 0;">
+<div id="bench_chart_3" style="width:100%; height:300px;"></div>
 <script>
 (function () {
   const theme = window.bramblePlotlyTheme();
   const data = [{
   name: "M₊ᵧ 2D",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [161.292,161.291,161.625,160.959],
-  customdata: [["1.12.7","161.3 μs",3,"7.64 MiB"],["1.12.7","161.3 μs",3,"7.64 MiB"],["1.12.7","161.6 μs",3,"7.64 MiB"],["1.12.7","161.0 μs",3,"7.64 MiB"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [161.292,161.291,161.625,160.959,162.125],
+  customdata: [["1.12.7","161.3 μs",3,"7.64 MiB"],["1.12.7","161.3 μs",3,"7.64 MiB"],["1.12.7","161.6 μs",3,"7.64 MiB"],["1.12.7","161.0 μs",3,"7.64 MiB"],["1.12.7","162.1 μs",3,"7.64 MiB"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#3b82f6", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -446,9 +257,9 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 },
 {
   name: "M₊₂ 3D",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [227.708,226.792,228.458,228.291],
-  customdata: [["1.12.7","227.7 μs",3,"7.64 MiB"],["1.12.7","226.8 μs",3,"7.64 MiB"],["1.12.7","228.5 μs",3,"7.64 MiB"],["1.12.7","228.3 μs",3,"7.64 MiB"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [227.708,226.792,228.458,228.291,228.458],
+  customdata: [["1.12.7","227.7 μs",3,"7.64 MiB"],["1.12.7","226.8 μs",3,"7.64 MiB"],["1.12.7","228.5 μs",3,"7.64 MiB"],["1.12.7","228.3 μs",3,"7.64 MiB"],["1.12.7","228.5 μs",3,"7.64 MiB"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#10b981", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -457,9 +268,9 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 },
 {
   name: "M₊ₓ 2D",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [161.625,159.625,162.417,163.666],
-  customdata: [["1.12.7","161.6 μs",3,"7.64 MiB"],["1.12.7","159.6 μs",3,"7.64 MiB"],["1.12.7","162.4 μs",3,"7.64 MiB"],["1.12.7","163.7 μs",3,"7.64 MiB"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [161.625,159.625,162.417,163.666,164.416],
+  customdata: [["1.12.7","161.6 μs",3,"7.64 MiB"],["1.12.7","159.6 μs",3,"7.64 MiB"],["1.12.7","162.4 μs",3,"7.64 MiB"],["1.12.7","163.7 μs",3,"7.64 MiB"],["1.12.7","164.4 μs",3,"7.64 MiB"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#f59e0b", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -468,9 +279,9 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 },
 {
   name: "jumpᵧ 2D",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [160.834,159.917,160.958,161.166],
-  customdata: [["1.12.7","160.8 μs",3,"7.64 MiB"],["1.12.7","159.9 μs",3,"7.64 MiB"],["1.12.7","161.0 μs",3,"7.64 MiB"],["1.12.7","161.2 μs",3,"7.64 MiB"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [160.834,159.917,160.958,161.166,161.583],
+  customdata: [["1.12.7","160.8 μs",3,"7.64 MiB"],["1.12.7","159.9 μs",3,"7.64 MiB"],["1.12.7","161.0 μs",3,"7.64 MiB"],["1.12.7","161.2 μs",3,"7.64 MiB"],["1.12.7","161.6 μs",3,"7.64 MiB"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#8b5cf6", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -479,9 +290,9 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 },
 {
   name: "jump₂ 3D",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [227.334,226.667,227.25,227.667],
-  customdata: [["1.12.7","227.3 μs",3,"7.64 MiB"],["1.12.7","226.7 μs",3,"7.64 MiB"],["1.12.7","227.2 μs",3,"7.64 MiB"],["1.12.7","227.7 μs",3,"7.64 MiB"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [227.334,226.667,227.25,227.667,221.75],
+  customdata: [["1.12.7","227.3 μs",3,"7.64 MiB"],["1.12.7","226.7 μs",3,"7.64 MiB"],["1.12.7","227.2 μs",3,"7.64 MiB"],["1.12.7","227.7 μs",3,"7.64 MiB"],["1.12.7","221.8 μs",3,"7.64 MiB"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#ec4899", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -490,9 +301,9 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 },
 {
   name: "jumpₓ 2D",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [161.458,161.834,160.5,163.292],
-  customdata: [["1.12.7","161.5 μs",3,"7.64 MiB"],["1.12.7","161.8 μs",3,"7.64 MiB"],["1.12.7","160.5 μs",3,"7.64 MiB"],["1.12.7","163.3 μs",3,"7.64 MiB"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [161.458,161.834,160.5,163.292,164.125],
+  customdata: [["1.12.7","161.5 μs",3,"7.64 MiB"],["1.12.7","161.8 μs",3,"7.64 MiB"],["1.12.7","160.5 μs",3,"7.64 MiB"],["1.12.7","163.3 μs",3,"7.64 MiB"],["1.12.7","164.1 μs",3,"7.64 MiB"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#06b6d4", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -503,9 +314,12 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
     paper_bgcolor: theme.bg,
     plot_bgcolor: theme.bg,
     font: { color: theme.text },
-    legend: { orientation: 'h', y: -0.3, font: { color: theme.text, size: 11 } },
+    legend: {
+      orientation: 'v', x: 1.02, xanchor: 'left', y: 1, yanchor: 'top',
+      font: { color: theme.text, size: 11 },
+    },
     xaxis: {
-      type: 'category', categoryorder: 'array', categoryarray: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
+      type: 'category', categoryorder: 'array', categoryarray: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
       tickangle: -45, color: theme.text, gridcolor: theme.grid,
       tickfont: { family: 'monospace', size: 10 },
     },
@@ -513,7 +327,7 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
       title: { text: "μs", font: { color: theme.text } },
       color: theme.text, gridcolor: theme.grid,
     },
-    margin: { t: 20, l: 60, r: 20, b: 90 },
+    margin: { t: 20, l: 60, r: 160, b: 60 },
   };
   Plotly.newPlot('bench_chart_3', data, layout, { displayModeBar: false, responsive: true });
   window.brambleRegisterPlotlyChart('bench_chart_3', function () {
@@ -528,83 +342,24 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 })();
 </script>
 
-  </div>
 </div>
 ```
 
-### Inner Products 2D
+### Inner products 2D
+
+The reduction path — inner products and norms — including the seminorm's sum over directions.
 
 ```@raw html
-<div style="display:flex; flex-wrap:wrap; gap:1.5rem; align-items:start; margin:1.2rem 0 2.5rem 0;">
-  <div style="flex:1 1 430px; min-width:320px; overflow-x:auto;">
-<table style="width:100%; border-collapse:collapse; font-size:12.5px; line-height:1.4;">
-<thead>
-<tr style="border-bottom:2px solid rgba(128,128,128,0.3);">
-<th style="padding:8px 6px; text-align:left;">Benchmark</th>
-<th style="padding:8px 6px; text-align:right;">Base (v2.0.0 <code>2dec0c7</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Prev (v2.2.0 <code>d7c2416</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Latest (v2.2.1 <code>c66d0bf</code>)</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Prev</th>
-<th style="padding:8px 6px; text-align:center;">Allocs</th>
-<th style="padding:8px 6px; text-align:right;">Memory</th>
-</tr>
-</thead>
-<tbody>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>innerₕ</code></td>
-<td style="padding:7px 6px; text-align:right;">240.4 μs</td>
-<td style="padding:7px 6px; text-align:right;">237.0 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">239.9 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.2% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">0 B</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>norm₁ₕ</code></td>
-<td style="padding:7px 6px; text-align:right;">789.8 μs</td>
-<td style="padding:7px 6px; text-align:right;">785.7 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">792.7 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.9% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">0 B</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>normₕ</code></td>
-<td style="padding:7px 6px; text-align:right;">189.3 μs</td>
-<td style="padding:7px 6px; text-align:right;">184.4 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">187.2 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-1.1% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.5% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">0 B</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>snorm₁ₕ</code></td>
-<td style="padding:7px 6px; text-align:right;">578.5 μs</td>
-<td style="padding:7px 6px; text-align:right;">578.2 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">580.4 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">0 B</td>
-</tr>
-</tbody>
-</table>
-
-  </div>
-  <div style="flex:1 1 450px; min-width:340px;">
-<div id="bench_chart_4" style="width:100%; max-width:560px; height:280px;"></div>
+<div style="width:100%; margin:1.2rem 0 2.5rem 0;">
+<div id="bench_chart_4" style="width:100%; height:300px;"></div>
 <script>
 (function () {
   const theme = window.bramblePlotlyTheme();
   const data = [{
   name: "innerₕ",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [240.375,238.041,236.959,239.917],
-  customdata: [["1.12.7","240.4 μs",0,"0 B"],["1.12.7","238.0 μs",0,"0 B"],["1.12.7","237.0 μs",0,"0 B"],["1.12.7","239.9 μs",0,"0 B"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [240.375,238.041,236.959,239.917,238.833],
+  customdata: [["1.12.7","240.4 μs",0,"0 B"],["1.12.7","238.0 μs",0,"0 B"],["1.12.7","237.0 μs",0,"0 B"],["1.12.7","239.9 μs",0,"0 B"],["1.12.7","238.8 μs",0,"0 B"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#3b82f6", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -613,9 +368,9 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 },
 {
   name: "norm₁ₕ",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [789.791,788.458,785.667,792.708],
-  customdata: [["1.12.7","789.8 μs",0,"0 B"],["1.12.7","788.5 μs",0,"0 B"],["1.12.7","785.7 μs",0,"0 B"],["1.12.7","792.7 μs",0,"0 B"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [789.791,788.458,785.667,792.708,792.958],
+  customdata: [["1.12.7","789.8 μs",0,"0 B"],["1.12.7","788.5 μs",0,"0 B"],["1.12.7","785.7 μs",0,"0 B"],["1.12.7","792.7 μs",0,"0 B"],["1.12.7","793.0 μs",0,"0 B"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#10b981", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -624,9 +379,9 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 },
 {
   name: "normₕ",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [189.292,186.167,184.417,187.208],
-  customdata: [["1.12.7","189.3 μs",0,"0 B"],["1.12.7","186.2 μs",0,"0 B"],["1.12.7","184.4 μs",0,"0 B"],["1.12.7","187.2 μs",0,"0 B"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [189.292,186.167,184.417,187.208,189.542],
+  customdata: [["1.12.7","189.3 μs",0,"0 B"],["1.12.7","186.2 μs",0,"0 B"],["1.12.7","184.4 μs",0,"0 B"],["1.12.7","187.2 μs",0,"0 B"],["1.12.7","189.5 μs",0,"0 B"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#f59e0b", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -635,9 +390,9 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 },
 {
   name: "snorm₁ₕ",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [578.5,582.375,578.209,580.375],
-  customdata: [["1.12.7","578.5 μs",0,"0 B"],["1.12.7","582.4 μs",0,"0 B"],["1.12.7","578.2 μs",0,"0 B"],["1.12.7","580.4 μs",0,"0 B"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [578.5,582.375,578.209,580.375,579.5],
+  customdata: [["1.12.7","578.5 μs",0,"0 B"],["1.12.7","582.4 μs",0,"0 B"],["1.12.7","578.2 μs",0,"0 B"],["1.12.7","580.4 μs",0,"0 B"],["1.12.7","579.5 μs",0,"0 B"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#8b5cf6", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -648,9 +403,12 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
     paper_bgcolor: theme.bg,
     plot_bgcolor: theme.bg,
     font: { color: theme.text },
-    legend: { orientation: 'h', y: -0.3, font: { color: theme.text, size: 11 } },
+    legend: {
+      orientation: 'v', x: 1.02, xanchor: 'left', y: 1, yanchor: 'top',
+      font: { color: theme.text, size: 11 },
+    },
     xaxis: {
-      type: 'category', categoryorder: 'array', categoryarray: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
+      type: 'category', categoryorder: 'array', categoryarray: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
       tickangle: -45, color: theme.text, gridcolor: theme.grid,
       tickfont: { family: 'monospace', size: 10 },
     },
@@ -658,7 +416,7 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
       title: { text: "μs", font: { color: theme.text } },
       color: theme.text, gridcolor: theme.grid,
     },
-    margin: { t: 20, l: 60, r: 20, b: 90 },
+    margin: { t: 20, l: 60, r: 160, b: 60 },
   };
   Plotly.newPlot('bench_chart_4', data, layout, { displayModeBar: false, responsive: true });
   window.brambleRegisterPlotlyChart('bench_chart_4', function () {
@@ -673,194 +431,25 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 })();
 </script>
 
-  </div>
 </div>
 ```
 
 ### Restriction
 
-```@raw html
-<div style="display:flex; flex-wrap:wrap; gap:1.5rem; align-items:start; margin:1.2rem 0 2.5rem 0;">
-  <div style="flex:1 1 430px; min-width:320px; overflow-x:auto;">
-<table style="width:100%; border-collapse:collapse; font-size:12.5px; line-height:1.4;">
-<thead>
-<tr style="border-bottom:2px solid rgba(128,128,128,0.3);">
-<th style="padding:8px 6px; text-align:left;">Benchmark</th>
-<th style="padding:8px 6px; text-align:right;">Base (v2.0.0 <code>2dec0c7</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Prev (v2.2.0 <code>d7c2416</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Latest (v2.2.1 <code>c66d0bf</code>)</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Prev</th>
-<th style="padding:8px 6px; text-align:center;">Allocs</th>
-<th style="padding:8px 6px; text-align:right;">Memory</th>
-</tr>
-</thead>
-<tbody>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>Rₕ 1D (allocates its output)</code></td>
-<td style="padding:7px 6px; text-align:right;">3.2 ms</td>
-<td style="padding:7px 6px; text-align:right;">3.38 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">3.2 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-5.3% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;">10</td>
-<td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>Rₕ! 1D</code></td>
-<td style="padding:7px 6px; text-align:right;">3.19 ms</td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center;">—</td>
-<td style="padding:7px 6px; text-align:right;">—</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>Rₕ! 1D, Parallel() backend</code></td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right;">3.21 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">3.2 ms</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;">7</td>
-<td style="padding:7px 6px; text-align:right;">448 B</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>Rₕ! 1D, Serial() backend (default)</code></td>
-<td style="padding:7px 6px; text-align:right;">2.95 ms</td>
-<td style="padding:7px 6px; text-align:right;">2.97 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">2.95 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.5% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">0 B</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>Rₕ! 2D</code></td>
-<td style="padding:7px 6px; text-align:right;">3.82 ms</td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center;">—</td>
-<td style="padding:7px 6px; text-align:right;">—</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>Rₕ! 2D, Parallel() backend</code></td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right;">3.83 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">3.83 ms</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;">7</td>
-<td style="padding:7px 6px; text-align:right;">448 B</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>Rₕ! 3D</code></td>
-<td style="padding:7px 6px; text-align:right;">4.44 ms</td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center;">—</td>
-<td style="padding:7px 6px; text-align:right;">—</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>Rₕ! 3D, Parallel() backend</code></td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right;">4.55 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">4.45 ms</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-2.3% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;">7</td>
-<td style="padding:7px 6px; text-align:right;">464 B</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>avgₕ! 1D</code></td>
-<td style="padding:7px 6px; text-align:right;">16.74 ms</td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center;">—</td>
-<td style="padding:7px 6px; text-align:right;">—</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>avgₕ! 1D, Parallel() backend</code></td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right;">16.67 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">16.65 ms</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;">7</td>
-<td style="padding:7px 6px; text-align:right;">544 B</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>avgₕ! 1D, Serial() backend (default)</code></td>
-<td style="padding:7px 6px; text-align:right;">17.32 ms</td>
-<td style="padding:7px 6px; text-align:right;">17.26 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">17.26 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">0 B</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>avgₕ! 2D</code></td>
-<td style="padding:7px 6px; text-align:right;">106.39 ms</td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center;">—</td>
-<td style="padding:7px 6px; text-align:right;">—</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>avgₕ! 2D, Parallel() backend</code></td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right;">106.72 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">106.26 ms</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;">7</td>
-<td style="padding:7px 6px; text-align:right;">560 B</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>avgₕ! 3D</code></td>
-<td style="padding:7px 6px; text-align:right;">620.75 ms</td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center;">—</td>
-<td style="padding:7px 6px; text-align:right;">—</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>avgₕ! 3D, Parallel() backend</code></td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right;">622.73 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">620.64 ms</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;">7</td>
-<td style="padding:7px 6px; text-align:right;">576 B</td>
-</tr>
-</tbody>
-</table>
+Point interpolation (`Rₕ!`) and cell-averaging (`avgₕ!`), compared across the `Serial()` (the allocation-free default) and `Parallel()` backends, split by dimension.
 
-  </div>
-  <div style="flex:1 1 450px; min-width:340px;">
-<div style="display:flex; flex-wrap:wrap; gap:1rem;">
-  <div style="flex: 0 0 380px;"><div id="bench_chart_5" style="width:100%; max-width:380px; height:280px;"></div>
+```@raw html
+<div style="width:100%; margin:1.2rem 0 2.5rem 0;">
+<div style="display:flex; flex-direction:column; gap:1.5rem; width:100%;">
+  <div style="width:100%;"><div id="bench_chart_5" style="width:100%; height:300px;"></div>
 <script>
 (function () {
   const theme = window.bramblePlotlyTheme();
   const data = [{
   name: "Rₕ 1D (allocates its output)",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,1.0149558149254283,1.0576855523560704,1.0014603442143817],
-  customdata: [["1.12.7","3.2 ms (baseline)",10,"7.64 MiB"],["1.12.7","3.24 ms (+1.5%)",10,"7.64 MiB"],["1.12.7","3.38 ms (+5.8%)",10,"7.64 MiB"],["1.12.7","3.2 ms (+0.1%)",10,"7.64 MiB"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,1.0149558149254283,1.0576855523560704,1.0014603442143817,1.0023077913658966],
+  customdata: [["1.12.7","3.2 ms (baseline)",10,"7.64 MiB"],["1.12.7","3.24 ms (+1.5%)",10,"7.64 MiB"],["1.12.7","3.38 ms (+5.8%)",10,"7.64 MiB"],["1.12.7","3.2 ms (+0.1%)",10,"7.64 MiB"],["1.12.7","3.2 ms (+0.2%)",10,"7.64 MiB"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#3b82f6", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -868,75 +457,53 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
   hovertemplate: '%{x} (Julia %{customdata[0]})<br>Rₕ 1D (allocates its output): %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
 },
 {
-  name: "Rₕ! 1D",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)"],
-  y: [1.0,1.024612615432775],
-  customdata: [["1.12.7","3.19 ms (baseline)",7,"448 B"],["1.12.7","3.27 ms (+2.5%)",7,"448 B"]],
+  name: "Rₕ! 1D, Parallel() backend",
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,1.024612615432775,1.0042131789012365,1.0028173423070903,1.0015000782595085],
+  customdata: [["1.12.7","3.19 ms (baseline)",7,"448 B"],["1.12.7","3.27 ms (+2.5%)",7,"448 B"],["1.12.7","3.21 ms (+0.4%)",7,"448 B"],["1.12.7","3.2 ms (+0.3%)",7,"448 B"],["1.12.7","3.2 ms (+0.2%)",7,"448 B"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#10b981", width: 2, shape: 'spline', smoothing: 0.3 },
   marker: { color: "#10b981", size: 7 },
-  hovertemplate: '%{x} (Julia %{customdata[0]})<br>Rₕ! 1D: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
-},
-{
-  name: "Rₕ! 1D, Parallel() backend",
-  x: ["v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,0.9986100196417722],
-  customdata: [["1.12.7","3.21 ms (baseline)",7,"448 B"],["1.12.7","3.2 ms (-0.1%)",7,"448 B"]],
-  mode: 'lines+markers',
-  type: 'scatter',
-  line: { color: "#f59e0b", width: 2, shape: 'spline', smoothing: 0.3 },
-  marker: { color: "#f59e0b", size: 7 },
   hovertemplate: '%{x} (Julia %{customdata[0]})<br>Rₕ! 1D, Parallel() backend: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
 },
 {
   name: "Rₕ! 1D, Serial() backend (default)",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,1.0301685765215176,1.0069036584330702,1.0014642220524574],
-  customdata: [["1.12.7","2.95 ms (baseline)",0,"0 B"],["1.12.7","3.03 ms (+3.0%)",0,"0 B"],["1.12.7","2.97 ms (+0.7%)",0,"0 B"],["1.12.7","2.95 ms (+0.1%)",0,"0 B"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,1.0301685765215176,1.0069036584330702,1.0014642220524574,1.0011104320516084],
+  customdata: [["1.12.7","2.95 ms (baseline)",0,"0 B"],["1.12.7","3.03 ms (+3.0%)",0,"0 B"],["1.12.7","2.97 ms (+0.7%)",0,"0 B"],["1.12.7","2.95 ms (+0.1%)",0,"0 B"],["1.12.7","2.95 ms (+0.1%)",0,"0 B"]],
+  mode: 'lines+markers',
+  type: 'scatter',
+  line: { color: "#f59e0b", width: 2, shape: 'spline', smoothing: 0.3 },
+  marker: { color: "#f59e0b", size: 7 },
+  hovertemplate: '%{x} (Julia %{customdata[0]})<br>Rₕ! 1D, Serial() backend (default): %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
+},
+{
+  name: "avgₕ! 1D, Parallel() backend",
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,1.0068065935214991,0.9960489659344681,0.9949062282935864,0.9958261545011166],
+  customdata: [["1.12.7","16.74 ms (baseline)",7,"544 B"],["1.12.7","16.85 ms (+0.7%)",7,"544 B"],["1.12.7","16.67 ms (-0.4%)",7,"544 B"],["1.12.7","16.65 ms (-0.5%)",7,"544 B"],["1.12.7","16.67 ms (-0.4%)",7,"544 B"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#8b5cf6", width: 2, shape: 'spline', smoothing: 0.3 },
   marker: { color: "#8b5cf6", size: 7 },
-  hovertemplate: '%{x} (Julia %{customdata[0]})<br>Rₕ! 1D, Serial() backend (default): %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
-},
-{
-  name: "avgₕ! 1D",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)"],
-  y: [1.0,1.0068065935214991],
-  customdata: [["1.12.7","16.74 ms (baseline)",7,"544 B"],["1.12.7","16.85 ms (+0.7%)",7,"544 B"]],
-  mode: 'lines+markers',
-  type: 'scatter',
-  line: { color: "#ec4899", width: 2, shape: 'spline', smoothing: 0.3 },
-  marker: { color: "#ec4899", size: 7 },
-  hovertemplate: '%{x} (Julia %{customdata[0]})<br>avgₕ! 1D: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
-},
-{
-  name: "avgₕ! 1D, Parallel() backend",
-  x: ["v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,0.9988527294541092],
-  customdata: [["1.12.7","16.67 ms (baseline)",7,"544 B"],["1.12.7","16.65 ms (-0.1%)",7,"544 B"]],
-  mode: 'lines+markers',
-  type: 'scatter',
-  line: { color: "#06b6d4", width: 2, shape: 'spline', smoothing: 0.3 },
-  marker: { color: "#06b6d4", size: 7 },
   hovertemplate: '%{x} (Julia %{customdata[0]})<br>avgₕ! 1D, Parallel() backend: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
 },
 {
   name: "avgₕ! 1D, Serial() backend (default)",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,0.994873716820243,0.9963419560811928,0.9964045252268809],
-  customdata: [["1.12.7","17.32 ms (baseline)",0,"0 B"],["1.12.7","17.24 ms (-0.5%)",0,"0 B"],["1.12.7","17.26 ms (-0.4%)",0,"0 B"],["1.12.7","17.26 ms (-0.4%)",0,"0 B"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,0.994873716820243,0.9963419560811928,0.9964045252268809,0.997997816198286],
+  customdata: [["1.12.7","17.32 ms (baseline)",0,"0 B"],["1.12.7","17.24 ms (-0.5%)",0,"0 B"],["1.12.7","17.26 ms (-0.4%)",0,"0 B"],["1.12.7","17.26 ms (-0.4%)",0,"0 B"],["1.12.7","17.29 ms (-0.2%)",0,"0 B"]],
   mode: 'lines+markers',
   type: 'scatter',
-  line: { color: "#f97316", width: 2, shape: 'spline', smoothing: 0.3 },
-  marker: { color: "#f97316", size: 7 },
+  line: { color: "#ec4899", width: 2, shape: 'spline', smoothing: 0.3 },
+  marker: { color: "#ec4899", size: 7 },
   hovertemplate: '%{x} (Julia %{customdata[0]})<br>avgₕ! 1D, Serial() backend (default): %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
 },
 {
   name: "1.0x (ref)",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1,1,1,1],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1,1,1,1,1],
   mode: 'lines',
   type: 'scatter',
   line: { color: 'rgba(128,128,128,0.7)', dash: 'dash', width: 1.5 },
@@ -946,9 +513,12 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
     paper_bgcolor: theme.bg,
     plot_bgcolor: theme.bg,
     font: { color: theme.text },
-    legend: { orientation: 'h', y: -0.3, font: { color: theme.text, size: 11 } },
+    legend: {
+      orientation: 'v', x: 1.02, xanchor: 'left', y: 1, yanchor: 'top',
+      font: { color: theme.text, size: 11 },
+    },
     xaxis: {
-      type: 'category', categoryorder: 'array', categoryarray: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
+      type: 'category', categoryorder: 'array', categoryarray: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
       tickangle: -45, color: theme.text, gridcolor: theme.grid,
       tickfont: { family: 'monospace', size: 10 },
     },
@@ -956,7 +526,7 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
       title: { text: "relative to baseline", font: { color: theme.text } },
       color: theme.text, gridcolor: theme.grid,
     },
-    margin: { t: 20, l: 60, r: 20, b: 90 },
+    margin: { t: 20, l: 60, r: 160, b: 60 },
   };
   Plotly.newPlot('bench_chart_5', data, layout, { displayModeBar: false, responsive: true });
   window.brambleRegisterPlotlyChart('bench_chart_5', function () {
@@ -970,58 +540,58 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
   });
 })();
 </script>
-</div><div style="flex: 0 0 380px;"><div id="bench_chart_6" style="width:100%; max-width:380px; height:280px;"></div>
+</div><div style="width:100%;"><div id="bench_chart_6" style="width:100%; height:300px;"></div>
 <script>
 (function () {
   const theme = window.bramblePlotlyTheme();
   const data = [{
-  name: "Rₕ! 2D",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)"],
-  y: [1.0,1.0244596787155744],
-  customdata: [["1.12.7","3.82 ms (baseline)",7,"448 B"],["1.12.7","3.91 ms (+2.4%)",7,"448 B"]],
+  name: "Rₕ! 2D, Parallel() backend",
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,1.0244596787155744,1.0037520529878992,1.0018323096971185,0.9997382227734669],
+  customdata: [["1.12.7","3.82 ms (baseline)",7,"448 B"],["1.12.7","3.91 ms (+2.4%)",7,"448 B"],["1.12.7","3.83 ms (+0.4%)",7,"448 B"],["1.12.7","3.83 ms (+0.2%)",7,"448 B"],["1.12.7","3.82 ms (-0.0%)",7,"448 B"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#3b82f6", width: 2, shape: 'spline', smoothing: 0.3 },
   marker: { color: "#3b82f6", size: 7 },
-  hovertemplate: '%{x} (Julia %{customdata[0]})<br>Rₕ! 2D: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
+  hovertemplate: '%{x} (Julia %{customdata[0]})<br>Rₕ! 2D, Parallel() backend: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
 },
 {
-  name: "Rₕ! 2D, Parallel() backend",
-  x: ["v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,0.9980874327628362],
-  customdata: [["1.12.7","3.83 ms (baseline)",7,"448 B"],["1.12.7","3.83 ms (-0.2%)",7,"448 B"]],
+  name: "Rₕ! 2D, Serial() backend (default)",
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,0.9939257266957312,0.995707065803144,0.9941954426632402,0.9934426653979228],
+  customdata: [["1.12.7","3.71 ms (baseline)",0,"0 B"],["1.12.7","3.69 ms (-0.6%)",0,"0 B"],["1.12.7","3.69 ms (-0.4%)",0,"0 B"],["1.12.7","3.69 ms (-0.6%)",0,"0 B"],["1.12.7","3.68 ms (-0.7%)",0,"0 B"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#10b981", width: 2, shape: 'spline', smoothing: 0.3 },
   marker: { color: "#10b981", size: 7 },
-  hovertemplate: '%{x} (Julia %{customdata[0]})<br>Rₕ! 2D, Parallel() backend: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
+  hovertemplate: '%{x} (Julia %{customdata[0]})<br>Rₕ! 2D, Serial() backend (default): %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
 },
 {
-  name: "avgₕ! 2D",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)"],
-  y: [1.0,0.996973378521717],
-  customdata: [["1.12.7","106.39 ms (baseline)",7,"560 B"],["1.12.7","106.07 ms (-0.3%)",7,"560 B"]],
+  name: "avgₕ! 2D, Parallel() backend",
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,0.996973378521717,1.0030935735212574,0.9988203732425536,0.9973027528709953],
+  customdata: [["1.12.7","106.39 ms (baseline)",7,"560 B"],["1.12.7","106.07 ms (-0.3%)",7,"560 B"],["1.12.7","106.72 ms (+0.3%)",7,"560 B"],["1.12.7","106.26 ms (-0.1%)",7,"560 B"],["1.12.7","106.1 ms (-0.3%)",7,"560 B"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#f59e0b", width: 2, shape: 'spline', smoothing: 0.3 },
   marker: { color: "#f59e0b", size: 7 },
-  hovertemplate: '%{x} (Julia %{customdata[0]})<br>avgₕ! 2D: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
+  hovertemplate: '%{x} (Julia %{customdata[0]})<br>avgₕ! 2D, Parallel() backend: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
 },
 {
-  name: "avgₕ! 2D, Parallel() backend",
-  x: ["v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,0.9957399784112828],
-  customdata: [["1.12.7","106.72 ms (baseline)",7,"560 B"],["1.12.7","106.26 ms (-0.4%)",7,"560 B"]],
+  name: "avgₕ! 2D, Serial() backend (default)",
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,0.990859277878407,0.9963455292959916,0.9925425798108675,0.9908653413907442],
+  customdata: [["1.12.7","110.0 ms (baseline)",0,"0 B"],["1.12.7","109.0 ms (-0.9%)",0,"0 B"],["1.12.7","109.6 ms (-0.4%)",0,"0 B"],["1.12.7","109.18 ms (-0.7%)",0,"0 B"],["1.12.7","109.0 ms (-0.9%)",0,"0 B"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#8b5cf6", width: 2, shape: 'spline', smoothing: 0.3 },
   marker: { color: "#8b5cf6", size: 7 },
-  hovertemplate: '%{x} (Julia %{customdata[0]})<br>avgₕ! 2D, Parallel() backend: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
+  hovertemplate: '%{x} (Julia %{customdata[0]})<br>avgₕ! 2D, Serial() backend (default): %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
 },
 {
   name: "1.0x (ref)",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1,1,1,1],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1,1,1,1,1],
   mode: 'lines',
   type: 'scatter',
   line: { color: 'rgba(128,128,128,0.7)', dash: 'dash', width: 1.5 },
@@ -1031,9 +601,12 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
     paper_bgcolor: theme.bg,
     plot_bgcolor: theme.bg,
     font: { color: theme.text },
-    legend: { orientation: 'h', y: -0.3, font: { color: theme.text, size: 11 } },
+    legend: {
+      orientation: 'v', x: 1.02, xanchor: 'left', y: 1, yanchor: 'top',
+      font: { color: theme.text, size: 11 },
+    },
     xaxis: {
-      type: 'category', categoryorder: 'array', categoryarray: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
+      type: 'category', categoryorder: 'array', categoryarray: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
       tickangle: -45, color: theme.text, gridcolor: theme.grid,
       tickfont: { family: 'monospace', size: 10 },
     },
@@ -1041,7 +614,7 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
       title: { text: "relative to baseline", font: { color: theme.text } },
       color: theme.text, gridcolor: theme.grid,
     },
-    margin: { t: 20, l: 60, r: 20, b: 90 },
+    margin: { t: 20, l: 60, r: 160, b: 60 },
   };
   Plotly.newPlot('bench_chart_6', data, layout, { displayModeBar: false, responsive: true });
   window.brambleRegisterPlotlyChart('bench_chart_6', function () {
@@ -1055,58 +628,58 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
   });
 })();
 </script>
-</div><div style="flex: 0 0 380px;"><div id="bench_chart_7" style="width:100%; max-width:380px; height:280px;"></div>
+</div><div style="width:100%;"><div id="bench_chart_7" style="width:100%; height:300px;"></div>
 <script>
 (function () {
   const theme = window.bramblePlotlyTheme();
   const data = [{
-  name: "Rₕ! 3D",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)"],
-  y: [1.0,1.031481808717184],
-  customdata: [["1.12.7","4.44 ms (baseline)",7,"464 B"],["1.12.7","4.58 ms (+3.1%)",7,"464 B"]],
+  name: "Rₕ! 3D, Parallel() backend",
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,1.031481808717184,1.0251649174146713,1.001388221390585,1.0013317200821632],
+  customdata: [["1.12.7","4.44 ms (baseline)",7,"464 B"],["1.12.7","4.58 ms (+3.1%)",7,"464 B"],["1.12.7","4.55 ms (+2.5%)",7,"464 B"],["1.12.7","4.45 ms (+0.1%)",7,"464 B"],["1.12.7","4.45 ms (+0.1%)",7,"464 B"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#3b82f6", width: 2, shape: 'spline', smoothing: 0.3 },
   marker: { color: "#3b82f6", size: 7 },
-  hovertemplate: '%{x} (Julia %{customdata[0]})<br>Rₕ! 3D: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
+  hovertemplate: '%{x} (Julia %{customdata[0]})<br>Rₕ! 3D, Parallel() backend: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
 },
 {
-  name: "Rₕ! 3D, Parallel() backend",
-  x: ["v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,0.9768069550370023],
-  customdata: [["1.12.7","4.55 ms (baseline)",7,"464 B"],["1.12.7","4.45 ms (-2.3%)",7,"464 B"]],
+  name: "Rₕ! 3D, Serial() backend (default)",
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,0.9934655799749492,0.9946625222703774,0.9932147016111117,0.9945561943211609],
+  customdata: [["1.12.7","4.32 ms (baseline)",0,"0 B"],["1.12.7","4.29 ms (-0.7%)",0,"0 B"],["1.12.7","4.29 ms (-0.5%)",0,"0 B"],["1.12.7","4.29 ms (-0.7%)",0,"0 B"],["1.12.7","4.29 ms (-0.5%)",0,"0 B"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#10b981", width: 2, shape: 'spline', smoothing: 0.3 },
   marker: { color: "#10b981", size: 7 },
-  hovertemplate: '%{x} (Julia %{customdata[0]})<br>Rₕ! 3D, Parallel() backend: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
+  hovertemplate: '%{x} (Julia %{customdata[0]})<br>Rₕ! 3D, Serial() backend (default): %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
 },
 {
-  name: "avgₕ! 3D",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)"],
-  y: [1.0,1.0626395001054676],
-  customdata: [["1.12.7","620.75 ms (baseline)",7,"576 B"],["1.12.7","659.64 ms (+6.3%)",7,"576 B"]],
+  name: "avgₕ! 3D, Parallel() backend",
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,1.0626395001054676,1.0031843637550093,0.9998218554882745,1.0021153017605628],
+  customdata: [["1.12.7","620.75 ms (baseline)",7,"576 B"],["1.12.7","659.64 ms (+6.3%)",7,"576 B"],["1.12.7","622.73 ms (+0.3%)",7,"576 B"],["1.12.7","620.64 ms (-0.0%)",7,"576 B"],["1.12.7","622.07 ms (+0.2%)",7,"576 B"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#f59e0b", width: 2, shape: 'spline', smoothing: 0.3 },
   marker: { color: "#f59e0b", size: 7 },
-  hovertemplate: '%{x} (Julia %{customdata[0]})<br>avgₕ! 3D: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
+  hovertemplate: '%{x} (Julia %{customdata[0]})<br>avgₕ! 3D, Parallel() backend: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
 },
 {
-  name: "avgₕ! 3D, Parallel() backend",
-  x: ["v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,0.9966481651945325],
-  customdata: [["1.12.7","622.73 ms (baseline)",7,"576 B"],["1.12.7","620.64 ms (-0.3%)",7,"576 B"]],
+  name: "avgₕ! 3D, Serial() backend (default)",
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,0.9953563221063543,0.9961396104082121,0.9993011818337315,0.9935846831953266],
+  customdata: [["1.12.7","643.71 ms (baseline)",0,"0 B"],["1.12.7","640.72 ms (-0.5%)",0,"0 B"],["1.12.7","641.22 ms (-0.4%)",0,"0 B"],["1.12.7","643.26 ms (-0.1%)",0,"0 B"],["1.12.7","639.58 ms (-0.6%)",0,"0 B"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#8b5cf6", width: 2, shape: 'spline', smoothing: 0.3 },
   marker: { color: "#8b5cf6", size: 7 },
-  hovertemplate: '%{x} (Julia %{customdata[0]})<br>avgₕ! 3D, Parallel() backend: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
+  hovertemplate: '%{x} (Julia %{customdata[0]})<br>avgₕ! 3D, Serial() backend (default): %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
 },
 {
   name: "1.0x (ref)",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1,1,1,1],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1,1,1,1,1],
   mode: 'lines',
   type: 'scatter',
   line: { color: 'rgba(128,128,128,0.7)', dash: 'dash', width: 1.5 },
@@ -1116,9 +689,12 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
     paper_bgcolor: theme.bg,
     plot_bgcolor: theme.bg,
     font: { color: theme.text },
-    legend: { orientation: 'h', y: -0.3, font: { color: theme.text, size: 11 } },
+    legend: {
+      orientation: 'v', x: 1.02, xanchor: 'left', y: 1, yanchor: 'top',
+      font: { color: theme.text, size: 11 },
+    },
     xaxis: {
-      type: 'category', categoryorder: 'array', categoryarray: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
+      type: 'category', categoryorder: 'array', categoryarray: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
       tickangle: -45, color: theme.text, gridcolor: theme.grid,
       tickfont: { family: 'monospace', size: 10 },
     },
@@ -1126,7 +702,7 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
       title: { text: "relative to baseline", font: { color: theme.text } },
       color: theme.text, gridcolor: theme.grid,
     },
-    margin: { t: 20, l: 60, r: 20, b: 90 },
+    margin: { t: 20, l: 60, r: 160, b: 60 },
   };
   Plotly.newPlot('bench_chart_7', data, layout, { displayModeBar: false, responsive: true });
   window.brambleRegisterPlotlyChart('bench_chart_7', function () {
@@ -1143,63 +719,24 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 </div>
 </div>
 
-  </div>
 </div>
 ```
 
 ### Composite
 
-```@raw html
-<div style="display:flex; flex-wrap:wrap; gap:1.5rem; align-items:start; margin:1.2rem 0 2.5rem 0;">
-  <div style="flex:1 1 430px; min-width:320px; overflow-x:auto;">
-<table style="width:100%; border-collapse:collapse; font-size:12.5px; line-height:1.4;">
-<thead>
-<tr style="border-bottom:2px solid rgba(128,128,128,0.3);">
-<th style="padding:8px 6px; text-align:left;">Benchmark</th>
-<th style="padding:8px 6px; text-align:right;">Base (v2.0.0 <code>2dec0c7</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Prev (v2.2.0 <code>d7c2416</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Latest (v2.2.1 <code>c66d0bf</code>)</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Prev</th>
-<th style="padding:8px 6px; text-align:center;">Allocs</th>
-<th style="padding:8px 6px; text-align:right;">Memory</th>
-</tr>
-</thead>
-<tbody>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>D₋ₓ (3 components)</code></td>
-<td style="padding:7px 6px; text-align:right;">670.2 μs</td>
-<td style="padding:7px 6px; text-align:right;">659.9 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">657.8 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-1.8% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;">3</td>
-<td style="padding:7px 6px; text-align:right;">22.89 MiB</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>∇₋ₕ (3 components)</code></td>
-<td style="padding:7px 6px; text-align:right;">1.38 ms</td>
-<td style="padding:7px 6px; text-align:right;">1.4 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">1.39 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.7% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;">10</td>
-<td style="padding:7px 6px; text-align:right;">45.78 MiB</td>
-</tr>
-</tbody>
-</table>
+A composite (multi-component) operator, which dispatches per component and calls the engine once per component with a view rather than once with a plain vector.
 
-  </div>
-  <div style="flex:1 1 450px; min-width:340px;">
-<div id="bench_chart_8" style="width:100%; max-width:560px; height:280px;"></div>
+```@raw html
+<div style="width:100%; margin:1.2rem 0 2.5rem 0;">
+<div id="bench_chart_8" style="width:100%; height:300px;"></div>
 <script>
 (function () {
   const theme = window.bramblePlotlyTheme();
   const data = [{
   name: "D₋ₓ (3 components)",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [0.670208,0.693958,0.659917,0.657834],
-  customdata: [["1.12.7","670.2 μs",3,"22.89 MiB"],["1.12.7","694.0 μs",3,"22.89 MiB"],["1.12.7","659.9 μs",3,"22.89 MiB"],["1.12.7","657.8 μs",3,"22.89 MiB"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [0.670208,0.693958,0.659917,0.657834,0.65625],
+  customdata: [["1.12.7","670.2 μs",3,"22.89 MiB"],["1.12.7","694.0 μs",3,"22.89 MiB"],["1.12.7","659.9 μs",3,"22.89 MiB"],["1.12.7","657.8 μs",3,"22.89 MiB"],["1.12.7","656.2 μs",3,"22.89 MiB"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#3b82f6", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -1208,9 +745,9 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 },
 {
   name: "∇₋ₕ (3 components)",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.380625,1.407666,1.395312,1.385937],
-  customdata: [["1.12.7","1.38 ms",10,"45.78 MiB"],["1.12.7","1.41 ms",10,"45.78 MiB"],["1.12.7","1.4 ms",10,"45.78 MiB"],["1.12.7","1.39 ms",10,"45.78 MiB"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.380625,1.407666,1.395312,1.385937,1.397542],
+  customdata: [["1.12.7","1.38 ms",10,"45.78 MiB"],["1.12.7","1.41 ms",10,"45.78 MiB"],["1.12.7","1.4 ms",10,"45.78 MiB"],["1.12.7","1.39 ms",10,"45.78 MiB"],["1.12.7","1.4 ms",10,"45.78 MiB"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#10b981", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -1221,9 +758,12 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
     paper_bgcolor: theme.bg,
     plot_bgcolor: theme.bg,
     font: { color: theme.text },
-    legend: { orientation: 'h', y: -0.3, font: { color: theme.text, size: 11 } },
+    legend: {
+      orientation: 'v', x: 1.02, xanchor: 'left', y: 1, yanchor: 'top',
+      font: { color: theme.text, size: 11 },
+    },
     xaxis: {
-      type: 'category', categoryorder: 'array', categoryarray: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
+      type: 'category', categoryorder: 'array', categoryarray: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
       tickangle: -45, color: theme.text, gridcolor: theme.grid,
       tickfont: { family: 'monospace', size: 10 },
     },
@@ -1231,7 +771,7 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
       title: { text: "ms", font: { color: theme.text } },
       color: theme.text, gridcolor: theme.grid,
     },
-    margin: { t: 20, l: 60, r: 20, b: 90 },
+    margin: { t: 20, l: 60, r: 160, b: 60 },
   };
   Plotly.newPlot('bench_chart_8', data, layout, { displayModeBar: false, responsive: true });
   window.brambleRegisterPlotlyChart('bench_chart_8', function () {
@@ -1246,73 +786,24 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 })();
 </script>
 
-  </div>
 </div>
 ```
 
 ### Construction
 
-```@raw html
-<div style="display:flex; flex-wrap:wrap; gap:1.5rem; align-items:start; margin:1.2rem 0 2.5rem 0;">
-  <div style="flex:1 1 430px; min-width:320px; overflow-x:auto;">
-<table style="width:100%; border-collapse:collapse; font-size:12.5px; line-height:1.4;">
-<thead>
-<tr style="border-bottom:2px solid rgba(128,128,128,0.3);">
-<th style="padding:8px 6px; text-align:left;">Benchmark</th>
-<th style="padding:8px 6px; text-align:right;">Base (v2.0.0 <code>2dec0c7</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Prev (v2.2.0 <code>d7c2416</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Latest (v2.2.1 <code>c66d0bf</code>)</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Prev</th>
-<th style="padding:8px 6px; text-align:center;">Allocs</th>
-<th style="padding:8px 6px; text-align:right;">Memory</th>
-</tr>
-</thead>
-<tbody>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>gridspace 2D</code></td>
-<td style="padding:7px 6px; text-align:right;">2.22 ms</td>
-<td style="padding:7px 6px; text-align:right;">2.23 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">2.24 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.9% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.6% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;">42</td>
-<td style="padding:7px 6px; text-align:right;">22.95 MiB</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>gridspace 3D</code></td>
-<td style="padding:7px 6px; text-align:right;">6.2 ms</td>
-<td style="padding:7px 6px; text-align:right;">6.2 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">6.22 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;">52</td>
-<td style="padding:7px 6px; text-align:right;">30.57 MiB</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>hₘₐₓ 3D</code></td>
-<td style="padding:7px 6px; text-align:right;">153.0 ns</td>
-<td style="padding:7px 6px; text-align:right;">152.7 ns</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">153.1 ns</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">0 B</td>
-</tr>
-</tbody>
-</table>
+Mesh and grid-space construction, including the quadrature weights `gridspace` builds internally.
 
-  </div>
-  <div style="flex:1 1 450px; min-width:340px;">
-<div id="bench_chart_9" style="width:100%; max-width:560px; height:280px;"></div>
+```@raw html
+<div style="width:100%; margin:1.2rem 0 2.5rem 0;">
+<div id="bench_chart_9" style="width:100%; height:300px;"></div>
 <script>
 (function () {
   const theme = window.bramblePlotlyTheme();
   const data = [{
   name: "gridspace 2D",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,1.0100427623813584,1.0026278231190768,1.0086912332613118],
-  customdata: [["1.12.7","2.22 ms (baseline)",42,"22.95 MiB"],["1.12.7","2.24 ms (+1.0%)",42,"22.95 MiB"],["1.12.7","2.23 ms (+0.3%)",42,"22.95 MiB"],["1.12.7","2.24 ms (+0.9%)",42,"22.95 MiB"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,1.0100427623813584,1.0026278231190768,1.0086912332613118,1.0026845873421188],
+  customdata: [["1.12.7","2.22 ms (baseline)",42,"22.95 MiB"],["1.12.7","2.24 ms (+1.0%)",42,"22.95 MiB"],["1.12.7","2.23 ms (+0.3%)",42,"22.95 MiB"],["1.12.7","2.24 ms (+0.9%)",42,"22.95 MiB"],["1.12.7","2.23 ms (+0.3%)",42,"22.95 MiB"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#3b82f6", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -1321,9 +812,9 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 },
 {
   name: "gridspace 3D",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,1.0131330029173518,1.000413423237967,1.0038948566148846],
-  customdata: [["1.12.7","6.2 ms (baseline)",52,"30.57 MiB"],["1.12.7","6.28 ms (+1.3%)",52,"30.57 MiB"],["1.12.7","6.2 ms (+0.0%)",52,"30.57 MiB"],["1.12.7","6.22 ms (+0.4%)",52,"30.57 MiB"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,1.0131330029173518,1.000413423237967,1.0038948566148846,1.0024061780884717],
+  customdata: [["1.12.7","6.2 ms (baseline)",52,"30.57 MiB"],["1.12.7","6.28 ms (+1.3%)",52,"30.57 MiB"],["1.12.7","6.2 ms (+0.0%)",52,"30.57 MiB"],["1.12.7","6.22 ms (+0.4%)",52,"30.57 MiB"],["1.12.7","6.21 ms (+0.2%)",52,"30.57 MiB"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#10b981", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -1332,9 +823,9 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 },
 {
   name: "hₘₐₓ 3D",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,1.0106493855220369,0.9980022868874013,1.000662731514902],
-  customdata: [["1.12.7","153.0 ns (baseline)",0,"0 B"],["1.12.7","154.6 ns (+1.1%)",0,"0 B"],["1.12.7","152.7 ns (-0.2%)",0,"0 B"],["1.12.7","153.1 ns (+0.1%)",0,"0 B"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,1.0106493855220369,0.9980022868874013,1.000662731514902,1.0013258453409757],
+  customdata: [["1.12.7","153.0 ns (baseline)",0,"0 B"],["1.12.7","154.6 ns (+1.1%)",0,"0 B"],["1.12.7","152.7 ns (-0.2%)",0,"0 B"],["1.12.7","153.1 ns (+0.1%)",0,"0 B"],["1.12.7","153.2 ns (+0.1%)",0,"0 B"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#f59e0b", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -1343,8 +834,8 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 },
 {
   name: "1.0x (ref)",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1,1,1,1],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1,1,1,1,1],
   mode: 'lines',
   type: 'scatter',
   line: { color: 'rgba(128,128,128,0.7)', dash: 'dash', width: 1.5 },
@@ -1354,9 +845,12 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
     paper_bgcolor: theme.bg,
     plot_bgcolor: theme.bg,
     font: { color: theme.text },
-    legend: { orientation: 'h', y: -0.3, font: { color: theme.text, size: 11 } },
+    legend: {
+      orientation: 'v', x: 1.02, xanchor: 'left', y: 1, yanchor: 'top',
+      font: { color: theme.text, size: 11 },
+    },
     xaxis: {
-      type: 'category', categoryorder: 'array', categoryarray: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
+      type: 'category', categoryorder: 'array', categoryarray: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
       tickangle: -45, color: theme.text, gridcolor: theme.grid,
       tickfont: { family: 'monospace', size: 10 },
     },
@@ -1364,7 +858,7 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
       title: { text: "relative to baseline", font: { color: theme.text } },
       color: theme.text, gridcolor: theme.grid,
     },
-    margin: { t: 20, l: 60, r: 20, b: 90 },
+    margin: { t: 20, l: 60, r: 160, b: 60 },
   };
   Plotly.newPlot('bench_chart_9', data, layout, { displayModeBar: false, responsive: true });
   window.brambleRegisterPlotlyChart('bench_chart_9', function () {
@@ -1379,63 +873,24 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 })();
 </script>
 
-  </div>
 </div>
 ```
 
-### Startup and Latency
+### Startup and latency
+
+Time to first `using Bramble` and first operator call — compilation latency, not steady-state performance.
 
 ```@raw html
-<div style="display:flex; flex-wrap:wrap; gap:1.5rem; align-items:start; margin:1.2rem 0 2.5rem 0;">
-  <div style="flex:1 1 430px; min-width:320px; overflow-x:auto;">
-<table style="width:100%; border-collapse:collapse; font-size:12.5px; line-height:1.4;">
-<thead>
-<tr style="border-bottom:2px solid rgba(128,128,128,0.3);">
-<th style="padding:8px 6px; text-align:left;">Benchmark</th>
-<th style="padding:8px 6px; text-align:right;">Base (v2.0.0 <code>2dec0c7</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Prev (v2.2.0 <code>d7c2416</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Latest (v2.2.1 <code>c66d0bf</code>)</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Prev</th>
-<th style="padding:8px 6px; text-align:center;">Allocs</th>
-<th style="padding:8px 6px; text-align:right;">Memory</th>
-</tr>
-</thead>
-<tbody>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>TTFX (load + first operator)</code></td>
-<td style="padding:7px 6px; text-align:right;">598.63 ms</td>
-<td style="padding:7px 6px; text-align:right;">457.11 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">447.73 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-25.2% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-2.1% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;">45</td>
-<td style="padding:7px 6px; text-align:right;">1.3 KiB</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>using Bramble</code></td>
-<td style="padding:7px 6px; text-align:right;">501.71 ms</td>
-<td style="padding:7px 6px; text-align:right;">395.6 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">388.86 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-22.5% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-1.7% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;">45</td>
-<td style="padding:7px 6px; text-align:right;">1.3 KiB</td>
-</tr>
-</tbody>
-</table>
-
-  </div>
-  <div style="flex:1 1 450px; min-width:340px;">
-<div id="bench_chart_10" style="width:100%; max-width:560px; height:280px;"></div>
+<div style="width:100%; margin:1.2rem 0 2.5rem 0;">
+<div id="bench_chart_10" style="width:100%; height:300px;"></div>
 <script>
 (function () {
   const theme = window.bramblePlotlyTheme();
   const data = [{
   name: "TTFX (load + first operator)",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [598.631542,654.503208,457.110625,447.726084],
-  customdata: [["1.12.7","598.63 ms",45,"1.3 KiB"],["1.12.7","654.5 ms",45,"1.3 KiB"],["1.12.7","457.11 ms",45,"1.3 KiB"],["1.12.7","447.73 ms",45,"1.3 KiB"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [598.631542,654.503208,457.110625,447.726084,452.362375],
+  customdata: [["1.12.7","598.63 ms",45,"1.3 KiB"],["1.12.7","654.5 ms",45,"1.3 KiB"],["1.12.7","457.11 ms",45,"1.3 KiB"],["1.12.7","447.73 ms",45,"1.3 KiB"],["1.12.7","452.36 ms",45,"1.3 KiB"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#3b82f6", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -1444,9 +899,9 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 },
 {
   name: "using Bramble",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [501.70775,487.277792,395.600916,388.855333],
-  customdata: [["1.12.7","501.71 ms",45,"1.3 KiB"],["1.12.7","487.28 ms",45,"1.3 KiB"],["1.12.7","395.6 ms",45,"1.3 KiB"],["1.12.7","388.86 ms",45,"1.3 KiB"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [501.70775,487.277792,395.600916,388.855333,391.447667],
+  customdata: [["1.12.7","501.71 ms",45,"1.3 KiB"],["1.12.7","487.28 ms",45,"1.3 KiB"],["1.12.7","395.6 ms",45,"1.3 KiB"],["1.12.7","388.86 ms",45,"1.3 KiB"],["1.12.7","391.45 ms",45,"1.3 KiB"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#10b981", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -1457,9 +912,12 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
     paper_bgcolor: theme.bg,
     plot_bgcolor: theme.bg,
     font: { color: theme.text },
-    legend: { orientation: 'h', y: -0.3, font: { color: theme.text, size: 11 } },
+    legend: {
+      orientation: 'v', x: 1.02, xanchor: 'left', y: 1, yanchor: 'top',
+      font: { color: theme.text, size: 11 },
+    },
     xaxis: {
-      type: 'category', categoryorder: 'array', categoryarray: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
+      type: 'category', categoryorder: 'array', categoryarray: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
       tickangle: -45, color: theme.text, gridcolor: theme.grid,
       tickfont: { family: 'monospace', size: 10 },
     },
@@ -1467,7 +925,7 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
       title: { text: "ms", font: { color: theme.text } },
       color: theme.text, gridcolor: theme.grid,
     },
-    margin: { t: 20, l: 60, r: 20, b: 90 },
+    margin: { t: 20, l: 60, r: 160, b: 60 },
   };
   Plotly.newPlot('bench_chart_10', data, layout, { displayModeBar: false, responsive: true });
   window.brambleRegisterPlotlyChart('bench_chart_10', function () {
@@ -1482,281 +940,79 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 })();
 </script>
 
-  </div>
 </div>
 ```
 
 ### Forms
 
-```@raw html
-<div style="display:flex; flex-wrap:wrap; gap:1.5rem; align-items:start; margin:1.2rem 0 2.5rem 0;">
-  <div style="flex:1 1 430px; min-width:320px; overflow-x:auto;">
-<table style="width:100%; border-collapse:collapse; font-size:12.5px; line-height:1.4;">
-<thead>
-<tr style="border-bottom:2px solid rgba(128,128,128,0.3);">
-<th style="padding:8px 6px; text-align:left;">Benchmark</th>
-<th style="padding:8px 6px; text-align:right;">Base (v2.0.0 <code>2dec0c7</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Prev (v2.2.0 <code>d7c2416</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Latest (v2.2.1 <code>c66d0bf</code>)</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Prev</th>
-<th style="padding:8px 6px; text-align:center;">Allocs</th>
-<th style="padding:8px 6px; text-align:right;">Memory</th>
-</tr>
-</thead>
-<tbody>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>allocate_system_matrix 2D</code></td>
-<td style="padding:7px 6px; text-align:right;">2.84 ms</td>
-<td style="padding:7px 6px; text-align:right;">2.84 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">3.01 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+6.2% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+6.0% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;">21</td>
-<td style="padding:7px 6px; text-align:right;">15.13 MiB</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>assemble (BilinearForm) 2D, Parallel() backend</code></td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right;">4.79 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">5.17 ms</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+7.8% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;">35</td>
-<td style="padding:7px 6px; text-align:right;">15.13 MiB</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>assemble (BilinearForm) 2D, Serial() backend</code></td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right;">4.67 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">4.71 ms</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.9% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;">21</td>
-<td style="padding:7px 6px; text-align:right;">15.13 MiB</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>assemble (BilinearForm), Parallel() backend</code></td>
-<td style="padding:7px 6px; text-align:right;">5.11 ms</td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center;">—</td>
-<td style="padding:7px 6px; text-align:right;">—</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>assemble (BilinearForm), Serial() backend</code></td>
-<td style="padding:7px 6px; text-align:right;">4.71 ms</td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center;">—</td>
-<td style="padding:7px 6px; text-align:right;">—</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>assemble! (matrix) 2D</code></td>
-<td style="padding:7px 6px; text-align:right;">1.07 ms</td>
-<td style="padding:7px 6px; text-align:right;">1.02 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">1.02 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-4.3% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">0 B</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>assemble! 1D</code></td>
-<td style="padding:7px 6px; text-align:right;">938.8 μs</td>
-<td style="padding:7px 6px; text-align:right;">939.4 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">937.6 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">0 B</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>assemble! 1D, Parallel() backend</code></td>
-<td style="padding:7px 6px; text-align:right;">1.19 ms</td>
-<td style="padding:7px 6px; text-align:right;">1.21 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">1.2 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.7% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.6% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;">7</td>
-<td style="padding:7px 6px; text-align:right;">480 B</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>assemble! 2D</code></td>
-<td style="padding:7px 6px; text-align:right;">1.18 ms</td>
-<td style="padding:7px 6px; text-align:right;">471.6 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">492.0 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-58.5% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+4.3% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">0 B</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>assemble_parallel! 1D</code></td>
-<td style="padding:7px 6px; text-align:right;">1.29 ms</td>
-<td style="padding:7px 6px; text-align:right;">1.34 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">1.35 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+4.4% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;">7</td>
-<td style="padding:7px 6px; text-align:right;">480 B</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>assemble_parallel! 2D</code></td>
-<td style="padding:7px 6px; text-align:right;">1.72 ms</td>
-<td style="padding:7px 6px; text-align:right;">1.72 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">1.72 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;">7</td>
-<td style="padding:7px 6px; text-align:right;">496 B</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>evaluate! 1D</code></td>
-<td style="padding:7px 6px; text-align:right;">1.14 ms</td>
-<td style="padding:7px 6px; text-align:right;">1.12 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">1.11 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-2.2% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.6% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">0 B</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>form (bilinear, 2D)</code></td>
-<td style="padding:7px 6px; text-align:right;">2.1 ns</td>
-<td style="padding:7px 6px; text-align:right;">2.1 ns</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">2.0 ns</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-2.0% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-2.0% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">0 B</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>form (linear, 2D)</code></td>
-<td style="padding:7px 6px; text-align:right;">2.1 ns</td>
-<td style="padding:7px 6px; text-align:right;">2.1 ns</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">2.0 ns</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-2.0% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-2.0% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">0 B</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>l(vₕ) 1D</code></td>
-<td style="padding:7px 6px; text-align:right;">883.6 μs</td>
-<td style="padding:7px 6px; text-align:right;">881.0 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">883.5 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">0 B</td>
-</tr>
-</tbody>
-</table>
+Linear and bilinear form assembly, across 1D/2D and the `Serial()`/`Parallel()` backends.
 
-  </div>
-  <div style="flex:1 1 450px; min-width:340px;">
-<div style="display:flex; flex-wrap:wrap; gap:1rem;">
-  <div style="flex: 0 0 380px;"><div id="bench_chart_11" style="width:100%; max-width:380px; height:280px;"></div>
+```@raw html
+<div style="width:100%; margin:1.2rem 0 2.5rem 0;">
+<div style="display:flex; flex-direction:column; gap:1.5rem; width:100%;">
+  <div style="width:100%;"><div id="bench_chart_11" style="width:100%; height:300px;"></div>
 <script>
 (function () {
   const theme = window.bramblePlotlyTheme();
   const data = [{
-  name: "allocate_system_matrix 2D",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,1.1201502186338541,1.0020717135970576,1.0620293764332527],
-  customdata: [["1.12.7","2.84 ms (baseline)",21,"15.13 MiB"],["1.12.7","3.18 ms (+12.0%)",21,"15.13 MiB"],["1.12.7","2.84 ms (+0.2%)",21,"15.13 MiB"],["1.12.7","3.01 ms (+6.2%)",21,"15.13 MiB"]],
+  name: "assemble! 1D",
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,1.0150463394448215,1.000620983710628,0.9987132961879269,1.0018198124693103],
+  customdata: [["1.12.7","938.8 μs (baseline)",0,"0 B"],["1.12.7","953.0 μs (+1.5%)",0,"0 B"],["1.12.7","939.4 μs (+0.1%)",0,"0 B"],["1.12.7","937.6 μs (-0.1%)",0,"0 B"],["1.12.7","940.5 μs (+0.2%)",0,"0 B"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#3b82f6", width: 2, shape: 'spline', smoothing: 0.3 },
   marker: { color: "#3b82f6", size: 7 },
-  hovertemplate: '%{x} (Julia %{customdata[0]})<br>allocate_system_matrix 2D: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
-},
-{
-  name: "assemble (BilinearForm) 2D, Parallel() backend",
-  x: ["v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,1.0783013768024774],
-  customdata: [["1.12.7","4.79 ms (baseline)",35,"15.13 MiB"],["1.12.7","5.17 ms (+7.8%)",35,"15.13 MiB"]],
-  mode: 'lines+markers',
-  type: 'scatter',
-  line: { color: "#10b981", width: 2, shape: 'spline', smoothing: 0.3 },
-  marker: { color: "#10b981", size: 7 },
-  hovertemplate: '%{x} (Julia %{customdata[0]})<br>assemble (BilinearForm) 2D, Parallel() backend: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
-},
-{
-  name: "assemble (BilinearForm) 2D, Serial() backend",
-  x: ["v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,1.008632227310463],
-  customdata: [["1.12.7","4.67 ms (baseline)",21,"15.13 MiB"],["1.12.7","4.71 ms (+0.9%)",21,"15.13 MiB"]],
-  mode: 'lines+markers',
-  type: 'scatter',
-  line: { color: "#f59e0b", width: 2, shape: 'spline', smoothing: 0.3 },
-  marker: { color: "#f59e0b", size: 7 },
-  hovertemplate: '%{x} (Julia %{customdata[0]})<br>assemble (BilinearForm) 2D, Serial() backend: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
-},
-{
-  name: "assemble (BilinearForm), Parallel() backend",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)"],
-  y: [1.0,0.9389424435152599],
-  customdata: [["1.12.7","5.11 ms (baseline)",35,"15.13 MiB"],["1.12.7","4.8 ms (-6.1%)",35,"15.13 MiB"]],
-  mode: 'lines+markers',
-  type: 'scatter',
-  line: { color: "#8b5cf6", width: 2, shape: 'spline', smoothing: 0.3 },
-  marker: { color: "#8b5cf6", size: 7 },
-  hovertemplate: '%{x} (Julia %{customdata[0]})<br>assemble (BilinearForm), Parallel() backend: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
-},
-{
-  name: "assemble (BilinearForm), Serial() backend",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)"],
-  y: [1.0,1.0252965369306104],
-  customdata: [["1.12.7","4.71 ms (baseline)",21,"15.13 MiB"],["1.12.7","4.83 ms (+2.5%)",21,"15.13 MiB"]],
-  mode: 'lines+markers',
-  type: 'scatter',
-  line: { color: "#ec4899", width: 2, shape: 'spline', smoothing: 0.3 },
-  marker: { color: "#ec4899", size: 7 },
-  hovertemplate: '%{x} (Julia %{customdata[0]})<br>assemble (BilinearForm), Serial() backend: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
-},
-{
-  name: "assemble! (matrix) 2D",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,0.9931328213306763,0.9567273159754381,0.9574690049848619],
-  customdata: [["1.12.7","1.07 ms (baseline)",0,"0 B"],["1.12.7","1.06 ms (-0.7%)",0,"0 B"],["1.12.7","1.02 ms (-4.3%)",0,"0 B"],["1.12.7","1.02 ms (-4.3%)",0,"0 B"]],
-  mode: 'lines+markers',
-  type: 'scatter',
-  line: { color: "#06b6d4", width: 2, shape: 'spline', smoothing: 0.3 },
-  marker: { color: "#06b6d4", size: 7 },
-  hovertemplate: '%{x} (Julia %{customdata[0]})<br>assemble! (matrix) 2D: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
-},
-{
-  name: "assemble! 1D",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,1.0150463394448215,1.000620983710628,0.9987132961879269],
-  customdata: [["1.12.7","938.8 μs (baseline)",0,"0 B"],["1.12.7","953.0 μs (+1.5%)",0,"0 B"],["1.12.7","939.4 μs (+0.1%)",0,"0 B"],["1.12.7","937.6 μs (-0.1%)",0,"0 B"]],
-  mode: 'lines+markers',
-  type: 'scatter',
-  line: { color: "#f97316", width: 2, shape: 'spline', smoothing: 0.3 },
-  marker: { color: "#f97316", size: 7 },
   hovertemplate: '%{x} (Julia %{customdata[0]})<br>assemble! 1D: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
 },
 {
   name: "assemble! 1D, Parallel() backend",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,1.0114479998458745,1.0133326855598732,1.0069808758846506],
-  customdata: [["1.12.7","1.19 ms (baseline)",7,"480 B"],["1.12.7","1.21 ms (+1.1%)",7,"480 B"],["1.12.7","1.21 ms (+1.3%)",7,"480 B"],["1.12.7","1.2 ms (+0.7%)",7,"480 B"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,1.0114479998458745,1.0133326855598732,1.0069808758846506,1.0832411233396966],
+  customdata: [["1.12.7","1.19 ms (baseline)",7,"480 B"],["1.12.7","1.21 ms (+1.1%)",7,"480 B"],["1.12.7","1.21 ms (+1.3%)",7,"480 B"],["1.12.7","1.2 ms (+0.7%)",7,"480 B"],["1.12.7","1.29 ms (+8.3%)",7,"480 B"]],
   mode: 'lines+markers',
   type: 'scatter',
-  line: { color: "#3b82f6", width: 2, shape: 'spline', smoothing: 0.3 },
-  marker: { color: "#3b82f6", size: 7 },
+  line: { color: "#10b981", width: 2, shape: 'spline', smoothing: 0.3 },
+  marker: { color: "#10b981", size: 7 },
   hovertemplate: '%{x} (Julia %{customdata[0]})<br>assemble! 1D, Parallel() backend: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
 },
 {
+  name: "assemble_parallel! 1D",
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,0.9451508406118697,1.041935681318264,1.044453759180331,0.9637784184456564],
+  customdata: [["1.12.7","1.29 ms (baseline)",7,"480 B"],["1.12.7","1.22 ms (-5.5%)",7,"480 B"],["1.12.7","1.34 ms (+4.2%)",7,"480 B"],["1.12.7","1.35 ms (+4.4%)",7,"480 B"],["1.12.7","1.24 ms (-3.6%)",7,"480 B"]],
+  mode: 'lines+markers',
+  type: 'scatter',
+  line: { color: "#f59e0b", width: 2, shape: 'spline', smoothing: 0.3 },
+  marker: { color: "#f59e0b", size: 7 },
+  hovertemplate: '%{x} (Julia %{customdata[0]})<br>assemble_parallel! 1D: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
+},
+{
+  name: "evaluate! 1D",
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,1.0108406550714244,0.984801899960271,0.9784285598765237,0.9813220967067121],
+  customdata: [["1.12.7","1.14 ms (baseline)",0,"0 B"],["1.12.7","1.15 ms (+1.1%)",0,"0 B"],["1.12.7","1.12 ms (-1.5%)",0,"0 B"],["1.12.7","1.11 ms (-2.2%)",0,"0 B"],["1.12.7","1.12 ms (-1.9%)",0,"0 B"]],
+  mode: 'lines+markers',
+  type: 'scatter',
+  line: { color: "#8b5cf6", width: 2, shape: 'spline', smoothing: 0.3 },
+  marker: { color: "#8b5cf6", size: 7 },
+  hovertemplate: '%{x} (Julia %{customdata[0]})<br>evaluate! 1D: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
+},
+{
+  name: "l(vₕ) 1D",
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,1.0075918079096045,0.9970755468636825,0.999951334564682,1.0001403375344053],
+  customdata: [["1.12.7","883.6 μs (baseline)",0,"0 B"],["1.12.7","890.3 μs (+0.8%)",0,"0 B"],["1.12.7","881.0 μs (-0.3%)",0,"0 B"],["1.12.7","883.5 μs (-0.0%)",0,"0 B"],["1.12.7","883.7 μs (+0.0%)",0,"0 B"]],
+  mode: 'lines+markers',
+  type: 'scatter',
+  line: { color: "#ec4899", width: 2, shape: 'spline', smoothing: 0.3 },
+  marker: { color: "#ec4899", size: 7 },
+  hovertemplate: '%{x} (Julia %{customdata[0]})<br>l(vₕ) 1D: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
+},
+{
   name: "1.0x (ref)",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1,1,1,1],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1,1,1,1,1],
   mode: 'lines',
   type: 'scatter',
   line: { color: 'rgba(128,128,128,0.7)', dash: 'dash', width: 1.5 },
@@ -1766,9 +1022,12 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
     paper_bgcolor: theme.bg,
     plot_bgcolor: theme.bg,
     font: { color: theme.text },
-    legend: { orientation: 'h', y: -0.3, font: { color: theme.text, size: 11 } },
+    legend: {
+      orientation: 'v', x: 1.02, xanchor: 'left', y: 1, yanchor: 'top',
+      font: { color: theme.text, size: 11 },
+    },
     xaxis: {
-      type: 'category', categoryorder: 'array', categoryarray: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
+      type: 'category', categoryorder: 'array', categoryarray: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
       tickangle: -45, color: theme.text, gridcolor: theme.grid,
       tickfont: { family: 'monospace', size: 10 },
     },
@@ -1776,7 +1035,7 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
       title: { text: "relative to baseline", font: { color: theme.text } },
       color: theme.text, gridcolor: theme.grid,
     },
-    margin: { t: 20, l: 60, r: 20, b: 90 },
+    margin: { t: 20, l: 60, r: 160, b: 60 },
   };
   Plotly.newPlot('bench_chart_11', data, layout, { displayModeBar: false, responsive: true });
   window.brambleRegisterPlotlyChart('bench_chart_11', function () {
@@ -1790,91 +1049,102 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
   });
 })();
 </script>
-</div><div style="flex: 0 0 380px;"><div id="bench_chart_12" style="width:100%; max-width:380px; height:280px;"></div>
+</div><div style="width:100%;"><div id="bench_chart_12" style="width:100%; height:300px;"></div>
 <script>
 (function () {
   const theme = window.bramblePlotlyTheme();
   const data = [{
-  name: "assemble! 2D",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,1.0225387640157861,0.39797427504845106,0.4152390146996709],
-  customdata: [["1.12.7","1.18 ms (baseline)",0,"0 B"],["1.12.7","1.21 ms (+2.3%)",0,"0 B"],["1.12.7","471.6 μs (-60.2%)",0,"0 B"],["1.12.7","492.0 μs (-58.5%)",0,"0 B"]],
+  name: "allocate_system_matrix 2D",
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,1.1201502186338541,1.0020717135970576,1.0620293764332527,1.0353425733969965],
+  customdata: [["1.12.7","2.84 ms (baseline)",21,"15.13 MiB"],["1.12.7","3.18 ms (+12.0%)",21,"15.13 MiB"],["1.12.7","2.84 ms (+0.2%)",21,"15.13 MiB"],["1.12.7","3.01 ms (+6.2%)",21,"15.13 MiB"],["1.12.7","2.94 ms (+3.5%)",21,"15.13 MiB"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#3b82f6", width: 2, shape: 'spline', smoothing: 0.3 },
   marker: { color: "#3b82f6", size: 7 },
-  hovertemplate: '%{x} (Julia %{customdata[0]})<br>assemble! 2D: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
+  hovertemplate: '%{x} (Julia %{customdata[0]})<br>allocate_system_matrix 2D: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
 },
 {
-  name: "assemble_parallel! 1D",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,0.9451508406118697,1.041935681318264,1.044453759180331],
-  customdata: [["1.12.7","1.29 ms (baseline)",7,"480 B"],["1.12.7","1.22 ms (-5.5%)",7,"480 B"],["1.12.7","1.34 ms (+4.2%)",7,"480 B"],["1.12.7","1.35 ms (+4.4%)",7,"480 B"]],
+  name: "assemble (BilinearForm) 2D, Parallel() backend",
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,0.9389424435152599,0.9377114436036916,1.0111355406812994,0.9948887678496944],
+  customdata: [["1.12.7","5.11 ms (baseline)",35,"15.13 MiB"],["1.12.7","4.8 ms (-6.1%)",35,"15.13 MiB"],["1.12.7","4.79 ms (-6.2%)",35,"15.13 MiB"],["1.12.7","5.17 ms (+1.1%)",35,"15.13 MiB"],["1.12.7","5.09 ms (-0.5%)",35,"15.13 MiB"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#10b981", width: 2, shape: 'spline', smoothing: 0.3 },
   marker: { color: "#10b981", size: 7 },
-  hovertemplate: '%{x} (Julia %{customdata[0]})<br>assemble_parallel! 1D: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
+  hovertemplate: '%{x} (Julia %{customdata[0]})<br>assemble (BilinearForm) 2D, Parallel() backend: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
 },
 {
-  name: "assemble_parallel! 2D",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,1.302873613909273,1.002922896488245,1.0018074160238535],
-  customdata: [["1.12.7","1.72 ms (baseline)",7,"496 B"],["1.12.7","2.24 ms (+30.3%)",7,"496 B"],["1.12.7","1.72 ms (+0.3%)",7,"496 B"],["1.12.7","1.72 ms (+0.2%)",7,"496 B"]],
+  name: "assemble (BilinearForm) 2D, Serial() backend",
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,1.0252965369306104,0.9901446389160652,0.998691792509425,0.9931761928722526],
+  customdata: [["1.12.7","4.71 ms (baseline)",21,"15.13 MiB"],["1.12.7","4.83 ms (+2.5%)",21,"15.13 MiB"],["1.12.7","4.67 ms (-1.0%)",21,"15.13 MiB"],["1.12.7","4.71 ms (-0.1%)",21,"15.13 MiB"],["1.12.7","4.68 ms (-0.7%)",21,"15.13 MiB"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#f59e0b", width: 2, shape: 'spline', smoothing: 0.3 },
   marker: { color: "#f59e0b", size: 7 },
-  hovertemplate: '%{x} (Julia %{customdata[0]})<br>assemble_parallel! 2D: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
+  hovertemplate: '%{x} (Julia %{customdata[0]})<br>assemble (BilinearForm) 2D, Serial() backend: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
 },
 {
-  name: "evaluate! 1D",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,1.0108406550714244,0.984801899960271,0.9784285598765237],
-  customdata: [["1.12.7","1.14 ms (baseline)",0,"0 B"],["1.12.7","1.15 ms (+1.1%)",0,"0 B"],["1.12.7","1.12 ms (-1.5%)",0,"0 B"],["1.12.7","1.11 ms (-2.2%)",0,"0 B"]],
+  name: "assemble! (matrix) 2D",
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,0.9931328213306763,0.9567273159754381,0.9574690049848619,0.9580533660225897],
+  customdata: [["1.12.7","1.07 ms (baseline)",0,"0 B"],["1.12.7","1.06 ms (-0.7%)",0,"0 B"],["1.12.7","1.02 ms (-4.3%)",0,"0 B"],["1.12.7","1.02 ms (-4.3%)",0,"0 B"],["1.12.7","1.02 ms (-4.2%)",0,"0 B"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#8b5cf6", width: 2, shape: 'spline', smoothing: 0.3 },
   marker: { color: "#8b5cf6", size: 7 },
-  hovertemplate: '%{x} (Julia %{customdata[0]})<br>evaluate! 1D: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
+  hovertemplate: '%{x} (Julia %{customdata[0]})<br>assemble! (matrix) 2D: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
 },
 {
-  name: "form (bilinear, 2D)",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,1.0,1.0,0.9803168506961112],
-  customdata: [["1.12.7","2.1 ns (baseline)",0,"0 B"],["1.12.7","2.1 ns (baseline)",0,"0 B"],["1.12.7","2.1 ns (baseline)",0,"0 B"],["1.12.7","2.0 ns (-2.0%)",0,"0 B"]],
+  name: "assemble! 2D",
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,1.0225387640157861,0.39797427504845106,0.4152390146996709,1.002954111895058],
+  customdata: [["1.12.7","1.18 ms (baseline)",0,"0 B"],["1.12.7","1.21 ms (+2.3%)",0,"0 B"],["1.12.7","471.6 μs (-60.2%)",0,"0 B"],["1.12.7","492.0 μs (-58.5%)",0,"0 B"],["1.12.7","1.19 ms (+0.3%)",0,"0 B"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#ec4899", width: 2, shape: 'spline', smoothing: 0.3 },
   marker: { color: "#ec4899", size: 7 },
-  hovertemplate: '%{x} (Julia %{customdata[0]})<br>form (bilinear, 2D): %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
+  hovertemplate: '%{x} (Julia %{customdata[0]})<br>assemble! 2D: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
 },
 {
-  name: "form (linear, 2D)",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,1.0,1.0,0.9803168506961112],
-  customdata: [["1.12.7","2.1 ns (baseline)",0,"0 B"],["1.12.7","2.1 ns (baseline)",0,"0 B"],["1.12.7","2.1 ns (baseline)",0,"0 B"],["1.12.7","2.0 ns (-2.0%)",0,"0 B"]],
+  name: "assemble_parallel! 2D",
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,1.302873613909273,1.002922896488245,1.0018074160238535,0.9939722719268906],
+  customdata: [["1.12.7","1.72 ms (baseline)",7,"496 B"],["1.12.7","2.24 ms (+30.3%)",7,"496 B"],["1.12.7","1.72 ms (+0.3%)",7,"496 B"],["1.12.7","1.72 ms (+0.2%)",7,"496 B"],["1.12.7","1.71 ms (-0.6%)",7,"496 B"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#06b6d4", width: 2, shape: 'spline', smoothing: 0.3 },
   marker: { color: "#06b6d4", size: 7 },
-  hovertemplate: '%{x} (Julia %{customdata[0]})<br>form (linear, 2D): %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
+  hovertemplate: '%{x} (Julia %{customdata[0]})<br>assemble_parallel! 2D: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
 },
 {
-  name: "l(vₕ) 1D",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,1.0075918079096045,0.9970755468636825,0.999951334564682],
-  customdata: [["1.12.7","883.6 μs (baseline)",0,"0 B"],["1.12.7","890.3 μs (+0.8%)",0,"0 B"],["1.12.7","881.0 μs (-0.3%)",0,"0 B"],["1.12.7","883.5 μs (-0.0%)",0,"0 B"]],
+  name: "form (bilinear, 2D)",
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,1.0,1.0,0.9803168506961112,0.9803168506961112],
+  customdata: [["1.12.7","2.1 ns (baseline)",0,"0 B"],["1.12.7","2.1 ns (baseline)",0,"0 B"],["1.12.7","2.1 ns (baseline)",0,"0 B"],["1.12.7","2.0 ns (-2.0%)",0,"0 B"],["1.12.7","2.0 ns (-2.0%)",0,"0 B"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#f97316", width: 2, shape: 'spline', smoothing: 0.3 },
   marker: { color: "#f97316", size: 7 },
-  hovertemplate: '%{x} (Julia %{customdata[0]})<br>l(vₕ) 1D: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
+  hovertemplate: '%{x} (Julia %{customdata[0]})<br>form (bilinear, 2D): %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
+},
+{
+  name: "form (linear, 2D)",
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,1.0,1.0,0.9803168506961112,0.9803168506961112],
+  customdata: [["1.12.7","2.1 ns (baseline)",0,"0 B"],["1.12.7","2.1 ns (baseline)",0,"0 B"],["1.12.7","2.1 ns (baseline)",0,"0 B"],["1.12.7","2.0 ns (-2.0%)",0,"0 B"],["1.12.7","2.0 ns (-2.0%)",0,"0 B"]],
+  mode: 'lines+markers',
+  type: 'scatter',
+  line: { color: "#3b82f6", width: 2, shape: 'spline', smoothing: 0.3 },
+  marker: { color: "#3b82f6", size: 7 },
+  hovertemplate: '%{x} (Julia %{customdata[0]})<br>form (linear, 2D): %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
 },
 {
   name: "1.0x (ref)",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1,1,1,1],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1,1,1,1,1],
   mode: 'lines',
   type: 'scatter',
   line: { color: 'rgba(128,128,128,0.7)', dash: 'dash', width: 1.5 },
@@ -1884,9 +1154,12 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
     paper_bgcolor: theme.bg,
     plot_bgcolor: theme.bg,
     font: { color: theme.text },
-    legend: { orientation: 'h', y: -0.3, font: { color: theme.text, size: 11 } },
+    legend: {
+      orientation: 'v', x: 1.02, xanchor: 'left', y: 1, yanchor: 'top',
+      font: { color: theme.text, size: 11 },
+    },
     xaxis: {
-      type: 'category', categoryorder: 'array', categoryarray: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
+      type: 'category', categoryorder: 'array', categoryarray: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
       tickangle: -45, color: theme.text, gridcolor: theme.grid,
       tickfont: { family: 'monospace', size: 10 },
     },
@@ -1894,7 +1167,7 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
       title: { text: "relative to baseline", font: { color: theme.text } },
       color: theme.text, gridcolor: theme.grid,
     },
-    margin: { t: 20, l: 60, r: 20, b: 90 },
+    margin: { t: 20, l: 60, r: 160, b: 60 },
   };
   Plotly.newPlot('bench_chart_12', data, layout, { displayModeBar: false, responsive: true });
   window.brambleRegisterPlotlyChart('bench_chart_12', function () {
@@ -1911,164 +1184,25 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 </div>
 </div>
 
-  </div>
 </div>
 ```
 
 ### Precision 1D
 
-```@raw html
-<div style="display:flex; flex-wrap:wrap; gap:1.5rem; align-items:start; margin:1.2rem 0 2.5rem 0;">
-  <div style="flex:1 1 430px; min-width:320px; overflow-x:auto;">
-<table style="width:100%; border-collapse:collapse; font-size:12.5px; line-height:1.4;">
-<thead>
-<tr style="border-bottom:2px solid rgba(128,128,128,0.3);">
-<th style="padding:8px 6px; text-align:left;">Benchmark</th>
-<th style="padding:8px 6px; text-align:right;">Base (v2.0.0 <code>2dec0c7</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Prev (v2.2.0 <code>d7c2416</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Latest (v2.2.1 <code>c66d0bf</code>)</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Prev</th>
-<th style="padding:8px 6px; text-align:center;">Allocs</th>
-<th style="padding:8px 6px; text-align:right;">Memory</th>
-</tr>
-</thead>
-<tbody>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>Rₕ! Double64</code></td>
-<td style="padding:7px 6px; text-align:right;">8.94 ms</td>
-<td style="padding:7px 6px; text-align:right;">8.92 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">9.09 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.7% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.8% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">0 B</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>Rₕ! Float32</code></td>
-<td style="padding:7px 6px; text-align:right;">286.0 μs</td>
-<td style="padding:7px 6px; text-align:right;">285.7 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">286.1 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">0 B</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>Rₕ! Float64</code></td>
-<td style="padding:7px 6px; text-align:right;">293.5 μs</td>
-<td style="padding:7px 6px; text-align:right;">293.5 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">293.5 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">0 B</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>assemble! Double64</code></td>
-<td style="padding:7px 6px; text-align:right;">1.04 ms</td>
-<td style="padding:7px 6px; text-align:right;">1.02 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">1.02 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-2.4% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.8% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">0 B</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>assemble! Float32</code></td>
-<td style="padding:7px 6px; text-align:right;">71.3 μs</td>
-<td style="padding:7px 6px; text-align:right;">71.5 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">79.8 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+11.8% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+11.5% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">0 B</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>assemble! Float64</code></td>
-<td style="padding:7px 6px; text-align:right;">84.0 μs</td>
-<td style="padding:7px 6px; text-align:right;">84.0 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">84.2 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">0 B</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>avgₕ! Double64</code></td>
-<td style="padding:7px 6px; text-align:right;">72.2 ms</td>
-<td style="padding:7px 6px; text-align:right;">72.32 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">72.47 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;">33</td>
-<td style="padding:7px 6px; text-align:right;">2.9 KiB</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>avgₕ! Float32</code></td>
-<td style="padding:7px 6px; text-align:right;">1.61 ms</td>
-<td style="padding:7px 6px; text-align:right;">1.61 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">1.61 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">0 B</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>avgₕ! Float64</code></td>
-<td style="padding:7px 6px; text-align:right;">1.72 ms</td>
-<td style="padding:7px 6px; text-align:right;">1.72 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">1.71 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">0 B</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>innerₕ Double64</code></td>
-<td style="padding:7px 6px; text-align:right;">1.06 ms</td>
-<td style="padding:7px 6px; text-align:right;">1.06 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">1.06 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">0 B</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>innerₕ Float32</code></td>
-<td style="padding:7px 6px; text-align:right;">11.6 μs</td>
-<td style="padding:7px 6px; text-align:right;">11.6 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">11.6 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">0 B</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>innerₕ Float64</code></td>
-<td style="padding:7px 6px; text-align:right;">23.2 μs</td>
-<td style="padding:7px 6px; text-align:right;">23.2 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">23.2 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">0 B</td>
-</tr>
-</tbody>
-</table>
+The same 1D workload — restriction, assembly, inner product — repeated in `Float32`, `Float64`, and `Double64`, split by precision since `Double64` (software arithmetic) is an order of magnitude slower.
 
-  </div>
-  <div style="flex:1 1 450px; min-width:340px;">
-<div style="display:flex; flex-wrap:wrap; gap:1rem;">
-  <div style="flex: 0 0 380px;"><div id="bench_chart_13" style="width:100%; max-width:380px; height:280px;"></div>
+```@raw html
+<div style="width:100%; margin:1.2rem 0 2.5rem 0;">
+<div style="display:flex; flex-direction:column; gap:1.5rem; width:100%;">
+  <div style="width:100%;"><div id="bench_chart_13" style="width:100%; height:300px;"></div>
 <script>
 (function () {
   const theme = window.bramblePlotlyTheme();
   const data = [{
   name: "Rₕ! Float32",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,0.9989825174825174,0.998979020979021,1.000437062937063],
-  customdata: [["1.12.7","286.0 μs (baseline)",0,"0 B"],["1.12.7","285.7 μs (-0.1%)",0,"0 B"],["1.12.7","285.7 μs (-0.1%)",0,"0 B"],["1.12.7","286.1 μs (+0.0%)",0,"0 B"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,0.9989825174825174,0.998979020979021,1.000437062937063,0.9988321678321679],
+  customdata: [["1.12.7","286.0 μs (baseline)",0,"0 B"],["1.12.7","285.7 μs (-0.1%)",0,"0 B"],["1.12.7","285.7 μs (-0.1%)",0,"0 B"],["1.12.7","286.1 μs (+0.0%)",0,"0 B"],["1.12.7","285.7 μs (-0.1%)",0,"0 B"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#3b82f6", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -2077,9 +1211,9 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 },
 {
   name: "assemble! Float32",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,1.119748223122538,1.0023411324351983,1.1179958784854134],
-  customdata: [["1.12.7","71.3 μs (baseline)",0,"0 B"],["1.12.7","79.9 μs (+12.0%)",0,"0 B"],["1.12.7","71.5 μs (+0.2%)",0,"0 B"],["1.12.7","79.8 μs (+11.8%)",0,"0 B"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,1.119748223122538,1.0023411324351983,1.1179958784854134,1.0029299202332722],
+  customdata: [["1.12.7","71.3 μs (baseline)",0,"0 B"],["1.12.7","79.9 μs (+12.0%)",0,"0 B"],["1.12.7","71.5 μs (+0.2%)",0,"0 B"],["1.12.7","79.8 μs (+11.8%)",0,"0 B"],["1.12.7","71.5 μs (+0.3%)",0,"0 B"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#10b981", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -2088,9 +1222,9 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 },
 {
   name: "avgₕ! Float32",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,1.0091040787194028,0.9996498191821893,0.9994029806146125],
-  customdata: [["1.12.7","1.61 ms (baseline)",0,"0 B"],["1.12.7","1.62 ms (+0.9%)",0,"0 B"],["1.12.7","1.61 ms (-0.0%)",0,"0 B"],["1.12.7","1.61 ms (-0.1%)",0,"0 B"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,1.0091040787194028,0.9996498191821893,0.9994029806146125,1.00136119174781],
+  customdata: [["1.12.7","1.61 ms (baseline)",0,"0 B"],["1.12.7","1.62 ms (+0.9%)",0,"0 B"],["1.12.7","1.61 ms (-0.0%)",0,"0 B"],["1.12.7","1.61 ms (-0.1%)",0,"0 B"],["1.12.7","1.61 ms (+0.1%)",0,"0 B"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#f59e0b", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -2099,9 +1233,9 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 },
 {
   name: "innerₕ Float32",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,1.0,1.003539364640884,1.003539364640884],
-  customdata: [["1.12.7","11.6 μs (baseline)",0,"0 B"],["1.12.7","11.6 μs (baseline)",0,"0 B"],["1.12.7","11.6 μs (+0.4%)",0,"0 B"],["1.12.7","11.6 μs (+0.4%)",0,"0 B"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,1.0,1.003539364640884,1.003539364640884,1.003539364640884],
+  customdata: [["1.12.7","11.6 μs (baseline)",0,"0 B"],["1.12.7","11.6 μs (baseline)",0,"0 B"],["1.12.7","11.6 μs (+0.4%)",0,"0 B"],["1.12.7","11.6 μs (+0.4%)",0,"0 B"],["1.12.7","11.6 μs (+0.4%)",0,"0 B"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#8b5cf6", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -2110,8 +1244,8 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 },
 {
   name: "1.0x (ref)",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1,1,1,1],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1,1,1,1,1],
   mode: 'lines',
   type: 'scatter',
   line: { color: 'rgba(128,128,128,0.7)', dash: 'dash', width: 1.5 },
@@ -2121,9 +1255,12 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
     paper_bgcolor: theme.bg,
     plot_bgcolor: theme.bg,
     font: { color: theme.text },
-    legend: { orientation: 'h', y: -0.3, font: { color: theme.text, size: 11 } },
+    legend: {
+      orientation: 'v', x: 1.02, xanchor: 'left', y: 1, yanchor: 'top',
+      font: { color: theme.text, size: 11 },
+    },
     xaxis: {
-      type: 'category', categoryorder: 'array', categoryarray: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
+      type: 'category', categoryorder: 'array', categoryarray: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
       tickangle: -45, color: theme.text, gridcolor: theme.grid,
       tickfont: { family: 'monospace', size: 10 },
     },
@@ -2131,7 +1268,7 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
       title: { text: "relative to baseline", font: { color: theme.text } },
       color: theme.text, gridcolor: theme.grid,
     },
-    margin: { t: 20, l: 60, r: 20, b: 90 },
+    margin: { t: 20, l: 60, r: 160, b: 60 },
   };
   Plotly.newPlot('bench_chart_13', data, layout, { displayModeBar: false, responsive: true });
   window.brambleRegisterPlotlyChart('bench_chart_13', function () {
@@ -2145,15 +1282,15 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
   });
 })();
 </script>
-</div><div style="flex: 0 0 380px;"><div id="bench_chart_14" style="width:100%; max-width:380px; height:280px;"></div>
+</div><div style="width:100%;"><div id="bench_chart_14" style="width:100%; height:300px;"></div>
 <script>
 (function () {
   const theme = window.bramblePlotlyTheme();
   const data = [{
   name: "Rₕ! Float64",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,1.0007085868461754,1.0,1.0],
-  customdata: [["1.12.7","293.5 μs (baseline)",0,"0 B"],["1.12.7","293.8 μs (+0.1%)",0,"0 B"],["1.12.7","293.5 μs (baseline)",0,"0 B"],["1.12.7","293.5 μs (baseline)",0,"0 B"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,1.0007085868461754,1.0,1.0,1.000143080036247],
+  customdata: [["1.12.7","293.5 μs (baseline)",0,"0 B"],["1.12.7","293.8 μs (+0.1%)",0,"0 B"],["1.12.7","293.5 μs (baseline)",0,"0 B"],["1.12.7","293.5 μs (baseline)",0,"0 B"],["1.12.7","293.6 μs (+0.0%)",0,"0 B"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#3b82f6", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -2162,9 +1299,9 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 },
 {
   name: "assemble! Float64",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,1.0044665189737727,1.0,1.0024893399080492],
-  customdata: [["1.12.7","84.0 μs (baseline)",0,"0 B"],["1.12.7","84.3 μs (+0.4%)",0,"0 B"],["1.12.7","84.0 μs (baseline)",0,"0 B"],["1.12.7","84.2 μs (+0.2%)",0,"0 B"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,1.0044665189737727,1.0,1.0024893399080492,0.9990114104671384],
+  customdata: [["1.12.7","84.0 μs (baseline)",0,"0 B"],["1.12.7","84.3 μs (+0.4%)",0,"0 B"],["1.12.7","84.0 μs (baseline)",0,"0 B"],["1.12.7","84.2 μs (+0.2%)",0,"0 B"],["1.12.7","83.9 μs (-0.1%)",0,"0 B"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#10b981", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -2173,9 +1310,9 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 },
 {
   name: "avgₕ! Float64",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,1.039595387843113,1.0002670582355868,0.9985196761052483],
-  customdata: [["1.12.7","1.72 ms (baseline)",0,"0 B"],["1.12.7","1.78 ms (+4.0%)",0,"0 B"],["1.12.7","1.72 ms (+0.0%)",0,"0 B"],["1.12.7","1.71 ms (-0.1%)",0,"0 B"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,1.039595387843113,1.0002670582355868,0.9985196761052483,1.000861750620612],
+  customdata: [["1.12.7","1.72 ms (baseline)",0,"0 B"],["1.12.7","1.78 ms (+4.0%)",0,"0 B"],["1.12.7","1.72 ms (+0.0%)",0,"0 B"],["1.12.7","1.71 ms (-0.1%)",0,"0 B"],["1.12.7","1.72 ms (+0.1%)",0,"0 B"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#f59e0b", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -2184,9 +1321,9 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 },
 {
   name: "innerₕ Float64",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,1.0018129235550568,1.0,1.0],
-  customdata: [["1.12.7","23.2 μs (baseline)",0,"0 B"],["1.12.7","23.2 μs (+0.2%)",0,"0 B"],["1.12.7","23.2 μs (baseline)",0,"0 B"],["1.12.7","23.2 μs (baseline)",0,"0 B"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,1.0018129235550568,1.0,1.0,1.0],
+  customdata: [["1.12.7","23.2 μs (baseline)",0,"0 B"],["1.12.7","23.2 μs (+0.2%)",0,"0 B"],["1.12.7","23.2 μs (baseline)",0,"0 B"],["1.12.7","23.2 μs (baseline)",0,"0 B"],["1.12.7","23.2 μs (baseline)",0,"0 B"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#8b5cf6", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -2195,8 +1332,8 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 },
 {
   name: "1.0x (ref)",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1,1,1,1],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1,1,1,1,1],
   mode: 'lines',
   type: 'scatter',
   line: { color: 'rgba(128,128,128,0.7)', dash: 'dash', width: 1.5 },
@@ -2206,9 +1343,12 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
     paper_bgcolor: theme.bg,
     plot_bgcolor: theme.bg,
     font: { color: theme.text },
-    legend: { orientation: 'h', y: -0.3, font: { color: theme.text, size: 11 } },
+    legend: {
+      orientation: 'v', x: 1.02, xanchor: 'left', y: 1, yanchor: 'top',
+      font: { color: theme.text, size: 11 },
+    },
     xaxis: {
-      type: 'category', categoryorder: 'array', categoryarray: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
+      type: 'category', categoryorder: 'array', categoryarray: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
       tickangle: -45, color: theme.text, gridcolor: theme.grid,
       tickfont: { family: 'monospace', size: 10 },
     },
@@ -2216,7 +1356,7 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
       title: { text: "relative to baseline", font: { color: theme.text } },
       color: theme.text, gridcolor: theme.grid,
     },
-    margin: { t: 20, l: 60, r: 20, b: 90 },
+    margin: { t: 20, l: 60, r: 160, b: 60 },
   };
   Plotly.newPlot('bench_chart_14', data, layout, { displayModeBar: false, responsive: true });
   window.brambleRegisterPlotlyChart('bench_chart_14', function () {
@@ -2230,15 +1370,15 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
   });
 })();
 </script>
-</div><div style="flex: 0 0 380px;"><div id="bench_chart_15" style="width:100%; max-width:380px; height:280px;"></div>
+</div><div style="width:100%;"><div id="bench_chart_15" style="width:100%; height:300px;"></div>
 <script>
 (function () {
   const theme = window.bramblePlotlyTheme();
   const data = [{
   name: "Rₕ! Double64",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,1.0108921227371217,0.9980802684000839,1.0165024673236878],
-  customdata: [["1.12.7","8.94 ms (baseline)",0,"0 B"],["1.12.7","9.04 ms (+1.1%)",0,"0 B"],["1.12.7","8.92 ms (-0.2%)",0,"0 B"],["1.12.7","9.09 ms (+1.7%)",0,"0 B"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,1.0108921227371217,0.9980802684000839,1.0165024673236878,1.0041937513105472],
+  customdata: [["1.12.7","8.94 ms (baseline)",0,"0 B"],["1.12.7","9.04 ms (+1.1%)",0,"0 B"],["1.12.7","8.92 ms (-0.2%)",0,"0 B"],["1.12.7","9.09 ms (+1.7%)",0,"0 B"],["1.12.7","8.98 ms (+0.4%)",0,"0 B"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#3b82f6", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -2247,9 +1387,9 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 },
 {
   name: "assemble! Double64",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,0.9757634899651484,0.9847374113688259,0.976445138805432],
-  customdata: [["1.12.7","1.04 ms (baseline)",0,"0 B"],["1.12.7","1.01 ms (-2.4%)",0,"0 B"],["1.12.7","1.02 ms (-1.5%)",0,"0 B"],["1.12.7","1.02 ms (-2.4%)",0,"0 B"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,0.9757634899651484,0.9847374113688259,0.976445138805432,0.9631053959860594],
+  customdata: [["1.12.7","1.04 ms (baseline)",0,"0 B"],["1.12.7","1.01 ms (-2.4%)",0,"0 B"],["1.12.7","1.02 ms (-1.5%)",0,"0 B"],["1.12.7","1.02 ms (-2.4%)",0,"0 B"],["1.12.7","1.0 ms (-3.7%)",0,"0 B"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#10b981", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -2258,9 +1398,9 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 },
 {
   name: "avgₕ! Double64",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,1.0152270976688864,1.0015953961178983,1.003690557211355],
-  customdata: [["1.12.7","72.2 ms (baseline)",33,"2.9 KiB"],["1.12.7","73.3 ms (+1.5%)",33,"2.9 KiB"],["1.12.7","72.32 ms (+0.2%)",33,"2.9 KiB"],["1.12.7","72.47 ms (+0.4%)",33,"2.9 KiB"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,1.0152270976688864,1.0015953961178983,1.003690557211355,0.9999570082730335],
+  customdata: [["1.12.7","72.2 ms (baseline)",33,"2.9 KiB"],["1.12.7","73.3 ms (+1.5%)",33,"2.9 KiB"],["1.12.7","72.32 ms (+0.2%)",33,"2.9 KiB"],["1.12.7","72.47 ms (+0.4%)",33,"2.9 KiB"],["1.12.7","72.2 ms (-0.0%)",33,"2.9 KiB"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#f59e0b", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -2269,9 +1409,9 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 },
 {
   name: "innerₕ Double64",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1.0,1.0,1.0001571025399811,0.9986284101599248],
-  customdata: [["1.12.7","1.06 ms (baseline)",0,"0 B"],["1.12.7","1.06 ms (baseline)",0,"0 B"],["1.12.7","1.06 ms (+0.0%)",0,"0 B"],["1.12.7","1.06 ms (-0.1%)",0,"0 B"]],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1.0,1.0,1.0001571025399811,0.9986284101599248,1.0009021636876765],
+  customdata: [["1.12.7","1.06 ms (baseline)",0,"0 B"],["1.12.7","1.06 ms (baseline)",0,"0 B"],["1.12.7","1.06 ms (+0.0%)",0,"0 B"],["1.12.7","1.06 ms (-0.1%)",0,"0 B"],["1.12.7","1.06 ms (+0.1%)",0,"0 B"]],
   mode: 'lines+markers',
   type: 'scatter',
   line: { color: "#8b5cf6", width: 2, shape: 'spline', smoothing: 0.3 },
@@ -2280,8 +1420,8 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 },
 {
   name: "1.0x (ref)",
-  x: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
-  y: [1,1,1,1],
+  x: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
+  y: [1,1,1,1,1],
   mode: 'lines',
   type: 'scatter',
   line: { color: 'rgba(128,128,128,0.7)', dash: 'dash', width: 1.5 },
@@ -2291,9 +1431,12 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
     paper_bgcolor: theme.bg,
     plot_bgcolor: theme.bg,
     font: { color: theme.text },
-    legend: { orientation: 'h', y: -0.3, font: { color: theme.text, size: 11 } },
+    legend: {
+      orientation: 'v', x: 1.02, xanchor: 'left', y: 1, yanchor: 'top',
+      font: { color: theme.text, size: 11 },
+    },
     xaxis: {
-      type: 'category', categoryorder: 'array', categoryarray: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)","v2.2.1 (c66d0bf)"],
+      type: 'category', categoryorder: 'array', categoryarray: ["v2.0.0","v2.1.0","v2.2.0","v2.2.1","v2.2.2"],
       tickangle: -45, color: theme.text, gridcolor: theme.grid,
       tickfont: { family: 'monospace', size: 10 },
     },
@@ -2301,7 +1444,7 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
       title: { text: "relative to baseline", font: { color: theme.text } },
       color: theme.text, gridcolor: theme.grid,
     },
-    margin: { t: 20, l: 60, r: 20, b: 90 },
+    margin: { t: 20, l: 60, r: 160, b: 60 },
   };
   Plotly.newPlot('bench_chart_15', data, layout, { displayModeBar: false, responsive: true });
   window.brambleRegisterPlotlyChart('bench_chart_15', function () {
@@ -2318,7 +1461,6 @@ Comparing **4** recorded baselines in chronological order. The earliest run (v2.
 </div>
 </div>
 
-  </div>
 </div>
 ```
 

@@ -59,19 +59,6 @@ function _format_memory(b::Real)
     end
 end
 
-function _badge_delta(t_curr::Real, t_ref::Real)
-    t_ref <= 0 && return "—"
-    ratio = (t_curr - t_ref) / t_ref
-    pct = round(ratio * 100, digits = 1)
-    if abs(pct) < 0.5
-        return "<span style=\"opacity:0.6;\">(=)</span>"
-    elseif pct < 0
-        return "<span style=\"color:#10b981; font-weight:bold;\">$(pct)% 🟢</span>"
-    else
-        return "<span style=\"color:#ef4444; font-weight:bold;\">+$(pct)% 🔴</span>"
-    end
-end
-
 function _select_unit(max_ns::Real)
     if max_ns < 1_000
         return ("ns", 1.0)
@@ -116,8 +103,33 @@ end
 
 # The package version is what a reader tracks progress against release to release; the
 # commit is what pins the measurement exactly, since several baselines can share a
-# version between releases. Show both, version first.
+# version between releases. Show both, version first — except on the trend chart's own
+# x-axis (`_run_xlabel`), which stays version-only: the axis is read as a release
+# timeline, not a commit log, and the exact commit is one hover away (`_run_label`
+# supplies it to every point's tooltip via `customdata`).
 _run_label(r) = "v$(r.version) ($(r.commit))"
+_run_xlabel(r) = "v$(r.version)"
+
+# One short sentence per group, mined from this suite's own "## Why these six" rationale
+# in benchmark/benchmarks.jl — what a reader is actually looking at, not just how to read
+# the chart (that part is explained once, generically, above the whole section). A group
+# not listed here (a future addition to the suite) still gets a plain, data-derived line
+# instead of silently rendering with no introduction at all.
+const _BENCH_GROUP_BLURBS = Dict(
+    "operators 2D" => "The finite-difference stencil engine on a 1000×1000 grid: the difference operator along the grid's contiguous storage direction (`D₋ₓ`) versus across it (`D₋ᵧ`), which access memory very differently and so can perform very differently.",
+    "operators 3D" => "The same stencil engine in 3D (`D₋₂`), together with the inner product `innerₕ` and the full gradient `∇₋ₕ`.",
+    "jumps & averages" => "Jump and average operators across cell interfaces, in 2D and 3D.",
+    "inner products 2D" => "The reduction path — inner products and norms — including the seminorm's sum over directions.",
+    "restriction" => "Point interpolation (`Rₕ!`) and cell-averaging (`avgₕ!`), compared across the `Serial()` (the allocation-free default) and `Parallel()` backends, split by dimension.",
+    "composite" => "A composite (multi-component) operator, which dispatches per component and calls the engine once per component with a view rather than once with a plain vector.",
+    "construction" => "Mesh and grid-space construction, including the quadrature weights `gridspace` builds internally.",
+    "startup & latency" => "Time to first `using Bramble` and first operator call — compilation latency, not steady-state performance.",
+    "forms" => "Linear and bilinear form assembly, across 1D/2D and the `Serial()`/`Parallel()` backends.",
+    "precision 1D" => "The same 1D workload — restriction, assembly, inner product — repeated in `Float32`, `Float64`, and `Double64`, split by precision since `Double64` (software arithmetic) is an order of magnitude slower.",
+)
+
+_bench_group_blurb(gname, n_series, n_runs) = get(_BENCH_GROUP_BLURBS, gname,
+    "$n_series benchmark$(n_series == 1 ? "" : "s") in this group, across $n_runs recorded releases.")
 
 # Single run: a horizontal bar per benchmark. No trend to show, so no head-script emission
 # here — the caller (generate_benchmarks_markdown) emits plotlyjs_head() once for the page.
@@ -146,7 +158,7 @@ function _render_plotly_barchart_single(
     end
 
     return """
-    <div id="$div_id" style="width:100%; max-width:520px; height:$(height)px;"></div>
+    <div id="$div_id" style="width:100%; height:$(height)px;"></div>
     <script>
     (function () {
       const theme = window.bramblePlotlyTheme();
@@ -193,9 +205,9 @@ end
 # (see there) can render as two of these side by side, each restarting the palette from its
 # own beginning rather than cycling into a color the other chart already used.
 function _render_one_trend_plot(
-        gname, bnames_subset, runs, use_normalized, unit_label, unit_divisor, max_width)
+        gname, bnames_subset, runs, use_normalized, unit_label, unit_divisor)
     div_id = _next_bench_div_id()
-    all_labels_js = "[" * join(("\"$(_run_label(r))\"" for r in runs), ",") * "]"
+    all_labels_js = "[" * join(("\"$(_run_xlabel(r))\"" for r in runs), ",") * "]"
 
     traces = String[]
     for (idx, bname) in enumerate(bnames_subset)
@@ -215,7 +227,7 @@ function _render_one_trend_plot(
                              "$(round(abs(t_ns / t0 - 1) * 100, digits = 1))%") *
                             ")" :
                             _format_time(t_ns)
-                push!(xs, "\"$(_run_label(r))\"")
+                push!(xs, "\"$(_run_xlabel(r))\"")
                 push!(ys, "$y_val")
                 push!(customdata,
                     """["$(r.julia)","$delta_str",$(allocs(m)),"$(_format_memory(memory(m)))"]""")
@@ -243,7 +255,7 @@ function _render_one_trend_plot(
 
     # The 1.0x reference line in normalized mode, flat across every commit.
     if use_normalized
-        ref_xs = join(("\"$(_run_label(r))\"" for r in runs), ",")
+        ref_xs = join(("\"$(_run_xlabel(r))\"" for r in runs), ",")
         ref_ys = join(("1" for _ in runs), ",")
         push!(traces, """
             {
@@ -260,7 +272,7 @@ function _render_one_trend_plot(
     y_title = use_normalized ? "relative to baseline" : unit_label
 
     return """
-    <div id="$div_id" style="width:100%; max-width:$(max_width)px; height:280px;"></div>
+    <div id="$div_id" style="width:100%; height:300px;"></div>
     <script>
     (function () {
       const theme = window.bramblePlotlyTheme();
@@ -269,7 +281,10 @@ function _render_one_trend_plot(
         paper_bgcolor: theme.bg,
         plot_bgcolor: theme.bg,
         font: { color: theme.text },
-        legend: { orientation: 'h', y: -0.3, font: { color: theme.text, size: 11 } },
+        legend: {
+          orientation: 'v', x: 1.02, xanchor: 'left', y: 1, yanchor: 'top',
+          font: { color: theme.text, size: 11 },
+        },
         xaxis: {
           type: 'category', categoryorder: 'array', categoryarray: $all_labels_js,
           tickangle: -45, color: theme.text, gridcolor: theme.grid,
@@ -279,7 +294,7 @@ function _render_one_trend_plot(
           title: { text: "$y_title", font: { color: theme.text } },
           color: theme.text, gridcolor: theme.grid,
         },
-        margin: { t: 20, l: 60, r: 20, b: 90 },
+        margin: { t: 20, l: 60, r: 160, b: 60 },
       };
       Plotly.newPlot('$div_id', data, layout, { displayModeBar: false, responsive: true });
       window.brambleRegisterPlotlyChart('$div_id', function () {
@@ -312,173 +327,28 @@ function _render_trend_chart(
 
     # Beyond one palette's worth of series (7), `_BENCH_PALETTE` repeats colors and two
     # unrelated lines become visually indistinguishable — "restriction" (9 benchmarks),
-    # "forms" (13) and "precision 1D" (12) all hit this. Split into side-by-side charts instead of
-    # cycling, clustered along whichever axis the group's names carry (dimension,
+    # "forms" (13) and "precision 1D" (12) all hit this. Split into separate charts instead
+    # of cycling, clustered along whichever axis the group's names carry (dimension,
     # precision — see `_BENCH_GROUP_SPLIT_TAGS`) rather than an arbitrary midpoint; each
     # keeps its own distinct palette rather than inheriting where the previous chart left
-    # off. Every panel gets a *fixed*, non-growing width (`flex: 0 0`, not `flex: 1 1`) —
-    # with `flex-grow` allowed, a chart that wraps alone onto its own row (three panels
-    # rarely fit one row beside the table) stretches to fill it and ends up visibly larger
-    # than the ones still paired above it. Fixed width means every panel is the same size
-    # regardless of how many end up sharing a row.
+    # off. Stacked one per row, each at the full page width, rather than side by side —
+    # squeezed into a fraction of the row, a legend of 4-5 series plus rotated version
+    # labels on the x-axis has no room to lay out cleanly.
     if length(sorted_bnames) > length(_BENCH_PALETTE)
         clusters = _bench_group_clusters(gname, sorted_bnames)
-        width = 380
         panels = [_render_one_trend_plot(gname, names, runs, use_normalized, unit_label,
-                      unit_divisor, width)
+                      unit_divisor)
                   for names in clusters]
-        divs = join(("<div style=\"flex: 0 0 $(width)px;\">$p</div>" for p in panels))
+        divs = join(("<div style=\"width:100%;\">$p</div>" for p in panels))
         return """
-        <div style="display:flex; flex-wrap:wrap; gap:1rem;">
+        <div style="display:flex; flex-direction:column; gap:1.5rem; width:100%;">
           $divs
         </div>
         """
     end
 
     return _render_one_trend_plot(
-        gname, sorted_bnames, runs, use_normalized, unit_label, unit_divisor, 560)
-end
-
-function _render_table_html(gname, sorted_bnames, runs)
-    num_runs = length(runs)
-    io = IOBuffer()
-    println(io,
-        "<table style=\"width:100%; border-collapse:collapse; font-size:12.5px; line-height:1.4;\">")
-    println(io, "<thead>")
-    println(io, "<tr style=\"border-bottom:2px solid rgba(128,128,128,0.3);\">")
-    println(io, "<th style=\"padding:8px 6px; text-align:left;\">Benchmark</th>")
-
-    if num_runs <= 3
-        for (idx, r) in enumerate(runs)
-            ref_label = idx == 1 && num_runs >= 2 ? " (ref)" : ""
-            println(io,
-                "<th style=\"padding:8px 6px; text-align:right;\">v$(r.version) <code>$(r.commit)</code>$ref_label</th>")
-            println(io, "<th style=\"padding:8px 6px; text-align:center;\">Allocs</th>")
-        end
-        if num_runs >= 2
-            println(io,
-                "<th style=\"padding:8px 6px; text-align:center;\">Δ vs Base</th>")
-        end
-        println(io, "<th style=\"padding:8px 6px; text-align:right;\">Memory</th>")
-    else
-        # Compact summary for 4+ runs (avoids horizontal blowout with 10-20 runs)
-        println(io,
-            "<th style=\"padding:8px 6px; text-align:right;\">Base (v$(runs[1].version) <code>$(runs[1].commit)</code>)</th>")
-        println(io,
-            "<th style=\"padding:8px 6px; text-align:right;\">Prev (v$(runs[end-1].version) <code>$(runs[end-1].commit)</code>)</th>")
-        println(io,
-            "<th style=\"padding:8px 6px; text-align:right;\">Latest (v$(runs[end].version) <code>$(runs[end].commit)</code>)</th>")
-        println(io,
-            "<th style=\"padding:8px 6px; text-align:center;\">Δ vs Base</th>")
-        println(io,
-            "<th style=\"padding:8px 6px; text-align:center;\">Δ vs Prev</th>")
-        println(io, "<th style=\"padding:8px 6px; text-align:center;\">Allocs</th>")
-        println(io, "<th style=\"padding:8px 6px; text-align:right;\">Memory</th>")
-    end
-    println(io, "</tr>")
-    println(io, "</thead>")
-    println(io, "<tbody>")
-
-    for bname in sorted_bnames
-        println(io, "<tr style=\"border-bottom:1px solid rgba(128,128,128,0.15);\">")
-        println(io, "<td style=\"padding:7px 6px; font-weight:600;\"><code>$bname</code></td>")
-
-        t_base = 0.0
-        if haskey(runs[1].data, gname) && haskey(runs[1].data[gname], bname)
-            t_base = time(median(runs[1].data[gname][bname]))
-        end
-
-        if num_runs <= 3
-            latest_mem = "—"
-            for (idx, r) in enumerate(runs)
-                if haskey(r.data, gname) && haskey(r.data[gname], bname)
-                    m = median(r.data[gname][bname])
-                    t_str = _format_time(time(m))
-                    a_str = string(allocs(m))
-                    latest_mem = _format_memory(memory(m))
-                    println(io, "<td style=\"padding:7px 6px; text-align:right;\">$t_str</td>")
-                    println(io, "<td style=\"padding:7px 6px; text-align:center;\">$a_str</td>")
-                else
-                    println(io,
-                        "<td style=\"padding:7px 6px; text-align:right; opacity:0.4;\">—</td>")
-                    println(io,
-                        "<td style=\"padding:7px 6px; text-align:center; opacity:0.4;\">—</td>")
-                end
-            end
-            if num_runs >= 2
-                if haskey(runs[end].data, gname) && haskey(runs[end].data[gname], bname) &&
-                   t_base > 0
-                    t_latest = time(median(runs[end].data[gname][bname]))
-                    delta_badge = _badge_delta(t_latest, t_base)
-                    println(io,
-                        "<td style=\"padding:7px 6px; text-align:center;\">$delta_badge</td>")
-                else
-                    println(io,
-                        "<td style=\"padding:7px 6px; text-align:center; opacity:0.4;\">—</td>")
-                end
-            end
-            println(io, "<td style=\"padding:7px 6px; text-align:right;\">$latest_mem</td>")
-        else
-            # Base
-            if haskey(runs[1].data, gname) && haskey(runs[1].data[gname], bname)
-                m1 = median(runs[1].data[gname][bname])
-                println(io,
-                    "<td style=\"padding:7px 6px; text-align:right;\">$(_format_time(time(m1)))</td>")
-            else
-                println(io,
-                    "<td style=\"padding:7px 6px; text-align:right; opacity:0.4;\">—</td>")
-            end
-            # Prev
-            t_prev = 0.0
-            if haskey(runs[end - 1].data, gname) && haskey(runs[end - 1].data[gname], bname)
-                mp = median(runs[end - 1].data[gname][bname])
-                t_prev = time(mp)
-                println(io,
-                    "<td style=\"padding:7px 6px; text-align:right;\">$(_format_time(t_prev))</td>")
-            else
-                println(io,
-                    "<td style=\"padding:7px 6px; text-align:right; opacity:0.4;\">—</td>")
-            end
-            # Latest
-            latest_allocs = "—"
-            latest_mem = "—"
-            t_latest = 0.0
-            if haskey(runs[end].data, gname) && haskey(runs[end].data[gname], bname)
-                ml = median(runs[end].data[gname][bname])
-                t_latest = time(ml)
-                latest_allocs = string(allocs(ml))
-                latest_mem = _format_memory(memory(ml))
-                println(io,
-                    "<td style=\"padding:7px 6px; text-align:right; font-weight:600;\">$(_format_time(t_latest))</td>")
-            else
-                println(io,
-                    "<td style=\"padding:7px 6px; text-align:right; opacity:0.4;\">—</td>")
-            end
-            # Delta vs Base
-            if t_latest > 0 && t_base > 0
-                println(io,
-                    "<td style=\"padding:7px 6px; text-align:center;\">$(_badge_delta(t_latest, t_base))</td>")
-            else
-                println(io,
-                    "<td style=\"padding:7px 6px; text-align:center; opacity:0.4;\">—</td>")
-            end
-            # Delta vs Prev
-            if t_latest > 0 && t_prev > 0
-                println(io,
-                    "<td style=\"padding:7px 6px; text-align:center;\">$(_badge_delta(t_latest, t_prev))</td>")
-            else
-                println(io,
-                    "<td style=\"padding:7px 6px; text-align:center; opacity:0.4;\">—</td>")
-            end
-            println(io,
-                "<td style=\"padding:7px 6px; text-align:center;\">$latest_allocs</td>")
-            println(io, "<td style=\"padding:7px 6px; text-align:right;\">$latest_mem</td>")
-        end
-        println(io, "</tr>")
-    end
-    println(io, "</tbody>")
-    println(io, "</table>")
-    return String(take!(io))
+        gname, sorted_bnames, runs, use_normalized, unit_label, unit_divisor)
 end
 
 function generate_benchmarks_markdown(
@@ -503,7 +373,7 @@ function generate_benchmarks_markdown(
     println(io,
         "Bramble tracks memory allocations and performance regressions with a dedicated regression suite in `benchmark/benchmarks.jl`.")
     println(io,
-        "All measurements below are run on **1,000,000 grid points** per dimension setup (e.g. ``1000 \\times 1000`` in 2D, ``100 \\times 100 \\times 100`` in 3D).")
+        "All measurements below are run on **1,000,000 grid points** per dimension setup (e.g. \$1000 \\times 1000\$ in 2D, \$100 \\times 100 \\times 100\$ in 3D).")
     println(io)
 
     if isempty(json_files)
@@ -547,23 +417,6 @@ function generate_benchmarks_markdown(
     # Order runs chronologically by commit timestamp
     sort!(runs, by = r -> r.time)
 
-    println(io, "## Recorded baselines")
-    println(io)
-    if length(runs) >= 2
-        println(io,
-            "Comparing **$(length(runs))** recorded baselines in chronological order. The earliest run (v$(runs[1].version), `$(runs[1].commit)`) is the reference baseline for relative speedup/slowdown calculations.")
-        println(io)
-    end
-    println(io, "| Version | Commit | Julia | Summary | File |")
-    println(io, "|---|---|:---:|---|---|")
-    for (idx, r) in enumerate(runs)
-        tag = idx == 1 && length(runs) >= 2 ? " *(baseline)*" : ""
-        msg = isempty(r.message) ? "Baseline" : r.message
-        println(io,
-            "| v$(r.version)$tag | `$(r.commit)` | `$(r.julia)` | $msg | `$(basename(r.path))` |")
-    end
-    println(io)
-
     # Collect all groups dynamically
     group_order = [
         "operators 2D",
@@ -588,6 +441,14 @@ function generate_benchmarks_markdown(
 
     println(io, "## Comparative timings and allocations")
     println(io)
+    if length(runs) >= 2
+        println(io,
+            "Each chart below tracks one benchmark group across all **$(length(runs))** recorded baselines, in chronological release order, against the earliest run (v$(runs[1].version)) as the reference. Where a group's operations span more than a 20× range, the y-axis shows time relative to that reference instead of absolute time, so a cheap operation isn't flattened onto the same line as an expensive one. Hover any point for its exact time, Julia version, allocation count, and memory.")
+    else
+        println(io,
+            "Each chart below shows one benchmark group's timings and allocations for the single recorded baseline. Hover a bar for its exact time.")
+    end
+    println(io)
 
     # Loaded once for the whole page — every chart below reuses window.Plotly and the shared
     # theme/registration helpers (plotly_common.jl) rather than each re-loading the CDN
@@ -598,13 +459,6 @@ function generate_benchmarks_markdown(
     println(io)
 
     for gname in ordered_groups
-        # Display only — "&" reads better as "and" in a heading, but the underlying group
-        # key (benchmark/benchmarks.jl's `SUITE["jumps & averages"]`) stays as-is: it is also
-        # the key every saved baseline_*.json carries, and renaming it would fragment that
-        # group's trend history across old and new baselines instead.
-        println(io, "### $(replace(titlecase(gname), "&" => "and"))")
-        println(io)
-
         bnames = Set{String}()
         max_time_ns = 0.0
         min_time_ns = Inf
@@ -621,21 +475,24 @@ function generate_benchmarks_markdown(
         sorted_bnames = sort(collect(bnames))
         isempty(sorted_bnames) && continue
 
+        # Display only — "&" reads better as "and" in a heading, but the underlying group
+        # key (benchmark/benchmarks.jl's `SUITE["jumps & averages"]`) stays as-is: it is also
+        # the key every saved baseline_*.json carries, and renaming it would fragment that
+        # group's trend history across old and new baselines instead. Sentence case
+        # (`uppercasefirst`, not `titlecase`) so a multi-word group name reads as a heading
+        # rather than a title — "Jumps and averages", not "Jumps And Averages".
+        println(io, "### $(uppercasefirst(replace(gname, "&" => "and")))")
+        println(io)
+        println(io, _bench_group_blurb(gname, length(sorted_bnames), length(runs)))
+        println(io)
+
         unit_label, unit_divisor = _select_unit(max_time_ns)
-        table_html = _render_table_html(gname, sorted_bnames, runs)
         chart_html = _render_trend_chart(
             gname, sorted_bnames, runs, max_time_ns, min_time_ns, unit_label, unit_divisor)
 
-        # Side-by-side flex layout
         println(io, "```@raw html")
-        println(io,
-            "<div style=\"display:flex; flex-wrap:wrap; gap:1.5rem; align-items:start; margin:1.2rem 0 2.5rem 0;\">")
-        println(io, "  <div style=\"flex:1 1 430px; min-width:320px; overflow-x:auto;\">")
-        println(io, table_html)
-        println(io, "  </div>")
-        println(io, "  <div style=\"flex:1 1 450px; min-width:340px;\">")
+        println(io, "<div style=\"width:100%; margin:1.2rem 0 2.5rem 0;\">")
         println(io, chart_html)
-        println(io, "  </div>")
         println(io, "</div>")
         println(io, "```")
         println(io)
