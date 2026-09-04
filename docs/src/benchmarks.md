@@ -5,7 +5,7 @@ All measurements below are run on **1,000,000 grid points** per dimension setup 
 
 ## Recorded Baselines
 
-Comparing **5** recorded baselines in chronological order. The earliest run (`0b9a62b`) serves as reference baseline for relative speedup/slowdown calculations.
+Comparing **6** recorded baselines in chronological order. The earliest run (`0b9a62b`) serves as reference baseline for relative speedup/slowdown calculations.
 
 | Commit | Julia | Summary | File |
 |---|:---:|---|---|
@@ -14,6 +14,7 @@ Comparing **5** recorded baselines in chronological order. The earliest run (`0b
 | `41036bb` | `1.12.7` | fix(space): only fetch the Gauss rule inside the kernel where it truly folds | `baseline_41036bb.json` |
 | `15f5e3b` | `1.12.7` | test(form): measure the evaluate! allocation behind a barrier | `baseline_15f5e3b.json` |
 | `e6655b1` | `1.12.7` | perf(space): add specialized 2D and 3D tensor-product loops to _cell_average for faster, zero-alloc cell quadrature | `baseline_e6655b1.json` |
+| `2dec0c7` | `1.12.7` | chore: bump version to 2.0.0 | `baseline_2dec0c7.json` |
 
 ## Comparative Timings & Allocations
 
@@ -27,8 +28,8 @@ Comparing **5** recorded baselines in chronological order. The earliest run (`0b
 <tr style="border-bottom:2px solid rgba(128,128,128,0.3);">
 <th style="padding:8px 6px; text-align:left;">Benchmark</th>
 <th style="padding:8px 6px; text-align:right;">Base (<code>0b9a62b</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Prev (<code>15f5e3b</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Latest (<code>e6655b1</code>)</th>
+<th style="padding:8px 6px; text-align:right;">Prev (<code>e6655b1</code>)</th>
+<th style="padding:8px 6px; text-align:right;">Latest (<code>2dec0c7</code>)</th>
 <th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
 <th style="padding:8px 6px; text-align:center;">Δ vs Prev</th>
 <th style="padding:8px 6px; text-align:center;">Allocs</th>
@@ -39,18 +40,18 @@ Comparing **5** recorded baselines in chronological order. The earliest run (`0b
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>Dcₓ</code></td>
 <td style="padding:7px 6px; text-align:right;">257.2 μs</td>
-<td style="padding:7px 6px; text-align:right;">260.1 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">261.5 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.7% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.5% 🔴</span></td>
+<td style="padding:7px 6px; text-align:right;">261.5 μs</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">256.5 μs</td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-1.9% 🟢</span></td>
 <td style="padding:7px 6px; text-align:center;">3</td>
 <td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>D₋ᵧ</code></td>
 <td style="padding:7px 6px; text-align:right;">161.4 μs</td>
-<td style="padding:7px 6px; text-align:right;">161.5 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">161.2 μs</td>
+<td style="padding:7px 6px; text-align:right;">161.2 μs</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">162.0 μs</td>
 <td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:center;">3</td>
@@ -59,20 +60,20 @@ Comparing **5** recorded baselines in chronological order. The earliest run (`0b
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>D₋ₓ</code></td>
 <td style="padding:7px 6px; text-align:right;">203.7 μs</td>
-<td style="padding:7px 6px; text-align:right;">203.1 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">205.2 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.8% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.1% 🔴</span></td>
+<td style="padding:7px 6px; text-align:right;">205.2 μs</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">204.0 μs</td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.6% 🟢</span></td>
 <td style="padding:7px 6px; text-align:center;">3</td>
 <td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>M₋ₓ</code></td>
 <td style="padding:7px 6px; text-align:right;">171.4 μs</td>
-<td style="padding:7px 6px; text-align:right;">173.1 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">155.5 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-9.3% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-10.1% 🟢</span></td>
+<td style="padding:7px 6px; text-align:right;">155.5 μs</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">172.0 μs</td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+10.6% 🔴</span></td>
 <td style="padding:7px 6px; text-align:center;">3</td>
 <td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
 </tr>
@@ -107,98 +108,116 @@ Comparing **5** recorded baselines in chronological order. The earliest run (`0b
 <text x="57" y="49.0" font-size="10" fill="currentColor" opacity="0.65" text-anchor="end">300.0 μs</text>
 <line x1="65.0" y1="45" x2="65.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
 <text x="65.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`0b9a62b`</text>
-<line x1="177.5" y1="45" x2="177.5" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="177.5" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`855fbf5`</text>
-<line x1="290.0" y1="45" x2="290.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="290.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`41036bb`</text>
-<line x1="402.5" y1="45" x2="402.5" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="402.5" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`15f5e3b`</text>
+<line x1="155.0" y1="45" x2="155.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="155.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`855fbf5`</text>
+<line x1="245.0" y1="45" x2="245.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="245.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`41036bb`</text>
+<line x1="335.0" y1="45" x2="335.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="335.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`15f5e3b`</text>
+<line x1="425.0" y1="45" x2="425.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="425.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`e6655b1`</text>
 <line x1="515.0" y1="45" x2="515.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="515.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`e6655b1`</text>
-<polyline points="65.0,72.8 177.5,73.2 290.0,74.2 402.5,70.9 515.0,70.1" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<text x="515.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`2dec0c7`</text>
+<polyline points="65.0,72.8 155.0,73.2 245.0,74.2 335.0,70.9 425.0,70.1 515.0,73.3" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
 <circle cx="65.0" cy="72.8" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>0b9a62b (Julia 1.12.7)
 Dcₓ: 257.2 μs (3 allocs, 7.64 MiB)</title></circle>
 <text x="65.0" y="65.8" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">257.2</text>
-<circle cx="177.5" cy="73.2" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<circle cx="155.0" cy="73.2" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>855fbf5 (Julia 1.12.7)
 Dcₓ: 256.5 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="177.5" y="66.2" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">256.5</text>
-<circle cx="290.0" cy="74.2" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="155.0" y="66.2" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">256.5</text>
+<circle cx="245.0" cy="74.2" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>41036bb (Julia 1.12.7)
 Dcₓ: 255.0 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="290.0" y="67.2" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">255.0</text>
-<circle cx="402.5" cy="70.9" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="245.0" y="67.2" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">255.0</text>
+<circle cx="335.0" cy="70.9" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>15f5e3b (Julia 1.12.7)
 Dcₓ: 260.1 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="402.5" y="63.9" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">260.1</text>
-<circle cx="515.0" cy="70.1" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="335.0" y="63.9" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">260.1</text>
+<circle cx="425.0" cy="70.1" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 Dcₓ: 261.5 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="515.0" y="63.1" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">261.5</text>
-<polyline points="65.0,135.1 177.5,134.3 290.0,134.7 402.5,135.0 515.0,135.2" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<text x="425.0" y="63.1" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">261.5</text>
+<circle cx="515.0" cy="73.3" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+Dcₓ: 256.5 μs (3 allocs, 7.64 MiB)</title></circle>
+<text x="515.0" y="66.3" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">256.5</text>
+<polyline points="65.0,135.1 155.0,134.3 245.0,134.7 335.0,135.0 425.0,135.2 515.0,134.7" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
 <circle cx="65.0" cy="135.1" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>0b9a62b (Julia 1.12.7)
 D₋ᵧ: 161.4 μs (3 allocs, 7.64 MiB)</title></circle>
 <text x="65.0" y="128.1" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">161.4</text>
-<circle cx="177.5" cy="134.3" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<circle cx="155.0" cy="134.3" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>855fbf5 (Julia 1.12.7)
 D₋ᵧ: 162.6 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="177.5" y="127.3" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">162.6</text>
-<circle cx="290.0" cy="134.7" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="155.0" y="127.3" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">162.6</text>
+<circle cx="245.0" cy="134.7" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>41036bb (Julia 1.12.7)
 D₋ᵧ: 162.0 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="290.0" y="127.7" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">162.0</text>
-<circle cx="402.5" cy="135.0" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="245.0" y="127.7" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">162.0</text>
+<circle cx="335.0" cy="135.0" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>15f5e3b (Julia 1.12.7)
 D₋ᵧ: 161.5 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="402.5" y="128.0" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">161.5</text>
-<circle cx="515.0" cy="135.2" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="335.0" y="128.0" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">161.5</text>
+<circle cx="425.0" cy="135.2" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 D₋ᵧ: 161.2 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="515.0" y="128.2" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">161.2</text>
-<polyline points="65.0,107.6 177.5,107.9 290.0,107.6 402.5,108.0 515.0,106.6" fill="none" stroke="#f59e0b" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<text x="425.0" y="128.2" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">161.2</text>
+<circle cx="515.0" cy="134.7" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+D₋ᵧ: 162.0 μs (3 allocs, 7.64 MiB)</title></circle>
+<text x="515.0" y="127.7" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">162.0</text>
+<polyline points="65.0,107.6 155.0,107.9 245.0,107.6 335.0,108.0 425.0,106.6 515.0,107.4" fill="none" stroke="#f59e0b" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
 <circle cx="65.0" cy="107.6" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>0b9a62b (Julia 1.12.7)
 D₋ₓ: 203.7 μs (3 allocs, 7.64 MiB)</title></circle>
 <text x="65.0" y="100.6" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">203.7</text>
-<circle cx="177.5" cy="107.9" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<circle cx="155.0" cy="107.9" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>855fbf5 (Julia 1.12.7)
 D₋ₓ: 203.3 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="177.5" y="100.9" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">203.3</text>
-<circle cx="290.0" cy="107.6" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="155.0" y="100.9" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">203.3</text>
+<circle cx="245.0" cy="107.6" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>41036bb (Julia 1.12.7)
 D₋ₓ: 203.7 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="290.0" y="100.6" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">203.7</text>
-<circle cx="402.5" cy="108.0" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="245.0" y="100.6" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">203.7</text>
+<circle cx="335.0" cy="108.0" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>15f5e3b (Julia 1.12.7)
 D₋ₓ: 203.1 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="402.5" y="101.0" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">203.1</text>
-<circle cx="515.0" cy="106.6" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="335.0" y="101.0" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">203.1</text>
+<circle cx="425.0" cy="106.6" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 D₋ₓ: 205.2 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="515.0" y="99.6" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">205.2</text>
-<polyline points="65.0,128.6 177.5,128.8 290.0,130.7 402.5,127.5 515.0,138.9" fill="none" stroke="#8b5cf6" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<text x="425.0" y="99.6" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">205.2</text>
+<circle cx="515.0" cy="107.4" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+D₋ₓ: 204.0 μs (3 allocs, 7.64 MiB)</title></circle>
+<text x="515.0" y="100.4" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">204.0</text>
+<polyline points="65.0,128.6 155.0,128.8 245.0,130.7 335.0,127.5 425.0,138.9 515.0,128.2" fill="none" stroke="#8b5cf6" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
 <circle cx="65.0" cy="128.6" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>0b9a62b (Julia 1.12.7)
 M₋ₓ: 171.4 μs (3 allocs, 7.64 MiB)</title></circle>
 <text x="65.0" y="121.6" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">171.4</text>
-<circle cx="177.5" cy="128.8" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<circle cx="155.0" cy="128.8" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>855fbf5 (Julia 1.12.7)
 M₋ₓ: 171.0 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="177.5" y="121.8" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">171.0</text>
-<circle cx="290.0" cy="130.7" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="155.0" y="121.8" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">171.0</text>
+<circle cx="245.0" cy="130.7" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>41036bb (Julia 1.12.7)
 M₋ₓ: 168.2 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="290.0" y="123.7" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">168.2</text>
-<circle cx="402.5" cy="127.5" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="245.0" y="123.7" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">168.2</text>
+<circle cx="335.0" cy="127.5" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>15f5e3b (Julia 1.12.7)
 M₋ₓ: 173.1 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="402.5" y="120.5" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">173.1</text>
-<circle cx="515.0" cy="138.9" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="335.0" y="120.5" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">173.1</text>
+<circle cx="425.0" cy="138.9" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 M₋ₓ: 155.5 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="515.0" y="131.9" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">155.5</text>
+<text x="425.0" y="131.9" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">155.5</text>
+<circle cx="515.0" cy="128.2" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+M₋ₓ: 172.0 μs (3 allocs, 7.64 MiB)</title></circle>
+<text x="515.0" y="121.2" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">172.0</text>
 </svg></div>
 
   </div>
@@ -215,8 +234,8 @@ M₋ₓ: 155.5 μs (3 allocs, 7.64 MiB)</title></circle>
 <tr style="border-bottom:2px solid rgba(128,128,128,0.3);">
 <th style="padding:8px 6px; text-align:left;">Benchmark</th>
 <th style="padding:8px 6px; text-align:right;">Base (<code>0b9a62b</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Prev (<code>15f5e3b</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Latest (<code>e6655b1</code>)</th>
+<th style="padding:8px 6px; text-align:right;">Prev (<code>e6655b1</code>)</th>
+<th style="padding:8px 6px; text-align:right;">Latest (<code>2dec0c7</code>)</th>
 <th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
 <th style="padding:8px 6px; text-align:center;">Δ vs Prev</th>
 <th style="padding:8px 6px; text-align:center;">Allocs</th>
@@ -227,30 +246,30 @@ M₋ₓ: 155.5 μs (3 allocs, 7.64 MiB)</title></circle>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>D₋₂</code></td>
 <td style="padding:7px 6px; text-align:right;">200.9 μs</td>
-<td style="padding:7px 6px; text-align:right;">229.7 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">201.0 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-12.5% 🟢</span></td>
+<td style="padding:7px 6px; text-align:right;">201.0 μs</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">229.6 μs</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+14.3% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+14.2% 🔴</span></td>
 <td style="padding:7px 6px; text-align:center;">3</td>
 <td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>innerₕ</code></td>
 <td style="padding:7px 6px; text-align:right;">240.2 μs</td>
-<td style="padding:7px 6px; text-align:right;">237.0 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">238.5 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.7% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.7% 🔴</span></td>
+<td style="padding:7px 6px; text-align:right;">238.5 μs</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">240.4 μs</td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.8% 🔴</span></td>
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>∇₋ₕ</code></td>
 <td style="padding:7px 6px; text-align:right;">694.1 μs</td>
-<td style="padding:7px 6px; text-align:right;">688.0 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">706.5 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.8% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+2.7% 🔴</span></td>
+<td style="padding:7px 6px; text-align:right;">706.5 μs</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">690.8 μs</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.5% 🟢</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-2.2% 🟢</span></td>
 <td style="padding:7px 6px; text-align:center;">15</td>
 <td style="padding:7px 6px; text-align:right;">22.92 MiB</td>
 </tr>
@@ -282,77 +301,91 @@ M₋ₓ: 155.5 μs (3 allocs, 7.64 MiB)</title></circle>
 <text x="57" y="49.0" font-size="10" fill="currentColor" opacity="0.65" text-anchor="end">1000.0 μs</text>
 <line x1="65.0" y1="45" x2="65.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
 <text x="65.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`0b9a62b`</text>
-<line x1="177.5" y1="45" x2="177.5" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="177.5" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`855fbf5`</text>
-<line x1="290.0" y1="45" x2="290.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="290.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`41036bb`</text>
-<line x1="402.5" y1="45" x2="402.5" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="402.5" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`15f5e3b`</text>
+<line x1="155.0" y1="45" x2="155.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="155.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`855fbf5`</text>
+<line x1="245.0" y1="45" x2="245.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="245.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`41036bb`</text>
+<line x1="335.0" y1="45" x2="335.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="335.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`15f5e3b`</text>
+<line x1="425.0" y1="45" x2="425.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="425.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`e6655b1`</text>
 <line x1="515.0" y1="45" x2="515.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="515.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`e6655b1`</text>
-<polyline points="65.0,200.8 177.5,196.6 290.0,195.5 402.5,195.2 515.0,200.8" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<text x="515.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`2dec0c7`</text>
+<polyline points="65.0,200.8 155.0,196.6 245.0,195.5 335.0,195.2 425.0,200.8 515.0,195.2" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
 <circle cx="65.0" cy="200.8" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>0b9a62b (Julia 1.12.7)
 D₋₂: 200.9 μs (3 allocs, 7.64 MiB)</title></circle>
 <text x="65.0" y="193.8" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">200.9</text>
-<circle cx="177.5" cy="196.6" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<circle cx="155.0" cy="196.6" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>855fbf5 (Julia 1.12.7)
 D₋₂: 222.8 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="177.5" y="189.6" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">222.8</text>
-<circle cx="290.0" cy="195.5" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="155.0" y="189.6" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">222.8</text>
+<circle cx="245.0" cy="195.5" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>41036bb (Julia 1.12.7)
 D₋₂: 228.1 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="290.0" y="188.5" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">228.1</text>
-<circle cx="402.5" cy="195.2" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="245.0" y="188.5" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">228.1</text>
+<circle cx="335.0" cy="195.2" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>15f5e3b (Julia 1.12.7)
 D₋₂: 229.7 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="402.5" y="188.2" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">229.7</text>
-<circle cx="515.0" cy="200.8" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="335.0" y="188.2" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">229.7</text>
+<circle cx="425.0" cy="200.8" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 D₋₂: 201.0 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="515.0" y="193.8" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">201.0</text>
-<polyline points="65.0,193.2 177.5,193.2 290.0,193.3 402.5,193.8 515.0,193.5" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<text x="425.0" y="193.8" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">201.0</text>
+<circle cx="515.0" cy="195.2" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+D₋₂: 229.6 μs (3 allocs, 7.64 MiB)</title></circle>
+<text x="515.0" y="188.2" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">229.6</text>
+<polyline points="65.0,193.2 155.0,193.2 245.0,193.3 335.0,193.8 425.0,193.5 515.0,193.1" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
 <circle cx="65.0" cy="193.2" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>0b9a62b (Julia 1.12.7)
 innerₕ: 240.2 μs (0 allocs, 0 B)</title></circle>
 <text x="65.0" y="186.2" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">240.2</text>
-<circle cx="177.5" cy="193.2" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<circle cx="155.0" cy="193.2" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>855fbf5 (Julia 1.12.7)
 innerₕ: 240.0 μs (0 allocs, 0 B)</title></circle>
-<text x="177.5" y="186.2" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">240.0</text>
-<circle cx="290.0" cy="193.3" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="155.0" y="186.2" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">240.0</text>
+<circle cx="245.0" cy="193.3" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>41036bb (Julia 1.12.7)
 innerₕ: 239.5 μs (0 allocs, 0 B)</title></circle>
-<text x="290.0" y="186.3" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">239.5</text>
-<circle cx="402.5" cy="193.8" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="245.0" y="186.3" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">239.5</text>
+<circle cx="335.0" cy="193.8" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>15f5e3b (Julia 1.12.7)
 innerₕ: 237.0 μs (0 allocs, 0 B)</title></circle>
-<text x="402.5" y="186.8" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">237.0</text>
-<circle cx="515.0" cy="193.5" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="335.0" y="186.8" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">237.0</text>
+<circle cx="425.0" cy="193.5" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 innerₕ: 238.5 μs (0 allocs, 0 B)</title></circle>
-<text x="515.0" y="186.5" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">238.5</text>
-<polyline points="65.0,104.7 177.5,106.1 290.0,106.3 402.5,105.8 515.0,102.2" fill="none" stroke="#f59e0b" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<text x="425.0" y="186.5" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">238.5</text>
+<circle cx="515.0" cy="193.1" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+innerₕ: 240.4 μs (0 allocs, 0 B)</title></circle>
+<text x="515.0" y="186.1" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">240.4</text>
+<polyline points="65.0,104.7 155.0,106.1 245.0,106.3 335.0,105.8 425.0,102.2 515.0,105.3" fill="none" stroke="#f59e0b" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
 <circle cx="65.0" cy="104.7" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>0b9a62b (Julia 1.12.7)
 ∇₋ₕ: 694.1 μs (15 allocs, 22.92 MiB)</title></circle>
 <text x="65.0" y="97.7" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">694.1</text>
-<circle cx="177.5" cy="106.1" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<circle cx="155.0" cy="106.1" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>855fbf5 (Julia 1.12.7)
 ∇₋ₕ: 686.6 μs (15 allocs, 22.92 MiB)</title></circle>
-<text x="177.5" y="99.1" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">686.6</text>
-<circle cx="290.0" cy="106.3" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="155.0" y="99.1" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">686.6</text>
+<circle cx="245.0" cy="106.3" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>41036bb (Julia 1.12.7)
 ∇₋ₕ: 685.7 μs (15 allocs, 22.92 MiB)</title></circle>
-<text x="290.0" y="99.3" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">685.7</text>
-<circle cx="402.5" cy="105.8" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="245.0" y="99.3" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">685.7</text>
+<circle cx="335.0" cy="105.8" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>15f5e3b (Julia 1.12.7)
 ∇₋ₕ: 688.0 μs (15 allocs, 22.92 MiB)</title></circle>
-<text x="402.5" y="98.8" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">688.0</text>
-<circle cx="515.0" cy="102.2" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="335.0" y="98.8" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">688.0</text>
+<circle cx="425.0" cy="102.2" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 ∇₋ₕ: 706.5 μs (15 allocs, 22.92 MiB)</title></circle>
-<text x="515.0" y="95.2" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">706.5</text>
+<text x="425.0" y="95.2" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">706.5</text>
+<circle cx="515.0" cy="105.3" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+∇₋ₕ: 690.8 μs (15 allocs, 22.92 MiB)</title></circle>
+<text x="515.0" y="98.3" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">690.8</text>
 </svg></div>
 
   </div>
@@ -369,8 +402,8 @@ innerₕ: 238.5 μs (0 allocs, 0 B)</title></circle>
 <tr style="border-bottom:2px solid rgba(128,128,128,0.3);">
 <th style="padding:8px 6px; text-align:left;">Benchmark</th>
 <th style="padding:8px 6px; text-align:right;">Base (<code>0b9a62b</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Prev (<code>15f5e3b</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Latest (<code>e6655b1</code>)</th>
+<th style="padding:8px 6px; text-align:right;">Prev (<code>e6655b1</code>)</th>
+<th style="padding:8px 6px; text-align:right;">Latest (<code>2dec0c7</code>)</th>
 <th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
 <th style="padding:8px 6px; text-align:center;">Δ vs Prev</th>
 <th style="padding:8px 6px; text-align:center;">Allocs</th>
@@ -381,60 +414,60 @@ innerₕ: 238.5 μs (0 allocs, 0 B)</title></circle>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>M₊ᵧ 2D</code></td>
 <td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right;">161.7 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">153.5 μs</td>
+<td style="padding:7px 6px; text-align:right;">153.5 μs</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">161.3 μs</td>
 <td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-5.1% 🟢</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+5.1% 🔴</span></td>
 <td style="padding:7px 6px; text-align:center;">3</td>
 <td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>M₊₂ 3D</code></td>
 <td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right;">227.1 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">221.0 μs</td>
+<td style="padding:7px 6px; text-align:right;">221.0 μs</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">227.7 μs</td>
 <td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-2.7% 🟢</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+3.0% 🔴</span></td>
 <td style="padding:7px 6px; text-align:center;">3</td>
 <td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>M₊ₓ 2D</code></td>
 <td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right;">161.1 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">152.3 μs</td>
+<td style="padding:7px 6px; text-align:right;">152.3 μs</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">161.6 μs</td>
 <td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-5.5% 🟢</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+6.1% 🔴</span></td>
 <td style="padding:7px 6px; text-align:center;">3</td>
 <td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>jumpᵧ 2D</code></td>
 <td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right;">160.3 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">159.8 μs</td>
+<td style="padding:7px 6px; text-align:right;">159.8 μs</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">160.8 μs</td>
 <td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.6% 🔴</span></td>
 <td style="padding:7px 6px; text-align:center;">3</td>
 <td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>jump₂ 3D</code></td>
 <td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right;">227.2 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">210.4 μs</td>
+<td style="padding:7px 6px; text-align:right;">210.4 μs</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">227.3 μs</td>
 <td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-7.4% 🟢</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+8.1% 🔴</span></td>
 <td style="padding:7px 6px; text-align:center;">3</td>
 <td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>jumpₓ 2D</code></td>
 <td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right;">162.9 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">163.0 μs</td>
+<td style="padding:7px 6px; text-align:right;">163.0 μs</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">161.5 μs</td>
 <td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.9% 🟢</span></td>
 <td style="padding:7px 6px; text-align:center;">3</td>
 <td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
 </tr>
@@ -475,116 +508,142 @@ innerₕ: 238.5 μs (0 allocs, 0 B)</title></circle>
 <text x="57" y="69.0" font-size="10" fill="currentColor" opacity="0.65" text-anchor="end">300.0 μs</text>
 <line x1="65.0" y1="65" x2="65.0" y2="260" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
 <text x="65.0" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`0b9a62b`</text>
-<line x1="177.5" y1="65" x2="177.5" y2="260" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="177.5" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`855fbf5`</text>
-<line x1="290.0" y1="65" x2="290.0" y2="260" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="290.0" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`41036bb`</text>
-<line x1="402.5" y1="65" x2="402.5" y2="260" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="402.5" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`15f5e3b`</text>
+<line x1="155.0" y1="65" x2="155.0" y2="260" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="155.0" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`855fbf5`</text>
+<line x1="245.0" y1="65" x2="245.0" y2="260" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="245.0" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`41036bb`</text>
+<line x1="335.0" y1="65" x2="335.0" y2="260" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="335.0" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`15f5e3b`</text>
+<line x1="425.0" y1="65" x2="425.0" y2="260" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="425.0" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`e6655b1`</text>
 <line x1="515.0" y1="65" x2="515.0" y2="260" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="515.0" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`e6655b1`</text>
-<polyline points="177.5,154.9 290.0,152.7 402.5,154.9 515.0,160.2" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
-<circle cx="177.5" cy="154.9" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="515.0" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`2dec0c7`</text>
+<polyline points="155.0,154.9 245.0,152.7 335.0,154.9 425.0,160.2 515.0,155.2" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="155.0" cy="154.9" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>855fbf5 (Julia 1.12.7)
 M₊ᵧ 2D: 161.6 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="177.5" y="147.9" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">161.6</text>
-<circle cx="290.0" cy="152.7" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="155.0" y="147.9" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">161.6</text>
+<circle cx="245.0" cy="152.7" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>41036bb (Julia 1.12.7)
 M₊ᵧ 2D: 165.1 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="290.0" y="145.7" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">165.1</text>
-<circle cx="402.5" cy="154.9" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="245.0" y="145.7" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">165.1</text>
+<circle cx="335.0" cy="154.9" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>15f5e3b (Julia 1.12.7)
 M₊ᵧ 2D: 161.7 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="402.5" y="147.9" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">161.7</text>
-<circle cx="515.0" cy="160.2" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="335.0" y="147.9" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">161.7</text>
+<circle cx="425.0" cy="160.2" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 M₊ᵧ 2D: 153.5 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="515.0" y="153.2" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">153.5</text>
-<polyline points="177.5,111.9 290.0,114.5 402.5,112.4 515.0,116.3" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
-<circle cx="177.5" cy="111.9" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="425.0" y="153.2" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">153.5</text>
+<circle cx="515.0" cy="155.2" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+M₊ᵧ 2D: 161.3 μs (3 allocs, 7.64 MiB)</title></circle>
+<text x="515.0" y="148.2" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">161.3</text>
+<polyline points="155.0,111.9 245.0,114.5 335.0,112.4 425.0,116.3 515.0,112.0" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="155.0" cy="111.9" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>855fbf5 (Julia 1.12.7)
 M₊₂ 3D: 227.8 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="177.5" y="104.9" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">227.8</text>
-<circle cx="290.0" cy="114.5" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="155.0" y="104.9" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">227.8</text>
+<circle cx="245.0" cy="114.5" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>41036bb (Julia 1.12.7)
 M₊₂ 3D: 223.8 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="290.0" y="107.5" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">223.8</text>
-<circle cx="402.5" cy="112.4" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="245.0" y="107.5" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">223.8</text>
+<circle cx="335.0" cy="112.4" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>15f5e3b (Julia 1.12.7)
 M₊₂ 3D: 227.1 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="402.5" y="105.4" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">227.1</text>
-<circle cx="515.0" cy="116.3" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="335.0" y="105.4" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">227.1</text>
+<circle cx="425.0" cy="116.3" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 M₊₂ 3D: 221.0 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="515.0" y="109.3" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">221.0</text>
-<polyline points="177.5,155.7 290.0,154.4 402.5,155.3 515.0,161.0" fill="none" stroke="#f59e0b" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
-<circle cx="177.5" cy="155.7" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="425.0" y="109.3" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">221.0</text>
+<circle cx="515.0" cy="112.0" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+M₊₂ 3D: 227.7 μs (3 allocs, 7.64 MiB)</title></circle>
+<text x="515.0" y="105.0" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">227.7</text>
+<polyline points="155.0,155.7 245.0,154.4 335.0,155.3 425.0,161.0 515.0,154.9" fill="none" stroke="#f59e0b" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="155.0" cy="155.7" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>855fbf5 (Julia 1.12.7)
 M₊ₓ 2D: 160.4 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="177.5" y="148.7" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">160.4</text>
-<circle cx="290.0" cy="154.4" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="155.0" y="148.7" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">160.4</text>
+<circle cx="245.0" cy="154.4" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>41036bb (Julia 1.12.7)
 M₊ₓ 2D: 162.5 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="290.0" y="147.4" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">162.5</text>
-<circle cx="402.5" cy="155.3" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="245.0" y="147.4" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">162.5</text>
+<circle cx="335.0" cy="155.3" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>15f5e3b (Julia 1.12.7)
 M₊ₓ 2D: 161.1 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="402.5" y="148.3" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">161.1</text>
-<circle cx="515.0" cy="161.0" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="335.0" y="148.3" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">161.1</text>
+<circle cx="425.0" cy="161.0" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 M₊ₓ 2D: 152.3 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="515.0" y="154.0" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">152.3</text>
-<polyline points="177.5,154.7 290.0,155.5 402.5,155.8 515.0,156.1" fill="none" stroke="#8b5cf6" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
-<circle cx="177.5" cy="154.7" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="425.0" y="154.0" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">152.3</text>
+<circle cx="515.0" cy="154.9" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+M₊ₓ 2D: 161.6 μs (3 allocs, 7.64 MiB)</title></circle>
+<text x="515.0" y="147.9" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">161.6</text>
+<polyline points="155.0,154.7 245.0,155.5 335.0,155.8 425.0,156.1 515.0,155.5" fill="none" stroke="#8b5cf6" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="155.0" cy="154.7" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>855fbf5 (Julia 1.12.7)
 jumpᵧ 2D: 162.0 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="177.5" y="147.7" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">162.0</text>
-<circle cx="290.0" cy="155.5" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="155.0" y="147.7" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">162.0</text>
+<circle cx="245.0" cy="155.5" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>41036bb (Julia 1.12.7)
 jumpᵧ 2D: 160.8 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="290.0" y="148.5" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">160.8</text>
-<circle cx="402.5" cy="155.8" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="245.0" y="148.5" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">160.8</text>
+<circle cx="335.0" cy="155.8" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>15f5e3b (Julia 1.12.7)
 jumpᵧ 2D: 160.3 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="402.5" y="148.8" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">160.3</text>
-<circle cx="515.0" cy="156.1" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="335.0" y="148.8" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">160.3</text>
+<circle cx="425.0" cy="156.1" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 jumpᵧ 2D: 159.8 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="515.0" y="149.1" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">159.8</text>
-<polyline points="177.5,112.0 290.0,112.0 402.5,112.3 515.0,123.2" fill="none" stroke="#ec4899" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
-<circle cx="177.5" cy="112.0" r="4.5" fill="#ec4899" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="425.0" y="149.1" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">159.8</text>
+<circle cx="515.0" cy="155.5" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+jumpᵧ 2D: 160.8 μs (3 allocs, 7.64 MiB)</title></circle>
+<text x="515.0" y="148.5" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">160.8</text>
+<polyline points="155.0,112.0 245.0,112.0 335.0,112.3 425.0,123.2 515.0,112.2" fill="none" stroke="#ec4899" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="155.0" cy="112.0" r="4.5" fill="#ec4899" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>855fbf5 (Julia 1.12.7)
 jump₂ 3D: 227.6 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="177.5" y="105.0" font-size="10" font-weight="bold" fill="#ec4899" text-anchor="middle">227.6</text>
-<circle cx="290.0" cy="112.0" r="4.5" fill="#ec4899" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="155.0" y="105.0" font-size="10" font-weight="bold" fill="#ec4899" text-anchor="middle">227.6</text>
+<circle cx="245.0" cy="112.0" r="4.5" fill="#ec4899" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>41036bb (Julia 1.12.7)
 jump₂ 3D: 227.6 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="290.0" y="105.0" font-size="10" font-weight="bold" fill="#ec4899" text-anchor="middle">227.6</text>
-<circle cx="402.5" cy="112.3" r="4.5" fill="#ec4899" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="245.0" y="105.0" font-size="10" font-weight="bold" fill="#ec4899" text-anchor="middle">227.6</text>
+<circle cx="335.0" cy="112.3" r="4.5" fill="#ec4899" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>15f5e3b (Julia 1.12.7)
 jump₂ 3D: 227.2 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="402.5" y="105.3" font-size="10" font-weight="bold" fill="#ec4899" text-anchor="middle">227.2</text>
-<circle cx="515.0" cy="123.2" r="4.5" fill="#ec4899" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="335.0" y="105.3" font-size="10" font-weight="bold" fill="#ec4899" text-anchor="middle">227.2</text>
+<circle cx="425.0" cy="123.2" r="4.5" fill="#ec4899" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 jump₂ 3D: 210.4 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="515.0" y="116.2" font-size="10" font-weight="bold" fill="#ec4899" text-anchor="middle">210.4</text>
-<polyline points="177.5,153.0 290.0,154.4 402.5,154.1 515.0,154.1" fill="none" stroke="#06b6d4" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
-<circle cx="177.5" cy="153.0" r="4.5" fill="#06b6d4" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="425.0" y="116.2" font-size="10" font-weight="bold" fill="#ec4899" text-anchor="middle">210.4</text>
+<circle cx="515.0" cy="112.2" r="4.5" fill="#ec4899" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+jump₂ 3D: 227.3 μs (3 allocs, 7.64 MiB)</title></circle>
+<text x="515.0" y="105.2" font-size="10" font-weight="bold" fill="#ec4899" text-anchor="middle">227.3</text>
+<polyline points="155.0,153.0 245.0,154.4 335.0,154.1 425.0,154.1 515.0,155.1" fill="none" stroke="#06b6d4" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="155.0" cy="153.0" r="4.5" fill="#06b6d4" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>855fbf5 (Julia 1.12.7)
 jumpₓ 2D: 164.7 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="177.5" y="146.0" font-size="10" font-weight="bold" fill="#06b6d4" text-anchor="middle">164.7</text>
-<circle cx="290.0" cy="154.4" r="4.5" fill="#06b6d4" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="155.0" y="146.0" font-size="10" font-weight="bold" fill="#06b6d4" text-anchor="middle">164.7</text>
+<circle cx="245.0" cy="154.4" r="4.5" fill="#06b6d4" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>41036bb (Julia 1.12.7)
 jumpₓ 2D: 162.5 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="290.0" y="147.4" font-size="10" font-weight="bold" fill="#06b6d4" text-anchor="middle">162.5</text>
-<circle cx="402.5" cy="154.1" r="4.5" fill="#06b6d4" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="245.0" y="147.4" font-size="10" font-weight="bold" fill="#06b6d4" text-anchor="middle">162.5</text>
+<circle cx="335.0" cy="154.1" r="4.5" fill="#06b6d4" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>15f5e3b (Julia 1.12.7)
 jumpₓ 2D: 162.9 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="402.5" y="147.1" font-size="10" font-weight="bold" fill="#06b6d4" text-anchor="middle">162.9</text>
-<circle cx="515.0" cy="154.1" r="4.5" fill="#06b6d4" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="335.0" y="147.1" font-size="10" font-weight="bold" fill="#06b6d4" text-anchor="middle">162.9</text>
+<circle cx="425.0" cy="154.1" r="4.5" fill="#06b6d4" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 jumpₓ 2D: 163.0 μs (3 allocs, 7.64 MiB)</title></circle>
-<text x="515.0" y="147.1" font-size="10" font-weight="bold" fill="#06b6d4" text-anchor="middle">163.0</text>
+<text x="425.0" y="147.1" font-size="10" font-weight="bold" fill="#06b6d4" text-anchor="middle">163.0</text>
+<circle cx="515.0" cy="155.1" r="4.5" fill="#06b6d4" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+jumpₓ 2D: 161.5 μs (3 allocs, 7.64 MiB)</title></circle>
+<text x="515.0" y="148.1" font-size="10" font-weight="bold" fill="#06b6d4" text-anchor="middle">161.5</text>
 </svg></div>
 
   </div>
@@ -601,8 +660,8 @@ jumpₓ 2D: 163.0 μs (3 allocs, 7.64 MiB)</title></circle>
 <tr style="border-bottom:2px solid rgba(128,128,128,0.3);">
 <th style="padding:8px 6px; text-align:left;">Benchmark</th>
 <th style="padding:8px 6px; text-align:right;">Base (<code>0b9a62b</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Prev (<code>15f5e3b</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Latest (<code>e6655b1</code>)</th>
+<th style="padding:8px 6px; text-align:right;">Prev (<code>e6655b1</code>)</th>
+<th style="padding:8px 6px; text-align:right;">Latest (<code>2dec0c7</code>)</th>
 <th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
 <th style="padding:8px 6px; text-align:center;">Δ vs Prev</th>
 <th style="padding:8px 6px; text-align:center;">Allocs</th>
@@ -613,40 +672,40 @@ jumpₓ 2D: 163.0 μs (3 allocs, 7.64 MiB)</title></circle>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>innerₕ</code></td>
 <td style="padding:7px 6px; text-align:right;">242.0 μs</td>
-<td style="padding:7px 6px; text-align:right;">239.8 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">242.2 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.0% 🔴</span></td>
+<td style="padding:7px 6px; text-align:right;">242.2 μs</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">240.4 μs</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.7% 🟢</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.8% 🟢</span></td>
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>norm₁ₕ</code></td>
 <td style="padding:7px 6px; text-align:right;">790.2 μs</td>
-<td style="padding:7px 6px; text-align:right;">783.7 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">799.8 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.2% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+2.1% 🔴</span></td>
+<td style="padding:7px 6px; text-align:right;">799.8 μs</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">789.8 μs</td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-1.3% 🟢</span></td>
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>normₕ</code></td>
 <td style="padding:7px 6px; text-align:right;">190.0 μs</td>
-<td style="padding:7px 6px; text-align:right;">188.3 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">188.0 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-1.0% 🟢</span></td>
+<td style="padding:7px 6px; text-align:right;">188.0 μs</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">189.3 μs</td>
 <td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.7% 🔴</span></td>
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>snorm₁ₕ</code></td>
 <td style="padding:7px 6px; text-align:right;">578.1 μs</td>
-<td style="padding:7px 6px; text-align:right;">577.5 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">580.6 μs</td>
+<td style="padding:7px 6px; text-align:right;">580.6 μs</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">578.5 μs</td>
 <td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.5% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
@@ -681,98 +740,116 @@ jumpₓ 2D: 163.0 μs (3 allocs, 7.64 MiB)</title></circle>
 <text x="57" y="49.0" font-size="10" fill="currentColor" opacity="0.65" text-anchor="end">1000.0 μs</text>
 <line x1="65.0" y1="45" x2="65.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
 <text x="65.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`0b9a62b`</text>
-<line x1="177.5" y1="45" x2="177.5" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="177.5" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`855fbf5`</text>
-<line x1="290.0" y1="45" x2="290.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="290.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`41036bb`</text>
-<line x1="402.5" y1="45" x2="402.5" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="402.5" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`15f5e3b`</text>
+<line x1="155.0" y1="45" x2="155.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="155.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`855fbf5`</text>
+<line x1="245.0" y1="45" x2="245.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="245.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`41036bb`</text>
+<line x1="335.0" y1="45" x2="335.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="335.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`15f5e3b`</text>
+<line x1="425.0" y1="45" x2="425.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="425.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`e6655b1`</text>
 <line x1="515.0" y1="45" x2="515.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="515.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`e6655b1`</text>
-<polyline points="65.0,192.8 177.5,193.5 290.0,193.2 402.5,193.2 515.0,192.8" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<text x="515.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`2dec0c7`</text>
+<polyline points="65.0,192.8 155.0,193.5 245.0,193.2 335.0,193.2 425.0,192.8 515.0,193.1" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
 <circle cx="65.0" cy="192.8" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>0b9a62b (Julia 1.12.7)
 innerₕ: 242.0 μs (0 allocs, 0 B)</title></circle>
 <text x="65.0" y="185.8" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">242.0</text>
-<circle cx="177.5" cy="193.5" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<circle cx="155.0" cy="193.5" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>855fbf5 (Julia 1.12.7)
 innerₕ: 238.5 μs (0 allocs, 0 B)</title></circle>
-<text x="177.5" y="186.5" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">238.5</text>
-<circle cx="290.0" cy="193.2" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="155.0" y="186.5" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">238.5</text>
+<circle cx="245.0" cy="193.2" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>41036bb (Julia 1.12.7)
 innerₕ: 240.0 μs (0 allocs, 0 B)</title></circle>
-<text x="290.0" y="186.2" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">240.0</text>
-<circle cx="402.5" cy="193.2" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="245.0" y="186.2" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">240.0</text>
+<circle cx="335.0" cy="193.2" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>15f5e3b (Julia 1.12.7)
 innerₕ: 239.8 μs (0 allocs, 0 B)</title></circle>
-<text x="402.5" y="186.2" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">239.8</text>
-<circle cx="515.0" cy="192.8" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="335.0" y="186.2" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">239.8</text>
+<circle cx="425.0" cy="192.8" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 innerₕ: 242.2 μs (0 allocs, 0 B)</title></circle>
-<text x="515.0" y="185.8" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">242.2</text>
-<polyline points="65.0,85.9 177.5,87.3 290.0,84.7 402.5,87.2 515.0,84.0" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<text x="425.0" y="185.8" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">242.2</text>
+<circle cx="515.0" cy="193.1" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+innerₕ: 240.4 μs (0 allocs, 0 B)</title></circle>
+<text x="515.0" y="186.1" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">240.4</text>
+<polyline points="65.0,85.9 155.0,87.3 245.0,84.7 335.0,87.2 425.0,84.0 515.0,86.0" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
 <circle cx="65.0" cy="85.9" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>0b9a62b (Julia 1.12.7)
 norm₁ₕ: 790.2 μs (0 allocs, 0 B)</title></circle>
 <text x="65.0" y="78.9" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">790.2</text>
-<circle cx="177.5" cy="87.3" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<circle cx="155.0" cy="87.3" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>855fbf5 (Julia 1.12.7)
 norm₁ₕ: 782.9 μs (0 allocs, 0 B)</title></circle>
-<text x="177.5" y="80.3" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">782.9</text>
-<circle cx="290.0" cy="84.7" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="155.0" y="80.3" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">782.9</text>
+<circle cx="245.0" cy="84.7" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>41036bb (Julia 1.12.7)
 norm₁ₕ: 796.6 μs (0 allocs, 0 B)</title></circle>
-<text x="290.0" y="77.7" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">796.6</text>
-<circle cx="402.5" cy="87.2" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="245.0" y="77.7" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">796.6</text>
+<circle cx="335.0" cy="87.2" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>15f5e3b (Julia 1.12.7)
 norm₁ₕ: 783.7 μs (0 allocs, 0 B)</title></circle>
-<text x="402.5" y="80.2" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">783.7</text>
-<circle cx="515.0" cy="84.0" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="335.0" y="80.2" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">783.7</text>
+<circle cx="425.0" cy="84.0" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 norm₁ₕ: 799.8 μs (0 allocs, 0 B)</title></circle>
-<text x="515.0" y="77.0" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">799.8</text>
-<polyline points="65.0,203.0 177.5,203.6 290.0,203.1 402.5,203.3 515.0,203.3" fill="none" stroke="#f59e0b" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<text x="425.0" y="77.0" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">799.8</text>
+<circle cx="515.0" cy="86.0" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+norm₁ₕ: 789.8 μs (0 allocs, 0 B)</title></circle>
+<text x="515.0" y="79.0" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">789.8</text>
+<polyline points="65.0,203.0 155.0,203.6 245.0,203.1 335.0,203.3 425.0,203.3 515.0,203.1" fill="none" stroke="#f59e0b" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
 <circle cx="65.0" cy="203.0" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>0b9a62b (Julia 1.12.7)
 normₕ: 190.0 μs (0 allocs, 0 B)</title></circle>
 <text x="65.0" y="196.0" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">190.0</text>
-<circle cx="177.5" cy="203.6" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<circle cx="155.0" cy="203.6" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>855fbf5 (Julia 1.12.7)
 normₕ: 186.8 μs (0 allocs, 0 B)</title></circle>
-<text x="177.5" y="196.6" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">186.8</text>
-<circle cx="290.0" cy="203.1" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="155.0" y="196.6" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">186.8</text>
+<circle cx="245.0" cy="203.1" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>41036bb (Julia 1.12.7)
 normₕ: 189.4 μs (0 allocs, 0 B)</title></circle>
-<text x="290.0" y="196.1" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">189.4</text>
-<circle cx="402.5" cy="203.3" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="245.0" y="196.1" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">189.4</text>
+<circle cx="335.0" cy="203.3" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>15f5e3b (Julia 1.12.7)
 normₕ: 188.3 μs (0 allocs, 0 B)</title></circle>
-<text x="402.5" y="196.3" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">188.3</text>
-<circle cx="515.0" cy="203.3" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="335.0" y="196.3" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">188.3</text>
+<circle cx="425.0" cy="203.3" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 normₕ: 188.0 μs (0 allocs, 0 B)</title></circle>
-<text x="515.0" y="196.3" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">188.0</text>
-<polyline points="65.0,127.3 177.5,127.5 290.0,126.4 402.5,127.4 515.0,126.8" fill="none" stroke="#8b5cf6" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<text x="425.0" y="196.3" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">188.0</text>
+<circle cx="515.0" cy="203.1" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+normₕ: 189.3 μs (0 allocs, 0 B)</title></circle>
+<text x="515.0" y="196.1" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">189.3</text>
+<polyline points="65.0,127.3 155.0,127.5 245.0,126.4 335.0,127.4 425.0,126.8 515.0,127.2" fill="none" stroke="#8b5cf6" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
 <circle cx="65.0" cy="127.3" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>0b9a62b (Julia 1.12.7)
 snorm₁ₕ: 578.1 μs (0 allocs, 0 B)</title></circle>
 <text x="65.0" y="120.3" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">578.1</text>
-<circle cx="177.5" cy="127.5" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<circle cx="155.0" cy="127.5" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>855fbf5 (Julia 1.12.7)
 snorm₁ₕ: 577.1 μs (0 allocs, 0 B)</title></circle>
-<text x="177.5" y="120.5" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">577.1</text>
-<circle cx="290.0" cy="126.4" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="155.0" y="120.5" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">577.1</text>
+<circle cx="245.0" cy="126.4" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>41036bb (Julia 1.12.7)
 snorm₁ₕ: 582.4 μs (0 allocs, 0 B)</title></circle>
-<text x="290.0" y="119.4" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">582.4</text>
-<circle cx="402.5" cy="127.4" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="245.0" y="119.4" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">582.4</text>
+<circle cx="335.0" cy="127.4" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>15f5e3b (Julia 1.12.7)
 snorm₁ₕ: 577.5 μs (0 allocs, 0 B)</title></circle>
-<text x="402.5" y="120.4" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">577.5</text>
-<circle cx="515.0" cy="126.8" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="335.0" y="120.4" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">577.5</text>
+<circle cx="425.0" cy="126.8" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 snorm₁ₕ: 580.6 μs (0 allocs, 0 B)</title></circle>
-<text x="515.0" y="119.8" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">580.6</text>
+<text x="425.0" y="119.8" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">580.6</text>
+<circle cx="515.0" cy="127.2" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+snorm₁ₕ: 578.5 μs (0 allocs, 0 B)</title></circle>
+<text x="515.0" y="120.2" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">578.5</text>
 </svg></div>
 
   </div>
@@ -789,8 +866,8 @@ snorm₁ₕ: 580.6 μs (0 allocs, 0 B)</title></circle>
 <tr style="border-bottom:2px solid rgba(128,128,128,0.3);">
 <th style="padding:8px 6px; text-align:left;">Benchmark</th>
 <th style="padding:8px 6px; text-align:right;">Base (<code>0b9a62b</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Prev (<code>15f5e3b</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Latest (<code>e6655b1</code>)</th>
+<th style="padding:8px 6px; text-align:right;">Prev (<code>e6655b1</code>)</th>
+<th style="padding:8px 6px; text-align:right;">Latest (<code>2dec0c7</code>)</th>
 <th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
 <th style="padding:8px 6px; text-align:center;">Δ vs Prev</th>
 <th style="padding:8px 6px; text-align:center;">Allocs</th>
@@ -801,72 +878,92 @@ snorm₁ₕ: 580.6 μs (0 allocs, 0 B)</title></circle>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>Rₕ 1D (allocates its output)</code></td>
 <td style="padding:7px 6px; text-align:right;">2.87 ms</td>
-<td style="padding:7px 6px; text-align:right;">2.89 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">2.92 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.6% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.2% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;">6</td>
+<td style="padding:7px 6px; text-align:right;">2.92 ms</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">3.2 ms</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+11.2% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+9.5% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center;">10</td>
 <td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>Rₕ! 1D</code></td>
 <td style="padding:7px 6px; text-align:right;">2.87 ms</td>
-<td style="padding:7px 6px; text-align:right;">2.95 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">2.89 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.0% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-2.0% 🟢</span></td>
+<td style="padding:7px 6px; text-align:right;">2.89 ms</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">3.19 ms</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+11.5% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+10.4% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center;">7</td>
+<td style="padding:7px 6px; text-align:right;">448 B</td>
+</tr>
+<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
+<td style="padding:7px 6px; font-weight:600;"><code>Rₕ! 1D, Serial() backend (default)</code></td>
+<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">2.95 ms</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>Rₕ! 2D</code></td>
 <td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right;">3.41 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">3.54 ms</td>
+<td style="padding:7px 6px; text-align:right;">3.54 ms</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">3.82 ms</td>
 <td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+3.6% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">0 B</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+8.1% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center;">7</td>
+<td style="padding:7px 6px; text-align:right;">448 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>Rₕ! 3D</code></td>
 <td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right;">3.84 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">4.34 ms</td>
+<td style="padding:7px 6px; text-align:right;">4.34 ms</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">4.44 ms</td>
 <td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+13.2% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">0 B</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+2.2% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center;">7</td>
+<td style="padding:7px 6px; text-align:right;">464 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>avgₕ! 1D</code></td>
 <td style="padding:7px 6px; text-align:right;">16.27 ms</td>
-<td style="padding:7px 6px; text-align:right;">15.99 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">16.23 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.5% 🔴</span></td>
+<td style="padding:7px 6px; text-align:right;">16.23 ms</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">16.74 ms</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+2.8% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+3.1% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center;">7</td>
+<td style="padding:7px 6px; text-align:right;">544 B</td>
+</tr>
+<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
+<td style="padding:7px 6px; font-weight:600;"><code>avgₕ! 1D, Serial() backend (default)</code></td>
+<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">17.32 ms</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>avgₕ! 2D</code></td>
 <td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right;">121.95 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">105.79 ms</td>
+<td style="padding:7px 6px; text-align:right;">105.79 ms</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">106.39 ms</td>
 <td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-13.2% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">0 B</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.6% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center;">7</td>
+<td style="padding:7px 6px; text-align:right;">560 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>avgₕ! 3D</code></td>
 <td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right;">750.65 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">655.97 ms</td>
+<td style="padding:7px 6px; text-align:right;">655.97 ms</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">620.75 ms</td>
 <td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-12.6% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">0 B</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-5.4% 🟢</span></td>
+<td style="padding:7px 6px; text-align:center;">7</td>
+<td style="padding:7px 6px; text-align:right;">576 B</td>
 </tr>
 </tbody>
 </table>
@@ -883,19 +980,25 @@ snorm₁ₕ: 580.6 μs (0 allocs, 0 B)</title></circle>
 <text x="317" y="20" font-size="11" font-weight="bold" fill="currentColor">Rₕ! 1D</text>
 <line x1="379" y1="16" x2="393" y2="16" stroke="#f59e0b" stroke-width="2.5" />
 <circle cx="386" cy="16" r="3.5" fill="#f59e0b" />
-<text x="397" y="20" font-size="11" font-weight="bold" fill="currentColor">Rₕ! 2D</text>
+<text x="397" y="20" font-size="11" font-weight="bold" fill="currentColor">Rₕ! 1D, Serial() backend (default)</text>
 <line x1="65" y1="34" x2="79" y2="34" stroke="#8b5cf6" stroke-width="2.5" />
 <circle cx="72" cy="34" r="3.5" fill="#8b5cf6" />
-<text x="83" y="38" font-size="11" font-weight="bold" fill="currentColor">Rₕ! 3D</text>
+<text x="83" y="38" font-size="11" font-weight="bold" fill="currentColor">Rₕ! 2D</text>
 <line x1="145" y1="34" x2="159" y2="34" stroke="#ec4899" stroke-width="2.5" />
 <circle cx="152" cy="34" r="3.5" fill="#ec4899" />
-<text x="163" y="38" font-size="11" font-weight="bold" fill="currentColor">avgₕ! 1D</text>
-<line x1="239" y1="34" x2="253" y2="34" stroke="#06b6d4" stroke-width="2.5" />
-<circle cx="246" cy="34" r="3.5" fill="#06b6d4" />
-<text x="257" y="38" font-size="11" font-weight="bold" fill="currentColor">avgₕ! 2D</text>
-<line x1="333" y1="34" x2="347" y2="34" stroke="#f97316" stroke-width="2.5" />
-<circle cx="340" cy="34" r="3.5" fill="#f97316" />
-<text x="351" y="38" font-size="11" font-weight="bold" fill="currentColor">avgₕ! 3D</text>
+<text x="163" y="38" font-size="11" font-weight="bold" fill="currentColor">Rₕ! 3D</text>
+<line x1="225" y1="34" x2="239" y2="34" stroke="#06b6d4" stroke-width="2.5" />
+<circle cx="232" cy="34" r="3.5" fill="#06b6d4" />
+<text x="243" y="38" font-size="11" font-weight="bold" fill="currentColor">avgₕ! 1D</text>
+<line x1="319" y1="34" x2="333" y2="34" stroke="#f97316" stroke-width="2.5" />
+<circle cx="326" cy="34" r="3.5" fill="#f97316" />
+<text x="337" y="38" font-size="11" font-weight="bold" fill="currentColor">avgₕ! 1D, Serial() backend (default)</text>
+<line x1="65" y1="52" x2="79" y2="52" stroke="#3b82f6" stroke-width="2.5" />
+<circle cx="72" cy="52" r="3.5" fill="#3b82f6" />
+<text x="83" y="56" font-size="11" font-weight="bold" fill="currentColor">avgₕ! 2D</text>
+<line x1="159" y1="52" x2="173" y2="52" stroke="#10b981" stroke-width="2.5" />
+<circle cx="166" cy="52" r="3.5" fill="#10b981" />
+<text x="177" y="56" font-size="11" font-weight="bold" fill="currentColor">avgₕ! 3D</text>
 <line x1="65" y1="260.0" x2="515" y2="260.0" stroke="rgba(128,128,128,0.18)" stroke-dasharray="3,3" />
 <text x="57" y="264.0" font-size="10" fill="currentColor" opacity="0.7" text-anchor="end">0.63×</text>
 <line x1="65" y1="211.25" x2="515" y2="211.25" stroke="rgba(128,128,128,0.18)" stroke-dasharray="3,3" />
@@ -908,129 +1011,167 @@ snorm₁ₕ: 580.6 μs (0 allocs, 0 B)</title></circle>
 <text x="57" y="69.0" font-size="10" fill="currentColor" opacity="0.7" text-anchor="end">1.44×</text>
 <line x1="65.0" y1="65" x2="65.0" y2="260" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
 <text x="65.0" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`0b9a62b`</text>
-<line x1="177.5" y1="65" x2="177.5" y2="260" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="177.5" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`855fbf5`</text>
-<line x1="290.0" y1="65" x2="290.0" y2="260" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="290.0" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`41036bb`</text>
-<line x1="402.5" y1="65" x2="402.5" y2="260" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="402.5" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`15f5e3b`</text>
+<line x1="155.0" y1="65" x2="155.0" y2="260" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="155.0" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`855fbf5`</text>
+<line x1="245.0" y1="65" x2="245.0" y2="260" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="245.0" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`41036bb`</text>
+<line x1="335.0" y1="65" x2="335.0" y2="260" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="335.0" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`15f5e3b`</text>
+<line x1="425.0" y1="65" x2="425.0" y2="260" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="425.0" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`e6655b1`</text>
 <line x1="515.0" y1="65" x2="515.0" y2="260" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="515.0" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`e6655b1`</text>
-<polyline points="65.0,170.9 177.5,170.4 290.0,169.1 402.5,169.9 515.0,167.0" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<text x="515.0" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`2dec0c7`</text>
+<polyline points="65.0,170.9 155.0,170.4 245.0,169.1 335.0,169.9 425.0,167.0 515.0,143.9" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
 <circle cx="65.0" cy="170.9" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>0b9a62b (Julia 1.12.7)
 Rₕ 1D (allocates its output): 2.87 ms (baseline, 6 allocs, 7.64 MiB)</title></circle>
 <text x="65.0" y="163.9" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">1.0×</text>
-<circle cx="177.5" cy="170.4" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<circle cx="155.0" cy="170.4" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>855fbf5 (Julia 1.12.7)
 Rₕ 1D (allocates its output): 2.88 ms (+0.2%, 6 allocs, 7.64 MiB)</title></circle>
-<text x="177.5" y="163.4" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">1.0×</text>
-<circle cx="290.0" cy="169.1" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="155.0" y="163.4" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">1.0×</text>
+<circle cx="245.0" cy="169.1" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>41036bb (Julia 1.12.7)
 Rₕ 1D (allocates its output): 2.89 ms (+0.7%, 11 allocs, 7.64 MiB)</title></circle>
-<text x="290.0" y="162.1" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">1.01×</text>
-<circle cx="402.5" cy="169.9" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="245.0" y="162.1" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">1.01×</text>
+<circle cx="335.0" cy="169.9" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>15f5e3b (Julia 1.12.7)
 Rₕ 1D (allocates its output): 2.89 ms (+0.4%, 11 allocs, 7.64 MiB)</title></circle>
-<text x="402.5" y="162.9" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">1.0×</text>
-<circle cx="515.0" cy="167.0" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="335.0" y="162.9" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">1.0×</text>
+<circle cx="425.0" cy="167.0" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 Rₕ 1D (allocates its output): 2.92 ms (+1.6%, 6 allocs, 7.64 MiB)</title></circle>
-<text x="515.0" y="160.0" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">1.02×</text>
-<polyline points="65.0,170.9 177.5,169.8 290.0,164.2 402.5,163.7 515.0,168.6" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<text x="425.0" y="160.0" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">1.02×</text>
+<circle cx="515.0" cy="143.9" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+Rₕ 1D (allocates its output): 3.2 ms (+11.2%, 10 allocs, 7.64 MiB)</title></circle>
+<text x="515.0" y="136.9" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">1.11×</text>
+<polyline points="65.0,170.9 155.0,169.8 245.0,164.2 335.0,163.7 425.0,168.6 515.0,143.4" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
 <circle cx="65.0" cy="170.9" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>0b9a62b (Julia 1.12.7)
 Rₕ! 1D: 2.87 ms (baseline, 3 allocs, 64 B)</title></circle>
 <text x="65.0" y="163.9" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.0×</text>
-<circle cx="177.5" cy="169.8" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<circle cx="155.0" cy="169.8" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>855fbf5 (Julia 1.12.7)
 Rₕ! 1D: 2.88 ms (+0.5%, 3 allocs, 64 B)</title></circle>
-<text x="177.5" y="162.8" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.0×</text>
-<circle cx="290.0" cy="164.2" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="155.0" y="162.8" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.0×</text>
+<circle cx="245.0" cy="164.2" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>41036bb (Julia 1.12.7)
 Rₕ! 1D: 2.95 ms (+2.8%, 0 allocs, 0 B)</title></circle>
-<text x="290.0" y="157.2" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.03×</text>
-<circle cx="402.5" cy="163.7" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="245.0" y="157.2" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.03×</text>
+<circle cx="335.0" cy="163.7" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>15f5e3b (Julia 1.12.7)
 Rₕ! 1D: 2.95 ms (+3.0%, 0 allocs, 0 B)</title></circle>
-<text x="402.5" y="156.7" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.03×</text>
-<circle cx="515.0" cy="168.6" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="335.0" y="156.7" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.03×</text>
+<circle cx="425.0" cy="168.6" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 Rₕ! 1D: 2.89 ms (+1.0%, 0 allocs, 0 B)</title></circle>
-<text x="515.0" y="161.6" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.01×</text>
-<polyline points="290.0,170.9 402.5,169.1 515.0,160.4" fill="none" stroke="#f59e0b" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
-<circle cx="290.0" cy="170.9" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="425.0" y="161.6" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.01×</text>
+<circle cx="515.0" cy="143.4" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+Rₕ! 1D: 3.19 ms (+11.5%, 7 allocs, 448 B)</title></circle>
+<text x="515.0" y="136.4" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.11×</text>
+<circle cx="515.0" cy="170.9" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+Rₕ! 1D, Serial() backend (default): 2.95 ms (baseline, 0 allocs, 0 B)</title></circle>
+<text x="515.0" y="163.9" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">1.0×</text>
+<polyline points="245.0,170.9 335.0,169.1 425.0,160.4 515.0,140.2" fill="none" stroke="#8b5cf6" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="245.0" cy="170.9" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>41036bb (Julia 1.12.7)
 Rₕ! 2D: 3.39 ms (baseline, 0 allocs, 0 B)</title></circle>
-<text x="290.0" y="163.9" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">1.0×</text>
-<circle cx="402.5" cy="169.1" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="245.0" y="163.9" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">1.0×</text>
+<circle cx="335.0" cy="169.1" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>15f5e3b (Julia 1.12.7)
 Rₕ! 2D: 3.41 ms (+0.8%, 0 allocs, 0 B)</title></circle>
-<text x="402.5" y="162.1" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">1.01×</text>
-<circle cx="515.0" cy="160.4" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="335.0" y="162.1" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">1.01×</text>
+<circle cx="425.0" cy="160.4" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 Rₕ! 2D: 3.54 ms (+4.4%, 0 allocs, 0 B)</title></circle>
-<text x="515.0" y="153.4" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">1.04×</text>
-<polyline points="290.0,170.9 402.5,170.7 515.0,139.0" fill="none" stroke="#8b5cf6" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
-<circle cx="290.0" cy="170.9" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="425.0" y="153.4" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">1.04×</text>
+<circle cx="515.0" cy="140.2" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+Rₕ! 2D: 3.82 ms (+12.8%, 7 allocs, 448 B)</title></circle>
+<text x="515.0" y="133.2" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">1.13×</text>
+<polyline points="245.0,170.9 335.0,170.7 425.0,139.0 515.0,132.9" fill="none" stroke="#ec4899" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="245.0" cy="170.9" r="4.5" fill="#ec4899" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>41036bb (Julia 1.12.7)
 Rₕ! 3D: 3.84 ms (baseline, 0 allocs, 0 B)</title></circle>
-<text x="290.0" y="163.9" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">1.0×</text>
-<circle cx="402.5" cy="170.7" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="245.0" y="163.9" font-size="10" font-weight="bold" fill="#ec4899" text-anchor="middle">1.0×</text>
+<circle cx="335.0" cy="170.7" r="4.5" fill="#ec4899" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>15f5e3b (Julia 1.12.7)
 Rₕ! 3D: 3.84 ms (+0.1%, 0 allocs, 0 B)</title></circle>
-<text x="402.5" y="163.7" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">1.0×</text>
-<circle cx="515.0" cy="139.0" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="335.0" y="163.7" font-size="10" font-weight="bold" fill="#ec4899" text-anchor="middle">1.0×</text>
+<circle cx="425.0" cy="139.0" r="4.5" fill="#ec4899" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 Rₕ! 3D: 4.34 ms (+13.2%, 0 allocs, 0 B)</title></circle>
-<text x="515.0" y="132.0" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">1.13×</text>
-<polyline points="65.0,170.9 177.5,169.6 290.0,170.4 402.5,175.2 515.0,171.5" fill="none" stroke="#ec4899" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
-<circle cx="65.0" cy="170.9" r="4.5" fill="#ec4899" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="425.0" y="132.0" font-size="10" font-weight="bold" fill="#ec4899" text-anchor="middle">1.13×</text>
+<circle cx="515.0" cy="132.9" r="4.5" fill="#ec4899" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+Rₕ! 3D: 4.44 ms (+15.8%, 7 allocs, 464 B)</title></circle>
+<text x="515.0" y="125.9" font-size="10" font-weight="bold" fill="#ec4899" text-anchor="middle">1.16×</text>
+<polyline points="65.0,170.9 155.0,169.6 245.0,170.4 335.0,175.2 425.0,171.5 515.0,164.1" fill="none" stroke="#06b6d4" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="65.0" cy="170.9" r="4.5" fill="#06b6d4" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>0b9a62b (Julia 1.12.7)
 avgₕ! 1D: 16.27 ms (baseline, 2 allocs, 128 B)</title></circle>
-<text x="65.0" y="163.9" font-size="10" font-weight="bold" fill="#ec4899" text-anchor="middle">1.0×</text>
-<circle cx="177.5" cy="169.6" r="4.5" fill="#ec4899" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="65.0" y="163.9" font-size="10" font-weight="bold" fill="#06b6d4" text-anchor="middle">1.0×</text>
+<circle cx="155.0" cy="169.6" r="4.5" fill="#06b6d4" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>855fbf5 (Julia 1.12.7)
 avgₕ! 1D: 16.37 ms (+0.6%, 2 allocs, 128 B)</title></circle>
-<text x="177.5" y="162.6" font-size="10" font-weight="bold" fill="#ec4899" text-anchor="middle">1.01×</text>
-<circle cx="290.0" cy="170.4" r="4.5" fill="#ec4899" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="155.0" y="162.6" font-size="10" font-weight="bold" fill="#06b6d4" text-anchor="middle">1.01×</text>
+<circle cx="245.0" cy="170.4" r="4.5" fill="#06b6d4" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>41036bb (Julia 1.12.7)
 avgₕ! 1D: 16.31 ms (+0.2%, 3 allocs, 48 B)</title></circle>
-<text x="290.0" y="163.4" font-size="10" font-weight="bold" fill="#ec4899" text-anchor="middle">1.0×</text>
-<circle cx="402.5" cy="175.2" r="4.5" fill="#ec4899" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="245.0" y="163.4" font-size="10" font-weight="bold" fill="#06b6d4" text-anchor="middle">1.0×</text>
+<circle cx="335.0" cy="175.2" r="4.5" fill="#06b6d4" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>15f5e3b (Julia 1.12.7)
 avgₕ! 1D: 15.99 ms (-1.8%, 3 allocs, 48 B)</title></circle>
-<text x="402.5" y="168.2" font-size="10" font-weight="bold" fill="#ec4899" text-anchor="middle">0.98×</text>
-<circle cx="515.0" cy="171.5" r="4.5" fill="#ec4899" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="335.0" y="168.2" font-size="10" font-weight="bold" fill="#06b6d4" text-anchor="middle">0.98×</text>
+<circle cx="425.0" cy="171.5" r="4.5" fill="#06b6d4" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 avgₕ! 1D: 16.23 ms (-0.3%, 0 allocs, 0 B)</title></circle>
-<text x="515.0" y="164.5" font-size="10" font-weight="bold" fill="#ec4899" text-anchor="middle">1.0×</text>
-<polyline points="290.0,170.9 402.5,172.1 515.0,203.8" fill="none" stroke="#06b6d4" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
-<circle cx="290.0" cy="170.9" r="4.5" fill="#06b6d4" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="425.0" y="164.5" font-size="10" font-weight="bold" fill="#06b6d4" text-anchor="middle">1.0×</text>
+<circle cx="515.0" cy="164.1" r="4.5" fill="#06b6d4" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+avgₕ! 1D: 16.74 ms (+2.8%, 7 allocs, 544 B)</title></circle>
+<text x="515.0" y="157.1" font-size="10" font-weight="bold" fill="#06b6d4" text-anchor="middle">1.03×</text>
+<circle cx="515.0" cy="170.9" r="4.5" fill="#f97316" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+avgₕ! 1D, Serial() backend (default): 17.32 ms (baseline, 0 allocs, 0 B)</title></circle>
+<text x="515.0" y="163.9" font-size="10" font-weight="bold" fill="#f97316" text-anchor="middle">1.0×</text>
+<polyline points="245.0,170.9 335.0,172.1 425.0,203.8 515.0,202.7" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="245.0" cy="170.9" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>41036bb (Julia 1.12.7)
 avgₕ! 2D: 122.55 ms (baseline, 4 allocs, 128 B)</title></circle>
-<text x="290.0" y="163.9" font-size="10" font-weight="bold" fill="#06b6d4" text-anchor="middle">1.0×</text>
-<circle cx="402.5" cy="172.1" r="4.5" fill="#06b6d4" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="245.0" y="163.9" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">1.0×</text>
+<circle cx="335.0" cy="172.1" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>15f5e3b (Julia 1.12.7)
 avgₕ! 2D: 121.95 ms (-0.5%, 4 allocs, 128 B)</title></circle>
-<text x="402.5" y="165.1" font-size="10" font-weight="bold" fill="#06b6d4" text-anchor="middle">1.0×</text>
-<circle cx="515.0" cy="203.8" r="4.5" fill="#06b6d4" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="335.0" y="165.1" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">1.0×</text>
+<circle cx="425.0" cy="203.8" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 avgₕ! 2D: 105.79 ms (-13.7%, 0 allocs, 0 B)</title></circle>
-<text x="515.0" y="196.8" font-size="10" font-weight="bold" fill="#06b6d4" text-anchor="middle">0.86×</text>
-<polyline points="290.0,170.9 402.5,172.3 515.0,202.5" fill="none" stroke="#f97316" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
-<circle cx="290.0" cy="170.9" r="4.5" fill="#f97316" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="425.0" y="196.8" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">0.86×</text>
+<circle cx="515.0" cy="202.7" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+avgₕ! 2D: 106.39 ms (-13.2%, 7 allocs, 560 B)</title></circle>
+<text x="515.0" y="195.7" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">0.87×</text>
+<polyline points="245.0,170.9 335.0,172.3 425.0,202.5 515.0,213.7" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="245.0" cy="170.9" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>41036bb (Julia 1.12.7)
 avgₕ! 3D: 755.03 ms (baseline, 4 allocs, 144 B)</title></circle>
-<text x="290.0" y="163.9" font-size="10" font-weight="bold" fill="#f97316" text-anchor="middle">1.0×</text>
-<circle cx="402.5" cy="172.3" r="4.5" fill="#f97316" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="245.0" y="163.9" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.0×</text>
+<circle cx="335.0" cy="172.3" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>15f5e3b (Julia 1.12.7)
 avgₕ! 3D: 750.65 ms (-0.6%, 4 allocs, 144 B)</title></circle>
-<text x="402.5" y="165.3" font-size="10" font-weight="bold" fill="#f97316" text-anchor="middle">0.99×</text>
-<circle cx="515.0" cy="202.5" r="4.5" fill="#f97316" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="335.0" y="165.3" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">0.99×</text>
+<circle cx="425.0" cy="202.5" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 avgₕ! 3D: 655.97 ms (-13.1%, 0 allocs, 0 B)</title></circle>
-<text x="515.0" y="195.5" font-size="10" font-weight="bold" fill="#f97316" text-anchor="middle">0.87×</text>
+<text x="425.0" y="195.5" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">0.87×</text>
+<circle cx="515.0" cy="213.7" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+avgₕ! 3D: 620.75 ms (-17.8%, 7 allocs, 576 B)</title></circle>
+<text x="515.0" y="206.7" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">0.82×</text>
 </svg></div>
 
   </div>
@@ -1047,8 +1188,8 @@ avgₕ! 3D: 655.97 ms (-13.1%, 0 allocs, 0 B)</title></circle>
 <tr style="border-bottom:2px solid rgba(128,128,128,0.3);">
 <th style="padding:8px 6px; text-align:left;">Benchmark</th>
 <th style="padding:8px 6px; text-align:right;">Base (<code>0b9a62b</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Prev (<code>15f5e3b</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Latest (<code>e6655b1</code>)</th>
+<th style="padding:8px 6px; text-align:right;">Prev (<code>e6655b1</code>)</th>
+<th style="padding:8px 6px; text-align:right;">Latest (<code>2dec0c7</code>)</th>
 <th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
 <th style="padding:8px 6px; text-align:center;">Δ vs Prev</th>
 <th style="padding:8px 6px; text-align:center;">Allocs</th>
@@ -1059,20 +1200,20 @@ avgₕ! 3D: 655.97 ms (-13.1%, 0 allocs, 0 B)</title></circle>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>D₋ₓ (3 components)</code></td>
 <td style="padding:7px 6px; text-align:right;">711.0 μs</td>
-<td style="padding:7px 6px; text-align:right;">672.7 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">712.9 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+6.0% 🔴</span></td>
+<td style="padding:7px 6px; text-align:right;">712.9 μs</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">670.2 μs</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-5.7% 🟢</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-6.0% 🟢</span></td>
 <td style="padding:7px 6px; text-align:center;">3</td>
 <td style="padding:7px 6px; text-align:right;">22.89 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>∇₋ₕ (3 components)</code></td>
 <td style="padding:7px 6px; text-align:right;">1.43 ms</td>
-<td style="padding:7px 6px; text-align:right;">1.4 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">1.46 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+2.4% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+4.4% 🔴</span></td>
+<td style="padding:7px 6px; text-align:right;">1.46 ms</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">1.38 ms</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-3.3% 🟢</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-5.6% 🟢</span></td>
 <td style="padding:7px 6px; text-align:center;">10</td>
 <td style="padding:7px 6px; text-align:right;">45.78 MiB</td>
 </tr>
@@ -1101,56 +1242,66 @@ avgₕ! 3D: 655.97 ms (-13.1%, 0 allocs, 0 B)</title></circle>
 <text x="57" y="49.0" font-size="10" fill="currentColor" opacity="0.65" text-anchor="end">1.5 ms</text>
 <line x1="65.0" y1="45" x2="65.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
 <text x="65.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`0b9a62b`</text>
-<line x1="177.5" y1="45" x2="177.5" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="177.5" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`855fbf5`</text>
-<line x1="290.0" y1="45" x2="290.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="290.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`41036bb`</text>
-<line x1="402.5" y1="45" x2="402.5" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="402.5" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`15f5e3b`</text>
+<line x1="155.0" y1="45" x2="155.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="155.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`855fbf5`</text>
+<line x1="245.0" y1="45" x2="245.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="245.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`41036bb`</text>
+<line x1="335.0" y1="45" x2="335.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="335.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`15f5e3b`</text>
+<line x1="425.0" y1="45" x2="425.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="425.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`e6655b1`</text>
 <line x1="515.0" y1="45" x2="515.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="515.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`e6655b1`</text>
-<polyline points="65.0,147.6 177.5,152.1 290.0,152.9 402.5,152.6 515.0,147.3" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<text x="515.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`2dec0c7`</text>
+<polyline points="65.0,147.6 155.0,152.1 245.0,152.9 335.0,152.6 425.0,147.3 515.0,152.9" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
 <circle cx="65.0" cy="147.6" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>0b9a62b (Julia 1.12.7)
 D₋ₓ (3 components): 0.7 ms (3 allocs, 22.89 MiB)</title></circle>
 <text x="65.0" y="140.6" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">0.7</text>
-<circle cx="177.5" cy="152.1" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<circle cx="155.0" cy="152.1" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>855fbf5 (Julia 1.12.7)
 D₋ₓ (3 components): 0.7 ms (3 allocs, 22.89 MiB)</title></circle>
-<text x="177.5" y="145.1" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">0.7</text>
-<circle cx="290.0" cy="152.9" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="155.0" y="145.1" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">0.7</text>
+<circle cx="245.0" cy="152.9" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>41036bb (Julia 1.12.7)
 D₋ₓ (3 components): 0.7 ms (3 allocs, 22.89 MiB)</title></circle>
-<text x="290.0" y="145.9" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">0.7</text>
-<circle cx="402.5" cy="152.6" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="245.0" y="145.9" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">0.7</text>
+<circle cx="335.0" cy="152.6" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>15f5e3b (Julia 1.12.7)
 D₋ₓ (3 components): 0.7 ms (3 allocs, 22.89 MiB)</title></circle>
-<text x="402.5" y="145.6" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">0.7</text>
-<circle cx="515.0" cy="147.3" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="335.0" y="145.6" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">0.7</text>
+<circle cx="425.0" cy="147.3" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 D₋ₓ (3 components): 0.7 ms (3 allocs, 22.89 MiB)</title></circle>
-<text x="515.0" y="140.3" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">0.7</text>
-<polyline points="65.0,54.4 177.5,58.2 290.0,56.6 402.5,57.9 515.0,49.9" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<text x="425.0" y="140.3" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">0.7</text>
+<circle cx="515.0" cy="152.9" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+D₋ₓ (3 components): 0.7 ms (3 allocs, 22.89 MiB)</title></circle>
+<text x="515.0" y="145.9" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">0.7</text>
+<polyline points="65.0,54.4 155.0,58.2 245.0,56.6 335.0,57.9 425.0,49.9 515.0,60.5" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
 <circle cx="65.0" cy="54.4" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>0b9a62b (Julia 1.12.7)
 ∇₋ₕ (3 components): 1.4 ms (10 allocs, 45.78 MiB)</title></circle>
 <text x="65.0" y="47.4" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.4</text>
-<circle cx="177.5" cy="58.2" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<circle cx="155.0" cy="58.2" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>855fbf5 (Julia 1.12.7)
 ∇₋ₕ (3 components): 1.4 ms (10 allocs, 45.78 MiB)</title></circle>
-<text x="177.5" y="51.2" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.4</text>
-<circle cx="290.0" cy="56.6" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="155.0" y="51.2" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.4</text>
+<circle cx="245.0" cy="56.6" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>41036bb (Julia 1.12.7)
 ∇₋ₕ (3 components): 1.4 ms (10 allocs, 45.78 MiB)</title></circle>
-<text x="290.0" y="49.6" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.4</text>
-<circle cx="402.5" cy="57.9" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="245.0" y="49.6" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.4</text>
+<circle cx="335.0" cy="57.9" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>15f5e3b (Julia 1.12.7)
 ∇₋ₕ (3 components): 1.4 ms (10 allocs, 45.78 MiB)</title></circle>
-<text x="402.5" y="50.9" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.4</text>
-<circle cx="515.0" cy="49.9" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="335.0" y="50.9" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.4</text>
+<circle cx="425.0" cy="49.9" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 ∇₋ₕ (3 components): 1.5 ms (10 allocs, 45.78 MiB)</title></circle>
-<text x="515.0" y="42.9" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.5</text>
+<text x="425.0" y="42.9" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.5</text>
+<circle cx="515.0" cy="60.5" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+∇₋ₕ (3 components): 1.4 ms (10 allocs, 45.78 MiB)</title></circle>
+<text x="515.0" y="53.5" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.4</text>
 </svg></div>
 
   </div>
@@ -1167,8 +1318,8 @@ D₋ₓ (3 components): 0.7 ms (3 allocs, 22.89 MiB)</title></circle>
 <tr style="border-bottom:2px solid rgba(128,128,128,0.3);">
 <th style="padding:8px 6px; text-align:left;">Benchmark</th>
 <th style="padding:8px 6px; text-align:right;">Base (<code>0b9a62b</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Prev (<code>15f5e3b</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Latest (<code>e6655b1</code>)</th>
+<th style="padding:8px 6px; text-align:right;">Prev (<code>e6655b1</code>)</th>
+<th style="padding:8px 6px; text-align:right;">Latest (<code>2dec0c7</code>)</th>
 <th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
 <th style="padding:8px 6px; text-align:center;">Δ vs Prev</th>
 <th style="padding:8px 6px; text-align:center;">Allocs</th>
@@ -1179,28 +1330,28 @@ D₋ₓ (3 components): 0.7 ms (3 allocs, 22.89 MiB)</title></circle>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>gridspace 2D</code></td>
 <td style="padding:7px 6px; text-align:right;">368.8 μs</td>
-<td style="padding:7px 6px; text-align:right;">355.3 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">363.6 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-1.4% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+2.3% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;">21</td>
+<td style="padding:7px 6px; text-align:right;">363.6 μs</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">2.22 ms</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+501.9% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+510.5% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center;">42</td>
 <td style="padding:7px 6px; text-align:right;">22.95 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>gridspace 3D</code></td>
 <td style="padding:7px 6px; text-align:right;">1.63 ms</td>
-<td style="padding:7px 6px; text-align:right;">1.63 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">1.66 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.5% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.5% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;">24</td>
+<td style="padding:7px 6px; text-align:right;">1.66 ms</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">6.2 ms</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+279.6% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+273.8% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center;">52</td>
 <td style="padding:7px 6px; text-align:right;">30.57 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>hₘₐₓ 3D</code></td>
 <td style="padding:7px 6px; text-align:right;">153.0 ns</td>
-<td style="padding:7px 6px; text-align:right;">153.1 ns</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">153.3 ns</td>
+<td style="padding:7px 6px; text-align:right;">153.3 ns</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">153.0 ns</td>
 <td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:center;">0</td>
@@ -1225,86 +1376,100 @@ D₋ₓ (3 components): 0.7 ms (3 allocs, 22.89 MiB)</title></circle>
 <line x1="65" y1="240.0" x2="515" y2="240.0" stroke="rgba(128,128,128,0.18)" stroke-dasharray="3,3" />
 <text x="57" y="244.0" font-size="10" fill="currentColor" opacity="0.7" text-anchor="end">0.63×</text>
 <line x1="65" y1="191.25" x2="515" y2="191.25" stroke="rgba(128,128,128,0.18)" stroke-dasharray="3,3" />
-<text x="57" y="195.25" font-size="10" fill="currentColor" opacity="0.7" text-anchor="end">0.83×</text>
+<text x="57" y="195.25" font-size="10" fill="currentColor" opacity="0.7" text-anchor="end">2.2×</text>
 <line x1="65" y1="142.5" x2="515" y2="142.5" stroke="rgba(128,128,128,0.18)" stroke-dasharray="3,3" />
-<text x="57" y="146.5" font-size="10" fill="currentColor" opacity="0.7" text-anchor="end">1.03×</text>
+<text x="57" y="146.5" font-size="10" fill="currentColor" opacity="0.7" text-anchor="end">3.78×</text>
 <line x1="65" y1="93.75" x2="515" y2="93.75" stroke="rgba(128,128,128,0.18)" stroke-dasharray="3,3" />
-<text x="57" y="97.75" font-size="10" fill="currentColor" opacity="0.7" text-anchor="end">1.24×</text>
+<text x="57" y="97.75" font-size="10" fill="currentColor" opacity="0.7" text-anchor="end">5.36×</text>
 <line x1="65" y1="45.0" x2="515" y2="45.0" stroke="rgba(128,128,128,0.18)" stroke-dasharray="3,3" />
-<text x="57" y="49.0" font-size="10" fill="currentColor" opacity="0.7" text-anchor="end">1.44×</text>
+<text x="57" y="49.0" font-size="10" fill="currentColor" opacity="0.7" text-anchor="end">6.93×</text>
 <line x1="65.0" y1="45" x2="65.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
 <text x="65.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`0b9a62b`</text>
-<line x1="177.5" y1="45" x2="177.5" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="177.5" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`855fbf5`</text>
-<line x1="290.0" y1="45" x2="290.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="290.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`41036bb`</text>
-<line x1="402.5" y1="45" x2="402.5" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="402.5" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`15f5e3b`</text>
+<line x1="155.0" y1="45" x2="155.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="155.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`855fbf5`</text>
+<line x1="245.0" y1="45" x2="245.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="245.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`41036bb`</text>
+<line x1="335.0" y1="45" x2="335.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="335.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`15f5e3b`</text>
+<line x1="425.0" y1="45" x2="425.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="425.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`e6655b1`</text>
 <line x1="515.0" y1="45" x2="515.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="515.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`e6655b1`</text>
-<polyline points="65.0,150.9 177.5,156.7 290.0,159.4 402.5,159.7 515.0,154.3" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
-<circle cx="65.0" cy="150.9" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="515.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`2dec0c7`</text>
+<polyline points="65.0,228.5 155.0,229.3 245.0,229.6 335.0,229.7 425.0,229.0 515.0,73.2" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="65.0" cy="228.5" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>0b9a62b (Julia 1.12.7)
 gridspace 2D: 368.8 μs (baseline, 38 allocs, 30.59 MiB)</title></circle>
-<text x="65.0" y="143.9" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">1.0×</text>
-<circle cx="177.5" cy="156.7" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="65.0" y="221.5" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">1.0×</text>
+<circle cx="155.0" cy="229.3" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>855fbf5 (Julia 1.12.7)
 gridspace 2D: 360.0 μs (-2.4%, 38 allocs, 30.59 MiB)</title></circle>
-<text x="177.5" y="149.7" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">0.98×</text>
-<circle cx="290.0" cy="159.4" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="155.0" y="222.3" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">0.98×</text>
+<circle cx="245.0" cy="229.6" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>41036bb (Julia 1.12.7)
 gridspace 2D: 355.8 μs (-3.5%, 29 allocs, 30.59 MiB)</title></circle>
-<text x="290.0" y="152.4" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">0.96×</text>
-<circle cx="402.5" cy="159.7" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="245.0" y="222.6" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">0.96×</text>
+<circle cx="335.0" cy="229.7" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>15f5e3b (Julia 1.12.7)
 gridspace 2D: 355.3 μs (-3.7%, 21 allocs, 22.95 MiB)</title></circle>
-<text x="402.5" y="152.7" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">0.96×</text>
-<circle cx="515.0" cy="154.3" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="335.0" y="222.7" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">0.96×</text>
+<circle cx="425.0" cy="229.0" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 gridspace 2D: 363.6 μs (-1.4%, 21 allocs, 22.95 MiB)</title></circle>
-<text x="515.0" y="147.3" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">0.99×</text>
-<polyline points="65.0,150.9 177.5,150.5 290.0,151.1 402.5,150.9 515.0,147.2" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
-<circle cx="65.0" cy="150.9" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="425.0" y="222.0" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">0.99×</text>
+<circle cx="515.0" cy="73.2" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+gridspace 2D: 2.22 ms (+501.9%, 42 allocs, 22.95 MiB)</title></circle>
+<text x="515.0" y="66.2" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">6.02×</text>
+<polyline points="65.0,228.5 155.0,228.5 245.0,228.6 335.0,228.5 425.0,228.1 515.0,142.0" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="65.0" cy="228.5" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>0b9a62b (Julia 1.12.7)
 gridspace 3D: 1.63 ms (baseline, 44 allocs, 38.21 MiB)</title></circle>
-<text x="65.0" y="143.9" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.0×</text>
-<circle cx="177.5" cy="150.5" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="65.0" y="221.5" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.0×</text>
+<circle cx="155.0" cy="228.5" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>855fbf5 (Julia 1.12.7)
 gridspace 3D: 1.64 ms (+0.2%, 44 allocs, 38.21 MiB)</title></circle>
-<text x="177.5" y="143.5" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.0×</text>
-<circle cx="290.0" cy="151.1" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="155.0" y="221.5" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.0×</text>
+<circle cx="245.0" cy="228.6" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>41036bb (Julia 1.12.7)
 gridspace 3D: 1.63 ms (-0.1%, 32 allocs, 38.21 MiB)</title></circle>
-<text x="290.0" y="144.1" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.0×</text>
-<circle cx="402.5" cy="150.9" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="245.0" y="221.6" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.0×</text>
+<circle cx="335.0" cy="228.5" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>15f5e3b (Julia 1.12.7)
 gridspace 3D: 1.63 ms (baseline, 24 allocs, 30.57 MiB)</title></circle>
-<text x="402.5" y="143.9" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.0×</text>
-<circle cx="515.0" cy="147.2" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="335.0" y="221.5" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.0×</text>
+<circle cx="425.0" cy="228.1" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 gridspace 3D: 1.66 ms (+1.5%, 24 allocs, 30.57 MiB)</title></circle>
-<text x="515.0" y="140.2" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.02×</text>
-<polyline points="65.0,150.9 177.5,150.8 290.0,151.7 402.5,150.8 515.0,150.5" fill="none" stroke="#f59e0b" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
-<circle cx="65.0" cy="150.9" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="425.0" y="221.1" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.02×</text>
+<circle cx="515.0" cy="142.0" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+gridspace 3D: 6.2 ms (+279.6%, 52 allocs, 30.57 MiB)</title></circle>
+<text x="515.0" y="135.0" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">3.8×</text>
+<polyline points="65.0,228.5 155.0,228.5 245.0,228.6 335.0,228.5 425.0,228.5 515.0,228.6" fill="none" stroke="#f59e0b" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="65.0" cy="228.5" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>0b9a62b (Julia 1.12.7)
 hₘₐₓ 3D: 153.0 ns (baseline, 0 allocs, 0 B)</title></circle>
-<text x="65.0" y="143.9" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">1.0×</text>
-<circle cx="177.5" cy="150.8" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="65.0" y="221.5" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">1.0×</text>
+<circle cx="155.0" cy="228.5" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>855fbf5 (Julia 1.12.7)
 hₘₐₓ 3D: 153.1 ns (+0.1%, 0 allocs, 0 B)</title></circle>
-<text x="177.5" y="143.8" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">1.0×</text>
-<circle cx="290.0" cy="151.7" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="155.0" y="221.5" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">1.0×</text>
+<circle cx="245.0" cy="228.6" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>41036bb (Julia 1.12.7)
 hₘₐₓ 3D: 152.5 ns (-0.3%, 0 allocs, 0 B)</title></circle>
-<text x="290.0" y="144.7" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">1.0×</text>
-<circle cx="402.5" cy="150.8" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="245.0" y="221.6" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">1.0×</text>
+<circle cx="335.0" cy="228.5" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>15f5e3b (Julia 1.12.7)
 hₘₐₓ 3D: 153.1 ns (baseline, 0 allocs, 0 B)</title></circle>
-<text x="402.5" y="143.8" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">1.0×</text>
-<circle cx="515.0" cy="150.5" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="335.0" y="221.5" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">1.0×</text>
+<circle cx="425.0" cy="228.5" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 hₘₐₓ 3D: 153.3 ns (+0.2%, 0 allocs, 0 B)</title></circle>
-<text x="515.0" y="143.5" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">1.0×</text>
+<text x="425.0" y="221.5" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">1.0×</text>
+<circle cx="515.0" cy="228.6" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+hₘₐₓ 3D: 153.0 ns (baseline, 0 allocs, 0 B)</title></circle>
+<text x="515.0" y="221.6" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">1.0×</text>
 </svg></div>
 
   </div>
@@ -1321,8 +1486,8 @@ hₘₐₓ 3D: 153.3 ns (+0.2%, 0 allocs, 0 B)</title></circle>
 <tr style="border-bottom:2px solid rgba(128,128,128,0.3);">
 <th style="padding:8px 6px; text-align:left;">Benchmark</th>
 <th style="padding:8px 6px; text-align:right;">Base (<code>0b9a62b</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Prev (<code>15f5e3b</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Latest (<code>e6655b1</code>)</th>
+<th style="padding:8px 6px; text-align:right;">Prev (<code>e6655b1</code>)</th>
+<th style="padding:8px 6px; text-align:right;">Latest (<code>2dec0c7</code>)</th>
 <th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
 <th style="padding:8px 6px; text-align:center;">Δ vs Prev</th>
 <th style="padding:8px 6px; text-align:center;">Allocs</th>
@@ -1333,20 +1498,20 @@ hₘₐₓ 3D: 153.3 ns (+0.2%, 0 allocs, 0 B)</title></circle>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>TTFX (load + first operator)</code></td>
 <td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right;">640.64 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">651.65 ms</td>
+<td style="padding:7px 6px; text-align:right;">651.65 ms</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">598.63 ms</td>
 <td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.7% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-8.1% 🟢</span></td>
 <td style="padding:7px 6px; text-align:center;">45</td>
 <td style="padding:7px 6px; text-align:right;">1.3 KiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>using Bramble</code></td>
 <td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right;">546.49 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">556.36 ms</td>
+<td style="padding:7px 6px; text-align:right;">556.36 ms</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">501.71 ms</td>
 <td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.8% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-9.8% 🟢</span></td>
 <td style="padding:7px 6px; text-align:center;">45</td>
 <td style="padding:7px 6px; text-align:right;">1.3 KiB</td>
 </tr>
@@ -1375,48 +1540,58 @@ hₘₐₓ 3D: 153.3 ns (+0.2%, 0 allocs, 0 B)</title></circle>
 <text x="57" y="49.0" font-size="10" fill="currentColor" opacity="0.65" text-anchor="end">1000.0 ms</text>
 <line x1="65.0" y1="45" x2="65.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
 <text x="65.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`0b9a62b`</text>
-<line x1="177.5" y1="45" x2="177.5" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="177.5" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`855fbf5`</text>
-<line x1="290.0" y1="45" x2="290.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="290.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`41036bb`</text>
-<line x1="402.5" y1="45" x2="402.5" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="402.5" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`15f5e3b`</text>
+<line x1="155.0" y1="45" x2="155.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="155.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`855fbf5`</text>
+<line x1="245.0" y1="45" x2="245.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="245.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`41036bb`</text>
+<line x1="335.0" y1="45" x2="335.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="335.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`15f5e3b`</text>
+<line x1="425.0" y1="45" x2="425.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="425.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`e6655b1`</text>
 <line x1="515.0" y1="45" x2="515.0" y2="240" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="515.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`e6655b1`</text>
-<polyline points="177.5,130.6 290.0,118.4 402.5,115.1 515.0,112.9" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
-<circle cx="177.5" cy="130.6" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="515.0" y="260" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`2dec0c7`</text>
+<polyline points="155.0,130.6 245.0,118.4 335.0,115.1 425.0,112.9 515.0,123.3" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="155.0" cy="130.6" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>855fbf5 (Julia 1.12.7)
 TTFX (load + first operator): 560.8 ms (45 allocs, 1.3 KiB)</title></circle>
-<text x="177.5" y="123.6" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">560.8</text>
-<circle cx="290.0" cy="118.4" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="155.0" y="123.6" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">560.8</text>
+<circle cx="245.0" cy="118.4" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>41036bb (Julia 1.12.7)
 TTFX (load + first operator): 623.6 ms (45 allocs, 1.3 KiB)</title></circle>
-<text x="290.0" y="111.4" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">623.6</text>
-<circle cx="402.5" cy="115.1" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="245.0" y="111.4" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">623.6</text>
+<circle cx="335.0" cy="115.1" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>15f5e3b (Julia 1.12.7)
 TTFX (load + first operator): 640.6 ms (45 allocs, 1.3 KiB)</title></circle>
-<text x="402.5" y="108.1" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">640.6</text>
-<circle cx="515.0" cy="112.9" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="335.0" y="108.1" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">640.6</text>
+<circle cx="425.0" cy="112.9" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 TTFX (load + first operator): 651.7 ms (45 allocs, 1.3 KiB)</title></circle>
-<text x="515.0" y="105.9" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">651.7</text>
-<polyline points="177.5,137.1 290.0,135.9 402.5,133.4 515.0,131.5" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
-<circle cx="177.5" cy="137.1" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="425.0" y="105.9" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">651.7</text>
+<circle cx="515.0" cy="123.3" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+TTFX (load + first operator): 598.6 ms (45 allocs, 1.3 KiB)</title></circle>
+<text x="515.0" y="116.3" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">598.6</text>
+<polyline points="155.0,137.1 245.0,135.9 335.0,133.4 425.0,131.5 515.0,142.2" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="155.0" cy="137.1" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>855fbf5 (Julia 1.12.7)
 using Bramble: 527.5 ms (45 allocs, 1.3 KiB)</title></circle>
-<text x="177.5" y="130.1" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">527.5</text>
-<circle cx="290.0" cy="135.9" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="155.0" y="130.1" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">527.5</text>
+<circle cx="245.0" cy="135.9" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>41036bb (Julia 1.12.7)
 using Bramble: 533.7 ms (45 allocs, 1.3 KiB)</title></circle>
-<text x="290.0" y="128.9" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">533.7</text>
-<circle cx="402.5" cy="133.4" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="245.0" y="128.9" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">533.7</text>
+<circle cx="335.0" cy="133.4" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>15f5e3b (Julia 1.12.7)
 using Bramble: 546.5 ms (45 allocs, 1.3 KiB)</title></circle>
-<text x="402.5" y="126.4" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">546.5</text>
-<circle cx="515.0" cy="131.5" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="335.0" y="126.4" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">546.5</text>
+<circle cx="425.0" cy="131.5" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 using Bramble: 556.4 ms (45 allocs, 1.3 KiB)</title></circle>
-<text x="515.0" y="124.5" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">556.4</text>
+<text x="425.0" y="124.5" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">556.4</text>
+<circle cx="515.0" cy="142.2" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+using Bramble: 501.7 ms (45 allocs, 1.3 KiB)</title></circle>
+<text x="515.0" y="135.2" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">501.7</text>
 </svg></div>
 
   </div>
@@ -1433,8 +1608,8 @@ using Bramble: 556.4 ms (45 allocs, 1.3 KiB)</title></circle>
 <tr style="border-bottom:2px solid rgba(128,128,128,0.3);">
 <th style="padding:8px 6px; text-align:left;">Benchmark</th>
 <th style="padding:8px 6px; text-align:right;">Base (<code>0b9a62b</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Prev (<code>15f5e3b</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Latest (<code>e6655b1</code>)</th>
+<th style="padding:8px 6px; text-align:right;">Prev (<code>e6655b1</code>)</th>
+<th style="padding:8px 6px; text-align:right;">Latest (<code>2dec0c7</code>)</th>
 <th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
 <th style="padding:8px 6px; text-align:center;">Δ vs Prev</th>
 <th style="padding:8px 6px; text-align:center;">Allocs</th>
@@ -1445,8 +1620,28 @@ using Bramble: 556.4 ms (45 allocs, 1.3 KiB)</title></circle>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>allocate_system_matrix 2D</code></td>
 <td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:right;">3.75 ms</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">2.84 ms</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-24.4% 🟢</span></td>
+<td style="padding:7px 6px; text-align:center;">21</td>
+<td style="padding:7px 6px; text-align:right;">15.13 MiB</td>
+</tr>
+<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
+<td style="padding:7px 6px; font-weight:600;"><code>assemble (BilinearForm), Parallel() backend</code></td>
 <td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">3.75 ms</td>
+<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">5.11 ms</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center;">35</td>
+<td style="padding:7px 6px; text-align:right;">15.13 MiB</td>
+</tr>
+<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
+<td style="padding:7px 6px; font-weight:600;"><code>assemble (BilinearForm), Serial() backend</code></td>
+<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">4.71 ms</td>
 <td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
 <td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
 <td style="padding:7px 6px; text-align:center;">21</td>
@@ -1455,90 +1650,100 @@ using Bramble: 556.4 ms (45 allocs, 1.3 KiB)</title></circle>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>assemble! (matrix) 2D</code></td>
 <td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">1.06 ms</td>
+<td style="padding:7px 6px; text-align:right;">1.06 ms</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">1.07 ms</td>
 <td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.6% 🔴</span></td>
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>assemble! 1D</code></td>
 <td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">910.5 μs</td>
+<td style="padding:7px 6px; text-align:right;">910.5 μs</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">938.8 μs</td>
 <td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+3.1% 🔴</span></td>
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>assemble! 2D</code></td>
+<td style="padding:7px 6px; font-weight:600;"><code>assemble! 1D, Parallel() backend</code></td>
 <td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
 <td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">483.5 μs</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">0 B</td>
-</tr>
-<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
-<td style="padding:7px 6px; font-weight:600;"><code>assemble_parallel! 1D</code></td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">1.2 ms</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">1.19 ms</td>
 <td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
 <td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
 <td style="padding:7px 6px; text-align:center;">7</td>
 <td style="padding:7px 6px; text-align:right;">480 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
+<td style="padding:7px 6px; font-weight:600;"><code>assemble! 2D</code></td>
+<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:right;">483.5 μs</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">1.18 ms</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+145.1% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">0 B</td>
+</tr>
+<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
+<td style="padding:7px 6px; font-weight:600;"><code>assemble_parallel! 1D</code></td>
+<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:right;">1.2 ms</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">1.29 ms</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+7.5% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center;">7</td>
+<td style="padding:7px 6px; text-align:right;">480 B</td>
+</tr>
+<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>assemble_parallel! 2D</code></td>
 <td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">2.23 ms</td>
+<td style="padding:7px 6px; text-align:right;">2.23 ms</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">1.72 ms</td>
 <td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-23.1% 🟢</span></td>
 <td style="padding:7px 6px; text-align:center;">7</td>
 <td style="padding:7px 6px; text-align:right;">496 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>evaluate! 1D</code></td>
 <td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">1.11 ms</td>
+<td style="padding:7px 6px; text-align:right;">1.11 ms</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">1.14 ms</td>
 <td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+2.4% 🔴</span></td>
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>form (bilinear, 2D)</code></td>
 <td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:right;">2.1 ns</td>
 <td style="padding:7px 6px; text-align:right; font-weight:600;">2.1 ns</td>
 <td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>form (linear, 2D)</code></td>
 <td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:right;">2.1 ns</td>
 <td style="padding:7px 6px; text-align:right; font-weight:600;">2.1 ns</td>
 <td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>l(vₕ) 1D</code></td>
 <td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">884.3 μs</td>
+<td style="padding:7px 6px; text-align:right;">884.3 μs</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">883.6 μs</td>
 <td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
@@ -1554,91 +1759,164 @@ using Bramble: 556.4 ms (45 allocs, 1.3 KiB)</title></circle>
 <text x="83" y="20" font-size="11" font-weight="bold" fill="currentColor">allocate_system_matrix 2D</text>
 <line x1="278" y1="16" x2="292" y2="16" stroke="#10b981" stroke-width="2.5" />
 <circle cx="285" cy="16" r="3.5" fill="#10b981" />
-<text x="296" y="20" font-size="11" font-weight="bold" fill="currentColor">assemble! (matrix) 2D</text>
+<text x="296" y="20" font-size="11" font-weight="bold" fill="currentColor">assemble (BilinearForm), Parallel() backend</text>
 <line x1="65" y1="34" x2="79" y2="34" stroke="#f59e0b" stroke-width="2.5" />
 <circle cx="72" cy="34" r="3.5" fill="#f59e0b" />
-<text x="83" y="38" font-size="11" font-weight="bold" fill="currentColor">assemble! 1D</text>
-<line x1="187" y1="34" x2="201" y2="34" stroke="#8b5cf6" stroke-width="2.5" />
-<circle cx="194" cy="34" r="3.5" fill="#8b5cf6" />
-<text x="205" y="38" font-size="11" font-weight="bold" fill="currentColor">assemble! 2D</text>
-<line x1="309" y1="34" x2="323" y2="34" stroke="#ec4899" stroke-width="2.5" />
-<circle cx="316" cy="34" r="3.5" fill="#ec4899" />
-<text x="327" y="38" font-size="11" font-weight="bold" fill="currentColor">assemble_parallel! 1D</text>
-<line x1="65" y1="52" x2="79" y2="52" stroke="#06b6d4" stroke-width="2.5" />
-<circle cx="72" cy="52" r="3.5" fill="#06b6d4" />
-<text x="83" y="56" font-size="11" font-weight="bold" fill="currentColor">assemble_parallel! 2D</text>
-<line x1="250" y1="52" x2="264" y2="52" stroke="#f97316" stroke-width="2.5" />
-<circle cx="257" cy="52" r="3.5" fill="#f97316" />
-<text x="268" y="56" font-size="11" font-weight="bold" fill="currentColor">evaluate! 1D</text>
-<line x1="372" y1="52" x2="386" y2="52" stroke="#3b82f6" stroke-width="2.5" />
-<circle cx="379" cy="52" r="3.5" fill="#3b82f6" />
-<text x="390" y="56" font-size="11" font-weight="bold" fill="currentColor">form (bilinear, 2D)</text>
-<line x1="65" y1="70" x2="79" y2="70" stroke="#10b981" stroke-width="2.5" />
-<circle cx="72" cy="70" r="3.5" fill="#10b981" />
-<text x="83" y="74" font-size="11" font-weight="bold" fill="currentColor">form (linear, 2D)</text>
-<line x1="222" y1="70" x2="236" y2="70" stroke="#f59e0b" stroke-width="2.5" />
-<circle cx="229" cy="70" r="3.5" fill="#f59e0b" />
-<text x="240" y="74" font-size="11" font-weight="bold" fill="currentColor">l(vₕ) 1D</text>
+<text x="83" y="38" font-size="11" font-weight="bold" fill="currentColor">assemble (BilinearForm), Serial() backend</text>
+<line x1="390" y1="34" x2="404" y2="34" stroke="#8b5cf6" stroke-width="2.5" />
+<circle cx="397" cy="34" r="3.5" fill="#8b5cf6" />
+<text x="408" y="38" font-size="11" font-weight="bold" fill="currentColor">assemble! (matrix) 2D</text>
+<line x1="65" y1="52" x2="79" y2="52" stroke="#ec4899" stroke-width="2.5" />
+<circle cx="72" cy="52" r="3.5" fill="#ec4899" />
+<text x="83" y="56" font-size="11" font-weight="bold" fill="currentColor">assemble! 1D</text>
+<line x1="187" y1="52" x2="201" y2="52" stroke="#06b6d4" stroke-width="2.5" />
+<circle cx="194" cy="52" r="3.5" fill="#06b6d4" />
+<text x="205" y="56" font-size="11" font-weight="bold" fill="currentColor">assemble! 1D, Parallel() backend</text>
+<line x1="65" y1="70" x2="79" y2="70" stroke="#f97316" stroke-width="2.5" />
+<circle cx="72" cy="70" r="3.5" fill="#f97316" />
+<text x="83" y="74" font-size="11" font-weight="bold" fill="currentColor">assemble! 2D</text>
+<line x1="187" y1="70" x2="201" y2="70" stroke="#3b82f6" stroke-width="2.5" />
+<circle cx="194" cy="70" r="3.5" fill="#3b82f6" />
+<text x="205" y="74" font-size="11" font-weight="bold" fill="currentColor">assemble_parallel! 1D</text>
+<line x1="372" y1="70" x2="386" y2="70" stroke="#10b981" stroke-width="2.5" />
+<circle cx="379" cy="70" r="3.5" fill="#10b981" />
+<text x="390" y="74" font-size="11" font-weight="bold" fill="currentColor">assemble_parallel! 2D</text>
+<line x1="65" y1="88" x2="79" y2="88" stroke="#f59e0b" stroke-width="2.5" />
+<circle cx="72" cy="88" r="3.5" fill="#f59e0b" />
+<text x="83" y="92" font-size="11" font-weight="bold" fill="currentColor">evaluate! 1D</text>
+<line x1="187" y1="88" x2="201" y2="88" stroke="#8b5cf6" stroke-width="2.5" />
+<circle cx="194" cy="88" r="3.5" fill="#8b5cf6" />
+<text x="205" y="92" font-size="11" font-weight="bold" fill="currentColor">form (bilinear, 2D)</text>
+<line x1="358" y1="88" x2="372" y2="88" stroke="#ec4899" stroke-width="2.5" />
+<circle cx="365" cy="88" r="3.5" fill="#ec4899" />
+<text x="376" y="92" font-size="11" font-weight="bold" fill="currentColor">form (linear, 2D)</text>
+<line x1="65" y1="106" x2="79" y2="106" stroke="#06b6d4" stroke-width="2.5" />
+<circle cx="72" cy="106" r="3.5" fill="#06b6d4" />
+<text x="83" y="110" font-size="11" font-weight="bold" fill="currentColor">l(vₕ) 1D</text>
 <line x1="65" y1="260.0" x2="515" y2="260.0" stroke="rgba(128,128,128,0.18)" stroke-dasharray="3,3" />
 <text x="57" y="264.0" font-size="10" fill="currentColor" opacity="0.7" text-anchor="end">0.63×</text>
 <line x1="65" y1="211.25" x2="515" y2="211.25" stroke="rgba(128,128,128,0.18)" stroke-dasharray="3,3" />
-<text x="57" y="215.25" font-size="10" fill="currentColor" opacity="0.7" text-anchor="end">0.83×</text>
+<text x="57" y="215.25" font-size="10" fill="currentColor" opacity="0.7" text-anchor="end">1.18×</text>
 <line x1="65" y1="162.5" x2="515" y2="162.5" stroke="rgba(128,128,128,0.18)" stroke-dasharray="3,3" />
-<text x="57" y="166.5" font-size="10" fill="currentColor" opacity="0.7" text-anchor="end">1.03×</text>
+<text x="57" y="166.5" font-size="10" fill="currentColor" opacity="0.7" text-anchor="end">1.72×</text>
 <line x1="65" y1="113.75" x2="515" y2="113.75" stroke="rgba(128,128,128,0.18)" stroke-dasharray="3,3" />
-<text x="57" y="117.75" font-size="10" fill="currentColor" opacity="0.7" text-anchor="end">1.24×</text>
+<text x="57" y="117.75" font-size="10" fill="currentColor" opacity="0.7" text-anchor="end">2.27×</text>
 <line x1="65" y1="65.0" x2="515" y2="65.0" stroke="rgba(128,128,128,0.18)" stroke-dasharray="3,3" />
-<text x="57" y="69.0" font-size="10" fill="currentColor" opacity="0.7" text-anchor="end">1.44×</text>
+<text x="57" y="69.0" font-size="10" fill="currentColor" opacity="0.7" text-anchor="end">2.82×</text>
 <line x1="65.0" y1="65" x2="65.0" y2="260" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
 <text x="65.0" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`0b9a62b`</text>
-<line x1="177.5" y1="65" x2="177.5" y2="260" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="177.5" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`855fbf5`</text>
-<line x1="290.0" y1="65" x2="290.0" y2="260" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="290.0" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`41036bb`</text>
-<line x1="402.5" y1="65" x2="402.5" y2="260" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="402.5" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`15f5e3b`</text>
+<line x1="155.0" y1="65" x2="155.0" y2="260" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="155.0" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`855fbf5`</text>
+<line x1="245.0" y1="65" x2="245.0" y2="260" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="245.0" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`41036bb`</text>
+<line x1="335.0" y1="65" x2="335.0" y2="260" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="335.0" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`15f5e3b`</text>
+<line x1="425.0" y1="65" x2="425.0" y2="260" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="425.0" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`e6655b1`</text>
 <line x1="515.0" y1="65" x2="515.0" y2="260" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="515.0" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`e6655b1`</text>
-<circle cx="515.0" cy="170.9" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="515.0" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`2dec0c7`</text>
+<polyline points="425.0,227.1 515.0,248.8" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="425.0" cy="227.1" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 allocate_system_matrix 2D: 3.75 ms (baseline, 21 allocs, 15.13 MiB)</title></circle>
-<text x="515.0" y="163.9" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">1.0×</text>
-<circle cx="515.0" cy="170.9" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="425.0" y="220.1" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">1.0×</text>
+<circle cx="515.0" cy="248.8" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+allocate_system_matrix 2D: 2.84 ms (-24.4%, 21 allocs, 15.13 MiB)</title></circle>
+<text x="515.0" y="241.8" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">0.76×</text>
+<circle cx="515.0" cy="227.1" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+assemble (BilinearForm), Parallel() backend: 5.11 ms (baseline, 35 allocs, 15.13 MiB)</title></circle>
+<text x="515.0" y="220.1" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.0×</text>
+<circle cx="515.0" cy="227.1" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+assemble (BilinearForm), Serial() backend: 4.71 ms (baseline, 21 allocs, 15.13 MiB)</title></circle>
+<text x="515.0" y="220.1" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">1.0×</text>
+<polyline points="425.0,227.1 515.0,226.5" fill="none" stroke="#8b5cf6" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="425.0" cy="227.1" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 assemble! (matrix) 2D: 1.06 ms (baseline, 0 allocs, 0 B)</title></circle>
-<text x="515.0" y="163.9" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.0×</text>
-<circle cx="515.0" cy="170.9" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="425.0" y="220.1" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">1.0×</text>
+<circle cx="515.0" cy="226.5" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+assemble! (matrix) 2D: 1.07 ms (+0.6%, 0 allocs, 0 B)</title></circle>
+<text x="515.0" y="219.5" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">1.01×</text>
+<polyline points="425.0,227.1 515.0,224.3" fill="none" stroke="#ec4899" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="425.0" cy="227.1" r="4.5" fill="#ec4899" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 assemble! 1D: 910.5 μs (baseline, 0 allocs, 0 B)</title></circle>
-<text x="515.0" y="163.9" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">1.0×</text>
-<circle cx="515.0" cy="170.9" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="425.0" y="220.1" font-size="10" font-weight="bold" fill="#ec4899" text-anchor="middle">1.0×</text>
+<circle cx="515.0" cy="224.3" r="4.5" fill="#ec4899" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+assemble! 1D: 938.8 μs (+3.1%, 0 allocs, 0 B)</title></circle>
+<text x="515.0" y="217.3" font-size="10" font-weight="bold" fill="#ec4899" text-anchor="middle">1.03×</text>
+<circle cx="515.0" cy="227.1" r="4.5" fill="#06b6d4" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+assemble! 1D, Parallel() backend: 1.19 ms (baseline, 7 allocs, 480 B)</title></circle>
+<text x="515.0" y="220.1" font-size="10" font-weight="bold" fill="#06b6d4" text-anchor="middle">1.0×</text>
+<polyline points="425.0,227.1 515.0,97.9" fill="none" stroke="#f97316" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="425.0" cy="227.1" r="4.5" fill="#f97316" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 assemble! 2D: 483.5 μs (baseline, 0 allocs, 0 B)</title></circle>
-<text x="515.0" y="163.9" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">1.0×</text>
-<circle cx="515.0" cy="170.9" r="4.5" fill="#ec4899" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="425.0" y="220.1" font-size="10" font-weight="bold" fill="#f97316" text-anchor="middle">1.0×</text>
+<circle cx="515.0" cy="97.9" r="4.5" fill="#f97316" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+assemble! 2D: 1.18 ms (+145.1%, 0 allocs, 0 B)</title></circle>
+<text x="515.0" y="90.9" font-size="10" font-weight="bold" fill="#f97316" text-anchor="middle">2.45×</text>
+<polyline points="425.0,227.1 515.0,220.4" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="425.0" cy="227.1" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 assemble_parallel! 1D: 1.2 ms (baseline, 7 allocs, 480 B)</title></circle>
-<text x="515.0" y="163.9" font-size="10" font-weight="bold" fill="#ec4899" text-anchor="middle">1.0×</text>
-<circle cx="515.0" cy="170.9" r="4.5" fill="#06b6d4" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="425.0" y="220.1" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">1.0×</text>
+<circle cx="515.0" cy="220.4" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+assemble_parallel! 1D: 1.29 ms (+7.5%, 7 allocs, 480 B)</title></circle>
+<text x="515.0" y="213.4" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">1.07×</text>
+<polyline points="425.0,227.1 515.0,247.6" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="425.0" cy="227.1" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 assemble_parallel! 2D: 2.23 ms (baseline, 7 allocs, 496 B)</title></circle>
-<text x="515.0" y="163.9" font-size="10" font-weight="bold" fill="#06b6d4" text-anchor="middle">1.0×</text>
-<circle cx="515.0" cy="170.9" r="4.5" fill="#f97316" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="425.0" y="220.1" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.0×</text>
+<circle cx="515.0" cy="247.6" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+assemble_parallel! 2D: 1.72 ms (-23.1%, 7 allocs, 496 B)</title></circle>
+<text x="515.0" y="240.6" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">0.77×</text>
+<polyline points="425.0,227.1 515.0,224.9" fill="none" stroke="#f59e0b" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="425.0" cy="227.1" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 evaluate! 1D: 1.11 ms (baseline, 0 allocs, 0 B)</title></circle>
-<text x="515.0" y="163.9" font-size="10" font-weight="bold" fill="#f97316" text-anchor="middle">1.0×</text>
-<circle cx="515.0" cy="170.9" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="425.0" y="220.1" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">1.0×</text>
+<circle cx="515.0" cy="224.9" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+evaluate! 1D: 1.14 ms (+2.4%, 0 allocs, 0 B)</title></circle>
+<text x="515.0" y="217.9" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">1.02×</text>
+<polyline points="425.0,227.1 515.0,227.1" fill="none" stroke="#8b5cf6" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="425.0" cy="227.1" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 form (bilinear, 2D): 2.1 ns (baseline, 0 allocs, 0 B)</title></circle>
-<text x="515.0" y="163.9" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">1.0×</text>
-<circle cx="515.0" cy="170.9" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="425.0" y="220.1" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">1.0×</text>
+<circle cx="515.0" cy="227.1" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+form (bilinear, 2D): 2.1 ns (baseline, 0 allocs, 0 B)</title></circle>
+<text x="515.0" y="220.1" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">1.0×</text>
+<polyline points="425.0,227.1 515.0,227.1" fill="none" stroke="#ec4899" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="425.0" cy="227.1" r="4.5" fill="#ec4899" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 form (linear, 2D): 2.1 ns (baseline, 0 allocs, 0 B)</title></circle>
-<text x="515.0" y="163.9" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.0×</text>
-<circle cx="515.0" cy="170.9" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="425.0" y="220.1" font-size="10" font-weight="bold" fill="#ec4899" text-anchor="middle">1.0×</text>
+<circle cx="515.0" cy="227.1" r="4.5" fill="#ec4899" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+form (linear, 2D): 2.1 ns (baseline, 0 allocs, 0 B)</title></circle>
+<text x="515.0" y="220.1" font-size="10" font-weight="bold" fill="#ec4899" text-anchor="middle">1.0×</text>
+<polyline points="425.0,227.1 515.0,227.1" fill="none" stroke="#06b6d4" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="425.0" cy="227.1" r="4.5" fill="#06b6d4" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 l(vₕ) 1D: 884.3 μs (baseline, 0 allocs, 0 B)</title></circle>
-<text x="515.0" y="163.9" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">1.0×</text>
+<text x="425.0" y="220.1" font-size="10" font-weight="bold" fill="#06b6d4" text-anchor="middle">1.0×</text>
+<circle cx="515.0" cy="227.1" r="4.5" fill="#06b6d4" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+l(vₕ) 1D: 883.6 μs (-0.1%, 0 allocs, 0 B)</title></circle>
+<text x="515.0" y="220.1" font-size="10" font-weight="bold" fill="#06b6d4" text-anchor="middle">1.0×</text>
 </svg></div>
 
   </div>
@@ -1655,8 +1933,8 @@ l(vₕ) 1D: 884.3 μs (baseline, 0 allocs, 0 B)</title></circle>
 <tr style="border-bottom:2px solid rgba(128,128,128,0.3);">
 <th style="padding:8px 6px; text-align:left;">Benchmark</th>
 <th style="padding:8px 6px; text-align:right;">Base (<code>0b9a62b</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Prev (<code>15f5e3b</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Latest (<code>e6655b1</code>)</th>
+<th style="padding:8px 6px; text-align:right;">Prev (<code>e6655b1</code>)</th>
+<th style="padding:8px 6px; text-align:right;">Latest (<code>2dec0c7</code>)</th>
 <th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
 <th style="padding:8px 6px; text-align:center;">Δ vs Prev</th>
 <th style="padding:8px 6px; text-align:center;">Allocs</th>
@@ -1667,120 +1945,120 @@ l(vₕ) 1D: 884.3 μs (baseline, 0 allocs, 0 B)</title></circle>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>Rₕ! Double64</code></td>
 <td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">9.03 ms</td>
+<td style="padding:7px 6px; text-align:right;">9.03 ms</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">8.94 ms</td>
 <td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-1.0% 🟢</span></td>
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>Rₕ! Float32</code></td>
 <td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">278.4 μs</td>
+<td style="padding:7px 6px; text-align:right;">278.4 μs</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">286.0 μs</td>
 <td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+2.7% 🔴</span></td>
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>Rₕ! Float64</code></td>
 <td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">285.8 μs</td>
+<td style="padding:7px 6px; text-align:right;">285.8 μs</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">293.5 μs</td>
 <td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+2.7% 🔴</span></td>
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>assemble! Double64</code></td>
 <td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">1.02 ms</td>
+<td style="padding:7px 6px; text-align:right;">1.02 ms</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">1.04 ms</td>
 <td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+2.0% 🔴</span></td>
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>assemble! Float32</code></td>
 <td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">71.6 μs</td>
+<td style="padding:7px 6px; text-align:right;">71.6 μs</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">71.3 μs</td>
 <td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>assemble! Float64</code></td>
 <td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">80.5 μs</td>
+<td style="padding:7px 6px; text-align:right;">80.5 μs</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">84.0 μs</td>
 <td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+4.2% 🔴</span></td>
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>avgₕ! Double64</code></td>
 <td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">72.82 ms</td>
+<td style="padding:7px 6px; text-align:right;">72.82 ms</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">72.2 ms</td>
 <td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.9% 🟢</span></td>
 <td style="padding:7px 6px; text-align:center;">33</td>
 <td style="padding:7px 6px; text-align:right;">2.9 KiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>avgₕ! Float32</code></td>
 <td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">1.6 ms</td>
+<td style="padding:7px 6px; text-align:right;">1.6 ms</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">1.61 ms</td>
 <td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.7% 🔴</span></td>
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>avgₕ! Float64</code></td>
 <td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">1.64 ms</td>
+<td style="padding:7px 6px; text-align:right;">1.64 ms</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">1.72 ms</td>
 <td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+4.6% 🔴</span></td>
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>innerₕ Double64</code></td>
 <td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">1.07 ms</td>
+<td style="padding:7px 6px; text-align:right;">1.07 ms</td>
+<td style="padding:7px 6px; text-align:right; font-weight:600;">1.06 ms</td>
 <td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.6% 🟢</span></td>
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>innerₕ Float32</code></td>
 <td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:right;">11.6 μs</td>
 <td style="padding:7px 6px; text-align:right; font-weight:600;">11.6 μs</td>
 <td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>innerₕ Float64</code></td>
 <td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:right;">23.2 μs</td>
 <td style="padding:7px 6px; text-align:right; font-weight:600;">23.2 μs</td>
 <td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
@@ -1839,60 +2117,122 @@ l(vₕ) 1D: 884.3 μs (baseline, 0 allocs, 0 B)</title></circle>
 <text x="57" y="69.0" font-size="10" fill="currentColor" opacity="0.7" text-anchor="end">1.44×</text>
 <line x1="65.0" y1="65" x2="65.0" y2="260" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
 <text x="65.0" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`0b9a62b`</text>
-<line x1="177.5" y1="65" x2="177.5" y2="260" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="177.5" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`855fbf5`</text>
-<line x1="290.0" y1="65" x2="290.0" y2="260" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="290.0" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`41036bb`</text>
-<line x1="402.5" y1="65" x2="402.5" y2="260" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="402.5" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`15f5e3b`</text>
+<line x1="155.0" y1="65" x2="155.0" y2="260" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="155.0" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`855fbf5`</text>
+<line x1="245.0" y1="65" x2="245.0" y2="260" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="245.0" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`41036bb`</text>
+<line x1="335.0" y1="65" x2="335.0" y2="260" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="335.0" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`15f5e3b`</text>
+<line x1="425.0" y1="65" x2="425.0" y2="260" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
+<text x="425.0" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`e6655b1`</text>
 <line x1="515.0" y1="65" x2="515.0" y2="260" stroke="rgba(128,128,128,0.15)" stroke-dasharray="2,2" />
-<text x="515.0" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`e6655b1`</text>
-<circle cx="515.0" cy="170.9" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="515.0" y="280" font-size="11" font-family="monospace" fill="currentColor" opacity="0.8" text-anchor="middle">`2dec0c7`</text>
+<polyline points="425.0,170.9 515.0,173.3" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="425.0" cy="170.9" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 Rₕ! Double64: 9.03 ms (baseline, 0 allocs, 0 B)</title></circle>
-<text x="515.0" y="163.9" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">1.0×</text>
-<circle cx="515.0" cy="170.9" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="425.0" y="163.9" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">1.0×</text>
+<circle cx="515.0" cy="173.3" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+Rₕ! Double64: 8.94 ms (-1.0%, 0 allocs, 0 B)</title></circle>
+<text x="515.0" y="166.3" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">0.99×</text>
+<polyline points="425.0,170.9 515.0,164.3" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="425.0" cy="170.9" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 Rₕ! Float32: 278.4 μs (baseline, 0 allocs, 0 B)</title></circle>
-<text x="515.0" y="163.9" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.0×</text>
-<circle cx="515.0" cy="170.9" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="425.0" y="163.9" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.0×</text>
+<circle cx="515.0" cy="164.3" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+Rₕ! Float32: 286.0 μs (+2.7%, 0 allocs, 0 B)</title></circle>
+<text x="515.0" y="157.3" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.03×</text>
+<polyline points="425.0,170.9 515.0,164.4" fill="none" stroke="#f59e0b" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="425.0" cy="170.9" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 Rₕ! Float64: 285.8 μs (baseline, 0 allocs, 0 B)</title></circle>
-<text x="515.0" y="163.9" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">1.0×</text>
-<circle cx="515.0" cy="170.9" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="425.0" y="163.9" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">1.0×</text>
+<circle cx="515.0" cy="164.4" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+Rₕ! Float64: 293.5 μs (+2.7%, 0 allocs, 0 B)</title></circle>
+<text x="515.0" y="157.4" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">1.03×</text>
+<polyline points="425.0,170.9 515.0,166.2" fill="none" stroke="#8b5cf6" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="425.0" cy="170.9" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 assemble! Double64: 1.02 ms (baseline, 0 allocs, 0 B)</title></circle>
-<text x="515.0" y="163.9" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">1.0×</text>
-<circle cx="515.0" cy="170.9" r="4.5" fill="#ec4899" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="425.0" y="163.9" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">1.0×</text>
+<circle cx="515.0" cy="166.2" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+assemble! Double64: 1.04 ms (+2.0%, 0 allocs, 0 B)</title></circle>
+<text x="515.0" y="159.2" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">1.02×</text>
+<polyline points="425.0,170.9 515.0,171.8" fill="none" stroke="#ec4899" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="425.0" cy="170.9" r="4.5" fill="#ec4899" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 assemble! Float32: 71.6 μs (baseline, 0 allocs, 0 B)</title></circle>
-<text x="515.0" y="163.9" font-size="10" font-weight="bold" fill="#ec4899" text-anchor="middle">1.0×</text>
-<circle cx="515.0" cy="170.9" r="4.5" fill="#06b6d4" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="425.0" y="163.9" font-size="10" font-weight="bold" fill="#ec4899" text-anchor="middle">1.0×</text>
+<circle cx="515.0" cy="171.8" r="4.5" fill="#ec4899" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+assemble! Float32: 71.3 μs (-0.3%, 0 allocs, 0 B)</title></circle>
+<text x="515.0" y="164.8" font-size="10" font-weight="bold" fill="#ec4899" text-anchor="middle">1.0×</text>
+<polyline points="425.0,170.9 515.0,160.7" fill="none" stroke="#06b6d4" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="425.0" cy="170.9" r="4.5" fill="#06b6d4" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 assemble! Float64: 80.5 μs (baseline, 0 allocs, 0 B)</title></circle>
-<text x="515.0" y="163.9" font-size="10" font-weight="bold" fill="#06b6d4" text-anchor="middle">1.0×</text>
-<circle cx="515.0" cy="170.9" r="4.5" fill="#f97316" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="425.0" y="163.9" font-size="10" font-weight="bold" fill="#06b6d4" text-anchor="middle">1.0×</text>
+<circle cx="515.0" cy="160.7" r="4.5" fill="#06b6d4" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+assemble! Float64: 84.0 μs (+4.2%, 0 allocs, 0 B)</title></circle>
+<text x="515.0" y="153.7" font-size="10" font-weight="bold" fill="#06b6d4" text-anchor="middle">1.04×</text>
+<polyline points="425.0,170.9 515.0,173.0" fill="none" stroke="#f97316" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="425.0" cy="170.9" r="4.5" fill="#f97316" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 avgₕ! Double64: 72.82 ms (baseline, 33 allocs, 2.9 KiB)</title></circle>
-<text x="515.0" y="163.9" font-size="10" font-weight="bold" fill="#f97316" text-anchor="middle">1.0×</text>
-<circle cx="515.0" cy="170.9" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="425.0" y="163.9" font-size="10" font-weight="bold" fill="#f97316" text-anchor="middle">1.0×</text>
+<circle cx="515.0" cy="173.0" r="4.5" fill="#f97316" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+avgₕ! Double64: 72.2 ms (-0.9%, 33 allocs, 2.9 KiB)</title></circle>
+<text x="515.0" y="166.0" font-size="10" font-weight="bold" fill="#f97316" text-anchor="middle">0.99×</text>
+<polyline points="425.0,170.9 515.0,169.2" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="425.0" cy="170.9" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 avgₕ! Float32: 1.6 ms (baseline, 0 allocs, 0 B)</title></circle>
-<text x="515.0" y="163.9" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">1.0×</text>
-<circle cx="515.0" cy="170.9" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="425.0" y="163.9" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">1.0×</text>
+<circle cx="515.0" cy="169.2" r="4.5" fill="#3b82f6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+avgₕ! Float32: 1.61 ms (+0.7%, 0 allocs, 0 B)</title></circle>
+<text x="515.0" y="162.2" font-size="10" font-weight="bold" fill="#3b82f6" text-anchor="middle">1.01×</text>
+<polyline points="425.0,170.9 515.0,159.9" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="425.0" cy="170.9" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 avgₕ! Float64: 1.64 ms (baseline, 0 allocs, 0 B)</title></circle>
-<text x="515.0" y="163.9" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.0×</text>
-<circle cx="515.0" cy="170.9" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="425.0" y="163.9" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.0×</text>
+<circle cx="515.0" cy="159.9" r="4.5" fill="#10b981" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+avgₕ! Float64: 1.72 ms (+4.6%, 0 allocs, 0 B)</title></circle>
+<text x="515.0" y="152.9" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">1.05×</text>
+<polyline points="425.0,170.9 515.0,172.4" fill="none" stroke="#f59e0b" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="425.0" cy="170.9" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 innerₕ Double64: 1.07 ms (baseline, 0 allocs, 0 B)</title></circle>
-<text x="515.0" y="163.9" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">1.0×</text>
-<circle cx="515.0" cy="170.9" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="425.0" y="163.9" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">1.0×</text>
+<circle cx="515.0" cy="172.4" r="4.5" fill="#f59e0b" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+innerₕ Double64: 1.06 ms (-0.6%, 0 allocs, 0 B)</title></circle>
+<text x="515.0" y="165.4" font-size="10" font-weight="bold" fill="#f59e0b" text-anchor="middle">0.99×</text>
+<polyline points="425.0,170.9 515.0,171.8" fill="none" stroke="#8b5cf6" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="425.0" cy="170.9" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
 innerₕ Float32: 11.6 μs (baseline, 0 allocs, 0 B)</title></circle>
-<text x="515.0" y="163.9" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">1.0×</text>
-<circle cx="515.0" cy="170.9" r="4.5" fill="#ec4899" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<text x="425.0" y="163.9" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">1.0×</text>
+<circle cx="515.0" cy="171.8" r="4.5" fill="#8b5cf6" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
+innerₕ Float32: 11.6 μs (-0.4%, 0 allocs, 0 B)</title></circle>
+<text x="515.0" y="164.8" font-size="10" font-weight="bold" fill="#8b5cf6" text-anchor="middle">1.0×</text>
+<polyline points="425.0,170.9 515.0,170.9" fill="none" stroke="#ec4899" stroke-width="2.5" stroke-linejoin="round" opacity="0.88" />
+<circle cx="425.0" cy="170.9" r="4.5" fill="#ec4899" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
 <title>e6655b1 (Julia 1.12.7)
+innerₕ Float64: 23.2 μs (baseline, 0 allocs, 0 B)</title></circle>
+<text x="425.0" y="163.9" font-size="10" font-weight="bold" fill="#ec4899" text-anchor="middle">1.0×</text>
+<circle cx="515.0" cy="170.9" r="4.5" fill="#ec4899" stroke="var(--documenter-bg, #fff)" stroke-width="1.5">
+<title>2dec0c7 (Julia 1.12.7)
 innerₕ Float64: 23.2 μs (baseline, 0 allocs, 0 B)</title></circle>
 <text x="515.0" y="163.9" font-size="10" font-weight="bold" fill="#ec4899" text-anchor="middle">1.0×</text>
 </svg></div>
