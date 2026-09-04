@@ -12,8 +12,8 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
 #
 # The convention throughout: `a(u, v) = vᵀ A u`, so a row of `A` is indexed by the test
 # function and a column by the trial function. Every check below is written against a matrix
-# built by code that shares nothing with `local_stencil` — the operator's own sparse form and
-# the inner product's own weights — so the two agree or one of them is wrong.
+# built by code that shares nothing with `local_stencil`: the operator's own sparse form and
+# the inner product's own weights, so the two agree or one of them is wrong.
 
 @testset "Bilinear forms" begin
     S = interval(0.0, 1.0) × interval(0.0, 1.0)
@@ -117,7 +117,7 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
         # The motivating case: a Stokes-style system where leaf 1 ("velocity") gets a
         # boundary condition and leaf 2 ("pressure") stays completely free. Before
         # `dirichlet_components` existed, `dirichlet_labels` bound to every leaf sharing the
-        # named marker — there was no way to say "this leaf only" through `assemble`/
+        # named marker: there was no way to say "this leaf only" through `assemble`/
         # `assemble!` at all.
         Vₕ = gridspace(Ωₕ, Val(2))
         a = form(Vₕ, Vₕ, (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)))
@@ -141,7 +141,7 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
         @test Matrix(A2) ≈ Matrix(A)
 
         # without dirichlet_components, the same labels bind to every leaf that has the
-        # marker — this is the pre-existing, still-default behaviour, confirmed unchanged
+        # marker (this is the pre-existing, still-default behaviour, confirmed unchanged).
         Aboth = assemble(a; dirichlet_labels = :walls)
         blk2(i, j) = Matrix(Aboth)[((i - 1) * n + 1):(i * n), ((j - 1) * n + 1):(j * n)]
         for i in 1:n
@@ -154,7 +154,7 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
     @testset "Serial vs parallel agreement" begin
         # The serial and threaded paths are separate walks over the same terms, so a break in
         # the serial path is invisible unless it is compared against the other. It was, once.
-        # `assemble_parallel!` always threads regardless of the backend's policy (point 22),
+        # `assemble_parallel!` always threads regardless of the backend's policy,
         # which is what makes it the right fixed reference here; `assemble!` on `Wₕ`'s
         # default Serial() backend gives the serial answer.
         Vₕ = gridspace(Ωₕ, Val(2))
@@ -208,7 +208,7 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
     @testset "Nested leaf traversal" begin
         # A composite of composites needs no separate type and no separate constructor. Its
         # blocks are numbered by leaf, so a two-by-two nesting is four blocks addressed
-        # `u(1)` through `u(4)` — the same spelling a flat space uses, and the same one
+        # `u(1)` through `u(4)`: the same spelling a flat space uses, and the same one
         # `linear.jl` uses for a right-hand side.
         #
         # There used to be a `CoupledBilinearForm` reached only when a space was
@@ -278,7 +278,7 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
 
         @test ForwardDiff.gradient(w -> sum(assemble(scalar_form(w))), c1) ≈ diag(H)
 
-        # the element type follows the data — the matrix has to be able to hold a Dual, and
+        # the element type follows the data: the matrix has to be able to hold a Dual, and
         # taking it from the space instead is what made this impossible
         wd = ForwardDiff.Dual.(c1, 1.0)
         @test eltype(assemble(scalar_form(wd))) <: ForwardDiff.Dual
@@ -339,7 +339,7 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
 
     @testset "Form construction" begin
         # `form` used to evaluate a sample stencil and bin the whole grid into a vector of
-        # vectors before anything was assembled — 9,271,600 B at 90,000 degrees of freedom.
+        # vectors before anything was assembled (9,271,600 B at 90,000 degrees of freedom).
         # The colouring is a property of the AST and the grid, so it is derived where it is
         # used.
         function _form_bytes(W)

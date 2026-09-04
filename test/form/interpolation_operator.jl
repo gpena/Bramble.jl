@@ -14,17 +14,44 @@ using Bramble: CompositeGridSpace, form, assemble, assemble!, assemble_parallel!
                shift_stencil, local_stencil, markers, LinearProduct, shift_op, jumpₓ,
                resolve_form_ast
 
-# The interpolation *operator* (point 61): `πₕ(Wsrc, u)` over a trial function, as opposed to
+# Standalone runner fallback
+if !@isdefined(alloc_test)
+    @inline function alloc_test(f::F, args...; kwargs...) where {F}
+        f(args...; kwargs...)
+        return @allocated(f(args...; kwargs...))
+    end
+end
+
+if !@isdefined(var"@test_allocs")
+    macro test_allocs(call_expr)
+        if Meta.isexpr(call_expr, :call)
+            fn = call_expr.args[1]
+            args = call_expr.args[2:end]
+            quote
+                @test alloc_test($(esc(fn)), $(map(esc, args)...)) == 0
+            end
+        else
+            quote
+                let
+                    $(esc(call_expr))
+                    @test (@allocated $(esc(call_expr))) == 0
+                end
+            end
+        end
+    end
+end
+
+# The interpolation operator: `πₕ(Wsrc, u)` over a trial function, as opposed to
 # `πₕ(uₕ)` over a grid function whose values are known (test/form/interpolation.jl).
 #
 # What makes this its own mechanism rather than another wrapper is that its stencil entries
-# name **absolute columns** of `Wsrc` — the `2ᴰ` corners `locate_cell` picks out for the point
-# being visited — where every other node's entries are offsets from that point. Two
+# name **absolute columns** of `Wsrc` (the `2ᴰ` corners `locate_cell` picks out for the point
+# being visited), where every other node's entries are offsets from that point. Two
 # consequences, and this file exists to hold both to their word:
 #
 #  1. The assembled block is exactly `interpolation_matrix`'s own `P`, times whatever the
 #     surrounding operators and quadrature weight amount to. That is a matrix identity, so it
-#     is testable to the last bit rather than by "is finite and the right shape" — and it is
+#     is testable to the last bit rather than by "is finite and the right shape", and it is
 #     checked against `interpolation_matrix` rather than against a hand-written expectation,
 #     since the two share `_interp_cell_frac` and would have to *both* be wrong to agree with
 #     a wrong third answer.
@@ -48,19 +75,18 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         Ws = gridspace(mesh(Ω, 7, true))       # source space: where the unknown lives
         P = interpolation_matrix(Wt, Ws)
         Dx, Mx = D₋ₓ(Wt), M₋ₓ(Wt)
-
-        # `Hₕ · P`, the cross-mesh mass matrix — the term point 61 exists for
+        # `Hₕ · P`, the cross-mesh mass matrix: the term interpolation on trial spaces exists for
         A = assemble(form(Ws, Wt, (u, v) -> innerₕ(πₕ(Ws, u), v)))
         @test size(A) == (ndofs(Wt), ndofs(Ws))
         @test A ≈ Hh(Wt) * P
 
         # `Dₓᵀ H₊ Dₓ P`: an operator *outside* the interpolation, differencing on the mesh
-        # being integrated over. This is the re-evaluation path — relabelling the absolute
+        # being integrated over. This is the re-evaluation path: relabelling the absolute
         # columns would have named the wrong ones, or failed to name any.
         A = assemble(form(Ws, Wt, (u, v) -> inner₊ₓ(D₋ₓ(πₕ(Ws, u)), D₋ₓ(v))))
         @test A ≈ Dx' * Hp(Wt, 1) * Dx * P
 
-        # the average, whose mask is ½ rather than 1/h — a different weight over the same shift
+        # the average, whose mask is ½ rather than 1/h: a different weight over the same shift
         A = assemble(form(Ws, Wt, (u, v) -> inner₊ₓ(M₋ₓ(πₕ(Ws, u)), v)))
         @test A ≈ Hp(Wt, 1) * Mx * P
 
@@ -93,7 +119,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         @test A ≈ 2.0 * Hh(Wt) * P + 3.0 * Dx' * Hp(Wt, 1) * Dx * P
         # the `Ref` stays live, and refilling costs nothing
         β[] = -1.0
-        @test (@allocated assemble!(A, a)) == 0
+        @test_allocs assemble!(A, a)
         @test A ≈ 2.0 * Hh(Wt) * P - Dx' * Hp(Wt, 1) * Dx * P
 
         # a grid-function coefficient on the interpolated side, read on the *test* mesh
@@ -125,7 +151,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
 
     @testset "Non-uniform meshes" begin
         # `_interp_cell_frac` reads the mesh's own point coordinates rather than assuming a
-        # step, so a non-uniform pair is not a special case — but it is the case that would
+        # step, so a non-uniform pair is not a special case, but it is the case that would
         # catch an implementation that quietly divided by a nominal `h`.
         Ω = domain(interval(0.0, 1.0))
         Wt = gridspace(mesh(Ω, 13, false))
@@ -152,7 +178,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
     end
 
     @testset "Action on a grid function" begin
-        # the assembled matrix applied to a source vector is the weighted interpolant — the
+        # the assembled matrix applied to a source vector is the weighted interpolant: the
         # numeric `πₕ` (space/operators/interpolation.jl) computing the same thing by an
         # entirely different route, which is the check that the two layers agree.
         Ω = domain(interval(0.0, 1.0))
@@ -166,15 +192,15 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         end
 
         # and the interpolant is exact on an affine function, so there the action is the
-        # weighted restriction of `f` itself — an oracle that does not go through `πₕ` at all
+        # weighted restriction of `f` itself: an oracle that does not go through `πₕ` at all
         uₛ = Rₕ(Ws, x -> 2x - 1)
         @test A * values(uₛ) ≈ collect(weights(Wt, Innerh())) .* values(Rₕ(Wt, x -> 2x - 1))
     end
 
     @testset "Composite blocks" begin
-        # the motivating case: two leaves over different meshes, coupled. Point 69 refused
-        # this by name because nothing said how to map between the two index spaces; `πₕ` is
-        # what says it.
+        # the motivating case: two leaves over different meshes, coupled. Cross-mesh terms refuse
+        # this by name unless something says how to map between the two index spaces; `πₕ` is
+        # what specifies that mapping.
         Ω = domain(interval(0.0, 1.0))
         Wbig = gridspace(mesh(Ω, 9, true))
         Wsmall = gridspace(mesh(Ω, 5, true))
@@ -186,7 +212,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         A = assemble(form(Vh, Vh, (u, v) -> innerₕ(πₕ(Wsmall, u(2)), v(1))))
         @test size(A) == (nb + ns, nb + ns)
         @test A[1:nb, (nb + 1):(nb + ns)] ≈ Hh(Wbig) * interpolation_matrix(Wbig, Wsmall)
-        # and nothing landed anywhere else — the direction that used to write silently wrong
+        # and nothing landed anywhere else: the direction that used to write silently wrong
         # columns would have shown up here
         @test iszero(A[1:nb, 1:nb])
         @test iszero(A[(nb + 1):(nb + ns), :])
@@ -207,7 +233,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         @test A[1:nb, 1:nb] ≈ Hh(Wbig)
         @test A[(nb + 1):(nb + ns), (nb + 1):(nb + ns)] ≈ Hh(Wsmall)
         @test A[1:nb, (nb + 1):(nb + ns)] ≈ Hh(Wbig) * interpolation_matrix(Wbig, Wsmall)
-        @test (@allocated assemble!(A, a)) == 0
+        @test_allocs assemble!(A, a)
 
         # an operator outside the interpolation, on a composite block
         Dx = D₋ₓ(Wbig)
@@ -228,13 +254,13 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         assemble_parallel!(Ap, a)
         @test As ≈ Ap
 
-        # `_bilinear_colour_strides` reads only the *test* side of the stencil — rows disjoint
-        # implies entries disjoint whatever the columns do — which is why an interpolation on
+        # `_bilinear_colour_strides` reads only the *test* side of the stencil (disjoint rows
+        # imply disjoint entries regardless of what columns do), which is why an interpolation on
         # the trial side needs no colouring change. This is what would fail if that reasoning
         # were wrong: two threads racing on one entry would give a wrong sum, not an error.
         assemble_parallel!(Ap, a)
         @test As ≈ Ap
-        @test (@allocated assemble!(As, a)) == 0
+        @test_allocs assemble!(As, a)
     end
 
     @testset "Refusals" begin
@@ -243,7 +269,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         Ws = gridspace(mesh(Ω, 7, true))
 
         # an operator *inside* the interpolation would difference on the source mesh, which
-        # is a different operator from `D₋ₓ(πₕ(…))` and is not implemented — refused rather
+        # is a different operator from `D₋ₓ(πₕ(…))` and is not implemented; refused rather
         # than quietly treated as the one that is
         @test_throws ArgumentError πₕ(Ws, D₋ₓ(TrialFunction{1}()))
         @test_throws ArgumentError πₕ(Ws, M₋ₓ(TrialFunction{1}()))
@@ -253,7 +279,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
 
         # `πₕ` given a space that is not the trial function's: the columns it names are
         # numbered in that space, so pairing it with the wrong one writes into the wrong part
-        # of the block — the same silent-wrong answer point 69 refused, so it is refused too
+        # of the block: the same silent-wrong answer cross-mesh blocks refuse, so it is refused too
         @test_throws ArgumentError assemble(form(Ws, Wt, (u, v) -> innerₕ(πₕ(Wt, u), v)))
         @test_throws ArgumentError allocate_system_matrix(form(
             Ws, Wt, (u, v) -> innerₕ(πₕ(Wt, u), v)))
@@ -268,7 +294,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
             spzeros(ndofs(Vh), ndofs(Vh)),
             form(Vh, Vh, (u, v) -> innerₕ(πₕ(Wbig, u(2)), v(1))))
 
-        # a cross-mesh block with *no* interpolation is still refused, at every entry point —
+        # a cross-mesh block with *no* interpolation is still refused, at every entry point:
         # the exemption is for the term that says how to map, not for cross-mesh generally
         for g in ((u, v) -> innerₕ(u(2), v(1)), (u, v) -> innerₕ(u(1), v(2)))
             @test_throws ArgumentError assemble(form(Vh, Vh, g))
@@ -285,10 +311,10 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         # A term contributing *both* absolute columns and ordinary offsets: the offsets are
         # still read out of the index space being walked, so the two leaves still have to
         # share one. The first version of this file asked only whether an interpolation
-        # appeared anywhere in the term, which exempted the bare `u` along with it — and in
+        # appeared anywhere in the term, which exempted the bare `u` along with it; and in
         # the direction where the trial space is the larger one, the bare `u`'s column landed
         # *in range* and simply wrong. Measured at 0.25 absolute error on a 5×9 block, with
-        # no error raised: the same silent-wrong answer point 69 exists to refuse.
+        # no error raised: this is the silent-wrong answer cross-mesh blocks refuse.
         Ω = domain(interval(0.0, 1.0))
         Wbig = gridspace(mesh(Ω, 9, true))
         Wsml = gridspace(mesh(Ω, 5, true))
@@ -335,8 +361,8 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         @test node isa InterpolationNode
 
         # whether *every* trial column the term contributes is an absolute one, under any
-        # tower of wrappers. Not "does an interpolation appear anywhere" — see the mixed-sum
-        # testset below for why that distinction is the whole ballgame.
+        # tower of wrappers. Not "does an interpolation appear anywhere" (see the mixed-sum
+        # testset below for why that distinction is the whole ballgame).
         @test _all_trial_interpolated(node)
         @test _all_trial_interpolated(D₋ₓ(M₋ₓ(node)))
         @test _all_trial_interpolated(2.0 * node)
@@ -350,7 +376,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         @test !_all_trial_interpolated(u + node)
         @test !_all_trial_interpolated(D₋ₓ(node + u))
         @test !_all_trial_interpolated(innerₕ(node + u, v))
-        # a node contributing no trial column at all answers vacuously — there is nothing
+        # a node contributing no trial column at all answers vacuously: there is nothing
         # there that would need a mesh correspondence
         @test _all_trial_interpolated(v)
         @test _all_trial_interpolated(πₕ(Rₕ(Ws, x -> x)))
@@ -377,7 +403,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         @test stencil_shift_trait(u + D₋ₓ(u)) isa TranslationInvariantStencil
 
         # `shifted_inner_stencil` must be exactly `shift_stencil` on the translation-invariant
-        # path — every operator in the package goes through it now, so this is what says the
+        # path: every operator in the package goes through it now, so this is what says the
         # refactor changed nothing for them
         Ωₕ = mesh(Wt)
         mk = markers(Ωₕ)
@@ -391,7 +417,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         end
 
         # the interpolation's own stencil: `2ᴰ` entries naming absolute columns, weights
-        # summing to one — which is what keeps the interpolant from overshooting
+        # summing to one, which is what keeps the interpolant from overshooting
         st = local_stencil(node, Wt, I, mk, 5)
         @test length(st) == 2
         @test all(e -> e[1] isa AbsoluteColumn, st)
@@ -420,7 +446,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
 
     @testset "Element type" begin
         # the interpolation's weights come from the mesh's own coordinates, so a `Float32`
-        # space must not be widened to `Float64` by them — the same rule every other stencil
+        # space must not be widened to `Float64` by them; the same rule every other stencil
         # leaf follows (test/form/common.jl, "Element type preservation")
         for T in (Float32, Float64)
             Ω = domain(interval(T(0), T(1)))
@@ -446,7 +472,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         # interpolation's own weights come from the mesh's coordinates and are ordinary
         # floats, so they must promote against a `Dual` coefficient rather than pin the
         # matrix to `Float64`. (The mesh geometry itself is not the differentiation variable
-        # here — `interpolation_matrix` over a real-valued mesh stays real-valued.)
+        # here: `interpolation_matrix` over a real-valued mesh stays real-valued.)
         Ω = domain(interval(0.0, 1.0))
         Wt = gridspace(mesh(Ω, 11, true))
         Ws = gridspace(mesh(Ω, 7, true))
@@ -489,7 +515,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
 
     @testset "Resolved AST round-trips" begin
         # `resolve_form_ast` rebuilds the tree once, at `form(...)`, and every wrapper has to
-        # rebuild itself with the resolved inner operator — including this one, or the node
+        # rebuild itself with the resolved inner operator, including this one, or the node
         # would be dropped and the term would silently assemble as if un-interpolated
         Ω = domain(interval(0.0, 1.0))
         Wt = gridspace(mesh(Ω, 11, true))

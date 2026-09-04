@@ -2,11 +2,11 @@ using Test
 using Bramble
 using Bramble: dot
 
-# Point 50: a `markers` keyword on the *symbolic* innerₕ/inner₊ family
+# A `markers` keyword on the *symbolic* innerₕ/inner₊ family
 # (form/operators/inner.jl), implemented by wrapping the constructed
-# BilinearProduct/LinearProduct in RegionRestriction — reusing existing, already
+# BilinearProduct/LinearProduct in RegionRestriction, reusing existing, already
 # block-routing-aware machinery rather than a new AST node. Every case here is
-# checked against either the numeric `markers` keyword (point 11) or a hand-built
+# checked against either the numeric `markers` keyword or a hand-built
 # reference, not just that assembly ran without error.
 
 @testset "Symbolic markers" begin
@@ -68,7 +68,7 @@ using Bramble: dot
     @testset "Unknown marker error" begin
         # Scalar space: assembling with a typo'd label, instead of silently assembling to
         # all zero (RegionRestriction's own local_stencil can't tell "not marked" from
-        # "no such marker" — haskey failing looks like the former).
+        # "no such marker"; haskey failing looks like the former).
         c = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v; markers = (:nonexistent,)))
         @test_throws ArgumentError assemble(c)
 
@@ -79,7 +79,7 @@ using Bramble: dot
 
         # Composite space: leaves currently share one mesh (gridspace(Ωₕ, Val(N)) builds
         # every leaf over the same Ωₕ), so this can't yet arise from one leaf lacking a
-        # label another has — but a name that exists on no leaf at all must still be
+        # label another has, but a name that exists on no leaf at all must still be
         # caught, not silently assembled to zero.
         Vₕ = Wₕ^Val(2)
         d = form(Vₕ, Vₕ,

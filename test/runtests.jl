@@ -31,8 +31,8 @@ end
 # and the whole suite passes with 0 failures. If a future Julia does perturb them, these
 # will fail rather than quietly not run, which is the outcome to prefer: the boxing
 # regressions this suite exists to catch are invisible to both JET's optimisation analysis
-# and AllocCheck — a reproduction of the original bug allocating 23,824 B against 0 B for
-# the fix draws no report from either — so a runtime count is the only thing that sees
+# and AllocCheck (a reproduction of the original bug allocating 23,824 B against 0 B for
+# the fix draws no report from either), so a runtime count is the only thing that sees
 # them.
 macro test_allocs(call_expr)
     if Meta.isexpr(call_expr, :call)
@@ -53,7 +53,7 @@ end
 
 # Two comparison helpers, shared by the files that need them rather than defined in each.
 #
-# They used to be duplicated verbatim — `_fd` in space/autodiff.jl and form/autodiff.jl,
+# They used to be duplicated verbatim: `_fd` in space/autodiff.jl and form/autodiff.jl,
 # `_tri` in form/symmetrize.jl and form/autodiff.jl. Every test file is included into
 # `Main`, so the second definition overwrote the first and Julia warned three times per
 # run. The copies were identical, so nothing misbehaved; the hazard was that editing one
@@ -69,8 +69,8 @@ _tri(m) = spdiagm(0 => fill(4.0, m), 1 => fill(-1.0, m - 1), -1 => fill(-1.0, m 
 
 # `f` must be a scalar functional of one parameter, evaluated through the library. Checks
 # that the AD derivative is right, not merely that it ran. Was `_matches_finite_difference`
-# in space/autodiff.jl and `_matches_fd` in form/autodiff.jl — same body, two names, so no
-# overwrite warning pointed at it.
+# in space/autodiff.jl and `_matches_fd` in form/autodiff.jl (same body, two names, so no
+# overwrite warning pointed at it).
 function _matches_fd(f, a = 1.3; rtol = 1e-5)
     return isapprox(ForwardDiff.derivative(f, a), _fd(f, a); rtol = rtol)
 end
@@ -84,7 +84,7 @@ const __bramble_with_unit_tests = __bramble_test_group in ("all", "unit", "full"
 #   ForwardDiff 0.3 s   ReverseDiff 0.5 s   PolyesterForwardDiff 0.6 s
 #   Mooncake   25.1 s   Enzyme     33.2 s
 #
-# So the three cheap ones run with the unit tests — 3.3 s between them, load included —
+# So the three cheap ones run with the unit tests (3.3 s between them, load included)
 # and the two that spend almost a minute compiling on first call live behind this group.
 # What they establish changes when a *backend* changes rather than when Bramble does, so
 # paying that per push would be paying it for nothing almost every time. The weekly

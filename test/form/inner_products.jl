@@ -10,7 +10,7 @@ using Bramble: IdentityOperator, TrialFunction, TestFunction, IndexedTrialFuncti
 #
 # `test/form/operators.jl` covers which weight each product *carries*. This covers the rest
 # of the file: the overloads for a number, a function or a grid function on the left, the
-# tuple forms, and — the part that matters most — the stencil evaluators, which are the
+# tuple forms, and (the part that matters most) the stencil evaluators, which are the
 # path assembly will take and which nothing had run.
 #
 # Why the coverage figure said nothing useful here. Julia marks a line of a method it never
@@ -81,8 +81,8 @@ using Bramble: IdentityOperator, TrialFunction, TestFunction, IndexedTrialFuncti
             end
         end
 
-        # a number becomes a SourceConstant, not a function wrapper or a stored vector —
-        # point 44's fix: skips point(m, I) entirely rather than computing and discarding it
+        # A number becomes a SourceConstant, not a function wrapper or a stored vector:
+        # skips point(m, I) entirely rather than computing and discarding it.
         sf = source_number(7.25, Val(2))
         @test sf isa SourceConstant{2}
         @test only(local_stencil(sf, Wₕ, I, nothing, lin))[2] == 7.25
@@ -121,7 +121,7 @@ using Bramble: IdentityOperator, TrialFunction, TestFunction, IndexedTrialFuncti
             @test is_symbolic(p)
         end
 
-        # tuples of gradient tuples — a velocity field against a velocity field
+        # tuples of gradient tuples: a velocity field against a velocity field
         vec_trial = (IndexedTrialFunction{2}(1), IndexedTrialFunction{2}(2))
         vec_test = (IndexedTestFunction{2}(1), IndexedTestFunction{2}(2))
         p = inner₊(map(∇₋ₕ, vec_trial), map(∇₋ₕ, vec_test))
@@ -135,8 +135,8 @@ using Bramble: IdentityOperator, TrialFunction, TestFunction, IndexedTrialFuncti
 
     @testset "Non-symbolic tuple refusal" begin
         # This branch used to read `first(l).values`, where a VectorElement stores `data`,
-        # and call `inner₊!`, which no revision of the package defines — two names that
-        # could never resolve, in a branch nothing reached. It is entered when the right
+        # and call `inner₊!`, which no revision of the package defines (two names that
+        # could never resolve, in a branch nothing reached). It is entered when the right
         # side carries no trial or test function, so there is nothing for the product to be
         # a form in, and it now says that.
         concrete = ∇₋ₕ(id)

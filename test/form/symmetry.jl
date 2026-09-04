@@ -4,12 +4,12 @@ using LinearAlgebra: issymmetric, isposdef
 using Bramble: form, assemble, trial_space, test_space, restrict_to, IdentityOperator,
                ZeroOperator
 
-# `issymmetric`/`isposdef` on a `BilinearForm` are a purely structural, symbolic check —
+# `issymmetric`/`isposdef` on a `BilinearForm` are a purely structural, symbolic check:
 # every test here has a positive case checked against a real assembled matrix (not just the
 # trait's own reasoning) and, where it matters, a negative control confirming the check can
 # actually tell the two apart.
 
-@testset "Symmetry & SPD detection" begin
+@testset "Symmetry and SPD detection" begin
     S = interval(0.0, 1.0) × interval(0.0, 1.0)
     Ωₕ = mesh(domain(S, :walls => get_boundary_symbols(S)), (9, 7), (true, true))
     Wₕ = gridspace(Ωₕ)
@@ -102,7 +102,7 @@ using Bramble: form, assemble, trial_space, test_space, restrict_to, IdentityOpe
     end
 
     @testset "Grid function coefficient" begin
-        # `αₕ` changes sign over the domain — `LᵀWL` is PSD for any real `L`, including one
+        # `αₕ` changes sign over the domain: `LᵀWL` is PSD for any real `L`, including one
         # with a sign-changing coefficient, since the same `αₕ` scales both the trial and
         # test side identically (`(αₕ D₋ₓu)_i (αₕ D₋ₓv)_i` carries `αₕ_i²`, never negative).
         # `isposdef` has no positivity guard for `GridFunctionScale` the way it does for a

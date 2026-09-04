@@ -151,7 +151,7 @@ end
 # ==============================================================================
 
 """
-	DifferenceNode{D, Dim}
+    DifferenceNode{D, Dim}
 
 Either one-sided difference node over a `D`-dimensional space, differencing along `Dim`.
 
@@ -269,7 +269,7 @@ Dₕ₂(op::LazyOp{D}) where {D} = CrossWeightedDifference{D, 3, typeof(op)}(op)
     ∇ₕ(op::LazyOp{D}) where D
 
 The vector forms: every direction at once, as a `D`-tuple of nodes. In one dimension there
-is only one direction, so the node itself is returned rather than a one-element tuple —
+is only one direction, so the node itself is returned rather than a one-element tuple,
 as `∇₋ₕ` and `∇₊ₕ` already do.
 """
 Dcₕ(op::LazyOp{1}) = Dcₓ(op)
@@ -357,7 +357,7 @@ end
 # --- Traits ----------------------------------------------------------------------- #
 
 """
-	ExtendedDifferenceNode{D, Dim}
+    ExtendedDifferenceNode{D, Dim}
 
 The three difference nodes that are neither one-sided nor a jump, differencing along `Dim`.
 Grouped so that everything reading only the direction off a node covers all of them at

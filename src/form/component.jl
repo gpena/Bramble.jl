@@ -12,12 +12,12 @@
 # change because its argument names a component, and a source term does not have one to
 # name.
 #
-# This is what makes the composite `innerₕ(uₕ, r)` shorthand possible —
-# `Σ innerₕ(uₕ(c), r(c))` — because `r` may be any expression in the test function rather
-# than only the bare leaf.
+# This is what makes the composite `innerₕ(uₕ, r)` shorthand possible:
+# `Σ innerₕ(uₕ(c), r(c))` (because `r` may be any expression in the test function rather
+# than only the bare leaf).
 
 """
-	component(op::LazyOp, i::Int)
+    component(op::LazyOp, i::Int) -> LazyOp
 
 The `i`-th component of the symbolic operator `op`: the same expression with its trial and
 test leaves replaced by their indexed forms.
@@ -100,9 +100,9 @@ end
 # than only the bare leaf: `innerₕ(uₕ, v + 2 * D₋ₓ(v) - M₋ₓ(v))` expands term by term and
 # component by component.
 #
-# Without these methods the call did not fail — it took the scalar overload, wrapped the
+# Without these methods the call did not fail; it took the scalar overload, wrapped the
 # whole composite coefficient vector in one `SourceVector`, and assembled it into every
-# block reading the *first* component's coefficients each time. Silently the wrong answer,
+# block reading the first component's coefficients each time. Silently the wrong answer,
 # which is why these are worth having rather than merely convenient.
 
 for (f, W) in ((:innerₕ, :InnerH), (:inner₊, :(InnerPlus{1})),
@@ -115,8 +115,8 @@ for (f, W) in ((:innerₕ, :InnerH), (:inner₊, :(InnerPlus{1})),
 
     # A tuple reads the same way, one entry per component, which is how `Rₕ` already takes
     # a composite source: `Rₕ(Vₕ, (f, g))`. So `innerₕ((f, g), v)` is the form-level spelling
-    # of the same thing, and covers a tuple of numbers as readily as a tuple of functions —
-    # both are sources the scalar case already accepts.
+    # of the same thing, and covers a tuple of numbers as readily as a tuple of functions (both
+    # are sources the scalar case already accepts).
     #
     # Unlike the `VectorElement` method above, a tuple carries no space, so its length is
     # only a claim about how many components the form has. A claim that turns out wrong is

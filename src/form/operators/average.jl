@@ -159,20 +159,20 @@ end
     space, I::CartesianIndex{D}, markers) where {D, Dim} = shift_stencil(
     inner, Val(Dim), op.shift_amount)
 
-# `shift_op` has no mask of its own — every other wrapper that reaches a neighbour
+# `shift_op` has no mask of its own: every other wrapper that reaches a neighbour
 # (differences, averages, jumps) computes one first and multiplies a clamped boundary read by
 # it, which is what makes `_clamped_shift`'s "clamp now, a zero mask absorbs it" contract safe
-# for them. Nothing here would absorb it for a *source*: relabelling an offset is safe
-# unclamped, since the caller's own bounds check drops the whole entry when the *offset* lands
+# for them. Nothing here would absorb it for a source: relabelling an offset is safe
+# unclamped, since the caller's own bounds check drops the whole entry when the offset lands
 # out of range, but a source has already been reduced to a value by the time this runs, with
-# no offset left for that check. A source shifted off the grid therefore reads as zero here —
+# no offset left for that check. A source shifted off the grid therefore reads as zero here:
 # an empty stencil, the same "missing neighbour is zero" convention the masked stencils use,
 # mirroring how `RegionRestriction` already spells "contributes nothing here".
 #
-# An interpolation is not a source, and clamping *is* its own correct behaviour: `locate_cell`
+# An interpolation is not a source, and clamping is its own correct behaviour: `locate_cell`
 # (`space/operators/interpolation.jl`) clamps every point it is given, in-grid or not, by
-# design — `πₕ`'s own docstring calls this extrapolation along the boundary cell's slope, not
-# a missing-neighbour convention to override. So only a source-only inner operand gets the
+# design (`πₕ`'s own docstring calls this extrapolation along the boundary cell's slope, not
+# a missing-neighbour convention to override). So only a source-only inner operand gets the
 # in-grid check; anything else falls through to the ordinary clamped re-evaluation.
 @inline function _shift_node_stencil(::PointDependentStencil, op::ShiftNode{D, Dim}, inner,
         space, I::CartesianIndex{D}, markers) where {D, Dim}
@@ -192,7 +192,7 @@ end
 # ==============================================================================
 
 """
-	AverageNode{D, Dim}
+    AverageNode{D, Dim}
 
 Either average node over a `D`-dimensional space, averaging along `Dim`.
 

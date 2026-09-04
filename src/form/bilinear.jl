@@ -1,34 +1,28 @@
-# ==============================================================================
-# Struct Definitions
-# ==============================================================================
-
-# of a `LinearForm` field, which has to resolve when the struct is defined rather than when
-# it is called, so keeping it here made unlocking that file alone impossible.
+# --- Struct definitions ----------------------------------------------------------- #
 
 """
-    BilinearForm{D,TrialSpace,TestSpace,AST}
+    BilinearForm{D, TrialSpace, TestSpace, AST}
 
 Represents a bilinear form defined over a trial space and test space.
 
-# Fields
-- `trial_space::TrialSpace`: The space for the trial function.
-- `test_space::TestSpace`: The space for the test function.
-- `ast::AST`: The resolved expression tree.
+# Arguments
+- `trial_space::TrialSpace`: Space for the trial function.
+- `test_space::TestSpace`: Space for the test function.
+- `ast::AST`: Resolved expression tree.
 
 The form resolves its expression tree `ast` once at construction, referencing the underlying
 storage of any coefficient grid functions (`VectorElement`). In-place updates via `Rₕ!(cₕ, ...)`
 or `values(cₕ) .= ...` are automatically seen by subsequent assemblies with zero heap allocations.
-The expression itself is not kept: nothing downstream ever calls it again, only the AST it
-built once.
+The expression itself is not kept: downstream routines evaluate the resolved AST directly.
 
-Constant scalar coefficients can be written directly as plain numbers (e.g. `2.0 * innerₕ(D₋ₓ(u), D₋ₓ(v))`).
-`Ref` is only needed if you want a **dynamic scalar coefficient** that changes across iterations in a loop:
+Constant scalar coefficients can be written directly as numbers (e.g. `2.0 * innerₕ(D₋ₓ(u), D₋ₓ(v))`).
+`Ref` is only needed if a dynamic scalar coefficient changes across loop iterations:
 ```julia
 β = Ref(1.0)
 a = form(Wₕ, Wₕ, (u, v) -> innerₕ(β * D₋ₓ(u), D₋ₓ(v)))
 # Inside time loop:
 β[] = 3.0
-assemble!(A, a) # allocates 0 bytes and evaluates with β = 3.0
+assemble!(A, a) # zero allocations, evaluates with β = 3.0
 ```
 """
 struct BilinearForm{D, TrialSpace, TestSpace, AST}
@@ -40,39 +34,32 @@ end
 """
     trial_space(form::BilinearForm)
 
-Returns the trial space of the bilinear form.
+Return the trial space of the bilinear form.
 """
 trial_space(form::BilinearForm) = form.trial_space
 
 """
     test_space(form::BilinearForm)
 
-Returns the test space of the bilinear form.
+Return the test space of the bilinear form.
 """
 test_space(form::BilinearForm) = form.test_space
 
-# `a(uₕ, vₕ) = vᵀ A u`. Assembles a whole matrix per call, which is what makes it a
-# convenience rather than something to put in a loop.
+# `a(uₕ, vₕ) = vᵀ A u`. Assembles a whole matrix per call: intended for testing/convenience.
 @inline (form::BilinearForm)(u, v) = dot(v, assemble(form) * u)
 
 """
     resolve_form_ast(form::BilinearForm)
 
-Returns the resolved AST stored inside the bilinear form.
+Return the resolved AST stored inside the bilinear form.
 """
 @inline resolve_form_ast(form::BilinearForm) = form.ast
 
 """
-    form(Wₕ, Vₕ, f)
+    form(Wₕ, Vₕ, f) -> BilinearForm
 
-Constructs a `BilinearForm` over the trial space `Wₕ` and the test space `Vₕ` from the
-bilinear expression `f`, a function of a trial and a test argument.
-
-A composite space needs no separate constructor and no separate type. Its blocks are
-addressed by leaf index, `u(i)` and `v(j)`, whatever the nesting: `leaf_spaces_offsets`
-flattens a space of spaces into leaves, so a two-by-two nesting is four blocks numbered one
-to four. A term naming neither side is the same integrand on every diagonal block, and one
-naming both is the single block it belongs to, off-diagonal included.
+Construct a `BilinearForm` over the trial space `Wₕ` and the test space `Vₕ` from the
+bilinear expression `f` (a function of trial and test arguments `(u, v)`).
 
 # Examples
 ```julia
@@ -91,9 +78,7 @@ function form(Wₕ, Vₕ, f)
     return BilinearForm{D, typeof(Wₕ), typeof(Vₕ), typeof(ast)}(Wₕ, Vₕ, ast)
 end
 
-# ==============================================================================
-# Utility Helpers
-# ==============================================================================
+# --- Utility helpers -------------------------------------------------------------- #
 
 @inline function add_to_sparse!(A::SparseMatrixCSC, row::Int, col::Int, val::Number)
     p1 = A.colptr[col]
@@ -126,21 +111,10 @@ end
     end
 end
 
-# `zeros(T, n)` with `T` a value rather than a literal type matches two methods —
-# `zeros(::Type, ::Integer)` giving a vector and `zeros(::Integer, ::Integer)` giving a
-# matrix — so the result infers as a union and `sparse` has no method for half of it.
-# Dispatching on `::Type{T}` settles which one, and the vector comes back concrete.
+# Dispatches on `::Type{T}` to ensure concrete vector return type.
 @inline _zeros_of(::Type{T}, n::Int) where {T} = zeros(T, n)
 
 # Whether an earlier entry of this stencil already named the same pair of offsets.
-#
-# The pattern wants each position once, however many terms write a value there. A form like
-# `innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v))` has both products contributing at `(0, 0)`, so
-# its stencil is five entries over four distinct pairs — a fifth of the coordinates it
-# generated were the same entry twice, and `sparse!` then paid to sort and merge them.
-#
-# A linear scan over the entries already seen, which is the whole stencil: a handful, not a
-# collection worth a set.
 @inline function _offsets_seen_before(stencil, k::Int, off_u, off_v)
     @inbounds for l in 1:(k - 1)
         stencil[l][1] == off_u && stencil[l][2] == off_v && return true
@@ -151,16 +125,8 @@ end
 # Which column of the trial block a stencil entry's trial slot names, or `0` when it names
 # none of them.
 #
-# Two kinds of entry, resolved by dispatch on the slot rather than by a runtime flag. The
-# ordinary kind is an offset from the point being visited, read out of the index space being
-# walked and dropped when it falls off the grid — the boundary truncation the whole assembly
-# has always relied on. An interpolation's kind (`AbsoluteColumn`, point 61) is already a
-# column of the *source* space, chosen by `locate_cell`, and needs neither the arithmetic nor
-# the bounds check: `locate_cell` clamps to a real cell, so every column it names exists.
-#
-# `0` for "no column" rather than `nothing`: column indices are one-based, so the sentinel
-# cannot collide with an answer, and the callers stay free of a union to unwrap in their
-# innermost loop.
+# Ordinary offsets are bounds-checked and dropped on boundaries. An interpolation entry
+# (`AbsoluteColumn`) names a source column directly.
 @inline function _trial_column(lin_indices, I::CartesianIndex, off_u)
     Iu = I + CartesianIndex(off_u)
     return checkbounds(Bool, lin_indices, Iu) ? lin_indices[Iu] : 0
@@ -168,47 +134,17 @@ end
 
 @inline _trial_column(lin_indices, I::CartesianIndex, off_u::AbsoluteColumn) = off_u.col
 
-# Whether a term's two leaves can be coupled at all.
-#
-# A coupled term is assembled by walking the *test* leaf's grid and reading the trial column
-# out of that same index space, offset into the trial leaf's block:
-# `lin_indices[I + off_u] + col_offset`. That is only meaningful when the two leaves share an
-# index space — which they always did until heterogeneous composite spaces arrived, since a
-# space built by repeating one space (`Wₕ^Val(N)`) hands every leaf the same mesh object.
-#
-# On leaves over differently-sized meshes there is no correspondence between an index on one
-# and an index on the other, and the arithmetic fails in whichever direction the sizes run:
-# a smaller trial block overruns (a loud `ArgumentError` from `sparse!`, naming column
-# indices rather than the real problem) and a larger one lands on in-range but *wrong*
-# columns, silently. Neither is an answer to give, because the term has no meaning until
-# something says how to map between the two meshes. That something is the symbolic
-# interpolation operator `πₕ(Wsrc, u)` (point 61), and a term that carries one is exempt from
-# this check for exactly that reason: its trial entries are absolute columns of `Wsrc`
-# (`AbsoluteColumn`, `_trial_column`), so it never does the index arithmetic this refuses.
-# Every other cross-mesh term is still refused by name, which is the only honest option — the
-# same reasoning as "a missing component is an error, not a zero".
+# Refuse cross-mesh coupling unless an explicit mapping (such as interpolation) is provided.
 @noinline function _throw_cross_mesh_block(term, Ωu, Ωv)
     throw(ArgumentError(
         "a bilinear term coupling two leaves over different meshes has no assembly: the " *
         "trial leaf has $(npoints(Ωu, Tuple)) points and the test leaf $(npoints(Ωv, Tuple)), " *
         "so an index on one names no point on the other. Got $(typeof(term)). Couple leaves " *
-        "that share a mesh, or say how to map between them: wrap the trial function in the " *
-        "interpolation operator, `πₕ(Wtrial, u)`, which reads the trial field at the test " *
-        "mesh's own points and is what gives such a block a meaning. On the source side of a " *
-        "*linear* form, `πₕ(uₕ)` does the same for a field whose values are already known."))
+        "that share a mesh, or wrap the trial function in an interpolation operator: `πₕ(Wtrial, u)`."))
 end
 
 @inline function _check_block_meshes(term, trial_leaf, test_leaf)
-    # Every interpolation the term carries has to name the leaf whose columns it writes into.
-    # Checked first and unconditionally: it applies whether or not the rest of the term
-    # interpolates, and folds to nothing when no interpolation is present.
     _check_interp_spaces(term, trial_leaf)
-
-    # The mesh correspondence is only dispensable when *every* trial column the term
-    # contributes is an absolute one. A term mixing the two — `πₕ(Wsrc, u) + u` — still reads
-    # the bare `u`'s column out of the index space being walked, so it still needs the two
-    # leaves to share one. Asking "does an interpolation appear anywhere" instead is what let
-    # such a mix assemble against wrong columns in silence.
     _all_trial_interpolated(term) && return nothing
 
     Ωu = mesh(trial_leaf)
@@ -217,12 +153,6 @@ end
     return nothing
 end
 
-# An interpolating term names its columns outright, so the two leaves are free to be over
-# different meshes — that is the whole point of point 61. What is *not* free is which space
-# those columns belong to: they are numbered in `Wsrc`, and the block writes them into the
-# trial leaf's own column range. Get that pairing wrong and a too-small `Wsrc` writes into a
-# corner of the block while a too-large one runs past its end, which is the same silent-wrong
-# answer point 69 refused for the un-interpolated case. So it is checked, not assumed.
 @inline function _check_one_interp_space(term, Wsrc, trial_leaf)
     Ωsrc = mesh(Wsrc)
     Ωu = mesh(trial_leaf)
@@ -236,25 +166,13 @@ end
         "the interpolation operator in a bilinear term names a space that is not the trial " *
         "function's: `πₕ` was given a space over a mesh of $(npoints(Ωsrc, Tuple)) points, " *
         "while the trial leaf this term assembles into has $(npoints(Ωu, Tuple)). Got " *
-        "$(typeof(term)). `πₕ(Wsrc, u)` interpolates *from* the space the trial function " *
-        "lives on, so `Wsrc` must be that space — the form's trial space, or, on a composite " *
-        "space, the leaf the index picks out: `πₕ(leaf, u(i))`."))
+        "$(typeof(term)). `πₕ(Wsrc, u)` interpolates from the space the trial function " *
+        "lives on, so `Wsrc` must be that space."))
 end
 
-# A sum is checked term by term. The composite paths route each term to its block first and
-# so never reach here with a sum, but the scalar ones check the whole form's AST at once —
-# and there `_bears_interpolation` of the sum is true as soon as *one* summand interpolates,
-# which would exempt the others along with it. Recursion shape shared via
-# `_visit_operator_add1` (form/common.jl).
 @inline _check_block_meshes(op::OperatorAdd, trial_leaf, test_leaf) = _visit_operator_add1(
     _check_block_meshes, op, trial_leaf, test_leaf)
 
-# How many entries the pattern can hold at most: one interior stencil's worth per grid
-# point. An upper bound, because truncation at a boundary drops entries and never adds any.
-#
-# Worth computing because `push!` grows by doubling: filling two 1,250,000-element vectors
-# cost 28.4 MB each where the data is 9.5 MB, so a third of the pattern's memory was
-# reallocation. `sizehint!` is the whole fix for that part.
 function _pattern_upper_bound(ast::AST_TYPE, sp, mesh_markers, lin_indices) where {AST_TYPE}
     grid_inds = indices(mesh(sp))
     npts = length(grid_inds)
@@ -265,37 +183,29 @@ end
 """
     allocate_system_matrix(form::BilinearForm, ast = resolve_form_ast(form)) -> SparseMatrixCSC
 
-Builds the sparse matrix a `BilinearForm` assembles into: the right size, the right sparsity
-pattern, and every stored value zero.
+Build the sparse matrix a `BilinearForm` assembles into: the appropriate size, correct sparsity
+pattern, and stored zeros throughout.
 
-The pattern follows from the stencil rather than from the numbers, so it is known before any
-value is computed, and it does not change while the mesh and the expression do not. That is
-what makes the two-step idiom worth using — build the pattern once, outside a time loop, and
-refill it inside:
+The pattern follows from the stencil rather than coefficient values, remaining invariant while the mesh
+and expression structure are unchanged. Preallocating the matrix once outside loops allows zero-allocation
+in-place assembly:
 
 ```julia
 A = allocate_system_matrix(a)
 for step in 1:nsteps
-    assemble!(A, a)          # refills the values, allocates nothing
-    # …
+    assemble!(A, a)          # refills values in-place with zero allocations
 end
 ```
 
-against calling [`assemble`](@ref) each step, which allocates a new matrix every time.
-
-Only the structure is computed here. The entries are all zero on return, so a matrix from
-this is not usable until `assemble!` has filled it.
+Only the structure is preallocated here; all stored entries are zero until `assemble!` fills them.
 
 See also [`assemble`](@ref) and [`assemble!`](@ref).
 """
 function allocate_system_matrix(
         form::BilinearForm{D, TrialSpace, TestSpace, AST},
         ast = form.ast) where {D, TrialSpace, TestSpace, AST}
-    # The *test* space, because a matrix row is indexed by the test function and the
-    # quadrature weight belongs to the integral, which is over the test space's mesh. The
-    # composite path has always walked its test leaf (`first(test_leaves[…])`); the two
-    # spaces coincide in every form where one space serves both, so this only starts to
-    # matter — and only then differs — once an interpolating term makes them differ (point 61).
+    # The test space: matrix rows are indexed by the test function and the quadrature weight
+    # belongs to the integral over the test space mesh.
     space = form.test_space
     _check_block_meshes(ast, form.trial_space, form.test_space)
     Ωₕ = mesh(space)
@@ -328,31 +238,13 @@ function allocate_system_matrix(
     end
 
     # The element type is the one the form's own weights have, promoted against the space's
-    # — the same rule `assemble` uses for a right-hand side, and for the same two reasons.
-    # It is what lets a `Dual` through, and taking it from the space instead left it
-    # inferred as a union: `zeros(eltype(space), n)` can be `zeros(n₁, n₂)` when `eltype`
-    # of an unconstrained type parameter is not known to be a type, so `V_vec` came out as
-    # `Union{Vector{Float64}, Matrix{Float64}}` and `sparse` had no method for half of it.
-    # JET found that; nothing else would have, since the bad half is unreachable in
-    # practice.
-    # `sparse!` rather than `sparse`: it uses the coordinate vectors as its own scratch
-    # instead of copying them, and they are discarded here either way. Worth 13.4 MB of the
-    # 64.9 the pattern cost at 250,000 degrees of freedom.
+    # (supporting automatic differentiation dual numbers).
     V_vec = _zeros_of(
         promote_type(_assembled_eltype(ast, space), eltype(form.trial_space)), length(I_vec))
-    # rows are indexed by the test function and columns by the trial one. The check at the
-    # top is what makes these equal; naming them separately keeps the shape honest rather
-    # than resting on an `n` that happens to serve both.
     return sparse!(I_vec, J_vec, V_vec, ndofs(form.test_space), ndofs(form.trial_space), +)
 end
 
 # Which entries a term can reach, block by block.
-#
-# The version this replaces walked `space.spaces` with one offset used for both the row and
-# the column, so the pattern it built had diagonal blocks and nothing else — and
-# `add_to_sparse!` searches for an entry and returns quietly when it is missing, so every
-# off-diagonal contribution was dropped without a word. `innerₕ(u(1), v(2))` assembled to
-# zeros.
 function _pattern_term!(I_vec::Vector{Int}, J_vec::Vector{Int}, term::TERM, trial_leaf,
         test_leaf, row_offset::Int, col_offset::Int) where {TERM}
     Ωₕ = mesh(test_leaf)
@@ -416,8 +308,6 @@ function allocate_system_matrix(
     I_vec = Int[]
     J_vec = Int[]
 
-    # One block's worth per block is the bound: a term reaching every diagonal block reaches
-    # as many as there are leaves, and one naming a block reaches exactly one.
     sp = first(first(test_leaves))
     Ωₛ = mesh(sp)
     hint = length(test_leaves) *
@@ -429,27 +319,13 @@ function allocate_system_matrix(
 
     ncols = ndofs(form.trial_space)
     nrows = ndofs(form.test_space)
-    # `first_space(form.trial_space)` used to be passed here, which is a *scalar* leaf —
-    # `_assembled_eltype` then dispatched to its generic, non-composite method, which probes
-    # the whole (possibly multi-leaf) `ast` with a single `local_stencil` call and reads only
-    # the type of that stencil's *first* entry. A `GridFunctionScale` coefficient (a
-    # `ForwardDiff.Dual`, differentiating through a coupled nonlinear system) contributed by a
-    # later leaf's term was invisible to that single probe: the matrix still allocated as
-    # `Float64`, and the first attempt to scatter a `Dual` value into it threw
-    # `MethodError: no method matching Float64(::Dual)` from deep inside `add_to_sparse!`,
-    # far from this line. Passing the composite space itself dispatches to the
-    # `CompositeGridSpace` method instead, which probes every term against the leaf it
-    # actually routes to and promotes across all of them — the same thing the scalar path
-    # above already gets from `promote_type(_assembled_eltype(ast, space), ...)`.
     V_vec = _zeros_of(
         promote_type(_assembled_eltype(ast, form.test_space), eltype(form.trial_space)),
         length(I_vec))
     return sparse!(I_vec, J_vec, V_vec, nrows, ncols, +)
 end
 
-# ==============================================================================
-# Assembly Implementations
-# ==============================================================================
+# --- Assembly implementations ----------------------------------------------------- #
 
 function apply_dirichlet_labels!(
         A::AbstractMatrix, form::BilinearForm, dirichlet_labels, dirichlet_components = nothing)
@@ -466,43 +342,27 @@ function apply_dirichlet_labels!(
 end
 
 """
-    assemble(form::BilinearForm; dirichlet_labels = nothing)
+    assemble(form::BilinearForm; dirichlet_labels = nothing, dirichlet_components = nothing) -> SparseMatrixCSC
 
-Allocates a matrix with the form's sparsity pattern and assembles into it.
+Allocate a matrix with the form's sparsity pattern and assemble into it.
 
-**Call this once, then assemble into what it returns.** Building the sparsity pattern is by
-far the larger half of the work — at 250,000 degrees of freedom it is 9,700 us and 52 MB
-against 1,500 us and nothing to fill the matrix — and the pattern does not change between
-assemblies. So a time loop or a Newton iteration written with `assemble` pays for the same
-pattern on every step:
+**Call this once, then assemble into what it returns.** Building the sparsity pattern is the
+larger part of the work (at 250,000 degrees of freedom it is 9,700 us and 52 MB against 1,500 us
+and zero allocations to refill the matrix), and the pattern does not change between assemblies.
+A time loop or Newton iteration benefits from preallocating the pattern once:
 
 ```julia
-A = assemble(a)                        # once: pattern, allocation and the first fill
+A = assemble(a)                        # once: pattern, allocation and initial fill
 for step in 1:nsteps
-    Rₕ!(cₕ, coefficient_at(step))      # written through, so the form still sees it
+    Rₕ!(cₕ, coefficient_at(step))      # modified in-place
     assemble!(A, a)                    # or assemble_parallel!(A, a)
 end
 ```
 
-which is seven times cheaper per step. It assumes the pattern stays the same, which it does
-as long as the form's operators do: a coefficient changes values, not which entries exist.
-
-`assemble!` also takes an `ast`, and for a form like the one above there is no reason to use
-it — resolving is 11 us against 550 to assemble, and 288 bytes. It earns its place in one
-case, where a *coefficient* carries an operator: `innerₕ(D₋ₓ(cₕ) * u, v)` recomputes
-`D₋ₓ(cₕ)` on every resolve, 2 MB of it, where the same operator on the test argument is
-symbolic and free. Hoisting is the better answer there, and keeps the form live —
-
-```julia
-dcₕ = D₋ₓ(cₕ)                          # computed once, and still written through
-a = form(Wₕ, Wₕ, (u, v) -> innerₕ(dcₕ * u, v))
-```
-
 Runs serially or across threads following `form.trial_space`'s backend
-[`execution_policy`](@ref), the same as [`assemble!`](@ref) — [`Serial`](@ref) by default.
-Optional `dirichlet_labels` applies boundary conditions to the matrix; `dirichlet_components`
-restricts which leaf(-ves) of a composite trial space they bind to — see
-[`dirichlet_bc!`](@ref).
+[`execution_policy`](@ref): [`Serial`](@ref) by default. Optional `dirichlet_labels` applies
+boundary conditions to the matrix; `dirichlet_components` restricts which leaf components of a
+composite trial space they bind to (see [`dirichlet_bc!`](@ref)).
 """
 function assemble(form::BilinearForm; dirichlet_labels = nothing, dirichlet_components = nothing)
     _validate_dirichlet_labels(dirichlet_labels)
@@ -513,9 +373,7 @@ function assemble(form::BilinearForm; dirichlet_labels = nothing, dirichlet_comp
     return A
 end
 
-# ==============================================================================
-# Helper Cores for Function Barrier Optimization
-# ==============================================================================
+# --- Helper cores for function barrier optimization ------------------------------- #
 
 # The scalar case: one block, no offsets.
 function _assemble_bilinear_core!(A::SparseMatrixCSC, trial_space, test_space,
@@ -548,17 +406,6 @@ function _scatter_block!(A::SparseMatrixCSC, term::TERM, sp, row_offset::Int,
     return A
 end
 
-# Walk the sum and send each term to the blocks it belongs to. The same shape as
-# `_route_terms!` on the vector side, and for the same reason: recursing keeps each term
-# concretely typed at its own call, where flattening into a vector makes every one a dynamic
-# read.
-#
-# A term naming neither side goes to the diagonal blocks, since `Σᵢ innerₕ(uᵢ, vᵢ)` is block
-# diagonal and not full. A term naming both goes to one block, off-diagonal included — which
-# is what the version this replaces could not do: it walked the top-level components with a
-# single offset for row and column, so off-diagonal terms had nowhere to land and
-# `add_to_sparse!` dropped them in silence. Recursion shape shared via `_visit_operator_add2`
-# (form/common.jl).
 function _assemble_blocks!(A::SparseMatrixCSC, op::OperatorAdd, trial_leaves, test_leaves)
     _visit_operator_add2(
         _assemble_blocks!, A, op, trial_leaves, test_leaves)
@@ -591,15 +438,7 @@ function _assemble_bilinear_core!(A::SparseMatrixCSC, trial_space::CompositeGrid
     return A
 end
 
-# The safe stride for a matrix assembly, read from a sample stencil.
-#
-# A bilinear stencil writes to `(I + off_v, I + off_u)`, so two points collide on an entry
-# only if their *row* footprints overlap: rows disjoint implies entries disjoint whatever the
-# columns do. So the span of the test-side offsets is enough, which is the same quantity
-# `_colour_strides` computes for a vector assembly.
-#
-# Taken from an evaluated stencil rather than from `stencil_offsets`, which refuses a
-# `BilinearProduct` on purpose: its offsets are pairs, and what is wanted here is one side.
+# Safe stride for matrix assembly, determined from a sample stencil evaluation.
 function _bilinear_colour_strides(ast::AST_TYPE, sp, ::Val{D}) where {AST_TYPE, D}
     Ωₕ = mesh(sp)
     grid_inds = indices(Ωₕ)
@@ -617,9 +456,7 @@ function _bilinear_colour_strides(ast::AST_TYPE, sp, ::Val{D}) where {AST_TYPE, 
     return hi .- lo .+ 1
 end
 
-# One colour, threaded, writing straight into the matrix. The colouring is what makes that
-# safe: `add_to_sparse!` searches a column and updates in place, so two threads landing on
-# one entry would race on the value.
+# One colour, threaded, writing directly into the matrix.
 @noinline function _sweep_bilinear_colour!(A::SparseMatrixCSC, sp, term::TERM, idxs,
         lin_indices, mesh_markers, row_offset::Int, col_offset::Int) where {TERM}
     Threads.@threads for I in idxs
@@ -637,9 +474,7 @@ end
     return nothing
 end
 
-# Every colour in turn, as strided sub-grids rather than a materialised list of indices. The
-# version this replaces binned the whole grid into a `Vector{Vector{CartesianIndex}}` at
-# construction — 9.3 MB at 90,000 degrees of freedom, before a single entry was assembled.
+# Every colour in turn, using strided subgrids.
 function _sweep_bilinear!(A::SparseMatrixCSC, sp, term::TERM, strides, row_offset::Int,
         col_offset::Int) where {TERM}
     Ωₕ = mesh(sp)
@@ -660,9 +495,6 @@ function _sweep_bilinear!(A::SparseMatrixCSC, sp, term::TERM, strides, row_offse
     return A
 end
 
-# The threaded counterpart of `_assemble_blocks!`, term outside and grid inside for the same
-# reason the vector side is: routing per point redoes the component walk at every one.
-# Recursion shape shared via `_visit_operator_add2` (form/common.jl).
 function _assemble_blocks_parallel!(A::SparseMatrixCSC, op::OperatorAdd, trial_leaves,
         test_leaves, dim_val::Val)
     _visit_operator_add2(
@@ -708,16 +540,16 @@ function _assemble_bilinear_parallel_core!(A::SparseMatrixCSC,
 end
 
 """
-    assemble!(A::SparseMatrixCSC, form::BilinearForm; dirichlet_labels = nothing, dirichlet_components = nothing, ast = form.ast)
+    assemble!(A::SparseMatrixCSC, form::BilinearForm; dirichlet_labels = nothing, dirichlet_components = nothing, ast = form.ast) -> SparseMatrixCSC
 
-Assembles the `BilinearForm` into the preallocated sparse matrix `A`, allocating nothing (**0 bytes**).
+Assemble the `BilinearForm` into the preallocated sparse matrix `A`, allocating nothing (**0 bytes**).
 
 Runs serially or across threads following `form.trial_space`'s backend
-[`execution_policy`](@ref) — [`Serial`](@ref) (the default) or [`Parallel`](@ref).
+[`execution_policy`](@ref): [`Serial`](@ref) (the default) or [`Parallel`](@ref).
 [`assemble_parallel!`](@ref) is a separate, lower-level entry point that always threads,
 ignoring the backend's policy.
 
-By default `assemble!` uses the pre-resolved `form.ast` stored inside the form.
+By default `assemble!` uses the pre-resolved `form.ast` stored directly inside the form.
 
 ## Live coefficients
 - Grid functions: the stored AST retains references to source `VectorElement` storage. Mutating values in-place (`Rₕ!(cₕ, ...)` or `values(cₕ) .= ...`) between steps automatically updates the matrix entries with 0 allocations.
@@ -742,25 +574,14 @@ function assemble!(
 end
 
 """
-    assemble_parallel!(A::SparseMatrixCSC, form::BilinearForm, ast = resolve_form_ast(form)) -> A
+    assemble_parallel!(A::SparseMatrixCSC, form::BilinearForm, ast = form.ast) -> SparseMatrixCSC
 
-Refills `A` with the assembled `form` across threads, and returns it, regardless of
-`form.trial_space`'s backend policy — a lower-level entry point than [`assemble!`](@ref) for
-forcing a threaded sweep explicitly (benchmarking, or a one-off forced comparison). `A` must
-already carry the right sparsity pattern, from [`allocate_system_matrix`](@ref) or a previous
-[`assemble`](@ref). Unlike `assemble!`, does not apply `dirichlet_labels`.
+Refill `A` with the assembled `form` across threads and return it, regardless of
+`form.trial_space`'s backend policy. `A` must already carry the correct sparsity pattern from
+[`allocate_system_matrix`](@ref) or a previous [`assemble`](@ref). Unlike `assemble!`, does
+not apply `dirichlet_labels`.
 
-Colouring is what makes this correct rather than merely fast. Filling an entry goes through a
-column search and an in-place update, so two threads landing on the same entry would race on
-the *value*, not just on the structure.
-
-A matrix colours on the **test side alone**. A bilinear stencil writes to
-`(I + off_v, I + off_u)`, so two points collide on an entry only if their row footprints
-overlap — rows disjoint implies entries disjoint, whatever the columns do — which is the same
-span a vector assembly uses.
-
-Takes `ast` positionally, matching the vector form and unlike the keyword on
-[`assemble!`](@ref).
+Colouring on the test side ensures thread safety when updating stored matrix values concurrently.
 """
 function assemble_parallel!(
         A::SparseMatrixCSC, form::BilinearForm{D, TrialSpace, TestSpace, AST},

@@ -8,7 +8,7 @@ using LinearAlgebra: issymmetric
 # `dirichlet_bc!` zeros the marked *rows* and puts one on the diagonal, which destroys the
 # symmetry of an operator that had it. `symmetrize!` restores it by eliminating the marked
 # *columns* into the right-hand side. The pair is what lets a symmetric assembled operator
-# stay symmetric under constraints, which is what a Cholesky factorization needs — and the
+# stay symmetric under constraints, which is what a Cholesky factorization needs; the
 # ordering matters: between the two calls the matrix is not symmetric.
 #
 # Two things this file pins that were wrong or absent:
@@ -168,7 +168,7 @@ using LinearAlgebra: issymmetric
     end
 
     @testset "Homogeneous conditions" begin
-        # A zero boundary value contributes nothing to F, so the elimination is skipped —
+        # A zero boundary value contributes nothing to F, so the elimination is skipped:
         # worth about 12% on the conditions that are most common. The result must not
         # depend on which branch was taken.
         Az, Fz = _tri(n), zeros(n)
@@ -187,8 +187,8 @@ using LinearAlgebra: issymmetric
     @testset "Interface types" begin
         # All three entry points now accept all three, which they did not: `symmetrize!`
         # was the one that rejected a `ScalarGridSpace`, so `dirichlet_bc!(A, Wₕ, :bottom)`
-        # worked while `symmetrize!(A, F, Wₕ, :bottom)` was a MethodError — for two calls
-        # that are almost always written together.
+        # worked while `symmetrize!(A, F, Wₕ, :bottom)` was a MethodError (for two calls
+        # that are almost always written together).
         bcs = dirichlet_constraints(set(Ωₕ), :bottom => (x -> 7.0))
         for (holder, nd) in ((Ωₕ, n), (Wₕ, n), (Vₕ, ndofs(Vₕ)))
             A = blockdiag(ntuple(_ -> _tri(n), nd ÷ n)...)
@@ -213,7 +213,7 @@ using LinearAlgebra: issymmetric
 
     @testset "Constraint method sharing" begin
         # `EvaluatedDomainMarkers` holds the original alongside a timestamp, so it is a
-        # distinct type — but it answers `conditions`, `label` and `identifier`
+        # distinct type, but it answers `conditions`, `label` and `identifier`
         # identically, and applying a condition never needs to tell the two apart. There
         # used to be two byte-identical methods, one per type.
         tb = dirichlet_constraints(set(Ωₕ), interval(0.0, 1.0),
@@ -238,7 +238,7 @@ using LinearAlgebra: issymmetric
         # It runs once per step of a time loop. The dense path used to allocate a
         # `findall` vector that grew with the boundary; both paths now walk the mask's set
         # bits, which also does work proportional to what is marked rather than to the
-        # whole grid. Measured inside a function on concrete locals — read from a
+        # whole grid. Measured inside a function on concrete locals: read from a
         # non-const global the arguments box at the call boundary.
         function counts(N)
             Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),

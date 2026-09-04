@@ -11,8 +11,7 @@ using Supposition
     Ω = I × I
 
     @testset "Boundary conditions" begin
-        # Boundary condition functions, stored directly -- point 48 (2026-09-04) removed
-        # BrambleFunction-wrapping from the condition path entirely.
+        # Boundary condition functions are stored directly without BrambleFunction-wrapping.
         f1 = x -> x[1]^2 + x[2]
         f2 = x -> 2 * x[2]
 
@@ -29,9 +28,9 @@ using Supposition
         end
 
         @testset "Time-dependent functor" begin
-            # Create a time-dependent constraint. Point 48 (2026-09-04): the raw two-argument
-            # closure is stored directly now, in `DomainMarkers.conditions` -- a `Tuple`, one
-            # `Marker{F}` per condition's own type -- rather than a `BrambleFunction`.
+            # Create a time-dependent constraint. The raw two-argument closure is stored
+            # directly in `DomainMarkers.conditions`: a `Tuple`, one `Marker{F}` per
+            # condition's own type, rather than a `BrambleFunction`.
             bcs_t = dirichlet_constraints(Ω, I, :time_dep_bc => (x, t) -> f_t(x, t))
 
             function_markers = bcs_t.conditions
@@ -270,7 +269,7 @@ using LinearAlgebra: I as LinearAlgebraI
     @testset "Set/mesh/space construction" begin
         # `dirichlet_constraints` takes whichever of the three the caller has to hand, and
         # digs out the underlying `CartesianProduct` itself. For a composite space that
-        # means its first leaf — the constraint is over the domain, and every leaf of a
+        # means its first leaf: the constraint is over the domain, and every leaf of a
         # composite space shares it.
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
             (6, 6), (true, true))
@@ -340,8 +339,8 @@ using LinearAlgebra: I as LinearAlgebraI
         # This runs once per step of a time loop, so it has to cost nothing beyond the
         # work itself. Two things had to go for that: the leaves used to come back in a
         # `Vector{Tuple{Any, Int}}`, which made every read through a leaf dynamic and
-        # boxed a Bool per degree of freedom — 809 KB for one call on a 60x60 grid with
-        # three components — and the composite matrix path used to build a BitVector over
+        # boxed a Bool per degree of freedom (809 KB for one call on a 60x60 grid with
+        # three components), and the composite matrix path used to build a BitVector over
         # the whole system to hold the marked rows.
         #
         # Both are gone: `leaf_spaces_offsets` answers with a tuple, and each leaf's mask
@@ -368,8 +367,8 @@ using LinearAlgebra: I as LinearAlgebraI
                 matrix_composite = @allocated(dirichlet_bc!(Av, V, :bottom)),
                 vector_scalar = @allocated(dirichlet_bc!(vw, W, bcs, :bottom)),
                 vector_composite = @allocated(dirichlet_bc!(vv, V, bcs, :bottom)),
-                # `components` restricts the same tuple walk, not a fresh Vector — this must
-                # cost the same nothing as the unrestricted call above.
+                # `components` restricts the same tuple walk, not a fresh Vector: this must
+                # cost the same zero bytes as the unrestricted call above.
                 matrix_one_component = @allocated(dirichlet_bc!(
                     Av, V, :bottom; components = 1)),
                 vector_one_component = @allocated(dirichlet_bc!(

@@ -10,17 +10,12 @@ using Bramble: IndexedTrialFunction, IndexedTestFunction, TrialFunction, TestFun
 # side: the row comes from the test function and the column from the trial one. These two
 # walks are how that is read off the tree, and `block_of` turns the pair into a block or
 # into an error.
-#
-# The file used to test a good deal more — `make_trial_args`, `extract_block_asts`,
-# `is_hierarchical` and the throwing `find_*_component` — all of which served a separate
-# `CoupledBilinearForm` reached only for a space of spaces. Routing by leaf index reaches
-# off-diagonal blocks for any composite, so none of it had a caller left.
 
 @testset "Block extraction" begin
     @testset "Component search" begin
         # The walk descends to the leaf, so every node that wraps one has to pass the
         # question through. A node missed here reports `nothing`, and a term reporting
-        # `nothing` goes to every diagonal block rather than the one it names — which is
+        # `nothing` goes to every diagonal block rather than the one it names, which is
         # silent, and produced a wrong answer that summed to something plausible.
         u, v = IndexedTrialFunction{2}(3), IndexedTestFunction{2}(2)
 
@@ -77,7 +72,7 @@ using Bramble: IndexedTrialFunction, IndexedTestFunction, TrialFunction, TestFun
         # neither named: every diagonal block, since Σᵢ innerₕ(uᵢ, vᵢ) is block diagonal
         @test block_of(innerₕ(u, v), 3, 3) === nothing
 
-        # one named and not the other is refused rather than guessed at — it is not
+        # one named and not the other is refused rather than guessed at: it is not
         # something written in a variational formulation
         @test_throws ArgumentError block_of(innerₕ(u(1), v), 3, 3)
         @test_throws ArgumentError block_of(innerₕ(u, v(2)), 3, 3)

@@ -65,26 +65,21 @@ end
 # ==============================================================================
 
 #=
-`markers`, on every `innerₕ`/`inner₊`/`inner₊ₓ`/`inner₊ᵧ`/`inner₊₂` below (both the bilinear
-forms and the linear, source-term ones), restricts the product to the union of the labelled
-regions — a mask on which grid points the assembled term contributes to at all, the symbolic
-counterpart of the numeric `markers` keyword on `space/inner_product.jl`'s versions of the
-same names (point 11).
+`markers`, on every `innerₕ`/`inner₊`/`inner₊ₓ`/`inner₊ᵧ`/`inner₊₂` below (both bilinear
+and linear forms), restricts the product to the union of the labelled regions: a mask on
+which grid points the assembled term contributes to at all, the symbolic counterpart of the
+numeric `markers` keyword on `space/inner_product.jl`'s versions of the same names.
 
-It is implemented by wrapping the freshly built `BilinearProduct`/`LinearProduct` in
-`RegionRestriction` (`restrict_to`) — not a new AST node. That node already returns an empty
-stencil off-region and the term's own stencil on it, which *is* the mask this needs, and it
-is already known to every existing AST walker: block routing
-(`trial_component_or_nothing`/`test_component_or_nothing`), `resolve_ast`, `is_symbolic`. A
-bespoke marker node was considered and rejected for exactly this reason during point 13 (see
-`form/symmetry.jl`'s "AST wrapper node" note) — reusing `RegionRestriction` sidesteps that
-risk entirely, since nothing new needs teaching to any of those walkers.
+Implemented by wrapping the built `BilinearProduct`/`LinearProduct` in `RegionRestriction`
+(`restrict_to`). That node returns an empty stencil off-region and the term's own stencil on
+it, which is the mask required, and is supported by all existing AST walkers: block routing
+(`trial_component_or_nothing`/`test_component_or_nothing`), `resolve_ast`, `is_symbolic`.
 =#
 
 @inline _restrict_by_markers(prod::LazyOp{D}, ::NTuple{0, Symbol}) where {D} = prod
 
 # A single marker unwraps to a bare `Symbol` region rather than a one-element tuple, so it
-# matches `restrict_to`'s own convention exactly — including `:interior`, which is a keyword
+# matches `restrict_to`'s own convention exactly, including `:interior`, which is a keyword
 # `RegionRestriction` special-cases only when `region` is literally a `Symbol`, not a tuple
 # containing one.
 @inline function _restrict_by_markers(prod::LazyOp{D}, markers::NTuple{1, Symbol}) where {D}
@@ -97,13 +92,13 @@ end
 end
 
 """
-    inner_plus(left::NTuple{D,LazyOp{D}}, right::NTuple{D,LazyOp{D}}) where D
+    inner_plus(left::NTuple{D, LazyOp{D}}, right::NTuple{D, LazyOp{D}}; markers = ()) -> LazyOp{D}
 
 Constructs the sum of directional modified \$L^2_+\$ inner products across all dimensions.
 
 Each dimension's term is a `LinearProduct` or a `BilinearProduct` independently, following
-[`_is_source_only`](@ref) on `left[dim]` exactly as [`innerₕ`](@ref) does — a gradient tuple
-of interpolated sources (`πₕ(u1), πₕ(u2)`, point 25) is source-only dimension by dimension.
+[`_is_source_only`](@ref) on `left[dim]` exactly as [`innerₕ`](@ref) does: a gradient tuple
+of interpolated sources (`πₕ(u1), πₕ(u2)`) is source-only dimension by dimension.
 """
 function inner_plus(left::NTuple{D, LazyOp{D}}, right::NTuple{D, LazyOp{D}};
         markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
@@ -122,22 +117,20 @@ end
 # Support both scalar and NTuple combinations in standard inner products:
 
 """
-    innerₕ(left::LazyOp{D}, right::LazyOp{D}; markers = ()) where D
+    innerₕ(left::LazyOp{D}, right::LazyOp{D}; markers = ()) -> LazyOp{D}
 
-Constructs a symbolic \$L^2\$ inner product between `left` and `right` — a `LinearProduct`
-(source × test) if `left` is *source-only* ([`_is_source_only`](@ref): a source, or a source
+Constructs a symbolic \$L^2\$ inner product between `left` and `right`: a `LinearProduct`
+(source × test) if `left` is source-only ([`_is_source_only`](@ref): a source, or a source
 wrapped in differences/averages/shifts/jumps/restrictions/scales, never a trial function),
-a `BilinearProduct` (trial × test) otherwise.
+or a `BilinearProduct` (trial × test) otherwise.
 
-This matters for a `LazyOp` `left` specifically — a bare `Function`/`Number`/`VectorElement`
-is never anything but a source, so those overloads below build a `LinearProduct`
-unconditionally, but `left` arriving already wrapped (`πₕ(uₕ)`, or `D₋ₓ(πₕ(uₕ))`, point 25)
-needs the check: the two AST shapes carry different stencil contracts, and building the
-wrong one is a structural mismatch, not merely a slower path.
+This applies specifically when `left` is a `LazyOp`: a bare `Function`/`Number`/`VectorElement`
+is unconditionally a source, so those overloads build a `LinearProduct` directly. When
+`left` arrives already wrapped (`πₕ(uₕ)` or `D₋ₓ(πₕ(uₕ))`), this check ensures the correct
+linear AST node is constructed.
 
-`markers` restricts the assembled term to the union of the labelled regions — a mask on
-which grid points it contributes to at all, the symbolic counterpart of the `markers`
-keyword on the numeric `innerₕ` in `space/inner_product.jl`.
+`markers` restricts the assembled term to the union of the labelled regions: a mask on
+which grid points it contributes to at all.
 """
 function innerₕ(left::LazyOp{D}, right::LazyOp{D};
         markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
@@ -169,23 +162,21 @@ function inner₊(left::NTuple{D, LazyOp{D}}, right::NTuple{D, LazyOp{D}};
 end
 
 """
-    inner₊(left::BackwardDifference{D,Dim}, right::BackwardDifference{D,Dim}) where {D,Dim}
+    inner₊(left::BackwardDifference{D,Dim}, right::BackwardDifference{D,Dim}) -> LazyOp{D}
 
-`inner₊` of two backward differences taken along the *same* direction, which is the weight
+`inner₊` of two backward differences taken along the same direction, which is the weight
 the product carries: `InnerPlus{Dim}`.
 
-In one dimension there is only one direction, so `inner₊(left, right)` above already
-answers. Above one dimension a bare `inner₊` of two operators names no direction, and the
-weights are directional — so the direction is read off the nodes, exactly as the coupled
-overloads below read it. This is what makes `inner₊(D₋ₓ(u), D₋ₓ(v))` mean what it reads as.
+In one dimension there is only one direction, so `inner₊(left, right)` already answers.
+Above one dimension a bare `inner₊` of two operators names no direction, and the
+weights are directional: the direction is read off the nodes. This is what makes
+`inner₊(D₋ₓ(u), D₋ₓ(v))` mean what it reads as.
 
 Backward differences only, as everywhere `inner₊` meets a difference: the weights are those
 of the summation-by-parts identity, which pairs them with a backward difference.
 
-A `LinearProduct` (source × test) if `left` is *source-only* ([`_is_source_only`](@ref)) —
-`inner₊(D₋ₓ(πₕ(u)), D₋ₓ(v))` (point 25) is this case, `left` a `BackwardDifference` wrapping
-an interpolated source rather than a trial function — a `BilinearProduct` otherwise, exactly
-as [`innerₕ`](@ref) decides.
+Constructs a `LinearProduct` (source × test) if `left` is source-only ([`_is_source_only`](@ref)),
+or a `BilinearProduct` otherwise, matching [`innerₕ`](@ref).
 
 `markers` restricts the sum as it does for [`innerₕ`](@ref).
 """
@@ -201,20 +192,13 @@ function inner₊(left::BackwardDifference{D, Dim},
 end
 
 """
-    inner₊(left::LazyOp{D}, right::LazyOp{D}) where {D}
+    inner₊(left::LazyOp{D}, right::LazyOp{D}) -> LazyOp{D}
 
 Symbolic `inner₊` of two operators neither of which names a direction.
 
 In one dimension there is only one direction to name, so this is the product, with weight
 `InnerPlus{1}`. Above one dimension the weights are directional and nothing here supplies
-the direction, so it is an error — and one worth spelling out, because without this method
-the call does not fail here at all: dispatch falls through to the *numeric* `inner₊` over
-grid functions in `space/inner_product.jl`, whose `@generated` body then complains about
-types the caller never mentioned.
-
-The `D` is a type parameter, so the branch folds away and neither case pays for the other.
-Writing it as one method rather than a `LazyOp{1}` pair keeps it from tying with the
-single-sided methods below, which in one dimension are equally specific.
+the direction, so it throws an `ArgumentError`.
 
 `markers` restricts the sum as it does for [`innerₕ`](@ref).
 """
@@ -241,22 +225,21 @@ end
 end
 
 """
-    inner₊(left::LazyOp{D}, right::BackwardDifference{D,Dim}) where {D,Dim}
-    inner₊(left::BackwardDifference{D,Dim}, right::LazyOp{D}) where {D,Dim}
+    inner₊(left::LazyOp{D}, right::BackwardDifference{D,Dim}) -> LazyOp{D}
+    inner₊(left::BackwardDifference{D,Dim}, right::LazyOp{D}) -> LazyOp{D}
 
 `inner₊` where one side is a backward difference and the other is not: the difference names
 the direction, so the product carries `InnerPlus{Dim}`.
 
-This is what `inner₊(u, D₋ₓ(v))` means — the common form, and the one the coupled
+This is what `inner₊(u, D₋ₓ(v))` means: the common form, and the one the coupled
 pressure-velocity terms are written in, `inner₊(p, D₋ₓ(v[1]))` with `p` a symbolic scalar
-field. It is not restricted to the indexed leaves: a plain `TrialFunction` reads the
+field. It is not restricted to indexed leaves: a plain `TrialFunction` reads the
 direction off the difference just as an `IndexedTrialFunction` does.
 
 Backward differences only, as everywhere `inner₊` meets a difference.
 
-A `LinearProduct` if `left` is *source-only* ([`_is_source_only`](@ref)), a `BilinearProduct`
-otherwise — exactly as [`innerₕ`](@ref) decides, so `inner₊(πₕ(u), D₋ₓ(v))` (point 25) builds
-the right AST shape too.
+A `LinearProduct` if `left` is source-only ([`_is_source_only`](@ref)), a `BilinearProduct`
+otherwise, matching [`innerₕ`](@ref).
 
 `markers` restricts the sum as it does for [`innerₕ`](@ref).
 """
@@ -364,7 +347,7 @@ end
 end
 
 # Linear Forms (e.g. innerₕ(f, v) where f is a Function, Number, or VectorElement and v is
-# TestFunction). `markers` restricts each the same way it does the bilinear forms above — a
+# TestFunction). `markers` restricts each the same way it does the bilinear forms above: a
 # mask on which grid points the source term contributes to at all.
 function innerₕ(l::Function, r::LazyOp{D};
         markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
@@ -431,30 +414,21 @@ function inner₊(l::NTuple{D, Number}, r::NTuple{D, LazyOp{D}};
 end
 @inline function inner₊(l::NTuple{D, VectorElement}, r::NTuple{D, LazyOp{D}};
         markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
-    if is_symbolic(r)
-        return _restrict_by_markers(
-            foldl(+,
-                ntuple(
-                    dim -> LinearProduct{D, InnerPlus{dim},
-                        SourceVector{D, typeof(l[dim].data)}, typeof(r[dim])}(
-                        SourceVector{D, typeof(l[dim].data)}(l[dim].data), r[dim]),
-                    Val(D))),
-            markers)
+    if all(is_symbolic, r)
+        terms = ntuple(Val(D)) do dim
+            LinearProduct{D, InnerPlus{dim}, SourceVector{D, typeof(values(l[dim]))},
+                typeof(r[dim])}(
+                SourceVector{D, typeof(values(l[dim]))}(values(l[dim])), r[dim])
+        end
+        return _restrict_by_markers(foldl(+, terms), markers)
     else
         return _inner₊_numeric_tuple_unsupported(r)
     end
 end
 
-# The branch above used to try to evaluate the product numerically, and could not have: it
-# read `first(l).values` where a `VectorElement` stores `data`, and called `inner₊!`, which
-# no revision of the package defines. Two names that were never going to resolve, in a
-# branch nothing reached — the same shape as `backward_difference_matrix`.
-#
-# What it would have meant is also unclear. It is entered when `r` is a tuple of operators
-# carrying no trial or test function, so there is nothing for the product to be a form *in*;
-# `∇₋ₕ(IdentityOperator(Wₕ))` has no argument to differentiate. So this says so rather than
-# guessing at an implementation, and the symbolic branch above — the one that is actually
-# used — is untouched.
+# The right-hand side in this branch carries no trial or test function, so there is
+# nothing for the product to be a form in: `∇₋ₕ(IdentityOperator(Wₕ))` has no argument to
+# differentiate.
 @noinline function _inner₊_numeric_tuple_unsupported(r)
     throw(ArgumentError(
         "inner₊ of a tuple of grid functions against a tuple of non-symbolic operators " *
@@ -528,24 +502,22 @@ end
 # Zero-Allocation Stencil Evaluators
 # ==============================================================================
 
-#=
-`_same_operator_shape` (form/symmetry.jl) answers, for `innerₕ(L(u), L(v))` with the same `L`
-on both sides, that `op.left_op` and `op.right_op` are the same operator chain up to
-substituting `TrialFunction` for `TestFunction` at the leaves — which is exactly the
-condition under which `local_stencil(op.left_op, …)` and `local_stencil(op.right_op, …)`
-compute the identical tuple of `(offset, coefficient)` pairs. The two are then multiplied
-pairwise regardless, so half of those products — `left[i][2]*left[j][2]` and
-`left[j][2]*left[i][2]` — are the same number computed twice.
-`multiply_stencils_bilinear_symmetric` computes each such product once and reuses it for
-both `(i, j)` and `(j, i)`, so the fast path below runs `local_stencil` on one side only and
-still returns the same `N²`-entry tuple `multiply_stencils_bilinear` would have, just with
-`N(N+1)/2` multiplications behind it instead of `N²`.
-
-This check depends only on `op.left_op`/`op.right_op`'s structure, not on which space the
-trial and test argument range over — unlike `issymmetric`/`isposdef` (form/symmetry.jl),
-which additionally require the same space, it answers a strictly local question ("do the two
-sides compute the same numbers here") and is safe regardless.
-=#
+# `_same_operator_shape` answers, for `innerₕ(L(u), L(v))` with the same `L`
+# on both sides, that `op.left_op` and `op.right_op` are the same operator chain up to
+# substituting `TrialFunction` for `TestFunction` at the leaves: exactly the
+# condition under which `local_stencil(op.left_op, …)` and `local_stencil(op.right_op, …)`
+# compute the identical tuple of `(offset, coefficient)` pairs. The two are then multiplied
+# pairwise regardless, so half of those products (`left[i][2]*left[j][2]` and
+# `left[j][2]*left[i][2]`) are the same number computed twice.
+# `multiply_stencils_bilinear_symmetric` computes each such product once and reuses it for
+# both `(i, j)` and `(j, i)`, so the fast path below runs `local_stencil` on one side only and
+# still returns the same `N²`-entry tuple `multiply_stencils_bilinear` would have, just with
+# `N(N+1)/2` multiplications behind it instead of `N²`.
+#
+# This check depends only on `op.left_op`/`op.right_op`'s structure, not on which space the
+# trial and test argument range over: unlike `issymmetric`/`isposdef`,
+# which additionally require the same space, it answers a strictly local question ("do the two
+# sides compute the same numbers here") and is safe regardless.
 @inline function local_stencil(
         op::BilinearProduct{D, InnerType}, space, I::CartesianIndex{D},
         markers, lin_idx::Int) where {D, InnerType}
@@ -563,34 +535,26 @@ end
 # `multiply_stencils_linear` keeps only the *right* operand's offsets and multiplies the
 # coefficients, so the assembly sums the left stencil's coefficients and discards where each
 # one sat. That is exact only when the left stencil is a single entry, at offset zero,
-# carrying the factor's true value at this point — an invariant the code relied on without
-# ever stating it, and which a source under an operator breaks: `D₋ₓ(f)` stencils as the
-# same value at two offsets with opposite signs, so the sum is zero.
+# carrying the factor's true value at this point: an invariant the code relies on, and which
+# a source under an operator breaks: `D₋ₓ(f)` stencils as the same value at two offsets with
+# opposite signs, so the sum is zero.
 #
-# Fixed not by re-deriving each operator's arithmetic a second time (point 68's `_source_value`
-# did, one method per node, duplicating every mask and spacing `local_stencil` already has),
-# but by reading the source-only subtree's own `local_stencil` and discarding its offsets —
-# `sum_stencil_values` (form/common.jl). That reads correctly *because* of point 61's
-# `stencil_shift_trait`: a source is `PointDependentStencil`, so every neighbour a wrapping
-# operator reaches is obtained by re-evaluating the subtree at that neighbour's own point
-# (`shifted_inner_stencil`) rather than by relabelling today's offset onto it — which is
-# exactly the re-reading `_source_value` used to do by hand, now the same mechanism point 61
-# already needed for the interpolation operator. `_is_source_only` is decided by the operand's
-# type, so the branch folds away and a trial-function left operand pays nothing for it.
+# Fixed by reading the source-only subtree's own `local_stencil` and discarding its offsets
+# (`sum_stencil_values`). That reads correctly via `stencil_shift_trait`:
+# a source is `PointDependentStencil`, so every neighbour a wrapping operator reaches is
+# obtained by re-evaluating the subtree at that neighbour's own point
+# (`shifted_inner_stencil`) rather than by relabelling the offset.
 @noinline function _throw_source_not_point_dependent(op)
     throw(ArgumentError(
         "`_is_source_only` accepted $(typeof(op)) as a source, but `stencil_shift_trait` " *
         "does not mark it (or a node it wraps) `PointDependentStencil`. Contracting it would " *
-        "relabel offsets instead of re-reading the source at each neighbour — exactly the " *
-        "point-68 defect this check exists to catch loudly instead of assembling silently " *
-        "wrong. Add the missing `stencil_shift_trait` method next to the node's definition " *
-        "(form/operators/interpolation.jl)."))
+        "relabel offsets instead of re-reading the source at each neighbour. " *
+        "Add the missing `stencil_shift_trait` method next to the node's definition."))
 end
 
-# Called only on a `LinearProduct`'s own `left_op`, which is source-only by construction —
+# Called only on a `LinearProduct`'s own `left_op`, which is source-only by construction:
 # every constructor above chooses `LinearProduct` over `BilinearProduct` precisely by
-# checking `_is_source_only(left)` first. So the contraction below is unconditional, not a
-# branch: there is no non-source case to fall back to here.
+# checking `_is_source_only(left)` first. So the contraction below is unconditional.
 @inline function _contracted_left_stencil(op, space, I::CartesianIndex{D},
         markers, lin_idx::Int) where {D}
     stencil_shift_trait(op) isa PointDependentStencil ||
@@ -625,8 +589,8 @@ end
 
 # Disambiguation for the empty tuple.
 #
-# The overloads below are written over `NTuple{D, …}` for several element types — LazyOp
-# nodes, VectorElements, Functions, Numbers — and any two of them overlap at `D = 0`,
+# The overloads below are written over `NTuple{D, …}` for several element types: LazyOp
+# nodes, VectorElements, Functions, Numbers; any two of them overlap at `D = 0`,
 # where `Tuple{}` satisfies both and neither signature is more specific. That is ten
 # ambiguous pairs, which Aqua fails on.
 #

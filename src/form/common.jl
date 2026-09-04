@@ -8,28 +8,28 @@
 @inline _get_component(x::Number, dim::Int) = x
 
 """
-    get_spacing(mesh, I, dim::Int)
+    get_spacing(mesh, I, dim::Int) -> Real
 
-Gets the grid spacing in a given coordinate direction `dim` at Cartesian index `I`.
+Grid spacing in coordinate direction `dim` at Cartesian index `I`.
 """
 @inline get_spacing(mesh, I, dim::Int) = _get_component(spacing(mesh, I), dim)
 
 """
-    get_forward_spacing(mesh, I, dim::Int)
+    get_forward_spacing(mesh, I, dim::Int) -> Real
 
-Gets the forward grid spacing in a given coordinate direction `dim` at Cartesian index `I`.
+Forward grid spacing in coordinate direction `dim` at Cartesian index `I`.
 """
 @inline get_forward_spacing(mesh, I, dim::Int) = _get_component(forward_spacing(mesh, I), dim)
 
 """
-    get_half_spacing(mesh, I, dim::Int)
+    get_half_spacing(mesh, I, dim::Int) -> Real
 
-Gets the half-grid spacing in a given coordinate direction `dim` at Cartesian index `I`.
+Half-grid spacing in coordinate direction `dim` at Cartesian index `I`.
 """
 @inline get_half_spacing(mesh, I, dim::Int) = _get_component(half_spacing(mesh, I), dim)
 
 """
-    shift_offset(offset::NTuple{D,Int}, dim::Int, delta::Int) where D
+    shift_offset(offset::NTuple{D, Int}, dim::Int, delta::Int) -> NTuple{D, Int}
 
 Shifts a Cartesian offset tuple by `delta` in dimension `dim`.
 """
@@ -37,9 +37,9 @@ Shifts a Cartesian offset tuple by `delta` in dimension `dim`.
     i -> i == dim ? offset[i] + delta : offset[i], Val(D))
 
 """
-    zero_offset(::Val{D}) where D
+    zero_offset(::Val{D}) -> NTuple{D, Int}
 
-Returns a D-tuple of zeros.
+Zero-initialized offset tuple of dimension `D`.
 """
 @inline zero_offset(::Val{D}) where {D} = ntuple(x -> 0, Val(D))
 
@@ -115,14 +115,14 @@ end
 
 The sum of a stencil's coefficients, ignoring its offsets entirely.
 
-What `_contracted_left_stencil` (`form/operators/inner.jl`) needs from a source-only
+Required by `_contracted_left_stencil` (`form/operators/inner.jl`) for a source-only
 subtree's own `local_stencil`: not the offsets, which mean nothing for a value that
-contributes no matrix structure, only their total. `false` rather than `0` or `zero(T)` as
-the empty-stencil answer — [`RegionRestriction`](@ref) can legitimately produce `()` for a
+contributes no matrix structure, only their total. `false` rather than `0` or `zero(T)` is
+the empty-stencil answer: [`RegionRestriction`](@ref) can legitimately produce `()` for a
 point outside its region, and there is no `T` to call `zero` on when there are no entries to
 read one from; `false` promotes to whatever numeric type the other entries (or, empty, the
-caller's own multiplication) turn out to have, the same trick `sum(f, itr; init = false)`
-plays, spelled as a `@generated` unrolled fold so the tuple length stays a compile-time
+caller's own multiplication) turn out to have, the same behavior `sum(f, itr; init = false)`
+provides, spelled as a `@generated` unrolled fold so the tuple length stays a compile-time
 constant like every other stencil-algebra primitive here.
 """
 @generated function sum_stencil_values(stencil::Tuple)
@@ -191,12 +191,12 @@ end
 An AST node representing a source term defined by a discrete vector of values.
 
 Note the division of labour with `GridFunctionScale`, which also carries values per
-grid point. A `SourceFunction` holds a function of *position*, `f(x)`, evaluated at the
+grid point. A `SourceFunction` holds a function of position, `f(x)`, evaluated at the
 point. A `Function` inside a `GridFunctionScale` is something else entirely: a
-**zero-argument thunk** returning the vector or number to scale by, called as `f()` both
+zero-argument thunk returning the vector or number to scale by, called as `f()` both
 here and in `resolve_ast`. It defers building that vector until the form is resolved.
 
-So `(x -> x[1]) * D₋ₓ(u)` does not do what it reads as — the thunk call fails, because the
+So `(x -> x[1]) * D₋ₓ(u)` does not do what it reads as: the thunk call fails, because the
 function wants a point. A function of position belongs in a `SourceFunction`, or should be
 restricted to the grid with `Rₕ` first and passed as the vector it becomes.
 """
@@ -205,11 +205,11 @@ struct SourceVector{D, VType <: AbstractVector} <: LazyOp{D}
 end
 
 """
-    SourceConstant{D,T} <: LazyOp{D}
+    SourceConstant{D, T} <: LazyOp{D}
 
 An AST node representing a source term that is the same number everywhere on the mesh.
 
-`SourceFunction` reaches this value the general way, through `f(point(m, I))` — a real
+`SourceFunction` reaches this value the general way, through `f(point(m, I))`: a real
 cost when `f` is `x -> l`, discarding the point it just computed, at every grid point of
 every assembly. `SourceConstant` skips `point` entirely; measured behind a function
 barrier, assembling a constant source is 1.6–2.6× faster than through `SourceFunction`,
@@ -228,7 +228,7 @@ offset from the point being evaluated.
 
 Every other node's stencil says "this many points from here, on the mesh being walked", which
 is what lets `shift_stencil` compose operators by relabelling. An interpolation cannot say
-that: the trial degrees of freedom it reaches live on a *different* mesh, and which ones
+that: the trial degrees of freedom it reaches live on a different mesh, and which ones
 depends on where the point falls (`locate_cell`). So it names them outright, and the bilinear
 consumers resolve the two kinds of entry by dispatch.
 """
@@ -238,8 +238,8 @@ end
 
 # --- Whether an operator's stencil may be shifted by relabelling its offsets -------- #
 #
-# Every wrapper that reaches a neighbour — the differences, the averages, `Sₓ`, the jumps —
-# evaluates its inner operator **once**, at the point being visited, and then produces the
+# Every wrapper that reaches a neighbour (the differences, the averages, Sₓ, the jumps)
+# evaluates its inner operator once, at the point being visited, and then produces the
 # neighbour's contribution by adding a constant to the offsets (`shift_stencil`). That is
 # exact whenever the inner stencil is the same shape everywhere, which is to say for a trial
 # or test function however deeply wrapped: relabelling `(0,)` as `(-1,)` says precisely what
@@ -248,11 +248,11 @@ end
 #
 # Two kinds of node break that. An interpolation's entries name absolute columns chosen by
 # `locate_cell` from the point's own coordinates, and a source's entries carry the function's
-# *value* at the point — for neither does adding one to an offset produce what the neighbour
+# value at the point: for neither does adding one to an offset produce what the neighbour
 # holds. Such a node has to be re-evaluated at the shifted point instead, which is what this
-# trait selects between; `stencil_shift_trait`'s ladder lives in
-# `form/operators/interpolation.jl`, after every node type it has to answer for exists —
-# marking a source point-dependent there (point 71) is also what a source-only subtree's own
+# trait selects between. `stencil_shift_trait`'s ladder lives in
+# `form/operators/interpolation.jl`, after every node type it has to answer for exists:
+# marking a source point-dependent there is also what a source-only subtree's own
 # contraction (`_contracted_left_stencil`, `form/operators/inner.jl`) reads its values through.
 #
 # A Holy trait rather than a `Bool` predicate on purpose: the choice is made by dispatch on a
@@ -289,17 +289,17 @@ struct PointDependentStencil <: StencilShiftTrait end
 
 # The point `delta` steps away in direction `Dim`, clamped to the mesh.
 #
-# Clamping is safe at *most* callers: an operator that reaches outside masks its own
+# Clamping is safe at most callers: an operator that reaches outside masks its own
 # out-of-range half to a zero coefficient (`mask = I[Dim] == 1 ? 0 : 1` and its twins), so the
 # clamped point's entries are multiplied by zero and only ever contribute an explicit zero.
-# Evaluating without clamping is what is *not* safe — `point(m, I)` off the grid is out of
+# Evaluating without clamping is what is not safe: `point(m, I)` off the grid is out of
 # bounds, where the offsets a translation-invariant shift produces are merely filtered later.
 #
 # `ShiftNode` is the one caller this does not fully cover: it carries no mask of its own
 # (unlike every difference, average and jump), and relies for its offset path on the
-# assembly's own bounds check dropping an out-of-range *offset* — a fallback with nothing left
+# assembly's own bounds check dropping an out-of-range offset: a fallback with nothing left
 # to check once a `PointDependentStencil` has already reduced the shift to a bare value. For a
-# *source* specifically, it checks [`_in_grid`](@ref) itself rather than trusting the clamp.
+# source specifically, it checks [`_in_grid`](@ref) itself rather than trusting the clamp.
 # An interpolation is the other `PointDependentStencil` node and is unaffected: clamping is
 # its own already-correct behaviour (`locate_cell` extrapolates by design), so `ShiftNode`
 # only takes the `_in_grid` branch when its inner operand is source-only.
@@ -316,7 +316,7 @@ end
 Whether `I` names a real point of `space`'s mesh.
 
 The check [`ShiftNode`](@ref)'s own `local_stencil` makes for a `PointDependentStencil` inner
-operator, in place of trusting `_clamped_shift`'s clamp — see the note there for why that
+operator, in place of trusting `_clamped_shift`'s clamp; see the note there for why that
 trust does not extend to this one caller.
 """
 @inline _in_grid(space, I::CartesianIndex{D}) where {D} = checkbounds(
@@ -332,7 +332,7 @@ The one place the "shift by relabelling" assumption is made, so the one place a 
 cannot be relabelled has to be handled: [`TranslationInvariantStencil`](@ref) relabels
 `inner`'s offsets and never touches `inner_op` again, [`PointDependentStencil`](@ref)
 discards `inner` and evaluates `inner_op` at the shifted point instead. Both produce a tuple
-of the same static length, since it is the same operator either way — so the callers'
+of the same static length, since it is the same operator either way, so the callers'
 `concatenate_stencils` sees exactly the shape it always did.
 """
 @inline function shifted_inner_stencil(inner_op, inner, space, I::CartesianIndex{D},
@@ -357,26 +357,26 @@ end
 # 3. Form API & Bramble Standard Mapping
 # ==============================================================================
 
-# Indexing a node by component — `v(1)`, and the distribution through whatever is built on
-# top of it — lives in form/component.jl, included after the operator files because it needs
+# Indexing a node by component (`v(1)`, and distribution through whatever is built on
+# top of it) lives in form/component.jl, included after the operator files because it needs
 # every node type in its signatures.
 
 """
-    trial_function(::Val{D}) where D
+    trial_function(::Val{D}) -> TrialFunction{D}
 
 Constructs a `TrialFunction` of dimension `D`.
 """
 trial_function(::Val{D}) where {D} = TrialFunction{D}()
 
 """
-    test_function(::Val{D}) where D
+    test_function(::Val{D}) -> TestFunction{D}
 
 Constructs a `TestFunction` of dimension `D`.
 """
 test_function(::Val{D}) where {D} = TestFunction{D}()
 
 """
-    source_function(f, ::Val{D}) where D
+    source_function(f, ::Val{D}) -> SourceFunction{D, typeof(f)}
 
 Constructs a `SourceFunction` wrapping function `f`.
 """
@@ -528,21 +528,21 @@ is_symbolic(op::JumpNode) = is_symbolic(op.inner_op)
 """
     _is_source_only(op::LazyOp) -> Bool
 
-Whether a `LazyOp` subtree is *source-only*: built entirely from sources
+Whether a `LazyOp` subtree is source-only: built entirely from sources
 (`SourceFunction`/`SourceVector`) and the plain operators that wrap them, never bottoming
 out in a `TrialFunction`/`IndexedTrialFunction` leaf.
 
 `innerₕ`'s `l::Function`/`l::Number`/`l::VectorElement` overloads (`operators/inner.jl`)
-never need this: those three types are never anything *but* a source, so wrapping them in a
+never need this: those three types are never anything but a source, so wrapping them in a
 `LinearProduct` is unconditional. The question only exists for an argument that already
-arrived as a `LazyOp` — `πₕ(uₕ)` ([`interpolate_at`](@ref), point 25) or `D₋ₓ(πₕ(uₕ))` are
+arrived as a `LazyOp`: `πₕ(uₕ)` ([`interpolate_at`](@ref)) or `D₋ₓ(πₕ(uₕ))` are
 sources too, just already wrapped, and the generic `innerₕ(::LazyOp, ::LazyOp)` used to build
 a `BilinearProduct` regardless, which is the wrong AST shape for a `LinearForm`'s assembly
-walk — a `BilinearProduct`'s stencil carries a *pair* of offsets (trial and test), where
+walk: a `BilinearProduct`'s stencil carries a pair of offsets (trial and test), where
 `_scatter_term!` (`form/linear.jl`) expects one.
 
-A missing case defaults to `false` (the fallback `::LazyOp` method below) — conservative,
-since that is exactly the behaviour every node had before this predicate existed (always
+A missing case defaults to `false` (the fallback `::LazyOp` method below): conservative,
+since that is exactly the behavior every node had before this predicate existed (always
 `BilinearProduct`) for anything not explicitly listed as source-only.
 """
 _is_source_only(::TrialFunction) = false
@@ -578,35 +578,33 @@ _is_source_only(::LinearProduct) = false
 
 _is_source_only(::LazyOp) = false
 
-# The *value* of a source-only subtree at a grid point — `_contracted_left_stencil`
+# The value of a source-only subtree at a grid point: `_contracted_left_stencil`
 # (form/operators/inner.jl) reads it from the subtree's own `local_stencil`, correctly
 # re-evaluated at every neighbour because a source is `PointDependentStencil`
-# (form/operators/interpolation.jl, point 71). No separate ladder here any more; point 68
-# fixed this defect first, by hand, one method per node — retired once point 61's shift
-# trait gave the same recursion a home that needed writing only once.
+# (form/operators/interpolation.jl).
 
 # ==============================================================================
-# 7. Walking an OperatorAdd tree — shared by every router in linear.jl/bilinear.jl
+# 7. Walking an OperatorAdd tree: shared by every router in linear.jl/bilinear.jl
 # ==============================================================================
 
 # Six functions across `linear.jl`/`bilinear.jl` (`_check_block_meshes`,
 # `_route_terms!`, `_route_terms_parallel!`, `_pattern_blocks!`, `_assemble_blocks!`,
 # `_assemble_blocks_parallel!`) walk a form's `OperatorAdd` tree to send each summand where
 # it belongs, all with the same shape: recurse left, recurse right, done. Recursing the tree
-# rather than flattening it into a vector of terms first, the same reason in each case — a
-# flattened vector is `Vector{Any}` and makes every term a dynamic read, where recursing
+# rather than flattening it into a vector of terms first preserves concrete types: a
+# flattened vector is `Vector{Any}` and makes every term a dynamic read, whereas recursing
 # keeps each term concretely typed at its own call and costs nothing.
 #
 # They differ only in how many arguments sit before `op` and what (if anything) the caller
-# reads back — and nothing does: every call site above these six is a bare statement, the
-# return value always discarded. So the three shapes below return whatever the six already
+# reads back; nothing does: every call site above these six is a bare statement, the
+# return value always discarded. The three shapes below return whatever the six already
 # return unread today. Three separate names rather than one overloaded on argument count:
 # with `rest...`/untyped leading arguments, overloads sharing a name are genuinely ambiguous
-# to the compiler (a call whose second *and* third arguments both happen to be `OperatorAdd`
-# matches two of the three signatures at once) — Aqua's ambiguity check catches this even
+# to the compiler (a call whose second and third arguments both happen to be `OperatorAdd`
+# matches two of the three signatures at once). Aqua's ambiguity check catches this even
 # though no real call here ever hits it, and three names sidesteps the question rather than
 # resolving it with a disambiguating method nothing calls. Each is still picked at its call
-# site by hand, same as before; what moves out is only the recursion body, and
+# site by hand; what moves out is only the recursion body, and
 # `@code_warntype` still sees ordinary calls to `f`, specialized on `F = typeof(f)` like any
 # other higher-order call in Julia.
 

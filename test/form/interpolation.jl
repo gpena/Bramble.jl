@@ -7,7 +7,7 @@ using Bramble: SourceFunction, TrialFunction, TestFunction, LinearProduct,
 # it composes with the same operators (D₋ₓ, M₋ₓ, ...) any other source does. The one thing
 # that is not automatic is `innerₕ`'s own dispatch: its generic LazyOp×LazyOp constructor used
 # to assume "trial × test" unconditionally and build a BilinearProduct, which is the wrong AST
-# shape for a source — πₕ(uₕ) (and D₋ₓ(πₕ(uₕ)), etc.) never reaches the Function/Number/
+# shape for a source: `πₕ(uₕ)` (and `D₋ₓ(πₕ(uₕ))`, etc.) never reaches the Function/Number/
 # VectorElement overloads that build a LinearProduct, because it already arrives as a LazyOp.
 # `_is_source_only` is the fix: a recursive predicate that lets innerₕ tell "a source, however
 # deeply wrapped" from "a trial function" and route to the correct AST node either way.
@@ -29,7 +29,7 @@ using Bramble: SourceFunction, TrialFunction, TestFunction, LinearProduct,
     @test _is_source_only(2 * src)
     @test _is_source_only(src + src)
 
-    # a trial function is never source-only, wrapped or not — this is the case the fix must
+    # a trial function is never source-only, wrapped or not: this is the case the fix must
     # not disturb, since it is what every existing bilinear form is built from
     u = TrialFunction{2}()
     @test !_is_source_only(u)
@@ -54,7 +54,7 @@ end
     uv = Rₕ(Vh, (x -> x[1] + x[2], x -> 2x[1] - x[2]))
     u_leaf2 = uv(2)   # lives on Wsmall, moved onto Wbig below
 
-    # the dispatch itself: innerₕ(πₕ(u), v) must build a LinearProduct (source × test) — a
+    # the dispatch itself: innerₕ(πₕ(u), v) must build a LinearProduct (source × test), as a
     # BilinearProduct here would crash at assembly, since the linear-form walk only knows how
     # to scatter a single-offset stencil
     lf1 = form(Vh, v -> innerₕ(πₕ(u_leaf2), v(1)))
@@ -97,8 +97,8 @@ end
 end
 
 @testset "inner₊ source dispatch" begin
-    # innerₕ's fix (_is_source_only) was applied only to innerₕ itself when point 25 landed;
-    # inner_plus/inner₊/inner₊ₓ/inner₊ᵧ/inner₊₂ had the identical structural bug — every one
+    # innerₕ's fix (_is_source_only) was applied only to innerₕ itself originally;
+    # inner_plus/inner₊/inner₊ₓ/inner₊ᵧ/inner₊₂ had the identical structural bug: every one
     # of them built a BilinearProduct unconditionally too. Fixed the same way, checked the
     # same way: each dispatch shape asserted directly, then assembled for real.
     Ωbig = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (8, 8), (true, true))
@@ -180,7 +180,7 @@ end
     end
 
     if Threads.nthreads() > 1
-        # more work than threads, so every thread gets a chunk of every colour — a race in
+        # more work than threads, so every thread gets a chunk of every colour: a race in
         # the scatter, or a colour built against the wrong AST shape, shows here
         Ωb = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (40, 40), (true, true))
         Ωb_small = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (17, 17), (true, true))

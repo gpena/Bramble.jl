@@ -9,25 +9,22 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
 # `multiply_stencils_linear` keeps only the test side's offsets and multiplies the
 # coefficients, so the assembly contracts the left factor by summing its coefficients and
 # discarding where each one sat. That is exact only when the left stencil is a single entry
-# at offset zero carrying the factor's true value — an invariant nothing stated, and one a
+# at offset zero carrying the factor's true value (an invariant nothing stated, and one a
 # source under an operator breaks: `local_stencil` composes operators by relabelling offsets
 # (`shift_stencil`), which is right for a translation-invariant node and wrong for a source,
-# whose coefficient *is* a value read at the current point.
+# whose coefficient *is* a value read at the current point).
 #
-# Before this was fixed (point 68), `innerₕ(D₋ₓ(f), v)` assembled to exactly zero (the two
+# Previously, `innerₕ(D₋ₓ(f), v)` assembled to exactly zero (the two
 # relabelled copies of f(xᵢ) cancelled) and `innerₕ(M₋ₓ(f), v)` reproduced `innerₕ(f, v)`
-# (they summed back to f(xᵢ)) — the operator silently dropped either way. The forms tutorial
-# shipped an example of the first kind. The fix originally lived in a dedicated `_source_value`
-# ladder, one method per node, mirroring `local_stencil`'s masks and spacings by hand; point 71
-# retired that ladder onto `_contracted_left_stencil` reading the same subtree's own
-# `local_stencil`, correct once a source is marked `PointDependentStencil`
-# (`form/operators/interpolation.jl`) — this file's checks are unchanged either way, since they
-# pin the observable behaviour, not which mechanism produces it.
+# (they summed back to f(xᵢ)): the operator silently dropped either way.
+# Now, `_contracted_left_stencil` reads the subtree's own `local_stencil`, correct once a
+# source is marked `PointDependentStencil` (`form/operators/interpolation.jl`).
+# This file's checks pin the observable behaviour.
 #
 # Every check below is against the NUMERIC operator layer, which is a third, independent
 # implementation of the same arithmetic: `assemble(innerₕ(Op(f), v))` must equal
 # `values(Op(Rₕ(Wₕ, f))) .* weights`. Each is paired with a negative control, because a zero
-# vector satisfies `isfinite`, `isa` and `≈ 0` alike — that is exactly how this went unnoticed.
+# vector satisfies `isfinite`, `isa` and `≈ 0` alike: that is exactly how this went unnoticed.
 
 @testset "Source operators" begin
     @testset "1D numeric equivalence" begin
@@ -79,10 +76,10 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
         @test assemble(form(Wₕ, v -> innerₕ(M₋ₓ(D₋ₓ(sf)), v))) ≈ values(M₋ₓ(D₋ₓ(fₕ))) .* w
 
         # `f` is separable, x²  +  sin(3y), so its mixed difference is mathematically zero at
-        # every point — both sides here are machine-epsilon noise (~1e-16), not a value an
+        # every point (both sides here are machine-epsilon noise (~1e-16), not a value an
         # unqualified `≈`'s relative tolerance can compare meaningfully; an `atol` this loose
         # would swallow a real regression anywhere else in this file, where every other
-        # comparison is against a value orders of magnitude larger
+        # comparison is against a value orders of magnitude larger)
         @test isapprox(assemble(form(Wₕ, v -> innerₕ(D₋ₓ(D₋ᵧ(sf)), v))),
             values(D₋ₓ(D₋ᵧ(fₕ))) .* w; atol = 1e-12)
 
@@ -90,7 +87,7 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
         @test assemble(form(Wₕ, v -> innerₕ(3 * D₋ₓ(sf), v))) ≈ 3 .* values(D₋ₓ(fₕ)) .* w
 
         # a sum of two differently-operated copies of the same source, and of two different
-        # sources — the addends are contracted independently
+        # sources: the addends are contracted independently
         gf = source_function(x -> x[2], Val(2))
         gₕ = Rₕ(Wₕ, x -> x[2])
         @test assemble(form(Wₕ, v -> innerₕ(D₋ₓ(sf) + M₋ₓ(sf), v))) ≈
@@ -141,8 +138,8 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
         @test b ≈ expected
         @test !all(iszero, b)
 
-        # `shift_op` carries no mask of its own — every difference/average/jump does, and
-        # that mask is what makes clamping the shifted point safe for them (the clamped,
+        # `shift_op` carries no mask of its own (every difference/average/jump does, and
+        # that mask is what makes clamping the shifted point safe for them: the clamped,
         # possibly-wrong read gets multiplied by exactly zero). A shift by more than one point
         # makes the distinction sharp: the wrongly-clamped answer would read the *boundary
         # point's own value* rather than contribute zero, which a shift of amount 1 cannot
@@ -167,7 +164,7 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
         full = assemble(form(Wₕ, v -> innerₕ(D₋ₓ(sf), v)))
         @test !all(iszero, b)                       # something survives the mask
         @test b != full                             # and the mask actually removed something
-        # every entry is either the unmasked one or zero — the mask selects, it does not scale
+        # every entry is either the unmasked one or zero: the mask selects, it does not scale
         @test all(i -> b[i] ≈ full[i] || iszero(b[i]), eachindex(b))
     end
 
@@ -192,7 +189,7 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
         us = Rₕ(Wsmall, f)
         w = weights(Wbig, Innerh())
 
-        # the interpolant landed on Wbig, then differenced there — the numeric spelling of
+        # the interpolant landed on Wbig, then differenced there: the numeric spelling of
         # exactly what D₋ₓ(πₕ(us)) means symbolically
         b = assemble(form(Wbig, v -> innerₕ(D₋ₓ(πₕ(us)), v)))
         @test b ≈ values(D₋ₓ(πₕ(Wbig, us))) .* w
@@ -219,9 +216,9 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
     end
 
     @testset "Test-side offsets" begin
-        # `innerₕ(f, D₋ₓ(v))` is the discrete adjoint: the coefficient at grid point J picks
-        # up contributions from both I = J and I = J+1, which is exactly what the test-side
-        # offsets are for. It must NOT be collapsed the way the source side is.
+        # innerₕ(f, D₋ₓ(v)) is the discrete adjoint: the coefficient at grid point J picks
+        # up contributions from both I = J and I = J+1. It must NOT be collapsed the way
+        # the source side is.
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 7, true)
         Wₕ = gridspace(Ωₕ)
         fₕ = Rₕ(Wₕ, x -> x + 1)
@@ -234,33 +231,33 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
     end
 
     @testset "inner₊/inner₊₂ source-only left operand" begin
-        # `inner₊(left::LazyOp, right::BackwardDifference)` and its mirror, and the plain
-        # `inner₊ₓ`/`inner₊ᵧ`/`inner₊₂(left, right)` methods, all branch the same way
-        # `innerₕ` does: a `LinearProduct` when `left` is source-only, a `BilinearProduct`
-        # otherwise. Both branches are the same function, so the untested `LinearProduct`
-        # side is checked against the already-verified `BilinearProduct` side, contracted at
-        # a concrete vector equal to the source's own values — not a from-scratch oracle, but
-        # a genuinely independent code path (`_contracted_left_stencil` vs `local_stencil`
-        # on a `BilinearProduct`) computing what should be the identical number.
+        # inner₊(left::LazyOp, right::BackwardDifference) and its mirror, and the plain
+        # inner₊ₓ/inner₊ᵧ/inner₊₂(left, right) methods, all branch the same way
+        # innerₕ does: a LinearProduct when left is source-only, a BilinearProduct
+        # otherwise. Both branches are the same function, so the untested LinearProduct
+        # side is checked against the already-verified BilinearProduct side, contracted at
+        # a concrete vector equal to the source's own values (not a from-scratch oracle, but
+        # a genuinely independent code path (_contracted_left_stencil vs local_stencil
+        # on a BilinearProduct) computing what should be the identical number).
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 8, true)
         Wₕ = gridspace(Ωₕ)
         f = x -> x^2 + sin(2x)
         sf = source_function(f, Val(1))
         fₕ = Rₕ(Wₕ, f)
 
-        # inner₊(source, D₋ₓ(v)) — source-only left, direction named by the right side
+        # inner₊(source, D₋ₓ(v)): source-only left, direction named by the right side
         b1 = assemble(form(Wₕ, v -> inner₊(sf, D₋ₓ(v))))
         A1 = assemble(form(Wₕ, Wₕ, (u, v) -> inner₊(u, D₋ₓ(v))))
         @test b1 ≈ A1 * values(fₕ)
         @test !all(iszero, b1)
 
-        # inner₊(D₋ₓ(source), v) — source-only left wrapped in a difference, plain right
+        # inner₊(D₋ₓ(source), v): source-only left wrapped in a difference, plain right
         b2 = assemble(form(Wₕ, v -> inner₊(D₋ₓ(sf), v)))
         A2 = assemble(form(Wₕ, Wₕ, (u, v) -> inner₊(D₋ₓ(u), v)))
         @test b2 ≈ A2 * values(fₕ)
         @test !all(iszero, b2)
 
-        # inner₊₂(source, v) — the plain directional (z) form, 3D since Dim = 3 needs D ≥ 3
+        # inner₊₂(source, v): the plain directional (z) form, 3D since Dim = 3 needs D ≥ 3
         Ω3 = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 3, 5),
             (true, true, true))
         W3 = gridspace(Ω3)
@@ -317,11 +314,11 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
 
     @testset "Invalid source node error" begin
         # `_is_source_only` and `stencil_shift_trait` are two independent ladders over the
-        # same node types (point 71): a source-only subtree is contracted by reading its own
+        # same node types: a source-only subtree is contracted by reading its own
         # `local_stencil`, correct only because a source is marked `PointDependentStencil`.
         # A future node accepted by the first ladder without a matching entry in the second
-        # would otherwise relabel offsets instead of re-reading the neighbour — the exact
-        # point-68 defect, reintroduced silently — so this checks it and throws instead. Not
+        # would otherwise relabel offsets instead of re-reading the neighbour:
+        # this checks that case and throws instead. Not
         # reachable through today's node types (every one that answers `true` to
         # `_is_source_only` already answers `PointDependentStencil` here), so exercised
         # directly rather than by constructing a form that hits it.

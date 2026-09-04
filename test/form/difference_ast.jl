@@ -10,10 +10,9 @@ using Bramble: IdentityOperator, IndexedTrialFunction, IndexedTestFunction,
 # The two one-sided difference nodes of the symbolic layer.
 #
 # They are meant to be interchangeable: whatever a form can do with D₋ it can do with D₊.
-# That had drifted — `get_derivative_matrix_and_scale` and `get_innermost_dim` existed for
+# Previously, `get_derivative_matrix_and_scale` and `get_innermost_dim` existed for
 # the backward node alone, so any form built on D₊ met a MethodError as soon as it was
-# assembled. The backward one was also calling `backward_difference_matrix`, a name no
-# revision of the package ever defined.
+# assembled.
 #
 # The one deliberate exception is `inner₊`, which takes backward differences only. Its
 # weights are the staggered ones of the summation-by-parts identity, and those pair with a
@@ -92,8 +91,8 @@ using Bramble: IdentityOperator, IndexedTrialFunction, IndexedTestFunction,
         end
 
         # the block walk reaches its leaf through either node, and through a scaling on
-        # top of it. Its leaf is an indexed trial or test function — that is what it is
-        # looking for — so it is those the nodes wrap here, not the identity.
+        # top of it. Its leaf is an indexed trial or test function (that is what it is
+        # looking for), so it is those the nodes wrap here, not the identity.
         u, v = IndexedTrialFunction{2}(3), IndexedTestFunction{2}(2)
         for D in (D₋ₓ, D₊ₓ, D₋ᵧ, D₊ᵧ)
             @test trial_component_or_nothing(D(u)) == 3
