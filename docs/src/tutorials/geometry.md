@@ -227,6 +227,9 @@ collect(labels(m1))
 # [:inflow, :outflow, :wall]
 ```
 
+!!! tip "Zero-allocation marker iteration"
+    `labels(m1)` aggregates all marker types using `Iterators.flatten`. In performance-critical inner loops where zero heap allocations are required, iterate directly over `label_symbols(m1)`, `label_tuples(m1)`, or `label_conditions(m1)`, which allocate 0 bytes.
+
 ### 4.3 Function-based and time-dependent markers
 
 You can also define internal or geometric subset markers using boolean condition functions, as well as time-dependent markers:
@@ -282,12 +285,16 @@ topo_dim(Ω)       # 2
 tails(Ω)          # ((0.0, 1.0), (0.0, 1.0))
 center(Ω)         # (0.5, 0.5)
 (0.5, 0.5) ∈ Ω    # true
+Bramble.is_collapsed(Ω)    # false (checks if any dimension is degenerate)
+Bramble.is_collapsed(Ω, 1) # false (checks dimension 1)
 
-# Access underlying set and markers — `set` is `public`, not exported, so it needs `Bramble.`
+# Access underlying set and markers — `set` and `is_collapsed` are `public`, not exported, so they use `Bramble.`
 Bramble.set(Ω)    # CartesianProduct{2, Float64}
 markers(Ω)        # DomainMarkers
 collect(labels(Ω)) # [:dirichlet, :neumann]
 ```
+
+Iterating directly over `label_symbols(Ω)`, `label_tuples(Ω)`, or `label_conditions(Ω)` allocates 0 bytes.
 
 ---
 

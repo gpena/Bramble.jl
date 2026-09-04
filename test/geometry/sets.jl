@@ -3,9 +3,17 @@ using Bramble
 using Bramble: CartesianProduct, set, is_collapsed, point_type
 using StaticArrays
 
-@testset "CartesianProduct" begin
-    @testset "Constructors" begin
-        # interval constructor (Float64 default)
+@testset "CartesianProduct sets" begin
+    # Invariants tested:
+    # 1. Interval construction defaults to Float64 when integer bounds are provided.
+    # 2. Preserves custom scalar element types (Float32).
+    # 3. Degenerate intervals (min ≈ max) correctly flag collapsed status.
+    # 4. Inverted intervals (x > y) raise an ArgumentError.
+    # 5. Multi-dimensional tuples promote inhomogeneous coordinates and validate coordinate ordering.
+    # 6. Degenerate point constructors construct collapsed 1D sets.
+    # 7. Box constructors calculate min/max bounding boxes from arbitrary opposing corner pairs.
+    @testset "CartesianProduct constructors" begin
+        # Interval constructor (Float64 default)
         I_f64 = interval(-3.0, 10.0)
         @test I_f64 isa CartesianProduct{1, Float64}
         @test I_f64.box isa SVector{1}
@@ -13,27 +21,27 @@ using StaticArrays
         @test all(isapprox.(I_f64.box[1], (-3.0, 10.0)))
         @test I_f64.collapsed[1] == false
 
-        # interval constructor (Int -> Float64)
+        # Interval constructor (Int -> Float64 promotion)
         I_int = interval(-3, 10)
         @test I_int isa CartesianProduct{1, Float64}
         @test I_int.box[1] == (-3.0, 10.0)
         @test all(isapprox.(I_int.box[1], (-3.0, 10.0)))
 
-        # interval constructor (Float32)
+        # Interval constructor (Float32)
         I_f32 = interval(0.0f0, 1.0f0)
         @test I_f32 isa CartesianProduct{1, Float32}
         @test eltype(I_f32) === Float32
 
-        # interval edge case: zero width
+        # Interval edge case: zero width
         I_zero = interval(5.5, 5.5)
         @test I_zero isa CartesianProduct{1, Float64}
         @test all(isapprox.(I_zero.box[1], (5.5, 5.5)))
         @test I_zero.collapsed[1] == true
 
-        # interval constructor assertion x <= y
+        # Interval constructor assertion: x <= y
         @test_throws ArgumentError interval(10, 1)
 
-        # interval from CartesianProduct{1}
+        # Interval from CartesianProduct{1}
         I_f64_again = interval(I_f64)
         @test I_f64_again isa CartesianProduct{1, Float64}
         @test all(isapprox.(I_f64_again.box[1], (-3.0, 10.0)))
@@ -58,14 +66,14 @@ using StaticArrays
         @test cp_f32_3d.box[2] == (2.0f0, 3.0f0)
         @test cp_f32_3d.box[3] == (-1.0f0, 0.0f0)
 
-        # cartesian_product invalid assertion
+        # cartesian_product invalid interval error
         @test_throws ArgumentError cartesian_product(((1.0, 0.0), (2.0, 3.0)))
 
         # cartesian_product(CartesianProduct) identity
         cp_id = cartesian_product(cp_int_2d)
         @test cp_id === cp_int_2d
 
-        # point constructor (collapsed CartesianProduct)
+        # Point constructor (collapsed 1D set)
         P_f64 = point(3.5)
         @test P_f64 isa CartesianProduct{1, Float64}
         @test P_f64.box[1] == (3.5, 3.5)
@@ -75,7 +83,7 @@ using StaticArrays
         @test P_f32 isa CartesianProduct{1, Float32}
         @test eltype(P_f32) === Float32
 
-        # box constructors
+        # Box constructors from opposing corners
         B1d = box(1.0, 5.0)
         @test B1d isa CartesianProduct{1, Float64}
         @test B1d.box[1] == (1.0, 5.0)
@@ -89,7 +97,6 @@ using StaticArrays
         @test B2d.box[1] == (0.0, 1.0)
         @test B2d.box[2] == (2.0, 3.0)
 
-        # box with reversed points
         B2d_rev = box((5.0, 10.0), (2.0, 8.0))
         @test B2d_rev.box[1] == (2.0, 5.0)
         @test B2d_rev.box[2] == (8.0, 10.0)
@@ -101,16 +108,25 @@ using StaticArrays
         @test B3d.box[3] == (2.0, 5.0)
     end
 
-    @testset "Accessors & properties" begin
+    # Invariants tested:
+    # 1. dim returns spatial embedding dimension D.
+    # 2. topo_dim returns D minus the number of collapsed dimensions.
+    # 3. eltype extracts scalar coordinate precision T.
+    # 4. center calculates the midpoint along each dimension.
+    # 5. tails and indexing X(i) return interval tuples; out-of-bounds raises BoundsError.
+    # 6. first and last return the lower and upper bounds of 1D intervals.
+    # 7. projection extracts individual 1D coordinate intervals as CartesianProduct{1}.
+    # 8. point_type reflects coordinate representation (T for 1D, NTuple{D, T} for D-dimensional).
+    @testset "Accessors and geometric properties" begin
         I = interval(0.0, 1.0)
         R2 = cartesian_product(((0, 1), (2, 3)))
         R3 = I × interval(2.0, 3.0) × interval(4.0, 5.0)
 
-        # set accessor
+        # Set identity accessor
         @test set(I) === I
         @test set(R2) === R2
 
-        # eltype
+        # Coordinate element type
         @test eltype(I) === Float64
         @test eltype(typeof(I)) === Float64
         @test eltype(R2) === Float64
@@ -118,7 +134,7 @@ using StaticArrays
         @test eltype(R3) === Float64
         @test eltype(typeof(R3)) === Float64
 
-        # dim
+        # Embedding dimension
         @test dim(I) === 1
         @test dim(typeof(I)) === 1
         @test dim(R2) === 2
@@ -126,12 +142,12 @@ using StaticArrays
         @test dim(R3) === 3
         @test dim(typeof(R3)) === 3
 
-        # topo_dim (topological dimension)
+        # Topological dimension
         @test topo_dim(I) === 1
         @test topo_dim(R2) === 2
         @test topo_dim(R3) === 3
 
-        # topo_dim with collapsed dimensions
+        # Topological dimension with collapsed dimensions
         P_collapsed = point(1.0)
         @test topo_dim(P_collapsed) === 0
 
@@ -139,19 +155,28 @@ using StaticArrays
         @test dim(I_line) === 2
         @test topo_dim(I_line) === 1
 
-        # center
+        # Center point
         @test center(I) ≈ SVector(0.5)
         @test center(R2) ≈ SVector(0.5, 2.5)
         @test center(R3) ≈ SVector(0.5, 2.5, 4.5)
 
-        # is_collapsed
+        # Degeneracy check across 1D and nD sets
         @test is_collapsed(I) == false
         @test is_collapsed(P_collapsed) == true
         @test is_collapsed(1.0, 1.0) == true
         @test is_collapsed(1, 1.0) == true
         @test is_collapsed(0.0, 1.0) == false
+        @test is_collapsed(R2) == false
+        @test is_collapsed(R2, 1) == false
+        @test is_collapsed(R2, 2) == false
+        R2_c = I × point(3.0)
+        @test is_collapsed(R2_c) == true
+        @test is_collapsed(R2_c, 1) == false
+        @test is_collapsed(R2_c, 2) == true
+        @test_throws BoundsError is_collapsed(R2_c, 0)
+        @test_throws BoundsError is_collapsed(R2_c, 3)
 
-        # point_type
+        # Point representation type
         @test point_type(I) === Float64
         @test point_type(typeof(I)) === Float64
         @test point_type(R2) === NTuple{2, Float64}
@@ -159,7 +184,7 @@ using StaticArrays
         @test point_type(R3) === NTuple{3, Float64}
         @test point_type(typeof(R3)) === NTuple{3, Float64}
 
-        # Call syntax (X(i))
+        # Indexing syntax X(i)
         @test all(isapprox.(I(1), (0.0, 1.0)))
         @test all(isapprox.(R2(1), (0.0, 1.0)))
         @test all(isapprox.(R2(2), (2.0, 3.0)))
@@ -170,7 +195,7 @@ using StaticArrays
         @test_throws BoundsError R2(0)
         @test_throws BoundsError R3(4)
 
-        # tails(X, i)
+        # Component tails
         @test all(isapprox.(tails(I, 1), (0.0, 1.0)))
         @test all(isapprox.(tails(R2, 1), (0.0, 1.0)))
         @test all(isapprox.(tails(R2, 2), (2.0, 3.0)))
@@ -179,38 +204,43 @@ using StaticArrays
         @test_throws BoundsError tails(R2, 0)
         @test_throws BoundsError tails(R3, 4)
 
-        # tails(X)
         @test all(isapprox.(tails(I), (0.0, 1.0)))
         @test tails(R2) == ((0.0, 1.0), (2.0, 3.0))
         @test tails(R3) == ((0.0, 1.0), (2.0, 3.0), (4.0, 5.0))
 
-        # first/last (only for D=1)
+        # First and last endpoints for 1D sets
         @test isapprox(first(I), 0.0)
         @test isapprox(last(I), 1.0)
         @test_throws MethodError first(R2)
         @test_throws MethodError last(R3)
     end
 
-    @testset "Operations & promotions" begin
+    # Invariants tested:
+    # 1. Tensor product (×) combines dimensions: dim(X × Y) == dim(X) + dim(Y).
+    # 2. Promotes coordinate types when operands have different precisions (e.g. Float32 × Float64).
+    # 3. Preserves collapsed flags across combined dimensions.
+    # 4. Associativity holds across successive tensor products.
+    # 5. projection extracts 1D sets with dimension bounds checking.
+    @testset "Tensor products and type promotion" begin
         I1 = interval(0.0, 1.0)
         I2 = interval(2.0, 3.0)
         I3_int = interval(4, 5)
         I_f32 = interval(0.0f0, 1.0f0)
 
-        # × operator (Float64 x Float64)
+        # Tensor product (Float64 × Float64)
         P1 = I1 × I2
         @test P1 isa CartesianProduct{2, Float64}
         @test dim(P1) == 2
         @test P1.box isa SVector{2}
         @test tails(P1) == ((0.0, 1.0), (2.0, 3.0))
 
-        # × operator with mixed types (Float32 x Float64)
+        # Tensor product with mixed types (Float32 × Float64)
         P_mixed = I_f32 × I1
         @test P_mixed isa CartesianProduct{2, Float64}
         @test eltype(P_mixed) === Float64
         @test tails(P_mixed) == ((0.0, 1.0), (0.0, 1.0))
 
-        # × operator creating 5D
+        # Higher-dimensional tensor product (5D)
         I4 = interval(6.0, 7.0)
         I5 = interval(8.0, 9.0)
         P5 = I1 × I2 × I3_int × I4 × I5
@@ -218,7 +248,7 @@ using StaticArrays
         @test dim(P5) == 5
         @test P5.box isa SVector{5}
 
-        # projection
+        # 1D projection extraction
         P_proj = I1 × I2 × I3_int
         proj1 = projection(P_proj, 1)
         proj2 = projection(P_proj, 2)
@@ -242,7 +272,10 @@ using StaticArrays
         @test_throws BoundsError projection(P_proj, 0)
     end
 
-    @testset "Type stability & allocations" begin
+    # Invariants tested:
+    # 1. Compiler type inference (@inferred) for constructors, accessors, and geometric queries.
+    # 2. Zero heap allocations (@test_allocs) for core geometry queries and tensor products.
+    @testset "Type stability and zero allocations" begin
         I1 = interval(0.0, 1.0)
         I2 = interval(2.0, 3.0)
         cp2 = I1 × I2
@@ -264,15 +297,22 @@ using StaticArrays
         @inferred cp2(1)
         @inferred is_collapsed(I1)
         @inferred is_collapsed(point(1.0))
+        @inferred is_collapsed(cp2)
+        @inferred is_collapsed(cp2, 1)
+        @inferred is_collapsed(cp3)
+        @inferred is_collapsed(cp3, 2)
         @inferred I1 × I2
 
-        # Allocations: Zero heap allocations for core operations
+        # Zero heap allocations for core operations
         @test_allocs interval(0.0, 1.0)
         @test_allocs point(0.5)
         @test_allocs box(0.0, 1.0)
         @test_allocs box((0.0, 1.0), (2.0, 3.0))
         @test_allocs center(cp2)
         @test_allocs topo_dim(cp3)
+        @test_allocs is_collapsed(cp2)
+        @test_allocs is_collapsed(cp2, 1)
+        @test_allocs is_collapsed(cp3)
         @test_allocs projection(cp3, 2)
         @test_allocs tails(cp3)
         @test_allocs tails(cp3, 1)
@@ -280,13 +320,16 @@ using StaticArrays
         @test_allocs (I1 × I2)
     end
 
-    @testset "Show" begin
+    # Invariants tested:
+    # 1. Compact mode formats intervals and collapsed points concisely.
+    # 2. Detailed multiline mode displays formatted coordinates, dimensions, and topological dimensions.
+    @testset "String representation" begin
         I = interval(0.0, 1.0)
         P = point(2.5)
         R2 = I × interval(2.0, 3.0)
         R2_collapsed = I × point(3.0)
 
-        # Compact mode
+        # Compact display mode
         io_compact = IOBuffer()
         show(IOContext(io_compact, :compact => true), I)
         @test occursin("[0.0, 1.0]", String(take!(io_compact)))
@@ -300,7 +343,7 @@ using StaticArrays
         show(IOContext(io_compact, :compact => true), R2_collapsed)
         @test occursin("[0.0, 1.0] × 3.0", String(take!(io_compact)))
 
-        # Detailed multiline mode
+        # Detailed multiline display mode
         io_det = IOBuffer()
         show(io_det, I)
         str_I = String(take!(io_det))
@@ -320,29 +363,37 @@ using StaticArrays
         @test occursin("topological dim 1", str_R2c)
     end
 
-    @testset "Point containment" begin
+    # Invariants tested:
+    # 1. Scalar containment inside 1D closed intervals.
+    # 2. Vector and SVector containment across multi-dimensional bounding boxes.
+    # 3. Vector length mismatches return false without throwing.
+    # 4. Fallback returns false for non-numeric types.
+    @testset "Point containment queries" begin
         I = interval(0.0, 1.0)
         R2 = interval(0.0, 2.0) × interval(-1.0, 1.0)
 
-        # AbstractVector path (line 220)
+        # AbstractVector containment
         @test [0.5] ∈ I
         @test [1.5] ∉ I
         @test [0.5, 0.0] ∈ R2
         @test [2.5, 0.0] ∉ R2
-        @test [0.5, 0.0, 0.0] ∉ R2  # wrong dimension → false (line 220 length check)
+        @test [0.5, 0.0, 0.0] ∉ R2
 
-        # SVector path (goes through AbstractVector dispatch)
+        # SVector containment
         @test SVector(0.5) ∈ I
         @test SVector(1.5) ∉ I
         @test SVector(0.5, 0.0) ∈ R2
         @test SVector(2.5, 0.0) ∉ R2
 
-        # Fallback dispatch for non-numeric, non-tuple input (line 221)
+        # Fallback dispatch for unsupported input types
         @test ("hello" ∈ I) == false
         @test (:sym ∈ R2) == false
     end
 
-    @testset "Pretty print" begin
+    # Invariants tested:
+    # 1. PrettyPrinter formatting utilities: indentation, coloring, section headers, and key-value pairs.
+    # 2. Dimension label helper get_dimension_label returns precomputed labels or indexed fallbacks.
+    @testset "Pretty printing and visual formatting" begin
         using Bramble: PrettyPrinter, with_indent, print_indent, print_colored,
                        println_colored,
                        print_header, print_section_header, print_subsection_header,
@@ -355,109 +406,86 @@ using StaticArrays
         pp1 = with_indent(pp0, 1)
         pp2 = with_indent(pp0, 2)
 
-        # print_indent: level 0 → no output
         print_indent(pp0)
         @test isempty(String(take!(io)))
 
-        # print_indent: level 1 → two spaces
         print_indent(pp1)
         @test String(take!(io)) == "  "
 
-        # print_colored: default color
         print_colored(pp0, "hello")
         @test occursin("hello", String(take!(io)))
 
-        # print_colored: with color
         print_colored(pp0, "world"; color = :blue)
         @test occursin("world", String(take!(io)))
 
-        # println_colored
         println_colored(pp0, "line"; color = :green)
         @test occursin("line", String(take!(io)))
 
-        # print_header without type_info
         print_header(pp0, "Header")
         @test occursin("Header", String(take!(io)))
 
-        # print_header with type_info
         print_header(pp0, "Title", "Float64")
         str = String(take!(io))
         @test occursin("Title", str) && occursin("Float64", str)
 
-        # print_section_header
         print_section_header(pp0, "Section:")
         @test occursin("Section:", String(take!(io)))
 
-        # print_subsection_header without count
         print_subsection_header(pp0, "Sub", 0)
         @test occursin("Sub", String(take!(io)))
 
-        # print_subsection_header with count
         print_subsection_header(pp0, "Sub", 3)
         @test occursin("(3)", String(take!(io)))
 
-        # print_key_value
         print_key_value(pp0, "key", "val")
         str = String(take!(io))
         @test occursin("key", str) && occursin("val", str)
 
-        # print_label
         print_label(pp0, :boundary)
         @test occursin(":boundary", String(take!(io)))
 
-        # print_value
         print_value(pp0, 3.14)
         @test occursin("3.14", String(take!(io)))
 
-        # print_interval — normal
         print_interval(pp0, 0.0, 1.0)
         @test occursin("0.0, 1.0", String(take!(io)))
 
-        # print_interval — collapsed
         print_interval(pp0, 0.5, 0.5; collapsed = true)
         str = String(take!(io))
         @test occursin("collapsed", str)
 
-        # print_dimension_info
         print_dimension_info(pp0, "x", 0.0, 1.0, false)
         str = String(take!(io))
         @test occursin("x", str) && occursin("0.0", str)
 
-        # print_empty_message
         print_empty_message(pp0)
         @test occursin("none", String(take!(io)))
 
-        # print_marker_summary — all types
         print_marker_summary(pp0, 2, 1, 0)
         str = String(take!(io))
         @test occursin("2 symbols", str) && occursin("1 tuple", str)
 
-        # print_marker_summary — single marker (singular)
         print_marker_summary(pp0, 1, 0, 0)
         @test occursin("1 marker", String(take!(io)))
 
-        # print_marker_summary — condition only
         print_marker_summary(pp0, 0, 0, 2)
         @test occursin("2 functions", String(take!(io)))
 
-        # print_labels_list
         print_labels_list(pp0, [:a, :b, :c])
         str = String(take!(io))
         @test occursin(":a", str) && occursin(":b", str) && occursin(":c", str)
 
-        # get_dimension_label
         @test get_dimension_label(1) == "x"
         @test get_dimension_label(2) == "y"
         @test get_dimension_label(3) == "z"
-        @test get_dimension_label(7) == "x7"  # beyond precomputed table
+        @test get_dimension_label(7) == "x7"
     end
 end
 
-@testset "Containment allocations" begin
-    # `x in X` is called per point when a marker condition is evaluated over a mesh, so a
-    # heap allocation here is one per grid point. The vector method reduced over `1:D`
-    # with a closure capturing the vector, which allocated 80 bytes a call; it is unrolled
-    # over Val(D) instead.
+# Invariants tested:
+# 1. AbstractVector point containment unrolls over Val(D) with zero heap allocations.
+# 2. Closed boundary corners and points on edges evaluate to true.
+@testset "Containment query zero-allocation guarantees" begin
     X1 = interval(0.0, 1.0)
     X2 = interval(0.0, 1.0) × interval(0.0, 2.0)
     X3 = box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))
@@ -471,11 +499,10 @@ end
     @test_allocs contains(v2, X2)
     @test_allocs contains(v3, X3)
 
-    # the unrolled form still answers correctly, including the length mismatch
     @test v2 in X2
     @test !([2.0, 1.0] in X2)
     @test !([0.5] in X2)
     @test !([0.5, 1.0, 0.5] in X2)
-    @test [0.0, 0.0] in X2          # closed at the corner
+    @test [0.0, 0.0] in X2
     @test [1.0, 2.0] in X2
 end

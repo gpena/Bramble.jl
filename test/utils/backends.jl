@@ -5,7 +5,8 @@ using Bramble: Backend, backend, vector, matrix, vector_type, matrix_type, backe
 using SparseArrays
 using LinearAlgebra: diag, I
 
-# A lightweight mock GPU array wrapper that simulates GPU vendor arrays (like MtlArray/CuArray)
+# Minimal DenseArray mock simulating vendor GPU array types (such as MtlArray or CuArray)
+# to verify generic backend dispatch without requiring GPU hardware or optional dependencies.
 struct MockGPUArray{T, N} <: DenseArray{T, N}
     data::Array{T, N}
 end
@@ -24,8 +25,13 @@ Base.fill!(A::MockGPUArray{T}, v) where {T} = (fill!(A.data, v); A)
 const MockGPUVector{T} = MockGPUArray{T, 1}
 const MockGPUMatrix{T} = MockGPUArray{T, 2}
 
-@testset "Backend" begin
-    @testset "Constructor" begin
+@testset "Backend configuration and allocation" begin
+    # Invariants tested:
+    # 1. Default configuration: Vector{Float64}, SparseMatrixCSC{Float64, Int}, Serial() policy.
+    # 2. Positional constructor backend(T) deduces array element types from domain coordinate types.
+    # 3. Execution policy selection (Serial vs Parallel) is preserved at type and instance level.
+    # 4. DenseVector type parameter constraint rejects non-dense vector types at the type level.
+    @testset "Backend constructors" begin
         be_default = backend()
         @test vector_type(be_default) === Vector{Float64}
         @test matrix_type(be_default) === SparseMatrixCSC{Float64, Int}
@@ -33,7 +39,7 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
         @test execution_policy(typeof(be_default)) === Serial()
         @test be_default isa Backend{Vector{Float64}, SparseMatrixCSC{Float64, Int}}
 
-        # Test single-argument positional constructor
+        # Positional constructor for scalar element type deduction
         be_pos_f64 = backend(Float64)
         @test be_pos_f64 === be_default
         be_pos_f32 = backend(Float32)
@@ -45,29 +51,34 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
         @test execution_policy(be_pos_par) === Parallel()
         @test execution_policy(typeof(be_pos_par)) === Parallel()
 
-        # Test custom Float32 Backend (Dense-Sparse)
+        # Custom Float32 dense vector and sparse matrix backend
         be_f32_ds = backend(vector_type = Vector{Float32}, matrix_type = SparseMatrixCSC{
             Float32, Int})
         @test vector_type(be_f32_ds) === Vector{Float32}
         @test matrix_type(be_f32_ds) === SparseMatrixCSC{Float32, Int}
         @test be_f32_ds isa Backend{Vector{Float32}, SparseMatrixCSC{Float32, Int}}
 
-        # Test custom Float64 Backend (Dense-Dense)
+        # Custom Float64 dense vector and dense matrix backend
         be_f64_dd = backend(vector_type = Vector{Float64}, matrix_type = Matrix{Float64})
         @test vector_type(be_f64_dd) === Vector{Float64}
         @test matrix_type(be_f64_dd) === Matrix{Float64}
         @test be_f64_dd isa Backend{Vector{Float64}, Matrix{Float64}}
+
         # Non-dense vector types (e.g. SparseVector) are rejected at the type level
         @test_throws TypeError backend(vector_type = SparseVector{Float64, Int})
 
-        # Test custom Complex Backend (Dense-Dense)
+        # Complex element type backend
         be_c64_dd = backend(vector_type = Vector{ComplexF64}, matrix_type = Matrix{ComplexF64})
         @test vector_type(be_c64_dd) === Vector{ComplexF64}
         @test matrix_type(be_c64_dd) === Matrix{ComplexF64}
         @test be_c64_dd isa Backend{Vector{ComplexF64}, Matrix{ComplexF64}}
     end
 
-    @testset "vector" begin
+    # Invariants tested:
+    # 1. vector(backend, n) allocates storage matching configured vector_type.
+    # 2. Length and element type match requested dimensions.
+    # 3. Degenerate zero-length vector allocation succeeds.
+    @testset "Vector allocation" begin
         n = 15
 
         be_default = backend()
@@ -87,7 +98,11 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
         @test length(v_zero) == 0
     end
 
-    @testset "matrix" begin
+    # Invariants tested:
+    # 1. Sparse matrix allocation initializes empty storage with nnz == 0.
+    # 2. Dense matrix allocation initializes dimensions matching (m, n).
+    # 3. Degenerate dimensions (0 rows, 0 columns, 0x0) construct valid empty matrices.
+    @testset "Matrix allocation" begin
         m, n = 10, 20
 
         be_default = backend()
@@ -110,6 +125,7 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
         @test size(M_f32) == (m, n)
         @test eltype(M_f32) === Float32
 
+        # Degenerate matrix dimensions
         M_zero_row = matrix(be_default, 0, n)
         @test M_zero_row isa SparseMatrixCSC{Float64, Int}
         @test size(M_zero_row) == (0, n)
@@ -131,6 +147,9 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
         @test size(M_zero_col_dense) == (m, 0)
     end
 
+    # Invariants tested:
+    # 1. Custom DenseArray subtypes integrate seamlessly with backend factory functions.
+    # 2. backend_zeros and backend_eye populate correct dimensions and values.
     @testset "Mock GPU backend" begin
         be_gpu = backend(vector_type = MockGPUVector{Float32}, matrix_type = MockGPUMatrix{Float32})
         @test vector_type(be_gpu) === MockGPUVector{Float32}
@@ -158,14 +177,14 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
         @test eye_gpu[3, 3] == 1.0f0
     end
 
-    # Conditional test for Metal on macOS without requiring it as a project dependency
+    # Conditional validation for Metal.jl arrays when running on macOS with functional GPU runtime
     if Sys.isapple()
         metal_pkg = Base.find_package("Metal")
         if metal_pkg !== nothing
             try
                 @eval using Metal
                 if isdefined(Main, :Metal) && Metal.functional()
-                    @testset "Metal backend" begin
+                    @testset "Metal GPU backend" begin
                         be_metal = backend(vector_type = MtlVector{Float32}, matrix_type = MtlMatrix{Float32})
                         @test vector_type(be_metal) === MtlVector{Float32}
                         @test matrix_type(be_metal) === MtlMatrix{Float32}
@@ -189,7 +208,10 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
         end
     end
 
-    @testset "backend_types" begin
+    # Invariants tested:
+    # 1. backend_types returns (eltype(VT), VT, MT, Backend{VT, MT, EP}).
+    # 2. Calling on instance and calling on type produce identical type tuples.
+    @testset "Backend type reflection" begin
         be_default = backend()
         T, VT, MT, BType = backend_types(be_default)
         @test T === Float64
@@ -210,7 +232,10 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
         @test MT_f32 === Matrix{Float32}
     end
 
-    @testset "eltype" begin
+    # Invariants tested:
+    # 1. eltype returns scalar coordinate type of vector storage.
+    # 2. Consistent across real, single precision, and complex backends.
+    @testset "Element type reflection" begin
         be_default = backend()
         @test eltype(be_default) === Float64
         @test eltype(typeof(be_default)) === Float64
@@ -223,7 +248,11 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
         @test eltype(be_complex) === ComplexF64
     end
 
-    @testset "Eye & zeros" begin
+    # Invariants tested:
+    # 1. backend_eye produces identity matrices with ones on diagonal and zeros elsewhere.
+    # 2. Sparse backend_eye creates exactly n non-zero entries.
+    # 3. backend_zeros produces zero matrices matching backend matrix type.
+    @testset "Identity and zero matrices" begin
         n = 5
         be_default = backend()
         be_dense = backend(vector_type = Vector{Float64}, matrix_type = Matrix{Float64})
@@ -250,7 +279,10 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
         @test all(Z_dense .== 0.0)
     end
 
-    @testset "Type stability & allocations" begin
+    # Invariants tested:
+    # 1. Backend constructors and accessors are type-inferred by the Julia compiler.
+    # 2. Backend construction and metadata queries allocate zero heap bytes.
+    @testset "Type stability and zero allocations" begin
         be = backend()
         @inferred backend()
         @inferred vector_type(be)
@@ -259,7 +291,6 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
         @inferred eltype(be)
         @inferred backend_types(be)
 
-        # Backend constructor is zero-allocation singleton
         @test_allocs backend()
         @test_allocs vector_type(be)
         @test_allocs matrix_type(be)
@@ -268,7 +299,10 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
         @test_allocs backend_types(be)
     end
 
-    @testset "Show" begin
+    # Invariants tested:
+    # 1. Standard show prints full type parameters and execution policy.
+    # 2. Compact show outputs compact summary format Backend{T}.
+    @testset "String representation" begin
         be = backend()
         io = IOBuffer()
         show(io, be)
@@ -280,13 +314,19 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
         @test occursin("Backend{Float64}", String(take!(io)))
     end
 end
-@testset "Additional coverage" begin
+
+@testset "Type-level accessors and fallback construction" begin
+    # Invariants tested:
+    # 1. vector_type and matrix_type resolve directly on Type{Backend{...}} without allocating an instance.
     @testset "Type-level accessors" begin
         BE = Backend{Vector{Float64}, SparseMatrixCSC{Float64, Int}, Serial}
         @test vector_type(BE) === Vector{Float64}
         @test matrix_type(BE) === SparseMatrixCSC{Float64, Int}
     end
 
+    # Invariants tested:
+    # 1. Types lacking undef constructors fall back to size-based constructors VT(n) and MT(n, m).
+    # 2. Types failing both undef and size-based allocation raise actionable ErrorException diagnostics.
     @testset "Fallback constructors" begin
         struct SizeConstructibleVec{T} <: DenseVector{T}
             data::Vector{T}
@@ -313,7 +353,7 @@ end
         @test M isa SizeConstructibleMat{Float64}
         @test size(M) == (3, 4)
 
-        # Types that fail both undef and size constructor -> trigger _throw_vector_error & _throw_matrix_error
+        # Unconstructible types trigger _throw_vector_error and _throw_matrix_error
         struct UnconstructibleVec{T} <: DenseVector{T} end
         struct UnconstructibleMat{T} <: AbstractMatrix{T} end
 
@@ -323,6 +363,8 @@ end
         @test_throws ErrorException matrix(be_fail, 3, 4)
     end
 
+    # Invariants tested:
+    # 1. metal_backend() without Metal.jl loaded throws an ErrorException instructing the user to load Metal.
     @testset "Metal stub" begin
         if isdefined(Main, :Metal)
             @test metal_backend() isa Backend

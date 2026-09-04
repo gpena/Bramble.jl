@@ -7,26 +7,26 @@ end
 end
 
 """
-	$(SIGNATURES)
+    _cpu_threaded_for!(policy::ExecutionPolicy, v::AbstractArray, idxs, f::Function) -> Nothing
 
-Applies `f` across `idxs`, writing into `v` in place, either as a plain loop or across
-threads depending on `policy` -- [`Serial`](@ref) or [`Parallel`](@ref), read off a
-[`Backend`](@ref) via [`execution_policy`](@ref).
+Apply `f` across indices `idxs` and write the result into `v` in place.
+
+Dispatches to sequential iteration for [`Serial`](@ref) or static work partitioning across
+threads for [`Parallel`](@ref).
 
 # Arguments
-- `policy`: [`Serial`](@ref) or [`Parallel`](@ref)
-- `v`: Array to be modified in-place
-- `idxs`: Iterable of indices to process
-- `f`: Function that takes an index and returns the value to be stored at that index
+- `policy`: Execution policy ([`Serial`](@ref) or [`Parallel`](@ref)).
+- `v`: Destination array mutated in place.
+- `idxs`: Iterable collection of linear or Cartesian indices.
+- `f`: Kernel mapping each index `idx` to the scalar value stored in `v[idx]`.
 """
 @inline _cpu_threaded_for!(::Serial, v, idxs, f) = _serial_for!(v, idxs, f)
 @inline _cpu_threaded_for!(::Parallel, v, idxs, f) = _threaded_for!(v, idxs, f)
 
-# Kept in its own function on purpose. `Threads.@threads` builds a closure over
-# the loop body, and having it in the same body as the serial branch makes that
-# closure allocate even on calls that never reach it.
+# Kept in an isolated function to prevent Threads.@threads closure boxing allocations
+# on paths that execute serially.
 @noinline function _threaded_for!(v, idxs, f)
-    # :static partitions work evenly across threads — lower overhead for uniform workloads
+    # Static partitioning distributes work evenly across available threads
     Threads.@threads :static for idx in idxs
         @inbounds v[idx] = f(idx)
     end
@@ -34,14 +34,14 @@ threads depending on `policy` -- [`Serial`](@ref) or [`Parallel`](@ref), read of
 end
 
 """
-	$(SIGNATURES)
+    _serial_for!(v::AbstractArray, idxs, f::Function) -> Nothing
 
-Performs a serial (single-threaded) iteration over the specified indices, applying a function `f` to modify array `v` in-place.
+Iterate sequentially over `idxs`, writing `v[idx] = f(idx)` in place.
 
 # Arguments
-- `v`: Array to be modified in-place
-- `idxs`: Indices to iterate over
-- `f`: Function to be applied at each index
+- `v`: Destination array mutated in place.
+- `idxs`: Iterable collection of indices.
+- `f`: Kernel evaluating values at each index.
 """
 @inline function _serial_for!(v, idxs, f)
     @inbounds for idx in idxs
@@ -50,25 +50,15 @@ Performs a serial (single-threaded) iteration over the specified indices, applyi
     return nothing
 end
 
-#=========================================================================
-Scattering a tuple-valued kernel across several arrays.
-
-`_cpu_threaded_for!` writes one value per index into one array. When the kernel
-returns a tuple instead -- one value per component of a multi-component field --
-the alternative is to call it once per component and keep only the i-th result,
-which evaluates it `NC` times per index and discards `NC - 1` of every `NC`
-values. Measured on an expensive kernel that is 1.9x the work at `NC = 2`, 2.8x
-at `NC = 3` and 3.6x at `NC = 4`.
-
-These evaluate the kernel once per index and scatter its tuple across the
-target arrays.
-=========================================================================#
+# Scatters tuple-valued kernel outputs into separate component arrays in a single pass,
+# evaluating multi-component evaluations once per index instead of per component.
 
 """
-	$(SIGNATURES)
+    _write_components!(mats::Tuple, vals::Tuple, idx) -> Nothing
 
-Writes each element of `vals` into the corresponding array of `mats` at `idx`.
-Unrolled by recursion on the tuple, so there is no loop and no allocation.
+Recursively unpack and write elements of `vals` into destination arrays `mats` at index `idx`.
+
+Recursion on tuples unrolls at compile time with zero heap allocations.
 """
 @inline _write_components!(::Tuple{}, ::Tuple, idx) = nothing
 @inline function _write_components!(mats::Tuple, vals::Tuple, idx)
@@ -77,17 +67,17 @@ Unrolled by recursion on the tuple, so there is no loop and no allocation.
 end
 
 """
-	$(SIGNATURES)
+    _cpu_threaded_scatter_for!(policy::ExecutionPolicy, mats::Tuple, idxs, g::Function) -> Nothing
 
-Applies `g` across `idxs` and scatters each returned tuple over the arrays in
-`mats`, dispatching on `policy` -- [`Serial`](@ref) or [`Parallel`](@ref) -- on the
-same terms as [`_cpu_threaded_for!`](@ref).
+Evaluate tuple-valued kernel `g` across `idxs` and scatter results into destination arrays `mats`.
+
+Dispatches to sequential execution for [`Serial`](@ref) or static multithreaded execution for [`Parallel`](@ref).
 
 # Arguments
-- `policy`: [`Serial`](@ref) or [`Parallel`](@ref)
-- `mats`: Tuple of arrays to be modified in-place, one per component
-- `idxs`: Iterable of indices to process
-- `g`: Function taking an index and returning a tuple of values, one per array
+- `policy`: Execution policy ([`Serial`](@ref) or [`Parallel`](@ref)).
+- `mats`: Tuple of destination arrays mutated in place.
+- `idxs`: Iterable collection of indices.
+- `g`: Kernel mapping each index to a tuple of values matching `length(mats)`.
 """
 @inline function _cpu_threaded_scatter_for!(::Serial, mats::Tuple, idxs, g)
     @inbounds for idx in idxs
@@ -98,8 +88,7 @@ end
 @inline _cpu_threaded_scatter_for!(::Parallel, mats::Tuple, idxs, g) = _threaded_scatter_for!(
     mats, idxs, g)
 
-# Separate function for the same reason as `_threaded_for!`: sharing a body with
-# the serial branch makes the `@threads` closure allocate even when unused.
+# Kept in an isolated function to prevent closure boxing allocations on serial execution paths.
 @noinline function _threaded_scatter_for!(mats::Tuple, idxs, g)
     Threads.@threads :static for idx in idxs
         @inbounds _write_components!(mats, g(idx), idx)
@@ -107,19 +96,25 @@ end
     return nothing
 end
 
-##################################################################################
-#                                                                                #
-#   Helper functions to calculate inner products in discrete spaces               #
-#                                                                                #
-##################################################################################
+# Discrete space inner product kernels
 
 """
-	$(SIGNATURES)
+    _dot(u::AbstractVector, v::AbstractVector, w::AbstractVector) -> Real
 
-Computes the weighted element-wise dot product of three vectors:
-``\\sum_{i} u_i \\cdot v_i \\cdot w_i``
+Compute the weighted trilinear dot product
+```math
+\\sum_{i=1}^n u_i v_i w_i
+```
 
-Uses SIMD and `muladd` for outer accumulation.
+Accumulates via fused multiply-add operations (`muladd`) with `@simd` vectorization.
+
+# Arguments
+- `u`: First vector.
+- `v`: Second vector.
+- `w`: Weight vector.
+
+# Throws
+- `DimensionMismatch`: If `length(u)`, `length(v)`, and `length(w)` do not match.
 """
 @inline function _dot(u::AbstractVector{T}, v::AbstractVector{T},
         w::AbstractVector{T}) where {T}
@@ -148,13 +143,24 @@ end
 end
 
 """
-	$(SIGNATURES)
+    _dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, mask::BitVector) -> Real
 
-As [`_dot`](@ref), restricted to the indices `mask` marks:
-``\\sum_{i \\,:\\, mask_i} u_i \\cdot v_i \\cdot w_i``.
+Compute the weighted dot product restricted to indices where `mask` is true:
+```math
+\\sum_{i \\in \\mathrm{supp}(\\mathrm{mask})} u_i v_i w_i
+```
 
-Uses `BitVector` word-level skipping (`mask.chunks`) and bit scanning (`trailing_zeros`)
-to traverse marked entries efficiently with zero allocations.
+Traverses 64-bit integer words in `mask.chunks`, skipping zero chunks and extracting active
+bit positions via `trailing_zeros` to avoid branch mispredictions and allocations.
+
+# Arguments
+- `u`: First vector.
+- `v`: Second vector.
+- `w`: Weight vector.
+- `mask`: Boolean selection mask.
+
+# Throws
+- `DimensionMismatch`: If vector or mask lengths do not match.
 """
 @inline function _dot_masked(
         u::AbstractVector{T}, v::AbstractVector{T}, w::AbstractVector{T},

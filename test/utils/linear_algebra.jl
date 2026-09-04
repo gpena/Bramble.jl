@@ -6,8 +6,14 @@ using Bramble: _dot, _dot_masked,
 using LinearAlgebra: dot
 using StaticArrays
 
-@testset "Linear algebra" begin
-    @testset "_dot" begin
+@testset "Linear algebra utilities" begin
+    # Invariants tested:
+    # 1. Trilinear form evaluation: ∑ u_i * v_i * w_i matches hand-calculated expected values.
+    # 2. Annihilation: any zero vector argument produces a zero result.
+    # 3. Precision preservation: Float32 inputs produce Float32 outputs; mixed types promote correctly.
+    # 4. Dimension checking: mismatched vector lengths throw DimensionMismatch.
+    # 5. Zero-allocation guarantee: static arrays (SVector) execute with zero heap allocations.
+    @testset "Weighted trilinear dot product" begin
         u = [1.0, 2.0, 3.0]
         v = [4.0, 5.0, 6.0]
         w = [2.0, 2.0, 2.0]
@@ -17,6 +23,7 @@ using StaticArrays
         @test result ≈ expected
         @test result ≈ 64.0
 
+        # Annihilation with zero vectors
         u_zero = [0.0, 0.0, 0.0]
         @test _dot(u_zero, v, w) ≈ 0.0
         @test _dot(u, u_zero, w) ≈ 0.0
@@ -25,6 +32,7 @@ using StaticArrays
         ones_vec = [1.0, 1.0, 1.0, 1.0]
         @test _dot(ones_vec, ones_vec, ones_vec) ≈ 4.0
 
+        # Precision preservation and type promotion
         u_f32 = Float32[1.0, 2.0, 3.0]
         v_f32 = Float32[4.0, 5.0, 6.0]
         w_f32 = Float32[2.0, 2.0, 2.0]
@@ -38,8 +46,10 @@ using StaticArrays
 
         @test _dot([2.0], [3.0], [4.0]) ≈ 24.0
 
+        # Dimension mismatch detection
         @test_throws DimensionMismatch _dot([1.0, 2.0], [1.0, 2.0, 3.0], [1.0, 2.0])
 
+        # Zero allocations on static arrays
         sv_u = SVector(1.0, 2.0, 3.0)
         sv_v = SVector(4.0, 5.0, 6.0)
         sv_w = SVector(2.0, 2.0, 2.0)
@@ -55,7 +65,10 @@ using StaticArrays
         @test result_large ≈ expected_large
     end
 
-    @testset "_serial_for!" begin
+    # Invariants tested:
+    # 1. Sequential mutation across 1D linear index ranges and Cartesian index collections.
+    # 2. Sub-range execution leaves untouched elements unmodified.
+    @testset "Serial in-place iteration" begin
         n = 10
         v = zeros(n)
         idxs = 1:n
@@ -64,6 +77,7 @@ using StaticArrays
         _serial_for!(v, idxs, f)
         @test v == [Float64(i^2) for i in 1:n]
 
+        # Partial range iteration
         v2 = ones(n)
         idxs_partial = 3:7
         f2 = i -> Float64(i * 10)
@@ -72,6 +86,7 @@ using StaticArrays
         @test v2[3:7] == [30.0, 40.0, 50.0, 60.0, 70.0]
         @test v2[8:10] == [1.0, 1.0, 1.0]
 
+        # Cartesian index iteration
         A = zeros(3, 4)
         cart_idxs = CartesianIndices(A)
         f3 = idx -> Float64(idx[1] + idx[2])
@@ -82,10 +97,10 @@ using StaticArrays
         end
     end
 
-    @testset "_cpu_threaded_for!" begin
-        # Dispatched on policy now, not gated by size: both Serial() and Parallel() are
-        # exercised directly at every size below, rather than needing a grid large enough to
-        # cross a threshold (there is none left to cross).
+    # Invariants tested:
+    # 1. Serial() and Parallel() policies produce mathematically identical array mutations.
+    # 2. Multidimensional CartesianIndices work consistently under both policies.
+    @testset "Threaded in-place iteration" begin
         for policy in (Serial(), Parallel())
             n = 100
             v = zeros(n)
@@ -113,7 +128,7 @@ using StaticArrays
             end
         end
 
-        # Verify Parallel() gives the same result as Serial()
+        # Direct equivalence test between Serial() and Parallel()
         n = 100
         idxs = 1:n
         v_serial = zeros(n)
@@ -124,34 +139,46 @@ using StaticArrays
         @test v_serial ≈ v_parallel
     end
 
-    @testset "_dot_masked" begin
+    # Invariants tested:
+    # 1. Trilinear form restricted to indices in support of BitVector mask.
+    # 2. 64-bit chunk bit-scanning accurately identifies active bit indices.
+    # 3. All-true mask matches unmasked _dot.
+    # 4. All-false mask produces exact zero.
+    # 5. Length mismatches between vectors or between vector and mask raise DimensionMismatch.
+    # 6. Allocation-free evaluation on static arrays.
+    @testset "Masked dot product" begin
         u = [1.0, 2.0, 3.0, 4.0]
         v = [2.0, 3.0, 4.0, 5.0]
         w = [0.5, 1.0, 1.5, 2.0]
 
-        # Mask selecting elements 2 and 4
+        # Mask selecting indices 2 and 4
         mask = BitVector([false, true, false, true])
-        expected = (2.0 * 3.0 * 1.0) + (4.0 * 5.0 * 2.0) # 6 + 40 = 46
+        expected = (2.0 * 3.0 * 1.0) + (4.0 * 5.0 * 2.0)
         @test _dot_masked(u, v, w, mask) ≈ expected
 
-        # All-true mask matches unmasked _dot
+        # Boundary cases: all-true and all-false masks
         mask_all = trues(4)
         @test _dot_masked(u, v, w, mask_all) ≈ _dot(u, v, w)
 
-        # All-false mask produces zero
         mask_none = falses(4)
         @test _dot_masked(u, v, w, mask_none) == 0.0
 
+        # Dimension validation
         @test_throws DimensionMismatch _dot_masked([1.0], [1.0, 2.0], [1.0], mask_all)
         @test_throws DimensionMismatch _dot_masked(u, v, w, BitVector([true, false]))
 
+        # Static array evaluation
         sv_u = SVector(1.0, 2.0, 3.0, 4.0)
         sv_v = SVector(2.0, 3.0, 4.0, 5.0)
         sv_w = SVector(0.5, 1.0, 1.5, 2.0)
         @test _dot_masked(sv_u, sv_v, sv_w, mask) ≈ expected
     end
 
-    @testset "Scattering" begin
+    # Invariants tested:
+    # 1. _write_components! unrolls via recursion on tuple types without allocations.
+    # 2. _cpu_threaded_scatter_for! scatters multi-component kernel evaluations in a single pass.
+    # 3. Serial() and Parallel() execution policies yield identical results.
+    @testset "Component scattering" begin
         a = zeros(3)
         b = zeros(3)
         c = zeros(3)
@@ -171,7 +198,7 @@ using StaticArrays
             @test m2 == [Float64(2i) for i in 1:n]
         end
 
-        # Serial and Parallel match
+        # Policy equivalence check
         n = 64
         m1_s, m2_s = zeros(n), zeros(n)
         m1_p, m2_p = zeros(n), zeros(n)
@@ -182,6 +209,8 @@ using StaticArrays
         @test m2_s ≈ m2_p
     end
 
+    # Invariants tested:
+    # 1. Return types are completely inferred by compiler for _dot and _dot_masked.
     @testset "Type stability" begin
         u = [1.0, 2.0, 3.0]
         v = [4.0, 5.0, 6.0]

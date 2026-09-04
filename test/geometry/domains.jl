@@ -9,8 +9,8 @@ using Bramble: label_identifiers, label_symbols, label_tuples, label_conditions,
                topo_dim, is_collapsed
 using StaticArrays
 
-@testset "Domains" begin
-    # --- Setup Test Data ---
+@testset "Computational domains" begin
+    # Test data setup: Cartesian products and coordinate indicator predicates.
     I1D = interval(0.0, 1.0)
     I2D = interval(0.0f0, 1.0f0) × interval(2.0f0, 3.0f0) # Float32
     I3D = interval(0.0, 1.0) × interval(2.0, 3.0) × interval(4.0, 5.0)
@@ -19,10 +19,13 @@ using StaticArrays
     func2 = x -> x[2] < 2.5
     func3 = x -> x[1] == 0.0
 
-    @testset "Marker & MarkerPair" begin
+    # Invariant: Marker instances associate a symbol label with a boundary symbol,
+    # a set of symbols, or a raw closure condition. MarkerPair instances provide
+    # convenient pair notation (`:label => identifier`).
+    @testset "Marker and MarkerPair data structures" begin
         m_sym = Marker(:boundary, :left)
         m_tup = Marker(:corners, Set((:top, :right)))
-        # a function-valued marker holds the raw closure directly, nothing wrapped
+        # A function-valued marker holds the raw closure directly without wrapping.
         m_fun = Marker(:region, func1)
 
         @test label(m_sym) === :boundary
@@ -40,7 +43,9 @@ using StaticArrays
         @test identifier(pair_sym) === :left
     end
 
-    @testset "Boundary symbols" begin
+    # Invariant: Boundary symbols for 1D, 2D, and 3D geometries are extractable
+    # from either value instances or type signatures of sets and domains.
+    @testset "Boundary symbol extraction" begin
         @test get_boundary_symbols(I1D) == (:left, :right)
         @test get_boundary_symbols(I2D) == (:bottom, :top, :left, :right)
         @test get_boundary_symbols(I3D) == (:bottom, :top, :back, :front, :left, :right)
@@ -59,21 +64,22 @@ using StaticArrays
         @test get_boundary_symbols(typeof(Ω1)) == (:left, :right)
     end
 
-    @testset "process_identifier" begin
+    # Invariant: `process_identifier` normalizes symbols, tuples, and vectors
+    # of symbols into canonical boundary representations. Function-valued pairs
+    # are stored directly as closures and are not routed through `process_identifier`.
+    @testset "Identifier processing" begin
         @test process_identifier(I1D, :left) === :left
         @test process_identifier(I2D, (:top, :right)) == Set((:top, :right))
-        # a vector of symbols normalises to the same Set as the tuple form
+        # A vector of symbols normalizes to the same Set as the tuple form.
         @test process_identifier(I2D, [:top, :right]) == Set((:top, :right))
         @test process_identifier(I2D, [:top, :right]) ==
               process_identifier(I2D, (:top, :right))
-        # process_identifier no longer has a Function-typed method: point 48 (2026-09-04)
-        # removed BrambleFunction-wrapping from the marker/condition path entirely, so a
-        # function-valued pair is stored as its own raw closure directly (see
-        # `_pairs_to_tuple_conditions`), never routed through `process_identifier`.
     end
 
-    @testset "create_markers" begin
-        # Empty call
+    # Invariant: `DomainMarkers` correctly partitions and deduplicates boundary
+    # symbols, boundary tuples, and functional conditions.
+    @testset "Domain marker container creation" begin
+        # Empty container instantiation.
         dm_empty = markers(I1D)
         @test dm_empty isa DomainMarkers
         @test isempty(dm_empty.symbols)
@@ -82,7 +88,7 @@ using StaticArrays
         @test isempty(dm_empty)
         @test length(dm_empty) == 0
 
-        # Mixed types
+        # Mixed marker types.
         pairs = (:bnd_left => :left,
             :bnd_right => :right,
             :corners => (:top, :right),
@@ -94,18 +100,20 @@ using StaticArrays
         @test length(dm_mixed) == 6
         @test !isempty(dm_mixed)
 
-        # Duplicate labels (different identifiers kept)
+        # Duplicate labels with different identifiers are preserved.
         dm_dup_label = markers(I1D, :boundary => :left, :boundary => :right)
         @test length(dm_dup_label.symbols) == 2
         @test Set(label(m) for m in dm_dup_label.symbols) == Set([:boundary])
 
-        # Duplicate markers (same label and identifier -> set deduplication)
+        # Duplicate markers with identical label and identifier are deduplicated.
         dm_dup_marker = markers(I1D, :boundary => :left, :boundary => :left)
         @test length(dm_dup_marker.symbols) == 1
     end
 
-    @testset "Construction & traits" begin
-        # Default constructor
+    # Invariant: Domain constructors preserve geometric traits including
+    # spatial dimension, element type, topological dimension, and point type.
+    @testset "Domain construction and geometric traits" begin
+        # Default constructor from geometric set.
         Ω1_def = domain(I1D)
         @test set(Ω1_def) === I1D
         @test dim(Ω1_def) == 1
@@ -123,7 +131,7 @@ using StaticArrays
         @test point_type(Ω2_def) === NTuple{2, Float32}
         @test point_type(typeof(Ω2_def)) === NTuple{2, Float32}
 
-        # Domain with premade DomainMarkers
+        # Domain constructed with preallocated DomainMarkers.
         markers_premade = markers(I2D, :neumann => :top, :fixed => func1)
         Ω_premade = domain(I2D, markers_premade)
         @test set(Ω_premade) === I2D
@@ -131,18 +139,20 @@ using StaticArrays
         @test length(Ω_premade) == 2
         @test !isempty(Ω_premade)
 
-        # Domain with pairs
+        # Domain constructed with marker pairs directly.
         Ω_pairs = domain(I2D, :neumann => :top, :fixed => func1, :mixed => (:left, :bottom))
         @test set(Ω_pairs) === I2D
         @test length(Ω_pairs) == 3
 
-        # Domain with empty markers
+        # Domain constructed with empty marker set.
         Ω_empty = domain(I1D, markers(I1D))
         @test isempty(Ω_empty)
         @test length(Ω_empty) == 0
     end
 
-    @testset "Accessors & iterators" begin
+    # Invariant: Domain accessor functions expose categorized markers, labels,
+    # symbols, tuples, functional conditions, and dimension projections.
+    @testset "Domain accessors and marker iterators" begin
         Ω = domain(I2D,
             :bnd_left => :left,
             :corners => (:top, :right),
@@ -168,7 +178,7 @@ using StaticArrays
         @test Set(label_conditions(Ω)) == Set([:region1])
         @test Set(label_identifiers(Ω)) == Set([:bnd_left, :corners, :region1, :boundary])
 
-        # Projection
+        # Dimension projection onto 1D coordinate intervals.
         proj1 = projection(Ω, 1)
         proj2 = projection(Ω, 2)
         @test proj1 isa CartesianProduct{1, Float32}
@@ -177,12 +187,14 @@ using StaticArrays
         @test proj2.box[1] == (2.0f0, 3.0f0)
     end
 
-    @testset "Time dependence" begin
+    # Invariant: Time-dependent marker conditions can be evaluated at a specific
+    # temporal parameter t, yielding an `EvaluatedDomainMarkers` container.
+    @testset "Time-dependent domain evaluation" begin
         I_space = interval(0.0, 1.0) × interval(0.0, 1.0)
         I_time = interval(0.0, 2.0)
         func_time = (x, t) -> x[1] > t
 
-        # Create time-dependent DomainMarkers
+        # Create time-dependent DomainMarkers.
         dm_time = markers(I_space, I_time,
             :moving => func_time,
             :fixed_bnd => :left)
@@ -190,7 +202,7 @@ using StaticArrays
         @test length(dm_time) == 2
         @test length(conditions(dm_time)) == 1
 
-        # Time evaluation of DomainMarkers
+        # Temporal evaluation of DomainMarkers.
         dm_eval = dm_time(0.5)
         @test dm_eval isa EvaluatedDomainMarkers
         @test length(dm_eval) == 2
@@ -203,14 +215,14 @@ using StaticArrays
         @test isempty(collect(label_tuples(dm_eval)))
         @test Set(collect(label_conditions(dm_eval))) == Set([:moving])
 
-        # Test evaluated condition function
+        # Evaluate the instantiated condition closure.
         moving_marker = first(conditions(dm_eval))
         @test label(moving_marker) == :moving
         bf = identifier(moving_marker)
         @test bf((0.8, 0.5)) == true
         @test bf((0.2, 0.5)) == false
 
-        # Direct evaluation on Domain: Ω(t)
+        # Direct evaluation on Domain: Ω(t).
         Ω_time = domain(I_space, I_time, :moving => func_time, :fixed_bnd => :left)
         @test dim(Ω_time) == 2
         Ω_eval = Ω_time(0.5)
@@ -219,7 +231,9 @@ using StaticArrays
         @test length(Ω_eval) == 2
     end
 
-    @testset "Type stability & allocations" begin
+    # Invariant: Querying geometric traits, projections, and boundary symbols
+    # on stack-allocated domains infers cleanly and allocates zero heap memory.
+    @testset "Domain type stability and zero allocations" begin
         Ω = domain(I2D, :left => :left, :right => :right)
         @inferred set(Ω)
         @inferred dim(Ω)
@@ -228,6 +242,8 @@ using StaticArrays
         @inferred point_type(Ω)
         @inferred projection(Ω, 1)
         @inferred get_boundary_symbols(Ω)
+        @inferred is_collapsed(Ω)
+        @inferred is_collapsed(Ω, 1)
         @inferred Base.length(Ω)
         @inferred Base.isempty(Ω)
 
@@ -235,14 +251,18 @@ using StaticArrays
         @test_allocs dim(Ω)
         @test_allocs eltype(Ω)
         @test_allocs topo_dim(Ω)
+        @test_allocs is_collapsed(Ω)
+        @test_allocs is_collapsed(Ω, 1)
         @test_allocs projection(Ω, 1)
         @test_allocs get_boundary_symbols(Ω)
         @test_allocs Base.length(Ω)
         @test_allocs Base.isempty(Ω)
     end
 
-    @testset "Show" begin
-        # Marker show
+    # Invariant: Textual display formatting for markers, marker containers, and
+    # domains across dimensions (1D, 2D, 3D, collapsed) produces valid output.
+    @testset "Domain string representation" begin
+        # Marker formatting.
         m_s = Marker(:left, :left)
         m_t = Marker(:corner, Set([:top, :right]))
         m_f = Marker(:level, x -> x[1] > 0)
@@ -251,7 +271,7 @@ using StaticArrays
         @test occursin("Marker(:corner => (", repr(m_t))
         @test occursin("Marker(:level => <function>)", repr(m_f))
 
-        # DomainMarkers show
+        # DomainMarkers detailed display.
         dm = markers(I1D, :left => :left, :right => (:top, :bottom), :fn => func1)
         io = IOBuffer()
         show(io, dm)
@@ -261,14 +281,14 @@ using StaticArrays
         @test occursin("Tuple markers", str_dm)
         @test occursin("Function markers", str_dm)
 
-        # DomainMarkers compact and empty
+        # DomainMarkers compact and empty display.
         show(IOContext(io, :compact => true), dm)
         @test occursin("DomainMarkers(3 total)", String(take!(io)))
 
         show(io, markers(I1D))
         @test occursin("(empty)", String(take!(io)))
 
-        # Domain show (detailed and compact)
+        # Domain detailed and compact display.
         Ω_1d = domain(I1D)
         show(io, Ω_1d)
         str_d1 = String(take!(io))
@@ -279,26 +299,26 @@ using StaticArrays
         show(IOContext(io, :compact => true), Ω_1d)
         @test occursin("Domain{1D, Float64}:", String(take!(io)))
 
-        # Domain 2D with empty markers
+        # 2D domain with empty markers.
         Ω_empty = domain(I2D, markers(I2D))
         show(io, Ω_empty)
         str_d_empty = String(take!(io))
         @test occursin("(none)", str_d_empty)
 
-        # 2D domain with markers — show (hits n_tup path)
+        # 2D domain with markers (covers tuple markers branch).
         Ω_2d = domain(I2D, :wall => (:top, :bottom))
         show(io, Ω_2d)
         str_2d = String(take!(io))
         @test occursin("Domain", str_2d)
         @test occursin("Markers:", str_2d)
 
-        # 3D domain — triggers the D>1 branch in Base.show
+        # 3D domain (covers D > 1 coordinate formatting).
         Ω_3d = domain(I3D, :dirichlet => :left)
         show(io, Ω_3d)
         str_3d = String(take!(io))
         @test occursin("z:", str_3d)
 
-        # 3D domain with collapsed dimension — triggers topodim < D branch
+        # 3D domain with collapsed dimension (topological dimension < D).
         I3D_c = interval(0.0, 1.0) × interval(0.0, 1.0) × point(0.5)
         Ω_3d_c = domain(I3D_c)
         show(io, Ω_3d_c)
@@ -306,68 +326,81 @@ using StaticArrays
         @test occursin("Topological dimension", str_3d_c)
     end
 
-    @testset "Delegation" begin
+    # Invariant: `Domain` forwards geometric property queries (`center`, `in`,
+    # `tails`, `is_collapsed`, `projection`, boundary symbols) directly to
+    # the underlying geometric set.
+    @testset "Geometric property delegation" begin
         Ω_1d = domain(interval(0.0, 4.0))
         Ω_2d = domain(interval(0.0, 2.0) × interval(1.0, 3.0))
 
-        # center (line 204)
+        # Geometric centroid.
         @test center(Ω_1d)[1] ≈ 2.0
         @test center(Ω_2d)[1] ≈ 1.0 && center(Ω_2d)[2] ≈ 2.0
 
-        # in (line 211)
+        # Point containment.
         @test 2.0 ∈ Ω_1d
         @test 5.0 ∉ Ω_1d
         @test (1.0, 2.0) ∈ Ω_2d
         @test (5.0, 2.0) ∉ Ω_2d
 
-        # tails (lines 218-219)
+        # Boundary coordinate limits.
         @test tails(Ω_1d) == (0.0, 4.0)
         @test tails(Ω_1d, 1) == (0.0, 4.0)
         @test tails(Ω_2d) == ((0.0, 2.0), (1.0, 3.0))
         @test tails(Ω_2d, 1) == (0.0, 2.0)
         @test tails(Ω_2d, 2) == (1.0, 3.0)
 
-        # is_collapsed on 1D Domain (line 226)
+        # Degenerate dimension detection across 1D and nD domains.
         @test !is_collapsed(Ω_1d)
+        @test !is_collapsed(Ω_2d)
+        @test !is_collapsed(Ω_2d, 1)
+        @test !is_collapsed(Ω_2d, 2)
         Ω_pt = domain(point(0.5))
         @test is_collapsed(Ω_pt)
+        Ω_2d_c = domain(interval(0.0, 1.0) × point(2.0))
+        @test is_collapsed(Ω_2d_c)
+        @test !is_collapsed(Ω_2d_c, 1)
+        @test is_collapsed(Ω_2d_c, 2)
+        @test_throws BoundsError is_collapsed(Ω_2d_c, 0)
+        @test_throws BoundsError is_collapsed(Ω_2d_c, 3)
 
-        # projection (line 235)
+        # Coordinate projection.
         @test projection(Ω_2d, 1) == interval(0.0, 2.0)
         @test projection(Ω_2d, 2) == interval(1.0, 3.0)
 
-        # Domain(i) call — delegates to CartesianProduct(i) returning (min, max) tuple (line 228)
+        # Coordinate interval indexing.
         @test Ω_2d(1) == (0.0, 2.0)
         @test Ω_2d(2) == (1.0, 3.0)
 
-        # get_boundary_symbols on Domain (line 246)
+        # Boundary symbols from domain instance.
         @test get_boundary_symbols(Ω_1d) == (:left, :right)
         @test get_boundary_symbols(Ω_2d) == (:bottom, :top, :left, :right)
 
-        # get_boundary_symbols on Domain type (line 254)
+        # Boundary symbols from domain type.
         @test get_boundary_symbols(typeof(Ω_1d)) == (:left, :right)
         @test get_boundary_symbols(typeof(Ω_2d)) == (:bottom, :top, :left, :right)
     end
 
-    @testset "EvaluatedDomainMarkers" begin
+    # Invariant: `EvaluatedDomainMarkers` handles static condition fallbacks
+    # when evaluating time-dependent marker collections and supports standard iteration.
+    @testset "Evaluated domain marker iteration and traits" begin
         using Bramble: EvaluatedDomainMarkers, label_identifiers, label_symbols,
                        label_tuples, label_conditions
 
         I_time = interval(0.0, 1.0)
         I_space = interval(0.0, 1.0)
 
-        # markers with a time-independent condition (non-applicable at time t → fallback line 258)
-        # Use a static boolean function — applicable(f, t) will be false since it takes (x::Float64)
+        # Static boolean function taking spatial coordinate only (not applicable to scalar time t).
         staticfunc = x -> x > 0.5
         dm = markers(I_space, :region => staticfunc)
-        edm = dm(0.5)  # evaluates time-dependent markers; condition not applicable to scalar t
+        edm = dm(0.5)
         @test edm isa EvaluatedDomainMarkers
 
-        # labels on EvaluatedDomainMarkers (line 263)
+        # Labels query on evaluated marker container.
         lbls = collect(labels(edm))
         @test :region ∈ lbls
 
-        # label_symbols, label_tuples, label_conditions on EvaluatedDomainMarkers
+        # Categorized label accessors on EvaluatedDomainMarkers.
         dm2 = markers(I_space, :left => :left, :wall => (:top, :bottom), :region =>
             staticfunc)
         edm2 = dm2(0.0)
@@ -378,14 +411,18 @@ using StaticArrays
         @test !isempty(edm2)
     end
 
-    @testset "get_boundary_symbols" begin
+    # Invariant: `get_boundary_symbols` returns canonical boundary names for
+    # dimensions 1, 2, and 3, and raises an error for unsupported dimensions.
+    @testset "Default boundary symbol mappings" begin
         @test get_boundary_symbols(1) == (:left, :right)
         @test get_boundary_symbols(2) == (:bottom, :top, :left, :right)
         @test get_boundary_symbols(3) == (:bottom, :top, :back, :front, :left, :right)
         @test_throws ErrorException get_boundary_symbols(4)
     end
 
-    @testset "Space-time constructor" begin
+    # Invariant: Spatiotemporal domains can be constructed by combining spatial
+    # and temporal sets alongside time-dependent boundary conditions.
+    @testset "Spatiotemporal domain construction" begin
         I_space = interval(0.0, 1.0) × interval(0.0, 1.0)
         I_time = interval(0.0, 2.0)
         f = (x, t) -> x[1] > t
@@ -396,17 +433,17 @@ using StaticArrays
     end
 end
 
-@testset "Interface coverage" begin
-    @testset "Higher dimensions" begin
-        # There is no canonical naming for the faces of a 4D box, so both the
-        # value-based and the type-based entry points refuse rather than guess.
+@testset "Higher-dimensional domains and collapsed sets" begin
+    # Invariant: Boundary symbols are defined up to 3D; higher dimensions throw errors.
+    @testset "Higher-dimensional domains" begin
+        # 4D boxes have no canonical boundary face names; queries throw an ErrorException.
         X4 = interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0) ×
              interval(0.0, 1.0)
         @test dim(X4) == 4
         @test_throws ErrorException get_boundary_symbols(4)
         @test_throws ErrorException get_boundary_symbols(typeof(X4))
 
-        # The supported dimensions resolve identically through every entry point.
+        # Supported dimensions resolve identically across value and type queries.
         @test get_boundary_symbols(1) == (:left, :right)
         @test get_boundary_symbols(2) == (:bottom, :top, :left, :right)
         @test get_boundary_symbols(3) == (:bottom, :top, :back, :front, :left, :right)
@@ -421,7 +458,8 @@ end
         @test get_boundary_symbols(X3) == get_boundary_symbols(typeof(X3))
     end
 
-    @testset "Collapsed set show" begin
+    # Invariant: A domain wrapping a degenerate interval displays as a Point rather than Interval.
+    @testset "Collapsed set display formatting" begin
         out = sprint(show, domain(interval(3.0, 3.0)))
         @test occursin("Point", out)
         @test occursin("3.0", out)

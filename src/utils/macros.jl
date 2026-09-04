@@ -1,51 +1,30 @@
 """
-	@forward T.field f, g, h
+    @forward T.field functions
+    @forward T.field (f, g, ...)
 
-A macro for automatically forwarding method calls from a type to one of its fields.
-This macro is adapted from Lazy.jl and generates delegation methods that forward
-function calls to a specific field of a struct.
+Generate delegating method definitions forwarding function calls on type `T` to `x.field`.
 
-# Syntax
-
+For each supplied function `f`, generates an inlined method:
 ```julia
-@forward TypeName.fieldname (func1, func2, func3, ...)
+@inline f(x::T, args...; kwargs...) = f(x.field, args...; kwargs...)
 ```
-
-# Arguments
-
-  - `TypeName.fieldname`: The type and field to forward calls to
-  - Function list: Single function or tuple of functions to forward
-
-# Behavior
-
-For each function `f` in the list, generates a method:
-```julia
-f(x::TypeName, args...; kwargs...) = f(x.fieldname, args...; kwargs...)
-```
-
-The generated methods are marked with `@inline` for performance.
 
 # Examples
+```jldoctest
+using Bramble: @forward
 
-```julia
 struct Container
     data::Vector{Float64}
 end
 
-# Forward length, size, and eltype to the data field
-@forward Container.data (Base.length, Base.size, Base.eltype)
+@forward Container.data (Base.length, Base.size)
 
 c = Container([1.0, 2.0, 3.0])
-length(c)  # Returns 3 (calls length(c.data))
-size(c)    # Returns (3,) (calls size(c.data))
+length(c) == 3 && size(c) == (3,)
+
+# output
+true
 ```
-
-# Use Cases
-
-  - Delegating collection interface methods (length, iterate, etc.)
-  - Forwarding mathematical operations to wrapped types
-  - Reducing boilerplate for wrapper types
-
 """
 macro forward(ex, fs)
     if !(Meta.isexpr(ex, :.) && length(ex.args) == 2 && ex.args[2] isa QuoteNode)

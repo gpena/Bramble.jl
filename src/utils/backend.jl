@@ -1,99 +1,100 @@
 """
-	ExecutionPolicy
+    ExecutionPolicy
 
-Abstract supertype for the execution intent a [`Backend`](@ref) carries: [`Serial`](@ref)
-or [`Parallel`](@ref).
+Abstract supertype for backend execution policies.
 
-Named for intent rather than mechanism on purpose. `Parallel` is realised as
-`Threads.@threads` on a CPU backend today, and is simply how a GPU backend already runs --
-an earlier `Threaded` name would have meant nothing there.
+Directs grid operations and form assembly to execute either sequentially via
+[`Serial`](@ref) or across threads via [`Parallel`](@ref).
 """
 abstract type ExecutionPolicy end
 
 """
-	Serial
+    Serial() <: ExecutionPolicy
 
-Run every per-index and per-thread-capable operation (`Rₕ!`, `avgₕ!`, form assembly, ...) as
-a plain loop, unconditionally. The default policy.
+Sequential execution policy.
+
+Directs grid operations and form assembly to execute via single-threaded loops.
+This is the default execution policy.
+
+See also: [`Parallel`](@ref), [`ExecutionPolicy`](@ref).
 """
 struct Serial <: ExecutionPolicy end
 
 """
-	Parallel
+    Parallel() <: ExecutionPolicy
 
-Run every per-index and per-thread-capable operation across threads, unconditionally.
+Multithreaded execution policy.
 
-There is no size threshold: choosing `Parallel()` on a backend means every eligible call
-threads, however small, however many times a time-stepping loop repeats it. That is a
-deliberate trade -- the alternative is an automatic per-call size heuristic, which would
-have to be tuned separately for every operation (`Rₕ!`'s crossover is not `avgₕ!`'s), tuning
-the caller cannot see or override. Choose [`Serial`](@ref) instead for small, frequently
-repeated calls.
+Directs grid operations and form assembly to execute across CPU threads via static partitioning.
+Execution is unconditional: no per-call size thresholds are imposed. For workloads dominated
+by small, frequently repeated calls, use [`Serial`](@ref).
+
+See also: [`Serial`](@ref), [`ExecutionPolicy`](@ref).
 """
 struct Parallel <: ExecutionPolicy end
 
 """
-	$(TYPEDEF)
+    Backend{VT, MT, EP}()
 
-A singleton structure containing type-level configuration for backend linear algebra objects.
-This structure has no fields, only type parameters `VT`, `MT` and `EP`.
+Compile-time descriptor specifying vector type `VT`, matrix type `MT`, and execution policy `EP`.
 
-This allows specifying the desired concrete types for dense vectors (CPU or GPU)
-and matrices (e.g., dense `Vector`, sparse or dense matrices like `SparseMatrixCSC` or `Matrix`,
-different element types like `Float32`, `Float64`, or custom GPU arrays), and the
-[`ExecutionPolicy`](@ref) -- [`Serial`](@ref) or [`Parallel`](@ref) -- every
-threading-capable operation over this backend uses.
+# Type parameters
+- `VT<:DenseVector`: Concrete dense vector type (for CPU or GPU).
+- `MT<:AbstractMatrix`: Concrete matrix type (e.g. `SparseMatrixCSC{Float64, Int}` or `Matrix{Float64}`).
+- `EP<:ExecutionPolicy`: Execution policy ([`Serial`](@ref) or [`Parallel`](@ref)).
+
+See also: [`backend`](@ref), [`vector_type`](@ref), [`matrix_type`](@ref), [`execution_policy`](@ref).
 """
 struct Backend{VT <: DenseVector, MT <: AbstractMatrix, EP <: ExecutionPolicy} end
 
 """
-	$(SIGNATURES)
+    vector_type(backend::Backend{VT}) -> Type{VT}
+    vector_type(::Type{<:Backend{VT}}) -> Type{VT}
 
-Returns the vector type (`VT`) associated with the given [`Backend`](@ref) instance or type.
+Return the vector type `VT` configured for `backend`.
 """
 @inline vector_type(::Backend{VT, MT, EP}) where {VT, MT, EP} = VT
 @inline vector_type(::Type{<:Backend{VT, MT, EP}}) where {VT, MT, EP} = VT
 
 """
-	$(SIGNATURES)
+    matrix_type(backend::Backend{<:Any, MT}) -> Type{MT}
+    matrix_type(::Type{<:Backend{<:Any, MT}}) -> Type{MT}
 
-Returns the matrix type (`MT`) associated with the given [`Backend`](@ref) instance or type.
+Return the matrix type `MT` configured for `backend`.
 """
 @inline matrix_type(::Backend{VT, MT, EP}) where {VT, MT, EP} = MT
 @inline matrix_type(::Type{<:Backend{VT, MT, EP}}) where {VT, MT, EP} = MT
 
 """
-	$(SIGNATURES)
+    execution_policy(backend::Backend{<:Any, <:Any, EP}) -> EP
+    execution_policy(::Type{<:Backend{<:Any, <:Any, EP}}) -> EP
 
-Returns the [`ExecutionPolicy`](@ref) instance ([`Serial`](@ref) or [`Parallel`](@ref))
-associated with the given [`Backend`](@ref), mesh, or space.
+Return the [`ExecutionPolicy`](@ref) instance ([`Serial`](@ref) or [`Parallel`](@ref)) configured for `backend`.
 """
 @inline execution_policy(::Backend{VT, MT, EP}) where {VT, MT, EP} = EP()
 @inline execution_policy(::Type{<:Backend{VT, MT, EP}}) where {VT, MT, EP} = EP()
 
 """
-	$(SIGNATURES)
+    backend(; vector_type = Vector{Float64}, matrix_type = SparseMatrixCSC{Float64, Int}, policy::ExecutionPolicy = Serial()) -> Backend
 
-Creates a linear algebra [`Backend`](@ref) using keyword arguments.
+Construct a [`Backend`](@ref) configuration.
 
-Defaults to standard dense `Float64` vectors and `SparseMatrixCSC` matrices, run serially:
-- `vector_type = Vector{Float64}`
-- `matrix_type = SparseMatrixCSC{Float64,Int}`
-- `policy = Serial()`
+# Keywords
+- `vector_type`: Dense vector type (default: `Vector{Float64}`).
+- `matrix_type`: Matrix type (default: `SparseMatrixCSC{Float64, Int}`).
+- `policy`: Execution policy instance, [`Serial`](@ref) or [`Parallel`](@ref) (default: `Serial()`).
+
+# Returns
+- `Backend`: Singleton instance parameterized by `(vector_type, matrix_type, typeof(policy))`.
 
 # Examples
-
 ```jldoctest
-julia> dense_sparse = backend() # Default backend (Dense-Sparse Float64, Serial)
+using Bramble, SparseArrays
+b = backend()
+b isa Backend{Vector{Float64}, SparseMatrixCSC{Float64, Int}, Serial}
 
-julia> dense_dense = backend(vector_type = Vector{Float64}, matrix_type = Matrix{Float64})
-
-julia> using SparseArrays;
-       SMat{T} = SparseMatrixCSC{T,Int};
-       T32 = Float32;
-       dense32 = backend(vector_type = Vector{T32}, matrix_type = SMat{T32})
-
-julia> threaded = backend(policy = Parallel())
+# output
+true
 ```
 """
 @inline backend(;
@@ -103,26 +104,36 @@ julia> threaded = backend(policy = Parallel())
     vector_type, matrix_type, typeof(policy)}()
 
 """
-	backend(::Type{T}; policy = Serial())
+    backend(::Type{T}; policy::ExecutionPolicy = Serial()) -> Backend{Vector{T}, SparseMatrixCSC{T, Int}, typeof(policy)}
 
-The default dense-vector, sparse-matrix backend over the element type `T`, run serially
-unless `policy = Parallel()` is given.
+Construct the default dense-vector, sparse-matrix backend over scalar coordinate type `T`.
 
-`backend(Float64)` is what `backend()` returns. The single-argument form exists so that a
-mesh can take its element type from the domain it is built on rather than always being
-`Float64`: `mesh` defaults its backend to `backend(eltype(Ω))`.
+Allows meshes to inherit their scalar coordinate type from the underlying geometric domain.
+
+# Arguments
+- `T`: Coordinate and scalar element type (e.g. `Float64`, `Float32`).
+
+# Keywords
+- `policy`: Execution policy instance ([`Serial`](@ref) or [`Parallel`](@ref), default: `Serial()`).
+
+# Examples
+```jldoctest
+using Bramble, SparseArrays
+b = backend(Float32)
+vector_type(b) === Vector{Float32} && matrix_type(b) === SparseMatrixCSC{Float32, Int}
+
+# output
+true
+```
 """
 @inline backend(::Type{T}; policy::ExecutionPolicy = Serial()) where {T} = Backend{
     Vector{T}, SparseMatrixCSC{T, Int}, typeof(policy)}()
 
 """
-	$(SIGNATURES)
+    backend_types(backend::Backend{VT, MT, EP}) -> Tuple{Type, Type{VT}, Type{MT}, Type{Backend{VT, MT, EP}}}
+    backend_types(::Type{<:Backend{VT, MT, EP}}) -> Tuple{Type, Type{VT}, Type{MT}, Type{Backend{VT, MT, EP}}}
 
-Returns a tuple with the backend associated types:
-1. Element type of `VT`
-2. Vector type `VT`
-3. Matrix type `MT`
-4. Concrete backend type `Backend{VT,MT,EP}`
+Return a 4-tuple containing `(eltype(VT), VT, MT, Backend{VT, MT, EP})`.
 """
 @inline backend_types(backend::Backend{VT, MT, EP}) where {VT, MT, EP} = eltype(VT), VT, MT,
 typeof(backend)
@@ -139,9 +150,16 @@ end
 end
 
 """
-	$(SIGNATURES)
+    vector(backend::Backend{VT}, n::Integer) -> VT
 
-Creates a vector of type `VT` associated with the given [`Backend`](@ref) instance with length `n`.
+Allocate an uninitialized vector of length `n` using vector type `VT` configured in `backend`.
+
+# Arguments
+- `backend`: Target backend instance.
+- `n`: Number of vector elements.
+
+# Throws
+- `ErrorException`: If neither `VT(undef, n)` nor `VT(n)` succeeds.
 """
 function vector(::Backend{VT, MT, EP}, n::Integer) where {VT, MT, EP}
     try
@@ -161,9 +179,20 @@ end
     undef, n)
 
 """
-	$(SIGNATURES)
+    matrix(backend::Backend{<:Any, MT}, n::Integer, m::Integer) -> MT
 
-Creates a matrix of type `MT` associated with the given [`Backend`](@ref) instance with dimensions `n` × `m`.
+Allocate a matrix of dimensions `n × m` using matrix type `MT` configured in `backend`.
+
+For dense matrix types, allocates uninitialized storage via `MT(undef, n, m)`.
+For sparse matrix types (`SparseMatrixCSC`), allocates an empty sparse matrix via `spzeros(T, Ti, n, m)`.
+
+# Arguments
+- `backend`: Target backend instance.
+- `n`: Number of rows.
+- `m`: Number of columns.
+
+# Throws
+- `ErrorException`: If `MT` cannot be constructed with dimensions `(n, m)`.
 """
 function matrix(backend::Backend{VT, MT, EP}, n::Integer, m::Integer) where {VT, MT, EP}
     try
@@ -184,9 +213,9 @@ end
     m::Integer) where {VT, T, Ti, MT <: SparseMatrixCSC{T, Ti}, EP} = spzeros(T, Ti, n, m)
 
 """
-	$(SIGNATURES)
+    backend_eye(backend::Backend, n::Integer) -> AbstractMatrix
 
-Constructs an `n` × `n` identity matrix associated with the given [`Backend`](@ref) instance.
+Construct an ``n \\times n`` identity matrix matching the matrix type configured in `backend`.
 """
 @inline backend_eye(backend::Backend, n::Integer) = _backend_eye(matrix_type(backend), n)
 @inline _backend_eye(::Type{<:SparseMatrixCSC{T, Ti}}, n::Integer) where {
@@ -202,9 +231,9 @@ function _backend_eye(::Type{MT}, n::Integer) where {T, MT <: AbstractMatrix{T}}
 end
 
 """
-	$(SIGNATURES)
+    backend_zeros(backend::Backend, n::Integer) -> AbstractMatrix
 
-Constructs an `n` × `n` zero matrix associated with the given [`Backend`](@ref) instance.
+Construct an ``n \\times n`` zero matrix matching the matrix type configured in `backend`.
 """
 @inline backend_zeros(backend::Backend, n::Integer) = _backend_zeros(matrix_type(backend), n)
 @inline _backend_zeros(::Type{<:SparseMatrixCSC{T, Ti}}, n::Integer) where {
@@ -218,9 +247,10 @@ function _backend_zeros(::Type{MT}, n::Integer) where {T, MT <: AbstractMatrix{T
 end
 
 """
-	$(SIGNATURES)
+    eltype(backend::Backend{VT}) -> Type
+    eltype(::Type{<:Backend{VT}}) -> Type
 
-Returns the coordinate/element type of the vector type (`VT`) used in the given [`Backend`](@ref).
+Return the coordinate and scalar element type of vector type `VT` configured in `backend`.
 """
 @inline Base.eltype(backend::Backend{
     VT, MT, EP}) where {VT, MT, EP} = eltype(typeof(backend))
@@ -235,21 +265,21 @@ function Base.show(io::IO, be::Backend{VT, MT, EP}) where {VT, MT, EP}
 end
 
 """
-	metal_backend(T::Type = Float32; policy = Serial())
+    metal_backend(::Type{T} = Float32; policy::ExecutionPolicy = Serial()) -> Backend
 
-Returns a Metal GPU [`Backend`](@ref) using Apple Metal arrays via
-[Metal.jl](https://github.com/JuliaGPU/Metal.jl).
+Construct a Metal GPU [`Backend`](@ref) backed by `Metal.jl` arrays.
 
-Requires loading `Metal.jl` alongside `Bramble.jl`:
+Requires `using Metal` in the caller environment. Apple Silicon GPUs support `Float32`
+and `Float16`, but do not support 64-bit floating point arithmetic.
 
-```julia
-using Bramble, Metal
-b = metal_backend()           # Float32 GPU backend
-b = metal_backend(Float16)    # half-precision
-```
+# Arguments
+- `T`: Floating-point element type (`Float32` or `Float16`, default: `Float32`).
 
-!!! note
-    `Float64` is not supported on Apple Silicon GPUs. Use `Float32` or `Float16`.
+# Keywords
+- `policy`: Execution policy instance ([`Serial`](@ref) or [`Parallel`](@ref), default: `Serial()`).
+
+# Throws
+- `ErrorException`: If `Metal.jl` is not loaded.
 """
 function metal_backend(T::Type = Float32; policy::ExecutionPolicy = Serial())
     return _metal_backend(T, policy)

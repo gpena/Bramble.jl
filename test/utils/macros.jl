@@ -1,7 +1,7 @@
 using Test
 using Bramble: @forward
 
-# Top-level helper structs for @forward testing
+# Helper wrapper types defined at top level for method forwarding verification
 struct SimpleWrapper
     data::Vector{Float64}
 end
@@ -45,7 +45,9 @@ struct NumHolder
 end
 @forward NumHolder.num (custom_double, custom_square)
 
-@testset "@forward" begin
+@testset "Macro method forwarding" begin
+    # Invariants tested:
+    # 1. Forwarded methods return identical results to direct field access.
     @testset "Basic forwarding" begin
         sw = SimpleWrapper([1.0, 2.0, 3.0, 4.0])
         @test length(sw) == 4
@@ -54,6 +56,8 @@ end
         @test size(sw) == size(sw.data)
     end
 
+    # Invariants tested:
+    # 1. Single function forward syntax @forward T.field f.
     @testset "Single function" begin
         nw_pos = NumberWrapper(5)
         nw_neg = NumberWrapper(-5)
@@ -61,6 +65,8 @@ end
         @test abs(nw_neg) == 5
     end
 
+    # Invariants tested:
+    # 1. Tuple syntax @forward T.field (f, g, ...) forwarding multiple methods simultaneously.
     @testset "Multiple functions" begin
         aw_1d = ArrayWrapper([1, 2, 3])
         aw_2d = ArrayWrapper([1 2; 3 4])
@@ -76,7 +82,9 @@ end
         @test ndims(aw_2d) == 2
     end
 
-    @testset "Arguments" begin
+    # Invariants tested:
+    # 1. Positional arguments are passed through to the wrapped field (indexing and mutation).
+    @testset "Positional arguments" begin
         vc = VectorContainer([10.0, 20.0, 30.0])
         @test vc[1] == 10.0
         @test vc[2] == 20.0
@@ -87,7 +95,9 @@ end
         @test vc.vec[2] == 25.0
     end
 
-    @testset "Iteration" begin
+    # Invariants tested:
+    # 1. Forwarding iterate enables Julia's standard iteration protocol (for loops, collect).
+    @testset "Iteration protocol" begin
         iw = IterableWrapper(["a", "b", "c"])
         @test length(iw) == 3
         @test eltype(iw) == String
@@ -102,6 +112,8 @@ end
         @test items == ["a", "b", "c"]
     end
 
+    # Invariants tested:
+    # 1. Keyword arguments are forwarded transparently to underlying methods.
     @testset "Keyword arguments" begin
         sw = StringWrapper("hello world foo")
         @test split(sw) == ["hello", "world", "foo"]
@@ -109,6 +121,8 @@ end
         @test split(sw, keepempty = false) == ["hello", "world", "foo"]
     end
 
+    # Invariants tested:
+    # 1. Forwarded methods preserve type inference and return values.
     @testset "Type stability" begin
         tw_int = TypedWrapper(42)
         tw_float = TypedWrapper(3.14)
@@ -123,22 +137,24 @@ end
         @test z_float == 0.0
     end
 
+    # Invariants tested:
+    # 1. Custom non-Base functions can be forwarded.
     @testset "Custom functions" begin
         nh = NumHolder(5)
         @test custom_double(nh) == 10
         @test custom_square(nh) == 25
     end
-end
 
-@testset "Malformed syntax" begin
-    # The macro must reject anything that is not `T.field`, with a message that
-    # shows the accepted forms.
-    err = try
-        @eval @forward NotAFieldAccess (Base.size,)
-        nothing
-    catch e
-        e
+    # Failure modes tested:
+    # 1. Macro invocation without property access expression (T.x) raises actionable syntax error.
+    @testset "Malformed syntax" begin
+        err = try
+            @eval @forward NotAFieldAccess (Base.size,)
+            nothing
+        catch e
+            e
+        end
+        @test err !== nothing
+        @test occursin("@forward T.x", sprint(showerror, err))
     end
-    @test err !== nothing
-    @test occursin("@forward T.x", sprint(showerror, err))
 end

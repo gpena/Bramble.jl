@@ -1,101 +1,95 @@
 """
-	$(TYPEDEF)
+    Marker(label::Symbol, identifier::F)
 
-Represents a labeled region or boundary of a computational domain.
+Labeled geometric region or boundary marker on a computational domain.
 
-Each `Marker` consists of a `label` (a `Symbol`) and an `identifier`. The `identifier` specifies how to locate the marked region:
-- A `Symbol` for predefined boundaries (e.g., `:left`, `:top`).
-- A `Set{Symbol}` for collections of predefined boundaries (e.g., `Set([:top, :right])`).
-- A characteristic or level-set function, returning `true` for points in the marked region.
-
-# Fields
-
-$(FIELDS)
+# Arguments
+- `label`: Region identifier (e.g. `:inlet`, `:wall`, `:boundary`).
+- `identifier`: Location specification, either a predefined boundary `Symbol` (e.g. `:left`),
+  a `Set{Symbol}` of boundary names, or a boolean spatial predicate function `f(x)`.
 """
 struct Marker{F}
-    "A `Symbol` naming the marked region (e.g., `:inlet`, `:wall`, `:boundary`)."
     label::Symbol
-    "The object identifying the region (`Symbol`, `Set{Symbol}`, or a raw function)."
     identifier::F
 end
 
 """
-	MarkerPair{F}
+    MarkerPair{F}
 
-A type alias for `Pair{Symbol, F}`, representing a convenient way to define a marker (e.g., `:boundary => :left`).
+Type alias for `Pair{Symbol, F}` used to specify region markers (e.g. `:boundary => :left`).
 """
 const MarkerPair{F} = Pair{Symbol, F}
 
 """
-	$(SIGNATURES)
+    label(m::Marker) -> Symbol
+    label(m::MarkerPair) -> Symbol
 
-Returns the `Symbol` label of a `Marker` or `MarkerPair`.
+Return the `Symbol` label of marker `m`.
 """
 @inline label(m::Marker) = m.label
 @inline label(m::MarkerPair) = first(m)
 
 """
-	$(SIGNATURES)
+    identifier(m::Marker{F}) -> F
+    identifier(m::MarkerPair{F}) -> F
 
-Returns the identifier (`Symbol`, `Set{Symbol}`, or function) of a `Marker` or `MarkerPair`.
+Return the identifying symbol, set of symbols, or predicate function of marker `m`.
 """
 @inline identifier(m::Marker) = m.identifier
 @inline identifier(m::MarkerPair) = last(m)
 
 """
-	$(TYPEDEF)
+    DomainMarkers(symbols::Set{Marker{Symbol}}, tuples::Set{Marker{Set{Symbol}}}, conditions::Tuple)
 
-A container that categorizes and stores all markers for a given computational domain.
+Container categorizing and indexing boundary and interior markers for a computational domain.
 
-`conditions` is a `Tuple` rather than a `Set`: each marker keeps its own condition's
-concrete closure type as one of the tuple's element types, rather than erasing every
-condition into one shared wrapper type the way a homogeneous `Set` would force. Point 48
-found this genuinely faster (not just simpler) for the one place a condition is called in
-a real hot loop, per-point: ~1.84× on Dirichlet value application, allocation-free either
-way, and the previous `BrambleFunction`-wrapped path wasn't even allocation-free once time
-dependence was involved (evaluating the outer time-closure built a new wrapper every call).
-A tuple pays for this with a distinct `DomainMarkers` type per distinct set of condition
-closures, rather than one type covering any combination — the same tradeoff `LinearForm`/
-`BilinearForm` already accepted for a form's AST.
+Condition predicates are stored in a tuple to preserve closure specialization at the type level.
 
 # Fields
+- `symbols`: Markers identified by a single predefined boundary `Symbol` (e.g. `:left`).
+- `tuples`: Markers identified by collections of predefined boundary symbols (e.g. `Set([:top, :right])`).
+- `conditions`: Statically typed tuple of predicate function markers `f(x)` or `f(x, t)`.
 
-$(FIELDS)
+See also: [`markers`](@ref), [`symbols`](@ref), [`tuples`](@ref), [`conditions`](@ref).
 """
 struct DomainMarkers{CT <: Tuple}
-    "markers identified by a single predefined `Symbol` (e.g., `:left`)."
     symbols::Set{Marker{Symbol}}
-    "markers identified by a collection of predefined `Symbol`s (e.g., `(:top, :right)`)."
     tuples::Set{Marker{Set{Symbol}}}
-    "markers identified by a boolean function `f(x)` or `f(x, t)`, one `Marker{F}` per condition's own closure type."
     conditions::CT
 end
 
 """
-	$(SIGNATURES)
+    symbols(domain_markers::DomainMarkers) -> Set{Marker{Symbol}}
 
-Returns the set of single-symbol markers from a [`DomainMarkers`](@ref) object.
+Return the set of single-symbol markers configured in `domain_markers`.
 """
 @inline symbols(domain_markers::DomainMarkers) = domain_markers.symbols
 
 """
-	$(SIGNATURES)
+    tuples(domain_markers::DomainMarkers) -> Set{Marker{Set{Symbol}}}
 
-Returns the set of symbol-tuple markers from a [`DomainMarkers`](@ref) object.
+Return the set of multi-symbol markers configured in `domain_markers`.
 """
 @inline tuples(domain_markers::DomainMarkers) = domain_markers.tuples
 
 """
-	$(SIGNATURES)
+    conditions(domain_markers::DomainMarkers) -> Tuple
 
-Returns the set of function condition markers from a [`DomainMarkers`](@ref) object.
+Return the tuple of predicate condition markers configured in `domain_markers`.
 """
 @inline conditions(domain_markers::DomainMarkers) = domain_markers.conditions
 
 """
-	$(SIGNATURES)
+    label_identifiers(domain_markers::DomainMarkers)
+    labels(domain_markers::DomainMarkers)
 
-Returns a generator that yields the label (`Symbol`) of every marker in the [`DomainMarkers`](@ref) collection.
+Return an iterator yielding the `Symbol` label of every marker in `domain_markers`.
+
+!!! note
+    Flattening across heterogeneous marker types (`symbols`, `tuples`, and `conditions`)
+    allocates ~224 bytes for the union iterator state. For zero allocations in performance-critical
+    paths, iterate directly over [`label_symbols`](@ref), [`label_tuples`](@ref), or
+    [`label_conditions`](@ref), which allocate 0 bytes.
 """
 @inline function label_identifiers(domain_markers::DomainMarkers)
     (; symbols, tuples, conditions) = domain_markers
@@ -106,56 +100,57 @@ end
 @inline labels(domain_markers::DomainMarkers) = label_identifiers(domain_markers)
 
 """
-	$(SIGNATURES)
+    label_symbols(domain_markers::DomainMarkers)
 
-Returns a generator that yields the labels from the single-symbol markers.
+Return an iterator yielding labels of all single-symbol markers.
 """
 @inline label_symbols(domain_markers::DomainMarkers) = (label(marker)::Symbol
 for marker in symbols(domain_markers))
 
 """
-	$(SIGNATURES)
+    label_tuples(domain_markers::DomainMarkers)
 
-Returns a generator that yields the labels from the symbol-tuple markers.
+Return an iterator yielding labels of all multi-symbol markers.
 """
 @inline label_tuples(domain_markers::DomainMarkers) = (label(marker)::Symbol
 for marker in tuples(domain_markers))
 
 """
-	$(SIGNATURES)
+    label_conditions(domain_markers::DomainMarkers)
 
-Returns a generator that yields the labels from the function-based condition markers.
+Return an iterator yielding labels of all condition predicate markers.
 """
 @inline label_conditions(domain_markers::DomainMarkers) = (label(marker)::Symbol
 for marker in conditions(domain_markers))
 
 """
-	$(SIGNATURES)
+    markers(space_set::CartesianProduct, pairs::Pair...) -> DomainMarkers
+    markers(space_set::CartesianProduct, time_set::CartesianProduct{1}, pairs::Pair...) -> DomainMarkers
 
-Constructs a [`DomainMarkers`](@ref) object from a series of `label => identifier` pairs.
+Construct a [`DomainMarkers`](@ref) collection from `label => identifier` pairs.
 
-The `identifier` can be a `Symbol`, a `Tuple` of `Symbol`s, or a `Function`.
+# Arguments
+- `space_set`: Geometric spatial set.
+- `time_set`: Optional 1D temporal interval for time-dependent boundary conditions.
+- `pairs`: Vararg sequence of `label => identifier` pairs where identifier is a `Symbol`,
+  `NTuple{N, Symbol}`, or predicate `Function`.
 
-# Example
-
+# Examples
 ```jldoctest
-julia> I = cartesian_product(0.0, 1.0);
-julia> m = markers(I, :left_boundary => :left, :internal => x -> 0.2 < x < 0.8);
-julia> length(m.symbols)
-1
-julia> length(m.conditions)
-1
+using Bramble
+I = cartesian_product(0.0, 1.0)
+m = markers(I, :left_boundary => :left, :internal => x -> 0.2 < x < 0.8)
+length(symbols(m)) == 1 && length(conditions(m)) == 1
+
+# output
+true
 ```
 """
 @inline markers(space_set::CartesianProduct, pairs::Pair...) = _create_generic_markers(pairs...)
 @inline markers(space_set::CartesianProduct, time_set::CartesianProduct{1},
     pairs::Pair...) = _create_generic_markers(pairs...)
 
-#=========================================================================
-Internal helper to parse identifier-based markers (Symbols and Tuples of Symbols)
-from a collection of pairs. Returns a tuple containing the set of symbol markers
-and the set of tuple markers.
-=========================================================================#
+# Parse identifier-based markers (Symbols and Tuples of Symbols) from input pairs
 function _extract_identifier_markers(pairs::Tuple)
     symbols = Set{Marker{Symbol}}()
     tuples = Set{Marker{Set{Symbol}}}()
@@ -174,13 +169,8 @@ function _extract_identifier_markers(pairs::Tuple)
     return symbols, tuples
 end
 
-#=========================================================================
-Creates DomainMarkers from pairs. The space/time domain used to matter here only to
-settle a BrambleFunction's CoType ahead of time (point 48) -- a raw closure needs no
-such settling, so the same builder now covers both the spatial and spatio-temporal
-constructors; what distinguishes them is only whether the caller later calls the result
-as `dm(t)`, which `EvaluatedDomainMarkers` handles.
-=========================================================================#
+# Construct DomainMarkers from label-identifier pairs, extracting symbol and tuple sets
+# while preserving concrete closure types in a specialized conditions tuple.
 function _create_generic_markers(pairs::Pair...)
     symbols, tuples = _extract_identifier_markers(pairs)
     conditions = _pairs_to_tuple_conditions(pairs)
@@ -188,11 +178,8 @@ function _create_generic_markers(pairs::Pair...)
     return DomainMarkers(symbols, tuples, conditions)
 end
 
-# One `Marker{F}` per function-valued pair, each keeping its own closure's concrete type
-# rather than erasing every condition into one shared wrapper type (point 48). `filter`/`map`
-# over a `Tuple` are themselves recursive/generated in Base, so this stays allocation-free
-# and fully specialised -- the same guarantee `_write_components!` relies on elsewhere for a
-# differently-shaped heterogeneous-tuple problem.
+# Extract function-valued pairs into a tuple of Marker{F} instances, keeping each closure's
+# concrete type specialized for zero heap allocations during evaluation.
 @inline function _pairs_to_tuple_conditions(pairs::Tuple)
     fn_pairs = filter(p -> p.second isa Function, pairs)
     return map(p -> Marker(p.first, p.second), fn_pairs)
@@ -204,44 +191,38 @@ end
 @inline process_identifier(::CartesianProduct, identifier::AbstractVector{Symbol}) = Set(identifier)
 
 """
-	$(TYPEDEF)
+    EvaluatedDomainMarkers(original_markers::DomainMarkers, evaluation_time::Number)
 
-A lazy, view-like wrapper representing a [`DomainMarkers`](@ref) object evaluated at a specific time `t`.
+Time-evaluated wrapper representing a time-dependent [`DomainMarkers`](@ref) collection evaluated at timestamp `t`.
 
 # Fields
-
-$(FIELDS)
+- `original_markers`: Underlying [`DomainMarkers`](@ref) object.
+- `evaluation_time`: Evaluation timestamp `t`.
 """
 struct EvaluatedDomainMarkers{M <: DomainMarkers, T <: Number}
-    "the original time-dependent DomainMarkers instance."
     original_markers::M
-    "the evaluation timestamp."
     evaluation_time::T
 end
 
 """
-	$(SIGNATURES)
+    symbols(edm::EvaluatedDomainMarkers) -> Set{Marker{Symbol}}
 
-Returns the set of single-symbol markers from an [`EvaluatedDomainMarkers`](@ref) object.
+Return single-symbol markers from the underlying domain markers.
 """
 @inline symbols(edm::EvaluatedDomainMarkers) = symbols(edm.original_markers)
 
 """
-	$(SIGNATURES)
+    tuples(edm::EvaluatedDomainMarkers) -> Set{Marker{Set{Symbol}}}
 
-Returns the set of symbol-tuple markers from an [`EvaluatedDomainMarkers`](@ref) object.
+Return multi-symbol markers from the underlying domain markers.
 """
 @inline tuples(edm::EvaluatedDomainMarkers) = tuples(edm.original_markers)
 
 """
-	$(SIGNATURES)
+    conditions(edm::EvaluatedDomainMarkers) -> Tuple
 
-Returns a tuple of condition markers evaluated at `edm.evaluation_time`: each raw `f(x, t)`
-closure becomes an `f(x)` one, via `Base.Fix2(f, t)` rather than a call through a wrapper --
-every condition built through the time-dependent constructor is uniformly two-argument, so
-this needs no per-marker check the way the old `BrambleFunction`-wrapped path did. `map`
-over a `Tuple` preserves the tuple (and each closure's own concrete type), the same
-guarantee [`conditions`](@ref)`(::DomainMarkers)` itself relies on.
+Return condition markers evaluated at timestamp `edm.evaluation_time`, converting `f(x, t)`
+closures into unary spatial predicates `f(x)` via `Base.Fix2(f, t)`.
 """
 function conditions(edm::EvaluatedDomainMarkers)
     t = edm.evaluation_time
@@ -250,69 +231,38 @@ function conditions(edm::EvaluatedDomainMarkers)
 end
 
 """
-	$(SIGNATURES)
+    label_identifiers(edm::EvaluatedDomainMarkers)
+    labels(edm::EvaluatedDomainMarkers)
 
-Returns a generator that yields the label (`Symbol`) of every marker in an [`EvaluatedDomainMarkers`](@ref) collection.
+Return an iterator yielding the `Symbol` label of every marker in evaluated marker collection `edm`.
+
+!!! note
+    Iterating directly over [`label_symbols`](@ref), [`label_tuples`](@ref), or
+    [`label_conditions`](@ref) allocates 0 bytes.
 """
 @inline label_identifiers(edm::EvaluatedDomainMarkers) = (label(m)::Symbol
 for m in Iterators.flatten((symbols(edm), tuples(edm), conditions(edm))))
 
-"""
-	$(SIGNATURES)
-
-Returns a generator that yields the labels of all markers in an [`EvaluatedDomainMarkers`](@ref) collection.
-"""
 @inline labels(edm::EvaluatedDomainMarkers) = label_identifiers(edm)
 
-"""
-	$(SIGNATURES)
-
-Returns a generator that yields the labels of the single-symbol markers in an [`EvaluatedDomainMarkers`](@ref) collection.
-"""
 @inline label_symbols(edm::EvaluatedDomainMarkers) = (label(m)::Symbol
 for m in symbols(edm))
 
-"""
-	$(SIGNATURES)
-
-Returns a generator that yields the labels of the symbol-tuple markers in an [`EvaluatedDomainMarkers`](@ref) collection.
-"""
 @inline label_tuples(edm::EvaluatedDomainMarkers) = (label(m)::Symbol for m in tuples(edm))
 
-"""
-	$(SIGNATURES)
-
-Returns a generator that yields the labels of the function-based condition markers in an [`EvaluatedDomainMarkers`](@ref) collection.
-"""
 @inline label_conditions(edm::EvaluatedDomainMarkers) = (label(m)::Symbol
 for m in conditions(edm))
 
-"""
-	$(SIGNATURES)
-
-Returns the total number of markers in an [`EvaluatedDomainMarkers`](@ref) object.
-"""
 @inline Base.length(edm::EvaluatedDomainMarkers) = length(edm.original_markers)
-
-"""
-	$(SIGNATURES)
-
-Returns `true` if an [`EvaluatedDomainMarkers`](@ref) object contains zero markers.
-"""
 @inline Base.isempty(edm::EvaluatedDomainMarkers) = isempty(edm.original_markers)
 
 """
-	(dm::DomainMarkers)(t::Number)
+    (dm::DomainMarkers)(t::Number) -> EvaluatedDomainMarkers
 
-Evaluates a time-dependent [`DomainMarkers`](@ref) object at a specific time `t`.
+Evaluate time-dependent condition markers at timestamp `t`.
 """
 (dm::DomainMarkers)(t::Number) = EvaluatedDomainMarkers(dm, t)
 
-"""
-	Base.show(io::IO, m::Marker)
-
-Custom display for [`Marker`](@ref) objects.
-"""
 function Base.show(io::IO, m::Marker{F}) where {F}
     if F <: Symbol
         print(io, "Marker(:$(m.label) => :$(m.identifier))")
@@ -324,11 +274,6 @@ function Base.show(io::IO, m::Marker{F}) where {F}
     end
 end
 
-"""
-	Base.show(io::IO, dm::DomainMarkers)
-
-Custom display for [`DomainMarkers`](@ref) objects with colored formatting.
-"""
 function Base.show(io::IO, dm::DomainMarkers)
     pp = PrettyPrinter(io)
 
@@ -338,10 +283,8 @@ function Base.show(io::IO, dm::DomainMarkers)
     total = n_sym + n_tup + n_cond
 
     if pp.compact
-        # Compact mode for arrays/collections
         print(io, "DomainMarkers($total total)")
     else
-        # Detailed mode
         if total == 0
             print_empty_message(pp, "DomainMarkers: (empty)")
             return
@@ -352,7 +295,6 @@ function Base.show(io::IO, dm::DomainMarkers)
 
         pp_indented = with_indent(pp, 1)
 
-        # Show symbol markers
         if n_sym > 0
             print_section_header(pp_indented, "Symbol markers ($n_sym):")
             pp_double_indent = with_indent(pp, 2)
@@ -361,7 +303,6 @@ function Base.show(io::IO, dm::DomainMarkers)
             end
         end
 
-        # Show tuple markers
         if n_tup > 0
             print_section_header(pp_indented, "Tuple markers ($n_tup):")
             pp_double_indent = with_indent(pp, 2)
@@ -378,9 +319,6 @@ function Base.show(io::IO, dm::DomainMarkers)
             end
         end
 
-        # Show condition markers. Whether a given condition is time-dependent is no longer
-        # a per-marker trait to query -- every condition built through the time-dependent
-        # constructor is uniformly two-argument -- so this only prints the label.
         if n_cond > 0
             print_section_header(pp_indented, "Function markers ($n_cond):")
             pp_double_indent = with_indent(pp, 2)
@@ -393,25 +331,14 @@ function Base.show(io::IO, dm::DomainMarkers)
             end
         end
 
-        # Remove trailing newline
         remove_trailing_newline(io)
     end
 end
 
-"""
-	Base.length(dm::DomainMarkers)
-
-Returns the total number of markers in a [`DomainMarkers`](@ref) object.
-"""
-function Base.length(dm::DomainMarkers)
+@inline function Base.length(dm::DomainMarkers)
     length(dm.symbols) + length(dm.tuples) + length(dm.conditions)
 end
 
-"""
-	Base.isempty(dm::DomainMarkers)
-
-Checks if a [`DomainMarkers`](@ref) object contains zero markers.
-"""
-function Base.isempty(dm::DomainMarkers)
+@inline function Base.isempty(dm::DomainMarkers)
     isempty(dm.symbols) && isempty(dm.tuples) && isempty(dm.conditions)
 end

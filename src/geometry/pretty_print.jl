@@ -1,9 +1,9 @@
 # Pretty printing utilities for geometry types
 
 """
-	PrettyPrinter
+    PrettyPrinter(io::IO, compact::Bool, indent_level::Int)
 
-A helper struct for managing pretty printing with colors and indentation.
+Helper struct managing visual formatting, indentation, and styled console output.
 """
 struct PrettyPrinter
     io::IO
@@ -14,17 +14,17 @@ end
 @inline PrettyPrinter(io::IO) = PrettyPrinter(io, get(io, :compact, false), 0)
 
 """
-	with_indent(pp::PrettyPrinter, levels::Int=1)
+    with_indent(pp::PrettyPrinter, levels::Int = 1) -> PrettyPrinter
 
-Returns a new PrettyPrinter with increased indentation.
+Return a new `PrettyPrinter` instance with indentation increased by `levels`.
 """
 @inline with_indent(pp::PrettyPrinter, levels::Int = 1) = PrettyPrinter(
     pp.io, pp.compact, pp.indent_level + levels)
 
 """
-	print_indent(pp::PrettyPrinter)
+    print_indent(pp::PrettyPrinter)
 
-Prints the current indentation level.
+Print leading spaces corresponding to the current indentation level.
 """
 @inline function print_indent(pp::PrettyPrinter)
     pp.indent_level == 0 && return
@@ -34,9 +34,9 @@ Prints the current indentation level.
 end
 
 """
-	print_colored(pp::PrettyPrinter, text; color=:default, bold=false)
+    print_colored(pp::PrettyPrinter, text; color = :default, bold = false)
 
-Prints colored text with the current indentation.
+Print styled text according to current color settings.
 """
 @inline function print_colored(pp::PrettyPrinter, text; color = :default, bold = false)
     if color == :default
@@ -47,9 +47,9 @@ Prints colored text with the current indentation.
 end
 
 """
-	println_colored(pp::PrettyPrinter, text; color=:default, bold=false)
+    println_colored(pp::PrettyPrinter, text; color = :default, bold = false)
 
-Prints colored text with newline.
+Print styled text followed by a newline.
 """
 @inline function println_colored(pp::PrettyPrinter, text; color = :default, bold = false)
     print_colored(pp, text; color = color, bold = bold)
@@ -57,9 +57,9 @@ Prints colored text with newline.
 end
 
 """
-	print_header(pp::PrettyPrinter, title::String, type_info::String="")
+    print_header(pp::PrettyPrinter, title::String, type_info::String = "")
 
-Prints a header with title and optional type information.
+Print a prominent header with optional type information.
 """
 function print_header(pp::PrettyPrinter, title::String, type_info::String = "")
     print_indent(pp)
@@ -72,9 +72,9 @@ function print_header(pp::PrettyPrinter, title::String, type_info::String = "")
 end
 
 """
-	print_section_header(pp::PrettyPrinter, title::String)
+    print_section_header(pp::PrettyPrinter, title::String)
 
-Prints a section header.
+Print a section header with accent color.
 """
 function print_section_header(pp::PrettyPrinter, title::String)
     print_indent(pp)
@@ -83,9 +83,9 @@ function print_section_header(pp::PrettyPrinter, title::String)
 end
 
 """
-	print_subsection_header(pp::PrettyPrinter, title::String, count::Int=0)
+    print_subsection_header(pp::PrettyPrinter, title::String, count::Int = 0)
 
-Prints a subsection header with optional count.
+Print a subsection header with an optional item count.
 """
 function print_subsection_header(pp::PrettyPrinter, title::String, count::Int = 0)
     print_indent(pp)
@@ -97,10 +97,9 @@ function print_subsection_header(pp::PrettyPrinter, title::String, count::Int = 
 end
 
 """
-	print_key_value(pp::PrettyPrinter, key::String, value::String; 
-					key_color=:green, value_color=:blue, separator=" => ")
+    print_key_value(pp::PrettyPrinter, key::String, value::String; key_color = :green, value_color = :blue, separator = " => ")
 
-Prints a key-value pair with colors.
+Print a key-value pair formatted with distinct colors.
 """
 function print_key_value(pp::PrettyPrinter, key::String, value::String;
         key_color = :green, value_color = :blue, separator = " => ")
@@ -112,27 +111,27 @@ function print_key_value(pp::PrettyPrinter, key::String, value::String;
 end
 
 """
-	print_label(pp::PrettyPrinter, label::Symbol)
+    print_label(pp::PrettyPrinter, label::Symbol)
 
-Prints a colored label (marker or dimension name).
+Print a highlighted symbol label.
 """
 @inline function print_label(pp::PrettyPrinter, label::Symbol)
     printstyled(pp.io, ":$label"; color = :green)
 end
 
 """
-	print_value(pp::PrettyPrinter, value; color=:blue)
+    print_value(pp::PrettyPrinter, value; color = :blue)
 
-Prints a colored value.
+Print a colored value.
 """
 @inline function print_value(pp::PrettyPrinter, value; color = :blue)
     printstyled(pp.io, "$value"; color = color)
 end
 
 """
-	print_interval(pp::PrettyPrinter, min_val, max_val; collapsed=false)
+    print_interval(pp::PrettyPrinter, min_val, max_val; collapsed = false)
 
-Prints an interval with proper formatting.
+Print formatted interval endpoints or a collapsed point marker.
 """
 function print_interval(pp::PrettyPrinter, min_val, max_val; collapsed = false)
     if collapsed
@@ -146,9 +145,9 @@ function print_interval(pp::PrettyPrinter, min_val, max_val; collapsed = false)
 end
 
 """
-	print_dimension_info(pp::PrettyPrinter, label::String, min_val, max_val, collapsed::Bool)
+    print_dimension_info(pp::PrettyPrinter, label::String, min_val, max_val, collapsed::Bool)
 
-Prints dimension information (coordinate label and range).
+Print coordinate dimension bounds.
 """
 function print_dimension_info(
         pp::PrettyPrinter, label::String, min_val, max_val, collapsed::Bool)
@@ -160,9 +159,9 @@ function print_dimension_info(
 end
 
 """
-	print_empty_message(pp::PrettyPrinter, message::String="(none)")
+    print_empty_message(pp::PrettyPrinter, message::String = "(none)")
 
-Prints an empty/none message in gray.
+Print an empty collection indicator in muted text.
 """
 function print_empty_message(pp::PrettyPrinter, message::String = "(none)")
     print_indent(pp)
@@ -171,9 +170,9 @@ function print_empty_message(pp::PrettyPrinter, message::String = "(none)")
 end
 
 """
-	print_marker_summary(pp::PrettyPrinter, n_sym::Int, n_tup::Int, n_cond::Int)
+    print_marker_summary(pp::PrettyPrinter, n_sym::Int, n_tup::Int, n_cond::Int)
 
-Prints a summary of marker counts.
+Print categorized counts of symbols, tuples, and function condition markers without intermediate allocations.
 """
 function print_marker_summary(pp::PrettyPrinter, n_sym::Int, n_tup::Int, n_cond::Int)
     total = n_sym + n_tup + n_cond
@@ -181,7 +180,6 @@ function print_marker_summary(pp::PrettyPrinter, n_sym::Int, n_tup::Int, n_cond:
     printstyled(pp.io, "$total marker$(total == 1 ? "" : "s")"; color = :yellow)
     print(pp.io, " (")
 
-    # Build parts string without intermediate array allocation
     first = true
     if n_sym > 0
         print(pp.io, "$n_sym symbol$(n_sym == 1 ? "" : "s")")
@@ -201,9 +199,9 @@ function print_marker_summary(pp::PrettyPrinter, n_sym::Int, n_tup::Int, n_cond:
 end
 
 """
-	print_labels_list(pp::PrettyPrinter, labels; prefix="Labels: ")
+    print_labels_list(pp::PrettyPrinter, labels; prefix = "Labels: ")
 
-Prints a comma-separated list of labels.
+Print a comma-separated list of symbols.
 """
 function print_labels_list(pp::PrettyPrinter, labels; prefix = "Labels: ")
     print_indent(pp)
@@ -217,9 +215,9 @@ function print_labels_list(pp::PrettyPrinter, labels; prefix = "Labels: ")
 end
 
 """
-	remove_trailing_newline(io::IO)
+    remove_trailing_newline(io::IO)
 
-Removes the trailing newline from output.
+Trim trailing newline from an `IOBuffer`.
 """
 function remove_trailing_newline(io::IO)
     io isa IOBuffer || return
@@ -227,13 +225,13 @@ function remove_trailing_newline(io::IO)
     print(io, endswith(s, '\n') ? chop(s) : s)
 end
 
-# Precomputed dimension labels to avoid repeated allocations
+# Statically preallocated coordinate dimension names to eliminate runtime allocation
 const DIMENSION_LABELS = ("x", "y", "z", "w", "v", "u")
 
 """
-	get_dimension_label(i::Int)
+    get_dimension_label(i::Int) -> String
 
-Returns the label for the i-th dimension.
+Return the standard coordinate label for dimension index `i`.
 """
 @inline function get_dimension_label(i::Int)
     return i <= length(DIMENSION_LABELS) ? DIMENSION_LABELS[i] : "x$i"

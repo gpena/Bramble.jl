@@ -1,67 +1,71 @@
-# Abstract supertype for all domain-related types.
+# Abstract supertype for all domain-related types
 abstract type DomainBaseType end
 
 """
-	$(TYPEDEF)
+    Domain(set::SetType, markers::MarkersType)
 
-Represents a computational domain, combining a geometric set (e.g., [`CartesianProduct`](@ref)) with a collection of labeled [`DomainMarkers`](@ref).
+Computational domain pairing a geometric set (e.g. [`CartesianProduct`](@ref)) with labeled [`DomainMarkers`](@ref).
 
 # Fields
+- `set`: Geometric set defining the spatial bounding box or interval.
+- `markers`: [`DomainMarkers`](@ref) collection indexing labeled boundaries and subregions.
 
-$(FIELDS)
-
-# Related Types
-
-- Use `mesh` to discretize a [`Domain`](@ref) into a computational mesh.
-- See [`CartesianProduct`](@ref) for the underlying geometric representation.
-- See [`DomainMarkers`](@ref) for marker management.
+See also: [`domain`](@ref), [`CartesianProduct`](@ref), [`DomainMarkers`](@ref).
 """
 struct Domain{SetType, MarkersType} <: DomainBaseType
-    "the geometric set defining the domain's extent (e.g., a [`CartesianProduct`](@ref))."
     set::SetType
-    "a [`DomainMarkers`](@ref) object containing all labeled regions for this domain."
     markers::MarkersType
 end
 
 """
-	$(SIGNATURES)
+    markers(Ω::Domain) -> DomainMarkers
 
-Returns the [`DomainMarkers`](@ref) object associated with the [`Domain`](@ref) `Ω`.
+Return the [`DomainMarkers`](@ref) collection associated with domain `Ω`.
 """
 @inline markers(Ω::Domain) = Ω.markers
 
 """
-	$(SIGNATURES)
+    symbols(Ω::Domain) -> Set{Marker{Symbol}}
 
-Returns the set of single-symbol markers associated with the [`Domain`](@ref) `Ω`.
+Return the set of single-symbol markers associated with domain `Ω`.
 """
 @inline symbols(Ω::Domain) = symbols(markers(Ω))
 
 """
-	$(SIGNATURES)
+    tuples(Ω::Domain) -> Set{Marker{Set{Symbol}}}
 
-Returns the set of symbol-tuple markers associated with the [`Domain`](@ref) `Ω`.
+Return the set of multi-symbol markers associated with domain `Ω`.
 """
 @inline tuples(Ω::Domain) = tuples(markers(Ω))
 
 """
-	$(SIGNATURES)
+    conditions(Ω::Domain) -> Tuple
 
-Returns the set of condition-based markers associated with the [`Domain`](@ref) `Ω`.
+Return the tuple of condition predicate markers associated with domain `Ω`.
 """
 @inline conditions(Ω::Domain) = conditions(markers(Ω))
 
 """
-	$(SIGNATURES)
+    labels(Ω::Domain)
 
-Returns a generator that yields the labels (`Symbol`) of all markers associated with the [`Domain`](@ref) `Ω`.
+Return an iterator yielding the `Symbol` label of every marker in domain `Ω`.
+
+!!! note
+    Flattening across heterogeneous marker types (`symbols`, `tuples`, and `conditions`)
+    allocates ~224 bytes for the union iterator state. For zero allocations in performance-critical
+    paths, iterate directly over [`label_symbols`](@ref), [`label_tuples`](@ref), or
+    [`label_conditions`](@ref), which allocate 0 bytes.
 """
 @inline labels(Ω::Domain) = labels(markers(Ω))
 
 """
-	$(SIGNATURES)
+    marker_identifiers(Ω::Domain)
 
-Returns a generator that yields the identifiers (`Symbol`, `Set{Symbol}`, or a raw function) of all markers in the [`Domain`](@ref) `Ω`.
+Return an iterator yielding the identifying symbols, symbol sets, or predicate functions of all markers in domain `Ω`.
+
+!!! note
+    Iterating directly over [`marker_symbols`](@ref), [`marker_tuples`](@ref), or
+    [`marker_conditions`](@ref) allocates 0 bytes.
 """
 @inline function marker_identifiers(Ω::Domain)
     return (identifier(marker)
@@ -69,69 +73,63 @@ Returns a generator that yields the identifiers (`Symbol`, `Set{Symbol}`, or a r
 end
 
 """
-	$(SIGNATURES)
+    marker_symbols(Ω::Domain)
 
-Returns a generator yielding the identifiers of single-symbol markers.
+Return an iterator yielding identifiers of single-symbol markers on domain `Ω`.
 """
 @inline function marker_symbols(Ω::Domain)
     return (identifier(marker) for marker in symbols(Ω))
 end
 
 """
-	$(SIGNATURES)
+    marker_tuples(Ω::Domain)
 
-Returns a generator yielding the identifiers of symbol-tuple markers.
+Return an iterator yielding identifiers of multi-symbol markers on domain `Ω`.
 """
 @inline function marker_tuples(Ω::Domain)
     return (identifier(marker) for marker in tuples(Ω))
 end
 
 """
-	$(SIGNATURES)
+    marker_conditions(Ω::Domain)
 
-Returns a generator yielding the identifiers (functions) of condition-based markers.
+Return an iterator yielding predicate functions of condition markers on domain `Ω`.
 """
 @inline function marker_conditions(Ω::Domain)
     return (identifier(marker) for marker in conditions(Ω))
 end
 
-"""
-	$(SIGNATURES)
-
-Returns a generator with all marker labels on [`Domain`](@ref) `Ω`.
-"""
 @inline label_identifiers(Ω::Domain) = label_identifiers(markers(Ω))
-
-"""
-	$(SIGNATURES)
-
-Returns a generator with the labels of symbol markers on [`Domain`](@ref) `Ω`.
-"""
 @inline label_symbols(Ω::Domain) = label_symbols(markers(Ω))
-
-"""
-	$(SIGNATURES)
-
-Returns a generator with the labels of symbol-tuple markers on [`Domain`](@ref) `Ω`.
-"""
 @inline label_tuples(Ω::Domain) = label_tuples(markers(Ω))
-
-"""
-	$(SIGNATURES)
-
-Returns a generator with the labels of function condition markers on [`Domain`](@ref) `Ω`.
-"""
 @inline label_conditions(Ω::Domain) = label_conditions(markers(Ω))
 
 """
-	$(SIGNATURES)
+    domain(X::CartesianProduct) -> Domain
+    domain(X::CartesianProduct, markers::DomainMarkers) -> Domain
+    domain(X::CartesianProduct, pairs::Pair...) -> Domain
+    domain(space_set::CartesianProduct, time_set::CartesianProduct{1}, pairs::Pair...) -> Domain
 
-Returns a [`Domain`](@ref) from a [`CartesianProduct`](@ref).
+Construct a computational [`Domain`](@ref) from a [`CartesianProduct`](@ref) set and optional markers.
 
-- `domain(X)`: Assumes a default `:boundary` marker covering all boundaries of `X`.
-- `domain(X, markers::DomainMarkers)`: Constructs a domain with explicit markers.
-- `domain(X, pairs...)`: Constructs a domain with markers defined by label-identifier pairs.
-- `domain(space_set, time_set, pairs...)`: Constructs a spatio-temporal domain.
+When no markers are supplied, defaults to a `:boundary` marker covering all boundaries of `X`.
+
+# Arguments
+- `X`: Underlying geometric set.
+- `markers`: Explicit [`DomainMarkers`](@ref) container.
+- `pairs`: Variable sequence of `label => identifier` pairs.
+- `space_set`: Spatial bounding set.
+- `time_set`: 1D temporal interval for time-dependent boundary conditions.
+
+# Examples
+```jldoctest
+using Bramble
+Ω = domain(interval(0.0, 1.0))
+dim(Ω) == 1 && eltype(Ω) === Float64
+
+# output
+true
+```
 """
 @inline domain(X::CartesianProduct) = Domain(X, markers(X, :boundary =>
     get_boundary_symbols(X)))
@@ -141,110 +139,110 @@ Returns a [`Domain`](@ref) from a [`CartesianProduct`](@ref).
     space_set, markers(space_set, time_set, pairs...))
 
 """
-	(Ω::Domain)(t::Number)
+    (Ω::Domain)(t::Number) -> Domain
 
-Evaluates a time-dependent [`Domain`](@ref) at time `t`, returning a time-evaluated [`Domain`](@ref).
+Evaluate a time-dependent [`Domain`](@ref) at timestamp `t`.
 """
 @inline (Ω::Domain)(t::Number) = Domain(set(Ω), markers(Ω)(t))
 
 """
-	$(SIGNATURES)
+    set(Ω::Domain) -> CartesianProduct
 
-Returns the [`CartesianProduct`](@ref) geometric set associated with the [`Domain`](@ref) `Ω`.
+Return the geometric set defining [`Domain`](@ref) `Ω`.
 """
 @inline set(Ω::Domain) = Ω.set
 
 """
-	$(SIGNATURES)
+    dim(Ω::Domain) -> Int
+    dim(::Type{<:Domain{SetType}}) -> Int
 
-Returns the dimension of the space where the [`Domain`](@ref) `Ω` is embedded.
+Return the spatial embedding dimension of [`Domain`](@ref) `Ω`.
 """
 @inline dim(Ω::Domain) = dim(set(Ω))
 @inline dim(::Type{<:Domain{SetType}}) where {SetType} = dim(SetType)
 
 """
-	$(SIGNATURES)
+    topo_dim(Ω::Domain) -> Int
 
-Returns the topological dimension of [`Domain`](@ref) `Ω`.
+Return the topological dimension of [`Domain`](@ref) `Ω`.
 """
 @inline topo_dim(Ω::Domain) = topo_dim(set(Ω))
 
 """
-	$(SIGNATURES)
+    eltype(Ω::Domain) -> Type
+    eltype(::Type{<:Domain{SetType}}) -> Type
 
-Returns the element type of the bounds defining [`Domain`](@ref) `Ω`.
+Return the coordinate element type of [`Domain`](@ref) `Ω`.
 """
 @inline eltype(Ω::Domain) = eltype(set(Ω))
 @inline eltype(::Type{<:Domain{SetType}}) where {SetType} = eltype(SetType)
 
 """
-	$(SIGNATURES)
+    point_type(Ω::Domain) -> Type
+    point_type(::Type{<:Domain{SetType}}) -> Type
 
-Determines the coordinate point type within a [`Domain`](@ref) space.
+Return the coordinate point representation type of [`Domain`](@ref) `Ω`.
 """
 @inline point_type(Ω::Domain) = point_type(set(Ω))
 @inline point_type(::Type{<:Domain{SetType}}) where {SetType} = point_type(SetType)
 
-"""
-	$(SIGNATURES)
-
-Returns the total number of markers defined on [`Domain`](@ref) `Ω`.
-"""
 @inline Base.length(Ω::Domain) = length(markers(Ω))
-
-"""
-	$(SIGNATURES)
-
-Returns `true` if [`Domain`](@ref) `Ω` has no markers attached.
-"""
 @inline Base.isempty(Ω::Domain) = isempty(markers(Ω))
 
 """
-	$(SIGNATURES)
+    center(Ω::Domain) -> SVector
 
-Returns the center point of [`Domain`](@ref) `Ω` as an `SVector{D,T}`.
+Compute the geometric center point of [`Domain`](@ref) `Ω`.
 """
 @inline center(Ω::Domain) = center(set(Ω))
 
 """
-	Base.in(x, Ω::Domain)
+    in(x, Ω::Domain) -> Bool
 
-Returns `true` if point `x` is contained in the closed [`Domain`](@ref) `Ω`.
+Query whether point `x` lies within the closed domain `Ω`.
 """
 @inline Base.in(x, Ω::Domain) = x ∈ set(Ω)
 
 """
-	$(SIGNATURES)
+    tails(Ω::Domain) -> Tuple
+    tails(Ω::Domain, i::Integer) -> Tuple{T, T}
 
-Returns the boundary tails/intervals of the underlying set of [`Domain`](@ref) `Ω`.
+Return the coordinate interval endpoints of domain `Ω`.
 """
 @inline tails(Ω::Domain) = tails(set(Ω))
 @inline tails(Ω::Domain, i::Integer) = tails(set(Ω), i)
 
 """
-	$(SIGNATURES)
+    is_collapsed(Ω::Domain) -> Bool
+    is_collapsed(Ω::Domain, i::Integer) -> Bool
 
-Returns whether the underlying set of [`Domain`](@ref) `Ω` is collapsed.
+Return whether the underlying geometric set of domain `Ω` is collapsed across any
+dimension, or along coordinate dimension `i`.
 """
 @inline is_collapsed(Ω::Domain) = is_collapsed(set(Ω))
+@inline is_collapsed(Ω::Domain, i::Integer) = is_collapsed(set(Ω), i)
 
 @inline (Ω::Domain)(i::Integer) = set(Ω)(i)
 
 """
-	$(SIGNATURES)
+    projection(Ω::Domain, i::Integer) -> CartesianProduct{1}
 
-Returns the `i`-th 1D [`CartesianProduct`](@ref) component of the set associated with [`Domain`](@ref) `Ω`.
+Extract the `i`-th coordinate dimension of domain `Ω` as a 1D [`CartesianProduct`](@ref).
 """
 @inline projection(Ω::Domain, i::Integer) = projection(set(Ω), i)
 
 """
-	$(SIGNATURES)
+    get_boundary_symbols(Ω::Domain) -> Tuple{Vararg{Symbol}}
+    get_boundary_symbols(X::CartesianProduct) -> Tuple{Vararg{Symbol}}
+    get_boundary_symbols(D::Integer) -> Tuple{Vararg{Symbol}}
 
-Returns a tuple of default boundary symbols for a [`CartesianProduct`](@ref) or [`Domain`](@ref).
-
+Return the default boundary symbols for dimension `D` or domain `Ω`:
 - 1D ``[x_1, x_2]``: `(:left, :right)`
 - 2D ``[x_1, x_2] \\times [y_1, y_2]``: `(:bottom, :top, :left, :right)`
 - 3D ``[x_1, x_2] \\times [y_1, y_2] \\times [z_1, z_2]``: `(:bottom, :top, :back, :front, :left, :right)`
+
+# Throws
+- `ErrorException`: If dimension `D > 3`.
 """
 @inline get_boundary_symbols(Ω::Domain) = get_boundary_symbols(set(Ω))
 @inline get_boundary_symbols(::CartesianProduct{1}) = (:left, :right)
@@ -268,23 +266,15 @@ end
 end
 @inline get_boundary_symbols(::Type{<:Domain{SetType}}) where {SetType} = get_boundary_symbols(SetType)
 
-"""
-	Base.show(io::IO, Ω::Domain)
-
-Custom display for [`Domain`](@ref) objects, combining set geometry and marker information with colors.
-"""
 function Base.show(io::IO, Ω::Domain)
     pp = PrettyPrinter(io)
 
     if pp.compact
-        # Compact mode for arrays/collections
         print(io, "Domain{$(dim(Ω))D, $(eltype(Ω))}:")
     else
-        # Detailed mode
         X = set(Ω)
         dm = markers(Ω)
 
-        # Header
         printstyled(io, "Domain"; bold = true, color = :cyan)
         print(io, " {")
         printstyled(io, "$(dim(Ω))D", color = :yellow)
@@ -292,7 +282,6 @@ function Base.show(io::IO, Ω::Domain)
         printstyled(io, "$(eltype(Ω))", color = :yellow)
         println(io, "}:")
 
-        # Set information
         println(io)
         pp_indented = with_indent(pp, 1)
         print_section_header(pp_indented, "Set:")
@@ -328,7 +317,6 @@ function Base.show(io::IO, Ω::Domain)
             end
         end
 
-        # Markers information
         println(io)
         print_section_header(pp_indented, "Markers:")
 
@@ -344,13 +332,11 @@ function Base.show(io::IO, Ω::Domain)
         else
             print_marker_summary(with_indent(pp, 2), n_sym, n_tup, n_cond)
 
-            # Show marker labels
             print(io, "    ")
             print_labels_list(pp, collect(labels(Ω)))
             println(io)
         end
 
-        # Remove trailing newline
         remove_trailing_newline(io)
     end
 end
