@@ -1,0 +1,51 @@
+name: Docs (on demand)
+
+# A standalone trigger for exactly one thing: rebuild and redeploy the documentation site
+# right now, rather than waiting for Nightly.yml's own docs job to run on its 06:00 UTC
+# schedule (or the rest of that workflow's full test matrix along with it). Same steps as
+# Nightly.yml's `docs` job, factored out here rather than shared, since a push to `main`
+# is exactly the moment this is wanted and Nightly.yml's own schedule already covers the
+# routine case — this is for "I just pushed a docs fix and don't want to wait until
+# tomorrow," not a replacement for the nightly job.
+#
+# Stable Julia here on purpose, unlike Nightly.yml's own docs job: the point of this
+# workflow is a reliable, on-request redeploy, and gating that on Julia nightly would make
+# it fail for reasons that have nothing to do with the docs change being deployed.
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+
+jobs:
+  docs:
+    name: Documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      statuses: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.12"
+
+      - uses: julia-actions/cache@v2
+
+      - name: Install dependencies
+        run: |
+          julia --color=yes --project=docs -e '
+            using Pkg
+            Pkg.develop(PackageSpec(path=pwd()))
+            Pkg.instantiate()'
+
+      - name: Build and deploy
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: julia --color=yes --project=docs docs/make.jl
