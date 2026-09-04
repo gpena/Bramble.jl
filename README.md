@@ -172,6 +172,12 @@ If you use `Bramble.jl` in your research, please cite the software:
 
 ---
 
+## Acknowledgements
+
+The development of Bramble.jl was assisted by Generative AI models (Google Gemini and Anthropic Claude), which were used for code drafting, refactoring and debugging.
+
+---
+
 ## License
 
 `Bramble.jl` is licensed under the [MIT License](LICENSE).
