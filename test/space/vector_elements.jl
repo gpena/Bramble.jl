@@ -338,7 +338,6 @@ end
 
     @testset "avgₕ quadrature" begin
         import Bramble: _gauss_rule, AVG_QUAD_POINTS, values
-        using StaticArrays
 
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 40, false)   # non-uniform
         W = gridspace(Ωₕ)
@@ -385,8 +384,8 @@ end
         @testset "Rule construction" begin
             for T in (Float64, Float32)
                 nodes, wts = _gauss_rule(Val(3), T)
-                @test nodes isa SVector{3, T}
-                @test wts isa SVector{3, T}
+                @test nodes isa NTuple{3, T}
+                @test wts isa NTuple{3, T}
                 @test sum(wts) ≈ one(T)
                 # folded to a constant at compile time, so obtaining it allocates nothing
                 get_rule() = _gauss_rule(Val(3), T)
@@ -785,7 +784,7 @@ end
         # capture it by hand. It used to fetch the rule inside instead, which made it 96
         # bytes smaller — `nodes` and `wts` are isbits and stored inline, 48 bytes each,
         # and `Threads.@threads` copies the closure once per thread — by relying on
-        # `_gauss_rule` being `@generated` and folding to an `SVector` literal.
+        # `_gauss_rule` being `@generated` and folding to a tuple literal.
         #
         # That fold is not guaranteed. On Julia 1.13 / x86_64 it did not happen, the rule
         # was rebuilt at every grid point, and `avgₕ!` measured 83,887,904 B on a 1024x1024

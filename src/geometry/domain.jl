@@ -190,7 +190,7 @@ Return the coordinate point representation type of [`Domain`](@ref) `Ω`.
 @inline Base.isempty(Ω::Domain) = isempty(markers(Ω))
 
 """
-    center(Ω::Domain) -> SVector
+    center(Ω::Domain) -> NTuple
 
 Compute the geometric center point of [`Domain`](@ref) `Ω`.
 """

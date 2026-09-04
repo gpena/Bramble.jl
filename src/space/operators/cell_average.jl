@@ -153,8 +153,8 @@ struct _AvgKernel1{F, X, IX, NQ, T}
     f::F
     x::X
     idxs::IX
-    nodes::SVector{NQ, T}
-    wts::SVector{NQ, T}
+    nodes::NTuple{NQ, T}
+    wts::NTuple{NQ, T}
 end
 @inline (k::_AvgKernel1)(i) = _cell_average(k.f, k.x, k.idxs[i][1], k.nodes, k.wts)
 
@@ -162,8 +162,8 @@ struct _AvgKernelD{F, X, IX, NQ, T}
     f::F
     x::X
     idxs::IX
-    nodes::SVector{NQ, T}
-    wts::SVector{NQ, T}
+    nodes::NTuple{NQ, T}
+    wts::NTuple{NQ, T}
 end
 @inline (k::_AvgKernelD)(i) = _cell_average(k.f, k.x, k.idxs[i], k.nodes, k.wts)
 
@@ -220,8 +220,8 @@ struct _AvgScatterKernel1{F, X, IX, NQ, T, NC}
     f::F
     x::X
     idxs::IX
-    nodes::SVector{NQ, T}
-    wts::SVector{NQ, T}
+    nodes::NTuple{NQ, T}
+    wts::NTuple{NQ, T}
 end
 @inline (k::_AvgScatterKernel1{
     F, X, IX, NQ, T, NC})(i) where {F, X, IX, NQ, T, NC} = _cell_average(
@@ -231,8 +231,8 @@ struct _AvgScatterKernelD{F, X, IX, NQ, T, NC}
     f::F
     x::X
     idxs::IX
-    nodes::SVector{NQ, T}
-    wts::SVector{NQ, T}
+    nodes::NTuple{NQ, T}
+    wts::NTuple{NQ, T}
 end
 @inline (k::_AvgScatterKernelD{
     F, X, IX, NQ, T, NC})(i) where {F, X, IX, NQ, T, NC} = _cell_average(
@@ -432,7 +432,7 @@ const AVG_QUAD_POINTS = 6
 	_gauss_rule(::Val{N}, ::Type{T})
 
 Returns `(nodes, weights)` for the `N`-point Gauss-Legendre rule on `[0, 1]` as
-`SVector{N,T}`, so the per-cell loop that consumes them does not allocate.
+`NTuple{N,T}`, so the per-cell loop that consumes them does not allocate.
 
 The rule is built by `QuadGK.gauss` in the requested element type, so `Float32`
 and `BigFloat` grids get a rule at their own precision rather than a rounded
@@ -454,7 +454,7 @@ cell *average* directly.
             x, w = gauss(T, N, zero(T), one(T))
             nodes = Expr(:tuple, x...)
             wts = Expr(:tuple, w...)
-            return :((SVector{$N, $T}($nodes), SVector{$N, $T}($wts)))
+            return :(($nodes, $wts))
         catch
             # fall through to the run-time rule
         end
@@ -464,12 +464,12 @@ end
 
 @inline function _gauss_rule_runtime(::Val{N}, ::Type{T}) where {N, T}
     x, w = gauss(T, N, zero(T), one(T))
-    return SVector{N, T}(x), SVector{N, T}(w)
+    return NTuple{N, T}(x), NTuple{N, T}(w)
 end
 
 # Average of `f` over the 1D cell spanned by `x[i] .. x[i+1]`.
-@inline function _cell_average(f, x::AbstractVector, i::Int, nodes::SVector{NQ, T},
-        wts::SVector{NQ, T}) where {NQ, T}
+@inline function _cell_average(f, x::AbstractVector, i::Int, nodes::NTuple{NQ, T},
+        wts::NTuple{NQ, T}) where {NQ, T}
     @inbounds a = T(x[i])
     @inbounds d = T(x[i + 1]) - a
 
@@ -484,13 +484,13 @@ end
 # generic index loop.
 #
 # The quadrature rule is built once, outside the kernel, and captured by it. That costs
-# `SVector{6,T}` twice — 96 bytes for `Float64`, stored inline because it is isbits — and
+# `NTuple{6,T}` twice — 96 bytes for `Float64`, stored inline because it is isbits — and
 # `Threads.@threads` gives each task its own copy of the closure, so it is paid once per
 # thread per call. Measured as the per-thread gap between `avgₕ!` at 472 B and `Rₕ!` at
 # 376 B.
 #
 # It used to be fetched *inside* the kernel for `Float16`/`Float32`/`Float64`, to avoid
-# exactly that: `_gauss_rule` is `@generated` and folds to an `SVector` literal, so the
+# exactly that: `_gauss_rule` is `@generated` and folds to a tuple literal, so the
 # closure shrank to 16 bytes from 104 and the loop ran within noise of the old one.
 #
 # That fold is not guaranteed, and on x86_64 Linux it does not happen. CI measured `avgₕ!`
@@ -536,8 +536,8 @@ end
 # single function returning all components, raised a MethodError. The per-component tuple
 # form with a tuple of functions was unaffected, since it dispatches to the scalar path
 # once per component.
-@inline function _cell_average(f, x::AbstractVector, i::Int, nodes::SVector{NQ, T},
-        wts::SVector{NQ, T}, ::Val{NC}) where {NQ, T, NC}
+@inline function _cell_average(f, x::AbstractVector, i::Int, nodes::NTuple{NQ, T},
+        wts::NTuple{NQ, T}, ::Val{NC}) where {NQ, T, NC}
     @inbounds a = T(x[i])
     @inbounds b = T(x[i + 1])
 
@@ -550,7 +550,7 @@ end
 
 # 2D specialized scalar cell average
 @inline function _cell_average(f, x::NTuple{2}, idx::CartesianIndex{2},
-        nodes::SVector{NQ, T}, wts::SVector{NQ, T}) where {NQ, T}
+        nodes::NTuple{NQ, T}, wts::NTuple{NQ, T}) where {NQ, T}
     @inbounds i, j = idx[1], idx[2]
     @inbounds a1 = T(x[1][i])
     @inbounds d1 = T(x[1][i + 1]) - a1
@@ -572,8 +572,8 @@ end
 
 # 2D specialized composite cell average
 @inline function _cell_average(
-        f, x::NTuple{2}, idx::CartesianIndex{2}, nodes::SVector{NQ, T},
-        wts::SVector{NQ, T}, ::Val{NC}) where {NQ, T, NC}
+        f, x::NTuple{2}, idx::CartesianIndex{2}, nodes::NTuple{NQ, T},
+        wts::NTuple{NQ, T}, ::Val{NC}) where {NQ, T, NC}
     @inbounds i, j = idx[1], idx[2]
     @inbounds a1 = T(x[1][i])
     @inbounds d1 = T(x[1][i + 1]) - a1
@@ -595,7 +595,7 @@ end
 
 # 3D specialized scalar cell average
 @inline function _cell_average(f, x::NTuple{3}, idx::CartesianIndex{3},
-        nodes::SVector{NQ, T}, wts::SVector{NQ, T}) where {NQ, T}
+        nodes::NTuple{NQ, T}, wts::NTuple{NQ, T}) where {NQ, T}
     @inbounds i, j, k = idx[1], idx[2], idx[3]
     @inbounds a1 = T(x[1][i])
     @inbounds d1 = T(x[1][i + 1]) - a1
@@ -623,8 +623,8 @@ end
 
 # 3D specialized composite cell average
 @inline function _cell_average(
-        f, x::NTuple{3}, idx::CartesianIndex{3}, nodes::SVector{NQ, T},
-        wts::SVector{NQ, T}, ::Val{NC}) where {NQ, T, NC}
+        f, x::NTuple{3}, idx::CartesianIndex{3}, nodes::NTuple{NQ, T},
+        wts::NTuple{NQ, T}, ::Val{NC}) where {NQ, T, NC}
     @inbounds i, j, k = idx[1], idx[2], idx[3]
     @inbounds a1 = T(x[1][i])
     @inbounds d1 = T(x[1][i + 1]) - a1
@@ -655,8 +655,8 @@ end
 # per component; the accumulator is a tuple and every operation on it broadcasts
 # over `NC` isbits values, so nothing allocates.
 @inline function _cell_average(
-        f, x::NTuple{D}, idx::CartesianIndex{D}, nodes::SVector{NQ, T},
-        wts::SVector{NQ, T}, ::Val{NC}) where {D, NQ, T, NC}
+        f, x::NTuple{D}, idx::CartesianIndex{D}, nodes::NTuple{NQ, T},
+        wts::NTuple{NQ, T}, ::Val{NC}) where {D, NQ, T, NC}
     a = ntuple(k -> @inbounds(T(x[k][idx[k]])), Val(D))
     b = ntuple(k -> @inbounds(T(x[k][idx[k] + 1])), Val(D))
 
@@ -675,7 +675,7 @@ end
 # Average of `f` over the D-dimensional cell around `idx`, whose corners are the
 # half points `x[k][idx[k]]` and `x[k][idx[k] + 1]` along each axis.
 @inline function _cell_average(f, x::NTuple{D}, idx::CartesianIndex{D},
-        nodes::SVector{NQ, T}, wts::SVector{NQ, T}) where {D, NQ, T}
+        nodes::NTuple{NQ, T}, wts::NTuple{NQ, T}) where {D, NQ, T}
     a = ntuple(k -> @inbounds(T(x[k][idx[k]])), Val(D))
     b = ntuple(k -> @inbounds(T(x[k][idx[k] + 1])), Val(D))
 

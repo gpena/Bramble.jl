@@ -199,10 +199,8 @@ function _pc_geometry()
     0.5 in I
     (0.5,) in I
     [0.5] in I
-    SVector(0.5) in I
     (0.5, 1.0) in R2
     [0.5, 1.0] in R2
-    SVector(0.5, 1.0) in R2
     return nothing
 end
 

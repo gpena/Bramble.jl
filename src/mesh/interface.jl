@@ -47,16 +47,14 @@ abstract type AbstractMeshType{D} end
 """
     generate_indices(pts::Int) -> CartesianIndices{1}
     generate_indices(pts::NTuple{D, Int}) -> CartesianIndices{D}
-    generate_indices(pts::SVector{D, Int}) -> CartesianIndices{D}
 
 Return the `CartesianIndices` of a mesh with `pts[i]` points in each direction.
 
-For scalar input (`Int`), returns 1D `CartesianIndices`. For tuple or static vector
-input, returns multi-dimensional `CartesianIndices`.
+For scalar input (`Int`), returns 1D `CartesianIndices`. For tuple input, returns
+multi-dimensional `CartesianIndices`.
 """
 @inline generate_indices(pts::Int) = CartesianIndices((pts,))
 @inline generate_indices(pts::NTuple{D, Int}) where {D} = CartesianIndices(pts)
-@inline generate_indices(pts::SVector{D, Int}) where {D} = CartesianIndices(Tuple(pts))
 
 """
     is_boundary_index(idxs::CartesianIndices{D}, idx) -> Bool
@@ -616,10 +614,10 @@ function locate_cell end
 @inline locate_cell(Ωₕ::AbstractMeshType{D}, x::AbstractVector) where {D} = locate_cell(Ωₕ, Tuple(x))
 
 """
-    normal_vector(Ωₕ::AbstractMeshType{D}, symbol::Symbol) -> SVector{D, Float64}
-    normal_vector(::Val{D}, symbol::Symbol) -> SVector{D, Float64}
+    normal_vector(Ωₕ::AbstractMeshType{D}, symbol::Symbol) -> NTuple{D, Float64}
+    normal_vector(::Val{D}, symbol::Symbol) -> NTuple{D, Float64}
 
-Return the outward unit normal vector (as an `SVector{D, Float64}`) associated with a standard
+Return the outward unit normal vector (as an `NTuple{D, Float64}`) associated with a standard
 boundary facet label (`:left`, `:right`, `:bottom`, `:top`, `:front`, `:back`).
 
 # Conventions
@@ -645,25 +643,25 @@ See also: [`get_boundary_symbols`](@ref).
 @inline normal_vector(::AbstractMeshType{D}, symbol::Symbol) where {D} = normal_vector(Val(D), symbol)
 
 @inline function normal_vector(::Val{1}, symbol::Symbol)
-    symbol === :left && return SVector{1, Float64}(-1.0)
-    symbol === :right && return SVector{1, Float64}(1.0)
+    symbol === :left && return (-1.0,)
+    symbol === :right && return (1.0,)
     throw(ArgumentError("Unknown 1D boundary symbol: :$symbol. Expected :left or :right."))
 end
 
 @inline function normal_vector(::Val{2}, symbol::Symbol)
-    symbol === :left && return SVector{2, Float64}(-1.0, 0.0)
-    symbol === :right && return SVector{2, Float64}(1.0, 0.0)
-    symbol === :bottom && return SVector{2, Float64}(0.0, -1.0)
-    symbol === :top && return SVector{2, Float64}(0.0, 1.0)
+    symbol === :left && return (-1.0, 0.0)
+    symbol === :right && return (1.0, 0.0)
+    symbol === :bottom && return (0.0, -1.0)
+    symbol === :top && return (0.0, 1.0)
     throw(ArgumentError("Unknown 2D boundary symbol: :$symbol. Expected :left, :right, :bottom, or :top."))
 end
 
 @inline function normal_vector(::Val{3}, symbol::Symbol)
-    symbol === :back && return SVector{3, Float64}(-1.0, 0.0, 0.0)
-    symbol === :front && return SVector{3, Float64}(1.0, 0.0, 0.0)
-    symbol === :left && return SVector{3, Float64}(0.0, -1.0, 0.0)
-    symbol === :right && return SVector{3, Float64}(0.0, 1.0, 0.0)
-    symbol === :bottom && return SVector{3, Float64}(0.0, 0.0, -1.0)
-    symbol === :top && return SVector{3, Float64}(0.0, 0.0, 1.0)
+    symbol === :back && return (-1.0, 0.0, 0.0)
+    symbol === :front && return (1.0, 0.0, 0.0)
+    symbol === :left && return (0.0, -1.0, 0.0)
+    symbol === :right && return (0.0, 1.0, 0.0)
+    symbol === :bottom && return (0.0, 0.0, -1.0)
+    symbol === :top && return (0.0, 0.0, 1.0)
     throw(ArgumentError("Unknown 3D boundary symbol: :$symbol. Expected :left, :right, :bottom, :top, :front, or :back."))
 end

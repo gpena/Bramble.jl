@@ -84,7 +84,7 @@ end
         @test @inferred(cell_measure(Ωₕ3, CartesianIndex(2, 3, 4))) isa Float64
 
         @test @inferred(locate_cell(Ωₕ1, 0.5)) isa Int
-        @test @inferred(normal_vector(Ωₕ1, :left)) isa AbstractVector
+        @test @inferred(normal_vector(Ωₕ1, :left)) isa NTuple{1, Float64}
         @test @inferred(stepsize(Ωu)) isa Float64
     end
 

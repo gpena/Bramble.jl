@@ -1,17 +1,17 @@
 """
-    CartesianProduct{D, T}(box::SVector{D, Tuple{T, T}}, collapsed::SVector{D, Bool})
+    CartesianProduct{D, T}(box::NTuple{D, Tuple{T, T}}, collapsed::NTuple{D, Bool})
 
 Cartesian product of `D` closed intervals embedded in ``\\mathbb{R}^D`` with scalar coordinate type `T`.
 
 # Fields
-- `box`: Statically sized vector of `D` interval endpoint pairs `(min, max)`.
-- `collapsed`: Statically sized vector of `D` boolean flags indicating whether each dimension is degenerate (`min ≈ max`).
+- `box`: Tuple of `D` interval endpoint pairs `(min, max)`.
+- `collapsed`: Tuple of `D` boolean flags indicating whether each dimension is degenerate (`min ≈ max`).
 
 See also: [`interval`](@ref), [`point`](@ref), [`cartesian_product`](@ref), [`box`](@ref).
 """
 struct CartesianProduct{D, T}
-    box::SVector{D, Tuple{T, T}}
-    collapsed::SVector{D, Bool}
+    box::NTuple{D, Tuple{T, T}}
+    collapsed::NTuple{D, Bool}
 end
 
 @noinline _throw_bounds_error(X::CartesianProduct, i) = throw(BoundsError(X, i))
@@ -85,8 +85,8 @@ true
     _x <= _y || _throw_interval_error(x, y)
 
     _is_collapsed = is_collapsed(_x, _y)
-    box = SVector{1, Tuple{T, T}}(((_x, _y),))
-    collapsed = SVector{1, Bool}((_is_collapsed,))
+    box = ((_x, _y),)
+    collapsed = (_is_collapsed,)
     return CartesianProduct{1, T}(box, collapsed)
 end
 
@@ -99,8 +99,8 @@ Construct a degenerate 1D [`CartesianProduct`](@ref) representing the point ``[x
 """
 @inline function point(x::Number)
     _x = float(x)
-    box = SVector{1, Tuple{typeof(_x), typeof(_x)}}(((_x, _x),))
-    collapsed = SVector{1, Bool}((true,))
+    box = ((_x, _x),)
+    collapsed = (true,)
     return CartesianProduct{1, typeof(_x)}(box, collapsed)
 end
 
@@ -134,8 +134,7 @@ true
     _box = ntuple(i -> (FloatT(_box_f[i][1]), FloatT(_box_f[i][2])), Val(D))
     _collapsed_flags = ntuple(i -> is_collapsed(_box[i]...), Val(D))
 
-    return CartesianProduct{D, FloatT}(
-        SVector{D, Tuple{FloatT, FloatT}}(_box), SVector{D, Bool}(_collapsed_flags))
+    return CartesianProduct{D, FloatT}(_box, _collapsed_flags)
 end
 
 @inline cartesian_product(X::CartesianProduct) = X
@@ -155,17 +154,16 @@ Interval bounds for each dimension `i` are defined by ``[\\min(a_i, b_i), \\max(
     collapsed_flags = ntuple(i -> is_collapsed(box_coords[i]...), Val(D))
     FloatT = typeof(box_coords[1][1])
 
-    return CartesianProduct{D, FloatT}(
-        SVector{D, Tuple{FloatT, FloatT}}(box_coords), SVector{D, Bool}(collapsed_flags))
+    return CartesianProduct{D, FloatT}(box_coords, collapsed_flags)
 end
 
 """
-    center(X::CartesianProduct{D, T}) -> SVector{D, T}
+    center(X::CartesianProduct{D, T}) -> NTuple{D, T}
 
 Compute the geometric center point of [`CartesianProduct`](@ref) `X`.
 """
 @inline function center(cp::CartesianProduct{D, T}) where {D, T}
-    return SVector{D, T}(ntuple(i -> (cp.box[i][1] + cp.box[i][2]) * T(0.5), Val(D)))
+    return ntuple(i -> (cp.box[i][1] + cp.box[i][2]) * T(0.5), Val(D))
 end
 
 """
@@ -238,14 +236,14 @@ The resulting set has embedding dimension `D1 + D2` with promoted scalar coordin
     D = D1 + D2
     T = promote_type(T1, T2)
     if T === T1 === T2
-        new_box = vcat(X.box, Y.box)
+        new_box = (X.box..., Y.box...)
     else
-        new_box = SVector{D, Tuple{T, T}}(ntuple(
+        new_box = ntuple(
             i -> i <= D1 ? (T(X.box[i][1]), T(X.box[i][2])) :
                  (T(Y.box[i - D1][1]), T(Y.box[i - D1][2])),
-            Val(D)))
+            Val(D))
     end
-    new_collapsed = vcat(X.collapsed, Y.collapsed)
+    new_collapsed = (X.collapsed..., Y.collapsed...)
 
     return CartesianProduct{D, T}(new_box, new_collapsed)
 end

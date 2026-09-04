@@ -2,7 +2,6 @@
 # Focuses on domain variations, marker combinations, predicates, and interface fallbacks.
 
 using Test
-using StaticArrays
 using Bramble
 import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, hₘᵢₙ,
                 is_collapsed
@@ -297,8 +296,8 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, h
             @test locate_cell(M1, 1.5) == 10
 
             # normal_vector
-            @test normal_vector(M1, :left) == SVector{1, Float64}(-1.0)
-            @test normal_vector(M1, :right) == SVector{1, Float64}(1.0)
+            @test normal_vector(M1, :left) == (-1.0,)
+            @test normal_vector(M1, :right) == (1.0,)
             @test_throws ArgumentError normal_vector(M1, :unknown)
         end
 
@@ -341,10 +340,10 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, h
             @test locate_cell(M2, [0.35, 1.05]) == CartesianIndex(4, 11)
 
             # normal_vector
-            @test normal_vector(M2, :left) == SVector{2, Float64}(-1.0, 0.0)
-            @test normal_vector(M2, :right) == SVector{2, Float64}(1.0, 0.0)
-            @test normal_vector(M2, :bottom) == SVector{2, Float64}(0.0, -1.0)
-            @test normal_vector(M2, :top) == SVector{2, Float64}(0.0, 1.0)
+            @test normal_vector(M2, :left) == (-1.0, 0.0)
+            @test normal_vector(M2, :right) == (1.0, 0.0)
+            @test normal_vector(M2, :bottom) == (0.0, -1.0)
+            @test normal_vector(M2, :top) == (0.0, 1.0)
             @test_throws ArgumentError normal_vector(M2, :invalid)
         end
 
@@ -364,12 +363,12 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, h
             @test locate_cell(M3, (0.5, 0.5, 0.5)) == CartesianIndex(3, 3, 3)
             @test locate_cell(M3, (0.1, 0.3, 0.8)) == CartesianIndex(1, 2, 4)
 
-            @test normal_vector(M3, :back) == SVector{3, Float64}(-1.0, 0.0, 0.0)
-            @test normal_vector(M3, :front) == SVector{3, Float64}(1.0, 0.0, 0.0)
-            @test normal_vector(M3, :left) == SVector{3, Float64}(0.0, -1.0, 0.0)
-            @test normal_vector(M3, :right) == SVector{3, Float64}(0.0, 1.0, 0.0)
-            @test normal_vector(M3, :bottom) == SVector{3, Float64}(0.0, 0.0, -1.0)
-            @test normal_vector(M3, :top) == SVector{3, Float64}(0.0, 0.0, 1.0)
+            @test normal_vector(M3, :back) == (-1.0, 0.0, 0.0)
+            @test normal_vector(M3, :front) == (1.0, 0.0, 0.0)
+            @test normal_vector(M3, :left) == (0.0, -1.0, 0.0)
+            @test normal_vector(M3, :right) == (0.0, 1.0, 0.0)
+            @test normal_vector(M3, :bottom) == (0.0, 0.0, -1.0)
+            @test normal_vector(M3, :top) == (0.0, 0.0, 1.0)
         end
     end
 end
@@ -381,14 +380,12 @@ struct BareMesh <: Bramble.AbstractMeshType{1} end
     import Bramble: generate_indices, interior_indices, _extract_linear_index,
                     spacing_for_derivative, forward_spacing_for_derivative,
                     cell_measures, normal_vector, half_spacings
-    using StaticArrays
 
     Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
     Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (4, 3), (true, true))
 
-    @testset "generate_indices with SVector" begin
-        @test generate_indices(SVector(4, 3)) == CartesianIndices((4, 3))
-        @test generate_indices((4, 3)) == generate_indices(SVector(4, 3))
+    @testset "generate_indices" begin
+        @test generate_indices((4, 3)) == CartesianIndices((4, 3))
         @test generate_indices(5) == CartesianIndices((5,))
     end
 
@@ -433,7 +430,7 @@ struct BareMesh <: Bramble.AbstractMeshType{1} end
         @test_throws ArgumentError normal_vector(Ωₕ, :nonsense)
         @test_throws ArgumentError normal_vector(Ω2, :nonsense)
         @test_throws ArgumentError normal_vector(Ω3, :nonsense)
-        @test normal_vector(Ω3, :front) == SVector(1.0, 0.0, 0.0)
+        @test normal_vector(Ω3, :front) == (1.0, 0.0, 0.0)
     end
 
     @testset "cell_measures widths" begin
