@@ -1,15 +1,15 @@
-"""
-Test coverage for mesh module
+# Unit tests for mesh edge cases, multi-dimensional domains, and boundary queries.
+# Focuses on domain variations, marker combinations, predicates, and interface fallbacks.
 
-Focus on edge cases, marker combinations, and complex interactions
-"""
-
+using Test
+using StaticArrays
+using Bramble
 import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, hₘᵢₙ,
                 is_collapsed
 
-@testset "Meshes" begin
+@testset "Comprehensive mesh test suite" begin
     @testset "Domain edge cases" begin
-        @testset "1D Domain variations" begin
+        @testset "One-dimensional domain variations" begin
             I = interval(-1.0, 2.0)
 
             # Domain without markers
@@ -29,7 +29,7 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, h
             @test !isnothing(markers(X3))
         end
 
-        @testset "2D Domain variations" begin
+        @testset "Two-dimensional domain variations" begin
             I = interval(0.0, 1.0)
             Ω = I × I
 
@@ -52,7 +52,7 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, h
             @test !isnothing(X3)
         end
 
-        @testset "3D Domain" begin
+        @testset "Three-dimensional domain" begin
             I = interval(0.0, 1.0)
             Ω = I × I × I
 
@@ -139,7 +139,7 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, h
     end
 
     @testset "Set operations" begin
-        @testset "1D Sets" begin
+        @testset "One-dimensional sets" begin
             I1 = interval(0.0, 1.0)
             I2 = interval(-1.0, 0.5)
             I3 = interval(0.5, 2.0)
@@ -149,7 +149,7 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, h
             @test I3 isa CartesianProduct
         end
 
-        @testset "2D Sets (Cartesian Products)" begin
+        @testset "Two-dimensional Cartesian products" begin
             I = interval(0.0, 1.0)
             J = interval(-1.0, 1.0)
 
@@ -163,7 +163,7 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, h
             @test Ω3 isa CartesianProduct
         end
 
-        @testset "3D Sets" begin
+        @testset "Three-dimensional sets" begin
             I = interval(0.0, 1.0)
             J = interval(-0.5, 0.5)
             K = interval(0.0, 2.0)
@@ -177,7 +177,7 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, h
     end
 
     @testset "Mesh integration" begin
-        @testset "1D Domain to Mesh" begin
+        @testset "One-dimensional domain to mesh" begin
             I = interval(0.0, π)
             X = domain(I, markers(I,
                 :left => x -> x[1] < 0.1,
@@ -190,7 +190,7 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, h
             @test haskey(markers(Mh), :right)
         end
 
-        @testset "2D Domain to Mesh" begin
+        @testset "Two-dimensional domain to mesh" begin
             I = interval(0.0, 1.0)
             Ω = I × I
             X = domain(Ω, markers(Ω,
@@ -202,7 +202,7 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, h
             @test haskey(markers(Mh), :boundary)
         end
 
-        @testset "3D Domain to Mesh (small)" begin
+        @testset "Three-dimensional domain to mesh" begin
             I = interval(0.0, 1.0)
             Ω = I × I × I
             X = domain(Ω)
@@ -267,7 +267,7 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, h
     end
 
     @testset "Extended interface" begin
-        @testset "1D Mesh Extended Interface" begin
+        @testset "One-dimensional extended interface" begin
             I = interval(0.0, 1.0)
             M1 = mesh(domain(I), 11)
 
@@ -302,7 +302,7 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, h
             @test_throws ArgumentError normal_vector(M1, :unknown)
         end
 
-        @testset "2D Mesh Extended Interface" begin
+        @testset "Two-dimensional extended interface" begin
             I = interval(0.0, 1.0)
             J = interval(0.0, 2.0)
             M2 = mesh(domain(I × J), (11, 21))
@@ -348,7 +348,7 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, h
             @test_throws ArgumentError normal_vector(M2, :invalid)
         end
 
-        @testset "3D Mesh Extended Interface" begin
+        @testset "Three-dimensional extended interface" begin
             I = interval(0.0, 1.0)
             M3 = mesh(domain(I × I × I), (5, 5, 5))
 
@@ -380,19 +380,19 @@ struct BareMesh <: Bramble.AbstractMeshType{1} end
 @testset "Interface coverage" begin
     import Bramble: generate_indices, interior_indices, _extract_linear_index,
                     spacing_for_derivative, forward_spacing_for_derivative,
-                    cell_measures, normal_vector
+                    cell_measures, normal_vector, half_spacings
     using StaticArrays
 
     Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
     Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (4, 3), (true, true))
 
-    @testset "generate_indices SVector" begin
+    @testset "generate_indices with SVector" begin
         @test generate_indices(SVector(4, 3)) == CartesianIndices((4, 3))
         @test generate_indices((4, 3)) == generate_indices(SVector(4, 3))
         @test generate_indices(5) == CartesianIndices((5,))
     end
 
-    @testset "interior_indices collapsed axis" begin
+    @testset "interior_indices with collapsed axis" begin
         # an axis with one point cannot lose its boundary, so the range passes through
         Ωc = mesh(domain(interval(0.0, 1.0) × interval(2.0, 2.0)), (5, 1), (true, true))
         ii = interior_indices(Ωc)
@@ -413,7 +413,7 @@ struct BareMesh <: Bramble.AbstractMeshType{1} end
         @test _extract_linear_index(3) == 3
     end
 
-    @testset "Unimplemented fallback" begin
+    @testset "Unimplemented interface fallback" begin
         @test_throws ErrorException eltype(BareMesh())
         @test_throws ErrorException eltype(BareMesh)
     end
@@ -467,7 +467,7 @@ struct BareMesh <: Bramble.AbstractMeshType{1} end
               forward_spacing(Ωₕ, 1)
     end
 
-    @testset "copy deep vs shallow" begin
+    @testset "Deep versus shallow copy" begin
         c1 = copy(Ωₕ)
         @test c1 isa Mesh1D
         @test points(c1) == points(Ωₕ)

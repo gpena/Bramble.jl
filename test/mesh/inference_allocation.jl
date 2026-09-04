@@ -1,6 +1,35 @@
 using Test
 using Bramble
-using Bramble: spacings, normal_vector, hₘᵢₙ
+using Bramble: spacings, normal_vector, hₘᵢₙ, half_spacings, cell_measures,
+               dim, topo_dim, half_points!, spacing!, half_spacing!, set_points!,
+               change_points!, _mark_indices!, points_iterator
+using StaticArrays: SVector
+
+if !@isdefined(alloc_test)
+    @inline function alloc_test(f::F, args...; kwargs...) where {F}
+        f(args...; kwargs...)
+        return @allocated(f(args...; kwargs...))
+    end
+end
+
+if !@isdefined(var"@test_allocs")
+    macro test_allocs(call_expr)
+        if Meta.isexpr(call_expr, :call)
+            fn = call_expr.args[1]
+            args = call_expr.args[2:end]
+            quote
+                @test alloc_test($(esc(fn)), $(map(esc, args)...)) == 0
+            end
+        else
+            quote
+                let
+                    $(esc(call_expr))
+                    @test (@allocated $(esc(call_expr))) == 0
+                end
+            end
+        end
+    end
+end
 
 # Type stability and allocation of the mesh interface.
 #
@@ -8,10 +37,8 @@ using Bramble: spacings, normal_vector, hₘᵢₙ
 # accessors return a concrete type, and reading geometry off a mesh allocates nothing.
 # Both were true and both were unguarded, so a regression in either was invisible until
 # it showed up as a slowdown somewhere else.
-#
-# @test_allocs is skipped under coverage, since the instrumentation allocates.
 
-@testset "Inference & allocations" begin
+@testset "Inference and allocations" begin
     Ωₕ1 = mesh(domain(interval(0.0, 1.0)), 64, false)
     Ωₕ2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (8, 9), (true, false))
     Ωₕ3 = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 6),
@@ -85,5 +112,45 @@ using Bramble: spacings, normal_vector, hₘᵢₙ
         @test_allocs npoints(Ωₕ2, Tuple)
         @test_allocs point(Ωₕ3, CartesianIndex(2, 3, 4))
         @test_allocs cell_measure(Ωₕ3, CartesianIndex(2, 3, 4))
+
+        # Multi-dimensional metric queries and projections
+        @test_allocs dim(Ωₕ2)
+        @test_allocs topo_dim(Ωₕ2)
+        @test_allocs (Ωₕ2)(1)
+        @test_allocs spacing(Ωₕ2, CartesianIndex(2, 3))
+        @test_allocs half_spacing(Ωₕ2, CartesianIndex(2, 3))
+        @test_allocs forward_spacing(Ωₕ2, CartesianIndex(2, 3))
+        @test_allocs hₘₐₓ(Ωₕ2)
+        @test_allocs hₘᵢₙ(Ωₕ2)
+        @test_allocs locate_cell(Ωₕ2, SVector(0.5, 0.5))
+        @test_allocs normal_vector(Ωₕ2, :left)
+        @test_allocs normal_vector(Ωₕ3, :top)
+
+        # In-place mutating operations
+        n1 = npoints(Ωₕ1)
+        target_half = zeros(Float64, n1 + 1)
+        target_sp = zeros(Float64, n1)
+        target_hsp = zeros(Float64, n1)
+        pts_copy = copy(points(Ωₕ1))
+        target_bits = falses(n1)
+        lin_idxs = LinearIndices((n1,))
+
+        @test_allocs half_points!(target_half, Ωₕ1)
+        @test_allocs spacing!(target_sp, Ωₕ1)
+        @test_allocs half_spacing!(target_hsp, Ωₕ1)
+        @test_allocs set_points!(Ωₕ1, pts_copy)
+        @test_allocs change_points!(Ωₕ1, pts_copy)
+        @test_allocs _mark_indices!(target_bits, lin_idxs, 1:3)
+
+        # Multi-dimensional grid iterators
+        iterate_points_it(it) = (s = 0.0; for p in it
+                s += p[1] + p[2]
+            end; s)
+        iterate_points_gen(pts) = (s = 0.0; for p in pts
+                s += p[1] + p[2]
+            end; s)
+
+        @test_allocs iterate_points_it(points_iterator(Ωₕ2))
+        @test_allocs iterate_points_gen(points(Ωₕ2))
     end
 end

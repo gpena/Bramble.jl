@@ -1,28 +1,26 @@
 """
-	boundary_symbol_to_cartesian(indices::CartesianIndices)
+    boundary_symbol_to_cartesian(indices::CartesianIndices{1}) -> NamedTuple
+    boundary_symbol_to_cartesian(indices::CartesianIndices{2}) -> NamedTuple
+    boundary_symbol_to_cartesian(indices::CartesianIndices{3}) -> NamedTuple
 
-Maps standard boundary symbols (:left, :right, :top, :bottom, :front, :back) to their
-corresponding CartesianIndices on the mesh boundary.
+Map standard boundary symbols (`:left`, `:right`, `:top`, `:bottom`, `:front`, `:back`) to their
+corresponding `CartesianIndices` on the mesh boundary.
 
 # Returns
 
-A NamedTuple with boundary symbols as keys and CartesianIndices as values:
-
+A `NamedTuple` with boundary symbols as keys and `CartesianIndices` as values:
   - 1D: `:left`, `:right` (single points)
   - 2D: `:left`, `:right`, `:top`, `:bottom` (faces)
-  - 3D: All six faces of a rectangular prism
+  - 3D: All six faces of a rectangular prism (`:left`, `:right`, `:top`, `:bottom`, `:front`, `:back`)
 
 # Examples
 
 ```jldoctest
 julia> boundary_symbol_to_cartesian(CartesianIndices((1:3, 1:4)))
-(left = CartesianIndices((1:1, 1:4)),
- right = CartesianIndices((3:3, 1:4)),
- top = CartesianIndices((1:3, 4:4)),
- bottom = CartesianIndices((1:3, 1:1)))
+(left = CartesianIndices((1:1, 1:4)), right = CartesianIndices((3:3, 1:4)), top = CartesianIndices((1:3, 4:4)), bottom = CartesianIndices((1:3, 1:1)))
 ```
 
-See also: [`boundary_symbol_to_dict`](@ref), [`set_markers!`](@ref)
+See also: [`boundary_symbol_to_dict`](@ref), [`set_markers!`](@ref).
 """
 @inline boundary_symbol_to_cartesian(indices::CartesianIndices{1}) = (;
     :left => first(indices), :right => last(indices))
@@ -50,153 +48,129 @@ function boundary_symbol_to_cartesian(indices::CartesianIndices{3})
 end
 
 """
-	boundary_symbol_to_dict(indices::CartesianIndices)
+    boundary_symbol_to_dict(indices::CartesianIndices) -> Dict{Symbol, CartesianIndices}
 
-	Returns a dictionary connecting the facet labels of a set to the corresponding `CartesianIndices` (see [`boundary_symbol_to_cartesian`](@ref)).
+Return a dictionary connecting the facet labels of a set to the corresponding `CartesianIndices`.
+
+See also: [`boundary_symbol_to_cartesian`](@ref).
 """
 function boundary_symbol_to_dict(indices::CartesianIndices)
     Dict(pairs(boundary_symbol_to_cartesian(indices)))
 end
 
 """
-	$(TYPEDEF)
+    const MeshMarkers = Dict{Symbol, BitVector}
 
-Efficient storage type for mesh markers as a `Dict` of `Symbols`. For each label, a BitVector is assigned that determines, for a given index, if the corresponding geometric point is identified by the marker.
+Dictionary mapping semantic marker symbols to boolean indicator vectors across mesh points.
+
+For each label, a `BitVector` indicates whether the corresponding mesh point satisfies the marker.
 """
 const MeshMarkers = Dict{Symbol, BitVector}
 
 """
-	process_label_for_mesh!(npts, markers_mesh, set_labels)
+    process_label_for_mesh!(npts::Integer, markers_mesh::MeshMarkers, set_labels) -> Nothing
 
-Initializes boolean vectors for a given set of labels within the mesh markers dictionary.
+Initialize boolean indicator vectors for a collection of marker labels within `markers_mesh`.
 
-For each label in `set_labels`, this function creates a `BitVector` of length `npts`
-(the total number of points in the mesh), initializes it with all `false` values,
-and assigns it to the corresponding key in the `markers_mesh` dictionary. This
-prepares the storage for later marking which points belong to which labeled region.
+For each label in `set_labels`, assigns a `BitVector` of length `npts` initialized to `false`.
 
 # Arguments
 
-  - `npts`: The total number of points in the mesh.
-  - `markers_mesh`: The [`MeshMarkers`](@ref) dictionary to be modified in-place.
-  - `set_labels`: An iterator or collection of `Symbol` labels to initialize.
+  - `npts`: Total number of grid points in the mesh.
+  - `markers_mesh`: [`MeshMarkers`](@ref) dictionary modified in-place.
+  - `set_labels`: Collection of `Symbol` labels to initialize.
 """
 @inline function process_label_for_mesh!(npts, markers_mesh::MeshMarkers, set_labels)
     @inbounds for label in set_labels
         markers_mesh[label] = falses(npts)
     end
+    return nothing
 end
 
 """
-	_init_mesh_markers(Ωₕ, domain_markers)
+    _init_mesh_markers(Ωₕ::AbstractMeshType, domain_markers::DomainMarkers) -> MeshMarkers
 
-Internal helper function to create and initialize the [`MeshMarkers`](@ref) dictionary.
+Internal helper function to construct and initialize the [`MeshMarkers`](@ref) dictionary.
 
-This function extracts all unique labels from the provided [`DomainMarkers`](@ref) object,
-which can come from symbol-, tuple-, or condition-based markers. It then prepares
-a [`MeshMarkers`](@ref) dictionary where each label is a key associated with a `BitVector`
-of `false`s, ready to be populated.
+Allocates `BitVector` storage initialized to `false` for every symbol, tuple, and condition
+label defined in `domain_markers`.
 """
 function _init_mesh_markers(Ωₕ::AbstractMeshType, domain_markers::DomainMarkers)
-    # Create an empty dictionary to store the mesh markers.
     markers_mesh = MeshMarkers()
-    # Get the total number of points in the mesh.
     npts = npoints(Ωₕ)
 
-    # Initialize boolean vectors for each category of marker labels.
     process_label_for_mesh!(npts, markers_mesh, label_symbols(domain_markers))
     process_label_for_mesh!(npts, markers_mesh, label_tuples(domain_markers))
     process_label_for_mesh!(npts, markers_mesh, label_conditions(domain_markers))
 
-    # Return the fully initialized (but empty) markers dictionary.
     return markers_mesh
 end
 
 """
-	set_markers!(Ωₕ::AbstractMeshType, domain_markers::DomainMarkers)
+    set_markers!(Ωₕ::AbstractMeshType, domain_markers::DomainMarkers) -> Nothing
 
-Applies domain markers to mesh points, creating BitVector indicators for each label.
+Evaluate domain markers onto mesh points, creating `BitVector` indicators for each label.
 
-This function handles three types of markers:
+Supports three classes of domain markers:
+  1. Symbol markers: predefined boundary labels (`:left`, `:right`, etc.).
+  2. Tuple markers: unions of boundary symbols.
+  3. Function markers: level-set boolean predicates `x -> Bool`.
 
- 1. **Symbol markers**: Predefined boundary labels (:left, :right, etc.)
- 2. **Tuple markers**: Collections of boundary symbols
- 3. **Function markers**: Level-set conditions (including time-dependent functions)
+Also seeds the default geometric markers `:boundary` and `:interior` if not already defined.
 
-# Notes
+# Arguments
 
-  - Time-dependent markers are evaluated at the current time
-  - Markers are stored as BitVectors in the mesh's `markers` field
-  - Existing markers are completely replaced
+  - `Ωₕ`: Target mesh whose `markers` field is populated.
+  - `domain_markers`: [`DomainMarkers`](@ref) containing semantic boundary or regional labels.
 
-# Example
+# Examples
 
 ```julia
 Ω = domain(interval(0, 1) × interval(0, 1),
-		   :inlet => :left,
-		   :outlet => :right,
-		   :walls => (:top, :bottom),
-		   :obstacle => x -> norm(x .- 0.5) < 0.2)
+           :inlet => :left,
+           :outlet => :right,
+           :walls => (:top, :bottom),
+           :obstacle => x -> norm(x .- 0.5) < 0.2)
 Ωₕ = mesh(Ω, (20, 20), (true, true))
-# Ωₕ.markers now contains BitVectors for :inlet, :outlet, :walls, :obstacle
+# Ωₕ.markers contains BitVectors for :inlet, :outlet, :walls, :obstacle, :boundary, :interior
 ```
 
-See also: [`DomainMarkers`](@ref), [`MeshMarkers`](@ref)
+See also: [`DomainMarkers`](@ref), [`MeshMarkers`](@ref).
 """
 function set_markers!(Ωₕ::AbstractMeshType, domain_markers)
-    # Initialize a dictionary to hold the boolean vectors for each marker label.
     mesh_markers = _init_mesh_markers(Ωₕ, domain_markers)
 
-    # Process markers identified by single symbols (e.g., :left) and tuples/sets (e.g., (:top, :right)).
     _set_markers_symbols!(mesh_markers, symbols(domain_markers), Ωₕ)
     _set_markers_symbols!(mesh_markers, tuples(domain_markers), Ωₕ)
-
-    # Process markers identified by user-defined functions (level-set conditions).
     _set_markers_conditions!(mesh_markers, conditions(domain_markers), Ωₕ)
 
-    # `:boundary`/`:interior` are reserved, always-available markers — see the note above
-    # `_ensure_geometric_markers!`.
+    # `:boundary`/`:interior` are reserved, always-available markers; see note above _ensure_geometric_markers!.
     _ensure_geometric_markers!(mesh_markers, Ωₕ)
 
-    # Assign the populated markers dictionary to the mesh object.
     Ωₕ.markers = mesh_markers
+    return nothing
 end
 
 #=
-Every mesh carries `:boundary` and `:interior`, computed from the mesh's own shape rather
-than from anything the user registered — every other label depends on a `domain(...)` call
-naming it, and a mesh built with only custom labels (or none at all) had neither. That gap
-was silent and wrong in one specific way: `RegionRestriction`'s `local_stencil`
-(form/operators/restriction.jl) reads `:interior` as "not `:boundary`", and when no
-`:boundary` key exists, `haskey` returning `false` for every point made `:interior` silently
-mean *the whole domain* rather than throwing or refusing.
+Every mesh carries :boundary and :interior, computed from the mesh's own geometry rather
+than from user registrations: every other label depends on a domain(...) call naming it.
+RegionRestriction's local_stencil (form/operators/restriction.jl) reads :interior as
+"not :boundary"; ensuring :boundary exists guarantees well-defined complementary indexing.
 
-`:boundary` is computed via `boundary_symbol_to_dict` — the same face ranges `domain(X)`'s
-zero-argument convenience already marks via `get_boundary_symbols` — rather than via
-`is_boundary_index`, which answers a related but *not* identical question: it excludes a
-degenerate (length-1) dimension from making a point count as boundary (right, for
-`interior_indices`'s purpose — a degenerate axis has nothing to shrink), where the face-based
-definition marks `:left` and `:right` at the same single point regardless. A collapsed 1D
-mesh (a single point) surfaces the difference directly, and existing tests already rely on
-the face-based answer through `domain(X)`. Matching it exactly, rather than introducing a
-second, diverging definition of "boundary", is what keeps this addition non-breaking.
-`:interior` is then genuinely new — no pre-existing convention to match — so it is simply the
-logical complement, consistent with what the `:interior`-as-"not `:boundary`" special case
-already meant.
+:boundary is computed via boundary_symbol_to_dict (the same face ranges marked by
+get_boundary_symbols) rather than is_boundary_index, which excludes degenerate (length-1)
+axes. The face-based definition marks :left and :right consistently even for degenerate sets.
+:interior is defined as the logical complement .!boundary_set.
 =#
 
 """
-    _ensure_geometric_markers!(mesh_markers, Ωₕ)
+    _ensure_geometric_markers!(mesh_markers::MeshMarkers, Ωₕ::AbstractMeshType) -> Nothing
 
-Seeds `:boundary`/`:interior` from the mesh's own geometry, but only where the domain did not
-already register a label under that name: `:boundary`/`:interior` were already usable as
-ordinary custom label names before this existed (`test/mesh/meshes.jl`'s "2D Domain to Mesh"
-has a `:boundary` defined by its own tolerance-based condition, for instance), so this adds a
-default rather than reserving the name outright. When the two happen to disagree — the
-existing label does not describe the same set of points the geometric one would — that is
-worth knowing about even though it is not an error: `restrict_to(:interior, ...)`/
-`restrict_to(:boundary, ...)` elsewhere in the package assume the geometric meaning, and a
-mesh whose `:boundary` means something else will not behave the way those call sites expect.
+Seed `:boundary` and `:interior` from the mesh's own geometry, preserving any existing
+custom definitions registered under those names.
+
+If a pre-existing custom marker with the same name disagrees with the geometric boundary,
+a warning is issued because downstream operators (`restrict_to`) assume geometric semantics.
 """
 function _ensure_geometric_markers!(mesh_markers::MeshMarkers, Ωₕ::AbstractMeshType)
     linear_indices = LinearIndices(npoints(Ωₕ, Tuple))
@@ -221,53 +195,47 @@ end
 
 @noinline function _warn_geometric_marker_mismatch(label::Symbol)
     @warn ":$label is defined here to mean something other than the mesh's own geometric " *
-          "$(label === :boundary ? "boundary" : "interior") — every boundary face for " *
-          ":boundary, its complement for :interior. restrict_to(:$label, ...) and " *
+          "$(label === :boundary ? "boundary" : "interior") (every boundary face for " *
+          ":boundary, its complement for :interior). restrict_to(:$label, ...) and " *
           "innerₕ(...; markers = (:$label,)) will use this mesh's own definition, not the " *
           "geometric one; give the custom label a different name to avoid the ambiguity."
 end
 
 """
-	_mark_indices!(marker_set, linear_indices, indices_to_mark)
+    _mark_indices!(marker_set::AbstractVector{Bool}, linear_indices, indices_to_mark) -> Nothing
 
-A utility function to efficiently update a boolean marker vector.
+Utility function to update a boolean marker vector.
 
-It sets the value to `true` at the linear positions corresponding to the `CartesianIndex` or collection of `CartesianIndices` provided in `indices_to_mark`.
+Sets entries to `true` at the linear positions corresponding to `indices_to_mark`.
 """
 @inline function _mark_indices!(marker_set::AbstractVector{Bool}, linear_indices, idx::CartesianIndex)
     @inbounds marker_set[linear_indices[idx]] = true
+    return nothing
 end
 
 @inline function _mark_indices!(marker_set::AbstractVector{Bool}, linear_indices, indices_to_mark)
     @inbounds for idx in indices_to_mark
         marker_set[linear_indices[idx]] = true
     end
+    return nothing
 end
 
 """
-	_set_markers_symbols!(mesh_markers, symbols, Ωₕ)
+    _set_markers_symbols!(mesh_markers::MeshMarkers, symbols, Ωₕ::AbstractMeshType) -> Nothing
 
-Processes markers that are identified by predefined symbols (e.g., `:left`, `:top`) or sets/tuples of those symbols.
+Process markers identified by predefined symbols (`:left`, `:top`, etc.) or collections of symbols.
 """
 function _set_markers_symbols!(mesh_markers::MeshMarkers, symbols, Ωₕ)
-    # Create a map from predefined boundary symbols to their corresponding CartesianIndices.
     symbol_to_index_map = boundary_symbol_to_dict(indices(Ωₕ))
-    # Create a converter from Cartesian to linear indices for efficient array access.
     linear_indices = LinearIndices(npoints(Ωₕ, Tuple))
 
-    # Iterate over each marker defined by a symbol or set of symbols.
     for marker in symbols
         (; label, identifier) = marker
-
-        # Get the boolean vector for the current marker label.
         target_marker_set = mesh_markers[label]
 
-        # Case 1: The identifier is a single symbol (e.g., :left).
         if identifier isa Symbol
             idxs = symbol_to_index_map[identifier]
             _mark_indices!(target_marker_set, linear_indices, idxs)
-
-            # Case 2: The identifier is a Set or Tuple of symbols (e.g., (:top, :right)).
         elseif identifier isa Union{Set, Tuple}
             for id in identifier
                 idxs = symbol_to_index_map[id]
@@ -275,40 +243,33 @@ function _set_markers_symbols!(mesh_markers::MeshMarkers, symbols, Ωₕ)
             end
         end
     end
+    return nothing
 end
 
 """
-	__process_condition!(mesh_marker, identifier, Ωₕ)
+    __process_condition!(mesh_marker::BitVector, identifier, Ωₕ::AbstractMeshType) -> Nothing
 
-Core logic for evaluating a function-based (level-set) marker.
-
-It iterates through every point in the mesh, evaluates the `identifier` function
-at that point's coordinates, and sets the marker to `true` if the function returns `true`.
+Core logic for evaluating a function-based (level-set) marker predicate across all mesh points.
 """
 function __process_condition!(mesh_marker, identifier, Ωₕ)
     linear_indices = LinearIndices(npoints(Ωₕ, Tuple))
-    # Loop over every CartesianIndex in the mesh.
     @inbounds for idx in indices(Ωₕ)
-        # Check if the function `identifier(point)` returns true.
         if identifier(point(Ωₕ, idx))
-            # If it does, mark this point's linear index as true.
             mesh_marker[linear_indices[idx]] = true
         end
     end
+    return nothing
 end
 
 """
-	_set_markers_conditions!(mesh_markers, conditions, Ωₕ)
+    _set_markers_conditions!(mesh_markers::MeshMarkers, conditions, Ωₕ::AbstractMeshType) -> Nothing
 
-Iterates through all function-based markers and applies them to the mesh.
+Iterate through all function-based markers and evaluate them across the mesh.
 """
 function _set_markers_conditions!(mesh_markers::MeshMarkers, conditions, Ωₕ)
-    # Loop through each marker that is defined by a condition (function).
     for marker in conditions
         (; label, identifier) = marker
-        # Call the helper function to evaluate the condition for the entire mesh.
         __process_condition!(mesh_markers[label], identifier, Ωₕ)
     end
-
     return nothing
 end

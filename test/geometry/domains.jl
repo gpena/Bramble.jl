@@ -9,6 +9,32 @@ using Bramble: label_identifiers, label_symbols, label_tuples, label_conditions,
                topo_dim, is_collapsed
 using StaticArrays
 
+if !@isdefined(alloc_test)
+    @inline function alloc_test(f::F, args...; kwargs...) where {F}
+        f(args...; kwargs...)
+        return @allocated(f(args...; kwargs...))
+    end
+end
+
+if !@isdefined(var"@test_allocs")
+    macro test_allocs(call_expr)
+        if Meta.isexpr(call_expr, :call)
+            fn = call_expr.args[1]
+            args = call_expr.args[2:end]
+            quote
+                @test alloc_test($(esc(fn)), $(map(esc, args)...)) == 0
+            end
+        else
+            quote
+                let
+                    $(esc(call_expr))
+                    @test (@allocated $(esc(call_expr))) == 0
+                end
+            end
+        end
+    end
+end
+
 @testset "Computational domains" begin
     # Test data setup: Cartesian products and coordinate indicator predicates.
     I1D = interval(0.0, 1.0)
@@ -257,6 +283,35 @@ using StaticArrays
         @test_allocs get_boundary_symbols(Ω)
         @test_allocs Base.length(Ω)
         @test_allocs Base.isempty(Ω)
+
+        # Zero allocations iterating directly over homogeneous marker categories
+        Ω_markers = domain(I2D, :left_bnd => :left, :corner => (:top, :right), :sub =>
+            (x -> x[1] > 0.5f0))
+        iterate_symbols(dom) = (c = 0; for s in label_symbols(dom)
+                c += 1
+            end; c)
+        iterate_tuples(dom) = (c = 0; for t in label_tuples(dom)
+                c += 1
+            end; c)
+        iterate_conditions(dom) = (c = 0; for cond in label_conditions(dom)
+                c += 1
+            end; c)
+        iterate_marker_syms(dom) = (c = 0; for m in marker_symbols(dom)
+                c += 1
+            end; c)
+        iterate_marker_tups(dom) = (c = 0; for m in marker_tuples(dom)
+                c += 1
+            end; c)
+        iterate_marker_conds(dom) = (c = 0; for m in marker_conditions(dom)
+                c += 1
+            end; c)
+
+        @test_allocs iterate_symbols(Ω_markers)
+        @test_allocs iterate_tuples(Ω_markers)
+        @test_allocs iterate_conditions(Ω_markers)
+        @test_allocs iterate_marker_syms(Ω_markers)
+        @test_allocs iterate_marker_tups(Ω_markers)
+        @test_allocs iterate_marker_conds(Ω_markers)
     end
 
     # Invariant: Textual display formatting for markers, marker containers, and

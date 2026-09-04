@@ -1,21 +1,25 @@
 """
-	$(TYPEDEF)
+    Mesh1D{BT, CI, VT, T} <: AbstractMeshType{1}
 
-A mutable structure representing a 1D mesh.
+One-dimensional grid discretizing a 1D [`CartesianProduct`](@ref) interval.
 
-Stores the coordinates of the grid points (`pts`), the underlying geometric interval (`set`), and a dictionary of markers labeling specific points or regions, along with the cell centers (`half_pts`) and cell widths (`half_spacings`) the finite volume method needs, precomputed once rather than recomputed by every caller.
-
-The struct is mutable to allow for in-place modifications, such as mesh refinement.
+Stores grid point coordinates `pts`, underlying geometric interval `set`, semantic markers `markers`,
+Cartesian indices `indices`, and computational backend `backend`. Also precomputes and caches cell centers
+(`half_pts`), cell measures (`half_spacings`), and backward spacings (`spacings`).
 
 # Fields
 
-$(FIELDS)
+  - `set`: 1D geometric [`CartesianProduct`](@ref) interval over which the mesh is defined.
+  - `markers`: [`MeshMarkers`](@ref) dictionary mapping symbols to `BitVector` indicators.
+  - `indices`: `CartesianIndices{1}` of the grid points.
+  - `backend`: Linear algebra [`Backend`](@ref) for memory management and operations.
+  - `pts`: Coordinate vector storing grid points ``x_i`` for ``i = 1, \\dots, N``.
+  - `half_pts`: Precomputed cell centers (midpoints) ``x_{i+1/2}`` for ``i = 1, \\dots, N+1``.
+  - `half_spacings`: Precomputed cell widths (control volume measures) ``h_{i+1/2}`` for ``i = 1, \\dots, N``.
+  - `spacings`: Precomputed backward grid spacings ``h_i = x_i - x_{i-1}``, with ``h_1 = x_2 - x_1``.
+  - `collapsed`: Boolean flag indicating whether the interval is degenerate (a single point).
 
-For future reference, the entries of vector `pts` are
-
-```math
-x_i, \\, i=1,\\dots,N.
-```
+See also: [`MeshnD`](@ref), [`mesh`](@ref), [`AbstractMeshType`](@ref).
 """
 mutable struct Mesh1D{BT <: Backend, CI <: CartesianIndices{1}, VT <: AbstractVector, T} <:
                AbstractMeshType{1}
@@ -71,10 +75,10 @@ end
 @inline half_spacings(Ωₕ::Mesh1D) = Ωₕ.half_spacings
 
 """
-	spacings(Ωₕ::Mesh1D)
+    spacings(Ωₕ::Mesh1D) -> AbstractVector
 
-Returns the cached vector of backward spacings, where `spacings(Ωₕ)[i]` is
-[`spacing`](@ref)`(Ωₕ, i)`. It is recomputed by [`set_points!`](@ref) whenever the
+Return the cached vector of backward spacings, where `spacings(Ωₕ)[i]` is
+[`spacing`](@ref)`(Ωₕ, i)`. Recomputed by [`set_points!`](@ref) whenever the
 grid points change.
 """
 @inline spacings(Ωₕ::Mesh1D) = Ωₕ.spacings
@@ -82,9 +86,10 @@ grid points change.
 @inline cell_measures(Ωₕ::Mesh1D) = half_spacings(Ωₕ)
 
 """
-	set_points!(Ωₕ::Mesh1D, pts)
+    set_points!(Ωₕ::Mesh1D, pts::AbstractVector) -> Nothing
 
-Overrides the points in Ωₕ. This function recalculates the cached [`spacings`](@ref), [`half_points`](@ref) and [`half_spacings`](@ref).
+Override the grid coordinates in `Ωₕ`. Recalculates cached [`spacings`](@ref),
+[`half_points`](@ref), and [`half_spacings`](@ref).
 """
 @inline function set_points!(Ωₕ::Mesh1D, pts)
     n = length(pts)
@@ -112,16 +117,16 @@ Overrides the points in Ωₕ. This function recalculates the cached [`spacings`
 end
 
 """
-	half_points!(Ωₕ::Mesh1D, pts)
+    half_points!(Ωₕ::Mesh1D, pts::AbstractVector) -> Nothing
 
-Overrides the half_points in Ωₕ.
+Override the precomputed cell center cache in `Ωₕ`.
 """
 @inline half_points!(Ωₕ::Mesh1D, pts) = (Ωₕ.half_pts = pts; return)
 
 """
-	half_spacings!(Ωₕ::Mesh1D, pts)
+    half_spacings!(Ωₕ::Mesh1D, pts::AbstractVector) -> Nothing
 
-Overrides the spacings in Ωₕ.
+Override the precomputed cell width cache in `Ωₕ`.
 """
 @inline half_spacings!(Ωₕ::Mesh1D, pts) = (Ωₕ.half_spacings = pts; return)
 
@@ -129,10 +134,10 @@ Overrides the spacings in Ωₕ.
 @inline eltype(::Type{<:Mesh1D{BT}}) where {BT} = eltype(BT)
 
 """
-	(Ωₕ::Mesh1D)(i::Integer)
+    (Ωₕ::Mesh1D)(i::Integer) -> Mesh1D
 
-Returns the `i`-th submesh of `Ωₕ`. A 1D mesh is its own only submesh, so this returns
-`Ωₕ` itself; it exists so that generic `D`-dimensional code can index uniformly.
+Return the `i`-th submesh of `Ωₕ`. A 1D mesh is its own only submesh, returning
+`Ωₕ` itself; provided for uniform indexing in multi-dimensional generic algorithms.
 """
 @inline (Ωₕ::Mesh1D)(::Integer) = Ωₕ
 
@@ -149,9 +154,9 @@ end
 
 @inline spacing(Ωₕ::Mesh1D, i::CartesianIndex{1}) = spacing(Ωₕ, _extract_linear_index(i))
 """
-	spacing_for_derivative(Ωₕ::Mesh1D, idx) -> eltype(Ωₕ)
+    spacing_for_derivative(Ωₕ::Mesh1D, idx) -> eltype(Ωₕ)
 
-Returns the spacing that a backward finite difference divides by at `idx`, which is
+Return the spacing that a backward finite difference divides by at `idx`, which is
 [`spacing`](@ref)`(Ωₕ, idx)` everywhere except the first point, where the difference has
 no stencil and this is zero.
 
@@ -167,21 +172,19 @@ See also: [`forward_spacing_for_derivative`](@ref), [`spacings`](@ref).
 end
 
 """
-	backward_spacings_for_derivative(Ωₕ::Mesh1D)
+    backward_spacings_for_derivative(Ωₕ::Mesh1D) -> AbstractVector
 
-Returns a vector `h` with `h[i] == `[`spacing_for_derivative`](@ref)`(Ωₕ, i)` for every
-`i > 1`. Entry 1 is not meaningful: the backward difference has no stencil at the first
-point and the engines handle that point separately.
+Return a vector `h` with `h[i] == `[`spacing_for_derivative`](@ref)`(Ωₕ, i)` for every
+`i > 1`. Entry 1 is zero: the backward difference has no stencil at the first point.
 """
 @inline backward_spacings_for_derivative(Ωₕ::Mesh1D) = spacings(Ωₕ)
 
 """
-	forward_spacings_for_derivative(Ωₕ::Mesh1D)
+    forward_spacings_for_derivative(Ωₕ::Mesh1D) -> AbstractVector
 
-Returns a vector `h` with `h[i] == `[`forward_spacing_for_derivative`](@ref)`(Ωₕ, i)` for
-every `i < npoints(Ωₕ)`, as a view onto the cached spacings, since
-`forward_spacing(Ωₕ, i) == spacing(Ωₕ, i + 1)` there. The last entry is not meaningful,
-for the same reason as above.
+Return a vector `h` with `h[i] == `[`forward_spacing_for_derivative`](@ref)`(Ωₕ, i)` for
+every `i < npoints(Ωₕ)`, as a view onto cached spacings. The last entry is omitted because
+the forward difference has no stencil at the right boundary.
 """
 @inline function forward_spacings_for_derivative(Ωₕ::Mesh1D)
     h = spacings(Ωₕ)
@@ -198,9 +201,9 @@ end
 
 @inline forward_spacing(Ωₕ::Mesh1D, i::CartesianIndex{1}) = forward_spacing(Ωₕ, _extract_linear_index(i))
 """
-	forward_spacing_for_derivative(Ωₕ::Mesh1D, idx) -> eltype(Ωₕ)
+    forward_spacing_for_derivative(Ωₕ::Mesh1D, idx) -> eltype(Ωₕ)
 
-Returns the spacing that a forward finite difference divides by at `idx`, which is
+Return the spacing that a forward finite difference divides by at `idx`, which is
 [`forward_spacing`](@ref)`(Ωₕ, idx)` everywhere except the last point, where the
 difference has no stencil and this is zero.
 
@@ -387,7 +390,7 @@ function _mesh(Ω::Domain{CartesianProduct{1, T}}, npts::Tuple{Int}, unif::Tuple
     return mesh
 end
 
-# The geometric refinement alone, with markers left untouched — shared by both public
+# The geometric refinement alone, with markers left untouched: shared by both public
 # methods below, neither of which wants the *other*'s marker handling as an intermediate
 # step of its own.
 function _refine_indices!(Ωₕ::Mesh1D)
@@ -428,14 +431,14 @@ end
 
 # Refines a 1D mesh in-place by inserting a new point at the midpoint of each interval.
 function iterative_refinement!(Ωₕ::Mesh1D)
-    # Same two no-op cases `_refine_indices!` itself checks — mirrored here, not just
+    # Same two no-op cases `_refine_indices!` itself checks: mirrored here, not just
     # inherited from calling it, so a mesh with nothing to refine also gets no marker
     # rebuild: `_refine_indices!` returning "did nothing" is not visible to its caller, and
     # rebuilding markers anyway would drop a mesh's custom labels for no reason at all.
     (is_collapsed(Ωₕ) || npoints(Ωₕ) <= 1) && return
 
     # The old markers dict is sized for the old grid and would otherwise be left silently
-    # wrong rather than merely absent — see the identical note in `MeshnD`'s own
+    # wrong rather than merely absent: see the identical note in `MeshnD`'s own
     # one-argument `iterative_refinement!` (meshnd.jl). `:boundary`/`:interior` need no
     # domain and are rebuilt unconditionally; anything else is dropped with a warning
     # rather than kept incorrect. The two-argument form below does not route through this
@@ -490,11 +493,11 @@ function change_points!(Ωₕ::Mesh1D, pts)
 end
 
 """
-	Base.copy(Ωₕ::Mesh1D)
+    Base.copy(Ωₕ::Mesh1D) -> Mesh1D
 
-Creates a copy of the mesh `Ωₕ`. The copy is shallow with respect to the immutable fields
-(`set`, `indices`, `backend`, `collapsed`), but deep with respect to the mutable data fields
-(`pts`, `half_pts`, `half_spacings`, `markers`) which are copied.
+Create a copy of mesh `Ωₕ`. The copy is shallow with respect to immutable fields
+(`set`, `indices`, `backend`, `collapsed`), but deep with respect to mutable data fields
+(`pts`, `half_pts`, `half_spacings`, `markers`).
 """
 function Base.copy(Ωₕ::Mesh1D)
     return Mesh1D(Ωₕ.set,
@@ -512,9 +515,9 @@ end
 @inline Base.getindex(Ωₕ::Mesh1D, i::CartesianIndex{1}) = point(Ωₕ, i)
 
 """
-	Base.show(io::IO, Ωₕ::Mesh1D)
+    Base.show(io::IO, Ωₕ::Mesh1D) -> Nothing
 
-Custom display for Mesh1D objects with detailed mesh information and colors.
+Custom display for `Mesh1D` objects with detailed mesh summary, domain information, and markers.
 """
 function Base.show(io::IO, Ωₕ::Mesh1D{BT, CI, VT, T}) where {BT, CI, VT, T}
     pp = PrettyPrinter(io)

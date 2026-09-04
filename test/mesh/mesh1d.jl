@@ -1,14 +1,20 @@
+# Unit tests for 1D mesh generation, geometric queries, and refinement operations.
+# Verifies point coordinate generation, half-point and half-spacing caches,
+# marker propagation, and degenerate single-point interval behaviors.
+
+using Test
+using Bramble
 import Bramble: indices, change_points!, npoints, dim, spacing, half_spacings,
                 generate_indices, boundary_symbol_to_dict, markers, backend, set_indices!,
                 points, set_points!, set_markers!, point, half_point,
-                half_spacing, iterative_refinement!
+                half_spacing, iterative_refinement!, set, is_collapsed, is_uniform
 import Bramble: cell_measure, hₘₐₓ, half_points, boundary_indices, interior_indices
 import Bramble: DomainMarkers, Mesh1D, Backend, points_iterator, half_points_iterator,
                 spacings_iterator, cell_measures_iterator, half_spacings_iterator,
                 forward_spacing, forward_spacings_iterator, MeshMarkers
 import Base: diff
 
-@testset "Mesh1D" begin
+@testset "One-dimensional meshes" begin
     function create_test_domain(a = 0.0, b = 1.0; markers = nothing)
         I = interval(a, b)
 
@@ -19,7 +25,7 @@ import Base: diff
         end
     end
 
-    @testset "Helpers" begin
+    @testset "Helper utilities" begin
         @testset "generate_indices" begin
             @test generate_indices(5) == CartesianIndices((5,))
             @test generate_indices(1) == CartesianIndices((1,))
@@ -38,7 +44,7 @@ import Base: diff
         end
     end
 
-    @testset "Construction & properties" begin
+    @testset "Construction and properties" begin
         Ω = create_test_domain(0.0, 2.0)
         npts = 5
         Ωₕ_unif = mesh(Ω, npts, true; backend = backend())
@@ -250,7 +256,7 @@ import Base: diff
             :Dirichlet, :Neumann, :Mixed, :LowerHalf, :PointMarker, :boundary, :interior])
     end
 
-    @testset "Modification" begin
+    @testset "Mesh modification" begin
         @testset "iterative_refinement!" begin
             dm = markers(interval(0, 1),
                 :BC => :left,
@@ -305,7 +311,7 @@ import Base: diff
         Ω = create_test_domain(0.0, 4.0)
         Ωₕ = mesh(Ω, 5, true; backend = backend()) # [0, 1, 2, 3, 4]
 
-        @testset "Accessors" begin
+        @testset "Field accessors" begin
             # Test set accessor
             @test set(Ωₕ) == interval(0.0, 4.0)
 
@@ -359,7 +365,7 @@ import Base: diff
             @test forward_spacing(Ωₕ, CartesianIndex(3)) ≈ 1.0
         end
 
-        @testset "Mesh callable" begin
+        @testset "Submesh indexing" begin
             # Test that mesh(i) returns itself for 1D
             @test Ωₕ(1) === Ωₕ
             @test Ωₕ(999) === Ωₕ  # Any value returns itself
@@ -380,7 +386,7 @@ import Base: diff
             @test Ωₕ[CartesianIndex(5)] ≈ 4.0
         end
 
-        @testset "Show" begin
+        @testset "Pretty printing" begin
             buf = IOBuffer()
             show(buf, Ωₕ)
             str = String(take!(buf))

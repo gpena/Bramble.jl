@@ -106,12 +106,12 @@ end
 
 # Mesh mutation is a separate pass so the queries above stay on a pristine mesh.
 function _pc_mesh_mutation(Ωₕ, dm)
-    # The one-argument path is for a mesh with no custom labels to begin with — every
+    # The one-argument path is for a mesh with no custom labels to begin with; every
     # `Ωₕ` reaching this function carries `dm`'s own, so calling it directly would warn
-    # (correctly) about dropping them, on every precompile. Strip them first so this
-    # exercises the intended, warning-free case; the two-argument call right below already
-    # exercises the marked-mesh path. An `MeshnD` carries labels twice over — once on the
-    # ND mesh itself, once more on each dimension's own `Mesh1D` submesh — so both need
+    # (correctly) about dropping them on precompilation. Strip them first so this
+    # exercises the intended warning-free case; the two-argument call right below already
+    # exercises the marked-mesh path. `MeshnD` carries labels twice: once on the
+    # multidimensional mesh itself, and once on each dimension's `Mesh1D` submesh, so both need
     # clearing, not just the outer one.
     bare = deepcopy(Ωₕ)
     bare.markers = MeshMarkers()
@@ -208,7 +208,7 @@ end
 
 # Grid space construction and the two restriction operators.
 #
-# Rₕ and avgₕ specialise on the caller's function type, so the method instances
+# Rₕ and avgₕ specialize on the caller's function type, so the method instances
 # cached for the closures below are never reused by a user's own function. What
 # this workload does cache is everything around them, which dominates: the grid
 # space construction, the generated Gauss rule, the parallel-for
@@ -299,7 +299,7 @@ end
 # Difference, jump and average operators, and the inner products and norms.
 #
 # This is the part of the space interface where precompilation pays in full.
-# Rₕ and avgₕ specialise on the caller's function type, so most of what a
+# Rₕ and avgₕ specialize on the caller's function type, so most of what a
 # workload caches for them is thrown away by a user's own function; an
 # operator's method instance is fixed by the element type and the direction
 # alone, and an inner product's by the element types, so nothing here is
@@ -332,7 +332,7 @@ const _PC_OPS_ALL = (∇₋ₕ, ∇₊ₕ, diff₋ₕ, diff₊ₕ, jumpₕ, M₋
 # Applied with a plain loop over the tuple, which inference unrolls into a static
 # call per operator. Going through `foreach` and a closure instead leaves the
 # calls dynamically dispatched, and then only the dispatch site is cached and
-# every alias costs its ~7 ms again on first use — measured 254 ms against
+# every alias costs its ~7 ms again on first use: measured 254 ms against
 # 460 ms over the calls in this file.
 function _pc_apply_each(ops, uₕ)
     for op in ops
@@ -388,11 +388,11 @@ _pc_vectorial_ops(uₕ) = _pc_apply_each(_PC_OPS_ALL, uₕ)
 # innerₕ and the norms built on it take a grid function of a scalar space; inner₊
 # and norm₊ take the gradient tuple, which in 1D is the bare element.
 #
-# innerₕ, normₕ and _dot are all @inline, so no standalone specialisation of
+# innerₕ, normₕ and _dot are all @inline, so no standalone specialization of
 # them exists to be cached: they are inlined into whatever calls them, and in a
 # user's program that caller is the user's own method. Calling one at top level
 # in a fresh session therefore still costs about 9 ms, and nothing this workload
-# can do removes that — it is the cost of building a specialisation for a call
+# can do removes that; it is the cost of building a specialization for a call
 # that was not inlined into a method.
 #
 # What the calls below do cache is everything non-inline underneath: the
@@ -524,7 +524,7 @@ function _pc_form_stencils(Ωₕ::AbstractMeshType, Wₕ, id, u, v, label::Symbo
     I = first(idx)
     mk = markers(Ωₕ)
 
-    # bilinear and linear products, each weight kind
+    # Bilinear and linear products for each weight kind.
     for prod in (innerₕ(D₋ₓ(id), D₋ₓ(id)), inner₊ₓ(M₋ₓ(id), M₋ₓ(id)),
         innerₕ(id, D₋ₓ(id)))
         local_stencil(prod, Wₕ, I, nothing, lin[I])
@@ -532,8 +532,8 @@ function _pc_form_stencils(Ωₕ::AbstractMeshType, Wₕ, id, u, v, label::Symbo
         resolve_ast(prod)
     end
 
-    # every node kind evaluated once, with and without a marker table — the restriction is
-    # the only node that reads it, and `nothing` is a separate method there
+    # Every node kind evaluated once, with and without a marker table: restriction is
+    # the only node that reads it, and `nothing` is a separate method there.
     for op in (id, D₋ₓ(id), D₊ₓ(id), M₋ₓ(id), jumpₓ(id), Dcₓ(id), Dstar₊ₓ(id), Dₕₓ(id),
         shift_op(id, 1, 1), 3 * D₋ₓ(id), D₋ₓ(id) + D₊ₓ(id),
         restrict_to(:interior, id), restrict_to(label, id))
@@ -541,7 +541,7 @@ function _pc_form_stencils(Ωₕ::AbstractMeshType, Wₕ, id, u, v, label::Symbo
         local_stencil(op, Wₕ, I, mk, lin[I])
     end
 
-    # the symbolic inner products over trial and test leaves, including the tuple forms
+    # Symbolic inner products over trial and test leaves, including tuple forms.
     innerₕ(u, v)
     innerₕ(2.0, v)
     innerₕ(x -> 1.0, v)
@@ -608,21 +608,19 @@ function _pc_form_dirichlet(Ωₕ::AbstractMeshType, Wₕ, Vₕ, be, label::Symb
 end
 
 # Assembly. `_assemble_linear_core!`, `_scatter_term!`, `_route_terms!` and `_sweep_colour!`
-# are each parameterised on the AST type, so a form shape this workload never names compiles
-# from scratch on the caller's first `assemble` — nothing above reaches them, because the
+# are each parameterized on the AST type, so a form shape this workload never names compiles
+# from scratch on the caller's first `assemble`: nothing above reaches them, because the
 # stencil session evaluates `local_stencil` directly and never drives a loop over the grid.
 #
 # Measured in a fresh session before this was added, the shapes below cost 1,032 ms of
 # first-call latency in 1D and 2D together.
 #
 # 3D is deliberately absent, as it is in the sessions above. Its shapes are the most
-# expensive to reach — 78 to 114 ms apiece — but they are also three more specialisations of
-# every core, and the build pays for them whether or not the caller ever works in 3D.
+# expensive to reach (78 to 114 ms apiece) and introduce three more specializations of
+# every core, paying build costs whether or not the caller computes in 3D.
 #
-# One call per shape rather than a loop over a tuple of closures. A loop makes the closure
-# type a union at the call site and compiles one generic version, which is not the code the
-# caller will run: the same mistake read 0.005 ms for 40 ms of work when it was made in the
-# harness that measured this.
+# One call per shape rather than a loop over a tuple of closures. A loop creates a union
+# type at the call site and compiles a generic fallback rather than concrete specialized kernels.
 function _pc_assemble_shape(Wₕ, g, b)
     lf = form(Wₕ, g)
     ast = resolve_form_ast(lf)
@@ -730,19 +728,19 @@ function _pc_form_assembly(Ωₕ::AbstractMeshType, Wₕ, Vₕ, label::Symbol, f
     b = zeros(eltype(Wₕ), ndofs(Wₕ))
     bv = zeros(eltype(Vₕ), ndofs(Vₕ))
 
-    # one colour, then two
+    # One color, then two.
     _pc_assemble_shape_threaded(Wₕ, v -> innerₕ(uₕ, v), b)
     _pc_assemble_shape_threaded(Wₕ, v -> innerₕ(uₕ, D₋ₓ(v)), b)
 
-    # the other weight, a sum of two kinds of inner product, and a linear combination in the
-    # test argument — the three shapes a form is most likely to be written as
+    # The other weight, a sum of two kinds of inner product, and a linear combination in the
+    # test argument: the three shapes a form is most likely to be written as.
     _pc_assemble_shape(Wₕ, v -> inner₊ₓ(uₕ, D₋ₓ(v)), b)
     _pc_assemble_shape(Wₕ, v -> innerₕ(uₕ, v) + inner₊ₓ(uₕ, D₋ₓ(v)), b)
     _pc_assemble_shape(Wₕ, v -> innerₕ(uₕ, v + 2 * D₋ₓ(v) - M₋ₓ(v)), b)
     _pc_assemble_directional(Wₕ, uₕ, b, dim_val)
 
-    # written out per component, the shorthand that sums them, and a routed term carrying
-    # operators
+    # Written out per component, the shorthand that sums them, and a routed term carrying
+    # operators.
     uv = Rₕ(Vₕ, (f, f))
     c = components(uv)
     _pc_assemble_composite(Vₕ, v -> innerₕ(c[1], v(1)) + innerₕ(c[2], v(2)), bv)

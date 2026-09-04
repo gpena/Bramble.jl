@@ -6,6 +6,32 @@ using Bramble: _dot, _dot_masked,
 using LinearAlgebra: dot
 using StaticArrays
 
+if !@isdefined(alloc_test)
+    @inline function alloc_test(f::F, args...; kwargs...) where {F}
+        f(args...; kwargs...)
+        return @allocated(f(args...; kwargs...))
+    end
+end
+
+if !@isdefined(var"@test_allocs")
+    macro test_allocs(call_expr)
+        if Meta.isexpr(call_expr, :call)
+            fn = call_expr.args[1]
+            args = call_expr.args[2:end]
+            quote
+                @test alloc_test($(esc(fn)), $(map(esc, args)...)) == 0
+            end
+        else
+            quote
+                let
+                    $(esc(call_expr))
+                    @test (@allocated $(esc(call_expr))) == 0
+                end
+            end
+        end
+    end
+end
+
 @testset "Linear algebra utilities" begin
     # Invariants tested:
     # 1. Trilinear form evaluation: ∑ u_i * v_i * w_i matches hand-calculated expected values.
@@ -95,6 +121,10 @@ using StaticArrays
 
             @test A[i, j] ≈ Float64(i + j)
         end
+
+        # Zero allocations during serial iteration on preallocated buffer
+        v_alloc = zeros(10)
+        @test_allocs _serial_for!(v_alloc, 1:10, f)
     end
 
     # Invariants tested:
@@ -137,6 +167,11 @@ using StaticArrays
         _cpu_threaded_for!(Serial(), v_serial, idxs, f_test)
         _cpu_threaded_for!(Parallel(), v_parallel, idxs, f_test)
         @test v_serial ≈ v_parallel
+
+        # Zero allocations during Serial() policy execution
+        v_serial_alloc = zeros(100)
+        f_alloc = i -> Float64(i^2)
+        @test_allocs _cpu_threaded_for!(Serial(), v_serial_alloc, 1:100, f_alloc)
     end
 
     # Invariants tested:
@@ -167,11 +202,12 @@ using StaticArrays
         @test_throws DimensionMismatch _dot_masked([1.0], [1.0, 2.0], [1.0], mask_all)
         @test_throws DimensionMismatch _dot_masked(u, v, w, BitVector([true, false]))
 
-        # Static array evaluation
+        # Static array evaluation and zero-allocation guarantee
         sv_u = SVector(1.0, 2.0, 3.0, 4.0)
         sv_v = SVector(2.0, 3.0, 4.0, 5.0)
         sv_w = SVector(0.5, 1.0, 1.5, 2.0)
         @test _dot_masked(sv_u, sv_v, sv_w, mask) ≈ expected
+        @test_allocs _dot_masked(sv_u, sv_v, sv_w, mask)
     end
 
     # Invariants tested:
@@ -187,6 +223,11 @@ using StaticArrays
         @test b[2] == 20.0
         @test c[2] == 30.0
         @test _write_components!((), (), 1) === nothing
+
+        # Zero allocations during component unpacking
+        targets = (zeros(3), zeros(3), zeros(3))
+        vals = (10.0, 20.0, 30.0)
+        @test_allocs _write_components!(targets, vals, 2)
 
         for policy in (Serial(), Parallel())
             n = 50
@@ -207,6 +248,11 @@ using StaticArrays
         _cpu_threaded_scatter_for!(Parallel(), (m1_p, m2_p), 1:n, g_fn)
         @test m1_s ≈ m1_p
         @test m2_s ≈ m2_p
+
+        # Zero allocations during Serial() component scattering
+        scatter_targets = (zeros(50), zeros(50))
+        g_scatter = i -> (Float64(i), Float64(2i))
+        @test_allocs _cpu_threaded_scatter_for!(Serial(), scatter_targets, 1:50, g_scatter)
     end
 
     # Invariants tested:

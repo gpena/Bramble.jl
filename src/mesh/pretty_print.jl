@@ -1,9 +1,9 @@
 # Pretty printing utilities for mesh types
 
 """
-	print_mesh_header(pp::PrettyPrinter, mesh_type::String, D::Int, T::Type, npts)
+    print_mesh_header(pp::PrettyPrinter, mesh_type::String, D::Int, T::Type, npts) -> Nothing
 
-Prints a colored header for mesh objects.
+Print a styled header for mesh objects.
 """
 function print_mesh_header(pp::PrettyPrinter, mesh_type::String, D::Int, T::Type, npts)
     printstyled(pp.io, mesh_type; bold = true, color = :cyan)
@@ -15,9 +15,9 @@ function print_mesh_header(pp::PrettyPrinter, mesh_type::String, D::Int, T::Type
 end
 
 """
-	print_mesh_summary(pp::PrettyPrinter, npts, topodim::Int, collapsed::Bool)
+    print_mesh_summary(pp::PrettyPrinter, npts, topodim::Int, collapsed::Bool) -> Nothing
 
-Prints a summary line for mesh properties (number of points, topology).
+Print a summary line for mesh properties (number of points, topology).
 """
 function print_mesh_summary(pp::PrettyPrinter, npts, topodim::Int, collapsed::Bool)
     print_indent(pp)
@@ -49,9 +49,9 @@ function print_mesh_summary(pp::PrettyPrinter, npts, topodim::Int, collapsed::Bo
 end
 
 """
-	print_mesh_domain_info(pp::PrettyPrinter, set::CartesianProduct)
+    print_mesh_domain_info(pp::PrettyPrinter, set::CartesianProduct) -> Nothing
 
-Prints the domain information for a mesh.
+Print the domain information for a mesh.
 """
 function print_mesh_domain_info(pp::PrettyPrinter, set::CartesianProduct)
     print_indent(pp)
@@ -63,9 +63,9 @@ function print_mesh_domain_info(pp::PrettyPrinter, set::CartesianProduct)
 end
 
 """
-	print_mesh_spacing_info(pp::PrettyPrinter, uniform::Bool, hmax)
+    print_mesh_spacing_info(pp::PrettyPrinter, uniform::Union{Bool, Tuple{Vararg{Bool}}}, hmax) -> Nothing
 
-Prints mesh spacing information.
+Print mesh spacing information and maximum cell diagonal.
 """
 function print_mesh_spacing_info(
         pp::PrettyPrinter, uniform::Union{
@@ -99,9 +99,9 @@ function print_mesh_spacing_info(
 end
 
 """
-	print_mesh_markers(pp::PrettyPrinter, mesh_markers::MeshMarkers)
+    print_mesh_markers(pp::PrettyPrinter, mesh_markers::MeshMarkers) -> Nothing
 
-Prints marker information for a mesh.
+Print marker information and labeled point counts for a mesh.
 """
 function print_mesh_markers(pp::PrettyPrinter, mesh_markers::MeshMarkers)
     n_markers = length(mesh_markers)

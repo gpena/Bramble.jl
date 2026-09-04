@@ -2,11 +2,11 @@ using Test
 using Bramble
 
 # `:boundary`/`:interior` are reserved markers every mesh now carries automatically,
-# computed from the mesh's own shape — see `_ensure_geometric_markers!`
-# (src/mesh/marker.jl). Every case here is checked against a real mesh's marker
+# computed from the mesh's own shape (see `_ensure_geometric_markers!`
+# in src/mesh/marker.jl). Every case here is checked against a real mesh's marker
 # BitVectors, not just that construction did or didn't throw.
 
-@testset "Reserved markers" begin
+@testset "Reserved geometric markers" begin
     S = interval(0.0, 1.0) × interval(0.0, 1.0)
 
     @testset "Default markers" begin
@@ -56,7 +56,7 @@ using Bramble
 
     @testset "Reserved symbol override" begin
         # `:boundary`/`:interior` were already usable as ordinary custom labels before this
-        # existed, so a mismatch warns rather than errors — the custom definition wins, not
+        # existed, so a mismatch warns rather than errors: the custom definition wins, not
         # the geometric one, since erroring would break that pre-existing freedom.
         Ωₕ = @test_logs (:warn, r"boundary.*something other than") mesh(
             domain(S, :boundary => :left), (4, 4), (true, true))

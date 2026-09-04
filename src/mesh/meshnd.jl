@@ -2,26 +2,30 @@
     D::Int) = throw(DimensionMismatch("the domain is $(d)-dimensional but npts and unif have length $D"))
 
 """
-	MeshnD{D,BT,CI,M1T,T}
+    MeshnD{D, BT, CI, SM, T} <: AbstractMeshType{D}
 
-A structured D-dimensional tensor-product mesh (D ∈ {2,3}).
+Structured multi-dimensional tensor-product mesh for spatial dimensions ``D \\in \\{2, 3\\}``.
 
-The mesh is constructed as a Cartesian product of 1D submeshes. Grid points are not
-stored explicitly; they are computed on demand from the tensor-product structure.
+Constructed as a Cartesian product of 1D submeshes ([`Mesh1D`](@ref)). Coordinate points
+are evaluated on demand from the tensor-product submeshes.
 
-# Type Parameters
+# Type parameters
 
-  - `D`: Spatial dimension (2 or 3)
-  - `BT <: Backend`: Linear algebra backend
-  - `CI`: CartesianIndices type
-  - `M1T <: AbstractMeshType{1}`: Type of 1D submeshes (typically Mesh1D)
-  - `T`: Element type (Float64, Float32, etc.)
+  - `D`: Spatial dimension (2 or 3).
+  - `BT <: Backend`: Computational linear algebra backend.
+  - `CI <: CartesianIndices{D}`: Cartesian index space.
+  - `SM <: Tuple`: Tuple of 1D submeshes (`Mesh1D`).
+  - `T`: Coordinate element type (`Float64`, `Float32`, etc.).
 
 # Fields
 
-$(FIELDS)
+  - `set`: Multi-dimensional geometric [`CartesianProduct`](@ref) domain.
+  - `markers`: [`MeshMarkers`](@ref) dictionary mapping symbols to `BitVector` indicators.
+  - `indices`: Multi-dimensional `CartesianIndices{D}` for the grid.
+  - `backend`: Linear algebra [`Backend`](@ref).
+  - `submeshes`: Tuple of `D` [`Mesh1D`](@ref) objects along each coordinate axis.
 
-# Example
+# Examples
 
 ```julia
 # Create a 2D mesh with 20×30 grid points
@@ -29,14 +33,14 @@ X = domain(interval(0, 1) × interval(0, 2))
 Ωₕ = mesh(X, (20, 30), (true, false))
 
 # Access submeshes
-x_mesh = Ωₕ(1)  # 1D mesh in x-direction
-y_mesh = Ωₕ(2)  # 1D mesh in y-direction
+x_mesh = Ωₕ(1)  # 1D mesh along x-axis
+y_mesh = Ωₕ(2)  # 1D mesh along y-axis
 
-# Get a specific point
-point(Ωₕ, (10, 15))  # Returns (x₁₀, y₁₅)
+# Query a specific point coordinate
+point(Ωₕ, (10, 15))  # returns (x₁₀, y₁₅)
 ```
 
-See also: [`Mesh1D`](@ref), [`submeshes`](@ref), [`mesh`](@ref)
+See also: [`Mesh1D`](@ref), [`submeshes`](@ref), [`mesh`](@ref).
 """
 mutable struct MeshnD{D, BT <: Backend, CI <: CartesianIndices{D}, SM <: Tuple, T} <:
                AbstractMeshType{D}
@@ -53,18 +57,18 @@ mutable struct MeshnD{D, BT <: Backend, CI <: CartesianIndices{D}, SM <: Tuple, 
 end
 
 """
-	submeshes(Ω::Domain, npts, unif, backend)
+    submeshes(Ω::Domain, npts, unif, backend) -> NTuple{D, Mesh1D}
 
-Creates the component 1D submeshes for a tensor-product grid.
+Create the component 1D submeshes for a tensor-product grid.
 
-This function takes a D-dimensional [`Domain`](@ref) and generates a tuple of `D` independent [`Mesh1D`](@ref) objects. Each submesh corresponds to one of the spatial dimensions of the original domain.
+Generates a tuple of `D` independent [`Mesh1D`](@ref) objects corresponding to each coordinate axis of `Ω`.
 
 # Arguments
 
-  - `Ω`: The D-dimensional [`Domain`](@ref).
-  - `npts`: A tuple containing the number of points for each dimension.
-  - `unif`: A tuple of booleans indicating if the grid is uniform in each dimension.
-  - `backend`: The linear algebra backend.
+  - `Ω`: Multi-dimensional continuous [`Domain`](@ref).
+  - `npts`: Number of points along each dimension.
+  - `unif`: Flags indicating whether each axis is uniformly partitioned.
+  - `backend`: Computational linear algebra [`Backend`](@ref).
 """
 @inline function submeshes(Ω::Domain, npts, unif, backend)
     # Use ntuple for a type-stable way to generate the tuple of 1D meshes.
@@ -76,18 +80,19 @@ This function takes a D-dimensional [`Domain`](@ref) and generates a tuple of `D
 end
 
 """
-	_mesh(Ω::Domain, npts, unif, backend)
+    _mesh(Ω::Domain, npts::NTuple{D, Int}, unif::NTuple{D, Bool}, backend) -> MeshnD{D}
 
-Internal constructor for a D-dimensional, tensor-product `MeshnD`.
+Internal constructor for multi-dimensional tensor-product mesh [`MeshnD`](@ref).
 
-Builds the 1D submeshes for each dimension and combines them into a single [`MeshnD`](@ref) object. A "collapsed" dimension (an interval that is just a point) forces that dimension's point count to 1.
+Builds the 1D submeshes along each axis and combines them into a [`MeshnD`](@ref). Collapsed
+dimensions (degenerate single-point intervals) are forced to a point count of 1.
 
 # Arguments
 
-  - `Ω`: The D-dimensional [`Domain`](@ref) to be meshed.
-  - `npts`: An `NTuple{D, Int}` specifying the number of points in each dimension.
-  - `unif`: An `NTuple{D, Bool}` specifying if the grid is uniform in each dimension.
-  - `backend`: The linear algebra backend.
+  - `Ω`: Multi-dimensional continuous [`Domain`](@ref) to discretize.
+  - `npts`: Number of points in each spatial dimension.
+  - `unif`: Uniformity flags for each spatial dimension.
+  - `backend`: Linear algebra [`Backend`](@ref).
 """
 function _mesh(Ω::Domain, npts::NTuple{D, Int}, unif::NTuple{D, Bool}, backend) where {D}
     # Ensure the dimension of the domain matches the length of the input tuples.
@@ -118,9 +123,9 @@ end
 @inline eltype(::Type{<:MeshnD{D, BT}}) where {D, BT} = eltype(BT)
 
 """
-	(Ωₕ::MeshnD)(i)
+    (Ωₕ::MeshnD)(i::Integer) -> Mesh1D
 
-Returns the `i`-th submesh of `Ωₕ`.
+Return the `i`-th 1D submesh of `Ωₕ` along coordinate axis `i`.
 """
 @inline function (Ωₕ::MeshnD{D})(i) where {D}
     @boundscheck 1 <= i <= D || throw(BoundsError(Ωₕ.submeshes, i))
@@ -171,9 +176,9 @@ end
 @generate_mesh_ntuple_func half_spacings
 
 """
-	spacings(Ωₕ::MeshnD)
+    spacings(Ωₕ::MeshnD{D}) -> NTuple{D, AbstractVector}
 
-Returns the per-axis backward spacings as an `NTuple{D}` of vectors, where
+Return the per-axis backward spacings as an `NTuple{D}` of vectors, where
 `spacings(Ωₕ)[d][i]` is [`spacing`](@ref)`(Ωₕ(d), i)`.
 
 See also: [`half_spacings`](@ref), [`cell_measures`](@ref).
@@ -190,9 +195,9 @@ See also: [`half_spacings`](@ref), [`cell_measures`](@ref).
     i -> _apply_hs_logic(half_spacing(Ωₕ(i), idx[i])), Val(D))
 
 """
-	cell_measures(Ωₕ::MeshnD)
+    cell_measures(Ωₕ::MeshnD{D}) -> NTuple{D, AbstractVector}
 
-Returns the per-axis cell widths as an `NTuple{D}` of vectors. The measure of an
+Return the per-axis cell widths as an `NTuple{D}` of vectors. The measure of an
 individual cell is the product of its per-axis widths; see [`cell_measure`](@ref).
 """
 @inline cell_measures(Ωₕ::MeshnD{D}) where {D} = ntuple(i -> cell_measures(Ωₕ(i)), Val(D))
@@ -242,7 +247,7 @@ end
 
 @inline cell_measures_iterator(Ωₕ::MeshnD) = (cell_measure(Ωₕ, idx) for idx in indices(Ωₕ))
 
-# The geometric refinement alone, with markers left untouched — shared by both public
+# The geometric refinement alone, with markers left untouched: shared by both public
 # methods below, neither of which wants the *other*'s marker handling as an intermediate
 # step of its own.
 function _refine_indices!(Ωₕ::MeshnD{D}) where {D}
@@ -265,10 +270,10 @@ function iterative_refinement!(Ωₕ::MeshnD{D}) where {D}
     # wrong rather than merely absent: `haskey(markers(Ωₕ), :boundary)` still answers
     # `true`, its BitVector still indexes without erroring (it is shorter than the new
     # point count, not longer), and every point beyond its old length reads as "not
-    # boundary" — found by refining a mesh and reassembling a Poisson problem on it, where
+    # boundary" (found by refining a mesh and reassembling a Poisson problem on it, where
     # the boundary rows past the old length never got constrained and the system went
-    # singular with no error naming why. `:boundary`/`:interior` need no domain to
-    # recompute — they come from the mesh's own shape alone — so they are rebuilt
+    # singular with no error naming why). `:boundary`/`:interior` need no domain to
+    # recompute: they come from the mesh's own shape alone, so they are rebuilt
     # unconditionally here. Anything else the mesh was carrying (a domain's own custom
     # labels) cannot be re-derived without that domain, so it is dropped rather than left
     # stale; the two-argument form re-evaluates those too, and does not route through this
@@ -309,11 +314,11 @@ function change_points!(Ωₕ::MeshnD{D}, domain_markers::DomainMarkers, pts) wh
 end
 
 """
-	Base.copy(Ωₕ::MeshnD)
+    Base.copy(Ωₕ::MeshnD{D}) -> MeshnD{D}
 
-Creates a copy of the mesh `Ωₕ`. The copy is shallow with respect to the immutable fields
-(`set`, `indices`, `backend`), but deep with respect to the mutable data fields
-(`submeshes`, `markers`) which are copied.
+Create a copy of mesh `Ωₕ`. The copy is shallow with respect to immutable fields
+(`set`, `indices`, `backend`), but deep with respect to mutable data fields
+(`submeshes`, `markers`).
 """
 function Base.copy(Ωₕ::MeshnD{D}) where {D}
     return MeshnD(Ωₕ.set,
@@ -324,9 +329,9 @@ function Base.copy(Ωₕ::MeshnD{D}) where {D}
 end
 
 """
-	Base.show(io::IO, Ωₕ::MeshnD)
+    Base.show(io::IO, Ωₕ::MeshnD) -> Nothing
 
-Custom display for MeshnD objects with detailed mesh information and colors.
+Custom display for `MeshnD` objects with detailed mesh summary, domain information, and markers.
 """
 function Base.show(io::IO, Ωₕ::MeshnD{D, BT, CI, SM, T}) where {D, BT, CI, SM, T}
     pp = PrettyPrinter(io)

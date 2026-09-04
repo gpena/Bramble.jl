@@ -16,7 +16,7 @@ See also: [`Mesh1D`](@ref), [`MeshnD`](@ref), [`Domain`](@ref)
 #------------------------------------------------------------------------------------------#
 
 """
-	AbstractMeshType{D}
+    AbstractMeshType{D}
 
 Abstract supertype for all mesh types in Bramble. The type parameter `D` represents
 the spatial dimension of the mesh (1, 2, or 3).
@@ -27,11 +27,11 @@ All concrete mesh types must implement the AbstractMeshType interface, including
   - `points`, `point`, `half_points`, `half_point`
   - `spacing`, `half_spacing`, `forward_spacing`
 
-# Type Parameter
+# Type parameters
 
   - `D`: Spatial dimension (1, 2, or 3)
 
-# Related Types
+# Related types
 
   - Meshes are created from a [`Domain`](@ref) using the [`mesh`](@ref) function.
   - See [`MeshMarkers`](@ref) for marker management on meshes.
@@ -45,21 +45,24 @@ abstract type AbstractMeshType{D} end
 #------------------------------------------------------------------------------------------#
 
 """
-	generate_indices(pts)
+    generate_indices(pts::Int) -> CartesianIndices{1}
+    generate_indices(pts::NTuple{D, Int}) -> CartesianIndices{D}
+    generate_indices(pts::SVector{D, Int}) -> CartesianIndices{D}
 
-Returns the `CartesianIndices` of a mesh with `pts[i]` points in each direction.
+Return the `CartesianIndices` of a mesh with `pts[i]` points in each direction.
 
-For scalar input (`Int`), returns 1D `CartesianIndices`. For tuple/vector input,
-returns multi-dimensional `CartesianIndices`.
+For scalar input (`Int`), returns 1D `CartesianIndices`. For tuple or static vector
+input, returns multi-dimensional `CartesianIndices`.
 """
 @inline generate_indices(pts::Int) = CartesianIndices((pts,))
 @inline generate_indices(pts::NTuple{D, Int}) where {D} = CartesianIndices(pts)
 @inline generate_indices(pts::SVector{D, Int}) where {D} = CartesianIndices(Tuple(pts))
 
 """
-	is_boundary_index(idxs::CartesianIndices, idx)
+    is_boundary_index(idxs::CartesianIndices{D}, idx) -> Bool
+    is_boundary_index(Ωₕ::AbstractMeshType, idx) -> Bool
 
-Checks if a given index `idx` lies on the boundary of a `CartesianIndices` domain.
+Determine whether index `idx` lies on the boundary of `idxs` or mesh `Ωₕ`.
 """
 function is_boundary_index(idxs::CartesianIndices{D}, idx) where {D}
     _idx = CartesianIndex(idx)
@@ -73,9 +76,10 @@ function is_boundary_index(idxs::CartesianIndices{D}, idx) where {D}
 end
 
 """
-	boundary_indices(idxs::CartesianIndices)
+    boundary_indices(idxs::CartesianIndices{D}) -> NTuple{2D, CartesianIndices{D}}
+    boundary_indices(Ωₕ::AbstractMeshType{D}) -> NTuple{2D, CartesianIndices{D}}
 
-Returns all boundary facets of a `CartesianIndices` domain as a tuple of `CartesianIndices`.
+Return all boundary facets of a `CartesianIndices` domain or mesh `Ωₕ` as a tuple of `CartesianIndices`.
 """
 @inline function boundary_indices(idxs::CartesianIndices)
     tup = boundary_symbol_to_cartesian(idxs)
@@ -83,9 +87,10 @@ Returns all boundary facets of a `CartesianIndices` domain as a tuple of `Cartes
 end
 
 """
-	interior_indices(indices::CartesianIndices)
+    interior_indices(indices::CartesianIndices{D}) -> CartesianIndices{D}
+    interior_indices(Ωₕ::AbstractMeshType{D}) -> CartesianIndices{D}
 
-Computes the `CartesianIndices` representing the interior of a given domain, excluding
+Compute the `CartesianIndices` representing the interior of a domain or mesh, excluding
 all boundary points. Dimensions with a length of one or less remain unchanged.
 """
 @inline function interior_indices(indices::CartesianIndices{D}) where {D}
@@ -108,52 +113,52 @@ end
 #------------------------------------------------------------------------------------------#
 
 """
-	set(Ωₕ::AbstractMeshType)
+    set(Ωₕ::AbstractMeshType) -> AbstractSetType
 
-Returns the geometric set of the domain over which the mesh `Ωₕ` is defined.
+Return the underlying geometric set of the domain over which mesh `Ωₕ` is defined.
 """
 @inline set(Ωₕ::AbstractMeshType) = Ωₕ.set
 
 """
-	indices(Ωₕ::AbstractMeshType)
+    indices(Ωₕ::AbstractMeshType) -> CartesianIndices
 
-Returns the `CartesianIndices` associated with the points of mesh `Ωₕ`.
+Return the `CartesianIndices` associated with the points of mesh `Ωₕ`.
 """
 @inline indices(Ωₕ::AbstractMeshType) = Ωₕ.indices
 
 """
-	backend(Ωₕ::AbstractMeshType)
+    backend(Ωₕ::AbstractMeshType) -> Backend
 
-Returns the linear algebra [`Backend`](@ref) associated with the mesh `Ωₕ`.
+Return the linear algebra [`Backend`](@ref) associated with mesh `Ωₕ`.
 """
 @inline backend(Ωₕ::AbstractMeshType) = Ωₕ.backend
 
 """
-	execution_policy(Ωₕ::AbstractMeshType)
+    execution_policy(Ωₕ::AbstractMeshType) -> ExecutionPolicy
 
-Returns the [`ExecutionPolicy`](@ref) ([`Serial`](@ref) or [`Parallel`](@ref)) of the
-[`Backend`](@ref) associated with the mesh `Ωₕ`.
+Return the [`ExecutionPolicy`](@ref) ([`Serial`](@ref) or [`Parallel`](@ref)) of the
+[`Backend`](@ref) associated with mesh `Ωₕ`.
 """
 @inline execution_policy(Ωₕ::AbstractMeshType) = execution_policy(backend(Ωₕ))
 
 """
-	markers(Ωₕ::AbstractMeshType)
+    markers(Ωₕ::AbstractMeshType) -> MeshMarkers
 
-Returns the `MeshMarkers` dictionary associated with the mesh `Ωₕ`.
+Return the [`MeshMarkers`](@ref) dictionary associated with mesh `Ωₕ`.
 """
 @inline markers(Ωₕ::AbstractMeshType) = Ωₕ.markers
 
 """
-	index_in_marker(Ωₕ::AbstractMeshType, label::Symbol)
+    index_in_marker(Ωₕ::AbstractMeshType, label::Symbol) -> BitVector
 
-Returns the `BitVector` associated with the marker `label` in mesh `Ωₕ`.
+Return the `BitVector` indicator associated with marker `label` in mesh `Ωₕ`.
 """
 @inline index_in_marker(Ωₕ::AbstractMeshType, label::Symbol) = markers(Ωₕ)[label]
 
 """
-	set_indices!(Ωₕ::AbstractMeshType, indices)
+    set_indices!(Ωₕ::AbstractMeshType, indices::CartesianIndices) -> Nothing
 
-Overrides the indices in `Ωₕ`. Used internally during mesh refinement.
+Override the grid indices in `Ωₕ`. Used internally during mesh refinement.
 """
 @inline set_indices!(Ωₕ::AbstractMeshType, indices) = (Ωₕ.indices = indices; return)
 
@@ -209,12 +214,22 @@ end
 # storage, and the storage should follow the geometry it is built on; passing `backend`
 # explicitly still overrides it, which is how a mesh gets a type the domain does not have.
 """
-	$(SIGNATURES)
+    mesh(Ω::Domain, npts::NTuple{D, Int}, unif::NTuple{D, Bool}; backend = backend(eltype(Ω))) -> AbstractMeshType{D}
+    mesh(Ω::Domain{<:CartesianProduct{1}}, npts::Int, unif::Bool = true; backend = backend(eltype(Ω))) -> Mesh1D
+    mesh(Ω::Domain, npts::NTuple{D, Int}; uniform = ntuple(_ -> true, Val(D)), backend = backend(eltype(Ω))) -> MeshnD
 
-Returns a [`Mesh1D`](@ref) or a [`MeshnD`](@ref) (``D=2,3``) defined on the [`Domain`](@ref) `Ω`.
+Return a [`Mesh1D`](@ref) or [`MeshnD`](@ref) (``D=2,3``) discretizing the [`Domain`](@ref) `Ω`.
 
-The number of points for each coordinate direction is given in `npts`.
-The distribution of points on the submeshes is given by `unif` (or keyword `uniform`, default `true`).
+# Arguments
+
+  - `Ω`: Continuous domain to discretize.
+  - `npts`: Number of grid points along each coordinate direction.
+  - `unif`: Boolean flag or tuple of flags specifying whether the point distribution along each axis is uniform.
+
+# Keywords
+
+  - `uniform`: Convenience keyword alternative to positional `unif`. Defaults to `true` across all axes.
+  - `backend`: Linear algebra and memory storage [`Backend`](@ref). Defaults to `backend(eltype(Ω))`.
 
 # Examples
 
@@ -239,26 +254,26 @@ X = domain(interval(0, 1) × interval(4, 5))
     backend = backend(eltype(Ω))) where {D} = _mesh(Ω, npts, uniform, backend)
 
 #------------------------------------------------------------------------------------------#
-#------------------------------------------------------------------------------------------#
 # Required Interface Methods
 #------------------------------------------------------------------------------------------#
 
 """
-	dim(Ωₕ::AbstractMeshType)
-	dim(::Type{<:AbstractMeshType})
+    dim(Ωₕ::AbstractMeshType{D}) -> Int
+    dim(::Type{<:AbstractMeshType{D}}) -> Int
 
-Returns the spatial dimension ``D`` of the domain where `Ωₕ` is embedded.
+Return the spatial dimension ``D`` of the domain where `Ωₕ` is embedded.
 """
 @inline dim(::AbstractMeshType{D}) where {D} = D
 @inline dim(::Type{<:AbstractMeshType{D}}) where {D} = D
 
 """
-	topo_dim(Ωₕ::AbstractMeshType)
+    topo_dim(Ωₕ::AbstractMeshType{D}) -> Int
 
-Returns the topological dimension of `Ωₕ`.
+Return the topological dimension of `Ωₕ`.
 
 The topological dimension counts the number of coordinate axes with more than one point,
-identifying degenerate or collapsed dimensions (e.g. lines or points embedded in 2D/3D).
+identifying degenerate or collapsed dimensions (such as manifolds or boundaries embedded
+in higher-dimensional ambient space).
 """
 @inline function topo_dim(Ωₕ::AbstractMeshType{D}) where {D}
     count = 0
@@ -269,10 +284,10 @@ identifying degenerate or collapsed dimensions (e.g. lines or points embedded in
 end
 
 """
-	eltype(Ωₕ::AbstractMeshType)
-	eltype(::Type{<:AbstractMeshType})
+    eltype(Ωₕ::AbstractMeshType) -> Type
+    eltype(::Type{<:AbstractMeshType}) -> Type
 
-Returns the floating-point coordinate element type of the points in `Ωₕ`.
+Return the floating-point coordinate element type of the points in `Ωₕ`.
 """
 function eltype(Ωₕ::AbstractMeshType)
     error("Interface function 'eltype' not implemented for mesh of type $(typeof(Ωₕ)).")
@@ -283,38 +298,38 @@ function eltype(::Type{<:AbstractMeshType})
 end
 
 """
-	points(Ωₕ::AbstractMeshType)
+    points(Ωₕ::AbstractMeshType) -> Union{Vector, NTuple}
 
-Returns the coordinates of the mesh points:
-- For 1D meshes (`Mesh1D`): returns a coordinate vector `Vector{T}` of length ``N_x``.
-- For nD meshes (`MeshnD`): returns an `NTuple{D, Vector{T}}` containing the 1D coordinate vectors along each axis.
+Return the coordinates of the mesh points:
+  - For 1D meshes ([`Mesh1D`](@ref)): returns a coordinate vector `Vector{T}` of length ``N_x``.
+  - For nD meshes ([`MeshnD`](@ref)): returns an `NTuple{D, Vector{T}}` containing the 1D coordinate vectors along each axis.
 
 See also: [`point`](@ref), [`points_iterator`](@ref).
 """
 function points end
 
 """
-	point(Ωₕ::AbstractMeshType, idx)
+    point(Ωₕ::AbstractMeshType, idx)
 
-Returns the coordinate point at index `idx` (linear integer, tuple `(i, j)`, or `CartesianIndex`):
-- For 1D meshes: scalar coordinate ``x_i``.
-- For nD meshes: coordinate tuple ``(x_{i_1}, \\dots, x_{i_D})``.
+Return the coordinate point at index `idx` (linear integer, tuple `(i, j)`, or `CartesianIndex`):
+  - For 1D meshes: scalar coordinate ``x_i``.
+  - For nD meshes: coordinate tuple ``(x_{i_1}, \\dots, x_{i_D})``.
 
-Direct indexing `Ωₕ[idx]` is also supported.
+Direct indexing `Ωₕ[idx]` delegates to `point(Ωₕ, idx)`.
 """
 function point end
 
 """
-	points_iterator(Ωₕ::AbstractMeshType)
+    points_iterator(Ωₕ::AbstractMeshType)
 
-Returns an iterator yielding coordinate points across the entire mesh.
+Return an iterator yielding coordinate points across the entire mesh.
 """
 function points_iterator end
 
 """
-	half_points(Ωₕ::AbstractMeshType)
+    half_points(Ωₕ::AbstractMeshType)
 
-Returns the precomputed cell centers (half-points) for each coordinate axis:
+Return the precomputed cell centers (half-points) for each coordinate axis:
 ```math
 x_{i+1/2} = \\frac{x_i + x_{i+1}}{2}, \\quad i = 1, \\dots, N-1.
 ```
@@ -322,134 +337,138 @@ x_{i+1/2} = \\frac{x_i + x_{i+1}}{2}, \\quad i = 1, \\dots, N-1.
 function half_points end
 
 """
-	half_point(Ωₕ::AbstractMeshType, idx)
+    half_point(Ωₕ::AbstractMeshType, idx)
 
-Returns the cell center (half-point) coordinate corresponding to index `idx`.
+Return the cell center (half-point) coordinate corresponding to index `idx`.
 """
 function half_point end
 
 """
-	half_points_iterator(Ωₕ::AbstractMeshType)
+    half_points_iterator(Ωₕ::AbstractMeshType)
 
-Returns an iterator over cell center (half-point) coordinates.
+Return an iterator over cell center (half-point) coordinates.
 """
 function half_points_iterator end
 
 """
-	spacing(Ωₕ::AbstractMeshType, idx)
+    spacing(Ωₕ::AbstractMeshType, idx)
 
-Returns the backward spacing ``h_i = x_i - x_{i-1}`` at index `idx` (for ``i=1``, returns ``x_2 - x_1``).
+Return the backward spacing ``h_i = x_i - x_{i-1}`` at index `idx` (for ``i=1``, returns ``x_2 - x_1``).
 For nD meshes, returns a tuple of backward spacings along each axis.
 """
 function spacing end
 
 """
-	spacings_iterator(Ωₕ::AbstractMeshType)
+    spacings_iterator(Ωₕ::AbstractMeshType)
 
-Returns an iterator over backward spacings across mesh points.
+Return an iterator over backward spacings across mesh points.
 """
 function spacings_iterator end
 
 """
-	forward_spacing(Ωₕ::AbstractMeshType, idx)
+    forward_spacing(Ωₕ::AbstractMeshType, idx)
 
-Returns the forward spacing ``h_{i+1} = x_{i+1} - x_i`` at index `idx` (for ``i=N``, returns ``x_N - x_{N-1}``).
+Return the forward spacing ``h_{i+1} = x_{i+1} - x_i`` at index `idx` (for ``i=N``, returns ``x_N - x_{N-1}``).
 For nD meshes, returns a tuple of forward spacings along each axis.
 """
 function forward_spacing end
 
 """
-	forward_spacings_iterator(Ωₕ::AbstractMeshType)
+    forward_spacings_iterator(Ωₕ::AbstractMeshType)
 
-Returns an iterator over forward spacings across mesh points.
+Return an iterator over forward spacings across mesh points.
 """
 function forward_spacings_iterator end
 
 """
-	half_spacings(Ωₕ::AbstractMeshType)
+    half_spacings(Ωₕ::AbstractMeshType)
 
-Returns the cell widths (half-spacings) ``h_{i+1/2} = \\frac{h_i + h_{i+1}}{2}`` along each axis.
+Return the cell widths (half-spacings) along each axis:
+```math
+h_{i+1/2} = \\frac{h_i + h_{i+1}}{2}.
+```
 """
 function half_spacings end
 
 """
-	half_spacing(Ωₕ::AbstractMeshType, idx)
+    half_spacing(Ωₕ::AbstractMeshType, idx)
 
-Returns the cell width (half-spacing) at index `idx`.
+Return the cell width (half-spacing) at index `idx`.
 """
 function half_spacing end
 
 """
-	half_spacings_iterator(Ωₕ::AbstractMeshType)
+    half_spacings_iterator(Ωₕ::AbstractMeshType)
 
-Returns an iterator over cell widths (half-spacings).
+Return an iterator over cell widths (half-spacings).
 """
 function half_spacings_iterator end
 
 """
-	npoints(Ωₕ::AbstractMeshType, [::Type{Tuple}])
+    npoints(Ωₕ::AbstractMeshType) -> Int
+    npoints(Ωₕ::AbstractMeshType, ::Type{Tuple}) -> NTuple{D, Int}
 
-Returns the total number of points in `Ωₕ`.
+Return the total number of points in `Ωₕ`.
 When passing `Tuple` as the second argument, returns a tuple with the number of points along each dimension.
 """
 function npoints end
 
 """
-	hₘₐₓ(Ωₕ::AbstractMeshType)
+    hₘₐₓ(Ωₕ::AbstractMeshType) -> Real
 
-Returns the maximum diagonal stepsize across all cells in the mesh:
+Return the maximum diagonal stepsize across all cells in the mesh:
 ```math
-h_{\\max} = \\max_{idx} \\| (h_{1, idx_1}, \\dots, h_{D, idx_D}) \\|_2.
+h_{\\max} = \\max_{\\mathbf{i}} \\| (h_{1, i_1}, \\dots, h_{D, i_D}) \\|_2.
 ```
 """
 function hₘₐₓ end
 
 """
-	hₘᵢₙ(Ωₕ::AbstractMeshType)
+    hₘᵢₙ(Ωₕ::AbstractMeshType) -> Real
 
-Returns the diagonal of the smallest cell in the mesh, the counterpart of [`hₘₐₓ`](@ref):
-- In 1D: ``\\min_i (x_i - x_{i-1})``.
-- In nD:
+Return the diagonal of the smallest cell in the mesh, the counterpart of [`hₘₐₓ`](@ref):
+  - In 1D: ``\\min_i (x_i - x_{i-1})``.
+  - In nD:
 
 ```math
-h_{\\min} = \\min_{idx} \\| (h_{1, idx_1}, \\dots, h_{D, idx_D}) \\|_2.
+h_{\\min} = \\min_{\\mathbf{i}} \\| (h_{1, i_1}, \\dots, h_{D, i_D}) \\|_2.
 ```
 
 This is a diagonal rather than an edge length, so that `hₘₐₓ` and `hₘᵢₙ` measure the same
-kind of quantity. For the smallest extent along one coordinate, ask that submesh:
+kind of quantity. For the smallest extent along one coordinate, query that submesh directly:
 `hₘᵢₙ(Ωₕ(i))`.
 """
 function hₘᵢₙ end
 
 """
-	cell_measure(Ωₕ::AbstractMeshType, idx)
+    cell_measure(Ωₕ::AbstractMeshType, idx) -> Real
 
-Returns the control volume (length, area, or volume) of the cell centered at index `idx`:
+Return the control volume (length, area, or volume) of the cell centered at index `idx`:
 ```math
-\\text{meas}(\\square_{idx}) = \\prod_{d=1}^D h_{d, idx_d+1/2}.
+\\operatorname{meas}(\\square_{\\mathbf{i}}) = \\prod_{d=1}^D h_{d, i_d+1/2}.
 ```
 """
 function cell_measure end
 
 """
-	cell_measures_iterator(Ωₕ::AbstractMeshType)
+    cell_measures_iterator(Ωₕ::AbstractMeshType)
 
-Returns an iterator yielding the volume/measure of each cell in the mesh.
+Return an iterator yielding the volume or measure of each cell in the mesh.
 """
 function cell_measures_iterator end
 
 """
-	iterative_refinement!(Ωₕ::AbstractMeshType, [domain_markers::DomainMarkers])
+    iterative_refinement!(Ωₕ::AbstractMeshType, [domain_markers::DomainMarkers]) -> AbstractMeshType
 
-Refines the mesh `Ωₕ` in-place by halving each existing cell (inserting new points at midpoints).
+Refine the mesh `Ωₕ` in-place by halving each existing cell (inserting new points at midpoints).
 If domain markers are supplied, they are re-evaluated onto the refined grid points.
 """
 function iterative_refinement! end
 
 """
-	change_points!(Ωₕ::AbstractMeshType, [domain_markers::DomainMarkers], pts)
+    change_points!(Ωₕ::AbstractMeshType, [domain_markers::DomainMarkers], pts) -> AbstractMeshType
 
-Updates the coordinates of mesh `Ωₕ` in-place using new point coordinates in `pts`,
+Update the coordinates of mesh `Ωₕ` in-place using new point coordinates in `pts`,
 recalculating all cached half-points and cell spacings.
 """
 function change_points! end
@@ -459,9 +478,9 @@ function change_points! end
 #------------------------------------------------------------------------------------------#
 
 """
-	is_uniform(Ωₕ::AbstractMeshType; tol=1e-10)
+    is_uniform(Ωₕ::AbstractMeshType; tol = 1e-10) -> Bool
 
-Checks if the mesh has uniform spacing (within numerical tolerance).
+Check whether the mesh has uniform spacing (within numerical tolerance `tol`).
 """
 function is_uniform(Ωₕ::AbstractMeshType{1}; tol = 1e-10)
     n = npoints(Ωₕ)
@@ -487,54 +506,54 @@ end
 #------------------------------------------------------------------------------------------#
 
 """
-	Base.size(Ωₕ::AbstractMeshType)
-	Base.size(Ωₕ::AbstractMeshType, d::Integer)
+    Base.size(Ωₕ::AbstractMeshType) -> NTuple{D, Int}
+    Base.size(Ωₕ::AbstractMeshType, d::Integer) -> Int
 
-Returns the tuple of point counts along each spatial dimension, matching `npoints(Ωₕ, Tuple)`.
+Return the tuple of point counts along each spatial dimension, matching `npoints(Ωₕ, Tuple)`.
 """
 @inline Base.size(Ωₕ::AbstractMeshType) = npoints(Ωₕ, Tuple)
 @inline Base.size(Ωₕ::AbstractMeshType, d::Integer) = npoints(Ωₕ, Tuple)[d]
 
 """
-	Base.length(Ωₕ::AbstractMeshType)
+    Base.length(Ωₕ::AbstractMeshType) -> Int
 
-Returns the total number of points in `Ωₕ`, matching `npoints(Ωₕ)`.
+Return the total number of points in `Ωₕ`, matching `npoints(Ωₕ)`.
 """
 @inline Base.length(Ωₕ::AbstractMeshType) = npoints(Ωₕ)
 
 """
-	Base.axes(Ωₕ::AbstractMeshType)
-	Base.axes(Ωₕ::AbstractMeshType, d::Integer)
+    Base.axes(Ωₕ::AbstractMeshType)
+    Base.axes(Ωₕ::AbstractMeshType, d::Integer)
 
-Returns the axes of the mesh's `CartesianIndices`.
+Return the axes of the mesh's `CartesianIndices`.
 """
 @inline Base.axes(Ωₕ::AbstractMeshType) = axes(indices(Ωₕ))
 @inline Base.axes(Ωₕ::AbstractMeshType, d::Integer) = axes(indices(Ωₕ), d)
 
 """
-	Base.firstindex(Ωₕ::AbstractMeshType)
-	Base.firstindex(Ωₕ::AbstractMeshType, d::Integer)
+    Base.firstindex(Ωₕ::AbstractMeshType)
+    Base.firstindex(Ωₕ::AbstractMeshType, d::Integer)
 
-Returns the first valid index of `Ωₕ`.
+Return the first valid index of `Ωₕ`.
 """
 @inline Base.firstindex(::AbstractMeshType{1}) = 1
 @inline Base.firstindex(Ωₕ::AbstractMeshType{D}) where {D} = first(indices(Ωₕ))
 @inline Base.firstindex(Ωₕ::AbstractMeshType, d::Integer) = 1
 
 """
-	Base.lastindex(Ωₕ::AbstractMeshType)
-	Base.lastindex(Ωₕ::AbstractMeshType, d::Integer)
+    Base.lastindex(Ωₕ::AbstractMeshType)
+    Base.lastindex(Ωₕ::AbstractMeshType, d::Integer)
 
-Returns the last valid index of `Ωₕ`.
+Return the last valid index of `Ωₕ`.
 """
 @inline Base.lastindex(Ωₕ::AbstractMeshType{1}) = npoints(Ωₕ)
 @inline Base.lastindex(Ωₕ::AbstractMeshType{D}) where {D} = last(indices(Ωₕ))
 @inline Base.lastindex(Ωₕ::AbstractMeshType, d::Integer) = size(Ωₕ, d)
 
 """
-	Base.iterate(Ωₕ::AbstractMeshType, [state])
+    Base.iterate(Ωₕ::AbstractMeshType, [state])
 
-Iterates over all grid points of `Ωₕ`, returning coordinates `point(Ωₕ, idx)` for each index.
+Iterate over all grid points of `Ωₕ`, returning coordinates `point(Ωₕ, idx)` for each index.
 """
 @inline function Base.iterate(Ωₕ::AbstractMeshType{1}, state = 1)
     state > npoints(Ωₕ) && return nothing
@@ -552,15 +571,15 @@ end
 #------------------------------------------------------------------------------------------#
 
 """
-	stepsize(Ωₕ::AbstractMeshType)
-	stepsize(Ωₕ::AbstractMeshType, d::Integer)
+    stepsize(Ωₕ::AbstractMeshType) -> Union{Real, NTuple{D, Real}}
+    stepsize(Ωₕ::AbstractMeshType, d::Integer) -> Real
 
-Returns the constant stepsize for a uniform mesh:
-- In 1D: returns scalar ``h = x_2 - x_1``.
-- In nD: returns a tuple ``(h_1, \\dots, h_D)`` of stepsizes along each coordinate axis.
-- When `d` is specified: returns the stepsize along dimension `d`.
+Return the constant stepsize for a uniform mesh:
+  - In 1D: returns scalar ``h = x_2 - x_1``.
+  - In nD: returns a tuple ``(h_1, \\dots, h_D)`` of stepsizes along each coordinate axis.
+  - When `d` is specified: returns the stepsize along dimension `d`.
 
-Throws an error if the mesh is not uniform.
+Throws an `ArgumentError` if the mesh is not uniform.
 
 See also: [`is_uniform`](@ref), [`spacing`](@ref).
 """
@@ -578,14 +597,16 @@ end
 @inline stepsize(Ωₕ::AbstractMeshType, d::Integer) = stepsize(Ωₕ(d))
 
 """
-	locate_cell(Ωₕ::AbstractMeshType, x)
+    locate_cell(Ωₕ::AbstractMeshType{1}, x::Real) -> Int
+    locate_cell(Ωₕ::AbstractMeshType{D}, x) -> CartesianIndex{D}
 
-Locates the cell containing continuous coordinate `x`:
-- For 1D meshes: returns integer index `i \\in 1:N-1` such that ``x_i \\le x \\le x_{i+1}``
-  (clamped to the domain boundaries).
-- For nD meshes: returns a `CartesianIndex{D}` locating the bounding cell along each dimension.
+Locate the cell containing continuous coordinate `x`:
+  - For 1D meshes: returns integer index `i \\in 1:N-1` such that ``x_i \\le x \\le x_{i+1}``
+    (clamped to the domain boundaries).
+  - For nD meshes: returns a `CartesianIndex{D}` locating the bounding cell along each dimension.
 
 # Examples
+
 ```julia
 Ωₕ = mesh(domain(interval(0.0, 1.0)), 11)  # h = 0.1
 locate_cell(Ωₕ, 0.35)  # returns 4 (interval [0.3, 0.4])
@@ -595,29 +616,29 @@ function locate_cell end
 @inline locate_cell(Ωₕ::AbstractMeshType{D}, x::AbstractVector) where {D} = locate_cell(Ωₕ, Tuple(x))
 
 """
-	normal_vector(::AbstractMeshType{D}, symbol::Symbol)
-	normal_vector(Val(D), symbol::Symbol)
-	normal_vector(symbol::Symbol)
+    normal_vector(Ωₕ::AbstractMeshType{D}, symbol::Symbol) -> SVector{D, Float64}
+    normal_vector(::Val{D}, symbol::Symbol) -> SVector{D, Float64}
 
-Returns the outward unit normal vector (as an `SVector{D, Float64}`) associated with a standard
+Return the outward unit normal vector (as an `SVector{D, Float64}`) associated with a standard
 boundary facet label (`:left`, `:right`, `:bottom`, `:top`, `:front`, `:back`).
 
 # Conventions
-- 1D:
-  - `:left`  ``\\to (-1.0)``
-  - `:right` ``\\to (+1.0)``
-- 2D:
-  - `:left`   ``\\to (-1.0, 0.0)``
-  - `:right`  ``\\to (+1.0, 0.0)``
-  - `:bottom` ``\\to (0.0, -1.0)``
-  - `:top`    ``\\to (0.0, +1.0)``
-- 3D:
-  - `:back`   ``\\to (-1.0, 0.0, 0.0)``
-  - `:front`  ``\\to (+1.0, 0.0, 0.0)``
-  - `:left`   ``\\to (0.0, -1.0, 0.0)``
-  - `:right`  ``\\to (0.0, +1.0, 0.0)``
-  - `:bottom` ``\\to (0.0, 0.0, -1.0)``
-  - `:top`    ``\\to (0.0, 0.0, +1.0)``
+
+  - 1D:
+      - `:left`  ``\\to (-1.0)``
+      - `:right` ``\\to (+1.0)``
+  - 2D:
+      - `:left`   ``\\to (-1.0, 0.0)``
+      - `:right`  ``\\to (+1.0, 0.0)``
+      - `:bottom` ``\\to (0.0, -1.0)``
+      - `:top`    ``\\to (0.0, +1.0)``
+  - 3D:
+      - `:back`   ``\\to (-1.0, 0.0, 0.0)``
+      - `:front`  ``\\to (+1.0, 0.0, 0.0)``
+      - `:left`   ``\\to (0.0, -1.0, 0.0)``
+      - `:right`  ``\\to (0.0, +1.0, 0.0)``
+      - `:bottom` ``\\to (0.0, 0.0, -1.0)``
+      - `:top`    ``\\to (0.0, 0.0, +1.0)``
 
 See also: [`get_boundary_symbols`](@ref).
 """

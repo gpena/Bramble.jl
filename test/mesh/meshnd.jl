@@ -1,10 +1,48 @@
-using Bramble: is_boundary_index, CartesianProduct, MeshnD, Backend, backend
+# Unit and property tests for multi-dimensional tensor-product meshes (2D and 3D).
+# Verifies tensor-product submesh coordination, boundary queries, marker assignment,
+# iterative refinement, and cell measure calculations.
+
+using Test
+using Bramble
+using Bramble: is_boundary_index, CartesianProduct, MeshnD, Backend, backend,
+               set, is_collapsed, topo_dim, is_uniform, Mesh1D, MeshMarkers,
+               boundary_symbol_to_dict, points_iterator, half_points_iterator,
+               spacings_iterator, forward_spacings_iterator, half_spacings_iterator,
+               cell_measures_iterator, cell_measure, half_point, half_spacing,
+               forward_spacing, points, point, spacing, spacings, cell_measures,
+               iterative_refinement!, change_points!
 using LinearAlgebra: hypot
 using Random
 using Supposition
 
+if !@isdefined(alloc_test)
+    @inline function alloc_test(f::F, args...; kwargs...) where {F}
+        f(args...; kwargs...)
+        return @allocated(f(args...; kwargs...))
+    end
+end
+
+if !@isdefined(var"@test_allocs")
+    macro test_allocs(call_expr)
+        if Meta.isexpr(call_expr, :call)
+            fn = call_expr.args[1]
+            args = call_expr.args[2:end]
+            quote
+                @test alloc_test($(esc(fn)), $(map(esc, args)...)) == 0
+            end
+        else
+            quote
+                let
+                    $(esc(call_expr))
+                    @test (@allocated $(esc(call_expr))) == 0
+                end
+            end
+        end
+    end
+end
+
 # --- Test Suite ---
-@testset "MeshND" begin
+@testset "Multi-dimensional meshes" begin
     # Helper function to create a simple nD domain
     function create_test_nd_domain(intervals::NTuple{D, Tuple{Float64, Float64}}; markers = nothing) where {D}
         nd_intervals = map(t -> interval(t[1], t[2]), intervals)
@@ -23,7 +61,7 @@ using Supposition
         return prod
     end
 
-    @testset "Helpers" begin
+    @testset "Helper utilities" begin
         @testset "boundary_symbol_to_dict 2D" begin
             indices = CartesianIndices((4, 5)) # N=4, M=5
             dict = boundary_symbol_to_dict(indices)
@@ -84,7 +122,7 @@ using Supposition
         end
     end # Helper Functions Testset
 
-    @testset "2D" begin
+    @testset "Two-dimensional meshes" begin
         D = 2
         npts_2d = (4, 5) # Nx=4, Ny=5
         intervals_2d = ((0.0, 3.0), (0.0, 4.0)) # dx=1.0, dy=1.0
@@ -92,7 +130,7 @@ using Supposition
         Ωₕ_2d_unif = mesh(Ω_2d, npts_2d, (true, true); backend = backend())
         Ωₕ_2d_nonunif = mesh(Ω_2d, npts_2d, (false, true); backend = backend())
 
-        @testset "Construction & properties" begin
+        @testset "Construction and properties" begin
             @test Ωₕ_2d_unif isa MeshnD{2}
             @test backend(Ωₕ_2d_unif) isa Backend
             @test eltype(Ωₕ_2d_unif) == Float64
@@ -211,7 +249,7 @@ using Supposition
             Ωₕ_2d_marked = mesh(Ω_2d_marked, npts_2d, (true, true); backend = backend()) # Pts: x=[0,1,2,3], y=[0,1,2,3,4]
         end
 
-        @testset "Modification" begin
+        @testset "Mesh modification" begin
             Ω_2d_dummy = create_test_nd_set(intervals_2d)
 
             # Setup for modification tests
@@ -241,14 +279,14 @@ using Supposition
         end
     end # Dimension D=2 Testset
 
-    @testset "3D" begin
+    @testset "Three-dimensional meshes" begin
         D = 3
         npts_3d = (3, 4, 2) # Nx=3, Ny=4, Nz=2
         intervals_3d = ((0.0, 2.0), (0.0, 3.0), (0.0, 1.0)) # dx=1.0, dy=1.0, dz=1.0
         Ω_3d = create_test_nd_domain(intervals_3d)
         Ωₕ_3d_unif = mesh(Ω_3d, npts_3d, (true, true, true); backend = backend())
 
-        @testset "Construction & properties" begin
+        @testset "Construction and properties" begin
             @test Ωₕ_3d_unif isa MeshnD{3}
             @test backend(Ωₕ_3d_unif) isa Backend
             @test eltype(Ωₕ_3d_unif) == Float64
@@ -332,7 +370,7 @@ using Supposition
     end # Dimension D=3 Testset
 
     @testset "Additional methods" begin
-        @testset "Iterators" begin
+        @testset "Grid iterators" begin
             intervals_2d = ((0.0, 2.0), (0.0, 2.0))
             Ω_2d = create_test_nd_domain(intervals_2d)
             Ωₕ = mesh(Ω_2d, (3, 3), (true, true); backend = backend()) # 3x3 uniform
@@ -402,7 +440,7 @@ using Supposition
             @test dim(typeof(Ωₕ_3d)) == 3
         end
 
-        @testset "Accessors" begin
+        @testset "Field accessors" begin
             intervals_2d = ((0.0, 1.0), (0.0, 1.0))
             Ω = create_test_nd_domain(intervals_2d)
             Ωₕ = mesh(Ω, (4, 4), (true, true); backend = backend())
@@ -435,7 +473,7 @@ using Supposition
             @test topo_dim(Ωₕ_line) == 1  # Only 1 non-collapsed dimension
         end
 
-        @testset "Collapsed dimension" begin
+        @testset "Collapsed dimensions" begin
             # A line y = 5 embedded in 2D: the collapsed axis must sit at 5, not 0.
             Ω_line = create_test_nd_domain(((0.0, 1.0), (5.0, 5.0)))
             Ωₕ_line = mesh(Ω_line, (3, 4), (true, true); backend = backend())
@@ -452,7 +490,7 @@ using Supposition
             @test point(Ωₕ_pt, (1, 1, 1)) == (2.0, 3.0, 4.0)
         end
 
-        @testset "_apply_hs_logic" begin
+        @testset "Half-spacing logic" begin
             # Test the helper function for collapsed dimensions
             using Bramble: _apply_hs_logic
 
@@ -461,7 +499,7 @@ using Supposition
             @test _apply_hs_logic(2.0) == 2.0
         end
 
-        @testset "forward_spacing" begin
+        @testset "Forward spacing" begin
             intervals_2d = ((0.0, 2.0), (0.0, 2.0))
             Ω = create_test_nd_domain(intervals_2d)
             Ωₕ = mesh(Ω, (3, 3), (true, true); backend = backend())
@@ -473,7 +511,7 @@ using Supposition
             @test forward_spacing(Ωₕ, CartesianIndex(2, 1)) == (1.0, 1.0)
         end
 
-        @testset "Indexing" begin
+        @testset "Grid indexing" begin
             intervals_2d = ((0.0, 2.0), (0.0, 4.0))
             Ω = create_test_nd_domain(intervals_2d)
             Ωₕ = mesh(Ω, (3, 5))
@@ -483,7 +521,7 @@ using Supposition
             @test Ωₕ[CartesianIndex(3, 5)] == (2.0, 4.0)
         end
 
-        @testset "Show" begin
+        @testset "Pretty printing" begin
             intervals_2d = ((0.0, 1.0), (0.0, 2.0))
             Ω = create_test_nd_domain(intervals_2d)
             Ωₕ = mesh(Ω, (4, 4))
@@ -638,7 +676,7 @@ end # Main Testset
     end
 end
 
-@testset "hₘₐₓ diagonal" begin
+@testset "Maximum diagonal stepsize" begin
     # hₘₐₓ is computed per axis and combined with hypot, rather than by visiting every
     # cell. The two agree because the spacing along one axis does not depend on the other
     # coordinates and hypot is increasing in each argument, but that is a property of the
@@ -656,7 +694,10 @@ end
     end
 
     # and it costs nothing, which is the point of computing it this way
-    Ωₕ = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (30, 30, 30),
-        (true, true, true))
-    @test_allocs hₘₐₓ(Ωₕ)
+    let
+        Ωₕ = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (30, 30, 30),
+            (true, true, true))
+        eval_hmax(m) = hₘₐₓ(m)
+        @test_allocs eval_hmax(Ωₕ)
+    end
 end
