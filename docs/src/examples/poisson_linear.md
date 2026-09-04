@@ -52,6 +52,15 @@ uₕ .= A \ F
 nothing # hide
 ```
 
+## Visualizing the solution
+
+A heatmap of the field just solved for, `uₕ` from the block above — no new solve needed:
+
+```@example poisson_linear
+include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
+heatmap_plot(uₕ; title = "Linear Poisson, 2D")
+```
+
 ## Checking the answer
 
 Not just that it ran — that it converges at the rate the scheme promises, on genuinely random
