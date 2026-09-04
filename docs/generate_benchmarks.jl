@@ -3,6 +3,11 @@
 using BenchmarkTools
 using Dates
 
+include(joinpath(@__DIR__, "chartjs_common.jl"))
+
+const _BENCH_CHART_COUNTER = Ref(0)
+_next_bench_chart_id() = "bench_chart_$(_BENCH_CHART_COUNTER[] += 1)"
+
 function _get_commit_info(commit_hash::AbstractString, path::AbstractString)
     try
         msg = readchomp(pipeline(`git log -1 --format="%s" $commit_hash`, stderr = devnull))
@@ -65,300 +70,207 @@ function _select_unit(max_ns::Real)
     end
 end
 
-function _nice_axis_max(max_val::Real)
-    magnitude = 10.0^floor(log10(max(max_val, 1e-6)))
-    norm = max_val / magnitude
-    nice_norm = norm <= 1.0 ? 1.0 :
-                (norm <= 1.5 ? 1.5 :
-                 (norm <= 2.0 ? 2.0 : (norm <= 3.0 ? 3.0 : (norm <= 5.0 ? 5.0 : 10.0))))
-    return nice_norm * magnitude
-end
+const _BENCH_PALETTE = ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4",
+    "#f97316"]
 
-function _render_svg_barchart_single(
+# Single run: a horizontal bar per benchmark. No trend to show, so no head-script emission
+# here — the caller (generate_benchmarks_markdown) emits chartjs_head() once for the page.
+function _render_chartjs_barchart_single(
         gname, sorted_bnames, runs, max_time_ns, unit_label, unit_divisor)
     r = runs[1]
-    palette = ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4", "#f97316"]
-    max_val = max_time_ns / unit_divisor
-    axis_max = _nice_axis_max(max_val)
+    chart_id = _next_bench_chart_id()
+    height = 60 + length(sorted_bnames) * 34
 
-    bar_h = 16
-    row_gap = 14
-    total_row_h = bar_h + row_gap
-    label_w = 170
-    bar_area_w = 260
-    chart_w = label_w + bar_area_w + 90
-    top_m = 40
-    bottom_m = 30
-    total_h = top_m + length(sorted_bnames) * total_row_h + bottom_m
-
-    io = IOBuffer()
-    println(io,
-        "<div style=\"width:100%; max-width:$(chart_w)px; background:var(--documenter-bg, #fff); border:1px solid rgba(128,128,128,0.2); border-radius:8px; padding:0.8em; box-sizing:border-box;\">")
-    println(io,
-        "<svg viewBox=\"0 0 $chart_w $total_h\" width=\"100%\" style=\"font-family:-apple-system, BlinkMacSystemFont, juliamono, monospace; display:block;\">")
-
-    # Header legend
-    println(io,
-        "<rect x=\"$(label_w + 10)\" y=\"15\" width=\"12\" height=\"12\" rx=\"2\" fill=\"#3b82f6\" />")
-    println(io,
-        "<text x=\"$(label_w + 28)\" y=\"25\" font-size=\"12\" fill=\"currentColor\" opacity=\"0.9\">$(r.commit) (Julia $(r.julia))</text>")
-
-    # Grid ticks
-    for frac in 0.0:0.25:1.0
-        gx = label_w + 10 + frac * bar_area_w
-        tick_val = round(frac * axis_max; digits = 1)
-        println(io,
-            "<line x1=\"$gx\" y1=\"$(top_m - 5)\" x2=\"$gx\" y2=\"$(total_h - bottom_m + 5)\" stroke=\"rgba(128,128,128,0.18)\" stroke-dasharray=\"3,3\" />")
-        println(io,
-            "<text x=\"$gx\" y=\"$(total_h - bottom_m + 18)\" font-size=\"10\" fill=\"currentColor\" opacity=\"0.65\" text-anchor=\"middle\">$tick_val $unit_label</text>")
-    end
-
-    y = top_m + 5
+    labels = String[]
+    values = Float64[]
+    colors = String[]
+    tooltips = String[]
     for (idx, bname) in enumerate(sorted_bnames)
-        c = palette[mod1(idx, length(palette))]
-        mid_y = y + bar_h / 2 + 4
-        println(io,
-            "<text x=\"$label_w\" y=\"$mid_y\" font-size=\"11\" font-weight=\"bold\" fill=\"currentColor\" text-anchor=\"end\">$bname</text>")
-        bx = label_w + 10
+        push!(labels, "\"$bname\"")
+        push!(colors, "\"$(_BENCH_PALETTE[mod1(idx, length(_BENCH_PALETTE))])\"")
         if haskey(r.data, gname) && haskey(r.data[gname], bname)
             m = median(r.data[gname][bname])
             t_val = time(m) / unit_divisor
-            bw = max(2.0, (t_val / axis_max) * bar_area_w)
-            t_str = string(round(t_val; digits = 1), " ", unit_label)
-            println(io,
-                "<rect x=\"$bx\" y=\"$y\" width=\"$bw\" height=\"$bar_h\" rx=\"3\" fill=\"$c\" opacity=\"0.9\">")
-            println(io, "<title>$(r.commit): $t_str</title></rect>")
-            println(io,
-                "<text x=\"$(bx + bw + 5)\" y=\"$(y + bar_h - 3)\" font-size=\"11\" fill=\"currentColor\" opacity=\"0.85\">$t_str</text>")
+            push!(values, t_val)
+            push!(tooltips, "\"$(_format_time(time(m)))\"")
         else
-            println(io,
-                "<text x=\"$bx\" y=\"$(y + bar_h - 3)\" font-size=\"11\" fill=\"currentColor\" opacity=\"0.4\">—</text>")
+            push!(values, 0.0)
+            push!(tooltips, "\"—\"")
         end
-        y += total_row_h
     end
 
-    println(io, "</svg></div>")
-    return String(take!(io))
+    return """
+    <div style="width:100%; max-width:520px;">
+      <canvas id="$chart_id" height="$height"></canvas>
+    </div>
+    <script>
+    (function () {
+      const theme = window.brambleChartTheme();
+      const tooltips = [$(join(tooltips, ","))];
+      const chart = new Chart(document.getElementById('$chart_id').getContext('2d'), {
+        type: 'bar',
+        data: {
+          labels: [$(join(labels, ","))],
+          datasets: [{
+            label: "$(r.commit) (Julia $(r.julia))",
+            data: [$(join(values, ","))],
+            backgroundColor: [$(join(colors, ","))],
+            borderRadius: 4,
+          }],
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: theme.text } },
+            tooltip: { callbacks: { label: (c) => tooltips[c.dataIndex] } },
+          },
+          scales: {
+            x: {
+              title: { display: true, text: "$unit_label", color: theme.text },
+              ticks: { color: theme.text }, grid: { color: theme.grid }, border: { color: theme.axis },
+            },
+            y: { ticks: { color: theme.text }, grid: { display: false }, border: { color: theme.axis } },
+          },
+        },
+      });
+      window.brambleRegisterChart(chart, function (c) {
+        const t = window.brambleChartTheme();
+        c.options.plugins.legend.labels.color = t.text;
+        c.options.scales.x.title.color = t.text;
+        c.options.scales.x.ticks.color = t.text;
+        c.options.scales.x.grid.color = t.grid;
+        c.options.scales.x.border.color = t.axis;
+        c.options.scales.y.ticks.color = t.text;
+        c.options.scales.y.border.color = t.axis;
+      });
+    })();
+    </script>
+    """
 end
 
-function _render_svg_trend_chart(
+function _render_chartjs_trend_chart(
         gname, sorted_bnames, runs, max_time_ns, min_time_ns, unit_label, unit_divisor)
     num_runs = length(runs)
-    num_benchmarks = length(sorted_bnames)
 
     if num_runs == 1
-        return _render_svg_barchart_single(
+        return _render_chartjs_barchart_single(
             gname, sorted_bnames, runs, max_time_ns, unit_label, unit_divisor)
     end
 
-    palette = ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4", "#f97316"]
+    chart_id = _next_bench_chart_id()
 
-    # If the operations in this group differ by more than 20x (e.g. 150ns vs 1.7ms),
-    # use a normalized relative scale (T / T_baseline) so small operations are not flattened.
+    # If the operations in this group differ by more than 20x (e.g. 150ns vs 1.7ms), plot a
+    # normalized relative scale (T / T_baseline) instead of absolute time, so small operations
+    # are not flattened against a group's largest one.
     use_normalized = (max_time_ns / max(min_time_ns, 1.0)) > 20.0
 
-    chart_w = 540
-    pad_l = 65
-    pad_r = 25
-    pad_t = num_benchmarks > 4 ? 65 : 45
-    pad_b = num_runs > 6 ? 60 : 45
-    plot_w = chart_w - pad_l - pad_r
-    plot_h = 195
-    chart_h = pad_t + plot_h + pad_b
+    labels_js = "[" * join(("\"$(r.commit)\"" for r in runs), ",") * "]"
 
-    io = IOBuffer()
-    println(io,
-        "<div style=\"width:100%; max-width:$(chart_w)px; background:var(--documenter-bg, #fff); border:1px solid rgba(128,128,128,0.2); border-radius:8px; padding:0.8em; box-sizing:border-box;\">")
-    println(io,
-        "<svg viewBox=\"0 0 $chart_w $chart_h\" width=\"100%\" style=\"font-family:-apple-system, BlinkMacSystemFont, juliamono, monospace; display:block;\">")
-
-    # Legend at top (wrapping if needed)
-    leg_x = pad_l
-    leg_y = 16
+    datasets = String[]
     for (idx, bname) in enumerate(sorted_bnames)
-        c = palette[mod1(idx, length(palette))]
-        if leg_x > chart_w - 110
-            leg_x = pad_l
-            leg_y += 18
+        color = _BENCH_PALETTE[mod1(idx, length(_BENCH_PALETTE))]
+        pts = String[]
+        t0 = 0.0
+        for r in runs
+            if haskey(r.data, gname) && haskey(r.data[gname], bname)
+                m = median(r.data[gname][bname])
+                t_ns = time(m)
+                t0 == 0.0 && (t0 = t_ns)
+                y_val = use_normalized ? t_ns / t0 : t_ns / unit_divisor
+                delta_str = use_normalized ?
+                            "\"$(_format_time(t_ns)) (" *
+                            (t_ns == t0 ? "baseline" :
+                             (t_ns < t0 ? "-" : "+") *
+                             "$(round(abs(t_ns / t0 - 1) * 100, digits = 1))%" ) *
+                            ")\"" :
+                            "\"$(_format_time(t_ns))\""
+                push!(pts, """{x:"$(r.commit)",y:$(y_val),julia:"$(r.julia)",
+                    detail:$(delta_str),allocs:$(allocs(m)),mem:"$(_format_memory(memory(m)))"}""")
+            else
+                push!(pts, "null")
+            end
         end
-        println(io,
-            "<line x1=\"$leg_x\" y1=\"$leg_y\" x2=\"$(leg_x + 14)\" y2=\"$leg_y\" stroke=\"$c\" stroke-width=\"2.5\" />")
-        println(io, "<circle cx=\"$(leg_x + 7)\" cy=\"$leg_y\" r=\"3.5\" fill=\"$c\" />")
-        println(io,
-            "<text x=\"$(leg_x + 18)\" y=\"$(leg_y + 4)\" font-size=\"11\" font-weight=\"bold\" fill=\"currentColor\">$bname</text>")
-        leg_x += length(bname) * 7 + 38
+        push!(datasets, """
+            {
+              label: "$bname",
+              data: [$(join(pts, ","))],
+              borderColor: "$color",
+              backgroundColor: "$color",
+              spanGaps: true,
+              pointRadius: 4,
+              pointHoverRadius: 6,
+              borderWidth: 2,
+              tension: 0.15,
+            }""")
     end
 
-    x_coords = [pad_l + (i - 1) * (plot_w / max(1, num_runs - 1)) for i in 1:num_runs]
-
+    # The 1.0x reference line in normalized mode, flat across every commit.
     if use_normalized
-        # Relative scale: 1.0 is baseline
-        # Compute max relative ratio across all points
-        max_ratio = 1.25
-        min_ratio = 0.75
-        for bname in sorted_bnames
-            t0 = 0.0
-            for (i, r) in enumerate(runs)
-                if haskey(r.data, gname) && haskey(r.data[gname], bname)
-                    t_ns = time(median(r.data[gname][bname]))
-                    if t0 == 0.0
-                        t0 = t_ns
-                    end
-                    ratio = t_ns / t0
-                    max_ratio = max(max_ratio, ratio)
-                    min_ratio = min(min_ratio, ratio)
-                end
-            end
-        end
-        y_max = ceil(max_ratio * 1.15; digits = 2)
-        y_min = max(0.0, floor(min_ratio * 0.85; digits = 2))
-
-        # Y-axis ticks & grid lines
-        for frac in 0.0:0.25:1.0
-            y = pad_t + plot_h - frac * plot_h
-            val = round(y_min + frac * (y_max - y_min); digits = 2)
-            dash = val == 1.0 ? "stroke-width=\"1.8\"" : "stroke-dasharray=\"3,3\""
-            color = val == 1.0 ? "rgba(59, 130, 246, 0.4)" : "rgba(128,128,128,0.18)"
-            println(io,
-                "<line x1=\"$pad_l\" y1=\"$y\" x2=\"$(pad_l + plot_w)\" y2=\"$y\" stroke=\"$color\" $dash />")
-            label_text = val == 1.0 ? "1.0× (ref)" : "$(val)×"
-            println(io,
-                "<text x=\"$(pad_l - 8)\" y=\"$(y + 4)\" font-size=\"10\" fill=\"currentColor\" opacity=\"0.7\" text-anchor=\"end\">$label_text</text>")
-        end
-
-        # X-axis ticks (commits)
-        for (i, r) in enumerate(runs)
-            x = x_coords[i]
-            println(io,
-                "<line x1=\"$x\" y1=\"$pad_t\" x2=\"$x\" y2=\"$(pad_t + plot_h)\" stroke=\"rgba(128,128,128,0.15)\" stroke-dasharray=\"2,2\" />")
-            commit_str = "`$(r.commit)`"
-            if num_runs > 6
-                println(io,
-                    "<text x=\"$x\" y=\"$(pad_t + plot_h + 18)\" font-size=\"10\" font-family=\"monospace\" fill=\"currentColor\" opacity=\"0.8\" text-anchor=\"end\" transform=\"rotate(-35, $x, $(pad_t + plot_h + 18))\">$commit_str</text>")
-            else
-                println(io,
-                    "<text x=\"$x\" y=\"$(pad_t + plot_h + 20)\" font-size=\"11\" font-family=\"monospace\" fill=\"currentColor\" opacity=\"0.8\" text-anchor=\"middle\">$commit_str</text>")
-            end
-        end
-
-        # Plot lines and nodes
-        for (idx, bname) in enumerate(sorted_bnames)
-            c = palette[mod1(idx, length(palette))]
-            points = Tuple{Float64, Float64, Int, Float64, Float64, Int, Int}[]
-            t0 = 0.0
-            for (i, r) in enumerate(runs)
-                if haskey(r.data, gname) && haskey(r.data[gname], bname)
-                    m = median(r.data[gname][bname])
-                    t_ns = time(m)
-                    if t0 == 0.0
-                        t0 = t_ns
-                    end
-                    ratio = t_ns / t0
-                    x = x_coords[i]
-                    y = pad_t + plot_h - ((ratio - y_min) / (y_max - y_min)) * plot_h
-                    push!(points, (x, y, i, ratio, t_ns, allocs(m), memory(m)))
-                end
-            end
-
-            if length(points) >= 2
-                pts_str = join(
-                    ["$(round(p[1], digits=1)),$(round(p[2], digits=1))" for p in points],
-                    " ")
-                println(io,
-                    "<polyline points=\"$pts_str\" fill=\"none\" stroke=\"$c\" stroke-width=\"2.5\" stroke-linejoin=\"round\" opacity=\"0.88\" />")
-            end
-
-            for (p_idx, p) in enumerate(points)
-                x, y, r_idx, ratio, t_ns, a_cnt, mem_cnt = p
-                r = runs[r_idx]
-                t_str = _format_time(t_ns)
-                mem_str = _format_memory(mem_cnt)
-                pct_vs_base = round((ratio - 1.0) * 100; digits = 1)
-                delta_str = pct_vs_base == 0.0 ? "baseline" :
-                            (pct_vs_base > 0 ? "+$pct_vs_base%" : "$pct_vs_base%")
-                println(io,
-                    "<circle cx=\"$(round(x, digits=1))\" cy=\"$(round(y, digits=1))\" r=\"4.5\" fill=\"$c\" stroke=\"var(--documenter-bg, #fff)\" stroke-width=\"1.5\">")
-                println(io,
-                    "<title>$(r.commit) (Julia $(r.julia))\n$bname: $t_str ($delta_str, $a_cnt allocs, $mem_str)</title></circle>")
-
-                if num_runs <= 6 || p_idx == 1 || p_idx == length(points)
-                    println(io,
-                        "<text x=\"$(round(x, digits=1))\" y=\"$(round(y - 7, digits=1))\" font-size=\"10\" font-weight=\"bold\" fill=\"$c\" text-anchor=\"middle\">$(round(ratio, digits=2))×</text>")
-                end
-            end
-        end
-    else
-        # Absolute linear scale
-        max_val = max_time_ns / unit_divisor
-        axis_max = _nice_axis_max(max_val)
-
-        # Y-axis ticks & grid lines
-        for frac in 0.0:0.25:1.0
-            y = pad_t + plot_h - frac * plot_h
-            val = round(frac * axis_max; digits = 1)
-            println(io,
-                "<line x1=\"$pad_l\" y1=\"$y\" x2=\"$(pad_l + plot_w)\" y2=\"$y\" stroke=\"rgba(128,128,128,0.18)\" stroke-dasharray=\"3,3\" />")
-            println(io,
-                "<text x=\"$(pad_l - 8)\" y=\"$(y + 4)\" font-size=\"10\" fill=\"currentColor\" opacity=\"0.65\" text-anchor=\"end\">$val $unit_label</text>")
-        end
-
-        # X-axis ticks (commits)
-        for (i, r) in enumerate(runs)
-            x = x_coords[i]
-            println(io,
-                "<line x1=\"$x\" y1=\"$pad_t\" x2=\"$x\" y2=\"$(pad_t + plot_h)\" stroke=\"rgba(128,128,128,0.15)\" stroke-dasharray=\"2,2\" />")
-            commit_str = "`$(r.commit)`"
-            if num_runs > 6
-                println(io,
-                    "<text x=\"$x\" y=\"$(pad_t + plot_h + 18)\" font-size=\"10\" font-family=\"monospace\" fill=\"currentColor\" opacity=\"0.8\" text-anchor=\"end\" transform=\"rotate(-35, $x, $(pad_t + plot_h + 18))\">$commit_str</text>")
-            else
-                println(io,
-                    "<text x=\"$x\" y=\"$(pad_t + plot_h + 20)\" font-size=\"11\" font-family=\"monospace\" fill=\"currentColor\" opacity=\"0.8\" text-anchor=\"middle\">$commit_str</text>")
-            end
-        end
-
-        # Plot lines and nodes
-        for (idx, bname) in enumerate(sorted_bnames)
-            c = palette[mod1(idx, length(palette))]
-            points = Tuple{Float64, Float64, Int, Float64, Int, Int}[]
-            for (i, r) in enumerate(runs)
-                if haskey(r.data, gname) && haskey(r.data[gname], bname)
-                    m = median(r.data[gname][bname])
-                    t_val = time(m) / unit_divisor
-                    x = x_coords[i]
-                    y = pad_t + plot_h - (min(t_val, axis_max) / axis_max) * plot_h
-                    push!(points, (x, y, i, t_val, allocs(m), memory(m)))
-                end
-            end
-
-            if length(points) >= 2
-                pts_str = join(
-                    ["$(round(p[1], digits=1)),$(round(p[2], digits=1))" for p in points],
-                    " ")
-                println(io,
-                    "<polyline points=\"$pts_str\" fill=\"none\" stroke=\"$c\" stroke-width=\"2.5\" stroke-linejoin=\"round\" opacity=\"0.88\" />")
-            end
-
-            for (p_idx, p) in enumerate(points)
-                x, y, r_idx, t_val, a_cnt, mem_cnt = p
-                r = runs[r_idx]
-                t_str = string(round(t_val, digits = 1), " ", unit_label)
-                mem_str = _format_memory(mem_cnt)
-                println(io,
-                    "<circle cx=\"$(round(x, digits=1))\" cy=\"$(round(y, digits=1))\" r=\"4.5\" fill=\"$c\" stroke=\"var(--documenter-bg, #fff)\" stroke-width=\"1.5\">")
-                println(io,
-                    "<title>$(r.commit) (Julia $(r.julia))\n$bname: $t_str ($a_cnt allocs, $mem_str)</title></circle>")
-
-                if num_runs <= 6 || p_idx == 1 || p_idx == length(points)
-                    println(io,
-                        "<text x=\"$(round(x, digits=1))\" y=\"$(round(y - 7, digits=1))\" font-size=\"10\" font-weight=\"bold\" fill=\"$c\" text-anchor=\"middle\">$(round(t_val, digits=1))</text>")
-                end
-            end
-        end
+        ref_pts = join(("{x:\"$(r.commit)\",y:1}" for r in runs), ",")
+        push!(datasets, """
+            {
+              label: "1.0x (ref)",
+              data: [$ref_pts],
+              borderColor: "rgba(128,128,128,0.7)",
+              borderDash: [5,4],
+              borderWidth: 1.5,
+              pointRadius: 0,
+            }""")
     end
 
-    println(io, "</svg></div>")
-    return String(take!(io))
+    y_title = use_normalized ? "relative to baseline" : unit_label
+
+    return """
+    <div style="width:100%; max-width:560px;">
+      <canvas id="$chart_id" height="280"></canvas>
+    </div>
+    <script>
+    (function () {
+      const theme = window.brambleChartTheme();
+      const chart = new Chart(document.getElementById('$chart_id').getContext('2d'), {
+        type: 'line',
+        data: { labels: $labels_js, datasets: [$(join(datasets, ",\n"))] },
+        options: {
+          responsive: true,
+          interaction: { mode: 'nearest', axis: 'x', intersect: false },
+          plugins: {
+            legend: { position: 'top', labels: { color: theme.text, boxWidth: 12, font: { size: 11 } } },
+            tooltip: {
+              callbacks: {
+                title: (items) => items[0].raw.x + " (Julia " + items[0].raw.julia + ")",
+                label: (c) => c.raw ? c.dataset.label + ": " + (c.raw.detail || c.raw.y) +
+                  (c.raw.allocs !== undefined ? " (" + c.raw.allocs + " allocs, " + c.raw.mem + ")" : "") : c.dataset.label,
+              },
+            },
+          },
+          scales: {
+            x: {
+              ticks: { color: theme.text, maxRotation: 45, minRotation: 0, font: { family: 'monospace', size: 10 } },
+              grid: { color: theme.grid }, border: { color: theme.axis },
+            },
+            y: {
+              title: { display: true, text: "$y_title", color: theme.text },
+              ticks: { color: theme.text }, grid: { color: theme.grid }, border: { color: theme.axis },
+            },
+          },
+        },
+      });
+      window.brambleRegisterChart(chart, function (c) {
+        const t = window.brambleChartTheme();
+        c.options.plugins.legend.labels.color = t.text;
+        c.options.scales.x.ticks.color = t.text;
+        c.options.scales.x.grid.color = t.grid;
+        c.options.scales.x.border.color = t.axis;
+        c.options.scales.y.title.color = t.text;
+        c.options.scales.y.ticks.color = t.text;
+        c.options.scales.y.grid.color = t.grid;
+        c.options.scales.y.border.color = t.axis;
+      });
+    })();
+    </script>
+    """
 end
 
 function _render_table_html(gname, sorted_bnames, runs)
@@ -604,6 +516,14 @@ function generate_benchmarks_markdown(
     println(io, "## Comparative timings and allocations")
     println(io)
 
+    # Loaded once for the whole page — every chart below reuses window.Chart and the shared
+    # theme/registration helpers (chartjs_common.jl) rather than each re-loading the CDN
+    # script.
+    println(io, "```@raw html")
+    println(io, chartjs_head())
+    println(io, "```")
+    println(io)
+
     for gname in ordered_groups
         println(io, "### $(titlecase(gname))")
         println(io)
@@ -626,7 +546,7 @@ function generate_benchmarks_markdown(
 
         unit_label, unit_divisor = _select_unit(max_time_ns)
         table_html = _render_table_html(gname, sorted_bnames, runs)
-        chart_html = _render_svg_trend_chart(
+        chart_html = _render_chartjs_trend_chart(
             gname, sorted_bnames, runs, max_time_ns, min_time_ns, unit_label, unit_divisor)
 
         # Side-by-side flex layout
