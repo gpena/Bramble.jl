@@ -2,13 +2,28 @@
 # convergence plots). Included once per page that needs it — `generate_benchmarks.jl` for the
 # benchmark page, `convergence_plot.jl` for the four worked examples.
 #
-# Two problems every Chart.js-on-Documenter page has, solved once here rather than per call
-# site: Documenter ships RequireJS for MathJax, and Chart.js's UMD build detects the global
-# AMD `define` and registers as an anonymous module instead of attaching `window.Chart` — a
-# bare `<script src>` fails silently with "Chart is not defined". And Chart.js draws on a
-# canvas with JS-supplied colours, which (unlike the SVG plots' `currentColor`) do not track
-# Documenter's dark/light toggle on their own, so a chart drawn once in light colours turns
-# unreadable text-on-background after a toggle unless something repaints it.
+# Three problems every Chart.js-on-Documenter page has, solved once here rather than per call
+# site.
+#
+# Documenter ships RequireJS for MathJax, and Chart.js's UMD build detects the global AMD
+# `define` and registers as an anonymous module instead of attaching `window.Chart` — a bare
+# `<script src>` fails silently with "Chart is not defined".
+#
+# Chart.js draws on a canvas with JS-supplied colours, which (unlike the SVG plots'
+# `currentColor`) do not track Documenter's dark/light toggle on their own, so a chart drawn
+# once in light colours turns unreadable text-on-background after a toggle unless something
+# repaints it.
+#
+# `responsive: true` sizes a chart from its container's dimensions *at chart-creation time*,
+# which runs synchronously as each `<script>` tag executes while the page is still loading —
+# before web fonts finish swapping in and before every chart above it has settled the page's
+# final layout. A chart created against a not-yet-final container size can bake that size in
+# permanently: found live, on the deployed site rather than a fast local build (font/layout
+# timing is exactly the kind of thing that reproduces differently under real network
+# conditions), as every point in one chart landing on the same pixel row regardless of its
+# real value — axes drawn, data not. Fixed the same way for every chart at once, on
+# `window.load` once the whole page (fonts included) has truly finished, rather than any
+# per-chart guess about how long to wait.
 
 """
     chartjs_head() -> String
@@ -58,6 +73,33 @@ function chartjs_head()
           attributes: true,
           attributeFilter: ['class'],
         });
+      }
+
+      // The layout-race fix (see the module note above): once per page, after everything
+      // (fonts included) has truly finished loading, force every chart created so far to
+      // resize against its now-final container and relayout. `resize()` reads the actual
+      // current size; `update()` (not 'none' — this one may need to move real distance, not
+      // just recolour) redraws from it. A chart registered *after* window.load (later
+      // content on the same page) already has this page's final layout available at its own
+      // creation time, so it does not need the same rescue.
+      if (!window.__bramble_load_fix_installed) {
+        window.__bramble_load_fix_installed = true;
+        const rescue = function () {
+          for (const { chart } of window.__bramble_charts) {
+            chart.resize();
+            chart.update();
+          }
+        };
+        // `window.load` does not wait for web fonts — those load asynchronously and can
+        // still swap in (reflowing text, and with it every container's width) afterwards.
+        // `document.fonts.ready` is the one signal that actually waits for that; checked
+        // live and found `load` alone left one chart still stuck at its pre-font-swap size
+        // while every other chart on the same page had already settled by the time `load`
+        // fired. Both awaited, in whichever order they resolve, before the rescue pass runs.
+        const loaded = document.readyState === 'complete' ? Promise.resolve() :
+          new Promise((r) => window.addEventListener('load', r, { once: true }));
+        const fontsReady = (document.fonts && document.fonts.ready) || Promise.resolve();
+        Promise.all([loaded, fontsReady]).then(rescue);
       }
     </script>
     """

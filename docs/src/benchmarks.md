@@ -59,6 +59,33 @@ Comparing **6** recorded baselines in chronological order. The earliest run (`0b
       attributeFilter: ['class'],
     });
   }
+
+  // The layout-race fix (see the module note above): once per page, after everything
+  // (fonts included) has truly finished loading, force every chart created so far to
+  // resize against its now-final container and relayout. `resize()` reads the actual
+  // current size; `update()` (not 'none' — this one may need to move real distance, not
+  // just recolour) redraws from it. A chart registered *after* window.load (later
+  // content on the same page) already has this page's final layout available at its own
+  // creation time, so it does not need the same rescue.
+  if (!window.__bramble_load_fix_installed) {
+    window.__bramble_load_fix_installed = true;
+    const rescue = function () {
+      for (const { chart } of window.__bramble_charts) {
+        chart.resize();
+        chart.update();
+      }
+    };
+    // `window.load` does not wait for web fonts — those load asynchronously and can
+    // still swap in (reflowing text, and with it every container's width) afterwards.
+    // `document.fonts.ready` is the one signal that actually waits for that; checked
+    // live and found `load` alone left one chart still stuck at its pre-font-swap size
+    // while every other chart on the same page had already settled by the time `load`
+    // fired. Both awaited, in whichever order they resolve, before the rescue pass runs.
+    const loaded = document.readyState === 'complete' ? Promise.resolve() :
+      new Promise((r) => window.addEventListener('load', r, { once: true }));
+    const fontsReady = (document.fonts && document.fonts.ready) || Promise.resolve();
+    Promise.all([loaded, fontsReady]).then(rescue);
+  }
 </script>
 
 ```
@@ -402,7 +429,7 @@ detail:"690.8 μs",allocs:15,mem:"22.92 MiB"}],
 </div>
 ```
 
-### Jumps & Averages
+### Jumps and Averages
 
 ```@raw html
 <div style="display:flex; flex-wrap:wrap; gap:1.5rem; align-items:start; margin:1.2rem 0 2.5rem 0;">
@@ -496,7 +523,7 @@ detail:"690.8 μs",allocs:15,mem:"22.92 MiB"}],
     type: 'line',
     data: { labels: ["0b9a62b","855fbf5","41036bb","15f5e3b","e6655b1","2dec0c7"], datasets: [{
   label: "M₊ᵧ 2D",
-  data: [null,{x:"855fbf5",y:161.625,julia:"1.12.7",
+  data: [{x:"855fbf5",y:161.625,julia:"1.12.7",
 detail:"161.6 μs",allocs:3,mem:"7.64 MiB"},{x:"41036bb",y:165.125,julia:"1.12.7",
 detail:"165.1 μs",allocs:3,mem:"7.64 MiB"},{x:"15f5e3b",y:161.709,julia:"1.12.7",
 detail:"161.7 μs",allocs:3,mem:"7.64 MiB"},{x:"e6655b1",y:153.5,julia:"1.12.7",
@@ -512,7 +539,7 @@ detail:"161.3 μs",allocs:3,mem:"7.64 MiB"}],
 },
 {
   label: "M₊₂ 3D",
-  data: [null,{x:"855fbf5",y:227.833,julia:"1.12.7",
+  data: [{x:"855fbf5",y:227.833,julia:"1.12.7",
 detail:"227.8 μs",allocs:3,mem:"7.64 MiB"},{x:"41036bb",y:223.8125,julia:"1.12.7",
 detail:"223.8 μs",allocs:3,mem:"7.64 MiB"},{x:"15f5e3b",y:227.125,julia:"1.12.7",
 detail:"227.1 μs",allocs:3,mem:"7.64 MiB"},{x:"e6655b1",y:221.042,julia:"1.12.7",
@@ -528,7 +555,7 @@ detail:"227.7 μs",allocs:3,mem:"7.64 MiB"}],
 },
 {
   label: "M₊ₓ 2D",
-  data: [null,{x:"855fbf5",y:160.417,julia:"1.12.7",
+  data: [{x:"855fbf5",y:160.417,julia:"1.12.7",
 detail:"160.4 μs",allocs:3,mem:"7.64 MiB"},{x:"41036bb",y:162.5,julia:"1.12.7",
 detail:"162.5 μs",allocs:3,mem:"7.64 MiB"},{x:"15f5e3b",y:161.125,julia:"1.12.7",
 detail:"161.1 μs",allocs:3,mem:"7.64 MiB"},{x:"e6655b1",y:152.292,julia:"1.12.7",
@@ -544,7 +571,7 @@ detail:"161.6 μs",allocs:3,mem:"7.64 MiB"}],
 },
 {
   label: "jumpᵧ 2D",
-  data: [null,{x:"855fbf5",y:162.0,julia:"1.12.7",
+  data: [{x:"855fbf5",y:162.0,julia:"1.12.7",
 detail:"162.0 μs",allocs:3,mem:"7.64 MiB"},{x:"41036bb",y:160.833,julia:"1.12.7",
 detail:"160.8 μs",allocs:3,mem:"7.64 MiB"},{x:"15f5e3b",y:160.292,julia:"1.12.7",
 detail:"160.3 μs",allocs:3,mem:"7.64 MiB"},{x:"e6655b1",y:159.8335,julia:"1.12.7",
@@ -560,7 +587,7 @@ detail:"160.8 μs",allocs:3,mem:"7.64 MiB"}],
 },
 {
   label: "jump₂ 3D",
-  data: [null,{x:"855fbf5",y:227.625,julia:"1.12.7",
+  data: [{x:"855fbf5",y:227.625,julia:"1.12.7",
 detail:"227.6 μs",allocs:3,mem:"7.64 MiB"},{x:"41036bb",y:227.625,julia:"1.12.7",
 detail:"227.6 μs",allocs:3,mem:"7.64 MiB"},{x:"15f5e3b",y:227.25,julia:"1.12.7",
 detail:"227.2 μs",allocs:3,mem:"7.64 MiB"},{x:"e6655b1",y:210.3955,julia:"1.12.7",
@@ -576,7 +603,7 @@ detail:"227.3 μs",allocs:3,mem:"7.64 MiB"}],
 },
 {
   label: "jumpₓ 2D",
-  data: [null,{x:"855fbf5",y:164.667,julia:"1.12.7",
+  data: [{x:"855fbf5",y:164.667,julia:"1.12.7",
 detail:"164.7 μs",allocs:3,mem:"7.64 MiB"},{x:"41036bb",y:162.5,julia:"1.12.7",
 detail:"162.5 μs",allocs:3,mem:"7.64 MiB"},{x:"15f5e3b",y:162.917,julia:"1.12.7",
 detail:"162.9 μs",allocs:3,mem:"7.64 MiB"},{x:"e6655b1",y:162.958,julia:"1.12.7",
@@ -974,7 +1001,7 @@ detail:"3.19 ms (+11.5%)",allocs:7,mem:"448 B"}],
 },
 {
   label: "Rₕ! 1D, Serial() backend (default)",
-  data: [null,null,null,null,null,{x:"2dec0c7",y:1.0,julia:"1.12.7",
+  data: [{x:"2dec0c7",y:1.0,julia:"1.12.7",
 detail:"2.95 ms (baseline)",allocs:0,mem:"0 B"}],
   borderColor: "#f59e0b",
   backgroundColor: "#f59e0b",
@@ -986,7 +1013,7 @@ detail:"2.95 ms (baseline)",allocs:0,mem:"0 B"}],
 },
 {
   label: "Rₕ! 2D",
-  data: [null,null,{x:"41036bb",y:1.0,julia:"1.12.7",
+  data: [{x:"41036bb",y:1.0,julia:"1.12.7",
 detail:"3.39 ms (baseline)",allocs:0,mem:"0 B"},{x:"15f5e3b",y:1.007540760969849,julia:"1.12.7",
 detail:"3.41 ms (+0.8%)",allocs:0,mem:"0 B"},{x:"e6655b1",y:1.043731778425656,julia:"1.12.7",
 detail:"3.54 ms (+4.4%)",allocs:0,mem:"0 B"},{x:"2dec0c7",y:1.1278125253718123,julia:"1.12.7",
@@ -1001,7 +1028,7 @@ detail:"3.82 ms (+12.8%)",allocs:7,mem:"448 B"}],
 },
 {
   label: "Rₕ! 3D",
-  data: [null,null,{x:"41036bb",y:1.0,julia:"1.12.7",
+  data: [{x:"41036bb",y:1.0,julia:"1.12.7",
 detail:"3.84 ms (baseline)",allocs:0,mem:"0 B"},{x:"15f5e3b",y:1.0008362910433581,julia:"1.12.7",
 detail:"3.84 ms (+0.1%)",allocs:0,mem:"0 B"},{x:"e6655b1",y:1.1324801261956277,julia:"1.12.7",
 detail:"4.34 ms (+13.2%)",allocs:0,mem:"0 B"},{x:"2dec0c7",y:1.1578988386280187,julia:"1.12.7",
@@ -1033,7 +1060,7 @@ detail:"16.74 ms (+2.8%)",allocs:7,mem:"544 B"}],
 },
 {
   label: "avgₕ! 1D, Serial() backend (default)",
-  data: [null,null,null,null,null,{x:"2dec0c7",y:1.0,julia:"1.12.7",
+  data: [{x:"2dec0c7",y:1.0,julia:"1.12.7",
 detail:"17.32 ms (baseline)",allocs:0,mem:"0 B"}],
   borderColor: "#f97316",
   backgroundColor: "#f97316",
@@ -1045,7 +1072,7 @@ detail:"17.32 ms (baseline)",allocs:0,mem:"0 B"}],
 },
 {
   label: "avgₕ! 2D",
-  data: [null,null,{x:"41036bb",y:1.0,julia:"1.12.7",
+  data: [{x:"41036bb",y:1.0,julia:"1.12.7",
 detail:"122.55 ms (baseline)",allocs:4,mem:"128 B"},{x:"15f5e3b",y:0.9950879352926364,julia:"1.12.7",
 detail:"121.95 ms (-0.5%)",allocs:4,mem:"128 B"},{x:"e6655b1",y:0.8632950112333189,julia:"1.12.7",
 detail:"105.79 ms (-13.7%)",allocs:0,mem:"0 B"},{x:"2dec0c7",y:0.868153015068287,julia:"1.12.7",
@@ -1060,7 +1087,7 @@ detail:"106.39 ms (-13.2%)",allocs:7,mem:"560 B"}],
 },
 {
   label: "avgₕ! 3D",
-  data: [null,null,{x:"41036bb",y:1.0,julia:"1.12.7",
+  data: [{x:"41036bb",y:1.0,julia:"1.12.7",
 detail:"755.03 ms (baseline)",allocs:4,mem:"144 B"},{x:"15f5e3b",y:0.9942083628646255,julia:"1.12.7",
 detail:"750.65 ms (-0.6%)",allocs:4,mem:"144 B"},{x:"e6655b1",y:0.8688007671265353,julia:"1.12.7",
 detail:"655.97 ms (-13.1%)",allocs:0,mem:"0 B"},{x:"2dec0c7",y:0.8221637041006734,julia:"1.12.7",
@@ -1417,7 +1444,7 @@ detail:"153.0 ns (-0.0%)",allocs:0,mem:"0 B"}],
 </div>
 ```
 
-### Startup & Latency
+### Startup and Latency
 
 ```@raw html
 <div style="display:flex; flex-wrap:wrap; gap:1.5rem; align-items:start; margin:1.2rem 0 2.5rem 0;">
@@ -1471,7 +1498,7 @@ detail:"153.0 ns (-0.0%)",allocs:0,mem:"0 B"}],
     type: 'line',
     data: { labels: ["0b9a62b","855fbf5","41036bb","15f5e3b","e6655b1","2dec0c7"], datasets: [{
   label: "TTFX (load + first operator)",
-  data: [null,{x:"855fbf5",y:560.776833,julia:"1.12.7",
+  data: [{x:"855fbf5",y:560.776833,julia:"1.12.7",
 detail:"560.78 ms",allocs:45,mem:"1.3 KiB"},{x:"41036bb",y:623.567291,julia:"1.12.7",
 detail:"623.57 ms",allocs:45,mem:"1.3 KiB"},{x:"15f5e3b",y:640.640917,julia:"1.12.7",
 detail:"640.64 ms",allocs:45,mem:"1.3 KiB"},{x:"e6655b1",y:651.652791,julia:"1.12.7",
@@ -1487,7 +1514,7 @@ detail:"598.63 ms",allocs:45,mem:"1.3 KiB"}],
 },
 {
   label: "using Bramble",
-  data: [null,{x:"855fbf5",y:527.500292,julia:"1.12.7",
+  data: [{x:"855fbf5",y:527.500292,julia:"1.12.7",
 detail:"527.5 ms",allocs:45,mem:"1.3 KiB"},{x:"41036bb",y:533.709208,julia:"1.12.7",
 detail:"533.71 ms",allocs:45,mem:"1.3 KiB"},{x:"15f5e3b",y:546.493334,julia:"1.12.7",
 detail:"546.49 ms",allocs:45,mem:"1.3 KiB"},{x:"e6655b1",y:556.356292,julia:"1.12.7",
@@ -1708,7 +1735,7 @@ detail:"501.71 ms",allocs:45,mem:"1.3 KiB"}],
     type: 'line',
     data: { labels: ["0b9a62b","855fbf5","41036bb","15f5e3b","e6655b1","2dec0c7"], datasets: [{
   label: "allocate_system_matrix 2D",
-  data: [null,null,null,null,{x:"e6655b1",y:1.0,julia:"1.12.7",
+  data: [{x:"e6655b1",y:1.0,julia:"1.12.7",
 detail:"3.75 ms (baseline)",allocs:21,mem:"15.13 MiB"},{x:"2dec0c7",y:0.7555938001171498,julia:"1.12.7",
 detail:"2.84 ms (-24.4%)",allocs:21,mem:"15.13 MiB"}],
   borderColor: "#3b82f6",
@@ -1721,7 +1748,7 @@ detail:"2.84 ms (-24.4%)",allocs:21,mem:"15.13 MiB"}],
 },
 {
   label: "assemble (BilinearForm), Parallel() backend",
-  data: [null,null,null,null,null,{x:"2dec0c7",y:1.0,julia:"1.12.7",
+  data: [{x:"2dec0c7",y:1.0,julia:"1.12.7",
 detail:"5.11 ms (baseline)",allocs:35,mem:"15.13 MiB"}],
   borderColor: "#10b981",
   backgroundColor: "#10b981",
@@ -1733,7 +1760,7 @@ detail:"5.11 ms (baseline)",allocs:35,mem:"15.13 MiB"}],
 },
 {
   label: "assemble (BilinearForm), Serial() backend",
-  data: [null,null,null,null,null,{x:"2dec0c7",y:1.0,julia:"1.12.7",
+  data: [{x:"2dec0c7",y:1.0,julia:"1.12.7",
 detail:"4.71 ms (baseline)",allocs:21,mem:"15.13 MiB"}],
   borderColor: "#f59e0b",
   backgroundColor: "#f59e0b",
@@ -1745,7 +1772,7 @@ detail:"4.71 ms (baseline)",allocs:21,mem:"15.13 MiB"}],
 },
 {
   label: "assemble! (matrix) 2D",
-  data: [null,null,null,null,{x:"e6655b1",y:1.0,julia:"1.12.7",
+  data: [{x:"e6655b1",y:1.0,julia:"1.12.7",
 detail:"1.06 ms (baseline)",allocs:0,mem:"0 B"},{x:"2dec0c7",y:1.005847639232309,julia:"1.12.7",
 detail:"1.07 ms (+0.6%)",allocs:0,mem:"0 B"}],
   borderColor: "#8b5cf6",
@@ -1758,7 +1785,7 @@ detail:"1.07 ms (+0.6%)",allocs:0,mem:"0 B"}],
 },
 {
   label: "assemble! 1D",
-  data: [null,null,null,null,{x:"e6655b1",y:1.0,julia:"1.12.7",
+  data: [{x:"e6655b1",y:1.0,julia:"1.12.7",
 detail:"910.5 μs (baseline)",allocs:0,mem:"0 B"},{x:"2dec0c7",y:1.0311656331209127,julia:"1.12.7",
 detail:"938.8 μs (+3.1%)",allocs:0,mem:"0 B"}],
   borderColor: "#ec4899",
@@ -1771,7 +1798,7 @@ detail:"938.8 μs (+3.1%)",allocs:0,mem:"0 B"}],
 },
 {
   label: "assemble! 1D, Parallel() backend",
-  data: [null,null,null,null,null,{x:"2dec0c7",y:1.0,julia:"1.12.7",
+  data: [{x:"2dec0c7",y:1.0,julia:"1.12.7",
 detail:"1.19 ms (baseline)",allocs:7,mem:"480 B"}],
   borderColor: "#06b6d4",
   backgroundColor: "#06b6d4",
@@ -1783,7 +1810,7 @@ detail:"1.19 ms (baseline)",allocs:7,mem:"480 B"}],
 },
 {
   label: "assemble! 2D",
-  data: [null,null,null,null,{x:"e6655b1",y:1.0,julia:"1.12.7",
+  data: [{x:"e6655b1",y:1.0,julia:"1.12.7",
 detail:"483.5 μs (baseline)",allocs:0,mem:"0 B"},{x:"2dec0c7",y:2.4507931747673215,julia:"1.12.7",
 detail:"1.18 ms (+145.1%)",allocs:0,mem:"0 B"}],
   borderColor: "#f97316",
@@ -1796,7 +1823,7 @@ detail:"1.18 ms (+145.1%)",allocs:0,mem:"0 B"}],
 },
 {
   label: "assemble_parallel! 1D",
-  data: [null,null,null,null,{x:"e6655b1",y:1.0,julia:"1.12.7",
+  data: [{x:"e6655b1",y:1.0,julia:"1.12.7",
 detail:"1.2 ms (baseline)",allocs:7,mem:"480 B"},{x:"2dec0c7",y:1.0746227026198918,julia:"1.12.7",
 detail:"1.29 ms (+7.5%)",allocs:7,mem:"480 B"}],
   borderColor: "#3b82f6",
@@ -1809,7 +1836,7 @@ detail:"1.29 ms (+7.5%)",allocs:7,mem:"480 B"}],
 },
 {
   label: "assemble_parallel! 2D",
-  data: [null,null,null,null,{x:"e6655b1",y:1.0,julia:"1.12.7",
+  data: [{x:"e6655b1",y:1.0,julia:"1.12.7",
 detail:"2.23 ms (baseline)",allocs:7,mem:"496 B"},{x:"2dec0c7",y:0.7690877108851282,julia:"1.12.7",
 detail:"1.72 ms (-23.1%)",allocs:7,mem:"496 B"}],
   borderColor: "#10b981",
@@ -1822,7 +1849,7 @@ detail:"1.72 ms (-23.1%)",allocs:7,mem:"496 B"}],
 },
 {
   label: "evaluate! 1D",
-  data: [null,null,null,null,{x:"e6655b1",y:1.0,julia:"1.12.7",
+  data: [{x:"e6655b1",y:1.0,julia:"1.12.7",
 detail:"1.11 ms (baseline)",allocs:0,mem:"0 B"},{x:"2dec0c7",y:1.0244619294002388,julia:"1.12.7",
 detail:"1.14 ms (+2.4%)",allocs:0,mem:"0 B"}],
   borderColor: "#f59e0b",
@@ -1835,7 +1862,7 @@ detail:"1.14 ms (+2.4%)",allocs:0,mem:"0 B"}],
 },
 {
   label: "form (bilinear, 2D)",
-  data: [null,null,null,null,{x:"e6655b1",y:1.0,julia:"1.12.7",
+  data: [{x:"e6655b1",y:1.0,julia:"1.12.7",
 detail:"2.1 ns (baseline)",allocs:0,mem:"0 B"},{x:"2dec0c7",y:0.9995201535508638,julia:"1.12.7",
 detail:"2.1 ns (-0.0%)",allocs:0,mem:"0 B"}],
   borderColor: "#8b5cf6",
@@ -1848,7 +1875,7 @@ detail:"2.1 ns (-0.0%)",allocs:0,mem:"0 B"}],
 },
 {
   label: "form (linear, 2D)",
-  data: [null,null,null,null,{x:"e6655b1",y:1.0,julia:"1.12.7",
+  data: [{x:"e6655b1",y:1.0,julia:"1.12.7",
 detail:"2.1 ns (baseline)",allocs:0,mem:"0 B"},{x:"2dec0c7",y:0.9995201535508638,julia:"1.12.7",
 detail:"2.1 ns (-0.0%)",allocs:0,mem:"0 B"}],
   borderColor: "#ec4899",
@@ -1861,7 +1888,7 @@ detail:"2.1 ns (-0.0%)",allocs:0,mem:"0 B"}],
 },
 {
   label: "l(vₕ) 1D",
-  data: [null,null,null,null,{x:"e6655b1",y:1.0,julia:"1.12.7",
+  data: [{x:"e6655b1",y:1.0,julia:"1.12.7",
 detail:"884.3 μs (baseline)",allocs:0,mem:"0 B"},{x:"2dec0c7",y:0.999151904144814,julia:"1.12.7",
 detail:"883.6 μs (-0.1%)",allocs:0,mem:"0 B"}],
   borderColor: "#06b6d4",
@@ -2077,7 +2104,7 @@ detail:"883.6 μs (-0.1%)",allocs:0,mem:"0 B"}],
     type: 'line',
     data: { labels: ["0b9a62b","855fbf5","41036bb","15f5e3b","e6655b1","2dec0c7"], datasets: [{
   label: "Rₕ! Double64",
-  data: [null,null,null,null,{x:"e6655b1",y:1.0,julia:"1.12.7",
+  data: [{x:"e6655b1",y:1.0,julia:"1.12.7",
 detail:"9.03 ms (baseline)",allocs:0,mem:"0 B"},{x:"2dec0c7",y:0.9900855530248217,julia:"1.12.7",
 detail:"8.94 ms (-1.0%)",allocs:0,mem:"0 B"}],
   borderColor: "#3b82f6",
@@ -2090,7 +2117,7 @@ detail:"8.94 ms (-1.0%)",allocs:0,mem:"0 B"}],
 },
 {
   label: "Rₕ! Float32",
-  data: [null,null,null,null,{x:"e6655b1",y:1.0,julia:"1.12.7",
+  data: [{x:"e6655b1",y:1.0,julia:"1.12.7",
 detail:"278.4 μs (baseline)",allocs:0,mem:"0 B"},{x:"2dec0c7",y:1.027391109115402,julia:"1.12.7",
 detail:"286.0 μs (+2.7%)",allocs:0,mem:"0 B"}],
   borderColor: "#10b981",
@@ -2103,7 +2130,7 @@ detail:"286.0 μs (+2.7%)",allocs:0,mem:"0 B"}],
 },
 {
   label: "Rₕ! Float64",
-  data: [null,null,null,null,{x:"e6655b1",y:1.0,julia:"1.12.7",
+  data: [{x:"e6655b1",y:1.0,julia:"1.12.7",
 detail:"285.8 μs (baseline)",allocs:0,mem:"0 B"},{x:"2dec0c7",y:1.0272685914260717,julia:"1.12.7",
 detail:"293.5 μs (+2.7%)",allocs:0,mem:"0 B"}],
   borderColor: "#f59e0b",
@@ -2116,7 +2143,7 @@ detail:"293.5 μs (+2.7%)",allocs:0,mem:"0 B"}],
 },
 {
   label: "assemble! Double64",
-  data: [null,null,null,null,{x:"e6655b1",y:1.0,julia:"1.12.7",
+  data: [{x:"e6655b1",y:1.0,julia:"1.12.7",
 detail:"1.02 ms (baseline)",allocs:0,mem:"0 B"},{x:"2dec0c7",y:1.0196884049872457,julia:"1.12.7",
 detail:"1.04 ms (+2.0%)",allocs:0,mem:"0 B"}],
   borderColor: "#8b5cf6",
@@ -2129,7 +2156,7 @@ detail:"1.04 ms (+2.0%)",allocs:0,mem:"0 B"}],
 },
 {
   label: "assemble! Float32",
-  data: [null,null,null,null,{x:"e6655b1",y:1.0,julia:"1.12.7",
+  data: [{x:"e6655b1",y:1.0,julia:"1.12.7",
 detail:"71.6 μs (baseline)",allocs:0,mem:"0 B"},{x:"2dec0c7",y:0.9965075506754397,julia:"1.12.7",
 detail:"71.3 μs (-0.3%)",allocs:0,mem:"0 B"}],
   borderColor: "#ec4899",
@@ -2142,7 +2169,7 @@ detail:"71.3 μs (-0.3%)",allocs:0,mem:"0 B"}],
 },
 {
   label: "assemble! Float64",
-  data: [null,null,null,null,{x:"e6655b1",y:1.0,julia:"1.12.7",
+  data: [{x:"e6655b1",y:1.0,julia:"1.12.7",
 detail:"80.5 μs (baseline)",allocs:0,mem:"0 B"},{x:"2dec0c7",y:1.0424126542673389,julia:"1.12.7",
 detail:"84.0 μs (+4.2%)",allocs:0,mem:"0 B"}],
   borderColor: "#06b6d4",
@@ -2155,7 +2182,7 @@ detail:"84.0 μs (+4.2%)",allocs:0,mem:"0 B"}],
 },
 {
   label: "avgₕ! Double64",
-  data: [null,null,null,null,{x:"e6655b1",y:1.0,julia:"1.12.7",
+  data: [{x:"e6655b1",y:1.0,julia:"1.12.7",
 detail:"72.82 ms (baseline)",allocs:33,mem:"2.9 KiB"},{x:"2dec0c7",y:0.9914917982718104,julia:"1.12.7",
 detail:"72.2 ms (-0.9%)",allocs:33,mem:"2.9 KiB"}],
   borderColor: "#f97316",
@@ -2168,7 +2195,7 @@ detail:"72.2 ms (-0.9%)",allocs:33,mem:"2.9 KiB"}],
 },
 {
   label: "avgₕ! Float32",
-  data: [null,null,null,null,{x:"e6655b1",y:1.0,julia:"1.12.7",
+  data: [{x:"e6655b1",y:1.0,julia:"1.12.7",
 detail:"1.6 ms (baseline)",allocs:0,mem:"0 B"},{x:"2dec0c7",y:1.0070662716091487,julia:"1.12.7",
 detail:"1.61 ms (+0.7%)",allocs:0,mem:"0 B"}],
   borderColor: "#3b82f6",
@@ -2181,7 +2208,7 @@ detail:"1.61 ms (+0.7%)",allocs:0,mem:"0 B"}],
 },
 {
   label: "avgₕ! Float64",
-  data: [null,null,null,null,{x:"e6655b1",y:1.0,julia:"1.12.7",
+  data: [{x:"e6655b1",y:1.0,julia:"1.12.7",
 detail:"1.64 ms (baseline)",allocs:0,mem:"0 B"},{x:"2dec0c7",y:1.0458125564220302,julia:"1.12.7",
 detail:"1.72 ms (+4.6%)",allocs:0,mem:"0 B"}],
   borderColor: "#10b981",
@@ -2194,7 +2221,7 @@ detail:"1.72 ms (+4.6%)",allocs:0,mem:"0 B"}],
 },
 {
   label: "innerₕ Double64",
-  data: [null,null,null,null,{x:"e6655b1",y:1.0,julia:"1.12.7",
+  data: [{x:"e6655b1",y:1.0,julia:"1.12.7",
 detail:"1.07 ms (baseline)",allocs:0,mem:"0 B"},{x:"2dec0c7",y:0.9940385739333722,julia:"1.12.7",
 detail:"1.06 ms (-0.6%)",allocs:0,mem:"0 B"}],
   borderColor: "#f59e0b",
@@ -2207,7 +2234,7 @@ detail:"1.06 ms (-0.6%)",allocs:0,mem:"0 B"}],
 },
 {
   label: "innerₕ Float32",
-  data: [null,null,null,null,{x:"e6655b1",y:1.0,julia:"1.12.7",
+  data: [{x:"e6655b1",y:1.0,julia:"1.12.7",
 detail:"11.6 μs (baseline)",allocs:0,mem:"0 B"},{x:"2dec0c7",y:0.9964731182795699,julia:"1.12.7",
 detail:"11.6 μs (-0.4%)",allocs:0,mem:"0 B"}],
   borderColor: "#8b5cf6",
@@ -2220,7 +2247,7 @@ detail:"11.6 μs (-0.4%)",allocs:0,mem:"0 B"}],
 },
 {
   label: "innerₕ Float64",
-  data: [null,null,null,null,{x:"e6655b1",y:1.0,julia:"1.12.7",
+  data: [{x:"e6655b1",y:1.0,julia:"1.12.7",
 detail:"23.2 μs (baseline)",allocs:0,mem:"0 B"},{x:"2dec0c7",y:1.0,julia:"1.12.7",
 detail:"23.2 μs (baseline)",allocs:0,mem:"0 B"}],
   borderColor: "#ec4899",

@@ -188,9 +188,15 @@ function _render_chartjs_trend_chart(
                             "\"$(_format_time(t_ns))\""
                 push!(pts, """{x:"$(r.commit)",y:$(y_val),julia:"$(r.julia)",
                     detail:$(delta_str),allocs:$(allocs(m)),mem:"$(_format_memory(memory(m)))"}""")
-            else
-                push!(pts, "null")
             end
+            # A run missing this benchmark contributes no point at all, rather than a `null`
+            # placeholder: each point already carries its own `x`, so a category scale needs
+            # no placeholder to stay aligned, and a leading `null` (the commit before a
+            # benchmark existed, e.g. the very first run for a group added later) tripped a
+            # real Chart.js parsing edge case — every *real* point in that dataset parsed to
+            # `null` while the literal placeholder got a pixel position, leaving the whole
+            # line invisible. `spanGaps` was doing the same job as this omission for every
+            # other case anyway.
         end
         push!(datasets, """
             {
@@ -525,7 +531,11 @@ function generate_benchmarks_markdown(
     println(io)
 
     for gname in ordered_groups
-        println(io, "### $(titlecase(gname))")
+        # Display only — "&" reads better as "and" in a heading, but the underlying group
+        # key (benchmark/benchmarks.jl's `SUITE["jumps & averages"]`) stays as-is: it is also
+        # the key every saved baseline_*.json carries, and renaming it would fragment that
+        # group's trend history across old and new baselines instead.
+        println(io, "### $(replace(titlecase(gname), "&" => "and"))")
         println(io)
 
         bnames = Set{String}()
