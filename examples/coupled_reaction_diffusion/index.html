@@ -52,11 +52,11 @@ for it in 1:20
     DifferentiationInterface.jacobian!(residual, J, prep, sparse_ad, w)
     w .-= J \ r
 end
-length(newton_residuals), newton_residuals</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(4, [2.348062225087349, 0.020986547691592892, 1.2004428810608362e-6, 5.907679759241721e-14])</code></pre><p>Quadratic convergence, same as the single-species case — the composite space changes what the Jacobian differentiates through, not how well Newton converges once it has a correct one.</p><pre><code class="language-julia hljs">wₕ = element(Vₕ)
+length(newton_residuals), newton_residuals</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(4, [2.348062225087349, 0.020986547691592708, 1.200442878175613e-6, 6.743358351430693e-14])</code></pre><p>Quadratic convergence, same as the single-species case — the composite space changes what the Jacobian differentiates through, not how well Newton converges once it has a correct one.</p><pre><code class="language-julia hljs">wₕ = element(Vₕ)
 wₕ .= w
 uₕ, vₕ = components(wₕ)
 uexact, vexact = Rₕ(Wₕ, u_ex), Rₕ(Wₕ, v_ex)
-norm₁ₕ(uₕ .- uexact), norm₁ₕ(vₕ .- vexact)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(0.012343565736875204, 0.0789715380696449)</code></pre><h2 id="Checking-the-answer"><a class="docs-heading-anchor" href="#Checking-the-answer">Checking the answer</a><a id="Checking-the-answer-1"></a><a class="docs-heading-anchor-permalink" href="#Checking-the-answer" title="Permalink"></a></h2><p>The same nested-random-mesh pattern as every other example, checking each species&#39; own error separately — a routing mistake would show up as one converging correctly while the other silently used the wrong block, which a single combined error could hide. A <em>dense</em> <code>ForwardDiff.jacobian</code> over two coupled species would cost <code>(2n)^2</code> against the scalar examples&#39; <code>n^2</code>, and was what forced this example to stay at three small refinement levels before switching to sparse AD; with it, this reaches the same five levels the <a href="../convection_diffusion_linear/">linear coupled example</a> uses, tens of thousands of degrees of freedom, in about a second per level:</p><pre><code class="language-julia hljs">using Random
+norm₁ₕ(uₕ .- uexact), norm₁ₕ(vₕ .- vexact)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(0.01234356573687419, 0.07897153806964348)</code></pre><h2 id="Checking-the-answer"><a class="docs-heading-anchor" href="#Checking-the-answer">Checking the answer</a><a id="Checking-the-answer-1"></a><a class="docs-heading-anchor-permalink" href="#Checking-the-answer" title="Permalink"></a></h2><p>The same nested-random-mesh pattern as every other example, checking each species&#39; own error separately — a routing mistake would show up as one converging correctly while the other silently used the wrong block, which a single combined error could hide. A <em>dense</em> <code>ForwardDiff.jacobian</code> over two coupled species would cost <code>(2n)^2</code> against the scalar examples&#39; <code>n^2</code>, and was what forced this example to stay at three small refinement levels before switching to sparse AD; with it, this reaches the same five levels the <a href="../convection_diffusion_linear/">linear coupled example</a> uses, tens of thousands of degrees of freedom, in about a second per level:</p><pre><code class="language-julia hljs">using Random
 Random.seed!(20260903)
 
 function coupled_series(; n0::Int = 5, levels::Int)
@@ -114,7 +114,7 @@ end
 hs, erru, errv = coupled_series(; levels = 5)
 order_u = log(erru[end - 1] / erru[end]) / log(hs[end - 1] / hs[end])
 order_v = log(errv[end - 1] / errv[end]) / log(hs[end - 1] / hs[end])
-(order_u, order_v)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(1.9980708093150845, 1.990435960373762)</code></pre><pre><code class="language-julia hljs">order_u &gt; 1.9 &amp;&amp; order_v &gt; 1.9</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">true</code></pre><pre><code class="language-julia hljs">convergence_plot([(hs, erru, &quot;u&quot;, &quot;#5B5FC7&quot;), (hs, errv, &quot;v&quot;, &quot;#0E7C86&quot;)];
+(order_u, order_v)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(1.9980708093155757, 1.9904359603728772)</code></pre><pre><code class="language-julia hljs">order_u &gt; 1.9 &amp;&amp; order_v &gt; 1.9</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">true</code></pre><pre><code class="language-julia hljs">convergence_plot([(hs, erru, &quot;u&quot;, &quot;#5B5FC7&quot;), (hs, errv, &quot;v&quot;, &quot;#0E7C86&quot;)];
     title = &quot;Coupled nonlinear reaction, ‖·‖₁ₕ&quot;)</code></pre><script>
   // See the module note above: hide `define` from Chart.js's UMD wrapper so it attaches
   // `window.Chart` instead of registering as an anonymous AMD module.
@@ -195,7 +195,7 @@ order_v = log(errv[end - 1] / errv[end]) / log(hs[end - 1] / hs[end])
     type: 'scatter',
     data: { datasets: [{
   label: "u",
-  data: [{x:0.7281398631056489,y:0.13509580614559974},{x:0.3640699315528245,y:0.03655058875874418},{x:0.18203496577641226,y:0.00928501442041335},{x:0.09101748288820616,y:0.002333111059630234},{x:0.045508741444103114,y:0.0005840582532897435}],
+  data: [{x:0.7281398631056489,y:0.13509580614559974},{x:0.3640699315528245,y:0.03655058875874418},{x:0.18203496577641226,y:0.0092850144204161},{x:0.09101748288820616,y:0.0023331110596354183},{x:0.045508741444103114,y:0.0005840582532908424}],
   showLine: false,
   pointBackgroundColor: "#5B5FC7",
   pointBorderColor: "#5B5FC7",
@@ -204,7 +204,7 @@ order_v = log(errv[end - 1] / errv[end]) / log(hs[end - 1] / hs[end])
 },
 {
   label: "v",
-  data: [{x:0.7281398631056489,y:0.8035909996433601},{x:0.3640699315528245,y:0.23130629735192365},{x:0.18203496577641226,y:0.06228236898218091},{x:0.09101748288820616,y:0.015954707817459324},{x:0.045508741444103114,y:0.004015206879135127}],
+  data: [{x:0.7281398631056489,y:0.8035909996433601},{x:0.3640699315528245,y:0.23130629735192357},{x:0.18203496577641226,y:0.0622823689821809},{x:0.09101748288820616,y:0.01595470781745784},{x:0.045508741444103114,y:0.0040152068791372165}],
   showLine: false,
   pointBackgroundColor: "#0E7C86",
   pointBorderColor: "#0E7C86",
@@ -213,7 +213,7 @@ order_v = log(errv[end - 1] / errv[end]) / log(hs[end - 1] / hs[end])
 },
 {
   label: "slope 2",
-  data: [{x:0.045508741444103114,y:0.0005840582532897435}, {x:0.7281398631056489,y:0.14951891284217397}],
+  data: [{x:0.045508741444103114,y:0.0005840582532908424}, {x:0.7281398631056489,y:0.1495189128424553}],
   showLine: true,
   borderDash: [5,4],
   borderWidth: 1.5,
@@ -257,4 +257,4 @@ order_v = log(errv[end - 1] / errv[end]) / log(hs[end - 1] / hs[end])
   });
 })();
 </script>
-<p>Second order for both species, same rate as every other example — the composite space and the quadratic coupling change how the residual and its Jacobian are built, not the discretization&#39;s own accuracy once Newton has converged to it.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../convection_diffusion_linear/">« Convection-diffusion equation</a><a class="docs-footer-nextpage" href="../../benchmarks/">Benchmarks »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Friday 4 September 2026 13:16">Friday 4 September 2026</span>. Using Julia version 1.12.7.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+<p>Second order for both species, same rate as every other example — the composite space and the quadratic coupling change how the residual and its Jacobian are built, not the discretization&#39;s own accuracy once Newton has converged to it.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../convection_diffusion_linear/">« Convection-diffusion equation</a><a class="docs-footer-nextpage" href="../../benchmarks/">Benchmarks »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Friday 4 September 2026 18:10">Friday 4 September 2026</span>. Using Julia version 1.12.7.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

@@ -65,7 +65,7 @@ hs3, errs3 = poisson_series(3; levels = 4)   # 5³ up to 33³ points — 3D is e
 order1 = log(errs1[end - 1] / errs1[end]) / log(hs1[end - 1] / hs1[end])
 order2 = log(errs2[end - 1] / errs2[end]) / log(hs2[end - 1] / hs2[end])
 order3 = log(errs3[end - 1] / errs3[end]) / log(hs3[end - 1] / hs3[end])
-(order1, order2, order3)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(1.9999725316189474, 1.9987351879750455, 1.9213573743755605)</code></pre><pre><code class="language-julia hljs">order1 &gt; 1.9 &amp;&amp; order2 &gt; 1.9 &amp;&amp; order3 &gt; 1.8   # comfortably above 1st order; 2nd is the promise</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">true</code></pre><pre><code class="language-julia hljs">convergence_plot([
+(order1, order2, order3)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(1.9999725315392576, 1.9987351848449026, 1.9213573743808905)</code></pre><pre><code class="language-julia hljs">order1 &gt; 1.9 &amp;&amp; order2 &gt; 1.9 &amp;&amp; order3 &gt; 1.8   # comfortably above 1st order; 2nd is the promise</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">true</code></pre><pre><code class="language-julia hljs">convergence_plot([
     (hs1, errs1, &quot;1D&quot;, &quot;#5B5FC7&quot;),
     (hs2, errs2, &quot;2D&quot;, &quot;#0E7C86&quot;),
     (hs3, errs3, &quot;3D&quot;, &quot;#B26A00&quot;),
@@ -149,7 +149,7 @@ order3 = log(errs3[end - 1] / errs3[end]) / log(hs3[end - 1] / hs3[end])
     type: 'scatter',
     data: { datasets: [{
   label: "1D",
-  data: [{x:0.4537346574443589,y:0.00563052255415435},{x:0.22686732872217952,y:0.0014387185891611759},{x:0.11343366436108976,y:0.00036159826835853703},{x:0.05671683218054491,y:9.051909558615742e-5},{x:0.028358416090272454,y:2.263723852315859e-5},{x:0.014179208045136282,y:5.65977474670783e-6},{x:0.007089604022568197,y:1.4149706269389574e-6}],
+  data: [{x:0.4537346574443589,y:0.00563052255415435},{x:0.22686732872217952,y:0.0014387185891611759},{x:0.11343366436108976,y:0.00036159826835796555},{x:0.05671683218054491,y:9.051909558615742e-5},{x:0.028358416090272454,y:2.263723852315859e-5},{x:0.014179208045136282,y:5.659774746395203e-6},{x:0.007089604022568197,y:1.4149706269389574e-6}],
   showLine: false,
   pointBackgroundColor: "#5B5FC7",
   pointBorderColor: "#5B5FC7",
@@ -158,7 +158,7 @@ order3 = log(errs3[end - 1] / errs3[end]) / log(hs3[end - 1] / hs3[end])
 },
 {
   label: "2D",
-  data: [{x:0.7281398631056489,y:0.03199953910428043},{x:0.3640699315528245,y:0.008793250952994824},{x:0.18203496577641226,y:0.002265339697101463},{x:0.09101748288820616,y:0.0005717359852528194},{x:0.045508741444103114,y:0.00014335278983928606},{x:0.0227543707220516,y:3.586963061612084e-5}],
+  data: [{x:0.7281398631056489,y:0.03199953910428043},{x:0.3640699315528245,y:0.008793250952996226},{x:0.18203496577641226,y:0.002265339697102513},{x:0.09101748288820616,y:0.0005717359852752782},{x:0.045508741444103114,y:0.00014335278986954067},{x:0.0227543707220516,y:3.586963070151565e-5}],
   showLine: false,
   pointBackgroundColor: "#0E7C86",
   pointBorderColor: "#0E7C86",
@@ -167,7 +167,7 @@ order3 = log(errs3[end - 1] / errs3[end]) / log(hs3[end - 1] / hs3[end])
 },
 {
   label: "3D",
-  data: [{x:0.918047411794347,y:0.04929084727845036},{x:0.4590237058971735,y:0.022394853247472986},{x:0.22951185294858678,y:0.006603070237368526},{x:0.1147559264742934,y:0.0017432501644422543}],
+  data: [{x:0.918047411794347,y:0.0492908472784506},{x:0.4590237058971735,y:0.022394853247473666},{x:0.22951185294858678,y:0.006603070237365547},{x:0.1147559264742934,y:0.0017432501644350277}],
   showLine: false,
   pointBackgroundColor: "#B26A00",
   pointBorderColor: "#B26A00",
@@ -220,4 +220,4 @@ order3 = log(errs3[end - 1] / errs3[end]) / log(hs3[end - 1] / hs3[end])
   });
 })();
 </script>
-<p>Second order in every dimension, on grids chosen specifically not to make that trivially true — every curve&#39;s markers sit along the same reference slope. 3D uses fewer refinement levels than 2D, and 2D fewer than 1D: the same dyadic split costs <span>$8\times$</span> the points per level in 3D against <span>$4\times$</span> in 2D and <span>$2\times$</span> in 1D, so matching level counts across all three would make the higher dimensions by far the most expensive part of this page for no extra information.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../tutorials/plotting/">« Plotting directly</a><a class="docs-footer-nextpage" href="../poisson_nonlinear/">Nonlinear Poisson equation »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Friday 4 September 2026 13:16">Friday 4 September 2026</span>. Using Julia version 1.12.7.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+<p>Second order in every dimension, on grids chosen specifically not to make that trivially true — every curve&#39;s markers sit along the same reference slope. 3D uses fewer refinement levels than 2D, and 2D fewer than 1D: the same dyadic split costs <span>$8\times$</span> the points per level in 3D against <span>$4\times$</span> in 2D and <span>$2\times$</span> in 1D, so matching level counts across all three would make the higher dimensions by far the most expensive part of this page for no extra information.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../tutorials/plotting/">« Plotting directly</a><a class="docs-footer-nextpage" href="../poisson_nonlinear/">Nonlinear Poisson equation »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Friday 4 September 2026 18:10">Friday 4 September 2026</span>. Using Julia version 1.12.7.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
