@@ -58,7 +58,7 @@ A heatmap of the field just solved for, `uₕ` from the block above — no new s
 
 ```@example poisson_linear
 include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
-heatmap_plot(uₕ; title = "Linear Poisson, 2D")
+heatmap_plot(uₕ; title = "Linear Poisson, 2D") # hide
 ```
 
 ## Checking the answer
@@ -120,11 +120,7 @@ order1 > 1.9 && order2 > 1.9 && order3 > 1.8   # comfortably above 1st order; 2n
 
 ```@example poisson_linear
 include(joinpath(@__DIR__, "..", "convergence_plot.jl")) # hide
-convergence_plot([
-    (hs1, errs1, "1D", "#5B5FC7"),
-    (hs2, errs2, "2D", "#0E7C86"),
-    (hs3, errs3, "3D", "#B26A00"),
-]; title = "Linear Poisson, ‖·‖₁ₕ")
+convergence_plot([(hs1, errs1, "1D", "#5B5FC7"), (hs2, errs2, "2D", "#0E7C86"), (hs3, errs3, "3D", "#B26A00")]; title = "Linear Poisson, ‖·‖₁ₕ") # hide
 ```
 
 Second order in every dimension, on grids chosen specifically not to make that trivially

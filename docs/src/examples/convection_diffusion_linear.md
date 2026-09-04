@@ -54,7 +54,7 @@ nothing # hide
 
 ```@example convdiff
 include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
-heatmap_plot(uₕ; title = "Convection-diffusion, 2D")
+heatmap_plot(uₕ; title = "Convection-diffusion, 2D") # hide
 ```
 
 ## Checking the answer
@@ -115,11 +115,7 @@ order1 > 1.9 && order2 > 1.9 && order3 > 1.8
 
 ```@example convdiff
 include(joinpath(@__DIR__, "..", "convergence_plot.jl")) # hide
-convergence_plot([
-    (hs1, errs1, "1D", "#5B5FC7"),
-    (hs2, errs2, "2D", "#0E7C86"),
-    (hs3, errs3, "3D", "#B26A00"),
-]; title = "Convection-diffusion, ‖·‖₁ₕ")
+convergence_plot([(hs1, errs1, "1D", "#5B5FC7"), (hs2, errs2, "2D", "#0E7C86"), (hs3, errs3, "3D", "#B26A00")]; title = "Convection-diffusion, ‖·‖₁ₕ") # hide
 ```
 
 Second order in every dimension. The convective term does not change the rate — it changes

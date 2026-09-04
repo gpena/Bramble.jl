@@ -116,11 +116,11 @@ new solve or copy needed:
 
 ```@example coupled
 include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
-heatmap_plot(uₕ; title = "Coupled reaction-diffusion, u")
+heatmap_plot(uₕ; title = "Coupled reaction-diffusion, u") # hide
 ```
 
 ```@example coupled
-heatmap_plot(vₕ; title = "Coupled reaction-diffusion, v")
+heatmap_plot(vₕ; title = "Coupled reaction-diffusion, v") # hide
 ```
 
 ## Checking the answer
@@ -202,8 +202,7 @@ order_u > 1.9 && order_v > 1.9
 
 ```@example coupled
 include(joinpath(@__DIR__, "..", "convergence_plot.jl")) # hide
-convergence_plot([(hs, erru, "u", "#5B5FC7"), (hs, errv, "v", "#0E7C86")];
-    title = "Coupled nonlinear reaction, ‖·‖₁ₕ")
+convergence_plot([(hs, erru, "u", "#5B5FC7"), (hs, errv, "v", "#0E7C86")]; title = "Coupled nonlinear reaction, ‖·‖₁ₕ") # hide
 ```
 
 Second order for both species, same rate as every other example — the composite space and
