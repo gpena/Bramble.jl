@@ -8,10 +8,10 @@
 
 ---
 
-| **Documentation & DOI** | [![Documentation](https://img.shields.io/badge/docs-stable-blue.svg)](https://gpena.github.io/Bramble.jl/) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.14230821.svg)](https://doi.org/10.5281/zenodo.14230821) |
-|:--- |:--- |
-| **Testing & Quality** | [![CI](https://github.com/gpena/Bramble.jl/workflows/CI/badge.svg)](https://github.com/gpena/Bramble.jl/actions?query=workflow%3ACI++) [![codecov](https://codecov.io/gh/gpena/Bramble.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/gpena/Bramble.jl) [![Aqua](https://raw.githubusercontent.com/JuliaTesting/Aqua.jl/master/badge.svg)](https://github.com/JuliaTesting/Aqua.jl) [![JET](https://img.shields.io/badge/%F0%9F%9B%A9%EF%B8%8F_tested_with-JET.jl-233f9a)](https://github.com/aviatesk/JET.jl) |
-| **Platform & Standards** | [![Julia](https://img.shields.io/badge/Julia-1.12%2B-9558B2?logo=julia&logoColor=white)](https://julialang.org) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/gpena/Bramble.jl/blob/main/LICENSE) [![SciML Code Style](https://img.shields.io/static/v1?label=code%20style&message=SciML&color=9558b2&labelColor=389826)](https://github.com/SciML/SciMLStyle) |
+| **Documentation & DOI**  | [![Documentation](https://img.shields.io/badge/docs-stable-blue.svg)](https://gpena.github.io/Bramble.jl/) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.14230821.svg)](https://doi.org/10.5281/zenodo.14230821)                                                                                                                                                                                                                                                                                                 |
+| :-------------------------| :-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Testing & Quality**    | [![CI](https://github.com/gpena/Bramble.jl/workflows/CI/badge.svg)](https://github.com/gpena/Bramble.jl/actions?query=workflow%3ACI++) [![codecov](https://codecov.io/gh/gpena/Bramble.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/gpena/Bramble.jl) [![Aqua](https://raw.githubusercontent.com/JuliaTesting/Aqua.jl/master/badge.svg)](https://github.com/JuliaTesting/Aqua.jl) [![JET](https://img.shields.io/badge/%F0%9F%9B%A9%EF%B8%8F_tested_with-JET.jl-233f9a)](https://github.com/aviatesk/JET.jl) |
+| **Platform & Standards** | [![Julia](https://img.shields.io/badge/Julia-1.12%2B-9558B2?logo=julia&logoColor=white)](https://julialang.org) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/gpena/Bramble.jl/blob/main/LICENSE) [![SciML Code Style](https://img.shields.io/static/v1?label=code%20style&message=SciML&color=9558b2&labelColor=389826)](https://github.com/SciML/SciMLStyle)                                                                                                             |
 
 ---
 
@@ -165,7 +165,7 @@ If you use `Bramble.jl` in your research, please cite the software:
 @software{bramble2025,
   author       = {Gon{\c{c}}alo Pena},
   title        = {{Bramble.jl}: Nonuniform Finite Difference Method Discretizations in Julia},
-  doi          = {10.5281/zenodo.17582286},
+  doi          = {10.5281/zenodo.14230821},
   url          = {https://github.com/gpena/Bramble.jl}
 }
 ```
