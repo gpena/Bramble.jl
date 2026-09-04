@@ -87,6 +87,33 @@ end
 const _BENCH_PALETTE = ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4",
     "#f97316"]
 
+# Some groups have a natural axis their series cluster along — a dimension, a numeric
+# precision — and read better split along that axis than at an arbitrary midpoint. Listed
+# in the order charts should appear.
+const _BENCH_GROUP_SPLIT_TAGS = Dict(
+    "restriction" => ["1D", "2D", "3D"],
+    "forms" => ["1D", "2D", "3D"],
+    "precision 1D" => ["Float32", "Float64", "Double64"],
+)
+
+_midpoint_clusters(bnames) = (mid = cld(length(bnames), 2); [bnames[1:mid], bnames[(mid + 1):end]])
+
+# Bucket `bnames` by whichever configured tag each one contains, in tag order, dropping
+# empty buckets. Falls back to a plain midpoint split for a group with no configured tags,
+# or if some name doesn't match any of them (so a future rename can't silently vanish a
+# series into nothing rendered at all).
+function _bench_group_clusters(gname, bnames)
+    tags = get(_BENCH_GROUP_SPLIT_TAGS, gname, nothing)
+    tags === nothing && return _midpoint_clusters(bnames)
+    clusters = [String[] for _ in tags]
+    for bname in bnames
+        idx = findfirst(t -> occursin(t, bname), tags)
+        idx === nothing && return _midpoint_clusters(bnames)
+        push!(clusters[idx], bname)
+    end
+    return [c for c in clusters if !isempty(c)]
+end
+
 # The package version is what a reader tracks progress against release to release; the
 # commit is what pins the measurement exactly, since several baselines can share a
 # version between releases. Show both, version first.
@@ -305,19 +332,26 @@ function _render_chartjs_trend_chart(
     use_normalized = (max_time_ns / max(min_time_ns, 1.0)) > 20.0
 
     # Beyond one palette's worth of series (7), Chart.js repeats colors and two unrelated
-    # lines become visually indistinguishable — "restriction" (9 benchmarks) and "forms"
-    # (13) both hit this. Split into two side-by-side charts instead of cycling; each keeps
-    # its own distinct palette rather than inheriting where the other left off.
+    # lines become visually indistinguishable — "restriction" (9 benchmarks), "forms" (13)
+    # and "precision 1D" (12) all hit this. Split into side-by-side charts instead of
+    # cycling, clustered along whichever axis the group's names carry (dimension,
+    # precision — see `_BENCH_GROUP_SPLIT_TAGS`) rather than an arbitrary midpoint; each
+    # keeps its own distinct palette rather than inheriting where the previous chart left
+    # off. Every panel gets a *fixed*, non-growing width (`flex: 0 0`, not `flex: 1 1`) —
+    # with `flex-grow` allowed, a chart that wraps alone onto its own row (three panels
+    # rarely fit one row beside the table) stretches to fill it and ends up visibly larger
+    # than the ones still paired above it. Fixed width means every panel is the same size
+    # regardless of how many end up sharing a row.
     if length(sorted_bnames) > length(_BENCH_PALETTE)
-        mid = cld(length(sorted_bnames), 2)
-        left = _render_one_trend_canvas(
-            gname, sorted_bnames[1:mid], runs, use_normalized, unit_label, unit_divisor, 460)
-        right = _render_one_trend_canvas(gname, sorted_bnames[(mid + 1):end], runs,
-            use_normalized, unit_label, unit_divisor, 460)
+        clusters = _bench_group_clusters(gname, sorted_bnames)
+        width = 380
+        panels = [_render_one_trend_canvas(gname, names, runs, use_normalized, unit_label,
+                      unit_divisor, width)
+                  for names in clusters]
+        divs = join(("<div style=\"flex: 0 0 $(width)px;\">$p</div>" for p in panels))
         return """
         <div style="display:flex; flex-wrap:wrap; gap:1rem;">
-          <div style="flex:1 1 400px; min-width:320px;">$left</div>
-          <div style="flex:1 1 400px; min-width:320px;">$right</div>
+          $divs
         </div>
         """
     end

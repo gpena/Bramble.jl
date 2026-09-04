@@ -113,9 +113,9 @@ Comparing **3** recorded baselines in chronological order. The earliest run (v2.
 <td style="padding:7px 6px; text-align:center;">3</td>
 <td style="padding:7px 6px; text-align:right;">268.7 μs</td>
 <td style="padding:7px 6px; text-align:center;">3</td>
-<td style="padding:7px 6px; text-align:right;">256.8 μs</td>
+<td style="padding:7px 6px; text-align:right;">278.6 μs</td>
 <td style="padding:7px 6px; text-align:center;">3</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+8.6% 🔴</span></td>
 <td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
@@ -124,9 +124,9 @@ Comparing **3** recorded baselines in chronological order. The earliest run (v2.
 <td style="padding:7px 6px; text-align:center;">3</td>
 <td style="padding:7px 6px; text-align:right;">162.2 μs</td>
 <td style="padding:7px 6px; text-align:center;">3</td>
-<td style="padding:7px 6px; text-align:right;">161.1 μs</td>
+<td style="padding:7px 6px; text-align:right;">177.6 μs</td>
 <td style="padding:7px 6px; text-align:center;">3</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.5% 🟢</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+9.7% 🔴</span></td>
 <td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
@@ -135,9 +135,9 @@ Comparing **3** recorded baselines in chronological order. The earliest run (v2.
 <td style="padding:7px 6px; text-align:center;">3</td>
 <td style="padding:7px 6px; text-align:right;">205.2 μs</td>
 <td style="padding:7px 6px; text-align:center;">3</td>
-<td style="padding:7px 6px; text-align:right;">204.4 μs</td>
+<td style="padding:7px 6px; text-align:right;">210.3 μs</td>
 <td style="padding:7px 6px; text-align:center;">3</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+3.1% 🔴</span></td>
 <td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
@@ -146,9 +146,9 @@ Comparing **3** recorded baselines in chronological order. The earliest run (v2.
 <td style="padding:7px 6px; text-align:center;">3</td>
 <td style="padding:7px 6px; text-align:right;">161.5 μs</td>
 <td style="padding:7px 6px; text-align:center;">3</td>
-<td style="padding:7px 6px; text-align:right;">170.2 μs</td>
+<td style="padding:7px 6px; text-align:right;">180.6 μs</td>
 <td style="padding:7px 6px; text-align:center;">3</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-1.0% 🟢</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+5.0% 🔴</span></td>
 <td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
 </tr>
 </tbody>
@@ -168,8 +168,8 @@ Comparing **3** recorded baselines in chronological order. The earliest run (v2.
   label: "Dcₓ",
   data: [{x:"v2.0.0 (2dec0c7)",y:256.5,julia:"1.12.7",
 detail:"256.5 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.1.0 (274ae7d)",y:268.708,julia:"1.12.7",
-detail:"268.7 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (d7c2416)",y:256.75,julia:"1.12.7",
-detail:"256.8 μs",allocs:3,mem:"7.64 MiB"}],
+detail:"268.7 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (d7c2416)",y:278.5625,julia:"1.12.7",
+detail:"278.6 μs",allocs:3,mem:"7.64 MiB"}],
   borderColor: "#3b82f6",
   backgroundColor: "#3b82f6",
   spanGaps: true,
@@ -182,8 +182,8 @@ detail:"256.8 μs",allocs:3,mem:"7.64 MiB"}],
   label: "D₋ᵧ",
   data: [{x:"v2.0.0 (2dec0c7)",y:161.958,julia:"1.12.7",
 detail:"162.0 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.1.0 (274ae7d)",y:162.209,julia:"1.12.7",
-detail:"162.2 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (d7c2416)",y:161.083,julia:"1.12.7",
-detail:"161.1 μs",allocs:3,mem:"7.64 MiB"}],
+detail:"162.2 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (d7c2416)",y:177.6455,julia:"1.12.7",
+detail:"177.6 μs",allocs:3,mem:"7.64 MiB"}],
   borderColor: "#10b981",
   backgroundColor: "#10b981",
   spanGaps: true,
@@ -196,8 +196,8 @@ detail:"161.1 μs",allocs:3,mem:"7.64 MiB"}],
   label: "D₋ₓ",
   data: [{x:"v2.0.0 (2dec0c7)",y:204.042,julia:"1.12.7",
 detail:"204.0 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.1.0 (274ae7d)",y:205.208,julia:"1.12.7",
-detail:"205.2 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (d7c2416)",y:204.375,julia:"1.12.7",
-detail:"204.4 μs",allocs:3,mem:"7.64 MiB"}],
+detail:"205.2 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (d7c2416)",y:210.291,julia:"1.12.7",
+detail:"210.3 μs",allocs:3,mem:"7.64 MiB"}],
   borderColor: "#f59e0b",
   backgroundColor: "#f59e0b",
   spanGaps: true,
@@ -210,8 +210,8 @@ detail:"204.4 μs",allocs:3,mem:"7.64 MiB"}],
   label: "M₋ₓ",
   data: [{x:"v2.0.0 (2dec0c7)",y:171.959,julia:"1.12.7",
 detail:"172.0 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.1.0 (274ae7d)",y:161.458,julia:"1.12.7",
-detail:"161.5 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (d7c2416)",y:170.25,julia:"1.12.7",
-detail:"170.2 μs",allocs:3,mem:"7.64 MiB"}],
+detail:"161.5 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (d7c2416)",y:180.583,julia:"1.12.7",
+detail:"180.6 μs",allocs:3,mem:"7.64 MiB"}],
   borderColor: "#8b5cf6",
   backgroundColor: "#8b5cf6",
   spanGaps: true,
@@ -289,9 +289,9 @@ detail:"170.2 μs",allocs:3,mem:"7.64 MiB"}],
 <td style="padding:7px 6px; text-align:center;">3</td>
 <td style="padding:7px 6px; text-align:right;">212.8 μs</td>
 <td style="padding:7px 6px; text-align:center;">3</td>
-<td style="padding:7px 6px; text-align:right;">228.1 μs</td>
+<td style="padding:7px 6px; text-align:right;">228.6 μs</td>
 <td style="padding:7px 6px; text-align:center;">3</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.6% 🟢</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
@@ -300,7 +300,7 @@ detail:"170.2 μs",allocs:3,mem:"7.64 MiB"}],
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">240.3 μs</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">239.8 μs</td>
+<td style="padding:7px 6px; text-align:right;">240.7 μs</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
@@ -311,9 +311,9 @@ detail:"170.2 μs",allocs:3,mem:"7.64 MiB"}],
 <td style="padding:7px 6px; text-align:center;">15</td>
 <td style="padding:7px 6px; text-align:right;">696.7 μs</td>
 <td style="padding:7px 6px; text-align:center;">15</td>
-<td style="padding:7px 6px; text-align:right;">695.8 μs</td>
+<td style="padding:7px 6px; text-align:right;">685.9 μs</td>
 <td style="padding:7px 6px; text-align:center;">15</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.7% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.7% 🟢</span></td>
 <td style="padding:7px 6px; text-align:right;">22.92 MiB</td>
 </tr>
 </tbody>
@@ -333,8 +333,8 @@ detail:"170.2 μs",allocs:3,mem:"7.64 MiB"}],
   label: "D₋₂",
   data: [{x:"v2.0.0 (2dec0c7)",y:229.584,julia:"1.12.7",
 detail:"229.6 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.1.0 (274ae7d)",y:212.792,julia:"1.12.7",
-detail:"212.8 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (d7c2416)",y:228.125,julia:"1.12.7",
-detail:"228.1 μs",allocs:3,mem:"7.64 MiB"}],
+detail:"212.8 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (d7c2416)",y:228.583,julia:"1.12.7",
+detail:"228.6 μs",allocs:3,mem:"7.64 MiB"}],
   borderColor: "#3b82f6",
   backgroundColor: "#3b82f6",
   spanGaps: true,
@@ -347,8 +347,8 @@ detail:"228.1 μs",allocs:3,mem:"7.64 MiB"}],
   label: "innerₕ",
   data: [{x:"v2.0.0 (2dec0c7)",y:240.375,julia:"1.12.7",
 detail:"240.4 μs",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:240.292,julia:"1.12.7",
-detail:"240.3 μs",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:239.75,julia:"1.12.7",
-detail:"239.8 μs",allocs:0,mem:"0 B"}],
+detail:"240.3 μs",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:240.666,julia:"1.12.7",
+detail:"240.7 μs",allocs:0,mem:"0 B"}],
   borderColor: "#10b981",
   backgroundColor: "#10b981",
   spanGaps: true,
@@ -361,8 +361,8 @@ detail:"239.8 μs",allocs:0,mem:"0 B"}],
   label: "∇₋ₕ",
   data: [{x:"v2.0.0 (2dec0c7)",y:690.75,julia:"1.12.7",
 detail:"690.8 μs",allocs:15,mem:"22.92 MiB"},{x:"v2.1.0 (274ae7d)",y:696.667,julia:"1.12.7",
-detail:"696.7 μs",allocs:15,mem:"22.92 MiB"},{x:"v2.2.0 (d7c2416)",y:695.834,julia:"1.12.7",
-detail:"695.8 μs",allocs:15,mem:"22.92 MiB"}],
+detail:"696.7 μs",allocs:15,mem:"22.92 MiB"},{x:"v2.2.0 (d7c2416)",y:685.875,julia:"1.12.7",
+detail:"685.9 μs",allocs:15,mem:"22.92 MiB"}],
   borderColor: "#f59e0b",
   backgroundColor: "#f59e0b",
   spanGaps: true,
@@ -440,9 +440,9 @@ detail:"695.8 μs",allocs:15,mem:"22.92 MiB"}],
 <td style="padding:7px 6px; text-align:center;">3</td>
 <td style="padding:7px 6px; text-align:right;">161.3 μs</td>
 <td style="padding:7px 6px; text-align:center;">3</td>
-<td style="padding:7px 6px; text-align:right;">165.5 μs</td>
+<td style="padding:7px 6px; text-align:right;">161.6 μs</td>
 <td style="padding:7px 6px; text-align:center;">3</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+2.6% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
@@ -451,9 +451,9 @@ detail:"695.8 μs",allocs:15,mem:"22.92 MiB"}],
 <td style="padding:7px 6px; text-align:center;">3</td>
 <td style="padding:7px 6px; text-align:right;">226.8 μs</td>
 <td style="padding:7px 6px; text-align:center;">3</td>
-<td style="padding:7px 6px; text-align:right;">225.8 μs</td>
+<td style="padding:7px 6px; text-align:right;">228.5 μs</td>
 <td style="padding:7px 6px; text-align:center;">3</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.9% 🟢</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
@@ -462,9 +462,9 @@ detail:"695.8 μs",allocs:15,mem:"22.92 MiB"}],
 <td style="padding:7px 6px; text-align:center;">3</td>
 <td style="padding:7px 6px; text-align:right;">159.6 μs</td>
 <td style="padding:7px 6px; text-align:center;">3</td>
-<td style="padding:7px 6px; text-align:right;">159.2 μs</td>
+<td style="padding:7px 6px; text-align:right;">162.4 μs</td>
 <td style="padding:7px 6px; text-align:center;">3</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-1.5% 🟢</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.5% 🔴</span></td>
 <td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
@@ -473,7 +473,7 @@ detail:"695.8 μs",allocs:15,mem:"22.92 MiB"}],
 <td style="padding:7px 6px; text-align:center;">3</td>
 <td style="padding:7px 6px; text-align:right;">159.9 μs</td>
 <td style="padding:7px 6px; text-align:center;">3</td>
-<td style="padding:7px 6px; text-align:right;">161.3 μs</td>
+<td style="padding:7px 6px; text-align:right;">161.0 μs</td>
 <td style="padding:7px 6px; text-align:center;">3</td>
 <td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
@@ -484,9 +484,9 @@ detail:"695.8 μs",allocs:15,mem:"22.92 MiB"}],
 <td style="padding:7px 6px; text-align:center;">3</td>
 <td style="padding:7px 6px; text-align:right;">226.7 μs</td>
 <td style="padding:7px 6px; text-align:center;">3</td>
-<td style="padding:7px 6px; text-align:right;">225.8 μs</td>
+<td style="padding:7px 6px; text-align:right;">227.2 μs</td>
 <td style="padding:7px 6px; text-align:center;">3</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.7% 🟢</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
@@ -495,9 +495,9 @@ detail:"695.8 μs",allocs:15,mem:"22.92 MiB"}],
 <td style="padding:7px 6px; text-align:center;">3</td>
 <td style="padding:7px 6px; text-align:right;">161.8 μs</td>
 <td style="padding:7px 6px; text-align:center;">3</td>
-<td style="padding:7px 6px; text-align:right;">162.0 μs</td>
+<td style="padding:7px 6px; text-align:right;">160.5 μs</td>
 <td style="padding:7px 6px; text-align:center;">3</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.6% 🟢</span></td>
 <td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
 </tr>
 </tbody>
@@ -517,8 +517,8 @@ detail:"695.8 μs",allocs:15,mem:"22.92 MiB"}],
   label: "M₊ᵧ 2D",
   data: [{x:"v2.0.0 (2dec0c7)",y:161.292,julia:"1.12.7",
 detail:"161.3 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.1.0 (274ae7d)",y:161.291,julia:"1.12.7",
-detail:"161.3 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (d7c2416)",y:165.458,julia:"1.12.7",
-detail:"165.5 μs",allocs:3,mem:"7.64 MiB"}],
+detail:"161.3 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (d7c2416)",y:161.625,julia:"1.12.7",
+detail:"161.6 μs",allocs:3,mem:"7.64 MiB"}],
   borderColor: "#3b82f6",
   backgroundColor: "#3b82f6",
   spanGaps: true,
@@ -531,8 +531,8 @@ detail:"165.5 μs",allocs:3,mem:"7.64 MiB"}],
   label: "M₊₂ 3D",
   data: [{x:"v2.0.0 (2dec0c7)",y:227.708,julia:"1.12.7",
 detail:"227.7 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.1.0 (274ae7d)",y:226.792,julia:"1.12.7",
-detail:"226.8 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (d7c2416)",y:225.75,julia:"1.12.7",
-detail:"225.8 μs",allocs:3,mem:"7.64 MiB"}],
+detail:"226.8 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (d7c2416)",y:228.458,julia:"1.12.7",
+detail:"228.5 μs",allocs:3,mem:"7.64 MiB"}],
   borderColor: "#10b981",
   backgroundColor: "#10b981",
   spanGaps: true,
@@ -545,8 +545,8 @@ detail:"225.8 μs",allocs:3,mem:"7.64 MiB"}],
   label: "M₊ₓ 2D",
   data: [{x:"v2.0.0 (2dec0c7)",y:161.625,julia:"1.12.7",
 detail:"161.6 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.1.0 (274ae7d)",y:159.625,julia:"1.12.7",
-detail:"159.6 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (d7c2416)",y:159.209,julia:"1.12.7",
-detail:"159.2 μs",allocs:3,mem:"7.64 MiB"}],
+detail:"159.6 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (d7c2416)",y:162.417,julia:"1.12.7",
+detail:"162.4 μs",allocs:3,mem:"7.64 MiB"}],
   borderColor: "#f59e0b",
   backgroundColor: "#f59e0b",
   spanGaps: true,
@@ -559,8 +559,8 @@ detail:"159.2 μs",allocs:3,mem:"7.64 MiB"}],
   label: "jumpᵧ 2D",
   data: [{x:"v2.0.0 (2dec0c7)",y:160.834,julia:"1.12.7",
 detail:"160.8 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.1.0 (274ae7d)",y:159.917,julia:"1.12.7",
-detail:"159.9 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (d7c2416)",y:161.291,julia:"1.12.7",
-detail:"161.3 μs",allocs:3,mem:"7.64 MiB"}],
+detail:"159.9 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (d7c2416)",y:160.958,julia:"1.12.7",
+detail:"161.0 μs",allocs:3,mem:"7.64 MiB"}],
   borderColor: "#8b5cf6",
   backgroundColor: "#8b5cf6",
   spanGaps: true,
@@ -573,8 +573,8 @@ detail:"161.3 μs",allocs:3,mem:"7.64 MiB"}],
   label: "jump₂ 3D",
   data: [{x:"v2.0.0 (2dec0c7)",y:227.334,julia:"1.12.7",
 detail:"227.3 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.1.0 (274ae7d)",y:226.667,julia:"1.12.7",
-detail:"226.7 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (d7c2416)",y:225.833,julia:"1.12.7",
-detail:"225.8 μs",allocs:3,mem:"7.64 MiB"}],
+detail:"226.7 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (d7c2416)",y:227.25,julia:"1.12.7",
+detail:"227.2 μs",allocs:3,mem:"7.64 MiB"}],
   borderColor: "#ec4899",
   backgroundColor: "#ec4899",
   spanGaps: true,
@@ -587,8 +587,8 @@ detail:"225.8 μs",allocs:3,mem:"7.64 MiB"}],
   label: "jumpₓ 2D",
   data: [{x:"v2.0.0 (2dec0c7)",y:161.458,julia:"1.12.7",
 detail:"161.5 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.1.0 (274ae7d)",y:161.834,julia:"1.12.7",
-detail:"161.8 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (d7c2416)",y:162.041,julia:"1.12.7",
-detail:"162.0 μs",allocs:3,mem:"7.64 MiB"}],
+detail:"161.8 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (d7c2416)",y:160.5,julia:"1.12.7",
+detail:"160.5 μs",allocs:3,mem:"7.64 MiB"}],
   borderColor: "#06b6d4",
   backgroundColor: "#06b6d4",
   spanGaps: true,
@@ -666,9 +666,9 @@ detail:"162.0 μs",allocs:3,mem:"7.64 MiB"}],
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">238.0 μs</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">241.1 μs</td>
+<td style="padding:7px 6px; text-align:right;">237.0 μs</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-1.4% 🟢</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
@@ -677,9 +677,9 @@ detail:"162.0 μs",allocs:3,mem:"7.64 MiB"}],
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">788.5 μs</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">801.5 μs</td>
+<td style="padding:7px 6px; text-align:right;">785.7 μs</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.5% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.5% 🟢</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
@@ -688,9 +688,9 @@ detail:"162.0 μs",allocs:3,mem:"7.64 MiB"}],
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">186.2 μs</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">190.1 μs</td>
+<td style="padding:7px 6px; text-align:right;">184.4 μs</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-2.6% 🟢</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
@@ -699,9 +699,9 @@ detail:"162.0 μs",allocs:3,mem:"7.64 MiB"}],
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">582.4 μs</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">581.9 μs</td>
+<td style="padding:7px 6px; text-align:right;">578.2 μs</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.6% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 </tbody>
@@ -721,8 +721,8 @@ detail:"162.0 μs",allocs:3,mem:"7.64 MiB"}],
   label: "innerₕ",
   data: [{x:"v2.0.0 (2dec0c7)",y:240.375,julia:"1.12.7",
 detail:"240.4 μs",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:238.041,julia:"1.12.7",
-detail:"238.0 μs",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:241.084,julia:"1.12.7",
-detail:"241.1 μs",allocs:0,mem:"0 B"}],
+detail:"238.0 μs",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:236.959,julia:"1.12.7",
+detail:"237.0 μs",allocs:0,mem:"0 B"}],
   borderColor: "#3b82f6",
   backgroundColor: "#3b82f6",
   spanGaps: true,
@@ -735,8 +735,8 @@ detail:"241.1 μs",allocs:0,mem:"0 B"}],
   label: "norm₁ₕ",
   data: [{x:"v2.0.0 (2dec0c7)",y:789.791,julia:"1.12.7",
 detail:"789.8 μs",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:788.458,julia:"1.12.7",
-detail:"788.5 μs",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:801.458,julia:"1.12.7",
-detail:"801.5 μs",allocs:0,mem:"0 B"}],
+detail:"788.5 μs",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:785.667,julia:"1.12.7",
+detail:"785.7 μs",allocs:0,mem:"0 B"}],
   borderColor: "#10b981",
   backgroundColor: "#10b981",
   spanGaps: true,
@@ -749,8 +749,8 @@ detail:"801.5 μs",allocs:0,mem:"0 B"}],
   label: "normₕ",
   data: [{x:"v2.0.0 (2dec0c7)",y:189.292,julia:"1.12.7",
 detail:"189.3 μs",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:186.167,julia:"1.12.7",
-detail:"186.2 μs",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:190.084,julia:"1.12.7",
-detail:"190.1 μs",allocs:0,mem:"0 B"}],
+detail:"186.2 μs",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:184.417,julia:"1.12.7",
+detail:"184.4 μs",allocs:0,mem:"0 B"}],
   borderColor: "#f59e0b",
   backgroundColor: "#f59e0b",
   spanGaps: true,
@@ -763,8 +763,8 @@ detail:"190.1 μs",allocs:0,mem:"0 B"}],
   label: "snorm₁ₕ",
   data: [{x:"v2.0.0 (2dec0c7)",y:578.5,julia:"1.12.7",
 detail:"578.5 μs",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:582.375,julia:"1.12.7",
-detail:"582.4 μs",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:581.917,julia:"1.12.7",
-detail:"581.9 μs",allocs:0,mem:"0 B"}],
+detail:"582.4 μs",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:578.209,julia:"1.12.7",
+detail:"578.2 μs",allocs:0,mem:"0 B"}],
   borderColor: "#8b5cf6",
   backgroundColor: "#8b5cf6",
   spanGaps: true,
@@ -842,9 +842,9 @@ detail:"581.9 μs",allocs:0,mem:"0 B"}],
 <td style="padding:7px 6px; text-align:center;">10</td>
 <td style="padding:7px 6px; text-align:right;">3.24 ms</td>
 <td style="padding:7px 6px; text-align:center;">10</td>
-<td style="padding:7px 6px; text-align:right;">3.21 ms</td>
+<td style="padding:7px 6px; text-align:right;">3.38 ms</td>
 <td style="padding:7px 6px; text-align:center;">10</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+5.8% 🔴</span></td>
 <td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
@@ -853,9 +853,20 @@ detail:"581.9 μs",allocs:0,mem:"0 B"}],
 <td style="padding:7px 6px; text-align:center;">7</td>
 <td style="padding:7px 6px; text-align:right;">3.27 ms</td>
 <td style="padding:7px 6px; text-align:center;">7</td>
+<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:right;">448 B</td>
+</tr>
+<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
+<td style="padding:7px 6px; font-weight:600;"><code>Rₕ! 1D, Parallel() backend</code></td>
+<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
 <td style="padding:7px 6px; text-align:right;">3.21 ms</td>
 <td style="padding:7px 6px; text-align:center;">7</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.5% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
 <td style="padding:7px 6px; text-align:right;">448 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
@@ -864,9 +875,9 @@ detail:"581.9 μs",allocs:0,mem:"0 B"}],
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">3.03 ms</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">3.01 ms</td>
+<td style="padding:7px 6px; text-align:right;">2.97 ms</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+2.3% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.7% 🔴</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
@@ -875,9 +886,20 @@ detail:"581.9 μs",allocs:0,mem:"0 B"}],
 <td style="padding:7px 6px; text-align:center;">7</td>
 <td style="padding:7px 6px; text-align:right;">3.91 ms</td>
 <td style="padding:7px 6px; text-align:center;">7</td>
-<td style="padding:7px 6px; text-align:right;">3.87 ms</td>
+<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:right;">448 B</td>
+</tr>
+<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
+<td style="padding:7px 6px; font-weight:600;"><code>Rₕ! 2D, Parallel() backend</code></td>
+<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:right;">3.83 ms</td>
 <td style="padding:7px 6px; text-align:center;">7</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.2% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
 <td style="padding:7px 6px; text-align:right;">448 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
@@ -886,9 +908,20 @@ detail:"581.9 μs",allocs:0,mem:"0 B"}],
 <td style="padding:7px 6px; text-align:center;">7</td>
 <td style="padding:7px 6px; text-align:right;">4.58 ms</td>
 <td style="padding:7px 6px; text-align:center;">7</td>
-<td style="padding:7px 6px; text-align:right;">4.72 ms</td>
+<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:right;">464 B</td>
+</tr>
+<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
+<td style="padding:7px 6px; font-weight:600;"><code>Rₕ! 3D, Parallel() backend</code></td>
+<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:right;">4.55 ms</td>
 <td style="padding:7px 6px; text-align:center;">7</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+6.3% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
 <td style="padding:7px 6px; text-align:right;">464 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
@@ -897,9 +930,20 @@ detail:"581.9 μs",allocs:0,mem:"0 B"}],
 <td style="padding:7px 6px; text-align:center;">7</td>
 <td style="padding:7px 6px; text-align:right;">16.85 ms</td>
 <td style="padding:7px 6px; text-align:center;">7</td>
-<td style="padding:7px 6px; text-align:right;">16.72 ms</td>
+<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:right;">544 B</td>
+</tr>
+<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
+<td style="padding:7px 6px; font-weight:600;"><code>avgₕ! 1D, Parallel() backend</code></td>
+<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:right;">16.67 ms</td>
 <td style="padding:7px 6px; text-align:center;">7</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
 <td style="padding:7px 6px; text-align:right;">544 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
@@ -908,9 +952,9 @@ detail:"581.9 μs",allocs:0,mem:"0 B"}],
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">17.24 ms</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">17.25 ms</td>
+<td style="padding:7px 6px; text-align:right;">17.26 ms</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.5% 🟢</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
@@ -919,9 +963,20 @@ detail:"581.9 μs",allocs:0,mem:"0 B"}],
 <td style="padding:7px 6px; text-align:center;">7</td>
 <td style="padding:7px 6px; text-align:right;">106.07 ms</td>
 <td style="padding:7px 6px; text-align:center;">7</td>
-<td style="padding:7px 6px; text-align:right;">106.47 ms</td>
+<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:right;">560 B</td>
+</tr>
+<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
+<td style="padding:7px 6px; font-weight:600;"><code>avgₕ! 2D, Parallel() backend</code></td>
+<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:right;">106.72 ms</td>
 <td style="padding:7px 6px; text-align:center;">7</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
 <td style="padding:7px 6px; text-align:right;">560 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
@@ -930,9 +985,20 @@ detail:"581.9 μs",allocs:0,mem:"0 B"}],
 <td style="padding:7px 6px; text-align:center;">7</td>
 <td style="padding:7px 6px; text-align:right;">659.64 ms</td>
 <td style="padding:7px 6px; text-align:center;">7</td>
-<td style="padding:7px 6px; text-align:right;">622.8 ms</td>
+<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:right;">576 B</td>
+</tr>
+<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
+<td style="padding:7px 6px; font-weight:600;"><code>avgₕ! 3D, Parallel() backend</code></td>
+<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:right;">622.73 ms</td>
 <td style="padding:7px 6px; text-align:center;">7</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
 <td style="padding:7px 6px; text-align:right;">576 B</td>
 </tr>
 </tbody>
@@ -941,7 +1007,7 @@ detail:"581.9 μs",allocs:0,mem:"0 B"}],
   </div>
   <div style="flex:1 1 450px; min-width:340px;">
 <div style="display:flex; flex-wrap:wrap; gap:1rem;">
-  <div style="flex:1 1 400px; min-width:320px;"><div style="width:100%; max-width:460px;">
+  <div style="flex: 0 0 380px;"><div style="width:100%; max-width:380px;">
   <canvas id="bench_chart_5" height="280"></canvas>
 </div>
 <script>
@@ -953,8 +1019,8 @@ detail:"581.9 μs",allocs:0,mem:"0 B"}],
   label: "Rₕ 1D (allocates its output)",
   data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
 detail:"3.2 ms (baseline)",allocs:10,mem:"7.64 MiB"},{x:"v2.1.0 (274ae7d)",y:1.0149558149254283,julia:"1.12.7",
-detail:"3.24 ms (+1.5%)",allocs:10,mem:"7.64 MiB"},{x:"v2.2.0 (d7c2416)",y:1.0044658399467121,julia:"1.12.7",
-detail:"3.21 ms (+0.4%)",allocs:10,mem:"7.64 MiB"}],
+detail:"3.24 ms (+1.5%)",allocs:10,mem:"7.64 MiB"},{x:"v2.2.0 (d7c2416)",y:1.0576855523560704,julia:"1.12.7",
+detail:"3.38 ms (+5.8%)",allocs:10,mem:"7.64 MiB"}],
   borderColor: "#3b82f6",
   backgroundColor: "#3b82f6",
   spanGaps: true,
@@ -967,10 +1033,21 @@ detail:"3.21 ms (+0.4%)",allocs:10,mem:"7.64 MiB"}],
   label: "Rₕ! 1D",
   data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
 detail:"3.19 ms (baseline)",allocs:7,mem:"448 B"},{x:"v2.1.0 (274ae7d)",y:1.024612615432775,julia:"1.12.7",
-detail:"3.27 ms (+2.5%)",allocs:7,mem:"448 B"},{x:"v2.2.0 (d7c2416)",y:1.004656440757552,julia:"1.12.7",
-detail:"3.21 ms (+0.5%)",allocs:7,mem:"448 B"}],
+detail:"3.27 ms (+2.5%)",allocs:7,mem:"448 B"}],
   borderColor: "#10b981",
   backgroundColor: "#10b981",
+  spanGaps: true,
+  pointRadius: 4,
+  pointHoverRadius: 6,
+  borderWidth: 2,
+  tension: 0.15,
+},
+{
+  label: "Rₕ! 1D, Parallel() backend",
+  data: [{x:"v2.2.0 (d7c2416)",y:1.0,julia:"1.12.7",
+detail:"3.21 ms (baseline)",allocs:7,mem:"448 B"}],
+  borderColor: "#f59e0b",
+  backgroundColor: "#f59e0b",
   spanGaps: true,
   pointRadius: 4,
   pointHoverRadius: 6,
@@ -981,22 +1058,8 @@ detail:"3.21 ms (+0.5%)",allocs:7,mem:"448 B"}],
   label: "Rₕ! 1D, Serial() backend (default)",
   data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
 detail:"2.95 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0301685765215176,julia:"1.12.7",
-detail:"3.03 ms (+3.0%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:1.0233426704014938,julia:"1.12.7",
-detail:"3.01 ms (+2.3%)",allocs:0,mem:"0 B"}],
-  borderColor: "#f59e0b",
-  backgroundColor: "#f59e0b",
-  spanGaps: true,
-  pointRadius: 4,
-  pointHoverRadius: 6,
-  borderWidth: 2,
-  tension: 0.15,
-},
-{
-  label: "Rₕ! 2D",
-  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
-detail:"3.82 ms (baseline)",allocs:7,mem:"448 B"},{x:"v2.1.0 (274ae7d)",y:1.0244596787155744,julia:"1.12.7",
-detail:"3.91 ms (+2.4%)",allocs:7,mem:"448 B"},{x:"v2.2.0 (d7c2416)",y:1.0118616496886683,julia:"1.12.7",
-detail:"3.87 ms (+1.2%)",allocs:7,mem:"448 B"}],
+detail:"3.03 ms (+3.0%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:1.0069036584330702,julia:"1.12.7",
+detail:"2.97 ms (+0.7%)",allocs:0,mem:"0 B"}],
   borderColor: "#8b5cf6",
   backgroundColor: "#8b5cf6",
   spanGaps: true,
@@ -1006,13 +1069,38 @@ detail:"3.87 ms (+1.2%)",allocs:7,mem:"448 B"}],
   tension: 0.15,
 },
 {
-  label: "Rₕ! 3D",
+  label: "avgₕ! 1D",
   data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
-detail:"4.44 ms (baseline)",allocs:7,mem:"464 B"},{x:"v2.1.0 (274ae7d)",y:1.031481808717184,julia:"1.12.7",
-detail:"4.58 ms (+3.1%)",allocs:7,mem:"464 B"},{x:"v2.2.0 (d7c2416)",y:1.0627620360730465,julia:"1.12.7",
-detail:"4.72 ms (+6.3%)",allocs:7,mem:"464 B"}],
+detail:"16.74 ms (baseline)",allocs:7,mem:"544 B"},{x:"v2.1.0 (274ae7d)",y:1.0068065935214991,julia:"1.12.7",
+detail:"16.85 ms (+0.7%)",allocs:7,mem:"544 B"}],
   borderColor: "#ec4899",
   backgroundColor: "#ec4899",
+  spanGaps: true,
+  pointRadius: 4,
+  pointHoverRadius: 6,
+  borderWidth: 2,
+  tension: 0.15,
+},
+{
+  label: "avgₕ! 1D, Parallel() backend",
+  data: [{x:"v2.2.0 (d7c2416)",y:1.0,julia:"1.12.7",
+detail:"16.67 ms (baseline)",allocs:7,mem:"544 B"}],
+  borderColor: "#06b6d4",
+  backgroundColor: "#06b6d4",
+  spanGaps: true,
+  pointRadius: 4,
+  pointHoverRadius: 6,
+  borderWidth: 2,
+  tension: 0.15,
+},
+{
+  label: "avgₕ! 1D, Serial() backend (default)",
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"17.32 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:0.994873716820243,julia:"1.12.7",
+detail:"17.24 ms (-0.5%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:0.9963419560811928,julia:"1.12.7",
+detail:"17.26 ms (-0.4%)",allocs:0,mem:"0 B"}],
+  borderColor: "#f97316",
+  backgroundColor: "#f97316",
   spanGaps: true,
   pointRadius: 4,
   pointHoverRadius: 6,
@@ -1065,8 +1153,7 @@ detail:"4.72 ms (+6.3%)",allocs:7,mem:"464 B"}],
   });
 })();
 </script>
-</div>
-  <div style="flex:1 1 400px; min-width:320px;"><div style="width:100%; max-width:460px;">
+</div><div style="flex: 0 0 380px;"><div style="width:100%; max-width:380px;">
   <canvas id="bench_chart_6" height="280"></canvas>
 </div>
 <script>
@@ -1075,11 +1162,10 @@ detail:"4.72 ms (+6.3%)",allocs:7,mem:"464 B"}],
   const chart = new Chart(document.getElementById('bench_chart_6').getContext('2d'), {
     type: 'line',
     data: { labels: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)"], datasets: [{
-  label: "avgₕ! 1D",
+  label: "Rₕ! 2D",
   data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
-detail:"16.74 ms (baseline)",allocs:7,mem:"544 B"},{x:"v2.1.0 (274ae7d)",y:1.0068065935214991,julia:"1.12.7",
-detail:"16.85 ms (+0.7%)",allocs:7,mem:"544 B"},{x:"v2.2.0 (d7c2416)",y:0.9989244822203467,julia:"1.12.7",
-detail:"16.72 ms (-0.1%)",allocs:7,mem:"544 B"}],
+detail:"3.82 ms (baseline)",allocs:7,mem:"448 B"},{x:"v2.1.0 (274ae7d)",y:1.0244596787155744,julia:"1.12.7",
+detail:"3.91 ms (+2.4%)",allocs:7,mem:"448 B"}],
   borderColor: "#3b82f6",
   backgroundColor: "#3b82f6",
   spanGaps: true,
@@ -1089,11 +1175,9 @@ detail:"16.72 ms (-0.1%)",allocs:7,mem:"544 B"}],
   tension: 0.15,
 },
 {
-  label: "avgₕ! 1D, Serial() backend (default)",
-  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
-detail:"17.32 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:0.994873716820243,julia:"1.12.7",
-detail:"17.24 ms (-0.5%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:0.9954365216680587,julia:"1.12.7",
-detail:"17.25 ms (-0.5%)",allocs:0,mem:"0 B"}],
+  label: "Rₕ! 2D, Parallel() backend",
+  data: [{x:"v2.2.0 (d7c2416)",y:1.0,julia:"1.12.7",
+detail:"3.83 ms (baseline)",allocs:7,mem:"448 B"}],
   borderColor: "#10b981",
   backgroundColor: "#10b981",
   spanGaps: true,
@@ -1106,10 +1190,100 @@ detail:"17.25 ms (-0.5%)",allocs:0,mem:"0 B"}],
   label: "avgₕ! 2D",
   data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
 detail:"106.39 ms (baseline)",allocs:7,mem:"560 B"},{x:"v2.1.0 (274ae7d)",y:0.996973378521717,julia:"1.12.7",
-detail:"106.07 ms (-0.3%)",allocs:7,mem:"560 B"},{x:"v2.2.0 (d7c2416)",y:1.0008005106966111,julia:"1.12.7",
-detail:"106.47 ms (+0.1%)",allocs:7,mem:"560 B"}],
+detail:"106.07 ms (-0.3%)",allocs:7,mem:"560 B"}],
   borderColor: "#f59e0b",
   backgroundColor: "#f59e0b",
+  spanGaps: true,
+  pointRadius: 4,
+  pointHoverRadius: 6,
+  borderWidth: 2,
+  tension: 0.15,
+},
+{
+  label: "avgₕ! 2D, Parallel() backend",
+  data: [{x:"v2.2.0 (d7c2416)",y:1.0,julia:"1.12.7",
+detail:"106.72 ms (baseline)",allocs:7,mem:"560 B"}],
+  borderColor: "#8b5cf6",
+  backgroundColor: "#8b5cf6",
+  spanGaps: true,
+  pointRadius: 4,
+  pointHoverRadius: 6,
+  borderWidth: 2,
+  tension: 0.15,
+},
+{
+  label: "1.0x (ref)",
+  data: [{x:"v2.0.0 (2dec0c7)",y:1},{x:"v2.1.0 (274ae7d)",y:1},{x:"v2.2.0 (d7c2416)",y:1}],
+  borderColor: "rgba(128,128,128,0.7)",
+  borderDash: [5,4],
+  borderWidth: 1.5,
+  pointRadius: 0,
+}] },
+    options: {
+      responsive: true,
+      interaction: { mode: 'nearest', axis: 'x', intersect: false },
+      plugins: {
+        legend: { position: 'top', labels: { color: theme.text, boxWidth: 12, font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            title: (items) => items[0].raw.x + " (Julia " + items[0].raw.julia + ")",
+            label: (c) => c.raw ? c.dataset.label + ": " + (c.raw.detail || c.raw.y) +
+              (c.raw.allocs !== undefined ? " (" + c.raw.allocs + " allocs, " + c.raw.mem + ")" : "") : c.dataset.label,
+          },
+        },
+      },
+      scales: {
+        x: {
+          ticks: { color: theme.text, maxRotation: 45, minRotation: 0, font: { family: 'monospace', size: 10 } },
+          grid: { color: theme.grid }, border: { color: theme.axis },
+        },
+        y: {
+          title: { display: true, text: "relative to baseline", color: theme.text },
+          ticks: { color: theme.text }, grid: { color: theme.grid }, border: { color: theme.axis },
+        },
+      },
+    },
+  });
+  window.brambleRegisterChart(chart, function (c) {
+    const t = window.brambleChartTheme();
+    c.options.plugins.legend.labels.color = t.text;
+    c.options.scales.x.ticks.color = t.text;
+    c.options.scales.x.grid.color = t.grid;
+    c.options.scales.x.border.color = t.axis;
+    c.options.scales.y.title.color = t.text;
+    c.options.scales.y.ticks.color = t.text;
+    c.options.scales.y.grid.color = t.grid;
+    c.options.scales.y.border.color = t.axis;
+  });
+})();
+</script>
+</div><div style="flex: 0 0 380px;"><div style="width:100%; max-width:380px;">
+  <canvas id="bench_chart_7" height="280"></canvas>
+</div>
+<script>
+(function () {
+  const theme = window.brambleChartTheme();
+  const chart = new Chart(document.getElementById('bench_chart_7').getContext('2d'), {
+    type: 'line',
+    data: { labels: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)"], datasets: [{
+  label: "Rₕ! 3D",
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"4.44 ms (baseline)",allocs:7,mem:"464 B"},{x:"v2.1.0 (274ae7d)",y:1.031481808717184,julia:"1.12.7",
+detail:"4.58 ms (+3.1%)",allocs:7,mem:"464 B"}],
+  borderColor: "#3b82f6",
+  backgroundColor: "#3b82f6",
+  spanGaps: true,
+  pointRadius: 4,
+  pointHoverRadius: 6,
+  borderWidth: 2,
+  tension: 0.15,
+},
+{
+  label: "Rₕ! 3D, Parallel() backend",
+  data: [{x:"v2.2.0 (d7c2416)",y:1.0,julia:"1.12.7",
+detail:"4.55 ms (baseline)",allocs:7,mem:"464 B"}],
+  borderColor: "#10b981",
+  backgroundColor: "#10b981",
   spanGaps: true,
   pointRadius: 4,
   pointHoverRadius: 6,
@@ -1120,8 +1294,19 @@ detail:"106.47 ms (+0.1%)",allocs:7,mem:"560 B"}],
   label: "avgₕ! 3D",
   data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
 detail:"620.75 ms (baseline)",allocs:7,mem:"576 B"},{x:"v2.1.0 (274ae7d)",y:1.0626395001054676,julia:"1.12.7",
-detail:"659.64 ms (+6.3%)",allocs:7,mem:"576 B"},{x:"v2.2.0 (d7c2416)",y:1.0033005530130232,julia:"1.12.7",
-detail:"622.8 ms (+0.3%)",allocs:7,mem:"576 B"}],
+detail:"659.64 ms (+6.3%)",allocs:7,mem:"576 B"}],
+  borderColor: "#f59e0b",
+  backgroundColor: "#f59e0b",
+  spanGaps: true,
+  pointRadius: 4,
+  pointHoverRadius: 6,
+  borderWidth: 2,
+  tension: 0.15,
+},
+{
+  label: "avgₕ! 3D, Parallel() backend",
+  data: [{x:"v2.2.0 (d7c2416)",y:1.0,julia:"1.12.7",
+detail:"622.73 ms (baseline)",allocs:7,mem:"576 B"}],
   borderColor: "#8b5cf6",
   backgroundColor: "#8b5cf6",
   spanGaps: true,
@@ -1209,9 +1394,9 @@ detail:"622.8 ms (+0.3%)",allocs:7,mem:"576 B"}],
 <td style="padding:7px 6px; text-align:center;">3</td>
 <td style="padding:7px 6px; text-align:right;">694.0 μs</td>
 <td style="padding:7px 6px; text-align:center;">3</td>
-<td style="padding:7px 6px; text-align:right;">742.8 μs</td>
+<td style="padding:7px 6px; text-align:right;">659.9 μs</td>
 <td style="padding:7px 6px; text-align:center;">3</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+10.8% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-1.5% 🟢</span></td>
 <td style="padding:7px 6px; text-align:right;">22.89 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
@@ -1220,9 +1405,9 @@ detail:"622.8 ms (+0.3%)",allocs:7,mem:"576 B"}],
 <td style="padding:7px 6px; text-align:center;">10</td>
 <td style="padding:7px 6px; text-align:right;">1.41 ms</td>
 <td style="padding:7px 6px; text-align:center;">10</td>
-<td style="padding:7px 6px; text-align:right;">1.44 ms</td>
+<td style="padding:7px 6px; text-align:right;">1.4 ms</td>
 <td style="padding:7px 6px; text-align:center;">10</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+4.1% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.1% 🔴</span></td>
 <td style="padding:7px 6px; text-align:right;">45.78 MiB</td>
 </tr>
 </tbody>
@@ -1231,19 +1416,19 @@ detail:"622.8 ms (+0.3%)",allocs:7,mem:"576 B"}],
   </div>
   <div style="flex:1 1 450px; min-width:340px;">
 <div style="width:100%; max-width:560px;">
-  <canvas id="bench_chart_7" height="280"></canvas>
+  <canvas id="bench_chart_8" height="280"></canvas>
 </div>
 <script>
 (function () {
   const theme = window.brambleChartTheme();
-  const chart = new Chart(document.getElementById('bench_chart_7').getContext('2d'), {
+  const chart = new Chart(document.getElementById('bench_chart_8').getContext('2d'), {
     type: 'line',
     data: { labels: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)"], datasets: [{
   label: "D₋ₓ (3 components)",
   data: [{x:"v2.0.0 (2dec0c7)",y:0.670208,julia:"1.12.7",
 detail:"670.2 μs",allocs:3,mem:"22.89 MiB"},{x:"v2.1.0 (274ae7d)",y:0.693958,julia:"1.12.7",
-detail:"694.0 μs",allocs:3,mem:"22.89 MiB"},{x:"v2.2.0 (d7c2416)",y:0.7428125,julia:"1.12.7",
-detail:"742.8 μs",allocs:3,mem:"22.89 MiB"}],
+detail:"694.0 μs",allocs:3,mem:"22.89 MiB"},{x:"v2.2.0 (d7c2416)",y:0.659917,julia:"1.12.7",
+detail:"659.9 μs",allocs:3,mem:"22.89 MiB"}],
   borderColor: "#3b82f6",
   backgroundColor: "#3b82f6",
   spanGaps: true,
@@ -1256,8 +1441,8 @@ detail:"742.8 μs",allocs:3,mem:"22.89 MiB"}],
   label: "∇₋ₕ (3 components)",
   data: [{x:"v2.0.0 (2dec0c7)",y:1.380625,julia:"1.12.7",
 detail:"1.38 ms",allocs:10,mem:"45.78 MiB"},{x:"v2.1.0 (274ae7d)",y:1.407666,julia:"1.12.7",
-detail:"1.41 ms",allocs:10,mem:"45.78 MiB"},{x:"v2.2.0 (d7c2416)",y:1.436584,julia:"1.12.7",
-detail:"1.44 ms",allocs:10,mem:"45.78 MiB"}],
+detail:"1.41 ms",allocs:10,mem:"45.78 MiB"},{x:"v2.2.0 (d7c2416)",y:1.395312,julia:"1.12.7",
+detail:"1.4 ms",allocs:10,mem:"45.78 MiB"}],
   borderColor: "#10b981",
   backgroundColor: "#10b981",
   spanGaps: true,
@@ -1335,9 +1520,9 @@ detail:"1.44 ms",allocs:10,mem:"45.78 MiB"}],
 <td style="padding:7px 6px; text-align:center;">42</td>
 <td style="padding:7px 6px; text-align:right;">2.24 ms</td>
 <td style="padding:7px 6px; text-align:center;">42</td>
-<td style="padding:7px 6px; text-align:right;">2.24 ms</td>
+<td style="padding:7px 6px; text-align:right;">2.23 ms</td>
 <td style="padding:7px 6px; text-align:center;">42</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.0% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">22.95 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
@@ -1346,7 +1531,7 @@ detail:"1.44 ms",allocs:10,mem:"45.78 MiB"}],
 <td style="padding:7px 6px; text-align:center;">52</td>
 <td style="padding:7px 6px; text-align:right;">6.28 ms</td>
 <td style="padding:7px 6px; text-align:center;">52</td>
-<td style="padding:7px 6px; text-align:right;">6.22 ms</td>
+<td style="padding:7px 6px; text-align:right;">6.2 ms</td>
 <td style="padding:7px 6px; text-align:center;">52</td>
 <td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">30.57 MiB</td>
@@ -1357,9 +1542,9 @@ detail:"1.44 ms",allocs:10,mem:"45.78 MiB"}],
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">154.6 ns</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">154.4 ns</td>
+<td style="padding:7px 6px; text-align:right;">152.7 ns</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.9% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 </tbody>
@@ -1368,19 +1553,19 @@ detail:"1.44 ms",allocs:10,mem:"45.78 MiB"}],
   </div>
   <div style="flex:1 1 450px; min-width:340px;">
 <div style="width:100%; max-width:560px;">
-  <canvas id="bench_chart_8" height="280"></canvas>
+  <canvas id="bench_chart_9" height="280"></canvas>
 </div>
 <script>
 (function () {
   const theme = window.brambleChartTheme();
-  const chart = new Chart(document.getElementById('bench_chart_8').getContext('2d'), {
+  const chart = new Chart(document.getElementById('bench_chart_9').getContext('2d'), {
     type: 'line',
     data: { labels: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)"], datasets: [{
   label: "gridspace 2D",
   data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
 detail:"2.22 ms (baseline)",allocs:42,mem:"22.95 MiB"},{x:"v2.1.0 (274ae7d)",y:1.0100427623813584,julia:"1.12.7",
-detail:"2.24 ms (+1.0%)",allocs:42,mem:"22.95 MiB"},{x:"v2.2.0 (d7c2416)",y:1.0095548603690214,julia:"1.12.7",
-detail:"2.24 ms (+1.0%)",allocs:42,mem:"22.95 MiB"}],
+detail:"2.24 ms (+1.0%)",allocs:42,mem:"22.95 MiB"},{x:"v2.2.0 (d7c2416)",y:1.0026278231190768,julia:"1.12.7",
+detail:"2.23 ms (+0.3%)",allocs:42,mem:"22.95 MiB"}],
   borderColor: "#3b82f6",
   backgroundColor: "#3b82f6",
   spanGaps: true,
@@ -1393,8 +1578,8 @@ detail:"2.24 ms (+1.0%)",allocs:42,mem:"22.95 MiB"}],
   label: "gridspace 3D",
   data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
 detail:"6.2 ms (baseline)",allocs:52,mem:"30.57 MiB"},{x:"v2.1.0 (274ae7d)",y:1.0131330029173518,julia:"1.12.7",
-detail:"6.28 ms (+1.3%)",allocs:52,mem:"30.57 MiB"},{x:"v2.2.0 (d7c2416)",y:1.0028900913595995,julia:"1.12.7",
-detail:"6.22 ms (+0.3%)",allocs:52,mem:"30.57 MiB"}],
+detail:"6.28 ms (+1.3%)",allocs:52,mem:"30.57 MiB"},{x:"v2.2.0 (d7c2416)",y:1.000413423237967,julia:"1.12.7",
+detail:"6.2 ms (+0.0%)",allocs:52,mem:"30.57 MiB"}],
   borderColor: "#10b981",
   backgroundColor: "#10b981",
   spanGaps: true,
@@ -1407,8 +1592,8 @@ detail:"6.22 ms (+0.3%)",allocs:52,mem:"30.57 MiB"}],
   label: "hₘₐₓ 3D",
   data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
 detail:"153.0 ns (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0106493855220369,julia:"1.12.7",
-detail:"154.6 ns (+1.1%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:1.0089876062952494,julia:"1.12.7",
-detail:"154.4 ns (+0.9%)",allocs:0,mem:"0 B"}],
+detail:"154.6 ns (+1.1%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:0.9980022868874013,julia:"1.12.7",
+detail:"152.7 ns (-0.2%)",allocs:0,mem:"0 B"}],
   borderColor: "#f59e0b",
   backgroundColor: "#f59e0b",
   spanGaps: true,
@@ -1494,9 +1679,9 @@ detail:"154.4 ns (+0.9%)",allocs:0,mem:"0 B"}],
 <td style="padding:7px 6px; text-align:center;">45</td>
 <td style="padding:7px 6px; text-align:right;">654.5 ms</td>
 <td style="padding:7px 6px; text-align:center;">45</td>
-<td style="padding:7px 6px; text-align:right;">454.61 ms</td>
+<td style="padding:7px 6px; text-align:right;">457.11 ms</td>
 <td style="padding:7px 6px; text-align:center;">45</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-24.1% 🟢</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-23.6% 🟢</span></td>
 <td style="padding:7px 6px; text-align:right;">1.3 KiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
@@ -1505,9 +1690,9 @@ detail:"154.4 ns (+0.9%)",allocs:0,mem:"0 B"}],
 <td style="padding:7px 6px; text-align:center;">45</td>
 <td style="padding:7px 6px; text-align:right;">487.28 ms</td>
 <td style="padding:7px 6px; text-align:center;">45</td>
-<td style="padding:7px 6px; text-align:right;">400.0 ms</td>
+<td style="padding:7px 6px; text-align:right;">395.6 ms</td>
 <td style="padding:7px 6px; text-align:center;">45</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-20.3% 🟢</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-21.1% 🟢</span></td>
 <td style="padding:7px 6px; text-align:right;">1.3 KiB</td>
 </tr>
 </tbody>
@@ -1516,19 +1701,19 @@ detail:"154.4 ns (+0.9%)",allocs:0,mem:"0 B"}],
   </div>
   <div style="flex:1 1 450px; min-width:340px;">
 <div style="width:100%; max-width:560px;">
-  <canvas id="bench_chart_9" height="280"></canvas>
+  <canvas id="bench_chart_10" height="280"></canvas>
 </div>
 <script>
 (function () {
   const theme = window.brambleChartTheme();
-  const chart = new Chart(document.getElementById('bench_chart_9').getContext('2d'), {
+  const chart = new Chart(document.getElementById('bench_chart_10').getContext('2d'), {
     type: 'line',
     data: { labels: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)"], datasets: [{
   label: "TTFX (load + first operator)",
   data: [{x:"v2.0.0 (2dec0c7)",y:598.631542,julia:"1.12.7",
 detail:"598.63 ms",allocs:45,mem:"1.3 KiB"},{x:"v2.1.0 (274ae7d)",y:654.503208,julia:"1.12.7",
-detail:"654.5 ms",allocs:45,mem:"1.3 KiB"},{x:"v2.2.0 (d7c2416)",y:454.605959,julia:"1.12.7",
-detail:"454.61 ms",allocs:45,mem:"1.3 KiB"}],
+detail:"654.5 ms",allocs:45,mem:"1.3 KiB"},{x:"v2.2.0 (d7c2416)",y:457.110625,julia:"1.12.7",
+detail:"457.11 ms",allocs:45,mem:"1.3 KiB"}],
   borderColor: "#3b82f6",
   backgroundColor: "#3b82f6",
   spanGaps: true,
@@ -1541,8 +1726,8 @@ detail:"454.61 ms",allocs:45,mem:"1.3 KiB"}],
   label: "using Bramble",
   data: [{x:"v2.0.0 (2dec0c7)",y:501.70775,julia:"1.12.7",
 detail:"501.71 ms",allocs:45,mem:"1.3 KiB"},{x:"v2.1.0 (274ae7d)",y:487.277792,julia:"1.12.7",
-detail:"487.28 ms",allocs:45,mem:"1.3 KiB"},{x:"v2.2.0 (d7c2416)",y:399.997458,julia:"1.12.7",
-detail:"400.0 ms",allocs:45,mem:"1.3 KiB"}],
+detail:"487.28 ms",allocs:45,mem:"1.3 KiB"},{x:"v2.2.0 (d7c2416)",y:395.600916,julia:"1.12.7",
+detail:"395.6 ms",allocs:45,mem:"1.3 KiB"}],
   borderColor: "#10b981",
   backgroundColor: "#10b981",
   spanGaps: true,
@@ -1620,9 +1805,31 @@ detail:"400.0 ms",allocs:45,mem:"1.3 KiB"}],
 <td style="padding:7px 6px; text-align:center;">21</td>
 <td style="padding:7px 6px; text-align:right;">3.18 ms</td>
 <td style="padding:7px 6px; text-align:center;">21</td>
-<td style="padding:7px 6px; text-align:right;">2.86 ms</td>
+<td style="padding:7px 6px; text-align:right;">2.84 ms</td>
 <td style="padding:7px 6px; text-align:center;">21</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.0% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
+<td style="padding:7px 6px; text-align:right;">15.13 MiB</td>
+</tr>
+<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
+<td style="padding:7px 6px; font-weight:600;"><code>assemble (BilinearForm) 2D, Parallel() backend</code></td>
+<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:right;">4.79 ms</td>
+<td style="padding:7px 6px; text-align:center;">35</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:right;">15.13 MiB</td>
+</tr>
+<tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
+<td style="padding:7px 6px; font-weight:600;"><code>assemble (BilinearForm) 2D, Serial() backend</code></td>
+<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:right;">4.67 ms</td>
+<td style="padding:7px 6px; text-align:center;">21</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
 <td style="padding:7px 6px; text-align:right;">15.13 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
@@ -1631,9 +1838,9 @@ detail:"400.0 ms",allocs:45,mem:"1.3 KiB"}],
 <td style="padding:7px 6px; text-align:center;">35</td>
 <td style="padding:7px 6px; text-align:right;">4.8 ms</td>
 <td style="padding:7px 6px; text-align:center;">35</td>
-<td style="padding:7px 6px; text-align:right;">4.78 ms</td>
-<td style="padding:7px 6px; text-align:center;">35</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-6.4% 🟢</span></td>
+<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
 <td style="padding:7px 6px; text-align:right;">15.13 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
@@ -1642,9 +1849,9 @@ detail:"400.0 ms",allocs:45,mem:"1.3 KiB"}],
 <td style="padding:7px 6px; text-align:center;">21</td>
 <td style="padding:7px 6px; text-align:right;">4.83 ms</td>
 <td style="padding:7px 6px; text-align:center;">21</td>
-<td style="padding:7px 6px; text-align:right;">4.73 ms</td>
-<td style="padding:7px 6px; text-align:center;">21</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
+<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
+<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
 <td style="padding:7px 6px; text-align:right;">15.13 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
@@ -1653,9 +1860,9 @@ detail:"400.0 ms",allocs:45,mem:"1.3 KiB"}],
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">1.06 ms</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">1.04 ms</td>
+<td style="padding:7px 6px; text-align:right;">1.02 ms</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-2.5% 🟢</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-4.3% 🟢</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
@@ -1664,7 +1871,7 @@ detail:"400.0 ms",allocs:45,mem:"1.3 KiB"}],
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">953.0 μs</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">937.2 μs</td>
+<td style="padding:7px 6px; text-align:right;">939.4 μs</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
@@ -1677,7 +1884,7 @@ detail:"400.0 ms",allocs:45,mem:"1.3 KiB"}],
 <td style="padding:7px 6px; text-align:center;">7</td>
 <td style="padding:7px 6px; text-align:right;">1.21 ms</td>
 <td style="padding:7px 6px; text-align:center;">7</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.6% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.3% 🔴</span></td>
 <td style="padding:7px 6px; text-align:right;">480 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
@@ -1686,9 +1893,9 @@ detail:"400.0 ms",allocs:45,mem:"1.3 KiB"}],
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">1.21 ms</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">481.7 μs</td>
+<td style="padding:7px 6px; text-align:right;">471.6 μs</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-59.4% 🟢</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-60.2% 🟢</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
@@ -1697,7 +1904,7 @@ detail:"400.0 ms",allocs:45,mem:"1.3 KiB"}],
 <td style="padding:7px 6px; text-align:center;">7</td>
 <td style="padding:7px 6px; text-align:right;">1.22 ms</td>
 <td style="padding:7px 6px; text-align:center;">7</td>
-<td style="padding:7px 6px; text-align:right;">1.35 ms</td>
+<td style="padding:7px 6px; text-align:right;">1.34 ms</td>
 <td style="padding:7px 6px; text-align:center;">7</td>
 <td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+4.2% 🔴</span></td>
 <td style="padding:7px 6px; text-align:right;">480 B</td>
@@ -1708,9 +1915,9 @@ detail:"400.0 ms",allocs:45,mem:"1.3 KiB"}],
 <td style="padding:7px 6px; text-align:center;">7</td>
 <td style="padding:7px 6px; text-align:right;">2.24 ms</td>
 <td style="padding:7px 6px; text-align:center;">7</td>
-<td style="padding:7px 6px; text-align:right;">1.73 ms</td>
+<td style="padding:7px 6px; text-align:right;">1.72 ms</td>
 <td style="padding:7px 6px; text-align:center;">7</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.7% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">496 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
@@ -1719,9 +1926,9 @@ detail:"400.0 ms",allocs:45,mem:"1.3 KiB"}],
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">1.15 ms</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">1.13 ms</td>
+<td style="padding:7px 6px; text-align:right;">1.12 ms</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.5% 🟢</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-1.5% 🟢</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
@@ -1752,7 +1959,7 @@ detail:"400.0 ms",allocs:45,mem:"1.3 KiB"}],
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">890.3 μs</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">884.3 μs</td>
+<td style="padding:7px 6px; text-align:right;">881.0 μs</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
@@ -1763,22 +1970,46 @@ detail:"400.0 ms",allocs:45,mem:"1.3 KiB"}],
   </div>
   <div style="flex:1 1 450px; min-width:340px;">
 <div style="display:flex; flex-wrap:wrap; gap:1rem;">
-  <div style="flex:1 1 400px; min-width:320px;"><div style="width:100%; max-width:460px;">
-  <canvas id="bench_chart_10" height="280"></canvas>
+  <div style="flex: 0 0 380px;"><div style="width:100%; max-width:380px;">
+  <canvas id="bench_chart_11" height="280"></canvas>
 </div>
 <script>
 (function () {
   const theme = window.brambleChartTheme();
-  const chart = new Chart(document.getElementById('bench_chart_10').getContext('2d'), {
+  const chart = new Chart(document.getElementById('bench_chart_11').getContext('2d'), {
     type: 'line',
     data: { labels: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)"], datasets: [{
   label: "allocate_system_matrix 2D",
   data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
 detail:"2.84 ms (baseline)",allocs:21,mem:"15.13 MiB"},{x:"v2.1.0 (274ae7d)",y:1.1201502186338541,julia:"1.12.7",
-detail:"3.18 ms (+12.0%)",allocs:21,mem:"15.13 MiB"},{x:"v2.2.0 (d7c2416)",y:1.0102132588259443,julia:"1.12.7",
-detail:"2.86 ms (+1.0%)",allocs:21,mem:"15.13 MiB"}],
+detail:"3.18 ms (+12.0%)",allocs:21,mem:"15.13 MiB"},{x:"v2.2.0 (d7c2416)",y:1.0020717135970576,julia:"1.12.7",
+detail:"2.84 ms (+0.2%)",allocs:21,mem:"15.13 MiB"}],
   borderColor: "#3b82f6",
   backgroundColor: "#3b82f6",
+  spanGaps: true,
+  pointRadius: 4,
+  pointHoverRadius: 6,
+  borderWidth: 2,
+  tension: 0.15,
+},
+{
+  label: "assemble (BilinearForm) 2D, Parallel() backend",
+  data: [{x:"v2.2.0 (d7c2416)",y:1.0,julia:"1.12.7",
+detail:"4.79 ms (baseline)",allocs:35,mem:"15.13 MiB"}],
+  borderColor: "#10b981",
+  backgroundColor: "#10b981",
+  spanGaps: true,
+  pointRadius: 4,
+  pointHoverRadius: 6,
+  borderWidth: 2,
+  tension: 0.15,
+},
+{
+  label: "assemble (BilinearForm) 2D, Serial() backend",
+  data: [{x:"v2.2.0 (d7c2416)",y:1.0,julia:"1.12.7",
+detail:"4.67 ms (baseline)",allocs:21,mem:"15.13 MiB"}],
+  borderColor: "#f59e0b",
+  backgroundColor: "#f59e0b",
   spanGaps: true,
   pointRadius: 4,
   pointHoverRadius: 6,
@@ -1789,10 +2020,9 @@ detail:"2.86 ms (+1.0%)",allocs:21,mem:"15.13 MiB"}],
   label: "assemble (BilinearForm), Parallel() backend",
   data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
 detail:"5.11 ms (baseline)",allocs:35,mem:"15.13 MiB"},{x:"v2.1.0 (274ae7d)",y:0.9389424435152599,julia:"1.12.7",
-detail:"4.8 ms (-6.1%)",allocs:35,mem:"15.13 MiB"},{x:"v2.2.0 (d7c2416)",y:0.9359668749114706,julia:"1.12.7",
-detail:"4.78 ms (-6.4%)",allocs:35,mem:"15.13 MiB"}],
-  borderColor: "#10b981",
-  backgroundColor: "#10b981",
+detail:"4.8 ms (-6.1%)",allocs:35,mem:"15.13 MiB"}],
+  borderColor: "#8b5cf6",
+  backgroundColor: "#8b5cf6",
   spanGaps: true,
   pointRadius: 4,
   pointHoverRadius: 6,
@@ -1803,10 +2033,9 @@ detail:"4.78 ms (-6.4%)",allocs:35,mem:"15.13 MiB"}],
   label: "assemble (BilinearForm), Serial() backend",
   data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
 detail:"4.71 ms (baseline)",allocs:21,mem:"15.13 MiB"},{x:"v2.1.0 (274ae7d)",y:1.0252965369306104,julia:"1.12.7",
-detail:"4.83 ms (+2.5%)",allocs:21,mem:"15.13 MiB"},{x:"v2.2.0 (d7c2416)",y:1.003261291058878,julia:"1.12.7",
-detail:"4.73 ms (+0.3%)",allocs:21,mem:"15.13 MiB"}],
-  borderColor: "#f59e0b",
-  backgroundColor: "#f59e0b",
+detail:"4.83 ms (+2.5%)",allocs:21,mem:"15.13 MiB"}],
+  borderColor: "#ec4899",
+  backgroundColor: "#ec4899",
   spanGaps: true,
   pointRadius: 4,
   pointHoverRadius: 6,
@@ -1817,10 +2046,10 @@ detail:"4.73 ms (+0.3%)",allocs:21,mem:"15.13 MiB"}],
   label: "assemble! (matrix) 2D",
   data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
 detail:"1.07 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:0.9931328213306763,julia:"1.12.7",
-detail:"1.06 ms (-0.7%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:0.9747938113918562,julia:"1.12.7",
-detail:"1.04 ms (-2.5%)",allocs:0,mem:"0 B"}],
-  borderColor: "#8b5cf6",
-  backgroundColor: "#8b5cf6",
+detail:"1.06 ms (-0.7%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:0.9567273159754381,julia:"1.12.7",
+detail:"1.02 ms (-4.3%)",allocs:0,mem:"0 B"}],
+  borderColor: "#06b6d4",
+  backgroundColor: "#06b6d4",
   spanGaps: true,
   pointRadius: 4,
   pointHoverRadius: 6,
@@ -1831,10 +2060,10 @@ detail:"1.04 ms (-2.5%)",allocs:0,mem:"0 B"}],
   label: "assemble! 1D",
   data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
 detail:"938.8 μs (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0150463394448215,julia:"1.12.7",
-detail:"953.0 μs (+1.5%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:0.998225456497588,julia:"1.12.7",
-detail:"937.2 μs (-0.2%)",allocs:0,mem:"0 B"}],
-  borderColor: "#ec4899",
-  backgroundColor: "#ec4899",
+detail:"953.0 μs (+1.5%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:1.000620983710628,julia:"1.12.7",
+detail:"939.4 μs (+0.1%)",allocs:0,mem:"0 B"}],
+  borderColor: "#f97316",
+  backgroundColor: "#f97316",
   spanGaps: true,
   pointRadius: 4,
   pointHoverRadius: 6,
@@ -1845,24 +2074,10 @@ detail:"937.2 μs (-0.2%)",allocs:0,mem:"0 B"}],
   label: "assemble! 1D, Parallel() backend",
   data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
 detail:"1.19 ms (baseline)",allocs:7,mem:"480 B"},{x:"v2.1.0 (274ae7d)",y:1.0114479998458745,julia:"1.12.7",
-detail:"1.21 ms (+1.1%)",allocs:7,mem:"480 B"},{x:"v2.2.0 (d7c2416)",y:1.0161245333308762,julia:"1.12.7",
-detail:"1.21 ms (+1.6%)",allocs:7,mem:"480 B"}],
-  borderColor: "#06b6d4",
-  backgroundColor: "#06b6d4",
-  spanGaps: true,
-  pointRadius: 4,
-  pointHoverRadius: 6,
-  borderWidth: 2,
-  tension: 0.15,
-},
-{
-  label: "assemble! 2D",
-  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
-detail:"1.18 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0225387640157861,julia:"1.12.7",
-detail:"1.21 ms (+2.3%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:0.40648343380801943,julia:"1.12.7",
-detail:"481.7 μs (-59.4%)",allocs:0,mem:"0 B"}],
-  borderColor: "#f97316",
-  backgroundColor: "#f97316",
+detail:"1.21 ms (+1.1%)",allocs:7,mem:"480 B"},{x:"v2.2.0 (d7c2416)",y:1.0133326855598732,julia:"1.12.7",
+detail:"1.21 ms (+1.3%)",allocs:7,mem:"480 B"}],
+  borderColor: "#3b82f6",
+  backgroundColor: "#3b82f6",
   spanGaps: true,
   pointRadius: 4,
   pointHoverRadius: 6,
@@ -1915,23 +2130,36 @@ detail:"481.7 μs (-59.4%)",allocs:0,mem:"0 B"}],
   });
 })();
 </script>
-</div>
-  <div style="flex:1 1 400px; min-width:320px;"><div style="width:100%; max-width:460px;">
-  <canvas id="bench_chart_11" height="280"></canvas>
+</div><div style="flex: 0 0 380px;"><div style="width:100%; max-width:380px;">
+  <canvas id="bench_chart_12" height="280"></canvas>
 </div>
 <script>
 (function () {
   const theme = window.brambleChartTheme();
-  const chart = new Chart(document.getElementById('bench_chart_11').getContext('2d'), {
+  const chart = new Chart(document.getElementById('bench_chart_12').getContext('2d'), {
     type: 'line',
     data: { labels: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)"], datasets: [{
+  label: "assemble! 2D",
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"1.18 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0225387640157861,julia:"1.12.7",
+detail:"1.21 ms (+2.3%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:0.39797427504845106,julia:"1.12.7",
+detail:"471.6 μs (-60.2%)",allocs:0,mem:"0 B"}],
+  borderColor: "#3b82f6",
+  backgroundColor: "#3b82f6",
+  spanGaps: true,
+  pointRadius: 4,
+  pointHoverRadius: 6,
+  borderWidth: 2,
+  tension: 0.15,
+},
+{
   label: "assemble_parallel! 1D",
   data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
 detail:"1.29 ms (baseline)",allocs:7,mem:"480 B"},{x:"v2.1.0 (274ae7d)",y:0.9451508406118697,julia:"1.12.7",
-detail:"1.22 ms (-5.5%)",allocs:7,mem:"480 B"},{x:"v2.2.0 (d7c2416)",y:1.0422099581069324,julia:"1.12.7",
-detail:"1.35 ms (+4.2%)",allocs:7,mem:"480 B"}],
-  borderColor: "#3b82f6",
-  backgroundColor: "#3b82f6",
+detail:"1.22 ms (-5.5%)",allocs:7,mem:"480 B"},{x:"v2.2.0 (d7c2416)",y:1.041935681318264,julia:"1.12.7",
+detail:"1.34 ms (+4.2%)",allocs:7,mem:"480 B"}],
+  borderColor: "#10b981",
+  backgroundColor: "#10b981",
   spanGaps: true,
   pointRadius: 4,
   pointHoverRadius: 6,
@@ -1942,10 +2170,10 @@ detail:"1.35 ms (+4.2%)",allocs:7,mem:"480 B"}],
   label: "assemble_parallel! 2D",
   data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
 detail:"1.72 ms (baseline)",allocs:7,mem:"496 B"},{x:"v2.1.0 (274ae7d)",y:1.302873613909273,julia:"1.12.7",
-detail:"2.24 ms (+30.3%)",allocs:7,mem:"496 B"},{x:"v2.2.0 (d7c2416)",y:1.0066105025746,julia:"1.12.7",
-detail:"1.73 ms (+0.7%)",allocs:7,mem:"496 B"}],
-  borderColor: "#10b981",
-  backgroundColor: "#10b981",
+detail:"2.24 ms (+30.3%)",allocs:7,mem:"496 B"},{x:"v2.2.0 (d7c2416)",y:1.002922896488245,julia:"1.12.7",
+detail:"1.72 ms (+0.3%)",allocs:7,mem:"496 B"}],
+  borderColor: "#f59e0b",
+  backgroundColor: "#f59e0b",
   spanGaps: true,
   pointRadius: 4,
   pointHoverRadius: 6,
@@ -1956,22 +2184,8 @@ detail:"1.73 ms (+0.7%)",allocs:7,mem:"496 B"}],
   label: "evaluate! 1D",
   data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
 detail:"1.14 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0108406550714244,julia:"1.12.7",
-detail:"1.15 ms (+1.1%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:0.994543415357895,julia:"1.12.7",
-detail:"1.13 ms (-0.5%)",allocs:0,mem:"0 B"}],
-  borderColor: "#f59e0b",
-  backgroundColor: "#f59e0b",
-  spanGaps: true,
-  pointRadius: 4,
-  pointHoverRadius: 6,
-  borderWidth: 2,
-  tension: 0.15,
-},
-{
-  label: "form (bilinear, 2D)",
-  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
-detail:"2.1 ns (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0,julia:"1.12.7",
-detail:"2.1 ns (baseline)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:1.0,julia:"1.12.7",
-detail:"2.1 ns (baseline)",allocs:0,mem:"0 B"}],
+detail:"1.15 ms (+1.1%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:0.984801899960271,julia:"1.12.7",
+detail:"1.12 ms (-1.5%)",allocs:0,mem:"0 B"}],
   borderColor: "#8b5cf6",
   backgroundColor: "#8b5cf6",
   spanGaps: true,
@@ -1981,7 +2195,7 @@ detail:"2.1 ns (baseline)",allocs:0,mem:"0 B"}],
   tension: 0.15,
 },
 {
-  label: "form (linear, 2D)",
+  label: "form (bilinear, 2D)",
   data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
 detail:"2.1 ns (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0,julia:"1.12.7",
 detail:"2.1 ns (baseline)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:1.0,julia:"1.12.7",
@@ -1995,13 +2209,27 @@ detail:"2.1 ns (baseline)",allocs:0,mem:"0 B"}],
   tension: 0.15,
 },
 {
+  label: "form (linear, 2D)",
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"2.1 ns (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0,julia:"1.12.7",
+detail:"2.1 ns (baseline)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:1.0,julia:"1.12.7",
+detail:"2.1 ns (baseline)",allocs:0,mem:"0 B"}],
+  borderColor: "#06b6d4",
+  backgroundColor: "#06b6d4",
+  spanGaps: true,
+  pointRadius: 4,
+  pointHoverRadius: 6,
+  borderWidth: 2,
+  tension: 0.15,
+},
+{
   label: "l(vₕ) 1D",
   data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
 detail:"883.6 μs (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0075918079096045,julia:"1.12.7",
-detail:"890.3 μs (+0.8%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:1.0008476839779805,julia:"1.12.7",
-detail:"884.3 μs (+0.1%)",allocs:0,mem:"0 B"}],
-  borderColor: "#06b6d4",
-  backgroundColor: "#06b6d4",
+detail:"890.3 μs (+0.8%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:0.9970755468636825,julia:"1.12.7",
+detail:"881.0 μs (-0.3%)",allocs:0,mem:"0 B"}],
+  borderColor: "#f97316",
+  backgroundColor: "#f97316",
   spanGaps: true,
   pointRadius: 4,
   pointHoverRadius: 6,
@@ -2087,9 +2315,9 @@ detail:"884.3 μs (+0.1%)",allocs:0,mem:"0 B"}],
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">9.04 ms</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">9.0 ms</td>
+<td style="padding:7px 6px; text-align:right;">8.92 ms</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.7% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
@@ -2098,7 +2326,7 @@ detail:"884.3 μs (+0.1%)",allocs:0,mem:"0 B"}],
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">285.7 μs</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">285.9 μs</td>
+<td style="padding:7px 6px; text-align:right;">285.7 μs</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
@@ -2122,7 +2350,7 @@ detail:"884.3 μs (+0.1%)",allocs:0,mem:"0 B"}],
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">1.02 ms</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-2.3% 🟢</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-1.5% 🟢</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
@@ -2142,7 +2370,7 @@ detail:"884.3 μs (+0.1%)",allocs:0,mem:"0 B"}],
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">84.3 μs</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">84.2 μs</td>
+<td style="padding:7px 6px; text-align:right;">84.0 μs</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
@@ -2153,9 +2381,9 @@ detail:"884.3 μs (+0.1%)",allocs:0,mem:"0 B"}],
 <td style="padding:7px 6px; text-align:center;">33</td>
 <td style="padding:7px 6px; text-align:right;">73.3 ms</td>
 <td style="padding:7px 6px; text-align:center;">33</td>
-<td style="padding:7px 6px; text-align:right;">72.86 ms</td>
+<td style="padding:7px 6px; text-align:right;">72.32 ms</td>
 <td style="padding:7px 6px; text-align:center;">33</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.9% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">2.9 KiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
@@ -2175,9 +2403,9 @@ detail:"884.3 μs (+0.1%)",allocs:0,mem:"0 B"}],
 <td style="padding:7px 6px; text-align:center;">0</td>
 <td style="padding:7px 6px; text-align:right;">1.78 ms</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:right;">1.73 ms</td>
+<td style="padding:7px 6px; text-align:right;">1.72 ms</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.9% 🔴</span></td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
@@ -2219,64 +2447,22 @@ detail:"884.3 μs (+0.1%)",allocs:0,mem:"0 B"}],
   </div>
   <div style="flex:1 1 450px; min-width:340px;">
 <div style="display:flex; flex-wrap:wrap; gap:1rem;">
-  <div style="flex:1 1 400px; min-width:320px;"><div style="width:100%; max-width:460px;">
-  <canvas id="bench_chart_12" height="280"></canvas>
+  <div style="flex: 0 0 380px;"><div style="width:100%; max-width:380px;">
+  <canvas id="bench_chart_13" height="280"></canvas>
 </div>
 <script>
 (function () {
   const theme = window.brambleChartTheme();
-  const chart = new Chart(document.getElementById('bench_chart_12').getContext('2d'), {
+  const chart = new Chart(document.getElementById('bench_chart_13').getContext('2d'), {
     type: 'line',
     data: { labels: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)"], datasets: [{
-  label: "Rₕ! Double64",
-  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
-detail:"8.94 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0108921227371217,julia:"1.12.7",
-detail:"9.04 ms (+1.1%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:1.0069476480044732,julia:"1.12.7",
-detail:"9.0 ms (+0.7%)",allocs:0,mem:"0 B"}],
-  borderColor: "#3b82f6",
-  backgroundColor: "#3b82f6",
-  spanGaps: true,
-  pointRadius: 4,
-  pointHoverRadius: 6,
-  borderWidth: 2,
-  tension: 0.15,
-},
-{
   label: "Rₕ! Float32",
   data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
 detail:"286.0 μs (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:0.9989825174825174,julia:"1.12.7",
-detail:"285.7 μs (-0.1%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:0.9995629370629371,julia:"1.12.7",
-detail:"285.9 μs (-0.0%)",allocs:0,mem:"0 B"}],
-  borderColor: "#10b981",
-  backgroundColor: "#10b981",
-  spanGaps: true,
-  pointRadius: 4,
-  pointHoverRadius: 6,
-  borderWidth: 2,
-  tension: 0.15,
-},
-{
-  label: "Rₕ! Float64",
-  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
-detail:"293.5 μs (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0007085868461754,julia:"1.12.7",
-detail:"293.8 μs (+0.1%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:1.0,julia:"1.12.7",
-detail:"293.5 μs (baseline)",allocs:0,mem:"0 B"}],
-  borderColor: "#f59e0b",
-  backgroundColor: "#f59e0b",
-  spanGaps: true,
-  pointRadius: 4,
-  pointHoverRadius: 6,
-  borderWidth: 2,
-  tension: 0.15,
-},
-{
-  label: "assemble! Double64",
-  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
-detail:"1.04 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:0.9757634899651484,julia:"1.12.7",
-detail:"1.01 ms (-2.4%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:0.9769258502583824,julia:"1.12.7",
-detail:"1.02 ms (-2.3%)",allocs:0,mem:"0 B"}],
-  borderColor: "#8b5cf6",
-  backgroundColor: "#8b5cf6",
+detail:"285.7 μs (-0.1%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:0.998979020979021,julia:"1.12.7",
+detail:"285.7 μs (-0.1%)",allocs:0,mem:"0 B"}],
+  borderColor: "#3b82f6",
+  backgroundColor: "#3b82f6",
   spanGaps: true,
   pointRadius: 4,
   pointHoverRadius: 6,
@@ -2287,10 +2473,10 @@ detail:"1.02 ms (-2.3%)",allocs:0,mem:"0 B"}],
   label: "assemble! Float32",
   data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
 detail:"71.3 μs (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.119748223122538,julia:"1.12.7",
-detail:"79.9 μs (+12.0%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:1.0029299202332722,julia:"1.12.7",
-detail:"71.5 μs (+0.3%)",allocs:0,mem:"0 B"}],
-  borderColor: "#ec4899",
-  backgroundColor: "#ec4899",
+detail:"79.9 μs (+12.0%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:1.0023411324351983,julia:"1.12.7",
+detail:"71.5 μs (+0.2%)",allocs:0,mem:"0 B"}],
+  borderColor: "#10b981",
+  backgroundColor: "#10b981",
   spanGaps: true,
   pointRadius: 4,
   pointHoverRadius: 6,
@@ -2298,13 +2484,27 @@ detail:"71.5 μs (+0.3%)",allocs:0,mem:"0 B"}],
   tension: 0.15,
 },
 {
-  label: "assemble! Float64",
+  label: "avgₕ! Float32",
   data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
-detail:"84.0 μs (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0044665189737727,julia:"1.12.7",
-detail:"84.3 μs (+0.4%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:1.0034779294409109,julia:"1.12.7",
-detail:"84.2 μs (+0.3%)",allocs:0,mem:"0 B"}],
-  borderColor: "#06b6d4",
-  backgroundColor: "#06b6d4",
+detail:"1.61 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0091040787194028,julia:"1.12.7",
+detail:"1.62 ms (+0.9%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:0.9996498191821893,julia:"1.12.7",
+detail:"1.61 ms (-0.0%)",allocs:0,mem:"0 B"}],
+  borderColor: "#f59e0b",
+  backgroundColor: "#f59e0b",
+  spanGaps: true,
+  pointRadius: 4,
+  pointHoverRadius: 6,
+  borderWidth: 2,
+  tension: 0.15,
+},
+{
+  label: "innerₕ Float32",
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"11.6 μs (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0,julia:"1.12.7",
+detail:"11.6 μs (baseline)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:1.003539364640884,julia:"1.12.7",
+detail:"11.6 μs (+0.4%)",allocs:0,mem:"0 B"}],
+  borderColor: "#8b5cf6",
+  backgroundColor: "#8b5cf6",
   spanGaps: true,
   pointRadius: 4,
   pointHoverRadius: 6,
@@ -2357,21 +2557,20 @@ detail:"84.2 μs (+0.3%)",allocs:0,mem:"0 B"}],
   });
 })();
 </script>
-</div>
-  <div style="flex:1 1 400px; min-width:320px;"><div style="width:100%; max-width:460px;">
-  <canvas id="bench_chart_13" height="280"></canvas>
+</div><div style="flex: 0 0 380px;"><div style="width:100%; max-width:380px;">
+  <canvas id="bench_chart_14" height="280"></canvas>
 </div>
 <script>
 (function () {
   const theme = window.brambleChartTheme();
-  const chart = new Chart(document.getElementById('bench_chart_13').getContext('2d'), {
+  const chart = new Chart(document.getElementById('bench_chart_14').getContext('2d'), {
     type: 'line',
     data: { labels: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)"], datasets: [{
-  label: "avgₕ! Double64",
+  label: "Rₕ! Float64",
   data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
-detail:"72.2 ms (baseline)",allocs:33,mem:"2.9 KiB"},{x:"v2.1.0 (274ae7d)",y:1.0152270976688864,julia:"1.12.7",
-detail:"73.3 ms (+1.5%)",allocs:33,mem:"2.9 KiB"},{x:"v2.2.0 (d7c2416)",y:1.0091008804543633,julia:"1.12.7",
-detail:"72.86 ms (+0.9%)",allocs:33,mem:"2.9 KiB"}],
+detail:"293.5 μs (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0007085868461754,julia:"1.12.7",
+detail:"293.8 μs (+0.1%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:1.0,julia:"1.12.7",
+detail:"293.5 μs (baseline)",allocs:0,mem:"0 B"}],
   borderColor: "#3b82f6",
   backgroundColor: "#3b82f6",
   spanGaps: true,
@@ -2381,11 +2580,11 @@ detail:"72.86 ms (+0.9%)",allocs:33,mem:"2.9 KiB"}],
   tension: 0.15,
 },
 {
-  label: "avgₕ! Float32",
+  label: "assemble! Float64",
   data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
-detail:"1.61 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0091040787194028,julia:"1.12.7",
-detail:"1.62 ms (+0.9%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:1.0000385977079187,julia:"1.12.7",
-detail:"1.61 ms (+0.0%)",allocs:0,mem:"0 B"}],
+detail:"84.0 μs (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0044665189737727,julia:"1.12.7",
+detail:"84.3 μs (+0.4%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:1.0,julia:"1.12.7",
+detail:"84.0 μs (baseline)",allocs:0,mem:"0 B"}],
   borderColor: "#10b981",
   backgroundColor: "#10b981",
   spanGaps: true,
@@ -2398,38 +2597,10 @@ detail:"1.61 ms (+0.0%)",allocs:0,mem:"0 B"}],
   label: "avgₕ! Float64",
   data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
 detail:"1.72 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.039595387843113,julia:"1.12.7",
-detail:"1.78 ms (+4.0%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:1.009258795447953,julia:"1.12.7",
-detail:"1.73 ms (+0.9%)",allocs:0,mem:"0 B"}],
+detail:"1.78 ms (+4.0%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:1.0002670582355868,julia:"1.12.7",
+detail:"1.72 ms (+0.0%)",allocs:0,mem:"0 B"}],
   borderColor: "#f59e0b",
   backgroundColor: "#f59e0b",
-  spanGaps: true,
-  pointRadius: 4,
-  pointHoverRadius: 6,
-  borderWidth: 2,
-  tension: 0.15,
-},
-{
-  label: "innerₕ Double64",
-  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
-detail:"1.06 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0,julia:"1.12.7",
-detail:"1.06 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:0.999412041392286,julia:"1.12.7",
-detail:"1.06 ms (-0.1%)",allocs:0,mem:"0 B"}],
-  borderColor: "#8b5cf6",
-  backgroundColor: "#8b5cf6",
-  spanGaps: true,
-  pointRadius: 4,
-  pointHoverRadius: 6,
-  borderWidth: 2,
-  tension: 0.15,
-},
-{
-  label: "innerₕ Float32",
-  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
-detail:"11.6 μs (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0,julia:"1.12.7",
-detail:"11.6 μs (baseline)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:1.003539364640884,julia:"1.12.7",
-detail:"11.6 μs (+0.4%)",allocs:0,mem:"0 B"}],
-  borderColor: "#ec4899",
-  backgroundColor: "#ec4899",
   spanGaps: true,
   pointRadius: 4,
   pointHoverRadius: 6,
@@ -2442,8 +2613,118 @@ detail:"11.6 μs (+0.4%)",allocs:0,mem:"0 B"}],
 detail:"23.2 μs (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0018129235550568,julia:"1.12.7",
 detail:"23.2 μs (+0.2%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:1.0,julia:"1.12.7",
 detail:"23.2 μs (baseline)",allocs:0,mem:"0 B"}],
-  borderColor: "#06b6d4",
-  backgroundColor: "#06b6d4",
+  borderColor: "#8b5cf6",
+  backgroundColor: "#8b5cf6",
+  spanGaps: true,
+  pointRadius: 4,
+  pointHoverRadius: 6,
+  borderWidth: 2,
+  tension: 0.15,
+},
+{
+  label: "1.0x (ref)",
+  data: [{x:"v2.0.0 (2dec0c7)",y:1},{x:"v2.1.0 (274ae7d)",y:1},{x:"v2.2.0 (d7c2416)",y:1}],
+  borderColor: "rgba(128,128,128,0.7)",
+  borderDash: [5,4],
+  borderWidth: 1.5,
+  pointRadius: 0,
+}] },
+    options: {
+      responsive: true,
+      interaction: { mode: 'nearest', axis: 'x', intersect: false },
+      plugins: {
+        legend: { position: 'top', labels: { color: theme.text, boxWidth: 12, font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            title: (items) => items[0].raw.x + " (Julia " + items[0].raw.julia + ")",
+            label: (c) => c.raw ? c.dataset.label + ": " + (c.raw.detail || c.raw.y) +
+              (c.raw.allocs !== undefined ? " (" + c.raw.allocs + " allocs, " + c.raw.mem + ")" : "") : c.dataset.label,
+          },
+        },
+      },
+      scales: {
+        x: {
+          ticks: { color: theme.text, maxRotation: 45, minRotation: 0, font: { family: 'monospace', size: 10 } },
+          grid: { color: theme.grid }, border: { color: theme.axis },
+        },
+        y: {
+          title: { display: true, text: "relative to baseline", color: theme.text },
+          ticks: { color: theme.text }, grid: { color: theme.grid }, border: { color: theme.axis },
+        },
+      },
+    },
+  });
+  window.brambleRegisterChart(chart, function (c) {
+    const t = window.brambleChartTheme();
+    c.options.plugins.legend.labels.color = t.text;
+    c.options.scales.x.ticks.color = t.text;
+    c.options.scales.x.grid.color = t.grid;
+    c.options.scales.x.border.color = t.axis;
+    c.options.scales.y.title.color = t.text;
+    c.options.scales.y.ticks.color = t.text;
+    c.options.scales.y.grid.color = t.grid;
+    c.options.scales.y.border.color = t.axis;
+  });
+})();
+</script>
+</div><div style="flex: 0 0 380px;"><div style="width:100%; max-width:380px;">
+  <canvas id="bench_chart_15" height="280"></canvas>
+</div>
+<script>
+(function () {
+  const theme = window.brambleChartTheme();
+  const chart = new Chart(document.getElementById('bench_chart_15').getContext('2d'), {
+    type: 'line',
+    data: { labels: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)"], datasets: [{
+  label: "Rₕ! Double64",
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"8.94 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0108921227371217,julia:"1.12.7",
+detail:"9.04 ms (+1.1%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:0.9980802684000839,julia:"1.12.7",
+detail:"8.92 ms (-0.2%)",allocs:0,mem:"0 B"}],
+  borderColor: "#3b82f6",
+  backgroundColor: "#3b82f6",
+  spanGaps: true,
+  pointRadius: 4,
+  pointHoverRadius: 6,
+  borderWidth: 2,
+  tension: 0.15,
+},
+{
+  label: "assemble! Double64",
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"1.04 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:0.9757634899651484,julia:"1.12.7",
+detail:"1.01 ms (-2.4%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:0.9847374113688259,julia:"1.12.7",
+detail:"1.02 ms (-1.5%)",allocs:0,mem:"0 B"}],
+  borderColor: "#10b981",
+  backgroundColor: "#10b981",
+  spanGaps: true,
+  pointRadius: 4,
+  pointHoverRadius: 6,
+  borderWidth: 2,
+  tension: 0.15,
+},
+{
+  label: "avgₕ! Double64",
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"72.2 ms (baseline)",allocs:33,mem:"2.9 KiB"},{x:"v2.1.0 (274ae7d)",y:1.0152270976688864,julia:"1.12.7",
+detail:"73.3 ms (+1.5%)",allocs:33,mem:"2.9 KiB"},{x:"v2.2.0 (d7c2416)",y:1.0015953961178983,julia:"1.12.7",
+detail:"72.32 ms (+0.2%)",allocs:33,mem:"2.9 KiB"}],
+  borderColor: "#f59e0b",
+  backgroundColor: "#f59e0b",
+  spanGaps: true,
+  pointRadius: 4,
+  pointHoverRadius: 6,
+  borderWidth: 2,
+  tension: 0.15,
+},
+{
+  label: "innerₕ Double64",
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"1.06 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0,julia:"1.12.7",
+detail:"1.06 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:1.0001571025399811,julia:"1.12.7",
+detail:"1.06 ms (+0.0%)",allocs:0,mem:"0 B"}],
+  borderColor: "#8b5cf6",
+  backgroundColor: "#8b5cf6",
   spanGaps: true,
   pointRadius: 4,
   pointHoverRadius: 6,
