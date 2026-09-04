@@ -36,20 +36,20 @@ See also: [`dirichlet_constraints`](@ref), [`dirichlet_bc!`](@ref), [`symmetrize
 =#
 
 """
-	$(TYPEDEF)
+    DirichletConstraint{CT} = DomainMarkers{CT}
 
-Alias for storage of Dirichlet constraints.
+Type alias for Dirichlet boundary constraint storage.
 """
 const DirichletConstraint{CT} = DomainMarkers{CT}
 
 """
-	dirichlet_constraints(_set, [I::CartesianProduct{1}], pairs...)
+    dirichlet_constraints(input, [I::CartesianProduct{1}], pairs::Pair...) -> DomainMarkers
 
-Creates Dirichlet boundary constraints.
+Create Dirichlet boundary constraints.
 
 Each `pair` is of the form `:label => func`, where `:label` identifies the boundary region and `func` defines the Dirichlet values. If the optional time domain `I` is provided, `func` should be a time-dependent function `func(x, t)`.
 
-The `cartesian_product` can be a `CartesianProduct` mesh domain or an `ScalarGridSpace` from which the mesh can be extracted. The `:label` must match a label in the mesh definition.
+`input` can be a `CartesianProduct` mesh domain, a `ScalarGridSpace`, or a `CompositeGridSpace` from which the mesh is extracted. The `:label` must match a label in the mesh definition.
 """
 function dirichlet_constraints(input, pairs::Pair...)
     _constraint_domain(input)      # validates `input`; the domain itself is never stored
@@ -68,38 +68,34 @@ end
 @inline _constraint_domain(input) = set(input)
 
 #===========================================================================#
-# The element type a constraint stores its values in
+# Element type handling in boundary constraints
 #
-# Used to need settling ahead of time (point 48's history): the conditions lived in a
-# `Set{Marker{BrambleFunction{…, CoType, …}}}`, and a `FunctionWrapper`'s whole point is a
-# *fixed* concrete return type declared upfront, which meant probing every condition at
-# construction time to promote a `Dual`-returning one correctly. `conditions` is now a
-# `Tuple`, one `Marker{F}` per condition's own raw closure — nothing is erased, so nothing
-# needs a return type settled ahead of the call: `v[idx] = func(point(...))` converts to
-# `v`'s own eltype exactly the way any other assignment does, the same rule `Rₕ`/`avgₕ`
-# already follow. `_probe_at`/`_probed_type`/`_constraint_value_type`/
-# `_get_eltype_and_domain` accordingly no longer exist.
+# `conditions` is stored as a `Tuple`, containing one `Marker{F}` per condition's
+# raw closure. Since closures are preserved without type erasure, no return type
+# probe is required at construction time: `v[idx] = func(point(...))` converts
+# directly to `v`'s element type upon assignment, accommodating both standard floats
+# and `ForwardDiff.Dual` numbers without allocation.
 #===========================================================================#
 
 """
-	dirichlet_constraints(X::CartesianProduct, f::Function)
+    dirichlet_constraints(X::CartesianProduct, f::Function) -> DomainMarkers
 
-	Creates a single Dirichlet boundary constraint with function `f` with the label `:dirichlet`.
+Create a single Dirichlet boundary constraint with function `f` under the `:boundary` label.
 """
 @inline dirichlet_constraints(X::CartesianProduct, f::F) where {F <:
                                                                 Function} = dirichlet_constraints(
     X, :boundary => f)
 
 """
-	_validate_dirichlet_labels(labels)
+    _validate_dirichlet_labels(labels)
 
-Internal helper to validate dirichlet_labels parameter.
+Internal helper to validate the `dirichlet_labels` parameter.
 
 Ensures that `labels` is either `nothing`, a `Symbol`, or a `Tuple` of `Symbol`s.
 Throws an error if the validation fails.
 
-This function is used by both `bilinear_form.jl` and `linear_form.jl` to validate
-the `dirichlet_labels` keyword argument before applying boundary conditions.
+Used by `bilinear_form.jl` and `linear_form.jl` to validate the `dirichlet_labels`
+keyword argument before applying boundary conditions.
 """
 function _validate_dirichlet_labels(labels)
     if labels !== nothing && !(labels isa Symbol || labels isa Tuple)
@@ -108,13 +104,13 @@ function _validate_dirichlet_labels(labels)
 end
 
 #===========================================================================#
-# Restricting which leaf(-ves) of a composite space `dirichlet_labels` binds to
+# Restricting which leaf components of a composite space `dirichlet_labels` binds to
 #
-# `components` names leaves by their 1-based position in `leaf_spaces_offsets`, the same
-# depth-first, left-to-right order `u(1)`/`u(2)` addressing already uses elsewhere in the
-# form layer — so a Stokes-style `Wₕ = vector_gridspace(Ωₕ, Val(2))` (velocity, pressure)
-# constrains only velocity with `components = 1`, leaving the pressure block untouched.
-# `nothing` (the default) means every leaf, exactly today's unrestricted behaviour.
+# `components` names leaves by their 1-based position in `leaf_spaces_offsets`, following the
+# depth-first, left-to-right ordering used by `u(1)`/`u(2)` addressing elsewhere in the
+# form layer: for a Stokes-style `Wₕ = vector_gridspace(Ωₕ, Val(2))` (velocity, pressure),
+# setting `components = 1` constrains velocity only, leaving pressure unconstrained.
+# `nothing` (the default) targets all leaves.
 #===========================================================================#
 
 function _validate_dirichlet_components(components, n_leaves::Int)
@@ -134,7 +130,7 @@ end
 @noinline function _throw_dirichlet_component_out_of_range(c::Int, n_leaves::Int)
     throw(ArgumentError(
         "dirichlet_components names leaf $c, but this space only has $n_leaves leaf " *
-        "space(s) — leaves are numbered 1 to $n_leaves, the same order u(1), u(2), ... " *
+        "space(s); leaves are numbered 1 to $n_leaves, the same order u(1), u(2), ... " *
         "addresses."))
 end
 
@@ -144,19 +140,15 @@ end
 @inline _validate_scalar_components(components) = _validate_dirichlet_components(
     components, 1)
 
-# Whether the leaf at 1-based position `i` is one `components` names — `nothing` means
-# every leaf, matching the unrestricted default.
+# Whether the leaf at 1-based position `i` is selected by `components` (`nothing` means
+# all leaves, matching the unrestricted default).
 @inline _leaf_selected(::Nothing, i::Int) = true
 @inline _leaf_selected(components::Int, i::Int) = components == i
 @inline _leaf_selected(components::Tuple, i::Int) = i in components
 
-# Calls `f(sp, offset)` for each leaf `components` selects, walking the *full* tuple from
-# `leaf_spaces_offsets` `Base.tail`-recursively rather than building a filtered sub-tuple
-# first. A sub-tuple's length would depend on `components`, a runtime value, so the compiler
-# cannot give it one concrete type — precisely the "leaves in a `Vector{Tuple{Any,Int}}`"
-# boxing this file already avoids elsewhere; walking the untouched, statically-shaped tuple
-# and skipping unselected leaves keeps every leaf's own type and stays allocation free.
-# Same `f::F where {F}` pattern `_each_marked` already uses below for the same reason.
+# Calls `f(sp, offset)` for each leaf selected by `components`, walking the full tuple from
+# `leaf_spaces_offsets` using `Base.tail` recursion rather than creating a dynamic sub-tuple.
+# Walking the statically-shaped tuple keeps leaf types concrete and avoids heap allocation.
 @inline _each_selected_leaf(f::F, ::Tuple{}, components, i::Int = 1) where {F} = nothing
 @inline function _each_selected_leaf(f::F, leaves::Tuple, components, i::Int = 1) where {F}
     sp, offset = first(leaves)
@@ -165,14 +157,12 @@ end
     return nothing
 end
 
-#==============================================================================
-						APPLYING DIRICHLET BOUNDARY CONDITIONS
-==============================================================================#
+# --- Applying Dirichlet boundary conditions ---------------------------------------- #
 
 """
-	dirichlet_bc!(A::AbstractMatrix, Ωₕ::AbstractMeshType, labels::Symbol...)
+    dirichlet_bc!(A::AbstractMatrix, Ωₕ::AbstractMeshType, labels::Symbol...) -> AbstractMatrix
 
-Applies Dirichlet boundary conditions to matrix `A` based on marked regions in the mesh `Ωₕ`.
+Apply Dirichlet boundary conditions to matrix `A` based on marked regions in the mesh `Ωₕ`.
 
 For each index `i` associated with the given Dirichlet `labels`, this function:
 
@@ -201,13 +191,10 @@ end
     return dirichlet_bc!(v, mesh(space), bcs, labels...)
 end
 
-# Overloads for CompositeGridSpace — handles both flat and hierarchical spaces.
+# Overloads for CompositeGridSpace: handles both flat and hierarchical spaces.
 #
 # `leaf_spaces_offsets` (space/vector_gridspace.jl) answers with a tuple, so the leaves
 # keep their concrete types and the loops below unroll rather than dispatching per leaf.
-# It matters: with the leaves in a `Vector{Tuple{Any, Int}}` the innermost assignment
-# boxed a Bool on every degree of freedom, 39,646 allocations and 809 KB for one call on a
-# 60x60 grid with three components.
 #
 # The masks are per leaf and the rows are global, so a leaf's mask is consulted through
 # its offset rather than copied into a mask over the whole system. That is what keeps the
@@ -228,10 +215,10 @@ end
     return _row_marked(Base.tail(entries), r)
 end
 
-# One entry per leaf, always — `components` never changes how many entries there are, only
+# One entry per leaf, always: `components` never changes how many entries there are, only
 # each one's `active` flag, so this stays the same fully-unrolled shape whether or not a
 # caller restricts `components` (see `_each_selected_leaf` for why filtering the tuple
-# itself is the wrong move).
+# itself is avoided).
 @inline _leaf_entries(leaves::Tuple, label::Symbol, components) = _leaf_entries_impl(
     leaves, label, components, 1)
 @inline _leaf_entries_impl(::Tuple{}, label::Symbol, components, i::Int) = ()
@@ -243,23 +230,22 @@ end
 end
 
 """
-	dirichlet_bc!(A::AbstractMatrix, space::CompositeGridSpace, labels::Symbol...; components = nothing)
+    dirichlet_bc!(A::AbstractMatrix, space::CompositeGridSpace, labels::Symbol...; components = nothing) -> AbstractMatrix
 
-Applies Dirichlet boundary conditions to matrix `A` on the regions `labels` name, restricted
-to the leaf(-ves) `components` names — 1-based positions in `leaf_spaces_offsets(space)`, the
-same depth-first order `u(1)`/`u(2)` addressing already uses. `components = nothing` (the
-default) applies to every leaf, unchanged from before this keyword existed.
+Apply Dirichlet boundary conditions to matrix `A` on the regions named by `labels`, restricted
+to the leaf components specified in `components` (1-based positions in `leaf_spaces_offsets(space)`,
+following the depth-first ordering used by `u(1)`/`u(2)` addressing). `components = nothing` (the
+default) applies to every leaf component.
 
-This is what lets a coupled system constrain one field and leave another free — a Stokes
-problem prescribing velocity while leaving pressure unconstrained, say:
+This allows coupled systems to constrain selected fields while leaving others unconstrained
+(for example, prescribing velocity while leaving pressure free in a Stokes problem):
 
 ```julia
 Wₕ = vector_gridspace(Ωₕ, Val(2))   # 1: velocity, 2: pressure
 dirichlet_bc!(A, Wₕ, :left, :right; components = 1)   # velocity only
 ```
 
-Call again with a different `labels`/`components` pair for another field; each call only
-ever restricts which leaves it touches, so several calls compose.
+Successive calls with different `labels`/`components` pairs compose cleanly.
 """
 function dirichlet_bc!(A::AbstractMatrix, space::CompositeGridSpace, labels::Symbol...;
         components = nothing)
@@ -323,26 +309,20 @@ end
 end
 
 """
-	ConstraintMarkers
+    ConstraintMarkers
 
-Either shape a set of Dirichlet conditions arrives in: the constraints themselves, or the
-same constraints already evaluated at a point in time.
-
-The two are distinct types — `EvaluatedDomainMarkers` holds the original alongside the
-timestamp — but they answer `conditions`, `label` and `identifier` identically, and nothing
-that applies a condition needs to tell them apart. There used to be two byte-identical
-methods, one per type.
+Union representing either unevaluated Dirichlet constraints (`DomainMarkers`) or time-evaluated
+constraints (`EvaluatedDomainMarkers`).
 """
 const ConstraintMarkers = Union{DomainMarkers, EvaluatedDomainMarkers}
 
 """
-	dirichlet_bc!(v, Ωₕ, bcs, labels...)
+    dirichlet_bc!(v::AbstractVector, Ωₕ::AbstractMeshType, bcs::ConstraintMarkers, labels::Symbol...) -> AbstractVector
 
-Writes the Dirichlet values into `v` at the points `labels` marks.
+Write Dirichlet values into `v` at the points marked by `labels`.
 
-`bcs` may be the constraints or a time-evaluated form of them; see [`ConstraintMarkers`](@ref).
-Only the marked entries are touched, and the work is proportional to how many there are
-rather than to the size of the grid — a boundary in a volume is a small fraction of it.
+`bcs` may be unevaluated constraints or time-evaluated constraints (see [`ConstraintMarkers`](@ref)).
+Only the marked entries are modified, with complexity proportional to the boundary cardinality.
 """
 @inline function dirichlet_bc!(
         v::AbstractVector, Ωₕ::AbstractMeshType, bcs::ConstraintMarkers,
@@ -353,9 +333,7 @@ rather than to the size of the grid — a boundary in a volume is a small fracti
 end
 
 # Unrolled by recursion on the conditions tuple, same idiom as `_write_components!`
-# (utils/linear_algebra.jl) — a plain `for marker in conditions(bcs)` measured 7% slower
-# and non-allocation-free (208 B) against this, point 48: the compiler does not always
-# fully unroll a `for` over a small heterogeneous tuple the way explicit recursion does.
+# (utils/linear_algebra.jl): explicit recursion avoids heap allocations from small heterogeneous tuple iterations.
 @inline _apply_conditions!(::Tuple{}, v, Ωₕ, labels, offset) = nothing
 @inline function _apply_conditions!(markers::Tuple, v, Ωₕ, labels, offset)
     marker = first(markers)
@@ -370,7 +348,7 @@ end
     labels::Symbol...) = dirichlet_bc!(v, Ωₕ, bcs, labels, 0)
 
 """
-	_dirichlet_bc_indices!(A, marker_indices)
+    _dirichlet_bc_indices!(A, marker_indices)
 
 Internal helper to apply Dirichlet boundary conditions to matrix `A` for a given set of indices.
 """
@@ -398,10 +376,10 @@ function _dirichlet_bc_indices!(A::AbstractMatrix, index_in_marker::BitVector)
 end
 
 """
-_dirichlet_bc_indices!(A::SparseMatrixCSC, index_in_marker::BitVector)
+    _dirichlet_bc_indices!(A::SparseMatrixCSC, index_in_marker::BitVector)
 
-Applies Dirichlet boundary conditions to a sparse matrix `A` by directly manipulating
-its CSC data structure for high performance.
+Apply Dirichlet boundary conditions to a sparse matrix `A` by directly manipulating
+its CSC data structure.
 """
 function _dirichlet_bc_indices!(A::SparseMatrixCSC, index_in_marker::BitVector)
     T = eltype(A)
@@ -435,21 +413,19 @@ function _dirichlet_bc_indices!(A::SparseMatrixCSC, index_in_marker::BitVector)
 end
 
 """
-	_function_in_linear_indices(func, Ωₕ, i)
+    _function_in_linear_indices(func, Ωₕ, i)
 
-Internal helper to evaluate a function at a grid point given its linear index.
+Internal helper to evaluate a boundary function at a grid point given its linear index.
 
 Converts linear index `i` to Cartesian indices and evaluates `func` at the
-corresponding physical point in mesh `Ωₕ`.
+corresponding physical coordinates in mesh `Ωₕ`.
 
 # Arguments
-
-  - `func`: Function to evaluate (typically a boundary condition function)
-  - `Ωₕ`: The mesh
-  - `i`: Linear index into the mesh points
+- `func`: Boundary condition function
+- `Ωₕ`: Mesh
+- `i`: Linear index into mesh points
 
 # Returns
-
 The value of `func` at the `i`-th mesh point.
 """
 _function_in_linear_indices(func, Ωₕ, i) = func(point(Ωₕ, indices(Ωₕ)[i]))
@@ -475,22 +451,15 @@ _function_in_linear_indices(func, Ωₕ, i) = func(point(Ωₕ, indices(Ωₕ)[i
     return v
 end
 
-#==============================================================================
-					SYMMETRIZATION OF THE LINEAR SYSTEM
-==============================================================================#
+# --- Symmetrization of the linear system ------------------------------------------- #
 
 """
-	dirichlet_bc_symmetrize!(A, F, Ωₕ, labels...)
+    dirichlet_bc_symmetrize!(A::AbstractMatrix, F::AbstractVector, Ωₕ::AbstractMeshType, labels::Symbol...)
 
-Imposes the Dirichlet conditions on `A` and then symmetrizes the system, in that order.
+Impose Dirichlet conditions on `A` and symmetrize the linear system `Ax = F`.
 
-The stored zeros this leaves behind stay stored. There used to be a `dropzeros` option to
-strip them, and it is gone rather than merely defaulted off: the sparsity pattern of an
-assembled operator is the stencil's, known ahead of time and shared with every matrix
-assembled the same way. Dropping entries makes the pattern depend on the boundary data, and
-every later write to a dropped position stops being a value update and becomes a structural
-insert, which rebuilds the column. Keeping explicit zeros costs one stored value each and
-keeps the pattern fixed, which is the cheaper side of that trade by a wide margin.
+The stored zeros this leaves behind remain in the sparse structure. Preserving explicit zeros
+keeps the sparsity pattern fixed across assemblies, avoiding costly CSC column reallocations.
 """
 function dirichlet_bc_symmetrize!(
         A::AbstractMatrix, F::AbstractVector, Ωₕ::AbstractMeshType, labels::Symbol...)
@@ -500,21 +469,17 @@ function dirichlet_bc_symmetrize!(
 end
 
 """
-	symmetrize!(A, F, Ωₕ, labels)
+    symmetrize!(A::AbstractMatrix, F::AbstractVector, Ωₕ::AbstractMeshType, labels::Symbol...)
 
-Modifies the linear system `Ax = F` to make `A` symmetric after applying Dirichlet
-conditions. It updates the vector `F` and zeros out the columns of `A` corresponding
-to Dirichlet nodes.
+Modify the linear system `Ax = F` to restore symmetry in `A` after applying Dirichlet conditions.
+Updates `F` to account for prescribed boundary data and zeroes the corresponding columns in `A`.
 
-The algorithm goes as follows: for any given row `i` where Dirichlet boundary conditions have been applied
-
-	- calculate `dᵢ = cᵢ .* F`, where `cᵢ` is the `i`-th column of `A`;
-	- replace `F` by subtracting `dᵢ` to `F` (except for the `i`-th component)
-	- replace all elements in the `i`-th column of `A` (except the `i`-th by zero).
+For each index `i` with prescribed Dirichlet boundary conditions:
+- Calculate `dᵢ = cᵢ .* F[i]`, where `cᵢ` is the `i`-th column of `A`;
+- Update `F` by subtracting `dᵢ` from `F` (preserving the `i`-th component);
+- Zero out off-diagonal elements in the `i`-th column of `A`.
 """
-# A scalar space carries its mesh, and every other entry point here takes one. `symmetrize!`
-# did not, so `dirichlet_bc!(A, Wₕ, :bottom)` worked while `symmetrize!(A, F, Wₕ, :bottom)`
-# was a MethodError — for a pair of calls that are almost always written together.
+# A scalar space carries its mesh, and every other entry point here takes one.
 @inline function symmetrize!(A::AbstractMatrix, F::AbstractVector, Wₕ::ScalarGridSpace,
         labels::Symbol...; components = nothing)
     _validate_scalar_components(components)
@@ -529,23 +494,17 @@ function symmetrize!(A::AbstractMatrix, F::AbstractVector, Ωₕ::AbstractMeshTy
 end
 
 """
-	symmetrize!(A, F, Wₕ::CompositeGridSpace, labels...)
+    symmetrize!(A::AbstractMatrix, F::AbstractVector, Wₕ::CompositeGridSpace, labels::Symbol...; components = nothing)
 
-Symmetrizes a coupled system, one leaf space at a time.
+Symmetrize a coupled linear system leaf space by leaf space.
 
-The counterpart of the composite `dirichlet_bc!`, and it works the same way: each leaf's
-marker mask is read at that leaf's offset into the global system rather than gathered into
-a mask over the whole of it, so the call allocates nothing. `leaf_spaces_offsets` answers
-with a tuple, so the loop unrolls and every read through a leaf keeps its concrete type.
+The counterpart of the composite `dirichlet_bc!`: each leaf's marker mask is read at that
+leaf's offset into the global system without allocating full-system masks. `leaf_spaces_offsets`
+returns a tuple, enabling loop unrolling and type stability.
 
-Without this method a composite space met a `MethodError` here while `dirichlet_bc!`
-accepted it — the two have to agree, since a system is rarely constrained by one and not
-the other.
-
-Takes the same `components` keyword as the composite `dirichlet_bc!`, restricting which
-leaf(-ves) `labels` binds to — 1-based positions in `leaf_spaces_offsets(Wₕ)`.
-`components = nothing` (the default) is every leaf, unchanged from before this keyword
-existed.
+Takes the same `components` keyword as composite `dirichlet_bc!`, restricting which leaf
+components `labels` binds to (1-based positions in `leaf_spaces_offsets(Wₕ)`). `components = nothing`
+(the default) applies to every leaf.
 """
 function symmetrize!(A::AbstractMatrix, F::AbstractVector, Wₕ::CompositeGridSpace,
         labels::Symbol...; components = nothing)
@@ -558,14 +517,11 @@ function symmetrize!(A::AbstractMatrix, F::AbstractVector, Wₕ::CompositeGridSp
     end
 end
 
-# Walking the set bits of the mask, rather than the mask itself. The marked set is a
-# boundary and the grid is a volume, so it is sparse in the extreme — 60 of 3,600 degrees
-# of freedom on a 60x60 grid marked `:bottom`. Testing every bit would do 3,600 tests to
-# find 60; skipping whole zero chunks and then walking set bits with `trailing_zeros` does
-# work proportional to what is marked.
+# Walking the set bits of the mask rather than the mask itself: boundary sets are sparse
+# compared to the domain volume. Skipping zero chunks and walking set bits with `trailing_zeros`
+# performs work proportional to the boundary cardinality.
 #
-# `offset` is where this mask's leaf starts in the global system: the mask is per leaf and
-# the matrix is the whole coupled system. Zero for a scalar space.
+# `offset` is where this mask's leaf starts in the global system (zero for a scalar space).
 @inline function _each_marked(f::F, mask::BitVector, offset::Int) where {F}
     @inbounds for (chunk_idx, chunk) in enumerate(mask.chunks)
         chunk == zero(UInt64) && continue
@@ -581,8 +537,6 @@ end
 # Generic implementation for dense matrices
 function symmetrize!(A::AbstractMatrix, F::AbstractVector, mask::BitVector, offset::Int = 0)
     T = eltype(A)
-    # `findall(mask)` used to build the index vector here — 576 B on a 60x60 grid, and
-    # growing with the boundary. The bit walk needs none.
     _each_marked(mask, offset) do i
         dirichlet_val = F[i]
         @inbounds for k in axes(A, 1)
@@ -596,24 +550,14 @@ end
 
 # Implementation for sparse matrices
 #
-# The diagonal is written where the sweep finds it, not through `A[i, i] = one(T)`
-# afterwards. That assignment looks free and is not: `setindex!` on a CSC matrix binary
-# searches the column's row indices for `i`, once per marked degree of freedom, immediately
-# after a loop that has just walked past that exact entry. Writing it in place makes
-# `symmetrize!` about twice as fast — 2.58 µs to 1.38 µs on a 200x200 grid — and the whole
-# of that gain is this one change.
+# The diagonal is written directly where the sweep encounters it rather than calling
+# `A[i, i] = one(T)` afterwards (which would perform a binary search for the row index).
 #
-# The fallback stays for the case the sweep does not find a diagonal, which is a matrix
-# that does not store one in a marked column. `dirichlet_bc!` leaves one behind, so the
-# usual path never needs it, but `symmetrize!` can be called on its own.
+# Skipping `F` when the boundary value is zero benefits homogeneous conditions.
+# It is safe under automatic differentiation: `iszero` on a `ForwardDiff.Dual` checks partials
+# as well as the value.
 #
-# Skipping `F` when the boundary value is zero is worth about 12% on homogeneous
-# conditions, which are the common ones, and nothing on inhomogeneous. It is safe under
-# automatic differentiation: `iszero` on a `ForwardDiff.Dual` tests the partials as well as
-# the value, so a value that is zero here but still varying is not skipped.
-#
-# No `@simd`: the branch rules it out. It bought nothing anyway — `F[rows[k]]` is an
-# indirect scatter.
+# No `@simd`: the branch rules it out, and `F[rows[k]]` is an indirect scatter.
 function symmetrize!(A::SparseMatrixCSC, F::AbstractVector, mask::BitVector,
         offset::Int = 0)
     T = eltype(A)

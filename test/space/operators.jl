@@ -1,48 +1,61 @@
+using Test
+using Bramble
+using Bramble: IdentityOperator, ZeroOperator, OperatorScale, GridFunctionScale,
+               OperatorAdd, is_symbolic, space
 
-function test_operators(::Val{D}) where {D}
-    I = interval(0, 1)
-    X = domain(reduce(×, ntuple(j -> I, D)))
-    M = mesh(X, ntuple(i -> 4, D), ntuple(i -> false, D))
-    W = gridspace(M)
-    un = element(W)
-    #u0 = element(W, 2);
-    Rₕ!(un, x -> exp(sum(x)) + sum(x))
+@testset "Linear operators" begin
+    for D in 1:3
+        @testset "$(D)D" begin
+            I = interval(0.0, 1.0)
+            X = domain(reduce(×, ntuple(_ -> I, Val(D))))
+            M = mesh(X, ntuple(_ -> 4, Val(D)), ntuple(_ -> false, Val(D)))
+            W = gridspace(M)
+            u = element(W)
+            Rₕ!(u, x -> 1.0)
 
-    x0 = Bramble.IdentityOperator(W)
+            x0 = IdentityOperator(W)
+            @test space(x0) === W
+            @test !is_symbolic(x0)
 
-    x1 = 2 * x0
-    Bramble.scalar(x1) == 2
+            z0 = ZeroOperator(W)
+            @test space(z0) === W
+            @test !is_symbolic(z0)
 
-    x2 = un * x0
-    @test(all(Bramble.scalar(x2) .== un))
+            # Scalar scaling
+            x1 = 2 * x0
+            @test x1 isa OperatorScale
+            @test x1.scalar == 2
+            @test x1.inner_op === x0
+            @test !is_symbolic(x1)
 
-    x3 = 4 * x1
-    @test(all(Bramble.scalar(x3) .== 8))
+            x1_div = x0 / 2
+            @test x1_div isa OperatorScale
+            @test x1_div.scalar == 0.5
 
-    x4 = 4 * x2
-    @test(all(Bramble.scalar(x4) .== (4 .* un)))
+            # Grid function scaling
+            x2 = u * x0
+            @test x2 isa GridFunctionScale
+            @test x2.grid_function === u
+            @test x2.inner_op === x0
+            @test !is_symbolic(x2)
 
-    x5 = un * x2
-    @test(all(Bramble.scalar(x5) .== un .* un))
+            # Operator addition and subtraction
+            sum_op = x0 + x0
+            @test sum_op isa OperatorAdd
+            @test sum_op.left_op === x0
+            @test sum_op.right_op === x0
+            @test !is_symbolic(sum_op)
 
-    x6 = Bramble.GradientOperator(W)
+            diff_op = x0 - x0
+            @test diff_op isa OperatorAdd
+            @test diff_op.left_op === x0
 
-    x7 = 2 * x6
-    @test(Bramble.scalar(x7) == 2)
-
-    x8 = un * x6
-    @test(all(Bramble.scalar(x8) .== un))
-
-    x9 = 4 * x7
-    @test(all(Bramble.scalar(x9) .== 8))
-
-    x10 = 4 * x8
-    @test(all(Bramble.scalar(x10) .== 4 .* un))
-
-    x11 = un * x8
-    @test(all(Bramble.scalar(x11) .== un .* un))
-end
-
-for i in 1:3
-    test_operators(Val(i))
+            # String representation
+            buf = IOBuffer()
+            show(buf, x0)
+            @test String(take!(buf)) == "I"
+            show(buf, z0)
+            @test String(take!(buf)) == "0"
+        end
+    end
 end

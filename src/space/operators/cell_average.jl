@@ -22,27 +22,34 @@
 # the docstring from `avgₕ` and binds it to nothing, which the exported-names-are-
 # documented check in test/quality catches.
 """
-	avgₕ(Wₕ::AbstractSpaceType, f; quad_points = AVG_QUAD_POINTS, markers = ())
+    avgₕ(Wₕ::AbstractSpaceType, f; quad_points = AVG_QUAD_POINTS, markers = ()) -> VectorElement
 
 Returns a [`VectorElement`](@ref) with the average of function `f` with respect to the [`cell_measure`](@ref) of `mesh(Wₕ)` around each grid point.
 
 Each cell average is a tensor-product Gauss-Legendre rule with `quad_points`
 points per direction, exact for polynomials of degree `2 * quad_points - 1`.
 
-# The shape of `f`
+# Arguments
 
-As for [`Rₕ`](@ref), `f` receives the coordinates of a point: a scalar on a 1D
-mesh and an `NTuple{D}` on a `D`-dimensional one, never an `SVector`. For an
-`N`-component space either a tuple of functions or a single function returning
-all components works, and both give the same result.
+  - `Wₕ::AbstractSpaceType`: grid space on which to average `f`.
+  - `f`: function of one grid point. Receives coordinates as a scalar on 1D
+    meshes or an `NTuple{D}` on `D`-dimensional meshes, never an `SVector`.
 
 # Keywords
 
-  - `quad_points`: points per direction, per cell. Has no counterpart in
-    [`Rₕ`](@ref), which involves no quadrature. An `Int` or a `Val`; see
-    [`avgₕ!`](@ref) for what the difference costs.
-  - `markers`: restrict evaluation to the named marked regions, as in
-    [`Rₕ`](@ref), leaving every other entry zero.
+  - `quad_points::Union{Integer, Val}`: points per direction, per cell.
+    Defaults to `Val(AVG_QUAD_POINTS)`.
+  - `markers::NTuple{N, Symbol}`: restrict evaluation to the named marked
+    regions, leaving every other entry zero.
+
+# Examples
+
+```julia
+avgₕ(Wₕ, x -> sin(x))
+avgₕ(Wₕ, x -> sin(x[1]) * x[2]; quad_points = Val(4))
+```
+
+See also: [`avgₕ!`](@ref), [`Rₕ`](@ref).
 """
 Base.@constprop :aggressive function avgₕ(
         Wₕ::AbstractSpaceType, f; quad_points::Union{Integer, Val} = Val(AVG_QUAD_POINTS),
@@ -52,27 +59,28 @@ Base.@constprop :aggressive function avgₕ(
 end
 
 """
-	avgₕ!(uₕ::VectorElement, f; quad_points = AVG_QUAD_POINTS, markers = ())
+    avgₕ!(uₕ::VectorElement, f; quad_points = AVG_QUAD_POINTS, markers = ()) -> VectorElement
 
 In-place version of the averaging operator [`avgₕ`](@ref). Returns `uₕ`.
 
-Allocates only the task overhead of the parallel loop, independently of the
-number of grid points, and `f` is called directly rather than wrapped so that it
-specialises and inlines into the quadrature loop. This is the form to use inside
-a time-stepping loop.
+Evaluates the tensor-product Gauss-Legendre cell average of `f` and writes
+the result into `uₕ`.
 
-`f` and the keywords are as described for [`avgₕ`](@ref).
+# Arguments
 
-`quad_points` accepts a plain `Int` or a `Val`. A `Val` (the keyword's own default,
-`Val(AVG_QUAD_POINTS)`) is a compile-time constant the quadrature rule specialises
-on directly, so it costs nothing beyond the parallel loop's own task overhead — the
-same is true of the positional form `avgₕ!(uₕ, f, Val(n))`, which skips the keyword
-sorter entirely. A runtime `Int` is genuinely dynamic and cannot specialise the same
-way, so it costs a small, constant allocation (tens of bytes, not the per-point cost
-this docstring's first paragraph is about) to box the resulting `Val` — acceptable
-for an occasional call, worth avoiding with `Val` inside a hot loop.
+  - `uₕ::VectorElement`: pre-allocated element to write into.
+  - `f`: function of one grid point. Receives coordinates as a scalar on 1D
+    meshes or an `NTuple{D}` on `D`-dimensional meshes.
 
-See also: [`avgₕ`](@ref), [`Rₕ!`](@ref)
+# Keywords
+
+  - `quad_points::Union{Integer, Val}`: points per direction, per cell.
+    Defaults to `Val(AVG_QUAD_POINTS)`. Using a `Val` allows compile-time
+    specialization of the quadrature nodes and weights without boxing.
+  - `markers::NTuple{N, Symbol}`: restrict evaluation to the named marked
+    regions, leaving every other entry zero.
+
+See also: [`avgₕ`](@ref), [`Rₕ!`](@ref).
 """
 @inline avgₕ!(uₕ::VectorElement{<:ScalarGridSpace{D}}, f::Tuple{Any}) where {D} = avgₕ!(uₕ, f[1])
 
@@ -104,12 +112,9 @@ See also: [`avgₕ`](@ref), [`Rₕ!`](@ref)
     markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {N} = avgₕ!(
     uₕ, f[1]; quad_points = quad_points, markers = markers)
 
-# `NQ` is a compile-time constant here (a type parameter), so the check folds away same as
-# `_is_source_only`'s own branches do — it costs nothing on the path this exists to keep
-# allocation-free. Without it, `quad_points = Val(0)` reached QuadGK's own "Gauss rules
-# require positive order" instead of this function's own message, for the keyword path only
-# (the direct positional `avgₕ!(uₕ, f, Val(n))` escape hatch stays unchecked, matching every
-# other internal call that already hard-codes a known-good `Val` without validating it).
+# `NQ` is a compile-time constant here (a type parameter), so the check folds away,
+# costing nothing on the hot path. Without it, `quad_points = Val(0)` reached QuadGK's
+# internal error message rather than validating the argument early.
 @inline function _to_quad_val(nq::Val{NQ}) where {NQ}
     NQ >= 1 || throw(ArgumentError("quad_points must be >= 1, got $NQ"))
     return nq
@@ -133,28 +138,16 @@ Base.@constprop :aggressive function avgₕ!(
     return _avgₕ!(uₕ, f, Val(D), nq)
 end
 
-# A named, concretely-typed kernel for the quadrature loop's inner call, rather than an
-# anonymous closure over the same five captures (`f`, `x`, `idxs`, `nodes`, `wts`).
-#
-# The two should be equivalent -- a Julia closure is already a concrete, compiler-generated
-# struct with the same fields -- and mostly are: `Rₕ!`'s equivalent closure, half the
-# captures, never showed *this* problem (the allocation flake below). It did turn out to cost
-# real time for an unrelated reason, closed the same way -- see `_RₕKernel`, point 67. This one,
-# five captures deep inside `_cpu_threaded_for!`,
-# is a *closer call* for the compiler's inlining cost model, and closer calls are where an
-# "inlining budget nothing can query" (this file's own words, on the related `_gauss_rule`
-# fold) occasionally goes the wrong way -- point 51 in docs/form-unlock-plan.md measured it:
-# 1 to 3 in 20 independent compiles landed on a path that cost 176 B *per grid point*, 80 MiB
-# on a million-point mesh, on otherwise identical code. A hand-written struct doesn't remove
-# that risk outright, but it is one fewer compiler decision between the data and the call --
-# no closure-capture-list inference, just field access on a type this file wrote down. Pay a
-# few named types now, deterministically, rather than gamble on an unobservable heuristic.
+# Concretely typed kernels (`_AvgKernel1` / `_AvgKernelD`) for the quadrature loop,
+# avoiding anonymous closures over captures (`f`, `x`, `idxs`, `nodes`, `wts`).
+# Explicit struct types ensure predictable inlining and eliminate allocation flakes
+# inside parallel loop dispatch.
 struct _AvgKernel1{F, X, IX, NQ, T}
     f::F
     x::X
     idxs::IX
-    nodes::SVector{NQ, T}
-    wts::SVector{NQ, T}
+    nodes::NTuple{NQ, T}
+    wts::NTuple{NQ, T}
 end
 @inline (k::_AvgKernel1)(i) = _cell_average(k.f, k.x, k.idxs[i][1], k.nodes, k.wts)
 
@@ -162,8 +155,8 @@ struct _AvgKernelD{F, X, IX, NQ, T}
     f::F
     x::X
     idxs::IX
-    nodes::SVector{NQ, T}
-    wts::SVector{NQ, T}
+    nodes::NTuple{NQ, T}
+    wts::NTuple{NQ, T}
 end
 @inline (k::_AvgKernelD)(i) = _cell_average(k.f, k.x, k.idxs[i], k.nodes, k.wts)
 
@@ -220,8 +213,8 @@ struct _AvgScatterKernel1{F, X, IX, NQ, T, NC}
     f::F
     x::X
     idxs::IX
-    nodes::SVector{NQ, T}
-    wts::SVector{NQ, T}
+    nodes::NTuple{NQ, T}
+    wts::NTuple{NQ, T}
 end
 @inline (k::_AvgScatterKernel1{
     F, X, IX, NQ, T, NC})(i) where {F, X, IX, NQ, T, NC} = _cell_average(
@@ -231,8 +224,8 @@ struct _AvgScatterKernelD{F, X, IX, NQ, T, NC}
     f::F
     x::X
     idxs::IX
-    nodes::SVector{NQ, T}
-    wts::SVector{NQ, T}
+    nodes::NTuple{NQ, T}
+    wts::NTuple{NQ, T}
 end
 @inline (k::_AvgScatterKernelD{
     F, X, IX, NQ, T, NC})(i) where {F, X, IX, NQ, T, NC} = _cell_average(
@@ -396,16 +389,16 @@ integrand, so a small fixed rule is both cheaper and allocation free.
 
 Writing the cell integral on the reference cube,
 
-	1/|C| ∫_C f = ∫_{[0,1]^D} f(a + t ⊙ (b - a)) dt,
+    1/|C| ∫_C f = ∫_{[0,1]^D} f(a + t ⊙ (b - a)) dt,
 
 because |C| = ∏ₖ (bₖ - aₖ) exactly: the cell around a grid point spans
 consecutive half points, whose spacing is the half spacing that
 `cell_measure` returns. The quadrature weights below sum to one, so the
-weighted sum *is* the average and no measure division is needed.
+weighted sum is the average and no measure division is needed.
 =#
 
 """
-	AVG_QUAD_POINTS
+    AVG_QUAD_POINTS
 
 Default number of Gauss-Legendre points per direction, per cell, used by
 [`avgₕ`](@ref). Six points are exact for polynomials up to degree eleven.
@@ -413,7 +406,7 @@ Default number of Gauss-Legendre points per direction, per cell, used by
 Unlike an adaptive rule, a fixed one does not tighten itself on coarse cells, so
 the default is chosen to be accurate on cells far coarser than any practical
 grid. Measured on 4 points spanning [-1, 4] with a function varying by a factor
-of e^5 across the domain -- deliberately harsher than a real mesh -- the worst
+of e^5 across the domain (deliberately harsher than a real mesh), the worst
 error over 30 random grids was
 
     points   1D        2D        3D        evaluations per cell (3D)
@@ -429,15 +422,15 @@ cheap to resolve and the cells are small.
 const AVG_QUAD_POINTS = 6
 
 """
-	_gauss_rule(::Val{N}, ::Type{T})
+    _gauss_rule(::Val{N}, ::Type{T})
 
 Returns `(nodes, weights)` for the `N`-point Gauss-Legendre rule on `[0, 1]` as
-`SVector{N,T}`, so the per-cell loop that consumes them does not allocate.
+`NTuple{N,T}`, so the per-cell loop that consumes them does not allocate.
 
 The rule is built by `QuadGK.gauss` in the requested element type, so `Float32`
 and `BigFloat` grids get a rule at their own precision rather than a rounded
 `Float64` one. Weights sum to one, which makes the weighted sum over a cell the
-cell *average* directly.
+cell average directly.
 """
 @generated function _gauss_rule(::Val{N}, ::Type{T}) where {N, T}
     # When `T` is an isbits float its precision is fixed by the type, so the rule
@@ -445,16 +438,14 @@ cell *average* directly.
     # then costs nothing at all. This covers Float16/32/64 and equally the stack
     # allocated extended precision types such as Double64 or Float64x2.
     #
-    # Anything else -- notably BigFloat, whose precision is a run-time setting that
-    # must not be baked in at compile time -- falls back to building the rule per
-    # call, at the precision in force at that moment. The same fallback catches an
-    # isbits type that QuadGK cannot construct a rule for.
+    # Non-isbits types (notably BigFloat, whose precision is a runtime setting)
+    # fall back to building the rule dynamically per call at current precision.
     if isbitstype(T)
         try
             x, w = gauss(T, N, zero(T), one(T))
             nodes = Expr(:tuple, x...)
             wts = Expr(:tuple, w...)
-            return :((SVector{$N, $T}($nodes), SVector{$N, $T}($wts)))
+            return :(($nodes, $wts))
         catch
             # fall through to the run-time rule
         end
@@ -464,12 +455,12 @@ end
 
 @inline function _gauss_rule_runtime(::Val{N}, ::Type{T}) where {N, T}
     x, w = gauss(T, N, zero(T), one(T))
-    return SVector{N, T}(x), SVector{N, T}(w)
+    return NTuple{N, T}(x), NTuple{N, T}(w)
 end
 
 # Average of `f` over the 1D cell spanned by `x[i] .. x[i+1]`.
-@inline function _cell_average(f, x::AbstractVector, i::Int, nodes::SVector{NQ, T},
-        wts::SVector{NQ, T}) where {NQ, T}
+@inline function _cell_average(f, x::AbstractVector, i::Int, nodes::NTuple{NQ, T},
+        wts::NTuple{NQ, T}) where {NQ, T}
     @inbounds a = T(x[i])
     @inbounds d = T(x[i + 1]) - a
 
@@ -483,32 +474,10 @@ end
 # Kernel form of the cell average: closes over the geometry so it can be handed to a
 # generic index loop.
 #
-# The quadrature rule is built once, outside the kernel, and captured by it. That costs
-# `SVector{6,T}` twice — 96 bytes for `Float64`, stored inline because it is isbits — and
-# `Threads.@threads` gives each task its own copy of the closure, so it is paid once per
-# thread per call. Measured as the per-thread gap between `avgₕ!` at 472 B and `Rₕ!` at
-# 376 B.
-#
-# It used to be fetched *inside* the kernel for `Float16`/`Float32`/`Float64`, to avoid
-# exactly that: `_gauss_rule` is `@generated` and folds to an `SVector` literal, so the
-# closure shrank to 16 bytes from 104 and the loop ran within noise of the old one.
-#
-# That fold is not guaranteed, and on x86_64 Linux it does not happen. CI measured `avgₕ!`
-# at exactly 80 bytes per grid point — 83,887,904 B on a 1024x1024 mesh, against a 100,000
-# bound — while the same commit measured 0 B per point on aarch64 macOS. Both the serial
-# and the threaded path showed it, so it is codegen, not threading.
-#
-# What made it expensive to diagnose: a probe that built the kernel and called it directly
-# reported the fold surviving *on the failing machine*. Calling the closure on its own
-# folds; inlining it into `_cpu_threaded_for!`'s loop does not. So the probe has to measure the
-# real path, and the test now does.
-#
-# The trade was therefore 96 bytes per thread against 80 MiB per million points on one of
-# the two architectures we test, decided by an inlining budget nothing can query. Capturing
-# is what the code did for every type before the split, and it is what the extended types
-# always needed: `BigFloat`'s precision is a run-time setting so `_gauss_rule` cannot fold
-# at all, and `Double64` is isbits and takes the folding branch without folding, costing
-# 3184 bytes per call — 2977 B per grid point on the fetch-inside path.
+# The quadrature rule is precomputed outside the kernel and captured as stack-allocated
+# tuples (`nodes`, `wts`). Pre-evaluating outside the loop avoids recomputing or
+# querying compiler-generated code inside the inner per-point evaluation loop, ensuring
+# zero per-point allocations across all platforms and thread dispatchers.
 @inline function _cell_average_kernel(f, x, nq::Val, ::Type{T}, ::Val{1}) where {T}
     nodes, wts = _gauss_rule(nq, T)
     return idx -> _cell_average(f, x, idx[1], nodes, wts)
@@ -536,8 +505,8 @@ end
 # single function returning all components, raised a MethodError. The per-component tuple
 # form with a tuple of functions was unaffected, since it dispatches to the scalar path
 # once per component.
-@inline function _cell_average(f, x::AbstractVector, i::Int, nodes::SVector{NQ, T},
-        wts::SVector{NQ, T}, ::Val{NC}) where {NQ, T, NC}
+@inline function _cell_average(f, x::AbstractVector, i::Int, nodes::NTuple{NQ, T},
+        wts::NTuple{NQ, T}, ::Val{NC}) where {NQ, T, NC}
     @inbounds a = T(x[i])
     @inbounds b = T(x[i + 1])
 
@@ -550,7 +519,7 @@ end
 
 # 2D specialized scalar cell average
 @inline function _cell_average(f, x::NTuple{2}, idx::CartesianIndex{2},
-        nodes::SVector{NQ, T}, wts::SVector{NQ, T}) where {NQ, T}
+        nodes::NTuple{NQ, T}, wts::NTuple{NQ, T}) where {NQ, T}
     @inbounds i, j = idx[1], idx[2]
     @inbounds a1 = T(x[1][i])
     @inbounds d1 = T(x[1][i + 1]) - a1
@@ -572,8 +541,8 @@ end
 
 # 2D specialized composite cell average
 @inline function _cell_average(
-        f, x::NTuple{2}, idx::CartesianIndex{2}, nodes::SVector{NQ, T},
-        wts::SVector{NQ, T}, ::Val{NC}) where {NQ, T, NC}
+        f, x::NTuple{2}, idx::CartesianIndex{2}, nodes::NTuple{NQ, T},
+        wts::NTuple{NQ, T}, ::Val{NC}) where {NQ, T, NC}
     @inbounds i, j = idx[1], idx[2]
     @inbounds a1 = T(x[1][i])
     @inbounds d1 = T(x[1][i + 1]) - a1
@@ -595,7 +564,7 @@ end
 
 # 3D specialized scalar cell average
 @inline function _cell_average(f, x::NTuple{3}, idx::CartesianIndex{3},
-        nodes::SVector{NQ, T}, wts::SVector{NQ, T}) where {NQ, T}
+        nodes::NTuple{NQ, T}, wts::NTuple{NQ, T}) where {NQ, T}
     @inbounds i, j, k = idx[1], idx[2], idx[3]
     @inbounds a1 = T(x[1][i])
     @inbounds d1 = T(x[1][i + 1]) - a1
@@ -623,8 +592,8 @@ end
 
 # 3D specialized composite cell average
 @inline function _cell_average(
-        f, x::NTuple{3}, idx::CartesianIndex{3}, nodes::SVector{NQ, T},
-        wts::SVector{NQ, T}, ::Val{NC}) where {NQ, T, NC}
+        f, x::NTuple{3}, idx::CartesianIndex{3}, nodes::NTuple{NQ, T},
+        wts::NTuple{NQ, T}, ::Val{NC}) where {NQ, T, NC}
     @inbounds i, j, k = idx[1], idx[2], idx[3]
     @inbounds a1 = T(x[1][i])
     @inbounds d1 = T(x[1][i + 1]) - a1
@@ -655,8 +624,8 @@ end
 # per component; the accumulator is a tuple and every operation on it broadcasts
 # over `NC` isbits values, so nothing allocates.
 @inline function _cell_average(
-        f, x::NTuple{D}, idx::CartesianIndex{D}, nodes::SVector{NQ, T},
-        wts::SVector{NQ, T}, ::Val{NC}) where {D, NQ, T, NC}
+        f, x::NTuple{D}, idx::CartesianIndex{D}, nodes::NTuple{NQ, T},
+        wts::NTuple{NQ, T}, ::Val{NC}) where {D, NQ, T, NC}
     a = ntuple(k -> @inbounds(T(x[k][idx[k]])), Val(D))
     b = ntuple(k -> @inbounds(T(x[k][idx[k] + 1])), Val(D))
 
@@ -675,7 +644,7 @@ end
 # Average of `f` over the D-dimensional cell around `idx`, whose corners are the
 # half points `x[k][idx[k]]` and `x[k][idx[k] + 1]` along each axis.
 @inline function _cell_average(f, x::NTuple{D}, idx::CartesianIndex{D},
-        nodes::SVector{NQ, T}, wts::SVector{NQ, T}) where {D, NQ, T}
+        nodes::NTuple{NQ, T}, wts::NTuple{NQ, T}) where {D, NQ, T}
     a = ntuple(k -> @inbounds(T(x[k][idx[k]])), Val(D))
     b = ntuple(k -> @inbounds(T(x[k][idx[k] + 1])), Val(D))
 

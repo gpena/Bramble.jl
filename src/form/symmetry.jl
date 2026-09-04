@@ -6,8 +6,8 @@
 
 #=
 `innerₕ(L(u), L(v))` with the same `L` applied to the trial and test argument assembles to
-`LᵀWL`: symmetric by construction, since `W` — the quadrature weight `InnerH`/`InnerPlus`
-carries — is a positive diagonal, and `AᵀWA` is symmetric whatever `A` is. A sum of such
+`LᵀWL`: symmetric by construction, since `W` (the quadrature weight `InnerH`/`InnerPlus`
+carries) is a positive diagonal, and `AᵀWA` is symmetric whatever `A` is. A sum of such
 terms is symmetric, and scaling one by a real number preserves that. A term naming a
 different operator on either side, such as `inner₊(u, D₋ₓ(v))`, generally is not.
 
@@ -15,14 +15,13 @@ The check walks the same AST `local_stencil` walks to assemble, asking whether `
 and `right_op` are the same operator chain up to substituting `TrialFunction` for
 `TestFunction` at the leaves. It evaluates nothing: two coefficients compare equal only when
 they are the same object, which is exactly what happens when `L` is written once and applied
-to both arguments — both sides then close over the identical variable. A numerically equal
-but distinct coefficient is deliberately not recognised: this answers "is it *this*
-pattern", not "does it happen to work out", the same conservative stance point 14 was
-removed for not having.
+to both arguments: both sides then close over the identical variable. A numerically equal
+but distinct coefficient is deliberately not recognised: this answers "is it this
+pattern", not "does it happen to work out".
 
 None of this means anything unless the trial and test argument range over the same space:
 "symmetric" presupposes a square matrix, and `form(Wₕ, Vₕ, ...)` with `Wₕ ≠ Vₕ` need not even
-produce one — nor, if it happens to be square, does the `off_u`/`off_v` swap the argument
+produce one; nor, if it happens to be square, does the `off_u`/`off_v` swap the argument
 relies on correspond to an actual matrix transpose unless both sides share the same mesh
 indexing. So both predicates below check `trial_space(a) === test_space(a)` before walking
 the expression at all, and answer `false` immediately otherwise.
@@ -37,9 +36,9 @@ end
 # Every other node wraps one (or two) inner operators, and that inner operator is exactly
 # where a trial/test pair stops being the same Julia type: `D₋ₓ(u)` is a
 # `BackwardDifference{D,Dim,TrialFunction{D}}`, `D₋ₓ(v)` a
-# `BackwardDifference{D,Dim,TestFunction{D}}` — different `OpType`, so `typeof(a) ==
-# typeof(b)` is false for the one case this trait exists to recognise. Each method below
-# fixes every type parameter *except* the wrapped operator's own type, and recurses into it
+# `BackwardDifference{D,Dim,TestFunction{D}}` (different `OpType`, so `typeof(a) ==
+# typeof(b)` is false for the one case this trait exists to recognise). Each method below
+# fixes every type parameter except the wrapped operator's own type, and recurses into it
 # instead of requiring it to match structurally.
 for W in (:BackwardDifference, :ForwardDifference, :CenteredDifference,
     :StarDifference, :CrossWeightedDifference, :BackwardAverage,
@@ -66,7 +65,7 @@ function _same_operator_shape(a::OperatorScale{D}, b::OperatorScale{D}) where {D
 end
 
 # By identity, not value: a coefficient compares equal here only when both sides close over
-# the identical object, which is what happens when `L` is written once and applied twice —
+# the identical object, which is what happens when `L` is written once and applied twice:
 # see the module-level note above. A numerically equal but distinct array is not this case.
 function _same_operator_shape(a::GridFunctionScale{D}, b::GridFunctionScale{D}) where {D}
     a.grid_function ===
@@ -86,8 +85,8 @@ function _same_operator_shape(a::IdentityOperator{D}, b::IdentityOperator{D}) wh
 end
 _same_operator_shape(a::ZeroOperator{D}, b::ZeroOperator{D}) where {D} = a.space === b.space
 
-# Anything else — different node types, a Trial/Test pair with mismatched indices, or a
-# shape this does not recognise — is not verified as the same operator.
+# Anything else: different node types, a Trial/Test pair with mismatched indices, or a
+# shape this does not recognise, is not verified as the same operator.
 _same_operator_shape(a, b) = false
 
 # ==============================================================================
@@ -98,8 +97,8 @@ _same_operator_shape(a, b) = false
 
 # For `i <= j`, `stencil[i][2]*stencil[j][2]*vol` is computed once and bound to a local; for
 # `i > j` the mirrored entry reuses that same binding instead of recomputing the (identical,
-# since multiplication commutes) product. The output is still every `(i, j)` pair — same
-# length, same values — `multiply_stencils_bilinear` would give for `left ≡ right`, just
+# since multiplication commutes) product. The output is still every `(i, j)` pair (same
+# length, same values) `multiply_stencils_bilinear` would give for `left ≡ right`, just
 # built from `N(N+1)/2` multiplications rather than `N²`.
 @generated function multiply_stencils_bilinear_symmetric(stencil::Tuple, vol::Number)
     N = length(stencil.parameters)
@@ -121,8 +120,8 @@ _same_operator_shape(a, b) = false
 end
 
 # Whether one term of a resolved bilinear AST is symmetric by the `LᵀWL` argument above.
-# Only the three shapes that argument covers answer true; anything else — including a shape
-# this does not recognise but which happens to be symmetric some other way — answers false.
+# Only the three shapes that argument covers answer true; anything else (including a shape
+# this does not recognise but which happens to be symmetric some other way) answers false.
 _is_symmetric_term(op::BilinearProduct) = _same_operator_shape(op.left_op, op.right_op)
 function _is_symmetric_term(op::OperatorAdd)
     _is_symmetric_term(op.left_op) && _is_symmetric_term(op.right_op)
@@ -141,31 +140,31 @@ _is_posdef_term(op::OperatorScale) = op.scalar > 0 && _is_posdef_term(op.inner_o
 _is_posdef_term(op) = false
 
 """
-    issymmetric(a::BilinearForm)
+    issymmetric(a::BilinearForm) -> Bool
 
-Whether `a` is symmetric by construction — `innerₕ(L(u), L(v))`, or a sum or scaling of such
+Whether `a` is symmetric by construction: `innerₕ(L(u), L(v))`, or a sum or scaling of such
 terms, with the *same* `L` written once and applied to both the trial and test argument.
 
 Purely structural: this walks `a`'s expression and never assembles a matrix. It is also
-conservative — a term that happens to produce a symmetric matrix through some other route
+conservative: a term that happens to produce a symmetric matrix through some other route
 answers `false`, the same as one that is not symmetric at all.
 
 This describes the *unconstrained* operator. [`dirichlet_bc!`](@ref) zeros a row without
 touching its column, so a matrix assembled with `dirichlet_labels` is not symmetric even when
-`issymmetric(a)` is `true` — only after [`symmetrize!`](@ref) restores it. `true` here is a
+`issymmetric(a)` is `true`, until [`symmetrize!`](@ref) restores it. `true` here is a
 claim about `a`'s expression, not about whatever matrix a particular call to `assemble`
 produced.
 
 # Examples
 ```julia
 a = form(Wₕ, Wₕ, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
-issymmetric(a)  # true — the same D₋ₓ on both sides
+issymmetric(a)  # true: the same D₋ₓ on both sides
 
 b = form(Wₕ, Wₕ, (u, v) -> inner₊(u, D₋ₓ(v)))
-issymmetric(b)  # false — different operators either side
+issymmetric(b)  # false: different operators either side
 
 issymmetric(Matrix(assemble(a)))                                # true
-issymmetric(Matrix(assemble(a; dirichlet_labels = :boundary)))   # false — rows zeroed, columns not
+issymmetric(Matrix(assemble(a; dirichlet_labels = :boundary)))   # false: rows zeroed, columns not
 ```
 """
 function issymmetric(a::BilinearForm)
@@ -174,15 +173,15 @@ function issymmetric(a::BilinearForm)
 end
 
 """
-    isposdef(a::BilinearForm)
+    isposdef(a::BilinearForm) -> Bool
 
 Whether `a` is symmetric positive semi-definite by the same `LᵀWL` construction
-`issymmetric` checks — true only when, in addition, every scaling along the way is by a
+`issymmetric` checks: true only when, in addition, every scaling along the way is by a
 positive number, which is what keeps that positivity from being flipped or collapsed.
 
 Purely structural, like `issymmetric`, and for the same reason conservative: this does not
-prove positive-*definite* (which also needs `L` to have trivial kernel), only that the
-assembled matrix is symmetric positive semi-definite — enough to make `cholesky` worth
+prove positive-definite (which also needs `L` to have trivial kernel), only that the
+assembled matrix is symmetric positive semi-definite, enough to make `cholesky` worth
 attempting first rather than a general factorization.
 
 Describes the *unconstrained* operator, exactly as `issymmetric` does: a matrix assembled

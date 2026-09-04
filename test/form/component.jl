@@ -5,8 +5,8 @@ using Bramble: IndexedTrialFunction, IndexedTestFunction, TrialFunction, TestFun
                source_function, trial_component_or_nothing, test_component_or_nothing,
                components
 
-# `component(op, i)` — the mechanism behind `u(1)`, `D₋ₓ(v)(2)`, and the composite
-# `innerₕ(uₕ, r)` shorthand alike — rebuilds a symbolic tree with its trial/test leaves
+# `component(op, i)` (the mechanism behind `u(1)`, `D₋ₓ(v)(2)`, and the composite
+# `innerₕ(uₕ, r)` shorthand alike) rebuilds a symbolic tree with its trial/test leaves
 # replaced by their indexed forms. `test/form/linear.jl`'s "Shorthand equivalence" and
 # "Source variants" testsets already exercise most of this file's methods incidentally,
 # through `innerₕ`/`inner₊ₓ` and a real composite form; this file covers what those do
@@ -86,7 +86,7 @@ using Bramble: IndexedTrialFunction, IndexedTestFunction, TrialFunction, TestFun
 
     @testset "Composite shorthand: inner₊₂" begin
         # inner₊₂ needs a spatial dimension of at least 3, unlike the 2D composite spaces
-        # used above — a separate small 3D setup.
+        # used above; here we use a separate small 3D setup.
         Ω3 = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (3, 4, 3),
             (true, true, true))
         V3 = gridspace(Ω3, Val(2))

@@ -26,7 +26,7 @@ The number of colours is `prod(strides)`, and the common case is one:
 | `inner₊(∇₋ₕ(fₕ), ∇₋ₕ(v))` | `(-1, 0)`, `(0, -1)`, `(0, 0)` | `(2, 2)` | 4 |
 
 Any form whose test argument carries no difference strides by 1 in every dimension, and is
-swept as a single flat parallel loop with no phases at all — both `_sweep_parallel!` and
+swept as a single flat parallel loop with no phases at all: both `_sweep_parallel!` and
 `_sweep_bilinear!` check `prod(strides) == 1` and take that path directly.
 
 A colour is a strided sub-grid, not a materialised list of indices:
@@ -150,9 +150,11 @@ Pages = [
     "form/component.jl",
     "form/block_extract.jl",
     "form/stencil_pattern.jl",
+    "form/symmetry.jl",
     "form/operators/average.jl",
     "form/operators/difference.jl",
     "form/operators/inner.jl",
+    "form/operators/interpolation.jl",
     "form/operators/jump.jl",
     "form/operators/restriction.jl",
     "form/dirichlet_constraints.jl",

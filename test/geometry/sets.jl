@@ -42,7 +42,7 @@ end
         # Interval constructor (Float64 default)
         I_f64 = interval(-3.0, 10.0)
         @test I_f64 isa CartesianProduct{1, Float64}
-        @test I_f64.box isa SVector{1}
+        @test I_f64.box isa NTuple{1}
         @test I_f64.box[1] == (-3.0, 10.0)
         @test all(isapprox.(I_f64.box[1], (-3.0, 10.0)))
         @test I_f64.collapsed[1] == false
@@ -80,14 +80,14 @@ end
         # cartesian_product(NTuple) - Int
         cp_int_2d = cartesian_product(((0, 1), (4, 5)))
         @test cp_int_2d isa CartesianProduct{2, Float64}
-        @test cp_int_2d.box isa SVector{2}
+        @test cp_int_2d.box isa NTuple{2}
         @test cp_int_2d.box[1] == (0.0, 1.0)
         @test cp_int_2d.box[2] == (4.0, 5.0)
 
         # cartesian_product(NTuple) - Float32
         cp_f32_3d = cartesian_product(((0.0f0, 1.0f0), (2.0f0, 3.0f0), (-1.0f0, 0.0f0)))
         @test cp_f32_3d isa CartesianProduct{3, Float32}
-        @test cp_f32_3d.box isa SVector{3}
+        @test cp_f32_3d.box isa NTuple{3}
         @test cp_f32_3d.box[1] == (0.0f0, 1.0f0)
         @test cp_f32_3d.box[2] == (2.0f0, 3.0f0)
         @test cp_f32_3d.box[3] == (-1.0f0, 0.0f0)
@@ -182,9 +182,9 @@ end
         @test topo_dim(I_line) === 1
 
         # Center point
-        @test center(I) ≈ SVector(0.5)
-        @test center(R2) ≈ SVector(0.5, 2.5)
-        @test center(R3) ≈ SVector(0.5, 2.5, 4.5)
+        @test all(isapprox.(center(I), (0.5,)))
+        @test all(isapprox.(center(R2), (0.5, 2.5)))
+        @test all(isapprox.(center(R3), (0.5, 2.5, 4.5)))
 
         # Degeneracy check across 1D and nD sets
         @test is_collapsed(I) == false
@@ -257,7 +257,7 @@ end
         P1 = I1 × I2
         @test P1 isa CartesianProduct{2, Float64}
         @test dim(P1) == 2
-        @test P1.box isa SVector{2}
+        @test P1.box isa NTuple{2}
         @test tails(P1) == ((0.0, 1.0), (2.0, 3.0))
 
         # Tensor product with mixed types (Float32 × Float64)
@@ -272,7 +272,7 @@ end
         P5 = I1 × I2 × I3_int × I4 × I5
         @test P5 isa CartesianProduct{5, Float64}
         @test dim(P5) == 5
-        @test P5.box isa SVector{5}
+        @test P5.box isa NTuple{5}
 
         # 1D projection extraction
         P_proj = I1 × I2 × I3_int

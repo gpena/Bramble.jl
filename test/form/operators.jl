@@ -11,7 +11,7 @@ using Bramble: IdentityOperator, ZeroOperator, TrialFunction, TestFunction,
 # The symbolic operator layer: averages, the shift node, region restriction, and the
 # inner products that turn a pair of operators into a bilinear product.
 #
-# None of this was reachable by the test suite before — `average.jl`, `restriction.jl` and
+# None of this was reachable by the test suite before: `average.jl`, `restriction.jl` and
 # `inner.jl` had literally zero executed lines, and the coverage report said 100% because
 # Julia only instruments the lines of methods it actually compiled. Probing them turned up
 # three breaks straight away, all fixed here and pinned below:
@@ -122,7 +122,7 @@ const _ORIGIN_2D = (0, 0)
             # Every other node takes `markers` and ignores it, so callers with nothing to
             # restrict by pass `nothing`. This used to be `haskey(::Nothing, ::Symbol)`.
             # Nothing marked means `:interior` is the whole grid and every named region is
-            # empty — the same answer a table simply missing the key already gave.
+            # empty, the same answer a table simply missing the key already gave.
             @test local_stencil(restrict_to(:interior, id), Wₕ, interior, nothing,
                 lin[interior]) == local_stencil(id, Wₕ, interior, nothing, lin[interior])
             @test local_stencil(restrict_to(:bottom, id), Wₕ, bottom_idx, nothing,
@@ -224,7 +224,7 @@ const _ORIGIN_2D = (0, 0)
 
     @testset "Composite space nodes" begin
         # The nodes carry the space only through their dimension, so a composite space is
-        # not a different case for them — but nothing had checked, and the difference and
+        # not a different case for them, but nothing had checked, and the difference and
         # average families are what a coupled form is written from.
         idv = IdentityOperator(Vₕ)
         @test Bramble.space(idv) === Vₕ

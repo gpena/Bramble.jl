@@ -13,8 +13,8 @@ using Bramble: IdentityOperator, TrialFunction, IndexedTrialFunction, IndexedTes
 #
 # The space layer had all four on grid functions; the form layer had none of them, so a
 # form could only be written from one-sided differences and averages. Three of the four
-# have no *matrix* in the space layer either — `Dcₓ(Ωₕ)` is a MethodError, only `Dcₓ(uₕ)`
-# exists — so these nodes are the only route from those operators into an assembled form.
+# have no *matrix* in the space layer either (`Dcₓ(Ωₕ)` is a MethodError, only `Dcₓ(uₕ)`
+# exists), so these nodes are the only route from those operators into an assembled form.
 #
 # Which is what the central test below rests on. A node is right exactly when applying its
 # stencil to a grid function reproduces what the space-layer operator returns for the same
@@ -24,7 +24,7 @@ using Bramble: IdentityOperator, TrialFunction, IndexedTrialFunction, IndexedTes
 
 # Apply a symbolic stencil across the grid, the way assembly will: sum `coefficient ×
 # u[I + offset]` over the stencil at each point. Also counts any live coefficient pointing
-# off the grid, which must never happen — a truncated point zeroes its coefficients and
+# off the grid, which must never happen: a truncated point zeroes its coefficients and
 # keeps its offsets, so an out-of-range offset must always carry a zero.
 function apply_stencil(node, Wₕ, uₕ)
     Ωₕ = mesh(Wₕ)
@@ -58,7 +58,7 @@ end
                 Wₕ = gridspace(Ωₕ)
                 id = IdentityOperator(Wₕ)
                 uₕ = Rₕ(Wₕ, x -> x^3 + sin(3x) + 1)
-                # the four new families, and the four that were already here — with
+                # the four new families, and the four that were already here; with
                 # `get_derivative_matrix_and_scale` gone, this is what pins the one-sided
                 # nodes to the operators they stand for
                 for (node, op) in ((jumpₓ(id), jumpₓ), (Dcₓ(id), Dcₓ),
@@ -127,7 +127,7 @@ end
             @test all(iszero, coeffs(node, at_start, 1))
         end
 
-        # a starred difference is fine at the first point — it only reaches forward
+        # a starred difference is fine at the first point (it only reaches forward)
         @test any(!iszero, coeffs(Dstar₊ₓ(id), at_start, 1))
     end
 
@@ -159,7 +159,7 @@ end
         uₕ = Rₕ(Wₕ, x -> x[1] * x[2] + 1)
 
         # each wraps whatever it is given, so a difference of an average is a difference
-        # of an average — checked against doing the two in turn on grid functions
+        # of an average: checked against doing the two in turn on grid functions
         got, escaped = apply_stencil(Dcₓ(M₋ᵧ(id)), Wₕ, uₕ)
         @test escaped == 0
         @test got ≈ values(Dcₓ(M₋ᵧ(uₕ))) rtol=1e-12
@@ -220,8 +220,8 @@ end
         # Every node that names a direction answers for it, not only the differences. The
         # averages, the shift and the restriction had no method until the precompilation
         # workload called the trait across every node kind and met a MethodError on the
-        # averages — the kind of gap nothing else was going to find, since the trait has no
-        # caller in the unlocked code.
+        # averages (the kind of gap nothing else was going to find, since the trait has no
+        # caller in the unlocked code).
         for (f, dim) in ((M₋ₓ, 1), (M₊ₓ, 1), (M₋ᵧ, 2), (M₊ᵧ, 2), (M₋₂, 3), (M₊₂, 3))
             @test get_innermost_dim(f(id)) == dim
         end

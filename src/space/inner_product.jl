@@ -31,7 +31,7 @@ average apply componentwise and take any grid function.
 is a zero-cost, compile-time-known branch to the original unmasked sum, and a non-empty tuple
 restricts the sum to the union of the labelled regions' points.
 
-This is a *masked sum of the existing cell measures*, not a surface integral — the two are
+This is a *masked sum of the existing cell measures*, not a surface integral; the two are
 not interchangeable and differ by a factor of `h`. Measured on a 5×5 uniform mesh of the unit
 square, restricted to `:bottom`: the masked sum here gives 0.125, which scales like `h` and
 vanishes under refinement, where the true boundary integral `∫_Γ u v ds` gives 1.0 and is
@@ -55,7 +55,7 @@ function _combined_mask(Ωₕ, markers::NTuple{N, Symbol}) where {N}
 end
 
 """
-	innerₕ(uₕ::VectorElement, vₕ::VectorElement)
+    innerₕ(uₕ::VectorElement, vₕ::VectorElement; markers = ()) -> Real
 
 Returns the discrete ``L^2`` inner product of the grid functions `uₕ` and `vₕ`, weighting each point by its cell measure.
 
@@ -87,8 +87,8 @@ the component-wise products:
 which is the only meaning it can have, so there is nothing ambiguous about accepting one.
 The two grid functions must have the same number of components.
 
-`markers` restricts the sum to the union of the labelled regions' points — a masked sum of
-the same cell measures, not a surface integral; see the note above `_combined_mask`.
+`markers` restricts the sum to the union of the labelled regions' points (a masked sum of
+the same cell measures, not a surface integral; see the note above `_combined_mask`).
 """
 @inline function innerₕ(uₕ::VectorElement{<:ScalarGridSpace},
         vₕ::VectorElement{<:ScalarGridSpace};
@@ -115,20 +115,20 @@ end
 end
 
 """
-	inner_Γ(uₕ::VectorElement, vₕ::VectorElement, labels::Symbol...)
+    inner_Γ(uₕ::VectorElement, vₕ::VectorElement, labels::Symbol...)
 
 Placeholder for the true, ``(D-1)``-dimensional boundary integral ``\\int_\\Gamma u\\,v\\,ds``
 over the mesh regions `labels` name.
 
 **Not the same quantity as `innerₕ(uₕ, vₕ; markers = labels)`.** That is a masked sum of the
-existing cell measures — a ``D``-dimensional quantity restricted to a set of points — and it
+existing cell measures (a ``D``-dimensional quantity restricted to a set of points), and it
 scales like `h`, vanishing under refinement: 0.125 on a 5×5 mesh of the unit square restricted
 to `:bottom`. This function is meant for the mesh-independent surface integral a Neumann or
-Robin term needs — 1.0 on that same mesh and region — which is a genuinely different quantity,
+Robin term needs (1.0 on that same mesh and region), which is a genuinely different quantity,
 not a bug in the other one. See point 11 of `docs/form-unlock-plan.md`.
 
 **Not yet implemented.** No ``(D-1)``-dimensional surface quadrature weight exists anywhere in
-the package today — only `Innerh` (cell measures) and `Innerplus` (directional, still
+the package today: only `Innerh` (cell measures) and `Innerplus` (directional, still
 ``D``-dimensional). This always throws until that weight is built; kept unexported until it
 does something.
 """
@@ -136,12 +136,12 @@ function inner_Γ(uₕ::VectorElement, vₕ::VectorElement, labels::Symbol...)
     throw(ErrorException(
         "inner_Γ (the true boundary integral) is not yet implemented: no (D-1)-dimensional " *
         "surface quadrature weight exists in the package. innerₕ(uₕ, vₕ; markers = labels) " *
-        "computes a related but NOT equivalent quantity — a masked sum of cell measures that " *
+        "computes a related but NOT equivalent quantity: a masked sum of cell measures that " *
         "scales like h and vanishes under refinement, not a mesh-independent surface integral."))
 end
 
 """
-	normₕ(uₕ::VectorElement)
+    normₕ(uₕ::VectorElement) -> Real
 
 Returns the discrete ``L^2`` norm of the grid function `uₕ`, defined as
 
@@ -170,7 +170,7 @@ the inner product there: the square root of the sum of the components' squared n
 end
 
 """
-	inner₊ₓ(uₕ::VectorElement, vₕ::VectorElement)
+    inner₊ₓ(uₕ::VectorElement, vₕ::VectorElement; markers = ()) -> Real
 
 Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ` and `vₕ` associated with the first variable.
 
@@ -198,15 +198,15 @@ Defined for grid functions of a [`ScalarGridSpace`](@ref) only. A grid function 
 composite grid space is rejected at dispatch; take a scalar component of it with
 [`components`](@ref) first, which is itself a scalar grid function and is accepted.
 
-`markers` restricts the sum as it does for [`innerₕ`](@ref) — a masked sum, not a surface
-integral.
+`markers` restricts the sum as it does for [`innerₕ`](@ref) (a masked sum, not a surface
+integral).
 """
 @inline inner₊ₓ(uₕ::VectorElement{<:ScalarGridSpace},
     vₕ::VectorElement{<:ScalarGridSpace}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {N} = _directional_inner_plus(
     uₕ, vₕ, Val(1); markers = markers)
 
 """
-	inner₊ᵧ(uₕ::VectorElement, vₕ::VectorElement)
+    inner₊ᵧ(uₕ::VectorElement, vₕ::VectorElement; markers = ()) -> Real
 
 Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ` and `vₕ`
 associated with the second variable, the ``y`` direction.
@@ -229,15 +229,15 @@ Defined for grid functions of a [`ScalarGridSpace`](@ref) only. A grid function 
 composite grid space is rejected at dispatch; take a scalar component of it with
 [`components`](@ref) first, which is itself a scalar grid function and is accepted.
 
-`markers` restricts the sum as it does for [`innerₕ`](@ref) — a masked sum, not a surface
-integral.
+`markers` restricts the sum as it does for [`innerₕ`](@ref) (a masked sum, not a surface
+integral).
 """
 @inline inner₊ᵧ(uₕ::VectorElement{<:ScalarGridSpace},
     vₕ::VectorElement{<:ScalarGridSpace}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {N} = _directional_inner_plus(
     uₕ, vₕ, Val(2); markers = markers)
 
 """
-	inner₊₂(uₕ::VectorElement, vₕ::VectorElement)
+    inner₊₂(uₕ::VectorElement, vₕ::VectorElement; markers = ()) -> Real
 
 Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ` and `vₕ` associated with the `z` variable
 
@@ -249,8 +249,8 @@ Defined for grid functions of a [`ScalarGridSpace`](@ref) only. A grid function 
 composite grid space is rejected at dispatch; take a scalar component of it with
 [`components`](@ref) first, which is itself a scalar grid function and is accepted.
 
-`markers` restricts the sum as it does for [`innerₕ`](@ref) — a masked sum, not a surface
-integral.
+`markers` restricts the sum as it does for [`innerₕ`](@ref) (a masked sum, not a surface
+integral).
 """
 @inline inner₊₂(uₕ::VectorElement{<:ScalarGridSpace},
     vₕ::VectorElement{<:ScalarGridSpace}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {N} = _directional_inner_plus(
@@ -329,12 +329,13 @@ function _generate_inner_plus_body(u_type, v_type, result_kind::Symbol)
 end
 
 """
-	inner₊(uₕ::VectorElement, vₕ::VectorElement, [::Type{Tuple}])
-	inner₊(uₕ::NTuple{D}, vₕ::NTuple{D})
+    inner₊(uₕ::VectorElement, vₕ::VectorElement) -> Real
+    inner₊(uₕ::VectorElement, vₕ::VectorElement, ::Type{Tuple}) -> Tuple
+    inner₊(uₕ::NTuple{D, VectorElement}, vₕ::NTuple{D, VectorElement}) -> Real
 
 Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ` and `vₕ`.
 
-If the `Tuple` argument is given, it returns `D`-tuple of all ``\\textrm{inner}_{x_i,+}`` applied to its input arguments, where `D` is the topological dimension of the mesh associated with the elements.
+If the `Tuple` argument is given, it returns a `D`-tuple of all ``\\textrm{inner}_{x_i,+}`` applied to its input arguments, where `D` is the topological dimension of the mesh associated with the elements.
 
 If `NTuple`s of [`VectorElement`](@ref) are passed as input arguments, it returns the sum of all inner products ``(\\textrm{u}_h[i],\\textrm{v}_h[i])_{+x_i}``.
 
@@ -358,7 +359,7 @@ For [`VectorElement`](@ref)s, the definition is given by
 (\\textrm{u}_h, \\textrm{v}_h)_+ \\vcentcolon = (\\textrm{u}_h, \\textrm{v}_h)_{+x} + (\\textrm{u}_h, \\textrm{v}_h)_{+y} + (\\textrm{u}_h, \\textrm{v}_h)_{+z}.
 ```
 
-See the definitions of [inner₊ₓ](@ref inner₊ₓ(uₕ::VectorElement, vₕ::VectorElement)), [inner₊ᵧ](@ref inner₊ᵧ(uₕ::VectorElement, vₕ::VectorElement)) and [inner₊₂](@ref inner₊₂(uₕ::VectorElement, vₕ::VectorElement)) for more details.
+See the definitions of [`inner₊ₓ`](@ref), [`inner₊ᵧ`](@ref), and [`inner₊₂`](@ref) for more details.
 
 Defined for grid functions of a [`ScalarGridSpace`](@ref) only, and for tuples whose
 entries are such grid functions. A grid function of a composite grid space raises a
@@ -369,10 +370,10 @@ itself a scalar grid function and is accepted.
 @generated inner₊(uₕ, vₕ, ::Type{Tuple}) = :($(_generate_inner_plus_body(uₕ, vₕ, :tuple)))
 
 """
-	norm₊(uₕ::VectorElement)
-	norm₊(uₕ::NTuple{D,VectorElement})
+    norm₊(uₕ::VectorElement) -> Real
+    norm₊(uₕ::NTuple{D, VectorElement}) -> Real
 
-Returns the discrete modified ``L^2`` norm of the grid function `uₕ`. It also accepts a `NTuple` of [`VectorElement`](@ref)s.
+Returns the discrete modified ``L^2`` norm of the grid function `uₕ`. It also accepts an `NTuple` of [`VectorElement`](@ref)s.
 
 For [`VectorElement`](@ref)s `uₕ`, it is defined as
 
@@ -438,7 +439,7 @@ end
 end
 
 """
-	snorm₁ₕ(uₕ::VectorElement)
+    snorm₁ₕ(uₕ::VectorElement) -> Real
 
 Returns the discrete ``H^1`` seminorm of the grid function `uₕ`,
 
@@ -459,7 +460,7 @@ composite grid space is rejected at dispatch; take a scalar component of it with
 @inline snorm₁ₕ(uₕ::VectorElement{<:ScalarGridSpace}) = sqrt(_snorm₁ₕ_sq(uₕ))
 
 """
-	norm₁ₕ(uₕ::VectorElement)
+    norm₁ₕ(uₕ::VectorElement) -> Real
 
 Returns the discrete version of the standard ``H^1`` norm of [`VectorElement`](@ref) `uₕ`.
 

@@ -16,11 +16,34 @@ using Bramble: values, components, _difference_engine!, _average_engine!,
 #
 # None of it was visible to the suite, because line coverage does not see any of it.
 
-# Allocation of a call, behind a function barrier so the closure cannot box anything.
-# `alloc_test` comes from runtests.jl. These run under code coverage too; see the note on
-# `@test_allocs` there for why they no longer skip.
+# Standalone runner fallback
+if !@isdefined(alloc_test)
+    @inline function alloc_test(f::F, args...; kwargs...) where {F}
+        f(args...; kwargs...)
+        return @allocated(f(args...; kwargs...))
+    end
+end
 
-@testset "Inference & allocations" begin
+if !@isdefined(var"@test_allocs")
+    macro test_allocs(call_expr)
+        if Meta.isexpr(call_expr, :call)
+            fn = call_expr.args[1]
+            args = call_expr.args[2:end]
+            quote
+                @test alloc_test($(esc(fn)), $(map(esc, args)...)) == 0
+            end
+        else
+            quote
+                let
+                    $(esc(call_expr))
+                    @test (@allocated $(esc(call_expr))) == 0
+                end
+            end
+        end
+    end
+end
+
+@testset "Inference and allocations" begin
     Ωₕ1 = mesh(domain(interval(0.0, 1.0)), 64, false)
     Ωₕ2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (8, 9), (true, false))
     Ωₕ3 = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 6),
@@ -167,23 +190,16 @@ using Bramble: values, components, _difference_engine!, _average_engine!,
             (alloc_test(Rₕ!, u, sin), alloc_test(avgₕ!, u, sin))
         end
 
-        # No threading threshold left to straddle (point 22): a `Serial()` backend runs
-        # every grid size through the same plain loop, so both sizes give exactly 0 bytes,
-        # not merely the same as each other.
+        # A `Serial()` backend runs every grid size through the same plain loop,
+        # so both sizes give exactly 0 bytes.
         be_serial = backend(policy = Serial())
         @test inplace_bytes(be_serial, 16) == (0, 0)
         @test inplace_bytes(be_serial, 2048) == (0, 0)   # 128x the degrees of freedom
 
-        # `Parallel()` costs a small, size-independent constant (task spawn overhead). On
-        # Julia nightly specifically (checked: never on a release build, across many
-        # repeated runs here — point 64), a single measurement drifts by one or two 64-byte
-        # quanta, nondeterministically, in either direction — the thread-spawn machinery's
-        # own scheduling noise, not anything Rₕ!/avgₕ! do differently at either grid size.
-        # Neither taking the minimum over repeats nor an exact equality converged on its
-        # own (checked: still flaked after 5 repeats), so the two are combined: the minimum
-        # over a handful of repeats to reject one-off spikes, then a tolerance for the
-        # genuine floor-level noise that remains — the property under test is "constant",
-        # not "bit-for-bit reproducible", which nightly's scheduler does not promise.
+        # `Parallel()` costs a small, size-independent constant (task spawn overhead).
+        # A single measurement may drift slightly due to thread-spawn machinery
+        # scheduling noise, independent of the grid size. Taking the minimum over repeats
+        # with a small tolerance verifies that allocation does not scale with problem size.
         be_parallel = backend(policy = Parallel())
         function min_inplace_bytes(be, n)
             trials = ntuple(_ -> inplace_bytes(be, n), 5)
@@ -210,5 +226,13 @@ using Bramble: values, components, _difference_engine!, _average_engine!,
         @test alloc_test(avgₕ!, u, f; quad_points = Val(3)) == 0
         @test alloc_test(Rₕ!, v, f_tup; markers = (:left,)) == 0
         @test alloc_test(avgₕ!, v, f_tup; markers = (:left,)) == 0
+
+        # Zero allocations for values! and πₕ!
+        @test alloc_test(values!, u, 1.0) == 0
+        @test alloc_test(values!, u, values(u)) == 0
+
+        W_target = gridspace(mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (8, 8)))
+        u_target = element(W_target)
+        @test alloc_test(πₕ!, u_target, u) == 0
     end
 end

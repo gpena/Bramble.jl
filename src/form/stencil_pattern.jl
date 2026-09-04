@@ -1,32 +1,22 @@
 # stencil_pattern.jl
 #
-# Which grid offsets an operator reaches, read off its AST before assembling it.
+# Grid offsets an operator reaches, read off its AST before assembling it.
 #
 # Every node here reaches a fixed set of neighbours: a backward difference reads the point
 # and the one before it, a cross-weighted difference reads three in a row, an average reads
-# two. Those offsets are a property of the tree, not of the grid point — truncation at a
+# two. Those offsets are a property of the tree, not of the grid point: truncation at a
 # boundary zeroes the coefficients and keeps the offsets, which is what makes the set well
 # defined. So the sparsity pattern of the assembled matrix is known before a single entry
 # is computed.
 #
-# What that is for is preallocation. The pattern of an assembled operator is the stencil's,
-# and building the backend's matrix with exactly that pattern means assembly only ever
-# updates stored values and never performs a structural insert — which rebuilds a column.
-# It is the same fact the removal of the `dropzeros` option rested on: the pattern is known
-# ahead of time and is worth keeping fixed.
-#
-# What this deliberately does NOT do is choose a matrix type. An earlier version classified
-# operators into `Diagonal`, `Tridiagonal` or sparse, and that was wrong twice over. It is
-# circumstantial — a diagonal operator is a special case that rarely survives being part of
-# a real form — and, more importantly, the matrix type is not the form layer's to decide.
-# `Backend{VT, MT}` carries it as a type parameter and `matrix(backend, n, m)` builds it,
-# which is the whole point of the backend: a Metal backend must get a GPU matrix, and
-# handing back a `Tridiagonal` because the stencil happened to be narrow would break that
-# contract. The offsets inform how the backend's matrix is preallocated; they do not
-# override what it is.
+# The pattern is used for preallocation. The sparsity pattern of an assembled operator
+# matches the stencil's reach, and building the backend matrix with this pattern ensures
+# assembly only updates stored values without structural inserts. The offsets inform how
+# the backend matrix is preallocated; they do not dictate the concrete matrix type, which
+# is configured by `Backend{VT, MT}`.
 
 """
-	stencil_offsets(op) -> Vector{NTuple{D, Int}}
+    stencil_offsets(op) -> Vector{NTuple{D, Int}}
 
 The grid offsets the operator `op` reaches, sorted and without repeats.
 
@@ -116,10 +106,8 @@ stencil_offsets(op::GridFunctionScale) = stencil_offsets(op.inner_op)
 # reach is its child's wherever the operator contributes at all
 stencil_offsets(op::RegionRestriction) = stencil_offsets(op.inner_op)
 
-# A linear product contracts the left factor away — `multiply_stencils_linear` keeps only
-# the right offsets — so its reach is the test side's. Found missing when the parallel
-# assembly wanted to ask what an assembled form reaches: the products are the only nodes
-# assembly ever evaluates, and neither had a method.
+# A linear product contracts the left factor away (`multiply_stencils_linear` keeps only
+# the right offsets), so its reach is the test side's.
 stencil_offsets(op::LinearProduct) = stencil_offsets(op.right_op)
 
 # A bilinear product deliberately has none. Its stencil entries are (row offset, column

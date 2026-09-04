@@ -12,7 +12,7 @@ using Bramble: IdentityOperator, ZeroOperator, TrialFunction, TestFunction,
 # Every node reaches a fixed set of neighbours, and that set is a property of the tree
 # rather than of the grid point: truncation at a boundary zeroes the coefficients and keeps
 # the offsets. So the pattern is known before a single entry is computed, which is what lets
-# the backend's matrix be preallocated with exactly that pattern — after which assembly only
+# the backend's matrix be preallocated with exactly that pattern: after which assembly only
 # ever updates stored values instead of performing structural inserts.
 #
 # It deliberately stops at the pattern and does not pick a matrix type: that belongs to the
@@ -162,8 +162,8 @@ end
         u, v = TrialFunction{1}(), TestFunction{1}()
         uh = Rₕ(Wₕ1, sin)
 
-        # A linear product contracts its left factor away — `multiply_stencils_linear`
-        # keeps only the right offsets — so its reach is the test side's.
+        # A linear product contracts its left factor away (`multiply_stencils_linear`
+        # keeps only the right offsets), so its reach is the test side's.
         @test stencil_offsets(innerₕ(uh, v)) == [(0,)]
         @test sort(stencil_offsets(innerₕ(uh, D₋ₓ(v)))) == [(-1,), (0,)]
         @test sort(stencil_offsets(inner₊(uh, D₋ₓ(v)))) == [(-1,), (0,)]

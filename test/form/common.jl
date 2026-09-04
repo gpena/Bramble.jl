@@ -14,11 +14,11 @@ using Bramble: TrialFunction, TestFunction, IndexedTrialFunction, IndexedTestFun
 #
 # A stencil is a tuple of `(offset, coefficient)` pairs, offsets relative to the point being
 # evaluated. Everything in this file either produces one, combines two, or walks a tree of
-# nodes that do. The `@generated` combinators are the pieces assembly is built from —
+# nodes that do. The combinators are the pieces assembly is built from:
 # `multiply_stencils_bilinear` is how a trial stencil and a test stencil become matrix
-# entries — and none of them had ever run.
+# entries, and none of them had ever run.
 
-@testset "AST & stencil algebra" begin
+@testset "AST and stencil algebra" begin
     Ωₕ1 = mesh(domain(interval(0.0, 1.0)), 9, false)
     Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6), (true, false))
     Wₕ1, Wₕ = gridspace(Ωₕ1), gridspace(Ωₕ)
@@ -83,7 +83,7 @@ using Bramble: TrialFunction, TestFunction, IndexedTrialFunction, IndexedTestFun
         @test length(b) == length(s1) * length(s2)
         @test b == ((O, (0, 1), 20.0), ((1, 0), (0, 1), 30.0))
 
-        # the linear form keeps only the right offset — the left has been contracted away
+        # the linear form keeps only the right offset (the left has been contracted away)
         l = multiply_stencils_linear(s1, s2, 2.0)
         @test length(l) == length(s1) * length(s2)
         @test l == (((0, 1), 20.0), ((0, 1), 30.0))
@@ -222,7 +222,7 @@ end
     # because the stencil leaves returned a literal `1.0` and the boundary masks a literal
     # `0.0`/`1.0`. `_assembled_eltype` promotes the space's type against the weight it finds,
     # and `promote_type(Float32, Float64)` is `Float64`, so single precision was widened at
-    # every point of every form — including on the Metal backend, whose arrays are Float32.
+    # every point of every form, including on the Metal backend, whose arrays are Float32.
     #
     # The weights are now typed: a unit weight is the integer `1`, which carries no precision
     # claim and promotes to whatever it multiplies, and the averages take ½ from

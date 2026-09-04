@@ -1,32 +1,27 @@
-
-# ==============================================================================
-# Struct Definitions
-# ==============================================================================
+# --- Struct definitions ----------------------------------------------------------- #
 
 """
-    LinearForm{D,TestSpace,AST}
+    LinearForm{D, TestSpace, AST}
 
 Represents a linear form defined over a test space.
 
-# Fields
-- `test_space::TestSpace`: The space for the test function.
-- `ast::AST`: The resolved expression tree.
+# Arguments
+- `test_space::TestSpace`: Space for the test function.
+- `ast::AST`: Resolved expression tree.
 
 The form resolves its expression tree `ast` once at construction, referencing the underlying
 storage of any coefficient grid functions (`VectorElement`). In-place updates via `Rₕ!(fₕ, ...)`
 or `values(fₕ) .= ...` are automatically seen by subsequent assemblies with zero heap allocations.
-The expression itself is not kept: nothing downstream ever calls it again, only the AST it
-built once — the point that made `form` construction cheap is also what makes storing the
-closure needless.
+The expression itself is not retained: downstream routines evaluate the resolved AST directly.
 
-Constant scalar coefficients can be written directly as plain numbers (e.g. `2.5 * innerₕ(fₕ, v)`).
-`Ref` is only needed if you want a **dynamic scalar coefficient** that changes across iterations in a loop:
+Constant scalar coefficients can be written directly as numbers (e.g. `2.5 * innerₕ(fₕ, v)`).
+`Ref` is only needed if a dynamic scalar coefficient changes across loop iterations:
 ```julia
 α = Ref(1.0)
 l = form(Wₕ, v -> α * innerₕ(fₕ, v))
 # Inside time loop:
 α[] = 2.5
-assemble!(b, l) # allocates 0 bytes and evaluates with α = 2.5
+assemble!(b, l) # zero allocations, evaluates with α = 2.5
 ```
 """
 struct LinearForm{D, TestSpace, AST}
@@ -37,35 +32,14 @@ end
 """
     test_space(form::LinearForm)
 
-Returns the test space of the linear form.
+Return the test space of the linear form.
 """
 test_space(form::LinearForm) = form.test_space
 
-# A linear form is a functional on its test space, so what it contracts against is an
-# element of that space.
+# A linear form is a functional on its test space, contracting against an element of that space.
 #
-# `dot` would take a bare `Vector` of the right length just as happily, and on a composite
-# space that is precisely where it goes quietly wrong: the length says nothing about whether
-# the blocks line up with the components the form routes its terms to, so a vector assembled
-# for one component ordering contracts against another without complaint. Requiring a
-# `VectorElement` makes the caller name the space it belongs to.
-# Deliberately one argument. `assemble!` and `evaluate!` take an `ast` keyword so a caller
-# assembling in a loop can resolve once; this does not, because here it buys nothing worth an
-# interface: measured from 2,500 to 1,000,000 degrees of freedom, resolving a form over a
-# plain grid function is below the resolution of the clock and the keyword changed the total
-# by 0.01%. What it costs is the 160 B of the tree, per call, which is why the loop-shaped
-# entry points keep it and the convenience one does not.
-#
-# The exception is a source carrying an operator, where resolving *computes*: `D₋ₓ(fₕ)` on
-# grid data is 349 us and a full-length element at a million degrees of freedom, and the
-# keyword would have saved 18.8%. Hoisting it out of the form is the better answer and needs
-# no keyword at all —
-#
-#     dfₕ = D₋ₓ(fₕ)                          # once, and visibly
-#     l = form(Wₕ, v -> innerₕ(dfₕ, v))      # the source is plain data again
-#
-# which also keeps the form live with respect to `dfₕ`'s values, where a cached tree would
-# not.
+# Requiring a `VectorElement` prevents errors on composite spaces where bare vector lengths
+# do not convey block alignments.
 @inline function (form::LinearForm)(vₕ::VectorElement)
     ast = form.ast
     space = form.test_space
@@ -84,29 +58,17 @@ end
 end
 
 """
-    evaluate!(scratch, form::LinearForm, vₕ; ast = resolve_form_ast(form))
+    evaluate!(scratch::AbstractVector, form::LinearForm, vₕ::VectorElement; ast = resolve_form_ast(form)) -> Number
 
-Evaluates `form` at `vₕ`, assembling into `scratch` rather than into a fresh vector, and
-returns the value.
+Evaluate `form` at `vₕ`, assembling into `scratch` rather than into a newly allocated vector, and
+return the resulting contracted scalar value.
 
-Use this when the assembled vector is wanted as well as the value — a Newton step needs the
-residual and its norm, and assembling once serves both. `scratch` is overwritten on every
-call and holds the right-hand side when this returns.
+Useful when both the assembled vector and the scalar value are needed (such as a Newton step
+requiring the residual vector and its norm). `scratch` is overwritten and contains the right-hand
+side upon return.
 
-For the value *alone*, call the form instead: `form(vₕ)` fuses the contraction into the
-assembly walk and is faster — 1,528 us against 2,143 us at a million degrees of freedom,
-because it makes one pass where this writes a full-length vector and then reads it back. It
-takes no `ast`, so it resolves on every call and allocates the 160 B of the tree; this is
-the one to reach for when a loop must allocate nothing at all.
-
-Pass `ast` as well to resolve the expression once across the loop; resolving is 160 B per
-call otherwise. That caches the expression, so the loop must write through the same elements
-rather than rebind them — see the note above `assemble!` for what a reused `ast` does
-and does not notice.
-
-Returns the value rather than `scratch`, which departs from the rule that a mutating
-function with a single destination returns it. The departure is the point: `scratch` is not
-the result here, it is the space the result was computed in.
+For the scalar value alone, `form(vₕ)` fuses the contraction into the assembly sweep in a single pass.
+Pass `ast` to reuse the pre-resolved expression tree across iterations for zero allocations.
 
 # Examples
 ```julia
@@ -114,9 +76,8 @@ l = form(Wₕ, v -> innerₕ(fₕ, v))
 scratch = zeros(ndofs(Wₕ))
 ast = resolve_form_ast(l)
 for step in 1:nsteps
-    Rₕ!(fₕ, source_at(step))          # written through, not rebound
+    Rₕ!(fₕ, source_at(step))          # modified in-place
     value = evaluate!(scratch, l, uₕ; ast = ast)
-    # `scratch` is the right-hand side for this step, and `value` its contraction
 end
 ```
 """
@@ -137,7 +98,7 @@ end
 """
     resolve_form_ast(form::LinearForm)
 
-Returns the resolved AST stored inside the linear form.
+Return the resolved AST stored inside the linear form.
 """
 @inline resolve_form_ast(form::LinearForm) = form.ast
 
@@ -146,8 +107,8 @@ Returns the resolved AST stored inside the linear form.
 @noinline function _validate_form_expression(bad, ::Val{D}) where {D}
     throw(ArgumentError(
         "a linear form's expression has to build an operator over its test argument, and " *
-        "this one returned a $(typeof(bad)). Write it as a function of the test argument — " *
-        "`v -> innerₕ(fₕ, v)` — rather than as a value."))
+        "this one returned a $(typeof(bad)). Write it as a function of the test argument (`v -> innerₕ(fₕ, v)`) " *
+        "rather than as a value."))
 end
 
 @noinline function _validate_form_expression(::LazyOp{E}, ::Val{D}) where {E, D}
@@ -158,18 +119,17 @@ end
 end
 
 """
-    form(Wₕ, f)
+    form(Wₕ, f) -> LinearForm
 
-Constructs a `LinearForm` over the test space `Wₕ` using the linear expression `f`.
+Construct a `LinearForm` over the test space `Wₕ` using the linear expression `f`.
 
-Construction is cheap: it resolves nothing and measures nothing. What a parallel assembly
-needs to partition the grid is read from the AST when it assembles — see
-`_colour_strides`.
+Construction resolves the AST once; grid partitioning for parallel assembly is determined
+from the resolved AST during assembly (see `_colour_strides`).
 
 # Examples
 ```julia
 # 1D linear form: l(v) = (f, v)
-l = form(Wh, v -> innerₕ(fh, v))
+l = form(Wₕ, v -> innerₕ(fₕ, v))
 ```
 """
 function form(Wₕ, f)
@@ -180,14 +140,10 @@ function form(Wₕ, f)
     return LinearForm{D, typeof(Wₕ), typeof(ast)}(Wₕ, ast)
 end
 
-# ==============================================================================
-# Assembly Implementations
-# ==============================================================================
+# --- Assembly implementations ----------------------------------------------------- #
 
-# Nothing to do unless labels were named. `dirichlet_conditions` defaults to `nothing`
-# rather than to an empty constraint set, because the empty set was built on every call and
-# then discarded by exactly this test — 2,080 B per assembly, for an argument that went
-# unread. Naming labels without conditions is a usage error and says so.
+# Nothing to do unless labels are provided. `dirichlet_conditions` defaults to `nothing`
+# to prevent allocations when boundary constraints are absent.
 function apply_dirichlet_conditions!(
         b::AbstractVector, form::LinearForm, dirichlet_conditions, dirichlet_labels,
         dirichlet_components = nothing)
@@ -213,72 +169,39 @@ end
 end
 
 """
-    assemble(form::LinearForm; dirichlet_conditions = nothing, dirichlet_labels = nothing, dirichlet_components = nothing)
+    assemble(form::LinearForm; dirichlet_conditions = nothing, dirichlet_labels = nothing, dirichlet_components = nothing, ast = form.ast) -> AbstractVector
 
-Assembles the system vector of the `LinearForm`, applying `dirichlet_conditions` on the
-regions `dirichlet_labels` names when both are given. `dirichlet_components` restricts which
-leaf(-ves) of a composite test space they bind to — see [`dirichlet_bc!`](@ref).
+Assemble the system vector of the `LinearForm`, applying `dirichlet_conditions` on the
+regions named by `dirichlet_labels` when both are provided. `dirichlet_components` restricts which
+leaf components of a composite test space they bind to (see [`dirichlet_bc!`](@ref)).
 
 Runs serially or across threads following `test_space(form)`'s backend
-[`execution_policy`](@ref) — [`Serial`](@ref) (the default) or [`Parallel`](@ref), chosen
-once on the backend rather than picked per call: threading only pays from roughly 250,000
-degrees of freedom upward on four threads (1.2x–2.2x faster there) and loses below about
-100,000, where spawning the tasks costs more than the whole sweep — a threshold that moves
-with the thread count, the dimension and the form, so it belongs to whoever builds the
-backend, not to a constant compiled in here. [`assemble_parallel!`](@ref) always threads
-regardless of the backend's policy, for benchmarking or a one-off forced comparison.
-
-For most of this package's history the parallel path lost at *every* size — 76x at 2,500
-degrees of freedom, 3.0x at 250,000 — because it gave each thread a full-length buffer and
-reduced them afterwards, paying O(n · threads) of memory traffic against the O(n · stencil)
-the assembly itself costs. The buffers are gone; see `_colour_strides`.
+[`execution_policy`](@ref): [`Serial`](@ref) (the default) or [`Parallel`](@ref).
+[`assemble_parallel!`](@ref) always threads regardless of the backend policy.
 """
 function assemble(form::LinearForm; dirichlet_conditions = nothing,
         dirichlet_labels = nothing, dirichlet_components = nothing, ast = form.ast)
     _validate_dirichlet_labels(dirichlet_labels)
     space = test_space(form)
-    # `values(element(space, T))` rather than `zeros(T, ndofs(space))`: the latter always
-    # gives a plain `Vector` regardless of what backend the space was built with, so a form
-    # over a sparse-vector or GPU backend silently assembled into a dense CPU array instead.
-    # `element` is the one place that already turns a space's `Backend` into a concrete
-    # container, so this reuses it rather than re-deriving the same construction here.
+    # `values(element(space, T))` reuses the space's backend container type.
     b = values(element(space, _assembled_eltype(ast, space)))
     return assemble!(b, form; ast = ast, dirichlet_conditions = dirichlet_conditions,
         dirichlet_labels = dirichlet_labels, dirichlet_components = dirichlet_components)
 end
 
 # The element type of the assembled vector is the one the form's own weights have, promoted
-# against the space's — not the space's outright.
-#
-# It used to be `eltype(test_space(form))`, which made a Float64 space able to assemble only
-# Float64 right-hand sides, and that is what blocked differentiating an assembled residual.
-# Writing a `ForwardDiff.Dual` weight into a Float64 vector met
-# `MethodError: no method matching Float64(::Dual)`. It is the same rule `Rₕ` uses and the
-# same defect `dirichlet_constraints` had: read the type from the data, not from the space.
-#
-# Promoted rather than taken outright, so an integer-valued source still assembles into
-# Float64 on a Float64 space, while a Dual-valued one gives a Dual over the same,
-# undifferentiated, geometry. Read from one stencil evaluation, which is one extra call per
-# assembly against inferring a type the compiler may not know.
+# against the space's (not the space's outright), supporting autodiff types like `ForwardDiff.Dual`.
 function _assembled_eltype(ast, space)
     return _probed_eltype(ast, space, eltype(space))
 end
 
-# Composite: a term naming a component belongs to *that* leaf's mesh alone, and probing it
-# against leaf 1's — the scalar method's whole approach — is only ever correct by
-# coincidence, when every leaf happens to share the scalar method's size. Heterogeneous
-# composites don't, and it throws `BoundsError` there rather than reading a nonsense value:
-# `local_stencil` for a term indexed to a leaf it wasn't built for is handed an index that
-# is valid for the *wrong* leaf's shape, and a term's own `VectorElement` data is sized to
-# the leaf it actually belongs to, not to whichever leaf happened to be probed. So this
-# walks the same term/component routing `_route_terms!` uses, and probes each term on the
-# one leaf it actually addresses.
+# Composite: terms naming components are routed and probed on their respective leaf spaces.
 function _assembled_eltype(ast, space::CompositeGridSpace)
     return _routed_eltype(ast, leaf_spaces_offsets(space), eltype(space))
 end
 
 # An interior point, so a truncated stencil does not decide the type. A restriction can
-# still answer with nothing, in which case the space's type is all there is to go on.
+# still answer with nothing, in which case the space's type is used.
 function _probed_eltype(term, sp, T)
     Ωₕ = mesh(sp)
     grid_inds = indices(Ωₕ)
@@ -301,9 +224,7 @@ function _routed_eltype(term, leaves, T)
     return _probed_eltype(term, sp, T)
 end
 
-# ==============================================================================
-# Helper Cores for Function Barrier Optimization
-# ==============================================================================
+# --- Helper cores for function barrier optimization ------------------------------- #
 
 function _assemble_linear_core!(
         b::AbstractVector, space, ast::AST_TYPE, lin_indices, mesh_markers) where {AST_TYPE}
@@ -323,24 +244,21 @@ function _assemble_linear_core!(
     return b
 end
 
-# ==============================================================================
-# The partition a parallel assembly walks
-# ==============================================================================
+# --- Parallel assembly partitioning ------------------------------------------------ #
 
 """
-	_colour_strides(offsets) -> NTuple{D, Int}
+    _colour_strides(offsets) -> NTuple{D, Int}
 
-The per-dimension stride separating grid points a parallel assembly may write at the same
-time, for an operator reaching `offsets`.
+Per-dimension stride separating grid points that a parallel assembly may write concurrently,
+for an operator reaching `offsets`.
 
-Two points of one colour differ by a multiple of the stride in some dimension, so by at
-least `span + 1` there, while each writes a footprint `span` wide about itself. More than a
-width apart, the footprints cannot overlap: no two points in a colour ever target the same
-row, and the sweep needs no coordination of any kind.
+Two points of one colour differ by a multiple of the stride in some dimension (at least
+`span + 1` there, where each writes a footprint `span` wide about itself). Beyond one width apart,
+the footprints do not overlap: no two points in a colour ever target the same row, enabling
+lock-free parallel assembly.
 
-An operator reaching only its own point — `innerₕ(fₕ, v)`, and every form whose test
-argument carries no difference — strides by 1 in every dimension, so it has one colour: the
-whole grid in a single flat parallel pass.
+An operator reaching only its own point (such as `innerₕ(fₕ, v)` or any form whose test
+argument carries no difference) strides by 1 in every dimension, resulting in a single colour.
 """
 @inline function _colour_strides(offsets::Vector{NTuple{D, Int}}) where {D}
     isempty(offsets) && return ntuple(_ -> 1, D)
@@ -354,22 +272,13 @@ whole grid in a single flat parallel pass.
     return hi .- lo .+ 1
 end
 
-# One colour of `grid_inds`, as a strided sub-grid rather than a materialised list of
-# indices. The colouring is a range, so it costs nothing to build — the version this
-# replaces binned every index into a vector of vectors — and the writes within a colour
-# still run in ascending order.
+# One colour of `grid_inds`, represented as a strided subgrid without allocating index vectors.
 @inline function _colour_subgrid(grid_inds::CartesianIndices{D}, c::CartesianIndex{D},
         strides::NTuple{D, Int}) where {D}
     return CartesianIndices(ntuple(d -> c[d]:strides[d]:last(axes(grid_inds, d)), D))
 end
 
-# The threaded pass over one colour, writing straight into `b`.
-#
-# `AbstractVector` rather than `Vector`, and no element type named anywhere, so a
-# Dual-valued assembly takes this path as readily as a Float64 one. The per-thread buffers
-# this replaces were `Vector{Float64}` outright, which is what stopped the parallel path
-# differentiating at all — the same defect, read the type from the data and not from the
-# space, that `Rₕ` and `dirichlet_constraints` each had.
+# The threaded pass over one colour, writing directly into `b`.
 @noinline function _sweep_colour!(b::AbstractVector, sp, term::TERM, idxs, lin_indices,
         mesh_markers, offset::Int) where {TERM}
     Threads.@threads for I in idxs
@@ -386,17 +295,9 @@ end
     return nothing
 end
 
-# Every colour in turn. Written as a loop over an explicitly passed grid rather than as a
-# higher-order function taking the sweep as a closure, which is not a style choice: the
-# closure captured the `sp` of the caller's `for (sp, offset) in leaves`, and a closure over
-# a loop variable is boxed, so `local_stencil` became a dynamic call at every grid point of
-# every leaf. It cost a composite assembly 7x — measured at 0.08x of serial, against 1.9x
-# for the same form on a scalar space, which is how the boxing was found.
+# Every colour in turn.
 function _sweep_parallel!(b::AbstractVector, sp, term::TERM, grid_inds, strides,
         offset::Int) where {TERM}
-    # `sp`'s own mesh, not a value threaded in from a caller that may hold a different
-    # leaf's — computed once per leaf here (this is called once per leaf), then reused
-    # across every colour of that leaf.
     Ωsp = mesh(sp)
     lin_indices = LinearIndices(indices(Ωsp))
     mesh_markers = markers(Ωsp)
@@ -423,25 +324,8 @@ end
 function _assemble_linear_core!(
         b::AbstractVector, space::CompositeGridSpace{N}, ast::AST_TYPE,
         lin_indices, mesh_markers) where {N, AST_TYPE}
-    # `leaf_spaces_offsets` rather than a Vector of offsets accumulated with `push!`, for
-    # two reasons. It allocates nothing, where the Vector cost 128 B on every call — small,
-    # but this is what a time loop calls each step. And it walks the *leaves*, where
-    # `space.spaces` walks the top-level components: for a composite whose component is
-    # itself composite, `indices(mesh(sp))` covers one leaf's grid while `ndofs(sp)` counts
-    # the whole nested block, so the old loop wrote into a fraction of the range it had
-    # reserved.
-    #
-    # `lin_indices`/`mesh_markers` above are the caller's — leaf 1's, since that is all
-    # `mesh(space)` can mean for a composite space — and are deliberately *not* forwarded
-    # from here on: a heterogeneous composite's leaves do not share a `LinearIndices`/marker
-    # set, so every function below this point derives its own from the leaf it is actually
-    # given (point 24).
     leaves = leaf_spaces_offsets(space)
 
-    # A form written without component indices means the same integrand in every block, and
-    # takes the path that allocates nothing. A form that names components —
-    # `innerₕ(uₕ(1), v(1)) + innerₕ(uₕ(2), v(2))` — has to be split, and splitting builds a
-    # vector of terms, so the question is asked once here rather than paid for always.
     if !routes_by_component(ast)
         for (sp, offset) in leaves
             _scatter_term!(b, sp, ast, offset)
@@ -475,9 +359,8 @@ end
 end
 
 # Walk the sum and send each term to the blocks it belongs to. Recursing the tree rather
-# than flattening it into a vector of terms first — see `_visit_operator_add2`
-# (form/common.jl) for why, shared by every router of this shape. Measured here: 544 B per
-# assembly became 0.
+# than flattening it into a vector of terms first avoids allocation (see `_visit_operator_add2`
+# in form/common.jl).
 function _route_terms!(b::AbstractVector, op::OperatorAdd, leaves)
     _visit_operator_add2(
         _route_terms!, b, op, leaves)
@@ -495,23 +378,9 @@ function _route_terms!(b::AbstractVector, term::TERM, leaves) where {TERM}
     return b
 end
 
-# ==============================================================================
-# Contraction: the same walk, accumulating a number instead of filling a vector
-# ==============================================================================
+# --- Contraction: accumulating a scalar without vector allocation ------------------ #
 
-# `l(vₕ)` answers with a scalar, and used to build the whole right-hand side to get it:
-# `dot(assemble(form), values(vₕ))` allocated one full-length vector per call to produce one
-# number. On a 90,000-point grid that was 721,168 B for 8 bytes of answer, and two vectors
-# when the source carried an operator, since resolving evaluates `D₋ₓ(uₕ)` into an element
-# of its own.
-#
-# The vector was never needed. `l(vₕ) = Σᵢ bᵢ vᵢ`, and `bᵢ` is built by accumulating stencil
-# weights into row `i`, so the sum can be taken as the walk goes: multiply each weight by
-# `v` at the row it would have been written to. Same arithmetic, reassociated, and one pass
-# rather than a write pass and a read pass.
-#
-# `acc` is passed in already typed rather than started at `zero(T)` here, so the accumulator
-# type is fixed by the caller and this stays inferable whatever the weights promote to.
+# `l(vₕ)` evaluates to a scalar by fusing the stencil evaluation with contraction against `vₕ`.
 function _contract_linear_core(space, ast::AST_TYPE, lin_indices, mesh_markers,
         v::AbstractVector, acc::T) where {AST_TYPE, T}
     for I in indices(mesh(space))
@@ -531,9 +400,6 @@ end
 
 function _contract_linear_core(space::CompositeGridSpace{N}, ast::AST_TYPE, lin_indices,
         mesh_markers, v::AbstractVector, acc::T) where {N, AST_TYPE, T}
-    # The same split the assembling core makes, for the same reasons. `lin_indices`/
-    # `mesh_markers` above are leaf 1's, deliberately unused past this point — see the note
-    # in `_assemble_linear_core!`.
     leaves = leaf_spaces_offsets(space)
 
     if !routes_by_component(ast)
@@ -546,7 +412,7 @@ function _contract_linear_core(space::CompositeGridSpace{N}, ast::AST_TYPE, lin_
     return _route_terms_contract(ast, leaves, v, acc)
 end
 
-# The counterpart of `_scatter_term!`, and a function barrier for the same reason.
+# The counterpart of `_scatter_term!`, functioning as a barrier.
 function _contract_term(sp, term::TERM, offset::Int,
         v::AbstractVector, acc::T) where {TERM, T}
     Ωsp = mesh(sp)
@@ -567,11 +433,6 @@ function _contract_term(sp, term::TERM, offset::Int,
     return acc
 end
 
-# The counterpart of `_route_terms!`. Recursive rather than over a flattened vector for the
-# same reason (`_visit_operator_add`, form/common.jl), but does not go through it: threading
-# `acc` through the recursion rather than discarding each branch's result keeps the
-# accumulator type fixed across the whole walk, which none of `_visit_operator_add`'s three
-# shapes do.
 function _route_terms_contract(op::OperatorAdd, leaves, v, acc)
     acc = _route_terms_contract(op.left_op, leaves, v, acc)
     return _route_terms_contract(op.right_op, leaves, v, acc)
@@ -587,18 +448,7 @@ function _route_terms_contract(term::TERM, leaves, v, acc::T) where {TERM, T}
     return acc
 end
 
-# The threaded counterpart of `_route_terms!`, and deliberately the same shape: term
-# outside, grid inside.
-#
-# The obvious parallel shape is the other order — one pass over the grid, routing every term
-# at each point — and it measured 0.08x of the serial sweep at a million degrees of freedom,
-# against 1.9x for a comparable form on a scalar space. Routing per point redoes the
-# component walk and the leaf search at every point; routing per term hoists both out of the
-# grid loop and leaves each sweep a tight, concretely typed one. The order of the two loops
-# is the whole of the difference.
-#
-# Strides come from the term rather than from the whole form, so a term reaching only its own
-# point still sweeps in a single colour even when some other term in the same form does not.
+# Threaded routing by term: hoists component resolution outside the inner loop.
 function _route_terms_parallel!(b::AbstractVector, op::OperatorAdd, leaves)
     _visit_operator_add2(
         _route_terms_parallel!, b, op, leaves)
@@ -617,10 +467,7 @@ function _route_terms_parallel!(b::AbstractVector, term::TERM, leaves) where {TE
     return b
 end
 
-# The scatter, behind a function barrier: a term is only concretely typed once it is an
-# argument, so without this `local_stencil` would be a dynamic call at every grid point
-# rather than once per term. `lin_indices`/`mesh_markers` come from `sp`'s own mesh, not
-# from a caller's — a caller only ever knows leaf 1's for a composite space (point 24).
+# Function barrier for term scattering.
 function _scatter_term!(b::AbstractVector, sp, term::TERM, offset::Int) where {TERM}
     Ωsp = mesh(sp)
     lin_indices = LinearIndices(indices(Ωsp))
@@ -643,14 +490,9 @@ end
 function _assemble_linear_parallel_core!(b::AbstractVector,
         space::CompositeGridSpace{N}, ast::AST_TYPE,
         lin_indices, mesh_markers) where {N, AST_TYPE}
-    # `lin_indices`/`mesh_markers` above are leaf 1's, deliberately unused past this point —
-    # see the note in `_assemble_linear_core!`.
     leaves = leaf_spaces_offsets(space)
     strides = _colour_strides(stencil_offsets(ast))
 
-    # The same split the serial core makes: a form whose terms mean the same thing on every
-    # block sweeps each leaf with the whole AST, and one whose terms name components has to
-    # be routed term by term.
     if !routes_by_component(ast)
         for (sp, offset) in leaves
             _sweep_parallel!(b, sp, ast, indices(mesh(sp)), strides, offset)
@@ -662,46 +504,32 @@ function _assemble_linear_parallel_core!(b::AbstractVector,
     return b
 end
 
-# Not cached on the form on purpose: a `GridFunctionScale` over a thunk has its values read
-# when the AST resolves, so resolving eagerly at construction would freeze coefficients a
-# caller may still be changing. Resolving per call costs 160 B.
-
 """
     assemble!(b::AbstractVector, form::LinearForm; dirichlet_conditions = nothing,
-              dirichlet_labels = nothing, dirichlet_components = nothing, ast = form.ast) -> b
+              dirichlet_labels = nothing, dirichlet_components = nothing, ast = form.ast) -> AbstractVector
 
-Refills `b` with the assembled `form` and returns it, allocating nothing (**0 bytes**).
+Refill `b` with the assembled `form` and return it with zero allocations (**0 bytes**).
 
-This is the call a time loop wants. [`assemble`](@ref) allocates a fresh vector on every
-step; `assemble!` writes into one that already exists, and a vector fill into an existing
-buffer measures 0 bytes.
-
-By default `assemble!` uses the pre-resolved `form.ast` stored directly inside the form,
-achieving zero heap allocations.
+By default `assemble!` uses the pre-resolved `form.ast` stored directly inside the form.
 
 ## Live coefficients
 - Grid functions: the stored AST retains references to source `VectorElement` storage. Mutating values in-place (`Rₕ!(uₕ, ...)` or `values(uₕ) .= ...`) between steps automatically updates the assembled vector without needing to rebuild the form.
 - Dynamic scalars: plain numbers work directly for constant scalars. To update a scalar dynamically across loop iterations, wrap it in a `Ref(val)` (e.g. `α = Ref(1.0); l = form(Wₕ, v -> α * innerₕ(uₕ, v))`). Mutating `α[] = new_val` evaluates live during assembly with 0 allocations.
 
 # Arguments
-
-  - `b`: the vector to refill. Its length must be `ndofs(test_space(form))`.
-  - `form`: the linear form to assemble.
+- `b`: Vector to refill, with length `ndofs(test_space(form))`.
+- `form`: Linear form to assemble.
 
 # Keywords
+- `dirichlet_conditions`, `dirichlet_labels`: Boundary values to impose after assembly and the region labels to impose them on (both default to `nothing`).
+- `dirichlet_components`: Restricts which leaf components of a composite `test_space(form)` the labels bind to (see [`dirichlet_bc!`](@ref); default: `nothing`, targeting all leaves).
+- `ast`: Optional custom AST override (defaults to `form.ast`).
 
-  - `dirichlet_conditions`, `dirichlet_labels`: boundary values to impose after assembling,
-    and the labels to impose them on. Both default to `nothing`, which imposes nothing.
-  - `dirichlet_components`: restricts which leaf(-ves) of a composite `test_space(form)` the
-    labels bind to — see [`dirichlet_bc!`](@ref). `nothing` (the default) is every leaf.
-  - `ast`: an optional custom AST override (defaults to `form.ast`).
+Runs serially or across threads following `test_space(form)`'s backend [`execution_policy`](@ref):
+[`Serial`](@ref) or [`Parallel`](@ref). [`assemble_parallel!`](@ref) forces threaded execution
+regardless of backend policy.
 
-Runs serially or across threads following `test_space(form)`'s backend
-[`execution_policy`](@ref) — [`Serial`](@ref) or [`Parallel`](@ref). [`assemble_parallel!`](@ref)
-is a separate, lower-level entry point that always threads, ignoring the backend's policy.
-
-See also [`assemble`](@ref), [`assemble_parallel!`](@ref) for the threaded sweep regardless
-of policy, and [`evaluate!`](@ref) when the contraction is wanted alongside the vector.
+See also [`assemble`](@ref), [`assemble_parallel!`](@ref), and [`evaluate!`](@ref).
 """
 function assemble!(b::AbstractVector, form::LinearForm{D, TestSpace, AST};
         dirichlet_conditions = nothing,
@@ -728,12 +556,11 @@ function assemble!(b::AbstractVector, form::LinearForm{D, TestSpace, AST};
 end
 
 """
-    assemble_parallel!(b, form::LinearForm, ast = form.ast) -> b
+    assemble_parallel!(b::AbstractVector, form::LinearForm, ast = form.ast) -> AbstractVector
 
-Refills `b` with the assembled `form` across threads, and returns it, regardless of
-`test_space(form)`'s backend policy -- a lower-level entry point than [`assemble!`](@ref)
-for forcing a threaded sweep explicitly (benchmarking, or a one-off comparison). Unlike
-`assemble!`, does not apply `dirichlet_conditions`.
+Refill `b` with the assembled `form` across threads and return it, regardless of
+`test_space(form)`'s backend execution policy. Unlike [`assemble!`](@ref), does not
+apply Dirichlet conditions.
 """
 function assemble_parallel!(b::AbstractVector,
         form::LinearForm{D, TestSpace, AST},

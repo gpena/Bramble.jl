@@ -9,7 +9,7 @@ using Bramble: values, components
 # different things. The mesh is geometry and stays in its own element type; the
 # coefficients are whatever the computation needs, and for a derivative that is a
 # `ForwardDiff.Dual`. `Rₕ` and `avgₕ` take their element type from the function being
-# restricted, and `similar` — which every operator allocates its output with — keeps the
+# restricted, and `similar` (which every operator allocates its output with) keeps the
 # element's own type rather than reaching back to the space's.
 #
 # None of the arithmetic needed changing: the operators, inner products and norms were

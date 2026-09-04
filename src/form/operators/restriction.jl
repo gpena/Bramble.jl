@@ -1,32 +1,28 @@
 # restriction.jl
-# Contains RegionRestriction struct and related logic for Bramble lazy AST
+# RegionRestriction struct and spatial restriction logic for Bramble lazy AST
 
-# ==============================================================================
-# Struct Definitions
-# ==============================================================================
+# --- Struct definition ------------------------------------------------------------- #
 
 """
-    RegionRestriction{D,RegionType,OpType<:LazyOp{D}} <: LazyOp{D}
+    RegionRestriction{D, RegionType, OpType <: LazyOp{D}} <: LazyOp{D}
 
-An AST node representing a spatial restriction of an operator to a specific mesh region or boundary.
+AST node representing a spatial restriction of an operator to a specific mesh region or boundary.
 
-# Fields
-- `region::RegionType`: The identifier for the region (e.g., `:interior`, `:boundary`, `:left`, `:right`, `:top`, `:bottom`).
-- `inner_op::OpType`: The underlying operator being restricted.
+# Arguments
+- `region::RegionType`: Identifier for the region (e.g. `:interior`, `:boundary`, `:left`, `:right`, `:top`, `:bottom`).
+- `inner_op::OpType`: Underlying operator being restricted.
 """
 struct RegionRestriction{D, RegionType, OpType <: LazyOp{D}} <: LazyOp{D}
     region::RegionType
     inner_op::OpType
 end
 
-# ==============================================================================
-# User-Facing API
-# ==============================================================================
+# --- User-facing API --------------------------------------------------------------- #
 
 """
-    restrict_to(region, op::LazyOp{D}) where D
+    restrict_to(region, op::LazyOp{D}) -> RegionRestriction
 
-Restricts the operator `op` to a specific mesh region or boundary identifier.
+Restrict the operator `op` to a specific mesh region or boundary identifier.
 
 # Examples
 ```julia
@@ -41,24 +37,21 @@ function restrict_to(region, op::LazyOp{D}) where {D}
     RegionRestriction{D, typeof(region), typeof(op)}(region, op)
 end
 
-# ==============================================================================
-# Zero-Allocation Stencil Evaluators
-# ==============================================================================
+# --- Zero-allocation stencil evaluators -------------------------------------------- #
 
-# `markers` is optional throughout the stencil evaluators — every other node takes it and
+# `markers` is optional throughout the stencil evaluators: every other node accepts it and
 # ignores it, and callers with nothing to restrict by pass `nothing`. Only this node reads
-# it, so only this node has to say what an absent table means: no point is marked. The
-# `:interior` region is then the whole grid, and every other region is empty, which is what
-# `haskey` returning `false` already gave for a table that simply lacked the key.
+# it, so only this node determines what an absent table means: no point is marked. The
+# `:interior` region is then the whole grid, and every other region is empty, which matches
+# `haskey` returning `false` for a table that lacks the key.
 @inline _is_marked(::Nothing, ::Symbol, ::Int) = false
 @inline _is_marked(markers, region::Symbol, lin_idx::Int) = haskey(markers, region) &&
                                                             markers[region][lin_idx]
 
-# A tuple of regions is a union, not an intersection: `restrict_to((:bottom, :left), u)`
-# means either counts, matching what several `markers = (...)` labels mean everywhere else
-# in the package (`Rₕ!`, `dirichlet_bc!`, the numeric `innerₕ`). Chaining single-region
-# `RegionRestriction`s instead would give the intersection, which is a different — and much
-# less useful — condition.
+# A tuple of regions represents a union, not an intersection: `restrict_to((:bottom, :left), u)`
+# matches either region, consistent with tuple markers throughout the package (`Rₕ!`,
+# `dirichlet_bc!`, numeric `innerₕ`). Chaining single-region `RegionRestriction`s instead
+# would give the intersection (a different and rarely useful condition).
 @inline _is_marked(markers, regions::NTuple{N, Symbol}, lin_idx::Int) where {N} = any(
     r -> _is_marked(markers, r, lin_idx), regions)
 
@@ -77,9 +70,7 @@ end
     end
 end
 
-# ==============================================================================
-# AST Resolution
-# ==============================================================================
+# --- AST resolution ---------------------------------------------------------------- #
 
 # A restriction narrows where its child contributes without changing what it reaches, so
 # the direction is its child's.

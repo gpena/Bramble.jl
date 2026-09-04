@@ -62,7 +62,7 @@ See also: [`_BRAMBLE_var2symbol`](@ref)
 """
 const _BRAMBLE_var2label = ("x", "y", "z")
 """
-	AbstractSpaceType{N}
+    AbstractSpaceType{N}
 
 Abstract supertype for all function spaces defined on a mesh.
 
@@ -71,7 +71,8 @@ This is the top-level abstraction for a grid-based function space. The parameter
 abstract type AbstractSpaceType{N} end
 
 """
-	$(TYPEDEF)
+    VectorElement(data::VT, space::S)
+    VectorElement{S, T, VT}(data::VT, space::S)
 
 Represents a **grid function** (a vector) that belongs to a specific function space.
 
@@ -79,7 +80,8 @@ This is a wrapper that bundles the raw numerical data (the vector `data`) with i
 
 # Fields
 
-$(FIELDS)
+  - `data::VT`: the raw vector data containing the degrees of freedom.
+  - `space::S`: the parent function space to which this vector belongs.
 """
 struct VectorElement{S, T, VT <: AbstractVector{T}} <: AbstractVector{T}
     "the raw vector data containing the degrees of freedom."
@@ -89,7 +91,7 @@ struct VectorElement{S, T, VT <: AbstractVector{T}} <: AbstractVector{T}
 end
 
 """
-	InnerProductType
+    InnerProductType
 
 Abstract type for selecting which discrete inner product formula to use.
 
@@ -98,10 +100,12 @@ used in various finite difference schemes and stability analyses. The choice of 
 product affects energy estimates and numerical stability properties.
 
 # Subtypes
+
 - [`Innerh`](@ref): Standard ``L^2`` inner product using cell measures (volumes)
 - [`Innerplus`](@ref): Modified inner product using staggered grid spacings
 
 # Background
+
 In finite difference methods, different inner products arise naturally from:
 - Summation-by-parts (SBP) operators
 - Energy method stability analysis
@@ -112,6 +116,7 @@ modified inner products (`Innerplus`) use combinations of forward/backward spaci
 appearing in discrete energy estimates for difference operators.
 
 # Usage
+
 ```julia
 # Compute standard L² inner product
 result = innerₕ(uₕ, vₕ)  # Uses Innerh() internally
@@ -125,7 +130,7 @@ See also: [`Innerh`](@ref), [`Innerplus`](@ref), [`innerₕ`](@ref), [`inner₊�
 abstract type InnerProductType end
 
 """
-	Innerplus <: InnerProductType
+    Innerplus <: InnerProductType
 
 Selector for modified discrete ``L^2`` inner products using staggered grid spacings.
 
@@ -139,12 +144,14 @@ The modified inner products are used for:
 - Constructing stable finite difference schemes
 
 # Mathematical form
+
 For a 2D grid in the x-direction:
 ```math
 (u_h, v_h)_{+x} = \\sum_{i,j} h_{x,i} h_{y,j+1/2} u_h(x_i, y_j) v_h(x_i, y_j)
 ```
 
 # Example
+
 ```julia
 # These functions use Innerplus internally
 result_x = inner₊ₓ(uₕ, vₕ)  # Modified inner product, x-direction
@@ -156,7 +163,7 @@ See also: [`InnerProductType`](@ref), [`Innerh`](@ref), [`inner₊ₓ`](@ref), [
 struct Innerplus <: InnerProductType end
 
 """
-	Innerh <: InnerProductType
+    Innerh <: InnerProductType
 
 Selector for the standard discrete ``L^2`` inner product weighted by cell measures.
 
@@ -165,6 +172,7 @@ denoted ``|\\square_k|``. This is the most common inner product for finite diffe
 methods and corresponds to the trapezoid rule for integration on non-uniform grids.
 
 # Mathematical form
+
 For a 2D grid:
 ```math
 (u_h, v_h)_h = \\sum_{i,j} |\\square_{i,j}| u_h(x_i, y_j) v_h(x_i, y_j)
@@ -173,6 +181,7 @@ For a 2D grid:
 where ``|\\square_{i,j}|`` is the area of the cell centered at ``(x_i, y_j)``.
 
 # Example
+
 ```julia
 # Compute L² inner product
 result = innerₕ(uₕ, vₕ)  # Uses Innerh() internally
@@ -194,42 +203,45 @@ the exact missing signature.
 =#
 
 """
-	space(Wₕ::AbstractSpaceType)
+    space(Wₕ::AbstractSpaceType) -> AbstractSpaceType
 
 Returns the function space `Wₕ` itself.
 """
 @inline space(Wₕ::AbstractSpaceType) = return Wₕ
 
 """
-	mesh(Wₕ::AbstractSpaceType)
+    mesh(Wₕ::AbstractSpaceType) -> AbstractMeshType
 
 Returns the underlying mesh object associated with the function space `Wₕ`.
 """
 function mesh end
 
 """
-	mesh_type(Wₕ::AbstractSpaceType)
+    mesh_type(Wₕ::AbstractSpaceType) -> Type{<:AbstractMeshType}
+    mesh_type(::Type{<:AbstractSpaceType}) -> Type{<:AbstractMeshType}
 
 Returns the type of the mesh associated with the function space `Wₕ`. Also works if the argument is the type of the space.
 """
 function mesh_type end
 
 """
-	$(TYPEDSIGNATURES)
+    backend(Wₕ::AbstractSpaceType) -> AbstractBackend
 
 Returns the computational backend associated with the space `Wₕ`.
 """
 function backend end
 
 """
-	dim(Wₕ::AbstractSpaceType)
+    dim(Wₕ::AbstractSpaceType) -> Int
+    dim(::Type{<:AbstractSpaceType}) -> Int
 
-Returns the spatial dimension of the mesh associated with the functionpace `Wₕ`.
+Returns the spatial dimension of the mesh associated with the function space `Wₕ`.
 """
 function dim end
 
 """
-	ndofs(Wₕ::AbstractSpaceType, [::Type{Tuple}])
+    ndofs(Wₕ::AbstractSpaceType) -> Int
+    ndofs(Wₕ::AbstractSpaceType, ::Type{Tuple}) -> NTuple{D, Int}
 
 Returns the total number of degrees of freedom (DOFs) in the function space `Wₕ`.
 If `Tuple` is passed, it returns a tuple with the number of DOFs in each dimension.
@@ -237,8 +249,8 @@ If `Tuple` is passed, it returns a tuple with the number of DOFs in each dimensi
 function ndofs end
 
 """
-	ncomponents(Wₕ::AbstractSpaceType)
-	ncomponents(::Type{<:AbstractSpaceType})
+    ncomponents(Wₕ::AbstractSpaceType) -> Int
+    ncomponents(::Type{<:AbstractSpaceType}) -> Int
 
 Returns the number of field components of the function space (e.g. 1 for scalar, D for vector).
 """
@@ -246,7 +258,7 @@ Returns the number of field components of the function space (e.g. 1 for scalar,
 @inline ncomponents(::Type{<:AbstractSpaceType{N}}) where {N} = N
 
 """
-	spaces(Wₕ::AbstractSpaceType)
+    spaces(Wₕ::AbstractSpaceType) -> Tuple
 
 Returns the constituent subspace(s) of `Wₕ` as a tuple.
 """

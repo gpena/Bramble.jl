@@ -12,18 +12,36 @@ using Bramble: values
 # on top of it, which is also why there is no second implementation to keep in step.
 #
 # Per the return contract, a mutating function with a single destination returns it, so
-# `D₋ₓ!(vₕ, uₕ)` gives back `vₕ` and composes: `normₕ(D₋ₓ!(vₕ, uₕ))`.
+# Standalone runner fallback
+if !@isdefined(alloc_test)
+    @inline function alloc_test(f::F, args...; kwargs...) where {F}
+        f(args...; kwargs...)
+        return @allocated(f(args...; kwargs...))
+    end
+end
 
-# Every family's base name, before the x/y/z suffix — the same 10 families
-# `_DIFFERENCE_OP_CONFIGS`/`_AVERAGE_OP_CONFIGS` and the two "written out" generators
-# (`jump.jl`, `Dc`/`Dstar₊` in `difference.jl`) build a full x/y/z alias set for
-# unconditionally, regardless of what dimension a caller ever uses. Deriving the
-# per-dimension list mechanically from this tuple and `_DIR_SUFFIXES`, instead of typing
-# out each `(name!, name, "name")` triple by hand per `Val(D)`, is what point 78 asks
-# for: the old hand-written lists quietly tested `D₊`/`M₋`/`Dstar₊`/`M₊` at only two of
-# three directions and `diff₋`/`diff₊` at only one, though every omitted variant already
-# resolves to a real, distinct, correct method (confirmed auditing point 66) — a gap in
-# this test file's own bookkeeping, not in the operators themselves.
+if !@isdefined(var"@test_allocs")
+    macro test_allocs(call_expr)
+        if Meta.isexpr(call_expr, :call)
+            fn = call_expr.args[1]
+            args = call_expr.args[2:end]
+            quote
+                @test alloc_test($(esc(fn)), $(map(esc, args)...)) == 0
+            end
+        else
+            quote
+                let
+                    $(esc(call_expr))
+                    @test (@allocated $(esc(call_expr))) == 0
+                end
+            end
+        end
+    end
+end
+
+# Base names for the 10 directional operator families across spatial dimensions.
+# Deriving the per-dimension list mechanically from this tuple and `_DIR_SUFFIXES`
+# ensures complete and uniform test coverage across 1D, 2D, and 3D.
 const _INPLACE_FAMILIES = (:D₋, :D₊, :diff₋, :diff₊, :M₋, :M₊, :jump, :Dc, :Dstar₊, :Dₕ)
 const _DIR_SUFFIXES = ("ₓ", "ᵧ", "₂")
 
@@ -79,7 +97,7 @@ end
     @testset "Destination overwrite" begin
         # Every one of these truncates a boundary slice to zero. If a `!` form skipped
         # those entries instead of writing them, whatever was in the destination would
-        # survive — and with a fresh `similar` that is uninitialised memory, so the
+        # survive (with a fresh `similar` that is uninitialised memory), so the
         # allocating form would look right while the in-place form returned garbage at the
         # boundary. Pre-filling with a value that cannot be a correct answer catches it.
         Random.seed!(20260831)
@@ -115,12 +133,56 @@ end
                 push!(inplace, @allocated f!(vₕ, uₕ))
                 push!(allocating, @allocated f(uₕ))
             end
+            # In-place values! assignment checks
+            values!(vₕ, 0.0)
+            values!(vₕ, values(uₕ))
+            push!(inplace, @allocated values!(vₕ, 0.0))
+            push!(inplace, @allocated values!(vₕ, values(uₕ)))
+
             return inplace, allocating
         end
 
         inplace, allocating = counts()
         @test all(iszero, inplace)
         @test all(>(0), allocating)             # the comparison is not vacuous
+    end
+
+    @testset "Aliasing rejected" begin
+        # Every stencil here reads a neighbour of the point it writes, and the traversal
+        # overwrites entries in place as it goes; calling `f!(uₕ, uₕ)` would silently
+        # corrupt the result from the second write onward instead of raising an error
+        # (this was the reported bug for `D₋ₓ!`). Each family must refuse aliased
+        # destination and source rather than compute a wrong answer.
+        Ωs = (mesh(domain(interval(0.0, 1.0)), 9, false),
+            mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 7), (true, false)),
+            mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 4),
+                (false, true, false)))
+        fs = (x -> x^3 + sin(4x) + 1,
+            x -> exp(x[1]) * (x[2]^2 + 1),
+            x -> x[1]^2 + 2x[2] + sin(x[3]) + 1)
+
+        for D in 1:3
+            @testset "$(D)D" begin
+                Ωₕ = Ωs[D]
+                Wₕ = gridspace(Ωₕ)
+                Vₕ = gridspace(Ωₕ, Val(2))
+                uₕ = Rₕ(Wₕ, fs[D])
+                uv = Rₕ(Vₕ, (fs[D], fs[D]))
+
+                for (f!, _, nm) in _ops(Val(D))
+                    @testset "$nm" begin
+                        # the same object
+                        @test_throws ArgumentError f!(uₕ, uₕ)
+                        @test_throws ArgumentError f!(uv, uv)
+
+                        # distinct `VectorElement`s sharing the same backing array
+                        shared = VectorElement(values(uₕ), space(uₕ))
+                        @test_throws ArgumentError f!(uₕ, shared)
+                        @test_throws ArgumentError f!(shared, uₕ)
+                    end
+                end
+            end
+        end
     end
 
     @testset "Composite matching" begin

@@ -3,13 +3,13 @@ using Bramble
 using Bramble: CompositeGridSpace, form, assemble, assemble!, assemble_parallel!,
                allocate_system_matrix
 
-# Coupling two leaves of a composite space whose meshes differ in size (point 69).
+# Coupling two leaves of a composite space whose meshes differ in size.
 #
 # A coupled bilinear term is assembled by walking the *test* leaf's grid and reading the
 # trial column out of that same index space, offset into the trial leaf's block:
 # `lin_indices[I + off_u] + col_offset`. That only means something when the two leaves share
-# an index space, which they always did until heterogeneous composite spaces arrived — a
-# space built by repeating one space hands every leaf the same mesh object.
+# an index space, which they always did until heterogeneous composite spaces arrived (a
+# space built by repeating one space hands every leaf the same mesh object).
 #
 # On leaves of different sizes it failed in whichever direction the sizes ran, and one of the
 # two failures was silent:
@@ -18,9 +18,8 @@ using Bramble: CompositeGridSpace, form, assemble, assemble!, assemble_parallel!
 #   innerₕ(u(1), v(2))  big trial, small test  → assembled, in-range but WRONG columns
 #
 # There is no correspondence between an index on one mesh and an index on the other, so the
-# term has no assembly until something says how to map between them — a symbolic
-# interpolation operator, which is point 61 and is not built. Until then it is refused by
-# name, at every entry point.
+# term has no assembly until something says how to map between them, such as an interpolation
+# operator `πₕ(Wsrc, u)`. Without that mapping it is refused at every entry point.
 
 @testset "Cross-mesh blocks" begin
     Ωbig = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (6, 6), (true, true))
@@ -30,7 +29,7 @@ using Bramble: CompositeGridSpace, form, assemble, assemble!, assemble_parallel!
 
     @testset "Entry point refusal" begin
         # the direction that used to throw from inside `sparse!`, and the one that used to
-        # assemble silently wrong columns — the second is the reason this is a test and not
+        # assemble silently wrong columns; the second is the reason this is a test and not
         # just a nicer error message
         for g in ((u, v) -> innerₕ(u(2), v(1)), (u, v) -> innerₕ(u(1), v(2)))
             a = form(Vh, Vh, g)
@@ -106,9 +105,9 @@ using Bramble: CompositeGridSpace, form, assemble, assemble!, assemble_parallel!
               (ndofs(Wₕ), ndofs(Wₕ))
     end
 
-    @testset "Row & column dimensions" begin
-        # equal here, because the check above is what allows the form at all — asserted so
-        # that a future cross-mesh operator (point 61) has something to change deliberately
+    @testset "Row and column dimensions" begin
+        # equal here, because the check above is what allows the form at all: asserted so
+        # that cross-mesh operators have a well-defined baseline
         Wₕ = gridspace(Ωbig)
         a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
         A = allocate_system_matrix(a)

@@ -37,7 +37,7 @@ See also: [`diff₊ₓ`](@ref), [`_difference_engine!`](@ref).
 =#
 
 """
-	jump_dim!(out, in, dims, jump_dim::Val)
+    jump_dim!(out, in, dims, jump_dim::Val)
 
 In-place jump of `in` along `jump_dim`, written into `out`, computing
 ``u_{i+1} - u_i``.
@@ -49,7 +49,7 @@ difference are the same arithmetic.
     jump_dim::Val) where {D} = forward_difference_dim!(out, in, dims, jump_dim)
 
 """
-	jump(arg, dim_val::Val)
+    jump(arg, dim_val::Val)
 
 The jump across the interfaces along the direction `dim_val`, ``u_{i+1} - u_i``.
 
@@ -62,7 +62,7 @@ forward difference are the same quantity. The name records which of the two is m
 @inline jump(arg, dim_val::Val) = forward_difference(arg, dim_val)
 
 """
-	jump!(vₕ, uₕ, dim_val::Val)
+    jump!(vₕ, uₕ, dim_val::Val)
 
 The jump across the interfaces along `dim_val`, written into `vₕ`, which is returned.
 
@@ -80,37 +80,37 @@ for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
     direction = _BRAMBLE_var2label[i]
     @eval begin
         @doc """
-          	$($(QuoteNode(alias)))(arg)
+            $($(QuoteNode(alias)))(arg)
 
-          The jump across the interfaces along the `$($direction)` direction,
-          ``\\\\llbracket u \\\\rrbracket = u_{i+1} - u_i``.
+        The jump across the interfaces along the `$($direction)` direction,
+        ``\\\\llbracket u \\\\rrbracket = u_{i+1} - u_i``.
 
-          Alias for `jump(arg, Val($($i)))`. `arg` is a mesh, a grid space or a
-          [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
-          third applies it and returns a `VectorElement`.
+        Alias for `jump(arg, Val($($i)))`. `arg` is a mesh, a grid space or a
+        [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+        third applies it and returns a `VectorElement`.
 
-          Accepts a grid function of a scalar or of a composite grid space. On a composite
-          one the operator is applied to each component in turn, and the result is the
-          composite grid function whose components are those results.
+        Accepts a grid function of a scalar or of a composite grid space. On a composite
+        one the operator is applied to each component in turn, and the result is the
+        composite grid function whose components are those results.
 
-          The last point along `$($direction)` has no forward neighbour and is treated as
-          though it were zero, as in [`diff₊$($suffix)`](@ref).
-          """
+        The last point along `$($direction)` has no forward neighbour and is treated as
+        though it were zero, as in [`diff₊$($suffix)`](@ref).
+        """
         @inline $alias(arg) = jump(arg, Val($i))
 
         @doc """
-          	$($(QuoteNode(alias)))!(vₕ, uₕ)
+            $($(QuoteNode(alias)))!(vₕ, uₕ)
 
-          The in-place form of [`$($(QuoteNode(alias)))`](@ref): writes the jump into `vₕ`
-          and returns it, allocating nothing. `vₕ` and `uₕ` must belong to the same space
-          and must not be the same object.
-          """
+        The in-place form of [`$($(QuoteNode(alias)))`](@ref): writes the jump into `vₕ`
+        and returns it, allocating nothing. `vₕ` and `uₕ` must belong to the same space
+        and must not be the same object.
+        """
         @inline $(Symbol(alias, :!))(vₕ, uₕ) = jump!(vₕ, uₕ, Val($i))
     end
 end
 
 """
-	jumpₕ(arg)
+    jumpₕ(arg)
 
 The jump of `arg` along every coordinate, as a tuple with one entry per spatial dimension.
 On a one-dimensional mesh it returns that single entry rather than a one-tuple.

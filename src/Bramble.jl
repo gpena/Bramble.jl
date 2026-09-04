@@ -9,8 +9,6 @@ import Base: show, first, last, getindex, setindex!, iterate, size, firstindex,
 using SparseArrays: SparseMatrixCSC, spdiagm, spzeros,
                     rowvals, nonzeros, nzrange, sparse, sparse!
 
-using StaticArrays: SVector
-
 using LinearAlgebra: I, dot
 import LinearAlgebra: issymmetric, isposdef
 

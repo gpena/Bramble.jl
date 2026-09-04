@@ -1,27 +1,20 @@
 # block_extract.jl
 # Reading which block of a coupled form a term belongs to.
 #
-# What is left here is the pair of walks assembly asks — which component a term names on the
-# trial side and on the test side — and `block_of`, which turns the two into a block or into
-# an error.
-#
-# There used to be a good deal more: `make_trial_args` and `make_test_args` built nested
-# tuples of indexed leaves, `extract_block_asts` decomposed a form into an NS by NT matrix of
-# sub-ASTs, `is_hierarchical` chose between two ways of writing one form, and
-# `find_trial_component` and `find_test_component` were the throwing counterparts of the
-# walks below. All of it existed to serve `CoupledBilinearForm`, which reached off-diagonal
-# blocks only for a space of spaces. Routing by leaf index reaches them for any composite,
-# so none of it had a caller left.
+# Determines component routing for coupled assembly: trial and test component indices
+# inspected via `trial_component_or_nothing` and `test_component_or_nothing`, which
+# `block_of` converts to a block coordinate `(trial, test)` or validates. Routing by
+# leaf index supports arbitrary composite function spaces.
 
 """
     test_component_or_nothing(op) -> Union{Int, Nothing}
 
 The component `op` is written against, or `nothing` when it names none.
 
-For code that has to *ask* rather than assume — assembling a composite right-hand side, where a term built from an indexed test
-function belongs to one block while a term built from a plain one belongs to all of them.
-Written out rather than wrapping the throwing form in a `try`, because it is asked once per
-term per assembly and an assembly happens every step of a time loop.
+Used when assembling composite right-hand sides, where a term built from an indexed test
+function belongs to one block while a term built from an unindexed one belongs to all of them.
+Written as a query rather than catching an exception because it is evaluated once per
+term per assembly in time-stepping loops.
 """
 test_component_or_nothing(op::IndexedTestFunction) = op.component_idx
 test_component_or_nothing(op::LinearProduct) = test_component_or_nothing(op.right_op)
@@ -40,13 +33,11 @@ test_component_or_nothing(op::ShiftNode) = test_component_or_nothing(op.inner_op
 test_component_or_nothing(op::OperatorScale) = test_component_or_nothing(op.inner_op)
 test_component_or_nothing(op::GridFunctionScale) = test_component_or_nothing(op.inner_op)
 test_component_or_nothing(op::RegionRestriction) = test_component_or_nothing(op.inner_op)
-# A sum *inside* one inner product — `innerₕ(uₕ, v + 2 * D₋ₓ(v) - M₋ₓ(v))` — is still one
+# A sum inside one inner product, `innerₕ(uₕ, v + 2 * D₋ₓ(v) - M₋ₓ(v))`, is still one
 # term of the form, and every test leaf in it names the same component or none. So the
 # component of a sum is the component its sides agree on.
 #
-# Without this the `::Any` fallback answered `nothing` and the term broadcast to every block,
-# so a coupled form with an operator sum in its test slot put every component's source into
-# every block. It summed to something plausible and was wrong.
+# Without this check the fallback returned `nothing` and the term broadcast to every block.
 function test_component_or_nothing(op::OperatorAdd)
     l = test_component_or_nothing(op.left_op)
     r = test_component_or_nothing(op.right_op)
@@ -54,9 +45,8 @@ function test_component_or_nothing(op::OperatorAdd)
     return _throw_mixed_components(l, r)
 end
 
-# Sides naming different components cannot be one term of one block. It is ill-formed rather
-# than ambiguous — `innerₕ(uₕ, v(1) + v(2))` is not a component of anything — and silence
-# here is what produced the bug above, so it is an error.
+# Sides naming different components cannot be one term of one block:
+# `innerₕ(uₕ, v(1) + v(2))` is ill-formed, so an error is raised.
 @noinline function _throw_mixed_components(l, r)
     throw(ArgumentError(
         "the two sides of a sum inside one inner product name different components " *
@@ -110,7 +100,7 @@ The `(trial, test)` block `term` belongs to, or `nothing` when it belongs to eve
 block.
 
 A term naming neither side is the same integrand on each block, which for a matrix means the
-diagonal — `Σᵢ innerₕ(uᵢ, vᵢ)` is block diagonal, not full. A term naming both is one block.
+diagonal: `Σᵢ innerₕ(uᵢ, vᵢ)` is block diagonal, not full. A term naming both is one block.
 A term naming one and not the other is refused: `innerₕ(u(1), v)` is not something written
 in a variational formulation, and reading it as a whole row or column of blocks would be a
 guess about what was meant.
@@ -159,13 +149,13 @@ end
 routes_by_component(op) = test_component_or_nothing(op) !== nothing
 
 """
-    _collect_region_labels(op) -> NTuple{N,Symbol}
+    _collect_region_labels(op) -> NTuple{N, Symbol}
 
-Every marker label a `RegionRestriction` anywhere in `op` names — from `restrict_to` calls
-written directly, or from the `markers = (...)` keyword on `innerₕ`/`inner₊` and friends,
-which is sugar for the same node (point 50). Flattened into one tuple; a term naming several
-restrictions (nested, or one on each side of a product) reports all of them, since every one
-has to exist on every leaf the term reaches for assembly to mean what it says.
+Every marker label a `RegionRestriction` anywhere in `op` names: from `restrict_to` calls
+written directly, or from the `markers = (...)` keyword on `innerₕ`/`inner₊` and friends.
+Flattened into one tuple; a term naming several restrictions (nested, or one on each side of
+a product) reports all of them, since every one has to exist on every leaf the term reaches
+for assembly to mean what it says.
 
 Recurses the same way [`trial_component_or_nothing`](@ref)/[`test_component_or_nothing`](@ref)
 do, so a marker nested behind any operator those already see through is found here too.
@@ -194,7 +184,7 @@ _collect_region_labels(op) = ()
     _validate_term_markers(term, mesh_markers, context::String)
 
 Throws if `term` names, via `restrict_to` or `markers = (...)`, a label that does not exist
-in `mesh_markers` — the mesh a term is about to be scattered against. Checked once, while the
+in `mesh_markers` (the mesh a term is about to be scattered against). Checked once, while the
 sparsity pattern is built (`allocate_system_matrix`/`_pattern_term!`), rather than left to
 `RegionRestriction`'s own `local_stencil`: that answers `false` for a missing key the same way
 it does for "not marked", so a typo'd or leaf-missing label would otherwise assemble to a
@@ -210,7 +200,7 @@ end
 @noinline function _throw_marker_not_on_space(label::Symbol, context::String)
     throw(ArgumentError(
         "the marker :$label is not defined on $context. A marker named in restrict_to or " *
-        "markers = (...) must exist on every space a term reaches — if it is only defined " *
+        "markers = (...) must exist on every space a term reaches; if it is only defined " *
         "on some of a composite space's leaves, write the term per component instead, one " *
         "innerₕ(u(i), v(i)) per leaf with that leaf's own markers, rather than one term " *
         "naming a marker not every leaf it reaches has."))

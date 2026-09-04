@@ -15,13 +15,13 @@ For a function uₕ on a grid, the average operator ⟨·⟩ computes the mean v
 adjacent grid points:
 
 **Forward average** (at point xᵢ):
-	⟨u⟩ᵢᶠ = (uᵢ + uᵢ₊₁) / 2
+    ⟨u⟩ᵢᶠ = (uᵢ + uᵢ₊₁) / 2
 
 **Backward average** (at point xᵢ):
-	⟨u⟩ᵢᵇ = (uᵢ + uᵢ₋₁) / 2
+    ⟨u⟩ᵢᵇ = (uᵢ + uᵢ₋₁) / 2
 
 At boundary points where no neighbor exists:
-	⟨u⟩ᵢ = uᵢ / 2
+    ⟨u⟩ᵢ = uᵢ / 2
 
 ## Use cases
 
@@ -152,10 +152,10 @@ for config in _AVERAGE_OP_CONFIGS
     @eval begin
         # --- In-place applicators ---
         @doc """
-          	$($(QuoteNode(Symbol(average_name, :_dim!))))(out, in, dims, average_dim)
+            $($(QuoteNode(Symbol(average_name, :_dim!))))(out, in, dims, average_dim)
 
-          Low-level, in-place function to compute the $($dir_string_lowercase) average of vector `in` along dimension `average_dim`, storing the result in `out`. This function computes ``$($math_op)``.
-          """
+        Low-level, in-place function to compute the $($dir_string_lowercase) average of vector `in` along dimension `average_dim`, storing the result in `out`. This function computes ``$($math_op)``.
+        """
         function $(Symbol(average_name, :_dim!))(out, in, h, dims::NTuple{D, Int},
                 average_dim::Val{DIFF_DIM}) where {D, DIFF_DIM}
             1 <= DIFF_DIM <= D || _throw_stencil_dim_error(DIFF_DIM, D)
@@ -173,22 +173,15 @@ for config in _AVERAGE_OP_CONFIGS
 
         # --- Matrix operator functions ---
         @doc """
-          	$($(QuoteNode(average_name)))(arg, dim_val::Val)
+            $($(QuoteNode(average_name)))(arg, dim_val::Val)
 
-          Constructs or applies the $($dir_string_lowercase) averaging operator, representing the operation ``$($math_op)``.
-          """
+        Constructs or applies the $($dir_string_lowercase) averaging operator, representing the operation ``$($math_op)``.
+        """
         @inline function $average_name(Ωₕ::AbstractMeshType, dim_val::Val; vector_cache = __vector(Ωₕ))
             avg_matrix = _average_operator(Ωₕ, $dir_instance, dim_val)
             _average_weights!(vector_cache, Ωₕ, $dir_instance, dim_val)
             return vector_cache .* avg_matrix
         end
-
-        #@inline function $average_name(Ωₕ::AbstractMeshType, dim_val::Val)
-        #avg_matrix = _average_operator(Ωₕ, $dir_instance, dim_val)
-        #_average_weights!(vector_cache, Ωₕ, spacing_func, dim_val)
-        #return Diagonal(vector_cache) * avg_matrix
-        #	return _average_operator(Ωₕ, $dir_instance, dim_val)
-        #end
 
         # --- Generic applicators ---
         #
@@ -199,6 +192,7 @@ for config in _AVERAGE_OP_CONFIGS
 
         function $average_name!(vₕ::VectorElement{<:ScalarGridSpace},
                 uₕ::VectorElement{<:ScalarGridSpace}, dim_val::Val)
+            _check_no_alias(vₕ, uₕ)
             _average_engine!(vₕ.data, uₕ.data, _grid_dims(uₕ), $dir_instance, dim_val)
             return vₕ
         end
@@ -207,8 +201,10 @@ for config in _AVERAGE_OP_CONFIGS
         function $average_name!(vₕ::VectorElement{<:CompositeGridSpace},
                 uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val)
             _apply_componentwise!(
-                (v, u) -> _average_engine!(
-                    v.data, u.data, _grid_dims(u), $dir_instance, dim_val),
+                (v, u) -> begin
+                    _check_no_alias(v, u)
+                    _average_engine!(v.data, u.data, _grid_dims(u), $dir_instance, dim_val)
+                end,
                 vₕ, uₕ)
             return vₕ
         end

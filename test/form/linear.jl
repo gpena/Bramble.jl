@@ -7,7 +7,34 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
                values, TestFunction, TrialFunction,
                IndexedTestFunction, IndexedTrialFunction, test_component_or_nothing,
                routes_by_component, component, components, _colour_strides,
-               stencil_offsets, ndofs, Innerh, Innerplus, evaluate!
+               stencil_offsets, ndofs, Innerh, Innerplus, evaluate!, set
+
+# Standalone runner fallback
+if !@isdefined(alloc_test)
+    @inline function alloc_test(f::F, args...; kwargs...) where {F}
+        f(args...; kwargs...)
+        return @allocated(f(args...; kwargs...))
+    end
+end
+
+if !@isdefined(var"@test_allocs")
+    macro test_allocs(call_expr)
+        if Meta.isexpr(call_expr, :call)
+            fn = call_expr.args[1]
+            args = call_expr.args[2:end]
+            quote
+                @test alloc_test($(esc(fn)), $(map(esc, args)...)) == 0
+            end
+        else
+            quote
+                let
+                    $(esc(call_expr))
+                    @test (@allocated $(esc(call_expr))) == 0
+                end
+            end
+        end
+    end
+end
 
 # Assembling the right-hand side of a system.
 #
@@ -18,7 +45,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
 #
 # The values are checked against integrals that can be worked out by hand: `innerₕ(uₕ, v)`
 # assembles the vector whose entries are ``|□ᵢ| uᵢ``, so summing it gives ``∫ u`` over the
-# domain to the accuracy of the quadrature — exactly, for the cases below.
+# domain to the accuracy of the quadrature (exactly, for the cases below).
 
 @testset "Linear forms" begin
     Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
@@ -103,8 +130,8 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         # `lin_indices`/`mesh_markers` used to be built once from the composite space's
         # first leaf and handed to every leaf's own assembly walk. For a homogeneous
         # composite every leaf shares one size, so nothing caught it; for a genuinely
-        # heterogeneous one — built directly from a tuple of differently-sized leaves,
-        # bypassing `gridspace(Ω, Val(N))`, which always broadcasts one shared mesh — any
+        # heterogeneous one (built directly from a tuple of differently-sized leaves,
+        # bypassing `gridspace(Ω, Val(N))`, which always broadcasts one shared mesh), any
         # leaf past the first ran its own indices through leaf 1's (smaller or larger)
         # `LinearIndices` and either threw `BoundsError` or, worse, read the wrong leaf's
         # data at a coincidentally in-bounds index.
@@ -130,17 +157,17 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         @test sum(b2[(ndofs(Wbig) + 1):end]) ≈ expected2
         @test all(iszero, b2[1:ndofs(Wbig)])            # leaf 1's block untouched
 
-        # both together, routed — each block gets its own leaf's own answer
+        # both together, routed: each block gets its own leaf's own answer
         lboth = form(Vh, v -> innerₕ(uv(1), v(1)) + innerₕ(uv(2), v(2)))
         bboth = assemble(lboth)
         @test bboth[1:ndofs(Wbig)] ≈ b1[1:ndofs(Wbig)]
         @test bboth[(ndofs(Wbig) + 1):end] ≈ b2[(ndofs(Wbig) + 1):end]
 
         # contraction takes the same walk, so it needs the same fix independently:
-        # l(uv) = Σᵢ bᵢ uvᵢ, not Σᵢ bᵢ — uv is not constant here on purpose
+        # l(uv) = Σᵢ bᵢ uvᵢ, not Σᵢ bᵢ (uv is not constant here on purpose)
         @test lboth(uv) ≈ dot(bboth, values(uv))
 
-        # assemble! into a pre-allocated vector — the everyday, allocation-free call
+        # assemble! into a pre-allocated vector: the everyday, allocation-free call
         b3 = similar(bboth)
         assemble!(b3, lboth)
         @test b3 ≈ bboth
@@ -236,8 +263,8 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         # The check is the defining property of an assembled right-hand side rather than a
         # hand-computed integral: b is the vector for which bᵀw is the form evaluated at w,
         # so the same combination applied numerically through the space layer to a grid
-        # function must give bᵀw. That validates the whole path — routing, offsets, weights
-        # and truncation — against code that has nothing to do with assembly.
+        # function must give bᵀw. That validates the whole path (routing, offsets, weights
+        # and truncation) against code that has nothing to do with assembly.
         Ωf = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 11), (true, false))
         Wf = gridspace(Ωf)
         Vf = gridspace(Ωf, Val(3))
@@ -341,7 +368,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
             @test _colour_strides(NTuple{2, Int}[]) == (1, 1)
 
             # and read off a real form, an operator reaching only its own point gives one
-            # colour — the whole grid in a single flat pass — while a difference gives two
+            # colour (the whole grid in a single flat pass), while a difference gives two
             plain = _colour_strides(stencil_offsets(resolve_form_ast(
                 form(Wₕ, v -> innerₕ(uₕ, v)))))
             wide = _colour_strides(stencil_offsets(resolve_form_ast(
@@ -359,9 +386,9 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
             @test bp ≈ bs
         end
 
-        # a heterogeneous leaf too (point 24): `_sweep_parallel!` derives its own
+        # a heterogeneous leaf too: `_sweep_parallel!` derives its own
         # `LinearIndices`/`markers` from whichever leaf it is handed, so this needs its own
-        # check independent of the two cases above — those never exercise a leaf whose mesh
+        # check independent of the two cases above; those never exercise a leaf whose mesh
         # differs from `first_space(space)`'s. Written with `v(2)`, not `v`: an unindexed
         # form broadcasts to *every* leaf using the same source, which only the two cases
         # above can get away with, since every leaf there happens to share one size.
@@ -463,8 +490,8 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
                 @test bcp ≈ bc
             end
 
-            # A heterogeneous leaf under real concurrency (point 24), same "more work than
-            # threads" sizing as the homogeneous stress case above — a race in the scatter,
+            # A heterogeneous leaf under real concurrency, same "more work than
+            # threads" sizing as the homogeneous stress case above: a race in the scatter,
             # or a colour built from the wrong leaf's `LinearIndices`, would show here.
             Ωb_small = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (17, 17),
                 (true, true))
@@ -560,8 +587,8 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         @test d ≈ once
 
         # In-place assembly allocates zero bytes
-        @test @allocated(assemble!(d, lfs)) == 0
-        @test @allocated(assemble!(d, lfa_scalar)) == 0
+        @test_allocs assemble!(d, lfs)
+        @test_allocs assemble!(d, lfa_scalar)
     end
 
     @testset "Direct contraction" begin
@@ -653,12 +680,12 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         loop_first = evaluate!(scratch, lfl, wₕ)
         Rₕ!(ul, x -> 5.0)
         @test evaluate!(scratch, lfl, wₕ) ≈ 5 * loop_first
-        @test @allocated(evaluate!(scratch, lfl, wₕ)) == 0
+        @test_allocs evaluate!(scratch, lfl, wₕ)
     end
 
     @testset "Source variants" begin
         # The source of a linear form need not be a grid function. A number and a function
-        # both work, and an integer promotes rather than forcing the output's element type —
+        # both work, and an integer promotes rather than forcing the output's element type:
         # the same rule that lets a Dual through.
         Wc = gridspace(Ωₕ)
         one_over_Ω = 1.0                       # the mesh has measure 1, so ∫c = c
@@ -723,7 +750,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
 
     @testset "Expression validation" begin
         # The `ast` field stores the pre-resolved tree; the expression itself is not kept
-        # (point 59) since nothing downstream ever calls it again.
+        # since nothing downstream ever calls it again.
         @test fieldnames(typeof(form(Wₕ, v -> innerₕ(uₕ, v)))) ==
               (:test_space, :ast)
 
@@ -739,7 +766,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         # assembled vector has to be `Aᵀ H u` exactly: `H` the diagonal weight matrix of the
         # inner product, `A` the operator's own sparse matrix. Both are built by code that
         # shares nothing with `local_stencil`, which is what makes this an independent check
-        # rather than a restatement — the two agree or one of them is wrong.
+        # rather than a restatement: the two agree or one of them is wrong.
         n = ndofs(Wₕ)
         uu = values(uₕ)
         Hh = Diagonal(collect(weights(Wₕ, Innerh())))
@@ -810,7 +837,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         # naming labels without conditions is a usage error rather than a silent no-op.
         # The conditions default to `nothing` now: they used to default to an empty
         # constraint set, built on every call and then discarded whenever no labels were
-        # named — 2,080 B per assembly for an argument nothing read.
+        # named (2,080 B per assembly for an argument nothing read).
         @test_throws ArgumentError assemble(form(Wₕ, v -> innerₕ(uₕ, v));
             dirichlet_labels = :bottom)
         msg = try
@@ -849,7 +876,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
 
     @testset "Allocation contract" begin
         # This is what a time loop calls every step. The assembly kernel itself is
-        # allocation free; what used to cost was the two default arguments — an empty
+        # allocation free; what used to cost was the two default arguments: an empty
         # constraint set at 2,080 B and the AST resolution at 160 B, both recomputed per
         # call and both invariant for a given form.
         #
@@ -882,7 +909,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         @test counts(8).without_ast == counts(24).without_ast
 
         # the composite path too. It used to allocate a Vector of dof offsets on every
-        # call — 128 B, constant in the grid but paid every step of a time loop.
+        # call (128 B, constant in the grid but paid every step of a time loop).
         function composite_bytes(N)
             Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (N, N), (true, true))
             V = gridspace(Ω, Val(3))
@@ -896,10 +923,10 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         @test composite_bytes(8) == 0
         @test composite_bytes(16) == 0
 
-        # a heterogeneous leaf costs the same nothing (point 24): `_scatter_term!` now
+        # a heterogeneous leaf costs the same zero bytes: `_scatter_term!` now
         # builds its own `LinearIndices`/`markers` from `mesh(sp)` per leaf instead of
-        # receiving them from the caller, once per leaf per term — not once per grid
-        # point — so it must not reopen the door to a per-point allocation the homogeneous
+        # receiving them from the caller, once per leaf per term (not once per grid
+        # point), so it must not reopen the door to a per-point allocation the homogeneous
         # case above doesn't have.
         function heterogeneous_bytes(N)
             Ωbig = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (N, N),
@@ -921,7 +948,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         @test het16 == composite_bytes(16)
 
         # and the parallel path's per-call cost doesn't grow just because the leaves
-        # differ in size — same thread-set allocation either way, not asserted at zero
+        # differ in size: same thread-set allocation either way, not asserted at zero
         # (that's tracked, not guaranteed, the same way the benchmark suite treats it)
         function parallel_bytes(space, u1, u2)
             lf = form(space, v -> innerₕ(u1(1), v(1)) + innerₕ(u2(2), v(2)))
@@ -938,13 +965,13 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         uhet_alloc = Rₕ(Vhet_alloc, (x -> x[1] + x[2], x -> x[1] - x[2]))
 
         # On Julia nightly specifically (checked: never on a release build, across many
-        # repeated runs here — point 64), a single measurement drifts by one or two
-        # 64-byte quanta, nondeterministically, in either direction — the thread-spawn
+        # repeated runs), a single measurement drifts by one or two
+        # 64-byte quanta, nondeterministically, in either direction: the thread-spawn
         # machinery's own scheduling noise, not anything the composite-space routing does
         # differently per leaf. Neither the minimum over repeats nor an exact equality
         # converged alone (checked: still flaked after 5 repeats), so the two are
         # combined: the minimum rejects one-off spikes, then a tolerance allows the
-        # genuine floor-level noise that remains — the property under test is "constant",
+        # genuine floor-level noise that remains; the property under test is "constant",
         # not "bit-for-bit reproducible", which nightly's scheduler does not promise.
         min_parallel_bytes(space, u1, u2) = minimum(
             ntuple(_ -> parallel_bytes(space, u1, u2), 5))
@@ -958,7 +985,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         # differentiate it with respect to the coefficient vector to get a Jacobian.
         #
         # This did not work. `assemble` allocated its output with `eltype(test_space(form))`
-        # — the *space's* element type — so a Float64 space could only assemble a Float64
+        # (the space's element type), so a Float64 space could only assemble a Float64
         # right-hand side, and writing a Dual weight into it met
         # `MethodError: no method matching Float64(::Dual)`. The type now comes from the
         # form's own weights, promoted against the space's, which is the rule `Rₕ` already
@@ -996,7 +1023,7 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
             Jb = ForwardDiff.jacobian(res, u0)
             @test size(Jb) == (n, n)
 
-            # a pinned value does not depend on the coefficients, so its row is zero —
+            # a pinned value does not depend on the coefficients, so its row is zero:
             # which is what a solver needs in order not to move it
             marked = index_in_marker(Ωₕ, :bottom)
             @test any(marked)
@@ -1058,8 +1085,8 @@ using Bramble: LinearForm, form, assemble, assemble!, assemble_parallel!, test_s
         #     1.12.7           ( 0, 0, 0)
         #
         # The cost is per-callsite, not per-process, which is why neither of the simpler
-        # fixes works. A plain warmup call does not absorb it — the warmup's return value is
-        # unused, so the `dot` inside it can be optimised away — and neither does a
+        # fixes works. A plain warmup call does not absorb it (the warmup's return value is
+        # unused, so the `dot` inside it can be optimised away), and neither does a
         # discarded `@allocated` written as a second statement, because that is a different
         # callsite and pays its own one-time 16 bytes. Repeating one callsite is what
         # reaches the steady state.

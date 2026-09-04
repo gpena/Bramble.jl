@@ -4,50 +4,45 @@
 #
 #     ⟦u⟧ᵢ = u_{i+1} - u_i
 #
-# One of these, not a forward and a backward pair, for the reason the space layer's
-# operators/jump.jl gives: the jump belongs to the interface between two cells rather than
-# to a direction of travel across it, so naming a backward jump would name the same
-# interface twice.
+# A single definition rather than forward/backward pairs: the jump belongs to the interface
+# between two cells rather than to a direction of travel across it.
 #
-# Arithmetically it is the *unscaled* forward difference, and the form layer has no node
-# for that — `ForwardDifference` carries the 1/h. So unlike the space layer, where every
-# jump name forwards to its difference counterpart, this is a node of its own.
+# Arithmetically it is the unscaled forward difference (as `ForwardDifference` carries the 1/h).
+# Unlike the space layer, where each jump forwards to its difference counterpart, here it is
+# an independent AST node.
 #
-# It also does not truncate, and that is deliberate rather than an oversight. The space
-# layer treats the missing u_{n+1} as zero, giving -uₙ at the last point rather than 0,
-# which is what makes the operator agree with its matrix: the last row of `jumpₓ(Ωₕ)` is
-# [0 … 0 -1]. The scaled differences do truncate, because the truncation lives in their
-# weights. So the stencil here drops the forward term and keeps the local one, where
-# `ForwardDifference` zeroes both.
+# Boundary points do not truncate: the absent u_{n+1} is taken as zero, yielding -uₙ at the
+# boundary point. This matches the space-layer matrix representation where the final row of
+# `jumpₓ(Ωₕ)` is [0, ..., 0, -1].
 
 """
-    JumpNode{D,Dim,OpType<:LazyOp{D}} <: LazyOp{D}
+    JumpNode{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
 
-An AST node for the jump across interfaces along `Dim`, ``u_{i+1} - u_i``.
+AST node representing the jump across interfaces along dimension `Dim`, ``u_{i+1} - u_i``.
 
-Not truncated at the far end: the absent `u_{i+1}` is taken as zero, giving `-uᵢ` there.
-That matches the space layer's matrix, whose last row keeps the `-1`.
+Not truncated at the far end: the absent `u_{i+1}` is taken as zero, yielding `-uᵢ` there.
+This matches the space-layer matrix convention, whose boundary row preserves `-1`.
 """
 struct JumpNode{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
     inner_op::OpType
 end
 
 """
-    jumpₓ(op::LazyOp{D}) where D
-    jumpᵧ(op::LazyOp{D}) where D
-    jump₂(op::LazyOp{D}) where D
+    jumpₓ(op::LazyOp{D}) -> JumpNode
+    jumpᵧ(op::LazyOp{D}) -> JumpNode
+    jump₂(op::LazyOp{D}) -> JumpNode
 
-Symbolic jumps across the interfaces along each coordinate direction.
+Symbolic jumps across the interfaces along coordinate directions ``x``, ``y``, and ``z``.
 """
 jumpₓ(op::LazyOp{D}) where {D} = JumpNode{D, 1, typeof(op)}(op)
 jumpᵧ(op::LazyOp{D}) where {D} = JumpNode{D, 2, typeof(op)}(op)
 jump₂(op::LazyOp{D}) where {D} = JumpNode{D, 3, typeof(op)}(op)
 
 """
-    jumpₕ(op::LazyOp{D}) where D
+    jumpₕ(op::LazyOp{D})
 
-Every direction at once, as a `D`-tuple of `JumpNode`s. In one dimension the node
-itself, not a one-element tuple.
+Symbolic jumps across every coordinate direction simultaneously. Returns a `JumpNode`
+in 1D, or a `NTuple{D, JumpNode}` in higher dimensions.
 """
 jumpₕ(op::LazyOp{1}) = jumpₓ(op)
 jumpₕ(op::LazyOp{D}) where {D} = ntuple(dim -> JumpNode{D, dim, typeof(op)}(op), Val(D))

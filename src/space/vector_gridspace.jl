@@ -7,14 +7,16 @@ to be constructed and queried with zero overhead.
 =#
 
 """
-	$(TYPEDEF)
+    CompositeGridSpace(spaces::Tuple)
+    CompositeGridSpace{N}(spaces::Spaces) where {N, Spaces <: Tuple}
+    CompositeGridSpace{N, Spaces}(spaces::Spaces) where {N, Spaces <: Tuple}
 
 A `CompositeGridSpace` represents a grid space formed by composing `N` individual sub-spaces.
 It is immutable and stack-allocatable, wrapping a tuple of spaces.
 
 # Fields
 
-$(FIELDS)
+  - `spaces::Spaces`: the tuple of constituent sub-spaces.
 """
 struct CompositeGridSpace{N, Spaces <: Tuple} <: AbstractSpaceType{N}
     "the tuple of constituent sub-spaces."
@@ -30,7 +32,7 @@ end
 CompositeGridSpace(spaces::AbstractSpaceType...) = CompositeGridSpace(spaces)
 
 """
-	VectorGridSpace{N}
+    VectorGridSpace{N}
 
 Type alias for a `CompositeGridSpace{N}`, representing a vector-valued function space.
 """
@@ -41,8 +43,8 @@ const VectorGridSpace{N} = CompositeGridSpace{N}
 # ==============================================================================
 
 """
-	gridspace(Ωₕ::AbstractMeshType, ::Val{N}) where N
-	gridspace(Ωₕ::AbstractMeshType, N::Int)
+    gridspace(Ωₕ::AbstractMeshType, ::Val{N}) where N -> CompositeGridSpace{N}
+    gridspace(Ωₕ::AbstractMeshType, N::Int) -> CompositeGridSpace{N}
 
 Constructs a vector function space with `N` components on mesh `Ωₕ`.
 The underlying scalar space and its weights are computed once and shared across components.
@@ -71,7 +73,7 @@ Base.@constprop :aggressive function gridspace(Ωₕ::AbstractMeshType, N::Int)
 end
 
 """
-	vector_gridspace(Ωₕ::AbstractMeshType, [N = dim(Ωₕ)])
+    vector_gridspace(Ωₕ::AbstractMeshType, [N = dim(Ωₕ)]) -> CompositeGridSpace
 
 Convenience constructor for a vector grid space on mesh `Ωₕ`. If `N` is omitted,
 it defaults to the spatial dimension of the mesh (`dim(Ωₕ)`).
@@ -84,8 +86,8 @@ it defaults to the spatial dimension of the mesh (`dim(Ωₕ)`).
     Ωₕ, N)
 
 """
-	^(Wₕ::ScalarGridSpace, ::Val{N}) where N
-	^(Wₕ::ScalarGridSpace, N::Int)
+    ^(Wₕ::ScalarGridSpace, ::Val{N}) where N -> CompositeGridSpace{N}
+    ^(Wₕ::ScalarGridSpace, N::Int) -> CompositeGridSpace{N}
 
 Constructs an `N`-component vector grid space from a scalar grid space `Wₕ` using mathematical exponentiation syntax:
 `Vₕ = Wₕ^2` or `Vₕ = Wₕ^dim(mesh)`.
@@ -151,19 +153,18 @@ end
 # Walking a composite space's leaves
 #
 # A `CompositeGridSpace` may nest, so the scalar spaces underneath it form a tree. Several
-# things need that tree flattened together with each leaf's offset into the global vector
+# operations need that tree flattened together with each leaf's offset into the global vector
 # of degrees of freedom: imposing Dirichlet conditions, and extracting the blocks of a
 # coupled form.
 #
-# The result is a tuple, not a vector, and that is the point. The leaves have different
-# concrete types, so a `Vector` of them can only be `Vector{Tuple{Any, Int}}`, and then
-# everything read through a leaf — its mesh, its dof count, the marker mask — is
-# dynamically typed. A tuple keeps each leaf's type, so the loop over it unrolls and the
-# work compiles. It also allocates nothing.
+# The result is a tuple, not a vector. Leaves may have different concrete types, so a
+# `Vector` of them would become `Vector{Tuple{Any, Int}}`, forcing dynamic typing on every
+# read through a leaf (mesh, dof count, marker mask). A tuple preserves each leaf's concrete
+# type, unrolling the iteration and compiling to zero allocations.
 #===========================================================================#
 
 """
-	leaf_spaces_offsets(Wₕ) -> Tuple
+    leaf_spaces_offsets(Wₕ) -> Tuple
 
 The scalar spaces underneath `Wₕ` paired with their offsets into the global degree of
 freedom vector, depth first and left to right, as a tuple of `(space, offset)`.
@@ -185,7 +186,7 @@ A scalar space is its own only leaf, at offset zero.
 end
 
 """
-	n_leaf_spaces(Wₕ) -> Int
+    n_leaf_spaces(Wₕ) -> Int
 
 The number of scalar spaces underneath `Wₕ`, counting through any nesting.
 """

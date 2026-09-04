@@ -5,7 +5,7 @@ using Bramble: values, hₘᵢₙ
 
 # The element type of the backend survives the whole library.
 #
-# The backend decides the numeric type — the domain's own eltype does not propagate, so a
+# The backend decides the numeric type: the domain's own eltype does not propagate, so a
 # Float32 run is asked for by constructing the backend with Float32 array types. From
 # there every mesh, grid space, grid function, operator, matrix and inner product must
 # stay in that type.
