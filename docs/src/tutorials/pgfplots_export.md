@@ -1,7 +1,7 @@
 # Writing PGFPlots data files
 
 `export_vtk` writes a full grid for a viewer like ParaView. For a plot going straight into a
-LaTeX document, that is usually more than is wanted — `export_pgfplots` writes the plain
+LaTeX document, that is usually more than is wanted: `export_pgfplots` writes the plain
 whitespace-separated table `pgfplots` reads directly with `\addplot table {...}`, needing no
 package beyond `Base`. This tutorial covers:
 
@@ -15,8 +15,8 @@ claims to.
 
 ## 1. A 1D curve
 
-`export_pgfplots` takes a filename, a mesh, and any number of `name => data` pairs — each
-pair becomes a column:
+`export_pgfplots` takes a filename, a mesh, and any number of `name => data` pairs (each
+pair becomes a column):
 
 ```@example pgf
 using Bramble
@@ -29,7 +29,7 @@ f = export_pgfplots(joinpath(mktempdir(), "curve"), Ωₕ, "u" => uₕ)
 read(f, String) |> s -> s[1:60] * "..."
 ```
 
-The first line is a header naming the columns, `x` and then each field in order — read it
+The first line is a header naming the columns, `x` and then each field in order; read it
 with `\addplot table {curve.dat};`, or pick a column explicitly with
 `\addplot table[x=x, y=u] {curve.dat};`, which matters once a file has more than one field:
 
@@ -63,7 +63,7 @@ readlines(f2)[1]
 ## 3. A 2D surface
 
 On a 2D mesh, `export_pgfplots` writes `x y z` triples for `\addplot3[surf] table {...}` or
-`[mesh]`. Points are grouped into scan lines — one run of constant `x` — separated by a
+`[mesh]`. Points are grouped into scan lines (one run of constant `x`) separated by a
 **blank line**, which is what tells `pgfplots` where one row of the grid ends and the next
 begins:
 
@@ -76,7 +76,7 @@ f3 = export_pgfplots(joinpath(mktempdir(), "surf"), Ω2, "u" => u2)
 read(f3, String)
 ```
 
-Miss those blank lines — write every point as one long unbroken list — and the same numbers
+Miss those blank lines (writing every point as one long unbroken list) and the same numbers
 plot as a shredded zigzag instead of a surface, because `pgfplots` has no way to tell where
 one row stops and the next starts.
 

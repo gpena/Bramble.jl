@@ -4,15 +4,15 @@ using WriteVTK
 
 # `export_vtk` is a thin wrapper: it reshapes what is already there (`to_matrix`, whose
 # correctness is pinned in test/space/vector_elements.jl) and hands it to WriteVTK, which
-# writes its own well-formed XML. So what is worth checking here is the wiring — that a
+# writes its own well-formed XML. So what is worth checking here is the wiring: that a
 # 1D mesh does not hit the "not implemented" wall the exporter this replaces had, that a
 # composite element becomes a multi-component vector field rather than one field per
 # component, and that a call with no WriteVTK loaded fails with a message that says why
-# rather than a bare MethodError — not the XML byte-for-byte, which is WriteVTK's job to
-# get right, not this package's to re-verify.
+# rather than a bare MethodError (not the XML byte-for-byte, which is WriteVTK's job to
+# get right, not this package's to re-verify).
 #
 # `Base.read` on the produced file, rather than opening it in ParaView, is enough: the
-# structural facts under test — extents, field names, component counts — are all in the
+# structural facts under test (extents, field names, component counts) are all in the
 # header, in plain text ahead of the compressed appended data.
 
 @testset "VTK export" begin
@@ -81,12 +81,12 @@ using WriteVTK
 
     # Not tested here: what `export_vtk` does when WriteVTK has not been loaded. Once this
     # file's `using WriteVTK` above runs, the extension is active for the rest of this
-    # process — multiple dispatch has already resolved `_export_vtk`'s specialization over
+    # process: multiple dispatch has already resolved `_export_vtk`'s specialization over
     # its `::Any` fallback for any `AbstractMeshType` argument, permanently, since Julia does
     # not un-load a method. Reproducing the unloaded case honestly needs a subprocess that
     # never touches WriteVTK, which nothing else in test/ does (only benchmark/benchmarks.jl
-    # spawns Julia, for timing) — disproportionate machinery for one error string. Checked
-    # by hand instead: `export_vtk("x", Ωₕ)` without `using WriteVTK` gives "export_vtk
-    # requires WriteVTK.jl. Add `using WriteVTK` before calling this function.", which is
-    # also in the docstring's own words.
+    # spawns Julia, for timing), which is disproportionate machinery for one error string.
+    # Checked by hand instead: `export_vtk("x", Ωₕ)` without `using WriteVTK` gives
+    # "export_vtk requires WriteVTK.jl. Add `using WriteVTK` before calling this function.",
+    # which is also in the docstring's own words.
 end

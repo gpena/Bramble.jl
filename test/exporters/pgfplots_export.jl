@@ -2,7 +2,7 @@ using Test
 using Bramble
 
 # Plain text, so unlike the VTK export test, the byte content itself is exactly what is
-# under test — there is no library on the other end whose correctness can be assumed.
+# under test: there is no library on the other end whose correctness can be assumed.
 # Two facts matter most: the header/column layout for the 1D table format, and the
 # blank-line placement for the 2D `surf`/`mesh` format, which is the single most common
 # mistake when writing this by hand (miss it, and pgfplots connects points across rows
@@ -77,8 +77,8 @@ using Bramble
             blanks = findall(==(""), body)
             @test blanks == [5, 10]   # after row 4 and after row 9 of a 4-row scan line
 
-            # every value on a blank-separated block shares the same x — the outer,
-            # blank-line-grouped coordinate — and every block's y values sweep the full
+            # every value on a blank-separated block shares the same x (the outer,
+            # blank-line-grouped coordinate), and every block's y values sweep the full
             # inner axis in order.
             x, y = points(Ωₕ)
             blocks = [body[1:4], body[6:9], body[11:14]]

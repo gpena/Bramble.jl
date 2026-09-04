@@ -15,7 +15,8 @@ examples = "Examples" =>
         "examples/convection_diffusion_linear.md", "examples/coupled_reaction_diffusion.md"]
 benchmarks = "Benchmarks" => "benchmarks.md"
 internals = "Internals" => ["internals/utils.md", "internals/geometry.md",
-    "internals/mesh.md", "internals/space.md", "internals/form.md", "internals/autodiff.md"]
+    "internals/mesh.md", "internals/space.md", "internals/form.md", "internals/autodiff.md",
+    "internals/exporters.md"]
 documentation = "Documentation" => ["api.md", internals]
 
 allpages = [
@@ -36,8 +37,8 @@ makedocs(;
     authors = "Gonçalo Pena and Gemini",
     # `missing_docs` stays a warning: Documenter reports every internal helper it cannot
     # find a page for, so making it an error would mean adding `@docs` stubs to silence it
-    # rather than because they help. The rule that matters — every *exported* name has a
-    # docstring — is enforced in test/quality/docstrings.jl instead, where it has no false
+    # rather than because they help. The rule that matters (every *exported* name has a
+    # docstring) is enforced in test/quality/exports.jl instead, where it has no false
     # positives. A broken `@ref` is always a real mistake, so that one is an error.
     warnonly = [:missing_docs])
 

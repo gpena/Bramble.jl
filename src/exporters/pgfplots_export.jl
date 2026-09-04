@@ -1,13 +1,13 @@
 # Extension of the coordinate for a filename with none, or one not already recognisable as
-# plain-text tabular data. `pgfplots` itself does not care about the extension — it reads
-# whatever `\addplot table {...}` is pointed at — this is only for a sensible default.
+# plain-text tabular data. `pgfplots` itself does not care about the extension: it reads
+# whatever `\addplot table {...}` is pointed at, and this is only for a sensible default.
 function _pgf_filename(f::AbstractString)
     any(
         e -> endswith(f, e), (".dat", ".txt", ".tsv", ".csv")) ? f : f * ".dat"
 end
 
 # Expands one `name => data` pair into the column(s) it contributes: one for a scalar field,
-# one per component — named `name_1`, `name_2`, ... — for a composite one, since a table's
+# one per component (named `name_1`, `name_2`, ...) for a composite one, since a table's
 # columns have no way to group themselves the way a VTK field's `NumberOfComponents` does.
 function _pgf_columns(name, uₕ::VectorElement{<:CompositeGridSpace})
     [(string(name, "_", i), to_matrix(c)) for (i, c) in enumerate(components(uₕ))]
@@ -20,7 +20,7 @@ _pgf_columns(name, a::AbstractVector) = [(string(name), a)]
 # refused here rather than silently taking one component.
 function _pgf_error_composite(name)
     throw(ArgumentError(
-        "export_pgfplots writes one scalar field per 2D file — pgfplots' surf/mesh format " *
+        "export_pgfplots writes one scalar field per 2D file: pgfplots' surf/mesh format " *
         "has no way to encode more than one z-value per (x, y) point. \"$name\" is a " *
         "composite element; export each of its components(...) separately."))
 end
@@ -39,11 +39,11 @@ function _pgf_grid_len(name, a, n)
 end
 
 """
-	export_pgfplots(filename::AbstractString, Ωₕ::AbstractMeshType{1}, fields::Pair...)
-	export_pgfplots(filename::AbstractString, Ωₕ::AbstractMeshType{2}, field::Pair)
-	export_pgfplots(filename::AbstractString, uₕ::VectorElement, name::AbstractString = "u")
+    export_pgfplots(filename::AbstractString, Ωₕ::AbstractMeshType{1}, fields::Pair...) -> String
+    export_pgfplots(filename::AbstractString, Ωₕ::AbstractMeshType{2}, field::Pair) -> String
+    export_pgfplots(filename::AbstractString, uₕ::VectorElement, name::AbstractString = "u") -> String
 
-Write grid data to a plain-text table, laid out the way `pgfplots` reads it directly — no
+Write grid data to a plain-text table, laid out the way `pgfplots` reads it directly: no
 external package needed, since the format is just whitespace-separated numbers.
 
 On a 1D mesh, any number of named fields become columns: `x name₁ name₂ ...`, one row per
@@ -51,8 +51,8 @@ grid point, readable with `\\addplot table {file.dat}` or `\\addplot table[y=nam
 to pick one column by name. A composite [`VectorElement`](@ref) expands into one column per
 component, named `name_1`, `name_2`, and so on.
 
-On a 2D mesh, exactly one field is written as `x y z` triples — pgfplots' `surf`/`mesh`
-format has no way to encode more than one value per point — with a blank line after each
+On a 2D mesh, exactly one field is written as `x y z` triples (pgfplots' `surf`/`mesh`
+format has no way to encode more than one value per point) with a blank line after each
 run of constant `x`. That blank line is what tells `\\addplot3[surf] table {file.dat}` where
 one row of the grid ends and the next begins; without it the same numbers plot as a
 shredded zigzag instead of a surface. A composite element is refused with a message saying
@@ -108,7 +108,7 @@ end
 
 function export_pgfplots(filename::AbstractString, Ωₕ::AbstractMeshType{2}, fields::Pair...)
     length(fields) == 1 || throw(ArgumentError(
-        "export_pgfplots writes one scalar field per 2D file — pgfplots' surf/mesh format " *
+        "export_pgfplots writes one scalar field per 2D file: pgfplots' surf/mesh format " *
         "has no way to encode more than one z-value per (x, y) point. Got " *
         "$(length(fields)) fields; call export_pgfplots once per field."))
     name, data = only(fields)
@@ -134,7 +134,7 @@ function export_pgfplots(
     throw(ArgumentError(
         "export_pgfplots supports 1D and 2D meshes only. pgfplots' \\addplot3[surf] plots " *
         "a height field over a 2D domain, not a true 3D volume, so a $(D)D mesh has no " *
-        "faithful representation in this format — use export_vtk instead."))
+        "faithful representation in this format; use export_vtk instead."))
 end
 
 function export_pgfplots(

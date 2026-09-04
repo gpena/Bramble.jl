@@ -1,18 +1,18 @@
 """
-	export_vtk(filename::AbstractString, Ωₕ::AbstractMeshType, fields::Pair...)
-	export_vtk(filename::AbstractString, uₕ::VectorElement, name::AbstractString = "u")
+    export_vtk(filename::AbstractString, Ωₕ::AbstractMeshType, fields::Pair...) -> Vector{String}
+    export_vtk(filename::AbstractString, uₕ::VectorElement, name::AbstractString = "u") -> Vector{String}
 
 Write `Ωₕ`, and any number of named fields over it, to a VTK rectilinear grid file
 (`.vtr`).
 
 Each entry in `fields` is `name => data`, where `data` is a [`VectorElement`](@ref) over a
-grid space on `Ωₕ` — scalar or composite — or a plain array already shaped like the grid.
+grid space on `Ωₕ` (scalar or composite) or a plain array already shaped like the grid.
 The second method is a shorthand for a single field, named `"u"` unless told otherwise.
 
 A 1D mesh gets a degenerate second axis rather than being refused: VTK has no dedicated 1D
 grid type, but a rectilinear grid one point deep in `y` opens and renders correctly.
 
-Requires [WriteVTK.jl](https://github.com/JuliaVTK/WriteVTK.jl) — `using WriteVTK` before
+Requires [WriteVTK.jl](https://github.com/JuliaVTK/WriteVTK.jl); call `using WriteVTK` before
 calling this.
 
 # Examples
@@ -42,7 +42,7 @@ end
 # `BrambleVTKExt` extension overrides this with the real implementation.
 #
 # `Ωₕ` is untyped here on purpose. `export_vtk` above already restricts it to
-# `AbstractMeshType`, so nothing is given up by loosening it in this internal fallback —
+# `AbstractMeshType`, so nothing is given up by loosening it in this internal fallback,
 # but the extension's method has to be a strict *specialization* of this one rather than an
 # identical signature, or loading it overwrites a method during precompilation, which Julia
 # refuses.
