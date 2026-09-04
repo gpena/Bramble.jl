@@ -147,6 +147,44 @@ end
         @test all(>(0), allocating)             # the comparison is not vacuous
     end
 
+    @testset "Aliasing rejected" begin
+        # Every stencil here reads a neighbour of the point it writes, and the traversal
+        # overwrites entries in place as it goes; calling `f!(uₕ, uₕ)` would silently
+        # corrupt the result from the second write onward instead of raising an error
+        # (this was the reported bug for `D₋ₓ!`). Each family must refuse aliased
+        # destination and source rather than compute a wrong answer.
+        Ωs = (mesh(domain(interval(0.0, 1.0)), 9, false),
+            mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 7), (true, false)),
+            mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 4),
+                (false, true, false)))
+        fs = (x -> x^3 + sin(4x) + 1,
+            x -> exp(x[1]) * (x[2]^2 + 1),
+            x -> x[1]^2 + 2x[2] + sin(x[3]) + 1)
+
+        for D in 1:3
+            @testset "$(D)D" begin
+                Ωₕ = Ωs[D]
+                Wₕ = gridspace(Ωₕ)
+                Vₕ = gridspace(Ωₕ, Val(2))
+                uₕ = Rₕ(Wₕ, fs[D])
+                uv = Rₕ(Vₕ, (fs[D], fs[D]))
+
+                for (f!, _, nm) in _ops(Val(D))
+                    @testset "$nm" begin
+                        # the same object
+                        @test_throws ArgumentError f!(uₕ, uₕ)
+                        @test_throws ArgumentError f!(uv, uv)
+
+                        # distinct `VectorElement`s sharing the same backing array
+                        shared = VectorElement(values(uₕ), space(uₕ))
+                        @test_throws ArgumentError f!(uₕ, shared)
+                        @test_throws ArgumentError f!(shared, uₕ)
+                    end
+                end
+            end
+        end
+    end
+
     @testset "Composite matching" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 7, true)
         Wₕ = gridspace(Ωₕ)

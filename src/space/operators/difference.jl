@@ -225,6 +225,18 @@ end
     throw(DimensionMismatch("out has $lout entries and in has $lin, but the grid $(dims) has $(prod(dims))"))
 end
 
+# Every stencil below reads a neighbour of the coordinate it writes, and the traversal
+# is a single contiguous pass: aliased destination and source would overwrite an entry
+# before the interior point that still needs it as a neighbour has been computed,
+# corrupting every value downstream of the first write (see `D₋ₓ!` in the docs). Checked
+# with `mightalias` rather than `===` so that two distinct `VectorElement`s sharing the
+# same backing array (a view, or one built directly on the other's data) are caught too.
+@noinline _throw_alias_error() = throw(ArgumentError(
+    "destination and source must not alias"))
+
+@inline _check_no_alias(vₕ::VectorElement, uₕ::VectorElement) = Base.mightalias(
+    values(vₕ), values(uₕ)) && _throw_alias_error()
+
 # --- Argument handling shared by every operator ---------------------------------- #
 # The operators accept a mesh, a grid space or a grid function, and the vectorial aliases
 # need the spatial dimension of whichever was passed. Going through `space` alone would
@@ -245,6 +257,7 @@ end
 
 @inline function _apply_stencil!(vₕ::VectorElement{<:ScalarGridSpace},
         uₕ::VectorElement{<:ScalarGridSpace}, h, dir::GridDirection, dim_val::Val)
+    _check_no_alias(vₕ, uₕ)
     _difference_engine!(vₕ.data, uₕ.data, h, _grid_dims(uₕ), dir, dim_val)
     return nothing
 end

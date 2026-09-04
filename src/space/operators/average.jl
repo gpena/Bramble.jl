@@ -192,6 +192,7 @@ for config in _AVERAGE_OP_CONFIGS
 
         function $average_name!(vₕ::VectorElement{<:ScalarGridSpace},
                 uₕ::VectorElement{<:ScalarGridSpace}, dim_val::Val)
+            _check_no_alias(vₕ, uₕ)
             _average_engine!(vₕ.data, uₕ.data, _grid_dims(uₕ), $dir_instance, dim_val)
             return vₕ
         end
@@ -200,8 +201,10 @@ for config in _AVERAGE_OP_CONFIGS
         function $average_name!(vₕ::VectorElement{<:CompositeGridSpace},
                 uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val)
             _apply_componentwise!(
-                (v, u) -> _average_engine!(
-                    v.data, u.data, _grid_dims(u), $dir_instance, dim_val),
+                (v, u) -> begin
+                    _check_no_alias(v, u)
+                    _average_engine!(v.data, u.data, _grid_dims(u), $dir_instance, dim_val)
+                end,
                 vₕ, uₕ)
             return vₕ
         end
