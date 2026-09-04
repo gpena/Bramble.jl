@@ -185,14 +185,13 @@ hp_i = half_point(Ωₕ, 3)  # x_{3+1/2}
 
 ### 2.3 Spacings and cell measures
 
-- **`spacing(Ωₕ, i)`**: Backward spacing $h_i = x_i - x_{i-1}$ (for $i=1$, returns $x_2 - x_1$).
-- **`forward_spacing(Ωₕ, i)`**: Forward spacing $h_{i+1} = x_{i+1} - x_i$.
-- **`half_spacing(Ωₕ, i)`**: Cell width $h_{i+1/2} = \frac{h_i + h_{i+1}}{2}$.
-- **`cell_measure(Ωₕ, idx)`**: Volume/area of the control volume centered at `idx`.
-  - In 1D: cell measure is $h_{i+1/2}$.
-  - In 2D: cell measure is $h_{x, i+1/2} \times h_{y, j+1/2}$.
-  - In 3D: cell measure is $h_{x, i+1/2} \times h_{y, j+1/2} \times h_{z, l+1/2}$.
-- **`hₘₐₓ(Ωₕ)`**: Maximum diagonal cell measure across the entire mesh.
+| Function | Meaning |
+| --- | --- |
+| `spacing(Ωₕ, i)` | Backward spacing $h_i = x_i - x_{i-1}$ (for $i=1$, returns $x_2 - x_1$) |
+| `forward_spacing(Ωₕ, i)` | Forward spacing $h_{i+1} = x_{i+1} - x_i$ |
+| `half_spacing(Ωₕ, i)` | Cell width $h_{i+1/2} = \frac{h_i + h_{i+1}}{2}$ |
+| `cell_measure(Ωₕ, idx)` | Volume/area of the control volume centered at `idx`: $h_{i+1/2}$ in 1D, $h_{x,i+1/2} \times h_{y,j+1/2}$ in 2D, and that product times $h_{z,l+1/2}$ in 3D |
+| `hₘₐₓ(Ωₕ)` | Maximum diagonal cell measure across the mesh |
 
 A 1D mesh stores its backward spacings rather than recomputing them, so
 `spacings(Ωₕ)` hands back the whole vector and `spacing(Ωₕ, i)` is a single array read.
@@ -295,7 +294,7 @@ thinner along that axis.
 
 ## 3. Boundary and interior indexing
 
-`Bramble.jl` leverages Julia's native `CartesianIndices` for zero-overhead, multi-dimensional grid navigation:
+`Bramble.jl` uses Julia's native `CartesianIndices` for zero-overhead, multi-dimensional grid navigation:
 
 ```julia
 # Complete Cartesian grid indices

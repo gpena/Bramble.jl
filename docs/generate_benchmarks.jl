@@ -520,7 +520,7 @@ function generate_benchmarks_markdown(
     end
 
     io = IOBuffer()
-    println(io, "# Performance & Benchmarks")
+    println(io, "# Performance and benchmarks")
     println(io)
     println(io,
         "Bramble tracks memory allocations and performance regressions with a dedicated regression suite in `benchmark/benchmarks.jl`.")
@@ -563,11 +563,11 @@ function generate_benchmarks_markdown(
     # Order runs chronologically by commit timestamp
     sort!(runs, by = r -> r.time)
 
-    println(io, "## Recorded Baselines")
+    println(io, "## Recorded baselines")
     println(io)
     if length(runs) >= 2
         println(io,
-            "Comparing **$(length(runs))** recorded baselines in chronological order. The earliest run (`$(runs[1].commit)`) serves as reference baseline for relative speedup/slowdown calculations.")
+            "Comparing **$(length(runs))** recorded baselines in chronological order. The earliest run (`$(runs[1].commit)`) is the reference baseline for relative speedup/slowdown calculations.")
         println(io)
     end
     println(io, "| Commit | Julia | Summary | File |")
@@ -601,7 +601,7 @@ function generate_benchmarks_markdown(
         g in ordered_groups || push!(ordered_groups, g)
     end
 
-    println(io, "## Comparative Timings & Allocations")
+    println(io, "## Comparative timings and allocations")
     println(io)
 
     for gname in ordered_groups
@@ -644,7 +644,7 @@ function generate_benchmarks_markdown(
         println(io)
     end
 
-    println(io, "## How to Add New Benchmark Runs")
+    println(io, "## How to add new benchmark runs")
     println(io)
     println(io, "To record performance on a new commit or after an optimization pass, run:")
     println(io)

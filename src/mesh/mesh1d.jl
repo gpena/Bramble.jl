@@ -3,7 +3,7 @@
 
 A mutable structure representing a 1D mesh.
 
-This struct holds all the geometric and topological information for a one-dimensional grid. It includes the coordinates of the grid points (`pts`), the underlying geometric interval (`set`), and a dictionary of markers for labeling specific points or regions. Key geometric quantities like cell centers (`half_pts`) and cell widths (`half_spacings`) are pre-computed and stored for efficiency, which is particularly useful in numerical methods like the finite volume method.
+Stores the coordinates of the grid points (`pts`), the underlying geometric interval (`set`), and a dictionary of markers labeling specific points or regions, along with the cell centers (`half_pts`) and cell widths (`half_spacings`) the finite volume method needs, precomputed once rather than recomputed by every caller.
 
 The struct is mutable to allow for in-place modifications, such as mesh refinement.
 

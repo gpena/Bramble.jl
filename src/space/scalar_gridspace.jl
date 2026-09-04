@@ -1,9 +1,9 @@
 """
 	$(TYPEDEF)
 
-A container that stores pre-computed weight vectors for various discrete inner products on a grid space.
-
-This struct holds the diagonal elements (weights) needed to compute different types of inner products, such as those weighted by cell measures or staggered grid spacings. By pre-computing and storing these vectors, numerical simulations can avoid costly recalculations within iterative loops.
+Holds the diagonal weight vectors for a grid space's discrete inner products, both the
+standard ``L^2`` weights and the staggered ones, precomputed once rather than recomputed
+on every call.
 
 # Fields
 
@@ -23,13 +23,14 @@ end
 
 Represents a function space for **scalar fields** defined on a mesh.
 
-This structure is a cornerstone for numerical simulations, bundling a mesh with pre-computed weights for discrete inner products, lazy-initialized matrices for finite difference operators (like differentiation and averaging), and an efficient memory buffer for temporary vectors.
+A `ScalarGridSpace` pairs the mesh with the precomputed weight vectors
+([`SpaceWeights`](@ref)) its discrete inner products need.
 
 # Fields
 
 $(FIELDS)
 
-## Discrete Inner Products
+## Discrete inner products
 
 The `weights` object stores vectors for different discrete ``L^2`` inner products on the space of grid functions. They are defined as follows:
 

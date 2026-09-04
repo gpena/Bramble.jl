@@ -1,14 +1,12 @@
 """
 # interface.jl
 
-This file defines the abstract interface and shared foundational methods for all mesh types in Bramble.
+Abstract interface and shared foundational methods for every mesh type in Bramble.
 
-## Key Components
-
-- `AbstractMeshType{D}`: Abstract supertype parameterized by spatial dimension ``D``.
-- **Cartesian Index Operations**: `generate_indices`, `boundary_indices`, `interior_indices`, `is_boundary_index`.
-- **Interface Declarations & Fallbacks**: Field getters, bounds checking, iterators, and spacing calculations.
-- **Mesh Construction**: Top-level `mesh(Ω, npts, ...)` dispatch.
+- `AbstractMeshType{D}`: abstract supertype parameterized by spatial dimension ``D``.
+- Cartesian index operations: `generate_indices`, `boundary_indices`, `interior_indices`, `is_boundary_index`.
+- Interface declarations and fallbacks: field getters, bounds checking, iterators, and spacing calculations.
+- Mesh construction: the top-level `mesh(Ω, npts, ...)` dispatch.
 
 See also: [`Mesh1D`](@ref), [`MeshnD`](@ref), [`Domain`](@ref)
 """

@@ -1,23 +1,23 @@
 #=
 # gridspace.jl
 
-This file defines the core abstractions for function spaces on structured grids.
+Core abstractions for function spaces on structured grids.
 
-## Key Components
+## Overview
 
-- **Abstract Types**: `AbstractSpaceType`, `InnerProductType`
-- **Element Types**: `VectorElement` - wrapper for grid functions
-- **Interface Functions**: Required methods for any concrete space implementation
+- Abstract types: `AbstractSpaceType`, `InnerProductType`.
+- Element types: `VectorElement`, a wrapper for grid functions.
+- Interface functions: the methods any concrete space implementation must provide.
 
-## Design Philosophy
+## Design
 
 The space framework uses Julia's type system and multiple dispatch to:
 1. Maintain type stability through compile-time information (`Val`, type parameters)
 2. Enable specialized implementations for scalar vs vector fields via `AbstractSpaceType{N}`
 3. Support different discrete inner products (`InnerProductType`)
-4. Provide a clean separation between data (vectors/matrices) and context (spaces)
+4. Keep data (vectors/matrices) and context (spaces) separate
 
-## Usage Pattern
+## Usage
 
 ```julia
 # Create a space from a mesh
@@ -133,12 +133,12 @@ These inner products use a combination of forward spacings ``h_i`` and centered 
 widths ``h_{i+1/2}``, appearing naturally in energy estimates for finite difference 
 operators. Different spatial directions may have different weight formulas.
 
-The modified inner products are essential for:
+The modified inner products are used for:
 - Proving discrete energy stability
 - Analyzing discrete conservation properties
 - Constructing stable finite difference schemes
 
-# Mathematical Form
+# Mathematical form
 For a 2D grid in the x-direction:
 ```math
 (u_h, v_h)_{+x} = \\sum_{i,j} h_{x,i} h_{y,j+1/2} u_h(x_i, y_j) v_h(x_i, y_j)
@@ -164,7 +164,7 @@ The weights are the volumes (1D: lengths, 2D: areas, 3D: volumes) of grid cells,
 denoted ``|\\square_k|``. This is the most common inner product for finite difference
 methods and corresponds to the trapezoid rule for integration on non-uniform grids.
 
-# Mathematical Form
+# Mathematical form
 For a 2D grid:
 ```math
 (u_h, v_h)_h = \\sum_{i,j} |\\square_{i,j}| u_h(x_i, y_j) v_h(x_i, y_j)

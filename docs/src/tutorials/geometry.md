@@ -62,7 +62,7 @@ Alternatively, you can construct products directly using tuples of interval pair
 
 ## 2. Querying geometric properties
 
-`Bramble.jl` provides a comprehensive, type-stable query interface:
+`Bramble.jl` provides a type-stable interface for querying geometric properties:
 
 ```julia
 X = interval(0.0, 2.0) × interval(-1.0, 1.0)
@@ -105,7 +105,7 @@ X = interval(0.0, 1.0) × interval(0.0, 1.0)
 
 ## 3. Collapsed and lower-dimensional geometries
 
-A dimension is considered **collapsed** if its interval is degenerate ($a = b$). Bramble accurately tracks collapsed dimensions without heap allocations, enabling seamless modeling of lower-dimensional surfaces or interfaces embedded in higher-dimensional spaces:
+A dimension is considered **collapsed** when its interval is degenerate ($a = b$). Bramble tracks collapsed dimensions without heap allocations, so a lower-dimensional surface or interface embedded in a higher-dimensional space can be modeled directly:
 
 ```julia
 # 1D line embedded in 2D space: x ∈ [0, 1], y = 0

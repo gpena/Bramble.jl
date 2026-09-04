@@ -9,7 +9,7 @@
 
 This file implements averaging operators for staggered grid computations.
 
-## Mathematical Formulation
+## Mathematical formulation
 
 For a function uₕ on a grid, the average operator ⟨·⟩ computes the mean value between 
 adjacent grid points:
@@ -23,13 +23,13 @@ adjacent grid points:
 At boundary points where no neighbor exists:
 	⟨u⟩ᵢ = uᵢ / 2
 
-## Use Cases
+## Use cases
 
-Averaging is essential for:
-1. **Staggered grids**: Transfer variables between cell centers and faces
-2. **Discontinuous Galerkin**: Compute interface values
-3. **Finite difference**: Approximate derivatives at intermediate points
-4. **Conservative schemes**: Maintain flux conservation
+Typical uses:
+1. Staggered grids: transfer variables between cell centers and faces
+2. Discontinuous Galerkin: compute interface values
+3. Finite difference: approximate derivatives at intermediate points
+4. Conservative schemes: maintain flux conservation
 
 ## Example
 
@@ -41,7 +41,7 @@ u_face = ⟨u⟩ᶠ(Vₕ, dim)  # Forward average in dimension dim
 p_center = ⟨p⟩ᵇ(Pₕ, dim)  # Backward average in dimension dim
 ```
 
-## Implementation Details
+## Implementation details
 
 - Uses `@simd` for vectorization
 - Separate loops for interior (2-point average) and boundary (1-point)
@@ -218,7 +218,7 @@ for config in _AVERAGE_OP_CONFIGS
     end
 
     # --- Aliases for x, y, z directions ---
-    # Use the robust helper function to generate aliases and their docstrings.
+    # Generate aliases and their docstrings via the shared helper.
     for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
         direction = _BRAMBLE_var2label[i]
         _define_directional_alias(average_name, Symbol(average_alias, suffix),

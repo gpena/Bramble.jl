@@ -6,7 +6,7 @@ Represents a labeled region or boundary of a computational domain.
 Each `Marker` consists of a `label` (a `Symbol`) and an `identifier`. The `identifier` specifies how to locate the marked region:
 - A `Symbol` for predefined boundaries (e.g., `:left`, `:top`).
 - A `Set{Symbol}` for collections of predefined boundaries (e.g., `Set([:top, :right])`).
-- A function that acts as a characteristic or level-set function returning `true` for points in the marked region.
+- A characteristic or level-set function, returning `true` for points in the marked region.
 
 # Fields
 

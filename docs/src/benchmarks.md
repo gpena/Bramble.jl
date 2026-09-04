@@ -1,11 +1,11 @@
-# Performance & Benchmarks
+# Performance and benchmarks
 
 Bramble tracks memory allocations and performance regressions with a dedicated regression suite in `benchmark/benchmarks.jl`.
 All measurements below are run on **1,000,000 grid points** per dimension setup (e.g. ``1000 \times 1000`` in 2D, ``100 \times 100 \times 100`` in 3D).
 
-## Recorded Baselines
+## Recorded baselines
 
-Comparing **6** recorded baselines in chronological order. The earliest run (`0b9a62b`) serves as reference baseline for relative speedup/slowdown calculations.
+Comparing **6** recorded baselines in chronological order. The earliest run (`0b9a62b`) is the reference baseline for relative speedup/slowdown calculations.
 
 | Commit | Julia | Summary | File |
 |---|:---:|---|---|
@@ -16,7 +16,7 @@ Comparing **6** recorded baselines in chronological order. The earliest run (`0b
 | `e6655b1` | `1.12.7` | perf(space): add specialized 2D and 3D tensor-product loops to _cell_average for faster, zero-alloc cell quadrature | `baseline_e6655b1.json` |
 | `2dec0c7` | `1.12.7` | chore: bump version to 2.0.0 | `baseline_2dec0c7.json` |
 
-## Comparative Timings & Allocations
+## Comparative timings and allocations
 
 ### Operators 2D
 
@@ -2241,7 +2241,7 @@ innerₕ Float64: 23.2 μs (baseline, 0 allocs, 0 B)</title></circle>
 </div>
 ```
 
-## How to Add New Benchmark Runs
+## How to add new benchmark runs
 
 To record performance on a new commit or after an optimization pass, run:
 

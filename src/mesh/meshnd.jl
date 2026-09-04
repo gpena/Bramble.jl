@@ -6,9 +6,8 @@
 
 A structured D-dimensional tensor-product mesh (D ∈ {2,3}).
 
-The mesh is constructed as a Cartesian product of 1D submeshes, enabling efficient
-storage and computation. Grid points are not explicitly stored; instead, they are
-accessed via the tensor product structure.
+The mesh is constructed as a Cartesian product of 1D submeshes. Grid points are not
+stored explicitly; they are computed on demand from the tensor-product structure.
 
 # Type Parameters
 
@@ -81,7 +80,7 @@ end
 
 Internal constructor for a D-dimensional, tensor-product `MeshnD`.
 
-This function orchestrates the creation of a structured multidimensional mesh. It first builds the underlying 1D submeshes for each dimension and then combines them into a single [`MeshnD`](@ref) object. It also handles the important edge case of "collapsed" dimensions (where an interval is just a point), forcing the number of grid points in that dimension to be 1.
+Builds the 1D submeshes for each dimension and combines them into a single [`MeshnD`](@ref) object. A "collapsed" dimension (an interval that is just a point) forces that dimension's point count to 1.
 
 # Arguments
 

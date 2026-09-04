@@ -3,7 +3,7 @@
 
 This file implements Dirichlet boundary condition handling for finite element assembly.
 
-## Mathematical Background
+## Mathematical background
 
 Dirichlet boundary conditions impose constraints of the form:
 ```math
@@ -12,7 +12,7 @@ u(x) = g(x) \\quad \\text{for } x \\in \\Gamma_D
 
 where Γ_D is the Dirichlet boundary and g is the prescribed function.
 
-## Usage Pattern
+## Usage pattern
 
 ```julia
 # Define boundary conditions
@@ -26,7 +26,7 @@ dirichlet_bc!(F, mesh(Wₕ), bc, :left, :right)
 symmetrize!(A, F, mesh(Wₕ), :left, :right)
 ```
 
-## Performance Optimizations
+## Performance optimizations
 
 - BitVector chunk-based processing (64 bits at a time)
 - Direct sparse matrix CSC structure manipulation

@@ -679,9 +679,9 @@ buffer measures 0 bytes.
 By default `assemble!` uses the pre-resolved `form.ast` stored directly inside the form,
 achieving zero heap allocations.
 
-## Live Coefficients
-- **Grid functions**: The stored AST retains references to source `VectorElement` storage. Mutating values in-place (`Rₕ!(uₕ, ...)` or `values(uₕ) .= ...`) between steps automatically updates the assembled vector without needing to rebuild the form.
-- **Dynamic scalars**: Plain numbers work directly for constant scalars. To update a scalar dynamically across loop iterations, wrap it in a `Ref(val)` (e.g. `α = Ref(1.0); l = form(Wₕ, v -> α * innerₕ(uₕ, v))`). Mutating `α[] = new_val` evaluates live during assembly with 0 allocations.
+## Live coefficients
+- Grid functions: the stored AST retains references to source `VectorElement` storage. Mutating values in-place (`Rₕ!(uₕ, ...)` or `values(uₕ) .= ...`) between steps automatically updates the assembled vector without needing to rebuild the form.
+- Dynamic scalars: plain numbers work directly for constant scalars. To update a scalar dynamically across loop iterations, wrap it in a `Ref(val)` (e.g. `α = Ref(1.0); l = form(Wₕ, v -> α * innerₕ(uₕ, v))`). Mutating `α[] = new_val` evaluates live during assembly with 0 allocations.
 
 # Arguments
 

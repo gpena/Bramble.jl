@@ -9,9 +9,9 @@
 
 This file implements difference and finite difference operators for grid functions.
 
-## Mathematical Formulation
+## Mathematical formulation
 
-### Simple Difference Operators (no grid spacing)
+### Simple difference operators (no grid spacing)
 
 **Forward difference**:
 	Δ₊uᵢ = uᵢ₊₁ - uᵢ
@@ -19,7 +19,7 @@ This file implements difference and finite difference operators for grid functio
 **Backward difference**:
 	Δ₋uᵢ = uᵢ - uᵢ₋₁
 
-### Finite Difference Operators (with grid spacing h)
+### Finite difference operators (with grid spacing h)
 
 **Forward finite difference** (approximates ∂u/∂x at xᵢ):
 	δ₊uᵢ = (uᵢ₊₁ - uᵢ) / hᵢ
@@ -27,37 +27,37 @@ This file implements difference and finite difference operators for grid functio
 **Backward finite difference** (approximates ∂u/∂x at xᵢ):
 	δ₋uᵢ = (uᵢ - uᵢ₋₁) / hᵢ
 
-## Boundary Treatment
+## Boundary treatment
 
 At domain boundaries where neighbors don't exist:
-- **Forward at last point**: Δ₊uₙ = -uₙ (enforces zero beyond boundary)
-- **Backward at first point**: Δ₋u₁ = u₁ (enforces zero before boundary)
+- Forward at last point: Δ₊uₙ = -uₙ (enforces zero beyond boundary)
+- Backward at first point: Δ₋u₁ = u₁ (enforces zero before boundary)
 
 This convention:
 1. Maintains operator size consistency
 2. Respects homogeneous Dirichlet-like conditions
 3. Ensures matrix operators remain well-defined
 
-## Grid Spacing Support
+## Grid spacing support
 
 The operators support:
-- **Uniform grids**: `h` is a scalar or nothing
-- **Non-uniform grids**: `h` is a vector of local spacings
-- **Adaptive spacing**: `h` is a function `h(i)` returning spacing at index i
+- Uniform grids: `h` is a scalar or nothing
+- Non-uniform grids: `h` is a vector of local spacings
+- Adaptive spacing: `h` is a function `h(i)` returning spacing at index i
 
-## Use Cases
+## Use cases
 
-**Simple differences**: Measure changes without physical units
+Simple differences: measure changes without physical units
 ```julia
 Δu = Δ₊(uₕ, dim)  # Dimensionless change
 ```
 
-**Finite differences**: Approximate derivatives with physical meaning
+Finite differences: approximate derivatives with physical meaning
 ```julia
 ∂u_∂x = δ₊(uₕ, dim, mesh)  # Has units of [u]/[x]
 ```
 
-## Performance Optimizations
+## Performance optimizations
 
 - `@propagate_inbounds`: Eliminates bounds checking in inner loops
 - `@simd`: Enables SIMD vectorization
