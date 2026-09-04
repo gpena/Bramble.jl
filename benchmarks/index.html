@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Benchmarks · Bramble.jl</title><meta name="title" content="Benchmarks · Bramble.jl"/><meta property="og:title" content="Benchmarks · Bramble.jl"/><meta property="twitter:title" content="Benchmarks · Bramble.jl"/><meta name="description" content="Documentation for Bramble.jl."/><meta property="og:description" content="Documentation for Bramble.jl."/><meta property="twitter:description" content="Documentation for Bramble.jl."/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../"><img src="../assets/logo.svg" alt="Bramble.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../">Bramble.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../tutorials/geometry/">Geometry tutorial</a></li><li><a class="tocitem" href="../tutorials/mesh/">Mesh tutorial</a></li><li><a class="tocitem" href="../tutorials/backend/">Backend tutorial</a></li><li><a class="tocitem" href="../tutorials/space/">Grid spaces and discrete functions</a></li><li><a class="tocitem" href="../tutorials/operators/">Difference, jump and average operators</a></li><li><a class="tocitem" href="../tutorials/form/">Linear and bilinear forms</a></li><li><a class="tocitem" href="../tutorials/autodiff/">Automatic differentiation tutorial</a></li><li><a class="tocitem" href="../tutorials/vtk_export/">Writing VTK files</a></li><li><a class="tocitem" href="../tutorials/pgfplots_export/">Writing PGFPlots data files</a></li><li><a class="tocitem" href="../tutorials/plotting/">Plotting directly</a></li></ul></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../examples/poisson_linear/">Linear Poisson equation</a></li><li><a class="tocitem" href="../examples/poisson_nonlinear/">Nonlinear Poisson equation</a></li><li><a class="tocitem" href="../examples/convection_diffusion_linear/">Convection-diffusion equation</a></li><li><a class="tocitem" href="../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a></li></ul></li><li class="is-active"><a class="tocitem" href>Benchmarks</a><ul class="internal"><li><a class="tocitem" href="#Recorded-baselines"><span>Recorded baselines</span></a></li><li><a class="tocitem" href="#Comparative-timings-and-allocations"><span>Comparative timings and allocations</span></a></li><li><a class="tocitem" href="#How-to-add-new-benchmark-runs"><span>How to add new benchmark runs</span></a></li></ul></li><li><span class="tocitem">Documentation</span><ul><li><a class="tocitem" href="../api/">API reference</a></li><li><input class="collapse-toggle" id="menuitem-5-2" type="checkbox"/><label class="tocitem" for="menuitem-5-2"><span class="docs-label">Internals</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../internals/utils/">Utilities</a></li><li><a class="tocitem" href="../internals/geometry/">Geometry</a></li><li><a class="tocitem" href="../internals/mesh/">Mesh</a></li><li><a class="tocitem" href="../internals/space/">Spaces</a></li><li><a class="tocitem" href="../internals/form/">Forms</a></li><li><a class="tocitem" href="../internals/autodiff/">Automatic differentiation</a></li></ul></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Benchmarks</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Benchmarks</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/benchmarks.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Performance-and-benchmarks"><a class="docs-heading-anchor" href="#Performance-and-benchmarks">Performance and benchmarks</a><a id="Performance-and-benchmarks-1"></a><a class="docs-heading-anchor-permalink" href="#Performance-and-benchmarks" title="Permalink"></a></h1><p>Bramble tracks memory allocations and performance regressions with a dedicated regression suite in <code>benchmark/benchmarks.jl</code>. All measurements below are run on <strong>1,000,000 grid points</strong> per dimension setup (e.g. <span>$1000 \times 1000$</span> in 2D, <span>$100 \times 100 \times 100$</span> in 3D).</p><h2 id="Recorded-baselines"><a class="docs-heading-anchor" href="#Recorded-baselines">Recorded baselines</a><a id="Recorded-baselines-1"></a><a class="docs-heading-anchor-permalink" href="#Recorded-baselines" title="Permalink"></a></h2><p>Comparing <strong>4</strong> recorded baselines in chronological order. The earliest run (v1.1.1, <code>e6655b1</code>) is the reference baseline for relative speedup/slowdown calculations.</p><table><tr><th style="text-align: right">Version</th><th style="text-align: right">Commit</th><th style="text-align: center">Julia</th><th style="text-align: right">Summary</th><th style="text-align: right">File</th></tr><tr><td style="text-align: right">v1.1.1 <em>(baseline)</em></td><td style="text-align: right"><code>e6655b1</code></td><td style="text-align: center"><code>1.12.7</code></td><td style="text-align: right">perf(space): add specialized 2D and 3D tensor-product loops to <em>cell</em>average for faster, zero-alloc cell quadrature</td><td style="text-align: right"><code>baseline_e6655b1.json</code></td></tr><tr><td style="text-align: right">v2.0.0</td><td style="text-align: right"><code>2dec0c7</code></td><td style="text-align: center"><code>1.12.7</code></td><td style="text-align: right">chore: bump version to 2.0.0</td><td style="text-align: right"><code>baseline_2dec0c7.json</code></td></tr><tr><td style="text-align: right">v2.1.0</td><td style="text-align: right"><code>274ae7d</code></td><td style="text-align: center"><code>1.12.7</code></td><td style="text-align: right">chore: bump version to 2.1.0</td><td style="text-align: right"><code>baseline_274ae7d.json</code></td></tr><tr><td style="text-align: right">v2.2.0</td><td style="text-align: right"><code>b1f12ec</code></td><td style="text-align: center"><code>1.12.7</code></td><td style="text-align: right">chore: bump version to 2.2.0</td><td style="text-align: right"><code>baseline_b1f12ec.json</code></td></tr></table><h2 id="Comparative-timings-and-allocations"><a class="docs-heading-anchor" href="#Comparative-timings-and-allocations">Comparative timings and allocations</a><a id="Comparative-timings-and-allocations-1"></a><a class="docs-heading-anchor-permalink" href="#Comparative-timings-and-allocations" title="Permalink"></a></h2><script>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Benchmarks · Bramble.jl</title><meta name="title" content="Benchmarks · Bramble.jl"/><meta property="og:title" content="Benchmarks · Bramble.jl"/><meta property="twitter:title" content="Benchmarks · Bramble.jl"/><meta name="description" content="Documentation for Bramble.jl."/><meta property="og:description" content="Documentation for Bramble.jl."/><meta property="twitter:description" content="Documentation for Bramble.jl."/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../"><img src="../assets/logo.svg" alt="Bramble.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../">Bramble.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../tutorials/geometry/">Geometry tutorial</a></li><li><a class="tocitem" href="../tutorials/mesh/">Mesh tutorial</a></li><li><a class="tocitem" href="../tutorials/backend/">Backend tutorial</a></li><li><a class="tocitem" href="../tutorials/space/">Grid spaces and discrete functions</a></li><li><a class="tocitem" href="../tutorials/operators/">Difference, jump and average operators</a></li><li><a class="tocitem" href="../tutorials/form/">Linear and bilinear forms</a></li><li><a class="tocitem" href="../tutorials/autodiff/">Automatic differentiation tutorial</a></li><li><a class="tocitem" href="../tutorials/vtk_export/">Writing VTK files</a></li><li><a class="tocitem" href="../tutorials/pgfplots_export/">Writing PGFPlots data files</a></li><li><a class="tocitem" href="../tutorials/plotting/">Plotting directly</a></li></ul></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../examples/poisson_linear/">Linear Poisson equation</a></li><li><a class="tocitem" href="../examples/poisson_nonlinear/">Nonlinear Poisson equation</a></li><li><a class="tocitem" href="../examples/convection_diffusion_linear/">Convection-diffusion equation</a></li><li><a class="tocitem" href="../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a></li></ul></li><li class="is-active"><a class="tocitem" href>Benchmarks</a><ul class="internal"><li><a class="tocitem" href="#Recorded-baselines"><span>Recorded baselines</span></a></li><li><a class="tocitem" href="#Comparative-timings-and-allocations"><span>Comparative timings and allocations</span></a></li><li><a class="tocitem" href="#How-to-add-new-benchmark-runs"><span>How to add new benchmark runs</span></a></li></ul></li><li><span class="tocitem">Documentation</span><ul><li><a class="tocitem" href="../api/">API reference</a></li><li><input class="collapse-toggle" id="menuitem-5-2" type="checkbox"/><label class="tocitem" for="menuitem-5-2"><span class="docs-label">Internals</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../internals/utils/">Utilities</a></li><li><a class="tocitem" href="../internals/geometry/">Geometry</a></li><li><a class="tocitem" href="../internals/mesh/">Mesh</a></li><li><a class="tocitem" href="../internals/space/">Spaces</a></li><li><a class="tocitem" href="../internals/form/">Forms</a></li><li><a class="tocitem" href="../internals/autodiff/">Automatic differentiation</a></li><li><a class="tocitem" href="../internals/exporters/">Exporters</a></li></ul></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Benchmarks</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Benchmarks</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/benchmarks.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Performance-and-benchmarks"><a class="docs-heading-anchor" href="#Performance-and-benchmarks">Performance and benchmarks</a><a id="Performance-and-benchmarks-1"></a><a class="docs-heading-anchor-permalink" href="#Performance-and-benchmarks" title="Permalink"></a></h1><p>Bramble tracks memory allocations and performance regressions with a dedicated regression suite in <code>benchmark/benchmarks.jl</code>. All measurements below are run on <strong>1,000,000 grid points</strong> per dimension setup (e.g. <span>$1000 \times 1000$</span> in 2D, <span>$100 \times 100 \times 100$</span> in 3D).</p><h2 id="Recorded-baselines"><a class="docs-heading-anchor" href="#Recorded-baselines">Recorded baselines</a><a id="Recorded-baselines-1"></a><a class="docs-heading-anchor-permalink" href="#Recorded-baselines" title="Permalink"></a></h2><p>Comparing <strong>3</strong> recorded baselines in chronological order. The earliest run (v2.0.0, <code>2dec0c7</code>) is the reference baseline for relative speedup/slowdown calculations.</p><table><tr><th style="text-align: right">Version</th><th style="text-align: right">Commit</th><th style="text-align: center">Julia</th><th style="text-align: right">Summary</th><th style="text-align: right">File</th></tr><tr><td style="text-align: right">v2.0.0 <em>(baseline)</em></td><td style="text-align: right"><code>2dec0c7</code></td><td style="text-align: center"><code>1.12.7</code></td><td style="text-align: right">chore: bump version to 2.0.0</td><td style="text-align: right"><code>baseline_2dec0c7.json</code></td></tr><tr><td style="text-align: right">v2.1.0</td><td style="text-align: right"><code>274ae7d</code></td><td style="text-align: center"><code>1.12.7</code></td><td style="text-align: right">chore: bump version to 2.1.0</td><td style="text-align: right"><code>baseline_274ae7d.json</code></td></tr><tr><td style="text-align: right">v2.2.0</td><td style="text-align: right"><code>d7c2416</code></td><td style="text-align: center"><code>1.12.7</code></td><td style="text-align: right">Merge remote-tracking branch &#39;origin/main&#39;</td><td style="text-align: right"><code>baseline_d7c2416.json</code></td></tr></table><h2 id="Comparative-timings-and-allocations"><a class="docs-heading-anchor" href="#Comparative-timings-and-allocations">Comparative timings and allocations</a><a id="Comparative-timings-and-allocations-1"></a><a class="docs-heading-anchor-permalink" href="#Comparative-timings-and-allocations" title="Permalink"></a></h2><script>
   // See the module note above: hide `define` from Chart.js's UMD wrapper so it attaches
   // `window.Chart` instead of registering as an anonymous AMD module.
   window.__bramble_amd_define = window.define;
@@ -73,54 +73,59 @@
 <thead>
 <tr style="border-bottom:2px solid rgba(128,128,128,0.3);">
 <th style="padding:8px 6px; text-align:left;">Benchmark</th>
-<th style="padding:8px 6px; text-align:right;">Base (v1.1.1 <code>e6655b1</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Prev (v2.1.0 <code>274ae7d</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Latest (v2.2.0 <code>b1f12ec</code>)</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Prev</th>
+<th style="padding:8px 6px; text-align:right;">v2.0.0 <code>2dec0c7</code> (ref)</th>
 <th style="padding:8px 6px; text-align:center;">Allocs</th>
+<th style="padding:8px 6px; text-align:right;">v2.1.0 <code>274ae7d</code></th>
+<th style="padding:8px 6px; text-align:center;">Allocs</th>
+<th style="padding:8px 6px; text-align:right;">v2.2.0 <code>d7c2416</code></th>
+<th style="padding:8px 6px; text-align:center;">Allocs</th>
+<th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
 <th style="padding:8px 6px; text-align:right;">Memory</th>
 </tr>
 </thead>
 <tbody>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>Dcₓ</code></td>
-<td style="padding:7px 6px; text-align:right;">261.5 μs</td>
-<td style="padding:7px 6px; text-align:right;">268.7 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">281.9 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+7.8% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+4.9% 🔴</span></td>
+<td style="padding:7px 6px; text-align:right;">256.5 μs</td>
 <td style="padding:7px 6px; text-align:center;">3</td>
+<td style="padding:7px 6px; text-align:right;">268.7 μs</td>
+<td style="padding:7px 6px; text-align:center;">3</td>
+<td style="padding:7px 6px; text-align:right;">256.8 μs</td>
+<td style="padding:7px 6px; text-align:center;">3</td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>D₋ᵧ</code></td>
-<td style="padding:7px 6px; text-align:right;">161.2 μs</td>
-<td style="padding:7px 6px; text-align:right;">162.2 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">170.8 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+5.9% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+5.3% 🔴</span></td>
+<td style="padding:7px 6px; text-align:right;">162.0 μs</td>
 <td style="padding:7px 6px; text-align:center;">3</td>
+<td style="padding:7px 6px; text-align:right;">162.2 μs</td>
+<td style="padding:7px 6px; text-align:center;">3</td>
+<td style="padding:7px 6px; text-align:right;">161.1 μs</td>
+<td style="padding:7px 6px; text-align:center;">3</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.5% 🟢</span></td>
 <td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>D₋ₓ</code></td>
-<td style="padding:7px 6px; text-align:right;">205.2 μs</td>
-<td style="padding:7px 6px; text-align:right;">205.2 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">209.6 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+2.1% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+2.2% 🔴</span></td>
+<td style="padding:7px 6px; text-align:right;">204.0 μs</td>
 <td style="padding:7px 6px; text-align:center;">3</td>
+<td style="padding:7px 6px; text-align:right;">205.2 μs</td>
+<td style="padding:7px 6px; text-align:center;">3</td>
+<td style="padding:7px 6px; text-align:right;">204.4 μs</td>
+<td style="padding:7px 6px; text-align:center;">3</td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>M₋ₓ</code></td>
-<td style="padding:7px 6px; text-align:right;">155.5 μs</td>
-<td style="padding:7px 6px; text-align:right;">161.5 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">174.3 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+12.1% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+8.0% 🔴</span></td>
+<td style="padding:7px 6px; text-align:right;">172.0 μs</td>
 <td style="padding:7px 6px; text-align:center;">3</td>
+<td style="padding:7px 6px; text-align:right;">161.5 μs</td>
+<td style="padding:7px 6px; text-align:center;">3</td>
+<td style="padding:7px 6px; text-align:right;">170.2 μs</td>
+<td style="padding:7px 6px; text-align:center;">3</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-1.0% 🟢</span></td>
 <td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
 </tr>
 </tbody>
@@ -136,13 +141,12 @@
   const theme = window.brambleChartTheme();
   const chart = new Chart(document.getElementById('bench_chart_1').getContext('2d'), {
     type: 'line',
-    data: { labels: ["v1.1.1 (e6655b1)","v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (b1f12ec)"], datasets: [{
+    data: { labels: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)"], datasets: [{
   label: "Dcₓ",
-  data: [{x:"v1.1.1 (e6655b1)",y:261.458,julia:"1.12.7",
-detail:"261.5 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.0.0 (2dec0c7)",y:256.5,julia:"1.12.7",
+  data: [{x:"v2.0.0 (2dec0c7)",y:256.5,julia:"1.12.7",
 detail:"256.5 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.1.0 (274ae7d)",y:268.708,julia:"1.12.7",
-detail:"268.7 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (b1f12ec)",y:281.875,julia:"1.12.7",
-detail:"281.9 μs",allocs:3,mem:"7.64 MiB"}],
+detail:"268.7 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (d7c2416)",y:256.75,julia:"1.12.7",
+detail:"256.8 μs",allocs:3,mem:"7.64 MiB"}],
   borderColor: "#3b82f6",
   backgroundColor: "#3b82f6",
   spanGaps: true,
@@ -153,11 +157,10 @@ detail:"281.9 μs",allocs:3,mem:"7.64 MiB"}],
 },
 {
   label: "D₋ᵧ",
-  data: [{x:"v1.1.1 (e6655b1)",y:161.25,julia:"1.12.7",
-detail:"161.2 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.0.0 (2dec0c7)",y:161.958,julia:"1.12.7",
+  data: [{x:"v2.0.0 (2dec0c7)",y:161.958,julia:"1.12.7",
 detail:"162.0 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.1.0 (274ae7d)",y:162.209,julia:"1.12.7",
-detail:"162.2 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (b1f12ec)",y:170.75,julia:"1.12.7",
-detail:"170.8 μs",allocs:3,mem:"7.64 MiB"}],
+detail:"162.2 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (d7c2416)",y:161.083,julia:"1.12.7",
+detail:"161.1 μs",allocs:3,mem:"7.64 MiB"}],
   borderColor: "#10b981",
   backgroundColor: "#10b981",
   spanGaps: true,
@@ -168,11 +171,10 @@ detail:"170.8 μs",allocs:3,mem:"7.64 MiB"}],
 },
 {
   label: "D₋ₓ",
-  data: [{x:"v1.1.1 (e6655b1)",y:205.25,julia:"1.12.7",
-detail:"205.2 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.0.0 (2dec0c7)",y:204.042,julia:"1.12.7",
+  data: [{x:"v2.0.0 (2dec0c7)",y:204.042,julia:"1.12.7",
 detail:"204.0 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.1.0 (274ae7d)",y:205.208,julia:"1.12.7",
-detail:"205.2 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (b1f12ec)",y:209.625,julia:"1.12.7",
-detail:"209.6 μs",allocs:3,mem:"7.64 MiB"}],
+detail:"205.2 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (d7c2416)",y:204.375,julia:"1.12.7",
+detail:"204.4 μs",allocs:3,mem:"7.64 MiB"}],
   borderColor: "#f59e0b",
   backgroundColor: "#f59e0b",
   spanGaps: true,
@@ -183,11 +185,10 @@ detail:"209.6 μs",allocs:3,mem:"7.64 MiB"}],
 },
 {
   label: "M₋ₓ",
-  data: [{x:"v1.1.1 (e6655b1)",y:155.542,julia:"1.12.7",
-detail:"155.5 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.0.0 (2dec0c7)",y:171.959,julia:"1.12.7",
+  data: [{x:"v2.0.0 (2dec0c7)",y:171.959,julia:"1.12.7",
 detail:"172.0 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.1.0 (274ae7d)",y:161.458,julia:"1.12.7",
-detail:"161.5 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (b1f12ec)",y:174.333,julia:"1.12.7",
-detail:"174.3 μs",allocs:3,mem:"7.64 MiB"}],
+detail:"161.5 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (d7c2416)",y:170.25,julia:"1.12.7",
+detail:"170.2 μs",allocs:3,mem:"7.64 MiB"}],
   borderColor: "#8b5cf6",
   backgroundColor: "#8b5cf6",
   spanGaps: true,
@@ -242,44 +243,48 @@ detail:"174.3 μs",allocs:3,mem:"7.64 MiB"}],
 <thead>
 <tr style="border-bottom:2px solid rgba(128,128,128,0.3);">
 <th style="padding:8px 6px; text-align:left;">Benchmark</th>
-<th style="padding:8px 6px; text-align:right;">Base (v1.1.1 <code>e6655b1</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Prev (v2.1.0 <code>274ae7d</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Latest (v2.2.0 <code>b1f12ec</code>)</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Prev</th>
+<th style="padding:8px 6px; text-align:right;">v2.0.0 <code>2dec0c7</code> (ref)</th>
 <th style="padding:8px 6px; text-align:center;">Allocs</th>
+<th style="padding:8px 6px; text-align:right;">v2.1.0 <code>274ae7d</code></th>
+<th style="padding:8px 6px; text-align:center;">Allocs</th>
+<th style="padding:8px 6px; text-align:right;">v2.2.0 <code>d7c2416</code></th>
+<th style="padding:8px 6px; text-align:center;">Allocs</th>
+<th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
 <th style="padding:8px 6px; text-align:right;">Memory</th>
 </tr>
 </thead>
 <tbody>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>D₋₂</code></td>
-<td style="padding:7px 6px; text-align:right;">201.0 μs</td>
-<td style="padding:7px 6px; text-align:right;">212.8 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">229.5 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+14.2% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+7.9% 🔴</span></td>
+<td style="padding:7px 6px; text-align:right;">229.6 μs</td>
 <td style="padding:7px 6px; text-align:center;">3</td>
+<td style="padding:7px 6px; text-align:right;">212.8 μs</td>
+<td style="padding:7px 6px; text-align:center;">3</td>
+<td style="padding:7px 6px; text-align:right;">228.1 μs</td>
+<td style="padding:7px 6px; text-align:center;">3</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.6% 🟢</span></td>
 <td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>innerₕ</code></td>
-<td style="padding:7px 6px; text-align:right;">238.5 μs</td>
-<td style="padding:7px 6px; text-align:right;">240.3 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">241.6 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.3% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.5% 🔴</span></td>
+<td style="padding:7px 6px; text-align:right;">240.4 μs</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">240.3 μs</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">239.8 μs</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>∇₋ₕ</code></td>
-<td style="padding:7px 6px; text-align:right;">706.5 μs</td>
-<td style="padding:7px 6px; text-align:right;">696.7 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">689.6 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-2.4% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-1.0% 🟢</span></td>
+<td style="padding:7px 6px; text-align:right;">690.8 μs</td>
 <td style="padding:7px 6px; text-align:center;">15</td>
+<td style="padding:7px 6px; text-align:right;">696.7 μs</td>
+<td style="padding:7px 6px; text-align:center;">15</td>
+<td style="padding:7px 6px; text-align:right;">695.8 μs</td>
+<td style="padding:7px 6px; text-align:center;">15</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.7% 🔴</span></td>
 <td style="padding:7px 6px; text-align:right;">22.92 MiB</td>
 </tr>
 </tbody>
@@ -295,13 +300,12 @@ detail:"174.3 μs",allocs:3,mem:"7.64 MiB"}],
   const theme = window.brambleChartTheme();
   const chart = new Chart(document.getElementById('bench_chart_2').getContext('2d'), {
     type: 'line',
-    data: { labels: ["v1.1.1 (e6655b1)","v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (b1f12ec)"], datasets: [{
+    data: { labels: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)"], datasets: [{
   label: "D₋₂",
-  data: [{x:"v1.1.1 (e6655b1)",y:201.0205,julia:"1.12.7",
-detail:"201.0 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.0.0 (2dec0c7)",y:229.584,julia:"1.12.7",
+  data: [{x:"v2.0.0 (2dec0c7)",y:229.584,julia:"1.12.7",
 detail:"229.6 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.1.0 (274ae7d)",y:212.792,julia:"1.12.7",
-detail:"212.8 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (b1f12ec)",y:229.5,julia:"1.12.7",
-detail:"229.5 μs",allocs:3,mem:"7.64 MiB"}],
+detail:"212.8 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (d7c2416)",y:228.125,julia:"1.12.7",
+detail:"228.1 μs",allocs:3,mem:"7.64 MiB"}],
   borderColor: "#3b82f6",
   backgroundColor: "#3b82f6",
   spanGaps: true,
@@ -312,11 +316,10 @@ detail:"229.5 μs",allocs:3,mem:"7.64 MiB"}],
 },
 {
   label: "innerₕ",
-  data: [{x:"v1.1.1 (e6655b1)",y:238.542,julia:"1.12.7",
-detail:"238.5 μs",allocs:0,mem:"0 B"},{x:"v2.0.0 (2dec0c7)",y:240.375,julia:"1.12.7",
+  data: [{x:"v2.0.0 (2dec0c7)",y:240.375,julia:"1.12.7",
 detail:"240.4 μs",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:240.292,julia:"1.12.7",
-detail:"240.3 μs",allocs:0,mem:"0 B"},{x:"v2.2.0 (b1f12ec)",y:241.583,julia:"1.12.7",
-detail:"241.6 μs",allocs:0,mem:"0 B"}],
+detail:"240.3 μs",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:239.75,julia:"1.12.7",
+detail:"239.8 μs",allocs:0,mem:"0 B"}],
   borderColor: "#10b981",
   backgroundColor: "#10b981",
   spanGaps: true,
@@ -327,11 +330,10 @@ detail:"241.6 μs",allocs:0,mem:"0 B"}],
 },
 {
   label: "∇₋ₕ",
-  data: [{x:"v1.1.1 (e6655b1)",y:706.521,julia:"1.12.7",
-detail:"706.5 μs",allocs:15,mem:"22.92 MiB"},{x:"v2.0.0 (2dec0c7)",y:690.75,julia:"1.12.7",
+  data: [{x:"v2.0.0 (2dec0c7)",y:690.75,julia:"1.12.7",
 detail:"690.8 μs",allocs:15,mem:"22.92 MiB"},{x:"v2.1.0 (274ae7d)",y:696.667,julia:"1.12.7",
-detail:"696.7 μs",allocs:15,mem:"22.92 MiB"},{x:"v2.2.0 (b1f12ec)",y:689.625,julia:"1.12.7",
-detail:"689.6 μs",allocs:15,mem:"22.92 MiB"}],
+detail:"696.7 μs",allocs:15,mem:"22.92 MiB"},{x:"v2.2.0 (d7c2416)",y:695.834,julia:"1.12.7",
+detail:"695.8 μs",allocs:15,mem:"22.92 MiB"}],
   borderColor: "#f59e0b",
   backgroundColor: "#f59e0b",
   spanGaps: true,
@@ -386,74 +388,81 @@ detail:"689.6 μs",allocs:15,mem:"22.92 MiB"}],
 <thead>
 <tr style="border-bottom:2px solid rgba(128,128,128,0.3);">
 <th style="padding:8px 6px; text-align:left;">Benchmark</th>
-<th style="padding:8px 6px; text-align:right;">Base (v1.1.1 <code>e6655b1</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Prev (v2.1.0 <code>274ae7d</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Latest (v2.2.0 <code>b1f12ec</code>)</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Prev</th>
+<th style="padding:8px 6px; text-align:right;">v2.0.0 <code>2dec0c7</code> (ref)</th>
 <th style="padding:8px 6px; text-align:center;">Allocs</th>
+<th style="padding:8px 6px; text-align:right;">v2.1.0 <code>274ae7d</code></th>
+<th style="padding:8px 6px; text-align:center;">Allocs</th>
+<th style="padding:8px 6px; text-align:right;">v2.2.0 <code>d7c2416</code></th>
+<th style="padding:8px 6px; text-align:center;">Allocs</th>
+<th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
 <th style="padding:8px 6px; text-align:right;">Memory</th>
 </tr>
 </thead>
 <tbody>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>M₊ᵧ 2D</code></td>
-<td style="padding:7px 6px; text-align:right;">153.5 μs</td>
 <td style="padding:7px 6px; text-align:right;">161.3 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">161.3 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+5.1% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:center;">3</td>
+<td style="padding:7px 6px; text-align:right;">161.3 μs</td>
+<td style="padding:7px 6px; text-align:center;">3</td>
+<td style="padding:7px 6px; text-align:right;">165.5 μs</td>
+<td style="padding:7px 6px; text-align:center;">3</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+2.6% 🔴</span></td>
 <td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>M₊₂ 3D</code></td>
-<td style="padding:7px 6px; text-align:right;">221.0 μs</td>
-<td style="padding:7px 6px; text-align:right;">226.8 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">227.7 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+3.0% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
+<td style="padding:7px 6px; text-align:right;">227.7 μs</td>
 <td style="padding:7px 6px; text-align:center;">3</td>
+<td style="padding:7px 6px; text-align:right;">226.8 μs</td>
+<td style="padding:7px 6px; text-align:center;">3</td>
+<td style="padding:7px 6px; text-align:right;">225.8 μs</td>
+<td style="padding:7px 6px; text-align:center;">3</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.9% 🟢</span></td>
 <td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>M₊ₓ 2D</code></td>
-<td style="padding:7px 6px; text-align:right;">152.3 μs</td>
-<td style="padding:7px 6px; text-align:right;">159.6 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">162.5 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+6.7% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.8% 🔴</span></td>
+<td style="padding:7px 6px; text-align:right;">161.6 μs</td>
 <td style="padding:7px 6px; text-align:center;">3</td>
+<td style="padding:7px 6px; text-align:right;">159.6 μs</td>
+<td style="padding:7px 6px; text-align:center;">3</td>
+<td style="padding:7px 6px; text-align:right;">159.2 μs</td>
+<td style="padding:7px 6px; text-align:center;">3</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-1.5% 🟢</span></td>
 <td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>jumpᵧ 2D</code></td>
-<td style="padding:7px 6px; text-align:right;">159.8 μs</td>
-<td style="padding:7px 6px; text-align:right;">159.9 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">161.0 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.7% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.7% 🔴</span></td>
+<td style="padding:7px 6px; text-align:right;">160.8 μs</td>
 <td style="padding:7px 6px; text-align:center;">3</td>
+<td style="padding:7px 6px; text-align:right;">159.9 μs</td>
+<td style="padding:7px 6px; text-align:center;">3</td>
+<td style="padding:7px 6px; text-align:right;">161.3 μs</td>
+<td style="padding:7px 6px; text-align:center;">3</td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>jump₂ 3D</code></td>
-<td style="padding:7px 6px; text-align:right;">210.4 μs</td>
-<td style="padding:7px 6px; text-align:right;">226.7 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">227.5 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+8.1% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
+<td style="padding:7px 6px; text-align:right;">227.3 μs</td>
 <td style="padding:7px 6px; text-align:center;">3</td>
+<td style="padding:7px 6px; text-align:right;">226.7 μs</td>
+<td style="padding:7px 6px; text-align:center;">3</td>
+<td style="padding:7px 6px; text-align:right;">225.8 μs</td>
+<td style="padding:7px 6px; text-align:center;">3</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.7% 🟢</span></td>
 <td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>jumpₓ 2D</code></td>
-<td style="padding:7px 6px; text-align:right;">163.0 μs</td>
-<td style="padding:7px 6px; text-align:right;">161.8 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">162.7 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.5% 🔴</span></td>
+<td style="padding:7px 6px; text-align:right;">161.5 μs</td>
 <td style="padding:7px 6px; text-align:center;">3</td>
+<td style="padding:7px 6px; text-align:right;">161.8 μs</td>
+<td style="padding:7px 6px; text-align:center;">3</td>
+<td style="padding:7px 6px; text-align:right;">162.0 μs</td>
+<td style="padding:7px 6px; text-align:center;">3</td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
 </tr>
 </tbody>
@@ -469,13 +478,12 @@ detail:"689.6 μs",allocs:15,mem:"22.92 MiB"}],
   const theme = window.brambleChartTheme();
   const chart = new Chart(document.getElementById('bench_chart_3').getContext('2d'), {
     type: 'line',
-    data: { labels: ["v1.1.1 (e6655b1)","v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (b1f12ec)"], datasets: [{
+    data: { labels: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)"], datasets: [{
   label: "M₊ᵧ 2D",
-  data: [{x:"v1.1.1 (e6655b1)",y:153.5,julia:"1.12.7",
-detail:"153.5 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.0.0 (2dec0c7)",y:161.292,julia:"1.12.7",
+  data: [{x:"v2.0.0 (2dec0c7)",y:161.292,julia:"1.12.7",
 detail:"161.3 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.1.0 (274ae7d)",y:161.291,julia:"1.12.7",
-detail:"161.3 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (b1f12ec)",y:161.333,julia:"1.12.7",
-detail:"161.3 μs",allocs:3,mem:"7.64 MiB"}],
+detail:"161.3 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (d7c2416)",y:165.458,julia:"1.12.7",
+detail:"165.5 μs",allocs:3,mem:"7.64 MiB"}],
   borderColor: "#3b82f6",
   backgroundColor: "#3b82f6",
   spanGaps: true,
@@ -486,11 +494,10 @@ detail:"161.3 μs",allocs:3,mem:"7.64 MiB"}],
 },
 {
   label: "M₊₂ 3D",
-  data: [{x:"v1.1.1 (e6655b1)",y:221.042,julia:"1.12.7",
-detail:"221.0 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.0.0 (2dec0c7)",y:227.708,julia:"1.12.7",
+  data: [{x:"v2.0.0 (2dec0c7)",y:227.708,julia:"1.12.7",
 detail:"227.7 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.1.0 (274ae7d)",y:226.792,julia:"1.12.7",
-detail:"226.8 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (b1f12ec)",y:227.709,julia:"1.12.7",
-detail:"227.7 μs",allocs:3,mem:"7.64 MiB"}],
+detail:"226.8 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (d7c2416)",y:225.75,julia:"1.12.7",
+detail:"225.8 μs",allocs:3,mem:"7.64 MiB"}],
   borderColor: "#10b981",
   backgroundColor: "#10b981",
   spanGaps: true,
@@ -501,11 +508,10 @@ detail:"227.7 μs",allocs:3,mem:"7.64 MiB"}],
 },
 {
   label: "M₊ₓ 2D",
-  data: [{x:"v1.1.1 (e6655b1)",y:152.292,julia:"1.12.7",
-detail:"152.3 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.0.0 (2dec0c7)",y:161.625,julia:"1.12.7",
+  data: [{x:"v2.0.0 (2dec0c7)",y:161.625,julia:"1.12.7",
 detail:"161.6 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.1.0 (274ae7d)",y:159.625,julia:"1.12.7",
-detail:"159.6 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (b1f12ec)",y:162.542,julia:"1.12.7",
-detail:"162.5 μs",allocs:3,mem:"7.64 MiB"}],
+detail:"159.6 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (d7c2416)",y:159.209,julia:"1.12.7",
+detail:"159.2 μs",allocs:3,mem:"7.64 MiB"}],
   borderColor: "#f59e0b",
   backgroundColor: "#f59e0b",
   spanGaps: true,
@@ -516,11 +522,10 @@ detail:"162.5 μs",allocs:3,mem:"7.64 MiB"}],
 },
 {
   label: "jumpᵧ 2D",
-  data: [{x:"v1.1.1 (e6655b1)",y:159.8335,julia:"1.12.7",
-detail:"159.8 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.0.0 (2dec0c7)",y:160.834,julia:"1.12.7",
+  data: [{x:"v2.0.0 (2dec0c7)",y:160.834,julia:"1.12.7",
 detail:"160.8 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.1.0 (274ae7d)",y:159.917,julia:"1.12.7",
-detail:"159.9 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (b1f12ec)",y:161.0,julia:"1.12.7",
-detail:"161.0 μs",allocs:3,mem:"7.64 MiB"}],
+detail:"159.9 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (d7c2416)",y:161.291,julia:"1.12.7",
+detail:"161.3 μs",allocs:3,mem:"7.64 MiB"}],
   borderColor: "#8b5cf6",
   backgroundColor: "#8b5cf6",
   spanGaps: true,
@@ -531,11 +536,10 @@ detail:"161.0 μs",allocs:3,mem:"7.64 MiB"}],
 },
 {
   label: "jump₂ 3D",
-  data: [{x:"v1.1.1 (e6655b1)",y:210.3955,julia:"1.12.7",
-detail:"210.4 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.0.0 (2dec0c7)",y:227.334,julia:"1.12.7",
+  data: [{x:"v2.0.0 (2dec0c7)",y:227.334,julia:"1.12.7",
 detail:"227.3 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.1.0 (274ae7d)",y:226.667,julia:"1.12.7",
-detail:"226.7 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (b1f12ec)",y:227.459,julia:"1.12.7",
-detail:"227.5 μs",allocs:3,mem:"7.64 MiB"}],
+detail:"226.7 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (d7c2416)",y:225.833,julia:"1.12.7",
+detail:"225.8 μs",allocs:3,mem:"7.64 MiB"}],
   borderColor: "#ec4899",
   backgroundColor: "#ec4899",
   spanGaps: true,
@@ -546,11 +550,10 @@ detail:"227.5 μs",allocs:3,mem:"7.64 MiB"}],
 },
 {
   label: "jumpₓ 2D",
-  data: [{x:"v1.1.1 (e6655b1)",y:162.958,julia:"1.12.7",
-detail:"163.0 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.0.0 (2dec0c7)",y:161.458,julia:"1.12.7",
+  data: [{x:"v2.0.0 (2dec0c7)",y:161.458,julia:"1.12.7",
 detail:"161.5 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.1.0 (274ae7d)",y:161.834,julia:"1.12.7",
-detail:"161.8 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (b1f12ec)",y:162.708,julia:"1.12.7",
-detail:"162.7 μs",allocs:3,mem:"7.64 MiB"}],
+detail:"161.8 μs",allocs:3,mem:"7.64 MiB"},{x:"v2.2.0 (d7c2416)",y:162.041,julia:"1.12.7",
+detail:"162.0 μs",allocs:3,mem:"7.64 MiB"}],
   borderColor: "#06b6d4",
   backgroundColor: "#06b6d4",
   spanGaps: true,
@@ -605,54 +608,59 @@ detail:"162.7 μs",allocs:3,mem:"7.64 MiB"}],
 <thead>
 <tr style="border-bottom:2px solid rgba(128,128,128,0.3);">
 <th style="padding:8px 6px; text-align:left;">Benchmark</th>
-<th style="padding:8px 6px; text-align:right;">Base (v1.1.1 <code>e6655b1</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Prev (v2.1.0 <code>274ae7d</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Latest (v2.2.0 <code>b1f12ec</code>)</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Prev</th>
+<th style="padding:8px 6px; text-align:right;">v2.0.0 <code>2dec0c7</code> (ref)</th>
 <th style="padding:8px 6px; text-align:center;">Allocs</th>
+<th style="padding:8px 6px; text-align:right;">v2.1.0 <code>274ae7d</code></th>
+<th style="padding:8px 6px; text-align:center;">Allocs</th>
+<th style="padding:8px 6px; text-align:right;">v2.2.0 <code>d7c2416</code></th>
+<th style="padding:8px 6px; text-align:center;">Allocs</th>
+<th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
 <th style="padding:8px 6px; text-align:right;">Memory</th>
 </tr>
 </thead>
 <tbody>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>innerₕ</code></td>
-<td style="padding:7px 6px; text-align:right;">242.2 μs</td>
-<td style="padding:7px 6px; text-align:right;">238.0 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">237.6 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-1.9% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
+<td style="padding:7px 6px; text-align:right;">240.4 μs</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">238.0 μs</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">241.1 μs</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>norm₁ₕ</code></td>
-<td style="padding:7px 6px; text-align:right;">799.8 μs</td>
-<td style="padding:7px 6px; text-align:right;">788.5 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">784.7 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-1.9% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.5% 🟢</span></td>
+<td style="padding:7px 6px; text-align:right;">789.8 μs</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">788.5 μs</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">801.5 μs</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.5% 🔴</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>normₕ</code></td>
-<td style="padding:7px 6px; text-align:right;">188.0 μs</td>
-<td style="padding:7px 6px; text-align:right;">186.2 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">186.6 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.8% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
+<td style="padding:7px 6px; text-align:right;">189.3 μs</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">186.2 μs</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">190.1 μs</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>snorm₁ₕ</code></td>
-<td style="padding:7px 6px; text-align:right;">580.6 μs</td>
-<td style="padding:7px 6px; text-align:right;">582.4 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">579.8 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.5% 🟢</span></td>
+<td style="padding:7px 6px; text-align:right;">578.5 μs</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">582.4 μs</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">581.9 μs</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.6% 🔴</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 </tbody>
@@ -668,13 +676,12 @@ detail:"162.7 μs",allocs:3,mem:"7.64 MiB"}],
   const theme = window.brambleChartTheme();
   const chart = new Chart(document.getElementById('bench_chart_4').getContext('2d'), {
     type: 'line',
-    data: { labels: ["v1.1.1 (e6655b1)","v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (b1f12ec)"], datasets: [{
+    data: { labels: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)"], datasets: [{
   label: "innerₕ",
-  data: [{x:"v1.1.1 (e6655b1)",y:242.25,julia:"1.12.7",
-detail:"242.2 μs",allocs:0,mem:"0 B"},{x:"v2.0.0 (2dec0c7)",y:240.375,julia:"1.12.7",
+  data: [{x:"v2.0.0 (2dec0c7)",y:240.375,julia:"1.12.7",
 detail:"240.4 μs",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:238.041,julia:"1.12.7",
-detail:"238.0 μs",allocs:0,mem:"0 B"},{x:"v2.2.0 (b1f12ec)",y:237.625,julia:"1.12.7",
-detail:"237.6 μs",allocs:0,mem:"0 B"}],
+detail:"238.0 μs",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:241.084,julia:"1.12.7",
+detail:"241.1 μs",allocs:0,mem:"0 B"}],
   borderColor: "#3b82f6",
   backgroundColor: "#3b82f6",
   spanGaps: true,
@@ -685,11 +692,10 @@ detail:"237.6 μs",allocs:0,mem:"0 B"}],
 },
 {
   label: "norm₁ₕ",
-  data: [{x:"v1.1.1 (e6655b1)",y:799.791,julia:"1.12.7",
-detail:"799.8 μs",allocs:0,mem:"0 B"},{x:"v2.0.0 (2dec0c7)",y:789.791,julia:"1.12.7",
+  data: [{x:"v2.0.0 (2dec0c7)",y:789.791,julia:"1.12.7",
 detail:"789.8 μs",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:788.458,julia:"1.12.7",
-detail:"788.5 μs",allocs:0,mem:"0 B"},{x:"v2.2.0 (b1f12ec)",y:784.6665,julia:"1.12.7",
-detail:"784.7 μs",allocs:0,mem:"0 B"}],
+detail:"788.5 μs",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:801.458,julia:"1.12.7",
+detail:"801.5 μs",allocs:0,mem:"0 B"}],
   borderColor: "#10b981",
   backgroundColor: "#10b981",
   spanGaps: true,
@@ -700,11 +706,10 @@ detail:"784.7 μs",allocs:0,mem:"0 B"}],
 },
 {
   label: "normₕ",
-  data: [{x:"v1.1.1 (e6655b1)",y:188.042,julia:"1.12.7",
-detail:"188.0 μs",allocs:0,mem:"0 B"},{x:"v2.0.0 (2dec0c7)",y:189.292,julia:"1.12.7",
+  data: [{x:"v2.0.0 (2dec0c7)",y:189.292,julia:"1.12.7",
 detail:"189.3 μs",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:186.167,julia:"1.12.7",
-detail:"186.2 μs",allocs:0,mem:"0 B"},{x:"v2.2.0 (b1f12ec)",y:186.625,julia:"1.12.7",
-detail:"186.6 μs",allocs:0,mem:"0 B"}],
+detail:"186.2 μs",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:190.084,julia:"1.12.7",
+detail:"190.1 μs",allocs:0,mem:"0 B"}],
   borderColor: "#f59e0b",
   backgroundColor: "#f59e0b",
   spanGaps: true,
@@ -715,11 +720,10 @@ detail:"186.6 μs",allocs:0,mem:"0 B"}],
 },
 {
   label: "snorm₁ₕ",
-  data: [{x:"v1.1.1 (e6655b1)",y:580.625,julia:"1.12.7",
-detail:"580.6 μs",allocs:0,mem:"0 B"},{x:"v2.0.0 (2dec0c7)",y:578.5,julia:"1.12.7",
+  data: [{x:"v2.0.0 (2dec0c7)",y:578.5,julia:"1.12.7",
 detail:"578.5 μs",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:582.375,julia:"1.12.7",
-detail:"582.4 μs",allocs:0,mem:"0 B"},{x:"v2.2.0 (b1f12ec)",y:579.75,julia:"1.12.7",
-detail:"579.8 μs",allocs:0,mem:"0 B"}],
+detail:"582.4 μs",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:581.917,julia:"1.12.7",
+detail:"581.9 μs",allocs:0,mem:"0 B"}],
   borderColor: "#8b5cf6",
   backgroundColor: "#8b5cf6",
   spanGaps: true,
@@ -774,104 +778,114 @@ detail:"579.8 μs",allocs:0,mem:"0 B"}],
 <thead>
 <tr style="border-bottom:2px solid rgba(128,128,128,0.3);">
 <th style="padding:8px 6px; text-align:left;">Benchmark</th>
-<th style="padding:8px 6px; text-align:right;">Base (v1.1.1 <code>e6655b1</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Prev (v2.1.0 <code>274ae7d</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Latest (v2.2.0 <code>b1f12ec</code>)</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Prev</th>
+<th style="padding:8px 6px; text-align:right;">v2.0.0 <code>2dec0c7</code> (ref)</th>
 <th style="padding:8px 6px; text-align:center;">Allocs</th>
+<th style="padding:8px 6px; text-align:right;">v2.1.0 <code>274ae7d</code></th>
+<th style="padding:8px 6px; text-align:center;">Allocs</th>
+<th style="padding:8px 6px; text-align:right;">v2.2.0 <code>d7c2416</code></th>
+<th style="padding:8px 6px; text-align:center;">Allocs</th>
+<th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
 <th style="padding:8px 6px; text-align:right;">Memory</th>
 </tr>
 </thead>
 <tbody>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>Rₕ 1D (allocates its output)</code></td>
-<td style="padding:7px 6px; text-align:right;">2.92 ms</td>
-<td style="padding:7px 6px; text-align:right;">3.24 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">3.25 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+11.4% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
+<td style="padding:7px 6px; text-align:right;">3.2 ms</td>
 <td style="padding:7px 6px; text-align:center;">10</td>
+<td style="padding:7px 6px; text-align:right;">3.24 ms</td>
+<td style="padding:7px 6px; text-align:center;">10</td>
+<td style="padding:7px 6px; text-align:right;">3.21 ms</td>
+<td style="padding:7px 6px; text-align:center;">10</td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">7.64 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>Rₕ! 1D</code></td>
-<td style="padding:7px 6px; text-align:right;">2.89 ms</td>
-<td style="padding:7px 6px; text-align:right;">3.27 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">3.19 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+10.1% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-2.6% 🟢</span></td>
+<td style="padding:7px 6px; text-align:right;">3.19 ms</td>
 <td style="padding:7px 6px; text-align:center;">7</td>
+<td style="padding:7px 6px; text-align:right;">3.27 ms</td>
+<td style="padding:7px 6px; text-align:center;">7</td>
+<td style="padding:7px 6px; text-align:right;">3.21 ms</td>
+<td style="padding:7px 6px; text-align:center;">7</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.5% 🔴</span></td>
 <td style="padding:7px 6px; text-align:right;">448 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>Rₕ! 1D, Serial() backend (default)</code></td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right;">3.03 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">3.03 ms</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
+<td style="padding:7px 6px; text-align:right;">2.95 ms</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">3.03 ms</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">3.01 ms</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+2.3% 🔴</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>Rₕ! 2D</code></td>
-<td style="padding:7px 6px; text-align:right;">3.54 ms</td>
-<td style="padding:7px 6px; text-align:right;">3.91 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">3.87 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+9.4% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-1.2% 🟢</span></td>
+<td style="padding:7px 6px; text-align:right;">3.82 ms</td>
 <td style="padding:7px 6px; text-align:center;">7</td>
+<td style="padding:7px 6px; text-align:right;">3.91 ms</td>
+<td style="padding:7px 6px; text-align:center;">7</td>
+<td style="padding:7px 6px; text-align:right;">3.87 ms</td>
+<td style="padding:7px 6px; text-align:center;">7</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.2% 🔴</span></td>
 <td style="padding:7px 6px; text-align:right;">448 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>Rₕ! 3D</code></td>
-<td style="padding:7px 6px; text-align:right;">4.34 ms</td>
-<td style="padding:7px 6px; text-align:right;">4.58 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">4.61 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+6.0% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.5% 🔴</span></td>
+<td style="padding:7px 6px; text-align:right;">4.44 ms</td>
 <td style="padding:7px 6px; text-align:center;">7</td>
+<td style="padding:7px 6px; text-align:right;">4.58 ms</td>
+<td style="padding:7px 6px; text-align:center;">7</td>
+<td style="padding:7px 6px; text-align:right;">4.72 ms</td>
+<td style="padding:7px 6px; text-align:center;">7</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+6.3% 🔴</span></td>
 <td style="padding:7px 6px; text-align:right;">464 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>avgₕ! 1D</code></td>
-<td style="padding:7px 6px; text-align:right;">16.23 ms</td>
-<td style="padding:7px 6px; text-align:right;">16.85 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">16.77 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+3.3% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.5% 🟢</span></td>
+<td style="padding:7px 6px; text-align:right;">16.74 ms</td>
 <td style="padding:7px 6px; text-align:center;">7</td>
+<td style="padding:7px 6px; text-align:right;">16.85 ms</td>
+<td style="padding:7px 6px; text-align:center;">7</td>
+<td style="padding:7px 6px; text-align:right;">16.72 ms</td>
+<td style="padding:7px 6px; text-align:center;">7</td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">544 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>avgₕ! 1D, Serial() backend (default)</code></td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right;">17.24 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">17.33 ms</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.5% 🔴</span></td>
+<td style="padding:7px 6px; text-align:right;">17.32 ms</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">17.24 ms</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">17.25 ms</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.5% 🟢</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>avgₕ! 2D</code></td>
-<td style="padding:7px 6px; text-align:right;">105.79 ms</td>
-<td style="padding:7px 6px; text-align:right;">106.07 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">107.04 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.2% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.9% 🔴</span></td>
+<td style="padding:7px 6px; text-align:right;">106.39 ms</td>
 <td style="padding:7px 6px; text-align:center;">7</td>
+<td style="padding:7px 6px; text-align:right;">106.07 ms</td>
+<td style="padding:7px 6px; text-align:center;">7</td>
+<td style="padding:7px 6px; text-align:right;">106.47 ms</td>
+<td style="padding:7px 6px; text-align:center;">7</td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">560 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>avgₕ! 3D</code></td>
-<td style="padding:7px 6px; text-align:right;">655.97 ms</td>
-<td style="padding:7px 6px; text-align:right;">659.64 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">628.3 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-4.2% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-4.8% 🟢</span></td>
+<td style="padding:7px 6px; text-align:right;">620.75 ms</td>
 <td style="padding:7px 6px; text-align:center;">7</td>
+<td style="padding:7px 6px; text-align:right;">659.64 ms</td>
+<td style="padding:7px 6px; text-align:center;">7</td>
+<td style="padding:7px 6px; text-align:right;">622.8 ms</td>
+<td style="padding:7px 6px; text-align:center;">7</td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">576 B</td>
 </tr>
 </tbody>
@@ -888,13 +902,12 @@ detail:"579.8 μs",allocs:0,mem:"0 B"}],
   const theme = window.brambleChartTheme();
   const chart = new Chart(document.getElementById('bench_chart_5').getContext('2d'), {
     type: 'line',
-    data: { labels: ["v1.1.1 (e6655b1)","v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (b1f12ec)"], datasets: [{
+    data: { labels: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)"], datasets: [{
   label: "Rₕ 1D (allocates its output)",
-  data: [{x:"v1.1.1 (e6655b1)",y:1.0,julia:"1.12.7",
-detail:"2.92 ms (baseline)",allocs:6,mem:"7.64 MiB"},{x:"v2.0.0 (2dec0c7)",y:1.094514155733015,julia:"1.12.7",
-detail:"3.2 ms (+9.5%)",allocs:10,mem:"7.64 MiB"},{x:"v2.1.0 (274ae7d)",y:1.1108835068794192,julia:"1.12.7",
-detail:"3.24 ms (+11.1%)",allocs:10,mem:"7.64 MiB"},{x:"v2.2.0 (b1f12ec)",y:1.1136734997601507,julia:"1.12.7",
-detail:"3.25 ms (+11.4%)",allocs:10,mem:"7.64 MiB"}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"3.2 ms (baseline)",allocs:10,mem:"7.64 MiB"},{x:"v2.1.0 (274ae7d)",y:1.0149558149254283,julia:"1.12.7",
+detail:"3.24 ms (+1.5%)",allocs:10,mem:"7.64 MiB"},{x:"v2.2.0 (d7c2416)",y:1.0044658399467121,julia:"1.12.7",
+detail:"3.21 ms (+0.4%)",allocs:10,mem:"7.64 MiB"}],
   borderColor: "#3b82f6",
   backgroundColor: "#3b82f6",
   spanGaps: true,
@@ -905,11 +918,10 @@ detail:"3.25 ms (+11.4%)",allocs:10,mem:"7.64 MiB"}],
 },
 {
   label: "Rₕ! 1D",
-  data: [{x:"v1.1.1 (e6655b1)",y:1.0,julia:"1.12.7",
-detail:"2.89 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.0.0 (2dec0c7)",y:1.1039945977011891,julia:"1.12.7",
-detail:"3.19 ms (+10.4%)",allocs:7,mem:"448 B"},{x:"v2.1.0 (274ae7d)",y:1.1311667921742699,julia:"1.12.7",
-detail:"3.27 ms (+13.1%)",allocs:7,mem:"448 B"},{x:"v2.2.0 (b1f12ec)",y:1.101201175152052,julia:"1.12.7",
-detail:"3.19 ms (+10.1%)",allocs:7,mem:"448 B"}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"3.19 ms (baseline)",allocs:7,mem:"448 B"},{x:"v2.1.0 (274ae7d)",y:1.024612615432775,julia:"1.12.7",
+detail:"3.27 ms (+2.5%)",allocs:7,mem:"448 B"},{x:"v2.2.0 (d7c2416)",y:1.004656440757552,julia:"1.12.7",
+detail:"3.21 ms (+0.5%)",allocs:7,mem:"448 B"}],
   borderColor: "#10b981",
   backgroundColor: "#10b981",
   spanGaps: true,
@@ -922,8 +934,8 @@ detail:"3.19 ms (+10.1%)",allocs:7,mem:"448 B"}],
   label: "Rₕ! 1D, Serial() backend (default)",
   data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
 detail:"2.95 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0301685765215176,julia:"1.12.7",
-detail:"3.03 ms (+3.0%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (b1f12ec)",y:1.030387912740854,julia:"1.12.7",
-detail:"3.03 ms (+3.0%)",allocs:0,mem:"0 B"}],
+detail:"3.03 ms (+3.0%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:1.0233426704014938,julia:"1.12.7",
+detail:"3.01 ms (+2.3%)",allocs:0,mem:"0 B"}],
   borderColor: "#f59e0b",
   backgroundColor: "#f59e0b",
   spanGaps: true,
@@ -934,11 +946,10 @@ detail:"3.03 ms (+3.0%)",allocs:0,mem:"0 B"}],
 },
 {
   label: "Rₕ! 2D",
-  data: [{x:"v1.1.1 (e6655b1)",y:1.0,julia:"1.12.7",
-detail:"3.54 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.0.0 (2dec0c7)",y:1.0805578106215967,julia:"1.12.7",
-detail:"3.82 ms (+8.1%)",allocs:7,mem:"448 B"},{x:"v2.1.0 (274ae7d)",y:1.1069879075030054,julia:"1.12.7",
-detail:"3.91 ms (+10.7%)",allocs:7,mem:"448 B"},{x:"v2.2.0 (b1f12ec)",y:1.0935517997312778,julia:"1.12.7",
-detail:"3.87 ms (+9.4%)",allocs:7,mem:"448 B"}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"3.82 ms (baseline)",allocs:7,mem:"448 B"},{x:"v2.1.0 (274ae7d)",y:1.0244596787155744,julia:"1.12.7",
+detail:"3.91 ms (+2.4%)",allocs:7,mem:"448 B"},{x:"v2.2.0 (d7c2416)",y:1.0118616496886683,julia:"1.12.7",
+detail:"3.87 ms (+1.2%)",allocs:7,mem:"448 B"}],
   borderColor: "#8b5cf6",
   backgroundColor: "#8b5cf6",
   spanGaps: true,
@@ -949,11 +960,10 @@ detail:"3.87 ms (+9.4%)",allocs:7,mem:"448 B"}],
 },
 {
   label: "Rₕ! 3D",
-  data: [{x:"v1.1.1 (e6655b1)",y:1.0,julia:"1.12.7",
-detail:"4.34 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.0.0 (2dec0c7)",y:1.0224451730714081,julia:"1.12.7",
-detail:"4.44 ms (+2.2%)",allocs:7,mem:"464 B"},{x:"v2.1.0 (274ae7d)",y:1.0546335964338502,julia:"1.12.7",
-detail:"4.58 ms (+5.5%)",allocs:7,mem:"464 B"},{x:"v2.2.0 (b1f12ec)",y:1.0599608180159794,julia:"1.12.7",
-detail:"4.61 ms (+6.0%)",allocs:7,mem:"464 B"}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"4.44 ms (baseline)",allocs:7,mem:"464 B"},{x:"v2.1.0 (274ae7d)",y:1.031481808717184,julia:"1.12.7",
+detail:"4.58 ms (+3.1%)",allocs:7,mem:"464 B"},{x:"v2.2.0 (d7c2416)",y:1.0627620360730465,julia:"1.12.7",
+detail:"4.72 ms (+6.3%)",allocs:7,mem:"464 B"}],
   borderColor: "#ec4899",
   backgroundColor: "#ec4899",
   spanGaps: true,
@@ -964,7 +974,7 @@ detail:"4.61 ms (+6.0%)",allocs:7,mem:"464 B"}],
 },
 {
   label: "1.0x (ref)",
-  data: [{x:"v1.1.1 (e6655b1)",y:1},{x:"v2.0.0 (2dec0c7)",y:1},{x:"v2.1.0 (274ae7d)",y:1},{x:"v2.2.0 (b1f12ec)",y:1}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1},{x:"v2.1.0 (274ae7d)",y:1},{x:"v2.2.0 (d7c2416)",y:1}],
   borderColor: "rgba(128,128,128,0.7)",
   borderDash: [5,4],
   borderWidth: 1.5,
@@ -1017,13 +1027,12 @@ detail:"4.61 ms (+6.0%)",allocs:7,mem:"464 B"}],
   const theme = window.brambleChartTheme();
   const chart = new Chart(document.getElementById('bench_chart_6').getContext('2d'), {
     type: 'line',
-    data: { labels: ["v1.1.1 (e6655b1)","v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (b1f12ec)"], datasets: [{
+    data: { labels: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)"], datasets: [{
   label: "avgₕ! 1D",
-  data: [{x:"v1.1.1 (e6655b1)",y:1.0,julia:"1.12.7",
-detail:"16.23 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.0.0 (2dec0c7)",y:1.030946330946331,julia:"1.12.7",
-detail:"16.74 ms (+3.1%)",allocs:7,mem:"544 B"},{x:"v2.1.0 (274ae7d)",y:1.0379635635635636,julia:"1.12.7",
-detail:"16.85 ms (+3.8%)",allocs:7,mem:"544 B"},{x:"v2.2.0 (b1f12ec)",y:1.033210133210133,julia:"1.12.7",
-detail:"16.77 ms (+3.3%)",allocs:7,mem:"544 B"}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"16.74 ms (baseline)",allocs:7,mem:"544 B"},{x:"v2.1.0 (274ae7d)",y:1.0068065935214991,julia:"1.12.7",
+detail:"16.85 ms (+0.7%)",allocs:7,mem:"544 B"},{x:"v2.2.0 (d7c2416)",y:0.9989244822203467,julia:"1.12.7",
+detail:"16.72 ms (-0.1%)",allocs:7,mem:"544 B"}],
   borderColor: "#3b82f6",
   backgroundColor: "#3b82f6",
   spanGaps: true,
@@ -1036,8 +1045,8 @@ detail:"16.77 ms (+3.3%)",allocs:7,mem:"544 B"}],
   label: "avgₕ! 1D, Serial() backend (default)",
   data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
 detail:"17.32 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:0.994873716820243,julia:"1.12.7",
-detail:"17.24 ms (-0.5%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (b1f12ec)",y:1.0001455136681547,julia:"1.12.7",
-detail:"17.33 ms (+0.0%)",allocs:0,mem:"0 B"}],
+detail:"17.24 ms (-0.5%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:0.9954365216680587,julia:"1.12.7",
+detail:"17.25 ms (-0.5%)",allocs:0,mem:"0 B"}],
   borderColor: "#10b981",
   backgroundColor: "#10b981",
   spanGaps: true,
@@ -1048,11 +1057,10 @@ detail:"17.33 ms (+0.0%)",allocs:0,mem:"0 B"}],
 },
 {
   label: "avgₕ! 2D",
-  data: [{x:"v1.1.1 (e6655b1)",y:1.0,julia:"1.12.7",
-detail:"105.79 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.0.0 (2dec0c7)",y:1.0056272812558338,julia:"1.12.7",
-detail:"106.39 ms (+0.6%)",allocs:7,mem:"560 B"},{x:"v2.1.0 (274ae7d)",y:1.0025836281272376,julia:"1.12.7",
-detail:"106.07 ms (+0.3%)",allocs:7,mem:"560 B"},{x:"v2.2.0 (b1f12ec)",y:1.011775611623505,julia:"1.12.7",
-detail:"107.04 ms (+1.2%)",allocs:7,mem:"560 B"}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"106.39 ms (baseline)",allocs:7,mem:"560 B"},{x:"v2.1.0 (274ae7d)",y:0.996973378521717,julia:"1.12.7",
+detail:"106.07 ms (-0.3%)",allocs:7,mem:"560 B"},{x:"v2.2.0 (d7c2416)",y:1.0008005106966111,julia:"1.12.7",
+detail:"106.47 ms (+0.1%)",allocs:7,mem:"560 B"}],
   borderColor: "#f59e0b",
   backgroundColor: "#f59e0b",
   spanGaps: true,
@@ -1063,11 +1071,10 @@ detail:"107.04 ms (+1.2%)",allocs:7,mem:"560 B"}],
 },
 {
   label: "avgₕ! 3D",
-  data: [{x:"v1.1.1 (e6655b1)",y:1.0,julia:"1.12.7",
-detail:"655.97 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.0.0 (2dec0c7)",y:0.9463201866405931,julia:"1.12.7",
-detail:"620.75 ms (-5.4%)",allocs:7,mem:"576 B"},{x:"v2.1.0 (274ae7d)",y:1.0055972100714727,julia:"1.12.7",
-detail:"659.64 ms (+0.6%)",allocs:7,mem:"576 B"},{x:"v2.2.0 (b1f12ec)",y:0.9578184850486867,julia:"1.12.7",
-detail:"628.3 ms (-4.2%)",allocs:7,mem:"576 B"}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"620.75 ms (baseline)",allocs:7,mem:"576 B"},{x:"v2.1.0 (274ae7d)",y:1.0626395001054676,julia:"1.12.7",
+detail:"659.64 ms (+6.3%)",allocs:7,mem:"576 B"},{x:"v2.2.0 (d7c2416)",y:1.0033005530130232,julia:"1.12.7",
+detail:"622.8 ms (+0.3%)",allocs:7,mem:"576 B"}],
   borderColor: "#8b5cf6",
   backgroundColor: "#8b5cf6",
   spanGaps: true,
@@ -1078,7 +1085,7 @@ detail:"628.3 ms (-4.2%)",allocs:7,mem:"576 B"}],
 },
 {
   label: "1.0x (ref)",
-  data: [{x:"v1.1.1 (e6655b1)",y:1},{x:"v2.0.0 (2dec0c7)",y:1},{x:"v2.1.0 (274ae7d)",y:1},{x:"v2.2.0 (b1f12ec)",y:1}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1},{x:"v2.1.0 (274ae7d)",y:1},{x:"v2.2.0 (d7c2416)",y:1}],
   borderColor: "rgba(128,128,128,0.7)",
   borderDash: [5,4],
   borderWidth: 1.5,
@@ -1132,34 +1139,37 @@ detail:"628.3 ms (-4.2%)",allocs:7,mem:"576 B"}],
 <thead>
 <tr style="border-bottom:2px solid rgba(128,128,128,0.3);">
 <th style="padding:8px 6px; text-align:left;">Benchmark</th>
-<th style="padding:8px 6px; text-align:right;">Base (v1.1.1 <code>e6655b1</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Prev (v2.1.0 <code>274ae7d</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Latest (v2.2.0 <code>b1f12ec</code>)</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Prev</th>
+<th style="padding:8px 6px; text-align:right;">v2.0.0 <code>2dec0c7</code> (ref)</th>
 <th style="padding:8px 6px; text-align:center;">Allocs</th>
+<th style="padding:8px 6px; text-align:right;">v2.1.0 <code>274ae7d</code></th>
+<th style="padding:8px 6px; text-align:center;">Allocs</th>
+<th style="padding:8px 6px; text-align:right;">v2.2.0 <code>d7c2416</code></th>
+<th style="padding:8px 6px; text-align:center;">Allocs</th>
+<th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
 <th style="padding:8px 6px; text-align:right;">Memory</th>
 </tr>
 </thead>
 <tbody>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>D₋ₓ (3 components)</code></td>
-<td style="padding:7px 6px; text-align:right;">712.9 μs</td>
-<td style="padding:7px 6px; text-align:right;">694.0 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">661.1 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-7.3% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-4.7% 🟢</span></td>
+<td style="padding:7px 6px; text-align:right;">670.2 μs</td>
 <td style="padding:7px 6px; text-align:center;">3</td>
+<td style="padding:7px 6px; text-align:right;">694.0 μs</td>
+<td style="padding:7px 6px; text-align:center;">3</td>
+<td style="padding:7px 6px; text-align:right;">742.8 μs</td>
+<td style="padding:7px 6px; text-align:center;">3</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+10.8% 🔴</span></td>
 <td style="padding:7px 6px; text-align:right;">22.89 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>∇₋ₕ (3 components)</code></td>
-<td style="padding:7px 6px; text-align:right;">1.46 ms</td>
-<td style="padding:7px 6px; text-align:right;">1.41 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">1.41 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-3.6% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
+<td style="padding:7px 6px; text-align:right;">1.38 ms</td>
 <td style="padding:7px 6px; text-align:center;">10</td>
+<td style="padding:7px 6px; text-align:right;">1.41 ms</td>
+<td style="padding:7px 6px; text-align:center;">10</td>
+<td style="padding:7px 6px; text-align:right;">1.44 ms</td>
+<td style="padding:7px 6px; text-align:center;">10</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+4.1% 🔴</span></td>
 <td style="padding:7px 6px; text-align:right;">45.78 MiB</td>
 </tr>
 </tbody>
@@ -1175,13 +1185,12 @@ detail:"628.3 ms (-4.2%)",allocs:7,mem:"576 B"}],
   const theme = window.brambleChartTheme();
   const chart = new Chart(document.getElementById('bench_chart_7').getContext('2d'), {
     type: 'line',
-    data: { labels: ["v1.1.1 (e6655b1)","v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (b1f12ec)"], datasets: [{
+    data: { labels: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)"], datasets: [{
   label: "D₋ₓ (3 components)",
-  data: [{x:"v1.1.1 (e6655b1)",y:0.712875,julia:"1.12.7",
-detail:"712.9 μs",allocs:3,mem:"22.89 MiB"},{x:"v2.0.0 (2dec0c7)",y:0.670208,julia:"1.12.7",
+  data: [{x:"v2.0.0 (2dec0c7)",y:0.670208,julia:"1.12.7",
 detail:"670.2 μs",allocs:3,mem:"22.89 MiB"},{x:"v2.1.0 (274ae7d)",y:0.693958,julia:"1.12.7",
-detail:"694.0 μs",allocs:3,mem:"22.89 MiB"},{x:"v2.2.0 (b1f12ec)",y:0.661125,julia:"1.12.7",
-detail:"661.1 μs",allocs:3,mem:"22.89 MiB"}],
+detail:"694.0 μs",allocs:3,mem:"22.89 MiB"},{x:"v2.2.0 (d7c2416)",y:0.7428125,julia:"1.12.7",
+detail:"742.8 μs",allocs:3,mem:"22.89 MiB"}],
   borderColor: "#3b82f6",
   backgroundColor: "#3b82f6",
   spanGaps: true,
@@ -1192,11 +1201,10 @@ detail:"661.1 μs",allocs:3,mem:"22.89 MiB"}],
 },
 {
   label: "∇₋ₕ (3 components)",
-  data: [{x:"v1.1.1 (e6655b1)",y:1.462125,julia:"1.12.7",
-detail:"1.46 ms",allocs:10,mem:"45.78 MiB"},{x:"v2.0.0 (2dec0c7)",y:1.380625,julia:"1.12.7",
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.380625,julia:"1.12.7",
 detail:"1.38 ms",allocs:10,mem:"45.78 MiB"},{x:"v2.1.0 (274ae7d)",y:1.407666,julia:"1.12.7",
-detail:"1.41 ms",allocs:10,mem:"45.78 MiB"},{x:"v2.2.0 (b1f12ec)",y:1.409917,julia:"1.12.7",
-detail:"1.41 ms",allocs:10,mem:"45.78 MiB"}],
+detail:"1.41 ms",allocs:10,mem:"45.78 MiB"},{x:"v2.2.0 (d7c2416)",y:1.436584,julia:"1.12.7",
+detail:"1.44 ms",allocs:10,mem:"45.78 MiB"}],
   borderColor: "#10b981",
   backgroundColor: "#10b981",
   spanGaps: true,
@@ -1251,44 +1259,48 @@ detail:"1.41 ms",allocs:10,mem:"45.78 MiB"}],
 <thead>
 <tr style="border-bottom:2px solid rgba(128,128,128,0.3);">
 <th style="padding:8px 6px; text-align:left;">Benchmark</th>
-<th style="padding:8px 6px; text-align:right;">Base (v1.1.1 <code>e6655b1</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Prev (v2.1.0 <code>274ae7d</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Latest (v2.2.0 <code>b1f12ec</code>)</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Prev</th>
+<th style="padding:8px 6px; text-align:right;">v2.0.0 <code>2dec0c7</code> (ref)</th>
 <th style="padding:8px 6px; text-align:center;">Allocs</th>
+<th style="padding:8px 6px; text-align:right;">v2.1.0 <code>274ae7d</code></th>
+<th style="padding:8px 6px; text-align:center;">Allocs</th>
+<th style="padding:8px 6px; text-align:right;">v2.2.0 <code>d7c2416</code></th>
+<th style="padding:8px 6px; text-align:center;">Allocs</th>
+<th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
 <th style="padding:8px 6px; text-align:right;">Memory</th>
 </tr>
 </thead>
 <tbody>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>gridspace 2D</code></td>
-<td style="padding:7px 6px; text-align:right;">363.6 μs</td>
-<td style="padding:7px 6px; text-align:right;">2.24 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">2.37 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+551.1% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+5.6% 🔴</span></td>
+<td style="padding:7px 6px; text-align:right;">2.22 ms</td>
 <td style="padding:7px 6px; text-align:center;">42</td>
+<td style="padding:7px 6px; text-align:right;">2.24 ms</td>
+<td style="padding:7px 6px; text-align:center;">42</td>
+<td style="padding:7px 6px; text-align:right;">2.24 ms</td>
+<td style="padding:7px 6px; text-align:center;">42</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.0% 🔴</span></td>
 <td style="padding:7px 6px; text-align:right;">22.95 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>gridspace 3D</code></td>
-<td style="padding:7px 6px; text-align:right;">1.66 ms</td>
-<td style="padding:7px 6px; text-align:right;">6.28 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">6.15 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+271.0% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-2.0% 🟢</span></td>
+<td style="padding:7px 6px; text-align:right;">6.2 ms</td>
 <td style="padding:7px 6px; text-align:center;">52</td>
+<td style="padding:7px 6px; text-align:right;">6.28 ms</td>
+<td style="padding:7px 6px; text-align:center;">52</td>
+<td style="padding:7px 6px; text-align:right;">6.22 ms</td>
+<td style="padding:7px 6px; text-align:center;">52</td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">30.57 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>hₘₐₓ 3D</code></td>
-<td style="padding:7px 6px; text-align:right;">153.3 ns</td>
-<td style="padding:7px 6px; text-align:right;">154.6 ns</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">154.7 ns</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.9% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
+<td style="padding:7px 6px; text-align:right;">153.0 ns</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">154.6 ns</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">154.4 ns</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.9% 🔴</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 </tbody>
@@ -1304,13 +1316,12 @@ detail:"1.41 ms",allocs:10,mem:"45.78 MiB"}],
   const theme = window.brambleChartTheme();
   const chart = new Chart(document.getElementById('bench_chart_8').getContext('2d'), {
     type: 'line',
-    data: { labels: ["v1.1.1 (e6655b1)","v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (b1f12ec)"], datasets: [{
+    data: { labels: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)"], datasets: [{
   label: "gridspace 2D",
-  data: [{x:"v1.1.1 (e6655b1)",y:1.0,julia:"1.12.7",
-detail:"363.6 μs (baseline)",allocs:21,mem:"22.95 MiB"},{x:"v2.0.0 (2dec0c7)",y:6.105084526663064,julia:"1.12.7",
-detail:"2.22 ms (+510.5%)",allocs:42,mem:"22.95 MiB"},{x:"v2.1.0 (274ae7d)",y:6.166396439882448,julia:"1.12.7",
-detail:"2.24 ms (+516.6%)",allocs:42,mem:"22.95 MiB"},{x:"v2.2.0 (b1f12ec)",y:6.510884019764373,julia:"1.12.7",
-detail:"2.37 ms (+551.1%)",allocs:42,mem:"22.95 MiB"}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"2.22 ms (baseline)",allocs:42,mem:"22.95 MiB"},{x:"v2.1.0 (274ae7d)",y:1.0100427623813584,julia:"1.12.7",
+detail:"2.24 ms (+1.0%)",allocs:42,mem:"22.95 MiB"},{x:"v2.2.0 (d7c2416)",y:1.0095548603690214,julia:"1.12.7",
+detail:"2.24 ms (+1.0%)",allocs:42,mem:"22.95 MiB"}],
   borderColor: "#3b82f6",
   backgroundColor: "#3b82f6",
   spanGaps: true,
@@ -1321,11 +1332,10 @@ detail:"2.37 ms (+551.1%)",allocs:42,mem:"22.95 MiB"}],
 },
 {
   label: "gridspace 3D",
-  data: [{x:"v1.1.1 (e6655b1)",y:1.0,julia:"1.12.7",
-detail:"1.66 ms (baseline)",allocs:24,mem:"30.57 MiB"},{x:"v2.0.0 (2dec0c7)",y:3.7381318258903335,julia:"1.12.7",
-detail:"6.2 ms (+273.8%)",allocs:52,mem:"30.57 MiB"},{x:"v2.1.0 (274ae7d)",y:3.787224722065197,julia:"1.12.7",
-detail:"6.28 ms (+278.7%)",allocs:52,mem:"30.57 MiB"},{x:"v2.2.0 (b1f12ec)",y:3.7104832108535897,julia:"1.12.7",
-detail:"6.15 ms (+271.0%)",allocs:52,mem:"30.57 MiB"}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"6.2 ms (baseline)",allocs:52,mem:"30.57 MiB"},{x:"v2.1.0 (274ae7d)",y:1.0131330029173518,julia:"1.12.7",
+detail:"6.28 ms (+1.3%)",allocs:52,mem:"30.57 MiB"},{x:"v2.2.0 (d7c2416)",y:1.0028900913595995,julia:"1.12.7",
+detail:"6.22 ms (+0.3%)",allocs:52,mem:"30.57 MiB"}],
   borderColor: "#10b981",
   backgroundColor: "#10b981",
   spanGaps: true,
@@ -1336,11 +1346,10 @@ detail:"6.15 ms (+271.0%)",allocs:52,mem:"30.57 MiB"}],
 },
 {
   label: "hₘₐₓ 3D",
-  data: [{x:"v1.1.1 (e6655b1)",y:1.0,julia:"1.12.7",
-detail:"153.3 ns (baseline)",allocs:0,mem:"0 B"},{x:"v2.0.0 (2dec0c7)",y:0.9983413587458482,julia:"1.12.7",
-detail:"153.0 ns (-0.2%)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0089730807577268,julia:"1.12.7",
-detail:"154.6 ns (+0.9%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (b1f12ec)",y:1.0090240228220448,julia:"1.12.7",
-detail:"154.7 ns (+0.9%)",allocs:0,mem:"0 B"}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"153.0 ns (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0106493855220369,julia:"1.12.7",
+detail:"154.6 ns (+1.1%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:1.0089876062952494,julia:"1.12.7",
+detail:"154.4 ns (+0.9%)",allocs:0,mem:"0 B"}],
   borderColor: "#f59e0b",
   backgroundColor: "#f59e0b",
   spanGaps: true,
@@ -1351,7 +1360,7 @@ detail:"154.7 ns (+0.9%)",allocs:0,mem:"0 B"}],
 },
 {
   label: "1.0x (ref)",
-  data: [{x:"v1.1.1 (e6655b1)",y:1},{x:"v2.0.0 (2dec0c7)",y:1},{x:"v2.1.0 (274ae7d)",y:1},{x:"v2.2.0 (b1f12ec)",y:1}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1},{x:"v2.1.0 (274ae7d)",y:1},{x:"v2.2.0 (d7c2416)",y:1}],
   borderColor: "rgba(128,128,128,0.7)",
   borderDash: [5,4],
   borderWidth: 1.5,
@@ -1403,34 +1412,37 @@ detail:"154.7 ns (+0.9%)",allocs:0,mem:"0 B"}],
 <thead>
 <tr style="border-bottom:2px solid rgba(128,128,128,0.3);">
 <th style="padding:8px 6px; text-align:left;">Benchmark</th>
-<th style="padding:8px 6px; text-align:right;">Base (v1.1.1 <code>e6655b1</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Prev (v2.1.0 <code>274ae7d</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Latest (v2.2.0 <code>b1f12ec</code>)</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Prev</th>
+<th style="padding:8px 6px; text-align:right;">v2.0.0 <code>2dec0c7</code> (ref)</th>
 <th style="padding:8px 6px; text-align:center;">Allocs</th>
+<th style="padding:8px 6px; text-align:right;">v2.1.0 <code>274ae7d</code></th>
+<th style="padding:8px 6px; text-align:center;">Allocs</th>
+<th style="padding:8px 6px; text-align:right;">v2.2.0 <code>d7c2416</code></th>
+<th style="padding:8px 6px; text-align:center;">Allocs</th>
+<th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
 <th style="padding:8px 6px; text-align:right;">Memory</th>
 </tr>
 </thead>
 <tbody>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>TTFX (load + first operator)</code></td>
-<td style="padding:7px 6px; text-align:right;">651.65 ms</td>
-<td style="padding:7px 6px; text-align:right;">654.5 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">459.4 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-29.5% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-29.8% 🟢</span></td>
+<td style="padding:7px 6px; text-align:right;">598.63 ms</td>
 <td style="padding:7px 6px; text-align:center;">45</td>
+<td style="padding:7px 6px; text-align:right;">654.5 ms</td>
+<td style="padding:7px 6px; text-align:center;">45</td>
+<td style="padding:7px 6px; text-align:right;">454.61 ms</td>
+<td style="padding:7px 6px; text-align:center;">45</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-24.1% 🟢</span></td>
 <td style="padding:7px 6px; text-align:right;">1.3 KiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>using Bramble</code></td>
-<td style="padding:7px 6px; text-align:right;">556.36 ms</td>
-<td style="padding:7px 6px; text-align:right;">487.28 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">400.97 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-27.9% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-17.7% 🟢</span></td>
+<td style="padding:7px 6px; text-align:right;">501.71 ms</td>
 <td style="padding:7px 6px; text-align:center;">45</td>
+<td style="padding:7px 6px; text-align:right;">487.28 ms</td>
+<td style="padding:7px 6px; text-align:center;">45</td>
+<td style="padding:7px 6px; text-align:right;">400.0 ms</td>
+<td style="padding:7px 6px; text-align:center;">45</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-20.3% 🟢</span></td>
 <td style="padding:7px 6px; text-align:right;">1.3 KiB</td>
 </tr>
 </tbody>
@@ -1446,13 +1458,12 @@ detail:"154.7 ns (+0.9%)",allocs:0,mem:"0 B"}],
   const theme = window.brambleChartTheme();
   const chart = new Chart(document.getElementById('bench_chart_9').getContext('2d'), {
     type: 'line',
-    data: { labels: ["v1.1.1 (e6655b1)","v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (b1f12ec)"], datasets: [{
+    data: { labels: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)"], datasets: [{
   label: "TTFX (load + first operator)",
-  data: [{x:"v1.1.1 (e6655b1)",y:651.652791,julia:"1.12.7",
-detail:"651.65 ms",allocs:45,mem:"1.3 KiB"},{x:"v2.0.0 (2dec0c7)",y:598.631542,julia:"1.12.7",
+  data: [{x:"v2.0.0 (2dec0c7)",y:598.631542,julia:"1.12.7",
 detail:"598.63 ms",allocs:45,mem:"1.3 KiB"},{x:"v2.1.0 (274ae7d)",y:654.503208,julia:"1.12.7",
-detail:"654.5 ms",allocs:45,mem:"1.3 KiB"},{x:"v2.2.0 (b1f12ec)",y:459.395333,julia:"1.12.7",
-detail:"459.4 ms",allocs:45,mem:"1.3 KiB"}],
+detail:"654.5 ms",allocs:45,mem:"1.3 KiB"},{x:"v2.2.0 (d7c2416)",y:454.605959,julia:"1.12.7",
+detail:"454.61 ms",allocs:45,mem:"1.3 KiB"}],
   borderColor: "#3b82f6",
   backgroundColor: "#3b82f6",
   spanGaps: true,
@@ -1463,11 +1474,10 @@ detail:"459.4 ms",allocs:45,mem:"1.3 KiB"}],
 },
 {
   label: "using Bramble",
-  data: [{x:"v1.1.1 (e6655b1)",y:556.356292,julia:"1.12.7",
-detail:"556.36 ms",allocs:45,mem:"1.3 KiB"},{x:"v2.0.0 (2dec0c7)",y:501.70775,julia:"1.12.7",
+  data: [{x:"v2.0.0 (2dec0c7)",y:501.70775,julia:"1.12.7",
 detail:"501.71 ms",allocs:45,mem:"1.3 KiB"},{x:"v2.1.0 (274ae7d)",y:487.277792,julia:"1.12.7",
-detail:"487.28 ms",allocs:45,mem:"1.3 KiB"},{x:"v2.2.0 (b1f12ec)",y:400.974292,julia:"1.12.7",
-detail:"400.97 ms",allocs:45,mem:"1.3 KiB"}],
+detail:"487.28 ms",allocs:45,mem:"1.3 KiB"},{x:"v2.2.0 (d7c2416)",y:399.997458,julia:"1.12.7",
+detail:"400.0 ms",allocs:45,mem:"1.3 KiB"}],
   borderColor: "#10b981",
   backgroundColor: "#10b981",
   spanGaps: true,
@@ -1522,144 +1532,158 @@ detail:"400.97 ms",allocs:45,mem:"1.3 KiB"}],
 <thead>
 <tr style="border-bottom:2px solid rgba(128,128,128,0.3);">
 <th style="padding:8px 6px; text-align:left;">Benchmark</th>
-<th style="padding:8px 6px; text-align:right;">Base (v1.1.1 <code>e6655b1</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Prev (v2.1.0 <code>274ae7d</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Latest (v2.2.0 <code>b1f12ec</code>)</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Prev</th>
+<th style="padding:8px 6px; text-align:right;">v2.0.0 <code>2dec0c7</code> (ref)</th>
 <th style="padding:8px 6px; text-align:center;">Allocs</th>
+<th style="padding:8px 6px; text-align:right;">v2.1.0 <code>274ae7d</code></th>
+<th style="padding:8px 6px; text-align:center;">Allocs</th>
+<th style="padding:8px 6px; text-align:right;">v2.2.0 <code>d7c2416</code></th>
+<th style="padding:8px 6px; text-align:center;">Allocs</th>
+<th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
 <th style="padding:8px 6px; text-align:right;">Memory</th>
 </tr>
 </thead>
 <tbody>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>allocate_system_matrix 2D</code></td>
-<td style="padding:7px 6px; text-align:right;">3.75 ms</td>
-<td style="padding:7px 6px; text-align:right;">3.18 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">3.25 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-13.3% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+2.5% 🔴</span></td>
+<td style="padding:7px 6px; text-align:right;">2.84 ms</td>
 <td style="padding:7px 6px; text-align:center;">21</td>
+<td style="padding:7px 6px; text-align:right;">3.18 ms</td>
+<td style="padding:7px 6px; text-align:center;">21</td>
+<td style="padding:7px 6px; text-align:right;">2.86 ms</td>
+<td style="padding:7px 6px; text-align:center;">21</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.0% 🔴</span></td>
 <td style="padding:7px 6px; text-align:right;">15.13 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>assemble (BilinearForm), Parallel() backend</code></td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right;">4.8 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">5.08 ms</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+5.8% 🔴</span></td>
+<td style="padding:7px 6px; text-align:right;">5.11 ms</td>
 <td style="padding:7px 6px; text-align:center;">35</td>
+<td style="padding:7px 6px; text-align:right;">4.8 ms</td>
+<td style="padding:7px 6px; text-align:center;">35</td>
+<td style="padding:7px 6px; text-align:right;">4.78 ms</td>
+<td style="padding:7px 6px; text-align:center;">35</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-6.4% 🟢</span></td>
 <td style="padding:7px 6px; text-align:right;">15.13 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>assemble (BilinearForm), Serial() backend</code></td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right;">4.83 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">6.05 ms</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+25.1% 🔴</span></td>
+<td style="padding:7px 6px; text-align:right;">4.71 ms</td>
 <td style="padding:7px 6px; text-align:center;">21</td>
+<td style="padding:7px 6px; text-align:right;">4.83 ms</td>
+<td style="padding:7px 6px; text-align:center;">21</td>
+<td style="padding:7px 6px; text-align:right;">4.73 ms</td>
+<td style="padding:7px 6px; text-align:center;">21</td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">15.13 MiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>assemble! (matrix) 2D</code></td>
-<td style="padding:7px 6px; text-align:right;">1.06 ms</td>
-<td style="padding:7px 6px; text-align:right;">1.06 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">1.02 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-4.0% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-3.9% 🟢</span></td>
+<td style="padding:7px 6px; text-align:right;">1.07 ms</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">1.06 ms</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">1.04 ms</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-2.5% 🟢</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>assemble! 1D</code></td>
-<td style="padding:7px 6px; text-align:right;">910.5 μs</td>
-<td style="padding:7px 6px; text-align:right;">953.0 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">894.9 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-1.7% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-6.1% 🟢</span></td>
+<td style="padding:7px 6px; text-align:right;">938.8 μs</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">953.0 μs</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">937.2 μs</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>assemble! 1D, Parallel() backend</code></td>
-<td style="padding:7px 6px; text-align:right; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:right;">1.21 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">1.26 ms</td>
-<td style="padding:7px 6px; text-align:center; opacity:0.4;">—</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+4.2% 🔴</span></td>
+<td style="padding:7px 6px; text-align:right;">1.19 ms</td>
 <td style="padding:7px 6px; text-align:center;">7</td>
+<td style="padding:7px 6px; text-align:right;">1.21 ms</td>
+<td style="padding:7px 6px; text-align:center;">7</td>
+<td style="padding:7px 6px; text-align:right;">1.21 ms</td>
+<td style="padding:7px 6px; text-align:center;">7</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.6% 🔴</span></td>
 <td style="padding:7px 6px; text-align:right;">480 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>assemble! 2D</code></td>
-<td style="padding:7px 6px; text-align:right;">483.5 μs</td>
-<td style="padding:7px 6px; text-align:right;">1.21 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">1.19 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+146.4% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-1.7% 🟢</span></td>
+<td style="padding:7px 6px; text-align:right;">1.18 ms</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">1.21 ms</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">481.7 μs</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-59.4% 🟢</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>assemble_parallel! 1D</code></td>
-<td style="padding:7px 6px; text-align:right;">1.2 ms</td>
-<td style="padding:7px 6px; text-align:right;">1.22 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">1.21 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.1% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.5% 🟢</span></td>
+<td style="padding:7px 6px; text-align:right;">1.29 ms</td>
 <td style="padding:7px 6px; text-align:center;">7</td>
+<td style="padding:7px 6px; text-align:right;">1.22 ms</td>
+<td style="padding:7px 6px; text-align:center;">7</td>
+<td style="padding:7px 6px; text-align:right;">1.35 ms</td>
+<td style="padding:7px 6px; text-align:center;">7</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+4.2% 🔴</span></td>
 <td style="padding:7px 6px; text-align:right;">480 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>assemble_parallel! 2D</code></td>
-<td style="padding:7px 6px; text-align:right;">2.23 ms</td>
-<td style="padding:7px 6px; text-align:right;">2.24 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">2.19 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-2.1% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-2.3% 🟢</span></td>
+<td style="padding:7px 6px; text-align:right;">1.72 ms</td>
 <td style="padding:7px 6px; text-align:center;">7</td>
+<td style="padding:7px 6px; text-align:right;">2.24 ms</td>
+<td style="padding:7px 6px; text-align:center;">7</td>
+<td style="padding:7px 6px; text-align:right;">1.73 ms</td>
+<td style="padding:7px 6px; text-align:center;">7</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.7% 🔴</span></td>
 <td style="padding:7px 6px; text-align:right;">496 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>evaluate! 1D</code></td>
-<td style="padding:7px 6px; text-align:right;">1.11 ms</td>
-<td style="padding:7px 6px; text-align:right;">1.15 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">1.1 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-1.1% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-4.5% 🟢</span></td>
+<td style="padding:7px 6px; text-align:right;">1.14 ms</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">1.15 ms</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">1.13 ms</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.5% 🟢</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>form (bilinear, 2D)</code></td>
 <td style="padding:7px 6px; text-align:right;">2.1 ns</td>
-<td style="padding:7px 6px; text-align:right;">2.1 ns</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">2.2 ns</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+6.0% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+6.0% 🔴</span></td>
 <td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">2.1 ns</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">2.1 ns</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>form (linear, 2D)</code></td>
 <td style="padding:7px 6px; text-align:right;">2.1 ns</td>
-<td style="padding:7px 6px; text-align:right;">2.1 ns</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">2.0 ns</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-2.0% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-2.0% 🟢</span></td>
 <td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">2.1 ns</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">2.1 ns</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>l(vₕ) 1D</code></td>
-<td style="padding:7px 6px; text-align:right;">884.3 μs</td>
-<td style="padding:7px 6px; text-align:right;">890.3 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">880.9 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-1.1% 🟢</span></td>
+<td style="padding:7px 6px; text-align:right;">883.6 μs</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">890.3 μs</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">884.3 μs</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 </tbody>
@@ -1676,13 +1700,12 @@ detail:"400.97 ms",allocs:45,mem:"1.3 KiB"}],
   const theme = window.brambleChartTheme();
   const chart = new Chart(document.getElementById('bench_chart_10').getContext('2d'), {
     type: 'line',
-    data: { labels: ["v1.1.1 (e6655b1)","v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (b1f12ec)"], datasets: [{
+    data: { labels: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)"], datasets: [{
   label: "allocate_system_matrix 2D",
-  data: [{x:"v1.1.1 (e6655b1)",y:1.0,julia:"1.12.7",
-detail:"3.75 ms (baseline)",allocs:21,mem:"15.13 MiB"},{x:"v2.0.0 (2dec0c7)",y:0.7555938001171498,julia:"1.12.7",
-detail:"2.84 ms (-24.4%)",allocs:21,mem:"15.13 MiB"},{x:"v2.1.0 (274ae7d)",y:0.84637856039961,julia:"1.12.7",
-detail:"3.18 ms (-15.4%)",allocs:21,mem:"15.13 MiB"},{x:"v2.2.0 (b1f12ec)",y:0.8671316241247737,julia:"1.12.7",
-detail:"3.25 ms (-13.3%)",allocs:21,mem:"15.13 MiB"}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"2.84 ms (baseline)",allocs:21,mem:"15.13 MiB"},{x:"v2.1.0 (274ae7d)",y:1.1201502186338541,julia:"1.12.7",
+detail:"3.18 ms (+12.0%)",allocs:21,mem:"15.13 MiB"},{x:"v2.2.0 (d7c2416)",y:1.0102132588259443,julia:"1.12.7",
+detail:"2.86 ms (+1.0%)",allocs:21,mem:"15.13 MiB"}],
   borderColor: "#3b82f6",
   backgroundColor: "#3b82f6",
   spanGaps: true,
@@ -1695,8 +1718,8 @@ detail:"3.25 ms (-13.3%)",allocs:21,mem:"15.13 MiB"}],
   label: "assemble (BilinearForm), Parallel() backend",
   data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
 detail:"5.11 ms (baseline)",allocs:35,mem:"15.13 MiB"},{x:"v2.1.0 (274ae7d)",y:0.9389424435152599,julia:"1.12.7",
-detail:"4.8 ms (-6.1%)",allocs:35,mem:"15.13 MiB"},{x:"v2.2.0 (b1f12ec)",y:0.9931931104699164,julia:"1.12.7",
-detail:"5.08 ms (-0.7%)",allocs:35,mem:"15.13 MiB"}],
+detail:"4.8 ms (-6.1%)",allocs:35,mem:"15.13 MiB"},{x:"v2.2.0 (d7c2416)",y:0.9359668749114706,julia:"1.12.7",
+detail:"4.78 ms (-6.4%)",allocs:35,mem:"15.13 MiB"}],
   borderColor: "#10b981",
   backgroundColor: "#10b981",
   spanGaps: true,
@@ -1709,8 +1732,8 @@ detail:"5.08 ms (-0.7%)",allocs:35,mem:"15.13 MiB"}],
   label: "assemble (BilinearForm), Serial() backend",
   data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
 detail:"4.71 ms (baseline)",allocs:21,mem:"15.13 MiB"},{x:"v2.1.0 (274ae7d)",y:1.0252965369306104,julia:"1.12.7",
-detail:"4.83 ms (+2.5%)",allocs:21,mem:"15.13 MiB"},{x:"v2.2.0 (b1f12ec)",y:1.2830876581749497,julia:"1.12.7",
-detail:"6.05 ms (+28.3%)",allocs:21,mem:"15.13 MiB"}],
+detail:"4.83 ms (+2.5%)",allocs:21,mem:"15.13 MiB"},{x:"v2.2.0 (d7c2416)",y:1.003261291058878,julia:"1.12.7",
+detail:"4.73 ms (+0.3%)",allocs:21,mem:"15.13 MiB"}],
   borderColor: "#f59e0b",
   backgroundColor: "#f59e0b",
   spanGaps: true,
@@ -1721,11 +1744,10 @@ detail:"6.05 ms (+28.3%)",allocs:21,mem:"15.13 MiB"}],
 },
 {
   label: "assemble! (matrix) 2D",
-  data: [{x:"v1.1.1 (e6655b1)",y:1.0,julia:"1.12.7",
-detail:"1.06 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.0.0 (2dec0c7)",y:1.005847639232309,julia:"1.12.7",
-detail:"1.07 ms (+0.6%)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:0.9989403037795832,julia:"1.12.7",
-detail:"1.06 ms (-0.1%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (b1f12ec)",y:0.9600065936653714,julia:"1.12.7",
-detail:"1.02 ms (-4.0%)",allocs:0,mem:"0 B"}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"1.07 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:0.9931328213306763,julia:"1.12.7",
+detail:"1.06 ms (-0.7%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:0.9747938113918562,julia:"1.12.7",
+detail:"1.04 ms (-2.5%)",allocs:0,mem:"0 B"}],
   borderColor: "#8b5cf6",
   backgroundColor: "#8b5cf6",
   spanGaps: true,
@@ -1736,11 +1758,10 @@ detail:"1.02 ms (-4.0%)",allocs:0,mem:"0 B"}],
 },
 {
   label: "assemble! 1D",
-  data: [{x:"v1.1.1 (e6655b1)",y:1.0,julia:"1.12.7",
-detail:"910.5 μs (baseline)",allocs:0,mem:"0 B"},{x:"v2.0.0 (2dec0c7)",y:1.0311656331209127,julia:"1.12.7",
-detail:"938.8 μs (+3.1%)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0466809012606841,julia:"1.12.7",
-detail:"953.0 μs (+4.7%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (b1f12ec)",y:0.9828844383815618,julia:"1.12.7",
-detail:"894.9 μs (-1.7%)",allocs:0,mem:"0 B"}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"938.8 μs (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0150463394448215,julia:"1.12.7",
+detail:"953.0 μs (+1.5%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:0.998225456497588,julia:"1.12.7",
+detail:"937.2 μs (-0.2%)",allocs:0,mem:"0 B"}],
   borderColor: "#ec4899",
   backgroundColor: "#ec4899",
   spanGaps: true,
@@ -1753,8 +1774,8 @@ detail:"894.9 μs (-1.7%)",allocs:0,mem:"0 B"}],
   label: "assemble! 1D, Parallel() backend",
   data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
 detail:"1.19 ms (baseline)",allocs:7,mem:"480 B"},{x:"v2.1.0 (274ae7d)",y:1.0114479998458745,julia:"1.12.7",
-detail:"1.21 ms (+1.1%)",allocs:7,mem:"480 B"},{x:"v2.2.0 (b1f12ec)",y:1.0539229523727356,julia:"1.12.7",
-detail:"1.26 ms (+5.4%)",allocs:7,mem:"480 B"}],
+detail:"1.21 ms (+1.1%)",allocs:7,mem:"480 B"},{x:"v2.2.0 (d7c2416)",y:1.0161245333308762,julia:"1.12.7",
+detail:"1.21 ms (+1.6%)",allocs:7,mem:"480 B"}],
   borderColor: "#06b6d4",
   backgroundColor: "#06b6d4",
   spanGaps: true,
@@ -1765,11 +1786,10 @@ detail:"1.26 ms (+5.4%)",allocs:7,mem:"480 B"}],
 },
 {
   label: "assemble! 2D",
-  data: [{x:"v1.1.1 (e6655b1)",y:1.0,julia:"1.12.7",
-detail:"483.5 μs (baseline)",allocs:0,mem:"0 B"},{x:"v2.0.0 (2dec0c7)",y:2.4507931747673215,julia:"1.12.7",
-detail:"1.18 ms (+145.1%)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:2.5060310237849017,julia:"1.12.7",
-detail:"1.21 ms (+150.6%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (b1f12ec)",y:2.463633919338159,julia:"1.12.7",
-detail:"1.19 ms (+146.4%)",allocs:0,mem:"0 B"}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"1.18 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0225387640157861,julia:"1.12.7",
+detail:"1.21 ms (+2.3%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:0.40648343380801943,julia:"1.12.7",
+detail:"481.7 μs (-59.4%)",allocs:0,mem:"0 B"}],
   borderColor: "#f97316",
   backgroundColor: "#f97316",
   spanGaps: true,
@@ -1780,7 +1800,7 @@ detail:"1.19 ms (+146.4%)",allocs:0,mem:"0 B"}],
 },
 {
   label: "1.0x (ref)",
-  data: [{x:"v1.1.1 (e6655b1)",y:1},{x:"v2.0.0 (2dec0c7)",y:1},{x:"v2.1.0 (274ae7d)",y:1},{x:"v2.2.0 (b1f12ec)",y:1}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1},{x:"v2.1.0 (274ae7d)",y:1},{x:"v2.2.0 (d7c2416)",y:1}],
   borderColor: "rgba(128,128,128,0.7)",
   borderDash: [5,4],
   borderWidth: 1.5,
@@ -1833,13 +1853,12 @@ detail:"1.19 ms (+146.4%)",allocs:0,mem:"0 B"}],
   const theme = window.brambleChartTheme();
   const chart = new Chart(document.getElementById('bench_chart_11').getContext('2d'), {
     type: 'line',
-    data: { labels: ["v1.1.1 (e6655b1)","v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (b1f12ec)"], datasets: [{
+    data: { labels: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)"], datasets: [{
   label: "assemble_parallel! 1D",
-  data: [{x:"v1.1.1 (e6655b1)",y:1.0,julia:"1.12.7",
-detail:"1.2 ms (baseline)",allocs:7,mem:"480 B"},{x:"v2.0.0 (2dec0c7)",y:1.0746227026198918,julia:"1.12.7",
-detail:"1.29 ms (+7.5%)",allocs:7,mem:"480 B"},{x:"v2.1.0 (274ae7d)",y:1.0156805507217899,julia:"1.12.7",
-detail:"1.22 ms (+1.6%)",allocs:7,mem:"480 B"},{x:"v2.2.0 (b1f12ec)",y:1.0109971175029682,julia:"1.12.7",
-detail:"1.21 ms (+1.1%)",allocs:7,mem:"480 B"}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"1.29 ms (baseline)",allocs:7,mem:"480 B"},{x:"v2.1.0 (274ae7d)",y:0.9451508406118697,julia:"1.12.7",
+detail:"1.22 ms (-5.5%)",allocs:7,mem:"480 B"},{x:"v2.2.0 (d7c2416)",y:1.0422099581069324,julia:"1.12.7",
+detail:"1.35 ms (+4.2%)",allocs:7,mem:"480 B"}],
   borderColor: "#3b82f6",
   backgroundColor: "#3b82f6",
   spanGaps: true,
@@ -1850,11 +1869,10 @@ detail:"1.21 ms (+1.1%)",allocs:7,mem:"480 B"}],
 },
 {
   label: "assemble_parallel! 2D",
-  data: [{x:"v1.1.1 (e6655b1)",y:1.0,julia:"1.12.7",
-detail:"2.23 ms (baseline)",allocs:7,mem:"496 B"},{x:"v2.0.0 (2dec0c7)",y:0.7690877108851282,julia:"1.12.7",
-detail:"1.72 ms (-23.1%)",allocs:7,mem:"496 B"},{x:"v2.1.0 (274ae7d)",y:1.002024085294117,julia:"1.12.7",
-detail:"2.24 ms (+0.2%)",allocs:7,mem:"496 B"},{x:"v2.2.0 (b1f12ec)",y:0.9787687086846266,julia:"1.12.7",
-detail:"2.19 ms (-2.1%)",allocs:7,mem:"496 B"}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"1.72 ms (baseline)",allocs:7,mem:"496 B"},{x:"v2.1.0 (274ae7d)",y:1.302873613909273,julia:"1.12.7",
+detail:"2.24 ms (+30.3%)",allocs:7,mem:"496 B"},{x:"v2.2.0 (d7c2416)",y:1.0066105025746,julia:"1.12.7",
+detail:"1.73 ms (+0.7%)",allocs:7,mem:"496 B"}],
   borderColor: "#10b981",
   backgroundColor: "#10b981",
   spanGaps: true,
@@ -1865,11 +1883,10 @@ detail:"2.19 ms (-2.1%)",allocs:7,mem:"496 B"}],
 },
 {
   label: "evaluate! 1D",
-  data: [{x:"v1.1.1 (e6655b1)",y:1.0,julia:"1.12.7",
-detail:"1.11 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.0.0 (2dec0c7)",y:1.0244619294002388,julia:"1.12.7",
-detail:"1.14 ms (+2.4%)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0355677678106727,julia:"1.12.7",
-detail:"1.15 ms (+3.6%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (b1f12ec)",y:0.9892313843150462,julia:"1.12.7",
-detail:"1.1 ms (-1.1%)",allocs:0,mem:"0 B"}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"1.14 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0108406550714244,julia:"1.12.7",
+detail:"1.15 ms (+1.1%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:0.994543415357895,julia:"1.12.7",
+detail:"1.13 ms (-0.5%)",allocs:0,mem:"0 B"}],
   borderColor: "#f59e0b",
   backgroundColor: "#f59e0b",
   spanGaps: true,
@@ -1880,11 +1897,10 @@ detail:"1.1 ms (-1.1%)",allocs:0,mem:"0 B"}],
 },
 {
   label: "form (bilinear, 2D)",
-  data: [{x:"v1.1.1 (e6655b1)",y:1.0,julia:"1.12.7",
-detail:"2.1 ns (baseline)",allocs:0,mem:"0 B"},{x:"v2.0.0 (2dec0c7)",y:0.9995201535508638,julia:"1.12.7",
-detail:"2.1 ns (-0.0%)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:0.9995201535508638,julia:"1.12.7",
-detail:"2.1 ns (-0.0%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (b1f12ec)",y:1.0595009596928984,julia:"1.12.7",
-detail:"2.2 ns (+6.0%)",allocs:0,mem:"0 B"}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"2.1 ns (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0,julia:"1.12.7",
+detail:"2.1 ns (baseline)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:1.0,julia:"1.12.7",
+detail:"2.1 ns (baseline)",allocs:0,mem:"0 B"}],
   borderColor: "#8b5cf6",
   backgroundColor: "#8b5cf6",
   spanGaps: true,
@@ -1895,11 +1911,10 @@ detail:"2.2 ns (+6.0%)",allocs:0,mem:"0 B"}],
 },
 {
   label: "form (linear, 2D)",
-  data: [{x:"v1.1.1 (e6655b1)",y:1.0,julia:"1.12.7",
-detail:"2.1 ns (baseline)",allocs:0,mem:"0 B"},{x:"v2.0.0 (2dec0c7)",y:0.9995201535508638,julia:"1.12.7",
-detail:"2.1 ns (-0.0%)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:0.9995201535508638,julia:"1.12.7",
-detail:"2.1 ns (-0.0%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (b1f12ec)",y:0.9798464491362763,julia:"1.12.7",
-detail:"2.0 ns (-2.0%)",allocs:0,mem:"0 B"}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"2.1 ns (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0,julia:"1.12.7",
+detail:"2.1 ns (baseline)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:1.0,julia:"1.12.7",
+detail:"2.1 ns (baseline)",allocs:0,mem:"0 B"}],
   borderColor: "#ec4899",
   backgroundColor: "#ec4899",
   spanGaps: true,
@@ -1910,11 +1925,10 @@ detail:"2.0 ns (-2.0%)",allocs:0,mem:"0 B"}],
 },
 {
   label: "l(vₕ) 1D",
-  data: [{x:"v1.1.1 (e6655b1)",y:1.0,julia:"1.12.7",
-detail:"884.3 μs (baseline)",allocs:0,mem:"0 B"},{x:"v2.0.0 (2dec0c7)",y:0.999151904144814,julia:"1.12.7",
-detail:"883.6 μs (-0.1%)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.006737273473597,julia:"1.12.7",
-detail:"890.3 μs (+0.7%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (b1f12ec)",y:0.9960885819158825,julia:"1.12.7",
-detail:"880.9 μs (-0.4%)",allocs:0,mem:"0 B"}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"883.6 μs (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0075918079096045,julia:"1.12.7",
+detail:"890.3 μs (+0.8%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:1.0008476839779805,julia:"1.12.7",
+detail:"884.3 μs (+0.1%)",allocs:0,mem:"0 B"}],
   borderColor: "#06b6d4",
   backgroundColor: "#06b6d4",
   spanGaps: true,
@@ -1925,7 +1939,7 @@ detail:"880.9 μs (-0.4%)",allocs:0,mem:"0 B"}],
 },
 {
   label: "1.0x (ref)",
-  data: [{x:"v1.1.1 (e6655b1)",y:1},{x:"v2.0.0 (2dec0c7)",y:1},{x:"v2.1.0 (274ae7d)",y:1},{x:"v2.2.0 (b1f12ec)",y:1}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1},{x:"v2.1.0 (274ae7d)",y:1},{x:"v2.2.0 (d7c2416)",y:1}],
   borderColor: "rgba(128,128,128,0.7)",
   borderDash: [5,4],
   borderWidth: 1.5,
@@ -1979,134 +1993,147 @@ detail:"880.9 μs (-0.4%)",allocs:0,mem:"0 B"}],
 <thead>
 <tr style="border-bottom:2px solid rgba(128,128,128,0.3);">
 <th style="padding:8px 6px; text-align:left;">Benchmark</th>
-<th style="padding:8px 6px; text-align:right;">Base (v1.1.1 <code>e6655b1</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Prev (v2.1.0 <code>274ae7d</code>)</th>
-<th style="padding:8px 6px; text-align:right;">Latest (v2.2.0 <code>b1f12ec</code>)</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
-<th style="padding:8px 6px; text-align:center;">Δ vs Prev</th>
+<th style="padding:8px 6px; text-align:right;">v2.0.0 <code>2dec0c7</code> (ref)</th>
 <th style="padding:8px 6px; text-align:center;">Allocs</th>
+<th style="padding:8px 6px; text-align:right;">v2.1.0 <code>274ae7d</code></th>
+<th style="padding:8px 6px; text-align:center;">Allocs</th>
+<th style="padding:8px 6px; text-align:right;">v2.2.0 <code>d7c2416</code></th>
+<th style="padding:8px 6px; text-align:center;">Allocs</th>
+<th style="padding:8px 6px; text-align:center;">Δ vs Base</th>
 <th style="padding:8px 6px; text-align:right;">Memory</th>
 </tr>
 </thead>
 <tbody>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>Rₕ! Double64</code></td>
-<td style="padding:7px 6px; text-align:right;">9.03 ms</td>
-<td style="padding:7px 6px; text-align:right;">9.04 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">9.08 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.6% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.5% 🔴</span></td>
+<td style="padding:7px 6px; text-align:right;">8.94 ms</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">9.04 ms</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">9.0 ms</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.7% 🔴</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>Rₕ! Float32</code></td>
-<td style="padding:7px 6px; text-align:right;">278.4 μs</td>
-<td style="padding:7px 6px; text-align:right;">285.7 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">285.7 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+2.6% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
+<td style="padding:7px 6px; text-align:right;">286.0 μs</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">285.7 μs</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">285.9 μs</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>Rₕ! Float64</code></td>
-<td style="padding:7px 6px; text-align:right;">285.8 μs</td>
-<td style="padding:7px 6px; text-align:right;">293.8 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">295.7 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+3.5% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.7% 🔴</span></td>
+<td style="padding:7px 6px; text-align:right;">293.5 μs</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">293.8 μs</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">293.5 μs</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>assemble! Double64</code></td>
-<td style="padding:7px 6px; text-align:right;">1.02 ms</td>
-<td style="padding:7px 6px; text-align:right;">1.01 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">1.03 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.2% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.7% 🔴</span></td>
+<td style="padding:7px 6px; text-align:right;">1.04 ms</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">1.01 ms</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">1.02 ms</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-2.3% 🟢</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>assemble! Float32</code></td>
-<td style="padding:7px 6px; text-align:right;">71.6 μs</td>
-<td style="padding:7px 6px; text-align:right;">79.9 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">79.8 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+11.4% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
+<td style="padding:7px 6px; text-align:right;">71.3 μs</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">79.9 μs</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">71.5 μs</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>assemble! Float64</code></td>
-<td style="padding:7px 6px; text-align:right;">80.5 μs</td>
-<td style="padding:7px 6px; text-align:right;">84.3 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">88.5 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+9.8% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+4.9% 🔴</span></td>
+<td style="padding:7px 6px; text-align:right;">84.0 μs</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">84.3 μs</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">84.2 μs</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>avgₕ! Double64</code></td>
-<td style="padding:7px 6px; text-align:right;">72.82 ms</td>
-<td style="padding:7px 6px; text-align:right;">73.3 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">74.17 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.9% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+1.2% 🔴</span></td>
+<td style="padding:7px 6px; text-align:right;">72.2 ms</td>
 <td style="padding:7px 6px; text-align:center;">33</td>
+<td style="padding:7px 6px; text-align:right;">73.3 ms</td>
+<td style="padding:7px 6px; text-align:center;">33</td>
+<td style="padding:7px 6px; text-align:right;">72.86 ms</td>
+<td style="padding:7px 6px; text-align:center;">33</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.9% 🔴</span></td>
 <td style="padding:7px 6px; text-align:right;">2.9 KiB</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>avgₕ! Float32</code></td>
-<td style="padding:7px 6px; text-align:right;">1.6 ms</td>
-<td style="padding:7px 6px; text-align:right;">1.62 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">1.67 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+4.8% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+3.2% 🔴</span></td>
+<td style="padding:7px 6px; text-align:right;">1.61 ms</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">1.62 ms</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">1.61 ms</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>avgₕ! Float64</code></td>
-<td style="padding:7px 6px; text-align:right;">1.64 ms</td>
-<td style="padding:7px 6px; text-align:right;">1.78 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">1.71 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+4.2% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-4.2% 🟢</span></td>
+<td style="padding:7px 6px; text-align:right;">1.72 ms</td>
 <td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">1.78 ms</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">1.73 ms</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+0.9% 🔴</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>innerₕ Double64</code></td>
-<td style="padding:7px 6px; text-align:right;">1.07 ms</td>
 <td style="padding:7px 6px; text-align:right;">1.06 ms</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">1.06 ms</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#10b981; font-weight:bold;">-0.5% 🟢</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">1.06 ms</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">1.06 ms</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>innerₕ Float32</code></td>
 <td style="padding:7px 6px; text-align:right;">11.6 μs</td>
-<td style="padding:7px 6px; text-align:right;">11.6 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">11.9 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+2.2% 🔴</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="color:#ef4444; font-weight:bold;">+2.5% 🔴</span></td>
 <td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">11.6 μs</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">11.6 μs</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 <tr style="border-bottom:1px solid rgba(128,128,128,0.15);">
 <td style="padding:7px 6px; font-weight:600;"><code>innerₕ Float64</code></td>
 <td style="padding:7px 6px; text-align:right;">23.2 μs</td>
-<td style="padding:7px 6px; text-align:right;">23.2 μs</td>
-<td style="padding:7px 6px; text-align:right; font-weight:600;">23.2 μs</td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
-<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">23.2 μs</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:right;">23.2 μs</td>
+<td style="padding:7px 6px; text-align:center;">0</td>
+<td style="padding:7px 6px; text-align:center;"><span style="opacity:0.6;">(=)</span></td>
 <td style="padding:7px 6px; text-align:right;">0 B</td>
 </tr>
 </tbody>
@@ -2123,13 +2150,12 @@ detail:"880.9 μs (-0.4%)",allocs:0,mem:"0 B"}],
   const theme = window.brambleChartTheme();
   const chart = new Chart(document.getElementById('bench_chart_12').getContext('2d'), {
     type: 'line',
-    data: { labels: ["v1.1.1 (e6655b1)","v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (b1f12ec)"], datasets: [{
+    data: { labels: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)"], datasets: [{
   label: "Rₕ! Double64",
-  data: [{x:"v1.1.1 (e6655b1)",y:1.0,julia:"1.12.7",
-detail:"9.03 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.0.0 (2dec0c7)",y:0.9900855530248217,julia:"1.12.7",
-detail:"8.94 ms (-1.0%)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.000869686388619,julia:"1.12.7",
-detail:"9.04 ms (+0.1%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (b1f12ec)",y:1.0057622743896264,julia:"1.12.7",
-detail:"9.08 ms (+0.6%)",allocs:0,mem:"0 B"}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"8.94 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0108921227371217,julia:"1.12.7",
+detail:"9.04 ms (+1.1%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:1.0069476480044732,julia:"1.12.7",
+detail:"9.0 ms (+0.7%)",allocs:0,mem:"0 B"}],
   borderColor: "#3b82f6",
   backgroundColor: "#3b82f6",
   spanGaps: true,
@@ -2140,11 +2166,10 @@ detail:"9.08 ms (+0.6%)",allocs:0,mem:"0 B"}],
 },
 {
   label: "Rₕ! Float32",
-  data: [{x:"v1.1.1 (e6655b1)",y:1.0,julia:"1.12.7",
-detail:"278.4 μs (baseline)",allocs:0,mem:"0 B"},{x:"v2.0.0 (2dec0c7)",y:1.027391109115402,julia:"1.12.7",
-detail:"286.0 μs (+2.7%)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0263457566232599,julia:"1.12.7",
-detail:"285.7 μs (+2.6%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (b1f12ec)",y:1.0261948810058374,julia:"1.12.7",
-detail:"285.7 μs (+2.6%)",allocs:0,mem:"0 B"}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"286.0 μs (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:0.9989825174825174,julia:"1.12.7",
+detail:"285.7 μs (-0.1%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:0.9995629370629371,julia:"1.12.7",
+detail:"285.9 μs (-0.0%)",allocs:0,mem:"0 B"}],
   borderColor: "#10b981",
   backgroundColor: "#10b981",
   spanGaps: true,
@@ -2155,11 +2180,10 @@ detail:"285.7 μs (+2.6%)",allocs:0,mem:"0 B"}],
 },
 {
   label: "Rₕ! Float64",
-  data: [{x:"v1.1.1 (e6655b1)",y:1.0,julia:"1.12.7",
-detail:"285.8 μs (baseline)",allocs:0,mem:"0 B"},{x:"v2.0.0 (2dec0c7)",y:1.0272685914260717,julia:"1.12.7",
-detail:"293.5 μs (+2.7%)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0279965004374454,julia:"1.12.7",
-detail:"293.8 μs (+2.8%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (b1f12ec)",y:1.0347016622922134,julia:"1.12.7",
-detail:"295.7 μs (+3.5%)",allocs:0,mem:"0 B"}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"293.5 μs (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0007085868461754,julia:"1.12.7",
+detail:"293.8 μs (+0.1%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:1.0,julia:"1.12.7",
+detail:"293.5 μs (baseline)",allocs:0,mem:"0 B"}],
   borderColor: "#f59e0b",
   backgroundColor: "#f59e0b",
   spanGaps: true,
@@ -2170,11 +2194,10 @@ detail:"295.7 μs (+3.5%)",allocs:0,mem:"0 B"}],
 },
 {
   label: "assemble! Double64",
-  data: [{x:"v1.1.1 (e6655b1)",y:1.0,julia:"1.12.7",
-detail:"1.02 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.0.0 (2dec0c7)",y:1.0196884049872457,julia:"1.12.7",
-detail:"1.04 ms (+2.0%)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:0.9949747167273505,julia:"1.12.7",
-detail:"1.01 ms (-0.5%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (b1f12ec)",y:1.0120495038439594,julia:"1.12.7",
-detail:"1.03 ms (+1.2%)",allocs:0,mem:"0 B"}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"1.04 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:0.9757634899651484,julia:"1.12.7",
+detail:"1.01 ms (-2.4%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:0.9769258502583824,julia:"1.12.7",
+detail:"1.02 ms (-2.3%)",allocs:0,mem:"0 B"}],
   borderColor: "#8b5cf6",
   backgroundColor: "#8b5cf6",
   spanGaps: true,
@@ -2185,11 +2208,10 @@ detail:"1.03 ms (+1.2%)",allocs:0,mem:"0 B"}],
 },
 {
   label: "assemble! Float32",
-  data: [{x:"v1.1.1 (e6655b1)",y:1.0,julia:"1.12.7",
-detail:"71.6 μs (baseline)",allocs:0,mem:"0 B"},{x:"v2.0.0 (2dec0c7)",y:0.9965075506754397,julia:"1.12.7",
-detail:"71.3 μs (-0.3%)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.115837559197016,julia:"1.12.7",
-detail:"79.9 μs (+11.6%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (b1f12ec)",y:1.1140913345347359,julia:"1.12.7",
-detail:"79.8 μs (+11.4%)",allocs:0,mem:"0 B"}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"71.3 μs (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.119748223122538,julia:"1.12.7",
+detail:"79.9 μs (+12.0%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:1.0029299202332722,julia:"1.12.7",
+detail:"71.5 μs (+0.3%)",allocs:0,mem:"0 B"}],
   borderColor: "#ec4899",
   backgroundColor: "#ec4899",
   spanGaps: true,
@@ -2200,11 +2222,10 @@ detail:"79.8 μs (+11.4%)",allocs:0,mem:"0 B"}],
 },
 {
   label: "assemble! Float64",
-  data: [{x:"v1.1.1 (e6655b1)",y:1.0,julia:"1.12.7",
-detail:"80.5 μs (baseline)",allocs:0,mem:"0 B"},{x:"v2.0.0 (2dec0c7)",y:1.0424126542673389,julia:"1.12.7",
-detail:"84.0 μs (+4.2%)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0470686101661244,julia:"1.12.7",
-detail:"84.3 μs (+4.7%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (b1f12ec)",y:1.0982841250527675,julia:"1.12.7",
-detail:"88.5 μs (+9.8%)",allocs:0,mem:"0 B"}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"84.0 μs (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0044665189737727,julia:"1.12.7",
+detail:"84.3 μs (+0.4%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:1.0034779294409109,julia:"1.12.7",
+detail:"84.2 μs (+0.3%)",allocs:0,mem:"0 B"}],
   borderColor: "#06b6d4",
   backgroundColor: "#06b6d4",
   spanGaps: true,
@@ -2215,7 +2236,7 @@ detail:"88.5 μs (+9.8%)",allocs:0,mem:"0 B"}],
 },
 {
   label: "1.0x (ref)",
-  data: [{x:"v1.1.1 (e6655b1)",y:1},{x:"v2.0.0 (2dec0c7)",y:1},{x:"v2.1.0 (274ae7d)",y:1},{x:"v2.2.0 (b1f12ec)",y:1}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1},{x:"v2.1.0 (274ae7d)",y:1},{x:"v2.2.0 (d7c2416)",y:1}],
   borderColor: "rgba(128,128,128,0.7)",
   borderDash: [5,4],
   borderWidth: 1.5,
@@ -2268,13 +2289,12 @@ detail:"88.5 μs (+9.8%)",allocs:0,mem:"0 B"}],
   const theme = window.brambleChartTheme();
   const chart = new Chart(document.getElementById('bench_chart_13').getContext('2d'), {
     type: 'line',
-    data: { labels: ["v1.1.1 (e6655b1)","v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (b1f12ec)"], datasets: [{
+    data: { labels: ["v2.0.0 (2dec0c7)","v2.1.0 (274ae7d)","v2.2.0 (d7c2416)"], datasets: [{
   label: "avgₕ! Double64",
-  data: [{x:"v1.1.1 (e6655b1)",y:1.0,julia:"1.12.7",
-detail:"72.82 ms (baseline)",allocs:33,mem:"2.9 KiB"},{x:"v2.0.0 (2dec0c7)",y:0.9914917982718104,julia:"1.12.7",
-detail:"72.2 ms (-0.9%)",allocs:33,mem:"2.9 KiB"},{x:"v2.1.0 (274ae7d)",y:1.0065893407219952,julia:"1.12.7",
-detail:"73.3 ms (+0.7%)",allocs:33,mem:"2.9 KiB"},{x:"v2.2.0 (b1f12ec)",y:1.0185492826883644,julia:"1.12.7",
-detail:"74.17 ms (+1.9%)",allocs:33,mem:"2.9 KiB"}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"72.2 ms (baseline)",allocs:33,mem:"2.9 KiB"},{x:"v2.1.0 (274ae7d)",y:1.0152270976688864,julia:"1.12.7",
+detail:"73.3 ms (+1.5%)",allocs:33,mem:"2.9 KiB"},{x:"v2.2.0 (d7c2416)",y:1.0091008804543633,julia:"1.12.7",
+detail:"72.86 ms (+0.9%)",allocs:33,mem:"2.9 KiB"}],
   borderColor: "#3b82f6",
   backgroundColor: "#3b82f6",
   spanGaps: true,
@@ -2285,11 +2305,10 @@ detail:"74.17 ms (+1.9%)",allocs:33,mem:"2.9 KiB"}],
 },
 {
   label: "avgₕ! Float32",
-  data: [{x:"v1.1.1 (e6655b1)",y:1.0,julia:"1.12.7",
-detail:"1.6 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.0.0 (2dec0c7)",y:1.0070662716091487,julia:"1.12.7",
-detail:"1.61 ms (+0.7%)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.016234682221534,julia:"1.12.7",
-detail:"1.62 ms (+1.6%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (b1f12ec)",y:1.048443865427995,julia:"1.12.7",
-detail:"1.67 ms (+4.8%)",allocs:0,mem:"0 B"}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"1.61 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0091040787194028,julia:"1.12.7",
+detail:"1.62 ms (+0.9%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:1.0000385977079187,julia:"1.12.7",
+detail:"1.61 ms (+0.0%)",allocs:0,mem:"0 B"}],
   borderColor: "#10b981",
   backgroundColor: "#10b981",
   spanGaps: true,
@@ -2300,11 +2319,10 @@ detail:"1.67 ms (+4.8%)",allocs:0,mem:"0 B"}],
 },
 {
   label: "avgₕ! Float64",
-  data: [{x:"v1.1.1 (e6655b1)",y:1.0,julia:"1.12.7",
-detail:"1.64 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.0.0 (2dec0c7)",y:1.0458125564220302,julia:"1.12.7",
-detail:"1.72 ms (+4.6%)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.087221910204758,julia:"1.12.7",
-detail:"1.78 ms (+8.7%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (b1f12ec)",y:1.0415613353914304,julia:"1.12.7",
-detail:"1.71 ms (+4.2%)",allocs:0,mem:"0 B"}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"1.72 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.039595387843113,julia:"1.12.7",
+detail:"1.78 ms (+4.0%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:1.009258795447953,julia:"1.12.7",
+detail:"1.73 ms (+0.9%)",allocs:0,mem:"0 B"}],
   borderColor: "#f59e0b",
   backgroundColor: "#f59e0b",
   spanGaps: true,
@@ -2315,11 +2333,10 @@ detail:"1.71 ms (+4.2%)",allocs:0,mem:"0 B"}],
 },
 {
   label: "innerₕ Double64",
-  data: [{x:"v1.1.1 (e6655b1)",y:1.0,julia:"1.12.7",
-detail:"1.07 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.0.0 (2dec0c7)",y:0.9940385739333722,julia:"1.12.7",
-detail:"1.06 ms (-0.6%)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:0.9940385739333722,julia:"1.12.7",
-detail:"1.06 ms (-0.6%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (b1f12ec)",y:0.9949736995908826,julia:"1.12.7",
-detail:"1.06 ms (-0.5%)",allocs:0,mem:"0 B"}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"1.06 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0,julia:"1.12.7",
+detail:"1.06 ms (baseline)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:0.999412041392286,julia:"1.12.7",
+detail:"1.06 ms (-0.1%)",allocs:0,mem:"0 B"}],
   borderColor: "#8b5cf6",
   backgroundColor: "#8b5cf6",
   spanGaps: true,
@@ -2330,11 +2347,10 @@ detail:"1.06 ms (-0.5%)",allocs:0,mem:"0 B"}],
 },
 {
   label: "innerₕ Float32",
-  data: [{x:"v1.1.1 (e6655b1)",y:1.0,julia:"1.12.7",
-detail:"11.6 μs (baseline)",allocs:0,mem:"0 B"},{x:"v2.0.0 (2dec0c7)",y:0.9964731182795699,julia:"1.12.7",
-detail:"11.6 μs (-0.4%)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:0.9964731182795699,julia:"1.12.7",
-detail:"11.6 μs (-0.4%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (b1f12ec)",y:1.021505376344086,julia:"1.12.7",
-detail:"11.9 μs (+2.2%)",allocs:0,mem:"0 B"}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+detail:"11.6 μs (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0,julia:"1.12.7",
+detail:"11.6 μs (baseline)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:1.003539364640884,julia:"1.12.7",
+detail:"11.6 μs (+0.4%)",allocs:0,mem:"0 B"}],
   borderColor: "#ec4899",
   backgroundColor: "#ec4899",
   spanGaps: true,
@@ -2345,10 +2361,9 @@ detail:"11.9 μs (+2.2%)",allocs:0,mem:"0 B"}],
 },
 {
   label: "innerₕ Float64",
-  data: [{x:"v1.1.1 (e6655b1)",y:1.0,julia:"1.12.7",
-detail:"23.2 μs (baseline)",allocs:0,mem:"0 B"},{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
+  data: [{x:"v2.0.0 (2dec0c7)",y:1.0,julia:"1.12.7",
 detail:"23.2 μs (baseline)",allocs:0,mem:"0 B"},{x:"v2.1.0 (274ae7d)",y:1.0018129235550568,julia:"1.12.7",
-detail:"23.2 μs (+0.2%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (b1f12ec)",y:1.0,julia:"1.12.7",
+detail:"23.2 μs (+0.2%)",allocs:0,mem:"0 B"},{x:"v2.2.0 (d7c2416)",y:1.0,julia:"1.12.7",
 detail:"23.2 μs (baseline)",allocs:0,mem:"0 B"}],
   borderColor: "#06b6d4",
   backgroundColor: "#06b6d4",
@@ -2360,7 +2375,7 @@ detail:"23.2 μs (baseline)",allocs:0,mem:"0 B"}],
 },
 {
   label: "1.0x (ref)",
-  data: [{x:"v1.1.1 (e6655b1)",y:1},{x:"v2.0.0 (2dec0c7)",y:1},{x:"v2.1.0 (274ae7d)",y:1},{x:"v2.2.0 (b1f12ec)",y:1}],
+  data: [{x:"v2.0.0 (2dec0c7)",y:1},{x:"v2.1.0 (274ae7d)",y:1},{x:"v2.2.0 (d7c2416)",y:1}],
   borderColor: "rgba(128,128,128,0.7)",
   borderDash: [5,4],
   borderWidth: 1.5,
@@ -2408,4 +2423,4 @@ detail:"23.2 μs (baseline)",allocs:0,mem:"0 B"}],
 </div>
 
   </div>
-</div><h2 id="How-to-add-new-benchmark-runs"><a class="docs-heading-anchor" href="#How-to-add-new-benchmark-runs">How to add new benchmark runs</a><a id="How-to-add-new-benchmark-runs-1"></a><a class="docs-heading-anchor-permalink" href="#How-to-add-new-benchmark-runs" title="Permalink"></a></h2><p>To record performance on a new commit or after an optimization pass, run:</p><pre><code class="language-bash hljs">julia --project=benchmark benchmark/benchmarks.jl --save benchmark/baselines/baseline_$(git rev-parse --short HEAD).json</code></pre><p>Rebuilding the documentation (<code>julia -e &#39;using Pkg; Pkg.activate(&quot;docs&quot;); include(&quot;docs/make.jl&quot;)&#39;</code>) will automatically discover all <code>baseline_*.json</code> files and append new comparison columns, delta calculations, and charts.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../examples/coupled_reaction_diffusion/">« Coupled nonlinear reaction-diffusion system</a><a class="docs-footer-nextpage" href="../api/">API reference »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Friday 4 September 2026 18:18">Friday 4 September 2026</span>. Using Julia version 1.12.7.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+</div><h2 id="How-to-add-new-benchmark-runs"><a class="docs-heading-anchor" href="#How-to-add-new-benchmark-runs">How to add new benchmark runs</a><a id="How-to-add-new-benchmark-runs-1"></a><a class="docs-heading-anchor-permalink" href="#How-to-add-new-benchmark-runs" title="Permalink"></a></h2><p>To record performance on a new commit or after an optimization pass, run:</p><pre><code class="language-bash hljs">julia --project=benchmark benchmark/benchmarks.jl --save benchmark/baselines/baseline_$(git rev-parse --short HEAD).json</code></pre><p>Rebuilding the documentation (<code>julia -e &#39;using Pkg; Pkg.activate(&quot;docs&quot;); include(&quot;docs/make.jl&quot;)&#39;</code>) will automatically discover all <code>baseline_*.json</code> files and append new comparison columns, delta calculations, and charts.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../examples/coupled_reaction_diffusion/">« Coupled nonlinear reaction-diffusion system</a><a class="docs-footer-nextpage" href="../api/">API reference »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Friday 4 September 2026 18:35">Friday 4 September 2026</span>. Using Julia version 1.12.7.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
