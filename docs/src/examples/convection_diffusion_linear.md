@@ -50,6 +50,13 @@ uₕ .= A \ F
 nothing # hide
 ```
 
+## Visualizing the solution
+
+```@example convdiff
+include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
+heatmap_plot(uₕ; title = "Convection-diffusion, 2D")
+```
+
 ## Checking the answer
 
 The same pattern as the other two examples — one random coarse mesh per dimension, refined

@@ -109,6 +109,20 @@ uexact, vexact = Rₕ(Wₕ, u_ex), Rₕ(Wₕ, v_ex)
 norm₁ₕ(uₕ .- uexact), norm₁ₕ(vₕ .- vexact)
 ```
 
+## Visualizing the solution
+
+Each species is its own 2D scalar field — `components(wₕ)` gives a view directly onto it, no
+new solve or copy needed:
+
+```@example coupled
+include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
+heatmap_plot(uₕ; title = "Coupled reaction-diffusion, u")
+```
+
+```@example coupled
+heatmap_plot(vₕ; title = "Coupled reaction-diffusion, v")
+```
+
 ## Checking the answer
 
 The same nested-random-mesh pattern as every other example, checking each species' own error
