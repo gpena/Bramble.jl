@@ -100,8 +100,13 @@ let W1 = gridspace(_mesh1_par()), u1 = element(W1), W2 = gridspace(_mesh2_par())
     u2 = element(W2), W3 = gridspace(_mesh3_par()), u3 = element(W3),
     # the plain default backend, which no longer threads at any size (see the note
     # on _mesh1_par above) — the cost of that default is now real and worth tracking
-    # alongside the Parallel() numbers, not only the allocation-zero guarantee.
-    W1d = gridspace(_mesh1()), u1d = element(W1d)
+    # alongside the Parallel() numbers, not only the allocation-zero guarantee. Only
+    # 1D had a Serial() entry until now; 2D/3D never got one (gpena/Bramble.jl issue
+    # noticed while reading the docs page — the trend charts had no serial line to
+    # compare the parallel one against past 1D).
+    W1d = gridspace(_mesh1()), u1d = element(W1d),
+    W2d = gridspace(_mesh2()), u2d = element(W2d),
+    W3d = gridspace(_mesh3()), u3d = element(W3d)
 
     g = SUITE["restriction"] = BenchmarkGroup()
     g["Rₕ! 1D, Parallel() backend"] = @benchmarkable Rₕ!($u1, sin)
@@ -113,6 +118,10 @@ let W1 = gridspace(_mesh1_par()), u1 = element(W1), W2 = gridspace(_mesh2_par())
     g["Rₕ 1D (allocates its output)"] = @benchmarkable Rₕ($W1, sin)
     g["Rₕ! 1D, Serial() backend (default)"] = @benchmarkable Rₕ!($u1d, sin)
     g["avgₕ! 1D, Serial() backend (default)"] = @benchmarkable avgₕ!($u1d, sin)
+    g["Rₕ! 2D, Serial() backend (default)"] = @benchmarkable Rₕ!($u2d, x -> sin(x[1]) * x[2])
+    g["avgₕ! 2D, Serial() backend (default)"] = @benchmarkable avgₕ!($u2d, x->sin(x[1])*x[2]) samples=5 evals=1
+    g["Rₕ! 3D, Serial() backend (default)"] = @benchmarkable Rₕ!($u3d, x -> sin(x[1]) + x[3])
+    g["avgₕ! 3D, Serial() backend (default)"] = @benchmarkable avgₕ!($u3d, x->sin(x[1])+x[3]) samples=3 evals=1
 end
 
 # --- 2. the stencil engine, both directions ------------------------------- #
@@ -306,6 +315,10 @@ const ALLOCATION_BOUNDS = Dict(
     # with the thread count and are printed rather than gated
     ("restriction", "Rₕ! 1D, Serial() backend (default)") => 0,
     ("restriction", "avgₕ! 1D, Serial() backend (default)") => 0,
+    ("restriction", "Rₕ! 2D, Serial() backend (default)") => 0,
+    ("restriction", "avgₕ! 2D, Serial() backend (default)") => 0,
+    ("restriction", "Rₕ! 3D, Serial() backend (default)") => 0,
+    ("restriction", "avgₕ! 3D, Serial() backend (default)") => 0,
     # contiguous-direction difference: 3 allocs for similar(::VectorElement)
     ("operators 2D", "D₋ₓ") => 3,
     ("operators 2D", "D₋ᵧ") => 3,
