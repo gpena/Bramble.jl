@@ -14,22 +14,30 @@ using Bramble: values
 # Per the return contract, a mutating function with a single destination returns it, so
 # `D₋ₓ!(vₕ, uₕ)` gives back `vₕ` and composes: `normₕ(D₋ₓ!(vₕ, uₕ))`.
 
-# (in-place, allocating, name) for every family, per dimension
-function _ops(::Val{1})
-    ((D₋ₓ!, D₋ₓ, "D₋ₓ"), (D₊ₓ!, D₊ₓ, "D₊ₓ"),
-        (diff₋ₓ!, diff₋ₓ, "diff₋ₓ"), (diff₊ₓ!, diff₊ₓ, "diff₊ₓ"),
-        (M₋ₓ!, M₋ₓ, "M₋ₓ"), (M₊ₓ!, M₊ₓ, "M₊ₓ"), (jumpₓ!, jumpₓ, "jumpₓ"),
-        (Dcₓ!, Dcₓ, "Dcₓ"), (Dstar₊ₓ!, Dstar₊ₓ, "Dstar₊ₓ"), (Dₕₓ!, Dₕₓ, "Dₕₓ"))
-end
-function _ops(::Val{2})
-    (_ops(Val(1))...,
-        (D₋ᵧ!, D₋ᵧ, "D₋ᵧ"), (D₊ᵧ!, D₊ᵧ, "D₊ᵧ"), (M₋ᵧ!, M₋ᵧ, "M₋ᵧ"),
-        (jumpᵧ!, jumpᵧ, "jumpᵧ"), (Dcᵧ!, Dcᵧ, "Dcᵧ"), (Dₕᵧ!, Dₕᵧ, "Dₕᵧ"))
-end
-function _ops(::Val{3})
-    (_ops(Val(2))...,
-        (D₋₂!, D₋₂, "D₋₂"), (M₊₂!, M₊₂, "M₊₂"), (jump₂!, jump₂, "jump₂"),
-        (Dc₂!, Dc₂, "Dc₂"), (Dstar₊₂!, Dstar₊₂, "Dstar₊₂"), (Dₕ₂!, Dₕ₂, "Dₕ₂"))
+# Every family's base name, before the x/y/z suffix — the same 10 families
+# `_DIFFERENCE_OP_CONFIGS`/`_AVERAGE_OP_CONFIGS` and the two "written out" generators
+# (`jump.jl`, `Dc`/`Dstar₊` in `difference.jl`) build a full x/y/z alias set for
+# unconditionally, regardless of what dimension a caller ever uses. Deriving the
+# per-dimension list mechanically from this tuple and `_DIR_SUFFIXES`, instead of typing
+# out each `(name!, name, "name")` triple by hand per `Val(D)`, is what point 78 asks
+# for: the old hand-written lists quietly tested `D₊`/`M₋`/`Dstar₊`/`M₊` at only two of
+# three directions and `diff₋`/`diff₊` at only one, though every omitted variant already
+# resolves to a real, distinct, correct method (confirmed auditing point 66) — a gap in
+# this test file's own bookkeeping, not in the operators themselves.
+const _INPLACE_FAMILIES = (:D₋, :D₊, :diff₋, :diff₊, :M₋, :M₊, :jump, :Dc, :Dstar₊, :Dₕ)
+const _DIR_SUFFIXES = ("ₓ", "ᵧ", "₂")
+
+function _ops(::Val{D}) where {D}
+    entries = Tuple{Function, Function, String}[]
+    for dim in 1:D, fam in _INPLACE_FAMILIES
+
+        suffix = _DIR_SUFFIXES[dim]
+        name = Symbol(fam, suffix)
+        push!(entries,
+            (getproperty(Bramble, Symbol(name, :!)),
+                getproperty(Bramble, name), string(name)))
+    end
+    return Tuple(entries)
 end
 
 @testset "In-place operators" begin
