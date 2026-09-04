@@ -1,25 +1,25 @@
-# Shared Plotly.js loading/theming for solution-field plots (docs/src/solution_plot.jl).
-# Mirrors chartjs_common.jl's role for Chart.js — a separate file, and a separate registry/
-# observer, because Plotly's repaint API (`Plotly.relayout`/`Plotly.Plots.resize`) is shaped
-# nothing like Chart.js's (`chart.update()`/`chart.resize()`), so there is nothing to share
-# beyond the general pattern.
+# Shared Plotly.js loading/theming for every chart on the docs site (benchmark trend/bar
+# charts, convergence plots, solution heatmaps). Included once per page that needs it —
+# docs/generate_benchmarks.jl for the benchmark page, docs/src/convergence_plot.jl for the
+# worked examples, docs/src/solution_plot.jl for their solution-field plots.
 #
-# Plotly is used here (not Chart.js) because neither a heatmap nor a 3D isosurface has a
-# Chart.js trace type at all — both are native Plotly trace types.
+# Three problems every Plotly-on-Documenter page has, solved once here rather than per call
+# site.
 #
-# Same three problems as chartjs_common.jl, solved the same way:
+# Documenter ships RequireJS for MathJax, and Plotly's UMD build can detect the global AMD
+# `define` and register as an anonymous module instead of attaching `window.Plotly` — a bare
+# `<script src>` would then fail silently with "Plotly is not defined". Guarded against below
+# (verified live against a built page, not assumed).
 #
-# Plotly's UMD build can hit the same Documenter-ships-RequireJS AMD clash Chart.js's does
-# (a bare `<script src>` registering as an anonymous module instead of attaching
-# `window.Plotly`) — guarded the same way, verified live against the built page rather than
-# assumed.
+# A Plotly chart is drawn with JS-supplied colours (paper/plot background, font colour, grid
+# lines), which do not track Documenter's dark/light toggle on their own, so a chart drawn
+# once in light colours turns unreadable text-on-background after a toggle unless something
+# repaints it.
 #
-# A Plotly chart is drawn with JS-supplied colours (paper/plot background, font colour),
-# which do not track Documenter's dark/light toggle on their own.
-#
-# `Plotly.newPlot` sizes a chart from its container at creation time, before web fonts finish
-# swapping in and before layout has settled — the same "baked-in wrong size" risk
-# chartjs_common.jl documents for Chart.js, fixed the same way: resize every registered plot
+# `Plotly.newPlot` sizes a chart from its container's dimensions *at chart-creation time*,
+# which runs synchronously as each `<script>` tag executes while the page is still loading —
+# before web fonts finish swapping in and before every chart above it has settled the page's
+# final layout. Fixed the same way for every chart at once: resize every registered plot
 # once, after `window.load` and `document.fonts.ready` have both resolved.
 
 """
@@ -41,9 +41,9 @@ function plotlyjs_head()
     <script>
       window.define = window.__bramble_amd_define;
 
-      // Colour tokens read from the page's own theme, not hard-coded — same check
-      // chartjs_common.jl uses: Documenter stamps `theme--documenter-dark` on <html> when
-      // dark mode is active, light mode has no such class.
+      // Colour tokens read from the page's own theme, not hard-coded — Documenter stamps
+      // `theme--documenter-dark` on <html> when dark mode is active, light mode has no such
+      // class. Recomputed on every call so a caller can re-theme after a toggle.
       window.bramblePlotlyTheme = function () {
         const dark = document.documentElement.className.includes('documenter-dark');
         return dark

@@ -3,10 +3,10 @@
 using BenchmarkTools
 using Dates
 
-include(joinpath(@__DIR__, "chartjs_common.jl"))
+include(joinpath(@__DIR__, "plotly_common.jl"))
 
 const _BENCH_CHART_COUNTER = Ref(0)
-_next_bench_chart_id() = "bench_chart_$(_BENCH_CHART_COUNTER[] += 1)"
+_next_bench_div_id() = "bench_chart_$(_BENCH_CHART_COUNTER[] += 1)"
 
 function _get_commit_info(commit_hash::AbstractString, path::AbstractString)
     try
@@ -120,11 +120,11 @@ end
 _run_label(r) = "v$(r.version) ($(r.commit))"
 
 # Single run: a horizontal bar per benchmark. No trend to show, so no head-script emission
-# here — the caller (generate_benchmarks_markdown) emits chartjs_head() once for the page.
-function _render_chartjs_barchart_single(
+# here — the caller (generate_benchmarks_markdown) emits plotlyjs_head() once for the page.
+function _render_plotly_barchart_single(
         gname, sorted_bnames, runs, max_time_ns, unit_label, unit_divisor)
     r = runs[1]
-    chart_id = _next_bench_chart_id()
+    div_id = _next_bench_div_id()
     height = 60 + length(sorted_bnames) * 34
 
     labels = String[]
@@ -146,70 +146,61 @@ function _render_chartjs_barchart_single(
     end
 
     return """
-    <div style="width:100%; max-width:520px;">
-      <canvas id="$chart_id" height="$height"></canvas>
-    </div>
+    <div id="$div_id" style="width:100%; max-width:520px; height:$(height)px;"></div>
     <script>
     (function () {
-      const theme = window.brambleChartTheme();
-      const tooltips = [$(join(tooltips, ","))];
-      const chart = new Chart(document.getElementById('$chart_id').getContext('2d'), {
+      const theme = window.bramblePlotlyTheme();
+      const data = [{
         type: 'bar',
-        data: {
-          labels: [$(join(labels, ","))],
-          datasets: [{
-            label: "$(_run_label(r)) (Julia $(r.julia))",
-            data: [$(join(values, ","))],
-            backgroundColor: [$(join(colors, ","))],
-            borderRadius: 4,
-          }],
+        orientation: 'h',
+        name: "$(_run_label(r)) (Julia $(r.julia))",
+        y: [$(join(labels, ","))],
+        x: [$(join(values, ","))],
+        marker: { color: [$(join(colors, ","))] },
+        hovertext: [$(join(tooltips, ","))],
+        hoverinfo: 'text',
+      }];
+      const layout = {
+        paper_bgcolor: theme.bg,
+        plot_bgcolor: theme.bg,
+        font: { color: theme.text },
+        showlegend: true,
+        legend: { font: { color: theme.text } },
+        xaxis: {
+          title: { text: "$unit_label", font: { color: theme.text } },
+          color: theme.text, gridcolor: theme.grid,
         },
-        options: {
-          indexAxis: 'y',
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { labels: { color: theme.text } },
-            tooltip: { callbacks: { label: (c) => tooltips[c.dataIndex] } },
-          },
-          scales: {
-            x: {
-              title: { display: true, text: "$unit_label", color: theme.text },
-              ticks: { color: theme.text }, grid: { color: theme.grid }, border: { color: theme.axis },
-            },
-            y: { ticks: { color: theme.text }, grid: { display: false }, border: { color: theme.axis } },
-          },
-        },
-      });
-      window.brambleRegisterChart(chart, function (c) {
-        const t = window.brambleChartTheme();
-        c.options.plugins.legend.labels.color = t.text;
-        c.options.scales.x.title.color = t.text;
-        c.options.scales.x.ticks.color = t.text;
-        c.options.scales.x.grid.color = t.grid;
-        c.options.scales.x.border.color = t.axis;
-        c.options.scales.y.ticks.color = t.text;
-        c.options.scales.y.border.color = t.axis;
+        yaxis: { color: theme.text, autorange: 'reversed' },
+        margin: { t: 30, l: 10, r: 20, b: 40 },
+      };
+      Plotly.newPlot('$div_id', data, layout, { displayModeBar: false, responsive: true });
+      window.brambleRegisterPlotlyChart('$div_id', function () {
+        const t = window.bramblePlotlyTheme();
+        return {
+          'font.color': t.text,
+          'legend.font.color': t.text,
+          'xaxis.color': t.text, 'xaxis.gridcolor': t.grid, 'xaxis.title.font.color': t.text,
+          'yaxis.color': t.text,
+        };
       });
     })();
     </script>
     """
 end
 
-# One canvas's worth of a trend chart, for a fixed subset of a group's benchmark names.
-# Split out of `_render_chartjs_trend_chart` so a group with more series than the palette
-# has colors for (see there) can render as two of these side by side, each restarting the
-# palette from its own beginning rather than cycling into a color the other chart already
-# used.
-function _render_one_trend_canvas(
+# One plot's worth of a trend chart, for a fixed subset of a group's benchmark names. Split
+# out of `_render_trend_chart` so a group with more series than the palette has colors for
+# (see there) can render as two of these side by side, each restarting the palette from its
+# own beginning rather than cycling into a color the other chart already used.
+function _render_one_trend_plot(
         gname, bnames_subset, runs, use_normalized, unit_label, unit_divisor, max_width)
-    chart_id = _next_bench_chart_id()
-    labels_js = "[" * join(("\"$(_run_label(r))\"" for r in runs), ",") * "]"
+    div_id = _next_bench_div_id()
+    all_labels_js = "[" * join(("\"$(_run_label(r))\"" for r in runs), ",") * "]"
 
-    datasets = String[]
+    traces = String[]
     for (idx, bname) in enumerate(bnames_subset)
         color = _BENCH_PALETTE[mod1(idx, length(_BENCH_PALETTE))]
-        pts = String[]
+        xs, ys, customdata = String[], String[], String[]
         t0 = 0.0
         for r in runs
             if haskey(r.data, gname) && haskey(r.data[gname], bname)
@@ -218,111 +209,99 @@ function _render_one_trend_canvas(
                 t0 == 0.0 && (t0 = t_ns)
                 y_val = use_normalized ? t_ns / t0 : t_ns / unit_divisor
                 delta_str = use_normalized ?
-                            "\"$(_format_time(t_ns)) (" *
+                            "$(_format_time(t_ns)) (" *
                             (t_ns == t0 ? "baseline" :
                              (t_ns < t0 ? "-" : "+") *
-                             "$(round(abs(t_ns / t0 - 1) * 100, digits = 1))%" ) *
-                            ")\"" :
-                            "\"$(_format_time(t_ns))\""
-                push!(pts, """{x:"$(_run_label(r))",y:$(y_val),julia:"$(r.julia)",
-                    detail:$(delta_str),allocs:$(allocs(m)),mem:"$(_format_memory(memory(m)))"}""")
+                             "$(round(abs(t_ns / t0 - 1) * 100, digits = 1))%") *
+                            ")" :
+                            _format_time(t_ns)
+                push!(xs, "\"$(_run_label(r))\"")
+                push!(ys, "$y_val")
+                push!(customdata,
+                    """["$(r.julia)","$delta_str",$(allocs(m)),"$(_format_memory(memory(m)))"]""")
             end
             # A run missing this benchmark contributes no point at all, rather than a `null`
-            # placeholder: each point already carries its own `x`, so a category scale needs
+            # placeholder: each point already carries its own `x`, so a category axis needs
             # no placeholder to stay aligned, and a leading `null` (the commit before a
-            # benchmark existed, e.g. the very first run for a group added later) tripped a
-            # real Chart.js parsing edge case — every *real* point in that dataset parsed to
-            # `null` while the literal placeholder got a pixel position, leaving the whole
-            # line invisible. `spanGaps` was doing the same job as this omission for every
-            # other case anyway.
+            # benchmark existed, e.g. the very first run for a group added later) is exactly
+            # the kind of gap a category axis with an explicit `categoryarray` handles by
+            # skipping straight to the next real point instead of breaking alignment.
         end
-        push!(datasets, """
+        push!(traces, """
             {
-              label: "$bname",
-              data: [$(join(pts, ","))],
-              borderColor: "$color",
-              backgroundColor: "$color",
-              spanGaps: true,
-              pointRadius: 4,
-              pointHoverRadius: 6,
-              borderWidth: 2,
-              tension: 0.15,
+              name: "$bname",
+              x: [$(join(xs, ","))],
+              y: [$(join(ys, ","))],
+              customdata: [$(join(customdata, ","))],
+              mode: 'lines+markers',
+              type: 'scatter',
+              line: { color: "$color", width: 2, shape: 'spline', smoothing: 0.3 },
+              marker: { color: "$color", size: 7 },
+              hovertemplate: '%{x} (Julia %{customdata[0]})<br>$bname: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
             }""")
     end
 
     # The 1.0x reference line in normalized mode, flat across every commit.
     if use_normalized
-        ref_pts = join(("{x:\"$(_run_label(r))\",y:1}" for r in runs), ",")
-        push!(datasets, """
+        ref_xs = join(("\"$(_run_label(r))\"" for r in runs), ",")
+        ref_ys = join(("1" for _ in runs), ",")
+        push!(traces, """
             {
-              label: "1.0x (ref)",
-              data: [$ref_pts],
-              borderColor: "rgba(128,128,128,0.7)",
-              borderDash: [5,4],
-              borderWidth: 1.5,
-              pointRadius: 0,
+              name: "1.0x (ref)",
+              x: [$ref_xs],
+              y: [$ref_ys],
+              mode: 'lines',
+              type: 'scatter',
+              line: { color: 'rgba(128,128,128,0.7)', dash: 'dash', width: 1.5 },
+              hoverinfo: 'skip',
             }""")
     end
 
     y_title = use_normalized ? "relative to baseline" : unit_label
 
     return """
-    <div style="width:100%; max-width:$(max_width)px;">
-      <canvas id="$chart_id" height="280"></canvas>
-    </div>
+    <div id="$div_id" style="width:100%; max-width:$(max_width)px; height:280px;"></div>
     <script>
     (function () {
-      const theme = window.brambleChartTheme();
-      const chart = new Chart(document.getElementById('$chart_id').getContext('2d'), {
-        type: 'line',
-        data: { labels: $labels_js, datasets: [$(join(datasets, ",\n"))] },
-        options: {
-          responsive: true,
-          interaction: { mode: 'nearest', axis: 'x', intersect: false },
-          plugins: {
-            legend: { position: 'top', labels: { color: theme.text, boxWidth: 12, font: { size: 11 } } },
-            tooltip: {
-              callbacks: {
-                title: (items) => items[0].raw.x + " (Julia " + items[0].raw.julia + ")",
-                label: (c) => c.raw ? c.dataset.label + ": " + (c.raw.detail || c.raw.y) +
-                  (c.raw.allocs !== undefined ? " (" + c.raw.allocs + " allocs, " + c.raw.mem + ")" : "") : c.dataset.label,
-              },
-            },
-          },
-          scales: {
-            x: {
-              ticks: { color: theme.text, maxRotation: 45, minRotation: 0, font: { family: 'monospace', size: 10 } },
-              grid: { color: theme.grid }, border: { color: theme.axis },
-            },
-            y: {
-              title: { display: true, text: "$y_title", color: theme.text },
-              ticks: { color: theme.text }, grid: { color: theme.grid }, border: { color: theme.axis },
-            },
-          },
+      const theme = window.bramblePlotlyTheme();
+      const data = [$(join(traces, ",\n"))];
+      const layout = {
+        paper_bgcolor: theme.bg,
+        plot_bgcolor: theme.bg,
+        font: { color: theme.text },
+        legend: { orientation: 'h', y: -0.3, font: { color: theme.text, size: 11 } },
+        xaxis: {
+          type: 'category', categoryorder: 'array', categoryarray: $all_labels_js,
+          tickangle: -45, color: theme.text, gridcolor: theme.grid,
+          tickfont: { family: 'monospace', size: 10 },
         },
-      });
-      window.brambleRegisterChart(chart, function (c) {
-        const t = window.brambleChartTheme();
-        c.options.plugins.legend.labels.color = t.text;
-        c.options.scales.x.ticks.color = t.text;
-        c.options.scales.x.grid.color = t.grid;
-        c.options.scales.x.border.color = t.axis;
-        c.options.scales.y.title.color = t.text;
-        c.options.scales.y.ticks.color = t.text;
-        c.options.scales.y.grid.color = t.grid;
-        c.options.scales.y.border.color = t.axis;
+        yaxis: {
+          title: { text: "$y_title", font: { color: theme.text } },
+          color: theme.text, gridcolor: theme.grid,
+        },
+        margin: { t: 20, l: 60, r: 20, b: 90 },
+      };
+      Plotly.newPlot('$div_id', data, layout, { displayModeBar: false, responsive: true });
+      window.brambleRegisterPlotlyChart('$div_id', function () {
+        const t = window.bramblePlotlyTheme();
+        return {
+          'font.color': t.text,
+          'legend.font.color': t.text,
+          'xaxis.color': t.text, 'xaxis.gridcolor': t.grid,
+          'yaxis.color': t.text, 'yaxis.gridcolor': t.grid, 'yaxis.title.font.color': t.text,
+        };
       });
     })();
     </script>
     """
 end
 
-function _render_chartjs_trend_chart(
+function _render_trend_chart(
         gname, sorted_bnames, runs, max_time_ns, min_time_ns, unit_label, unit_divisor)
     num_runs = length(runs)
 
     if num_runs == 1
-        return _render_chartjs_barchart_single(
+        return _render_plotly_barchart_single(
             gname, sorted_bnames, runs, max_time_ns, unit_label, unit_divisor)
     end
 
@@ -331,9 +310,9 @@ function _render_chartjs_trend_chart(
     # are not flattened against a group's largest one.
     use_normalized = (max_time_ns / max(min_time_ns, 1.0)) > 20.0
 
-    # Beyond one palette's worth of series (7), Chart.js repeats colors and two unrelated
-    # lines become visually indistinguishable — "restriction" (9 benchmarks), "forms" (13)
-    # and "precision 1D" (12) all hit this. Split into side-by-side charts instead of
+    # Beyond one palette's worth of series (7), `_BENCH_PALETTE` repeats colors and two
+    # unrelated lines become visually indistinguishable — "restriction" (9 benchmarks),
+    # "forms" (13) and "precision 1D" (12) all hit this. Split into side-by-side charts instead of
     # cycling, clustered along whichever axis the group's names carry (dimension,
     # precision — see `_BENCH_GROUP_SPLIT_TAGS`) rather than an arbitrary midpoint; each
     # keeps its own distinct palette rather than inheriting where the previous chart left
@@ -345,7 +324,7 @@ function _render_chartjs_trend_chart(
     if length(sorted_bnames) > length(_BENCH_PALETTE)
         clusters = _bench_group_clusters(gname, sorted_bnames)
         width = 380
-        panels = [_render_one_trend_canvas(gname, names, runs, use_normalized, unit_label,
+        panels = [_render_one_trend_plot(gname, names, runs, use_normalized, unit_label,
                       unit_divisor, width)
                   for names in clusters]
         divs = join(("<div style=\"flex: 0 0 $(width)px;\">$p</div>" for p in panels))
@@ -356,7 +335,7 @@ function _render_chartjs_trend_chart(
         """
     end
 
-    return _render_one_trend_canvas(
+    return _render_one_trend_plot(
         gname, sorted_bnames, runs, use_normalized, unit_label, unit_divisor, 560)
 end
 
@@ -610,11 +589,11 @@ function generate_benchmarks_markdown(
     println(io, "## Comparative timings and allocations")
     println(io)
 
-    # Loaded once for the whole page — every chart below reuses window.Chart and the shared
-    # theme/registration helpers (chartjs_common.jl) rather than each re-loading the CDN
+    # Loaded once for the whole page — every chart below reuses window.Plotly and the shared
+    # theme/registration helpers (plotly_common.jl) rather than each re-loading the CDN
     # script.
     println(io, "```@raw html")
-    println(io, chartjs_head())
+    println(io, plotlyjs_head())
     println(io, "```")
     println(io)
 
@@ -644,7 +623,7 @@ function generate_benchmarks_markdown(
 
         unit_label, unit_divisor = _select_unit(max_time_ns)
         table_html = _render_table_html(gname, sorted_bnames, runs)
-        chart_html = _render_chartjs_trend_chart(
+        chart_html = _render_trend_chart(
             gname, sorted_bnames, runs, max_time_ns, min_time_ns, unit_label, unit_divisor)
 
         # Side-by-side flex layout

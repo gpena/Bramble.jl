@@ -1,27 +1,23 @@
-# An interactive log-log convergence plot: Chart.js (CDN), no bundler, no assets wiring in
+# An interactive log-log convergence plot: Plotly.js (CDN), no bundler, no assets wiring in
 # make.jl. `@example` blocks across the worked examples `include` this rather than each
 # redefining it.
-#
-# Was a dependency-free inline SVG. Moved to Chart.js on request, once a spike confirmed two
-# things worth recording: Chart.js's UMD build needs the AMD workaround `chartjs_common.jl`
-# applies (Documenter ships RequireJS for MathJax, which the UMD wrapper detects and reacts to
-# by registering an anonymous module instead of attaching `window.Chart`), and its
-# `type: 'logarithmic'` scale is native — no plugin — and was checked to produce correctly
-# straight, correctly-sloped lines for a slope-2/slope-1 pair before this replaced the SVG.
 #
 # Points only, no connecting line between a series' own markers: with several curves on one
 # plot a connecting line adds nothing a reader doesn't already get from the markers being in
 # order left to right along a log axis, and it competes visually with the one reference line
 # that matters. That one dashed line has slope `reference_slope` (what the scheme promises)
-# and is anchored through the finest point of the first series.
+# and is anchored through the finest point of the first series. It renders as a straight line
+# on Plotly's log axes for the same reason it did on a logarithmic axis anywhere else: the log
+# transform is applied to the axis, not the data, so a true power-law relationship in the
+# underlying (h, error) coordinates always plots straight regardless of which library draws it.
 #
-# Text/grid colours come from `brambleChartTheme()` (`chartjs_common.jl`) rather than a fixed
-# palette: a canvas chart's colours are plain JS strings, not CSS `currentColor`, so unlike the
-# SVG this replaced, they do not track Documenter's dark/light toggle by themselves — every
-# chart registers with `brambleRegisterChart` so the shared theme-change observer can repaint
-# it after a toggle instead of leaving it in the wrong contrast until the next reload.
+# Text/grid colours come from `bramblePlotlyTheme()` (`plotly_common.jl`) rather than a fixed
+# palette: a chart's colours are plain JS strings, not CSS `currentColor`, so unlike a plain
+# SVG they do not track Documenter's dark/light toggle by themselves — every chart registers
+# with `brambleRegisterPlotlyChart` so the shared theme-change observer can repaint it after a
+# toggle instead of leaving it in the wrong contrast until the next reload.
 
-include(joinpath(@__DIR__, "..", "chartjs_common.jl"))
+include(joinpath(@__DIR__, "..", "plotly_common.jl"))
 
 struct ConvergencePlot
     html::String
@@ -29,6 +25,7 @@ end
 Base.show(io::IO, ::MIME"text/html", p::ConvergencePlot) = print(io, p.html)
 
 const _CONVERGENCE_PLOT_COUNTER = Ref(0)
+_next_convergence_plot_id() = "bramble_cp_$(_CONVERGENCE_PLOT_COUNTER[] += 1)"
 
 """
     convergence_plot(series; title = "", reference_slope = 2)
@@ -38,21 +35,20 @@ spatial dimension.
 """
 function convergence_plot(series; title::AbstractString = "", reference_slope::Real = 2,
         width::Int = 480, height::Int = 340)
-    _CONVERGENCE_PLOT_COUNTER[] += 1
-    chart_id = "bramble_cp_$(_CONVERGENCE_PLOT_COUNTER[])"
+    div_id = _next_convergence_plot_id()
 
-    datasets = String[]
+    traces = String[]
     for (hs, errs, label, color) in series
-        pts = join(("{x:$(h),y:$(e)}" for (h, e) in zip(hs, errs)), ",")
-        push!(datasets, """
+        xs = "[" * join(hs, ",") * "]"
+        ys = "[" * join(errs, ",") * "]"
+        push!(traces, """
             {
-              label: "$label",
-              data: [$pts],
-              showLine: false,
-              pointBackgroundColor: "$color",
-              pointBorderColor: "$color",
-              pointRadius: 5,
-              pointHoverRadius: 7,
+              name: "$label",
+              x: $xs,
+              y: $ys,
+              mode: 'markers',
+              type: 'scatter',
+              marker: { color: "$color", size: 8 },
             }""")
     end
 
@@ -64,65 +60,51 @@ function convergence_plot(series; title::AbstractString = "", reference_slope::R
     h0, e0 = hs1[end], errs1[end]
     e_at(h) = e0 * (h / h0)^reference_slope
     slope_label = "slope $(isinteger(reference_slope) ? Int(reference_slope) : reference_slope)"
-    push!(datasets, """
+    push!(traces, """
         {
-          label: "$slope_label",
-          data: [{x:$hmin,y:$(e_at(hmin))}, {x:$hmax,y:$(e_at(hmax))}],
-          showLine: true,
-          borderDash: [5,4],
-          borderWidth: 1.5,
-          pointRadius: 0,
-          borderColor: 'rgba(128,128,128,0.7)',
+          name: "$slope_label",
+          x: [$hmin, $hmax],
+          y: [$(e_at(hmin)), $(e_at(hmax))],
+          mode: 'lines',
+          type: 'scatter',
+          line: { dash: 'dash', width: 1.5, color: 'rgba(128,128,128,0.7)' },
         }""")
 
-    title_js = isempty(title) ? "display: false" : "display: true, text: \"$title\""
+    title_js = isempty(title) ? "''" : "'$title'"
 
     html = """
-    $(chartjs_head())
-    <div style="width:100%; max-width:$(width)px; margin: 1em 0;">
-      <canvas id="$chart_id" width="$width" height="$height"></canvas>
-    </div>
+    $(plotlyjs_head())
+    <div id="$div_id" style="width:100%; max-width:$(width)px; height:$(height)px; margin: 1em 0;"></div>
     <script>
     (function () {
-      const theme = window.brambleChartTheme();
-      const ctx = document.getElementById('$chart_id').getContext('2d');
-      const chart = new Chart(ctx, {
-        type: 'scatter',
-        data: { datasets: [$(join(datasets, ",\n"))] },
-        options: {
-          responsive: true,
-          plugins: {
-            title: { $title_js, color: theme.text, font: { size: 13, weight: '600' } },
-            legend: { position: 'bottom', labels: { color: theme.text, boxWidth: 12, font: { size: 11 } } },
-          },
-          scales: {
-            x: {
-              type: 'logarithmic',
-              title: { display: true, text: 'h', color: theme.text },
-              ticks: { color: theme.text },
-              grid: { color: theme.grid },
-              border: { color: theme.axis },
-            },
-            y: {
-              type: 'logarithmic',
-              title: { display: true, text: 'error', color: theme.text },
-              ticks: { color: theme.text },
-              grid: { color: theme.grid },
-              border: { color: theme.axis },
-            },
-          },
+      const theme = window.bramblePlotlyTheme();
+      const data = [$(join(traces, ",\n"))];
+      const layout = {
+        title: { text: $title_js, font: { color: theme.text, size: 13 } },
+        paper_bgcolor: theme.bg,
+        plot_bgcolor: theme.bg,
+        font: { color: theme.text },
+        legend: { orientation: 'h', y: -0.25, font: { color: theme.text, size: 11 } },
+        xaxis: {
+          type: 'log', title: { text: 'h', font: { color: theme.text } },
+          color: theme.text, gridcolor: theme.grid,
         },
-      });
-      window.brambleRegisterChart(chart, function (c) {
-        const t = window.brambleChartTheme();
-        c.options.plugins.title.color = t.text;
-        c.options.plugins.legend.labels.color = t.text;
-        for (const ax of ['x', 'y']) {
-          c.options.scales[ax].title.color = t.text;
-          c.options.scales[ax].ticks.color = t.text;
-          c.options.scales[ax].grid.color = t.grid;
-          c.options.scales[ax].border.color = t.axis;
-        }
+        yaxis: {
+          type: 'log', title: { text: 'error', font: { color: theme.text } },
+          color: theme.text, gridcolor: theme.grid,
+        },
+        margin: { t: 40, l: 60, r: 20, b: 40 },
+      };
+      Plotly.newPlot('$div_id', data, layout, { displayModeBar: false, responsive: true });
+      window.brambleRegisterPlotlyChart('$div_id', function () {
+        const t = window.bramblePlotlyTheme();
+        return {
+          'font.color': t.text,
+          'title.font.color': t.text,
+          'legend.font.color': t.text,
+          'xaxis.color': t.text, 'xaxis.gridcolor': t.grid, 'xaxis.title.font.color': t.text,
+          'yaxis.color': t.text, 'yaxis.gridcolor': t.grid, 'yaxis.title.font.color': t.text,
+        };
       });
     })();
     </script>

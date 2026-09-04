@@ -1,7 +1,7 @@
 # Solution-field plots via Plotly.js (CDN), no bundler, no assets wiring in make.jl —
 # `@example` blocks across the worked examples `include` this rather than each redefining it.
-# Mirrors `convergence_plot.jl`'s structure exactly; see `plotly_common.jl` for why Plotly
-# rather than Chart.js.
+# Mirrors `convergence_plot.jl`'s structure exactly; see `plotly_common.jl` for the shared
+# CDN-loading/theming infrastructure.
 
 include(joinpath(@__DIR__, "..", "plotly_common.jl"))
 
