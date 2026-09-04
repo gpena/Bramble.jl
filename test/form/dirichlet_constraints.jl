@@ -1,6 +1,7 @@
-import Bramble: CartesianProduct, DirichletConstraint, label_conditions, embed_function,
+import Bramble: CartesianProduct, DirichletConstraint,
+                label_conditions,
                 symbols, labels, DomainMarkers, tuples, conditions, identifier,
-                EvaluatedDomainMarkers, BrambleFunction, label, markers, point,
+                EvaluatedDomainMarkers, label, markers, point,
                 index_in_marker
 using Supposition
 
@@ -10,22 +11,18 @@ using Supposition
     Ω = I × I
 
     @testset "Boundary conditions" begin
-        # Define some functions to use as boundary conditions
+        # Boundary condition functions, stored directly -- point 48 (2026-09-04) removed
+        # BrambleFunction-wrapping from the condition path entirely.
         f1 = x -> x[1]^2 + x[2]
         f2 = x -> 2 * x[2]
 
         # Define a time-dependent function: f(x, t)
         f_t = (x, t) -> x[1] * t
 
-        # Wrap them using the embed_function(macro
-        bf1 = embed_function(Ω, f1)
-        bf2 = embed_function(Ω, f2)
-        bf_t = embed_function(Ω, I, f_t)
-
         # --- Tests ---
 
         @testset "Constructor" begin
-            bcs = dirichlet_constraints(Ω, :gamma_1 => x->bf1(x), :gamma_2 => x->bf2(x))
+            bcs = dirichlet_constraints(Ω, :gamma_1 => f1, :gamma_2 => f2)
 
             @test bcs isa DirichletConstraint
             @test length(label_conditions(bcs)) == 2

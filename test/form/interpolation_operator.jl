@@ -1,6 +1,9 @@
 using Test
 using Bramble
-using LinearAlgebra
+# Named, not bare: a bare `using LinearAlgebra` here would export its own `×` (cross
+# product) into this shared Main session, ambiguous with Bramble's own `×` for every
+# file included afterward -- the same trap flagged elsewhere in this suite.
+using LinearAlgebra: Diagonal, dot, I
 using SparseArrays
 using ForwardDiff
 using Bramble: CompositeGridSpace, form, assemble, assemble!, assemble_parallel!,

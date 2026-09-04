@@ -61,7 +61,7 @@ Returns a generator that yields the labels (`Symbol`) of all markers associated 
 """
 	$(SIGNATURES)
 
-Returns a generator that yields the identifiers (`Symbol`, `Set{Symbol}`, or `BrambleFunction`) of all markers in the [`Domain`](@ref) `Ω`.
+Returns a generator that yields the identifiers (`Symbol`, `Set{Symbol}`, or a raw function) of all markers in the [`Domain`](@ref) `Ω`.
 """
 @inline function marker_identifiers(Ω::Domain)
     return (identifier(marker)

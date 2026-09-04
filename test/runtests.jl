@@ -100,7 +100,6 @@ if __bramble_with_unit_tests
             include("utils/macros.jl")
             include("utils/backends.jl")
             include("utils/linear_algebra.jl")
-            include("utils/bramble_functions.jl")
         end
 
         @testset "Sets and Domains" begin

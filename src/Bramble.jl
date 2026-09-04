@@ -9,8 +9,6 @@ import Base: show, first, last, getindex, setindex!, iterate, size, firstindex,
 using SparseArrays: SparseMatrixCSC, spdiagm, spzeros,
                     rowvals, nonzeros, nzrange, sparse, sparse!
 
-using FunctionWrappers: FunctionWrapper
-
 using StaticArrays: SVector
 
 using LinearAlgebra: I, dot
@@ -27,17 +25,14 @@ using QuadGK: gauss
 # Utilities
 export backend, metal_backend, vector_type, matrix_type, backend_types
 export ExecutionPolicy, Serial, Parallel, execution_policy
-export BrambleFunction
 
 # `vector`/`matrix` build a raw backend array (point 70): real API, but two of the most
 # generic nouns in the language, and a beginner's own top-level `vector = [...]` after
 # `using Bramble` errors rather than shadows. `Bramble.vector(...)` still reaches them.
 public vector, matrix
-# Backend-extension plumbing (point 70): identity/zero matrices tied to a `Backend`, and
-# the time-dependence machinery behind `embed_function`/`BrambleFunction`'s own markers use
-# — none of it appears in a tutorial, all of it documented for whoever writes a new mesh,
-# backend or marker.
-public backend_eye, backend_zeros, embed_function, has_time
+# Backend-extension plumbing (point 70): identity/zero matrices tied to a `Backend` — real,
+# tested, reached while implementing a new backend rather than while using one.
+public backend_eye, backend_zeros
 
 # domain/interval handling functions
 export box, interval, ×, dim, topo_dim, tails, point, cartesian_product, center, projection,
@@ -133,7 +128,6 @@ include("geometry/pretty_print.jl")
 include("geometry/set.jl")
 include("geometry/marker.jl")
 include("geometry/domain.jl")
-include("utils/bramble_function.jl")
 
 include("mesh/interface.jl")
 include("mesh/marker.jl")

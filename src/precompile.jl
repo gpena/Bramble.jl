@@ -5,7 +5,7 @@
 # method instance it reaches. The workload is therefore written as a few
 # realistic end-to-end sessions rather than an enumeration of individual
 # methods: building and querying a mesh over a domain already exercises
-# interval, marker, backend and BrambleFunction construction transitively.
+# interval, marker and backend construction transitively.
 #
 # Only add a call here when it is NOT reachable from one of those sessions.
 #
@@ -157,36 +157,6 @@ function _pc_linear_algebra(be)
     return nothing
 end
 
-# BrambleFunction call paths. Point 48 (2026-09-04) moved condition markers off
-# BrambleFunction entirely (a Tuple of raw closures instead, measured faster in the one
-# place a condition is a per-point hot loop), so nothing in src/ reaches this anymore --
-# kept warm only for external callers of the still-public embed_function/BrambleFunction.
-function _pc_bramble_function(X, I_time, f, ft, pt)
-    bf = embed_function(X, f)
-    bft = embed_function(X, I_time, ft)
-
-    if pt isa Number
-        bf(pt)
-        bf((pt,))
-        bf([pt])
-    else
-        bf(pt)
-        bf(pt...)
-        bf(collect(pt))
-    end
-    bft(0.5)(pt)
-    bft(pt, 0.5)
-
-    has_time(bf)
-    has_time(typeof(bf))
-    has_time(bft)
-    argstype(bf.wrapped)
-    codomaintype(bf.wrapped)
-    embed_function(X, bf)
-    sprint(show, bf)
-    return nothing
-end
-
 # Geometry constructors and predicates not exercised by the sessions above.
 function _pc_geometry()
     I = interval(0.0, 1.0)
@@ -247,10 +217,9 @@ end
 # grid space of 0.29 s against 0.02 s.
 #
 # The residual per-closure cost stays: roughly 50 ms for Rₕ and 10 ms for avgₕ.
-# Embedding f in a BrambleFunction would erase the closure type and remove even
-# that, but it also blocks inlining into the quadrature loop and costs about 2x
-# at run time, which is the wrong trade for a time-stepping loop. See the note
-# in avgₕ!.
+# A type-erasing wrapper around f would remove even that, but it also blocks
+# inlining into the quadrature loop and costs about 2x at run time, which is
+# the wrong trade for a time-stepping loop. See the note in avgₕ!.
 function _pc_space_session(Ωₕ, f, g)
     Wₕ = gridspace(Ωₕ)
 
@@ -892,13 +861,6 @@ if PRECOMPILE_WORKLOAD
             normal_vector(Ωₕ1, :left)
             normal_vector(Ωₕ2, :top)
             normal_vector(Ωₕ3, :front)
-
-            # Function embedding, including the time-dependent path.
-            _pc_bramble_function(I1, I_time, x -> x + 1.0, (x, t) -> (x + 1.0) * t, 0.5)
-            _pc_bramble_function(S2, I_time, x -> x[1] * x[2],
-                (x, t) -> x[1] * x[2] * t, (0.5, 1.0))
-            _pc_bramble_function(S3, I_time, x -> x[1] + x[2] + x[3],
-                (x, t) -> (x[1] + x[2] + x[3]) * t, (0.5, 0.5, 0.5))
 
             # Grid spaces and restriction operators, in 1D, 2D and 3D.
             _, e1, c1 = _pc_space_session(Ωₕ1, x -> x + 1.0, x -> 2x)

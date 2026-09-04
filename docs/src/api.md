@@ -29,14 +29,6 @@ backend_zeros
 metal_backend
 ```
 
-### Function embedding
-
-```@docs
-BrambleFunction
-embed_function
-has_time
-```
-
 ---
 
 ## Geometry

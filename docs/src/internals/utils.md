@@ -19,11 +19,3 @@ Modules = [Bramble]
 Public = false
 Pages = ["utils/linear_algebra.jl", ]
 ```
-
-## Bramble function
-
-```@autodocs
-Modules = [Bramble]
-Public = false
-Pages = ["utils/bramble_function.jl", ]
-```

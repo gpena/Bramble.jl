@@ -1,9 +1,9 @@
 using Test
 using Bramble
-using Bramble: Marker, MarkerPair, BrambleFunction, Domain, DomainMarkers,
+using Bramble: Marker, MarkerPair, Domain, DomainMarkers,
                EvaluatedDomainMarkers, dim, set, markers, labels, CartesianProduct
 using Bramble: get_boundary_symbols, label, identifier, domain, symbols, tuples, conditions
-using Bramble: marker_identifiers, _embed_notime, process_identifier, marker_symbols,
+using Bramble: marker_identifiers, process_identifier, marker_symbols,
                marker_tuples, marker_conditions
 using Bramble: label_identifiers, label_symbols, label_tuples, label_conditions, point_type,
                topo_dim, is_collapsed
@@ -22,8 +22,8 @@ using StaticArrays
     @testset "Marker & MarkerPair" begin
         m_sym = Marker(:boundary, :left)
         m_tup = Marker(:corners, Set((:top, :right)))
-        bf_func1 = _embed_notime(I1D, func1; CoType = eltype(I1D))
-        m_fun = Marker(:region, bf_func1)
+        # a function-valued marker holds the raw closure directly, nothing wrapped
+        m_fun = Marker(:region, func1)
 
         @test label(m_sym) === :boundary
         @test identifier(m_sym) === :left
@@ -32,7 +32,7 @@ using StaticArrays
         @test identifier(m_tup) == Set((:top, :right))
 
         @test label(m_fun) === :region
-        @test identifier(m_fun) isa BrambleFunction
+        @test identifier(m_fun) === func1
 
         # MarkerPair
         pair_sym = :inlet => :left
@@ -245,7 +245,7 @@ using StaticArrays
         # Marker show
         m_s = Marker(:left, :left)
         m_t = Marker(:corner, Set([:top, :right]))
-        m_f = Marker(:level, _embed_notime(I1D, x -> x[1] > 0))
+        m_f = Marker(:level, x -> x[1] > 0)
 
         @test occursin("Marker(:left => :left)", repr(m_s))
         @test occursin("Marker(:corner => (", repr(m_t))
