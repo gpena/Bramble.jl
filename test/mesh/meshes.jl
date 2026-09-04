@@ -195,7 +195,12 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, h
             X = domain(Ω, markers(Ω,
                 :boundary => x -> any(x .< 0.01) || any(x .> 0.99)))
 
-            Mh = mesh(X, (6, 6), (false, false))
+            # The custom :boundary above is a coordinate-threshold predicate, which does not
+            # track a non-uniform ((false, false)) mesh's actual boundary *indices* exactly —
+            # a deliberate mismatch with the geometric definition, not a mistake, so it is
+            # silenced explicitly rather than left to print an unrelated warning on every run
+            # of this testset (point 18, gpena/Bramble.jl#18).
+            Mh = mesh(X, (6, 6), (false, false); warn_marker_mismatch = false)
             @test Mh isa MeshnD
             @test npoints(Mh) == 36
             @test haskey(markers(Mh), :boundary)

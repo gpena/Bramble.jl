@@ -123,6 +123,13 @@ Also seeds the default geometric markers `:boundary` and `:interior` if not alre
   - `Ωₕ`: Target mesh whose `markers` field is populated.
   - `domain_markers`: [`DomainMarkers`](@ref) containing semantic boundary or regional labels.
 
+# Keywords
+
+  - `warn_marker_mismatch::Bool = true`: whether to warn when a custom `:boundary`/`:interior`
+    marker disagrees with the mesh's own geometric definition. The custom marker is kept
+    either way; set to `false` to silence the warning for an intentional redefinition (see
+    [`mesh`](@ref)).
+
 # Examples
 
 ```julia
@@ -137,7 +144,7 @@ Also seeds the default geometric markers `:boundary` and `:interior` if not alre
 
 See also: [`DomainMarkers`](@ref), [`MeshMarkers`](@ref).
 """
-function set_markers!(Ωₕ::AbstractMeshType, domain_markers)
+function set_markers!(Ωₕ::AbstractMeshType, domain_markers; warn_marker_mismatch::Bool = true)
     mesh_markers = _init_mesh_markers(Ωₕ, domain_markers)
 
     _set_markers_symbols!(mesh_markers, symbols(domain_markers), Ωₕ)
@@ -145,7 +152,7 @@ function set_markers!(Ωₕ::AbstractMeshType, domain_markers)
     _set_markers_conditions!(mesh_markers, conditions(domain_markers), Ωₕ)
 
     # `:boundary`/`:interior` are reserved, always-available markers; see note above _ensure_geometric_markers!.
-    _ensure_geometric_markers!(mesh_markers, Ωₕ)
+    _ensure_geometric_markers!(mesh_markers, Ωₕ; warn_marker_mismatch)
 
     Ωₕ.markers = mesh_markers
     return nothing
@@ -170,23 +177,28 @@ Seed `:boundary` and `:interior` from the mesh's own geometry, preserving any ex
 custom definitions registered under those names.
 
 If a pre-existing custom marker with the same name disagrees with the geometric boundary,
-a warning is issued because downstream operators (`restrict_to`) assume geometric semantics.
+a warning is issued because downstream operators (`restrict_to`) assume geometric semantics —
+unless `warn_marker_mismatch` is `false`, for a caller that has deliberately redefined the
+label and does not want to be told so on every mesh built from it.
 """
-function _ensure_geometric_markers!(mesh_markers::MeshMarkers, Ωₕ::AbstractMeshType)
+function _ensure_geometric_markers!(mesh_markers::MeshMarkers, Ωₕ::AbstractMeshType;
+        warn_marker_mismatch::Bool = true)
     linear_indices = LinearIndices(npoints(Ωₕ, Tuple))
     boundary_set = falses(npoints(Ωₕ))
     for idxs in values(boundary_symbol_to_dict(indices(Ωₕ)))
         _mark_indices!(boundary_set, linear_indices, idxs)
     end
 
-    _default_geometric_marker!(mesh_markers, :boundary, boundary_set)
-    _default_geometric_marker!(mesh_markers, :interior, .!boundary_set)
+    _default_geometric_marker!(mesh_markers, :boundary, boundary_set, warn_marker_mismatch)
+    _default_geometric_marker!(mesh_markers, :interior, .!boundary_set, warn_marker_mismatch)
     return nothing
 end
 
-function _default_geometric_marker!(mesh_markers::MeshMarkers, label::Symbol, geometric::BitVector)
+function _default_geometric_marker!(mesh_markers::MeshMarkers, label::Symbol,
+        geometric::BitVector, warn_marker_mismatch::Bool)
     if haskey(mesh_markers, label)
-        mesh_markers[label] == geometric || _warn_geometric_marker_mismatch(label)
+        mesh_markers[label] == geometric ||
+            (warn_marker_mismatch && _warn_geometric_marker_mismatch(label))
     else
         mesh_markers[label] = geometric
     end

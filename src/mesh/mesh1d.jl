@@ -345,7 +345,9 @@ end
 end
 
 # Internal constructor function for creating a 1D mesh.
-function _mesh(Ω::Domain{CartesianProduct{1, T}}, npts::Tuple{Int}, unif::Tuple{Bool}, backend) where {T}
+function _mesh(
+        Ω::Domain{CartesianProduct{1, T}}, npts::Tuple{Int}, unif::Tuple{Bool}, backend;
+        warn_marker_mismatch::Bool = true) where {T}
     # Unpack the domain's set and markers, and the number of points.
     (; set, markers) = Ω
     n_points, = npts
@@ -386,7 +388,7 @@ function _mesh(Ω::Domain{CartesianProduct{1, T}}, npts::Tuple{Int}, unif::Tuple
     half_spacing!(half_spacings(mesh), mesh)
 
     # Finally, apply the domain markers to the mesh points.
-    set_markers!(mesh, markers)
+    set_markers!(mesh, markers; warn_marker_mismatch)
     return mesh
 end
 
@@ -459,7 +461,8 @@ function iterative_refinement!(Ωₕ::Mesh1D)
 end
 
 # Refines a 1D mesh and then reapplies the domain markers to the new set of points.
-function iterative_refinement!(Ωₕ::Mesh1D, domain_markers::DomainMarkers)
+function iterative_refinement!(Ωₕ::Mesh1D, domain_markers::DomainMarkers;
+        warn_marker_mismatch::Bool = true)
     # Do nothing if the mesh is collapsed.
     if is_collapsed(Ωₕ)
         return
@@ -468,16 +471,17 @@ function iterative_refinement!(Ωₕ::Mesh1D, domain_markers::DomainMarkers)
     # First, perform the geometric refinement of the mesh.
     _refine_indices!(Ωₕ)
     # Then, update the markers based on the new, denser grid.
-    set_markers!(Ωₕ, domain_markers)
+    set_markers!(Ωₕ, domain_markers; warn_marker_mismatch)
     return
 end
 
 # Changes the grid points of a mesh and then reapplies the domain markers.
-function change_points!(Ωₕ::Mesh1D, domain_markers::DomainMarkers, pts)
+function change_points!(Ωₕ::Mesh1D, domain_markers::DomainMarkers, pts;
+        warn_marker_mismatch::Bool = true)
     # First, update the grid points and all derived geometric quantities.
     change_points!(Ωₕ, pts)
     # Then, recalculate the markers for the new point distribution.
-    set_markers!(Ωₕ, domain_markers)
+    set_markers!(Ωₕ, domain_markers; warn_marker_mismatch)
     return
 end
 

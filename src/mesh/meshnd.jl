@@ -94,7 +94,8 @@ dimensions (degenerate single-point intervals) are forced to a point count of 1.
   - `unif`: Uniformity flags for each spatial dimension.
   - `backend`: Linear algebra [`Backend`](@ref).
 """
-function _mesh(Ω::Domain, npts::NTuple{D, Int}, unif::NTuple{D, Bool}, backend) where {D}
+function _mesh(Ω::Domain, npts::NTuple{D, Int}, unif::NTuple{D, Bool}, backend;
+        warn_marker_mismatch::Bool = true) where {D}
     # Ensure the dimension of the domain matches the length of the input tuples.
     dim(Ω) == D || _throw_domain_dim_mismatch(dim(Ω), D)
     _set = set(Ω)
@@ -114,7 +115,7 @@ function _mesh(Ω::Domain, npts::NTuple{D, Int}, unif::NTuple{D, Bool}, backend)
     output_mesh = MeshnD(_set, mesh_markers, idxs, backend, _submeshes)
 
     # Now that the mesh object is created, populate its markers based on the domain's markers.
-    set_markers!(output_mesh, markers(Ω))
+    set_markers!(output_mesh, markers(Ω); warn_marker_mismatch)
 
     return output_mesh
 end
@@ -293,10 +294,11 @@ function iterative_refinement!(Ωₕ::MeshnD{D}) where {D}
     return nothing
 end
 
-function iterative_refinement!(Ωₕ::MeshnD{D}, domain_markers::DomainMarkers) where {D}
+function iterative_refinement!(Ωₕ::MeshnD{D}, domain_markers::DomainMarkers;
+        warn_marker_mismatch::Bool = true) where {D}
     _refine_indices!(Ωₕ)
     # The markers are BitVectors sized to the old grid, so they are rebuilt too.
-    set_markers!(Ωₕ, domain_markers)
+    set_markers!(Ωₕ, domain_markers; warn_marker_mismatch)
     return nothing
 end
 
@@ -307,9 +309,10 @@ function change_points!(Ωₕ::MeshnD{D}, pts) where {D}
     return
 end
 
-function change_points!(Ωₕ::MeshnD{D}, domain_markers::DomainMarkers, pts) where {D}
+function change_points!(Ωₕ::MeshnD{D}, domain_markers::DomainMarkers, pts;
+        warn_marker_mismatch::Bool = true) where {D}
     change_points!(Ωₕ, pts)
-    set_markers!(Ωₕ, domain_markers)
+    set_markers!(Ωₕ, domain_markers; warn_marker_mismatch)
     return
 end
 

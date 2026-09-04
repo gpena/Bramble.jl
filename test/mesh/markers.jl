@@ -65,6 +65,19 @@ using Bramble
         @test sum(Bramble.markers(Ωₕ)[:boundary]) == 4   # just the :left face on a 4x4 grid
     end
 
+    @testset "warn_marker_mismatch = false silences a deliberate redefinition" begin
+        # gpena/Bramble.jl#18: the warning has no way to tell "a mistake" from "the caller
+        # redefined the label on purpose" — this is that opt-out, checked in both directions
+        # so it silences the warning without silently dropping the custom marker too.
+        Ωₕ = @test_logs mesh(
+            domain(S, :boundary => :left), (4, 4), (true, true); warn_marker_mismatch = false)
+        @test sum(Bramble.markers(Ωₕ)[:boundary]) == 4   # the custom definition still wins
+
+        # The default stays warn-on-mismatch — false is opt-in, not a silent global change.
+        @test_logs (:warn, r"boundary.*something other than") mesh(
+            domain(S, :boundary => :left), (4, 4), (true, true))
+    end
+
     @testset "Condition markers" begin
         is_geom_boundary(x) = x[1] == 0.0 || x[1] == 1.0 || x[2] == 0.0 || x[2] == 1.0
 

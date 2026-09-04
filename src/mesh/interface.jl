@@ -228,6 +228,9 @@ Return a [`Mesh1D`](@ref) or [`MeshnD`](@ref) (``D=2,3``) discretizing the [`Dom
 
   - `uniform`: Convenience keyword alternative to positional `unif`. Defaults to `true` across all axes.
   - `backend`: Linear algebra and memory storage [`Backend`](@ref). Defaults to `backend(eltype(Ω))`.
+  - `warn_marker_mismatch::Bool = true`: warn if `Ω` carries a custom `:boundary`/`:interior`
+    marker that disagrees with this mesh's own geometric one. The custom marker is kept
+    either way; set to `false` for a deliberate redefinition you don't want flagged.
 
 # Examples
 
@@ -242,14 +245,18 @@ X = domain(interval(0, 1) × interval(4, 5))
 ```
 """
 @inline mesh(Ω::Domain, npts::NTuple{D, Int}, unif::NTuple{D, Bool};
-    backend = backend(eltype(Ω))) where {D} = _mesh(Ω, npts, unif, backend)
+    backend = backend(eltype(Ω)), warn_marker_mismatch::Bool = true) where {D} = _mesh(
+    Ω, npts, unif, backend; warn_marker_mismatch)
 @inline mesh(Ω::Domain{CartesianProduct{1, T}}, npts::Int, unif::Bool;
-    backend = backend(eltype(Ω))) where {T} = _mesh(Ω, (npts,), (unif,), backend)
+    backend = backend(eltype(Ω)), warn_marker_mismatch::Bool = true) where {T} = _mesh(
+    Ω, (npts,), (unif,), backend; warn_marker_mismatch)
 @inline mesh(Ω::Domain{CartesianProduct{1, T}}, npts::Int; uniform::Bool = true,
-    backend = backend(eltype(Ω))) where {T} = _mesh(Ω, (npts,), (uniform,), backend)
+    backend = backend(eltype(Ω)), warn_marker_mismatch::Bool = true) where {T} = _mesh(
+    Ω, (npts,), (uniform,), backend; warn_marker_mismatch)
 @inline mesh(
     Ω::Domain, npts::NTuple{D, Int}; uniform::NTuple{D, Bool} = ntuple(_ -> true, Val(D)),
-    backend = backend(eltype(Ω))) where {D} = _mesh(Ω, npts, uniform, backend)
+    backend = backend(eltype(Ω)), warn_marker_mismatch::Bool = true) where {D} = _mesh(
+    Ω, npts, uniform, backend; warn_marker_mismatch)
 
 #------------------------------------------------------------------------------------------#
 # Required Interface Methods
