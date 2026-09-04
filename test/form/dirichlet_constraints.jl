@@ -32,22 +32,20 @@ using Supposition
         end
 
         @testset "Time-dependent functor" begin
-            # Create a time-dependent constraint
+            # Create a time-dependent constraint. Point 48 (2026-09-04): the raw two-argument
+            # closure is stored directly now, in `DomainMarkers.conditions` -- a `Tuple`, one
+            # `Marker{F}` per condition's own type -- rather than a `BrambleFunction`.
             bcs_t = dirichlet_constraints(Ω, I, :time_dep_bc => (x, t) -> f_t(x, t))
 
             function_markers = bcs_t.conditions
             function_snapshot = first(function_markers)
-            @test identifier(function_snapshot) isa BrambleFunction
             @test length(function_markers) == 1
-
-            # The new marker should contain a non-time-dependent BrambleFunction
             @test label(function_snapshot) == :time_dep_bc
 
-            # The new function should be equivalent to `x -> f_t(x, 0.5)`
+            # called directly as f(x, t) -- there is no wrapper-provided f(t)(x) currying
             x_point = (10.0, 5.0)
             t_point = 0.5
-
-            @test identifier(function_snapshot)(t_point)(x_point) == f_t(x_point, t_point)
+            @test identifier(function_snapshot)(x_point, t_point) == f_t(x_point, t_point)
         end
     end
 
@@ -64,13 +62,14 @@ using Supposition
 
         @test length(evaluated_conditions) == 2
         for marker in evaluated_conditions
+            # a plain one-argument closure now, x -> f(x, 0.75) via Base.Fix2 -- not a
+            # BrambleFunction, and no longer callable as new_bf(x, t)
             new_bf = identifier(marker)
-            @test new_bf isa BrambleFunction
 
             if label(marker) == :moving_front
-                # The new function should be equivalent to `x -> x[1] > 0.75`
-                @test new_bf(0.8, 0.8) == true
-                @test new_bf(0.7, 0.7) == false
+                # equivalent to `x -> x[1] > 0.75`
+                @test new_bf(0.8) == true
+                @test new_bf(0.7) == false
             end
         end
     end

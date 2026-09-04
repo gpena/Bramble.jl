@@ -40,7 +40,7 @@ See also: [`dirichlet_constraints`](@ref), [`dirichlet_bc!`](@ref), [`symmetrize
 
 Alias for storage of Dirichlet constraints.
 """
-const DirichletConstraint{FType} = DomainMarkers{FType}
+const DirichletConstraint{CT} = DomainMarkers{CT}
 
 """
 	dirichlet_constraints(_set, [I::CartesianProduct{1}], pairs...)
@@ -52,17 +52,13 @@ Each `pair` is of the form `:label => func`, where `:label` identifies the bound
 The `cartesian_product` can be a `CartesianProduct` mesh domain or an `ScalarGridSpace` from which the mesh can be extracted. The `:label` must match a label in the mesh definition.
 """
 function dirichlet_constraints(input, pairs::Pair...)
-    domain = _constraint_domain(input)
-    T, _ = _get_eltype_and_domain(domain)
-    return _create_generic_markers(_constraint_value_type(T, domain, pairs), domain,
-        pairs...)
+    _constraint_domain(input)      # validates `input`; the domain itself is never stored
+    return _create_generic_markers(pairs...)
 end
 
 function dirichlet_constraints(input, I::CartesianProduct{1}, pairs::Pair...)
-    domain = _constraint_domain(input)
-    T, _ = _get_eltype_and_domain(domain)
-    return _create_generic_markers(_constraint_value_type(T, domain, pairs, I), domain, I,
-        pairs...)
+    _constraint_domain(input)      # validates `input`; the domain itself is never stored
+    return _create_generic_markers(pairs...)
 end
 
 @inline _constraint_domain(input::ScalarGridSpace) = set(mesh(input))
@@ -74,69 +70,16 @@ end
 #===========================================================================#
 # The element type a constraint stores its values in
 #
-# The conditions are held in a `Set{Marker{BrambleFunction{…, CoType, …}}}`, and the
-# concrete element type is the whole point of the wrapper: it is what keeps applying a
-# constraint allocation free. So `CoType` has to be settled when the constraints are built.
-#
-# It used to be the domain's own element type, which made a `Float64` domain able to carry
-# only `Float64` boundary values, and that is exactly what blocks differentiating with
-# respect to boundary data: a `ForwardDiff.Dual`-returning condition met
-# `MethodError: no method matching Float64(::Dual)` inside the wrapper.
-#
-# The rule is now the one `Rₕ` already uses (space/operators/restriction.jl): the type the
-# functions return, promoted against the domain's rather than replacing it, so an
-# integer-valued condition still gives `Float64` on a `Float64` domain while a Dual-valued
-# one gives a Dual over the same, undifferentiated, geometry.
-#
-# Learning it costs one extra call per condition. `Rₕ` reads it from a grid point; there is
-# no mesh here, so it is read at the domain's lower corner. A condition need not be defined
-# there — it is only ever applied on the part of the boundary its label marks — so a probe
-# that throws falls back to the domain's type, which is exactly the old behaviour. That
-# keeps a condition like `x -> sqrt(x[1] - 0.5)` working, the same trap `Rₕ` hit.
+# Used to need settling ahead of time (point 48's history): the conditions lived in a
+# `Set{Marker{BrambleFunction{…, CoType, …}}}`, and a `FunctionWrapper`'s whole point is a
+# *fixed* concrete return type declared upfront, which meant probing every condition at
+# construction time to promote a `Dual`-returning one correctly. `conditions` is now a
+# `Tuple`, one `Marker{F}` per condition's own raw closure — nothing is erased, so nothing
+# needs a return type settled ahead of the call: `v[idx] = func(point(...))` converts to
+# `v`'s own eltype exactly the way any other assignment does, the same rule `Rₕ`/`avgₕ`
+# already follow. `_probe_at`/`_probed_type`/`_constraint_value_type`/
+# `_get_eltype_and_domain` accordingly no longer exist.
 #===========================================================================#
-
-@inline _probe_at(X::CartesianProduct{1}) = first(first(tails(X)))
-@inline _probe_at(X::CartesianProduct) = map(first, tails(X))
-
-@inline function _probed_type(f, args...)
-    try
-        return typeof(f(args...))
-    catch
-        return Union{}          # promotes away, leaving the domain's type
-    end
-end
-
-function _constraint_value_type(::Type{T}, domain, pairs, I = nothing) where {T}
-    p = _probe_at(domain)
-    t = I === nothing ? nothing : first(first(tails(I)))
-    R = T
-    for pair in pairs
-        f = pair.second
-        f isa Function || continue
-        R = promote_type(R, t === nothing ? _probed_type(f, p) : _probed_type(f, p, t))
-    end
-    return R
-end
-
-"""
-	_get_eltype_and_domain(cartesian_product)
-
-Internal helper to extract element type and spatial domain from either a
-`CartesianProduct` or `ScalarGridSpace`.
-
-# Arguments
-
-  - `cartesian_product`: Either a `CartesianProduct` domain or a `ScalarGridSpace`
-
-# Returns
-
-  - `(T, domain)` where `T` is the element type and `domain` is the `CartesianProduct`
-
-This helper enables a unified interface for `dirichlet_constraints` that accepts
-both mesh domains and grid spaces.
-"""
-_get_eltype_and_domain(X::CartesianProduct{D, T}) where {D, T} = (T, X)
-_get_eltype_and_domain(Wₕ::ScalarGridSpace) = (eltype(Wₕ), set(mesh(Wₕ)))
 
 """
 	dirichlet_constraints(X::CartesianProduct, f::Function)
@@ -405,16 +348,22 @@ rather than to the size of the grid — a boundary in a volume is a small fracti
         v::AbstractVector, Ωₕ::AbstractMeshType, bcs::ConstraintMarkers,
         labels::NTuple{N, Symbol}, offset::Int = 0) where {N}
     isempty(labels) && return v
-
-    for marker in conditions(bcs)
-        current_label = label(marker)
-        if current_label in labels
-            _dirichlet_bc_indices!(v, Ωₕ, index_in_marker(Ωₕ, current_label),
-                identifier(marker), offset)
-        end
-    end
-
+    _apply_conditions!(conditions(bcs), v, Ωₕ, labels, offset)
     return v
+end
+
+# Unrolled by recursion on the conditions tuple, same idiom as `_write_components!`
+# (utils/linear_algebra.jl) — a plain `for marker in conditions(bcs)` measured 7% slower
+# and non-allocation-free (208 B) against this, point 48: the compiler does not always
+# fully unroll a `for` over a small heterogeneous tuple the way explicit recursion does.
+@inline _apply_conditions!(::Tuple{}, v, Ωₕ, labels, offset) = nothing
+@inline function _apply_conditions!(markers::Tuple, v, Ωₕ, labels, offset)
+    marker = first(markers)
+    if label(marker) in labels
+        _dirichlet_bc_indices!(v, Ωₕ, index_in_marker(Ωₕ, label(marker)),
+            identifier(marker), offset)
+    end
+    return _apply_conditions!(Base.tail(markers), v, Ωₕ, labels, offset)
 end
 
 @inline dirichlet_bc!(v::AbstractVector, Ωₕ::AbstractMeshType, bcs::ConstraintMarkers,
@@ -506,7 +455,7 @@ The value of `func` at the `i`-th mesh point.
 _function_in_linear_indices(func, Ωₕ, i) = func(point(Ωₕ, indices(Ωₕ)[i]))
 
 @inline function _dirichlet_bc_indices!(v::AbstractVector, Ωₕ::AbstractMeshType,
-        index_in_marker::BitVector, func::BrambleFunction, offset::Int = 0)
+        index_in_marker::BitVector, func::F, offset::Int = 0) where {F}
     cart_indices = indices(Ωₕ)
 
     chunks = index_in_marker.chunks

@@ -66,7 +66,10 @@ using StaticArrays
         @test process_identifier(I2D, [:top, :right]) == Set((:top, :right))
         @test process_identifier(I2D, [:top, :right]) ==
               process_identifier(I2D, (:top, :right))
-        @test process_identifier(I1D, func1) isa BrambleFunction
+        # process_identifier no longer has a Function-typed method: point 48 (2026-09-04)
+        # removed BrambleFunction-wrapping from the marker/condition path entirely, so a
+        # function-valued pair is stored as its own raw closure directly (see
+        # `_pairs_to_tuple_conditions`), never routed through `process_identifier`.
     end
 
     @testset "create_markers" begin

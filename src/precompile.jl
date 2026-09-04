@@ -157,9 +157,10 @@ function _pc_linear_algebra(be)
     return nothing
 end
 
-# BrambleFunction call paths. Meshing reaches the 1-argument spatial call via
-# condition markers, but not the tuple/vector/splatted forms or the
-# time-dependent ones.
+# BrambleFunction call paths. Point 48 (2026-09-04) moved condition markers off
+# BrambleFunction entirely (a Tuple of raw closures instead, measured faster in the one
+# place a condition is a per-point hot loop), so nothing in src/ reaches this anymore --
+# kept warm only for external callers of the still-public embed_function/BrambleFunction.
 function _pc_bramble_function(X, I_time, f, ft, pt)
     bf = embed_function(X, f)
     bft = embed_function(X, I_time, ft)

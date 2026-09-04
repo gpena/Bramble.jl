@@ -17,13 +17,15 @@ using LinearAlgebra: issymmetric, norm
 #     nothing checked, and a `\\` through both is the shape an adjoint actually has.
 #
 #   - the *boundary data*: the parameter being differentiated sits inside the condition
-#     itself, `x -> a * x[1]`. This did not work. The conditions are stored in a
-#     `Set{Marker{BrambleFunction{…, CoType, …}}}` whose concrete element type is what
-#     keeps applying them allocation free, and `CoType` was the *domain's* element type —
+#     itself, `x -> a * x[1]`. This did not work, originally: the conditions were stored in
+#     a `Set{Marker{BrambleFunction{…, CoType, …}}}` whose concrete element type is what
+#     kept applying them allocation free, and `CoType` was the *domain's* element type —
 #     so a Float64 domain could carry only Float64 boundary values, and a Dual-returning
 #     condition met `MethodError: no method matching Float64(::Dual)` inside the wrapper.
-#     It is now the type the conditions return, promoted against the domain's, which is the
-#     rule `Rₕ` already used.
+#     Point 48 (2026-09-04) removed the wrapper entirely — `conditions` is a `Tuple` of raw
+#     closures now, one `Marker{F}` per condition's own type, nothing erased — so there is
+#     no `CoType` left to settle at all: `v[idx] = func(point(...))` converts to `v`'s own
+#     eltype the same way any assignment does, exactly the rule `Rₕ`/`avgₕ` already used.
 #
 # As in test/space/autodiff.jl, each case is checked against a central difference of the
 # same functional in plain Float64 — so it tests that the derivative is right, not merely
@@ -136,26 +138,35 @@ using LinearAlgebra: issymmetric, norm
     end
 
     @testset "Element type inference" begin
-        cotype(bcs) = typeof(Bramble.identifier(first(Bramble.conditions(bcs)))).parameters[3]
+        # No CoType to settle at all now (see the header note): a condition's return type
+        # only ever has to match whatever `v` was already allocated with. Checked directly
+        # by applying, not by inspecting an internal wrapper type that no longer exists.
+        apply(bcs) = (v = zeros(n); dirichlet_bc!(v, Ωₕ, bcs, :bottom); v)
 
-        # a plain condition is unchanged
-        @test cotype(dirichlet_constraints(set(Ωₕ), :bottom => (x -> 7.0))) === Float64
+        # a plain condition applies as-is
+        @test eltype(apply(dirichlet_constraints(set(Ωₕ), :bottom => (x -> 7.0)))) ===
+              Float64
 
-        # promoted against the domain's type, not replacing it: an integer-valued
-        # condition still gives Float64 on a Float64 domain
-        @test cotype(dirichlet_constraints(set(Ωₕ), :bottom => (x -> 1))) === Float64
+        # an integer-valued condition still gives Float64 on a Float64 destination —
+        # ordinary conversion on assignment, not a promotion decided ahead of time
+        @test eltype(apply(dirichlet_constraints(set(Ωₕ), :bottom => (x -> 1)))) === Float64
 
-        # a condition need not be defined at the probe point — it is only ever applied
-        # where its label marks — so a probe that throws falls back to the domain's type.
-        # This is the trap Rₕ hit with `x -> sqrt(x - 0.5)`.
-        @test cotype(dirichlet_constraints(set(Ωₕ),
-            :bottom => (x -> sqrt(x[1] - 0.5)))) === Float64
+        # a condition need not be defined everywhere it is merely *registered* — building
+        # the constraints no longer evaluates the condition at all (there is no probe point
+        # to need one), so a condition undefined off its own boundary — the trap `Rₕ` hit
+        # with `x -> sqrt(x - 0.5)` — cannot fail at construction time the way a CoType
+        # probe once could. (Applying it is a separate question: `sqrt(x[1] - 0.5)` is
+        # genuinely undefined across all of `:bottom` here, since that label spans the
+        # whole `x[1] ∈ [0,1]` edge — so only construction is checked, not application.)
         @test_nowarn dirichlet_constraints(set(Ωₕ), :bottom => (x -> sqrt(x[1] - 0.5)))
 
-        # a Dual-returning condition carries a Dual
+        # a Dual-returning condition, applied into a Dual-eltype destination, carries a Dual
         a = ForwardDiff.Dual{ForwardDiff.Tag{typeof(identity), Float64}}(1.3, 1.0)
-        @test cotype(dirichlet_constraints(set(Ωₕ), :bottom => (x -> a * x[1]))) <:
-              ForwardDiff.Dual
+        bcs_dual = dirichlet_constraints(set(Ωₕ), :bottom => (x -> a * x[1]))
+        v_dual = zeros(typeof(a), n)
+        dirichlet_bc!(v_dual, Ωₕ, bcs_dual, :bottom)
+        @test eltype(v_dual) <: ForwardDiff.Dual
+        @test !all(iszero, v_dual)
 
         # the mesh underneath stays undifferentiated
         @test eltype(Ωₕ) === Float64

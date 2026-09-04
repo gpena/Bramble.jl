@@ -6,7 +6,7 @@ Represents a labeled region or boundary of a computational domain.
 Each `Marker` consists of a `label` (a `Symbol`) and an `identifier`. The `identifier` specifies how to locate the marked region:
 - A `Symbol` for predefined boundaries (e.g., `:left`, `:top`).
 - A `Set{Symbol}` for collections of predefined boundaries (e.g., `Set([:top, :right])`).
-- A function (wrapped in a `BrambleFunction`) that acts as a characteristic or level-set function returning `true` for points in the marked region.
+- A function that acts as a characteristic or level-set function returning `true` for points in the marked region.
 
 # Fields
 
@@ -15,7 +15,7 @@ $(FIELDS)
 struct Marker{F}
     "A `Symbol` naming the marked region (e.g., `:inlet`, `:wall`, `:boundary`)."
     label::Symbol
-    "The object identifying the region (`Symbol`, `Set{Symbol}`, or `BrambleFunction`)."
+    "The object identifying the region (`Symbol`, `Set{Symbol}`, or a raw function)."
     identifier::F
 end
 
@@ -47,17 +47,28 @@ Returns the identifier (`Symbol`, `Set{Symbol}`, or function) of a `Marker` or `
 
 A container that categorizes and stores all markers for a given computational domain.
 
+`conditions` is a `Tuple` rather than a `Set`: each marker keeps its own condition's
+concrete closure type as one of the tuple's element types, rather than erasing every
+condition into one shared wrapper type the way a homogeneous `Set` would force. Point 48
+found this genuinely faster (not just simpler) for the one place a condition is called in
+a real hot loop, per-point: ~1.84× on Dirichlet value application, allocation-free either
+way, and the previous `BrambleFunction`-wrapped path wasn't even allocation-free once time
+dependence was involved (evaluating the outer time-closure built a new wrapper every call).
+A tuple pays for this with a distinct `DomainMarkers` type per distinct set of condition
+closures, rather than one type covering any combination — the same tradeoff `LinearForm`/
+`BilinearForm` already accepted for a form's AST.
+
 # Fields
 
 $(FIELDS)
 """
-struct DomainMarkers{BFType}
+struct DomainMarkers{CT <: Tuple}
     "markers identified by a single predefined `Symbol` (e.g., `:left`)."
     symbols::Set{Marker{Symbol}}
     "markers identified by a collection of predefined `Symbol`s (e.g., `(:top, :right)`)."
     tuples::Set{Marker{Set{Symbol}}}
-    "markers identified by a boolean function `f(x)` or `f(x, t)`."
-    conditions::Set{Marker{BFType}}
+    "markers identified by a boolean function `f(x)` or `f(x, t)`, one `Marker{F}` per condition's own closure type."
+    conditions::CT
 end
 
 """
@@ -136,10 +147,9 @@ julia> length(m.conditions)
 1
 ```
 """
-@inline markers(space_set::CartesianProduct, pairs::Pair...) = _create_generic_markers(
-    Bool, space_set, pairs...)
+@inline markers(space_set::CartesianProduct, pairs::Pair...) = _create_generic_markers(pairs...)
 @inline markers(space_set::CartesianProduct, time_set::CartesianProduct{1},
-    pairs::Pair...) = _create_generic_markers(Bool, space_set, time_set, pairs...)
+    pairs::Pair...) = _create_generic_markers(pairs...)
 
 #=========================================================================
 Internal helper to parse identifier-based markers (Symbols and Tuples of Symbols)
@@ -165,71 +175,27 @@ function _extract_identifier_markers(pairs::Tuple)
 end
 
 #=========================================================================
-Creates DomainMarkers from pairs, handling spatial domains.
+Creates DomainMarkers from pairs. The space/time domain used to matter here only to
+settle a BrambleFunction's CoType ahead of time (point 48) -- a raw closure needs no
+such settling, so the same builder now covers both the spatial and spatio-temporal
+constructors; what distinguishes them is only whether the caller later calls the result
+as `dm(t)`, which `EvaluatedDomainMarkers` handles.
 =========================================================================#
-function _create_generic_markers(FinalType::Type, space_domain::CartesianProduct, pairs::Pair...)
+function _create_generic_markers(pairs::Pair...)
     symbols, tuples = _extract_identifier_markers(pairs)
-    conditions = _pairs_to_set_conditions(FinalType, space_domain, pairs)
+    conditions = _pairs_to_tuple_conditions(pairs)
 
     return DomainMarkers(symbols, tuples, conditions)
 end
 
-#=========================================================================
-Creates DomainMarkers from pairs, handling spatio-temporal domains.
-=========================================================================#
-function _create_generic_markers(FinalType::Type, space_domain::CartesianProduct,
-        time_domain::CartesianProduct{1}, pairs::Pair...)
-    symbols, tuples = _extract_identifier_markers(pairs)
-    conditions = _pairs_to_set_conditions(FinalType, space_domain, time_domain, pairs)
-
-    return DomainMarkers(symbols, tuples, conditions)
-end
-
-function _pairs_to_set_conditions(
-        FinalType::Type, space_domain::CartesianProduct{
-            D, T}, pairs) where {D, T}
-    ArgsT = point_type(space_domain)
-    BrambleFuncType = BrambleFunction{ArgsT, false, FinalType, typeof(space_domain)}
-
-    result = Set{Marker{BrambleFuncType}}()
-    sizehint!(result, length(pairs))
-
-    for p in pairs
-        if p.second isa Function
-            push!(result, Marker(p.first, process_identifier(space_domain, p.second; FinalType)))
-        end
-    end
-
-    return result
-end
-
-function _pairs_to_set_conditions(FinalType::Type, space_domain::CartesianProduct{D, T},
-        time_domain::CartesianProduct{1, T}, pairs) where {D, T}
-    SpaceArgsT = point_type(space_domain)
-    SpaceFuncType = BrambleFunction{SpaceArgsT, false, FinalType, typeof(space_domain)}
-    BrambleFuncType = BrambleFunction{T, true, SpaceFuncType, typeof(time_domain)}
-
-    result = Set{Marker{BrambleFuncType}}()
-    sizehint!(result, length(pairs))
-
-    for p in pairs
-        if p.second isa Function
-            push!(result, Marker(p.first, process_identifier(space_domain, time_domain, p.second; FinalType)))
-        end
-    end
-
-    return result
-end
-
-@inline function process_identifier(space_domain::CartesianProduct, identifier::F;
-        FinalType = Bool) where {F <: Function}
-    return _embed_notime(space_domain, identifier, CoType = FinalType)
-end
-
-@inline function process_identifier(
-        space_domain::CartesianProduct, time_domain::CartesianProduct{1},
-        identifier::F; FinalType = Bool) where {F <: Function}
-    return _embed_withtime(space_domain, time_domain, identifier, FinalCoType = FinalType)
+# One `Marker{F}` per function-valued pair, each keeping its own closure's concrete type
+# rather than erasing every condition into one shared wrapper type (point 48). `filter`/`map`
+# over a `Tuple` are themselves recursive/generated in Base, so this stays allocation-free
+# and fully specialised -- the same guarantee `_write_components!` relies on elsewhere for a
+# differently-shaped heterogeneous-tuple problem.
+@inline function _pairs_to_tuple_conditions(pairs::Tuple)
+    fn_pairs = filter(p -> p.second isa Function, pairs)
+    return map(p -> Marker(p.first, p.second), fn_pairs)
 end
 
 @inline process_identifier(::CartesianProduct, identifier::Symbol) = identifier
@@ -270,21 +236,18 @@ Returns the set of symbol-tuple markers from an [`EvaluatedDomainMarkers`](@ref)
 """
 	$(SIGNATURES)
 
-Returns a vector of condition markers evaluated at `edm.evaluation_time`.
+Returns a tuple of condition markers evaluated at `edm.evaluation_time`: each raw `f(x, t)`
+closure becomes an `f(x)` one, via `Base.Fix2(f, t)` rather than a call through a wrapper --
+every condition built through the time-dependent constructor is uniformly two-argument, so
+this needs no per-marker check the way the old `BrambleFunction`-wrapped path did. `map`
+over a `Tuple` preserves the tuple (and each closure's own concrete type), the same
+guarantee [`conditions`](@ref)`(::DomainMarkers)` itself relies on.
 """
 function conditions(edm::EvaluatedDomainMarkers)
     t = edm.evaluation_time
-    return [_evaluate_marker_at_time(marker, t)
-            for marker in conditions(edm.original_markers)]
+    return map(m -> Marker(label(m), Base.Fix2(identifier(m), t)),
+        conditions(edm.original_markers))
 end
-
-@inline function _evaluate_marker_at_time(marker, t)
-    bf = identifier(marker)
-    return Marker(label(marker), _eval_bf_at_time(Val(has_time(bf)), bf, t))
-end
-
-@inline _eval_bf_at_time(::Val{true}, bf, t) = bf(t)
-@inline _eval_bf_at_time(::Val{false}, bf, t) = bf
 
 """
 	$(SIGNATURES)
@@ -415,17 +378,17 @@ function Base.show(io::IO, dm::DomainMarkers)
             end
         end
 
-        # Show condition markers
+        # Show condition markers. Whether a given condition is time-dependent is no longer
+        # a per-marker trait to query -- every condition built through the time-dependent
+        # constructor is uniformly two-argument -- so this only prints the label.
         if n_cond > 0
             print_section_header(pp_indented, "Function markers ($n_cond):")
             pp_double_indent = with_indent(pp, 2)
             for m in dm.conditions
-                bf = identifier(m)
                 print_indent(pp_double_indent)
                 printstyled(io, ":$(label(m))"; color = :green)
                 print(io, " => ")
                 printstyled(io, "<function>"; color = :magenta)
-                has_time(bf) && printstyled(io, " (time-dependent)"; color = :red)
                 println(io)
             end
         end
