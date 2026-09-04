@@ -104,12 +104,12 @@ let W1 = gridspace(_mesh1_par()), u1 = element(W1), W2 = gridspace(_mesh2_par())
     W1d = gridspace(_mesh1()), u1d = element(W1d)
 
     g = SUITE["restriction"] = BenchmarkGroup()
-    g["Rₕ! 1D"] = @benchmarkable Rₕ!($u1, sin)
-    g["avgₕ! 1D"] = @benchmarkable avgₕ!($u1, sin)
-    g["Rₕ! 2D"] = @benchmarkable Rₕ!($u2, x -> sin(x[1]) * x[2])
-    g["avgₕ! 2D"] = @benchmarkable avgₕ!($u2, x->sin(x[1])*x[2]) samples=5 evals=1
-    g["Rₕ! 3D"] = @benchmarkable Rₕ!($u3, x -> sin(x[1]) + x[3])
-    g["avgₕ! 3D"] = @benchmarkable avgₕ!($u3, x->sin(x[1])+x[3]) samples=3 evals=1
+    g["Rₕ! 1D, Parallel() backend"] = @benchmarkable Rₕ!($u1, sin)
+    g["avgₕ! 1D, Parallel() backend"] = @benchmarkable avgₕ!($u1, sin)
+    g["Rₕ! 2D, Parallel() backend"] = @benchmarkable Rₕ!($u2, x -> sin(x[1]) * x[2])
+    g["avgₕ! 2D, Parallel() backend"] = @benchmarkable avgₕ!($u2, x->sin(x[1])*x[2]) samples=5 evals=1
+    g["Rₕ! 3D, Parallel() backend"] = @benchmarkable Rₕ!($u3, x -> sin(x[1]) + x[3])
+    g["avgₕ! 3D, Parallel() backend"] = @benchmarkable avgₕ!($u3, x->sin(x[1])+x[3]) samples=3 evals=1
     g["Rₕ 1D (allocates its output)"] = @benchmarkable Rₕ($W1, sin)
     g["Rₕ! 1D, Serial() backend (default)"] = @benchmarkable Rₕ!($u1d, sin)
     g["avgₕ! 1D, Serial() backend (default)"] = @benchmarkable avgₕ!($u1d, sin)
@@ -256,9 +256,9 @@ let W1 = gridspace(_mesh1()), f1 = Rₕ(W1, sin), v1 = Rₕ(W1, cos),
     # Both allocate a fresh matrix each call (assemble calls allocate_system_matrix
     # internally), so neither is zero — read by a person, like allocate_system_matrix
     # itself above.
-    g["assemble (BilinearForm), Serial() backend"] = @benchmarkable Bramble.assemble(
+    g["assemble (BilinearForm) 2D, Serial() backend"] = @benchmarkable Bramble.assemble(
         $am) samples=5 evals=1
-    g["assemble (BilinearForm), Parallel() backend"] = @benchmarkable Bramble.assemble(
+    g["assemble (BilinearForm) 2D, Parallel() backend"] = @benchmarkable Bramble.assemble(
         $amp) samples=5 evals=1
 end
 
