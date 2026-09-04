@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Convection-diffusion equation · Bramble.jl</title><meta name="title" content="Convection-diffusion equation · Bramble.jl"/><meta property="og:title" content="Convection-diffusion equation · Bramble.jl"/><meta property="twitter:title" content="Convection-diffusion equation · Bramble.jl"/><meta name="description" content="Documentation for Bramble.jl."/><meta property="og:description" content="Documentation for Bramble.jl."/><meta property="twitter:description" content="Documentation for Bramble.jl."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img src="../../assets/logo.svg" alt="Bramble.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">Bramble.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../../tutorials/geometry/">Geometry tutorial</a></li><li><a class="tocitem" href="../../tutorials/mesh/">Mesh tutorial</a></li><li><a class="tocitem" href="../../tutorials/backend/">Backend tutorial</a></li><li><a class="tocitem" href="../../tutorials/space/">Grid spaces and discrete functions</a></li><li><a class="tocitem" href="../../tutorials/operators/">Difference, jump and average operators</a></li><li><a class="tocitem" href="../../tutorials/form/">Linear and bilinear forms</a></li><li><a class="tocitem" href="../../tutorials/vtk_export/">Writing VTK files</a></li><li><a class="tocitem" href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a></li><li><a class="tocitem" href="../../tutorials/plotting/">Plotting directly</a></li></ul></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../poisson_linear/">Linear Poisson equation</a></li><li><a class="tocitem" href="../poisson_nonlinear/">Nonlinear Poisson equation</a></li><li class="is-active"><a class="tocitem" href>Convection-diffusion equation</a><ul class="internal"><li><a class="tocitem" href="#Problem"><span>Problem</span></a></li><li><a class="tocitem" href="#Checking-the-answer"><span>Checking the answer</span></a></li></ul></li><li><a class="tocitem" href="../coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a></li></ul></li><li><a class="tocitem" href="../../benchmarks/">Benchmarks</a></li><li><span class="tocitem">Documentation</span><ul><li><a class="tocitem" href="../../api/">API reference</a></li><li><input class="collapse-toggle" id="menuitem-5-2" type="checkbox"/><label class="tocitem" for="menuitem-5-2"><span class="docs-label">Internals</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../internals/utils/">Utilities</a></li><li><a class="tocitem" href="../../internals/geometry/">Geometry</a></li><li><a class="tocitem" href="../../internals/mesh/">Mesh</a></li><li><a class="tocitem" href="../../internals/space/">Spaces</a></li><li><a class="tocitem" href="../../internals/form/">Forms</a></li></ul></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Examples</a></li><li class="is-active"><a href>Convection-diffusion equation</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Convection-diffusion equation</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/examples/convection_diffusion_linear.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Convection-diffusion-equation"><a class="docs-heading-anchor" href="#Convection-diffusion-equation">Convection-diffusion equation</a><a id="Convection-diffusion-equation-1"></a><a class="docs-heading-anchor-permalink" href="#Convection-diffusion-equation" title="Permalink"></a></h1><p>One more linear operator, built the same way as the <a href="../poisson_linear/">Poisson example</a> —
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Convection-diffusion equation · Bramble.jl</title><meta name="title" content="Convection-diffusion equation · Bramble.jl"/><meta property="og:title" content="Convection-diffusion equation · Bramble.jl"/><meta property="twitter:title" content="Convection-diffusion equation · Bramble.jl"/><meta name="description" content="Documentation for Bramble.jl."/><meta property="og:description" content="Documentation for Bramble.jl."/><meta property="twitter:description" content="Documentation for Bramble.jl."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img src="../../assets/logo.svg" alt="Bramble.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">Bramble.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../../tutorials/geometry/">Geometry tutorial</a></li><li><a class="tocitem" href="../../tutorials/mesh/">Mesh tutorial</a></li><li><a class="tocitem" href="../../tutorials/backend/">Backend tutorial</a></li><li><a class="tocitem" href="../../tutorials/space/">Grid spaces and discrete functions</a></li><li><a class="tocitem" href="../../tutorials/operators/">Difference, jump and average operators</a></li><li><a class="tocitem" href="../../tutorials/form/">Linear and bilinear forms</a></li><li><a class="tocitem" href="../../tutorials/autodiff/">Automatic differentiation tutorial</a></li><li><a class="tocitem" href="../../tutorials/vtk_export/">Writing VTK files</a></li><li><a class="tocitem" href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a></li><li><a class="tocitem" href="../../tutorials/plotting/">Plotting directly</a></li></ul></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../poisson_linear/">Linear Poisson equation</a></li><li><a class="tocitem" href="../poisson_nonlinear/">Nonlinear Poisson equation</a></li><li class="is-active"><a class="tocitem" href>Convection-diffusion equation</a><ul class="internal"><li><a class="tocitem" href="#Problem"><span>Problem</span></a></li><li><a class="tocitem" href="#Checking-the-answer"><span>Checking the answer</span></a></li></ul></li><li><a class="tocitem" href="../coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a></li></ul></li><li><a class="tocitem" href="../../benchmarks/">Benchmarks</a></li><li><span class="tocitem">Documentation</span><ul><li><a class="tocitem" href="../../api/">API reference</a></li><li><input class="collapse-toggle" id="menuitem-5-2" type="checkbox"/><label class="tocitem" for="menuitem-5-2"><span class="docs-label">Internals</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../internals/utils/">Utilities</a></li><li><a class="tocitem" href="../../internals/geometry/">Geometry</a></li><li><a class="tocitem" href="../../internals/mesh/">Mesh</a></li><li><a class="tocitem" href="../../internals/space/">Spaces</a></li><li><a class="tocitem" href="../../internals/form/">Forms</a></li><li><a class="tocitem" href="../../internals/autodiff/">Automatic differentiation</a></li></ul></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Examples</a></li><li class="is-active"><a href>Convection-diffusion equation</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Convection-diffusion equation</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/examples/convection_diffusion_linear.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Convection-diffusion-equation"><a class="docs-heading-anchor" href="#Convection-diffusion-equation">Convection-diffusion equation</a><a id="Convection-diffusion-equation-1"></a><a class="docs-heading-anchor-permalink" href="#Convection-diffusion-equation" title="Permalink"></a></h1><p>One more linear operator, built the same way as the <a href="../poisson_linear/">Poisson example</a> —
 diffusion plus a constant convective term, in 1D, 2D and 3D. Every number and every plot
 below was produced by the code shown.</p><h2 id="Problem"><a class="docs-heading-anchor" href="#Problem">Problem</a><a id="Problem-1"></a><a class="docs-heading-anchor-permalink" href="#Problem" title="Permalink"></a></h2><p class="math-container">\[-\nabla \cdot (\epsilon \nabla u) + b \, \mathbf{1} \cdot \nabla u = g \text{ in } \Omega,
 \qquad u = u_{\text{exact}} \text{ on } \partial\Omega, \qquad \Omega = (0,1)^D\]</p><p>with a constant diffusion coefficient <span>$\epsilon$</span> and a constant convective speed <span>$b$</span> along
@@ -16,9 +16,9 @@ rhs(x) = -2 * sol(x) * (b + ϵ)
 Wₕ = gridspace(Ωₕ)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">ScalarGridSpace{2, Float64, Vector{Float64}, MeshnD{2, Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}, Serial}, CartesianIndices{2, Tuple{Base.OneTo{Int64}, Base.OneTo{Int64}}}, Tuple{Mesh1D{Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}, Serial}, CartesianIndices{1, Tuple{Base.OneTo{Int64}}}, Vector{Float64}, Float64}, Mesh1D{Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}, Serial}, CartesianIndices{1, Tuple{Base.OneTo{Int64}}}, Vector{Float64}, Float64}}, Float64}}(<span class="sgr36"><span class="sgr1">MeshnD</span></span> {<span class="sgr33">2D</span>, <span class="sgr33">Float64</span>}
 <span class="sgr34">576 points</span> (24 × 24)
 <span class="sgr90">Domain: </span>[0.0, 1.0] × [0.0, 1.0]
-<span class="sgr90">Spacing: </span>mixed (x: non-uniform, y: non-uniform) • <span class="sgr35">h</span>ₘₐₓ = <span class="sgr34">0.191088</span>
+<span class="sgr90">Spacing: </span>mixed (x: non-uniform, y: non-uniform) • <span class="sgr35">h</span>ₘₐₓ = <span class="sgr34">0.181846</span>
 <span class="sgr90">Markers: </span><span class="sgr33">2 labels</span> • <span class="sgr32">:boundary</span> (<span class="sgr34">92</span>), <span class="sgr32">:interior</span> (<span class="sgr34">484</span>)
-, Bramble.SpaceWeights{2, Vector{Float64}}([0.00029260422758309947, 0.0003742700598526457, 0.00026145792941582, 0.0005497256705762892, 0.0007943041112542399, 0.0005104780255647911, 0.0001230286701079164, 0.0007855844596075888, 0.000918729392884792, 0.00025795300581120216  …  0.000182225435576688, 0.0002764292915649792, 0.0004441156531554797, 0.0006302899301707681, 0.0006274229317986409, 0.0005122438995479537, 0.0011062939447522414, 0.0018822663794004475, 0.0012864366816870176, 0.00032808484234627804], ([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0  …  0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0  …  0.000364450871153376, 0.0005528585831299584, 0.0008882313063109594, 0.0012605798603415362, 0.0012548458635972819, 0.0010244877990959074, 0.002212587889504483, 0.003764532758800895, 0.002572873363374035, 0.0])))</code></pre><p><code>inner₊(M₋ₕ(u), ∇₋ₕ(v))</code> is the convective term: <code>M₋ₕ</code> averages the trial function onto the
+, Bramble.SpaceWeights{2, Vector{Float64}}([0.00041732976851671465, 0.0010896435026056567, 0.0012538386590178767, 0.0011726363780375066, 0.0008495302555133462, 0.0007031095846359453, 0.0009405604721844294, 0.0007195528542156996, 0.0005187037586469393, 0.0010163698096807706  …  6.0774181736540935e-5, 6.560151086671902e-5, 1.990071795923094e-5, 3.333339231545308e-5, 6.701529034004951e-5, 5.4319734543793364e-5, 4.8057815645411574e-5, 3.7247876255020953e-5, 1.663491924670047e-5, 8.471172410578905e-6], ([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0  …  0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0  …  0.00012154836347308187, 0.00013120302173343803, 3.980143591846188e-5, 6.666678463090616e-5, 0.00013403058068009902, 0.00010863946908758673, 9.611563129082315e-5, 7.449575251004191e-5, 3.326983849340094e-5, 0.0])))</code></pre><p><code>inner₊(M₋ₕ(u), ∇₋ₕ(v))</code> is the convective term: <code>M₋ₕ</code> averages the trial function onto the
 same staggered points <code>∇₋ₕ</code> differences on, one pair per direction, and <code>inner₊</code>&#39;s own
 gradient-tuple overload sums them — the identical spelling whether <code>D</code> is 1 or 3, since
 <code>M₋ₕ</code>/<code>∇₋ₕ</code> collapse to a bare node instead of a one-element tuple in 1D and <code>inner₊</code> has a
@@ -77,22 +77,135 @@ hs3, errs3 = convdiff_series(3; levels = 4)
 order1 = log(errs1[end - 1] / errs1[end]) / log(hs1[end - 1] / hs1[end])
 order2 = log(errs2[end - 1] / errs2[end]) / log(hs2[end - 1] / hs2[end])
 order3 = log(errs3[end - 1] / errs3[end]) / log(hs3[end - 1] / hs3[end])
-(order1, order2, order3)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(1.9999783961000077, 1.9987767358817627, 1.9218532636829506)</code></pre><pre><code class="language-julia hljs">order1 &gt; 1.9 &amp;&amp; order2 &gt; 1.9 &amp;&amp; order3 &gt; 1.8</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">true</code></pre><pre><code class="language-julia hljs">convergence_plot([
+(order1, order2, order3)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(1.9999783961160091, 1.9987767350944552, 1.9218532636823207)</code></pre><pre><code class="language-julia hljs">order1 &gt; 1.9 &amp;&amp; order2 &gt; 1.9 &amp;&amp; order3 &gt; 1.8</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">true</code></pre><pre><code class="language-julia hljs">convergence_plot([
     (hs1, errs1, &quot;1D&quot;, &quot;#5B5FC7&quot;),
     (hs2, errs2, &quot;2D&quot;, &quot;#0E7C86&quot;),
     (hs3, errs3, &quot;3D&quot;, &quot;#B26A00&quot;),
-]; title = &quot;Convection-diffusion, ‖·‖₁ₕ&quot;)</code></pre><div style="width:100%; max-width:480px; border:1px solid rgba(128,128,128,0.35); border-radius:8px; padding:0.6em; box-sizing:border-box;">
-<svg viewBox="0 0 480 340" width="100%" xmlns="http://www.w3.org/2000/svg" style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:currentColor;">
-  <text x="240.0" y="14" font-size="12" font-weight="600" fill="currentColor" text-anchor="middle">Convection-diffusion, ‖·‖₁ₕ</text>
-  <line x1="46" y1="30" x2="46" y2="288" stroke="currentColor" stroke-opacity="0.35"/>
-  <line x1="46" y1="288" x2="464" y2="288" stroke="currentColor" stroke-opacity="0.35"/>
-  <circle cx="378.7" cy="92.9" r="5" fill="#5B5FC7"/><circle cx="329.0" cy="121.5" r="5" fill="#5B5FC7"/><circle cx="279.4" cy="150.4" r="5" fill="#5B5FC7"/><circle cx="229.8" cy="179.4" r="5" fill="#5B5FC7"/><circle cx="180.1" cy="208.4" r="5" fill="#5B5FC7"/><circle cx="130.5" cy="237.5" r="5" fill="#5B5FC7"/><circle cx="80.8" cy="266.5" r="5" fill="#5B5FC7"/><circle cx="412.6" cy="61.3" r="5" fill="#0E7C86"/><circle cx="362.9" cy="88.3" r="5" fill="#0E7C86"/><circle cx="313.3" cy="116.7" r="5" fill="#0E7C86"/><circle cx="263.6" cy="145.6" r="5" fill="#0E7C86"/><circle cx="214.0" cy="174.6" r="5" fill="#0E7C86"/><circle cx="164.4" cy="203.6" r="5" fill="#0E7C86"/><circle cx="429.2" cy="51.5" r="5" fill="#B26A00"/><circle cx="379.5" cy="68.1" r="5" fill="#B26A00"/><circle cx="329.9" cy="93.7" r="5" fill="#B26A00"/><circle cx="280.2" cy="121.6" r="5" fill="#B26A00"/><line x1="46.0" y1="286.9" x2="464.0" y2="42.4" stroke="currentColor" stroke-opacity="0.55" stroke-width="1.3" stroke-dasharray="4,3"/><text x="255.0" y="158.6" font-size="10" fill="currentColor" fill-opacity="0.75" text-anchor="middle">slope 2</text>
-  <text x="46" y="26" font-size="10" fill="currentColor" fill-opacity="0.7" text-anchor="start">log₂(error)</text>
-  <text x="464" y="308" font-size="10" fill="currentColor" fill-opacity="0.7" text-anchor="end">log₂(h) →</text>
-  <circle cx="50" cy="329" r="4" fill="#5B5FC7"/><text x="58" y="332" font-size="10" fill="currentColor">1D</text><circle cx="92.4" cy="329" r="4" fill="#0E7C86"/><text x="100.4" y="332" font-size="10" fill="currentColor">2D</text><circle cx="134.8" cy="329" r="4" fill="#B26A00"/><text x="142.8" y="332" font-size="10" fill="currentColor">3D</text>
-</svg>
+]; title = &quot;Convection-diffusion, ‖·‖₁ₕ&quot;)</code></pre><script>
+  // See the module note above: hide `define` from Chart.js's UMD wrapper so it attaches
+  // `window.Chart` instead of registering as an anonymous AMD module.
+  window.__bramble_amd_define = window.define;
+  window.define = undefined;
+</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+  window.define = window.__bramble_amd_define;
+
+  // Colour tokens read from the page's own theme, not hard-coded — Documenter stamps
+  // `theme--documenter-dark` on <html> when dark mode is active, light mode has no such
+  // class. Recomputed on every call so a caller can re-theme after a toggle.
+  window.brambleChartTheme = function () {
+    const dark = document.documentElement.className.includes('documenter-dark');
+    return dark
+      ? { text: '#c3c2b7', grid: 'rgba(255,255,255,0.12)', axis: 'rgba(255,255,255,0.35)' }
+      : { text: '#52514e', grid: 'rgba(0,0,0,0.10)', axis: 'rgba(0,0,0,0.35)' };
+  };
+
+  // Every chart this page creates registers itself (chart instance + the function that
+  // reapplies theme-dependent option colours) so one observer can repaint all of them
+  // together when the theme toggles, instead of each chart wiring its own observer.
+  window.__bramble_charts = window.__bramble_charts || [];
+  window.brambleRegisterChart = function (chart, restyle) {
+    window.__bramble_charts.push({ chart, restyle });
+  };
+
+  if (!window.__bramble_theme_observer) {
+    window.__bramble_theme_observer = new MutationObserver(function () {
+      for (const { chart, restyle } of window.__bramble_charts) {
+        restyle(chart);
+        chart.update('none');
+      }
+    });
+    window.__bramble_theme_observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class'],
+    });
+  }
+</script>
+
+<div style="width:100%; max-width:480px; margin: 1em 0;">
+  <canvas id="bramble_cp_1" width="480" height="340"></canvas>
 </div>
+<script>
+(function () {
+  const theme = window.brambleChartTheme();
+  const ctx = document.getElementById('bramble_cp_1').getContext('2d');
+  const chart = new Chart(ctx, {
+    type: 'scatter',
+    data: { datasets: [{
+  label: "1D",
+  data: [{x:0.4537346574443589,y:0.007321832869221185},{x:0.22686732872217952,y:0.0018702458334760464},{x:0.11343366436108976,y:0.00047001791626974246},{x:0.05671683218054491,y:0.00011765753065793345},{x:0.028358416090272454,y:2.9423939099349495e-5},{x:0.014179208045136282,y:7.356571333058696e-6},{x:0.007089604022568197,y:1.8391703740302698e-6}],
+  showLine: false,
+  pointBackgroundColor: "#5B5FC7",
+  pointBorderColor: "#5B5FC7",
+  pointRadius: 5,
+  pointHoverRadius: 7,
+},
+{
+  label: "2D",
+  data: [{x:0.7281398631056489,y:0.033018608008555925},{x:0.3640699315528245,y:0.00908963505498852},{x:0.18203496577641226,y:0.00234148199122349},{x:0.09101748288820616,y:0.0005908586926771619},{x:0.045508741444103114,y:0.00014813605527488915},{x:0.0227543707220516,y:3.7065428372440735e-5}],
+  showLine: false,
+  pointBackgroundColor: "#0E7C86",
+  pointBorderColor: "#0E7C86",
+  pointRadius: 5,
+  pointHoverRadius: 7,
+},
+{
+  label: "3D",
+  data: [{x:0.918047411794347,y:0.05275044235051122},{x:0.4590237058971735,y:0.02391814821260483},{x:0.22951185294858678,y:0.007046640601918239},{x:0.1147559264742934,y:0.0018597160629038832}],
+  showLine: false,
+  pointBackgroundColor: "#B26A00",
+  pointBorderColor: "#B26A00",
+  pointRadius: 5,
+  pointHoverRadius: 7,
+},
+{
+  label: "slope 2",
+  data: [{x:0.007089604022568197,y:1.8391703740302698e-6}, {x:0.918047411794347,y:0.030839563713406345}],
+  showLine: true,
+  borderDash: [5,4],
+  borderWidth: 1.5,
+  pointRadius: 0,
+  borderColor: 'rgba(128,128,128,0.7)',
+}] },
+    options: {
+      responsive: true,
+      plugins: {
+        title: { display: true, text: "Convection-diffusion, ‖·‖₁ₕ", color: theme.text, font: { size: 13, weight: '600' } },
+        legend: { position: 'bottom', labels: { color: theme.text, boxWidth: 12, font: { size: 11 } } },
+      },
+      scales: {
+        x: {
+          type: 'logarithmic',
+          title: { display: true, text: 'h', color: theme.text },
+          ticks: { color: theme.text },
+          grid: { color: theme.grid },
+          border: { color: theme.axis },
+        },
+        y: {
+          type: 'logarithmic',
+          title: { display: true, text: 'error', color: theme.text },
+          ticks: { color: theme.text },
+          grid: { color: theme.grid },
+          border: { color: theme.axis },
+        },
+      },
+    },
+  });
+  window.brambleRegisterChart(chart, function (c) {
+    const t = window.brambleChartTheme();
+    c.options.plugins.title.color = t.text;
+    c.options.plugins.legend.labels.color = t.text;
+    for (const ax of ['x', 'y']) {
+      c.options.scales[ax].title.color = t.text;
+      c.options.scales[ax].ticks.color = t.text;
+      c.options.scales[ax].grid.color = t.grid;
+      c.options.scales[ax].border.color = t.axis;
+    }
+  });
+})();
+</script>
 <p>Second order in every dimension. The convective term does not change the rate — it changes
 the matrix from symmetric to non-symmetric (<code>inner₊(M₋ₕ(u), ∇₋ₕ(v)) ≠ inner₊(M₋ₕ(v), ∇₋ₕ(u))</code>
 in general), which is why this example does not also check <code>issymmetric</code>, unlike the
-<a href="../../tutorials/form/">forms tutorial</a>&#39;s pure-diffusion Poisson problem.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../poisson_nonlinear/">« Nonlinear Poisson equation</a><a class="docs-footer-nextpage" href="../coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Friday 4 September 2026 10:41">Friday 4 September 2026</span>. Using Julia version 1.14.0-DEV.3112.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+<a href="../../tutorials/form/">forms tutorial</a>&#39;s pure-diffusion Poisson problem.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../poisson_nonlinear/">« Nonlinear Poisson equation</a><a class="docs-footer-nextpage" href="../coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Friday 4 September 2026 12:25">Friday 4 September 2026</span>. Using Julia version 1.14.0-DEV.3112.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Nonlinear Poisson equation · Bramble.jl</title><meta name="title" content="Nonlinear Poisson equation · Bramble.jl"/><meta property="og:title" content="Nonlinear Poisson equation · Bramble.jl"/><meta property="twitter:title" content="Nonlinear Poisson equation · Bramble.jl"/><meta name="description" content="Documentation for Bramble.jl."/><meta property="og:description" content="Documentation for Bramble.jl."/><meta property="twitter:description" content="Documentation for Bramble.jl."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img src="../../assets/logo.svg" alt="Bramble.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">Bramble.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../../tutorials/geometry/">Geometry tutorial</a></li><li><a class="tocitem" href="../../tutorials/mesh/">Mesh tutorial</a></li><li><a class="tocitem" href="../../tutorials/backend/">Backend tutorial</a></li><li><a class="tocitem" href="../../tutorials/space/">Grid spaces and discrete functions</a></li><li><a class="tocitem" href="../../tutorials/operators/">Difference, jump and average operators</a></li><li><a class="tocitem" href="../../tutorials/form/">Linear and bilinear forms</a></li><li><a class="tocitem" href="../../tutorials/vtk_export/">Writing VTK files</a></li><li><a class="tocitem" href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a></li><li><a class="tocitem" href="../../tutorials/plotting/">Plotting directly</a></li></ul></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../poisson_linear/">Linear Poisson equation</a></li><li class="is-active"><a class="tocitem" href>Nonlinear Poisson equation</a><ul class="internal"><li><a class="tocitem" href="#Problem"><span>Problem</span></a></li><li><a class="tocitem" href="#Fixed-point-(Picard)-iteration"><span>Fixed-point (Picard) iteration</span></a></li><li><a class="tocitem" href="#Newton&#39;s-method"><span>Newton&#39;s method</span></a></li><li><a class="tocitem" href="#Checking-the-answer"><span>Checking the answer</span></a></li></ul></li><li><a class="tocitem" href="../convection_diffusion_linear/">Convection-diffusion equation</a></li><li><a class="tocitem" href="../coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a></li></ul></li><li><a class="tocitem" href="../../benchmarks/">Benchmarks</a></li><li><span class="tocitem">Documentation</span><ul><li><a class="tocitem" href="../../api/">API reference</a></li><li><input class="collapse-toggle" id="menuitem-5-2" type="checkbox"/><label class="tocitem" for="menuitem-5-2"><span class="docs-label">Internals</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../internals/utils/">Utilities</a></li><li><a class="tocitem" href="../../internals/geometry/">Geometry</a></li><li><a class="tocitem" href="../../internals/mesh/">Mesh</a></li><li><a class="tocitem" href="../../internals/space/">Spaces</a></li><li><a class="tocitem" href="../../internals/form/">Forms</a></li></ul></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Examples</a></li><li class="is-active"><a href>Nonlinear Poisson equation</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Nonlinear Poisson equation</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/examples/poisson_nonlinear.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Nonlinear-Poisson-equation"><a class="docs-heading-anchor" href="#Nonlinear-Poisson-equation">Nonlinear Poisson equation</a><a id="Nonlinear-Poisson-equation-1"></a><a class="docs-heading-anchor-permalink" href="#Nonlinear-Poisson-equation" title="Permalink"></a></h1><p>Two ways to solve the same nonlinear problem — fixed-point (Picard) iteration and Newton&#39;s
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Nonlinear Poisson equation · Bramble.jl</title><meta name="title" content="Nonlinear Poisson equation · Bramble.jl"/><meta property="og:title" content="Nonlinear Poisson equation · Bramble.jl"/><meta property="twitter:title" content="Nonlinear Poisson equation · Bramble.jl"/><meta name="description" content="Documentation for Bramble.jl."/><meta property="og:description" content="Documentation for Bramble.jl."/><meta property="twitter:description" content="Documentation for Bramble.jl."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img src="../../assets/logo.svg" alt="Bramble.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">Bramble.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../../tutorials/geometry/">Geometry tutorial</a></li><li><a class="tocitem" href="../../tutorials/mesh/">Mesh tutorial</a></li><li><a class="tocitem" href="../../tutorials/backend/">Backend tutorial</a></li><li><a class="tocitem" href="../../tutorials/space/">Grid spaces and discrete functions</a></li><li><a class="tocitem" href="../../tutorials/operators/">Difference, jump and average operators</a></li><li><a class="tocitem" href="../../tutorials/form/">Linear and bilinear forms</a></li><li><a class="tocitem" href="../../tutorials/autodiff/">Automatic differentiation tutorial</a></li><li><a class="tocitem" href="../../tutorials/vtk_export/">Writing VTK files</a></li><li><a class="tocitem" href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a></li><li><a class="tocitem" href="../../tutorials/plotting/">Plotting directly</a></li></ul></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../poisson_linear/">Linear Poisson equation</a></li><li class="is-active"><a class="tocitem" href>Nonlinear Poisson equation</a><ul class="internal"><li><a class="tocitem" href="#Problem"><span>Problem</span></a></li><li><a class="tocitem" href="#Fixed-point-(Picard)-iteration"><span>Fixed-point (Picard) iteration</span></a></li><li><a class="tocitem" href="#Newton&#39;s-method"><span>Newton&#39;s method</span></a></li><li><a class="tocitem" href="#Checking-the-answer"><span>Checking the answer</span></a></li></ul></li><li><a class="tocitem" href="../convection_diffusion_linear/">Convection-diffusion equation</a></li><li><a class="tocitem" href="../coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a></li></ul></li><li><a class="tocitem" href="../../benchmarks/">Benchmarks</a></li><li><span class="tocitem">Documentation</span><ul><li><a class="tocitem" href="../../api/">API reference</a></li><li><input class="collapse-toggle" id="menuitem-5-2" type="checkbox"/><label class="tocitem" for="menuitem-5-2"><span class="docs-label">Internals</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../internals/utils/">Utilities</a></li><li><a class="tocitem" href="../../internals/geometry/">Geometry</a></li><li><a class="tocitem" href="../../internals/mesh/">Mesh</a></li><li><a class="tocitem" href="../../internals/space/">Spaces</a></li><li><a class="tocitem" href="../../internals/form/">Forms</a></li><li><a class="tocitem" href="../../internals/autodiff/">Automatic differentiation</a></li></ul></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Examples</a></li><li class="is-active"><a href>Nonlinear Poisson equation</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Nonlinear Poisson equation</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/examples/poisson_nonlinear.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Nonlinear-Poisson-equation"><a class="docs-heading-anchor" href="#Nonlinear-Poisson-equation">Nonlinear Poisson equation</a><a id="Nonlinear-Poisson-equation-1"></a><a class="docs-heading-anchor-permalink" href="#Nonlinear-Poisson-equation" title="Permalink"></a></h1><p>Two ways to solve the same nonlinear problem — fixed-point (Picard) iteration and Newton&#39;s
 method — so the difference between linear and quadratic convergence is something measured,
 not just asserted. Every number and every plot below was produced by the code shown.</p><h2 id="Problem"><a class="docs-heading-anchor" href="#Problem">Problem</a><a id="Problem-1"></a><a class="docs-heading-anchor-permalink" href="#Problem" title="Permalink"></a></h2><p class="math-container">\[-\left(\alpha(u) u&#39;\right)&#39; = g \text{ in } (0,1), \qquad u(0) = u(1) = u_{\text{exact}},\]</p><p>with a diffusion coefficient that depends on the unknown itself,</p><p class="math-container">\[\alpha(u) = 3 + \frac{1}{1+u^2},\]</p><p>and the manufactured solution <span>$u_{\text{exact}}(x) = e^{x}$</span>, with <span>$g$</span> calculated so that
 it is exactly satisfied.</p><pre><code class="language-julia hljs">using Bramble
@@ -42,7 +42,7 @@ for it in 1:200
     αvals .= α.(M₋ₕ(uₙ))
     step &lt; 1e-12 &amp;&amp; break
 end
-length(picard_steps), picard_steps[[1, 2, 3, end]]</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(9, [2.718281828459045, 0.05861868861595787, 0.0005906470362426752, 5.484501741648273e-14])</code></pre><p>The step size roughly halves each time — linear convergence, one correct digit gained every
+length(picard_steps), picard_steps[[1, 2, 3, end]]</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(9, [2.718281828459045, 0.05861868861595898, 0.0005906470362648797, 1.0591527654923993e-13])</code></pre><p>The step size roughly halves each time — linear convergence, one correct digit gained every
 couple of iterations.</p><h2 id="Newton&#39;s-method"><a class="docs-heading-anchor" href="#Newton&#39;s-method">Newton&#39;s method</a><a id="Newton&#39;s-method-1"></a><a class="docs-heading-anchor-permalink" href="#Newton&#39;s-method" title="Permalink"></a></h2><p>The residual <span>$R(u) = A(u) u - F$</span> is the same matrix, applied to the vector it was built
 from rather than solved against. Boundary rows come along for free: <code>dirichlet_labels</code>
 already replaces them with the identity before the residual ever sees them, so
@@ -89,7 +89,7 @@ for it in 1:20
     DifferentiationInterface.jacobian!(residual, J, prep, sparse_ad, u)
     u .-= J \ r
 end
-length(newton_residuals), newton_residuals</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(5, [3.045650645339086, 0.28825369754829117, 0.0010419389496578958, 8.753640078333893e-9, 1.4174773028430616e-12])</code></pre><p>Close to allocation-free, not quite: the two rebuilds this step avoids — the Jacobian&#39;s
+length(newton_residuals), newton_residuals</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(5, [3.045650645339086, 0.2882536975482648, 0.0010419389496574964, 8.75363687371228e-9, 1.8607806369099165e-12])</code></pre><p>Close to allocation-free, not quite: the two rebuilds this step avoids — the Jacobian&#39;s
 sparsity pattern, and the diffusion matrix&#39;s own pattern inside <code>assemble</code> — were the two
 largest costs, but <code>diffusion_matrix</code> still rebuilds a <em>fresh</em> matrix, values and pattern
 both, on every call, because <code>residual</code> has to stay generic over <code>T</code>
@@ -107,7 +107,7 @@ machine precision. Both methods reach the same solution, and both are close to t
 measured the same way the <a href="../poisson_linear/">linear example</a> measures it:</p><pre><code class="language-julia hljs">uₕ_newton = element(Wₕ)
 uₕ_newton .= u
 uexact = Rₕ(Wₕ, sol)
-norm₁ₕ(uₕ_newton .- uexact), norm₁ₕ(uₙ .- uexact)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(0.00012994988047528803, 0.00012994988041995162)</code></pre><h2 id="Checking-the-answer"><a class="docs-heading-anchor" href="#Checking-the-answer">Checking the answer</a><a id="Checking-the-answer-1"></a><a class="docs-heading-anchor-permalink" href="#Checking-the-answer" title="Permalink"></a></h2><p>The same nested-random-mesh pattern as the <a href="../poisson_linear/">linear example</a> — one random
+norm₁ₕ(uₕ_newton .- uexact), norm₁ₕ(uₙ .- uexact)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(0.00012994988044923506, 0.00012994988053859232)</code></pre><h2 id="Checking-the-answer"><a class="docs-heading-anchor" href="#Checking-the-answer">Checking the answer</a><a id="Checking-the-answer-1"></a><a class="docs-heading-anchor-permalink" href="#Checking-the-answer" title="Permalink"></a></h2><p>The same nested-random-mesh pattern as the <a href="../poisson_linear/">linear example</a> — one random
 coarse mesh per dimension, refined in place with <a href="../../api/#Bramble.iterative_refinement!"><code>iterative_refinement!</code></a> — using
 Newton at every level, since it needs by far the fewest solves to reach machine precision.
 A dense Jacobian would have made 2D and 3D here impractical (<code>O(n^2)</code> memory for a matrix that
@@ -169,20 +169,133 @@ hs3, errs3 = nonlinear_series(3; levels = 4)
 order1 = log(errs1[end - 1] / errs1[end]) / log(hs1[end - 1] / hs1[end])
 order2 = log(errs2[end - 1] / errs2[end]) / log(hs2[end - 1] / hs2[end])
 order3 = log(errs3[end - 1] / errs3[end]) / log(hs3[end - 1] / hs3[end])
-(order1, order2, order3)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(1.999940812788034, 1.9959056148965422, 1.9217474793035954)</code></pre><pre><code class="language-julia hljs">order1 &gt; 1.9 &amp;&amp; order2 &gt; 1.9 &amp;&amp; order3 &gt; 1.8</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">true</code></pre><pre><code class="language-julia hljs">convergence_plot([
+(order1, order2, order3)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(1.9999416343805259, 1.99590561435972, 1.92174747930559)</code></pre><pre><code class="language-julia hljs">order1 &gt; 1.9 &amp;&amp; order2 &gt; 1.9 &amp;&amp; order3 &gt; 1.8</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">true</code></pre><pre><code class="language-julia hljs">convergence_plot([
     (hs1, errs1, &quot;1D&quot;, &quot;#5B5FC7&quot;),
     (hs2, errs2, &quot;2D&quot;, &quot;#0E7C86&quot;),
     (hs3, errs3, &quot;3D&quot;, &quot;#B26A00&quot;),
-]; title = &quot;Nonlinear Poisson, ‖·‖₁ₕ&quot;)</code></pre><div style="width:100%; max-width:480px; border:1px solid rgba(128,128,128,0.35); border-radius:8px; padding:0.6em; box-sizing:border-box;">
-<svg viewBox="0 0 480 340" width="100%" xmlns="http://www.w3.org/2000/svg" style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:currentColor;">
-  <text x="240.0" y="14" font-size="12" font-weight="600" fill="currentColor" text-anchor="middle">Nonlinear Poisson, ‖·‖₁ₕ</text>
-  <line x1="46" y1="30" x2="46" y2="288" stroke="currentColor" stroke-opacity="0.35"/>
-  <line x1="46" y1="288" x2="464" y2="288" stroke="currentColor" stroke-opacity="0.35"/>
-  <circle cx="378.7" cy="102.3" r="5" fill="#5B5FC7"/><circle cx="329.0" cy="129.1" r="5" fill="#5B5FC7"/><circle cx="279.4" cy="156.4" r="5" fill="#5B5FC7"/><circle cx="229.8" cy="183.9" r="5" fill="#5B5FC7"/><circle cx="180.1" cy="211.4" r="5" fill="#5B5FC7"/><circle cx="130.5" cy="239.0" r="5" fill="#5B5FC7"/><circle cx="80.8" cy="266.5" r="5" fill="#5B5FC7"/><circle cx="412.6" cy="59.3" r="5" fill="#0E7C86"/><circle cx="362.9" cy="85.0" r="5" fill="#0E7C86"/><circle cx="313.3" cy="112.0" r="5" fill="#0E7C86"/><circle cx="263.6" cy="139.4" r="5" fill="#0E7C86"/><circle cx="214.0" cy="166.8" r="5" fill="#0E7C86"/><circle cx="429.2" cy="51.5" r="5" fill="#B26A00"/><circle cx="379.5" cy="67.2" r="5" fill="#B26A00"/><circle cx="329.9" cy="91.5" r="5" fill="#B26A00"/><circle cx="280.2" cy="118.0" r="5" fill="#B26A00"/><line x1="46.0" y1="285.8" x2="464.0" y2="53.9" stroke="currentColor" stroke-opacity="0.55" stroke-width="1.3" stroke-dasharray="4,3"/><text x="255.0" y="163.9" font-size="10" fill="currentColor" fill-opacity="0.75" text-anchor="middle">slope 2</text>
-  <text x="46" y="26" font-size="10" fill="currentColor" fill-opacity="0.7" text-anchor="start">log₂(error)</text>
-  <text x="464" y="308" font-size="10" fill="currentColor" fill-opacity="0.7" text-anchor="end">log₂(h) →</text>
-  <circle cx="50" cy="329" r="4" fill="#5B5FC7"/><text x="58" y="332" font-size="10" fill="currentColor">1D</text><circle cx="92.4" cy="329" r="4" fill="#0E7C86"/><text x="100.4" y="332" font-size="10" fill="currentColor">2D</text><circle cx="134.8" cy="329" r="4" fill="#B26A00"/><text x="142.8" y="332" font-size="10" fill="currentColor">3D</text>
-</svg>
+]; title = &quot;Nonlinear Poisson, ‖·‖₁ₕ&quot;)</code></pre><script>
+  // See the module note above: hide `define` from Chart.js's UMD wrapper so it attaches
+  // `window.Chart` instead of registering as an anonymous AMD module.
+  window.__bramble_amd_define = window.define;
+  window.define = undefined;
+</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+  window.define = window.__bramble_amd_define;
+
+  // Colour tokens read from the page's own theme, not hard-coded — Documenter stamps
+  // `theme--documenter-dark` on <html> when dark mode is active, light mode has no such
+  // class. Recomputed on every call so a caller can re-theme after a toggle.
+  window.brambleChartTheme = function () {
+    const dark = document.documentElement.className.includes('documenter-dark');
+    return dark
+      ? { text: '#c3c2b7', grid: 'rgba(255,255,255,0.12)', axis: 'rgba(255,255,255,0.35)' }
+      : { text: '#52514e', grid: 'rgba(0,0,0,0.10)', axis: 'rgba(0,0,0,0.35)' };
+  };
+
+  // Every chart this page creates registers itself (chart instance + the function that
+  // reapplies theme-dependent option colours) so one observer can repaint all of them
+  // together when the theme toggles, instead of each chart wiring its own observer.
+  window.__bramble_charts = window.__bramble_charts || [];
+  window.brambleRegisterChart = function (chart, restyle) {
+    window.__bramble_charts.push({ chart, restyle });
+  };
+
+  if (!window.__bramble_theme_observer) {
+    window.__bramble_theme_observer = new MutationObserver(function () {
+      for (const { chart, restyle } of window.__bramble_charts) {
+        restyle(chart);
+        chart.update('none');
+      }
+    });
+    window.__bramble_theme_observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class'],
+    });
+  }
+</script>
+
+<div style="width:100%; max-width:480px; margin: 1em 0;">
+  <canvas id="bramble_cp_1" width="480" height="340"></canvas>
 </div>
+<script>
+(function () {
+  const theme = window.brambleChartTheme();
+  const ctx = document.getElementById('bramble_cp_1').getContext('2d');
+  const chart = new Chart(ctx, {
+    type: 'scatter',
+    data: { datasets: [{
+  label: "1D",
+  data: [{x:0.4537346574443589,y:0.0038632486241389746},{x:0.22686732872217952,y:0.0010046880088554978},{x:0.11343366436108976,y:0.0002535308751295753},{x:0.05671683218054491,y:6.352911781224811e-5},{x:0.028358416090272454,y:1.5891413455615445e-5},{x:0.014179208045136282,y:3.973425012922281e-6},{x:0.007089604022568197,y:9.933964412288988e-7}],
+  showLine: false,
+  pointBackgroundColor: "#5B5FC7",
+  pointBorderColor: "#5B5FC7",
+  pointRadius: 5,
+  pointHoverRadius: 7,
+},
+{
+  label: "2D",
+  data: [{x:0.7281398631056489,y:0.03359133864316144},{x:0.3640699315528245,y:0.00921005687413041},{x:0.18203496577641226,y:0.002370760002502543},{x:0.09101748288820616,y:0.0005981775775607113},{x:0.045508741444103114,y:0.00014996940596413518}],
+  showLine: false,
+  pointBackgroundColor: "#0E7C86",
+  pointBorderColor: "#0E7C86",
+  pointRadius: 5,
+  pointHoverRadius: 7,
+},
+{
+  label: "3D",
+  data: [{x:0.918047411794347,y:0.04984357792276735},{x:0.4590237058971735,y:0.022594049568891685},{x:0.22951185294858678,y:0.006657103524352411},{x:0.1147559264742934,y:0.0017570401083154424}],
+  showLine: false,
+  pointBackgroundColor: "#B26A00",
+  pointBorderColor: "#B26A00",
+  pointRadius: 5,
+  pointHoverRadius: 7,
+},
+{
+  label: "slope 2",
+  data: [{x:0.007089604022568197,y:9.933964412288988e-7}, {x:0.918047411794347,y:0.016657463209792618}],
+  showLine: true,
+  borderDash: [5,4],
+  borderWidth: 1.5,
+  pointRadius: 0,
+  borderColor: 'rgba(128,128,128,0.7)',
+}] },
+    options: {
+      responsive: true,
+      plugins: {
+        title: { display: true, text: "Nonlinear Poisson, ‖·‖₁ₕ", color: theme.text, font: { size: 13, weight: '600' } },
+        legend: { position: 'bottom', labels: { color: theme.text, boxWidth: 12, font: { size: 11 } } },
+      },
+      scales: {
+        x: {
+          type: 'logarithmic',
+          title: { display: true, text: 'h', color: theme.text },
+          ticks: { color: theme.text },
+          grid: { color: theme.grid },
+          border: { color: theme.axis },
+        },
+        y: {
+          type: 'logarithmic',
+          title: { display: true, text: 'error', color: theme.text },
+          ticks: { color: theme.text },
+          grid: { color: theme.grid },
+          border: { color: theme.axis },
+        },
+      },
+    },
+  });
+  window.brambleRegisterChart(chart, function (c) {
+    const t = window.brambleChartTheme();
+    c.options.plugins.title.color = t.text;
+    c.options.plugins.legend.labels.color = t.text;
+    for (const ax of ['x', 'y']) {
+      c.options.scales[ax].title.color = t.text;
+      c.options.scales[ax].ticks.color = t.text;
+      c.options.scales[ax].grid.color = t.grid;
+      c.options.scales[ax].border.color = t.axis;
+    }
+  });
+})();
+</script>
 <p>Second order in every dimension, same as the linear problem — the nonlinearity changes how
-many solves it takes to reach a given <span>$u$</span>, not the discretization&#39;s own accuracy once it has.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../poisson_linear/">« Linear Poisson equation</a><a class="docs-footer-nextpage" href="../convection_diffusion_linear/">Convection-diffusion equation »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Friday 4 September 2026 10:41">Friday 4 September 2026</span>. Using Julia version 1.14.0-DEV.3112.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+many solves it takes to reach a given <span>$u$</span>, not the discretization&#39;s own accuracy once it has.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../poisson_linear/">« Linear Poisson equation</a><a class="docs-footer-nextpage" href="../convection_diffusion_linear/">Convection-diffusion equation »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Friday 4 September 2026 12:25">Friday 4 September 2026</span>. Using Julia version 1.14.0-DEV.3112.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Coupled nonlinear reaction-diffusion system · Bramble.jl</title><meta name="title" content="Coupled nonlinear reaction-diffusion system · Bramble.jl"/><meta property="og:title" content="Coupled nonlinear reaction-diffusion system · Bramble.jl"/><meta property="twitter:title" content="Coupled nonlinear reaction-diffusion system · Bramble.jl"/><meta name="description" content="Documentation for Bramble.jl."/><meta property="og:description" content="Documentation for Bramble.jl."/><meta property="twitter:description" content="Documentation for Bramble.jl."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img src="../../assets/logo.svg" alt="Bramble.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">Bramble.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../../tutorials/geometry/">Geometry tutorial</a></li><li><a class="tocitem" href="../../tutorials/mesh/">Mesh tutorial</a></li><li><a class="tocitem" href="../../tutorials/backend/">Backend tutorial</a></li><li><a class="tocitem" href="../../tutorials/space/">Grid spaces and discrete functions</a></li><li><a class="tocitem" href="../../tutorials/operators/">Difference, jump and average operators</a></li><li><a class="tocitem" href="../../tutorials/form/">Linear and bilinear forms</a></li><li><a class="tocitem" href="../../tutorials/vtk_export/">Writing VTK files</a></li><li><a class="tocitem" href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a></li><li><a class="tocitem" href="../../tutorials/plotting/">Plotting directly</a></li></ul></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../poisson_linear/">Linear Poisson equation</a></li><li><a class="tocitem" href="../poisson_nonlinear/">Nonlinear Poisson equation</a></li><li><a class="tocitem" href="../convection_diffusion_linear/">Convection-diffusion equation</a></li><li class="is-active"><a class="tocitem" href>Coupled nonlinear reaction-diffusion system</a><ul class="internal"><li><a class="tocitem" href="#Problem"><span>Problem</span></a></li><li><a class="tocitem" href="#Newton&#39;s-method-on-a-composite-residual"><span>Newton&#39;s method on a composite residual</span></a></li><li><a class="tocitem" href="#Checking-the-answer"><span>Checking the answer</span></a></li></ul></li></ul></li><li><a class="tocitem" href="../../benchmarks/">Benchmarks</a></li><li><span class="tocitem">Documentation</span><ul><li><a class="tocitem" href="../../api/">API reference</a></li><li><input class="collapse-toggle" id="menuitem-5-2" type="checkbox"/><label class="tocitem" for="menuitem-5-2"><span class="docs-label">Internals</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../internals/utils/">Utilities</a></li><li><a class="tocitem" href="../../internals/geometry/">Geometry</a></li><li><a class="tocitem" href="../../internals/mesh/">Mesh</a></li><li><a class="tocitem" href="../../internals/space/">Spaces</a></li><li><a class="tocitem" href="../../internals/form/">Forms</a></li></ul></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Examples</a></li><li class="is-active"><a href>Coupled nonlinear reaction-diffusion system</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Coupled nonlinear reaction-diffusion system</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/examples/coupled_reaction_diffusion.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Coupled-nonlinear-reaction-diffusion-system"><a class="docs-heading-anchor" href="#Coupled-nonlinear-reaction-diffusion-system">Coupled nonlinear reaction-diffusion system</a><a id="Coupled-nonlinear-reaction-diffusion-system-1"></a><a class="docs-heading-anchor-permalink" href="#Coupled-nonlinear-reaction-diffusion-system" title="Permalink"></a></h1><p>Two species, coupled through a quadratic reaction term, solved with Newton&#39;s method the same
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Coupled nonlinear reaction-diffusion system · Bramble.jl</title><meta name="title" content="Coupled nonlinear reaction-diffusion system · Bramble.jl"/><meta property="og:title" content="Coupled nonlinear reaction-diffusion system · Bramble.jl"/><meta property="twitter:title" content="Coupled nonlinear reaction-diffusion system · Bramble.jl"/><meta name="description" content="Documentation for Bramble.jl."/><meta property="og:description" content="Documentation for Bramble.jl."/><meta property="twitter:description" content="Documentation for Bramble.jl."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img src="../../assets/logo.svg" alt="Bramble.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">Bramble.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../../tutorials/geometry/">Geometry tutorial</a></li><li><a class="tocitem" href="../../tutorials/mesh/">Mesh tutorial</a></li><li><a class="tocitem" href="../../tutorials/backend/">Backend tutorial</a></li><li><a class="tocitem" href="../../tutorials/space/">Grid spaces and discrete functions</a></li><li><a class="tocitem" href="../../tutorials/operators/">Difference, jump and average operators</a></li><li><a class="tocitem" href="../../tutorials/form/">Linear and bilinear forms</a></li><li><a class="tocitem" href="../../tutorials/autodiff/">Automatic differentiation tutorial</a></li><li><a class="tocitem" href="../../tutorials/vtk_export/">Writing VTK files</a></li><li><a class="tocitem" href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a></li><li><a class="tocitem" href="../../tutorials/plotting/">Plotting directly</a></li></ul></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../poisson_linear/">Linear Poisson equation</a></li><li><a class="tocitem" href="../poisson_nonlinear/">Nonlinear Poisson equation</a></li><li><a class="tocitem" href="../convection_diffusion_linear/">Convection-diffusion equation</a></li><li class="is-active"><a class="tocitem" href>Coupled nonlinear reaction-diffusion system</a><ul class="internal"><li><a class="tocitem" href="#Problem"><span>Problem</span></a></li><li><a class="tocitem" href="#Newton&#39;s-method-on-a-composite-residual"><span>Newton&#39;s method on a composite residual</span></a></li><li><a class="tocitem" href="#Checking-the-answer"><span>Checking the answer</span></a></li></ul></li></ul></li><li><a class="tocitem" href="../../benchmarks/">Benchmarks</a></li><li><span class="tocitem">Documentation</span><ul><li><a class="tocitem" href="../../api/">API reference</a></li><li><input class="collapse-toggle" id="menuitem-5-2" type="checkbox"/><label class="tocitem" for="menuitem-5-2"><span class="docs-label">Internals</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../internals/utils/">Utilities</a></li><li><a class="tocitem" href="../../internals/geometry/">Geometry</a></li><li><a class="tocitem" href="../../internals/mesh/">Mesh</a></li><li><a class="tocitem" href="../../internals/space/">Spaces</a></li><li><a class="tocitem" href="../../internals/form/">Forms</a></li><li><a class="tocitem" href="../../internals/autodiff/">Automatic differentiation</a></li></ul></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Examples</a></li><li class="is-active"><a href>Coupled nonlinear reaction-diffusion system</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Coupled nonlinear reaction-diffusion system</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/examples/coupled_reaction_diffusion.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Coupled-nonlinear-reaction-diffusion-system"><a class="docs-heading-anchor" href="#Coupled-nonlinear-reaction-diffusion-system">Coupled nonlinear reaction-diffusion system</a><a id="Coupled-nonlinear-reaction-diffusion-system-1"></a><a class="docs-heading-anchor-permalink" href="#Coupled-nonlinear-reaction-diffusion-system" title="Permalink"></a></h1><p>Two species, coupled through a quadratic reaction term, solved with Newton&#39;s method the same
 way the <a href="../poisson_nonlinear/">nonlinear Poisson example</a> does — except now the Jacobian
 differentiates through a <em>composite</em> space&#39;s assembly, not a scalar one. Every number and
 every plot below was produced by the code shown.</p><h2 id="Problem"><a class="docs-heading-anchor" href="#Problem">Problem</a><a id="Problem-1"></a><a class="docs-heading-anchor-permalink" href="#Problem" title="Permalink"></a></h2><p class="math-container">\[\begin{aligned}
@@ -64,12 +64,12 @@ for it in 1:20
     DifferentiationInterface.jacobian!(residual, J, prep, sparse_ad, w)
     w .-= J \ r
 end
-length(newton_residuals), newton_residuals</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(4, [2.34806222508735, 0.02098654769159208, 1.2004428782207324e-6, 6.301742156381484e-14])</code></pre><p>Quadratic convergence, same as the single-species case — the composite space changes what
+length(newton_residuals), newton_residuals</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(4, [2.34806222508735, 0.020986547691592708, 1.2004428784453107e-6, 5.751925770599995e-14])</code></pre><p>Quadratic convergence, same as the single-species case — the composite space changes what
 the Jacobian differentiates through, not how well Newton converges once it has a correct one.</p><pre><code class="language-julia hljs">wₕ = element(Vₕ)
 wₕ .= w
 uₕ, vₕ = components(wₕ)
 uexact, vexact = Rₕ(Wₕ, u_ex), Rₕ(Wₕ, v_ex)
-norm₁ₕ(uₕ .- uexact), norm₁ₕ(vₕ .- vexact)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(0.012343565736874626, 0.07897153806964287)</code></pre><h2 id="Checking-the-answer"><a class="docs-heading-anchor" href="#Checking-the-answer">Checking the answer</a><a id="Checking-the-answer-1"></a><a class="docs-heading-anchor-permalink" href="#Checking-the-answer" title="Permalink"></a></h2><p>The same nested-random-mesh pattern as every other example, checking each species&#39; own error
+norm₁ₕ(uₕ .- uexact), norm₁ₕ(vₕ .- vexact)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(0.012343565736871558, 0.07897153806964263)</code></pre><h2 id="Checking-the-answer"><a class="docs-heading-anchor" href="#Checking-the-answer">Checking the answer</a><a id="Checking-the-answer-1"></a><a class="docs-heading-anchor-permalink" href="#Checking-the-answer" title="Permalink"></a></h2><p>The same nested-random-mesh pattern as every other example, checking each species&#39; own error
 separately — a routing mistake would show up as one converging correctly while the other
 silently used the wrong block, which a single combined error could hide. A <em>dense</em>
 <code>ForwardDiff.jacobian</code> over two coupled species would cost <code>(2n)^2</code> against the scalar
@@ -134,18 +134,122 @@ end
 hs, erru, errv = coupled_series(; levels = 5)
 order_u = log(erru[end - 1] / erru[end]) / log(hs[end - 1] / hs[end])
 order_v = log(errv[end - 1] / errv[end]) / log(hs[end - 1] / hs[end])
-(order_u, order_v)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(1.9980708092985653, 1.990435960372385)</code></pre><pre><code class="language-julia hljs">order_u &gt; 1.9 &amp;&amp; order_v &gt; 1.9</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">true</code></pre><pre><code class="language-julia hljs">convergence_plot([(hs, erru, &quot;u&quot;, &quot;#5B5FC7&quot;), (hs, errv, &quot;v&quot;, &quot;#0E7C86&quot;)];
-    title = &quot;Coupled nonlinear reaction, ‖·‖₁ₕ&quot;)</code></pre><div style="width:100%; max-width:480px; border:1px solid rgba(128,128,128,0.35); border-radius:8px; padding:0.6em; box-sizing:border-box;">
-<svg viewBox="0 0 480 340" width="100%" xmlns="http://www.w3.org/2000/svg" style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:currentColor;">
-  <text x="240.0" y="14" font-size="12" font-weight="600" fill="currentColor" text-anchor="middle">Coupled nonlinear reaction, ‖·‖₁ₕ</text>
-  <line x1="46" y1="30" x2="46" y2="288" stroke="currentColor" stroke-opacity="0.35"/>
-  <line x1="46" y1="288" x2="464" y2="288" stroke="currentColor" stroke-opacity="0.35"/>
-  <circle cx="429.2" cy="104.5" r="5" fill="#5B5FC7"/><circle cx="342.1" cy="143.4" r="5" fill="#5B5FC7"/><circle cx="255.0" cy="184.2" r="5" fill="#5B5FC7"/><circle cx="167.9" cy="225.3" r="5" fill="#5B5FC7"/><circle cx="80.8" cy="266.5" r="5" fill="#5B5FC7"/><circle cx="429.2" cy="51.5" r="5" fill="#0E7C86"/><circle cx="342.1" cy="88.5" r="5" fill="#0E7C86"/><circle cx="255.0" cy="127.6" r="5" fill="#0E7C86"/><circle cx="167.9" cy="168.1" r="5" fill="#0E7C86"/><circle cx="80.8" cy="209.1" r="5" fill="#0E7C86"/><line x1="46.0" y1="283.0" x2="464.0" y2="85.0" stroke="currentColor" stroke-opacity="0.55" stroke-width="1.3" stroke-dasharray="4,3"/><text x="255.0" y="178.0" font-size="10" fill="currentColor" fill-opacity="0.75" text-anchor="middle">slope 2</text>
-  <text x="46" y="26" font-size="10" fill="currentColor" fill-opacity="0.7" text-anchor="start">log₂(error)</text>
-  <text x="464" y="308" font-size="10" fill="currentColor" fill-opacity="0.7" text-anchor="end">log₂(h) →</text>
-  <circle cx="50" cy="329" r="4" fill="#5B5FC7"/><text x="58" y="332" font-size="10" fill="currentColor">u</text><circle cx="86.2" cy="329" r="4" fill="#0E7C86"/><text x="94.2" y="332" font-size="10" fill="currentColor">v</text>
-</svg>
+(order_u, order_v)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(1.998070809314497, 1.990435960373693)</code></pre><pre><code class="language-julia hljs">order_u &gt; 1.9 &amp;&amp; order_v &gt; 1.9</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">true</code></pre><pre><code class="language-julia hljs">convergence_plot([(hs, erru, &quot;u&quot;, &quot;#5B5FC7&quot;), (hs, errv, &quot;v&quot;, &quot;#0E7C86&quot;)];
+    title = &quot;Coupled nonlinear reaction, ‖·‖₁ₕ&quot;)</code></pre><script>
+  // See the module note above: hide `define` from Chart.js's UMD wrapper so it attaches
+  // `window.Chart` instead of registering as an anonymous AMD module.
+  window.__bramble_amd_define = window.define;
+  window.define = undefined;
+</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+  window.define = window.__bramble_amd_define;
+
+  // Colour tokens read from the page's own theme, not hard-coded — Documenter stamps
+  // `theme--documenter-dark` on <html> when dark mode is active, light mode has no such
+  // class. Recomputed on every call so a caller can re-theme after a toggle.
+  window.brambleChartTheme = function () {
+    const dark = document.documentElement.className.includes('documenter-dark');
+    return dark
+      ? { text: '#c3c2b7', grid: 'rgba(255,255,255,0.12)', axis: 'rgba(255,255,255,0.35)' }
+      : { text: '#52514e', grid: 'rgba(0,0,0,0.10)', axis: 'rgba(0,0,0,0.35)' };
+  };
+
+  // Every chart this page creates registers itself (chart instance + the function that
+  // reapplies theme-dependent option colours) so one observer can repaint all of them
+  // together when the theme toggles, instead of each chart wiring its own observer.
+  window.__bramble_charts = window.__bramble_charts || [];
+  window.brambleRegisterChart = function (chart, restyle) {
+    window.__bramble_charts.push({ chart, restyle });
+  };
+
+  if (!window.__bramble_theme_observer) {
+    window.__bramble_theme_observer = new MutationObserver(function () {
+      for (const { chart, restyle } of window.__bramble_charts) {
+        restyle(chart);
+        chart.update('none');
+      }
+    });
+    window.__bramble_theme_observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class'],
+    });
+  }
+</script>
+
+<div style="width:100%; max-width:480px; margin: 1em 0;">
+  <canvas id="bramble_cp_1" width="480" height="340"></canvas>
 </div>
+<script>
+(function () {
+  const theme = window.brambleChartTheme();
+  const ctx = document.getElementById('bramble_cp_1').getContext('2d');
+  const chart = new Chart(ctx, {
+    type: 'scatter',
+    data: { datasets: [{
+  label: "u",
+  data: [{x:0.7281398631056489,y:0.135095806145601},{x:0.3640699315528245,y:0.036550588758745325},{x:0.18203496577641226,y:0.009285014420416795},{x:0.09101748288820616,y:0.002333111059636433},{x:0.045508741444103114,y:0.0005840582532915332}],
+  showLine: false,
+  pointBackgroundColor: "#5B5FC7",
+  pointBorderColor: "#5B5FC7",
+  pointRadius: 5,
+  pointHoverRadius: 7,
+},
+{
+  label: "v",
+  data: [{x:0.7281398631056489,y:0.8035909996433598},{x:0.3640699315528245,y:0.23130629735192357},{x:0.18203496577641226,y:0.06228236898217951},{x:0.09101748288820616,y:0.015954707817459113},{x:0.045508741444103114,y:0.004015206879135267}],
+  showLine: false,
+  pointBackgroundColor: "#0E7C86",
+  pointBorderColor: "#0E7C86",
+  pointRadius: 5,
+  pointHoverRadius: 7,
+},
+{
+  label: "slope 2",
+  data: [{x:0.045508741444103114,y:0.0005840582532915332}, {x:0.7281398631056489,y:0.14951891284263213}],
+  showLine: true,
+  borderDash: [5,4],
+  borderWidth: 1.5,
+  pointRadius: 0,
+  borderColor: 'rgba(128,128,128,0.7)',
+}] },
+    options: {
+      responsive: true,
+      plugins: {
+        title: { display: true, text: "Coupled nonlinear reaction, ‖·‖₁ₕ", color: theme.text, font: { size: 13, weight: '600' } },
+        legend: { position: 'bottom', labels: { color: theme.text, boxWidth: 12, font: { size: 11 } } },
+      },
+      scales: {
+        x: {
+          type: 'logarithmic',
+          title: { display: true, text: 'h', color: theme.text },
+          ticks: { color: theme.text },
+          grid: { color: theme.grid },
+          border: { color: theme.axis },
+        },
+        y: {
+          type: 'logarithmic',
+          title: { display: true, text: 'error', color: theme.text },
+          ticks: { color: theme.text },
+          grid: { color: theme.grid },
+          border: { color: theme.axis },
+        },
+      },
+    },
+  });
+  window.brambleRegisterChart(chart, function (c) {
+    const t = window.brambleChartTheme();
+    c.options.plugins.title.color = t.text;
+    c.options.plugins.legend.labels.color = t.text;
+    for (const ax of ['x', 'y']) {
+      c.options.scales[ax].title.color = t.text;
+      c.options.scales[ax].ticks.color = t.text;
+      c.options.scales[ax].grid.color = t.grid;
+      c.options.scales[ax].border.color = t.axis;
+    }
+  });
+})();
+</script>
 <p>Second order for both species, same rate as every other example — the composite space and
 the quadratic coupling change how the residual and its Jacobian are built, not the
-discretization&#39;s own accuracy once Newton has converged to it.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../convection_diffusion_linear/">« Convection-diffusion equation</a><a class="docs-footer-nextpage" href="../../benchmarks/">Benchmarks »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Friday 4 September 2026 10:41">Friday 4 September 2026</span>. Using Julia version 1.14.0-DEV.3112.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+discretization&#39;s own accuracy once Newton has converged to it.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../convection_diffusion_linear/">« Convection-diffusion equation</a><a class="docs-footer-nextpage" href="../../benchmarks/">Benchmarks »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Friday 4 September 2026 12:25">Friday 4 September 2026</span>. Using Julia version 1.14.0-DEV.3112.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
