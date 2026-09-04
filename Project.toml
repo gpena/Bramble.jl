@@ -1,6 +1,6 @@
 name = "Bramble"
 uuid = "72287966-2ff3-4442-8755-61ed245be5f7"
-version = "2.1.1"
+version = "2.2.0"
 authors = ["Gonçalo Pena <goncalo.pena@uc.pt>"]
 
 [workspace]
