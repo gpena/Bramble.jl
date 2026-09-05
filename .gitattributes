@@ -1,0 +1,6 @@
+/.github/ export-ignore
+/benchmark/ export-ignore
+/docs/ export-ignore
+/codecov.yml export-ignore
+/.gitignore export-ignore
+/.JuliaFormatter.toml export-ignore
