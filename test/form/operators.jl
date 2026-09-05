@@ -135,6 +135,42 @@ const _ORIGIN_2D = (0, 0)
                 lin[interior]) == ()
         end
 
+        @testset "Custom :interior marker is honoured, not overridden by !:boundary (#66)" begin
+            # `:interior` used to be computed as `!_is_marked(markers, :boundary, ...)`
+            # unconditionally, discarding whatever a real marker table's own `:interior`
+            # entry said -- even a deliberately redefined one, despite mesh/marker.jl
+            # warning the caller that a custom definition wins.
+            S1 = interval(0.0, 1.0)
+            Ωc = domain(S1, :interior => (x -> x[1] > 0.5))
+            Ωch = mesh(Ωc, 5, true; warn_marker_mismatch = false)
+            custom_interior = markers(Ωch)[:interior]
+
+            # Deliberately not the complement of :boundary, so reading :interior directly
+            # and computing "not :boundary" give different answers -- the only way to tell
+            # the fix from the bug.
+            @test custom_interior != .!markers(Ωch)[:boundary]
+
+            Wc = gridspace(Ωch)
+            a = form(Wc, Wc, (u, v) -> innerₕ(restrict_to(:interior, u), v))
+            A = Matrix(assemble(a))
+            n = size(A, 1)
+            @test findall(!iszero, [A[i, i] for i in 1:n]) == findall(custom_interior)
+
+            # The default (geometric, unmarked) case must still behave exactly as before:
+            # there, :interior IS defined as !:boundary by construction
+            # (`_ensure_geometric_markers!`), so reading it directly agrees numerically
+            # with the old computation -- this fix changes which entry is read, not what a
+            # mesh with no custom marker computes.
+            Ωd = mesh(domain(S1), 5, true)
+            @test markers(Ωd)[:interior] == .!markers(Ωd)[:boundary]
+            Wd = gridspace(Ωd)
+            ad = form(Wd, Wd, (u, v) -> innerₕ(restrict_to(:interior, u), v))
+            Ad = Matrix(assemble(ad))
+            nd = size(Ad, 1)
+            @test findall(!iszero, [Ad[i, i] for i in 1:nd]) ==
+                  findall(markers(Ωd)[:interior])
+        end
+
         @testset "Operator composition" begin
             r = restrict_to(:bottom, D₋ₓ(id))
             @test local_stencil(r, Wₕ, bottom_idx, mk, lin[bottom_idx]) ==

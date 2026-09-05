@@ -1,8 +1,8 @@
 using Test
 using Bramble
 using LinearAlgebra: issymmetric, isposdef
-using Bramble: form, assemble, trial_space, test_space, restrict_to, IdentityOperator,
-               ZeroOperator
+using Bramble: form, assemble, trial_space, test_space, restrict_to, shift_op,
+               IdentityOperator, ZeroOperator
 
 # `issymmetric`/`isposdef` on a `BilinearForm` are a purely structural, symbolic check:
 # every test here has a positive case checked against a real assembled matrix (not just the
@@ -99,6 +99,38 @@ using Bramble: form, assemble, trial_space, test_space, restrict_to, IdentityOpe
             (u, v) -> inner₊ₓ(restrict_to(:boundary, D₋ₓ(u)), restrict_to(:interior, D₋ₓ(v))))
         @test !issymmetric(h2)
         @test !isposdef(h2)
+    end
+
+    @testset "Shifted operators (#65)" begin
+        # `shift_amount` is a field, not a type parameter, so it has to be compared
+        # explicitly (form/symmetry.jl) rather than folded into the same `where`-clause
+        # trick used for BackwardDifference et al. Before that field comparison existed,
+        # two DIFFERENT shifts read as the same operator, and local_stencil(::BilinearProduct)
+        # (form/operators/inner.jl:521-532) takes that as license to evaluate one side only
+        # and mirror it — corrupting the assembled matrix itself, not just the `issymmetric`
+        # trait.
+        m = form(Wₕ, Wₕ, (u, v) -> innerₕ(shift_op(u, 1, 1), shift_op(v, 1, 1)))
+        @test issymmetric(m)
+        @test isposdef(m)
+        @test issymmetric(Matrix(assemble(m)))
+
+        m2 = form(Wₕ, Wₕ, (u, v) -> innerₕ(shift_op(u, 1, 1), shift_op(v, 1, 2)))
+        @test !issymmetric(m2)
+        @test !isposdef(m2)
+        @test !issymmetric(Matrix(assemble(m2)))
+
+        # The trait alone isn't the point: the assembled *values* have to be right too.
+        # Wrapping the test side in a no-op OperatorScale forces `_same_operator_shape` to
+        # its generic `false` fallback (a ShiftNode and an OperatorScale are never the same
+        # shape), which routes assembly through the always-correct general path regardless
+        # of what the fast-path trait would have said. The fast path must agree with it.
+        m2_general = form(
+            Wₕ, Wₕ, (u, v) -> innerₕ(shift_op(u, 1, 1), 1.0 * shift_op(v, 1, 2)))
+        @test Matrix(assemble(m2)) ≈ Matrix(assemble(m2_general))
+
+        # And the fast path must NOT agree with mirroring one side, which is what the bug
+        # actually did: this is the same wrong answer `assemble(m)` (matching shifts) gives.
+        @test !(Matrix(assemble(m2)) ≈ Matrix(assemble(m)))
     end
 
     @testset "Grid function coefficient" begin

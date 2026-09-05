@@ -151,6 +151,69 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
         end
     end
 
+    @testset "Dirichlet labels pin the TEST space's rows, not the trial space's (#48)" begin
+        # `apply_dirichlet_labels!` used to call `dirichlet_bc!(A, trial_space(form), ...)`.
+        # Rows are indexed by the test function (see the file header), so that pinned the
+        # wrong rows whenever trial_space and test_space disagree on leaf layout. On a
+        # square, same-space form (trial === test, the overwhelmingly common case, and every
+        # other test in this file) the two spaces' leaf offsets coincide and the bug is
+        # numerically invisible. Catching it needs trial and test spaces that are genuinely
+        # different: built from leaves of different sizes, in reversed order, so pinning
+        # against the wrong space's offsets lands on different rows entirely rather than
+        # merely fewer or more of the same ones.
+        n1, n2 = 5, 7
+        W1 = gridspace(mesh(domain(interval(0.0, 1.0)), n1, true))   # leaf size n1
+        W2 = gridspace(mesh(domain(interval(0.0, 1.0)), n2, true))   # leaf size n2
+
+        trial = W1 × W2   # leaf 1: size n1 (offset 0), leaf 2: size n2 (offset n1)
+        test = W2 × W1   # leaf 1: size n2 (offset 0), leaf 2: size n1 (offset n2)
+
+        # Cross terms, so each pairing is same-size (required by `_check_block_meshes`) and
+        # lands off the "obvious" diagonal: trial leaf 1 (W1, n1) pairs with test leaf 2
+        # (W1, n1); trial leaf 2 (W2, n2) pairs with test leaf 1 (W2, n2).
+        a = form(trial, test, (u, v) -> innerₕ(u(1), v(2)) + innerₕ(u(2), v(1)))
+        @test trial_space(a) !== test_space(a)
+
+        N = n1 + n2
+        @test size(assemble(a)) == (N, N)   # square: total ndofs agree, just laid out differently
+
+        # `:boundary` is reserved and auto-computed on every mesh: index 1 and index n. So
+        # each leaf contributes exactly two marked rows/columns, with no domain setup needed.
+        Abc = assemble(a; dirichlet_labels = :boundary)
+
+        # The two candidate row sets, computed directly rather than re-derived from the fix:
+        # pin using test_space's own offsets (what the interface promises), and, separately,
+        # what the pre-fix code actually pinned (trial_space's offsets). If these coincided
+        # the test would prove nothing; with n1 ≠ n2 and the leaves in reversed order, they
+        # do not.
+        A_using_test = Matrix(dirichlet_bc!(assemble(a), test_space(a), :boundary))
+        A_using_trial = Matrix(dirichlet_bc!(assemble(a), trial_space(a), :boundary))
+        @test A_using_test != A_using_trial   # the two spaces really do disagree
+
+        pinned_rows(A) = [i for i in 1:N if A[i, i] ≈ 1.0 && count(!iszero, A[i, :]) == 1]
+        correct_rows = sort!(union(1, n2, n2 + 1, N))          # test leaves: offsets 0, n2
+        buggy_rows = sort!(union(1, n1, n1 + 1, N))          # trial leaves: offsets 0, n1
+        @test correct_rows != buggy_rows   # n1 ≠ n2 makes the two sets genuinely different
+
+        @test pinned_rows(A_using_test) == correct_rows
+        @test pinned_rows(A_using_trial) == buggy_rows
+
+        # The fixed `assemble` must agree with test_space's own pinning, not trial_space's.
+        @test Matrix(Abc) ≈ A_using_test
+        @test !(Matrix(Abc) ≈ A_using_trial)
+
+        # `assemble!` into a pre-allocated matrix takes the same path and must agree.
+        A2 = allocate_system_matrix(a)
+        assemble!(A2, a; dirichlet_labels = :boundary)
+        @test Matrix(A2) ≈ Matrix(Abc)
+
+        # `dirichlet_components` on an asymmetric form restricts by TEST leaf, since that is
+        # what the rows mean: component 1 is test's leaf 1 (W2, offset 0, size n2).
+        A1 = Matrix(assemble(a; dirichlet_labels = :boundary, dirichlet_components = 1))
+        @test pinned_rows(A1) == [1, n2]              # only test leaf 1's marked rows
+        @test !(1 + n2 in pinned_rows(A1))              # test leaf 2 untouched
+    end
+
     @testset "Serial vs parallel agreement" begin
         # The serial and threaded paths are separate walks over the same terms, so a break in
         # the serial path is invisible unless it is compared against the other. It was, once.

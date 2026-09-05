@@ -57,11 +57,16 @@ end
 
 @inline function local_stencil(
         op::RegionRestriction, space, I::CartesianIndex{D}, markers, lin_idx::Int) where {D}
-    if op.region === :interior
-        in_region = !_is_marked(markers, :boundary, lin_idx)
-    else
-        in_region = _is_marked(markers, op.region, lin_idx)
-    end
+    # A real marker table always carries its own `:interior` (`_ensure_geometric_markers!`
+    # guarantees the key, geometric or user-redefined), so it is read directly like every
+    # other region — no exception for `:interior` here. There is exactly one case that still
+    # needs one: `markers === nothing`, the "no marker context at all" sentinel above, where
+    # `:interior` is defined as the whole grid rather than as `_is_marked`'s blanket `false`
+    # for every region. Read directly, a real `:interior` used to be silently overridden by
+    # "not :boundary", which discarded a deliberately redefined `:interior` even though the
+    # mesh warns that a custom definition wins (mesh/marker.jl).
+    in_region = markers === nothing ? (op.region === :interior) :
+                _is_marked(markers, op.region, lin_idx)
 
     if in_region
         return local_stencil(op.inner_op, space, I, markers, lin_idx)

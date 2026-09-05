@@ -42,10 +42,23 @@ end
 # instead of requiring it to match structurally.
 for W in (:BackwardDifference, :ForwardDifference, :CenteredDifference,
     :StarDifference, :CrossWeightedDifference, :BackwardAverage,
-    :ForwardAverage, :ShiftNode, :JumpNode)
+    :ForwardAverage, :JumpNode)
     @eval _same_operator_shape(a::$W{D, Dim}, b::$W{
         D, Dim}) where {D, Dim} = _same_operator_shape(
         a.inner_op, b.inner_op)
+end
+
+# `shift_amount` is a field, not a type parameter, so — like `RegionRestriction.region` and
+# `OperatorScale.scalar` below — it is compared explicitly rather than folded into the
+# `where` clause. Two shifts by different amounts are not the same operator: leaving this to
+# the generic loop above compared only `D`/`Dim`, so `shift_op(u, 1, 1)` and
+# `shift_op(v, 1, 2)` read as identical, and the fast path this trait guards then evaluates
+# one side only and mirrors it into a matrix that is not what the form asked for.
+function _same_operator_shape(a::ShiftNode{D, Dim}, b::ShiftNode{D, Dim}) where {D, Dim}
+    a.shift_amount ==
+    b.shift_amount &&
+        _same_operator_shape(
+            a.inner_op, b.inner_op)
 end
 
 # The region a restriction names is a field, not a type parameter with a fixed set of

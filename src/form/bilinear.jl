@@ -331,10 +331,10 @@ function apply_dirichlet_labels!(
         A::AbstractMatrix, form::BilinearForm, dirichlet_labels, dirichlet_components = nothing)
     if dirichlet_labels !== nothing
         if dirichlet_labels isa Symbol
-            dirichlet_bc!(A, trial_space(form), dirichlet_labels; components = dirichlet_components)
+            dirichlet_bc!(A, test_space(form), dirichlet_labels; components = dirichlet_components)
         elseif dirichlet_labels isa Tuple
             if !isempty(dirichlet_labels)
-                dirichlet_bc!(A, trial_space(form), dirichlet_labels...;
+                dirichlet_bc!(A, test_space(form), dirichlet_labels...;
                     components = dirichlet_components)
             end
         end
