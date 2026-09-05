@@ -17,11 +17,5 @@ Supposition = "5a0628fe-1738-4658-9b6d-0b7605a9755b"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
 
-# AMD is not used directly here; it is a transitive dependency of LinearSolve (via
-# SparseColumnPivotedQR's AMD-ordering extension) pinned below solely to work around an
-# upstream break: AMD.jl 0.5.4 removed the `SS_Int` constant that extension reads, which
-# fails LinearSolve's precompilation entirely (SciML/SparseColumnPivotedQR.jl#72, open,
-# with a fix PR #71 not yet merged). Drop this pin once that lands upstream and AMD's
-# fixed release is out.
 [compat]
-AMD = "0.5.0 - 0.5.3"
+AMD = "0.5"
