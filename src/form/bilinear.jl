@@ -1,5 +1,26 @@
 # --- Struct definitions ----------------------------------------------------------- #
 
+# Every scattered contribution's nzval position, for one term routed into one block: the
+# same shape `add_to_sparse!` used to re-derive by searching on every call (gpena/Bramble.jl#26).
+# `point_ptr[lin_idx]:point_ptr[lin_idx + 1] - 1` is the slice of `positions` holding the
+# positions for grid point `lin_idx`'s own (guard-passing, non-deduplicated) stencil entries,
+# in the same order a scatter walk visits them -- addressed per point rather than by a shared
+# running counter so a future caller could read it without a race even if the walk over grid
+# points were threaded (today's cached path is serial-only; see below).
+const NzvalSegment = Tuple{Vector{Int}, Vector{Int}}
+
+# One `BilinearForm`'s nzval-position cache: valid only for the exact matrix object last
+# assembled into (`A === cache.A`), one `NzvalSegment` per (term, block) the serial assembly
+# walk visits, in visitation order. A companion *value*, not a type parameter of
+# `BilinearForm` -- so it can be filled in lazily, on the first `assemble!` call, without the
+# form itself needing to be mutable or its type to depend on whether a cache exists yet.
+mutable struct _AssemblyCache
+    A::Union{Nothing, SparseMatrixCSC}
+    ast::Any
+    segments::Vector{NzvalSegment}
+end
+_AssemblyCache() = _AssemblyCache(nothing, nothing, NzvalSegment[])
+
 """
     BilinearForm{D, TrialSpace, TestSpace, AST}
 
@@ -29,6 +50,7 @@ struct BilinearForm{D, TrialSpace, TestSpace, AST}
     trial_space::TrialSpace
     test_space::TestSpace
     ast::AST
+    cache::_AssemblyCache
 end
 
 """
@@ -75,22 +97,22 @@ function form(Wₕ, Vₕ, f)
     raw_ast = f(TrialFunction{D}(), TestFunction{D}())
     _validate_form_expression(raw_ast, Val(D))
     ast = resolve_ast(raw_ast)
-    return BilinearForm{D, typeof(Wₕ), typeof(Vₕ), typeof(ast)}(Wₕ, Vₕ, ast)
+    return BilinearForm{D, typeof(Wₕ), typeof(Vₕ), typeof(ast)}(Wₕ, Vₕ, ast, _AssemblyCache())
 end
 
 # --- Utility helpers -------------------------------------------------------------- #
 
-@inline function add_to_sparse!(A::SparseMatrixCSC, row::Int, col::Int, val::Number)
+# The nzval index storing (row, col) in A, or 0 if it names no stored entry. A linear scan
+# of the column when it holds few entries, a binary search otherwise -- both rely on
+# `SparseMatrixCSC`'s own invariant that `rowval` is sorted within each column.
+@inline function _find_nzval_position(A::SparseMatrixCSC, row::Int, col::Int)
     p1 = A.colptr[col]
     p2 = A.colptr[col + 1] - 1
 
     if (p2 - p1) < 32
         idx = p1
         @inbounds while idx <= p2
-            if A.rowval[idx] == row
-                A.nzval[idx] += val
-                return
-            end
+            A.rowval[idx] == row && return idx
             idx += 1
         end
     else
@@ -104,11 +126,18 @@ end
             elseif mid_row > row
                 hi = mid - 1
             else
-                A.nzval[mid] += val
-                return
+                return mid
             end
         end
     end
+    return 0
+end
+
+@inline function add_to_sparse!(A::SparseMatrixCSC, row::Int, col::Int, val::Number)
+    pos = _find_nzval_position(A, row, col)
+    pos == 0 && return nothing
+    @inbounds A.nzval[pos] += val
+    return nothing
 end
 
 # Dispatches on `::Type{T}` to ensure concrete vector return type.
@@ -364,20 +393,180 @@ function assemble(form::BilinearForm; dirichlet_labels = nothing, dirichlet_comp
 end
 
 # --- Helper cores for function barrier optimization ------------------------------- #
+#
+# Two ways to fill a term's block, serially: `_record_segment!` searches for each entry's
+# nzval position (as every call used to) and also records it; `_replay_segment!` reads a
+# previously recorded position back instead of searching. `_assemble_bilinear_core_cached!`
+# picks between them by whether `A` is the exact matrix object the form's cache was last
+# built against (gpena/Bramble.jl#26).
+#
+# The parallel path (`_sweep_bilinear!`/`_sweep_bilinear_colour!`, below) is untouched: it
+# always threads, and recording is an inherently serial, one-time pass (`push!` from
+# multiple threads would race), so caching it would mean its first call silently stopped
+# threading -- breaking `assemble_parallel!`'s own documented contract ("always threads").
 
-# The scalar case: one block, no offsets.
-function _assemble_bilinear_core!(A::SparseMatrixCSC, trial_space, test_space,
-        ast::AST_TYPE) where {AST_TYPE}
+@noinline function _throw_missing_pattern_entry(term)
+    throw(ArgumentError(
+        "assembling $(typeof(term)) reached a matrix entry outside its preallocated " *
+        "sparsity pattern. `A` was not built by `allocate_system_matrix` for this exact " *
+        "form, or the form's `ast` changed after `A` was built."))
+end
+
+# One term into one block, serially, searching for each entry's nzval position (once) and
+# recording it into a fresh `NzvalSegment` alongside performing the (first) real scatter.
+# `row_offset` comes from the test leaf and `col_offset` from the trial leaf: a matrix row
+# is indexed by the test function.
+function _record_segment!(A::SparseMatrixCSC, term::TERM, sp, row_offset::Int,
+        col_offset::Int) where {TERM}
+    Ωₕ = mesh(sp)
+    mesh_markers = markers(Ωₕ)
+    lin_indices = LinearIndices(indices(Ωₕ))
+    n = length(lin_indices)
+
+    point_ptr = Vector{Int}(undef, n + 1)
+    positions = Int[]
+
+    @inbounds for I in indices(Ωₕ)
+        lin_idx = lin_indices[I]
+        point_ptr[lin_idx] = length(positions) + 1
+        stencil = local_stencil(term, sp, I, mesh_markers, lin_idx)
+
+        for (off_u, off_v, weight) in stencil
+            Iv = I + CartesianIndex(off_v)
+            col = _trial_column(lin_indices, I, off_u)
+
+            if checkbounds(Bool, lin_indices, Iv) && col != 0
+                pos = _find_nzval_position(A, lin_indices[Iv] + row_offset, col +
+                                                                            col_offset)
+                pos == 0 && _throw_missing_pattern_entry(term)
+                A.nzval[pos] += weight
+                push!(positions, pos)
+            end
+        end
+    end
+    point_ptr[n + 1] = length(positions) + 1
+    return (point_ptr, positions)::NzvalSegment
+end
+
+# The replay counterpart: same walk, same fresh stencil evaluation (weights may be live --
+# only positions are fixed), but each entry's nzval index comes from `segment` instead of a
+# search. `point_ptr[lin_idx]` addresses each point's own slice of `positions` directly, so
+# this stays correct regardless of what order grid points are visited in.
+function _replay_segment!(A::SparseMatrixCSC, term::TERM, sp, row_offset::Int,
+        col_offset::Int, segment::NzvalSegment) where {TERM}
+    point_ptr, positions = segment
+    Ωₕ = mesh(sp)
+    mesh_markers = markers(Ωₕ)
+    lin_indices = LinearIndices(indices(Ωₕ))
+
+    @inbounds for I in indices(Ωₕ)
+        lin_idx = lin_indices[I]
+        stencil = local_stencil(term, sp, I, mesh_markers, lin_idx)
+        p = point_ptr[lin_idx]
+
+        for (off_u, off_v, weight) in stencil
+            Iv = I + CartesianIndex(off_v)
+            col = _trial_column(lin_indices, I, off_u)
+
+            if checkbounds(Bool, lin_indices, Iv) && col != 0
+                A.nzval[positions[p]] += weight
+                p += 1
+            end
+        end
+    end
+    return nothing
+end
+
+# The scalar case: one block, no offsets, so exactly one segment either way.
+function _record_bilinear_core!(A::SparseMatrixCSC, trial_space, test_space,
+        ast::AST_TYPE, segments::Vector{NzvalSegment}) where {AST_TYPE}
     _check_block_meshes(ast, trial_space, test_space)
-    _scatter_block!(A, ast, test_space, 0, 0)
+    push!(segments, _record_segment!(A, ast, test_space, 0, 0))
+    return nothing
+end
+
+function _replay_bilinear_core!(A::SparseMatrixCSC, trial_space, test_space,
+        ast::AST_TYPE, segments::Vector{NzvalSegment}) where {AST_TYPE}
+    _check_block_meshes(ast, trial_space, test_space)
+    _replay_segment!(A, ast, test_space, 0, 0, segments[1])
+    return nothing
+end
+
+function _record_blocks!(A::SparseMatrixCSC, op::OperatorAdd, trial_leaves, test_leaves,
+        segments::Vector{NzvalSegment})
+    _record_blocks!(A, op.left_op, trial_leaves, test_leaves, segments)
+    _record_blocks!(A, op.right_op, trial_leaves, test_leaves, segments)
+    return nothing
+end
+
+function _record_blocks!(A::SparseMatrixCSC, term::TERM, trial_leaves, test_leaves,
+        segments::Vector{NzvalSegment}) where {TERM}
+    for blk in blocks(term, trial_leaves, test_leaves)
+        _check_block_meshes(term, blk.trial_leaf, blk.test_leaf)
+        push!(segments, _record_segment!(
+            A, term, blk.test_leaf, blk.row_offset, blk.col_offset))
+    end
+    return nothing
+end
+
+# `next` is threaded through by value and returned, rather than via a mutable `Ref`, so
+# this stays allocation-free: the segment index the *next* leaf-term/block should consume,
+# in the same left-then-right order `_record_blocks!` built `segments` in.
+function _replay_blocks!(A::SparseMatrixCSC, op::OperatorAdd, trial_leaves, test_leaves,
+        segments::Vector{NzvalSegment}, next::Int)
+    next = _replay_blocks!(A, op.left_op, trial_leaves, test_leaves, segments, next)
+    next = _replay_blocks!(A, op.right_op, trial_leaves, test_leaves, segments, next)
+    return next
+end
+
+function _replay_blocks!(A::SparseMatrixCSC, term::TERM, trial_leaves, test_leaves,
+        segments::Vector{NzvalSegment}, next::Int) where {TERM}
+    for blk in blocks(term, trial_leaves, test_leaves)
+        _check_block_meshes(term, blk.trial_leaf, blk.test_leaf)
+        next += 1
+        _replay_segment!(
+            A, term, blk.test_leaf, blk.row_offset, blk.col_offset, segments[next])
+    end
+    return next
+end
+
+function _record_bilinear_core!(A::SparseMatrixCSC, trial_space::CompositeGridSpace,
+        test_space::CompositeGridSpace, ast::AST_TYPE,
+        segments::Vector{NzvalSegment}) where {AST_TYPE}
+    _record_blocks!(A, ast, leaf_spaces_offsets(trial_space),
+        leaf_spaces_offsets(test_space), segments)
+    return nothing
+end
+
+function _replay_bilinear_core!(A::SparseMatrixCSC, trial_space::CompositeGridSpace,
+        test_space::CompositeGridSpace, ast::AST_TYPE,
+        segments::Vector{NzvalSegment}) where {AST_TYPE}
+    _replay_blocks!(A, ast, leaf_spaces_offsets(trial_space),
+        leaf_spaces_offsets(test_space), segments, 0)
+    return nothing
+end
+
+# Picks recording (cache miss: a fresh `A`, a changed `ast` -- e.g. `assemble!(A, form;
+# ast = ...)` given something other than `form.ast` -- or the first call ever) or replay
+# (cache hit) and keeps `cache` in step with whichever one ran. `ast` is checked as well as
+# `A`: the cache's positions are only valid for the exact stencil shape they were recorded
+# against, and a different `ast` can visit a different number of entries per point.
+function _assemble_bilinear_core_cached!(A::SparseMatrixCSC, trial_space, test_space,
+        ast::AST_TYPE, cache::_AssemblyCache) where {AST_TYPE}
+    if cache.A === A && cache.ast === ast
+        _replay_bilinear_core!(A, trial_space, test_space, ast, cache.segments)
+    else
+        empty!(cache.segments)
+        _record_bilinear_core!(A, trial_space, test_space, ast, cache.segments)
+        cache.A = A
+        cache.ast = ast
+    end
     return A
 end
 
-# One grid point's stencil, scattered into the matrix. The whole of what differs between
-# a serial sweep and a threaded one: both call this for each `I`, only the surrounding
-# `for` differs (serial `indices(Ωₕ)` vs. `Threads.@threads` over one colour's subgrid).
-# Any future change to how a stencil entry lands in the matrix (gpena/Bramble.jl#26) is
-# written once here rather than fitted into both drivers.
+# One grid point's stencil, scattered into the matrix. Used only by the parallel path
+# below: it always searches (never caches), so a serial recording pass is never required
+# before a `Parallel()`-backend form's first assembly.
 @inline function _scatter_point!(A::SparseMatrixCSC, term::TERM, sp, I::CartesianIndex,
         lin_indices, mesh_markers, row_offset::Int, col_offset::Int) where {TERM}
     stencil = local_stencil(term, sp, I, mesh_markers, lin_indices[I])
@@ -391,41 +580,6 @@ end
         end
     end
     return nothing
-end
-
-# One term into one block, serially. `row_offset` comes from the test leaf and `col_offset`
-# from the trial leaf: a matrix row is indexed by the test function.
-function _scatter_block!(A::SparseMatrixCSC, term::TERM, sp, row_offset::Int,
-        col_offset::Int) where {TERM}
-    Ωₕ = mesh(sp)
-    mesh_markers = markers(Ωₕ)
-    lin_indices = LinearIndices(indices(Ωₕ))
-
-    @inbounds for I in indices(Ωₕ)
-        _scatter_point!(A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset)
-    end
-    return A
-end
-
-function _assemble_blocks!(A::SparseMatrixCSC, op::OperatorAdd, trial_leaves, test_leaves)
-    _visit_operator_add2(
-        _assemble_blocks!, A, op, trial_leaves, test_leaves)
-end
-
-function _assemble_blocks!(A::SparseMatrixCSC, term::TERM, trial_leaves,
-        test_leaves) where {TERM}
-    for blk in blocks(term, trial_leaves, test_leaves)
-        _check_block_meshes(term, blk.trial_leaf, blk.test_leaf)
-        _scatter_block!(A, term, blk.test_leaf, blk.row_offset, blk.col_offset)
-    end
-    return A
-end
-
-function _assemble_bilinear_core!(A::SparseMatrixCSC, trial_space::CompositeGridSpace,
-        test_space::CompositeGridSpace, ast::AST_TYPE) where {AST_TYPE}
-    _assemble_blocks!(A, ast, leaf_spaces_offsets(trial_space),
-        leaf_spaces_offsets(test_space))
-    return A
 end
 
 # Safe stride for matrix assembly, determined from a sample stencil evaluation.
@@ -534,7 +688,8 @@ function assemble!(
     fill!(nonzeros(A), zero(eltype(nonzeros(A))))
 
     if execution_policy(form.trial_space) isa Serial
-        _assemble_bilinear_core!(A, form.trial_space, form.test_space, ast)
+        _assemble_bilinear_core_cached!(
+            A, form.trial_space, form.test_space, ast, form.cache)
     else
         _assemble_bilinear_parallel_core!(A, form.trial_space, form.test_space, ast, Val(D))
     end

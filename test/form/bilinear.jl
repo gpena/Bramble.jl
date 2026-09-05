@@ -452,10 +452,10 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
     end
 
     @testset "Composite in-place reassembly (zero allocations)" begin
-        # `_loop_bytes` above only exercises the scalar core (`_assemble_bilinear_core!`).
-        # The block-routing core (`_assemble_blocks!`, going through `blocks` -- see #49) had
-        # no equivalent guard, so a routing change could reintroduce an allocation (e.g. from
-        # building an intermediate `Block` per term) with nothing in the suite to catch it.
+        # `_loop_bytes` above only exercises the scalar core. The block-routing core (going
+        # through `blocks` -- see #49) had no equivalent guard, so a routing change could
+        # reintroduce an allocation (e.g. from building an intermediate `Block` per term)
+        # with nothing in the suite to catch it.
         Vₕ = gridspace(Ωₕ, Val(2))
         function _loop_bytes(A, a)
             assemble!(A, a)
@@ -470,6 +470,99 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
 
         a_mixed = form(Vₕ, Vₕ, (u, v) -> innerₕ(u, v) + innerₕ(u(1), v(2))) # both, one term each
         @test _loop_bytes(assemble(a_mixed), a_mixed) == 0
+    end
+
+    @testset "Cached nzval positions (#26)" begin
+        # `assemble!` used to search for every scattered entry's nzval position on every
+        # call. It now records that search's result the first time a given matrix is
+        # assembled into and replays it thereafter -- these exercise both paths and the
+        # points where they meet (a matrix swap, a changed `ast`), not just a single
+        # before/after allocation count.
+
+        @testset "Replay matches search across many repeated calls" begin
+            a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
+            A = assemble(a)                 # record, inside assemble's own call
+            reference = copy(A.nzval)
+            for _ in 1:5                    # several replay calls, not just one
+                assemble!(A, a)
+                @test A.nzval ≈ reference
+            end
+        end
+
+        @testset "Live coefficients still update under replay" begin
+            cₕ = Rₕ(Wₕ, x -> 1.0)
+            a = form(Wₕ, Wₕ, (u, v) -> innerₕ(cₕ * u, v))
+            A = assemble(a)                 # record
+            s1 = sum(A)
+            for factor in (3.0, -2.0, 5.0)
+                Rₕ!(cₕ, x -> factor)
+                assemble!(A, a)              # replay, each time with a different live value
+                @test sum(A) ≈ factor * s1
+            end
+        end
+
+        @testset "Dirichlet labels still applied after a cached replay" begin
+            a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
+            A = assemble(a)                             # record, unconstrained
+            assemble!(A, a)                             # replay, unconstrained
+            assemble!(A, a; dirichlet_labels = :walls)   # replay core, then Dirichlet applied
+            marked = index_in_marker(Ωₕ, :walls)
+            for i in 1:n
+                marked[i] || continue
+                @test A[i, i] ≈ 1.0
+                @test count(!iszero, A[i, :]) == 1
+            end
+        end
+
+        @testset "Switching matrices rebuilds rather than corrupting" begin
+            a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
+            A1 = assemble(a)
+            A2 = similar(sparse(A1))
+            assemble!(A2, a)    # different matrix object: must record again, not reuse A1's cache
+            @test A2.nzval ≈ A1.nzval
+            assemble!(A1, a)    # back to A1: must record again (cache now points at A2)
+            @test A1.nzval ≈ A2.nzval
+            assemble!(A1, a)    # each is still independently replayable afterwards
+            assemble!(A2, a)
+            @test A1.nzval ≈ A2.nzval
+        end
+
+        @testset "Composite: diagonal, off-diagonal, mixed, and nested all replay correctly" begin
+            Vₕ = gridspace(Ωₕ, Val(2))
+            for g in ((u, v) -> innerₕ(u, v),
+                (u, v) -> innerₕ(u(1), v(2)),
+                (u, v) -> innerₕ(u, v) + innerₕ(u(1), v(2)),
+                (u, v) -> inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + innerₕ(u(2), v(1)))
+                a = form(Vₕ, Vₕ, g)
+                A = assemble(a)
+                reference = copy(A.nzval)
+                for _ in 1:3
+                    assemble!(A, a)
+                    @test A.nzval ≈ reference
+                end
+            end
+
+            # more than two segments to replay, in order (#64's own nesting shape)
+            nested = Bramble.CompositeGridSpace((
+                gridspace(Ωₕ, Val(2)), gridspace(Ωₕ, Val(2))))
+            a = form(nested, nested, (u, v) -> innerₕ(u(2), v(4)) + innerₕ(u, v))
+            A = assemble(a)
+            reference = copy(A.nzval)
+            for _ in 1:3
+                assemble!(A, a)
+                @test A.nzval ≈ reference
+            end
+        end
+
+        @testset "A different ast forces a rebuild rather than a stale replay" begin
+            a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
+            A = assemble(a)                                   # records for a's own ast
+            alt = form(Wₕ, Wₕ, (u, v) -> 2.0 * innerₕ(u, v))  # same reach, different ast object
+            assemble!(A, a; ast = resolve_form_ast(alt))
+            @test sum(A) ≈ 2 * sum(H)
+            assemble!(A, a)                                   # back to a's own ast: rebuilds again
+            @test Matrix(A) ≈ H
+        end
     end
 
     @testset "Form construction" begin
