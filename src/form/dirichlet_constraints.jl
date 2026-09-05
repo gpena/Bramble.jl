@@ -28,9 +28,14 @@ symmetrize!(A, F, mesh(Wₕ), :left, :right)
 
 ## Performance optimizations
 
-- BitVector chunk-based processing (64 bits at a time)
-- Direct sparse matrix CSC structure manipulation
-- SIMD-friendly loops for cache efficiency
+- Constrained indices are walked, never scanned for: `_each_marked` skips empty `BitVector`
+  chunks and steps set bits with `trailing_zeros`, so every routine here costs the boundary
+  cardinality rather than `ndofs`. It is the one iterator; nothing else in this file walks a
+  mask by hand.
+- Sparse matrices are modified through their CSC arrays directly, in a single sweep that
+  writes the diagonal where it meets it. Calling `A[i, i] = one(T)` afterwards would
+  binary-search the column, so the sweeps that can avoid that do.
+- No `@simd` anywhere: every one of these loops is branch-driven, which rules it out.
 
 See also: [`dirichlet_constraints`](@ref), [`dirichlet_bc!`](@ref), [`symmetrize!`](@ref)
 =#
@@ -157,6 +162,27 @@ end
     return nothing
 end
 
+# --- Walking a boundary mask -------------------------------------------------------- #
+
+# The one way this file iterates constrained indices. Walking the set bits rather than the
+# mask itself: boundary sets are sparse compared to the domain volume, so skipping zero
+# chunks and walking set bits with `trailing_zeros` performs work proportional to the
+# boundary cardinality rather than to `ndofs`.
+#
+# `offset` is where this mask's leaf starts in the global system (zero for a scalar space),
+# so `f` always receives a global index.
+@inline function _each_marked(f::F, mask::BitVector, offset::Int) where {F}
+    @inbounds for (chunk_idx, chunk) in enumerate(mask.chunks)
+        chunk == zero(UInt64) && continue
+        base = offset + (chunk_idx - 1) * 64
+        rest = chunk
+        while rest != zero(UInt64)
+            f(base + trailing_zeros(rest) + 1)
+            rest &= rest - 1
+        end
+    end
+end
+
 # --- Applying Dirichlet boundary conditions ---------------------------------------- #
 
 """
@@ -260,40 +286,42 @@ end
 # Dense: one pass over the marked rows of each leaf, skipping unselected ones.
 function _dirichlet_bc_rows!(A::AbstractMatrix, entries::Tuple)
     T = eltype(A)
-    for (mask, offset, n, active) in entries
+    for (mask, offset, _, active) in entries
         active || continue
-        @inbounds for i in 1:n
-            if mask[i]
-                r = offset + i
-                @views A[r, :] .= zero(T)
-                A[r, r] = one(T)
-            end
+        _each_marked(mask, offset) do r
+            @views A[r, :] .= zero(T)
+            A[r, r] = one(T)
         end
     end
     return A
 end
 
 # Sparse: a single sweep of the stored values, testing each row against every *selected*
-# leaf, then the diagonals. Sweeping once per leaf instead would cost `nnz` per component.
+# leaf. Sweeping once per leaf instead would cost `nnz` per component.
+#
+# The diagonals are written by that same sweep rather than by a second pass afterwards --
+# see the longer note on `_dirichlet_bc_indices!(::SparseMatrixCSC, ...)`, which does the
+# same thing against a flat mask.
 function _dirichlet_bc_rows!(A::SparseMatrixCSC, entries::Tuple)
     T = eltype(A)
     rows = rowvals(A)
     vals = nonzeros(A)
 
     @inbounds for j in axes(A, 2)
-        for k in nzrange(A, j)
-            _row_marked(entries, rows[k]) && (vals[k] = zero(T))
-        end
-    end
+        column_is_constrained = _row_marked(entries, j)
+        diagonal_found = false
 
-    for (mask, offset, n, active) in entries
-        active || continue
-        @inbounds for i in 1:n
-            if mask[i]
-                r = offset + i
-                A[r, r] = one(T)
+        for k in nzrange(A, j)
+            row = rows[k]
+            if column_is_constrained && row == j
+                vals[k] = one(T)
+                diagonal_found = true
+            elseif _row_marked(entries, row)
+                vals[k] = zero(T)
             end
         end
+
+        column_is_constrained && !diagonal_found && (A[j, j] = one(T))
     end
     return A
 end
@@ -348,29 +376,19 @@ end
     labels::Symbol...) = dirichlet_bc!(v, Ωₕ, bcs, labels, 0)
 
 """
-    _dirichlet_bc_indices!(A, marker_indices)
+    _dirichlet_bc_indices!(A::AbstractMatrix, index_in_marker::BitVector)
 
-Internal helper to apply Dirichlet boundary conditions to matrix `A` for a given set of indices.
+Internal helper to apply Dirichlet boundary conditions to matrix `A` at the indices marked
+in `index_in_marker`: each marked row is zeroed and its diagonal set to one.
+
+Costs the boundary cardinality, not `ndofs` — the marked indices are walked with
+[`_each_marked`](@ref) rather than scanned for.
 """
 function _dirichlet_bc_indices!(A::AbstractMatrix, index_in_marker::BitVector)
     T = eltype(A)
-
-    chunks = index_in_marker.chunks
-    @inbounds for (chunk_idx, chunk) in enumerate(chunks)
-        chunk == zero(UInt64) && continue # Skip chunks with no Dirichlet nodes
-
-        offset = (chunk_idx - 1) * 64
-        temp_chunk = chunk
-        while temp_chunk != zero(UInt64)
-            bit_pos = trailing_zeros(temp_chunk)
-            i = offset + bit_pos + 1
-
-            # Zero out the i-th row and set diagonal to one
-            @views A[i, :] .= zero(T)
-            A[i, i] = one(T)
-
-            temp_chunk &= temp_chunk - 1 # Clear the processed bit
-        end
+    _each_marked(index_in_marker, 0) do i
+        @views A[i, :] .= zero(T)
+        A[i, i] = one(T)
     end
     return A
 end
@@ -380,34 +398,41 @@ end
 
 Apply Dirichlet boundary conditions to a sparse matrix `A` by directly manipulating
 its CSC data structure.
+
+A single sweep of the stored values does both halves of the job: entries in a constrained
+row are zeroed, and the diagonal of such a row is set to one where the sweep meets it,
+rather than by a second pass afterwards. Explicit zeros are left in place, so the sparsity
+pattern is unchanged and the matrix can be refilled without reallocating its columns.
 """
 function _dirichlet_bc_indices!(A::SparseMatrixCSC, index_in_marker::BitVector)
     T = eltype(A)
     rows = rowvals(A)
     vals = nonzeros(A)
 
-    # 1. Zero out non-zero values in Dirichlet rows
+    # One sweep, not two: the diagonal of a constrained row is a stored entry like any
+    # other, so it is written where this sweep meets it rather than searched for afterwards
+    # -- `A[i, i] = one(T)` binary-searches the column every call. Same reasoning, and the
+    # same `diagonal_found` fallback, as `symmetrize!(::SparseMatrixCSC, ...)` below.
+    #
+    # No `@simd`: the branches rule it out, as they already did before the diagonal write
+    # moved in here.
     @inbounds for j in axes(A, 2)
-        @simd for i in nzrange(A, j)
-            if index_in_marker[rows[i]]
-                vals[i] = zero(T)
+        column_is_constrained = index_in_marker[j]
+        diagonal_found = false
+
+        for k in nzrange(A, j)
+            row = rows[k]
+            if column_is_constrained && row == j
+                vals[k] = one(T)
+                diagonal_found = true
+            elseif index_in_marker[row]
+                vals[k] = zero(T)
             end
         end
-    end
 
-    # 2. Set diagonal elements to one for all Dirichlet rows
-    chunks = index_in_marker.chunks
-    @inbounds for (chunk_idx, chunk) in enumerate(chunks)
-        chunk == zero(UInt64) && continue
-
-        offset = (chunk_idx - 1) * 64
-        temp_chunk = chunk
-        while temp_chunk != zero(UInt64)
-            bit_pos = trailing_zeros(temp_chunk)
-            i = offset + bit_pos + 1
-            A[i, i] = one(T)
-            temp_chunk &= temp_chunk - 1
-        end
+        # A constrained row whose diagonal is not stored: rare, since the pattern comes
+        # from `allocate_system_matrix`, but this is the one write that has to grow it.
+        column_is_constrained && !diagonal_found && (A[j, j] = one(T))
     end
     return A
 end
@@ -434,18 +459,11 @@ _function_in_linear_indices(func, Ωₕ, i) = func(point(Ωₕ, indices(Ωₕ)[i
         index_in_marker::BitVector, func::F, offset::Int = 0) where {F}
     cart_indices = indices(Ωₕ)
 
-    chunks = index_in_marker.chunks
-    @inbounds for (chunk_idx, chunk) in enumerate(chunks)
-        chunk == zero(UInt64) && continue
-
-        chunk_offset = (chunk_idx - 1) * 64
-        temp_chunk = chunk
-        while temp_chunk != zero(UInt64)
-            bit_pos = trailing_zeros(temp_chunk)
-            idx = chunk_offset + bit_pos + 1
-            v[idx + offset] = func(point(Ωₕ, cart_indices[idx]))
-            temp_chunk &= temp_chunk - 1
-        end
+    # Walked at offset zero, not at `offset`: the index is needed twice over, once against
+    # the leaf's own mesh points and once against the global vector, and only the latter is
+    # shifted.
+    _each_marked(index_in_marker, 0) do idx
+        @inbounds v[idx + offset] = func(point(Ωₕ, cart_indices[idx]))
     end
 
     return v
@@ -513,23 +531,6 @@ function symmetrize!(A::AbstractMatrix, F::AbstractVector, Wₕ::CompositeGridSp
     for p in labels
         _each_selected_leaf(leaves, components) do sp, offset
             symmetrize!(A, F, index_in_marker(mesh(sp), p), offset)
-        end
-    end
-end
-
-# Walking the set bits of the mask rather than the mask itself: boundary sets are sparse
-# compared to the domain volume. Skipping zero chunks and walking set bits with `trailing_zeros`
-# performs work proportional to the boundary cardinality.
-#
-# `offset` is where this mask's leaf starts in the global system (zero for a scalar space).
-@inline function _each_marked(f::F, mask::BitVector, offset::Int) where {F}
-    @inbounds for (chunk_idx, chunk) in enumerate(mask.chunks)
-        chunk == zero(UInt64) && continue
-        base = offset + (chunk_idx - 1) * 64
-        rest = chunk
-        while rest != zero(UInt64)
-            f(base + trailing_zeros(rest) + 1)
-            rest &= rest - 1
         end
     end
 end
