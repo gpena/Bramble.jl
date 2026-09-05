@@ -19,7 +19,17 @@ mutable struct _AssemblyCache
     ast::Any
     segments::Vector{NzvalSegment}
 end
-_AssemblyCache() = _AssemblyCache(nothing, nothing, NzvalSegment[])
+
+# Every fresh `BilinearForm` starts pointing at this one, shared, empty vector rather than
+# allocating its own: it is never mutated in place (a cache miss *replaces* `cache.segments`
+# wholesale, see `_assemble_bilinear_core_cached!`, rather than `empty!`ing whatever it
+# currently references), so sharing it across every not-yet-assembled form is safe. Keeps
+# `form(Wₕ, Vₕ, f)` itself allocation-free: only the `_AssemblyCache` wrapper is a genuine
+# per-form cost (one allocation, since it is a `mutable struct` and therefore always
+# heap-boxed), not a second one for an empty vector nothing has scattered into yet.
+const _NO_SEGMENTS = NzvalSegment[]
+
+_AssemblyCache() = _AssemblyCache(nothing, nothing, _NO_SEGMENTS)
 
 """
     BilinearForm{D, TrialSpace, TestSpace, AST}
@@ -556,8 +566,12 @@ function _assemble_bilinear_core_cached!(A::SparseMatrixCSC, trial_space, test_s
     if cache.A === A && cache.ast === ast
         _replay_bilinear_core!(A, trial_space, test_space, ast, cache.segments)
     else
-        empty!(cache.segments)
-        _record_bilinear_core!(A, trial_space, test_space, ast, cache.segments)
+        # A fresh vector, not `empty!` on whatever `cache.segments` currently references:
+        # that reference may be `_NO_SEGMENTS`, shared with every other not-yet-assembled
+        # form, and `empty!`ing it in place would corrupt all of them.
+        segments = NzvalSegment[]
+        _record_bilinear_core!(A, trial_space, test_space, ast, segments)
+        cache.segments = segments
         cache.A = A
         cache.ast = ast
     end

@@ -90,10 +90,14 @@ _mesh3() = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), N3, (true, true, 
 # here would silently change what those numbers mean.
 const _PAR = backend(policy = Parallel())
 _mesh1_par() = mesh(domain(interval(0.0, 1.0)), N1, true; backend = _PAR)
-_mesh2_par() = mesh(
-    domain(interval(0.0, 1.0) × interval(0.0, 1.0)), N2, (true, true); backend = _PAR)
-_mesh3_par() = mesh(
-    domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), N3, (true, true, true); backend = _PAR)
+function _mesh2_par()
+    mesh(
+        domain(interval(0.0, 1.0) × interval(0.0, 1.0)), N2, (true, true); backend = _PAR)
+end
+function _mesh3_par()
+    mesh(
+        domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), N3, (true, true, true); backend = _PAR)
+end
 
 # --- 1. restriction & cell-averaging across 1D, 2D, 3D -------------------- #
 let W1 = gridspace(_mesh1_par()), u1 = element(W1), W2 = gridspace(_mesh2_par()),
@@ -104,9 +108,8 @@ let W1 = gridspace(_mesh1_par()), u1 = element(W1), W2 = gridspace(_mesh2_par())
     # 1D had a Serial() entry until now; 2D/3D never got one (gpena/Bramble.jl issue
     # noticed while reading the docs page — the trend charts had no serial line to
     # compare the parallel one against past 1D).
-    W1d = gridspace(_mesh1()), u1d = element(W1d),
-    W2d = gridspace(_mesh2()), u2d = element(W2d),
-    W3d = gridspace(_mesh3()), u3d = element(W3d)
+    W1d = gridspace(_mesh1()), u1d = element(W1d), W2d = gridspace(_mesh2()),
+    u2d = element(W2d), W3d = gridspace(_mesh3()), u3d = element(W3d)
 
     g = SUITE["restriction"] = BenchmarkGroup()
     g["Rₕ! 1D, Parallel() backend"] = @benchmarkable Rₕ!($u1, sin)
@@ -118,9 +121,11 @@ let W1 = gridspace(_mesh1_par()), u1 = element(W1), W2 = gridspace(_mesh2_par())
     g["Rₕ 1D (allocates its output)"] = @benchmarkable Rₕ($W1, sin)
     g["Rₕ! 1D, Serial() backend (default)"] = @benchmarkable Rₕ!($u1d, sin)
     g["avgₕ! 1D, Serial() backend (default)"] = @benchmarkable avgₕ!($u1d, sin)
-    g["Rₕ! 2D, Serial() backend (default)"] = @benchmarkable Rₕ!($u2d, x -> sin(x[1]) * x[2])
+    g["Rₕ! 2D, Serial() backend (default)"] = @benchmarkable Rₕ!($u2d, x -> sin(x[1]) *
+                                                                            x[2])
     g["avgₕ! 2D, Serial() backend (default)"] = @benchmarkable avgₕ!($u2d, x->sin(x[1])*x[2]) samples=5 evals=1
-    g["Rₕ! 3D, Serial() backend (default)"] = @benchmarkable Rₕ!($u3d, x -> sin(x[1]) + x[3])
+    g["Rₕ! 3D, Serial() backend (default)"] = @benchmarkable Rₕ!($u3d, x -> sin(x[1]) +
+                                                                            x[3])
     g["avgₕ! 3D, Serial() backend (default)"] = @benchmarkable avgₕ!($u3d, x->sin(x[1])+x[3]) samples=3 evals=1
 end
 
@@ -203,15 +208,14 @@ end
 # here is the allocation count and the shape of the cost, neither of which needs
 # a million degrees of freedom to show a regression.
 let W1 = gridspace(_mesh1()), f1 = Rₕ(W1, sin), v1 = Rₕ(W1, cos),
-    l1 = Bramble.form(W1, v -> innerₕ(f1, v)),
-    b1 = Bramble.assemble(l1), ast1 = Bramble.resolve_form_ast(l1),
-    W2 = gridspace(_mesh2()), f2 = Rₕ(W2, x -> sin(x[1]) * x[2]),
-    l2 = Bramble.form(W2, v -> innerₕ(f2, v)),
+    l1 = Bramble.form(W1, v -> innerₕ(f1, v)), b1 = Bramble.assemble(l1),
+    ast1 = Bramble.resolve_form_ast(l1), W2 = gridspace(_mesh2()),
+    f2 = Rₕ(W2, x -> sin(x[1]) * x[2]), l2 = Bramble.form(W2, v -> innerₕ(f2, v)),
     b2 = Bramble.assemble(l2), ast2 = Bramble.resolve_form_ast(l2),
     Wm = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)),
         (300, 300), (true, true))),
-    am = Bramble.form(Wm, Wm, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v))),
-    Am = Bramble.assemble(am), astm = Bramble.resolve_form_ast(am),
+    am = Bramble.form(Wm, Wm, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v))), Am = Bramble.assemble(am),
+    astm = Bramble.resolve_form_ast(am),
     # point 22: assemble!/assemble dispatch on execution_policy(space) now, a
     # different code path from assemble_parallel! below, which always threads
     # regardless of the backend. W1p/amp exercise that dispatch directly through
@@ -230,10 +234,23 @@ let W1 = gridspace(_mesh1()), f1 = Rₕ(W1, sin), v1 = Rₕ(W1, cos),
     # construction, which built the whole AST eagerly until recently: a linear
     # form cost 48 MB and a bilinear one 9.3 MB, where both are now under 400 KB.
     #
-    # These two measure 0.001 ns, which is BenchmarkTools reporting that the call
-    # was optimised away: a form is now three stored fields and nothing else, so
-    # there is no work left to elide. Kept as a regression guard rather than a
-    # measurement — reintroduce eager work and the number stops being zero.
+    # The linear form measures 0.001 ns, which is BenchmarkTools reporting that the call
+    # was optimised away: a `LinearForm` is three stored fields and nothing else, so there
+    # is no work left to elide. Kept as a regression guard rather than a measurement —
+    # reintroduce eager work and the number stops being zero.
+    #
+    # The bilinear one is not zero-allocation any more: gpena/Bramble.jl#26 gave
+    # `BilinearForm` a fourth field, `cache::_AssemblyCache`, a *mutable* struct (so it can
+    # be filled in lazily on the first `assemble!` call without `BilinearForm` itself needing
+    # to be mutable) — and a `mutable struct` is always heap-boxed in Julia, so constructing
+    # one costs exactly one allocation regardless of what it holds. Every fresh form starts
+    # pointing at a single shared, empty `segments` vector (`_NO_SEGMENTS`) rather than
+    # allocating its own, which is what keeps this at one allocation instead of two. Getting
+    # to zero would mean moving the cache out of `BilinearForm` entirely (an external
+    # identity-keyed cache, e.g. a `WeakKeyDict`) — a bigger, separately-justified change,
+    # not something to reach for over one small one-time per-form allocation. `assemble!`
+    # itself, called potentially many times per form, is unaffected: still 0 bytes (see
+    # "assemble! 1D"/"assemble! (matrix) 2D" below).
     g["form (linear, 2D)"] = @benchmarkable Bramble.form($W2, v -> innerₕ($f2, v))
     g["form (bilinear, 2D)"] = @benchmarkable Bramble.form(
         $Wm, $Wm, (u, v) -> innerₕ(u, v))
@@ -358,7 +375,9 @@ const ALLOCATION_BOUNDS = Dict(
     ("forms", "evaluate! 1D") => 0,
     ("forms", "l(vₕ) 1D") => 0,
     ("forms", "form (linear, 2D)") => 0,
-    ("forms", "form (bilinear, 2D)") => 0,
+    # 1, not 0: BilinearForm's cache field (gpena/Bramble.jl#26) is a mutable struct, always
+    # heap-boxed on construction -- see the comment above where this benchmark is defined.
+    ("forms", "form (bilinear, 2D)") => 1,
     # the same assembly in three precisions: none of them may allocate, and the
     # reduction is the path where a widened element type would show first
     ("precision 1D", "assemble! Float32") => 0,
@@ -432,7 +451,7 @@ function main(args = ARGS)
     i = findfirst(==("--save"), args)
     if i !== nothing && i < length(args)
         ac || error("refusing to save a baseline recorded on battery power. Plug in " *
-                    "and re-run; the allocation gate above is still valid.")
+              "and re-run; the allocation gate above is still valid.")
         BenchmarkTools.save(args[i + 1], results)
         println("\nsaved baseline to ", args[i + 1],
             " (Bramble $(pkgversion(Bramble)), Julia $VERSION)")
