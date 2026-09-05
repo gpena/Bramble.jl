@@ -410,6 +410,38 @@ function check_allocations(results)
     return ok
 end
 
+# `BenchmarkTools.save` serializes a `Trial` in full: every one of its (possibly thousands
+# of) per-sample `times`/`gctimes`, which is why baseline_*.json files run 4+ MB each. Only
+# three numbers per benchmark are ever read back: `docs/generate_benchmarks.jl` calls
+# `median(trial)`, and this file's own `--compare` path (below) calls `minimum(trial)` —
+# both reduce to a `TrialEstimate`, whose `time`/`memory`/`allocs` are already scalar
+# fields on `Trial` itself (`memory`/`allocs` are never per-sample to begin with).
+#
+# `median`/`minimum`/`maximum` of a 3-element vector `[min, median, max]` return exactly
+# `min`, `median` and `max` back — sorting can't move the middle element, since a set's
+# median always sits between its own min and max — so replacing a trial's full sample
+# vectors with just those three values leaves every statistic these two scripts read
+# byte-identical, while cutting what gets serialized by two to three orders of magnitude.
+# `gctimes` are reduced the same way, independently, since nothing downstream reads
+# `gctime` off a loaded baseline (only `time`/`memory`/`allocs`) — the correspondence
+# between a given `times` and `gctimes` entry does not need to survive the reduction.
+#
+# This is deliberately not a new save format: the reduced object is still a plain
+# `BenchmarkTools.Trial`, loadable with the same `BenchmarkTools.load` and readable by
+# every existing `median`/`minimum`/`judge` call already in this file and in
+# `docs/generate_benchmarks.jl`. Old baseline_*.json files (full samples) keep loading
+# unchanged; nothing needs a format-version check.
+function _reduce_for_save(t::BenchmarkTools.Trial)
+    length(t.times) <= 3 && return t
+    i_min = argmin(t.times)
+    i_max = argmax(t.times)
+    return BenchmarkTools.Trial(t.params,
+        [t.times[i_min], median(t.times), t.times[i_max]],
+        [t.gctimes[i_min], median(t.gctimes), t.gctimes[i_max]],
+        t.memory, t.allocs)
+end
+_reduce_for_save(g::BenchmarkGroup) = BenchmarkTools.mapvals(_reduce_for_save, g)
+
 function main(args = ARGS)
     set_zero_subnormals(true)
     ac = _on_ac_power()
@@ -452,7 +484,7 @@ function main(args = ARGS)
     if i !== nothing && i < length(args)
         ac || error("refusing to save a baseline recorded on battery power. Plug in " *
               "and re-run; the allocation gate above is still valid.")
-        BenchmarkTools.save(args[i + 1], results)
+        BenchmarkTools.save(args[i + 1], _reduce_for_save(results))
         println("\nsaved baseline to ", args[i + 1],
             " (Bramble $(pkgversion(Bramble)), Julia $VERSION)")
     end
