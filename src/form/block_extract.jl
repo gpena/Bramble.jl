@@ -134,6 +134,54 @@ end
 end
 
 """
+    Block{TrialLeaf, TestLeaf}
+
+One leaf-space pair's rectangle within a composite system matrix: the concrete trial and
+test leaf spaces a term couples, and the row/column offset each contributes to that
+rectangle's position in the assembled matrix.
+
+Matrix rows are indexed by the test function (see `bilinear.jl`'s file header), so
+`row_offset` always comes from `test_leaf`'s offset in `leaf_spaces_offsets`, and
+`col_offset` from `trial_leaf`'s. That asymmetry used to be carried by convention across
+six call sites, each unpacking a bare `(tc, sc)` tuple into `first`/`last` calls in the
+right order -- one of which got it backwards (gpena/Bramble.jl#48). Naming it here means a
+caller reads `blk.row_offset`/`blk.col_offset` off the type instead of re-deriving which
+positional element means which.
+"""
+struct Block{TrialLeaf, TestLeaf}
+    trial_leaf::TrialLeaf
+    test_leaf::TestLeaf
+    row_offset::Int
+    col_offset::Int
+end
+
+@inline _block_from_indices(trial_leaves, test_leaves, tc::Int, sc::Int) = Block(
+    first(trial_leaves[tc]), first(test_leaves[sc]),
+    last(test_leaves[sc]), last(trial_leaves[tc]))
+
+@inline function _diagonal_blocks(trial_leaves::Tuple, test_leaves::Tuple)
+    n = min(length(trial_leaves), length(test_leaves))
+    return ntuple(c -> _block_from_indices(trial_leaves, test_leaves, c, c), n)
+end
+
+"""
+    blocks(term, trial_leaves, test_leaves) -> Tuple{Vararg{Block}}
+
+Every [`Block`](@ref) `term` must be assembled into.
+
+A term naming both sides (via [`block_of`](@ref)) resolves to the one `Block` it names. A
+term naming neither is the same integrand on every diagonal block, so it resolves to one
+`Block` per diagonal leaf pair. `trial_leaves`/`test_leaves` are `leaf_spaces_offsets`
+results.
+"""
+@inline function blocks(term, trial_leaves::Tuple, test_leaves::Tuple)
+    blk = block_of(term, length(trial_leaves), length(test_leaves))
+    blk === nothing && return _diagonal_blocks(trial_leaves, test_leaves)
+    tc, sc = blk
+    return (_block_from_indices(trial_leaves, test_leaves, tc, sc),)
+end
+
+"""
     routes_by_component(op) -> Bool
 
 Whether `op` names components anywhere inside it, and so has to be split across the blocks

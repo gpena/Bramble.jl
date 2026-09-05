@@ -6,7 +6,7 @@ using SparseArrays: sparse, nnz, nonzeros
 using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, trial_space,
                test_space, resolve_form_ast, allocate_system_matrix, ndofs, values,
                Innerh, Innerplus, block_of, trial_component_or_nothing,
-               test_component_or_nothing
+               test_component_or_nothing, Block, blocks, leaf_spaces_offsets
 
 # Assembling the matrix of a bilinear form.
 #
@@ -331,6 +331,57 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
         @test_throws ArgumentError block_of(innerₕ(u(1), v), 2, 2)
     end
 
+    @testset "Block resolution (#49)" begin
+        # `blocks(term, trial_leaves, test_leaves)` is the one place the trial/test row/
+        # column asymmetry is resolved, and is testable directly against `leaf_spaces_offsets`
+        # without assembling a matrix -- unlike before it existed, when the only way to see
+        # a wrong offset was in an assembled matrix's numbers (which is exactly how #48 was a
+        # live bug for a while). Asymmetric leaf sizes and reversed order, as in the #48 test
+        # above, so a row/column offset mix-up lands on the wrong number rather than the same
+        # one by coincidence.
+        n1, n2 = 5, 7
+        W1 = gridspace(mesh(domain(interval(0.0, 1.0)), n1, true))
+        W2 = gridspace(mesh(domain(interval(0.0, 1.0)), n2, true))
+
+        trial = W1 × W2   # leaf 1: W1, offset 0.  leaf 2: W2, offset n1
+        test = W2 × W1    # leaf 1: W2, offset 0.  leaf 2: W1, offset n2
+
+        trial_leaves = leaf_spaces_offsets(trial)
+        test_leaves = leaf_spaces_offsets(test)
+
+        u1 = Bramble.TrialFunction{1}()
+        v1 = Bramble.TestFunction{1}()
+
+        @testset "Named block: row from test leaf, column from trial leaf" begin
+            bs = blocks(innerₕ(u1(1), v1(2)), trial_leaves, test_leaves)
+            @test length(bs) == 1
+            blk = only(bs)
+            @test blk isa Block
+            @test blk.trial_leaf === W1        # trial leaf 1
+            @test blk.test_leaf === W1         # test leaf 2 is also W1
+            @test blk.row_offset == n2          # test leaf 2's own offset, not trial's
+            @test blk.col_offset == 0           # trial leaf 1's own offset
+        end
+
+        @testset "Unrouted term: one Block per diagonal leaf pair" begin
+            bs = blocks(innerₕ(u1, v1), trial_leaves, test_leaves)
+            @test length(bs) == 2
+            @test bs[1].trial_leaf === W1 && bs[1].test_leaf === W2
+            @test bs[1].row_offset == 0 && bs[1].col_offset == 0
+            @test bs[2].trial_leaf === W2 && bs[2].test_leaf === W1
+            @test bs[2].row_offset == n2 && bs[2].col_offset == n1
+        end
+
+        @testset "Zero allocations" begin
+            _named() = blocks(innerₕ(u1(1), v1(2)), trial_leaves, test_leaves)
+            _diag() = blocks(innerₕ(u1, v1), trial_leaves, test_leaves)
+            _named()
+            _diag()
+            @test (@allocated _named()) == 0
+            @test (@allocated _diag()) == 0
+        end
+    end
+
     @testset "Matrix differentiation" begin
         # A coefficient in the integrand: a(u, v) = ∫ c·u·v, so A = H·diag(c) and the
         # derivative of `sum(A)` with respect to `cᵢ` is `Hᵢᵢ`. Checked against that rather
@@ -398,6 +449,27 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
         Ain = assemble(ainline)
         @test _loop_bytes(Ain, ainline) == 0
         @test Matrix(Ain) ≈ Matrix(Aop)              # and the two agree
+    end
+
+    @testset "Composite in-place reassembly (zero allocations)" begin
+        # `_loop_bytes` above only exercises the scalar core (`_assemble_bilinear_core!`).
+        # The block-routing core (`_assemble_blocks!`, going through `blocks` -- see #49) had
+        # no equivalent guard, so a routing change could reintroduce an allocation (e.g. from
+        # building an intermediate `Block` per term) with nothing in the suite to catch it.
+        Vₕ = gridspace(Ωₕ, Val(2))
+        function _loop_bytes(A, a)
+            assemble!(A, a)
+            return @allocated assemble!(A, a)
+        end
+
+        a_diag = form(Vₕ, Vₕ, (u, v) -> innerₕ(u, v))          # blk === nothing path
+        @test _loop_bytes(assemble(a_diag), a_diag) == 0
+
+        a_off = form(Vₕ, Vₕ, (u, v) -> innerₕ(u(1), v(2)))     # named-block path
+        @test _loop_bytes(assemble(a_off), a_off) == 0
+
+        a_mixed = form(Vₕ, Vₕ, (u, v) -> innerₕ(u, v) + innerₕ(u(1), v(2))) # both, one term each
+        @test _loop_bytes(assemble(a_mixed), a_mixed) == 0
     end
 
     @testset "Form construction" begin

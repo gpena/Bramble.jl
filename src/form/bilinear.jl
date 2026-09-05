@@ -280,21 +280,11 @@ end
 
 function _pattern_blocks!(I_vec::Vector{Int}, J_vec::Vector{Int}, term::TERM,
         trial_leaves, test_leaves) where {TERM}
-    blk = block_of(term, length(trial_leaves), length(test_leaves))
-
-    if blk === nothing
-        for c in 1:min(length(trial_leaves), length(test_leaves))
-            _check_block_meshes(term, first(trial_leaves[c]), first(test_leaves[c]))
-            _pattern_term!(I_vec, J_vec, term, first(trial_leaves[c]),
-                first(test_leaves[c]), last(test_leaves[c]), last(trial_leaves[c]))
-        end
-        return nothing
+    for blk in blocks(term, trial_leaves, test_leaves)
+        _check_block_meshes(term, blk.trial_leaf, blk.test_leaf)
+        _pattern_term!(I_vec, J_vec, term, blk.trial_leaf, blk.test_leaf,
+            blk.row_offset, blk.col_offset)
     end
-
-    tc, sc = blk
-    _check_block_meshes(term, first(trial_leaves[tc]), first(test_leaves[sc]))
-    _pattern_term!(I_vec, J_vec, term, first(trial_leaves[tc]), first(test_leaves[sc]),
-        last(test_leaves[sc]), last(trial_leaves[tc]))
     return nothing
 end
 
@@ -413,21 +403,10 @@ end
 
 function _assemble_blocks!(A::SparseMatrixCSC, term::TERM, trial_leaves,
         test_leaves) where {TERM}
-    blk = block_of(term, length(trial_leaves), length(test_leaves))
-
-    if blk === nothing
-        for c in 1:min(length(trial_leaves), length(test_leaves))
-            _check_block_meshes(term, first(trial_leaves[c]), first(test_leaves[c]))
-            _scatter_block!(A, term, first(test_leaves[c]), last(test_leaves[c]),
-                last(trial_leaves[c]))
-        end
-        return A
+    for blk in blocks(term, trial_leaves, test_leaves)
+        _check_block_meshes(term, blk.trial_leaf, blk.test_leaf)
+        _scatter_block!(A, term, blk.test_leaf, blk.row_offset, blk.col_offset)
     end
-
-    tc, sc = blk
-    _check_block_meshes(term, first(trial_leaves[tc]), first(test_leaves[sc]))
-    _scatter_block!(A, term, first(test_leaves[sc]), last(test_leaves[sc]),
-        last(trial_leaves[tc]))
     return A
 end
 
@@ -503,23 +482,12 @@ end
 
 function _assemble_blocks_parallel!(A::SparseMatrixCSC, term::TERM, trial_leaves,
         test_leaves, dim_val::Val) where {TERM}
-    blk = block_of(term, length(trial_leaves), length(test_leaves))
-
-    if blk === nothing
-        for c in 1:min(length(trial_leaves), length(test_leaves))
-            _check_block_meshes(term, first(trial_leaves[c]), first(test_leaves[c]))
-            sp = first(test_leaves[c])
-            _sweep_bilinear!(A, sp, term, _bilinear_colour_strides(term, sp, dim_val),
-                last(test_leaves[c]), last(trial_leaves[c]))
-        end
-        return A
+    for blk in blocks(term, trial_leaves, test_leaves)
+        _check_block_meshes(term, blk.trial_leaf, blk.test_leaf)
+        _sweep_bilinear!(A, blk.test_leaf, term,
+            _bilinear_colour_strides(term, blk.test_leaf, dim_val),
+            blk.row_offset, blk.col_offset)
     end
-
-    tc, sc = blk
-    _check_block_meshes(term, first(trial_leaves[tc]), first(test_leaves[sc]))
-    sp = first(test_leaves[sc])
-    _sweep_bilinear!(A, sp, term, _bilinear_colour_strides(term, sp, dim_val),
-        last(test_leaves[sc]), last(trial_leaves[tc]))
     return A
 end
 
