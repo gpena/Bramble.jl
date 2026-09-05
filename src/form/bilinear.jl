@@ -373,6 +373,26 @@ function _assemble_bilinear_core!(A::SparseMatrixCSC, trial_space, test_space,
     return A
 end
 
+# One grid point's stencil, scattered into the matrix. The whole of what differs between
+# a serial sweep and a threaded one: both call this for each `I`, only the surrounding
+# `for` differs (serial `indices(Ωₕ)` vs. `Threads.@threads` over one colour's subgrid).
+# Any future change to how a stencil entry lands in the matrix (gpena/Bramble.jl#26) is
+# written once here rather than fitted into both drivers.
+@inline function _scatter_point!(A::SparseMatrixCSC, term::TERM, sp, I::CartesianIndex,
+        lin_indices, mesh_markers, row_offset::Int, col_offset::Int) where {TERM}
+    stencil = local_stencil(term, sp, I, mesh_markers, lin_indices[I])
+
+    for (off_u, off_v, weight) in stencil
+        Iv = I + CartesianIndex(off_v)
+        col = _trial_column(lin_indices, I, off_u)
+
+        if checkbounds(Bool, lin_indices, Iv) && col != 0
+            add_to_sparse!(A, lin_indices[Iv] + row_offset, col + col_offset, weight)
+        end
+    end
+    return nothing
+end
+
 # One term into one block, serially. `row_offset` comes from the test leaf and `col_offset`
 # from the trial leaf: a matrix row is indexed by the test function.
 function _scatter_block!(A::SparseMatrixCSC, term::TERM, sp, row_offset::Int,
@@ -382,16 +402,7 @@ function _scatter_block!(A::SparseMatrixCSC, term::TERM, sp, row_offset::Int,
     lin_indices = LinearIndices(indices(Ωₕ))
 
     @inbounds for I in indices(Ωₕ)
-        stencil = local_stencil(term, sp, I, mesh_markers, lin_indices[I])
-
-        for (off_u, off_v, weight) in stencil
-            Iv = I + CartesianIndex(off_v)
-            col = _trial_column(lin_indices, I, off_u)
-
-            if checkbounds(Bool, lin_indices, Iv) && col != 0
-                add_to_sparse!(A, lin_indices[Iv] + row_offset, col + col_offset, weight)
-            end
-        end
+        _scatter_point!(A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset)
     end
     return A
 end
@@ -439,16 +450,7 @@ end
 @noinline function _sweep_bilinear_colour!(A::SparseMatrixCSC, sp, term::TERM, idxs,
         lin_indices, mesh_markers, row_offset::Int, col_offset::Int) where {TERM}
     Threads.@threads for I in idxs
-        stencil = local_stencil(term, sp, I, mesh_markers, lin_indices[I])
-
-        for (off_u, off_v, weight) in stencil
-            Iv = I + CartesianIndex(off_v)
-            col = _trial_column(lin_indices, I, off_u)
-
-            if checkbounds(Bool, lin_indices, Iv) && col != 0
-                add_to_sparse!(A, lin_indices[Iv] + row_offset, col + col_offset, weight)
-            end
-        end
+        _scatter_point!(A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset)
     end
     return nothing
 end
