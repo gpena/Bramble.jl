@@ -166,6 +166,14 @@ if __bramble_with_unit_tests
             include("exporters/vtk_export.jl")
             include("exporters/pgfplots_export.jl")
         end
+
+        # End-to-end order of convergence for the worked examples, which the pages
+        # themselves compute but only render. 7 s for both problems across 1D/2D/3D --
+        # cheap enough to run on every push rather than sit behind a group, and it covers
+        # assemble/solve/boundary-conditions as a pipeline rather than operator by operator.
+        @testset "Worked examples" begin
+            include("examples/convergence.jl")
+        end
     end
 end
 
