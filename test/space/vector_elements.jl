@@ -774,7 +774,7 @@ end
 
 @testset "Tuple arithmetic" begin
     import Bramble: values, space_type, _find_vec_in_broadcast,
-                    _cell_average_kernel, _gauss_rule, VectorElement
+                    _gauss_rule, VectorElement
 
     Ωₕ = mesh(domain(interval(0.0, 1.0)), 6, true)
     W = gridspace(Ωₕ)
@@ -875,20 +875,6 @@ end
         @test all(values(u)[i] ≈ 1.0 for i in eachindex(values(u)) if marked[i])
         @test all(values(u)[i] == 0.0 for i in eachindex(values(u)) if !marked[i])
         @test any(marked)
-
-        # the nD kernel form is what the masked path uses. It takes the quadrature order
-        # and element type rather than a built rule, and builds it once.
-        k = _cell_average_kernel(x -> 1.0, half_points(Ωh), Val(3), Float64, Val(2))
-        @test k(first(indices(Ωh))) ≈ 1.0
-
-        # It carries the rule, deliberately, so it is the same size as a closure written to
-        # capture it by hand. Capturing avoids rebuilding the rule across different architectures.
-        nodes, wts = _gauss_rule(Val(3), Float64)
-        carrying = let f = (x -> 1.0), x = half_points(Ωh), nodes = nodes, wts = wts
-            idx -> Bramble._cell_average(f, x, idx, nodes, wts)
-        end
-        @test sizeof(k) == sizeof(carrying)
-        @test k(first(indices(Ωh))) ≈ carrying(first(indices(Ωh)))
     end
 end
 
@@ -906,7 +892,11 @@ end
         (sin, cos), x -> (sin(x), cos(x))),
         (
         "2D", mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 8), (true, false)),
-        (x -> sin(x[1]), x -> cos(x[2])), x -> (sin(x[1]), cos(x[2]))))
+        (x -> sin(x[1]), x -> cos(x[2])), x -> (sin(x[1]), cos(x[2]))),
+        (
+        "3D",
+        mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (5, 4, 6), (true, true, false)),
+        (x -> sin(x[1]), x -> cos(x[3])), x -> (sin(x[1]), cos(x[3]))))
         @testset "$lbl" begin
             Vₕ = gridspace(Ωₕ, Val(2))
 
@@ -924,6 +914,53 @@ end
             @test values(avgₕ(Vₕ, f_all; quad_points = 3)) ≈ values(from_tuple) rtol=1e-8
         end
     end
+end
+
+@testset "avgₕ! alternate calling conventions" begin
+    # `avgₕ!`'s keyword form (`quad_points`/`markers`) is what every other test in this
+    # file uses. Two other spellings exist underneath it and agree with it exactly: an
+    # explicit positional `Val(nq)` for a composite space (bypassing the keyword default),
+    # and a scalar element wrapped in a one-element tuple (the shape a one-component
+    # composite space's own dispatch produces) combined with the keyword form.
+    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 5), (true, true))
+    Vₕ = gridspace(Ωₕ, Val(2))
+    fs = (x -> sin(x[1]), x -> cos(x[2]))
+    f_all = x -> (sin(x[1]), cos(x[2]))
+
+    u_tuple = element(Vₕ)
+    avgₕ!(u_tuple, fs, Val(3))
+    @test values(u_tuple) ≈ values(avgₕ(Vₕ, fs; quad_points = 3))
+
+    u_single = element(Vₕ)
+    avgₕ!(u_single, f_all, Val(3))
+    @test values(u_single) ≈ values(avgₕ(Vₕ, f_all; quad_points = 3))
+
+    Wₕ = gridspace(mesh(domain(interval(0.0, 1.0)), 21, true))
+    v_tuple = element(Wₕ)
+    avgₕ!(v_tuple, (sin,); quad_points = 3)
+    @test values(v_tuple) ≈ values(avgₕ(Wₕ, sin; quad_points = 3))
+end
+
+@testset "_cell_average, generic-dimension dispatch" begin
+    import Bramble: _cell_average, _gauss_rule
+    nodes, wts = _gauss_rule(Val(3), Float64)
+
+    # `_cell_average`'s generic-D methods (scalar and composite): specialised 1D/2D/3D
+    # methods exist and take priority for any mesh this package actually builds, so these
+    # are checked directly at D = 4 rather than through avgₕ!/a mesh. Correctness, not
+    # just reachability: an affine function's cell average equals its value at the cell's
+    # midpoint, which is a property of the quadrature rule, not of the specific dimension.
+    x4 = ntuple(_ -> [0.0, 0.5, 1.0], Val(4))
+    idx4 = CartesianIndex(1, 1, 1, 1)
+    mid4 = ntuple(_ -> 0.25, Val(4))
+
+    f_affine(pt) = 1.0 + sum(pt)
+    s_scalar = _cell_average(f_affine, x4, idx4, nodes, wts)
+    @test s_scalar ≈ f_affine(mid4)
+
+    f_affine_vec(pt) = (1.0 + sum(pt), 2.0 * sum(pt))
+    s_vec = _cell_average(f_affine_vec, x4, idx4, nodes, wts, Val(2))
+    @test all(s_vec .≈ f_affine_vec(mid4))
 end
 
 @testset "Quadrature reuse" begin

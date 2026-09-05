@@ -106,6 +106,12 @@ end
         Wm = gridspace(Ωm)
         @test _matches_fd(a -> innerₕ(
             avgₕ(Wm, x -> a * sin(x); markers = (:left, :right)), Rₕ(Wm, x -> a * x)))
+
+        # `innerₕ`'s own `markers` keyword (not `avgₕ`'s, above), with one side Dual-valued
+        # and the other Float64: `_dot_masked` promotes rather than requiring both sides
+        # (and the weight vector) to already share one element type.
+        @test _matches_fd(a -> innerₕ(
+            element(Wm, a), Rₕ(Wm, x -> x); markers = (:left, :right)))
     end
 
     @testset "Difference, jump & average" begin

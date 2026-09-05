@@ -494,34 +494,6 @@ end
     return s
 end
 
-# Kernel form of the cell average: closes over the geometry so it can be handed to a
-# generic index loop.
-#
-# The quadrature rule is precomputed outside the kernel and captured as stack-allocated
-# tuples (`nodes`, `wts`). Pre-evaluating outside the loop avoids recomputing or
-# querying compiler-generated code inside the inner per-point evaluation loop, ensuring
-# zero per-point allocations across all platforms and thread dispatchers.
-@inline function _cell_average_kernel(f, x, nq::Val, ::Type{T}, ::Val{1}) where {T}
-    nodes, wts = _gauss_rule(nq, T)
-    return idx -> _cell_average(f, x, idx[1], nodes, wts)
-end
-@inline function _cell_average_kernel(f, x, nq::Val, ::Type{T}, ::Val{D}) where {D, T}
-    nodes, wts = _gauss_rule(nq, T)
-    return idx -> _cell_average(f, x, idx, nodes, wts)
-end
-
-# The composite form, one value per component.
-@inline function _cell_average_kernel(
-        f, x, nq::Val, ::Type{T}, ::Val{1}, ::Val{NC}) where {T, NC}
-    nodes, wts = _gauss_rule(nq, T)
-    return idx -> _cell_average(f, x, idx[1], nodes, wts, Val(NC))
-end
-@inline function _cell_average_kernel(
-        f, x, nq::Val, ::Type{T}, ::Val{D}, ::Val{NC}) where {D, T, NC}
-    nodes, wts = _gauss_rule(nq, T)
-    return idx -> _cell_average(f, x, idx, nodes, wts, Val(NC))
-end
-
 # The one-dimensional composite case. A 1D mesh answers `half_points` with a plain vector
 # rather than a one-tuple of vectors, so the D-dimensional method below does not match it
 # and this one is needed: without it, `avgₕ!` on a composite space over a 1D mesh, given a

@@ -126,4 +126,46 @@ using Bramble
             @test readlines(f)[1] == "x u"
         end
     end
+
+    @testset "Filename already has a recognised extension" begin
+        # Every other testset writes to an extension-less path, always taking
+        # `_pgf_filename`'s "append .dat" branch; a name that already ends in one of the
+        # recognised extensions must come back unchanged instead of doubly-suffixed.
+        Ωₕ = mesh(domain(interval(0.0, 1.0)), 4, true)
+        Wₕ = gridspace(Ωₕ)
+        uₕ = Rₕ(Wₕ, sin)
+        mktempdir() do dir
+            for ext in (".dat", ".txt", ".tsv", ".csv")
+                path = joinpath(dir, "t" * ext)
+                f = export_pgfplots(path, Ωₕ, "u" => uₕ)
+                @test f == path
+            end
+        end
+    end
+
+    @testset "2D field data as a plain array, not a VectorElement" begin
+        # Every other 2D testset passes a VectorElement; `_pgf_grid` also accepts a plain
+        # matrix (already shaped like the grid) or a plain vector (reshaped to it), each
+        # with its own size/length check.
+        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (3, 4), (true, true))
+        x, y = points(Ωₕ)
+        Z = [xi + 10yj for xi in x, yj in y]   # already (nx, ny)-shaped
+
+        mktempdir() do dir
+            f_mat = export_pgfplots(joinpath(dir, "m"), Ωₕ, "u" => Z)
+            f_vec = export_pgfplots(joinpath(dir, "v"), Ωₕ, "u" => vec(Z))
+            @test read(f_mat, String) == read(f_vec, String)
+
+            # and matches the VectorElement route for the same underlying values
+            Wₕ = gridspace(Ωₕ)
+            uₕ = Rₕ(Wₕ, x -> x[1] + 10x[2])
+            f_ref = export_pgfplots(joinpath(dir, "r"), Ωₕ, "u" => uₕ)
+            @test read(f_mat, String) == read(f_ref, String)
+
+            @test_throws "has size (2, 4), but the mesh has (3, 4) points" export_pgfplots(
+                joinpath(dir, "bad"), Ωₕ, "u" => Z[1:2, :])
+            @test_throws "has length 11, but the mesh has 12 points" export_pgfplots(
+                joinpath(dir, "bad2"), Ωₕ, "u" => vec(Z)[1:11])
+        end
+    end
 end

@@ -79,14 +79,23 @@ using WriteVTK
         end
     end
 
-    # Not tested here: what `export_vtk` does when WriteVTK has not been loaded. Once this
-    # file's `using WriteVTK` above runs, the extension is active for the rest of this
-    # process: multiple dispatch has already resolved `_export_vtk`'s specialization over
-    # its `::Any` fallback for any `AbstractMeshType` argument, permanently, since Julia does
-    # not un-load a method. Reproducing the unloaded case honestly needs a subprocess that
-    # never touches WriteVTK, which nothing else in test/ does (only benchmark/benchmarks.jl
-    # spawns Julia, for timing), which is disproportionate machinery for one error string.
-    # Checked by hand instead: `export_vtk("x", Ωₕ)` without `using WriteVTK` gives
-    # "export_vtk requires WriteVTK.jl. Add `using WriteVTK` before calling this function.",
-    # which is also in the docstring's own words.
+    # Not tested via the public `export_vtk`: what it does when WriteVTK has not been
+    # loaded. Once this file's `using WriteVTK` above runs, the extension is active for the
+    # rest of this process: multiple dispatch has already resolved `_export_vtk`'s
+    # specialization over its `::Any` fallback for any `AbstractMeshType` argument,
+    # permanently, since Julia does not un-load a method. Reproducing the unloaded case
+    # honestly needs a subprocess that never touches WriteVTK, which nothing else in test/
+    # does (only benchmark/benchmarks.jl spawns Julia, for timing), which is disproportionate
+    # machinery for one error string. Checked by hand instead: `export_vtk("x", Ωₕ)` without
+    # `using WriteVTK` gives "export_vtk requires WriteVTK.jl. Add `using WriteVTK` before
+    # calling this function.", which is also in the docstring's own words.
+    #
+    # The fallback stub itself is still directly reachable, though: the extension's method
+    # is a strict *specialization* of `_export_vtk(::AbstractString, ::Any, ::Pair...)` over
+    # `::AbstractMeshType`, not a replacement of it, so a second positional argument that is
+    # not an `AbstractMeshType` still resolves to the generic stub regardless of whether
+    # WriteVTK is loaded.
+    @testset "Fallback stub, called directly" begin
+        @test_throws "export_vtk requires WriteVTK.jl" Bramble._export_vtk("x", 42)
+    end
 end
