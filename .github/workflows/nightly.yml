@@ -42,6 +42,18 @@ jobs:
     name: Julia ${{ matrix.version }} (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    # `nightly` is an unreleased Julia that changes daily, so it reports rather than gates:
+    # a red leg there is a signal to look, not a broken package. Everything Bramble
+    # actually supports — 1.12, and the next release while it is in prerelease — still
+    # fails the workflow.
+    #
+    # Concretely, on 2026-09-05 the 1.14-dev legs began reporting 16 bytes where
+    # `evaluate!` allocates 0 on both 1.12 and 1.13.0-prerelease (test/form/linear.jl:51).
+    # That is the allocation guarantee working as designed — see the note above
+    # `@test_allocs` in test/runtests.jl, which says a future Julia perturbing these counts
+    # should fail loudly rather than quietly skip — but it is upstream news, not a defect
+    # here, and it should not turn the whole nightly run red.
+    continue-on-error: ${{ matrix.version == 'nightly' }}
     permissions:
       contents: read
       id-token: write

@@ -382,7 +382,7 @@ Internal helper to apply Dirichlet boundary conditions to matrix `A` at the indi
 in `index_in_marker`: each marked row is zeroed and its diagonal set to one.
 
 Costs the boundary cardinality, not `ndofs` — the marked indices are walked with
-[`_each_marked`](@ref) rather than scanned for.
+`_each_marked` rather than scanned for.
 """
 function _dirichlet_bc_indices!(A::AbstractMatrix, index_in_marker::BitVector)
     T = eltype(A)
