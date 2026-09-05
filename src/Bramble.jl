@@ -9,7 +9,7 @@ import Base: show, first, last, getindex, setindex!, iterate, size, firstindex,
 using SparseArrays: SparseMatrixCSC, spdiagm, spzeros,
                     rowvals, nonzeros, nzrange, sparse, sparse!
 
-using LinearAlgebra: I, dot
+using LinearAlgebra: I, dot, mul!
 import LinearAlgebra: issymmetric, isposdef
 
 import Base: copy

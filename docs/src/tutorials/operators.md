@@ -588,6 +588,18 @@ either space's own backend `matrix_type`: unlike the shift-based matrices above,
 destination point's source cell has no regular diagonal structure to exploit, so `P` is
 assembled directly from `locate_cell` rather than composed from `shift`.
 
+`πₕ!(dest, src)` re-locates every destination point's cell on every call, which is wasted
+work when the same two meshes are interpolated between repeatedly (a time loop moving a
+coefficient across two composite leaves, say). Build `P` once and pass it to `πₕ!` instead:
+zero allocations, no `locate_cell` search, just `mul!` under the hood — the same "build the
+pattern once" split [`allocate_system_matrix`](@ref)/[`assemble!`](@ref) already use.
+
+```@repl operators
+dest2 = similar(dest);
+πₕ!(dest2, P, src);
+values(dest2) ≈ values(dest)
+```
+
 ### Composing symbolically, inside a form
 
 The same name, one argument fewer, is also the symbolic counterpart: `πₕ(uₕ)` wraps a grid

@@ -97,6 +97,55 @@ using Bramble
         @test all(≈(1), vec(sum(P2, dims = 2)))
     end
 
+    @testset "πₕ! against a precomputed interpolation_matrix (#14)" begin
+        # The whole point of building P once: this must agree with the pointwise path
+        # (which re-locates every destination point's cell on every call) to the last bit,
+        # not merely approximately -- same reasoning as "Matrix agreement" above, one level
+        # up (the in-place operator, not the raw matrix product).
+        Ω1dest = mesh(domain(interval(0.0, 1.0)), 9, false)
+        Ω1src = mesh(domain(interval(0.0, 1.0)), 5, true)
+        W1dest, W1src = gridspace(Ω1dest), gridspace(Ω1src)
+        src1 = Rₕ(W1src, x -> sin(3x) + x^2)
+        P1 = interpolation_matrix(W1dest, W1src)
+
+        dest1 = similar(πₕ(W1dest, src1))
+        returned = πₕ!(dest1, P1, src1)
+        @test returned === dest1
+        @test values(dest1) ≈ values(πₕ(W1dest, src1))
+
+        Ω2dest = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (11, 9), (true, true))
+        Ω2src = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (4, 6), (true, true))
+        W2dest, W2src = gridspace(Ω2dest), gridspace(Ω2src)
+        src2 = Rₕ(W2src, x -> x[1] * x[2] + x[1])
+        P2 = interpolation_matrix(W2dest, W2src)
+
+        dest2 = similar(πₕ(W2dest, src2))
+        πₕ!(dest2, P2, src2)
+        @test values(dest2) ≈ values(πₕ(W2dest, src2))
+
+        @testset "Tracks a live-updated src across repeated calls" begin
+            for factor in (1.0, 2.5, -1.0)
+                Rₕ!(src2, x -> factor * (x[1] * x[2] + x[1]))
+                πₕ!(dest2, P2, src2)
+                @test values(dest2) ≈ values(πₕ(W2dest, src2))
+            end
+        end
+
+        @testset "Zero allocations" begin
+            function _bytes(dest, P, src)
+                πₕ!(dest, P, src)
+                return @allocated πₕ!(dest, P, src)
+            end
+            @test _bytes(dest2, P2, src2) == 0
+        end
+
+        @testset "A mismatched P throws DimensionMismatch" begin
+            Wwrong = gridspace(mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (3, 3), (
+                true, true)))
+            @test_throws DimensionMismatch πₕ!(Bramble.element(Wwrong), P2, src2)
+        end
+    end
+
     @testset "Operator composition" begin
         # once πₕ returns an ordinary VectorElement, every existing numeric
         # operator just works on it with no separate mechanism needed.

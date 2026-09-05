@@ -102,9 +102,41 @@ mesh points, providing the in-place numeric interpolation operator named after t
 not only at `src`'s own grid points), so this is equivalent to `Rₕ!(dest, x -> interpolate_at(src, x))`.
 `dest` and `src` may be built over entirely different meshes. `Rₕ!` handles evaluating the interpolant
 at each of `dest`'s grid points, following `dest`'s backend [`execution_policy`](@ref).
+
+Every call here re-locates, via [`locate_cell`](@ref), which cell of `src`'s mesh each of
+`dest`'s points falls in. Interpolating repeatedly between the same two meshes (a time loop
+transferring a coefficient between two composite leaves, say) should build that once instead:
+see the [`interpolation_matrix`](@ref)-based method below, following the same "build the
+pattern once" shape [`allocate_system_matrix`](@ref)/[`assemble!`](@ref) already use.
 """
 @inline πₕ!(dest::VectorElement, src::VectorElement) = Rₕ!(
     dest, x -> interpolate_at(src, x))
+
+"""
+    πₕ!(dest::VectorElement, P::SparseMatrixCSC, src::VectorElement) -> VectorElement
+
+Fills `dest` via a precomputed [`interpolation_matrix`](@ref) `P` instead of re-locating
+each destination point's cell: `values(dest) .= P * values(src)`, computed in place via
+`mul!` (zero allocations, once `P` and `dest` already exist).
+
+`P` must be `interpolation_matrix(space(dest), space(src))` (or an equal-shape matrix
+built the same way) -- a mismatched size throws the usual `DimensionMismatch` from `mul!`.
+Repeated interpolation between the same two meshes should build `P` once and reuse it here
+every subsequent call, exactly as `allocate_system_matrix`/`assemble!` split the sparsity
+pattern (expensive, built once) from refilling values (cheap, every step):
+
+```julia
+P = interpolation_matrix(space(dest), space(src))
+for step in 1:nsteps
+    Rₕ!(src, coefficient_at(step))
+    πₕ!(dest, P, src)   # no locate_cell search, zero allocations
+end
+```
+"""
+@inline function πₕ!(dest::VectorElement, P::SparseMatrixCSC, src::VectorElement)
+    mul!(values(dest), P, values(src))
+    return dest
+end
 
 """
     πₕ(Wₕ::ScalarGridSpace, src::VectorElement) -> VectorElement
