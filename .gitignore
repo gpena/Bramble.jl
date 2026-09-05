@@ -106,3 +106,11 @@ docs/manual_design_preview.html
 # Working notes for the form-layer unlock, paired with the tracker artifact. Kept out of
 # version control by request: the history and the open questions live here, not on GitHub.
 docs/form-unlock-plan.md
+
+# Agent instructions and the standards index they point into, kept local alongside
+# .agents/ and .claude/ above. Both are about *working on* the package, and both index
+# into .agents/skills/, which is itself untracked — tracking a map to files nobody else
+# has would only mislead. CONTEXT.md stays tracked: it is the domain vocabulary, and that
+# is about the package itself.
+CLAUDE.md
+STANDARDS.md
