@@ -65,9 +65,15 @@ _Avoid_: solution vector, DOF vector, array
 Acceptable synonym for vector element, and the one the docstrings use in mathematical prose.
 
 **Leaf space**:
-One scalar component of a composite space, numbered by its depth-first position — the same
-order `u(1)`, `u(2)` address. Velocity and pressure in a Stokes system are two leaves.
+One scalar component of a composite space, numbered by its depth-first position. Velocity and
+pressure in a Stokes system are two leaves. Assembly and the Dirichlet path address leaves,
+through `leaf_spaces_offsets`.
 _Avoid_: component (used for the `components` keyword, which *selects* leaves), field, block
+
+⚠️ **Leaf numbering and `u(i)` are not the same scheme.** `u(i)` and `components(u)` address
+*immediate* subspaces, not leaves. On a flat composite the two coincide; on a nested one
+(`(W × W) × W`) they do not, and that divergence is a live defect — see
+[#64](https://github.com/gpena/Bramble.jl/issues/64). Say which you mean until it is fixed.
 
 **Backend**:
 Where a space's arrays live and how they are iterated, carrying the execution policy
