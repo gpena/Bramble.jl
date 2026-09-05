@@ -233,6 +233,32 @@ using LinearAlgebra: I as LinearAlgebraI
         @testset "Component argument type" begin
             @test_throws ErrorException dirichlet_bc!(_eye(nV), Vₕ, :bottom; components = :left)
         end
+
+        @testset "Nested composite (#64)" begin
+            # `dirichlet_components` is leaf-indexed (via `leaf_spaces_offsets`); `uₕ(i)`
+            # used to be indexed by *immediate* child instead. On a flat space like `Vₕ`
+            # above the two coincide, which is why nothing here caught it: `(Wₕ × Wₕ) × Wₕ`
+            # has 2 immediate children but 3 leaves, and before the fix `components = 3`
+            # validated fine while `u(3)` raised a `BoundsError` on the same space.
+            Vn = (Wₕ × Wₕ) × Wₕ
+            nVn = ndofs(Vn)
+            @test nVn == 3nW
+
+            A = _eye(nVn)
+            @test dirichlet_bc!(A, Vn, :bottom; components = 3) === A
+            for i in 1:nW
+                row = 2nW + i          # leaf 3's offset, per leaf_spaces_offsets
+                if marked[i]
+                    @test A[row, row] == 1.0
+                    @test count(!=(0.0), A[row, :]) == 1
+                end
+            end
+            @test A[1:(2nW), :] == _eye(nVn)[1:(2nW), :]   # leaves 1, 2 untouched
+
+            un = element(Vn, 0.0)
+            @test length(values(un(3))) == nW    # was a BoundsError before the fix
+            @test_throws BoundsError un(4)
+        end
     end
 
     @testset "Evaluation points" begin

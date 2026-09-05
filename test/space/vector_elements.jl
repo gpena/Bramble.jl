@@ -498,6 +498,107 @@ end
         @test_throws BoundsError component_range(V, 3)
     end
 
+    @testset "Nested composite spaces (#64)" begin
+        # `×` deliberately nests (`(W5 × W9) × W9`), so the leaves underneath are not the
+        # space's own immediate children -- `spaces(Wn)` has 2 entries, the leaves have 3.
+        # Before this fix, `uₕ(i)`/`components`/`component_range` walked the immediate
+        # children (`component_ranges`), while assembly and `dirichlet_components` walked
+        # the leaves (`leaf_spaces_offsets`); the two disagreed the moment a space nested.
+        # This checks the element-level accessors agree with `leaf_spaces_offsets`
+        # directly, which is the ground truth assembly already uses correctly.
+        Wn = (W5 × W9) × W9
+        leaves = Bramble.leaf_spaces_offsets(Wn)
+        @test length(leaves) == 3                      # not 2 (the immediate-child count)
+        @test Bramble.n_leaf_spaces(Wn) == 3
+        @test ndofs.(first.(leaves)) == (5, 9, 9)
+        @test component_ranges(Wn) == (1:5, 6:14, 15:23)
+        @test component_range(Wn, 3) == 15:23
+        @test_throws BoundsError component_range(Wn, 4)
+
+        un = element(Wn, 0.0)
+        values(un) .= 1:23
+        @test values(un(1)) == 1:5
+        @test values(un(2)) == 6:14
+        @test values(un(3)) == 15:23                    # was a BoundsError before the fix
+        @test_throws BoundsError un(4)
+
+        comps = components(un)
+        @test length(comps) == 3
+        @test all(values(comps[i]) == values(un(i)) for i in 1:3)
+
+        # Restriction and cell-averaging, one function per leaf: independent of shared
+        # structure, so this exercises the heterogeneous nesting directly.
+        r1 = element(Wn)
+        Rₕ!(r1, (x -> 1.0, x -> 2.0, x -> 3.0))
+        @test values(r1(1)) == fill(1.0, 5)
+        @test values(r1(3)) == fill(3.0, 9)
+
+        a1 = element(Wn)
+        avgₕ!(a1, (x -> 1.0, x -> 2.0, x -> 3.0))
+        @test all(≈(1.0), values(a1(1)))
+        @test all(≈(3.0), values(a1(3)))
+
+        # Masked, one function per leaf, on the heterogeneous nesting.
+        r3 = element(Wn)
+        Rₕ!(r3, (x -> 10.0, x -> 20.0, x -> 30.0); markers = (:boundary,))
+        @test values(r3(1)) == [10.0, 0.0, 0.0, 0.0, 10.0]
+        a3 = element(Wn)
+        avgₕ!(a3, (x -> 10.0, x -> 20.0, x -> 30.0); markers = (:boundary,))
+        @test a3(1).data[1] ≈ 10.0 && a3(1).data[end] ≈ 10.0
+        @test all(iszero, a3(1).data[2:(end - 1)])
+
+        # The single vector-valued-function form (`f(x) -> (v1, v2, v3)`, one call per
+        # point) reads `mesh(Wₕ)`, which is the *first leaf's* mesh regardless of nesting
+        # (`mesh(Wₕ::CompositeGridSpace) = mesh(first_space(Wₕ))`), and so only ever visits
+        # as many points as that leaf has. That is a real, pre-existing requirement that
+        # every leaf share one mesh -- unrelated to #64, and not something this fix changes
+        # or is meant to lift -- so it is checked here on a *homogeneous* nesting (three
+        # leaves of the same W9 mesh), where the tuple-of-functions and vector-function
+        # forms agree, rather than on the heterogeneous `Wn` above, where they cannot.
+        Wn2 = (W9 × W9) × W9
+        r4 = element(Wn2)
+        r5 = element(Wn2)
+        Rₕ!(r4, (x -> 1.0, x -> 2.0, x -> 3.0))
+        Rₕ!(r5, x -> (1.0, 2.0, 3.0))
+        @test values(r4) == values(r5)
+
+        a4 = element(Wn2)
+        a5 = element(Wn2)
+        avgₕ!(a4, (x -> 1.0, x -> 2.0, x -> 3.0))
+        avgₕ!(a5, x -> (1.0, 2.0, 3.0))
+        @test values(a4) ≈ values(a5)
+
+        # Difference operators, on the homogeneous nesting: `_apply_componentwise!` used to
+        # recurse once per *immediate* child, so a nested composite's second child (itself a
+        # CompositeGridSpace, not a ScalarGridSpace) had no `_apply_stencil!` method to
+        # dispatch to at all -- this failed outright before the fix, rather than computing
+        # a wrong answer. (Not run on the heterogeneous `Wn`: `D₋ₓ` derives its grid spacing
+        # once from `mesh(Wₕ)`, the same first-leaf-only mesh noted above, so it shares that
+        # same pre-existing, unrelated requirement that every leaf's mesh agree.)
+        un2 = element(Wn2, 0.0)
+        Rₕ!(un2, (x -> sin(x[1]), x -> cos(x[1]), x -> x[1]^2))
+        Dn2 = D₋ₓ(un2)
+        @test values(Dn2(1)) == values(D₋ₓ(un2(1)))
+        @test values(Dn2(2)) == values(D₋ₓ(un2(2)))
+        @test values(Dn2(3)) == values(D₋ₓ(un2(3)))
+
+        # innerₕ sums leaf by leaf: 3 leaves of constant 1, 2, 3 against all-ones, over a
+        # mesh whose cell measures sum to 1 per leaf, gives 1+2+3 = 6 exactly. Runs on the
+        # heterogeneous `Wn`, since innerₕ has no shared-mesh requirement of its own.
+        u_const = element(Wn)
+        v_ones = element(Wn)
+        Rₕ!(u_const, (x -> 1.0, x -> 2.0, x -> 3.0))
+        Rₕ!(v_ones, (x -> 1.0, x -> 1.0, x -> 1.0))
+        @test innerₕ(u_const, v_ones) ≈ 6.0
+
+        # The leaf-count mismatch check has to compare leaf counts, not the space's own
+        # structural type parameter -- two spaces can share that parameter (both are
+        # `CompositeGridSpace{2}`) while nesting differently and so having different leaf
+        # counts.
+        Wflat2 = W5 × W9
+        @test_throws DimensionMismatch innerₕ(element(Wn, 0.0), element(Wflat2, 0.0))
+    end
+
     @testset "Vector vs component functions" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (8, 8))
         W = gridspace(Ωₕ)

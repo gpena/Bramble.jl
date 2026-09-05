@@ -87,22 +87,22 @@ See also: [`avgₕ`](@ref), [`Rₕ!`](@ref).
 @inline avgₕ!(uₕ::VectorElement{<:ScalarGridSpace{D}}, f::F) where {D, F} = _avgₕ!(
     uₕ, f, Val(D), Val(AVG_QUAD_POINTS))
 
-@inline avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::Tuple) where {NC} = _avgₕ!(
+@inline avgₕ!(uₕ::VectorElement{<:CompositeGridSpace}, f::Tuple) = _avgₕ!(
     uₕ, f, Val(dim(mesh(space(uₕ)))), Val(AVG_QUAD_POINTS))
 
-@inline avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::F) where {NC, F} = _avgₕ!(
+@inline avgₕ!(uₕ::VectorElement{<:CompositeGridSpace}, f::F) where {F} = _avgₕ!(
     uₕ, f, Val(dim(mesh(space(uₕ)))), Val(AVG_QUAD_POINTS))
 
 @inline avgₕ!(uₕ::VectorElement{<:ScalarGridSpace{D}}, f::F, nq::Val{NQ}) where {
     D, F, NQ} = _avgₕ!(
     uₕ, f, Val(D), nq)
 
-@inline avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::Tuple, nq::Val{NQ}) where {
-    NC, NQ} = _avgₕ!(
+@inline avgₕ!(uₕ::VectorElement{<:CompositeGridSpace}, f::Tuple, nq::Val{NQ}) where {
+    NQ} = _avgₕ!(
     uₕ, f, Val(dim(mesh(space(uₕ)))), nq)
 
-@inline avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::F, nq::Val{NQ}) where {
-    NC, F, NQ} = _avgₕ!(
+@inline avgₕ!(uₕ::VectorElement{<:CompositeGridSpace}, f::F, nq::Val{NQ}) where {
+    F, NQ} = _avgₕ!(
     uₕ, f, Val(dim(mesh(space(uₕ)))), nq)
 
 # A one-component space is a scalar space, so an NC-tuple of functions with
@@ -192,18 +192,26 @@ end
     return uₕ
 end
 
-# Composite space: one function per component
-@inline function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}},
-        f::Tuple, ::Val{D}, nq::Val{NQ}) where {NC, D, NQ}
+# Composite space: one function per *leaf* (`components` flattens any nesting), so this
+# needs no leaf count of its own beyond `length(components(uₕ))`. `ntuple` over that count,
+# indexing into the two tuples inside the closure, rather than `map(f, t1, t2)` directly:
+# measured, the two are not equivalent here. A closure capturing `Val(D)`/`nq` alongside the
+# tuples and passed to two-tuple `map` boxes (192 B where 0 were measured before), while the
+# same closure body run through `ntuple`'s index does not. `Rₕ!`/`innerₕ`'s composite paths
+# use two-tuple `map` too and were measured clean, so this is not "avoid map on composites" —
+# only this specific shape, with `Val(D)` reconstructed inside the closure, needs the
+# `ntuple` form.
+@inline function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace},
+        f::Tuple, ::Val{D}, nq::Val{NQ}) where {D, NQ}
     comps = components(uₕ)
-    ntuple(i -> _avgₕ!(comps[i], f[i], Val(D), nq), Val(NC))
+    ntuple(i -> (_avgₕ!(comps[i], f[i], Val(D), nq); nothing), Val(length(comps)))
     return uₕ
 end
 
-@inline function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}},
-        f::Tuple, ::Val{1}, nq::Val{NQ}) where {NC, NQ}
+@inline function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace},
+        f::Tuple, ::Val{1}, nq::Val{NQ}) where {NQ}
     comps = components(uₕ)
-    ntuple(i -> _avgₕ!(comps[i], f[i], Val(1), nq), Val(NC))
+    ntuple(i -> (_avgₕ!(comps[i], f[i], Val(1), nq); nothing), Val(length(comps)))
     return uₕ
 end
 
@@ -231,15 +239,19 @@ end
     F, X, IX, NQ, T, NC})(i) where {F, X, IX, NQ, T, NC} = _cell_average(
     k.f, k.x, k.idxs[i], k.nodes, k.wts, Val(NC))
 
-# Composite space: single vector-valued function returning all components
-@inline function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f, ::Val{1}, nq::Val{NQ}) where {
-        NC, NQ}
+# Composite space: single vector-valued function returning all components. `NC` here is
+# the space's *leaf* count (`length(comps)`, over `components`, which flattens any nesting),
+# not the space's own structural type parameter — the two agree for a flat composite and
+# disagree for a nested one, and it is `f`'s return shape that has to match the former.
+@inline function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace}, f, ::Val{1}, nq::Val{NQ}) where {
+        NQ}
     sp = space(uₕ)
     Ωₕ = mesh(sp)
     x = half_points(Ωₕ)
     T = eltype(Ωₕ)
     comps = components(uₕ)
-    raws = ntuple(i -> values(comps[i]), Val(NC))
+    raws = map(values, comps)
+    NC = length(comps)
     idxs = indices(Ωₕ)
     n = length(idxs)
     nodes, wts = _gauss_rule(nq, T)
@@ -251,14 +263,15 @@ end
     return uₕ
 end
 
-@inline function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f, ::Val{D}, nq::Val{NQ}) where {
-        NC, D, NQ}
+@inline function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace}, f, ::Val{D}, nq::Val{NQ}) where {
+        D, NQ}
     sp = space(uₕ)
     Ωₕ = mesh(sp)
     x = half_points(Ωₕ)
     T = eltype(Ωₕ)
     comps = components(uₕ)
-    raws = ntuple(i -> values(comps[i]), Val(NC))
+    raws = map(values, comps)
+    NC = length(comps)
     idxs = indices(Ωₕ)
     n = length(idxs)
     nodes, wts = _gauss_rule(nq, T)
@@ -316,27 +329,36 @@ end
     return uₕ
 end
 
-@inline function _avg_masked!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::Tuple,
-        markers::NTuple{N, Symbol}, ::Val{D}, nq::Val{NQ}) where {NC, N, D, NQ}
+# `ntuple` indexing rather than two-tuple `map`, for the reason given above `_avgₕ!`'s
+# composite Tuple methods: measured, a closure capturing `markers` and reconstructing
+# `Val(D)` boxes when passed to `map(f, t1, t2)` but not when run through `ntuple`'s index.
+@inline function _avg_masked!(uₕ::VectorElement{<:CompositeGridSpace}, f::Tuple,
+        markers::NTuple{N, Symbol}, ::Val{D}, nq::Val{NQ}) where {N, D, NQ}
     comps = components(uₕ)
-    ntuple(i -> _avg_masked!(comps[i], f[i], markers, Val(D), nq), Val(NC))
+    ntuple(i -> (_avg_masked!(comps[i], f[i], markers, Val(D), nq); nothing),
+        Val(length(comps)))
     return uₕ
 end
 
-@inline function _avg_masked!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::Tuple,
-        markers::NTuple{N, Symbol}, ::Val{1}, nq::Val{NQ}) where {NC, N, NQ}
+@inline function _avg_masked!(uₕ::VectorElement{<:CompositeGridSpace}, f::Tuple,
+        markers::NTuple{N, Symbol}, ::Val{1}, nq::Val{NQ}) where {N, NQ}
     comps = components(uₕ)
-    ntuple(i -> _avg_masked!(comps[i], f[i], markers, Val(1), nq), Val(NC))
+    ntuple(i -> (_avg_masked!(comps[i], f[i], markers, Val(1), nq); nothing),
+        Val(length(comps)))
     return uₕ
 end
 
-@inline function _avg_masked!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::F,
-        markers::NTuple{N, Symbol}, ::Val{1}, nq::Val{NQ}) where {NC, F, N, NQ}
+# `NC` is the space's *leaf* count (see the note on the unmasked _avgₕ! above): the number
+# of values `f` must return per point, which is `length(comps)`, not the space's own
+# structural type parameter.
+@inline function _avg_masked!(uₕ::VectorElement{<:CompositeGridSpace}, f::F,
+        markers::NTuple{N, Symbol}, ::Val{1}, nq::Val{NQ}) where {F, N, NQ}
     Ωₕ = mesh(space(uₕ))
     x = half_points(Ωₕ)
     T = eltype(Ωₕ)
     comps = components(uₕ)
-    raws = ntuple(i -> values(comps[i]), Val(NC))
+    raws = map(values, comps)
+    NC = length(comps)
     idxs = indices(Ωₕ)
     n = length(idxs)
     nodes, wts = _gauss_rule(nq, T)
@@ -356,13 +378,14 @@ end
     return uₕ
 end
 
-@inline function _avg_masked!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::F,
-        markers::NTuple{N, Symbol}, ::Val{D}, nq::Val{NQ}) where {NC, F, N, D, NQ}
+@inline function _avg_masked!(uₕ::VectorElement{<:CompositeGridSpace}, f::F,
+        markers::NTuple{N, Symbol}, ::Val{D}, nq::Val{NQ}) where {F, N, D, NQ}
     Ωₕ = mesh(space(uₕ))
     x = half_points(Ωₕ)
     T = eltype(Ωₕ)
     comps = components(uₕ)
-    raws = ntuple(i -> values(comps[i]), Val(NC))
+    raws = map(values, comps)
+    NC = length(comps)
     idxs = indices(Ωₕ)
     n = length(idxs)
     nodes, wts = _gauss_rule(nq, T)

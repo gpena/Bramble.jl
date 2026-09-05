@@ -262,11 +262,13 @@ end
     return nothing
 end
 
-# `f!` is the single-component applicator; it is called once per component.
-@inline function _apply_componentwise!(f!, vₕ::VectorElement{<:CompositeGridSpace{NC}},
-        uₕ::VectorElement{<:CompositeGridSpace{NC}}) where {NC}
-    vc, uc = components(vₕ), components(uₕ)
-    ntuple(i -> (f!(vc[i], uc[i]); nothing), Val(NC))
+# `f!` is the single-component applicator; it is called once per *leaf* (`components`
+# flattens any nesting), so this needs no component count of its own — `map` over the two
+# tuples `components` returns unrolls exactly as the old `ntuple(…, Val(NC))` did, and stays
+# correct regardless of how deeply either space nests.
+@inline function _apply_componentwise!(f!, vₕ::VectorElement{<:CompositeGridSpace},
+        uₕ::VectorElement{<:CompositeGridSpace})
+    map(f!, components(vₕ), components(uₕ))
     return nothing
 end
 

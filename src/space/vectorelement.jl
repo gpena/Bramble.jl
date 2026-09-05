@@ -29,7 +29,8 @@ Reshapes the flat coefficient vector of `uₕ` into a multidimensional array tha
 """
 @inline to_matrix(uₕ::VectorElement{<:ScalarGridSpace}) = Base.ReshapedArray(
     values(uₕ), npoints(mesh(space(uₕ)), Tuple), ())
-@inline to_matrix(uₕ::VectorElement{<:CompositeGridSpace{N}}) where {N} = ntuple(i -> to_matrix(uₕ(i)), Val(N))
+@inline to_matrix(uₕ::VectorElement{<:CompositeGridSpace}) = map(
+    v -> to_matrix(v), components(uₕ))
 
 """
     values!(uₕ::VectorElement, s) -> uₕ
@@ -82,29 +83,33 @@ See also: [`space`](@ref), [`VectorElement`](@ref)
 # ==============================================================================
 
 """
-    component_range(Wₕ::CompositeGridSpace{N}, i::Int) where N -> UnitRange{Int}
+    component_range(Wₕ::CompositeGridSpace, i::Int) -> UnitRange{Int}
 
-Returns the degree-of-freedom index range for the `i`-th constituent space of composite space `Wₕ`.
+Returns the degree-of-freedom index range for the `i`-th **leaf** of composite space `Wₕ`,
+numbered depth-first (see [`leaf_spaces_offsets`](@ref)) — the same numbering `uₕ(i)` and
+[`dirichlet_components`](@ref dirichlet_bc!) use, so it agrees with them regardless of how
+deeply `Wₕ` nests.
 """
-@inline function component_range(Wₕ::CompositeGridSpace{N}, i::Int) where {N}
-    @boundscheck (1 <= i <= N) || throw(BoundsError(Wₕ, i))
-    return @inbounds component_ranges(Wₕ)[i]
+@inline function component_range(Wₕ::CompositeGridSpace, i::Int)
+    leaves = leaf_spaces_offsets(Wₕ)
+    @boundscheck (1 <= i <= length(leaves)) || throw(BoundsError(Wₕ, i))
+    sp, offset = @inbounds leaves[i]
+    return (offset + 1):(offset + ndofs(sp))
 end
 
 """
-    component_ranges(Wₕ::CompositeGridSpace{N}) where N -> NTuple{N, UnitRange{Int}}
+    component_ranges(Wₕ::CompositeGridSpace) -> NTuple{n_leaf_spaces(Wₕ), UnitRange{Int}}
 
-Returns an `NTuple{N, UnitRange{Int}}` containing the degree-of-freedom ranges for all `N` components.
+Returns the degree-of-freedom ranges for every **leaf** of `Wₕ`, depth-first — see
+[`component_range`](@ref).
 """
-@inline function component_ranges(Wₕ::CompositeGridSpace{N}) where {N}
-    subs = spaces(Wₕ)
-    # `ntuple` over `Val(N)` and `cumsum` on a tuple both unroll, so this is a
-    # handful of adds with no loop and no allocation. Sizes are summed rather
-    # than assumed equal: subspaces of the same *type* can still hold different
-    # numbers of degrees of freedom, so nothing here may be inferred from types.
-    ns = ntuple(i -> ndofs(subs[i]), Val(N))
-    stops = cumsum(ns)
-    return ntuple(i -> (stops[i] - ns[i] + 1):stops[i], Val(N))
+@inline function component_ranges(Wₕ::CompositeGridSpace)
+    # `map` over `leaf_spaces_offsets(Wₕ)` unrolls exactly as the old `ntuple(…, Val(N))`
+    # did: the tuple it walks is built by compile-time recursion (leaf_spaces_offsets),
+    # so its length and element types are known to the compiler, not just at runtime.
+    return map(
+        leaves_entry -> (leaves_entry[2] + 1):(leaves_entry[2] + ndofs(leaves_entry[1])),
+        leaf_spaces_offsets(Wₕ))
 end
 
 """
@@ -131,10 +136,11 @@ u_x .= 1.0
 ```
 """
 @inline function (uₕ::VectorElement{<:CompositeGridSpace})(i::Int)
-    rng = component_range(space(uₕ), i)
-    subspace = spaces(space(uₕ))[i]
-    v_data = @views values(uₕ)[rng]
-    return VectorElement(v_data, subspace)
+    leaves = leaf_spaces_offsets(space(uₕ))
+    @boundscheck (1 <= i <= length(leaves)) || throw(BoundsError(uₕ, i))
+    sp, offset = @inbounds leaves[i]
+    v_data = @views values(uₕ)[(offset + 1):(offset + ndofs(sp))]
+    return VectorElement(v_data, sp)
 end
 
 @inline function (uₕ::VectorElement{<:ScalarGridSpace})(i::Int)
@@ -152,13 +158,14 @@ Extracts a [`VectorElement`](@ref) view of the `i`-th field component of `uₕ`.
 """
     components(uₕ::VectorElement) -> Tuple
 
-Returns an `NTuple` of [`VectorElement`](@ref) views for all components of `uₕ`.
+Returns an `NTuple` of [`VectorElement`](@ref) views, one per **leaf** of `uₕ`'s space,
+depth-first — the same leaf a matching-index `uₕ(i)` returns, regardless of nesting.
 """
-@inline function components(uₕ::VectorElement{<:CompositeGridSpace{N}}) where {N}
-    ranges = component_ranges(space(uₕ))
-    subs = spaces(space(uₕ))
+@inline function components(uₕ::VectorElement{<:CompositeGridSpace})
     raw = values(uₕ)
-    return ntuple(i -> VectorElement(@views(raw[ranges[i]]), subs[i]), Val(N))
+    return map(leaf_spaces_offsets(space(uₕ))) do (sp, offset)
+        VectorElement(@views(raw[(offset + 1):(offset + ndofs(sp))]), sp)
+    end
 end
 
 @inline components(uₕ::VectorElement{<:ScalarGridSpace}) = (uₕ,)

@@ -107,10 +107,13 @@ end
 
 for (f, W) in ((:innerₕ, :InnerH), (:inner₊, :(InnerPlus{1})),
     (:inner₊ₓ, :(InnerPlus{1})), (:inner₊ᵧ, :(InnerPlus{2})), (:inner₊₂, :(InnerPlus{3})))
-    @eval @inline function $f(l::VectorElement{<:CompositeGridSpace{NC}},
-            r::LazyOp{D}) where {NC, D}
+    # `NC` is `l`'s *leaf* count (`length(comps)`, over `components`, which flattens any
+    # nesting), not the space's own structural type parameter -- `component(r, c)` names
+    # leaf `c` (form-level indexing is already leaf-based, see form/block_extract.jl), so
+    # this has to walk the same leaves `comps` does, in the same order, for any `r`.
+    @eval @inline function $f(l::VectorElement{<:CompositeGridSpace}, r::LazyOp{D}) where {D}
         comps = components(l)
-        return foldl(+, ntuple(c -> $f(comps[c], component(r, c)), Val(NC)))
+        return foldl(+, ntuple(c -> $f(comps[c], component(r, c)), Val(length(comps))))
     end
 
     # A tuple reads the same way, one entry per component, which is how `Rₕ` already takes

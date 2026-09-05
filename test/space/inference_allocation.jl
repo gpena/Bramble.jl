@@ -227,6 +227,18 @@ end
         @test alloc_test(Rₕ!, v, f_tup; markers = (:left,)) == 0
         @test alloc_test(avgₕ!, v, f_tup; markers = (:left,)) == 0
 
+        # gpena/Bramble.jl#64: `_avgₕ!`/`_avg_masked!`'s composite Tuple methods used to
+        # route the per-leaf application through `map(f, t1, t2)` with a closure that
+        # reconstructs `Val(D)` inside it. Measured 192 B where a plain `ntuple` over the
+        # same body gives 0 -- the Core.Box trap this suite otherwise only documents on the
+        # difference engine, here on the fix for nested composite spaces.
+        Vn = (W × W) × W
+        un = element(Vn)
+        f_tup3 = (f, f, f)
+        @test alloc_test(avgₕ!, un, f_tup3) == 0
+        @test alloc_test(avgₕ!, un, f_tup3; markers = (:left,)) == 0
+        @test alloc_test(Rₕ!, un, f_tup3; markers = (:left,)) == 0
+
         # Zero allocations for values! and πₕ!
         @test alloc_test(values!, u, 1.0) == 0
         @test alloc_test(values!, u, values(u)) == 0

@@ -50,12 +50,14 @@ Rₕ!(uₕ, x -> (f₁(x), f₂(x)))          # one function returning all compo
 See also: [`Rₕ`](@ref), [`avgₕ!`](@ref), [`element`](@ref)
 """
 @inline Rₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f::F) where {F} = _Rₕ_parallel!(uₕ, f)
-@inline Rₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::F) where {
-    NC, F} = _Rₕ_scatter_parallel!(
+@inline Rₕ!(uₕ::VectorElement{<:CompositeGridSpace}, f::F) where {F} = _Rₕ_scatter_parallel!(
     uₕ, f)
-@inline function Rₕ!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::Tuple) where {NC}
-    comps = components(uₕ)
-    ntuple(i -> Rₕ!(comps[i], f[i]), Val(NC))
+@inline function Rₕ!(uₕ::VectorElement{<:CompositeGridSpace}, f::Tuple)
+    # `map` over `components(uₕ)` and `f` together, rather than `ntuple(…, Val(NC))`
+    # indexing both by a shared count: it unrolls exactly the same way for tuples, needs
+    # no leaf count of its own, stays correct under any nesting, and — since `map` requires
+    # equal-length tuples — errors the same way a length mismatch always would have.
+    map(Rₕ!, components(uₕ), f)
     return uₕ
 end
 
@@ -88,11 +90,10 @@ end
 end
 
 @inline function _Rₕ_scatter_parallel!(
-        uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::F) where {NC, F}
+        uₕ::VectorElement{<:CompositeGridSpace}, f::F) where {F}
     sp = space(uₕ)
     Ωₕ = mesh(sp)
-    comps = components(uₕ)
-    raws = ntuple(i -> values(comps[i]), Val(NC))
+    raws = map(values, components(uₕ))
     idxs = indices(Ωₕ)
     n = length(idxs)
     _cpu_threaded_scatter_for!(execution_policy(sp), raws, 1:n, _RₕKernel(f, Ωₕ, idxs))
@@ -107,10 +108,9 @@ end
 
 # One function per component: each is already independent, so restrict each
 # component with its own function. Masked restriction routes componentwise through _Rₕ_masked!.
-@inline function _Rₕ_masked!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::Tuple,
-        markers::NTuple{N, Symbol}) where {NC, N}
-    comps = components(uₕ)
-    ntuple(i -> _Rₕ_masked!(comps[i], f[i], markers), Val(NC))
+@inline function _Rₕ_masked!(uₕ::VectorElement{<:CompositeGridSpace}, f::Tuple,
+        markers::NTuple{N, Symbol}) where {N}
+    map((c, g) -> _Rₕ_masked!(c, g, markers), components(uₕ), f)
     return uₕ
 end
 
@@ -151,11 +151,10 @@ function _Rₕ_masked!(uₕ::VectorElement{<:ScalarGridSpace}, f::F, markers::NT
     return uₕ
 end
 
-function _Rₕ_masked!(uₕ::VectorElement{<:CompositeGridSpace{NC}}, f::F,
-        markers::NTuple{N, Symbol}) where {NC, F, N}
+function _Rₕ_masked!(uₕ::VectorElement{<:CompositeGridSpace}, f::F,
+        markers::NTuple{N, Symbol}) where {F, N}
     Ωₕ = mesh(space(uₕ))
-    comps = components(uₕ)
-    raws = ntuple(i -> values(comps[i]), Val(NC))
+    raws = map(values, components(uₕ))
     idxs = indices(Ωₕ)
     n = length(idxs)
 

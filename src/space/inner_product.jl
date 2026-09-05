@@ -98,20 +98,23 @@ the same cell measures, not a surface integral; see the note above `_combined_ma
     return _dot_masked(uₕ.data, weights(space(uₕ), Innerh()), vₕ.data, mask)
 end
 
-# Summed over the components, unrolled because `NC` is a type parameter, so this costs no
-# more than writing the sum out by hand. `markers` threads through unchanged: each component
-# is restricted to the same regions.
-@inline function innerₕ(uₕ::VectorElement{<:CompositeGridSpace{NC}},
-        vₕ::VectorElement{<:CompositeGridSpace{NC}};
-        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {NC, N}
+# Summed over the *leaves* (`components` flattens any nesting), unrolled via `map` over the
+# two tuples exactly as the old `ntuple(…, Val(NC))` did over the space's own structural
+# type parameter -- which is what a nested composite's u(i)/components disagree with (see
+# CONTEXT.md, gpena/Bramble.jl#64), so this can no longer read the leaf count off a type
+# parameter shared by both arguments; it has to check the actual leaf counts instead.
+# `markers` threads through unchanged: each leaf is restricted to the same regions.
+@inline function innerₕ(uₕ::VectorElement{<:CompositeGridSpace},
+        vₕ::VectorElement{<:CompositeGridSpace};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {N}
     uc, vc = components(uₕ), components(vₕ)
-    return sum(ntuple(c -> innerₕ(uc[c], vc[c]; markers = markers), Val(NC)))
+    length(uc) == length(vc) || _throw_innerh_leaf_mismatch(length(uc), length(vc))
+    return sum(map((u, v) -> innerₕ(u, v; markers = markers), uc, vc))
 end
 
-@noinline function innerₕ(uₕ::VectorElement{<:CompositeGridSpace{N}},
-        vₕ::VectorElement{<:CompositeGridSpace{M}}) where {N, M}
+@noinline function _throw_innerh_leaf_mismatch(n::Int, m::Int)
     throw(DimensionMismatch(
-        "innerₕ needs the same number of components on both sides; got $N and $M"))
+        "innerₕ needs the same number of leaf components on both sides; got $n and $m"))
 end
 
 """
