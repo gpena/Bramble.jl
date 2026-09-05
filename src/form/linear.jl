@@ -43,11 +43,9 @@ test_space(form::LinearForm) = form.test_space
 @inline function (form::LinearForm)(vₕ::VectorElement)
     ast = form.ast
     space = form.test_space
-    Ωₕ = mesh(space)
     T = promote_type(_assembled_eltype(ast, space), eltype(values(vₕ)))
 
-    return _contract_linear_core(space, ast, LinearIndices(indices(Ωₕ)), markers(Ωₕ),
-        values(vₕ), zero(T))
+    return _contract_linear_core(space, ast, values(vₕ), zero(T))
 end
 
 @noinline function (form::LinearForm)(v::AbstractVector)
@@ -226,23 +224,9 @@ end
 
 # --- Helper cores for function barrier optimization ------------------------------- #
 
-function _assemble_linear_core!(
-        b::AbstractVector, space, ast::AST_TYPE, lin_indices, mesh_markers) where {AST_TYPE}
-    for I in indices(mesh(space))
-        lin_idx = lin_indices[I]
-        stencil = local_stencil(ast, space, I, mesh_markers, lin_idx)
-
-        for (off_v, weight) in stencil
-            Iv = I + CartesianIndex(off_v)
-
-            if checkbounds(Bool, lin_indices, Iv)
-                row = lin_indices[Iv]
-                @inbounds b[row] += weight
-            end
-        end
-    end
-    return b
-end
+# The scalar case is `_scatter_term!` (below) at offset zero: one leaf, the whole space.
+@inline _assemble_linear_core!(b::AbstractVector, space, ast::AST_TYPE) where {AST_TYPE} = _scatter_term!(
+    b, space, ast, 0)
 
 # --- Parallel assembly partitioning ------------------------------------------------ #
 
@@ -314,16 +298,14 @@ function _sweep_parallel!(b::AbstractVector, sp, term::TERM, grid_inds, strides,
     return b
 end
 
-function _assemble_linear_parallel_core!(b::AbstractVector, space, ast::AST_TYPE,
-        lin_indices, mesh_markers) where {AST_TYPE}
+function _assemble_linear_parallel_core!(b::AbstractVector, space, ast::AST_TYPE) where {AST_TYPE}
     strides = _colour_strides(stencil_offsets(ast))
     _sweep_parallel!(b, space, ast, indices(mesh(space)), strides, 0)
     return b
 end
 
 function _assemble_linear_core!(
-        b::AbstractVector, space::CompositeGridSpace{N}, ast::AST_TYPE,
-        lin_indices, mesh_markers) where {N, AST_TYPE}
+        b::AbstractVector, space::CompositeGridSpace{N}, ast::AST_TYPE) where {N, AST_TYPE}
     leaves = leaf_spaces_offsets(space)
 
     if !routes_by_component(ast)
@@ -381,25 +363,13 @@ end
 # --- Contraction: accumulating a scalar without vector allocation ------------------ #
 
 # `l(vₕ)` evaluates to a scalar by fusing the stencil evaluation with contraction against `vₕ`.
-function _contract_linear_core(space, ast::AST_TYPE, lin_indices, mesh_markers,
-        v::AbstractVector, acc::T) where {AST_TYPE, T}
-    for I in indices(mesh(space))
-        lin_idx = lin_indices[I]
-        stencil = local_stencil(ast, space, I, mesh_markers, lin_idx)
+# The scalar case is `_contract_term` (below) at offset zero: one leaf, the whole space.
+@inline _contract_linear_core(
+    space, ast::AST_TYPE, v::AbstractVector, acc::T) where {
+    AST_TYPE, T} = _contract_term(space, ast, 0, v, acc)
 
-        for (off_v, weight) in stencil
-            Iv = I + CartesianIndex(off_v)
-
-            if checkbounds(Bool, lin_indices, Iv)
-                @inbounds acc += weight * v[lin_indices[Iv]]
-            end
-        end
-    end
-    return acc
-end
-
-function _contract_linear_core(space::CompositeGridSpace{N}, ast::AST_TYPE, lin_indices,
-        mesh_markers, v::AbstractVector, acc::T) where {N, AST_TYPE, T}
+function _contract_linear_core(space::CompositeGridSpace{N}, ast::AST_TYPE,
+        v::AbstractVector, acc::T) where {N, AST_TYPE, T}
     leaves = leaf_spaces_offsets(space)
 
     if !routes_by_component(ast)
@@ -488,8 +458,7 @@ function _scatter_term!(b::AbstractVector, sp, term::TERM, offset::Int) where {T
 end
 
 function _assemble_linear_parallel_core!(b::AbstractVector,
-        space::CompositeGridSpace{N}, ast::AST_TYPE,
-        lin_indices, mesh_markers) where {N, AST_TYPE}
+        space::CompositeGridSpace{N}, ast::AST_TYPE) where {N, AST_TYPE}
     leaves = leaf_spaces_offsets(space)
     strides = _colour_strides(stencil_offsets(ast))
 
@@ -539,15 +508,12 @@ function assemble!(b::AbstractVector, form::LinearForm{D, TestSpace, AST};
     _validate_dirichlet_labels(dirichlet_labels)
     fill!(b, zero(eltype(b)))
     space = form.test_space
-    Ωₕ = mesh(space)
-    mesh_markers = markers(Ωₕ)
-    _validate_term_markers(ast, mesh_markers, "the form's space")
-    lin_indices = LinearIndices(indices(Ωₕ))
+    _validate_term_markers(ast, markers(mesh(space)), "the form's space")
 
     if execution_policy(space) isa Serial
-        _assemble_linear_core!(b, space, ast, lin_indices, mesh_markers)
+        _assemble_linear_core!(b, space, ast)
     else
-        _assemble_linear_parallel_core!(b, space, ast, lin_indices, mesh_markers)
+        _assemble_linear_parallel_core!(b, space, ast)
     end
 
     apply_dirichlet_conditions!(b, form, dirichlet_conditions, dirichlet_labels,
@@ -566,13 +532,10 @@ function assemble_parallel!(b::AbstractVector,
         form::LinearForm{D, TestSpace, AST},
         ast = form.ast) where {D, TestSpace, AST}
     space = form.test_space
-    Ωₕ = mesh(space)
-    mesh_markers = markers(Ωₕ)
-    _validate_term_markers(ast, mesh_markers, "the form's space")
-    lin_indices = LinearIndices(indices(Ωₕ))
+    _validate_term_markers(ast, markers(mesh(space)), "the form's space")
 
     fill!(b, zero(eltype(b)))
-    _assemble_linear_parallel_core!(b, space, ast, lin_indices, mesh_markers)
+    _assemble_linear_parallel_core!(b, space, ast)
 
     return b
 end
