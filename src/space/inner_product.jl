@@ -276,6 +276,19 @@ function _tuple_element_dim(::Type{T}) where {T <: Tuple}
     return isempty(ft) ? nothing : get_dimension_from_type(first(ft))
 end
 
+# Whether `@generated` is load-bearing here, or just this file's house style, was asked in
+# gpena/Bramble.jl#61 and measured rather than asserted (bramble-verification §1): an
+# ordinary function computing `D`/`mesh_dim` this same way and passing them on as
+# `Val(D)`/`Val(mesh_dim)` inferred to `Any` and allocated (112–592 B across 1D/2D/3D,
+# scalar and tuple inputs), where the `@generated` version below infers concretely and
+# allocates 0. The difference is constant propagation, not type stability: `D`/`mesh_dim`
+# come out of a several-branch `if`/`something` chain, and while that chain's return type is
+# already concrete (`Tuple{Int,Int}`), Julia's inliner does not reliably fold it down to the
+# *specific* compile-time value `Val(D)` needs from inside a caller — unlike a plain `map`
+# or `sum` over an already concretely-sized `Tuple`, which Julia unrolls and specializes on
+# its own (see `form/common.jl`'s stencil primitives, sibling functions in this same
+# investigation that turned out not to need `@generated` at all). So: load-bearing here,
+# incidental there.
 function _generate_inner_plus_body(u_type, v_type, result_kind::Symbol)
     dim_u = get_dimension_from_type(u_type)
     dim_v = get_dimension_from_type(v_type)

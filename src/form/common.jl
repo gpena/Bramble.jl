@@ -47,68 +47,39 @@ Zero-initialized offset tuple of dimension `D`.
     shift_stencil(inner::Tuple, ::Val{Dim}, delta)
 
 Shifts all coordinates in a stencil tuple by `delta` in dimension `Dim`.
+
+`map` over a `Tuple` unrolls and stays type-stable at compile time in Julia — measured
+against a `@generated` version this once was (gpena/Bramble.jl#63): identical zero
+allocations and identical inferred return type, so the code generation bought nothing
+here.
 """
-@generated function shift_stencil(inner::Tuple, ::Val{Dim}, ::Val{Delta}) where {Dim, Delta}
-    N = length(inner.parameters)
-    exprs = Expr[]
-    for i in 1:N
-        push!(exprs, :((shift_offset(inner[$i][1], Dim, Delta), inner[$i][2])))
-    end
-    return Expr(:tuple, exprs...)
+@inline shift_stencil(inner::Tuple, ::Val{Dim}, ::Val{Delta}) where {Dim, Delta} = map(
+    t -> (shift_offset(t[1], Dim, Delta), t[2]), inner)
+
+@inline shift_stencil(inner::Tuple, ::Val{Dim}, delta::Int) where {Dim} = map(
+    t -> (shift_offset(t[1], Dim, delta), t[2]), inner)
+
+# `(left..., right...)` is already resolved at compile time for tuples; no metaprogramming
+# needed (gpena/Bramble.jl#63).
+@inline concatenate_stencils(left::Tuple, right::Tuple) = (left..., right...)
+
+# Recursion on tuple structure (`_flatten_tuples`, below) rather than `Iterators.flatten`:
+# measured (gpena/Bramble.jl#63), the latter does not stay type-stable for a tuple-of-tuples
+# and allocates (752 B for a 2×3 outer product), where this and the `@generated` version it
+# replaces both allocate 0.
+@inline _flatten_tuples(::Tuple{}) = ()
+@inline _flatten_tuples(t::Tuple) = (first(t)..., _flatten_tuples(Base.tail(t))...)
+
+@inline function multiply_stencils_bilinear(left::Tuple, right::Tuple, vol::Number)
+    _flatten_tuples(map(l -> map(r -> (l[1], r[1], l[2] * r[2] * vol), right), left))
 end
 
-@generated function shift_stencil(inner::Tuple, ::Val{Dim}, delta::Int) where {Dim}
-    N = length(inner.parameters)
-    exprs = Expr[]
-    for i in 1:N
-        push!(exprs, :((shift_offset(inner[$i][1], Dim, delta), inner[$i][2])))
-    end
-    return Expr(:tuple, exprs...)
+@inline function multiply_stencils_linear(left::Tuple, right::Tuple, vol::Number)
+    _flatten_tuples(map(l -> map(r -> (r[1], l[2] * r[2] * vol), right), left))
 end
 
-@generated function concatenate_stencils(left::Tuple, right::Tuple)
-    N_left = length(left.parameters)
-    N_right = length(right.parameters)
-    exprs = Expr[]
-    for i in 1:N_left
-        push!(exprs, :(left[$i]))
-    end
-    for i in 1:N_right
-        push!(exprs, :(right[$i]))
-    end
-    return Expr(:tuple, exprs...)
-end
-
-@generated function multiply_stencils_bilinear(left::Tuple, right::Tuple, vol::Number)
-    N_l = length(left.parameters)
-    N_r = length(right.parameters)
-    exprs = Expr[]
-    for i in 1:N_l, j in 1:N_r
-
-        push!(exprs, :((left[$i][1], right[$j][1], left[$i][2] * right[$j][2] * vol)))
-    end
-    return Expr(:tuple, exprs...)
-end
-
-@generated function multiply_stencils_linear(left::Tuple, right::Tuple, vol::Number)
-    N_l = length(left.parameters)
-    N_r = length(right.parameters)
-    exprs = Expr[]
-    for i in 1:N_l, j in 1:N_r
-
-        push!(exprs, :((right[$j][1], left[$i][2] * right[$j][2] * vol)))
-    end
-    return Expr(:tuple, exprs...)
-end
-
-@generated function scale_stencil(inner::Tuple, scalar::Number)
-    N = length(inner.parameters)
-    exprs = Expr[]
-    for i in 1:N
-        push!(exprs, :((Base.front(inner[$i])..., inner[$i][end] * scalar)))
-    end
-    return Expr(:tuple, exprs...)
-end
+@inline scale_stencil(inner::Tuple, scalar::Number) = map(
+    t -> (Base.front(t)..., t[end] * scalar), inner)
 
 """
     sum_stencil_values(stencil::Tuple)
@@ -121,19 +92,13 @@ contributes no matrix structure, only their total. `false` rather than `0` or `z
 the empty-stencil answer: [`RegionRestriction`](@ref) can legitimately produce `()` for a
 point outside its region, and there is no `T` to call `zero` on when there are no entries to
 read one from; `false` promotes to whatever numeric type the other entries (or, empty, the
-caller's own multiplication) turn out to have, the same behavior `sum(f, itr; init = false)`
-provides, spelled as a `@generated` unrolled fold so the tuple length stays a compile-time
-constant like every other stencil-algebra primitive here.
+caller's own multiplication) turn out to have — exactly `sum(f, itr; init = false)`'s own
+behavior, which is what this calls. This used to be its own `@generated` unrolled fold
+"like every other stencil-algebra primitive" in this file; measured against `sum` directly
+(gpena/Bramble.jl#63), identical zero allocations and identical inferred type, so the
+`@generated` version bought nothing that `sum` was not already providing.
 """
-@generated function sum_stencil_values(stencil::Tuple)
-    N = length(stencil.parameters)
-    N == 0 && return :(false)
-    ex = :(stencil[1][end])
-    for i in 2:N
-        ex = :($ex + stencil[$i][end])
-    end
-    return ex
-end
+@inline sum_stencil_values(stencil::Tuple) = sum(t -> t[end], stencil; init = false)
 
 # ==============================================================================
 # 2. Abstract Syntax Tree (AST) Nodes
