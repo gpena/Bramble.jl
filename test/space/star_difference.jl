@@ -279,6 +279,77 @@ star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
 
                 ok_x && ok_y
             end
+
+            # 3D: arbitrary non-uniform tensor product mesh and fields across coordinates.
+            # Axis sizes kept smaller than the 2D check's (max 5 intervals, not 8) so the
+            # total point count (up to 6³ = 216) stays a fast random search.
+            @check function check_sbp_3d(
+                    hx = Data.Vectors(positive_h; min_size = 2, max_size = 5),
+                    hy = Data.Vectors(positive_h; min_size = 2, max_size = 5),
+                    hz = Data.Vectors(positive_h; min_size = 2, max_size = 5),
+                    u_raw = Data.Vectors(field_val; min_size = 216, max_size = 216),
+                    v_raw = Data.Vectors(field_val; min_size = 216, max_size = 216)
+            )
+                nx = length(hx) + 1
+                ny = length(hy) + 1
+                nz = length(hz) + 1
+
+                pts_x = zeros(Float64, nx)
+                for i in 1:length(hx)
+                    pts_x[i + 1] = pts_x[i] + hx[i]
+                end
+                pts_x ./= pts_x[end]
+
+                pts_y = zeros(Float64, ny)
+                for j in 1:length(hy)
+                    pts_y[j + 1] = pts_y[j] + hy[j]
+                end
+                pts_y ./= pts_y[end]
+
+                pts_z = zeros(Float64, nz)
+                for k in 1:length(hz)
+                    pts_z[k + 1] = pts_z[k] + hz[k]
+                end
+                pts_z ./= pts_z[end]
+
+                Ωₕ = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (nx, ny, nz),
+                    (false, false, false))
+                set_points!(Ωₕ(1), pts_x)
+                set_points!(Ωₕ(2), pts_y)
+                set_points!(Ωₕ(3), pts_z)
+                Wₕ = gridspace(Ωₕ)
+
+                total = nx * ny * nz
+                u_arr = reshape(copy(u_raw[1:total]), nx, ny, nz)
+                v_arr = reshape(copy(v_raw[1:total]), nx, ny, nz)
+
+                v_arr[1, :, :] .= 0.0
+                v_arr[end, :, :] .= 0.0
+                v_arr[:, 1, :] .= 0.0
+                v_arr[:, end, :] .= 0.0
+                v_arr[:, :, 1] .= 0.0
+                v_arr[:, :, end] .= 0.0
+
+                uₕ = element(Wₕ, vec(u_arr))
+                vₕ = element(Wₕ, vec(v_arr))
+
+                lhs_x = innerₕ(Dstar₊ₓ(uₕ), vₕ)
+                rhs_x = -inner₊ₓ(uₕ, D₋ₓ(vₕ))
+                scale_x = max(abs(lhs_x), abs(rhs_x), 1.0)
+                ok_x = isapprox(lhs_x, rhs_x; atol = 1e-10 * scale_x, rtol = 1e-10)
+
+                lhs_y = innerₕ(Dstar₊ᵧ(uₕ), vₕ)
+                rhs_y = -inner₊ᵧ(uₕ, D₋ᵧ(vₕ))
+                scale_y = max(abs(lhs_y), abs(rhs_y), 1.0)
+                ok_y = isapprox(lhs_y, rhs_y; atol = 1e-10 * scale_y, rtol = 1e-10)
+
+                lhs_z = innerₕ(Dstar₊₂(uₕ), vₕ)
+                rhs_z = -inner₊₂(uₕ, D₋₂(vₕ))
+                scale_z = max(abs(lhs_z), abs(rhs_z), 1.0)
+                ok_z = isapprox(lhs_z, rhs_z; atol = 1e-10 * scale_z, rtol = 1e-10)
+
+                ok_x && ok_y && ok_z
+            end
         end
     end
 
