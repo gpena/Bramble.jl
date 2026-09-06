@@ -94,6 +94,15 @@ const __bramble_with_unit_tests = __bramble_test_group in ("all", "unit", "full"
 # installed reports a skip rather than an error.
 const __bramble_with_ad_backends = __bramble_test_group in ("ad", "full")
 
+# The Makie/Meshes/RecipesBase/Metal weak deps: `test/Project.toml` lists them (so
+# `Pkg.instantiate()` always resolves and can precompile them, the same tradeoff already
+# made for the AD backends above), but they are only ever `using`-d, and so only ever pay
+# their compile cost, behind this group -- every push otherwise gets none of that weight.
+# Metal within this group further gates on `Metal.functional()`, since installing and
+# precompiling it succeeds on any platform (it degrades gracefully, the same convention
+# CUDA.jl uses) while only a real Apple Silicon device can actually run anything on it.
+const __bramble_with_ext_backends = __bramble_test_group in ("ext", "full")
+
 # `manual/test_snippets.jl` checks that the code in the 12-chapter PDF manual still
 # compiles and gives the answers it claims. Kept out of the every-push groups because it
 # assembles several real PDE systems (seconds, not milliseconds) and, unlike the operator
@@ -227,5 +236,14 @@ end
 if __bramble_with_manual_snippets
     @testset verbose=true "Manual snippets" begin
         include(__bramble_manual_snippets_path)
+    end
+end
+
+if __bramble_with_ext_backends
+    @testset verbose=true "Package extensions" begin
+        include("ext/plots_ext.jl")
+        include("ext/makie_ext.jl")
+        include("ext/meshes_ext.jl")
+        include("ext/metal_ext.jl")
     end
 end
