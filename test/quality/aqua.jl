@@ -25,9 +25,9 @@ using Aqua
         ambiguities = true,
         unbound_args = test_unbound,
         undefined_exports = true,
-        project_extras = false,
-        stale_deps = false,
-        deps_compat = false,
+        project_extras = true,
+        stale_deps = true,
+        deps_compat = true,
         persistent_tasks = test_persistent_tasks)
     Aqua.test_ambiguities(Bramble; recursive = false)
 end
