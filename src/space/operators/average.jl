@@ -86,6 +86,24 @@ function _average_engine!(out, in_ref, dims::NTuple{D, Int}, dir::GridDirection,
     return nothing
 end
 
+# Shared by every averaging direction (gpena/Bramble.jl#44): the alias check and the engine
+# call, once, rather than once per direction and again inside each one's composite closure.
+@inline function _apply_averaged!(vₕ::VectorElement{<:ScalarGridSpace},
+        uₕ::VectorElement{<:ScalarGridSpace}, dir::GridDirection, dim_val::Val)
+    _check_no_alias(vₕ, uₕ)
+    _average_engine!(vₕ.data, uₕ.data, _grid_dims(uₕ), dir, dim_val)
+    return vₕ
+end
+
+# A composite grid function is averaged one component at a time. Recursing into the scalar
+# method above re-checks aliasing and re-derives `_grid_dims` per leaf, same as the
+# difference operators' `_apply_spaced!` (operators/difference.jl).
+@inline function _apply_averaged!(vₕ::VectorElement{<:CompositeGridSpace},
+        uₕ::VectorElement{<:CompositeGridSpace}, dir::GridDirection, dim_val::Val)
+    _apply_componentwise!((v, u) -> _apply_averaged!(v, u, dir, dim_val), vₕ, uₕ)
+    return vₕ
+end
+
 # Divided by 2 rather than multiplied by 0.5, for the reason given at `_compute_average`:
 # the literal is a Float64 and promotes the whole matrix. On a Float32 backend everything
 # else in the library stayed Float32 and only the averaging matrices came back Float64.
@@ -190,24 +208,15 @@ for config in _AVERAGE_OP_CONFIGS
         @inline $average_name(Wₕ::AbstractSpaceType, dim_val::Val) = $average_name(
             mesh(Wₕ), dim_val)
 
-        function $average_name!(vₕ::VectorElement{<:ScalarGridSpace},
-                uₕ::VectorElement{<:ScalarGridSpace}, dim_val::Val)
-            _check_no_alias(vₕ, uₕ)
-            _average_engine!(vₕ.data, uₕ.data, _grid_dims(uₕ), $dir_instance, dim_val)
-            return vₕ
-        end
+        @inline $average_name!(vₕ::VectorElement{<:ScalarGridSpace},
+            uₕ::VectorElement{<:ScalarGridSpace}, dim_val::Val) = _apply_averaged!(
+            vₕ, uₕ, $dir_instance, dim_val)
 
-        # A composite grid function is averaged one component at a time.
-        function $average_name!(vₕ::VectorElement{<:CompositeGridSpace},
-                uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val)
-            _apply_componentwise!(
-                (v, u) -> begin
-                    _check_no_alias(v, u)
-                    _average_engine!(v.data, u.data, _grid_dims(u), $dir_instance, dim_val)
-                end,
-                vₕ, uₕ)
-            return vₕ
-        end
+        # A composite grid function is averaged one component at a time --
+        # `_apply_averaged!`'s composite method does this by recursing into the scalar one.
+        @inline $average_name!(vₕ::VectorElement{<:CompositeGridSpace},
+            uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val) = _apply_averaged!(
+            vₕ, uₕ, $dir_instance, dim_val)
 
         @inline $average_name(uₕ::VectorElement, dim_val::Val) = $average_name!(
             similar(uₕ), uₕ, dim_val)

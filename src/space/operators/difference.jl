@@ -121,12 +121,9 @@ end
 @inline @propagate_inbounds _compute_difference(
     ::Backward, ::Val{false}, cur, other, h, i) = (cur - other) / _get_h_val(h, i)
 
-# The finite difference has no one-sided stencil at the boundary, so it is zero there.
-# `zero(cur)` rather than a literal keeps the element type of the grid.
-@inline @propagate_inbounds _compute_difference(
-    ::Forward, ::Val{true}, cur, h, i) = zero(cur)
-@inline @propagate_inbounds _compute_difference(
-    ::Backward, ::Val{true}, cur, h, i) = zero(cur)
+# The scaled (finite difference) and centered families' boundary case -- zero, for any
+# direction -- is covered by the one `_compute_difference(::GridDirection, ::Val{true}, ...)`
+# method below, after the interior kernels.
 
 # The centered kernels take the three points of their stencil in grid order, rather than
 # a point and its neighbour. `Centered` does not read the middle one; it is passed anyway
@@ -156,9 +153,13 @@ end
     return (hᵢ * (fwd - cur) / hᵢ₊₁ + hᵢ₊₁ * (cur - back) / hᵢ) / (hᵢ + hᵢ₊₁)
 end
 
-# Neither has a stencil on either end slice, so both are zero there.
+# The one boundary method for every direction: Forward, Backward or CenteredStencil alike
+# have no stencil on a truncated slice, so all read zero there. `zero(cur)` rather than a
+# literal keeps the element type of the grid. No ambiguity against the `::Nothing` methods
+# above (the unscaled boundary case): those are more specific in both the direction and the
+# `h` slot.
 @inline @propagate_inbounds _compute_difference(
-    ::CenteredStencil, ::Val{true}, cur, h, i) = zero(cur)
+    ::GridDirection, ::Val{true}, cur, h, i) = zero(cur)
 
 # --- The starred forward difference ----------------------------------------------- #
 #
@@ -269,6 +270,48 @@ end
         uₕ::VectorElement{<:CompositeGridSpace})
     map(f!, components(vₕ), components(uₕ))
     return nothing
+end
+
+# --- Deriving h and checking preconditions from a leaf's own submesh -------------- #
+#
+# Every family below (unscaled and finite differences, Dstar₊, Dc, Dₕ) shares one shape:
+# derive `h` (or nothing) from the direction's submesh, optionally check a precondition on
+# it, then apply the stencil. Only what `h` is and whether there is a precondition differ.
+# `spacing_func`/`precheck` are ordinary named functions, never closures over local state,
+# so each of the family's call sites still specializes to its own zero-allocation method --
+# the same guarantee the duplicated versions this replaces already had.
+
+@inline _no_spacing(sub) = nothing
+@inline _no_precheck(sub, dim::Int) = nothing
+
+# A centered stencil needs a point on each side; shared by Dc and Dₕ, the two families that
+# check it.
+@inline function _check_centered_points(sub, dim::Int)
+    npoints(sub) >= 3 || _throw_centered_too_few_points(dim, npoints(sub))
+    return nothing
+end
+
+@inline function _apply_spaced!(vₕ::VectorElement{<:ScalarGridSpace},
+        uₕ::VectorElement{<:ScalarGridSpace}, spacing_func::F, precheck::P, dir::GridDirection,
+        dim_val::Val{DIM}) where {F, P, DIM}
+    sub = _op_mesh(uₕ)(DIM)
+    precheck(sub, DIM)
+    _apply_stencil!(vₕ, uₕ, spacing_func(sub), dir, dim_val)
+    return vₕ
+end
+
+# A composite grid function is differenced one component at a time. A leaf's mesh is not
+# necessarily the whole composite's, so `sub` (and whatever it derives) has to be
+# re-evaluated per leaf rather than once from `uₕ` -- checking or fetching it once only
+# validated leaf 1, and reused its value on every other leaf (gpena/Bramble.jl#79).
+# Recursing into the scalar method above does that for free, since each leaf is itself a
+# scalar space.
+@inline function _apply_spaced!(vₕ::VectorElement{<:CompositeGridSpace},
+        uₕ::VectorElement{<:CompositeGridSpace}, spacing_func, precheck, dir::GridDirection,
+        dim_val::Val)
+    _apply_componentwise!(
+        (v, u) -> _apply_spaced!(v, u, spacing_func, precheck, dir, dim_val), vₕ, uₕ)
+    return vₕ
 end
 
 # --- Shared stencil traversal --------------------------------------------------- #
@@ -653,19 +696,12 @@ for config in _DIFFERENCE_OP_CONFIGS
         @inline $diff_name(Wₕ::AbstractSpaceType, dim_val::Val) = $diff_name(
             mesh(Wₕ), dim_val)
 
-        function $diff_name!(vₕ::VectorElement{<:ScalarGridSpace},
-                uₕ::VectorElement{<:ScalarGridSpace}, dim_val::Val)
-            _apply_stencil!(vₕ, uₕ, nothing, $dir_instance, dim_val)
-            return vₕ
-        end
-
-        # A composite grid function is differenced one component at a time.
-        function $diff_name!(vₕ::VectorElement{<:CompositeGridSpace},
-                uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val)
-            _apply_componentwise!(
-                (v, u) -> _apply_stencil!(v, u, nothing, $dir_instance, dim_val), vₕ, uₕ)
-            return vₕ
-        end
+        @inline $diff_name!(vₕ::VectorElement{<:ScalarGridSpace},
+            uₕ::VectorElement{<:ScalarGridSpace}, dim_val::Val) = _apply_spaced!(
+            vₕ, uₕ, _no_spacing, _no_precheck, $dir_instance, dim_val)
+        @inline $diff_name!(vₕ::VectorElement{<:CompositeGridSpace},
+            uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val) = _apply_spaced!(
+            vₕ, uₕ, _no_spacing, _no_precheck, $dir_instance, dim_val)
 
         @inline $diff_name(uₕ::VectorElement, dim_val::Val) = $diff_name!(
             similar(uₕ), uₕ, dim_val)
@@ -673,29 +709,15 @@ for config in _DIFFERENCE_OP_CONFIGS
         @inline $finite_diff_name(Wₕ::AbstractSpaceType, dim_val::Val) = $finite_diff_name(
             mesh(Wₕ), dim_val)
 
-        function $finite_diff_name!(vₕ::VectorElement{<:ScalarGridSpace},
-                uₕ::VectorElement{<:ScalarGridSpace}, dim_val::Val{DIM}) where {DIM}
-            # The mesh caches its spacings, so hand the engine that vector rather
-            # than a callable: indexing it is 3.6x faster than one call per grid
-            # point, and it needs no allocation of its own.
-            h = $spacings_func(_op_mesh(uₕ)(DIM))
-            _apply_stencil!(vₕ, uₕ, h, $dir_instance, dim_val)
-            return vₕ
-        end
-
-        # A composite's leaves may sit on different meshes (`mesh(Wₕ::CompositeGridSpace)`
-        # always resolves to the first leaf's, see `vector_gridspace.jl`), so the spacings
-        # are fetched per leaf rather than once from `uₕ` — fetching them once applied
-        # leaf 1's spacings to every leaf, indexing out of range on any leaf sized
-        # differently (gpena/Bramble.jl#79).
-        function $finite_diff_name!(vₕ::VectorElement{<:CompositeGridSpace},
-                uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val{DIM}) where {DIM}
-            _apply_componentwise!(
-                (v, u) -> _apply_stencil!(
-                    v, u, $spacings_func(_op_mesh(u)(DIM)), $dir_instance, dim_val),
-                vₕ, uₕ)
-            return vₕ
-        end
+        # The mesh caches its spacings, so `$spacings_func` hands the engine that vector
+        # rather than a callable: indexing it is 3.6x faster than one call per grid point,
+        # and it needs no allocation of its own.
+        @inline $finite_diff_name!(vₕ::VectorElement{<:ScalarGridSpace},
+            uₕ::VectorElement{<:ScalarGridSpace}, dim_val::Val) = _apply_spaced!(
+            vₕ, uₕ, $spacings_func, _no_precheck, $dir_instance, dim_val)
+        @inline $finite_diff_name!(vₕ::VectorElement{<:CompositeGridSpace},
+            uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val) = _apply_spaced!(
+            vₕ, uₕ, $spacings_func, _no_precheck, $dir_instance, dim_val)
 
         @inline $finite_diff_name(uₕ::VectorElement, dim_val::Val) = $finite_diff_name!(
             similar(uₕ), uₕ, dim_val)
@@ -743,24 +765,17 @@ The last point has no forward neighbour, so it is truncated to zero, as in
 
 See also: [`star_spacings`](@ref), [`D₊ₓ`](@ref).
 """
-function forward_star_difference!(vₕ::VectorElement{<:ScalarGridSpace},
-        uₕ::VectorElement{<:ScalarGridSpace}, dim_val::Val{DIM}) where {DIM}
-    h = star_spacings(_op_mesh(uₕ)(DIM))
-    _apply_stencil!(vₕ, uₕ, h, Forward(), dim_val)
-    return vₕ
-end
+@inline forward_star_difference!(vₕ::VectorElement{<:ScalarGridSpace},
+    uₕ::VectorElement{<:ScalarGridSpace}, dim_val::Val) = _apply_spaced!(
+    vₕ, uₕ, star_spacings, _no_precheck, Forward(), dim_val)
 
-# A composite grid function is differenced one component at a time. A leaf's mesh is
-# not necessarily the whole composite's (`_op_mesh(uₕ)` resolves to leaf 1 only), so the
-# averaged spacing is built per leaf rather than once (gpena/Bramble.jl#79).
-function forward_star_difference!(vₕ::VectorElement{<:CompositeGridSpace},
-        uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val{DIM}) where {DIM}
-    _apply_componentwise!(
-        (v, u) -> _apply_stencil!(
-            v, u, star_spacings(_op_mesh(u)(DIM)), Forward(), dim_val),
-        vₕ, uₕ)
-    return vₕ
-end
+# A composite grid function is differenced one component at a time. A leaf's mesh is not
+# necessarily the whole composite's (`_op_mesh(uₕ)` resolves to leaf 1 only), so the
+# averaged spacing is built per leaf rather than once (gpena/Bramble.jl#79) --
+# `_apply_spaced!`'s composite method does this by recursing into the scalar one above.
+@inline forward_star_difference!(vₕ::VectorElement{<:CompositeGridSpace},
+    uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val) = _apply_spaced!(
+    vₕ, uₕ, star_spacings, _no_precheck, Forward(), dim_val)
 
 @inline forward_star_difference(uₕ::VectorElement, dim_val::Val) = forward_star_difference!(
     similar(uₕ), uₕ, dim_val)
@@ -837,30 +852,18 @@ lack a neighbour on one side, so both are truncated to zero.
 
 See also: [`star_spacings`](@ref), [`D₋ₓ`](@ref), [`D₊ₓ`](@ref).
 """
-function centered_difference!(vₕ::VectorElement{<:ScalarGridSpace},
-        uₕ::VectorElement{<:ScalarGridSpace}, dim_val::Val{DIM}) where {DIM}
-    sub = _op_mesh(uₕ)(DIM)
-    npoints(sub) >= 3 || _throw_centered_too_few_points(DIM, npoints(sub))
-    h = star_spacings(sub)
-    _apply_stencil!(vₕ, uₕ, h, Centered(), dim_val)
-    return vₕ
-end
+@inline centered_difference!(vₕ::VectorElement{<:ScalarGridSpace},
+    uₕ::VectorElement{<:ScalarGridSpace}, dim_val::Val) = _apply_spaced!(
+    vₕ, uₕ, star_spacings, _check_centered_points, Centered(), dim_val)
 
 # As for the other operators, a composite grid function is differenced one component at a
 # time. A leaf's mesh is not necessarily the whole composite's, so both the point-count
 # check and the denominator are built per leaf rather than once from `uₕ` — checking once
-# only validated leaf 1, and reused its spacing on every other leaf (gpena/Bramble.jl#79).
-function centered_difference!(vₕ::VectorElement{<:CompositeGridSpace},
-        uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val{DIM}) where {DIM}
-    _apply_componentwise!(
-        (v, u) -> begin
-            sub = _op_mesh(u)(DIM)
-            npoints(sub) >= 3 || _throw_centered_too_few_points(DIM, npoints(sub))
-            _apply_stencil!(v, u, star_spacings(sub), Centered(), dim_val)
-        end,
-        vₕ, uₕ)
-    return vₕ
-end
+# only validated leaf 1, and reused its spacing on every other leaf (gpena/Bramble.jl#79) --
+# `_apply_spaced!`'s composite method does this by recursing into the scalar one above.
+@inline centered_difference!(vₕ::VectorElement{<:CompositeGridSpace},
+    uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val) = _apply_spaced!(
+    vₕ, uₕ, star_spacings, _check_centered_points, Centered(), dim_val)
 
 @inline centered_difference(uₕ::VectorElement, dim_val::Val) = centered_difference!(similar(uₕ), uₕ, dim_val)
 
@@ -942,30 +945,18 @@ zero.
 
 See also: [`Dcₓ`](@ref), [`D₋ₓ`](@ref).
 """
-function cross_weighted_difference!(vₕ::VectorElement{<:ScalarGridSpace},
-        uₕ::VectorElement{<:ScalarGridSpace}, dim_val::Val{DIM}) where {DIM}
-    sub = _op_mesh(uₕ)(DIM)
-    npoints(sub) >= 3 || _throw_centered_too_few_points(DIM, npoints(sub))
-    h = spacings(sub)
-    _apply_stencil!(vₕ, uₕ, h, CrossWeighted(), dim_val)
-    return vₕ
-end
+@inline cross_weighted_difference!(vₕ::VectorElement{<:ScalarGridSpace},
+    uₕ::VectorElement{<:ScalarGridSpace}, dim_val::Val) = _apply_spaced!(
+    vₕ, uₕ, spacings, _check_centered_points, CrossWeighted(), dim_val)
 
 # As for the other operators, a composite grid function is differenced one component at a
 # time. A leaf's mesh is not necessarily the whole composite's, so both the point-count
 # check and the spacings are fetched per leaf rather than once from `uₕ` — fetching once
-# only validated leaf 1, and reused its spacings on every other leaf (gpena/Bramble.jl#79).
-function cross_weighted_difference!(vₕ::VectorElement{<:CompositeGridSpace},
-        uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val{DIM}) where {DIM}
-    _apply_componentwise!(
-        (v, u) -> begin
-            sub = _op_mesh(u)(DIM)
-            npoints(sub) >= 3 || _throw_centered_too_few_points(DIM, npoints(sub))
-            _apply_stencil!(v, u, spacings(sub), CrossWeighted(), dim_val)
-        end,
-        vₕ, uₕ)
-    return vₕ
-end
+# only validated leaf 1, and reused its spacings on every other leaf (gpena/Bramble.jl#79) --
+# `_apply_spaced!`'s composite method does this by recursing into the scalar one above.
+@inline cross_weighted_difference!(vₕ::VectorElement{<:CompositeGridSpace},
+    uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val) = _apply_spaced!(
+    vₕ, uₕ, spacings, _check_centered_points, CrossWeighted(), dim_val)
 
 @inline cross_weighted_difference(uₕ::VectorElement, dim_val::Val) = cross_weighted_difference!(
     similar(uₕ), uₕ, dim_val)
