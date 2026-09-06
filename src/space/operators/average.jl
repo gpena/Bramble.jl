@@ -65,7 +65,7 @@ See also: [`_compute_average`](@ref), [`add_half_shift`](@ref), [`Forward`](@ref
 @inline @propagate_inbounds _compute_average(::GridDirection, ::Val{true}, cur) = zero(cur)
 
 # The traversal is shared with the difference engine; see _stencil_ranges in
-# operators/difference.jl.
+# operators/stencil.jl.
 function _average_engine!(out, in_ref, dims::NTuple{D, Int}, dir::GridDirection,
         ::Val{DIM}) where {D, DIM}
     li = LinearIndices(dims)
