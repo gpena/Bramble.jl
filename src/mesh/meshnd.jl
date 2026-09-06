@@ -235,7 +235,11 @@ individual cell is the product of its per-axis widths; see [`cell_measure`](@ref
 @inline hₘᵢₙ(Ωₕ::MeshnD{D}) where {D} = hypot(ntuple(i -> hₘᵢₙ(Ωₕ(i)), Val(D))...)
 
 @inline function cell_measure(Ωₕ::MeshnD{D}, idx) where {D}
-    return prod(ntuple(i -> half_spacing(Ωₕ(i), idx[i]), Val(D)))
+    # Routed through the coerced, tuple-returning `half_spacing(::MeshnD, idx)` above
+    # (not the raw per-submesh `half_spacing(Ωₕ(i), idx[i])`), so a collapsed axis's
+    # zero half-spacing is replaced by `_apply_hs_logic` before the product, not left
+    # to make the whole cell measure zero.
+    return prod(half_spacing(Ωₕ, idx))
 end
 
 @inline Base.getindex(Ωₕ::MeshnD, idx::CartesianIndex) = point(Ωₕ, idx)

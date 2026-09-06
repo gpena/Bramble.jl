@@ -83,7 +83,19 @@ grid points change.
 """
 @inline spacings(Ωₕ::Mesh1D) = Ωₕ.spacings
 @inline spacings!(Ωₕ::Mesh1D, v) = (Ωₕ.spacings = v; return)
-@inline cell_measures(Ωₕ::Mesh1D) = half_spacings(Ωₕ)
+
+# A single-point mesh (n == 1, whether from a topologically collapsed domain or simply a
+# one-point request) has no adjacent interval, so `half_spacings` is the honest raw zero
+# there -- that raw value stays untouched, since other code (collapse detection, among it)
+# reads it as exactly that. `cell_measures` is a *measure*, though, and the same `_apply_hs_logic`
+# coercion `half_spacing(::MeshnD, idx)` already applies is needed here too, or a mesh with
+# a collapsed axis silently gets a zero weight everywhere (gpena/Bramble.jl#89): the zero
+# case is only ever the single-element one, so this stays the same zero-copy array in
+# every other case and only allocates on that one rare, one-element path.
+@inline function cell_measures(Ωₕ::Mesh1D)
+    hs = half_spacings(Ωₕ)
+    return length(hs) == 1 ? [_apply_hs_logic(hs[1])] : hs
+end
 
 """
     set_points!(Ωₕ::Mesh1D, pts::AbstractVector) -> Nothing
@@ -237,12 +249,13 @@ end
 @inline function cell_measure(Ωₕ::Mesh1D, i)
     idx = _extract_linear_index(i)
     _check_point_bounds(Ωₕ, idx, "cell_measure")
-    return half_spacing(Ωₕ, idx)
+    return _apply_hs_logic(half_spacing(Ωₕ, idx))
 end
 
 @inline half_spacings_iterator(Ωₕ::Mesh1D) = Ωₕ.half_spacings
 @inline half_points_iterator(Ωₕ::Mesh1D) = Ωₕ.half_pts
-@inline cell_measures_iterator(Ωₕ::Mesh1D) = half_spacings_iterator(Ωₕ)
+@inline cell_measures_iterator(Ωₕ::Mesh1D) = Iterators.map(
+    _apply_hs_logic, half_spacings_iterator(Ωₕ))
 
 @inline function _generate_random_points!(v)
     rand!(v)
