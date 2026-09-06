@@ -246,4 +246,28 @@ end
         @test eltype(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v)))) === T
         @test eltype(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v))))) === T
     end
+
+    @testset "Through the Dirichlet-constrained path" begin
+        # Every check above stops at assemble(form(...)), never reaching
+        # apply_dirichlet_labels!/dirichlet_bc!, which write their own mask/diagonal
+        # literals (0/1) into the matrix and vector -- exactly the kind of literal that
+        # widened a Float32 space to Float64 before _assembled_eltype existed. A Dirichlet
+        # constraint on a Float32 problem must not reintroduce that promotion one call later.
+        for T in (Float32, Float64)
+            S = interval(T(0), T(1)) × interval(T(0), T(1))
+            Ωₕ = mesh(domain(S, :walls => get_boundary_symbols(S)), (6, 6), (true, true))
+            Wₕ = gridspace(Ωₕ)
+            @test eltype(Ωₕ) === T
+
+            a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
+            A = assemble(a; dirichlet_labels = :walls)
+            @test eltype(A) === T
+
+            fₕ = Rₕ(Wₕ, x -> sin(x[1]) * x[2])
+            l = form(Wₕ, v -> innerₕ(fₕ, v))
+            bcs = dirichlet_constraints(set(Ωₕ), :walls => (x -> zero(T)))
+            b = assemble(l; dirichlet_conditions = bcs, dirichlet_labels = :walls)
+            @test eltype(b) === T
+        end
+    end
 end
