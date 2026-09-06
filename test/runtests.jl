@@ -94,6 +94,24 @@ const __bramble_with_unit_tests = __bramble_test_group in ("all", "unit", "full"
 # installed reports a skip rather than an error.
 const __bramble_with_ad_backends = __bramble_test_group in ("ad", "full")
 
+# `manual/test_snippets.jl` checks that the code in the 12-chapter PDF manual still
+# compiles and gives the answers it claims. Kept out of the every-push groups because it
+# assembles several real PDE systems (seconds, not milliseconds) and, unlike the operator
+# tests, doesn't catch anything a change to the manual's own prose wouldn't also need a
+# human to re-read for.
+#
+# `manual/` is entirely gitignored (the manual is written and built outside version
+# control, by request), so this file does not exist on a fresh checkout -- including CI's.
+# `isfile` below makes this a local-only check: it runs when a maintainer has the manual
+# checked out and asks for the `full` group, and skips with a clear `@info` (not silently)
+# everywhere else, rather than erroring on a file that was never going to be there.
+const __bramble_manual_snippets_path = joinpath(@__DIR__, "..", "manual", "test_snippets.jl")
+const __bramble_with_manual_snippets = __bramble_test_group == "full" &&
+                                       isfile(__bramble_manual_snippets_path)
+if __bramble_test_group == "full" && !__bramble_with_manual_snippets
+    @info "Skipping manual snippets: manual/test_snippets.jl not found (manual/ is gitignored, so this is expected outside a machine that has it checked out locally)."
+end
+
 if __bramble_with_unit_tests
     @testset verbose=true "Core library" begin
         @testset "Utilities" begin
@@ -191,5 +209,11 @@ if __bramble_with_ad_backends
         # reuses so both files check every backend the same way.
         __bramble_with_unit_tests || include("space/autodiff_backends.jl")
         include("space/autodiff_heavy.jl")
+    end
+end
+
+if __bramble_with_manual_snippets
+    @testset verbose=true "Manual snippets" begin
+        include(__bramble_manual_snippets_path)
     end
 end
