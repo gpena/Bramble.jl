@@ -204,14 +204,26 @@ the direction, so it throws an `ArgumentError`.
 """
 function inner₊(left::LazyOp{D}, right::LazyOp{D};
         markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
-    if D == 1
-        prod = if _is_source_only(left)
-            LinearProduct{1, InnerPlus{1}, typeof(left), typeof(right)}(left, right)
-        else
-            BilinearProduct{1, InnerPlus{1}, typeof(left), typeof(right)}(left, right)
-        end
-        return _restrict_by_markers(prod, markers)
+    return _inner₊_same_dim(Val(D), left, right, markers)
+end
+
+# Split on `Val(D)` rather than branching on `D == 1` at runtime: `D` is a type parameter,
+# known at compile time, so the choice belongs at dispatch (gpena/Bramble.jl#59). Kept as an
+# inner helper, not a second `inner₊` method on `LazyOp{1}`, `LazyOp{1}`: that concrete-D
+# signature is no longer a subtype of the `BackwardDifference{D,Dim}`-paired overloads below
+# (unlike this method's shared, still-generic-in-D one), and is genuinely ambiguous against
+# them for D=1 -- confirmed by trying it first and watching precompilation fail on exactly
+# that call shape.
+function _inner₊_same_dim(::Val{1}, left, right, markers::NTuple{N, Symbol}) where {N}
+    prod = if _is_source_only(left)
+        LinearProduct{1, InnerPlus{1}, typeof(left), typeof(right)}(left, right)
+    else
+        BilinearProduct{1, InnerPlus{1}, typeof(left), typeof(right)}(left, right)
     end
+    return _restrict_by_markers(prod, markers)
+end
+
+function _inner₊_same_dim(::Val{D}, left, right, markers::NTuple{N, Symbol}) where {D, N}
     return _inner₊_no_direction(left, right, D)
 end
 
