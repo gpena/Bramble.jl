@@ -104,4 +104,39 @@ end
         @test _asymptotically_second_order(p2, 1.9)
         @test _asymptotically_second_order(p3, 1.8)
     end
+
+    @testset "Variable-coefficient Poisson" begin
+        # -∇·(κ(x)∇u) = f with a smooth, spatially varying κ(x) = 1 + 0.5sin(πx₁) > 0 --
+        # every case above uses a constant coefficient (docs/src/examples/*.md's own
+        # problem statements say so explicitly), so none of them exercises the live grid
+        # coefficient path (the same κₕ * ∇₋ₕ(u) mechanism poisson_nonlinear.md's α(u)
+        # uses) under an independently-known exact answer.
+        #
+        # Same manufactured solution as "Linear Poisson" above, so f is worked out by hand
+        # from div(κ∇u) = (κ'(x₁) + D·κ(x₁))·exp(∑x): κ depends only on x₁, so the x₁ term
+        # picks up κ' from the product rule while each of the other D-1 directions
+        # contributes a plain κ·exp(∑x) (∂ᵢexp(∑x) = exp(∑x) for every i).
+        κ(x) = 1.0 + 0.5 * sin(pi * x[1])
+        dκ(x) = 0.5 * pi * cos(pi * x[1])
+
+        p1, p2, p3 = _orders(
+            Wc -> begin
+                # Evaluating κ at the nodes and multiplying it straight into the nodal
+                # gradient degrades to first order: `∇₋ₕ(u)` lives at the staggered
+                # half-points, so a nodal κ is an O(h) mismatch in *location*, not just a
+                # discretization choice. `M₋ₕ` -- the same averaging poisson_nonlinear.md
+                # uses to move its solution-dependent α onto the staggered grid -- moves κ
+                # there too, direction by direction.
+                κₕ = Rₕ(Wc, κ)
+                D = dim(Wc)
+                κf = M₋ₕ(κₕ)
+                gradκ(u) = D == 1 ? κf * ∇₋ₕ(u) : ntuple(i -> κf[i] * ∇₋ₕ(u)[i], D)
+                form(Wc, Wc, (u, v) -> inner₊(gradκ(u), ∇₋ₕ(v)))
+            end,
+            (x, D) -> -(dκ(x) + D * κ(x)) * exp(sum(x)))
+
+        @test _asymptotically_second_order(p1, 1.9)
+        @test _asymptotically_second_order(p2, 1.9)
+        @test _asymptotically_second_order(p3, 1.8)
+    end
 end
