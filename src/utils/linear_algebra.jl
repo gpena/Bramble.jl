@@ -96,6 +96,49 @@ end
     return nothing
 end
 
+#===========================================================================#
+# Walking a boundary mask
+#
+# The general-purpose chunk-skipping walk over a `BitVector`'s set bits. Lives here, not
+# in `form/dirichlet_constraints.jl` where it used to be written out by hand a second time
+# (as `_each_marked`) and a third (inside `_dot_masked` below, twice): a bit-walk is a
+# linear-algebra utility, with Dirichlet boundary conditions one caller among several
+# (gpena/Bramble.jl#71).
+#===========================================================================#
+
+"""
+    MarkedIndices(mask::BitVector, offset::Int = 0)
+
+Lazily iterates the 1-based positions where `mask` is set, each shifted by `offset` (so a
+leaf's mask, consulted at its offset into a global vector, yields global indices without
+copying). Walks whole 64-bit words at a time, skipping zero chunks entirely and extracting
+set bits via `trailing_zeros`, so the work is proportional to the number of set bits, not
+to `length(mask)`.
+
+No bounds guard against `length(mask)` is needed: `BitVector` guarantees the padding bits
+of its final chunk are zero, so the walk never yields an index past the mask's own length.
+"""
+struct MarkedIndices
+    chunks::Vector{UInt64}
+    offset::Int
+end
+
+@inline MarkedIndices(mask::BitVector, offset::Int = 0) = MarkedIndices(mask.chunks, offset)
+
+@inline function Base.iterate(m::MarkedIndices, (chunk_idx, rest) = (0, zero(UInt64)))
+    chunks = m.chunks
+    @inbounds while rest == zero(UInt64)
+        chunk_idx += 1
+        chunk_idx > length(chunks) && return nothing
+        rest = chunks[chunk_idx]
+    end
+    i = m.offset + (chunk_idx - 1) * 64 + trailing_zeros(rest) + 1
+    return i, (chunk_idx, rest & (rest - 1))
+end
+
+Base.IteratorSize(::Type{MarkedIndices}) = Base.SizeUnknown()
+Base.eltype(::Type{MarkedIndices}) = Int
+
 # Discrete space inner product kernels
 
 """
@@ -108,6 +151,12 @@ Compute the weighted trilinear dot product
 
 Accumulates via fused multiply-add operations (`muladd`) with `@simd` vectorization.
 
+A same-eltype specialization used to sit alongside this one, skipping the `promote_type`
+call and the `T(...)` conversions on the (dispatch-favoured) assumption that they cost
+something. Compared by `@code_llvm`/`@code_native` with matching element types
+(gpena/Bramble.jl#71): identical generated code, since `promote_type(T, T, T) === T` and
+`T(x::T)` is an identity conversion the compiler elides. One method now covers both cases.
+
 # Arguments
 - `u`: First vector.
 - `v`: Second vector.
@@ -116,19 +165,6 @@ Accumulates via fused multiply-add operations (`muladd`) with `@simd` vectorizat
 # Throws
 - `DimensionMismatch`: If `length(u)`, `length(v)`, and `length(w)` do not match.
 """
-@inline function _dot(u::AbstractVector{T}, v::AbstractVector{T},
-        w::AbstractVector{T}) where {T}
-    (length(u) == length(v) == length(w)) ||
-        _throw_dot_dim_error(length(u), length(v), length(w))
-    s = zero(T)
-
-    @inbounds @simd for i in 1:length(u)
-        s = muladd(u[i] * v[i], w[i], s)
-    end
-
-    return s
-end
-
 @inline function _dot(u::AbstractVector, v::AbstractVector, w::AbstractVector)
     (length(u) == length(v) == length(w)) ||
         _throw_dot_dim_error(length(u), length(v), length(w))
@@ -150,8 +186,12 @@ Compute the weighted dot product restricted to indices where `mask` is true:
 \\sum_{i \\in \\mathrm{supp}(\\mathrm{mask})} u_i v_i w_i
 ```
 
-Traverses 64-bit integer words in `mask.chunks`, skipping zero chunks and extracting active
-bit positions via `trailing_zeros` to avoid branch mispredictions and allocations.
+Walks `MarkedIndices(mask)`, so the work is proportional to the number of set bits
+rather than to `length(mask)`.
+
+As with `_dot`, a same-eltype specialization used to sit alongside this one;
+`@code_llvm`/`@code_native` with matching element types (gpena/Bramble.jl#71) showed
+identical generated code, so one method now covers both cases.
 
 # Arguments
 - `u`: First vector.
@@ -163,50 +203,14 @@ bit positions via `trailing_zeros` to avoid branch mispredictions and allocation
 - `DimensionMismatch`: If vector or mask lengths do not match.
 """
 @inline function _dot_masked(
-        u::AbstractVector{T}, v::AbstractVector{T}, w::AbstractVector{T},
-        mask::BitVector) where {T}
-    n = length(u)
-    (n == length(v) == length(w) == length(mask)) ||
-        _throw_dot_dim_error(n, length(v), length(w), length(mask))
-    s = zero(T)
-
-    chunks = mask.chunks
-    @inbounds for c in eachindex(chunks)
-        chunk = chunks[c]
-        chunk == 0 && continue
-        base_i = (c - 1) * 64
-        while chunk != 0
-            tz = trailing_zeros(chunk)
-            i = base_i + tz + 1
-            i > n && break
-            s = muladd(u[i] * v[i], w[i], s)
-            chunk &= chunk - 1
-        end
-    end
-
-    return s
-end
-
-@inline function _dot_masked(
         u::AbstractVector, v::AbstractVector, w::AbstractVector, mask::BitVector)
-    n = length(u)
-    (n == length(v) == length(w) == length(mask)) ||
-        _throw_dot_dim_error(n, length(v), length(w), length(mask))
+    (length(u) == length(v) == length(w) == length(mask)) ||
+        _throw_dot_dim_error(length(u), length(v), length(w), length(mask))
     T = promote_type(eltype(u), eltype(v), eltype(w))
     s = zero(T)
 
-    chunks = mask.chunks
-    @inbounds for c in eachindex(chunks)
-        chunk = chunks[c]
-        chunk == 0 && continue
-        base_i = (c - 1) * 64
-        while chunk != 0
-            tz = trailing_zeros(chunk)
-            i = base_i + tz + 1
-            i > n && break
-            s = muladd(T(u[i]) * T(v[i]), T(w[i]), s)
-            chunk &= chunk - 1
-        end
+    @inbounds for i in MarkedIndices(mask)
+        s = muladd(T(u[i]) * T(v[i]), T(w[i]), s)
     end
 
     return s

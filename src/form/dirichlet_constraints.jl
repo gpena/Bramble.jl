@@ -28,8 +28,9 @@ symmetrize!(A, F, mesh(Wₕ), :left, :right)
 
 ## Performance optimizations
 
-- Constrained indices are walked, never scanned for: `_each_marked` skips empty `BitVector`
-  chunks and steps set bits with `trailing_zeros`, so every routine here costs the boundary
+- Constrained indices are walked, never scanned for: `_each_marked` calls
+  `MarkedIndices` (utils/linear_algebra.jl), which skips empty `BitVector` chunks and
+  steps set bits with `trailing_zeros`, so every routine here costs the boundary
   cardinality rather than `ndofs`. It is the one iterator; nothing else in this file walks a
   mask by hand.
 - Sparse matrices are modified through their CSC arrays directly, in a single sweep that
@@ -164,22 +165,17 @@ end
 
 # --- Walking a boundary mask -------------------------------------------------------- #
 
-# The one way this file iterates constrained indices. Walking the set bits rather than the
-# mask itself: boundary sets are sparse compared to the domain volume, so skipping zero
-# chunks and walking set bits with `trailing_zeros` performs work proportional to the
-# boundary cardinality rather than to `ndofs`.
+# The one way this file iterates constrained indices. A thin caller over `MarkedIndices`
+# (utils/linear_algebra.jl): the chunk-skipping bit-walk itself is a linear-algebra utility,
+# not something specific to Dirichlet boundary conditions, so it lives there and this file
+# just calls it (gpena/Bramble.jl#71). `_dot_masked` walks the same set of indices for the
+# same reason.
 #
 # `offset` is where this mask's leaf starts in the global system (zero for a scalar space),
 # so `f` always receives a global index.
 @inline function _each_marked(f::F, mask::BitVector, offset::Int) where {F}
-    @inbounds for (chunk_idx, chunk) in enumerate(mask.chunks)
-        chunk == zero(UInt64) && continue
-        base = offset + (chunk_idx - 1) * 64
-        rest = chunk
-        while rest != zero(UInt64)
-            f(base + trailing_zeros(rest) + 1)
-            rest &= rest - 1
-        end
+    @inbounds for i in MarkedIndices(mask, offset)
+        f(i)
     end
 end
 

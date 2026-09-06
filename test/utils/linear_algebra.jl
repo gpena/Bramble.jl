@@ -1,6 +1,6 @@
 using Test
 using Bramble
-using Bramble: _dot, _dot_masked,
+using Bramble: _dot, _dot_masked, MarkedIndices,
                _cpu_threaded_for!, _serial_for!, _cpu_threaded_scatter_for!,
                _write_components!, Serial, Parallel
 using LinearAlgebra: dot
@@ -208,6 +208,36 @@ end
         sv_w = SVector(0.5, 1.0, 1.5, 2.0)
         @test _dot_masked(sv_u, sv_v, sv_w, mask) ≈ expected
         @test_allocs _dot_masked(sv_u, sv_v, sv_w, mask)
+    end
+
+    # gpena/Bramble.jl#71: `MarkedIndices` is the one bit-walk `_dot_masked` above and
+    # `_each_marked` (form/dirichlet_constraints.jl) both call, rather than each keeping its
+    # own copy. Checked directly here, past a single 64-bit chunk, since the masks above are
+    # all short enough to never exercise the chunk-skipping loop or the chunk-boundary
+    # bit-index arithmetic at all.
+    @testset "MarkedIndices" begin
+        @test collect(MarkedIndices(falses(200))) == Int[]
+
+        mask = falses(200)
+        set_bits = [1, 5, 63, 64, 65, 127, 128, 129, 199, 200]
+        mask[set_bits] .= true
+        @test collect(MarkedIndices(mask)) == set_bits
+
+        # A nonzero offset shifts every yielded index, as consulting a composite leaf's own
+        # mask at its position in the global vector needs.
+        @test collect(MarkedIndices(mask, 1000)) == set_bits .+ 1000
+
+        # A mask whose length isn't a multiple of 64: the padding bits of the final chunk
+        # must be zero (a `BitVector` invariant), so the walk must not yield past `length(mask)`.
+        odd_mask = falses(70)
+        odd_mask[[3, 70]] .= true
+        @test collect(MarkedIndices(odd_mask)) == [3, 70]
+
+        # Allocation-free: the whole point of walking chunks instead of `findall`.
+        count_bits(m) = (n = 0; for _ in MarkedIndices(m)
+                n += 1
+            end; n)
+        @test_allocs count_bits(mask)
     end
 
     # Invariants tested:
