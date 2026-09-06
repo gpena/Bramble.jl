@@ -270,53 +270,16 @@ function _refine_indices!(Ωₕ::MeshnD{D}) where {D}
     return nothing
 end
 
-function iterative_refinement!(Ωₕ::MeshnD{D}) where {D}
-    # The old markers dict is sized for the old grid and would otherwise be left silently
-    # wrong rather than merely absent: `haskey(markers(Ωₕ), :boundary)` still answers
-    # `true`, its BitVector still indexes without erroring (it is shorter than the new
-    # point count, not longer), and every point beyond its old length reads as "not
-    # boundary" (found by refining a mesh and reassembling a Poisson problem on it, where
-    # the boundary rows past the old length never got constrained and the system went
-    # singular with no error naming why). `:boundary`/`:interior` need no domain to
-    # recompute: they come from the mesh's own shape alone, so they are rebuilt
-    # unconditionally here. Anything else the mesh was carrying (a domain's own custom
-    # labels) cannot be re-derived without that domain, so it is dropped rather than left
-    # stale; the two-argument form re-evaluates those too, and does not route through this
-    # method at all, precisely so it never triggers the warning below on its own account.
-    old_markers = markers(Ωₕ)
-    extra_labels = setdiff(keys(old_markers), (:boundary, :interior))
-    isempty(extra_labels) ||
-        @warn "iterative_refinement!(Ωₕ) refined a mesh carrying custom markers " *
-              "$(Tuple(extra_labels)); those are dropped, not re-evaluated onto the new " *
-              "points, because there is no domain here to re-derive them from. Call " *
-              "iterative_refinement!(Ωₕ, domain_markers) instead to keep them."
-
-    _refine_indices!(Ωₕ)
-    fresh_markers = MeshMarkers()
-    _ensure_geometric_markers!(fresh_markers, Ωₕ)
-    Ωₕ.markers = fresh_markers
-    return nothing
-end
-
-function iterative_refinement!(Ωₕ::MeshnD{D}, domain_markers::DomainMarkers;
-        warn_marker_mismatch::Bool = true) where {D}
-    _refine_indices!(Ωₕ)
-    # The markers are BitVectors sized to the old grid, so they are rebuilt too.
-    set_markers!(Ωₕ, domain_markers; warn_marker_mismatch)
-    return nothing
-end
+# A `MeshnD` always has something to refine (each axis handles its own collapse
+# independently, inside `_refine_indices!` above); the rest of the refinement/
+# `change_points!` plumbing is shared with `Mesh1D`, in `mesh/interface.jl`
+# (gpena/Bramble.jl#68). `_nothing_to_refine`'s default (`interface.jl`) already answers
+# `false` for any mesh type that does not override it, so no override is needed here.
 
 function change_points!(Ωₕ::MeshnD{D}, pts) where {D}
     @inbounds for i in 1:D
         change_points!(Ωₕ(i), pts[i])
     end
-    return
-end
-
-function change_points!(Ωₕ::MeshnD{D}, domain_markers::DomainMarkers, pts;
-        warn_marker_mismatch::Bool = true) where {D}
-    change_points!(Ωₕ, pts)
-    set_markers!(Ωₕ, domain_markers; warn_marker_mismatch)
     return
 end
 

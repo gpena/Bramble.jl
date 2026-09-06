@@ -160,9 +160,100 @@ Override the grid indices in `Ωₕ`. Used internally during mesh refinement.
 """
 @inline set_indices!(Ωₕ::AbstractMeshType, indices) = (Ωₕ.indices = indices; return)
 
+"""
+    markers!(Ωₕ::AbstractMeshType, mesh_markers::MeshMarkers) -> Nothing
+
+Override the markers dictionary in `Ωₕ`. Used internally during mesh refinement, where
+the old dictionary is sized for the old grid and is replaced outright rather than merged
+into.
+"""
+@inline markers!(Ωₕ::AbstractMeshType, mesh_markers) = (Ωₕ.markers = mesh_markers; return)
+
 @inline is_boundary_index(Ωₕ::AbstractMeshType, idx) = is_boundary_index(indices(Ωₕ), idx)
 @inline boundary_indices(Ωₕ::AbstractMeshType) = boundary_indices(indices(Ωₕ))
 @inline interior_indices(Ωₕ::AbstractMeshType) = interior_indices(indices(Ωₕ))
+
+"""
+    is_collapsed(Ωₕ::AbstractMeshType) -> Bool
+
+Whether `Ωₕ` has no interval to refine or measure a spacing over — a [`Mesh1D`](@ref)
+built over a single point. A [`MeshnD`](@ref) is never collapsed as a whole: each axis is
+its own `Mesh1D` and may be collapsed individually, which is handled per axis rather than
+at this level, so the default here is `false`.
+"""
+@inline is_collapsed(::AbstractMeshType) = false
+
+# The only real difference between `Mesh1D`'s and `MeshnD`'s refinement: a `MeshnD` always
+# has something to refine (each axis handles its own collapse independently, inside
+# `_refine_indices!`), while a `Mesh1D` with fewer than two points — collapsed, or a
+# genuine single-point mesh over a non-degenerate domain — has no interval at all.
+@inline _nothing_to_refine(::AbstractMeshType) = false
+
+#===========================================================================#
+# Refinement and point replacement
+#
+# The geometric part (`_refine_indices!`, `change_points!(Ωₕ, pts)`) is type-specific and
+# defined alongside each mesh type. Everything downstream of it — deciding whether there
+# is anything to do, and rebuilding markers afterward — reads only the fields this file
+# already assumes exist, so it is written once here rather than once per mesh type
+# (gpena/Bramble.jl#68).
+#===========================================================================#
+
+# The one-argument form: no domain to re-derive custom markers from, so they are dropped
+# with a warning rather than kept incorrect. The public contract for both this and the
+# two-argument form below is documented once, on the `function iterative_refinement! end`
+# stub further down this file, rather than repeated on each method.
+function iterative_refinement!(Ωₕ::AbstractMeshType)
+    # Mirrored from `_refine_indices!`'s own no-op cases (a collapsed or single-point
+    # `Mesh1D`), rather than just inherited from calling it: `_refine_indices!` returning
+    # "did nothing" is not visible to its caller, and rebuilding markers anyway would drop
+    # a mesh's custom labels for no reason at all.
+    _nothing_to_refine(Ωₕ) && return
+
+    # The old markers dict is sized for the old grid and would otherwise be left silently
+    # wrong rather than merely absent: `haskey(markers(Ωₕ), :boundary)` still answers
+    # `true`, its `BitVector` still indexes without erroring (it is shorter than the new
+    # point count, not longer), and every point beyond its old length reads as "not
+    # boundary" (found by refining a mesh and reassembling a Poisson problem on it, where
+    # the boundary rows past the old length never got constrained and the system went
+    # singular with no error naming why). `:boundary`/`:interior` need no domain and are
+    # rebuilt unconditionally; anything else is dropped with a warning rather than kept
+    # incorrect. The two-argument form below does not route through this method at all,
+    # precisely so it never triggers the warning on its own account.
+    old_markers = markers(Ωₕ)
+    extra_labels = setdiff(keys(old_markers), (:boundary, :interior))
+    isempty(extra_labels) ||
+        @warn "iterative_refinement!(Ωₕ) refined a mesh carrying custom markers " *
+              "$(Tuple(extra_labels)); those are dropped, not re-evaluated onto the new " *
+              "points, because there is no domain here to re-derive them from. Call " *
+              "iterative_refinement!(Ωₕ, domain_markers) instead to keep them."
+
+    _refine_indices!(Ωₕ)
+    fresh_markers = MeshMarkers()
+    _ensure_geometric_markers!(fresh_markers, Ωₕ)
+    markers!(Ωₕ, fresh_markers)
+    return
+end
+
+# The two-argument form: a real domain to re-derive markers from, so refinement always
+# proceeds except when there is no interval at all (`is_collapsed`) — unlike the
+# one-argument form above, a single-point, non-collapsed mesh still has its (unchanged)
+# point's markers correctly re-evaluated, since `set_markers!` needs no interval to do that.
+function iterative_refinement!(Ωₕ::AbstractMeshType, domain_markers::DomainMarkers;
+        warn_marker_mismatch::Bool = true)
+    is_collapsed(Ωₕ) && return
+
+    _refine_indices!(Ωₕ)
+    set_markers!(Ωₕ, domain_markers; warn_marker_mismatch)
+    return
+end
+
+function change_points!(Ωₕ::AbstractMeshType, domain_markers::DomainMarkers, pts;
+        warn_marker_mismatch::Bool = true)
+    change_points!(Ωₕ, pts)
+    set_markers!(Ωₕ, domain_markers; warn_marker_mismatch)
+    return
+end
 
 #------------------------------------------------------------------------------------------#
 # Bounds Checking & Internal Helpers
@@ -187,21 +278,6 @@ end
 @inline _spacing_generator(Ωₕ::AbstractMeshType, spacing_func) = (spacing_func(Ωₕ, i)
 for i in 1:npoints(Ωₕ))
 @inline _apply_hs_logic(value::T) where {T} = ifelse(iszero(value), one(T), value)
-
-# 1D spacing reference routines
-# A mesh with fewer than two points has no interval to measure, so every spacing is zero.
-# The single definition of the backward spacing convention, including the boundary case
-# where the first point has no interval behind it and repeats the first one. Mesh1D fills
-# its cache with this; forward_spacing then reads that cache one entry along.
-@inline function _compute_backward_spacing_1d(pts::AbstractVector, i::Int, collapsed::Bool, T::Type)
-    if collapsed || length(pts) < 2
-        return zero(T)
-    elseif i == 1
-        return pts[2] - pts[1]
-    else
-        return pts[i] - pts[i - 1]
-    end
-end
 
 #------------------------------------------------------------------------------------------#
 # High-Level Mesh Constructor Dispatch

@@ -280,6 +280,27 @@ import Base: diff
             @test npoints(Ωₕ2) == npts_refined2
             @test indices(Ωₕ2) == CartesianIndices((npts_refined2,))
             @test points(Ωₕ2) ≈ [0.0, 0.25, 0.5, 0.75, 1.0]
+
+            # gpena/Bramble.jl#68: the two arities have a genuine (not accidental)
+            # asymmetry on a single-point, non-collapsed mesh — nothing to refine either
+            # way, but the one-argument form must leave existing markers untouched
+            # (no domain to re-derive them from), while the two-argument form must still
+            # (re)apply the domain markers it was given, since `set_markers!` needs no
+            # interval to do that. Hoisting both to `AbstractMeshType` in `interface.jl`
+            # must not collapse this distinction into a single shared guard.
+            Ω_one = create_test_domain(2.0, 5.0; markers = dm)
+            Ωₕ_one_arg = mesh(Ω_one, 1, true; backend = backend())
+            @test !is_collapsed(Ωₕ_one_arg)
+            markers_before = deepcopy(markers(Ωₕ_one_arg))
+            iterative_refinement!(Ωₕ_one_arg)
+            @test npoints(Ωₕ_one_arg) == 1
+            @test markers(Ωₕ_one_arg) == markers_before
+
+            Ωₕ_one_dm = mesh(Ω_one, 1, true; backend = backend())
+            iterative_refinement!(Ωₕ_one_dm, dm)
+            @test npoints(Ωₕ_one_dm) == 1
+            @test haskey(markers(Ωₕ_one_dm), :BC)
+            @test haskey(markers(Ωₕ_one_dm), :Center)
         end
 
         @testset "change_points!" begin
