@@ -79,10 +79,7 @@ end
 
 Return all boundary facets of a `CartesianIndices` domain or mesh `Ωₕ` as a tuple of `CartesianIndices`.
 """
-@inline function boundary_indices(idxs::CartesianIndices)
-    tup = boundary_symbol_to_cartesian(idxs)
-    return ntuple(i -> tup[i], length(tup))
-end
+@inline boundary_indices(idxs::CartesianIndices) = Tuple(boundary_symbol_to_cartesian(idxs))
 
 """
     interior_indices(indices::CartesianIndices{D}) -> CartesianIndices{D}
