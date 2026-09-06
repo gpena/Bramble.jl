@@ -254,10 +254,11 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         assemble_parallel!(Ap, a)
         @test As ≈ Ap
 
-        # `_bilinear_colour_strides` reads only the *test* side of the stencil (disjoint rows
-        # imply disjoint entries regardless of what columns do), which is why an interpolation on
-        # the trial side needs no colouring change. This is what would fail if that reasoning
-        # were wrong: two threads racing on one entry would give a wrong sum, not an error.
+        # Bilinear colouring (`_colour_strides(stencil_offsets(ast))`) reads only the *test*
+        # side of the stencil (disjoint rows imply disjoint entries regardless of what
+        # columns do), which is why an interpolation on the trial side needs no colouring
+        # change. This is what would fail if that reasoning were wrong: two threads racing
+        # on one entry would give a wrong sum, not an error.
         assemble_parallel!(Ap, a)
         @test As ≈ Ap
         @test_allocs assemble!(As, a)

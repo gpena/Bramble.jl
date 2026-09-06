@@ -174,9 +174,11 @@ end
         @test stencil_offsets(inner₊(uh, v)) == [(0,)]
         @test sort(stencil_offsets(innerₕ(uh, v) + innerₕ(uh, D₋ₓ(v)))) == [(-1,), (0,)]
 
-        # A bilinear product pairs a row offset with a column offset, so what it reaches is
-        # a set of pairs and does not fit this shape. It says so rather than answering with
-        # half the truth.
-        @test_throws ArgumentError stencil_offsets(innerₕ(D₋ₓ(u), D₋ₓ(v)))
+        # A bilinear product pairs a row offset with a column offset -- but colouring, the
+        # one consumer of this function (gpena/Bramble.jl#54), only ever needs the row
+        # side: a write collision needs both to coincide, and colour-separated rows can't.
+        # So this reduces to the test factor's reach, same as a LinearProduct already does,
+        # regardless of how complex the trial factor is.
+        @test sort(stencil_offsets(innerₕ(D₋ₓ(u), D₋ₓ(v)))) == [(-1,), (0,)]
     end
 end

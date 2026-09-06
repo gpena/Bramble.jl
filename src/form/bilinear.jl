@@ -220,7 +220,13 @@ end
 @inline _matrix_eltype(ast, form::BilinearForm) = promote_type(
     _assembled_eltype(ast, form.test_space), eltype(form.trial_space))
 
-function _pattern_upper_bound(ast::AST_TYPE, sp, mesh_markers, lin_indices) where {AST_TYPE}
+# A hint for `sizehint!`, not a real bound: `local_stencil` can return a longer stencil at a
+# boundary point than at this representative interior one, so this can undercount. Cheap to
+# get wrong, since the only cost is a reallocation of `I_vec`/`J_vec` -- computing the true
+# maximum (over the boundary stencils too) would cost more than the reallocation it saves.
+# Named for what it is after gpena/Bramble.jl#41 pointed out that "upper bound" was a
+# guarantee this never gave.
+function _pattern_size_hint(ast::AST_TYPE, sp, mesh_markers, lin_indices) where {AST_TYPE}
     grid_inds = indices(mesh(sp))
     npts = length(grid_inds)
     I = grid_inds[length(grid_inds) ÷ 2 + 1]
@@ -263,7 +269,7 @@ function allocate_system_matrix(
 
     I_vec = Int[]
     J_vec = Int[]
-    hint = _pattern_upper_bound(ast, space, mesh_markers, lin_indices)
+    hint = _pattern_size_hint(ast, space, mesh_markers, lin_indices)
     sizehint!(I_vec, hint)
     sizehint!(J_vec, hint)
 
@@ -345,7 +351,7 @@ function allocate_system_matrix(
     sp = first(first(test_leaves))
     Ωₛ = mesh(sp)
     hint = length(test_leaves) *
-           _pattern_upper_bound(ast, sp, markers(Ωₛ), LinearIndices(indices(Ωₛ)))
+           _pattern_size_hint(ast, sp, markers(Ωₛ), LinearIndices(indices(Ωₛ)))
     sizehint!(I_vec, hint)
     sizehint!(J_vec, hint)
 
@@ -599,24 +605,6 @@ end
     return nothing
 end
 
-# Safe stride for matrix assembly, determined from a sample stencil evaluation.
-function _bilinear_colour_strides(ast::AST_TYPE, sp, ::Val{D}) where {AST_TYPE, D}
-    Ωₕ = mesh(sp)
-    grid_inds = indices(Ωₕ)
-    lin_indices = LinearIndices(grid_inds)
-    I = grid_inds[length(grid_inds) ÷ 2 + 1]
-    stencil = local_stencil(ast, sp, I, markers(Ωₕ), lin_indices[I])
-    isempty(stencil) && return ntuple(_ -> 1, D)
-
-    lo = stencil[1][2]
-    hi = stencil[1][2]
-    for (_, off_v, _) in stencil
-        lo = min.(lo, off_v)
-        hi = max.(hi, off_v)
-    end
-    return hi .- lo .+ 1
-end
-
 # One colour, threaded, writing directly into the matrix.
 @noinline function _sweep_bilinear_colour!(A::SparseMatrixCSC, sp, term::TERM, idxs,
         lin_indices, mesh_markers, row_offset::Int, col_offset::Int) where {TERM}
@@ -648,35 +636,35 @@ function _sweep_bilinear!(A::SparseMatrixCSC, sp, term::TERM, strides, row_offse
 end
 
 function _assemble_blocks_parallel!(A::SparseMatrixCSC, op::OperatorAdd, trial_leaves,
-        test_leaves, dim_val::Val)
+        test_leaves)
     _visit_operator_add2(
-        _assemble_blocks_parallel!, A, op, trial_leaves, test_leaves, dim_val)
+        _assemble_blocks_parallel!, A, op, trial_leaves, test_leaves)
 end
 
 function _assemble_blocks_parallel!(A::SparseMatrixCSC, term::TERM, trial_leaves,
-        test_leaves, dim_val::Val) where {TERM}
+        test_leaves) where {TERM}
     for blk in blocks(term, trial_leaves, test_leaves)
         _check_block_meshes(term, blk.trial_leaf, blk.test_leaf)
         _sweep_bilinear!(A, blk.test_leaf, term,
-            _bilinear_colour_strides(term, blk.test_leaf, dim_val),
+            _colour_strides(stencil_offsets(term)),
             blk.row_offset, blk.col_offset)
     end
     return A
 end
 
 function _assemble_bilinear_parallel_core!(A::SparseMatrixCSC, trial_space, test_space,
-        ast::AST_TYPE, dim_val::Val) where {AST_TYPE}
+        ast::AST_TYPE) where {AST_TYPE}
     _check_block_meshes(ast, trial_space, test_space)
     _sweep_bilinear!(A, test_space, ast,
-        _bilinear_colour_strides(ast, test_space, dim_val), 0, 0)
+        _colour_strides(stencil_offsets(ast)), 0, 0)
     return A
 end
 
 function _assemble_bilinear_parallel_core!(A::SparseMatrixCSC,
         trial_space::CompositeGridSpace, test_space::CompositeGridSpace,
-        ast::AST_TYPE, dim_val::Val) where {AST_TYPE}
+        ast::AST_TYPE) where {AST_TYPE}
     _assemble_blocks_parallel!(A, ast, leaf_spaces_offsets(trial_space),
-        leaf_spaces_offsets(test_space), dim_val)
+        leaf_spaces_offsets(test_space))
     return A
 end
 
@@ -708,7 +696,7 @@ function assemble!(
         _assemble_bilinear_core_cached!(
             A, form.trial_space, form.test_space, ast, form.cache)
     else
-        _assemble_bilinear_parallel_core!(A, form.trial_space, form.test_space, ast, Val(D))
+        _assemble_bilinear_parallel_core!(A, form.trial_space, form.test_space, ast)
     end
 
     apply_dirichlet_labels!(A, form, dirichlet_labels, dirichlet_components)
@@ -731,7 +719,7 @@ function assemble_parallel!(
     fill!(nonzeros(A), zero(eltype(nonzeros(A))))
 
     _assemble_bilinear_parallel_core!(
-        A, form.trial_space, form.test_space, ast, Val(D))
+        A, form.trial_space, form.test_space, ast)
 
     return A
 end

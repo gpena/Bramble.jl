@@ -43,12 +43,12 @@ The implementation this replaced binned every index into a vector of vectors.
 
 A bilinear stencil writes to `(I + off_v, I + off_u)`, so two points collide on an entry only
 if their *row* footprints overlap: rows disjoint implies entries disjoint whatever the columns
-do. `_bilinear_colour_strides` therefore takes the span of the test-side offsets only, which
-is the same quantity `_colour_strides` computes for a vector assembly.
-
-It reads them from an evaluated sample stencil rather than from `stencil_offsets`, which
-refuses a `BilinearProduct` on purpose: its offsets are pairs, and only one side is wanted
-here.
+do. Matrix assembly colours from `_colour_strides(stencil_offsets(ast))` too, the same
+function and the same quantity a vector assembly colours from
+([gpena/Bramble.jl#54](https://github.com/gpena/Bramble.jl/issues/54)): `stencil_offsets`
+reduces a `BilinearProduct` to its test factor's reach, since that is the only side
+colouring ever needs, so there is one static answer to "what does this reach" rather than
+a second one re-derived from a sample stencil evaluation.
 
 The colouring is what makes the matrix sweep correct rather than merely fast. `add_to_sparse!`
 searches a column and updates the entry in place, so two threads landing on the same entry

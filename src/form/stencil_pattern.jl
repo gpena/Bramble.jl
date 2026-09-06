@@ -24,6 +24,9 @@ Read from the AST rather than from an evaluated stencil, and the two agree: a tr
 point keeps its offsets and zeroes its coefficients, so the set does not vary over the grid.
 The one node whose reach is not fixed by its type is [`ShiftNode`](@ref), which carries its
 step as a field; the value is available here because this walks the built tree.
+
+For a `BilinearProduct` this is the row (test-side) reach only, not the full row/column
+pattern -- see the note on that method.
 """
 function stencil_offsets end
 
@@ -110,15 +113,17 @@ stencil_offsets(op::RegionRestriction) = stencil_offsets(op.inner_op)
 # the right offsets), so its reach is the test side's.
 stencil_offsets(op::LinearProduct) = stencil_offsets(op.right_op)
 
-# A bilinear product deliberately has none. Its stencil entries are (row offset, column
-# offset, value) triples, so what it reaches is a set of *pairs* and does not fit the shape
-# this function answers with. Matrix assembly wants both sets; ask the two factors.
-@noinline function stencil_offsets(op::BilinearProduct)
-    throw(ArgumentError(
-        "stencil_offsets is not defined for a BilinearProduct: its stencil pairs a row " *
-        "offset with a column offset, so it reaches a set of pairs rather than a set of " *
-        "offsets. Ask its factors instead."))
-end
+# A bilinear product's stencil entries are (row offset, column offset, value) triples, so
+# the general "what does this reach" question is genuinely ambiguous between the two sets.
+# The one caller that matters (`_colour_strides`, form/linear.jl, used for both the linear
+# and bilinear parallel-assembly paths) only ever needs the row side, though: `add_to_sparse!`
+# (form/bilinear.jl) finds a fixed nzval slot for each stored (row, col) pair, so two writes
+# can only collide if both their row AND column coincide. If colouring already keeps rows
+# from coinciding, the pair can't either, whatever the columns are -- so this reduces to the
+# test factor's reach, the same way `stencil_offsets(::LinearProduct)` above already does.
+# Building the full sparsity pattern (both sets) is a different question, answered
+# separately by walking `local_stencil` directly (`_pattern_term!`, form/bilinear.jl).
+stencil_offsets(op::BilinearProduct) = stencil_offsets(op.right_op)
 
 function stencil_offsets(op::OperatorAdd)
     sort!(union(

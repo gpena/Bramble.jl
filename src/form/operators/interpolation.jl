@@ -135,8 +135,9 @@ _collect_region_labels(op::InterpolationNode) = _collect_region_labels(op.inner_
 
 # The reach on the mesh being walked is the inner leaf's (a single point). The columns this
 # node names are on the other mesh and are not offsets, so they have no place in an
-# offset set; matrix colouring inspects the evaluated stencil's test side instead
-# (`_bilinear_colour_strides`).
+# offset set; a bilinear term's colouring only ever reads its test factor's reach anyway
+# (`stencil_offsets(::BilinearProduct)`, form/stencil_pattern.jl), and an interpolation
+# names a trial-side space, not a test one.
 stencil_offsets(op::InterpolationNode) = stencil_offsets(op.inner_op)
 
 # Two interpolations are the same shape only when they interpolate from the same space. The
