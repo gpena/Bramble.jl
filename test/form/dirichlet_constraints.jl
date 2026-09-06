@@ -43,6 +43,14 @@ using Supposition
             t_point = 0.5
             @test identifier(function_snapshot)(x_point, t_point) == f_t(x_point, t_point)
         end
+
+        @testset "Time domain rejects space-only conditions" begin
+            # gpena/Bramble.jl#33: passing a time domain alongside a `func(x)`-only
+            # condition used to be silently accepted -- the time domain had no effect at
+            # all -- and only broke later, once `bcs(t)` was actually called during
+            # assembly. Caught here by arity, at construction.
+            @test_throws "must accept (x, t)" dirichlet_constraints(Ω, I, :gamma_1 => f1)
+        end
     end
 
     @testset "Lazy time evaluation" begin

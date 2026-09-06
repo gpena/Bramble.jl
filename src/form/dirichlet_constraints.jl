@@ -53,7 +53,7 @@ const DirichletConstraint{CT} = DomainMarkers{CT}
 
 Create Dirichlet boundary constraints.
 
-Each `pair` is of the form `:label => func`, where `:label` identifies the boundary region and `func` defines the Dirichlet values. If the optional time domain `I` is provided, `func` should be a time-dependent function `func(x, t)`.
+Each `pair` is of the form `:label => func`, where `:label` identifies the boundary region and `func` defines the Dirichlet values. If the optional time domain `I` is provided, `func` must be a time-dependent function `func(x, t)`; this is checked by arity, since nothing about `func` itself can be evaluated at construction time.
 
 `input` can be a `CartesianProduct` mesh domain, a `ScalarGridSpace`, or a `CompositeGridSpace` from which the mesh is extracted. The `:label` must match a label in the mesh definition.
 """
@@ -64,7 +64,20 @@ end
 
 function dirichlet_constraints(input, I::CartesianProduct{1}, pairs::Pair...)
     _constraint_domain(input)      # validates `input`; the domain itself is never stored
+    _validate_time_dependent_arity(pairs)
     return _create_generic_markers(pairs...)
+end
+
+# A time domain `I` promises the evaluation path (`(dm::DomainMarkers)(t)`, which does
+# `Base.Fix2(func, t)`) that every `func` here accepts `(x, t)`. Nothing downstream checks
+# this: `Fix2` builds regardless of arity and only fails once the resulting closure is
+# called during assembly, far from the mistake. Caught here by arity alone, not by calling
+# `func`, since a condition's closure is otherwise never evaluated before assembly.
+function _validate_time_dependent_arity(pairs::Tuple{Vararg{Pair}})
+    for (lbl, func) in pairs
+        hasmethod(func, Tuple{Any, Any}) ||
+            error("dirichlet_constraints: condition for label `:$lbl` must accept (x, t) since a time domain was given, got $(func)")
+    end
 end
 
 @inline _constraint_domain(input::ScalarGridSpace) = set(mesh(input))
