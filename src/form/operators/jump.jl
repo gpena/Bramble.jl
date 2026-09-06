@@ -66,5 +66,3 @@ function resolve_ast(op::JumpNode{D, Dim}) where {D, Dim}
     inner = resolve_ast(op.inner_op)
     return JumpNode{D, Dim, typeof(inner)}(inner)
 end
-
-Bramble.get_innermost_dim(op::JumpNode{D, Dim}) where {D, Dim} = Dim

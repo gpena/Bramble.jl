@@ -164,8 +164,6 @@ difference. Use this alias where the distinction genuinely does not arise.
 """
 const DifferenceNode{D, Dim} = Union{BackwardDifference{D, Dim}, ForwardDifference{D, Dim}}
 
-Bramble.get_innermost_dim(op::DifferenceNode{D, Dim}) where {D, Dim} = Dim
-
 # ==============================================================================
 # The remaining difference families
 # ==============================================================================
@@ -365,8 +363,6 @@ once, as `DifferenceNode` does for the one-sided pair.
 """
 const ExtendedDifferenceNode{D, Dim} = Union{CenteredDifference{D, Dim},
     StarDifference{D, Dim}, CrossWeightedDifference{D, Dim}}
-
-Bramble.get_innermost_dim(op::ExtendedDifferenceNode{D, Dim}) where {D, Dim} = Dim
 
 function resolve_ast(op::CenteredDifference{D, Dim}) where {D, Dim}
     inner = resolve_ast(op.inner_op)

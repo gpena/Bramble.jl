@@ -4,7 +4,7 @@ using Random
 using Bramble: IdentityOperator, TrialFunction, IndexedTrialFunction, IndexedTestFunction,
                LazyOp, JumpNode, CenteredDifference, StarDifference,
                CrossWeightedDifference, ExtendedDifferenceNode,
-               local_stencil, resolve_ast, is_symbolic, get_innermost_dim,
+               local_stencil, resolve_ast, is_symbolic,
                trial_component_or_nothing, test_component_or_nothing, values, indices,
                restrict_to
 
@@ -204,30 +204,18 @@ end
         id = IdentityOperator(Wₕ)
         u = TrialFunction{2}()
 
-        for (f, T, dim) in ((jumpₓ, JumpNode, 1), (jumpᵧ, JumpNode, 2),
-            (Dcₓ, CenteredDifference, 1), (Dcᵧ, CenteredDifference, 2),
-            (Dstar₊ₓ, StarDifference, 1), (Dstar₊₂, StarDifference, 3),
-            (Dₕₓ, CrossWeightedDifference, 1), (Dₕᵧ, CrossWeightedDifference, 2))
+        for (f, T) in ((jumpₓ, JumpNode), (jumpᵧ, JumpNode),
+            (Dcₓ, CenteredDifference), (Dcᵧ, CenteredDifference),
+            (Dstar₊ₓ, StarDifference), (Dstar₊₂, StarDifference),
+            (Dₕₓ, CrossWeightedDifference), (Dₕᵧ, CrossWeightedDifference))
             node = f(id)
             @test node isa T
             @test node isa LazyOp{2}
-            @test get_innermost_dim(node) == dim
             @test resolve_ast(node) isa T
             @test !is_symbolic(node)
             @test is_symbolic(f(u))            # symbolic through the wrapper
         end
 
-        # Every node that names a direction answers for it, not only the differences. The
-        # averages, the shift and the restriction had no method until the precompilation
-        # workload called the trait across every node kind and met a MethodError on the
-        # averages (the kind of gap nothing else was going to find, since the trait has no
-        # caller in the unlocked code).
-        for (f, dim) in ((M₋ₓ, 1), (M₊ₓ, 1), (M₋ᵧ, 2), (M₊ᵧ, 2), (M₋₂, 3), (M₊₂, 3))
-            @test get_innermost_dim(f(id)) == dim
-        end
-        @test get_innermost_dim(Bramble.shift_op(id, 2, 3)) == 2
-        @test get_innermost_dim(restrict_to(:interior, M₋ᵧ(id))) == 2
-        @test get_innermost_dim(restrict_to(:bottom, D₋ₓ(id))) == 1
         @test M₋ₓ(id) isa Bramble.AverageNode
         @test M₊ᵧ(id) isa Bramble.AverageNode
 

@@ -201,13 +201,6 @@ anything reading the direction rather than choosing a stencil is written against
 """
 const AverageNode{D, Dim} = Union{BackwardAverage{D, Dim}, ForwardAverage{D, Dim}}
 
-# The direction an operator works along, for the nodes that name one. An average carries
-# `Dim` exactly as a difference does, and a shift likewise; a restriction has whatever its
-# child has. The gap was found by the precompilation workload, which calls the trait across
-# every node kind and met a MethodError on the averages.
-Bramble.get_innermost_dim(op::AverageNode{D, Dim}) where {D, Dim} = Dim
-Bramble.get_innermost_dim(op::ShiftNode{D, Dim}) where {D, Dim} = Dim
-
 function resolve_ast(op::BackwardAverage{D, Dim}) where {D, Dim}
     BackwardAverage{D, Dim, typeof(resolve_ast(op.inner_op))}(resolve_ast(op.inner_op))
 end

@@ -139,8 +139,6 @@ _collect_region_labels(op::InterpolationNode) = _collect_region_labels(op.inner_
 # (`_bilinear_colour_strides`).
 stencil_offsets(op::InterpolationNode) = stencil_offsets(op.inner_op)
 
-Bramble.get_innermost_dim(op::InterpolationNode) = get_innermost_dim(op.inner_op)
-
 # Two interpolations are the same shape only when they interpolate from the same space. The
 # symmetry fast path compares the two sides of a product for structural equality, and an
 # interpolation on one side only must not read as symmetric.

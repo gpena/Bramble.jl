@@ -156,15 +156,3 @@ show(io::IO, ::ZeroOperator) = print(io, "0")
 
 @inline Base.:*(vₕ::Function, op::LazyOp) = GridFunctionScale(vₕ, op)
 @inline Base.:*(op::LazyOp, vₕ::Function) = GridFunctionScale(vₕ, op)
-
-# --- Traits the form layer extends -------------------------------------------------- #
-
-"""
-    get_innermost_dim(op::LazyOp) -> Int
-
-The coordinate direction of the difference node at the bottom of `op`.
-"""
-function get_innermost_dim end
-
-@inline get_innermost_dim(op::OperatorScale) = get_innermost_dim(op.inner_op)
-@inline get_innermost_dim(op::GridFunctionScale) = get_innermost_dim(op.inner_op)

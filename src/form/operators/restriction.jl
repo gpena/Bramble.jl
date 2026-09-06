@@ -77,10 +77,6 @@ end
 
 # --- AST resolution ---------------------------------------------------------------- #
 
-# A restriction narrows where its child contributes without changing what it reaches, so
-# the direction is its child's.
-Bramble.get_innermost_dim(op::RegionRestriction) = get_innermost_dim(op.inner_op)
-
 function resolve_ast(op::RegionRestriction{D, RegionType}) where {D, RegionType}
     RegionRestriction{D, RegionType, typeof(resolve_ast(op.inner_op))}(op.region, resolve_ast(op.inner_op))
 end

@@ -3,16 +3,15 @@ using Bramble
 using Bramble: IdentityOperator, IndexedTrialFunction, IndexedTestFunction,
                TrialFunction, TestFunction,
                BackwardDifference, ForwardDifference, DifferenceNode,
-               get_innermost_dim, is_symbolic,
+               is_symbolic,
                resolve_ast, trial_component_or_nothing, test_component_or_nothing,
                grad_backward, grad_forward
 
 # The two one-sided difference nodes of the symbolic layer.
 #
 # They are meant to be interchangeable: whatever a form can do with D₋ it can do with D₊.
-# Previously, `get_derivative_matrix_and_scale` and `get_innermost_dim` existed for
-# the backward node alone, so any form built on D₊ met a MethodError as soon as it was
-# assembled.
+# Previously, `get_derivative_matrix_and_scale` existed for the backward node alone, so any
+# form built on D₊ met a MethodError as soon as it was assembled.
 #
 # The one deliberate exception is `inner₊`, which takes backward differences only. Its
 # weights are the staggered ones of the summation-by-parts identity, and those pair with a
@@ -24,14 +23,6 @@ using Bramble: IdentityOperator, IndexedTrialFunction, IndexedTestFunction,
     id = IdentityOperator(Wₕ)
 
     BD, FD = typeof(D₋ₓ(id)), typeof(D₊ₓ(id))
-
-    @testset "Scaling recursion" begin
-        for op in (D₋ₓ(id), D₊ₓ(id))
-            @test get_innermost_dim(2 * op) == 1
-            @test get_innermost_dim(op / 4) == 1
-            @test get_innermost_dim(7 * (op / 4)) == 1
-        end
-    end
 
     @testset "Backward vs forward parity" begin
         # A structural guard rather than a list of cases: whatever generic function has a
@@ -126,6 +117,5 @@ using Bramble: IdentityOperator, IndexedTrialFunction, IndexedTestFunction,
         id1 = IdentityOperator(gridspace(Ω1))
         @test !(∇₋ₕ(id1) isa Tuple)
         @test !(∇₊ₕ(id1) isa Tuple)
-        @test get_innermost_dim(∇₊ₕ(id1)) == 1
     end
 end

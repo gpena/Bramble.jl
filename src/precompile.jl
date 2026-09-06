@@ -499,7 +499,6 @@ function _pc_form_ast(Wₕ, ::Val{D}) where {D}
         Dcₓ(id), Dstar₊ₓ(id), Dₕₓ(id))
         is_symbolic(op)
         resolve_ast(op)
-        get_innermost_dim(op)
         stencil_offsets(op)
     end
     shift_op(id, 1, 1)
