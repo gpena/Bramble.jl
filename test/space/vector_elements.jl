@@ -547,14 +547,9 @@ end
         @test a3(1).data[1] ≈ 10.0 && a3(1).data[end] ≈ 10.0
         @test all(iszero, a3(1).data[2:(end - 1)])
 
-        # The single vector-valued-function form (`f(x) -> (v1, v2, v3)`, one call per
-        # point) reads `mesh(Wₕ)`, which is the *first leaf's* mesh regardless of nesting
-        # (`mesh(Wₕ::CompositeGridSpace) = mesh(first_space(Wₕ))`), and so only ever visits
-        # as many points as that leaf has. That is a real, pre-existing requirement that
-        # every leaf share one mesh -- unrelated to #64, and not something this fix changes
-        # or is meant to lift -- so it is checked here on a *homogeneous* nesting (three
-        # leaves of the same W9 mesh), where the tuple-of-functions and vector-function
-        # forms agree, rather than on the heterogeneous `Wn` above, where they cannot.
+        # The single vector-valued-function form (`f(x) -> (v1, v2, v3)`), on the
+        # homogeneous nesting: three leaves of the same W9 mesh, where it must agree with
+        # the tuple-of-functions form.
         Wn2 = (W9 × W9) × W9
         r4 = element(Wn2)
         r5 = element(Wn2)
@@ -572,15 +567,63 @@ end
         # recurse once per *immediate* child, so a nested composite's second child (itself a
         # CompositeGridSpace, not a ScalarGridSpace) had no `_apply_stencil!` method to
         # dispatch to at all -- this failed outright before the fix, rather than computing
-        # a wrong answer. (Not run on the heterogeneous `Wn`: `D₋ₓ` derives its grid spacing
-        # once from `mesh(Wₕ)`, the same first-leaf-only mesh noted above, so it shares that
-        # same pre-existing, unrelated requirement that every leaf's mesh agree.)
+        # a wrong answer.
         un2 = element(Wn2, 0.0)
         Rₕ!(un2, (x -> sin(x[1]), x -> cos(x[1]), x -> x[1]^2))
         Dn2 = D₋ₓ(un2)
         @test values(Dn2(1)) == values(D₋ₓ(un2(1)))
         @test values(Dn2(2)) == values(D₋ₓ(un2(2)))
         @test values(Dn2(3)) == values(D₋ₓ(un2(3)))
+
+        # gpena/Bramble.jl#78/#79: on the *heterogeneous* `Wn` (leaves of size 5, 9, 9), the
+        # single vector-valued-function form of Rₕ!/avgₕ! and the whole-composite
+        # difference operators used to read `mesh(Wₕ::CompositeGridSpace)`, which always
+        # resolves to the first leaf's mesh regardless of nesting -- silently mis-sizing
+        # every other leaf (Rₕ!/avgₕ!) or indexing a wrong-sized spacings vector, producing
+        # `Inf` (the difference operators). Both are checked here against the
+        # tuple-of-functions form (Rₕ!/avgₕ!) or against applying the operator to each leaf
+        # directly (difference operators), which have always used each leaf's own mesh.
+        r6 = element(Wn)
+        Rₕ!(r6, x -> (sin(x), cos(x), x^2))
+        @test values(r6(1)) == values(Rₕ(W5, x -> sin(x)))
+        @test values(r6(2)) == values(Rₕ(W9, x -> cos(x)))
+        @test values(r6(3)) == values(Rₕ(W9, x -> x^2))
+        @test all(isfinite, values(r6))
+
+        a6 = element(Wn)
+        avgₕ!(a6, x -> (sin(x), cos(x), x^2))
+        @test values(a6(1)) ≈ values(avgₕ(W5, x -> sin(x)))
+        @test values(a6(2)) ≈ values(avgₕ(W9, x -> cos(x)))
+        @test values(a6(3)) ≈ values(avgₕ(W9, x -> x^2))
+
+        # Masked, single vector-valued function, on the heterogeneous nesting.
+        r7 = element(Wn)
+        Rₕ!(r7, x -> (10.0, 20.0, 30.0); markers = (:boundary,))
+        @test values(r7(1)) == [10.0, 0.0, 0.0, 0.0, 10.0]
+        @test values(r7(2)) == [20.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 20.0]
+        @test values(r7(3)) == [30.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 30.0]
+
+        a7 = element(Wn)
+        avgₕ!(a7, x -> (10.0, 20.0, 30.0); markers = (:boundary,))
+        @test a7(2).data[1] ≈ 20.0 && a7(2).data[end] ≈ 20.0
+        @test all(iszero, a7(2).data[2:(end - 1)])
+
+        un3 = element(Wn, 0.0)
+        Rₕ!(un3, x -> (sin(x), cos(x), x^2))
+        Dn3 = D₋ₓ(un3)
+        @test values(Dn3(1)) == values(D₋ₓ(un3(1)))
+        @test values(Dn3(2)) == values(D₋ₓ(un3(2)))
+        @test values(Dn3(3)) == values(D₋ₓ(un3(3)))
+        @test all(isfinite, values(Dn3))
+
+        # `Dcₓ` is a separate composite method from `D₋ₓ`'s (its own denominator and its
+        # own `npoints >= 3` check), so it is checked here too rather than assuming one
+        # family's fix covers the others.
+        Cn3 = Dcₓ(un3)
+        @test values(Cn3(1)) == values(Dcₓ(un3(1)))
+        @test values(Cn3(2)) == values(Dcₓ(un3(2)))
+        @test values(Cn3(3)) == values(Dcₓ(un3(3)))
+        @test all(isfinite, values(Cn3))
 
         # innerₕ sums leaf by leaf: 3 leaves of constant 1, 2, 3 against all-ones, over a
         # mesh whose cell measures sum to 1 per leaf, gives 1+2+3 = 6 exactly. Runs on the

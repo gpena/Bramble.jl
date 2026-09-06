@@ -684,12 +684,17 @@ for config in _DIFFERENCE_OP_CONFIGS
             return vₕ
         end
 
-        # Every component shares the mesh, so the spacings are fetched once.
+        # A composite's leaves may sit on different meshes (`mesh(Wₕ::CompositeGridSpace)`
+        # always resolves to the first leaf's, see `vector_gridspace.jl`), so the spacings
+        # are fetched per leaf rather than once from `uₕ` — fetching them once applied
+        # leaf 1's spacings to every leaf, indexing out of range on any leaf sized
+        # differently (gpena/Bramble.jl#79).
         function $finite_diff_name!(vₕ::VectorElement{<:CompositeGridSpace},
                 uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val{DIM}) where {DIM}
-            h = $spacings_func(_op_mesh(uₕ)(DIM))
             _apply_componentwise!(
-                (v, u) -> _apply_stencil!(v, u, h, $dir_instance, dim_val), vₕ, uₕ)
+                (v, u) -> _apply_stencil!(
+                    v, u, $spacings_func(_op_mesh(u)(DIM)), $dir_instance, dim_val),
+                vₕ, uₕ)
             return vₕ
         end
 
@@ -746,13 +751,15 @@ function forward_star_difference!(vₕ::VectorElement{<:ScalarGridSpace},
     return vₕ
 end
 
-# A composite grid function is differenced one component at a time; every component
-# shares the mesh, so the denominator is built once.
+# A composite grid function is differenced one component at a time. A leaf's mesh is
+# not necessarily the whole composite's (`_op_mesh(uₕ)` resolves to leaf 1 only), so the
+# averaged spacing is built per leaf rather than once (gpena/Bramble.jl#79).
 function forward_star_difference!(vₕ::VectorElement{<:CompositeGridSpace},
         uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val{DIM}) where {DIM}
-    h = star_spacings(_op_mesh(uₕ)(DIM))
     _apply_componentwise!(
-        (v, u) -> _apply_stencil!(v, u, h, Forward(), dim_val), vₕ, uₕ)
+        (v, u) -> _apply_stencil!(
+            v, u, star_spacings(_op_mesh(u)(DIM)), Forward(), dim_val),
+        vₕ, uₕ)
     return vₕ
 end
 
@@ -841,14 +848,18 @@ function centered_difference!(vₕ::VectorElement{<:ScalarGridSpace},
 end
 
 # As for the other operators, a composite grid function is differenced one component at a
-# time; every component shares the mesh, so the denominator is built once.
+# time. A leaf's mesh is not necessarily the whole composite's, so both the point-count
+# check and the denominator are built per leaf rather than once from `uₕ` — checking once
+# only validated leaf 1, and reused its spacing on every other leaf (gpena/Bramble.jl#79).
 function centered_difference!(vₕ::VectorElement{<:CompositeGridSpace},
         uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val{DIM}) where {DIM}
-    sub = _op_mesh(uₕ)(DIM)
-    npoints(sub) >= 3 || _throw_centered_too_few_points(DIM, npoints(sub))
-    h = star_spacings(sub)
     _apply_componentwise!(
-        (v, u) -> _apply_stencil!(v, u, h, Centered(), dim_val), vₕ, uₕ)
+        (v, u) -> begin
+            sub = _op_mesh(u)(DIM)
+            npoints(sub) >= 3 || _throw_centered_too_few_points(DIM, npoints(sub))
+            _apply_stencil!(v, u, star_spacings(sub), Centered(), dim_val)
+        end,
+        vₕ, uₕ)
     return vₕ
 end
 
@@ -942,14 +953,18 @@ function cross_weighted_difference!(vₕ::VectorElement{<:ScalarGridSpace},
 end
 
 # As for the other operators, a composite grid function is differenced one component at a
-# time; every component shares the mesh, so the spacings are fetched once.
+# time. A leaf's mesh is not necessarily the whole composite's, so both the point-count
+# check and the spacings are fetched per leaf rather than once from `uₕ` — fetching once
+# only validated leaf 1, and reused its spacings on every other leaf (gpena/Bramble.jl#79).
 function cross_weighted_difference!(vₕ::VectorElement{<:CompositeGridSpace},
         uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val{DIM}) where {DIM}
-    sub = _op_mesh(uₕ)(DIM)
-    npoints(sub) >= 3 || _throw_centered_too_few_points(DIM, npoints(sub))
-    h = spacings(sub)
     _apply_componentwise!(
-        (v, u) -> _apply_stencil!(v, u, h, CrossWeighted(), dim_val), vₕ, uₕ)
+        (v, u) -> begin
+            sub = _op_mesh(u)(DIM)
+            npoints(sub) >= 3 || _throw_centered_too_few_points(DIM, npoints(sub))
+            _apply_stencil!(v, u, spacings(sub), CrossWeighted(), dim_val)
+        end,
+        vₕ, uₕ)
     return vₕ
 end
 

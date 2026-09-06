@@ -216,7 +216,7 @@ end
 end
 
 # Same reasoning as `_AvgKernel1`/`_AvgKernelD` above, for the tuple-valued (composite)
-# quadrature call.
+# quadrature call. Only valid when every leaf shares one mesh (see `_avgₕ!` below).
 struct _AvgScatterKernel1{F, X, IX, NQ, T, NC}
     f::F
     x::X
@@ -239,47 +239,62 @@ end
     F, X, IX, NQ, T, NC})(i) where {F, X, IX, NQ, T, NC} = _cell_average(
     k.f, k.x, k.idxs[i], k.nodes, k.wts, Val(NC))
 
-# Composite space: single vector-valued function returning all components. `NC` here is
-# the space's *leaf* count (`length(comps)`, over `components`, which flattens any nesting),
-# not the space's own structural type parameter — the two agree for a flat composite and
-# disagree for a nested one, and it is `f`'s return shape that has to match the former.
+# Composite space: single vector-valued function returning all components. When every
+# leaf shares one mesh, `f` is evaluated once per point and its tuple scattered across
+# every leaf's storage — `NC` is the space's *leaf* count (`length(comps)`, over
+# `components`, which flattens any nesting), not the space's own structural type
+# parameter. A heterogeneous composite (leaves on different meshes) has no such shared
+# "grid point i" — `mesh(Wₕ::CompositeGridSpace)` always resolves to the first leaf's
+# regardless — so taking the shared-evaluation path unconditionally silently mis-sized
+# every leaf after the first (gpena/Bramble.jl#78): `f` is instead re-evaluated at each
+# leaf's own grid points through the scalar `_avgₕ!`, keeping only that leaf's entry.
 @inline function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace}, f, ::Val{1}, nq::Val{NQ}) where {
         NQ}
-    sp = space(uₕ)
-    Ωₕ = mesh(sp)
-    x = half_points(Ωₕ)
-    T = eltype(Ωₕ)
     comps = components(uₕ)
-    raws = map(values, comps)
-    NC = length(comps)
-    idxs = indices(Ωₕ)
-    n = length(idxs)
-    nodes, wts = _gauss_rule(nq, T)
+    if _shares_one_mesh(comps)
+        sp = space(uₕ)
+        Ωₕ = mesh(sp)
+        x = half_points(Ωₕ)
+        T = eltype(Ωₕ)
+        raws = map(values, comps)
+        NC = length(comps)
+        idxs = indices(Ωₕ)
+        n = length(idxs)
+        nodes, wts = _gauss_rule(nq, T)
 
-    _cpu_threaded_scatter_for!(
-        execution_policy(sp), raws, 1:n,
-        _AvgScatterKernel1{typeof(f), typeof(x), typeof(idxs), NQ, T, NC}(
-            f, x, idxs, nodes, wts))
+        _cpu_threaded_scatter_for!(
+            execution_policy(sp), raws, 1:n,
+            _AvgScatterKernel1{typeof(f), typeof(x), typeof(idxs), NQ, T, NC}(
+                f, x, idxs, nodes, wts))
+    else
+        ntuple(k -> (_avgₕ!(comps[k], pt -> f(pt)[k], Val(1), nq); nothing),
+            Val(length(comps)))
+    end
     return uₕ
 end
 
 @inline function _avgₕ!(uₕ::VectorElement{<:CompositeGridSpace}, f, ::Val{D}, nq::Val{NQ}) where {
         D, NQ}
-    sp = space(uₕ)
-    Ωₕ = mesh(sp)
-    x = half_points(Ωₕ)
-    T = eltype(Ωₕ)
     comps = components(uₕ)
-    raws = map(values, comps)
-    NC = length(comps)
-    idxs = indices(Ωₕ)
-    n = length(idxs)
-    nodes, wts = _gauss_rule(nq, T)
+    if _shares_one_mesh(comps)
+        sp = space(uₕ)
+        Ωₕ = mesh(sp)
+        x = half_points(Ωₕ)
+        T = eltype(Ωₕ)
+        raws = map(values, comps)
+        NC = length(comps)
+        idxs = indices(Ωₕ)
+        n = length(idxs)
+        nodes, wts = _gauss_rule(nq, T)
 
-    _cpu_threaded_scatter_for!(
-        execution_policy(sp), raws, 1:n,
-        _AvgScatterKernelD{typeof(f), typeof(x), typeof(idxs), NQ, T, NC}(
-            f, x, idxs, nodes, wts))
+        _cpu_threaded_scatter_for!(
+            execution_policy(sp), raws, 1:n,
+            _AvgScatterKernelD{typeof(f), typeof(x), typeof(idxs), NQ, T, NC}(
+                f, x, idxs, nodes, wts))
+    else
+        ntuple(k -> (_avgₕ!(comps[k], pt -> f(pt)[k], Val(D), nq); nothing),
+            Val(length(comps)))
+    end
     return uₕ
 end
 
@@ -348,59 +363,72 @@ end
     return uₕ
 end
 
-# `NC` is the space's *leaf* count (see the note on the unmasked _avgₕ! above): the number
-# of values `f` must return per point, which is `length(comps)`, not the space's own
-# structural type parameter.
+# As the unmasked `_avgₕ!` composite methods above: only valid as a single shared-mesh
+# pass when every leaf sits on the same mesh; a heterogeneous composite instead uses
+# each leaf's own marker mask and grid points, re-evaluating `f` per leaf through the
+# scalar `_avg_masked!` and keeping only that leaf's tuple entry (gpena/Bramble.jl#78).
 @inline function _avg_masked!(uₕ::VectorElement{<:CompositeGridSpace}, f::F,
         markers::NTuple{N, Symbol}, ::Val{1}, nq::Val{NQ}) where {F, N, NQ}
-    Ωₕ = mesh(space(uₕ))
-    x = half_points(Ωₕ)
-    T = eltype(Ωₕ)
     comps = components(uₕ)
-    raws = map(values, comps)
-    NC = length(comps)
-    idxs = indices(Ωₕ)
-    n = length(idxs)
-    nodes, wts = _gauss_rule(nq, T)
+    if _shares_one_mesh(comps)
+        Ωₕ = mesh(space(uₕ))
+        x = half_points(Ωₕ)
+        T = eltype(Ωₕ)
+        raws = map(values, comps)
+        NC = length(comps)
+        idxs = indices(Ωₕ)
+        n = length(idxs)
+        nodes, wts = _gauss_rule(nq, T)
 
-    for raw in raws
-        fill!(raw, zero(eltype(raw)))
-    end
-    for m in markers
-        mask = index_in_marker(Ωₕ, m)
-        @inbounds for i in 1:n
-            if mask[i]
-                vals = _cell_average(f, x, idxs[i][1], nodes, wts, Val(NC))
-                _write_components!(raws, vals, i)
+        for raw in raws
+            fill!(raw, zero(eltype(raw)))
+        end
+        for m in markers
+            mask = index_in_marker(Ωₕ, m)
+            @inbounds for i in 1:n
+                if mask[i]
+                    vals = _cell_average(f, x, idxs[i][1], nodes, wts, Val(NC))
+                    _write_components!(raws, vals, i)
+                end
             end
         end
+    else
+        ntuple(
+            k -> (_avg_masked!(comps[k], pt -> f(pt)[k], markers, Val(1), nq); nothing),
+            Val(length(comps)))
     end
     return uₕ
 end
 
 @inline function _avg_masked!(uₕ::VectorElement{<:CompositeGridSpace}, f::F,
         markers::NTuple{N, Symbol}, ::Val{D}, nq::Val{NQ}) where {F, N, D, NQ}
-    Ωₕ = mesh(space(uₕ))
-    x = half_points(Ωₕ)
-    T = eltype(Ωₕ)
     comps = components(uₕ)
-    raws = map(values, comps)
-    NC = length(comps)
-    idxs = indices(Ωₕ)
-    n = length(idxs)
-    nodes, wts = _gauss_rule(nq, T)
+    if _shares_one_mesh(comps)
+        Ωₕ = mesh(space(uₕ))
+        x = half_points(Ωₕ)
+        T = eltype(Ωₕ)
+        raws = map(values, comps)
+        NC = length(comps)
+        idxs = indices(Ωₕ)
+        n = length(idxs)
+        nodes, wts = _gauss_rule(nq, T)
 
-    for raw in raws
-        fill!(raw, zero(eltype(raw)))
-    end
-    for m in markers
-        mask = index_in_marker(Ωₕ, m)
-        @inbounds for i in 1:n
-            if mask[i]
-                vals = _cell_average(f, x, idxs[i], nodes, wts, Val(NC))
-                _write_components!(raws, vals, i)
+        for raw in raws
+            fill!(raw, zero(eltype(raw)))
+        end
+        for m in markers
+            mask = index_in_marker(Ωₕ, m)
+            @inbounds for i in 1:n
+                if mask[i]
+                    vals = _cell_average(f, x, idxs[i], nodes, wts, Val(NC))
+                    _write_components!(raws, vals, i)
+                end
             end
         end
+    else
+        ntuple(
+            k -> (_avg_masked!(comps[k], pt -> f(pt)[k], markers, Val(D), nq); nothing),
+            Val(length(comps)))
     end
     return uₕ
 end
@@ -614,10 +642,10 @@ end
     return s
 end
 
-# Average of a vector valued `f` over the cell around `idx`, one value per
-# component. `f` is evaluated once per quadrature node instead of once per node
-# per component; the accumulator is a tuple and every operation on it broadcasts
-# over `NC` isbits values, so nothing allocates.
+# Average of a vector-valued `f` over the D-dimensional cell around `idx`, one value
+# per component. No mesh this package builds is more than 3D, so the 1D/2D/3D
+# specialized methods above always take priority in practice; this generic one exists
+# for dispatch correctness at any `D`, tested directly rather than through a mesh.
 @inline function _cell_average(
         f, x::NTuple{D}, idx::CartesianIndex{D}, nodes::NTuple{NQ, T},
         wts::NTuple{NQ, T}, ::Val{NC}) where {D, NQ, T, NC}

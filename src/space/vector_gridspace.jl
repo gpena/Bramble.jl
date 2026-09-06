@@ -127,6 +127,24 @@ end
 
 @inline spaces(Wₕ::CompositeGridSpace) = Wₕ.spaces
 
+"""
+    _shares_one_mesh(comps::Tuple) -> Bool
+
+Whether every leaf element in `comps` (a composite's `components(uₕ)`) sits on the exact
+same mesh object.
+
+A composite's leaves need not share a mesh — heterogeneous composites, whose leaves are
+built over differently-sized meshes, are a supported pattern (see the interpolation
+tutorial). When they do share one, a single evaluation of a vector-valued function at one
+leaf's grid points is valid for every leaf, which is what the scatter paths of
+[`Rₕ!`](@ref)/[`avgₕ!`](@ref) use this to decide; when they do not, each leaf needs its own
+evaluation, since there is no shared "grid point i" across differently-sized meshes.
+"""
+@inline function _shares_one_mesh(comps::Tuple)
+    Ωₕ = mesh(space(comps[1]))
+    return all(c -> mesh(space(c)) === Ωₕ, comps)
+end
+
 # ==============================================================================
 # Collection Interface
 # ==============================================================================

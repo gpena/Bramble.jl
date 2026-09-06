@@ -38,9 +38,12 @@ Rₕ!(uₕ, x -> sin(x[1]) * cos(x[2]))   # 2D: x is a Tuple{Float64,Float64}
 Rₕ!(uₕ, x -> 1.0; markers = (:left,))
 ```
 
-For an `N`-component element either shape of `f` works and both give the same
-result; the single vector-valued function is evaluated once per grid point,
-whereas the tuple evaluates each component function separately:
+For an `N`-component element either shape of `f` works and both give the same result;
+the single vector-valued function is evaluated once per grid point when every
+component shares the same mesh, whereas the tuple always evaluates each component
+function separately. On a heterogeneous composite — components built over different
+meshes — the single-function form is instead re-evaluated once per component, since
+there is no grid point shared by every component to evaluate it at only once:
 
 ```julia
 Rₕ!(uₕ, (f₁, f₂))                     # one function per component
@@ -89,14 +92,27 @@ end
     return uₕ
 end
 
+# When every leaf shares one mesh, `f` is evaluated once per grid point and its tuple
+# scattered across every leaf's storage in a single pass — the docstring's "evaluated
+# once" claim. A heterogeneous composite (leaves on different meshes) has no such shared
+# "grid point i"; `mesh(Wₕ::CompositeGridSpace)` always resolves to the first leaf's
+# regardless (see `vector_gridspace.jl`), so taking the shared-evaluation path
+# unconditionally silently mis-sized every leaf after the first (gpena/Bramble.jl#78).
+# `f` is instead re-evaluated at each leaf's own grid points through `_Rₕ_parallel!`,
+# keeping only that leaf's entry of the tuple it returns.
 @inline function _Rₕ_scatter_parallel!(
         uₕ::VectorElement{<:CompositeGridSpace}, f::F) where {F}
-    sp = space(uₕ)
-    Ωₕ = mesh(sp)
-    raws = map(values, components(uₕ))
-    idxs = indices(Ωₕ)
-    n = length(idxs)
-    _cpu_threaded_scatter_for!(execution_policy(sp), raws, 1:n, _RₕKernel(f, Ωₕ, idxs))
+    comps = components(uₕ)
+    if _shares_one_mesh(comps)
+        sp = space(uₕ)
+        Ωₕ = mesh(sp)
+        raws = map(values, comps)
+        idxs = indices(Ωₕ)
+        n = length(idxs)
+        _cpu_threaded_scatter_for!(execution_policy(sp), raws, 1:n, _RₕKernel(f, Ωₕ, idxs))
+    else
+        ntuple(k -> (_Rₕ_parallel!(comps[k], pt -> f(pt)[k]); nothing), Val(length(comps)))
+    end
     return uₕ
 end
 
@@ -151,24 +167,35 @@ function _Rₕ_masked!(uₕ::VectorElement{<:ScalarGridSpace}, f::F, markers::NT
     return uₕ
 end
 
+# As `_Rₕ_scatter_parallel!` above: only valid as a single shared-mesh pass when every
+# leaf sits on the same mesh; a heterogeneous composite instead uses each leaf's own
+# marker mask and grid points, re-evaluating `f` per leaf through the scalar
+# `_Rₕ_masked!` and keeping only that leaf's tuple entry (gpena/Bramble.jl#78).
 function _Rₕ_masked!(uₕ::VectorElement{<:CompositeGridSpace}, f::F,
         markers::NTuple{N, Symbol}) where {F, N}
-    Ωₕ = mesh(space(uₕ))
-    raws = map(values, components(uₕ))
-    idxs = indices(Ωₕ)
-    n = length(idxs)
+    comps = components(uₕ)
+    if _shares_one_mesh(comps)
+        Ωₕ = mesh(space(uₕ))
+        raws = map(values, comps)
+        idxs = indices(Ωₕ)
+        n = length(idxs)
 
-    for raw in raws
-        fill!(raw, zero(eltype(raw)))
-    end
-    for m in markers
-        mask = index_in_marker(Ωₕ, m)
-        @inbounds for i in 1:n
-            if mask[i]
-                vals = f(point(Ωₕ, idxs[i]))
-                _write_components!(raws, vals, i)
+        for raw in raws
+            fill!(raw, zero(eltype(raw)))
+        end
+        for m in markers
+            mask = index_in_marker(Ωₕ, m)
+            @inbounds for i in 1:n
+                if mask[i]
+                    vals = f(point(Ωₕ, idxs[i]))
+                    _write_components!(raws, vals, i)
+                end
             end
         end
+    else
+        ntuple(
+            k -> (_Rₕ_masked!(comps[k], pt -> f(pt)[k], markers); nothing),
+            Val(length(comps)))
     end
     return uₕ
 end
@@ -250,8 +277,11 @@ Rₕ(Vₕ, (f₁, f₂))                   # one function per component
 Rₕ(Vₕ, x -> (f₁(x), f₂(x)))        # one function returning all components
 ```
 
-Prefer `x -> (f₁(x), f₂(x))` when components share computation, as it evaluates
-once per grid point, whereas `(f₁, f₂)` evaluates each component function separately.
+Prefer `x -> (f₁(x), f₂(x))` when components share computation, as it evaluates once
+per grid point on a space whose components share one mesh, whereas `(f₁, f₂)` always
+evaluates each component function separately. On a heterogeneous composite — components
+built over different meshes — the single-function form gives up that advantage, since
+there is no grid point shared by every component to evaluate it at only once.
 
 See also: [`Rₕ!`](@ref), [`avgₕ`](@ref).
 """
