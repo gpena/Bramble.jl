@@ -281,6 +281,43 @@ using LinearAlgebra: I as LinearAlgebraI
         @test count(both) > count(marked)     # :top really adds rows
     end
 
+    @testset "Overlapping label precedence" begin
+        # Two Dirichlet labels overlapping at a shared corner node (the (0,0) corner is
+        # both :bottom and :left), each carrying a different value function.
+        # `_apply_conditions!` (form/dirichlet_constraints.jl) walks `conditions(bcs)` in
+        # the order the labels were given to `dirichlet_constraints` and unconditionally
+        # overwrites, so the LAST-declared label wins on a shared node. Pinned in both
+        # construction orders so a reordering of that walk is caught, not just its current
+        # direction.
+        Ωo = mesh(
+            domain(interval(0.0, 1.0) × interval(0.0, 1.0),
+                :bottom => :bottom, :left => :left),
+            (5, 5), (true, true))
+        Wo = gridspace(Ωo)
+        no = ndofs(Wo)
+        bottom_mask = index_in_marker(Ωo, :bottom)
+        left_mask = index_in_marker(Ωo, :left)
+        shared = bottom_mask .& left_mask
+        @test any(shared)   # the (0,0) corner is marked by both
+
+        bcs_left_last = dirichlet_constraints(
+            set(Ωo), :bottom => (x -> 1.0), :left => (x -> 2.0))
+        v = fill(-1.0, no)
+        dirichlet_bc!(v, Wo, bcs_left_last, :bottom, :left)
+        @test all(v[i] == 2.0 for i in 1:no if shared[i])
+        @test all(v[i] == 1.0 for i in 1:no if bottom_mask[i] && !shared[i])
+        @test all(v[i] == 2.0 for i in 1:no if left_mask[i] && !shared[i])
+
+        # Same labels passed to `dirichlet_bc!` in the same order, but declared to
+        # `dirichlet_constraints` in the opposite order: the winner flips, so precedence
+        # tracks construction order, not the order given to `dirichlet_bc!`.
+        bcs_bottom_last = dirichlet_constraints(
+            set(Ωo), :left => (x -> 2.0), :bottom => (x -> 1.0))
+        w = fill(-1.0, no)
+        dirichlet_bc!(w, Wo, bcs_bottom_last, :bottom, :left)
+        @test all(w[i] == 1.0 for i in 1:no if shared[i])
+    end
+
     @testset "Empty & missing labels" begin
         A0 = _eye(nW)
         A1 = copy(A0)

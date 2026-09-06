@@ -103,4 +103,43 @@ using Bramble: dot
     @testset "Empty-tuple disambiguator" begin
         @test_throws ArgumentError inner₊((), (); markers = (:bottom,))
     end
+
+    @testset "Empty-selection marker" begin
+        # A marker predicate matching zero grid points: the sum it restricts to must
+        # evaluate to a clean zero, not throw, and not allocate -- the whole point of a
+        # marker-restricted sum is that its cost is the marked cardinality, which here is
+        # zero.
+        Ωₑ = mesh(domain(S, :empty => (x -> x[1] > 10.0)), (5, 5), (true, true))
+        Wₑ = gridspace(Ωₑ)
+        uₑ = Rₕ(Wₑ, x -> 1.0)
+        vₑ = Rₕ(Wₑ, x -> 1.0)
+
+        @test innerₕ(uₑ, vₑ; markers = (:empty,)) == 0.0
+
+        function _empty_marker_allocs(u, v)
+            innerₕ(u, v; markers = (:empty,))   # warm up
+            return @allocated innerₕ(u, v; markers = (:empty,))
+        end
+        @test _empty_marker_allocs(uₑ, vₑ) == 0
+
+        a = form(Wₑ, Wₑ, (u, v) -> innerₕ(u, v; markers = (:empty,)))
+        @test dot(vₑ.data, assemble(a) * uₑ.data) == 0.0
+
+        # `dirichlet_bc!` against a marker that selects nothing must leave the vector and
+        # the matrix bitwise untouched, not throw.
+        bcs = dirichlet_constraints(set(Ωₑ), :empty => (x -> 7.0))
+        v = fill(3.0, ndofs(Wₑ))
+        v_orig = copy(v)
+        @test dirichlet_bc!(v, Wₑ, bcs, :empty) === v
+        @test v == v_orig
+
+        n = ndofs(Wₑ)
+        A = zeros(n, n)
+        for i in 1:n
+            A[i, i] = 1.0
+        end
+        A_orig = copy(A)
+        @test dirichlet_bc!(A, Wₑ, :empty) === A
+        @test A == A_orig
+    end
 end

@@ -101,4 +101,25 @@ using Bramble
             domain(S, :boundary => (x -> x[1] < 0.5)), (4, 4), (true, true))
         @test sum(Bramble.markers(Ωₕ4)[:boundary]) == 8   # x[1] < 0.5 on a 4x4 grid
     end
+
+    @testset "Empty-selection marker" begin
+        # A predicate matching no grid point at all -- `index_in_marker` must come back a
+        # clean all-false mask rather than throwing or producing something haskey can't see.
+        Ωₕ = mesh(domain(S, :empty => (x -> x[1] > 10.0)), (4, 4), (true, true))
+        @test haskey(Bramble.markers(Ωₕ), :empty)
+        @test sum(Bramble.markers(Ωₕ)[:empty]) == 0
+        @test !any(Bramble.index_in_marker(Ωₕ, :empty))
+        @test Bramble.index_in_marker(Ωₕ, :empty) isa BitVector
+    end
+
+    @testset "Corner-only marker" begin
+        # A predicate matching exactly the four geometric corners of a 2D box, as its own
+        # named region -- distinct from :boundary (every edge point) and from any single
+        # face marker.
+        is_corner(x) = (x[1] == 0.0 || x[1] == 1.0) && (x[2] == 0.0 || x[2] == 1.0)
+        Ωₕ = mesh(domain(S, :corners => is_corner), (4, 4), (true, true))
+        @test sum(Bramble.markers(Ωₕ)[:corners]) == 4
+        @test all(Bramble.index_in_marker(Ωₕ, :corners) .<=
+                  Bramble.markers(Ωₕ)[:boundary])   # every corner is on the boundary
+    end
 end
