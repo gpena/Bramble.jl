@@ -196,10 +196,11 @@ at this level, so the default here is `false`.
 # (gpena/Bramble.jl#68).
 #===========================================================================#
 
-# The one-argument form: no domain to re-derive custom markers from, so they are dropped
-# with a warning rather than kept incorrect. The public contract for both this and the
-# two-argument form below is documented once, on the `function iterative_refinement! end`
-# stub further down this file, rather than repeated on each method.
+# The one-argument form: no domain to re-derive custom markers from, so a mesh carrying
+# any is refused outright rather than silently losing them. The public contract for both
+# this and the two-argument form below is documented once, on the
+# `function iterative_refinement! end` stub further down this file, rather than repeated
+# on each method.
 function iterative_refinement!(Ωₕ::AbstractMeshType)
     # Mirrored from `_refine_indices!`'s own no-op cases (a collapsed or single-point
     # `Mesh1D`), rather than just inherited from calling it: `_refine_indices!` returning
@@ -214,22 +215,27 @@ function iterative_refinement!(Ωₕ::AbstractMeshType)
     # boundary" (found by refining a mesh and reassembling a Poisson problem on it, where
     # the boundary rows past the old length never got constrained and the system went
     # singular with no error naming why). `:boundary`/`:interior` need no domain and are
-    # rebuilt unconditionally; anything else is dropped with a warning rather than kept
-    # incorrect. The two-argument form below does not route through this method at all,
-    # precisely so it never triggers the warning on its own account.
+    # rebuilt unconditionally; anything else has no domain to re-derive it from, so this
+    # refuses rather than drops it with a warning the caller could miss
+    # (gpena/Bramble.jl#19). The two-argument form below does not route through this
+    # method at all, precisely so it never triggers this check on its own account.
     old_markers = markers(Ωₕ)
     extra_labels = setdiff(keys(old_markers), (:boundary, :interior))
-    isempty(extra_labels) ||
-        @warn "iterative_refinement!(Ωₕ) refined a mesh carrying custom markers " *
-              "$(Tuple(extra_labels)); those are dropped, not re-evaluated onto the new " *
-              "points, because there is no domain here to re-derive them from. Call " *
-              "iterative_refinement!(Ωₕ, domain_markers) instead to keep them."
+    isempty(extra_labels) || _throw_refinement_drops_markers(extra_labels)
 
     _refine_indices!(Ωₕ)
     fresh_markers = MeshMarkers()
     _ensure_geometric_markers!(fresh_markers, Ωₕ)
     markers!(Ωₕ, fresh_markers)
     return
+end
+
+@noinline function _throw_refinement_drops_markers(extra_labels)
+    throw(ArgumentError(
+        "iterative_refinement!(Ωₕ) was asked to refine a mesh carrying custom markers " *
+        "$(Tuple(extra_labels)), and there is no domain here to re-evaluate them onto " *
+        "the refined points. Call iterative_refinement!(Ωₕ, domain_markers) instead to " *
+        "keep them."))
 end
 
 # The two-argument form: a real domain to re-derive markers from, so refinement always
@@ -540,6 +546,11 @@ function cell_measures_iterator end
 
 Refine the mesh `Ωₕ` in-place by halving each existing cell (inserting new points at midpoints).
 If domain markers are supplied, they are re-evaluated onto the refined grid points.
+
+Without `domain_markers`, any custom marker `Ωₕ` carries beyond `:boundary`/`:interior` has
+no domain here to re-derive it from, so this throws an `ArgumentError` rather than silently
+dropping it. Pass `domain_markers` (the same ones the mesh was built with, or equivalent) to
+keep them.
 """
 function iterative_refinement! end
 

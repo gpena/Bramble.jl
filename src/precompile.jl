@@ -107,10 +107,10 @@ end
 # Mesh mutation is a separate pass so the queries above stay on a pristine mesh.
 function _pc_mesh_mutation(Ωₕ, dm)
     # The one-argument path is for a mesh with no custom labels to begin with; every
-    # `Ωₕ` reaching this function carries `dm`'s own, so calling it directly would warn
-    # (correctly) about dropping them on precompilation. Strip them first so this
-    # exercises the intended warning-free case; the two-argument call right below already
-    # exercises the marked-mesh path. `MeshnD` carries labels twice: once on the
+    # `Ωₕ` reaching this function carries `dm`'s own, so calling it directly would throw
+    # (correctly) rather than drop them on precompilation. Strip them first so this
+    # exercises the intended no-custom-labels case; the two-argument call right below
+    # already exercises the marked-mesh path. `MeshnD` carries labels twice: once on the
     # multidimensional mesh itself, and once on each dimension's `Mesh1D` submesh, so both need
     # clearing, not just the outer one.
     bare = deepcopy(Ωₕ)

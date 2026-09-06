@@ -264,19 +264,20 @@ import Base: diff
             Ω = create_test_domain(0.0, 1.0; markers = dm)
 
             npts_initial = 3 # Pts: 0.0, 0.5, 1.0
-            Ωₕ = mesh(Ω, npts_initial, true; backend = backend())
+            npts_refined2 = 2 * npts_initial - 1 # 5
 
-            # Refine without marker update
-            iterative_refinement!(Ωₕ)
-            npts_refined1 = 2 * npts_initial - 1 # 2*3 - 1 = 5
-            @test npoints(Ωₕ) == npts_refined1
-            @test indices(Ωₕ) == CartesianIndices((npts_refined1,))
-            @test points(Ωₕ) ≈ [0.0, 0.25, 0.5, 0.75, 1.0]
+            # gpena/Bramble.jl#19: refining a mesh carrying custom markers (:BC, :Center)
+            # without supplying domain markers now refuses outright -- there is no domain
+            # here to re-derive them from -- rather than silently dropping them. Left
+            # untouched, not partially refined.
+            Ωₕ = mesh(Ω, npts_initial, true; backend = backend())
+            @test_throws ArgumentError iterative_refinement!(Ωₕ)
+            @test npoints(Ωₕ) == npts_initial
+            @test points(Ωₕ) ≈ [0.0, 0.5, 1.0]
 
             # Refine *with* marker update
             Ωₕ2 = mesh(Ω, npts_initial, true; backend = backend()) # Start fresh: 0.0, 0.5, 1.0
             iterative_refinement!(Ωₕ2, dm)
-            npts_refined2 = 2 * npts_initial - 1 # 5
             @test npoints(Ωₕ2) == npts_refined2
             @test indices(Ωₕ2) == CartesianIndices((npts_refined2,))
             @test points(Ωₕ2) ≈ [0.0, 0.25, 0.5, 0.75, 1.0]
