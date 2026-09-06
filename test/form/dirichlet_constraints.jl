@@ -27,6 +27,14 @@ using Supposition
             @test length(label_conditions(bcs)) == 2
         end
 
+        @testset "Rejects an input with no domain" begin
+            # gpena/Bramble.jl#34: a bad `input` used to surface as a MethodError from
+            # `set`, an internal accessor the caller never named. Now a real check names
+            # the accepted types instead.
+            @test_throws "must be a CartesianProduct" dirichlet_constraints(
+                "not a domain", :gamma_1 => f1)
+        end
+
         @testset "Time-dependent functor" begin
             # Create a time-dependent constraint. The raw two-argument closure is stored
             # directly in `DomainMarkers.conditions`: a `Tuple`, one `Marker{F}` per

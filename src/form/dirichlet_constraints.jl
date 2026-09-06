@@ -55,7 +55,7 @@ Create Dirichlet boundary constraints.
 
 Each `pair` is of the form `:label => func`, where `:label` identifies the boundary region and `func` defines the Dirichlet values. If the optional time domain `I` is provided, `func` must be a time-dependent function `func(x, t)`; this is checked by arity, since nothing about `func` itself can be evaluated at construction time.
 
-`input` can be a `CartesianProduct` mesh domain, a `ScalarGridSpace`, or a `CompositeGridSpace` from which the mesh is extracted. The `:label` must match a label in the mesh definition.
+`input` can be a `CartesianProduct`, a `Domain`, an `AbstractMeshType`, a `ScalarGridSpace`, or a `CompositeGridSpace` from which the mesh is extracted. The `:label` must match a label in the mesh definition.
 """
 function dirichlet_constraints(input, pairs::Pair...)
     _constraint_domain(input)      # validates `input`; the domain itself is never stored
@@ -84,7 +84,15 @@ end
 # recursive: the first leaf space. Every leaf of a composite space shares the domain, so
 # which one is asked does not matter.
 @inline _constraint_domain(input::CompositeGridSpace) = set(mesh(first_space(input)))
-@inline _constraint_domain(input) = set(input)
+@inline _constraint_domain(input::Union{
+    CartesianProduct, Domain, AbstractMeshType}) = set(input)
+@inline _constraint_domain(input) = _throw_bad_dirichlet_input(input)
+
+@noinline function _throw_bad_dirichlet_input(input)
+    throw(ArgumentError(
+        "dirichlet_constraints: `input` must be a CartesianProduct, Domain, " *
+        "AbstractMeshType, ScalarGridSpace, or CompositeGridSpace, got a $(typeof(input))"))
+end
 
 #===========================================================================#
 # Element type handling in boundary constraints
