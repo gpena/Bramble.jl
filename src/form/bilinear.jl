@@ -212,6 +212,14 @@ end
 @inline _check_block_meshes(op::OperatorAdd, trial_leaf, test_leaf) = _visit_operator_add1(
     _check_block_meshes, op, trial_leaf, test_leaf)
 
+# The element type is the one the form's own weights have, promoted against the trial
+# space's (supporting automatic differentiation dual numbers). One place for this rule:
+# reading it from the space alone instead of promoting against the data broke ForwardDiff in
+# four separate places, each with the same symptom (`MethodError: no method matching
+# Float64(::Dual)`), each time only on the AD path (bramble-verification §4).
+@inline _matrix_eltype(ast, form::BilinearForm) = promote_type(
+    _assembled_eltype(ast, form.test_space), eltype(form.trial_space))
+
 function _pattern_upper_bound(ast::AST_TYPE, sp, mesh_markers, lin_indices) where {AST_TYPE}
     grid_inds = indices(mesh(sp))
     npts = length(grid_inds)
@@ -276,10 +284,7 @@ function allocate_system_matrix(
         end
     end
 
-    # The element type is the one the form's own weights have, promoted against the space's
-    # (supporting automatic differentiation dual numbers).
-    V_vec = _zeros_of(
-        promote_type(_assembled_eltype(ast, space), eltype(form.trial_space)), length(I_vec))
+    V_vec = _zeros_of(_matrix_eltype(ast, form), length(I_vec))
     return sparse!(I_vec, J_vec, V_vec, ndofs(form.test_space), ndofs(form.trial_space), +)
 end
 
@@ -348,9 +353,7 @@ function allocate_system_matrix(
 
     ncols = ndofs(form.trial_space)
     nrows = ndofs(form.test_space)
-    V_vec = _zeros_of(
-        promote_type(_assembled_eltype(ast, form.test_space), eltype(form.trial_space)),
-        length(I_vec))
+    V_vec = _zeros_of(_matrix_eltype(ast, form), length(I_vec))
     return sparse!(I_vec, J_vec, V_vec, nrows, ncols, +)
 end
 
