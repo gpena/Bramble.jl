@@ -163,7 +163,7 @@ the inner product there: the square root of the sum of the components' squared n
 ################################################################################
 
 @inline function _directional_inner_plus(uₕ::VectorElement{<:ScalarGridSpace},
-        vₕ::VectorElement{<:ScalarGridSpace}, _::Val{DIM};
+        vₕ::VectorElement{<:ScalarGridSpace}, ::Val{DIM};
         markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {DIM, N}
     N == 0 &&
         return _dot(uₕ.data, weights(space(uₕ), Innerplus(), DIM), vₕ.data)
