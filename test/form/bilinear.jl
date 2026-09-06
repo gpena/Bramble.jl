@@ -242,6 +242,36 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
         end
     end
 
+    @testset "Determinism under threads" begin
+        # `≈` above tolerates float summation reordering; the claim here is stronger --
+        # bit-for-bit identical `nzval`, which only a genuine absence of a race across the
+        # multi-colour scatter can guarantee run after run. Only meaningful with more than
+        # one thread actually available (gpena/Bramble.jl#84): on one thread the colours
+        # never run concurrently, so nothing could race in the first place, and CI already
+        # runs with JULIA_NUM_THREADS=auto (see the @warn in test/runtests.jl for a local,
+        # single-threaded `Pkg.test()`).
+        #
+        # A small mesh gives each colour very few points, which is exactly where a race at
+        # a boundary phase transition is most likely to surface -- a larger mesh averages
+        # rare timing windows away. Repeated 50 times against one fixed serial reference,
+        # since an intermittent race need not show on the first run.
+        if Threads.nthreads() > 1
+            Ω5 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 5), (true, true))
+            W5 = gridspace(Ω5)
+            a5 = form(W5, W5, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)) + inner₊ᵧ(D₋ᵧ(u), D₋ᵧ(v)))
+            Aser5 = sparse(assemble(a5))
+            reference = copy(Aser5.nzval)
+
+            for _ in 1:50
+                Apar5 = similar(Aser5)
+                assemble_parallel!(Apar5, a5)
+                @test Apar5.nzval == reference
+            end
+        else
+            @test_skip "bit-for-bit determinism under threads not exercised: only one thread available"
+        end
+    end
+
     @testset "Backend policy" begin
         # assemble!/assemble no longer hardcode parallel (the asymmetry this closed:
         # assemble(a::BilinearForm) used to call assemble_parallel! unconditionally, the

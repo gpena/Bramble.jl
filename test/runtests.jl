@@ -112,6 +112,17 @@ if __bramble_test_group == "full" && !__bramble_with_manual_snippets
     @info "Skipping manual snippets: manual/test_snippets.jl not found (manual/ is gitignored, so this is expected outside a machine that has it checked out locally)."
 end
 
+# `assemble_parallel!`/`Parallel()`-backend correctness is only genuinely exercised when
+# more than one thread is actually available -- on one thread the multi-colour sweep never
+# runs concurrently, so nothing can race, and the tests that check it degrade to
+# `@test_skip` (test/form/linear.jl's "Parallel vs serial agreement", test/form/bilinear.jl's
+# "Determinism under threads"). CI sets `JULIA_NUM_THREADS=auto`, so this only fires for a
+# local `Pkg.test()`, which defaults to one thread -- without this, that run reads as "all
+# green" with five-plus concurrency assertions quietly never having run at all.
+if __bramble_with_unit_tests && Threads.nthreads() == 1
+    @warn "Running on a single thread ($(Threads.nthreads())): concurrency assertions for assemble_parallel!/Parallel() are skipped (@test_skip), not passed. Run `julia --threads=auto` (or pass `julia_args = \`--threads=auto\`` to `Pkg.test`) to actually exercise them."
+end
+
 if __bramble_with_unit_tests
     @testset verbose=true "Core library" begin
         @testset "Utilities" begin
