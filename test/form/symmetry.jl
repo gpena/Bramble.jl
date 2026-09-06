@@ -1,6 +1,7 @@
 using Test
 using Bramble
-using LinearAlgebra: issymmetric, isposdef
+using Random
+using LinearAlgebra: issymmetric, isposdef, cholesky, Symmetric, issuccess
 using Bramble: form, assemble, trial_space, test_space, restrict_to, shift_op,
                IdentityOperator, ZeroOperator
 
@@ -168,5 +169,35 @@ using Bramble: form, assemble, trial_space, test_space, restrict_to, shift_op,
         Wₕ3 = gridspace(Ωₕ)
         k3 = form(Wₕ, Wₕ, (u, v) -> innerₕ(IdentityOperator(Wₕ), IdentityOperator(Wₕ3)))
         @test !issymmetric(k3)
+    end
+
+    @testset "Numerically SPD after assembly" begin
+        # `isposdef`/`issymmetric` above are a symbolic, structural check on the form
+        # itself (module note at the top of this file): they confirm a shape recognized as
+        # SPD, never an actual number. This asserts the numeric property that a direct
+        # solver actually relies on -- that the assembled, Dirichlet-constrained Poisson
+        # matrix is strictly positive-definite -- via a real Cholesky factorization on
+        # several random, non-uniform meshes, in 1D/2D/3D.
+        Random.seed!(20260906)
+        for (D, n) in ((1, 21), (2, (9, 11)), (3, (5, 6, 4)))
+            Ωd = domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D)))
+            Ωr = D == 1 ? mesh(Ωd, n, false) : mesh(Ωd, n, ntuple(_ -> false, D))
+            Wr = gridspace(Ωr)
+            a = form(Wr, Wr, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+            l = form(Wr, v -> innerₕ(x -> 1.0, v))
+            bcs = dirichlet_constraints(Bramble.set(Ωr), :boundary => (x -> 0.0))
+
+            A = assemble(a; dirichlet_labels = :boundary)
+            b = assemble(l; dirichlet_conditions = bcs, dirichlet_labels = :boundary)
+            # `dirichlet_bc!` (inside `assemble`) zeros the marked rows, which on its own
+            # destroys symmetry; `symmetrize!` restores it by eliminating the marked
+            # columns into `b`, so the matrix Cholesky actually sees is the real, complete
+            # constrained system, not merely one triangle of an asymmetric one.
+            symmetrize!(A, b, Ωr, :boundary)
+            @test issymmetric(Matrix(A))
+
+            F = cholesky(Symmetric(Matrix(A)); check = false)
+            @test issuccess(F)
+        end
     end
 end
