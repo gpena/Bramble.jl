@@ -217,8 +217,3 @@ end
 function resolve_ast(op::ShiftNode{D, Dim}) where {D, Dim}
     ShiftNode{D, Dim, typeof(resolve_ast(op.inner_op))}(op.shift_amount, resolve_ast(op.inner_op))
 end
-
-function Bramble.get_innermost_dim(op::Union{
-        BackwardAverage{D, Dim}, ForwardAverage{D, Dim}, ShiftNode{D, Dim}}) where {D, Dim}
-    Dim
-end

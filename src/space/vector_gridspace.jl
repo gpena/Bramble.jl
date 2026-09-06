@@ -119,11 +119,17 @@ end
 @inline backend(Wₕ::CompositeGridSpace) = backend(first_space(Wₕ))
 @inline execution_policy(Wₕ::CompositeGridSpace) = execution_policy(backend(Wₕ))
 @inline ndofs(Wₕ::CompositeGridSpace) = sum(ndofs, Wₕ.spaces)
+# One entry per *component*, not per spatial dimension: see the warning on the
+# `ndofs` stub (space/gridspace.jl) for why this is not interchangeable with the
+# scalar method's `Tuple` form of the same name.
 @inline ndofs(Wₕ::CompositeGridSpace, ::Type{Tuple}) = map(ndofs, Wₕ.spaces)
 
-@inline weights(Wₕ::CompositeGridSpace) = weights(first_space(Wₕ))
-@inline weights(Wₕ::CompositeGridSpace, ip::InnerProductType) = weights(first_space(Wₕ), ip)
-@inline weights(Wₕ::CompositeGridSpace, ip::InnerProductType, i::Int) = weights(first_space(Wₕ), ip, i)
+# No `weights(::CompositeGridSpace, ...)` method: leaves can have different meshes and
+# therefore different weights, so there is no single vector that could correctly answer
+# for the whole composite (gpena/Bramble.jl#67) — the same reason `normₕ`/`norm₊`
+# (space/inner_product.jl) are typed for a `ScalarGridSpace` only. A composite raises the
+# `MethodError` those already document as the contract; call `weights` on a `components`
+# leaf instead.
 
 @inline spaces(Wₕ::CompositeGridSpace) = Wₕ.spaces
 

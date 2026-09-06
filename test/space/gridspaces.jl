@@ -199,10 +199,15 @@ using Supposition
             @test ndofs(V, Tuple) == (ndofs(W), ndofs(W))
             @test spaces(V) === (W, W)
 
-            # Weights forwarding
-            @test weights(V) === weights(W)
-            @test weights(V, Innerh()) === weights(W, Innerh())
-            @test weights(V, Innerplus(), 1) === weights(W, Innerplus(), 1)
+            # gpena/Bramble.jl#67: `weights` used to forward to the first leaf, which
+            # silently answered with the wrong vector on a composite whose leaves have
+            # different meshes. Deleted in favor of the same "reject at dispatch" contract
+            # `normₕ`/`norm₊` already use for composites — checked here rather than just
+            # asserted, since `V`'s two leaves happen to share one mesh and so cannot tell
+            # a correct forward from a wrong one.
+            @test_throws MethodError weights(V)
+            @test_throws MethodError weights(V, Innerh())
+            @test_throws MethodError weights(V, Innerplus(), 1)
         end
 
         @testset "Collection interface" begin

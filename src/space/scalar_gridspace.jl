@@ -222,6 +222,12 @@ w_plus_x = weights(Wₕ, Innerplus(), 1)  # Vector for x-direction
 result = dot(uₕ.data, w_h, vₕ.data)  # Weighted inner product
 ```
 
+Defined for a [`ScalarGridSpace`](@ref) only, the same rule [`normₕ`](@ref)/[`norm₊`](@ref)
+follow: a composite grid space's leaves can have different meshes and therefore different
+weights, so there is no single vector that could correctly answer for the whole composite.
+A [`CompositeGridSpace`](@ref) raises a `MethodError`; take a scalar component of it with
+[`components`](@ref) first.
+
 See also: [`SpaceWeights`](@ref), [`Innerh`](@ref), [`Innerplus`](@ref), `innerₕ`
 """
 @inline weights(Wₕ::ScalarGridSpace) = Wₕ.weights
@@ -260,7 +266,8 @@ n = ndofs(Wₕ)        # Total DOFs (e.g., 10000 for 100×100 grid)
 dims = ndofs(Wₕ, Tuple)  # Per dimension (e.g., (100, 100))
 ```
 
-See also: [`npoints`](@ref), [`dim`](@ref)
+See also: [`npoints`](@ref), [`dim`](@ref). On a [`CompositeGridSpace`](@ref), the
+`Tuple` form means something different — see the warning on [`ndofs`](@ref).
 """
 @inline ndofs(Wₕ::ScalarGridSpace) = npoints(mesh(Wₕ))
 @inline ndofs(Wₕ::ScalarGridSpace, ::Type{Tuple}) = npoints(mesh(Wₕ), Tuple)

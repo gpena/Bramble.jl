@@ -241,10 +241,21 @@ function dim end
 
 """
     ndofs(Wₕ::AbstractSpaceType) -> Int
-    ndofs(Wₕ::AbstractSpaceType, ::Type{Tuple}) -> NTuple{D, Int}
+    ndofs(Wₕ::AbstractSpaceType, ::Type{Tuple}) -> NTuple{N, Int}
 
 Returns the total number of degrees of freedom (DOFs) in the function space `Wₕ`.
-If `Tuple` is passed, it returns a tuple with the number of DOFs in each dimension.
+
+!!! warning "The `Tuple` form means something different for a composite space"
+    On a [`ScalarGridSpace`](@ref), `ndofs(Wₕ, Tuple)` is the grid's shape — one entry
+    per **spatial dimension** (`Nₓ`, `Nᵧ`, ...). On a [`CompositeGridSpace`](@ref), it is
+    instead one entry per **component**, each that component's own (scalar) DOF count —
+    unrelated to spatial dimension, and not a shape a `prod` should be taken over. Code
+    that does not know in advance which kind of space it was given should reach for one
+    of the two unambiguous forms instead: `npoints(mesh(Wₕ), Tuple)` for the grid shape,
+    or `map(ndofs, spaces(Wₕ))` for the per-component counts. Mixing them up is not
+    hypothetical: `src/space/operators/difference.jl`'s `_grid_dims` avoids
+    `ndofs(Wₕ, Tuple)` for exactly this reason, after a 3-component 4×6 space addressed
+    13824 slots into 72 and segfaulted under an `@inbounds` engine.
 """
 function ndofs end
 
