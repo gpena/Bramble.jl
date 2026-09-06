@@ -61,7 +61,6 @@ Finite differences: approximate derivatives with physical meaning
 
 - `@propagate_inbounds`: Eliminates bounds checking in inner loops
 - `@simd`: Enables SIMD vectorization
-- `@muladd`: Fuses multiply-add operations (a-b)/h → (a-b)*inv_h
 - Separate loops for interior (2-point stencil) and boundary (1-point)
 
 ## Accuracy
