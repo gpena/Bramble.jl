@@ -429,14 +429,6 @@ end
 # 5. AST Resolution & Thunk Eval
 # ==============================================================================
 
-resolve_ast(op::TrialFunction) = op
-resolve_ast(op::TestFunction) = op
-resolve_ast(op::IndexedTrialFunction) = op
-resolve_ast(op::IndexedTestFunction) = op
-resolve_ast(op::SourceFunction) = op
-resolve_ast(op::SourceVector) = op
-resolve_ast(op::SourceConstant) = op
-
 function resolve_ast(op::OperatorAdd{D}) where {D}
     OperatorAdd{D, typeof(resolve_ast(op.left_op)), typeof(resolve_ast(op.right_op))}(
         resolve_ast(op.left_op), resolve_ast(op.right_op))
@@ -454,10 +446,13 @@ function resolve_ast(op::GridFunctionScale{D, <:Function}) where {D}
     return GridFunctionScale{D, typeof(vec), typeof(resolve_ast(op.inner_op))}(vec, resolve_ast(op.inner_op))
 end
 
-resolve_ast(op::IdentityOperator) = op
-resolve_ast(op::ZeroOperator) = op
-
 resolve_ast(ops::NTuple{N, Any}) where {N} = map(resolve_ast, ops)
+# The catch-all every node above without its own method falls through to: TrialFunction,
+# TestFunction, IndexedTrialFunction, IndexedTestFunction, SourceFunction, SourceVector,
+# SourceConstant, IdentityOperator, ZeroOperator, and anything else with nothing to resolve.
+# gpena/Bramble.jl#62: those nine used to have their own identity methods here, each
+# decorative -- this catch-all made every one of them redundant, since a node not listed
+# was never an error, only silently unresolved. Left as one line rather than nine.
 resolve_ast(op::Any) = op
 
 # ==============================================================================
