@@ -76,6 +76,28 @@ end
         end
     end
 
+    @testset "Extreme aspect ratio" begin
+        # Δy/Δx ~ 1e4 on a 2D grid, the kind of elongated domain a boundary-layer or thin-
+        # channel geometry produces. `f` is rescaled in y so its values stay O(1) despite
+        # the domain spanning four orders of magnitude in that direction; what is under
+        # test is whether the operator's own order degrades from the resulting spacing
+        # disparity, not whether the manufactured values themselves stay reasonable.
+        f = x -> sin(x[1]) * exp(x[2] / 1.0e4)
+        for (opname, op, df, drop) in (
+            ("D₋ₓ", D₋ₓ, x -> cos(x[1]) * exp(x[2] / 1.0e4), e -> @view e[2:end, :]),
+            (
+            "D₋ᵧ", D₋ᵧ, x -> sin(x[1]) * exp(x[2] / 1.0e4) / 1.0e4, e -> @view e[:, 2:end]))
+            @testset "$opname" begin
+                Random.seed!(20250829)
+                Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0e4)), (17, 17),
+                    (true, true))
+                ords = _orders(Ωₕ, op, f, df, drop; steps = 3)
+                @test all(>(0.9), ords)
+                @test 0.95 < last(ords) < 1.05
+            end
+        end
+    end
+
     @testset "Truncation boundary order" begin
         # The trap this exists to document. D₋ₓ is zero at the first point while the
         # derivative is not, so that one point contributes an O(1) error at every

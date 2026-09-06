@@ -490,6 +490,45 @@ end
             @test point(Ωₕ_pt, (1, 1, 1)) == (2.0, 3.0, 4.0)
         end
 
+        @testset "Collapsed dimensions, one layer further" begin
+            # None of the collapsed-mesh cases above are ever carried past mesh queries:
+            # nothing calls gridspace, innerₕ, cell_measure or a difference operator on a
+            # mesh built from a mixed collapsed/non-collapsed CartesianProduct. A boundary-
+            # layer or axisymmetric geometry that legitimately collapses one axis could hit
+            # a zero-division or out-of-bounds error at that layer with nothing here to
+            # catch it.
+            Ω_line = create_test_nd_domain(((0.0, 1.0), (5.0, 5.0)))
+            Ωₕ_line = mesh(Ω_line, (9, 4), (true, true); backend = backend())
+            Wₕ_line = gridspace(Ωₕ_line)
+
+            uₕ = Rₕ(Wₕ_line, x -> sin(pi * x[1]) + x[2])
+            vₕ = Rₕ(Wₕ_line, x -> 1.0)
+
+            # cell_measure along the collapsed axis is coerced to 1 (`_apply_hs_logic`), so
+            # the measure is exactly the live axis's own cell width, never zero or NaN/Inf.
+            idxs = indices(Ωₕ_line)
+            @test all(idx -> isfinite(cell_measure(Ωₕ_line, idx)), idxs)
+            @test all(idx -> cell_measure(Ωₕ_line, idx) > 0.0, idxs)
+
+            s = innerₕ(uₕ, vₕ)
+            @test isfinite(s)
+            @test s ≈
+                  sum(cell_measure(Ωₕ_line, idx) * (sin(pi * point(Ωₕ_line, idx)[1]) + 5.0)
+            for idx in idxs)
+
+            # the live axis differences normally
+            d1 = D₋ₓ(uₕ)
+            @test all(isfinite, values(d1))
+
+            # the collapsed axis has a single point in that direction: a backward
+            # difference across it can never have a neighbour, so it must come back the
+            # same truncated zero every difference operator writes where it has none,
+            # rather than NaN/Inf from dividing by a collapsed (zero) spacing.
+            d2 = D₋ᵧ(uₕ)
+            @test all(iszero, values(d2))
+            @test all(isfinite, values(d2))
+        end
+
         @testset "Half-spacing logic" begin
             # Test the helper function for collapsed dimensions
             using Bramble: _apply_hs_logic
