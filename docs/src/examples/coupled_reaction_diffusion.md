@@ -50,7 +50,7 @@ the current guess, the same trick [the nonlinear Poisson example uses for a sing
 species](poisson_nonlinear.md#Fixed-point-(Picard)-iteration), extended to a second one.
 Writing the coupling as `v_current * u(1)` in `u`'s own equation and `-u_current * u(2)` in
 `v`'s reproduces `uv` and `-uv` exactly once the trial function is evaluated at the current
-`w` — which is all `A(w) w` needs to do. Nothing here works out `∂(uv)/∂u` and `∂(uv)/∂v` by
+`w` — which is all `A(w)` needs to do. Nothing here works out `∂(uv)/∂u` and `∂(uv)/∂v` by
 hand; `ForwardDiff` differentiates through *how* `A` itself depends on `w` automatically:
 
 ```@example coupled
