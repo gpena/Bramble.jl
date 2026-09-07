@@ -34,7 +34,7 @@ Equations are defined through bilinear and linear forms, then assembled into spa
 - Boundary condition support for Dirichlet conditions, with a `symmetrize!` operator that restores symmetry for Cholesky factorizations.
 - Composite grid spaces (`Wₕ^Val(N)`) with block matrix assembly for coupled PDE systems.
 - End-to-end automatic differentiation via ForwardDiff and ReverseDiff through operators, form assembly, and nonlinear residuals.
-- Export pipelines for visualization via VTK (`write_vtk`) in ParaView and PGFPlots/TikZ for LaTeX figures.
+- Export pipelines for visualization via VTK (`export_vtk`) in ParaView and PGFPlots/TikZ for LaTeX figures.
 
 ---
 

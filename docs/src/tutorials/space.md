@@ -475,10 +475,10 @@ normₕ(uₕ)^2 ≈ innerₕ(uₕ, uₕ)
 
 ### Discrete Sobolev norms: ``H^1`` seminorm and full ``H^1`` norm
 
-Bramble provides discrete ``H^1`` Sobolev norms based on the forward discrete gradient ``\nabla_{+h}``:
+Bramble provides discrete ``H^1`` Sobolev norms based on the backward discrete gradient ``\nabla_{-h}``:
 * `snorm₁ₕ(uₕ)`: the discrete ``H^1`` seminorm ``|u_h|_{1,h}``, defined as:
   ```math
-  |u_h|_{1,h}^2 = \|\nabla_{+h} u_h\|_h^2 = \sum_{d=1}^D \|D_{+x_d} u_h\|_h^2.
+  |u_h|_{1,h}^2 = \|\nabla_{-h} u_h\|_h^2 = \sum_{d=1}^D \|D_{-x_d} u_h\|_h^2.
   ```
 * `norm₁ₕ(uₕ)`: the full discrete ``H^1`` norm, satisfying the Pythagorean identity:
   ```math
@@ -505,7 +505,7 @@ For vector-valued grid functions in a `CompositeGridSpace` (such as velocities o
 Vₕ = Wₕ^2
 u_vec = Rₕ(Vₕ, (x -> sin(x), x -> cos(x)))
 
-normₕ(u_vec)^2 ≈ normₕ(u_vec[1])^2 + normₕ(u_vec[2])^2
+normₕ(u_vec)^2 ≈ normₕ(u_vec(1))^2 + normₕ(u_vec(2))^2
 ```
 
 ### Staggered weights and directional inner products

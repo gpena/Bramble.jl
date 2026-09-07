@@ -207,9 +207,9 @@ spacings(Ωₕ)                       # every hᵢ at once
 spacings(Ωₕ)[3] == spacing(Ωₕ, 3)  # true, the accessor just indexes it
 ```
 
-This matters for the difference operators, which need one spacing per grid point: they
-index the cached vector instead of calling `spacing` once per point, which measured
-about 3.6x faster on a 100 000-point grid.
+This matters for the difference operators, which need one spacing per grid point: reading
+the cached vector directly, rather than boxing the spacing accessor as a generic callable
+passed into the inner stencil loop, keeps that loop allocation-free.
 
 ```julia
 # Maximum grid stepsize

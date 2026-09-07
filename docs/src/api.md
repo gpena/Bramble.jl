@@ -145,6 +145,8 @@ vector_gridspace
 ndofs
 weights
 spaces
+space
+ncomponents
 ```
 
 ### Vector elements and grid functions
@@ -152,6 +154,8 @@ spaces
 ```@docs
 VectorElement
 element
+Base.values(::VectorElement)
+values!
 to_matrix
 component
 components
@@ -200,20 +204,32 @@ every coordinate at once. See the [operators tutorial](tutorials/operators.md).
 
 ```@docs
 diff₋ₓ
+diff₋ₓ!
 diff₋ᵧ
+diff₋ᵧ!
 diff₋₂
+diff₋₂!
 diff₋ₕ
 diff₊ₓ
+diff₊ₓ!
 diff₊ᵧ
+diff₊ᵧ!
 diff₊₂
+diff₊₂!
 diff₊ₕ
 D₋ₓ
+D₋ₓ!
 D₋ᵧ
+D₋ᵧ!
 D₋₂
+D₋₂!
 ∇₋ₕ
 D₊ₓ
+D₊ₓ!
 D₊ᵧ
+D₊ᵧ!
 D₊₂
+D₊₂!
 ∇₊ₕ
 ```
 
@@ -224,8 +240,11 @@ the discrete summation-by-parts identity
 
 ```@docs
 Dstar₊ₓ
+Dstar₊ₓ!
 Dstar₊ᵧ
+Dstar₊ᵧ!
 Dstar₊₂
+Dstar₊₂!
 Dstar₊ₕ
 ```
 
@@ -235,8 +254,11 @@ functions vanishing on the boundary.
 
 ```@docs
 Dcₓ
+Dcₓ!
 Dcᵧ
+Dcᵧ!
 Dc₂
+Dc₂!
 Dcₕ
 ```
 
@@ -246,8 +268,11 @@ grid, and so is second order on a non-uniform one where `Dcₓ` is first.
 
 ```@docs
 Dₕₓ
+Dₕₓ!
 Dₕᵧ
+Dₕᵧ!
 Dₕ₂
+Dₕ₂!
 ∇ₕ
 ```
 
@@ -257,8 +282,11 @@ between two cells, not to a direction of travel across it.
 
 ```@docs
 jumpₓ
+jumpₓ!
 jumpᵧ
+jumpᵧ!
 jump₂
+jump₂!
 jumpₕ
 ```
 
@@ -266,12 +294,18 @@ Averages of a point with its neighbour.
 
 ```@docs
 M₋ₓ
+M₋ₓ!
 M₋ᵧ
+M₋ᵧ!
 M₋₂
+M₋₂!
 M₋ₕ
 M₊ₓ
+M₊ₓ!
 M₊ᵧ
+M₊ᵧ!
 M₊₂
+M₊₂!
 M₊ₕ
 ```
 

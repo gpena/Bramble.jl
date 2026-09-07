@@ -102,7 +102,7 @@ function poisson_series(D::Int; n0::Int = 5, levels::Int)
 end
 
 Random.seed!(20260903)
-hs1, errs1 = poisson_series(1; n0 = 6, levels = 7)  # 6 up to 385 points
+hs1, errs1 = poisson_series(1; n0 = 6, levels = 7)  # 6 up to 321 points
 Random.seed!(20260903)
 hs2, errs2 = poisson_series(2; levels = 6)   # 5² up to 129² points
 Random.seed!(20260903)

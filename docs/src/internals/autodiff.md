@@ -30,6 +30,7 @@ Propagating derivatives through discrete operators requires that allocations do 
 Bramble's runtime kernels mutate destination buffers using `setindex!`. AD backends that support array mutation work out of the box:
 
 - **ForwardDiff**: Dual numbers propagate through coefficients, difference operators, weak forms, and boundary conditions.
+- **PolyesterForwardDiff**: The same forward-mode propagation, chunked across threads.
 - **ReverseDiff**: Tracked arrays and scalars propagate through space operators and form assembly.
 - **Mooncake & Enzyme**: Differentiate operator evaluations and space methods.
 - **Zygote**: Not supported directly because it disallows array mutation (`setindex!`).

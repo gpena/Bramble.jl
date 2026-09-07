@@ -74,8 +74,10 @@ end
 length(picard_steps), picard_steps[[1, 2, 3, end]]
 ```
 
-The step size roughly halves each time — linear convergence, one correct digit gained every
-couple of iterations.
+The step size drops by roughly a factor of 20-50 each time here, reaching machine precision
+in 9 iterations — still only linear convergence (a roughly constant per-step ratio, not the
+per-step squaring Newton gets below), just a fast-converging instance of it for this
+particular coefficient and mesh.
 
 ## Newton's method
 

@@ -169,9 +169,9 @@ separately — a routing mistake would show up as one converging correctly while
 silently used the wrong block, which a single combined error could hide. A *dense*
 `ForwardDiff.jacobian` over two coupled species would cost `(2n)^2` against the scalar
 examples' `n^2`, and was what forced this example to stay at three small refinement levels
-before switching to sparse AD; with it, this reaches the same five levels the [linear coupled
-example](convection_diffusion_linear.md) uses, tens of thousands of degrees of freedom, in
-about a second per level:
+before switching to sparse AD; with it, this reaches five levels — the same order of tens of
+thousands of degrees of freedom the [linear coupled
+example](convection_diffusion_linear.md) reaches at six — in about a second per level:
 
 ```@example coupled
 using Random
