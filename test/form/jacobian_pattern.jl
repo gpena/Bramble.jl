@@ -158,6 +158,50 @@ end
         @test jacobian_pattern(a) == (A .!= 0)
     end
 
+    @testset "Multiple independent nonlinear coefficients" begin
+        # -(α(M₋ₕ(u))u')' + β(D₋ₓ(u))u = g: two terms, each nonlinear through a
+        # *different* stencil op. Passing both dependencies together must still be a
+        # safe superset of the true pattern -- neither term's reach may be dropped just
+        # because the other one was declared too.
+        # No manufactured solution needed: only the pattern's structural safety is
+        # checked here, not convergence to a known answer, so any boundary/source data
+        # will do.
+        α(u) = 3 + 1 / (1 + u^2)
+        β(u) = 1 + 0.5 * u^2
+
+        Ω = domain(interval(0.0, 1.0))
+        Ωₕ = mesh(Ω, 20, false)
+        Wₕ = gridspace(Ωₕ)
+        bcs = dirichlet_constraints(Bramble.set(Ω), :boundary => x -> exp(x[1]))
+        gₕ = element(Wₕ)
+        avgₕ!(gₕ, x -> exp(x[1]))
+        l = form(Wₕ, v -> innerₕ(gₕ, v))
+        F = assemble(l; dirichlet_conditions = bcs, dirichlet_labels = :boundary)
+
+        function build_form(uₕ)
+            αv = α.(M₋ₕ(uₕ))
+            βv = β.(D₋ₓ(uₕ))
+            return form(Wₕ, Wₕ, (U, V) -> inner₊(αv * ∇₋ₕ(U), ∇₋ₕ(V)) + innerₕ(βv * U, V))
+        end
+        function residual(u_vec::AbstractVector{T}) where {T}
+            uₕ = element(Wₕ, T)
+            uₕ .= u_vec
+            A = assemble(build_form(uₕ); dirichlet_labels = :boundary)
+            return A * u_vec .- F
+        end
+
+        a = build_form(element(Wₕ, 0.0))
+        mine = jacobian_pattern(a, U -> M₋ₕ(U), U -> D₋ₓ(U))
+
+        u_probe = rand(ndofs(Wₕ))
+        prep = prepare_jacobian(residual, _traced_ad, u_probe)
+        J = DifferentiationInterface.jacobian(residual, prep, _traced_ad, u_probe)
+        ground_truth = J .!= 0
+
+        @test all(ground_truth .<= mine)
+        @test nnz(mine) >= nnz(sparse(ground_truth))
+    end
+
     @testset "Composite trial space is rejected" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 4), (false, false))
         Wₕ = gridspace(Ωₕ)

@@ -184,7 +184,7 @@ using ADTypes: KnownJacobianSparsityDetector
 a_for_pattern = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals_pattern * ∇₋ₕ(U), ∇₋ₕ(V)))
 pattern = jacobian_pattern(a_for_pattern, U -> M₋ₕ(U))
 
-native_ad = AutoSparse(AutoForwardDiff();
+sparse_ad_manual = AutoSparse(AutoForwardDiff();
     sparsity_detector = KnownJacobianSparsityDetector(pattern),
     coloring_algorithm = SparseMatrixColorings.GreedyColoringAlgorithm())
 nothing # hide
@@ -192,10 +192,12 @@ nothing # hide
 
 [`ast_sparsity_detector`](@ref) spells the same thing more directly, once
 [ADTypes.jl](https://github.com/SciML/ADTypes.jl) is loaded — no separate `pattern`
-variable, no `KnownJacobianSparsityDetector` wrapper, the same detector either way:
+variable, no `KnownJacobianSparsityDetector` wrapper, the same detector either way. This is
+the one actually driving the Newton loop below, not just `sparse_ad_manual` shown for what
+it desugars to:
 
 ```@example poisson_nonlinear
-native_ad_direct = AutoSparse(AutoForwardDiff();
+native_ad = AutoSparse(AutoForwardDiff();
     sparsity_detector = ast_sparsity_detector(a_for_pattern, U -> M₋ₕ(U)),
     coloring_algorithm = SparseMatrixColorings.GreedyColoringAlgorithm())
 nothing # hide
@@ -310,3 +312,11 @@ convergence_plot([(hs1, errs1, "1D", "#5B5FC7"), (hs2, errs2, "2D", "#0E7C86"), 
 
 Second order in every dimension, same as the linear problem — the nonlinearity changes how
 many solves it takes to reach a given ``u``, not the discretization's own accuracy once it has.
+
+`nonlinear_series` above uses `sparse_ad`, the tracer, at every level and dimension — the
+same substitution shown earlier (`ast_sparsity_detector(a, U -> M₋ₕ(U))` in place of
+`sparse_ad`'s `sparsity_detector`) works here unchanged, `D`-tuple coefficient and all:
+`jacobian_pattern` flattens whatever `M₋ₕ(U)` returns — one node in 1D, a `D`-tuple in
+2D/3D — the same way before taking its reach, so nothing about `Ac`/`grad` above needs to
+change to swap it in. Not re-run a second time here only to save the doc build the cost of
+solving the same nine problems twice for an answer already shown identical above.

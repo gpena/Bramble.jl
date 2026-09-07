@@ -101,6 +101,17 @@ length(newton_residuals), newton_residuals
 Quadratic convergence, same as the single-species case — the composite space changes what
 the Jacobian differentiates through, not how well Newton converges once it has a correct one.
 
+Unlike [the nonlinear Poisson example](poisson_nonlinear.md), `sparse_ad` above is the only
+option here, not a choice between two: [`jacobian_pattern`](@ref)/[`ast_sparsity_detector`](@ref)
+read a sparsity pattern directly off a `BilinearForm`'s AST, but only over a single,
+non-composite grid space. This form's coupling is exactly the case that scope excludes —
+`v_c` scaling a term routed into block `(1,1)` is a *different* leaf's component reaching
+into this one, which needs the block/leaf routing [`allocate_system_matrix`](@ref)'s
+composite method has and `jacobian_pattern` does not yet reuse (see its own docstring).
+`SparseConnectivityTracer`'s tracer does not need to know about blocks at all — it traces
+`residual` as a plain function of `w`, composite space and all — which is exactly why it
+stays the only option for a coupled system like this one.
+
 ```@example coupled
 wₕ = element(Vₕ)
 wₕ .= w

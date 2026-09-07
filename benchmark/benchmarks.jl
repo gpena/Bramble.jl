@@ -1,7 +1,7 @@
 #===========================================================================#
 # Performance regression suite.
 #
-# Ten groups, chosen to cover the paths where every slowdown found so far
+# Eleven groups, chosen to cover the paths where every slowdown found so far
 # actually appeared, rather than to cover the API. Run it before tagging:
 #
 #     julia --project=benchmark benchmark/benchmarks.jl
@@ -44,10 +44,20 @@ using BenchmarkTools
 using Bramble
 using DoubleFloats: Double64
 
-# Nothing is imported beyond `Bramble` itself. PkgBenchmark and AirspeedVelocity `include`
-# this file, so whatever it brings in lands in the including module, and `using Bramble`
-# already makes `values` ambiguous there against `Base.values` — Bramble exports its own.
-# Nothing below calls `values`, so the benchmarks do not depend on that resolving.
+# Group 11 (jacobian sparsity) needs the sparse-AD stack `jacobian_pattern`/
+# `ast_sparsity_detector` (#21, #13) are actually compared against. Brought in the same
+# scoped way `DoubleFloats: Double64` already is above -- specific names or `import`, never
+# a bare `using X` -- so the including module (PkgBenchmark, AirspeedVelocity) gets nothing
+# beyond what each name below spells out.
+using ForwardDiff: ForwardDiff
+using DifferentiationInterface: AutoSparse, AutoForwardDiff, prepare_jacobian, jacobian
+import SparseConnectivityTracer
+import SparseMatrixColorings
+
+# Nothing else is imported beyond `Bramble` itself. PkgBenchmark and AirspeedVelocity
+# `include` this file, so whatever it brings in lands in the including module, and `using
+# Bramble` already makes `values` ambiguous there against `Base.values` — Bramble exports
+# its own. Nothing below calls `values`, so the benchmarks do not depend on that resolving.
 
 # Battery power means CPU frequency scaling and thermal throttling, so a timing
 # taken on battery is not comparable with one taken on AC, and a baseline saved
@@ -317,6 +327,76 @@ let N = 100_000
         g["avgₕ! $lbl"] = @benchmarkable avgₕ!($u, sin) samples=20
         g["assemble! $lbl"] = @benchmarkable Bramble.assemble!($b, $l; ast = $ast)
         g["innerₕ $lbl"] = @benchmarkable innerₕ($fₕ, $fₕ)
+    end
+end
+
+# --- 11. jacobian sparsity: AD tracing vs. reading it off the AST --------- #
+#
+# `jacobian_pattern`/`ast_sparsity_detector` (#21, #13) exist to replace
+# `SparseConnectivityTracer.TracerSparsityDetector()`'s tracing pass with one that reads
+# the pattern directly off a `BilinearForm`'s AST. Compared here on the 1D nonlinear
+# Poisson residual `docs/src/examples/poisson_nonlinear.md` builds, at two sizes to show
+# the claim that the gap widens with the mesh, not just that it exists at one size.
+#
+# `prepare_jacobian` (pattern detection + coloring) is the piece expected to differ.
+# `jacobian` (the actual sparse sweep, once both have a pattern and coloring) is expected
+# to land at parity -- included anyway, so a future change that broke *that* symmetry
+# would show up here rather than only in a person's own ad-hoc check.
+let
+    function _nonlinear_poisson_residual(n::Int)
+        sol(x) = exp(x[1])
+        α(u) = 3 + 1 / (1 + u^2)
+        dαdu(u) = -2u / (1 + u^2)^2
+        rhs(x) = -dαdu(sol(x)) * sol(x)^2 - α(sol(x)) * sol(x)
+
+        Ω = domain(interval(0.0, 1.0))
+        Ωₕ = mesh(Ω, n, false)
+        Wₕ = gridspace(Ωₕ)
+        bcs = dirichlet_constraints(Bramble.set(Ω), :boundary => sol)
+        gₕ = element(Wₕ)
+        avgₕ!(gₕ, rhs)
+        l = Bramble.form(Wₕ, v -> innerₕ(gₕ, v))
+        F = Bramble.assemble(l; dirichlet_conditions = bcs, dirichlet_labels = :boundary)
+
+        function diffusion_form(uₕ)
+            αv = α.(M₋ₕ(uₕ))
+            return Bramble.form(Wₕ, Wₕ, (U, V) -> inner₊(αv * ∇₋ₕ(U), ∇₋ₕ(V)))
+        end
+        function residual(u_vec::AbstractVector{T}) where {T}
+            uₕ = element(Wₕ, T)
+            uₕ .= u_vec
+            A = Bramble.assemble(diffusion_form(uₕ); dirichlet_labels = :boundary)
+            return A * u_vec .- F
+        end
+
+        a = diffusion_form(element(Wₕ, 0.0))
+        return Wₕ, residual, a
+    end
+
+    g = SUITE["jacobian sparsity"] = BenchmarkGroup()
+
+    for (lbl, n) in (("1D n=100", 100), ("1D n=10000", 10_000))
+        Wₕ, residual, a = _nonlinear_poisson_residual(n)
+        u = zeros(ndofs(Wₕ))
+
+        traced_ad = AutoSparse(AutoForwardDiff();
+            sparsity_detector = SparseConnectivityTracer.TracerSparsityDetector(),
+            coloring_algorithm = SparseMatrixColorings.GreedyColoringAlgorithm())
+        native_ad = AutoSparse(AutoForwardDiff();
+            sparsity_detector = Bramble.ast_sparsity_detector(a, U -> M₋ₕ(U)),
+            coloring_algorithm = SparseMatrixColorings.GreedyColoringAlgorithm())
+
+        g["prepare_jacobian (traced), $lbl"] = @benchmarkable prepare_jacobian(
+            $residual, $traced_ad, $u)
+        g["prepare_jacobian (native), $lbl"] = @benchmarkable prepare_jacobian(
+            $residual, $native_ad, $u)
+
+        prep_t = prepare_jacobian(residual, traced_ad, u)
+        prep_n = prepare_jacobian(residual, native_ad, u)
+        g["jacobian (traced), $lbl"] = @benchmarkable jacobian(
+            $residual, $prep_t, $traced_ad, $u)
+        g["jacobian (native), $lbl"] = @benchmarkable jacobian(
+            $residual, $prep_n, $native_ad, $u)
     end
 end
 

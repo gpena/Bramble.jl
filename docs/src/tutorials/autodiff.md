@@ -223,6 +223,47 @@ println("Jacobian dimensions: ", size(J))
 println("Non-zero entries: ", nnz(J))
 ```
 
+`TracerSparsityDetector` works this way for *any* Julia function, which is exactly why it has to
+run `pde_residual` once to find out. `pde_residual` here is not arbitrary, though: its matrix
+`A_sparse` comes from a `BilinearForm`, whose own sparsity is already known directly
+from its AST — no tracing needed for that part. [`jacobian_pattern`](@ref) reads that
+pattern off the form, widened by the reach of each coefficient's own dependence on the
+unknown, named the same way a form term names an operator — a function of the trial
+placeholder. `αvals` here is `1.0 .+ uₕ.^2`, a plain pointwise function of `uₕ` at the *same*
+grid point (no averaging, unlike the staggered `M₋ₕ(u)` coefficient in
+[the nonlinear Poisson example](../examples/poisson_nonlinear.md)), so its dependency is
+just the trial placeholder itself, `U -> U`. [`ast_sparsity_detector`](@ref) hands the
+result straight to `AutoSparse` in place of the tracer, once
+[ADTypes.jl](https://github.com/SciML/ADTypes.jl) is loaded:
+
+```@example autodiff_tutorial
+using ADTypes
+
+αvals0 = 1.0 .+ values(element(Wₕ, 0.0)) .^ 2
+a_for_pattern = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals0 * ∇₋ₕ(U), ∇₋ₕ(V)))
+
+const native_backend = AutoSparse(AutoForwardDiff();
+    sparsity_detector = ast_sparsity_detector(a_for_pattern, U -> U),
+    coloring_algorithm = SparseMatrixColorings.GreedyColoringAlgorithm())
+
+prep_native = DifferentiationInterface.prepare_jacobian(pde_residual, native_backend, u0)
+J_native = DifferentiationInterface.jacobian(pde_residual, prep_native, native_backend, u0)
+
+J == J_native
+```
+
+`a_for_pattern` only needs *some* concrete coefficient to build a `BilinearForm` from — the
+pattern is a property of the AST, not of `αvals0`'s values, so evaluating it at `u = 0` is as
+good as evaluating it at any other point. Same Jacobian either way, but no tracing pass paid
+for it: `jacobian_pattern` only ever walks the grid once, touching neither `ForwardDiff` nor
+the coefficient's actual values, so `prepare_jacobian` gets cheaper as the mesh grows rather
+than scaling with however long one residual call takes to trace. The trade is scope, not
+correctness: it only applies when the residual's matrix is assembled from a `BilinearForm`
+in the first place (as here), and — for now — only over a single, non-composite grid space
+(see [`jacobian_pattern`](@ref)'s own docstring for the composite case this doesn't cover
+yet). `TracerSparsityDetector` above keeps working regardless of how `A_sparse` was built,
+which is the case to reach for it.
+
 ---
 
 ## 7. Choosing the right backend
