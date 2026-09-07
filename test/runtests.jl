@@ -207,11 +207,15 @@ if __bramble_with_unit_tests
         end
 
         # End-to-end order of convergence for the worked examples, which the pages
-        # themselves compute but only render. 7 s for both problems across 1D/2D/3D --
+        # themselves compute but only render, plus regression coverage for the two
+        # nonlinear examples (Picard, Newton, and a differentiated composite residual --
+        # see #81) that convergence.jl alone does not reach. ~1m05s together -- still
         # cheap enough to run on every push rather than sit behind a group, and it covers
-        # assemble/solve/boundary-conditions as a pipeline rather than operator by operator.
+        # assemble/solve/boundary-conditions and the sparse-AD Newton path as pipelines
+        # rather than operator by operator.
         @testset "Worked examples" begin
             include("examples/convergence.jl")
+            include("examples/nonlinear_convergence.jl")
         end
     end
 end
