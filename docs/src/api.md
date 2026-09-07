@@ -316,6 +316,17 @@ allocate_system_matrix
 evaluate!
 ```
 
+### Jacobian sparsity
+
+For a Newton residual built from a [`BilinearForm`](@ref) with a live nonlinear
+coefficient (see [the nonlinear Poisson example](examples/poisson_nonlinear.md)),
+`jacobian_pattern` reads the Jacobian's sparsity pattern directly off the form's AST,
+without AD tracing.
+
+```@docs
+jacobian_pattern
+```
+
 ### Dirichlet conditions
 
 ```@docs

@@ -199,6 +199,7 @@ if __bramble_with_unit_tests
             include("form/block_extract.jl")
             include("form/component.jl")
             include("form/stencil_pattern.jl")
+            include("form/jacobian_pattern.jl")
         end
 
         @testset "Exporters" begin

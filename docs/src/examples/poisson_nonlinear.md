@@ -161,6 +161,63 @@ uexact = Rₕ(Wₕ, sol)
 norm₁ₕ(uₕ_newton .- uexact), norm₁ₕ(uₙ .- uexact)
 ```
 
+## Skipping the tracer: a Bramble-native pattern
+
+`SparseConnectivityTracer` above finds the Jacobian's sparsity pattern by tracing `residual`
+— running it once with a special value that records which inputs reach which outputs. That
+works for *any* Julia function, which is exactly why it needs to run the function at all: a
+tracing pass, on top of the coloring pass that follows it.
+
+`residual` here is not an arbitrary function, though — it is `A(u) * u - F`, where `A` comes
+from [`allocate_system_matrix`](@ref), whose own sparsity is already known directly from
+`a`'s AST — no tracing needed for that part at all. The only piece missing from `A`'s own
+pattern is the extra chain-rule term from `αvals_local`'s own dependence on `u` through
+`M₋ₕ`. [`jacobian_pattern`](@ref) supplies exactly that piece — named the same way the
+coefficient itself was built, `U -> M₋ₕ(U)` — and hands the result to
+[`ADTypes.KnownJacobianSparsityDetector`](https://github.com/SciML/ADTypes.jl) in place of
+the tracer:
+
+```@example poisson_nonlinear
+using ADTypes: KnownJacobianSparsityDetector
+
+αvals_pattern = α.(M₋ₕ(element(Wₕ, 0.0)))
+a_for_pattern = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals_pattern * ∇₋ₕ(U), ∇₋ₕ(V)))
+pattern = jacobian_pattern(a_for_pattern, U -> M₋ₕ(U))
+
+native_ad = AutoSparse(AutoForwardDiff();
+    sparsity_detector = KnownJacobianSparsityDetector(pattern),
+    coloring_algorithm = SparseMatrixColorings.GreedyColoringAlgorithm())
+nothing # hide
+```
+
+`a_for_pattern` only needs *some* concrete coefficient to build a `BilinearForm` from — the
+pattern is a property of the AST, not of `αvals_pattern`'s values, so evaluating it at `u = 0`
+is as good as evaluating it at the true solution. Feeding `native_ad` into the same
+`prepare_jacobian`/`jacobian!` loop as before reaches the same pattern (118 nonzeros, both
+ways, on this mesh) and the same quadratic convergence:
+
+```@example poisson_nonlinear
+u_native = zeros(ndofs(Wₕ))
+prep_native = prepare_jacobian(residual, native_ad, u_native)
+J_native = DifferentiationInterface.jacobian(residual, prep_native, native_ad, u_native)
+newton_residuals_native = Float64[]
+for it in 1:20
+    r = residual(u_native)
+    push!(newton_residuals_native, sqrt(sum(abs2, r)))
+    newton_residuals_native[end] < 1e-10 && break
+    DifferentiationInterface.jacobian!(residual, J_native, prep_native, native_ad, u_native)
+    u_native .-= J_native \ r
+end
+newton_residuals_native
+```
+
+What changes is what `prepare_jacobian` has to pay for: no tracing pass, only coloring.
+Measured on this mesh, `prepare_jacobian` costs 0.140 ms with the tracer against 0.062 ms
+given the pattern directly — [`jacobian_pattern`](@ref) itself costs 0.023 ms of that 0.062,
+read straight off `a`'s AST. The gap widens with the mesh: tracing cost scales with however
+long one `residual` call takes to run and record, while `jacobian_pattern` only ever walks
+the grid once, touching neither `ForwardDiff` nor the coefficient's actual values.
+
 ## Checking the answer
 
 The same nested-random-mesh pattern as the [linear example](poisson_linear.md) — one random
