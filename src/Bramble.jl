@@ -109,6 +109,7 @@ export M₊ₓ!, M₊ᵧ!, M₊₂!
 export dirichlet_constraints, dirichlet_bc!, symmetrize!
 export form, assemble, assemble!, assemble_parallel!, allocate_system_matrix, evaluate!
 export jacobian_pattern, ast_sparsity_detector
+export type_cached_assemble!
 
 # `DirichletConstraint` is `dirichlet_constraints(...)`'s own return type, reached for an
 # `isa` check rather than constructed by name — the tests already reach it as
@@ -158,6 +159,7 @@ include("form/dirichlet_constraints.jl")
 include("form/linear.jl")
 include("form/bilinear.jl")
 include("form/jacobian_pattern.jl")
+include("form/type_cached_assemble.jl")
 include("form/symmetry.jl")
 
 include("exporters/vtk_export.jl")

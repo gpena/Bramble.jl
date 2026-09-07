@@ -141,13 +141,9 @@ largest costs, but `diffusion_matrix` still rebuilds a *fresh* matrix, values an
 both, on every call, because `residual` has to stay generic over `T`
 (`Float64` on a plain call, `ForwardDiff.Dual` while `jacobian!` is probing it) and a matrix
 allocated for one element type cannot hold the other. Measured behind a function barrier: a
-plain `residual(u)` call costs 10,096 B (rebuilding `A` once, at `T = Float64`); a full Newton
-step costs 98,016 B (that, plus rebuilding it again at `T = Dual` for every colour
-`jacobian!`'s sparse sweep needs). Closing that gap would mean giving `diffusion_matrix` a
-`Float64`-specialized method sitting behind `assemble!`, the way the Picard loop already has,
-and a separate generic one only the `Dual` calls ever reach — a real further optimization,
-just not one this page chases, since it would cost real clarity for a page about *what*
-Newton needs, not how few bytes it can be made to cost.
+plain `residual(u)` call costs 17,536 B (rebuilding `A` once, at `T = Float64`); a full Newton
+step costs 112,896 B (that, plus rebuilding it again at `T = Dual` for every colour
+`jacobian!`'s sparse sweep needs).
 
 Quadratic convergence — the residual's correct digits roughly *double* each step, against
 Picard's roughly-constant gain of one — visible directly in how fast that list reaches
@@ -160,6 +156,67 @@ uₕ_newton .= u
 uexact = Rₕ(Wₕ, sol)
 norm₁ₕ(uₕ_newton .- uexact), norm₁ₕ(uₙ .- uexact)
 ```
+
+## Closing the gap: caching the diffusion matrix by element type
+
+`diffusion_matrix` rebuilds its pattern on every call for a real reason — `T` differs between
+a plain call and a `jacobian!` sweep, and a `Float64` matrix cannot hold a `Dual` — but the
+*pattern* itself is exactly as fixed across element types as it is across Newton iterations:
+only `α`'s values differ, and only because they were evaluated at a different `T`.
+[`type_cached_assemble!`](@ref) gives that pattern a place to live per type it is ever reached
+at, instead of rebuilding it from nothing every time. `build_diffusion` is named and defined
+once, the same reason `a` above is built once outside the Picard loop rather than inside it;
+`refill!` reaches for `M₋ₓ!` rather than `M₋ₕ`, which would allocate a fresh result
+every call and reintroduce exactly the cost this is meant to stop paying:
+
+```@example poisson_nonlinear
+function build_diffusion(uₕ)
+    Mu = element(Wₕ, eltype(uₕ))
+    αvals = element(Wₕ, eltype(uₕ))
+    a = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals * ∇₋ₕ(U), ∇₋ₕ(V)))
+    refill!(uₕ) = begin
+        M₋ₓ!(Mu, uₕ)
+        αvals .= α.(Mu)
+    end
+    return a, refill!
+end
+
+cache = Dict()
+diffusion_matrix_cached(uₕ) = type_cached_assemble!(
+    build_diffusion, cache, uₕ; dirichlet_labels = :boundary)
+
+function residual_cached(u_vec::AbstractVector{T}) where {T}
+    uₕ = element(Wₕ, T)
+    uₕ .= u_vec
+    A = diffusion_matrix_cached(uₕ)
+    return A * u_vec .- F
+end
+
+u_cached = zeros(ndofs(Wₕ))
+prep_cached = prepare_jacobian(residual_cached, sparse_ad, u_cached)
+J_cached = DifferentiationInterface.jacobian(residual_cached, prep_cached, sparse_ad, u_cached)
+newton_residuals_cached = Float64[]
+for it in 1:20
+    r = residual_cached(u_cached)
+    push!(newton_residuals_cached, sqrt(sum(abs2, r)))
+    newton_residuals_cached[end] < 1e-10 && break
+    DifferentiationInterface.jacobian!(residual_cached, J_cached, prep_cached, sparse_ad, u_cached)
+    u_cached .-= J_cached \ r
+end
+newton_residuals_cached, maximum(abs.(u_cached .- u))
+```
+
+Same convergence, same answer, and only `residual_cached` and `diffusion_matrix_cached` (the
+first call at each of `T = Float64` and `T = Dual` still pays to build and to
+[`allocate_system_matrix`](@ref)) differ from `residual`/`diffusion_matrix` above. Measured the
+same way, behind the same function barrier: a plain `residual_cached(u)` call, once both types
+have been seen, costs 2,880 B against `residual`'s 17,536 B; a full Newton step costs 74,016 B
+against 112,896 B. What is left is not zero — `cache`'s value type is necessarily `Any`, since
+the cached `(a, refill!, A)` triple's own concrete type differs across `T`, so fetching it back
+out still pays a small, fixed dictionary/dynamic-dispatch cost — but that cost does not grow
+with the mesh, unlike the pattern rebuild it replaces (see
+[`type_cached_assemble!`](@ref)'s own docstring and `test/form/type_cached_assemble.jl` for the
+same comparison run at a mesh 100 times larger).
 
 ## Skipping the tracer: a Bramble-native pattern
 

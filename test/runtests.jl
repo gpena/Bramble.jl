@@ -200,6 +200,7 @@ if __bramble_with_unit_tests
             include("form/component.jl")
             include("form/stencil_pattern.jl")
             include("form/jacobian_pattern.jl")
+            include("form/type_cached_assemble.jl")
         end
 
         @testset "Exporters" begin
