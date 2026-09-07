@@ -101,16 +101,44 @@ length(newton_residuals), newton_residuals
 Quadratic convergence, same as the single-species case — the composite space changes what
 the Jacobian differentiates through, not how well Newton converges once it has a correct one.
 
-Unlike [the nonlinear Poisson example](poisson_nonlinear.md), `sparse_ad` above is the only
-option here, not a choice between two: [`jacobian_pattern`](@ref)/[`ast_sparsity_detector`](@ref)
-read a sparsity pattern directly off a `BilinearForm`'s AST, but only over a single,
-non-composite grid space. This form's coupling is exactly the case that scope excludes —
+## Skipping the tracer here too
+
 `v_c` scaling a term routed into block `(1,1)` is a *different* leaf's component reaching
-into this one, which needs the block/leaf routing [`allocate_system_matrix`](@ref)'s
-composite method has and `jacobian_pattern` does not yet reuse (see its own docstring).
-`SparseConnectivityTracer`'s tracer does not need to know about blocks at all — it traces
-`residual` as a plain function of `w`, composite space and all — which is exactly why it
-stays the only option for a coupled system like this one.
+into this one — [`jacobian_pattern`](@ref) reads that the same way a form term names a
+component, `U -> U(2)` rather than a stencil op, since `v_c` is read directly rather than
+averaged first. Block `(2,2)`'s own `u_c` dependency is named the same way, `U -> U(1)`:
+
+```@example coupled
+using ADTypes
+
+u_c0, v_c0 = components(element(Vₕ, 0.0))
+a_for_pattern = form(Vₕ, Vₕ, (p, q) ->
+    inner₊(∇₋ₕ(p(1)), ∇₋ₕ(q(1))) + innerₕ(p(1), q(1)) + innerₕ(v_c0 * p(1), q(1)) +
+    inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2))) + innerₕ(p(2), q(2)) - innerₕ(u_c0 * p(2), q(2)))
+
+native_ad = AutoSparse(AutoForwardDiff();
+    sparsity_detector = ast_sparsity_detector(a_for_pattern, U -> U(2), U -> U(1)),
+    coloring_algorithm = SparseMatrixColorings.GreedyColoringAlgorithm())
+
+w_native = zeros(ndofs(Vₕ))
+prep_native = prepare_jacobian(residual, native_ad, w_native)
+J_native = DifferentiationInterface.jacobian(residual, prep_native, native_ad, w_native)
+newton_residuals_native = Float64[]
+for it in 1:20
+    r = residual(w_native)
+    push!(newton_residuals_native, sqrt(sum(abs2, r)))
+    newton_residuals_native[end] < 1e-10 && break
+    DifferentiationInterface.jacobian!(residual, J_native, prep_native, native_ad, w_native)
+    w_native .-= J_native \ r
+end
+newton_residuals_native
+```
+
+Same quadratic convergence, no tracing pass paid for it: `v_c0`/`u_c0` are read at `w = 0`
+only to build *some* concrete `BilinearForm` — the pattern is a property of `a`'s AST, not
+of those values. `SparseConnectivityTracer`'s tracer still works here regardless of how
+`coupled_matrix` was built, composite space and all — the case to reach for it is a residual
+whose matrix does not come from a `BilinearForm` in the first place, which is not this one.
 
 ```@example coupled
 wₕ = element(Vₕ)
@@ -219,3 +247,9 @@ convergence_plot([(hs, erru, "u", "#5B5FC7"), (hs, errv, "v", "#0E7C86")]; title
 Second order for both species, same rate as every other example — the composite space and
 the quadratic coupling change how the residual and its Jacobian are built, not the
 discretization's own accuracy once Newton has converged to it.
+
+`coupled_series` above uses `sparse_ad`, the tracer, at every level — `native_ad`'s
+substitution (`ast_sparsity_detector(a, U -> U(2), U -> U(1))` in place of `sparse_ad`'s
+`sparsity_detector`) works here unchanged too. Not re-run a second time here, the same
+reason [the nonlinear Poisson example](poisson_nonlinear.md#Checking-the-answer) does not
+re-run its own convergence sweep a second time either.

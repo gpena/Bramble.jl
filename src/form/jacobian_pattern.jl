@@ -67,19 +67,26 @@ sparse_ad = AutoSparse(AutoForwardDiff();
     coloring_algorithm = GreedyColoringAlgorithm())
 ```
 
-Scoped to a bilinear form over a single (non-composite) grid space: a composite trial
-space's leaves can couple through *another* component (`coupled_reaction_diffusion.md`'s
-`v_c * p(1)`), which needs the block/leaf routing `allocate_system_matrix`'s composite
-method has and this function does not yet reuse.
+## Composite trial/test spaces
+
+A dependency may also name a *different* leaf, the same way a form term does --
+`U -> U(2)` for a coefficient that is component 2's own value (no stencil op, as in
+[the coupled reaction-diffusion example](examples/coupled_reaction_diffusion.md)'s `v_c`),
+or `U -> M₋ₕ(U(2))` for one built from a stencil op applied to that other component.
+`nothing` named (`U -> M₋ₕ(U)`, no `(k)`) means the coefficient depends on *this block's
+own* trial leaf, exactly like the non-composite case above. Every dependency still applies
+to every block the walk visits, whichever leaf it names -- a safe superset stays safe
+however many blocks end up seeing an entry they did not strictly need.
+
+```julia
+# a = form(Vₕ, Vₕ, (p, q) -> inner₊(∇₋ₕ(p(1)), ∇₋ₕ(q(1))) + innerₕ(v_c * p(1), q(1)) +
+#                            inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2))) - innerₕ(u_c * p(2), q(2)))
+pattern = jacobian_pattern(a, U -> U(2), U -> U(1))   # block (1,1) reads U(2), (2,2) reads U(1)
+```
 """
 function jacobian_pattern(
         form::BilinearForm{D, TrialSpace, TestSpace, AST},
         coefficient_dependencies::Function...) where {D, TrialSpace, TestSpace, AST}
-    TrialSpace <: CompositeGridSpace && throw(ArgumentError(
-        "jacobian_pattern does not support a composite trial space yet: a coefficient " *
-        "that depends on a *different* leaf (as in coupled_reaction_diffusion.md) needs " *
-        "block routing this function does not do. See gpena/Bramble.jl#21."))
-
     ast = form.ast
     space = form.test_space
     _check_block_meshes(ast, form.trial_space, form.test_space)
@@ -131,6 +138,145 @@ function jacobian_pattern(
             end
         end
     end
+
+    n = ndofs(form.test_space)
+    m = ndofs(form.trial_space)
+    return sparse!(I_vec, J_vec, fill(true, length(I_vec)), n, m, |)
+end
+
+# --- composite trial/test spaces --------------------------------------------------- #
+#
+# A dependency op's own reach (`stencil_offsets`) is unchanged by which leaf it names --
+# `M₋ₕ(U(2))`'s reach is exactly `M₋ₕ(U)`'s, since `component` only replaces the leaf type,
+# never wraps it in anything `stencil_offsets` sees. What is new is *where* that reach
+# lands: `trial_component_or_nothing` (form/block_extract.jl) reads which leaf a resolved
+# op names, `nothing` meaning "the block currently being widened, not a different one."
+
+# One resolved dependency: which leaf it targets (`nothing` = the block's own trial leaf)
+# paired with its own stencil reach.
+const _DependencyOp{D} = Tuple{Union{Int, Nothing}, Vector{NTuple{D, Int}}}
+
+# Every `(dep(U))` node, flattened across dependencies and across whatever tuple a
+# multi-dimensional stencil op (`∇₋ₕ`, `M₋ₕ` in D > 1) returns -- one entry per node, not
+# unioned by target, so a point-anchored composition (below) can pull each entry's own
+# `lin_indices`/`col_offset` independently.
+function _resolve_dependency_ops(::Val{D}, deps::Tuple, U) where {D}
+    entries = _DependencyOp{D}[]
+    for dep in deps, op in _as_op_tuple(dep(U))
+
+        push!(entries, (trial_component_or_nothing(op), stencil_offsets(op)))
+    end
+    return entries
+end
+
+@noinline function _throw_cross_leaf_dependency_mesh(target::Int)
+    throw(ArgumentError(
+        "a coefficient dependency named component $target, whose leaf does not share the " *
+        "reaching term's own mesh. jacobian_pattern's composite case assumes every leaf a " *
+        "dependency can name is discretised on the same mesh as the term it widens, the " *
+        "same assumption allocate_system_matrix's own composite method makes."))
+end
+
+# `nothing` -> the block's own trial leaf, its own `lin_indices`/`col_offset` (already in
+# hand from the block being widened). An explicit component -> that leaf's own, looked up
+# from `trial_leaves`, guarded the same way `_check_block_meshes` guards a term's own leaves.
+function _dependency_leaf(target::Union{Int, Nothing}, trial_leaves,
+        own_lin_indices, own_col_offset, own_mesh)
+    target === nothing && return (own_lin_indices, own_col_offset)
+    leaf_space, leaf_col_offset = trial_leaves[target]
+    leaf_mesh = mesh(leaf_space)
+    npoints(leaf_mesh, Tuple) == npoints(own_mesh, Tuple) ||
+        _throw_cross_leaf_dependency_mesh(target)
+    return (LinearIndices(indices(leaf_mesh)), leaf_col_offset)
+end
+
+# One term's contribution to one block, mirroring `_pattern_term!` (form/bilinear.jl) for
+# the base pattern, plus the same per-point coefficient widening the scalar `jacobian_pattern`
+# does above -- resolved once per block (not per point) into `(lin_indices, col_offset)`
+# pairs, since neither depends on the grid point being visited.
+function _pattern_term_jacobian!(I_vec::Vector{Int}, J_vec::Vector{Int}, term::TERM,
+        trial_leaf, test_leaf, row_offset::Int, col_offset::Int, trial_leaves,
+        dep_ops::Vector{_DependencyOp{D}}) where {TERM, D}
+    Ωₕ = mesh(test_leaf)
+    mesh_markers = markers(Ωₕ)
+    _validate_term_markers(term, mesh_markers, "one of the composite space's leaves")
+    lin_indices = LinearIndices(indices(Ωₕ))
+    Ωu = mesh(trial_leaf)
+
+    resolved = map(dep_ops) do (target, offsets)
+        leaf_lin_indices, leaf_col_offset = _dependency_leaf(
+            target, trial_leaves, lin_indices, col_offset, Ωu)
+        (leaf_lin_indices, leaf_col_offset, offsets)
+    end
+
+    @inbounds for I in indices(Ωₕ)
+        stencil = local_stencil(term, test_leaf, I, mesh_markers, lin_indices[I])
+
+        for k in eachindex(stencil)
+            off_u, off_v, _ = stencil[k]
+            _offsets_seen_before(stencil, k, off_u, off_v) && continue
+
+            Iv = I + CartesianIndex(off_v)
+            col = _trial_column(lin_indices, I, off_u)
+            if checkbounds(Bool, lin_indices, Iv) && col != 0
+                push!(I_vec, lin_indices[Iv] + row_offset)
+                push!(J_vec, col + col_offset)
+            end
+        end
+
+        isempty(resolved) && continue
+
+        for k in eachindex(stencil)
+            off_u, off_v, _ = stencil[k]
+            _row_offset_seen_before(stencil, k, off_v) && continue
+
+            Iv = I + CartesianIndex(off_v)
+            checkbounds(Bool, lin_indices, Iv) || continue
+            row = lin_indices[Iv] + row_offset
+
+            for (dep_lin_indices, dep_col_offset, offsets) in resolved, δ in offsets
+
+                Ic = I + CartesianIndex(δ)
+                checkbounds(Bool, dep_lin_indices, Ic) || continue
+                push!(I_vec, row)
+                push!(J_vec, dep_lin_indices[Ic] + dep_col_offset)
+            end
+        end
+    end
+    return nothing
+end
+
+# Recursion shape shared via `_visit_operator_add3` (form/common.jl), the same one
+# `_pattern_blocks!` (form/bilinear.jl) uses for the base (non-Jacobian) pattern.
+function _pattern_blocks_jacobian!(I_vec::Vector{Int}, J_vec::Vector{Int}, op::OperatorAdd,
+        trial_leaves, test_leaves, dep_ops)
+    _visit_operator_add3(
+        _pattern_blocks_jacobian!, I_vec, J_vec, op, trial_leaves, test_leaves, dep_ops)
+end
+
+function _pattern_blocks_jacobian!(I_vec::Vector{Int}, J_vec::Vector{Int}, term::TERM,
+        trial_leaves, test_leaves, dep_ops) where {TERM}
+    for blk in blocks(term, trial_leaves, test_leaves)
+        _check_block_meshes(term, blk.trial_leaf, blk.test_leaf)
+        _pattern_term_jacobian!(I_vec, J_vec, term, blk.trial_leaf, blk.test_leaf,
+            blk.row_offset, blk.col_offset, trial_leaves, dep_ops)
+    end
+    return nothing
+end
+
+function jacobian_pattern(
+        form::BilinearForm{D, TrialSpace, TestSpace, AST},
+        coefficient_dependencies::Function...) where {D, TrialSpace <: CompositeGridSpace,
+        TestSpace <: CompositeGridSpace, AST}
+    ast = form.ast
+    trial_leaves = leaf_spaces_offsets(form.trial_space)
+    test_leaves = leaf_spaces_offsets(form.test_space)
+
+    dep_ops = _resolve_dependency_ops(Val(D), coefficient_dependencies, TrialFunction{D}())
+
+    I_vec = Int[]
+    J_vec = Int[]
+    _pattern_blocks_jacobian!(I_vec, J_vec, ast, trial_leaves, test_leaves, dep_ops)
 
     n = ndofs(form.test_space)
     m = ndofs(form.trial_space)

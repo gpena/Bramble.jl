@@ -259,9 +259,10 @@ for it: `jacobian_pattern` only ever walks the grid once, touching neither `Forw
 the coefficient's actual values, so `prepare_jacobian` gets cheaper as the mesh grows rather
 than scaling with however long one residual call takes to trace. The trade is scope, not
 correctness: it only applies when the residual's matrix is assembled from a `BilinearForm`
-in the first place (as here), and — for now — only over a single, non-composite grid space
-(see [`jacobian_pattern`](@ref)'s own docstring for the composite case this doesn't cover
-yet). `TracerSparsityDetector` above keeps working regardless of how `A_sparse` was built,
+in the first place (as here) -- composite trial/test spaces are supported too (see
+[`jacobian_pattern`](@ref)'s own docstring, and
+[the coupled reaction-diffusion example](../examples/coupled_reaction_diffusion.md#Skipping-the-tracer-here-too)).
+`TracerSparsityDetector` above keeps working regardless of how `A_sparse` was built,
 which is the case to reach for it.
 
 ---
