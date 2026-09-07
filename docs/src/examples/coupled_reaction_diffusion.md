@@ -47,7 +47,7 @@ nothing # hide
 `uv` is quadratic in the unknowns, so it cannot sit inside a matrix independent of
 `w = (u, v)` the way the linear terms can — but it *can* sit inside a matrix that depends on
 the current guess, the same trick [the nonlinear Poisson example uses for a single
-species](poisson_nonlinear.md#Fixed-point-(Picard)-iteration), extended to a second one.
+species](poisson_nonlinear.md#Fixed-point-%28Picard%29-iteration), extended to a second one.
 Writing the coupling as `v_current * u(1)` in `u`'s own equation and `-u_current * u(2)` in
 `v`'s reproduces `uv` and `-uv` exactly once the trial function is evaluated at the current
 `w` — which is all `A(w)` needs to do. Nothing here works out `∂(uv)/∂u` and `∂(uv)/∂v` by
