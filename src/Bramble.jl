@@ -108,7 +108,7 @@ export M₊ₓ!, M₊ᵧ!, M₊₂!
 
 export dirichlet_constraints, dirichlet_bc!, symmetrize!
 export form, assemble, assemble!, assemble_parallel!, allocate_system_matrix, evaluate!
-export jacobian_pattern
+export jacobian_pattern, ast_sparsity_detector
 
 # `DirichletConstraint` is `dirichlet_constraints(...)`'s own return type, reached for an
 # `isa` check rather than constructed by name — the tests already reach it as

@@ -136,3 +136,39 @@ function jacobian_pattern(
     m = ndofs(form.trial_space)
     return sparse!(I_vec, J_vec, fill(true, length(I_vec)), n, m, |)
 end
+
+"""
+    ast_sparsity_detector(a::BilinearForm, coefficient_dependencies::Function...)
+
+An `ADTypes.AbstractSparsityDetector` that supplies [`jacobian_pattern`](@ref)`(a,
+coefficient_dependencies...)` directly as a Newton residual's Jacobian sparsity, in place of
+one detected by tracing:
+
+```julia
+sparse_ad = AutoSparse(AutoForwardDiff();
+    sparsity_detector = ast_sparsity_detector(a, U -> M₋ₕ(U)),
+    coloring_algorithm = GreedyColoringAlgorithm())
+```
+
+Requires [ADTypes.jl](https://github.com/SciML/ADTypes.jl); call `using ADTypes` before
+calling this function.
+"""
+function ast_sparsity_detector(a::BilinearForm, coefficient_dependencies::Function...)
+    return _ast_sparsity_detector(a, coefficient_dependencies...)
+end
+
+# Errors by default, same idiom as `export_vtk`/`_export_vtk` and `metal_backend`/
+# `_metal_backend`: a helpful message rather than a bare `MethodError` when the weak
+# dependency has not been loaded. `BrambleSparseADExt` overrides this with the real
+# implementation, gated on `ADTypes` alone -- the only package the detector interface
+# (`ADTypes.AbstractSparsityDetector`/`jacobian_sparsity`) is actually defined in;
+# `DifferentiationInterface` depends on `ADTypes`, so loading it loads this extension too.
+#
+# The first argument is `::Any` here, not `::BilinearForm`: the extension's method has to be
+# a strict *specialization* of this one rather than an identical signature, or loading it
+# overwrites a method during precompilation, which Julia refuses (`export_vtk`'s own
+# `_export_vtk(::AbstractString, ::Any, ::Pair...)` fallback is loosened the same way).
+function _ast_sparsity_detector(::Any, ::Function...)
+    error("ast_sparsity_detector requires ADTypes.jl. Add `using ADTypes` before calling " *
+          "this function.")
+end

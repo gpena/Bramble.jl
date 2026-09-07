@@ -16,6 +16,7 @@ Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [weakdeps]
+ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
 Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
 MakieCore = "20f20a25-4f0e-4fdf-b5d1-57303727442b"
 Meshes = "eacbb407-ea5a-433e-ab97-5258b1ca43fa"
@@ -28,9 +29,11 @@ BrambleMakieExt = "Makie"
 BrambleMeshesExt = ["Meshes", "MakieCore"]
 BrambleMetalExt = "Metal"
 BramblePlotsExt = "RecipesBase"
+BrambleSparseADExt = "ADTypes"
 BrambleVTKExt = "WriteVTK"
 
 [compat]
+ADTypes = "1"
 Aqua = "0.8"
 DocStringExtensions = "0.9"
 JET = "0.12"

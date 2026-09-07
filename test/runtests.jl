@@ -250,5 +250,6 @@ if __bramble_with_ext_backends
         include("ext/makie_ext.jl")
         include("ext/meshes_ext.jl")
         include("ext/metal_ext.jl")
+        include("ext/sparse_ad_ext.jl")
     end
 end

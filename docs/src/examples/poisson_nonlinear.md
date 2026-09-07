@@ -190,6 +190,17 @@ native_ad = AutoSparse(AutoForwardDiff();
 nothing # hide
 ```
 
+[`ast_sparsity_detector`](@ref) spells the same thing more directly, once
+[ADTypes.jl](https://github.com/SciML/ADTypes.jl) is loaded — no separate `pattern`
+variable, no `KnownJacobianSparsityDetector` wrapper, the same detector either way:
+
+```@example poisson_nonlinear
+native_ad_direct = AutoSparse(AutoForwardDiff();
+    sparsity_detector = ast_sparsity_detector(a_for_pattern, U -> M₋ₕ(U)),
+    coloring_algorithm = SparseMatrixColorings.GreedyColoringAlgorithm())
+nothing # hide
+```
+
 `a_for_pattern` only needs *some* concrete coefficient to build a `BilinearForm` from — the
 pattern is a property of the AST, not of `αvals_pattern`'s values, so evaluating it at `u = 0`
 is as good as evaluating it at the true solution. Feeding `native_ad` into the same

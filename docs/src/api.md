@@ -321,10 +321,13 @@ evaluate!
 For a Newton residual built from a [`BilinearForm`](@ref) with a live nonlinear
 coefficient (see [the nonlinear Poisson example](examples/poisson_nonlinear.md)),
 `jacobian_pattern` reads the Jacobian's sparsity pattern directly off the form's AST,
-without AD tracing.
+without AD tracing. `ast_sparsity_detector` wraps it as an
+`ADTypes.AbstractSparsityDetector`, ready to hand `AutoSparse` directly (requires
+[ADTypes.jl](https://github.com/SciML/ADTypes.jl)).
 
 ```@docs
 jacobian_pattern
+ast_sparsity_detector
 ```
 
 ### Dirichlet conditions
