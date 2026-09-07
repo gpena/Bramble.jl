@@ -789,6 +789,66 @@ function _pc_form_session(Ωₕ::AbstractMeshType, be, label::Symbol, f, ft, I_t
     return nothing
 end
 
+# --- Jacobian sparsity and per-type assembly caching (gpena/Bramble.jl#21/#95/#20) ------- #
+#
+# Neither is reachable from the sessions above. jacobian_pattern walks a BilinearForm's own
+# local_stencil through a fresh set of helpers (_coefficient_offsets, _pattern_term!,
+# _resolve_dependency_ops, _pattern_term_jacobian! for the composite dispatch) that nothing
+# else here calls. type_cached_assemble! is its own dispatch on the element type `T`, not
+# exercised anywhere assemble/assemble! already are.
+_pc_alpha(u) = 3.0 + 1.0 / (1.0 + u^2)
+
+# The direct (uncached) build jacobian_pattern only needs a BilinearForm from -- how it was
+# assembled makes no difference to the pattern.
+function _pc_diffusion_form(Wₕ, uₕ)
+    αvals = element(Wₕ, eltype(uₕ))
+    αvals .= _pc_alpha.(M₋ₓ(uₕ))
+    return form(Wₕ, Wₕ, (U, V) -> inner₊(αvals * D₋ₓ(U), D₋ₓ(V)))
+end
+
+# `build` for type_cached_assemble!, built once per session (not re-literalized per call,
+# the same economy its own docstring asks a caller to observe) and closing over `Wₕ`.
+function _pc_build_diffusion(Wₕ)
+    return function (uₕ)
+        Mu = element(Wₕ, eltype(uₕ))
+        αvals = element(Wₕ, eltype(uₕ))
+        a = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals * D₋ₓ(U), D₋ₓ(V)))
+        refill!(uₕ) = begin
+            M₋ₓ!(Mu, uₕ)
+            αvals .= _pc_alpha.(Mu)
+        end
+        return a, refill!
+    end
+end
+
+function _pc_jacobian_pattern_session(Wₕ)
+    u0 = element(Wₕ, 0.0)
+    jacobian_pattern(_pc_diffusion_form(Wₕ, u0), U -> M₋ₓ(U))
+    return nothing
+end
+
+# The composite dispatch (#95): a coefficient naming a different leaf than the block it
+# sits in, both directions, the same shape as the coupled reaction-diffusion example.
+function _pc_jacobian_pattern_composite_session(Vₕ)
+    v0 = element(Vₕ, 0.0)
+    c = components(v0)
+    ac = form(Vₕ, Vₕ,
+        (p, q) -> innerₕ(c[2] * p(1), q(1)) + innerₕ(c[1] * p(2), q(2)))
+    jacobian_pattern(ac, U -> U(2), U -> U(1))
+    return nothing
+end
+
+# Two calls, so both the cache-miss (build, allocate_system_matrix) and cache-hit (refill!
+# only) paths get their own method instances.
+function _pc_type_cached_assemble_session(Wₕ)
+    build = _pc_build_diffusion(Wₕ)
+    cache = Dict()
+    u0 = element(Wₕ, 0.0)
+    type_cached_assemble!(build, cache, u0)
+    type_cached_assemble!(build, cache, u0)
+    return nothing
+end
+
 # Cross-mesh interpolation session: pointwise interpolant, in-place and allocating
 # projection, sparse matrix assembly, and form-level integration.
 function _pc_interpolation_session(Ω_src, Ω_dest)
@@ -925,6 +985,15 @@ if PRECOMPILE_WORKLOAD
                 I_time, Val(1))
             _pc_form_session(Ωₕ2, be, :wall, x -> x[1] * x[2],
                 (x, t) -> x[1] * x[2] * t, I_time, Val(2))
+
+            # Jacobian sparsity from the AST, scalar and composite, and the per-element-type
+            # assembly cache (gpena/Bramble.jl#21/#95/#20). Kept to 1D, the same economy the
+            # sessions above already apply.
+            Wₕ_pc = gridspace(Ωₕ1)
+            Vₕ_pc = gridspace(Ωₕ1, Val(2))
+            _pc_jacobian_pattern_session(Wₕ_pc)
+            _pc_jacobian_pattern_composite_session(Vₕ_pc)
+            _pc_type_cached_assemble_session(Wₕ_pc)
 
             # The Parallel() execution policy (point 22), otherwise never constructed above.
             _pc_parallel_policy_session(Ω1, 5)
