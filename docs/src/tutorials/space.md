@@ -436,7 +436,7 @@ vₕ = avgₕ(Vₕ, (x -> 1.0, x -> 2.0 * x[1]))
 
 ---
 
-## 7. Discrete inner products and norms
+## 8. Discrete inner products and norms
 
 In continuous analysis, function spaces like ``L^2(\Omega)`` and ``H^1(\Omega)`` are equipped with inner products and norms:
 ```math

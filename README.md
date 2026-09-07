@@ -162,7 +162,7 @@ Documentation, tutorials, and the API reference are available at [https://gpena.
 If you use `Bramble.jl` in your research, please cite the software:
 
 ```bibtex
-@software{bramble2025,
+@software{bramble2026,
   author       = {Gon{\c{c}}alo Pena},
   title        = {{Bramble.jl}: Nonuniform Finite Difference Method Discretizations in Julia},
   doi          = {10.5281/zenodo.14230821},

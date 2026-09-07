@@ -1,7 +1,5 @@
 module Bramble
 
-using DocStringExtensions
-
 import Base: eltype, length
 import Base: show, first, last, getindex, setindex!, iterate, size, firstindex,
              lastindex, axes, eachindex
