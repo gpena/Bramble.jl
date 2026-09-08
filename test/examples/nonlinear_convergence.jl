@@ -48,7 +48,7 @@ const _sparse_ad = AutoSparse(AutoForwardDiff();
         for it in 1:200
             assemble!(A, a; dirichlet_labels = :boundary)
             unew = A \ F
-            last_step = maximum(abs, unew .- values(uₙ))
+            last_step = maximum(abs, unew .- parent(uₙ))
             uₙ .= unew
             αvals .= α.(M₋ₕ(uₙ))
             if last_step < 1e-12

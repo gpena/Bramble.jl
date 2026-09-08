@@ -7,40 +7,40 @@
 # restriction.jl and cell_average.jl.
 #===========================================================================#
 
-# Extends `Base.values` rather than defining a `Bramble.values` of its own. As a separate
-# function it was a second binding exported under the same name, so `using Bramble` made
-# `values` ambiguous with `Base.values` for the whole session: a user who then called
-# `values(some_dict)` got an UndefVarError about two modules exporting different bindings.
-# Extending Base is not piracy here, `VectorElement` being ours.
+# `Base.parent` is Julia's own name for "the storage a wrapper array delegates to" (see
+# `parent(::SubArray)`, `parent(::ReshapedArray)`); `VectorElement` never defined it, so
+# `parent(uₕ)` fell through to the generic `AbstractArray` fallback and returned `uₕ`
+# itself rather than unwrapping anything -- the wrong answer for a wrapper type, silently,
+# since nothing in this package called `parent` to notice. Replaces the former `values`
+# accessor outright (gpena/Bramble.jl#73).
 """
-    values(uₕ::VectorElement) -> AbstractVector
+    parent(uₕ::VectorElement) -> AbstractVector
 
 Returns the coefficient vector containing the degrees of freedom of [`VectorElement`](@ref) `uₕ`.
 """
-@inline Base.values(uₕ::VectorElement) = uₕ.data
+@inline Base.parent(uₕ::VectorElement) = uₕ.data
 
 """
-    to_matrix(uₕ::VectorElement)
+    reshape(uₕ::VectorElement)
 
 Reshapes the flat coefficient vector of `uₕ` into a multidimensional array that matches the logical layout of the grid points.
 
   - For a scalar space, this returns a D-dimensional array.
   - For an N-component vector space, it returns an N-tuple of arrays, one for each component.
-"""
-@inline to_matrix(uₕ::VectorElement{<:ScalarGridSpace}) = Base.ReshapedArray(
-    values(uₕ), npoints(mesh(space(uₕ)), Tuple), ())
-@inline to_matrix(uₕ::VectorElement{<:CompositeGridSpace}) = map(
-    v -> to_matrix(v), components(uₕ))
 
+This zero-argument form is specific to `VectorElement` and does not conflict with
+`reshape(A, dims)`; it does shadow `Base.reshape(A) = reshape(A, ())`'s 0-dimensional
+result for this type specifically, in favor of the shape a grid function actually has.
+Replaces the former `to_matrix` outright (gpena/Bramble.jl#73).
 """
-    values!(uₕ::VectorElement, s) -> uₕ
+@inline Base.reshape(uₕ::VectorElement{<:ScalarGridSpace}) = Base.ReshapedArray(
+    parent(uₕ), npoints(mesh(space(uₕ)), Tuple), ())
+@inline Base.reshape(uₕ::VectorElement{<:CompositeGridSpace}) = map(
+    reshape, components(uₕ))
 
-Copies the values of `s` into the coefficients of [`VectorElement`](@ref) `uₕ`. Returns `uₕ`.
-"""
-@inline function values!(uₕ::VectorElement, s)
-    copyto!(values(uₕ), s)
-    return uₕ
-end
+# `values!` is gone outright (gpena/Bramble.jl#73): `copyto!(uₕ, s)` already does the same
+# in-place copy through `VectorElement`'s `AbstractVector` interface, so it needed no
+# replacement definition of its own.
 
 """
     space(uₕ::VectorElement) -> AbstractSpaceType
@@ -114,7 +114,6 @@ end
 
 """
     (uₕ::VectorElement)(i::Int) -> VectorElement
-    component(uₕ::VectorElement, i::Int) -> VectorElement
 
 Extracts a [`VectorElement`](@ref) view of the `i`-th field component of `uₕ`.
 
@@ -139,7 +138,7 @@ u_x .= 1.0
     leaves = leaf_spaces_offsets(space(uₕ))
     @boundscheck (1 <= i <= length(leaves)) || throw(BoundsError(uₕ, i))
     sp, offset = @inbounds leaves[i]
-    v_data = @views values(uₕ)[(offset + 1):(offset + ndofs(sp))]
+    v_data = @views parent(uₕ)[(offset + 1):(offset + ndofs(sp))]
     return VectorElement(v_data, sp)
 end
 
@@ -149,20 +148,13 @@ end
 end
 
 """
-    component(uₕ::VectorElement, i::Int) -> VectorElement
-
-Extracts a [`VectorElement`](@ref) view of the `i`-th field component of `uₕ`. Alias for `uₕ(i)`.
-"""
-@inline component(uₕ::VectorElement, i::Int) = uₕ(i)
-
-"""
     components(uₕ::VectorElement) -> Tuple
 
 Returns an `NTuple` of [`VectorElement`](@ref) views, one per **leaf** of `uₕ`'s space,
 depth-first — the same leaf a matching-index `uₕ(i)` returns, regardless of nesting.
 """
 @inline function components(uₕ::VectorElement{<:CompositeGridSpace})
-    raw = values(uₕ)
+    raw = parent(uₕ)
     return map(leaf_spaces_offsets(space(uₕ))) do (sp, offset)
         VectorElement(@views(raw[(offset + 1):(offset + ndofs(sp))]), sp)
     end
@@ -250,7 +242,7 @@ end
 # grid function differenced into a Float64 one, which fails on the first store. For an
 # element built the ordinary way the two coincide, so nothing changes for a Float64 run.
 @inline function Base.similar(uₕ::VectorElement)
-    v = similar(values(uₕ))
+    v = similar(parent(uₕ))
     return VectorElement{typeof(space(uₕ)), eltype(v), typeof(v)}(v, space(uₕ))
 end
 
@@ -265,7 +257,7 @@ function Base.similar(bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{VectorEleme
     vec_elem = _find_vec_in_broadcast(bc)
     vec_elem === nothing &&
         throw(ArgumentError("No VectorElement found in broadcast expression"))
-    return VectorElement(similar(values(vec_elem), ElType), space(vec_elem))
+    return VectorElement(similar(parent(vec_elem), ElType), space(vec_elem))
 end
 
 # Version without a specified ElType.
@@ -273,7 +265,7 @@ function Base.similar(bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{VectorEleme
     vec_elem = _find_vec_in_broadcast(bc)
     vec_elem === nothing &&
         throw(ArgumentError("No VectorElement found in broadcast expression"))
-    return VectorElement(similar(values(vec_elem)), space(vec_elem))
+    return VectorElement(similar(parent(vec_elem)), space(vec_elem))
 end
 
 """

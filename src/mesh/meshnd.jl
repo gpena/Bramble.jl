@@ -145,9 +145,6 @@ end
 #
 # - `@generate_mesh_ntuple_func_with_idx`: For indexed operations returning tuples
 #   Example: point(Ωₕ, idx) returns (x[idx[1]], y[idx[2]], z[idx[3]])
-#
-# - `@generate_mesh_iterator_func`: For functions returning Cartesian product iterators
-#   Example: points_iterator(Ωₕ) returns all (x,y,z) combinations
 #------------------------------------------------------------------------------------------#
 
 # A macro for functions of the form: func(Ωₕ) -> ntuple(...)
@@ -161,13 +158,6 @@ end
 macro generate_mesh_ntuple_func_with_idx(fname)
     return esc(quote
         @inline $fname(Ωₕ::MeshnD{D}, idx) where {D} = ntuple(i -> $fname(Ωₕ(i), idx[i]), Val(D))
-    end)
-end
-
-# A macro for functions of the form: func(Ωₕ) -> Iterators.product(...)
-macro generate_mesh_iterator_func(fname)
-    return esc(quote
-        @inline $fname(Ωₕ::MeshnD{D}) where {D} = Iterators.product(ntuple(i -> $fname(Ωₕ(i)), Val(D))...)
     end)
 end
 
@@ -185,6 +175,7 @@ Return the per-axis backward spacings as an `NTuple{D}` of vectors, where
 See also: [`half_spacings`](@ref), [`cell_measures`](@ref).
 """
 @generate_mesh_ntuple_func spacings
+@generate_mesh_ntuple_func forward_spacings
 
 # ntuple wrappers with an index
 @generate_mesh_ntuple_func_with_idx point
@@ -202,13 +193,6 @@ Return the per-axis cell widths as an `NTuple{D}` of vectors. The measure of an
 individual cell is the product of its per-axis widths; see [`cell_measure`](@ref).
 """
 @inline cell_measures(Ωₕ::MeshnD{D}) where {D} = ntuple(i -> cell_measures(Ωₕ(i)), Val(D))
-
-# Iterator wrappers
-@generate_mesh_iterator_func points_iterator
-@generate_mesh_iterator_func half_points_iterator
-@generate_mesh_iterator_func spacings_iterator
-@generate_mesh_iterator_func forward_spacings_iterator
-@generate_mesh_iterator_func half_spacings_iterator
 
 @inline npoints(Ωₕ::MeshnD) = prod(npoints(Ωₕ, Tuple))
 @inline npoints(Ωₕ::MeshnD{D}, ::Type{Tuple}) where {D} = ntuple(i -> npoints(Ωₕ(i)), Val(D))
@@ -249,8 +233,6 @@ function locate_cell(Ωₕ::MeshnD{D}, x::Tuple) where {D}
     indices_tuple = ntuple(i -> locate_cell(Ωₕ(i), x[i]), Val(D))
     return CartesianIndex(indices_tuple)
 end
-
-@inline cell_measures_iterator(Ωₕ::MeshnD) = (cell_measure(Ωₕ, idx) for idx in indices(Ωₕ))
 
 # The geometric refinement alone, with markers left untouched: shared by both public
 # methods below, neither of which wants the *other*'s marker handling as an intermediate

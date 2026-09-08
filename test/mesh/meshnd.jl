@@ -6,9 +6,8 @@ using Test
 using Bramble
 using Bramble: is_boundary_index, CartesianProduct, MeshnD, Backend, backend,
                set, is_collapsed, topo_dim, is_uniform, Mesh1D, MeshMarkers,
-               boundary_symbol_to_dict, points_iterator, half_points_iterator,
-               spacings_iterator, forward_spacings_iterator, half_spacings_iterator,
-               cell_measures_iterator, cell_measure, half_point, half_spacing,
+               boundary_symbol_to_dict, half_spacings, indices,
+               cell_measure, half_point, half_spacing,
                forward_spacing, points, point, spacing, spacings, cell_measures,
                iterative_refinement!, change_points!
 using LinearAlgebra: hypot
@@ -174,8 +173,8 @@ end
             @test point(Ωₕ_2d_unif, CartesianIndex(2, 3)) == (1.0, 2.0) # x[2], y[3]
             @test point(Ωₕ_2d_unif, (4, 5)) == (3.0, 4.0) # x[4], y[5]
 
-            # points_iterator(mesh)
-            pts_iter = points_iterator(Ωₕ_2d_unif)
+            # Iterators.product(points(mesh)...)
+            pts_iter = Iterators.product(points(Ωₕ_2d_unif)...)
             pts = collect(pts_iter)
 
             @test length(pts_iter) == 20
@@ -375,31 +374,31 @@ end
             Ω_2d = create_test_nd_domain(intervals_2d)
             Ωₕ = mesh(Ω_2d, (3, 3), (true, true); backend = backend()) # 3x3 uniform
 
-            # points_iterator
-            pts_iter = points_iterator(Ωₕ)
+            # Iterators.product(points(mesh)...)
+            pts_iter = Iterators.product(points(Ωₕ)...)
             @test length(pts_iter) == 9
             pts_collected = collect(pts_iter)
             @test pts_collected[1] == (0.0, 0.0)
             @test pts_collected[end] == (2.0, 2.0)
 
-            # half_points_iterator
-            hp_iter = half_points_iterator(Ωₕ)
+            # Iterators.product(half_points(mesh)...)
+            hp_iter = Iterators.product(half_points(Ωₕ)...)
             @test length(hp_iter) == 4 * 4  # (n+1) × (n+1)
 
-            # spacings_iterator
-            sp_iter = spacings_iterator(Ωₕ)
+            # Iterators.product(spacings(mesh)...)
+            sp_iter = Iterators.product(spacings(Ωₕ)...)
             @test length(sp_iter) == 9
 
-            # forward_spacings_iterator
-            fsp_iter = forward_spacings_iterator(Ωₕ)
+            # Iterators.product(forward_spacings(mesh)...)
+            fsp_iter = Iterators.product(forward_spacings(Ωₕ)...)
             @test length(fsp_iter) == 9
 
-            # half_spacings_iterator
-            hsp_iter = half_spacings_iterator(Ωₕ)
+            # Iterators.product(half_spacings(mesh)...)
+            hsp_iter = Iterators.product(half_spacings(Ωₕ)...)
             @test length(hsp_iter) == 9
 
-            # cell_measures_iterator
-            cm_iter = cell_measures_iterator(Ωₕ)
+            # (cell_measure(mesh, idx) for idx in indices(mesh))
+            cm_iter = (cell_measure(Ωₕ, idx) for idx in indices(Ωₕ))
             cm_collected = collect(cm_iter)
             @test length(cm_collected) == 9
             # Corner cells should have measure 0.5*0.5 = 0.25
@@ -481,7 +480,7 @@ end
             @test npoints(Ωₕ_line, Tuple) == (3, 1)
             @test point(Ωₕ_line, (1, 1)) == (0.0, 5.0)
             @test point(Ωₕ_line, (3, 1)) == (1.0, 5.0)
-            @test all(p -> p[2] == 5.0, points_iterator(Ωₕ_line))
+            @test all(p -> p[2] == 5.0, Iterators.product(points(Ωₕ_line)...))
 
             # A single point embedded in 3D.
             Ω_pt = create_test_nd_domain(((2.0, 2.0), (3.0, 3.0), (4.0, 4.0)))
@@ -518,15 +517,15 @@ end
 
             # the live axis differences normally
             d1 = D₋ₓ(uₕ)
-            @test all(isfinite, values(d1))
+            @test all(isfinite, parent(d1))
 
             # the collapsed axis has a single point in that direction: a backward
             # difference across it can never have a neighbour, so it must come back the
             # same truncated zero every difference operator writes where it has none,
             # rather than NaN/Inf from dividing by a collapsed (zero) spacing.
             d2 = D₋ᵧ(uₕ)
-            @test all(iszero, values(d2))
-            @test all(isfinite, values(d2))
+            @test all(iszero, parent(d2))
+            @test all(isfinite, parent(d2))
         end
 
         @testset "Half-spacing logic" begin
@@ -656,13 +655,13 @@ end # Main Testset
             f = x -> sum(x)
             uₕ = Rₕ(Wₕ, f)
 
-            @test length(Bramble.values(uₕ)) == npoints(Ωₕ)
-            @test !any(isnan, Bramble.values(uₕ))
+            @test length(parent(uₕ)) == npoints(Ωₕ)
+            @test !any(isnan, parent(uₕ))
             # every entry equals f at its own point, so none was left unwritten
-            @test all(Bramble.values(uₕ)[i] ≈ f(point(Ωₕ, idx))
+            @test all(parent(uₕ)[i] ≈ f(point(Ωₕ, idx))
             for (i, idx) in enumerate(indices(Ωₕ)))
             # the full range of the domain is reached
-            @test maximum(Bramble.values(uₕ)) ≈ Float64(D)
+            @test maximum(parent(uₕ)) ≈ Float64(D)
         end
     end
 

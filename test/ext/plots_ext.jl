@@ -19,7 +19,7 @@ using RecipesBase
 
         x, y = rd.args
         @test x == points(Ωₕ)
-        @test y == values(uₕ)
+        @test y == parent(uₕ)
     end
 
     @testset "2D: heatmap recipe, transposed to Plots' (row, col) = (y, x) convention" begin
@@ -35,7 +35,7 @@ using RecipesBase
         @test x == px
         @test y == py
         @test size(z) == (length(py), length(px))
-        @test z == permutedims(to_matrix(uₕ))
+        @test z == permutedims(reshape(uₕ))
     end
 
     @testset "3D: not implemented" begin

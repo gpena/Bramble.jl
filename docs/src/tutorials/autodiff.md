@@ -239,7 +239,7 @@ result straight to `AutoSparse` in place of the tracer, once
 ```@example autodiff_tutorial
 using ADTypes
 
-αvals0 = 1.0 .+ values(element(Wₕ, 0.0)) .^ 2
+αvals0 = 1.0 .+ parent(element(Wₕ, 0.0)) .^ 2
 a_for_pattern = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals0 * ∇₋ₕ(U), ∇₋ₕ(V)))
 
 const native_backend = AutoSparse(AutoForwardDiff();

@@ -28,15 +28,15 @@ jump_ops(::Val{3}) = (jumpₓ, jump₂, jump_ops(Val(2))...)
                 # the primary applicator, out of place, against the in-place one
                 res_oop = jump(uₕ, Val(i))
                 jump_dim!(vₕ.data, uₕ.data, dims, Val(i))
-                @test norm(values(res_oop) - values(vₕ)) < 1e-14
+                @test norm(parent(res_oop) - parent(vₕ)) < 1e-14
 
                 # and against the unscaled forward difference it forwards to
                 @test norm(res_oop .- forward_difference(uₕ, Val(i))) < 1e-14
             end
 
             # the definition itself, u_{i+1} - u_i, read off the values
-            u = values(uₕ)
-            r = reshape(values(jumpₓ(uₕ)), dims)
+            u = parent(uₕ)
+            r = reshape(parent(jumpₓ(uₕ)), dims)
             ur = reshape(u, dims)
             n1 = dims[1]
             for I in CartesianIndices(r)
@@ -110,8 +110,8 @@ jump_ops(::Val{3}) = (jumpₓ, jump₂, jump_ops(Val(2))...)
             vₕ = element(Wₕ, v_vec)
             uvₕ = element(Wₕ, uv_vec)
 
-            j_uv = values(jumpₓ(uvₕ))[1:(n - 1)]
-            leibniz = (values(M₊ₓ(uₕ)) .* values(jumpₓ(vₕ)) .+ values(jumpₓ(uₕ)) .* values(M₊ₓ(vₕ)))[1:(n - 1)]
+            j_uv = parent(jumpₓ(uvₕ))[1:(n - 1)]
+            leibniz = (parent(M₊ₓ(uₕ)) .* parent(jumpₓ(vₕ)) .+ parent(jumpₓ(uₕ)) .* parent(M₊ₓ(vₕ)))[1:(n - 1)]
 
             scale = max(maximum(abs, j_uv), maximum(abs, leibniz), 1.0)
             isapprox(j_uv, leibniz; atol = 1e-10 * scale, rtol = 1e-10)
@@ -140,20 +140,20 @@ jump_ops(::Val{3}) = (jumpₓ, jump₂, jump_ops(Val(2))...)
             vₕ = element(Wₕ, v_vec)
             uvₕ = element(Wₕ, uv_vec)
 
-            j_x = reshape(values(jumpₓ(uvₕ)), nx, ny)
+            j_x = reshape(parent(jumpₓ(uvₕ)), nx, ny)
             leibniz_x = reshape(
-                values(M₊ₓ(uₕ)) .* values(jumpₓ(vₕ)) .+
-                values(jumpₓ(uₕ)) .* values(M₊ₓ(vₕ)),
+                parent(M₊ₓ(uₕ)) .* parent(jumpₓ(vₕ)) .+
+                parent(jumpₓ(uₕ)) .* parent(M₊ₓ(vₕ)),
                 nx,
                 ny)
             scale_x = max(maximum(abs, j_x[1:(nx - 1), :]), 1.0)
             ok_x = isapprox(j_x[1:(nx - 1), :], leibniz_x[1:(nx - 1), :];
                 atol = 1e-10 * scale_x, rtol = 1e-10)
 
-            j_y = reshape(values(jumpᵧ(uvₕ)), nx, ny)
+            j_y = reshape(parent(jumpᵧ(uvₕ)), nx, ny)
             leibniz_y = reshape(
-                values(M₊ᵧ(uₕ)) .* values(jumpᵧ(vₕ)) .+
-                values(jumpᵧ(uₕ)) .* values(M₊ᵧ(vₕ)),
+                parent(M₊ᵧ(uₕ)) .* parent(jumpᵧ(vₕ)) .+
+                parent(jumpᵧ(uₕ)) .* parent(M₊ᵧ(vₕ)),
                 nx,
                 ny)
             scale_y = max(maximum(abs, j_y[:, 1:(ny - 1)]), 1.0)

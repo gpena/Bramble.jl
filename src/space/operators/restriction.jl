@@ -85,7 +85,7 @@ end
 @inline function _Rₕ_parallel!(uₕ::VectorElement{<:ScalarGridSpace}, f::F) where {F}
     (; space) = uₕ
     Ωₕ = mesh(space)
-    raw = values(uₕ)
+    raw = parent(uₕ)
     idxs = indices(Ωₕ)
     n = length(idxs)
     _cpu_threaded_for!(execution_policy(space), raw, 1:n, _RₕKernel(f, Ωₕ, idxs))
@@ -151,7 +151,7 @@ function _Rₕ_masked!(uₕ::VectorElement{<:ScalarGridSpace}, f::F, markers::NT
         N, Symbol}) where {F, N}
     (; space) = uₕ
     Ωₕ = mesh(space)
-    raw = values(uₕ)
+    raw = parent(uₕ)
     idxs = indices(Ωₕ)
     n = length(idxs)
 

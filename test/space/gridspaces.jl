@@ -375,8 +375,8 @@ end
 
             # and they are what the inner products actually use
             uₕ = Rₕ(Wₕ, x -> x^2 + 1)
-            @test innerₕ(uₕ, uₕ) ≈ sum(wh[i] * Bramble.values(uₕ)[i]^2 for i in 1:n)
-            @test inner₊(uₕ, uₕ) ≈ sum(wp[i] * Bramble.values(uₕ)[i]^2 for i in 1:n)
+            @test innerₕ(uₕ, uₕ) ≈ sum(wh[i] * Bramble.parent(uₕ)[i]^2 for i in 1:n)
+            @test inner₊(uₕ, uₕ) ≈ sum(wp[i] * Bramble.parent(uₕ)[i]^2 for i in 1:n)
         end
     end
 

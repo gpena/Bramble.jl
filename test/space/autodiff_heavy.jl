@@ -2,7 +2,6 @@ using Test
 using Bramble
 using ForwardDiff
 using DifferentiationInterface
-using Bramble: values
 
 # The two backends that are expensive to run, and the one that cannot run at all.
 #

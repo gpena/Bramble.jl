@@ -1,7 +1,7 @@
 using Test
 using Bramble
 using ForwardDiff
-using Bramble: values, components
+using Bramble: components
 
 # Differentiating through the library.
 #
@@ -40,12 +40,12 @@ using Bramble: values, components
     Wₕ = gridspace(Ωₕ)
     tup = (Rₕ(Wₕ, x -> x), Rₕ(Wₕ, x -> 2x))
 
-    scaled(a) = sum(values((a * tup)[1])) + sum(values((a * tup)[2]))
+    scaled(a) = sum(parent((a * tup)[1])) + sum(parent((a * tup)[2]))
     @test _matches_fd(scaled)
-    @test eltype(values((ForwardDiff.Dual{Nothing}(2.0, 1.0) * tup)[1])) <: ForwardDiff.Dual
+    @test eltype(parent((ForwardDiff.Dual{Nothing}(2.0, 1.0) * tup)[1])) <: ForwardDiff.Dual
 
     # a Dual-valued element on the left of the tuple, which takes the other method
-    weighted(a) = sum(values(((a * Rₕ(Wₕ, x -> 3.0)) * tup)[1]))
+    weighted(a) = sum(parent(((a * Rₕ(Wₕ, x -> 3.0)) * tup)[1]))
     @test _matches_fd(weighted)
 end
 
@@ -63,16 +63,16 @@ end
         @test eltype(Ωₕ1) === Float64
         @test eltype(points(Ωₕ1)) === Float64
         @test eltype(spacings(Ωₕ1)) === Float64
-        @test eltype(values(uₕ)) === typeof(a)
-        @test eltype(values(similar(uₕ))) === typeof(a)
-        @test eltype(values(D₋ₓ(uₕ))) === typeof(a)
+        @test eltype(parent(uₕ)) === typeof(a)
+        @test eltype(parent(similar(uₕ))) === typeof(a)
+        @test eltype(parent(D₋ₓ(uₕ))) === typeof(a)
         @test innerₕ(uₕ, uₕ) isa typeof(a)
 
         # and an ordinary run is untouched: no Dual anywhere, still Float64
         vₕ = Rₕ(Wₕ1, sin)
-        @test eltype(values(vₕ)) === Float64
-        @test eltype(values(similar(vₕ))) === Float64
-        @test eltype(values(D₋ₓ(vₕ))) === Float64
+        @test eltype(parent(vₕ)) === Float64
+        @test eltype(parent(similar(vₕ))) === Float64
+        @test eltype(parent(D₋ₓ(vₕ))) === Float64
     end
 
     @testset "Restriction & cell-averaging" begin
@@ -180,7 +180,7 @@ end
         for (nm, op) in (("D₋ₓ", D₋ₓ), ("M₋ₓ", M₋ₓ), ("jumpₓ", jumpₓ))
             @testset "$nm" begin
                 @test _matches_fd(a -> sum(op(Ωₕ1) *
-                                           values(Rₕ(Wₕ1, x -> a * sin(x)))))
+                                           parent(Rₕ(Wₕ1, x -> a * sin(x)))))
             end
         end
     end

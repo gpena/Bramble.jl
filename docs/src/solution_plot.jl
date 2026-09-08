@@ -25,9 +25,9 @@ function heatmap_plot(uₕ; title::AbstractString = "", width::Int = 480, height
     xs = [point(Ωₕ(1), i) for i in 1:nx]
     ys = [point(Ωₕ(2), j) for j in 1:ny]
 
-    # to_matrix(uₕ) is (nx, ny) — Plotly's z wants z[row][col] with row = y, col = x, so
+    # reshape(uₕ) is (nx, ny) — Plotly's z wants z[row][col] with row = y, col = x, so
     # transpose rather than reindex by hand.
-    M = permutedims(to_matrix(uₕ))
+    M = permutedims(reshape(uₕ))
 
     div_id = _next_solution_plot_id()
     x_js = "[" * join(xs, ",") * "]"

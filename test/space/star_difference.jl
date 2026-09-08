@@ -2,7 +2,7 @@ using Test
 using Bramble
 using Random
 using Supposition
-using Bramble: values, components, star_spacings, StarSpacings, submeshes
+using Bramble: components, star_spacings, StarSpacings, submeshes
 
 # The starred forward difference and the identity it exists for.
 #
@@ -52,15 +52,15 @@ star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
                 Wₕ = gridspace(Ωₕ)
                 n = npoints(Ωₕ)
                 uₕ = Rₕ(Wₕ, x -> x^2 + sin(x))
-                u = values(uₕ)
+                u = parent(uₕ)
 
                 want = [i == n ? 0.0 :
                         (u[i + 1] - u[i]) / ((spacing(Ωₕ, i) + spacing(Ωₕ, i + 1)) / 2)
                         for i in 1:n]
-                @test values(Dstar₊ₓ(uₕ)) ≈ want
+                @test parent(Dstar₊ₓ(uₕ)) ≈ want
 
                 # the last point has no forward neighbour and is truncated, as in D₊ₓ
-                @test values(Dstar₊ₓ(uₕ))[n] == 0.0
+                @test parent(Dstar₊ₓ(uₕ))[n] == 0.0
             end
         end
     end
@@ -72,13 +72,13 @@ star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
         Wₕ = gridspace(Ωₕ)
         n = npoints(Ωₕ, Tuple)
 
-        @test all(iszero, values(Dstar₊ₓ(Rₕ(Wₕ, x -> 3.0))))
+        @test all(iszero, parent(Dstar₊ₓ(Rₕ(Wₕ, x -> 3.0))))
 
         for (d, op) in ((1, Dstar₊ₓ), (2, Dstar₊ᵧ), (3, Dstar₊₂))
             # a function constant along d differences to zero along d
-            @test all(iszero, values(op(Rₕ(Wₕ, x -> x[mod1(d + 1, 3)]))))
+            @test all(iszero, parent(op(Rₕ(Wₕ, x -> x[mod1(d + 1, 3)]))))
             # and one linear along d differences to one, away from the truncated slice
-            r = reshape(values(op(Rₕ(Wₕ, x -> x[d]))), n)
+            r = reshape(parent(op(Rₕ(Wₕ, x -> x[d]))), n)
             interior = ntuple(k -> k == d ? (1:(n[k] - 1)) : (1:n[k]), 3)
             @test all(≈(1.0), r[interior...])
         end
@@ -91,23 +91,23 @@ star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
         uₕ = Rₕ(Wₕ, x -> x[1] * x[2])
 
         @test Dstar₊ₕ(uₕ) isa NTuple{2, VectorElement}
-        @test values(Dstar₊ₕ(uₕ)[1]) == values(Dstar₊ₓ(uₕ))
-        @test values(Dstar₊ₕ(uₕ)[2]) == values(Dstar₊ᵧ(uₕ))
+        @test parent(Dstar₊ₕ(uₕ)[1]) == parent(Dstar₊ₓ(uₕ))
+        @test parent(Dstar₊ₕ(uₕ)[2]) == parent(Dstar₊ᵧ(uₕ))
 
         # in one dimension the tuple and the grid function coincide
         Ω1 = mesh(domain(interval(0.0, 1.0)), 7, true)
         u1 = Rₕ(gridspace(Ω1), sin)
         @test !(Dstar₊ₕ(u1) isa Tuple)
-        @test values(Dstar₊ₕ(u1)) == values(Dstar₊ₓ(u1))
+        @test parent(Dstar₊ₕ(u1)) == parent(Dstar₊ₓ(u1))
 
         # composite grid functions apply componentwise, as the other operators do
         fs = (x -> x[1], x -> x[2]^2)
         cₕ = Rₕ(Vₕ, fs)
         scalars = (Rₕ(Wₕ, fs[1]), Rₕ(Wₕ, fs[2]))
         rₕ = Dstar₊ₓ(cₕ)
-        @test length(values(rₕ)) == length(values(cₕ))
+        @test length(parent(rₕ)) == length(parent(cₕ))
         for k in 1:2
-            @test values(components(rₕ)[k]) == values(Dstar₊ₓ(scalars[k]))
+            @test parent(components(rₕ)[k]) == parent(Dstar₊ₓ(scalars[k]))
         end
     end
 

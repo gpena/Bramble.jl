@@ -2,7 +2,6 @@ using Test
 using Bramble
 using ForwardDiff
 using DifferentiationInterface
-using Bramble: values
 
 # Which differentiation backends can differentiate through Bramble, and through one API.
 #
@@ -44,10 +43,10 @@ _have(mod::Symbol) = Base.identify_package(String(mod)) !== nothing
 function _ad_problems()
     Ωₕ = mesh(domain(interval(0.0, 1.0)), 6, true)
     Wₕ = gridspace(Ωₕ)
-    scalar = a -> sum(values(D₋ₓ(Rₕ(Wₕ, x -> a * sin(x)))))
+    scalar = a -> sum(parent(D₋ₓ(Rₕ(Wₕ, x -> a * sin(x)))))
     vector = p -> begin
         uₕ = Rₕ(Wₕ, x -> p[1] * sin(x) + p[2] * x^2)
-        return sum(values(D₋ₓ(uₕ))) + normₕ(uₕ)^2
+        return sum(parent(D₋ₓ(uₕ))) + normₕ(uₕ)^2
     end
     return scalar, vector
 end

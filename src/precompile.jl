@@ -88,12 +88,13 @@ function _pc_mesh_session(Ω, npts, unif, be, label::Symbol)
     index_in_marker(Ωₕ, label)
     boundary_symbol_to_dict(indices(Ωₕ))
 
-    for it in (points_iterator, half_points_iterator, spacings_iterator,
-        forward_spacings_iterator, half_spacings_iterator, cell_measures_iterator)
-        iter = it(Ωₕ)
+    # gpena/Bramble.jl#75: warms the plain accessors and the mesh's own iteration
+    # protocol, not the deprecated `*_iterator` aliases these replace.
+    for iter in (points(Ωₕ), half_points(Ωₕ), spacings(Ωₕ), forward_spacings(Ωₕ),
+        half_spacings(Ωₕ), (cell_measure(Ωₕ, idx) for idx in indices(Ωₕ)))
         isempty(iter) || first(iter)
     end
-    for p in points_iterator(Ωₕ)
+    for p in Ωₕ
         p
     end
 
@@ -259,8 +260,7 @@ function _pc_space_session(Ωₕ, f, g)
     wₕ = Rₕ(Vₕ, (f, g))
     avgₕ(Vₕ, (f, g))
     wₕ(1)
-    component(wₕ, 1)
-    to_matrix(wₕ)
+    reshape(wₕ)
     space_type(uₕ)
     space_type(wₕ)
 
@@ -269,19 +269,21 @@ function _pc_space_session(Ωₕ, f, g)
     element(Wₕ)
     aₕ = element(Wₕ, 3.0)
     element(Wₕ, 2)                   # Int fill converts to eltype
-    bₕ = element(Wₕ, deepcopy(values(aₕ)))
+    bₕ = element(Wₕ, deepcopy(parent(aₕ)))
 
     space(bₕ)
-    values!(uₕ, values(bₕ))
+    # gpena/Bramble.jl#73: warms `parent`/`copyto!`, the replacements for the deprecated
+    # `values`/`values!`, not the deprecated names themselves.
+    copyto!(uₕ, parent(bₕ))
     copyto!(uₕ, bₕ)
-    copyto!(uₕ, values(bₕ))
+    copyto!(uₕ, parent(bₕ))
 
     uₕ[1]
     uₕ[2] = 99.0
     uₕ[3] = 99                       # Int setindex converts
 
     axes(uₕ)
-    to_matrix(uₕ)
+    reshape(uₕ)
     size(uₕ)
     firstindex(uₕ)
     lastindex(uₕ)

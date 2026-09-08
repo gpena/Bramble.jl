@@ -49,7 +49,7 @@ end
     "destination and source must not alias"))
 
 @inline _check_no_alias(vₕ::VectorElement, uₕ::VectorElement) = Base.mightalias(
-    values(vₕ), values(uₕ)) && _throw_alias_error()
+    parent(vₕ), parent(uₕ)) && _throw_alias_error()
 
 # --- Argument handling shared by every operator ------------------------------------- #
 # The operators accept a mesh, a grid space or a grid function, and the vectorial aliases

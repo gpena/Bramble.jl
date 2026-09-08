@@ -23,7 +23,7 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
 #
 # Every check below is against the NUMERIC operator layer, which is a third, independent
 # implementation of the same arithmetic: `assemble(innerₕ(Op(f), v))` must equal
-# `values(Op(Rₕ(Wₕ, f))) .* weights`. Each is paired with a negative control, because a zero
+# `parent(Op(Rₕ(Wₕ, f))) .* weights`. Each is paired with a negative control, because a zero
 # vector satisfies `isfinite`, `isa` and `≈ 0` alike: that is exactly how this went unnoticed.
 
 @testset "Source operators" begin
@@ -38,7 +38,7 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
         for (nm, op) in (("D₋ₓ", D₋ₓ), ("D₊ₓ", D₊ₓ), ("M₋ₓ", M₋ₓ), ("M₊ₓ", M₊ₓ),
             ("jumpₓ", jumpₓ), ("Dcₓ", Dcₓ), ("Dstar₊ₓ", Dstar₊ₓ), ("Dₕₓ", Dₕₓ))
             b = assemble(form(Wₕ, v -> innerₕ(op(sf), v)))
-            @test b ≈ values(op(fₕ)) .* w                     # the oracle
+            @test b ≈ parent(op(fₕ)) .* w                     # the oracle
             @test !all(iszero, b)                             # the control the old tests lacked
         end
     end
@@ -56,7 +56,7 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
             ("jumpₓ", jumpₓ), ("jumpᵧ", jumpᵧ), ("Dcₓ", Dcₓ), ("Dcᵧ", Dcᵧ),
             ("Dstar₊ₓ", Dstar₊ₓ), ("Dₕₓ", Dₕₓ))
             b = assemble(form(Wₕ, v -> innerₕ(op(sf), v)))
-            @test b ≈ values(op(fₕ)) .* w
+            @test b ≈ parent(op(fₕ)) .* w
             @test !all(iszero, b)
         end
     end
@@ -72,8 +72,8 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
         # a difference of an average, and an average of a difference: the outer operator has
         # to re-read the inner subtree at the shifted point, which is precisely what
         # relabelling an offset cannot do
-        @test assemble(form(Wₕ, v -> innerₕ(D₋ₓ(M₋ᵧ(sf)), v))) ≈ values(D₋ₓ(M₋ᵧ(fₕ))) .* w
-        @test assemble(form(Wₕ, v -> innerₕ(M₋ₓ(D₋ₓ(sf)), v))) ≈ values(M₋ₓ(D₋ₓ(fₕ))) .* w
+        @test assemble(form(Wₕ, v -> innerₕ(D₋ₓ(M₋ᵧ(sf)), v))) ≈ parent(D₋ₓ(M₋ᵧ(fₕ))) .* w
+        @test assemble(form(Wₕ, v -> innerₕ(M₋ₓ(D₋ₓ(sf)), v))) ≈ parent(M₋ₓ(D₋ₓ(fₕ))) .* w
 
         # `f` is separable, x²  +  sin(3y), so its mixed difference is mathematically zero at
         # every point (both sides here are machine-epsilon noise (~1e-16), not a value an
@@ -81,19 +81,19 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
         # would swallow a real regression anywhere else in this file, where every other
         # comparison is against a value orders of magnitude larger)
         @test isapprox(assemble(form(Wₕ, v -> innerₕ(D₋ₓ(D₋ᵧ(sf)), v))),
-            values(D₋ₓ(D₋ᵧ(fₕ))) .* w; atol = 1e-12)
+            parent(D₋ₓ(D₋ᵧ(fₕ))) .* w; atol = 1e-12)
 
         # scaling by a number, and by a Ref that a caller can rebind between assemblies
-        @test assemble(form(Wₕ, v -> innerₕ(3 * D₋ₓ(sf), v))) ≈ 3 .* values(D₋ₓ(fₕ)) .* w
+        @test assemble(form(Wₕ, v -> innerₕ(3 * D₋ₓ(sf), v))) ≈ 3 .* parent(D₋ₓ(fₕ)) .* w
 
         # a sum of two differently-operated copies of the same source, and of two different
         # sources: the addends are contracted independently
         gf = source_function(x -> x[2], Val(2))
         gₕ = Rₕ(Wₕ, x -> x[2])
         @test assemble(form(Wₕ, v -> innerₕ(D₋ₓ(sf) + M₋ₓ(sf), v))) ≈
-              (values(D₋ₓ(fₕ)) .+ values(M₋ₓ(fₕ))) .* w
+              (parent(D₋ₓ(fₕ)) .+ parent(M₋ₓ(fₕ))) .* w
         @test assemble(form(Wₕ, v -> innerₕ(D₋ₓ(sf) + D₋ᵧ(gf), v))) ≈
-              (values(D₋ₓ(fₕ)) .+ values(D₋ᵧ(gₕ))) .* w
+              (parent(D₋ₓ(fₕ)) .+ parent(D₋ᵧ(gₕ))) .* w
 
         for b in (assemble(form(Wₕ, v -> innerₕ(D₋ₓ(M₋ᵧ(sf)), v))),
             assemble(form(Wₕ, v -> innerₕ(3 * D₋ₓ(sf), v))),
@@ -117,11 +117,11 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
         # the oracle: the pointwise product restricted to the grid, then differenced
         cfₕ = Rₕ(Wₕ, x -> c(x) * f(x))
         b = assemble(form(Wₕ, v -> innerₕ(D₋ₓ(cₕ * sf), v)))
-        @test b ≈ values(D₋ₓ(cfₕ)) .* w
+        @test b ≈ parent(D₋ₓ(cfₕ)) .* w
         @test !all(iszero, b)
         # and it is genuinely different from scaling *after* the difference, so the test
         # distinguishes "read at the shifted point" from "read here"
-        @test !isapprox(b, values(cₕ) .* values(D₋ₓ(fₕ)) .* w)
+        @test !isapprox(b, parent(cₕ) .* parent(D₋ₓ(fₕ)) .* w)
     end
 
     @testset "Boundary truncation" begin
@@ -133,7 +133,7 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
         w = weights(Wₕ, Innerh())
 
         b = assemble(form(Wₕ, v -> innerₕ(shift_op(sf, 1, 1), v)))
-        expected = [i < length(w) ? values(fₕ)[i + 1] * w[i] : zero(eltype(w))
+        expected = [i < length(w) ? parent(fₕ)[i + 1] * w[i] : zero(eltype(w))
                     for i in eachindex(w)]
         @test b ≈ expected
         @test !all(iszero, b)
@@ -145,9 +145,9 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
         # point's own value* rather than contribute zero, which a shift of amount 1 cannot
         # tell apart from the correct answer at every row but the last.
         b2 = assemble(form(Wₕ, v -> innerₕ(shift_op(sf, 1, 2), v)))
-        expected2 = [i + 2 <= length(w) ? values(fₕ)[i + 2] * w[i] : zero(eltype(w))
+        expected2 = [i + 2 <= length(w) ? parent(fₕ)[i + 2] * w[i] : zero(eltype(w))
                      for i in eachindex(w)]
-        wrongly_clamped = [values(fₕ)[min(i + 2, length(w))] * w[i] for i in eachindex(w)]
+        wrongly_clamped = [parent(fₕ)[min(i + 2, length(w))] * w[i] for i in eachindex(w)]
         @test b2 ≈ expected2
         @test !isapprox(b2, wrongly_clamped)
     end
@@ -174,10 +174,10 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
         f = x -> x[1] * x[2] + x[1]
         fₕ = Rₕ(Wₕ, f)
         w = weights(Wₕ, Innerh())
-        sv = SourceVector{2, typeof(values(fₕ))}(values(fₕ))
+        sv = SourceVector{2, typeof(parent(fₕ))}(parent(fₕ))
 
         b = assemble(form(Wₕ, v -> innerₕ(D₋ₓ(sv), v)))
-        @test b ≈ values(D₋ₓ(fₕ)) .* w
+        @test b ≈ parent(D₋ₓ(fₕ)) .* w
         @test !all(iszero, b)
     end
 
@@ -192,7 +192,7 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
         # the interpolant landed on Wbig, then differenced there: the numeric spelling of
         # exactly what D₋ₓ(πₕ(us)) means symbolically
         b = assemble(form(Wbig, v -> innerₕ(D₋ₓ(πₕ(us)), v)))
-        @test b ≈ values(D₋ₓ(πₕ(Wbig, us))) .* w
+        @test b ≈ parent(D₋ₓ(πₕ(Wbig, us))) .* w
         @test !all(iszero, b)
 
         # and the composite-space spelling the forms tutorial teaches
@@ -210,8 +210,8 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
         fₕ = Rₕ(Wₕ, f)
         w = weights(Wₕ, Innerh())
 
-        @test assemble(form(Wₕ, v -> innerₕ(sf, v))) ≈ values(fₕ) .* w
-        @test assemble(form(Wₕ, v -> innerₕ(fₕ, v))) ≈ values(fₕ) .* w
+        @test assemble(form(Wₕ, v -> innerₕ(sf, v))) ≈ parent(fₕ) .* w
+        @test assemble(form(Wₕ, v -> innerₕ(fₕ, v))) ≈ parent(fₕ) .* w
         @test assemble(form(Wₕ, v -> innerₕ(2.0, v))) ≈ 2.0 .* w
     end
 
@@ -226,7 +226,7 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
         b = assemble(l)
         # contract against a test function: l(uₕ) = Σ wᵢ fᵢ (D₋ₓu)ᵢ, computable numerically
         uₕ = Rₕ(Wₕ, x -> x^2)
-        @test l(uₕ) ≈ sum(weights(Wₕ, Innerh()) .* values(fₕ) .* values(D₋ₓ(uₕ)))
+        @test l(uₕ) ≈ sum(weights(Wₕ, Innerh()) .* parent(fₕ) .* parent(D₋ₓ(uₕ)))
         @test !all(iszero, b)
     end
 
@@ -248,13 +248,13 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
         # inner₊(source, D₋ₓ(v)): source-only left, direction named by the right side
         b1 = assemble(form(Wₕ, v -> inner₊(sf, D₋ₓ(v))))
         A1 = assemble(form(Wₕ, Wₕ, (u, v) -> inner₊(u, D₋ₓ(v))))
-        @test b1 ≈ A1 * values(fₕ)
+        @test b1 ≈ A1 * parent(fₕ)
         @test !all(iszero, b1)
 
         # inner₊(D₋ₓ(source), v): source-only left wrapped in a difference, plain right
         b2 = assemble(form(Wₕ, v -> inner₊(D₋ₓ(sf), v)))
         A2 = assemble(form(Wₕ, Wₕ, (u, v) -> inner₊(D₋ₓ(u), v)))
-        @test b2 ≈ A2 * values(fₕ)
+        @test b2 ≈ A2 * parent(fₕ)
         @test !all(iszero, b2)
 
         # inner₊₂(source, v): the plain directional (z) form, 3D since Dim = 3 needs D ≥ 3
@@ -267,7 +267,7 @@ using Bramble: source_function, SourceVector, Innerh, restrict_to, shift_op,
 
         b3 = assemble(form(W3, v -> inner₊₂(sf3, v)))
         A3 = assemble(form(W3, W3, (u, v) -> inner₊₂(u, v)))
-        @test b3 ≈ A3 * values(f3ₕ)
+        @test b3 ≈ A3 * parent(f3ₕ)
         @test !all(iszero, b3)
     end
 

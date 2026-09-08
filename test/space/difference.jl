@@ -248,7 +248,7 @@ end
                 ops = (D₋ₓ, D₊ₓ, diff₋ₓ, diff₊ₓ)
                 all_ok = true
                 for op in ops
-                    v1 = values(op(uₕ))
+                    v1 = parent(op(uₕ))
                     v2 = op(Wₕ) * u_vals
                     scale = max(maximum(abs, v1), maximum(abs, v2), 1.0)
                     if !isapprox(v1, v2; atol = 1e-10 * scale, rtol = 1e-10)
@@ -293,7 +293,7 @@ end
                 ops = (D₋ₓ, D₊ₓ, diff₋ₓ, diff₊ₓ, D₋ᵧ, D₊ᵧ, diff₋ᵧ, diff₊ᵧ)
                 all_ok = true
                 for op in ops
-                    v1 = values(op(uₕ))
+                    v1 = parent(op(uₕ))
                     v2 = op(Wₕ) * u_vec
                     scale = max(maximum(abs, v1), maximum(abs, v2), 1.0)
                     if !isapprox(v1, v2; atol = 1e-10 * scale, rtol = 1e-10)

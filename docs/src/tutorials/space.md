@@ -131,7 +131,7 @@ When working with vector fields in a `CompositeGridSpace`, you often need to ins
 
 ### Functor call syntax and component views
 
-Calling a vector element as a function `uₕ(i)` or using `component(uₕ, i)` returns a `VectorElement` representing the $i$-th component:
+Calling a vector element as a function `uₕ(i)` returns a `VectorElement` representing the $i$-th component:
 
 ```julia
 uₕ = element(Vₕ)
@@ -139,9 +139,6 @@ uₕ = element(Vₕ)
 # Extract component views using coordinate subscripts ("ₓ", "ᵧ", "₂")
 uₓ = uₕ(1)
 uᵧ = uₕ(2)
-
-# Alternative named accessor
-uₓ = component(uₕ, 1)
 ```
 
 ### Degree-of-freedom ranges
@@ -166,10 +163,10 @@ uₓ .= 1.5
 uᵧ .= -2.0
 
 # The parent vector reflects the updates immediately
-values(uₕ)
+parent(uₕ)
 ```
 
-For scalar spaces, `uₕ(1)` or `component(uₕ, 1)` cleanly returns `uₕ` itself.
+For scalar spaces, `uₕ(1)` cleanly returns `uₕ` itself.
 
 ### Tuple destructuring
 
@@ -187,28 +184,28 @@ u₁, u₂ = components(uₕ)
 
 While degrees of freedom are stored internally as flat 1D vectors for linear algebra operations, finite difference stencils and visualization require indexing points in physical grid dimensions.
 
-The `to_matrix` function reshapes the flat coefficient vector into a multidimensional array matching the mesh geometry:
+The zero-argument `reshape(uₕ)` reshapes the flat coefficient vector into a multidimensional array matching the mesh geometry:
 
 ### Scalar elements
 
 ```julia
 u_scal = element(Wₕ, 0.0)
-u_grid = to_matrix(u_scal)
+u_grid = reshape(u_scal)
 size(u_grid)  # (5, 5)
 
 # Access value at grid point (i, j)
 u_grid[2, 3] = 10.0
 ```
 
-Because `to_matrix` returns a `Base.ReshapedArray` view of the underlying vector, mutating `u_grid` modifies `u_scal` in-place with zero memory allocation.
+Because `reshape(u_scal)` returns a `Base.ReshapedArray` view of the underlying vector, mutating `u_grid` modifies `u_scal` in-place with zero memory allocation.
 
 ### Multi-component elements
 
-For multi-component vector elements, `to_matrix` returns a tuple of reshaped arrays, one for each component:
+For multi-component vector elements, `reshape` returns a tuple of reshaped arrays, one for each component:
 
 ```julia
-mats = to_matrix(uₕ)
-# mats is a Tuple containing (to_matrix(uₓ), to_matrix(uᵧ))
+mats = reshape(uₕ)
+# mats is a Tuple containing (reshape(uₓ), reshape(uᵧ))
 
 size(mats[1])  # (5, 5)
 size(mats[2])  # (5, 5)
@@ -244,10 +241,10 @@ size(mats[2])  # (5, 5)
 
   <!-- Connectors from Flat to Component Views -->
   <path d="M 205 71 L 205 105" stroke="#3b82f6" stroke-width="1.5" fill="none" marker-end="url(#arrowBlue)"/>
-  <text x="215" y="93" font-size="11" fill="#3b82f6">uₕ(1) / component(uₕ, 1)</text>
+  <text x="215" y="93" font-size="11" fill="#3b82f6">uₕ(1)</text>
 
   <path d="M 565 71 L 565 105" stroke="#8b5cf6" stroke-width="1.5" fill="none" marker-end="url(#arrowPurple)"/>
-  <text x="575" y="93" font-size="11" fill="#8b5cf6">uₕ(2) / component(uₕ, 2)</text>
+  <text x="575" y="93" font-size="11" fill="#8b5cf6">uₕ(2)</text>
 
   <!-- 2. Zero-copy component views -->
   <rect x="30" y="110" width="350" height="34" rx="4" fill="#3b82f6" fill-opacity="0.08" stroke="#3b82f6" stroke-dasharray="4,3" stroke-width="1.2"/>
@@ -258,10 +255,10 @@ size(mats[2])  # (5, 5)
 
   <!-- Connectors from Component Views to 2D Grids -->
   <path d="M 205 144 L 205 178" stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
-  <text x="215" y="166" font-size="11" fill="currentColor">to_matrix(uₓ)</text>
+  <text x="215" y="166" font-size="11" fill="currentColor">reshape(uₓ)</text>
 
   <path d="M 565 144 L 565 178" stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
-  <text x="575" y="166" font-size="11" fill="currentColor">to_matrix(uᵧ)</text>
+  <text x="575" y="166" font-size="11" fill="currentColor">reshape(uᵧ)</text>
 
   <!-- 3. Reshaped 2D Matrix Views -->
   <g transform="translate(145, 185)">

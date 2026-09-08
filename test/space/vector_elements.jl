@@ -1,5 +1,5 @@
-import Bramble: VectorElement, spacing, points, half_points, space, values, ndofs, values!,
-                half_spacings_iterator, half_points_iterator, indices, point
+import Bramble: VectorElement, spacing, points, half_points, space, ndofs,
+                half_spacings, indices, point
 using LinearAlgebra: norm
 using SparseArrays
 
@@ -30,9 +30,9 @@ function compute_exp_cell_averages!(w::Array{T, D}, mesh) where {T, D}
     # Create an iterator for each dimension that yields `(hᵢ, xᵢ, xᵢ₊₁)` for cell interfaces
     cell_data_iterators = ntuple(Val(D)) do i
         mesh_dim = mesh(i)
-        zip(half_spacings_iterator(mesh_dim),
-            half_points_iterator(mesh_dim),
-            Iterators.drop(half_points_iterator(mesh_dim), 1))
+        zip(half_spacings(mesh_dim),
+            half_points(mesh_dim),
+            Iterators.drop(half_points(mesh_dim), 1))
     end
 
     # Iterate over the Cartesian product of the dimensional iterators
@@ -70,39 +70,38 @@ end
         u1 = element(W)
         @test u1 isa VectorElement
         @test space(u1) === W
-        @test values(u1) isa Vector
-        @test length(values(u1)) == ndofs(W)
-        @test eltype(values(u1)) == Float64
+        @test parent(u1) isa Vector
+        @test length(parent(u1)) == ndofs(W)
+        @test eltype(parent(u1)) == Float64
 
         u2 = element(W, 5.0)
         @test u2 isa VectorElement
         @test space(u2) === W
-        @test all(==(5.0), values(u2))
+        @test all(==(5.0), parent(u2))
         @test length(u2) == 4
 
         v_init = collect(1.0:4.0)
         u3 = element(W, v_init)
         @test u3 isa VectorElement
         @test space(u3) === W
-        @test values(u3) == v_init
+        @test parent(u3) == v_init
         @test_throws DimensionMismatch element(W, collect(1.0:5.0))
 
         u4 = element(W, 3) # Test with Int
         @test u4 isa VectorElement
         @test space(u4) === W
-        @test all(==(3.0), values(u4))
+        @test all(==(3.0), parent(u4))
         @test eltype(u4) == Float64
     end
 
     @testset "Getters & setters" begin
         u = element(W, 1.0:4.0)
         @test space(u) === W
-        @test values!(u, fill(2.0, 4)) === u
-        @test values(u) == fill(2.0, 4)
+        @test copyto!(u, fill(2.0, 4)) === u
+        @test parent(u) == fill(2.0, 4)
 
-        # Test copyto! alias
         @test copyto!(u, fill(3.0, 4)) === u
-        @test values(u) == fill(3.0, 4)
+        @test parent(u) == fill(3.0, 4)
     end
 
     @testset "Forwarded methods" begin
@@ -128,7 +127,7 @@ end
 
         u[3] = 99.0
         @test u[3] == 99.0
-        @test values(u)[3] == 99.0
+        @test parent(u)[3] == 99.0
     end
 
     @testset "similar" begin
@@ -150,13 +149,13 @@ end
 
         # VectorElement to VectorElement
         copyto!(z, u)
-        @test values(z) == values(u)
-        @test !(values(z) === values(u)) # Ensure it's a copy
+        @test parent(z) == parent(u)
+        @test !(parent(z) === parent(u)) # Ensure it's a copy
 
         # AbstractVector to VectorElement
         vec_data = fill(5.5, 4)
         copyto!(z, vec_data)
-        @test values(z) == vec_data
+        @test parent(z) == vec_data
     end
 
     @testset "Broadcasting" begin
@@ -175,21 +174,21 @@ end
 
         # Test copyto! broadcast (u .= v)
         copyto!(u, Base.broadcasted(identity, v))
-        @test values(u) == values(v)
+        @test parent(u) == parent(v)
 
         # Test materialize! / fused (w .= u .+ v .* α)
         w .= u .+ v .* α # Uses materialize! implicitly
-        expected_w = values(u) .+ values(v) .* α
-        @test values(w) ≈ expected_w
+        expected_w = parent(u) .+ parent(v) .* α
+        @test parent(w) ≈ expected_w
 
         # Test copyto! variant (w .= β .* v)
         w .= β .* v
-        expected_w2 = β .* values(v)
-        @test values(w) ≈ expected_w2
+        expected_w2 = β .* parent(v)
+        @test parent(w) ≈ expected_w2
 
         # Test scalar assignment via broadcast
         w .= 5.0
-        @test all(==(5.0), values(w))
+        @test all(==(5.0), parent(w))
     end
 
     @testset "Arithmetic" begin
@@ -204,34 +203,34 @@ end
         r3 = u + v
         @test r3 isa VectorElement
         @test space(r3) === space(u)
-        @test values(r3) ≈ u_data .+ v_data
+        @test parent(r3) ≈ u_data .+ v_data
 
         # Scalar * VectorElement
         r4 = α * u
-        @test values(r4) ≈ α .* u_data
+        @test parent(r4) ≈ α .* u_data
 
         # VectorElement * Scalar
         r5 = u * α
-        @test values(r5) ≈ u_data .* α
+        @test parent(r5) ≈ u_data .* α
 
         # VectorElement * VectorElement
         r6 = u .* v
-        @test values(r6) ≈ u_data .* v_data
+        @test parent(r6) ≈ u_data .* v_data
 
         # Subtraction
         r7 = u - v
-        @test values(r7) ≈ u_data .- v_data
+        @test parent(r7) ≈ u_data .- v_data
         r8 = u .- α
-        @test values(r8) ≈ u_data .- α
+        @test parent(r8) ≈ u_data .- α
         r9 = α .- u
-        @test values(r9) ≈ α .- u_data
+        @test parent(r9) ≈ α .- u_data
 
         # Power
         r13 = u .^ β
-        @test values(r13) ≈ u_data .^ β
+        @test parent(r13) ≈ u_data .^ β
 
         r15 = u .^ v # Elementwise
-        @test values(r15) ≈ u_data .^ v_data
+        @test parent(r15) ≈ u_data .^ v_data
     end
 end
 
@@ -251,7 +250,7 @@ end
                 _func2array!(w, test_function_idx, indices(mesh(Wₕ)))
 
                 w_flat = reshape(w, prod(dims))
-                @test norm(values(uₕ) - w_flat) < 1e-15
+                @test norm(parent(uₕ) - w_flat) < 1e-15
             end
 
             @testset "avgₕ!" begin
@@ -260,7 +259,7 @@ end
                 w = Array{Float64, D}(undef, dims)
                 compute_exp_cell_averages!(w, mesh(Wₕ))
 
-                u_reshaped = reshape(values(uₕ), dims)
+                u_reshaped = reshape(parent(uₕ), dims)
                 interior = valid_interior_range(D, dims)
                 @test @views norm(u_reshaped[interior...] - w[interior...]) < 1e-4
             end
@@ -278,7 +277,7 @@ end
         @test length(u_vec) == 2 * ndofs(W)
         @test ncomponents(space(u_vec)) == 2
 
-        # Component extraction via functor call u(i) and component(u, i)
+        # Component extraction via functor call u(i)
         u1 = u_vec(1)
         u2 = u_vec(2)
         @test u1 isa VectorElement
@@ -287,7 +286,6 @@ end
         @test space(u2) === W
         @test length(u1) == ndofs(W)
         @test length(u2) == ndofs(W)
-        @test component(u_vec, 1) === u1 || values(component(u_vec, 1)) == values(u1)
 
         # Component ranges
         @test component_range(V, 1) == 1:ndofs(W)
@@ -303,7 +301,6 @@ end
         # Scalar space component indexing
         u_scal = element(W, 3.0)
         @test u_scal(1) === u_scal
-        @test component(u_scal, 1) === u_scal
         @test components(u_scal) === (u_scal,)
         @test_throws BoundsError u_scal(2)
         @test_throws BoundsError u_vec(0)
@@ -312,11 +309,11 @@ end
         # In-place mutation through component views
         u1 .= 10.0
         u2 .= 25.0
-        @test all(==(10.0), values(u_vec)[1:ndofs(W)])
-        @test all(==(25.0), values(u_vec)[(ndofs(W) + 1):(2 * ndofs(W))])
+        @test all(==(10.0), parent(u_vec)[1:ndofs(W)])
+        @test all(==(25.0), parent(u_vec)[(ndofs(W) + 1):(2 * ndofs(W))])
 
-        # to_matrix on multi-component elements
-        mats = to_matrix(u_vec)
+        # reshape on multi-component elements
+        mats = reshape(u_vec)
         @test mats isa Tuple
         @test length(mats) == 2
         @test size(mats[1]) == (5, 6)
@@ -331,13 +328,13 @@ end
 
         # Multi-component avgₕ
         u_avg = avgₕ(V, (x -> 2.0, x -> 5.0))
-        mats_avg = to_matrix(u_avg)
+        mats_avg = reshape(u_avg)
         @test mats_avg[1][2, 2] ≈ 2.0
         @test mats_avg[2][2, 2] ≈ 5.0
     end
 
     @testset "avgₕ quadrature" begin
-        import Bramble: _gauss_rule, AVG_QUAD_POINTS, values
+        import Bramble: _gauss_rule, AVG_QUAD_POINTS
 
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 40, false)   # non-uniform
         W = gridspace(Ωₕ)
@@ -352,7 +349,7 @@ end
         @testset "Convergence" begin
             errs = map(1:4) do nq
                 avgₕ!(u, f; quad_points = nq)
-                maximum(abs, values(u) .- exact)
+                maximum(abs, parent(u) .- exact)
             end
             # The mesh is randomly non-uniform, so assert the trend and generous
             # bounds rather than tight magic constants.
@@ -363,7 +360,7 @@ end
 
             # the shipped default must reach machine precision on this integrand
             avgₕ!(u, f)
-            @test maximum(abs, values(u) .- exact) < 1e-11
+            @test maximum(abs, parent(u) .- exact) < 1e-11
 
             @test_throws ArgumentError avgₕ!(u, f; quad_points = 0)
         end
@@ -377,7 +374,7 @@ end
                 ex = [(xh[i + 1]^(deg + 1) - xh[i]^(deg + 1)) /
                       ((deg + 1) * (xh[i + 1] - xh[i]))
                       for i in 1:npoints(Ωₕ)]
-                @test maximum(abs, values(u) .- ex) < 1e-12
+                @test maximum(abs, parent(u) .- ex) < 1e-12
             end
         end
 
@@ -472,7 +469,7 @@ end
 end
 
 @testset "Composite evaluation" begin
-    import Bramble: component_range, component_ranges, components, values, ndofs, spaces
+    import Bramble: component_range, component_ranges, components, ndofs, spaces
 
     W5 = gridspace(mesh(domain(interval(0.0, 1.0)), 5, true))
     W9 = gridspace(mesh(domain(interval(0.0, 1.0)), 9, true))
@@ -492,8 +489,8 @@ end
 
         # Writing through one component must not touch the other.
         cs[1] .= 1.0
-        @test all(==(1.0), values(u)[1:5])
-        @test all(==(0.0), values(u)[6:14])
+        @test all(==(1.0), parent(u)[1:5])
+        @test all(==(0.0), parent(u)[6:14])
 
         @test_throws BoundsError component_range(V, 3)
     end
@@ -516,32 +513,32 @@ end
         @test_throws BoundsError component_range(Wn, 4)
 
         un = element(Wn, 0.0)
-        values(un) .= 1:23
-        @test values(un(1)) == 1:5
-        @test values(un(2)) == 6:14
-        @test values(un(3)) == 15:23                    # was a BoundsError before the fix
+        parent(un) .= 1:23
+        @test parent(un(1)) == 1:5
+        @test parent(un(2)) == 6:14
+        @test parent(un(3)) == 15:23                    # was a BoundsError before the fix
         @test_throws BoundsError un(4)
 
         comps = components(un)
         @test length(comps) == 3
-        @test all(values(comps[i]) == values(un(i)) for i in 1:3)
+        @test all(parent(comps[i]) == parent(un(i)) for i in 1:3)
 
         # Restriction and cell-averaging, one function per leaf: independent of shared
         # structure, so this exercises the heterogeneous nesting directly.
         r1 = element(Wn)
         Rₕ!(r1, (x -> 1.0, x -> 2.0, x -> 3.0))
-        @test values(r1(1)) == fill(1.0, 5)
-        @test values(r1(3)) == fill(3.0, 9)
+        @test parent(r1(1)) == fill(1.0, 5)
+        @test parent(r1(3)) == fill(3.0, 9)
 
         a1 = element(Wn)
         avgₕ!(a1, (x -> 1.0, x -> 2.0, x -> 3.0))
-        @test all(≈(1.0), values(a1(1)))
-        @test all(≈(3.0), values(a1(3)))
+        @test all(≈(1.0), parent(a1(1)))
+        @test all(≈(3.0), parent(a1(3)))
 
         # Masked, one function per leaf, on the heterogeneous nesting.
         r3 = element(Wn)
         Rₕ!(r3, (x -> 10.0, x -> 20.0, x -> 30.0); markers = (:boundary,))
-        @test values(r3(1)) == [10.0, 0.0, 0.0, 0.0, 10.0]
+        @test parent(r3(1)) == [10.0, 0.0, 0.0, 0.0, 10.0]
         a3 = element(Wn)
         avgₕ!(a3, (x -> 10.0, x -> 20.0, x -> 30.0); markers = (:boundary,))
         @test a3(1).data[1] ≈ 10.0 && a3(1).data[end] ≈ 10.0
@@ -555,13 +552,13 @@ end
         r5 = element(Wn2)
         Rₕ!(r4, (x -> 1.0, x -> 2.0, x -> 3.0))
         Rₕ!(r5, x -> (1.0, 2.0, 3.0))
-        @test values(r4) == values(r5)
+        @test parent(r4) == parent(r5)
 
         a4 = element(Wn2)
         a5 = element(Wn2)
         avgₕ!(a4, (x -> 1.0, x -> 2.0, x -> 3.0))
         avgₕ!(a5, x -> (1.0, 2.0, 3.0))
-        @test values(a4) ≈ values(a5)
+        @test parent(a4) ≈ parent(a5)
 
         # Difference operators, on the homogeneous nesting: `_apply_componentwise!` used to
         # recurse once per *immediate* child, so a nested composite's second child (itself a
@@ -571,9 +568,9 @@ end
         un2 = element(Wn2, 0.0)
         Rₕ!(un2, (x -> sin(x[1]), x -> cos(x[1]), x -> x[1]^2))
         Dn2 = D₋ₓ(un2)
-        @test values(Dn2(1)) == values(D₋ₓ(un2(1)))
-        @test values(Dn2(2)) == values(D₋ₓ(un2(2)))
-        @test values(Dn2(3)) == values(D₋ₓ(un2(3)))
+        @test parent(Dn2(1)) == parent(D₋ₓ(un2(1)))
+        @test parent(Dn2(2)) == parent(D₋ₓ(un2(2)))
+        @test parent(Dn2(3)) == parent(D₋ₓ(un2(3)))
 
         # gpena/Bramble.jl#78/#79: on the *heterogeneous* `Wn` (leaves of size 5, 9, 9), the
         # single vector-valued-function form of Rₕ!/avgₕ! and the whole-composite
@@ -585,23 +582,23 @@ end
         # directly (difference operators), which have always used each leaf's own mesh.
         r6 = element(Wn)
         Rₕ!(r6, x -> (sin(x), cos(x), x^2))
-        @test values(r6(1)) == values(Rₕ(W5, x -> sin(x)))
-        @test values(r6(2)) == values(Rₕ(W9, x -> cos(x)))
-        @test values(r6(3)) == values(Rₕ(W9, x -> x^2))
-        @test all(isfinite, values(r6))
+        @test parent(r6(1)) == parent(Rₕ(W5, x -> sin(x)))
+        @test parent(r6(2)) == parent(Rₕ(W9, x -> cos(x)))
+        @test parent(r6(3)) == parent(Rₕ(W9, x -> x^2))
+        @test all(isfinite, parent(r6))
 
         a6 = element(Wn)
         avgₕ!(a6, x -> (sin(x), cos(x), x^2))
-        @test values(a6(1)) ≈ values(avgₕ(W5, x -> sin(x)))
-        @test values(a6(2)) ≈ values(avgₕ(W9, x -> cos(x)))
-        @test values(a6(3)) ≈ values(avgₕ(W9, x -> x^2))
+        @test parent(a6(1)) ≈ parent(avgₕ(W5, x -> sin(x)))
+        @test parent(a6(2)) ≈ parent(avgₕ(W9, x -> cos(x)))
+        @test parent(a6(3)) ≈ parent(avgₕ(W9, x -> x^2))
 
         # Masked, single vector-valued function, on the heterogeneous nesting.
         r7 = element(Wn)
         Rₕ!(r7, x -> (10.0, 20.0, 30.0); markers = (:boundary,))
-        @test values(r7(1)) == [10.0, 0.0, 0.0, 0.0, 10.0]
-        @test values(r7(2)) == [20.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 20.0]
-        @test values(r7(3)) == [30.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 30.0]
+        @test parent(r7(1)) == [10.0, 0.0, 0.0, 0.0, 10.0]
+        @test parent(r7(2)) == [20.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 20.0]
+        @test parent(r7(3)) == [30.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 30.0]
 
         a7 = element(Wn)
         avgₕ!(a7, x -> (10.0, 20.0, 30.0); markers = (:boundary,))
@@ -611,19 +608,19 @@ end
         un3 = element(Wn, 0.0)
         Rₕ!(un3, x -> (sin(x), cos(x), x^2))
         Dn3 = D₋ₓ(un3)
-        @test values(Dn3(1)) == values(D₋ₓ(un3(1)))
-        @test values(Dn3(2)) == values(D₋ₓ(un3(2)))
-        @test values(Dn3(3)) == values(D₋ₓ(un3(3)))
-        @test all(isfinite, values(Dn3))
+        @test parent(Dn3(1)) == parent(D₋ₓ(un3(1)))
+        @test parent(Dn3(2)) == parent(D₋ₓ(un3(2)))
+        @test parent(Dn3(3)) == parent(D₋ₓ(un3(3)))
+        @test all(isfinite, parent(Dn3))
 
         # `Dcₓ` is a separate composite method from `D₋ₓ`'s (its own denominator and its
         # own `npoints >= 3` check), so it is checked here too rather than assuming one
         # family's fix covers the others.
         Cn3 = Dcₓ(un3)
-        @test values(Cn3(1)) == values(Dcₓ(un3(1)))
-        @test values(Cn3(2)) == values(Dcₓ(un3(2)))
-        @test values(Cn3(3)) == values(Dcₓ(un3(3)))
-        @test all(isfinite, values(Cn3))
+        @test parent(Cn3(1)) == parent(Dcₓ(un3(1)))
+        @test parent(Cn3(2)) == parent(Dcₓ(un3(2)))
+        @test parent(Cn3(3)) == parent(Dcₓ(un3(3)))
+        @test all(isfinite, parent(Cn3))
 
         # innerₕ sums leaf by leaf: 3 leaves of constant 1, 2, 3 against all-ones, over a
         # mesh whose cell measures sum to 1 per leaf, gives 1+2+3 = 6 exactly. Runs on the
@@ -654,13 +651,13 @@ end
             b = element(V)
             Rₕ!(a, fvec)
             Rₕ!(b, ftup)
-            @test values(a) == values(b)
+            @test parent(a) == parent(b)
 
             c = element(V)
             d = element(V)
             avgₕ!(c, fvec)
             avgₕ!(d, ftup)
-            @test values(c) == values(d)
+            @test parent(c) == parent(d)
         end
     end
 
@@ -673,13 +670,13 @@ end
         u2 = element(W)
         Rₕ!(u1, f)
         Rₕ!(u2, (f,))
-        @test values(u1) == values(u2)
+        @test parent(u1) == parent(u2)
 
         v1 = element(W)
         v2 = element(W)
         avgₕ!(v1, f)
         avgₕ!(v2, (f,))
-        @test values(v1) == values(v2)
+        @test parent(v1) == parent(v2)
     end
 
     @testset "In-place return" begin
@@ -706,7 +703,7 @@ end
 end
 
 @testset "Rₕ & avgₕ interface" begin
-    import Bramble: values, index_in_marker
+    import Bramble: index_in_marker
 
     Ω = domain(interval(0.0, 1.0), :left => :left, :right => :right)
     Ωₕ = mesh(Ω, 6, true)
@@ -719,21 +716,21 @@ end
 
         u = element(W)
         Rₕ!(u, x -> 1.0; markers = (:left,))
-        @test values(u) == [1.0, 0, 0, 0, 0, 0]
+        @test parent(u) == [1.0, 0, 0, 0, 0, 0]
 
         # several markers act as a union
         Rₕ!(u, x -> 1.0; markers = (:left, :right))
-        @test values(u) == [1.0, 0, 0, 0, 0, 1.0]
+        @test parent(u) == [1.0, 0, 0, 0, 0, 1.0]
 
         # avgₕ takes the same keyword
         v = element(W)
         avgₕ!(v, x -> 1.0; markers = (:right,))
-        @test values(v)[1:5] == zeros(5)
-        @test values(v)[6] ≈ 1.0
+        @test parent(v)[1:5] == zeros(5)
+        @test parent(v)[6] ≈ 1.0
 
         w = avgₕ(W, x -> 1.0; markers = (:left,))
         @test w[1] ≈ 1.0
-        @test values(w)[2:6] == zeros(5)
+        @test parent(w)[2:6] == zeros(5)
     end
 
     @testset "Argument types" begin
@@ -765,7 +762,7 @@ end
 end
 
 @testset "Threaded scatter" begin
-    import Bramble: values, components
+    import Bramble: components
 
     # Dispatched on the backend's policy now (point 22), not gated by size -- a `Parallel()`
     # backend exercises the threaded scatter path at any grid size, deterministically,
@@ -785,16 +782,16 @@ end
         b = element(V)
         Rₕ!(a, fvec)
         Rₕ!(b, ftup)
-        @test values(a) == values(b)
+        @test parent(a) == parent(b)
 
         c = element(V)
         d = element(V)
         avgₕ!(c, fvec)
         avgₕ!(d, ftup)
-        @test values(c) == values(d)
+        @test parent(c) == parent(d)
 
         # every component was written; nothing left at the uninitialised value
-        @test all(isfinite, values(a))
+        @test all(isfinite, parent(a))
         @test length(components(a)) == NC
     end
 end
@@ -816,7 +813,7 @@ end
 end
 
 @testset "Tuple arithmetic" begin
-    import Bramble: values, space_type, _find_vec_in_broadcast,
+    import Bramble: space_type, _find_vec_in_broadcast,
                     _gauss_rule, VectorElement
 
     Ωₕ = mesh(domain(interval(0.0, 1.0)), 6, true)
@@ -829,19 +826,19 @@ end
         # uₕ * (v₁, v₂) multiplies componentwise
         z = u * v
         @test z isa NTuple{2, VectorElement}
-        @test values(z[1]) == fill(6.0, 6)
-        @test values(z[2]) == fill(15.0, 6)
+        @test parent(z[1]) == fill(6.0, 6)
+        @test parent(z[2]) == fill(15.0, 6)
 
         # a * (v₁, v₂) and the two reversed forms
         z2 = 2.0 * v
-        @test values(z2[1]) == fill(4.0, 6)
-        @test values(z2[2]) == fill(10.0, 6)
-        @test values((v * 2.0)[1]) == values(z2[1])
-        @test values((v * u)[2]) == values(z[2])
+        @test parent(z2[1]) == fill(4.0, 6)
+        @test parent(z2[2]) == fill(10.0, 6)
+        @test parent((v * 2.0)[1]) == parent(z2[1])
+        @test parent((v * u)[2]) == parent(z[2])
 
         # the originals are untouched
-        @test values(v[1]) == fill(2.0, 6)
-        @test values(u) == fill(3.0, 6)
+        @test parent(v[1]) == fill(2.0, 6)
+        @test parent(u) == fill(3.0, 6)
 
         # the result takes the type of the product, not of the tuple. Both of these
         # allocated their output with `similar(vₕ[i])`, which copies the element's type and
@@ -851,10 +848,10 @@ end
         Ω32 = mesh(domain(interval(0.0f0, 1.0f0)), 6, true)
         W32 = gridspace(Ω32)
         v32 = (element(W32, 2.0f0), element(W32, 5.0f0))
-        @test eltype(values(v32[1])) === Float32
-        @test eltype(values((2.0 * v32)[1])) === Float64        # Float64 scalar widens it
-        @test eltype(values((2.0f0 * v32)[1])) === Float32       # Float32 leaves it alone
-        @test values((2.0 * v32)[2]) ≈ fill(10.0, 6)
+        @test eltype(parent(v32[1])) === Float32
+        @test eltype(parent((2.0 * v32)[1])) === Float64        # Float64 scalar widens it
+        @test eltype(parent((2.0f0 * v32)[1])) === Float32       # Float32 leaves it alone
+        @test parent((2.0 * v32)[2]) ≈ fill(10.0, 6)
 
         # and the space comes from the tuple's elements, as it did before
         @test all(space((u * v)[i]) === space(v[i]) for i in 1:2)
@@ -871,10 +868,10 @@ end
         Ω = mesh(domain(interval(0.0, 1.0)), 6, true)
         V = gridspace(Ω)^Val(2)
 
-        @test eltype(values(Rₕ(V, x -> (1.0, 2)))) === Float64
-        @test eltype(values(Rₕ(V, x -> (1.0, 2.0)))) === Float64
-        @test eltype(values(Rₕ(V, x -> (1, 2)))) === Float64      # promoted against the space
-        @test values(Rₕ(V, x -> (1.0, 2))) == values(Rₕ(V, x -> (1.0, 2.0)))
+        @test eltype(parent(Rₕ(V, x -> (1.0, 2)))) === Float64
+        @test eltype(parent(Rₕ(V, x -> (1.0, 2.0)))) === Float64
+        @test eltype(parent(Rₕ(V, x -> (1, 2)))) === Float64      # promoted against the space
+        @test parent(Rₕ(V, x -> (1.0, 2))) == parent(Rₕ(V, x -> (1.0, 2.0)))
     end
 
     @testset "space_type" begin
@@ -898,13 +895,13 @@ end
         uv = element(V)
         Rₕ!(uv, x -> (1.0, 2.0); markers = (:left,))
         c = components(uv)
-        @test values(c[1]) == [1.0, 0, 0, 0, 0, 0]
-        @test values(c[2]) == [2.0, 0, 0, 0, 0, 0]
+        @test parent(c[1]) == [1.0, 0, 0, 0, 0, 0]
+        @test parent(c[2]) == [2.0, 0, 0, 0, 0, 0]
 
         # a tuple of functions takes the per-component route with the same result
         wv = element(V)
         Rₕ!(wv, (x -> 1.0, x -> 2.0); markers = (:left,))
-        @test values(wv) == values(uv)
+        @test parent(wv) == parent(uv)
     end
 
     @testset "nD marker averaging" begin
@@ -915,8 +912,8 @@ end
         u = element(Wh)
         avgₕ!(u, x -> 1.0; markers = (:bottom,))
         marked = index_in_marker(Ωh, :bottom)
-        @test all(values(u)[i] ≈ 1.0 for i in eachindex(values(u)) if marked[i])
-        @test all(values(u)[i] == 0.0 for i in eachindex(values(u)) if !marked[i])
+        @test all(parent(u)[i] ≈ 1.0 for i in eachindex(parent(u)) if marked[i])
+        @test all(parent(u)[i] == 0.0 for i in eachindex(parent(u)) if !marked[i])
         @test any(marked)
     end
 end
@@ -947,14 +944,14 @@ end
             avgₕ!(from_tuple, fs)
             from_single = element(Vₕ)
             avgₕ!(from_single, f_all)
-            @test values(from_single) ≈ values(from_tuple)
+            @test parent(from_single) ≈ parent(from_tuple)
 
             # and the out-of-place form agrees with both
-            @test values(avgₕ(Vₕ, f_all)) ≈ values(from_tuple)
-            @test values(avgₕ(Vₕ, fs)) ≈ values(from_tuple)
+            @test parent(avgₕ(Vₕ, f_all)) ≈ parent(from_tuple)
+            @test parent(avgₕ(Vₕ, fs)) ≈ parent(from_tuple)
 
             # the quadrature order still reaches the composite path
-            @test values(avgₕ(Vₕ, f_all; quad_points = 3)) ≈ values(from_tuple) rtol=1e-8
+            @test parent(avgₕ(Vₕ, f_all; quad_points = 3)) ≈ parent(from_tuple) rtol=1e-8
         end
     end
 end
@@ -972,16 +969,16 @@ end
 
     u_tuple = element(Vₕ)
     avgₕ!(u_tuple, fs, Val(3))
-    @test values(u_tuple) ≈ values(avgₕ(Vₕ, fs; quad_points = 3))
+    @test parent(u_tuple) ≈ parent(avgₕ(Vₕ, fs; quad_points = 3))
 
     u_single = element(Vₕ)
     avgₕ!(u_single, f_all, Val(3))
-    @test values(u_single) ≈ values(avgₕ(Vₕ, f_all; quad_points = 3))
+    @test parent(u_single) ≈ parent(avgₕ(Vₕ, f_all; quad_points = 3))
 
     Wₕ = gridspace(mesh(domain(interval(0.0, 1.0)), 21, true))
     v_tuple = element(Wₕ)
     avgₕ!(v_tuple, (sin,); quad_points = 3)
-    @test values(v_tuple) ≈ values(avgₕ(Wₕ, sin; quad_points = 3))
+    @test parent(v_tuple) ≈ parent(avgₕ(Wₕ, sin; quad_points = 3))
 end
 
 @testset "_cell_average, generic-dimension dispatch" begin
@@ -1057,19 +1054,19 @@ end
     uₕ = Rₕ(Wₕ, right_half; markers = (:right,))
     ref = element(Wₕ)
     Rₕ!(ref, right_half; markers = (:right,))
-    @test values(uₕ) == values(ref)
+    @test parent(uₕ) == parent(ref)
 
-    @test values(avgₕ(Wₕ, right_half; markers = (:right,))) isa AbstractVector
+    @test parent(avgₕ(Wₕ, right_half; markers = (:right,))) isa AbstractVector
 
     # composite, both shapes of f
-    @test values(Rₕ(Vₕ, (right_half, right_half); markers = (:right,))) isa AbstractVector
+    @test parent(Rₕ(Vₕ, (right_half, right_half); markers = (:right,))) isa AbstractVector
 
     # and the unmarked path is unchanged
-    @test values(Rₕ(Wₕ, sin)) ≈ [sin(x) for x in points(Ωₕ)]
+    @test parent(Rₕ(Wₕ, sin)) ≈ [sin(x) for x in points(Ωₕ)]
 end
 
 @testset "Composite avgₕ! restriction" begin
-    # The marked branch used to hand `to_matrix(uₕ)` to `_masked_for!` unconditionally.
+    # The marked branch used to hand `reshape(uₕ)` to `_masked_for!` unconditionally.
     # For a composite grid function that is an NTuple of matrices rather than one array,
     # and the scalar kernel was built where the composite one is needed, so the call
     # raised a MethodError. Both shapes of `f` are covered, and they must agree.
@@ -1080,18 +1077,18 @@ end
     avgₕ!(from_tuple, (sin, cos); markers = (:right,))
     from_single = element(Vₕ)
     avgₕ!(from_single, x -> (sin(x), cos(x)); markers = (:right,))
-    @test values(from_single) ≈ values(from_tuple)
-    @test values(avgₕ(Vₕ, x -> (sin(x), cos(x)); markers = (:right,))) ≈ values(from_tuple)
+    @test parent(from_single) ≈ parent(from_tuple)
+    @test parent(avgₕ(Vₕ, x -> (sin(x), cos(x)); markers = (:right,))) ≈ parent(from_tuple)
 
     # the mask is respected: marked entries written, the rest left at zero
     mask = index_in_marker(Ωₕ, :right)
     for k in 1:2
-        vals = values(components(from_tuple)[k])
+        vals = parent(components(from_tuple)[k])
         @test any(vals[i] != 0 for i in eachindex(vals) if mask[i])
         @test all(vals[i] == 0 for i in eachindex(vals) if !mask[i])
     end
 
-    # 2D as well, where to_matrix really is multidimensional
+    # 2D as well, where reshape really is multidimensional
     Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
         (5, 5), (true, true))
     V2 = gridspace(Ω2, Val(2))
@@ -1099,5 +1096,5 @@ end
     avgₕ!(c2, x -> (sin(x[1]), cos(x[2])); markers = (:bottom,))
     t2 = element(V2)
     avgₕ!(t2, (x -> sin(x[1]), x -> cos(x[2])); markers = (:bottom,))
-    @test values(c2) ≈ values(t2)
+    @test parent(c2) ≈ parent(t2)
 end

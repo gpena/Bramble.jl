@@ -243,7 +243,7 @@ end
 
     routed = w -> begin
         c = element(Vₕ, eltype(w))
-        values(c) .= w
+        parent(c) .= w
         return assemble(form(Vₕ, v -> innerₕ(c(1), v(1)) + inner₊ₓ(D₋ₓ(c(2)), D₋ₓ(v(2)))))
     end
 
@@ -264,7 +264,7 @@ end
     # a Jacobian that was empty for some other reason.
     crossed = w -> begin
         c = element(Vₕ, eltype(w))
-        values(c) .= w
+        parent(c) .= w
         return assemble(form(Vₕ, v -> innerₕ(c(2), v(1))))
     end
     Jx = DifferentiationInterface.jacobian(crossed, AutoForwardDiff(), w0)

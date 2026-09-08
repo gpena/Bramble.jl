@@ -10,9 +10,9 @@ end
 # one per component (named `name_1`, `name_2`, ...) for a composite one, since a table's
 # columns have no way to group themselves the way a VTK field's `NumberOfComponents` does.
 function _pgf_columns(name, uₕ::VectorElement{<:CompositeGridSpace})
-    [(string(name, "_", i), to_matrix(c)) for (i, c) in enumerate(components(uₕ))]
+    [(string(name, "_", i), reshape(c)) for (i, c) in enumerate(components(uₕ))]
 end
-_pgf_columns(name, uₕ::VectorElement) = [(string(name), to_matrix(uₕ))]
+_pgf_columns(name, uₕ::VectorElement) = [(string(name), reshape(uₕ))]
 _pgf_columns(name, a::AbstractVector) = [(string(name), a)]
 
 # The single scalar field a 2D `surf`/`mesh` table can carry, reshaped to the grid if it is
@@ -25,7 +25,7 @@ function _pgf_error_composite(name)
         "composite element; export each of its components(...) separately."))
 end
 _pgf_grid(name, uₕ::VectorElement{<:CompositeGridSpace}, dims) = _pgf_error_composite(name)
-_pgf_grid(name, uₕ::VectorElement, dims) = to_matrix(uₕ)
+_pgf_grid(name, uₕ::VectorElement, dims) = reshape(uₕ)
 function _pgf_grid(name, a::AbstractMatrix, dims)
     size(a) == dims || throw(ArgumentError(
         "\"$name\" has size $(size(a)), but the mesh has $dims points"))

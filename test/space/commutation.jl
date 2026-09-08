@@ -2,7 +2,6 @@ using Test
 using Bramble
 using Random
 using Supposition
-using Bramble: values
 
 # Mixed differences commute.
 #
@@ -47,7 +46,7 @@ using Bramble: values
 
                 for (n1, op1, n2, op2) in PAIRS_2D
                     @testset "$n1 ∘ $n2" begin
-                        @test values(op1(op2(uₕ))) ≈ values(op2(op1(uₕ)))
+                        @test parent(op1(op2(uₕ))) ≈ parent(op2(op1(uₕ)))
                     end
                 end
             end
@@ -70,7 +69,7 @@ using Bramble: values
                     ("Dₕᵧ", Dₕᵧ, "Dₕ₂", Dₕ₂),
                     ("M₊ₓ", M₊ₓ, "D₋₂", D₋₂))
                     @testset "$n1 ∘ $n2" begin
-                        @test values(op1(op2(uₕ))) ≈ values(op2(op1(uₕ)))
+                        @test parent(op1(op2(uₕ))) ≈ parent(op2(op1(uₕ)))
                     end
                 end
             end
@@ -87,7 +86,7 @@ using Bramble: values
         cₕ = Rₕ(Vₕ, (x -> x[1] * x[2], x -> sin(x[1]), x -> exp(x[2])))
 
         for (op1, op2) in ((D₋ₓ, D₋ᵧ), (Dcₓ, Dcᵧ), (Dₕₓ, Dₕᵧ), (M₋ₓ, D₊ᵧ))
-            @test values(op1(op2(cₕ))) ≈ values(op2(op1(cₕ)))
+            @test parent(op1(op2(cₕ))) ≈ parent(op2(op1(cₕ)))
         end
     end
 
@@ -128,8 +127,8 @@ using Bramble: values
 
             all_commute = true
             for (_, op1, _, op2) in PAIRS_2D
-                res1 = values(op1(op2(uₕ)))
-                res2 = values(op2(op1(uₕ)))
+                res1 = parent(op1(op2(uₕ)))
+                res2 = parent(op2(op1(uₕ)))
                 scale = max(maximum(abs, res1), maximum(abs, res2), 1.0)
                 if !isapprox(res1, res2; atol = 1e-10 * scale, rtol = 1e-10)
                     all_commute = false
@@ -147,7 +146,7 @@ using Bramble: values
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 17, false)
         uₕ = Rₕ(gridspace(Ωₕ), x -> exp(x) + x^3)
 
-        @test !isapprox(values(D₋ₓ(M₋ₓ(uₕ))), values(M₋ₓ(D₊ₓ(uₕ))))
-        @test !isapprox(values(Dcₓ(D₋ₓ(uₕ))), values(Dₕₓ(D₋ₓ(uₕ))))
+        @test !isapprox(parent(D₋ₓ(M₋ₓ(uₕ))), parent(M₋ₓ(D₊ₓ(uₕ))))
+        @test !isapprox(parent(Dcₓ(D₋ₓ(uₕ))), parent(Dₕₓ(D₋ₓ(uₕ))))
     end
 end

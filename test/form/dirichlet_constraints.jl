@@ -272,7 +272,7 @@ using LinearAlgebra: I as LinearAlgebraI
             @test A[1:(2nW), :] == _eye(nVn)[1:(2nW), :]   # leaves 1, 2 untouched
 
             un = element(Vn, 0.0)
-            @test length(values(un(3))) == nW    # was a BoundsError before the fix
+            @test length(parent(un(3))) == nW    # was a BoundsError before the fix
             @test_throws BoundsError un(4)
         end
     end

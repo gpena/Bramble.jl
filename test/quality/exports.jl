@@ -54,9 +54,9 @@ end
     # name ambiguous for the whole session: after `using Bramble` a call to it raises an
     # UndefVarError naming two modules, and the user loses the Base one everywhere.
     #
-    # `values` was in exactly that position. It is defined as a method on `Base.values`
-    # now, which is an extension rather than a new function, and not piracy because
-    # `VectorElement` belongs to this package.
+    # `parent`/`reshape` are in exactly that position, on `VectorElement`. Both are defined
+    # as methods on `Base.parent`/`Base.reshape`, extensions rather than new functions, and
+    # not piracy because `VectorElement` belongs to this package.
     #
     # A name Base defines but does not export (`tails`) is fine: `using Bramble` resolves
     # it to this package's without ambiguity.
@@ -73,8 +73,12 @@ end
     @test isempty(clashes)
 
     # the case that motivated this: both meanings reachable after `using Bramble`
-    @test Bramble.values === Base.values
-    @test collect(values(Dict(1 => 2))) == [2]
+    @test Bramble.parent === Base.parent
+    @test Bramble.reshape === Base.reshape
+    v = [1, 2, 3]
+    @test parent(v) === v  # generic AbstractArray fallback, untouched
     Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
-    @test values(Rₕ(gridspace(Ωₕ), x -> x^2)) ≈ [0.0, 0.0625, 0.25, 0.5625, 1.0]
+    uₕ = Rₕ(gridspace(Ωₕ), x -> x^2)
+    @test parent(uₕ) ≈ [0.0, 0.0625, 0.25, 0.5625, 1.0]
+    @test reshape(uₕ) == parent(uₕ)
 end

@@ -1,7 +1,7 @@
 module BrambleVTKExt
 
 using Bramble: Bramble, AbstractMeshType, VectorElement, CompositeGridSpace,
-               points, to_matrix, components
+               points, components
 
 using WriteVTK: WriteVTK, vtk_grid, vtk_save
 
@@ -12,12 +12,12 @@ _vtk_axes(Ωₕ::AbstractMeshType{1}) = (points(Ωₕ), [zero(eltype(Ωₕ))])
 _vtk_axes(Ωₕ::AbstractMeshType) = points(Ωₕ)
 
 # What `vtk[name] = ...` wants for one field. A scalar space gives an array shaped like the
-# grid: `to_matrix` already reshapes a `VectorElement`'s flat storage that way, in the same
+# grid: `reshape(uₕ)` already reshapes a `VectorElement`'s flat storage that way, in the same
 # column-major order `points(Ωₕ)`'s axes imply, so no permutation is needed. A composite
 # space gives a `Tuple` of them: WriteVTK reads `length(data)` off a `Tuple` as the number of
 # vector components, one array per component.
-_vtk_data(uₕ::VectorElement{<:CompositeGridSpace}) = Tuple(to_matrix.(components(uₕ)))
-_vtk_data(uₕ::VectorElement) = to_matrix(uₕ)
+_vtk_data(uₕ::VectorElement{<:CompositeGridSpace}) = Tuple(reshape.(components(uₕ)))
+_vtk_data(uₕ::VectorElement) = reshape(uₕ)
 _vtk_data(a::AbstractArray) = a
 
 function Bramble._export_vtk(

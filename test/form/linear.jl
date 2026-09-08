@@ -147,13 +147,13 @@ end
 
         # leaf 1 alone: already worked before this fix, kept as the reference case
         b1 = assemble(form(Vh, v -> innerₕ(uv(1), v(1))))
-        expected1 = sum(values(Rₕ(Wbig, x -> x[1] + x[2])) .* weights(Wbig, Innerh()))
+        expected1 = sum(parent(Rₕ(Wbig, x -> x[1] + x[2])) .* weights(Wbig, Innerh()))
         @test sum(b1) ≈ expected1
         @test all(iszero, b1[(ndofs(Wbig) + 1):end])   # leaf 2's block untouched
 
         # leaf 2 alone: this is exactly what used to throw BoundsError
         b2 = assemble(form(Vh, v -> innerₕ(uv(2), v(2))))
-        expected2 = sum(values(Rₕ(Wsmall, x -> 2x[1] - x[2])) .* weights(Wsmall, Innerh()))
+        expected2 = sum(parent(Rₕ(Wsmall, x -> 2x[1] - x[2])) .* weights(Wsmall, Innerh()))
         @test sum(b2[(ndofs(Wbig) + 1):end]) ≈ expected2
         @test all(iszero, b2[1:ndofs(Wbig)])            # leaf 1's block untouched
 
@@ -165,7 +165,7 @@ end
 
         # contraction takes the same walk, so it needs the same fix independently:
         # l(uv) = Σᵢ bᵢ uvᵢ, not Σᵢ bᵢ (uv is not constant here on purpose)
-        @test lboth(uv) ≈ dot(bboth, values(uv))
+        @test lboth(uv) ≈ dot(bboth, parent(uv))
 
         # assemble! into a pre-allocated vector: the everyday, allocation-free call
         b3 = similar(bboth)
@@ -284,7 +284,7 @@ end
                         inner₊ₓ(g2, D₋ᵧ(w) + jumpₓ(w)) +
                         innerₕ(g3, 3 * M₊ᵧ(w) - Dₕₓ(w))
 
-            @test dot(b, values(w)) ≈ reference
+            @test dot(b, parent(w)) ≈ reference
             @test !iszero(reference)          # the identity is not being met by both sides
         end                                   # being zero
 
@@ -297,7 +297,7 @@ end
                                 (w = components(wv)[c]; w + 2 * D₋ₓ(w) - M₋ₓ(w)))
             for c in 1:3)
 
-            @test dot(b, values(wv)) ≈ reference
+            @test dot(b, parent(wv)) ≈ reference
             @test !iszero(reference)
         end
 
@@ -555,13 +555,13 @@ end
 
     @testset "Reassembly" begin
         # The AST is stored on the form and references the underlying VectorElement arrays,
-        # so updating an element in-place via `values(us) .= ...` or `Rₕ!(us, ...)` is
+        # so updating an element in-place via `parent(us) .= ...` or `Rₕ!(us, ...)` is
         # automatically seen without allocating a new AST.
         us = Rₕ(Wₕ, x -> 1.0)
         lfs = form(Wₕ, v -> innerₕ(us, v))
 
         first_sum = sum(assemble(lfs))
-        values(us) .= 5.0
+        parent(us) .= 5.0
         @test sum(assemble(lfs)) ≈ 5 * first_sum
 
         # Dynamic scalar coefficients use Julia-native RefValue:
@@ -576,7 +576,7 @@ end
 
         # both at once: a dynamic Ref scalar and in-place element update
         α_ref[] = 3.0
-        values(ua_scalar) .= 2.0
+        parent(ua_scalar) .= 2.0
         @test sum(assemble(lfa_scalar)) ≈ 3 * at_two   # 3 x 2 against 2 x 1
 
         # `assemble!` overwrites its destination rather than accumulating into it
@@ -593,7 +593,7 @@ end
 
     @testset "Direct contraction" begin
         # `l(vₕ)` answers with a number, and used to allocate a whole right-hand side to
-        # get it: `dot(assemble(form), values(vₕ))`. The walk now multiplies each stencil
+        # get it: `dot(assemble(form), parent(vₕ))`. The walk now multiplies each stencil
         # weight by `v` at the row it would have written to, so the same sum is taken as it
         # goes and no vector is built.
         n = ndofs(Wₕ)
@@ -601,7 +601,7 @@ end
         astc = resolve_form_ast(lfc)
         b = assemble(lfc)
 
-        @test lfc(uₕ) ≈ sum(b .* values(uₕ))
+        @test lfc(uₕ) ≈ sum(b .* parent(uₕ))
 
         # The functor takes no `ast` on purpose, so it resolves every call and cannot be
         # allocation free. What it must not do is build a full-length vector, which is what
@@ -625,7 +625,7 @@ end
             ("scalar, a linear combination", v -> innerₕ(uₕ, v + 2 * D₋ₓ(v) - M₋ₓ(v))),
             ("scalar, two kinds summed", v -> innerₕ(uₕ, v) + inner₊ₓ(uₕ, D₋ₓ(v))))
             lfx = form(Wₕ, g)
-            @test lfx(uₕ) ≈ sum(assemble(lfx) .* values(uₕ))
+            @test lfx(uₕ) ≈ sum(assemble(lfx) .* parent(uₕ))
         end
         for (nm, g) in (
             ("composite shorthand", v -> innerₕ(uc, v)),
@@ -634,12 +634,12 @@ end
             v -> innerₕ(cc[1], v(1) + D₋ₓ(v(1))) + innerₕ(cc[3], v(3))),
             ("composite crossed", v -> innerₕ(cc[1], v(2))))
             lfx = form(Vc, g)
-            @test lfx(wc) ≈ sum(assemble(lfx) .* values(wc))
+            @test lfx(wc) ≈ sum(assemble(lfx) .* parent(wc))
         end
 
         # A source carrying an operator is evaluated into an element during form construction
         lfd = form(Wₕ, v -> innerₕ(D₋ₓ(uₕ), v))
-        @test lfd(uₕ) ≈ sum(assemble(lfd) .* values(uₕ))
+        @test lfd(uₕ) ≈ sum(assemble(lfd) .* parent(uₕ))
         @test _contract_allocs(lfd, uₕ) < 8 * n ÷ 100
 
         # and hoisting the operator out of the form agrees
@@ -658,7 +658,7 @@ end
         lfe = form(Wₕ, v -> innerₕ(uev, v))
 
         first_value = lfe(wₕ)
-        values(uev) .= 5.0
+        parent(uev) .= 5.0
         @test lfe(wₕ) ≈ 5 * first_value
 
         # a live scalar via RefValue, through evaluation rather than assembly
@@ -768,7 +768,7 @@ end
         # shares nothing with `local_stencil`, which is what makes this an independent check
         # rather than a restatement: the two agree or one of them is wrong.
         n = ndofs(Wₕ)
-        uu = values(uₕ)
+        uu = parent(uₕ)
         Hh = Diagonal(collect(weights(Wₕ, Innerh())))
         Hpx = Diagonal(collect(weights(Wₕ, Innerplus(), 1)))
         Dx = Matrix(D₋ₓ(Wₕ))
@@ -990,7 +990,7 @@ end
         # `MethodError: no method matching Float64(::Dual)`. The type now comes from the
         # form's own weights, promoted against the space's, which is the rule `Rₕ` already
         # used and the same defect `dirichlet_constraints` had.
-        u0 = values(uₕ)
+        u0 = parent(uₕ)
 
         @testset "Source parameter differentiation" begin
             J(a) = sum(assemble(form(Wₕ, v -> innerₕ(Rₕ(Wₕ, x -> a * (x[1] + x[2])), v))))
@@ -1036,12 +1036,12 @@ end
         b = assemble(lf)
         ones_el = Rₕ(Wₕ, x -> 1.0)
         @test lf(ones_el) ≈ sum(b)        # against the all-ones element, the sum
-        @test lf(uₕ) ≈ sum(b .* values(uₕ))
+        @test lf(uₕ) ≈ sum(b .* parent(uₕ))
 
         # A bare vector is refused rather than contracted. Its length carries no claim about
         # whether its blocks match the components a form routes to, so accepting one would
         # make a composite mismatch silent.
-        @test_throws ArgumentError lf(values(uₕ))
+        @test_throws ArgumentError lf(parent(uₕ))
         @test_throws ArgumentError lf(fill(1.0, ndofs(Wₕ)))
 
         # on a composite space, where the components have to line up with the blocks rather
@@ -1050,8 +1050,8 @@ end
         uc = Rₕ(Vc, (x -> 1.0, x -> 3.0))
         wc = Rₕ(Vc, (x -> 2.0, x -> 5.0))
         lfv = form(Vc, v -> innerₕ(uc, v))
-        @test lfv(wc) ≈ sum(assemble(lfv) .* values(wc))
-        @test_throws ArgumentError lfv(values(wc))
+        @test lfv(wc) ≈ sum(assemble(lfv) .* parent(wc))
+        @test_throws ArgumentError lfv(parent(wc))
 
         # `evaluate!` agrees, and reuses its scratch rather than assembling afresh
         scratch = zeros(ndofs(Wₕ))
@@ -1067,7 +1067,7 @@ end
 
         scratchv = zeros(ndofs(Vc))
         @test evaluate!(scratchv, lfv, wc) ≈ lfv(wc)
-        @test_throws ArgumentError evaluate!(scratchv, lfv, values(wc))
+        @test_throws ArgumentError evaluate!(scratchv, lfv, parent(wc))
 
         # and it allocates nothing per call, once the AST is resolved outside the loop.
         #

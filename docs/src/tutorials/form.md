@@ -67,7 +67,7 @@ Forms store their resolved abstract syntax tree (`ast`) directly upon creation, 
 
 ### Live grid coefficients and dynamic scalars
 
-- **Grid functions**: Overwrite a coefficient element in-place with `Rₕ!(fₕ, ...)` or `values(fₕ) .= ...` between steps, and the next `assemble!(b, l)` evaluates the new values live with **0 bytes allocated**, without needing to reconstruct the form.
+- **Grid functions**: Overwrite a coefficient element in-place with `Rₕ!(fₕ, ...)` or `parent(fₕ) .= ...` between steps, and the next `assemble!(b, l)` evaluates the new values live with **0 bytes allocated**, without needing to reconstruct the form.
 - **Scalar coefficients**: Constant scalar factors can be written directly as plain numbers (e.g. `2.5 * innerₕ(fₕ, v)`). A `Ref(val)` is only needed when you want a **dynamic scalar coefficient** that changes across loop iterations:
 
 ```@example forms
@@ -196,7 +196,7 @@ Solving ``-u'' = \pi^2 \sin(\pi x)`` with ``u(0) = u(1) = 0`` gives ``u = \sin(\
 ```@example forms
 uh = Ad \ bd
 exact = Rₕ(Wd, x -> sin(π * x))
-maximum(abs, uh .- values(exact))
+maximum(abs, uh .- parent(exact))
 ```
 
 Eight parts in ten thousand on 33 points, which is second order behaving itself.
@@ -367,7 +367,7 @@ An operated source is worth a word on what it means. `innerₕ(D₋ₓ(f), v)` i
 another grid function, which is then integrated against the test function. It agrees entry
 for entry with applying the numeric operator first:
 `assemble(form(Wₕ, v -> innerₕ(D₋ₓ(fₕ), v)))` equals
-`values(D₋ₓ(fₕ)) .* weights(Wₕ, Innerh())`. That equivalence is what
+`parent(D₋ₓ(fₕ)) .* weights(Wₕ, Innerh())`. That equivalence is what
 `test/form/source_operators.jl` pins, for every operator, against the numeric layer.
 
 A *bilinear* term coupling two leaves over different meshes is a different matter, and it is

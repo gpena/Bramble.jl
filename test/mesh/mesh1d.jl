@@ -8,10 +8,9 @@ import Bramble: indices, change_points!, npoints, dim, spacing, half_spacings,
                 generate_indices, boundary_symbol_to_dict, markers, backend, set_indices!,
                 points, set_points!, set_markers!, point, half_point,
                 half_spacing, iterative_refinement!, set, is_collapsed, is_uniform
-import Bramble: cell_measure, hₘₐₓ, half_points, boundary_indices, interior_indices
-import Bramble: DomainMarkers, Mesh1D, Backend, points_iterator, half_points_iterator,
-                spacings_iterator, cell_measures_iterator, half_spacings_iterator,
-                forward_spacing, forward_spacings_iterator, MeshMarkers
+import Bramble: cell_measure, cell_measures, hₘₐₓ, half_points, boundary_indices,
+                interior_indices
+import Bramble: DomainMarkers, Mesh1D, Backend, forward_spacing, MeshMarkers
 import Base: diff
 
 @testset "One-dimensional meshes" begin
@@ -63,7 +62,7 @@ import Base: diff
             @test points(Ωₕ_unif) ≈ [0.0, 0.5, 1.0, 1.5, 2.0]
             @test point(Ωₕ_unif, 3) ≈ 1.0
             @test point(Ωₕ_unif, CartesianIndex(3)) ≈ 1.0
-            @test collect(points_iterator(Ωₕ_unif)) ≈ [0.0, 0.5, 1.0, 1.5, 2.0]
+            @test collect(points(Ωₕ_unif)) ≈ [0.0, 0.5, 1.0, 1.5, 2.0]
         end
 
         @testset "Non-uniform mesh" begin
@@ -83,7 +82,7 @@ import Base: diff
             @test all(pts_nonunif .>= 0.0) && all(pts_nonunif .<= 2.0)
             @test point(Ωₕ_nonunif, 1) ≈ 0.0
             @test point(Ωₕ_nonunif, npts) ≈ 2.0
-            @test collect(points_iterator(Ωₕ_nonunif)) ≈ pts_nonunif
+            @test collect(points(Ωₕ_nonunif)) ≈ pts_nonunif
         end
 
         @testset "set_points! & set_indices!" begin
@@ -119,15 +118,15 @@ import Base: diff
             @test spacing(Ωₕ_unif, 1) ≈ 1.0 # Defined as pts[2]-pts[1]
             @test spacing(Ωₕ_unif, 2) ≈ 1.0
             @test spacing(Ωₕ_unif, 5) ≈ 1.0
-            @test collect(spacings_iterator(Ωₕ_unif)) ≈ [1.0, 1.0, 1.0, 1.0, 1.0]
+            @test collect(spacings(Ωₕ_unif)) ≈ [1.0, 1.0, 1.0, 1.0, 1.0]
 
             # Non-uniform
             @test spacing(Ωₕ_nonunif, 1) ≈ 1.0 # pts[2]-pts[1]
             @test spacing(Ωₕ_nonunif, 2) ≈ 1.0 # pts[2]-pts[1]
             @test spacing(Ωₕ_nonunif, 3) ≈ 2.0 # pts[3]-pts[2]
             @test spacing(Ωₕ_nonunif, 4) ≈ 2.0 # pts[4]-pts[3]
-            # Iterator starts from index 1, using the definition for spacing(mesh, i)
-            @test collect(spacings_iterator(Ωₕ_nonunif)) ≈ [1.0, 1.0, 2.0, 2.0]
+            # spacings starts from index 1, using the definition for spacing(mesh, i)
+            @test collect(spacings(Ωₕ_nonunif)) ≈ [1.0, 1.0, 2.0, 2.0]
         end
 
         @testset "hₘₐₓ" begin
@@ -143,7 +142,7 @@ import Base: diff
             @test half_spacing(Ωₕ_unif, 4) ≈
                   0.5 * (spacing(Ωₕ_unif, 4) + spacing(Ωₕ_unif, 5)) ≈ 1.0
             @test half_spacing(Ωₕ_unif, 5) ≈ 0.5 * spacing(Ωₕ_unif, 5) ≈ 0.5
-            @test collect(half_spacings_iterator(Ωₕ_unif)) ≈ [0.5, 1.0, 1.0, 1.0, 0.5]
+            @test collect(half_spacings(Ωₕ_unif)) ≈ [0.5, 1.0, 1.0, 1.0, 0.5]
 
             # Non-uniform: h = [1.0, 1.0, 2.0, 2.0] (spacings at indices 1, 2, 3, 4)
             # h_half should be: h1/2, (h1+h2)/2, (h2+h3)/2, h3/2  <- NO! Definition uses i and i+1
@@ -157,7 +156,7 @@ import Base: diff
             @test half_spacing(Ωₕ_nonunif, 3) ≈
                   0.5 * (spacing(Ωₕ_nonunif, 3) + spacing(Ωₕ_nonunif, 4)) ≈ 2.0
             @test half_spacing(Ωₕ_nonunif, 4) ≈ 0.5 * spacing(Ωₕ_nonunif, 4) ≈ 1.0
-            @test collect(half_spacings_iterator(Ωₕ_nonunif)) ≈ [0.5, 1.5, 2.0, 1.0]
+            @test collect(half_spacings(Ωₕ_nonunif)) ≈ [0.5, 1.5, 2.0, 1.0]
         end
 
         @testset "cell_measure" begin
@@ -165,14 +164,14 @@ import Base: diff
             @test cell_measure(Ωₕ_unif, 1) ≈ half_spacing(Ωₕ_unif, 1)
             @test cell_measure(Ωₕ_unif, 3) ≈ half_spacing(Ωₕ_unif, 3)
             @test cell_measure(Ωₕ_unif, 5) ≈ half_spacing(Ωₕ_unif, 5)
-            @test collect(cell_measures_iterator(Ωₕ_unif)) ≈
-                  collect(half_spacings_iterator(Ωₕ_unif))
+            @test collect(cell_measures(Ωₕ_unif)) ≈
+                  collect(half_spacings(Ωₕ_unif))
 
             @test cell_measure(Ωₕ_nonunif, 1) ≈ half_spacing(Ωₕ_nonunif, 1)
             @test cell_measure(Ωₕ_nonunif, 2) ≈ half_spacing(Ωₕ_nonunif, 2)
             @test cell_measure(Ωₕ_nonunif, 4) ≈ half_spacing(Ωₕ_nonunif, 4)
-            @test collect(cell_measures_iterator(Ωₕ_nonunif)) ≈
-                  collect(half_spacings_iterator(Ωₕ_nonunif))
+            @test collect(cell_measures(Ωₕ_nonunif)) ≈
+                  collect(half_spacings(Ωₕ_nonunif))
         end
 
         @testset "half_points" begin
@@ -189,7 +188,7 @@ import Base: diff
             @test half_point(Ωₕ_unif, 3) ≈ 1.5
             @test half_point(Ωₕ_unif, 5) ≈ 3.5
             @test half_point(Ωₕ_unif, 6) ≈ 4.0
-            @test collect(half_points_iterator(Ωₕ_unif)) ≈ [0.0, 0.5, 1.5, 2.5, 3.5, 4.0]
+            @test collect(half_points(Ωₕ_unif)) ≈ [0.0, 0.5, 1.5, 2.5, 3.5, 4.0]
 
             # Non-uniform: pts = 0, 1, 3, 5; npts=4
             # Indices for half_points go from 1 to npts+1 = 5
@@ -203,7 +202,7 @@ import Base: diff
             @test half_point(Ωₕ_nonunif, 3) ≈ 2.0
             @test half_point(Ωₕ_nonunif, 4) ≈ 4.0
             @test half_point(Ωₕ_nonunif, 5) ≈ 5.0
-            @test collect(half_points_iterator(Ωₕ_nonunif)) ≈ [0.0, 0.5, 2.0, 4.0, 5.0]
+            @test collect(half_points(Ωₕ_nonunif)) ≈ [0.0, 0.5, 2.0, 4.0, 5.0]
         end
     end
 

@@ -76,15 +76,15 @@ Wₕ = gridspace(Ωₕ);
 points(Ωₕ)
 spacings(Ωₕ)
 uₕ = Rₕ(Wₕ, x -> x^2);
-values(uₕ)
+parent(uₕ)
 ```
 
 The four backward operators on that grid function:
 
 ```@repl operators
-values(diff₋ₓ(uₕ))
-values(D₋ₓ(uₕ))
-values(M₋ₓ(uₕ))
+parent(diff₋ₓ(uₕ))
+parent(D₋ₓ(uₕ))
+parent(M₋ₓ(uₕ))
 ```
 
 Reading the second entry of each: `diff₋ₓ` gives ``u_2 - u_1 = 0.0625``, `D₋ₓ` divides
@@ -93,8 +93,8 @@ that by ``h_2 = 0.25`` to get ``0.25``, and `M₋ₓ` averages ``(u_1 + u_2)/2 =
 The jump has no backward form, so it matches the *forward* unscaled difference instead:
 
 ```@repl operators
-values(diff₊ₓ(uₕ))
-values(jumpₓ(uₕ))
+parent(diff₊ₓ(uₕ))
+parent(jumpₓ(uₕ))
 ```
 
 entry for entry, as section 1 said it would.
@@ -164,10 +164,10 @@ The backward finite difference is truncated at ``x_1`` and the forward one at ``
 while the unscaled differences act as though the missing neighbour were zero:
 
 ```@repl operators
-values(D₋ₓ(uₕ))[1]
-values(D₊ₓ(uₕ))[end]
-values(diff₊ₓ(uₕ))[end]   # -u₅, not 0
-values(diff₋ₓ(uₕ))[1]     # u₁, and u₁ happens to be 0 here
+parent(D₋ₓ(uₕ))[1]
+parent(D₊ₓ(uₕ))[end]
+parent(diff₊ₓ(uₕ))[end]   # -u₅, not 0
+parent(diff₋ₓ(uₕ))[1]     # u₁, and u₁ happens to be 0 here
 ```
 
 Section 9 shows why this matters in practice.
@@ -275,7 +275,7 @@ as a sparse matrix:
 ```@repl operators
 A = D₋ₓ(Wₕ);
 typeof(A)
-A * values(uₕ) ≈ values(D₋ₓ(uₕ))
+A * parent(uₕ) ≈ parent(D₋ₓ(uₕ))
 ```
 
 Both routes give the same answer. Applying the operator directly to `uₕ` is the fast
@@ -318,8 +318,8 @@ and it coincides with `D₊ₓ`; the two differ only where the spacing varies:
 Ωₙ = mesh(domain(interval(0.0, 1.0)), 5, true);
 set_points!(Ωₙ, [0.0, 0.1, 0.3, 0.7, 1.0])
 uₙ = Rₕ(gridspace(Ωₙ), x -> x^2);
-values(D₊ₓ(uₙ))
-values(Dstar₊ₓ(uₙ))
+parent(D₊ₓ(uₙ))
+parent(Dstar₊ₓ(uₙ))
 ```
 
 The identity is
@@ -367,9 +367,9 @@ It is the only operator here that truncates on **two** slices, since neither the
 nor the last point has a neighbour on both sides.
 
 ```@repl operators
-values(D₋ₓ(uₙ))
-values(D₊ₓ(uₙ))
-values(Dcₓ(uₙ))
+parent(D₋ₓ(uₙ))
+parent(D₊ₓ(uₙ))
+parent(Dcₓ(uₙ))
 ```
 
 Writing the denominator as ``x_{i+1} - x_{i-1}`` rather than as a pair of spacings buys
@@ -379,7 +379,7 @@ First, it reproduces an affine function's derivative exactly, since numerator an
 denominator are then the same quantity:
 
 ```@repl operators
-values(Dcₓ(Rₕ(gridspace(Ωₙ), x -> 3x + 1)))
+parent(Dcₓ(Rₕ(gridspace(Ωₙ), x -> 3x + 1)))
 ```
 
 Second, it is skew-symmetric in `innerₕ` for grid functions vanishing on the boundary:
@@ -431,8 +431,8 @@ With ``u = x^2`` the weighted sum telescopes to ``2 x_i (h_i + h_{i+1})``, and t
 denominator cancels:
 
 ```@repl operators
-values(Dcₓ(uₙ))
-values(Dₕₓ(uₙ))
+parent(Dcₓ(uₙ))
+parent(Dₕₓ(uₙ))
 2 .* points(Ωₙ)   # Dₕₓ hits this exactly, away from the two truncated points
 ```
 
@@ -564,7 +564,7 @@ Wbig, Wsmall = gridspace(Ωbig), gridspace(Ωsmall);
 src = Rₕ(Wsmall, x -> x[1] + x[2]);   # affine, so the interpolant is exact
 dest = πₕ(Wbig, src);
 exact = Rₕ(Wbig, x -> x[1] + x[2]);
-maximum(abs, values(dest) .- values(exact))
+maximum(abs, parent(dest) .- parent(exact))
 ```
 
 Once `πₕ` returns an ordinary [`VectorElement`](@ref), every operator above just applies
@@ -579,7 +579,7 @@ between the *two* spaces rather than one, and rectangular rather than square, si
 ```@repl operators
 P = interpolation_matrix(Wbig, Wsmall);
 size(P)
-P * values(src) ≈ values(dest)
+P * parent(src) ≈ parent(dest)
 ```
 
 Each row of `P` has at most ``2^D`` nonzero entries — one destination point's corner
@@ -597,7 +597,7 @@ pattern once" split [`allocate_system_matrix`](@ref)/[`assemble!`](@ref) already
 ```@repl operators
 dest2 = similar(dest);
 πₕ!(dest2, P, src);
-values(dest2) ≈ values(dest)
+parent(dest2) ≈ parent(dest)
 ```
 
 ### Composing symbolically, inside a form

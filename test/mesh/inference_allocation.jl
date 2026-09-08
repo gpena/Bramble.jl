@@ -2,7 +2,7 @@ using Test
 using Bramble
 using Bramble: spacings, normal_vector, hₘᵢₙ, half_spacings, cell_measures,
                dim, topo_dim, half_points!, spacing!, half_spacing!, set_points!,
-               change_points!, _mark_indices!, points_iterator
+               change_points!, _mark_indices!
 using StaticArrays: SVector
 
 if !@isdefined(alloc_test)
@@ -150,7 +150,9 @@ end
                 s += p[1] + p[2]
             end; s)
 
-        @test_allocs iterate_points_it(points_iterator(Ωₕ2))
+        # gpena/Bramble.jl#75: `points_iterator` was `Iterators.product` over
+        # `points(Ωₕ2)`'s per-axis vectors and is gone; this is that same construction.
+        @test_allocs iterate_points_it(Iterators.product(points(Ωₕ2)...))
         @test_allocs iterate_points_gen(points(Ωₕ2))
     end
 end

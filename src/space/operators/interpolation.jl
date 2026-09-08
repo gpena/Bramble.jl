@@ -116,7 +116,7 @@ pattern once" shape [`allocate_system_matrix`](@ref)/[`assemble!`](@ref) already
     πₕ!(dest::VectorElement, P::SparseMatrixCSC, src::VectorElement) -> VectorElement
 
 Fills `dest` via a precomputed [`interpolation_matrix`](@ref) `P` instead of re-locating
-each destination point's cell: `values(dest) .= P * values(src)`, computed in place via
+each destination point's cell: `parent(dest) .= P * parent(src)`, computed in place via
 `mul!` (zero allocations, once `P` and `dest` already exist).
 
 `P` must be `interpolation_matrix(space(dest), space(src))` (or an equal-shape matrix
@@ -134,7 +134,7 @@ end
 ```
 """
 @inline function πₕ!(dest::VectorElement, P::SparseMatrixCSC, src::VectorElement)
-    mul!(values(dest), P, values(src))
+    mul!(parent(dest), P, parent(src))
     return dest
 end
 
@@ -190,7 +190,7 @@ end
 
 The piecewise (multi)linear interpolant of [`πₕ`](@ref)/[`interpolate_at`](@ref) as
 a sparse matrix `P` rather than applied pointwise:
-`P * values(src) ≈ values(πₕ(Wdest, src))` for any `src::VectorElement` over
+`P * parent(src) ≈ parent(πₕ(Wdest, src))` for any `src::VectorElement` over
 `Wsrc`. `P` is `ndofs(Wdest) × ndofs(Wsrc)`, generally rectangular (since `Wdest` and
 `Wsrc` are built over different meshes), with at most ``2^D`` nonzero entries per row:
 the corner weights of the source cell [`locate_cell`](@ref) places that destination point in.

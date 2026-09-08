@@ -1,7 +1,6 @@
 using Test
 using Bramble
 using Random
-using Bramble: values
 
 # Convergence order of the finite difference operators.
 #
@@ -25,7 +24,7 @@ using Bramble: values
 # truncated. The max norm is used so the result does not depend on the quadrature weights.
 function _interior_error(Ωₕ, op, f, df, drop)
     Wₕ = gridspace(Ωₕ)
-    e = values(op(Rₕ(Wₕ, f))) .- values(Rₕ(Wₕ, df))
+    e = parent(op(Rₕ(Wₕ, f))) .- parent(Rₕ(Wₕ, df))
     dims = npoints(Ωₕ, Tuple)
     return maximum(abs, drop(reshape(e, dims)))
 end
@@ -116,7 +115,7 @@ end
 
         # and the error at that point stays O(1) rather than shrinking
         Wₕ = gridspace(Ωₕ)
-        @test values(D₋ₓ(Rₕ(Wₕ, sin)))[1] == 0.0
-        @test abs(values(Rₕ(Wₕ, cos))[1] - 1.0) < 1e-12
+        @test parent(D₋ₓ(Rₕ(Wₕ, sin)))[1] == 0.0
+        @test abs(parent(Rₕ(Wₕ, cos))[1] - 1.0) < 1e-12
     end
 end

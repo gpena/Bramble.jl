@@ -1,7 +1,6 @@
 using Test
 using Bramble
 using Random
-using Bramble: values
 
 # The in-place forms of every directional operator.
 #
@@ -81,13 +80,13 @@ end
                     @testset "$nm" begin
                         vₕ = similar(uₕ)
                         returned = f!(vₕ, uₕ)
-                        @test values(vₕ) == values(f(uₕ))
+                        @test parent(vₕ) == parent(f(uₕ))
                         @test returned === vₕ          # single destination returns it
 
                         # and componentwise over a composite space
                         vv = similar(uv)
                         @test f!(vv, uv) === vv
-                        @test values(vv) == values(f(uv))
+                        @test parent(vv) == parent(f(uv))
                     end
                 end
             end
@@ -108,10 +107,10 @@ end
         for (f!, f, nm) in _ops(Val(2))
             @testset "$nm" begin
                 vₕ = similar(uₕ)
-                values(vₕ) .= -999.0
+                parent(vₕ) .= -999.0
                 f!(vₕ, uₕ)
-                @test values(vₕ) == values(f(uₕ))
-                @test !any(==(-999.0), values(vₕ))
+                @test parent(vₕ) == parent(f(uₕ))
+                @test !any(==(-999.0), parent(vₕ))
             end
         end
     end
@@ -133,11 +132,11 @@ end
                 push!(inplace, @allocated f!(vₕ, uₕ))
                 push!(allocating, @allocated f(uₕ))
             end
-            # In-place values! assignment checks
-            values!(vₕ, 0.0)
-            values!(vₕ, values(uₕ))
-            push!(inplace, @allocated values!(vₕ, 0.0))
-            push!(inplace, @allocated values!(vₕ, values(uₕ)))
+            # In-place copyto! assignment checks (values!'s replacement, gpena/Bramble.jl#73)
+            copyto!(vₕ, 0.0)
+            copyto!(vₕ, parent(uₕ))
+            push!(inplace, @allocated copyto!(vₕ, 0.0))
+            push!(inplace, @allocated copyto!(vₕ, parent(uₕ)))
 
             return inplace, allocating
         end
@@ -176,7 +175,7 @@ end
                         @test_throws ArgumentError f!(uv, uv)
 
                         # distinct `VectorElement`s sharing the same backing array
-                        shared = VectorElement(values(uₕ), space(uₕ))
+                        shared = VectorElement(parent(uₕ), space(uₕ))
                         @test_throws ArgumentError f!(uₕ, shared)
                         @test_throws ArgumentError f!(shared, uₕ)
                     end

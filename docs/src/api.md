@@ -86,6 +86,7 @@ spacing
 forward_spacing
 half_spacing
 spacings
+forward_spacings
 half_spacings
 hₘₐₓ
 hₘᵢₙ
@@ -95,17 +96,6 @@ normal_vector
 cell_measure
 cell_measures
 is_uniform
-```
-
-### Mesh iterators
-
-```@docs
-points_iterator
-half_points_iterator
-spacings_iterator
-forward_spacings_iterator
-half_spacings_iterator
-cell_measures_iterator
 ```
 
 ### Mesh indexing and boundaries
@@ -154,10 +144,8 @@ ncomponents
 ```@docs
 VectorElement
 element
-Base.values(::VectorElement)
-values!
-to_matrix
-component
+Base.parent(::VectorElement)
+Base.reshape(::VectorElement)
 components
 component_range
 component_ranges

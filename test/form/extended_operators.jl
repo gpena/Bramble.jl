@@ -30,7 +30,7 @@ function apply_stencil(node, Wₕ, uₕ)
     Ωₕ = mesh(Wₕ)
     idx = indices(Ωₕ)
     lin = LinearIndices(idx)
-    u = values(uₕ)
+    u = parent(uₕ)
     out = zeros(eltype(u), length(u))
     escaped = 0
     for I in idx
@@ -65,7 +65,7 @@ end
                     (Dstar₊ₓ(id), Dstar₊ₓ), (Dₕₓ(id), Dₕₓ),
                     (D₋ₓ(id), D₋ₓ), (D₊ₓ(id), D₊ₓ), (M₋ₓ(id), M₋ₓ), (M₊ₓ(id), M₊ₓ))
                     got, escaped = apply_stencil(node, Wₕ, uₕ)
-                    @test got ≈ values(op(uₕ)) rtol=1e-12
+                    @test got ≈ parent(op(uₕ)) rtol=1e-12
                     @test escaped == 0
                 end
             end
@@ -82,7 +82,7 @@ end
                 (Dstar₊ₓ(id), Dstar₊ₓ), (Dstar₊ᵧ(id), Dstar₊ᵧ),
                 (Dₕₓ(id), Dₕₓ), (Dₕᵧ(id), Dₕᵧ))
                 got, escaped = apply_stencil(node, Wₕ, uₕ)
-                @test got ≈ values(op(uₕ)) rtol=1e-12
+                @test got ≈ parent(op(uₕ)) rtol=1e-12
                 @test escaped == 0
             end
         end
@@ -96,7 +96,7 @@ end
             for (node, op) in ((jump₂(id), jump₂), (Dc₂(id), Dc₂),
                 (Dstar₊₂(id), Dstar₊₂), (Dₕ₂(id), Dₕ₂))
                 got, escaped = apply_stencil(node, Wₕ, uₕ)
-                @test got ≈ values(op(uₕ)) rtol=1e-12
+                @test got ≈ parent(op(uₕ)) rtol=1e-12
                 @test escaped == 0
             end
         end
@@ -162,15 +162,15 @@ end
         # of an average: checked against doing the two in turn on grid functions
         got, escaped = apply_stencil(Dcₓ(M₋ᵧ(id)), Wₕ, uₕ)
         @test escaped == 0
-        @test got ≈ values(Dcₓ(M₋ᵧ(uₕ))) rtol=1e-12
+        @test got ≈ parent(Dcₓ(M₋ᵧ(uₕ))) rtol=1e-12
 
         got2, escaped2 = apply_stencil(jumpᵧ(D₋ₓ(id)), Wₕ, uₕ)
         @test escaped2 == 0
-        @test got2 ≈ values(jumpᵧ(D₋ₓ(uₕ))) rtol=1e-12
+        @test got2 ≈ parent(jumpᵧ(D₋ₓ(uₕ))) rtol=1e-12
 
         # and scaling passes straight through
         got3, _ = apply_stencil(3 * Dₕₓ(id), Wₕ, uₕ)
-        @test got3 ≈ 3 .* values(Dₕₓ(uₕ)) rtol=1e-12
+        @test got3 ≈ 3 .* parent(Dₕₓ(uₕ)) rtol=1e-12
     end
 
     @testset "Vector forms" begin

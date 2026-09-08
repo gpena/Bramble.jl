@@ -1,7 +1,7 @@
 using Test
 using Bramble
 using SparseArrays
-using Bramble: values, hₘᵢₙ
+using Bramble: hₘᵢₙ
 
 # The element type of the backend survives the whole library.
 #
@@ -47,15 +47,15 @@ const F32_BACKEND = backend(vector_type = Vector{Float32},
         Wₕ = gridspace(Ωₕ)
         uₕ = Rₕ(Wₕ, x -> sin(x[1]) * x[2])
 
-        @test eltype(values(uₕ)) === Float32
-        @test eltype(values(avgₕ(Wₕ, x -> sin(x[1]) * x[2]))) === Float32
+        @test eltype(parent(uₕ)) === Float32
+        @test eltype(parent(avgₕ(Wₕ, x -> sin(x[1]) * x[2]))) === Float32
 
         for op in (diff₋ₓ, diff₊ₓ, D₋ₓ, D₊ₓ, jumpₓ, M₋ₓ, M₊ₓ,
             Dstar₊ₓ, Dcₓ, Dₕₓ, D₋ᵧ, M₊ᵧ, Dcᵧ, Dₕᵧ)
-            @test eltype(values(op(uₕ))) === Float32
+            @test eltype(parent(op(uₕ))) === Float32
         end
         for op in (∇₋ₕ, ∇₊ₕ, Dstar₊ₕ, Dcₕ, ∇ₕ, M₋ₕ, jumpₕ)
-            @test all(g -> eltype(values(g)) === Float32, op(uₕ))
+            @test all(g -> eltype(parent(g)) === Float32, op(uₕ))
         end
     end
 

@@ -89,8 +89,8 @@ using Bramble: IdentityOperator, TrialFunction, TestFunction, IndexedTrialFuncti
 
         # and the grid function's coefficients are carried by reference, read at the point
         p = innerₕ(uₕ, v)
-        @test p.left_op.vec === values(uₕ)
-        @test only(local_stencil(p.left_op, Wₕ, I, nothing, lin))[2] == values(uₕ)[lin]
+        @test p.left_op.vec === parent(uₕ)
+        @test only(local_stencil(p.left_op, Wₕ, I, nothing, lin))[2] == parent(uₕ)[lin]
     end
 
     @testset "Directional spellings" begin

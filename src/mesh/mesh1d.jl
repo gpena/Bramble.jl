@@ -56,8 +56,6 @@ end
     return @inbounds points(Ωₕ)[idx]
 end
 
-@inline points_iterator(Ωₕ::Mesh1D) = Ωₕ.pts
-
 function locate_cell(Ωₕ::Mesh1D, x::Real)
     pts = Ωₕ.pts
     n = length(pts)
@@ -83,6 +81,17 @@ grid points change.
 """
 @inline spacings(Ωₕ::Mesh1D) = Ωₕ.spacings
 @inline spacings!(Ωₕ::Mesh1D, v) = (Ωₕ.spacings = v; return)
+
+"""
+    forward_spacings(Ωₕ::Mesh1D) -> AbstractVector
+
+Return the forward spacings of `Ωₕ`, where `forward_spacings(Ωₕ)[i]` is
+[`forward_spacing`](@ref)`(Ωₕ, i)`. Unlike [`spacings`](@ref), this is not cached: it is
+[`spacing`](@ref)'s vector read one index ahead, computed lazily on iteration.
+
+See also: [`forward_spacing_for_derivative`](@ref).
+"""
+@inline forward_spacings(Ωₕ::Mesh1D) = _spacing_generator(Ωₕ, forward_spacing)
 
 # A single-point mesh (n == 1, whether from a topologically collapsed domain or simply a
 # one-point request) has no adjacent interval, so `half_spacings` is the honest raw zero
@@ -156,8 +165,8 @@ Return the `i`-th submesh of `Ωₕ`. A 1D mesh is its own only submesh, returni
 @inline npoints(Ωₕ::Mesh1D) = length(points(Ωₕ))
 @inline npoints(Ωₕ::Mesh1D, ::Type{Tuple}) = (npoints(Ωₕ),)
 
-@inline hₘₐₓ(Ωₕ::Mesh1D) = maximum(spacings_iterator(Ωₕ))
-@inline hₘᵢₙ(Ωₕ::Mesh1D) = minimum(spacings_iterator(Ωₕ))
+@inline hₘₐₓ(Ωₕ::Mesh1D) = maximum(spacings(Ωₕ))
+@inline hₘᵢₙ(Ωₕ::Mesh1D) = minimum(spacings(Ωₕ))
 
 @inline function spacing(Ωₕ::Mesh1D, i::Int)
     _check_point_bounds(Ωₕ, i, "spacing")
@@ -236,9 +245,6 @@ end
     return Ωₕ.half_pts[i]
 end
 
-@inline spacings_iterator(Ωₕ::Mesh1D) = _spacing_generator(Ωₕ, spacing)
-@inline forward_spacings_iterator(Ωₕ::Mesh1D) = _spacing_generator(Ωₕ, forward_spacing)
-
 @inline function half_spacing(Ωₕ::Mesh1D, i::Int)
     _check_point_bounds(Ωₕ, i, "half_spacing")
     return Ωₕ.half_spacings[i]
@@ -251,11 +257,6 @@ end
     _check_point_bounds(Ωₕ, idx, "cell_measure")
     return _apply_hs_logic(half_spacing(Ωₕ, idx))
 end
-
-@inline half_spacings_iterator(Ωₕ::Mesh1D) = Ωₕ.half_spacings
-@inline half_points_iterator(Ωₕ::Mesh1D) = Ωₕ.half_pts
-@inline cell_measures_iterator(Ωₕ::Mesh1D) = Iterators.map(
-    _apply_hs_logic, half_spacings_iterator(Ωₕ))
 
 @inline function _generate_random_points!(v)
     rand!(v)

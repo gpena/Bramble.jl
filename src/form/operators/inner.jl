@@ -428,9 +428,9 @@ end
         markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {D, N}
     if all(is_symbolic, r)
         terms = ntuple(Val(D)) do dim
-            LinearProduct{D, InnerPlus{dim}, SourceVector{D, typeof(values(l[dim]))},
+            LinearProduct{D, InnerPlus{dim}, SourceVector{D, typeof(parent(l[dim]))},
                 typeof(r[dim])}(
-                SourceVector{D, typeof(values(l[dim]))}(values(l[dim])), r[dim])
+                SourceVector{D, typeof(parent(l[dim]))}(parent(l[dim])), r[dim])
         end
         return _restrict_by_markers(foldl(+, terms), markers)
     else

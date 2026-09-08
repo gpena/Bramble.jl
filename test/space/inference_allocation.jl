@@ -1,6 +1,6 @@
 using Test
 using Bramble
-using Bramble: values, components, _difference_engine!, _average_engine!,
+using Bramble: components, _difference_engine!, _average_engine!,
                backward_spacings_for_derivative, Backward, Forward
 
 # Type stability and allocation across grid spaces, operators and inner products.
@@ -63,7 +63,7 @@ end
         @test @inferred(Rₕ(Wₕ2, x -> x[1])) isa VectorElement
         @test @inferred(avgₕ(Wₕ2, x -> x[1])) isa VectorElement
         @test @inferred(Rₕ(Vₕ2, (x -> x[1], x -> x[2]))) isa VectorElement
-        @test @inferred(values(uₕ2)) isa AbstractVector
+        @test @inferred(parent(uₕ2)) isa AbstractVector
     end
 
     @testset "Type stability (operators)" begin
@@ -138,9 +138,9 @@ end
         diff!(o, i, hh) = _difference_engine!(o, i, hh, dims, Backward(), Val(1))
         avg!(o, i) = _average_engine!(o, i, dims, Backward(), Val(1))
 
-        @test_allocs diff!(values(vₕ), values(uₕ1), h)
-        @test_allocs diff!(values(vₕ), values(uₕ1), nothing)
-        @test_allocs avg!(values(vₕ), values(uₕ1))
+        @test_allocs diff!(parent(vₕ), parent(uₕ1), h)
+        @test_allocs diff!(parent(vₕ), parent(uₕ1), nothing)
+        @test_allocs avg!(parent(vₕ), parent(uₕ1))
     end
 
     @testset "Callable spacing dispatch" begin
@@ -160,7 +160,7 @@ end
             vₙ = similar(uₙ)
             hf = Base.Fix1(Bramble.spacing_for_derivative, Ωₙ)
             run!(o, i) = _difference_engine!(o, i, hf, (n,), Backward(), Val(1))
-            alloc_test(run!, values(vₙ), values(uₙ))
+            alloc_test(run!, parent(vₙ), parent(uₙ))
         end
         @test callable_bytes(1024) == callable_bytes(8192)
     end
@@ -239,9 +239,9 @@ end
         @test alloc_test(avgₕ!, un, f_tup3; markers = (:left,)) == 0
         @test alloc_test(Rₕ!, un, f_tup3; markers = (:left,)) == 0
 
-        # Zero allocations for values! and πₕ!
-        @test alloc_test(values!, u, 1.0) == 0
-        @test alloc_test(values!, u, values(u)) == 0
+        # Zero allocations for copyto! (values!'s replacement, gpena/Bramble.jl#73) and πₕ!
+        @test alloc_test(copyto!, u, 1.0) == 0
+        @test alloc_test(copyto!, u, parent(u)) == 0
 
         W_target = gridspace(mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (8, 8)))
         u_target = element(W_target)

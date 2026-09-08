@@ -11,7 +11,7 @@ Represents a linear form defined over a test space.
 
 The form resolves its expression tree `ast` once at construction, referencing the underlying
 storage of any coefficient grid functions (`VectorElement`). In-place updates via `Rₕ!(fₕ, ...)`
-or `values(fₕ) .= ...` are automatically seen by subsequent assemblies with zero heap allocations.
+or `parent(fₕ) .= ...` are automatically seen by subsequent assemblies with zero heap allocations.
 The expression itself is not retained: downstream routines evaluate the resolved AST directly.
 
 Constant scalar coefficients can be written directly as numbers (e.g. `2.5 * innerₕ(fₕ, v)`).
@@ -43,9 +43,9 @@ test_space(form::LinearForm) = form.test_space
 @inline function (form::LinearForm)(vₕ::VectorElement)
     ast = form.ast
     space = form.test_space
-    T = promote_type(_assembled_eltype(ast, space), eltype(values(vₕ)))
+    T = promote_type(_assembled_eltype(ast, space), eltype(parent(vₕ)))
 
-    return _contract_linear_core(space, ast, values(vₕ), zero(T))
+    return _contract_linear_core(space, ast, parent(vₕ), zero(T))
 end
 
 @noinline function (form::LinearForm)(v::AbstractVector)
@@ -82,7 +82,7 @@ end
 @inline function evaluate!(scratch::AbstractVector, form::LinearForm, vₕ::VectorElement;
         ast = form.ast)
     assemble!(scratch, form; ast = ast)
-    return dot(scratch, values(vₕ))
+    return dot(scratch, parent(vₕ))
 end
 
 @noinline function evaluate!(::AbstractVector, ::LinearForm, v::AbstractVector; kwargs...)
@@ -181,8 +181,8 @@ function assemble(form::LinearForm; dirichlet_conditions = nothing,
         dirichlet_labels = nothing, dirichlet_components = nothing, ast = form.ast)
     _validate_dirichlet_labels(dirichlet_labels)
     space = test_space(form)
-    # `values(element(space, T))` reuses the space's backend container type.
-    b = values(element(space, _assembled_eltype(ast, space)))
+    # `parent(element(space, T))` reuses the space's backend container type.
+    b = parent(element(space, _assembled_eltype(ast, space)))
     return assemble!(b, form; ast = ast, dirichlet_conditions = dirichlet_conditions,
         dirichlet_labels = dirichlet_labels, dirichlet_components = dirichlet_components)
 end
@@ -482,7 +482,7 @@ Refill `b` with the assembled `form` and return it with zero allocations (**0 by
 By default `assemble!` uses the pre-resolved `form.ast` stored directly inside the form.
 
 ## Live coefficients
-- Grid functions: the stored AST retains references to source `VectorElement` storage. Mutating values in-place (`Rₕ!(uₕ, ...)` or `values(uₕ) .= ...`) between steps automatically updates the assembled vector without needing to rebuild the form.
+- Grid functions: the stored AST retains references to source `VectorElement` storage. Mutating values in-place (`Rₕ!(uₕ, ...)` or `parent(uₕ) .= ...`) between steps automatically updates the assembled vector without needing to rebuild the form.
 - Dynamic scalars: plain numbers work directly for constant scalars. To update a scalar dynamically across loop iterations, wrap it in a `Ref(val)` (e.g. `α = Ref(1.0); l = form(Wₕ, v -> α * innerₕ(uₕ, v))`). Mutating `α[] = new_val` evaluates live during assembly with 0 allocations.
 
 # Arguments

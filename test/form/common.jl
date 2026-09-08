@@ -136,7 +136,7 @@ using Bramble: TrialFunction, TestFunction, IndexedTrialFunction, IndexedTestFun
 
         # a grid function scales pointwise, read at the linear index
         uₕ = Rₕ(Wₕ, x -> x[1] + 1)
-        @test local_stencil(uₕ * id, Wₕ, I, nothing, lin) == ((O, values(uₕ)[lin]),)
+        @test local_stencil(uₕ * id, Wₕ, I, nothing, lin) == ((O, parent(uₕ)[lin]),)
     end
 
     @testset "GridFunctionScale thunk" begin

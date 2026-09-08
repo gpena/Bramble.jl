@@ -2,7 +2,7 @@ using Test
 using Bramble
 using Random
 using Supposition
-using Bramble: values, components
+using Bramble: components
 
 # The centered difference.
 #
@@ -34,15 +34,15 @@ centered_ops(::Val{3}) = (Dcₓ, Dcᵧ, Dc₂)
                 Wₕ = gridspace(Ωₕ)
                 n = npoints(Ωₕ)
                 uₕ = Rₕ(Wₕ, x -> x^2 + sin(x))
-                u = values(uₕ)
+                u = parent(uₕ)
 
                 want = [(i == 1 || i == n) ? 0.0 :
                         (u[i + 1] - u[i - 1]) / (spacing(Ωₕ, i) + spacing(Ωₕ, i + 1))
                         for i in 1:n]
-                @test values(Dcₓ(uₕ)) ≈ want
+                @test parent(Dcₓ(uₕ)) ≈ want
 
                 # the denominator is the span the stencil covers
-                @test all(values(Dcₓ(uₕ))[i] ≈
+                @test all(parent(Dcₓ(uₕ))[i] ≈
                           (u[i + 1] - u[i - 1]) /
                           (points(Ωₕ)[i + 1] - points(Ωₕ)[i - 1]) for i in 2:(n - 1))
             end
@@ -58,12 +58,12 @@ centered_ops(::Val{3}) = (Dcₓ, Dcᵧ, Dc₂)
         n = npoints(Ωₕ, Tuple)
         uₕ = Rₕ(Wₕ, x -> exp(x[1]) * (x[2] + 1))
 
-        rx = reshape(values(Dcₓ(uₕ)), n)
+        rx = reshape(parent(Dcₓ(uₕ)), n)
         @test all(iszero, rx[1, :])
         @test all(iszero, rx[end, :])
         @test !any(iszero, rx[2:(end - 1), :])
 
-        ry = reshape(values(Dcᵧ(uₕ)), n)
+        ry = reshape(parent(Dcᵧ(uₕ)), n)
         @test all(iszero, ry[:, 1])
         @test all(iszero, ry[:, end])
         @test !any(iszero, ry[:, 2:(end - 1)])
@@ -80,14 +80,14 @@ centered_ops(::Val{3}) = (Dcₓ, Dcᵧ, Dc₂)
                 Wₕ = gridspace(Ωₕ)
                 n = npoints(Ωₕ, Tuple)
 
-                @test all(iszero, values(Dcₓ(Rₕ(Wₕ, x -> 3.0))))
+                @test all(iszero, parent(Dcₓ(Rₕ(Wₕ, x -> 3.0))))
 
                 for (d, op) in ((1, Dcₓ), (2, Dcᵧ), (3, Dc₂))
                     # constant along d differences to zero along d
-                    @test all(iszero, values(op(Rₕ(Wₕ, x -> x[mod1(d + 1, 3)]))))
+                    @test all(iszero, parent(op(Rₕ(Wₕ, x -> x[mod1(d + 1, 3)]))))
                     # and 3x + 1 along d differences to exactly 3, away from both
                     # truncated slices
-                    r = reshape(values(op(Rₕ(Wₕ, x -> 3x[d] + 1))), n)
+                    r = reshape(parent(op(Rₕ(Wₕ, x -> 3x[d] + 1))), n)
                     interior = ntuple(k -> k == d ? (2:(n[k] - 1)) : (1:n[k]), 3)
                     @test all(≈(3.0), r[interior...])
                 end
@@ -106,7 +106,7 @@ centered_ops(::Val{3}) = (Dcₓ, Dcᵧ, Dc₂)
                 Wₕ = gridspace(Ωₕ)
                 n = npoints(Ωₕ)
                 uₕ = Rₕ(Wₕ, x -> sin(3x))
-                dc, dm, dp = values(Dcₓ(uₕ)), values(D₋ₓ(uₕ)), values(D₊ₓ(uₕ))
+                dc, dm, dp = parent(Dcₓ(uₕ)), parent(D₋ₓ(uₕ)), parent(D₊ₓ(uₕ))
 
                 @test all(dc[i] ≈
                           (spacing(Ωₕ, i + 1) * dp[i] + spacing(Ωₕ, i) * dm[i]) /
@@ -131,7 +131,7 @@ centered_ops(::Val{3}) = (Dcₓ, Dcᵧ, Dc₂)
             for k in 0:steps
                 k > 0 && iterative_refinement!(Ωₕ)
                 Wₕ = gridspace(Ωₕ)
-                e = values(Dcₓ(Rₕ(Wₕ, sin))) .- values(Rₕ(Wₕ, cos))
+                e = parent(Dcₓ(Rₕ(Wₕ, sin))) .- parent(Rₕ(Wₕ, cos))
                 push!(errs, maximum(abs, e[2:(end - 1)]))
             end
             return [log2(errs[k] / errs[k + 1]) for k in 1:(length(errs) - 1)]
@@ -155,23 +155,23 @@ centered_ops(::Val{3}) = (Dcₓ, Dcᵧ, Dc₂)
         uₕ = Rₕ(Wₕ, x -> x[1] * x[2])
 
         @test Dcₕ(uₕ) isa NTuple{2, VectorElement}
-        @test values(Dcₕ(uₕ)[1]) == values(Dcₓ(uₕ))
-        @test values(Dcₕ(uₕ)[2]) == values(Dcᵧ(uₕ))
+        @test parent(Dcₕ(uₕ)[1]) == parent(Dcₓ(uₕ))
+        @test parent(Dcₕ(uₕ)[2]) == parent(Dcᵧ(uₕ))
 
         # in one dimension the tuple and the grid function coincide
         Ω1 = mesh(domain(interval(0.0, 1.0)), 7, true)
         u1 = Rₕ(gridspace(Ω1), sin)
         @test !(Dcₕ(u1) isa Tuple)
-        @test values(Dcₕ(u1)) == values(Dcₓ(u1))
+        @test parent(Dcₕ(u1)) == parent(Dcₓ(u1))
 
         # composite grid functions apply componentwise, as the other operators do
         fs = (x -> x[1], x -> x[2]^2)
         cₕ = Rₕ(Vₕ, fs)
         scalars = (Rₕ(Wₕ, fs[1]), Rₕ(Wₕ, fs[2]))
         rₕ = Dcₓ(cₕ)
-        @test length(values(rₕ)) == length(values(cₕ))
+        @test length(parent(rₕ)) == length(parent(cₕ))
         for k in 1:2
-            @test values(components(rₕ)[k]) == values(Dcₓ(scalars[k]))
+            @test parent(components(rₕ)[k]) == parent(Dcₓ(scalars[k]))
         end
     end
 
@@ -210,7 +210,7 @@ centered_ops(::Val{3}) = (Dcₓ, Dcᵧ, Dc₂)
                 @test skew(uₕ, vₕ)
 
                 # the cancellation that makes it exact
-                u, v = values(uₕ), values(vₕ)
+                u, v = parent(uₕ), parent(vₕ)
                 @test innerₕ(Dcₓ(uₕ), vₕ) ≈
                       sum((u[i + 1] - u[i - 1]) * v[i] for i in 2:(n - 1)) / 2
             end

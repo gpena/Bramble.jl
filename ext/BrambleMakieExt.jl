@@ -1,7 +1,7 @@
 module BrambleMakieExt
 
 using Bramble: Bramble, VectorElement, ScalarGridSpace, CompositeGridSpace,
-               mesh, points, to_matrix, values
+               mesh, points
 
 import Makie
 
@@ -25,7 +25,7 @@ end
 # 1D: `lines(uₕ)`, `scatter(uₕ)`. `PointBased` plot types want a vector of points, not two
 # separate coordinate vectors — that is a Makie 0.10+ requirement, not a style choice.
 function Makie.convert_arguments(::Makie.PointBased, uₕ::VectorElement{<:ScalarGridSpace{1}})
-    (Makie.Point2f.(points(mesh(uₕ)), values(uₕ)),)
+    (Makie.Point2f.(points(mesh(uₕ)), parent(uₕ)),)
 end
 
 # `VectorElement <: AbstractVector`, so before `convert_arguments` above is ever reached,
@@ -44,7 +44,7 @@ end
 # above expects to have been given directly.
 function Makie.expand_dimensions(::Makie.PointBased, uₕ::VectorElement{<:ScalarGridSpace{1}})
     (
-        points(mesh(uₕ)), values(uₕ))
+        points(mesh(uₕ)), parent(uₕ))
 end
 
 # 2D: `heatmap(uₕ)` and `surface(uₕ)`/`contour(uₕ)` alike. Each fixes its own conversion
@@ -53,7 +53,7 @@ end
 function Makie.convert_arguments(
         ::Union{Makie.CellGrid, Makie.VertexGrid}, uₕ::VectorElement{<:ScalarGridSpace{2}})
     (
-        points(mesh(uₕ))..., to_matrix(uₕ))
+        points(mesh(uₕ))..., reshape(uₕ))
 end
 
 function Makie.convert_arguments(::Makie.PointBased, ::VectorElement{<:CompositeGridSpace})

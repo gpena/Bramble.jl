@@ -125,7 +125,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         # a grid-function coefficient on the interpolated side, read on the *test* mesh
         cₕ = Rₕ(Wt, x -> 1 + x^2)
         A = assemble(form(Ws, Wt, (u, v) -> innerₕ(cₕ * πₕ(Ws, u), v)))
-        @test A ≈ Hh(Wt) * Diagonal(values(cₕ)) * P
+        @test A ≈ Hh(Wt) * Diagonal(parent(cₕ)) * P
     end
 
     @testset "Higher dimensions" begin
@@ -188,13 +188,13 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
 
         for f in (x -> sin(3x) + 1, x -> 2x - 1, x -> exp(-x))
             uₛ = Rₕ(Ws, f)
-            @test A * values(uₛ) ≈ collect(weights(Wt, Innerh())) .* values(πₕ(Wt, uₛ))
+            @test A * parent(uₛ) ≈ collect(weights(Wt, Innerh())) .* parent(πₕ(Wt, uₛ))
         end
 
         # and the interpolant is exact on an affine function, so there the action is the
         # weighted restriction of `f` itself: an oracle that does not go through `πₕ` at all
         uₛ = Rₕ(Ws, x -> 2x - 1)
-        @test A * values(uₛ) ≈ collect(weights(Wt, Innerh())) .* values(Rₕ(Wt, x -> 2x - 1))
+        @test A * parent(uₛ) ≈ collect(weights(Wt, Innerh())) .* parent(Rₕ(Wt, x -> 2x - 1))
     end
 
     @testset "Composite blocks" begin
@@ -526,6 +526,6 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         @test _all_trial_interpolated(a.ast)
         @test _check_interp_spaces(a.ast, Ws) === nothing
         @test_throws ArgumentError _check_interp_spaces(a.ast, Wt)
-        @test assemble(a) ≈ Hh(Wt) * Diagonal(values(cₕ)) * interpolation_matrix(Wt, Ws)
+        @test assemble(a) ≈ Hh(Wt) * Diagonal(parent(cₕ)) * interpolation_matrix(Wt, Ws)
     end
 end

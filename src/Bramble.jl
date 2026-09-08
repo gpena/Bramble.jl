@@ -46,18 +46,16 @@ export Mesh1D, MeshnD
 export mesh, submeshes, hₘₐₓ, stepsize, locate_cell,
        iterative_refinement!, change_points!, set_points!
 export npoints, points, point, half_points, half_point
-export spacing, forward_spacing, half_spacing, spacings, cell_measure
+export spacing, forward_spacing, half_spacing, spacings, forward_spacings, cell_measure
 export indices, boundary_indices, interior_indices, is_boundary_index, index_in_marker,
        is_uniform
 
 # `AbstractMeshType`/`MeshMarkers` are extension points for a new mesh type, not everyday
-# vocabulary; `mesh_type`/`normal_vector`/`hₘᵢₙ`/`half_spacings`/`cell_measures` and the six
-# `*_iterator` functions are the same layer — real, tested, reached while implementing a
-# mesh or a boundary-facing operator rather than while using one (point 70).
+# vocabulary; `mesh_type`/`normal_vector`/`hₘᵢₙ`/`half_spacings`/`cell_measures` are the
+# same layer — real, tested, reached while implementing a mesh or a boundary-facing
+# operator rather than while using one (point 70).
 public AbstractMeshType, MeshMarkers
 public mesh_type, hₘᵢₙ, normal_vector, half_spacings, cell_measures
-public spacings_iterator, forward_spacings_iterator, half_spacings_iterator,
-       points_iterator, half_points_iterator, cell_measures_iterator
 
 # Space handling
 export gridspace, vector_gridspace, space, spaces, ScalarGridSpace,
@@ -68,7 +66,7 @@ export ndofs, ncomponents, weights
 # space's type back off a `VectorElement`. Neither appears in a tutorial — both are for
 # code written *against* a space's type, not for building one (point 70).
 public VectorGridSpace, space_type
-export VectorElement, element, to_matrix, values, values!, component, components,
+export VectorElement, element, parent, reshape, components,
        component_range, component_ranges
 export Rₕ, Rₕ!, avgₕ, avgₕ!
 export interpolate_at, interpolation_matrix, πₕ, πₕ!

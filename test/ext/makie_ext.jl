@@ -19,7 +19,7 @@ using Makie
         (pts,) = Makie.convert_arguments(Makie.PointBased(), uₕ)
         @test pts isa Vector{<:Makie.Point2}
         @test [p[1] for p in pts] ≈ points(Ωₕ)
-        @test [p[2] for p in pts] ≈ values(uₕ)
+        @test [p[2] for p in pts] ≈ parent(uₕ)
 
         # `expand_dimensions` is the one Makie actually reaches first for a `VectorElement`
         # (see the extension's own comment on why `convert_arguments` alone is not enough):
@@ -27,7 +27,7 @@ using Makie
         # single vector of points.
         x, y = Makie.expand_dimensions(Makie.PointBased(), uₕ)
         @test x == points(Ωₕ)
-        @test y == values(uₕ)
+        @test y == parent(uₕ)
     end
 
     @testset "2D: CellGrid and VertexGrid convert_arguments" begin
@@ -41,7 +41,7 @@ using Makie
             x, y, z = Makie.convert_arguments(trait, uₕ)
             @test x == px
             @test y == py
-            @test z == to_matrix(uₕ)
+            @test z == reshape(uₕ)
         end
     end
 

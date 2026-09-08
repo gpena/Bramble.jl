@@ -56,17 +56,17 @@ using Bramble
         dest = πₕ(Wbig, src)
         @test dest isa Bramble.VectorElement
         @test space(dest) === Wbig
-        @test values(dest) ≈ values(exact) atol=1e-10
+        @test parent(dest) ≈ parent(exact) atol=1e-10
 
         # the in-place form agrees with the out-of-place one
         dest2 = similar(dest)
         returned = πₕ!(dest2, src)
         @test returned === dest2
-        @test values(dest2) ≈ values(dest)
+        @test parent(dest2) ≈ parent(dest)
     end
 
     @testset "Matrix agreement" begin
-        # P * values(src) is exactly the same computation πₕ performs pointwise:
+        # P * parent(src) is exactly the same computation πₕ performs pointwise:
         # same corner-weight arithmetic, just emitted as triplets instead of accumulated,
         # so the two must agree to the last bit, not merely approximately.
         Ω1dest = mesh(domain(interval(0.0, 1.0)), 9, false)
@@ -75,7 +75,7 @@ using Bramble
         src1 = Rₕ(W1src, x -> sin(3x) + x^2)
         P1 = interpolation_matrix(W1dest, W1src)
         @test size(P1) == (ndofs(W1dest), ndofs(W1src))
-        @test P1 * values(src1) ≈ values(πₕ(W1dest, src1))
+        @test P1 * parent(src1) ≈ parent(πₕ(W1dest, src1))
 
         Ω2dest = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (11, 9), (true, true))
         Ω2src = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (4, 6), (true, true))
@@ -83,12 +83,12 @@ using Bramble
         src2 = Rₕ(W2src, x -> x[1] * x[2] + x[1])
         P2 = interpolation_matrix(W2dest, W2src)
         @test size(P2) == (ndofs(W2dest), ndofs(W2src))
-        @test P2 * values(src2) ≈ values(πₕ(W2dest, src2))
+        @test P2 * parent(src2) ≈ parent(πₕ(W2dest, src2))
 
         # exact for affine data, same as interpolate_at itself
         exact = Rₕ(W2dest, x -> x[1] * 2 - x[2])
         srcaffine = Rₕ(W2src, x -> x[1] * 2 - x[2])
-        @test interpolation_matrix(W2dest, W2src) * values(srcaffine) ≈ values(exact) atol=1e-10
+        @test interpolation_matrix(W2dest, W2src) * parent(srcaffine) ≈ parent(exact) atol=1e-10
 
         # at most 2^D = 4 nonzeros per row, and every row sums to 1 (a partition of unity,
         # since the corner weights of any cell always sum to 1)
@@ -111,7 +111,7 @@ using Bramble
         dest1 = similar(πₕ(W1dest, src1))
         returned = πₕ!(dest1, P1, src1)
         @test returned === dest1
-        @test values(dest1) ≈ values(πₕ(W1dest, src1))
+        @test parent(dest1) ≈ parent(πₕ(W1dest, src1))
 
         Ω2dest = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (11, 9), (true, true))
         Ω2src = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (4, 6), (true, true))
@@ -121,13 +121,13 @@ using Bramble
 
         dest2 = similar(πₕ(W2dest, src2))
         πₕ!(dest2, P2, src2)
-        @test values(dest2) ≈ values(πₕ(W2dest, src2))
+        @test parent(dest2) ≈ parent(πₕ(W2dest, src2))
 
         @testset "Tracks a live-updated src across repeated calls" begin
             for factor in (1.0, 2.5, -1.0)
                 Rₕ!(src2, x -> factor * (x[1] * x[2] + x[1]))
                 πₕ!(dest2, P2, src2)
-                @test values(dest2) ≈ values(πₕ(W2dest, src2))
+                @test parent(dest2) ≈ parent(πₕ(W2dest, src2))
             end
         end
 
@@ -159,7 +159,7 @@ using Bramble
         mx = M₋ₓ(dest)
         @test space(dx) === Wbig
         @test space(mx) === Wbig
-        @test all(isfinite, values(dx))
-        @test all(isfinite, values(mx))
+        @test all(isfinite, parent(dx))
+        @test all(isfinite, parent(mx))
     end
 end

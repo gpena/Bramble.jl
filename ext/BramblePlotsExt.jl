@@ -1,7 +1,7 @@
 module BramblePlotsExt
 
 using Bramble: Bramble, VectorElement, ScalarGridSpace, CompositeGridSpace,
-               mesh, points, to_matrix, values
+               mesh, points
 
 using RecipesBase
 
@@ -22,17 +22,17 @@ end
 
 @recipe function f(uₕ::VectorElement{<:ScalarGridSpace{1}})
     seriestype --> :line
-    return points(mesh(uₕ)), values(uₕ)
+    return points(mesh(uₕ)), parent(uₕ)
 end
 
 # Plots.jl's `heatmap(x, y, z)`/`surface(x, y, z)` read `z` as an image matrix: the first
 # index of `z` is the row, plotted against `y`, the second is the column, plotted against
-# `x` — so `size(z) == (length(y), length(x))`. `to_matrix(uₕ)` is `(nx, ny)`, x fastest,
+# `x` — so `size(z) == (length(y), length(x))`. `reshape(uₕ)` is `(nx, ny)`, x fastest,
 # so it needs transposing to match; without it the plot would be silently rotated.
 @recipe function f(uₕ::VectorElement{<:ScalarGridSpace{2}})
     seriestype --> :heatmap
     x, y = points(mesh(uₕ))
-    return x, y, permutedims(to_matrix(uₕ))
+    return x, y, permutedims(reshape(uₕ))
 end
 
 @recipe function f(::VectorElement{<:CompositeGridSpace})

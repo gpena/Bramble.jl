@@ -59,7 +59,7 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
         # the functor contracts as vᵀ A u
         uₕ = Rₕ(Wₕ, x -> sin(x[1]))
         vₕ = Rₕ(Wₕ, x -> x[2] + 1)
-        @test a(uₕ, vₕ) ≈ dot(values(vₕ), Matrix(Apar) * values(uₕ))
+        @test a(uₕ, vₕ) ≈ dot(parent(vₕ), Matrix(Apar) * parent(uₕ))
 
         # re-assembly overwrites rather than accumulating
         assemble!(Aser, a)

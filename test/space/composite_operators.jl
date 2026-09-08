@@ -1,6 +1,6 @@
 using Test
 using Bramble
-using Bramble: values, components, ndofs, _grid_dims, _op_mesh
+using Bramble: components, ndofs, _grid_dims, _op_mesh
 
 # Operators on composite grid functions.
 #
@@ -51,8 +51,8 @@ using Bramble: values, components, ndofs, _grid_dims, _op_mesh
                 cs = components(uₕ)
                 @test _grid_dims(cs[1]) == npoints(Ωₕ, Tuple)
                 # every component holds exactly one value per grid point
-                @test all(length(values(c)) == prod(npoints(Ωₕ, Tuple)) for c in cs)
-                @test length(values(uₕ)) == NC * prod(npoints(Ωₕ, Tuple))
+                @test all(length(parent(c)) == prod(npoints(Ωₕ, Tuple)) for c in cs)
+                @test length(parent(uₕ)) == NC * prod(npoints(Ωₕ, Tuple))
             end
         end
     end
@@ -68,15 +68,15 @@ using Bramble: values, components, ndofs, _grid_dims, _op_mesh
 
                     # the scalar grid functions the components should behave like
                     scalars = ntuple(k -> Rₕ(Wₕ, fs[k]), NC)
-                    @test all(values(components(uₕ)[k]) == values(scalars[k]) for k in 1:NC)
+                    @test all(parent(components(uₕ)[k]) == parent(scalars[k]) for k in 1:NC)
 
                     for (name, ops...) in scalar_ops, d in 1:D
 
                         op = ops[d]
                         rₕ = op(uₕ)
-                        @test length(values(rₕ)) == length(values(uₕ))
+                        @test length(parent(rₕ)) == length(parent(uₕ))
                         for k in 1:NC
-                            @test values(components(rₕ)[k]) == values(op(scalars[k]))
+                            @test parent(components(rₕ)[k]) == parent(op(scalars[k]))
                         end
                     end
                 end
@@ -99,8 +99,8 @@ using Bramble: values, components, ndofs, _grid_dims, _op_mesh
             @test length(g) == 2
             for d in 1:2, k in 1:2
 
-                @test values(components(g[d])[k]) ==
-                      values(scalar_ops_pair[d](scalars[k]))
+                @test parent(components(g[d])[k]) ==
+                      parent(scalar_ops_pair[d](scalars[k]))
             end
         end
     end
@@ -114,7 +114,7 @@ using Bramble: values, components, ndofs, _grid_dims, _op_mesh
         uₕ = Rₕ(V₁, (f,))
         sₕ = Rₕ(Wₕ, f)
         for op in (diff₋ₓ, diff₊ₓ, D₋ₓ, D₊ₓ, jumpₓ, M₋ₓ, M₊ₓ)
-            @test values(op(uₕ)) == values(op(sₕ))
+            @test parent(op(uₕ)) == parent(op(sₕ))
         end
     end
 
@@ -122,9 +122,9 @@ using Bramble: values, components, ndofs, _grid_dims, _op_mesh
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 6, true)
         Vₕ = gridspace(Ωₕ, Val(2))
         uₕ = Rₕ(Vₕ, (x -> x, x -> x^2))
-        before = copy(values(uₕ))
+        before = copy(parent(uₕ))
         rₕ = D₋ₓ(uₕ)
         rₕ[1] = -1234.0
-        @test values(uₕ) == before
+        @test parent(uₕ) == before
     end
 end

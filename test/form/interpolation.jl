@@ -82,11 +82,11 @@ end
     @test !all(iszero, b3)
 
     # the averaged interpolant against the numeric layer, block 1: an oracle, not a shape check
-    @test b3[1:ndofs(Wbig)] ≈ values(M₋ₓ(πₕ(Wbig, u_leaf2))) .* weights(Wbig, Innerh())
+    @test b3[1:ndofs(Wbig)] ≈ parent(M₋ₓ(πₕ(Wbig, u_leaf2))) .* weights(Wbig, Innerh())
 
     # numeric consistency: innerₕ(πₕ(u), v(1)) scatters |cell_i| * interpolate_at(u, x_i) into
     # block 1, so it must equal the numeric πₕ path times the weights directly
-    Ib1 = values(πₕ(Wbig, u_leaf2))
+    Ib1 = parent(πₕ(Wbig, u_leaf2))
     w1 = weights(Wbig, Innerh())
     @test sum(b1[1:ndofs(Wbig)]) ≈ sum(Ib1 .* w1) atol=1e-8
 

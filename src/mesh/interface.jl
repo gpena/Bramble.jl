@@ -388,7 +388,7 @@ Return the coordinates of the mesh points:
   - For 1D meshes ([`Mesh1D`](@ref)): returns a coordinate vector `Vector{T}` of length ``N_x``.
   - For nD meshes ([`MeshnD`](@ref)): returns an `NTuple{D, Vector{T}}` containing the 1D coordinate vectors along each axis.
 
-See also: [`point`](@ref), [`points_iterator`](@ref).
+See also: [`point`](@ref).
 """
 function points end
 
@@ -402,13 +402,6 @@ Return the coordinate point at index `idx` (linear integer, tuple `(i, j)`, or `
 Direct indexing `Ωₕ[idx]` delegates to `point(Ωₕ, idx)`.
 """
 function point end
-
-"""
-    points_iterator(Ωₕ::AbstractMeshType)
-
-Return an iterator yielding coordinate points across the entire mesh.
-"""
-function points_iterator end
 
 """
     half_points(Ωₕ::AbstractMeshType)
@@ -428,13 +421,6 @@ Return the cell center (half-point) coordinate corresponding to index `idx`.
 function half_point end
 
 """
-    half_points_iterator(Ωₕ::AbstractMeshType)
-
-Return an iterator over cell center (half-point) coordinates.
-"""
-function half_points_iterator end
-
-"""
     spacing(Ωₕ::AbstractMeshType, idx)
 
 Return the backward spacing ``h_i = x_i - x_{i-1}`` at index `idx` (for ``i=1``, returns ``x_2 - x_1``).
@@ -443,26 +429,12 @@ For nD meshes, returns a tuple of backward spacings along each axis.
 function spacing end
 
 """
-    spacings_iterator(Ωₕ::AbstractMeshType)
-
-Return an iterator over backward spacings across mesh points.
-"""
-function spacings_iterator end
-
-"""
     forward_spacing(Ωₕ::AbstractMeshType, idx)
 
 Return the forward spacing ``h_{i+1} = x_{i+1} - x_i`` at index `idx` (for ``i=N``, returns ``x_N - x_{N-1}``).
 For nD meshes, returns a tuple of forward spacings along each axis.
 """
 function forward_spacing end
-
-"""
-    forward_spacings_iterator(Ωₕ::AbstractMeshType)
-
-Return an iterator over forward spacings across mesh points.
-"""
-function forward_spacings_iterator end
 
 """
     half_spacings(Ωₕ::AbstractMeshType)
@@ -480,13 +452,6 @@ function half_spacings end
 Return the cell width (half-spacing) at index `idx`.
 """
 function half_spacing end
-
-"""
-    half_spacings_iterator(Ωₕ::AbstractMeshType)
-
-Return an iterator over cell widths (half-spacings).
-"""
-function half_spacings_iterator end
 
 """
     npoints(Ωₕ::AbstractMeshType) -> Int
@@ -533,13 +498,6 @@ Return the control volume (length, area, or volume) of the cell centered at inde
 ```
 """
 function cell_measure end
-
-"""
-    cell_measures_iterator(Ωₕ::AbstractMeshType)
-
-Return an iterator yielding the volume or measure of each cell in the mesh.
-"""
-function cell_measures_iterator end
 
 """
     iterative_refinement!(Ωₕ::AbstractMeshType, [domain_markers::DomainMarkers]) -> AbstractMeshType

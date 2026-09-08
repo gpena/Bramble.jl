@@ -65,7 +65,7 @@ picard_steps = Float64[]
 for it in 1:200
     assemble!(A, a; dirichlet_labels = :boundary)
     unew = A \ F
-    step = maximum(abs, unew .- values(uₙ))
+    step = maximum(abs, unew .- parent(uₙ))
     push!(picard_steps, step)
     uₙ .= unew
     αvals .= α.(M₋ₕ(uₙ))
@@ -341,7 +341,7 @@ function nonlinear_series(D::Int; n0::Int = 5, levels::Int)
         uexact_c = Rₕ(Wc, sol_d)
 
         push!(hs, hₘₐₓ(Ωc))
-        push!(errs, norm₁ₕ(element(Wc) .= uc .- values(uexact_c)))
+        push!(errs, norm₁ₕ(element(Wc) .= uc .- parent(uexact_c)))
         level < levels && iterative_refinement!(Ωc)
     end
     return hs, errs

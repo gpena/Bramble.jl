@@ -103,7 +103,7 @@ end
             uₕ
         end) * u
 
-        u1_vec = values(u1)
+        u1_vec = parent(u1)
         J_cached = DifferentiationInterface.jacobian(residual_cached, AutoForwardDiff(), u1_vec)
         J_direct = DifferentiationInterface.jacobian(residual_direct, AutoForwardDiff(), u1_vec)
         @test J_cached == J_direct

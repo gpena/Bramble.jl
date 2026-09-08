@@ -1,4 +1,4 @@
-import Bramble: half_spacings_iterator
+import Bramble: half_spacings
 using Supposition
 
 @testset "Inner products & norms" begin
@@ -9,7 +9,7 @@ using Supposition
         z = normₕ(v)
 
         if D == 1
-            @test z ≈ sqrt(sum(half_spacings_iterator(mesh(Wh))))
+            @test z ≈ sqrt(sum(half_spacings(mesh(Wh))))
             @test norm₊(D₋ₓ(u)) ≈ 0.0
         elseif D == 2
             @test z ≈ 5.0
