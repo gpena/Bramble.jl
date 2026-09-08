@@ -17,7 +17,7 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
 
 @testset "Bilinear forms" begin
     S = interval(0.0, 1.0) × interval(0.0, 1.0)
-    Ωₕ = mesh(domain(S, :walls => get_boundary_symbols(S)), (9, 7), (true, true))
+    Ωₕ = mesh(domain(S, :walls => boundary_symbols(S)), (9, 7), (true, true))
     Wₕ = gridspace(Ωₕ)
     n = ndofs(Wₕ)
 
@@ -278,7 +278,7 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
         # opposite default from LinearForm's serial-by-default assemble). Both now read
         # form.trial_space's execution_policy, defaulting to Serial() like the vector form.
         @test execution_policy(Wₕ) isa Serial
-        Ω_par = mesh(domain(S, :walls => get_boundary_symbols(S)), (9, 7), (true, true);
+        Ω_par = mesh(domain(S, :walls => boundary_symbols(S)), (9, 7), (true, true);
             backend = backend(policy = Parallel()))
         W_par = gridspace(Ω_par)
         @test execution_policy(W_par) isa Parallel

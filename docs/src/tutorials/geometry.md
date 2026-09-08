@@ -51,13 +51,6 @@ Multi-dimensional hyper-rectangles are constructed intuitively by taking the ten
 Ω_3d = interval(-1.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 0.5)
 ```
 
-Alternatively, you can construct products directly using tuples of interval pairs:
-
-```julia
-# Direct tuple construction
-Ω_2d = cartesian_product(((0.0, 1.0), (0.0, 2.0)))
-```
-
 ---
 
 ## 2. Querying geometric properties
@@ -74,9 +67,9 @@ dim(X)            # 2
 topo_dim(X)       # 2
 
 # Interval bounds
-tails(X)          # ((0.0, 2.0), (-1.0, 1.0))
-tails(X, 1)       # (0.0, 2.0)  -- bounds in dimension 1
-tails(X, 2)       # (-1.0, 1.0) -- bounds in dimension 2
+extrema(X)          # ((0.0, 2.0), (-1.0, 1.0))
+extrema(X, 1)       # (0.0, 2.0)  -- bounds in dimension 1
+extrema(X, 2)       # (-1.0, 1.0) -- bounds in dimension 2
 
 # Geometric center
 center(X)         # (1.0, 0.0)
@@ -132,10 +125,10 @@ For a $D$-dimensional domain, the standard boundary facets are:
 - **2D**: `:bottom`, `:top`, `:left`, `:right`
 - **3D**: `:bottom`, `:top`, `:back`, `:front`, `:left`, `:right`
 
-You can inspect standard boundary symbols using [`get_boundary_symbols`](@ref):
+You can inspect standard boundary symbols using [`boundary_symbols`](@ref):
 
 ```julia
-get_boundary_symbols(2)
+boundary_symbols(2)
 # (:bottom, :top, :left, :right)
 ```
 
@@ -282,7 +275,7 @@ geom = interval(0.0, 1.0) × interval(0.0, 1.0)
 ```julia
 dim(Ω)            # 2
 topo_dim(Ω)       # 2
-tails(Ω)          # ((0.0, 1.0), (0.0, 1.0))
+extrema(Ω)        # ((0.0, 1.0), (0.0, 1.0))
 center(Ω)         # (0.5, 0.5)
 (0.5, 0.5) ∈ Ω    # true
 Bramble.is_collapsed(Ω)    # false (checks if any dimension is degenerate)

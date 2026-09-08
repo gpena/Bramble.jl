@@ -39,16 +39,15 @@ metal_backend
 interval
 point
 box
-cartesian_product
 ×
 dim
 topo_dim
-tails
+Base.extrema(::CartesianProduct, ::Integer)
 center
 projection
 is_collapsed
 point_type
-get_boundary_symbols
+boundary_symbols
 set
 ```
 
@@ -145,7 +144,7 @@ ncomponents
 VectorElement
 element
 Base.parent(::VectorElement)
-Base.reshape(::VectorElement)
+Base.reshape(::VectorElement{<:ScalarGridSpace})
 components
 component_range
 component_ranges

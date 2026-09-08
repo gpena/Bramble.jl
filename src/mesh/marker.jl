@@ -165,7 +165,7 @@ RegionRestriction's local_stencil (form/operators/restriction.jl) reads :interio
 "not :boundary"; ensuring :boundary exists guarantees well-defined complementary indexing.
 
 :boundary is computed via boundary_symbol_to_dict (the same face ranges marked by
-get_boundary_symbols) rather than is_boundary_index, which excludes degenerate (length-1)
+boundary_symbols) rather than is_boundary_index, which excludes degenerate (length-1)
 axes. The face-based definition marks :left and :right consistently even for degenerate sets.
 :interior is defined as the logical complement .!boundary_set.
 =#

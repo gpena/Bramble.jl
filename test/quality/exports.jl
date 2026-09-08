@@ -54,12 +54,15 @@ end
     # name ambiguous for the whole session: after `using Bramble` a call to it raises an
     # UndefVarError naming two modules, and the user loses the Base one everywhere.
     #
-    # `parent`/`reshape` are in exactly that position, on `VectorElement`. Both are defined
-    # as methods on `Base.parent`/`Base.reshape`, extensions rather than new functions, and
-    # not piracy because `VectorElement` belongs to this package.
+    # `parent`/`reshape` are in exactly that position, on `VectorElement`, and `extrema` is
+    # too, on `CartesianProduct`/`Domain`. All are defined as methods on
+    # `Base.parent`/`Base.reshape`/`Base.extrema`, extensions rather than new functions,
+    # and not piracy because `VectorElement`/`CartesianProduct`/`Domain` belong to this
+    # package.
     #
-    # A name Base defines but does not export (`tails`) is fine: `using Bramble` resolves
-    # it to this package's without ambiguity.
+    # A name Base defines but does not export is fine too: `using Bramble` would resolve
+    # it to this package's own definition without ambiguity, the same way `tails` (removed
+    # in gpena/Bramble.jl#76) used to share a name with a non-exported Base internal.
     clashes = Symbol[]
     for n in names(Bramble)
         n === :Bramble && continue
@@ -75,8 +78,12 @@ end
     # the case that motivated this: both meanings reachable after `using Bramble`
     @test Bramble.parent === Base.parent
     @test Bramble.reshape === Base.reshape
+    @test Bramble.extrema === Base.extrema
     v = [1, 2, 3]
     @test parent(v) === v  # generic AbstractArray fallback, untouched
+    @test extrema(v) == (1, 3)  # generic AbstractArray reduction, untouched
+    I = interval(0.0, 2.0)
+    @test extrema(I) == (0.0, 2.0)
     Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
     uₕ = Rₕ(gridspace(Ωₕ), x -> x^2)
     @test parent(uₕ) ≈ [0.0, 0.0625, 0.25, 0.5625, 1.0]

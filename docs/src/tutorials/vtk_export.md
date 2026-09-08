@@ -31,7 +31,7 @@ files = export_vtk(joinpath(mktempdir(), "solution"), Ωₕ, "u" => uₕ)
 ```
 
 `data` can be a [`VectorElement`](@ref), which is reshaped to match the grid the same way
-[`to_matrix`](@ref) does, or a plain array already shaped that way. Passing more than one
+`reshape` does, or a plain array already shaped that way. Passing more than one
 pair writes more than one field into the same file:
 
 ```@example vtk

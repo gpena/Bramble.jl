@@ -7,7 +7,7 @@ Cartesian product of `D` closed intervals embedded in ``\\mathbb{R}^D`` with sca
 - `box`: Tuple of `D` interval endpoint pairs `(min, max)`.
 - `collapsed`: Tuple of `D` boolean flags indicating whether each dimension is degenerate (`min ≈ max`).
 
-See also: [`interval`](@ref), [`point`](@ref), [`cartesian_product`](@ref), [`box`](@ref).
+See also: [`interval`](@ref), [`point`](@ref), [`box`](@ref).
 """
 struct CartesianProduct{D, T}
     box::NTuple{D, Tuple{T, T}}
@@ -17,7 +17,6 @@ end
 @noinline _throw_bounds_error(X::CartesianProduct, i) = throw(BoundsError(X, i))
 @noinline _throw_interval_error(x,
     y) = throw(ArgumentError("Invalid interval: expected x <= y, but got x = $x, y = $y"))
-@noinline _throw_box_error(box) = throw(ArgumentError("Invalid box: Each tuple must satisfy x[1] <= x[2]. Found box: $box"))
 
 """
     is_collapsed(a::Number, b::Number) -> Bool
@@ -105,41 +104,6 @@ Construct a degenerate 1D [`CartesianProduct`](@ref) representing the point ``[x
 end
 
 """
-    cartesian_product(x::Number, y::Number) -> CartesianProduct{1, T}
-    cartesian_product(box::NTuple{D, Tuple{Any, Any}}) -> CartesianProduct{D, T}
-    cartesian_product(X::CartesianProduct) -> CartesianProduct
-
-Construct a [`CartesianProduct`](@ref) from scalar interval endpoints, a tuple of interval pairs, or an existing set.
-
-# Throws
-- `ArgumentError`: If any interval pair satisfies `pair[1] > pair[2]`.
-
-# Examples
-```jldoctest
-using Bramble
-X = cartesian_product(((0.0, 1.0), (0.0, 2.0)))
-dim(X) == 2 && eltype(X) === Float64
-
-# output
-true
-```
-"""
-@inline cartesian_product(x::Number, y::Number) = interval(x, y)
-
-@inline function cartesian_product(box::NTuple{D, Tuple{Any, Any}}) where {D}
-    all(i -> box[i][1] <= box[i][2], 1:D) || _throw_box_error(box)
-
-    _box_f = ntuple(i -> (float(box[i][1]), float(box[i][2])), Val(D))
-    FloatT = mapreduce(t -> promote_type(typeof(t[1]), typeof(t[2])), promote_type, _box_f)
-    _box = ntuple(i -> (FloatT(_box_f[i][1]), FloatT(_box_f[i][2])), Val(D))
-    _collapsed_flags = ntuple(i -> is_collapsed(_box[i]...), Val(D))
-
-    return CartesianProduct{D, FloatT}(_box, _collapsed_flags)
-end
-
-@inline cartesian_product(X::CartesianProduct) = X
-
-"""
     box(a::Number, b::Number) -> CartesianProduct{1, T}
     box(a::NTuple{D}, b::NTuple{D}) -> CartesianProduct{D, T}
 
@@ -204,16 +168,21 @@ Return the topological dimension of `X`, defined as the embedding dimension `D` 
 """
 @inline topo_dim(X::CartesianProduct{D}) where {D} = D - sum(X.collapsed)
 
+# Extends `Base.extrema` rather than defining a `Bramble.tails` of its own -- the whole
+# point of dropping `tails` (gpena/Bramble.jl#76) is that "the (min, max) pair of an
+# interval" already has a name. `CartesianProduct` is not iterable, so this adds new
+# dispatches rather than overriding the generic reduction `extrema` gives an
+# `AbstractArray`; there is no existing behaviour here to shadow.
 """
-    tails(X::CartesianProduct, i::Integer) -> Tuple{T, T}
-    tails(X::CartesianProduct{1}) -> Tuple{T, T}
-    tails(X::CartesianProduct{D}) -> NTuple{D, Tuple{T, T}}
+    extrema(X::CartesianProduct, i::Integer) -> Tuple{T, T}
+    extrema(X::CartesianProduct{1}) -> Tuple{T, T}
+    extrema(X::CartesianProduct{D}) -> NTuple{D, Tuple{T, T}}
 
 Return component interval endpoint pairs `(min, max)` for index `i` or all dimensions.
 """
-@inline tails(X::CartesianProduct, i::Integer) = X(i)
-@inline tails(X::CartesianProduct{1}) = X(1)
-@inline tails(X::CartesianProduct{D}) where {D} = ntuple(i -> X(i), Val(D))
+@inline Base.extrema(X::CartesianProduct, i::Integer) = X(i)
+@inline Base.extrema(X::CartesianProduct{1}) = X(1)
+@inline Base.extrema(X::CartesianProduct{D}) where {D} = ntuple(i -> X(i), Val(D))
 
 """
     first(X::CartesianProduct{1}) -> T

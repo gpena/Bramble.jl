@@ -2,7 +2,7 @@ using Test
 using Bramble
 using Bramble: Marker, MarkerPair, Domain, DomainMarkers,
                EvaluatedDomainMarkers, dim, set, markers, labels, CartesianProduct
-using Bramble: get_boundary_symbols, label, identifier, domain, symbols, tuples, conditions
+using Bramble: boundary_symbols, label, identifier, domain, symbols, tuples, conditions
 using Bramble: marker_identifiers, process_identifier, marker_symbols,
                marker_tuples, marker_conditions
 using Bramble: label_identifiers, label_symbols, label_tuples, label_conditions, point_type,
@@ -72,22 +72,22 @@ end
     # Invariant: Boundary symbols for 1D, 2D, and 3D geometries are extractable
     # from either value instances or type signatures of sets and domains.
     @testset "Boundary symbol extraction" begin
-        @test get_boundary_symbols(I1D) == (:left, :right)
-        @test get_boundary_symbols(I2D) == (:bottom, :top, :left, :right)
-        @test get_boundary_symbols(I3D) == (:bottom, :top, :back, :front, :left, :right)
+        @test boundary_symbols(I1D) == (:left, :right)
+        @test boundary_symbols(I2D) == (:bottom, :top, :left, :right)
+        @test boundary_symbols(I3D) == (:bottom, :top, :back, :front, :left, :right)
 
         # Type-level boundary symbols
-        @test get_boundary_symbols(typeof(I1D)) == (:left, :right)
-        @test get_boundary_symbols(typeof(I2D)) == (:bottom, :top, :left, :right)
-        @test get_boundary_symbols(typeof(I3D)) ==
+        @test boundary_symbols(typeof(I1D)) == (:left, :right)
+        @test boundary_symbols(typeof(I2D)) == (:bottom, :top, :left, :right)
+        @test boundary_symbols(typeof(I3D)) ==
               (:bottom, :top, :back, :front, :left, :right)
 
         # On Domain
         Ω1 = domain(I1D)
         Ω2 = domain(I2D)
-        @test get_boundary_symbols(Ω1) == (:left, :right)
-        @test get_boundary_symbols(Ω2) == (:bottom, :top, :left, :right)
-        @test get_boundary_symbols(typeof(Ω1)) == (:left, :right)
+        @test boundary_symbols(Ω1) == (:left, :right)
+        @test boundary_symbols(Ω2) == (:bottom, :top, :left, :right)
+        @test boundary_symbols(typeof(Ω1)) == (:left, :right)
     end
 
     # Invariant: `process_identifier` normalizes symbols, tuples, and vectors
@@ -267,7 +267,7 @@ end
         @inferred topo_dim(Ω)
         @inferred point_type(Ω)
         @inferred projection(Ω, 1)
-        @inferred get_boundary_symbols(Ω)
+        @inferred boundary_symbols(Ω)
         @inferred is_collapsed(Ω)
         @inferred is_collapsed(Ω, 1)
         @inferred Base.length(Ω)
@@ -280,7 +280,7 @@ end
         @test_allocs is_collapsed(Ω)
         @test_allocs is_collapsed(Ω, 1)
         @test_allocs projection(Ω, 1)
-        @test_allocs get_boundary_symbols(Ω)
+        @test_allocs boundary_symbols(Ω)
         @test_allocs Base.length(Ω)
         @test_allocs Base.isempty(Ω)
 
@@ -382,7 +382,7 @@ end
     end
 
     # Invariant: `Domain` forwards geometric property queries (`center`, `in`,
-    # `tails`, `is_collapsed`, `projection`, boundary symbols) directly to
+    # `extrema`, `is_collapsed`, `projection`, boundary symbols) directly to
     # the underlying geometric set.
     @testset "Geometric property delegation" begin
         Ω_1d = domain(interval(0.0, 4.0))
@@ -399,11 +399,11 @@ end
         @test (5.0, 2.0) ∉ Ω_2d
 
         # Boundary coordinate limits.
-        @test tails(Ω_1d) == (0.0, 4.0)
-        @test tails(Ω_1d, 1) == (0.0, 4.0)
-        @test tails(Ω_2d) == ((0.0, 2.0), (1.0, 3.0))
-        @test tails(Ω_2d, 1) == (0.0, 2.0)
-        @test tails(Ω_2d, 2) == (1.0, 3.0)
+        @test extrema(Ω_1d) == (0.0, 4.0)
+        @test extrema(Ω_1d, 1) == (0.0, 4.0)
+        @test extrema(Ω_2d) == ((0.0, 2.0), (1.0, 3.0))
+        @test extrema(Ω_2d, 1) == (0.0, 2.0)
+        @test extrema(Ω_2d, 2) == (1.0, 3.0)
 
         # Degenerate dimension detection across 1D and nD domains.
         @test !is_collapsed(Ω_1d)
@@ -428,12 +428,12 @@ end
         @test Ω_2d(2) == (1.0, 3.0)
 
         # Boundary symbols from domain instance.
-        @test get_boundary_symbols(Ω_1d) == (:left, :right)
-        @test get_boundary_symbols(Ω_2d) == (:bottom, :top, :left, :right)
+        @test boundary_symbols(Ω_1d) == (:left, :right)
+        @test boundary_symbols(Ω_2d) == (:bottom, :top, :left, :right)
 
         # Boundary symbols from domain type.
-        @test get_boundary_symbols(typeof(Ω_1d)) == (:left, :right)
-        @test get_boundary_symbols(typeof(Ω_2d)) == (:bottom, :top, :left, :right)
+        @test boundary_symbols(typeof(Ω_1d)) == (:left, :right)
+        @test boundary_symbols(typeof(Ω_2d)) == (:bottom, :top, :left, :right)
     end
 
     # Invariant: `EvaluatedDomainMarkers` handles static condition fallbacks
@@ -466,13 +466,13 @@ end
         @test !isempty(edm2)
     end
 
-    # Invariant: `get_boundary_symbols` returns canonical boundary names for
+    # Invariant: `boundary_symbols` returns canonical boundary names for
     # dimensions 1, 2, and 3, and raises an error for unsupported dimensions.
     @testset "Default boundary symbol mappings" begin
-        @test get_boundary_symbols(1) == (:left, :right)
-        @test get_boundary_symbols(2) == (:bottom, :top, :left, :right)
-        @test get_boundary_symbols(3) == (:bottom, :top, :back, :front, :left, :right)
-        @test_throws ErrorException get_boundary_symbols(4)
+        @test boundary_symbols(1) == (:left, :right)
+        @test boundary_symbols(2) == (:bottom, :top, :left, :right)
+        @test boundary_symbols(3) == (:bottom, :top, :back, :front, :left, :right)
+        @test_throws ErrorException boundary_symbols(4)
     end
 
     # Invariant: Spatiotemporal domains can be constructed by combining spatial
@@ -495,22 +495,22 @@ end
         X4 = interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0) ×
              interval(0.0, 1.0)
         @test dim(X4) == 4
-        @test_throws ErrorException get_boundary_symbols(4)
-        @test_throws ErrorException get_boundary_symbols(typeof(X4))
+        @test_throws ErrorException boundary_symbols(4)
+        @test_throws ErrorException boundary_symbols(typeof(X4))
 
         # Supported dimensions resolve identically across value and type queries.
-        @test get_boundary_symbols(1) == (:left, :right)
-        @test get_boundary_symbols(2) == (:bottom, :top, :left, :right)
-        @test get_boundary_symbols(3) == (:bottom, :top, :back, :front, :left, :right)
+        @test boundary_symbols(1) == (:left, :right)
+        @test boundary_symbols(2) == (:bottom, :top, :left, :right)
+        @test boundary_symbols(3) == (:bottom, :top, :back, :front, :left, :right)
 
         I = interval(0.0, 1.0)
-        @test get_boundary_symbols(I) == get_boundary_symbols(typeof(I))
-        @test get_boundary_symbols(typeof(domain(I))) == get_boundary_symbols(typeof(I))
+        @test boundary_symbols(I) == boundary_symbols(typeof(I))
+        @test boundary_symbols(typeof(domain(I))) == boundary_symbols(typeof(I))
 
         X2 = I × I
-        @test get_boundary_symbols(X2) == get_boundary_symbols(typeof(X2))
+        @test boundary_symbols(X2) == boundary_symbols(typeof(X2))
         X3 = I × I × I
-        @test get_boundary_symbols(X3) == get_boundary_symbols(typeof(X3))
+        @test boundary_symbols(X3) == boundary_symbols(typeof(X3))
     end
 
     # Invariant: A domain wrapping a degenerate interval displays as a Point rather than Interval.

@@ -31,8 +31,8 @@ public vector, matrix
 public backend_eye, backend_zeros
 
 # domain/interval handling functions
-export box, interval, ×, dim, topo_dim, tails, point, cartesian_product, center, projection,
-       get_boundary_symbols
+export box, interval, ×, dim, topo_dim, extrema, point, center, projection,
+       boundary_symbols
 export domain, markers, labels
 
 # `set` is `CartesianProduct`'s identity accessor — real, but the single most generic noun

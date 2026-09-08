@@ -268,7 +268,7 @@ end
     # Get the number of points and the interval's element type and bounds.
     npts = length(x)
     T = eltype(I)
-    a, b = tails(I)
+    a, b = extrema(I)
 
     # Handle the trivial case of a single point mesh. The point sits at the lower
     # bound of the interval (for a collapsed interval a == b, so this is the point itself).

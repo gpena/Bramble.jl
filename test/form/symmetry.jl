@@ -12,7 +12,7 @@ using Bramble: form, assemble, trial_space, test_space, restrict_to, shift_op,
 
 @testset "Symmetry and SPD detection" begin
     S = interval(0.0, 1.0) × interval(0.0, 1.0)
-    Ωₕ = mesh(domain(S, :walls => get_boundary_symbols(S)), (9, 7), (true, true))
+    Ωₕ = mesh(domain(S, :walls => boundary_symbols(S)), (9, 7), (true, true))
     Wₕ = gridspace(Ωₕ)
 
     @testset "Identical operators" begin

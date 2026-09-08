@@ -138,7 +138,7 @@ Construct a [`DomainMarkers`](@ref) collection from `label => identifier` pairs.
 # Examples
 ```jldoctest
 using Bramble
-I = cartesian_product(0.0, 1.0)
+I = interval(0.0, 1.0)
 m = markers(I, :left_boundary => :left, :internal => x -> 0.2 < x < 0.8)
 length(symbols(m)) == 1 && length(conditions(m)) == 1
 

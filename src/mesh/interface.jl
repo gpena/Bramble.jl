@@ -687,7 +687,7 @@ boundary facet label (`:left`, `:right`, `:bottom`, `:top`, `:front`, `:back`).
       - `:bottom` ``\\to (0.0, 0.0, -1.0)``
       - `:top`    ``\\to (0.0, 0.0, +1.0)``
 
-See also: [`get_boundary_symbols`](@ref).
+See also: [`boundary_symbols`](@ref).
 """
 @inline normal_vector(::AbstractMeshType{D}, symbol::Symbol) where {D} = normal_vector(Val(D), symbol)
 

@@ -35,7 +35,8 @@ end
     # 2. Preserves custom scalar element types (Float32).
     # 3. Degenerate intervals (min ≈ max) correctly flag collapsed status.
     # 4. Inverted intervals (x > y) raise an ArgumentError.
-    # 5. Multi-dimensional tuples promote inhomogeneous coordinates and validate coordinate ordering.
+    # 5. `×`-composed and `box`-composed multi-dimensional sets promote coordinate types
+    #    the same way and agree on layout.
     # 6. Degenerate point constructors construct collapsed 1D sets.
     # 7. Box constructors calculate min/max bounding boxes from arbitrary opposing corner pairs.
     @testset "CartesianProduct constructors" begin
@@ -72,32 +73,26 @@ end
         @test I_f64_again isa CartesianProduct{1, Float64}
         @test all(isapprox.(I_f64_again.box[1], (-3.0, 10.0)))
 
-        # cartesian_product(x, y) alias
-        cp_f64 = cartesian_product(-3.0, 10.0)
-        @test cp_f64 isa CartesianProduct{1, Float64}
-        @test all(isapprox.(cp_f64.box[1], (-3.0, 10.0)))
-
-        # cartesian_product(NTuple) - Int
-        cp_int_2d = cartesian_product(((0, 1), (4, 5)))
+        # × of two intervals - Int, promoted to Float64
+        cp_int_2d = interval(0, 1) × interval(4, 5)
         @test cp_int_2d isa CartesianProduct{2, Float64}
         @test cp_int_2d.box isa NTuple{2}
         @test cp_int_2d.box[1] == (0.0, 1.0)
         @test cp_int_2d.box[2] == (4.0, 5.0)
 
-        # cartesian_product(NTuple) - Float32
-        cp_f32_3d = cartesian_product(((0.0f0, 1.0f0), (2.0f0, 3.0f0), (-1.0f0, 0.0f0)))
+        # × of three intervals - Float32, preserved
+        cp_f32_3d = interval(0.0f0, 1.0f0) × interval(2.0f0, 3.0f0) ×
+                    interval(-1.0f0, 0.0f0)
         @test cp_f32_3d isa CartesianProduct{3, Float32}
         @test cp_f32_3d.box isa NTuple{3}
         @test cp_f32_3d.box[1] == (0.0f0, 1.0f0)
         @test cp_f32_3d.box[2] == (2.0f0, 3.0f0)
         @test cp_f32_3d.box[3] == (-1.0f0, 0.0f0)
 
-        # cartesian_product invalid interval error
-        @test_throws ArgumentError cartesian_product(((1.0, 0.0), (2.0, 3.0)))
-
-        # cartesian_product(CartesianProduct) identity
-        cp_id = cartesian_product(cp_int_2d)
-        @test cp_id === cp_int_2d
+        # box(corner, corner) - Int, promoted to Float64, same layout as cp_int_2d above
+        cp_box_2d = box((0, 4), (1, 5))
+        @test cp_box_2d isa CartesianProduct{2, Float64}
+        @test cp_box_2d.box == cp_int_2d.box
 
         # Point constructor (collapsed 1D set)
         P_f64 = point(3.5)
@@ -139,13 +134,13 @@ end
     # 2. topo_dim returns D minus the number of collapsed dimensions.
     # 3. eltype extracts scalar coordinate precision T.
     # 4. center calculates the midpoint along each dimension.
-    # 5. tails and indexing X(i) return interval tuples; out-of-bounds raises BoundsError.
+    # 5. extrema and indexing X(i) return interval tuples; out-of-bounds raises BoundsError.
     # 6. first and last return the lower and upper bounds of 1D intervals.
     # 7. projection extracts individual 1D coordinate intervals as CartesianProduct{1}.
     # 8. point_type reflects coordinate representation (T for 1D, NTuple{D, T} for D-dimensional).
     @testset "Accessors and geometric properties" begin
         I = interval(0.0, 1.0)
-        R2 = cartesian_product(((0, 1), (2, 3)))
+        R2 = interval(0, 1) × interval(2, 3)
         R3 = I × interval(2.0, 3.0) × interval(4.0, 5.0)
 
         # Set identity accessor
@@ -221,18 +216,18 @@ end
         @test_throws BoundsError R2(0)
         @test_throws BoundsError R3(4)
 
-        # Component tails
-        @test all(isapprox.(tails(I, 1), (0.0, 1.0)))
-        @test all(isapprox.(tails(R2, 1), (0.0, 1.0)))
-        @test all(isapprox.(tails(R2, 2), (2.0, 3.0)))
-        @test all(isapprox.(tails(R3, 3), (4.0, 5.0)))
-        @test_throws BoundsError tails(I, 2)
-        @test_throws BoundsError tails(R2, 0)
-        @test_throws BoundsError tails(R3, 4)
+        # Component extrema
+        @test all(isapprox.(extrema(I, 1), (0.0, 1.0)))
+        @test all(isapprox.(extrema(R2, 1), (0.0, 1.0)))
+        @test all(isapprox.(extrema(R2, 2), (2.0, 3.0)))
+        @test all(isapprox.(extrema(R3, 3), (4.0, 5.0)))
+        @test_throws BoundsError extrema(I, 2)
+        @test_throws BoundsError extrema(R2, 0)
+        @test_throws BoundsError extrema(R3, 4)
 
-        @test all(isapprox.(tails(I), (0.0, 1.0)))
-        @test tails(R2) == ((0.0, 1.0), (2.0, 3.0))
-        @test tails(R3) == ((0.0, 1.0), (2.0, 3.0), (4.0, 5.0))
+        @test all(isapprox.(extrema(I), (0.0, 1.0)))
+        @test extrema(R2) == ((0.0, 1.0), (2.0, 3.0))
+        @test extrema(R3) == ((0.0, 1.0), (2.0, 3.0), (4.0, 5.0))
 
         # First and last endpoints for 1D sets
         @test isapprox(first(I), 0.0)
@@ -258,13 +253,13 @@ end
         @test P1 isa CartesianProduct{2, Float64}
         @test dim(P1) == 2
         @test P1.box isa NTuple{2}
-        @test tails(P1) == ((0.0, 1.0), (2.0, 3.0))
+        @test extrema(P1) == ((0.0, 1.0), (2.0, 3.0))
 
         # Tensor product with mixed types (Float32 × Float64)
         P_mixed = I_f32 × I1
         @test P_mixed isa CartesianProduct{2, Float64}
         @test eltype(P_mixed) === Float64
-        @test tails(P_mixed) == ((0.0, 1.0), (0.0, 1.0))
+        @test extrema(P_mixed) == ((0.0, 1.0), (0.0, 1.0))
 
         # Higher-dimensional tensor product (5D)
         I4 = interval(6.0, 7.0)
@@ -282,17 +277,17 @@ end
 
         @test proj1 isa CartesianProduct{1, Float64}
         @test dim(proj1) == 1
-        @test all(isapprox.(tails(proj1), (0.0, 1.0)))
+        @test all(isapprox.(extrema(proj1), (0.0, 1.0)))
         @test isapprox(first(proj1), 0.0)
         @test isapprox(last(proj1), 1.0)
 
         @test proj2 isa CartesianProduct{1, Float64}
         @test dim(proj2) == 1
-        @test all(isapprox.(tails(proj2), (2.0, 3.0)))
+        @test all(isapprox.(extrema(proj2), (2.0, 3.0)))
 
         @test proj3 isa CartesianProduct{1, Float64}
         @test dim(proj3) == 1
-        @test all(isapprox.(tails(proj3), (4.0, 5.0)))
+        @test all(isapprox.(extrema(proj3), (4.0, 5.0)))
 
         @test_throws BoundsError projection(P_proj, 4)
         @test_throws BoundsError projection(P_proj, 0)
@@ -318,8 +313,8 @@ end
         @inferred eltype(cp3)
         @inferred topo_dim(cp3)
         @inferred projection(cp3, 2)
-        @inferred tails(cp3, 1)
-        @inferred tails(cp3)
+        @inferred extrema(cp3, 1)
+        @inferred extrema(cp3)
         @inferred cp2(1)
         @inferred is_collapsed(I1)
         @inferred is_collapsed(point(1.0))
@@ -340,8 +335,8 @@ end
         @test_allocs is_collapsed(cp2, 1)
         @test_allocs is_collapsed(cp3)
         @test_allocs projection(cp3, 2)
-        @test_allocs tails(cp3)
-        @test_allocs tails(cp3, 1)
+        @test_allocs extrema(cp3)
+        @test_allocs extrema(cp3, 1)
         @test_allocs cp2(1)
         @test_allocs (I1 × I2)
     end

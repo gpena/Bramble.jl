@@ -255,7 +255,7 @@ end
         # constraint on a Float32 problem must not reintroduce that promotion one call later.
         for T in (Float32, Float64)
             S = interval(T(0), T(1)) × interval(T(0), T(1))
-            Ωₕ = mesh(domain(S, :walls => get_boundary_symbols(S)), (6, 6), (true, true))
+            Ωₕ = mesh(domain(S, :walls => boundary_symbols(S)), (6, 6), (true, true))
             Wₕ = gridspace(Ωₕ)
             @test eltype(Ωₕ) === T
 

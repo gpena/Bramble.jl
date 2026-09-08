@@ -106,7 +106,7 @@ end
     if _shares_one_mesh(comps)
         sp = space(uₕ)
         Ωₕ = mesh(sp)
-        raws = map(values, comps)
+        raws = map(parent, comps)
         idxs = indices(Ωₕ)
         n = length(idxs)
         _cpu_threaded_scatter_for!(execution_policy(sp), raws, 1:n, _RₕKernel(f, Ωₕ, idxs))
@@ -176,7 +176,7 @@ function _Rₕ_masked!(uₕ::VectorElement{<:CompositeGridSpace}, f::F,
     comps = components(uₕ)
     if _shares_one_mesh(comps)
         Ωₕ = mesh(space(uₕ))
-        raws = map(values, comps)
+        raws = map(parent, comps)
         idxs = indices(Ωₕ)
         n = length(idxs)
 

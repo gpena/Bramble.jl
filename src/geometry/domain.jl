@@ -132,7 +132,7 @@ true
 ```
 """
 @inline domain(X::CartesianProduct) = Domain(X, markers(X, :boundary =>
-    get_boundary_symbols(X)))
+    boundary_symbols(X)))
 @inline domain(X::CartesianProduct, markers::DomainMarkers) = Domain(X, markers)
 @inline domain(X::CartesianProduct, pairs::Pair...) = domain(X, markers(X, pairs...))
 @inline domain(space_set::CartesianProduct, time_set::CartesianProduct{1}, pairs::Pair...) = domain(
@@ -204,13 +204,13 @@ Query whether point `x` lies within the closed domain `Ω`.
 @inline Base.in(x, Ω::Domain) = x ∈ set(Ω)
 
 """
-    tails(Ω::Domain) -> Tuple
-    tails(Ω::Domain, i::Integer) -> Tuple{T, T}
+    extrema(Ω::Domain) -> Tuple
+    extrema(Ω::Domain, i::Integer) -> Tuple{T, T}
 
 Return the coordinate interval endpoints of domain `Ω`.
 """
-@inline tails(Ω::Domain) = tails(set(Ω))
-@inline tails(Ω::Domain, i::Integer) = tails(set(Ω), i)
+@inline Base.extrema(Ω::Domain) = extrema(set(Ω))
+@inline Base.extrema(Ω::Domain, i::Integer) = extrema(set(Ω), i)
 
 """
     is_collapsed(Ω::Domain) -> Bool
@@ -232,9 +232,9 @@ Extract the `i`-th coordinate dimension of domain `Ω` as a 1D [`CartesianProduc
 @inline projection(Ω::Domain, i::Integer) = projection(set(Ω), i)
 
 """
-    get_boundary_symbols(Ω::Domain) -> Tuple{Vararg{Symbol}}
-    get_boundary_symbols(X::CartesianProduct) -> Tuple{Vararg{Symbol}}
-    get_boundary_symbols(D::Integer) -> Tuple{Vararg{Symbol}}
+    boundary_symbols(Ω::Domain) -> Tuple{Vararg{Symbol}}
+    boundary_symbols(X::CartesianProduct) -> Tuple{Vararg{Symbol}}
+    boundary_symbols(D::Integer) -> Tuple{Vararg{Symbol}}
 
 Return the default boundary symbols for dimension `D` or domain `Ω`:
 - 1D ``[x_1, x_2]``: `(:left, :right)`
@@ -244,27 +244,27 @@ Return the default boundary symbols for dimension `D` or domain `Ω`:
 # Throws
 - `ErrorException`: If dimension `D > 3`.
 """
-@inline get_boundary_symbols(Ω::Domain) = get_boundary_symbols(set(Ω))
-@inline get_boundary_symbols(::CartesianProduct{1}) = (:left, :right)
-@inline get_boundary_symbols(::CartesianProduct{2}) = (:bottom, :top, :left, :right)
-@inline get_boundary_symbols(::CartesianProduct{3}) = (
+@inline boundary_symbols(Ω::Domain) = boundary_symbols(set(Ω))
+@inline boundary_symbols(::CartesianProduct{1}) = (:left, :right)
+@inline boundary_symbols(::CartesianProduct{2}) = (:bottom, :top, :left, :right)
+@inline boundary_symbols(::CartesianProduct{3}) = (
     :bottom, :top, :back, :front, :left, :right)
-@inline get_boundary_symbols(::Type{<:CartesianProduct{1}}) = (:left, :right)
-@inline get_boundary_symbols(::Type{<:CartesianProduct{2}}) = (:bottom, :top, :left, :right)
-@inline get_boundary_symbols(::Type{<:CartesianProduct{3}}) = (
+@inline boundary_symbols(::Type{<:CartesianProduct{1}}) = (:left, :right)
+@inline boundary_symbols(::Type{<:CartesianProduct{2}}) = (:bottom, :top, :left, :right)
+@inline boundary_symbols(::Type{<:CartesianProduct{3}}) = (
     :bottom, :top, :back, :front, :left, :right)
-function get_boundary_symbols(D::Integer)
+function boundary_symbols(D::Integer)
     D == 1 && return (:left, :right)
     D == 2 && return (:bottom, :top, :left, :right)
     D == 3 && return (:bottom, :top, :back, :front, :left, :right)
-    error("get_boundary_symbols is not defined for $(D)D domains. " *
+    error("boundary_symbols is not defined for $(D)D domains. " *
           "Provide explicit boundary names via the markers() interface.")
 end
-@noinline function get_boundary_symbols(::Type{<:CartesianProduct{D}}) where {D}
-    error("get_boundary_symbols is not defined for $(D)D domains. " *
+@noinline function boundary_symbols(::Type{<:CartesianProduct{D}}) where {D}
+    error("boundary_symbols is not defined for $(D)D domains. " *
           "Provide explicit boundary names via the markers() interface.")
 end
-@inline get_boundary_symbols(::Type{<:Domain{SetType}}) where {SetType} = get_boundary_symbols(SetType)
+@inline boundary_symbols(::Type{<:Domain{SetType}}) where {SetType} = boundary_symbols(SetType)
 
 function Base.show(io::IO, Ω::Domain)
     pp = PrettyPrinter(io)
