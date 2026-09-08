@@ -14,7 +14,7 @@
 
 """
     type_cached_assemble!(build, cache::AbstractDict, uₕ::VectorElement;
-        dirichlet_labels = nothing, dirichlet_components = nothing) -> SparseMatrixCSC
+        dirichlet = nothing, dirichlet_components = nothing) -> SparseMatrixCSC
 
 Assembles a coefficient-dependent [`BilinearForm`](@ref) into a matrix whose sparsity
 pattern is built once per distinct element type `uₕ` is ever passed at, rather than on
@@ -50,7 +50,7 @@ end
 
 cache = Dict()
 diffusion_matrix(uₕ) = type_cached_assemble!(
-    build_diffusion, cache, uₕ; dirichlet_labels = :boundary)
+    build_diffusion, cache, uₕ; dirichlet = :boundary)
 ```
 
 `refill!` reaches for `M₋ₓ!` rather than the non-mutating `M₋ₓ`/`M₋ₕ` deliberately: the
@@ -73,7 +73,7 @@ usage above. A form assembled from more than one task needs a lock or a per-task
 the same as any other shared mutable `Dict`.
 """
 function type_cached_assemble!(build::F, cache::AbstractDict, uₕ::VectorElement{S, T};
-        dirichlet_labels = nothing, dirichlet_components = nothing) where {F, S, T}
+        dirichlet = nothing, dirichlet_components = nothing) where {F, S, T}
     # `haskey`/`cache[T]` rather than `get!(f, cache, T) do ... end`: the do-block form
     # has to construct its closure before `get!` can even decide whether to call it, so it
     # allocates on every call, cache hit or miss -- exactly the cost this function exists
@@ -93,7 +93,7 @@ function type_cached_assemble!(build::F, cache::AbstractDict, uₕ::VectorElemen
         entry
     end
     refill!(uₕ)
-    assemble!(A, a; dirichlet_labels = dirichlet_labels,
+    assemble!(A, a; dirichlet = dirichlet,
         dirichlet_components = dirichlet_components)
     return A
 end

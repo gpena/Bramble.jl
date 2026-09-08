@@ -818,48 +818,44 @@ end
     end
 
     @testset "Dirichlet conditions" begin
-        bcs = dirichlet_constraints(set(Ωₕ), :bottom => (x -> 5.0))
+        bcs = dirichlet_constraints(Ωₕ, :bottom => (x -> 5.0))
         marked = index_in_marker(Ωₕ, :bottom)
         @test any(marked)
 
-        b = assemble(form(Wₕ, v -> innerₕ(uₕ, v));
-            dirichlet_conditions = bcs, dirichlet_labels = :bottom)
+        b = assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet = bcs)
         @test all(b[marked] .≈ 5.0)
 
-        # a tuple of labels, and an empty tuple which asks for nothing
-        b2 = assemble(form(Wₕ, v -> innerₕ(uₕ, v));
-            dirichlet_conditions = bcs, dirichlet_labels = (:bottom,))
+        # the same constraint, spelled as a Tuple of pairs rather than pre-built constraints
+        b2 = assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet = (:bottom => (x -> 5.0),))
         @test b2 ≈ b
-        plain = assemble(form(Wₕ, v -> innerₕ(uₕ, v)))
-        @test assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet_conditions = bcs,
-            dirichlet_labels = ()) ≈ plain
 
-        # naming labels without conditions is a usage error rather than a silent no-op.
-        # The conditions default to `nothing` now: they used to default to an empty
-        # constraint set, built on every call and then discarded whenever no labels were
-        # named (2,080 B per assembly for an argument nothing read).
+        # no dirichlet at all is the unconstrained assembly
+        plain = assemble(form(Wₕ, v -> innerₕ(uₕ, v)))
+        @test assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet = nothing) ≈ plain
+
+        # naming a label alone, with no values, is a usage error rather than a silent
+        # no-op: a linear form has nowhere to read boundary values from.
         @test_throws ArgumentError assemble(form(Wₕ, v -> innerₕ(uₕ, v));
-            dirichlet_labels = :bottom)
+            dirichlet = :bottom)
         msg = try
-            assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet_labels = :bottom)
+            assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet = :bottom)
         catch e
             sprint(showerror, e)
         end
-        @test occursin("dirichlet_conditions", msg)
+        @test occursin("carries no values", msg)
 
-        # and an invalid label type is rejected before anything is assembled
-        @test_throws ErrorException assemble(form(Wₕ, v -> innerₕ(uₕ, v));
-            dirichlet_conditions = bcs, dirichlet_labels = 3)
+        # and a value dirichlet does not know how to normalize is rejected before
+        # anything is assembled
+        @test_throws ArgumentError assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet = 3)
     end
 
     @testset "dirichlet_components restriction" begin
-        bcs = dirichlet_constraints(set(Ωₕ), :bottom => (x -> 5.0))
+        bcs = dirichlet_constraints(Ωₕ, :bottom => (x -> 5.0))
         marked = index_in_marker(Ωₕ, :bottom)
         uv = Rₕ(Vₕ, (x -> sin(x[1]), x -> cos(x[2])))
         l = form(Vₕ, v -> innerₕ(uv(1), v(1)) + innerₕ(uv(2), v(2)))
 
-        b = assemble(l; dirichlet_conditions = bcs, dirichlet_labels = :bottom,
-            dirichlet_components = 1)
+        b = assemble(l; dirichlet = bcs, dirichlet_components = 1)
         plain = assemble(l)
 
         leaf1, leaf2 = view(b, 1:n), view(b, (n + 1):(2n))
@@ -870,7 +866,7 @@ end
         @test any(i -> marked[i] && leaf1[i] != view(plain, 1:n)[i], 1:n) # leaf 1 changed
 
         # without dirichlet_components, the same labels bind to both leaves
-        b_both = assemble(l; dirichlet_conditions = bcs, dirichlet_labels = :bottom)
+        b_both = assemble(l; dirichlet = bcs)
         @test all(view(b_both, (n + 1):(2n))[i] ≈ 5.0 for i in 1:n if marked[i])
     end
 
@@ -1017,9 +1013,9 @@ end
         end
 
         @testset "Constrained Jacobian" begin
-            bcs = dirichlet_constraints(set(Ωₕ), :bottom => (x -> 0.0))
+            bcs = dirichlet_constraints(Ωₕ, :bottom => (x -> 0.0))
             res(u) = assemble(form(Wₕ, v -> innerₕ(element(Wₕ, u .* u), v));
-                dirichlet_conditions = bcs, dirichlet_labels = :bottom)
+                dirichlet = bcs)
             Jb = ForwardDiff.jacobian(res, u0)
             @test size(Jb) == (n, n)
 

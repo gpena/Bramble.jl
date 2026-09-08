@@ -31,11 +31,11 @@ rhs(x) = -dαdu(sol(x)) * sol(x)^2 - α(sol(x)) * sol(x)
 Ωₕ = mesh(Ω, 40, false)
 Wₕ = gridspace(Ωₕ)
 
-bcs = dirichlet_constraints(Bramble.set(Ω), :boundary => sol)
+bcs = dirichlet_constraints(Ω, :boundary => sol)
 gₕ = element(Wₕ)
 avgₕ!(gₕ, rhs)
 l = form(Wₕ, v -> innerₕ(gₕ, v))
-F = assemble(l; dirichlet_conditions = bcs, dirichlet_labels = :boundary)
+F = assemble(l; dirichlet = bcs)
 nothing # hide
 ```
 
@@ -63,7 +63,7 @@ A = allocate_system_matrix(a)
 
 picard_steps = Float64[]
 for it in 1:200
-    assemble!(A, a; dirichlet_labels = :boundary)
+    assemble!(A, a; dirichlet = :boundary)
     unew = A \ F
     step = maximum(abs, unew .- parent(uₙ))
     push!(picard_steps, step)
@@ -82,7 +82,7 @@ particular coefficient and mesh.
 ## Newton's method
 
 The residual ``R(u) = A(u) u - F`` is the same matrix, applied to the vector it was built
-from rather than solved against. Boundary rows come along for free: `dirichlet_labels`
+from rather than solved against. Boundary rows come along for free: `dirichlet`
 already replaces them with the identity before the residual ever sees them, so
 ``R_i(u) = u_i - u_{\text{exact}}(x_i)`` there, and the Jacobian's boundary rows are the
 identity too, with no separate case to write.
@@ -113,7 +113,7 @@ const sparse_ad = AutoSparse(AutoForwardDiff();
 function diffusion_matrix(uₕ)
     αvals_local = α.(M₋ₕ(uₕ))
     a = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals_local * ∇₋ₕ(U), ∇₋ₕ(V)))
-    return assemble(a; dirichlet_labels = :boundary)
+    return assemble(a; dirichlet = :boundary)
 end
 
 function residual(u_vec::AbstractVector{T}) where {T}
@@ -185,7 +185,7 @@ end
 
 cache = Dict()
 diffusion_matrix_cached(uₕ) = type_cached_assemble!(
-    build_diffusion, cache, uₕ; dirichlet_labels = :boundary)
+    build_diffusion, cache, uₕ; dirichlet = :boundary)
 
 function residual_cached(u_vec::AbstractVector{T}) where {T}
     uₕ = element(Wₕ, T)
@@ -310,18 +310,18 @@ function nonlinear_series(D::Int; n0::Int = 5, levels::Int)
     hs, errs = Float64[], Float64[]
     for level in 1:levels
         Wc = gridspace(Ωc)
-        bcs_c = dirichlet_constraints(Bramble.set(Ωd), :boundary => sol_d)
+        bcs_c = dirichlet_constraints(Ωd, :boundary => sol_d)
         g_c = element(Wc)
         avgₕ!(g_c, rhs_d)
         l_c = form(Wc, v -> innerₕ(g_c, v))
-        F_c = assemble(l_c; dirichlet_conditions = bcs_c, dirichlet_labels = :boundary)
+        F_c = assemble(l_c; dirichlet = bcs_c)
 
         Ac(uₕ) = begin
             Mu = M₋ₕ(uₕ)
             αv = D == 1 ? α.(Mu) : ntuple(i -> α.(Mu[i]), D)
             grad(U) = D == 1 ? αv * ∇₋ₕ(U) : ntuple(i -> αv[i] * ∇₋ₕ(U)[i], D)
             assemble(form(Wc, Wc, (U, V) -> inner₊(grad(U), ∇₋ₕ(V)));
-                dirichlet_labels = :boundary)
+                dirichlet = :boundary)
         end
         rc(uv::AbstractVector{T}) where {T} = begin
             uₕ = element(Wc, T)

@@ -380,7 +380,7 @@ function apply_dirichlet_labels!(
 end
 
 """
-    assemble(form::BilinearForm; dirichlet_labels = nothing, dirichlet_components = nothing) -> SparseMatrixCSC
+    assemble(form::BilinearForm; dirichlet = nothing, dirichlet_components = nothing) -> SparseMatrixCSC
 
 Allocate a matrix with the form's sparsity pattern and assemble into it.
 
@@ -398,15 +398,17 @@ end
 ```
 
 Runs serially or across threads following `form.trial_space`'s backend
-[`execution_policy`](@ref): [`Serial`](@ref) by default. Optional `dirichlet_labels` applies
-boundary conditions to the matrix; `dirichlet_components` restricts which leaf components of a
-composite trial space they bind to (see [`dirichlet_bc!`](@ref)).
+[`execution_policy`](@ref): [`Serial`](@ref) by default. Optional `dirichlet` applies
+boundary conditions to the matrix -- a label `Symbol`, a `Tuple` of labels, a `label => f`
+`Pair` (values ignored on the matrix side), or constraints from
+[`dirichlet_constraints`](@ref); see [`_normalize_dirichlet`](@ref) for every accepted
+form. `dirichlet_components` restricts which leaf components of a composite trial space
+they bind to (see [`dirichlet_bc!`](@ref)).
 """
-function assemble(form::BilinearForm; dirichlet_labels = nothing, dirichlet_components = nothing)
-    _validate_dirichlet_labels(dirichlet_labels)
+function assemble(form::BilinearForm; dirichlet = nothing, dirichlet_components = nothing)
     ast_resolved = form.ast
     A = allocate_system_matrix(form, ast_resolved)
-    assemble!(A, form; dirichlet_labels = dirichlet_labels,
+    assemble!(A, form; dirichlet = dirichlet,
         dirichlet_components = dirichlet_components, ast = ast_resolved)
     return A
 end
@@ -669,7 +671,7 @@ function _assemble_bilinear_parallel_core!(A::SparseMatrixCSC,
 end
 
 """
-    assemble!(A::SparseMatrixCSC, form::BilinearForm; dirichlet_labels = nothing, dirichlet_components = nothing, ast = form.ast) -> SparseMatrixCSC
+    assemble!(A::SparseMatrixCSC, form::BilinearForm; dirichlet = nothing, dirichlet_components = nothing, ast = form.ast) -> SparseMatrixCSC
 
 Assemble the `BilinearForm` into the preallocated sparse matrix `A`, allocating nothing (**0 bytes**).
 
@@ -686,10 +688,10 @@ By default `assemble!` uses the pre-resolved `form.ast` stored directly inside t
 """
 function assemble!(
         A::SparseMatrixCSC, form::BilinearForm{D, TrialSpace, TestSpace, AST};
-        dirichlet_labels = nothing,
+        dirichlet = nothing,
         dirichlet_components = nothing,
         ast = form.ast) where {D, TrialSpace, TestSpace, AST}
-    _validate_dirichlet_labels(dirichlet_labels)
+    dirichlet_labels, _ = _normalize_dirichlet(dirichlet)
     fill!(nonzeros(A), zero(eltype(nonzeros(A))))
 
     if execution_policy(form.trial_space) isa Serial
@@ -722,4 +724,46 @@ function assemble_parallel!(
         A, form.trial_space, form.test_space, ast)
 
     return A
+end
+
+"""
+    assemble(a::BilinearForm, l::LinearForm; dirichlet = nothing, dirichlet_components = nothing, symmetrize::Bool = false) -> (A, F)
+
+Assemble both the matrix and the vector in one call, applying the same `dirichlet`
+constraints to each -- the common case of building a system to solve `A \\ F` against.
+`a` and `l` should share the same test space; boundary values are read from `dirichlet`
+once rather than once per form.
+
+`symmetrize = true` additionally restores symmetry in `A` after `dirichlet_bc!` (which
+only clears rows, not the columns) and updates `F` to match, via [`symmetrize!`](@ref).
+Requires `dirichlet` to name at least one label -- there is nothing to symmetrize against
+otherwise.
+
+```julia
+A, F = assemble(a, l; dirichlet = :boundary => sol, symmetrize = true)
+u = A \\ F
+```
+
+is the one-call equivalent of assembling `a` and `l` separately and calling
+[`symmetrize!`](@ref) by hand.
+"""
+function assemble(a::BilinearForm, l::LinearForm; dirichlet = nothing,
+        dirichlet_components = nothing, symmetrize::Bool = false)
+    A = assemble(a; dirichlet = dirichlet, dirichlet_components = dirichlet_components)
+    F = assemble(l; dirichlet = dirichlet, dirichlet_components = dirichlet_components)
+
+    if symmetrize
+        dirichlet_labels, _ = _normalize_dirichlet(dirichlet)
+        dirichlet_labels === nothing && _throw_symmetrize_without_dirichlet()
+        symmetrize!(A, F, test_space(a), dirichlet_labels...;
+            components = dirichlet_components)
+    end
+
+    return A, F
+end
+
+@noinline function _throw_symmetrize_without_dirichlet()
+    throw(ArgumentError(
+        "symmetrize = true has nothing to symmetrize against without dirichlet naming " *
+        "at least one label."))
 end

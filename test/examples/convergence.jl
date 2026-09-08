@@ -44,13 +44,13 @@ function _series(assemble_form, rhs, D::Int, n0::Int, levels::Int)
     hs, errs = Float64[], Float64[]
     for level in 1:levels
         Wc = gridspace(Ωc)
-        bcs_c = dirichlet_constraints(Bramble.set(Ωd), :boundary => sol_d)
+        bcs_c = dirichlet_constraints(Ωd, :boundary => sol_d)
 
-        A_c = assemble(assemble_form(Wc); dirichlet_labels = :boundary)
+        A_c = assemble(assemble_form(Wc); dirichlet = :boundary)
         g_c = element(Wc)
         avgₕ!(g_c, x -> rhs(x, D))
         l_c = form(Wc, v -> innerₕ(g_c, v))
-        F_c = assemble(l_c; dirichlet_conditions = bcs_c, dirichlet_labels = :boundary)
+        F_c = assemble(l_c; dirichlet = bcs_c)
 
         u_c = element(Wc)
         u_c .= A_c \ F_c

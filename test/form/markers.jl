@@ -127,7 +127,7 @@ using Bramble: dot
 
         # `dirichlet_bc!` against a marker that selects nothing must leave the vector and
         # the matrix bitwise untouched, not throw.
-        bcs = dirichlet_constraints(set(Ωₑ), :empty => (x -> 7.0))
+        bcs = dirichlet_constraints(Ωₑ, :empty => (x -> 7.0))
         v = fill(3.0, ndofs(Wₑ))
         v_orig = copy(v)
         @test dirichlet_bc!(v, Wₑ, bcs, :empty) === v

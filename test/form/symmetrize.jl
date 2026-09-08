@@ -189,7 +189,7 @@ using LinearAlgebra: issymmetric
         # was the one that rejected a `ScalarGridSpace`, so `dirichlet_bc!(A, Wₕ, :bottom)`
         # worked while `symmetrize!(A, F, Wₕ, :bottom)` was a MethodError (for two calls
         # that are almost always written together).
-        bcs = dirichlet_constraints(set(Ωₕ), :bottom => (x -> 7.0))
+        bcs = dirichlet_constraints(Ωₕ, :bottom => (x -> 7.0))
         for (holder, nd) in ((Ωₕ, n), (Wₕ, n), (Vₕ, ndofs(Vₕ)))
             A = blockdiag(ntuple(_ -> _tri(n), nd ÷ n)...)
             F = ones(nd)
@@ -216,7 +216,7 @@ using LinearAlgebra: issymmetric
         # distinct type, but it answers `conditions`, `label` and `identifier`
         # identically, and applying a condition never needs to tell the two apart. There
         # used to be two byte-identical methods, one per type.
-        tb = dirichlet_constraints(set(Ωₕ), interval(0.0, 1.0),
+        tb = dirichlet_constraints(Ωₕ, interval(0.0, 1.0),
             :bottom => ((x, t) -> t * x[1] + 1))
         ev = tb(0.5)
         @test ev isa Bramble.EvaluatedDomainMarkers

@@ -159,12 +159,12 @@ When solving $A u = F(p)$:
 ```@example autodiff_tutorial
 # Discrete Laplacian on nonuniform grid
 a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
-A = assemble(a; dirichlet_labels = :boundary)
+A = assemble(a; dirichlet = :boundary)
 Adense = Matrix(A)
 
 function solve_objective(p)
     # 1. Parameter-dependent Dirichlet boundary data
-    bcs = dirichlet_constraints(Bramble.set(Ω), :boundary => (x -> p[1]))
+    bcs = dirichlet_constraints(Ω, :boundary => (x -> p[1]))
 
     # 2. Source term allocated with the dual/tracked scalar type
     gₕ = element(Wₕ, eltype(p))
@@ -172,7 +172,7 @@ function solve_objective(p)
 
     # 3. Assemble right-hand side with constraints
     l = form(Wₕ, v -> innerₕ(gₕ, v))
-    F = assemble(l; dirichlet_conditions = bcs, dirichlet_labels = :boundary)
+    F = assemble(l; dirichlet = bcs)
 
     # 4. Linear solve and scalar objective
     u = Adense \ F
@@ -209,7 +209,7 @@ function pde_residual(u_vec)
     # Local diffusion coefficient depending on the state
     αvals = 1.0 .+ uₕ .^ 2
     a = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals * ∇₋ₕ(U), ∇₋ₕ(V)))
-    A_sparse = assemble(a; dirichlet_labels = :boundary)
+    A_sparse = assemble(a; dirichlet = :boundary)
 
     F = ones(T, ndofs(Wₕ))
     return A_sparse * u_vec .- F

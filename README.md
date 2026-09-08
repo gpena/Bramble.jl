@@ -73,14 +73,14 @@ rhs(x) = -2 * u_exact(x)
 
 # 3. Bilinear form (discrete Laplacian) and matrix assembly
 a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
-A = assemble(a; dirichlet_labels = :boundary)
+A = assemble(a; dirichlet = :boundary)
 
 # 4. Linear form (source term) and Dirichlet boundary conditions
 gₕ = element(Wₕ)
 avgₕ!(gₕ, rhs)
-bcs = dirichlet_constraints(Bramble.set(Ω), :boundary => u_exact)
+bcs = dirichlet_constraints(Ω, :boundary => u_exact)
 l = form(Wₕ, v -> innerₕ(gₕ, v))
-F = assemble(l; dirichlet_conditions = bcs, dirichlet_labels = :boundary)
+F = assemble(l; dirichlet = bcs)
 
 # 5. Solve linear system
 uₕ = element(Wₕ)
@@ -108,7 +108,7 @@ a = form(Vₕ, Vₕ, (p, q) ->
     inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2))) + innerₕ(p(2), q(2))
 )
 
-A = assemble(a; dirichlet_labels = :boundary)
+A = assemble(a; dirichlet = :boundary)
 ```
 
 ---

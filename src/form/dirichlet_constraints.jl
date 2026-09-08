@@ -49,6 +49,14 @@ Type alias for Dirichlet boundary constraint storage.
 const DirichletConstraint{CT} = DomainMarkers{CT}
 
 """
+    ConstraintMarkers
+
+Union representing either unevaluated Dirichlet constraints (`DomainMarkers`) or time-evaluated
+constraints (`EvaluatedDomainMarkers`).
+"""
+const ConstraintMarkers = Union{DomainMarkers, EvaluatedDomainMarkers}
+
+"""
     dirichlet_constraints(input, [I::CartesianProduct{1}], pairs::Pair...) -> DomainMarkers
 
 Create Dirichlet boundary constraints.
@@ -58,14 +66,44 @@ Each `pair` is of the form `:label => func`, where `:label` identifies the bound
 `input` can be a `CartesianProduct`, a `Domain`, an `AbstractMeshType`, a `ScalarGridSpace`, or a `CompositeGridSpace` from which the mesh is extracted. The `:label` must match a label in the mesh definition.
 """
 function dirichlet_constraints(input, pairs::Pair...)
-    _constraint_domain(input)      # validates `input`; the domain itself is never stored
+    _constraint_domain(input)
+    _validate_dirichlet_pair_labels(input, pairs)
     return _create_generic_markers(pairs...)
 end
 
 function dirichlet_constraints(input, I::CartesianProduct{1}, pairs::Pair...)
-    _constraint_domain(input)      # validates `input`; the domain itself is never stored
+    _constraint_domain(input)
+    _validate_dirichlet_pair_labels(input, pairs)
     _validate_time_dependent_arity(pairs)
     return _create_generic_markers(pairs...)
+end
+
+# `input`'s *registered* labels, not just the shape it validates against
+# (`_constraint_domain`): a `Domain`/mesh built with custom names (`domain(X, :inlet =>
+# :left, ...)`) knows `:inlet`, which the geometric set alone has no way to. Only a bare
+# `CartesianProduct` -- never wrapped in a `domain(...)` call, so no custom label could
+# exist -- falls back to the generic per-dimension names `boundary_symbols` returns.
+@inline _dirichlet_known_labels(input::ScalarGridSpace) = keys(markers(mesh(input)))
+@inline _dirichlet_known_labels(input::CompositeGridSpace) = keys(markers(mesh(first_space(input))))
+@inline _dirichlet_known_labels(input::AbstractMeshType) = keys(markers(input))
+@inline _dirichlet_known_labels(input::Domain) = labels(markers(input))
+@inline _dirichlet_known_labels(input::CartesianProduct) = boundary_symbols(input)
+
+# Checked against what `input` actually has registered, not the shape's generic
+# per-dimension names: a mistyped or nonexistent label otherwise passes here silently and
+# only fails (or, on a composite space with `dirichlet_components`, silently does nothing)
+# once `dirichlet_bc!`/`assemble` reaches it, far from the mistake.
+function _validate_dirichlet_pair_labels(input, pairs::Tuple{Vararg{Pair}})
+    known = _dirichlet_known_labels(input)
+    for (lbl, _) in pairs
+        lbl in known || _throw_unknown_dirichlet_label(lbl, known)
+    end
+end
+
+@noinline function _throw_unknown_dirichlet_label(lbl::Symbol, known)
+    throw(ArgumentError(
+        "dirichlet_constraints: label `:$lbl` is not registered on this domain/mesh/" *
+        "space. Known labels: $(join(sort(collect(known)), ", "))."))
 end
 
 # A time domain `I` promises the evaluation path (`(dm::DomainMarkers)(t)`, which does
@@ -114,20 +152,37 @@ Create a single Dirichlet boundary constraint with function `f` under the `:boun
     X, :boundary => f)
 
 """
-    _validate_dirichlet_labels(labels)
+    _normalize_dirichlet(dirichlet) -> (labels, conditions)
 
-Internal helper to validate the `dirichlet_labels` parameter.
+Internal helper turning every form accepted by the `dirichlet` keyword into the
+`(labels, conditions)` pair `apply_dirichlet_labels!`/`apply_dirichlet_conditions!`
+already take -- unifying the keyword this way adds no second implementation of applying
+constraints to keep in step with the first.
 
-Ensures that `labels` is either `nothing`, a `Symbol`, or a `Tuple` of `Symbol`s.
-Throws an error if the validation fails.
-
-Used by `bilinear_form.jl` and `linear_form.jl` to validate the `dirichlet_labels`
-keyword argument before applying boundary conditions.
+Accepts, in order: `nothing`; a single label `Symbol` (bilinear only -- no values to
+carry); a `Tuple` of label `Symbol`s; a single `label => f` `Pair`; a `Tuple` of such
+`Pair`s; or constraints already built by [`dirichlet_constraints`](@ref), whose own
+labels are read back out. Anything else throws.
 """
-function _validate_dirichlet_labels(labels)
-    if labels !== nothing && !(labels isa Symbol || labels isa Tuple)
-        error("dirichlet_labels must be nothing, a Symbol, or a Tuple of Symbols")
-    end
+@inline _normalize_dirichlet(::Nothing) = (nothing, nothing)
+@inline _normalize_dirichlet(label::Symbol) = ((label,), nothing)
+# `Tuple{}` is a subtype of both `Tuple{Vararg{Symbol}}` and `Tuple{Vararg{Pair{Symbol}}}`
+# below (a zero-length vararg tuple matches any element type), so it needs its own method
+# rather than leaving the two to race for it as an ambiguity.
+@inline _normalize_dirichlet(::Tuple{}) = ((), nothing)
+@inline _normalize_dirichlet(labels::Tuple{Vararg{Symbol}}) = (labels, nothing)
+@inline _normalize_dirichlet(pair::Pair{Symbol}) = (
+    (first(pair),), _create_generic_markers(pair))
+@inline _normalize_dirichlet(pairs::Tuple{Vararg{Pair{Symbol}}}) = (
+    map(first, pairs), _create_generic_markers(pairs...))
+@inline _normalize_dirichlet(bcs::ConstraintMarkers) = (Tuple(labels(bcs)), bcs)
+@inline _normalize_dirichlet(dirichlet) = _throw_bad_dirichlet(dirichlet)
+
+@noinline function _throw_bad_dirichlet(dirichlet)
+    throw(ArgumentError(
+        "dirichlet must be nothing, a Symbol, a Tuple of Symbols, a `label => f` Pair, " *
+        "a Tuple of such Pairs, or constraints from dirichlet_constraints; got a " *
+        "$(typeof(dirichlet))"))
 end
 
 #===========================================================================#
@@ -352,14 +407,6 @@ end
     end
     return v
 end
-
-"""
-    ConstraintMarkers
-
-Union representing either unevaluated Dirichlet constraints (`DomainMarkers`) or time-evaluated
-constraints (`EvaluatedDomainMarkers`).
-"""
-const ConstraintMarkers = Union{DomainMarkers, EvaluatedDomainMarkers}
 
 """
     dirichlet_bc!(v::AbstractVector, Ωₕ::AbstractMeshType, bcs::ConstraintMarkers, labels::Symbol...) -> AbstractVector

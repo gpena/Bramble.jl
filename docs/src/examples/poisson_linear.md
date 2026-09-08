@@ -37,15 +37,15 @@ The bilinear form is the discrete Laplacian, the same `inner₊(∇₋ₕ(u), �
 in one dimension:
 
 ```@example poisson_linear
-bcs = dirichlet_constraints(Bramble.set(Ω), :boundary => sol)
+bcs = dirichlet_constraints(Ω, :boundary => sol)
 
 a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
-A = assemble(a; dirichlet_labels = :boundary)
+A = assemble(a; dirichlet = :boundary)
 
 gₕ = element(Wₕ)
 avgₕ!(gₕ, rhs)
 l = form(Wₕ, v -> innerₕ(gₕ, v))
-F = assemble(l; dirichlet_conditions = bcs, dirichlet_labels = :boundary)
+F = assemble(l; dirichlet = bcs)
 
 uₕ = element(Wₕ)
 uₕ .= A \ F
@@ -81,14 +81,14 @@ function poisson_series(D::Int; n0::Int = 5, levels::Int)
     hs, errs = Float64[], Float64[]
     for level in 1:levels
         Wc = gridspace(Ωc)
-        bcs_c = dirichlet_constraints(Bramble.set(Ωd), :boundary => sol_d)
+        bcs_c = dirichlet_constraints(Ωd, :boundary => sol_d)
 
         a_c = form(Wc, Wc, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
-        A_c = assemble(a_c; dirichlet_labels = :boundary)
+        A_c = assemble(a_c; dirichlet = :boundary)
         g_c = element(Wc)
         avgₕ!(g_c, rhs_d)
         l_c = form(Wc, v -> innerₕ(g_c, v))
-        F_c = assemble(l_c; dirichlet_conditions = bcs_c, dirichlet_labels = :boundary)
+        F_c = assemble(l_c; dirichlet = bcs_c)
 
         u_c = element(Wc)
         u_c .= A_c \ F_c

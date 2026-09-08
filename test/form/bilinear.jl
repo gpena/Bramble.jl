@@ -66,7 +66,7 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
         @test Matrix(Aser) ≈ Matrix(Apar)
 
         # and Dirichlet rows are pinned
-        Abc = assemble(a; dirichlet_labels = :walls)
+        Abc = assemble(a; dirichlet = :walls)
         marked = index_in_marker(Ωₕ, :walls)
         for i in 1:n
             marked[i] || continue
@@ -116,14 +116,14 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
     @testset "dirichlet_components restriction" begin
         # The motivating case: a Stokes-style system where leaf 1 ("velocity") gets a
         # boundary condition and leaf 2 ("pressure") stays completely free. Before
-        # `dirichlet_components` existed, `dirichlet_labels` bound to every leaf sharing the
+        # `dirichlet_components` existed, `dirichlet` bound to every leaf sharing the
         # named marker: there was no way to say "this leaf only" through `assemble`/
         # `assemble!` at all.
         Vₕ = gridspace(Ωₕ, Val(2))
         a = form(Vₕ, Vₕ, (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)))
         marked = index_in_marker(Ωₕ, :walls)
 
-        A = assemble(a; dirichlet_labels = :walls, dirichlet_components = 1)
+        A = assemble(a; dirichlet = :walls, dirichlet_components = 1)
         blk(i, j) = Matrix(A)[((i - 1) * n + 1):(i * n), ((j - 1) * n + 1):(j * n)]
 
         for i in 1:n
@@ -137,12 +137,12 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
 
         # assemble! into a pre-allocated matrix follows the same keyword
         A2 = allocate_system_matrix(a)
-        assemble!(A2, a; dirichlet_labels = :walls, dirichlet_components = 1)
+        assemble!(A2, a; dirichlet = :walls, dirichlet_components = 1)
         @test Matrix(A2) ≈ Matrix(A)
 
         # without dirichlet_components, the same labels bind to every leaf that has the
         # marker (this is the pre-existing, still-default behaviour, confirmed unchanged).
-        Aboth = assemble(a; dirichlet_labels = :walls)
+        Aboth = assemble(a; dirichlet = :walls)
         blk2(i, j) = Matrix(Aboth)[((i - 1) * n + 1):(i * n), ((j - 1) * n + 1):(j * n)]
         for i in 1:n
             if marked[i]
@@ -179,7 +179,7 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
 
         # `:boundary` is reserved and auto-computed on every mesh: index 1 and index n. So
         # each leaf contributes exactly two marked rows/columns, with no domain setup needed.
-        Abc = assemble(a; dirichlet_labels = :boundary)
+        Abc = assemble(a; dirichlet = :boundary)
 
         # The two candidate row sets, computed directly rather than re-derived from the fix:
         # pin using test_space's own offsets (what the interface promises), and, separately,
@@ -204,12 +204,12 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
 
         # `assemble!` into a pre-allocated matrix takes the same path and must agree.
         A2 = allocate_system_matrix(a)
-        assemble!(A2, a; dirichlet_labels = :boundary)
+        assemble!(A2, a; dirichlet = :boundary)
         @test Matrix(A2) ≈ Matrix(Abc)
 
         # `dirichlet_components` on an asymmetric form restricts by TEST leaf, since that is
         # what the rows mean: component 1 is test's leaf 1 (W2, offset 0, size n2).
-        A1 = Matrix(assemble(a; dirichlet_labels = :boundary, dirichlet_components = 1))
+        A1 = Matrix(assemble(a; dirichlet = :boundary, dirichlet_components = 1))
         @test pinned_rows(A1) == [1, n2]              # only test leaf 1's marked rows
         @test !(1 + n2 in pinned_rows(A1))              # test leaf 2 untouched
     end
@@ -535,7 +535,7 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
             a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
             A = assemble(a)                             # record, unconstrained
             assemble!(A, a)                             # replay, unconstrained
-            assemble!(A, a; dirichlet_labels = :walls)   # replay core, then Dirichlet applied
+            assemble!(A, a; dirichlet = :walls)   # replay core, then Dirichlet applied
             marked = index_in_marker(Ωₕ, :walls)
             for i in 1:n
                 marked[i] || continue

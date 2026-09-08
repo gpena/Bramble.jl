@@ -574,10 +574,10 @@ end
 # The constraints, and applying them. Every path: matrix and vector, scalar and composite.
 function _pc_form_dirichlet(Ωₕ::AbstractMeshType, Wₕ, Vₕ, be, label::Symbol, f, ft,
         I_time)
-    bcs = dirichlet_constraints(set(Ωₕ), label => f)
+    bcs = dirichlet_constraints(Ωₕ, label => f)
     dirichlet_constraints(Wₕ, label => f)
     dirichlet_constraints(Vₕ, label => f)
-    tbcs = dirichlet_constraints(set(Ωₕ), I_time, label => ft)
+    tbcs = dirichlet_constraints(Ωₕ, I_time, label => ft)
     ev = tbcs(0.5)
     symbols(bcs)
     conditions(bcs)
@@ -666,9 +666,9 @@ function _pc_assemble_bilinear_shape(Wₕ, g, label::Symbol)
 
     A = allocate_system_matrix(bf, ast)
     assemble!(A, bf; ast = ast)
-    assemble!(A, bf; dirichlet_labels = label, ast = ast)
+    assemble!(A, bf; dirichlet = label, ast = ast)
     assemble(bf)
-    assemble(bf; dirichlet_labels = label)
+    assemble(bf; dirichlet = label)
 
     uₕ = element(Wₕ, 1.0)
     bf(uₕ, uₕ)
@@ -752,9 +752,16 @@ function _pc_form_assembly(Ωₕ::AbstractMeshType, Wₕ, Vₕ, label::Symbol, f
         Vₕ, v -> innerₕ(c[1], v(1) + D₋ₓ(v(1))) + innerₕ(c[2], v(2)), bv)
 
     # and the constrained right-hand side, which is a different path from the bare one
-    bcs = dirichlet_constraints(set(Ωₕ), label => f)
-    assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet_conditions = bcs,
-        dirichlet_labels = label)
+    bcs = dirichlet_constraints(Ωₕ, label => f)
+    lf = form(Wₕ, v -> innerₕ(uₕ, v))
+    assemble(lf; dirichlet = bcs)
+
+    # The joint (A, F) entry point, every `dirichlet` shape it accepts, with and without
+    # symmetrize: a `label => f` Pair, a Tuple of one, and pre-built constraints.
+    af = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
+    assemble(af, lf; dirichlet = label => f)
+    assemble(af, lf; dirichlet = (label => f,), symmetrize = true)
+    assemble(af, lf; dirichlet = bcs, symmetrize = true)
 
     # Bilinear forms: mass, stiffness, combination, and transverse
     _pc_assemble_bilinear_shape_threaded(Wₕ, (u, v) -> innerₕ(u, v), label)

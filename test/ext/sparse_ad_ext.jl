@@ -26,11 +26,11 @@ import SparseMatrixColorings
     Ωₕ = Bramble.mesh(Ω, 20, false)
     Wₕ = gridspace(Ωₕ)
 
-    bcs = dirichlet_constraints(Bramble.set(Ω), :boundary => sol)
+    bcs = dirichlet_constraints(Ω, :boundary => sol)
     gₕ = Bramble.element(Wₕ)
     avgₕ!(gₕ, rhs)
     l = form(Wₕ, v -> innerₕ(gₕ, v))
-    F = assemble(l; dirichlet_conditions = bcs, dirichlet_labels = :boundary)
+    F = assemble(l; dirichlet = bcs)
 
     function diffusion_form(uₕ)
         αv = α.(M₋ₕ(uₕ))
@@ -40,7 +40,7 @@ import SparseMatrixColorings
     function residual(u_vec::AbstractVector{T}) where {T}
         uₕ = Bramble.element(Wₕ, T)
         uₕ .= u_vec
-        A = assemble(diffusion_form(uₕ); dirichlet_labels = :boundary)
+        A = assemble(diffusion_form(uₕ); dirichlet = :boundary)
         return A * u_vec .- F
     end
 

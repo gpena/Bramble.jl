@@ -31,11 +31,11 @@ const _sparse_ad = AutoSparse(AutoForwardDiff();
         Ωₕ = mesh(Ω, 40, false)
         Wₕ = gridspace(Ωₕ)
 
-        bcs = dirichlet_constraints(Bramble.set(Ω), :boundary => sol)
+        bcs = dirichlet_constraints(Ω, :boundary => sol)
         gₕ = element(Wₕ)
         avgₕ!(gₕ, rhs)
         l = form(Wₕ, v -> innerₕ(gₕ, v))
-        F = assemble(l; dirichlet_conditions = bcs, dirichlet_labels = :boundary)
+        F = assemble(l; dirichlet = bcs)
 
         uₙ = element(Wₕ, 0.0)
         αvals = element(Wₕ)
@@ -46,7 +46,7 @@ const _sparse_ad = AutoSparse(AutoForwardDiff();
         last_step = Inf
         converged_at = 0
         for it in 1:200
-            assemble!(A, a; dirichlet_labels = :boundary)
+            assemble!(A, a; dirichlet = :boundary)
             unew = A \ F
             last_step = maximum(abs, unew .- parent(uₙ))
             uₙ .= unew
@@ -77,16 +77,16 @@ const _sparse_ad = AutoSparse(AutoForwardDiff();
         Ωₕ = mesh(Ω, 40, false)
         Wₕ = gridspace(Ωₕ)
 
-        bcs = dirichlet_constraints(Bramble.set(Ω), :boundary => sol)
+        bcs = dirichlet_constraints(Ω, :boundary => sol)
         gₕ = element(Wₕ)
         avgₕ!(gₕ, rhs)
         l = form(Wₕ, v -> innerₕ(gₕ, v))
-        F = assemble(l; dirichlet_conditions = bcs, dirichlet_labels = :boundary)
+        F = assemble(l; dirichlet = bcs)
 
         function diffusion_matrix(uₕ)
             αvals_local = α.(M₋ₕ(uₕ))
             a = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals_local * ∇₋ₕ(U), ∇₋ₕ(V)))
-            return assemble(a; dirichlet_labels = :boundary)
+            return assemble(a; dirichlet = :boundary)
         end
 
         function residual(u_vec::AbstractVector{T}) where {T}
@@ -145,13 +145,13 @@ const _sparse_ad = AutoSparse(AutoForwardDiff();
             for level in 1:levels
                 Wc = gridspace(Ωc)
                 Vc = Wc^Val(2)
-                bcs_c = dirichlet_constraints(Bramble.set(Ω), :boundary => x -> 0.0)
+                bcs_c = dirichlet_constraints(Ω, :boundary => x -> 0.0)
                 f1_c = element(Wc)
                 avgₕ!(f1_c, f1)
                 f2_c = element(Wc)
                 avgₕ!(f2_c, f2)
                 l_c = form(Vc, q -> innerₕ(f1_c, q(1)) + innerₕ(f2_c, q(2)))
-                F_c = assemble(l_c; dirichlet_conditions = bcs_c, dirichlet_labels = :boundary)
+                F_c = assemble(l_c; dirichlet = bcs_c)
 
                 Ac(wₕ) = begin
                     u_c, v_c = components(wₕ)
@@ -162,7 +162,7 @@ const _sparse_ad = AutoSparse(AutoForwardDiff();
                                       innerₕ(v_c * p(1), q(1)) +
                                       inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2))) + innerₕ(p(2), q(2)) -
                                       innerₕ(u_c * p(2), q(2)));
-                        dirichlet_labels = :boundary)
+                        dirichlet = :boundary)
                 end
                 rc(w::AbstractVector{T}) where {T} = begin
                     wₕ = element(Vc, T)

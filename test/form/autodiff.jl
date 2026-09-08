@@ -72,7 +72,7 @@ using LinearAlgebra: issymmetric, norm
 
     @testset "Dual boundary data" begin
         @test _matches_fd(a -> begin
-            bcs = dirichlet_constraints(set(Ωₕ), :bottom => (x -> a * x[1] + a^2))
+            bcs = dirichlet_constraints(Ωₕ, :bottom => (x -> a * x[1] + a^2))
             v = zeros(typeof(a), n)
             dirichlet_bc!(v, Ωₕ, bcs, :bottom)
             sum(v)
@@ -80,7 +80,7 @@ using LinearAlgebra: issymmetric, norm
 
         # through a composite space, where the value lands in every leaf
         @test _matches_fd(a -> begin
-            bcs = dirichlet_constraints(set(Ωₕ), :bottom => (x -> a * sin(x[1])))
+            bcs = dirichlet_constraints(Ωₕ, :bottom => (x -> a * sin(x[1])))
             v = zeros(typeof(a), 3n)
             dirichlet_bc!(v, Vₕ, bcs, :bottom)
             sum(v)
@@ -91,7 +91,7 @@ using LinearAlgebra: issymmetric, norm
             A = _tri(n)
             F = zeros(typeof(a), n)
             F .= collect(1.0:n)
-            bcs = dirichlet_constraints(set(Ωₕ), :bottom => (x -> a * x[1] + 1))
+            bcs = dirichlet_constraints(Ωₕ, :bottom => (x -> a * x[1] + 1))
             dirichlet_bc!(A, Ωₕ, :bottom)
             dirichlet_bc!(F, Ωₕ, bcs, :bottom)
             sum(Matrix(A) \ F)
@@ -121,7 +121,7 @@ using LinearAlgebra: issymmetric, norm
 
     @testset "Multi-variable gradient" begin
         function J(p)
-            bcs = dirichlet_constraints(set(Ωₕ),
+            bcs = dirichlet_constraints(Ωₕ,
                 :bottom => (x -> p[1] * x[1] + p[2] * x[1]^2))
             v = zeros(eltype(p), n)
             dirichlet_bc!(v, Ωₕ, bcs, :bottom)
@@ -144,12 +144,12 @@ using LinearAlgebra: issymmetric, norm
         apply(bcs) = (v = zeros(n); dirichlet_bc!(v, Ωₕ, bcs, :bottom); v)
 
         # a plain condition applies as-is
-        @test eltype(apply(dirichlet_constraints(set(Ωₕ), :bottom => (x -> 7.0)))) ===
+        @test eltype(apply(dirichlet_constraints(Ωₕ, :bottom => (x -> 7.0)))) ===
               Float64
 
         # an integer-valued condition still gives Float64 on a Float64 destination (
         # ordinary conversion on assignment, not a promotion decided ahead of time)
-        @test eltype(apply(dirichlet_constraints(set(Ωₕ), :bottom => (x -> 1)))) === Float64
+        @test eltype(apply(dirichlet_constraints(Ωₕ, :bottom => (x -> 1)))) === Float64
 
         # a condition need not be defined everywhere it is merely *registered*: building
         # the constraints no longer evaluates the condition at all (there is no probe point
@@ -158,11 +158,11 @@ using LinearAlgebra: issymmetric, norm
         # probe once could. (Applying it is a separate question: `sqrt(x[1] - 0.5)` is
         # genuinely undefined across all of `:bottom` here, since that label spans the
         # whole `x[1] ∈ [0,1]` edge, so only construction is checked, not application.)
-        @test_nowarn dirichlet_constraints(set(Ωₕ), :bottom => (x -> sqrt(x[1] - 0.5)))
+        @test_nowarn dirichlet_constraints(Ωₕ, :bottom => (x -> sqrt(x[1] - 0.5)))
 
         # a Dual-returning condition, applied into a Dual-eltype destination, carries a Dual
         a = ForwardDiff.Dual{ForwardDiff.Tag{typeof(identity), Float64}}(1.3, 1.0)
-        bcs_dual = dirichlet_constraints(set(Ωₕ), :bottom => (x -> a * x[1]))
+        bcs_dual = dirichlet_constraints(Ωₕ, :bottom => (x -> a * x[1]))
         v_dual = zeros(typeof(a), n)
         dirichlet_bc!(v_dual, Ωₕ, bcs_dual, :bottom)
         @test eltype(v_dual) <: ForwardDiff.Dual
@@ -174,7 +174,7 @@ using LinearAlgebra: issymmetric, norm
 
     @testset "Time-dependent constraints" begin
         @test _matches_fd(a -> begin
-            bcs = dirichlet_constraints(set(Ωₕ), interval(0.0, 1.0),
+            bcs = dirichlet_constraints(Ωₕ, interval(0.0, 1.0),
                 :bottom => ((x, t) -> a * t * x[1] + a))
             v = zeros(typeof(a), n)
             dirichlet_bc!(v, Ωₕ, bcs(0.5), :bottom)
@@ -190,7 +190,7 @@ using LinearAlgebra: issymmetric, norm
                 (24, 24), (true, true))
             W = gridspace(Ω)
             m = ndofs(W)
-            bcs = dirichlet_constraints(set(Ω), :bottom => (x -> 7.0))
+            bcs = dirichlet_constraints(Ω, :bottom => (x -> 7.0))
             v = zeros(m)
             dirichlet_bc!(v, Ω, bcs, :bottom)
             return @allocated dirichlet_bc!(v, Ω, bcs, :bottom)

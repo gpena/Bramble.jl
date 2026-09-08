@@ -352,11 +352,11 @@ let
         Ω = domain(interval(0.0, 1.0))
         Ωₕ = mesh(Ω, n, false)
         Wₕ = gridspace(Ωₕ)
-        bcs = dirichlet_constraints(Bramble.set(Ω), :boundary => sol)
+        bcs = dirichlet_constraints(Ω, :boundary => sol)
         gₕ = element(Wₕ)
         avgₕ!(gₕ, rhs)
         l = Bramble.form(Wₕ, v -> innerₕ(gₕ, v))
-        F = Bramble.assemble(l; dirichlet_conditions = bcs, dirichlet_labels = :boundary)
+        F = Bramble.assemble(l; dirichlet = bcs)
 
         function diffusion_form(uₕ)
             αv = α.(M₋ₕ(uₕ))
@@ -365,7 +365,7 @@ let
         function residual(u_vec::AbstractVector{T}) where {T}
             uₕ = element(Wₕ, T)
             uₕ .= u_vec
-            A = Bramble.assemble(diffusion_form(uₕ); dirichlet_labels = :boundary)
+            A = Bramble.assemble(diffusion_form(uₕ); dirichlet = :boundary)
             return A * u_vec .- F
         end
 

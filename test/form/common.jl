@@ -260,13 +260,13 @@ end
             @test eltype(Ωₕ) === T
 
             a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
-            A = assemble(a; dirichlet_labels = :walls)
+            A = assemble(a; dirichlet = :walls)
             @test eltype(A) === T
 
             fₕ = Rₕ(Wₕ, x -> sin(x[1]) * x[2])
             l = form(Wₕ, v -> innerₕ(fₕ, v))
-            bcs = dirichlet_constraints(set(Ωₕ), :walls => (x -> zero(T)))
-            b = assemble(l; dirichlet_conditions = bcs, dirichlet_labels = :walls)
+            bcs = dirichlet_constraints(Ωₕ, :walls => (x -> zero(T)))
+            b = assemble(l; dirichlet = bcs)
             @test eltype(b) === T
         end
     end

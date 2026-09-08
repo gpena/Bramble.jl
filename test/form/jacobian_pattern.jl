@@ -35,11 +35,11 @@ function _nonlinear_poisson_setup(D::Int, Ωd, Ωₕ)
     rhs(x) = -D * dαdu(sol(x)) * sol(x)^2 - D * α(sol(x)) * sol(x)
 
     Wₕ = gridspace(Ωₕ)
-    bcs = dirichlet_constraints(Bramble.set(Ωd), :boundary => sol)
+    bcs = dirichlet_constraints(Ωd, :boundary => sol)
     gₕ = element(Wₕ)
     avgₕ!(gₕ, rhs)
     l = form(Wₕ, v -> innerₕ(gₕ, v))
-    F = assemble(l; dirichlet_conditions = bcs, dirichlet_labels = :boundary)
+    F = assemble(l; dirichlet = bcs)
 
     function diffusion_form(uₕ)
         αv = D == 1 ? α.(M₋ₕ(uₕ)) : ntuple(i -> α.(M₋ₕ(uₕ)[i]), D)
@@ -50,7 +50,7 @@ function _nonlinear_poisson_setup(D::Int, Ωd, Ωₕ)
     function residual(u_vec::AbstractVector{T}) where {T}
         uₕ = element(Wₕ, T)
         uₕ .= u_vec
-        A = assemble(diffusion_form(uₕ); dirichlet_labels = :boundary)
+        A = assemble(diffusion_form(uₕ); dirichlet = :boundary)
         return A * u_vec .- F
     end
 
@@ -172,11 +172,11 @@ end
         Ω = domain(interval(0.0, 1.0))
         Ωₕ = mesh(Ω, 20, false)
         Wₕ = gridspace(Ωₕ)
-        bcs = dirichlet_constraints(Bramble.set(Ω), :boundary => x -> exp(x[1]))
+        bcs = dirichlet_constraints(Ω, :boundary => x -> exp(x[1]))
         gₕ = element(Wₕ)
         avgₕ!(gₕ, x -> exp(x[1]))
         l = form(Wₕ, v -> innerₕ(gₕ, v))
-        F = assemble(l; dirichlet_conditions = bcs, dirichlet_labels = :boundary)
+        F = assemble(l; dirichlet = bcs)
 
         function build_form(uₕ)
             αv = α.(M₋ₕ(uₕ))
@@ -186,7 +186,7 @@ end
         function residual(u_vec::AbstractVector{T}) where {T}
             uₕ = element(Wₕ, T)
             uₕ .= u_vec
-            A = assemble(build_form(uₕ); dirichlet_labels = :boundary)
+            A = assemble(build_form(uₕ); dirichlet = :boundary)
             return A * u_vec .- F
         end
 
@@ -222,13 +222,13 @@ end
             Wₕ = gridspace(Ωₕ)
             Vₕ = Wₕ^Val(2)
 
-            bcs = dirichlet_constraints(Bramble.set(Ω), :boundary => x -> 0.0)
+            bcs = dirichlet_constraints(Ω, :boundary => x -> 0.0)
             f1ₕ = element(Wₕ)
             avgₕ!(f1ₕ, f1)
             f2ₕ = element(Wₕ)
             avgₕ!(f2ₕ, f2)
             l = form(Vₕ, q -> innerₕ(f1ₕ, q(1)) + innerₕ(f2ₕ, q(2)))
-            F = assemble(l; dirichlet_conditions = bcs, dirichlet_labels = :boundary)
+            F = assemble(l; dirichlet = bcs)
 
             function coupled_form(wₕ)
                 u_c, v_c = components(wₕ)
@@ -241,7 +241,7 @@ end
             function residual(w::AbstractVector{T}) where {T}
                 wₕ = element(Vₕ, T)
                 wₕ .= w
-                A = assemble(coupled_form(wₕ); dirichlet_labels = :boundary)
+                A = assemble(coupled_form(wₕ); dirichlet = :boundary)
                 return A * w .- F
             end
 
@@ -265,11 +265,11 @@ end
             Wₕ = gridspace(Ωₕ)
             Vₕ = Wₕ^Val(3)
 
-            bcs = dirichlet_constraints(Bramble.set(Ω), :boundary => x -> 0.0)
+            bcs = dirichlet_constraints(Ω, :boundary => x -> 0.0)
             fₕ = element(Wₕ)
             avgₕ!(fₕ, x -> sin(π * x[1]))
             l = form(Vₕ, q -> innerₕ(fₕ, q(1)) + innerₕ(fₕ, q(2)) + innerₕ(fₕ, q(3)))
-            F = assemble(l; dirichlet_conditions = bcs, dirichlet_labels = :boundary)
+            F = assemble(l; dirichlet = bcs)
 
             function chain_form(wₕ)
                 c1, c2, c3 = components(wₕ)
@@ -284,7 +284,7 @@ end
             function residual(w::AbstractVector{T}) where {T}
                 wₕ = element(Vₕ, T)
                 wₕ .= w
-                A = assemble(chain_form(wₕ); dirichlet_labels = :boundary)
+                A = assemble(chain_form(wₕ); dirichlet = :boundary)
                 return A * w .- F
             end
 
@@ -309,11 +309,11 @@ end
             Wₕ = gridspace(Ωₕ)
             Vₕ = Wₕ^Val(2)
 
-            bcs = dirichlet_constraints(Bramble.set(Ω), :boundary => x -> 0.0)
+            bcs = dirichlet_constraints(Ω, :boundary => x -> 0.0)
             fₕ = element(Wₕ)
             avgₕ!(fₕ, x -> sin(π * x[1]))
             l = form(Vₕ, q -> innerₕ(fₕ, q(1)) + innerₕ(fₕ, q(2)))
-            F = assemble(l; dirichlet_conditions = bcs, dirichlet_labels = :boundary)
+            F = assemble(l; dirichlet = bcs)
 
             α(u) = 3 + 1 / (1 + u^2)
 
@@ -330,7 +330,7 @@ end
             function residual(w::AbstractVector{T}) where {T}
                 wₕ = element(Vₕ, T)
                 wₕ .= w
-                A = assemble(mixed_form(wₕ); dirichlet_labels = :boundary)
+                A = assemble(mixed_form(wₕ); dirichlet = :boundary)
                 return A * w .- F
             end
 
@@ -355,11 +355,11 @@ end
             Wₕ = gridspace(Ωₕ)
             Vₕ = Wₕ^Val(2)
 
-            bcs = dirichlet_constraints(Bramble.set(Ω), :boundary => x -> 0.0)
+            bcs = dirichlet_constraints(Ω, :boundary => x -> 0.0)
             fₕ = element(Wₕ)
             avgₕ!(fₕ, x -> sin(π * x[1]))
             l = form(Vₕ, q -> innerₕ(fₕ, q(1)) + innerₕ(fₕ, q(2)))
-            F = assemble(l; dirichlet_conditions = bcs, dirichlet_labels = :boundary)
+            F = assemble(l; dirichlet = bcs)
 
             β(u) = 1 + 0.5 * u^2
 
@@ -375,7 +375,7 @@ end
             function residual(w::AbstractVector{T}) where {T}
                 wₕ = element(Vₕ, T)
                 wₕ .= w
-                A = assemble(averaged_cross_form(wₕ); dirichlet_labels = :boundary)
+                A = assemble(averaged_cross_form(wₕ); dirichlet = :boundary)
                 return A * w .- F
             end
 
@@ -440,13 +440,13 @@ end
             Wₕ = gridspace(Ωₕ)
             Vₕ = Wₕ^Val(2)
 
-            bcs = dirichlet_constraints(Bramble.set(Ω), :boundary => x -> 0.0)
+            bcs = dirichlet_constraints(Ω, :boundary => x -> 0.0)
             f1ₕ = element(Wₕ)
             avgₕ!(f1ₕ, f1)
             f2ₕ = element(Wₕ)
             avgₕ!(f2ₕ, f2)
             l = form(Vₕ, q -> innerₕ(f1ₕ, q(1)) + innerₕ(f2ₕ, q(2)))
-            F = assemble(l; dirichlet_conditions = bcs, dirichlet_labels = :boundary)
+            F = assemble(l; dirichlet = bcs)
 
             function coupled_form(wₕ)
                 u_c, v_c = components(wₕ)
@@ -459,7 +459,7 @@ end
             function residual(w::AbstractVector{T}) where {T}
                 wₕ = element(Vₕ, T)
                 wₕ .= w
-                A = assemble(coupled_form(wₕ); dirichlet_labels = :boundary)
+                A = assemble(coupled_form(wₕ); dirichlet = :boundary)
                 return A * w .- F
             end
 

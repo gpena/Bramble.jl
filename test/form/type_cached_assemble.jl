@@ -47,11 +47,11 @@ end
     Ω = domain(interval(0.0, 1.0))
     Ωₕ = mesh(Ω, 20, false)
     Wₕ = gridspace(Ωₕ)
-    bcs = dirichlet_constraints(Bramble.set(Ω), :boundary => x -> exp(x[1]))
+    bcs = dirichlet_constraints(Ω, :boundary => x -> exp(x[1]))
     gₕ = element(Wₕ)
     avgₕ!(gₕ, x -> exp(x[1]))
     l = form(Wₕ, v -> innerₕ(gₕ, v))
-    F = assemble(l; dirichlet_conditions = bcs, dirichlet_labels = :boundary)
+    F = assemble(l; dirichlet = bcs)
 
     α(u) = 3 + 1 / (1 + u^2)
 
@@ -60,7 +60,7 @@ end
     function diffusion_matrix_direct(uₕ)
         αvals = α.(M₋ₕ(uₕ))
         a = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals * ∇₋ₕ(U), ∇₋ₕ(V)))
-        return assemble(a; dirichlet_labels = :boundary)
+        return assemble(a; dirichlet = :boundary)
     end
 
     # `build` is a named, top-level function (not a `do ... end` literal written inside a
@@ -82,7 +82,7 @@ end
     @testset "matches the direct (uncached) result, at Float64 and at Dual" begin
         cache = Dict()
         diffusion_matrix_cached(uₕ) = type_cached_assemble!(
-            _build_diffusion, cache, uₕ; dirichlet_labels = :boundary)
+            _build_diffusion, cache, uₕ; dirichlet = :boundary)
 
         u0 = element(Wₕ, 0.0)
         @test diffusion_matrix_cached(u0) == diffusion_matrix_direct(u0)
@@ -119,7 +119,7 @@ end
         # unassigned rather than merely holding arbitrary bits.
         cache = Dict()
         diffusion_matrix_cached(uₕ) = type_cached_assemble!(
-            _build_diffusion, cache, uₕ; dirichlet_labels = :boundary)
+            _build_diffusion, cache, uₕ; dirichlet = :boundary)
         function residual_cached(u_vec::AbstractVector{T}) where {T}
             uₕ = element(Wₕ, T)
             uₕ .= u_vec
@@ -141,7 +141,7 @@ end
         # allocation grows with `ndofs` because it rebuilds the whole sparsity pattern every
         # call, a cache hit's cost does not grow with the mesh at all.
         diffusion_matrix_cached = let cache = Dict()
-            uₕ -> type_cached_assemble!(_build_diffusion, cache, uₕ; dirichlet_labels = :boundary)
+            uₕ -> type_cached_assemble!(_build_diffusion, cache, uₕ; dirichlet = :boundary)
         end
 
         u0 = element(Wₕ, 0.0)
@@ -170,10 +170,10 @@ end
         function diffusion_matrix_direct_big(uₕ)
             αvals = α.(M₋ₕ(uₕ))
             a = form(Wₕ_big, Wₕ_big, (U, V) -> inner₊(αvals * ∇₋ₕ(U), ∇₋ₕ(V)))
-            return assemble(a; dirichlet_labels = :boundary)
+            return assemble(a; dirichlet = :boundary)
         end
         diffusion_matrix_cached_big = let cache_big = Dict()
-            uₕ -> type_cached_assemble!(_build_diffusion_big, cache_big, uₕ; dirichlet_labels = :boundary)
+            uₕ -> type_cached_assemble!(_build_diffusion_big, cache_big, uₕ; dirichlet = :boundary)
         end
         u0_big = element(Wₕ_big, 0.0)
         diffusion_matrix_cached_big(u0_big)
@@ -190,15 +190,15 @@ end
         dαdu(u) = -2u / (1 + u^2)^2
         rhs(x) = -dαdu(sol(x)) * sol(x)^2 - α(sol(x)) * sol(x)
 
-        bcs_sol = dirichlet_constraints(Bramble.set(Ω), :boundary => sol)
+        bcs_sol = dirichlet_constraints(Ω, :boundary => sol)
         gₕ_sol = element(Wₕ)
         avgₕ!(gₕ_sol, rhs)
         l_sol = form(Wₕ, v -> innerₕ(gₕ_sol, v))
-        F_sol = assemble(l_sol; dirichlet_conditions = bcs_sol, dirichlet_labels = :boundary)
+        F_sol = assemble(l_sol; dirichlet = bcs_sol)
 
         cache = Dict()
         diffusion_matrix_cached(uₕ) = type_cached_assemble!(
-            _build_diffusion, cache, uₕ; dirichlet_labels = :boundary)
+            _build_diffusion, cache, uₕ; dirichlet = :boundary)
         function residual_cached(u_vec::AbstractVector{T}) where {T}
             uₕ = element(Wₕ, T)
             uₕ .= u_vec
@@ -209,7 +209,7 @@ end
             uₕ .= u_vec
             αvals = α.(M₋ₕ(uₕ))
             a = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals * ∇₋ₕ(U), ∇₋ₕ(V)))
-            A = assemble(a; dirichlet_labels = :boundary)
+            A = assemble(a; dirichlet = :boundary)
             return A * u_vec .- F_sol
         end
 

@@ -18,10 +18,17 @@ using Supposition
         # Define a time-dependent function: f(x, t)
         f_t = (x, t) -> x[1] * t
 
+        # A `Domain` over the same geometry as `Ω`, registering every label this
+        # testset's `dirichlet_constraints` calls use -- the construction-time label
+        # check needs something real to validate against, which the bare `Ω` (used
+        # as-is by `markers(Ω, ...)` below, which needs a `CartesianProduct`) does not
+        # carry.
+        Ωd = domain(Ω, :gamma_1 => :left, :gamma_2 => :right, :time_dep_bc => :left)
+
         # --- Tests ---
 
         @testset "Constructor" begin
-            bcs = dirichlet_constraints(Ω, :gamma_1 => f1, :gamma_2 => f2)
+            bcs = dirichlet_constraints(Ωd, :gamma_1 => f1, :gamma_2 => f2)
 
             @test bcs isa DirichletConstraint
             @test length(label_conditions(bcs)) == 2
@@ -39,7 +46,7 @@ using Supposition
             # Create a time-dependent constraint. The raw two-argument closure is stored
             # directly in `DomainMarkers.conditions`: a `Tuple`, one `Marker{F}` per
             # condition's own type, rather than a `BrambleFunction`.
-            bcs_t = dirichlet_constraints(Ω, I, :time_dep_bc => (x, t) -> f_t(x, t))
+            bcs_t = dirichlet_constraints(Ωd, I, :time_dep_bc => (x, t) -> f_t(x, t))
 
             function_markers = bcs_t.conditions
             function_snapshot = first(function_markers)
@@ -57,7 +64,37 @@ using Supposition
             # condition used to be silently accepted -- the time domain had no effect at
             # all -- and only broke later, once `bcs(t)` was actually called during
             # assembly. Caught here by arity, at construction.
-            @test_throws "must accept (x, t)" dirichlet_constraints(Ω, I, :gamma_1 => f1)
+            @test_throws "must accept (x, t)" dirichlet_constraints(Ωd, I, :gamma_1 => f1)
+        end
+
+        @testset "Label validation, for every accepted `input` type" begin
+            # A mistyped or nonexistent label used to pass `dirichlet_constraints`
+            # silently and only fail (or, on a composite space with `dirichlet_components`,
+            # silently do nothing) once `assemble`/`dirichlet_bc!` reached it, far from the
+            # mistake. `_dirichlet_known_labels` has one method per accepted `input` type;
+            # each needs its own check that an unregistered label is actually rejected, and
+            # that a registered one still goes through.
+            Ωdm = mesh(Ωd, (5, 5), (true, true))
+            Wdm = gridspace(Ωdm)
+            Vdm = Wdm × Wdm
+
+            for input in (Ωd, Ωdm, Wdm, Vdm)
+                @test_throws "is not registered" dirichlet_constraints(
+                    input, :not_a_real_label => f1)
+                bcs = dirichlet_constraints(input, :gamma_1 => f1)
+                @test bcs isa DirichletConstraint
+            end
+
+            # A bare `CartesianProduct` (never wrapped by `domain(...)`) has no custom
+            # labels at all -- only the generic per-axis names `boundary_symbols` gives it.
+            @test_throws "is not registered" dirichlet_constraints(Ω, :gamma_1 => f1)
+            known = first(boundary_symbols(Ω))
+            @test dirichlet_constraints(Ω, known => f1) isa DirichletConstraint
+
+            # And the time-dependent constructor (`input, I::CartesianProduct{1}, pairs...`)
+            # validates the same way, before arity is even checked.
+            @test_throws "is not registered" dirichlet_constraints(
+                Ωd, I, :not_a_real_label => ((x, t) -> f_t(x, t)))
         end
     end
 
@@ -148,7 +185,7 @@ using LinearAlgebra: I as LinearAlgebraI
     end
 
     @testset "Vector values" begin
-        bcs = dirichlet_constraints(set(Ωₕ), :bottom => (x -> 7.0))
+        bcs = dirichlet_constraints(Ωₕ, :bottom => (x -> 7.0))
 
         v = fill(-1.0, nW)
         @test dirichlet_bc!(v, Wₕ, bcs, :bottom) === v
@@ -199,7 +236,7 @@ using LinearAlgebra: I as LinearAlgebraI
         end
 
         @testset "Vector (single leaf)" begin
-            bcs = dirichlet_constraints(set(Ωₕ), :bottom => (x -> 7.0))
+            bcs = dirichlet_constraints(Ωₕ, :bottom => (x -> 7.0))
             w = fill(-1.0, nV)
             @test dirichlet_bc!(w, Vₕ, bcs, :bottom; components = 2) === w
             for c in 0:2
@@ -278,7 +315,7 @@ using LinearAlgebra: I as LinearAlgebraI
     end
 
     @testset "Evaluation points" begin
-        bcs = dirichlet_constraints(set(Ωₕ), :bottom => (x -> x[1] + 10x[2]))
+        bcs = dirichlet_constraints(Ωₕ, :bottom => (x -> x[1] + 10x[2]))
         v = zeros(nW)
         @test dirichlet_bc!(v, Wₕ, bcs, :bottom) === v
         pts = [point(Ωₕ, idx) for idx in indices(Ωₕ)]
@@ -340,7 +377,7 @@ using LinearAlgebra: I as LinearAlgebraI
         @test dirichlet_bc!(A1, Wₕ) === A1                 # no labels at all
         @test A1 == A0
         v0 = fill(3.0, nW)
-        bcs = dirichlet_constraints(set(Ωₕ), :bottom => (x -> 7.0))
+        bcs = dirichlet_constraints(Ωₕ, :bottom => (x -> 7.0))
         @test dirichlet_bc!(v0, Wₕ, bcs) === v0            # no labels
         @test all(==(3.0), v0)
     end
@@ -356,7 +393,7 @@ using LinearAlgebra: I as LinearAlgebraI
         Vₕ = gridspace(Ωₕ, Val(3))
         g = x -> 7.0
 
-        from_set = dirichlet_constraints(set(Ωₕ), :bottom => g)
+        from_set = dirichlet_constraints(Ωₕ, :bottom => g)
         for src in (Ωₕ, Wₕ, Vₕ)
             c = dirichlet_constraints(src, :bottom => g)
             @test c isa DirichletConstraint
@@ -407,7 +444,7 @@ using LinearAlgebra: I as LinearAlgebraI
         dirichlet_bc!(Af, flat, :bottom)
         @test An == Af
 
-        bcs = dirichlet_constraints(set(Ωₕ), :bottom => (x -> 7.0))
+        bcs = dirichlet_constraints(Ωₕ, :bottom => (x -> 7.0))
         vn, vf = fill(3.0, 4n), fill(3.0, 4n)
         dirichlet_bc!(vn, nested, bcs, :bottom)
         dirichlet_bc!(vf, flat, bcs, :bottom)
@@ -429,7 +466,7 @@ using LinearAlgebra: I as LinearAlgebraI
             Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
                 (n, n), (true, true))
             W, V = gridspace(Ω), gridspace(Ω, Val(3))
-            bcs = dirichlet_constraints(set(Ω), :bottom => (x -> 7.0))
+            bcs = dirichlet_constraints(Ω, :bottom => (x -> 7.0))
 
             Aw, Av = _eye(ndofs(W)), _eye(ndofs(V))
             vw, vv = zeros(ndofs(W)), zeros(ndofs(V))
@@ -498,7 +535,7 @@ using LinearAlgebra: I as LinearAlgebraI
             v = copy(v_raw[1:n])
             v_orig = copy(v)
 
-            bcs = dirichlet_constraints(set(Ωₕ), :bottom => (x -> 2.5 * x[1] + 1.0))
+            bcs = dirichlet_constraints(Ωₕ, :bottom => (x -> 2.5 * x[1] + 1.0))
             dirichlet_bc!(v, Wₕ, bcs, :bottom)
 
             marked = index_in_marker(Ωₕ, :bottom)

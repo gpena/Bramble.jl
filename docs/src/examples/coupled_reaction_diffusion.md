@@ -32,13 +32,13 @@ f2(x) = 8π^2 * v_ex(x) + v_ex(x) - u_ex(x) * v_ex(x)
 Wₕ = gridspace(Ωₕ)
 Vₕ = Wₕ^Val(2)
 
-bcs = dirichlet_constraints(Bramble.set(Ω), :boundary => x -> 0.0)
+bcs = dirichlet_constraints(Ω, :boundary => x -> 0.0)
 f1ₕ = element(Wₕ)
 avgₕ!(f1ₕ, f1)
 f2ₕ = element(Wₕ)
 avgₕ!(f2ₕ, f2)
 l = form(Vₕ, q -> innerₕ(f1ₕ, q(1)) + innerₕ(f2ₕ, q(2)))
-F = assemble(l; dirichlet_conditions = bcs, dirichlet_labels = :boundary)
+F = assemble(l; dirichlet = bcs)
 nothing # hide
 ```
 
@@ -59,7 +59,7 @@ function coupled_matrix(wₕ)
     a = form(Vₕ, Vₕ, (p, q) ->
         inner₊(∇₋ₕ(p(1)), ∇₋ₕ(q(1))) + innerₕ(p(1), q(1)) + innerₕ(v_c * p(1), q(1)) +
         inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2))) + innerₕ(p(2), q(2)) - innerₕ(u_c * p(2), q(2)))
-    return assemble(a; dirichlet_labels = :boundary)
+    return assemble(a; dirichlet = :boundary)
 end
 nothing # hide
 ```
@@ -184,13 +184,13 @@ function coupled_series(; n0::Int = 5, levels::Int)
     for level in 1:levels
         Wc = gridspace(Ωc)
         Vc = Wc^Val(2)
-        bcs_c = dirichlet_constraints(Bramble.set(Ω), :boundary => x -> 0.0)
+        bcs_c = dirichlet_constraints(Ω, :boundary => x -> 0.0)
         f1_c = element(Wc)
         avgₕ!(f1_c, f1)
         f2_c = element(Wc)
         avgₕ!(f2_c, f2)
         l_c = form(Vc, q -> innerₕ(f1_c, q(1)) + innerₕ(f2_c, q(2)))
-        F_c = assemble(l_c; dirichlet_conditions = bcs_c, dirichlet_labels = :boundary)
+        F_c = assemble(l_c; dirichlet = bcs_c)
 
         Ac(wₕ) = begin
             u_c, v_c = components(wₕ)
@@ -199,7 +199,7 @@ function coupled_series(; n0::Int = 5, levels::Int)
                     innerₕ(v_c * p(1), q(1)) +
                     inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2))) + innerₕ(p(2), q(2)) -
                     innerₕ(u_c * p(2), q(2)));
-                dirichlet_labels = :boundary)
+                dirichlet = :boundary)
         end
         rc(w::AbstractVector{T}) where {T} = begin
             wₕ = element(Vc, T)

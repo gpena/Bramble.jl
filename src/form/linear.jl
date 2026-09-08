@@ -161,30 +161,32 @@ end
 
 @noinline function _throw_labels_without_conditions(labels)
     throw(ArgumentError(
-        "dirichlet_labels = $labels was given without dirichlet_conditions. Pass the " *
-        "constraints as well: assemble(form; dirichlet_conditions = bcs, " *
-        "dirichlet_labels = $labels)."))
+        "dirichlet names label(s) $labels but carries no values for them. A linear " *
+        "form needs both: pass a `label => f` Pair (or a Tuple of them, or constraints " *
+        "from dirichlet_constraints) as `dirichlet`, not a bare label."))
 end
 
 """
-    assemble(form::LinearForm; dirichlet_conditions = nothing, dirichlet_labels = nothing, dirichlet_components = nothing, ast = form.ast) -> AbstractVector
+    assemble(form::LinearForm; dirichlet = nothing, dirichlet_components = nothing, ast = form.ast) -> AbstractVector
 
-Assemble the system vector of the `LinearForm`, applying `dirichlet_conditions` on the
-regions named by `dirichlet_labels` when both are provided. `dirichlet_components` restricts which
-leaf components of a composite test space they bind to (see [`dirichlet_bc!`](@ref)).
+Assemble the system vector of the `LinearForm`, applying the boundary values `dirichlet`
+carries on the regions it names. `dirichlet` accepts a `label => f` `Pair`, a `Tuple` of
+such `Pair`s, or constraints from [`dirichlet_constraints`](@ref) -- a bare label or
+`Tuple` of labels has no values to write and raises an error (see
+[`_normalize_dirichlet`](@ref) for every accepted form). `dirichlet_components` restricts
+which leaf components of a composite test space they bind to (see [`dirichlet_bc!`](@ref)).
 
 Runs serially or across threads following `test_space(form)`'s backend
 [`execution_policy`](@ref): [`Serial`](@ref) (the default) or [`Parallel`](@ref).
 [`assemble_parallel!`](@ref) always threads regardless of the backend policy.
 """
-function assemble(form::LinearForm; dirichlet_conditions = nothing,
-        dirichlet_labels = nothing, dirichlet_components = nothing, ast = form.ast)
-    _validate_dirichlet_labels(dirichlet_labels)
+function assemble(form::LinearForm; dirichlet = nothing,
+        dirichlet_components = nothing, ast = form.ast)
     space = test_space(form)
     # `parent(element(space, T))` reuses the space's backend container type.
     b = parent(element(space, _assembled_eltype(ast, space)))
-    return assemble!(b, form; ast = ast, dirichlet_conditions = dirichlet_conditions,
-        dirichlet_labels = dirichlet_labels, dirichlet_components = dirichlet_components)
+    return assemble!(b, form; ast = ast, dirichlet = dirichlet,
+        dirichlet_components = dirichlet_components)
 end
 
 # The element type of the assembled vector is the one the form's own weights have, promoted
@@ -474,8 +476,8 @@ function _assemble_linear_parallel_core!(b::AbstractVector,
 end
 
 """
-    assemble!(b::AbstractVector, form::LinearForm; dirichlet_conditions = nothing,
-              dirichlet_labels = nothing, dirichlet_components = nothing, ast = form.ast) -> AbstractVector
+    assemble!(b::AbstractVector, form::LinearForm; dirichlet = nothing,
+              dirichlet_components = nothing, ast = form.ast) -> AbstractVector
 
 Refill `b` with the assembled `form` and return it with zero allocations (**0 bytes**).
 
@@ -490,7 +492,7 @@ By default `assemble!` uses the pre-resolved `form.ast` stored directly inside t
 - `form`: Linear form to assemble.
 
 # Keywords
-- `dirichlet_conditions`, `dirichlet_labels`: Boundary values to impose after assembly and the region labels to impose them on (both default to `nothing`).
+- `dirichlet`: Boundary values to impose after assembly, and the labels to impose them on, together -- a `label => f` `Pair`, a `Tuple` of such `Pair`s, or constraints from [`dirichlet_constraints`](@ref) (default: `nothing`; see [`_normalize_dirichlet`](@ref) for every accepted form).
 - `dirichlet_components`: Restricts which leaf components of a composite `test_space(form)` the labels bind to (see [`dirichlet_bc!`](@ref); default: `nothing`, targeting all leaves).
 - `ast`: Optional custom AST override (defaults to `form.ast`).
 
@@ -501,11 +503,10 @@ regardless of backend policy.
 See also [`assemble`](@ref), [`assemble_parallel!`](@ref), and [`evaluate!`](@ref).
 """
 function assemble!(b::AbstractVector, form::LinearForm{D, TestSpace, AST};
-        dirichlet_conditions = nothing,
-        dirichlet_labels = nothing,
+        dirichlet = nothing,
         dirichlet_components = nothing,
         ast = form.ast) where {D, TestSpace, AST}
-    _validate_dirichlet_labels(dirichlet_labels)
+    dirichlet_labels, dirichlet_conditions = _normalize_dirichlet(dirichlet)
     fill!(b, zero(eltype(b)))
     space = form.test_space
     _validate_term_markers(ast, markers(mesh(space)), "the form's space")

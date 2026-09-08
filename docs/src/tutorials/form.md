@@ -177,15 +177,12 @@ nothing # hide
 ```
 
 `dirichlet_constraints` records the values, `dirichlet_bc!` applies them — to the matrix by
-replacing the constrained rows, and to the vector by writing the boundary values in:
-
-`set` reads the plain `CartesianProduct` back out of a domain, which `dirichlet_constraints`
-needs. It's `public` rather than exported (point 70) — reached with `Bramble.` rather than
-brought into scope by `using Bramble`, since the bare name is the single most generic noun in
-the language to hand every user's namespace by default:
+replacing the constrained rows, and to the vector by writing the boundary values in.
+`dirichlet_constraints` takes the mesh (or a `Domain`/grid space) directly — no need to
+extract the underlying `CartesianProduct` first:
 
 ```@example forms
-bcs = dirichlet_constraints(Bramble.set(Ωd), :left => (x -> 0.0), :right => (x -> 0.0))
+bcs = dirichlet_constraints(Ωd, :left => (x -> 0.0), :right => (x -> 0.0))
 dirichlet_bc!(Ad, Ωd, :left, :right)
 dirichlet_bc!(bd, Ωd, bcs, :left, :right)
 nothing # hide
@@ -269,7 +266,7 @@ and means the diagonal, applied to every block.
 
 ### Constraining one block, leaving another free
 
-`dirichlet_labels` on its own binds to every leaf sharing the named marker — fine when every
+`dirichlet` on its own binds to every leaf sharing the named marker — fine when every
 block wants the same treatment, not when they don't. A Stokes-style system prescribing
 velocity while leaving pressure unconstrained needs `dirichlet_components` too: 1-based leaf
 positions, the same order `u(1)`/`u(2)` addressing already uses.
@@ -279,14 +276,14 @@ positions, the same order `u(1)`/`u(2)` addressing already uses.
 Ωdc = mesh(Ωc, 21, true)
 Vc = gridspace(Ωdc)^Val(2)           # 1: velocity-like, 2: pressure-like
 ac2 = form(Vc, Vc, (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)))
-Ac2 = assemble(ac2; dirichlet_labels = (:left, :right), dirichlet_components = 1)
+Ac2 = assemble(ac2; dirichlet = (:left, :right), dirichlet_components = 1)
 nothing # hide
 ```
 
 Block 1 (rows `1:21`) has its boundary rows pinned; block 2 is untouched — still the plain
 assembled operator, no rows replaced at all. Leaving `dirichlet_components` at its default
 (`nothing`) applies the labels to every leaf, exactly as before this keyword existed; call
-`assemble!`/`dirichlet_bc!` again with a different `dirichlet_labels`/`dirichlet_components`
+`assemble!`/`dirichlet_bc!` again with a different `dirichlet`/`dirichlet_components`
 pair to constrain another block differently.
 
 ### Interpolating between the leaves of a heterogeneous composite space

@@ -185,10 +185,10 @@ using Bramble: form, assemble, trial_space, test_space, restrict_to, shift_op,
             Wr = gridspace(Ωr)
             a = form(Wr, Wr, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
             l = form(Wr, v -> innerₕ(x -> 1.0, v))
-            bcs = dirichlet_constraints(Bramble.set(Ωr), :boundary => (x -> 0.0))
+            bcs = dirichlet_constraints(Ωr, :boundary => (x -> 0.0))
 
-            A = assemble(a; dirichlet_labels = :boundary)
-            b = assemble(l; dirichlet_conditions = bcs, dirichlet_labels = :boundary)
+            A = assemble(a; dirichlet = :boundary)
+            b = assemble(l; dirichlet = bcs)
             # `dirichlet_bc!` (inside `assemble`) zeros the marked rows, which on its own
             # destroys symmetry; `symmetrize!` restores it by eliminating the marked
             # columns into `b`, so the matrix Cholesky actually sees is the real, complete

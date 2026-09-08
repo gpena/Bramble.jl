@@ -163,7 +163,7 @@ conservative: a term that happens to produce a symmetric matrix through some oth
 answers `false`, the same as one that is not symmetric at all.
 
 This describes the *unconstrained* operator. [`dirichlet_bc!`](@ref) zeros a row without
-touching its column, so a matrix assembled with `dirichlet_labels` is not symmetric even when
+touching its column, so a matrix assembled with `dirichlet` is not symmetric even when
 `issymmetric(a)` is `true`, until [`symmetrize!`](@ref) restores it. `true` here is a
 claim about `a`'s expression, not about whatever matrix a particular call to `assemble`
 produced.
@@ -177,7 +177,7 @@ b = form(Wₕ, Wₕ, (u, v) -> inner₊(u, D₋ₓ(v)))
 issymmetric(b)  # false: different operators either side
 
 issymmetric(Matrix(assemble(a)))                                # true
-issymmetric(Matrix(assemble(a; dirichlet_labels = :boundary)))   # false: rows zeroed, columns not
+issymmetric(Matrix(assemble(a; dirichlet = :boundary)))   # false: rows zeroed, columns not
 ```
 """
 function issymmetric(a::BilinearForm)
@@ -198,7 +198,7 @@ assembled matrix is symmetric positive semi-definite, enough to make `cholesky` 
 attempting first rather than a general factorization.
 
 Describes the *unconstrained* operator, exactly as `issymmetric` does: a matrix assembled
-with `dirichlet_labels` needs [`symmetrize!`](@ref) after [`dirichlet_bc!`](@ref) before
+with `dirichlet` needs [`symmetrize!`](@ref) after [`dirichlet_bc!`](@ref) before
 either symmetry or positive-definiteness holds of it, `isposdef(a)` being `true` notwithstanding.
 """
 function isposdef(a::BilinearForm)
