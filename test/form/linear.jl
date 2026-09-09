@@ -18,7 +18,6 @@ using Bramble:
     IndexedTestFunction,
     IndexedTrialFunction,
     test_component_or_nothing,
-    routes_by_component,
     components,
     _colour_strides,
     stencil_offsets,
@@ -244,11 +243,6 @@ end
             @test test_component_or_nothing(innerₕ(uv(1), v(2))) == 2
             @test test_component_or_nothing(innerₕ(uv(1), v)) === nothing
             @test test_component_or_nothing(innerₕ(uv(1), D₋ₓ(v(2)))) == 2
-
-            # asked once per assembly, to keep an un-indexed form off the routing branch
-            @test routes_by_component(innerₕ(uv(1), v(1)) + innerₕ(uv(2), v(2)))
-            @test !routes_by_component(innerₕ(uv(1), v))
-            @test routes_by_component(innerₕ(uv(1), v) + innerₕ(uv(2), v(2)))
         end
 
         @testset "Zero-cost routing" begin

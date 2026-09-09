@@ -194,20 +194,6 @@ results.
 end
 
 """
-    routes_by_component(op) -> Bool
-
-Whether `op` names components anywhere inside it, and so has to be split across the blocks
-of a composite space rather than assembled into all of them.
-
-Asked once per assembly, before any splitting happens, so that a form written without
-component indices keeps the path that allocates nothing.
-"""
-function routes_by_component(op::OperatorAdd)
-    return routes_by_component(op.left_op) || routes_by_component(op.right_op)
-end
-routes_by_component(op) = test_component_or_nothing(op) !== nothing
-
-"""
     _collect_region_labels(op) -> NTuple{N, Symbol}
 
 Every marker label a `RegionRestriction` anywhere in `op` names: from `restrict_to` calls

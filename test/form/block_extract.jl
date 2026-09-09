@@ -8,7 +8,6 @@ using Bramble:
     trial_component_or_nothing,
     test_component_or_nothing,
     block_of,
-    routes_by_component,
     restrict_to
 
 # Reading which block of a coupled form a term belongs to.
@@ -50,8 +49,6 @@ using Bramble:
         @test trial_component_or_nothing(innerₕ(u, v)) === nothing
         @test test_component_or_nothing(innerₕ(u, v)) === nothing
         @test trial_component_or_nothing(D₋ₓ(u)) === nothing
-        @test !routes_by_component(innerₕ(u, v))
-        @test routes_by_component(innerₕ(u(1), v(1)))
     end
 
     @testset "Sum consistency" begin

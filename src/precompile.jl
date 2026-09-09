@@ -616,7 +616,6 @@ function _pc_form_blocks(Vₕ, ::Val{D}) where {D}
     u, v = TrialFunction{D}(), TestFunction{D}()
     a = innerₕ(D₋ₓ(u(1)), D₋ₓ(v(1))) + innerₕ(u(2), v(2))
 
-    routes_by_component(a)
     trial_component_or_nothing(a.left_op)
     test_component_or_nothing(a.left_op)
     block_of(a.left_op, n, n)
@@ -742,7 +741,6 @@ function _pc_assemble_bilinear_composite(Vₕ, g)
     bf = form(Vₕ, Vₕ, g)
     ast = resolve_form_ast(bf)
 
-    routes_by_component(ast)
     A = allocate_system_matrix(bf, ast)
     assemble!(A, bf; ast=ast)
     assemble(bf)
@@ -762,7 +760,6 @@ function _pc_assemble_composite(Vₕ, g, b)
     lf = form(Vₕ, g)
     ast = resolve_form_ast(lf)
 
-    routes_by_component(ast)
     assemble(lf)
     assemble!(b, lf; ast=ast)
     return nothing
