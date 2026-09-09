@@ -1,7 +1,7 @@
 using Test
 using Bramble
 using SparseArrays
-using Bramble: hₘᵢₙ
+using Bramble: hₘᵢₙ, diff₋ₓ, diff₊ₓ
 
 # The element type of the backend survives the whole library.
 #
@@ -16,16 +16,21 @@ using Bramble: hₘᵢₙ
 # while the rest of the library stayed Float32; nothing failed, the numbers were simply
 # in the wrong type. These tests are what makes that visible.
 
-const F32_BACKEND = backend(vector_type = Vector{Float32},
-    matrix_type = SparseMatrixCSC{Float32, Int})
+const F32_BACKEND = backend(;
+    vector_type=Vector{Float32}, matrix_type=SparseMatrixCSC{Float32,Int}
+)
 
 @testset "Element type preservation" begin
     @testset "Meshes & spaces" begin
         @test eltype(F32_BACKEND) === Float32
 
-        Ωₕ1 = mesh(domain(interval(0.0f0, 1.0f0)), 11, true; backend = F32_BACKEND)
-        Ωₕ2 = mesh(domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)), (6, 7),
-            (true, false); backend = F32_BACKEND)
+        Ωₕ1 = mesh(domain(interval(0.0f0, 1.0f0)), 11, true; backend=F32_BACKEND)
+        Ωₕ2 = mesh(
+            domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)),
+            (6, 7),
+            (true, false);
+            backend=F32_BACKEND,
+        )
 
         for Ωₕ in (Ωₕ1, Ωₕ2)
             @test eltype(Ωₕ) === Float32
@@ -42,16 +47,21 @@ const F32_BACKEND = backend(vector_type = Vector{Float32},
     end
 
     @testset "Functions & operators" begin
-        Ωₕ = mesh(domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)), (6, 7),
-            (true, false); backend = F32_BACKEND)
+        Ωₕ = mesh(
+            domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)),
+            (6, 7),
+            (true, false);
+            backend=F32_BACKEND,
+        )
         Wₕ = gridspace(Ωₕ)
         uₕ = Rₕ(Wₕ, x -> sin(x[1]) * x[2])
 
         @test eltype(parent(uₕ)) === Float32
         @test eltype(parent(avgₕ(Wₕ, x -> sin(x[1]) * x[2]))) === Float32
 
-        for op in (diff₋ₓ, diff₊ₓ, D₋ₓ, D₊ₓ, jumpₓ, M₋ₓ, M₊ₓ,
-            Dstar₊ₓ, Dcₓ, Dₕₓ, D₋ᵧ, M₊ᵧ, Dcᵧ, Dₕᵧ)
+        for op in (
+            diff₋ₓ, diff₊ₓ, D₋ₓ, D₊ₓ, jumpₓ, M₋ₓ, M₊ₓ, Dstar₊ₓ, Dcₓ, Dₕₓ, D₋ᵧ, M₊ᵧ, Dcᵧ, Dₕᵧ
+        )
             @test eltype(parent(op(uₕ))) === Float32
         end
         for op in (∇₋ₕ, ∇₊ₕ, Dstar₊ₕ, Dcₕ, ∇ₕ, M₋ₕ, jumpₕ)
@@ -62,8 +72,12 @@ const F32_BACKEND = backend(vector_type = Vector{Float32},
     @testset "Matrix forms" begin
         # The averaging matrices are where the Float64 literal was: every other family
         # was already exact, so a bound on all of them would not have caught it.
-        Ωₕ = mesh(domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)), (6, 7),
-            (true, false); backend = F32_BACKEND)
+        Ωₕ = mesh(
+            domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)),
+            (6, 7),
+            (true, false);
+            backend=F32_BACKEND,
+        )
 
         for op in (D₋ₓ, D₊ₓ, diff₋ₓ, diff₊ₓ, jumpₓ, M₋ₓ, M₊ₓ, M₋ᵧ, M₊ᵧ)
             @test eltype(op(Ωₕ)) === Float32
@@ -71,8 +85,12 @@ const F32_BACKEND = backend(vector_type = Vector{Float32},
     end
 
     @testset "Inner products & norms" begin
-        Ωₕ = mesh(domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)), (6, 7),
-            (true, false); backend = F32_BACKEND)
+        Ωₕ = mesh(
+            domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)),
+            (6, 7),
+            (true, false);
+            backend=F32_BACKEND,
+        )
         Wₕ = gridspace(Ωₕ)
         uₕ = Rₕ(Wₕ, x -> sin(x[1]) * x[2])
         gₕ = ∇₋ₕ(uₕ)

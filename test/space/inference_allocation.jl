@@ -1,7 +1,20 @@
 using Test
 using Bramble
-using Bramble: components, _difference_engine!, _average_engine!,
-               backward_spacings_for_derivative, Backward, Forward
+using Bramble:
+    components,
+    _difference_engine!,
+    _average_engine!,
+    backward_spacings_for_derivative,
+    Backward,
+    Forward,
+    diff₋ₓ,
+    diff₊ₓ,
+    diff₋ᵧ,
+    diff₊ᵧ,
+    diff₋₂,
+    diff₊₂,
+    diff₋ₕ,
+    diff₊ₕ
 
 # Type stability and allocation across grid spaces, operators and inner products.
 #
@@ -46,8 +59,9 @@ end
 @testset "Inference and allocations" begin
     Ωₕ1 = mesh(domain(interval(0.0, 1.0)), 64, false)
     Ωₕ2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (8, 9), (true, false))
-    Ωₕ3 = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 6),
-        (true, false, true))
+    Ωₕ3 = mesh(
+        domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 6), (true, false, true)
+    )
     Wₕ1, Wₕ2, Wₕ3 = gridspace(Ωₕ1), gridspace(Ωₕ2), gridspace(Ωₕ3)
     Vₕ2 = gridspace(Ωₕ2, Val(2))
 
@@ -71,7 +85,8 @@ end
         for (lbl, uₕ, ops) in (
             ("1D", uₕ1, (diff₋ₓ, diff₊ₓ, D₋ₓ, D₊ₓ, jumpₓ, M₋ₓ, M₊ₓ)),
             ("2D", uₕ2, (diff₋ᵧ, diff₊ᵧ, D₋ᵧ, D₊ᵧ, jumpᵧ, M₋ᵧ, M₊ᵧ)),
-            ("3D", uₕ3, (diff₋₂, diff₊₂, D₋₂, D₊₂, jump₂, M₋₂, M₊₂)))
+            ("3D", uₕ3, (diff₋₂, diff₊₂, D₋₂, D₊₂, jump₂, M₋₂, M₊₂)),
+        )
             @testset "$lbl" begin
                 for op in ops
                     @test @inferred(op(uₕ)) isa VectorElement
@@ -82,13 +97,13 @@ end
         # the tuple-valued aliases: a bare element in 1D, an NTuple above it
         @test @inferred(∇₋ₕ(uₕ1)) isa VectorElement
         for op in (∇₋ₕ, ∇₊ₕ, diff₋ₕ, diff₊ₕ, jumpₕ, M₋ₕ, M₊ₕ)
-            @test @inferred(op(uₕ2)) isa NTuple{2, VectorElement}
-            @test @inferred(op(uₕ3)) isa NTuple{3, VectorElement}
+            @test @inferred(op(uₕ2)) isa NTuple{2,VectorElement}
+            @test @inferred(op(uₕ3)) isa NTuple{3,VectorElement}
         end
 
         # composite grid functions go through a separate dispatch
         @test @inferred(D₋ₓ(cₕ2)) isa VectorElement
-        @test @inferred(∇₋ₕ(cₕ2)) isa NTuple{2, VectorElement}
+        @test @inferred(∇₋ₕ(cₕ2)) isa NTuple{2,VectorElement}
     end
 
     @testset "Type stability (inner products)" begin
@@ -171,7 +186,8 @@ end
         for (lbl, uₕ, ops) in (
             ("1D", uₕ1, (diff₋ₓ, D₋ₓ, M₋ₓ, jumpₓ)),
             ("2D", uₕ2, (diff₋ᵧ, D₋ᵧ, M₋ᵧ, jumpᵧ)),
-            ("3D", uₕ3, (diff₋₂, D₋₂, M₋₂, jump₂)))
+            ("3D", uₕ3, (diff₋₂, D₋₂, M₋₂, jump₂)),
+        )
             @testset "$lbl" begin
                 baseline = alloc_test(similar, uₕ)
                 for op in ops
@@ -185,14 +201,14 @@ end
         # Rₕ! and avgₕ! allocate a small constant. The property that matters is that it
         # is constant: anything proportional to the grid would be per-step garbage.
         function inplace_bytes(be, n)
-            W = gridspace(mesh(domain(interval(0.0, 1.0)), n, true; backend = be))
+            W = gridspace(mesh(domain(interval(0.0, 1.0)), n, true; backend=be))
             u = element(W)
             (alloc_test(Rₕ!, u, sin), alloc_test(avgₕ!, u, sin))
         end
 
         # A `Serial()` backend runs every grid size through the same plain loop,
         # so both sizes give exactly 0 bytes.
-        be_serial = backend(policy = Serial())
+        be_serial = backend(policy=Serial())
         @test inplace_bytes(be_serial, 16) == (0, 0)
         @test inplace_bytes(be_serial, 2048) == (0, 0)   # 128x the degrees of freedom
 
@@ -200,7 +216,7 @@ end
         # A single measurement may drift slightly due to thread-spawn machinery
         # scheduling noise, independent of the grid size. Taking the minimum over repeats
         # with a small tolerance verifies that allocation does not scale with problem size.
-        be_parallel = backend(policy = Parallel())
+        be_parallel = backend(policy=Parallel())
         function min_inplace_bytes(be, n)
             trials = ntuple(_ -> inplace_bytes(be, n), 5)
             (minimum(t[1] for t in trials), minimum(t[2] for t in trials))
@@ -219,13 +235,13 @@ end
         f(x) = sin(x[1]) * cos(x[2])
         f_tup = (f, f)
 
-        @test alloc_test(Rₕ!, u, f; markers = (:left,)) == 0
-        @test alloc_test(avgₕ!, u, f; markers = (:left,)) == 0
+        @test alloc_test(Rₕ!, u, f; markers=(:left,)) == 0
+        @test alloc_test(avgₕ!, u, f; markers=(:left,)) == 0
         @test alloc_test(Rₕ!, v, f_tup) == 0
         @test alloc_test(avgₕ!, u, f, Val(3)) == 0
-        @test alloc_test(avgₕ!, u, f; quad_points = Val(3)) == 0
-        @test alloc_test(Rₕ!, v, f_tup; markers = (:left,)) == 0
-        @test alloc_test(avgₕ!, v, f_tup; markers = (:left,)) == 0
+        @test alloc_test(avgₕ!, u, f; quad_points=Val(3)) == 0
+        @test alloc_test(Rₕ!, v, f_tup; markers=(:left,)) == 0
+        @test alloc_test(avgₕ!, v, f_tup; markers=(:left,)) == 0
 
         # gpena/Bramble.jl#64: `_avgₕ!`/`_avg_masked!`'s composite Tuple methods used to
         # route the per-leaf application through `map(f, t1, t2)` with a closure that
@@ -236,8 +252,8 @@ end
         un = element(Vn)
         f_tup3 = (f, f, f)
         @test alloc_test(avgₕ!, un, f_tup3) == 0
-        @test alloc_test(avgₕ!, un, f_tup3; markers = (:left,)) == 0
-        @test alloc_test(Rₕ!, un, f_tup3; markers = (:left,)) == 0
+        @test alloc_test(avgₕ!, un, f_tup3; markers=(:left,)) == 0
+        @test alloc_test(Rₕ!, un, f_tup3; markers=(:left,)) == 0
 
         # Zero allocations for copyto! (values!'s replacement, gpena/Bramble.jl#73) and πₕ!
         @test alloc_test(copyto!, u, 1.0) == 0

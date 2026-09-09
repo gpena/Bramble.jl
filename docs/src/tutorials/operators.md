@@ -4,7 +4,7 @@ Bramble provides the finite difference building blocks that discrete schemes are
 in: differences, jumps, averages, and their algebraic structures.
 This tutorial covers:
 
-1. The four operator families and how their names are built.
+1. The three operator families and how their names are built.
 2. Applying an operator to a grid function, and what happens at the boundary.
 3. The same operator as a sparse matrix.
 4. Gradients and the other vectorial forms.
@@ -16,20 +16,15 @@ Every number below was produced by the code shown.
 
 ## 1. The operator families
 
-There are four families. Two of them differ only by a division:
+There are three families:
 
 | Family | Meaning | Backward form |
 |:--|:--|:--|
-| unscaled difference | a plain difference | ``u_i - u_{i-1}`` |
-| finite difference | divided by the spacing, so it approximates ``\partial u / \partial x`` | ``\dfrac{u_i - u_{i-1}}{h_i}`` |
-| jump | the same arithmetic as the unscaled forward difference, used where the intent is a discontinuity across an interface | ``u_{i+1} - u_i`` |
+| finite difference | a difference divided by the spacing, so it approximates ``\partial u / \partial x`` | ``\dfrac{u_i - u_{i-1}}{h_i}`` |
+| jump | the plain difference across an interface, undivided, where the intent is a discontinuity | ``u_{i+1} - u_i`` |
 | average | the mean of a point and its neighbour | ``\dfrac{u_{i-1} + u_i}{2}`` |
 
-The jump and the unscaled forward difference compute the same numbers. They are separate
-names because they play different roles in a scheme, and reading `jumpₓ` in a penalty term
-says something that `diff₊ₓ` does not.
-
-The jump is also the one family with no backward form. A jump belongs to the interface
+The jump is the one family with no backward form. A jump belongs to the interface
 between two cells rather than to a direction of travel across it, so
 ``\llbracket u \rrbracket = u_{i+1} - u_i`` at the interface between ``x_i`` and
 ``x_{i+1}`` is a single quantity; a backward jump would name that same interface from the
@@ -41,7 +36,6 @@ A name is a stem, a direction, and a coordinate:
 
 | Piece | Meaning |
 |:--|:--|
-| `diff` | unscaled difference |
 | `D` | finite difference |
 | `jump` | jump |
 | `M` | average |
@@ -63,7 +57,6 @@ An operator takes a [`VectorElement`](@ref) and returns a new one on the same sp
 
 ```@setup operators
 using Bramble, Random
-using Bramble: values
 # The non-uniform meshes further down are drawn at random, so the page is seeded to make
 # every build produce the same numbers.
 Random.seed!(20260830)
@@ -79,31 +72,28 @@ uₕ = Rₕ(Wₕ, x -> x^2);
 parent(uₕ)
 ```
 
-The four backward operators on that grid function:
+The two backward operators on that grid function:
 
 ```@repl operators
-parent(diff₋ₓ(uₕ))
 parent(D₋ₓ(uₕ))
 parent(M₋ₓ(uₕ))
 ```
 
-Reading the second entry of each: `diff₋ₓ` gives ``u_2 - u_1 = 0.0625``, `D₋ₓ` divides
-that by ``h_2 = 0.25`` to get ``0.25``, and `M₋ₓ` averages ``(u_1 + u_2)/2 = 0.03125``.
+Reading the second entry of each: the plain difference is ``u_2 - u_1 = 0.0625``, so
+`D₋ₓ` divides that by ``h_2 = 0.25`` to get ``0.25``, and `M₋ₓ` averages
+``(u_1 + u_2)/2 = 0.03125``.
 
-The jump has no backward form, so it matches the *forward* unscaled difference instead:
+The jump has no backward form; forward, it is that plain difference, undivided:
 
 ```@repl operators
-parent(diff₊ₓ(uₕ))
 parent(jumpₓ(uₕ))
 ```
-
-entry for entry, as section 1 said it would.
 
 ## 3. What happens at the boundary
 
 Every operator has one slice where its stencil runs off the grid: the first point for a
 backward operator, the last for a forward one. There is no neighbour there, so the
-stencil is truncated, and the two difference families truncate differently.
+stencil is truncated, and the finite difference and the jump truncate differently.
 
 ```@raw html
 <figure>
@@ -157,17 +147,14 @@ stencil is truncated, and the two difference families truncate differently.
 ```
 
 The finite difference is **zero** on its truncated slice, because there is no one-sided
-stencil to divide by a spacing. The unscaled difference and the jump instead behave as
-if the missing neighbour were zero, which is what makes them agree with their matrices:
-
-The backward finite difference is truncated at ``x_1`` and the forward one at ``x_5``,
-while the unscaled differences act as though the missing neighbour were zero:
+stencil to divide by a spacing: the backward one is truncated at ``x_1`` and the forward
+one at ``x_5``. The jump instead behaves as if the missing neighbour were zero, which is
+what makes it agree with its matrix:
 
 ```@repl operators
 parent(D₋ₓ(uₕ))[1]
 parent(D₊ₓ(uₕ))[end]
-parent(diff₊ₓ(uₕ))[end]   # -u₅, not 0
-parent(diff₋ₓ(uₕ))[1]     # u₁, and u₁ happens to be 0 here
+parent(jumpₓ(uₕ))[end]   # -u₅, not 0
 ```
 
 Section 9 shows why this matters in practice.
@@ -297,8 +284,8 @@ length(g)
 ```
 
 Away from the truncated slices, `g[1]` is `1.0` and `g[2]` is `2.0`, the two partial
-derivatives of ``x + 2y``. The same suffix works for the other families as `diff₋ₕ`,
-`jumpₕ` and `M₋ₕ`, and all of them accept a mesh, a grid space or a grid function.
+derivatives of ``x + 2y``. The same suffix works for the other families as `jumpₕ` and
+`M₋ₕ`, and all of them accept a mesh, a grid space or a grid function.
 
 ## 6. Summation by parts, and `Dstar₊ₓ`
 
@@ -351,7 +338,8 @@ moving a difference from one factor to the other, and that step is exact only wi
 pairing: with `D₊ₓ` it leaves a residual that does not vanish under refinement, since it
 is a difference of quadrature weights and not a truncation error. Like the other
 difference families, `Dstar₊` can also be had as a sparse matrix: `Dstar₊ₓ(Wₕ)` is
-`diag(2/(hᵢ + hᵢ₊₁))` times the unscaled forward difference, with an empty last row.
+`diag(2/(hᵢ + hᵢ₊₁))` times the undivided forward difference ``u_{i+1} - u_i``, with an
+empty last row.
 
 ## 7. The centered difference, `Dcₓ`
 

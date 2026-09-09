@@ -1,11 +1,21 @@
 module Bramble
 
 import Base: eltype, length
-import Base: show, first, last, getindex, setindex!, iterate, size, firstindex,
-             lastindex, axes, eachindex
+import Base:
+    show,
+    first,
+    last,
+    getindex,
+    setindex!,
+    iterate,
+    size,
+    firstindex,
+    lastindex,
+    axes,
+    eachindex
 
-using SparseArrays: SparseMatrixCSC, spdiagm, spzeros,
-                    rowvals, nonzeros, nzrange, sparse, sparse!
+using SparseArrays:
+    SparseMatrixCSC, spdiagm, spzeros, rowvals, nonzeros, nzrange, sparse, sparse!
 
 using LinearAlgebra: I, dot, mul!
 import LinearAlgebra: issymmetric, isposdef
@@ -31,8 +41,7 @@ public vector, matrix
 public backend_eye, backend_zeros
 
 # domain/interval handling functions
-export box, interval, ×, dim, topo_dim, extrema, point, center, projection,
-       boundary_symbols
+export box, interval, ×, dim, topo_dim, extrema, point, center, projection, boundary_symbols
 export domain, markers, labels
 
 # `set` is `CartesianProduct`'s identity accessor — real, but the single most generic noun
@@ -43,12 +52,18 @@ public set, is_collapsed, point_type
 
 # Mesh handling
 export Mesh1D, MeshnD
-export mesh, submeshes, hₘₐₓ, stepsize, locate_cell,
-       iterative_refinement!, change_points!, set_points!
+export mesh,
+    submeshes,
+    hₘₐₓ,
+    stepsize,
+    locate_cell,
+    iterative_refinement!,
+    change_points!,
+    set_points!
 export npoints, points, point, half_points, half_point
 export spacing, forward_spacing, half_spacing, spacings, forward_spacings, cell_measure
-export indices, boundary_indices, interior_indices, is_boundary_index, index_in_marker,
-       is_uniform
+export indices,
+    boundary_indices, interior_indices, is_boundary_index, index_in_marker, is_uniform
 
 # `AbstractMeshType`/`MeshMarkers` are extension points for a new mesh type, not everyday
 # vocabulary; `mesh_type`/`normal_vector`/`hₘᵢₙ`/`half_spacings`/`cell_measures` are the
@@ -58,16 +73,15 @@ public AbstractMeshType, MeshMarkers
 public mesh_type, hₘᵢₙ, normal_vector, half_spacings, cell_measures
 
 # Space handling
-export gridspace, vector_gridspace, space, spaces, ScalarGridSpace,
-       CompositeGridSpace
+export gridspace, vector_gridspace, space, spaces, ScalarGridSpace, CompositeGridSpace
 export ndofs, ncomponents, weights
 
 # `VectorGridSpace` is a type alias for `CompositeGridSpace{N}`; `space_type` reads a
 # space's type back off a `VectorElement`. Neither appears in a tutorial — both are for
 # code written *against* a space's type, not for building one (point 70).
 public VectorGridSpace, space_type
-export VectorElement, element, parent, reshape, components,
-       component_range, component_ranges
+export VectorElement,
+    element, parent, reshape, components, component_range, component_ranges
 export Rₕ, Rₕ!, avgₕ, avgₕ!
 export interpolate_at, interpolation_matrix, πₕ, πₕ!
 
@@ -75,10 +89,14 @@ export innerₕ
 export inner₊, inner₊ₓ, inner₊ᵧ, inner₊₂
 export snorm₁ₕ, norm₁ₕ, norm₊, normₕ
 
-export diff₋ₓ, diff₋ᵧ, diff₋₂, diff₋ₕ
-export diff₊ₓ, diff₊ᵧ, diff₊₂, diff₊ₕ
-export diff₋ₓ!, diff₋ᵧ!, diff₋₂!
-export diff₊ₓ!, diff₊ᵧ!, diff₊₂!
+# The unscaled differences are `public` rather than exported: unlike every other operator
+# family they have no form-layer node, so they cannot appear inside a bilinear form, and
+# `diff₊` is the same arithmetic as `jump`, which carries the intent a caller reaching for
+# it usually means. Reached as `Bramble.diff₋ₓ` by anyone who wants the raw difference.
+public diff₋ₓ, diff₋ᵧ, diff₋₂, diff₋ₕ
+public diff₊ₓ, diff₊ᵧ, diff₊₂, diff₊ₕ
+public diff₋ₓ!, diff₋ᵧ!, diff₋₂!
+public diff₊ₓ!, diff₊ᵧ!, diff₊₂!
 
 export D₋ₓ, D₋ᵧ, D₋₂, ∇₋ₕ
 export D₊ₓ, D₊ᵧ, D₊₂, ∇₊ₕ

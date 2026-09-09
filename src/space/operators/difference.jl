@@ -94,11 +94,10 @@ struct CrossWeighted <: CenteredStencil end
 # @boundscheck rather than @assert: this runs once per grid point and the engine's
 # loops are marked @inbounds, which elides the former and cannot elide the latter.
 @inline function _get_h_val(h::AbstractVector, i::Int)
-    @boundscheck 1 <= i <= length(h) ||
-                 throw(BoundsError(h, i))
+    @boundscheck 1 <= i <= length(h) || throw(BoundsError(h, i))
     return @inbounds h[i]
 end
-@inline _get_h_val(h::F, i::Int) where {F <: Function} = h(i)
+@inline _get_h_val(h::F, i::Int) where {F<:Function} = h(i)
 
 # The kernels take the point and its neighbour in that order, whichever direction the
 # stencil runs, so that the engine can hand them `(cur, other)` without knowing which
@@ -107,19 +106,23 @@ end
 #
 # Unscaled, h === nothing: the plain difference.
 @inline @propagate_inbounds _compute_difference(
-    ::Forward, ::Val{false}, cur, other, ::Nothing, i) = other - cur
+    ::Forward, ::Val{false}, cur, other, ::Nothing, i
+) = other - cur
 @inline @propagate_inbounds _compute_difference(
-    ::Backward, ::Val{false}, cur, other, ::Nothing, i) = cur - other
+    ::Backward, ::Val{false}, cur, other, ::Nothing, i
+) = cur - other
+@inline @propagate_inbounds _compute_difference(::Forward, ::Val{true}, cur, ::Nothing, i) =
+    -cur
 @inline @propagate_inbounds _compute_difference(
-    ::Forward, ::Val{true}, cur, ::Nothing, i) = -cur
-@inline @propagate_inbounds _compute_difference(
-    ::Backward, ::Val{true}, cur, ::Nothing, i) = cur
+    ::Backward, ::Val{true}, cur, ::Nothing, i
+) = cur
 
 # Scaled by the grid spacing: the finite difference.
+@inline @propagate_inbounds _compute_difference(::Forward, ::Val{false}, cur, other, h, i) =
+    (other - cur) / _get_h_val(h, i)
 @inline @propagate_inbounds _compute_difference(
-    ::Forward, ::Val{false}, cur, other, h, i) = (other - cur) / _get_h_val(h, i)
-@inline @propagate_inbounds _compute_difference(
-    ::Backward, ::Val{false}, cur, other, h, i) = (cur - other) / _get_h_val(h, i)
+    ::Backward, ::Val{false}, cur, other, h, i
+) = (cur - other) / _get_h_val(h, i)
 
 # The scaled (finite difference) and centered families' boundary case -- zero, for any
 # direction -- is covered by the one `_compute_difference(::GridDirection, ::Val{true}, ...)`
@@ -135,7 +138,8 @@ end
 #
 # so the centered denominator is twice it and one lazy view serves both operators.
 @inline @propagate_inbounds _compute_difference(
-    ::Centered, ::Val{false}, back, _, fwd, h, i) = (fwd - back) / (2 * _get_h_val(h, i))
+    ::Centered, ::Val{false}, back, _, fwd, h, i
+) = (fwd - back) / (2 * _get_h_val(h, i))
 
 # The cross-weighted kernel needs the two spacings separately rather than their sum, so
 # its `h` is the mesh's cached spacings themselves:
@@ -147,7 +151,8 @@ end
 # respectively. Reading h[i+1] is in range because the interior stops at the last point
 # that has a forward neighbour.
 @inline @propagate_inbounds function _compute_difference(
-        ::CrossWeighted, ::Val{false}, back, cur, fwd, h, i)
+    ::CrossWeighted, ::Val{false}, back, cur, fwd, h, i
+)
     hᵢ = _get_h_val(h, i)
     hᵢ₊₁ = _get_h_val(h, i + 1)
     return (hᵢ * (fwd - cur) / hᵢ₊₁ + hᵢ₊₁ * (cur - back) / hᵢ) / (hᵢ + hᵢ₊₁)
@@ -158,8 +163,8 @@ end
 # literal keeps the element type of the grid. No ambiguity against the `::Nothing` methods
 # above (the unscaled boundary case): those are more specific in both the direction and the
 # `h` slot.
-@inline @propagate_inbounds _compute_difference(
-    ::GridDirection, ::Val{true}, cur, h, i) = zero(cur)
+@inline @propagate_inbounds _compute_difference(::GridDirection, ::Val{true}, cur, h, i) =
+    zero(cur)
 
 # --- The starred forward difference ----------------------------------------------- #
 #
@@ -184,7 +189,7 @@ Entry `i` reads `h[i]` and `h[i+1]`, so it is defined for `i < length(h)`. That 
 the range the forward stencil's interior covers; the last point has no forward neighbour
 and the engine truncates it to zero without consulting this.
 """
-struct StarSpacings{T, V <: AbstractVector{T}} <: AbstractVector{T}
+struct StarSpacings{T,V<:AbstractVector{T}} <: AbstractVector{T}
     h::V
 end
 
@@ -214,11 +219,20 @@ width gives half of it, the boundary cell being a half cell.
 # asserted: this checks a caller argument, and an @assert reports a size mismatch as an
 # AssertionError, which is not what a caller should have to catch.
 @noinline function _throw_centered_too_few_points(dim::Int, n::Int)
-    throw(ArgumentError("a centered difference along direction $dim needs at least 3 points there, got $n"))
+    throw(
+        ArgumentError(
+            "a centered difference along direction $dim needs at least 3 points there, got $n",
+        ),
+    )
 end
 
-@inline function _apply_stencil!(vₕ::VectorElement{<:ScalarGridSpace},
-        uₕ::VectorElement{<:ScalarGridSpace}, h, dir::GridDirection, dim_val::Val)
+@inline function _apply_stencil!(
+    vₕ::VectorElement{<:ScalarGridSpace},
+    uₕ::VectorElement{<:ScalarGridSpace},
+    h,
+    dir::GridDirection,
+    dim_val::Val,
+)
     _check_no_alias(vₕ, uₕ)
     _difference_engine!(vₕ.data, uₕ.data, h, _grid_dims(uₕ), dir, dim_val)
     return nothing
@@ -243,9 +257,14 @@ end
     return nothing
 end
 
-@inline function _apply_spaced!(vₕ::VectorElement{<:ScalarGridSpace},
-        uₕ::VectorElement{<:ScalarGridSpace}, spacing_func::F, precheck::P, dir::GridDirection,
-        dim_val::Val{DIM}) where {F, P, DIM}
+@inline function _apply_spaced!(
+    vₕ::VectorElement{<:ScalarGridSpace},
+    uₕ::VectorElement{<:ScalarGridSpace},
+    spacing_func::F,
+    precheck::P,
+    dir::GridDirection,
+    dim_val::Val{DIM},
+) where {F,P,DIM}
     sub = _op_mesh(uₕ)(DIM)
     precheck(sub, DIM)
     _apply_stencil!(vₕ, uₕ, spacing_func(sub), dir, dim_val)
@@ -258,11 +277,17 @@ end
 # validated leaf 1, and reused its value on every other leaf (gpena/Bramble.jl#79).
 # Recursing into the scalar method above does that for free, since each leaf is itself a
 # scalar space.
-@inline function _apply_spaced!(vₕ::VectorElement{<:CompositeGridSpace},
-        uₕ::VectorElement{<:CompositeGridSpace}, spacing_func, precheck, dir::GridDirection,
-        dim_val::Val)
+@inline function _apply_spaced!(
+    vₕ::VectorElement{<:CompositeGridSpace},
+    uₕ::VectorElement{<:CompositeGridSpace},
+    spacing_func,
+    precheck,
+    dir::GridDirection,
+    dim_val::Val,
+)
     _apply_componentwise!(
-        (v, u) -> _apply_spaced!(v, u, spacing_func, precheck, dir, dim_val), vₕ, uₕ)
+        (v, u) -> _apply_spaced!(v, u, spacing_func, precheck, dir, dim_val), vₕ, uₕ
+    )
     return vₕ
 end
 
@@ -272,8 +297,9 @@ end
 # _get_h_val. Without `H` the spacing callable stays boxed and each element pays a
 # dynamic dispatch: measured 13768 us and 6.4 MB against 29 us and no allocation on a
 # 100000-point 1D grid.
-function _difference_engine!(out, in_ref, h::H, dims::NTuple{D, Int},
-        dir::GridDirection, ::Val{DIM}) where {H, D, DIM}
+function _difference_engine!(
+    out, in_ref, h::H, dims::NTuple{D,Int}, dir::GridDirection, ::Val{DIM}
+) where {H,D,DIM}
     li = LinearIndices(dims)
     step = _stencil_step(Val(DIM), Val(D))
     interior, boundary = _stencil_ranges(axes(li), Val(DIM), dir)
@@ -281,7 +307,8 @@ function _difference_engine!(out, in_ref, h::H, dims::NTuple{D, Int},
     @inbounds @simd for I in CartesianIndices(interior)
         idx, other = li[I], li[_neighbour(dir, I, step)]
         out[idx] = _compute_difference(
-            dir, Val(false), in_ref[idx], in_ref[other], h, I[DIM])
+            dir, Val(false), in_ref[idx], in_ref[other], h, I[DIM]
+        )
     end
 
     @inbounds @simd for I in CartesianIndices(boundary)
@@ -297,23 +324,28 @@ end
 # each side and it truncates on two boundary slices rather than one. That is a different
 # shape from `_stencil_ranges`, whose two-value result the one-sided engines and the
 # average engine destructure, so it is written separately rather than folded in.
-@inline function _centered_stencil_ranges(full_axes::NTuple{D, Any}, ::Val{DIM}) where {
-        D, DIM}
+@inline function _centered_stencil_ranges(
+    full_axes::NTuple{D,Any}, ::Val{DIM}
+) where {D,DIM}
     interior = ntuple(
         d -> d == DIM ? ((first(full_axes[d]) + 1):(last(full_axes[d]) - 1)) : full_axes[d],
-        Val(D))
+        Val(D),
+    )
     lo = ntuple(
-        d -> d == DIM ? (first(full_axes[d]):first(full_axes[d])) : full_axes[d], Val(D))
+        d -> d == DIM ? (first(full_axes[d]):first(full_axes[d])) : full_axes[d], Val(D)
+    )
     hi = ntuple(
-        d -> d == DIM ? (last(full_axes[d]):last(full_axes[d])) : full_axes[d], Val(D))
+        d -> d == DIM ? (last(full_axes[d]):last(full_axes[d])) : full_axes[d], Val(D)
+    )
     return interior, lo, hi
 end
 
 # `h` carries a type parameter for the same reason it does in the one-sided engine: an
 # argument of function type that the body only forwards is not specialised on, and the
 # spacing would be boxed for every grid point.
-function _difference_engine!(out, in_ref, h::H, dims::NTuple{D, Int},
-        dir::CenteredStencil, ::Val{DIM}) where {H, D, DIM}
+function _difference_engine!(
+    out, in_ref, h::H, dims::NTuple{D,Int}, dir::CenteredStencil, ::Val{DIM}
+) where {H,D,DIM}
     li = LinearIndices(dims)
     step = _stencil_step(Val(DIM), Val(D))
     interior, lo, hi = _centered_stencil_ranges(axes(li), Val(DIM))
@@ -322,7 +354,8 @@ function _difference_engine!(out, in_ref, h::H, dims::NTuple{D, Int},
         idx = li[I]
         back, fwd = li[I - step], li[I + step]
         out[idx] = _compute_difference(
-            dir, Val(false), in_ref[back], in_ref[idx], in_ref[fwd], h, I[DIM])
+            dir, Val(false), in_ref[back], in_ref[idx], in_ref[fwd], h, I[DIM]
+        )
     end
 
     # Both end slices at once. Iterating the two range tuples costs nothing: they have
@@ -337,16 +370,21 @@ function _difference_engine!(out, in_ref, h::H, dims::NTuple{D, Int},
     return nothing
 end
 
-function difference_shift(Ωₕ::AbstractMeshType, ::Val{DIFF_DIM}, ::Val{first},
-        ::Val{second}) where {DIFF_DIM, first, second}
+function difference_shift(
+    Ωₕ::AbstractMeshType, ::Val{DIFF_DIM}, ::Val{first}, ::Val{second}
+) where {DIFF_DIM,first,second}
     return shift(Ωₕ, Val(DIFF_DIM), Val(first)) - shift(Ωₕ, Val(DIFF_DIM), Val(second))
 end
 
-function _difference_operator(Ωₕ::AbstractMeshType, ::Forward, ::Val{DIFF_DIM}) where {DIFF_DIM}
+function _difference_operator(
+    Ωₕ::AbstractMeshType, ::Forward, ::Val{DIFF_DIM}
+) where {DIFF_DIM}
     return difference_shift(Ωₕ, Val(DIFF_DIM), Val(1), Val(0))
 end
 
-function _difference_operator(Ωₕ::AbstractMeshType, ::Backward, ::Val{DIFF_DIM}) where {DIFF_DIM}
+function _difference_operator(
+    Ωₕ::AbstractMeshType, ::Backward, ::Val{DIFF_DIM}
+) where {DIFF_DIM}
     return difference_shift(Ωₕ, Val(DIFF_DIM), Val(0), Val(-1))
 end
 
@@ -360,8 +398,9 @@ end
 # The vector's truncated entry is not meaningful, whereas `spacing_for_derivative` returns
 # zero there, and this loop covers every index and turns that zero into a zero weight. The
 # engines can use the vector because they visit the truncated slice separately.
-function _derivative_weights!(v::AbstractVector, Ωₕ::AbstractMeshType,
-        spacing_func::F, ::Val{DIFF_DIM}) where {F, DIFF_DIM}
+function _derivative_weights!(
+    v::AbstractVector, Ωₕ::AbstractMeshType, spacing_func::F, ::Val{DIFF_DIM}
+) where {F,DIFF_DIM}
     dims = npoints(Ωₕ, Tuple)
 
     1 <= DIFF_DIM <= dim(Ωₕ) || _throw_stencil_dim_error(DIFF_DIM, dim(Ωₕ))
@@ -378,32 +417,38 @@ end
 
 # Configuration array to define forward and backward difference operators.
 const _DIFFERENCE_OP_CONFIGS = [
-    (direction = Forward(),
-        diff_name = :forward_difference,
-        finite_diff_name = :forward_finite_difference,
-        weights_func! = :forward_derivative_weights!,
-        spacing_func = :forward_spacing_for_derivative,
-        spacings_func = :forward_spacings_for_derivative,
-        diff_alias = :diff₊,
-        finite_diff_alias = :D₊,
-        grad_alias = :diff₊ₕ,
-        finite_grad_alias = :∇₊ₕ,
-        dir_string = "Forward",
-        dir_string_lowercase = "forward",
-        math_op = "u_{i+1} - u_i", math_finite_op = "\\frac{u_{i+1} - u_i}{h_i}"),
-    (direction = Backward(),
-        diff_name = :backward_difference,
-        finite_diff_name = :backward_finite_difference,
-        weights_func! = :backward_derivative_weights!,
-        spacing_func = :spacing_for_derivative,
-        spacings_func = :backward_spacings_for_derivative,
-        diff_alias = :diff₋,
-        finite_diff_alias = :D₋,
-        grad_alias = :diff₋ₕ,
-        finite_grad_alias = :∇₋ₕ,
-        dir_string = "Backward",
-        dir_string_lowercase = "backward",
-        math_op = "u_{i} - u_{i-1}", math_finite_op = "\\frac{u_{i} - u_{i-1}}{h_i}")
+    (
+        direction=Forward(),
+        diff_name=:forward_difference,
+        finite_diff_name=:forward_finite_difference,
+        (weights_func!)=:forward_derivative_weights!,
+        spacing_func=:forward_spacing_for_derivative,
+        spacings_func=:forward_spacings_for_derivative,
+        diff_alias=:diff₊,
+        finite_diff_alias=:D₊,
+        grad_alias=:diff₊ₕ,
+        finite_grad_alias=:∇₊ₕ,
+        dir_string="Forward",
+        dir_string_lowercase="forward",
+        math_op="u_{i+1} - u_i",
+        math_finite_op="\\frac{u_{i+1} - u_i}{h_i}",
+    ),
+    (
+        direction=Backward(),
+        diff_name=:backward_difference,
+        finite_diff_name=:backward_finite_difference,
+        (weights_func!)=:backward_derivative_weights!,
+        spacing_func=:spacing_for_derivative,
+        spacings_func=:backward_spacings_for_derivative,
+        diff_alias=:diff₋,
+        finite_diff_alias=:D₋,
+        grad_alias=:diff₋ₕ,
+        finite_grad_alias=:∇₋ₕ,
+        dir_string="Backward",
+        dir_string_lowercase="backward",
+        math_op="u_{i} - u_{i-1}",
+        math_finite_op="\\frac{u_{i} - u_{i-1}}{h_i}",
+    ),
 ]
 
 # Metaprogramming loop to generate all specified difference operators.
@@ -412,8 +457,6 @@ for config in _DIFFERENCE_OP_CONFIGS
     dir_instance = config.direction
     diff_name = config.diff_name
     finite_diff_name = config.finite_diff_name
-    diff_name! = Symbol(diff_name, :!)
-    finite_diff_name! = Symbol(finite_diff_name, :!)
     weights_func! = config.weights_func!
     spacing_func = config.spacing_func
     spacings_func = config.spacings_func
@@ -434,18 +477,20 @@ for config in _DIFFERENCE_OP_CONFIGS
 
         Low-level, in-place function to compute the **unscaled** $($dir_string_lowercase) difference of vector `in` along dimension `diff_dim`, storing the result in `out`. This function computes ``$($math_op)``.
         """
-        function $(Symbol(diff_name, :_dim!))(out, in, h, dims::NTuple{D, Int},
-                diff_dim::Val{DIFF_DIM}) where {D, DIFF_DIM}
+        function $(Symbol(diff_name, :_dim!))(
+            out, in, h, dims::NTuple{D,Int}, diff_dim::Val{DIFF_DIM}
+        ) where {D,DIFF_DIM}
             1 <= DIFF_DIM <= D || _throw_stencil_dim_error(DIFF_DIM, D)
             length(out) == length(in) == prod(dims) ||
                 _throw_stencil_size_error(length(out), length(in), dims)
             in_ref = (out === in) ? copy(in) : in
             _difference_engine!(out, in_ref, h, dims, $dir_instance, diff_dim)
-            return
+            return nothing
         end
 
         function $(Symbol(diff_name, :_dim!))(
-                out, in, dims::NTuple{D, Int}, diff_dim::Val{DIFF_DIM}) where {D, DIFF_DIM}
+            out, in, dims::NTuple{D,Int}, diff_dim::Val{DIFF_DIM}
+        ) where {D,DIFF_DIM}
             return $(Symbol(diff_name, :_dim!))(out, in, nothing, dims, diff_dim)
         end
 
@@ -455,7 +500,9 @@ for config in _DIFFERENCE_OP_CONFIGS
 
         Computes the geometric weights for the $($dir_string_lowercase) finite difference operator and stores them in-place in vector `v`.
         """
-        @inline function $weights_func!(v::AbstractVector, Ωₕ::AbstractMeshType, diff_dim::Val)
+        @inline function $weights_func!(
+            v::AbstractVector, Ωₕ::AbstractMeshType, diff_dim::Val
+        )
             _derivative_weights!(v, Ωₕ, $spacing_func, diff_dim)
         end
 
@@ -465,16 +512,17 @@ for config in _DIFFERENCE_OP_CONFIGS
 
         Constructs the **unscaled** $($dir_string_lowercase) difference operator, representing the operation ``$($math_op)``.
         """
-        @inline $diff_name(
-            Ωₕ::AbstractMeshType, dim_val::Val) = _difference_operator(
-            Ωₕ, $dir_instance, dim_val)
+        @inline $diff_name(Ωₕ::AbstractMeshType, dim_val::Val) =
+            _difference_operator(Ωₕ, $dir_instance, dim_val)
 
         @doc """
             $($(QuoteNode(finite_diff_name)))(arg, dim_val::Val)
 
         Constructs the $($dir_string_lowercase) **finite difference** operator, which approximates the first derivative using the formula ``$($math_finite_op)``.
         """
-        function $finite_diff_name(Ωₕ::AbstractMeshType, dim_val::Val; vector_cache = __vector(Ωₕ))
+        function $finite_diff_name(
+            Ωₕ::AbstractMeshType, dim_val::Val; vector_cache=__vector(Ωₕ)
+        )
             diff_matrix = $diff_name(Ωₕ, dim_val)
             $weights_func!(vector_cache, Ωₕ, dim_val)
             return vector_cache .* diff_matrix
@@ -482,63 +530,50 @@ for config in _DIFFERENCE_OP_CONFIGS
 
         # --- Generic applicators ---
         #
-        # The in-place forms hold the work and the allocating ones are one line each on top
-        # of them, rather than the two being written out separately. `_apply_stencil!` was
-        # always the core; what was missing was a public name for it.
-        @inline $diff_name(Wₕ::AbstractSpaceType, dim_val::Val) = $diff_name(
-            mesh(Wₕ), dim_val)
+        # Only the mesh-forwarding overloads are generated here; the grid-function trio
+        # (scalar `!`, composite `!`, allocating) comes from
+        # `_define_grid_function_forms` below, which `average.jl` and the centred families
+        # share (gpena/Bramble.jl#101).
+        @inline $diff_name(Wₕ::AbstractSpaceType, dim_val::Val) =
+            $diff_name(mesh(Wₕ), dim_val)
 
-        @inline $diff_name!(vₕ::VectorElement{<:ScalarGridSpace},
-            uₕ::VectorElement{<:ScalarGridSpace}, dim_val::Val) = _apply_spaced!(
-            vₕ, uₕ, _no_spacing, _no_precheck, $dir_instance, dim_val)
-        @inline $diff_name!(vₕ::VectorElement{<:CompositeGridSpace},
-            uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val) = _apply_spaced!(
-            vₕ, uₕ, _no_spacing, _no_precheck, $dir_instance, dim_val)
-
-        @inline $diff_name(uₕ::VectorElement, dim_val::Val) = $diff_name!(
-            similar(uₕ), uₕ, dim_val)
-
-        @inline $finite_diff_name(Wₕ::AbstractSpaceType, dim_val::Val) = $finite_diff_name(
-            mesh(Wₕ), dim_val)
-
-        # The mesh caches its spacings, so `$spacings_func` hands the engine that vector
-        # rather than a callable: indexing it is 3.6x faster than one call per grid point,
-        # and it needs no allocation of its own.
-        @inline $finite_diff_name!(vₕ::VectorElement{<:ScalarGridSpace},
-            uₕ::VectorElement{<:ScalarGridSpace}, dim_val::Val) = _apply_spaced!(
-            vₕ, uₕ, $spacings_func, _no_precheck, $dir_instance, dim_val)
-        @inline $finite_diff_name!(vₕ::VectorElement{<:CompositeGridSpace},
-            uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val) = _apply_spaced!(
-            vₕ, uₕ, $spacings_func, _no_precheck, $dir_instance, dim_val)
-
-        @inline $finite_diff_name(uₕ::VectorElement, dim_val::Val) = $finite_diff_name!(
-            similar(uₕ), uₕ, dim_val)
+        @inline $finite_diff_name(Wₕ::AbstractSpaceType, dim_val::Val) =
+            $finite_diff_name(mesh(Wₕ), dim_val)
     end
 
-    # --- Aliases for x, y, z directions ---
-    # ❗️ FIX: Call the helper function to generate the aliases safely.
-    unscaled_vs_finite_note = "The unscaled difference is not divided by the grid " *
-                              "spacing; the finite difference is."
-    for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
-        direction = _BRAMBLE_var2label[i]
-        _define_directional_alias(diff_name, Symbol(diff_alias, suffix),
-            dir_string_lowercase, direction, i, "unscaled difference", math_op;
-            formula_note = unscaled_vs_finite_note)
-        _define_directional_alias!(diff_name!, Symbol(diff_alias, suffix, :!),
-            dir_string_lowercase, direction, i, "unscaled difference", math_op)
-        _define_directional_alias(finite_diff_name, Symbol(finite_diff_alias, suffix),
-            dir_string_lowercase, direction, i, "finite difference", math_finite_op;
-            formula_note = unscaled_vs_finite_note)
-        _define_directional_alias!(
-            finite_diff_name!, Symbol(finite_diff_alias, suffix, :!),
-            dir_string_lowercase, direction, i, "finite difference", math_finite_op)
-    end
+    # The unscaled difference divides by nothing, so it passes `_no_spacing`. The finite
+    # one hands the engine the mesh's *cached* spacings vector rather than a callable:
+    # indexing it is 3.6x faster than one call per grid point, and it allocates nothing.
+    _define_grid_function_forms(
+        diff_name, :_apply_spaced!, (:_no_spacing, :_no_precheck), dir_instance
+    )
+    _define_grid_function_forms(
+        finite_diff_name, :_apply_spaced!, (spacings_func, :_no_precheck), dir_instance
+    )
 
-    # --- Aliases for gradient tuples ---
-    _define_vectorial_alias(diff_name, grad_alias, dir_string_lowercase,
-        "unscaled difference")
-    _define_vectorial_alias(finite_diff_name, finite_grad_alias, dir_string_lowercase,
-        "finite difference")
+    unscaled_vs_finite_note =
+        "The unscaled difference is not divided by the grid " *
+        "spacing; the finite difference is."
+    contrast_kwargs = (direction, suffix) -> (; formula_note=unscaled_vs_finite_note)
+
+    _define_operator_aliases(
+        diff_name,
+        diff_alias,
+        dir_string_lowercase,
+        "unscaled difference",
+        math_op;
+        vectorial_alias=grad_alias,
+        alias_kwargs=contrast_kwargs,
+    )
+    _define_operator_aliases(
+        finite_diff_name,
+        finite_diff_alias,
+        dir_string_lowercase,
+        "finite difference",
+        math_finite_op;
+        vectorial_alias=finite_grad_alias,
+        alias_kwargs=contrast_kwargs,
+    )
 end
 
 # --- The three centred families: Dstar₊, Dc, Dₕ ------------------------------------ #
@@ -558,163 +593,170 @@ end
 # `dir_string` could template, so it is config data (a closure per family) instead of a
 # shared string.
 const _CENTERED_DIFFERENCE_OP_CONFIGS = [
-    (name = :forward_star_difference,
-        direction = Forward(),
-        spacing_func = :star_spacings,
-        precheck = :_no_precheck,
-        alias_prefix = :Dstar₊,
-        vectorial_alias = :Dstar₊ₕ,
-        vectorial_dir_string = "starred forward",
-        vectorial_note = "",
-        alias_kwargs = (direction, suffix) -> (;
-            opening_sentence = "The forward difference of `uₕ` along the `$direction` " *
-                               "direction over the averaged spacing, " *
-                               "``\\frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}``.",
-            trailing_note = "The last point along `$direction` is truncated to zero."),
-        alias_kwargs_bang = (direction, suffix) -> (;
-            opening_sentence = "The forward difference of `uₕ` along the `$direction` " *
-                               "direction over the averaged spacing, " *
-                               "``\\frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}``, written " *
-                               "into `vₕ`."),
-        docstring = """
-            forward_star_difference(uₕ::VectorElement, dim_val::Val)
+    (
+        name=:forward_star_difference,
+        direction=Forward(),
+        spacing_func=:star_spacings,
+        precheck=:_no_precheck,
+        alias_prefix=:Dstar₊,
+        vectorial_alias=:Dstar₊ₕ,
+        vectorial_dir_string="starred forward",
+        vectorial_note="",
+        alias_kwargs=(direction, suffix) -> (;
+            opening_sentence="The forward difference of `uₕ` along the `$direction` " *
+                             "direction over the averaged spacing, " *
+                             "``\\frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}``.",
+            trailing_note="The last point along `$direction` is truncated to zero.",
+        ),
+        alias_kwargs_bang=(direction, suffix) -> (;
+            opening_sentence="The forward difference of `uₕ` along the `$direction` " *
+                             "direction over the averaged spacing, " *
+                             "``\\frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}``, written " *
+                             "into `vₕ`."
+        ),
+        docstring="""
+          forward_star_difference(uₕ::VectorElement, dim_val::Val)
 
-        The forward difference of `uₕ` along `dim_val`, divided by the averaged spacing:
+      The forward difference of `uₕ` along `dim_val`, divided by the averaged spacing:
 
-        ```math
-        \\textrm{Dstar}_{+}(\\textrm{u}_h)(i) =
-            \\frac{\\textrm{u}_h(x_{i+1}) - \\textrm{u}_h(x_i)}{(h_i + h_{i+1})/2}
-        ```
+      ```math
+      \\textrm{Dstar}_{+}(\\textrm{u}_h)(i) =
+          \\frac{\\textrm{u}_h(x_{i+1}) - \\textrm{u}_h(x_i)}{(h_i + h_{i+1})/2}
+      ```
 
-        Reached through [`Dstar₊ₓ`](@ref) and its siblings, and takes a mesh, a grid space or a
-        grid function as the other difference families do.
+      Reached through [`Dstar₊ₓ`](@ref) and its siblings, and takes a mesh, a grid space or a
+      grid function as the other difference families do.
 
-        The last point has no forward neighbour, so it is truncated to zero, as in
-        [`D₊ₓ`](@ref).
+      The last point has no forward neighbour, so it is truncated to zero, as in
+      [`D₊ₓ`](@ref).
 
-        See also: [`star_spacings`](@ref), [`D₊ₓ`](@ref).
-        """),
-    (name = :centered_difference,
-        direction = Centered(),
-        spacing_func = :star_spacings,
-        precheck = :_check_centered_points,
-        alias_prefix = :Dc,
-        vectorial_alias = :Dcₕ,
-        vectorial_dir_string = "centered",
-        vectorial_note = "",
-        alias_kwargs = (direction, suffix) -> (;
-            opening_sentence = "The centered difference of `uₕ` along the `$direction` " *
-                               "direction, ``\\frac{u_{i+1} - u_{i-1}}{h_i + h_{i+1}}``.",
-            trailing_note = "The first and last points along `$direction` are truncated " *
-                            "to zero, so the mesh needs at least three points along " *
-                            "`$direction` and an `ArgumentError` is thrown when it has " *
-                            "fewer."),
-        alias_kwargs_bang = (direction, suffix) -> (;
-            opening_sentence = "The centered difference of `uₕ` along the `$direction` " *
-                               "direction, ``\\frac{u_{i+1} - u_{i-1}}{h_i + h_{i+1}}``, " *
-                               "written into `vₕ`."),
-        docstring = """
-            centered_difference(uₕ::VectorElement, dim_val::Val)
+      See also: [`star_spacings`](@ref), [`D₊ₓ`](@ref).
+      """,
+    ),
+    (
+        name=:centered_difference,
+        direction=Centered(),
+        spacing_func=:star_spacings,
+        precheck=:_check_centered_points,
+        alias_prefix=:Dc,
+        vectorial_alias=:Dcₕ,
+        vectorial_dir_string="centered",
+        vectorial_note="",
+        alias_kwargs=(direction, suffix) -> (;
+            opening_sentence="The centered difference of `uₕ` along the `$direction` " *
+                             "direction, ``\\frac{u_{i+1} - u_{i-1}}{h_i + h_{i+1}}``.",
+            trailing_note="The first and last points along `$direction` are truncated " *
+                          "to zero, so the mesh needs at least three points along " *
+                          "`$direction` and an `ArgumentError` is thrown when it has " *
+                          "fewer.",
+        ),
+        alias_kwargs_bang=(direction, suffix) -> (;
+            opening_sentence="The centered difference of `uₕ` along the `$direction` " *
+                             "direction, ``\\frac{u_{i+1} - u_{i-1}}{h_i + h_{i+1}}``, " *
+                             "written into `vₕ`."
+        ),
+        docstring="""
+          centered_difference(uₕ::VectorElement, dim_val::Val)
 
-        The centered difference of `uₕ` along `dim_val`:
+      The centered difference of `uₕ` along `dim_val`:
 
-        ```math
-        \\textrm{Dc}(\\textrm{u}_h)(i) =
-            \\frac{\\textrm{u}_h(x_{i+1}) - \\textrm{u}_h(x_{i-1})}{h_i + h_{i+1}}
-        ```
+      ```math
+      \\textrm{Dc}(\\textrm{u}_h)(i) =
+          \\frac{\\textrm{u}_h(x_{i+1}) - \\textrm{u}_h(x_{i-1})}{h_i + h_{i+1}}
+      ```
 
-        Reached through [`Dcₓ`](@ref) and its siblings, and takes a mesh, a grid space or a grid
-        function as the other difference families do.
+      Reached through [`Dcₓ`](@ref) and its siblings, and takes a mesh, a grid space or a grid
+      function as the other difference families do.
 
-        The denominator is ``x_{i+1} - x_{i-1}``, so the operator reproduces the derivative of an
-        affine function exactly on any grid, uniform or not. Both the first and the last point
-        lack a neighbour on one side, so both are truncated to zero.
+      The denominator is ``x_{i+1} - x_{i-1}``, so the operator reproduces the derivative of an
+      affine function exactly on any grid, uniform or not. Both the first and the last point
+      lack a neighbour on one side, so both are truncated to zero.
 
-        See also: [`star_spacings`](@ref), [`D₋ₓ`](@ref), [`D₊ₓ`](@ref).
-        """),
-    (name = :cross_weighted_difference,
-        direction = CrossWeighted(),
-        spacing_func = :spacings,
-        precheck = :_check_centered_points,
-        alias_prefix = :Dₕ,
-        vectorial_alias = :∇ₕ,
-        vectorial_dir_string = "cross-weighted centered",
-        vectorial_note = "The centered counterpart of [`∇₋ₕ`](@ref) and [`∇₊ₕ`](@ref), " *
-                         "built from [`Dₕₓ`](@ref) rather than from the one-sided " *
-                         "differences.",
-        alias_kwargs = (direction, suffix) -> (;
-            opening_sentence = "The cross-weighted centered difference of `uₕ` along " *
-                               "the `$direction` direction, the backward differences " *
-                               "at ``x_{i+1}`` and ``x_i`` weighted by ``h_i`` and " *
-                               "``h_{i+1}``.",
-            alias_note = "Second order on a non-uniform grid, where [`Dc$suffix`](@ref) " *
-                         "is first.",
-            trailing_note = "The first and last points along `$direction` are truncated " *
-                            "to zero, so the mesh needs at least three points along " *
-                            "`$direction` and an `ArgumentError` is thrown when it has " *
-                            "fewer."),
-        alias_kwargs_bang = (direction, suffix) -> (;
-            opening_sentence = "The cross-weighted centered difference of `uₕ` along " *
-                               "the `$direction` direction, the backward differences " *
-                               "at ``x_{i+1}`` and ``x_i`` weighted by ``h_i`` and " *
-                               "``h_{i+1}``, written into `vₕ`."),
-        docstring = """
-            cross_weighted_difference(uₕ::VectorElement, dim_val::Val)
+      See also: [`star_spacings`](@ref), [`D₋ₓ`](@ref), [`D₊ₓ`](@ref).
+      """,
+    ),
+    (
+        name=:cross_weighted_difference,
+        direction=CrossWeighted(),
+        spacing_func=:spacings,
+        precheck=:_check_centered_points,
+        alias_prefix=:Dₕ,
+        vectorial_alias=:∇ₕ,
+        vectorial_dir_string="cross-weighted centered",
+        vectorial_note="The centered counterpart of [`∇₋ₕ`](@ref) and [`∇₊ₕ`](@ref), " *
+                       "built from [`Dₕₓ`](@ref) rather than from the one-sided " *
+                       "differences.",
+        alias_kwargs=(direction, suffix) -> (;
+            opening_sentence="The cross-weighted centered difference of `uₕ` along " *
+                             "the `$direction` direction, the backward differences " *
+                             "at ``x_{i+1}`` and ``x_i`` weighted by ``h_i`` and " *
+                             "``h_{i+1}``.",
+            alias_note="Second order on a non-uniform grid, where [`Dc$suffix`](@ref) " *
+                       "is first.",
+            trailing_note="The first and last points along `$direction` are truncated " *
+                          "to zero, so the mesh needs at least three points along " *
+                          "`$direction` and an `ArgumentError` is thrown when it has " *
+                          "fewer.",
+        ),
+        alias_kwargs_bang=(direction, suffix) -> (;
+            opening_sentence="The cross-weighted centered difference of `uₕ` along " *
+                             "the `$direction` direction, the backward differences " *
+                             "at ``x_{i+1}`` and ``x_i`` weighted by ``h_i`` and " *
+                             "``h_{i+1}``, written into `vₕ`."
+        ),
+        docstring="""
+          cross_weighted_difference(uₕ::VectorElement, dim_val::Val)
 
-        The cross-weighted centered difference of `uₕ` along `dim_val`:
+      The cross-weighted centered difference of `uₕ` along `dim_val`:
 
-        ```math
-        \\textrm{D}_{h}(\\textrm{u}_h)(i) =
-            \\frac{h_i}{h_i + h_{i+1}}\\, \\textrm{D}_{-}\\textrm{u}_h(x_{i+1}) +
-            \\frac{h_{i+1}}{h_i + h_{i+1}}\\, \\textrm{D}_{-}\\textrm{u}_h(x_i)
-        ```
+      ```math
+      \\textrm{D}_{h}(\\textrm{u}_h)(i) =
+          \\frac{h_i}{h_i + h_{i+1}}\\, \\textrm{D}_{-}\\textrm{u}_h(x_{i+1}) +
+          \\frac{h_{i+1}}{h_i + h_{i+1}}\\, \\textrm{D}_{-}\\textrm{u}_h(x_i)
+      ```
 
-        Reached through [`Dₕₓ`](@ref) and its siblings, and takes a mesh, a grid space or a grid
-        function as the other difference families do.
+      Reached through [`Dₕₓ`](@ref) and its siblings, and takes a mesh, a grid space or a grid
+      function as the other difference families do.
 
-        It is the same two one-sided differences [`Dcₓ`](@ref) combines, weighted by the opposite
-        spacings. That is the combination which cancels the leading truncation term on a
-        non-uniform grid, so this is second order where `Dcₓ` is first, and the two coincide when
-        the spacing is constant.
+      It is the same two one-sided differences [`Dcₓ`](@ref) combines, weighted by the opposite
+      spacings. That is the combination which cancels the leading truncation term on a
+      non-uniform grid, so this is second order where `Dcₓ` is first, and the two coincide when
+      the spacing is constant.
 
-        The first and the last point each lack a neighbour on one side, so both are truncated to
-        zero.
+      The first and the last point each lack a neighbour on one side, so both are truncated to
+      zero.
 
-        See also: [`Dcₓ`](@ref), [`D₋ₓ`](@ref).
-        """)
+      See also: [`Dcₓ`](@ref), [`D₋ₓ`](@ref).
+      """,
+    ),
 ]
 
 for config in _CENTERED_DIFFERENCE_OP_CONFIGS
     name = config.name
-    name! = Symbol(name, :!)
-    dir_instance = config.direction
-    spacing_func = config.spacing_func
-    precheck = config.precheck
-    doc = config.docstring
+    _define_grid_function_forms(
+        name,
+        :_apply_spaced!,
+        (config.spacing_func, config.precheck),
+        config.direction;
+        docstring=config.docstring,
+    )
 
-    @eval begin
-        @doc $doc @inline $(name!)(vₕ::VectorElement{<:ScalarGridSpace},
-            uₕ::VectorElement{<:ScalarGridSpace}, dim_val::Val) = _apply_spaced!(
-            vₕ, uₕ, $spacing_func, $precheck, $dir_instance, dim_val)
-
-        @inline $(name!)(vₕ::VectorElement{<:CompositeGridSpace},
-            uₕ::VectorElement{<:CompositeGridSpace}, dim_val::Val) = _apply_spaced!(
-            vₕ, uₕ, $spacing_func, $precheck, $dir_instance, dim_val)
-
-        @inline $(name)(uₕ::VectorElement, dim_val::Val) = $(name!)(
-            similar(uₕ), uₕ, dim_val)
-    end
-
-    for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
-        direction = _BRAMBLE_var2label[i]
-        _define_directional_alias(name, Symbol(config.alias_prefix, suffix),
-            "", suffix, i, "", ""; config.alias_kwargs(direction, suffix)...)
-        _define_directional_alias!(name!, Symbol(config.alias_prefix, suffix, :!),
-            "", suffix, i, "", ""; config.alias_kwargs_bang(direction, suffix)...)
-    end
-
-    _define_vectorial_alias(name, config.vectorial_alias, config.vectorial_dir_string,
-        "difference"; note = config.vectorial_note)
+    # `dir_string`/`what`/`formula` are empty here: every alias of these three supplies its
+    # own `opening_sentence`, so the generic "The `backward` difference along the `x`
+    # direction" template they would fill is never reached.
+    _define_operator_aliases(
+        name,
+        config.alias_prefix,
+        "",
+        "",
+        "";
+        vectorial_alias=config.vectorial_alias,
+        vectorial_dir_string=config.vectorial_dir_string,
+        vectorial_what="difference",
+        vectorial_note=config.vectorial_note,
+        alias_kwargs=config.alias_kwargs,
+        bang_alias_kwargs=config.alias_kwargs_bang,
+    )
 end
 
 # ==============================================================================
@@ -747,8 +789,9 @@ end
 # Returns `w`, as a mutating function with a single destination does, so that the builders
 # below can write `_extended_weights!(cache, …) .* matrix` rather than filling the cache on
 # one line and reaching for it on the next.
-@inline function _extended_weights!(w::AbstractVector, Ωₕ::AbstractMeshType,
-        ::Val{DIFF_DIM}, weight::F) where {F, DIFF_DIM}
+@inline function _extended_weights!(
+    w::AbstractVector, Ωₕ::AbstractMeshType, ::Val{DIFF_DIM}, weight::F
+) where {F,DIFF_DIM}
     1 <= DIFF_DIM <= dim(Ωₕ) || _throw_stencil_dim_error(DIFF_DIM, dim(Ωₕ))
 
     dims = npoints(Ωₕ, Tuple)
@@ -765,12 +808,12 @@ end
 # Each returns zero wherever its stencil would need a neighbour the grid does not have,
 # which truncates that slice of the matrix to an empty row.
 @inline _star_weight(h, i, n) = i == n ? zero(eltype(h)) : 2 / (h[i] + h[i + 1])
-@inline _centered_weight(h, i, n) = (i == 1 || i == n) ? zero(eltype(h)) :
-                                    inv(h[i] + h[i + 1])
-@inline _cross_forward_weight(h, i, n) = (i == 1 || i == n) ? zero(eltype(h)) :
-                                         h[i] / ((h[i] + h[i + 1]) * h[i + 1])
-@inline _cross_backward_weight(h, i, n) = (i == 1 || i == n) ? zero(eltype(h)) :
-                                          h[i + 1] / ((h[i] + h[i + 1]) * h[i])
+@inline _centered_weight(h, i, n) =
+    (i == 1 || i == n) ? zero(eltype(h)) : inv(h[i] + h[i + 1])
+@inline _cross_forward_weight(h, i, n) =
+    (i == 1 || i == n) ? zero(eltype(h)) : h[i] / ((h[i] + h[i + 1]) * h[i + 1])
+@inline _cross_backward_weight(h, i, n) =
+    (i == 1 || i == n) ? zero(eltype(h)) : h[i + 1] / ((h[i] + h[i + 1]) * h[i])
 
 """
     forward_star_difference(Ωₕ::AbstractMeshType, dim_val::Val)
@@ -780,8 +823,9 @@ The starred forward difference along `dim_val`, as a sparse matrix.
 The forward difference scaled by the averaged spacing instead of the forward one. The last
 point along the direction has no forward neighbour, so its row is empty.
 """
-function forward_star_difference(Ωₕ::AbstractMeshType, dim_val::Val;
-        vector_cache = __vector(Ωₕ))
+function forward_star_difference(
+    Ωₕ::AbstractMeshType, dim_val::Val; vector_cache=__vector(Ωₕ)
+)
     w = _extended_weights!(vector_cache, Ωₕ, dim_val, _star_weight)
     return w .* _difference_operator(Ωₕ, Forward(), dim_val)
 end
@@ -794,8 +838,9 @@ The centered difference along `dim_val`, as a sparse matrix.
 Reaches one point either side, so both end rows are empty and the mesh needs at least three
 points along the direction.
 """
-function centered_difference(Ωₕ::AbstractMeshType, dim_val::Val{DIM};
-        vector_cache = __vector(Ωₕ)) where {DIM}
+function centered_difference(
+    Ωₕ::AbstractMeshType, dim_val::Val{DIM}; vector_cache=__vector(Ωₕ)
+) where {DIM}
     n = npoints(Ωₕ(DIM))
     n >= 3 || _throw_centered_too_few_points(DIM, n)
 
@@ -812,24 +857,27 @@ A three-point stencil, so both end rows are empty and the mesh needs at least th
 along the direction. Built as the two one-sided differences it is defined from, each under
 its own diagonal weight.
 """
-function cross_weighted_difference(Ωₕ::AbstractMeshType, dim_val::Val{DIM};
-        vector_cache = __vector(Ωₕ)) where {DIM}
+function cross_weighted_difference(
+    Ωₕ::AbstractMeshType, dim_val::Val{DIM}; vector_cache=__vector(Ωₕ)
+) where {DIM}
     n = npoints(Ωₕ(DIM))
     n >= 3 || _throw_centered_too_few_points(DIM, n)
 
-    forward = _extended_weights!(vector_cache, Ωₕ, dim_val,
-        _cross_forward_weight) .* _difference_operator(Ωₕ, Forward(), dim_val)
+    forward =
+        _extended_weights!(vector_cache, Ωₕ, dim_val, _cross_forward_weight) .*
+        _difference_operator(Ωₕ, Forward(), dim_val)
 
     # the product above is materialised, so the cache is free to be rewritten
-    backward = _extended_weights!(vector_cache, Ωₕ, dim_val,
-        _cross_backward_weight) .* _difference_operator(Ωₕ, Backward(), dim_val)
+    backward =
+        _extended_weights!(vector_cache, Ωₕ, dim_val, _cross_backward_weight) .*
+        _difference_operator(Ωₕ, Backward(), dim_val)
     return forward + backward
 end
 
 # A grid space carries its mesh, as for every other family here.
-@inline forward_star_difference(Wₕ::AbstractSpaceType, dim_val::Val) = forward_star_difference(
-    mesh(Wₕ), dim_val)
-@inline centered_difference(Wₕ::AbstractSpaceType, dim_val::Val) = centered_difference(
-    mesh(Wₕ), dim_val)
-@inline cross_weighted_difference(Wₕ::AbstractSpaceType, dim_val::Val) = cross_weighted_difference(
-    mesh(Wₕ), dim_val)
+@inline forward_star_difference(Wₕ::AbstractSpaceType, dim_val::Val) =
+    forward_star_difference(mesh(Wₕ), dim_val)
+@inline centered_difference(Wₕ::AbstractSpaceType, dim_val::Val) =
+    centered_difference(mesh(Wₕ), dim_val)
+@inline cross_weighted_difference(Wₕ::AbstractSpaceType, dim_val::Val) =
+    cross_weighted_difference(mesh(Wₕ), dim_val)

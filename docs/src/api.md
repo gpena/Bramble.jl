@@ -186,8 +186,14 @@ interpolation_matrix
 
 ## Difference, jump and average operators
 
-The unscaled difference and its finite difference counterpart, per coordinate and over
-every coordinate at once. See the [operators tutorial](tutorials/operators.md).
+The finite difference, the jump and the average, per coordinate and over every coordinate
+at once. See the [operators tutorial](tutorials/operators.md).
+
+The unscaled differences (`diff₋ₓ` and its siblings) are the plain, undivided differences
+these are built from. They are reached as `Bramble.diff₋ₓ` rather than brought into scope
+by `using Bramble`: they have no form-layer node, so they cannot appear inside a bilinear
+form, and in a form the undivided forward difference is spelled [`jumpₓ`](@ref), which
+says which of the two is meant.
 
 ```@docs
 diff₋ₓ

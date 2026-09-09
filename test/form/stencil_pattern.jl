@@ -2,10 +2,23 @@ using Test
 using Bramble
 using Random
 using SparseArrays
-using Bramble: IdentityOperator, ZeroOperator, TrialFunction, TestFunction,
-               IndexedTrialFunction, SourceVector, LazyOp,
-               stencil_offsets, local_stencil, shift_op, restrict_to, source_function,
-               TrialFunction, TestFunction, LinearProduct, BilinearProduct
+using Bramble:
+    IdentityOperator,
+    ZeroOperator,
+    TrialFunction,
+    TestFunction,
+    IndexedTrialFunction,
+    SourceVector,
+    LazyOp,
+    stencil_offsets,
+    local_stencil,
+    shift_op,
+    restrict_to,
+    source_function,
+    TrialFunction,
+    TestFunction,
+    LinearProduct,
+    BilinearProduct
 
 # Reading the sparsity pattern off an AST before assembling it.
 #
@@ -25,14 +38,12 @@ using Bramble: IdentityOperator, ZeroOperator, TrialFunction, TestFunction,
 
 # the diagonals an assembled matrix actually occupies, in the stencil's own convention
 function _matrix_offsets(M)
-    sort(unique(j - i for j in axes(M, 2) for i in axes(M, 1)
-    if M[i, j] != 0))
+    return sort(unique(j - i for j in axes(M, 2) for i in axes(M, 1) if M[i, j] != 0))
 end
 
 # the offsets a stencil actually produces at one point
 function _stencil_at(node, Wₕ, I, lin)
-    sort(unique(first(e)
-    for e in local_stencil(node, Wₕ, I, nothing, lin[I])))
+    return sort(unique(first(e) for e in local_stencil(node, Wₕ, I, nothing, lin[I])))
 end
 
 @testset "Stencil patterns" begin
@@ -47,10 +58,17 @@ end
     @testset "Prediction match" begin
         @testset "1D" begin
             I = CartesianIndex(5)
-            for (nm, node) in (("identity", id1), ("D₋ₓ", D₋ₓ(id1)), ("D₊ₓ", D₊ₓ(id1)),
-                ("diff₋ₓ", D₋ₓ(id1)), ("M₋ₓ", M₋ₓ(id1)), ("M₊ₓ", M₊ₓ(id1)),
-                ("jumpₓ", jumpₓ(id1)), ("Dcₓ", Dcₓ(id1)),
-                ("Dstar₊ₓ", Dstar₊ₓ(id1)), ("Dₕₓ", Dₕₓ(id1)))
+            for (nm, node) in (
+                ("identity", id1),
+                ("D₋ₓ", D₋ₓ(id1)),
+                ("D₊ₓ", D₊ₓ(id1)),
+                ("M₋ₓ", M₋ₓ(id1)),
+                ("M₊ₓ", M₊ₓ(id1)),
+                ("jumpₓ", jumpₓ(id1)),
+                ("Dcₓ", Dcₓ(id1)),
+                ("Dstar₊ₓ", Dstar₊ₓ(id1)),
+                ("Dₕₓ", Dₕₓ(id1)),
+            )
                 @testset "$nm" begin
                     @test sort(stencil_offsets(node)) == _stencil_at(node, Wₕ1, I, lin1)
                 end
@@ -59,9 +77,16 @@ end
 
         @testset "2D directions" begin
             I = CartesianIndex(3, 3)
-            for (nm, node) in (("identity", id2), ("D₋ₓ", D₋ₓ(id2)), ("D₋ᵧ", D₋ᵧ(id2)),
-                ("M₊ᵧ", M₊ᵧ(id2)), ("jumpᵧ", jumpᵧ(id2)), ("Dcᵧ", Dcᵧ(id2)),
-                ("Dₕₓ", Dₕₓ(id2)), ("Dstar₊ᵧ", Dstar₊ᵧ(id2)))
+            for (nm, node) in (
+                ("identity", id2),
+                ("D₋ₓ", D₋ₓ(id2)),
+                ("D₋ᵧ", D₋ᵧ(id2)),
+                ("M₊ᵧ", M₊ᵧ(id2)),
+                ("jumpᵧ", jumpᵧ(id2)),
+                ("Dcᵧ", Dcᵧ(id2)),
+                ("Dₕₓ", Dₕₓ(id2)),
+                ("Dstar₊ᵧ", Dstar₊ᵧ(id2)),
+            )
                 @testset "$nm" begin
                     @test sort(stencil_offsets(node)) == _stencil_at(node, Wₕ2, I, lin2)
                 end
@@ -73,10 +98,16 @@ end
         # The independent check: every family has a matrix form, so the predicted offsets
         # can be compared against the diagonals the matrix actually occupies rather than
         # against another prediction.
-        for (nm, node, mat) in (("D₋ₓ", D₋ₓ(id1), D₋ₓ(Ωₕ1)), ("D₊ₓ", D₊ₓ(id1), D₊ₓ(Ωₕ1)),
-            ("M₋ₓ", M₋ₓ(id1), M₋ₓ(Ωₕ1)), ("M₊ₓ", M₊ₓ(id1), M₊ₓ(Ωₕ1)),
-            ("jumpₓ", jumpₓ(id1), jumpₓ(Ωₕ1)), ("Dcₓ", Dcₓ(id1), Dcₓ(Ωₕ1)),
-            ("Dstar₊ₓ", Dstar₊ₓ(id1), Dstar₊ₓ(Ωₕ1)), ("Dₕₓ", Dₕₓ(id1), Dₕₓ(Ωₕ1)))
+        for (nm, node, mat) in (
+            ("D₋ₓ", D₋ₓ(id1), D₋ₓ(Ωₕ1)),
+            ("D₊ₓ", D₊ₓ(id1), D₊ₓ(Ωₕ1)),
+            ("M₋ₓ", M₋ₓ(id1), M₋ₓ(Ωₕ1)),
+            ("M₊ₓ", M₊ₓ(id1), M₊ₓ(Ωₕ1)),
+            ("jumpₓ", jumpₓ(id1), jumpₓ(Ωₕ1)),
+            ("Dcₓ", Dcₓ(id1), Dcₓ(Ωₕ1)),
+            ("Dstar₊ₓ", Dstar₊ₓ(id1), Dstar₊ₓ(Ωₕ1)),
+            ("Dₕₓ", Dₕₓ(id1), Dₕₓ(Ωₕ1)),
+        )
             @testset "$nm" begin
                 predicted = sort([o[1] for o in stencil_offsets(node)])
                 @test predicted == _matrix_offsets(Matrix(mat))
@@ -85,9 +116,15 @@ end
     end
 
     @testset "Leaf reach" begin
-        for op in (TrialFunction{1}(), TestFunction{1}(), IndexedTrialFunction{1}(1),
-            source_function(sin, Val(1)), SourceVector{1, Vector{Float64}}([1.0]),
-            id1, ZeroOperator(Wₕ1))
+        for op in (
+            TrialFunction{1}(),
+            TestFunction{1}(),
+            IndexedTrialFunction{1}(1),
+            source_function(sin, Val(1)),
+            SourceVector{1,Vector{Float64}}([1.0]),
+            id1,
+            ZeroOperator(Wₕ1),
+        )
             @test stencil_offsets(op) == [(0,)]
         end
         @test stencil_offsets(id2) == [(0, 0)]
@@ -109,7 +146,7 @@ end
         # a shift moves the reach without widening it
         @test stencil_offsets(shift_op(id1, 1, 2)) == [(2,)]
         @test length(stencil_offsets(shift_op(D₋ₓ(id1), 1, 3))) ==
-              length(stencil_offsets(D₋ₓ(id1)))
+            length(stencil_offsets(D₋ₓ(id1)))
     end
 
     @testset "Reach transformation" begin

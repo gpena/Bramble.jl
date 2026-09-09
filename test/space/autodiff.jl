@@ -1,7 +1,7 @@
 using Test
 using Bramble
 using ForwardDiff
-using Bramble: components
+using Bramble: components, diff₋ₓ, diff₊ₓ
 
 # Differentiating through the library.
 #
@@ -57,7 +57,7 @@ end
 
     @testset "Non-differentiated mesh" begin
         # The point of the whole exercise: Dual coefficients over Float64 geometry.
-        a = ForwardDiff.Dual{ForwardDiff.Tag{typeof(identity), Float64}}(1.3, 1.0)
+        a = ForwardDiff.Dual{ForwardDiff.Tag{typeof(identity),Float64}}(1.3, 1.0)
         uₕ = Rₕ(Wₕ1, x -> a * sin(x))
 
         @test eltype(Ωₕ1) === Float64
@@ -76,14 +76,13 @@ end
     end
 
     @testset "Restriction & cell-averaging" begin
-        @test _matches_fd(a -> innerₕ(Rₕ(Wₕ1, x -> a * sin(x)),
-            Rₕ(Wₕ1, x -> a * x)))
-        @test _matches_fd(a -> innerₕ(avgₕ(Wₕ1, x -> a * sin(x)),
-            Rₕ(Wₕ1, x -> a * x)))
+        @test _matches_fd(a -> innerₕ(Rₕ(Wₕ1, x -> a * sin(x)), Rₕ(Wₕ1, x -> a * x)))
+        @test _matches_fd(a -> innerₕ(avgₕ(Wₕ1, x -> a * sin(x)), Rₕ(Wₕ1, x -> a * x)))
         # the quadrature rule is the mesh's type at every order, not the field's
         for nq in (2, 3, 6)
-            @test _matches_fd(a -> innerₕ(
-                avgₕ(Wₕ1, x -> a * sin(x); quad_points = nq), Rₕ(Wₕ1, x -> a * x)))
+            @test _matches_fd(
+                a -> innerₕ(avgₕ(Wₕ1, x -> a * sin(x); quad_points=nq), Rₕ(Wₕ1, x -> a * x))
+            )
         end
 
         # the in-place forms, writing into an element allocated at the Dual type
@@ -104,51 +103,78 @@ end
         # markers restrict evaluation and still differentiate
         Ωm = mesh(domain(interval(0.0, 1.0), :left => :left, :right => :right), 21, true)
         Wm = gridspace(Ωm)
-        @test _matches_fd(a -> innerₕ(
-            avgₕ(Wm, x -> a * sin(x); markers = (:left, :right)), Rₕ(Wm, x -> a * x)))
+        @test _matches_fd(
+            a -> innerₕ(
+                avgₕ(Wm, x -> a * sin(x); markers=(:left, :right)), Rₕ(Wm, x -> a * x)
+            ),
+        )
 
         # `innerₕ`'s own `markers` keyword (not `avgₕ`'s, above), with one side Dual-valued
         # and the other Float64: `_dot_masked` promotes rather than requiring both sides
         # (and the weight vector) to already share one element type.
-        @test _matches_fd(a -> innerₕ(
-            element(Wm, a), Rₕ(Wm, x -> x); markers = (:left, :right)))
+        @test _matches_fd(
+            a -> innerₕ(element(Wm, a), Rₕ(Wm, x -> x); markers=(:left, :right))
+        )
     end
 
     @testset "Difference, jump & average" begin
-        for (nm, op) in (("D₋ₓ", D₋ₓ), ("D₊ₓ", D₊ₓ), ("diff₋ₓ", diff₋ₓ),
-            ("diff₊ₓ", diff₊ₓ), ("jumpₓ", jumpₓ), ("M₋ₓ", M₋ₓ), ("M₊ₓ", M₊ₓ),
-            ("Dstar₊ₓ", Dstar₊ₓ), ("Dcₓ", Dcₓ), ("Dₕₓ", Dₕₓ))
+        for (nm, op) in (
+            ("D₋ₓ", D₋ₓ),
+            ("D₊ₓ", D₊ₓ),
+            ("diff₋ₓ", diff₋ₓ),
+            ("diff₊ₓ", diff₊ₓ),
+            ("jumpₓ", jumpₓ),
+            ("M₋ₓ", M₋ₓ),
+            ("M₊ₓ", M₊ₓ),
+            ("Dstar₊ₓ", Dstar₊ₓ),
+            ("Dcₓ", Dcₓ),
+            ("Dₕₓ", Dₕₓ),
+        )
             @testset "$nm" begin
-                @test _matches_fd(a -> innerₕ(
-                    op(Rₕ(Wₕ1, x -> a * sin(x) + a^2 * x)), Rₕ(Wₕ1, x -> x)))
+                @test _matches_fd(
+                    a -> innerₕ(op(Rₕ(Wₕ1, x -> a * sin(x) + a^2 * x)), Rₕ(Wₕ1, x -> x))
+                )
             end
         end
 
         # the vectorial forms, in 2D, consumed through the ₊ inner product
-        for (nm, op) in (("∇₋ₕ", ∇₋ₕ), ("∇₊ₕ", ∇₊ₕ), ("Dcₕ", Dcₕ), ("∇ₕ", ∇ₕ),
-            ("Dstar₊ₕ", Dstar₊ₕ), ("M₋ₕ", M₋ₕ), ("jumpₕ", jumpₕ))
+        for (nm, op) in (
+            ("∇₋ₕ", ∇₋ₕ),
+            ("∇₊ₕ", ∇₊ₕ),
+            ("Dcₕ", Dcₕ),
+            ("∇ₕ", ∇ₕ),
+            ("Dstar₊ₕ", Dstar₊ₕ),
+            ("M₋ₕ", M₋ₕ),
+            ("jumpₕ", jumpₕ),
+        )
             @testset "$nm" begin
-                @test _matches_fd(function (a)
-                    g = op(Rₕ(Wₕ2, x -> a * sin(x[1]) * x[2] + a^2 * x[1]))
-                    return inner₊(g, g)
-                end)
+                @test _matches_fd(
+                    function (a)
+                        g = op(Rₕ(Wₕ2, x -> a * sin(x[1]) * x[2] + a^2 * x[1]))
+                        return inner₊(g, g)
+                    end
+                )
             end
         end
     end
 
     @testset "Inner products & norms" begin
-        for (nm, f) in (("innerₕ", uₕ -> innerₕ(uₕ, uₕ)), ("normₕ", normₕ),
-            ("snorm₁ₕ", snorm₁ₕ), ("norm₁ₕ", norm₁ₕ),
-            ("inner₊", uₕ -> inner₊(uₕ, uₕ)), ("inner₊ₓ", uₕ -> inner₊ₓ(uₕ, uₕ)))
+        for (nm, f) in (
+            ("innerₕ", uₕ -> innerₕ(uₕ, uₕ)),
+            ("normₕ", normₕ),
+            ("snorm₁ₕ", snorm₁ₕ),
+            ("norm₁ₕ", norm₁ₕ),
+            ("inner₊", uₕ -> inner₊(uₕ, uₕ)),
+            ("inner₊ₓ", uₕ -> inner₊ₓ(uₕ, uₕ)),
+        )
             @testset "$nm" begin
-                @test _matches_fd(a -> f(Rₕ(Wₕ1,
-                    x -> a * sin(x) + a^2 * x)))
+                @test _matches_fd(a -> f(Rₕ(Wₕ1, x -> a * sin(x) + a^2 * x)))
             end
         end
-        @test _matches_fd(a -> norm₊(∇₋ₕ(Rₕ(Wₕ2,
-            x -> a * sin(x[1]) * x[2]))))
-        @test _matches_fd(a -> inner₊ᵧ(Rₕ(Wₕ2, x -> a * x[1] * x[2]),
-            Rₕ(Wₕ2, x -> a * x[2])))
+        @test _matches_fd(a -> norm₊(∇₋ₕ(Rₕ(Wₕ2, x -> a * sin(x[1]) * x[2]))))
+        @test _matches_fd(
+            a -> inner₊ᵧ(Rₕ(Wₕ2, x -> a * x[1] * x[2]), Rₕ(Wₕ2, x -> a * x[2]))
+        )
     end
 
     @testset "Composite grid functions" begin
@@ -179,8 +205,7 @@ end
         # Dual vector promotes.
         for (nm, op) in (("D₋ₓ", D₋ₓ), ("M₋ₓ", M₋ₓ), ("jumpₓ", jumpₓ))
             @testset "$nm" begin
-                @test _matches_fd(a -> sum(op(Ωₕ1) *
-                                           parent(Rₕ(Wₕ1, x -> a * sin(x)))))
+                @test _matches_fd(a -> sum(op(Ωₕ1) * parent(Rₕ(Wₕ1, x -> a * sin(x)))))
             end
         end
     end
@@ -197,7 +222,7 @@ end
         for k in 1:2
             e = zeros(2)
             e[k] = 1e-6
-            @test isapprox(g[k], (J(p0 .+ e) - J(p0 .- e)) / 2e-6; rtol = 1e-5)
+            @test isapprox(g[k], (J(p0 .+ e) - J(p0 .- e)) / 2e-6; rtol=1e-5)
         end
     end
 end

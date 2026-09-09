@@ -32,11 +32,15 @@ struct Backward <: GridDirection end
 # --- Argument validation shared by every operator ----------------------------------- #
 # Thrown rather than asserted: these check caller arguments, and an @assert reports a
 # size mismatch as an AssertionError, which is not what a caller should have to catch.
-@noinline _throw_stencil_dim_error(dim::Int,
-    D::Int) = throw(ArgumentError("the stencil direction must be between 1 and $D, got $dim"))
+@noinline _throw_stencil_dim_error(dim::Int, D::Int) =
+    throw(ArgumentError("the stencil direction must be between 1 and $D, got $dim"))
 
 @noinline function _throw_stencil_size_error(lout::Int, lin::Int, dims)
-    throw(DimensionMismatch("out has $lout entries and in has $lin, but the grid $(dims) has $(prod(dims))"))
+    throw(
+        DimensionMismatch(
+            "out has $lout entries and in has $lin, but the grid $(dims) has $(prod(dims))"
+        ),
+    )
 end
 
 # Every stencil reads a neighbour of the coordinate it writes, and the traversal is a
@@ -45,11 +49,11 @@ end
 # value downstream of the first write (see `D₋ₓ!` in the docs). Checked with `mightalias`
 # rather than `===` so that two distinct `VectorElement`s sharing the same backing array (a
 # view, or one built directly on the other's data) are caught too.
-@noinline _throw_alias_error() = throw(ArgumentError(
-    "destination and source must not alias"))
+@noinline _throw_alias_error() =
+    throw(ArgumentError("destination and source must not alias"))
 
-@inline _check_no_alias(vₕ::VectorElement, uₕ::VectorElement) = Base.mightalias(
-    parent(vₕ), parent(uₕ)) && _throw_alias_error()
+@inline _check_no_alias(vₕ::VectorElement, uₕ::VectorElement) =
+    Base.mightalias(parent(vₕ), parent(uₕ)) && _throw_alias_error()
 
 # --- Argument handling shared by every operator ------------------------------------- #
 # The operators accept a mesh, a grid space or a grid function, and the vectorial aliases
@@ -73,8 +77,9 @@ end
 # flattens any nesting), so this needs no component count of its own — `map` over the two
 # tuples `components` returns unrolls exactly as the old `ntuple(…, Val(NC))` did, and stays
 # correct regardless of how deeply either space nests.
-@inline function _apply_componentwise!(f!, vₕ::VectorElement{<:CompositeGridSpace},
-        uₕ::VectorElement{<:CompositeGridSpace})
+@inline function _apply_componentwise!(
+    f!, vₕ::VectorElement{<:CompositeGridSpace}, uₕ::VectorElement{<:CompositeGridSpace}
+)
     map(f!, components(vₕ), components(uₕ))
     return nothing
 end
@@ -86,10 +91,8 @@ end
 # is written once here and both engines using it (difference.jl, average.jl) share it.
 
 # The unit step along `DIM`.
-@inline _stencil_step(
-    ::Val{DIM}, ::Val{D}) where {
-    DIM, D} = CartesianIndex(ntuple(
-    i -> i == DIM ? 1 : 0, Val(D)))
+@inline _stencil_step(::Val{DIM}, ::Val{D}) where {DIM,D} =
+    CartesianIndex(ntuple(i -> i == DIM ? 1 : 0, Val(D)))
 
 # The neighbour of `I`: ahead of it for a forward stencil, behind it for a backward one.
 @inline _neighbour(::Forward, I, step) = I + step
@@ -98,23 +101,29 @@ end
 # The interior and boundary index ranges, as tuples of ranges to build
 # `CartesianIndices` from. A forward stencil reaches past the last slice along `DIM`, a
 # backward one past the first.
-@inline function _stencil_ranges(full_axes::NTuple{D, Any}, ::Val{DIM}, ::Forward) where {
-        D, DIM}
+@inline function _stencil_ranges(
+    full_axes::NTuple{D,Any}, ::Val{DIM}, ::Forward
+) where {D,DIM}
     interior = ntuple(
         d -> d == DIM ? (first(full_axes[d]):(last(full_axes[d]) - 1)) : full_axes[d],
-        Val(D))
+        Val(D),
+    )
     boundary = ntuple(
-        d -> d == DIM ? (last(full_axes[d]):last(full_axes[d])) : full_axes[d], Val(D))
+        d -> d == DIM ? (last(full_axes[d]):last(full_axes[d])) : full_axes[d], Val(D)
+    )
     return interior, boundary
 end
 
-@inline function _stencil_ranges(full_axes::NTuple{D, Any}, ::Val{DIM}, ::Backward) where {
-        D, DIM}
+@inline function _stencil_ranges(
+    full_axes::NTuple{D,Any}, ::Val{DIM}, ::Backward
+) where {D,DIM}
     interior = ntuple(
         d -> d == DIM ? ((first(full_axes[d]) + 1):last(full_axes[d])) : full_axes[d],
-        Val(D))
+        Val(D),
+    )
     boundary = ntuple(
-        d -> d == DIM ? (first(full_axes[d]):first(full_axes[d])) : full_axes[d], Val(D))
+        d -> d == DIM ? (first(full_axes[d]):first(full_axes[d])) : full_axes[d], Val(D)
+    )
     return interior, boundary
 end
 
@@ -138,11 +147,21 @@ for `_define_directional_alias` -- `Dc!`/`Dₕ!` have no backward/forward adject
 `dir_string` either.
 """
 function _define_directional_alias!(
-        base_op_name, alias_name, dir_string, suffix, direction_index, what, formula;
-        opening_sentence::String = "")
-    opening = isempty(opening_sentence) ?
-              "The `$dir_string` $what of `uₕ` along the `$suffix` direction, " *
-              "``$formula``, written into `vₕ`." : opening_sentence
+    base_op_name,
+    alias_name,
+    dir_string,
+    suffix,
+    direction_index,
+    what,
+    formula;
+    opening_sentence::String="",
+)
+    opening = if isempty(opening_sentence)
+        "The `$dir_string` $what of `uₕ` along the `$suffix` direction, " *
+        "``$formula``, written into `vₕ`."
+    else
+        opening_sentence
+    end
     doc_string = """
         $alias_name(vₕ, uₕ)
 
@@ -160,11 +179,12 @@ function _define_directional_alias!(
     scalar or of a composite grid space, componentwise on the latter.
     """
 
-    func_def_expr = :(@inline $(alias_name)(vₕ, uₕ) = $(base_op_name)(
-        vₕ, uₕ, Val($(direction_index))))
+    func_def_expr =
+        :(@inline $(alias_name)(vₕ, uₕ) = $(base_op_name)(vₕ, uₕ, Val($(direction_index))))
     final_expr = Expr(
-        :macrocall, GlobalRef(Core, Symbol("@doc")), nothing, doc_string, func_def_expr)
-    Core.eval(@__MODULE__, final_expr)
+        :macrocall, GlobalRef(Core, Symbol("@doc")), nothing, doc_string, func_def_expr
+    )
+    return Core.eval(@__MODULE__, final_expr)
 end
 
 """
@@ -195,15 +215,26 @@ the description of `arg`, before the closing "Accepts a grid function..." paragr
 in whether a mesh needs at least three points along the direction).
 """
 function _define_directional_alias(
-        base_op_name, alias_name, dir_string, suffix, direction_index, what, formula;
-        opening_sentence::String = "", formula_note::String = "", alias_note::String = "",
-        trailing_note::String = "")
+    base_op_name,
+    alias_name,
+    dir_string,
+    suffix,
+    direction_index,
+    what,
+    formula;
+    opening_sentence::String="",
+    formula_note::String="",
+    alias_note::String="",
+    trailing_note::String="",
+)
     fn = isempty(formula_note) ? "" : " " * formula_note
     an = isempty(alias_note) ? "" : " " * alias_note
     tn = isempty(trailing_note) ? "" : " " * trailing_note
-    opening = isempty(opening_sentence) ?
-              "The `$dir_string` $what along the `$suffix` direction, ``$formula``.$fn" :
-              opening_sentence
+    opening = if isempty(opening_sentence)
+        "The `$dir_string` $what along the `$suffix` direction, ``$formula``.$fn"
+    else
+        opening_sentence
+    end
 
     # 1. Construct the docstring content.
     doc_string = """
@@ -221,15 +252,17 @@ function _define_directional_alias(
     """
 
     # 2. Construct the function definition as an expression.
-    func_def_expr = :(@inline $(alias_name)(arg) = $(base_op_name)(arg, Val($(direction_index))))
+    func_def_expr =
+        :(@inline $(alias_name)(arg) = $(base_op_name)(arg, Val($(direction_index))))
 
     # 3. Combine them using the @doc macro syntax into a final expression.
     #    The `__source__` variable is replaced with `nothing`.
     final_expr = Expr(
-        :macrocall, GlobalRef(Core, Symbol("@doc")), nothing, doc_string, func_def_expr)
+        :macrocall, GlobalRef(Core, Symbol("@doc")), nothing, doc_string, func_def_expr
+    )
 
     # 4. Evaluate the final, complete expression in the module's global scope.
-    Core.eval(@__MODULE__, final_expr)
+    return Core.eval(@__MODULE__, final_expr)
 end
 
 """
@@ -248,7 +281,8 @@ independently before this existed.
 vectorial aliases need.
 """
 function _define_vectorial_alias(
-        base_op_name, alias_name, dir_string, what; note::String = "")
+    base_op_name, alias_name, dir_string, what; note::String=""
+)
     n = isempty(note) ? "" : " " * note
     doc_string = """
         $alias_name(arg)
@@ -269,12 +303,158 @@ function _define_vectorial_alias(
     # definition, and only the entry point carries the docstring.
     entry = :(@inline $(alias_name)(arg) = $(alias_name)(arg, Val(dim(_op_mesh(arg)))))
     one_d = :(@inline $(alias_name)(arg, ::Val{1}) = $(base_op_name)(arg, Val(1)))
-    n_d = :(@inline $(alias_name)(arg, ::Val{D}) where {D} = ntuple(
-        i -> $(base_op_name)(arg, Val(i)), Val(D)))
+    n_d = :(@inline $(alias_name)(arg, ::Val{D}) where {D} =
+        ntuple(i -> $(base_op_name)(arg, Val(i)), Val(D)))
 
     final_expr = Expr(
-        :macrocall, GlobalRef(Core, Symbol("@doc")), nothing, doc_string, entry)
+        :macrocall, GlobalRef(Core, Symbol("@doc")), nothing, doc_string, entry
+    )
     Core.eval(@__MODULE__, final_expr)
     Core.eval(@__MODULE__, one_d)
-    Core.eval(@__MODULE__, n_d)
+    return Core.eval(@__MODULE__, n_d)
+end
+
+"""
+    _define_grid_function_forms(base_name, apply_fn, extra_args, dir_instance;
+                                docstring = "")
+
+Defines the three methods every directional operator family applies a grid function
+through: `base_name!` on a scalar grid function, `base_name!` on a composite one, and the
+allocating `base_name` built on top of them.
+
+The three are byte-identical across the families apart from which applicator they call and
+what it takes before the direction (gpena/Bramble.jl#101) — `difference.jl` and
+`average.jl` each generated them from their own `@eval` loop before this existed:
+
+| Family | `apply_fn` | `extra_args` |
+|:--|:--|:--|
+| unscaled difference | `_apply_spaced!` | `(_no_spacing, _no_precheck)` |
+| finite difference | `_apply_spaced!` | `(spacings_func, _no_precheck)` |
+| `Dstar₊`/`Dc`/`Dₕ` | `_apply_spaced!` | `(spacing_func, precheck)` |
+| average | `_apply_averaged!` | `()` |
+
+`extra_args` are spliced as bare identifiers, so each generated method names an ordinary
+top-level function rather than closing over one: that is what keeps every call site
+specialising to its own zero-allocation method, as the hand-written versions did.
+
+The composite method recurses into the scalar one through `apply_fn`'s own composite
+method rather than repeating the walk, so a leaf's own submesh is what each leaf is
+measured against (gpena/Bramble.jl#79).
+
+`docstring`, given non-empty, is attached to the scalar `base_name!` method — the families
+whose prose lives here rather than on a separately hand-written matrix form use it.
+"""
+function _define_grid_function_forms(
+    base_name, apply_fn, extra_args, dir_instance; docstring::String=""
+)
+    bang_name = Symbol(base_name, :!)
+    extra = Any[extra_args...]
+
+    scalar = :(@inline $(bang_name)(
+        vₕ::VectorElement{<:ScalarGridSpace},
+        uₕ::VectorElement{<:ScalarGridSpace},
+        dim_val::Val,
+    ) = $(apply_fn)(vₕ, uₕ, $(extra...), $(dir_instance), dim_val))
+
+    composite = :(@inline $(bang_name)(
+        vₕ::VectorElement{<:CompositeGridSpace},
+        uₕ::VectorElement{<:CompositeGridSpace},
+        dim_val::Val,
+    ) = $(apply_fn)(vₕ, uₕ, $(extra...), $(dir_instance), dim_val))
+
+    allocating = :(@inline $(base_name)(uₕ::VectorElement, dim_val::Val) =
+        $(bang_name)(similar(uₕ), uₕ, dim_val))
+
+    if isempty(docstring)
+        Core.eval(@__MODULE__, scalar)
+    else
+        Core.eval(
+            @__MODULE__,
+            Expr(:macrocall, GlobalRef(Core, Symbol("@doc")), nothing, docstring, scalar),
+        )
+    end
+    Core.eval(@__MODULE__, composite)
+    return Core.eval(@__MODULE__, allocating)
+end
+
+# The default for a family that needs no extra prose on a given alias: every keyword of
+# `_define_directional_alias` is already optional.
+@inline _no_alias_kwargs(direction, suffix) = (;)
+
+"""
+    _define_operator_aliases(base_name, alias_stem, dir_string, what, formula;
+                             vectorial_alias = nothing, vectorial_note = "",
+                             alias_kwargs = _no_alias_kwargs,
+                             bang_alias_kwargs = _no_alias_kwargs)
+
+Defines one family's whole alias surface: the per-coordinate `alias_stem` pair for every
+direction (`Dcₓ`/`Dcₓ!`, `M₋ᵧ`/`M₋ᵧ!`, …) and, when `vectorial_alias` is given, the `ₕ`
+alias over every coordinate at once.
+
+[`_define_directional_alias`](@ref)/[`_define_directional_alias!`](@ref) and
+[`_define_vectorial_alias`](@ref) were already shared; the *loop* calling them was written
+out once per family in `difference.jl` and once more in `average.jl`
+(gpena/Bramble.jl#101). This is that loop.
+
+`alias_kwargs`/`bang_alias_kwargs` are called as `f(direction, suffix)` and return the
+keyword arguments for that one alias — the notes each family needs are bespoke prose
+("over the averaged spacing", "second order on a non-uniform grid, where `Dcₓ` is first"),
+so they are supplied per family rather than templated from `what`/`formula`.
+
+`vectorial_dir_string`/`vectorial_what` default to `dir_string`/`what` and exist for the
+families that describe the tuple-valued alias differently from the per-coordinate ones:
+`Dstar₊`/`Dc`/`Dₕ` override every directional `opening_sentence` and so pass `dir_string`
+and `what` empty, while `Dstar₊ₕ`/`Dcₕ`/`∇ₕ` still want "the centered difference of `arg`
+along every coordinate".
+"""
+function _define_operator_aliases(
+    base_name,
+    alias_stem,
+    dir_string,
+    what,
+    formula;
+    vectorial_alias=nothing,
+    vectorial_dir_string=dir_string,
+    vectorial_what=what,
+    vectorial_note::String="",
+    alias_kwargs=_no_alias_kwargs,
+    bang_alias_kwargs=_no_alias_kwargs,
+)
+    bang_name = Symbol(base_name, :!)
+
+    for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
+        # The human-readable label ("x"), not the subscript ("ₓ"): this lands in the
+        # generic "along the `x` direction" sentence, which a family overriding
+        # `opening_sentence` never reaches but the templated ones do.
+        direction = _BRAMBLE_var2label[i]
+        _define_directional_alias(
+            base_name,
+            Symbol(alias_stem, suffix),
+            dir_string,
+            direction,
+            i,
+            what,
+            formula;
+            alias_kwargs(direction, suffix)...,
+        )
+        _define_directional_alias!(
+            bang_name,
+            Symbol(alias_stem, suffix, :!),
+            dir_string,
+            direction,
+            i,
+            what,
+            formula;
+            bang_alias_kwargs(direction, suffix)...,
+        )
+    end
+
+    vectorial_alias === nothing && return nothing
+    return _define_vectorial_alias(
+        base_name,
+        vectorial_alias,
+        vectorial_dir_string,
+        vectorial_what;
+        note=vectorial_note,
+    )
 end
