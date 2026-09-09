@@ -154,6 +154,7 @@ include("space/scalar_gridspace.jl")
 include("space/vector_gridspace.jl")
 include("space/vectorelement.jl")
 
+include("space/operators/projection.jl")
 include("space/operators/restriction.jl")
 include("space/operators/cell_average.jl")
 include("space/operators/shift.jl")

@@ -52,17 +52,12 @@ Rₕ!(uₕ, x -> (f₁(x), f₂(x)))          # one function returning all compo
 
 See also: [`Rₕ`](@ref), [`avgₕ!`](@ref), [`element`](@ref)
 """
-@inline Rₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f::F) where {F} = _Rₕ_parallel!(uₕ, f)
+@inline Rₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f::F) where {F} =
+    project!(uₕ, PointValue(f))
 @inline Rₕ!(uₕ::VectorElement{<:CompositeGridSpace}, f::F) where {F} =
-    _Rₕ_scatter_parallel!(uₕ, f)
-@inline function Rₕ!(uₕ::VectorElement{<:CompositeGridSpace}, f::Tuple)
-    # `map` over `components(uₕ)` and `f` together, rather than `ntuple(…, Val(NC))`
-    # indexing both by a shared count: it unrolls exactly the same way for tuples, needs
-    # no leaf count of its own, stays correct under any nesting, and — since `map` requires
-    # equal-length tuples — errors the same way a length mismatch always would have.
-    map(Rₕ!, components(uₕ), f)
-    return uₕ
-end
+    project!(uₕ, PointValue(f))
+@inline Rₕ!(uₕ::VectorElement{<:CompositeGridSpace}, f::Tuple) =
+    project!(uₕ, map(PointValue, f))
 
 # A concretely typed kernel for per-point restriction calls, avoiding anonymous closure
 # captures over (`f`, `Ωₕ`, `idxs`). A named callable struct eliminates compiler indirection
@@ -74,48 +69,20 @@ struct _RₕKernel{F,M,IX}
 end
 @inline (k::_RₕKernel)(i) = k.f(point(k.Ω, k.idxs[i]))
 
-# The two plain methods above ensure that unmasked restriction calls (the primary path
-# during time stepping) resolve directly without invoking Julia's keyword argument dispatch
+# The plain methods above ensure that unmasked restriction calls (the primary path during
+# time stepping) resolve directly without invoking Julia's keyword argument dispatch
 # machinery. They take precedence over the generic `uₕ::VectorElement` keyword method for
 # concrete scalar and composite elements.
 #
-# A function barrier, typing `f` as its own free parameter `F`. Takes `uₕ` itself and
-# re-derives `Ωₕ`/`raw`/`idxs` inside the typed function, rather than being handed
-# pre-extracted locals from an untyped caller.
-@inline function _Rₕ_parallel!(uₕ::VectorElement{<:ScalarGridSpace}, f::F) where {F}
-    (; space) = uₕ
-    Ωₕ = mesh(space)
-    raw = parent(uₕ)
-    idxs = indices(Ωₕ)
-    n = length(idxs)
-    _cpu_threaded_for!(execution_policy(space), raw, 1:n, _RₕKernel(f, Ωₕ, idxs))
-    return uₕ
-end
+# `PointValue`'s side of the `project!` contract (`operators/projection.jl`). The same
+# kernel serves the scalar and the scattered case: `f` returns a scalar on a scalar space
+# and the leaves' tuple on a composite one, which is exactly what each sweep wants.
+@inline _rule_kernel(rule::PointValue, sp) = _RₕKernel(rule.f, mesh(sp), indices(mesh(sp)))
 
-# When every leaf shares one mesh, `f` is evaluated once per grid point and its tuple
-# scattered across every leaf's storage in a single pass — the docstring's "evaluated
-# once" claim. A heterogeneous composite (leaves on different meshes) has no such shared
-# "grid point i"; `mesh(Wₕ::CompositeGridSpace)` always resolves to the first leaf's
-# regardless (see `vector_gridspace.jl`), so taking the shared-evaluation path
-# unconditionally silently mis-sized every leaf after the first (gpena/Bramble.jl#78).
-# `f` is instead re-evaluated at each leaf's own grid points through `_Rₕ_parallel!`,
-# keeping only that leaf's entry of the tuple it returns.
-@inline function _Rₕ_scatter_parallel!(
-    uₕ::VectorElement{<:CompositeGridSpace}, f::F
-) where {F}
-    comps = components(uₕ)
-    if _shares_one_mesh(comps)
-        sp = space(uₕ)
-        Ωₕ = mesh(sp)
-        raws = map(parent, comps)
-        idxs = indices(Ωₕ)
-        n = length(idxs)
-        _cpu_threaded_scatter_for!(execution_policy(sp), raws, 1:n, _RₕKernel(f, Ωₕ, idxs))
-    else
-        ntuple(k -> (_Rₕ_parallel!(comps[k], pt -> f(pt)[k]); nothing), Val(length(comps)))
-    end
-    return uₕ
-end
+@inline _rule_scatter_kernel(rule::PointValue, sp, ::Val{NC}) where {NC} =
+    _RₕKernel(rule.f, mesh(sp), indices(mesh(sp)))
+
+@inline _rule_component(rule::PointValue, k) = PointValue(pt -> rule.f(pt)[k])
 
 # A one-component space is a scalar space, so generic code that builds an
 # NC-tuple of functions still works when NC == 1.
@@ -126,15 +93,6 @@ end
     f::Tuple{Any};
     markers::NTuple{N,Symbol}=NTuple{0,Symbol}(),
 ) where {N} = Rₕ!(uₕ, f[1]; markers=markers)
-
-# One function per component: each is already independent, so restrict each
-# component with its own function. Masked restriction routes componentwise through _Rₕ_masked!.
-@inline function _Rₕ_masked!(
-    uₕ::VectorElement{<:CompositeGridSpace}, f::Tuple, markers::NTuple{N,Symbol}
-) where {N}
-    map((c, g) -> _Rₕ_masked!(c, g, markers), components(uₕ), f)
-    return uₕ
-end
 
 # The general keyword method, typed as broadly as `VectorElement` so it stays less specific
 # than every plain method above, matching the split `avgₕ!` uses. The `N == 0` case never
@@ -151,64 +109,12 @@ Base.@constprop :aggressive function Rₕ!(
         return Rₕ!(uₕ, f)
     end
 
-    return _Rₕ_masked!(uₕ, f, markers)
+    return project!(uₕ, _point_rule(f), markers)
 end
 
-function _Rₕ_masked!(
-    uₕ::VectorElement{<:ScalarGridSpace}, f::F, markers::NTuple{N,Symbol}
-) where {F,N}
-    (; space) = uₕ
-    Ωₕ = mesh(space)
-    raw = parent(uₕ)
-    idxs = indices(Ωₕ)
-    n = length(idxs)
-
-    fill!(raw, zero(eltype(raw)))
-    for m in markers
-        mask = index_in_marker(Ωₕ, m)
-        @inbounds for i in 1:n
-            if mask[i]
-                raw[i] = f(point(Ωₕ, idxs[i]))
-            end
-        end
-    end
-    return uₕ
-end
-
-# As `_Rₕ_scatter_parallel!` above: only valid as a single shared-mesh pass when every
-# leaf sits on the same mesh; a heterogeneous composite instead uses each leaf's own
-# marker mask and grid points, re-evaluating `f` per leaf through the scalar
-# `_Rₕ_masked!` and keeping only that leaf's tuple entry (gpena/Bramble.jl#78).
-function _Rₕ_masked!(
-    uₕ::VectorElement{<:CompositeGridSpace}, f::F, markers::NTuple{N,Symbol}
-) where {F,N}
-    comps = components(uₕ)
-    if _shares_one_mesh(comps)
-        Ωₕ = mesh(space(uₕ))
-        raws = map(parent, comps)
-        idxs = indices(Ωₕ)
-        n = length(idxs)
-
-        for raw in raws
-            fill!(raw, zero(eltype(raw)))
-        end
-        for m in markers
-            mask = index_in_marker(Ωₕ, m)
-            @inbounds for i in 1:n
-                if mask[i]
-                    vals = f(point(Ωₕ, idxs[i]))
-                    _write_components!(raws, vals, i)
-                end
-            end
-        end
-    else
-        ntuple(
-            k -> (_Rₕ_masked!(comps[k], pt -> f(pt)[k], markers); nothing),
-            Val(length(comps)),
-        )
-    end
-    return uₕ
-end
+# A tuple of functions is a rule per leaf; anything else is one rule.
+@inline _point_rule(f::Tuple) = map(PointValue, f)
+@inline _point_rule(f) = PointValue(f)
 
 # The coefficient type of a restriction is the one `f` returns, promoted against the
 # backend's. Promoted rather than taken outright so that an integer-valued `f` still gives

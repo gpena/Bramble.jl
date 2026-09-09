@@ -246,7 +246,7 @@ end
 # A type-erasing wrapper around f would remove even that, but it also blocks
 # inlining into the quadrature loop and costs about 2x at run time, which is
 # the wrong trade for a time-stepping loop. See the note in avgₕ!.
-function _pc_space_session(Ωₕ, f, g)
+function _pc_space_session(Ωₕ, f, g, marker::Symbol)
     Wₕ = gridspace(Ωₕ)
 
     # Grid space queries. space_weights runs once per grid space at
@@ -269,6 +269,22 @@ function _pc_space_session(Ωₕ, f, g)
     vₕ = avgₕ(Wₕ, f)
     Rₕ!(uₕ, g)
     avgₕ!(vₕ, g)
+
+    # The masked paths are a separate specialization, not a branch inside the ones above:
+    # `project!` wraps the rule's kernel in a `_MaskedKernel` (gpena/Bramble.jl#51), so the
+    # sweep is instantiated for a different callable.
+    #
+    # What these two lines actually buy is small, and measured rather than assumed: three
+    # fresh processes each way, a masked first call goes 43.5 ms -> 40.5 ms for `Rₕ!` and
+    # 41.8 ms -> 41.4 ms for `avgₕ!` (spreads ±0.2 ms), for about 0.4 s of extra
+    # precompilation, itself inside the ~0.8 s run-to-run spread. So: 3 ms for `Rₕ!`, and
+    # nothing measurable for `avgₕ!`.
+    #
+    # The other ~40 ms is irreducible for the reason given above this function: `Rₕ!` and
+    # `avgₕ!` specialize on the caller's function type, and no workload can warm a closure
+    # it does not itself write. Kept because it is nearly free, not because it is a fix.
+    Rₕ!(uₕ, g; markers=(marker,))
+    avgₕ!(vₕ, g; markers=(marker,))
 
     Vₕ = gridspace(Ωₕ, Val(2))
     mesh_type(Vₕ)
@@ -950,6 +966,14 @@ function _pc_parallel_policy_session(Ω1, npts::Int)
     Rₕ!(uₕ, x -> 2x)
     avgₕ!(vₕ, x -> 2x)
 
+    # Masked under Parallel(): a threaded sweep over a `_MaskedKernel`. These only became
+    # threaded sweeps at all in gpena/Bramble.jl#51 -- before it, a masked call silently
+    # ran serially whatever the policy said. See the note in `_pc_space_session` for what
+    # warming them is worth (about 3 ms on `Rₕ!`, nothing measurable on `avgₕ!`): most of
+    # a masked first call is the caller's own closure, which no workload can reach.
+    Rₕ!(uₕ, x -> 2x; markers=(:left,))
+    avgₕ!(vₕ, x -> 2x; markers=(:left,))
+
     lf = form(Wₕ, v -> innerₕ(uₕ, v))
     b = zeros(eltype(Wₕ), ndofs(Wₕ))
     assemble!(b, lf)
@@ -1023,10 +1047,10 @@ if PRECOMPILE_WORKLOAD
             normal_vector(Ωₕ3, :front)
 
             # Grid spaces and restriction operators, in 1D, 2D and 3D.
-            _, e1, c1 = _pc_space_session(Ωₕ1, x -> x + 1.0, x -> 2x)
-            _, e2, c2 = _pc_space_session(Ωₕ2, x -> x[1] * x[2], x -> x[1] + x[2])
+            _, e1, c1 = _pc_space_session(Ωₕ1, x -> x + 1.0, x -> 2x, :left)
+            _, e2, c2 = _pc_space_session(Ωₕ2, x -> x[1] * x[2], x -> x[1] + x[2], :wall)
             _, e3, c3 = _pc_space_session(
-                Ωₕ3, x -> x[1] * x[2] * x[3], x -> x[1] + x[2] + x[3]
+                Ωₕ3, x -> x[1] * x[2] * x[3], x -> x[1] + x[2] + x[3], :boundary
             )
 
             _pc_operator_session(e1, c1, Val(1))
