@@ -26,6 +26,17 @@ const PRECOMPILE_WORKLOAD = @load_preference("precompile_workload", true)
 # everything they call.
 
 # 1D meshes are indexed by a scalar, nD meshes by the index tuple.
+# Every display path a type has: the two-argument `show` (the embeddable one-liner), the
+# `MIME"text/plain"` block, and `summary`, which array headers reach for independently of
+# either. They are separate methods since gpena/Bramble.jl#45, so warming one says nothing
+# about the others.
+function _pc_display(x)
+    sprint(show, x)
+    sprint(show, MIME"text/plain"(), x)
+    summary(x)
+    return nothing
+end
+
 function _pc_indexed(Ωₕ::AbstractMeshType{1}, idx_tup)
     i = idx_tup[1]
     point(Ωₕ, i)
@@ -195,7 +206,10 @@ function _pc_geometry()
             extrema(X, i)
             projection(X, i)
         end
+        # Both display paths, which are separate methods rather than one flag-switched
+        # body (gpena/Bramble.jl#45): the embeddable one-liner and the detailed block.
         sprint(show, X)
+        sprint(show, MIME"text/plain"(), X)
     end
     first(I)
     last(I)
@@ -753,6 +767,18 @@ function _pc_form_assembly(
     b = zeros(eltype(Wₕ), ndofs(Wₕ))
     bv = zeros(eltype(Vₕ), ndofs(Vₕ))
 
+    # Display for the space/element/form cluster (gpena/Bramble.jl#17, #45). None of it
+    # was reachable from the rest of this workload: these types had no `show` of their own
+    # until they gained one, and each has two independent methods now (the embeddable
+    # one-liner and the `MIME"text/plain"` block) plus a `summary` that array headers
+    # reach for. The composite space's detailed block takes a different branch from the
+    # scalar one, so both are named.
+    _pc_display(Wₕ)
+    _pc_display(Vₕ)
+    _pc_display(uₕ)
+    _pc_display(form(Wₕ, v -> innerₕ(uₕ, v)))
+    _pc_display(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v)))
+
     # One color, then two.
     _pc_assemble_shape_threaded(Wₕ, v -> innerₕ(uₕ, v), b)
     _pc_assemble_shape_threaded(Wₕ, v -> innerₕ(uₕ, D₋ₓ(v)), b)
@@ -1052,6 +1078,8 @@ if PRECOMPILE_WORKLOAD
                 extrema(d)
                 sprint(show, d)
                 sprint(show, m)
+                sprint(show, MIME"text/plain"(), d)
+                sprint(show, MIME"text/plain"(), m)
             end
             collect(labels(domain(I1, I_time, :moving => ((x, t) -> x > t))(0.5)))
         end
