@@ -17,7 +17,6 @@ using Bramble:
     is_symbolic,
     trial_component_or_nothing,
     test_component_or_nothing,
-    values,
     indices,
     restrict_to
 

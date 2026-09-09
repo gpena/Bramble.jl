@@ -31,7 +31,6 @@ using Bramble:
     multiply_stencils_linear,
     restrict_to,
     shift_op,
-    values,
     form,
     assemble
 

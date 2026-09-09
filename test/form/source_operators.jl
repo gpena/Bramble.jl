@@ -2,15 +2,7 @@ using Test
 using Bramble
 using ForwardDiff
 using Bramble:
-    source_function,
-    SourceVector,
-    Innerh,
-    restrict_to,
-    shift_op,
-    values,
-    form,
-    assemble,
-    assemble!
+    source_function, SourceVector, Innerh, restrict_to, shift_op, form, assemble, assemble!
 
 # An operator wrapped around a *source* in a linear form.
 #

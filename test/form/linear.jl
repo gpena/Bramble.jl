@@ -13,22 +13,19 @@ using Bramble:
     resolve_form_ast,
     apply_dirichlet_conditions!,
     LinearProduct,
-    values,
     TestFunction,
     TrialFunction,
     IndexedTestFunction,
     IndexedTrialFunction,
     test_component_or_nothing,
     routes_by_component,
-    component,
     components,
     _colour_strides,
     stencil_offsets,
     ndofs,
     Innerh,
     Innerplus,
-    evaluate!,
-    set
+    evaluate!
 
 # Standalone runner fallback
 if !@isdefined(alloc_test)

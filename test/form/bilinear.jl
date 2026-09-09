@@ -14,7 +14,6 @@ using Bramble:
     resolve_form_ast,
     allocate_system_matrix,
     ndofs,
-    values,
     Innerh,
     Innerplus,
     block_of,
