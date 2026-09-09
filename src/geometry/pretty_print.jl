@@ -52,16 +52,6 @@ Print styled text according to current color settings.
 end
 
 """
-    println_colored(pp::PrettyPrinter, text; color = :default, bold = false)
-
-Print styled text followed by a newline.
-"""
-@inline function println_colored(pp::PrettyPrinter, text; color=:default, bold=false)
-    print_colored(pp, text; color=color, bold=bold)
-    println(pp.io)
-end
-
-"""
     print_header(pp::PrettyPrinter, title::String, type_info::String = "")
 
 Print a prominent header with optional type information.
@@ -88,20 +78,6 @@ function print_section_header(pp::PrettyPrinter, title::String)
 end
 
 """
-    print_subsection_header(pp::PrettyPrinter, title::String, count::Int = 0)
-
-Print a subsection header with an optional item count.
-"""
-function print_subsection_header(pp::PrettyPrinter, title::String, count::Int=0)
-    print_indent(pp)
-    printstyled(pp.io, title; bold=true, color=:yellow)
-    if count > 0
-        print(pp.io, " ($count)")
-    end
-    return println(pp.io, ":")
-end
-
-"""
     print_key_value(pp::PrettyPrinter, key::String, value::String; key_color = :green, value_color = :blue, separator = " => ")
 
 Print a key-value pair formatted with distinct colors.
@@ -122,12 +98,28 @@ function print_key_value(
 end
 
 """
-    print_label(pp::PrettyPrinter, label::Symbol)
+    print_joined(f, pp::PrettyPrinter, items; sep = ", ")
 
-Print a highlighted symbol label.
+Print each of `items` by calling `f(item)`, separating consecutive ones with `sep`.
+
+Replaces seven hand-rolled variants of the same loop across the geometry and mesh
+renderers (gpena/Bramble.jl#47) — `i < length(xs) && print(io, ", ")` in five places and a
+`first` flag in `print_marker_summary`, which had to guard three optional groups. `f` is
+passed as a closure in the same style as `_each_marked` in `form/dirichlet_constraints.jl`,
+which measured at zero allocations, so the pattern costs nothing here.
+
+`items` may be any iterable; the separator is written *before* each entry after the first,
+so an empty or single-element collection prints no separator at all and a caller with
+optional groups just filters them out rather than tracking whether anything came before.
 """
-@inline function print_label(pp::PrettyPrinter, label::Symbol)
-    printstyled(pp.io, ":$label"; color=:green)
+function print_joined(f, pp::PrettyPrinter, items; sep=", ")
+    first = true
+    for item in items
+        first || print(pp.io, sep)
+        f(item)
+        first = false
+    end
+    return nothing
 end
 
 """
@@ -192,19 +184,11 @@ function print_marker_summary(pp::PrettyPrinter, n_sym::Int, n_tup::Int, n_cond:
     printstyled(pp.io, "$total marker$(total == 1 ? "" : "s")"; color=:yellow)
     print(pp.io, " (")
 
-    first = true
-    if n_sym > 0
-        print(pp.io, "$n_sym symbol$(n_sym == 1 ? "" : "s")")
-        first = false
-    end
-    if n_tup > 0
-        first || print(pp.io, ", ")
-        print(pp.io, "$n_tup tuple$(n_tup == 1 ? "" : "s")")
-        first = false
-    end
-    if n_cond > 0
-        first || print(pp.io, ", ")
-        print(pp.io, "$n_cond function$(n_cond == 1 ? "" : "s")")
+    # Only the non-empty groups, so `print_joined` handles the separators that the
+    # `first` flag used to track across three independent `if`s.
+    groups = ((n_sym, "symbol"), (n_tup, "tuple"), (n_cond, "function"))
+    print_joined(pp, Iterators.filter(g -> first(g) > 0, groups)) do (n, name)
+        return print(pp.io, "$n $name$(n == 1 ? "" : "s")")
     end
 
     return println(pp.io, ")")
@@ -218,10 +202,8 @@ Print a comma-separated list of symbols.
 function print_labels_list(pp::PrettyPrinter, labels; prefix="Labels: ")
     print_indent(pp)
     printstyled(pp.io, prefix; color=:light_black)
-
-    for (i, lbl) in enumerate(labels)
-        printstyled(pp.io, ":$lbl"; color=:green)
-        i < length(labels) && print(pp.io, ", ")
+    print_joined(pp, labels) do lbl
+        return printstyled(pp.io, ":$lbl"; color=:green)
     end
     return println(pp.io)
 end

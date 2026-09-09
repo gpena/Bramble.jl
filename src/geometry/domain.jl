@@ -312,17 +312,13 @@ function _show_domain_detailed(io::IO, Ω::Domain)
     topodim = topo_dim(X)
     pp_double_indent = with_indent(pp, 2)
 
+    # The set body itself is `set.jl`'s to render (gpena/Bramble.jl#47). Only the
+    # surrounding indentation and the topological-dimension wording are this layout's
+    # own: there is no `CartesianProduct{…}` header here to append "(topological dim N)"
+    # to, so it gets its own line.
     if D == 1
         print(io, "    ")
-        if X.collapsed[1]
-            print_colored(pp, "Point"; color=:yellow)
-            print(io, " at ")
-            print_value(pp, X.box[1][1])
-        else
-            print_colored(pp, "Interval"; color=:yellow)
-            print(io, " ")
-            print_interval(pp, X.box[1][1], X.box[1][2])
-        end
+        print_set_extent(pp, X)
         println(io)
     else
         if topodim < D
@@ -330,13 +326,7 @@ function _show_domain_detailed(io::IO, Ω::Domain)
             print_colored(pp, "Topological dimension: $topodim"; color=:yellow)
             println(io)
         end
-
-        for i in 1:D
-            label = get_dimension_label(i)
-            print_dimension_info(
-                pp_double_indent, label, X.box[i][1], X.box[i][2], X.collapsed[i]
-            )
-        end
+        print_set_axes(pp_double_indent, X)
     end
 
     println(io)

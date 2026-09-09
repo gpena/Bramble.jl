@@ -434,18 +434,18 @@ end
             with_indent,
             print_indent,
             print_colored,
-            println_colored,
             print_header,
             print_section_header,
-            print_subsection_header,
             print_key_value,
-            print_label,
             print_value,
             print_interval,
             print_dimension_info,
             print_empty_message,
             print_marker_summary,
             print_labels_list,
+            print_joined,
+            print_set_extent,
+            print_set_axes,
             get_dimension_label
 
         io = IOBuffer()
@@ -468,9 +468,6 @@ end
         print_colored(pp0, "world"; color=:blue)
         @test occursin("world", String(take!(io)))
 
-        println_colored(pp0, "line"; color=:green)
-        @test occursin("line", String(take!(io)))
-
         print_header(pp0, "Header")
         @test occursin("Header", String(take!(io)))
 
@@ -481,18 +478,9 @@ end
         print_section_header(pp0, "Section:")
         @test occursin("Section:", String(take!(io)))
 
-        print_subsection_header(pp0, "Sub", 0)
-        @test occursin("Sub", String(take!(io)))
-
-        print_subsection_header(pp0, "Sub", 3)
-        @test occursin("(3)", String(take!(io)))
-
         print_key_value(pp0, "key", "val")
         str = String(take!(io))
         @test occursin("key", str) && occursin("val", str)
-
-        print_label(pp0, :boundary)
-        @test occursin(":boundary", String(take!(io)))
 
         print_value(pp0, 3.14)
         @test occursin("3.14", String(take!(io)))
@@ -510,6 +498,41 @@ end
 
         print_empty_message(pp0)
         @test occursin("none", String(take!(io)))
+
+        # `print_joined` replaced seven hand-rolled separator loops
+        # (gpena/Bramble.jl#47), so the edge cases they each got right individually are
+        # asserted once here: no separator on empty or single, one between each pair.
+        print_joined(pp0, Int[]) do x
+            print(io, x)
+        end
+        @test isempty(String(take!(io)))
+
+        print_joined(pp0, [7]) do x
+            print(io, x)
+        end
+        @test String(take!(io)) == "7"
+
+        print_joined(pp0, 1:3) do x
+            print(io, x)
+        end
+        @test String(take!(io)) == "1, 2, 3"
+
+        print_joined(pp0, 1:3; sep=" × ") do x
+            print(io, x)
+        end
+        @test String(take!(io)) == "1 × 2 × 3"
+
+        # The shared set-body renderers `Domain` borrows from `set.jl`
+        print_set_extent(pp0, interval(0.0, 1.0))
+        @test occursin("Interval", String(take!(io)))
+
+        print_set_extent(pp0, point(2.5))
+        str = String(take!(io))
+        @test occursin("Point", str) && occursin("2.5", str)
+
+        print_set_axes(pp0, interval(0.0, 1.0) × interval(2.0, 3.0))
+        str = String(take!(io))
+        @test occursin("x", str) && occursin("y", str) && occursin("2.0, 3.0", str)
 
         print_marker_summary(pp0, 2, 1, 0)
         str = String(take!(io))

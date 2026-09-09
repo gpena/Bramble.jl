@@ -321,10 +321,8 @@ function Base.show(io::IO, ::MIME"text/plain", dm::DomainMarkers)
                 print_indent(pp_double_indent)
                 printstyled(io, ":$(label(m))"; color=:green)
                 print(io, " => (")
-                syms = sort!(collect(identifier(m)))
-                for (i, s) in enumerate(syms)
-                    printstyled(io, ":$s"; color=:blue)
-                    i < length(syms) && print(io, ", ")
+                print_joined(pp, sort!(collect(identifier(m)))) do s
+                    return printstyled(io, ":$s"; color=:blue)
                 end
                 println(io, ")")
             end

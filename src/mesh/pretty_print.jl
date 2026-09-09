@@ -27,9 +27,8 @@ function print_mesh_summary(pp::PrettyPrinter, npts, topodim::Int, collapsed::Bo
         total_pts = prod(npts)
         printstyled(pp.io, "$total_pts points"; color=:blue)
         print(pp.io, " (")
-        for (i, n) in enumerate(npts)
-            print(pp.io, n)
-            i < length(npts) && print(pp.io, " × ")
+        print_joined(pp, npts; sep=" × ") do n
+            return print(pp.io, n)
         end
         print(pp.io, ")")
     else
@@ -65,34 +64,41 @@ function print_mesh_domain_info(pp::PrettyPrinter, set::CartesianProduct)
 end
 
 """
-    print_mesh_spacing_info(pp::PrettyPrinter, uniform::Union{Bool, Tuple{Vararg{Bool}}}, hmax) -> Nothing
+    print_mesh_spacing_info(pp::PrettyPrinter, uniform::Bool, hmax) -> Nothing
+    print_mesh_spacing_info(pp::PrettyPrinter, uniform::Tuple{Vararg{Bool}}, hmax) -> Nothing
 
 Print mesh spacing information and maximum cell diagonal.
 """
-function print_mesh_spacing_info(
-    pp::PrettyPrinter, uniform::Union{Bool,Tuple{Vararg{Bool}}}, hmax
-)
+# One method per shape of `uniform` rather than one branching on it: a 1D mesh answers
+# with a `Bool` and an nD one with a tuple, which is a dispatch decision
+# (gpena/Bramble.jl#47).
+function print_mesh_spacing_info(pp::PrettyPrinter, uniform::Bool, hmax)
+    _print_spacing_prefix(pp)
+    print(pp.io, uniform ? "uniform" : "non-uniform")
+    return _print_spacing_suffix(pp, hmax)
+end
+
+function print_mesh_spacing_info(pp::PrettyPrinter, uniform::Tuple{Vararg{Bool}}, hmax)
+    _print_spacing_prefix(pp)
+    if all(uniform)
+        print(pp.io, "uniform")
+    else
+        print(pp.io, "mixed (")
+        print_joined(pp, enumerate(uniform)) do (i, u)
+            return print(pp.io, get_dimension_label(i), ": ", u ? "uniform" : "non-uniform")
+        end
+        print(pp.io, ")")
+    end
+    return _print_spacing_suffix(pp, hmax)
+end
+
+@inline function _print_spacing_prefix(pp::PrettyPrinter)
     print_indent(pp)
     printstyled(pp.io, "Spacing: "; color=:light_black)
+    return nothing
+end
 
-    if uniform isa Bool
-        print(pp.io, uniform ? "uniform" : "non-uniform")
-    else
-        # For multidimensional meshes
-        all_uniform = all(uniform)
-        if all_uniform
-            print(pp.io, "uniform")
-        else
-            print(pp.io, "mixed (")
-            for (i, u) in enumerate(uniform)
-                label = get_dimension_label(i)
-                print(pp.io, "$label: ", u ? "uniform" : "non-uniform")
-                i < length(uniform) && print(pp.io, ", ")
-            end
-            print(pp.io, ")")
-        end
-    end
-
+@inline function _print_spacing_suffix(pp::PrettyPrinter, hmax)
     print(pp.io, " • ")
     printstyled(pp.io, "h"; color=:magenta)
     print(pp.io, "ₘₐₓ = ")
@@ -122,19 +128,14 @@ function print_mesh_markers(pp::PrettyPrinter, mesh_markers::MeshMarkers)
     print(pp.io, " • ")
 
     # Print labels
-    labels_list = collect(keys(mesh_markers))
-    for (i, label) in enumerate(labels_list)
+    print_joined(pp, keys(mesh_markers)) do label
         printstyled(pp.io, ":$label"; color=:green)
-
-        # Count marked points
         marked_count = count(mesh_markers[label])
         if marked_count > 0
             print(pp.io, " (")
             printstyled(pp.io, "$marked_count"; color=:blue)
             print(pp.io, ")")
         end
-
-        i < length(labels_list) && print(pp.io, ", ")
     end
     return println(pp.io)
 end

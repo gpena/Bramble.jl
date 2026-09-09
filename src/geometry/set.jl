@@ -269,8 +269,7 @@ function Base.show(io::IO, X::CartesianProduct{D}) where {D}
             print(io, "[", X.box[1][1], ", ", X.box[1][2], "]")
         end
     else
-        for i in 1:D
-            i > 1 && print(io, " × ")
+        print_joined(PrettyPrinter(io), 1:D; sep=" × ") do i
             if X.collapsed[i]
                 print(io, X.box[i][1])
             else
@@ -278,6 +277,46 @@ function Base.show(io::IO, X::CartesianProduct{D}) where {D}
             end
         end
     end
+end
+
+"""
+    print_set_extent(pp::PrettyPrinter, X::CartesianProduct{1})
+
+Print a 1D set's extent: `Point at v` when the interval is degenerate, `Interval [a, b]`
+otherwise.
+
+Shared with [`Domain`](@ref)'s own detailed renderer, which used to carry a verbatim copy
+(gpena/Bramble.jl#47). Lives here rather than in `geometry/pretty_print.jl` because that
+file is included *before* this one, so a signature naming `CartesianProduct` there would
+not resolve.
+"""
+function print_set_extent(pp::PrettyPrinter, X::CartesianProduct)
+    if X.collapsed[1]
+        print_colored(pp, "Point"; color=:yellow)
+        print(pp.io, " at ")
+        print_value(pp, X.box[1][1])
+    else
+        print_colored(pp, "Interval"; color=:yellow)
+        print(pp.io, " ")
+        print_interval(pp, X.box[1][1], X.box[1][2])
+    end
+    return nothing
+end
+
+"""
+    print_set_axes(pp::PrettyPrinter, X::CartesianProduct{D})
+
+Print one `label: [min, max]` line per coordinate of a multi-dimensional set, collapsing
+degenerate axes. The companion of [`print_set_extent`](@ref) for `D > 1`, and likewise
+shared with `Domain`'s renderer.
+"""
+function print_set_axes(pp::PrettyPrinter, X::CartesianProduct{D}) where {D}
+    for i in 1:D
+        print_dimension_info(
+            pp, get_dimension_label(i), X.box[i][1], X.box[i][2], X.collapsed[i]
+        )
+    end
+    return nothing
 end
 
 # `MIME"text/plain"` is the detailed, multi-line form: what the REPL shows for a value
@@ -292,28 +331,13 @@ function Base.show(io::IO, ::MIME"text/plain", X::CartesianProduct{D,T}) where {
 
         if D == 1
             print(io, ": ")
-            if X.collapsed[1]
-                print_colored(pp, "Point"; color=:yellow)
-                print(io, " at ")
-                print_value(pp, X.box[1][1])
-            else
-                print_colored(pp, "Interval"; color=:yellow)
-                print(io, " ")
-                print_interval(pp, X.box[1][1], X.box[1][2])
-            end
+            print_set_extent(pp, X)
         else
             if topodim < D
                 print_colored(pp, " (topological dim $topodim)"; color=:yellow)
             end
             println(io, ":")
-
-            pp_indented = with_indent(pp, 1)
-            for i in 1:D
-                label = get_dimension_label(i)
-                print_dimension_info(
-                    pp_indented, label, X.box[i][1], X.box[i][2], X.collapsed[i]
-                )
-            end
+            print_set_axes(with_indent(pp, 1), X)
         end
     end
 end
