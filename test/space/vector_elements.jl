@@ -460,7 +460,8 @@ end
             # anonymous closure occasionally (1 to 3 in 20 independent compiles) took a
             # miscompiled path costing 176 B *per grid point*, 80 MiB on the large case
             # here. Fixed by replacing the closure with a named, concretely-typed kernel
-            # struct (`_AvgKernel1`/`_AvgKernelD`) -- not a guarantee the class of bug can
+            # struct (`_AvgKernel`, which also covers 1D since gpena/Bramble.jl#69 removed
+            # the `_AvgKernel1` split) -- not a guarantee the class of bug can
             # never recur, so this stays a real regression guard, not just documentation.
             be_parallel = backend(policy=Parallel())
             small = avg_bytes_direct(be_parallel, 32)
