@@ -31,6 +31,11 @@ const _sparse_ad = AutoSparse(
         rhs(x) = -dαdu(sol(x)) * sol(x)^2 - α(sol(x)) * sol(x)
 
         Ω = domain(interval(0.0, 1.0))
+        # `unif = false` draws the interior points from the global RNG, so without a seed
+        # the problem itself changes every run -- and both testsets below assert on an
+        # iteration count, which is exactly the kind of claim that then passes or fails by
+        # chance. Seeded so a failure here is reproducible and means something.
+        Random.seed!(20260909)
         Ωₕ = mesh(Ω, 40, false)
         Wₕ = gridspace(Ωₕ)
 
@@ -77,6 +82,11 @@ const _sparse_ad = AutoSparse(
         rhs(x) = -dαdu(sol(x)) * sol(x)^2 - α(sol(x)) * sol(x)
 
         Ω = domain(interval(0.0, 1.0))
+        # `unif = false` draws the interior points from the global RNG, so without a seed
+        # the problem itself changes every run -- and both testsets below assert on an
+        # iteration count, which is exactly the kind of claim that then passes or fails by
+        # chance. Seeded so a failure here is reproducible and means something.
+        Random.seed!(20260909)
         Ωₕ = mesh(Ω, 40, false)
         Wₕ = gridspace(Ωₕ)
 
@@ -142,6 +152,10 @@ const _sparse_ad = AutoSparse(
         Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
 
         function coupled_series(; n0::Int, levels::Int)
+            # Seeded for the same reason as the 1D testsets above: a non-uniform mesh is
+            # drawn from the global RNG, and the convergence rates asserted below should
+            # not depend on which mesh this run happened to get.
+            Random.seed!(20260909)
             Ωc = mesh(Ω, (n0, n0), (false, false))
             hs = Float64[]
             erru, errv = Float64[], Float64[]
