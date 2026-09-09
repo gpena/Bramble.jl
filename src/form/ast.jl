@@ -5,7 +5,7 @@
 ##############################################################################
 
 #=
-# linear_operators.jl
+# ast.jl
 
 The symbolic operator nodes the form layer builds its abstract syntax tree from. A
 `LazyOp` records *what* to apply without applying it, allowing a bilinear form to be written
@@ -125,7 +125,8 @@ end
 Whether `op` still contains a symbolic placeholder, such as a trial or test function, and
 so cannot be evaluated until one is substituted.
 
-The base cases are here; `src/form/common.jl` adds the methods for its own AST nodes.
+The base cases are here; `src/form/stencil_eval.jl` adds the methods for the concrete AST
+nodes, once every node type exists.
 """
 function is_symbolic end
 

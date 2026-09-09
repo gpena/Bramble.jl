@@ -155,7 +155,7 @@ function resolve_ast(op::ForwardDifference{D,Dim}) where {D,Dim}
 end
 
 # ==============================================================================
-# Direct integration helpers for linear_operators.jl
+# Direct integration helpers for the form AST (ast.jl)
 # ==============================================================================
 
 """

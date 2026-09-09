@@ -146,7 +146,9 @@ would race on the value, not just on the structure.
 Modules = [Bramble]
 Public = false
 Pages = [
+    "form/ast.jl",
     "form/common.jl",
+    "form/stencil_eval.jl",
     "form/component.jl",
     "form/block_extract.jl",
     "form/stencil_pattern.jl",

@@ -12,7 +12,6 @@ Pages = [
     "space/scalar_gridspace.jl",
     "space/vector_gridspace.jl",
     "space/vectorelement.jl",
-    "space/operators/linear_operators.jl",
     "space/operators/restriction.jl",
     "space/operators/cell_average.jl",
     "space/operators/shift.jl",
