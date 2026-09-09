@@ -20,13 +20,13 @@ f2(x) = 8π^2 * v_ex(x) + v_ex(x) - u_ex(x) * v_ex(x)
 Wₕ = gridspace(Ωₕ)
 Vₕ = Wₕ^Val(2)
 
-bcs = dirichlet_constraints(Bramble.set(Ω), :boundary =&gt; x -&gt; 0.0)
+bcs = dirichlet_constraints(Ω, :boundary =&gt; x -&gt; 0.0)
 f1ₕ = element(Wₕ)
 avgₕ!(f1ₕ, f1)
 f2ₕ = element(Wₕ)
 avgₕ!(f2ₕ, f2)
 l = form(Vₕ, q -&gt; innerₕ(f1ₕ, q(1)) + innerₕ(f2ₕ, q(2)))
-F = assemble(l; dirichlet_conditions = bcs, dirichlet_labels = :boundary)</code></pre><h2 id="Newton&#39;s-method-on-a-composite-residual"><a class="docs-heading-anchor" href="#Newton&#39;s-method-on-a-composite-residual">Newton&#39;s method on a composite residual</a><a id="Newton&#39;s-method-on-a-composite-residual-1"></a><a class="docs-heading-anchor-permalink" href="#Newton&#39;s-method-on-a-composite-residual" title="Permalink"></a></h2><p><code>uv</code> is quadratic in the unknowns, so it cannot sit inside a matrix independent of
+F = assemble(l; dirichlet = bcs)</code></pre><h2 id="Newton&#39;s-method-on-a-composite-residual"><a class="docs-heading-anchor" href="#Newton&#39;s-method-on-a-composite-residual">Newton&#39;s method on a composite residual</a><a id="Newton&#39;s-method-on-a-composite-residual-1"></a><a class="docs-heading-anchor-permalink" href="#Newton&#39;s-method-on-a-composite-residual" title="Permalink"></a></h2><p><code>uv</code> is quadratic in the unknowns, so it cannot sit inside a matrix independent of
 <code>w = (u, v)</code> the way the linear terms can — but it <em>can</em> sit inside a matrix that depends on
 the current guess, the same trick [the nonlinear Poisson example uses for a single
 species](poisson<em>nonlinear.md#Fixed-point-%28Picard%29-iteration), extended to a second one.
@@ -35,7 +35,7 @@ Writing the coupling as `v</em>current * u(1)<code>in</code>u<code>&#39;s own eq
     a = form(Vₕ, Vₕ, (p, q) -&gt;
         inner₊(∇₋ₕ(p(1)), ∇₋ₕ(q(1))) + innerₕ(p(1), q(1)) + innerₕ(v_c * p(1), q(1)) +
         inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2))) + innerₕ(p(2), q(2)) - innerₕ(u_c * p(2), q(2)))
-    return assemble(a; dirichlet_labels = :boundary)
+    return assemble(a; dirichlet = :boundary)
 end</code></pre><p>Its Jacobian is sparse for the same reason the [nonlinear Poisson
 example&#39;s](poisson_nonlinear.md#Newton&#39;s-method) is — the reaction term couples <code>u</code> and <code>v</code>
 only pointwise, so it adds nothing to the diffusion stencil&#39;s own reach — so the same sparse
@@ -64,7 +64,7 @@ for it in 1:20
     DifferentiationInterface.jacobian!(residual, J, prep, sparse_ad, w)
     w .-= J \ r
 end
-length(newton_residuals), newton_residuals</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(4, [2.3480622250873506, 0.02098654769159208, 1.2004428782207322e-6, 6.301742156381484e-14])</code></pre><p>Quadratic convergence, same as the single-species case — the composite space changes what
+length(newton_residuals), newton_residuals</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(4, [2.34806222508735, 0.02098654769159208, 1.2004428782207324e-6, 6.301742156381484e-14])</code></pre><p>Quadratic convergence, same as the single-species case — the composite space changes what
 the Jacobian differentiates through, not how well Newton converges once it has a correct one.</p><h2 id="Skipping-the-tracer-here-too"><a class="docs-heading-anchor" href="#Skipping-the-tracer-here-too">Skipping the tracer here too</a><a id="Skipping-the-tracer-here-too-1"></a><a class="docs-heading-anchor-permalink" href="#Skipping-the-tracer-here-too" title="Permalink"></a></h2><p><code>v_c</code> scaling a term routed into block <code>(1,1)</code> is a <em>different</em> leaf&#39;s component reaching
 into this one — <a href="../../api/#Bramble.jacobian_pattern"><code>jacobian_pattern</code></a> reads that the same way a form term names a
 component, <code>U -&gt; U(2)</code> rather than a stencil op, since <code>v_c</code> is read directly rather than
@@ -91,7 +91,7 @@ for it in 1:20
     w_native .-= J_native \ r
 end
 newton_residuals_native</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">4-element Vector{Float64}:
- 2.3480622250873506
+ 2.34806222508735
  0.02098654769159099
  1.200442880617717e-6
  6.183391553454602e-14</code></pre><p>Same quadratic convergence, no tracing pass paid for it: <code>v_c0</code>/<code>u_c0</code> are read at <code>w = 0</code>
@@ -102,7 +102,7 @@ whose matrix does not come from a <code>BilinearForm</code> in the first place, 
 wₕ .= w
 uₕ, vₕ = components(wₕ)
 uexact, vexact = Rₕ(Wₕ, u_ex), Rₕ(Wₕ, v_ex)
-norm₁ₕ(uₕ .- uexact), norm₁ₕ(vₕ .- vexact)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(0.01234356573687463, 0.07897153806964287)</code></pre><h2 id="Visualizing-the-solution"><a class="docs-heading-anchor" href="#Visualizing-the-solution">Visualizing the solution</a><a id="Visualizing-the-solution-1"></a><a class="docs-heading-anchor-permalink" href="#Visualizing-the-solution" title="Permalink"></a></h2><p>Each species is its own 2D scalar field — <code>components(wₕ)</code> gives a view directly onto it, no
+norm₁ₕ(uₕ .- uexact), norm₁ₕ(vₕ .- vexact)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(0.012343565736874626, 0.07897153806964287)</code></pre><h2 id="Visualizing-the-solution"><a class="docs-heading-anchor" href="#Visualizing-the-solution">Visualizing the solution</a><a id="Visualizing-the-solution-1"></a><a class="docs-heading-anchor-permalink" href="#Visualizing-the-solution" title="Permalink"></a></h2><p>Each species is its own 2D scalar field — <code>components(wₕ)</code> gives a view directly onto it, no
 new solve or copy needed:</p><script>
   // See the module note above: hide `define` from Plotly's UMD wrapper so it attaches
   // `window.Plotly` instead of registering as an anonymous AMD module.
@@ -300,13 +300,13 @@ function coupled_series(; n0::Int = 5, levels::Int)
     for level in 1:levels
         Wc = gridspace(Ωc)
         Vc = Wc^Val(2)
-        bcs_c = dirichlet_constraints(Bramble.set(Ω), :boundary =&gt; x -&gt; 0.0)
+        bcs_c = dirichlet_constraints(Ω, :boundary =&gt; x -&gt; 0.0)
         f1_c = element(Wc)
         avgₕ!(f1_c, f1)
         f2_c = element(Wc)
         avgₕ!(f2_c, f2)
         l_c = form(Vc, q -&gt; innerₕ(f1_c, q(1)) + innerₕ(f2_c, q(2)))
-        F_c = assemble(l_c; dirichlet_conditions = bcs_c, dirichlet_labels = :boundary)
+        F_c = assemble(l_c; dirichlet = bcs_c)
 
         Ac(wₕ) = begin
             u_c, v_c = components(wₕ)
@@ -315,7 +315,7 @@ function coupled_series(; n0::Int = 5, levels::Int)
                     innerₕ(v_c * p(1), q(1)) +
                     inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2))) + innerₕ(p(2), q(2)) -
                     innerₕ(u_c * p(2), q(2)));
-                dirichlet_labels = :boundary)
+                dirichlet = :boundary)
         end
         rc(w::AbstractVector{T}) where {T} = begin
             wₕ = element(Vc, T)
@@ -348,7 +348,7 @@ end
 hs, erru, errv = coupled_series(; levels = 5)
 order_u = log(erru[end - 1] / erru[end]) / log(hs[end - 1] / hs[end])
 order_v = log(errv[end - 1] / errv[end]) / log(hs[end - 1] / hs[end])
-(order_u, order_v)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(1.998070809298566, 1.9904359603723842)</code></pre><pre><code class="language-julia hljs">order_u &gt; 1.9 &amp;&amp; order_v &gt; 1.9</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">true</code></pre><script>
+(order_u, order_v)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(1.9980708092985653, 1.990435960372385)</code></pre><pre><code class="language-julia hljs">order_u &gt; 1.9 &amp;&amp; order_v &gt; 1.9</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">true</code></pre><script>
   // See the module note above: hide `define` from Plotly's UMD wrapper so it attaches
   // `window.Plotly` instead of registering as an anonymous AMD module.
   window.__bramble_amd_define = window.define;
@@ -412,7 +412,7 @@ order_v = log(errv[end - 1] / errv[end]) / log(hs[end - 1] / hs[end])
   const data = [{
   name: "u",
   x: [0.7281398631056489,0.3640699315528245,0.18203496577641226,0.09101748288820616,0.045508741444103114],
-  y: [0.135095806145601,0.03655058875874531,0.009285014420417563,0.002333111059634264,0.0005840582532974396],
+  y: [0.135095806145601,0.03655058875874531,0.009285014420417563,0.0023331110596342634,0.0005840582532974397],
   mode: 'markers',
   type: 'scatter',
   marker: { color: "#5B5FC7", size: 8 },
@@ -420,7 +420,7 @@ order_v = log(errv[end - 1] / errv[end]) / log(hs[end - 1] / hs[end])
 {
   name: "v",
   x: [0.7281398631056489,0.3640699315528245,0.18203496577641226,0.09101748288820616,0.045508741444103114],
-  y: [0.8035909996433598,0.23130629735192332,0.06228236898217978,0.015954707817455522,0.004015206879138005],
+  y: [0.8035909996433598,0.23130629735192332,0.06228236898217978,0.01595470781745552,0.004015206879138002],
   mode: 'markers',
   type: 'scatter',
   marker: { color: "#0E7C86", size: 8 },
@@ -428,7 +428,7 @@ order_v = log(errv[end - 1] / errv[end]) / log(hs[end - 1] / hs[end])
 {
   name: "slope 2",
   x: [0.045508741444103114, 0.7281398631056489],
-  y: [0.0005840582532974396, 0.14951891284414418],
+  y: [0.0005840582532974397, 0.1495189128441442],
   mode: 'lines',
   type: 'scatter',
   line: { dash: 'dash', width: 1.5, color: 'rgba(128,128,128,0.7)' },
@@ -468,4 +468,4 @@ discretization&#39;s own accuracy once Newton has converged to it.</p><p><code>c
 substitution (<code>ast_sparsity_detector(a, U -&gt; U(2), U -&gt; U(1))</code> in place of <code>sparse_ad</code>&#39;s
 <code>sparsity_detector</code>) works here unchanged too. Not re-run a second time here, the same
 reason <a href="../poisson_nonlinear/#Checking-the-answer">the nonlinear Poisson example</a> does not
-re-run its own convergence sweep a second time either.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../convection_diffusion_linear/">« Convection-diffusion equation</a><a class="docs-footer-nextpage" href="../../benchmarks/">Benchmarks »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Tuesday 8 September 2026 10:40">Tuesday 8 September 2026</span>. Using Julia version 1.14.0-DEV.3140.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+re-run its own convergence sweep a second time either.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../convection_diffusion_linear/">« Convection-diffusion equation</a><a class="docs-footer-nextpage" href="../../benchmarks/">Benchmarks »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Wednesday 9 September 2026 06:48">Wednesday 9 September 2026</span>. Using Julia version 1.14.0-DEV.3145.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

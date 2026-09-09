@@ -13,11 +13,11 @@ rhs(x) = -dαdu(sol(x)) * sol(x)^2 - α(sol(x)) * sol(x)
 Ωₕ = mesh(Ω, 40, false)
 Wₕ = gridspace(Ωₕ)
 
-bcs = dirichlet_constraints(Bramble.set(Ω), :boundary =&gt; sol)
+bcs = dirichlet_constraints(Ω, :boundary =&gt; sol)
 gₕ = element(Wₕ)
 avgₕ!(gₕ, rhs)
 l = form(Wₕ, v -&gt; innerₕ(gₕ, v))
-F = assemble(l; dirichlet_conditions = bcs, dirichlet_labels = :boundary)</code></pre><p>The right-hand side never changes across the iteration — only the diffusion matrix does,
+F = assemble(l; dirichlet = bcs)</code></pre><p>The right-hand side never changes across the iteration — only the diffusion matrix does,
 since only it depends on the current guess for <span>$u$</span>. <code>α</code> is evaluated at the average of the
 previous iterate, <code>M₋ₕ</code>, the standard discretization for a nonlinear flux.</p><h2 id="Fixed-point-(Picard)-iteration"><a class="docs-heading-anchor" href="#Fixed-point-(Picard)-iteration">Fixed-point (Picard) iteration</a><a id="Fixed-point-(Picard)-iteration-1"></a><a class="docs-heading-anchor-permalink" href="#Fixed-point-(Picard)-iteration" title="Permalink"></a></h2><p>Linearize by freezing <span>$\alpha$</span> at the previous iterate, solve, repeat. The <em>pattern</em> of the
 diffusion matrix — which entries are ever nonzero — never changes between iterations, only
@@ -34,9 +34,9 @@ A = allocate_system_matrix(a)
 
 picard_steps = Float64[]
 for it in 1:200
-    assemble!(A, a; dirichlet_labels = :boundary)
+    assemble!(A, a; dirichlet = :boundary)
     unew = A \ F
-    step = maximum(abs, unew .- values(uₙ))
+    step = maximum(abs, unew .- parent(uₙ))
     push!(picard_steps, step)
     uₙ .= unew
     αvals .= α.(M₋ₕ(uₙ))
@@ -46,7 +46,7 @@ length(picard_steps), picard_steps[[1, 2, 3, end]]</code></pre><pre class="docum
 in 9 iterations — still only linear convergence (a roughly constant per-step ratio, not the
 per-step squaring Newton gets below), just a fast-converging instance of it for this
 particular coefficient and mesh.</p><h2 id="Newton&#39;s-method"><a class="docs-heading-anchor" href="#Newton&#39;s-method">Newton&#39;s method</a><a id="Newton&#39;s-method-1"></a><a class="docs-heading-anchor-permalink" href="#Newton&#39;s-method" title="Permalink"></a></h2><p>The residual <span>$R(u) = A(u) u - F$</span> is the same matrix, applied to the vector it was built
-from rather than solved against. Boundary rows come along for free: <code>dirichlet_labels</code>
+from rather than solved against. Boundary rows come along for free: <code>dirichlet</code>
 already replaces them with the identity before the residual ever sees them, so
 <span>$R_i(u) = u_i - u_{\text{exact}}(x_i)$</span> there, and the Jacobian&#39;s boundary rows are the
 identity too, with no separate case to write.</p><p>That Jacobian is sparse — <code>R</code> inherits the same local stencil <code>A</code> itself has, a handful of
@@ -70,7 +70,7 @@ const sparse_ad = AutoSparse(AutoForwardDiff();
 function diffusion_matrix(uₕ)
     αvals_local = α.(M₋ₕ(uₕ))
     a = form(Wₕ, Wₕ, (U, V) -&gt; inner₊(αvals_local * ∇₋ₕ(U), ∇₋ₕ(V)))
-    return assemble(a; dirichlet_labels = :boundary)
+    return assemble(a; dirichlet = :boundary)
 end
 
 function residual(u_vec::AbstractVector{T}) where {T}
@@ -126,7 +126,7 @@ end
 
 cache = Dict()
 diffusion_matrix_cached(uₕ) = type_cached_assemble!(
-    build_diffusion, cache, uₕ; dirichlet_labels = :boundary)
+    build_diffusion, cache, uₕ; dirichlet = :boundary)
 
 function residual_cached(u_vec::AbstractVector{T}) where {T}
     uₕ = element(Wₕ, T)
@@ -220,18 +220,18 @@ function nonlinear_series(D::Int; n0::Int = 5, levels::Int)
     hs, errs = Float64[], Float64[]
     for level in 1:levels
         Wc = gridspace(Ωc)
-        bcs_c = dirichlet_constraints(Bramble.set(Ωd), :boundary =&gt; sol_d)
+        bcs_c = dirichlet_constraints(Ωd, :boundary =&gt; sol_d)
         g_c = element(Wc)
         avgₕ!(g_c, rhs_d)
         l_c = form(Wc, v -&gt; innerₕ(g_c, v))
-        F_c = assemble(l_c; dirichlet_conditions = bcs_c, dirichlet_labels = :boundary)
+        F_c = assemble(l_c; dirichlet = bcs_c)
 
         Ac(uₕ) = begin
             Mu = M₋ₕ(uₕ)
             αv = D == 1 ? α.(Mu) : ntuple(i -&gt; α.(Mu[i]), D)
             grad(U) = D == 1 ? αv * ∇₋ₕ(U) : ntuple(i -&gt; αv[i] * ∇₋ₕ(U)[i], D)
             assemble(form(Wc, Wc, (U, V) -&gt; inner₊(grad(U), ∇₋ₕ(V)));
-                dirichlet_labels = :boundary)
+                dirichlet = :boundary)
         end
         rc(uv::AbstractVector{T}) where {T} = begin
             uₕ = element(Wc, T)
@@ -251,7 +251,7 @@ function nonlinear_series(D::Int; n0::Int = 5, levels::Int)
         uexact_c = Rₕ(Wc, sol_d)
 
         push!(hs, hₘₐₓ(Ωc))
-        push!(errs, norm₁ₕ(element(Wc) .= uc .- values(uexact_c)))
+        push!(errs, norm₁ₕ(element(Wc) .= uc .- parent(uexact_c)))
         level &lt; levels &amp;&amp; iterative_refinement!(Ωc)
     end
     return hs, errs
@@ -267,7 +267,7 @@ hs3, errs3 = nonlinear_series(3; levels = 4)
 order1 = log(errs1[end - 1] / errs1[end]) / log(hs1[end - 1] / hs1[end])
 order2 = log(errs2[end - 1] / errs2[end]) / log(hs2[end - 1] / hs2[end])
 order3 = log(errs3[end - 1] / errs3[end]) / log(hs3[end - 1] / hs3[end])
-(order1, order2, order3)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(1.999940812788034, 1.9959056162191493, 1.921747479306224)</code></pre><pre><code class="language-julia hljs">order1 &gt; 1.9 &amp;&amp; order2 &gt; 1.9 &amp;&amp; order3 &gt; 1.8</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">true</code></pre><script>
+(order1, order2, order3)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(1.999940812788034, 1.9959056148965422, 1.9217474793035954)</code></pre><pre><code class="language-julia hljs">order1 &gt; 1.9 &amp;&amp; order2 &gt; 1.9 &amp;&amp; order3 &gt; 1.8</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">true</code></pre><script>
   // See the module note above: hide `define` from Plotly's UMD wrapper so it attaches
   // `window.Plotly` instead of registering as an anonymous AMD module.
   window.__bramble_amd_define = window.define;
@@ -339,7 +339,7 @@ order3 = log(errs3[end - 1] / errs3[end]) / log(hs3[end - 1] / hs3[end])
 {
   name: "2D",
   x: [0.7281398631056489,0.3640699315528245,0.18203496577641226,0.09101748288820616,0.045508741444103114],
-  y: [0.03359133864316144,0.009210056874124014,0.0023707600024911726,0.0005981775776085746,0.00014996940578284573],
+  y: [0.03359133864316144,0.009210056874124014,0.002370760002494258,0.0005981775775320155,0.00014996940590113772],
   mode: 'markers',
   type: 'scatter',
   marker: { color: "#0E7C86", size: 8 },
@@ -347,7 +347,7 @@ order3 = log(errs3[end - 1] / errs3[end]) / log(hs3[end - 1] / hs3[end])
 {
   name: "3D",
   x: [0.918047411794347,0.4590237058971735,0.22951185294858678,0.1147559264742934],
-  y: [0.04984357792276641,0.022594049568895228,0.006657103524357009,0.0017570401083158841],
+  y: [0.04984357792276641,0.022594049568895228,0.006657103524356484,0.0017570401083189466],
   mode: 'markers',
   type: 'scatter',
   marker: { color: "#B26A00", size: 8 },
@@ -396,4 +396,4 @@ same substitution shown earlier (<code>ast_sparsity_detector(a, U -&gt; M₋ₕ(
 <code>jacobian_pattern</code> flattens whatever <code>M₋ₕ(U)</code> returns — one node in 1D, a <code>D</code>-tuple in
 2D/3D — the same way before taking its reach, so nothing about <code>Ac</code>/<code>grad</code> above needs to
 change to swap it in. Not re-run a second time here only to save the doc build the cost of
-solving the same nine problems twice for an answer already shown identical above.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../poisson_linear/">« Linear Poisson equation</a><a class="docs-footer-nextpage" href="../convection_diffusion_linear/">Convection-diffusion equation »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Tuesday 8 September 2026 10:40">Tuesday 8 September 2026</span>. Using Julia version 1.14.0-DEV.3140.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+solving the same nine problems twice for an answer already shown identical above.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../poisson_linear/">« Linear Poisson equation</a><a class="docs-footer-nextpage" href="../convection_diffusion_linear/">Convection-diffusion equation »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Wednesday 9 September 2026 06:48">Wednesday 9 September 2026</span>. Using Julia version 1.14.0-DEV.3145.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

@@ -15,8 +15,7 @@ B = box(1.5, 0.2)       # [0.2, 1.5]</code></pre><h3 id="1.2-Multi-dimensional-s
 Ω_2d = interval(0.0, 1.0) × interval(0.0, 1.0)
 
 # 3D Cuboid: [-1, 1] × [0, 2] × [0, 0.5]
-Ω_3d = interval(-1.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 0.5)</code></pre><p>Alternatively, you can construct products directly using tuples of interval pairs:</p><pre><code class="language-julia hljs"># Direct tuple construction
-Ω_2d = cartesian_product(((0.0, 1.0), (0.0, 2.0)))</code></pre><hr/><h2 id="2.-Querying-geometric-properties"><a class="docs-heading-anchor" href="#2.-Querying-geometric-properties">2. Querying geometric properties</a><a id="2.-Querying-geometric-properties-1"></a><a class="docs-heading-anchor-permalink" href="#2.-Querying-geometric-properties" title="Permalink"></a></h2><p><code>Bramble.jl</code> provides a type-stable interface for querying geometric properties:</p><pre><code class="language-julia hljs">X = interval(0.0, 2.0) × interval(-1.0, 1.0)
+Ω_3d = interval(-1.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 0.5)</code></pre><hr/><h2 id="2.-Querying-geometric-properties"><a class="docs-heading-anchor" href="#2.-Querying-geometric-properties">2. Querying geometric properties</a><a id="2.-Querying-geometric-properties-1"></a><a class="docs-heading-anchor-permalink" href="#2.-Querying-geometric-properties" title="Permalink"></a></h2><p><code>Bramble.jl</code> provides a type-stable interface for querying geometric properties:</p><pre><code class="language-julia hljs">X = interval(0.0, 2.0) × interval(-1.0, 1.0)
 
 # Spatial embedding dimension (D = 2)
 dim(X)            # 2
@@ -25,9 +24,9 @@ dim(X)            # 2
 topo_dim(X)       # 2
 
 # Interval bounds
-tails(X)          # ((0.0, 2.0), (-1.0, 1.0))
-tails(X, 1)       # (0.0, 2.0)  -- bounds in dimension 1
-tails(X, 2)       # (-1.0, 1.0) -- bounds in dimension 2
+extrema(X)          # ((0.0, 2.0), (-1.0, 1.0))
+extrema(X, 1)       # (0.0, 2.0)  -- bounds in dimension 1
+extrema(X, 2)       # (-1.0, 1.0) -- bounds in dimension 2
 
 # Geometric center
 center(X)         # (1.0, 0.0)
@@ -49,7 +48,7 @@ topo_dim(line_in_2d)  # 1 (topological dimension)
 
 # Check if individual dimensions are collapsed
 line_in_2d.collapsed[1]  # false (x-axis is extended)
-line_in_2d.collapsed[2]  # true  (y-axis is collapsed)</code></pre><hr/><h2 id="4.-Boundary-markers"><a class="docs-heading-anchor" href="#4.-Boundary-markers">4. Boundary markers</a><a id="4.-Boundary-markers-1"></a><a class="docs-heading-anchor-permalink" href="#4.-Boundary-markers" title="Permalink"></a></h2><p>PDE boundary conditions require tagging specific domain boundaries (e.g., Dirichlet, Neumann, Robin, inflow/outflow).</p><h3 id="4.1-Boundary-symbol-conventions"><a class="docs-heading-anchor" href="#4.1-Boundary-symbol-conventions">4.1 Boundary symbol conventions</a><a id="4.1-Boundary-symbol-conventions-1"></a><a class="docs-heading-anchor-permalink" href="#4.1-Boundary-symbol-conventions" title="Permalink"></a></h3><p>For a <span>$D$</span>-dimensional domain, the standard boundary facets are:</p><ul><li><p><strong>1D</strong>: <code>:left</code>, <code>:right</code></p></li><li><p><strong>2D</strong>: <code>:bottom</code>, <code>:top</code>, <code>:left</code>, <code>:right</code></p></li><li><p><strong>3D</strong>: <code>:bottom</code>, <code>:top</code>, <code>:back</code>, <code>:front</code>, <code>:left</code>, <code>:right</code></p></li></ul><p>You can inspect standard boundary symbols using <a href="../../api/#Bramble.get_boundary_symbols"><code>get_boundary_symbols</code></a>:</p><pre><code class="language-julia hljs">get_boundary_symbols(2)
+line_in_2d.collapsed[2]  # true  (y-axis is collapsed)</code></pre><hr/><h2 id="4.-Boundary-markers"><a class="docs-heading-anchor" href="#4.-Boundary-markers">4. Boundary markers</a><a id="4.-Boundary-markers-1"></a><a class="docs-heading-anchor-permalink" href="#4.-Boundary-markers" title="Permalink"></a></h2><p>PDE boundary conditions require tagging specific domain boundaries (e.g., Dirichlet, Neumann, Robin, inflow/outflow).</p><h3 id="4.1-Boundary-symbol-conventions"><a class="docs-heading-anchor" href="#4.1-Boundary-symbol-conventions">4.1 Boundary symbol conventions</a><a id="4.1-Boundary-symbol-conventions-1"></a><a class="docs-heading-anchor-permalink" href="#4.1-Boundary-symbol-conventions" title="Permalink"></a></h3><p>For a <span>$D$</span>-dimensional domain, the standard boundary facets are:</p><ul><li><p><strong>1D</strong>: <code>:left</code>, <code>:right</code></p></li><li><p><strong>2D</strong>: <code>:bottom</code>, <code>:top</code>, <code>:left</code>, <code>:right</code></p></li><li><p><strong>3D</strong>: <code>:bottom</code>, <code>:top</code>, <code>:back</code>, <code>:front</code>, <code>:left</code>, <code>:right</code></p></li></ul><p>You can inspect standard boundary symbols using <a href="../../api/#Bramble.boundary_symbols"><code>boundary_symbols</code></a>:</p><pre><code class="language-julia hljs">boundary_symbols(2)
 # (:bottom, :top, :left, :right)</code></pre><figure>
 <svg viewBox="0 0 780 280" width="100%" style="max-width:780px;height:auto;font-family:system-ui,-apple-system,'Segoe UI',sans-serif"
      xmlns="http://www.w3.org/2000/svg" role="img"
@@ -155,7 +154,7 @@ geom = interval(0.0, 1.0) × interval(0.0, 1.0)
 # Or create a default domain marking all external boundaries as :boundary
 Ω_default = domain(geom)</code></pre><h3 id="5.1-Domain-traits"><a class="docs-heading-anchor" href="#5.1-Domain-traits">5.1 Domain traits</a><a id="5.1-Domain-traits-1"></a><a class="docs-heading-anchor-permalink" href="#5.1-Domain-traits" title="Permalink"></a></h3><p><code>Domain</code> automatically delegates geometric and marker methods directly:</p><pre><code class="language-julia hljs">dim(Ω)            # 2
 topo_dim(Ω)       # 2
-tails(Ω)          # ((0.0, 1.0), (0.0, 1.0))
+extrema(Ω)        # ((0.0, 1.0), (0.0, 1.0))
 center(Ω)         # (0.5, 0.5)
 (0.5, 0.5) ∈ Ω    # true
 Bramble.is_collapsed(Ω)    # false (checks if any dimension is degenerate)
@@ -197,4 +196,4 @@ sink = domain(
 )
 
 println(&quot;3D Domain Center: &quot;, center(sink))
-println(&quot;Active Labels: &quot;, collect(labels(sink)))</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../">« Home</a><a class="docs-footer-nextpage" href="../mesh/">Mesh tutorial »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Tuesday 8 September 2026 10:40">Tuesday 8 September 2026</span>. Using Julia version 1.14.0-DEV.3140.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+println(&quot;Active Labels: &quot;, collect(labels(sink)))</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../">« Home</a><a class="docs-footer-nextpage" href="../mesh/">Mesh tutorial »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Wednesday 9 September 2026 06:48">Wednesday 9 September 2026</span>. Using Julia version 1.14.0-DEV.3145.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
