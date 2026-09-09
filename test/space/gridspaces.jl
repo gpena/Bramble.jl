@@ -425,3 +425,78 @@ end
         end
     end
 end
+
+# Invariants tested (gpena/Bramble.jl#17, #45):
+# 1. Neither grid space had a `show` or `summary` of its own, so both fell through to the
+#    default: `summary(gridspace(...))` was 563 characters of nested type parameters, and
+#    displaying one dumped every weight vector with it.
+# 2. Two-argument `show` is the embeddable one-liner; `MIME"text/plain"` is the detailed
+#    block, and neither may end with a newline.
+# 3. A composite whose leaves are all identical collapses to one `N × …` line; a
+#    heterogeneous one enumerates its leaves, since that is when per-leaf detail informs.
+@testset "Display" begin
+    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (3, 3), (true, true))
+    Wₕ = gridspace(Ωₕ)
+    Vₕ = Wₕ × Wₕ
+    W4 = gridspace(
+        mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 4), (true, true))
+    )
+    Het = Wₕ × W4
+
+    @testset "Scalar space" begin
+        compact = sprint(show, Wₕ)
+        @test compact == "ScalarGridSpace{2D, Float64, 9 dofs}"
+        @test !occursin('\n', compact)
+        @test summary(Wₕ) == compact
+        # The whole point: the default `summary` was 563 characters.
+        @test length(summary(Wₕ)) < 60
+
+        detailed = sprint(show, MIME"text/plain"(), Wₕ)
+        @test occursin("ScalarGridSpace", detailed)
+        @test occursin("Mesh", detailed)
+        @test occursin("MeshnD{2D, 9 pts}", detailed)
+        @test occursin("Dofs", detailed)
+        @test occursin("9", detailed)
+        @test !endswith(detailed, '\n')
+        # No weight vector dumped into the display.
+        @test !occursin("SpaceWeights", detailed)
+    end
+
+    @testset "Composite space, identical leaves collapse" begin
+        compact = sprint(show, Vₕ)
+        @test compact == "CompositeGridSpace{2 components, 18 dofs}"
+        @test !occursin('\n', compact)
+
+        detailed = sprint(show, MIME"text/plain"(), Vₕ)
+        @test occursin("CompositeGridSpace", detailed)
+        @test occursin("2 components", detailed)
+        @test occursin("18 (9 per component)", detailed)
+        @test occursin("2 × ScalarGridSpace{2D, Float64, 9 dofs}", detailed)
+        @test !endswith(detailed, '\n')
+    end
+
+    @testset "Composite space, differing leaves enumerate" begin
+        detailed = sprint(show, MIME"text/plain"(), Het)
+        @test occursin("1: ScalarGridSpace{2D, Float64, 9 dofs}", detailed)
+        @test occursin("2: ScalarGridSpace{2D, Float64, 16 dofs}", detailed)
+        # Not collapsed, since the leaves genuinely differ.
+        @test !occursin("2 × ", detailed)
+        @test !endswith(detailed, '\n')
+    end
+
+    @testset "Grid function" begin
+        uₕ = Rₕ(Wₕ, x -> x[1])
+        compact = sprint(show, uₕ)
+        @test compact == "VectorElement{2D, Float64, 9 dofs}"
+        @test !occursin('\n', compact)
+        @test summary(uₕ) == compact
+        @test length(summary(uₕ)) < 60
+
+        detailed = sprint(show, MIME"text/plain"(), uₕ)
+        @test occursin("VectorElement", detailed)
+        @test occursin("Space", detailed)
+        @test occursin("ScalarGridSpace{2D, Float64, 9 dofs}", detailed)
+        @test occursin("Values", detailed)
+        @test !endswith(detailed, '\n')
+    end
+end

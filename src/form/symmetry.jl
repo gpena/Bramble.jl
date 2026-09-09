@@ -198,3 +198,76 @@ function isposdef(a::BilinearForm)
     trial_space(a) === test_space(a) || return false
     return _is_posdef_term(resolve_form_ast(a))
 end
+
+# --- Display ---------------------------------------------------------------------- #
+#
+# Both form types fell through to Julia's default `show`, which printed the whole resolved
+# AST type -- every operator node and its parameters -- ahead of the spaces, which are
+# what a caller actually wants to check. The integrand is deliberately *not* rendered
+# here: reconstructing it from the AST would need a name for every node type, kept in step
+# with each one added, to restate an expression the caller just wrote.
+#
+# Lives in this file rather than `linear.jl`/`bilinear.jl` because `issymmetric` below is
+# what the detailed bilinear block reports, and it is defined here.
+
+function Base.show(io::IO, l::LinearForm{D}) where {D}
+    print(io, "LinearForm{$(D)D, ", ndofs(test_space(l)), "}")
+    return nothing
+end
+
+function Base.show(io::IO, ::MIME"text/plain", l::LinearForm{D}) where {D}
+    return show_block(io) do io
+        pp = PrettyPrinter(io)
+        Vₕ = test_space(l)
+
+        printstyled(io, "LinearForm"; bold=true, color=:cyan)
+        print(io, " {")
+        printstyled(io, "$(D)D"; color=:yellow)
+        print(io, ", ")
+        printstyled(io, "$(eltype(Vₕ))"; color=:yellow)
+        println(io, "}:")
+
+        pp_indented = with_indent(pp, 1)
+        print_key_value(pp_indented, "Test space", sprint(show, Vₕ); separator=": ")
+        return print_key_value(pp_indented, "Vector", string(ndofs(Vₕ)); separator=": ")
+    end
+end
+
+function Base.show(io::IO, a::BilinearForm{D}) where {D}
+    print(io, "BilinearForm{$(D)D, ", ndofs(test_space(a)), "×", ndofs(trial_space(a)), "}")
+    return nothing
+end
+
+function Base.show(io::IO, ::MIME"text/plain", a::BilinearForm{D}) where {D}
+    return show_block(io) do io
+        pp = PrettyPrinter(io)
+        Uₕ = trial_space(a)
+        Vₕ = test_space(a)
+
+        printstyled(io, "BilinearForm"; bold=true, color=:cyan)
+        print(io, " {")
+        printstyled(io, "$(D)D"; color=:yellow)
+        print(io, ", ")
+        printstyled(io, "$(eltype(Vₕ))"; color=:yellow)
+        println(io, "}:")
+
+        pp_indented = with_indent(pp, 1)
+        print_key_value(pp_indented, "Trial space", sprint(show, Uₕ); separator=": ")
+
+        # `(same as trial)` rather than repeating the line: trial === test is the
+        # overwhelmingly common case, and the interesting information is which of the two
+        # it is.
+        test_text = if Uₕ === Vₕ
+            sprint(show, Vₕ) * "  (same as trial)"
+        else
+            sprint(show, Vₕ)
+        end
+        print_key_value(pp_indented, "Test space", test_text; separator=": ")
+        print_key_value(
+            pp_indented, "Matrix", "$(ndofs(Vₕ)) × $(ndofs(Uₕ))"; separator=": "
+        )
+        return print_key_value(
+            pp_indented, "Symmetric", issymmetric(a) ? "yes" : "no"; separator=": "
+        )
+    end
+end

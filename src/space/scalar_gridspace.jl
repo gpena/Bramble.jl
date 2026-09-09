@@ -359,3 +359,36 @@ function __innerplus_weights!(policy, v, innerplus_per_component)
     f = Base.Fix1(__prod, innerplus_per_component)
     return _cpu_threaded_for!(policy, v, idxs, f)
 end
+
+# --- Display ---------------------------------------------------------------------- #
+#
+# Neither grid space nor grid function had a `show` or `summary` method at all, so both
+# fell through to Julia's default: `summary(gridspace(...))` was 563 characters of nested
+# type parameters, and displaying one dumped every weight vector alongside it
+# (gpena/Bramble.jl#17). Two-argument `show` is the embeddable one-liner;
+# `MIME"text/plain"` is the detailed block (gpena/Bramble.jl#45).
+
+function Base.show(io::IO, Wₕ::ScalarGridSpace{D,T}) where {D,T}
+    print(io, "ScalarGridSpace{$(D)D, $T, ", ndofs(Wₕ), " dofs}")
+    return nothing
+end
+
+function Base.show(io::IO, ::MIME"text/plain", Wₕ::ScalarGridSpace{D,T}) where {D,T}
+    return show_block(io) do io
+        pp = PrettyPrinter(io)
+        printstyled(io, "ScalarGridSpace"; bold=true, color=:cyan)
+        print(io, " {")
+        printstyled(io, "$(D)D"; color=:yellow)
+        print(io, ", ")
+        printstyled(io, "$T"; color=:yellow)
+        println(io, "}:")
+
+        pp_indented = with_indent(pp, 1)
+        print_key_value(pp_indented, "Mesh", sprint(show, mesh(Wₕ)); separator=": ")
+        return print_key_value(pp_indented, "Dofs", string(ndofs(Wₕ)); separator=": ")
+    end
+end
+
+# `summary` is what an array of grid functions prints in its header and what `Base.show`
+# for an `AbstractArray` reaches for; the default spelled out every type parameter.
+Base.summary(Wₕ::ScalarGridSpace) = sprint(show, Wₕ)

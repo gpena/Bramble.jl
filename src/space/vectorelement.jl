@@ -341,3 +341,42 @@ _find_vec_in_broadcast(::Any, rest) = _find_vec_in_broadcast(rest) # Keep search
 
 @inline Base.:*(Vₕ::NTuple{D,VectorElement}, a::Number) where {D} = a * Vₕ
 @inline Base.:*(Vₕ::NTuple{D,VectorElement}, uₕ::VectorElement) where {D} = uₕ * Vₕ
+
+# --- Display ---------------------------------------------------------------------- #
+#
+# `VectorElement` is an `AbstractVector`, so without a `summary` of its own it inherited
+# the default one: 615 characters of nested type parameters in the header above its values
+# (gpena/Bramble.jl#17).
+
+function Base.show(io::IO, uₕ::VectorElement)
+    print(
+        io,
+        "VectorElement{$(dim(space(uₕ)))D, $(eltype(uₕ)), ",
+        length(parent(uₕ)),
+        " dofs}",
+    )
+    return nothing
+end
+
+function Base.show(io::IO, ::MIME"text/plain", uₕ::VectorElement)
+    return show_block(io) do io
+        pp = PrettyPrinter(io)
+        printstyled(io, "VectorElement"; bold=true, color=:cyan)
+        print(io, " {")
+        printstyled(io, "$(dim(space(uₕ)))D"; color=:yellow)
+        print(io, ", ")
+        printstyled(io, "$(eltype(uₕ))"; color=:yellow)
+        println(io, "}:")
+
+        pp_indented = with_indent(pp, 1)
+        print_key_value(pp_indented, "Space", sprint(show, space(uₕ)); separator=": ")
+        # The values themselves, through the backing array's own display, which already
+        # abbreviates a long vector rather than printing every entry.
+        print_indent(pp_indented)
+        printstyled(io, "Values"; color=:green)
+        print(io, ": ")
+        return print(IOContext(io, :compact => true, :limit => true), parent(uₕ))
+    end
+end
+
+Base.summary(uₕ::VectorElement) = sprint(show, uₕ)

@@ -214,3 +214,57 @@ The number of scalar spaces underneath `Wₕ`, counting through any nesting.
 """
 @inline n_leaf_spaces(::ScalarGridSpace) = 1
 @inline n_leaf_spaces(Wₕ::CompositeGridSpace) = sum(n_leaf_spaces, Wₕ.spaces)
+
+# --- Display ---------------------------------------------------------------------- #
+
+function Base.show(io::IO, Wₕ::CompositeGridSpace{N}) where {N}
+    print(
+        io,
+        "CompositeGridSpace{",
+        N,
+        " component",
+        N == 1 ? "" : "s",
+        ", ",
+        ndofs(Wₕ),
+        " dofs}",
+    )
+    return nothing
+end
+
+function Base.show(io::IO, ::MIME"text/plain", Wₕ::CompositeGridSpace{N}) where {N}
+    return show_block(io) do io
+        pp = PrettyPrinter(io)
+        printstyled(io, "CompositeGridSpace"; bold=true, color=:cyan)
+        print(io, " {")
+        printstyled(io, "$N component$(N == 1 ? "" : "s")"; color=:yellow)
+        print(io, ", ")
+        printstyled(io, "$(dim(Wₕ))D"; color=:yellow)
+        print(io, ", ")
+        printstyled(io, "$(eltype(Wₕ))"; color=:yellow)
+        println(io, "}:")
+
+        pp_indented = with_indent(pp, 1)
+        leaves = map(s -> sprint(show, s), Wₕ.spaces)
+
+        # Identical leaves collapse to one line: a stack of copies of one space is the
+        # common case, and repeating the same line N times carries no information. Only a
+        # genuinely heterogeneous composite (leaves over different meshes) is enumerated.
+        if allequal(leaves)
+            per = ndofs(first(Wₕ.spaces))
+            print_key_value(
+                pp_indented, "Dofs", "$(ndofs(Wₕ)) ($per per component)"; separator=": "
+            )
+            print_key_value(
+                pp_indented, "Components", "$N × $(first(leaves))"; separator=": "
+            )
+        else
+            print_key_value(pp_indented, "Dofs", string(ndofs(Wₕ)); separator=": ")
+            pp_double = with_indent(pp, 2)
+            for (i, leaf) in enumerate(leaves)
+                print_key_value(pp_double, string(i), leaf; separator=": ")
+            end
+        end
+    end
+end
+
+Base.summary(Wₕ::CompositeGridSpace) = sprint(show, Wₕ)

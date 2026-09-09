@@ -1,17 +1,22 @@
 # Pretty printing utilities for geometry types
 
 """
-    PrettyPrinter(io::IO, compact::Bool, indent_level::Int)
+    PrettyPrinter(io::IO, indent_level::Int)
 
 Helper struct managing visual formatting, indentation, and styled console output.
+
+Carries no `compact` flag: compact versus detailed is decided by *which* `show` method the
+caller reached — two-argument `show` for the embeddable one-liner, `MIME"text/plain"` for
+the detailed block — rather than by a runtime flag every renderer had to branch on
+(gpena/Bramble.jl#45). A `PrettyPrinter` is therefore only ever built inside a detailed
+renderer.
 """
 struct PrettyPrinter
     io::IO
-    compact::Bool
     indent_level::Int
 end
 
-@inline PrettyPrinter(io::IO) = PrettyPrinter(io, get(io, :compact, false), 0)
+@inline PrettyPrinter(io::IO) = PrettyPrinter(io, 0)
 
 """
     with_indent(pp::PrettyPrinter, levels::Int = 1) -> PrettyPrinter
@@ -19,7 +24,7 @@ end
 Return a new `PrettyPrinter` instance with indentation increased by `levels`.
 """
 @inline with_indent(pp::PrettyPrinter, levels::Int=1) =
-    PrettyPrinter(pp.io, pp.compact, pp.indent_level + levels)
+    PrettyPrinter(pp.io, pp.indent_level + levels)
 
 """
     print_indent(pp::PrettyPrinter)
@@ -222,14 +227,30 @@ function print_labels_list(pp::PrettyPrinter, labels; prefix="Labels: ")
 end
 
 """
-    remove_trailing_newline(io::IO)
+    show_block(f, io::IO)
 
-Trim trailing newline from an `IOBuffer`.
+Render a detailed (`MIME"text/plain"`) block and print it to `io` without its trailing
+newline.
+
+`f(inner)` writes to `inner`, an `IO` carrying `io`'s own `:color` and `:compact`
+settings, so `printstyled` still emits styling. The buffered text is printed with one
+trailing newline removed: `display` supplies the final newline itself, and a renderer
+emitting its own leaves a blank line behind (gpena/Bramble.jl#46).
+
+Replaces an earlier `remove_trailing_newline(io)` that rewrote the caller's stream in
+place and silently did nothing unless `io` happened to be a bare `IOBuffer` — which at the
+REPL, and inside array display, it never is. Buffering into a stream this function owns is
+what makes the trim actually happen.
 """
-function remove_trailing_newline(io::IO)
-    io isa IOBuffer || return nothing
-    s = String(take!(io))
-    return print(io, endswith(s, '\n') ? chop(s) : s)
+function show_block(f, io::IO)
+    buf = IOBuffer()
+    inner = IOContext(
+        buf, :color => get(io, :color, false), :compact => get(io, :compact, false)
+    )
+    f(inner)
+    s = String(take!(buf))
+    print(io, endswith(s, '\n') ? chop(s) : s)
+    return nothing
 end
 
 # Statically preallocated coordinate dimension names to eliminate runtime allocation

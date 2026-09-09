@@ -256,35 +256,43 @@ Query whether point `x` is contained in the closed set `X`.
 end
 @inline Base.in(x, X::CartesianProduct) = false
 
-function Base.show(io::IO, X::CartesianProduct{D,T}) where {D,T}
-    pp = PrettyPrinter(io)
-
-    if pp.compact
-        if D == 1
-            collapsed = X.collapsed[1]
-            if collapsed
-                print(io, "Point(", X.box[1][1], ")")
-            else
-                print(io, "[", X.box[1][1], ", ", X.box[1][2], "]")
-            end
+# The two-argument `show` is Julia's compact, embeddable form: what appears inside an
+# array, in `"$X"`, and wherever the value is part of something else. It stays a single
+# line with no type name of its own — the array header already carries the type, and
+# `mesh/pretty_print.jl` embeds this same rendering inside a mesh's own display, where a
+# repeated `CartesianProduct{…}` would be noise (gpena/Bramble.jl#45).
+function Base.show(io::IO, X::CartesianProduct{D}) where {D}
+    if D == 1
+        if X.collapsed[1]
+            print(io, "Point(", X.box[1][1], ")")
         else
-            for i in 1:D
-                i > 1 && print(io, " × ")
-                if X.collapsed[i]
-                    print(io, X.box[i][1])
-                else
-                    print(io, "[", X.box[i][1], ", ", X.box[i][2], "]")
-                end
-            end
+            print(io, "[", X.box[1][1], ", ", X.box[1][2], "]")
         end
     else
+        for i in 1:D
+            i > 1 && print(io, " × ")
+            if X.collapsed[i]
+                print(io, X.box[i][1])
+            else
+                print(io, "[", X.box[i][1], ", ", X.box[i][2], "]")
+            end
+        end
+    end
+end
+
+# `MIME"text/plain"` is the detailed, multi-line form: what the REPL shows for a value
+# displayed on its own. `show_block` strips the trailing newline the line helpers emit,
+# since `display` adds the final one itself (gpena/Bramble.jl#46).
+function Base.show(io::IO, ::MIME"text/plain", X::CartesianProduct{D,T}) where {D,T}
+    return show_block(io) do io
+        pp = PrettyPrinter(io)
         topodim = topo_dim(X)
 
+        print_colored(pp, "CartesianProduct{$D,$T}"; bold=true, color=:cyan)
+
         if D == 1
-            collapsed = X.collapsed[1]
-            print_colored(pp, "CartesianProduct{$D,$T}"; bold=true, color=:cyan)
             print(io, ": ")
-            if collapsed
+            if X.collapsed[1]
                 print_colored(pp, "Point"; color=:yellow)
                 print(io, " at ")
                 print_value(pp, X.box[1][1])
@@ -294,7 +302,6 @@ function Base.show(io::IO, X::CartesianProduct{D,T}) where {D,T}
                 print_interval(pp, X.box[1][1], X.box[1][2])
             end
         else
-            print_colored(pp, "CartesianProduct{$D,$T}"; bold=true, color=:cyan)
             if topodim < D
                 print_colored(pp, " (topological dim $topodim)"; color=:yellow)
             end
@@ -307,8 +314,6 @@ function Base.show(io::IO, X::CartesianProduct{D,T}) where {D,T}
                     pp_indented, label, X.box[i][1], X.box[i][2], X.collapsed[i]
                 )
             end
-
-            remove_trailing_newline(io)
         end
     end
 end

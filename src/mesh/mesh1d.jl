@@ -512,16 +512,20 @@ end
 
 Custom display for `Mesh1D` objects with detailed mesh summary, domain information, and markers.
 """
-function Base.show(io::IO, Ωₕ::Mesh1D{BT,CI,VT,T}) where {BT,CI,VT,T}
+function Base.show(io::IO, Ωₕ::Mesh1D)
+    print(io, "Mesh1D{", npoints(Ωₕ), " pts}")
+    return nothing
+end
+
+function Base.show(io::IO, ::MIME"text/plain", Ωₕ::Mesh1D{BT,CI,VT,T}) where {BT,CI,VT,T}
+    return show_block(io) do io
+        return _show_mesh1d_detailed(io, Ωₕ)
+    end
+end
+
+function _show_mesh1d_detailed(io::IO, Ωₕ::Mesh1D{BT,CI,VT,T}) where {BT,CI,VT,T}
     pp = PrettyPrinter(io)
 
-    if pp.compact
-        # Compact display for arrays/collections
-        print(io, "Mesh1D{", npoints(Ωₕ), " pts}")
-        return nothing
-    end
-
-    # Detailed display
     n_pts = npoints(Ωₕ)
     topodim = topo_dim(Ωₕ)
     collapsed = is_collapsed(Ωₕ)
@@ -543,7 +547,5 @@ function Base.show(io::IO, Ωₕ::Mesh1D{BT,CI,VT,T}) where {BT,CI,VT,T}
 
     # Markers information
     print_mesh_markers(pp, markers(Ωₕ))
-
-    # Remove trailing newline
-    return remove_trailing_newline(io)
+    return nothing
 end

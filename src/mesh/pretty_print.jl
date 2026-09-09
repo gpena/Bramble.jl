@@ -56,9 +56,11 @@ Print the domain information for a mesh.
 function print_mesh_domain_info(pp::PrettyPrinter, set::CartesianProduct)
     print_indent(pp)
     printstyled(pp.io, "Domain: "; color=:light_black)
-    # Reuse the CartesianProduct compact `show`, which already renders
-    # `[a, b] × [c, d]` and collapses degenerate axes to a single value.
-    show(IOContext(pp.io, :compact => true), set)
+    # The two-argument `show` is the embeddable one-liner, which already renders
+    # `[a, b] × [c, d]` and collapses degenerate axes to a single value. No `:compact`
+    # context needed to ask for it any more: it is the only thing this method does
+    # (gpena/Bramble.jl#45).
+    show(pp.io, set)
     return println(pp.io)
 end
 

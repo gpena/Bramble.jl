@@ -105,8 +105,11 @@ function _pc_mesh_session(Ω, npts, unif, be, label::Symbol)
     end
 
     Ωₕ[idx]
+    # Both display paths: the embeddable one-liner and the detailed `MIME"text/plain"`
+    # block, which are now separate methods rather than one flag-switched body
+    # (gpena/Bramble.jl#45).
     sprint(show, Ωₕ)
-    sprint(show, Ωₕ; context=:compact => true)
+    sprint(show, MIME"text/plain"(), Ωₕ)
 
     return Ωₕ
 end

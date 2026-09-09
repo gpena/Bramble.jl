@@ -350,38 +350,52 @@ end
         R2 = I × interval(2.0, 3.0)
         R2_collapsed = I × point(3.0)
 
-        # Compact display mode
+        # The compact, embeddable form is the two-argument `show` -- no `:compact`
+        # context needed to ask for it, and none available to opt out of it
+        # (gpena/Bramble.jl#45).
         io_compact = IOBuffer()
-        show(IOContext(io_compact, :compact => true), I)
+        show(io_compact, I)
         @test occursin("[0.0, 1.0]", String(take!(io_compact)))
 
-        show(IOContext(io_compact, :compact => true), P)
+        show(io_compact, P)
         @test occursin("Point(2.5)", String(take!(io_compact)))
 
-        show(IOContext(io_compact, :compact => true), R2)
+        show(io_compact, R2)
         @test occursin("[0.0, 1.0] × [2.0, 3.0]", String(take!(io_compact)))
 
-        show(IOContext(io_compact, :compact => true), R2_collapsed)
+        show(io_compact, R2_collapsed)
         @test occursin("[0.0, 1.0] × 3.0", String(take!(io_compact)))
 
-        # Detailed multiline display mode
+        # It stays a single line wherever it lands, which is the point: a multi-line
+        # block used to nest inside array display and string interpolation.
+        @test !occursin('\n', sprint(show, R2))
+        @test !occursin('\n', "$R2")
+        @test count('\n', sprint(show, MIME"text/plain"(), [R2, R2])) == 2
+
+        # The detailed multi-line form is `MIME"text/plain"`.
         io_det = IOBuffer()
-        show(io_det, I)
+        show(io_det, MIME"text/plain"(), I)
         str_I = String(take!(io_det))
         @test occursin("CartesianProduct{1,Float64}", str_I)
         @test occursin("Interval", str_I)
 
-        show(io_det, P)
+        show(io_det, MIME"text/plain"(), P)
         str_P = String(take!(io_det))
         @test occursin("Point", str_P)
 
-        show(io_det, R2)
+        show(io_det, MIME"text/plain"(), R2)
         str_R2 = String(take!(io_det))
         @test occursin("CartesianProduct{2,Float64}", str_R2)
 
-        show(io_det, R2_collapsed)
+        show(io_det, MIME"text/plain"(), R2_collapsed)
         str_R2c = String(take!(io_det))
         @test occursin("topological dim 1", str_R2c)
+
+        # No detailed renderer ends with a newline: `display` supplies the final one, and
+        # emitting our own left a stray blank line (gpena/Bramble.jl#46).
+        for X in (I, P, R2, R2_collapsed)
+            @test !endswith(sprint(show, MIME"text/plain"(), X), '\n')
+        end
     end
 
     # Invariants tested:
@@ -435,7 +449,10 @@ end
             get_dimension_label
 
         io = IOBuffer()
-        pp0 = PrettyPrinter(io, false, 0)
+        # Two fields, not three: the `compact` flag is gone, since compact versus
+        # detailed is now decided by which `show` method the caller reached
+        # (gpena/Bramble.jl#45).
+        pp0 = PrettyPrinter(io, 0)
         pp1 = with_indent(pp0, 1)
         pp2 = with_indent(pp0, 2)
 

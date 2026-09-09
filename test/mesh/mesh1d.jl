@@ -426,16 +426,19 @@ import Base: diff
         end
 
         @testset "Pretty printing" begin
+            # Detailed is `MIME"text/plain"`, compact is the two-argument `show`
+            # (gpena/Bramble.jl#45).
             buf = IOBuffer()
-            show(buf, Ωₕ)
+            show(buf, MIME"text/plain"(), Ωₕ)
             str = String(take!(buf))
             @test occursin("Mesh1D", str)
             @test occursin("5 points", str)
+            @test !endswith(str, '\n')
 
-            # Compact
-            show(IOContext(buf, :compact => true), Ωₕ)
+            show(buf, Ωₕ)
             str_c = String(take!(buf))
             @test occursin("Mesh1D{5 pts}", str_c)
+            @test !occursin('\n', str_c)
         end
 
         @testset "Convenience constructors" begin

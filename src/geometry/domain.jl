@@ -273,78 +273,87 @@ end
 @inline boundary_symbols(::Type{<:Domain{SetType}}) where {SetType} =
     boundary_symbols(SetType)
 
+# The compact, embeddable form (gpena/Bramble.jl#45). It used to read
+# `Domain{2D, Float64}:` -- a trailing colon promising content that never followed it,
+# which is what `"$Ω"` and array display actually showed. The colon is gone and the marker
+# count, the thing a `Domain` carries that its underlying set does not, is named instead.
 function Base.show(io::IO, Ω::Domain)
-    pp = PrettyPrinter(io)
+    # Counted from the three marker collections rather than `length(labels(Ω))`: `labels`
+    # returns a lazy `Iterators.Flatten`, which has no length.
+    n = length(symbols(Ω)) + length(tuples(Ω)) + length(conditions(Ω))
+    print(io, "Domain{$(dim(Ω))D, $(eltype(Ω))}(")
+    show(io, set(Ω))
+    print(io, ", ", n, " marker", n == 1 ? "" : "s", ")")
+    return nothing
+end
 
-    if pp.compact
-        print(io, "Domain{$(dim(Ω))D, $(eltype(Ω))}:")
-    else
-        X = set(Ω)
-        dm = markers(Ω)
-
-        printstyled(io, "Domain"; bold=true, color=:cyan)
-        print(io, " {")
-        printstyled(io, "$(dim(Ω))D"; color=:yellow)
-        print(io, ", ")
-        printstyled(io, "$(eltype(Ω))"; color=:yellow)
-        println(io, "}:")
-
-        println(io)
-        pp_indented = with_indent(pp, 1)
-        print_section_header(pp_indented, "Set:")
-
-        D = dim(X)
-        topodim = topo_dim(X)
-        pp_double_indent = with_indent(pp, 2)
-
-        if D == 1
-            collapsed = X.collapsed[1]
-            print(io, "    ")
-            if collapsed
-                print_colored(pp, "Point"; color=:yellow)
-                print(io, " at ")
-                print_value(pp, X.box[1][1])
-            else
-                print_colored(pp, "Interval"; color=:yellow)
-                print(io, " ")
-                print_interval(pp, X.box[1][1], X.box[1][2])
-            end
-            println(io)
-        else
-            if topodim < D
-                print(io, "    ")
-                print_colored(pp, "Topological dimension: $topodim"; color=:yellow)
-                println(io)
-            end
-
-            for i in 1:D
-                label = get_dimension_label(i)
-                print_dimension_info(
-                    pp_double_indent, label, X.box[i][1], X.box[i][2], X.collapsed[i]
-                )
-            end
-        end
-
-        println(io)
-        print_section_header(pp_indented, "Markers:")
-
-        n_sym = length(symbols(Ω))
-        n_tup = length(tuples(Ω))
-        n_cond = length(conditions(Ω))
-        total = n_sym + n_tup + n_cond
-
-        if total == 0
-            print(io, "    ")
-            print_empty_message(pp, "(none)")
-            println(io)
-        else
-            print_marker_summary(with_indent(pp, 2), n_sym, n_tup, n_cond)
-
-            print(io, "    ")
-            print_labels_list(pp, collect(labels(Ω)))
-            println(io)
-        end
-
-        remove_trailing_newline(io)
+function Base.show(io::IO, ::MIME"text/plain", Ω::Domain)
+    return show_block(io) do io
+        return _show_domain_detailed(io, Ω)
     end
+end
+
+function _show_domain_detailed(io::IO, Ω::Domain)
+    pp = PrettyPrinter(io)
+    X = set(Ω)
+
+    printstyled(io, "Domain"; bold=true, color=:cyan)
+    print(io, " {")
+    printstyled(io, "$(dim(Ω))D"; color=:yellow)
+    print(io, ", ")
+    printstyled(io, "$(eltype(Ω))"; color=:yellow)
+    println(io, "}:")
+
+    println(io)
+    pp_indented = with_indent(pp, 1)
+    print_section_header(pp_indented, "Set:")
+
+    D = dim(X)
+    topodim = topo_dim(X)
+    pp_double_indent = with_indent(pp, 2)
+
+    if D == 1
+        print(io, "    ")
+        if X.collapsed[1]
+            print_colored(pp, "Point"; color=:yellow)
+            print(io, " at ")
+            print_value(pp, X.box[1][1])
+        else
+            print_colored(pp, "Interval"; color=:yellow)
+            print(io, " ")
+            print_interval(pp, X.box[1][1], X.box[1][2])
+        end
+        println(io)
+    else
+        if topodim < D
+            print(io, "    ")
+            print_colored(pp, "Topological dimension: $topodim"; color=:yellow)
+            println(io)
+        end
+
+        for i in 1:D
+            label = get_dimension_label(i)
+            print_dimension_info(
+                pp_double_indent, label, X.box[i][1], X.box[i][2], X.collapsed[i]
+            )
+        end
+    end
+
+    println(io)
+    print_section_header(pp_indented, "Markers:")
+
+    n_sym = length(symbols(Ω))
+    n_tup = length(tuples(Ω))
+    n_cond = length(conditions(Ω))
+
+    if n_sym + n_tup + n_cond == 0
+        print(io, "    ")
+        print_empty_message(pp, "(none)")
+    else
+        print_marker_summary(with_indent(pp, 2), n_sym, n_tup, n_cond)
+
+        print(io, "    ")
+        print_labels_list(pp, collect(labels(Ω)))
+    end
+    return nothing
 end

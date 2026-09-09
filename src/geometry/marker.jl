@@ -282,16 +282,20 @@ function Base.show(io::IO, m::Marker{F}) where {F}
 end
 
 function Base.show(io::IO, dm::DomainMarkers)
-    pp = PrettyPrinter(io)
+    total = length(dm.symbols) + length(dm.tuples) + length(dm.conditions)
+    print(io, "DomainMarkers($total total)")
+    return nothing
+end
 
-    n_sym = length(dm.symbols)
-    n_tup = length(dm.tuples)
-    n_cond = length(dm.conditions)
-    total = n_sym + n_tup + n_cond
+function Base.show(io::IO, ::MIME"text/plain", dm::DomainMarkers)
+    return show_block(io) do io
+        pp = PrettyPrinter(io)
 
-    if pp.compact
-        print(io, "DomainMarkers($total total)")
-    else
+        n_sym = length(dm.symbols)
+        n_tup = length(dm.tuples)
+        n_cond = length(dm.conditions)
+        total = n_sym + n_tup + n_cond
+
         if total == 0
             print_empty_message(pp, "DomainMarkers: (empty)")
             return nothing
@@ -337,8 +341,6 @@ function Base.show(io::IO, dm::DomainMarkers)
                 println(io)
             end
         end
-
-        remove_trailing_newline(io)
     end
 end
 

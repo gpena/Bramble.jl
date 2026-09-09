@@ -297,17 +297,22 @@ end
 
 Custom display for `MeshnD` objects with detailed mesh summary, domain information, and markers.
 """
-function Base.show(io::IO, Ωₕ::MeshnD{D,BT,CI,SM,T}) where {D,BT,CI,SM,T}
+function Base.show(io::IO, Ωₕ::MeshnD{D}) where {D}
+    print(io, "MeshnD{$(D)D, ", npoints(Ωₕ), " pts}")
+    return nothing
+end
+
+function Base.show(
+    io::IO, ::MIME"text/plain", Ωₕ::MeshnD{D,BT,CI,SM,T}
+) where {D,BT,CI,SM,T}
+    return show_block(io) do io
+        return _show_meshnd_detailed(io, Ωₕ)
+    end
+end
+
+function _show_meshnd_detailed(io::IO, Ωₕ::MeshnD{D,BT,CI,SM,T}) where {D,BT,CI,SM,T}
     pp = PrettyPrinter(io)
 
-    if pp.compact
-        # Compact display for arrays/collections
-        npts_tuple = npoints(Ωₕ, Tuple)
-        print(io, "MeshnD{$(D)D, ", prod(npts_tuple), " pts}")
-        return nothing
-    end
-
-    # Detailed display
     npts_tuple = npoints(Ωₕ, Tuple)
     n_total = npoints(Ωₕ)
     topodim = topo_dim(Ωₕ)
@@ -333,7 +338,5 @@ function Base.show(io::IO, Ωₕ::MeshnD{D,BT,CI,SM,T}) where {D,BT,CI,SM,T}
 
     # Markers information
     print_mesh_markers(pp, markers(Ωₕ))
-
-    # Remove trailing newline
-    return remove_trailing_newline(io)
+    return nothing
 end

@@ -367,10 +367,11 @@ end
         @test occursin("Marker(:corner => (", repr(m_t))
         @test occursin("Marker(:level => <function>)", repr(m_f))
 
-        # DomainMarkers detailed display.
+        # DomainMarkers detailed display, which is `MIME"text/plain"`
+        # (gpena/Bramble.jl#45).
         dm = markers(I1D, :left => :left, :right => (:top, :bottom), :fn => func1)
         io = IOBuffer()
-        show(io, dm)
+        show(io, MIME"text/plain"(), dm)
         str_dm = String(take!(io))
         @test occursin("DomainMarkers:", str_dm)
         @test occursin("Symbol markers", str_dm)
@@ -378,48 +379,61 @@ end
         @test occursin("Function markers", str_dm)
 
         # DomainMarkers compact and empty display.
-        show(IOContext(io, :compact => true), dm)
+        show(io, dm)
         @test occursin("DomainMarkers(3 total)", String(take!(io)))
 
-        show(io, markers(I1D))
+        show(io, MIME"text/plain"(), markers(I1D))
         @test occursin("(empty)", String(take!(io)))
 
         # Domain detailed and compact display.
         Ω_1d = domain(I1D)
-        show(io, Ω_1d)
+        show(io, MIME"text/plain"(), Ω_1d)
         str_d1 = String(take!(io))
         @test occursin("Domain", str_d1)
         @test occursin("Set:", str_d1)
         @test occursin("Markers:", str_d1)
 
-        show(IOContext(io, :compact => true), Ω_1d)
-        @test occursin("Domain{1D, Float64}:", String(take!(io)))
+        # The compact form used to be a bare `Domain{1D, Float64}:` -- a trailing colon
+        # promising content that never followed, which is what interpolation and array
+        # display actually showed. It now names the set and the marker count, on one line.
+        show(io, Ω_1d)
+        str_c1 = String(take!(io))
+        @test occursin("Domain{1D, Float64}(", str_c1)
+        @test occursin("[0.0, 1.0]", str_c1)
+        @test occursin("marker", str_c1)
+        @test !occursin("}:", str_c1)
+        @test !occursin('\n', str_c1)
 
         # 2D domain with empty markers.
         Ω_empty = domain(I2D, markers(I2D))
-        show(io, Ω_empty)
+        show(io, MIME"text/plain"(), Ω_empty)
         str_d_empty = String(take!(io))
         @test occursin("(none)", str_d_empty)
 
         # 2D domain with markers (covers tuple markers branch).
         Ω_2d = domain(I2D, :wall => (:top, :bottom))
-        show(io, Ω_2d)
+        show(io, MIME"text/plain"(), Ω_2d)
         str_2d = String(take!(io))
         @test occursin("Domain", str_2d)
         @test occursin("Markers:", str_2d)
 
         # 3D domain (covers D > 1 coordinate formatting).
         Ω_3d = domain(I3D, :dirichlet => :left)
-        show(io, Ω_3d)
+        show(io, MIME"text/plain"(), Ω_3d)
         str_3d = String(take!(io))
         @test occursin("z:", str_3d)
 
         # 3D domain with collapsed dimension (topological dimension < D).
         I3D_c = interval(0.0, 1.0) × interval(0.0, 1.0) × point(0.5)
         Ω_3d_c = domain(I3D_c)
-        show(io, Ω_3d_c)
+        show(io, MIME"text/plain"(), Ω_3d_c)
         str_3d_c = String(take!(io))
         @test occursin("Topological dimension", str_3d_c)
+
+        # Neither detailed renderer ends with a newline (gpena/Bramble.jl#46).
+        for x in (dm, markers(I1D), Ω_1d, Ω_empty, Ω_2d, Ω_3d, Ω_3d_c)
+            @test !endswith(sprint(show, MIME"text/plain"(), x), '\n')
+        end
     end
 
     # Invariant: `Domain` forwards geometric property queries (`center`, `in`,
@@ -562,13 +576,17 @@ end
 
     # Invariant: A domain wrapping a degenerate interval displays as a Point rather than Interval.
     @testset "Collapsed set display formatting" begin
-        out = sprint(show, domain(interval(3.0, 3.0)))
+        out = sprint(show, MIME"text/plain"(), domain(interval(3.0, 3.0)))
         @test occursin("Point", out)
         @test occursin("3.0", out)
         @test !occursin("Interval", out)
 
-        out2 = sprint(show, domain(interval(0.0, 1.0)))
+        out2 = sprint(show, MIME"text/plain"(), domain(interval(0.0, 1.0)))
         @test occursin("Interval", out2)
         @test !occursin("Point", out2)
+
+        # The compact form collapses a degenerate axis to the bare value, so a point
+        # domain names no interval either.
+        @test occursin("Point(3.0)", sprint(show, domain(interval(3.0, 3.0))))
     end
 end

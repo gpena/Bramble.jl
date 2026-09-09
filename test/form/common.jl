@@ -325,3 +325,77 @@ end
         end
     end
 end
+
+# Invariants tested (gpena/Bramble.jl#45): both form types fell through to Julia's default
+# `show`, which printed the whole resolved AST type -- every operator node and its
+# parameters -- ahead of the spaces, which are what a caller actually wants to read back.
+# The integrand is deliberately not rendered: reconstructing it would need a name for
+# every node type, kept in step with each one added, to restate an expression the caller
+# just wrote.
+@testset "Form display" begin
+    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (3, 3), (true, true))
+    Wₕ = gridspace(Ωₕ)
+    W4 = gridspace(
+        mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 4), (true, true))
+    )
+    uₕ = Rₕ(Wₕ, x -> x[1])
+
+    sym = form(Wₕ, Wₕ, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)) + innerₕ(u, v))
+    asym = form(Wₕ, Wₕ, (u, v) -> inner₊(u, D₋ₓ(v)))
+    l = form(Wₕ, v -> innerₕ(uₕ, v))
+
+    @testset "LinearForm" begin
+        compact = sprint(show, l)
+        @test compact == "LinearForm{2D, 9}"
+        @test !occursin('\n', compact)
+
+        detailed = sprint(show, MIME"text/plain"(), l)
+        @test occursin("LinearForm", detailed)
+        @test occursin("Test space", detailed)
+        @test occursin("ScalarGridSpace{2D, Float64, 9 dofs}", detailed)
+        @test occursin("Vector", detailed)
+        @test !endswith(detailed, '\n')
+        # The AST type is what the default `show` used to print; it must not appear.
+        @test !occursin("LinearProduct", detailed)
+        @test !occursin("InnerH", detailed)
+    end
+
+    @testset "BilinearForm" begin
+        compact = sprint(show, sym)
+        @test compact == "BilinearForm{2D, 9×9}"
+        @test !occursin('\n', compact)
+
+        detailed = sprint(show, MIME"text/plain"(), sym)
+        @test occursin("BilinearForm", detailed)
+        @test occursin("Trial space", detailed)
+        @test occursin("Test space", detailed)
+        @test occursin("9 × 9", detailed)
+        @test !endswith(detailed, '\n')
+        @test !occursin("BilinearProduct", detailed)
+        @test !occursin("OperatorAdd", detailed)
+    end
+
+    @testset "Symmetry is reported from the existing structural check" begin
+        @test occursin("Symmetric: yes", sprint(show, MIME"text/plain"(), sym))
+        @test occursin("Symmetric: no", sprint(show, MIME"text/plain"(), asym))
+        # Whatever the display says must be what `issymmetric` says.
+        for a in (sym, asym)
+            expected = issymmetric(a) ? "Symmetric: yes" : "Symmetric: no"
+            @test occursin(expected, sprint(show, MIME"text/plain"(), a))
+        end
+    end
+
+    @testset "Distinct trial and test spaces are named separately" begin
+        mixed = form(Wₕ, W4, (u, v) -> innerₕ(u, v))
+        detailed = sprint(show, MIME"text/plain"(), mixed)
+        @test occursin("9 dofs", detailed)
+        @test occursin("16 dofs", detailed)
+        # `(same as trial)` is only for a form whose two spaces really are one object.
+        @test !occursin("same as trial", detailed)
+        @test occursin("same as trial", sprint(show, MIME"text/plain"(), sym))
+
+        # Rows are indexed by the test function, columns by the trial one, so the matrix
+        # shape reads test × trial.
+        @test sprint(show, mixed) == "BilinearForm{2D, 16×9}"
+    end
+end
