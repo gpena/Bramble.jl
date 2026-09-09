@@ -105,6 +105,59 @@ end
     RegionRestriction{D,typeof(markers),typeof(prod)}(markers, prod)
 end
 
+#=
+Every public spelling below differs from its neighbours in exactly two ways: which weight
+the product carries, and how a bare left operand becomes a source node. The weight is
+already a type -- `InnerH`, `InnerPlus{Dim}` -- and already the second parameter of the node
+being built, so it is passed as its own singleton rather than encoded a second time in a
+function name and then hand-written once per name (gpena/Bramble.jl#58).
+
+`_product` decides linear-versus-bilinear; `_inner` adds the marker restriction on top.
+`_linear_source` wraps a `Function`/`Number`/`VectorElement` left operand and is always
+linear, since a bare source is never a trial function; `_inner_source` adds the restriction.
+Each pair is split that way because the tuple forms fold several terms and have to restrict
+the sum once rather than each term separately.
+=#
+
+# A source on the left makes the product linear; anything else makes it bilinear.
+@inline function _product(
+    ::W, left::LazyOp{D}, right::LazyOp{D}
+) where {W<:AbstractInnerProduct,D}
+    return if _is_source_only(left)
+        LinearProduct{D,W,typeof(left),typeof(right)}(left, right)
+    else
+        BilinearProduct{D,W,typeof(left),typeof(right)}(left, right)
+    end
+end
+
+@inline _inner(w::AbstractInnerProduct, left::LazyOp, right::LazyOp, markers) =
+    _restrict_by_markers(_product(w, left, right), markers)
+
+# `parent` is Julia's own name for the storage a VectorElement delegates to; see
+# `src/space/vectorelement.jl`.
+@inline _as_source(l::Function, ::Val{D}) where {D} = SourceFunction{D,typeof(l)}(l)
+@inline _as_source(l::Number, ::Val{D}) where {D} = source_number(l, Val(D))
+@inline _as_source(l::VectorElement, ::Val{D}) where {D} =
+    SourceVector{D,typeof(parent(l))}(parent(l))
+
+@inline function _linear_source(::W, l, r::LazyOp{D}) where {W<:AbstractInnerProduct,D}
+    sf = _as_source(l, Val(D))
+    return LinearProduct{D,W,typeof(sf),typeof(r)}(sf, r)
+end
+
+@inline _inner_source(w::AbstractInnerProduct, l, r::LazyOp, markers) =
+    _restrict_by_markers(_linear_source(w, l, r), markers)
+
+# One directional source term per dimension, summed, with the sum restricted once. `Val(D)`
+# is what keeps `dim` a compile-time literal, so `InnerPlus{dim}` stays a type instead of
+# becoming a runtime value -- the same reason the folds below were written with `ntuple`.
+@inline function _inner_source_tuple(l, r::NTuple{D,LazyOp{D}}, markers) where {D}
+    terms = ntuple(Val(D)) do dim
+        _linear_source(InnerPlus{dim}(), l[dim], r[dim])
+    end
+    return _restrict_by_markers(foldl(+, terms), markers)
+end
+
 """
     inner_plus(left::NTuple{D, LazyOp{D}}, right::NTuple{D, LazyOp{D}}; markers = ()) -> LazyOp{D}
 
@@ -120,15 +173,7 @@ function inner_plus(
     markers::NTuple{N,Symbol}=NTuple{0,Symbol}(),
 ) where {D,N}
     terms = ntuple(Val(D)) do dim
-        if _is_source_only(left[dim])
-            LinearProduct{D,InnerPlus{dim},typeof(left[dim]),typeof(right[dim])}(
-                left[dim], right[dim]
-            )
-        else
-            BilinearProduct{D,InnerPlus{dim},typeof(left[dim]),typeof(right[dim])}(
-                left[dim], right[dim]
-            )
-        end
+        return _product(InnerPlus{dim}(), left[dim], right[dim])
     end
     return _restrict_by_markers(foldl(+, terms), markers)
 end
@@ -154,12 +199,7 @@ which grid points it contributes to at all.
 function innerₕ(
     left::LazyOp{D}, right::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
 ) where {D,N}
-    prod = if _is_source_only(left)
-        LinearProduct{D,InnerH,typeof(left),typeof(right)}(left, right)
-    else
-        BilinearProduct{D,InnerH,typeof(left),typeof(right)}(left, right)
-    end
-    return _restrict_by_markers(prod, markers)
+    return _inner(InnerH(), left, right, markers)
 end
 
 # There is deliberately no `innerₕ` over gradient tuples. `inner₊` has one because its
@@ -208,12 +248,7 @@ function inner₊(
     right::BackwardDifference{D,Dim};
     markers::NTuple{N,Symbol}=NTuple{0,Symbol}(),
 ) where {D,Dim,N}
-    prod = if _is_source_only(left)
-        LinearProduct{D,InnerPlus{Dim},typeof(left),typeof(right)}(left, right)
-    else
-        BilinearProduct{D,InnerPlus{Dim},typeof(left),typeof(right)}(left, right)
-    end
-    return _restrict_by_markers(prod, markers)
+    return _inner(InnerPlus{Dim}(), left, right, markers)
 end
 
 """
@@ -241,12 +276,7 @@ end
 # them for D=1 -- confirmed by trying it first and watching precompilation fail on exactly
 # that call shape.
 function _inner₊_same_dim(::Val{1}, left, right, markers::NTuple{N,Symbol}) where {N}
-    prod = if _is_source_only(left)
-        LinearProduct{1,InnerPlus{1},typeof(left),typeof(right)}(left, right)
-    else
-        BilinearProduct{1,InnerPlus{1},typeof(left),typeof(right)}(left, right)
-    end
-    return _restrict_by_markers(prod, markers)
+    return _inner(InnerPlus{1}(), left, right, markers)
 end
 
 function _inner₊_same_dim(::Val{D}, left, right, markers::NTuple{N,Symbol}) where {D,N}
@@ -289,24 +319,14 @@ function inner₊(
     right::BackwardDifference{D,Dim};
     markers::NTuple{N,Symbol}=NTuple{0,Symbol}(),
 ) where {D,Dim,N}
-    prod = if _is_source_only(left)
-        LinearProduct{D,InnerPlus{Dim},typeof(left),typeof(right)}(left, right)
-    else
-        BilinearProduct{D,InnerPlus{Dim},typeof(left),typeof(right)}(left, right)
-    end
-    return _restrict_by_markers(prod, markers)
+    return _inner(InnerPlus{Dim}(), left, right, markers)
 end
 function inner₊(
     left::BackwardDifference{D,Dim},
     right::LazyOp{D};
     markers::NTuple{N,Symbol}=NTuple{0,Symbol}(),
 ) where {D,Dim,N}
-    prod = if _is_source_only(left)
-        LinearProduct{D,InnerPlus{Dim},typeof(left),typeof(right)}(left, right)
-    else
-        BilinearProduct{D,InnerPlus{Dim},typeof(left),typeof(right)}(left, right)
-    end
-    return _restrict_by_markers(prod, markers)
+    return _inner(InnerPlus{Dim}(), left, right, markers)
 end
 
 """
@@ -374,32 +394,17 @@ otherwise, exactly as [`innerₕ`](@ref) decides.
 function inner₊ₓ(
     left::LazyOp{D}, right::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
 ) where {D,N}
-    prod = if _is_source_only(left)
-        LinearProduct{D,InnerPlus{1},typeof(left),typeof(right)}(left, right)
-    else
-        BilinearProduct{D,InnerPlus{1},typeof(left),typeof(right)}(left, right)
-    end
-    return _restrict_by_markers(prod, markers)
+    return _inner(InnerPlus{1}(), left, right, markers)
 end
 function inner₊ᵧ(
     left::LazyOp{D}, right::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
 ) where {D,N}
-    prod = if _is_source_only(left)
-        LinearProduct{D,InnerPlus{2},typeof(left),typeof(right)}(left, right)
-    else
-        BilinearProduct{D,InnerPlus{2},typeof(left),typeof(right)}(left, right)
-    end
-    return _restrict_by_markers(prod, markers)
+    return _inner(InnerPlus{2}(), left, right, markers)
 end
 function inner₊₂(
     left::LazyOp{D}, right::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
 ) where {D,N}
-    prod = if _is_source_only(left)
-        LinearProduct{D,InnerPlus{3},typeof(left),typeof(right)}(left, right)
-    else
-        BilinearProduct{D,InnerPlus{3},typeof(left),typeof(right)}(left, right)
-    end
-    return _restrict_by_markers(prod, markers)
+    return _inner(InnerPlus{3}(), left, right, markers)
 end
 
 @inline function source_number(l::Number, ::Val{D}) where {D}
@@ -412,59 +417,33 @@ end
 function innerₕ(
     l::Function, r::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
 ) where {D,N}
-    return _restrict_by_markers(
-        LinearProduct{D,InnerH,SourceFunction{D,typeof(l)},typeof(r)}(
-            SourceFunction{D,typeof(l)}(l), r
-        ),
-        markers,
-    )
+    return _inner_source(InnerH(), l, r, markers)
 end
 function innerₕ(
     l::Number, r::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
 ) where {D,N}
-    sf = source_number(l, Val(D))
-    return _restrict_by_markers(
-        LinearProduct{D,InnerH,typeof(sf),typeof(r)}(sf, r), markers
-    )
+    return _inner_source(InnerH(), l, r, markers)
 end
 function innerₕ(
     l::VectorElement, r::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
 ) where {D,N}
-    return _restrict_by_markers(
-        LinearProduct{D,InnerH,SourceVector{D,typeof(l.data)},typeof(r)}(
-            SourceVector{D,typeof(l.data)}(l.data), r
-        ),
-        markers,
-    )
+    return _inner_source(InnerH(), l, r, markers)
 end
 
 function inner₊(
     l::Function, r::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
 ) where {D,N}
-    return _restrict_by_markers(
-        LinearProduct{D,InnerPlus{1},SourceFunction{D,typeof(l)},typeof(r)}(
-            SourceFunction{D,typeof(l)}(l), r
-        ),
-        markers,
-    )
+    return _inner_source(InnerPlus{1}(), l, r, markers)
 end
 function inner₊(
     l::Number, r::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
 ) where {D,N}
-    sf = source_number(l, Val(D))
-    return _restrict_by_markers(
-        LinearProduct{D,InnerPlus{1},typeof(sf),typeof(r)}(sf, r), markers
-    )
+    return _inner_source(InnerPlus{1}(), l, r, markers)
 end
 function inner₊(
     l::VectorElement, r::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
 ) where {D,N}
-    return _restrict_by_markers(
-        LinearProduct{D,InnerPlus{1},SourceVector{D,typeof(l.data)},typeof(r)}(
-            SourceVector{D,typeof(l.data)}(l.data), r
-        ),
-        markers,
-    )
+    return _inner_source(InnerPlus{1}(), l, r, markers)
 end
 
 function inner₊(
@@ -472,38 +451,14 @@ function inner₊(
     r::NTuple{D,LazyOp{D}};
     markers::NTuple{N,Symbol}=NTuple{0,Symbol}(),
 ) where {D,N}
-    return _restrict_by_markers(
-        foldl(
-            +,
-            ntuple(
-                dim -> LinearProduct{
-                    D,InnerPlus{dim},SourceFunction{D,typeof(l[dim])},typeof(r[dim])
-                }(
-                    SourceFunction{D,typeof(l[dim])}(l[dim]), r[dim]
-                ),
-                Val(D),
-            ),
-        ),
-        markers,
-    )
+    return _inner_source_tuple(l, r, markers)
 end
 function inner₊(
     l::NTuple{D,Number},
     r::NTuple{D,LazyOp{D}};
     markers::NTuple{N,Symbol}=NTuple{0,Symbol}(),
 ) where {D,N}
-    return _restrict_by_markers(
-        foldl(
-            +,
-            ntuple(
-                dim -> let sf = source_number(l[dim], Val(D))
-                    LinearProduct{D,InnerPlus{dim},typeof(sf),typeof(r[dim])}(sf, r[dim])
-                end,
-                Val(D),
-            ),
-        ),
-        markers,
-    )
+    return _inner_source_tuple(l, r, markers)
 end
 @inline function inner₊(
     l::NTuple{D,VectorElement},
@@ -511,14 +466,7 @@ end
     markers::NTuple{N,Symbol}=NTuple{0,Symbol}(),
 ) where {D,N}
     if all(is_symbolic, r)
-        terms = ntuple(Val(D)) do dim
-            LinearProduct{
-                D,InnerPlus{dim},SourceVector{D,typeof(parent(l[dim]))},typeof(r[dim])
-            }(
-                SourceVector{D,typeof(parent(l[dim]))}(parent(l[dim])), r[dim]
-            )
-        end
-        return _restrict_by_markers(foldl(+, terms), markers)
+        return _inner_source_tuple(l, r, markers)
     else
         return _inner₊_numeric_tuple_unsupported(r)
     end
@@ -542,88 +490,49 @@ end
 function inner₊ₓ(
     l::Function, r::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
 ) where {D,N}
-    return _restrict_by_markers(
-        LinearProduct{D,InnerPlus{1},SourceFunction{D,typeof(l)},typeof(r)}(
-            SourceFunction{D,typeof(l)}(l), r
-        ),
-        markers,
-    )
+    return _inner_source(InnerPlus{1}(), l, r, markers)
 end
 function inner₊ᵧ(
     l::Function, r::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
 ) where {D,N}
-    return _restrict_by_markers(
-        LinearProduct{D,InnerPlus{2},SourceFunction{D,typeof(l)},typeof(r)}(
-            SourceFunction{D,typeof(l)}(l), r
-        ),
-        markers,
-    )
+    return _inner_source(InnerPlus{2}(), l, r, markers)
 end
 function inner₊₂(
     l::Function, r::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
 ) where {D,N}
-    return _restrict_by_markers(
-        LinearProduct{D,InnerPlus{3},SourceFunction{D,typeof(l)},typeof(r)}(
-            SourceFunction{D,typeof(l)}(l), r
-        ),
-        markers,
-    )
+    return _inner_source(InnerPlus{3}(), l, r, markers)
 end
 
 function inner₊ₓ(
     l::Number, r::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
 ) where {D,N}
-    sf = source_number(l, Val(D))
-    return _restrict_by_markers(
-        LinearProduct{D,InnerPlus{1},typeof(sf),typeof(r)}(sf, r), markers
-    )
+    return _inner_source(InnerPlus{1}(), l, r, markers)
 end
 function inner₊ᵧ(
     l::Number, r::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
 ) where {D,N}
-    sf = source_number(l, Val(D))
-    return _restrict_by_markers(
-        LinearProduct{D,InnerPlus{2},typeof(sf),typeof(r)}(sf, r), markers
-    )
+    return _inner_source(InnerPlus{2}(), l, r, markers)
 end
 function inner₊₂(
     l::Number, r::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
 ) where {D,N}
-    sf = source_number(l, Val(D))
-    return _restrict_by_markers(
-        LinearProduct{D,InnerPlus{3},typeof(sf),typeof(r)}(sf, r), markers
-    )
+    return _inner_source(InnerPlus{3}(), l, r, markers)
 end
 
 function inner₊ₓ(
     l::VectorElement, r::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
 ) where {D,N}
-    return _restrict_by_markers(
-        LinearProduct{D,InnerPlus{1},SourceVector{D,typeof(l.data)},typeof(r)}(
-            SourceVector{D,typeof(l.data)}(l.data), r
-        ),
-        markers,
-    )
+    return _inner_source(InnerPlus{1}(), l, r, markers)
 end
 function inner₊ᵧ(
     l::VectorElement, r::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
 ) where {D,N}
-    return _restrict_by_markers(
-        LinearProduct{D,InnerPlus{2},SourceVector{D,typeof(l.data)},typeof(r)}(
-            SourceVector{D,typeof(l.data)}(l.data), r
-        ),
-        markers,
-    )
+    return _inner_source(InnerPlus{2}(), l, r, markers)
 end
 function inner₊₂(
     l::VectorElement, r::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
 ) where {D,N}
-    return _restrict_by_markers(
-        LinearProduct{D,InnerPlus{3},SourceVector{D,typeof(l.data)},typeof(r)}(
-            SourceVector{D,typeof(l.data)}(l.data), r
-        ),
-        markers,
-    )
+    return _inner_source(InnerPlus{3}(), l, r, markers)
 end
 
 # ==============================================================================
