@@ -1,5 +1,17 @@
 # inner.jl
 # Contains all inner product traits and logic for Bramble lazy AST
+#
+# `inner₊` and `innerₕ` mean something different here than they do in
+# `src/space/inner_product.jl`. Here they take operators and build an **AST node**; there
+# they take grid functions and compute a **number**. CONTEXT.md draws that line at the
+# domain level: a form is symbolic, a grid function is data.
+#
+# What keeps the two families from colliding is the `NTuple{N,<:Tuple}` restriction on the
+# tuple overload below — a tuple of grid functions is not a tuple of tuples, so it cannot
+# reach this file's method. Widen it, or add a `VectorElement`-shaped overload here, and
+# the collision is real. The constraint is asserted in `test/form/inner_products.jl`,
+# testset "Symbolic and numeric families stay apart" (gpena/Bramble.jl#60), rather than
+# living only in the comment on that overload.
 
 # ==============================================================================
 # Struct Definitions
@@ -332,7 +344,9 @@ which dispatches to the existing `inner₊(::NTuple{D,LazyOp}, ::NTuple{D,LazyOp
 
 This overload is intentionally restricted to `NTuple{N,<:Tuple}` so it does **not**
 interfere with `inner₊(NTuple{D,VectorElement}, NTuple{D,VectorElement})` handled by
-the `@generated` method in `inner_product.jl`.
+the `@generated` method in `inner_product.jl`. That restriction is what separates this
+file's symbolic family from that file's numeric one; it is asserted in
+`test/form/inner_products.jl`, testset "Symbolic and numeric families stay apart".
 
 `markers` restricts the whole sum, not each component separately, as it does for
 [`innerₕ`](@ref).

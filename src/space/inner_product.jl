@@ -18,6 +18,20 @@ tuple with one grid function per direction: the gradient ∇₋ₕ(uₕ) is exac
 shape. In one dimension a one-tuple and the grid function coincide, so the scalar
 form is accepted there.
 
+`inner₊` and `innerₕ` are each spelled twice in this package, and the two meanings do not
+live in the same layer. Here they take grid functions and return a **number**. In
+`src/form/operators/inner.jl` they take operators and return an **AST node** for a form to
+be assembled from. CONTEXT.md draws that line at the domain level: a form is symbolic, a
+grid function is data.
+
+The two families are kept from colliding by the `NTuple{N,<:Tuple}` restriction on the
+symbolic tuple overload — a tuple of grid functions is not a tuple of tuples, so it cannot
+reach the symbolic method, and the `@generated` methods below stay reachable. Widen either
+side and the collision is real. The constraint is asserted in
+`test/form/inner_products.jl`, testset "Symbolic and numeric families stay apart"
+(gpena/Bramble.jl#60), so a change to either signature fails a test rather than silently
+returning the wrong kind of thing.
+
 A composite grid function is deliberately not accepted by either. It is a stack of
 scalar functions with no single weighting of its own, and summing over its
 components is a choice the caller should make explicitly rather than have inferred.

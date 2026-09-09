@@ -157,6 +157,38 @@ using Bramble:
         @test_throws ArgumentError inner₊((), ())
     end
 
+    @testset "Symbolic and numeric families stay apart" begin
+        # `inner₊` names two different things. Given grid functions it computes a number
+        # (`src/space/inner_product.jl`); given operators it builds an AST node
+        # (`src/form/operators/inner.jl`). Neither file says so from where a reader of it
+        # is standing, and what keeps the two families from colliding is the
+        # `NTuple{N,<:Tuple}` restriction on the symbolic tuple overload — recorded until
+        # now only in a comment inside one of the two files (gpena/Bramble.jl#60).
+        #
+        # These assert the *resolution* rather than the result, so widening either
+        # signature fails here instead of silently returning the wrong kind of thing.
+        # `which` is checked by file rather than by line, which moves.
+        numeric_file(T) = basename(String(which(inner₊, T).file))
+
+        @test numeric_file(Tuple{typeof(uₕ),typeof(uₕ)}) == "inner_product.jl"
+        @test numeric_file(Tuple{typeof((uₕ, uₕ)),typeof((uₕ, uₕ))}) == "inner_product.jl"
+
+        grads = map(∇₋ₕ, (IndexedTrialFunction{2}(1), IndexedTrialFunction{2}(2)))
+        @test numeric_file(Tuple{typeof(∇₋ₕ(u)),typeof(∇₋ₕ(v))}) == "inner.jl"
+        @test numeric_file(Tuple{typeof(grads),typeof(grads)}) == "inner.jl"
+
+        # The restriction itself: a tuple of grid functions is not a tuple of tuples, and
+        # that is the only reason the symbolic tuple overload does not swallow the numeric
+        # one. Widen it to `NTuple{N,Any}` and both of these flip.
+        @test !(typeof((uₕ, uₕ)) <: NTuple{2,<:Tuple})
+        @test typeof(grads) <: NTuple{2,<:Tuple}
+
+        # And the two families really do return different kinds of thing, which is what
+        # makes a mis-resolution worth catching.
+        @test inner₊(uₕ, uₕ) isa Real
+        @test inner₊(∇₋ₕ(u), ∇₋ₕ(v)) isa LazyOp
+    end
+
     @testset "Non-symbolic tuple refusal" begin
         # This branch used to read `first(l).values`, where a VectorElement stores `data`,
         # and call `inner₊!`, which no revision of the package defines (two names that
