@@ -103,40 +103,27 @@ D₊₂(op::LazyOp{D}) where {D} = ForwardDifference{D,3,typeof(op)}(op)
 # Zero-Allocation Stencil Evaluators
 # ==============================================================================
 
-@inline function local_stencil(
-    op::BackwardDifference{D,Dim}, space, I::CartesianIndex{D}, markers, lin_idx::Int
+# Taps and weights, consumed by the one `local_stencil` in `form/stencil_eval.jl` and --
+# the point of declaring them -- by `stencil_offsets` in `form/stencil_pattern.jl`, which
+# used to spell the same reach out a second time (gpena/Bramble.jl#70).
+@inline _stencil_taps(::BackwardDifference) = (Val(0), Val(-1))
+@inline _stencil_taps(::ForwardDifference) = (Val(1), Val(0))
+
+@inline function _stencil_weights(
+    op::BackwardDifference{D,Dim}, space, I::CartesianIndex{D}
 ) where {D,Dim}
-    inner = local_stencil(op.inner_op, space, I, markers, lin_idx)
-    m = mesh(space)
-    h = get_spacing(m, I, Dim)
-
+    h = get_spacing(mesh(space), I, Dim)
     mask = I[Dim] == 1 ? 0 : 1
-    t1 = scale_stencil(inner, mask / h)
-
-    inner_shifted = shifted_inner_stencil(
-        op.inner_op, inner, space, I, markers, Val(Dim), Val(-1)
-    )
-    t2 = scale_stencil(inner_shifted, -mask / h)
-
-    return concatenate_stencils(t1, t2)
+    return (mask / h, -mask / h)
 end
 
-@inline function local_stencil(
-    op::ForwardDifference{D,Dim}, space, I::CartesianIndex{D}, markers, lin_idx::Int
+@inline function _stencil_weights(
+    op::ForwardDifference{D,Dim}, space, I::CartesianIndex{D}
 ) where {D,Dim}
-    inner = local_stencil(op.inner_op, space, I, markers, lin_idx)
     m = mesh(space)
-    dims = npoints(m, Tuple)
     h = get_forward_spacing(m, I, Dim)
-
-    mask = I[Dim] == dims[Dim] ? 0 : 1
-    inner_shifted = shifted_inner_stencil(
-        op.inner_op, inner, space, I, markers, Val(Dim), Val(1)
-    )
-    t1 = scale_stencil(inner_shifted, mask / h)
-    t2 = scale_stencil(inner, -mask / h)
-
-    return concatenate_stencils(t1, t2)
+    mask = I[Dim] == npoints(m, Tuple)[Dim] ? 0 : 1
+    return (mask / h, -mask / h)
 end
 
 # ==============================================================================
@@ -295,42 +282,27 @@ end
 
 # --- Stencils --------------------------------------------------------------------- #
 
-@inline function local_stencil(
-    op::CenteredDifference{D,Dim}, space, I::CartesianIndex{D}, markers, lin_idx::Int
+@inline _stencil_taps(::CenteredDifference) = (Val(1), Val(-1))
+@inline _stencil_taps(::StarDifference) = (Val(1), Val(0))
+
+@inline function _stencil_weights(
+    op::CenteredDifference{D,Dim}, space, I::CartesianIndex{D}
 ) where {D,Dim}
-    inner = local_stencil(op.inner_op, space, I, markers, lin_idx)
     m = mesh(space)
-    dims = npoints(m, Tuple)
-
     # no neighbour on one side at either end
-    mask = (I[Dim] == 1 || I[Dim] == dims[Dim]) ? 0 : 1
+    mask = (I[Dim] == 1 || I[Dim] == npoints(m, Tuple)[Dim]) ? 0 : 1
     c = mask / (get_spacing(m, I, Dim) + get_forward_spacing(m, I, Dim))
-
-    forward = scale_stencil(
-        shifted_inner_stencil(op.inner_op, inner, space, I, markers, Val(Dim), Val(1)), c
-    )
-    backward = scale_stencil(
-        shifted_inner_stencil(op.inner_op, inner, space, I, markers, Val(Dim), Val(-1)), -c
-    )
-    return concatenate_stencils(forward, backward)
+    return (c, -c)
 end
 
-@inline function local_stencil(
-    op::StarDifference{D,Dim}, space, I::CartesianIndex{D}, markers, lin_idx::Int
+@inline function _stencil_weights(
+    op::StarDifference{D,Dim}, space, I::CartesianIndex{D}
 ) where {D,Dim}
-    inner = local_stencil(op.inner_op, space, I, markers, lin_idx)
     m = mesh(space)
-    dims = npoints(m, Tuple)
-
-    mask = I[Dim] == dims[Dim] ? 0 : 1
+    mask = I[Dim] == npoints(m, Tuple)[Dim] ? 0 : 1
     # the averaged spacing, which is what the starred difference divides by
     c = 2 * mask / (get_spacing(m, I, Dim) + get_forward_spacing(m, I, Dim))
-
-    forward = scale_stencil(
-        shifted_inner_stencil(op.inner_op, inner, space, I, markers, Val(Dim), Val(1)), c
-    )
-    here = scale_stencil(inner, -c)
-    return concatenate_stencils(forward, here)
+    return (c, -c)
 end
 
 # Expanding the definition over the two one-sided differences gives a three-point stencil.
@@ -340,29 +312,20 @@ end
 #
 # which is where the two coefficients below come from: `a` is the weight of the forward
 # neighbour and `b` the magnitude of the backward one.
-@inline function local_stencil(
-    op::CrossWeightedDifference{D,Dim}, space, I::CartesianIndex{D}, markers, lin_idx::Int
-) where {D,Dim}
-    inner = local_stencil(op.inner_op, space, I, markers, lin_idx)
-    m = mesh(space)
-    dims = npoints(m, Tuple)
+@inline _stencil_taps(::CrossWeightedDifference) = (Val(1), Val(0), Val(-1))
 
-    mask = (I[Dim] == 1 || I[Dim] == dims[Dim]) ? 0 : 1
+@inline function _stencil_weights(
+    op::CrossWeightedDifference{D,Dim}, space, I::CartesianIndex{D}
+) where {D,Dim}
+    m = mesh(space)
+    mask = (I[Dim] == 1 || I[Dim] == npoints(m, Tuple)[Dim]) ? 0 : 1
     h = get_spacing(m, I, Dim)
     hf = get_forward_spacing(m, I, Dim)
     total = h + hf
 
     a = mask * h / (total * hf)
     b = mask * hf / (total * h)
-
-    forward = scale_stencil(
-        shifted_inner_stencil(op.inner_op, inner, space, I, markers, Val(Dim), Val(1)), a
-    )
-    here = scale_stencil(inner, b - a)
-    backward = scale_stencil(
-        shifted_inner_stencil(op.inner_op, inner, space, I, markers, Val(Dim), Val(-1)), -b
-    )
-    return concatenate_stencils(concatenate_stencils(forward, here), backward)
+    return (a, b - a, -b)
 end
 
 # --- Traits ----------------------------------------------------------------------- #

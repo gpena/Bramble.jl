@@ -4,6 +4,87 @@
 # 1. Zero-Allocation Stencil Evaluators
 # ==============================================================================
 
+#=
+The three-tap template (gpena/Bramble.jl#70).
+
+Every difference, average and jump node evaluates to the same shape: ordered taps drawn
+from {+1, 0, -1}, each the inner operator's stencil either as-is (tap 0) or relabelled to a
+neighbour, scaled by a per-node weight and concatenated in order. Eight bodies wrote that
+out; a node now declares `_stencil_taps` and `_stencil_weights` in its own file and this is
+the only evaluator.
+
+Two properties this has to preserve, both load-bearing:
+
+  - **Taps are a compile-time ordered tuple.** They are `Val`s so `_tap_stencil` can
+    dispatch the tap-0 case away from the shifted one -- `shifted_inner_stencil` needs its
+    delta as a type. A node declares exactly its own taps and no padding: a zero-weight tap
+    added to make shapes uniform would widen `stencil_offsets`, which sizes the sparsity
+    pattern and the parallel colouring strides.
+  - **Concatenation order is entry-for-entry what it was.** `concatenate_stencils` is
+    `(left..., right...)`, so folding right-to-left gives the same flat order the
+    hand-written left-nested calls did.
+
+`stencil_offsets` (`form/stencil_pattern.jl`) now reads the same `_stencil_taps`, so a
+node's reach and its stencil cannot disagree -- they used to be spelled out twice.
+=#
+
+# One tap. Tap 0 is the inner stencil itself; any other is the inner stencil relabelled to
+# that neighbour, which is exactly what `shifted_inner_stencil` decides by trait.
+@inline _tap_stencil(op, inner, space, I, markers, ::Val{Dim}, ::Val{0}, w) where {Dim} =
+    scale_stencil(inner, w)
+
+@inline _tap_stencil(
+    op, inner, space, I, markers, ::Val{Dim}, ::Val{Delta}, w
+) where {Dim,Delta} = scale_stencil(
+    shifted_inner_stencil(op.inner_op, inner, space, I, markers, Val(Dim), Val(Delta)),
+    w,
+)
+
+# Recursion rather than a `foldl`, so the tuple length is consumed at compile time and the
+# stencil tuple type stays concrete through every step.
+@inline _fold_taps(op, inner, space, I, markers, vdim, taps::Tuple{Any}, ws::Tuple{Any}) =
+    _tap_stencil(op, inner, space, I, markers, vdim, taps[1], ws[1])
+
+@inline _fold_taps(op, inner, space, I, markers, vdim, taps::Tuple, ws::Tuple) =
+    concatenate_stencils(
+        _tap_stencil(op, inner, space, I, markers, vdim, taps[1], ws[1]),
+        _fold_taps(op, inner, space, I, markers, vdim, Base.tail(taps), Base.tail(ws)),
+    )
+
+"""
+    TappedNode{D, Dim}
+
+The nodes whose stencil is ordered taps from {+1, 0, -1} along `Dim` with per-node weights:
+the one-sided and extended differences, the two averages, and the jump. `ShiftNode` is not
+one of them -- it relabels its child's whole stencil rather than combining taps.
+"""
+const TappedNode{D,Dim} = Union{
+    BackwardDifference{D,Dim},
+    ForwardDifference{D,Dim},
+    CenteredDifference{D,Dim},
+    StarDifference{D,Dim},
+    CrossWeightedDifference{D,Dim},
+    BackwardAverage{D,Dim},
+    ForwardAverage{D,Dim},
+    JumpNode{D,Dim},
+}
+
+@inline function local_stencil(
+    op::TappedNode{D,Dim}, space, I::CartesianIndex{D}, markers, lin_idx::Int
+) where {D,Dim}
+    inner = local_stencil(op.inner_op, space, I, markers, lin_idx)
+    return _fold_taps(
+        op,
+        inner,
+        space,
+        I,
+        markers,
+        Val(Dim),
+        _stencil_taps(op),
+        _stencil_weights(op, space, I),
+    )
+end
+
 @inline local_stencil(
     ::TrialFunction{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int
 ) where {D} = ((zero_offset(Val(D)), 1),)

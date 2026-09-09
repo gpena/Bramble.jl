@@ -47,21 +47,14 @@ in 1D, or a `NTuple{D, JumpNode}` in higher dimensions.
 jumpₕ(op::LazyOp{1}) = jumpₓ(op)
 jumpₕ(op::LazyOp{D}) where {D} = ntuple(dim -> JumpNode{D,dim,typeof(op)}(op), Val(D))
 
-@inline function local_stencil(
-    op::JumpNode{D,Dim}, space, I::CartesianIndex{D}, markers, lin_idx::Int
+# only the forward term goes; the local one stays, which is the -uₙ convention
+@inline _stencil_taps(::JumpNode) = (Val(1), Val(0))
+
+@inline function _stencil_weights(
+    op::JumpNode{D,Dim}, space, I::CartesianIndex{D}
 ) where {D,Dim}
-    inner = local_stencil(op.inner_op, space, I, markers, lin_idx)
-    dims = npoints(mesh(space), Tuple)
-
-    # only the forward term goes; the local one stays, which is the -uₙ convention
-    reach = I[Dim] == dims[Dim] ? 0 : 1
-
-    forward = scale_stencil(
-        shifted_inner_stencil(op.inner_op, inner, space, I, markers, Val(Dim), Val(1)),
-        reach,
-    )
-    here = scale_stencil(inner, -1)
-    return concatenate_stencils(forward, here)
+    reach = I[Dim] == npoints(mesh(space), Tuple)[Dim] ? 0 : 1
+    return (reach, -1)
 end
 
 function resolve_ast(op::JumpNode{D,Dim}) where {D,Dim}

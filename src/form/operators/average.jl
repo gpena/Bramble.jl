@@ -117,39 +117,24 @@ M₊ₕ(op::LazyOp{D}) where {D} = vectorial_avg_forward(op)
 # Zero-Allocation Stencil Evaluators
 # ==============================================================================
 
-@inline function local_stencil(
-    op::BackwardAverage{D,Dim}, space, I::CartesianIndex{D}, markers, lin_idx::Int
-) where {D,Dim}
-    inner = local_stencil(op.inner_op, space, I, markers, lin_idx)
+# Both taps of an average carry the same weight, so the mask is the whole coefficient.
+@inline _stencil_taps(::BackwardAverage) = (Val(0), Val(-1))
+@inline _stencil_taps(::ForwardAverage) = (Val(1), Val(0))
 
+@inline function _stencil_weights(
+    op::BackwardAverage{D,Dim}, space, I::CartesianIndex{D}
+) where {D,Dim}
     T = eltype(space)
     mask = I[Dim] == 1 ? zero(T) : T(1) / 2
-    t1 = scale_stencil(inner, mask)
-
-    inner_shifted = shifted_inner_stencil(
-        op.inner_op, inner, space, I, markers, Val(Dim), Val(-1)
-    )
-    t2 = scale_stencil(inner_shifted, mask)
-
-    return concatenate_stencils(t1, t2)
+    return (mask, mask)
 end
 
-@inline function local_stencil(
-    op::ForwardAverage{D,Dim}, space, I::CartesianIndex{D}, markers, lin_idx::Int
+@inline function _stencil_weights(
+    op::ForwardAverage{D,Dim}, space, I::CartesianIndex{D}
 ) where {D,Dim}
-    inner = local_stencil(op.inner_op, space, I, markers, lin_idx)
-    m = mesh(space)
-    dims = npoints(m, Tuple)
-
     T = eltype(space)
-    mask = I[Dim] == dims[Dim] ? zero(T) : T(1) / 2
-    inner_shifted = shifted_inner_stencil(
-        op.inner_op, inner, space, I, markers, Val(Dim), Val(1)
-    )
-    t1 = scale_stencil(inner_shifted, mask)
-    t2 = scale_stencil(inner, mask)
-
-    return concatenate_stencils(t1, t2)
+    mask = I[Dim] == npoints(mesh(space), Tuple)[Dim] ? zero(T) : T(1) / 2
+    return (mask, mask)
 end
 
 @inline function local_stencil(

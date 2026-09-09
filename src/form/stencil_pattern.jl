@@ -57,33 +57,16 @@ end
 
 # --- the operators ------------------------------------------------------------------ #
 
-# a difference or an average reads the point and one neighbour; which neighbour is the
-# only thing that separates the backward and forward members of each pair
-function stencil_offsets(op::BackwardDifference{D,Dim}) where {D,Dim}
-    return _reach(stencil_offsets(op.inner_op), Val(Dim), (0, -1))
-end
-function stencil_offsets(op::ForwardDifference{D,Dim}) where {D,Dim}
-    return _reach(stencil_offsets(op.inner_op), Val(Dim), (0, 1))
-end
-function stencil_offsets(op::BackwardAverage{D,Dim}) where {D,Dim}
-    return _reach(stencil_offsets(op.inner_op), Val(Dim), (0, -1))
-end
-function stencil_offsets(op::ForwardAverage{D,Dim}) where {D,Dim}
-    return _reach(stencil_offsets(op.inner_op), Val(Dim), (0, 1))
-end
-function stencil_offsets(op::JumpNode{D,Dim}) where {D,Dim}
-    return _reach(stencil_offsets(op.inner_op), Val(Dim), (0, 1))
-end
-function stencil_offsets(op::StarDifference{D,Dim}) where {D,Dim}
-    return _reach(stencil_offsets(op.inner_op), Val(Dim), (0, 1))
-end
-
-# the centered difference skips its own centre, and the cross-weighted one does not
-function stencil_offsets(op::CenteredDifference{D,Dim}) where {D,Dim}
-    return _reach(stencil_offsets(op.inner_op), Val(Dim), (-1, 1))
-end
-function stencil_offsets(op::CrossWeightedDifference{D,Dim}) where {D,Dim}
-    return _reach(stencil_offsets(op.inner_op), Val(Dim), (-1, 0, 1))
+# A difference, an average or a jump reaches the point and one or two neighbours, and which
+# ones is precisely the tap set its stencil is built from. That used to be written out a
+# second time here, once per node, so the reach and the stencil agreed only by both being
+# maintained: it now reads the node's own `_stencil_taps` (gpena/Bramble.jl#70). `_reach`
+# sorts and de-duplicates, so the taps' evaluation order does not matter to it -- only the
+# set does, which is why the same declaration serves both.
+function stencil_offsets(op::TappedNode{D,Dim}) where {D,Dim}
+    return _reach(
+        stencil_offsets(op.inner_op), Val(Dim), map(_shift_delta, _stencil_taps(op))
+    )
 end
 
 # a shift moves the whole reach and widens nothing
