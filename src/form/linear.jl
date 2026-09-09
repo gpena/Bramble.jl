@@ -354,17 +354,7 @@ end
 function _assemble_linear_core!(
     b::AbstractVector, space::CompositeGridSpace{N}, ast::AST_TYPE
 ) where {N,AST_TYPE}
-    leaves = leaf_spaces_offsets(space)
-
-    if !routes_by_component(ast)
-        for (sp, offset) in leaves
-            _scatter_term!(b, sp, ast, offset)
-        end
-        return b
-    end
-
-    _route_terms!(b, ast, leaves)
-    return b
+    return _route_terms!(b, ast, leaf_spaces_offsets(space))
 end
 
 # A term naming a component the space does not have used to contribute nothing, in silence:
@@ -391,21 +381,60 @@ end
     )
 end
 
-# Walk the sum and send each term to the blocks it belongs to. Recursing the tree rather
-# than flattening it into a vector of terms first avoids allocation (see `_visit_operator_add2`
-# in form/common.jl).
+# --- the routing rule ------------------------------------------------------------- #
+
+#=
+The rule that carries the semantics of composite linear forms: **a term naming no component
+goes to every leaf; a term naming one goes to that leaf alone.** It used to be stated in a
+comment and then implemented three times over, once per consumer -- scatter into `b`,
+contract into an accumulator, sweep threaded (gpena/Bramble.jl#55). It is now written once
+here, and the three consumers differ only in what they do per leaf.
+
+Recursing the tree rather than flattening it into a vector of terms first avoids allocation
+(see `_visit_operator_add2` and `_fold_operator_add` in form/stencil_eval.jl).
+=#
+
+# Which leaves a term goes to. Resolved once per term, not once per (term, leaf).
+@inline function _routed_target(term, nleaves::Int)
+    target = test_component_or_nothing(term)
+    _check_component(target, nleaves)
+    return target
+end
+
+@inline _goes_to_leaf(::Nothing, ::Int) = true
+@inline _goes_to_leaf(target::Int, c::Int) = target == c
+
+# `f(leaf_space, offset)`, for each leaf the term routes to.
+@inline function each_routed_leaf(f::F, term, leaves) where {F}
+    target = _routed_target(term, length(leaves))
+    for (c, leaf) in enumerate(leaves)
+        _goes_to_leaf(target, c) || continue
+        f(first(leaf), last(leaf))
+    end
+    return nothing
+end
+
+# `acc = f(leaf_space, offset, acc)`, for each leaf the term routes to. Separate from
+# `each_routed_leaf` rather than expressed through it: threading the accumulator as a return
+# value is what keeps it concretely typed instead of captured and boxed.
+@inline function fold_routed_leaves(f::F, term, leaves, acc::T) where {F,T}
+    target = _routed_target(term, length(leaves))
+    for (c, leaf) in enumerate(leaves)
+        _goes_to_leaf(target, c) || continue
+        acc = f(first(leaf), last(leaf), acc)
+    end
+    return acc
+end
+
+# --- the three consumers ---------------------------------------------------------- #
+
 function _route_terms!(b::AbstractVector, op::OperatorAdd, leaves)
     return _visit_operator_add2(_route_terms!, b, op, leaves)
 end
 
 function _route_terms!(b::AbstractVector, term::TERM, leaves) where {TERM}
-    target = test_component_or_nothing(term)
-    _check_component(target, length(leaves))
-    for (c, leaf) in enumerate(leaves)
-        # a term naming a component goes to that block alone; one naming none goes to every
-        # block, so the two spellings can be mixed in a single form
-        (target === nothing || target == c) || continue
-        _scatter_term!(b, first(leaf), term, last(leaf))
+    each_routed_leaf(term, leaves) do sp, offset
+        return _scatter_term!(b, sp, term, offset)
     end
     return b
 end
@@ -421,16 +450,7 @@ end
 function _contract_linear_core(
     space::CompositeGridSpace{N}, ast::AST_TYPE, v::AbstractVector, acc::T
 ) where {N,AST_TYPE,T}
-    leaves = leaf_spaces_offsets(space)
-
-    if !routes_by_component(ast)
-        for (sp, offset) in leaves
-            acc = _contract_term(sp, ast, offset, v, acc)
-        end
-        return acc
-    end
-
-    return _route_terms_contract(ast, leaves, v, acc)
+    return _route_terms_contract(ast, acc, leaf_spaces_offsets(space), v)
 end
 
 # The counterpart of `_scatter_term!`, functioning as a barrier.
@@ -455,19 +475,14 @@ function _contract_term(
     return acc
 end
 
-function _route_terms_contract(op::OperatorAdd, leaves, v, acc)
-    acc = _route_terms_contract(op.left_op, leaves, v, acc)
-    return _route_terms_contract(op.right_op, leaves, v, acc)
+function _route_terms_contract(op::OperatorAdd, acc, leaves, v)
+    return _fold_operator_add(_route_terms_contract, op, acc, leaves, v)
 end
 
-function _route_terms_contract(term::TERM, leaves, v, acc::T) where {TERM,T}
-    target = test_component_or_nothing(term)
-    _check_component(target, length(leaves))
-    for (c, leaf) in enumerate(leaves)
-        (target === nothing || target == c) || continue
-        acc = _contract_term(first(leaf), term, last(leaf), v, acc)
+function _route_terms_contract(term::TERM, acc::T, leaves, v) where {TERM,T}
+    return fold_routed_leaves(term, leaves, acc) do sp, offset, a
+        return _contract_term(sp, term, offset, v, a)
     end
-    return acc
 end
 
 # Threaded routing by term: hoists component resolution outside the inner loop.
@@ -476,14 +491,11 @@ function _route_terms_parallel!(b::AbstractVector, op::OperatorAdd, leaves)
 end
 
 function _route_terms_parallel!(b::AbstractVector, term::TERM, leaves) where {TERM}
-    target = test_component_or_nothing(term)
-    _check_component(target, length(leaves))
+    # Hoisted out of the per-leaf call, as before: the colouring depends on the term's
+    # stencil, not on which leaf it lands in.
     strides = _colour_strides(stencil_offsets(term))
-
-    for (c, leaf) in enumerate(leaves)
-        (target === nothing || target == c) || continue
-        sp = first(leaf)
-        _sweep_parallel!(b, sp, term, indices(mesh(sp)), strides, last(leaf))
+    each_routed_leaf(term, leaves) do sp, offset
+        return _sweep_parallel!(b, sp, term, indices(mesh(sp)), strides, offset)
     end
     return b
 end
@@ -511,18 +523,7 @@ end
 function _assemble_linear_parallel_core!(
     b::AbstractVector, space::CompositeGridSpace{N}, ast::AST_TYPE
 ) where {N,AST_TYPE}
-    leaves = leaf_spaces_offsets(space)
-    strides = _colour_strides(stencil_offsets(ast))
-
-    if !routes_by_component(ast)
-        for (sp, offset) in leaves
-            _sweep_parallel!(b, sp, ast, indices(mesh(sp)), strides, offset)
-        end
-        return b
-    end
-
-    _route_terms_parallel!(b, ast, leaves)
-    return b
+    return _route_terms_parallel!(b, ast, leaf_spaces_offsets(space))
 end
 
 """
