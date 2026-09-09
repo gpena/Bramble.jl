@@ -20,14 +20,16 @@ using Aqua
     # where precompilation exits without creating done.log.
     test_persistent_tasks = VERSION < v"1.13-"
 
-    Aqua.test_all(Bramble;
-        piracies = true,
-        ambiguities = true,
-        unbound_args = test_unbound,
-        undefined_exports = true,
-        project_extras = true,
-        stale_deps = true,
-        deps_compat = true,
-        persistent_tasks = test_persistent_tasks)
-    Aqua.test_ambiguities(Bramble; recursive = false)
+    Aqua.test_all(
+        Bramble;
+        piracies=true,
+        ambiguities=true,
+        unbound_args=test_unbound,
+        undefined_exports=true,
+        project_extras=true,
+        stale_deps=true,
+        deps_compat=true,
+        persistent_tasks=test_persistent_tasks,
+    )
+    Aqua.test_ambiguities(Bramble; recursive=false)
 end

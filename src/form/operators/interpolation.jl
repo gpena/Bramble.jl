@@ -49,19 +49,22 @@ it at points of whatever mesh the assembly is walking.
 Distinct from the source wrapper `πₕ(uₕ)`, which carries a grid function's values. This node
 carries no values; it carries the map, and its stencil names trial columns.
 """
-struct InterpolationNode{D, S, OpType <: LazyOp{D}} <: LazyOp{D}
+struct InterpolationNode{D,S,OpType<:LazyOp{D}} <: LazyOp{D}
     src_space::S
     inner_op::OpType
 end
 
 @noinline function _throw_interp_inner(op)
-    throw(ArgumentError(
-        "πₕ as a bilinear operator wraps a trial function directly (`πₕ(Wsrc, u)` or " *
-        "`πₕ(Wsrc, u(2))`), but received $(typeof(op)). An operator applied before the " *
-        "interpolation (`πₕ(Wsrc, D₋ₓ(u))`, differencing on the source mesh and then " *
-        "interpolating) is a different operator and is not implemented; write the operator " *
-        "outside instead, `D₋ₓ(πₕ(Wsrc, u))`, which differences on the mesh being " *
-        "integrated over."))
+    throw(
+        ArgumentError(
+            "πₕ as a bilinear operator wraps a trial function directly (`πₕ(Wsrc, u)` or " *
+            "`πₕ(Wsrc, u(2))`), but received $(typeof(op)). An operator applied before the " *
+            "interpolation (`πₕ(Wsrc, D₋ₓ(u))`, differencing on the source mesh and then " *
+            "interpolating) is a different operator and is not implemented; write the operator " *
+            "outside instead, `D₋ₓ(πₕ(Wsrc, u))`, which differences on the mesh being " *
+            "integrated over.",
+        ),
+    )
 end
 
 #=
@@ -85,13 +88,14 @@ different operation and is refused, since it would difference on the source mesh
 =#
 function πₕ(Wsrc::ScalarGridSpace{D}, op::LazyOp{D}) where {D}
     op isa TrialFunction || op isa IndexedTrialFunction || _throw_interp_inner(op)
-    return InterpolationNode{D, typeof(Wsrc), typeof(op)}(Wsrc, op)
+    return InterpolationNode{D,typeof(Wsrc),typeof(op)}(Wsrc, op)
 end
 
 # --- The stencil: absolute trial columns, with the corner weights ------------------- #
 
-@inline function local_stencil(op::InterpolationNode{D}, space, I::CartesianIndex{D},
-        markers, lin_idx::Int) where {D}
+@inline function local_stencil(
+    op::InterpolationNode{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int
+) where {D}
     return _interp_stencil(mesh(op.src_space), point(mesh(space), I), Val(D))
 end
 
@@ -118,17 +122,17 @@ is_symbolic(op::InterpolationNode) = is_symbolic(op.inner_op)
 # this ensures `innerₕ` constructs a `BilinearProduct` for it.
 _is_source_only(::InterpolationNode) = false
 
-function resolve_ast(op::InterpolationNode{D, S}) where {D, S}
+function resolve_ast(op::InterpolationNode{D,S}) where {D,S}
     inner = resolve_ast(op.inner_op)
-    return InterpolationNode{D, S, typeof(inner)}(op.src_space, inner)
+    return InterpolationNode{D,S,typeof(inner)}(op.src_space, inner)
 end
 
 trial_component_or_nothing(op::InterpolationNode) = trial_component_or_nothing(op.inner_op)
 test_component_or_nothing(op::InterpolationNode) = test_component_or_nothing(op.inner_op)
 
-@inline function component(op::InterpolationNode{D, S}, i::Int) where {D, S}
+@inline function component(op::InterpolationNode{D,S}, i::Int) where {D,S}
     inner = component(op.inner_op, i)
-    return InterpolationNode{D, S, typeof(inner)}(op.src_space, inner)
+    return InterpolationNode{D,S,typeof(inner)}(op.src_space, inner)
 end
 
 _collect_region_labels(op::InterpolationNode) = _collect_region_labels(op.inner_op)
@@ -144,7 +148,7 @@ stencil_offsets(op::InterpolationNode) = stencil_offsets(op.inner_op)
 # symmetry fast path compares the two sides of a product for structural equality, and an
 # interpolation on one side only must not read as symmetric.
 function _same_operator_shape(a::InterpolationNode{D}, b::InterpolationNode{D}) where {D}
-    a.src_space === b.src_space && _same_operator_shape(a.inner_op, b.inner_op)
+    return a.src_space === b.src_space && _same_operator_shape(a.inner_op, b.inner_op)
 end
 
 # --- The shift trait: which nodes carry something a relabelled offset cannot express -- #
@@ -178,8 +182,9 @@ stencil_shift_trait(op::RegionRestriction) = stencil_shift_trait(op.inner_op)
 stencil_shift_trait(op::OperatorScale) = stencil_shift_trait(op.inner_op)
 stencil_shift_trait(op::GridFunctionScale) = stencil_shift_trait(op.inner_op)
 function stencil_shift_trait(op::OperatorAdd)
-    _combine_shift_traits(
-        stencil_shift_trait(op.left_op), stencil_shift_trait(op.right_op))
+    return _combine_shift_traits(
+        stencil_shift_trait(op.left_op), stencil_shift_trait(op.right_op)
+    )
 end
 
 # --- Which trial contributions interpolate, and from where --------------------------- #
@@ -223,8 +228,7 @@ _all_trial_interpolated(op::GridFunctionScale) = _all_trial_interpolated(op.inne
 
 # A sum requires both summands to interpolate.
 function _all_trial_interpolated(op::OperatorAdd)
-    _all_trial_interpolated(op.left_op) &&
-        _all_trial_interpolated(op.right_op)
+    return _all_trial_interpolated(op.left_op) && _all_trial_interpolated(op.right_op)
 end
 
 # Only the trial side of a product contributes columns, so only the trial side is inspected. A
@@ -237,8 +241,7 @@ _all_trial_interpolated(op::LinearProduct) = true
 # Validate every interpolation the term carries against the leaf whose columns it writes into.
 _check_interp_spaces(::Any, trial_leaf) = nothing
 function _check_interp_spaces(op::InterpolationNode, trial_leaf)
-    _check_one_interp_space(
-        op, op.src_space, trial_leaf)
+    return _check_one_interp_space(op, op.src_space, trial_leaf)
 end
 
 _check_interp_spaces(op::BackwardDifference, t) = _check_interp_spaces(op.inner_op, t)

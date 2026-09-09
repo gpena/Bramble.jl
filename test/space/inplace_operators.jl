@@ -45,14 +45,18 @@ const _INPLACE_FAMILIES = (:D₋, :D₊, :diff₋, :diff₊, :M₋, :M₊, :jump
 const _DIR_SUFFIXES = ("ₓ", "ᵧ", "₂")
 
 function _ops(::Val{D}) where {D}
-    entries = Tuple{Function, Function, String}[]
+    entries = Tuple{Function,Function,String}[]
     for dim in 1:D, fam in _INPLACE_FAMILIES
-
         suffix = _DIR_SUFFIXES[dim]
         name = Symbol(fam, suffix)
-        push!(entries,
-            (getproperty(Bramble, Symbol(name, :!)),
-                getproperty(Bramble, name), string(name)))
+        push!(
+            entries,
+            (
+                getproperty(Bramble, Symbol(name, :!)),
+                getproperty(Bramble, name),
+                string(name),
+            ),
+        )
     end
     return Tuple(entries)
 end
@@ -60,13 +64,20 @@ end
 @testset "In-place operators" begin
     @testset "Allocating agreement" begin
         Random.seed!(20260831)
-        Ωs = (mesh(domain(interval(0.0, 1.0)), 9, false),
+        Ωs = (
+            mesh(domain(interval(0.0, 1.0)), 9, false),
             mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 7), (true, false)),
-            mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 4),
-                (false, true, false)))
-        fs = (x -> x^3 + sin(4x) + 1,
+            mesh(
+                domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
+                (4, 5, 4),
+                (false, true, false),
+            ),
+        )
+        fs = (
+            x -> x^3 + sin(4x) + 1,
             x -> exp(x[1]) * (x[2]^2 + 1),
-            x -> x[1]^2 + 2x[2] + sin(x[3]) + 1)
+            x -> x[1]^2 + 2x[2] + sin(x[3]) + 1,
+        )
 
         for D in 1:3
             @testset "$(D)D" begin
@@ -118,8 +129,9 @@ end
     @testset "Zero allocations" begin
         # The reason the forms exist. Measured inside a function on concrete locals.
         function counts()
-            Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (24, 24),
-                (true, false))
+            Ωₕ = mesh(
+                domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (24, 24), (true, false)
+            )
             Wₕ = gridspace(Ωₕ)
             uₕ = Rₕ(Wₕ, x -> exp(x[1]) * (x[2]^2 + 1))
             vₕ = similar(uₕ)
@@ -152,13 +164,20 @@ end
         # corrupt the result from the second write onward instead of raising an error
         # (this was the reported bug for `D₋ₓ!`). Each family must refuse aliased
         # destination and source rather than compute a wrong answer.
-        Ωs = (mesh(domain(interval(0.0, 1.0)), 9, false),
+        Ωs = (
+            mesh(domain(interval(0.0, 1.0)), 9, false),
             mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 7), (true, false)),
-            mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 4),
-                (false, true, false)))
-        fs = (x -> x^3 + sin(4x) + 1,
+            mesh(
+                domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
+                (4, 5, 4),
+                (false, true, false),
+            ),
+        )
+        fs = (
+            x -> x^3 + sin(4x) + 1,
             x -> exp(x[1]) * (x[2]^2 + 1),
-            x -> x[1]^2 + 2x[2] + sin(x[3]) + 1)
+            x -> x[1]^2 + 2x[2] + sin(x[3]) + 1,
+        )
 
         for D in 1:3
             @testset "$(D)D" begin

@@ -49,7 +49,6 @@ stencil_offsets(op::ZeroOperator) = _origin(op)
 @inline function _reach(inner::Vector, ::Val{Dim}, steps::Tuple) where {Dim}
     out = eltype(inner)[]
     for s in steps, o in inner
-
         p = shift_offset(o, Dim, s)
         p in out || push!(out, p)
     end
@@ -60,45 +59,36 @@ end
 
 # a difference or an average reads the point and one neighbour; which neighbour is the
 # only thing that separates the backward and forward members of each pair
-function stencil_offsets(op::BackwardDifference{D, Dim}) where {D, Dim}
-    _reach(
-        stencil_offsets(op.inner_op), Val(Dim), (0, -1))
+function stencil_offsets(op::BackwardDifference{D,Dim}) where {D,Dim}
+    return _reach(stencil_offsets(op.inner_op), Val(Dim), (0, -1))
 end
-function stencil_offsets(op::ForwardDifference{D, Dim}) where {D, Dim}
-    _reach(
-        stencil_offsets(op.inner_op), Val(Dim), (0, 1))
+function stencil_offsets(op::ForwardDifference{D,Dim}) where {D,Dim}
+    return _reach(stencil_offsets(op.inner_op), Val(Dim), (0, 1))
 end
-function stencil_offsets(op::BackwardAverage{D, Dim}) where {D, Dim}
-    _reach(
-        stencil_offsets(op.inner_op), Val(Dim), (0, -1))
+function stencil_offsets(op::BackwardAverage{D,Dim}) where {D,Dim}
+    return _reach(stencil_offsets(op.inner_op), Val(Dim), (0, -1))
 end
-function stencil_offsets(op::ForwardAverage{D, Dim}) where {D, Dim}
-    _reach(
-        stencil_offsets(op.inner_op), Val(Dim), (0, 1))
+function stencil_offsets(op::ForwardAverage{D,Dim}) where {D,Dim}
+    return _reach(stencil_offsets(op.inner_op), Val(Dim), (0, 1))
 end
-function stencil_offsets(op::JumpNode{D, Dim}) where {D, Dim}
-    _reach(
-        stencil_offsets(op.inner_op), Val(Dim), (0, 1))
+function stencil_offsets(op::JumpNode{D,Dim}) where {D,Dim}
+    return _reach(stencil_offsets(op.inner_op), Val(Dim), (0, 1))
 end
-function stencil_offsets(op::StarDifference{D, Dim}) where {D, Dim}
-    _reach(
-        stencil_offsets(op.inner_op), Val(Dim), (0, 1))
+function stencil_offsets(op::StarDifference{D,Dim}) where {D,Dim}
+    return _reach(stencil_offsets(op.inner_op), Val(Dim), (0, 1))
 end
 
 # the centered difference skips its own centre, and the cross-weighted one does not
-function stencil_offsets(op::CenteredDifference{D, Dim}) where {D, Dim}
-    _reach(
-        stencil_offsets(op.inner_op), Val(Dim), (-1, 1))
+function stencil_offsets(op::CenteredDifference{D,Dim}) where {D,Dim}
+    return _reach(stencil_offsets(op.inner_op), Val(Dim), (-1, 1))
 end
-function stencil_offsets(op::CrossWeightedDifference{D, Dim}) where {D, Dim}
-    _reach(
-        stencil_offsets(op.inner_op), Val(Dim), (-1, 0, 1))
+function stencil_offsets(op::CrossWeightedDifference{D,Dim}) where {D,Dim}
+    return _reach(stencil_offsets(op.inner_op), Val(Dim), (-1, 0, 1))
 end
 
 # a shift moves the whole reach and widens nothing
-function stencil_offsets(op::ShiftNode{D, Dim}) where {D, Dim}
-    _reach(
-        stencil_offsets(op.inner_op), Val(Dim), (op.shift_amount,))
+function stencil_offsets(op::ShiftNode{D,Dim}) where {D,Dim}
+    return _reach(stencil_offsets(op.inner_op), Val(Dim), (op.shift_amount,))
 end
 
 # scaling changes coefficients, not reach
@@ -126,6 +116,5 @@ stencil_offsets(op::LinearProduct) = stencil_offsets(op.right_op)
 stencil_offsets(op::BilinearProduct) = stencil_offsets(op.right_op)
 
 function stencil_offsets(op::OperatorAdd)
-    sort!(union(
-        stencil_offsets(op.left_op), stencil_offsets(op.right_op)))
+    return sort!(union(stencil_offsets(op.left_op), stencil_offsets(op.right_op)))
 end

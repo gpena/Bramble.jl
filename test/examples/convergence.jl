@@ -46,11 +46,11 @@ function _series(assemble_form, rhs, D::Int, n0::Int, levels::Int)
         Wc = gridspace(Ωc)
         bcs_c = dirichlet_constraints(Ωd, :boundary => sol_d)
 
-        A_c = assemble(assemble_form(Wc); dirichlet = :boundary)
+        A_c = assemble(assemble_form(Wc); dirichlet=:boundary)
         g_c = element(Wc)
         avgₕ!(g_c, x -> rhs(x, D))
         l_c = form(Wc, v -> innerₕ(g_c, v))
-        F_c = assemble(l_c; dirichlet = bcs_c)
+        F_c = assemble(l_c; dirichlet=bcs_c)
 
         u_c = element(Wc)
         u_c .= A_c \ F_c
@@ -72,7 +72,7 @@ function _orders(assemble_form, rhs)
         n0, levels = _LEVELS[D].second
         Random.seed!(_SEED)
         hs, errs = _series(assemble_form, rhs, D, n0, levels)
-        _observed_order(hs, errs)
+        return _observed_order(hs, errs)
     end
 end
 
@@ -84,8 +84,9 @@ end
 
     @testset "Linear Poisson" begin
         # -Δu = g, u_exact = exp(∑x), so g = -D·u_exact
-        p1, p2, p3 = _orders(Wc -> form(Wc, Wc, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v))),
-            (x, D) -> -D * exp(sum(x)))
+        p1, p2, p3 = _orders(
+            Wc -> form(Wc, Wc, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v))), (x, D) -> -D * exp(sum(x))
+        )
 
         @test _asymptotically_second_order(p1, 1.9)
         @test _asymptotically_second_order(p2, 1.9)
@@ -96,9 +97,13 @@ end
         ϵ, b = 1.0, 0.1
         # ϵ·(-Δu) + b·∇u with the same manufactured solution: rhs = -D·u_exact·(b + ϵ)
         p1, p2, p3 = _orders(
-            Wc -> form(Wc, Wc,
-                (u, v) -> ϵ * inner₊(∇₋ₕ(u), ∇₋ₕ(v)) + b * inner₊(M₋ₕ(u), ∇₋ₕ(v))),
-            (x, D) -> -D * exp(sum(x)) * (b + ϵ))
+            Wc -> form(
+                Wc,
+                Wc,
+                (u, v) -> ϵ * inner₊(∇₋ₕ(u), ∇₋ₕ(v)) + b * inner₊(M₋ₕ(u), ∇₋ₕ(v)),
+            ),
+            (x, D) -> -D * exp(sum(x)) * (b + ϵ),
+        )
 
         @test _asymptotically_second_order(p1, 1.9)
         @test _asymptotically_second_order(p2, 1.9)
@@ -133,7 +138,8 @@ end
                 gradκ(u) = D == 1 ? κf * ∇₋ₕ(u) : ntuple(i -> κf[i] * ∇₋ₕ(u)[i], D)
                 form(Wc, Wc, (u, v) -> inner₊(gradκ(u), ∇₋ₕ(v)))
             end,
-            (x, D) -> -(dκ(x) + D * κ(x)) * exp(sum(x)))
+            (x, D) -> -(dκ(x) + D * κ(x)) * exp(sum(x)),
+        )
 
         @test _asymptotically_second_order(p1, 1.9)
         @test _asymptotically_second_order(p2, 1.9)

@@ -44,12 +44,13 @@ using Bramble
         full_sum = innerₕ(u, v)
         @test interior_sum < full_sum
         @test interior_sum ≈
-              sum(Bramble.weights(Wₕ, Bramble.Innerh())[Bramble.markers(Ωₕ)[:interior]])
+            sum(Bramble.weights(Wₕ, Bramble.Innerh())[Bramble.markers(Ωₕ)[:interior]])
     end
 
     @testset "Reserved symbol match" begin
-        Ωₕ = mesh(domain(S, :boundary => (:left, :right, :top, :bottom)), (4, 4), (
-            true, true))
+        Ωₕ = mesh(
+            domain(S, :boundary => (:left, :right, :top, :bottom)), (4, 4), (true, true)
+        )
         Ωₕ_default = mesh(domain(S), (4, 4), (true, true))
         @test Bramble.markers(Ωₕ)[:boundary] == Bramble.markers(Ωₕ_default)[:boundary]
     end
@@ -59,9 +60,10 @@ using Bramble
         # existed, so a mismatch warns rather than errors: the custom definition wins, not
         # the geometric one, since erroring would break that pre-existing freedom.
         Ωₕ = @test_logs (:warn, r"boundary.*something other than") mesh(
-            domain(S, :boundary => :left), (4, 4), (true, true))
+            domain(S, :boundary => :left), (4, 4), (true, true)
+        )
         @test Bramble.markers(Ωₕ)[:boundary] !=
-              Bramble.markers(mesh(domain(S), (4, 4), (true, true)))[:boundary]
+            Bramble.markers(mesh(domain(S), (4, 4), (true, true)))[:boundary]
         @test sum(Bramble.markers(Ωₕ)[:boundary]) == 4   # just the :left face on a 4x4 grid
     end
 
@@ -70,12 +72,14 @@ using Bramble
         # redefined the label on purpose" — this is that opt-out, checked in both directions
         # so it silences the warning without silently dropping the custom marker too.
         Ωₕ = @test_logs mesh(
-            domain(S, :boundary => :left), (4, 4), (true, true); warn_marker_mismatch = false)
+            domain(S, :boundary => :left), (4, 4), (true, true); warn_marker_mismatch=false
+        )
         @test sum(Bramble.markers(Ωₕ)[:boundary]) == 4   # the custom definition still wins
 
         # The default stays warn-on-mismatch — false is opt-in, not a silent global change.
         @test_logs (:warn, r"boundary.*something other than") mesh(
-            domain(S, :boundary => :left), (4, 4), (true, true))
+            domain(S, :boundary => :left), (4, 4), (true, true)
+        )
     end
 
     @testset "Condition markers" begin
@@ -86,8 +90,9 @@ using Bramble
         Ωₕ_default = mesh(domain(S), (4, 4), (true, true))
         @test Bramble.markers(Ωₕ)[:boundary] == Bramble.markers(Ωₕ_default)[:boundary]
 
-        Ωₕ2 = mesh(domain(S, :interior => (x -> !is_geom_boundary(x))), (4, 4), (
-            true, true))
+        Ωₕ2 = mesh(
+            domain(S, :interior => (x -> !is_geom_boundary(x))), (4, 4), (true, true)
+        )
         @test Bramble.markers(Ωₕ2)[:interior] == Bramble.markers(Ωₕ_default)[:interior]
 
         # a custom, non-reserved condition marker is untouched by any of this
@@ -98,7 +103,8 @@ using Bramble
 
         # a condition meaning something else under a reserved name warns, keeps its own value
         Ωₕ4 = @test_logs (:warn, r"boundary") mesh(
-            domain(S, :boundary => (x -> x[1] < 0.5)), (4, 4), (true, true))
+            domain(S, :boundary => (x -> x[1] < 0.5)), (4, 4), (true, true)
+        )
         @test sum(Bramble.markers(Ωₕ4)[:boundary]) == 8   # x[1] < 0.5 on a 4x4 grid
     end
 
@@ -119,7 +125,6 @@ using Bramble
         is_corner(x) = (x[1] == 0.0 || x[1] == 1.0) && (x[2] == 0.0 || x[2] == 1.0)
         Ωₕ = mesh(domain(S, :corners => is_corner), (4, 4), (true, true))
         @test sum(Bramble.markers(Ωₕ)[:corners]) == 4
-        @test all(Bramble.index_in_marker(Ωₕ, :corners) .<=
-                  Bramble.markers(Ωₕ)[:boundary])   # every corner is on the boundary
+        @test all(Bramble.index_in_marker(Ωₕ, :corners) .<= Bramble.markers(Ωₕ)[:boundary])   # every corner is on the boundary
     end
 end

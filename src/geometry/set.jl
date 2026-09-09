@@ -9,14 +9,14 @@ Cartesian product of `D` closed intervals embedded in ``\\mathbb{R}^D`` with sca
 
 See also: [`interval`](@ref), [`point`](@ref), [`box`](@ref).
 """
-struct CartesianProduct{D, T}
-    box::NTuple{D, Tuple{T, T}}
-    collapsed::NTuple{D, Bool}
+struct CartesianProduct{D,T}
+    box::NTuple{D,Tuple{T,T}}
+    collapsed::NTuple{D,Bool}
 end
 
 @noinline _throw_bounds_error(X::CartesianProduct, i) = throw(BoundsError(X, i))
-@noinline _throw_interval_error(x,
-    y) = throw(ArgumentError("Invalid interval: expected x <= y, but got x = $x, y = $y"))
+@noinline _throw_interval_error(x, y) =
+    throw(ArgumentError("Invalid interval: expected x <= y, but got x = $x, y = $y"))
 
 """
     is_collapsed(a::Number, b::Number) -> Bool
@@ -38,7 +38,7 @@ is strictly less than the spatial embedding dimension `D`.
 # Throws
 - `BoundsError`: If `i < 1` or `i > D`.
 """
-@inline is_collapsed(a::T, b::T) where {T <: Number} = isapprox(a, b)
+@inline is_collapsed(a::T, b::T) where {T<:Number} = isapprox(a, b)
 @inline is_collapsed(a::Number, b::Number) = isapprox(promote(a, b)...)
 @inline is_collapsed(X::CartesianProduct) = any(X.collapsed)
 @inline function is_collapsed(X::CartesianProduct{D}, i::Integer) where {D}
@@ -86,7 +86,7 @@ true
     _is_collapsed = is_collapsed(_x, _y)
     box = ((_x, _y),)
     collapsed = (_is_collapsed,)
-    return CartesianProduct{1, T}(box, collapsed)
+    return CartesianProduct{1,T}(box, collapsed)
 end
 
 @inline interval(x::CartesianProduct{1}) = interval(x(1)...)
@@ -100,7 +100,7 @@ Construct a degenerate 1D [`CartesianProduct`](@ref) representing the point ``[x
     _x = float(x)
     box = ((_x, _x),)
     collapsed = (true,)
-    return CartesianProduct{1, typeof(_x)}(box, collapsed)
+    return CartesianProduct{1,typeof(_x)}(box, collapsed)
 end
 
 """
@@ -118,7 +118,7 @@ Interval bounds for each dimension `i` are defined by ``[\\min(a_i, b_i), \\max(
     collapsed_flags = ntuple(i -> is_collapsed(box_coords[i]...), Val(D))
     FloatT = typeof(box_coords[1][1])
 
-    return CartesianProduct{D, FloatT}(box_coords, collapsed_flags)
+    return CartesianProduct{D,FloatT}(box_coords, collapsed_flags)
 end
 
 """
@@ -126,7 +126,7 @@ end
 
 Compute the geometric center point of [`CartesianProduct`](@ref) `X`.
 """
-@inline function center(cp::CartesianProduct{D, T}) where {D, T}
+@inline function center(cp::CartesianProduct{D,T}) where {D,T}
     return ntuple(i -> (cp.box[i][1] + cp.box[i][2]) * T(0.5), Val(D))
 end
 
@@ -149,8 +149,8 @@ end
 
 Return the scalar coordinate type `T` of [`CartesianProduct`](@ref) `X`.
 """
-@inline eltype(::CartesianProduct{D, T}) where {D, T} = T
-@inline eltype(::Type{<:CartesianProduct{D, T}}) where {D, T} = T
+@inline eltype(::CartesianProduct{D,T}) where {D,T} = T
+@inline eltype(::Type{<:CartesianProduct{D,T}}) where {D,T} = T
 
 """
     dim(X::CartesianProduct{D}) -> Int
@@ -200,21 +200,23 @@ Compute the Cartesian tensor product of sets `X` and `Y`.
 
 The resulting set has embedding dimension `D1 + D2` with promoted scalar coordinate type.
 """
-@inline function ×(X::CartesianProduct{D1, T1}, Y::CartesianProduct{
-        D2, T2}) where {D1, D2, T1, T2}
+@inline function ×(
+    X::CartesianProduct{D1,T1}, Y::CartesianProduct{D2,T2}
+) where {D1,D2,T1,T2}
     D = D1 + D2
     T = promote_type(T1, T2)
     if T === T1 === T2
         new_box = (X.box..., Y.box...)
     else
-        new_box = ntuple(
-            i -> i <= D1 ? (T(X.box[i][1]), T(X.box[i][2])) :
-                 (T(Y.box[i - D1][1]), T(Y.box[i - D1][2])),
-            Val(D))
+        new_box = ntuple(i -> if i <= D1
+            (T(X.box[i][1]), T(X.box[i][2]))
+        else
+            (T(Y.box[i - D1][1]), T(Y.box[i - D1][2]))
+        end, Val(D))
     end
     new_collapsed = (X.collapsed..., Y.collapsed...)
 
-    return CartesianProduct{D, T}(new_box, new_collapsed)
+    return CartesianProduct{D,T}(new_box, new_collapsed)
 end
 
 """
@@ -232,10 +234,10 @@ Extract the `i`-th coordinate dimension of `X` as a 1D [`CartesianProduct`](@ref
 
 Return the coordinate point representation type for a point in `X`.
 """
-@inline point_type(::CartesianProduct{1, T}) where {T} = T
-@inline point_type(::CartesianProduct{D, T}) where {D, T} = NTuple{D, T}
-@inline point_type(::Type{<:CartesianProduct{1, T}}) where {T} = T
-@inline point_type(::Type{<:CartesianProduct{D, T}}) where {D, T} = NTuple{D, T}
+@inline point_type(::CartesianProduct{1,T}) where {T} = T
+@inline point_type(::CartesianProduct{D,T}) where {D,T} = NTuple{D,T}
+@inline point_type(::Type{<:CartesianProduct{1,T}}) where {T} = T
+@inline point_type(::Type{<:CartesianProduct{D,T}}) where {D,T} = NTuple{D,T}
 
 """
     in(x, X::CartesianProduct) -> Bool
@@ -243,8 +245,8 @@ Return the coordinate point representation type for a point in `X`.
 Query whether point `x` is contained in the closed set `X`.
 """
 @inline Base.in(x::Number, X::CartesianProduct{1}) = (X.box[1][1] <= x <= X.box[1][2])
-@inline Base.in(x::Tuple{Vararg{Number, D}}, X::CartesianProduct{D}) where {D} = all(
-    i -> (X.box[i][1] <= x[i] <= X.box[i][2]), 1:D)
+@inline Base.in(x::Tuple{Vararg{Number,D}}, X::CartesianProduct{D}) where {D} =
+    all(i -> (X.box[i][1] <= x[i] <= X.box[i][2]), 1:D)
 
 # Unrolled over `Val(D)` rather than reduced over `1:D` to prevent heap allocations
 # when testing containment of an AbstractVector.
@@ -254,7 +256,7 @@ Query whether point `x` is contained in the closed set `X`.
 end
 @inline Base.in(x, X::CartesianProduct) = false
 
-function Base.show(io::IO, X::CartesianProduct{D, T}) where {D, T}
+function Base.show(io::IO, X::CartesianProduct{D,T}) where {D,T}
     pp = PrettyPrinter(io)
 
     if pp.compact
@@ -280,21 +282,21 @@ function Base.show(io::IO, X::CartesianProduct{D, T}) where {D, T}
 
         if D == 1
             collapsed = X.collapsed[1]
-            print_colored(pp, "CartesianProduct{$D,$T}"; bold = true, color = :cyan)
+            print_colored(pp, "CartesianProduct{$D,$T}"; bold=true, color=:cyan)
             print(io, ": ")
             if collapsed
-                print_colored(pp, "Point"; color = :yellow)
+                print_colored(pp, "Point"; color=:yellow)
                 print(io, " at ")
                 print_value(pp, X.box[1][1])
             else
-                print_colored(pp, "Interval"; color = :yellow)
+                print_colored(pp, "Interval"; color=:yellow)
                 print(io, " ")
                 print_interval(pp, X.box[1][1], X.box[1][2])
             end
         else
-            print_colored(pp, "CartesianProduct{$D,$T}"; bold = true, color = :cyan)
+            print_colored(pp, "CartesianProduct{$D,$T}"; bold=true, color=:cyan)
             if topodim < D
-                print_colored(pp, " (topological dim $topodim)"; color = :yellow)
+                print_colored(pp, " (topological dim $topodim)"; color=:yellow)
             end
             println(io, ":")
 
@@ -302,7 +304,8 @@ function Base.show(io::IO, X::CartesianProduct{D, T}) where {D, T}
             for i in 1:D
                 label = get_dimension_label(i)
                 print_dimension_info(
-                    pp_indented, label, X.box[i][1], X.box[i][2], X.collapsed[i])
+                    pp_indented, label, X.box[i][1], X.box[i][2], X.collapsed[i]
+                )
             end
 
             remove_trailing_newline(io)

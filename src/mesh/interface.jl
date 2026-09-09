@@ -54,7 +54,7 @@ For scalar input (`Int`), returns 1D `CartesianIndices`. For tuple input, return
 multi-dimensional `CartesianIndices`.
 """
 @inline generate_indices(pts::Int) = CartesianIndices((pts,))
-@inline generate_indices(pts::NTuple{D, Int}) where {D} = CartesianIndices(pts)
+@inline generate_indices(pts::NTuple{D,Int}) where {D} = CartesianIndices(pts)
 
 """
     is_boundary_index(idxs::CartesianIndices{D}, idx) -> Bool
@@ -155,7 +155,7 @@ Return the `BitVector` indicator associated with marker `label` in mesh `Ωₕ`.
 
 Override the grid indices in `Ωₕ`. Used internally during mesh refinement.
 """
-@inline set_indices!(Ωₕ::AbstractMeshType, indices) = (Ωₕ.indices = indices; return)
+@inline set_indices!(Ωₕ::AbstractMeshType, indices) = (Ωₕ.indices=indices; return nothing)
 
 """
     markers!(Ωₕ::AbstractMeshType, mesh_markers::MeshMarkers) -> Nothing
@@ -164,7 +164,8 @@ Override the markers dictionary in `Ωₕ`. Used internally during mesh refineme
 the old dictionary is sized for the old grid and is replaced outright rather than merged
 into.
 """
-@inline markers!(Ωₕ::AbstractMeshType, mesh_markers) = (Ωₕ.markers = mesh_markers; return)
+@inline markers!(Ωₕ::AbstractMeshType, mesh_markers) =
+    (Ωₕ.markers=mesh_markers; return nothing)
 
 @inline is_boundary_index(Ωₕ::AbstractMeshType, idx) = is_boundary_index(indices(Ωₕ), idx)
 @inline boundary_indices(Ωₕ::AbstractMeshType) = boundary_indices(indices(Ωₕ))
@@ -206,7 +207,7 @@ function iterative_refinement!(Ωₕ::AbstractMeshType)
     # `Mesh1D`), rather than just inherited from calling it: `_refine_indices!` returning
     # "did nothing" is not visible to its caller, and rebuilding markers anyway would drop
     # a mesh's custom labels for no reason at all.
-    _nothing_to_refine(Ωₕ) && return
+    _nothing_to_refine(Ωₕ) && return nothing
 
     # The old markers dict is sized for the old grid and would otherwise be left silently
     # wrong rather than merely absent: `haskey(markers(Ωₕ), :boundary)` still answers
@@ -227,35 +228,43 @@ function iterative_refinement!(Ωₕ::AbstractMeshType)
     fresh_markers = MeshMarkers()
     _ensure_geometric_markers!(fresh_markers, Ωₕ)
     markers!(Ωₕ, fresh_markers)
-    return
+    return nothing
 end
 
 @noinline function _throw_refinement_drops_markers(extra_labels)
-    throw(ArgumentError(
-        "iterative_refinement!(Ωₕ) was asked to refine a mesh carrying custom markers " *
-        "$(Tuple(extra_labels)), and there is no domain here to re-evaluate them onto " *
-        "the refined points. Call iterative_refinement!(Ωₕ, domain_markers) instead to " *
-        "keep them."))
+    throw(
+        ArgumentError(
+            "iterative_refinement!(Ωₕ) was asked to refine a mesh carrying custom markers " *
+            "$(Tuple(extra_labels)), and there is no domain here to re-evaluate them onto " *
+            "the refined points. Call iterative_refinement!(Ωₕ, domain_markers) instead to " *
+            "keep them.",
+        ),
+    )
 end
 
 # The two-argument form: a real domain to re-derive markers from, so refinement always
 # proceeds except when there is no interval at all (`is_collapsed`) — unlike the
 # one-argument form above, a single-point, non-collapsed mesh still has its (unchanged)
 # point's markers correctly re-evaluated, since `set_markers!` needs no interval to do that.
-function iterative_refinement!(Ωₕ::AbstractMeshType, domain_markers::DomainMarkers;
-        warn_marker_mismatch::Bool = true)
-    is_collapsed(Ωₕ) && return
+function iterative_refinement!(
+    Ωₕ::AbstractMeshType, domain_markers::DomainMarkers; warn_marker_mismatch::Bool=true
+)
+    is_collapsed(Ωₕ) && return nothing
 
     _refine_indices!(Ωₕ)
     set_markers!(Ωₕ, domain_markers; warn_marker_mismatch)
-    return
+    return nothing
 end
 
-function change_points!(Ωₕ::AbstractMeshType, domain_markers::DomainMarkers, pts;
-        warn_marker_mismatch::Bool = true)
+function change_points!(
+    Ωₕ::AbstractMeshType,
+    domain_markers::DomainMarkers,
+    pts;
+    warn_marker_mismatch::Bool=true,
+)
     change_points!(Ωₕ, pts)
     set_markers!(Ωₕ, domain_markers; warn_marker_mismatch)
-    return
+    return nothing
 end
 
 #------------------------------------------------------------------------------------------#
@@ -264,9 +273,15 @@ end
 
 @noinline _throw_mesh_bounds_error(Ωₕ, idx) = throw(BoundsError(Ωₕ, idx))
 
-@noinline _throw_not_uniform() = throw(ArgumentError("stepsize is only defined for a uniform mesh; use spacing(Ωₕ, idx) on a non-uniform one"))
+@noinline _throw_not_uniform() = throw(
+    ArgumentError(
+        "stepsize is only defined for a uniform mesh; use spacing(Ωₕ, idx) on a non-uniform one",
+    ),
+)
 
-@inline function _check_point_bounds(Ωₕ::AbstractMeshType, idx::Int, location::String = "point")
+@inline function _check_point_bounds(
+    Ωₕ::AbstractMeshType, idx::Int, location::String="point"
+)
     @boundscheck 1 <= idx <= npoints(Ωₕ) || _throw_mesh_bounds_error(Ωₕ, idx)
     return nothing
 end
@@ -278,8 +293,8 @@ end
 
 @inline _extract_linear_index(idx::Int) = idx
 @inline _extract_linear_index(idx::CartesianIndex{1}) = idx[1]
-@inline _spacing_generator(Ωₕ::AbstractMeshType, spacing_func) = (spacing_func(Ωₕ, i)
-for i in 1:npoints(Ωₕ))
+@inline _spacing_generator(Ωₕ::AbstractMeshType, spacing_func) =
+    (spacing_func(Ωₕ, i) for i in 1:npoints(Ωₕ))
 @inline _apply_hs_logic(value::T) where {T} = ifelse(iszero(value), one(T), value)
 
 #------------------------------------------------------------------------------------------#
@@ -323,19 +338,34 @@ X = domain(interval(0, 1) × interval(4, 5))
 Ωₕ_mixed = mesh(X, (10, 15), (true, false))
 ```
 """
-@inline mesh(Ω::Domain, npts::NTuple{D, Int}, unif::NTuple{D, Bool};
-    backend = backend(eltype(Ω)), warn_marker_mismatch::Bool = true) where {D} = _mesh(
-    Ω, npts, unif, backend; warn_marker_mismatch)
-@inline mesh(Ω::Domain{CartesianProduct{1, T}}, npts::Int, unif::Bool;
-    backend = backend(eltype(Ω)), warn_marker_mismatch::Bool = true) where {T} = _mesh(
-    Ω, (npts,), (unif,), backend; warn_marker_mismatch)
-@inline mesh(Ω::Domain{CartesianProduct{1, T}}, npts::Int; uniform::Bool = true,
-    backend = backend(eltype(Ω)), warn_marker_mismatch::Bool = true) where {T} = _mesh(
-    Ω, (npts,), (uniform,), backend; warn_marker_mismatch)
 @inline mesh(
-    Ω::Domain, npts::NTuple{D, Int}; uniform::NTuple{D, Bool} = ntuple(_ -> true, Val(D)),
-    backend = backend(eltype(Ω)), warn_marker_mismatch::Bool = true) where {D} = _mesh(
-    Ω, npts, uniform, backend; warn_marker_mismatch)
+    Ω::Domain,
+    npts::NTuple{D,Int},
+    unif::NTuple{D,Bool};
+    backend=backend(eltype(Ω)),
+    warn_marker_mismatch::Bool=true,
+) where {D} = _mesh(Ω, npts, unif, backend; warn_marker_mismatch)
+@inline mesh(
+    Ω::Domain{CartesianProduct{1,T}},
+    npts::Int,
+    unif::Bool;
+    backend=backend(eltype(Ω)),
+    warn_marker_mismatch::Bool=true,
+) where {T} = _mesh(Ω, (npts,), (unif,), backend; warn_marker_mismatch)
+@inline mesh(
+    Ω::Domain{CartesianProduct{1,T}},
+    npts::Int;
+    uniform::Bool=true,
+    backend=backend(eltype(Ω)),
+    warn_marker_mismatch::Bool=true,
+) where {T} = _mesh(Ω, (npts,), (uniform,), backend; warn_marker_mismatch)
+@inline mesh(
+    Ω::Domain,
+    npts::NTuple{D,Int};
+    uniform::NTuple{D,Bool}=ntuple(_ -> true, Val(D)),
+    backend=backend(eltype(Ω)),
+    warn_marker_mismatch::Bool=true,
+) where {D} = _mesh(Ω, npts, uniform, backend; warn_marker_mismatch)
 
 #------------------------------------------------------------------------------------------#
 # Required Interface Methods
@@ -374,11 +404,13 @@ end
 Return the floating-point coordinate element type of the points in `Ωₕ`.
 """
 function eltype(Ωₕ::AbstractMeshType)
-    error("Interface function 'eltype' not implemented for mesh of type $(typeof(Ωₕ)).")
+    return error(
+        "Interface function 'eltype' not implemented for mesh of type $(typeof(Ωₕ))."
+    )
 end
 
 function eltype(::Type{<:AbstractMeshType})
-    error("Interface function 'eltype(::Type{...})' not implemented for mesh type.")
+    return error("Interface function 'eltype(::Type{...})' not implemented for mesh type.")
 end
 
 """
@@ -529,7 +561,7 @@ function change_points! end
 
 Check whether the mesh has uniform spacing (within numerical tolerance `tol`).
 """
-function is_uniform(Ωₕ::AbstractMeshType{1}; tol = 1e-10)
+function is_uniform(Ωₕ::AbstractMeshType{1}; tol=1e-10)
     n = npoints(Ωₕ)
     if n <= 1
         return true
@@ -544,8 +576,8 @@ function is_uniform(Ωₕ::AbstractMeshType{1}; tol = 1e-10)
     return true
 end
 
-function is_uniform(Ωₕ::AbstractMeshType{D}; tol = 1e-10) where {D}
-    return all(i -> is_uniform(Ωₕ(i); tol = tol), 1:D)
+function is_uniform(Ωₕ::AbstractMeshType{D}; tol=1e-10) where {D}
+    return all(i -> is_uniform(Ωₕ(i); tol=tol), 1:D)
 end
 
 #------------------------------------------------------------------------------------------#
@@ -602,12 +634,12 @@ Return the last valid index of `Ωₕ`.
 
 Iterate over all grid points of `Ωₕ`, returning coordinates `point(Ωₕ, idx)` for each index.
 """
-@inline function Base.iterate(Ωₕ::AbstractMeshType{1}, state = 1)
+@inline function Base.iterate(Ωₕ::AbstractMeshType{1}, state=1)
     state > npoints(Ωₕ) && return nothing
     return (point(Ωₕ, state), state + 1)
 end
 
-@inline function Base.iterate(Ωₕ::AbstractMeshType{D}, state = iterate(indices(Ωₕ))) where {D}
+@inline function Base.iterate(Ωₕ::AbstractMeshType{D}, state=iterate(indices(Ωₕ))) where {D}
     state === nothing && return nothing
     idx, next_state = state
     return (point(Ωₕ, idx), iterate(indices(Ωₕ), next_state))
@@ -660,7 +692,8 @@ locate_cell(Ωₕ, 0.35)  # returns 4 (interval [0.3, 0.4])
 ```
 """
 function locate_cell end
-@inline locate_cell(Ωₕ::AbstractMeshType{D}, x::AbstractVector) where {D} = locate_cell(Ωₕ, Tuple(x))
+@inline locate_cell(Ωₕ::AbstractMeshType{D}, x::AbstractVector) where {D} =
+    locate_cell(Ωₕ, Tuple(x))
 
 """
     normal_vector(Ωₕ::AbstractMeshType{D}, symbol::Symbol) -> NTuple{D, Float64}
@@ -689,7 +722,8 @@ boundary facet label (`:left`, `:right`, `:bottom`, `:top`, `:front`, `:back`).
 
 See also: [`boundary_symbols`](@ref).
 """
-@inline normal_vector(::AbstractMeshType{D}, symbol::Symbol) where {D} = normal_vector(Val(D), symbol)
+@inline normal_vector(::AbstractMeshType{D}, symbol::Symbol) where {D} =
+    normal_vector(Val(D), symbol)
 
 @inline function normal_vector(::Val{1}, symbol::Symbol)
     symbol === :left && return (-1.0,)
@@ -702,7 +736,11 @@ end
     symbol === :right && return (1.0, 0.0)
     symbol === :bottom && return (0.0, -1.0)
     symbol === :top && return (0.0, 1.0)
-    throw(ArgumentError("Unknown 2D boundary symbol: :$symbol. Expected :left, :right, :bottom, or :top."))
+    throw(
+        ArgumentError(
+            "Unknown 2D boundary symbol: :$symbol. Expected :left, :right, :bottom, or :top.",
+        ),
+    )
 end
 
 @inline function normal_vector(::Val{3}, symbol::Symbol)
@@ -712,5 +750,9 @@ end
     symbol === :right && return (0.0, 1.0, 0.0)
     symbol === :bottom && return (0.0, 0.0, -1.0)
     symbol === :top && return (0.0, 0.0, 1.0)
-    throw(ArgumentError("Unknown 3D boundary symbol: :$symbol. Expected :left, :right, :bottom, :top, :front, or :back."))
+    throw(
+        ArgumentError(
+            "Unknown 3D boundary symbol: :$symbol. Expected :left, :right, :bottom, :top, :front, or :back.",
+        ),
+    )
 end

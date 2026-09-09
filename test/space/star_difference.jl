@@ -31,8 +31,9 @@ star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
 
                 @test hs isa StarSpacings
                 @test length(hs) == n - 1
-                @test all(hs[i] ≈ (spacing(Ωₕ, i) + spacing(Ωₕ, i + 1)) / 2
-                for i in 1:(n - 1))
+                @test all(
+                    hs[i] ≈ (spacing(Ωₕ, i) + spacing(Ωₕ, i + 1)) / 2 for i in 1:(n - 1)
+                )
 
                 # away from the first point this is the width of the cell around xᵢ
                 @test all(hs[i] ≈ half_spacing(Ωₕ, i) for i in 2:(n - 1))
@@ -54,9 +55,13 @@ star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
                 uₕ = Rₕ(Wₕ, x -> x^2 + sin(x))
                 u = parent(uₕ)
 
-                want = [i == n ? 0.0 :
+                want = [
+                    if i == n
+                        0.0
+                    else
                         (u[i + 1] - u[i]) / ((spacing(Ωₕ, i) + spacing(Ωₕ, i + 1)) / 2)
-                        for i in 1:n]
+                    end for i in 1:n
+                ]
                 @test parent(Dstar₊ₓ(uₕ)) ≈ want
 
                 # the last point has no forward neighbour and is truncated, as in D₊ₓ
@@ -67,8 +72,9 @@ star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
 
     @testset "Exactness" begin
         # a constant differences to zero, and x differences to one, in every direction
-        Ωₕ = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (5, 6, 4),
-            (true, true, true))
+        Ωₕ = mesh(
+            domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (5, 6, 4), (true, true, true)
+        )
         Wₕ = gridspace(Ωₕ)
         n = npoints(Ωₕ, Tuple)
 
@@ -90,7 +96,7 @@ star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
         Vₕ = gridspace(Ωₕ, Val(2))
         uₕ = Rₕ(Wₕ, x -> x[1] * x[2])
 
-        @test Dstar₊ₕ(uₕ) isa NTuple{2, VectorElement}
+        @test Dstar₊ₕ(uₕ) isa NTuple{2,VectorElement}
         @test parent(Dstar₊ₕ(uₕ)[1]) == parent(Dstar₊ₓ(uₕ))
         @test parent(Dstar₊ₕ(uₕ)[2]) == parent(Dstar₊ᵧ(uₕ))
 
@@ -119,7 +125,7 @@ star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
 
         @test @inferred(Dstar₊ₓ(u1)) isa VectorElement
         @test @inferred(Dstar₊ᵧ(u2)) isa VectorElement
-        @test @inferred(Dstar₊ₕ(u2)) isa NTuple{2, VectorElement}
+        @test @inferred(Dstar₊ₕ(u2)) isa NTuple{2,VectorElement}
         @test @inferred(star_spacings(Ωₕ1)) isa StarSpacings
 
         # the denominator is a lazy view over the cached spacings, so it costs nothing
@@ -138,11 +144,10 @@ star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
         # Compared with an absolute floor as well as a relative one. Where uₕ happens not
         # to vary along the direction being differenced both sides are zero, and a purely
         # relative comparison reports a large error on two values of order 1e-17.
-        agree(a, b) = isapprox(a, b; atol = 1e-12, rtol = 1e-12)
+        agree(a, b) = isapprox(a, b; atol=1e-12, rtol=1e-12)
 
         @testset "1D" begin
             for (lbl, unif) in (("uniform", true), ("random", false)), n in (11, 51, 201)
-
                 Random.seed!(20260830)
                 Ωₕ = mesh(domain(interval(0.0, 1.0)), n, unif)
                 Wₕ = gridspace(Ωₕ)
@@ -160,15 +165,19 @@ star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
 
             for unif in (true, false)
                 Random.seed!(20260830)
-                Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (21, 19),
-                    (unif, unif))
+                Ω2 = mesh(
+                    domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (21, 19), (unif, unif)
+                )
                 W2 = gridspace(Ω2)
                 a, b = Rₕ(W2, u2), Rₕ(W2, v2)
                 @test agree(innerₕ(Dstar₊ₓ(a), b), -inner₊ₓ(a, D₋ₓ(b)))
                 @test agree(innerₕ(Dstar₊ᵧ(a), b), -inner₊ᵧ(a, D₋ᵧ(b)))
 
-                Ω3 = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (11, 9, 8),
-                    (unif, unif, unif))
+                Ω3 = mesh(
+                    domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
+                    (11, 9, 8),
+                    (unif, unif, unif),
+                )
                 W3 = gridspace(Ω3)
                 c, d = Rₕ(W3, u3), Rₕ(W3, v3)
                 @test agree(innerₕ(Dstar₊ₓ(c), d), -inner₊ₓ(c, D₋ₓ(d)))
@@ -192,16 +201,18 @@ star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
         end
 
         @testset "Random grids (Supposition)" begin
-            positive_h = Data.Floats{Float64}(; minimum = 0.01, maximum = 10.0,
-                nans = false, infs = false)
-            field_val = Data.Floats{Float64}(; minimum = -100.0, maximum = 100.0,
-                nans = false, infs = false)
+            positive_h = Data.Floats{Float64}(;
+                minimum=0.01, maximum=10.0, nans=false, infs=false
+            )
+            field_val = Data.Floats{Float64}(;
+                minimum=-100.0, maximum=100.0, nans=false, infs=false
+            )
 
             # 1D: arbitrary non-uniform mesh and unconstrained u vs boundary-vanishing v
             @check function check_sbp_1d(
-                    h = Data.Vectors(positive_h; min_size = 2, max_size = 30),
-                    u_raw = Data.Vectors(field_val; min_size = 31, max_size = 31),
-                    v_raw = Data.Vectors(field_val; min_size = 31, max_size = 31)
+                h=Data.Vectors(positive_h; min_size=2, max_size=30),
+                u_raw=Data.Vectors(field_val; min_size=31, max_size=31),
+                v_raw=Data.Vectors(field_val; min_size=31, max_size=31),
             )
                 n = length(h) + 1
                 pts = zeros(Float64, n)
@@ -225,15 +236,15 @@ star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
                 lhs = innerₕ(Dstar₊ₓ(uₕ), vₕ)
                 rhs = -inner₊ₓ(uₕ, D₋ₓ(vₕ))
                 scale = max(abs(lhs), abs(rhs), 1.0)
-                isapprox(lhs, rhs; atol = 1e-10 * scale, rtol = 1e-10)
+                isapprox(lhs, rhs; atol=1e-10 * scale, rtol=1e-10)
             end
 
             # 2D: arbitrary non-uniform tensor product mesh and fields across coordinates
             @check function check_sbp_2d(
-                    hx = Data.Vectors(positive_h; min_size = 2, max_size = 8),
-                    hy = Data.Vectors(positive_h; min_size = 2, max_size = 8),
-                    u_raw = Data.Vectors(field_val; min_size = 81, max_size = 81),
-                    v_raw = Data.Vectors(field_val; min_size = 81, max_size = 81)
+                hx=Data.Vectors(positive_h; min_size=2, max_size=8),
+                hy=Data.Vectors(positive_h; min_size=2, max_size=8),
+                u_raw=Data.Vectors(field_val; min_size=81, max_size=81),
+                v_raw=Data.Vectors(field_val; min_size=81, max_size=81),
             )
                 nx = length(hx) + 1
                 ny = length(hy) + 1
@@ -249,8 +260,11 @@ star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
                 end
                 pts_y ./= pts_y[end]
 
-                Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (nx, ny),
-                    (false, false))
+                Ωₕ = mesh(
+                    domain(interval(0.0, 1.0) × interval(0.0, 1.0)),
+                    (nx, ny),
+                    (false, false),
+                )
                 set_points!(Ωₕ(1), pts_x)
                 set_points!(Ωₕ(2), pts_y)
                 Wₕ = gridspace(Ωₕ)
@@ -270,12 +284,12 @@ star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
                 lhs_x = innerₕ(Dstar₊ₓ(uₕ), vₕ)
                 rhs_x = -inner₊ₓ(uₕ, D₋ₓ(vₕ))
                 scale_x = max(abs(lhs_x), abs(rhs_x), 1.0)
-                ok_x = isapprox(lhs_x, rhs_x; atol = 1e-10 * scale_x, rtol = 1e-10)
+                ok_x = isapprox(lhs_x, rhs_x; atol=1e-10 * scale_x, rtol=1e-10)
 
                 lhs_y = innerₕ(Dstar₊ᵧ(uₕ), vₕ)
                 rhs_y = -inner₊ᵧ(uₕ, D₋ᵧ(vₕ))
                 scale_y = max(abs(lhs_y), abs(rhs_y), 1.0)
-                ok_y = isapprox(lhs_y, rhs_y; atol = 1e-10 * scale_y, rtol = 1e-10)
+                ok_y = isapprox(lhs_y, rhs_y; atol=1e-10 * scale_y, rtol=1e-10)
 
                 ok_x && ok_y
             end
@@ -284,11 +298,11 @@ star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
             # Axis sizes kept smaller than the 2D check's (max 5 intervals, not 8) so the
             # total point count (up to 6³ = 216) stays a fast random search.
             @check function check_sbp_3d(
-                    hx = Data.Vectors(positive_h; min_size = 2, max_size = 5),
-                    hy = Data.Vectors(positive_h; min_size = 2, max_size = 5),
-                    hz = Data.Vectors(positive_h; min_size = 2, max_size = 5),
-                    u_raw = Data.Vectors(field_val; min_size = 216, max_size = 216),
-                    v_raw = Data.Vectors(field_val; min_size = 216, max_size = 216)
+                hx=Data.Vectors(positive_h; min_size=2, max_size=5),
+                hy=Data.Vectors(positive_h; min_size=2, max_size=5),
+                hz=Data.Vectors(positive_h; min_size=2, max_size=5),
+                u_raw=Data.Vectors(field_val; min_size=216, max_size=216),
+                v_raw=Data.Vectors(field_val; min_size=216, max_size=216),
             )
                 nx = length(hx) + 1
                 ny = length(hy) + 1
@@ -312,8 +326,11 @@ star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
                 end
                 pts_z ./= pts_z[end]
 
-                Ωₕ = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (nx, ny, nz),
-                    (false, false, false))
+                Ωₕ = mesh(
+                    domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
+                    (nx, ny, nz),
+                    (false, false, false),
+                )
                 set_points!(Ωₕ(1), pts_x)
                 set_points!(Ωₕ(2), pts_y)
                 set_points!(Ωₕ(3), pts_z)
@@ -336,17 +353,17 @@ star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
                 lhs_x = innerₕ(Dstar₊ₓ(uₕ), vₕ)
                 rhs_x = -inner₊ₓ(uₕ, D₋ₓ(vₕ))
                 scale_x = max(abs(lhs_x), abs(rhs_x), 1.0)
-                ok_x = isapprox(lhs_x, rhs_x; atol = 1e-10 * scale_x, rtol = 1e-10)
+                ok_x = isapprox(lhs_x, rhs_x; atol=1e-10 * scale_x, rtol=1e-10)
 
                 lhs_y = innerₕ(Dstar₊ᵧ(uₕ), vₕ)
                 rhs_y = -inner₊ᵧ(uₕ, D₋ᵧ(vₕ))
                 scale_y = max(abs(lhs_y), abs(rhs_y), 1.0)
-                ok_y = isapprox(lhs_y, rhs_y; atol = 1e-10 * scale_y, rtol = 1e-10)
+                ok_y = isapprox(lhs_y, rhs_y; atol=1e-10 * scale_y, rtol=1e-10)
 
                 lhs_z = innerₕ(Dstar₊₂(uₕ), vₕ)
                 rhs_z = -inner₊₂(uₕ, D₋₂(vₕ))
                 scale_z = max(abs(lhs_z), abs(rhs_z), 1.0)
-                ok_z = isapprox(lhs_z, rhs_z; atol = 1e-10 * scale_z, rtol = 1e-10)
+                ok_z = isapprox(lhs_z, rhs_z; atol=1e-10 * scale_z, rtol=1e-10)
 
                 ok_x && ok_y && ok_z
             end

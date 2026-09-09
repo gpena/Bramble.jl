@@ -1,8 +1,15 @@
 using Test
 using Bramble
-using Bramble: __prod, _innerplus_weights!, spacing, _innerh_weights!,
-               _innerplus_mean_weights!, __innerplus_weights!, half_spacing, space_weights,
-               SpaceWeights
+using Bramble:
+    __prod,
+    _innerplus_weights!,
+    spacing,
+    _innerh_weights!,
+    _innerplus_mean_weights!,
+    __innerplus_weights!,
+    half_spacing,
+    space_weights,
+    SpaceWeights
 using Bramble: Innerh, Innerplus
 using Bramble: VectorGridSpace, mesh_type
 using LinearAlgebra: norm
@@ -77,7 +84,7 @@ using Supposition
         VT2 = vector_type(b2)
 
         sw2 = space_weights(mesh2d)
-        @test sw2 isa SpaceWeights{D2, VT2}
+        @test sw2 isa SpaceWeights{D2,VT2}
         @test length(sw2.innerh) == npoints(mesh2d)
         @test length(sw2.innerplus) == D2
         @test all(length(w) == npoints(mesh2d) for w in sw2.innerplus)
@@ -344,16 +351,13 @@ end
     import Bramble: Innerh, Innerplus, set_points!
 
     grids = Dict(
-        "uniform" => n -> collect(range(0.0, 1.0, length = n)),
+        "uniform" => n -> collect(range(0.0, 1.0, length=n)),
         "graded t^4" => n -> [(k / (n - 1))^4 for k in 0:(n - 1)],
         "clustered ends" => n -> [0.5 * (1 - cos(pi * k / (n - 1))) for k in 0:(n - 1)],
-        "one tiny cell" =>
-            n -> (v = collect(range(0.0, 1.0, length = n));
-                v[2] = v[1] + 1e-9;
-                v))
+        "one tiny cell" => n -> (v=collect(range(0.0, 1.0, length=n)); v[2]=v[1] + 1e-9; v),
+    )
 
     for n in (3, 17, 64), lbl in sort(collect(keys(grids)))
-
         @testset "n=$n $lbl" begin
             Ωₕ = mesh(domain(interval(0.0, 1.0)), n, true)
             set_points!(Ωₕ, grids[lbl](n))
@@ -381,32 +385,33 @@ end
     end
 
     @testset "Partition of unity" begin
-        positive_float = Data.Floats{Float64}(; minimum = 0.1, maximum = 10.0,
-            nans = false, infs = false)
-        coord_float = Data.Floats{Float64}(; minimum = -10.0, maximum = 10.0,
-            nans = false, infs = false)
+        positive_float = Data.Floats{Float64}(;
+            minimum=0.1, maximum=10.0, nans=false, infs=false
+        )
+        coord_float = Data.Floats{Float64}(;
+            minimum=-10.0, maximum=10.0, nans=false, infs=false
+        )
 
         @check function check_domain_measure_2d(
-                a1 = coord_float,
-                len1 = positive_float,
-                a2 = coord_float,
-                len2 = positive_float,
-                nx = Data.Integers(3, 10),
-                ny = Data.Integers(3, 10)
+            a1=coord_float,
+            len1=positive_float,
+            a2=coord_float,
+            len2=positive_float,
+            nx=Data.Integers(3, 10),
+            ny=Data.Integers(3, 10),
         )
             b1 = a1 + len1
             b2 = a2 + len2
             vol = len1 * len2
 
-            Ωₕ = mesh(
-                domain(interval(a1, b1) × interval(a2, b2)), (nx, ny), (false, false))
+            Ωₕ = mesh(domain(interval(a1, b1) × interval(a2, b2)), (nx, ny), (false, false))
             Wₕ = gridspace(Ωₕ)
 
             wh = weights(Wₕ, Innerh())
 
             # 1. Sum of cell measures equals total domain volume
             sum_wh = sum(wh)
-            ok_vol = isapprox(sum_wh, vol; atol = 1e-11 * vol, rtol = 1e-11)
+            ok_vol = isapprox(sum_wh, vol; atol=1e-11 * vol, rtol=1e-11)
 
             # 2. Each cell measure is strictly positive
             ok_pos = all(wh .> 0)
@@ -414,8 +419,7 @@ end
             # 3. L² norm of constant function 1 equals sqrt(volume)
             u_one = element(Wₕ, 1.0)
             norm_one = normₕ(u_one)
-            ok_norm = isapprox(
-                norm_one, sqrt(vol); atol = 1e-11 * sqrt(vol), rtol = 1e-11)
+            ok_norm = isapprox(norm_one, sqrt(vol); atol=1e-11 * sqrt(vol), rtol=1e-11)
 
             ok_vol && ok_pos && ok_norm
         end

@@ -3,7 +3,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
     test_dir = @__DIR__
     bramble_dir = abspath(joinpath(test_dir, "../"))
     Pkg.activate(joinpath(test_dir, "."))
-    Pkg.develop(path = bramble_dir)
+    Pkg.develop(; path=bramble_dir)
     Pkg.instantiate()
 end
 
@@ -62,7 +62,7 @@ end
 
 # Central difference of a scalar functional, to compare an AD derivative against. Every
 # AD test checks the derivative against this rather than merely checking that it ran.
-_fd(f, a; h = 1e-6) = (f(a + h) - f(a - h)) / (2h)
+_fd(f, a; h=1e-6) = (f(a + h) - f(a - h)) / (2h)
 
 # A symmetric, structurally symmetric operator to constrain.
 _tri(m) = spdiagm(0 => fill(4.0, m), 1 => fill(-1.0, m - 1), -1 => fill(-1.0, m - 1))
@@ -71,8 +71,8 @@ _tri(m) = spdiagm(0 => fill(4.0, m), 1 => fill(-1.0, m - 1), -1 => fill(-1.0, m 
 # that the AD derivative is right, not merely that it ran. Was `_matches_finite_difference`
 # in space/autodiff.jl and `_matches_fd` in form/autodiff.jl (same body, two names, so no
 # overwrite warning pointed at it).
-function _matches_fd(f, a = 1.3; rtol = 1e-5)
-    return isapprox(ForwardDiff.derivative(f, a), _fd(f, a); rtol = rtol)
+function _matches_fd(f, a=1.3; rtol=1e-5)
+    return isapprox(ForwardDiff.derivative(f, a), _fd(f, a); rtol=rtol)
 end
 
 const __bramble_test_group = get(ENV, "BRAMBLE_TEST_GROUP", "all")
@@ -114,9 +114,11 @@ const __bramble_with_ext_backends = __bramble_test_group in ("ext", "full")
 # `isfile` below makes this a local-only check: it runs when a maintainer has the manual
 # checked out and asks for the `full` group, and skips with a clear `@info` (not silently)
 # everywhere else, rather than erroring on a file that was never going to be there.
-const __bramble_manual_snippets_path = joinpath(@__DIR__, "..", "manual", "test_snippets.jl")
-const __bramble_with_manual_snippets = __bramble_test_group == "full" &&
-                                       isfile(__bramble_manual_snippets_path)
+const __bramble_manual_snippets_path = joinpath(
+    @__DIR__, "..", "manual", "test_snippets.jl"
+)
+const __bramble_with_manual_snippets =
+    __bramble_test_group == "full" && isfile(__bramble_manual_snippets_path)
 if __bramble_test_group == "full" && !__bramble_with_manual_snippets
     @info "Skipping manual snippets: manual/test_snippets.jl not found (manual/ is gitignored, so this is expected outside a machine that has it checked out locally)."
 end

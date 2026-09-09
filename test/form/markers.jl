@@ -17,36 +17,40 @@ using Bramble: dot
     vₕ = Rₕ(Wₕ, x -> 1.0)
 
     @testset "Numeric marker agreement" begin
-        a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v; markers = (:bottom,)))
+        a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v; markers=(:bottom,)))
         assembled = dot(vₕ.data, assemble(a) * uₕ.data)
         @test assembled ≈ 0.125
-        @test assembled ≈ innerₕ(uₕ, vₕ; markers = (:bottom,))
+        @test assembled ≈ innerₕ(uₕ, vₕ; markers=(:bottom,))
     end
 
     @testset "Unrestricted match" begin
-        a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v; markers = ()))
+        a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v; markers=()))
         b = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
         @test assemble(a) == assemble(b)
     end
 
     @testset "Direction inference agreement" begin
-        a1 = form(Wₕ, Wₕ, (u, v) -> inner₊(D₋ₓ(u), D₋ₓ(v); markers = (:bottom,)))
-        a2 = form(Wₕ, Wₕ, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v); markers = (:bottom,)))
+        a1 = form(Wₕ, Wₕ, (u, v) -> inner₊(D₋ₓ(u), D₋ₓ(v); markers=(:bottom,)))
+        a2 = form(Wₕ, Wₕ, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v); markers=(:bottom,)))
         @test assemble(a1) ≈ assemble(a2)
     end
 
     @testset "Gradient tuple inner₊" begin
-        a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v); markers = (:bottom,)))
-        b = form(Wₕ, Wₕ,
-            (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v); markers = (:bottom,)) +
-                      inner₊ᵧ(D₋ᵧ(u), D₋ᵧ(v); markers = (:bottom,)))
+        a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v); markers=(:bottom,)))
+        b = form(
+            Wₕ,
+            Wₕ,
+            (u, v) ->
+                inner₊ₓ(D₋ₓ(u), D₋ₓ(v); markers=(:bottom,)) +
+                inner₊ᵧ(D₋ᵧ(u), D₋ᵧ(v); markers=(:bottom,)),
+        )
         @test assemble(a) ≈ assemble(b)
     end
 
     @testset "Linear form restriction" begin
         fₕ = Rₕ(Wₕ, x -> π^2 * sin(π * x[1]))
-        l1 = form(Wₕ, v -> innerₕ(fₕ, v; markers = (:bottom,)))
-        l2 = form(Wₕ, v -> innerₕ(x -> π^2 * sin(π * x[1]), v; markers = (:bottom,)))
+        l1 = form(Wₕ, v -> innerₕ(fₕ, v; markers=(:bottom,)))
+        l2 = form(Wₕ, v -> innerₕ(x -> π^2 * sin(π * x[1]), v; markers=(:bottom,)))
         @test assemble(l1) ≈ assemble(l2)
 
         # restricted to :bottom, only entries on that edge are nonzero
@@ -55,26 +59,26 @@ using Bramble: dot
     end
 
     @testset "Reserved markers" begin
-        a_boundary = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v; markers = (:boundary,)))
-        a_interior = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v; markers = (:interior,)))
+        a_boundary = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v; markers=(:boundary,)))
+        a_interior = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v; markers=(:interior,)))
         full = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
         # boundary + interior sums (as numbers, since the masks are disjoint and cover
         # everything) reconstruct the unrestricted result
         @test dot(vₕ.data, assemble(a_boundary) * uₕ.data) +
               dot(vₕ.data, assemble(a_interior) * uₕ.data) ≈
-              dot(vₕ.data, assemble(full) * uₕ.data)
+            dot(vₕ.data, assemble(full) * uₕ.data)
     end
 
     @testset "Unknown marker error" begin
         # Scalar space: assembling with a typo'd label, instead of silently assembling to
         # all zero (RegionRestriction's own local_stencil can't tell "not marked" from
         # "no such marker"; haskey failing looks like the former).
-        c = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v; markers = (:nonexistent,)))
+        c = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v; markers=(:nonexistent,)))
         @test_throws ArgumentError assemble(c)
 
         # Linear (source-term) form, same reasoning.
         fₕ = Rₕ(Wₕ, x -> 1.0)
-        l = form(Wₕ, v -> innerₕ(fₕ, v; markers = (:nonexistent,)))
+        l = form(Wₕ, v -> innerₕ(fₕ, v; markers=(:nonexistent,)))
         @test_throws ArgumentError assemble(l)
 
         # Composite space: leaves currently share one mesh (gridspace(Ωₕ, Val(N)) builds
@@ -82,26 +86,30 @@ using Bramble: dot
         # label another has, but a name that exists on no leaf at all must still be
         # caught, not silently assembled to zero.
         Vₕ = Wₕ^Val(2)
-        d = form(Vₕ, Vₕ,
-            (u, v) -> innerₕ(u(1), v(1); markers = (:nonexistent,)) +
-                      innerₕ(u(2), v(2)))
+        d = form(
+            Vₕ,
+            Vₕ,
+            (u, v) -> innerₕ(u(1), v(1); markers=(:nonexistent,)) + innerₕ(u(2), v(2)),
+        )
         @test_throws ArgumentError assemble(d)
     end
 
     @testset "Composite space markers" begin
         Vₕ = Wₕ^Val(2)
-        a = form(Vₕ, Vₕ,
-            (u, v) -> innerₕ(u(1), v(1); markers = (:bottom,)) + innerₕ(u(2), v(2)))
+        a = form(
+            Vₕ, Vₕ, (u, v) -> innerₕ(u(1), v(1); markers=(:bottom,)) + innerₕ(u(2), v(2))
+        )
         @test size(assemble(a)) == (2 * Bramble.ndofs(Wₕ), 2 * Bramble.ndofs(Wₕ))
     end
 
     @testset "Direction mismatch message" begin
         @test_throws ArgumentError form(
-            Wₕ, Wₕ, (u, v) -> inner₊(D₋ₓ(u), D₋ᵧ(v); markers = (:bottom,)))
+            Wₕ, Wₕ, (u, v) -> inner₊(D₋ₓ(u), D₋ᵧ(v); markers=(:bottom,))
+        )
     end
 
     @testset "Empty-tuple disambiguator" begin
-        @test_throws ArgumentError inner₊((), (); markers = (:bottom,))
+        @test_throws ArgumentError inner₊((), (); markers=(:bottom,))
     end
 
     @testset "Empty-selection marker" begin
@@ -114,15 +122,15 @@ using Bramble: dot
         uₑ = Rₕ(Wₑ, x -> 1.0)
         vₑ = Rₕ(Wₑ, x -> 1.0)
 
-        @test innerₕ(uₑ, vₑ; markers = (:empty,)) == 0.0
+        @test innerₕ(uₑ, vₑ; markers=(:empty,)) == 0.0
 
         function _empty_marker_allocs(u, v)
-            innerₕ(u, v; markers = (:empty,))   # warm up
-            return @allocated innerₕ(u, v; markers = (:empty,))
+            innerₕ(u, v; markers=(:empty,))   # warm up
+            return @allocated innerₕ(u, v; markers=(:empty,))
         end
         @test _empty_marker_allocs(uₑ, vₑ) == 0
 
-        a = form(Wₑ, Wₑ, (u, v) -> innerₕ(u, v; markers = (:empty,)))
+        a = form(Wₑ, Wₑ, (u, v) -> innerₕ(u, v; markers=(:empty,)))
         @test dot(vₑ.data, assemble(a) * uₑ.data) == 0.0
 
         # `dirichlet_bc!` against a marker that selects nothing must leave the vector and

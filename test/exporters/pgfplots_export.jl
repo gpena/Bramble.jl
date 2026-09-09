@@ -52,7 +52,8 @@ using Bramble
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
         mktempdir() do dir
             @test_throws "has length 3, but the mesh has 5 points" export_pgfplots(
-                joinpath(dir, "t"), Ωₕ, "u" => [1.0, 2.0, 3.0])
+                joinpath(dir, "t"), Ωₕ, "u" => [1.0, 2.0, 3.0]
+            )
         end
     end
 
@@ -100,20 +101,24 @@ using Bramble
 
         mktempdir() do dir
             @test_throws "one scalar field per 2D file" export_pgfplots(
-                joinpath(dir, "t"), Ωₕ, "u" => uₕ, "v" => uₕ)
+                joinpath(dir, "t"), Ωₕ, "u" => uₕ, "v" => uₕ
+            )
             @test_throws "one scalar field per 2D file" export_pgfplots(
-                joinpath(dir, "t"), Ωₕ, "velocity" => cₕ)
+                joinpath(dir, "t"), Ωₕ, "velocity" => cₕ
+            )
         end
     end
 
     @testset "3D refusal" begin
-        Ωₕ = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (3, 3, 3),
-            (true, true, true))
+        Ωₕ = mesh(
+            domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (3, 3, 3), (true, true, true)
+        )
         Wₕ = gridspace(Ωₕ)
         uₕ = Rₕ(Wₕ, x -> x[1])
         mktempdir() do dir
             @test_throws "use export_vtk instead" export_pgfplots(
-                joinpath(dir, "t"), Ωₕ, "u" => uₕ)
+                joinpath(dir, "t"), Ωₕ, "u" => uₕ
+            )
         end
     end
 
@@ -163,9 +168,11 @@ using Bramble
             @test read(f_mat, String) == read(f_ref, String)
 
             @test_throws "has size (2, 4), but the mesh has (3, 4) points" export_pgfplots(
-                joinpath(dir, "bad"), Ωₕ, "u" => Z[1:2, :])
+                joinpath(dir, "bad"), Ωₕ, "u" => Z[1:2, :]
+            )
             @test_throws "has length 11, but the mesh has 12 points" export_pgfplots(
-                joinpath(dir, "bad2"), Ωₕ, "u" => vec(Z)[1:11])
+                joinpath(dir, "bad2"), Ωₕ, "u" => vec(Z)[1:11]
+            )
         end
     end
 end

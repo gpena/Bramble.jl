@@ -74,7 +74,7 @@ using Supposition
             @test inner₊(u1, u2) ≈ 2.0 * domain_length
 
             res_tuple = inner₊(u1, u3, Tuple)
-            @test res_tuple isa NTuple{1, Float64}
+            @test res_tuple isa NTuple{1,Float64}
             @test res_tuple[1] ≈ inner₊ₓ(u1, u3)
 
             @test norm₊(u1)^2 ≈ inner₊(u1, u1)
@@ -112,7 +112,7 @@ using Supposition
 
         @testset "Tuple methods" begin
             res_tuple = inner₊(ux, uy, Tuple)
-            @test res_tuple isa NTuple{2, Float64}
+            @test res_tuple isa NTuple{2,Float64}
             @test res_tuple[1] ≈ inner₊ₓ(ux, uy)
             @test res_tuple[2] ≈ inner₊ᵧ(ux, uy)
 
@@ -126,9 +126,9 @@ using Supposition
             # For u(x,y) = x + 2y, ∇u = (1, 2)
             Rₕ!(u1, x -> x[1] + 2*x[2])
 
-            expected_value_snorm = sum(i^2 *
-                                       sum(Bramble.weights(Wₕ_2d, Bramble.Innerplus(), i))
-            for i in 1:2)
+            expected_value_snorm = sum(
+                i^2 * sum(Bramble.weights(Wₕ_2d, Bramble.Innerplus(), i)) for i in 1:2
+            )
             @test snorm₁ₕ(u1)^2 ≈ expected_value_snorm
             @test norm₁ₕ(u1)^2 ≈ normₕ(u1)^2 + snorm₁ₕ(u1)^2
         end
@@ -151,9 +151,9 @@ using Supposition
         @testset "norm₁ₕ" begin
             # For u(x,y,z) = x+2y+3z, ∇u = (1, 2, 3)
             Rₕ!(u1, x -> x[1] + 2x[2] + 3x[3])
-            expected_value_snorm = sum(i^2 *
-                                       sum(Bramble.weights(Wₕ_3d, Bramble.Innerplus(), i))
-            for i in 1:3)
+            expected_value_snorm = sum(
+                i^2 * sum(Bramble.weights(Wₕ_3d, Bramble.Innerplus(), i)) for i in 1:3
+            )
 
             @test snorm₁ₕ(u1)^2 ≈ expected_value_snorm
             @test norm₁ₕ(u1)^2 ≈ normₕ(u1)^2 + snorm₁ₕ(u1)^2
@@ -165,8 +165,9 @@ end
     import Bramble: get_dimension_from_type, _get_h_val
 
     W1 = gridspace(mesh(domain(interval(0.0, 1.0)), 5, true))
-    W2 = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 5), (
-        true, true)))
+    W2 = gridspace(
+        mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 5), (true, true))
+    )
     u1 = Rₕ(W1, x -> x)
     u2 = Rₕ(W2, x -> x[1])
     v2 = Rₕ(W2, x -> x[2])
@@ -221,13 +222,22 @@ end
     # snorm₁ₕ(uₕ) == norm₊(∇₋ₕ(uₕ)) is the definition of the discrete H¹ seminorm, and
     # snorm₁ₕ computes it without materialising the gradient. The two routes must agree
     # in every dimension, on uniform and non-uniform grids.
-    meshes = (("1D uniform", mesh(domain(interval(0.0, 1.0)), 21, true)),
+    meshes = (
+        ("1D uniform", mesh(domain(interval(0.0, 1.0)), 21, true)),
         ("1D non-uniform", mesh(domain(interval(0.0, 1.0)), 21, false)),
-        ("2D",
-            mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 9), (true, false))),
-        ("3D",
-            mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 6),
-                (true, false, true))))
+        (
+            "2D",
+            mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 9), (true, false)),
+        ),
+        (
+            "3D",
+            mesh(
+                domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
+                (4, 5, 6),
+                (true, false, true),
+            ),
+        ),
+    )
 
     for (lbl, Ωₕ) in meshes
         @testset "$lbl" begin
@@ -244,15 +254,17 @@ end
     end
 
     @testset "Random grids (Supposition)" begin
-        positive_h = Data.Floats{Float64}(; minimum = 0.01, maximum = 10.0,
-            nans = false, infs = false)
-        field_val = Data.Floats{Float64}(; minimum = -100.0, maximum = 100.0,
-            nans = false, infs = false)
+        positive_h = Data.Floats{Float64}(;
+            minimum=0.01, maximum=10.0, nans=false, infs=false
+        )
+        field_val = Data.Floats{Float64}(;
+            minimum=-100.0, maximum=100.0, nans=false, infs=false
+        )
 
         @check function check_sobolev_identities_2d(
-                hx = Data.Vectors(positive_h; min_size = 3, max_size = 8),
-                hy = Data.Vectors(positive_h; min_size = 3, max_size = 8),
-                u_raw = Data.Vectors(field_val; min_size = 81, max_size = 81)
+            hx=Data.Vectors(positive_h; min_size=3, max_size=8),
+            hy=Data.Vectors(positive_h; min_size=3, max_size=8),
+            u_raw=Data.Vectors(field_val; min_size=81, max_size=81),
         )
             nx = length(hx) + 1
             ny = length(hy) + 1
@@ -268,8 +280,9 @@ end
             end
             pts_y ./= pts_y[end]
 
-            Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (nx, ny),
-                (false, false))
+            Ωₕ = mesh(
+                domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (nx, ny), (false, false)
+            )
             set_points!(Ωₕ(1), pts_x)
             set_points!(Ωₕ(2), pts_y)
             Wₕ = gridspace(Ωₕ)
@@ -281,17 +294,17 @@ end
             # normₕ² == innerₕ(u, u)
             n_sq = normₕ(uₕ)^2
             inn = innerₕ(uₕ, uₕ)
-            ok1 = isapprox(n_sq, inn; atol = 1e-10 * max(n_sq, 1.0), rtol = 1e-10)
+            ok1 = isapprox(n_sq, inn; atol=1e-10 * max(n_sq, 1.0), rtol=1e-10)
 
             # snorm₁ₕ(uₕ) == norm₊(∇₋ₕ(uₕ))
             sn = snorm₁ₕ(uₕ)
             grad_norm = norm₊(∇₋ₕ(uₕ))
-            ok2 = isapprox(sn, grad_norm; atol = 1e-10 * max(sn, 1.0), rtol = 1e-10)
+            ok2 = isapprox(sn, grad_norm; atol=1e-10 * max(sn, 1.0), rtol=1e-10)
 
             # norm₁ₕ(uₕ)² == normₕ(uₕ)² + snorm₁ₕ(uₕ)²
             h1_sq = norm₁ₕ(uₕ)^2
             sum_sq = n_sq + sn^2
-            ok3 = isapprox(h1_sq, sum_sq; atol = 1e-10 * max(h1_sq, 1.0), rtol = 1e-10)
+            ok3 = isapprox(h1_sq, sum_sq; atol=1e-10 * max(h1_sq, 1.0), rtol=1e-10)
 
             ok1 && ok2 && ok3
         end
@@ -326,8 +339,9 @@ end
         uv = Rₕ(Vc, (x -> x[1], x -> x[2], x -> 1.0))
         vv = Rₕ(Vc, (x -> 1.0, x -> 1.0, x -> 1.0))
 
-        byhand = sum(innerₕ(Bramble.components(uv)[c], Bramble.components(vv)[c])
-        for c in 1:3)
+        byhand = sum(
+            innerₕ(Bramble.components(uv)[c], Bramble.components(vv)[c]) for c in 1:3
+        )
         @test innerₕ(uv, vv) ≈ byhand
         @test innerₕ(uv, vv) ≈ 0.5 + 0.5 + 1.0        # ∫x + ∫y + ∫1 over the unit square
 
@@ -359,22 +373,22 @@ end
     @testset "Figure match" begin
         # Masked sum on a 5×5 mesh restricted to :bottom evaluates to 0.125, distinguished
         # from a codimension-1 boundary integral over the same region.
-        @test innerₕ(uₕ, vₕ; markers = (:bottom,)) ≈ 0.125
+        @test innerₕ(uₕ, vₕ; markers=(:bottom,)) ≈ 0.125
     end
 
     @testset "Empty default agreement" begin
-        @test innerₕ(uₕ, vₕ; markers = ()) == innerₕ(uₕ, vₕ)
-        @test inner₊ₓ(uₕ, vₕ; markers = ()) == inner₊ₓ(uₕ, vₕ)
+        @test innerₕ(uₕ, vₕ; markers=()) == innerₕ(uₕ, vₕ)
+        @test inner₊ₓ(uₕ, vₕ; markers=()) == inner₊ₓ(uₕ, vₕ)
     end
 
     @testset "Marker union" begin
         mask = Bramble.index_in_marker(Ωₕ, :bottom) .| Bramble.index_in_marker(Ωₕ, :left)
         w = Bramble.weights(Wₕ, Bramble.Innerh())
         byhand = sum(w[i] for i in eachindex(w) if mask[i])
-        @test innerₕ(uₕ, vₕ; markers = (:bottom, :left)) ≈ byhand
+        @test innerₕ(uₕ, vₕ; markers=(:bottom, :left)) ≈ byhand
         # a mesh point on both :bottom and :left (the corner) must count once
-        @test innerₕ(uₕ, vₕ; markers = (:bottom, :left)) <
-              innerₕ(uₕ, vₕ; markers = (:bottom,)) + innerₕ(uₕ, vₕ; markers = (:left,))
+        @test innerₕ(uₕ, vₕ; markers=(:bottom, :left)) <
+            innerₕ(uₕ, vₕ; markers=(:bottom,)) + innerₕ(uₕ, vₕ; markers=(:left,))
     end
 
     @testset "Composite threading" begin
@@ -382,15 +396,15 @@ end
         Uc = Rₕ(Vₕ, x -> (1.0, 2.0))
         Vc = Rₕ(Vₕ, x -> (1.0, 2.0))
         c1, c2 = Bramble.components(Uc)
-        byhand = innerₕ(c1, c1; markers = (:bottom,)) + innerₕ(c2, c2; markers = (:bottom,))
-        @test innerₕ(Uc, Vc; markers = (:bottom,)) ≈ byhand
+        byhand = innerₕ(c1, c1; markers=(:bottom,)) + innerₕ(c2, c2; markers=(:bottom,))
+        @test innerₕ(Uc, Vc; markers=(:bottom,)) ≈ byhand
     end
 
     @testset "Directional masking" begin
         wx = Bramble.weights(Wₕ, Bramble.Innerplus(), 1)
         mask = Bramble.index_in_marker(Ωₕ, :left)
         byhand = sum(wx[i] for i in eachindex(wx) if mask[i])
-        @test inner₊ₓ(uₕ, vₕ; markers = (:left,)) ≈ byhand
+        @test inner₊ₓ(uₕ, vₕ; markers=(:left,)) ≈ byhand
     end
 
     @testset "Refinement scaling" begin
@@ -401,9 +415,9 @@ end
             Ω = mesh(domain(S, :bottom => :bottom), (n, n), (true, true))
             W = gridspace(Ω)
             w = Rₕ(W, x -> 1.0)
-            innerₕ(w, w; markers = (:bottom,))
+            innerₕ(w, w; markers=(:bottom,))
         end
-        @test issorted(vals; rev = true)
+        @test issorted(vals; rev=true)
         @test vals[end] < vals[1] / 4
     end
 

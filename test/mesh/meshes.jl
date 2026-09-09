@@ -3,8 +3,8 @@
 
 using Test
 using Bramble
-import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, hₘᵢₙ,
-                is_collapsed
+import Bramble:
+    set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, hₘᵢₙ, is_collapsed
 
 @testset "Comprehensive mesh test suite" begin
     @testset "Domain edge cases" begin
@@ -20,11 +20,15 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, h
             @test !isnothing(markers(X2))
 
             # Domain with multiple markers
-            X3 = domain(I,
-                markers(I,
+            X3 = domain(
+                I,
+                markers(
+                    I,
                     :left => x -> x[1] < -0.5,
                     :right => x -> x[1] > 1.5,
-                    :center => x -> -0.5 ≤ x[1] ≤ 1.5))
+                    :center => x -> -0.5 ≤ x[1] ≤ 1.5,
+                ),
+            )
             @test !isnothing(markers(X3))
         end
 
@@ -37,17 +41,22 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, h
             @test !isnothing(X1)
 
             # Domain with boundary markers
-            X2 = domain(Ω,
-                markers(Ω,
+            X2 = domain(
+                Ω,
+                markers(
+                    Ω,
                     :bottom => x -> x[2] < 0.01,
                     :top => x -> x[2] > 0.99,
                     :left => x -> x[1] < 0.01,
-                    :right => x -> x[1] > 0.99))
+                    :right => x -> x[1] > 0.99,
+                ),
+            )
             @test !isnothing(X2)
 
             # Domain with interior markers
-            X3 = domain(Ω, markers(Ω,
-                :interior => x -> 0.25 < x[1] < 0.75 && 0.25 < x[2] < 0.75))
+            X3 = domain(
+                Ω, markers(Ω, :interior => x -> 0.25 < x[1] < 0.75 && 0.25 < x[2] < 0.75)
+            )
             @test !isnothing(X3)
         end
 
@@ -55,8 +64,7 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, h
             I = interval(0.0, 1.0)
             Ω = I × I × I
 
-            X = domain(Ω, markers(Ω,
-                :boundary => x -> any(x .< 0.01) || any(x .> 0.99)))
+            X = domain(Ω, markers(Ω, :boundary => x -> any(x .< 0.01) || any(x .> 0.99)))
             @test !isnothing(X)
             @test set(X) isa CartesianProduct
         end
@@ -66,22 +74,30 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, h
         I = interval(0.0, 1.0)
 
         @testset "Disjoint markers" begin
-            X = domain(I,
-                markers(I,
+            X = domain(
+                I,
+                markers(
+                    I,
                     :region1 => x -> x[1] < 0.33,
                     :region2 => x -> 0.33 ≤ x[1] < 0.67,
-                    :region3 => x -> x[1] ≥ 0.67))
+                    :region3 => x -> x[1] ≥ 0.67,
+                ),
+            )
 
             Mh = mesh(X, 10, false)
             @test Mh isa Mesh1D
         end
 
         @testset "Overlapping markers" begin
-            X = domain(I,
-                markers(I,
+            X = domain(
+                I,
+                markers(
+                    I,
                     :left_half => x -> x[1] ≤ 0.6,
                     :right_half => x -> x[1] ≥ 0.4,
-                    :center => x -> 0.3 ≤ x[1] ≤ 0.7))
+                    :center => x -> 0.3 ≤ x[1] ≤ 0.7,
+                ),
+            )
 
             Mh = mesh(X, 10, false)
             @test Mh isa Mesh1D
@@ -89,11 +105,15 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, h
 
         @testset "Nested markers" begin
             Ω = I × I
-            X = domain(Ω,
-                markers(Ω,
+            X = domain(
+                Ω,
+                markers(
+                    Ω,
                     :outer => x -> all(0.1 .≤ x .≤ 0.9),
                     :middle => x -> all(0.3 .≤ x .≤ 0.7),
-                    :inner => x -> all(0.4 .≤ x .≤ 0.6)))
+                    :inner => x -> all(0.4 .≤ x .≤ 0.6),
+                ),
+            )
 
             Mh = mesh(X, (5, 5), (false, false))
             @test Mh isa MeshnD
@@ -109,8 +129,9 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, h
             @test !isnothing(m1)
 
             # Complex logical expression
-            m2 = markers(I, :region =>
-                x -> (x[1] > 0.2 && x[1] < 0.4) || (x[1] > 0.6 && x[1] < 0.8))
+            m2 = markers(
+                I, :region => x -> (x[1] > 0.2 && x[1] < 0.4) || (x[1] > 0.6 && x[1] < 0.8)
+            )
             @test !isnothing(m2)
         end
 
@@ -119,8 +140,9 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, h
 
             # Distance-based marker
             center = (0.5, 0.5)
-            m1 = markers(Ω, :circle =>
-                x -> sqrt((x[1] - center[1])^2 + (x[2] - center[2])^2) < 0.3)
+            m1 = markers(
+                Ω, :circle => x -> sqrt((x[1] - center[1])^2 + (x[2] - center[2])^2) < 0.3
+            )
             @test !isnothing(m1)
 
             # Box marker
@@ -128,11 +150,13 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, h
             @test !isnothing(m2)
 
             # Annulus marker
-            m3 = markers(Ω, :annulus =>
-                x -> begin
+            m3 = markers(
+                Ω,
+                :annulus => x -> begin
                     r = sqrt((x[1] - center[1])^2 + (x[2] - center[2])^2)
                     0.2 < r < 0.4
-                end)
+                end,
+            )
             @test !isnothing(m3)
         end
     end
@@ -178,9 +202,9 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, h
     @testset "Mesh integration" begin
         @testset "One-dimensional domain to mesh" begin
             I = interval(0.0, π)
-            X = domain(I, markers(I,
-                :left => x -> x[1] < 0.1,
-                :right => x -> x[1] > π - 0.1))
+            X = domain(
+                I, markers(I, :left => x -> x[1] < 0.1, :right => x -> x[1] > π - 0.1)
+            )
 
             Mh = mesh(X, 20, false)
             @test Mh isa Mesh1D
@@ -192,15 +216,14 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, h
         @testset "Two-dimensional domain to mesh" begin
             I = interval(0.0, 1.0)
             Ω = I × I
-            X = domain(Ω, markers(Ω,
-                :boundary => x -> any(x .< 0.01) || any(x .> 0.99)))
+            X = domain(Ω, markers(Ω, :boundary => x -> any(x .< 0.01) || any(x .> 0.99)))
 
             # The custom :boundary above is a coordinate-threshold predicate, which does not
             # track a non-uniform ((false, false)) mesh's actual boundary *indices* exactly —
             # a deliberate mismatch with the geometric definition, not a mistake, so it is
             # silenced explicitly rather than left to print an unrelated warning on every run
             # of this testset (point 18, gpena/Bramble.jl#18).
-            Mh = mesh(X, (6, 6), (false, false); warn_marker_mismatch = false)
+            Mh = mesh(X, (6, 6), (false, false); warn_marker_mismatch=false)
             @test Mh isa MeshnD
             @test npoints(Mh) == 36
             @test haskey(markers(Mh), :boundary)
@@ -221,12 +244,16 @@ import Bramble: set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, h
         I = interval(0.0, 1.0)
         Ω = I × I
 
-        X = domain(Ω,
-            markers(Ω,
+        X = domain(
+            Ω,
+            markers(
+                Ω,
                 :left => x -> x[1] < 0.01,
                 :right => x -> x[1] > 0.99,
                 :bottom => x -> x[2] < 0.01,
-                :top => x -> x[2] > 0.99))
+                :top => x -> x[2] > 0.99,
+            ),
+        )
 
         m = markers(X)
         @test !isnothing(m)
@@ -382,9 +409,15 @@ end
 struct BareMesh <: Bramble.AbstractMeshType{1} end
 
 @testset "Interface coverage" begin
-    import Bramble: generate_indices, interior_indices, _extract_linear_index,
-                    spacing_for_derivative, forward_spacing_for_derivative,
-                    cell_measures, normal_vector, half_spacings
+    import Bramble:
+        generate_indices,
+        interior_indices,
+        _extract_linear_index,
+        spacing_for_derivative,
+        forward_spacing_for_derivative,
+        cell_measures,
+        normal_vector,
+        half_spacings
 
     Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
     Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (4, 3), (true, true))
@@ -443,7 +476,7 @@ struct BareMesh <: Bramble.AbstractMeshType{1} end
         @test length(cell_measures(Ωₕ)) == npoints(Ωₕ)
 
         cm = cell_measures(Ω2)
-        @test cm isa NTuple{2, Any}
+        @test cm isa NTuple{2,Any}
         @test cm[1] == cell_measures(Ω2(1))
         @test cm[2] == cell_measures(Ω2(2))
     end
@@ -466,7 +499,7 @@ struct BareMesh <: Bramble.AbstractMeshType{1} end
         @test forward_spacing_for_derivative(Ωₕ, N) == 0
         @test forward_spacing_for_derivative(Ωₕ, 1) == forward_spacing(Ωₕ, 1)
         @test forward_spacing_for_derivative(Ωₕ, CartesianIndex(1)) ==
-              forward_spacing(Ωₕ, 1)
+            forward_spacing(Ωₕ, 1)
     end
 
     @testset "Deep versus shallow copy" begin
@@ -512,23 +545,27 @@ struct BareMesh <: Bramble.AbstractMeshType{1} end
 end
 
 @testset "Cached spacings" begin
-    import Bramble: spacings, spacings!, spacing!, backward_spacings_for_derivative,
-                    forward_spacings_for_derivative
+    import Bramble:
+        spacings,
+        spacings!,
+        spacing!,
+        backward_spacings_for_derivative,
+        forward_spacings_for_derivative
 
     # The invariant the cache has to hold, stated independently of the cache itself.
     backward(pts, i) = i == 1 ? pts[2] - pts[1] : pts[i] - pts[i - 1]
 
     @testset "Accessor agreement" begin
         for unif in (true, false), n in (2, 5, 17)
-
             Ωₕ = mesh(domain(interval(0.0, 1.0)), n, unif)
             pts = points(Ωₕ)
             @test length(spacings(Ωₕ)) == npoints(Ωₕ)
             @test all(spacings(Ωₕ)[i] ≈ backward(pts, i) for i in 1:n)
             @test all(spacing(Ωₕ, i) == spacings(Ωₕ)[i] for i in 1:n)
             # forward_spacing reads the same vector one entry along
-            @test all(forward_spacing(Ωₕ, i) == spacings(Ωₕ)[i == n ? n : i + 1]
-            for i in 1:n)
+            @test all(
+                forward_spacing(Ωₕ, i) == spacings(Ωₕ)[i == n ? n : i + 1] for i in 1:n
+            )
         end
     end
 
@@ -574,7 +611,8 @@ end
         # Entry 1 of bwd and the last of fwd are not meaningful; the engines never read
         # them, so only the interior stencil is asserted here.
         @test all(bwd[i] == Bramble.spacing_for_derivative(Ωₕ, i) for i in 2:n)
-        @test all(fwd[i] == Bramble.forward_spacing_for_derivative(Ωₕ, i)
-        for i in 1:(n - 1))
+        @test all(
+            fwd[i] == Bramble.forward_spacing_for_derivative(Ωₕ, i) for i in 1:(n - 1)
+        )
     end
 end

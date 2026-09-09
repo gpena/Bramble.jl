@@ -4,7 +4,9 @@ using Bramble
 @testset "JET" begin
     if isempty(VERSION.prerelease)
         try
-            jet_report = JET.report_package(Bramble; target_modules = (Bramble,), toplevel_logger = nothing)
+            jet_report = JET.report_package(
+                Bramble; target_modules=(Bramble,), toplevel_logger=nothing
+            )
             reports = JET.get_reports(jet_report)
             @test length(reports) == 0
         catch e

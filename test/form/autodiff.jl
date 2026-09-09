@@ -32,8 +32,11 @@ using LinearAlgebra: issymmetric, norm
 # that it ran.
 
 @testset "Constraint differentiation" begin
-    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
-        (5, 5), (true, true))
+    Ωₕ = mesh(
+        domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
+        (5, 5),
+        (true, true),
+    )
     Wₕ = gridspace(Ωₕ)
     Vₕ = gridspace(Ωₕ, Val(3))
     n = ndofs(Wₕ)
@@ -71,31 +74,37 @@ using LinearAlgebra: issymmetric, norm
     end
 
     @testset "Dual boundary data" begin
-        @test _matches_fd(a -> begin
-            bcs = dirichlet_constraints(Ωₕ, :bottom => (x -> a * x[1] + a^2))
-            v = zeros(typeof(a), n)
-            dirichlet_bc!(v, Ωₕ, bcs, :bottom)
-            sum(v)
-        end)
+        @test _matches_fd(
+            a -> begin
+                bcs = dirichlet_constraints(Ωₕ, :bottom => (x -> a * x[1] + a^2))
+                v = zeros(typeof(a), n)
+                dirichlet_bc!(v, Ωₕ, bcs, :bottom)
+                sum(v)
+            end
+        )
 
         # through a composite space, where the value lands in every leaf
-        @test _matches_fd(a -> begin
-            bcs = dirichlet_constraints(Ωₕ, :bottom => (x -> a * sin(x[1])))
-            v = zeros(typeof(a), 3n)
-            dirichlet_bc!(v, Vₕ, bcs, :bottom)
-            sum(v)
-        end)
+        @test _matches_fd(
+            a -> begin
+                bcs = dirichlet_constraints(Ωₕ, :bottom => (x -> a * sin(x[1])))
+                v = zeros(typeof(a), 3n)
+                dirichlet_bc!(v, Vₕ, bcs, :bottom)
+                sum(v)
+            end
+        )
 
         # and end to end: the boundary data feeds a solve
-        @test _matches_fd(a -> begin
-            A = _tri(n)
-            F = zeros(typeof(a), n)
-            F .= collect(1.0:n)
-            bcs = dirichlet_constraints(Ωₕ, :bottom => (x -> a * x[1] + 1))
-            dirichlet_bc!(A, Ωₕ, :bottom)
-            dirichlet_bc!(F, Ωₕ, bcs, :bottom)
-            sum(Matrix(A) \ F)
-        end)
+        @test _matches_fd(
+            a -> begin
+                A = _tri(n)
+                F = zeros(typeof(a), n)
+                F .= collect(1.0:n)
+                bcs = dirichlet_constraints(Ωₕ, :bottom => (x -> a * x[1] + 1))
+                dirichlet_bc!(A, Ωₕ, :bottom)
+                dirichlet_bc!(F, Ωₕ, bcs, :bottom)
+                sum(Matrix(A) \ F)
+            end
+        )
     end
 
     @testset "Vanishing boundary variation" begin
@@ -114,15 +123,14 @@ using LinearAlgebra: issymmetric, norm
         end)
 
         # the value really is zero-with-derivative at the point being differentiated
-        d = ForwardDiff.Dual{ForwardDiff.Tag{typeof(identity), Float64}}(0.0, 1.0)
+        d = ForwardDiff.Dual{ForwardDiff.Tag{typeof(identity),Float64}}(0.0, 1.0)
         @test ForwardDiff.value(d) == 0.0
         @test !iszero(d)
     end
 
     @testset "Multi-variable gradient" begin
         function J(p)
-            bcs = dirichlet_constraints(Ωₕ,
-                :bottom => (x -> p[1] * x[1] + p[2] * x[1]^2))
+            bcs = dirichlet_constraints(Ωₕ, :bottom => (x -> p[1] * x[1] + p[2] * x[1]^2))
             v = zeros(eltype(p), n)
             dirichlet_bc!(v, Ωₕ, bcs, :bottom)
             return sum(abs2, v)
@@ -133,7 +141,7 @@ using LinearAlgebra: issymmetric, norm
         for k in 1:2
             e = zeros(2)
             e[k] = 1e-6
-            @test isapprox(g[k], (J(p0 .+ e) - J(p0 .- e)) / 2e-6; rtol = 1e-5)
+            @test isapprox(g[k], (J(p0 .+ e) - J(p0 .- e)) / 2e-6; rtol=1e-5)
         end
     end
 
@@ -141,11 +149,10 @@ using LinearAlgebra: issymmetric, norm
         # No CoType to settle at all now (see the header note): a condition's return type
         # only ever has to match whatever `v` was already allocated with. Checked directly
         # by applying, not by inspecting an internal wrapper type that no longer exists.
-        apply(bcs) = (v = zeros(n); dirichlet_bc!(v, Ωₕ, bcs, :bottom); v)
+        apply(bcs) = (v=zeros(n); dirichlet_bc!(v, Ωₕ, bcs, :bottom); v)
 
         # a plain condition applies as-is
-        @test eltype(apply(dirichlet_constraints(Ωₕ, :bottom => (x -> 7.0)))) ===
-              Float64
+        @test eltype(apply(dirichlet_constraints(Ωₕ, :bottom => (x -> 7.0)))) === Float64
 
         # an integer-valued condition still gives Float64 on a Float64 destination (
         # ordinary conversion on assignment, not a promotion decided ahead of time)
@@ -161,7 +168,7 @@ using LinearAlgebra: issymmetric, norm
         @test_nowarn dirichlet_constraints(Ωₕ, :bottom => (x -> sqrt(x[1] - 0.5)))
 
         # a Dual-returning condition, applied into a Dual-eltype destination, carries a Dual
-        a = ForwardDiff.Dual{ForwardDiff.Tag{typeof(identity), Float64}}(1.3, 1.0)
+        a = ForwardDiff.Dual{ForwardDiff.Tag{typeof(identity),Float64}}(1.3, 1.0)
         bcs_dual = dirichlet_constraints(Ωₕ, :bottom => (x -> a * x[1]))
         v_dual = zeros(typeof(a), n)
         dirichlet_bc!(v_dual, Ωₕ, bcs_dual, :bottom)
@@ -173,21 +180,27 @@ using LinearAlgebra: issymmetric, norm
     end
 
     @testset "Time-dependent constraints" begin
-        @test _matches_fd(a -> begin
-            bcs = dirichlet_constraints(Ωₕ, interval(0.0, 1.0),
-                :bottom => ((x, t) -> a * t * x[1] + a))
-            v = zeros(typeof(a), n)
-            dirichlet_bc!(v, Ωₕ, bcs(0.5), :bottom)
-            sum(v)
-        end)
+        @test _matches_fd(
+            a -> begin
+                bcs = dirichlet_constraints(
+                    Ωₕ, interval(0.0, 1.0), :bottom => ((x, t) -> a * t * x[1] + a)
+                )
+                v = zeros(typeof(a), n)
+                dirichlet_bc!(v, Ωₕ, bcs(0.5), :bottom)
+                sum(v)
+            end,
+        )
     end
 
     @testset "Zero allocations (constraints)" begin
         # The inference happens once, when the constraints are built. The hot path is
         # untouched, and has to stay so.
         function bytes()
-            Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
-                (24, 24), (true, true))
+            Ω = mesh(
+                domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
+                (24, 24),
+                (true, true),
+            )
             W = gridspace(Ω)
             m = ndofs(W)
             bcs = dirichlet_constraints(Ω, :bottom => (x -> 7.0))
@@ -225,9 +238,9 @@ end
     gf = DifferentiationInterface.gradient(resid, AutoForwardDiff(), p0)
     gr = DifferentiationInterface.gradient(resid, AutoReverseDiff(), p0)
 
-    @test isapprox(gf, fd; rtol = 1e-5)
-    @test isapprox(gr, fd; rtol = 1e-5)
-    @test isapprox(gf, gr; rtol = 1e-10)
+    @test isapprox(gf, fd; rtol=1e-5)
+    @test isapprox(gr, fd; rtol=1e-5)
+    @test isapprox(gf, gr; rtol=1e-10)
 end
 
 @testset "Coupled routing Jacobian" begin
@@ -239,19 +252,22 @@ end
     Wₕ = gridspace(Ωₕ)
     Vₕ = Wₕ^Val(2)
     n = ndofs(Wₕ)
-    w0 = collect(range(0.5, 1.5, length = ndofs(Vₕ)))
+    w0 = collect(range(0.5, 1.5, length=ndofs(Vₕ)))
 
-    routed = w -> begin
-        c = element(Vₕ, eltype(w))
-        parent(c) .= w
-        return assemble(form(Vₕ, v -> innerₕ(c(1), v(1)) + inner₊ₓ(D₋ₓ(c(2)), D₋ₓ(v(2)))))
-    end
+    routed =
+        w -> begin
+            c = element(Vₕ, eltype(w))
+            parent(c) .= w
+            return assemble(
+                form(Vₕ, v -> innerₕ(c(1), v(1)) + inner₊ₓ(D₋ₓ(c(2)), D₋ₓ(v(2))))
+            )
+        end
 
     Jf = DifferentiationInterface.jacobian(routed, AutoForwardDiff(), w0)
     Jr = DifferentiationInterface.jacobian(routed, AutoReverseDiff(), w0)
 
     @test size(Jf) == (ndofs(Vₕ), ndofs(Vₕ))
-    @test isapprox(Jf, Jr; rtol = 1e-10)
+    @test isapprox(Jf, Jr; rtol=1e-10)
 
     # the off-diagonal blocks are empty, exactly
     @test norm(Jf[1:n, (n + 1):(2n)]) == 0

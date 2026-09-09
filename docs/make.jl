@@ -5,46 +5,62 @@ include("generate_benchmarks.jl")
 generate_benchmarks_markdown()
 
 home = "Home" => "index.md"
-tutorials = "Tutorials" =>
-    ["tutorials/geometry.md", "tutorials/mesh.md", "tutorials/backend.md",
-        "tutorials/space.md", "tutorials/operators.md", "tutorials/form.md",
+tutorials =
+    "Tutorials" => [
+        "tutorials/geometry.md",
+        "tutorials/mesh.md",
+        "tutorials/backend.md",
+        "tutorials/space.md",
+        "tutorials/operators.md",
+        "tutorials/form.md",
         "tutorials/autodiff.md",
-        "tutorials/vtk_export.md", "tutorials/pgfplots_export.md", "tutorials/plotting.md"]
-examples = "Examples" =>
-    ["examples/poisson_linear.md", "examples/poisson_nonlinear.md",
-        "examples/convection_diffusion_linear.md", "examples/coupled_reaction_diffusion.md"]
+        "tutorials/vtk_export.md",
+        "tutorials/pgfplots_export.md",
+        "tutorials/plotting.md",
+    ]
+examples =
+    "Examples" => [
+        "examples/poisson_linear.md",
+        "examples/poisson_nonlinear.md",
+        "examples/convection_diffusion_linear.md",
+        "examples/coupled_reaction_diffusion.md",
+    ]
 benchmarks = "Benchmarks" => "benchmarks.md"
-internals = "Internals" => ["internals/utils.md", "internals/geometry.md",
-    "internals/mesh.md", "internals/space.md", "internals/form.md", "internals/autodiff.md",
-    "internals/exporters.md"]
+internals =
+    "Internals" => [
+        "internals/utils.md",
+        "internals/geometry.md",
+        "internals/mesh.md",
+        "internals/space.md",
+        "internals/form.md",
+        "internals/autodiff.md",
+        "internals/exporters.md",
+    ]
 documentation = "Documentation" => ["api.md", internals]
 
-allpages = [
-    home,
-    tutorials,
-    examples,
-    benchmarks,
-    documentation
-]
+allpages = [home, tutorials, examples, benchmarks, documentation]
 
 makedocs(;
-    format = Documenter.HTML(;
-        prettyurls = get(ENV, "CI", nothing) == "true",
-        size_threshold = 400 * 1024,
-        size_threshold_warn = 250 * 1024),
-    sitename = "Bramble.jl",
-    pages = allpages,
-    authors = "Gonçalo Pena and Gemini",
+    format=Documenter.HTML(;
+        prettyurls=get(ENV, "CI", nothing) == "true",
+        size_threshold=400 * 1024,
+        size_threshold_warn=250 * 1024,
+    ),
+    sitename="Bramble.jl",
+    pages=allpages,
+    authors="Gonçalo Pena and Gemini",
     # `missing_docs` stays a warning: Documenter reports every internal helper it cannot
     # find a page for, so making it an error would mean adding `@docs` stubs to silence it
     # rather than because they help. The rule that matters (every *exported* name has a
     # docstring) is enforced in test/quality/exports.jl instead, where it has no false
     # positives. A broken `@ref` is always a real mistake, so that one is an error.
-    warnonly = [:missing_docs])
+    warnonly=[:missing_docs],
+)
 
 deploydocs(;
-    repo = "github.com/gpena/Bramble.jl.git",
-    devbranch = "main",
-    branch = "gh-pages",
-    versions = nothing,
-    push_preview = true)
+    repo="github.com/gpena/Bramble.jl.git",
+    devbranch="main",
+    branch="gh-pages",
+    versions=nothing,
+    push_preview=true,
+)

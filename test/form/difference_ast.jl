@@ -1,11 +1,20 @@
 using Test
 using Bramble
-using Bramble: IdentityOperator, IndexedTrialFunction, IndexedTestFunction,
-               TrialFunction, TestFunction,
-               BackwardDifference, ForwardDifference, DifferenceNode,
-               is_symbolic,
-               resolve_ast, trial_component_or_nothing, test_component_or_nothing,
-               grad_backward, grad_forward
+using Bramble:
+    IdentityOperator,
+    IndexedTrialFunction,
+    IndexedTestFunction,
+    TrialFunction,
+    TestFunction,
+    BackwardDifference,
+    ForwardDifference,
+    DifferenceNode,
+    is_symbolic,
+    resolve_ast,
+    trial_component_or_nothing,
+    test_component_or_nothing,
+    grad_backward,
+    grad_forward
 
 # The two one-sided difference nodes of the symbolic layer.
 #
@@ -30,7 +39,7 @@ using Bramble: IdentityOperator, IndexedTrialFunction, IndexedTestFunction,
         # against the `DifferenceNode` alias satisfies it for both at once.
         function mentioning(needle)
             found = Set{Symbol}()
-            for nm in names(Bramble; all = true)
+            for nm in names(Bramble; all=true)
                 startswith(string(nm), '#') && continue
                 isdefined(Bramble, nm) || continue
                 f = getfield(Bramble, nm)
@@ -42,10 +51,12 @@ using Bramble: IdentityOperator, IndexedTrialFunction, IndexedTestFunction,
             return found
         end
 
-        backward_only = setdiff(mentioning("BackwardDifference"),
-            mentioning("ForwardDifference"))
-        forward_only = setdiff(mentioning("ForwardDifference"),
-            mentioning("BackwardDifference"))
+        backward_only = setdiff(
+            mentioning("BackwardDifference"), mentioning("ForwardDifference")
+        )
+        forward_only = setdiff(
+            mentioning("ForwardDifference"), mentioning("BackwardDifference")
+        )
 
         # `inner₊` is the documented exception, and the only one
         @test backward_only == Set([:inner₊])
@@ -53,16 +64,16 @@ using Bramble: IdentityOperator, IndexedTrialFunction, IndexedTestFunction,
     end
 
     @testset "inner₊ backward-only" begin
-        @test hasmethod(inner₊, Tuple{IndexedTrialFunction{2}, BD})
-        @test hasmethod(inner₊, Tuple{IndexedTestFunction{2}, BD})
-        @test hasmethod(inner₊, Tuple{BD, IndexedTrialFunction{2}})
+        @test hasmethod(inner₊, Tuple{IndexedTrialFunction{2},BD})
+        @test hasmethod(inner₊, Tuple{IndexedTestFunction{2},BD})
+        @test hasmethod(inner₊, Tuple{BD,IndexedTrialFunction{2}})
 
         # There is no symbolic method for the forward node, and none of the
         # direction-inferring ones accept it. It used to fall through to the *numeric*
         # `inner₊(uₕ, vₕ)` over grid functions and fail there, complaining about types the
         # caller never wrote; the guard in inner.jl now catches it as a usage error.
         for T in (FD, typeof(D₊ᵧ(id)))
-            m = which(inner₊, Tuple{IndexedTrialFunction{2}, T})
+            m = which(inner₊, Tuple{IndexedTrialFunction{2},T})
             @test !occursin("ForwardDifference", string(m.sig))
             @test occursin("form/operators/inner.jl", replace(string(m.file), "\\" => "/"))
         end
@@ -101,8 +112,8 @@ using Bramble: IdentityOperator, IndexedTrialFunction, IndexedTestFunction,
     end
 
     @testset "Gradient shapes" begin
-        @test grad_backward(id) isa NTuple{2, BackwardDifference}
-        @test grad_forward(id) isa NTuple{2, ForwardDifference}
+        @test grad_backward(id) isa NTuple{2,BackwardDifference}
+        @test grad_forward(id) isa NTuple{2,ForwardDifference}
         @test ∇₋ₕ(id) === grad_backward(id)
         @test ∇₊ₕ(id) === grad_forward(id)
 
@@ -110,7 +121,7 @@ using Bramble: IdentityOperator, IndexedTrialFunction, IndexedTestFunction,
         @test ∇₋ₕ((id, id)) == map(grad_backward, (id, id))
         @test ∇₊ₕ((id, id)) == map(grad_forward, (id, id))
         @test length(∇₊ₕ((id, id))) == 2
-        @test all(g -> g isa NTuple{2, ForwardDifference}, ∇₊ₕ((id, id)))
+        @test all(g -> g isa NTuple{2,ForwardDifference}, ∇₊ₕ((id, id)))
 
         # in one dimension the gradient is the node itself, not a 1-tuple
         Ω1 = mesh(domain(interval(0.0, 1.0)), 7, true)

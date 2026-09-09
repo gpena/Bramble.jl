@@ -41,7 +41,7 @@ abstract type LazyOp{D} <: OperatorType end
 
 The identity on `Wₕ`, as a symbolic node.
 """
-struct IdentityOperator{D, S} <: LazyOp{D}
+struct IdentityOperator{D,S} <: LazyOp{D}
     space::S
 end
 
@@ -50,30 +50,31 @@ end
 
 The zero operator on `Wₕ`, as a symbolic node. Absorbs multiplication by a scalar.
 """
-struct ZeroOperator{D, S} <: LazyOp{D}
+struct ZeroOperator{D,S} <: LazyOp{D}
     space::S
 end
 
-@inline IdentityOperator(space::AbstractSpaceType) = IdentityOperator{
-    dim(space), typeof(space)}(space)
+@inline IdentityOperator(space::AbstractSpaceType) =
+    IdentityOperator{dim(space),typeof(space)}(space)
 
 @inline space(op::IdentityOperator) = op.space
 @inline space(op::ZeroOperator) = op.space
-@inline ZeroOperator(space::AbstractSpaceType) = ZeroOperator{
-    dim(space), typeof(space)}(space)
+@inline ZeroOperator(space::AbstractSpaceType) =
+    ZeroOperator{dim(space),typeof(space)}(space)
 
 """
     OperatorScale(α, op::LazyOp)
 
 `op` scaled by the number `α`, as a symbolic node.
 """
-struct OperatorScale{D, ScalarType, OpType <: LazyOp{D}} <: LazyOp{D}
+struct OperatorScale{D,ScalarType,OpType<:LazyOp{D}} <: LazyOp{D}
     scalar::ScalarType
     inner_op::OpType
 
-    function OperatorScale{D, ScalarType, OpType}(
-            scalar::ScalarType, inner_op::OpType) where {D, ScalarType, OpType}
-        return new{D, ScalarType, OpType}(scalar, inner_op)
+    function OperatorScale{D,ScalarType,OpType}(
+        scalar::ScalarType, inner_op::OpType
+    ) where {D,ScalarType,OpType}
+        return new{D,ScalarType,OpType}(scalar, inner_op)
     end
 end
 
@@ -82,13 +83,14 @@ end
 
 `op` scaled pointwise by the grid function or function `vₕ`, as a symbolic node.
 """
-struct GridFunctionScale{D, VType, OpType <: LazyOp{D}} <: LazyOp{D}
+struct GridFunctionScale{D,VType,OpType<:LazyOp{D}} <: LazyOp{D}
     grid_function::VType
     inner_op::OpType
 
-    function GridFunctionScale{D, VType, OpType}(
-            grid_function::VType, inner_op::OpType) where {D, VType, OpType}
-        return new{D, VType, OpType}(grid_function, inner_op)
+    function GridFunctionScale{D,VType,OpType}(
+        grid_function::VType, inner_op::OpType
+    ) where {D,VType,OpType}
+        return new{D,VType,OpType}(grid_function, inner_op)
     end
 end
 
@@ -97,22 +99,23 @@ end
 
 The sum of two symbolic nodes over the same space.
 """
-struct OperatorAdd{D, LeftType <: LazyOp{D}, RightType <: LazyOp{D}} <: LazyOp{D}
+struct OperatorAdd{D,LeftType<:LazyOp{D},RightType<:LazyOp{D}} <: LazyOp{D}
     left_op::LeftType
     right_op::RightType
 
-    function OperatorAdd{D, LeftType, RightType}(
-            left_op::LeftType, right_op::RightType) where {D, LeftType, RightType}
-        return new{D, LeftType, RightType}(left_op, right_op)
+    function OperatorAdd{D,LeftType,RightType}(
+        left_op::LeftType, right_op::RightType
+    ) where {D,LeftType,RightType}
+        return new{D,LeftType,RightType}(left_op, right_op)
     end
 end
 
-@inline OperatorScale(scalar::S, op::LazyOp{D}) where {D, S} = OperatorScale{
-    D, S, typeof(op)}(scalar, op)
-@inline GridFunctionScale(grid_function::V, op::LazyOp{D}) where {D, V} = GridFunctionScale{
-    D, V, typeof(op)}(grid_function, op)
-@inline OperatorAdd(left::LazyOp{D}, right::LazyOp{D}) where {D} = OperatorAdd{
-    D, typeof(left), typeof(right)}(left, right)
+@inline OperatorScale(scalar::S, op::LazyOp{D}) where {D,S} =
+    OperatorScale{D,S,typeof(op)}(scalar, op)
+@inline GridFunctionScale(grid_function::V, op::LazyOp{D}) where {D,V} =
+    GridFunctionScale{D,V,typeof(op)}(grid_function, op)
+@inline OperatorAdd(left::LazyOp{D}, right::LazyOp{D}) where {D} =
+    OperatorAdd{D,typeof(left),typeof(right)}(left, right)
 
 # --- Symbolic or not --------------------------------------------------------------- #
 

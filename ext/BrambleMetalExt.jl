@@ -30,20 +30,22 @@ b16 = metal_backend(Float16)   # half-precision
 ```
 """
 function Bramble._metal_backend(
-        ::Type{T}, policy::ExecutionPolicy) where {T <: Union{Float16, Float32}}
-    return Backend{MtlVector{T}, MtlMatrix{T}, typeof(policy)}()
+    ::Type{T}, policy::ExecutionPolicy
+) where {T<:Union{Float16,Float32}}
+    return Backend{MtlVector{T},MtlMatrix{T},typeof(policy)}()
 end
 
 # ---------------------------------------------------------------------------
 # vector / matrix allocation — GPU-side construction
 # ---------------------------------------------------------------------------
 
-@inline function vector(::Backend{VT, MT, EP}, n::Integer) where {T, VT <: MtlVector{T}, MT, EP}
+@inline function vector(::Backend{VT,MT,EP}, n::Integer) where {T,VT<:MtlVector{T},MT,EP}
     return MtlArray{T}(undef, n)
 end
 
-@inline function matrix(::Backend{VT, MT, EP}, n::Integer, m::Integer) where {
-        T, VT, MT <: MtlMatrix{T}, EP}
+@inline function matrix(
+    ::Backend{VT,MT,EP}, n::Integer, m::Integer
+) where {T,VT,MT<:MtlMatrix{T},EP}
     return MtlArray{T}(undef, n, m)
 end
 

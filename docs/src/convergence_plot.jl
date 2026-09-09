@@ -33,23 +33,31 @@ _next_convergence_plot_id() = "bramble_cp_$(_CONVERGENCE_PLOT_COUNTER[] += 1)"
 `series` is a vector of `(hs, errs, label, color)` tuples, one per curve — e.g. one per
 spatial dimension.
 """
-function convergence_plot(series; title::AbstractString = "", reference_slope::Real = 2,
-        width::Int = 480, height::Int = 340)
+function convergence_plot(
+    series;
+    title::AbstractString="",
+    reference_slope::Real=2,
+    width::Int=480,
+    height::Int=340,
+)
     div_id = _next_convergence_plot_id()
 
     traces = String[]
     for (hs, errs, label, color) in series
         xs = "[" * join(hs, ",") * "]"
         ys = "[" * join(errs, ",") * "]"
-        push!(traces, """
-            {
-              name: "$label",
-              x: $xs,
-              y: $ys,
-              mode: 'markers',
-              type: 'scatter',
-              marker: { color: "$color", size: 8 },
-            }""")
+        push!(
+            traces,
+            """
+  {
+    name: "$label",
+    x: $xs,
+    y: $ys,
+    mode: 'markers',
+    type: 'scatter',
+    marker: { color: "$color", size: 8 },
+  }""",
+        )
     end
 
     # The reference line, anchored through the first series' finest (last) point — the number
@@ -60,15 +68,18 @@ function convergence_plot(series; title::AbstractString = "", reference_slope::R
     h0, e0 = hs1[end], errs1[end]
     e_at(h) = e0 * (h / h0)^reference_slope
     slope_label = "slope $(isinteger(reference_slope) ? Int(reference_slope) : reference_slope)"
-    push!(traces, """
-        {
-          name: "$slope_label",
-          x: [$hmin, $hmax],
-          y: [$(e_at(hmin)), $(e_at(hmax))],
-          mode: 'lines',
-          type: 'scatter',
-          line: { dash: 'dash', width: 1.5, color: 'rgba(128,128,128,0.7)' },
-        }""")
+    push!(
+        traces,
+        """
+{
+  name: "$slope_label",
+  x: [$hmin, $hmax],
+  y: [$(e_at(hmin)), $(e_at(hmax))],
+  mode: 'lines',
+  type: 'scatter',
+  line: { dash: 'dash', width: 1.5, color: 'rgba(128,128,128,0.7)' },
+}""",
+    )
 
     title_js = isempty(title) ? "''" : "'$title'"
 

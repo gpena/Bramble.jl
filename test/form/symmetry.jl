@@ -2,8 +2,15 @@ using Test
 using Bramble
 using Random
 using LinearAlgebra: issymmetric, isposdef, cholesky, Symmetric, issuccess
-using Bramble: form, assemble, trial_space, test_space, restrict_to, shift_op,
-               IdentityOperator, ZeroOperator
+using Bramble:
+    form,
+    assemble,
+    trial_space,
+    test_space,
+    restrict_to,
+    shift_op,
+    IdentityOperator,
+    ZeroOperator
 
 # `issymmetric`/`isposdef` on a `BilinearForm` are a purely structural, symbolic check:
 # every test here has a positive case checked against a real assembled matrix (not just the
@@ -60,7 +67,7 @@ using Bramble: form, assemble, trial_space, test_space, restrict_to, shift_op,
     @testset "Different spaces" begin
         Wₕ2 = gridspace(Ωₕ)
         @test trial_space(form(Wₕ, Wₕ, (u, v) -> u)) ===
-              test_space(form(Wₕ, Wₕ, (u, v) -> u))
+            test_space(form(Wₕ, Wₕ, (u, v) -> u))
 
         e = form(Wₕ, Wₕ2, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
         @test !issymmetric(e)
@@ -90,14 +97,22 @@ using Bramble: form, assemble, trial_space, test_space, restrict_to, shift_op,
 
     @testset "Region restriction" begin
         # `:boundary`/`:interior` exist on every mesh regardless of its own markers.
-        h = form(Wₕ, Wₕ,
-            (u, v) -> inner₊ₓ(restrict_to(:boundary, D₋ₓ(u)), restrict_to(:boundary, D₋ₓ(v))))
+        h = form(
+            Wₕ,
+            Wₕ,
+            (u, v) ->
+                inner₊ₓ(restrict_to(:boundary, D₋ₓ(u)), restrict_to(:boundary, D₋ₓ(v))),
+        )
         @test issymmetric(h)
         @test isposdef(h)
         @test issymmetric(Matrix(assemble(h)))
 
-        h2 = form(Wₕ, Wₕ,
-            (u, v) -> inner₊ₓ(restrict_to(:boundary, D₋ₓ(u)), restrict_to(:interior, D₋ₓ(v))))
+        h2 = form(
+            Wₕ,
+            Wₕ,
+            (u, v) ->
+                inner₊ₓ(restrict_to(:boundary, D₋ₓ(u)), restrict_to(:interior, D₋ₓ(v))),
+        )
         @test !issymmetric(h2)
         @test !isposdef(h2)
     end
@@ -126,7 +141,8 @@ using Bramble: form, assemble, trial_space, test_space, restrict_to, shift_op,
         # shape), which routes assembly through the always-correct general path regardless
         # of what the fast-path trait would have said. The fast path must agree with it.
         m2_general = form(
-            Wₕ, Wₕ, (u, v) -> innerₕ(shift_op(u, 1, 1), 1.0 * shift_op(v, 1, 2)))
+            Wₕ, Wₕ, (u, v) -> innerₕ(shift_op(u, 1, 1), 1.0 * shift_op(v, 1, 2))
+        )
         @test Matrix(assemble(m2)) ≈ Matrix(assemble(m2_general))
 
         # And the fast path must NOT agree with mirroring one side, which is what the bug
@@ -187,8 +203,8 @@ using Bramble: form, assemble, trial_space, test_space, restrict_to, shift_op,
             l = form(Wr, v -> innerₕ(x -> 1.0, v))
             bcs = dirichlet_constraints(Ωr, :boundary => (x -> 0.0))
 
-            A = assemble(a; dirichlet = :boundary)
-            b = assemble(l; dirichlet = bcs)
+            A = assemble(a; dirichlet=:boundary)
+            b = assemble(l; dirichlet=bcs)
             # `dirichlet_bc!` (inside `assemble`) zeros the marked rows, which on its own
             # destroys symmetry; `symmetrize!` restores it by eliminating the marked
             # columns into `b`, so the matrix Cholesky actually sees is the real, complete
@@ -196,7 +212,7 @@ using Bramble: form, assemble, trial_space, test_space, restrict_to, shift_op,
             symmetrize!(A, b, Ωr, :boundary)
             @test issymmetric(Matrix(A))
 
-            F = cholesky(Symmetric(Matrix(A)); check = false)
+            F = cholesky(Symmetric(Matrix(A)); check=false)
             @test issuccess(F)
         end
     end

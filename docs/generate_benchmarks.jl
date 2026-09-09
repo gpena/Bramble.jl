@@ -10,12 +10,14 @@ _next_bench_div_id() = "bench_chart_$(_BENCH_CHART_COUNTER[] += 1)"
 
 function _get_commit_info(commit_hash::AbstractString, path::AbstractString)
     try
-        msg = readchomp(pipeline(`git log -1 --format="%s" $commit_hash`, stderr = devnull))
-        ct = parse(Int,
-            readchomp(pipeline(`git log -1 --format="%ct" $commit_hash`, stderr = devnull)))
-        return (message = msg, time = ct)
+        msg = readchomp(pipeline(`git log -1 --format="%s" $commit_hash`; stderr=devnull))
+        ct = parse(
+            Int,
+            readchomp(pipeline(`git log -1 --format="%ct" $commit_hash`; stderr=devnull)),
+        )
+        return (message=msg, time=ct)
     catch
-        return (message = "", time = round(Int, mtime(path)))
+        return (message="", time=round(Int, mtime(path)))
     end
 end
 
@@ -25,7 +27,7 @@ end
 # or for a commit no longer reachable.
 function _get_pkg_version(commit_hash::AbstractString)
     try
-        toml = readchomp(pipeline(`git show $(commit_hash):Project.toml`, stderr = devnull))
+        toml = readchomp(pipeline(`git show $(commit_hash):Project.toml`; stderr=devnull))
         m = match(r"^version\s*=\s*\"([^\"]+)\""m, toml)
         return m !== nothing ? m.captures[1] : "unknown"
     catch
@@ -35,13 +37,13 @@ end
 
 function _format_time(t_ns::Real)
     if t_ns < 1_000
-        return string(round(t_ns, digits = 1), " ns")
+        return string(round(t_ns; digits=1), " ns")
     elseif t_ns < 1_000_000
-        return string(round(t_ns / 1_000, digits = 1), " μs")
+        return string(round(t_ns / 1_000; digits=1), " μs")
     elseif t_ns < 1_000_000_000
-        return string(round(t_ns / 1_000_000, digits = 2), " ms")
+        return string(round(t_ns / 1_000_000; digits=2), " ms")
     else
-        return string(round(t_ns / 1_000_000_000, digits = 2), " s")
+        return string(round(t_ns / 1_000_000_000; digits=2), " s")
     end
 end
 
@@ -51,11 +53,11 @@ function _format_memory(b::Real)
     elseif b < 1024
         return string(round(Int, b), " B")
     elseif b < 1024^2
-        return string(round(b / 1024, digits = 1), " KiB")
+        return string(round(b / 1024; digits=1), " KiB")
     elseif b < 1024^3
-        return string(round(b / (1024^2), digits = 2), " MiB")
+        return string(round(b / (1024^2); digits=2), " MiB")
     else
-        return string(round(b / (1024^3), digits = 2), " GiB")
+        return string(round(b / (1024^3); digits=2), " GiB")
     end
 end
 
@@ -71,8 +73,9 @@ function _select_unit(max_ns::Real)
     end
 end
 
-const _BENCH_PALETTE = ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4",
-    "#f97316"]
+const _BENCH_PALETTE = [
+    "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4", "#f97316"
+]
 
 # Some groups have a natural axis their series cluster along — a dimension, a numeric
 # precision — and read better split along that axis than at an arbitrary midpoint. Listed
@@ -83,7 +86,9 @@ const _BENCH_GROUP_SPLIT_TAGS = Dict(
     "precision 1D" => ["Float32", "Float64", "Double64"],
 )
 
-_midpoint_clusters(bnames) = (mid = cld(length(bnames), 2); [bnames[1:mid], bnames[(mid + 1):end]])
+function _midpoint_clusters(bnames)
+    return (mid=cld(length(bnames), 2); [bnames[1:mid], bnames[(mid + 1):end]])
+end
 
 # Bucket `bnames` by whichever configured tag each one contains, in tag order, dropping
 # empty buckets. Falls back to a plain midpoint split for a group with no configured tags,
@@ -128,13 +133,19 @@ const _BENCH_GROUP_BLURBS = Dict(
     "precision 1D" => "The same 1D workload — restriction, assembly, inner product — repeated in `Float32`, `Float64`, and `Double64`, split by precision since `Double64` (software arithmetic) is an order of magnitude slower.",
 )
 
-_bench_group_blurb(gname, n_series, n_runs) = get(_BENCH_GROUP_BLURBS, gname,
-    "$n_series benchmark$(n_series == 1 ? "" : "s") in this group, across $n_runs recorded releases.")
+function _bench_group_blurb(gname, n_series, n_runs)
+    return get(
+        _BENCH_GROUP_BLURBS,
+        gname,
+        "$n_series benchmark$(n_series == 1 ? "" : "s") in this group, across $n_runs recorded releases.",
+    )
+end
 
 # Single run: a horizontal bar per benchmark. No trend to show, so no head-script emission
 # here — the caller (generate_benchmarks_markdown) emits plotlyjs_head() once for the page.
 function _render_plotly_barchart_single(
-        gname, sorted_bnames, runs, max_time_ns, unit_label, unit_divisor)
+    gname, sorted_bnames, runs, max_time_ns, unit_label, unit_divisor
+)
     r = runs[1]
     div_id = _next_bench_div_id()
     height = 60 + length(sorted_bnames) * 34
@@ -205,7 +216,8 @@ end
 # (see there) can render as two of these side by side, each restarting the palette from its
 # own beginning rather than cycling into a color the other chart already used.
 function _render_one_trend_plot(
-        gname, bnames_subset, runs, use_normalized, unit_label, unit_divisor)
+    gname, bnames_subset, runs, use_normalized, unit_label, unit_divisor
+)
     div_id = _next_bench_div_id()
     all_labels_js = "[" * join(("\"$(_run_xlabel(r))\"" for r in runs), ",") * "]"
 
@@ -220,17 +232,26 @@ function _render_one_trend_plot(
                 t_ns = time(m)
                 t0 == 0.0 && (t0 = t_ns)
                 y_val = use_normalized ? t_ns / t0 : t_ns / unit_divisor
-                delta_str = use_normalized ?
-                            "$(_format_time(t_ns)) (" *
-                            (t_ns == t0 ? "baseline" :
-                             (t_ns < t0 ? "-" : "+") *
-                             "$(round(abs(t_ns / t0 - 1) * 100, digits = 1))%") *
-                            ")" :
-                            _format_time(t_ns)
+                delta_str = if use_normalized
+                    "$(_format_time(t_ns)) (" *
+                    (
+                        if t_ns == t0
+                            "baseline"
+                        else
+                            (t_ns < t0 ? "-" : "+") *
+                            "$(round(abs(t_ns / t0 - 1) * 100, digits = 1))%"
+                        end
+                    ) *
+                    ")"
+                else
+                    _format_time(t_ns)
+                end
                 push!(xs, "\"$(_run_xlabel(r))\"")
                 push!(ys, "$y_val")
-                push!(customdata,
-                    """["$(r.julia)","$delta_str",$(allocs(m)),"$(_format_memory(memory(m)))"]""")
+                push!(
+                    customdata,
+                    """["$(r.julia)","$delta_str",$(allocs(m)),"$(_format_memory(memory(m)))"]""",
+                )
             end
             # A run missing this benchmark contributes no point at all, rather than a `null`
             # placeholder: each point already carries its own `x`, so a category axis needs
@@ -239,34 +260,40 @@ function _render_one_trend_plot(
             # the kind of gap a category axis with an explicit `categoryarray` handles by
             # skipping straight to the next real point instead of breaking alignment.
         end
-        push!(traces, """
-            {
-              name: "$bname",
-              x: [$(join(xs, ","))],
-              y: [$(join(ys, ","))],
-              customdata: [$(join(customdata, ","))],
-              mode: 'lines+markers',
-              type: 'scatter',
-              line: { color: "$color", width: 2, shape: 'spline', smoothing: 0.3 },
-              marker: { color: "$color", size: 7 },
-              hovertemplate: '%{x} (Julia %{customdata[0]})<br>$bname: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
-            }""")
+        push!(
+            traces,
+            """
+  {
+    name: "$bname",
+    x: [$(join(xs, ","))],
+    y: [$(join(ys, ","))],
+    customdata: [$(join(customdata, ","))],
+    mode: 'lines+markers',
+    type: 'scatter',
+    line: { color: "$color", width: 2, shape: 'spline', smoothing: 0.3 },
+    marker: { color: "$color", size: 7 },
+    hovertemplate: '%{x} (Julia %{customdata[0]})<br>$bname: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
+  }""",
+        )
     end
 
     # The 1.0x reference line in normalized mode, flat across every commit.
     if use_normalized
         ref_xs = join(("\"$(_run_xlabel(r))\"" for r in runs), ",")
         ref_ys = join(("1" for _ in runs), ",")
-        push!(traces, """
-            {
-              name: "1.0x (ref)",
-              x: [$ref_xs],
-              y: [$ref_ys],
-              mode: 'lines',
-              type: 'scatter',
-              line: { color: 'rgba(128,128,128,0.7)', dash: 'dash', width: 1.5 },
-              hoverinfo: 'skip',
-            }""")
+        push!(
+            traces,
+            """
+  {
+    name: "1.0x (ref)",
+    x: [$ref_xs],
+    y: [$ref_ys],
+    mode: 'lines',
+    type: 'scatter',
+    line: { color: 'rgba(128,128,128,0.7)', dash: 'dash', width: 1.5 },
+    hoverinfo: 'skip',
+  }""",
+        )
     end
 
     y_title = use_normalized ? "relative to baseline" : unit_label
@@ -312,12 +339,14 @@ function _render_one_trend_plot(
 end
 
 function _render_trend_chart(
-        gname, sorted_bnames, runs, max_time_ns, min_time_ns, unit_label, unit_divisor)
+    gname, sorted_bnames, runs, max_time_ns, min_time_ns, unit_label, unit_divisor
+)
     num_runs = length(runs)
 
     if num_runs == 1
         return _render_plotly_barchart_single(
-            gname, sorted_bnames, runs, max_time_ns, unit_label, unit_divisor)
+            gname, sorted_bnames, runs, max_time_ns, unit_label, unit_divisor
+        )
     end
 
     # If the operations in this group differ by more than 20x (e.g. 150ns vs 1.7ms), plot a
@@ -336,9 +365,11 @@ function _render_trend_chart(
     # labels on the x-axis has no room to lay out cleanly.
     if length(sorted_bnames) > length(_BENCH_PALETTE)
         clusters = _bench_group_clusters(gname, sorted_bnames)
-        panels = [_render_one_trend_plot(gname, names, runs, use_normalized, unit_label,
-                      unit_divisor)
-                  for names in clusters]
+        panels = [
+            _render_one_trend_plot(
+                gname, names, runs, use_normalized, unit_label, unit_divisor
+            ) for names in clusters
+        ]
         divs = join(("<div style=\"width:100%;\">$p</div>" for p in panels))
         return """
         <div style="display:flex; flex-direction:column; gap:1.5rem; width:100%;">
@@ -348,12 +379,13 @@ function _render_trend_chart(
     end
 
     return _render_one_trend_plot(
-        gname, sorted_bnames, runs, use_normalized, unit_label, unit_divisor)
+        gname, sorted_bnames, runs, use_normalized, unit_label, unit_divisor
+    )
 end
 
 function generate_benchmarks_markdown(
-        benchmark_dir = normpath(joinpath(@__DIR__, "..", "benchmark", "baselines")),
-        output_path = normpath(joinpath(@__DIR__, "src", "benchmarks.md"))
+    benchmark_dir=normpath(joinpath(@__DIR__, "..", "benchmark", "baselines")),
+    output_path=normpath(joinpath(@__DIR__, "src", "benchmarks.md")),
 )
     json_files = String[]
     for dir in (benchmark_dir, normpath(joinpath(@__DIR__, "..", "benchmark")))
@@ -370,10 +402,14 @@ function generate_benchmarks_markdown(
     io = IOBuffer()
     println(io, "# Performance and benchmarks")
     println(io)
-    println(io,
-        "Bramble tracks memory allocations and performance regressions with a dedicated regression suite in `benchmark/benchmarks.jl`.")
-    println(io,
-        "All measurements below are run on **1,000,000 grid points** per dimension setup (e.g. \$1000 \\times 1000\$ in 2D, \$100 \\times 100 \\times 100\$ in 3D).")
+    println(
+        io,
+        "Bramble tracks memory allocations and performance regressions with a dedicated regression suite in `benchmark/benchmarks.jl`.",
+    )
+    println(
+        io,
+        "All measurements below are run on **1,000,000 grid points** per dimension setup (e.g. \$1000 \\times 1000\$ in 2D, \$100 \\times 100 \\times 100\$ in 3D).",
+    )
     println(io)
 
     if isempty(json_files)
@@ -381,11 +417,13 @@ function generate_benchmarks_markdown(
         println(io, "> No saved benchmark baselines were found in `benchmark/baselines/`.")
         println(io, "> To run and save a baseline locally on AC power:")
         println(io, "> ```bash")
-        println(io,
-            "> julia --project=benchmark benchmark/benchmarks.jl --save benchmark/baselines/baseline_\$(git rev-parse --short HEAD).json")
+        println(
+            io,
+            "> julia --project=benchmark benchmark/benchmarks.jl --save benchmark/baselines/baseline_\$(git rev-parse --short HEAD).json",
+        )
         println(io, "> ```")
         open(output_path, "w") do f
-            write(f, String(take!(io)))
+            return write(f, String(take!(io)))
         end
         return output_path
     end
@@ -410,12 +448,21 @@ function generate_benchmarks_markdown(
         # Baselines saved before the `pkgversion:` tag existed carry none — retrace it
         # from Project.toml at that commit instead of leaving it blank.
         pkg_ver === nothing && (pkg_ver = _get_pkg_version(commit))
-        push!(runs,
-            (commit = commit, message = info.message, time = info.time,
-                julia = julia_ver, version = pkg_ver, data = data, path = path))
+        push!(
+            runs,
+            (
+                commit=commit,
+                message=info.message,
+                time=info.time,
+                julia=julia_ver,
+                version=pkg_ver,
+                data=data,
+                path=path,
+            ),
+        )
     end
     # Order runs chronologically by commit timestamp
-    sort!(runs, by = r -> r.time)
+    sort!(runs; by=r -> r.time)
 
     # Collect all groups dynamically
     group_order = [
@@ -426,7 +473,7 @@ function generate_benchmarks_markdown(
         "restriction",
         "composite",
         "construction",
-        "startup & latency"
+        "startup & latency",
     ]
     all_groups = Set{String}()
     for r in runs
@@ -442,11 +489,15 @@ function generate_benchmarks_markdown(
     println(io, "## Comparative timings and allocations")
     println(io)
     if length(runs) >= 2
-        println(io,
-            "Each chart below tracks one benchmark group across all **$(length(runs))** recorded baselines, in chronological release order, against the earliest run (v$(runs[1].version)) as the reference. Where a group's operations span more than a 20× range, the y-axis shows time relative to that reference instead of absolute time, so a cheap operation isn't flattened onto the same line as an expensive one. Hover any point for its exact time, Julia version, allocation count, and memory.")
+        println(
+            io,
+            "Each chart below tracks one benchmark group across all **$(length(runs))** recorded baselines, in chronological release order, against the earliest run (v$(runs[1].version)) as the reference. Where a group's operations span more than a 20× range, the y-axis shows time relative to that reference instead of absolute time, so a cheap operation isn't flattened onto the same line as an expensive one. Hover any point for its exact time, Julia version, allocation count, and memory.",
+        )
     else
-        println(io,
-            "Each chart below shows one benchmark group's timings and allocations for the single recorded baseline. Hover a bar for its exact time.")
+        println(
+            io,
+            "Each chart below shows one benchmark group's timings and allocations for the single recorded baseline. Hover a bar for its exact time.",
+        )
     end
     println(io)
 
@@ -488,7 +539,8 @@ function generate_benchmarks_markdown(
 
         unit_label, unit_divisor = _select_unit(max_time_ns)
         chart_html = _render_trend_chart(
-            gname, sorted_bnames, runs, max_time_ns, min_time_ns, unit_label, unit_divisor)
+            gname, sorted_bnames, runs, max_time_ns, min_time_ns, unit_label, unit_divisor
+        )
 
         println(io, "```@raw html")
         println(io, "<div style=\"width:100%; margin:1.2rem 0 2.5rem 0;\">")
@@ -503,15 +555,19 @@ function generate_benchmarks_markdown(
     println(io, "To record performance on a new commit or after an optimization pass, run:")
     println(io)
     println(io, "```bash")
-    println(io,
-        "julia --project=benchmark benchmark/benchmarks.jl --save benchmark/baselines/baseline_\$(git rev-parse --short HEAD).json")
+    println(
+        io,
+        "julia --project=benchmark benchmark/benchmarks.jl --save benchmark/baselines/baseline_\$(git rev-parse --short HEAD).json",
+    )
     println(io, "```")
     println(io)
-    println(io,
-        "Rebuilding the documentation (`julia -e 'using Pkg; Pkg.activate(\"docs\"); include(\"docs/make.jl\")'`) will automatically discover all `baseline_*.json` files and append new comparison columns, delta calculations, and charts.")
+    println(
+        io,
+        "Rebuilding the documentation (`julia -e 'using Pkg; Pkg.activate(\"docs\"); include(\"docs/make.jl\")'`) will automatically discover all `baseline_*.json` files and append new comparison columns, delta calculations, and charts.",
+    )
 
     open(output_path, "w") do f
-        write(f, String(take!(io)))
+        return write(f, String(take!(io)))
     end
     return output_path
 end

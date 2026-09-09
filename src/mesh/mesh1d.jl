@@ -21,10 +21,10 @@ Cartesian indices `indices`, and computational backend `backend`. Also precomput
 
 See also: [`MeshnD`](@ref), [`mesh`](@ref), [`AbstractMeshType`](@ref).
 """
-mutable struct Mesh1D{BT <: Backend, CI <: CartesianIndices{1}, VT <: AbstractVector, T} <:
+mutable struct Mesh1D{BT<:Backend,CI<:CartesianIndices{1},VT<:AbstractVector,T} <:
                AbstractMeshType{1}
     "the geometric domain, a 1D CartesianProduct (interval), over which the mesh is defined."
-    set::CartesianProduct{1, T}
+    set::CartesianProduct{1,T}
     "a dictionary mapping `Symbol` labels to `BitVector`s, marking specific points on the mesh."
     markers::MeshMarkers
     "the `CartesianIndices` of the grid, allowing for array-like iteration and indexing over the points."
@@ -43,8 +43,11 @@ mutable struct Mesh1D{BT <: Backend, CI <: CartesianIndices{1}, VT <: AbstractVe
     collapsed::Bool
 end
 
-@noinline _throw_point_count_mismatch(expected::Int,
-    got::Int) = throw(DimensionMismatch("change_points! keeps the point count: the mesh has $expected points and $got were given"))
+@noinline _throw_point_count_mismatch(expected::Int, got::Int) = throw(
+    DimensionMismatch(
+        "change_points! keeps the point count: the mesh has $expected points and $got were given",
+    ),
+)
 
 @inline is_collapsed(Ωₕ::Mesh1D) = Ωₕ.collapsed
 
@@ -80,7 +83,7 @@ Return the cached vector of backward spacings, where `spacings(Ωₕ)[i]` is
 grid points change.
 """
 @inline spacings(Ωₕ::Mesh1D) = Ωₕ.spacings
-@inline spacings!(Ωₕ::Mesh1D, v) = (Ωₕ.spacings = v; return)
+@inline spacings!(Ωₕ::Mesh1D, v) = (Ωₕ.spacings=v; return nothing)
 
 """
     forward_spacings(Ωₕ::Mesh1D) -> AbstractVector
@@ -134,7 +137,7 @@ Override the grid coordinates in `Ωₕ`. Recalculates cached [`spacings`](@ref)
     # Re-compute the cell widths (half_spacings) using the new grid points.
     half_spacing!(half_spacings(Ωₕ), Ωₕ)
 
-    return
+    return nothing
 end
 
 """
@@ -142,14 +145,14 @@ end
 
 Override the precomputed cell center cache in `Ωₕ`.
 """
-@inline half_points!(Ωₕ::Mesh1D, pts) = (Ωₕ.half_pts = pts; return)
+@inline half_points!(Ωₕ::Mesh1D, pts) = (Ωₕ.half_pts=pts; return nothing)
 
 """
     half_spacings!(Ωₕ::Mesh1D, pts::AbstractVector) -> Nothing
 
 Override the precomputed cell width cache in `Ωₕ`.
 """
-@inline half_spacings!(Ωₕ::Mesh1D, pts) = (Ωₕ.half_spacings = pts; return)
+@inline half_spacings!(Ωₕ::Mesh1D, pts) = (Ωₕ.half_spacings=pts; return nothing)
 
 @inline eltype(::Mesh1D{BT}) where {BT} = eltype(BT)
 @inline eltype(::Type{<:Mesh1D{BT}}) where {BT} = eltype(BT)
@@ -220,7 +223,8 @@ end
     return @inbounds spacings(Ωₕ)[i == n ? n : i + 1]
 end
 
-@inline forward_spacing(Ωₕ::Mesh1D, i::CartesianIndex{1}) = forward_spacing(Ωₕ, _extract_linear_index(i))
+@inline forward_spacing(Ωₕ::Mesh1D, i::CartesianIndex{1}) =
+    forward_spacing(Ωₕ, _extract_linear_index(i))
 """
     forward_spacing_for_derivative(Ωₕ::Mesh1D, idx) -> eltype(Ωₕ)
 
@@ -250,7 +254,8 @@ end
     return Ωₕ.half_spacings[i]
 end
 
-@inline half_spacing(Ωₕ::Mesh1D, idx::CartesianIndex{1}) = half_spacing(Ωₕ, _extract_linear_index(idx))
+@inline half_spacing(Ωₕ::Mesh1D, idx::CartesianIndex{1}) =
+    half_spacing(Ωₕ, _extract_linear_index(idx))
 
 @inline function cell_measure(Ωₕ::Mesh1D, i)
     idx = _extract_linear_index(i)
@@ -274,7 +279,7 @@ end
     # bound of the interval (for a collapsed interval a == b, so this is the point itself).
     if npts == 1
         x .= a
-        return
+        return nothing
     end
 
     # Check if the point distribution should be uniform.
@@ -297,7 +302,7 @@ end
         # Scale and shift the points from [0, 1] to the target interval [a, b].
         @. x = a + x * (b - a)
     end
-    return
+    return nothing
 end
 
 # Calculates the "half points" (cell centers) for a 1D mesh.
@@ -315,7 +320,7 @@ end
         x[i] = (pts[i] + pts[i - 1]) * 0.5
     end
 
-    return
+    return nothing
 end
 
 # Calculates the "half spacings" (cell widths/measures) for a 1D mesh.
@@ -328,7 +333,7 @@ end
 
     if is_collapsed(Ωₕ) || n < 2
         fill!(x, zero(T))
-        return
+        return nothing
     end
 
     # The boundary convention: the first point has no interval behind it, so it repeats
@@ -341,7 +346,7 @@ end
         end
     end
 
-    return
+    return nothing
 end
 
 @inline function half_spacing!(x, Ωₕ)
@@ -357,13 +362,17 @@ end
         x[i] = (spacing(Ωₕ, i) + spacing(Ωₕ, i+1)) * 0.5
     end
 
-    return
+    return nothing
 end
 
 # Internal constructor function for creating a 1D mesh.
 function _mesh(
-        Ω::Domain{CartesianProduct{1, T}}, npts::Tuple{Int}, unif::Tuple{Bool}, backend;
-        warn_marker_mismatch::Bool = true) where {T}
+    Ω::Domain{CartesianProduct{1,T}},
+    npts::Tuple{Int},
+    unif::Tuple{Bool},
+    backend;
+    warn_marker_mismatch::Bool=true,
+) where {T}
     # Unpack the domain's set and markers, and the number of points.
     (; set, markers) = Ω
     n_points, = npts
@@ -394,8 +403,17 @@ function _mesh(
 
     # Instantiate the Mesh1D struct with initial (empty) markers.
     mesh_markers = MeshMarkers()
-    mesh = Mesh1D(set, mesh_markers, idxs, backend, pts, _half_pts, _half_spacings,
-        _spacings, is_collapsed)
+    mesh = Mesh1D(
+        set,
+        mesh_markers,
+        idxs,
+        backend,
+        pts,
+        _half_pts,
+        _half_spacings,
+        _spacings,
+        is_collapsed,
+    )
 
     # Now, calculate the derived geometric quantities for the newly created mesh. The
     # spacings come first: half_spacing! reads them back through `spacing`.
@@ -414,14 +432,14 @@ end
 function _refine_indices!(Ωₕ::Mesh1D)
     # Do nothing if the mesh is just a single point.
     if is_collapsed(Ωₕ)
-        return
+        return nothing
     end
 
     N_old = npoints(Ωₕ)
 
     # No intervals to refine if there's only one point.
     if N_old <= 1
-        return
+        return nothing
     end
 
     # Calculate the number of points in the new, refined mesh.
@@ -444,7 +462,7 @@ function _refine_indices!(Ωₕ::Mesh1D)
     # Update the mesh struct with the new indices and points.
     set_indices!(Ωₕ, new_indices)
     set_points!(Ωₕ, new_points)
-    return
+    return nothing
 end
 
 # A `Mesh1D` has nothing to refine when it is collapsed, or is a genuine single-point mesh
@@ -462,7 +480,7 @@ function change_points!(Ωₕ::Mesh1D, pts)
 
     # Call the helper function that handles updating the points and all derived quantities.
     set_points!(Ωₕ, pts)
-    return
+    return nothing
 end
 
 """
@@ -473,7 +491,8 @@ Create a copy of mesh `Ωₕ`. The copy is shallow with respect to immutable fie
 (`pts`, `half_pts`, `half_spacings`, `markers`).
 """
 function Base.copy(Ωₕ::Mesh1D)
-    return Mesh1D(Ωₕ.set,
+    return Mesh1D(
+        Ωₕ.set,
         deepcopy(Ωₕ.markers),
         Ωₕ.indices,
         Ωₕ.backend,
@@ -481,7 +500,8 @@ function Base.copy(Ωₕ::Mesh1D)
         copy(Ωₕ.half_pts),
         copy(Ωₕ.half_spacings),
         copy(Ωₕ.spacings),
-        Ωₕ.collapsed)
+        Ωₕ.collapsed,
+    )
 end
 
 @inline Base.getindex(Ωₕ::Mesh1D, i::Int) = point(Ωₕ, i)
@@ -492,13 +512,13 @@ end
 
 Custom display for `Mesh1D` objects with detailed mesh summary, domain information, and markers.
 """
-function Base.show(io::IO, Ωₕ::Mesh1D{BT, CI, VT, T}) where {BT, CI, VT, T}
+function Base.show(io::IO, Ωₕ::Mesh1D{BT,CI,VT,T}) where {BT,CI,VT,T}
     pp = PrettyPrinter(io)
 
     if pp.compact
         # Compact display for arrays/collections
         print(io, "Mesh1D{", npoints(Ωₕ), " pts}")
-        return
+        return nothing
     end
 
     # Detailed display
@@ -525,5 +545,5 @@ function Base.show(io::IO, Ωₕ::Mesh1D{BT, CI, VT, T}) where {BT, CI, VT, T}
     print_mesh_markers(pp, markers(Ωₕ))
 
     # Remove trailing newline
-    remove_trailing_newline(io)
+    return remove_trailing_newline(io)
 end

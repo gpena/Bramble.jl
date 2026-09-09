@@ -1,8 +1,18 @@
-import Bramble: CartesianProduct, DirichletConstraint,
-                label_conditions,
-                symbols, labels, DomainMarkers, tuples, conditions, identifier,
-                EvaluatedDomainMarkers, label, markers, point,
-                index_in_marker
+import Bramble:
+    CartesianProduct,
+    DirichletConstraint,
+    label_conditions,
+    symbols,
+    labels,
+    DomainMarkers,
+    tuples,
+    conditions,
+    identifier,
+    EvaluatedDomainMarkers,
+    label,
+    markers,
+    point,
+    index_in_marker
 using Supposition
 
 @testset "Dirichlet constraints" begin
@@ -39,7 +49,8 @@ using Supposition
             # `set`, an internal accessor the caller never named. Now a real check names
             # the accepted types instead.
             @test_throws "must be a CartesianProduct" dirichlet_constraints(
-                "not a domain", :gamma_1 => f1)
+                "not a domain", :gamma_1 => f1
+            )
         end
 
         @testset "Time-dependent functor" begin
@@ -80,7 +91,8 @@ using Supposition
 
             for input in (Ωd, Ωdm, Wdm, Vdm)
                 @test_throws "is not registered" dirichlet_constraints(
-                    input, :not_a_real_label => f1)
+                    input, :not_a_real_label => f1
+                )
                 bcs = dirichlet_constraints(input, :gamma_1 => f1)
                 @test bcs isa DirichletConstraint
             end
@@ -94,13 +106,15 @@ using Supposition
             # And the time-dependent constructor (`input, I::CartesianProduct{1}, pairs...`)
             # validates the same way, before arity is even checked.
             @test_throws "is not registered" dirichlet_constraints(
-                Ωd, I, :not_a_real_label => ((x, t) -> f_t(x, t)))
+                Ωd, I, :not_a_real_label => ((x, t) -> f_t(x, t))
+            )
         end
     end
 
     @testset "Lazy time evaluation" begin
         original_markers = markers(
-            Ω, I, :moving_front => (x, t) -> x[1] > t, :moving_back => (x, t) -> x[1] < t)
+            Ω, I, :moving_front => (x, t) -> x[1] > t, :moving_back => (x, t) -> x[1] < t
+        )
         lazy_markers_at_t = EvaluatedDomainMarkers(original_markers, 0.75)
 
         @test lazy_markers_at_t isa EvaluatedDomainMarkers
@@ -135,9 +149,10 @@ using LinearAlgebra: I as LinearAlgebraI
 # repeated once per component, block by block.
 @testset "Applying conditions" begin
     Ωₕ = mesh(
-        domain(interval(0.0, 1.0) × interval(0.0, 1.0),
-            :bottom => :bottom, :top => :top),
-        (5, 6), (true, true))
+        domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom, :top => :top),
+        (5, 6),
+        (true, true),
+    )
     Wₕ = gridspace(Ωₕ)
     Vₕ = gridspace(Ωₕ, Val(3))
     nW, nV = ndofs(Wₕ), ndofs(Vₕ)
@@ -174,7 +189,6 @@ using LinearAlgebra: I as LinearAlgebraI
         # a composite space is the scalar one repeated per component: the marked rows are
         # the marked scalar rows shifted by each component's offset
         for c in 0:2, i in 1:nW
-
             row = c * nW + i
             if marked[i]
                 @test A[row, row] == 1.0
@@ -204,9 +218,8 @@ using LinearAlgebra: I as LinearAlgebraI
         # The Stokes-style case this exists for: constrain one field, leave another free.
         @testset "Matrix (single leaf)" begin
             A = _eye(nV)
-            @test dirichlet_bc!(A, Vₕ, :bottom; components = 1) === A
+            @test dirichlet_bc!(A, Vₕ, :bottom; components=1) === A
             for c in 0:2, i in 1:nW
-
                 row = c * nW + i
                 if c == 0 && marked[i]
                     @test A[row, row] == 1.0
@@ -222,9 +235,8 @@ using LinearAlgebra: I as LinearAlgebraI
 
         @testset "Matrix (multiple leaves)" begin
             A = _eye(nV)
-            @test dirichlet_bc!(A, Vₕ, :bottom; components = (1, 3)) === A
+            @test dirichlet_bc!(A, Vₕ, :bottom; components=(1, 3)) === A
             for c in 0:2, i in 1:nW
-
                 row = c * nW + i
                 if c in (0, 2) && marked[i]
                     @test A[row, row] == 1.0
@@ -238,7 +250,7 @@ using LinearAlgebra: I as LinearAlgebraI
         @testset "Vector (single leaf)" begin
             bcs = dirichlet_constraints(Ωₕ, :bottom => (x -> 7.0))
             w = fill(-1.0, nV)
-            @test dirichlet_bc!(w, Vₕ, bcs, :bottom; components = 2) === w
+            @test dirichlet_bc!(w, Vₕ, bcs, :bottom; components=2) === w
             for c in 0:2
                 block = view(w, (c * nW + 1):((c + 1) * nW))
                 if c == 1
@@ -253,7 +265,7 @@ using LinearAlgebra: I as LinearAlgebraI
         @testset "Unrestricted default" begin
             A1, A2 = _eye(nV), _eye(nV)
             dirichlet_bc!(A1, Vₕ, :bottom)
-            dirichlet_bc!(A2, Vₕ, :bottom; components = nothing)
+            dirichlet_bc!(A2, Vₕ, :bottom; components=nothing)
             @test A1 == A2
         end
 
@@ -261,10 +273,9 @@ using LinearAlgebra: I as LinearAlgebraI
             A = Matrix(_eye(nV))
             F = fill(2.0, nV)
             A0 = copy(A)
-            symmetrize!(A, F, Vₕ, :bottom; components = 1)
+            symmetrize!(A, F, Vₕ, :bottom; components=1)
             # only leaf 1's marked rows/columns could have changed anything
             for c in 1:2, i in 1:nW
-
                 row = c * nW + i
                 @test A[:, row] == A0[:, row]
             end
@@ -272,19 +283,21 @@ using LinearAlgebra: I as LinearAlgebraI
 
         @testset "Out-of-range component error" begin
             A = _eye(nV)
-            @test_throws ArgumentError dirichlet_bc!(A, Vₕ, :bottom; components = 4)
-            @test_throws ArgumentError dirichlet_bc!(A, Vₕ, :bottom; components = 0)
-            @test_throws ArgumentError dirichlet_bc!(A, Vₕ, :bottom; components = (1, 5))
+            @test_throws ArgumentError dirichlet_bc!(A, Vₕ, :bottom; components=4)
+            @test_throws ArgumentError dirichlet_bc!(A, Vₕ, :bottom; components=0)
+            @test_throws ArgumentError dirichlet_bc!(A, Vₕ, :bottom; components=(1, 5))
         end
 
         @testset "Scalar single leaf" begin
             A = _eye(nW)
-            @test dirichlet_bc!(A, Wₕ, :bottom; components = 1) === A   # a no-op-equivalent ok
-            @test_throws ArgumentError dirichlet_bc!(_eye(nW), Wₕ, :bottom; components = 2)
+            @test dirichlet_bc!(A, Wₕ, :bottom; components=1) === A   # a no-op-equivalent ok
+            @test_throws ArgumentError dirichlet_bc!(_eye(nW), Wₕ, :bottom; components=2)
         end
 
         @testset "Component argument type" begin
-            @test_throws ErrorException dirichlet_bc!(_eye(nV), Vₕ, :bottom; components = :left)
+            @test_throws ErrorException dirichlet_bc!(
+                _eye(nV), Vₕ, :bottom; components=:left
+            )
         end
 
         @testset "Nested composite (#64)" begin
@@ -298,7 +311,7 @@ using LinearAlgebra: I as LinearAlgebraI
             @test nVn == 3nW
 
             A = _eye(nVn)
-            @test dirichlet_bc!(A, Vn, :bottom; components = 3) === A
+            @test dirichlet_bc!(A, Vn, :bottom; components=3) === A
             for i in 1:nW
                 row = 2nW + i          # leaf 3's offset, per leaf_spaces_offsets
                 if marked[i]
@@ -343,9 +356,12 @@ using LinearAlgebra: I as LinearAlgebraI
         # construction orders so a reordering of that walk is caught, not just its current
         # direction.
         Ωo = mesh(
-            domain(interval(0.0, 1.0) × interval(0.0, 1.0),
-                :bottom => :bottom, :left => :left),
-            (5, 5), (true, true))
+            domain(
+                interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom, :left => :left
+            ),
+            (5, 5),
+            (true, true),
+        )
         Wo = gridspace(Ωo)
         no = ndofs(Wo)
         bottom_mask = index_in_marker(Ωo, :bottom)
@@ -354,7 +370,8 @@ using LinearAlgebra: I as LinearAlgebraI
         @test any(shared)   # the (0,0) corner is marked by both
 
         bcs_left_last = dirichlet_constraints(
-            set(Ωo), :bottom => (x -> 1.0), :left => (x -> 2.0))
+            set(Ωo), :bottom => (x -> 1.0), :left => (x -> 2.0)
+        )
         v = fill(-1.0, no)
         dirichlet_bc!(v, Wo, bcs_left_last, :bottom, :left)
         @test all(v[i] == 2.0 for i in 1:no if shared[i])
@@ -365,7 +382,8 @@ using LinearAlgebra: I as LinearAlgebraI
         # `dirichlet_constraints` in the opposite order: the winner flips, so precedence
         # tracks construction order, not the order given to `dirichlet_bc!`.
         bcs_bottom_last = dirichlet_constraints(
-            set(Ωo), :left => (x -> 2.0), :bottom => (x -> 1.0))
+            set(Ωo), :left => (x -> 2.0), :bottom => (x -> 1.0)
+        )
         w = fill(-1.0, no)
         dirichlet_bc!(w, Wo, bcs_bottom_last, :bottom, :left)
         @test all(w[i] == 1.0 for i in 1:no if shared[i])
@@ -387,8 +405,11 @@ using LinearAlgebra: I as LinearAlgebraI
         # digs out the underlying `CartesianProduct` itself. For a composite space that
         # means its first leaf: the constraint is over the domain, and every leaf of a
         # composite space shares it.
-        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
-            (6, 6), (true, true))
+        Ωₕ = mesh(
+            domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
+            (6, 6),
+            (true, true),
+        )
         Wₕ = gridspace(Ωₕ)
         Vₕ = gridspace(Ωₕ, Val(3))
         g = x -> 7.0
@@ -410,7 +431,7 @@ using LinearAlgebra: I as LinearAlgebraI
         Iₜ = interval(0.0, 1.0)
         for src in (set(Ωₕ), Ωₕ, Wₕ, Vₕ)
             @test dirichlet_constraints(src, Iₜ, :bottom => ((x, t) -> t * x[1])) isa
-                  DirichletConstraint
+                DirichletConstraint
         end
     end
 
@@ -418,8 +439,11 @@ using LinearAlgebra: I as LinearAlgebraI
         # A `CompositeGridSpace` may hold composite spaces, so the leaves form a tree
         # rather than a list. The traversal flattens it depth first, and the offsets have
         # to keep running across the nesting rather than restarting inside each branch.
-        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
-            (5, 5), (true, true))
+        Ωₕ = mesh(
+            domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
+            (5, 5),
+            (true, true),
+        )
         Wₕ = gridspace(Ωₕ)
         n = ndofs(Wₕ)
         inner = gridspace(Ωₕ, Val(2))
@@ -463,8 +487,11 @@ using LinearAlgebra: I as LinearAlgebraI
         # is read at an offset rather than copied. Measured inside a function, on concrete
         # locals, so nothing boxes at the call boundary and the reading is the real one.
         function counts(n)
-            Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
-                (n, n), (true, true))
+            Ω = mesh(
+                domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
+                (n, n),
+                (true, true),
+            )
             W, V = gridspace(Ω), gridspace(Ω, Val(3))
             bcs = dirichlet_constraints(Ω, :bottom => (x -> 7.0))
 
@@ -476,19 +503,23 @@ using LinearAlgebra: I as LinearAlgebraI
             dirichlet_bc!(vw, W, bcs, :bottom)
             dirichlet_bc!(vv, V, bcs, :bottom)
 
-            dirichlet_bc!(Av, V, :bottom; components = 1)
-            dirichlet_bc!(vv, V, bcs, :bottom; components = 1)
+            dirichlet_bc!(Av, V, :bottom; components=1)
+            dirichlet_bc!(vv, V, bcs, :bottom; components=1)
 
-            return (matrix_scalar = @allocated(dirichlet_bc!(Aw, W, :bottom)),
-                matrix_composite = @allocated(dirichlet_bc!(Av, V, :bottom)),
-                vector_scalar = @allocated(dirichlet_bc!(vw, W, bcs, :bottom)),
-                vector_composite = @allocated(dirichlet_bc!(vv, V, bcs, :bottom)),
+            return (
+                matrix_scalar=@allocated(dirichlet_bc!(Aw, W, :bottom)),
+                matrix_composite=@allocated(dirichlet_bc!(Av, V, :bottom)),
+                vector_scalar=@allocated(dirichlet_bc!(vw, W, bcs, :bottom)),
+                vector_composite=@allocated(dirichlet_bc!(vv, V, bcs, :bottom)),
                 # `components` restricts the same tuple walk, not a fresh Vector: this must
                 # cost the same zero bytes as the unrestricted call above.
-                matrix_one_component = @allocated(dirichlet_bc!(
-                    Av, V, :bottom; components = 1)),
-                vector_one_component = @allocated(dirichlet_bc!(
-                    vv, V, bcs, :bottom; components = 1)))
+                matrix_one_component=@allocated(
+                    dirichlet_bc!(Av, V, :bottom; components=1)
+                ),
+                vector_one_component=@allocated(
+                    dirichlet_bc!(vv, V, bcs, :bottom; components=1)
+                )
+            )
         end
 
         for n in (10, 40)          # 16x the degrees of freedom apart
@@ -509,8 +540,11 @@ using LinearAlgebra: I as LinearAlgebraI
             return @allocated Bramble.leaf_spaces_offsets(V)
         end
 
-        Ωt = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
-            (8, 8), (true, true))
+        Ωt = mesh(
+            domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
+            (8, 8),
+            (true, true),
+        )
         Vt = gridspace(Ωt, Val(3))
         @test @inferred(Bramble.leaf_spaces_offsets(Vt)) isa Tuple
         @test isconcretetype(typeof(Bramble.leaf_spaces_offsets(Vt)))
@@ -518,16 +552,18 @@ using LinearAlgebra: I as LinearAlgebraI
     end
 
     @testset "Arbitrary fields (Supposition)" begin
-        field_val = Data.Floats{Float64}(; minimum = -100.0, maximum = 100.0,
-            nans = false, infs = false)
+        field_val = Data.Floats{Float64}(;
+            minimum=-100.0, maximum=100.0, nans=false, infs=false
+        )
 
         @check function check_dirichlet_invariance_2d(
-                nx = Data.Integers(4, 10),
-                ny = Data.Integers(4, 10),
-                v_raw = Data.Vectors(field_val; min_size = 100, max_size = 100)
+            nx=Data.Integers(4, 10),
+            ny=Data.Integers(4, 10),
+            v_raw=Data.Vectors(field_val; min_size=100, max_size=100),
         )
-            Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0),
-                :bottom => :bottom, :top => :top)
+            Ω = domain(
+                interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom, :top => :top
+            )
             Ωₕ = mesh(Ω, (nx, ny), (false, false))
             Wₕ = gridspace(Ωₕ)
             n = ndofs(Wₕ)
@@ -543,8 +579,8 @@ using LinearAlgebra: I as LinearAlgebraI
 
             # 1. Marked boundary nodes match prescribed values
             ok_marked = all(
-                isapprox(v[i], 2.5 * pts[i][1] + 1.0; atol = 1e-12)
-            for i in 1:n if marked[i])
+                isapprox(v[i], 2.5 * pts[i][1] + 1.0; atol=1e-12) for i in 1:n if marked[i]
+            )
 
             # 2. Unmarked nodes remain strictly bitwise unchanged
             ok_unmarked = all(v[i] == v_orig[i] for i in 1:n if !marked[i])

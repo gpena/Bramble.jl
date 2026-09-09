@@ -118,7 +118,7 @@ end
         sw = StringWrapper("hello world foo")
         @test split(sw) == ["hello", "world", "foo"]
         @test split(sw, " ") == ["hello", "world", "foo"]
-        @test split(sw, keepempty = false) == ["hello", "world", "foo"]
+        @test split(sw, keepempty=false) == ["hello", "world", "foo"]
     end
 
     # Invariants tested:

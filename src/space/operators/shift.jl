@@ -40,19 +40,19 @@ backend picked.
 See also: [`shift`](@ref)
 """
 @inline _Eye(be, npts::Int, ::Val{0}) = backend_eye(be, npts)
-@inline _Eye(be, npts::Int, ::Val{i}) where {i} = _shift_ones(
-    matrix_type(be), npts, i, npts - abs(i))
+@inline _Eye(be, npts::Int, ::Val{i}) where {i} =
+    _shift_ones(matrix_type(be), npts, i, npts - abs(i))
 
 # The three-way dispatch mirrors `_backend_eye` (backend.jl): a fast path for
 # `SparseMatrixCSC` and for dense `Matrix`, and a generic scalar-indexing fallback for
 # anything else. `spdiagm` alone carries the offset arithmetic, so the two fast paths only
 # differ in whether the sparse result is converted afterwards.
-@inline _shift_ones(::Type{<:SparseMatrixCSC{T, Ti}}, npts::Int, i::Int,
-    nz::Int) where {T, Ti} = spdiagm(npts, npts, i => fill(one(T), nz))
-@inline _shift_ones(::Type{<:Matrix{T}}, npts::Int, i::Int, nz::Int) where {T} = Matrix{T}(
-    spdiagm(npts, npts, i => fill(one(T), nz)))
-function _shift_ones(::Type{MT}, npts::Int, i::Int, nz::Int) where {
-        T, MT <: AbstractMatrix{T}}
+@inline _shift_ones(
+    ::Type{<:SparseMatrixCSC{T,Ti}}, npts::Int, i::Int, nz::Int
+) where {T,Ti} = spdiagm(npts, npts, i => fill(one(T), nz))
+@inline _shift_ones(::Type{<:Matrix{T}}, npts::Int, i::Int, nz::Int) where {T} =
+    Matrix{T}(spdiagm(npts, npts, i => fill(one(T), nz)))
+function _shift_ones(::Type{MT}, npts::Int, i::Int, nz::Int) where {T,MT<:AbstractMatrix{T}}
     A = MT(undef, npts, npts)
     fill!(A, zero(T))
     r0, c0 = i >= 0 ? (0, i) : (-i, 0)
@@ -63,7 +63,8 @@ function _shift_ones(::Type{MT}, npts::Int, i::Int, nz::Int) where {
 end
 
 @inline function _recursive_shift(
-        Ωₕ::AbstractMeshType, ::Val{1}, ::Val{DIFF_DIM}, ::Val{i}) where {DIFF_DIM, i}
+    Ωₕ::AbstractMeshType, ::Val{1}, ::Val{DIFF_DIM}, ::Val{i}
+) where {DIFF_DIM,i}
     dims = npoints(Ωₕ, Tuple)
     be = backend(Ωₕ)
 
@@ -75,7 +76,8 @@ end
 end
 
 @inline function _recursive_shift(
-        Ωₕ::AbstractMeshType, ::Val{D}, ::Val{DIFF_DIM}, ::Val{i}) where {D, DIFF_DIM, i}
+    Ωₕ::AbstractMeshType, ::Val{D}, ::Val{DIFF_DIM}, ::Val{i}
+) where {D,DIFF_DIM,i}
     dims = npoints(Ωₕ, Tuple)
     be = backend(Ωₕ)
 
@@ -146,7 +148,7 @@ differ only in which pair of shifts they subtract or average.
 
 See also: [`⊗`](@ref), [`diff₋ₓ`](@ref).
 """
-function shift(Ωₕ::AbstractMeshType, ::Val{SHIFT_DIM}, ::Val{i}) where {SHIFT_DIM, i}
+function shift(Ωₕ::AbstractMeshType, ::Val{SHIFT_DIM}, ::Val{i}) where {SHIFT_DIM,i}
     if i == 0
         return backend_eye(backend(Ωₕ), npoints(Ωₕ))
     end

@@ -42,7 +42,7 @@ end
     @testset "CartesianProduct constructors" begin
         # Interval constructor (Float64 default)
         I_f64 = interval(-3.0, 10.0)
-        @test I_f64 isa CartesianProduct{1, Float64}
+        @test I_f64 isa CartesianProduct{1,Float64}
         @test I_f64.box isa NTuple{1}
         @test I_f64.box[1] == (-3.0, 10.0)
         @test all(isapprox.(I_f64.box[1], (-3.0, 10.0)))
@@ -50,18 +50,18 @@ end
 
         # Interval constructor (Int -> Float64 promotion)
         I_int = interval(-3, 10)
-        @test I_int isa CartesianProduct{1, Float64}
+        @test I_int isa CartesianProduct{1,Float64}
         @test I_int.box[1] == (-3.0, 10.0)
         @test all(isapprox.(I_int.box[1], (-3.0, 10.0)))
 
         # Interval constructor (Float32)
         I_f32 = interval(0.0f0, 1.0f0)
-        @test I_f32 isa CartesianProduct{1, Float32}
+        @test I_f32 isa CartesianProduct{1,Float32}
         @test eltype(I_f32) === Float32
 
         # Interval edge case: zero width
         I_zero = interval(5.5, 5.5)
-        @test I_zero isa CartesianProduct{1, Float64}
+        @test I_zero isa CartesianProduct{1,Float64}
         @test all(isapprox.(I_zero.box[1], (5.5, 5.5)))
         @test I_zero.collapsed[1] == true
 
@@ -70,20 +70,20 @@ end
 
         # Interval from CartesianProduct{1}
         I_f64_again = interval(I_f64)
-        @test I_f64_again isa CartesianProduct{1, Float64}
+        @test I_f64_again isa CartesianProduct{1,Float64}
         @test all(isapprox.(I_f64_again.box[1], (-3.0, 10.0)))
 
         # × of two intervals - Int, promoted to Float64
         cp_int_2d = interval(0, 1) × interval(4, 5)
-        @test cp_int_2d isa CartesianProduct{2, Float64}
+        @test cp_int_2d isa CartesianProduct{2,Float64}
         @test cp_int_2d.box isa NTuple{2}
         @test cp_int_2d.box[1] == (0.0, 1.0)
         @test cp_int_2d.box[2] == (4.0, 5.0)
 
         # × of three intervals - Float32, preserved
-        cp_f32_3d = interval(0.0f0, 1.0f0) × interval(2.0f0, 3.0f0) ×
-                    interval(-1.0f0, 0.0f0)
-        @test cp_f32_3d isa CartesianProduct{3, Float32}
+        cp_f32_3d =
+            interval(0.0f0, 1.0f0) × interval(2.0f0, 3.0f0) × interval(-1.0f0, 0.0f0)
+        @test cp_f32_3d isa CartesianProduct{3,Float32}
         @test cp_f32_3d.box isa NTuple{3}
         @test cp_f32_3d.box[1] == (0.0f0, 1.0f0)
         @test cp_f32_3d.box[2] == (2.0f0, 3.0f0)
@@ -91,30 +91,30 @@ end
 
         # box(corner, corner) - Int, promoted to Float64, same layout as cp_int_2d above
         cp_box_2d = box((0, 4), (1, 5))
-        @test cp_box_2d isa CartesianProduct{2, Float64}
+        @test cp_box_2d isa CartesianProduct{2,Float64}
         @test cp_box_2d.box == cp_int_2d.box
 
         # Point constructor (collapsed 1D set)
         P_f64 = point(3.5)
-        @test P_f64 isa CartesianProduct{1, Float64}
+        @test P_f64 isa CartesianProduct{1,Float64}
         @test P_f64.box[1] == (3.5, 3.5)
         @test P_f64.collapsed[1] == true
 
         P_f32 = point(2.0f0)
-        @test P_f32 isa CartesianProduct{1, Float32}
+        @test P_f32 isa CartesianProduct{1,Float32}
         @test eltype(P_f32) === Float32
 
         # Box constructors from opposing corners
         B1d = box(1.0, 5.0)
-        @test B1d isa CartesianProduct{1, Float64}
+        @test B1d isa CartesianProduct{1,Float64}
         @test B1d.box[1] == (1.0, 5.0)
 
         B1d_rev = box(5.0, 1.0)
-        @test B1d_rev isa CartesianProduct{1, Float64}
+        @test B1d_rev isa CartesianProduct{1,Float64}
         @test B1d_rev.box[1] == (1.0, 5.0)
 
         B2d = box((0.0, 2.0), (1.0, 3.0))
-        @test B2d isa CartesianProduct{2, Float64}
+        @test B2d isa CartesianProduct{2,Float64}
         @test B2d.box[1] == (0.0, 1.0)
         @test B2d.box[2] == (2.0, 3.0)
 
@@ -123,7 +123,7 @@ end
         @test B2d_rev.box[2] == (8.0, 10.0)
 
         B3d = box((0.0, 1.0, 2.0), (3.0, -1.0, 5.0))
-        @test B3d isa CartesianProduct{3, Float64}
+        @test B3d isa CartesianProduct{3,Float64}
         @test B3d.box[1] == (0.0, 3.0)
         @test B3d.box[2] == (-1.0, 1.0)
         @test B3d.box[3] == (2.0, 5.0)
@@ -200,10 +200,10 @@ end
         # Point representation type
         @test point_type(I) === Float64
         @test point_type(typeof(I)) === Float64
-        @test point_type(R2) === NTuple{2, Float64}
-        @test point_type(typeof(R2)) === NTuple{2, Float64}
-        @test point_type(R3) === NTuple{3, Float64}
-        @test point_type(typeof(R3)) === NTuple{3, Float64}
+        @test point_type(R2) === NTuple{2,Float64}
+        @test point_type(typeof(R2)) === NTuple{2,Float64}
+        @test point_type(R3) === NTuple{3,Float64}
+        @test point_type(typeof(R3)) === NTuple{3,Float64}
 
         # Indexing syntax X(i)
         @test all(isapprox.(I(1), (0.0, 1.0)))
@@ -250,14 +250,14 @@ end
 
         # Tensor product (Float64 × Float64)
         P1 = I1 × I2
-        @test P1 isa CartesianProduct{2, Float64}
+        @test P1 isa CartesianProduct{2,Float64}
         @test dim(P1) == 2
         @test P1.box isa NTuple{2}
         @test extrema(P1) == ((0.0, 1.0), (2.0, 3.0))
 
         # Tensor product with mixed types (Float32 × Float64)
         P_mixed = I_f32 × I1
-        @test P_mixed isa CartesianProduct{2, Float64}
+        @test P_mixed isa CartesianProduct{2,Float64}
         @test eltype(P_mixed) === Float64
         @test extrema(P_mixed) == ((0.0, 1.0), (0.0, 1.0))
 
@@ -265,7 +265,7 @@ end
         I4 = interval(6.0, 7.0)
         I5 = interval(8.0, 9.0)
         P5 = I1 × I2 × I3_int × I4 × I5
-        @test P5 isa CartesianProduct{5, Float64}
+        @test P5 isa CartesianProduct{5,Float64}
         @test dim(P5) == 5
         @test P5.box isa NTuple{5}
 
@@ -275,17 +275,17 @@ end
         proj2 = projection(P_proj, 2)
         proj3 = projection(P_proj, 3)
 
-        @test proj1 isa CartesianProduct{1, Float64}
+        @test proj1 isa CartesianProduct{1,Float64}
         @test dim(proj1) == 1
         @test all(isapprox.(extrema(proj1), (0.0, 1.0)))
         @test isapprox(first(proj1), 0.0)
         @test isapprox(last(proj1), 1.0)
 
-        @test proj2 isa CartesianProduct{1, Float64}
+        @test proj2 isa CartesianProduct{1,Float64}
         @test dim(proj2) == 1
         @test all(isapprox.(extrema(proj2), (2.0, 3.0)))
 
-        @test proj3 isa CartesianProduct{1, Float64}
+        @test proj3 isa CartesianProduct{1,Float64}
         @test dim(proj3) == 1
         @test all(isapprox.(extrema(proj3), (4.0, 5.0)))
 
@@ -415,12 +415,24 @@ end
     # 1. PrettyPrinter formatting utilities: indentation, coloring, section headers, and key-value pairs.
     # 2. Dimension label helper get_dimension_label returns precomputed labels or indexed fallbacks.
     @testset "Pretty printing and visual formatting" begin
-        using Bramble: PrettyPrinter, with_indent, print_indent, print_colored,
-                       println_colored,
-                       print_header, print_section_header, print_subsection_header,
-                       print_key_value, print_label, print_value, print_interval,
-                       print_dimension_info, print_empty_message, print_marker_summary,
-                       print_labels_list, get_dimension_label
+        using Bramble:
+            PrettyPrinter,
+            with_indent,
+            print_indent,
+            print_colored,
+            println_colored,
+            print_header,
+            print_section_header,
+            print_subsection_header,
+            print_key_value,
+            print_label,
+            print_value,
+            print_interval,
+            print_dimension_info,
+            print_empty_message,
+            print_marker_summary,
+            print_labels_list,
+            get_dimension_label
 
         io = IOBuffer()
         pp0 = PrettyPrinter(io, false, 0)
@@ -436,10 +448,10 @@ end
         print_colored(pp0, "hello")
         @test occursin("hello", String(take!(io)))
 
-        print_colored(pp0, "world"; color = :blue)
+        print_colored(pp0, "world"; color=:blue)
         @test occursin("world", String(take!(io)))
 
-        println_colored(pp0, "line"; color = :green)
+        println_colored(pp0, "line"; color=:green)
         @test occursin("line", String(take!(io)))
 
         print_header(pp0, "Header")
@@ -471,7 +483,7 @@ end
         print_interval(pp0, 0.0, 1.0)
         @test occursin("0.0, 1.0", String(take!(io)))
 
-        print_interval(pp0, 0.5, 0.5; collapsed = true)
+        print_interval(pp0, 0.5, 0.5; collapsed=true)
         str = String(take!(io))
         @test occursin("collapsed", str)
 

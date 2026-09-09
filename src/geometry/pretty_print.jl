@@ -18,8 +18,8 @@ end
 
 Return a new `PrettyPrinter` instance with indentation increased by `levels`.
 """
-@inline with_indent(pp::PrettyPrinter, levels::Int = 1) = PrettyPrinter(
-    pp.io, pp.compact, pp.indent_level + levels)
+@inline with_indent(pp::PrettyPrinter, levels::Int=1) =
+    PrettyPrinter(pp.io, pp.compact, pp.indent_level + levels)
 
 """
     print_indent(pp::PrettyPrinter)
@@ -27,7 +27,7 @@ Return a new `PrettyPrinter` instance with indentation increased by `levels`.
 Print leading spaces corresponding to the current indentation level.
 """
 @inline function print_indent(pp::PrettyPrinter)
-    pp.indent_level == 0 && return
+    pp.indent_level == 0 && return nothing
     for _ in 1:pp.indent_level
         print(pp.io, "  ")
     end
@@ -38,11 +38,11 @@ end
 
 Print styled text according to current color settings.
 """
-@inline function print_colored(pp::PrettyPrinter, text; color = :default, bold = false)
+@inline function print_colored(pp::PrettyPrinter, text; color=:default, bold=false)
     if color == :default
         print(pp.io, text)
     else
-        printstyled(pp.io, text; color = color, bold = bold)
+        printstyled(pp.io, text; color=color, bold=bold)
     end
 end
 
@@ -51,8 +51,8 @@ end
 
 Print styled text followed by a newline.
 """
-@inline function println_colored(pp::PrettyPrinter, text; color = :default, bold = false)
-    print_colored(pp, text; color = color, bold = bold)
+@inline function println_colored(pp::PrettyPrinter, text; color=:default, bold=false)
+    print_colored(pp, text; color=color, bold=bold)
     println(pp.io)
 end
 
@@ -61,14 +61,14 @@ end
 
 Print a prominent header with optional type information.
 """
-function print_header(pp::PrettyPrinter, title::String, type_info::String = "")
+function print_header(pp::PrettyPrinter, title::String, type_info::String="")
     print_indent(pp)
-    printstyled(pp.io, title; bold = true, color = :cyan)
+    printstyled(pp.io, title; bold=true, color=:cyan)
     if !isempty(type_info)
         print(pp.io, " ")
-        printstyled(pp.io, type_info; color = :yellow)
+        printstyled(pp.io, type_info; color=:yellow)
     end
-    println(pp.io)
+    return println(pp.io)
 end
 
 """
@@ -78,8 +78,8 @@ Print a section header with accent color.
 """
 function print_section_header(pp::PrettyPrinter, title::String)
     print_indent(pp)
-    printstyled(pp.io, title; bold = true, color = :light_blue)
-    println(pp.io)
+    printstyled(pp.io, title; bold=true, color=:light_blue)
+    return println(pp.io)
 end
 
 """
@@ -87,13 +87,13 @@ end
 
 Print a subsection header with an optional item count.
 """
-function print_subsection_header(pp::PrettyPrinter, title::String, count::Int = 0)
+function print_subsection_header(pp::PrettyPrinter, title::String, count::Int=0)
     print_indent(pp)
-    printstyled(pp.io, title; bold = true, color = :yellow)
+    printstyled(pp.io, title; bold=true, color=:yellow)
     if count > 0
         print(pp.io, " ($count)")
     end
-    println(pp.io, ":")
+    return println(pp.io, ":")
 end
 
 """
@@ -101,13 +101,19 @@ end
 
 Print a key-value pair formatted with distinct colors.
 """
-function print_key_value(pp::PrettyPrinter, key::String, value::String;
-        key_color = :green, value_color = :blue, separator = " => ")
+function print_key_value(
+    pp::PrettyPrinter,
+    key::String,
+    value::String;
+    key_color=:green,
+    value_color=:blue,
+    separator=" => ",
+)
     print_indent(pp)
-    printstyled(pp.io, key; color = key_color)
+    printstyled(pp.io, key; color=key_color)
     print(pp.io, separator)
-    printstyled(pp.io, value; color = value_color)
-    println(pp.io)
+    printstyled(pp.io, value; color=value_color)
+    return println(pp.io)
 end
 
 """
@@ -116,7 +122,7 @@ end
 Print a highlighted symbol label.
 """
 @inline function print_label(pp::PrettyPrinter, label::Symbol)
-    printstyled(pp.io, ":$label"; color = :green)
+    printstyled(pp.io, ":$label"; color=:green)
 end
 
 """
@@ -124,8 +130,8 @@ end
 
 Print a colored value.
 """
-@inline function print_value(pp::PrettyPrinter, value; color = :blue)
-    printstyled(pp.io, "$value"; color = color)
+@inline function print_value(pp::PrettyPrinter, value; color=:blue)
+    printstyled(pp.io, "$value"; color=color)
 end
 
 """
@@ -133,13 +139,13 @@ end
 
 Print formatted interval endpoints or a collapsed point marker.
 """
-function print_interval(pp::PrettyPrinter, min_val, max_val; collapsed = false)
+function print_interval(pp::PrettyPrinter, min_val, max_val; collapsed=false)
     if collapsed
-        printstyled(pp.io, "$min_val"; color = :blue)
-        printstyled(pp.io, " (collapsed)"; color = :light_black)
+        printstyled(pp.io, "$min_val"; color=:blue)
+        printstyled(pp.io, " (collapsed)"; color=:light_black)
     else
         print(pp.io, "[")
-        printstyled(pp.io, "$min_val, $max_val"; color = :blue)
+        printstyled(pp.io, "$min_val, $max_val"; color=:blue)
         print(pp.io, "]")
     end
 end
@@ -150,12 +156,13 @@ end
 Print coordinate dimension bounds.
 """
 function print_dimension_info(
-        pp::PrettyPrinter, label::String, min_val, max_val, collapsed::Bool)
+    pp::PrettyPrinter, label::String, min_val, max_val, collapsed::Bool
+)
     print_indent(pp)
-    printstyled(pp.io, label; color = :green)
+    printstyled(pp.io, label; color=:green)
     print(pp.io, ": ")
-    print_interval(pp, min_val, max_val; collapsed = collapsed)
-    println(pp.io)
+    print_interval(pp, min_val, max_val; collapsed=collapsed)
+    return println(pp.io)
 end
 
 """
@@ -163,10 +170,10 @@ end
 
 Print an empty collection indicator in muted text.
 """
-function print_empty_message(pp::PrettyPrinter, message::String = "(none)")
+function print_empty_message(pp::PrettyPrinter, message::String="(none)")
     print_indent(pp)
-    printstyled(pp.io, message; color = :light_black)
-    println(pp.io)
+    printstyled(pp.io, message; color=:light_black)
+    return println(pp.io)
 end
 
 """
@@ -177,7 +184,7 @@ Print categorized counts of symbols, tuples, and function condition markers with
 function print_marker_summary(pp::PrettyPrinter, n_sym::Int, n_tup::Int, n_cond::Int)
     total = n_sym + n_tup + n_cond
     print_indent(pp)
-    printstyled(pp.io, "$total marker$(total == 1 ? "" : "s")"; color = :yellow)
+    printstyled(pp.io, "$total marker$(total == 1 ? "" : "s")"; color=:yellow)
     print(pp.io, " (")
 
     first = true
@@ -195,7 +202,7 @@ function print_marker_summary(pp::PrettyPrinter, n_sym::Int, n_tup::Int, n_cond:
         print(pp.io, "$n_cond function$(n_cond == 1 ? "" : "s")")
     end
 
-    println(pp.io, ")")
+    return println(pp.io, ")")
 end
 
 """
@@ -203,15 +210,15 @@ end
 
 Print a comma-separated list of symbols.
 """
-function print_labels_list(pp::PrettyPrinter, labels; prefix = "Labels: ")
+function print_labels_list(pp::PrettyPrinter, labels; prefix="Labels: ")
     print_indent(pp)
-    printstyled(pp.io, prefix; color = :light_black)
+    printstyled(pp.io, prefix; color=:light_black)
 
     for (i, lbl) in enumerate(labels)
-        printstyled(pp.io, ":$lbl"; color = :green)
+        printstyled(pp.io, ":$lbl"; color=:green)
         i < length(labels) && print(pp.io, ", ")
     end
-    println(pp.io)
+    return println(pp.io)
 end
 
 """
@@ -220,9 +227,9 @@ end
 Trim trailing newline from an `IOBuffer`.
 """
 function remove_trailing_newline(io::IO)
-    io isa IOBuffer || return
+    io isa IOBuffer || return nothing
     s = String(take!(io))
-    print(io, endswith(s, '\n') ? chop(s) : s)
+    return print(io, endswith(s, '\n') ? chop(s) : s)
 end
 
 # Statically preallocated coordinate dimension names to eliminate runtime allocation

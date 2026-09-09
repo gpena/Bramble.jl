@@ -3,7 +3,8 @@ using Bramble
 using Random
 using ADTypes: KnownJacobianSparsityDetector
 using ForwardDiff, DifferentiationInterface
-import SparseConnectivityTracer, SparseMatrixColorings
+using SparseConnectivityTracer: SparseConnectivityTracer
+using SparseMatrixColorings: SparseMatrixColorings
 using SparseArrays: nnz, sparse, findnz
 
 # `jacobian_pattern` (form/jacobian_pattern.jl, gpena/Bramble.jl#21) reads a Newton
@@ -18,9 +19,11 @@ using SparseArrays: nnz, sparse, findnz
 #     pattern (e.g. one that accidentally coincides in nnz count) would still pass the
 #     structural check alone.
 
-const _traced_ad = AutoSparse(AutoForwardDiff();
-    sparsity_detector = SparseConnectivityTracer.TracerSparsityDetector(),
-    coloring_algorithm = SparseMatrixColorings.GreedyColoringAlgorithm())
+const _traced_ad = AutoSparse(
+    AutoForwardDiff();
+    sparsity_detector=SparseConnectivityTracer.TracerSparsityDetector(),
+    coloring_algorithm=SparseMatrixColorings.GreedyColoringAlgorithm(),
+)
 
 # `-(α(u)u')' = g`, mirroring docs/src/examples/poisson_nonlinear.md, generalized to D
 # dimensions the way examples/nonlinear_convergence.jl and the doc's own `nonlinear_series`
@@ -39,7 +42,7 @@ function _nonlinear_poisson_setup(D::Int, Ωd, Ωₕ)
     gₕ = element(Wₕ)
     avgₕ!(gₕ, rhs)
     l = form(Wₕ, v -> innerₕ(gₕ, v))
-    F = assemble(l; dirichlet = bcs)
+    F = assemble(l; dirichlet=bcs)
 
     function diffusion_form(uₕ)
         αv = D == 1 ? α.(M₋ₕ(uₕ)) : ntuple(i -> α.(M₋ₕ(uₕ)[i]), D)
@@ -50,7 +53,7 @@ function _nonlinear_poisson_setup(D::Int, Ωd, Ωₕ)
     function residual(u_vec::AbstractVector{T}) where {T}
         uₕ = element(Wₕ, T)
         uₕ .= u_vec
-        A = assemble(diffusion_form(uₕ); dirichlet = :boundary)
+        A = assemble(diffusion_form(uₕ); dirichlet=:boundary)
         return A * u_vec .- F
     end
 
@@ -58,8 +61,8 @@ function _nonlinear_poisson_setup(D::Int, Ωd, Ωₕ)
 end
 
 @testset "jacobian_pattern" begin
-    @testset "Safe superset of the AD-traced pattern ($D D)" for (D, n) in ((1, 12), (2, 6), (
-        3, 4))
+    @testset "Safe superset of the AD-traced pattern ($D D)" for (D, n) in
+                                                                 ((1, 12), (2, 6), (3, 4))
         Ω = domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D)))
         Ωₕ = mesh(Ω, ntuple(_ -> n, D), ntuple(_ -> false, D))
         Wₕ, sol, diffusion_form, residual = _nonlinear_poisson_setup(D, Ω, Ωₕ)
@@ -92,9 +95,11 @@ end
         u0 = element(Wₕ, 0.0)
         a = diffusion_form(u0)
         pattern = jacobian_pattern(a, U -> M₋ₕ(U))
-        sparse_ad = AutoSparse(AutoForwardDiff();
-            sparsity_detector = KnownJacobianSparsityDetector(pattern),
-            coloring_algorithm = SparseMatrixColorings.GreedyColoringAlgorithm())
+        sparse_ad = AutoSparse(
+            AutoForwardDiff();
+            sparsity_detector=KnownJacobianSparsityDetector(pattern),
+            coloring_algorithm=SparseMatrixColorings.GreedyColoringAlgorithm(),
+        )
 
         u = zeros(ndofs(Wₕ))
         prep = prepare_jacobian(residual, sparse_ad, u)
@@ -125,9 +130,11 @@ end
         u02 = element(Wₕ2, 0.0)
         a2 = diffusion_form2(u02)
         pattern2 = jacobian_pattern(a2, U -> M₋ₕ(U))
-        sparse_ad2 = AutoSparse(AutoForwardDiff();
-            sparsity_detector = KnownJacobianSparsityDetector(pattern2),
-            coloring_algorithm = SparseMatrixColorings.GreedyColoringAlgorithm())
+        sparse_ad2 = AutoSparse(
+            AutoForwardDiff();
+            sparsity_detector=KnownJacobianSparsityDetector(pattern2),
+            coloring_algorithm=SparseMatrixColorings.GreedyColoringAlgorithm(),
+        )
 
         u2 = zeros(ndofs(Wₕ2))
         prep2 = prepare_jacobian(residual2, sparse_ad2, u2)
@@ -176,7 +183,7 @@ end
         gₕ = element(Wₕ)
         avgₕ!(gₕ, x -> exp(x[1]))
         l = form(Wₕ, v -> innerₕ(gₕ, v))
-        F = assemble(l; dirichlet = bcs)
+        F = assemble(l; dirichlet=bcs)
 
         function build_form(uₕ)
             αv = α.(M₋ₕ(uₕ))
@@ -186,7 +193,7 @@ end
         function residual(u_vec::AbstractVector{T}) where {T}
             uₕ = element(Wₕ, T)
             uₕ .= u_vec
-            A = assemble(build_form(uₕ); dirichlet = :boundary)
+            A = assemble(build_form(uₕ); dirichlet=:boundary)
             return A * u_vec .- F
         end
 
@@ -228,20 +235,25 @@ end
             f2ₕ = element(Wₕ)
             avgₕ!(f2ₕ, f2)
             l = form(Vₕ, q -> innerₕ(f1ₕ, q(1)) + innerₕ(f2ₕ, q(2)))
-            F = assemble(l; dirichlet = bcs)
+            F = assemble(l; dirichlet=bcs)
 
             function coupled_form(wₕ)
                 u_c, v_c = components(wₕ)
-                return form(Vₕ, Vₕ,
-                    (p, q) -> inner₊(∇₋ₕ(p(1)), ∇₋ₕ(q(1))) + innerₕ(p(1), q(1)) +
-                              innerₕ(v_c * p(1), q(1)) +
-                              inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2))) + innerₕ(p(2), q(2)) -
-                              innerₕ(u_c * p(2), q(2)))
+                return form(
+                    Vₕ,
+                    Vₕ,
+                    (p, q) ->
+                        inner₊(∇₋ₕ(p(1)), ∇₋ₕ(q(1))) +
+                        innerₕ(p(1), q(1)) +
+                        innerₕ(v_c * p(1), q(1)) +
+                        inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2))) +
+                        innerₕ(p(2), q(2)) - innerₕ(u_c * p(2), q(2)),
+                )
             end
             function residual(w::AbstractVector{T}) where {T}
                 wₕ = element(Vₕ, T)
                 wₕ .= w
-                A = assemble(coupled_form(wₕ); dirichlet = :boundary)
+                A = assemble(coupled_form(wₕ); dirichlet=:boundary)
                 return A * w .- F
             end
 
@@ -269,22 +281,26 @@ end
             fₕ = element(Wₕ)
             avgₕ!(fₕ, x -> sin(π * x[1]))
             l = form(Vₕ, q -> innerₕ(fₕ, q(1)) + innerₕ(fₕ, q(2)) + innerₕ(fₕ, q(3)))
-            F = assemble(l; dirichlet = bcs)
+            F = assemble(l; dirichlet=bcs)
 
             function chain_form(wₕ)
                 c1, c2, c3 = components(wₕ)
-                return form(Vₕ, Vₕ,
-                    (p, q) -> inner₊(∇₋ₕ(p(1)), ∇₋ₕ(q(1))) +
-                              innerₕ((1.0 .+ c2 .^ 2) * p(1), q(1)) +
-                              inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2))) +
-                              innerₕ((1.0 .+ c3 .^ 2) * p(2), q(2)) +
-                              inner₊(∇₋ₕ(p(3)), ∇₋ₕ(q(3))) +
-                              innerₕ((1.0 .+ c1 .^ 2) * p(3), q(3)))
+                return form(
+                    Vₕ,
+                    Vₕ,
+                    (p, q) ->
+                        inner₊(∇₋ₕ(p(1)), ∇₋ₕ(q(1))) +
+                        innerₕ((1.0 .+ c2 .^ 2) * p(1), q(1)) +
+                        inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2))) +
+                        innerₕ((1.0 .+ c3 .^ 2) * p(2), q(2)) +
+                        inner₊(∇₋ₕ(p(3)), ∇₋ₕ(q(3))) +
+                        innerₕ((1.0 .+ c1 .^ 2) * p(3), q(3)),
+                )
             end
             function residual(w::AbstractVector{T}) where {T}
                 wₕ = element(Vₕ, T)
                 wₕ .= w
-                A = assemble(chain_form(wₕ); dirichlet = :boundary)
+                A = assemble(chain_form(wₕ); dirichlet=:boundary)
                 return A * w .- F
             end
 
@@ -313,7 +329,7 @@ end
             fₕ = element(Wₕ)
             avgₕ!(fₕ, x -> sin(π * x[1]))
             l = form(Vₕ, q -> innerₕ(fₕ, q(1)) + innerₕ(fₕ, q(2)))
-            F = assemble(l; dirichlet = bcs)
+            F = assemble(l; dirichlet=bcs)
 
             α(u) = 3 + 1 / (1 + u^2)
 
@@ -322,15 +338,20 @@ end
                 Mc1 = M₋ₕ(c1)
                 αv = ntuple(i -> α.(Mc1[i]), 2)
                 grad1(p) = ntuple(i -> αv[i] * ∇₋ₕ(p(1))[i], 2)
-                return form(Vₕ, Vₕ,
-                    (p, q) -> inner₊(grad1(p), ∇₋ₕ(q(1))) +
-                              innerₕ((1.0 .+ c2 .^ 2) * p(1), q(1)) +
-                              inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2))) + innerₕ(p(2), q(2)))
+                return form(
+                    Vₕ,
+                    Vₕ,
+                    (p, q) ->
+                        inner₊(grad1(p), ∇₋ₕ(q(1))) +
+                        innerₕ((1.0 .+ c2 .^ 2) * p(1), q(1)) +
+                        inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2))) +
+                        innerₕ(p(2), q(2)),
+                )
             end
             function residual(w::AbstractVector{T}) where {T}
                 wₕ = element(Vₕ, T)
                 wₕ .= w
-                A = assemble(mixed_form(wₕ); dirichlet = :boundary)
+                A = assemble(mixed_form(wₕ); dirichlet=:boundary)
                 return A * w .- F
             end
 
@@ -359,7 +380,7 @@ end
             fₕ = element(Wₕ)
             avgₕ!(fₕ, x -> sin(π * x[1]))
             l = form(Vₕ, q -> innerₕ(fₕ, q(1)) + innerₕ(fₕ, q(2)))
-            F = assemble(l; dirichlet = bcs)
+            F = assemble(l; dirichlet=bcs)
 
             β(u) = 1 + 0.5 * u^2
 
@@ -368,14 +389,19 @@ end
                 Mc2 = M₋ₕ(c2)
                 βv = ntuple(i -> β.(Mc2[i]), 2)
                 grad1(p) = ntuple(i -> βv[i] * ∇₋ₕ(p(1))[i], 2)
-                return form(Vₕ, Vₕ,
-                    (p, q) -> inner₊(grad1(p), ∇₋ₕ(q(1))) +
-                              inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2))) + innerₕ(p(2), q(2)))
+                return form(
+                    Vₕ,
+                    Vₕ,
+                    (p, q) ->
+                        inner₊(grad1(p), ∇₋ₕ(q(1))) +
+                        inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2))) +
+                        innerₕ(p(2), q(2)),
+                )
             end
             function residual(w::AbstractVector{T}) where {T}
                 wₕ = element(Vₕ, T)
                 wₕ .= w
-                A = assemble(averaged_cross_form(wₕ); dirichlet = :boundary)
+                A = assemble(averaged_cross_form(wₕ); dirichlet=:boundary)
                 return A * w .- F
             end
 
@@ -397,12 +423,16 @@ end
             # narrower than the AST's own true reach), so the right check is the same
             # safe-superset direction every other case here uses, against `A`'s own
             # stored pattern rather than its numeric one.
-            Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 6), (
-                false, false))
+            Ωₕ = mesh(
+                domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 6), (false, false)
+            )
             Wₕ = gridspace(Ωₕ)
             Vₕ = Wₕ^Val(2)
-            a = form(Vₕ, Vₕ,
-                (p, q) -> inner₊(∇₋ₕ(p(1)), ∇₋ₕ(q(1))) + inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2))))
+            a = form(
+                Vₕ,
+                Vₕ,
+                (p, q) -> inner₊(∇₋ₕ(p(1)), ∇₋ₕ(q(1))) + inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2))),
+            )
             A = assemble(a)
             stored = fill(false, size(A))
             for (r, c) in zip(findnz(A)[1], findnz(A)[2])
@@ -446,20 +476,25 @@ end
             f2ₕ = element(Wₕ)
             avgₕ!(f2ₕ, f2)
             l = form(Vₕ, q -> innerₕ(f1ₕ, q(1)) + innerₕ(f2ₕ, q(2)))
-            F = assemble(l; dirichlet = bcs)
+            F = assemble(l; dirichlet=bcs)
 
             function coupled_form(wₕ)
                 u_c, v_c = components(wₕ)
-                return form(Vₕ, Vₕ,
-                    (p, q) -> inner₊(∇₋ₕ(p(1)), ∇₋ₕ(q(1))) + innerₕ(p(1), q(1)) +
-                              innerₕ(v_c * p(1), q(1)) +
-                              inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2))) + innerₕ(p(2), q(2)) -
-                              innerₕ(u_c * p(2), q(2)))
+                return form(
+                    Vₕ,
+                    Vₕ,
+                    (p, q) ->
+                        inner₊(∇₋ₕ(p(1)), ∇₋ₕ(q(1))) +
+                        innerₕ(p(1), q(1)) +
+                        innerₕ(v_c * p(1), q(1)) +
+                        inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2))) +
+                        innerₕ(p(2), q(2)) - innerₕ(u_c * p(2), q(2)),
+                )
             end
             function residual(w::AbstractVector{T}) where {T}
                 wₕ = element(Vₕ, T)
                 wₕ .= w
-                A = assemble(coupled_form(wₕ); dirichlet = :boundary)
+                A = assemble(coupled_form(wₕ); dirichlet=:boundary)
                 return A * w .- F
             end
 
@@ -480,9 +515,11 @@ end
 
             a = coupled_form(element(Vₕ, 0.0))
             pattern = jacobian_pattern(a, U -> U(2), U -> U(1))
-            native_ad = AutoSparse(AutoForwardDiff();
-                sparsity_detector = KnownJacobianSparsityDetector(pattern),
-                coloring_algorithm = SparseMatrixColorings.GreedyColoringAlgorithm())
+            native_ad = AutoSparse(
+                AutoForwardDiff();
+                sparsity_detector=KnownJacobianSparsityDetector(pattern),
+                coloring_algorithm=SparseMatrixColorings.GreedyColoringAlgorithm(),
+            )
 
             w_native, newton_residuals = newton(native_ad)
             w_traced, _ = newton(_traced_ad)

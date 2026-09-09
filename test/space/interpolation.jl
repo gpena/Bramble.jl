@@ -92,9 +92,9 @@ using Bramble
 
         # at most 2^D = 4 nonzeros per row, and every row sums to 1 (a partition of unity,
         # since the corner weights of any cell always sum to 1)
-        nnz_per_row = vec(sum(!iszero, P2, dims = 2))
+        nnz_per_row = vec(sum(!iszero, P2, dims=2))
         @test all(<=(4), nnz_per_row)
-        @test all(≈(1), vec(sum(P2, dims = 2)))
+        @test all(≈(1), vec(sum(P2, dims=2)))
     end
 
     @testset "πₕ! against a precomputed interpolation_matrix (#14)" begin
@@ -140,8 +140,9 @@ using Bramble
         end
 
         @testset "A mismatched P throws DimensionMismatch" begin
-            Wwrong = gridspace(mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (3, 3), (
-                true, true)))
+            Wwrong = gridspace(
+                mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (3, 3), (true, true))
+            )
             @test_throws DimensionMismatch πₕ!(Bramble.element(Wwrong), P2, src2)
         end
     end

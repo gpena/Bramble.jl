@@ -19,7 +19,7 @@ _next_solution_plot_id() = "bramble_sp_$(_SOLUTION_PLOT_COUNTER[] += 1)"
 A flat top-down colour map of a 2D scalar grid function `uₕ`, in physical mesh coordinates
 (not index space).
 """
-function heatmap_plot(uₕ; title::AbstractString = "", width::Int = 480, height::Int = 420)
+function heatmap_plot(uₕ; title::AbstractString="", width::Int=480, height::Int=420)
     Ωₕ = mesh(space(uₕ))
     nx, ny = npoints(Ωₕ, Tuple)
     xs = [point(Ωₕ(1), i) for i in 1:nx]

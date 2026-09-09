@@ -1,8 +1,19 @@
 using Test
 using Bramble
-using Bramble: spacings, normal_vector, hₘᵢₙ, half_spacings, cell_measures,
-               dim, topo_dim, half_points!, spacing!, half_spacing!, set_points!,
-               change_points!, _mark_indices!
+using Bramble:
+    spacings,
+    normal_vector,
+    hₘᵢₙ,
+    half_spacings,
+    cell_measures,
+    dim,
+    topo_dim,
+    half_points!,
+    spacing!,
+    half_spacing!,
+    set_points!,
+    change_points!,
+    _mark_indices!
 using StaticArrays: SVector
 
 if !@isdefined(alloc_test)
@@ -41,8 +52,9 @@ end
 @testset "Inference and allocations" begin
     Ωₕ1 = mesh(domain(interval(0.0, 1.0)), 64, false)
     Ωₕ2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (8, 9), (true, false))
-    Ωₕ3 = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 6),
-        (true, false, true))
+    Ωₕ3 = mesh(
+        domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 6), (true, false, true)
+    )
     Ωu = mesh(domain(interval(0.0, 1.0)), 32, true)     # uniform, for stepsize
 
     @testset "Type stability" begin
@@ -68,23 +80,25 @@ end
 
         # the per-axis vectors, which every nD mesh answers as an NTuple of vectors
         for (Ωₕ, D) in ((Ωₕ2, 2), (Ωₕ3, 3))
-            @test @inferred(spacings(Ωₕ)) isa NTuple{D, Vector{Float64}}
-            @test @inferred(half_spacings(Ωₕ)) isa NTuple{D, Vector{Float64}}
-            @test @inferred(cell_measures(Ωₕ)) isa NTuple{D, Vector{Float64}}
-            @test @inferred(points(Ωₕ)) isa NTuple{D, Vector{Float64}}
+            @test @inferred(spacings(Ωₕ)) isa NTuple{D,Vector{Float64}}
+            @test @inferred(half_spacings(Ωₕ)) isa NTuple{D,Vector{Float64}}
+            @test @inferred(cell_measures(Ωₕ)) isa NTuple{D,Vector{Float64}}
+            @test @inferred(points(Ωₕ)) isa NTuple{D,Vector{Float64}}
             # the same shape as its siblings, and the entries `spacing` reports
             @test map(length, spacings(Ωₕ)) == map(length, half_spacings(Ωₕ))
-            @test all(spacings(Ωₕ)[d][i] == spacing(Ωₕ(d), i)
-            for d in 1:D for i in 1:npoints(Ωₕ(d)))
+            @test all(
+                spacings(Ωₕ)[d][i] == spacing(Ωₕ(d), i) for d in 1:D for
+                i in 1:npoints(Ωₕ(d))
+            )
         end
 
-        @test @inferred(point(Ωₕ2, CartesianIndex(2, 3))) isa NTuple{2, Float64}
+        @test @inferred(point(Ωₕ2, CartesianIndex(2, 3))) isa NTuple{2,Float64}
         @test @inferred(cell_measure(Ωₕ2, CartesianIndex(2, 3))) isa Float64
-        @test @inferred(point(Ωₕ3, CartesianIndex(2, 3, 4))) isa NTuple{3, Float64}
+        @test @inferred(point(Ωₕ3, CartesianIndex(2, 3, 4))) isa NTuple{3,Float64}
         @test @inferred(cell_measure(Ωₕ3, CartesianIndex(2, 3, 4))) isa Float64
 
         @test @inferred(locate_cell(Ωₕ1, 0.5)) isa Int
-        @test @inferred(normal_vector(Ωₕ1, :left)) isa NTuple{1, Float64}
+        @test @inferred(normal_vector(Ωₕ1, :left)) isa NTuple{1,Float64}
         @test @inferred(stepsize(Ωu)) isa Float64
     end
 
@@ -143,12 +157,20 @@ end
         @test_allocs _mark_indices!(target_bits, lin_idxs, 1:3)
 
         # Multi-dimensional grid iterators
-        iterate_points_it(it) = (s = 0.0; for p in it
+        iterate_points_it(it) = (
+            s=0.0;
+            for p in it
                 s += p[1] + p[2]
-            end; s)
-        iterate_points_gen(pts) = (s = 0.0; for p in pts
+            end;
+            s
+        )
+        iterate_points_gen(pts) = (
+            s=0.0;
+            for p in pts
                 s += p[1] + p[2]
-            end; s)
+            end;
+            s
+        )
 
         # gpena/Bramble.jl#75: `points_iterator` was `Iterators.product` over
         # `points(Ωₕ2)`'s per-axis vectors and is gone; this is that same construction.

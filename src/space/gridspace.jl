@@ -83,7 +83,7 @@ This is a wrapper that bundles the raw numerical data (the vector `data`) with i
   - `data::VT`: the raw vector data containing the degrees of freedom.
   - `space::S`: the parent function space to which this vector belongs.
 """
-struct VectorElement{S, T, VT <: AbstractVector{T}} <: AbstractVector{T}
+struct VectorElement{S,T,VT<:AbstractVector{T}} <: AbstractVector{T}
     "the raw vector data containing the degrees of freedom."
     data::VT
     "the parent function space to which this vector belongs."

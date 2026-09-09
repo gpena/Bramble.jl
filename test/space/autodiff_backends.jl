@@ -61,14 +61,14 @@ function check_backend(name, backend)
     @testset "$name" begin
         d = DifferentiationInterface.derivative(scalar, backend, a0)
         @test d ≈ ForwardDiff.derivative(scalar, a0) rtol=1e-8
-        @test isapprox(d, (scalar(a0 + h) - scalar(a0 - h)) / 2h; rtol = 1e-5)
+        @test isapprox(d, (scalar(a0 + h) - scalar(a0 - h)) / 2h; rtol=1e-5)
 
         g = DifferentiationInterface.gradient(vector, backend, p0)
         @test g ≈ ForwardDiff.gradient(vector, p0) rtol=1e-8
         for k in 1:2
             e = zeros(2)
             e[k] = h
-            @test isapprox(g[k], (vector(p0 .+ e) - vector(p0 .- e)) / 2h; rtol = 1e-5)
+            @test isapprox(g[k], (vector(p0 .+ e) - vector(p0 .- e)) / 2h; rtol=1e-5)
         end
     end
 end

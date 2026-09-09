@@ -30,7 +30,7 @@ function _interior_error(Ωₕ, op, f, df, drop)
 end
 
 # Successive halvings of the mesh give log2 of the error ratio as the observed order.
-function _orders(Ωₕ, op, f, df, drop; steps = 4)
+function _orders(Ωₕ, op, f, df, drop; steps=4)
     errs = Float64[]
     for k in 0:steps
         k > 0 && iterative_refinement!(Ωₕ)
@@ -45,8 +45,10 @@ end
         # at the last, so those are dropped. Both uniform and random starting grids.
         for (lbl, unif) in (("uniform", true), ("random", false))
             @testset "$lbl" begin
-                for (opname, op, drop) in (("D₋ₓ", D₋ₓ, e -> @view e[2:end]),
-                    ("D₊ₓ", D₊ₓ, e -> @view e[1:(end - 1)]))
+                for (opname, op, drop) in (
+                    ("D₋ₓ", D₋ₓ, e -> @view e[2:end]),
+                    ("D₊ₓ", D₊ₓ, e -> @view e[1:(end - 1)]),
+                )
                     Random.seed!(20250829)
                     Ωₕ = mesh(domain(interval(0.0, 1.0)), 51, unif)
                     ords = _orders(Ωₕ, op, sin, cos, drop)
@@ -63,11 +65,15 @@ end
             @testset "$lbl" begin
                 for (opname, op, df, drop) in (
                     ("D₋ₓ", D₋ₓ, x -> cos(x[1]) * exp(x[2]), e -> @view e[2:end, :]),
-                    ("D₋ᵧ", D₋ᵧ, x -> sin(x[1]) * exp(x[2]), e -> @view e[:, 2:end]))
+                    ("D₋ᵧ", D₋ᵧ, x -> sin(x[1]) * exp(x[2]), e -> @view e[:, 2:end]),
+                )
                     Random.seed!(20250829)
-                    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (17, 17),
-                        (unif, unif))
-                    ords = _orders(Ωₕ, op, f, df, drop; steps = 3)
+                    Ωₕ = mesh(
+                        domain(interval(0.0, 1.0) × interval(0.0, 1.0)),
+                        (17, 17),
+                        (unif, unif),
+                    )
+                    ords = _orders(Ωₕ, op, f, df, drop; steps=3)
                     @test all(>(0.9), ords)
                     @test 0.95 < last(ords) < 1.05
                 end
@@ -85,12 +91,20 @@ end
         for (opname, op, df, drop) in (
             ("D₋ₓ", D₋ₓ, x -> cos(x[1]) * exp(x[2] / 1.0e4), e -> @view e[2:end, :]),
             (
-            "D₋ᵧ", D₋ᵧ, x -> sin(x[1]) * exp(x[2] / 1.0e4) / 1.0e4, e -> @view e[:, 2:end]))
+                "D₋ᵧ",
+                D₋ᵧ,
+                x -> sin(x[1]) * exp(x[2] / 1.0e4) / 1.0e4,
+                e -> @view e[:, 2:end]
+            ),
+        )
             @testset "$opname" begin
                 Random.seed!(20250829)
-                Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0e4)), (17, 17),
-                    (true, true))
-                ords = _orders(Ωₕ, op, f, df, drop; steps = 3)
+                Ωₕ = mesh(
+                    domain(interval(0.0, 1.0) × interval(0.0, 1.0e4)),
+                    (17, 17),
+                    (true, true),
+                )
+                ords = _orders(Ωₕ, op, f, df, drop; steps=3)
                 @test all(>(0.9), ords)
                 @test 0.95 < last(ords) < 1.05
             end

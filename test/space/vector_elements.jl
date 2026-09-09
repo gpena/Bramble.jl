@@ -1,5 +1,5 @@
-import Bramble: VectorElement, spacing, points, half_points, space, ndofs,
-                half_spacings, indices, point
+import Bramble:
+    VectorElement, spacing, points, half_points, space, ndofs, half_spacings, indices, point
 using LinearAlgebra: norm
 using SparseArrays
 
@@ -11,13 +11,13 @@ using SparseArrays
 end
 
 function valid_interior_range(i::Int, dims::NTuple{D}) where {D}
-    ntuple(k -> k == i ? (2:dims[k]) : (1:dims[k]), Val(D))
+    return ntuple(k -> k == i ? (2:dims[k]) : (1:dims[k]), Val(D))
 end
 
 """
 Calculates the exact cell average of `x -> exp(-x)` over an interval.
 """
-@inline function cell_avg_exp(v::NTuple{3, T}) where {T}
+@inline function cell_avg_exp(v::NTuple{3,T}) where {T}
     h, x0, x1 = v
     return (exp(-x0) - exp(-x1)) / h
 end
@@ -26,13 +26,15 @@ end
 Populates array `w` with cell-averaged values of the separable function
 `f(x) = exp(-sum(x))` on the given `mesh`.
 """
-function compute_exp_cell_averages!(w::Array{T, D}, mesh) where {T, D}
+function compute_exp_cell_averages!(w::Array{T,D}, mesh) where {T,D}
     # Create an iterator for each dimension that yields `(hᵢ, xᵢ, xᵢ₊₁)` for cell interfaces
     cell_data_iterators = ntuple(Val(D)) do i
         mesh_dim = mesh(i)
-        zip(half_spacings(mesh_dim),
+        return zip(
+            half_spacings(mesh_dim),
             half_points(mesh_dim),
-            Iterators.drop(half_points(mesh_dim), 1))
+            Iterators.drop(half_points(mesh_dim), 1),
+        )
     end
 
     # Iterate over the Cartesian product of the dimensional iterators
@@ -245,7 +247,7 @@ end
                 Rₕ!(uₕ, test_function)
 
                 # Reference calculation
-                w = Array{Float64, D}(undef, dims)
+                w = Array{Float64,D}(undef, dims)
                 test_function_idx(idx) = test_function(point(mesh(Wₕ), idx))
                 _func2array!(w, test_function_idx, indices(mesh(Wₕ)))
 
@@ -256,7 +258,7 @@ end
             @testset "avgₕ!" begin
                 avgₕ!(uₕ, x -> exp(-sum(x)))
 
-                w = Array{Float64, D}(undef, dims)
+                w = Array{Float64,D}(undef, dims)
                 compute_exp_cell_averages!(w, mesh(Wₕ))
 
                 u_reshaped = reshape(parent(uₕ), dims)
@@ -343,12 +345,13 @@ end
 
         # exact cell averages of exp(-x) over [xᵢ₋₁ᐟ₂, xᵢ₊₁ᐟ₂]
         xh = half_points(Ωₕ)
-        exact = [(exp(-xh[i]) - exp(-xh[i + 1])) / (xh[i + 1] - xh[i])
-                 for i in 1:npoints(Ωₕ)]
+        exact = [
+            (exp(-xh[i]) - exp(-xh[i + 1])) / (xh[i + 1] - xh[i]) for i in 1:npoints(Ωₕ)
+        ]
 
         @testset "Convergence" begin
             errs = map(1:4) do nq
-                avgₕ!(u, f; quad_points = nq)
+                avgₕ!(u, f; quad_points=nq)
                 maximum(abs, parent(u) .- exact)
             end
             # The mesh is randomly non-uniform, so assert the trend and generous
@@ -362,7 +365,7 @@ end
             avgₕ!(u, f)
             @test maximum(abs, parent(u) .- exact) < 1e-11
 
-            @test_throws ArgumentError avgₕ!(u, f; quad_points = 0)
+            @test_throws ArgumentError avgₕ!(u, f; quad_points=0)
         end
 
         @testset "Exact degree" begin
@@ -370,10 +373,11 @@ end
             for nq in 1:4
                 deg = 2nq - 1
                 g(x) = sum(x)^deg
-                avgₕ!(u, g; quad_points = nq)
-                ex = [(xh[i + 1]^(deg + 1) - xh[i]^(deg + 1)) /
-                      ((deg + 1) * (xh[i + 1] - xh[i]))
-                      for i in 1:npoints(Ωₕ)]
+                avgₕ!(u, g; quad_points=nq)
+                ex = [
+                    (xh[i + 1]^(deg + 1) - xh[i]^(deg + 1)) /
+                    ((deg + 1) * (xh[i + 1] - xh[i])) for i in 1:npoints(Ωₕ)
+                ]
                 @test maximum(abs, parent(u) .- ex) < 1e-12
             end
         end
@@ -381,8 +385,8 @@ end
         @testset "Rule construction" begin
             for T in (Float64, Float32)
                 nodes, wts = _gauss_rule(Val(3), T)
-                @test nodes isa NTuple{3, T}
-                @test wts isa NTuple{3, T}
+                @test nodes isa NTuple{3,T}
+                @test wts isa NTuple{3,T}
                 @test sum(wts) ≈ one(T)
                 # folded to a constant at compile time, so obtaining it allocates nothing
                 get_rule() = _gauss_rule(Val(3), T)
@@ -401,7 +405,9 @@ end
             # matching how /tmp/verify_consolidation.jl checked this earlier -- and where a
             # Serial() backend really does measure exactly 0, at every grid size.
             function avg_bytes_direct(be, n)
-                Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (n, n); backend = be)
+                Ω2 = mesh(
+                    domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (n, n); backend=be
+                )
                 W2 = gridspace(Ω2)
                 u2 = element(W2)
                 avgₕ!(u2, f)
@@ -422,7 +428,9 @@ end
             # own comments already warn about. A real caller wrapping avgₕ! in one more
             # closure than this file's own internal helpers do could hit the same thing.
             function avg_bytes_wrapped(be, n)
-                Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (n, n); backend = be)
+                Ω2 = mesh(
+                    domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (n, n); backend=be
+                )
                 W2 = gridspace(Ω2)
                 u2 = element(W2)
                 run!(uu, g) = avgₕ!(uu, g)
@@ -434,7 +442,7 @@ end
             # No threading threshold left to straddle (point 22): a `Serial()` backend runs
             # every grid size through the same plain loop, so the direct-call cost is
             # exactly 0 bytes regardless of how many points there are.
-            be_serial = backend(policy = Serial())
+            be_serial = backend(policy=Serial())
             @test avg_bytes_direct(be_serial, 32) == 0        # 1_024 degrees of freedom
             @test avg_bytes_direct(be_serial, 1024) == 0      # 1_048_576 degrees of freedom
             @test avg_bytes_direct(be_serial, 8) == avg_bytes_direct(be_serial, 16) == 0
@@ -454,13 +462,13 @@ end
             # here. Fixed by replacing the closure with a named, concretely-typed kernel
             # struct (`_AvgKernel1`/`_AvgKernelD`) -- not a guarantee the class of bug can
             # never recur, so this stays a real regression guard, not just documentation.
-            be_parallel = backend(policy = Parallel())
+            be_parallel = backend(policy=Parallel())
             small = avg_bytes_direct(be_parallel, 32)
             large = avg_bytes_direct(be_parallel, 1024)
             let per_point = (large - small) / (1_048_576 - 1_024)
                 @info "avgₕ! Parallel() allocation diagnostic: " *
-                      "small=$small large=$large per_point=$per_point " *
-                      "nthreads=$(Threads.nthreads())"
+                    "small=$small large=$large per_point=$per_point " *
+                    "nthreads=$(Threads.nthreads())"
             end
             @test large < 4 * small + 1     # +1 guards small == 0
             @test large < 100_000           # proportional (176 B/point) would be ~184 MB
@@ -537,10 +545,10 @@ end
 
         # Masked, one function per leaf, on the heterogeneous nesting.
         r3 = element(Wn)
-        Rₕ!(r3, (x -> 10.0, x -> 20.0, x -> 30.0); markers = (:boundary,))
+        Rₕ!(r3, (x -> 10.0, x -> 20.0, x -> 30.0); markers=(:boundary,))
         @test parent(r3(1)) == [10.0, 0.0, 0.0, 0.0, 10.0]
         a3 = element(Wn)
-        avgₕ!(a3, (x -> 10.0, x -> 20.0, x -> 30.0); markers = (:boundary,))
+        avgₕ!(a3, (x -> 10.0, x -> 20.0, x -> 30.0); markers=(:boundary,))
         @test a3(1).data[1] ≈ 10.0 && a3(1).data[end] ≈ 10.0
         @test all(iszero, a3(1).data[2:(end - 1)])
 
@@ -595,13 +603,13 @@ end
 
         # Masked, single vector-valued function, on the heterogeneous nesting.
         r7 = element(Wn)
-        Rₕ!(r7, x -> (10.0, 20.0, 30.0); markers = (:boundary,))
+        Rₕ!(r7, x -> (10.0, 20.0, 30.0); markers=(:boundary,))
         @test parent(r7(1)) == [10.0, 0.0, 0.0, 0.0, 10.0]
         @test parent(r7(2)) == [20.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 20.0]
         @test parent(r7(3)) == [30.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 30.0]
 
         a7 = element(Wn)
-        avgₕ!(a7, x -> (10.0, 20.0, 30.0); markers = (:boundary,))
+        avgₕ!(a7, x -> (10.0, 20.0, 30.0); markers=(:boundary,))
         @test a7(2).data[1] ≈ 20.0 && a7(2).data[end] ≈ 20.0
         @test all(iszero, a7(2).data[2:(end - 1)])
 
@@ -715,20 +723,20 @@ end
         @test index_in_marker(Ωₕ, :left) == Bool[1, 0, 0, 0, 0, 0]
 
         u = element(W)
-        Rₕ!(u, x -> 1.0; markers = (:left,))
+        Rₕ!(u, x -> 1.0; markers=(:left,))
         @test parent(u) == [1.0, 0, 0, 0, 0, 0]
 
         # several markers act as a union
-        Rₕ!(u, x -> 1.0; markers = (:left, :right))
+        Rₕ!(u, x -> 1.0; markers=(:left, :right))
         @test parent(u) == [1.0, 0, 0, 0, 0, 1.0]
 
         # avgₕ takes the same keyword
         v = element(W)
-        avgₕ!(v, x -> 1.0; markers = (:right,))
+        avgₕ!(v, x -> 1.0; markers=(:right,))
         @test parent(v)[1:5] == zeros(5)
         @test parent(v)[6] ≈ 1.0
 
-        w = avgₕ(W, x -> 1.0; markers = (:left,))
+        w = avgₕ(W, x -> 1.0; markers=(:left,))
         @test w[1] ≈ 1.0
         @test parent(w)[2:6] == zeros(5)
     end
@@ -736,19 +744,19 @@ end
     @testset "Argument types" begin
         seen = Ref{Any}(nothing)
         u1 = element(W)
-        Rₕ!(u1, x -> (seen[] = x; 0.0))
+        Rₕ!(u1, x -> (seen[]=x; 0.0))
         @test seen[] isa Float64          # documented: never an SVector
 
         Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 4))
         W2 = gridspace(Ω2)
         u2 = element(W2)
         seen2 = Ref{Any}(nothing)
-        Rₕ!(u2, x -> (seen2[] = x; 0.0))
-        @test seen2[] isa Tuple{Float64, Float64}
+        Rₕ!(u2, x -> (seen2[]=x; 0.0))
+        @test seen2[] isa Tuple{Float64,Float64}
 
         seen3 = Ref{Any}(nothing)
-        avgₕ!(u2, x -> (seen3[] = x; 0.0))
-        @test seen3[] isa Tuple{Float64, Float64}
+        avgₕ!(u2, x -> (seen3[]=x; 0.0))
+        @test seen3[] isa Tuple{Float64,Float64}
     end
 
     @testset "Keyword sets" begin
@@ -768,8 +776,11 @@ end
     # backend exercises the threaded scatter path at any grid size, deterministically,
     # rather than needing a grid large enough to cross a since-removed threshold.
     n = 8
-    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (n, n); backend = backend(
-        policy = Parallel()))
+    Ωₕ = mesh(
+        domain(interval(0.0, 1.0) × interval(0.0, 1.0)),
+        (n, n);
+        backend=backend(policy=Parallel()),
+    )
     W = gridspace(Ωₕ)
 
     for NC in (2, 3)
@@ -813,8 +824,7 @@ end
 end
 
 @testset "Tuple arithmetic" begin
-    import Bramble: space_type, _find_vec_in_broadcast,
-                    _gauss_rule, VectorElement
+    import Bramble: space_type, _find_vec_in_broadcast, _gauss_rule, VectorElement
 
     Ωₕ = mesh(domain(interval(0.0, 1.0)), 6, true)
     W = gridspace(Ωₕ)
@@ -825,7 +835,7 @@ end
 
         # uₕ * (v₁, v₂) multiplies componentwise
         z = u * v
-        @test z isa NTuple{2, VectorElement}
+        @test z isa NTuple{2,VectorElement}
         @test parent(z[1]) == fill(6.0, 6)
         @test parent(z[2]) == fill(15.0, 6)
 
@@ -893,14 +903,14 @@ end
         V = W2^Val(2)
 
         uv = element(V)
-        Rₕ!(uv, x -> (1.0, 2.0); markers = (:left,))
+        Rₕ!(uv, x -> (1.0, 2.0); markers=(:left,))
         c = components(uv)
         @test parent(c[1]) == [1.0, 0, 0, 0, 0, 0]
         @test parent(c[2]) == [2.0, 0, 0, 0, 0, 0]
 
         # a tuple of functions takes the per-component route with the same result
         wv = element(V)
-        Rₕ!(wv, (x -> 1.0, x -> 2.0); markers = (:left,))
+        Rₕ!(wv, (x -> 1.0, x -> 2.0); markers=(:left,))
         @test parent(wv) == parent(uv)
     end
 
@@ -910,7 +920,7 @@ end
         Wh = gridspace(Ωh)
 
         u = element(Wh)
-        avgₕ!(u, x -> 1.0; markers = (:bottom,))
+        avgₕ!(u, x -> 1.0; markers=(:bottom,))
         marked = index_in_marker(Ωh, :bottom)
         @test all(parent(u)[i] ≈ 1.0 for i in eachindex(parent(u)) if marked[i])
         @test all(parent(u)[i] == 0.0 for i in eachindex(parent(u)) if !marked[i])
@@ -928,15 +938,29 @@ end
     # unaffected, because it dispatches to the scalar path once per component, which is
     # why nothing caught it.
     for (lbl, Ωₕ, fs, f_all) in (
-        ("1D", mesh(domain(interval(0.0, 1.0)), 17, true),
-        (sin, cos), x -> (sin(x), cos(x))),
         (
-        "2D", mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 8), (true, false)),
-        (x -> sin(x[1]), x -> cos(x[2])), x -> (sin(x[1]), cos(x[2]))),
+            "1D",
+            mesh(domain(interval(0.0, 1.0)), 17, true),
+            (sin, cos),
+            x -> (sin(x), cos(x)),
+        ),
         (
-        "3D",
-        mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (5, 4, 6), (true, true, false)),
-        (x -> sin(x[1]), x -> cos(x[3])), x -> (sin(x[1]), cos(x[3]))))
+            "2D",
+            mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 8), (true, false)),
+            (x -> sin(x[1]), x -> cos(x[2])),
+            x -> (sin(x[1]), cos(x[2])),
+        ),
+        (
+            "3D",
+            mesh(
+                domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
+                (5, 4, 6),
+                (true, true, false),
+            ),
+            (x -> sin(x[1]), x -> cos(x[3])),
+            x -> (sin(x[1]), cos(x[3])),
+        ),
+    )
         @testset "$lbl" begin
             Vₕ = gridspace(Ωₕ, Val(2))
 
@@ -951,7 +975,7 @@ end
             @test parent(avgₕ(Vₕ, fs)) ≈ parent(from_tuple)
 
             # the quadrature order still reaches the composite path
-            @test parent(avgₕ(Vₕ, f_all; quad_points = 3)) ≈ parent(from_tuple) rtol=1e-8
+            @test parent(avgₕ(Vₕ, f_all; quad_points=3)) ≈ parent(from_tuple) rtol=1e-8
         end
     end
 end
@@ -969,16 +993,16 @@ end
 
     u_tuple = element(Vₕ)
     avgₕ!(u_tuple, fs, Val(3))
-    @test parent(u_tuple) ≈ parent(avgₕ(Vₕ, fs; quad_points = 3))
+    @test parent(u_tuple) ≈ parent(avgₕ(Vₕ, fs; quad_points=3))
 
     u_single = element(Vₕ)
     avgₕ!(u_single, f_all, Val(3))
-    @test parent(u_single) ≈ parent(avgₕ(Vₕ, f_all; quad_points = 3))
+    @test parent(u_single) ≈ parent(avgₕ(Vₕ, f_all; quad_points=3))
 
     Wₕ = gridspace(mesh(domain(interval(0.0, 1.0)), 21, true))
     v_tuple = element(Wₕ)
-    avgₕ!(v_tuple, (sin,); quad_points = 3)
-    @test parent(v_tuple) ≈ parent(avgₕ(Wₕ, sin; quad_points = 3))
+    avgₕ!(v_tuple, (sin,); quad_points=3)
+    @test parent(v_tuple) ≈ parent(avgₕ(Wₕ, sin; quad_points=3))
 end
 
 @testset "_cell_average, generic-dimension dispatch" begin
@@ -1019,9 +1043,11 @@ end
     @test rule_cost > 10_000     # it really is expensive, so the test is not vacuous
 
     function avg_bytes(n)
-        be = backend(vector_type = Vector{BigFloat},
-            matrix_type = SparseArrays.SparseMatrixCSC{BigFloat, Int})
-        Ωₕ = mesh(domain(interval(BigFloat(0), BigFloat(1))), n, true; backend = be)
+        be = backend(
+            vector_type=Vector{BigFloat},
+            matrix_type=SparseArrays.SparseMatrixCSC{BigFloat,Int},
+        )
+        Ωₕ = mesh(domain(interval(BigFloat(0), BigFloat(1))), n, true; backend=be)
         uₕ = element(gridspace(Ωₕ))
         avgₕ!(uₕ, sin)
         return @allocated avgₕ!(uₕ, sin)
@@ -1036,7 +1062,7 @@ end
 
     # and a folding type pays no per-point cost at all
     W64(n) = gridspace(mesh(domain(interval(0.0, 1.0)), n, true))
-    b64(n) = (u = element(W64(n)); avgₕ!(u, sin); @allocated avgₕ!(u, sin))
+    b64(n) = (u=element(W64(n)); avgₕ!(u, sin); @allocated avgₕ!(u, sin))
     @test b64(64) == b64(1024)
 end
 
@@ -1051,15 +1077,15 @@ end
     Vₕ = gridspace(Ωₕ, Val(2))
     right_half(x) = sqrt(x - 0.5)          # a DomainError anywhere left of 0.5
 
-    uₕ = Rₕ(Wₕ, right_half; markers = (:right,))
+    uₕ = Rₕ(Wₕ, right_half; markers=(:right,))
     ref = element(Wₕ)
-    Rₕ!(ref, right_half; markers = (:right,))
+    Rₕ!(ref, right_half; markers=(:right,))
     @test parent(uₕ) == parent(ref)
 
-    @test parent(avgₕ(Wₕ, right_half; markers = (:right,))) isa AbstractVector
+    @test parent(avgₕ(Wₕ, right_half; markers=(:right,))) isa AbstractVector
 
     # composite, both shapes of f
-    @test parent(Rₕ(Vₕ, (right_half, right_half); markers = (:right,))) isa AbstractVector
+    @test parent(Rₕ(Vₕ, (right_half, right_half); markers=(:right,))) isa AbstractVector
 
     # and the unmarked path is unchanged
     @test parent(Rₕ(Wₕ, sin)) ≈ [sin(x) for x in points(Ωₕ)]
@@ -1074,11 +1100,11 @@ end
     Vₕ = gridspace(Ωₕ, Val(2))
 
     from_tuple = element(Vₕ)
-    avgₕ!(from_tuple, (sin, cos); markers = (:right,))
+    avgₕ!(from_tuple, (sin, cos); markers=(:right,))
     from_single = element(Vₕ)
-    avgₕ!(from_single, x -> (sin(x), cos(x)); markers = (:right,))
+    avgₕ!(from_single, x -> (sin(x), cos(x)); markers=(:right,))
     @test parent(from_single) ≈ parent(from_tuple)
-    @test parent(avgₕ(Vₕ, x -> (sin(x), cos(x)); markers = (:right,))) ≈ parent(from_tuple)
+    @test parent(avgₕ(Vₕ, x -> (sin(x), cos(x)); markers=(:right,))) ≈ parent(from_tuple)
 
     # the mask is respected: marked entries written, the rest left at zero
     mask = index_in_marker(Ωₕ, :right)
@@ -1089,12 +1115,15 @@ end
     end
 
     # 2D as well, where reshape really is multidimensional
-    Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
-        (5, 5), (true, true))
+    Ω2 = mesh(
+        domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
+        (5, 5),
+        (true, true),
+    )
     V2 = gridspace(Ω2, Val(2))
     c2 = element(V2)
-    avgₕ!(c2, x -> (sin(x[1]), cos(x[2])); markers = (:bottom,))
+    avgₕ!(c2, x -> (sin(x[1]), cos(x[2])); markers=(:bottom,))
     t2 = element(V2)
-    avgₕ!(t2, (x -> sin(x[1]), x -> cos(x[2])); markers = (:bottom,))
+    avgₕ!(t2, (x -> sin(x[1]), x -> cos(x[2])); markers=(:bottom,))
     @test parent(c2) ≈ parent(t2)
 end

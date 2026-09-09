@@ -31,7 +31,7 @@ using DifferentiationInterface
     @testset "Mooncake" begin
         if _have(:Mooncake)
             @eval import Mooncake
-            check_backend("AutoMooncake", AutoMooncake(config = nothing))
+            check_backend("AutoMooncake", AutoMooncake(config=nothing))
         else
             @test_skip "Mooncake not in this environment"
         end
@@ -52,14 +52,16 @@ using DifferentiationInterface
             # Enzyme's own API this is `Enzyme.Const(f)`; through DI it is this field, which
             # the failure message names when it is missing.
             mode = Enzyme.set_runtime_activity(Enzyme.Reverse)
-            check_backend("AutoEnzyme",
-                AutoEnzyme(mode = mode, function_annotation = Enzyme.Const))
+            check_backend(
+                "AutoEnzyme", AutoEnzyme(mode=mode, function_annotation=Enzyme.Const)
+            )
 
             # Without the annotation it fails, which is worth pinning: if a later Enzyme
             # infers this on its own, this test tells us the annotation can go.
             scalar, _ = _ad_problems()
             @test_throws Exception DifferentiationInterface.derivative(
-                scalar, AutoEnzyme(mode = mode), 1.3)
+                scalar, AutoEnzyme(mode=mode), 1.3
+            )
         else
             @test_skip "Enzyme not in this environment"
         end
@@ -73,7 +75,8 @@ using DifferentiationInterface
             # passing, Zygote has gained mutation support and the decision can be revisited.
             scalar, _ = _ad_problems()
             @test_throws Exception DifferentiationInterface.derivative(
-                scalar, AutoZygote(), 1.3)
+                scalar, AutoZygote(), 1.3
+            )
         else
             @test_skip "Zygote not in this environment"
         end

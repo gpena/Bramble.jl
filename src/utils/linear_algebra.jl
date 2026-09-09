@@ -1,9 +1,17 @@
 @noinline function _throw_dot_dim_error(lu::Integer, lv::Integer, lw::Integer)
-    throw(DimensionMismatch("Vectors must have matching lengths, but got lengths ($lu, $lv, $lw)."))
+    throw(
+        DimensionMismatch(
+            "Vectors must have matching lengths, but got lengths ($lu, $lv, $lw)."
+        ),
+    )
 end
 
 @noinline function _throw_dot_dim_error(lu::Integer, lv::Integer, lw::Integer, lm::Integer)
-    throw(DimensionMismatch("Vectors and mask must have matching lengths, but got lengths ($lu, $lv, $lw, $lm)."))
+    throw(
+        DimensionMismatch(
+            "Vectors and mask must have matching lengths, but got lengths ($lu, $lv, $lw, $lm).",
+        ),
+    )
 end
 
 """
@@ -85,8 +93,8 @@ Dispatches to sequential execution for [`Serial`](@ref) or static multithreaded 
     end
     return nothing
 end
-@inline _cpu_threaded_scatter_for!(::Parallel, mats::Tuple, idxs, g) = _threaded_scatter_for!(
-    mats, idxs, g)
+@inline _cpu_threaded_scatter_for!(::Parallel, mats::Tuple, idxs, g) =
+    _threaded_scatter_for!(mats, idxs, g)
 
 # Kept in an isolated function to prevent closure boxing allocations on serial execution paths.
 @noinline function _threaded_scatter_for!(mats::Tuple, idxs, g)
@@ -123,9 +131,9 @@ struct MarkedIndices
     offset::Int
 end
 
-@inline MarkedIndices(mask::BitVector, offset::Int = 0) = MarkedIndices(mask.chunks, offset)
+@inline MarkedIndices(mask::BitVector, offset::Int=0) = MarkedIndices(mask.chunks, offset)
 
-@inline function Base.iterate(m::MarkedIndices, (chunk_idx, rest) = (0, zero(UInt64)))
+@inline function Base.iterate(m::MarkedIndices, (chunk_idx, rest)=(0, zero(UInt64)))
     chunks = m.chunks
     @inbounds while rest == zero(UInt64)
         chunk_idx += 1
@@ -203,7 +211,8 @@ identical generated code, so one method now covers both cases.
 - `DimensionMismatch`: If vector or mask lengths do not match.
 """
 @inline function _dot_masked(
-        u::AbstractVector, v::AbstractVector, w::AbstractVector, mask::BitVector)
+    u::AbstractVector, v::AbstractVector, w::AbstractVector, mask::BitVector
+)
     (length(u) == length(v) == length(w) == length(mask)) ||
         _throw_dot_dim_error(length(u), length(v), length(w), length(mask))
     T = promote_type(eltype(u), eltype(v), eltype(w))

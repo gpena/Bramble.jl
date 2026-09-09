@@ -31,8 +31,9 @@ using Makie
     end
 
     @testset "2D: CellGrid and VertexGrid convert_arguments" begin
-        Ωₕ = Bramble.mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (5, 7),
-            (true, true))
+        Ωₕ = Bramble.mesh(
+            domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (5, 7), (true, true)
+        )
         Wₕ = gridspace(Ωₕ)
         uₕ = Rₕ(Wₕ, x -> x[1] + 10x[2])
         px, py = points(Ωₕ)
@@ -46,8 +47,9 @@ using Makie
     end
 
     @testset "3D: not implemented" begin
-        Ωₕ = Bramble.mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (3, 3, 3),
-            (true, true, true))
+        Ωₕ = Bramble.mesh(
+            domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (3, 3, 3), (true, true, true)
+        )
         uₕ = Rₕ(gridspace(Ωₕ), x -> 1.0)
         @test_throws ArgumentError Makie.convert_arguments(Makie.PointBased(), uₕ)
         @test_throws ArgumentError Makie.convert_arguments(Makie.CellGrid(), uₕ)

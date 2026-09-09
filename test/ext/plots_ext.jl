@@ -14,7 +14,7 @@ using RecipesBase
         Wₕ = gridspace(Ωₕ)
         uₕ = Rₕ(Wₕ, sin)
 
-        rd = only(RecipesBase.apply_recipe(Dict{Symbol, Any}(), uₕ))
+        rd = only(RecipesBase.apply_recipe(Dict{Symbol,Any}(), uₕ))
         @test rd.plotattributes[:seriestype] == :line
 
         x, y = rd.args
@@ -27,7 +27,7 @@ using RecipesBase
         Wₕ = gridspace(Ωₕ)
         uₕ = Rₕ(Wₕ, x -> x[1] + 10x[2])
 
-        rd = only(RecipesBase.apply_recipe(Dict{Symbol, Any}(), uₕ))
+        rd = only(RecipesBase.apply_recipe(Dict{Symbol,Any}(), uₕ))
         @test rd.plotattributes[:seriestype] == :heatmap
 
         x, y, z = rd.args
@@ -39,21 +39,22 @@ using RecipesBase
     end
 
     @testset "3D: not implemented" begin
-        Ωₕ = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (3, 3, 3),
-            (true, true, true))
+        Ωₕ = mesh(
+            domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (3, 3, 3), (true, true, true)
+        )
         uₕ = Rₕ(gridspace(Ωₕ), x -> 1.0)
-        @test_throws ArgumentError RecipesBase.apply_recipe(Dict{Symbol, Any}(), uₕ)
+        @test_throws ArgumentError RecipesBase.apply_recipe(Dict{Symbol,Any}(), uₕ)
     end
 
     @testset "Composite: refused, points to components(...)" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
         Vₕ = gridspace(Ωₕ, Val(2))
         uv = Rₕ(Vₕ, (x -> x, x -> x^2))
-        @test_throws ArgumentError RecipesBase.apply_recipe(Dict{Symbol, Any}(), uv)
+        @test_throws ArgumentError RecipesBase.apply_recipe(Dict{Symbol,Any}(), uv)
 
         # each component, on its own, is an ordinary 1D grid function
         for c in components(uv)
-            rd = only(RecipesBase.apply_recipe(Dict{Symbol, Any}(), c))
+            rd = only(RecipesBase.apply_recipe(Dict{Symbol,Any}(), c))
             @test rd.plotattributes[:seriestype] == :line
         end
     end

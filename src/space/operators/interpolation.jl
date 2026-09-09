@@ -109,8 +109,8 @@ transferring a coefficient between two composite leaves, say) should build that 
 see the [`interpolation_matrix`](@ref)-based method below, following the same "build the
 pattern once" shape [`allocate_system_matrix`](@ref)/[`assemble!`](@ref) already use.
 """
-@inline πₕ!(dest::VectorElement, src::VectorElement) = Rₕ!(
-    dest, x -> interpolate_at(src, x))
+@inline πₕ!(dest::VectorElement, src::VectorElement) =
+    Rₕ!(dest, x -> interpolate_at(src, x))
 
 """
     πₕ!(dest::VectorElement, P::SparseMatrixCSC, src::VectorElement) -> VectorElement
@@ -146,8 +146,7 @@ multiple dispatch from the one-argument symbolic wrapper `πₕ(uₕ)` in `form/
 The element type is promoted from `Wₕ`'s and `src`'s own, so interpolating a `Dual`-valued
 `src` yields a `Dual`-valued result on an undifferentiated `Wₕ`.
 """
-@inline πₕ(Wₕ::ScalarGridSpace, src::VectorElement) = Rₕ(
-    Wₕ, x -> interpolate_at(src, x))
+@inline πₕ(Wₕ::ScalarGridSpace, src::VectorElement) = Rₕ(Wₕ, x -> interpolate_at(src, x))
 
 # --- Triplet assembly shared by both dimensionalities of interpolation_matrix ---
 #
@@ -155,8 +154,9 @@ The element type is promoted from `Wₕ`'s and `src`'s own, so interpolating a `
 # triplets instead of accumulating a value against one src's data, so the two are kept in
 # step by construction.
 
-function _interpolation_triplets!(rows, cols, vals, Ωdest::AbstractMeshType,
-        Ωsrc::AbstractMeshType{1})
+function _interpolation_triplets!(
+    rows, cols, vals, Ωdest::AbstractMeshType, Ωsrc::AbstractMeshType{1}
+)
     li_dest = LinearIndices(indices(Ωdest))
     for i in indices(Ωdest)
         x = point(Ωdest, i)
@@ -168,8 +168,9 @@ function _interpolation_triplets!(rows, cols, vals, Ωdest::AbstractMeshType,
     end
 end
 
-function _interpolation_triplets!(rows, cols, vals, Ωdest::AbstractMeshType,
-        Ωsrc::AbstractMeshType{D}) where {D}
+function _interpolation_triplets!(
+    rows, cols, vals, Ωdest::AbstractMeshType, Ωsrc::AbstractMeshType{D}
+) where {D}
     li_dest = LinearIndices(indices(Ωdest))
     li_src = LinearIndices(indices(Ωsrc))
     for I in indices(Ωdest)

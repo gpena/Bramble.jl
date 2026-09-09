@@ -27,8 +27,7 @@ end
 
 # Names re-exported from Base or another package are documented there, not here.
 function _is_ours(name::Symbol)
-    isdefined(Bramble, name) &&
-        parentmodule(getproperty(Bramble, name)) === Bramble
+    return isdefined(Bramble, name) && parentmodule(getproperty(Bramble, name)) === Bramble
 end
 
 @testset "Docstrings exist" begin

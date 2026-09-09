@@ -1,20 +1,31 @@
 using Test
 using Bramble
-using Bramble: Backend, backend, vector, matrix, vector_type, matrix_type, backend_types,
-               backend_eye, backend_zeros, execution_policy, Serial, Parallel
+using Bramble:
+    Backend,
+    backend,
+    vector,
+    matrix,
+    vector_type,
+    matrix_type,
+    backend_types,
+    backend_eye,
+    backend_zeros,
+    execution_policy,
+    Serial,
+    Parallel
 using SparseArrays
 using LinearAlgebra: diag, I
 
 # Minimal DenseArray mock simulating vendor GPU array types (such as MtlArray or CuArray)
 # to verify generic backend dispatch without requiring GPU hardware or optional dependencies.
-struct MockGPUArray{T, N} <: DenseArray{T, N}
-    data::Array{T, N}
+struct MockGPUArray{T,N} <: DenseArray{T,N}
+    data::Array{T,N}
 end
-function MockGPUArray{T, N}(::UndefInitializer, dims::Vararg{Integer, N}) where {T, N}
-    MockGPUArray(Array{T, N}(undef, dims...))
+function MockGPUArray{T,N}(::UndefInitializer, dims::Vararg{Integer,N}) where {T,N}
+    return MockGPUArray(Array{T,N}(undef, dims...))
 end
-function MockGPUArray{T, N}(::UndefInitializer, dims::NTuple{N, Integer}) where {T, N}
-    MockGPUArray(Array{T, N}(undef, dims))
+function MockGPUArray{T,N}(::UndefInitializer, dims::NTuple{N,Integer}) where {T,N}
+    return MockGPUArray(Array{T,N}(undef, dims))
 end
 Base.size(A::MockGPUArray) = size(A.data)
 Base.getindex(A::MockGPUArray, i::Int...) = getindex(A.data, i...)
@@ -22,8 +33,8 @@ Base.setindex!(A::MockGPUArray, v, i::Int...) = setindex!(A.data, v, i...)
 Base.IndexStyle(::Type{<:MockGPUArray}) = IndexLinear()
 Base.fill!(A::MockGPUArray{T}, v) where {T} = (fill!(A.data, v); A)
 
-const MockGPUVector{T} = MockGPUArray{T, 1}
-const MockGPUMatrix{T} = MockGPUArray{T, 2}
+const MockGPUVector{T} = MockGPUArray{T,1}
+const MockGPUMatrix{T} = MockGPUArray{T,2}
 
 @testset "Backend configuration and allocation" begin
     # Invariants tested:
@@ -34,44 +45,45 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
     @testset "Backend constructors" begin
         be_default = backend()
         @test vector_type(be_default) === Vector{Float64}
-        @test matrix_type(be_default) === SparseMatrixCSC{Float64, Int}
+        @test matrix_type(be_default) === SparseMatrixCSC{Float64,Int}
         @test execution_policy(be_default) === Serial()
         @test execution_policy(typeof(be_default)) === Serial()
-        @test be_default isa Backend{Vector{Float64}, SparseMatrixCSC{Float64, Int}}
+        @test be_default isa Backend{Vector{Float64},SparseMatrixCSC{Float64,Int}}
 
         # Positional constructor for scalar element type deduction
         be_pos_f64 = backend(Float64)
         @test be_pos_f64 === be_default
         be_pos_f32 = backend(Float32)
         @test vector_type(be_pos_f32) === Vector{Float32}
-        @test matrix_type(be_pos_f32) === SparseMatrixCSC{Float32, Int}
+        @test matrix_type(be_pos_f32) === SparseMatrixCSC{Float32,Int}
         @test execution_policy(be_pos_f32) === Serial()
 
-        be_pos_par = backend(Float32; policy = Parallel())
+        be_pos_par = backend(Float32; policy=Parallel())
         @test execution_policy(be_pos_par) === Parallel()
         @test execution_policy(typeof(be_pos_par)) === Parallel()
 
         # Custom Float32 dense vector and sparse matrix backend
-        be_f32_ds = backend(vector_type = Vector{Float32}, matrix_type = SparseMatrixCSC{
-            Float32, Int})
+        be_f32_ds = backend(
+            vector_type=Vector{Float32}, matrix_type=SparseMatrixCSC{Float32,Int}
+        )
         @test vector_type(be_f32_ds) === Vector{Float32}
-        @test matrix_type(be_f32_ds) === SparseMatrixCSC{Float32, Int}
-        @test be_f32_ds isa Backend{Vector{Float32}, SparseMatrixCSC{Float32, Int}}
+        @test matrix_type(be_f32_ds) === SparseMatrixCSC{Float32,Int}
+        @test be_f32_ds isa Backend{Vector{Float32},SparseMatrixCSC{Float32,Int}}
 
         # Custom Float64 dense vector and dense matrix backend
-        be_f64_dd = backend(vector_type = Vector{Float64}, matrix_type = Matrix{Float64})
+        be_f64_dd = backend(vector_type=Vector{Float64}, matrix_type=Matrix{Float64})
         @test vector_type(be_f64_dd) === Vector{Float64}
         @test matrix_type(be_f64_dd) === Matrix{Float64}
-        @test be_f64_dd isa Backend{Vector{Float64}, Matrix{Float64}}
+        @test be_f64_dd isa Backend{Vector{Float64},Matrix{Float64}}
 
         # Non-dense vector types (e.g. SparseVector) are rejected at the type level
-        @test_throws TypeError backend(vector_type = SparseVector{Float64, Int})
+        @test_throws TypeError backend(vector_type=SparseVector{Float64,Int})
 
         # Complex element type backend
-        be_c64_dd = backend(vector_type = Vector{ComplexF64}, matrix_type = Matrix{ComplexF64})
+        be_c64_dd = backend(vector_type=Vector{ComplexF64}, matrix_type=Matrix{ComplexF64})
         @test vector_type(be_c64_dd) === Vector{ComplexF64}
         @test matrix_type(be_c64_dd) === Matrix{ComplexF64}
-        @test be_c64_dd isa Backend{Vector{ComplexF64}, Matrix{ComplexF64}}
+        @test be_c64_dd isa Backend{Vector{ComplexF64},Matrix{ComplexF64}}
     end
 
     # Invariants tested:
@@ -87,7 +99,7 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
         @test length(v_default) == n
         @test eltype(v_default) === Float64
 
-        be_f32 = backend(vector_type = Vector{Float32}, matrix_type = Matrix{Float32})
+        be_f32 = backend(vector_type=Vector{Float32}, matrix_type=Matrix{Float32})
         v_f32 = vector(be_f32, n)
         @test v_f32 isa Vector{Float32}
         @test length(v_f32) == n
@@ -107,35 +119,36 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
 
         be_default = backend()
         M_default = matrix(be_default, m, n)
-        @test M_default isa SparseMatrixCSC{Float64, Int}
+        @test M_default isa SparseMatrixCSC{Float64,Int}
         @test size(M_default) == (m, n)
         @test eltype(M_default) === Float64
         @test nnz(M_default) == 0
 
-        be_dense = backend(vector_type = Vector{Float64}, matrix_type = Matrix{Float64})
+        be_dense = backend(vector_type=Vector{Float64}, matrix_type=Matrix{Float64})
         M_dense = matrix(be_dense, m, n)
         @test M_dense isa Matrix{Float64}
         @test size(M_dense) == (m, n)
         @test eltype(M_dense) === Float64
 
-        be_f32_sparse = backend(vector_type = Vector{Float32},
-            matrix_type = SparseMatrixCSC{Float32, Int32})
+        be_f32_sparse = backend(
+            vector_type=Vector{Float32}, matrix_type=SparseMatrixCSC{Float32,Int32}
+        )
         M_f32 = matrix(be_f32_sparse, m, n)
-        @test M_f32 isa SparseMatrixCSC{Float32, Int32}
+        @test M_f32 isa SparseMatrixCSC{Float32,Int32}
         @test size(M_f32) == (m, n)
         @test eltype(M_f32) === Float32
 
         # Degenerate matrix dimensions
         M_zero_row = matrix(be_default, 0, n)
-        @test M_zero_row isa SparseMatrixCSC{Float64, Int}
+        @test M_zero_row isa SparseMatrixCSC{Float64,Int}
         @test size(M_zero_row) == (0, n)
 
         M_zero_col = matrix(be_default, m, 0)
-        @test M_zero_col isa SparseMatrixCSC{Float64, Int}
+        @test M_zero_col isa SparseMatrixCSC{Float64,Int}
         @test size(M_zero_col) == (m, 0)
 
         M_zero_all = matrix(be_default, 0, 0)
-        @test M_zero_all isa SparseMatrixCSC{Float64, Int}
+        @test M_zero_all isa SparseMatrixCSC{Float64,Int}
         @test size(M_zero_all) == (0, 0)
 
         M_zero_row_dense = matrix(be_dense, 0, n)
@@ -151,7 +164,9 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
     # 1. Custom DenseArray subtypes integrate seamlessly with backend factory functions.
     # 2. backend_zeros and backend_eye populate correct dimensions and values.
     @testset "Mock GPU backend" begin
-        be_gpu = backend(vector_type = MockGPUVector{Float32}, matrix_type = MockGPUMatrix{Float32})
+        be_gpu = backend(
+            vector_type=MockGPUVector{Float32}, matrix_type=MockGPUMatrix{Float32}
+        )
         @test vector_type(be_gpu) === MockGPUVector{Float32}
         @test matrix_type(be_gpu) === MockGPUMatrix{Float32}
         @test eltype(be_gpu) === Float32
@@ -185,7 +200,9 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
                 @eval using Metal
                 if isdefined(Main, :Metal) && Metal.functional()
                     @testset "Metal GPU backend" begin
-                        be_metal = backend(vector_type = MtlVector{Float32}, matrix_type = MtlMatrix{Float32})
+                        be_metal = backend(
+                            vector_type=MtlVector{Float32}, matrix_type=MtlMatrix{Float32}
+                        )
                         @test vector_type(be_metal) === MtlVector{Float32}
                         @test matrix_type(be_metal) === MtlMatrix{Float32}
 
@@ -216,16 +233,16 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
         T, VT, MT, BType = backend_types(be_default)
         @test T === Float64
         @test VT === Vector{Float64}
-        @test MT === SparseMatrixCSC{Float64, Int}
-        @test BType === Backend{Vector{Float64}, SparseMatrixCSC{Float64, Int}, Serial}
+        @test MT === SparseMatrixCSC{Float64,Int}
+        @test BType === Backend{Vector{Float64},SparseMatrixCSC{Float64,Int},Serial}
 
         T2, VT2, MT2, BType2 = backend_types(typeof(be_default))
         @test T2 === Float64
         @test VT2 === Vector{Float64}
-        @test MT2 === SparseMatrixCSC{Float64, Int}
-        @test BType2 === Backend{Vector{Float64}, SparseMatrixCSC{Float64, Int}, Serial}
+        @test MT2 === SparseMatrixCSC{Float64,Int}
+        @test BType2 === Backend{Vector{Float64},SparseMatrixCSC{Float64,Int},Serial}
 
-        be_f32 = backend(vector_type = Vector{Float32}, matrix_type = Matrix{Float32})
+        be_f32 = backend(vector_type=Vector{Float32}, matrix_type=Matrix{Float32})
         T_f32, VT_f32, MT_f32, _ = backend_types(be_f32)
         @test T_f32 === Float32
         @test VT_f32 === Vector{Float32}
@@ -240,11 +257,11 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
         @test eltype(be_default) === Float64
         @test eltype(typeof(be_default)) === Float64
 
-        be_f32 = backend(vector_type = Vector{Float32}, matrix_type = Matrix{Float32})
+        be_f32 = backend(vector_type=Vector{Float32}, matrix_type=Matrix{Float32})
         @test eltype(be_f32) === Float32
         @test eltype(typeof(be_f32)) === Float32
 
-        be_complex = backend(vector_type = Vector{ComplexF64}, matrix_type = Matrix{ComplexF64})
+        be_complex = backend(vector_type=Vector{ComplexF64}, matrix_type=Matrix{ComplexF64})
         @test eltype(be_complex) === ComplexF64
     end
 
@@ -255,10 +272,10 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
     @testset "Identity and zero matrices" begin
         n = 5
         be_default = backend()
-        be_dense = backend(vector_type = Vector{Float64}, matrix_type = Matrix{Float64})
+        be_dense = backend(vector_type=Vector{Float64}, matrix_type=Matrix{Float64})
 
         I_sparse = backend_eye(be_default, n)
-        @test I_sparse isa SparseMatrixCSC{Float64, Int}
+        @test I_sparse isa SparseMatrixCSC{Float64,Int}
         @test size(I_sparse) == (n, n)
         @test diag(I_sparse) == ones(n)
         @test nnz(I_sparse) == n
@@ -269,7 +286,7 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
         @test I_dense == Matrix{Float64}(I, n, n)
 
         Z_sparse = backend_zeros(be_default, n)
-        @test Z_sparse isa SparseMatrixCSC{Float64, Int}
+        @test Z_sparse isa SparseMatrixCSC{Float64,Int}
         @test size(Z_sparse) == (n, n)
         @test nnz(Z_sparse) == 0
 
@@ -319,9 +336,9 @@ end
     # Invariants tested:
     # 1. vector_type and matrix_type resolve directly on Type{Backend{...}} without allocating an instance.
     @testset "Type-level accessors" begin
-        BE = Backend{Vector{Float64}, SparseMatrixCSC{Float64, Int}, Serial}
+        BE = Backend{Vector{Float64},SparseMatrixCSC{Float64,Int},Serial}
         @test vector_type(BE) === Vector{Float64}
-        @test matrix_type(BE) === SparseMatrixCSC{Float64, Int}
+        @test matrix_type(BE) === SparseMatrixCSC{Float64,Int}
     end
 
     # Invariants tested:
@@ -338,12 +355,15 @@ end
         struct SizeConstructibleMat{T} <: AbstractMatrix{T}
             data::Matrix{T}
         end
-        SizeConstructibleMat{T}(n::Integer, m::Integer) where {T} = SizeConstructibleMat{T}(zeros(T, n, m))
+        SizeConstructibleMat{T}(n::Integer, m::Integer) where {T} =
+            SizeConstructibleMat{T}(zeros(T, n, m))
         Base.size(v::SizeConstructibleMat) = size(v.data)
         Base.getindex(v::SizeConstructibleMat, i, j) = v.data[i, j]
 
-        be_custom = backend(vector_type = SizeConstructibleVec{Float64},
-            matrix_type = SizeConstructibleMat{Float64})
+        be_custom = backend(
+            vector_type=SizeConstructibleVec{Float64},
+            matrix_type=SizeConstructibleMat{Float64},
+        )
 
         v = vector(be_custom, 5)
         @test v isa SizeConstructibleVec{Float64}
@@ -357,8 +377,9 @@ end
         struct UnconstructibleVec{T} <: DenseVector{T} end
         struct UnconstructibleMat{T} <: AbstractMatrix{T} end
 
-        be_fail = backend(vector_type = UnconstructibleVec{Float64},
-            matrix_type = UnconstructibleMat{Float64})
+        be_fail = backend(
+            vector_type=UnconstructibleVec{Float64}, matrix_type=UnconstructibleMat{Float64}
+        )
         @test_throws ErrorException vector(be_fail, 5)
         @test_throws ErrorException matrix(be_fail, 3, 4)
     end

@@ -1,5 +1,6 @@
-@noinline _throw_domain_dim_mismatch(d::Int,
-    D::Int) = throw(DimensionMismatch("the domain is $(d)-dimensional but npts and unif have length $D"))
+@noinline _throw_domain_dim_mismatch(d::Int, D::Int) = throw(
+    DimensionMismatch("the domain is $(d)-dimensional but npts and unif have length $D")
+)
 
 """
     MeshnD{D, BT, CI, SM, T} <: AbstractMeshType{D}
@@ -42,10 +43,10 @@ point(Ωₕ, (10, 15))  # returns (x₁₀, y₁₅)
 
 See also: [`Mesh1D`](@ref), [`submeshes`](@ref), [`mesh`](@ref).
 """
-mutable struct MeshnD{D, BT <: Backend, CI <: CartesianIndices{D}, SM <: Tuple, T} <:
+mutable struct MeshnD{D,BT<:Backend,CI<:CartesianIndices{D},SM<:Tuple,T} <:
                AbstractMeshType{D}
     "the D-dimensional CartesianProduct (hyperrectangle) defining the geometric domain."
-    set::CartesianProduct{D, T}
+    set::CartesianProduct{D,T}
     "a dictionary mapping `Symbol` labels to `BitVector`s, marking grid points."
     markers::MeshMarkers
     "the `CartesianIndices` for the full D-dimensional grid, allowing for multi-dimensional indexing."
@@ -76,7 +77,9 @@ Generates a tuple of `D` independent [`Mesh1D`](@ref) objects corresponding to e
     # 1. `projection(Ω, i)` gets the i-th 1D interval from the domain's set.
     # 2. `domain(...)` wraps it in a Domain object.
     # 3. `mesh(...)` creates the corresponding Mesh1D for that dimension.
-    return ntuple(i -> mesh(domain(projection(Ω, i)), npts[i], unif[i], backend = backend), Val(dim(Ω)))
+    return ntuple(
+        i -> mesh(domain(projection(Ω, i)), npts[i], unif[i], backend=backend), Val(dim(Ω))
+    )
 end
 
 """
@@ -94,8 +97,13 @@ dimensions (degenerate single-point intervals) are forced to a point count of 1.
   - `unif`: Uniformity flags for each spatial dimension.
   - `backend`: Linear algebra [`Backend`](@ref).
 """
-function _mesh(Ω::Domain, npts::NTuple{D, Int}, unif::NTuple{D, Bool}, backend;
-        warn_marker_mismatch::Bool = true) where {D}
+function _mesh(
+    Ω::Domain,
+    npts::NTuple{D,Int},
+    unif::NTuple{D,Bool},
+    backend;
+    warn_marker_mismatch::Bool=true,
+) where {D}
     # Ensure the dimension of the domain matches the length of the input tuples.
     dim(Ω) == D || _throw_domain_dim_mismatch(dim(Ω), D)
     _set = set(Ω)
@@ -120,8 +128,8 @@ function _mesh(Ω::Domain, npts::NTuple{D, Int}, unif::NTuple{D, Bool}, backend;
     return output_mesh
 end
 
-@inline eltype(::MeshnD{D, BT}) where {D, BT} = eltype(BT)
-@inline eltype(::Type{<:MeshnD{D, BT}}) where {D, BT} = eltype(BT)
+@inline eltype(::MeshnD{D,BT}) where {D,BT} = eltype(BT)
+@inline eltype(::Type{<:MeshnD{D,BT}}) where {D,BT} = eltype(BT)
 
 """
     (Ωₕ::MeshnD)(i::Integer) -> Mesh1D
@@ -149,16 +157,21 @@ end
 
 # A macro for functions of the form: func(Ωₕ) -> ntuple(...)
 macro generate_mesh_ntuple_func(fname)
-    return esc(quote
-        @inline $fname(Ωₕ::MeshnD{D}) where {D} = ntuple(i -> $fname(Ωₕ(i)), Val(D))
-    end)
+    return esc(
+        quote
+            @inline $fname(Ωₕ::MeshnD{D}) where {D} = ntuple(i -> $fname(Ωₕ(i)), Val(D))
+        end
+    )
 end
 
 # A macro for functions of the form: func(Ωₕ, idx) -> ntuple(...)
 macro generate_mesh_ntuple_func_with_idx(fname)
-    return esc(quote
-        @inline $fname(Ωₕ::MeshnD{D}, idx) where {D} = ntuple(i -> $fname(Ωₕ(i), idx[i]), Val(D))
-    end)
+    return esc(
+        quote
+            @inline $fname(Ωₕ::MeshnD{D}, idx) where {D} =
+                ntuple(i -> $fname(Ωₕ(i), idx[i]), Val(D))
+        end,
+    )
 end
 
 # ntuple wrappers
@@ -183,8 +196,8 @@ See also: [`half_spacings`](@ref), [`cell_measures`](@ref).
 @generate_mesh_ntuple_func_with_idx spacing
 @generate_mesh_ntuple_func_with_idx forward_spacing
 
-@inline half_spacing(Ωₕ::MeshnD{D}, idx) where {D} = ntuple(
-    i -> _apply_hs_logic(half_spacing(Ωₕ(i), idx[i])), Val(D))
+@inline half_spacing(Ωₕ::MeshnD{D}, idx) where {D} =
+    ntuple(i -> _apply_hs_logic(half_spacing(Ωₕ(i), idx[i])), Val(D))
 
 """
     cell_measures(Ωₕ::MeshnD{D}) -> NTuple{D, AbstractVector}
@@ -195,7 +208,8 @@ individual cell is the product of its per-axis widths; see [`cell_measure`](@ref
 @inline cell_measures(Ωₕ::MeshnD{D}) where {D} = ntuple(i -> cell_measures(Ωₕ(i)), Val(D))
 
 @inline npoints(Ωₕ::MeshnD) = prod(npoints(Ωₕ, Tuple))
-@inline npoints(Ωₕ::MeshnD{D}, ::Type{Tuple}) where {D} = ntuple(i -> npoints(Ωₕ(i)), Val(D))
+@inline npoints(Ωₕ::MeshnD{D}, ::Type{Tuple}) where {D} =
+    ntuple(i -> npoints(Ωₕ(i)), Val(D))
 
 # The diagonal of the largest cell. On a tensor-product mesh the spacing along axis d does
 # not depend on the other coordinates, and `hypot` is increasing in each argument, so the
@@ -262,7 +276,7 @@ function change_points!(Ωₕ::MeshnD{D}, pts) where {D}
     @inbounds for i in 1:D
         change_points!(Ωₕ(i), pts[i])
     end
-    return
+    return nothing
 end
 
 """
@@ -273,11 +287,9 @@ Create a copy of mesh `Ωₕ`. The copy is shallow with respect to immutable fie
 (`submeshes`, `markers`).
 """
 function Base.copy(Ωₕ::MeshnD{D}) where {D}
-    return MeshnD(Ωₕ.set,
-        deepcopy(Ωₕ.markers),
-        Ωₕ.indices,
-        Ωₕ.backend,
-        map(copy, Ωₕ.submeshes))
+    return MeshnD(
+        Ωₕ.set, deepcopy(Ωₕ.markers), Ωₕ.indices, Ωₕ.backend, map(copy, Ωₕ.submeshes)
+    )
 end
 
 """
@@ -285,14 +297,14 @@ end
 
 Custom display for `MeshnD` objects with detailed mesh summary, domain information, and markers.
 """
-function Base.show(io::IO, Ωₕ::MeshnD{D, BT, CI, SM, T}) where {D, BT, CI, SM, T}
+function Base.show(io::IO, Ωₕ::MeshnD{D,BT,CI,SM,T}) where {D,BT,CI,SM,T}
     pp = PrettyPrinter(io)
 
     if pp.compact
         # Compact display for arrays/collections
         npts_tuple = npoints(Ωₕ, Tuple)
         print(io, "MeshnD{$(D)D, ", prod(npts_tuple), " pts}")
-        return
+        return nothing
     end
 
     # Detailed display
@@ -323,5 +335,5 @@ function Base.show(io::IO, Ωₕ::MeshnD{D, BT, CI, SM, T}) where {D, BT, CI, SM
     print_mesh_markers(pp, markers(Ωₕ))
 
     # Remove trailing newline
-    remove_trailing_newline(io)
+    return remove_trailing_newline(io)
 end

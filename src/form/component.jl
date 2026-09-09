@@ -46,40 +46,48 @@ function component end
 
 # --- the operators, rebuilt around an indexed argument ----------------------------- #
 
-for T in (:BackwardDifference, :ForwardDifference, :CenteredDifference, :StarDifference,
-    :CrossWeightedDifference, :JumpNode, :BackwardAverage, :ForwardAverage)
-    @eval @inline function component(op::$T{D, Dim}, i::Int) where {D, Dim}
+for T in (
+    :BackwardDifference,
+    :ForwardDifference,
+    :CenteredDifference,
+    :StarDifference,
+    :CrossWeightedDifference,
+    :JumpNode,
+    :BackwardAverage,
+    :ForwardAverage,
+)
+    @eval @inline function component(op::$T{D,Dim}, i::Int) where {D,Dim}
         inner = component(op.inner_op, i)
-        return $T{D, Dim, typeof(inner)}(inner)
+        return $T{D,Dim,typeof(inner)}(inner)
     end
 end
 
-@inline function component(op::ShiftNode{D, Dim}, i::Int) where {D, Dim}
+@inline function component(op::ShiftNode{D,Dim}, i::Int) where {D,Dim}
     inner = component(op.inner_op, i)
-    return ShiftNode{D, Dim, typeof(inner)}(op.shift_amount, inner)
+    return ShiftNode{D,Dim,typeof(inner)}(op.shift_amount, inner)
 end
 
-@inline function component(op::RegionRestriction{D, R}, i::Int) where {D, R}
+@inline function component(op::RegionRestriction{D,R}, i::Int) where {D,R}
     inner = component(op.inner_op, i)
-    return RegionRestriction{D, R, typeof(inner)}(op.region, inner)
+    return RegionRestriction{D,R,typeof(inner)}(op.region, inner)
 end
 
 # Scaling passes through untouched: the scalar or grid function multiplying an operator is
 # not what the index names.
-@inline function component(op::OperatorScale{D, S}, i::Int) where {D, S}
+@inline function component(op::OperatorScale{D,S}, i::Int) where {D,S}
     inner = component(op.inner_op, i)
-    return OperatorScale{D, S, typeof(inner)}(op.scalar, inner)
+    return OperatorScale{D,S,typeof(inner)}(op.scalar, inner)
 end
 
-@inline function component(op::GridFunctionScale{D, V}, i::Int) where {D, V}
+@inline function component(op::GridFunctionScale{D,V}, i::Int) where {D,V}
     inner = component(op.inner_op, i)
-    return GridFunctionScale{D, V, typeof(inner)}(op.grid_function, inner)
+    return GridFunctionScale{D,V,typeof(inner)}(op.grid_function, inner)
 end
 
 @inline function component(op::OperatorAdd{D}, i::Int) where {D}
     l = component(op.left_op, i)
     r = component(op.right_op, i)
-    return OperatorAdd{D, typeof(l), typeof(r)}(l, r)
+    return OperatorAdd{D,typeof(l),typeof(r)}(l, r)
 end
 
 # --- the functor ------------------------------------------------------------------- #
@@ -105,13 +113,20 @@ end
 # block reading the first component's coefficients each time. Silently the wrong answer,
 # which is why these are worth having rather than merely convenient.
 
-for (f, W) in ((:innerₕ, :InnerH), (:inner₊, :(InnerPlus{1})),
-    (:inner₊ₓ, :(InnerPlus{1})), (:inner₊ᵧ, :(InnerPlus{2})), (:inner₊₂, :(InnerPlus{3})))
+for (f, W) in (
+    (:innerₕ, :InnerH),
+    (:inner₊, :(InnerPlus{1})),
+    (:inner₊ₓ, :(InnerPlus{1})),
+    (:inner₊ᵧ, :(InnerPlus{2})),
+    (:inner₊₂, :(InnerPlus{3})),
+)
     # `NC` is `l`'s *leaf* count (`length(comps)`, over `components`, which flattens any
     # nesting), not the space's own structural type parameter -- `component(r, c)` names
     # leaf `c` (form-level indexing is already leaf-based, see form/block_extract.jl), so
     # this has to walk the same leaves `comps` does, in the same order, for any `r`.
-    @eval @inline function $f(l::VectorElement{<:CompositeGridSpace}, r::LazyOp{D}) where {D}
+    @eval @inline function $f(
+        l::VectorElement{<:CompositeGridSpace}, r::LazyOp{D}
+    ) where {D}
         comps = components(l)
         return foldl(+, ntuple(c -> $f(comps[c], component(r, c)), Val(length(comps))))
     end
@@ -125,13 +140,16 @@ for (f, W) in ((:innerₕ, :InnerH), (:inner₊, :(InnerPlus{1})),
     # only a claim about how many components the form has. A claim that turns out wrong is
     # caught where the space is known, in `_route_terms!`, which used to drop such a term
     # in silence.
-    @eval @inline function $f(l::NTuple{NC, Any}, r::LazyOp{D}) where {NC, D}
+    @eval @inline function $f(l::NTuple{NC,Any}, r::LazyOp{D}) where {NC,D}
         return foldl(+, ntuple(c -> $f(l[c], component(r, c)), Val(NC)))
     end
 
     @eval @noinline function $f(::Tuple{}, ::LazyOp)
-        throw(ArgumentError(
-            "an empty tuple names no components, so there is nothing to sum. Give one " *
-            "entry per component of the test space."))
+        throw(
+            ArgumentError(
+                "an empty tuple names no components, so there is nothing to sum. Give one " *
+                "entry per component of the test space.",
+            ),
+        )
     end
 end

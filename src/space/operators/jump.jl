@@ -45,8 +45,8 @@ In-place jump of `in` along `jump_dim`, written into `out`, computing
 Forwards to [`forward_difference_dim!`](@ref); the jump and the unscaled forward
 difference are the same arithmetic.
 """
-@inline jump_dim!(out, in, dims::NTuple{D, Int},
-    jump_dim::Val) where {D} = forward_difference_dim!(out, in, dims, jump_dim)
+@inline jump_dim!(out, in, dims::NTuple{D,Int}, jump_dim::Val) where {D} =
+    forward_difference_dim!(out, in, dims, jump_dim)
 
 """
     jump(arg, dim_val::Val)

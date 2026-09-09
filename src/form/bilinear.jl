@@ -7,7 +7,7 @@
 # in the same order a scatter walk visits them -- addressed per point rather than by a shared
 # running counter so a future caller could read it without a race even if the walk over grid
 # points were threaded (today's cached path is serial-only; see below).
-const NzvalSegment = Tuple{Vector{Int}, Vector{Int}}
+const NzvalSegment = Tuple{Vector{Int},Vector{Int}}
 
 # One `BilinearForm`'s nzval-position cache: valid only for the exact matrix object last
 # assembled into (`A === cache.A`), one `NzvalSegment` per (term, block) the serial assembly
@@ -15,7 +15,7 @@ const NzvalSegment = Tuple{Vector{Int}, Vector{Int}}
 # `BilinearForm` -- so it can be filled in lazily, on the first `assemble!` call, without the
 # form itself needing to be mutable or its type to depend on whether a cache exists yet.
 mutable struct _AssemblyCache
-    A::Union{Nothing, SparseMatrixCSC}
+    A::Union{Nothing,SparseMatrixCSC}
     ast::Any
     segments::Vector{NzvalSegment}
 end
@@ -56,7 +56,7 @@ a = form(Wₕ, Wₕ, (u, v) -> innerₕ(β * D₋ₓ(u), D₋ₓ(v)))
 assemble!(A, a) # zero allocations, evaluates with β = 3.0
 ```
 """
-struct BilinearForm{D, TrialSpace, TestSpace, AST}
+struct BilinearForm{D,TrialSpace,TestSpace,AST}
     trial_space::TrialSpace
     test_space::TestSpace
     ast::AST
@@ -107,7 +107,7 @@ function form(Wₕ, Vₕ, f)
     raw_ast = f(TrialFunction{D}(), TestFunction{D}())
     _validate_form_expression(raw_ast, Val(D))
     ast = resolve_ast(raw_ast)
-    return BilinearForm{D, typeof(Wₕ), typeof(Vₕ), typeof(ast)}(Wₕ, Vₕ, ast, _AssemblyCache())
+    return BilinearForm{D,typeof(Wₕ),typeof(Vₕ),typeof(ast)}(Wₕ, Vₕ, ast, _AssemblyCache())
 end
 
 # --- Utility helpers -------------------------------------------------------------- #
@@ -175,11 +175,14 @@ end
 
 # Refuse cross-mesh coupling unless an explicit mapping (such as interpolation) is provided.
 @noinline function _throw_cross_mesh_block(term, Ωu, Ωv)
-    throw(ArgumentError(
-        "a bilinear term coupling two leaves over different meshes has no assembly: the " *
-        "trial leaf has $(npoints(Ωu, Tuple)) points and the test leaf $(npoints(Ωv, Tuple)), " *
-        "so an index on one names no point on the other. Got $(typeof(term)). Couple leaves " *
-        "that share a mesh, or wrap the trial function in an interpolation operator: `πₕ(Wtrial, u)`."))
+    throw(
+        ArgumentError(
+            "a bilinear term coupling two leaves over different meshes has no assembly: the " *
+            "trial leaf has $(npoints(Ωu, Tuple)) points and the test leaf $(npoints(Ωv, Tuple)), " *
+            "so an index on one names no point on the other. Got $(typeof(term)). Couple leaves " *
+            "that share a mesh, or wrap the trial function in an interpolation operator: `πₕ(Wtrial, u)`.",
+        ),
+    )
 end
 
 @inline function _check_block_meshes(term, trial_leaf, test_leaf)
@@ -201,24 +204,27 @@ end
 end
 
 @noinline function _throw_interp_space_mismatch(term, Ωsrc, Ωu)
-    throw(ArgumentError(
-        "the interpolation operator in a bilinear term names a space that is not the trial " *
-        "function's: `πₕ` was given a space over a mesh of $(npoints(Ωsrc, Tuple)) points, " *
-        "while the trial leaf this term assembles into has $(npoints(Ωu, Tuple)). Got " *
-        "$(typeof(term)). `πₕ(Wsrc, u)` interpolates from the space the trial function " *
-        "lives on, so `Wsrc` must be that space."))
+    throw(
+        ArgumentError(
+            "the interpolation operator in a bilinear term names a space that is not the trial " *
+            "function's: `πₕ` was given a space over a mesh of $(npoints(Ωsrc, Tuple)) points, " *
+            "while the trial leaf this term assembles into has $(npoints(Ωu, Tuple)). Got " *
+            "$(typeof(term)). `πₕ(Wsrc, u)` interpolates from the space the trial function " *
+            "lives on, so `Wsrc` must be that space.",
+        ),
+    )
 end
 
-@inline _check_block_meshes(op::OperatorAdd, trial_leaf, test_leaf) = _visit_operator_add1(
-    _check_block_meshes, op, trial_leaf, test_leaf)
+@inline _check_block_meshes(op::OperatorAdd, trial_leaf, test_leaf) =
+    _visit_operator_add1(_check_block_meshes, op, trial_leaf, test_leaf)
 
 # The element type is the one the form's own weights have, promoted against the trial
 # space's (supporting automatic differentiation dual numbers). One place for this rule:
 # reading it from the space alone instead of promoting against the data broke ForwardDiff in
 # four separate places, each with the same symptom (`MethodError: no method matching
 # Float64(::Dual)`), each time only on the AD path (bramble-verification §4).
-@inline _matrix_eltype(ast, form::BilinearForm) = promote_type(
-    _assembled_eltype(ast, form.test_space), eltype(form.trial_space))
+@inline _matrix_eltype(ast, form::BilinearForm) =
+    promote_type(_assembled_eltype(ast, form.test_space), eltype(form.trial_space))
 
 # A hint for `sizehint!`, not a real bound: `local_stencil` can return a longer stencil at a
 # boundary point than at this representative interior one, so this can undercount. Cheap to
@@ -255,8 +261,8 @@ Only the structure is preallocated here; all stored entries are zero until `asse
 See also [`assemble`](@ref) and [`assemble!`](@ref).
 """
 function allocate_system_matrix(
-        form::BilinearForm{D, TrialSpace, TestSpace, AST},
-        ast = form.ast) where {D, TrialSpace, TestSpace, AST}
+    form::BilinearForm{D,TrialSpace,TestSpace,AST}, ast=form.ast
+) where {D,TrialSpace,TestSpace,AST}
     # The test space: matrix rows are indexed by the test function and the quadrature weight
     # belongs to the integral over the test space mesh.
     space = form.test_space
@@ -295,8 +301,15 @@ function allocate_system_matrix(
 end
 
 # Which entries a term can reach, block by block.
-function _pattern_term!(I_vec::Vector{Int}, J_vec::Vector{Int}, term::TERM, trial_leaf,
-        test_leaf, row_offset::Int, col_offset::Int) where {TERM}
+function _pattern_term!(
+    I_vec::Vector{Int},
+    J_vec::Vector{Int},
+    term::TERM,
+    trial_leaf,
+    test_leaf,
+    row_offset::Int,
+    col_offset::Int,
+) where {TERM}
     Ωₕ = mesh(test_leaf)
     mesh_markers = markers(Ωₕ)
     _validate_term_markers(term, mesh_markers, "one of the composite space's leaves")
@@ -322,26 +335,35 @@ function _pattern_term!(I_vec::Vector{Int}, J_vec::Vector{Int}, term::TERM, tria
 end
 
 # Recursion shape shared via `_visit_operator_add3` (form/common.jl).
-function _pattern_blocks!(I_vec::Vector{Int}, J_vec::Vector{Int}, op::OperatorAdd,
-        trial_leaves, test_leaves)
-    _visit_operator_add3(
-        _pattern_blocks!, I_vec, J_vec, op, trial_leaves, test_leaves)
+function _pattern_blocks!(
+    I_vec::Vector{Int}, J_vec::Vector{Int}, op::OperatorAdd, trial_leaves, test_leaves
+)
+    return _visit_operator_add3(
+        _pattern_blocks!, I_vec, J_vec, op, trial_leaves, test_leaves
+    )
 end
 
-function _pattern_blocks!(I_vec::Vector{Int}, J_vec::Vector{Int}, term::TERM,
-        trial_leaves, test_leaves) where {TERM}
+function _pattern_blocks!(
+    I_vec::Vector{Int}, J_vec::Vector{Int}, term::TERM, trial_leaves, test_leaves
+) where {TERM}
     for blk in blocks(term, trial_leaves, test_leaves)
         _check_block_meshes(term, blk.trial_leaf, blk.test_leaf)
-        _pattern_term!(I_vec, J_vec, term, blk.trial_leaf, blk.test_leaf,
-            blk.row_offset, blk.col_offset)
+        _pattern_term!(
+            I_vec,
+            J_vec,
+            term,
+            blk.trial_leaf,
+            blk.test_leaf,
+            blk.row_offset,
+            blk.col_offset,
+        )
     end
     return nothing
 end
 
 function allocate_system_matrix(
-        form::BilinearForm{D, TrialSpace, TestSpace, AST},
-        ast = form.ast) where {D, TrialSpace <: CompositeGridSpace,
-        TestSpace <: CompositeGridSpace, AST}
+    form::BilinearForm{D,TrialSpace,TestSpace,AST}, ast=form.ast
+) where {D,TrialSpace<:CompositeGridSpace,TestSpace<:CompositeGridSpace,AST}
     trial_leaves = leaf_spaces_offsets(form.trial_space)
     test_leaves = leaf_spaces_offsets(form.test_space)
 
@@ -350,8 +372,9 @@ function allocate_system_matrix(
 
     sp = first(first(test_leaves))
     Ωₛ = mesh(sp)
-    hint = length(test_leaves) *
-           _pattern_size_hint(ast, sp, markers(Ωₛ), LinearIndices(indices(Ωₛ)))
+    hint =
+        length(test_leaves) *
+        _pattern_size_hint(ast, sp, markers(Ωₛ), LinearIndices(indices(Ωₛ)))
     sizehint!(I_vec, hint)
     sizehint!(J_vec, hint)
 
@@ -366,14 +389,21 @@ end
 # --- Assembly implementations ----------------------------------------------------- #
 
 function apply_dirichlet_labels!(
-        A::AbstractMatrix, form::BilinearForm, dirichlet_labels, dirichlet_components = nothing)
+    A::AbstractMatrix, form::BilinearForm, dirichlet_labels, dirichlet_components=nothing
+)
     if dirichlet_labels !== nothing
         if dirichlet_labels isa Symbol
-            dirichlet_bc!(A, test_space(form), dirichlet_labels; components = dirichlet_components)
+            dirichlet_bc!(
+                A, test_space(form), dirichlet_labels; components=dirichlet_components
+            )
         elseif dirichlet_labels isa Tuple
             if !isempty(dirichlet_labels)
-                dirichlet_bc!(A, test_space(form), dirichlet_labels...;
-                    components = dirichlet_components)
+                dirichlet_bc!(
+                    A,
+                    test_space(form),
+                    dirichlet_labels...;
+                    components=dirichlet_components,
+                )
             end
         end
     end
@@ -405,11 +435,16 @@ boundary conditions to the matrix -- a label `Symbol`, a `Tuple` of labels, a `l
 form. `dirichlet_components` restricts which leaf components of a composite trial space
 they bind to (see [`dirichlet_bc!`](@ref)).
 """
-function assemble(form::BilinearForm; dirichlet = nothing, dirichlet_components = nothing)
+function assemble(form::BilinearForm; dirichlet=nothing, dirichlet_components=nothing)
     ast_resolved = form.ast
     A = allocate_system_matrix(form, ast_resolved)
-    assemble!(A, form; dirichlet = dirichlet,
-        dirichlet_components = dirichlet_components, ast = ast_resolved)
+    assemble!(
+        A,
+        form;
+        dirichlet=dirichlet,
+        dirichlet_components=dirichlet_components,
+        ast=ast_resolved,
+    )
     return A
 end
 
@@ -427,18 +462,22 @@ end
 # threading -- breaking `assemble_parallel!`'s own documented contract ("always threads").
 
 @noinline function _throw_missing_pattern_entry(term)
-    throw(ArgumentError(
-        "assembling $(typeof(term)) reached a matrix entry outside its preallocated " *
-        "sparsity pattern. `A` was not built by `allocate_system_matrix` for this exact " *
-        "form, or the form's `ast` changed after `A` was built."))
+    throw(
+        ArgumentError(
+            "assembling $(typeof(term)) reached a matrix entry outside its preallocated " *
+            "sparsity pattern. `A` was not built by `allocate_system_matrix` for this exact " *
+            "form, or the form's `ast` changed after `A` was built.",
+        ),
+    )
 end
 
 # One term into one block, serially, searching for each entry's nzval position (once) and
 # recording it into a fresh `NzvalSegment` alongside performing the (first) real scatter.
 # `row_offset` comes from the test leaf and `col_offset` from the trial leaf: a matrix row
 # is indexed by the test function.
-function _record_segment!(A::SparseMatrixCSC, term::TERM, sp, row_offset::Int,
-        col_offset::Int) where {TERM}
+function _record_segment!(
+    A::SparseMatrixCSC, term::TERM, sp, row_offset::Int, col_offset::Int
+) where {TERM}
     Ωₕ = mesh(sp)
     mesh_markers = markers(Ωₕ)
     lin_indices = LinearIndices(indices(Ωₕ))
@@ -457,8 +496,9 @@ function _record_segment!(A::SparseMatrixCSC, term::TERM, sp, row_offset::Int,
             col = _trial_column(lin_indices, I, off_u)
 
             if checkbounds(Bool, lin_indices, Iv) && col != 0
-                pos = _find_nzval_position(A, lin_indices[Iv] + row_offset, col +
-                                                                            col_offset)
+                pos = _find_nzval_position(
+                    A, lin_indices[Iv] + row_offset, col + col_offset
+                )
                 pos == 0 && _throw_missing_pattern_entry(term)
                 A.nzval[pos] += weight
                 push!(positions, pos)
@@ -473,8 +513,14 @@ end
 # only positions are fixed), but each entry's nzval index comes from `segment` instead of a
 # search. `point_ptr[lin_idx]` addresses each point's own slice of `positions` directly, so
 # this stays correct regardless of what order grid points are visited in.
-function _replay_segment!(A::SparseMatrixCSC, term::TERM, sp, row_offset::Int,
-        col_offset::Int, segment::NzvalSegment) where {TERM}
+function _replay_segment!(
+    A::SparseMatrixCSC,
+    term::TERM,
+    sp,
+    row_offset::Int,
+    col_offset::Int,
+    segment::NzvalSegment,
+) where {TERM}
     point_ptr, positions = segment
     Ωₕ = mesh(sp)
     mesh_markers = markers(Ωₕ)
@@ -499,33 +545,55 @@ function _replay_segment!(A::SparseMatrixCSC, term::TERM, sp, row_offset::Int,
 end
 
 # The scalar case: one block, no offsets, so exactly one segment either way.
-function _record_bilinear_core!(A::SparseMatrixCSC, trial_space, test_space,
-        ast::AST_TYPE, segments::Vector{NzvalSegment}) where {AST_TYPE}
+function _record_bilinear_core!(
+    A::SparseMatrixCSC,
+    trial_space,
+    test_space,
+    ast::AST_TYPE,
+    segments::Vector{NzvalSegment},
+) where {AST_TYPE}
     _check_block_meshes(ast, trial_space, test_space)
     push!(segments, _record_segment!(A, ast, test_space, 0, 0))
     return nothing
 end
 
-function _replay_bilinear_core!(A::SparseMatrixCSC, trial_space, test_space,
-        ast::AST_TYPE, segments::Vector{NzvalSegment}) where {AST_TYPE}
+function _replay_bilinear_core!(
+    A::SparseMatrixCSC,
+    trial_space,
+    test_space,
+    ast::AST_TYPE,
+    segments::Vector{NzvalSegment},
+) where {AST_TYPE}
     _check_block_meshes(ast, trial_space, test_space)
     _replay_segment!(A, ast, test_space, 0, 0, segments[1])
     return nothing
 end
 
-function _record_blocks!(A::SparseMatrixCSC, op::OperatorAdd, trial_leaves, test_leaves,
-        segments::Vector{NzvalSegment})
+function _record_blocks!(
+    A::SparseMatrixCSC,
+    op::OperatorAdd,
+    trial_leaves,
+    test_leaves,
+    segments::Vector{NzvalSegment},
+)
     _record_blocks!(A, op.left_op, trial_leaves, test_leaves, segments)
     _record_blocks!(A, op.right_op, trial_leaves, test_leaves, segments)
     return nothing
 end
 
-function _record_blocks!(A::SparseMatrixCSC, term::TERM, trial_leaves, test_leaves,
-        segments::Vector{NzvalSegment}) where {TERM}
+function _record_blocks!(
+    A::SparseMatrixCSC,
+    term::TERM,
+    trial_leaves,
+    test_leaves,
+    segments::Vector{NzvalSegment},
+) where {TERM}
     for blk in blocks(term, trial_leaves, test_leaves)
         _check_block_meshes(term, blk.trial_leaf, blk.test_leaf)
-        push!(segments, _record_segment!(
-            A, term, blk.test_leaf, blk.row_offset, blk.col_offset))
+        push!(
+            segments,
+            _record_segment!(A, term, blk.test_leaf, blk.row_offset, blk.col_offset),
+        )
     end
     return nothing
 end
@@ -533,37 +601,65 @@ end
 # `next` is threaded through by value and returned, rather than via a mutable `Ref`, so
 # this stays allocation-free: the segment index the *next* leaf-term/block should consume,
 # in the same left-then-right order `_record_blocks!` built `segments` in.
-function _replay_blocks!(A::SparseMatrixCSC, op::OperatorAdd, trial_leaves, test_leaves,
-        segments::Vector{NzvalSegment}, next::Int)
+function _replay_blocks!(
+    A::SparseMatrixCSC,
+    op::OperatorAdd,
+    trial_leaves,
+    test_leaves,
+    segments::Vector{NzvalSegment},
+    next::Int,
+)
     next = _replay_blocks!(A, op.left_op, trial_leaves, test_leaves, segments, next)
     next = _replay_blocks!(A, op.right_op, trial_leaves, test_leaves, segments, next)
     return next
 end
 
-function _replay_blocks!(A::SparseMatrixCSC, term::TERM, trial_leaves, test_leaves,
-        segments::Vector{NzvalSegment}, next::Int) where {TERM}
+function _replay_blocks!(
+    A::SparseMatrixCSC,
+    term::TERM,
+    trial_leaves,
+    test_leaves,
+    segments::Vector{NzvalSegment},
+    next::Int,
+) where {TERM}
     for blk in blocks(term, trial_leaves, test_leaves)
         _check_block_meshes(term, blk.trial_leaf, blk.test_leaf)
         next += 1
         _replay_segment!(
-            A, term, blk.test_leaf, blk.row_offset, blk.col_offset, segments[next])
+            A, term, blk.test_leaf, blk.row_offset, blk.col_offset, segments[next]
+        )
     end
     return next
 end
 
-function _record_bilinear_core!(A::SparseMatrixCSC, trial_space::CompositeGridSpace,
-        test_space::CompositeGridSpace, ast::AST_TYPE,
-        segments::Vector{NzvalSegment}) where {AST_TYPE}
-    _record_blocks!(A, ast, leaf_spaces_offsets(trial_space),
-        leaf_spaces_offsets(test_space), segments)
+function _record_bilinear_core!(
+    A::SparseMatrixCSC,
+    trial_space::CompositeGridSpace,
+    test_space::CompositeGridSpace,
+    ast::AST_TYPE,
+    segments::Vector{NzvalSegment},
+) where {AST_TYPE}
+    _record_blocks!(
+        A, ast, leaf_spaces_offsets(trial_space), leaf_spaces_offsets(test_space), segments
+    )
     return nothing
 end
 
-function _replay_bilinear_core!(A::SparseMatrixCSC, trial_space::CompositeGridSpace,
-        test_space::CompositeGridSpace, ast::AST_TYPE,
-        segments::Vector{NzvalSegment}) where {AST_TYPE}
-    _replay_blocks!(A, ast, leaf_spaces_offsets(trial_space),
-        leaf_spaces_offsets(test_space), segments, 0)
+function _replay_bilinear_core!(
+    A::SparseMatrixCSC,
+    trial_space::CompositeGridSpace,
+    test_space::CompositeGridSpace,
+    ast::AST_TYPE,
+    segments::Vector{NzvalSegment},
+) where {AST_TYPE}
+    _replay_blocks!(
+        A,
+        ast,
+        leaf_spaces_offsets(trial_space),
+        leaf_spaces_offsets(test_space),
+        segments,
+        0,
+    )
     return nothing
 end
 
@@ -572,8 +668,9 @@ end
 # (cache hit) and keeps `cache` in step with whichever one ran. `ast` is checked as well as
 # `A`: the cache's positions are only valid for the exact stencil shape they were recorded
 # against, and a different `ast` can visit a different number of entries per point.
-function _assemble_bilinear_core_cached!(A::SparseMatrixCSC, trial_space, test_space,
-        ast::AST_TYPE, cache::_AssemblyCache) where {AST_TYPE}
+function _assemble_bilinear_core_cached!(
+    A::SparseMatrixCSC, trial_space, test_space, ast::AST_TYPE, cache::_AssemblyCache
+) where {AST_TYPE}
     if cache.A === A && cache.ast === ast
         _replay_bilinear_core!(A, trial_space, test_space, ast, cache.segments)
     else
@@ -592,8 +689,16 @@ end
 # One grid point's stencil, scattered into the matrix. Used only by the parallel path
 # below: it always searches (never caches), so a serial recording pass is never required
 # before a `Parallel()`-backend form's first assembly.
-@inline function _scatter_point!(A::SparseMatrixCSC, term::TERM, sp, I::CartesianIndex,
-        lin_indices, mesh_markers, row_offset::Int, col_offset::Int) where {TERM}
+@inline function _scatter_point!(
+    A::SparseMatrixCSC,
+    term::TERM,
+    sp,
+    I::CartesianIndex,
+    lin_indices,
+    mesh_markers,
+    row_offset::Int,
+    col_offset::Int,
+) where {TERM}
     stencil = local_stencil(term, sp, I, mesh_markers, lin_indices[I])
 
     for (off_u, off_v, weight) in stencil
@@ -608,8 +713,16 @@ end
 end
 
 # One colour, threaded, writing directly into the matrix.
-@noinline function _sweep_bilinear_colour!(A::SparseMatrixCSC, sp, term::TERM, idxs,
-        lin_indices, mesh_markers, row_offset::Int, col_offset::Int) where {TERM}
+@noinline function _sweep_bilinear_colour!(
+    A::SparseMatrixCSC,
+    sp,
+    term::TERM,
+    idxs,
+    lin_indices,
+    mesh_markers,
+    row_offset::Int,
+    col_offset::Int,
+) where {TERM}
     Threads.@threads for I in idxs
         _scatter_point!(A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset)
     end
@@ -617,56 +730,78 @@ end
 end
 
 # Every colour in turn, using strided subgrids.
-function _sweep_bilinear!(A::SparseMatrixCSC, sp, term::TERM, strides, row_offset::Int,
-        col_offset::Int) where {TERM}
+function _sweep_bilinear!(
+    A::SparseMatrixCSC, sp, term::TERM, strides, row_offset::Int, col_offset::Int
+) where {TERM}
     Ωₕ = mesh(sp)
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
     mesh_markers = markers(Ωₕ)
 
     if prod(strides) == 1
-        _sweep_bilinear_colour!(A, sp, term, grid_inds, lin_indices, mesh_markers,
-            row_offset, col_offset)
+        _sweep_bilinear_colour!(
+            A, sp, term, grid_inds, lin_indices, mesh_markers, row_offset, col_offset
+        )
         return A
     end
 
     for c in CartesianIndices(strides)
-        _sweep_bilinear_colour!(A, sp, term, _colour_subgrid(grid_inds, c, strides),
-            lin_indices, mesh_markers, row_offset, col_offset)
+        _sweep_bilinear_colour!(
+            A,
+            sp,
+            term,
+            _colour_subgrid(grid_inds, c, strides),
+            lin_indices,
+            mesh_markers,
+            row_offset,
+            col_offset,
+        )
     end
     return A
 end
 
-function _assemble_blocks_parallel!(A::SparseMatrixCSC, op::OperatorAdd, trial_leaves,
-        test_leaves)
-    _visit_operator_add2(
-        _assemble_blocks_parallel!, A, op, trial_leaves, test_leaves)
+function _assemble_blocks_parallel!(
+    A::SparseMatrixCSC, op::OperatorAdd, trial_leaves, test_leaves
+)
+    return _visit_operator_add2(
+        _assemble_blocks_parallel!, A, op, trial_leaves, test_leaves
+    )
 end
 
-function _assemble_blocks_parallel!(A::SparseMatrixCSC, term::TERM, trial_leaves,
-        test_leaves) where {TERM}
+function _assemble_blocks_parallel!(
+    A::SparseMatrixCSC, term::TERM, trial_leaves, test_leaves
+) where {TERM}
     for blk in blocks(term, trial_leaves, test_leaves)
         _check_block_meshes(term, blk.trial_leaf, blk.test_leaf)
-        _sweep_bilinear!(A, blk.test_leaf, term,
+        _sweep_bilinear!(
+            A,
+            blk.test_leaf,
+            term,
             _colour_strides(stencil_offsets(term)),
-            blk.row_offset, blk.col_offset)
+            blk.row_offset,
+            blk.col_offset,
+        )
     end
     return A
 end
 
-function _assemble_bilinear_parallel_core!(A::SparseMatrixCSC, trial_space, test_space,
-        ast::AST_TYPE) where {AST_TYPE}
+function _assemble_bilinear_parallel_core!(
+    A::SparseMatrixCSC, trial_space, test_space, ast::AST_TYPE
+) where {AST_TYPE}
     _check_block_meshes(ast, trial_space, test_space)
-    _sweep_bilinear!(A, test_space, ast,
-        _colour_strides(stencil_offsets(ast)), 0, 0)
+    _sweep_bilinear!(A, test_space, ast, _colour_strides(stencil_offsets(ast)), 0, 0)
     return A
 end
 
-function _assemble_bilinear_parallel_core!(A::SparseMatrixCSC,
-        trial_space::CompositeGridSpace, test_space::CompositeGridSpace,
-        ast::AST_TYPE) where {AST_TYPE}
-    _assemble_blocks_parallel!(A, ast, leaf_spaces_offsets(trial_space),
-        leaf_spaces_offsets(test_space))
+function _assemble_bilinear_parallel_core!(
+    A::SparseMatrixCSC,
+    trial_space::CompositeGridSpace,
+    test_space::CompositeGridSpace,
+    ast::AST_TYPE,
+) where {AST_TYPE}
+    _assemble_blocks_parallel!(
+        A, ast, leaf_spaces_offsets(trial_space), leaf_spaces_offsets(test_space)
+    )
     return A
 end
 
@@ -687,16 +822,19 @@ By default `assemble!` uses the pre-resolved `form.ast` stored directly inside t
 - Dynamic scalars: plain numbers work directly for constant scalars. To update a scalar dynamically across loop iterations, wrap it in a `Ref(val)` (e.g. `β = Ref(1.0); a = form(Wₕ, Wₕ, (u, v) -> innerₕ(β * D₋ₓ(u), D₋ₓ(v)))`). Mutating `β[] = new_val` evaluates live during assembly with 0 allocations.
 """
 function assemble!(
-        A::SparseMatrixCSC, form::BilinearForm{D, TrialSpace, TestSpace, AST};
-        dirichlet = nothing,
-        dirichlet_components = nothing,
-        ast = form.ast) where {D, TrialSpace, TestSpace, AST}
+    A::SparseMatrixCSC,
+    form::BilinearForm{D,TrialSpace,TestSpace,AST};
+    dirichlet=nothing,
+    dirichlet_components=nothing,
+    ast=form.ast,
+) where {D,TrialSpace,TestSpace,AST}
     dirichlet_labels, _ = _normalize_dirichlet(dirichlet)
     fill!(nonzeros(A), zero(eltype(nonzeros(A))))
 
     if execution_policy(form.trial_space) isa Serial
         _assemble_bilinear_core_cached!(
-            A, form.trial_space, form.test_space, ast, form.cache)
+            A, form.trial_space, form.test_space, ast, form.cache
+        )
     else
         _assemble_bilinear_parallel_core!(A, form.trial_space, form.test_space, ast)
     end
@@ -716,12 +854,11 @@ not apply `dirichlet_labels`.
 Colouring on the test side ensures thread safety when updating stored matrix values concurrently.
 """
 function assemble_parallel!(
-        A::SparseMatrixCSC, form::BilinearForm{D, TrialSpace, TestSpace, AST},
-        ast = form.ast) where {D, TrialSpace, TestSpace, AST}
+    A::SparseMatrixCSC, form::BilinearForm{D,TrialSpace,TestSpace,AST}, ast=form.ast
+) where {D,TrialSpace,TestSpace,AST}
     fill!(nonzeros(A), zero(eltype(nonzeros(A))))
 
-    _assemble_bilinear_parallel_core!(
-        A, form.trial_space, form.test_space, ast)
+    _assemble_bilinear_parallel_core!(A, form.trial_space, form.test_space, ast)
 
     return A
 end
@@ -747,23 +884,32 @@ u = A \\ F
 is the one-call equivalent of assembling `a` and `l` separately and calling
 [`symmetrize!`](@ref) by hand.
 """
-function assemble(a::BilinearForm, l::LinearForm; dirichlet = nothing,
-        dirichlet_components = nothing, symmetrize::Bool = false)
-    A = assemble(a; dirichlet = dirichlet, dirichlet_components = dirichlet_components)
-    F = assemble(l; dirichlet = dirichlet, dirichlet_components = dirichlet_components)
+function assemble(
+    a::BilinearForm,
+    l::LinearForm;
+    dirichlet=nothing,
+    dirichlet_components=nothing,
+    symmetrize::Bool=false,
+)
+    A = assemble(a; dirichlet=dirichlet, dirichlet_components=dirichlet_components)
+    F = assemble(l; dirichlet=dirichlet, dirichlet_components=dirichlet_components)
 
     if symmetrize
         dirichlet_labels, _ = _normalize_dirichlet(dirichlet)
         dirichlet_labels === nothing && _throw_symmetrize_without_dirichlet()
-        symmetrize!(A, F, test_space(a), dirichlet_labels...;
-            components = dirichlet_components)
+        symmetrize!(
+            A, F, test_space(a), dirichlet_labels...; components=dirichlet_components
+        )
     end
 
     return A, F
 end
 
 @noinline function _throw_symmetrize_without_dirichlet()
-    throw(ArgumentError(
-        "symmetrize = true has nothing to symmetrize against without dirichlet naming " *
-        "at least one label."))
+    throw(
+        ArgumentError(
+            "symmetrize = true has nothing to symmetrize against without dirichlet naming " *
+            "at least one label.",
+        ),
+    )
 end

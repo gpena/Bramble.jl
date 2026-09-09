@@ -1,7 +1,6 @@
 module BramblePlotsExt
 
-using Bramble: Bramble, VectorElement, ScalarGridSpace, CompositeGridSpace,
-               mesh, points
+using Bramble: Bramble, VectorElement, ScalarGridSpace, CompositeGridSpace, mesh, points
 
 using RecipesBase
 
@@ -10,14 +9,20 @@ using RecipesBase
 # is no faithful Plots.jl representation of a field over an actual 3D mesh. See
 # `export_vtk`.
 function _plots_error_composite()
-    throw(ArgumentError(
-        "plotting a composite element directly has no single reading — plot each of its " *
-        "components(...) separately."))
+    return throw(
+        ArgumentError(
+            "plotting a composite element directly has no single reading — plot each of its " *
+            "components(...) separately.",
+        ),
+    )
 end
 function _plots_error_dim(D)
-    throw(ArgumentError(
-        "plotting a $(D)D grid function directly is not implemented — only 1D and 2D. " *
-        "See export_vtk for a full 3D field."))
+    return throw(
+        ArgumentError(
+            "plotting a $(D)D grid function directly is not implemented — only 1D and 2D. " *
+            "See export_vtk for a full 3D field.",
+        ),
+    )
 end
 
 @recipe function f(uₕ::VectorElement{<:ScalarGridSpace{1}})

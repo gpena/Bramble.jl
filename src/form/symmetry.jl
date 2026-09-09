@@ -28,9 +28,10 @@ the expression at all, and answer `false` immediately otherwise.
 =#
 
 _same_operator_shape(::TrialFunction{D}, ::TestFunction{D}) where {D} = true
-function _same_operator_shape(a::IndexedTrialFunction{D}, b::IndexedTestFunction{D}) where {D}
-    a.component_idx ==
-    b.component_idx
+function _same_operator_shape(
+    a::IndexedTrialFunction{D}, b::IndexedTestFunction{D}
+) where {D}
+    return a.component_idx == b.component_idx
 end
 
 # Every other node wraps one (or two) inner operators, and that inner operator is exactly
@@ -40,12 +41,18 @@ end
 # typeof(b)` is false for the one case this trait exists to recognise). Each method below
 # fixes every type parameter except the wrapped operator's own type, and recurses into it
 # instead of requiring it to match structurally.
-for W in (:BackwardDifference, :ForwardDifference, :CenteredDifference,
-    :StarDifference, :CrossWeightedDifference, :BackwardAverage,
-    :ForwardAverage, :JumpNode)
-    @eval _same_operator_shape(a::$W{D, Dim}, b::$W{
-        D, Dim}) where {D, Dim} = _same_operator_shape(
-        a.inner_op, b.inner_op)
+for W in (
+    :BackwardDifference,
+    :ForwardDifference,
+    :CenteredDifference,
+    :StarDifference,
+    :CrossWeightedDifference,
+    :BackwardAverage,
+    :ForwardAverage,
+    :JumpNode,
+)
+    @eval _same_operator_shape(a::$W{D,Dim}, b::$W{D,Dim}) where {D,Dim} =
+        _same_operator_shape(a.inner_op, b.inner_op)
 end
 
 # `shift_amount` is a field, not a type parameter, so — like `RegionRestriction.region` and
@@ -54,47 +61,35 @@ end
 # the generic loop above compared only `D`/`Dim`, so `shift_op(u, 1, 1)` and
 # `shift_op(v, 1, 2)` read as identical, and the fast path this trait guards then evaluates
 # one side only and mirrors it into a matrix that is not what the form asked for.
-function _same_operator_shape(a::ShiftNode{D, Dim}, b::ShiftNode{D, Dim}) where {D, Dim}
-    a.shift_amount ==
-    b.shift_amount &&
-        _same_operator_shape(
-            a.inner_op, b.inner_op)
+function _same_operator_shape(a::ShiftNode{D,Dim}, b::ShiftNode{D,Dim}) where {D,Dim}
+    return a.shift_amount == b.shift_amount && _same_operator_shape(a.inner_op, b.inner_op)
 end
 
 # The region a restriction names is a field, not a type parameter with a fixed set of
 # values, so it is compared explicitly rather than folded into the `where` clause.
 function _same_operator_shape(a::RegionRestriction{D}, b::RegionRestriction{D}) where {D}
-    a.region ===
-    b.region &&
-        _same_operator_shape(
-            a.inner_op, b.inner_op)
+    return a.region === b.region && _same_operator_shape(a.inner_op, b.inner_op)
 end
 
 function _same_operator_shape(a::OperatorScale{D}, b::OperatorScale{D}) where {D}
-    a.scalar ==
-    b.scalar &&
-        _same_operator_shape(
-            a.inner_op, b.inner_op)
+    return a.scalar == b.scalar && _same_operator_shape(a.inner_op, b.inner_op)
 end
 
 # By identity, not value: a coefficient compares equal here only when both sides close over
 # the identical object, which is what happens when `L` is written once and applied twice:
 # see the module-level note above. A numerically equal but distinct array is not this case.
 function _same_operator_shape(a::GridFunctionScale{D}, b::GridFunctionScale{D}) where {D}
-    a.grid_function ===
-    b.grid_function &&
-        _same_operator_shape(
-            a.inner_op, b.inner_op)
+    return a.grid_function === b.grid_function &&
+           _same_operator_shape(a.inner_op, b.inner_op)
 end
 
 function _same_operator_shape(a::OperatorAdd{D}, b::OperatorAdd{D}) where {D}
-    _same_operator_shape(
-        a.left_op, b.left_op) && _same_operator_shape(a.right_op, b.right_op)
+    return _same_operator_shape(a.left_op, b.left_op) &&
+           _same_operator_shape(a.right_op, b.right_op)
 end
 
 function _same_operator_shape(a::IdentityOperator{D}, b::IdentityOperator{D}) where {D}
-    a.space ===
-    b.space
+    return a.space === b.space
 end
 _same_operator_shape(a::ZeroOperator{D}, b::ZeroOperator{D}) where {D} = a.space === b.space
 
@@ -118,14 +113,12 @@ _same_operator_shape(a, b) = false
     assigns = Expr[]
     slot = Matrix{Symbol}(undef, N, N)
     for i in 1:N, j in i:N
-
         s = Symbol(:w_, i, :_, j)
         push!(assigns, :($s = stencil[$i][2] * stencil[$j][2] * vol))
         slot[i, j] = s
     end
     exprs = Expr[]
     for i in 1:N, j in 1:N
-
         s = i <= j ? slot[i, j] : slot[j, i]
         push!(exprs, :((stencil[$i][1], stencil[$j][1], $s)))
     end
@@ -137,7 +130,7 @@ end
 # this does not recognise but which happens to be symmetric some other way) answers false.
 _is_symmetric_term(op::BilinearProduct) = _same_operator_shape(op.left_op, op.right_op)
 function _is_symmetric_term(op::OperatorAdd)
-    _is_symmetric_term(op.left_op) && _is_symmetric_term(op.right_op)
+    return _is_symmetric_term(op.left_op) && _is_symmetric_term(op.right_op)
 end
 _is_symmetric_term(op::OperatorScale) = _is_symmetric_term(op.inner_op)
 _is_symmetric_term(op) = false
@@ -147,7 +140,7 @@ _is_symmetric_term(op) = false
 # would flip or collapse that.
 _is_posdef_term(op::BilinearProduct) = _same_operator_shape(op.left_op, op.right_op)
 function _is_posdef_term(op::OperatorAdd)
-    _is_posdef_term(op.left_op) && _is_posdef_term(op.right_op)
+    return _is_posdef_term(op.left_op) && _is_posdef_term(op.right_op)
 end
 _is_posdef_term(op::OperatorScale) = op.scalar > 0 && _is_posdef_term(op.inner_op)
 _is_posdef_term(op) = false

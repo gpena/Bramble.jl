@@ -21,9 +21,10 @@ using LinearAlgebra: issymmetric
 
 @testset "Symmetrizing constraints" begin
     Ωₕ = mesh(
-        domain(interval(0.0, 1.0) × interval(0.0, 1.0),
-            :bottom => :bottom, :top => :top),
-        (6, 6), (true, true))
+        domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom, :top => :top),
+        (6, 6),
+        (true, true),
+    )
     Wₕ = gridspace(Ωₕ)
     Vₕ = gridspace(Ωₕ, Val(3))
     n = ndofs(Wₕ)
@@ -216,14 +217,14 @@ using LinearAlgebra: issymmetric
         # distinct type, but it answers `conditions`, `label` and `identifier`
         # identically, and applying a condition never needs to tell the two apart. There
         # used to be two byte-identical methods, one per type.
-        tb = dirichlet_constraints(Ωₕ, interval(0.0, 1.0),
-            :bottom => ((x, t) -> t * x[1] + 1))
+        tb = dirichlet_constraints(
+            Ωₕ, interval(0.0, 1.0), :bottom => ((x, t) -> t * x[1] + 1)
+        )
         ev = tb(0.5)
         @test ev isa Bramble.EvaluatedDomainMarkers
 
-        @test which(dirichlet_bc!, Tuple{
-            Vector{Float64}, typeof(Ωₕ), typeof(tb), Symbol}) ===
-              which(dirichlet_bc!, Tuple{Vector{Float64}, typeof(Ωₕ), typeof(ev), Symbol})
+        @test which(dirichlet_bc!, Tuple{Vector{Float64},typeof(Ωₕ),typeof(tb),Symbol}) ===
+            which(dirichlet_bc!, Tuple{Vector{Float64},typeof(Ωₕ),typeof(ev),Symbol})
 
         v = zeros(n)
         dirichlet_bc!(v, Ωₕ, ev, :bottom)
@@ -241,8 +242,11 @@ using LinearAlgebra: issymmetric
         # whole grid. Measured inside a function on concrete locals: read from a
         # non-const global the arguments box at the call boundary.
         function counts(N)
-            Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
-                (N, N), (true, true))
+            Ω = mesh(
+                domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
+                (N, N),
+                (true, true),
+            )
             W, V = gridspace(Ω), gridspace(Ω, Val(3))
             m, mv = ndofs(W), ndofs(V)
             As, Fs = _tri(m), ones(m)
@@ -255,10 +259,12 @@ using LinearAlgebra: issymmetric
             symmetrize!(Cs, Cf, V, :bottom)
             symmetrize!(Cd, Cdf, V, :bottom)
 
-            return (sparse_scalar = @allocated(symmetrize!(As, Fs, Ω, :bottom)),
-                dense_scalar = @allocated(symmetrize!(Ad, Fd, Ω, :bottom)),
-                sparse_composite = @allocated(symmetrize!(Cs, Cf, V, :bottom)),
-                dense_composite = @allocated(symmetrize!(Cd, Cdf, V, :bottom)))
+            return (
+                sparse_scalar=@allocated(symmetrize!(As, Fs, Ω, :bottom)),
+                dense_scalar=@allocated(symmetrize!(Ad, Fd, Ω, :bottom)),
+                sparse_composite=@allocated(symmetrize!(Cs, Cf, V, :bottom)),
+                dense_composite=@allocated(symmetrize!(Cd, Cdf, V, :bottom))
+            )
         end
 
         for N in (8, 24)          # 9x the degrees of freedom apart

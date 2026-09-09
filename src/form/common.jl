@@ -19,7 +19,8 @@ Grid spacing in coordinate direction `dim` at Cartesian index `I`.
 
 Forward grid spacing in coordinate direction `dim` at Cartesian index `I`.
 """
-@inline get_forward_spacing(mesh, I, dim::Int) = _get_component(forward_spacing(mesh, I), dim)
+@inline get_forward_spacing(mesh, I, dim::Int) =
+    _get_component(forward_spacing(mesh, I), dim)
 
 """
     get_half_spacing(mesh, I, dim::Int) -> Real
@@ -33,8 +34,8 @@ Half-grid spacing in coordinate direction `dim` at Cartesian index `I`.
 
 Shifts a Cartesian offset tuple by `delta` in dimension `dim`.
 """
-@inline shift_offset(offset::NTuple{D, Int}, dim::Int, delta::Int) where {D} = ntuple(
-    i -> i == dim ? offset[i] + delta : offset[i], Val(D))
+@inline shift_offset(offset::NTuple{D,Int}, dim::Int, delta::Int) where {D} =
+    ntuple(i -> i == dim ? offset[i] + delta : offset[i], Val(D))
 
 """
     zero_offset(::Val{D}) -> NTuple{D, Int}
@@ -53,11 +54,11 @@ against a `@generated` version this once was (gpena/Bramble.jl#63): identical ze
 allocations and identical inferred return type, so the code generation bought nothing
 here.
 """
-@inline shift_stencil(inner::Tuple, ::Val{Dim}, ::Val{Delta}) where {Dim, Delta} = map(
-    t -> (shift_offset(t[1], Dim, Delta), t[2]), inner)
+@inline shift_stencil(inner::Tuple, ::Val{Dim}, ::Val{Delta}) where {Dim,Delta} =
+    map(t -> (shift_offset(t[1], Dim, Delta), t[2]), inner)
 
-@inline shift_stencil(inner::Tuple, ::Val{Dim}, delta::Int) where {Dim} = map(
-    t -> (shift_offset(t[1], Dim, delta), t[2]), inner)
+@inline shift_stencil(inner::Tuple, ::Val{Dim}, delta::Int) where {Dim} =
+    map(t -> (shift_offset(t[1], Dim, delta), t[2]), inner)
 
 # `(left..., right...)` is already resolved at compile time for tuples; no metaprogramming
 # needed (gpena/Bramble.jl#63).
@@ -78,8 +79,8 @@ end
     _flatten_tuples(map(l -> map(r -> (r[1], l[2] * r[2] * vol), right), left))
 end
 
-@inline scale_stencil(inner::Tuple, scalar::Number) = map(
-    t -> (Base.front(t)..., t[end] * scalar), inner)
+@inline scale_stencil(inner::Tuple, scalar::Number) =
+    map(t -> (Base.front(t)..., t[end] * scalar), inner)
 
 """
     sum_stencil_values(stencil::Tuple)
@@ -98,7 +99,7 @@ behavior, which is what this calls. This used to be its own `@generated` unrolle
 (gpena/Bramble.jl#63), identical zero allocations and identical inferred type, so the
 `@generated` version bought nothing that `sum` was not already providing.
 """
-@inline sum_stencil_values(stencil::Tuple) = sum(t -> t[end], stencil; init = false)
+@inline sum_stencil_values(stencil::Tuple) = sum(t -> t[end], stencil; init=false)
 
 # ==============================================================================
 # 2. Abstract Syntax Tree (AST) Nodes
@@ -146,7 +147,7 @@ end
 
 An AST node representing a source term defined by a continuous function.
 """
-struct SourceFunction{D, F} <: LazyOp{D}
+struct SourceFunction{D,F} <: LazyOp{D}
     func::F
 end
 
@@ -165,7 +166,7 @@ So `(x -> x[1]) * D₋ₓ(u)` does not do what it reads as: the thunk call fails
 function wants a point. A function of position belongs in a `SourceFunction`, or should be
 restricted to the grid with `Rₕ` first and passed as the vector it becomes.
 """
-struct SourceVector{D, VType <: AbstractVector} <: LazyOp{D}
+struct SourceVector{D,VType<:AbstractVector} <: LazyOp{D}
     vec::VType
 end
 
@@ -181,7 +182,7 @@ barrier, assembling a constant source is 1.6–2.6× faster than through `Source
 the ratio growing with `ndofs` rather than staying fixed, so this is a per-point saving
 rather than one-off overhead. `source_number` is what builds one from a literal `Number`.
 """
-struct SourceConstant{D, T} <: LazyOp{D}
+struct SourceConstant{D,T} <: LazyOp{D}
     value::T
 end
 
@@ -244,8 +245,10 @@ struct PointDependentStencil <: StencilShiftTrait end
 
 # A sum is translation invariant only if both summands are.
 @inline _combine_shift_traits(
-    ::TranslationInvariantStencil, ::TranslationInvariantStencil) = TranslationInvariantStencil()
-@inline _combine_shift_traits(::StencilShiftTrait, ::StencilShiftTrait) = PointDependentStencil()
+    ::TranslationInvariantStencil, ::TranslationInvariantStencil
+) = TranslationInvariantStencil()
+@inline _combine_shift_traits(::StencilShiftTrait, ::StencilShiftTrait) =
+    PointDependentStencil()
 
 @inline stencil_shift_trait(::LazyOp) = TranslationInvariantStencil()
 
@@ -268,8 +271,9 @@ struct PointDependentStencil <: StencilShiftTrait end
 # An interpolation is the other `PointDependentStencil` node and is unaffected: clamping is
 # its own already-correct behaviour (`locate_cell` extrapolates by design), so `ShiftNode`
 # only takes the `_in_grid` branch when its inner operand is source-only.
-@inline function _clamped_shift(m, I::CartesianIndex{D}, ::Val{Dim}, delta::Int) where {
-        D, Dim}
+@inline function _clamped_shift(
+    m, I::CartesianIndex{D}, ::Val{Dim}, delta::Int
+) where {D,Dim}
     dims = npoints(m, Tuple)
     j = clamp(I[Dim] + delta, 1, dims[Dim])
     return CartesianIndex(ntuple(d -> d == Dim ? j : I[d], Val(D)))
@@ -284,8 +288,8 @@ The check [`ShiftNode`](@ref)'s own `local_stencil` makes for a `PointDependentS
 operator, in place of trusting `_clamped_shift`'s clamp; see the note there for why that
 trust does not extend to this one caller.
 """
-@inline _in_grid(space, I::CartesianIndex{D}) where {D} = checkbounds(
-    Bool, LinearIndices(indices(mesh(space))), I)
+@inline _in_grid(space, I::CartesianIndex{D}) where {D} =
+    checkbounds(Bool, LinearIndices(indices(mesh(space))), I)
 
 """
     shifted_inner_stencil(inner_op, inner, space, I, markers, ::Val{Dim}, delta)
@@ -300,22 +304,40 @@ discards `inner` and evaluates `inner_op` at the shifted point instead. Both pro
 of the same static length, since it is the same operator either way, so the callers'
 `concatenate_stencils` sees exactly the shape it always did.
 """
-@inline function shifted_inner_stencil(inner_op, inner, space, I::CartesianIndex{D},
-        markers, ::Val{Dim}, delta) where {D, Dim}
-    return _shifted_inner_stencil(stencil_shift_trait(inner_op), inner_op, inner, space, I,
-        markers, Val(Dim), delta)
+@inline function shifted_inner_stencil(
+    inner_op, inner, space, I::CartesianIndex{D}, markers, ::Val{Dim}, delta
+) where {D,Dim}
+    return _shifted_inner_stencil(
+        stencil_shift_trait(inner_op), inner_op, inner, space, I, markers, Val(Dim), delta
+    )
 end
 
-@inline _shifted_inner_stencil(::TranslationInvariantStencil, inner_op, inner, space,
-    I::CartesianIndex{D}, markers, ::Val{Dim}, delta) where {D, Dim} = shift_stencil(
-    inner, Val(Dim), delta)
+@inline _shifted_inner_stencil(
+    ::TranslationInvariantStencil,
+    inner_op,
+    inner,
+    space,
+    I::CartesianIndex{D},
+    markers,
+    ::Val{Dim},
+    delta,
+) where {D,Dim} = shift_stencil(inner, Val(Dim), delta)
 
-@inline function _shifted_inner_stencil(::PointDependentStencil, inner_op, inner, space,
-        I::CartesianIndex{D}, markers, ::Val{Dim}, delta) where {D, Dim}
+@inline function _shifted_inner_stencil(
+    ::PointDependentStencil,
+    inner_op,
+    inner,
+    space,
+    I::CartesianIndex{D},
+    markers,
+    ::Val{Dim},
+    delta,
+) where {D,Dim}
     m = mesh(space)
     Ishift = _clamped_shift(m, I, Val(Dim), _shift_delta(delta))
-    return local_stencil(inner_op, space, Ishift, markers,
-        LinearIndices(indices(m))[Ishift])
+    return local_stencil(
+        inner_op, space, Ishift, markers, LinearIndices(indices(m))[Ishift]
+    )
 end
 
 # ==============================================================================
@@ -345,7 +367,7 @@ test_function(::Val{D}) where {D} = TestFunction{D}()
 
 Constructs a `SourceFunction` wrapping function `f`.
 """
-source_function(f, ::Val{D}) where {D} = SourceFunction{D, typeof(f)}(f)
+source_function(f, ::Val{D}) where {D} = SourceFunction{D,typeof(f)}(f)
 
 # Import modularized operator and product logic
 include("operators/difference.jl")
@@ -360,54 +382,63 @@ include("operators/interpolation.jl")
 # ==============================================================================
 
 @inline local_stencil(
-    ::TrialFunction{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int) where {D} = ((
-    zero_offset(Val(D)), 1),)
+    ::TrialFunction{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int
+) where {D} = ((zero_offset(Val(D)), 1),)
 @inline local_stencil(
-    ::TestFunction{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int) where {D} = ((
-    zero_offset(Val(D)), 1),)
-@inline local_stencil(::IndexedTrialFunction{D}, space, I::CartesianIndex{D},
-    markers, lin_idx::Int) where {D} = ((zero_offset(Val(D)), 1),)
-@inline local_stencil(::IndexedTestFunction{D}, space, I::CartesianIndex{D},
-    markers, lin_idx::Int) where {D} = ((zero_offset(Val(D)), 1),)
+    ::TestFunction{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int
+) where {D} = ((zero_offset(Val(D)), 1),)
+@inline local_stencil(
+    ::IndexedTrialFunction{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int
+) where {D} = ((zero_offset(Val(D)), 1),)
+@inline local_stencil(
+    ::IndexedTestFunction{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int
+) where {D} = ((zero_offset(Val(D)), 1),)
 
 @inline function local_stencil(
-        op::SourceFunction{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int) where {D}
+    op::SourceFunction{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int
+) where {D}
     m = mesh(space)
     x = point(m, I)
     return ((zero_offset(Val(D)), op.func(x)),)
 end
 
 @inline function local_stencil(
-        op::SourceVector{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int) where {D}
+    op::SourceVector{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int
+) where {D}
     return ((zero_offset(Val(D)), op.vec[lin_idx]),)
 end
 
 @inline function local_stencil(
-        op::SourceConstant{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int) where {D}
+    op::SourceConstant{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int
+) where {D}
     return ((zero_offset(Val(D)), op.value),)
 end
 
 @inline function local_stencil(
-        op::OperatorAdd, space, I::CartesianIndex{D}, markers, lin_idx::Int) where {D}
+    op::OperatorAdd, space, I::CartesianIndex{D}, markers, lin_idx::Int
+) where {D}
     left_stencil = local_stencil(op.left_op, space, I, markers, lin_idx)
     right_stencil = local_stencil(op.right_op, space, I, markers, lin_idx)
     return concatenate_stencils(left_stencil, right_stencil)
 end
 
 @inline function local_stencil(
-        op::OperatorScale, space, I::CartesianIndex{D}, markers, lin_idx::Int) where {D}
+    op::OperatorScale, space, I::CartesianIndex{D}, markers, lin_idx::Int
+) where {D}
     inner = local_stencil(op.inner_op, space, I, markers, lin_idx)
     return scale_stencil(inner, op.scalar)
 end
 
 @inline function local_stencil(
-        op::OperatorScale{D, <:Base.RefValue}, space, I::CartesianIndex{D}, markers, lin_idx::Int) where {D}
+    op::OperatorScale{D,<:Base.RefValue}, space, I::CartesianIndex{D}, markers, lin_idx::Int
+) where {D}
     inner = local_stencil(op.inner_op, space, I, markers, lin_idx)
     return scale_stencil(inner, op.scalar[])
 end
 
 @inline function local_stencil(
-        op::GridFunctionScale, space, I::CartesianIndex{D}, markers, lin_idx::Int) where {D}
+    op::GridFunctionScale, space, I::CartesianIndex{D}, markers, lin_idx::Int
+) where {D}
     inner = local_stencil(op.inner_op, space, I, markers, lin_idx)
     grid_fn = op.grid_function
     local_val = if grid_fn isa Function
@@ -419,34 +450,42 @@ end
     return scale_stencil(inner, local_val)
 end
 
-@inline local_stencil(op::IdentityOperator{D}, space, I::CartesianIndex{D},
-    markers, lin_idx::Int) where {D} = ((zero_offset(Val(D)), 1),)
 @inline local_stencil(
-    op::ZeroOperator{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int) where {D} = ((
-    zero_offset(Val(D)), 0),)
+    op::IdentityOperator{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int
+) where {D} = ((zero_offset(Val(D)), 1),)
+@inline local_stencil(
+    op::ZeroOperator{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int
+) where {D} = ((zero_offset(Val(D)), 0),)
 
 # ==============================================================================
 # 5. AST Resolution & Thunk Eval
 # ==============================================================================
 
 function resolve_ast(op::OperatorAdd{D}) where {D}
-    OperatorAdd{D, typeof(resolve_ast(op.left_op)), typeof(resolve_ast(op.right_op))}(
-        resolve_ast(op.left_op), resolve_ast(op.right_op))
+    return OperatorAdd{D,typeof(resolve_ast(op.left_op)),typeof(resolve_ast(op.right_op))}(
+        resolve_ast(op.left_op), resolve_ast(op.right_op)
+    )
 end
 function resolve_ast(op::OperatorScale{D}) where {D}
-    OperatorScale{D, typeof(op.scalar), typeof(resolve_ast(op.inner_op))}(op.scalar, resolve_ast(op.inner_op))
+    return OperatorScale{D,typeof(op.scalar),typeof(resolve_ast(op.inner_op))}(
+        op.scalar, resolve_ast(op.inner_op)
+    )
 end
 
-function resolve_ast(op::GridFunctionScale{D, VType}) where {D, VType}
-    GridFunctionScale{D, VType, typeof(resolve_ast(op.inner_op))}(op.grid_function, resolve_ast(op.inner_op))
+function resolve_ast(op::GridFunctionScale{D,VType}) where {D,VType}
+    return GridFunctionScale{D,VType,typeof(resolve_ast(op.inner_op))}(
+        op.grid_function, resolve_ast(op.inner_op)
+    )
 end
 
-function resolve_ast(op::GridFunctionScale{D, <:Function}) where {D}
+function resolve_ast(op::GridFunctionScale{D,<:Function}) where {D}
     vec = op.grid_function()
-    return GridFunctionScale{D, typeof(vec), typeof(resolve_ast(op.inner_op))}(vec, resolve_ast(op.inner_op))
+    return GridFunctionScale{D,typeof(vec),typeof(resolve_ast(op.inner_op))}(
+        vec, resolve_ast(op.inner_op)
+    )
 end
 
-resolve_ast(ops::NTuple{N, Any}) where {N} = map(resolve_ast, ops)
+resolve_ast(ops::NTuple{N,Any}) where {N} = map(resolve_ast, ops)
 # The catch-all every node above without its own method falls through to: TrialFunction,
 # TestFunction, IndexedTrialFunction, IndexedTestFunction, SourceFunction, SourceVector,
 # SourceConstant, IdentityOperator, ZeroOperator, and anything else with nothing to resolve.
@@ -528,8 +567,7 @@ _is_source_only(op::RegionRestriction) = _is_source_only(op.inner_op)
 _is_source_only(op::OperatorScale) = _is_source_only(op.inner_op)
 _is_source_only(op::GridFunctionScale) = _is_source_only(op.inner_op)
 function _is_source_only(op::OperatorAdd)
-    _is_source_only(op.left_op) &&
-        _is_source_only(op.right_op)
+    return _is_source_only(op.left_op) && _is_source_only(op.right_op)
 end
 
 # A product (whichever kind) is its own thing, not a bare source to route again.

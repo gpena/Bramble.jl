@@ -3,7 +3,8 @@ using Bramble: CartesianProduct, dim, Mesh1D, MeshnD, points
 
 using Meshes: Meshes, RectilinearGrid
 
-@inline _error_install_makie() = println("Please install `GLMakie` and add `using GLMakie` to your preamble.")
+@inline _error_install_makie() =
+    println("Please install `GLMakie` and add `using GLMakie` to your preamble.")
 """
 	Meshes.viz(X::CartesianProduct{D,T}) where {D,T}
 
@@ -36,7 +37,7 @@ function Meshes.viz(M::MeshnD{D}) where {D}
     grid = Meshes.RectilinearGrid(pts...)
 
     try
-        Meshes.viz(grid, showsegments = true)
+        Meshes.viz(grid; showsegments=true)
     catch
         _error_install_makie()
     end

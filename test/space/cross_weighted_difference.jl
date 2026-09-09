@@ -34,10 +34,14 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
                 dm = parent(D₋ₓ(uₕ))
                 h = [spacing(Ωₕ, i) for i in 1:n]
 
-                want = [(i == 1 || i == n) ? 0.0 :
+                want = [
+                    if (i == 1 || i == n)
+                        0.0
+                    else
                         (h[i] / (h[i] + h[i + 1])) * dm[i + 1] +
                         (h[i + 1] / (h[i] + h[i + 1])) * dm[i]
-                        for i in 1:n]
+                    end for i in 1:n
+                ]
                 @test parent(Dₕₓ(uₕ)) ≈ want
             end
         end
@@ -94,23 +98,27 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
 
                 # and on a non-uniform grid Dc misses the quadratic, which is what the
                 # cross weighting fixes
-                unif || @test !all(parent(Dcₓ(Rₕ(Wₕ, t -> 5t^2 - 2t + 1)))[i] ≈
-                           10x[i] - 2 for i in 2:(n - 1))
+                unif || @test !all(
+                    parent(Dcₓ(Rₕ(Wₕ, t -> 5t^2 - 2t + 1)))[i] ≈ 10x[i] - 2 for
+                    i in 2:(n - 1)
+                )
             end
         end
 
         # every direction, in three dimensions
         Random.seed!(20260830)
-        Ω3 = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (5, 6, 4),
-            (false, false, false))
+        Ω3 = mesh(
+            domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (5, 6, 4), (false, false, false)
+        )
         W3 = gridspace(Ω3)
         n3 = npoints(Ω3, Tuple)
         for (d, op) in ((1, Dₕₓ), (2, Dₕᵧ), (3, Dₕ₂))
             @test all(iszero, parent(op(Rₕ(W3, x -> x[mod1(d + 1, 3)]))))
             r = reshape(parent(op(Rₕ(W3, x -> x[d]^2))), n3)
             xd = points(Ω3)[d]
-            interior = CartesianIndices(ntuple(
-                k -> k == d ? (2:(n3[k] - 1)) : (1:n3[k]), 3))
+            interior = CartesianIndices(
+                ntuple(k -> k == d ? (2:(n3[k] - 1)) : (1:n3[k]), 3)
+            )
             @test all(r[I] ≈ 2 * xd[I[d]] for I in interior)
         end
     end
@@ -118,7 +126,7 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
     @testset "Convergence order" begin
         # Second order on both, which is the point: Dc is first order on a non-uniform
         # grid and this is not.
-        function orders(unif; steps = 4)
+        function orders(unif; steps=4)
             Random.seed!(20260830)
             Ωₕ = mesh(domain(interval(0.0, 1.0)), 21, unif)
             errs = Float64[]
@@ -147,7 +155,7 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
         Vₕ = gridspace(Ωₕ, Val(2))
         uₕ = Rₕ(Wₕ, x -> x[1] * x[2])
 
-        @test ∇ₕ(uₕ) isa NTuple{2, VectorElement}
+        @test ∇ₕ(uₕ) isa NTuple{2,VectorElement}
         @test parent(∇ₕ(uₕ)[1]) == parent(Dₕₓ(uₕ))
         @test parent(∇ₕ(uₕ)[2]) == parent(Dₕᵧ(uₕ))
 
@@ -176,7 +184,7 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
 
         @test @inferred(Dₕₓ(u1)) isa VectorElement
         @test @inferred(Dₕᵧ(u2)) isa VectorElement
-        @test @inferred(∇ₕ(u2)) isa NTuple{2, VectorElement}
+        @test @inferred(∇ₕ(u2)) isa NTuple{2,VectorElement}
 
         @test alloc_test(Dₕₓ, u1) == alloc_test(similar, u1)
         @test alloc_test(Dₕᵧ, u2) == alloc_test(similar, u2)

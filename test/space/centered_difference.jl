@@ -36,15 +36,21 @@ centered_ops(::Val{3}) = (Dcₓ, Dcᵧ, Dc₂)
                 uₕ = Rₕ(Wₕ, x -> x^2 + sin(x))
                 u = parent(uₕ)
 
-                want = [(i == 1 || i == n) ? 0.0 :
+                want = [
+                    if (i == 1 || i == n)
+                        0.0
+                    else
                         (u[i + 1] - u[i - 1]) / (spacing(Ωₕ, i) + spacing(Ωₕ, i + 1))
-                        for i in 1:n]
+                    end for i in 1:n
+                ]
                 @test parent(Dcₓ(uₕ)) ≈ want
 
                 # the denominator is the span the stencil covers
-                @test all(parent(Dcₓ(uₕ))[i] ≈
-                          (u[i + 1] - u[i - 1]) /
-                          (points(Ωₕ)[i + 1] - points(Ωₕ)[i - 1]) for i in 2:(n - 1))
+                @test all(
+                    parent(Dcₓ(uₕ))[i] ≈
+                    (u[i + 1] - u[i - 1]) / (points(Ωₕ)[i + 1] - points(Ωₕ)[i - 1]) for
+                    i in 2:(n - 1)
+                )
             end
         end
     end
@@ -75,8 +81,11 @@ centered_ops(::Val{3}) = (Dcₓ, Dcᵧ, Dc₂)
         for (lbl, unif) in (("uniform", true), ("random", false))
             @testset "$lbl" begin
                 Random.seed!(20260830)
-                Ωₕ = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (5, 6, 4),
-                    (unif, unif, unif))
+                Ωₕ = mesh(
+                    domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
+                    (5, 6, 4),
+                    (unif, unif, unif),
+                )
                 Wₕ = gridspace(Ωₕ)
                 n = npoints(Ωₕ, Tuple)
 
@@ -108,10 +117,11 @@ centered_ops(::Val{3}) = (Dcₓ, Dcᵧ, Dc₂)
                 uₕ = Rₕ(Wₕ, x -> sin(3x))
                 dc, dm, dp = parent(Dcₓ(uₕ)), parent(D₋ₓ(uₕ)), parent(D₊ₓ(uₕ))
 
-                @test all(dc[i] ≈
-                          (spacing(Ωₕ, i + 1) * dp[i] + spacing(Ωₕ, i) * dm[i]) /
-                          (spacing(Ωₕ, i) + spacing(Ωₕ, i + 1))
-                for i in 2:(n - 1))
+                @test all(
+                    dc[i] ≈
+                    (spacing(Ωₕ, i + 1) * dp[i] + spacing(Ωₕ, i) * dm[i]) /
+                    (spacing(Ωₕ, i) + spacing(Ωₕ, i + 1)) for i in 2:(n - 1)
+                )
 
                 if unif
                     @test all(dc[i] ≈ (dm[i] + dp[i]) / 2 for i in 2:(n - 1))
@@ -124,7 +134,7 @@ centered_ops(::Val{3}) = (Dcₓ, Dcᵧ, Dc₂)
         # Second order on a uniform grid, and first order on a non-uniform one: the
         # centered difference approximates the derivative at the midpoint of its stencil,
         # which coincides with xᵢ only when the two spacings match.
-        function orders(unif; steps = 4)
+        function orders(unif; steps=4)
             Random.seed!(20260830)
             Ωₕ = mesh(domain(interval(0.0, 1.0)), 21, unif)
             errs = Float64[]
@@ -154,7 +164,7 @@ centered_ops(::Val{3}) = (Dcₓ, Dcᵧ, Dc₂)
         Vₕ = gridspace(Ωₕ, Val(2))
         uₕ = Rₕ(Wₕ, x -> x[1] * x[2])
 
-        @test Dcₕ(uₕ) isa NTuple{2, VectorElement}
+        @test Dcₕ(uₕ) isa NTuple{2,VectorElement}
         @test parent(Dcₕ(uₕ)[1]) == parent(Dcₓ(uₕ))
         @test parent(Dcₕ(uₕ)[2]) == parent(Dcᵧ(uₕ))
 
@@ -183,7 +193,7 @@ centered_ops(::Val{3}) = (Dcₓ, Dcᵧ, Dc₂)
 
         @test @inferred(Dcₓ(u1)) isa VectorElement
         @test @inferred(Dcᵧ(u2)) isa VectorElement
-        @test @inferred(Dcₕ(u2)) isa NTuple{2, VectorElement}
+        @test @inferred(Dcₕ(u2)) isa NTuple{2,VectorElement}
 
         @test alloc_test(Dcₓ, u1) == alloc_test(similar, u1)
         @test alloc_test(Dcᵧ, u2) == alloc_test(similar, u2)
@@ -196,12 +206,10 @@ centered_ops(::Val{3}) = (Dcₓ, Dcᵧ, Dc₂)
         # denominator, so the weights cancel and the left side is half the sum of
         # (u_{i+1} - u_{i-1}) v_i over the interior. Shifting that sum by one gives the
         # right side, exactly and on any grid.
-        skew(u, v) = isapprox(innerₕ(Dcₓ(u), v), -innerₕ(u, Dcₓ(v));
-            atol = 1e-12, rtol = 1e-12)
+        skew(u, v) = isapprox(innerₕ(Dcₓ(u), v), -innerₕ(u, Dcₓ(v)); atol=1e-12, rtol=1e-12)
 
         @testset "1D" begin
             for (lbl, unif) in (("uniform", true), ("random", false)), n in (11, 51, 201)
-
                 Random.seed!(20260830)
                 Ωₕ = mesh(domain(interval(0.0, 1.0)), n, unif)
                 Wₕ = gridspace(Ωₕ)
@@ -212,7 +220,7 @@ centered_ops(::Val{3}) = (Dcₓ, Dcᵧ, Dc₂)
                 # the cancellation that makes it exact
                 u, v = parent(uₕ), parent(vₕ)
                 @test innerₕ(Dcₓ(uₕ), vₕ) ≈
-                      sum((u[i + 1] - u[i - 1]) * v[i] for i in 2:(n - 1)) / 2
+                    sum((u[i + 1] - u[i - 1]) * v[i] for i in 2:(n - 1)) / 2
             end
         end
 
@@ -237,37 +245,45 @@ centered_ops(::Val{3}) = (Dcₓ, Dcᵧ, Dc₂)
 
             for unif in (true, false)
                 Random.seed!(20260830)
-                Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (21, 19),
-                    (unif, unif))
+                Ω2 = mesh(
+                    domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (21, 19), (unif, unif)
+                )
                 W2 = gridspace(Ω2)
                 a, b = Rₕ(W2, f2), Rₕ(W2, g2)
                 for op in (Dcₓ, Dcᵧ)
-                    @test isapprox(innerₕ(op(a), b), -innerₕ(a, op(b));
-                        atol = 1e-12, rtol = 1e-12)
+                    @test isapprox(
+                        innerₕ(op(a), b), -innerₕ(a, op(b)); atol=1e-12, rtol=1e-12
+                    )
                 end
 
-                Ω3 = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (11, 9, 8),
-                    (unif, unif, unif))
+                Ω3 = mesh(
+                    domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
+                    (11, 9, 8),
+                    (unif, unif, unif),
+                )
                 W3 = gridspace(Ω3)
                 c, d = Rₕ(W3, f3), Rₕ(W3, g3)
                 for op in (Dcₓ, Dcᵧ, Dc₂)
-                    @test isapprox(innerₕ(op(c), d), -innerₕ(c, op(d));
-                        atol = 1e-12, rtol = 1e-12)
+                    @test isapprox(
+                        innerₕ(op(c), d), -innerₕ(c, op(d)); atol=1e-12, rtol=1e-12
+                    )
                 end
             end
         end
 
         @testset "Random grids (Supposition)" begin
-            positive_h = Data.Floats{Float64}(; minimum = 0.01, maximum = 10.0,
-                nans = false, infs = false)
-            field_val = Data.Floats{Float64}(; minimum = -100.0, maximum = 100.0,
-                nans = false, infs = false)
+            positive_h = Data.Floats{Float64}(;
+                minimum=0.01, maximum=10.0, nans=false, infs=false
+            )
+            field_val = Data.Floats{Float64}(;
+                minimum=-100.0, maximum=100.0, nans=false, infs=false
+            )
 
             # 1D: arbitrary non-uniform mesh with both fields vanishing on the boundary
             @check function check_dc_skew_1d(
-                    h = Data.Vectors(positive_h; min_size = 3, max_size = 30),
-                    u_raw = Data.Vectors(field_val; min_size = 31, max_size = 31),
-                    v_raw = Data.Vectors(field_val; min_size = 31, max_size = 31)
+                h=Data.Vectors(positive_h; min_size=3, max_size=30),
+                u_raw=Data.Vectors(field_val; min_size=31, max_size=31),
+                v_raw=Data.Vectors(field_val; min_size=31, max_size=31),
             )
                 n = length(h) + 1
                 pts = zeros(Float64, n)
@@ -293,15 +309,15 @@ centered_ops(::Val{3}) = (Dcₓ, Dcᵧ, Dc₂)
                 lhs = innerₕ(Dcₓ(uₕ), vₕ)
                 rhs = -innerₕ(uₕ, Dcₓ(vₕ))
                 scale = max(abs(lhs), abs(rhs), 1.0)
-                isapprox(lhs, rhs; atol = 1e-10 * scale, rtol = 1e-10)
+                isapprox(lhs, rhs; atol=1e-10 * scale, rtol=1e-10)
             end
 
             # 2D: arbitrary non-uniform tensor product mesh across both coordinates
             @check function check_dc_skew_2d(
-                    hx = Data.Vectors(positive_h; min_size = 2, max_size = 8),
-                    hy = Data.Vectors(positive_h; min_size = 2, max_size = 8),
-                    u_raw = Data.Vectors(field_val; min_size = 81, max_size = 81),
-                    v_raw = Data.Vectors(field_val; min_size = 81, max_size = 81)
+                hx=Data.Vectors(positive_h; min_size=2, max_size=8),
+                hy=Data.Vectors(positive_h; min_size=2, max_size=8),
+                u_raw=Data.Vectors(field_val; min_size=81, max_size=81),
+                v_raw=Data.Vectors(field_val; min_size=81, max_size=81),
             )
                 nx = length(hx) + 1
                 ny = length(hy) + 1
@@ -317,8 +333,11 @@ centered_ops(::Val{3}) = (Dcₓ, Dcᵧ, Dc₂)
                 end
                 pts_y ./= pts_y[end]
 
-                Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (nx, ny),
-                    (false, false))
+                Ωₕ = mesh(
+                    domain(interval(0.0, 1.0) × interval(0.0, 1.0)),
+                    (nx, ny),
+                    (false, false),
+                )
                 set_points!(Ωₕ(1), pts_x)
                 set_points!(Ωₕ(2), pts_y)
                 Wₕ = gridspace(Ωₕ)
@@ -342,12 +361,12 @@ centered_ops(::Val{3}) = (Dcₓ, Dcᵧ, Dc₂)
                 lhs_x = innerₕ(Dcₓ(uₕ), vₕ)
                 rhs_x = -innerₕ(uₕ, Dcₓ(vₕ))
                 scale_x = max(abs(lhs_x), abs(rhs_x), 1.0)
-                ok_x = isapprox(lhs_x, rhs_x; atol = 1e-10 * scale_x, rtol = 1e-10)
+                ok_x = isapprox(lhs_x, rhs_x; atol=1e-10 * scale_x, rtol=1e-10)
 
                 lhs_y = innerₕ(Dcᵧ(uₕ), vₕ)
                 rhs_y = -innerₕ(uₕ, Dcᵧ(vₕ))
                 scale_y = max(abs(lhs_y), abs(rhs_y), 1.0)
-                ok_y = isapprox(lhs_y, rhs_y; atol = 1e-10 * scale_y, rtol = 1e-10)
+                ok_y = isapprox(lhs_y, rhs_y; atol=1e-10 * scale_y, rtol=1e-10)
 
                 ok_x && ok_y
             end

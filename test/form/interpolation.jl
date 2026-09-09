@@ -1,7 +1,15 @@
 using Test
 using Bramble
-using Bramble: SourceFunction, TrialFunction, TestFunction, LinearProduct,
-               BilinearProduct, resolve_form_ast, _is_source_only, Innerh, OperatorAdd
+using Bramble:
+    SourceFunction,
+    TrialFunction,
+    TestFunction,
+    LinearProduct,
+    BilinearProduct,
+    resolve_form_ast,
+    _is_source_only,
+    Innerh,
+    OperatorAdd
 
 # πₕ(uₕ) wraps a grid function's interpolant as a genuine LazyOp source (SourceFunction), so
 # it composes with the same operators (D₋ₓ, M₋ₓ, ...) any other source does. The one thing
@@ -114,7 +122,7 @@ end
     @test resolve_form_ast(form(Vh, v -> inner₊ₓ(πₕ(u_leaf2), v(1)))) isa LinearProduct
     @test resolve_form_ast(form(Vh, v -> inner₊ᵧ(πₕ(u_leaf2), v(1)))) isa LinearProduct
     @test resolve_form_ast(form(Vh, v -> inner₊(D₋ₓ(πₕ(u_leaf2)), D₋ₓ(v(1))))) isa
-          LinearProduct
+        LinearProduct
     bx_all = assemble(lfx)
     @test all(isfinite, bx_all)
     @test !all(iszero, bx_all)          # the control: a dropped operator reads as zero
@@ -148,11 +156,12 @@ end
     # regression: an ordinary bilinear inner₊/inner₊ₓ/inner_plus, trial function either
     # wrapped or not, still builds BilinearProduct exactly as before this fix
     @test resolve_form_ast(form(Wbig, Wbig, (u, w) -> inner₊(D₋ₓ(u), D₋ₓ(w)))) isa
-          BilinearProduct
+        BilinearProduct
     @test resolve_form_ast(form(Wbig, Wbig, (u, w) -> inner₊ₓ(u, w))) isa BilinearProduct
     @test resolve_form_ast(form(W1, W1, (u, w) -> inner₊(u, w))) isa BilinearProduct
     ast_bilinear_grad = resolve_form_ast(
-        form(Vh, Vh, (u, w) -> inner₊((u(1), u(1)), (w(1), w(1)))))
+        form(Vh, Vh, (u, w) -> inner₊((u(1), u(1)), (w(1), w(1))))
+    )
     @test ast_bilinear_grad isa OperatorAdd
     @test ast_bilinear_grad.left_op isa BilinearProduct
     @test ast_bilinear_grad.right_op isa BilinearProduct
@@ -171,7 +180,8 @@ end
     for (nm, g) in (
         ("plain interpolant", v -> innerₕ(πₕ(u_leaf2), v(1))),
         ("difference of the interpolant", v -> innerₕ(D₋ₓ(πₕ(u_leaf2)), D₋ₓ(v(1)))),
-        ("average of the interpolant", v -> innerₕ(M₋ₓ(πₕ(u_leaf2)), v(1))))
+        ("average of the interpolant", v -> innerₕ(M₋ₓ(πₕ(u_leaf2)), v(1))),
+    )
         lf = form(Vh, g)
         bs = assemble(lf)
         bp = similar(bs)
@@ -191,8 +201,11 @@ end
 
         for (nm, g) in (
             ("plain interpolant", v -> innerₕ(πₕ(ub2), v(1))),
-            ("difference composed with the interpolant",
-            v -> innerₕ(D₋ₓ(πₕ(ub2)), D₋ₓ(v(1)))))
+            (
+                "difference composed with the interpolant",
+                v -> innerₕ(D₋ₓ(πₕ(ub2)), D₋ₓ(v(1))),
+            ),
+        )
             lfb = form(Vb, g)
             bb = assemble(lfb)
             bbp = similar(bb)

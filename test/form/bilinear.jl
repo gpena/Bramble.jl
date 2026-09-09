@@ -3,10 +3,26 @@ using Bramble
 using ForwardDiff
 using LinearAlgebra: Diagonal, I
 using SparseArrays: sparse, nnz, nonzeros
-using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, trial_space,
-               test_space, resolve_form_ast, allocate_system_matrix, ndofs, values,
-               Innerh, Innerplus, block_of, trial_component_or_nothing,
-               test_component_or_nothing, Block, blocks, leaf_spaces_offsets
+using Bramble:
+    BilinearForm,
+    form,
+    assemble,
+    assemble!,
+    assemble_parallel!,
+    trial_space,
+    test_space,
+    resolve_form_ast,
+    allocate_system_matrix,
+    ndofs,
+    values,
+    Innerh,
+    Innerplus,
+    block_of,
+    trial_component_or_nothing,
+    test_component_or_nothing,
+    Block,
+    blocks,
+    leaf_spaces_offsets
 
 # Assembling the matrix of a bilinear form.
 #
@@ -31,19 +47,19 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
         @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v)))) ≈ H
         @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(u), v)))) ≈ H * Dx
         @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, D₋ₓ(v))))) ≈
-              transpose(Dx) * H
+            transpose(Dx) * H
         @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(M₋ₓ(u), v)))) ≈ H * Mx
 
         # the stiffness matrix, which is the reason the package exists
         @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v))))) ≈
-              transpose(Dx) * Hx * Dx
+            transpose(Dx) * Hx * Dx
 
         # a sum of two kinds, and a linear combination inside one argument
-        @test Matrix(assemble(form(Wₕ, Wₕ,
-            (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v))))) ≈
-              H + transpose(Dx) * Hx * Dx
+        @test Matrix(
+            assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v))))
+        ) ≈ H + transpose(Dx) * Hx * Dx
         @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v + 2 * D₋ₓ(v))))) ≈
-              transpose(Idm + 2 * Dx) * H
+            transpose(Idm + 2 * Dx) * H
     end
 
     @testset "Entry point agreement" begin
@@ -66,7 +82,7 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
         @test Matrix(Aser) ≈ Matrix(Apar)
 
         # and Dirichlet rows are pinned
-        Abc = assemble(a; dirichlet = :walls)
+        Abc = assemble(a; dirichlet=:walls)
         marked = index_in_marker(Ωₕ, :walls)
         for i in 1:n
             marked[i] || continue
@@ -97,17 +113,25 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
         @test all(iszero, blk(Ao, 1, 2))
 
         # a full 2x2 system
-        Af = assemble(form(Vₕ, Vₕ,
-            (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(1), v(2)) +
-                      innerₕ(u(2), v(1)) + innerₕ(u(2), v(2))))
+        Af = assemble(
+            form(
+                Vₕ,
+                Vₕ,
+                (u, v) ->
+                    innerₕ(u(1), v(1)) +
+                    innerₕ(u(1), v(2)) +
+                    innerₕ(u(2), v(1)) +
+                    innerₕ(u(2), v(2)),
+            ),
+        )
         for i in 1:2, j in 1:2
-
             @test blk(Af, i, j) ≈ H
         end
 
         # blocks carrying operators, which is what a real coupled system looks like
-        Aop = assemble(form(Vₕ, Vₕ,
-            (u, v) -> inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + innerₕ(u(2), v(1))))
+        Aop = assemble(
+            form(Vₕ, Vₕ, (u, v) -> inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + innerₕ(u(2), v(1)))
+        )
         @test blk(Aop, 1, 1) ≈ transpose(Dx) * Hx * Dx
         @test blk(Aop, 1, 2) ≈ H
         @test all(iszero, blk(Aop, 2, 2))
@@ -123,7 +147,7 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
         a = form(Vₕ, Vₕ, (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)))
         marked = index_in_marker(Ωₕ, :walls)
 
-        A = assemble(a; dirichlet = :walls, dirichlet_components = 1)
+        A = assemble(a; dirichlet=:walls, dirichlet_components=1)
         blk(i, j) = Matrix(A)[((i - 1) * n + 1):(i * n), ((j - 1) * n + 1):(j * n)]
 
         for i in 1:n
@@ -137,12 +161,12 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
 
         # assemble! into a pre-allocated matrix follows the same keyword
         A2 = allocate_system_matrix(a)
-        assemble!(A2, a; dirichlet = :walls, dirichlet_components = 1)
+        assemble!(A2, a; dirichlet=:walls, dirichlet_components=1)
         @test Matrix(A2) ≈ Matrix(A)
 
         # without dirichlet_components, the same labels bind to every leaf that has the
         # marker (this is the pre-existing, still-default behaviour, confirmed unchanged).
-        Aboth = assemble(a; dirichlet = :walls)
+        Aboth = assemble(a; dirichlet=:walls)
         blk2(i, j) = Matrix(Aboth)[((i - 1) * n + 1):(i * n), ((j - 1) * n + 1):(j * n)]
         for i in 1:n
             if marked[i]
@@ -179,7 +203,7 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
 
         # `:boundary` is reserved and auto-computed on every mesh: index 1 and index n. So
         # each leaf contributes exactly two marked rows/columns, with no domain setup needed.
-        Abc = assemble(a; dirichlet = :boundary)
+        Abc = assemble(a; dirichlet=:boundary)
 
         # The two candidate row sets, computed directly rather than re-derived from the fix:
         # pin using test_space's own offsets (what the interface promises), and, separately,
@@ -204,12 +228,12 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
 
         # `assemble!` into a pre-allocated matrix takes the same path and must agree.
         A2 = allocate_system_matrix(a)
-        assemble!(A2, a; dirichlet = :boundary)
+        assemble!(A2, a; dirichlet=:boundary)
         @test Matrix(A2) ≈ Matrix(Abc)
 
         # `dirichlet_components` on an asymmetric form restricts by TEST leaf, since that is
         # what the rows mean: component 1 is test's leaf 1 (W2, offset 0, size n2).
-        A1 = Matrix(assemble(a; dirichlet = :boundary, dirichlet_components = 1))
+        A1 = Matrix(assemble(a; dirichlet=:boundary, dirichlet_components=1))
         @test pinned_rows(A1) == [1, n2]              # only test leaf 1's marked rows
         @test !(1 + n2 in pinned_rows(A1))              # test leaf 2 untouched
     end
@@ -228,12 +252,18 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
             ("scalar with operators", Wₕ, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v))),
             ("composite, diagonal", Vₕ, (u, v) -> innerₕ(u, v)),
             ("composite, off-diagonal", Vₕ, (u, v) -> innerₕ(u(1), v(2))),
-            ("composite, mixed spellings", Vₕ,
-            (u, v) -> innerₕ(u, v) + innerₕ(u(1), v(2))),
-            ("three components, crossed", V3,
-            (u, v) -> innerₕ(u(1), v(3)) + innerₕ(u(3), v(1))),
-            ("blocks with operators", Vₕ,
-            (u, v) -> inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + innerₕ(u(2), v(2))))
+            ("composite, mixed spellings", Vₕ, (u, v) -> innerₕ(u, v) + innerₕ(u(1), v(2))),
+            (
+                "three components, crossed",
+                V3,
+                (u, v) -> innerₕ(u(1), v(3)) + innerₕ(u(3), v(1)),
+            ),
+            (
+                "blocks with operators",
+                Vₕ,
+                (u, v) -> inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + innerₕ(u(2), v(2)),
+            ),
+        )
             a = form(sp, sp, g)
             Aser = assemble(a)
             Apar = similar(sparse(Aser))
@@ -278,8 +308,12 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
         # opposite default from LinearForm's serial-by-default assemble). Both now read
         # form.trial_space's execution_policy, defaulting to Serial() like the vector form.
         @test execution_policy(Wₕ) isa Serial
-        Ω_par = mesh(domain(S, :walls => boundary_symbols(S)), (9, 7), (true, true);
-            backend = backend(policy = Parallel()))
+        Ω_par = mesh(
+            domain(S, :walls => boundary_symbols(S)),
+            (9, 7),
+            (true, true);
+            backend=backend(policy=Parallel()),
+        )
         W_par = gridspace(Ω_par)
         @test execution_policy(W_par) isa Parallel
 
@@ -317,7 +351,6 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
         A = assemble(form(nested, nested, (u, v) -> innerₕ(u(1), v(3))))
         @test blk(A, 3, 1) ≈ H
         for i in 1:4, j in 1:4
-
             (i == 3 && j == 1) && continue
             @test all(iszero, blk(A, i, j))
         end
@@ -334,8 +367,9 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
         @test Matrix(As) ≈ Matrix(Ap)
 
         # and the range check counts leaves, not top-level components
-        @test_throws ArgumentError assemble(form(nested, nested,
-            (u, v) -> innerₕ(u(1), v(5))))
+        @test_throws ArgumentError assemble(
+            form(nested, nested, (u, v) -> innerₕ(u(1), v(5)))
+        )
     end
 
     @testset "Component naming rules" begin
@@ -438,8 +472,17 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
         # and through the block routing, where a wrong component would show up as a
         # derivative in a block that should not have one
         @test ForwardDiff.gradient(c1) do w
-            sum(assemble(form(Vₕ, Vₕ,
-                (u, v) -> innerₕ(Bramble.element(Wₕ, w) * u(1), v(1)) + innerₕ(u(2), v(2)))))
+            sum(
+                assemble(
+                    form(
+                        Vₕ,
+                        Vₕ,
+                        (u, v) ->
+                            innerₕ(Bramble.element(Wₕ, w) * u(1), v(1)) +
+                            innerₕ(u(2), v(2)),
+                    ),
+                ),
+            )
         end ≈ diag(H)
     end
 
@@ -535,7 +578,7 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
             a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
             A = assemble(a)                             # record, unconstrained
             assemble!(A, a)                             # replay, unconstrained
-            assemble!(A, a; dirichlet = :walls)   # replay core, then Dirichlet applied
+            assemble!(A, a; dirichlet=:walls)   # replay core, then Dirichlet applied
             marked = index_in_marker(Ωₕ, :walls)
             for i in 1:n
                 marked[i] || continue
@@ -559,10 +602,12 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
 
         @testset "Composite: diagonal, off-diagonal, mixed, and nested all replay correctly" begin
             Vₕ = gridspace(Ωₕ, Val(2))
-            for g in ((u, v) -> innerₕ(u, v),
+            for g in (
+                (u, v) -> innerₕ(u, v),
                 (u, v) -> innerₕ(u(1), v(2)),
                 (u, v) -> innerₕ(u, v) + innerₕ(u(1), v(2)),
-                (u, v) -> inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + innerₕ(u(2), v(1)))
+                (u, v) -> inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + innerₕ(u(2), v(1)),
+            )
                 a = form(Vₕ, Vₕ, g)
                 A = assemble(a)
                 reference = copy(A.nzval)
@@ -574,7 +619,8 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
 
             # more than two segments to replay, in order (#64's own nesting shape)
             nested = Bramble.CompositeGridSpace((
-                gridspace(Ωₕ, Val(2)), gridspace(Ωₕ, Val(2))))
+                gridspace(Ωₕ, Val(2)), gridspace(Ωₕ, Val(2))
+            ))
             a = form(nested, nested, (u, v) -> innerₕ(u(2), v(4)) + innerₕ(u, v))
             A = assemble(a)
             reference = copy(A.nzval)
@@ -588,7 +634,7 @@ using Bramble: BilinearForm, form, assemble, assemble!, assemble_parallel!, tria
             a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
             A = assemble(a)                                   # records for a's own ast
             alt = form(Wₕ, Wₕ, (u, v) -> 2.0 * innerₕ(u, v))  # same reach, different ast object
-            assemble!(A, a; ast = resolve_form_ast(alt))
+            assemble!(A, a; ast=resolve_form_ast(alt))
             @test sum(A) ≈ 2 * sum(H)
             assemble!(A, a)                                   # back to a's own ast: rebuilds again
             @test Matrix(A) ≈ H

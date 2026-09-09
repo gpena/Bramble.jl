@@ -50,7 +50,7 @@ end
 # One full pass over the mesh interface: construction, queries, iteration,
 # mutation and display.
 function _pc_mesh_session(Ω, npts, unif, be, label::Symbol)
-    Ωₕ = mesh(Ω, npts, unif; backend = be)
+    Ωₕ = mesh(Ω, npts, unif; backend=be)
 
     idx = first(indices(Ωₕ))
     _pc_indexed(Ωₕ, Tuple(idx))
@@ -90,8 +90,14 @@ function _pc_mesh_session(Ω, npts, unif, be, label::Symbol)
 
     # gpena/Bramble.jl#75: warms the plain accessors and the mesh's own iteration
     # protocol, not the deprecated `*_iterator` aliases these replace.
-    for iter in (points(Ωₕ), half_points(Ωₕ), spacings(Ωₕ), forward_spacings(Ωₕ),
-        half_spacings(Ωₕ), (cell_measure(Ωₕ, idx) for idx in indices(Ωₕ)))
+    for iter in (
+        points(Ωₕ),
+        half_points(Ωₕ),
+        spacings(Ωₕ),
+        forward_spacings(Ωₕ),
+        half_spacings(Ωₕ),
+        (cell_measure(Ωₕ, idx) for idx in indices(Ωₕ)),
+    )
         isempty(iter) || first(iter)
     end
     for p in Ωₕ
@@ -100,7 +106,7 @@ function _pc_mesh_session(Ω, npts, unif, be, label::Symbol)
 
     Ωₕ[idx]
     sprint(show, Ωₕ)
-    sprint(show, Ωₕ; context = :compact => true)
+    sprint(show, Ωₕ; context=:compact => true)
 
     return Ωₕ
 end
@@ -360,11 +366,14 @@ function _pc_directional_ops(uₕ, ::Val{3})
 end
 
 const _PC_OPS_X_INPLACE = (
-    diff₋ₓ!, diff₊ₓ!, D₋ₓ!, D₊ₓ!, jumpₓ!, M₋ₓ!, M₊ₓ!, Dstar₊ₓ!, Dcₓ!, Dₕₓ!)
+    diff₋ₓ!, diff₊ₓ!, D₋ₓ!, D₊ₓ!, jumpₓ!, M₋ₓ!, M₊ₓ!, Dstar₊ₓ!, Dcₓ!, Dₕₓ!
+)
 const _PC_OPS_Y_INPLACE = (
-    diff₋ᵧ!, diff₊ᵧ!, D₋ᵧ!, D₊ᵧ!, jumpᵧ!, M₋ᵧ!, M₊ᵧ!, Dstar₊ᵧ!, Dcᵧ!, Dₕᵧ!)
+    diff₋ᵧ!, diff₊ᵧ!, D₋ᵧ!, D₊ᵧ!, jumpᵧ!, M₋ᵧ!, M₊ᵧ!, Dstar₊ᵧ!, Dcᵧ!, Dₕᵧ!
+)
 const _PC_OPS_Z_INPLACE = (
-    diff₋₂!, diff₊₂!, D₋₂!, D₊₂!, jump₂!, M₋₂!, M₊₂!, Dstar₊₂!, Dc₂!, Dₕ₂!)
+    diff₋₂!, diff₊₂!, D₋₂!, D₊₂!, jump₂!, M₋₂!, M₊₂!, Dstar₊₂!, Dc₂!, Dₕ₂!
+)
 
 function _pc_apply_each_inplace(ops, vₕ, uₕ)
     for op in ops
@@ -374,7 +383,7 @@ function _pc_apply_each_inplace(ops, vₕ, uₕ)
 end
 
 function _pc_directional_ops_inplace(vₕ, uₕ, ::Val{1})
-    _pc_apply_each_inplace(_PC_OPS_X_INPLACE, vₕ, uₕ)
+    return _pc_apply_each_inplace(_PC_OPS_X_INPLACE, vₕ, uₕ)
 end
 
 function _pc_directional_ops_inplace(vₕ, uₕ, ::Val{2})
@@ -493,8 +502,7 @@ function _pc_form_ast(Wₕ, ::Val{D}) where {D}
     _pc_form_ast_interp(Wₕ, u)
 
     # the one-sided families, the averages, the shift and the restriction
-    for op in (D₋ₓ(id), D₊ₓ(id), M₋ₓ(id), M₊ₓ(id), jumpₓ(id),
-        Dcₓ(id), Dstar₊ₓ(id), Dₕₓ(id))
+    for op in (D₋ₓ(id), D₊ₓ(id), M₋ₓ(id), M₊ₓ(id), jumpₓ(id), Dcₓ(id), Dstar₊ₓ(id), Dₕₓ(id))
         is_symbolic(op)
         resolve_ast(op)
         stencil_offsets(op)
@@ -528,8 +536,7 @@ function _pc_form_stencils(Ωₕ::AbstractMeshType, Wₕ, id, u, v, label::Symbo
     mk = markers(Ωₕ)
 
     # Bilinear and linear products for each weight kind.
-    for prod in (innerₕ(D₋ₓ(id), D₋ₓ(id)), inner₊ₓ(M₋ₓ(id), M₋ₓ(id)),
-        innerₕ(id, D₋ₓ(id)))
+    for prod in (innerₕ(D₋ₓ(id), D₋ₓ(id)), inner₊ₓ(M₋ₓ(id), M₋ₓ(id)), innerₕ(id, D₋ₓ(id)))
         local_stencil(prod, Wₕ, I, nothing, lin[I])
         local_stencil(prod, Wₕ, I, mk, lin[I])
         resolve_ast(prod)
@@ -537,9 +544,21 @@ function _pc_form_stencils(Ωₕ::AbstractMeshType, Wₕ, id, u, v, label::Symbo
 
     # Every node kind evaluated once, with and without a marker table: restriction is
     # the only node that reads it, and `nothing` is a separate method there.
-    for op in (id, D₋ₓ(id), D₊ₓ(id), M₋ₓ(id), jumpₓ(id), Dcₓ(id), Dstar₊ₓ(id), Dₕₓ(id),
-        shift_op(id, 1, 1), 3 * D₋ₓ(id), D₋ₓ(id) + D₊ₓ(id),
-        restrict_to(:interior, id), restrict_to(label, id))
+    for op in (
+        id,
+        D₋ₓ(id),
+        D₊ₓ(id),
+        M₋ₓ(id),
+        jumpₓ(id),
+        Dcₓ(id),
+        Dstar₊ₓ(id),
+        Dₕₓ(id),
+        shift_op(id, 1, 1),
+        3 * D₋ₓ(id),
+        D₋ₓ(id) + D₊ₓ(id),
+        restrict_to(:interior, id),
+        restrict_to(label, id),
+    )
         local_stencil(op, Wₕ, I, nothing, lin[I])
         local_stencil(op, Wₕ, I, mk, lin[I])
     end
@@ -572,8 +591,7 @@ function _pc_form_blocks(Vₕ, ::Val{D}) where {D}
 end
 
 # The constraints, and applying them. Every path: matrix and vector, scalar and composite.
-function _pc_form_dirichlet(Ωₕ::AbstractMeshType, Wₕ, Vₕ, be, label::Symbol, f, ft,
-        I_time)
+function _pc_form_dirichlet(Ωₕ::AbstractMeshType, Wₕ, Vₕ, be, label::Symbol, f, ft, I_time)
     bcs = dirichlet_constraints(Ωₕ, label => f)
     dirichlet_constraints(Wₕ, label => f)
     dirichlet_constraints(Vₕ, label => f)
@@ -634,11 +652,11 @@ function _pc_assemble_shape(Wₕ, g, b)
     _assembled_eltype(ast, Wₕ)
 
     assemble(lf)
-    assemble!(b, lf; ast = ast)
+    assemble!(b, lf; ast=ast)
 
     vₕ = element(Wₕ, 1.0)
     lf(vₕ)
-    evaluate!(b, lf, vₕ; ast = ast)
+    evaluate!(b, lf, vₕ; ast=ast)
     return nothing
 end
 
@@ -665,10 +683,10 @@ function _pc_assemble_bilinear_shape(Wₕ, g, label::Symbol)
     isposdef(bf)
 
     A = allocate_system_matrix(bf, ast)
-    assemble!(A, bf; ast = ast)
-    assemble!(A, bf; dirichlet = label, ast = ast)
+    assemble!(A, bf; ast=ast)
+    assemble!(A, bf; dirichlet=label, ast=ast)
     assemble(bf)
-    assemble(bf; dirichlet = label)
+    assemble(bf; dirichlet=label)
 
     uₕ = element(Wₕ, 1.0)
     bf(uₕ, uₕ)
@@ -693,7 +711,7 @@ function _pc_assemble_bilinear_composite(Vₕ, g)
 
     routes_by_component(ast)
     A = allocate_system_matrix(bf, ast)
-    assemble!(A, bf; ast = ast)
+    assemble!(A, bf; ast=ast)
     assemble(bf)
     return nothing
 end
@@ -713,7 +731,7 @@ function _pc_assemble_composite(Vₕ, g, b)
 
     routes_by_component(ast)
     assemble(lf)
-    assemble!(b, lf; ast = ast)
+    assemble!(b, lf; ast=ast)
     return nothing
 end
 
@@ -725,8 +743,9 @@ function _pc_assemble_directional(Wₕ, uₕ, b, ::Val{2})
     return nothing
 end
 
-function _pc_form_assembly(Ωₕ::AbstractMeshType, Wₕ, Vₕ, label::Symbol, f,
-        dim_val::Val{D}) where {D}
+function _pc_form_assembly(
+    Ωₕ::AbstractMeshType, Wₕ, Vₕ, label::Symbol, f, dim_val::Val{D}
+) where {D}
     uₕ = Rₕ(Wₕ, f)
     b = zeros(eltype(Wₕ), ndofs(Wₕ))
     bv = zeros(eltype(Vₕ), ndofs(Vₕ))
@@ -748,38 +767,37 @@ function _pc_form_assembly(Ωₕ::AbstractMeshType, Wₕ, Vₕ, label::Symbol, f
     c = components(uv)
     _pc_assemble_composite(Vₕ, v -> innerₕ(c[1], v(1)) + innerₕ(c[2], v(2)), bv)
     _pc_assemble_composite(Vₕ, v -> innerₕ(uv, v), bv)
-    _pc_assemble_composite(
-        Vₕ, v -> innerₕ(c[1], v(1) + D₋ₓ(v(1))) + innerₕ(c[2], v(2)), bv)
+    _pc_assemble_composite(Vₕ, v -> innerₕ(c[1], v(1) + D₋ₓ(v(1))) + innerₕ(c[2], v(2)), bv)
 
     # and the constrained right-hand side, which is a different path from the bare one
     bcs = dirichlet_constraints(Ωₕ, label => f)
     lf = form(Wₕ, v -> innerₕ(uₕ, v))
-    assemble(lf; dirichlet = bcs)
+    assemble(lf; dirichlet=bcs)
 
     # The joint (A, F) entry point, every `dirichlet` shape it accepts, with and without
     # symmetrize: a `label => f` Pair, a Tuple of one, and pre-built constraints.
     af = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
-    assemble(af, lf; dirichlet = label => f)
-    assemble(af, lf; dirichlet = (label => f,), symmetrize = true)
-    assemble(af, lf; dirichlet = bcs, symmetrize = true)
+    assemble(af, lf; dirichlet=label => f)
+    assemble(af, lf; dirichlet=(label => f,), symmetrize=true)
+    assemble(af, lf; dirichlet=bcs, symmetrize=true)
 
     # Bilinear forms: mass, stiffness, combination, and transverse
     _pc_assemble_bilinear_shape_threaded(Wₕ, (u, v) -> innerₕ(u, v), label)
     _pc_assemble_bilinear_shape_threaded(Wₕ, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)), label)
-    _pc_assemble_bilinear_shape(
-        Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)), label)
+    _pc_assemble_bilinear_shape(Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)), label)
     _pc_assemble_bilinear_directional(Wₕ, label, dim_val)
 
     # Composite bilinear forms: diagonal and coupled
+    _pc_assemble_bilinear_composite(Vₕ, (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)))
     _pc_assemble_bilinear_composite(
-        Vₕ, (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)))
-    _pc_assemble_bilinear_composite(
-        Vₕ, (u, v) -> inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + innerₕ(u(2), v(1)))
+        Vₕ, (u, v) -> inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + innerₕ(u(2), v(1))
+    )
     return nothing
 end
 
-function _pc_form_session(Ωₕ::AbstractMeshType, be, label::Symbol, f, ft, I_time,
-        dim_val::Val{D}) where {D}
+function _pc_form_session(
+    Ωₕ::AbstractMeshType, be, label::Symbol, f, ft, I_time, dim_val::Val{D}
+) where {D}
     Wₕ = gridspace(Ωₕ)
     Vₕ = gridspace(Ωₕ, Val(2))
 
@@ -837,8 +855,7 @@ end
 function _pc_jacobian_pattern_composite_session(Vₕ)
     v0 = element(Vₕ, 0.0)
     c = components(v0)
-    ac = form(Vₕ, Vₕ,
-        (p, q) -> innerₕ(c[2] * p(1), q(1)) + innerₕ(c[1] * p(2), q(2)))
+    ac = form(Vₕ, Vₕ, (p, q) -> innerₕ(c[2] * p(1), q(1)) + innerₕ(c[1] * p(2), q(2)))
     jacobian_pattern(ac, U -> U(2), U -> U(1))
     return nothing
 end
@@ -895,8 +912,8 @@ end
 # Dirichlet/interpolation paths are deliberately left out, the same economy the assembly
 # sessions above already apply to 3D.
 function _pc_parallel_policy_session(Ω1, npts::Int)
-    be_par = backend(policy = Parallel())
-    Ωₕ = mesh(Ω1, npts, true; backend = be_par)
+    be_par = backend(; policy=Parallel())
+    Ωₕ = mesh(Ω1, npts, true; backend=be_par)
     Wₕ = gridspace(Ωₕ)
 
     uₕ = Rₕ(Wₕ, x -> x + 1.0)
@@ -924,7 +941,7 @@ function _pc_exporters_session(Ω1, Ω2)
     u2 = Rₕ(W2, x -> 1.0)
     mktempdir() do d
         export_pgfplots(joinpath(d, "out1.dat"), Ω1, "u" => u1)
-        export_pgfplots(joinpath(d, "out2.dat"), Ω2, "u" => u2)
+        return export_pgfplots(joinpath(d, "out2.dat"), Ω2, "u" => u2)
     end
     return nothing
 end
@@ -939,8 +956,11 @@ if PRECOMPILE_WORKLOAD
         Ω1 = domain(I1, :left => :left, :right => :right)
 
         S2 = I1 × interval(0.0, 2.0)
-        Ω2 = domain(S2, :wall => (:left, :right),
-            :blob => x -> (x[1] - 0.5)^2 + (x[2] - 0.5)^2 < 0.25)
+        Ω2 = domain(
+            S2,
+            :wall => (:left, :right),
+            :blob => x -> (x[1] - 0.5)^2 + (x[2] - 0.5)^2 < 0.25,
+        )
 
         S3 = box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))
         Ω3 = domain(S3, :boundary => boundary_symbols(S3))
@@ -977,7 +997,8 @@ if PRECOMPILE_WORKLOAD
             _, e1, c1 = _pc_space_session(Ωₕ1, x -> x + 1.0, x -> 2x)
             _, e2, c2 = _pc_space_session(Ωₕ2, x -> x[1] * x[2], x -> x[1] + x[2])
             _, e3, c3 = _pc_space_session(
-                Ωₕ3, x -> x[1] * x[2] * x[3], x -> x[1] + x[2] + x[3])
+                Ωₕ3, x -> x[1] * x[2] * x[3], x -> x[1] + x[2] + x[3]
+            )
 
             _pc_operator_session(e1, c1, Val(1))
             _pc_operator_session(e2, c2, Val(2))
@@ -986,10 +1007,12 @@ if PRECOMPILE_WORKLOAD
             # The symbolic layer. Not reachable from the space sessions: a LazyOp tree is
             # built from IdentityOperator and the trial/test leaves, not from a grid
             # function.
-            _pc_form_session(Ωₕ1, be, :left, x -> x + 1.0, (x, t) -> (x + 1.0) * t,
-                I_time, Val(1))
-            _pc_form_session(Ωₕ2, be, :wall, x -> x[1] * x[2],
-                (x, t) -> x[1] * x[2] * t, I_time, Val(2))
+            _pc_form_session(
+                Ωₕ1, be, :left, x -> x + 1.0, (x, t) -> (x + 1.0) * t, I_time, Val(1)
+            )
+            _pc_form_session(
+                Ωₕ2, be, :wall, x -> x[1] * x[2], (x, t) -> x[1] * x[2] * t, I_time, Val(2)
+            )
 
             # Jacobian sparsity from the AST, scalar and composite, and the per-element-type
             # assembly cache (gpena/Bramble.jl#21/#95/#20). Kept to 1D, the same economy the
@@ -1004,8 +1027,8 @@ if PRECOMPILE_WORKLOAD
             _pc_parallel_policy_session(Ω1, 5)
 
             # Cross-mesh interpolation sessions (1D and 2D).
-            Ωₕ1_fine = mesh(Ω1, 9, true; backend = be)
-            Ωₕ2_fine = mesh(Ω2, (6, 6), (true, true); backend = be)
+            Ωₕ1_fine = mesh(Ω1, 9, true; backend=be)
+            Ωₕ2_fine = mesh(Ω2, (6, 6), (true, true); backend=be)
             _pc_interpolation_session(Ωₕ1, Ωₕ1_fine)
             _pc_interpolation_session(Ωₕ2, Ωₕ2_fine)
 

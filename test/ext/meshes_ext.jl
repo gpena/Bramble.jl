@@ -33,15 +33,18 @@ using Meshes, MakieCore
     end
 
     @testset "2D MeshnD" begin
-        Ω2 = Bramble.mesh(Bramble.domain(Bramble.box((0.0, 0.0), (1.0, 2.0))), (4, 5),
-            (true, true))
+        Ω2 = Bramble.mesh(
+            Bramble.domain(Bramble.box((0.0, 0.0), (1.0, 2.0))), (4, 5), (true, true)
+        )
         @test (Meshes.viz(Ω2); true)   # RectilinearGrid conversion from the mesh's points
     end
 
     @testset "3D MeshnD" begin
         Ω3 = Bramble.mesh(
-            Bramble.domain(Bramble.box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (3, 3, 3),
-            (true, true, true))
+            Bramble.domain(Bramble.box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
+            (3, 3, 3),
+            (true, true, true),
+        )
         @test (Meshes.viz(Ω3); true)
     end
 

@@ -1,12 +1,31 @@
 using Test
 using Bramble
-using Bramble: IdentityOperator, ZeroOperator, TrialFunction, TestFunction,
-               IndexedTrialFunction, IndexedTestFunction, LazyOp,
-               BackwardDifference, ForwardDifference, BackwardAverage, ForwardAverage,
-               ShiftNode, RegionRestriction, BilinearProduct, InnerH, InnerPlus,
-               local_stencil, resolve_ast, restrict_to, shift_op,
-               inner_plus, vectorial_avg_backward, vectorial_avg_forward,
-               is_symbolic, markers
+using Bramble:
+    IdentityOperator,
+    ZeroOperator,
+    TrialFunction,
+    TestFunction,
+    IndexedTrialFunction,
+    IndexedTestFunction,
+    LazyOp,
+    BackwardDifference,
+    ForwardDifference,
+    BackwardAverage,
+    ForwardAverage,
+    ShiftNode,
+    RegionRestriction,
+    BilinearProduct,
+    InnerH,
+    InnerPlus,
+    local_stencil,
+    resolve_ast,
+    restrict_to,
+    shift_op,
+    inner_plus,
+    vectorial_avg_backward,
+    vectorial_avg_forward,
+    is_symbolic,
+    markers
 
 # The symbolic operator layer: averages, the shift node, region restriction, and the
 # inner products that turn a pair of operators into a bilinear product.
@@ -28,8 +47,11 @@ using Bramble: IdentityOperator, ZeroOperator, TrialFunction, TestFunction,
 const _ORIGIN_2D = (0, 0)
 
 @testset "Symbolic operators" begin
-    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
-        (5, 6), (true, true))
+    Ωₕ = mesh(
+        domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
+        (5, 6),
+        (true, true),
+    )
     Wₕ = gridspace(Ωₕ)
     Vₕ = gridspace(Ωₕ, Val(3))
     id = IdentityOperator(Wₕ)
@@ -42,10 +64,14 @@ const _ORIGIN_2D = (0, 0)
 
     @testset "Averages" begin
         @testset "Directional nodes" begin
-            for (op, T, dim) in ((M₋ₓ(id), BackwardAverage, 1), (
-                M₊ₓ(id), ForwardAverage, 1),
-                (M₋ᵧ(id), BackwardAverage, 2), (M₊ᵧ(id), ForwardAverage, 2),
-                (M₋₂(id), BackwardAverage, 3), (M₊₂(id), ForwardAverage, 3))
+            for (op, T, dim) in (
+                (M₋ₓ(id), BackwardAverage, 1),
+                (M₊ₓ(id), ForwardAverage, 1),
+                (M₋ᵧ(id), BackwardAverage, 2),
+                (M₊ᵧ(id), ForwardAverage, 2),
+                (M₋₂(id), BackwardAverage, 3),
+                (M₊₂(id), ForwardAverage, 3),
+            )
                 @test op isa T
                 @test typeof(op).parameters[2] == dim
                 @test resolve_ast(op) isa T
@@ -57,8 +83,9 @@ const _ORIGIN_2D = (0, 0)
         @testset "Stencil evaluation" begin
             # an average is the mean of the point and its neighbour: two half weights,
             # one at the origin and one a step away in the direction it averages over
-            for (op, offset) in ((M₋ₓ(id), (-1, 0)), (M₊ₓ(id), (1, 0)),
-                (M₋ᵧ(id), (0, -1)), (M₊ᵧ(id), (0, 1)))
+            for (op, offset) in (
+                (M₋ₓ(id), (-1, 0)), (M₊ₓ(id), (1, 0)), (M₋ᵧ(id), (0, -1)), (M₊ᵧ(id), (0, 1))
+            )
                 st = local_stencil(op, Wₕ, interior, nothing, lin[interior])
                 @test length(st) == 2
                 @test sum(last, st) ≈ 1.0            # an average preserves constants
@@ -70,8 +97,8 @@ const _ORIGIN_2D = (0, 0)
         @testset "Vector forms" begin
             @test M₋ₕ(id) === vectorial_avg_backward(id)
             @test M₊ₕ(id) === vectorial_avg_forward(id)
-            @test M₋ₕ(id) isa NTuple{2, BackwardAverage}
-            @test M₊ₕ(id) isa NTuple{2, ForwardAverage}
+            @test M₋ₕ(id) isa NTuple{2,BackwardAverage}
+            @test M₊ₕ(id) isa NTuple{2,ForwardAverage}
             @test M₋ₕ(id)[1] === M₋ₓ(id)
             @test M₋ₕ(id)[2] === M₋ᵧ(id)
 
@@ -83,8 +110,8 @@ const _ORIGIN_2D = (0, 0)
     end
 
     @testset "Shift node" begin
-        for (dim, amount, offset) in ((1, 1, (1, 0)), (1, -1, (-1, 0)),
-            (2, 1, (0, 1)), (2, -2, (0, -2)))
+        for (dim, amount, offset) in
+            ((1, 1, (1, 0)), (1, -1, (-1, 0)), (2, 1, (0, 1)), (2, -2, (0, -2)))
             op = shift_op(id, dim, amount)
             @test op isa ShiftNode
             st = local_stencil(op, Wₕ, interior, nothing, lin[interior])
@@ -93,7 +120,7 @@ const _ORIGIN_2D = (0, 0)
 
         # a zero shift is the identity, and shifting composes with what it wraps
         @test local_stencil(shift_op(id, 1, 0), Wₕ, interior, nothing, lin[interior]) ==
-              local_stencil(id, Wₕ, interior, nothing, lin[interior])
+            local_stencil(id, Wₕ, interior, nothing, lin[interior])
         @test resolve_ast(shift_op(id, 1, 1)) isa ShiftNode
     end
 
@@ -112,7 +139,7 @@ const _ORIGIN_2D = (0, 0)
         @testset ":interior vs :boundary" begin
             r = restrict_to(:interior, id)
             @test local_stencil(r, Wₕ, interior, mk, lin[interior]) ==
-                  local_stencil(id, Wₕ, interior, nothing, lin[interior])
+                local_stencil(id, Wₕ, interior, nothing, lin[interior])
             if haskey(mk, :boundary)
                 @test local_stencil(r, Wₕ, bottom_idx, mk, lin[bottom_idx]) == ()
             end
@@ -123,16 +150,20 @@ const _ORIGIN_2D = (0, 0)
             # restrict by pass `nothing`. This used to be `haskey(::Nothing, ::Symbol)`.
             # Nothing marked means `:interior` is the whole grid and every named region is
             # empty, the same answer a table simply missing the key already gave.
-            @test local_stencil(restrict_to(:interior, id), Wₕ, interior, nothing,
-                lin[interior]) == local_stencil(id, Wₕ, interior, nothing, lin[interior])
-            @test local_stencil(restrict_to(:bottom, id), Wₕ, bottom_idx, nothing,
-                lin[bottom_idx]) == ()
-            @test local_stencil(restrict_to(:nosuchregion, id), Wₕ, interior, nothing,
-                lin[interior]) == ()
+            @test local_stencil(
+                restrict_to(:interior, id), Wₕ, interior, nothing, lin[interior]
+            ) == local_stencil(id, Wₕ, interior, nothing, lin[interior])
+            @test local_stencil(
+                restrict_to(:bottom, id), Wₕ, bottom_idx, nothing, lin[bottom_idx]
+            ) == ()
+            @test local_stencil(
+                restrict_to(:nosuchregion, id), Wₕ, interior, nothing, lin[interior]
+            ) == ()
 
             # and a table without the key behaves the same way
-            @test local_stencil(restrict_to(:nosuchregion, id), Wₕ, interior, mk,
-                lin[interior]) == ()
+            @test local_stencil(
+                restrict_to(:nosuchregion, id), Wₕ, interior, mk, lin[interior]
+            ) == ()
         end
 
         @testset "Custom :interior marker is honoured, not overridden by !:boundary (#66)" begin
@@ -142,7 +173,7 @@ const _ORIGIN_2D = (0, 0)
             # warning the caller that a custom definition wins.
             S1 = interval(0.0, 1.0)
             Ωc = domain(S1, :interior => (x -> x[1] > 0.5))
-            Ωch = mesh(Ωc, 5, true; warn_marker_mismatch = false)
+            Ωch = mesh(Ωc, 5, true; warn_marker_mismatch=false)
             custom_interior = markers(Ωch)[:interior]
 
             # Deliberately not the complement of :boundary, so reading :interior directly
@@ -167,14 +198,13 @@ const _ORIGIN_2D = (0, 0)
             ad = form(Wd, Wd, (u, v) -> innerₕ(restrict_to(:interior, u), v))
             Ad = Matrix(assemble(ad))
             nd = size(Ad, 1)
-            @test findall(!iszero, [Ad[i, i] for i in 1:nd]) ==
-                  findall(markers(Ωd)[:interior])
+            @test findall(!iszero, [Ad[i, i] for i in 1:nd]) == findall(markers(Ωd)[:interior])
         end
 
         @testset "Operator composition" begin
             r = restrict_to(:bottom, D₋ₓ(id))
             @test local_stencil(r, Wₕ, bottom_idx, mk, lin[bottom_idx]) ==
-                  local_stencil(D₋ₓ(id), Wₕ, bottom_idx, mk, lin[bottom_idx])
+                local_stencil(D₋ₓ(id), Wₕ, bottom_idx, mk, lin[bottom_idx])
             @test local_stencil(r, Wₕ, interior, mk, lin[interior]) == ()
         end
     end
@@ -243,7 +273,7 @@ const _ORIGIN_2D = (0, 0)
             # weight, so the sum has nothing to infer and is written out at the call site.
             @test_throws MethodError innerₕ(∇₋ₕ(u2), ∇₋ₕ(v2))
             @test innerₕ(∇₋ₕ(u2)[1], ∇₋ₕ(v2)[1]) + innerₕ(∇₋ₕ(u2)[2], ∇₋ₕ(v2)[2]) isa
-                  Bramble.OperatorAdd
+                Bramble.OperatorAdd
         end
 
         @testset "Left operands" begin
@@ -269,9 +299,9 @@ const _ORIGIN_2D = (0, 0)
             @test f(idv) isa LazyOp{2}
             @test resolve_ast(f(idv)) isa LazyOp{2}
         end
-        @test ∇₋ₕ(idv) isa NTuple{2, BackwardDifference}
-        @test ∇₊ₕ(idv) isa NTuple{2, ForwardDifference}
-        @test M₋ₕ(idv) isa NTuple{2, BackwardAverage}
+        @test ∇₋ₕ(idv) isa NTuple{2,BackwardDifference}
+        @test ∇₊ₕ(idv) isa NTuple{2,ForwardDifference}
+        @test M₋ₕ(idv) isa NTuple{2,BackwardAverage}
         @test restrict_to(:bottom, idv) isa RegionRestriction
         @test shift_op(idv, 1, 1) isa ShiftNode
 
@@ -280,7 +310,7 @@ const _ORIGIN_2D = (0, 0)
         linv = LinearIndices(Bramble.indices(mesh(Vₕ)))
         for f in (D₋ₓ, M₋ₓ, M₊ᵧ)
             @test local_stencil(f(idv), Vₕ, interior, nothing, linv[interior]) ==
-                  local_stencil(f(id), Wₕ, interior, nothing, lin[interior])
+                local_stencil(f(id), Wₕ, interior, nothing, lin[interior])
         end
     end
 
@@ -290,6 +320,6 @@ const _ORIGIN_2D = (0, 0)
         @test sprint(show, z) == "0"
         @test sprint(show, id) == "I"
         @test local_stencil(id, Wₕ, interior, nothing, lin[interior]) ==
-              ((_ORIGIN_2D, 1.0),)
+            ((_ORIGIN_2D, 1.0),)
     end
 end

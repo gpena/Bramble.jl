@@ -32,8 +32,7 @@ function export_vtk(filename::AbstractString, Ωₕ::AbstractMeshType, fields::P
     return _export_vtk(filename, Ωₕ, fields...)
 end
 
-function export_vtk(
-        filename::AbstractString, uₕ::VectorElement, name::AbstractString = "u")
+function export_vtk(filename::AbstractString, uₕ::VectorElement, name::AbstractString="u")
     return export_vtk(filename, mesh(uₕ), name => uₕ)
 end
 
@@ -47,6 +46,8 @@ end
 # identical signature, or loading it overwrites a method during precompilation, which Julia
 # refuses.
 function _export_vtk(::AbstractString, ::Any, ::Pair...)
-    error("export_vtk requires WriteVTK.jl. Add `using WriteVTK` before calling this " *
-          "function.")
+    return error(
+        "export_vtk requires WriteVTK.jl. Add `using WriteVTK` before calling this " *
+        "function.",
+    )
 end

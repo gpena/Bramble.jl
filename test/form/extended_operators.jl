@@ -1,12 +1,25 @@
 using Test
 using Bramble
 using Random
-using Bramble: IdentityOperator, TrialFunction, IndexedTrialFunction, IndexedTestFunction,
-               LazyOp, JumpNode, CenteredDifference, StarDifference,
-               CrossWeightedDifference, ExtendedDifferenceNode,
-               local_stencil, resolve_ast, is_symbolic,
-               trial_component_or_nothing, test_component_or_nothing, values, indices,
-               restrict_to
+using Bramble:
+    IdentityOperator,
+    TrialFunction,
+    IndexedTrialFunction,
+    IndexedTestFunction,
+    LazyOp,
+    JumpNode,
+    CenteredDifference,
+    StarDifference,
+    CrossWeightedDifference,
+    ExtendedDifferenceNode,
+    local_stencil,
+    resolve_ast,
+    is_symbolic,
+    trial_component_or_nothing,
+    test_component_or_nothing,
+    values,
+    indices,
+    restrict_to
 
 # The four remaining operator families, as symbolic nodes: the jump, the centered
 # difference, the starred forward difference and the cross-weighted centered difference.
@@ -61,9 +74,16 @@ end
                 # the four new families, and the four that were already here; with
                 # `get_derivative_matrix_and_scale` gone, this is what pins the one-sided
                 # nodes to the operators they stand for
-                for (node, op) in ((jumpₓ(id), jumpₓ), (Dcₓ(id), Dcₓ),
-                    (Dstar₊ₓ(id), Dstar₊ₓ), (Dₕₓ(id), Dₕₓ),
-                    (D₋ₓ(id), D₋ₓ), (D₊ₓ(id), D₊ₓ), (M₋ₓ(id), M₋ₓ), (M₊ₓ(id), M₊ₓ))
+                for (node, op) in (
+                    (jumpₓ(id), jumpₓ),
+                    (Dcₓ(id), Dcₓ),
+                    (Dstar₊ₓ(id), Dstar₊ₓ),
+                    (Dₕₓ(id), Dₕₓ),
+                    (D₋ₓ(id), D₋ₓ),
+                    (D₊ₓ(id), D₊ₓ),
+                    (M₋ₓ(id), M₋ₓ),
+                    (M₊ₓ(id), M₊ₓ),
+                )
                     got, escaped = apply_stencil(node, Wₕ, uₕ)
                     @test got ≈ parent(op(uₕ)) rtol=1e-12
                     @test escaped == 0
@@ -72,15 +92,22 @@ end
         end
 
         @testset "2D" begin
-            Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 7),
-                (true, false))
+            Ωₕ = mesh(
+                domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 7), (true, false)
+            )
             Wₕ = gridspace(Ωₕ)
             id = IdentityOperator(Wₕ)
             uₕ = Rₕ(Wₕ, x -> exp(x[1]) * (x[2]^2 + 1))
-            for (node, op) in ((jumpₓ(id), jumpₓ), (jumpᵧ(id), jumpᵧ),
-                (Dcₓ(id), Dcₓ), (Dcᵧ(id), Dcᵧ),
-                (Dstar₊ₓ(id), Dstar₊ₓ), (Dstar₊ᵧ(id), Dstar₊ᵧ),
-                (Dₕₓ(id), Dₕₓ), (Dₕᵧ(id), Dₕᵧ))
+            for (node, op) in (
+                (jumpₓ(id), jumpₓ),
+                (jumpᵧ(id), jumpᵧ),
+                (Dcₓ(id), Dcₓ),
+                (Dcᵧ(id), Dcᵧ),
+                (Dstar₊ₓ(id), Dstar₊ₓ),
+                (Dstar₊ᵧ(id), Dstar₊ᵧ),
+                (Dₕₓ(id), Dₕₓ),
+                (Dₕᵧ(id), Dₕᵧ),
+            )
                 got, escaped = apply_stencil(node, Wₕ, uₕ)
                 @test got ≈ parent(op(uₕ)) rtol=1e-12
                 @test escaped == 0
@@ -88,13 +115,16 @@ end
         end
 
         @testset "3D directions" begin
-            Ωₕ = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 4),
-                (false, true, false))
+            Ωₕ = mesh(
+                domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
+                (4, 5, 4),
+                (false, true, false),
+            )
             Wₕ = gridspace(Ωₕ)
             id = IdentityOperator(Wₕ)
             uₕ = Rₕ(Wₕ, x -> x[1]^2 + 2x[2] + sin(x[3]) + 1)
-            for (node, op) in ((jump₂(id), jump₂), (Dc₂(id), Dc₂),
-                (Dstar₊₂(id), Dstar₊₂), (Dₕ₂(id), Dₕ₂))
+            for (node, op) in
+                ((jump₂(id), jump₂), (Dc₂(id), Dc₂), (Dstar₊₂(id), Dstar₊₂), (Dₕ₂(id), Dₕ₂))
                 got, escaped = apply_stencil(node, Wₕ, uₕ)
                 @test got ≈ parent(op(uₕ)) rtol=1e-12
                 @test escaped == 0
@@ -148,7 +178,7 @@ end
         for node in (Dcₓ(id), Dstar₊ₓ(id), Dₕₓ(id), jumpₓ(id))
             got, _ = apply_stencil(node, Wₕ, cₕ)
             # the jump keeps -uₙ at the far end, so only the interior is zero there
-            @test all(≈(0.0; atol = 1e-11), got[1:(end - 1)])
+            @test all(≈(0.0; atol=1e-11), got[1:(end - 1)])
         end
     end
 
@@ -178,10 +208,10 @@ end
         Wₕ = gridspace(Ωₕ)
         id = IdentityOperator(Wₕ)
 
-        @test jumpₕ(id) isa NTuple{2, JumpNode}
-        @test Dcₕ(id) isa NTuple{2, CenteredDifference}
-        @test Dstar₊ₕ(id) isa NTuple{2, StarDifference}
-        @test ∇ₕ(id) isa NTuple{2, CrossWeightedDifference}
+        @test jumpₕ(id) isa NTuple{2,JumpNode}
+        @test Dcₕ(id) isa NTuple{2,CenteredDifference}
+        @test Dstar₊ₕ(id) isa NTuple{2,StarDifference}
+        @test ∇ₕ(id) isa NTuple{2,CrossWeightedDifference}
 
         @test jumpₕ(id)[1] === jumpₓ(id)
         @test jumpₕ(id)[2] === jumpᵧ(id)
@@ -204,10 +234,16 @@ end
         id = IdentityOperator(Wₕ)
         u = TrialFunction{2}()
 
-        for (f, T) in ((jumpₓ, JumpNode), (jumpᵧ, JumpNode),
-            (Dcₓ, CenteredDifference), (Dcᵧ, CenteredDifference),
-            (Dstar₊ₓ, StarDifference), (Dstar₊₂, StarDifference),
-            (Dₕₓ, CrossWeightedDifference), (Dₕᵧ, CrossWeightedDifference))
+        for (f, T) in (
+            (jumpₓ, JumpNode),
+            (jumpᵧ, JumpNode),
+            (Dcₓ, CenteredDifference),
+            (Dcᵧ, CenteredDifference),
+            (Dstar₊ₓ, StarDifference),
+            (Dstar₊₂, StarDifference),
+            (Dₕₓ, CrossWeightedDifference),
+            (Dₕᵧ, CrossWeightedDifference),
+        )
             node = f(id)
             @test node isa T
             @test node isa LazyOp{2}
@@ -246,8 +282,8 @@ end
             @test f(idv) isa LazyOp{2}
             @test resolve_ast(f(idv)) isa LazyOp{2}
         end
-        @test ∇ₕ(idv) isa NTuple{2, CrossWeightedDifference}
-        @test jumpₕ(idv) isa NTuple{2, JumpNode}
+        @test ∇ₕ(idv) isa NTuple{2,CrossWeightedDifference}
+        @test jumpₕ(idv) isa NTuple{2,JumpNode}
 
         # the offsets are grid coordinates, which the components share, so the stencil is
         # the same one the scalar space gives
@@ -255,7 +291,7 @@ end
         I = CartesianIndex(3, 3)
         for f in (jumpₓ, Dcₓ, Dstar₊ᵧ, Dₕₓ)
             @test local_stencil(f(idv), Vₕ, I, nothing, lin[I]) ==
-                  local_stencil(f(id), Wₕ, I, nothing, lin[I])
+                local_stencil(f(id), Wₕ, I, nothing, lin[I])
         end
     end
 end

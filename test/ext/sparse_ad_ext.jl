@@ -2,7 +2,7 @@ using Test
 using Bramble
 using ADTypes
 using ForwardDiff, DifferentiationInterface
-import SparseMatrixColorings
+using SparseMatrixColorings: SparseMatrixColorings
 
 # BrambleSparseADExt's `ast_sparsity_detector` (gpena/Bramble.jl#13): the ergonomic wrapper
 # around `jacobian_pattern` (gpena/Bramble.jl#21) that plugs straight into
@@ -30,7 +30,7 @@ import SparseMatrixColorings
     gₕ = Bramble.element(Wₕ)
     avgₕ!(gₕ, rhs)
     l = form(Wₕ, v -> innerₕ(gₕ, v))
-    F = assemble(l; dirichlet = bcs)
+    F = assemble(l; dirichlet=bcs)
 
     function diffusion_form(uₕ)
         αv = α.(M₋ₕ(uₕ))
@@ -40,7 +40,7 @@ import SparseMatrixColorings
     function residual(u_vec::AbstractVector{T}) where {T}
         uₕ = Bramble.element(Wₕ, T)
         uₕ .= u_vec
-        A = assemble(diffusion_form(uₕ); dirichlet = :boundary)
+        A = assemble(diffusion_form(uₕ); dirichlet=:boundary)
         return A * u_vec .- F
     end
 
@@ -54,13 +54,15 @@ import SparseMatrixColorings
     @testset "matches jacobian_pattern directly" begin
         u_probe = zeros(ndofs(Wₕ))
         @test ADTypes.jacobian_sparsity(residual, u_probe, detector) ==
-              jacobian_pattern(a, U -> M₋ₕ(U))
+            jacobian_pattern(a, U -> M₋ₕ(U))
     end
 
     @testset "drives Newton to the right answer through AutoSparse" begin
-        sparse_ad = AutoSparse(AutoForwardDiff();
-            sparsity_detector = detector,
-            coloring_algorithm = SparseMatrixColorings.GreedyColoringAlgorithm())
+        sparse_ad = AutoSparse(
+            AutoForwardDiff();
+            sparsity_detector=detector,
+            coloring_algorithm=SparseMatrixColorings.GreedyColoringAlgorithm(),
+        )
 
         u = zeros(ndofs(Wₕ))
         prep = prepare_jacobian(residual, sparse_ad, u)

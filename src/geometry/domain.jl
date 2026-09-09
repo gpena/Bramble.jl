@@ -12,7 +12,7 @@ Computational domain pairing a geometric set (e.g. [`CartesianProduct`](@ref)) w
 
 See also: [`domain`](@ref), [`CartesianProduct`](@ref), [`DomainMarkers`](@ref).
 """
-struct Domain{SetType, MarkersType} <: DomainBaseType
+struct Domain{SetType,MarkersType} <: DomainBaseType
     set::SetType
     markers::MarkersType
 end
@@ -68,8 +68,10 @@ Return an iterator yielding the identifying symbols, symbol sets, or predicate f
     [`marker_conditions`](@ref) allocates 0 bytes.
 """
 @inline function marker_identifiers(Ω::Domain)
-    return (identifier(marker)
-    for marker in Iterators.flatten((symbols(Ω), tuples(Ω), conditions(Ω))))
+    return (
+        identifier(marker) for
+        marker in Iterators.flatten((symbols(Ω), tuples(Ω), conditions(Ω)))
+    )
 end
 
 """
@@ -131,12 +133,12 @@ dim(Ω) == 1 && eltype(Ω) === Float64
 true
 ```
 """
-@inline domain(X::CartesianProduct) = Domain(X, markers(X, :boundary =>
-    boundary_symbols(X)))
+@inline domain(X::CartesianProduct) =
+    Domain(X, markers(X, :boundary => boundary_symbols(X)))
 @inline domain(X::CartesianProduct, markers::DomainMarkers) = Domain(X, markers)
 @inline domain(X::CartesianProduct, pairs::Pair...) = domain(X, markers(X, pairs...))
-@inline domain(space_set::CartesianProduct, time_set::CartesianProduct{1}, pairs::Pair...) = domain(
-    space_set, markers(space_set, time_set, pairs...))
+@inline domain(space_set::CartesianProduct, time_set::CartesianProduct{1}, pairs::Pair...) =
+    domain(space_set, markers(space_set, time_set, pairs...))
 
 """
     (Ω::Domain)(t::Number) -> Domain
@@ -247,24 +249,29 @@ Return the default boundary symbols for dimension `D` or domain `Ω`:
 @inline boundary_symbols(Ω::Domain) = boundary_symbols(set(Ω))
 @inline boundary_symbols(::CartesianProduct{1}) = (:left, :right)
 @inline boundary_symbols(::CartesianProduct{2}) = (:bottom, :top, :left, :right)
-@inline boundary_symbols(::CartesianProduct{3}) = (
-    :bottom, :top, :back, :front, :left, :right)
+@inline boundary_symbols(::CartesianProduct{3}) =
+    (:bottom, :top, :back, :front, :left, :right)
 @inline boundary_symbols(::Type{<:CartesianProduct{1}}) = (:left, :right)
 @inline boundary_symbols(::Type{<:CartesianProduct{2}}) = (:bottom, :top, :left, :right)
-@inline boundary_symbols(::Type{<:CartesianProduct{3}}) = (
-    :bottom, :top, :back, :front, :left, :right)
+@inline boundary_symbols(::Type{<:CartesianProduct{3}}) =
+    (:bottom, :top, :back, :front, :left, :right)
 function boundary_symbols(D::Integer)
     D == 1 && return (:left, :right)
     D == 2 && return (:bottom, :top, :left, :right)
     D == 3 && return (:bottom, :top, :back, :front, :left, :right)
-    error("boundary_symbols is not defined for $(D)D domains. " *
-          "Provide explicit boundary names via the markers() interface.")
+    return error(
+        "boundary_symbols is not defined for $(D)D domains. " *
+        "Provide explicit boundary names via the markers() interface.",
+    )
 end
 @noinline function boundary_symbols(::Type{<:CartesianProduct{D}}) where {D}
-    error("boundary_symbols is not defined for $(D)D domains. " *
-          "Provide explicit boundary names via the markers() interface.")
+    error(
+        "boundary_symbols is not defined for $(D)D domains. " *
+        "Provide explicit boundary names via the markers() interface.",
+    )
 end
-@inline boundary_symbols(::Type{<:Domain{SetType}}) where {SetType} = boundary_symbols(SetType)
+@inline boundary_symbols(::Type{<:Domain{SetType}}) where {SetType} =
+    boundary_symbols(SetType)
 
 function Base.show(io::IO, Ω::Domain)
     pp = PrettyPrinter(io)
@@ -275,11 +282,11 @@ function Base.show(io::IO, Ω::Domain)
         X = set(Ω)
         dm = markers(Ω)
 
-        printstyled(io, "Domain"; bold = true, color = :cyan)
+        printstyled(io, "Domain"; bold=true, color=:cyan)
         print(io, " {")
-        printstyled(io, "$(dim(Ω))D", color = :yellow)
+        printstyled(io, "$(dim(Ω))D"; color=:yellow)
         print(io, ", ")
-        printstyled(io, "$(eltype(Ω))", color = :yellow)
+        printstyled(io, "$(eltype(Ω))"; color=:yellow)
         println(io, "}:")
 
         println(io)
@@ -294,11 +301,11 @@ function Base.show(io::IO, Ω::Domain)
             collapsed = X.collapsed[1]
             print(io, "    ")
             if collapsed
-                print_colored(pp, "Point", color = :yellow)
+                print_colored(pp, "Point"; color=:yellow)
                 print(io, " at ")
                 print_value(pp, X.box[1][1])
             else
-                print_colored(pp, "Interval", color = :yellow)
+                print_colored(pp, "Interval"; color=:yellow)
                 print(io, " ")
                 print_interval(pp, X.box[1][1], X.box[1][2])
             end
@@ -306,14 +313,15 @@ function Base.show(io::IO, Ω::Domain)
         else
             if topodim < D
                 print(io, "    ")
-                print_colored(pp, "Topological dimension: $topodim", color = :yellow)
+                print_colored(pp, "Topological dimension: $topodim"; color=:yellow)
                 println(io)
             end
 
             for i in 1:D
                 label = get_dimension_label(i)
                 print_dimension_info(
-                    pp_double_indent, label, X.box[i][1], X.box[i][2], X.collapsed[i])
+                    pp_double_indent, label, X.box[i][1], X.box[i][2], X.collapsed[i]
+                )
             end
         end
 

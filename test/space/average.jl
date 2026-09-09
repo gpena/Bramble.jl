@@ -74,7 +74,7 @@ using LinearAlgebra: norm
                     @test averages isa VectorElement
                     @test norm(averages - forward_average(uₕ, Val(1))) < 1e-12
                 else
-                    @test averages isa NTuple{D, VectorElement}
+                    @test averages isa NTuple{D,VectorElement}
                     for i in 1:D
                         @test norm(averages[i] - forward_average(uₕ, Val(i))) < 1e-12
                     end
@@ -126,7 +126,7 @@ using LinearAlgebra: norm
                     @test averages isa VectorElement
                     @test norm(averages - backward_average(uₕ, Val(1))) < 1e-12
                 else
-                    @test averages isa NTuple{D, VectorElement}
+                    @test averages isa NTuple{D,VectorElement}
                     for i in 1:D
                         @test norm(averages[i] - backward_average(uₕ, Val(i))) < 1e-12
                     end

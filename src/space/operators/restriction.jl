@@ -53,8 +53,8 @@ Rₕ!(uₕ, x -> (f₁(x), f₂(x)))          # one function returning all compo
 See also: [`Rₕ`](@ref), [`avgₕ!`](@ref), [`element`](@ref)
 """
 @inline Rₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f::F) where {F} = _Rₕ_parallel!(uₕ, f)
-@inline Rₕ!(uₕ::VectorElement{<:CompositeGridSpace}, f::F) where {F} = _Rₕ_scatter_parallel!(
-    uₕ, f)
+@inline Rₕ!(uₕ::VectorElement{<:CompositeGridSpace}, f::F) where {F} =
+    _Rₕ_scatter_parallel!(uₕ, f)
 @inline function Rₕ!(uₕ::VectorElement{<:CompositeGridSpace}, f::Tuple)
     # `map` over `components(uₕ)` and `f` together, rather than `ntuple(…, Val(NC))`
     # indexing both by a shared count: it unrolls exactly the same way for tuples, needs
@@ -67,7 +67,7 @@ end
 # A concretely typed kernel for per-point restriction calls, avoiding anonymous closure
 # captures over (`f`, `Ωₕ`, `idxs`). A named callable struct eliminates compiler indirection
 # and achieves performance parity with a flat loop.
-struct _RₕKernel{F, M, IX}
+struct _RₕKernel{F,M,IX}
     f::F
     Ω::M
     idxs::IX
@@ -101,7 +101,8 @@ end
 # `f` is instead re-evaluated at each leaf's own grid points through `_Rₕ_parallel!`,
 # keeping only that leaf's entry of the tuple it returns.
 @inline function _Rₕ_scatter_parallel!(
-        uₕ::VectorElement{<:CompositeGridSpace}, f::F) where {F}
+    uₕ::VectorElement{<:CompositeGridSpace}, f::F
+) where {F}
     comps = components(uₕ)
     if _shares_one_mesh(comps)
         sp = space(uₕ)
@@ -118,14 +119,19 @@ end
 
 # A one-component space is a scalar space, so generic code that builds an
 # NC-tuple of functions still works when NC == 1.
-@inline Rₕ!(uₕ::VectorElement{<:ScalarGridSpace{D}}, f::Tuple{Any}) where {D} = Rₕ!(uₕ, f[1])
-@inline Rₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f::Tuple{Any};
-    markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {N} = Rₕ!(uₕ, f[1]; markers = markers)
+@inline Rₕ!(uₕ::VectorElement{<:ScalarGridSpace{D}}, f::Tuple{Any}) where {D} =
+    Rₕ!(uₕ, f[1])
+@inline Rₕ!(
+    uₕ::VectorElement{<:ScalarGridSpace},
+    f::Tuple{Any};
+    markers::NTuple{N,Symbol}=NTuple{0,Symbol}(),
+) where {N} = Rₕ!(uₕ, f[1]; markers=markers)
 
 # One function per component: each is already independent, so restrict each
 # component with its own function. Masked restriction routes componentwise through _Rₕ_masked!.
-@inline function _Rₕ_masked!(uₕ::VectorElement{<:CompositeGridSpace}, f::Tuple,
-        markers::NTuple{N, Symbol}) where {N}
+@inline function _Rₕ_masked!(
+    uₕ::VectorElement{<:CompositeGridSpace}, f::Tuple, markers::NTuple{N,Symbol}
+) where {N}
     map((c, g) -> _Rₕ_masked!(c, g, markers), components(uₕ), f)
     return uₕ
 end
@@ -134,8 +140,9 @@ end
 # than every plain method above, matching the split `avgₕ!` uses. The `N == 0` case never
 # actually runs (the plain methods intercept a no-kwarg call before this method is even
 # looked up), but is kept as a fallback for an explicit `markers = ()`.
-Base.@constprop :aggressive function Rₕ!(uₕ::VectorElement, f::F;
-        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {F, N}
+Base.@constprop :aggressive function Rₕ!(
+    uₕ::VectorElement, f::F; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
+) where {F,N}
     if N > 0
         @debug "Using marker-based restriction" markers
     end
@@ -147,8 +154,9 @@ Base.@constprop :aggressive function Rₕ!(uₕ::VectorElement, f::F;
     return _Rₕ_masked!(uₕ, f, markers)
 end
 
-function _Rₕ_masked!(uₕ::VectorElement{<:ScalarGridSpace}, f::F, markers::NTuple{
-        N, Symbol}) where {F, N}
+function _Rₕ_masked!(
+    uₕ::VectorElement{<:ScalarGridSpace}, f::F, markers::NTuple{N,Symbol}
+) where {F,N}
     (; space) = uₕ
     Ωₕ = mesh(space)
     raw = parent(uₕ)
@@ -171,8 +179,9 @@ end
 # leaf sits on the same mesh; a heterogeneous composite instead uses each leaf's own
 # marker mask and grid points, re-evaluating `f` per leaf through the scalar
 # `_Rₕ_masked!` and keeping only that leaf's tuple entry (gpena/Bramble.jl#78).
-function _Rₕ_masked!(uₕ::VectorElement{<:CompositeGridSpace}, f::F,
-        markers::NTuple{N, Symbol}) where {F, N}
+function _Rₕ_masked!(
+    uₕ::VectorElement{<:CompositeGridSpace}, f::F, markers::NTuple{N,Symbol}
+) where {F,N}
     comps = components(uₕ)
     if _shares_one_mesh(comps)
         Ωₕ = mesh(space(uₕ))
@@ -195,7 +204,8 @@ function _Rₕ_masked!(uₕ::VectorElement{<:CompositeGridSpace}, f::F,
     else
         ntuple(
             k -> (_Rₕ_masked!(comps[k], pt -> f(pt)[k], markers); nothing),
-            Val(length(comps)))
+            Val(length(comps)),
+        )
     end
     return uₕ
 end
@@ -216,11 +226,11 @@ end
 #
 # Calling `promote_type` across the component field types preserves concrete numeric types
 # (e.g. `Float64`), consistent with scalar arithmetic, and is unchanged for homogeneous tuples.
-@inline _scalar_value_type(::Type{T}) where {T <: Tuple} = promote_type(fieldtypes(T)...)
+@inline _scalar_value_type(::Type{T}) where {T<:Tuple} = promote_type(fieldtypes(T)...)
 
 @inline _restricted_value_type(f, p) = _scalar_value_type(typeof(f(p)))
-@inline _restricted_value_type(f::Tuple, p) = promote_type(map(
-    g -> _scalar_value_type(typeof(g(p))), f)...)
+@inline _restricted_value_type(f::Tuple, p) =
+    promote_type(map(g -> _scalar_value_type(typeof(g(p))), f)...)
 
 # Selects a sample point where `f` is evaluated to determine its coefficient return type.
 # When markers are specified, the point must reside within the marked region because `f`
@@ -228,9 +238,9 @@ end
 #
 # If no index is marked, nothing is written and the element type cannot matter, so the
 # first grid point is as good as any.
-@inline _probe_point(Ωₕ, ::NTuple{0, Symbol}) = point(Ωₕ, first(indices(Ωₕ)))
+@inline _probe_point(Ωₕ, ::NTuple{0,Symbol}) = point(Ωₕ, first(indices(Ωₕ)))
 
-function _probe_point(Ωₕ, markers::NTuple{N, Symbol}) where {N}
+function _probe_point(Ωₕ, markers::NTuple{N,Symbol}) where {N}
     idxs = indices(Ωₕ)
     lin = LinearIndices(idxs)
     for m in markers
@@ -242,11 +252,13 @@ function _probe_point(Ωₕ, markers::NTuple{N, Symbol}) where {N}
     return point(Ωₕ, first(idxs))
 end
 
-@inline function _restriction_eltype(Wₕ::AbstractSpaceType, f,
-        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()) where {N}
+@inline function _restriction_eltype(
+    Wₕ::AbstractSpaceType, f, markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
+) where {N}
     Ωₕ = mesh(Wₕ)
     return promote_type(
-        eltype(backend(Wₕ)), _restricted_value_type(f, _probe_point(Ωₕ, markers)))
+        eltype(backend(Wₕ)), _restricted_value_type(f, _probe_point(Ωₕ, markers))
+    )
 end
 
 """
@@ -285,8 +297,9 @@ there is no grid point shared by every component to evaluate it at only once.
 
 See also: [`Rₕ!`](@ref), [`avgₕ`](@ref).
 """
-function Rₕ(Wₕ::AbstractSpaceType, f; markers::NTuple{N, Symbol} = NTuple{
-        0, Symbol}()) where {N}
+function Rₕ(
+    Wₕ::AbstractSpaceType, f; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
+) where {N}
     uₕ = element(Wₕ, _restriction_eltype(Wₕ, f, markers))
-    return Rₕ!(uₕ, f; markers = markers)
+    return Rₕ!(uₕ, f; markers=markers)
 end

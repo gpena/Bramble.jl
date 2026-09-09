@@ -1,10 +1,29 @@
 using Test
 using Bramble
-using Bramble: IdentityOperator, TrialFunction, TestFunction, IndexedTrialFunction,
-               IndexedTestFunction, LazyOp, BilinearProduct, LinearProduct,
-               InnerH, InnerPlus, SourceFunction, SourceVector, SourceConstant,
-               local_stencil, resolve_ast, is_symbolic, source_number,
-               inner_plus, compute_weight, weights, Innerh, Innerplus, values
+using Bramble:
+    IdentityOperator,
+    TrialFunction,
+    TestFunction,
+    IndexedTrialFunction,
+    IndexedTestFunction,
+    LazyOp,
+    BilinearProduct,
+    LinearProduct,
+    InnerH,
+    InnerPlus,
+    SourceFunction,
+    SourceVector,
+    SourceConstant,
+    local_stencil,
+    resolve_ast,
+    is_symbolic,
+    source_number,
+    inner_plus,
+    compute_weight,
+    weights,
+    Innerh,
+    Innerplus,
+    values
 
 # The inner products, from construction through to the stencil they evaluate to.
 #
@@ -19,8 +38,11 @@ using Bramble: IdentityOperator, TrialFunction, TestFunction, IndexedTrialFuncti
 # watch is the tracked count; the way to move it is to call things.
 
 @testset "Inner products" begin
-    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
-        (5, 6), (true, false))
+    Ωₕ = mesh(
+        domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
+        (5, 6),
+        (true, false),
+    )
     Wₕ = gridspace(Ωₕ)
     id = IdentityOperator(Wₕ)
     u, v = TrialFunction{2}(), TestFunction{2}()
@@ -57,13 +79,15 @@ using Bramble: IdentityOperator, TrialFunction, TestFunction, IndexedTrialFuncti
         @test compute_weight(InnerH(), Wₕ, I, lin) == weights(Wₕ, Innerh())[lin]
         for dim in 1:2
             @test compute_weight(InnerPlus{dim}(), Wₕ, I, lin) ==
-                  weights(Wₕ, Innerplus(), dim)[lin]
+                weights(Wₕ, Innerplus(), dim)[lin]
         end
 
         # and the product's own stencil picks up whichever of them its type names
-        for (node, wt) in ((innerₕ(id, id), weights(Wₕ, Innerh())[lin]),
+        for (node, wt) in (
+            (innerₕ(id, id), weights(Wₕ, Innerh())[lin]),
             (inner₊ₓ(id, id), weights(Wₕ, Innerplus(), 1)[lin]),
-            (inner₊ᵧ(id, id), weights(Wₕ, Innerplus(), 2)[lin]))
+            (inner₊ᵧ(id, id), weights(Wₕ, Innerplus(), 2)[lin]),
+        )
             st = local_stencil(node, Wₕ, I, nothing, lin)
             @test only(st)[3] ≈ wt
         end
@@ -72,8 +96,8 @@ using Bramble: IdentityOperator, TrialFunction, TestFunction, IndexedTrialFuncti
     @testset "Left operands" begin
         # Each builds a LinearProduct wrapping the left operand in the right source node,
         # which is what lets a right-hand side be assembled.
-        for (mk, T) in (((x -> x[1] + 1), SourceFunction), (3.5, SourceConstant),
-            (uₕ, SourceVector))
+        for (mk, T) in
+            (((x -> x[1] + 1), SourceFunction), (3.5, SourceConstant), (uₕ, SourceVector))
             for f in (innerₕ, inner₊, inner₊ₓ, inner₊ᵧ, inner₊₂)
                 p = f(mk, v)
                 @test p isa LinearProduct

@@ -18,7 +18,7 @@ using Bramble
 # mismatch this test exists for.
 
 @testset "Discrete conservation" begin
-    agree(a, b) = isapprox(a, b; atol = 1e-12, rtol = 1e-12)
+    agree(a, b) = isapprox(a, b; atol=1e-12, rtol=1e-12)
 
     @testset "2D" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (23, 19), (true, false))
@@ -38,12 +38,13 @@ using Bramble
         # confirms the identity is testing the boundary condition, not trivially zero.
         u_bad = Rₕ(Wₕ, x -> cos(pi * x[1]))   # nonzero at x = 0, 1
         flux_bad = inner₊ₓ(D₋ₓ(u_bad), onesₕ) + inner₊ᵧ(D₋ᵧ(v), onesₕ)
-        @test !isapprox(flux_bad, 0.0; atol = 1e-8)
+        @test !isapprox(flux_bad, 0.0; atol=1e-8)
     end
 
     @testset "3D" begin
-        Ωₕ = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (11, 9, 8),
-            (true, false, true))
+        Ωₕ = mesh(
+            domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (11, 9, 8), (true, false, true)
+        )
         Wₕ = gridspace(Ωₕ)
         onesₕ = Rₕ(Wₕ, x -> 1.0)
 

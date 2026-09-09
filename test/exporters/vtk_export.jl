@@ -64,8 +64,9 @@ using WriteVTK
     end
 
     @testset "3D export" begin
-        Ωₕ = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (3, 4, 3),
-            (true, true, true))
+        Ωₕ = mesh(
+            domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (3, 4, 3), (true, true, true)
+        )
         Wₕ = gridspace(Ωₕ)
         uₕ = Rₕ(Wₕ, x -> x[1] + x[2] + x[3])
         raw = collect(1.0:ndofs(Wₕ))
