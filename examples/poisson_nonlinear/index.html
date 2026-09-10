@@ -42,7 +42,7 @@ for it in 1:200
     αvals .= α.(M₋ₕ(uₙ))
     step &lt; 1e-12 &amp;&amp; break
 end
-length(picard_steps), picard_steps[[1, 2, 3, end]]</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(9, [2.718281828459045, 0.05861868861595898, 0.0005906470362648797, 1.0591527654923993e-13])</code></pre><p>The step size drops by roughly a factor of 20-50 each time here, reaching machine precision
+length(picard_steps), picard_steps[[1, 2, 3, end]]</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(9, [2.718281828459045, 0.05861868861595787, 0.0005906470362426752, 5.484501741648273e-14])</code></pre><p>The step size drops by roughly a factor of 20-50 each time here, reaching machine precision
 in 9 iterations — still only linear convergence (a roughly constant per-step ratio, not the
 per-step squaring Newton gets below), just a fast-converging instance of it for this
 particular coefficient and mesh.</p><h2 id="Newton&#39;s-method"><a class="docs-heading-anchor" href="#Newton&#39;s-method">Newton&#39;s method</a><a id="Newton&#39;s-method-1"></a><a class="docs-heading-anchor-permalink" href="#Newton&#39;s-method" title="Permalink"></a></h2><p>The residual <span>$R(u) = A(u) u - F$</span> is the same matrix, applied to the vector it was built
@@ -91,7 +91,7 @@ for it in 1:20
     DifferentiationInterface.jacobian!(residual, J, prep, sparse_ad, u)
     u .-= J \ r
 end
-length(newton_residuals), newton_residuals</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(5, [3.045650645339086, 0.2882536975482648, 0.0010419389496574964, 8.75363687371228e-9, 1.8607806369099165e-12])</code></pre><p>Close to allocation-free, not quite: the two rebuilds this step avoids — the Jacobian&#39;s
+length(newton_residuals), newton_residuals</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(5, [3.045650645339086, 0.28825369754829117, 0.0010419389496578958, 8.753640078333893e-9, 1.4174773028430616e-12])</code></pre><p>Close to allocation-free, not quite: the two rebuilds this step avoids — the Jacobian&#39;s
 sparsity pattern, and the diffusion matrix&#39;s own pattern inside <code>assemble</code> — were the two
 largest costs, but <code>diffusion_matrix</code> still rebuilds a <em>fresh</em> matrix, values and pattern
 both, on every call, because <code>residual</code> has to stay generic over <code>T</code>
@@ -105,7 +105,7 @@ machine precision. Both methods reach the same solution, and both are close to t
 measured the same way the <a href="../poisson_linear/">linear example</a> measures it:</p><pre><code class="language-julia hljs">uₕ_newton = element(Wₕ)
 uₕ_newton .= u
 uexact = Rₕ(Wₕ, sol)
-norm₁ₕ(uₕ_newton .- uexact), norm₁ₕ(uₙ .- uexact)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(0.00012994988044923506, 0.00012994988053859232)</code></pre><h2 id="Closing-the-gap:-caching-the-diffusion-matrix-by-element-type"><a class="docs-heading-anchor" href="#Closing-the-gap:-caching-the-diffusion-matrix-by-element-type">Closing the gap: caching the diffusion matrix by element type</a><a id="Closing-the-gap:-caching-the-diffusion-matrix-by-element-type-1"></a><a class="docs-heading-anchor-permalink" href="#Closing-the-gap:-caching-the-diffusion-matrix-by-element-type" title="Permalink"></a></h2><p><code>diffusion_matrix</code> rebuilds its pattern on every call for a real reason — <code>T</code> differs between
+norm₁ₕ(uₕ_newton .- uexact), norm₁ₕ(uₙ .- uexact)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(0.00012994988047528803, 0.00012994988041995162)</code></pre><h2 id="Closing-the-gap:-caching-the-diffusion-matrix-by-element-type"><a class="docs-heading-anchor" href="#Closing-the-gap:-caching-the-diffusion-matrix-by-element-type">Closing the gap: caching the diffusion matrix by element type</a><a id="Closing-the-gap:-caching-the-diffusion-matrix-by-element-type-1"></a><a class="docs-heading-anchor-permalink" href="#Closing-the-gap:-caching-the-diffusion-matrix-by-element-type" title="Permalink"></a></h2><p><code>diffusion_matrix</code> rebuilds its pattern on every call for a real reason — <code>T</code> differs between
 a plain call and a <code>jacobian!</code> sweep, and a <code>Float64</code> matrix cannot hold a <code>Dual</code> — but the
 <em>pattern</em> itself is exactly as fixed across element types as it is across Newton iterations:
 only <code>α</code>&#39;s values differ, and only because they were evaluated at a different <code>T</code>.
@@ -146,7 +146,7 @@ for it in 1:20
     DifferentiationInterface.jacobian!(residual_cached, J_cached, prep_cached, sparse_ad, u_cached)
     u_cached .-= J_cached \ r
 end
-newton_residuals_cached, maximum(abs.(u_cached .- u))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">([3.045650645339086, 0.2882536975482648, 0.0010419389496574964, 8.75363687371228e-9, 1.8607806369099165e-12], 0.0)</code></pre><p>Same convergence, same answer, and only <code>residual_cached</code> and <code>diffusion_matrix_cached</code> (the
+newton_residuals_cached, maximum(abs.(u_cached .- u))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">([3.045650645339086, 0.28825369754829117, 0.0010419389496578958, 8.753640078333893e-9, 1.4174773028430616e-12], 0.0)</code></pre><p>Same convergence, same answer, and only <code>residual_cached</code> and <code>diffusion_matrix_cached</code> (the
 first call at each of <code>T = Float64</code> and <code>T = Dual</code> still pays to build and to
 <a href="../../api/#Bramble.allocate_system_matrix"><code>allocate_system_matrix</code></a>) differ from <code>residual</code>/<code>diffusion_matrix</code> above. Measured the
 same way, behind the same function barrier: a plain <code>residual_cached(u)</code> call, once both types
@@ -197,10 +197,10 @@ for it in 1:20
 end
 newton_residuals_native</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">5-element Vector{Float64}:
  3.045650645339086
- 0.2882536975482648
- 0.0010419389496574964
- 8.75363687371228e-9
- 1.8607806369099165e-12</code></pre><p>What changes is what <code>prepare_jacobian</code> has to pay for: no tracing pass, only coloring.
+ 0.28825369754829117
+ 0.0010419389496578958
+ 8.753640078333893e-9
+ 1.4174773028430616e-12</code></pre><p>What changes is what <code>prepare_jacobian</code> has to pay for: no tracing pass, only coloring.
 Measured on this mesh, <code>prepare_jacobian</code> costs 0.140 ms with the tracer against 0.062 ms
 given the pattern directly — <a href="../../api/#Bramble.jacobian_pattern"><code>jacobian_pattern</code></a> itself costs 0.023 ms of that 0.062,
 read straight off <code>a</code>&#39;s AST. The gap widens with the mesh: tracing cost scales with however
@@ -267,7 +267,7 @@ hs3, errs3 = nonlinear_series(3; levels = 4)
 order1 = log(errs1[end - 1] / errs1[end]) / log(hs1[end - 1] / hs1[end])
 order2 = log(errs2[end - 1] / errs2[end]) / log(hs2[end - 1] / hs2[end])
 order3 = log(errs3[end - 1] / errs3[end]) / log(hs3[end - 1] / hs3[end])
-(order1, order2, order3)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(1.9999416343805259, 1.99590561435972, 1.92174747930559)</code></pre><pre><code class="language-julia hljs">order1 &gt; 1.9 &amp;&amp; order2 &gt; 1.9 &amp;&amp; order3 &gt; 1.8</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">true</code></pre><script>
+(order1, order2, order3)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(1.999940812788034, 1.9959056148965422, 1.9217474793035954)</code></pre><pre><code class="language-julia hljs">order1 &gt; 1.9 &amp;&amp; order2 &gt; 1.9 &amp;&amp; order3 &gt; 1.8</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">true</code></pre><script>
   // See the module note above: hide `define` from Plotly's UMD wrapper so it attaches
   // `window.Plotly` instead of registering as an anonymous AMD module.
   window.__bramble_amd_define = window.define;
@@ -331,7 +331,7 @@ order3 = log(errs3[end - 1] / errs3[end]) / log(hs3[end - 1] / hs3[end])
   const data = [{
   name: "1D",
   x: [0.4537346574443589,0.22686732872217952,0.11343366436108976,0.05671683218054491,0.028358416090272454,0.014179208045136282,0.007089604022568197],
-  y: [0.0038632486241389746,0.0010046880088554978,0.0002535308751295753,6.352911781224811e-5,1.5891413455615445e-5,3.973425012922281e-6,9.933964412288988e-7],
+  y: [0.0038632486241389746,0.0010046880088554978,0.000253530875114058,6.352911781224811e-5,1.5891413455615445e-5,3.973422750118893e-6,9.933964412288988e-7],
   mode: 'markers',
   type: 'scatter',
   marker: { color: "#5B5FC7", size: 8 },
@@ -339,7 +339,7 @@ order3 = log(errs3[end - 1] / errs3[end]) / log(hs3[end - 1] / hs3[end])
 {
   name: "2D",
   x: [0.7281398631056489,0.3640699315528245,0.18203496577641226,0.09101748288820616,0.045508741444103114],
-  y: [0.03359133864316144,0.00921005687413041,0.002370760002502543,0.0005981775775607113,0.00014996940596413518],
+  y: [0.03359133864316144,0.009210056874124014,0.002370760002494258,0.0005981775775320155,0.00014996940590113772],
   mode: 'markers',
   type: 'scatter',
   marker: { color: "#0E7C86", size: 8 },
@@ -347,7 +347,7 @@ order3 = log(errs3[end - 1] / errs3[end]) / log(hs3[end - 1] / hs3[end])
 {
   name: "3D",
   x: [0.918047411794347,0.4590237058971735,0.22951185294858678,0.1147559264742934],
-  y: [0.04984357792276735,0.022594049568891685,0.006657103524352411,0.0017570401083154424],
+  y: [0.04984357792276641,0.022594049568895228,0.006657103524356484,0.0017570401083189466],
   mode: 'markers',
   type: 'scatter',
   marker: { color: "#B26A00", size: 8 },
@@ -396,4 +396,4 @@ same substitution shown earlier (<code>ast_sparsity_detector(a, U -&gt; M₋ₕ(
 <code>jacobian_pattern</code> flattens whatever <code>M₋ₕ(U)</code> returns — one node in 1D, a <code>D</code>-tuple in
 2D/3D — the same way before taking its reach, so nothing about <code>Ac</code>/<code>grad</code> above needs to
 change to swap it in. Not re-run a second time here only to save the doc build the cost of
-solving the same nine problems twice for an answer already shown identical above.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../poisson_linear/">« Linear Poisson equation</a><a class="docs-footer-nextpage" href="../convection_diffusion_linear/">Convection-diffusion equation »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Wednesday 9 September 2026 22:25">Wednesday 9 September 2026</span>. Using Julia version 1.14.0-DEV.3152.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+solving the same nine problems twice for an answer already shown identical above.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../poisson_linear/">« Linear Poisson equation</a><a class="docs-footer-nextpage" href="../convection_diffusion_linear/">Convection-diffusion equation »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Thursday 10 September 2026 10:43">Thursday 10 September 2026</span>. Using Julia version 1.14.0-DEV.3155.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
