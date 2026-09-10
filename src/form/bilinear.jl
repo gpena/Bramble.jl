@@ -409,6 +409,24 @@ are not read here at all.
 
 See also: [`visit_bilinear_stencil`](@ref), [`RecordSink`](@ref).
 """
+# What sharing the traversal costs here, measured rather than assumed (gpena/Bramble.jl#50).
+# Against the hand-written walk this replaced, on a 300x300 grid with
+# `innerₕ(D₋ₓ(u), D₋ₓ(v))` -- the form `benchmark/benchmarks.jl`'s
+# `forms / allocate_system_matrix 2D` uses:
+#
+#   entries pushed  359,100 either way        resulting nnz  269,400 either way
+#   the walk        1268 us -> 1398 us        the whole call 2879 us -> 3286 us
+#
+# So `sparse!` does identical work and the traversal itself is about 10% slower, on forms
+# whose stencils carry several distinct offset pairs per point; `innerₕ(u, v)` came out
+# faster and `inner₊(∇₋ₕ(u), ∇₋ₕ(v))` unchanged. The enclosing function's LLVM is
+# near-identical, so the difference is a codegen subtlety that was not localised further.
+#
+# Accepted deliberately. `allocate_system_matrix` runs once per form, and the per-refill
+# path (`RecordSink`/`ReplaySink`) is neutral, so this is a one-time setup cost rather than
+# something a time loop pays -- a cheap place to buy pattern and scatter sharing one walk,
+# which is what makes "every scattered entry is in the pattern" assertable at all. Reverting
+# just this sink would recover it and cost that.
 struct PatternSink
     I_vec::Vector{Int}
     J_vec::Vector{Int}
