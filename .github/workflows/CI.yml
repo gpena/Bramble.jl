@@ -44,20 +44,26 @@ jobs:
     if: ${{ needs.changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch' }}
     name: Julia ${{ matrix.version }} - ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    # The 1.13 pre-release is a canary, not a gate: what it catches is a future Julia
-    # changing under us, which is worth learning about without blocking the branch. `1.12`
-    # is the only version whose failure means Bramble is broken. Promote `~1.13.0-0` out of
-    # this when it goes final. `nightly`, and Linux itself, moved to the daily-scheduled
-    # nightly.yml — Linux specifically because a Linux-only allocation flake in `avgₕ!`
-    # (an architecture-dependent `@generated` fold, not a real regression each time it
-    # shows up) meant a red gate on an unrelated PR too often to be worth blocking on.
-    continue-on-error: ${{ matrix.version != '1.12' }}
+    # One version, and it gates: 1.13, current release since 2026-09-10, is the Julia a
+    # push has to pass on. It replaced the `~1.13.0-0` canary leg that sat here while
+    # 1.13 was in prerelease, allowed to fail.
+    #
+    # The 1.12 floor that Project.toml still declares moved to the daily-scheduled
+    # nightly.yml, next to `nightly` and Linux — Linux specifically because a Linux-only
+    # allocation flake in `avgₕ!` (an architecture-dependent `@generated` fold, not a real
+    # regression each time it shows up) meant a red gate on an unrelated PR too often to be
+    # worth blocking on. The trade: a break that only 1.12 sees is now caught the same day
+    # rather than the same push. It still fails nightly.yml when it happens.
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        version: ["1.12", "~1.13.0-0"]
+        # Spelled `1.13`, not `1` and not `~1.13.0-0`: `1` would roll onto 1.14 the day
+        # it is released and gate pushes on a Julia nobody here has run yet, and the
+        # range would pick up a `1.13.1-rc1` prerelease as soon as one is published.
+        # `1.13` tracks released 1.13.x and nothing else.
+        version: ["1.13"]
         os: [macOS-latest]
     steps:
       - uses: actions/checkout@v4

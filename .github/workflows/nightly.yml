@@ -1,7 +1,8 @@
 name: Nightly
 
 # Everything the per-push CI.yml deliberately leaves off, once a day: Linux entirely, Julia
-# nightly, and the checks that are not canaries but don't need every-push feedback either.
+# nightly, the 1.12 floor, and the checks that are not canaries but don't need every-push
+# feedback either.
 #
 # CI.yml's push gate is macOS-only now. Linux moved here because of a Linux-only allocation
 # flake in `avgₕ!` (test/space/vector_elements.jl's "allocations do not grow with the grid"
@@ -17,10 +18,9 @@ name: Nightly
 # time after CompatHelper: a compat bump it opens has already landed or not by the time this
 # decides what to install.
 #
-# `test` runs the full version × os matrix — macOS included, even though CI.yml already gates
-# 1.12/~1.13.0-0 on macOS at push time — because this is the only place Julia nightly ever
-# runs on macOS at all, and a single shared matrix is simpler than carving macOS-nightly out
-# on its own.
+# `test` runs the full version × os matrix on both platforms. CI.yml gates 1.13 on macOS at
+# push time and nothing else, so every leg here is one a push never sees: the 1.12 floor
+# Project.toml still declares, and Julia nightly.
 
 permissions:
   contents: read
@@ -44,8 +44,8 @@ jobs:
     timeout-minutes: 60
     # `nightly` is an unreleased Julia that changes daily, so it reports rather than gates:
     # a red leg there is a signal to look, not a broken package. Everything Bramble
-    # actually supports — 1.12, and the next release while it is in prerelease — still
-    # fails the workflow.
+    # actually supports — the 1.12 floor — still fails the workflow, and since CI.yml no
+    # longer runs 1.12 at all, this is the only place a 1.12-only break is caught.
     #
     # Concretely, on 2026-09-05 the 1.14-dev legs began reporting 16 bytes where
     # `evaluate!` allocates 0 on both 1.12 and 1.13.0-prerelease (test/form/linear.jl:51).
@@ -60,7 +60,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: ["1.12", "~1.13.0-0", "nightly"]
+        # 1.13 is not here: CI.yml gates it on every push, so repeating it daily would
+        # only re-run what a push already proved.
+        version: ["1.12", "nightly"]
         os: [ubuntu-latest, macOS-latest]
     steps:
       - uses: actions/checkout@v4

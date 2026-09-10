@@ -32,14 +32,25 @@ env:
 
 jobs:
   full:
-    name: Full suite (${{ matrix.os }})
+    name: Full suite (Julia ${{ matrix.version }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
+    # Nothing here gates a merge, but a red run should still mean something specific, so
+    # `nightly` reports rather than counting: it is an unreleased Julia that moves on its
+    # own, and Enzyme and Mooncake — the reason this workflow exists — are the first
+    # packages to stop building on it. The add step below already tolerates a backend it
+    # cannot install and `autodiff_backends.jl` skips one it cannot load, so expect the
+    # nightly legs to cover less than the released ones rather than to fail outright.
+    continue-on-error: ${{ matrix.version == 'nightly' }}
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
+        # The 1.12 floor, the 1.13 release, and nightly. Unlike CI.yml and nightly.yml,
+        # this workflow runs every version it can: what it tests is how the differentiation
+        # backends behave, and that is exactly the thing a Julia version change moves.
+        version: ["1.12", "1.13", "nightly"]
         os: [ubuntu-latest, macOS-latest]
     steps:
       - uses: actions/checkout@v4
@@ -48,7 +59,7 @@ jobs:
 
       - uses: julia-actions/setup-julia@v2
         with:
-          version: "1.12"
+          version: ${{ matrix.version }}
 
       - uses: julia-actions/cache@v2
         with:
