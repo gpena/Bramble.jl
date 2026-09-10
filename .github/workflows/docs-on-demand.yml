@@ -8,9 +8,10 @@ name: Docs (on demand)
 # routine case — this is for "I just pushed a docs fix and don't want to wait until
 # tomorrow," not a replacement for the nightly job.
 #
-# Stable Julia here on purpose, unlike Nightly.yml's own docs job: the point of this
-# workflow is a reliable, on-request redeploy, and gating that on Julia nightly would make
-# it fail for reasons that have nothing to do with the docs change being deployed.
+# Julia 1.13, the same release every other docs job now builds on. That used to be the
+# difference between this workflow and Nightly.yml's docs job, which built on Julia
+# nightly; both are on the release since 1.13 went final, so keep the two in step when
+# either moves.
 
 permissions:
   contents: read
@@ -34,7 +35,7 @@ jobs:
 
       - uses: julia-actions/setup-julia@v2
         with:
-          version: "1.12"
+          version: "1.13"
 
       - uses: julia-actions/cache@v2
 

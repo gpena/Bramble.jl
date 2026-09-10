@@ -98,9 +98,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      # 1.13, matching the other docs jobs and the push gate. The version matters less
+      # here than in `full` above -- what this catches is a broken cross-reference, not
+      # anything version-specific -- but there is no reason for it to drift.
       - uses: julia-actions/setup-julia@v2
         with:
-          version: "1.12"
+          version: "1.13"
       - uses: julia-actions/cache@v2
       # A broken `@ref` is an error the test suite cannot see: a docstring is only
       # cross-referenced when it is rendered, so nothing catches it until the docs are
