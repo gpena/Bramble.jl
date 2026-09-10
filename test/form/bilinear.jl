@@ -650,6 +650,50 @@ using Bramble:
         end
     end
 
+    @testset "A pattern that cannot hold the form raises (#50)" begin
+        # `add_to_sparse!` used to return quietly when an entry was missing, so a matrix
+        # whose pattern was built for a different form assembled to a plausible wrong
+        # answer. Both the serial recording pass and the threaded path now say so instead.
+        Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 5), (true, true))
+        W = gridspace(Ω)
+
+        narrow = form(W, W, (u, v) -> innerₕ(u, v))            # reaches the diagonal only
+        wide = form(W, W, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v)))    # reaches a neighbour too
+
+        # Serial: the recording pass searches and reports.
+        A = allocate_system_matrix(narrow, resolve_form_ast(narrow))
+        @test_throws ArgumentError assemble!(A, narrow; ast=resolve_form_ast(wide))
+
+        msg = try
+            assemble!(
+                allocate_system_matrix(narrow, resolve_form_ast(narrow)),
+                narrow;
+                ast=resolve_form_ast(wide),
+            )
+        catch e
+            sprint(showerror, e)
+        end
+        @test occursin("outside its preallocated", msg)
+
+        # Threaded: same refusal, reached through `add_to_sparse!` rather than the cache.
+        Wp = gridspace(
+            mesh(
+                domain(interval(0.0, 1.0) × interval(0.0, 1.0)),
+                (6, 5),
+                (true, true);
+                backend=backend(policy=Parallel()),
+            ),
+        )
+        np = form(Wp, Wp, (u, v) -> innerₕ(u, v))
+        wp = form(Wp, Wp, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v)))
+        Ap = allocate_system_matrix(np, resolve_form_ast(np))
+        @test_throws Exception assemble_parallel!(Ap, np, resolve_form_ast(wp))
+
+        # and the matching pattern still assembles, so the check is not simply always on
+        Aok = allocate_system_matrix(wide, resolve_form_ast(wide))
+        @test assemble!(Aok, wide) === Aok
+    end
+
     @testset "One traversal, pluggable sinks (#50)" begin
         # What the sink split buys: the traversal is now testable on its own, against a sink
         # that only records. Before this, every property below could only be checked through
@@ -657,7 +701,9 @@ using Bramble:
         struct CollectSink
             seen::Vector{Tuple{Int,Int,Float64}}
         end
-        Bramble._sink_entry!(s::CollectSink, row::Int, col::Int, w) =
+        # The sink contract's fifth argument is the replay slot, which only `ReplaySink`
+        # reads; a recording sink ignores it.
+        Bramble._sink_entry!(s::CollectSink, row::Int, col::Int, w, ::Int) =
             (push!(s.seen, (row, col, Float64(w))); nothing)
 
         Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 6), (true, true))
