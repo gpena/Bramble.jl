@@ -522,14 +522,61 @@ function _reduce_for_save(t::BenchmarkTools.Trial)
 end
 _reduce_for_save(g::BenchmarkGroup) = BenchmarkTools.mapvals(_reduce_for_save, g)
 
+# Fill `SUITE`'s parameters from the baseline being compared against, so a comparison is
+# not measured with a freshly guessed `evals`. Tunes instead when there is no baseline to
+# inherit from, or when it carries no usable parameters.
+function _prepare_params!(args)
+    j = findfirst(==("--compare"), args)
+    if j === nothing || j >= length(args) || !isfile(args[j + 1])
+        println("tuning...")
+        tune!(SUITE)
+        return :tuned
+    end
+
+    baseline = BenchmarkTools.load(args[j + 1])[1]
+    println("loading benchmark parameters from ", args[j + 1], "...")
+    try
+        loadparams!(SUITE, baseline, :evals, :samples)
+    catch err
+        @warn string("could not read parameters from the baseline; tuning instead, so ",
+            "this comparison carries the run-to-run spread that tuning adds") exception = err
+        tune!(SUITE)
+        return :tuned
+    end
+
+    # A benchmark added since the baseline was recorded has nothing to inherit.
+    # `loadparams!` leaves those at their default `evals = 1`, so they still need tuning;
+    # re-tuning the whole suite would discard what was just loaded.
+    untuned = [k for (k, b) in BenchmarkTools.leaves(SUITE) if b.params.evals == 1]
+    if !isempty(untuned)
+        println("  tuning ", length(untuned), " benchmark(s) absent from the baseline")
+        for k in untuned
+            tune!(SUITE[k])
+        end
+    end
+    return :inherited
+end
+
 function main(args = ARGS)
     set_zero_subnormals(true)
     ac = _on_ac_power()
     ac || @warn string("running on battery power: frequency scaling and thermal ",
         "throttling make these timings unreliable, and --save is refused. ",
         "Allocation counts are unaffected and still gated.")
-    println("tuning...")
-    tune!(SUITE)
+    # `tune!` estimates how many evaluations each sample should contain, from a short
+    # trial taken at the time. That estimate is not stable: on a machine that is briefly
+    # busy, or warm, a benchmark can be tuned to a different `evals` than it was last
+    # time, and per-sample loop overhead is then amortised over a different number of
+    # evaluations. Two runs of identical code can differ by more than `judge`'s 5%
+    # tolerance for that reason alone, which is one source of the verdicts that dissolve
+    # under an interleaved control.
+    #
+    # A `--compare` inherits the baseline's own parameters instead, so both sides are
+    # measured with the same `evals` and `samples` by construction. `_reduce_for_save`
+    # keeps `params` on every trial it writes, so every baseline in `baselines/` already
+    # carries them. A fresh `--save` has nothing to inherit and is tuned in full, which
+    # is right: a new baseline should record its own parameters.
+    _prepare_params!(args)
     results = run(SUITE; verbose = true)
     # The thread count belongs in the tags as much as the Julia version does.
     # Without it, two baselines are indistinguishable while measuring different
