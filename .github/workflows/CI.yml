@@ -49,11 +49,22 @@ jobs:
     # 1.13 was in prerelease, allowed to fail.
     #
     # The 1.12 floor that Project.toml still declares moved to the daily-scheduled
-    # nightly.yml, next to `nightly` and Linux — Linux specifically because a Linux-only
-    # allocation flake in `avgₕ!` (an architecture-dependent `@generated` fold, not a real
-    # regression each time it shows up) meant a red gate on an unrelated PR too often to be
-    # worth blocking on. The trade: a break that only 1.12 sees is now caught the same day
-    # rather than the same push. It still fails nightly.yml when it happens.
+    # nightly.yml, next to `nightly`. The trade: a break that only 1.12 sees is now caught
+    # the same day rather than the same push. It still fails nightly.yml when it happens.
+    #
+    # Both platforms gate. Linux had been dropped from this workflow because a Linux-only
+    # allocation flake in `avgₕ!` — an architecture-dependent `@generated` fold, not a real
+    # regression each time it appeared — reddened the gate on unrelated pushes. That is a
+    # deliberate reversal: a package that supports Linux should not learn about a Linux
+    # break a day late, and the flake was never a wrong answer, only an allocation count
+    # moving.
+    #
+    # The risk is not gone. `_gauss_rule` (src/space/operators/cell_average.jl) is still
+    # `@generated`, and it is the fold that was implicated. gpena/Bramble.jl#69 and #51
+    # rewrote everything around it — the `Val{1}`/`Val{D}` split is gone and `avgₕ!` now
+    # runs through `project!` — so the shape that flaked is not the shape running today, but
+    # that is a reason to expect less of it, not a fix. If a Linux-only allocation
+    # assertion starts failing here, that fold is where to look first.
     permissions:
       contents: read
     strategy:
@@ -64,7 +75,7 @@ jobs:
         # range would pick up a `1.13.1-rc1` prerelease as soon as one is published.
         # `1.13` tracks released 1.13.x and nothing else.
         version: ["1.13"]
-        os: [macOS-latest]
+        os: [ubuntu-latest, macOS-latest]
     steps:
       - uses: actions/checkout@v4
         with:
