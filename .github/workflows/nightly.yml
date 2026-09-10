@@ -98,17 +98,26 @@ jobs:
           fail_ci_if_error: false
 
   quality:
-    name: Quality (Aqua & JET)
+    name: Quality (Aqua & JET, Julia ${{ matrix.version }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        # Both supported releases. What Aqua and JET report is version-dependent in a way
+        # the unit tests are not -- method ambiguities and inference results move with the
+        # compiler -- so running one version here would leave the other unchecked. This job
+        # was pinned to 1.12 alone while test/quality/aqua.jl still skipped the
+        # persistent_tasks check on 1.13; it no longer does.
+        version: ["1.12", "1.13"]
     steps:
       - uses: actions/checkout@v4
 
       - uses: julia-actions/setup-julia@v2
         with:
-          version: "1.12"
+          version: ${{ matrix.version }}
 
       - uses: julia-actions/cache@v2
         with:
