@@ -173,6 +173,236 @@ end
 
 @inline _trial_column(lin_indices, I::CartesianIndex, off_u::AbsoluteColumn) = off_u.col
 
+# --- one traversal, pluggable sinks (gpena/Bramble.jl#50) -------------------------- #
+
+#=
+Five sweeps used to re-derive this same walk: `mesh` -> `markers` -> `LinearIndices`, loop
+the grid, evaluate `local_stencil`, decide each entry's (row, col), guard it, act. Two of
+them recorded the sparsity pattern and three wrote values into it, and the property that
+matters -- *every (row, col) the scatter touches is present in the pattern* -- held only
+because two independently written traversals agreed. `add_to_sparse!` has no else branch,
+so an entry the pattern lacks is dropped rather than raised.
+
+The walk is now written once. A sink says what to do per entry, and declares by dispatch
+whether it wants the de-duplication the pattern passes need and the value passes must not
+have (repeated offsets accumulate).
+
+Every rule that used to live in five places lives here: which entries are dropped
+(out-of-range rows, and `_trial_column` answering 0), that `off_u` may be an
+`AbsoluteColumn` while `off_v` never is, and that the fifth argument to `local_stencil` is
+the *leaf's* linear index -- the wrong leaf reads the wrong `SourceVector`, silently.
+=#
+
+"""
+    _sink_dedups(sink) -> Bool
+
+Whether `sink` wants repeated `(off_u, off_v)` pairs within one point's stencil collapsed
+to a single entry.
+
+The sparsity pattern wants each `(row, col)` once however many stencil entries name it, and
+a value sink wants every one of them, because repeated entries accumulate. Getting this
+backwards gives a wrong matrix rather than an error, so it is answered by dispatch on the
+sink type: the default is `false`, and the branch folds away at compile time, leaving the
+value sweeps with no de-duplication scan at all.
+
+See also: [`visit_bilinear_stencil`](@ref), [`PatternSink`](@ref).
+"""
+@inline _sink_dedups(::Any) = false
+
+"""
+    _sink_point!(sink, lin_idx::Int) -> Nothing
+
+Announce grid point `lin_idx` to `sink` before any of that point's entries.
+
+The default does nothing. [`RecordSink`](@ref) uses it to open that point's slice of the
+position list, and [`ReplaySink`](@ref) to seek to it, which is what lets a replay stay
+correct regardless of the order grid points are visited in.
+
+See also: [`visit_bilinear_stencil`](@ref).
+"""
+@inline _sink_point!(::Any, ::Int) = nothing
+
+"""
+    _entry_target(lin_indices, I::CartesianIndex, off_u, off_v,
+                  row_offset::Int, col_offset::Int) -> Tuple{Int,Int}
+
+The matrix position a stencil entry writes to, or `(0, 0)` when it writes nowhere.
+
+The row comes from the test offset `off_v` and is dropped when it leaves the grid. The
+column comes from [`_trial_column`](@ref), which answers `0` for a trial offset outside the
+grid and reads an [`AbsoluteColumn`](@ref) directly, since an interpolation entry names its
+source column rather than an offset from `I`. Both are then shifted into the block by
+`row_offset` and `col_offset`.
+
+`(0, 0)` is a sentinel rather than `nothing` so the return type stays concrete on the
+assembly hot path.
+
+# Returns
+- `Tuple{Int,Int}`: The `(row, col)` to write, or `(0, 0)` to skip the entry.
+"""
+@inline function _entry_target(
+    lin_indices, I::CartesianIndex, off_u, off_v, row_offset::Int, col_offset::Int
+)
+    Iv = I + CartesianIndex(off_v)
+    checkbounds(Bool, lin_indices, Iv) || return (0, 0)
+    col = _trial_column(lin_indices, I, off_u)
+    col == 0 && return (0, 0)
+    return (lin_indices[Iv] + row_offset, col + col_offset)
+end
+
+"""
+    visit_bilinear_stencil(sink, term, sp, row_offset::Int, col_offset::Int) -> sink
+
+Walk every grid point of `sp`, evaluate `term`'s local stencil there, and hand each entry
+that lands inside the matrix to `sink`.
+
+The walk that five separate sweeps used to re-derive: mesh, markers, linear indices, the
+loop over grid points, the stencil evaluation, and the decision of where each entry lands
+([`_entry_target`](@ref)). A sink supplies only what to do with an entry, so the pattern
+passes and the value passes share one traversal instead of agreeing by coincidence.
+
+The fifth argument handed to `local_stencil` is the *leaf's* linear index. A term routed to
+the wrong leaf reads the wrong `SourceVector` without complaint, which is why the index is
+derived here rather than by each caller.
+
+# Arguments
+- `sink`: What to do per entry. See [`PatternSink`](@ref), [`RecordSink`](@ref) and
+  [`ReplaySink`](@ref), and the contract in [`_sink_entry!`](@ref),
+  [`_sink_point!`](@ref) and [`_sink_dedups`](@ref).
+- `term`: The AST node whose stencil is evaluated at each point.
+- `sp`: The test leaf whose grid is walked and whose markers the stencil sees.
+- `row_offset`, `col_offset`: The block's origin in the assembled matrix, `0` for a scalar
+  space.
+
+# Returns
+- `sink`: The same sink, so a caller can read what it collected.
+
+See also: [`allocate_system_matrix`](@ref), [`add_to_sparse!`](@ref).
+"""
+@inline function visit_bilinear_stencil(
+    sink::SINK, term::TERM, sp, row_offset::Int, col_offset::Int
+) where {SINK,TERM}
+    Ωₕ = mesh(sp)
+    mesh_markers = markers(Ωₕ)
+    lin_indices = LinearIndices(indices(Ωₕ))
+
+    @inbounds for I in indices(Ωₕ)
+        lin_idx = lin_indices[I]
+        stencil = local_stencil(term, sp, I, mesh_markers, lin_idx)
+        _sink_point!(sink, lin_idx)
+
+        for k in eachindex(stencil)
+            off_u, off_v, weight = stencil[k]
+            if _sink_dedups(sink) && _offsets_seen_before(stencil, k, off_u, off_v)
+                continue
+            end
+            row, col = _entry_target(lin_indices, I, off_u, off_v, row_offset, col_offset)
+            row == 0 && continue
+            _sink_entry!(sink, row, col, weight)
+        end
+    end
+    return sink
+end
+
+# --- the sinks --------------------------------------------------------------------- #
+
+"""
+    PatternSink(I_vec::Vector{Int}, J_vec::Vector{Int})
+
+Collect the `(row, col)` coordinates a term can reach, for building a sparsity pattern.
+
+Appends each coordinate to `I_vec` and `J_vec`, which [`allocate_system_matrix`](@ref) then
+hands to `sparse!`. The only sink that de-duplicates ([`_sink_dedups`](@ref)): a coordinate
+named twice by one point's stencil is one entry of the pattern, and the weights it carries
+are not read here at all.
+
+See also: [`visit_bilinear_stencil`](@ref), [`RecordSink`](@ref).
+"""
+struct PatternSink
+    I_vec::Vector{Int}
+    J_vec::Vector{Int}
+end
+@inline _sink_dedups(::PatternSink) = true
+
+"""
+    _sink_entry!(sink, row::Int, col::Int, weight) -> Nothing
+
+Act on one stencil entry landing at `(row, col)` with coefficient `weight`.
+
+The one method each sink has to supply. Called by [`visit_bilinear_stencil`](@ref) only for
+entries that land inside the matrix, so a sink never has to guard the index itself.
+"""
+@inline function _sink_entry!(sink::PatternSink, row::Int, col::Int, _)
+    push!(sink.I_vec, row)
+    push!(sink.J_vec, col)
+    return nothing
+end
+
+"""
+    RecordSink(A::SparseMatrixCSC, term, point_ptr::Vector{Int}, positions::Vector{Int})
+
+Add a term's values to `A` and record where each entry landed, building the replay cache.
+
+For each entry it searches `A` for the `(row, col)`'s slot in `nzval`, adds the weight
+there, and appends the slot to `positions`. [`_sink_point!`](@ref) opens each grid point's
+own slice of that list in `point_ptr`, so a later replay can address a point directly
+instead of relying on the walk order.
+
+The search is the expensive half of assembly, which is why it is done once and replayed by
+[`ReplaySink`](@ref) afterwards.
+
+# Throws
+- `ArgumentError`: A `(row, col)` the pattern does not contain. This pass builds the cache,
+  so a pattern that cannot hold the term is reported rather than skipped, unlike
+  [`add_to_sparse!`](@ref) on the threaded path.
+
+See also: [`visit_bilinear_stencil`](@ref), [`NzvalSegment`](@ref).
+"""
+struct RecordSink{M<:SparseMatrixCSC,TERM}
+    A::M
+    term::TERM
+    point_ptr::Vector{Int}
+    positions::Vector{Int}
+end
+@inline _sink_point!(sink::RecordSink, lin_idx::Int) =
+    (@inbounds sink.point_ptr[lin_idx] = length(sink.positions) + 1; nothing)
+@inline function _sink_entry!(sink::RecordSink, row::Int, col::Int, weight)
+    pos = _find_nzval_position(sink.A, row, col)
+    pos == 0 && _throw_missing_pattern_entry(sink.term)
+    @inbounds sink.A.nzval[pos] += weight
+    push!(sink.positions, pos)
+    return nothing
+end
+
+"""
+    ReplaySink(A::SparseMatrixCSC, point_ptr::Vector{Int}, positions::Vector{Int}, p::Int)
+
+Add a term's values to `A` using slots recorded earlier by [`RecordSink`](@ref).
+
+The same walk and the same fresh stencil evaluation, because weights may be live: a
+coefficient grid function updated in place through `Rₕ!` is seen by the next assembly. Only
+the slot lookup is skipped, taken from `positions` rather than searched for, which is what
+the cache buys. `row` and `col` are ignored for that reason.
+
+Mutable because `p` advances through `positions` as the walk proceeds;
+[`_sink_point!`](@ref) resets it to each grid point's own slice.
+
+See also: [`visit_bilinear_stencil`](@ref).
+"""
+mutable struct ReplaySink{M<:SparseMatrixCSC}
+    A::M
+    point_ptr::Vector{Int}
+    positions::Vector{Int}
+    p::Int
+end
+@inline _sink_point!(sink::ReplaySink, lin_idx::Int) =
+    (@inbounds sink.p = sink.point_ptr[lin_idx]; nothing)
+@inline function _sink_entry!(sink::ReplaySink, ::Int, ::Int, weight)
+    @inbounds sink.A.nzval[sink.positions[sink.p]] += weight
+    sink.p += 1
+    return nothing
+end
+
 # Refuse cross-mesh coupling unless an explicit mapping (such as interpolation) is provided.
 @noinline function _throw_cross_mesh_block(term, Ωu, Ωv)
     throw(
@@ -271,7 +501,6 @@ function allocate_system_matrix(
     mesh_markers = markers(Ωₕ)
     _validate_term_markers(ast, mesh_markers, "the form's space")
     lin_indices = LinearIndices(indices(Ωₕ))
-    n = length(lin_indices)
 
     I_vec = Int[]
     J_vec = Int[]
@@ -279,22 +508,7 @@ function allocate_system_matrix(
     sizehint!(I_vec, hint)
     sizehint!(J_vec, hint)
 
-    @inbounds for I in indices(Ωₕ)
-        lin_idx = lin_indices[I]
-        stencil = local_stencil(ast, space, I, mesh_markers, lin_idx)
-
-        for k in eachindex(stencil)
-            off_u, off_v, _ = stencil[k]
-            _offsets_seen_before(stencil, k, off_u, off_v) && continue
-
-            Iv = I + CartesianIndex(off_v)
-            col = _trial_column(lin_indices, I, off_u)
-            if checkbounds(Bool, lin_indices, Iv) && col != 0
-                push!(I_vec, lin_indices[Iv])
-                push!(J_vec, col)
-            end
-        end
-    end
+    visit_bilinear_stencil(PatternSink(I_vec, J_vec), ast, space, 0, 0)
 
     V_vec = _zeros_of(_matrix_eltype(ast, form), length(I_vec))
     return sparse!(I_vec, J_vec, V_vec, ndofs(form.test_space), ndofs(form.trial_space), +)
@@ -313,24 +527,9 @@ function _pattern_term!(
     Ωₕ = mesh(test_leaf)
     mesh_markers = markers(Ωₕ)
     _validate_term_markers(term, mesh_markers, "one of the composite space's leaves")
-    lin_indices = LinearIndices(indices(Ωₕ))
-
-    @inbounds for I in indices(Ωₕ)
-        stencil = local_stencil(term, test_leaf, I, mesh_markers, lin_indices[I])
-
-        for k in eachindex(stencil)
-            off_u, off_v, _ = stencil[k]
-            _offsets_seen_before(stencil, k, off_u, off_v) && continue
-
-            Iv = I + CartesianIndex(off_v)
-            col = _trial_column(lin_indices, I, off_u)
-
-            if checkbounds(Bool, lin_indices, Iv) && col != 0
-                push!(I_vec, lin_indices[Iv] + row_offset)
-                push!(J_vec, col + col_offset)
-            end
-        end
-    end
+    visit_bilinear_stencil(
+        PatternSink(I_vec, J_vec), term, test_leaf, row_offset, col_offset
+    )
     return nothing
 end
 
@@ -478,35 +677,11 @@ end
 function _record_segment!(
     A::SparseMatrixCSC, term::TERM, sp, row_offset::Int, col_offset::Int
 ) where {TERM}
-    Ωₕ = mesh(sp)
-    mesh_markers = markers(Ωₕ)
-    lin_indices = LinearIndices(indices(Ωₕ))
-    n = length(lin_indices)
-
-    point_ptr = Vector{Int}(undef, n + 1)
-    positions = Int[]
-
-    @inbounds for I in indices(Ωₕ)
-        lin_idx = lin_indices[I]
-        point_ptr[lin_idx] = length(positions) + 1
-        stencil = local_stencil(term, sp, I, mesh_markers, lin_idx)
-
-        for (off_u, off_v, weight) in stencil
-            Iv = I + CartesianIndex(off_v)
-            col = _trial_column(lin_indices, I, off_u)
-
-            if checkbounds(Bool, lin_indices, Iv) && col != 0
-                pos = _find_nzval_position(
-                    A, lin_indices[Iv] + row_offset, col + col_offset
-                )
-                pos == 0 && _throw_missing_pattern_entry(term)
-                A.nzval[pos] += weight
-                push!(positions, pos)
-            end
-        end
-    end
-    point_ptr[n + 1] = length(positions) + 1
-    return (point_ptr, positions)::NzvalSegment
+    n = length(indices(mesh(sp)))
+    sink = RecordSink(A, term, Vector{Int}(undef, n + 1), Int[])
+    visit_bilinear_stencil(sink, term, sp, row_offset, col_offset)
+    @inbounds sink.point_ptr[n + 1] = length(sink.positions) + 1
+    return (sink.point_ptr, sink.positions)::NzvalSegment
 end
 
 # The replay counterpart: same walk, same fresh stencil evaluation (weights may be live --
@@ -522,25 +697,9 @@ function _replay_segment!(
     segment::NzvalSegment,
 ) where {TERM}
     point_ptr, positions = segment
-    Ωₕ = mesh(sp)
-    mesh_markers = markers(Ωₕ)
-    lin_indices = LinearIndices(indices(Ωₕ))
-
-    @inbounds for I in indices(Ωₕ)
-        lin_idx = lin_indices[I]
-        stencil = local_stencil(term, sp, I, mesh_markers, lin_idx)
-        p = point_ptr[lin_idx]
-
-        for (off_u, off_v, weight) in stencil
-            Iv = I + CartesianIndex(off_v)
-            col = _trial_column(lin_indices, I, off_u)
-
-            if checkbounds(Bool, lin_indices, Iv) && col != 0
-                A.nzval[positions[p]] += weight
-                p += 1
-            end
-        end
-    end
+    visit_bilinear_stencil(
+        ReplaySink(A, point_ptr, positions, 1), term, sp, row_offset, col_offset
+    )
     return nothing
 end
 
@@ -701,13 +860,13 @@ end
 ) where {TERM}
     stencil = local_stencil(term, sp, I, mesh_markers, lin_indices[I])
 
+    # One point rather than the whole grid, so this cannot call `visit_bilinear_stencil`
+    # itself -- the threaded sweep owns the grid loop. It shares the entry rule instead, so
+    # the guard and the `AbsoluteColumn` case are still stated in exactly one place.
     for (off_u, off_v, weight) in stencil
-        Iv = I + CartesianIndex(off_v)
-        col = _trial_column(lin_indices, I, off_u)
-
-        if checkbounds(Bool, lin_indices, Iv) && col != 0
-            add_to_sparse!(A, lin_indices[Iv] + row_offset, col + col_offset, weight)
-        end
+        row, col = _entry_target(lin_indices, I, off_u, off_v, row_offset, col_offset)
+        row == 0 && continue
+        add_to_sparse!(A, row, col, weight)
     end
     return nothing
 end

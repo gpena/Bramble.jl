@@ -21,7 +21,17 @@ using Bramble:
     test_component_or_nothing,
     Block,
     blocks,
-    leaf_spaces_offsets
+    leaf_spaces_offsets,
+    visit_bilinear_stencil,
+    PatternSink,
+    _sink_entry!,
+    _sink_dedups,
+    _entry_target,
+    _trial_column,
+    AbsoluteColumn,
+    TrialFunction,
+    TestFunction,
+    indices
 
 # Assembling the matrix of a bilinear form.
 #
@@ -637,6 +647,89 @@ using Bramble:
             @test sum(A) ≈ 2 * sum(H)
             assemble!(A, a)                                   # back to a's own ast: rebuilds again
             @test Matrix(A) ≈ H
+        end
+    end
+
+    @testset "One traversal, pluggable sinks (#50)" begin
+        # What the sink split buys: the traversal is now testable on its own, against a sink
+        # that only records. Before this, every property below could only be checked through
+        # a fully assembled matrix, where a dropped entry looks like a zero.
+        struct CollectSink
+            seen::Vector{Tuple{Int,Int,Float64}}
+        end
+        Bramble._sink_entry!(s::CollectSink, row::Int, col::Int, w) =
+            (push!(s.seen, (row, col, Float64(w))); nothing)
+
+        Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 6), (true, true))
+        W = gridspace(Ω)
+        u, v = TrialFunction{2}(), TestFunction{2}()
+
+        @testset "Every scattered entry is in the pattern" begin
+            # The invariant #50 exists to protect. It used to hold because two independently
+            # written traversals agreed; now both read the same walk, so it can be asserted
+            # directly rather than inferred from a matrix that came out right.
+            for ast in (
+                resolve_form_ast(form(W, W, (a, b) -> innerₕ(a, b))),
+                resolve_form_ast(form(W, W, (a, b) -> innerₕ(D₋ₓ(a), D₋ₓ(b)))),
+                resolve_form_ast(form(W, W, (a, b) -> inner₊(∇₋ₕ(a), ∇₋ₕ(b)))),
+                resolve_form_ast(form(W, W, (a, b) -> innerₕ(Dcₓ(a), M₊ᵧ(b)))),
+            )
+                pat = visit_bilinear_stencil(PatternSink(Int[], Int[]), ast, W, 0, 0)
+                pattern = Set(zip(pat.I_vec, pat.J_vec))
+                got = visit_bilinear_stencil(CollectSink([]), ast, W, 0, 0)
+                @test !isempty(got.seen)
+                @test all(((r, c, _),) -> (r, c) in pattern, got.seen)
+            end
+        end
+
+        @testset "The pattern de-duplicates and the value pass does not" begin
+            # Two identical terms name every coordinate twice. The pattern wants each once;
+            # the values have to accumulate both, or the matrix comes out halved.
+            ast = resolve_form_ast(form(W, W, (a, b) -> innerₕ(a, b) + innerₕ(a, b)))
+            pat = visit_bilinear_stencil(PatternSink(Int[], Int[]), ast, W, 0, 0)
+            got = visit_bilinear_stencil(CollectSink([]), ast, W, 0, 0)
+
+            @test length(pat.I_vec) == length(unique(zip(pat.I_vec, pat.J_vec)))
+            @test length(got.seen) == 2 * length(pat.I_vec)
+            # and the halving it protects against shows up in the assembled matrix
+            @test Matrix(assemble(form(W, W, (a, b) -> innerₕ(a, b) + innerₕ(a, b)))) ≈
+                2 .* Matrix(assemble(form(W, W, (a, b) -> innerₕ(a, b))))
+        end
+
+        @testset "Only the pattern sink asks for de-duplication" begin
+            @test _sink_dedups(PatternSink(Int[], Int[]))
+            @test !_sink_dedups(CollectSink([]))
+        end
+
+        @testset "Block offsets shift what a sink is handed" begin
+            ast = resolve_form_ast(form(W, W, (a, b) -> innerₕ(a, b)))
+            base = visit_bilinear_stencil(CollectSink([]), ast, W, 0, 0).seen
+            shifted = visit_bilinear_stencil(CollectSink([]), ast, W, 100, 7).seen
+            @test length(base) == length(shifted)
+            @test all(
+                ((b, s),) -> s[1] == b[1] + 100 && s[2] == b[2] + 7, zip(base, shifted)
+            )
+        end
+
+        @testset "Entry targets: the guard and the AbsoluteColumn case" begin
+            lin = LinearIndices(indices(Ω))
+            I = CartesianIndex(1, 1)
+
+            # inside: the row follows off_v, the column off_u, both shifted by the block
+            @test _entry_target(lin, CartesianIndex(3, 3), (0, 0), (0, 0), 0, 0) ==
+                (lin[3, 3], lin[3, 3])
+            @test _entry_target(lin, CartesianIndex(3, 3), (0, 0), (0, 0), 10, 5) ==
+                (lin[3, 3] + 10, lin[3, 3] + 5)
+
+            # a row off the grid drops the entry, and so does a column off the grid
+            @test _entry_target(lin, I, (0, 0), (-1, 0), 0, 0) == (0, 0)
+            @test _entry_target(lin, I, (-1, 0), (0, 0), 0, 0) == (0, 0)
+
+            # an interpolation entry names its source column outright rather than an offset
+            @test _trial_column(lin, I, AbsoluteColumn(42)) == 42
+            @test _entry_target(
+                lin, CartesianIndex(2, 2), AbsoluteColumn(42), (0, 0), 0, 3
+            ) == (lin[2, 2], 45)
         end
     end
 
