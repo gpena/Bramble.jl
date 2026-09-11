@@ -161,6 +161,9 @@ Pages = [
     "form/operators/restriction.jl",
     "form/dirichlet_constraints.jl",
     "form/linear.jl",
-    "form/bilinear.jl"
+    "form/bilinear.jl",
+    "form/bilinear_traversal.jl",
+    "form/bilinear_pattern.jl",
+    "form/bilinear_execution.jl"
 ]
 ```
