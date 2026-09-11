@@ -48,8 +48,14 @@ threads for [`Parallel`](@ref).
 @inline _cpu_threaded_for!(::Parallel, v, idxs::CartesianIndices, f) =
     _threaded_axis_for!(v, idxs, f)
 
-# Kept in an isolated function to prevent Threads.@threads closure boxing allocations
-# on paths that execute serially.
+"""
+    _threaded_for!(v::AbstractArray, idxs, f::Function) -> Nothing
+
+Fill `v[idx]` with `f(idx)` across threads, statically partitioning `idxs`.
+
+Kept in an isolated function to prevent `Threads.@threads` closure boxing allocations on
+paths that execute serially.
+"""
 @noinline function _threaded_for!(v, idxs, f)
     # Static partitioning distributes work evenly across available threads
     Threads.@threads :static for idx in idxs
