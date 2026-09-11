@@ -316,7 +316,15 @@ function (sd::Semidiscretization)(du::AbstractVector, u::AbstractVector, p, t)
 
     A = _refresh_operator!(sd, sd.reassemble)
     mul!(du, A, u)
-    @. du = F - du
+
+    # Written out rather than `@. du = F - du`: `du` on both sides of a broadcast sends it
+    # through `Base.unalias`, whose `unaliascopy` branch no static analysis can discharge
+    # (AllocCheck reports two allocation sites on it, though neither is reachable while `F`
+    # is `sd`'s own buffer). `eachindex` over both settles the lengths, so the indices are
+    # in bounds by construction.
+    @inbounds @simd for i in eachindex(du, F)
+        du[i] = F[i] - du[i]
+    end
     return du
 end
 

@@ -2,7 +2,7 @@ module BramblePlotsExt
 
 using Bramble: Bramble, VectorElement, ScalarGridSpace, CompositeGridSpace, mesh, points
 
-using RecipesBase
+using RecipesBase: RecipesBase, @recipe
 
 # Scoped the same way as the PGFPlots exporter, and for the same reason: Plots.jl's own
 # `surface`/`heatmap` plot a height field over a 2D domain, not a true 3D volume, so there

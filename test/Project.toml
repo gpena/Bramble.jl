@@ -5,6 +5,7 @@ AMD = "14f7f29c-3bd6-536c-9a0b-7339e30b5a3e"
 Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
 Bramble = "72287966-2ff3-4442-8755-61ed245be5f7"
 DifferentiationInterface = "a0c0ee7d-e4b9-4e03-894e-1c5f64a51d63"
+ExplicitImports = "7d51a73a-1435-4ff3-83d9-f097790105c7"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 ILUZero = "88f59080-6952-5380-9ea5-54057fb9a43f"
 IncompleteLU = "40713840-3770-5561-ab4c-a76e7d0d7895"
@@ -34,6 +35,7 @@ Bramble = {path = ".."}
 
 [compat]
 AMD = "0.5"
+ExplicitImports = "1.15"
 OrdinaryDiffEqBDF = "1, 2"
 OrdinaryDiffEqRosenbrock = "1, 2"
 SciMLBase = "2, 3"

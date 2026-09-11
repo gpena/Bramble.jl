@@ -1,7 +1,7 @@
 module BrambleMeshesExt
 using Bramble: CartesianProduct, dim, Mesh1D, MeshnD, points
 
-using Meshes: Meshes, RectilinearGrid
+using Meshes: Meshes
 
 @inline _error_install_makie() =
     println("Please install `GLMakie` and add `using GLMakie` to your preamble.")

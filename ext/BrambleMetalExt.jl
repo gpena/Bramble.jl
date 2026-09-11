@@ -1,6 +1,6 @@
 module BrambleMetalExt
 
-using Bramble: Bramble, Backend, backend, Serial, ExecutionPolicy
+using Bramble: Bramble, Backend, ExecutionPolicy
 using Metal: Metal, MtlArray, MtlMatrix, MtlVector, mtl
 using LinearAlgebra: I
 
