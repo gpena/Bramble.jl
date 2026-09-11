@@ -1,12 +1,16 @@
 """
 # interface.jl
 
-Abstract interface and shared foundational methods for every mesh type in Bramble.
+Abstract supertype, interface contracts, and shared fallbacks for every mesh type in
+Bramble: `AbstractMeshType{D}`, field getters, bounds checking, refinement
+(`iterative_refinement!`, `change_points!`), and interface stubs (`eltype`, `dim`,
+`topo_dim`, `points`, `point`, `half_points`, `half_point`, `spacing`, `forward_spacing`,
+`half_spacings`, `half_spacing`, `npoints`, `hₘₐₓ`, `hₘᵢₙ`, `cell_measure`).
 
-- `AbstractMeshType{D}`: abstract supertype parameterized by spatial dimension ``D``.
-- Cartesian index operations: `generate_indices`, `boundary_indices`, `interior_indices`, `is_boundary_index`.
-- Interface declarations and fallbacks: field getters, bounds checking, iterators, and spacing calculations.
-- Mesh construction: the top-level `mesh(Ω, npts, ...)` dispatch.
+Cartesian index generation and boundary/interior predicates live in `mesh/indices.jl`; the
+public `mesh(...)` constructor dispatch lives in `mesh/constructors.jl`; `is_uniform`,
+`stepsize`, `locate_cell`, `normal_vector`, and the `Base` collection interface live in
+`mesh/queries.jl`.
 
 See also: [`Mesh1D`](@ref), [`MeshnD`](@ref), [`Domain`](@ref)
 """
@@ -39,69 +43,6 @@ All concrete mesh types must implement the AbstractMeshType interface, including
 See also: [`Mesh1D`](@ref), [`MeshnD`](@ref), [`Domain`](@ref)
 """
 abstract type AbstractMeshType{D} end
-
-#------------------------------------------------------------------------------------------#
-# Cartesian Index Generation & Boundary Queries
-#------------------------------------------------------------------------------------------#
-
-"""
-    generate_indices(pts::Int) -> CartesianIndices{1}
-    generate_indices(pts::NTuple{D, Int}) -> CartesianIndices{D}
-
-Return the `CartesianIndices` of a mesh with `pts[i]` points in each direction.
-
-For scalar input (`Int`), returns 1D `CartesianIndices`. For tuple input, returns
-multi-dimensional `CartesianIndices`.
-"""
-@inline generate_indices(pts::Int) = CartesianIndices((pts,))
-@inline generate_indices(pts::NTuple{D,Int}) where {D} = CartesianIndices(pts)
-
-"""
-    is_boundary_index(idxs::CartesianIndices{D}, idx) -> Bool
-    is_boundary_index(Ωₕ::AbstractMeshType, idx) -> Bool
-
-Determine whether index `idx` lies on the boundary of `idxs` or mesh `Ωₕ`.
-"""
-function is_boundary_index(idxs::CartesianIndices{D}, idx) where {D}
-    _idx = CartesianIndex(idx)
-    @inbounds for i in 1:D
-        axis = idxs.indices[i]
-        if length(axis) > 1 && (_idx[i] == first(axis) || _idx[i] == last(axis))
-            return true
-        end
-    end
-    return false
-end
-
-"""
-    boundary_indices(idxs::CartesianIndices{D}) -> NTuple{2D, CartesianIndices{D}}
-    boundary_indices(Ωₕ::AbstractMeshType{D}) -> NTuple{2D, CartesianIndices{D}}
-
-Return all boundary facets of a `CartesianIndices` domain or mesh `Ωₕ` as a tuple of `CartesianIndices`.
-"""
-@inline boundary_indices(idxs::CartesianIndices) = Tuple(boundary_symbol_to_cartesian(idxs))
-
-"""
-    interior_indices(indices::CartesianIndices{D}) -> CartesianIndices{D}
-    interior_indices(Ωₕ::AbstractMeshType{D}) -> CartesianIndices{D}
-
-Compute the `CartesianIndices` representing the interior of a domain or mesh, excluding
-all boundary points. Dimensions with a length of one or less remain unchanged.
-"""
-@inline function interior_indices(indices::CartesianIndices{D}) where {D}
-    original_ranges = indices.indices
-
-    interior_ranges_tuple = ntuple(Val(D)) do i
-        @inbounds r = original_ranges[i]
-        if length(r) <= 1
-            return r
-        else
-            (first(r) + 1):(last(r) - 1)
-        end
-    end
-
-    return CartesianIndices(interior_ranges_tuple)
-end
 
 #------------------------------------------------------------------------------------------#
 # Field Getters & Index Delegation
@@ -166,10 +107,6 @@ into.
 """
 @inline markers!(Ωₕ::AbstractMeshType, mesh_markers) =
     (Ωₕ.markers=mesh_markers; return nothing)
-
-@inline is_boundary_index(Ωₕ::AbstractMeshType, idx) = is_boundary_index(indices(Ωₕ), idx)
-@inline boundary_indices(Ωₕ::AbstractMeshType) = boundary_indices(indices(Ωₕ))
-@inline interior_indices(Ωₕ::AbstractMeshType) = interior_indices(indices(Ωₕ))
 
 """
     is_collapsed(Ωₕ::AbstractMeshType) -> Bool
@@ -296,76 +233,6 @@ end
 @inline _spacing_generator(Ωₕ::AbstractMeshType, spacing_func) =
     (spacing_func(Ωₕ, i) for i in 1:npoints(Ωₕ))
 @inline _apply_hs_logic(value::T) where {T} = ifelse(iszero(value), one(T), value)
-
-#------------------------------------------------------------------------------------------#
-# High-Level Mesh Constructor Dispatch
-#------------------------------------------------------------------------------------------#
-
-# The backend defaults to one over the domain's own element type rather than always to
-# Float64, so a Float32 domain gives a Float32 mesh. The element type is a property of the
-# storage, and the storage should follow the geometry it is built on; passing `backend`
-# explicitly still overrides it, which is how a mesh gets a type the domain does not have.
-"""
-    mesh(Ω::Domain, npts::NTuple{D, Int}, unif::NTuple{D, Bool}; backend = backend(eltype(Ω))) -> AbstractMeshType{D}
-    mesh(Ω::Domain{<:CartesianProduct{1}}, npts::Int, unif::Bool = true; backend = backend(eltype(Ω))) -> Mesh1D
-    mesh(Ω::Domain, npts::NTuple{D, Int}; uniform = ntuple(_ -> true, Val(D)), backend = backend(eltype(Ω))) -> MeshnD
-
-Return a [`Mesh1D`](@ref) or [`MeshnD`](@ref) (``D=2,3``) discretizing the [`Domain`](@ref) `Ω`.
-
-# Arguments
-
-  - `Ω`: Continuous domain to discretize.
-  - `npts`: Number of grid points along each coordinate direction.
-  - `unif`: Boolean flag or tuple of flags specifying whether the point distribution along each axis is uniform.
-
-# Keywords
-
-  - `uniform`: Convenience keyword alternative to positional `unif`. Defaults to `true` across all axes.
-  - `backend`: Linear algebra and memory storage [`Backend`](@ref). Defaults to `backend(eltype(Ω))`.
-  - `warn_marker_mismatch::Bool = true`: warn if `Ω` carries a custom `:boundary`/`:interior`
-    marker that disagrees with this mesh's own geometric one. The custom marker is kept
-    either way; set to `false` for a deliberate redefinition you don't want flagged.
-
-# Examples
-
-```julia
-I = interval(0.0, 1.0)
-Ωₕ = mesh(domain(I), 10)                      # uniform by default
-Ωₕ_nonunif = mesh(domain(I), 10, false)       # explicit non-uniform
-
-X = domain(interval(0, 1) × interval(4, 5))
-Ωₕ_2d = mesh(X, (10, 15))                     # uniform by default
-Ωₕ_mixed = mesh(X, (10, 15), (true, false))
-```
-"""
-@inline mesh(
-    Ω::Domain,
-    npts::NTuple{D,Int},
-    unif::NTuple{D,Bool};
-    backend=backend(eltype(Ω)),
-    warn_marker_mismatch::Bool=true,
-) where {D} = _mesh(Ω, npts, unif, backend; warn_marker_mismatch)
-@inline mesh(
-    Ω::Domain{CartesianProduct{1,T}},
-    npts::Int,
-    unif::Bool;
-    backend=backend(eltype(Ω)),
-    warn_marker_mismatch::Bool=true,
-) where {T} = _mesh(Ω, (npts,), (unif,), backend; warn_marker_mismatch)
-@inline mesh(
-    Ω::Domain{CartesianProduct{1,T}},
-    npts::Int;
-    uniform::Bool=true,
-    backend=backend(eltype(Ω)),
-    warn_marker_mismatch::Bool=true,
-) where {T} = _mesh(Ω, (npts,), (uniform,), backend; warn_marker_mismatch)
-@inline mesh(
-    Ω::Domain,
-    npts::NTuple{D,Int};
-    uniform::NTuple{D,Bool}=ntuple(_ -> true, Val(D)),
-    backend=backend(eltype(Ω)),
-    warn_marker_mismatch::Bool=true,
-) where {D} = _mesh(Ω, npts, uniform, backend; warn_marker_mismatch)
 
 #------------------------------------------------------------------------------------------#
 # Required Interface Methods
@@ -551,208 +418,3 @@ Update the coordinates of mesh `Ωₕ` in-place using new point coordinates in `
 recalculating all cached half-points and cell spacings.
 """
 function change_points! end
-
-#------------------------------------------------------------------------------------------#
-# Uniformity Query
-#------------------------------------------------------------------------------------------#
-
-"""
-    is_uniform(Ωₕ::AbstractMeshType; tol = 1e-10) -> Bool
-
-Check whether the mesh has uniform spacing (within numerical tolerance `tol`).
-"""
-function is_uniform(Ωₕ::AbstractMeshType{1}; tol=1e-10)
-    n = npoints(Ωₕ)
-    if n <= 1
-        return true
-    end
-
-    h_ref = spacing(Ωₕ, 1)
-    @inbounds for i in 2:n
-        if abs(spacing(Ωₕ, i) - h_ref) >= tol
-            return false
-        end
-    end
-    return true
-end
-
-function is_uniform(Ωₕ::AbstractMeshType{D}; tol=1e-10) where {D}
-    return all(i -> is_uniform(Ωₕ(i); tol=tol), 1:D)
-end
-
-#------------------------------------------------------------------------------------------#
-# Base Collection Interface
-#------------------------------------------------------------------------------------------#
-
-"""
-    Base.size(Ωₕ::AbstractMeshType) -> NTuple{D, Int}
-    Base.size(Ωₕ::AbstractMeshType, d::Integer) -> Int
-
-Return the tuple of point counts along each spatial dimension, matching `npoints(Ωₕ, Tuple)`.
-"""
-@inline Base.size(Ωₕ::AbstractMeshType) = npoints(Ωₕ, Tuple)
-@inline Base.size(Ωₕ::AbstractMeshType, d::Integer) = npoints(Ωₕ, Tuple)[d]
-
-"""
-    Base.length(Ωₕ::AbstractMeshType) -> Int
-
-Return the total number of points in `Ωₕ`, matching `npoints(Ωₕ)`.
-"""
-@inline Base.length(Ωₕ::AbstractMeshType) = npoints(Ωₕ)
-
-"""
-    Base.axes(Ωₕ::AbstractMeshType)
-    Base.axes(Ωₕ::AbstractMeshType, d::Integer)
-
-Return the axes of the mesh's `CartesianIndices`.
-"""
-@inline Base.axes(Ωₕ::AbstractMeshType) = axes(indices(Ωₕ))
-@inline Base.axes(Ωₕ::AbstractMeshType, d::Integer) = axes(indices(Ωₕ), d)
-
-"""
-    Base.firstindex(Ωₕ::AbstractMeshType)
-    Base.firstindex(Ωₕ::AbstractMeshType, d::Integer)
-
-Return the first valid index of `Ωₕ`.
-"""
-@inline Base.firstindex(::AbstractMeshType{1}) = 1
-@inline Base.firstindex(Ωₕ::AbstractMeshType{D}) where {D} = first(indices(Ωₕ))
-@inline Base.firstindex(Ωₕ::AbstractMeshType, d::Integer) = 1
-
-"""
-    Base.lastindex(Ωₕ::AbstractMeshType)
-    Base.lastindex(Ωₕ::AbstractMeshType, d::Integer)
-
-Return the last valid index of `Ωₕ`.
-"""
-@inline Base.lastindex(Ωₕ::AbstractMeshType{1}) = npoints(Ωₕ)
-@inline Base.lastindex(Ωₕ::AbstractMeshType{D}) where {D} = last(indices(Ωₕ))
-@inline Base.lastindex(Ωₕ::AbstractMeshType, d::Integer) = size(Ωₕ, d)
-
-"""
-    Base.iterate(Ωₕ::AbstractMeshType, [state])
-
-Iterate over all grid points of `Ωₕ`, returning coordinates `point(Ωₕ, idx)` for each index.
-"""
-@inline function Base.iterate(Ωₕ::AbstractMeshType{1}, state=1)
-    state > npoints(Ωₕ) && return nothing
-    return (point(Ωₕ, state), state + 1)
-end
-
-@inline function Base.iterate(Ωₕ::AbstractMeshType{D}, state=iterate(indices(Ωₕ))) where {D}
-    state === nothing && return nothing
-    idx, next_state = state
-    return (point(Ωₕ, idx), iterate(indices(Ωₕ), next_state))
-end
-
-#------------------------------------------------------------------------------------------#
-# Advanced Mesh Queries
-#------------------------------------------------------------------------------------------#
-
-"""
-    stepsize(Ωₕ::AbstractMeshType) -> Union{Real, NTuple{D, Real}}
-    stepsize(Ωₕ::AbstractMeshType, d::Integer) -> Real
-
-Return the constant stepsize for a uniform mesh:
-  - In 1D: returns scalar ``h = x_2 - x_1``.
-  - In nD: returns a tuple ``(h_1, \\dots, h_D)`` of stepsizes along each coordinate axis.
-  - When `d` is specified: returns the stepsize along dimension `d`.
-
-Throws an `ArgumentError` if the mesh is not uniform.
-
-See also: [`is_uniform`](@ref), [`spacing`](@ref).
-"""
-@inline function stepsize(Ωₕ::AbstractMeshType{1})
-    is_uniform(Ωₕ) || _throw_not_uniform()
-    npoints(Ωₕ) <= 1 && return zero(eltype(Ωₕ))
-    return spacing(Ωₕ, 2)
-end
-
-@inline function stepsize(Ωₕ::AbstractMeshType{D}) where {D}
-    is_uniform(Ωₕ) || _throw_not_uniform()
-    return ntuple(i -> stepsize(Ωₕ(i)), Val(D))
-end
-
-@inline stepsize(Ωₕ::AbstractMeshType, d::Integer) = stepsize(Ωₕ(d))
-
-"""
-    locate_cell(Ωₕ::AbstractMeshType{1}, x::Real) -> Int
-    locate_cell(Ωₕ::AbstractMeshType{D}, x) -> CartesianIndex{D}
-
-Locate the cell containing continuous coordinate `x`:
-  - For 1D meshes: returns integer index `i \\in 1:N-1` such that ``x_i \\le x \\le x_{i+1}``
-    (clamped to the domain boundaries).
-  - For nD meshes: returns a `CartesianIndex{D}` locating the bounding cell along each dimension.
-
-# Examples
-
-```julia
-Ωₕ = mesh(domain(interval(0.0, 1.0)), 11)  # h = 0.1
-locate_cell(Ωₕ, 0.35)  # returns 4 (interval [0.3, 0.4])
-```
-"""
-function locate_cell end
-@inline locate_cell(Ωₕ::AbstractMeshType{D}, x::AbstractVector) where {D} =
-    locate_cell(Ωₕ, Tuple(x))
-
-"""
-    normal_vector(Ωₕ::AbstractMeshType{D}, symbol::Symbol) -> NTuple{D, Float64}
-    normal_vector(::Val{D}, symbol::Symbol) -> NTuple{D, Float64}
-
-Return the outward unit normal vector (as an `NTuple{D, Float64}`) associated with a standard
-boundary facet label (`:left`, `:right`, `:bottom`, `:top`, `:front`, `:back`).
-
-# Conventions
-
-  - 1D:
-      - `:left`  ``\\to (-1.0)``
-      - `:right` ``\\to (+1.0)``
-  - 2D:
-      - `:left`   ``\\to (-1.0, 0.0)``
-      - `:right`  ``\\to (+1.0, 0.0)``
-      - `:bottom` ``\\to (0.0, -1.0)``
-      - `:top`    ``\\to (0.0, +1.0)``
-  - 3D:
-      - `:back`   ``\\to (-1.0, 0.0, 0.0)``
-      - `:front`  ``\\to (+1.0, 0.0, 0.0)``
-      - `:left`   ``\\to (0.0, -1.0, 0.0)``
-      - `:right`  ``\\to (0.0, +1.0, 0.0)``
-      - `:bottom` ``\\to (0.0, 0.0, -1.0)``
-      - `:top`    ``\\to (0.0, 0.0, +1.0)``
-
-See also: [`boundary_symbols`](@ref).
-"""
-@inline normal_vector(::AbstractMeshType{D}, symbol::Symbol) where {D} =
-    normal_vector(Val(D), symbol)
-
-@inline function normal_vector(::Val{1}, symbol::Symbol)
-    symbol === :left && return (-1.0,)
-    symbol === :right && return (1.0,)
-    throw(ArgumentError("Unknown 1D boundary symbol: :$symbol. Expected :left or :right."))
-end
-
-@inline function normal_vector(::Val{2}, symbol::Symbol)
-    symbol === :left && return (-1.0, 0.0)
-    symbol === :right && return (1.0, 0.0)
-    symbol === :bottom && return (0.0, -1.0)
-    symbol === :top && return (0.0, 1.0)
-    throw(
-        ArgumentError(
-            "Unknown 2D boundary symbol: :$symbol. Expected :left, :right, :bottom, or :top.",
-        ),
-    )
-end
-
-@inline function normal_vector(::Val{3}, symbol::Symbol)
-    symbol === :back && return (-1.0, 0.0, 0.0)
-    symbol === :front && return (1.0, 0.0, 0.0)
-    symbol === :left && return (0.0, -1.0, 0.0)
-    symbol === :right && return (0.0, 1.0, 0.0)
-    symbol === :bottom && return (0.0, 0.0, -1.0)
-    symbol === :top && return (0.0, 0.0, 1.0)
-    throw(
-        ArgumentError(
-            "Unknown 3D boundary symbol: :$symbol. Expected :left, :right, :bottom, :top, :front, or :back.",
-        ),
-    )
-end
