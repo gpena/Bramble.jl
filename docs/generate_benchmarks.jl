@@ -465,15 +465,15 @@ function generate_benchmarks_markdown(
     println(io)
 
     if isempty(json_files)
-        println(io, "> [!NOTE]")
-        println(io, "> No saved benchmark baselines were found in `benchmark/baselines/`.")
-        println(io, "> To run and save a baseline locally on AC power:")
-        println(io, "> ```bash")
+        println(io, "!!! note \"No baselines recorded\"")
+        println(io, "    No saved benchmark baselines were found in `benchmark/baselines/`.")
+        println(io, "    To run and save a baseline locally on AC power:")
+        println(io, "    ```bash")
         println(
             io,
-            "> julia --project=benchmark benchmark/benchmarks.jl --save benchmark/baselines/baseline_\$(git rev-parse --short HEAD).json",
+            "    julia --project=benchmark benchmark/benchmarks.jl --save benchmark/baselines/baseline_\$(git rev-parse --short HEAD).json",
         )
-        println(io, "> ```")
+        println(io, "    ```")
         open(output_path, "w") do f
             return write(f, String(take!(io)))
         end
@@ -556,10 +556,14 @@ function generate_benchmarks_markdown(
         # count, so it cannot outlive the discontinuity it describes.
         for b in _thread_boundaries(runs)
             println(io)
-            println(io, "> [!NOTE]")
+            # Documenter admonition (`!!! note` + 4-space body), not GitHub's `> [!NOTE]`
+            # alert syntax, which Documenter renders as a blockquote with a literal
+            # "[NOTE]" in it. This note first rendered with the v2.9.0 baseline -- it is
+            # guarded on a thread boundary existing, so nothing displayed it before.
+            println(io, "!!! note \"Thread count changes at $(b.at)\"")
             println(
                 io,
-                "> Baselines before $(b.at) were recorded with $(_threads_phrase(b.from)); from $(b.at) onward, $(_threads_phrase(b.to)). Entries on the `Parallel()` backend are not comparable across that line, and the charts mark it with a dotted rule: at one thread the threaded code path runs its serial branch, so those entries measured task-spawn overhead rather than parallelism. Serial entries are unaffected.",
+                "    Baselines before $(b.at) were recorded with $(_threads_phrase(b.from)); from $(b.at) onward, $(_threads_phrase(b.to)). Entries on the `Parallel()` backend are not comparable across that line, and the charts mark it with a dotted rule: at one thread the threaded code path runs its serial branch, so those entries measured task-spawn overhead rather than parallelism. Serial entries are unaffected.",
             )
         end
     else
