@@ -215,6 +215,55 @@ end
 # out of `_render_trend_chart` so a group with more series than the palette has colors for
 # (see there) can render as two of these side by side, each restarting the palette from its
 # own beginning rather than cycling into a color the other chart already used.
+# Where the recorded thread count changes from one release to the next, and what it was
+# either side. A threaded benchmark is not comparable across that line: at one thread
+# `_cpu_threaded_for!` takes its serial branch, so a `Parallel() backend` entry measures the
+# threaded code path running serially -- task-spawn overhead and nothing about parallelism.
+# Measured on the reference machine, `Rₕ!` 2D goes 6.53 ms to 1.67 ms from one thread to
+# four, so the step is roughly fourfold and looks exactly like an improvement.
+#
+# Every baseline from v2.0.0 to v2.8.0 was recorded at one thread; `bramble-benchmarks` now
+# fixes four. Rather than re-record the history (those releases had two `Parallel()` entries
+# before v2.4.0, so there is little to recover) the boundary is drawn on the chart.
+_threads_phrase(n) = n == "1" ? "1 thread" : "$n threads"
+
+function _thread_boundaries(runs)
+    bounds = NamedTuple[]
+    for i in 2:length(runs)
+        runs[i].threads == runs[i - 1].threads && continue
+        push!(
+            bounds,
+            (
+                at=_run_xlabel(runs[i]),
+                # Half a category to the left of `runs[i]`, so the rule falls between the
+                # two releases instead of striking through the first one recorded at the
+                # new thread count. A category axis takes numeric x as a 0-based index.
+                x=i - 1.5,
+                from=runs[i - 1].threads,
+                to=runs[i].threads,
+            ),
+        )
+    end
+    return bounds
+end
+
+# Plotly `shapes`/`annotations` for those boundaries: a dashed rule between the two
+# categories, labelled with the change. Offset by half a category so it sits between the
+# points rather than through one.
+function _thread_boundary_js(runs)
+    bounds = _thread_boundaries(runs)
+    isempty(bounds) && return ("[]", "[]")
+    shapes = [
+        """{type:'line',xref:'x',yref:'paper',x0:$(b.x),x1:$(b.x),y0:0,y1:1,""" *
+        """layer:'below',line:{color:theme.grid,width:1.5,dash:'dot'}}""" for b in bounds
+    ]
+    notes = [
+        """{xref:'x',yref:'paper',x:$(b.x),y:1.06,text:'$(b.from)→$(b.to) threads',""" *
+        """showarrow:false,font:{color:theme.text,size:9},xanchor:'left'}""" for b in bounds
+    ]
+    return ("[" * join(shapes, ",") * "]", "[" * join(notes, ",") * "]")
+end
+
 function _render_one_trend_plot(
     gname, bnames_subset, runs, use_normalized, unit_label, unit_divisor
 )
@@ -250,7 +299,7 @@ function _render_one_trend_plot(
                 push!(ys, "$y_val")
                 push!(
                     customdata,
-                    """["$(r.julia)","$delta_str",$(allocs(m)),"$(_format_memory(memory(m)))"]""",
+                    """["$(r.julia)","$delta_str",$(allocs(m)),"$(_format_memory(memory(m)))","$(r.threads)"]""",
                 )
             end
             # A run missing this benchmark contributes no point at all, rather than a `null`
@@ -272,7 +321,7 @@ function _render_one_trend_plot(
     type: 'scatter',
     line: { color: "$color", width: 2, shape: 'spline', smoothing: 0.3 },
     marker: { color: "$color", size: 7 },
-    hovertemplate: '%{x} (Julia %{customdata[0]})<br>$bname: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
+    hovertemplate: '%{x} (Julia %{customdata[0]}, %{customdata[4]} thread(s))<br>$bname: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
   }""",
         )
     end
@@ -298,6 +347,7 @@ function _render_one_trend_plot(
 
     y_title = use_normalized ? "relative to baseline" : unit_label
 
+    thread_shapes, thread_notes = _thread_boundary_js(runs)
     return """
     <div id="$div_id" style="width:100%; height:300px;"></div>
     <script>
@@ -308,6 +358,8 @@ function _render_one_trend_plot(
         paper_bgcolor: theme.bg,
         plot_bgcolor: theme.bg,
         font: { color: theme.text },
+        shapes: $thread_shapes,
+        annotations: $thread_notes,
         legend: {
           orientation: 'v', x: 1.02, xanchor: 'left', y: 1, yanchor: 'top',
           font: { color: theme.text, size: 11 },
@@ -438,11 +490,14 @@ function generate_benchmarks_markdown(
         data = BenchmarkTools.load(path)[1]
         julia_ver = "unknown"
         pkg_ver = nothing
+        threads = nothing
         for t in data.tags
             if startswith(string(t), "julia:")
                 julia_ver = replace(string(t), "julia:" => "")
             elseif startswith(string(t), "pkgversion:")
                 pkg_ver = replace(string(t), "pkgversion:" => "")
+            elseif startswith(string(t), "threads:")
+                threads = replace(string(t), "threads:" => "")
             end
         end
         # Baselines saved before the `pkgversion:` tag existed carry none — retrace it
@@ -456,6 +511,10 @@ function generate_benchmarks_markdown(
                 time=info.time,
                 julia=julia_ver,
                 version=pkg_ver,
+                # The thread count a run was recorded at. `nothing` for baselines saved
+                # before benchmarks.jl tagged it; those read 0 allocations for `Rₕ!`, so
+                # they were single-threaded (see the note in benchmarks.jl's `main`).
+                threads=threads === nothing ? "1" : threads,
                 data=data,
                 path=path,
             ),
@@ -491,8 +550,18 @@ function generate_benchmarks_markdown(
     if length(runs) >= 2
         println(
             io,
-            "Each chart below tracks one benchmark group across all **$(length(runs))** recorded baselines, in chronological release order, against the earliest run (v$(runs[1].version)) as the reference. Where a group's operations span more than a 20× range, the y-axis shows time relative to that reference instead of absolute time, so a cheap operation isn't flattened onto the same line as an expensive one. Hover any point for its exact time, Julia version, allocation count, and memory.",
+            "Each chart below tracks one benchmark group across all **$(length(runs))** recorded baselines, in chronological release order, against the earliest run (v$(runs[1].version)) as the reference. Where a group's operations span more than a 20× range, the y-axis shows time relative to that reference instead of absolute time, so a cheap operation isn't flattened onto the same line as an expensive one. Hover any point for its exact time, Julia version, thread count, allocation count, and memory.",
         )
+        # Guarded on the data: the note disappears once every baseline shares a thread
+        # count, so it cannot outlive the discontinuity it describes.
+        for b in _thread_boundaries(runs)
+            println(io)
+            println(io, "> [!NOTE]")
+            println(
+                io,
+                "> Baselines before $(b.at) were recorded with $(_threads_phrase(b.from)); from $(b.at) onward, $(_threads_phrase(b.to)). Entries on the `Parallel()` backend are not comparable across that line, and the charts mark it with a dotted rule: at one thread the threaded code path runs its serial branch, so those entries measured task-spawn overhead rather than parallelism. Serial entries are unaffected.",
+            )
+        end
     else
         println(
             io,
