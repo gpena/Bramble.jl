@@ -357,6 +357,33 @@ jacobian_pattern
 ast_sparsity_detector
 ```
 
+### Time-dependent problems and the SciML stack
+
+`semidiscretize` applies the method of lines to a spatial [`BilinearForm`](@ref) and a
+source [`LinearForm`](@ref), producing the system `M uₕ' = F(t) - A uₕ` as a callable with
+the `(du, u, p, t)` signature a time stepper expects. Dirichlet conditions become algebraic
+rows of a singular mass matrix, so the result is an index-1 differential-algebraic system
+needing only the boundary data `g`, never its time derivative (see
+[the heat equation example](examples/heat_equation.md)).
+
+Nothing in this group needs a weak dependency except the last three, which name their
+results the way SciMLBase does: `ode_function` and `ode_problem` hand the semidiscretisation
+to `OrdinaryDiffEq`, and `linear_problem` hands a steady system to `LinearSolve` with its
+factorisations and preconditioners. All three require
+[SciMLBase.jl](https://github.com/SciML/SciMLBase.jl).
+
+```@docs
+semidiscretize
+Semidiscretization
+mass_matrix
+operator_matrix
+Bramble.jacobian!
+jacobian_prototype
+ode_function
+ode_problem
+linear_problem
+```
+
 ### Caching a coefficient-dependent assembly by element type
 
 A Newton residual generic over `T` (`Float64` on a plain call, `ForwardDiff.Dual` while an

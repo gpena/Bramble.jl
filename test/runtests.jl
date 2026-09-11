@@ -203,6 +203,7 @@ if __bramble_with_unit_tests
             include("form/stencil_pattern.jl")
             include("form/jacobian_pattern.jl")
             include("form/type_cached_assemble.jl")
+            include("form/semidiscrete.jl")
         end
 
         @testset "Exporters" begin
@@ -254,5 +255,6 @@ if __bramble_with_ext_backends
         include("ext/meshes_ext.jl")
         include("ext/metal_ext.jl")
         include("ext/sparse_ad_ext.jl")
+        include("ext/sciml_ext.jl")
     end
 end

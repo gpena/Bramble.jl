@@ -24,6 +24,7 @@ examples =
         "examples/poisson_nonlinear.md",
         "examples/convection_diffusion_linear.md",
         "examples/coupled_reaction_diffusion.md",
+        "examples/heat_equation.md",
     ]
 benchmarks = "Benchmarks" => "benchmarks.md"
 internals =
