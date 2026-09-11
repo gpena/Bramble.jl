@@ -291,6 +291,12 @@ let W1 = gridspace(_mesh1()), f1 = Rₕ(W1, sin), v1 = Rₕ(W1, cos),
     g["assemble! (matrix) 2D"] = @benchmarkable Bramble.assemble!(
         $Am, $am; ast = $astm) samples=5 evals=1
 
+    # The Parallel() entries below moved when the threaded sweeps started colouring by
+    # bands rather than by points (utils/linear_algebra.jl, form/{linear,bilinear}.jl):
+    # measured 1.02-2.05x on bilinear assembly and 1.10-2.17x on linear, most on wide
+    # stencils and in 3D, where the old point colouring could be slower than not threading
+    # at all. Expect a step down against any baseline recorded before that change.
+    #
     # policy dispatch through assemble!/assemble, not assemble_parallel!'s override
     g["assemble! 1D, Parallel() backend"] = @benchmarkable Bramble.assemble!(
         $b1p, $l1p; ast = $ast1p)

@@ -999,6 +999,39 @@ end
     return nothing
 end
 
+"""
+    _sweep_band_colour!(A, sp, term, ax, parity, nbands, rest, lin_indices, mesh_markers, row_offset, col_offset) -> Nothing
+
+Scatter one band colour of `term` into `A` across threads.
+
+Each thread takes one slab of the last axis and walks it whole. Two grid points can only
+reach the same matrix entry when they are closer than `strides[D]` along that axis -- their
+stencil footprints cannot meet otherwise -- so slabs of at least that width, taken every
+other one, never write the same entry concurrently, whatever the remaining axes do.
+"""
+@noinline function _sweep_band_colour!(
+    A::SparseMatrixCSC,
+    sp,
+    term::TERM,
+    ax,
+    parity::Int,
+    nbands::Int,
+    rest,
+    lin_indices,
+    mesh_markers,
+    row_offset::Int,
+    col_offset::Int,
+) where {TERM}
+    Threads.@threads for b in parity:2:nbands
+        for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
+            _scatter_point!(
+                A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset
+            )
+        end
+    end
+    return nothing
+end
+
 # Every colour in turn, using strided subgrids.
 function _sweep_bilinear!(
     A::SparseMatrixCSC, sp, term::TERM, strides, row_offset::Int, col_offset::Int
@@ -1008,6 +1041,38 @@ function _sweep_bilinear!(
     lin_indices = LinearIndices(grid_inds)
     mesh_markers = markers(Ωₕ)
 
+    # Bands first: a colour is then a slab of whole rows, walked contiguously, and there
+    # are two of them however wide the stencil is. Point colouring strides every axis and
+    # costs `prod(strides)` barriers, which on a nine-colour form was slower than not
+    # threading at all (gpena/Bramble.jl, `Dcₓ + Dcᵧ` at 1000x1000: 16.6 ms threaded
+    # against 16.4 ms serial, and 8.1 ms banded).
+    inds = grid_inds.indices
+    D = length(strides)
+    ax = inds[D]
+    nbands = _band_count(length(ax), strides[D], Threads.nthreads())
+
+    if nbands != 0
+        rest = Base.front(inds)
+        for parity in 1:2
+            _sweep_band_colour!(
+                A,
+                sp,
+                term,
+                ax,
+                parity,
+                nbands,
+                rest,
+                lin_indices,
+                mesh_markers,
+                row_offset,
+                col_offset,
+            )
+        end
+        return A
+    end
+
+    # Too short to band (a small grid, or a stencil reaching most of the axis): point
+    # colouring has no width requirement.
     if prod(strides) == 1
         _sweep_bilinear_colour!(
             A, sp, term, grid_inds, lin_indices, mesh_markers, row_offset, col_offset

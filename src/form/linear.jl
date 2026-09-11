@@ -299,19 +299,68 @@ end
 end
 
 # The threaded pass over one colour, writing directly into `b`.
+"""
+    _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset) -> Nothing
+
+Add one grid point's stencil contributions to `b`.
+
+Shared by the banded and the point-coloured sweep, so the two cannot drift apart.
+"""
+@inline function _scatter_linear_point!(
+    b::AbstractVector,
+    sp,
+    term::TERM,
+    I::CartesianIndex,
+    lin_indices,
+    mesh_markers,
+    offset::Int,
+) where {TERM}
+    stencil = local_stencil(term, sp, I, mesh_markers, lin_indices[I])
+
+    for (off_v, weight) in stencil
+        Iv = I + CartesianIndex(off_v)
+
+        if checkbounds(Bool, lin_indices, Iv)
+            @inbounds b[lin_indices[Iv] + offset] += weight
+        end
+    end
+    return nothing
+end
+
+"""
+    _sweep_linear_band_colour!(b, sp, term, ax, parity, nbands, rest, lin_indices, mesh_markers, offset) -> Nothing
+
+Scatter one band colour of `term` into `b` across threads.
+
+Two points collide only when they write the same entry of `b`, which needs their difference
+to lie inside the stencil's reach in every axis at once. Being at least `strides[D]` apart
+along the banded axis rules that out on its own, so alternate slabs never race.
+"""
+@noinline function _sweep_linear_band_colour!(
+    b::AbstractVector,
+    sp,
+    term::TERM,
+    ax,
+    parity::Int,
+    nbands::Int,
+    rest,
+    lin_indices,
+    mesh_markers,
+    offset::Int,
+) where {TERM}
+    Threads.@threads for k in parity:2:nbands
+        for I in CartesianIndices((rest..., _band_range(ax, nbands, k)))
+            _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset)
+        end
+    end
+    return nothing
+end
+
 @noinline function _sweep_colour!(
     b::AbstractVector, sp, term::TERM, idxs, lin_indices, mesh_markers, offset::Int
 ) where {TERM}
     Threads.@threads for I in idxs
-        stencil = local_stencil(term, sp, I, mesh_markers, lin_indices[I])
-
-        for (off_v, weight) in stencil
-            Iv = I + CartesianIndex(off_v)
-
-            if checkbounds(Bool, lin_indices, Iv)
-                @inbounds b[lin_indices[Iv] + offset] += weight
-            end
-        end
+        _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset)
     end
     return nothing
 end
@@ -323,6 +372,23 @@ function _sweep_parallel!(
     Ωsp = mesh(sp)
     lin_indices = LinearIndices(indices(Ωsp))
     mesh_markers = markers(Ωsp)
+
+    # Bands before colours, for the reason spelled out in `_sweep_bilinear!`: two slabs
+    # instead of `prod(strides)` strided colours, each walked contiguously.
+    inds = grid_inds.indices
+    D = length(strides)
+    ax = inds[D]
+    nbands = _band_count(length(ax), strides[D], Threads.nthreads())
+
+    if nbands != 0
+        rest = Base.front(inds)
+        for parity in 1:2
+            _sweep_linear_band_colour!(
+                b, sp, term, ax, parity, nbands, rest, lin_indices, mesh_markers, offset
+            )
+        end
+        return b
+    end
 
     if prod(strides) == 1
         _sweep_colour!(b, sp, term, grid_inds, lin_indices, mesh_markers, offset)

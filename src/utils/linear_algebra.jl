@@ -76,6 +76,39 @@ Iterate sequentially over `idxs`, writing `v[idx] = f(idx)` in place.
 end
 
 """
+    _band_range(ax::AbstractRange, nbands::Int, b::Int) -> AbstractRange
+
+The `b`-th of `nbands` contiguous slabs of `ax`.
+
+Slabs differ in length by at most one, the remainder spread over the first of them rather
+than left on the last. `b` indexes positions within `ax`, not values, so an axis carrying a
+stride keeps it.
+"""
+@inline function _band_range(ax::AbstractRange, nbands::Int, b::Int)
+    q, r = divrem(length(ax), nbands)
+    lo = (b - 1) * q + min(b - 1, r) + 1
+    hi = lo + q - 1 + (b <= r ? 1 : 0)
+    return @inbounds ax[lo:hi]
+end
+
+"""
+    _band_count(len::Int, span::Int, nthreads::Int) -> Int
+
+How many slabs to cut an axis of `len` points into for a stencil reaching `span` along it.
+
+Enough for every thread to hold one slab per colour, never so many that a slab falls below
+`span` (which is what keeps alternate slabs free of each other's stencil footprints), and
+always even so the two colours are balanced. Returns `0` when the axis is too short to band
+at all, leaving the caller on its point-coloured path.
+"""
+@inline function _band_count(len::Int, span::Int, nthreads::Int)
+    span < 1 && return 0
+    nbands = min(2 * nthreads, div(len, span))
+    isodd(nbands) && (nbands -= 1)
+    return nbands < 2 ? 0 : nbands
+end
+
+"""
     _LastAxisChunks(rest::Tuple, ax::AbstractRange, n::Int)
 
 Splits a `CartesianIndices` into `n` blocks along its last axis, each block itself a
