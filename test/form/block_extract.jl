@@ -1,4 +1,5 @@
 using Test
+using InteractiveUtils: subtypes
 using Bramble
 using Bramble:
     IndexedTrialFunction,
@@ -39,6 +40,91 @@ using Bramble:
         # and through a product, from the side that owns it
         @test trial_component_or_nothing(innerₕ(u, v)) == 3
         @test test_component_or_nothing(innerₕ(u, v)) == 2
+    end
+
+    @testset "Each collapsed ladder answers through its operand (#52)" begin
+        # Seven queries used to be registered against all thirteen wrapper types by hand;
+        # each is now one method on `UnaryWrapper`. One assertion per query, through a
+        # wrapper, so a collapsed method that stopped recursing would fail here rather
+        # than inherit a fallback that looks like an answer.
+        u, v = TrialFunction{2}(), TestFunction{2}()
+        iu, iv = IndexedTrialFunction{2}(1), IndexedTestFunction{2}(2)
+        sf = Bramble.SourceFunction{2,typeof(sin)}(sin)
+
+        # every member of the union, wrapped once, for the two component queries
+        for wrap in (D₋ₓ, D₊ₓ, Dcₓ, Dstar₊ₓ, Dₕₓ, jumpₓ, M₋ₓ, M₊ₓ)
+            @test test_component_or_nothing(wrap(iv)) == 2
+            @test trial_component_or_nothing(wrap(iu)) == 1
+            @test test_component_or_nothing(wrap(v)) === nothing
+        end
+        # the non-difference wrappers too: scale, grid-function scale, restriction
+        @test test_component_or_nothing(2.0 * iv) == 2
+        @test trial_component_or_nothing(2.0 * iu) == 1
+        @test test_component_or_nothing(Bramble.restrict_to(:left, iv)) == 2
+
+        # _is_source_only: a wrapped source stays a source, a wrapped trial never is
+        @test Bramble._is_source_only(D₋ₓ(sf))
+        @test Bramble._is_source_only(M₊ᵧ(D₋ₓ(sf)))
+        @test Bramble._is_source_only(2.0 * jumpₓ(sf))
+        @test !Bramble._is_source_only(D₋ₓ(u))
+
+        # stencil_shift_trait: this one overrides an *abstract* fallback that answers
+        # translation-invariant, so a wrapper that stopped recursing would relabel a
+        # source's stencil instead of re-evaluating it -- a wrong matrix, not an error
+        @test Bramble.stencil_shift_trait(sf) isa Bramble.PointDependentStencil
+        @test Bramble.stencil_shift_trait(D₋ₓ(sf)) isa Bramble.PointDependentStencil
+        @test Bramble.stencil_shift_trait(M₊ᵧ(D₋ₓ(sf))) isa Bramble.PointDependentStencil
+        @test Bramble.stencil_shift_trait(D₋ₓ(u)) isa Bramble.TranslationInvariantStencil
+
+        # is_symbolic, through several wrappers at once
+        @test Bramble.is_symbolic(D₋ₓ(M₊ᵧ(2.0 * iv)))
+        @test Bramble.is_symbolic(jumpₓ(sf))
+
+        # _all_trial_interpolated: also an abstract fallback (false), so the same risk
+        W = gridspace(
+            mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 5), (true, true))
+        )
+        πu = πₕ(W, u)
+        @test Bramble._all_trial_interpolated(πu)
+        @test Bramble._all_trial_interpolated(D₋ₓ(πu))
+        @test Bramble._all_trial_interpolated(2.0 * M₊ᵧ(πu))
+        @test !Bramble._all_trial_interpolated(D₋ₓ(u))
+    end
+
+    @testset "Every single-operand node is in UnaryWrapper (#52)" begin
+        # The queries that answer for a wrapper whatever they answer for its operand are
+        # now one method each, dispatched on `UnaryWrapper`. That only stays correct while
+        # the union lists every node with a single operand: a new wrapper left out of it
+        # would not fail to compile, it would inherit a fallback, and two of those
+        # fallbacks are wrong answers rather than missing ones
+        # (`stencil_shift_trait(::LazyOp)` says translation-invariant,
+        # `_all_trial_interpolated(::LazyOp)` says false).
+        #
+        # So the membership is asserted here rather than maintained by hand. Before the
+        # collapse this test could not have been written: there was nothing to compare a
+        # node against, only thirteen separate registrations to remember.
+        concrete(T) =
+            isabstracttype(T) ? reduce(vcat, concrete.(subtypes(T)); init=Type[]) : [T]
+        nodes = concrete(Bramble.LazyOp)
+        @test length(nodes) >= 25
+
+        single_operand = filter(nodes) do T
+            kids = filter(in((:inner_op, :left_op, :right_op)), fieldnames(T))
+            kids == (:inner_op,)
+        end
+        @test !isempty(single_operand)
+
+        missing_from_union = filter(T -> !(T <: Bramble.UnaryWrapper), single_operand)
+        @test isempty(missing_from_union)
+
+        # and nothing with two operands sneaked in: a product's sides have different roles,
+        # so a query about the test component reads `right_op` alone
+        two_operand = filter(nodes) do T
+            kids = filter(in((:inner_op, :left_op, :right_op)), fieldnames(T))
+            kids == (:left_op, :right_op)
+        end
+        @test !isempty(two_operand)
+        @test all(T -> !(T <: Bramble.UnaryWrapper), two_operand)
     end
 
     @testset "Unindexed terms" begin

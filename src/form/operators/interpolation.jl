@@ -116,8 +116,6 @@ end
 
 # --- Traits: every walker that sees through a wrapper has to see through this one ---- #
 
-is_symbolic(op::InterpolationNode) = is_symbolic(op.inner_op)
-
 # It carries a trial function, so it is never a source however it is wrapped:
 # this ensures `innerₕ` constructs a `BilinearProduct` for it.
 _is_source_only(::InterpolationNode) = false
@@ -126,9 +124,6 @@ function resolve_ast(op::InterpolationNode{D,S}) where {D,S}
     inner = resolve_ast(op.inner_op)
     return InterpolationNode{D,S,typeof(inner)}(op.src_space, inner)
 end
-
-trial_component_or_nothing(op::InterpolationNode) = trial_component_or_nothing(op.inner_op)
-test_component_or_nothing(op::InterpolationNode) = test_component_or_nothing(op.inner_op)
 
 @inline function component(op::InterpolationNode{D,S}, i::Int) where {D,S}
     inner = component(op.inner_op, i)
@@ -169,18 +164,6 @@ stencil_shift_trait(::SourceFunction) = PointDependentStencil()
 stencil_shift_trait(::SourceVector) = PointDependentStencil()
 stencil_shift_trait(::SourceConstant) = PointDependentStencil()
 
-stencil_shift_trait(op::BackwardDifference) = stencil_shift_trait(op.inner_op)
-stencil_shift_trait(op::ForwardDifference) = stencil_shift_trait(op.inner_op)
-stencil_shift_trait(op::CenteredDifference) = stencil_shift_trait(op.inner_op)
-stencil_shift_trait(op::StarDifference) = stencil_shift_trait(op.inner_op)
-stencil_shift_trait(op::CrossWeightedDifference) = stencil_shift_trait(op.inner_op)
-stencil_shift_trait(op::BackwardAverage) = stencil_shift_trait(op.inner_op)
-stencil_shift_trait(op::ForwardAverage) = stencil_shift_trait(op.inner_op)
-stencil_shift_trait(op::ShiftNode) = stencil_shift_trait(op.inner_op)
-stencil_shift_trait(op::JumpNode) = stencil_shift_trait(op.inner_op)
-stencil_shift_trait(op::RegionRestriction) = stencil_shift_trait(op.inner_op)
-stencil_shift_trait(op::OperatorScale) = stencil_shift_trait(op.inner_op)
-stencil_shift_trait(op::GridFunctionScale) = stencil_shift_trait(op.inner_op)
 function stencil_shift_trait(op::OperatorAdd)
     return _combine_shift_traits(
         stencil_shift_trait(op.left_op), stencil_shift_trait(op.right_op)
@@ -213,19 +196,6 @@ _all_trial_interpolated(::SourceConstant) = true
 _all_trial_interpolated(::TestFunction) = true
 _all_trial_interpolated(::IndexedTestFunction) = true
 
-_all_trial_interpolated(op::BackwardDifference) = _all_trial_interpolated(op.inner_op)
-_all_trial_interpolated(op::ForwardDifference) = _all_trial_interpolated(op.inner_op)
-_all_trial_interpolated(op::CenteredDifference) = _all_trial_interpolated(op.inner_op)
-_all_trial_interpolated(op::StarDifference) = _all_trial_interpolated(op.inner_op)
-_all_trial_interpolated(op::CrossWeightedDifference) = _all_trial_interpolated(op.inner_op)
-_all_trial_interpolated(op::BackwardAverage) = _all_trial_interpolated(op.inner_op)
-_all_trial_interpolated(op::ForwardAverage) = _all_trial_interpolated(op.inner_op)
-_all_trial_interpolated(op::ShiftNode) = _all_trial_interpolated(op.inner_op)
-_all_trial_interpolated(op::JumpNode) = _all_trial_interpolated(op.inner_op)
-_all_trial_interpolated(op::RegionRestriction) = _all_trial_interpolated(op.inner_op)
-_all_trial_interpolated(op::OperatorScale) = _all_trial_interpolated(op.inner_op)
-_all_trial_interpolated(op::GridFunctionScale) = _all_trial_interpolated(op.inner_op)
-
 # A sum requires both summands to interpolate.
 function _all_trial_interpolated(op::OperatorAdd)
     return _all_trial_interpolated(op.left_op) && _all_trial_interpolated(op.right_op)
@@ -243,19 +213,6 @@ _check_interp_spaces(::Any, trial_leaf) = nothing
 function _check_interp_spaces(op::InterpolationNode, trial_leaf)
     return _check_one_interp_space(op, op.src_space, trial_leaf)
 end
-
-_check_interp_spaces(op::BackwardDifference, t) = _check_interp_spaces(op.inner_op, t)
-_check_interp_spaces(op::ForwardDifference, t) = _check_interp_spaces(op.inner_op, t)
-_check_interp_spaces(op::CenteredDifference, t) = _check_interp_spaces(op.inner_op, t)
-_check_interp_spaces(op::StarDifference, t) = _check_interp_spaces(op.inner_op, t)
-_check_interp_spaces(op::CrossWeightedDifference, t) = _check_interp_spaces(op.inner_op, t)
-_check_interp_spaces(op::BackwardAverage, t) = _check_interp_spaces(op.inner_op, t)
-_check_interp_spaces(op::ForwardAverage, t) = _check_interp_spaces(op.inner_op, t)
-_check_interp_spaces(op::ShiftNode, t) = _check_interp_spaces(op.inner_op, t)
-_check_interp_spaces(op::JumpNode, t) = _check_interp_spaces(op.inner_op, t)
-_check_interp_spaces(op::RegionRestriction, t) = _check_interp_spaces(op.inner_op, t)
-_check_interp_spaces(op::OperatorScale, t) = _check_interp_spaces(op.inner_op, t)
-_check_interp_spaces(op::GridFunctionScale, t) = _check_interp_spaces(op.inner_op, t)
 
 function _check_interp_spaces(op::OperatorAdd, t)
     _check_interp_spaces(op.left_op, t)

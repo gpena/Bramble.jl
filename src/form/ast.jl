@@ -133,8 +133,6 @@ function is_symbolic end
 is_symbolic(::LazyOp) = false
 is_symbolic(ops::Tuple) = any(is_symbolic, ops)
 
-is_symbolic(op::OperatorScale) = is_symbolic(op.inner_op)
-is_symbolic(op::GridFunctionScale) = is_symbolic(op.inner_op)
 is_symbolic(op::OperatorAdd) = is_symbolic(op.left_op) || is_symbolic(op.right_op)
 
 # --- Display ----------------------------------------------------------------------- #

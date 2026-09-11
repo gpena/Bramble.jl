@@ -17,22 +17,11 @@ Written as a query rather than catching an exception because it is evaluated onc
 term per assembly in time-stepping loops.
 """
 test_component_or_nothing(op::IndexedTestFunction) = op.component_idx
+# Every node wrapping one operand answers what that operand answers. One method instead of
+# thirteen registrations (gpena/Bramble.jl#52); see [`UnaryWrapper`](@ref).
+test_component_or_nothing(op::UnaryWrapper) = test_component_or_nothing(op.inner_op)
 test_component_or_nothing(op::LinearProduct) = test_component_or_nothing(op.right_op)
 test_component_or_nothing(op::BilinearProduct) = test_component_or_nothing(op.right_op)
-test_component_or_nothing(op::BackwardDifference) = test_component_or_nothing(op.inner_op)
-test_component_or_nothing(op::ForwardDifference) = test_component_or_nothing(op.inner_op)
-test_component_or_nothing(op::CenteredDifference) = test_component_or_nothing(op.inner_op)
-test_component_or_nothing(op::StarDifference) = test_component_or_nothing(op.inner_op)
-function test_component_or_nothing(op::CrossWeightedDifference)
-    return test_component_or_nothing(op.inner_op)
-end
-test_component_or_nothing(op::JumpNode) = test_component_or_nothing(op.inner_op)
-test_component_or_nothing(op::BackwardAverage) = test_component_or_nothing(op.inner_op)
-test_component_or_nothing(op::ForwardAverage) = test_component_or_nothing(op.inner_op)
-test_component_or_nothing(op::ShiftNode) = test_component_or_nothing(op.inner_op)
-test_component_or_nothing(op::OperatorScale) = test_component_or_nothing(op.inner_op)
-test_component_or_nothing(op::GridFunctionScale) = test_component_or_nothing(op.inner_op)
-test_component_or_nothing(op::RegionRestriction) = test_component_or_nothing(op.inner_op)
 # A sum inside one inner product, `innerₕ(uₕ, v + 2 * D₋ₓ(v) - M₋ₓ(v))`, is still one
 # term of the form, and every test leaf in it names the same component or none. So the
 # component of a sum is the component its sides agree on.
@@ -71,21 +60,8 @@ block; a term naming both is one block; and a term naming one but not the other 
 something the mathematics can express, so it is an error rather than a guess.
 """
 trial_component_or_nothing(op::IndexedTrialFunction) = op.component_idx
+trial_component_or_nothing(op::UnaryWrapper) = trial_component_or_nothing(op.inner_op)
 trial_component_or_nothing(op::BilinearProduct) = trial_component_or_nothing(op.left_op)
-trial_component_or_nothing(op::BackwardDifference) = trial_component_or_nothing(op.inner_op)
-trial_component_or_nothing(op::ForwardDifference) = trial_component_or_nothing(op.inner_op)
-trial_component_or_nothing(op::CenteredDifference) = trial_component_or_nothing(op.inner_op)
-trial_component_or_nothing(op::StarDifference) = trial_component_or_nothing(op.inner_op)
-function trial_component_or_nothing(op::CrossWeightedDifference)
-    return trial_component_or_nothing(op.inner_op)
-end
-trial_component_or_nothing(op::JumpNode) = trial_component_or_nothing(op.inner_op)
-trial_component_or_nothing(op::BackwardAverage) = trial_component_or_nothing(op.inner_op)
-trial_component_or_nothing(op::ForwardAverage) = trial_component_or_nothing(op.inner_op)
-trial_component_or_nothing(op::ShiftNode) = trial_component_or_nothing(op.inner_op)
-trial_component_or_nothing(op::OperatorScale) = trial_component_or_nothing(op.inner_op)
-trial_component_or_nothing(op::GridFunctionScale) = trial_component_or_nothing(op.inner_op)
-trial_component_or_nothing(op::RegionRestriction) = trial_component_or_nothing(op.inner_op)
 
 function trial_component_or_nothing(op::OperatorAdd)
     l = trial_component_or_nothing(op.left_op)

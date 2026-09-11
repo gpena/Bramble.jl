@@ -52,6 +52,62 @@ node's reach and its stencil cannot disagree -- they used to be spelled out twic
     )
 
 """
+    UnaryWrapper{D}
+
+The AST nodes that wrap exactly one operand in an `inner_op` field.
+
+Thirteen node types, and the reason they are worth naming together: a query about a term
+usually has the same answer for a wrapper as for the operand inside it, so each such query
+used to be registered against all thirteen by hand -- one line apiece, per query
+(gpena/Bramble.jl#52). A query that forgot one inherited a fallback instead, and every
+fallback in this family is a plausible wrong answer rather than an error:
+`test_component_or_nothing` answering `nothing` sends a term to every block.
+
+Written as a union of concrete types rather than reached through a generic child accessor,
+deliberately. Dispatch resolves it at compile time and each method still reads `op.inner_op`
+directly, so nothing on the assembly path pays for the generality.
+
+Products and sums are not members. `BilinearProduct` and `LinearProduct` hold two operands
+with different roles -- trial on the left, test on the right -- so a query about the test
+component reads `right_op` alone, and `OperatorAdd` has to reconcile both sides. Those stay
+written out, which is the point: what is left explicit is what genuinely differs.
+"""
+const UnaryWrapper{D} = Union{
+    BackwardDifference{D},
+    ForwardDifference{D},
+    CenteredDifference{D},
+    StarDifference{D},
+    CrossWeightedDifference{D},
+    JumpNode{D},
+    BackwardAverage{D},
+    ForwardAverage{D},
+    ShiftNode{D},
+    OperatorScale{D},
+    GridFunctionScale{D},
+    RegionRestriction{D},
+    InterpolationNode{D},
+}
+
+# The queries that answer for a wrapper whatever they answer for its operand. One method
+# each, where every one of these was previously registered against all thirteen wrapper
+# types by hand (gpena/Bramble.jl#52).
+#
+# They live here rather than beside their own ladders because `UnaryWrapper` names
+# `InterpolationNode`, which `form/operators/interpolation.jl` defines -- so the union, and
+# anything dispatching on it, has to come after every operator file. The node-specific
+# overrides stay in their own files; `InterpolationNode` deviates from three of these and
+# says so there.
+#
+# Two of these override a fallback declared on the *abstract* type rather than filling a
+# gap: `stencil_shift_trait(::LazyOp)` answers translation-invariant and
+# `_all_trial_interpolated(::LazyOp)` answers false, so a wrapper reaching either default
+# is a wrong answer, not a missing one. That is the shape of mistake this collapse is meant
+# to make impossible: there is now one method to get right per query, not thirteen.
+stencil_shift_trait(op::UnaryWrapper) = stencil_shift_trait(op.inner_op)
+_all_trial_interpolated(op::UnaryWrapper) = _all_trial_interpolated(op.inner_op)
+_check_interp_spaces(op::UnaryWrapper, t) = _check_interp_spaces(op.inner_op, t)
+
+"""
     TappedNode{D, Dim}
 
 The nodes whose stencil is ordered taps from {+1, 0, -1} along `Dim` with per-node weights:
@@ -204,6 +260,9 @@ resolve_ast(op::Any) = op
 
 # Note: is_symbolic base function is declared in ast.jl
 
+# One method for every node that wraps a single operand, instead of one registration per
+# node type (gpena/Bramble.jl#52); see [`UnaryWrapper`](@ref).
+is_symbolic(op::UnaryWrapper) = is_symbolic(op.inner_op)
 is_symbolic(::TrialFunction) = true
 is_symbolic(::TestFunction) = true
 is_symbolic(::IndexedTrialFunction) = true
@@ -214,20 +273,9 @@ is_symbolic(::SourceConstant) = true
 is_symbolic(op::BilinearProduct) = true
 is_symbolic(op::LinearProduct) = true
 
-is_symbolic(op::BackwardDifference) = is_symbolic(op.inner_op)
-is_symbolic(op::ForwardDifference) = is_symbolic(op.inner_op)
-
-is_symbolic(op::BackwardAverage) = is_symbolic(op.inner_op)
-is_symbolic(op::ForwardAverage) = is_symbolic(op.inner_op)
-is_symbolic(op::ShiftNode) = is_symbolic(op.inner_op)
-
-is_symbolic(op::RegionRestriction) = is_symbolic(op.inner_op)
-
-is_symbolic(op::CenteredDifference) = is_symbolic(op.inner_op)
-is_symbolic(op::StarDifference) = is_symbolic(op.inner_op)
-is_symbolic(op::CrossWeightedDifference) = is_symbolic(op.inner_op)
-is_symbolic(op::JumpNode) = is_symbolic(op.inner_op)
-
+# A wrapper is source-only when what it wraps is. One method instead of one registration
+# per node type (gpena/Bramble.jl#52); `InterpolationNode` overrides it below, since it
+# carries a trial function however it is wrapped.
 """
     _is_source_only(op::LazyOp) -> Bool
 
@@ -248,6 +296,7 @@ A missing case defaults to `false` (the fallback `::LazyOp` method below): conse
 since that is exactly the behavior every node had before this predicate existed (always
 `BilinearProduct`) for anything not explicitly listed as source-only.
 """
+_is_source_only(op::UnaryWrapper) = _is_source_only(op.inner_op)
 _is_source_only(::TrialFunction) = false
 _is_source_only(::TestFunction) = false
 _is_source_only(::IndexedTrialFunction) = false
@@ -256,20 +305,6 @@ _is_source_only(::SourceFunction) = true
 _is_source_only(::SourceVector) = true
 _is_source_only(::SourceConstant) = true
 
-_is_source_only(op::BackwardDifference) = _is_source_only(op.inner_op)
-_is_source_only(op::ForwardDifference) = _is_source_only(op.inner_op)
-_is_source_only(op::CenteredDifference) = _is_source_only(op.inner_op)
-_is_source_only(op::StarDifference) = _is_source_only(op.inner_op)
-_is_source_only(op::CrossWeightedDifference) = _is_source_only(op.inner_op)
-
-_is_source_only(op::BackwardAverage) = _is_source_only(op.inner_op)
-_is_source_only(op::ForwardAverage) = _is_source_only(op.inner_op)
-_is_source_only(op::ShiftNode) = _is_source_only(op.inner_op)
-_is_source_only(op::JumpNode) = _is_source_only(op.inner_op)
-_is_source_only(op::RegionRestriction) = _is_source_only(op.inner_op)
-
-_is_source_only(op::OperatorScale) = _is_source_only(op.inner_op)
-_is_source_only(op::GridFunctionScale) = _is_source_only(op.inner_op)
 function _is_source_only(op::OperatorAdd)
     return _is_source_only(op.left_op) && _is_source_only(op.right_op)
 end

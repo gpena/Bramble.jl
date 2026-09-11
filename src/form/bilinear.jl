@@ -397,18 +397,6 @@ end
 
 # --- the sinks --------------------------------------------------------------------- #
 
-"""
-    PatternSink(I_vec::Vector{Int}, J_vec::Vector{Int})
-
-Collect the `(row, col)` coordinates a term can reach, for building a sparsity pattern.
-
-Appends each coordinate to `I_vec` and `J_vec`, which [`allocate_system_matrix`](@ref) then
-hands to `sparse!`. The only sink that de-duplicates ([`_sink_dedups`](@ref)): a coordinate
-named twice by one point's stencil is one entry of the pattern, and the weights it carries
-are not read here at all.
-
-See also: [`visit_bilinear_stencil`](@ref), [`RecordSink`](@ref).
-"""
 # What sharing the traversal costs here, measured rather than assumed (gpena/Bramble.jl#50).
 # Against the hand-written walk this replaced, on a 300x300 grid with
 # `innerₕ(D₋ₓ(u), D₋ₓ(v))` -- the form `benchmark/benchmarks.jl`'s
@@ -427,6 +415,18 @@ See also: [`visit_bilinear_stencil`](@ref), [`RecordSink`](@ref).
 # something a time loop pays -- a cheap place to buy pattern and scatter sharing one walk,
 # which is what makes "every scattered entry is in the pattern" assertable at all. Reverting
 # just this sink would recover it and cost that.
+"""
+    PatternSink(I_vec::Vector{Int}, J_vec::Vector{Int})
+
+Collect the `(row, col)` coordinates a term can reach, for building a sparsity pattern.
+
+Appends each coordinate to `I_vec` and `J_vec`, which [`allocate_system_matrix`](@ref) then
+hands to `sparse!`. The only sink that de-duplicates ([`_sink_dedups`](@ref)): a coordinate
+named twice by one point's stencil is one entry of the pattern, and the weights it carries
+are not read here at all.
+
+See also: [`visit_bilinear_stencil`](@ref), [`RecordSink`](@ref).
+"""
 struct PatternSink
     I_vec::Vector{Int}
     J_vec::Vector{Int}
