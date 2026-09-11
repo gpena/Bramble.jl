@@ -177,6 +177,13 @@ end
 # gridspace's weight construction (__innerplus_weights!) reads execution_policy(Ωₕ)
 # too, same reason as group 1 above — Parallel() explicitly, since the plain default
 # no longer threads at any size.
+#
+# What these two entries measure changed with the last-axis method in
+# utils/linear_algebra.jl. The threaded weight build used to be 1.7x (2D) and 3.1x (3D)
+# *slower* than the serial one, because `Threads.@threads` linearly indexes a
+# `CartesianIndices`; it is now level with serial. Expect a step down here against any
+# baseline recorded before that change — the rows are comparable across it only in the
+# sense that both measure whatever the threaded branch then was.
 let Ωₕ2 = _mesh2_par(), Ωₕ3 = _mesh3_par()
     g = SUITE["construction"] = BenchmarkGroup()
     g["gridspace 2D"] = @benchmarkable gridspace($Ωₕ2)   # builds the weights

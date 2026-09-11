@@ -31,6 +31,23 @@ threads for [`Parallel`](@ref).
 @inline _cpu_threaded_for!(::Serial, v, idxs, f) = _serial_for!(v, idxs, f)
 @inline _cpu_threaded_for!(::Parallel, v, idxs, f) = _threaded_for!(v, idxs, f)
 
+# `Threads.@threads` needs an indexable collection, so handed a `CartesianIndices` it
+# linearly indexes it and pays an index conversion per point, where the serial loop
+# iterates the block natively. That made the threaded weight build *slower* than the
+# serial one it replaces: `__innerplus_weights!` at 1e6 points measured 0.117 ms serial
+# against 0.365 ms on four threads in 3D (0.200 ms in 2D). Splitting the last axis hands
+# every thread a `CartesianIndices` block of its own, iterated exactly as the serial loop
+# iterates the whole, which brings it back to 0.125 ms.
+#
+# How much the threading then buys depends on how close one core gets to the machine's
+# store ceiling, which is ~68-73 GB/s here: on AC power a single core already reaches it
+# (four threads matching rather than beating it, from 8 MB to 488 MB), while on battery
+# one core manages 46-55 GB/s and four recover 1.24-1.39x. The point of this method is the
+# removed index conversion, which is a penalty in every power state; the parallel gain on
+# top of it is the machine's to give.
+@inline _cpu_threaded_for!(::Parallel, v, idxs::CartesianIndices, f) =
+    _threaded_axis_for!(v, idxs, f)
+
 # Kept in an isolated function to prevent Threads.@threads closure boxing allocations
 # on paths that execute serially.
 @noinline function _threaded_for!(v, idxs, f)
@@ -54,6 +71,66 @@ Iterate sequentially over `idxs`, writing `v[idx] = f(idx)` in place.
 @inline function _serial_for!(v, idxs, f)
     @inbounds for idx in idxs
         v[idx] = f(idx)
+    end
+    return nothing
+end
+
+"""
+    _LastAxisChunks(rest::Tuple, ax::AbstractRange, n::Int)
+
+Splits a `CartesianIndices` into `n` blocks along its last axis, each block itself a
+`CartesianIndices` over the leading axes `rest`. Indexable and lazy, so the split allocates
+nothing and `Threads.@threads` can partition it directly.
+
+Blocks differ in length by at most one slice: the remainder is spread over the first of
+them rather than left on the last, so no thread receives a double-sized tail.
+"""
+struct _LastAxisChunks{D,R<:Tuple,A<:AbstractRange}
+    rest::R
+    ax::A
+    n::Int
+end
+
+"""
+    _last_axis_chunks(idxs::CartesianIndices{D}, n::Integer) -> _LastAxisChunks{D}
+
+Return `idxs` split into at most `n` blocks along its last axis, clamped to the length of
+that axis so no block is empty.
+"""
+@inline function _last_axis_chunks(idxs::CartesianIndices{D}, n::Integer) where {D}
+    inds = idxs.indices
+    ax = inds[D]
+    nblocks = max(1, min(Int(n), length(ax)))
+    rest = Base.front(inds)
+    return _LastAxisChunks{D,typeof(rest),typeof(ax)}(rest, ax, nblocks)
+end
+
+@inline Base.length(c::_LastAxisChunks) = c.n
+@inline Base.firstindex(::_LastAxisChunks) = 1
+@inline Base.lastindex(c::_LastAxisChunks) = c.n
+
+# `lo:hi` are positions *within* the axis rather than values, so an axis that carries a
+# stride keeps it.
+@inline function Base.getindex(c::_LastAxisChunks{D}, k::Int) where {D}
+    q, r = divrem(length(c.ax), c.n)
+    lo = (k - 1) * q + min(k - 1, r) + 1
+    hi = lo + q - 1 + (k <= r ? 1 : 0)
+    return CartesianIndices((c.rest..., @inbounds c.ax[lo:hi]))
+end
+
+"""
+    _threaded_axis_for!(v::AbstractArray, idxs::CartesianIndices, f::Function) -> Nothing
+
+As [`_threaded_for!`](@ref), for a `CartesianIndices`: each thread takes one block of
+whole last-axis slices and walks it natively, never converting a linear index.
+"""
+@noinline function _threaded_axis_for!(v, idxs::CartesianIndices, f)
+    blocks = _last_axis_chunks(idxs, Threads.nthreads())
+    Threads.@threads :static for k in 1:length(blocks)
+        block = blocks[k]
+        @inbounds for I in block
+            v[I] = f(I)
+        end
     end
     return nothing
 end
