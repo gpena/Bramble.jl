@@ -1007,14 +1007,16 @@ Scatter one band colour of `term` into `A` across threads.
 Each thread takes one slab of the last axis and walks it whole. Two grid points can only
 reach the same matrix entry when they are closer than `strides[D]` along that axis -- their
 stencil footprints cannot meet otherwise -- so slabs of at least that width, taken every
-other one, never write the same entry concurrently, whatever the remaining axes do.
+other one, never write the same entry concurrently, whatever the remaining axes do. A term
+that reaches only its own point cannot collide at all, and then `bidx` is every band at
+once.
 """
 @noinline function _sweep_band_colour!(
     A::SparseMatrixCSC,
     sp,
     term::TERM,
     ax,
-    parity::Int,
+    bidx,
     nbands::Int,
     rest,
     lin_indices,
@@ -1022,7 +1024,7 @@ other one, never write the same entry concurrently, whatever the remaining axes 
     row_offset::Int,
     col_offset::Int,
 ) where {TERM}
-    Threads.@threads for b in parity:2:nbands
+    Threads.@threads for b in bidx
         for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
             _scatter_point!(
                 A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset
@@ -1053,13 +1055,17 @@ function _sweep_bilinear!(
 
     if nbands != 0
         rest = Base.front(inds)
-        for parity in 1:2
+        # A term reaching only its own point cannot collide, so one pass takes every band:
+        # contiguous slabs without the second barrier, which such a term would otherwise
+        # pay for nothing (it doubled `assemble_parallel!`'s task allocations).
+        bands = prod(strides) == 1 ? (1:1:nbands,) : (1:2:nbands, 2:2:nbands)
+        for bidx in bands
             _sweep_band_colour!(
                 A,
                 sp,
                 term,
                 ax,
-                parity,
+                bidx,
                 nbands,
                 rest,
                 lin_indices,

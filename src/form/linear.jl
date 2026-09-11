@@ -334,21 +334,22 @@ Scatter one band colour of `term` into `b` across threads.
 
 Two points collide only when they write the same entry of `b`, which needs their difference
 to lie inside the stencil's reach in every axis at once. Being at least `strides[D]` apart
-along the banded axis rules that out on its own, so alternate slabs never race.
+along the banded axis rules that out on its own, so alternate slabs never race. A term that
+reaches only its own point cannot collide at all, and then `bidx` is every band at once.
 """
 @noinline function _sweep_linear_band_colour!(
     b::AbstractVector,
     sp,
     term::TERM,
     ax,
-    parity::Int,
+    bidx,
     nbands::Int,
     rest,
     lin_indices,
     mesh_markers,
     offset::Int,
 ) where {TERM}
-    Threads.@threads for k in parity:2:nbands
+    Threads.@threads for k in bidx
         for I in CartesianIndices((rest..., _band_range(ax, nbands, k)))
             _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset)
         end
@@ -382,9 +383,11 @@ function _sweep_parallel!(
 
     if nbands != 0
         rest = Base.front(inds)
-        for parity in 1:2
+        # One pass over every band when nothing can collide; see `_sweep_bilinear!`.
+        bands = prod(strides) == 1 ? (1:1:nbands,) : (1:2:nbands, 2:2:nbands)
+        for bidx in bands
             _sweep_linear_band_colour!(
-                b, sp, term, ax, parity, nbands, rest, lin_indices, mesh_markers, offset
+                b, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset
             )
         end
         return b
