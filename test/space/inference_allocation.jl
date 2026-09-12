@@ -1,5 +1,6 @@
 using Test
 using Bramble
+using JET
 using Bramble:
     components,
     _difference_engine!,
@@ -141,6 +142,22 @@ end
         @test_allocs innerₕ(c, c)
         @test_allocs normₕ(c)
         @test_allocs snorm₁ₕ(c)
+    end
+
+    @testset "Zero dynamic dispatch (vectorial aliases)" begin
+        # gpena/Bramble.jl#146: `∇₋ₕ`/`∇₊ₕ`/`diff₋ₕ`/`diff₊ₕ`/`M₋ₕ`/`M₊ₕ`/`Dstar₊ₕ`/`Dcₕ`/`∇ₕ`
+        # used to generate their 2D/3D methods from `ntuple(i -> base_op(arg, Val(i)),
+        # Val(D))`, which boxes `i` as a runtime Int inside the closure: `Val(i)` can
+        # never constant-fold, so every coordinate paid for dynamic dispatch all the way
+        # down the difference-engine call stack (2-8 dispatches per call, per JET).
+        # `_define_vectorial_alias` now writes the 2D/3D methods out with literal `Val(1)`,
+        # `Val(2)`, `Val(3)` calls instead, so this must report zero.
+        for op in (∇₋ₕ, ∇₊ₕ, diff₋ₕ, diff₊ₕ, jumpₕ, M₋ₕ, M₊ₕ, Dstar₊ₕ, Dcₕ, ∇ₕ)
+            rep2 = JET.report_call(op, (typeof(uₕ2),))
+            @test isempty(JET.get_reports(rep2))
+            rep3 = JET.report_call(op, (typeof(uₕ3),))
+            @test isempty(JET.get_reports(rep3))
+        end
     end
 
     @testset "Zero allocations (stencils)" begin

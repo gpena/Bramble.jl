@@ -303,17 +303,29 @@ function _define_vectorial_alias(
 
     # Built one at a time, as in _define_directional_alias: @doc takes a single
     # definition, and only the entry point carries the docstring.
+    #
+    # 2D/3D are written out rather than generated from a generic `ntuple(i -> ...,
+    # Val(D)) where D` method: inside that closure, `Val(i)` boxes `i` as a runtime
+    # Int, so calling `base_op_name(arg, Val(i))` can never constant-fold down the
+    # difference-engine call stack and every coordinate pays for dynamic dispatch
+    # (gpena/Bramble.jl#146). Meshes are strictly 1D/2D/3D here (boundary_symbols has
+    # no names past :front/:back), so these three literal methods are exhaustive.
     entry = :(@inline $(alias_name)(arg) = $(alias_name)(arg, Val(dim(_op_mesh(arg)))))
     one_d = :(@inline $(alias_name)(arg, ::Val{1}) = $(base_op_name)(arg, Val(1)))
-    n_d = :(@inline $(alias_name)(arg, ::Val{D}) where {D} =
-        ntuple(i -> $(base_op_name)(arg, Val(i)), Val(D)))
+    two_d = :(@inline $(alias_name)(arg, ::Val{2}) =
+        ($(base_op_name)(arg, Val(1)), $(base_op_name)(arg, Val(2))))
+    three_d = :(@inline $(alias_name)(arg, ::Val{3}) = (
+        $(base_op_name)(arg, Val(1)), $(base_op_name)(arg, Val(2)),
+        $(base_op_name)(arg, Val(3)),
+    ))
 
     final_expr = Expr(
         :macrocall, GlobalRef(Core, Symbol("@doc")), nothing, doc_string, entry
     )
     Core.eval(@__MODULE__, final_expr)
     Core.eval(@__MODULE__, one_d)
-    return Core.eval(@__MODULE__, n_d)
+    Core.eval(@__MODULE__, two_d)
+    return Core.eval(@__MODULE__, three_d)
 end
 
 """
