@@ -88,32 +88,7 @@ jobs:
         env:
           BRAMBLE_TEST_GROUP: full
 
-  docs:
-    name: Docs build
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      # 1.13, matching the other docs jobs and the push gate. The version matters less
-      # here than in `full` above -- what this catches is a broken cross-reference, not
-      # anything version-specific -- but there is no reason for it to drift.
-      - uses: julia-actions/setup-julia@v2
-        with:
-          version: "1.13"
-      - uses: julia-actions/cache@v2
-      # A broken `@ref` is an error the test suite cannot see: a docstring is only
-      # cross-referenced when it is rendered, so nothing catches it until the docs are
-      # built. Two have slipped through already.
-      - name: Build the documentation
-        run: |
-          julia --project=docs -e '
-            using Pkg
-            Pkg.develop(PackageSpec(path = pwd()))
-            Pkg.instantiate()'
-          julia --project=docs docs/make.jl
-        env:
-          GKSwstype: "100"
+  # Docs are not built here, or on any schedule: generation is on-demand only
+  # (`docs-on-demand.yml`, `workflow_dispatch`). A broken `@ref` is an error the test suite
+  # cannot see (a docstring is only cross-referenced when it is rendered), so that check now
+  # runs only when the on-demand workflow is dispatched, not on a weekly cadence.

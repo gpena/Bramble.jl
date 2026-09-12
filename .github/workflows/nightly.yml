@@ -9,10 +9,14 @@ name: Nightly
 # — an architecture-dependent `@generated` fold, documented there, not a real regression each
 # time it fires) that turned an unrelated PR's gate red too often to be worth blocking pushes
 # on. Julia nightly changes underneath every push regardless of what Bramble does, so gating
-# on it meant the same kind of unrelated red gate. Formatting, quality (Aqua & JET)
-# and the docs build/deploy are not canaries in that sense, but moving them off every push
-# trades same-push feedback for a leaner, faster push CI — a failure here is caught and fixed
-# the same day rather than the same minute.
+# on it meant the same kind of unrelated red gate. Formatting and quality (Aqua & JET) are
+# not canaries in that sense, but moving them off every push trades same-push feedback for a
+# leaner, faster push CI — a failure here is caught and fixed the same day rather than the
+# same minute.
+#
+# Docs are not built here: generation is on-demand only (`docs-on-demand.yml`,
+# `workflow_dispatch`), run right after a docs-affecting push rather than waiting for this
+# schedule or bundling it with an unrelated full-matrix run.
 #
 # 06:00 UTC, after CompatHelper's 00:00 run, for the same reason Weekly.yml picks its own
 # time after CompatHelper: a compat bump it opens has already landed or not by the time this
@@ -148,42 +152,6 @@ jobs:
             Pkg.activate(mktempdir())
             Pkg.add("JuliaFormatter")
             using JuliaFormatter
-            format(["src", "test"]; overwrite = false) && exit(0)
-            @error "Source is not BlueStyle formatted. Run JuliaFormatter over src and test."
+            format(["src", "test", "docs", "ext", "benchmark"]; overwrite = false) && exit(0)
+            @error "Source is not BlueStyle formatted. Run JuliaFormatter over src, test, docs, ext and benchmark."
             exit(1)'
-
-  # This job deploys the live site, so it builds on the release Bramble gates on rather
-  # than on whatever Julia is passing through nightly: a docstring that renders fine on
-  # 1.13 and trips a 1.14-dev change should not be able to hold up a deploy, and the page
-  # readers get should come from the version the package is tested against. It sat on
-  # `nightly` until 1.13 went final.
-  docs:
-    name: Documentation
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    permissions:
-      contents: write
-      statuses: write
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: julia-actions/setup-julia@v2
-        with:
-          version: "1.13"
-
-      - uses: julia-actions/cache@v2
-
-      - name: Install dependencies
-        run: |
-          julia --color=yes --project=docs -e '
-            using Pkg
-            Pkg.develop(PackageSpec(path=pwd()))
-            Pkg.instantiate()'
-
-      - name: Build and deploy
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: julia --color=yes --project=docs docs/make.jl
