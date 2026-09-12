@@ -465,6 +465,7 @@ end
             f1(x) = 2π^2 * u_ex(x) + u_ex(x) + u_ex(x) * v_ex(x)
             f2(x) = 8π^2 * v_ex(x) + v_ex(x) - u_ex(x) * v_ex(x)
 
+            Random.seed!(20260912)
             Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
             Ωₕ = mesh(Ω, (16, 16), (false, false))
             Wₕ = gridspace(Ωₕ)

@@ -58,8 +58,8 @@ centered_ops(::Val{3}) = (Dcₓ, Dcᵧ, Dc₂)
     @testset "Truncation at ends" begin
         # Unlike the one-sided families, which lose one slice, this loses two: neither
         # the first nor the last point has a neighbour on both sides.
-        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 7), (true, false))
         Random.seed!(20260830)
+        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 7), (true, false))
         Wₕ = gridspace(Ωₕ)
         n = npoints(Ωₕ, Tuple)
         uₕ = Rₕ(Wₕ, x -> exp(x[1]) * (x[2] + 1))
@@ -158,8 +158,8 @@ centered_ops(::Val{3}) = (Dcₓ, Dcᵧ, Dc₂)
     end
 
     @testset "Directional family" begin
-        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6), (true, false))
         Random.seed!(20260830)
+        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6), (true, false))
         Wₕ = gridspace(Ωₕ)
         Vₕ = gridspace(Ωₕ, Val(2))
         uₕ = Rₕ(Wₕ, x -> x[1] * x[2])
