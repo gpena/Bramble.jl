@@ -92,10 +92,14 @@ end
 
 @inline _trial_column(lin_indices, I::CartesianIndex, off_u::AbsoluteColumn) = off_u.col
 
-# Whether `off_u`'s trial index survives, without computing the linear index `_trial_column`
-# would return -- for sinks that only need to know whether the entry lands, not where
-# ([`_sink_needs_coordinates`](@ref)). An `AbsoluteColumn` always survives, matching
-# `_trial_column`: it names a source column directly and is never `0`.
+"""
+    _trial_inbounds(lin_indices, I::CartesianIndex, off_u) -> Bool
+
+Whether `off_u`'s trial index survives, without computing the linear index
+[`_trial_column`](@ref) would return -- for sinks that only need to know whether the entry
+lands, not where ([`_sink_needs_coordinates`](@ref)). An [`AbsoluteColumn`](@ref) always
+survives, matching `_trial_column`: it names a source column directly and is never `0`.
+"""
 Base.@propagate_inbounds function _trial_inbounds(lin_indices, I::CartesianIndex, off_u)
     Iu = I + CartesianIndex(off_u)
     return checkbounds(Bool, lin_indices, Iu)
@@ -196,13 +200,17 @@ Base.@propagate_inbounds function _entry_target(
     return (lin_indices[Iv] + row_offset, col + col_offset)
 end
 
-# One entry: guard it, and hand it to the sink if it lands inside. Answers whether it did,
-# so the caller can advance the slot.
-#
-# Fused rather than "compute the target, then act on it" (`_entry_target`, which the tests
-# use and `_scatter_point!` shares) because returning a `(row, col)` sentinel tuple has to be
-# merged from three return points: measured against the hand-written loop it cost 5 extra phi
-# nodes, 4 integer adds and 3 comparisons per entry, with identical loads, stores and calls.
+"""
+    _step_entry!(sink, lin_indices, I, off_u, off_v, weight, row_offset::Int, col_offset::Int, slot::Int) -> Bool
+
+One entry: guard it, and hand it to the sink if it lands inside. Answers whether it did, so
+the caller can advance the slot.
+
+Fused rather than "compute the target, then act on it" ([`_entry_target`](@ref), which the
+tests use and `_scatter_point!` shares) because returning a `(row, col)` sentinel tuple has to
+be merged from three return points: measured against the hand-written loop it cost 5 extra
+phi nodes, 4 integer adds and 3 comparisons per entry, with identical loads, stores and calls.
+"""
 Base.@propagate_inbounds function _step_entry!(
     sink::SINK,
     lin_indices,
