@@ -23,13 +23,6 @@ Forward grid spacing in coordinate direction `dim` at Cartesian index `I`.
     _get_component(forward_spacing(mesh, I), dim)
 
 """
-    get_half_spacing(mesh, I, dim::Int) -> Real
-
-Half-grid spacing in coordinate direction `dim` at Cartesian index `I`.
-"""
-@inline get_half_spacing(mesh, I, dim::Int) = _get_component(half_spacing(mesh, I), dim)
-
-"""
     shift_offset(offset::NTuple{D, Int}, dim::Int, delta::Int) -> NTuple{D, Int}
 
 Shifts a Cartesian offset tuple by `delta` in dimension `dim`.

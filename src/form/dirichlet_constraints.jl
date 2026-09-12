@@ -523,24 +523,6 @@ function _dirichlet_bc_indices!(A::SparseMatrixCSC, index_in_marker::BitVector)
     return A
 end
 
-"""
-    _function_in_linear_indices(func, Ωₕ, i)
-
-Internal helper to evaluate a boundary function at a grid point given its linear index.
-
-Converts linear index `i` to Cartesian indices and evaluates `func` at the
-corresponding physical coordinates in mesh `Ωₕ`.
-
-# Arguments
-- `func`: Boundary condition function
-- `Ωₕ`: Mesh
-- `i`: Linear index into mesh points
-
-# Returns
-The value of `func` at the `i`-th mesh point.
-"""
-_function_in_linear_indices(func, Ωₕ, i) = func(point(Ωₕ, indices(Ωₕ)[i]))
-
 @inline function _dirichlet_bc_indices!(
     v::AbstractVector,
     Ωₕ::AbstractMeshType,
@@ -561,22 +543,6 @@ _function_in_linear_indices(func, Ωₕ, i) = func(point(Ωₕ, indices(Ωₕ)[i
 end
 
 # --- Symmetrization of the linear system ------------------------------------------- #
-
-"""
-    dirichlet_bc_symmetrize!(A::AbstractMatrix, F::AbstractVector, Ωₕ::AbstractMeshType, labels::Symbol...)
-
-Impose Dirichlet conditions on `A` and symmetrize the linear system `Ax = F`.
-
-The stored zeros this leaves behind remain in the sparse structure. Preserving explicit zeros
-keeps the sparsity pattern fixed across assemblies, avoiding costly CSC column reallocations.
-"""
-function dirichlet_bc_symmetrize!(
-    A::AbstractMatrix, F::AbstractVector, Ωₕ::AbstractMeshType, labels::Symbol...
-)
-    dirichlet_bc!(A, Ωₕ, labels...)
-    symmetrize!(A, F, Ωₕ, labels...)
-    return nothing
-end
 
 """
     symmetrize!(A::AbstractMatrix, F::AbstractVector, Ωₕ::AbstractMeshType, labels::Symbol...)

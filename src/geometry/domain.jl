@@ -60,41 +60,15 @@ Zero-allocation; see [`label_identifiers`](@ref).
 Return an iterator yielding the identifying symbols, symbol sets, or predicate functions of all markers in domain `Ω`.
 
 !!! note
-    Iterating directly over [`marker_symbols`](@ref), [`marker_tuples`](@ref), or
-    [`marker_conditions`](@ref) allocates 0 bytes.
+    Iterating [`symbols`](@ref), [`tuples`](@ref), or [`conditions`](@ref) directly, or
+    through [`label_symbols`](@ref)/[`label_tuples`](@ref)/[`label_conditions`](@ref),
+    allocates 0 bytes.
 """
 @inline function marker_identifiers(Ω::Domain)
     return (
         identifier(marker) for
         marker in Iterators.flatten((symbols(Ω), tuples(Ω), conditions(Ω)))
     )
-end
-
-"""
-    marker_symbols(Ω::Domain)
-
-Return an iterator yielding identifiers of single-symbol markers on domain `Ω`.
-"""
-@inline function marker_symbols(Ω::Domain)
-    return (identifier(marker) for marker in symbols(Ω))
-end
-
-"""
-    marker_tuples(Ω::Domain)
-
-Return an iterator yielding identifiers of multi-symbol markers on domain `Ω`.
-"""
-@inline function marker_tuples(Ω::Domain)
-    return (identifier(marker) for marker in tuples(Ω))
-end
-
-"""
-    marker_conditions(Ω::Domain)
-
-Return an iterator yielding predicate functions of condition markers on domain `Ω`.
-"""
-@inline function marker_conditions(Ω::Domain)
-    return (identifier(marker) for marker in conditions(Ω))
 end
 
 @inline label_identifiers(Ω::Domain) = label_identifiers(markers(Ω))

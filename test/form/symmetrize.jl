@@ -129,23 +129,17 @@ using LinearAlgebra: issymmetric
         @test F0 == Fbefore
     end
 
-    @testset "Wrapper execution order" begin
-        Aw, Fw = _tri(n), collect(1.0:n)
-        Bramble.dirichlet_bc_symmetrize!(Aw, Fw, Ωₕ, :bottom)
-
+    @testset "dirichlet_bc! then symmetrize! preserves stored zeros" begin
         Ae, Fe = _tri(n), collect(1.0:n)
         dirichlet_bc!(Ae, Ωₕ, :bottom)
         symmetrize!(Ae, Fe, Ωₕ, :bottom)
-
-        @test Aw == Ae
-        @test Fw == Fe
-        @test issymmetric(Aw)
+        @test issymmetric(Ae)
 
         # the stored zeros stay stored: the sparsity pattern is the stencil's, and is not
         # allowed to start depending on the boundary data. This is why the `dropzeros`
         # option was removed rather than defaulted off.
-        @test nnz(Aw) == nnz(_tri(n))
-        @test count(iszero, nonzeros(Aw)) > 0
+        @test nnz(Ae) == nnz(_tri(n))
+        @test count(iszero, nonzeros(Ae)) > 0
     end
 
     @testset "Diagonal preservation" begin

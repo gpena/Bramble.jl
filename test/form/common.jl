@@ -23,7 +23,6 @@ using Bramble:
     shift_offset,
     get_spacing,
     get_forward_spacing,
-    get_half_spacing,
     shift_stencil,
     concatenate_stencils,
     scale_stencil,
@@ -68,12 +67,10 @@ using Bramble:
         i1 = CartesianIndex(4)
         @test get_spacing(Ωₕ1, i1, 1) == spacing(Ωₕ1, i1)
         @test get_forward_spacing(Ωₕ1, i1, 1) == forward_spacing(Ωₕ1, i1)
-        @test get_half_spacing(Ωₕ1, i1, 1) == half_spacing(Ωₕ1, i1)
 
         for d in 1:2
             @test get_spacing(Ωₕ, I, d) == spacing(Ωₕ, I)[d]
             @test get_forward_spacing(Ωₕ, I, d) == forward_spacing(Ωₕ, I)[d]
-            @test get_half_spacing(Ωₕ, I, d) == half_spacing(Ωₕ, I)[d]
         end
 
         # the two directions of a non-uniform mesh really do differ, so the test is not

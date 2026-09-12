@@ -452,11 +452,9 @@ using LinearAlgebra: I as LinearAlgebraI
         # a scalar space is its own only leaf, at offset zero
         @test Bramble.first_space(Wₕ) === Wₕ
         @test Bramble.leaf_spaces_offsets(Wₕ) == ((Wₕ, 0),)
-        @test Bramble.n_leaf_spaces(Wₕ) == 1
 
         leaves = Bramble.leaf_spaces_offsets(nested)
         @test length(leaves) == 4
-        @test Bramble.n_leaf_spaces(nested) == 4
         @test map(last, leaves) == (0, n, 2n, 3n)
         @test ndofs(nested) == 4n
 

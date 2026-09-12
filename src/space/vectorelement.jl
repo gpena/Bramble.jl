@@ -97,7 +97,9 @@ deeply `Wₕ` nests.
 end
 
 """
-    component_ranges(Wₕ::CompositeGridSpace) -> NTuple{n_leaf_spaces(Wₕ), UnitRange{Int}}
+    component_ranges(Wₕ::CompositeGridSpace) -> NTuple{N, UnitRange{Int}}
+
+`N` is the number of scalar leaves underneath `Wₕ`, counting through any nesting.
 
 Returns the degree-of-freedom ranges for every **leaf** of `Wₕ`, depth-first — see
 [`component_range`](@ref).

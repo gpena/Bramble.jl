@@ -12,8 +12,7 @@ using Bramble:
     labels,
     CartesianProduct
 using Bramble: boundary_symbols, label, identifier, domain, symbols, tuples, conditions
-using Bramble:
-    marker_identifiers, process_identifier, marker_symbols, marker_tuples, marker_conditions
+using Bramble: marker_identifiers, process_identifier
 using Bramble:
     label_identifiers,
     label_symbols,
@@ -212,9 +211,6 @@ end
         lbls = Set(labels(Ω))
         @test lbls == Set([:bnd_left, :corners, :region1, :boundary])
 
-        @test Set(marker_symbols(Ω)) == Set([:left, :top])
-        @test Set(marker_tuples(Ω)) == Set([Set((:top, :right))])
-        @test length(collect(marker_conditions(Ω))) == 1
         @test length(collect(marker_identifiers(Ω))) == 4
 
         @test Set(label_symbols(Ω)) == Set([:bnd_left, :boundary])
@@ -325,27 +321,6 @@ end
             end;
             c
         )
-        iterate_marker_syms(dom) = (
-            c=0;
-            for m in marker_symbols(dom)
-                c += 1
-            end;
-            c
-        )
-        iterate_marker_tups(dom) = (
-            c=0;
-            for m in marker_tuples(dom)
-                c += 1
-            end;
-            c
-        )
-        iterate_marker_conds(dom) = (
-            c=0;
-            for m in marker_conditions(dom)
-                c += 1
-            end;
-            c
-        )
         iterate_label_identifiers(dom) = (
             c=0;
             for l in label_identifiers(dom)
@@ -357,9 +332,6 @@ end
         @test_allocs iterate_symbols(Ω_markers)
         @test_allocs iterate_tuples(Ω_markers)
         @test_allocs iterate_conditions(Ω_markers)
-        @test_allocs iterate_marker_syms(Ω_markers)
-        @test_allocs iterate_marker_tups(Ω_markers)
-        @test_allocs iterate_marker_conds(Ω_markers)
 
         # gpena/Bramble.jl#99: symbols/tuples moved from Set to Tuple, so the combined
         # sweep across all three marker categories no longer flattens heterogeneous

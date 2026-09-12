@@ -547,7 +547,6 @@ end
         Wn = (W5 × W9) × W9
         leaves = Bramble.leaf_spaces_offsets(Wn)
         @test length(leaves) == 3                      # not 2 (the immediate-child count)
-        @test Bramble.n_leaf_spaces(Wn) == 3
         @test ndofs.(first.(leaves)) == (5, 9, 9)
         @test component_ranges(Wn) == (1:5, 6:14, 15:23)
         @test component_range(Wn, 3) == 15:23

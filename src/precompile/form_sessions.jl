@@ -121,8 +121,8 @@ end
 
 # Block extraction for a coupled form: the symbolic arguments, and the split into blocks.
 function _pc_form_blocks(Vₕ, ::Val{D}) where {D}
-    n = n_leaf_spaces(Vₕ)
     leaves = leaf_spaces_offsets(Vₕ)
+    n = length(leaves)
 
     u, v = TrialFunction{D}(), TestFunction{D}()
     a = innerₕ(D₋ₓ(u(1)), D₋ₓ(v(1))) + innerₕ(u(2), v(2))
@@ -167,7 +167,6 @@ function _pc_form_dirichlet(Ωₕ::AbstractMeshType, Wₕ, Vₕ, be, label::Symb
     symmetrize!(A, F, Ωₕ, label)
     symmetrize!(A, F, Wₕ, label)
     symmetrize!(Av, Fv, Vₕ, label)
-    dirichlet_bc_symmetrize!(A, F, Ωₕ, label)
     return nothing
 end
 

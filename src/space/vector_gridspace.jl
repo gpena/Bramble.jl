@@ -207,14 +207,6 @@ A scalar space is its own only leaf, at offset zero.
     return ((head..., tail...), final)
 end
 
-"""
-    n_leaf_spaces(Wₕ) -> Int
-
-The number of scalar spaces underneath `Wₕ`, counting through any nesting.
-"""
-@inline n_leaf_spaces(::ScalarGridSpace) = 1
-@inline n_leaf_spaces(Wₕ::CompositeGridSpace) = sum(n_leaf_spaces, Wₕ.spaces)
-
 # --- Display ---------------------------------------------------------------------- #
 
 function Base.show(io::IO, Wₕ::CompositeGridSpace{N}) where {N}

@@ -671,5 +671,3 @@ function assemble_parallel!(b::AbstractVector, form::LinearForm, ast=nothing)
 
     return b
 end
-
-# update_ast_grid_coefficients! has been deprecated and deleted.
