@@ -280,10 +280,15 @@ For each index `i` associated with the given Dirichlet `labels`, this function:
  2. Sets the diagonal element `A[i, i]` to one.
 """
 function dirichlet_bc!(A::AbstractMatrix, Ωₕ::AbstractMeshType, labels::Symbol...)
-    for p in labels
-        vec_bool = index_in_marker(Ωₕ, p)
-        _dirichlet_bc_indices!(A, vec_bool)
-    end
+    isempty(labels) && return A
+    # One combined mask, one sweep over `A` -- not one sweep per label. Zeroing a row and
+    # setting its diagonal is idempotent, so unioning the labels' masks first changes
+    # nothing a per-label loop would have done, unlike the value-writing vector overload
+    # below, whose `_apply_conditions!` walk is order-sensitive on an overlap and must stay
+    # a loop. `_combined_mask` (space/inner_product.jl) already returns the mesh's own
+    # stored mask with no copy when there is only one label, so the common case still costs
+    # nothing here.
+    _dirichlet_bc_indices!(A, _combined_mask(Ωₕ, labels))
     return A
 end
 
