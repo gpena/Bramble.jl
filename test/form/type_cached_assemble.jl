@@ -4,6 +4,7 @@ using ForwardDiff, DifferentiationInterface
 using SparseConnectivityTracer: SparseConnectivityTracer
 using SparseMatrixColorings: SparseMatrixColorings
 using SparseArrays: nnz
+using Random
 
 # `type_cached_assemble!` (form/type_cached_assemble.jl, gpena/Bramble.jl#20): caches a
 # coefficient-dependent BilinearForm's sparsity pattern per element type, so a Newton
@@ -47,6 +48,12 @@ if !@isdefined(var"@test_allocs")
 end
 
 @testset "type_cached_assemble!" begin
+    # Non-uniform (`false`): mesh1d.jl's `_generate_random_points!` draws from the global
+    # RNG, so an unseeded run's point placement differs run to run -- and the Newton solve
+    # below asserts a specific iteration bound (`length(newton_residuals) < 6`), which an
+    # unlucky draw could plausibly miss. Seeded so the test is reproducible, not just
+    # usually passing.
+    Random.seed!(20260912)
     Ω = domain(interval(0.0, 1.0))
     Ωₕ = mesh(Ω, 20, false)
     Wₕ = gridspace(Ωₕ)
@@ -166,6 +173,7 @@ end
         # Same check at a 100x larger mesh: `direct_bytes` must grow with it (it rebuilds the
         # pattern), while a cache hit's own cost must not (it is dictionary/dispatch overhead,
         # not proportional to ndofs).
+        Random.seed!(20260912)
         Ωₕ_big = mesh(domain(interval(0.0, 1.0)), 2000, false)
         Wₕ_big = gridspace(Ωₕ_big)
         function _build_diffusion_big(uₕ)
