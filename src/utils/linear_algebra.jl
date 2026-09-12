@@ -263,6 +263,45 @@ end
 Base.IteratorSize(::Type{MarkedIndices}) = Base.SizeUnknown()
 Base.eltype(::Type{MarkedIndices}) = Int
 
+"""
+    MarkedIndicesUnion(masks::NTuple{N,BitVector}) where N
+
+Lazily iterates the 1-based positions where the union of `masks` is set.
+
+The multi-marker counterpart of [`MarkedIndices`](@ref): `_combined_mask` (space/inner_product.jl)
+used to materialize the union into a fresh `BitVector` via `copy` + `.|=` before walking it,
+one heap allocation per call (gpena/Bramble.jl#149). This ORs each mask's 64-bit chunk on the
+fly instead, so the union is never materialized -- still proportional to the number of set
+bits, still a whole-word skip wherever every mask's chunk is zero, and allocates nothing.
+"""
+struct MarkedIndicesUnion{N}
+    chunks::NTuple{N,Vector{UInt64}}
+    len::Int
+end
+
+@inline function MarkedIndicesUnion(masks::NTuple{N,BitVector}) where {N}
+    return MarkedIndicesUnion{N}(map(m -> m.chunks, masks), length(masks[1]))
+end
+
+@inline _reduce_or_chunk(chunks::NTuple{N,Vector{UInt64}}, i::Int) where {N} =
+    reduce(|, ntuple(k -> chunks[k][i], Val(N)))
+
+@inline function Base.iterate(
+    m::MarkedIndicesUnion{N}, (chunk_idx, rest)=(0, zero(UInt64))
+) where {N}
+    nchunks = length(m.chunks[1])
+    @inbounds while rest == zero(UInt64)
+        chunk_idx += 1
+        chunk_idx > nchunks && return nothing
+        rest = _reduce_or_chunk(m.chunks, chunk_idx)
+    end
+    i = (chunk_idx - 1) * 64 + trailing_zeros(rest) + 1
+    return i, (chunk_idx, rest & (rest - 1))
+end
+
+Base.IteratorSize(::Type{<:MarkedIndicesUnion}) = Base.SizeUnknown()
+Base.eltype(::Type{<:MarkedIndicesUnion}) = Int
+
 # Discrete space inner product kernels
 
 """
@@ -335,6 +374,24 @@ identical generated code, so one method now covers both cases.
     s = zero(T)
 
     @inbounds for i in MarkedIndices(mask)
+        s = muladd(T(u[i]) * T(v[i]), T(w[i]), s)
+    end
+
+    return s
+end
+
+# The multi-marker counterpart, walking a `MarkedIndicesUnion` (gpena/Bramble.jl#149)
+# instead of a `BitVector`: `_combined_mask` hands one of these straight in, with no
+# intermediate combined mask to check the length of, so the guard reads `mask.len`.
+@inline function _dot_masked(
+    u::AbstractVector, v::AbstractVector, w::AbstractVector, mask::MarkedIndicesUnion
+)
+    (length(u) == length(v) == length(w) == mask.len) ||
+        _throw_dot_dim_error(length(u), length(v), length(w), mask.len)
+    T = promote_type(eltype(u), eltype(v), eltype(w))
+    s = zero(T)
+
+    @inbounds for i in mask
         s = muladd(T(u[i]) * T(v[i]), T(w[i]), s)
     end
 

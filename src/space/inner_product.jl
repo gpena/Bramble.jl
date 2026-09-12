@@ -60,12 +60,31 @@ end
 # a sum (unlike `Rₕ!`'s per-marker write) must not double-count a point two markers both
 # cover. `N == 1` above skips this allocation, since the mesh's own stored mask can be read
 # directly without being unioned with anything.
+#
+# `dirichlet_bc!` (form/dirichlet_constraints.jl) is the other caller of this exact function,
+# and its `SparseMatrixCSC` path needs random-access `getindex` on the result (`index_in_marker[j]`
+# for an arbitrary column `j`, not a walk), which a lazy union can't offer without also
+# duplicating `BitVector`'s own bit-indexing math. So this stays eager; `_combined_marked_indices`
+# below is the innerₕ-only, allocation-free replacement (gpena/Bramble.jl#149), used solely by
+# code that only ever walks the result instead of indexing into it.
 function _combined_mask(Ωₕ, markers::NTuple{N,Symbol}) where {N}
     mask = copy(index_in_marker(Ωₕ, markers[1]))
     for k in 2:N
         mask .|= index_in_marker(Ωₕ, markers[k])
     end
     return mask
+end
+
+@inline function _combined_marked_indices(Ωₕ, markers::NTuple{1,Symbol})
+    return index_in_marker(Ωₕ, markers[1])
+end
+
+# `N > 1`: only ever handed to `_dot_masked`, which walks it and never indexes into it, so
+# the union can stay a lazy `MarkedIndicesUnion` (utils/linear_algebra.jl) instead of a
+# freshly allocated `BitVector` -- unlike `_combined_mask` above, this has exactly one
+# caller family (`innerₕ`/`_directional_inner_plus` below) and can afford to (gpena/Bramble.jl#149).
+@inline function _combined_marked_indices(Ωₕ, markers::NTuple{N,Symbol}) where {N}
+    return MarkedIndicesUnion(ntuple(k -> index_in_marker(Ωₕ, markers[k]), Val(N)))
 end
 
 """
@@ -110,7 +129,7 @@ the same cell measures, not a surface integral; see the note above `_combined_ma
     markers::NTuple{N,Symbol}=NTuple{0,Symbol}(),
 ) where {N}
     N == 0 && return _dot(uₕ.data, weights(space(uₕ), Innerh()), vₕ.data)
-    mask = _combined_mask(mesh(space(uₕ)), markers)
+    mask = _combined_marked_indices(mesh(space(uₕ)), markers)
     return _dot_masked(uₕ.data, weights(space(uₕ), Innerh()), vₕ.data, mask)
 end
 
@@ -193,7 +212,7 @@ the inner product there: the square root of the sum of the components' squared n
     markers::NTuple{N,Symbol}=NTuple{0,Symbol}(),
 ) where {DIM,N}
     N == 0 && return _dot(uₕ.data, weights(space(uₕ), Innerplus(), DIM), vₕ.data)
-    mask = _combined_mask(mesh(space(uₕ)), markers)
+    mask = _combined_marked_indices(mesh(space(uₕ)), markers)
     return _dot_masked(uₕ.data, weights(space(uₕ), Innerplus(), DIM), vₕ.data, mask)
 end
 
