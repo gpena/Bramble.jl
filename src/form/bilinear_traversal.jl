@@ -726,8 +726,9 @@ mutable struct DiagonalReplaySink{M<:SparseMatrixCSC,D,R}
     const P::Int
     n::Int
 end
-DiagonalReplaySink(A, interior, base, stride, P) =
-    DiagonalReplaySink(A, interior, base, stride, P, 0)
+function DiagonalReplaySink(A, interior, base, stride, P)
+    return DiagonalReplaySink(A, interior, base, stride, P, 0)
+end
 
 # `interior`'s axes are `_interior_range`'s output -- typically not 1-based (a margin-1
 # interior on a `OneTo(n)` grid starts at 2) -- so `LinearIndices(interior)` cannot be used
