@@ -173,19 +173,22 @@ See also: [`_step_entry!`](@ref), [`_trial_inbounds`](@ref).
 @inline _sink_needs_coordinates(::Any) = true
 
 """
-    _sink_point!(sink, lin_idx::Int) -> Int
+    _sink_point!(sink, lin_idx::Int, I::CartesianIndex) -> Int
 
-Announce grid point `lin_idx` to `sink`, and answer the base slot for its entries.
+Announce grid point `lin_idx` (at cartesian index `I`) to `sink`, and answer the base slot
+for its entries.
 
 The default answers `0`. [`RecordSink`](@ref) uses the call to open that point's slice of
 the position list; [`ReplaySink`](@ref) answers the start of that slice, which the traversal
 then adds the entry ordinal to. Addressing each point from its own base is what lets a
 replay stay correct regardless of the order grid points are visited in, without any sink
-having to carry a mutable cursor.
+having to carry a mutable cursor. `I` is passed alongside `lin_idx` for
+[`DiagonalReplaySink`](@ref), which addresses a point by its rank in `LinearIndices(interior)`
+rather than by `lin_idx` -- every other sink ignores it.
 
 See also: [`visit_bilinear_stencil`](@ref), [`_sink_entry!`](@ref).
 """
-@inline _sink_point!(::Any, ::Int) = 0
+@inline _sink_point!(::Any, ::Int, ::CartesianIndex) = 0
 
 """
     _entry_target(lin_indices, I::CartesianIndex, off_u, off_v,
@@ -419,7 +422,7 @@ end
     @inbounds for I in region
         lin_idx = lin_indices[I]
         stencil = local_stencil(term, sp, I, mesh_markers, lin_idx)
-        slot = _sink_point!(sink, lin_idx)
+        slot = _sink_point!(sink, lin_idx, I)
         _visit_entries(sink, stencil, lin_indices, I, row_offset, col_offset, slot)
     end
     return nothing
@@ -439,7 +442,7 @@ end
     @inbounds for I in interior
         lin_idx = lin_indices[I]
         stencil = local_stencil(term, sp, I, mesh_markers, lin_idx)
-        slot = _sink_point!(sink, lin_idx)
+        slot = _sink_point!(sink, lin_idx, I)
         _visit_entries_unguarded(
             sink, stencil, lin_indices, I, row_offset, col_offset, slot
         )
@@ -449,9 +452,10 @@ end
 
 """
     visit_bilinear_stencil(sink, term, sp, row_offset::Int, col_offset::Int) -> sink
+    visit_bilinear_stencil(interior_sink, boundary_sink, term, sp, row_offset::Int, col_offset::Int) -> boundary_sink
 
 Walk every grid point of `sp`, evaluate `term`'s local stencil there, and hand each entry
-that lands inside the matrix to `sink`.
+that lands inside the matrix to a sink.
 
 The walk that five separate sweeps used to re-derive: mesh, markers, linear indices, the
 loop over grid points, the stencil evaluation, and the decision of where each entry lands
@@ -464,28 +468,38 @@ derived here rather than by each caller.
 
 Splits into an interior core and a boundary shell when [`_stencil_margin`](@ref) and the
 grid size allow it (see the comment above `_peelable`), so most points skip the bounds
-guard entirely; every point still gets exactly one visit either way, so `sink` sees the same
+guard entirely; every point still gets exactly one visit either way, so a sink sees the same
 set of entries regardless of which path ran, in a possibly different order.
 [`RecordSink`](@ref)/[`ReplaySink`](@ref) are unaffected by that: they address each point by
 its own linear index, not by visit order (see their docstrings).
 
+The two-sink form lets the interior and the boundary shell be handled by different sinks --
+only [`DiagonalReplaySink`](@ref) needs this, pairing itself (interior) with an ordinary
+[`ReplaySink`](@ref) (boundary shell), so the one-sink form below is the thin, common case.
+
 # Arguments
-- `sink`: What to do per entry. See [`PatternSink`](@ref), [`RecordSink`](@ref) and
-  [`ReplaySink`](@ref), and the contract in [`_sink_entry!`](@ref),
-  [`_sink_point!`](@ref) and [`_sink_dedups`](@ref).
+- `sink` (or `interior_sink`/`boundary_sink`): What to do per entry. See [`PatternSink`](@ref),
+  [`RecordSink`](@ref), [`ReplaySink`](@ref) and [`DiagonalReplaySink`](@ref), and the
+  contract in [`_sink_entry!`](@ref), [`_sink_point!`](@ref) and [`_sink_dedups`](@ref).
 - `term`: The AST node whose stencil is evaluated at each point.
 - `sp`: The test leaf whose grid is walked and whose markers the stencil sees.
 - `row_offset`, `col_offset`: The block's origin in the assembled matrix, `0` for a scalar
   space.
 
 # Returns
-- `sink`: The same sink, so a caller can read what it collected.
+- The boundary-shell sink (`sink` itself, in the one-sink form), so a caller can read what
+  it collected.
 
 See also: [`allocate_system_matrix`](@ref), [`add_to_sparse!`](@ref).
 """
 @inline function visit_bilinear_stencil(
-    sink::SINK, term::TERM, sp, row_offset::Int, col_offset::Int
-) where {SINK,TERM}
+    interior_sink::SINK1,
+    boundary_sink::SINK2,
+    term::TERM,
+    sp,
+    row_offset::Int,
+    col_offset::Int,
+) where {SINK1,SINK2,TERM}
     Ωₕ = mesh(sp)
     mesh_markers = markers(Ωₕ)
     grid_inds = indices(Ωₕ)
@@ -501,20 +515,46 @@ See also: [`allocate_system_matrix`](@ref), [`add_to_sparse!`](@ref).
     if _peelable(ax, margin)
         interior = CartesianIndices(map(r -> _interior_range(r, margin), ax))
         _visit_interior!(
-            sink, term, sp, mesh_markers, lin_indices, interior, row_offset, col_offset
+            interior_sink,
+            term,
+            sp,
+            mesh_markers,
+            lin_indices,
+            interior,
+            row_offset,
+            col_offset,
         )
         @inbounds for slab in _boundary_shell_slabs(ax, margin)
             _visit_guarded_region!(
-                sink, term, sp, mesh_markers, lin_indices, slab, row_offset, col_offset
+                boundary_sink,
+                term,
+                sp,
+                mesh_markers,
+                lin_indices,
+                slab,
+                row_offset,
+                col_offset,
             )
         end
     else
         _visit_guarded_region!(
-            sink, term, sp, mesh_markers, lin_indices, grid_inds, row_offset, col_offset
+            boundary_sink,
+            term,
+            sp,
+            mesh_markers,
+            lin_indices,
+            grid_inds,
+            row_offset,
+            col_offset,
         )
     end
-    return sink
+    return boundary_sink
 end
+
+# The ordinary one-sink call every caller but the diagonal replay path uses: the same sink
+# plays both roles, so `visit_bilinear_stencil(sink, ...)` behaves exactly as it always has.
+@inline visit_bilinear_stencil(sink, term, sp, row_offset::Int, col_offset::Int) =
+    visit_bilinear_stencil(sink, sink, term, sp, row_offset, col_offset)
 
 # --- the sinks --------------------------------------------------------------------- #
 
@@ -609,7 +649,7 @@ struct RecordSink{M<:SparseMatrixCSC,TERM}
     point_ptr::Vector{Int}
     positions::Vector{Int}
 end
-@inline _sink_point!(sink::RecordSink, lin_idx::Int) =
+@inline _sink_point!(sink::RecordSink, lin_idx::Int, ::CartesianIndex) =
     (@inbounds sink.point_ptr[lin_idx] = length(sink.positions) + 1; 0)
 @inline function _sink_entry!(sink::RecordSink, row::Int, col::Int, weight, ::Int)
     pos = _find_nzval_position(sink.A, row, col)
@@ -642,11 +682,89 @@ struct ReplaySink{M<:SparseMatrixCSC}
     point_ptr::Vector{Int}
     positions::Vector{Int}
 end
-@inline _sink_point!(sink::ReplaySink, lin_idx::Int) = @inbounds(sink.point_ptr[lin_idx])
+@inline _sink_point!(sink::ReplaySink, lin_idx::Int, ::CartesianIndex) =
+    @inbounds(sink.point_ptr[lin_idx])
 @inline _sink_needs_coordinates(::ReplaySink) = false
 Base.@propagate_inbounds function _sink_entry!(
     sink::ReplaySink, ::Int, ::Int, weight, slot::Int
 )
     @inbounds sink.A.nzval[sink.positions[slot]] += weight
+    return nothing
+end
+
+"""
+    DiagonalReplaySink(A::SparseMatrixCSC, interior::CartesianIndices, base::Vector{Int}, stride::Vector{Int}, P::Int)
+
+Add a term's values to `A`'s interior core using [`DiagonalSegment`](@ref)'s per-tap stride
+instead of a stored position per entry.
+
+Paired with an ordinary [`ReplaySink`](@ref) for the boundary shell through the two-sink
+form of [`visit_bilinear_stencil`](@ref): this sink is only ever handed the interior region,
+so `_sink_point!` addresses a point by its rank `n` in `interior`'s own iteration order
+(zero-based, via [`_interior_rank`](@ref)) rather than by `lin_idx`, matching the order
+[`_record_segment!`](@ref) validated the stride against. The `k`-th tap of that point
+(`1`-based, `k in 1:P`) then lands at `base[k] + stride[k] * n`, recovered from the running
+`slot` the shared walk already threads (`slot = n * P + (k - 1)`), so no per-entry lookup
+runs at all.
+
+See also: [`visit_bilinear_stencil`](@ref), [`_replay_segment!`](@ref).
+"""
+# `n` is mutable, unlike every other field: `_sink_point!` sets it once per point and
+# `_sink_entry!` reads it for every one of that point's `P` taps, recovering the tap number
+# as `slot - n * P` (a multiply and a subtract). The alternative -- reconstructing `n` from
+# `slot` alone via `divrem(slot, P)` -- needs a genuine integer division every entry, because
+# `P` is a runtime field (it varies per term/segment, so it cannot be a type parameter
+# without reopening the boxing `DiagonalSegment`'s docstring already describes for a
+# per-element-varying parameter). Measured: the `divrem` version replayed a 1D interior
+# 30-40% *slower* than the flat `ReplaySink` it was meant to beat, even though it read no
+# `positions` array at all -- division dominated the saving.
+mutable struct DiagonalReplaySink{M<:SparseMatrixCSC,D,R}
+    const A::M
+    const interior::CartesianIndices{D,R}
+    const base::Vector{Int}
+    const stride::Vector{Int}
+    const P::Int
+    n::Int
+end
+DiagonalReplaySink(A, interior, base, stride, P) =
+    DiagonalReplaySink(A, interior, base, stride, P, 0)
+
+# `interior`'s axes are `_interior_range`'s output -- typically not 1-based (a margin-1
+# interior on a `OneTo(n)` grid starts at 2) -- so `LinearIndices(interior)` cannot be used
+# directly: it normalizes to a 1-based range over the same *length*, not the same *values*,
+# and indexing it with `I` unchanged throws (or silently answers a different point). This
+# computes the 0-based rank `I` holds in `interior`'s own column-major iteration order --
+# first axis fastest, exactly how `for I in interior` visits it -- from first principles.
+#
+# `CartesianIndices{D,R}` names *both* type parameters deliberately: `CartesianIndices{D}`
+# alone is still a `UnionAll` over the ranges-tuple type `R`, not a concrete type, and a
+# struct field or argument declared that way is stored boxed -- this is what made every
+# `DiagonalReplaySink`/`DiagonalSegment` built from it allocate (measured 144-384 B per
+# replay before this was named).
+@inline function _interior_rank(
+    interior::CartesianIndices{D,R}, I::CartesianIndex{D}
+) where {D,R}
+    ax = interior.indices
+    n = 0
+    stride = 1
+    @inbounds for d in 1:D
+        n += (I[d] - first(ax[d])) * stride
+        stride *= length(ax[d])
+    end
+    return n
+end
+
+@inline _sink_needs_coordinates(::DiagonalReplaySink) = false
+@inline function _sink_point!(sink::DiagonalReplaySink, ::Int, I::CartesianIndex)
+    n = _interior_rank(sink.interior, I)
+    sink.n = n
+    return n * sink.P
+end
+Base.@propagate_inbounds function _sink_entry!(
+    sink::DiagonalReplaySink, ::Int, ::Int, weight, slot::Int
+)
+    n = sink.n
+    k0 = slot - n * sink.P
+    @inbounds sink.A.nzval[sink.base[k0 + 1] + sink.stride[k0 + 1] * n] += weight
     return nothing
 end

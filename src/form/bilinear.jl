@@ -27,27 +27,67 @@ See also: [`RecordSink`](@ref), [`ReplaySink`](@ref).
 """
 const NzvalSegment = Tuple{Vector{Int},Vector{Int}}
 
-# One `BilinearForm`'s nzval-position cache: valid only for the exact matrix object last
-# assembled into (`A === cache.A`), one `NzvalSegment` per (term, block) the serial assembly
-# walk visits, in visitation order. A companion *value*, not a type parameter of
-# `BilinearForm` -- so it can be filled in lazily, on the first `assemble!` call, without the
-# form itself needing to be mutable or its type to depend on whether a cache exists yet.
-mutable struct _AssemblyCache
-    A::Union{Nothing,SparseMatrixCSC}
-    ast::Any
-    segments::Vector{NzvalSegment}
+"""
+    DiagonalSegment{D}
+
+One term's recorded nzval positions for one block, on a `D`-dimensional structured grid
+where the term's own [`_stencil_margin`](@ref) let its interior peel away from a boundary
+shell (gpena/Bramble.jl#160): interior entries are `base[k] + stride[k] * n` for the `n`-th
+point `interior`'s own iteration order visits (`n` zero-based, [`_interior_rank`](@ref)),
+rather than one stored `Int` per entry -- `positions` never carries the interior's
+`O(N * P)` share at all. `boundary` is an ordinary [`NzvalSegment`](@ref) covering only the
+shell, indexed exactly as before.
+
+Built by [`_record_segment!`](@ref) only when every interior point produces the same number
+of entries `P` and the same per-tap stride holds across the whole interior -- checked once,
+not assumed, because a form summing terms of different margins can make a column's true
+`nzval` footprint vary inside what this one term calls its own interior (see
+[`_stencil_margin`](@ref)). Any point where the check fails falls back to a plain
+[`NzvalSegment`](@ref), the general shape [`ReplaySink`](@ref) already handles.
+
+Parametrized by `D` alone -- `interior`'s ranges-tuple type is pinned to
+`NTuple{D,UnitRange{Int}}` (what [`_interior_range`](@ref) always produces), never left as
+an independent free parameter -- so that for one `BilinearForm`'s fixed dimension,
+`AnySegment{D}` is a two-member union of *concrete* types. A `CartesianIndices{D}` alone, or
+a `DiagonalSegment` with `D` left to vary, is not concrete (its ranges type is still a
+`UnionAll`) and stores boxed: exactly what made an early version of this allocate 80-400 B on
+every replay, `@test_allocs`-checked paths included.
+
+See also: [`DiagonalReplaySink`](@ref), [`AnySegment`](@ref).
+"""
+struct DiagonalSegment{D}
+    base::Vector{Int}
+    stride::Vector{Int}
+    P::Int
+    interior::CartesianIndices{D,NTuple{D,UnitRange{Int}}}
+    boundary::NzvalSegment
 end
 
-# Every fresh `BilinearForm` starts pointing at this one, shared, empty vector rather than
-# allocating its own: it is never mutated in place (a cache miss *replaces* `cache.segments`
-# wholesale, see `_assemble_bilinear_core_cached!`, rather than `empty!`ing whatever it
-# currently references), so sharing it across every not-yet-assembled form is safe. Keeps
-# `form(Wₕ, Vₕ, f)` itself allocation-free: only the `_AssemblyCache` wrapper is a genuine
-# per-form cost (one allocation, since it is a `mutable struct` and therefore always
-# heap-boxed), not a second one for an empty vector nothing has scattered into yet.
-const _NO_SEGMENTS = NzvalSegment[]
+"""
+    AnySegment{D} = Union{NzvalSegment,DiagonalSegment{D}}
 
-_AssemblyCache() = _AssemblyCache(nothing, nothing, _NO_SEGMENTS)
+Either recorded shape a (term, block) can cache, for a `D`-dimensional form: a flat
+[`NzvalSegment`](@ref) or, where the structure held, a [`DiagonalSegment`](@ref). Kept as a
+two-concrete-member union per `D` -- see [`DiagonalSegment`](@ref) -- rather than leaving
+`D` to vary, so `Vector{AnySegment{D}}` stores unboxed.
+"""
+const AnySegment{D} = Union{NzvalSegment,DiagonalSegment{D}}
+
+# One `BilinearForm`'s nzval-position cache: valid only for the exact matrix object last
+# assembled into (`A === cache.A`), one `AnySegment{D}` per (term, block) the serial assembly
+# walk visits, in visitation order. A companion *value*, not a type parameter of
+# `BilinearForm` -- so it can be filled in lazily, on the first `assemble!` call, without the
+# form itself needing to be mutable or its type to depend on whether a cache exists yet. `D`
+# itself, though, is threaded in at construction (matching `BilinearForm`'s own `D`): without
+# it, `segments`'s eltype would be the unparametrized (non-concrete) `AnySegment`, and every
+# push/read would box (see [`DiagonalSegment`](@ref)).
+mutable struct _AssemblyCache{D}
+    A::Union{Nothing,SparseMatrixCSC}
+    ast::Any
+    segments::Vector{AnySegment{D}}
+end
+
+_AssemblyCache{D}() where {D} = _AssemblyCache{D}(nothing, nothing, AnySegment{D}[])
 
 """
     BilinearForm{D, TrialSpace, TestSpace, AST}
@@ -78,7 +118,7 @@ struct BilinearForm{D,TrialSpace,TestSpace,AST}
     trial_space::TrialSpace
     test_space::TestSpace
     ast::AST
-    cache::_AssemblyCache
+    cache::_AssemblyCache{D}
 end
 
 """
@@ -127,7 +167,9 @@ function form(Wₕ, Vₕ, f)
     raw_ast = f(TrialFunction{D}(), TestFunction{D}())
     _validate_form_expression(raw_ast, Val(D))
     ast = simplify_ast(resolve_ast(raw_ast))
-    return BilinearForm{D,typeof(Wₕ),typeof(Vₕ),typeof(ast)}(Wₕ, Vₕ, ast, _AssemblyCache())
+    return BilinearForm{D,typeof(Wₕ),typeof(Vₕ),typeof(ast)}(
+        Wₕ, Vₕ, ast, _AssemblyCache{D}()
+    )
 end
 
 # --- Mesh compatibility checks ------------------------------------------------------ #
