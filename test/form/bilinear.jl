@@ -3,6 +3,7 @@ using Bramble
 using ForwardDiff
 using LinearAlgebra: Diagonal, I
 using SparseArrays: sparse, nnz, nonzeros
+using Random
 using Bramble:
     BilinearForm,
     form,
@@ -894,6 +895,12 @@ using Bramble:
             sol(x) = 1 + sin(pi * x[1]) * cos(pi * x[2])
             rhs(x) = 2 * pi^2 * sin(pi * x[1]) * cos(pi * x[2])
 
+            # Non-uniform (`false, false`): mesh1d.jl's `_generate_random_points!` draws from
+            # the global RNG, so an unseeded run's point placement differs run to run -- and
+            # the norm bound below is a fixed threshold that an unlucky draw could miss.
+            # Seeded so the test is reproducible, not just usually passing (see the identical
+            # rationale in test/form/type_cached_assemble.jl).
+            Random.seed!(20260912)
             Ωd = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
             Ω = mesh(Ωd, (48, 48), (false, false))
             W = gridspace(Ω)
