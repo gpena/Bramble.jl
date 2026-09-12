@@ -42,11 +42,11 @@ See also: [`dirichlet_constraints`](@ref), [`dirichlet_bc!`](@ref), [`symmetrize
 =#
 
 """
-    DirichletConstraint{CT} = DomainMarkers{CT}
+    DirichletConstraint = DomainMarkers
 
 Type alias for Dirichlet boundary constraint storage.
 """
-const DirichletConstraint{CT} = DomainMarkers{CT}
+const DirichletConstraint = DomainMarkers
 
 """
     ConstraintMarkers
@@ -182,7 +182,7 @@ labels are read back out. Anything else throws.
     ((first(pair),), _create_generic_markers(pair))
 @inline _normalize_dirichlet(pairs::Tuple{Vararg{Pair{Symbol}}}) =
     (map(first, pairs), _create_generic_markers(pairs...))
-@inline _normalize_dirichlet(bcs::ConstraintMarkers) = (Tuple(labels(bcs)), bcs)
+@inline _normalize_dirichlet(bcs::ConstraintMarkers) = (labels(bcs), bcs)
 @inline _normalize_dirichlet(dirichlet) = _throw_bad_dirichlet(dirichlet)
 
 @noinline function _throw_bad_dirichlet(dirichlet)

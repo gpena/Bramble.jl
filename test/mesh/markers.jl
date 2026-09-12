@@ -118,6 +118,45 @@ using Bramble
         @test Bramble.index_in_marker(Ωₕ, :empty) isa BitVector
     end
 
+    @testset "Zero-allocation marker setup (gpena/Bramble.jl#124)" begin
+        # `_ensure_geometric_markers!` and `_set_markers_symbols!` used to route every
+        # boundary-facet lookup through `boundary_symbol_to_dict`, allocating a fresh
+        # `Dict{Symbol, CartesianIndices}` per call just to iterate or index it once. Both
+        # now query `boundary_symbol_to_cartesian`'s `NamedTuple` directly, so that lookup
+        # itself is zero-allocation (checked below) and `_set_markers_symbols!` measures
+        # 832 B -> 0 B against the pre-#124 commit (43df4c0).
+        #
+        # `_ensure_geometric_markers!` as a whole is NOT claimed zero: it still allocates
+        # 192 B for this 8x8 mesh, two `BitVector`s' worth (`falses(npoints(Ωₕ))` for the
+        # boundary mask, `.!boundary_set` for its interior complement) -- unconditionally
+        # computed every call, whether or not :boundary/:interior turn out to already be
+        # registered. Measured directly (not from an isolated empty-dict call, which adds
+        # an unrelated ~368 B Dict-growth artifact never reachable through the public API,
+        # since `domain(X)` always pre-registers `:boundary`): this 192 B is unchanged by
+        # #124 and is unrelated to it -- a one-time mesh-construction cost, not a hot loop.
+        # Whether it can be cut further (writing the interior mask directly instead of
+        # negating a scratch copy) is a separate question from what #124 fixed.
+        Ωₕ = mesh(domain(S), (8, 8), (true, true))
+        idxs = Bramble.indices(Ωₕ)
+
+        iterate_boundary_facets(idxs) = (
+            c=0;
+            for face in values(Bramble.boundary_symbol_to_cartesian(idxs))
+                c += length(face)
+            end;
+            c
+        )
+        @test_allocs Bramble.boundary_symbol_to_cartesian(idxs)
+        @test_allocs iterate_boundary_facets(idxs)
+
+        dm = markers(S, :inlet => :left, :outlet => :right, :walls => (:top, :bottom))
+        mesh_markers = Bramble.MeshMarkers()
+        Bramble.process_label_for_mesh!(
+            Bramble.npoints(Ωₕ), mesh_markers, Bramble.label_symbols(dm)
+        )
+        @test_allocs Bramble._set_markers_symbols!(mesh_markers, Bramble.symbols(dm), Ωₕ)
+    end
+
     @testset "Corner-only marker" begin
         # A predicate matching exactly the four geometric corners of a 2D box, as its own
         # named region -- distinct from :boundary (every edge point) and from any single

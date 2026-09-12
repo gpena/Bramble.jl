@@ -39,36 +39,37 @@ Return the identifying symbol, set of symbols, or predicate function of marker `
 @inline identifier(m::MarkerPair) = last(m)
 
 """
-    DomainMarkers(symbols::Set{Marker{Symbol}}, tuples::Set{Marker{Set{Symbol}}}, conditions::Tuple)
+    DomainMarkers(symbols::Tuple, tuples::Tuple, conditions::Tuple)
 
 Container categorizing and indexing boundary and interior markers for a computational domain.
 
-Condition predicates are stored in a tuple to preserve closure specialization at the type level.
+Every field is a statically typed tuple, so `symbols`, `tuples`, and `conditions` markers
+are each an unrolled, zero-allocation sweep to iterate.
 
 # Fields
-- `symbols`: Markers identified by a single predefined boundary `Symbol` (e.g. `:left`).
-- `tuples`: Markers identified by collections of predefined boundary symbols (e.g. `Set([:top, :right])`).
+- `symbols`: Tuple of markers identified by a single predefined boundary `Symbol` (e.g. `:left`).
+- `tuples`: Tuple of markers identified by collections of predefined boundary symbols (e.g. `Set([:top, :right])`).
 - `conditions`: Statically typed tuple of predicate function markers `f(x)` or `f(x, t)`.
 
 See also: [`markers`](@ref), [`symbols`](@ref), [`tuples`](@ref), [`conditions`](@ref).
 """
-struct DomainMarkers{CT<:Tuple}
-    symbols::Set{Marker{Symbol}}
-    tuples::Set{Marker{Set{Symbol}}}
+struct DomainMarkers{ST<:Tuple,TT<:Tuple,CT<:Tuple}
+    symbols::ST
+    tuples::TT
     conditions::CT
 end
 
 """
-    symbols(domain_markers::DomainMarkers) -> Set{Marker{Symbol}}
+    symbols(domain_markers::DomainMarkers) -> Tuple
 
-Return the set of single-symbol markers configured in `domain_markers`.
+Return the tuple of single-symbol markers configured in `domain_markers`.
 """
 @inline symbols(domain_markers::DomainMarkers) = domain_markers.symbols
 
 """
-    tuples(domain_markers::DomainMarkers) -> Set{Marker{Set{Symbol}}}
+    tuples(domain_markers::DomainMarkers) -> Tuple
 
-Return the set of multi-symbol markers configured in `domain_markers`.
+Return the tuple of multi-symbol markers configured in `domain_markers`.
 """
 @inline tuples(domain_markers::DomainMarkers) = domain_markers.tuples
 
@@ -83,19 +84,16 @@ Return the tuple of predicate condition markers configured in `domain_markers`.
     label_identifiers(domain_markers::DomainMarkers)
     labels(domain_markers::DomainMarkers)
 
-Return an iterator yielding the `Symbol` label of every marker in `domain_markers`.
+Return a tuple of the `Symbol` label of every marker in `domain_markers`.
 
-!!! note
-    Flattening across heterogeneous marker types (`symbols`, `tuples`, and `conditions`)
-    allocates ~224 bytes for the union iterator state. For zero allocations in performance-critical
-    paths, iterate directly over [`label_symbols`](@ref), [`label_tuples`](@ref), or
-    [`label_conditions`](@ref), which allocate 0 bytes.
+Concatenates the per-category labels of `symbols`, `tuples`, and `conditions` as a single
+compile-time-unrolled tuple build, so this allocates 0 bytes. For the labels of one
+category alone, [`label_symbols`](@ref), [`label_tuples`](@ref), or
+[`label_conditions`](@ref) are equally zero-allocation.
 """
 @inline function label_identifiers(domain_markers::DomainMarkers)
     (; symbols, tuples, conditions) = domain_markers
-    return (
-        label(marker)::Symbol for marker in Iterators.flatten((symbols, tuples, conditions))
-    )
+    return (map(label, symbols)..., map(label, tuples)..., map(label, conditions)...)
 end
 
 @inline labels(domain_markers::DomainMarkers) = label_identifiers(domain_markers)
@@ -153,7 +151,10 @@ true
     space_set::CartesianProduct, time_set::CartesianProduct{1}, pairs::Pair...
 ) = _create_generic_markers(pairs...)
 
-# Parse identifier-based markers (Symbols and Tuples of Symbols) from input pairs
+# Parse identifier-based markers (Symbols and Tuples of Symbols) from input pairs.
+# Deduplication needs Set semantics (a `:label => :left` pair repeated verbatim collapses
+# to one marker), but that is a one-time construction cost, not a per-query one -- the
+# result is converted to a Tuple so every later read of DomainMarkers is zero-allocation.
 function _extract_identifier_markers(pairs::Tuple)
     symbols = Set{Marker{Symbol}}()
     tuples = Set{Marker{Set{Symbol}}}()
@@ -169,7 +170,7 @@ function _extract_identifier_markers(pairs::Tuple)
         end
     end
 
-    return symbols, tuples
+    return Tuple(symbols), Tuple(tuples)
 end
 
 # Construct DomainMarkers from label-identifier pairs, extracting symbol and tuple sets
@@ -239,15 +240,14 @@ end
     label_identifiers(edm::EvaluatedDomainMarkers)
     labels(edm::EvaluatedDomainMarkers)
 
-Return an iterator yielding the `Symbol` label of every marker in evaluated marker collection `edm`.
+Return a tuple of the `Symbol` label of every marker in evaluated marker collection `edm`.
 
-!!! note
-    Iterating directly over [`label_symbols`](@ref), [`label_tuples`](@ref), or
-    [`label_conditions`](@ref) allocates 0 bytes.
+Zero-allocation, like [`label_identifiers(::DomainMarkers)`](@ref).
 """
 @inline label_identifiers(edm::EvaluatedDomainMarkers) = (
-    label(m)::Symbol for
-    m in Iterators.flatten((symbols(edm), tuples(edm), conditions(edm)))
+    map(label, symbols(edm))...,
+    map(label, tuples(edm))...,
+    map(label, conditions(edm))...,
 )
 
 @inline labels(edm::EvaluatedDomainMarkers) = label_identifiers(edm)

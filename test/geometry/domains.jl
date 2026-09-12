@@ -346,6 +346,13 @@ end
             end;
             c
         )
+        iterate_label_identifiers(dom) = (
+            c=0;
+            for l in label_identifiers(dom)
+                c += 1
+            end;
+            c
+        )
 
         @test_allocs iterate_symbols(Ω_markers)
         @test_allocs iterate_tuples(Ω_markers)
@@ -353,6 +360,14 @@ end
         @test_allocs iterate_marker_syms(Ω_markers)
         @test_allocs iterate_marker_tups(Ω_markers)
         @test_allocs iterate_marker_conds(Ω_markers)
+
+        # gpena/Bramble.jl#99: symbols/tuples moved from Set to Tuple, so the combined
+        # sweep across all three marker categories no longer flattens heterogeneous
+        # iterators (previously ~224 B; measured directly at 96-176 B depending on marker
+        # count on the pre-#99 commit, 43df4c0) -- it concatenates three unrolled tuples.
+        @test_allocs label_identifiers(Ω_markers)
+        @test_allocs labels(Ω_markers)
+        @test_allocs iterate_label_identifiers(Ω_markers)
     end
 
     # Invariant: Textual display formatting for markers, marker containers, and

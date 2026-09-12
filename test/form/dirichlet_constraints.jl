@@ -551,6 +551,41 @@ using LinearAlgebra: I as LinearAlgebraI
         @test traversal_bytes(Vt) == 0
     end
 
+    @testset "Zero-allocation marker reads (gpena/Bramble.jl#99)" begin
+        # `DomainMarkers.symbols`/`.tuples` moved from Set to Tuple, so every marker read
+        # reached from a Dirichlet constraint -- including `_normalize_dirichlet`, which
+        # every `dirichlet =` keyword on `form`/`assemble!` passes through -- is now an
+        # unrolled sweep with nothing to allocate. Measured against the pre-#99 commit
+        # (43df4c0): `_normalize_dirichlet` 480 B (1 label) / 720 B (3 labels) -> 0 B;
+        # iterating `label_identifiers` 96 B / 176 B -> 0 B.
+        function marker_read_bytes(bcs)
+            Bramble.symbols(bcs)
+            Bramble.tuples(bcs)
+            Bramble.labels(bcs)
+            Bramble._normalize_dirichlet(bcs)
+            return (
+                symbols=@allocated(Bramble.symbols(bcs)),
+                tuples=@allocated(Bramble.tuples(bcs)),
+                labels=@allocated(Bramble.labels(bcs)),
+                normalize=@allocated(Bramble._normalize_dirichlet(bcs)),
+            )
+        end
+
+        Ωm = domain(
+            interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom, :top => :top
+        )
+        bcs_single = dirichlet_constraints(Ωm, :bottom => (x -> 7.0))
+        bcs_multi = dirichlet_constraints(Ωm, :bottom => (x -> 7.0), :top => (x -> x[1]))
+
+        for bcs in (bcs_single, bcs_multi)
+            c = marker_read_bytes(bcs)
+            @test c.symbols == 0
+            @test c.tuples == 0
+            @test c.labels == 0
+            @test c.normalize == 0
+        end
+    end
+
     @testset "Arbitrary fields (Supposition)" begin
         field_val = Data.Floats{Float64}(;
             minimum=-100.0, maximum=100.0, nans=false, infs=false

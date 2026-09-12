@@ -166,7 +166,7 @@ than from user registrations: every other label depends on a domain(...) call na
 RegionRestriction's local_stencil (form/operators/restriction.jl) reads :interior as
 "not :boundary"; ensuring :boundary exists guarantees well-defined complementary indexing.
 
-:boundary is computed via boundary_symbol_to_dict (the same face ranges marked by
+:boundary is computed via boundary_symbol_to_cartesian (the same face ranges marked by
 boundary_symbols) rather than is_boundary_index, which excludes degenerate (length-1)
 axes. The face-based definition marks :left and :right consistently even for degenerate sets.
 :interior is defined as the logical complement .!boundary_set.
@@ -188,7 +188,7 @@ function _ensure_geometric_markers!(
 )
     linear_indices = LinearIndices(npoints(Ωₕ, Tuple))
     boundary_set = falses(npoints(Ωₕ))
-    for idxs in values(boundary_symbol_to_dict(indices(Ωₕ)))
+    for idxs in values(boundary_symbol_to_cartesian(indices(Ωₕ)))
         _mark_indices!(boundary_set, linear_indices, idxs)
     end
 
@@ -251,7 +251,7 @@ end
 Process markers identified by predefined symbols (`:left`, `:top`, etc.) or collections of symbols.
 """
 function _set_markers_symbols!(mesh_markers::MeshMarkers, symbols, Ωₕ)
-    symbol_to_index_map = boundary_symbol_to_dict(indices(Ωₕ))
+    boundary_lookup = boundary_symbol_to_cartesian(indices(Ωₕ))
     linear_indices = LinearIndices(npoints(Ωₕ, Tuple))
 
     for marker in symbols
@@ -259,11 +259,11 @@ function _set_markers_symbols!(mesh_markers::MeshMarkers, symbols, Ωₕ)
         target_marker_set = mesh_markers[label]
 
         if identifier isa Symbol
-            idxs = symbol_to_index_map[identifier]
+            idxs = boundary_lookup[identifier]
             _mark_indices!(target_marker_set, linear_indices, idxs)
         elseif identifier isa Union{Set,Tuple}
             for id in identifier
-                idxs = symbol_to_index_map[id]
+                idxs = boundary_lookup[id]
                 _mark_indices!(target_marker_set, linear_indices, idxs)
             end
         end

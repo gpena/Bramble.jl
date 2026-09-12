@@ -25,16 +25,16 @@ Return the [`DomainMarkers`](@ref) collection associated with domain `Ω`.
 @inline markers(Ω::Domain) = Ω.markers
 
 """
-    symbols(Ω::Domain) -> Set{Marker{Symbol}}
+    symbols(Ω::Domain) -> Tuple
 
-Return the set of single-symbol markers associated with domain `Ω`.
+Return the tuple of single-symbol markers associated with domain `Ω`.
 """
 @inline symbols(Ω::Domain) = symbols(markers(Ω))
 
 """
-    tuples(Ω::Domain) -> Set{Marker{Set{Symbol}}}
+    tuples(Ω::Domain) -> Tuple
 
-Return the set of multi-symbol markers associated with domain `Ω`.
+Return the tuple of multi-symbol markers associated with domain `Ω`.
 """
 @inline tuples(Ω::Domain) = tuples(markers(Ω))
 
@@ -48,13 +48,9 @@ Return the tuple of condition predicate markers associated with domain `Ω`.
 """
     labels(Ω::Domain)
 
-Return an iterator yielding the `Symbol` label of every marker in domain `Ω`.
+Return a tuple of the `Symbol` label of every marker in domain `Ω`.
 
-!!! note
-    Flattening across heterogeneous marker types (`symbols`, `tuples`, and `conditions`)
-    allocates ~224 bytes for the union iterator state. For zero allocations in performance-critical
-    paths, iterate directly over [`label_symbols`](@ref), [`label_tuples`](@ref), or
-    [`label_conditions`](@ref), which allocate 0 bytes.
+Zero-allocation; see [`label_identifiers`](@ref).
 """
 @inline labels(Ω::Domain) = labels(markers(Ω))
 
