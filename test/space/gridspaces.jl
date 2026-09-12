@@ -255,6 +255,9 @@ using Supposition
         # The two spellings must produce the same type for every N.
         for n in 1:4
             @test typeof(gridspace(mesh2d, n)) === typeof(gridspace(mesh2d, Val(n)))
+        end
+        # `^`'s Int spelling is capped at 3 (gpena/Bramble.jl#147); see below.
+        for n in 1:3
             @test typeof(W^n) === typeof(W^Val(n))
         end
 
@@ -272,14 +275,33 @@ using Supposition
         @test_throws ArgumentError gridspace(mesh2d, 0)
         @test_throws ArgumentError W^0
 
-        # A literal component count must stay type stable; a runtime one need not.
+        # gpena/Bramble.jl#147: `^`'s Int spelling only accepts 1 <= N <= 3. Beyond
+        # that it throws rather than silently falling back to Val(N), because that
+        # fallback is exactly what reintroduces the union-return instability below.
+        @test_throws ArgumentError W^4
+        @test_throws ArgumentError W^100
+        @test (W^Val(4)) isa CompositeGridSpace{4}  # uncapped: the Val spelling still works
+
+        # A literal component count must stay type stable; a runtime one need not,
+        # *except* for `^`, whose Int spelling is deliberately capped at N ∈ {1,2,3}
+        # so that a dynamic N (one the compiler cannot constant-fold, e.g. threaded
+        # through a generic argument) still resolves to a union of concrete leaves.
+        # Julia's return-type inference only union-splits up to 3 concrete types; one
+        # more branch (even N ∈ {1,2,3,4}) collapses the whole union back down to the
+        # abstract `Union{ScalarGridSpace, CompositeGridSpace}` — confirmed directly
+        # against `Base.return_types` before picking 3 as the cap, not assumed.
         lit2(Ω) = gridspace(Ω, 2)
         lit5(Ω) = gridspace(Ω, 5)
         pow2(Wx) = Wx^2
+        pow_dynamic(Wx, N::Int) = Wx^N
         @test isconcretetype(Base.return_types(lit2, (typeof(mesh2d),))[1])
         @test isconcretetype(Base.return_types(lit5, (typeof(mesh2d),))[1])
         @test isconcretetype(Base.return_types(pow2, (typeof(W),))[1])
         @test isconcretetype(Base.return_types(gridspace, (typeof(mesh2d), Val{3}))[1])
+
+        pow_dynamic_rt = Base.return_types(pow_dynamic, (typeof(W), Int))[1]
+        @test pow_dynamic_rt isa Union
+        @test all(isconcretetype, Base.uniontypes(pow_dynamic_rt))
 
         # Components share one scalar space, so weights are computed once.
         V = gridspace(mesh2d, Val(3))

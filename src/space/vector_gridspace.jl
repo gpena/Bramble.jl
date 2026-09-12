@@ -90,14 +90,23 @@ Constructs an `N`-component vector grid space from a scalar grid space `Wₕ` us
 `Vₕ = Wₕ^2` or `Vₕ = Wₕ^dim(mesh)`.
 
 `Wₕ^1` is `Wₕ`, for both the `Int` and `Val` spellings.
+
+The `Int` spelling only accepts `1 <= N <= 3`, each branch-unswitched to a literal
+`Wₕ^Val(N)` call: Julia's return-type inference only union-splits up to 3 concrete
+types, so this is the largest range that stays inferrable even when `N` is a runtime
+value the compiler cannot constant-fold (e.g. threaded through a generic function
+argument). It also covers every mesh dimension this package supports
+(`Wₕ^dim(mesh)`). For `N > 3`, call `Wₕ^Val(N)` directly, which has no upper bound.
 """
 @inline Base.:^(Wₕ::ScalarGridSpace, ::Val{N}) where {N} =
     CompositeGridSpace(ntuple(_ -> Wₕ, Val(N)))
 @inline Base.:^(Wₕ::ScalarGridSpace, ::Val{1}) = Wₕ
 
 Base.@constprop :aggressive function Base.:^(Wₕ::ScalarGridSpace, N::Int)
-    N >= 1 || throw(ArgumentError("Power N must be >= 1, got $N"))
-    return Wₕ^Val(N)
+    N == 1 && return Wₕ
+    N == 2 && return Wₕ^Val(2)
+    N == 3 && return Wₕ^Val(3)
+    throw(ArgumentError("Power N must satisfy 1 <= N <= 3 for Wₕ^N; got $N. Use Wₕ^Val(N) for N > 3."))
 end
 
 # ==============================================================================
