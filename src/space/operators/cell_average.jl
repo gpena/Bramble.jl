@@ -156,6 +156,11 @@ end
 # A concretely typed kernel (`_AvgKernel`) for the quadrature loop, avoiding anonymous
 # closures over captures (`f`, `x`, `idxs`, `nodes`, `wts`). Explicit struct types ensure
 # predictable inlining and eliminate allocation flakes inside parallel loop dispatch.
+#
+# The accumulator seed (`zero(T)`) is built here, once per call, and handed to
+# `_cell_average` as a plain argument rather than reconstructed inside it from a `Val`
+# (gpena/Bramble.jl#102) -- the same seed a scalar quadrature loop always started from,
+# just named at the call site instead of hidden inside the callee.
 struct _AvgKernel{F,X,IX,NQ,T}
     f::F
     x::X
@@ -163,11 +168,17 @@ struct _AvgKernel{F,X,IX,NQ,T}
     nodes::NTuple{NQ,T}
     wts::NTuple{NQ,T}
 end
-@inline (k::_AvgKernel)(i) = _cell_average(k.f, k.x, k.idxs[i], k.nodes, k.wts)
+@inline (k::_AvgKernel{F,X,IX,NQ,T})(i) where {F,X,IX,NQ,T} =
+    _cell_average(k.f, k.x, k.idxs[i], k.nodes, k.wts, zero(T))
 
 # Same reasoning, for the tuple-valued (composite) quadrature call. `NC` is the space's
 # *leaf* count (`length(components(uₕ))`, which flattens any nesting), not the space's own
 # structural type parameter.
+#
+# Seeded with an `NC`-tuple of zeros rather than a bare `zero(T)`: `_cell_average` no longer
+# takes `::Val{NC}` to rebuild this itself (gpena/Bramble.jl#102), since `.+`/`.*` over a
+# `Number` seed already compute the scalar case, and over an `NTuple` seed compute this one,
+# from the same method body.
 struct _AvgScatterKernel{F,X,IX,NQ,T,NC}
     f::F
     x::X
@@ -176,7 +187,7 @@ struct _AvgScatterKernel{F,X,IX,NQ,T,NC}
     wts::NTuple{NQ,T}
 end
 @inline (k::_AvgScatterKernel{F,X,IX,NQ,T,NC})(i) where {F,X,IX,NQ,T,NC} =
-    _cell_average(k.f, k.x, k.idxs[i], k.nodes, k.wts, Val(NC))
+    _cell_average(k.f, k.x, k.idxs[i], k.nodes, k.wts, ntuple(_ -> zero(T), Val(NC)))
 
 # `CellAverage`'s side of the `project!` contract (`operators/projection.jl`). The rule
 # carries the quadrature order; the driver decides the space's shape, the masking and the
@@ -284,55 +295,50 @@ end
 # lets the D-dimensional kernels and sweeps cover one dimension too: dispatch already
 # separates 1D (`x::AbstractVector`) from nD (`x::NTuple{D}`), so nothing else had to know.
 # `CartesianIndex{1}[1]` is free -- confirmed against the allocation gates, not assumed.
-@inline _cell_average(
-    f, x::AbstractVector, idx::CartesianIndex{1}, nodes::NTuple{NQ,T}, wts::NTuple{NQ,T}
-) where {NQ,T} = _cell_average(f, x, idx[1], nodes, wts)
-
+#
+# One method rather than a scalar/composite pair: `seed` used to be reconstructed inside
+# from a trailing `::Val{NC}` (or omitted, for the scalar arity); it is now built once by
+# the caller and passed straight through, so scalar and composite calls share this same
+# unwrap (gpena/Bramble.jl#102).
 @inline _cell_average(
     f,
     x::AbstractVector,
     idx::CartesianIndex{1},
     nodes::NTuple{NQ,T},
     wts::NTuple{NQ,T},
-    ::Val{NC},
-) where {NQ,T,NC} = _cell_average(f, x, idx[1], nodes, wts, Val(NC))
+    seed,
+) where {NQ,T} = _cell_average(f, x, idx[1], nodes, wts, seed)
 
 # Average of `f` over the 1D cell spanned by `x[i] .. x[i+1]`.
+#
+# One method for both the scalar and the composite (tuple-valued `f`) case: `.+`/`.*`
+# broadcast over a `Number` seed compute exactly the scalar arithmetic `+`/`*` would
+# (bit-for-bit -- broadcasting a scalar adds no operation of its own), and over an
+# `NTuple` seed compute the per-component sum the old, separately-written composite method
+# did. The caller picks which by the `seed` it passes: `zero(T)` for scalar, an `NC`-tuple
+# of zeros for composite (gpena/Bramble.jl#102, collapsing what used to be a `::Val{NC}`
+# pair of methods here).
 @inline function _cell_average(
-    f, x::AbstractVector, i::Int, nodes::NTuple{NQ,T}, wts::NTuple{NQ,T}
+    f, x::AbstractVector, i::Int, nodes::NTuple{NQ,T}, wts::NTuple{NQ,T}, seed
 ) where {NQ,T}
     @inbounds a = T(x[i])
     @inbounds d = T(x[i + 1]) - a
 
-    s = zero(T)
+    s = seed
     @inbounds for q in 1:NQ
-        s += wts[q] * f(a + nodes[q] * d)
+        s = s .+ wts[q] .* f(a + nodes[q] * d)
     end
     return s
 end
 
-# The one-dimensional composite case. A 1D mesh answers `half_points` with a plain vector
-# rather than a one-tuple of vectors, so the D-dimensional method below does not match it
-# and this one is needed: without it, `avgₕ!` on a composite space over a 1D mesh, given a
-# single function returning all components, raised a MethodError. The per-component tuple
-# form with a tuple of functions was unaffected, since it dispatches to the scalar path
-# once per component.
+# 2D cell average, scalar or composite by the `seed` passed in -- see the 1D method above.
+#
+# The composite case is also what a 1D mesh's single-function-returning-all-components
+# form needs on a composite space; the 1D method above covers it directly (a 1D mesh
+# answers `half_points` with a plain vector, not a one-tuple of vectors, so it does not
+# reach this NTuple{2}-indexed method in the first place).
 @inline function _cell_average(
-    f, x::AbstractVector, i::Int, nodes::NTuple{NQ,T}, wts::NTuple{NQ,T}, ::Val{NC}
-) where {NQ,T,NC}
-    @inbounds a = T(x[i])
-    @inbounds b = T(x[i + 1])
-
-    s = ntuple(_ -> zero(T), Val(NC))
-    @inbounds for q in 1:NQ
-        s = s .+ wts[q] .* f(a + nodes[q] * (b - a))
-    end
-    return s
-end
-
-# 2D specialized scalar cell average
-@inline function _cell_average(
-    f, x::NTuple{2}, idx::CartesianIndex{2}, nodes::NTuple{NQ,T}, wts::NTuple{NQ,T}
+    f, x::NTuple{2}, idx::CartesianIndex{2}, nodes::NTuple{NQ,T}, wts::NTuple{NQ,T}, seed
 ) where {NQ,T}
     @inbounds i, j = idx[1], idx[2]
     @inbounds a1 = T(x[1][i])
@@ -340,35 +346,7 @@ end
     @inbounds a2 = T(x[2][j])
     @inbounds d2 = T(x[2][j + 1]) - a2
 
-    s = zero(T)
-    @inbounds for q2 in 1:NQ
-        w2 = wts[q2]
-        p2 = a2 + nodes[q2] * d2
-        for q1 in 1:NQ
-            w1 = wts[q1] * w2
-            p1 = a1 + nodes[q1] * d1
-            s += w1 * f((p1, p2))
-        end
-    end
-    return s
-end
-
-# 2D specialized composite cell average
-@inline function _cell_average(
-    f,
-    x::NTuple{2},
-    idx::CartesianIndex{2},
-    nodes::NTuple{NQ,T},
-    wts::NTuple{NQ,T},
-    ::Val{NC},
-) where {NQ,T,NC}
-    @inbounds i, j = idx[1], idx[2]
-    @inbounds a1 = T(x[1][i])
-    @inbounds d1 = T(x[1][i + 1]) - a1
-    @inbounds a2 = T(x[2][j])
-    @inbounds d2 = T(x[2][j + 1]) - a2
-
-    s = ntuple(_ -> zero(T), Val(NC))
+    s = seed
     @inbounds for q2 in 1:NQ
         w2 = wts[q2]
         p2 = a2 + nodes[q2] * d2
@@ -381,9 +359,9 @@ end
     return s
 end
 
-# 3D specialized scalar cell average
+# 3D cell average, scalar or composite by the `seed` passed in -- see the 1D method above.
 @inline function _cell_average(
-    f, x::NTuple{3}, idx::CartesianIndex{3}, nodes::NTuple{NQ,T}, wts::NTuple{NQ,T}
+    f, x::NTuple{3}, idx::CartesianIndex{3}, nodes::NTuple{NQ,T}, wts::NTuple{NQ,T}, seed
 ) where {NQ,T}
     @inbounds i, j, k = idx[1], idx[2], idx[3]
     @inbounds a1 = T(x[1][i])
@@ -393,41 +371,7 @@ end
     @inbounds a3 = T(x[3][k])
     @inbounds d3 = T(x[3][k + 1]) - a3
 
-    s = zero(T)
-    @inbounds for q3 in 1:NQ
-        w3 = wts[q3]
-        p3 = a3 + nodes[q3] * d3
-        for q2 in 1:NQ
-            w23 = wts[q2] * w3
-            p2 = a2 + nodes[q2] * d2
-            for q1 in 1:NQ
-                w1 = wts[q1] * w23
-                p1 = a1 + nodes[q1] * d1
-                s += w1 * f((p1, p2, p3))
-            end
-        end
-    end
-    return s
-end
-
-# 3D specialized composite cell average
-@inline function _cell_average(
-    f,
-    x::NTuple{3},
-    idx::CartesianIndex{3},
-    nodes::NTuple{NQ,T},
-    wts::NTuple{NQ,T},
-    ::Val{NC},
-) where {NQ,T,NC}
-    @inbounds i, j, k = idx[1], idx[2], idx[3]
-    @inbounds a1 = T(x[1][i])
-    @inbounds d1 = T(x[1][i + 1]) - a1
-    @inbounds a2 = T(x[2][j])
-    @inbounds d2 = T(x[2][j + 1]) - a2
-    @inbounds a3 = T(x[3][k])
-    @inbounds d3 = T(x[3][k + 1]) - a3
-
-    s = ntuple(_ -> zero(T), Val(NC))
+    s = seed
     @inbounds for q3 in 1:NQ
         w3 = wts[q3]
         p3 = a3 + nodes[q3] * d3
@@ -444,22 +388,19 @@ end
     return s
 end
 
-# Average of a vector-valued `f` over the D-dimensional cell around `idx`, one value
-# per component. No mesh this package builds is more than 3D, so the 1D/2D/3D
-# specialized methods above always take priority in practice; this generic one exists
-# for dispatch correctness at any `D`, tested directly rather than through a mesh.
+# Average of `f` over the D-dimensional cell around `idx`, whose corners are the half
+# points `x[k][idx[k]]` and `x[k][idx[k] + 1]` along each axis -- scalar or composite by
+# the `seed` passed in, see the 1D method above. No mesh this package builds is more than
+# 3D, so the 1D/2D/3D specialized methods above always take priority in practice; this
+# generic one exists for dispatch correctness at any `D`, tested directly rather than
+# through a mesh.
 @inline function _cell_average(
-    f,
-    x::NTuple{D},
-    idx::CartesianIndex{D},
-    nodes::NTuple{NQ,T},
-    wts::NTuple{NQ,T},
-    ::Val{NC},
-) where {D,NQ,T,NC}
+    f, x::NTuple{D}, idx::CartesianIndex{D}, nodes::NTuple{NQ,T}, wts::NTuple{NQ,T}, seed
+) where {D,NQ,T}
     a = ntuple(k -> @inbounds(T(x[k][idx[k]])), Val(D))
     b = ntuple(k -> @inbounds(T(x[k][idx[k] + 1])), Val(D))
 
-    s = ntuple(_ -> zero(T), Val(NC))
+    s = seed
     @inbounds for q in CartesianIndices(ntuple(_ -> NQ, Val(D)))
         w = one(T)
         for k in 1:D
@@ -467,26 +408,6 @@ end
         end
         pt = ntuple(k -> a[k] + nodes[q[k]] * (b[k] - a[k]), Val(D))
         s = s .+ w .* f(pt)
-    end
-    return s
-end
-
-# Average of `f` over the D-dimensional cell around `idx`, whose corners are the
-# half points `x[k][idx[k]]` and `x[k][idx[k] + 1]` along each axis.
-@inline function _cell_average(
-    f, x::NTuple{D}, idx::CartesianIndex{D}, nodes::NTuple{NQ,T}, wts::NTuple{NQ,T}
-) where {D,NQ,T}
-    a = ntuple(k -> @inbounds(T(x[k][idx[k]])), Val(D))
-    b = ntuple(k -> @inbounds(T(x[k][idx[k] + 1])), Val(D))
-
-    s = zero(T)
-    @inbounds for q in CartesianIndices(ntuple(_ -> NQ, Val(D)))
-        w = one(T)
-        for k in 1:D
-            w *= wts[q[k]]
-        end
-        pt = ntuple(k -> a[k] + nodes[q[k]] * (b[k] - a[k]), Val(D))
-        s += w * f(pt)
     end
     return s
 end

@@ -474,6 +474,38 @@ end
             @test large < 4 * small + 1     # +1 guards small == 0
             @test large < 100_000           # proportional (176 B/point) would be ~184 MB
         end
+
+        @testset "Allocation scaling (composite)" begin
+            # The composite (tuple-valued `f`) path shares the same seeded `_cell_average`
+            # methods as the scalar path above, an `NC`-tuple of zeros in place of the
+            # `zero(T)` seed rather than a separately written method (gpena/Bramble.jl#102).
+            # Same guarantee, checked the same way.
+            fvec(x) = (sin(x[1] + x[2]), cos(x[1] - x[2]))
+
+            function avg_bytes_composite(be, n)
+                Ω2 = mesh(
+                    domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (n, n); backend=be
+                )
+                V2 = gridspace(Ω2, Val(2))
+                u2 = element(V2)
+                avgₕ!(u2, fvec)
+                avgₕ!(u2, fvec)
+                return @allocated avgₕ!(u2, fvec)
+            end
+
+            be_serial = backend(policy=Serial())
+            @test avg_bytes_composite(be_serial, 32) == 0
+            @test avg_bytes_composite(be_serial, 1024) == 0
+            @test avg_bytes_composite(be_serial, 8) ==
+                avg_bytes_composite(be_serial, 16) ==
+                0
+
+            be_parallel = backend(policy=Parallel())
+            small = avg_bytes_composite(be_parallel, 32)
+            large = avg_bytes_composite(be_parallel, 1024)
+            @test large < 4 * small + 1     # +1 guards small == 0
+            @test large < 100_000           # proportional would be tens of MB
+        end
     end
 end
 
@@ -1010,21 +1042,23 @@ end
     import Bramble: _cell_average, _gauss_rule
     nodes, wts = _gauss_rule(Val(3), Float64)
 
-    # `_cell_average`'s generic-D methods (scalar and composite): specialised 1D/2D/3D
-    # methods exist and take priority for any mesh this package actually builds, so these
-    # are checked directly at D = 4 rather than through avgₕ!/a mesh. Correctness, not
-    # just reachability: an affine function's cell average equals its value at the cell's
-    # midpoint, which is a property of the quadrature rule, not of the specific dimension.
+    # `_cell_average`'s generic-D method (one method now, scalar or composite by the
+    # `seed` passed in rather than a `::Val{NC}`, gpena/Bramble.jl#102): specialised
+    # 1D/2D/3D methods exist and take priority for any mesh this package actually builds,
+    # so these are checked directly at D = 4 rather than through avgₕ!/a mesh. Correctness,
+    # not just reachability: an affine function's cell average equals its value at the
+    # cell's midpoint, which is a property of the quadrature rule, not of the specific
+    # dimension.
     x4 = ntuple(_ -> [0.0, 0.5, 1.0], Val(4))
     idx4 = CartesianIndex(1, 1, 1, 1)
     mid4 = ntuple(_ -> 0.25, Val(4))
 
     f_affine(pt) = 1.0 + sum(pt)
-    s_scalar = _cell_average(f_affine, x4, idx4, nodes, wts)
+    s_scalar = _cell_average(f_affine, x4, idx4, nodes, wts, 0.0)
     @test s_scalar ≈ f_affine(mid4)
 
     f_affine_vec(pt) = (1.0 + sum(pt), 2.0 * sum(pt))
-    s_vec = _cell_average(f_affine_vec, x4, idx4, nodes, wts, Val(2))
+    s_vec = _cell_average(f_affine_vec, x4, idx4, nodes, wts, (0.0, 0.0))
     @test all(s_vec .≈ f_affine_vec(mid4))
 end
 
