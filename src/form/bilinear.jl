@@ -109,7 +109,9 @@ Return the resolved AST stored inside the bilinear form.
     form(Wₕ, Vₕ, f) -> BilinearForm
 
 Construct a `BilinearForm` over the trial space `Wₕ` and the test space `Vₕ` from the
-bilinear expression `f` (a function of trial and test arguments `(u, v)`).
+bilinear expression `f` (a function of trial and test arguments `(u, v)`). The AST is
+resolved once and run through [`simplify_ast`](@ref) -- factoring common scalings,
+combining like terms, and eliding zero-scaled ones -- before it is stored.
 
 # Examples
 ```julia
@@ -124,7 +126,7 @@ function form(Wₕ, Vₕ, f)
     D = dim(Wₕ)
     raw_ast = f(TrialFunction{D}(), TestFunction{D}())
     _validate_form_expression(raw_ast, Val(D))
-    ast = resolve_ast(raw_ast)
+    ast = simplify_ast(resolve_ast(raw_ast))
     return BilinearForm{D,typeof(Wₕ),typeof(Vₕ),typeof(ast)}(Wₕ, Vₕ, ast, _AssemblyCache())
 end
 

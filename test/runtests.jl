@@ -198,6 +198,7 @@ if __bramble_with_unit_tests
             include("form/symmetrize.jl")
             include("form/autodiff.jl")
             include("form/common.jl")
+            include("form/simplifier.jl")
             include("form/block_extract.jl")
             include("form/component.jl")
             include("form/stencil_pattern.jl")

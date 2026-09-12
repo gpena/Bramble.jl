@@ -12,6 +12,7 @@ using Bramble:
     trial_space,
     test_space,
     resolve_form_ast,
+    resolve_ast,
     allocate_system_matrix,
     ndofs,
     Innerh,
@@ -737,7 +738,13 @@ using Bramble:
         @testset "The pattern de-duplicates and the value pass does not" begin
             # Two identical terms name every coordinate twice. The pattern wants each once;
             # the values have to accumulate both, or the matrix comes out halved.
-            ast = resolve_form_ast(form(W, W, (a, b) -> innerₕ(a, b) + innerₕ(a, b)))
+            #
+            # Built with `resolve_ast` directly rather than `form(...)`: `form` now runs
+            # `simplify_ast` (gpena/Bramble.jl#159), which combines two identical terms into
+            # one (`innerₕ(a,b) + innerₕ(a,b) -> 2 * innerₕ(a,b)`) precisely to avoid the
+            # double sweep this test exists to protect against -- so producing the
+            # duplicate-term tree this traversal invariant is about has to bypass it.
+            ast = resolve_ast(innerₕ(u, v) + innerₕ(u, v))
             pat = visit_bilinear_stencil(PatternSink(Int[], Int[]), ast, W, 0, 0)
             got = visit_bilinear_stencil(CollectSink([]), ast, W, 0, 0)
 

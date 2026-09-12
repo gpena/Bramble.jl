@@ -133,8 +133,10 @@ end
 
 Construct a `LinearForm` over the test space `Wₕ` using the linear expression `f`.
 
-Construction resolves the AST once; grid partitioning for parallel assembly is determined
-from the resolved AST during assembly (see `_colour_strides`).
+Construction resolves the AST once and runs [`simplify_ast`](@ref) over it -- factoring
+common scalings, combining like terms, and eliding zero-scaled ones -- before it is stored.
+Grid partitioning for parallel assembly is determined from the resolved AST during assembly
+(see `_colour_strides`).
 
 # Examples
 ```julia
@@ -146,7 +148,7 @@ function form(Wₕ, f)
     D = dim(Wₕ)
     raw_ast = f(TestFunction{D}())
     _validate_form_expression(raw_ast, Val(D))
-    ast = resolve_ast(raw_ast)
+    ast = simplify_ast(resolve_ast(raw_ast))
     return LinearForm{D,typeof(Wₕ),typeof(ast)}(Wₕ, ast)
 end
 

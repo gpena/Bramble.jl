@@ -13,6 +13,8 @@ This tutorial covers:
 6. Coupled systems, where a term names which block it belongs to, including a term that
    reads from a leaf built over a different mesh.
 7. Threaded assembly, and why it needs no locks.
+8. Restricting a term to part of the mesh.
+9. What `form(...)` simplifies automatically, and how to write a form so it can.
 
 Every number below was produced by the code shown.
 
@@ -484,8 +486,116 @@ On a composite space, a marker used without naming a component reaches every dia
 and has to exist on every leaf that reaches — write the term per component, each with its own
 markers, if it does not.
 
+## 9. What `form(...)` simplifies automatically
+
+`form(Wₕ, Vₕ, f)`/`form(Wₕ, f)` resolve the expression once and then run it through an
+algebraic simplification pass before storing it. This matters for how you *write* a form,
+because the assembler routes a form's summands one at a time: every `+` in the expression is
+a separate sweep over the mesh, so an expression with fewer top-level summands assembles
+faster, for exactly the same matrix or vector.
+
+The rewrites only touch `+`, `*` and `/` — never the operators inside them (`D₋ₓ`, `inner₊`,
+`innerₕ`, and the rest) — so they apply to whatever is built from those, coupled systems and
+restricted terms included.
+
+### Identical terms combine into one term
+
+Two summands that are the same expression merge into a single scaled term, rather than being
+routed and assembled separately:
+
+```@example forms
+a_dup = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + innerₕ(u, v))
+Bramble.resolve_form_ast(a_dup)  # 2 * innerₕ(u, v) — one term, not two
+```
+
+```@example forms
+Matrix(assemble(a_dup)) ≈ 2 .* Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))))
+```
+
+A form built up piece by piece — accumulating one contribution per physical effect, some of
+which may coincide — pays nothing for the duplication once assembled: write the terms
+separately if that is the clearer expression of the model, rather than checking by hand
+whether two of them happen to repeat.
+
+### A shared scalar factors out of a sum
+
+`c * A + c * B`, for two different `A` and `B`, becomes `c * (A + B)`: still two operators to
+evaluate, but one routed term instead of two.
+
+```@example forms
+Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (12, 10), (true, true))
+W2 = gridspace(Ω2)
+
+a_split = form(W2, W2, (u, v) -> 2 * inner₊ₓ(D₋ₓ(u), D₋ₓ(v)) + 2 * inner₊ᵧ(D₋ᵧ(u), D₋ᵧ(v)))
+Bramble.resolve_form_ast(a_split)  # 2 * (inner₊ₓ(...) + inner₊ᵧ(...)) — one routed term
+```
+
+```@example forms
+a_x = form(W2, W2, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
+a_y = form(W2, W2, (u, v) -> inner₊ᵧ(D₋ᵧ(u), D₋ᵧ(v)))
+Matrix(assemble(a_split)) ≈ 2 .* (Matrix(assemble(a_x)) .+ Matrix(assemble(a_y)))
+```
+
+An isotropic operator written out direction by direction — the common way to build one before
+reaching for a name like `inner₊`/`∇₋ₕ` that already sums over every direction — assembles as
+cheaply as writing it the terser way by hand.
+
+### A zero-scaled term leaves no trace
+
+A term scaled by the literal number `0` — a coefficient set to zero for a particular run,
+common in continuation methods and IMEX schemes toggling a physical effect on and off —
+contributes nothing to the sparsity pattern, rather than reserving space for the stencil it
+would otherwise have:
+
+```@example forms
+a_full = form(W2, W2, (u, v) -> innerₕ(u, v) + 0.0 * inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
+a_mass = form(W2, W2, (u, v) -> innerₕ(u, v))
+nnz(assemble(a_full)) == nnz(assemble(a_mass))  # the stiffness term left no entries at all
+```
+
+Without this, the zero-scaled stiffness term would still reserve its full band in the
+pattern — nonzero *positions* holding the value `0.0` — which costs both memory and a wasted
+sweep computing them. Toggling a term off is free to leave in the expression; there is no
+need to branch in Julia code around it.
+
+### What stays as written, and why
+
+The simplification works on `OperatorAdd`/`OperatorScale`/`GridFunctionScale` — the nodes
+`+`, `*` and `/` build — and nothing underneath them. A scalar buried inside an inner
+product's argument is invisible to it:
+
+```@example forms
+# NOT combined: the `2` and `3` sit inside innerₕ's own arguments, not around the term
+form(Wₕ, Wₕ, (u, v) -> innerₕ(2 * u, v) + innerₕ(3 * u, v))
+```
+
+still assembles two separate terms, even though it computes the same matrix as
+`5 * innerₕ(u, v)`. Writing a coefficient outside the operator it scales —
+`2 * innerₕ(u, v)`, not `innerₕ(2 * u, v)` — is what exposes it to factoring and combining;
+inside an argument, it is just part of what that argument evaluates to.
+
+A dynamic coefficient (a `Ref`, §2's "Live grid coefficients and dynamic scalars") combines
+and factors the same way a static number does, and keeps tracking its own updates afterwards
+— the rewrite only ever moves the `Ref` around, never reads the value inside it:
+
+```@example forms
+β = Ref(1.0)
+a_ref = form(Wₕ, Wₕ, (u, v) -> β * innerₕ(u, v) + β * innerₕ(u, v))
+Matrix(assemble(a_ref)) ≈ 2 .* Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))))
+```
+
+```@example forms
+β[] = 3.0
+Matrix(assemble(a_ref)) ≈ 6 .* Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))))
+```
+
+Two different `Ref`s, or a `Ref` alongside a plain number, never combine — a rewrite that
+assumed two independent dynamic coefficients were the same value would be a correctness bug
+the first time they diverged, so it is not attempted; write the shared coefficient as one
+`Ref`, used on every term it scales, if two terms are meant to move together.
+
 ## Where to go next
 
 The [internals page on forms](../internals/form.md) documents the colouring and the stencil
 algebra underneath all of this, including how the matrix path colours on the test-side span
-alone.
+alone, and the exact rewrite rules behind §9's automatic simplification.

@@ -142,6 +142,63 @@ would race on the value, not just on the structure.
 </figure>
 ```
 
+## Algebraic simplification of the `+`/`*` layer
+
+`form(Wₕ, Vₕ, f)`/`form(Wₕ, f)` call [`Bramble.simplify_ast`](@ref) on the resolved expression before
+storing it (`form/simplifier.jl`, [gpena/Bramble.jl#159](https://github.com/gpena/Bramble.jl/issues/159)).
+It rewrites only three node types: `OperatorAdd`, `OperatorScale` and `GridFunctionScale` —
+exactly what `ast.jl`'s `+`, `*` and `/` overloads build. Every other node — differences,
+averages, jumps, shifts, restrictions, interpolation, `BilinearProduct`/`LinearProduct`, and
+every leaf — is semantic rather than algebraic, and is left as it is.
+
+The rules matter here rather than only in the tutorial because of where the router splits
+work: `_visit_operator_add*` (`stencil_eval.jl`) recurses on `OperatorAdd` alone, so every
+other node is one routed term and one mesh sweep, however large the subtree underneath it.
+Fewer top-level `OperatorAdd` nodes is therefore not a cosmetic rewrite of the tree but a
+smaller number of sweeps for the same matrix or vector:
+
+| Input | Simplifies to | Effect on routing |
+|:--- |:--- |:--- |
+| `0 * A` | a `ZeroOperator` | a one-point pattern instead of `A`'s full stencil |
+| `A + 0`, `0 + A` | `A` | the zero term is not a term at all |
+| `1 * A` | `A` | no wrapper node to route through |
+| `c1 * (c2 * A)`, both static | `(c1 * c2) * A` | unchanged term count, one multiply instead of two |
+| `A + A` | `2 * A` | two routed terms become one |
+| `c1 * A + c2 * A`, same `A` | `(c1 + c2) * A` | two routed terms become one |
+| `c * A + c * B`, same `c` | `c * (A + B)` | two routed terms become one |
+
+`ZeroOperator{D,Nothing}(nothing)` is synthesized for the zero case rather than reusing a
+concrete space, because a `LazyOp{D}` subtree in general carries no space to read back —
+`space(op)` is only ever implemented for `IdentityOperator`/`ZeroOperator` themselves. Every
+consumer of `ZeroOperator` (`local_stencil`, `stencil_offsets`, `component`) reads only its
+`D` type parameter; the one exception, `symmetry.jl`'s `_same_operator_shape` comparing
+`a.space === b.space`, settles `nothing === nothing` the same way two zero operators over
+the same space would.
+
+"Same `A`"/"same `c`" is `_ast_equal` (`form/simplifier.jl`), a structural equality over `LazyOp`
+subtrees: the same concrete node type, and every field equal — recursively for a field that
+is itself a `LazyOp`, by `===` otherwise. `===` rather than `==` for a leaf field (a grid
+function, a closure, a component index) is deliberate: two arrays holding equal values right
+now are not the same operator once one of them is mutated in place and the other is not, and
+two independently built closures are never "the same" scaling function merely because they
+compute the same thing. Missing an equal-but-distinct pair only forgoes a rewrite; treating
+two different subtrees as equal would change what an assembled form computes, silently, which
+none of these rules may ever do — every rewrite here is an algebraic identity, so the
+assembled matrix or vector is unaffected down to the bit.
+
+A `Base.RefValue` coefficient (§2's dynamic scalar coefficients) is never dereferenced by the
+pass and never combined with a static number, or with a different `Ref`, only recognized as
+the same coefficient when it is the same `Ref` object on both sides — the whole point of a
+`Ref` coefficient is that its value can change after the form is built, so folding its
+current value into a static number would bake in a snapshot the rest of the design goes out
+of its way to avoid.
+
+The pass stops at these three node types on purpose. Rule 4 of #159 — lifting a scalar out of
+an inner product's own argument (`innerₕ(2 * u, v) -> 2 * innerₕ(u, v)`, exposing it to the
+rules above) — is not yet implemented; a coefficient written inside an operator's argument is
+invisible to this pass, which is exactly why the tutorial's §9 tells a reader to write it
+outside instead.
+
 ```@autodocs
 Modules = [Bramble]
 Public = false
@@ -149,6 +206,7 @@ Pages = [
     "form/ast.jl",
     "form/common.jl",
     "form/stencil_eval.jl",
+    "form/simplifier.jl",
     "form/component.jl",
     "form/block_extract.jl",
     "form/stencil_pattern.jl",
