@@ -195,11 +195,11 @@ function _pc_assemble_shape(Wₕ, g, b)
     _assembled_eltype(ast, Wₕ)
 
     assemble(lf)
-    assemble!(b, lf; ast=ast)
+    assemble!(b, lf)
 
     vₕ = element(Wₕ, 1.0)
     lf(vₕ)
-    evaluate!(b, lf, vₕ; ast=ast)
+    evaluate!(b, lf, vₕ)
     return nothing
 end
 
@@ -210,7 +210,7 @@ function _pc_assemble_shape_threaded(Wₕ, g, b)
     _pc_assemble_shape(Wₕ, g, b)
 
     lf = form(Wₕ, g)
-    assemble_parallel!(b, lf, resolve_form_ast(lf))
+    assemble_parallel!(b, lf)
     return nothing
 end
 
@@ -226,8 +226,8 @@ function _pc_assemble_bilinear_shape(Wₕ, g, label::Symbol)
     isposdef(bf)
 
     A = allocate_system_matrix(bf, ast)
-    assemble!(A, bf; ast=ast)
-    assemble!(A, bf; dirichlet=label, ast=ast)
+    assemble!(A, bf)
+    assemble!(A, bf; dirichlet=label)
     assemble(bf)
     assemble(bf; dirichlet=label)
 
@@ -242,7 +242,7 @@ function _pc_assemble_bilinear_shape_threaded(Wₕ, g, label::Symbol)
     bf = form(Wₕ, Wₕ, g)
     ast = resolve_form_ast(bf)
     A = allocate_system_matrix(bf, ast)
-    assemble_parallel!(A, bf, ast)
+    assemble_parallel!(A, bf)
     return nothing
 end
 
@@ -253,7 +253,7 @@ function _pc_assemble_bilinear_composite(Vₕ, g)
     ast = resolve_form_ast(bf)
 
     A = allocate_system_matrix(bf, ast)
-    assemble!(A, bf; ast=ast)
+    assemble!(A, bf)
     assemble(bf)
     return nothing
 end
@@ -269,10 +269,9 @@ end
 # thing on every block, and `_route_terms!` for terms that name a component.
 function _pc_assemble_composite(Vₕ, g, b)
     lf = form(Vₕ, g)
-    ast = resolve_form_ast(lf)
 
     assemble(lf)
-    assemble!(b, lf; ast=ast)
+    assemble!(b, lf)
     return nothing
 end
 

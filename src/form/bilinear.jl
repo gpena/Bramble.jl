@@ -229,20 +229,13 @@ form. `dirichlet_components` restricts which leaf components of a composite tria
 they bind to (see [`dirichlet_bc!`](@ref)).
 """
 function assemble(form::BilinearForm; dirichlet=nothing, dirichlet_components=nothing)
-    ast_resolved = form.ast
-    A = allocate_system_matrix(form, ast_resolved)
-    assemble!(
-        A,
-        form;
-        dirichlet=dirichlet,
-        dirichlet_components=dirichlet_components,
-        ast=ast_resolved,
-    )
+    A = allocate_system_matrix(form, form.ast)
+    _assemble_bilinear!(A, form, form.ast, dirichlet, dirichlet_components)
     return A
 end
 
 """
-    assemble!(A::SparseMatrixCSC, form::BilinearForm; dirichlet = nothing, dirichlet_components = nothing, ast = form.ast) -> SparseMatrixCSC
+    assemble!(A::SparseMatrixCSC, form::BilinearForm; dirichlet = nothing, dirichlet_components = nothing) -> SparseMatrixCSC
 
 Assemble the `BilinearForm` into the preallocated sparse matrix `A`, allocating nothing (**0 bytes**).
 
@@ -251,7 +244,7 @@ Runs serially or across threads following `form.trial_space`'s backend
 [`assemble_parallel!`](@ref) is a separate, lower-level entry point that always threads,
 ignoring the backend's policy.
 
-By default `assemble!` uses the pre-resolved `form.ast` stored directly inside the form.
+`assemble!` uses the pre-resolved `form.ast` stored directly inside the form.
 
 ## Live coefficients
 - Grid functions: the stored AST retains references to source `VectorElement` storage. Mutating values in-place (`Rₕ!(cₕ, ...)` or `parent(cₕ) .= ...`) between steps automatically updates the matrix entries with 0 allocations.
@@ -259,11 +252,21 @@ By default `assemble!` uses the pre-resolved `form.ast` stored directly inside t
 """
 function assemble!(
     A::SparseMatrixCSC,
-    form::BilinearForm{D,TrialSpace,TestSpace,AST};
+    form::BilinearForm;
     dirichlet=nothing,
     dirichlet_components=nothing,
-    ast=form.ast,
-) where {D,TrialSpace,TestSpace,AST}
+    ast=nothing,
+)
+    resolved_ast = ast === nothing ? form.ast : (_warn_ast_keyword(:assemble!); ast)
+    return _assemble_bilinear!(A, form, resolved_ast, dirichlet, dirichlet_components)
+end
+
+# The shared core behind `assemble!` and `assemble`: takes its `ast` positionally, already
+# resolved and already past the deprecation check, so neither public entry point warns twice
+# calling into the other.
+function _assemble_bilinear!(
+    A::SparseMatrixCSC, form::BilinearForm, ast, dirichlet, dirichlet_components
+)
     dirichlet_labels, _ = _normalize_dirichlet(dirichlet)
     fill!(nonzeros(A), zero(eltype(nonzeros(A))))
 
@@ -280,7 +283,7 @@ function assemble!(
 end
 
 """
-    assemble_parallel!(A::SparseMatrixCSC, form::BilinearForm, ast = form.ast) -> SparseMatrixCSC
+    assemble_parallel!(A::SparseMatrixCSC, form::BilinearForm) -> SparseMatrixCSC
 
 Refill `A` with the assembled `form` across threads and return it, regardless of
 `form.trial_space`'s backend policy. `A` must already carry the correct sparsity pattern from
@@ -289,12 +292,12 @@ not apply `dirichlet_labels`.
 
 Colouring on the test side ensures thread safety when updating stored matrix values concurrently.
 """
-function assemble_parallel!(
-    A::SparseMatrixCSC, form::BilinearForm{D,TrialSpace,TestSpace,AST}, ast=form.ast
-) where {D,TrialSpace,TestSpace,AST}
+function assemble_parallel!(A::SparseMatrixCSC, form::BilinearForm, ast=nothing)
+    resolved_ast =
+        ast === nothing ? form.ast : (_warn_ast_keyword(:assemble_parallel!); ast)
     fill!(nonzeros(A), zero(eltype(nonzeros(A))))
 
-    _assemble_bilinear_parallel_core!(A, form.trial_space, form.test_space, ast)
+    _assemble_bilinear_parallel_core!(A, form.trial_space, form.test_space, resolved_ast)
 
     return A
 end

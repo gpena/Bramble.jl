@@ -368,3 +368,23 @@ test_function(::Val{D}) where {D} = TestFunction{D}()
 Constructs a `SourceFunction` wrapping function `f`.
 """
 source_function(f, ::Val{D}) where {D} = SourceFunction{D,typeof(f)}(f)
+
+# ==============================================================================
+# 4. Deprecated `ast` keyword (gpena/Bramble.jl#105)
+# ==============================================================================
+
+# Measured to buy nothing: `resolve_form_ast(form)` is a field read, not a resolution, so
+# there is no per-call cost left to hoist by passing it back in. Its one real capability --
+# assembling a different form's AST into a matrix built for another form's pattern -- is
+# redundant with assembling that other form directly. Shared by `assemble!`/`assemble`/
+# `evaluate!` (linear.jl, bilinear.jl) and `assemble_parallel!`'s positional `ast` argument,
+# so the message and the removal version stay in one place.
+@noinline function _warn_ast_keyword(funcsym::Symbol)
+    Base.depwarn(
+        "the `ast` keyword measures no benefit over the form's own resolved AST, and its " *
+        "only real use -- swapping in another form's AST -- is redundant with assembling " *
+        "that form directly. It will be removed in v3.0.0 without replacement.",
+        funcsym,
+    )
+    return nothing
+end

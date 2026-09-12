@@ -59,7 +59,7 @@ end
 end
 
 """
-    evaluate!(scratch::AbstractVector, form::LinearForm, vₕ::VectorElement; ast = resolve_form_ast(form)) -> Number
+    evaluate!(scratch::AbstractVector, form::LinearForm, vₕ::VectorElement) -> Number
 
 Evaluate `form` at `vₕ`, assembling into `scratch` rather than into a newly allocated vector, and
 return the resulting contracted scalar value.
@@ -69,23 +69,22 @@ requiring the residual vector and its norm). `scratch` is overwritten and contai
 side upon return.
 
 For the scalar value alone, `form(vₕ)` fuses the contraction into the assembly sweep in a single pass.
-Pass `ast` to reuse the pre-resolved expression tree across iterations for zero allocations.
 
 # Examples
 ```julia
 l = form(Wₕ, v -> innerₕ(fₕ, v))
 scratch = zeros(ndofs(Wₕ))
-ast = resolve_form_ast(l)
 for step in 1:nsteps
     Rₕ!(fₕ, source_at(step))          # modified in-place
-    value = evaluate!(scratch, l, uₕ; ast = ast)
+    value = evaluate!(scratch, l, uₕ)
 end
 ```
 """
 @inline function evaluate!(
-    scratch::AbstractVector, form::LinearForm, vₕ::VectorElement; ast=form.ast
+    scratch::AbstractVector, form::LinearForm, vₕ::VectorElement; ast=nothing
 )
-    assemble!(scratch, form; ast=ast)
+    resolved_ast = ast === nothing ? form.ast : (_warn_ast_keyword(:evaluate!); ast)
+    _assemble_linear!(scratch, form, resolved_ast, nothing, nothing)
     return dot(scratch, parent(vₕ))
 end
 
@@ -197,7 +196,7 @@ end
 end
 
 """
-    assemble(form::LinearForm; dirichlet = nothing, dirichlet_components = nothing, ast = form.ast) -> AbstractVector
+    assemble(form::LinearForm; dirichlet = nothing, dirichlet_components = nothing) -> AbstractVector
 
 Assemble the system vector of the `LinearForm`, applying the boundary values `dirichlet`
 carries on the regions it names. `dirichlet` accepts a `label => f` `Pair`, a `Tuple` of
@@ -211,14 +210,13 @@ Runs serially or across threads following `test_space(form)`'s backend
 [`assemble_parallel!`](@ref) always threads regardless of the backend policy.
 """
 function assemble(
-    form::LinearForm; dirichlet=nothing, dirichlet_components=nothing, ast=form.ast
+    form::LinearForm; dirichlet=nothing, dirichlet_components=nothing, ast=nothing
 )
+    resolved_ast = ast === nothing ? form.ast : (_warn_ast_keyword(:assemble); ast)
     space = test_space(form)
     # `parent(element(space, T))` reuses the space's backend container type.
-    b = parent(element(space, _assembled_eltype(ast, space)))
-    return assemble!(
-        b, form; ast=ast, dirichlet=dirichlet, dirichlet_components=dirichlet_components
-    )
+    b = parent(element(space, _assembled_eltype(resolved_ast, space)))
+    return _assemble_linear!(b, form, resolved_ast, dirichlet, dirichlet_components)
 end
 
 # The element type of the assembled vector is the one the form's own weights have, promoted
@@ -597,11 +595,11 @@ end
 
 """
     assemble!(b::AbstractVector, form::LinearForm; dirichlet = nothing,
-              dirichlet_components = nothing, ast = form.ast) -> AbstractVector
+              dirichlet_components = nothing) -> AbstractVector
 
 Refill `b` with the assembled `form` and return it with zero allocations (**0 bytes**).
 
-By default `assemble!` uses the pre-resolved `form.ast` stored directly inside the form.
+`assemble!` uses the pre-resolved `form.ast` stored directly inside the form.
 
 ## Live coefficients
 - Grid functions: the stored AST retains references to source `VectorElement` storage. Mutating values in-place (`Rₕ!(uₕ, ...)` or `parent(uₕ) .= ...`) between steps automatically updates the assembled vector without needing to rebuild the form.
@@ -614,7 +612,6 @@ By default `assemble!` uses the pre-resolved `form.ast` stored directly inside t
 # Keywords
 - `dirichlet`: Boundary values to impose after assembly, and the labels to impose them on, together -- a `label => f` `Pair`, a `Tuple` of such `Pair`s, or constraints from [`dirichlet_constraints`](@ref) (default: `nothing`; see [`_normalize_dirichlet`](@ref) for every accepted form).
 - `dirichlet_components`: Restricts which leaf components of a composite `test_space(form)` the labels bind to (see [`dirichlet_bc!`](@ref); default: `nothing`, targeting all leaves).
-- `ast`: Optional custom AST override (defaults to `form.ast`).
 
 Runs serially or across threads following `test_space(form)`'s backend [`execution_policy`](@ref):
 [`Serial`](@ref) or [`Parallel`](@ref). [`assemble_parallel!`](@ref) forces threaded execution
@@ -624,11 +621,21 @@ See also [`assemble`](@ref), [`assemble_parallel!`](@ref), and [`evaluate!`](@re
 """
 function assemble!(
     b::AbstractVector,
-    form::LinearForm{D,TestSpace,AST};
+    form::LinearForm;
     dirichlet=nothing,
     dirichlet_components=nothing,
-    ast=form.ast,
-) where {D,TestSpace,AST}
+    ast=nothing,
+)
+    resolved_ast = ast === nothing ? form.ast : (_warn_ast_keyword(:assemble!); ast)
+    return _assemble_linear!(b, form, resolved_ast, dirichlet, dirichlet_components)
+end
+
+# The shared core behind `assemble!` and `assemble`: takes its `ast` positionally, already
+# resolved and already past the deprecation check, so neither public entry point warns twice
+# calling into the other.
+function _assemble_linear!(
+    b::AbstractVector, form::LinearForm, ast, dirichlet, dirichlet_components
+)
     dirichlet_labels, dirichlet_conditions = _normalize_dirichlet(dirichlet)
     fill!(b, zero(eltype(b)))
     space = form.test_space
@@ -647,20 +654,20 @@ function assemble!(
 end
 
 """
-    assemble_parallel!(b::AbstractVector, form::LinearForm, ast = form.ast) -> AbstractVector
+    assemble_parallel!(b::AbstractVector, form::LinearForm) -> AbstractVector
 
 Refill `b` with the assembled `form` across threads and return it, regardless of
 `test_space(form)`'s backend execution policy. Unlike [`assemble!`](@ref), does not
 apply Dirichlet conditions.
 """
-function assemble_parallel!(
-    b::AbstractVector, form::LinearForm{D,TestSpace,AST}, ast=form.ast
-) where {D,TestSpace,AST}
+function assemble_parallel!(b::AbstractVector, form::LinearForm, ast=nothing)
+    resolved_ast =
+        ast === nothing ? form.ast : (_warn_ast_keyword(:assemble_parallel!); ast)
     space = form.test_space
-    _validate_term_markers(ast, markers(mesh(space)), "the form's space")
+    _validate_term_markers(resolved_ast, markers(mesh(space)), "the form's space")
 
     fill!(b, zero(eltype(b)))
-    _assemble_linear_parallel_core!(b, space, ast)
+    _assemble_linear_parallel_core!(b, space, resolved_ast)
 
     return b
 end

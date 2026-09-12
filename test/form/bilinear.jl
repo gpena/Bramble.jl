@@ -639,13 +639,20 @@ using Bramble:
             end
         end
 
-        @testset "A different ast forces a rebuild rather than a stale replay" begin
+        @testset "A different form into the same matrix reassembles rather than replaying stale cache" begin
+            # Each form keeps its own `_AssemblyCache` (keyed on the exact matrix object it
+            # last assembled into), so assembling a second, same-reach form into `a`'s matrix
+            # records fresh under *its own* cache rather than touching `a`'s -- `a`'s own
+            # cache is still valid afterwards and replays correctly. This used to be shown
+            # by overriding `a`'s own `ast` keyword with another form's AST (gpena/Bramble.jl#105);
+            # assembling the other form directly demonstrates the same thing without the
+            # now-deprecated keyword, since the two were verified equivalent.
             a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
-            A = assemble(a)                                   # records for a's own ast
-            alt = form(Wₕ, Wₕ, (u, v) -> 2.0 * innerₕ(u, v))  # same reach, different ast object
-            assemble!(A, a; ast=resolve_form_ast(alt))
+            A = assemble(a)                                   # records under a's own cache
+            alt = form(Wₕ, Wₕ, (u, v) -> 2.0 * innerₕ(u, v))  # same reach, different form
+            assemble!(A, alt)                                  # alt's own cache: fresh record
             @test sum(A) ≈ 2 * sum(H)
-            assemble!(A, a)                                   # back to a's own ast: rebuilds again
+            assemble!(A, a)                                    # a's own cache, untouched, still valid
             @test Matrix(A) ≈ H
         end
     end
@@ -660,16 +667,15 @@ using Bramble:
         narrow = form(W, W, (u, v) -> innerₕ(u, v))            # reaches the diagonal only
         wide = form(W, W, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v)))    # reaches a neighbour too
 
-        # Serial: the recording pass searches and reports.
+        # Serial: the recording pass searches and reports. `wide` is assembled directly
+        # into a matrix built for `narrow`'s (narrower) pattern, rather than overriding
+        # `narrow`'s own `ast` keyword -- the two are equivalent, and only the latter is
+        # deprecated (gpena/Bramble.jl#105).
         A = allocate_system_matrix(narrow, resolve_form_ast(narrow))
-        @test_throws ArgumentError assemble!(A, narrow; ast=resolve_form_ast(wide))
+        @test_throws ArgumentError assemble!(A, wide)
 
         msg = try
-            assemble!(
-                allocate_system_matrix(narrow, resolve_form_ast(narrow)),
-                narrow;
-                ast=resolve_form_ast(wide),
-            )
+            assemble!(allocate_system_matrix(narrow, resolve_form_ast(narrow)), wide)
         catch e
             sprint(showerror, e)
         end
@@ -687,7 +693,7 @@ using Bramble:
         np = form(Wp, Wp, (u, v) -> innerₕ(u, v))
         wp = form(Wp, Wp, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v)))
         Ap = allocate_system_matrix(np, resolve_form_ast(np))
-        @test_throws Exception assemble_parallel!(Ap, np, resolve_form_ast(wp))
+        @test_throws Exception assemble_parallel!(Ap, wp)
 
         # and the matching pattern still assembles, so the check is not simply always on
         Aok = allocate_system_matrix(wide, resolve_form_ast(wide))

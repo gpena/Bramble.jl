@@ -256,10 +256,9 @@ end
                 V = gridspace(Ω, Val(3))
                 u = Rₕ(V, ntuple(_ -> (x -> x[1] + x[2]), 3))
                 lf = form(V, mk(u))
-                ast = resolve_form_ast(lf)
                 b = zeros(ndofs(V))
-                assemble!(b, lf; ast=ast)
-                return @allocated assemble!(b, lf; ast=ast)
+                assemble!(b, lf)
+                return @allocated assemble!(b, lf)
             end
             @test bytes(u -> (v -> innerₕ(u(1), v))) == 0
             @test bytes(u -> (v -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)))) == 0
@@ -932,9 +931,11 @@ end
 
     @testset "Allocation contract" begin
         # This is what a time loop calls every step. The assembly kernel itself is
-        # allocation free; what used to cost was the two default arguments: an empty
-        # constraint set at 2,080 B and the AST resolution at 160 B, both recomputed per
-        # call and both invariant for a given form.
+        # allocation free -- `form.ast` is a field read, not a resolution, so there is
+        # nothing left to hoist out of the call the way the now-deprecated `ast` keyword
+        # (#105) once claimed to (a fixed 160 B saved per call): both `assemble!(b, lf)` and
+        # the equivalent with the keyword measured 0 bytes, which is why the keyword is
+        # gone from these tests rather than compared against.
         #
         # Measured inside a function on concrete locals: read from a non-const global, the
         # arguments box at the call boundary and the reading is of the box.
@@ -943,28 +944,15 @@ end
             W = gridspace(Ω)
             u = Rₕ(W, x -> x[1] + x[2])
             lf = form(W, v -> innerₕ(u, v))
-            ast = resolve_form_ast(lf)
             b = zeros(ndofs(W))
 
-            assemble!(b, lf)                      # warm both paths
-            assemble!(b, lf; ast=ast)
-
-            return (
-                with_ast=@allocated(assemble!(b, lf; ast=ast)),
-                without_ast=@allocated(assemble!(b, lf))
-            )
+            assemble!(b, lf)                      # warm up
+            return @allocated assemble!(b, lf)
         end
 
         for N in (8, 24)          # 9x the degrees of freedom apart
-            c = counts(N)
-            # handed a resolved AST, assembly allocates nothing at all
-            @test c.with_ast == 0
-            # and resolving costs a fixed amount that does not grow with the grid
-            @test c.without_ast < 512
+            @test counts(N) == 0
         end
-
-        # the cost of resolving does not scale, which is what makes the keyword worth having
-        @test counts(8).without_ast == counts(24).without_ast
 
         # the composite path too. It used to allocate a Vector of dof offsets on every
         # call (128 B, constant in the grid but paid every step of a time loop).
@@ -973,10 +961,9 @@ end
             V = gridspace(Ω, Val(3))
             uv = Rₕ(V, ntuple(_ -> (x -> x[1] + x[2]), 3))
             lf = form(V, v -> innerₕ(uv(1), v))
-            ast = resolve_form_ast(lf)
             b = zeros(ndofs(V))
-            assemble!(b, lf; ast=ast)
-            return @allocated assemble!(b, lf; ast=ast)
+            assemble!(b, lf)
+            return @allocated assemble!(b, lf)
         end
         @test composite_bytes(8) == 0
         @test composite_bytes(16) == 0
@@ -998,10 +985,9 @@ end
             V = Bramble.CompositeGridSpace((gridspace(Ωbig), gridspace(Ωsmall)))
             uv = Rₕ(V, (x -> x[1] + x[2], x -> x[1] - x[2]))
             lf = form(V, v -> innerₕ(uv(1), v(1)) + innerₕ(uv(2), v(2)))
-            ast = resolve_form_ast(lf)
             b = zeros(ndofs(V))
-            assemble!(b, lf; ast=ast)
-            return @allocated assemble!(b, lf; ast=ast)
+            assemble!(b, lf)
+            return @allocated assemble!(b, lf)
         end
         het8, het16 = heterogeneous_bytes(8), heterogeneous_bytes(16)
         @test het8 == 0
@@ -1124,15 +1110,11 @@ end
         # repeatable, so the scratch is rewritten rather than accumulated into
         @test evaluate!(scratch, lf, uₕ) ≈ evaluate!(scratch, lf, uₕ)
 
-        # resolving once across a loop gives the same answer as resolving per call
-        ast = resolve_form_ast(lf)
-        @test evaluate!(scratch, lf, uₕ; ast=ast) ≈ lf(uₕ)
-
         scratchv = zeros(ndofs(Vc))
         @test evaluate!(scratchv, lfv, wc) ≈ lfv(wc)
         @test_throws ArgumentError evaluate!(scratchv, lfv, parent(wc))
 
-        # and it allocates nothing per call, once the AST is resolved outside the loop.
+        # and it allocates nothing per call, once warmed.
         #
         # Behind a barrier, like every other allocation assertion here: measured at testset
         # top level this reports the bytes of the surrounding closure rather than of the
@@ -1154,19 +1136,17 @@ end
         # callsite and pays its own one-time 16 bytes. Repeating one callsite is what
         # reaches the steady state.
         #
-        # It is `dot`, and it is upstream rather than anything here. `assemble!(; ast)`
-        # measures 0 on the same build, a bare `dot(::Vector{Float64}, ::Vector{Float64})`
-        # reproduces the identical (16, 0, 0) with no Bramble in the picture, and
-        # `@allocated` over a non-allocating expression is 0 on all three, so it is not the
-        # macro. An earlier version of this comment blamed the `ast` keyword box; that was
-        # wrong, and the keyword has nothing to do with it.
+        # It is `dot`, and it is upstream rather than anything here: a bare
+        # `dot(::Vector{Float64}, ::Vector{Float64})` reproduces the identical (16, 0, 0)
+        # with no Bramble in the picture, and `@allocated` over a non-allocating expression
+        # is 0 on all three, so it is not the macro.
         #
         # What is under test is that a time loop calling this does not allocate, and the
         # steady state is exactly that property.
-        function _evaluate_bytes(scratch, lf, v, ast)
-            evaluate!(scratch, lf, v; ast=ast)
-            return minimum(ntuple(_ -> @allocated(evaluate!(scratch, lf, v; ast=ast)), 3))
+        function _evaluate_bytes(scratch, lf, v)
+            evaluate!(scratch, lf, v)
+            return minimum(ntuple(_ -> @allocated(evaluate!(scratch, lf, v)), 3))
         end
-        @test _evaluate_bytes(scratch, lf, uₕ, ast) == 0
+        @test _evaluate_bytes(scratch, lf, uₕ) == 0
     end
 end
