@@ -133,6 +133,11 @@ function _is_symmetric_term(op::OperatorAdd)
     return _is_symmetric_term(op.left_op) && _is_symmetric_term(op.right_op)
 end
 _is_symmetric_term(op::OperatorScale) = _is_symmetric_term(op.inner_op)
+# `simplify_ast` (form/simplifier.jl) collapses a `BilinearProduct` with a `ZeroOperator` on
+# either side to a bare `ZeroOperator`, rather than leaving the product in place: the zero
+# matrix is `0ᵀW0`, symmetric (and, below, positive semi-definite) by the same argument as
+# any other term of this shape.
+_is_symmetric_term(::ZeroOperator) = true
 _is_symmetric_term(op) = false
 
 # As `_is_symmetric_term`, but additionally requires every `OperatorScale` along the way to
@@ -143,6 +148,7 @@ function _is_posdef_term(op::OperatorAdd)
     return _is_posdef_term(op.left_op) && _is_posdef_term(op.right_op)
 end
 _is_posdef_term(op::OperatorScale) = op.scalar > 0 && _is_posdef_term(op.inner_op)
+_is_posdef_term(::ZeroOperator) = true
 _is_posdef_term(op) = false
 
 """

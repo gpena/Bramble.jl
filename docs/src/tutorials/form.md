@@ -494,9 +494,11 @@ because the assembler routes a form's summands one at a time: every `+` in the e
 a separate sweep over the mesh, so an expression with fewer top-level summands assembles
 faster, for exactly the same matrix or vector.
 
-The rewrites only touch `+`, `*` and `/` — never the operators inside them (`D₋ₓ`, `inner₊`,
-`innerₕ`, and the rest) — so they apply to whatever is built from those, coupled systems and
-restricted terms included.
+Most of the rewrites touch only `+`, `*` and `/` — never the operators inside them (`D₋ₓ`,
+`inner₊`, `innerₕ`, and the rest) — so they apply to whatever is built from those, coupled
+systems and restricted terms included. A few reach one layer deeper, into an inner product's
+own arguments and into `shift_op`, because leaving them out would mean either a correctness
+gap or a documented dead end; §"What stays as written, and why" below draws the exact line.
 
 ### Identical terms combine into one term
 
@@ -558,22 +560,6 @@ pattern — nonzero *positions* holding the value `0.0` — which costs both mem
 sweep computing them. Toggling a term off is free to leave in the expression; there is no
 need to branch in Julia code around it.
 
-### What stays as written, and why
-
-The simplification works on `OperatorAdd`/`OperatorScale`/`GridFunctionScale` — the nodes
-`+`, `*` and `/` build — and nothing underneath them. A scalar buried inside an inner
-product's argument is invisible to it:
-
-```@example forms
-# NOT combined: the `2` and `3` sit inside innerₕ's own arguments, not around the term
-form(Wₕ, Wₕ, (u, v) -> innerₕ(2 * u, v) + innerₕ(3 * u, v))
-```
-
-still assembles two separate terms, even though it computes the same matrix as
-`5 * innerₕ(u, v)`. Writing a coefficient outside the operator it scales —
-`2 * innerₕ(u, v)`, not `innerₕ(2 * u, v)` — is what exposes it to factoring and combining;
-inside an argument, it is just part of what that argument evaluates to.
-
 A dynamic coefficient (a `Ref`, §2's "Live grid coefficients and dynamic scalars") combines
 and factors the same way a static number does, and keeps tracking its own updates afterwards
 — the rewrite only ever moves the `Ref` around, never reads the value inside it:
@@ -593,6 +579,122 @@ Two different `Ref`s, or a `Ref` alongside a plain number, never combine — a r
 assumed two independent dynamic coefficients were the same value would be a correctness bug
 the first time they diverged, so it is not attempted; write the shared coefficient as one
 `Ref`, used on every term it scales, if two terms are meant to move together.
+
+### A scalar inside an inner product's argument is lifted back out
+
+The three rules above stop at `innerₕ`/`inner₊`/... itself — but a scalar written *inside*
+one of their arguments is lifted back out to wrap the whole product, exposing it to exactly
+those rules:
+
+```@example forms
+a_hidden = form(Wₕ, Wₕ, (u, v) -> innerₕ(2 * D₋ₓ(u), D₋ₓ(v)) + innerₕ(3 * D₋ₓ(u), D₋ₓ(v)))
+Bramble.resolve_form_ast(a_hidden)  # 5 * innerₕ(D₋ₓ(u), D₋ₓ(v)) — one term, not two
+```
+
+```@example forms
+Matrix(assemble(a_hidden)) ≈ 5 .* Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v)))))
+```
+
+This is not only a routing question. `issymmetric`/`isposdef` (§4) recognise `innerₕ(L(u),
+L(v))` — the same operator on both sides — structurally, and a scalar sitting inside one
+argument used to hide that shape from the check, because `2 * D₋ₓ(u)` and `D₋ₓ(v)` are
+different node types even though the pattern is exactly the symmetric one:
+
+```@example forms
+issymmetric(form(Wₕ, Wₕ, (u, v) -> innerₕ(2 * D₋ₓ(u), D₋ₓ(v))))
+```
+
+Write the scalar wherever reads best — `2 * innerₕ(D₋ₓ(u), D₋ₓ(v))` and `innerₕ(2 * D₋ₓ(u),
+D₋ₓ(v))` now assemble, and are checked for symmetry, identically.
+
+### A component-mixing sum inside one inner product
+
+`innerₕ(fₕ, v(1) + v(2))` names two different components of a coupled test space inside one
+product — asking, in effect, for `fₕ`'s contribution to land in two different equations at
+once. There is no single routed term that means that, so this distributes into two, the same
+shape as writing them separately:
+
+```@example forms
+Vₕ = Wₕ^Val(2)
+fₕ = Rₕ(Wₕ, x -> sin(π * x[1]))
+
+l_mixed = form(Vₕ, v -> innerₕ(fₕ, v(1) + v(2)))
+Bramble.resolve_form_ast(l_mixed)  # innerₕ(fₕ, v(1)) + innerₕ(fₕ, v(2))
+```
+
+```@example forms
+l_split = form(Vₕ, v -> innerₕ(fₕ, v(1)) + innerₕ(fₕ, v(2)))
+assemble(l_mixed) ≈ assemble(l_split)
+```
+
+Before this rule, `l_mixed` assembled to an `ArgumentError` naming the two mismatched
+components rather than a vector — writing the sum by hand, as `l_split` does, was the only
+way to couple one source to two equations. Both spellings work now; write whichever reads
+better at the call site.
+
+This is the one rule that can turn a single sweep back into two rather than the reverse: a
+sum naming the *same* component on both sides (`v(1) + D₋ₓ(v(1))`, say) is left as the one
+term it already was, since nothing forces it apart — only a genuine mismatch, which had no
+valid single-term routing to begin with, triggers the split. A coefficient wrapping a mixed
+sum distributes along with it, for the same reason: `2 * innerₕ(fₕ, v(1) + v(2))` assembles
+`2 * innerₕ(fₕ, v(1)) + 2 * innerₕ(fₕ, v(2))`, not an `OperatorScale` hiding the same
+unroutable shape from view.
+
+### Nested grid-function scalings fuse into one array
+
+`u_h * (v_h * A)` — two grid functions scaling the same operator, one wrapping the other —
+precomputes their elementwise product once, at construction, rather than reading both arrays
+at every point of every assembly:
+
+```@example forms
+vₕ = Rₕ(Wₕ, x -> x[1] + 1.0)
+wₕ = Rₕ(Wₕ, x -> 2.0)
+a_fused = form(Wₕ, Wₕ, (u, v) -> vₕ * (wₕ * innerₕ(u, v)))
+Bramble.resolve_form_ast(a_fused).grid_function ≈ parent(vₕ) .* parent(wₕ)
+```
+
+Unlike the rules above, this one is not free: fusing two coefficients into one is an
+elementwise multiply over the whole array, paid once when the form is built rather than once
+per assembly. Worth it whenever the form outlives a single assembly (a time loop, a residual
+evaluated repeatedly), which is the common case; if a form is truly built and assembled once,
+the two scalings would have cost the same either way.
+
+### Two nested shifts combine, and a zero shift disappears
+
+`shift_op` composes the way integer addition does: two shifts along the *same* dimension
+combine their amounts, and a net shift of zero is the identity — including a shift undone by
+its own inverse:
+
+```@example forms
+using Bramble: shift_op
+a_shift = form(Wₕ, Wₕ, (u, v) -> innerₕ(shift_op(shift_op(u, 1, 2), 1, -2), v))
+Bramble.resolve_form_ast(a_shift)  # innerₕ(u, v) — the two shifts cancelled
+```
+
+A shift along a *different* dimension never combines with one it wraps: `Shift_x` and
+`Shift_y` are different operations, not two amounts of the same one, so nesting them stays
+exactly as written.
+
+### What stays as written, and why
+
+Every rule above stops at `BilinearProduct`/`LinearProduct`/`ShiftNode`: none of it descends
+into a difference, an average, a jump, a restriction or an interpolation. A scalar or a shift
+buried one layer further in —
+
+```@example forms
+# NOT lifted: the `2` sits inside D₋ₓ's own argument, one layer past where this pass looks
+form(Wₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(2 * u), v))
+```
+
+— is invisible to it, the same way `innerₕ(2 * u, v)` used to be before the rule above:
+write the scalar where the pass can see it, `2 * innerₕ(D₋ₓ(u), v)` or `innerₕ(2 * D₋ₓ(u),
+v)`, rather than nested inside the difference's own argument.
+
+`πₕ(Wsrc, u)` is never folded away, even when `Wsrc` happens to be exactly the space `u` is
+assembled against — a rewrite that could fire would need to know the trial space a term is
+about to be assembled into, which an expression built before `form` sees any space does not
+have. This is rarely a real cost: coupling two leaves that already share a mesh needs no
+`πₕ` at all (§6, "Interpolating between the leaves of a heterogeneous composite space").
 
 ## Where to go next
 

@@ -146,10 +146,13 @@ would race on the value, not just on the structure.
 
 `form(Wₕ, Vₕ, f)`/`form(Wₕ, f)` call [`Bramble.simplify_ast`](@ref) on the resolved expression before
 storing it (`form/simplifier.jl`, [gpena/Bramble.jl#159](https://github.com/gpena/Bramble.jl/issues/159)).
-It rewrites only three node types: `OperatorAdd`, `OperatorScale` and `GridFunctionScale` —
-exactly what `ast.jl`'s `+`, `*` and `/` overloads build. Every other node — differences,
-averages, jumps, shifts, restrictions, interpolation, `BilinearProduct`/`LinearProduct`, and
-every leaf — is semantic rather than algebraic, and is left as it is.
+Most of it rewrites three node types: `OperatorAdd`, `OperatorScale` and `GridFunctionScale`
+— exactly what `ast.jl`'s `+`, `*` and `/` overloads build. Every other node — differences,
+averages, jumps, restrictions, interpolation, and every leaf — is semantic rather than
+algebraic, and is left as it is. Two exceptions reach one layer deeper, into
+`BilinearProduct`/`LinearProduct` (what `innerₕ`/`inner₊`/... build) and into `ShiftNode`:
+leaving them untouched would mean either a correctness gap (§"Component distribution" below)
+or a documented dead end (a hidden scalar defeating `symmetry.jl`'s structural shape check).
 
 The rules matter here rather than only in the tutorial because of where the router splits
 work: `_visit_operator_add*` (`stencil_eval.jl`) recurses on `OperatorAdd` alone, so every
@@ -193,11 +196,42 @@ the same coefficient when it is the same `Ref` object on both sides — the whol
 current value into a static number would bake in a snapshot the rest of the design goes out
 of its way to avoid.
 
-The pass stops at these three node types on purpose. Rule 4 of #159 — lifting a scalar out of
-an inner product's own argument (`innerₕ(2 * u, v) -> 2 * innerₕ(u, v)`, exposing it to the
-rules above) — is not yet implemented; a coefficient written inside an operator's argument is
-invisible to this pass, which is exactly why the tutorial's §9 tells a reader to write it
-outside instead.
+### Reaching one layer deeper: inner products and shifts
+
+| Input | Simplifies to | Why |
+|:--- |:--- |:--- |
+| `⟨c * u, v⟩`, `⟨u, c * v⟩` | `c * ⟨u, v⟩` | exposes `c` to the rules above, and to `symmetry.jl` |
+| `⟨u, v(i) + v(j)⟩`, `i ≠ j` (or the trial-side mirror) | `⟨u, v(i)⟩ + ⟨u, v(j)⟩` | the combined shape has no valid single-term routing at all |
+| `u_h * (v_h * A)` | `(u_h .* v_h) * A` | one elementwise multiply at construction, not two scalings per point per assembly |
+| `Shift₀(u)` | `u` | a zero shift is the identity |
+| `Shift_a(Shift_b(u))`, same dimension | `Shift_{a+b}(u)` | additive, so `Shift_k(Shift_{-k}(u))` collapses to `u` via the rule above |
+
+Scalar lifting matters beyond routing: `_same_operator_shape` (`symmetry.jl`) recognises
+`⟨L(u), L(v)⟩` — the same operator chain on both sides — structurally, by comparing the
+concrete node types down both arguments. `innerₕ(2 * D₋ₓ(u), D₋ₓ(v))`'s trial side used to be
+an `OperatorScale` and its test side a bare `BackwardDifference` — different types, so the
+check answered `false` even though `2 * ⟨Lu, Lv⟩` is exactly the symmetric,
+positive-semidefinite shape it exists to recognise. Lifting the `2` out removes the mismatch.
+
+Component distribution exists because a term naming two different components inside one
+product has no other way to assemble: `test_component_or_nothing`/
+`trial_component_or_nothing` (`block_extract.jl`) *throw* when the two sides of a sum they
+walk into name different components, since the router needs exactly one block (or none) per
+routed term and a mixed sum inside one product answers neither. Distributing it into two
+clean products, each naming one component, is the only routing-safe shape — so unlike every
+other rule here, this one can turn a single sweep back into two. It is guarded accordingly: a
+same-component sum (`v(1) + D₋ₓ(v(1))`, or no component at all) is left as the single term it
+already is, and only fires when the two sides actually disagree.
+
+That guard — call it `_mixes_components(a, b)` — has to be checked again wherever an
+`OperatorAdd` could end up hidden inside an `OperatorScale`/`GridFunctionScale` wrapper,
+because hiding one there reintroduces exactly the unroutable shape: `2 * (A + B)` for `A`/`B`
+naming different components would throw at assembly the same way the un-lifted `innerₕ(fₕ, v(1)
++ v(2))` above did. So rule 2's factoring step (`c * A + c * B -> c * (A + B)`) refuses to
+fire when `A`/`B` mix components, and `simplify_ast(::OperatorScale)`/
+`simplify_ast(::GridFunctionScale)` distribute their own coefficient over an inner sum that
+mixes, rather than wrapping it, whenever `BilinearProduct`'s/`LinearProduct`'s own
+distribution produces one and something still wraps it from outside.
 
 ```@autodocs
 Modules = [Bramble]
