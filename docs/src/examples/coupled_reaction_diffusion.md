@@ -155,11 +155,11 @@ new solve or copy needed:
 
 ```@example coupled
 include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
-heatmap_plot(uₕ; title = "Coupled reaction-diffusion, u") # hide
+surface_plot(uₕ; title = "Coupled reaction-diffusion, u") # hide
 ```
 
 ```@example coupled
-heatmap_plot(vₕ; title = "Coupled reaction-diffusion, v") # hide
+surface_plot(vₕ; title = "Coupled reaction-diffusion, v") # hide
 ```
 
 ## Checking the answer

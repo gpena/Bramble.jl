@@ -54,7 +54,7 @@ nothing # hide
 
 ```@example convdiff
 include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
-heatmap_plot(uₕ; title = "Convection-diffusion, 2D") # hide
+surface_plot(uₕ; title = "Convection-diffusion, 2D") # hide
 ```
 
 ## Checking the answer

@@ -100,6 +100,19 @@ parent(uₕ) .= sol.u[end]
 normₕ(Rₕ(Wₕ, x -> uexact(x, 1.0)) - uₕ)
 ```
 
+A surface plot of the whole time evolution, `x` and `t` the two horizontal axes, `u` as
+height and colour, needs no new solve: `sol` already interpolates continuously in `t`, so
+sampling it at a uniform grid of times is enough to lay one out. The white curve traces
+`u(x, t)` at the current instant and loops on its own:
+
+```@example heat
+include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
+
+ts = range(0.0, 1.0; length=60)
+Z = reduce(vcat, (sol(t)' for t in ts))
+spacetime_surface_plot(points(Ωₕ), collect(ts), Z; title="Heat equation, x-t-u")
+```
+
 The initial condition handed in is copied, never mutated, and the copy is made consistent
 with the algebraic rows at ``t_0`` before stepping starts — an index-1 system whose initial
 condition disagrees with its own constraints is otherwise rejected by the solver or absorbed

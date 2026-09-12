@@ -1,5 +1,5 @@
 # Shared Plotly.js loading/theming for every chart on the docs site (benchmark trend/bar
-# charts, convergence plots, solution heatmaps). Included once per page that needs it —
+# charts, convergence plots, solution surface plots). Included once per page that needs it —
 # docs/generate_benchmarks.jl for the benchmark page, docs/src/convergence_plot.jl for the
 # worked examples, docs/src/solution_plot.jl for their solution-field plots.
 #
