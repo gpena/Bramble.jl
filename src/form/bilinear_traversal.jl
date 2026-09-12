@@ -92,6 +92,16 @@ end
 
 @inline _trial_column(lin_indices, I::CartesianIndex, off_u::AbsoluteColumn) = off_u.col
 
+# Whether `off_u`'s trial index survives, without computing the linear index `_trial_column`
+# would return -- for sinks that only need to know whether the entry lands, not where
+# ([`_sink_needs_coordinates`](@ref)). An `AbsoluteColumn` always survives, matching
+# `_trial_column`: it names a source column directly and is never `0`.
+Base.@propagate_inbounds function _trial_inbounds(lin_indices, I::CartesianIndex, off_u)
+    Iu = I + CartesianIndex(off_u)
+    return checkbounds(Bool, lin_indices, Iu)
+end
+@inline _trial_inbounds(lin_indices, I::CartesianIndex, off_u::AbsoluteColumn) = true
+
 # --- one traversal, pluggable sinks (gpena/Bramble.jl#50) -------------------------- #
 
 #=
@@ -126,6 +136,22 @@ value sweeps with no de-duplication scan at all.
 See also: [`visit_bilinear_stencil`](@ref), [`PatternSink`](@ref).
 """
 @inline _sink_dedups(::Any) = false
+
+"""
+    _sink_needs_coordinates(sink) -> Bool
+
+Whether `sink` reads the `(row, col)` an entry computes, rather than discarding it.
+
+The default is `true`. [`ReplaySink`](@ref) answers `false`: its [`_sink_entry!`](@ref)
+ignores `row` and `col` entirely, since the `nzval` position is already recorded in
+`sink.positions`. `false` lets [`_step_entry!`](@ref) skip the linear-index lookups and
+offset additions that would only be discarded, while still running the bounds checks that
+decide whether the entry survives at all -- dropped entries must match the record pass
+exactly, or `slot` drifts out of step with `positions`.
+
+See also: [`_step_entry!`](@ref), [`_trial_inbounds`](@ref).
+"""
+@inline _sink_needs_coordinates(::Any) = true
 
 """
     _sink_point!(sink, lin_idx::Int) -> Int
@@ -190,9 +216,14 @@ Base.@propagate_inbounds function _step_entry!(
 ) where {SINK}
     Iv = I + CartesianIndex(off_v)
     checkbounds(Bool, lin_indices, Iv) || return false
-    col = _trial_column(lin_indices, I, off_u)
-    col == 0 && return false
-    _sink_entry!(sink, lin_indices[Iv] + row_offset, col + col_offset, weight, slot)
+    if _sink_needs_coordinates(sink)
+        col = _trial_column(lin_indices, I, off_u)
+        col == 0 && return false
+        _sink_entry!(sink, lin_indices[Iv] + row_offset, col + col_offset, weight, slot)
+    else
+        _trial_inbounds(lin_indices, I, off_u) || return false
+        _sink_entry!(sink, 0, 0, weight, slot)
+    end
     return true
 end
 
@@ -386,7 +417,9 @@ Add a term's values to `A` using slots recorded earlier by [`RecordSink`](@ref).
 The same walk and the same fresh stencil evaluation, because weights may be live: a
 coefficient grid function updated in place through `Rₕ!` is seen by the next assembly. Only
 the slot lookup is skipped, taken from `positions` rather than searched for, which is what
-the cache buys. `row` and `col` are ignored for that reason.
+the cache buys. `row` and `col` are ignored for that reason, and
+[`_sink_needs_coordinates`](@ref) tells [`_step_entry!`](@ref) as much, so it skips computing
+them at all rather than computing and discarding them.
 
 Immutable: the walk's position advances as a loop-local in
 [`visit_bilinear_stencil`](@ref), handed back through `slot`, rather than as a field of the
@@ -400,6 +433,7 @@ struct ReplaySink{M<:SparseMatrixCSC}
     positions::Vector{Int}
 end
 @inline _sink_point!(sink::ReplaySink, lin_idx::Int) = @inbounds(sink.point_ptr[lin_idx])
+@inline _sink_needs_coordinates(::ReplaySink) = false
 Base.@propagate_inbounds function _sink_entry!(
     sink::ReplaySink, ::Int, ::Int, weight, slot::Int
 )
