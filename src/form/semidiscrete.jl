@@ -315,16 +315,14 @@ function (sd::Semidiscretization)(du::AbstractVector, u::AbstractVector, p, t)
     _assemble_source!(F, sd, sd.constraints, t)
 
     A = _refresh_operator!(sd, sd.reassemble)
-    mul!(du, A, u)
 
-    # Written out rather than `@. du = F - du`: `du` on both sides of a broadcast sends it
-    # through `Base.unalias`, whose `unaliascopy` branch no static analysis can discharge
-    # (AllocCheck reports two allocation sites on it, though neither is reachable while `F`
-    # is `sd`'s own buffer). `eachindex` over both settles the lengths, so the indices are
-    # in bounds by construction.
-    @inbounds @simd for i in eachindex(du, F)
-        du[i] = F[i] - du[i]
-    end
+    # `du = F - A u` via the 5-argument `mul!(C, A, B, α, β) = α A B + β C`: fuses the
+    # subtraction into the matrix-vector product itself (`du = -1 * A * u + 1 * du`),
+    # saving the extra read-and-write pass over `du`/`F` that a separate combine step
+    # would cost on every stage of a time integrator. `copyto!` first so that fused
+    # pass reads `F`'s values back out of `du`, not `F` itself.
+    copyto!(du, F)
+    mul!(du, A, u, -1, 1)
     return du
 end
 
