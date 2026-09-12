@@ -312,6 +312,17 @@ function _pc_form_assembly(
     _pc_assemble_shape(Wₕ, v -> innerₕ(uₕ, v + 2 * D₋ₓ(v) - M₋ₓ(v)), b)
     _pc_assemble_directional(Wₕ, uₕ, b, dim_val)
 
+    # A raw closure source, not a VectorElement: exercises form(Wₕ, f)'s eager lowering
+    # (`_lower_sources_for_space`/`_lower_sources`, gpena/Bramble.jl#197) through the real
+    # constructor, unlike `_pc_symbolic_operators`' `innerₕ(x -> 1.0, v)` above, which only
+    # builds the bare AST node from symbolic `TrialFunction`/`TestFunction` markers and never
+    # reaches `form`'s constructor or a real space at all. Every call above this one sources
+    # from `uₕ`, a `VectorElement`, so none of them touch this path either.
+    _pc_assemble_shape(Wₕ, v -> innerₕ(f, v), b)
+    # `f * uₕ` (gpena/Bramble.jl#197): the operator only `form`'s own lowering needed
+    # otherwise had no caller anywhere in this workload.
+    _pc_assemble_shape(Wₕ, v -> innerₕ(f * uₕ, v), b)
+
     # Written out per component, the shorthand that sums them, and a routed term carrying
     # operators.
     uv = Rₕ(Vₕ, (f, f))
@@ -319,6 +330,15 @@ function _pc_form_assembly(
     _pc_assemble_composite(Vₕ, v -> innerₕ(c[1], v(1)) + innerₕ(c[2], v(2)), bv)
     _pc_assemble_composite(Vₕ, v -> innerₕ(uv, v), bv)
     _pc_assemble_composite(Vₕ, v -> innerₕ(c[1], v(1) + D₋ₓ(v(1))) + innerₕ(c[2], v(2)), bv)
+
+    # A raw closure source naming one leaf's component (gpena/Bramble.jl#197):
+    # `_lower_sources_over_leaves`' target-known branch, sampling against that leaf's own
+    # space -- a different path from the shared-across-leaves one right below it.
+    _pc_assemble_composite(Vₕ, v -> innerₕ(f, v(1)), bv)
+    # A raw closure source naming no component: goes to every leaf, and is deliberately left
+    # unlowered (`_lower_sources_over_leaves`'s `target === nothing` branch) since leaves may
+    # not share a mesh -- checked here so that branch's own code path is precompiled too.
+    _pc_assemble_composite(Vₕ, v -> innerₕ(f, v), bv)
 
     # and the constrained right-hand side, which is a different path from the bare one
     bcs = dirichlet_constraints(Ωₕ, label => f)

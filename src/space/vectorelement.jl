@@ -344,6 +344,28 @@ _find_vec_in_broadcast(::Any, rest) = _find_vec_in_broadcast(rest) # Keep search
 @inline Base.:*(Vₕ::NTuple{D,VectorElement}, a::Number) where {D} = a * Vₕ
 @inline Base.:*(Vₕ::NTuple{D,VectorElement}, uₕ::VectorElement) where {D} = uₕ * Vₕ
 
+"""
+    f::Function * uₕ::VectorElement -> VectorElement
+    uₕ::VectorElement * f::Function -> VectorElement
+
+Project the continuous function `f` onto `uₕ`'s own space and scale `uₕ` pointwise by it
+(gpena/Bramble.jl#197): `Rₕ(space(uₕ), f) .* uₕ`.
+
+A plain `Function` has no meaning as a grid function on its own -- a form built from
+`innerₕ(f, v)` restricts it first through [`source_function`](@ref)/[`form`](@ref)'s own
+lowering, but `f * uₕ` outside a form (or a continuous spatial *condition* multiplying a
+grid function, `(x -> x[1] < 1) * uₕ`) had no operator to reach that with:
+```julia
+julia> (x -> x[1] < 1) * uₕ
+ERROR: MethodError: no method matching *(::Function, ::VectorElement)
+```
+now restricts `f` to `space(uₕ)` and multiplies elementwise, so the result is an ordinary
+`VectorElement`, usable anywhere one is -- including as a `SourceFunction`-lowered term
+inside another form.
+"""
+@inline Base.:*(f::Function, uₕ::VectorElement) = Rₕ(space(uₕ), f) .* uₕ
+@inline Base.:*(uₕ::VectorElement, f::Function) = f * uₕ
+
 # --- Display ---------------------------------------------------------------------- #
 #
 # `VectorElement` is an `AbstractVector`, so without a `summary` of its own it inherited

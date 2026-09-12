@@ -123,6 +123,20 @@ vₕ = element(Wₕ, 2.0)
 wₕ = 3.0 .* uₕ .+ vₕ
 ```
 
+### Scaling by a continuous function
+
+A plain `Function` has no meaning as a grid function on its own — `f * uₕ` restricts `f` to
+`uₕ`'s own space first (`Rₕ(space(uₕ), f)`) and scales elementwise, giving back an ordinary
+`VectorElement`:
+
+```julia
+uₕ = Rₕ(Wₕ, x -> 1.0)
+below_half = (x -> x[1] < 0.5) * uₕ   # same as (uₕ * (x -> x[1] < 0.5))
+```
+
+Useful for a spatial condition multiplying a grid function directly, including as a
+form's source: `innerₕ((x -> x[1] < 0.5) * uₕ, v)`.
+
 ---
 
 ## 4. Component indexing and field extraction

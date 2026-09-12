@@ -33,12 +33,12 @@ const NzvalSegment = Tuple{Vector{Int},Vector{Int}}
 One term's recorded nzval positions for one block, on a `D`-dimensional structured grid
 where the term's own [`_stencil_margin`](@ref) let its interior peel away from a boundary
 shell (gpena/Bramble.jl#160): interior entries are `base[k] + stride[k] * n` for the `n`-th
-point `interior`'s own iteration order visits (`n` zero-based, [`_interior_rank`](@ref)),
+point `interior`'s own iteration order visits (`n` zero-based, `_interior_rank`),
 rather than one stored `Int` per entry -- `positions` never carries the interior's
 `O(N * P)` share at all. `boundary` is an ordinary [`NzvalSegment`](@ref) covering only the
 shell, indexed exactly as before.
 
-Built by [`_record_segment!`](@ref) only when every interior point produces the same number
+Built by `_record_segment!` only when every interior point produces the same number
 of entries `P` and the same per-tap stride holds across the whole interior -- checked once,
 not assumed, because a form summing terms of different margins can make a column's true
 `nzval` footprint vary inside what this one term calls its own interior (see
@@ -46,7 +46,7 @@ not assumed, because a form summing terms of different margins can make a column
 [`NzvalSegment`](@ref), the general shape [`ReplaySink`](@ref) already handles.
 
 Parametrized by `D` alone -- `interior`'s ranges-tuple type is pinned to
-`NTuple{D,UnitRange{Int}}` (what [`_interior_range`](@ref) always produces), never left as
+`NTuple{D,UnitRange{Int}}` (what `_interior_range` always produces), never left as
 an independent free parameter -- so that for one `BilinearForm`'s fixed dimension,
 `AnySegment{D}` is a two-member union of *concrete* types. A `CartesianIndices{D}` alone, or
 a `DiagonalSegment` with `D` left to vary, is not concrete (its ranges type is still a

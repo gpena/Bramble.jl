@@ -128,6 +128,53 @@ end
     )
 end
 
+# Two node types `_lower_sources` (form/common.jl) needs its own method for, defined here
+# rather than alongside the rest of the family there because both are included after
+# common.jl -- a type named in a method *signature* has to already exist (bramble-performance
+# skill, "include-order rule"), unlike a name used only in a body.
+
+# `LinearProduct`'s left side is always a source (`_is_source_only`), its right side never
+# is, so only the left needs lowering.
+function _lower_sources(op::LinearProduct{D,W}, space) where {D,W}
+    left = _lower_sources(op.left_op, space)
+    return left === op.left_op ? op :
+           LinearProduct{D,W,typeof(left),typeof(op.right_op)}(left, op.right_op)
+end
+
+function _lower_sources(op::ShiftNode{D,Dim}, space) where {D,Dim}
+    inner = _lower_sources(op.inner_op, space)
+    return inner === op.inner_op ? op : ShiftNode{D,Dim,typeof(inner)}(op.shift_amount, inner)
+end
+
+# --- Eager source lowering across a CompositeGridSpace's leaves (gpena/Bramble.jl#197) --- #
+#
+# A non-composite space has exactly one leaf -- itself -- so `_lower_sources` above runs
+# directly against `Wₕ`, unambiguous. A composite space's terms follow the same routing rule
+# `_route_terms!` assembles by (`_routed_target`, above): a term naming one component lowers
+# against that leaf's own space; a term naming none goes to *every* leaf, which may have
+# different meshes, so there is no single space to sample against and lowering is skipped for
+# it -- the same `SourceFunction` it already was, evaluated fresh per leaf at assembly time
+# exactly as today. Missing this optimisation for that one shape is the safe choice: sampling
+# against the wrong leaf's mesh would silently assemble the wrong numbers, not merely run
+# slower.
+_lower_sources_for_space(ast, Wₕ) = _lower_sources(ast, Wₕ)
+
+function _lower_sources_for_space(ast, Wₕ::CompositeGridSpace)
+    return _lower_sources_over_leaves(ast, leaf_spaces_offsets(Wₕ))
+end
+
+function _lower_sources_over_leaves(op::OperatorAdd, leaves)
+    left = _lower_sources_over_leaves(op.left_op, leaves)
+    right = _lower_sources_over_leaves(op.right_op, leaves)
+    return left === op.left_op && right === op.right_op ? op : OperatorAdd(left, right)
+end
+
+function _lower_sources_over_leaves(term::TERM, leaves) where {TERM}
+    target = test_component_or_nothing(term)
+    (target === nothing || target < 1 || target > length(leaves)) && return term
+    return _lower_sources(term, first(leaves[target]))
+end
+
 """
     form(Wₕ, f) -> LinearForm
 
@@ -137,6 +184,18 @@ Construction resolves the AST once and runs [`simplify_ast`](@ref) over it -- fa
 common scalings, combining like terms, and eliding zero-scaled ones -- before it is stored.
 Grid partitioning for parallel assembly is determined from the resolved AST during assembly
 (see `_colour_strides`).
+
+Every `SourceFunction` reachable from the simplified AST -- a source term built directly from
+a plain function, `f(x)`, rather than a [`VectorElement`](@ref) or a `Ref` -- is then
+sampled once against its own leaf's space and lowered to a `SourceVector`
+(gpena/Bramble.jl#197): a brand-new closure passed as a source used to force a full
+recompilation of the assembly pipeline (~11ms measured) on every distinct closure, since
+Julia gives it its own type; assembling against the fixed `SourceVector` shape instead means
+that cost is paid once, here, not on every later `assemble!`/`assemble` call. This changes
+what a raw closure that captures mutable state does: it is evaluated once, now, not
+re-evaluated on later assemblies. `VectorElement` and `Ref` coefficients are unaffected --
+see the note on `_lower_sources` in `form/common.jl` for why, and for the documented
+alternative (`update_coefficients!`) a source meant to keep varying should use instead.
 
 # Examples
 ```julia
@@ -149,6 +208,7 @@ function form(Wₕ, f)
     raw_ast = f(TestFunction{D}())
     _validate_form_expression(raw_ast, Val(D))
     ast = simplify_ast(resolve_ast(raw_ast))
+    ast = _lower_sources_for_space(ast, Wₕ)
     return LinearForm{D,typeof(Wₕ),typeof(ast)}(Wₕ, ast)
 end
 

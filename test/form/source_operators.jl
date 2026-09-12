@@ -2,7 +2,19 @@ using Test
 using Bramble
 using ForwardDiff
 using Bramble:
-    source_function, SourceVector, Innerh, restrict_to, shift_op, form, assemble, assemble!
+    source_function,
+    SourceVector,
+    SourceFunction,
+    Innerh,
+    restrict_to,
+    shift_op,
+    form,
+    assemble,
+    assemble!,
+    resolve_form_ast,
+    LinearProduct,
+    CompositeGridSpace,
+    components
 
 # An operator wrapped around a *source* in a linear form.
 #
@@ -356,5 +368,134 @@ using Bramble:
         @test_throws ArgumentError Bramble._contracted_left_stencil(
             _UnmarkedSourceNode{1}(), nothing, CartesianIndex(1), nothing, 1
         )
+    end
+
+    # gpena/Bramble.jl#197: form(Wₕ, f) now samples every reachable SourceFunction once,
+    # against its own leaf's space, and stores the result as a SourceVector -- so a form
+    # built from a brand-new closure pays its one-time compilation cost at construction,
+    # not on every later assemble!/assemble.
+    @testset "Eager source lowering (#197)" begin
+        @testset "Plain source lowers to SourceVector" begin
+            Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, false)
+            Wₕ = gridspace(Ωₕ)
+            f = x -> x^2 + sin(3x)
+            l = form(Wₕ, v -> innerₕ(f, v))
+            ast = resolve_form_ast(l)
+            @test ast isa LinearProduct
+            @test ast.left_op isa SourceVector
+
+            b = assemble(l)
+            fₕ = Rₕ(Wₕ, f)
+            w = weights(Wₕ, Innerh())
+            @test b ≈ parent(fₕ) .* w
+        end
+
+        @testset "Wrapped source is left unlowered, still correct" begin
+            # D₋ₓ(sf) builds a node type `_lower_sources` has no method for, so it falls
+            # through to the generic leaf fallback -- unchanged, not incorrectly rewritten.
+            # A missed optimisation, not a correctness gap: checked against the same oracle
+            # "1D numeric equivalence" above uses.
+            Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, false)
+            Wₕ = gridspace(Ωₕ)
+            f = x -> x^2 + sin(3x)
+            sf = source_function(f, Val(1))
+            l = form(Wₕ, v -> innerₕ(D₋ₓ(sf), v))
+            ast = resolve_form_ast(l)
+            @test ast.left_op isa Bramble.BackwardDifference
+            @test ast.left_op.inner_op isa SourceFunction
+
+            b = assemble(l)
+            fₕ = Rₕ(Wₕ, f)
+            w = weights(Wₕ, Innerh())
+            @test b ≈ parent(D₋ₓ(fₕ)) .* w
+        end
+
+        @testset "Composite space: component-specific term lowers" begin
+            Wleaf = gridspace(mesh(domain(interval(0.0, 1.0)), 21, true))
+            Vₕ = Wleaf^Val(2)
+            f = x -> x[1]^2
+            l = form(Vₕ, v -> innerₕ(f, v(2)))
+            ast = resolve_form_ast(l)
+            @test ast.left_op isa SourceVector
+
+            n = ndofs(Wleaf)
+            b = assemble(l)
+            w = weights(Wleaf, Innerh())
+            @test b[1:n] == zeros(n)
+            @test b[(n + 1):end] ≈ parent(Rₕ(Wleaf, f)) .* w
+        end
+
+        @testset "Composite space: term shared across leaves is left unlowered" begin
+            # A term naming no component goes to every leaf (`_routed_target`); those
+            # leaves may have different meshes, so there is no single space to eagerly
+            # sample against. Skipped, not incorrectly lowered against one arbitrary leaf.
+            Wleaf = gridspace(mesh(domain(interval(0.0, 1.0)), 21, true))
+            Vₕ = Wleaf^Val(2)
+            f = x -> x[1] + 1.0
+            l = form(Vₕ, v -> innerₕ(f, v))
+            ast = resolve_form_ast(l)
+            @test ast.left_op isa SourceFunction
+
+            n = ndofs(Wleaf)
+            b = assemble(l)
+            w = weights(Wleaf, Innerh())
+            expected = parent(Rₕ(Wleaf, f)) .* w
+            @test b[1:n] ≈ expected
+            @test b[(n + 1):end] ≈ expected
+        end
+
+        @testset "Dynamic coefficients stay live (non-negotiable)" begin
+            # A raw closure loses live re-evaluation once lowered; Ref and VectorElement
+            # coefficients must not, since neither is ever wrapped in a SourceFunction.
+            Ωₕ = mesh(domain(interval(0.0, 1.0)), 11, true)
+            Wₕ = gridspace(Ωₕ)
+
+            α = Ref(1.0)
+            uₕ = Rₕ(Wₕ, x -> 1.0)
+            l = form(Wₕ, v -> α * innerₕ(uₕ, v))
+            b1 = assemble(l)
+            α[] = 3.0
+            b2 = assemble(l)
+            @test b2 ≈ 3 .* b1
+
+            vₕ = Rₕ(Wₕ, x -> 1.0)
+            l2 = form(Wₕ, v -> innerₕ(vₕ, v))
+            c1 = assemble(l2)
+            vₕ .= 2.0
+            c2 = assemble(l2)
+            @test c2 ≈ 2 .* c1
+        end
+
+        @testset "Dual numbers propagate through a lowered source" begin
+            # Distinct from "Source differentiation" above, which wraps its source in
+            # D₋ₓ and so never reaches the lowering path this checks.
+            Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, true)
+            Wₕ = gridspace(Ωₕ)
+
+            resid(p) = sum(assemble(form(Wₕ, v -> innerₕ(x -> p[1] * x[1]^2, v))))
+            g = ForwardDiff.gradient(resid, [2.0])
+            @test g[1] ≈ resid([1.0])
+            @test isfinite(g[1])
+            @test !iszero(g[1])
+        end
+    end
+
+    @testset "Function * VectorElement (#197)" begin
+        Ωₕ = mesh(domain(interval(0.0, 1.0)), 11, true)
+        Wₕ = gridspace(Ωₕ)
+        uₕ = Rₕ(Wₕ, x -> 1.0)
+        cond = x -> x[1] < 0.5
+
+        left = cond * uₕ
+        right = uₕ * cond
+        @test left == right
+        @test parent(left) == parent(Rₕ(Wₕ, cond))
+
+        # The issue's own worked example: a continuous condition scaling a grid function,
+        # used directly as a form's source.
+        l = form(Wₕ, v -> innerₕ(cond * uₕ, v))
+        b = assemble(l)
+        w = weights(Wₕ, Innerh())
+        @test b ≈ parent(cond * uₕ) .* w
     end
 end

@@ -692,23 +692,6 @@ Base.@propagate_inbounds function _sink_entry!(
     return nothing
 end
 
-"""
-    DiagonalReplaySink(A::SparseMatrixCSC, interior::CartesianIndices, base::Vector{Int}, stride::Vector{Int}, P::Int)
-
-Add a term's values to `A`'s interior core using [`DiagonalSegment`](@ref)'s per-tap stride
-instead of a stored position per entry.
-
-Paired with an ordinary [`ReplaySink`](@ref) for the boundary shell through the two-sink
-form of [`visit_bilinear_stencil`](@ref): this sink is only ever handed the interior region,
-so `_sink_point!` addresses a point by its rank `n` in `interior`'s own iteration order
-(zero-based, via [`_interior_rank`](@ref)) rather than by `lin_idx`, matching the order
-[`_record_segment!`](@ref) validated the stride against. The `k`-th tap of that point
-(`1`-based, `k in 1:P`) then lands at `base[k] + stride[k] * n`, recovered from the running
-`slot` the shared walk already threads (`slot = n * P + (k - 1)`), so no per-entry lookup
-runs at all.
-
-See also: [`visit_bilinear_stencil`](@ref), [`_replay_segment!`](@ref).
-"""
 # `n` is mutable, unlike every other field: `_sink_point!` sets it once per point and
 # `_sink_entry!` reads it for every one of that point's `P` taps, recovering the tap number
 # as `slot - n * P` (a multiply and a subtract). The alternative -- reconstructing `n` from
@@ -718,6 +701,30 @@ See also: [`visit_bilinear_stencil`](@ref), [`_replay_segment!`](@ref).
 # per-element-varying parameter). Measured: the `divrem` version replayed a 1D interior
 # 30-40% *slower* than the flat `ReplaySink` it was meant to beat, even though it read no
 # `positions` array at all -- division dominated the saving.
+#
+# A comment block here, between the docstring below and the struct it documents, silently
+# detaches the docstring from `DiagonalReplaySink` entirely -- `Docs.doc` and every `@ref`
+# to it then resolve to nothing, with no error at load time to catch it (found only by
+# building the docs: `docs/make.jl` reported four unresolved `@ref`s this struct's own
+# docstring and others' made to it and to its neighbours, all silently broken the same way).
+# The docstring must be the last thing before the struct, so this note moved above it.
+"""
+    DiagonalReplaySink(A::SparseMatrixCSC, interior::CartesianIndices, base::Vector{Int}, stride::Vector{Int}, P::Int)
+
+Add a term's values to `A`'s interior core using [`DiagonalSegment`](@ref)'s per-tap stride
+instead of a stored position per entry.
+
+Paired with an ordinary [`ReplaySink`](@ref) for the boundary shell through the two-sink
+form of [`visit_bilinear_stencil`](@ref): this sink is only ever handed the interior region,
+so `_sink_point!` addresses a point by its rank `n` in `interior`'s own iteration order
+(zero-based, via `_interior_rank`) rather than by `lin_idx`, matching the order
+`_record_segment!` validated the stride against. The `k`-th tap of that point
+(`1`-based, `k in 1:P`) then lands at `base[k] + stride[k] * n`, recovered from the running
+`slot` the shared walk already threads (`slot = n * P + (k - 1)`), so no per-entry lookup
+runs at all.
+
+See also: [`visit_bilinear_stencil`](@ref), `_replay_segment!`.
+"""
 mutable struct DiagonalReplaySink{M<:SparseMatrixCSC,D,R}
     const A::M
     const interior::CartesianIndices{D,R}

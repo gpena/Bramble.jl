@@ -344,6 +344,63 @@ Constructs a `SourceFunction` wrapping function `f`.
 """
 source_function(f, ::Val{D}) where {D} = SourceFunction{D,typeof(f)}(f)
 
+# --- Eager spatial lowering of source functions (gpena/Bramble.jl#197) ------------- #
+#
+# `local_stencil(op::SourceFunction, space, I, markers, lin_idx)` calls `op.func(point(mesh(
+# space), I))` fresh at every grid point of every assembly -- which is what lets a closure
+# capturing a `Ref` or other mutable state stay live across repeated `assemble!` calls, but
+# also means Julia treats each syntactically distinct closure as its own type, forcing full
+# recompilation of the whole assembly pipeline the first time any new closure is used as a
+# source (measured ~11ms per distinct closure).
+#
+# `_lower_sources(op, space) -> LazyOp` rewrites every `SourceFunction` reachable from `op`
+# into a `SourceVector` sampled once, now, against `space` (`Rₕ(space, func)`, `parent(...)`
+# of the result) -- so a form built from a brand-new closure pays that cost once, at
+# construction, and every later `assemble!`/`assemble` call is a flat array read like any
+# other `SourceVector`, regardless of how novel the closure's type is.
+#
+# This is a real behaviour change, not merely an optimisation: a `SourceFunction` closure
+# that captures mutable state is no longer re-evaluated on later assemblies -- it is
+# sampled once, here. `VectorElement` and `Ref` coefficients are unaffected (neither is ever
+# wrapped in a `SourceFunction`; see `GridFunctionScale`/`OperatorScale` below, both left as
+# pass-through, matching `simplify_ast`'s own shape in `simplifier.jl`), and no existing test
+# relied on a raw closure being re-invoked outside that documented pattern. A source meant to
+# vary after construction (a time-dependent PDE source, say) must use the already-documented
+# `update_coefficients!`/`VectorElement` pattern (`semidiscretize`'s docstring) instead of a
+# raw closure captured directly in the form.
+#
+# Every node type not named here is a leaf as far as this pass is concerned (it can never
+# contain a `SourceFunction`, or lowering inside it is handled by its own caller -- see
+# `_lower_sources_for_space` in `form/linear.jl` for `LinearProduct`/`OperatorAdd` routing
+# across a `CompositeGridSpace`'s leaves) and is returned unchanged.
+@inline _lower_sources(op::LazyOp, space) = op
+
+@inline function _lower_sources(op::SourceFunction{D}, space) where {D}
+    vec = parent(Rₕ(space, op.func))
+    return SourceVector{D,typeof(vec)}(vec)
+end
+
+function _lower_sources(op::OperatorScale, space)
+    inner = _lower_sources(op.inner_op, space)
+    return inner === op.inner_op ? op : OperatorScale(op.scalar, inner)
+end
+
+function _lower_sources(op::GridFunctionScale, space)
+    inner = _lower_sources(op.inner_op, space)
+    return inner === op.inner_op ? op : GridFunctionScale(op.grid_function, inner)
+end
+
+function _lower_sources(op::OperatorAdd, space)
+    left = _lower_sources(op.left_op, space)
+    right = _lower_sources(op.right_op, space)
+    return left === op.left_op && right === op.right_op ? op : OperatorAdd(left, right)
+end
+
+# `ShiftNode` (form/operators/average.jl) and `LinearProduct` (form/operators/inner.jl) are
+# both included after this file, so their `_lower_sources` methods -- naming the type in the
+# signature, unlike everything above -- live in form/linear.jl instead (bramble-performance
+# skill, "include-order rule").
+
 # ==============================================================================
 # 4. Deprecated `ast` keyword (gpena/Bramble.jl#105)
 # ==============================================================================

@@ -1,21 +1,9 @@
 module Bramble
 
 import Base: eltype, length
-import Base:
-    show,
-    first,
-    last,
-    getindex,
-    setindex!,
-    iterate,
-    size,
-    firstindex,
-    lastindex,
-    axes,
-    eachindex
+import Base: show, first, last, getindex, setindex!, iterate, size, firstindex, lastindex, axes, eachindex
 
-using SparseArrays:
-    SparseMatrixCSC, spdiagm, spzeros, rowvals, nonzeros, nzrange, sparse, sparse!
+using SparseArrays: SparseMatrixCSC, spdiagm, spzeros, rowvals, nonzeros, nzrange, sparse, sparse!
 
 using LinearAlgebra: I, dot, mul!
 import LinearAlgebra: issymmetric, isposdef
@@ -56,18 +44,10 @@ public set, is_collapsed, point_type
 
 # Mesh handling
 export Mesh1D, MeshnD
-export mesh,
-    submeshes,
-    hₘₐₓ,
-    stepsize,
-    locate_cell,
-    iterative_refinement!,
-    change_points!,
-    set_points!
+export mesh, submeshes, hₘₐₓ, stepsize, locate_cell, iterative_refinement!, change_points!, set_points!
 export npoints, points, point, half_points, half_point
 export spacing, forward_spacing, half_spacing, spacings, forward_spacings, cell_measure
-export indices,
-    boundary_indices, interior_indices, is_boundary_index, index_in_marker, is_uniform
+export indices, boundary_indices, interior_indices, is_boundary_index, index_in_marker, is_uniform
 
 # `AbstractMeshType`/`MeshMarkers` are extension points for a new mesh type, not everyday
 # vocabulary; `mesh_type`/`normal_vector`/`hₘᵢₙ`/`half_spacings`/`cell_measures` are the
@@ -84,8 +64,15 @@ export ndofs, ncomponents, weights
 # space's type back off a `VectorElement`. Neither appears in a tutorial — both are for
 # code written *against* a space's type, not for building one (point 70).
 public VectorGridSpace, space_type
-export VectorElement,
-    element, parent, reshape, components, component_range, component_ranges
+export VectorElement, element, parent, reshape, components, component_range, component_ranges
+# `*` is already in scope from Base regardless (a fundamental operator, never shadowed by
+# `using Bramble`), so this export is for documentation purposes alone -- the same reason
+# `parent`/`reshape` above are re-exported despite being Base's own functions too: it is what
+# keeps this file's `Base.:*(::Function, ::VectorElement)` docstring "public" from
+# Documenter's perspective, so `docs/src/internals/space.md`'s `Public = false` autodocs
+# sweep of `space/vectorelement.jl` does not also pick it up and conflict with its explicit
+# `@docs` entry in `api.md` (gpena/Bramble.jl#197).
+export *
 export Rₕ, Rₕ!, avgₕ, avgₕ!
 export interpolate_at, interpolation_matrix, πₕ, πₕ!
 

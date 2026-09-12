@@ -148,6 +148,7 @@ Base.reshape(::VectorElement{<:ScalarGridSpace})
 components
 component_range
 component_ranges
+Base.:*(::Function, ::VectorElement)
 ```
 
 ### Restriction and averaging operators
