@@ -106,6 +106,21 @@ Base.@propagate_inbounds function _trial_inbounds(lin_indices, I::CartesianIndex
 end
 @inline _trial_inbounds(lin_indices, I::CartesianIndex, off_u::AbsoluteColumn) = true
 
+"""
+    _trial_column_unguarded(lin_indices, I::CartesianIndex, off_u) -> Int
+
+[`_trial_column`](@ref), without the bounds check.
+
+Only called from the interior core of [`visit_bilinear_stencil`](@ref), where
+[`_stencil_margin`](@ref) has already guaranteed `I + CartesianIndex(off_u)` lands inside
+`lin_indices` for every entry the term's stencil can produce. An `AbsoluteColumn` names a
+source column outright either way, matching `_trial_column`.
+"""
+Base.@propagate_inbounds _trial_column_unguarded(lin_indices, I::CartesianIndex, off_u) =
+    lin_indices[I + CartesianIndex(off_u)]
+@inline _trial_column_unguarded(lin_indices, I::CartesianIndex, off_u::AbsoluteColumn) =
+    off_u.col
+
 # --- one traversal, pluggable sinks (gpena/Bramble.jl#50) -------------------------- #
 
 #=
@@ -235,6 +250,35 @@ Base.@propagate_inbounds function _step_entry!(
     return true
 end
 
+"""
+    _step_entry_unguarded!(sink, lin_indices, I, off_u, off_v, weight, row_offset::Int, col_offset::Int, slot::Int) -> Nothing
+
+[`_step_entry!`](@ref), without the guard: the interior-core counterpart, called only where
+[`_stencil_margin`](@ref) already guarantees every offset lands inside the grid. Always
+accepts its entry, so it has nothing to answer back and the caller advances `slot`
+unconditionally rather than being told to.
+"""
+Base.@propagate_inbounds function _step_entry_unguarded!(
+    sink::SINK,
+    lin_indices,
+    I,
+    off_u,
+    off_v,
+    weight,
+    row_offset::Int,
+    col_offset::Int,
+    slot::Int,
+) where {SINK}
+    if _sink_needs_coordinates(sink)
+        Iv = I + CartesianIndex(off_v)
+        col = _trial_column_unguarded(lin_indices, I, off_u)
+        _sink_entry!(sink, lin_indices[Iv] + row_offset, col + col_offset, weight, slot)
+    else
+        _sink_entry!(sink, 0, 0, weight, slot)
+    end
+    return nothing
+end
+
 # One point's entries, in two forms chosen by the de-duplication trait.
 #
 # A de-duplicating sink needs each entry's index, to ask `_offsets_seen_before` about the
@@ -264,6 +308,145 @@ Base.@propagate_inbounds function _visit_entries(
     return nothing
 end
 
+# The interior-core counterpart of `_visit_entries`: every entry survives, so `slot`
+# advances unconditionally instead of on `_step_entry_unguarded!`'s answer -- it has none to
+# give. Kept as its own loop rather than branching inside `_visit_entries` per entry, which
+# would reintroduce exactly the per-entry branch peeling exists to remove.
+Base.@propagate_inbounds function _visit_entries_unguarded(
+    sink::SINK, stencil, lin_indices, I, row_offset::Int, col_offset::Int, slot::Int
+) where {SINK}
+    if _sink_dedups(sink)
+        for k in eachindex(stencil)
+            off_u, off_v, weight = stencil[k]
+            _offsets_seen_before(stencil, k, off_u, off_v) && continue
+            _step_entry_unguarded!(
+                sink, lin_indices, I, off_u, off_v, weight, row_offset, col_offset, slot
+            )
+            slot += 1
+        end
+    else
+        for (off_u, off_v, weight) in stencil
+            _step_entry_unguarded!(
+                sink, lin_indices, I, off_u, off_v, weight, row_offset, col_offset, slot
+            )
+            slot += 1
+        end
+    end
+    return nothing
+end
+
+# --- interior/boundary geometry (gpena/Bramble.jl#160) ----------------------------- #
+#
+# `visit_bilinear_stencil` used to guard every point alike: a `checkbounds` and a
+# `_trial_column` lookup per entry, everywhere, even though on a 200x200 grid 98% of points
+# (every one at least `_stencil_margin(term)` cells from every face) can never fail either
+# guard. That thrashes the branch predictor and stops LLVM from unrolling the inner
+# accumulation, for a check whose answer is "yes" almost everywhere it runs.
+#
+# The fix is geometric, not a per-point shortcut: split `indices(Ωₕ)` into a rectangular
+# interior box, `margin` cells in from every face, where every offset the term can produce is
+# statically guaranteed in bounds, and a boundary shell outside it, where the guarded path
+# from before still runs unchanged. `margin` is `_stencil_margin(term)` (`stencil_pattern.jl`)
+# -- the widest offset the term's whole AST can reach, trial and test sides combined, not a
+# hardcoded 1: a nested difference or a multi-cell `Shift` reaches further than a single tap,
+# and treating a 1-cell rim as always safe for those would silently corrupt the boundary rows
+# instead of merely running slower.
+#
+# The shell is walked as `2D` axis-aligned slabs, one per `(dimension, low/high face)` pair.
+# Slab `2d-1`/`2d` covers dimension `d`'s low/high margin, at the box's full extent in every
+# dimension not yet peeled and the box's own interior range in every dimension an
+# earlier-numbered slab already claimed. That is what keeps a corner from being visited
+# twice: dimension 1's slabs claim the corner outright, dimension 2's slabs skip the range
+# dimension 1 already spoke for, and so on -- together with the interior box, the slabs cover
+# `indices(Ωₕ)` exactly once.
+#
+# Peeling only happens when it is geometrically sound: `_peelable` requires every axis to be
+# at least `2 * margin` points wide, or a term's own margin could make its low and high rim
+# overlap (a 3-point axis with a margin-2 term has no way to keep them apart) and a shared
+# point would be scattered into twice. A term or grid that fails this falls back to the one
+# guarded loop over the whole grid this file always ran before -- unchanged behaviour, not a
+# regression, for exactly the sizes where peeling would not be safe.
+
+@inline _interior_range(r::AbstractUnitRange{Int}, margin::Int) =
+    (first(r) + margin):(last(r) - margin)
+@inline _low_rim(r::AbstractUnitRange{Int}, margin::Int) = first(r):(first(r) + margin - 1)
+@inline _high_rim(r::AbstractUnitRange{Int}, margin::Int) = (last(r) - margin + 1):last(r)
+# The unrestricted case in `_boundary_shell_slabs` below, normalized to the same
+# `UnitRange{Int}` the three range-builders above already return: `ax[k]` on its own is
+# whatever concrete range type the mesh's `CartesianIndices` axes happen to carry (typically
+# `Base.OneTo{Int}`), and mixing that with `UnitRange{Int}` across an `ntuple`'s branches
+# makes the tuple's element type a `Union` -- which is exactly what made the first version of
+# this function allocate 672 B per call instead of 0.
+@inline _full_range(r::AbstractUnitRange{Int}) = first(r):last(r)
+
+@inline _peelable(ax::NTuple{D,AbstractUnitRange{Int}}, margin::Int) where {D} =
+    all(r -> 2 * margin <= length(r), ax)
+
+# The `2D` non-overlapping slabs partitioning `indices(Ωₕ)`'s rim, described above. `Val(2D)`
+# and the inner `Val(D)` are both resolved from `term`/`sp`'s own type parameters, so both
+# `ntuple`s unroll at compile time -- no closure captures a runtime dimension count the way
+# `_define_vectorial_alias`'s comment (`space/operators/stencil.jl`) warns a `Val(i)` built
+# from a loop variable would.
+@inline function _boundary_shell_slabs(
+    ax::NTuple{D,AbstractUnitRange{Int}}, margin::Int
+) where {D}
+    return ntuple(Val(2D)) do s
+        d = (s + 1) >>> 1
+        ranges = ntuple(Val(D)) do k
+            if k < d
+                _interior_range(ax[k], margin)
+            elseif k > d
+                _full_range(ax[k])
+            else
+                isodd(s) ? _low_rim(ax[k], margin) : _high_rim(ax[k], margin)
+            end
+        end
+        CartesianIndices(ranges)
+    end
+end
+
+# One point's stencil, guarded -- shared by the whole-grid fallback and every boundary slab.
+@inline function _visit_guarded_region!(
+    sink::SINK,
+    term::TERM,
+    sp,
+    mesh_markers,
+    lin_indices,
+    region,
+    row_offset::Int,
+    col_offset::Int,
+) where {SINK,TERM}
+    @inbounds for I in region
+        lin_idx = lin_indices[I]
+        stencil = local_stencil(term, sp, I, mesh_markers, lin_idx)
+        slot = _sink_point!(sink, lin_idx)
+        _visit_entries(sink, stencil, lin_indices, I, row_offset, col_offset, slot)
+    end
+    return nothing
+end
+
+# One point's stencil, unguarded -- the interior core, safe only where `_peelable` held.
+@inline function _visit_interior!(
+    sink::SINK,
+    term::TERM,
+    sp,
+    mesh_markers,
+    lin_indices,
+    interior,
+    row_offset::Int,
+    col_offset::Int,
+) where {SINK,TERM}
+    @inbounds for I in interior
+        lin_idx = lin_indices[I]
+        stencil = local_stencil(term, sp, I, mesh_markers, lin_idx)
+        slot = _sink_point!(sink, lin_idx)
+        _visit_entries_unguarded(
+            sink, stencil, lin_indices, I, row_offset, col_offset, slot
+        )
+    end
+    return nothing
+end
+
 """
     visit_bilinear_stencil(sink, term, sp, row_offset::Int, col_offset::Int) -> sink
 
@@ -278,6 +461,13 @@ passes and the value passes share one traversal instead of agreeing by coinciden
 The fifth argument handed to `local_stencil` is the *leaf's* linear index. A term routed to
 the wrong leaf reads the wrong `SourceVector` without complaint, which is why the index is
 derived here rather than by each caller.
+
+Splits into an interior core and a boundary shell when [`_stencil_margin`](@ref) and the
+grid size allow it (see the comment above `_peelable`), so most points skip the bounds
+guard entirely; every point still gets exactly one visit either way, so `sink` sees the same
+set of entries regardless of which path ran, in a possibly different order.
+[`RecordSink`](@ref)/[`ReplaySink`](@ref) are unaffected by that: they address each point by
+its own linear index, not by visit order (see their docstrings).
 
 # Arguments
 - `sink`: What to do per entry. See [`PatternSink`](@ref), [`RecordSink`](@ref) and
@@ -298,18 +488,30 @@ See also: [`allocate_system_matrix`](@ref), [`add_to_sparse!`](@ref).
 ) where {SINK,TERM}
     Ωₕ = mesh(sp)
     mesh_markers = markers(Ωₕ)
-    lin_indices = LinearIndices(indices(Ωₕ))
+    grid_inds = indices(Ωₕ)
+    lin_indices = LinearIndices(grid_inds)
+    margin = _stencil_margin(term)
+    ax = axes(grid_inds)
 
-    # `@inbounds` here is what the hand-written sweeps had wrapping their whole nested
-    # loop. It does not cross a function call on its own, so `_visit_entries`,
-    # `_entry_target` and `_trial_column` are `Base.@propagate_inbounds` to inherit it --
-    # without that, the bounds checks come back and the replay path costs 8-17% more.
-    @inbounds for I in indices(Ωₕ)
-        lin_idx = lin_indices[I]
-        stencil = local_stencil(term, sp, I, mesh_markers, lin_idx)
-        # `slot` stays a loop-local so it lives in a register rather than a sink field.
-        slot = _sink_point!(sink, lin_idx)
-        _visit_entries(sink, stencil, lin_indices, I, row_offset, col_offset, slot)
+    # `@inbounds` here (and inside `_visit_guarded_region!`/`_visit_interior!`) is what the
+    # hand-written sweeps had wrapping their whole nested loop. It does not cross a function
+    # call on its own, so `_visit_entries`, `_visit_entries_unguarded`, `_entry_target` and
+    # `_trial_column` are `Base.@propagate_inbounds` to inherit it -- without that, the bounds
+    # checks come back and the replay path costs 8-17% more.
+    if _peelable(ax, margin)
+        interior = CartesianIndices(map(r -> _interior_range(r, margin), ax))
+        _visit_interior!(
+            sink, term, sp, mesh_markers, lin_indices, interior, row_offset, col_offset
+        )
+        @inbounds for slab in _boundary_shell_slabs(ax, margin)
+            _visit_guarded_region!(
+                sink, term, sp, mesh_markers, lin_indices, slab, row_offset, col_offset
+            )
+        end
+    else
+        _visit_guarded_region!(
+            sink, term, sp, mesh_markers, lin_indices, grid_inds, row_offset, col_offset
+        )
     end
     return sink
 end

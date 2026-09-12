@@ -792,6 +792,129 @@ using Bramble:
         end
     end
 
+    @testset "Interior/boundary peeling (#160)" begin
+        # `visit_bilinear_stencil` splits the grid into an interior core (no bounds guard)
+        # and a boundary shell (the old guarded path) whenever `_stencil_margin(term)` and
+        # the grid size allow it. Every test below exists because the margin can exceed 1 --
+        # a composed difference or a multi-cell shift -- and treating a 1-cell rim as always
+        # safe for those would silently corrupt the rows nearest the boundary rather than
+        # merely running slower.
+        using Bramble:
+            _stencil_margin,
+            _peelable,
+            _interior_range,
+            _boundary_shell_slabs,
+            _visit_guarded_region!,
+            shift_op,
+            ShiftNode,
+            markers,
+            mesh
+
+        @testset "_stencil_margin reads composed reach, not a hardcoded 1" begin
+            u, v = TrialFunction{2}(), TestFunction{2}()
+            @test _stencil_margin(resolve_ast(innerₕ(u, v))) == 0
+            @test _stencil_margin(resolve_ast(innerₕ(D₋ₓ(u), v))) == 1
+            @test _stencil_margin(resolve_ast(innerₕ(D₋ₓ(D₋ₓ(u)), v))) == 2
+            @test _stencil_margin(resolve_ast(innerₕ(shift_op(u, 1, 3), v))) == 3
+            # the reach comes from whichever side -- trial or test -- reaches further
+            @test _stencil_margin(resolve_ast(innerₕ(u, D₋ₓ(v)))) == 1
+            @test _stencil_margin(resolve_ast(innerₕ(D₋ₓ(u), D₋ₓ(D₋ₓ(v))))) == 2
+            # a sum's margin is the widest of its terms
+            @test _stencil_margin(resolve_ast(innerₕ(u, v) + innerₕ(D₋ₓ(u), D₋ₓ(v)))) == 1
+        end
+
+        @testset "Interior + boundary slabs partition the grid exactly once" begin
+            for D in (1, 2, 3), margin in (0, 1, 2)
+                Ωd = domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D)))
+                Ω = mesh(Ωd, ntuple(_ -> 7, D), ntuple(_ -> true, D))
+                grid_inds = indices(Ω)
+                ax = axes(grid_inds)
+                @test _peelable(ax, margin)   # every axis here has 7 >= 2*margin points
+
+                lin = LinearIndices(grid_inds)
+                seen = Int[]
+                for I in CartesianIndices(map(r -> _interior_range(r, margin), ax))
+                    push!(seen, lin[I])
+                end
+                for slab in _boundary_shell_slabs(ax, margin), I in slab
+                    push!(seen, lin[I])
+                end
+                # every grid point exactly once: no gap, no double-scatter
+                @test sort(seen) == 1:length(grid_inds)
+            end
+
+            # A margin that cannot fit twice into the shortest axis must refuse to peel,
+            # rather than let the low and high rim overlap and double-scatter a point.
+            Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (3, 7), (true, true))
+            @test !_peelable(axes(indices(Ω)), 2)
+        end
+
+        @testset "Peeled traversal agrees with the guarded fallback, entry for entry" begin
+            struct _MarginCollectSink
+                seen::Vector{Tuple{Int,Int,Float64}}
+            end
+            Bramble._sink_entry!(s::_MarginCollectSink, row::Int, col::Int, w, ::Int) =
+                (push!(s.seen, (row, col, Float64(w))); nothing)
+
+            for D in (1, 2, 3)
+                Ωd = domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D)))
+                Ω = mesh(Ωd, ntuple(_ -> 6, D), ntuple(_ -> true, D))
+                W = gridspace(Ω)
+                u, v = TrialFunction{D}(), TestFunction{D}()
+
+                terms = Any[resolve_ast(innerₕ(u, v)), resolve_ast(innerₕ(D₋ₓ(u), D₋ₓ(v)))]
+                D >= 2 && push!(terms, resolve_ast(inner₊(∇₋ₕ(u), ∇₋ₕ(v))))
+                # margin 2: a composed difference and a multi-cell shift, neither a
+                # single tap -- exactly the case a hardcoded 1-cell rim would get wrong.
+                push!(terms, resolve_ast(innerₕ(D₋ₓ(D₋ₓ(u)), v)))
+                push!(terms, resolve_ast(innerₕ(shift_op(u, 1, 2), v)))
+
+                mesh_markers = markers(Ω)
+                lin_indices = LinearIndices(indices(Ω))
+                for ast in terms
+                    peeled = visit_bilinear_stencil(
+                        _MarginCollectSink(Tuple{Int,Int,Float64}[]), ast, W, 0, 0
+                    ).seen
+                    guarded = _MarginCollectSink(Tuple{Int,Int,Float64}[])
+                    _visit_guarded_region!(
+                        guarded, ast, W, mesh_markers, lin_indices, indices(Ω), 0, 0
+                    )
+                    @test sort(peeled) == sort(guarded.seen)
+                end
+            end
+        end
+
+        @testset "Nonzero Dirichlet boundary values solve correctly under peeling" begin
+            # The peeled path only ever changes which points skip the bounds guard; every
+            # point still gets visited exactly once (see above). This solves an actual
+            # manufactured Poisson problem with *nonzero* boundary data through the
+            # production `assemble`/`assemble!` pipeline -- which now always peels where
+            # `_stencil_margin` and the grid allow it -- and checks the discrete solution
+            # against the exact one, not merely that assembly runs.
+            sol(x) = 1 + sin(pi * x[1]) * cos(pi * x[2])
+            rhs(x) = 2 * pi^2 * sin(pi * x[1]) * cos(pi * x[2])
+
+            Ωd = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
+            Ω = mesh(Ωd, (48, 48), (false, false))
+            W = gridspace(Ω)
+            bcs = dirichlet_constraints(Ωd, :boundary => sol)
+
+            a = form(W, W, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+            A = assemble(a; dirichlet=:boundary)
+            fₕ = element(W)
+            avgₕ!(fₕ, rhs)
+            l = form(W, v -> innerₕ(fₕ, v))
+            F = assemble(l; dirichlet=bcs)
+
+            uₕ = element(W)
+            uₕ .= A \ F
+            # `sol` is nonzero along the whole boundary (`sin(pi*x[1])` vanishes there, but
+            # the constant `1` does not), so this exercises exactly the near-boundary rows
+            # the boundary shell (not the interior core) assembles.
+            @test norm₁ₕ(uₕ .- Rₕ(W, sol)) < 6e-3
+        end
+    end
+
     @testset "Form construction" begin
         # `form` used to evaluate a sample stencil and bin the whole grid into a vector of
         # vectors before anything was assembled (9,271,600 B at 90,000 degrees of freedom).

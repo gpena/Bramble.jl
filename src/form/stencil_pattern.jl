@@ -101,3 +101,66 @@ stencil_offsets(op::BilinearProduct) = stencil_offsets(op.right_op)
 function stencil_offsets(op::OperatorAdd)
     return sort!(union(stencil_offsets(op.left_op), stencil_offsets(op.right_op)))
 end
+
+"""
+    _stencil_margin(op) -> Int
+
+The largest `|offset|` component anywhere in `op`'s stencil, trial and test sides combined.
+
+Unlike [`stencil_offsets`](@ref), which keeps only the test-side (row) reach at a
+`BilinearProduct` because that is all its one caller (`_colour_strides`) needs, this keeps
+both. It exists for `visit_bilinear_stencil`'s interior/boundary split
+(`form/bilinear_traversal.jl`, gpena/Bramble.jl#160), which has to guard every offset an
+entry can carry -- trial and test alike, not just the row's -- before it can skip the guard
+anywhere.
+
+Answered as a scalar rather than the offset set `stencil_offsets` returns: the traversal
+only needs a margin to build a rectangular interior box from, and a scalar costs no
+allocation to compute, where reusing `stencil_offsets` (built on `union`-ing `Vector`s)
+would mean paying that cost inside `visit_bilinear_stencil` itself on the `ReplaySink` path,
+once per `assemble!` call rather than once per form.
+
+A composed reach past magnitude 1 is not a hypothetical this ignores: `D₋ₓ(D₋ₓ(u))` and
+`Shift(u, dim, 2)` both carry offsets wider than the one step a single difference or a unit
+shift would suggest, which is why this walks the same tree `stencil_offsets` does rather
+than assuming every node caps out at 1.
+"""
+_stencil_margin(op::TrialFunction) = 0
+_stencil_margin(op::TestFunction) = 0
+_stencil_margin(op::IndexedTrialFunction) = 0
+_stencil_margin(op::IndexedTestFunction) = 0
+_stencil_margin(op::SourceFunction) = 0
+_stencil_margin(op::SourceVector) = 0
+_stencil_margin(op::SourceConstant) = 0
+_stencil_margin(op::IdentityOperator) = 0
+_stencil_margin(op::ZeroOperator) = 0
+
+# A tapped node's own step is always exactly 1: every `_stencil_taps` entry across every
+# difference, average and jump is drawn from `{-1, 0, 1}` (`stencil_eval.jl`), so composing
+# margin here is `+1` regardless of which node it is -- the same fact `_reach` relies on to
+# shift the offset set by one tap.
+_stencil_margin(op::TappedNode) = _stencil_margin(op.inner_op) + 1
+
+# A shift's step is its own field, unlike a tap's, and unbounded: `simplify_ast` folds nested
+# shifts along the same dimension into one (`Shift_a(Shift_b(u)) -> Shift_{a+b}(u)`), so this
+# has to read the value rather than assume magnitude 1.
+_stencil_margin(op::ShiftNode) = _stencil_margin(op.inner_op) + abs(op.shift_amount)
+
+_stencil_margin(op::OperatorScale) = _stencil_margin(op.inner_op)
+_stencil_margin(op::GridFunctionScale) = _stencil_margin(op.inner_op)
+_stencil_margin(op::RegionRestriction) = _stencil_margin(op.inner_op)
+
+# Names an absolute column on another mesh via `locate_cell`, never a grid-relative offset on
+# the mesh being walked -- see `stencil_offsets(::InterpolationNode)` just above.
+_stencil_margin(op::InterpolationNode) = 0
+
+# The one place trial and test reach actually differ: `left_op` is what `off_u` (trial/column)
+# ranges over, `right_op` what `off_v` (test/row) does (`multiply_stencils_bilinear`,
+# `form/common.jl`), so the margin has to cover whichever side reaches further.
+function _stencil_margin(op::BilinearProduct)
+    return max(_stencil_margin(op.left_op), _stencil_margin(op.right_op))
+end
+
+function _stencil_margin(op::OperatorAdd)
+    return max(_stencil_margin(op.left_op), _stencil_margin(op.right_op))
+end
