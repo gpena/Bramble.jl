@@ -346,13 +346,19 @@ end
     @inbounds a2 = T(x[2][j])
     @inbounds d2 = T(x[2][j + 1]) - a2
 
+    # `p1` does not depend on `q2`, so evaluating it inside the `q2` loop recomputed it
+    # NQ² times instead of NQ (gpena/Bramble.jl#114). Precomputed once per axis instead;
+    # `ntuple` over a `Val`-known `NQ` unrolls to a stack tuple, no heap allocation.
+    p1s = ntuple(q -> a1 + nodes[q] * d1, Val(NQ))
+    p2s = ntuple(q -> a2 + nodes[q] * d2, Val(NQ))
+
     s = seed
     @inbounds for q2 in 1:NQ
         w2 = wts[q2]
-        p2 = a2 + nodes[q2] * d2
+        p2 = p2s[q2]
         for q1 in 1:NQ
             w1 = wts[q1] * w2
-            p1 = a1 + nodes[q1] * d1
+            p1 = p1s[q1]
             s = s .+ w1 .* f((p1, p2))
         end
     end
@@ -371,16 +377,24 @@ end
     @inbounds a3 = T(x[3][k])
     @inbounds d3 = T(x[3][k + 1]) - a3
 
+    # `p1` (independent of `q2`/`q3`) was recomputed NQ³ times instead of NQ, and `p2`
+    # (independent of `q3`) NQ² times instead of NQ (gpena/Bramble.jl#114). Both
+    # precomputed once per axis instead, same zero-allocation `ntuple` idiom as the 2D
+    # method above.
+    p1s = ntuple(q -> a1 + nodes[q] * d1, Val(NQ))
+    p2s = ntuple(q -> a2 + nodes[q] * d2, Val(NQ))
+    p3s = ntuple(q -> a3 + nodes[q] * d3, Val(NQ))
+
     s = seed
     @inbounds for q3 in 1:NQ
         w3 = wts[q3]
-        p3 = a3 + nodes[q3] * d3
+        p3 = p3s[q3]
         for q2 in 1:NQ
             w23 = wts[q2] * w3
-            p2 = a2 + nodes[q2] * d2
+            p2 = p2s[q2]
             for q1 in 1:NQ
                 w1 = wts[q1] * w23
-                p1 = a1 + nodes[q1] * d1
+                p1 = p1s[q1]
                 s = s .+ w1 .* f((p1, p2, p3))
             end
         end
