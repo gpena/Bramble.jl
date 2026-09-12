@@ -188,21 +188,10 @@ end
 _region_labels(region::Symbol) = (region,)
 _region_labels(region::NTuple{N,Symbol}) where {N} = region
 
-for W in (
-    :BackwardDifference,
-    :ForwardDifference,
-    :CenteredDifference,
-    :StarDifference,
-    :CrossWeightedDifference,
-    :BackwardAverage,
-    :ForwardAverage,
-    :ShiftNode,
-    :JumpNode,
-    :OperatorScale,
-    :GridFunctionScale,
-)
-    @eval _collect_region_labels(op::$W) = _collect_region_labels(op.inner_op)
-end
+# `RegionRestriction`'s own method above wins on specificity, so it is untouched by this
+# collapse; only `InterpolationNode`'s separate method (form/operators/interpolation.jl)
+# becomes redundant, since it recursed the same way.
+_collect_region_labels(op::UnaryWrapper) = _collect_region_labels(op.inner_op)
 
 function _collect_region_labels(op::Union{BilinearProduct,LinearProduct,OperatorAdd})
     return (_collect_region_labels(op.left_op)..., _collect_region_labels(op.right_op)...)

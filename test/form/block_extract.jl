@@ -127,6 +127,27 @@ using Bramble:
         @test all(T -> !(T <: Bramble.UnaryWrapper), two_operand)
     end
 
+    @testset "_collect_region_labels through wrappers and products (#106)" begin
+        # The twelve `@eval`-generated methods collapsed onto `UnaryWrapper` (with
+        # `RegionRestriction`'s own method still winning on specificity); this checks the
+        # collapse changed no answer: a restriction nested behind several wrappers, and one
+        # on each side of a product, must still be found.
+        u, v = TrialFunction{2}(), TestFunction{2}()
+
+        nested = M₊ᵧ(D₋ₓ(restrict_to(:bottom, u)))
+        @test Bramble._collect_region_labels(nested) == (:bottom,)
+
+        prod = innerₕ(restrict_to(:left, u), restrict_to(:right, v))
+        @test Set(Bramble._collect_region_labels(prod)) == Set((:left, :right))
+
+        # through an InterpolationNode too: its own override was redundant with the
+        # UnaryWrapper method and is gone, so this must still recurse
+        W = gridspace(
+            mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 5), (true, true))
+        )
+        @test Bramble._collect_region_labels(restrict_to(:top, πₕ(W, u))) == (:top,)
+    end
+
     @testset "Unindexed terms" begin
         # Not an error: a form written without component indices is the same integrand on
         # every block, which is how the two spellings mix in one form.

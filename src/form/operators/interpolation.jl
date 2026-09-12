@@ -130,7 +130,8 @@ end
     return InterpolationNode{D,S,typeof(inner)}(op.src_space, inner)
 end
 
-_collect_region_labels(op::InterpolationNode) = _collect_region_labels(op.inner_op)
+# `_collect_region_labels` for `InterpolationNode` comes from its `UnaryWrapper` membership
+# (form/block_extract.jl); it recursed the same way and needed no override.
 
 # The reach on the mesh being walked is the inner leaf's (a single point). The columns this
 # node names are on the other mesh and are not offsets, so they have no place in an
