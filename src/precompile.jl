@@ -25,6 +25,25 @@
 # the preference, since the sessions themselves cost nothing to define.
 #===========================================================================#
 
+"""
+    Bramble.PRECOMPILE_WORKLOAD -> Bool
+
+Whether the `@compile_workload` blocks -- this file's own, and each package extension's
+(`ext/*.jl`, gpena/Bramble.jl#196) -- run at precompile time. Read from the
+`"precompile_workload"` [`Preferences.jl`](https://github.com/JuliaPackaging/Preferences.jl)
+key, defaulting to `true`.
+
+```julia
+using Preferences, Bramble
+set_preferences!(Bramble, "precompile_workload" => false)
+```
+
+disables every workload, core and extensions alike, since they all gate on this same
+constant; the change takes effect on the next load, no manual cache clearing needed.
+
+`public`, not `export`ed: a real, cross-module contract every extension's own precompile
+gate reads, but not something an ordinary caller uses.
+"""
 const PRECOMPILE_WORKLOAD = @load_preference("precompile_workload", true)
 
 include("precompile/utils_sessions.jl")

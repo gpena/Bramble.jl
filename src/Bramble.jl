@@ -39,6 +39,10 @@ public vector, matrix
 # Backend-extension plumbing (point 70): identity/zero matrices tied to a `Backend` — real,
 # tested, reached while implementing a new backend rather than while using one.
 public backend_eye, backend_zeros
+# Read by every package extension's own `@compile_workload` gate (gpena/Bramble.jl#196), so
+# a user's `set_preferences!(Bramble, "precompile_workload" => false)` disables the
+# extensions' workloads along with the core one, not just the core one.
+public PRECOMPILE_WORKLOAD
 
 # domain/interval handling functions
 export box, interval, ×, dim, topo_dim, extrema, point, center, projection, boundary_symbols

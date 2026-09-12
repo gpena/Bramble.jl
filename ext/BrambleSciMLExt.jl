@@ -8,8 +8,24 @@ using Bramble:
     assemble,
     jacobian!,
     jacobian_prototype,
-    mass_matrix
+    mass_matrix,
+    domain,
+    interval,
+    mesh,
+    gridspace,
+    Rₕ,
+    form,
+    inner₊,
+    ∇₋ₕ,
+    innerₕ,
+    dirichlet_constraints,
+    semidiscretize,
+    ode_problem,
+    ode_function,
+    linear_problem,
+    boundary_symbols
 using SciMLBase: SciMLBase, LinearProblem, ODEFunction, ODEProblem
+using PrecompileTools: @setup_workload, @compile_workload
 
 # Gated on SciMLBase alone -- the package `ODEFunction`, `ODEProblem` and `LinearProblem` are
 # all defined in. `OrdinaryDiffEq` and `LinearSolve` both depend on it, so loading either
@@ -75,6 +91,33 @@ function Bramble._linear_problem(
         symmetrize=symmetrize,
     )
     return LinearProblem(A, F)
+end
+
+# Warms `ode_problem`/`ode_function`/`linear_problem` -- the three entry points this
+# extension defines -- which only exist once `SciMLBase` is loaded, so only this
+# extension's own precompile pass (not the core package's, in `src/precompile.jl`) ever
+# reaches them. The mesh/space/form/`semidiscretize` setup above `@compile_workload` is
+# already covered by the core workload; kept here only to build the `Semidiscretization`
+# and `BilinearForm`/`LinearForm` pair these three calls need.
+if Bramble.PRECOMPILE_WORKLOAD
+    @setup_workload begin
+        I0 = interval(0.0, 1.0)
+        Ωₕ = mesh(domain(I0, :boundary => boundary_symbols(I0)), 5, true)
+        Wₕ = gridspace(Ωₕ)
+        I_time = interval(0.0, 1.0)
+        fₕ = Rₕ(Wₕ, x -> 1.0)
+        a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+        l = form(Wₕ, v -> innerₕ(fₕ, v))
+        bcs = dirichlet_constraints(Ωₕ, I_time, :boundary => (x, t) -> 0.0)
+        sd = semidiscretize(a, l; dirichlet=bcs)
+        u0 = Rₕ(Wₕ, x -> 0.0)
+
+        @compile_workload begin
+            ode_problem(sd, u0, I_time)
+            ode_function(sd)
+            linear_problem(a, l)
+        end
+    end
 end
 
 end

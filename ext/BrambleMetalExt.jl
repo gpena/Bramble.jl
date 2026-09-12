@@ -6,6 +6,11 @@ using LinearAlgebra: I
 
 import Bramble: vector, matrix, _backend_eye, _backend_zeros
 
+# Deliberately no `@compile_workload` here (gpena/Bramble.jl#196): every method below
+# allocates real Metal GPU arrays, which needs an actual Metal-capable device. Precompiling
+# that on a headless CI runner or a non-Apple-Silicon machine would fail or hang, not just
+# run slow -- unlike every other extension in `ext/`, this one is excluded on purpose.
+
 # ---------------------------------------------------------------------------
 # Convenience constructor
 # ---------------------------------------------------------------------------

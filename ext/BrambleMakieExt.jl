@@ -1,8 +1,20 @@
 module BrambleMakieExt
 
-using Bramble: Bramble, VectorElement, ScalarGridSpace, CompositeGridSpace, mesh, points
+using Bramble:
+    Bramble,
+    VectorElement,
+    ScalarGridSpace,
+    CompositeGridSpace,
+    mesh,
+    gridspace,
+    points,
+    domain,
+    interval,
+    ×,
+    Rₕ
 
 using Makie: Makie
+using PrecompileTools: @setup_workload, @compile_workload
 
 # A composite element has no single reading as one curve or one grid — plot each of its
 # components(...) separately.
@@ -82,6 +94,27 @@ function Makie.convert_arguments(
     ::Union{Makie.CellGrid,Makie.VertexGrid}, ::VectorElement{<:ScalarGridSpace{D}}
 ) where {D}
     return _makie_error_dim(D)
+end
+
+# Warms `convert_arguments`/`expand_dimensions` for the 1D and 2D grid-function cases above
+# -- pure data conversion, no window or active display needed, so safe on a headless CI
+# runner. Only reachable once `Makie` is loaded, so only this extension's own precompile
+# pass reaches it.
+if Bramble.PRECOMPILE_WORKLOAD
+    @setup_workload begin
+        W1 = gridspace(mesh(domain(interval(0.0, 1.0)), 5, true))
+        W2 = gridspace(
+            mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 4), (true, true))
+        )
+        u1 = Rₕ(W1, x -> x[1])
+        u2 = Rₕ(W2, x -> x[1] * x[2])
+
+        @compile_workload begin
+            Makie.convert_arguments(Makie.PointBased(), u1)
+            Makie.expand_dimensions(Makie.PointBased(), u1)
+            Makie.convert_arguments(Makie.CellGrid(), u2)
+        end
+    end
 end
 
 end

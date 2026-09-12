@@ -1,7 +1,9 @@
 module BrambleMeshesExt
-using Bramble: CartesianProduct, dim, Mesh1D, MeshnD, points
+using Bramble:
+    Bramble, CartesianProduct, dim, Mesh1D, MeshnD, points, domain, interval, ×, mesh
 
 using Meshes: Meshes
+using PrecompileTools: @setup_workload, @compile_workload
 
 @inline _error_install_makie() =
     println("Please install `GLMakie` and add `using GLMakie` to your preamble.")
@@ -44,5 +46,25 @@ function Meshes.viz(M::MeshnD{D}) where {D}
 end
 
 Meshes.viz(M::Mesh1D) = @error "Visualization of 1D meshes is not supported"
+
+# Warms both `Meshes.viz` methods above (not the 1D one, which only ever errors) for a 2D
+# `CartesianProduct` and a 2D `MeshnD`. Each already wraps its real `Meshes.viz` call in a
+# `try`/`catch` falling back to a plain println when no Makie backend is installed
+# (`_error_install_makie`) -- precompiling through that path is no riskier than an ordinary
+# call from a session without GLMakie loaded, which this code is already designed to
+# tolerate. Only reachable once `Meshes` is loaded, so only this extension's own precompile
+# pass reaches it. Not named in gpena/Bramble.jl#196, which covers 6 of this package's 7
+# extensions; added here to close that gap.
+if Bramble.PRECOMPILE_WORKLOAD
+    @setup_workload begin
+        X = interval(0.0, 1.0) × interval(0.0, 1.0)
+        Ωₕ = mesh(domain(X), (4, 4), (true, true))
+
+        @compile_workload begin
+            Meshes.viz(X)
+            Meshes.viz(Ωₕ)
+        end
+    end
+end
 
 end
