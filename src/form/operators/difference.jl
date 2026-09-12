@@ -318,14 +318,26 @@ end
     op::CrossWeightedDifference{D,Dim}, space, I::CartesianIndex{D}
 ) where {D,Dim}
     m = mesh(space)
-    mask = (I[Dim] == 1 || I[Dim] == npoints(m, Tuple)[Dim]) ? 0 : 1
-    h = spacing(m, I, Dim)
-    hf = forward_spacing(m, I, Dim)
-    total = h + hf
 
-    a = mask * h / (total * hf)
-    b = mask * hf / (total * h)
-    return (a, b - a, -b)
+    if I[Dim] == 1
+        # No point behind the first one: Dₕ has no truncated-boundary convention of its
+        # own, so it collapses to the one-sided difference the near side still gives,
+        # D₊(u)_1 = (u_2 - u_1)/h_1 (gpena/Bramble.jl#183).
+        a = inv(spacing(m, I, Dim))
+        return (a, -a, zero(a))
+    elseif I[Dim] == npoints(m, Tuple)[Dim]
+        # No point past the last one: collapses to D₋(u)_n = (u_n - u_{n-1})/h_n.
+        b = inv(spacing(m, I, Dim))
+        return (zero(b), b, -b)
+    else
+        h = spacing(m, I, Dim)
+        hf = forward_spacing(m, I, Dim)
+        total = h + hf
+
+        a = h / (total * hf)
+        b = hf / (total * h)
+        return (a, b - a, -b)
+    end
 end
 
 # --- Traits ----------------------------------------------------------------------- #

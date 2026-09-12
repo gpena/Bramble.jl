@@ -211,8 +211,10 @@ opening sentence (the diff/finite-difference families use this to contrast the t
 does not apply to an average); `alias_note` follows the `Alias for ...` sentence, before
 `arg` is described (`Dₕ` uses this to compare itself with `Dc`); `trailing_note` follows
 the description of `arg`, before the closing "Accepts a grid function..." paragraph
-(`Dstar₊`, `Dc` and `Dₕ` use this for their truncation/precondition caveats, which differ
-in whether a mesh needs at least three points along the direction).
+(`Dstar₊`, `Dc` and `Dₕ` use this for their boundary-behaviour and precondition caveats,
+which differ both in what happens at the ends -- `Dstar₊`/`Dc` truncate, `Dₕ` falls back
+to a one-sided difference (gpena/Bramble.jl#183) -- and in whether a mesh needs at least
+three points along the direction).
 """
 function _define_directional_alias(
     base_op_name,

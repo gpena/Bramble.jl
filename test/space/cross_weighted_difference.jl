@@ -34,9 +34,12 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
                 dm = parent(D₋ₓ(uₕ))
                 h = [spacing(Ωₕ, i) for i in 1:n]
 
+                u = parent(uₕ)
                 want = [
-                    if (i == 1 || i == n)
-                        0.0
+                    if i == 1
+                        (u[2] - u[1]) / h[1]
+                    elseif i == n
+                        (u[n] - u[n - 1]) / h[n]
                     else
                         (h[i] / (h[i] + h[i + 1])) * dm[i + 1] +
                         (h[i + 1] / (h[i] + h[i + 1])) * dm[i]
@@ -47,30 +50,41 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
         end
     end
 
-    @testset "Truncation at ends" begin
+    @testset "Boundary is one-sided, not truncated" begin
+        # gpena/Bramble.jl#183: Dₕ used to truncate both ends to zero; it now falls back
+        # to the one-sided difference the near side still defines, so nothing here is
+        # zero for a function with no flat point.
         Random.seed!(20260830)
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 7), (true, false))
         Wₕ = gridspace(Ωₕ)
         n = npoints(Ωₕ, Tuple)
         uₕ = Rₕ(Wₕ, x -> exp(x[1]) * (x[2] + 1))
+        u = reshape(parent(uₕ), n)
 
         rx = reshape(parent(Dₕₓ(uₕ)), n)
-        @test all(iszero, rx[1, :])
-        @test all(iszero, rx[end, :])
-        @test !any(iszero, rx[2:(end - 1), :])
+        @test !any(iszero, rx)
+        hx = [spacing(Ωₕ(1), i) for i in 1:n[1]]
+        @test rx[1, :] ≈ (u[2, :] .- u[1, :]) ./ hx[1]
+        @test rx[end, :] ≈ (u[end, :] .- u[end - 1, :]) ./ hx[end]
 
         ry = reshape(parent(Dₕᵧ(uₕ)), n)
-        @test all(iszero, ry[:, 1])
-        @test all(iszero, ry[:, end])
-        @test !any(iszero, ry[:, 2:(end - 1)])
+        @test !any(iszero, ry)
+        hy = [spacing(Ωₕ(2), i) for i in 1:n[2]]
+        @test ry[:, 1] ≈ (u[:, 2] .- u[:, 1]) ./ hy[1]
+        @test ry[:, end] ≈ (u[:, end] .- u[:, end - 1]) ./ hy[end]
     end
 
     @testset "Uniform Dc agreement" begin
-        # Both are the mean of D₋ and D₊ there; they part company only where the two
-        # spacings differ.
+        # Both are the mean of D₋ and D₊ in the interior; they part company there only
+        # where the two spacings differ. At the boundary they now differ regardless of
+        # spacing: Dc still truncates to zero, Dₕ falls back to a one-sided difference
+        # (gpena/Bramble.jl#183).
         Ωu = mesh(domain(interval(0.0, 1.0)), 21, true)
+        n = npoints(Ωu)
         uu = Rₕ(gridspace(Ωu), x -> sin(3x))
-        @test parent(Dₕₓ(uu)) ≈ parent(Dcₓ(uu))
+        dh, dc = parent(Dₕₓ(uu)), parent(Dcₓ(uu))
+        @test dh[2:(n - 1)] ≈ dc[2:(n - 1)]
+        @test !(dh[1] ≈ dc[1]) && !(dh[n] ≈ dc[n])
 
         Random.seed!(20260830)
         Ωr = mesh(domain(interval(0.0, 1.0)), 21, false)
@@ -202,9 +216,14 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
 
         n = npoints(Ωm)
         M = Matrix(Dₕₓ(Ωm))
-        @test all(iszero, M[1, :])
-        @test all(iszero, M[n, :])
-        # three points wide in the interior, where the other two are two
+        h = [spacing(Ωm, i) for i in 1:n]
+        # no truncated row: row 1 is D₊ at the first point, row n is D₋ at the last
+        # (gpena/Bramble.jl#183)
+        @test count(!iszero, M[1, :]) == 2
+        @test M[1, 1:2] ≈ [-1, 1] ./ h[1]
+        @test count(!iszero, M[n, :]) == 2
+        @test M[n, (n - 1):n] ≈ [-1, 1] ./ h[n]
+        # three points wide in the interior, where the ends are two
         @test count(!iszero, M[4, :]) == 3
 
         @test_throws ArgumentError Dₕₓ(mesh(domain(interval(0.0, 1.0)), 2, true))

@@ -105,11 +105,13 @@ end
     end
 
     @testset "Destination overwrite" begin
-        # Every one of these truncates a boundary slice to zero. If a `!` form skipped
-        # those entries instead of writing them, whatever was in the destination would
-        # survive (with a fresh `similar` that is uninitialised memory), so the
-        # allocating form would look right while the in-place form returned garbage at the
-        # boundary. Pre-filling with a value that cannot be a correct answer catches it.
+        # Most of these truncate a boundary slice to zero (Dₕ instead falls back to a
+        # one-sided difference there, gpena/Bramble.jl#183, but still writes a real,
+        # non-sentinel value). If a `!` form skipped those entries instead of writing
+        # them, whatever was in the destination would survive (with a fresh `similar`
+        # that is uninitialised memory), so the allocating form would look right while
+        # the in-place form returned garbage at the boundary. Pre-filling with a value
+        # that cannot be a correct answer catches it.
         Random.seed!(20260831)
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 7), (true, false))
         Wₕ = gridspace(Ωₕ)

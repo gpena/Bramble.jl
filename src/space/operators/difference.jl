@@ -166,6 +166,28 @@ end
 @inline @propagate_inbounds _compute_difference(::GridDirection, ::Val{true}, cur, h, i) =
     zero(cur)
 
+# The two-sided (centred) engine's boundary call carries the one neighbour still on the
+# grid, in addition to `cur` -- `Centered`/`Dstar₊` (the latter routed through the one-sided
+# engine and the fallback above; only `Centered` reaches this one) still have no stencil at
+# a truncated end and read zero regardless, ignoring it. `CrossWeighted` overrides this
+# below to use it (gpena/Bramble.jl#183).
+@inline @propagate_inbounds _compute_difference(
+    ::CenteredStencil, ::Val{true}, cur, neighbour, h, i
+) = zero(cur)
+
+# `Dₕ` has no missing-neighbour convention of its own to truncate to: with only one side
+# of the stencil still on the grid, it collapses to the one-sided difference that side
+# still defines -- the forward difference at the first point (`neighbour` is `u_2`) and
+# the backward difference at the last (`neighbour` is `u_{n-1}`). The engine only ever
+# calls this at `i == 1` or `i == n` (`_check_centered_points` guarantees they differ), so
+# that comparison alone tells the two apart (gpena/Bramble.jl#183).
+@inline @propagate_inbounds function _compute_difference(
+    ::CrossWeighted, ::Val{true}, cur, neighbour, h, i
+)
+    hᵢ = _get_h_val(h, i)
+    return i == 1 ? (neighbour - cur) / hᵢ : (cur - neighbour) / hᵢ
+end
+
 # --- The starred forward difference ----------------------------------------------- #
 #
 #   Dstar₊(uₕ)(i) = (u(xᵢ₊₁) - u(xᵢ)) / ((hᵢ + hᵢ₊₁) / 2)
@@ -358,13 +380,18 @@ function _difference_engine!(
         )
     end
 
-    # Both end slices at once. Iterating the two range tuples costs nothing: they have
-    # the same type, so the loop unrolls.
-    for boundary in (lo, hi)
-        @inbounds @simd for I in CartesianIndices(boundary)
-            idx = li[I]
-            out[idx] = _compute_difference(dir, Val(true), in_ref[idx], h, I[DIM])
-        end
+    # Each end slice reads its own single neighbour still on the grid -- the one at `lo`
+    # forward (there is nothing behind it), the one at `hi` backward (nothing past it) --
+    # so unlike the interior loop above, the two are not the same shape and stay two
+    # explicit loops rather than one over `(lo, hi)` (gpena/Bramble.jl#183).
+    @inbounds @simd for I in CartesianIndices(lo)
+        idx, fwd = li[I], li[I + step]
+        out[idx] = _compute_difference(dir, Val(true), in_ref[idx], in_ref[fwd], h, I[DIM])
+    end
+
+    @inbounds @simd for I in CartesianIndices(hi)
+        idx, back = li[I], li[I - step]
+        out[idx] = _compute_difference(dir, Val(true), in_ref[idx], in_ref[back], h, I[DIM])
     end
 
     return nothing
@@ -693,10 +720,13 @@ const _CENTERED_DIFFERENCE_OP_CONFIGS = [
                              "``h_{i+1}``.",
             alias_note="Second order on a non-uniform grid, where [`Dc$suffix`](@ref) " *
                        "is first.",
-            trailing_note="The first and last points along `$direction` are truncated " *
-                          "to zero, so the mesh needs at least three points along " *
-                          "`$direction` and an `ArgumentError` is thrown when it has " *
-                          "fewer.",
+            trailing_note="Unlike [`Dc$suffix`](@ref), the first and last points along " *
+                          "`$direction` are not truncated: with no neighbour on the " *
+                          "far side, each collapses to the one-sided difference the " *
+                          "near side still gives, [`D₊$suffix`](@ref) at the first " *
+                          "point and [`D₋$suffix`](@ref) at the last. The mesh still " *
+                          "needs at least three points along `$direction`, and an " *
+                          "`ArgumentError` is thrown when it has fewer.",
         ),
         alias_kwargs_bang=(direction, suffix) -> (;
             opening_sentence="The cross-weighted centered difference of `uₕ` along " *
@@ -723,10 +753,11 @@ const _CENTERED_DIFFERENCE_OP_CONFIGS = [
       non-uniform grid, so this is second order where `Dcₓ` is first, and the two coincide when
       the spacing is constant.
 
-      The first and the last point each lack a neighbour on one side, so both are truncated to
-      zero.
+      The first and the last point each lack a neighbour on one side, but unlike `Dcₓ` neither
+      is truncated: each collapses to the one-sided difference its near side still defines,
+      [`D₊ₓ`](@ref)`(uₕ)` at the first point and [`D₋ₓ`](@ref)`(uₕ)` at the last.
 
-      See also: [`Dcₓ`](@ref), [`D₋ₓ`](@ref).
+      See also: [`Dcₓ`](@ref), [`D₋ₓ`](@ref), [`D₊ₓ`](@ref).
       """,
     ),
 ]
@@ -805,15 +836,23 @@ end
     return w
 end
 
-# Each returns zero wherever its stencil would need a neighbour the grid does not have,
-# which truncates that slice of the matrix to an empty row.
+# `_star_weight`/`_centered_weight` return zero wherever their stencil would need a
+# neighbour the grid does not have, truncating that slice of the matrix to an empty row.
 @inline _star_weight(h, i, n) = i == n ? zero(eltype(h)) : 2 / (h[i] + h[i + 1])
 @inline _centered_weight(h, i, n) =
     (i == 1 || i == n) ? zero(eltype(h)) : inv(h[i] + h[i + 1])
+
+# The cross-weighted pair instead falls back to the one-sided difference on whichever
+# side is still on the grid at each end: `diff₊`'s row 1 is already `u_2 - u_1` and
+# `diff₋`'s row `n` is already `u_n - u_{n-1}` (the unscaled matrices' own boundary
+# convention, `_difference_operator`), so weighting those rows by `1/h[1]` and `1/h[n]`
+# respectively -- with the other family's row zeroed there -- reproduces `D₊`/`D₋`
+# exactly, matching the grid-function engine's boundary case above
+# (gpena/Bramble.jl#183).
 @inline _cross_forward_weight(h, i, n) =
-    (i == 1 || i == n) ? zero(eltype(h)) : h[i] / ((h[i] + h[i + 1]) * h[i + 1])
+    i == n ? zero(eltype(h)) : (i == 1 ? inv(h[1]) : h[i] / ((h[i] + h[i + 1]) * h[i + 1]))
 @inline _cross_backward_weight(h, i, n) =
-    (i == 1 || i == n) ? zero(eltype(h)) : h[i + 1] / ((h[i] + h[i + 1]) * h[i])
+    i == 1 ? zero(eltype(h)) : (i == n ? inv(h[n]) : h[i + 1] / ((h[i] + h[i + 1]) * h[i]))
 
 """
     forward_star_difference(Ωₕ::AbstractMeshType, dim_val::Val)
@@ -853,9 +892,10 @@ end
 
 The cross-weighted centered difference along `dim_val`, as a sparse matrix.
 
-A three-point stencil, so both end rows are empty and the mesh needs at least three points
-along the direction. Built as the two one-sided differences it is defined from, each under
-its own diagonal weight.
+A three-point stencil in the interior, but neither end row is empty: with no neighbour on the
+far side, row 1 agrees with [`D₊ₓ`](@ref)`(Ωₕ, dim_val)` and row `n` with
+[`D₋ₓ`](@ref)`(Ωₕ, dim_val)`, each under its own diagonal weight alongside the interior
+cross-weighting. The mesh still needs at least three points along the direction.
 """
 function cross_weighted_difference(
     Ωₕ::AbstractMeshType, dim_val::Val{DIM}; vector_cache=__vector(Ωₕ)

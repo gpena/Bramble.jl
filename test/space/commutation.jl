@@ -18,9 +18,12 @@ using Supposition
 # an operator against its own formula and stays self-consistent under exactly that kind of
 # error; this compares two orderings that must agree independently of the formula.
 #
-# It also holds across the truncated slices, and that is not an accident: the finite
-# differences write a zero on their truncated slice, and a zero differences to zero from
-# either side, so the identity is exact everywhere rather than only in the interior.
+# It also holds at every boundary and corner slice, and that is not an accident: each
+# operator's boundary rule -- truncate to zero, or (`Dₕ`, gpena/Bramble.jl#183) fall back
+# to a one-sided difference -- is decided purely from its own axis's index, with the other
+# axis riding along unchanged. Two operators along different axes never touch the same
+# index in the direction the other one differences, so the identity is exact everywhere,
+# regardless of what either one's boundary rule actually computes there.
 
 @testset "Operator commutation" begin
     # One from each family, so the pairs cross families as well as directions.

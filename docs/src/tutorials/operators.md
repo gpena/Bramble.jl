@@ -421,7 +421,7 @@ denominator cancels:
 ```@repl operators
 parent(Dcₓ(uₙ))
 parent(Dₕₓ(uₙ))
-2 .* points(Ωₙ)   # Dₕₓ hits this exactly, away from the two truncated points
+2 .* points(Ωₙ)   # Dₕₓ hits this exactly in the interior
 ```
 
 That one order of extra exactness is one order of extra accuracy. Differencing ``\sin``
@@ -436,9 +436,11 @@ nested:
 | 161 | 4.48e-03 | 1.00 | 8.36e-05 | 1.99 |
 
 `Dₕₓ` is not skew-symmetric, so `Dcₓ` remains the one to reach for when the scheme needs
-that structure and `Dₕₓ` the one to reach for when it needs the order. Both truncate on
-two slices, both take a grid function only, and `∇ₕ` gives every coordinate at once, the
-centered counterpart of `∇₋ₕ` and `∇₊ₕ`.
+that structure and `Dₕₓ` the one to reach for when it needs the order. Both accept a mesh
+or a grid space for the matrix and a grid function to apply it, and `∇ₕ` gives every
+coordinate at once, the centered counterpart of `∇₋ₕ` and `∇₊ₕ`. They differ at the
+boundary: `Dcₓ` truncates both end rows to zero, while `Dₕₓ` has no truncated-boundary
+convention of its own and falls back to `D₊ₓ`/`D₋ₓ` there instead.
 
 ## 9. A convergence study, and the boundary
 

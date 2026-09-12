@@ -151,13 +151,24 @@ end
 
         # the scaled differences do truncate, at whichever ends they need a neighbour
         @test all(iszero, coeffs(Dstar₊ₓ(id), at_end, n))
-        for node in (Dcₓ(id), Dₕₓ(id))
-            @test all(iszero, coeffs(node, at_end, n))
-            @test all(iszero, coeffs(node, at_start, 1))
-        end
+        @test all(iszero, coeffs(Dcₓ(id), at_end, n))
+        @test all(iszero, coeffs(Dcₓ(id), at_start, 1))
 
         # a starred difference is fine at the first point (it only reaches forward)
         @test any(!iszero, coeffs(Dstar₊ₓ(id), at_start, 1))
+
+        # Dₕ has no truncated-boundary convention of its own: with no far neighbour it
+        # collapses to the one-sided difference the near side still gives, D₊ at the
+        # first point and D₋ at the last (gpena/Bramble.jl#183)
+        start_st = local_stencil(Dₕₓ(id), Wₕ, at_start, nothing, 1)
+        @test sum(c for (o, c) in start_st if o == (1,)) == 1 / spacing(Ωₕ, 1)
+        @test sum(c for (o, c) in start_st if o == (0,)) == -1 / spacing(Ωₕ, 1)
+        @test all(iszero(c) for (o, c) in start_st if o == (-1,))
+
+        end_st = local_stencil(Dₕₓ(id), Wₕ, at_end, nothing, n)
+        @test sum(c for (o, c) in end_st if o == (0,)) == 1 / spacing(Ωₕ, n)
+        @test sum(c for (o, c) in end_st if o == (-1,)) == -1 / spacing(Ωₕ, n)
+        @test all(iszero(c) for (o, c) in end_st if o == (1,))
     end
 
     @testset "Stencil shapes" begin
