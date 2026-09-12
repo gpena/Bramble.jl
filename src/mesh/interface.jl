@@ -321,17 +321,21 @@ function half_point end
 
 """
     spacing(Ωₕ::AbstractMeshType, idx)
+    spacing(Ωₕ::AbstractMeshType, idx, dim::Int)
 
 Return the backward spacing ``h_i = x_i - x_{i-1}`` at index `idx` (for ``i=1``, returns ``x_2 - x_1``).
-For nD meshes, returns a tuple of backward spacings along each axis.
+For nD meshes, returns a tuple of backward spacings along each axis; passing `dim` queries
+only that axis directly, without building and discarding the other `D - 1` components.
 """
 function spacing end
 
 """
     forward_spacing(Ωₕ::AbstractMeshType, idx)
+    forward_spacing(Ωₕ::AbstractMeshType, idx, dim::Int)
 
 Return the forward spacing ``h_{i+1} = x_{i+1} - x_i`` at index `idx` (for ``i=N``, returns ``x_N - x_{N-1}``).
-For nD meshes, returns a tuple of forward spacings along each axis.
+For nD meshes, returns a tuple of forward spacings along each axis; passing `dim` queries
+only that axis directly, without building and discarding the other `D - 1` components.
 """
 function forward_spacing end
 

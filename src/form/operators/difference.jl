@@ -112,7 +112,7 @@ D₊₂(op::LazyOp{D}) where {D} = ForwardDifference{D,3,typeof(op)}(op)
 @inline function _stencil_weights(
     op::BackwardDifference{D,Dim}, space, I::CartesianIndex{D}
 ) where {D,Dim}
-    h = get_spacing(mesh(space), I, Dim)
+    h = spacing(mesh(space), I, Dim)
     mask = I[Dim] == 1 ? 0 : 1
     return (mask / h, -mask / h)
 end
@@ -121,7 +121,7 @@ end
     op::ForwardDifference{D,Dim}, space, I::CartesianIndex{D}
 ) where {D,Dim}
     m = mesh(space)
-    h = get_forward_spacing(m, I, Dim)
+    h = forward_spacing(m, I, Dim)
     mask = I[Dim] == npoints(m, Tuple)[Dim] ? 0 : 1
     return (mask / h, -mask / h)
 end
@@ -291,7 +291,7 @@ end
     m = mesh(space)
     # no neighbour on one side at either end
     mask = (I[Dim] == 1 || I[Dim] == npoints(m, Tuple)[Dim]) ? 0 : 1
-    c = mask / (get_spacing(m, I, Dim) + get_forward_spacing(m, I, Dim))
+    c = mask / (spacing(m, I, Dim) + forward_spacing(m, I, Dim))
     return (c, -c)
 end
 
@@ -301,7 +301,7 @@ end
     m = mesh(space)
     mask = I[Dim] == npoints(m, Tuple)[Dim] ? 0 : 1
     # the averaged spacing, which is what the starred difference divides by
-    c = 2 * mask / (get_spacing(m, I, Dim) + get_forward_spacing(m, I, Dim))
+    c = 2 * mask / (spacing(m, I, Dim) + forward_spacing(m, I, Dim))
     return (c, -c)
 end
 
@@ -319,8 +319,8 @@ end
 ) where {D,Dim}
     m = mesh(space)
     mask = (I[Dim] == 1 || I[Dim] == npoints(m, Tuple)[Dim]) ? 0 : 1
-    h = get_spacing(m, I, Dim)
-    hf = get_forward_spacing(m, I, Dim)
+    h = spacing(m, I, Dim)
+    hf = forward_spacing(m, I, Dim)
     total = h + hf
 
     a = mask * h / (total * hf)

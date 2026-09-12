@@ -4,24 +4,6 @@
 # 1. Zero-Allocation Spacing & Tuple Utilities
 # ==============================================================================
 
-@inline _get_component(x::Tuple, dim::Int) = x[dim]
-@inline _get_component(x::Number, dim::Int) = x
-
-"""
-    get_spacing(mesh, I, dim::Int) -> Real
-
-Grid spacing in coordinate direction `dim` at Cartesian index `I`.
-"""
-@inline get_spacing(mesh, I, dim::Int) = _get_component(spacing(mesh, I), dim)
-
-"""
-    get_forward_spacing(mesh, I, dim::Int) -> Real
-
-Forward grid spacing in coordinate direction `dim` at Cartesian index `I`.
-"""
-@inline get_forward_spacing(mesh, I, dim::Int) =
-    _get_component(forward_spacing(mesh, I), dim)
-
 """
     shift_offset(offset::NTuple{D, Int}, dim::Int, delta::Int) -> NTuple{D, Int}
 

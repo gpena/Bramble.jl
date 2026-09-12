@@ -21,8 +21,6 @@ using Bramble:
     is_symbolic,
     zero_offset,
     shift_offset,
-    get_spacing,
-    get_forward_spacing,
     shift_stencil,
     concatenate_stencils,
     scale_stencil,
@@ -63,19 +61,21 @@ using Bramble:
 
     @testset "Directional spacings" begin
         # In one dimension the mesh answers with a number and in more with a tuple, so the
-        # accessors have to pick a component out of either.
+        # 3-arg accessors must agree with picking a component out of either: on `Mesh1D`
+        # `dim` is a passthrough (`spacing(Ωₕ1, i1, 1) == spacing(Ωₕ1, i1)`), while on
+        # `MeshnD` it queries submesh `dim` directly instead of building the full tuple.
         i1 = CartesianIndex(4)
-        @test get_spacing(Ωₕ1, i1, 1) == spacing(Ωₕ1, i1)
-        @test get_forward_spacing(Ωₕ1, i1, 1) == forward_spacing(Ωₕ1, i1)
+        @test spacing(Ωₕ1, i1, 1) == spacing(Ωₕ1, i1)
+        @test forward_spacing(Ωₕ1, i1, 1) == forward_spacing(Ωₕ1, i1)
 
         for d in 1:2
-            @test get_spacing(Ωₕ, I, d) == spacing(Ωₕ, I)[d]
-            @test get_forward_spacing(Ωₕ, I, d) == forward_spacing(Ωₕ, I)[d]
+            @test spacing(Ωₕ, I, d) == spacing(Ωₕ, I)[d]
+            @test forward_spacing(Ωₕ, I, d) == forward_spacing(Ωₕ, I)[d]
         end
 
         # the two directions of a non-uniform mesh really do differ, so the test is not
         # comparing a number with itself
-        @test get_spacing(Ωₕ, I, 1) != get_spacing(Ωₕ, I, 2)
+        @test spacing(Ωₕ, I, 1) != spacing(Ωₕ, I, 2)
     end
 
     @testset "Stencil combination" begin

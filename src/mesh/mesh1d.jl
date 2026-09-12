@@ -177,6 +177,10 @@ Return the `i`-th submesh of `Ωₕ`. A 1D mesh is its own only submesh, returni
 end
 
 @inline spacing(Ωₕ::Mesh1D, i::CartesianIndex{1}) = spacing(Ωₕ, _extract_linear_index(i))
+
+# D == 1, so dim is always 1: a plain passthrough matching the MeshnD 3-arg accessor
+# (gpena/Bramble.jl#111), so mesh-generic callers can use one signature regardless of D.
+@inline spacing(Ωₕ::Mesh1D, i, dim::Int) = spacing(Ωₕ, i)
 """
     spacing_for_derivative(Ωₕ::Mesh1D, idx) -> eltype(Ωₕ)
 
@@ -225,6 +229,8 @@ end
 
 @inline forward_spacing(Ωₕ::Mesh1D, i::CartesianIndex{1}) =
     forward_spacing(Ωₕ, _extract_linear_index(i))
+
+@inline forward_spacing(Ωₕ::Mesh1D, i, dim::Int) = forward_spacing(Ωₕ, i)
 """
     forward_spacing_for_derivative(Ωₕ::Mesh1D, idx) -> eltype(Ωₕ)
 

@@ -196,6 +196,11 @@ See also: [`half_spacings`](@ref), [`cell_measures`](@ref).
 @generate_mesh_ntuple_func_with_idx spacing
 @generate_mesh_ntuple_func_with_idx forward_spacing
 
+# Single-axis spacings, queried straight from submesh `dim` instead of building the full
+# `D`-tuple above and discarding the other `D - 1` entries (gpena/Bramble.jl#111).
+@inline spacing(Ωₕ::MeshnD, idx, dim::Int) = spacing(Ωₕ(dim), idx[dim])
+@inline forward_spacing(Ωₕ::MeshnD, idx, dim::Int) = forward_spacing(Ωₕ(dim), idx[dim])
+
 @inline half_spacing(Ωₕ::MeshnD{D}, idx) where {D} =
     ntuple(i -> _apply_hs_logic(half_spacing(Ωₕ(i), idx[i])), Val(D))
 
