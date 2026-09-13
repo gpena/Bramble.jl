@@ -142,12 +142,11 @@ end
 
 function _probe_point(Ωₕ, markers::NTuple{N, Symbol}) where {N}
     idxs = indices(Ωₕ)
-    lin = LinearIndices(idxs)
     for m in markers
-        mask = index_in_marker(Ωₕ, m)
-        @inbounds for idx in idxs
-            mask[lin[idx]] && return point(Ωₕ, idx)
-        end
+        # `findfirst` on a `BitVector` already scans a word (64 bits) at a time via
+        # `trailing_zeros`, rather than testing one Cartesian index per iteration.
+        i = findfirst(index_in_marker(Ωₕ, m))
+        i === nothing || return point(Ωₕ, idxs[i])
     end
     return point(Ωₕ, first(idxs))
 end
