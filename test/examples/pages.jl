@@ -1,6 +1,6 @@
 using Test
 
-# The four worked-example pages that need nothing beyond the every-push test environment.
+# The five worked-example pages that need nothing beyond the every-push test environment.
 # Each is a Literate script under docs/src/examples/, run here through `_run_example_page`
 # (test/runtests.jl), which is where its `#src` assertions execute: the convergence rates the
 # pages print, the iteration counts Picard and Newton reach, and the errors against each
@@ -31,5 +31,9 @@ using Test
 
     @testset "Coupled reaction-diffusion" begin
         _run_example_page(:coupled_reaction_diffusion)
+    end
+
+    @testset "3D linear elasticity" begin
+        _run_example_page(:elasticity_3d)
     end
 end

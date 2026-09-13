@@ -15,6 +15,7 @@ const LITERATE_EXAMPLES = [
     "poisson_nonlinear.jl",
     "convection_diffusion_linear.jl",
     "coupled_reaction_diffusion.jl",
+    "elasticity_3d.jl",
     "heat_equation.jl"
 ]
 
@@ -47,6 +48,7 @@ examples = "Examples" => [
     "examples/poisson_nonlinear.md",
     "examples/convection_diffusion_linear.md",
     "examples/coupled_reaction_diffusion.md",
+    "examples/elasticity_3d.md",
     "examples/heat_equation.md"
 ]
 benchmarks = "Benchmarks" => "benchmarks.md"
