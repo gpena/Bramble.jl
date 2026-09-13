@@ -2,6 +2,7 @@ using Test
 using Bramble
 using SparseArrays
 using LinearAlgebra: issymmetric
+using Supposition
 
 # Symmetrizing the constrained system.
 #
@@ -268,5 +269,109 @@ using LinearAlgebra: issymmetric
             @test c.sparse_composite == 0
             @test c.dense_composite == 0
         end
+    end
+end
+
+# Symmetry restoration as a property (gpena/Bramble.jl#120).
+#
+# The testsets above use one 6x6 grid and the `:bottom` marker. The pair
+# `dirichlet_bc!`/`symmetrize!` is supposed to restore symmetry for *any* symmetric
+# operator, any grid, and any set of marked labels, and the marker set is where it is
+# easiest to be accidentally right: a constraint set that happens to be one full grid line
+# hides an index arithmetic error that a corner shared by two labels exposes.
+#
+# The operator is assembled from a form rather than built by `_tri`, so what is checked is
+# the constraint pair against the matrices Bramble actually produces, on partitions drawn by
+# Supposition.
+@testset "Symmetry restoration (Supposition)" begin
+    positive_h = Data.Floats{Float64}(;
+        minimum = 0.01, maximum = 10.0, nans = false, infs = false
+    )
+
+    function _partition(h)
+        pts = zeros(Float64, length(h) + 1)
+        for i in eachindex(h)
+            pts[i + 1] = pts[i] + h[i]
+        end
+        pts ./= pts[end]
+        return pts
+    end
+
+    labels_all = (:bottom, :top, :left, :right)
+
+    @check function check_symmetry_is_restored(
+            hx = Data.Vectors(positive_h; min_size = 3, max_size = 6),
+            hy = Data.Vectors(positive_h; min_size = 3, max_size = 6),
+            use = Data.Vectors(Data.Booleans(); min_size = 4, max_size = 4)
+    )
+        labels = Tuple(labels_all[k] for k in 1:4 if use[k])
+        isempty(labels) && return true          # nothing constrained, nothing to restore
+
+        px, py = _partition(hx), _partition(hy)
+        nx, ny = length(px), length(py)
+
+        Ω = domain(
+            interval(0.0, 1.0) × interval(0.0, 1.0),
+            :bottom => :bottom,
+            :top => :top,
+            :left => :left,
+            :right => :right
+        )
+        Ωₕ = mesh(Ω, (nx, ny), (false, false))
+        set_points!(Ωₕ(1), px)
+        set_points!(Ωₕ(2), py)
+        Wₕ = gridspace(Ωₕ)
+
+        A = assemble(
+            form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
+        )
+        issymmetric(A) || return false
+        F = collect(1.0:ndofs(Wₕ))
+
+        for label in labels
+            dirichlet_bc!(A, Ωₕ, label)
+        end
+        for label in labels
+            symmetrize!(A, F, Ωₕ, label)
+        end
+
+        issymmetric(A) || return false
+
+        # Each constrained row is the identity row, whatever the labels overlapped.
+        for label in labels
+            marked = index_in_marker(Ωₕ, label)
+            for i in 1:ndofs(Wₕ)
+                marked[i] || continue
+                A[i, i] == 1 || return false
+                count(!iszero, A[i, :]) == 1 || return false
+            end
+        end
+        return true
+    end
+
+    # Non-vacuous: the marker sets these draws produce are not empty, they overlap at the
+    # corners, and the constrained matrix is genuinely asymmetric between the two calls.
+    @testset "Non-vacuous" begin
+        Ω = domain(
+            interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom, :left => :left
+        )
+        Ωₕ = mesh(Ω, (5, 5), (true, true))
+        Wₕ = gridspace(Ωₕ)
+
+        bottom = index_in_marker(Ωₕ, :bottom)
+        left = index_in_marker(Ωₕ, :left)
+        @test any(bottom)
+        @test any(left)
+        @test any(bottom .& left)          # the corner belongs to both
+
+        A = assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v))))
+        F = collect(1.0:ndofs(Wₕ))
+        @test issymmetric(A)
+        dirichlet_bc!(A, Ωₕ, :bottom)
+        dirichlet_bc!(A, Ωₕ, :left)
+        @test !issymmetric(A)
+        symmetrize!(A, F, Ωₕ, :bottom)
+        symmetrize!(A, F, Ωₕ, :left)
+        @test issymmetric(A)
     end
 end

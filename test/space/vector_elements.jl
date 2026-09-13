@@ -2,6 +2,8 @@ import Bramble:
                 VectorElement, spacing, points, half_points, space, ndofs, half_spacings, indices, point
 using LinearAlgebra: norm
 using SparseArrays
+using Random
+using Supposition
 
 @inline function _func2array!(u::AbstractArray, g, mesh_indices)
     @inbounds for idx in mesh_indices
@@ -1156,4 +1158,111 @@ end
     t2 = element(V2)
     avgₕ!(t2, (x -> sin(x[1]), x -> cos(x[2])); markers = (:bottom,))
     @test parent(c2) ≈ parent(t2)
+end
+
+# Polynomial reproduction of the cell average (gpena/Bramble.jl#120).
+#
+# `avgₕ` is a tensor-product Gauss-Legendre rule over each cell, so on a polynomial of
+# degree at most `2 * quad_points - 1` per direction it is not an approximation: it is the
+# exact cell average, on any partition whatsoever. The "Exact degree" testset above checks
+# that on one mesh built from one random draw; this checks it on partitions drawn by
+# Supposition, which is where a rule that silently used the cell's midpoint spacing instead
+# of its own endpoints, or mismatched a weight to a node near the boundary half-cells, would
+# show up.
+@testset "Cell average reproduction (Supposition)" begin
+    positive_h = Data.Floats{Float64}(;
+        minimum = 0.01, maximum = 10.0, nans = false, infs = false
+    )
+    coefficient = Data.Floats{Float64}(;
+        minimum = -5.0, maximum = 5.0, nans = false, infs = false
+    )
+
+    # A partition of [0, 1] from a vector of spacings: cumulative sum, rescaled. Same
+    # construction as test/space/commutation.jl's, which is where this file's random
+    # partitions have to match if a failure is to be comparable between them.
+    function _partition(h)
+        pts = zeros(Float64, length(h) + 1)
+        for i in eachindex(h)
+            pts[i + 1] = pts[i] + h[i]
+        end
+        pts ./= pts[end]
+        return pts
+    end
+
+    # The exact mean of `c0 + c1 x + c2 x^2` over `[a, b]`, from the antiderivative.
+    function _exact_mean(c0, c1, c2, a, b)
+        F(x) = c0 * x + c1 * x^2 / 2 + c2 * x^3 / 3
+        return (F(b) - F(a)) / (b - a)
+    end
+
+    # Absolute floor alongside the relative tolerance: the drawn spacings get very small, so
+    # a cell mean that is analytically zero lands at round-off and a purely relative
+    # comparison would report a huge error on two values of order 1e-17.
+    _agree(a, b) = isapprox(a, b; atol = 1e-11, rtol = 1e-11)
+
+    @check function check_cell_average_is_exact_1d(
+            h = Data.Vectors(positive_h; min_size = 3, max_size = 12),
+            c0 = coefficient, c1 = coefficient, c2 = coefficient
+    )
+        pts = _partition(h)
+        n = length(pts)
+        Ωₕ = mesh(domain(interval(0.0, 1.0)), n, false)
+        set_points!(Ωₕ, pts)
+        Wₕ = gridspace(Ωₕ)
+
+        uₕ = avgₕ(Wₕ, x -> c0 + c1 * x + c2 * x^2)
+        xh = half_points(Ωₕ)
+        return all(
+            _agree(parent(uₕ)[i], _exact_mean(c0, c1, c2, xh[i], xh[i + 1])) for i in 1:n
+        )
+    end
+
+    # In 2D the integrand is a product of two one-dimensional polynomials, so its exact cell
+    # mean is the product of the two one-dimensional means -- no two-dimensional quadrature
+    # is needed on the test side to state what the answer must be.
+    @check function check_cell_average_is_exact_2d(
+            hx = Data.Vectors(positive_h; min_size = 3, max_size = 7),
+            hy = Data.Vectors(positive_h; min_size = 3, max_size = 7),
+            c0 = coefficient, c1 = coefficient, c2 = coefficient, d0 = coefficient,
+            d1 = coefficient
+    )
+        px, py = _partition(hx), _partition(hy)
+        nx, ny = length(px), length(py)
+
+        Ωₕ = mesh(
+            domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (nx, ny), (false, false)
+        )
+        set_points!(Ωₕ(1), px)
+        set_points!(Ωₕ(2), py)
+        Wₕ = gridspace(Ωₕ)
+
+        f(x) = (c0 + c1 * x[1] + c2 * x[1]^2) * (d0 + d1 * x[2])
+        uₕ = reshape(parent(avgₕ(Wₕ, f)), nx, ny)
+
+        xh, yh = half_points(Ωₕ)
+        for j in 1:ny, i in 1:nx
+
+            expected = _exact_mean(c0, c1, c2, xh[i], xh[i + 1]) *
+                       _exact_mean(d0, d1, 0.0, yh[j], yh[j + 1])
+            _agree(uₕ[i, j], expected) || return false
+        end
+        return true
+    end
+
+    # Non-vacuous: one quadrature point is the midpoint rule, exact for degree 1 and not for
+    # degree 2, so the property above is a statement about the rule and not about any
+    # arithmetic that happens to agree.
+    @testset "Non-vacuous" begin
+        Random.seed!(20260913)
+        Ωₕ = mesh(domain(interval(0.0, 1.0)), 12, false)
+        Wₕ = gridspace(Ωₕ)
+        xh = half_points(Ωₕ)
+
+        midpoint = avgₕ(Wₕ, x -> x^2; quad_points = 1)
+        exact = [_exact_mean(0.0, 0.0, 1.0, xh[i], xh[i + 1]) for i in 1:npoints(Ωₕ)]
+        @test !all(_agree(parent(midpoint)[i], exact[i]) for i in 1:npoints(Ωₕ))
+
+        two_point = avgₕ(Wₕ, x -> x^2; quad_points = 2)
+        @test all(_agree(parent(two_point)[i], exact[i]) for i in 1:npoints(Ωₕ))
+    end
 end

@@ -4,6 +4,7 @@ using ForwardDiff
 using LinearAlgebra: Diagonal, I
 using SparseArrays: sparse, nnz, nonzeros
 using Random
+using Supposition
 using Bramble:
                BilinearForm,
                form,
@@ -937,5 +938,94 @@ using Bramble:
 
         # and a malformed expression fails here rather than at the first assemble
         @test_throws ArgumentError form(Wₕ, Wₕ, (u, v) -> 42)
+    end
+end
+
+# Linearity of assembly (gpena/Bramble.jl#120).
+#
+# A bilinear form is linear in each argument, and the assembled matrix inherits that: the
+# matrix of a sum of terms is the sum of their matrices, and a scalar in front of a term
+# scales that term's matrix alone. Stated on the assembler rather than on matrix-vector
+# arithmetic, since `A * (αu + v) == αAu + Av` holds for any matrix at all and would say
+# nothing about whether the right matrix was built.
+#
+# The grids are drawn by Supposition, so the property is checked on non-uniform partitions
+# with no relation between the directions -- the case where a term picking up the wrong
+# metric weight cannot cancel against another term's.
+@testset "Assembly linearity (Supposition)" begin
+    positive_h = Data.Floats{Float64}(;
+        minimum = 0.01, maximum = 10.0, nans = false, infs = false
+    )
+    scalar = Data.Floats{Float64}(;
+        minimum = -5.0, maximum = 5.0, nans = false, infs = false
+    )
+
+    function _partition(h)
+        pts = zeros(Float64, length(h) + 1)
+        for i in eachindex(h)
+            pts[i + 1] = pts[i] + h[i]
+        end
+        pts ./= pts[end]
+        return pts
+    end
+
+    # Absolute floor beside the relative one: a drawn partition can make an entry
+    # analytically zero land at round-off.
+    _agree(A, B) = isapprox(Matrix(A), Matrix(B); atol = 1e-10, rtol = 1e-10)
+
+    @check function check_assembly_is_linear_in_terms(
+            h = Data.Vectors(positive_h; min_size = 3, max_size = 10), α = scalar
+    )
+        pts = _partition(h)
+        Ωₕ = mesh(domain(interval(0.0, 1.0)), length(pts), false)
+        set_points!(Ωₕ, pts)
+        Wₕ = gridspace(Ωₕ)
+
+        mass = assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v)))
+        stiffness = assemble(form(Wₕ, Wₕ, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v))))
+        combined = assemble(
+            form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + α * inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
+        )
+
+        return _agree(combined, mass + α * stiffness)
+    end
+
+    # The same statement for a linear form, where the source rather than the operator
+    # carries the combination: `l` reads `α * u₁ + u₂` through the same evaluation path
+    # that a single grid function takes.
+    @check function check_linear_form_is_linear_in_source(
+            h = Data.Vectors(positive_h; min_size = 3, max_size = 10), α = scalar
+    )
+        pts = _partition(h)
+        Ωₕ = mesh(domain(interval(0.0, 1.0)), length(pts), false)
+        set_points!(Ωₕ, pts)
+        Wₕ = gridspace(Ωₕ)
+
+        u₁ = Rₕ(Wₕ, x -> sin(3x) + 1)
+        u₂ = Rₕ(Wₕ, x -> x^2 - 2)
+        w = α * u₁ + u₂
+
+        b₁ = assemble(form(Wₕ, v -> innerₕ(u₁, v)))
+        b₂ = assemble(form(Wₕ, v -> innerₕ(u₂, v)))
+        b = assemble(form(Wₕ, v -> innerₕ(w, v)))
+
+        return isapprox(b, α * b₁ + b₂; atol = 1e-10, rtol = 1e-10)
+    end
+
+    # Non-vacuous: mass and stiffness are different matrices, so the sum above is not the
+    # same statement twice, and the scalar genuinely changes the result.
+    @testset "Non-vacuous" begin
+        Random.seed!(20260913)
+        Ωₕ = mesh(domain(interval(0.0, 1.0)), 12, false)
+        Wₕ = gridspace(Ωₕ)
+
+        mass = assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v)))
+        stiffness = assemble(form(Wₕ, Wₕ, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v))))
+        @test !isapprox(Matrix(mass), Matrix(stiffness))
+
+        combined = assemble(
+            form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + 3.0 * inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
+        )
+        @test !isapprox(Matrix(combined), Matrix(mass + stiffness))
     end
 end

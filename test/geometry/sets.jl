@@ -2,6 +2,7 @@ using Test
 using Bramble
 using Bramble: CartesianProduct, set, is_collapsed, point_type
 using StaticArrays
+using Supposition
 
 if !@isdefined(alloc_test)
     @inline function alloc_test(f::F, args...; kwargs...) where {F}
@@ -577,4 +578,79 @@ end
     @test !([0.5, 1.0, 0.5] in X2)
     @test [0.0, 0.0] in X2
     @test [1.0, 2.0] in X2
+end
+
+# Property-based geometry invariants (gpena/Bramble.jl#120).
+#
+# The deterministic tests above pin the behaviour on a handful of sets whose numbers were
+# chosen to be readable. These pin the definitions themselves, on endpoints drawn by
+# Supposition: a tensor product is a conjunction over its axes, `projection` and `extrema`
+# read the same box, the centre is in the set, and a collapsed axis is one whose endpoints
+# coincide. Each is a statement about every valid `CartesianProduct`, not about a chosen one.
+@testset "Geometry properties (Supposition)" begin
+    coordinate = Data.Floats{Float64}(;
+        minimum = -10.0, maximum = 10.0, nans = false, infs = false
+    )
+    length_ = Data.Floats{Float64}(;
+        minimum = 0.01, maximum = 10.0, nans = false, infs = false
+    )
+
+    # A point is in a tensor product exactly when each of its coordinates is in the
+    # corresponding factor. This is the definition of `×`, and the one property that would
+    # break if `Base.in` ever stopped being a conjunction over the axes (an `any` where an
+    # `all` belongs passes every test built from a point known to be inside).
+    @check function check_membership_is_conjunction(
+            a1 = coordinate, l1 = length_, a2 = coordinate, l2 = length_,
+            x1 = coordinate, x2 = coordinate
+    )
+        I1 = interval(a1, a1 + l1)
+        I2 = interval(a2, a2 + l2)
+        X = I1 × I2
+        return ((x1, x2) in X) == ((x1 in I1) && (x2 in I2))
+    end
+
+    # `projection` and `extrema` are two spellings of the same box, and the centre of a set
+    # is a point of it.
+    @check function check_projection_extrema_and_center(
+            a1 = coordinate, l1 = length_, a2 = coordinate, l2 = length_
+    )
+        X = interval(a1, a1 + l1) × interval(a2, a2 + l2)
+
+        extrema(X, 1) == (a1, a1 + l1) || return false
+        extrema(X, 2) == (a2, a2 + l2) || return false
+        extrema(projection(X, 1)) == extrema(X, 1) || return false
+        extrema(projection(X, 2)) == extrema(X, 2) || return false
+
+        c = center(X)
+        c[1] ≈ (a1 + (a1 + l1)) / 2 || return false
+        c[2] ≈ (a2 + (a2 + l2)) / 2 || return false
+        return c in X
+    end
+
+    # A degenerate axis is exactly one whose endpoints coincide, and `topo_dim` counts the
+    # axes that are not degenerate.
+    @check function check_collapsed_axes(
+            a1 = coordinate, l1 = length_, a2 = coordinate, l2 = length_,
+            collapse1 = Data.Booleans(), collapse2 = Data.Booleans()
+    )
+        I1 = collapse1 ? interval(a1, a1) : interval(a1, a1 + l1)
+        I2 = collapse2 ? interval(a2, a2) : interval(a2, a2 + l2)
+        X = I1 × I2
+
+        is_collapsed(X, 1) == collapse1 || return false
+        is_collapsed(X, 2) == collapse2 || return false
+        is_collapsed(X) == (collapse1 || collapse2) || return false
+        dim(X) == 2 || return false
+        return topo_dim(X) == 2 - count((collapse1, collapse2))
+    end
+
+    # Non-vacuous: the conjunction property would also hold for a membership test that was
+    # always `false`, so check that both answers actually occur on the sets these
+    # generators produce.
+    @testset "Non-vacuous" begin
+        X = interval(0.0, 1.0) × interval(0.0, 1.0)
+        @test (0.5, 0.5) in X
+        @test !((0.5, 2.0) in X)
+        @test !((2.0, 0.5) in X)
+    end
 end

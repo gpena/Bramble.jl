@@ -13,6 +13,7 @@ using Bramble:
 using Bramble: Innerh, Innerplus
 using Bramble: VectorGridSpace, mesh_type
 using LinearAlgebra: norm
+using Random
 using Supposition
 
 @testset "Grid spaces" begin
@@ -521,5 +522,119 @@ end
         @test occursin("ScalarGridSpace{2D, Float64, 9 dofs}", detailed)
         @test occursin("Values", detailed)
         @test !endswith(detailed, '\n')
+    end
+end
+
+# Composite grid space invariants (gpena/Bramble.jl#120).
+#
+# Component count, grid size and partition are all drawn, so nothing here rests on the
+# particular `Val(2)`/`Val(3)` spaces the deterministic tests use. The components are given
+# values that differ by four orders of magnitude between blocks, for the reason recorded in
+# the verification notes: a routing bug that sends block `j`'s data to block `k` is
+# invisible when every component carries the same number, and `innerₕ` on a composite space
+# once returned `[0.5, 0.5]` where the answer was `[0.5, 50.0]` and passed every test there
+# was.
+@testset "Composite space properties (Supposition)" begin
+    positive_h = Data.Floats{Float64}(;
+        minimum = 0.01, maximum = 10.0, nans = false, infs = false
+    )
+
+    function _partition(h)
+        pts = zeros(Float64, length(h) + 1)
+        for i in eachindex(h)
+            pts[i + 1] = pts[i] + h[i]
+        end
+        pts ./= pts[end]
+        return pts
+    end
+
+    # The k-th component is `10^(2(k-1))` times a shape that is not constant, so a block
+    # that receives the wrong source shows it in the number rather than agreeing by accident.
+    _component(k) = x -> 10.0^(2 * (k - 1)) * (sin(3x) + 2)
+
+    function _setup(h, ncomp)
+        pts = _partition(h)
+        Ωₕ = mesh(domain(interval(0.0, 1.0)), length(pts), false)
+        set_points!(Ωₕ, pts)
+        Wₕ = gridspace(Ωₕ)
+        Vₕ = gridspace(Ωₕ, Val(ncomp))
+        return Wₕ, Vₕ
+    end
+
+    @check function check_component_extraction_and_block_layout(
+            h = Data.Vectors(positive_h; min_size = 3, max_size = 8),
+            ncomp = Data.Integers(2, 4)
+    )
+        Wₕ, Vₕ = _setup(h, ncomp)
+        n = ndofs(Wₕ)
+        ndofs(Vₕ) == ncomp * n || return false
+
+        fs = ntuple(_component, ncomp)
+        uₕ = Rₕ(Vₕ, fs)
+
+        for k in 1:ncomp
+            scalar = parent(Rₕ(Wₕ, fs[k]))
+            # the component accessor and the raw block of the underlying vector are the
+            # same numbers, in the same order
+            parent(uₕ(k)) == scalar || return false
+            parent(uₕ)[((k - 1) * n + 1):(k * n)] == scalar || return false
+        end
+        return true
+    end
+
+    @check function check_innerh_splits_over_blocks(
+            h = Data.Vectors(positive_h; min_size = 3, max_size = 8),
+            ncomp = Data.Integers(2, 4)
+    )
+        Wₕ, Vₕ = _setup(h, ncomp)
+        fs = ntuple(_component, ncomp)
+        uₕ = Rₕ(Vₕ, fs)
+        vₕ = Rₕ(Vₕ, ntuple(k -> (x -> _component(k)(x) + x^2), ncomp))
+
+        total = innerₕ(uₕ, vₕ)
+        blockwise = sum(innerₕ(uₕ(k), vₕ(k)) for k in 1:ncomp)
+        scale = max(abs(total), abs(blockwise), 1.0)
+        isapprox(total, blockwise; atol = 1e-11 * scale, rtol = 1e-11) || return false
+
+        # Blocks are orthogonal: a function living in one component only contributes
+        # nothing against a function living in another.
+        ncomp < 2 && return true
+        eₕ1, eₕ2 = element(Vₕ), element(Vₕ)
+        parent(eₕ1) .= 0.0
+        parent(eₕ2) .= 0.0
+        parent(eₕ1(1)) .= 1.0
+        parent(eₕ2(2)) .= 1.0
+        return abs(innerₕ(eₕ1, eₕ2)) <= 1e-12
+    end
+
+    @check function check_operators_act_blockwise(
+            h = Data.Vectors(positive_h; min_size = 3, max_size = 8),
+            ncomp = Data.Integers(2, 4)
+    )
+        Wₕ, Vₕ = _setup(h, ncomp)
+        fs = ntuple(_component, ncomp)
+        uₕ = Rₕ(Vₕ, fs)
+
+        for op in (D₋ₓ, M₋ₓ, jumpₓ)
+            composite = op(uₕ)
+            for k in 1:ncomp
+                scalar = parent(op(Rₕ(Wₕ, fs[k])))
+                parent(composite(k)) == scalar || return false
+            end
+        end
+        return true
+    end
+
+    # Non-vacuous: the blocks really do carry different numbers, so the equalities above are
+    # not comparing a value with itself.
+    @testset "Non-vacuous" begin
+        Random.seed!(20260913)
+        Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, false)
+        Vₕ = gridspace(Ωₕ, Val(3))
+        uₕ = Rₕ(Vₕ, ntuple(_component, 3))
+
+        @test !isapprox(parent(uₕ(1)), parent(uₕ(2)))
+        @test !isapprox(parent(uₕ(2)), parent(uₕ(3)))
+        @test innerₕ(uₕ(3), uₕ(3)) > 1e3 * innerₕ(uₕ(1), uₕ(1))
     end
 end
