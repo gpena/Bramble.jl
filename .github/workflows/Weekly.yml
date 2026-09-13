@@ -108,33 +108,55 @@ jobs:
   # rather than per push: advisories are published on the database's schedule, not on
   # Bramble's, so a push-triggered run would re-ask the same question for nothing.
   #
-  # Report, not gate, for the same reason the rest of this workflow is a canary. Measured
-  # on 2026-09-13, the three manifests hold 633 packages and 315 known advisories, and 29
-  # of the 30 affected packages are JLL binaries pinned by the Julia distribution itself
-  # (LibCURL_jll, OpenSSL_jll, MbedTLS_jll, nghttp2_jll and friends) -- Bramble cannot bump
-  # those without a new Julia release, so failing on them would paint the workflow red every
-  # week for something no commit here can fix. The findings go to the job summary for a
-  # person to read; what *is* gated is that the scan actually parsed the manifests.
+  # The manifests are gitignored, so there is nothing in a fresh checkout to scan and the
+  # job resolves one first. That is also the more useful question: not "was anything
+  # published against the versions someone last committed", which is no one's install, but
+  # "would today's resolution of this Project.toml install anything with a known advisory".
+  # One resolve is enough for all of it -- the root Project.toml declares a `[workspace]`
+  # with `test`, `docs` and `benchmark` as members, so the four environments share a single
+  # root Manifest.toml (382 packages as of 2026-09-13, Documenter and Supposition among
+  # them).
   #
-  # Exit codes carry that distinction (osv-scanner docs, "Exit Codes"): 0 is a clean scan,
-  # 1 is "packages scanned, advisories found", and everything else is an error -- notably
-  # 128, "no packages found", which is what a silently broken extractor looks like. So 0
-  # and 1 pass and the rest fails, and a green run means the audit ran rather than that it
-  # found nothing.
+  # Report, not gate, for the same reason the rest of this workflow is a canary: all 11
+  # packages the audit currently flags (84 advisories) are JLL binaries -- LibCURL_jll,
+  # OpenSSL_jll, FFMPEG_jll and friends -- whose versions come from the Julia distribution
+  # and upstream builders rather than from anything a commit here controls. Failing on them
+  # would paint the workflow red every week over something this repository cannot fix. The
+  # findings go to the job summary for a person to read.
+  #
+  # What *is* gated is that the audit ran. Exit codes carry that (osv-scanner docs, "Exit
+  # Codes"): 0 is a clean scan, 1 is "packages scanned, advisories found", and anything else
+  # is an error -- notably 128, "no packages found", which is what a silently broken
+  # extractor, or a manifest that failed to resolve, looks like. So 0 and 1 pass and the
+  # rest fails, and a green run means the manifest was parsed rather than that nothing was
+  # found.
   security-audit:
     name: Dependency vulnerability audit
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     permissions:
       contents: read
     env:
-      # Pinned to an exact release, with the SHA-256 the release publishes. Bump both
+      # Pinned to an exact release, with the SHA-256 that release publishes. Bump both
       # together: the checksum is the one thing that makes downloading a binary into CI
       # different from running whatever the URL happens to serve that morning.
       OSV_SCANNER_VERSION: v2.5.1
       OSV_SCANNER_SHA256: f9f25499a2c8cc367b3af45df2ea7eeca7fbccceab9c35079968f4b3652194be
     steps:
       - uses: actions/checkout@v4
+
+      # The current stable release, not the 1.12 floor the test matrix also covers: the
+      # question is what an install done today resolves to, and the stdlib JLL versions a
+      # manifest pins come from the Julia release that wrote it.
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1"
+
+      # `resolve`, not `instantiate`: the scan reads pinned versions out of the manifest and
+      # never loads a package, so downloading the artifacts behind Makie and friends would
+      # be minutes spent on bytes nothing here opens.
+      - name: Resolve the workspace manifest
+        run: julia --project=. -e 'using Pkg; Pkg.resolve()'
 
       # The binary rather than `google/osv-scanner-action`: the scan needs a flag the action
       # does not pass through (`--experimental-plugins`, below) and needs to read the exit
@@ -153,15 +175,15 @@ jobs:
       # audits nothing at all. Should the flag graduate or be renamed upstream, the scan
       # fails with exit 127/128 rather than passing empty -- which is the point of reading
       # the exit code below.
-      - name: Audit the manifests against the OSV database
+      - name: Audit the manifest against the OSV database
         run: |
           status=0
           ./osv-scanner scan source \
             --experimental-plugins julia/manifesttoml \
             -L Manifest.toml \
-            -L test/Manifest.toml \
-            -L docs/Manifest.toml \
-            --format markdown > osv-report.md || status=$?
+            --format markdown \
+            --verbosity error > osv-report.md || status=$?
+          echo "osv-scanner exited $status"
 
           {
             echo "## Dependency vulnerability audit"
@@ -170,7 +192,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           case "$status" in
-            0) echo "No known advisories against the three manifests." ;;
+            0) echo "No known advisories against the resolved workspace manifest." ;;
             1) echo "::notice::Known advisories found; read the job summary. Weekly.yml audits, it does not gate." ;;
             *) echo "::error::osv-scanner exited $status: the audit did not run. See the log above."
                exit "$status" ;;
