@@ -69,7 +69,15 @@ See also: [`space`](@ref), [`VectorElement`](@ref)
 
 # Forward array-like methods to the `data` field. This allows a VectorElement
 # to behave like a standard Julia vector (e.g., support `size`, `length`, `eltype`).
-@forward VectorElement.data (Base.size, Bramble.show)
+#
+# `size` is defined directly, not through `@forward`: the macro's generated
+# `size(x::VectorElement, args...; kwargs...)` is as broad as `Base`'s own
+# `size(t::AbstractArray, dim)` fallback (abstractarray.jl), so inserting it invalidated
+# that fallback's cached `MethodInstance`s package-wide the moment Bramble loaded (#198).
+# The zero-argument method below is all `size` ever needs from `VectorElement`: `Base`'s
+# fallback already answers `size(uₕ, dim)` as `size(uₕ)[dim]` without a second definition.
+@inline Base.size(uₕ::VectorElement) = size(uₕ.data)
+@forward VectorElement.data (Bramble.show,)
 
 # A VectorElement wraps a vector, so indexing is linear; without this the
 # AbstractArray default of IndexCartesian() is used.

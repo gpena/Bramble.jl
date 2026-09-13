@@ -284,6 +284,7 @@ if __bramble_with_quality
         include("quality/exports.jl")
         include("quality/explicit_imports.jl")
         include("quality/jet.jl")
+        include("quality/invalidations.jl")
         # Already run above with the unit group; included here so a `quality`-only run
         # (nightly's second job) still covers it, without running it twice for `all`.
         __bramble_with_unit_tests || include("quality/alloccheck.jl")

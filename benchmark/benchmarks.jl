@@ -203,11 +203,25 @@ let uₕ2 = Rₕ(gridspace(_mesh2()), x -> sin(x[1]) * x[2]), uₕ3 = Rₕ(grids
 end
 
 # --- 8. startup latency & TTFX -------------------------------------------- #
+#
+# Each command is a fresh process: TTFX is first-call latency, and a second
+# call in the same session would be measuring the JIT-warm path instead
+# (#198). The three dedicated entries below are cumulative on purpose — the
+# projection command re-pays mesh construction, the assembly command re-pays
+# both — because that is what "first assembly" actually costs a user who
+# imports Bramble and goes straight to `assemble`, not the marginal cost of
+# assembly alone on top of a warm session.
 let jl = Base.julia_cmd(), cmd_load = `$jl --project=. --startup-file=no -e "using Bramble"`,
+    cmd_mesh = `$jl --project=. --startup-file=no -e "using Bramble; m = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (10, 10), (true, true))"`,
+    cmd_projection = `$jl --project=. --startup-file=no -e "using Bramble; m = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (10, 10), (true, true)); W = gridspace(m); u = Rₕ(W, x -> sin(x[1]) * x[2])"`,
+    cmd_assembly = `$jl --project=. --startup-file=no -e "using Bramble; m = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (10, 10), (true, true)); W = gridspace(m); u = Rₕ(W, x -> sin(x[1]) * x[2]); l = Bramble.form(W, v -> innerₕ(u, v)); b = Bramble.assemble(l)"`,
     cmd_ttfx = `$jl --project=. --startup-file=no -e "using Bramble; m = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (10, 10), (true, true)); W = gridspace(m); u = element(W); D₋ₓ(u)"`
 
     g = SUITE["startup & latency"] = BenchmarkGroup()
     g["using Bramble"] = @benchmarkable run($cmd_load) samples=3 evals=1
+    g["TTFX mesh construction"] = @benchmarkable run($cmd_mesh) samples=3 evals=1
+    g["TTFX first-projection (Rₕ)"] = @benchmarkable run($cmd_projection) samples=3 evals=1
+    g["TTFX first-assembly (assemble)"] = @benchmarkable run($cmd_assembly) samples=3 evals=1
     g["TTFX (load + first operator)"] = @benchmarkable run($cmd_ttfx) samples=3 evals=1
 end
 
