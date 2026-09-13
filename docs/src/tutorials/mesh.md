@@ -72,6 +72,35 @@ x_mesh = Ωₕ_2d(1)  # 1D submesh in x-direction
 y_mesh = Ωₕ_2d(2)  # 1D submesh in y-direction
 ```
 
+### 1.3 Direct Cartesian set input and isotropic resolution
+
+When custom boundary markers are not required, you can pass a [`CartesianProduct`](@ref) geometric set directly to [`mesh`](@ref) without wrapping it in [`domain`](@ref). The default geometric markers `:boundary` and `:interior` are provisioned automatically:
+
+```julia
+# Direct discretization of intervals, products, and boxes
+X = interval(0.0, 1.0) × interval(0.0, 2.0)
+Ωₕ_direct = mesh(X, (10, 20))
+
+# Default boundary and interior markers are available immediately
+:boundary in keys(markers(Ωₕ_direct)) # true
+:interior in keys(markers(Ωₕ_direct)) # true
+```
+
+In any dimension $D \ge 1$, passing a single integer `npts::Int` creates an isotropic grid with the same resolution across all coordinate axes:
+
+```julia
+# Isotropic 20 × 20 grid directly from the geometric set
+Ωₕ_iso = mesh(X, 20)
+size(Ωₕ_iso) # (20, 20)
+
+# Isotropic resolution on a Domain
+Ω = domain(X)
+Ωₕ_iso_domain = mesh(Ω, 20)
+size(Ωₕ_iso_domain) # (20, 20)
+```
+
+Both positional `unif` and keyword `uniform` accept a single boolean for isotropic uniformity (e.g. `mesh(X, 20, false)` or `mesh(Ω, (10, 20); uniform = false)`) or an `NTuple{D, Bool}` for per-axis control.
+
 ---
 
 ## 2. Accessing grid coordinates and metric properties
