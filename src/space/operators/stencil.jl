@@ -315,7 +315,8 @@ function _define_vectorial_alias(
     two_d = :(@inline $(alias_name)(arg, ::Val{2}) =
         ($(base_op_name)(arg, Val(1)), $(base_op_name)(arg, Val(2))))
     three_d = :(@inline $(alias_name)(arg, ::Val{3}) = (
-        $(base_op_name)(arg, Val(1)), $(base_op_name)(arg, Val(2)),
+        $(base_op_name)(arg, Val(1)),
+        $(base_op_name)(arg, Val(2)),
         $(base_op_name)(arg, Val(3)),
     ))
 

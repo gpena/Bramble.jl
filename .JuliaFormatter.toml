@@ -1,1 +1,2 @@
 style = "blue"
+margin = 120  # Set your desired threshold (default for BlueStyle is 92)

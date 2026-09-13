@@ -106,7 +106,11 @@ Base.@constprop :aggressive function Base.:^(Wₕ::ScalarGridSpace, N::Int)
     N == 1 && return Wₕ
     N == 2 && return Wₕ^Val(2)
     N == 3 && return Wₕ^Val(3)
-    throw(ArgumentError("Power N must satisfy 1 <= N <= 3 for Wₕ^N; got $N. Use Wₕ^Val(N) for N > 3."))
+    throw(
+        ArgumentError(
+            "Power N must satisfy 1 <= N <= 3 for Wₕ^N; got $N. Use Wₕ^Val(N) for N > 3."
+        ),
+    )
 end
 
 # ==============================================================================

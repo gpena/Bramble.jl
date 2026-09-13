@@ -101,6 +101,7 @@ polygonal_mesh_plan.md
 # The manual is written and built outside version control, by request.
 # This covers its sources, its LaTeX build products and the design preview.
 manual/
+presentation/
 docs/manual_design_preview.html
 
 # Working notes for the form-layer unlock, paired with the tracker artifact. Kept out of
