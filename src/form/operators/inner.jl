@@ -44,7 +44,7 @@ struct InnerPlus{Dim} <: AbstractInnerProduct end
 An AST node representing a bilinear integration term \$(u, v)\$ in a bilinear form.
 """
 struct BilinearProduct{
-    D,InnerType<:AbstractInnerProduct,LeftType<:LazyOp{D},RightType<:LazyOp{D}
+    D, InnerType <: AbstractInnerProduct, LeftType <: LazyOp{D}, RightType <: LazyOp{D}
 } <: LazyOp{D}
     left_op::LeftType
     right_op::RightType
@@ -56,7 +56,7 @@ end
 An AST node representing a linear integration term \$(f, v)\$ in a linear form.
 """
 struct LinearProduct{
-    D,InnerType<:AbstractInnerProduct,LeftType<:LazyOp{D},RightType<:LazyOp{D}
+    D, InnerType <: AbstractInnerProduct, LeftType <: LazyOp{D}, RightType <: LazyOp{D}
 } <: LazyOp{D}
     left_op::LeftType
     right_op::RightType
@@ -66,12 +66,11 @@ end
 # Weight Helpers
 # ==============================================================================
 
-@inline compute_weight(::InnerH, space, I::CartesianIndex{D}, lin_idx::Int) where {D} =
-    weights(space, Innerh())[lin_idx]
+@inline compute_weight(::InnerH, space, I::CartesianIndex{D}, lin_idx::Int) where {D} = weights(space, Innerh())[lin_idx]
 
 @inline compute_weight(
     ::InnerPlus{ActiveDim}, space, I::CartesianIndex{D}, lin_idx::Int
-) where {ActiveDim,D} = weights(space, Innerplus(), ActiveDim)[lin_idx]
+) where {ActiveDim, D} = weights(space, Innerplus(), ActiveDim)[lin_idx]
 
 # ==============================================================================
 # User-Facing API & Overloads
@@ -89,20 +88,20 @@ it, which is the mask required, and is supported by all existing AST walkers: bl
 (`trial_component_or_nothing`/`test_component_or_nothing`), `resolve_ast`, `is_symbolic`.
 =#
 
-@inline _restrict_by_markers(prod::LazyOp{D}, ::NTuple{0,Symbol}) where {D} = prod
+@inline _restrict_by_markers(prod::LazyOp{D}, ::NTuple{0, Symbol}) where {D} = prod
 
 # A single marker unwraps to a bare `Symbol` region rather than a one-element tuple, so it
 # matches `restrict_to`'s own convention exactly, including `:interior`, which is a keyword
 # `RegionRestriction` special-cases only when `region` is literally a `Symbol`, not a tuple
 # containing one.
-@inline function _restrict_by_markers(prod::LazyOp{D}, markers::NTuple{1,Symbol}) where {D}
-    RegionRestriction{D,Symbol,typeof(prod)}(markers[1], prod)
+@inline function _restrict_by_markers(prod::LazyOp{D}, markers::NTuple{1, Symbol}) where {D}
+    RegionRestriction{D, Symbol, typeof(prod)}(markers[1], prod)
 end
 
 @inline function _restrict_by_markers(
-    prod::LazyOp{D}, markers::NTuple{N,Symbol}
-) where {D,N}
-    RegionRestriction{D,typeof(markers),typeof(prod)}(markers, prod)
+        prod::LazyOp{D}, markers::NTuple{N, Symbol}
+) where {D, N}
+    RegionRestriction{D, typeof(markers), typeof(prod)}(markers, prod)
 end
 
 #=
@@ -121,37 +120,34 @@ the sum once rather than each term separately.
 
 # A source on the left makes the product linear; anything else makes it bilinear.
 @inline function _product(
-    ::W, left::LazyOp{D}, right::LazyOp{D}
-) where {W<:AbstractInnerProduct,D}
+        ::W, left::LazyOp{D}, right::LazyOp{D}
+) where {W <: AbstractInnerProduct, D}
     return if _is_source_only(left)
-        LinearProduct{D,W,typeof(left),typeof(right)}(left, right)
+        LinearProduct{D, W, typeof(left), typeof(right)}(left, right)
     else
-        BilinearProduct{D,W,typeof(left),typeof(right)}(left, right)
+        BilinearProduct{D, W, typeof(left), typeof(right)}(left, right)
     end
 end
 
-@inline _inner(w::AbstractInnerProduct, left::LazyOp, right::LazyOp, markers) =
-    _restrict_by_markers(_product(w, left, right), markers)
+@inline _inner(w::AbstractInnerProduct, left::LazyOp, right::LazyOp, markers) = _restrict_by_markers(_product(w, left, right), markers)
 
 # `parent` is Julia's own name for the storage a VectorElement delegates to; see
 # `src/space/vectorelement.jl`.
-@inline _as_source(l::Function, ::Val{D}) where {D} = SourceFunction{D,typeof(l)}(l)
+@inline _as_source(l::Function, ::Val{D}) where {D} = SourceFunction{D, typeof(l)}(l)
 @inline _as_source(l::Number, ::Val{D}) where {D} = source_number(l, Val(D))
-@inline _as_source(l::VectorElement, ::Val{D}) where {D} =
-    SourceVector{D,typeof(parent(l))}(parent(l))
+@inline _as_source(l::VectorElement, ::Val{D}) where {D} = SourceVector{D, typeof(parent(l))}(parent(l))
 
-@inline function _linear_source(::W, l, r::LazyOp{D}) where {W<:AbstractInnerProduct,D}
+@inline function _linear_source(::W, l, r::LazyOp{D}) where {W <: AbstractInnerProduct, D}
     sf = _as_source(l, Val(D))
-    return LinearProduct{D,W,typeof(sf),typeof(r)}(sf, r)
+    return LinearProduct{D, W, typeof(sf), typeof(r)}(sf, r)
 end
 
-@inline _inner_source(w::AbstractInnerProduct, l, r::LazyOp, markers) =
-    _restrict_by_markers(_linear_source(w, l, r), markers)
+@inline _inner_source(w::AbstractInnerProduct, l, r::LazyOp, markers) = _restrict_by_markers(_linear_source(w, l, r), markers)
 
 # One directional source term per dimension, summed, with the sum restricted once. `Val(D)`
 # is what keeps `dim` a compile-time literal, so `InnerPlus{dim}` stays a type instead of
 # becoming a runtime value -- the same reason the folds below were written with `ntuple`.
-@inline function _inner_source_tuple(l, r::NTuple{D,LazyOp{D}}, markers) where {D}
+@inline function _inner_source_tuple(l, r::NTuple{D, LazyOp{D}}, markers) where {D}
     terms = ntuple(Val(D)) do dim
         _linear_source(InnerPlus{dim}(), l[dim], r[dim])
     end
@@ -168,10 +164,10 @@ Each dimension's term is a `LinearProduct` or a `BilinearProduct` independently,
 of interpolated sources (`πₕ(u1), πₕ(u2)`) is source-only dimension by dimension.
 """
 function inner_plus(
-    left::NTuple{D,LazyOp{D}},
-    right::NTuple{D,LazyOp{D}};
-    markers::NTuple{N,Symbol}=NTuple{0,Symbol}(),
-) where {D,N}
+        left::NTuple{D, LazyOp{D}},
+        right::NTuple{D, LazyOp{D}};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {D, N}
     terms = ntuple(Val(D)) do dim
         return _product(InnerPlus{dim}(), left[dim], right[dim])
     end
@@ -197,8 +193,8 @@ linear AST node is constructed.
 which grid points it contributes to at all.
 """
 function innerₕ(
-    left::LazyOp{D}, right::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
-) where {D,N}
+        left::LazyOp{D}, right::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {D, N}
     return _inner(InnerH(), left, right, markers)
 end
 
@@ -217,11 +213,11 @@ Constructs a symbolic modified \$L^2_+\$ inner product between `left` and `right
 `markers` restricts the sum as it does for [`innerₕ`](@ref).
 """
 function inner₊(
-    left::NTuple{D,LazyOp{D}},
-    right::NTuple{D,LazyOp{D}};
-    markers::NTuple{N,Symbol}=NTuple{0,Symbol}(),
-) where {D,N}
-    return inner_plus(left, right; markers=markers)
+        left::NTuple{D, LazyOp{D}},
+        right::NTuple{D, LazyOp{D}};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {D, N}
+    return inner_plus(left, right; markers = markers)
 end
 
 """
@@ -244,10 +240,10 @@ or a `BilinearProduct` otherwise, matching [`innerₕ`](@ref).
 `markers` restricts the sum as it does for [`innerₕ`](@ref).
 """
 function inner₊(
-    left::BackwardDifference{D,Dim},
-    right::BackwardDifference{D,Dim};
-    markers::NTuple{N,Symbol}=NTuple{0,Symbol}(),
-) where {D,Dim,N}
+        left::BackwardDifference{D, Dim},
+        right::BackwardDifference{D, Dim};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {D, Dim, N}
     return _inner(InnerPlus{Dim}(), left, right, markers)
 end
 
@@ -263,8 +259,8 @@ the direction, so it throws an `ArgumentError`.
 `markers` restricts the sum as it does for [`innerₕ`](@ref).
 """
 function inner₊(
-    left::LazyOp{D}, right::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
-) where {D,N}
+        left::LazyOp{D}, right::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {D, N}
     return _inner₊_same_dim(Val(D), left, right, markers)
 end
 
@@ -275,23 +271,23 @@ end
 # (unlike this method's shared, still-generic-in-D one), and is genuinely ambiguous against
 # them for D=1 -- confirmed by trying it first and watching precompilation fail on exactly
 # that call shape.
-function _inner₊_same_dim(::Val{1}, left, right, markers::NTuple{N,Symbol}) where {N}
+function _inner₊_same_dim(::Val{1}, left, right, markers::NTuple{N, Symbol}) where {N}
     return _inner(InnerPlus{1}(), left, right, markers)
 end
 
-function _inner₊_same_dim(::Val{D}, left, right, markers::NTuple{N,Symbol}) where {D,N}
+function _inner₊_same_dim(::Val{D}, left, right, markers::NTuple{N, Symbol}) where {D, N}
     return _inner₊_no_direction(left, right, D)
 end
 
 @noinline function _inner₊_no_direction(left, right, D::Int)
     throw(
         ArgumentError(
-            "inner₊ of two symbolic operators in $D dimensions names no direction, and its " *
-            "weights are directional. Write inner₊ₓ, inner₊ᵧ or inner₊₂ for a specific one, " *
-            "pass gradient tuples such as inner₊(∇₋ₕ(u), ∇₋ₕ(v)) to sum over all of them, or " *
-            "difference both sides along the same direction as in inner₊(D₋ₓ(u), D₋ₓ(v)). " *
-            "Got $(typeof(left)) and $(typeof(right)).",
-        ),
+        "inner₊ of two symbolic operators in $D dimensions names no direction, and its " *
+        "weights are directional. Write inner₊ₓ, inner₊ᵧ or inner₊₂ for a specific one, " *
+        "pass gradient tuples such as inner₊(∇₋ₕ(u), ∇₋ₕ(v)) to sum over all of them, or " *
+        "difference both sides along the same direction as in inner₊(D₋ₓ(u), D₋ₓ(v)). " *
+        "Got $(typeof(left)) and $(typeof(right)).",
+    ),
     )
 end
 
@@ -315,17 +311,17 @@ otherwise, matching [`innerₕ`](@ref).
 `markers` restricts the sum as it does for [`innerₕ`](@ref).
 """
 function inner₊(
-    left::LazyOp{D},
-    right::BackwardDifference{D,Dim};
-    markers::NTuple{N,Symbol}=NTuple{0,Symbol}(),
-) where {D,Dim,N}
+        left::LazyOp{D},
+        right::BackwardDifference{D, Dim};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {D, Dim, N}
     return _inner(InnerPlus{Dim}(), left, right, markers)
 end
 function inner₊(
-    left::BackwardDifference{D,Dim},
-    right::LazyOp{D};
-    markers::NTuple{N,Symbol}=NTuple{0,Symbol}(),
-) where {D,Dim,N}
+        left::BackwardDifference{D, Dim},
+        right::LazyOp{D};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {D, Dim, N}
     return _inner(InnerPlus{Dim}(), left, right, markers)
 end
 
@@ -340,16 +336,16 @@ either side, the two single-sided methods above tie, and the pair would be an am
 rather than an error the caller can read.
 """
 @noinline function inner₊(
-    left::BackwardDifference{D,Dim1},
-    right::BackwardDifference{D,Dim2};
-    markers::NTuple{M,Symbol}=NTuple{0,Symbol}(),
-) where {D,Dim1,Dim2,M}
+        left::BackwardDifference{D, Dim1},
+        right::BackwardDifference{D, Dim2};
+        markers::NTuple{M, Symbol} = NTuple{0, Symbol}()
+) where {D, Dim1, Dim2, M}
     throw(
         ArgumentError(
-            "inner₊ of backward differences along different directions ($Dim1 and $Dim2) " *
-            "names no single weight. Difference both sides along the same direction, or " *
-            "write inner₊ₓ, inner₊ᵧ or inner₊₂ for the one you mean.",
-        ),
+        "inner₊ of backward differences along different directions ($Dim1 and $Dim2) " *
+        "names no single weight. Difference both sides along the same direction, or " *
+        "write inner₊ₓ, inner₊ᵧ or inner₊₂ for the one you mean.",
+    ),
     )
 end
 
@@ -372,10 +368,10 @@ file's symbolic family from that file's numeric one; it is asserted in
 [`innerₕ`](@ref).
 """
 function inner₊(
-    left::NTuple{N,<:Tuple},
-    right::NTuple{N,<:Tuple};
-    markers::NTuple{M,Symbol}=NTuple{0,Symbol}(),
-) where {N,M}
+        left::NTuple{N, <:Tuple},
+        right::NTuple{N, <:Tuple};
+        markers::NTuple{M, Symbol} = NTuple{0, Symbol}()
+) where {N, M}
     return _restrict_by_markers(foldl(+, map(inner₊, left, right)), markers)
 end
 
@@ -392,79 +388,79 @@ otherwise, exactly as [`innerₕ`](@ref) decides.
 `markers` restricts the sum as it does for [`innerₕ`](@ref).
 """
 function inner₊ₓ(
-    left::LazyOp{D}, right::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
-) where {D,N}
+        left::LazyOp{D}, right::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {D, N}
     return _inner(InnerPlus{1}(), left, right, markers)
 end
 function inner₊ᵧ(
-    left::LazyOp{D}, right::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
-) where {D,N}
+        left::LazyOp{D}, right::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {D, N}
     return _inner(InnerPlus{2}(), left, right, markers)
 end
 function inner₊₂(
-    left::LazyOp{D}, right::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
-) where {D,N}
+        left::LazyOp{D}, right::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {D, N}
     return _inner(InnerPlus{3}(), left, right, markers)
 end
 
 @inline function source_number(l::Number, ::Val{D}) where {D}
-    return SourceConstant{D,typeof(l)}(l)
+    return SourceConstant{D, typeof(l)}(l)
 end
 
 # Linear Forms (e.g. innerₕ(f, v) where f is a Function, Number, or VectorElement and v is
 # TestFunction). `markers` restricts each the same way it does the bilinear forms above: a
 # mask on which grid points the source term contributes to at all.
 function innerₕ(
-    l::Function, r::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
-) where {D,N}
+        l::Function, r::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {D, N}
     return _inner_source(InnerH(), l, r, markers)
 end
 function innerₕ(
-    l::Number, r::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
-) where {D,N}
+        l::Number, r::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {D, N}
     return _inner_source(InnerH(), l, r, markers)
 end
 function innerₕ(
-    l::VectorElement, r::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
-) where {D,N}
+        l::VectorElement, r::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {D, N}
     return _inner_source(InnerH(), l, r, markers)
 end
 
 function inner₊(
-    l::Function, r::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
-) where {D,N}
+        l::Function, r::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {D, N}
     return _inner_source(InnerPlus{1}(), l, r, markers)
 end
 function inner₊(
-    l::Number, r::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
-) where {D,N}
+        l::Number, r::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {D, N}
     return _inner_source(InnerPlus{1}(), l, r, markers)
 end
 function inner₊(
-    l::VectorElement, r::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
-) where {D,N}
+        l::VectorElement, r::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {D, N}
     return _inner_source(InnerPlus{1}(), l, r, markers)
 end
 
 function inner₊(
-    l::NTuple{D,Function},
-    r::NTuple{D,LazyOp{D}};
-    markers::NTuple{N,Symbol}=NTuple{0,Symbol}(),
-) where {D,N}
+        l::NTuple{D, Function},
+        r::NTuple{D, LazyOp{D}};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {D, N}
     return _inner_source_tuple(l, r, markers)
 end
 function inner₊(
-    l::NTuple{D,Number},
-    r::NTuple{D,LazyOp{D}};
-    markers::NTuple{N,Symbol}=NTuple{0,Symbol}(),
-) where {D,N}
+        l::NTuple{D, Number},
+        r::NTuple{D, LazyOp{D}};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {D, N}
     return _inner_source_tuple(l, r, markers)
 end
 @inline function inner₊(
-    l::NTuple{D,VectorElement},
-    r::NTuple{D,LazyOp{D}};
-    markers::NTuple{N,Symbol}=NTuple{0,Symbol}(),
-) where {D,N}
+        l::NTuple{D, VectorElement},
+        r::NTuple{D, LazyOp{D}};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {D, N}
     if all(is_symbolic, r)
         return _inner_source_tuple(l, r, markers)
     else
@@ -478,60 +474,60 @@ end
 @noinline function _inner₊_numeric_tuple_unsupported(r)
     throw(
         ArgumentError(
-            "inner₊ of a tuple of grid functions against a tuple of non-symbolic operators " *
-            "has no definition: the right-hand side carries no trial or test function, so " *
-            "there is nothing for the product to be a form in. Got $(typeof(r)). Pair the " *
-            "grid functions with a symbolic gradient such as ∇₋ₕ(u), or take the numeric " *
-            "inner₊ of two grid functions directly.",
-        ),
+        "inner₊ of a tuple of grid functions against a tuple of non-symbolic operators " *
+        "has no definition: the right-hand side carries no trial or test function, so " *
+        "there is nothing for the product to be a form in. Got $(typeof(r)). Pair the " *
+        "grid functions with a symbolic gradient such as ∇₋ₕ(u), or take the numeric " *
+        "inner₊ of two grid functions directly.",
+    ),
     )
 end
 
 function inner₊ₓ(
-    l::Function, r::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
-) where {D,N}
+        l::Function, r::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {D, N}
     return _inner_source(InnerPlus{1}(), l, r, markers)
 end
 function inner₊ᵧ(
-    l::Function, r::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
-) where {D,N}
+        l::Function, r::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {D, N}
     return _inner_source(InnerPlus{2}(), l, r, markers)
 end
 function inner₊₂(
-    l::Function, r::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
-) where {D,N}
+        l::Function, r::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {D, N}
     return _inner_source(InnerPlus{3}(), l, r, markers)
 end
 
 function inner₊ₓ(
-    l::Number, r::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
-) where {D,N}
+        l::Number, r::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {D, N}
     return _inner_source(InnerPlus{1}(), l, r, markers)
 end
 function inner₊ᵧ(
-    l::Number, r::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
-) where {D,N}
+        l::Number, r::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {D, N}
     return _inner_source(InnerPlus{2}(), l, r, markers)
 end
 function inner₊₂(
-    l::Number, r::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
-) where {D,N}
+        l::Number, r::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {D, N}
     return _inner_source(InnerPlus{3}(), l, r, markers)
 end
 
 function inner₊ₓ(
-    l::VectorElement, r::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
-) where {D,N}
+        l::VectorElement, r::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {D, N}
     return _inner_source(InnerPlus{1}(), l, r, markers)
 end
 function inner₊ᵧ(
-    l::VectorElement, r::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
-) where {D,N}
+        l::VectorElement, r::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {D, N}
     return _inner_source(InnerPlus{2}(), l, r, markers)
 end
 function inner₊₂(
-    l::VectorElement, r::LazyOp{D}; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
-) where {D,N}
+        l::VectorElement, r::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {D, N}
     return _inner_source(InnerPlus{3}(), l, r, markers)
 end
 
@@ -556,8 +552,8 @@ end
 # which additionally require the same space, it answers a strictly local question ("do the two
 # sides compute the same numbers here") and is safe regardless.
 @inline function local_stencil(
-    op::BilinearProduct{D,InnerType}, space, I::CartesianIndex{D}, markers, lin_idx::Int
-) where {D,InnerType}
+        op::BilinearProduct{D, InnerType}, space, I::CartesianIndex{D}, markers, lin_idx::Int
+) where {D, InnerType}
     vol = compute_weight(InnerType(), space, I, lin_idx)
     if _same_operator_shape(op.left_op, op.right_op)
         stencil = local_stencil(op.left_op, space, I, markers, lin_idx)
@@ -584,11 +580,11 @@ end
 @noinline function _throw_source_not_point_dependent(op)
     throw(
         ArgumentError(
-            "`_is_source_only` accepted $(typeof(op)) as a source, but `stencil_shift_trait` " *
-            "does not mark it (or a node it wraps) `PointDependentStencil`. Contracting it would " *
-            "relabel offsets instead of re-reading the source at each neighbour. " *
-            "Add the missing `stencil_shift_trait` method next to the node's definition.",
-        ),
+        "`_is_source_only` accepted $(typeof(op)) as a source, but `stencil_shift_trait` " *
+        "does not mark it (or a node it wraps) `PointDependentStencil`. Contracting it would " *
+        "relabel offsets instead of re-reading the source at each neighbour. " *
+        "Add the missing `stencil_shift_trait` method next to the node's definition.",
+    ),
     )
 end
 
@@ -596,7 +592,7 @@ end
 # every constructor above chooses `LinearProduct` over `BilinearProduct` precisely by
 # checking `_is_source_only(left)` first. So the contraction below is unconditional.
 @inline function _contracted_left_stencil(
-    op, space, I::CartesianIndex{D}, markers, lin_idx::Int
+        op, space, I::CartesianIndex{D}, markers, lin_idx::Int
 ) where {D}
     stencil_shift_trait(op) isa PointDependentStencil ||
         _throw_source_not_point_dependent(op)
@@ -605,8 +601,8 @@ end
 end
 
 @inline function local_stencil(
-    op::LinearProduct{D,InnerType}, space, I::CartesianIndex{D}, markers, lin_idx::Int
-) where {D,InnerType}
+        op::LinearProduct{D, InnerType}, space, I::CartesianIndex{D}, markers, lin_idx::Int
+) where {D, InnerType}
     left_stencil = _contracted_left_stencil(op.left_op, space, I, markers, lin_idx)
     right_stencil = local_stencil(op.right_op, space, I, markers, lin_idx)
     vol = compute_weight(InnerType(), space, I, lin_idx)
@@ -617,16 +613,16 @@ end
 # AST Resolution
 # ==============================================================================
 
-function resolve_ast(op::BilinearProduct{D,InnerType}) where {D,InnerType}
+function resolve_ast(op::BilinearProduct{D, InnerType}) where {D, InnerType}
     return BilinearProduct{
-        D,InnerType,typeof(resolve_ast(op.left_op)),typeof(resolve_ast(op.right_op))
+        D, InnerType, typeof(resolve_ast(op.left_op)), typeof(resolve_ast(op.right_op))
     }(
         resolve_ast(op.left_op), resolve_ast(op.right_op)
     )
 end
-function resolve_ast(op::LinearProduct{D,InnerType}) where {D,InnerType}
+function resolve_ast(op::LinearProduct{D, InnerType}) where {D, InnerType}
     return LinearProduct{
-        D,InnerType,typeof(resolve_ast(op.left_op)),typeof(resolve_ast(op.right_op))
+        D, InnerType, typeof(resolve_ast(op.left_op)), typeof(resolve_ast(op.right_op))
     }(
         resolve_ast(op.left_op), resolve_ast(op.right_op)
     )
@@ -651,7 +647,7 @@ though the plain positional call already resolves through this method with no ke
 all. Aqua's ambiguity check is what caught it.
 =#
 @noinline function inner₊(
-    ::Tuple{}, ::Tuple{}; markers::NTuple{M,Symbol}=NTuple{0,Symbol}()
+        ::Tuple{}, ::Tuple{}; markers::NTuple{M, Symbol} = NTuple{0, Symbol}()
 ) where {M}
     throw(ArgumentError("inner₊ needs at least one component; got two empty tuples"))
 end

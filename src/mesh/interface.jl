@@ -96,7 +96,7 @@ Return the `BitVector` indicator associated with marker `label` in mesh `Ωₕ`.
 
 Override the grid indices in `Ωₕ`. Used internally during mesh refinement.
 """
-@inline set_indices!(Ωₕ::AbstractMeshType, indices) = (Ωₕ.indices=indices; return nothing)
+@inline set_indices!(Ωₕ::AbstractMeshType, indices) = (Ωₕ.indices = indices; return nothing)
 
 """
     markers!(Ωₕ::AbstractMeshType, mesh_markers::MeshMarkers) -> Nothing
@@ -105,8 +105,7 @@ Override the markers dictionary in `Ωₕ`. Used internally during mesh refineme
 the old dictionary is sized for the old grid and is replaced outright rather than merged
 into.
 """
-@inline markers!(Ωₕ::AbstractMeshType, mesh_markers) =
-    (Ωₕ.markers=mesh_markers; return nothing)
+@inline markers!(Ωₕ::AbstractMeshType, mesh_markers) = (Ωₕ.markers = mesh_markers; return nothing)
 
 """
     is_collapsed(Ωₕ::AbstractMeshType) -> Bool
@@ -171,11 +170,11 @@ end
 @noinline function _throw_refinement_drops_markers(extra_labels)
     throw(
         ArgumentError(
-            "iterative_refinement!(Ωₕ) was asked to refine a mesh carrying custom markers " *
-            "$(Tuple(extra_labels)), and there is no domain here to re-evaluate them onto " *
-            "the refined points. Call iterative_refinement!(Ωₕ, domain_markers) instead to " *
-            "keep them.",
-        ),
+        "iterative_refinement!(Ωₕ) was asked to refine a mesh carrying custom markers " *
+        "$(Tuple(extra_labels)), and there is no domain here to re-evaluate them onto " *
+        "the refined points. Call iterative_refinement!(Ωₕ, domain_markers) instead to " *
+        "keep them.",
+    ),
     )
 end
 
@@ -184,7 +183,7 @@ end
 # one-argument form above, a single-point, non-collapsed mesh still has its (unchanged)
 # point's markers correctly re-evaluated, since `set_markers!` needs no interval to do that.
 function iterative_refinement!(
-    Ωₕ::AbstractMeshType, domain_markers::DomainMarkers; warn_marker_mismatch::Bool=true
+        Ωₕ::AbstractMeshType, domain_markers::DomainMarkers; warn_marker_mismatch::Bool = true
 )
     is_collapsed(Ωₕ) && return nothing
 
@@ -194,10 +193,10 @@ function iterative_refinement!(
 end
 
 function change_points!(
-    Ωₕ::AbstractMeshType,
-    domain_markers::DomainMarkers,
-    pts;
-    warn_marker_mismatch::Bool=true,
+        Ωₕ::AbstractMeshType,
+        domain_markers::DomainMarkers,
+        pts;
+        warn_marker_mismatch::Bool = true
 )
     change_points!(Ωₕ, pts)
     set_markers!(Ωₕ, domain_markers; warn_marker_mismatch)
@@ -212,12 +211,12 @@ end
 
 @noinline _throw_not_uniform() = throw(
     ArgumentError(
-        "stepsize is only defined for a uniform mesh; use spacing(Ωₕ, idx) on a non-uniform one",
-    ),
+    "stepsize is only defined for a uniform mesh; use spacing(Ωₕ, idx) on a non-uniform one",
+),
 )
 
 @inline function _check_point_bounds(
-    Ωₕ::AbstractMeshType, idx::Int, location::String="point"
+        Ωₕ::AbstractMeshType, idx::Int, location::String = "point"
 )
     @boundscheck 1 <= idx <= npoints(Ωₕ) || _throw_mesh_bounds_error(Ωₕ, idx)
     return nothing
@@ -230,8 +229,7 @@ end
 
 @inline _extract_linear_index(idx::Int) = idx
 @inline _extract_linear_index(idx::CartesianIndex{1}) = idx[1]
-@inline _spacing_generator(Ωₕ::AbstractMeshType, spacing_func) =
-    (spacing_func(Ωₕ, i) for i in 1:npoints(Ωₕ))
+@inline _spacing_generator(Ωₕ::AbstractMeshType, spacing_func) = (spacing_func(Ωₕ, i) for i in 1:npoints(Ωₕ))
 @inline _apply_hs_logic(value::T) where {T} = ifelse(iszero(value), one(T), value)
 
 #------------------------------------------------------------------------------------------#

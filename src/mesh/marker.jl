@@ -22,8 +22,8 @@ julia> boundary_symbol_to_cartesian(CartesianIndices((1:3, 1:4)))
 
 See also: [`boundary_symbol_to_dict`](@ref), [`set_markers!`](@ref).
 """
-@inline boundary_symbol_to_cartesian(indices::CartesianIndices{1}) =
-    (; :left => first(indices), :right => last(indices))
+@inline boundary_symbol_to_cartesian(indices::CartesianIndices{1}) = (;
+    :left => first(indices), :right => last(indices))
 
 function boundary_symbol_to_cartesian(indices::CartesianIndices{2})
     N, M = size(indices)
@@ -32,7 +32,7 @@ function boundary_symbol_to_cartesian(indices::CartesianIndices{2})
         :left => indices[1:1, 1:M],
         :right => indices[N:N, 1:M],
         :top => indices[1:N, M:M],
-        :bottom => indices[1:N, 1:1],
+        :bottom => indices[1:N, 1:1]
     )
 end
 
@@ -45,7 +45,7 @@ function boundary_symbol_to_cartesian(indices::CartesianIndices{3})
         :top => indices[1:N, 1:M, K:K],
         :bottom => indices[1:N, 1:M, 1:1],
         :front => indices[N:N, 1:M, 1:K],
-        :back => indices[1:1, 1:M, 1:K],
+        :back => indices[1:1, 1:M, 1:K]
     )
 end
 
@@ -67,7 +67,7 @@ Dictionary mapping semantic marker symbols to boolean indicator vectors across m
 
 For each label, a `BitVector` indicates whether the corresponding mesh point satisfies the marker.
 """
-const MeshMarkers = Dict{Symbol,BitVector}
+const MeshMarkers = Dict{Symbol, BitVector}
 
 """
     process_label_for_mesh!(npts::Integer, markers_mesh::MeshMarkers, set_labels) -> Nothing
@@ -146,7 +146,7 @@ Also seeds the default geometric markers `:boundary` and `:interior` if not alre
 
 See also: [`DomainMarkers`](@ref), [`MeshMarkers`](@ref).
 """
-function set_markers!(Ωₕ::AbstractMeshType, domain_markers; warn_marker_mismatch::Bool=true)
+function set_markers!(Ωₕ::AbstractMeshType, domain_markers; warn_marker_mismatch::Bool = true)
     mesh_markers = _init_mesh_markers(Ωₕ, domain_markers)
 
     _set_markers_symbols!(mesh_markers, symbols(domain_markers), Ωₕ)
@@ -184,7 +184,7 @@ unless `warn_marker_mismatch` is `false`, for a caller that has deliberately red
 label and does not want to be told so on every mesh built from it.
 """
 function _ensure_geometric_markers!(
-    mesh_markers::MeshMarkers, Ωₕ::AbstractMeshType; warn_marker_mismatch::Bool=true
+        mesh_markers::MeshMarkers, Ωₕ::AbstractMeshType; warn_marker_mismatch::Bool = true
 )
     linear_indices = LinearIndices(npoints(Ωₕ, Tuple))
     boundary_set = falses(npoints(Ωₕ))
@@ -200,10 +200,10 @@ function _ensure_geometric_markers!(
 end
 
 function _default_geometric_marker!(
-    mesh_markers::MeshMarkers,
-    label::Symbol,
-    geometric::BitVector,
-    warn_marker_mismatch::Bool,
+        mesh_markers::MeshMarkers,
+        label::Symbol,
+        geometric::BitVector,
+        warn_marker_mismatch::Bool
 )
     if haskey(mesh_markers, label)
         mesh_markers[label] == geometric ||
@@ -216,10 +216,10 @@ end
 
 @noinline function _warn_geometric_marker_mismatch(label::Symbol)
     @warn ":$label is defined here to mean something other than the mesh's own geometric " *
-        "$(label === :boundary ? "boundary" : "interior") (every boundary face for " *
-        ":boundary, its complement for :interior). restrict_to(:$label, ...) and " *
-        "innerₕ(...; markers = (:$label,)) will use this mesh's own definition, not the " *
-        "geometric one; give the custom label a different name to avoid the ambiguity."
+          "$(label === :boundary ? "boundary" : "interior") (every boundary face for " *
+          ":boundary, its complement for :interior). restrict_to(:$label, ...) and " *
+          "innerₕ(...; markers = (:$label,)) will use this mesh's own definition, not the " *
+          "geometric one; give the custom label a different name to avoid the ambiguity."
 end
 
 """
@@ -230,14 +230,14 @@ Utility function to update a boolean marker vector.
 Sets entries to `true` at the linear positions corresponding to `indices_to_mark`.
 """
 @inline function _mark_indices!(
-    marker_set::AbstractVector{Bool}, linear_indices, idx::CartesianIndex
+        marker_set::AbstractVector{Bool}, linear_indices, idx::CartesianIndex
 )
     @inbounds marker_set[linear_indices[idx]] = true
     return nothing
 end
 
 @inline function _mark_indices!(
-    marker_set::AbstractVector{Bool}, linear_indices, indices_to_mark
+        marker_set::AbstractVector{Bool}, linear_indices, indices_to_mark
 )
     @inbounds for idx in indices_to_mark
         marker_set[linear_indices[idx]] = true
@@ -261,7 +261,7 @@ function _set_markers_symbols!(mesh_markers::MeshMarkers, symbols, Ωₕ)
         if identifier isa Symbol
             idxs = boundary_lookup[identifier]
             _mark_indices!(target_marker_set, linear_indices, idxs)
-        elseif identifier isa Union{Set,Tuple}
+        elseif identifier isa Union{Set, Tuple}
             for id in identifier
                 idxs = boundary_lookup[id]
                 _mark_indices!(target_marker_set, linear_indices, idxs)

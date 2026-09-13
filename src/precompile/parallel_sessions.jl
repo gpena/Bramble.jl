@@ -23,8 +23,8 @@
 # Dirichlet/interpolation paths are deliberately left out, the same economy the assembly
 # sessions above already apply to 3D.
 function _pc_parallel_policy_session(Ω1, npts::Int)
-    be_par = backend(; policy=Parallel())
-    Ωₕ = mesh(Ω1, npts, true; backend=be_par)
+    be_par = backend(; policy = Parallel())
+    Ωₕ = mesh(Ω1, npts, true; backend = be_par)
     Wₕ = gridspace(Ωₕ)
 
     uₕ = Rₕ(Wₕ, x -> x + 1.0)
@@ -37,8 +37,8 @@ function _pc_parallel_policy_session(Ω1, npts::Int)
     # ran serially whatever the policy said. See the note in `_pc_space_session` for what
     # warming them is worth (about 3 ms on `Rₕ!`, nothing measurable on `avgₕ!`): most of
     # a masked first call is the caller's own closure, which no workload can reach.
-    Rₕ!(uₕ, x -> 2x; markers=(:left,))
-    avgₕ!(vₕ, x -> 2x; markers=(:left,))
+    Rₕ!(uₕ, x -> 2x; markers = (:left,))
+    avgₕ!(vₕ, x -> 2x; markers = (:left,))
 
     lf = form(Wₕ, v -> innerₕ(uₕ, v))
     b = zeros(eltype(Wₕ), ndofs(Wₕ))

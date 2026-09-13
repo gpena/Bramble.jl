@@ -43,10 +43,10 @@ point(Ωₕ, (10, 15))  # returns (x₁₀, y₁₅)
 
 See also: [`Mesh1D`](@ref), [`submeshes`](@ref), [`mesh`](@ref).
 """
-mutable struct MeshnD{D,BT<:Backend,CI<:CartesianIndices{D},SM<:Tuple,T} <:
+mutable struct MeshnD{D, BT <: Backend, CI <: CartesianIndices{D}, SM <: Tuple, T} <:
                AbstractMeshType{D}
     "the D-dimensional CartesianProduct (hyperrectangle) defining the geometric domain."
-    set::CartesianProduct{D,T}
+    set::CartesianProduct{D, T}
     "a dictionary mapping `Symbol` labels to `BitVector`s, marking grid points."
     markers::MeshMarkers
     "the `CartesianIndices` for the full D-dimensional grid, allowing for multi-dimensional indexing."
@@ -78,7 +78,7 @@ Generates a tuple of `D` independent [`Mesh1D`](@ref) objects corresponding to e
     # 2. `domain(...)` wraps it in a Domain object.
     # 3. `mesh(...)` creates the corresponding Mesh1D for that dimension.
     return ntuple(
-        i -> mesh(domain(projection(Ω, i)), npts[i], unif[i], backend=backend), Val(dim(Ω))
+        i -> mesh(domain(projection(Ω, i)), npts[i], unif[i], backend = backend), Val(dim(Ω))
     )
 end
 
@@ -98,11 +98,11 @@ dimensions (degenerate single-point intervals) are forced to a point count of 1.
   - `backend`: Linear algebra [`Backend`](@ref).
 """
 function _mesh(
-    Ω::Domain,
-    npts::NTuple{D,Int},
-    unif::NTuple{D,Bool},
-    backend;
-    warn_marker_mismatch::Bool=true,
+        Ω::Domain,
+        npts::NTuple{D, Int},
+        unif::NTuple{D, Bool},
+        backend;
+        warn_marker_mismatch::Bool = true
 ) where {D}
     # Ensure the dimension of the domain matches the length of the input tuples.
     dim(Ω) == D || _throw_domain_dim_mismatch(dim(Ω), D)
@@ -128,8 +128,8 @@ function _mesh(
     return output_mesh
 end
 
-@inline eltype(::MeshnD{D,BT}) where {D,BT} = eltype(BT)
-@inline eltype(::Type{<:MeshnD{D,BT}}) where {D,BT} = eltype(BT)
+@inline eltype(::MeshnD{D, BT}) where {D, BT} = eltype(BT)
+@inline eltype(::Type{<:MeshnD{D, BT}}) where {D, BT} = eltype(BT)
 
 """
     (Ωₕ::MeshnD)(i::Integer) -> Mesh1D
@@ -159,8 +159,8 @@ end
 macro generate_mesh_ntuple_func(fname)
     return esc(
         quote
-            @inline $fname(Ωₕ::MeshnD{D}) where {D} = ntuple(i -> $fname(Ωₕ(i)), Val(D))
-        end
+        @inline $fname(Ωₕ::MeshnD{D}) where {D} = ntuple(i -> $fname(Ωₕ(i)), Val(D))
+    end
     )
 end
 
@@ -168,9 +168,8 @@ end
 macro generate_mesh_ntuple_func_with_idx(fname)
     return esc(
         quote
-            @inline $fname(Ωₕ::MeshnD{D}, idx) where {D} =
-                ntuple(i -> $fname(Ωₕ(i), idx[i]), Val(D))
-        end,
+        @inline $fname(Ωₕ::MeshnD{D}, idx) where {D} = ntuple(i -> $fname(Ωₕ(i), idx[i]), Val(D))
+    end,
     )
 end
 
@@ -201,8 +200,7 @@ See also: [`half_spacings`](@ref), [`cell_measures`](@ref).
 @inline spacing(Ωₕ::MeshnD, idx, dim::Int) = spacing(Ωₕ(dim), idx[dim])
 @inline forward_spacing(Ωₕ::MeshnD, idx, dim::Int) = forward_spacing(Ωₕ(dim), idx[dim])
 
-@inline half_spacing(Ωₕ::MeshnD{D}, idx) where {D} =
-    ntuple(i -> _apply_hs_logic(half_spacing(Ωₕ(i), idx[i])), Val(D))
+@inline half_spacing(Ωₕ::MeshnD{D}, idx) where {D} = ntuple(i -> _apply_hs_logic(half_spacing(Ωₕ(i), idx[i])), Val(D))
 
 """
     cell_measures(Ωₕ::MeshnD{D}) -> NTuple{D, AbstractVector}
@@ -213,8 +211,7 @@ individual cell is the product of its per-axis widths; see [`cell_measure`](@ref
 @inline cell_measures(Ωₕ::MeshnD{D}) where {D} = ntuple(i -> cell_measures(Ωₕ(i)), Val(D))
 
 @inline npoints(Ωₕ::MeshnD) = prod(npoints(Ωₕ, Tuple))
-@inline npoints(Ωₕ::MeshnD{D}, ::Type{Tuple}) where {D} =
-    ntuple(i -> npoints(Ωₕ(i)), Val(D))
+@inline npoints(Ωₕ::MeshnD{D}, ::Type{Tuple}) where {D} = ntuple(i -> npoints(Ωₕ(i)), Val(D))
 
 # The diagonal of the largest cell. On a tensor-product mesh the spacing along axis d does
 # not depend on the other coordinates, and `hypot` is increasing in each argument, so the
@@ -308,14 +305,14 @@ function Base.show(io::IO, Ωₕ::MeshnD{D}) where {D}
 end
 
 function Base.show(
-    io::IO, ::MIME"text/plain", Ωₕ::MeshnD{D,BT,CI,SM,T}
-) where {D,BT,CI,SM,T}
+        io::IO, ::MIME"text/plain", Ωₕ::MeshnD{D, BT, CI, SM, T}
+) where {D, BT, CI, SM, T}
     return show_block(io) do io
         return _show_meshnd_detailed(io, Ωₕ)
     end
 end
 
-function _show_meshnd_detailed(io::IO, Ωₕ::MeshnD{D,BT,CI,SM,T}) where {D,BT,CI,SM,T}
+function _show_meshnd_detailed(io::IO, Ωₕ::MeshnD{D, BT, CI, SM, T}) where {D, BT, CI, SM, T}
     pp = PrettyPrinter(io)
 
     npts_tuple = npoints(Ωₕ, Tuple)

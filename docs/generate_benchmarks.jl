@@ -10,14 +10,14 @@ _next_bench_div_id() = "bench_chart_$(_BENCH_CHART_COUNTER[] += 1)"
 
 function _get_commit_info(commit_hash::AbstractString, path::AbstractString)
     try
-        msg = readchomp(pipeline(`git log -1 --format="%s" $commit_hash`; stderr=devnull))
+        msg = readchomp(pipeline(`git log -1 --format="%s" $commit_hash`; stderr = devnull))
         ct = parse(
             Int,
-            readchomp(pipeline(`git log -1 --format="%ct" $commit_hash`; stderr=devnull)),
+            readchomp(pipeline(`git log -1 --format="%ct" $commit_hash`; stderr = devnull))
         )
-        return (message=msg, time=ct)
+        return (message = msg, time = ct)
     catch
-        return (message="", time=round(Int, mtime(path)))
+        return (message = "", time = round(Int, mtime(path)))
     end
 end
 
@@ -27,7 +27,7 @@ end
 # or for a commit no longer reachable.
 function _get_pkg_version(commit_hash::AbstractString)
     try
-        toml = readchomp(pipeline(`git show $(commit_hash):Project.toml`; stderr=devnull))
+        toml = readchomp(pipeline(`git show $(commit_hash):Project.toml`; stderr = devnull))
         m = match(r"^version\s*=\s*\"([^\"]+)\""m, toml)
         return m !== nothing ? m.captures[1] : "unknown"
     catch
@@ -37,13 +37,13 @@ end
 
 function _format_time(t_ns::Real)
     if t_ns < 1_000
-        return string(round(t_ns; digits=1), " ns")
+        return string(round(t_ns; digits = 1), " ns")
     elseif t_ns < 1_000_000
-        return string(round(t_ns / 1_000; digits=1), " μs")
+        return string(round(t_ns / 1_000; digits = 1), " μs")
     elseif t_ns < 1_000_000_000
-        return string(round(t_ns / 1_000_000; digits=2), " ms")
+        return string(round(t_ns / 1_000_000; digits = 2), " ms")
     else
-        return string(round(t_ns / 1_000_000_000; digits=2), " s")
+        return string(round(t_ns / 1_000_000_000; digits = 2), " s")
     end
 end
 
@@ -53,11 +53,11 @@ function _format_memory(b::Real)
     elseif b < 1024
         return string(round(Int, b), " B")
     elseif b < 1024^2
-        return string(round(b / 1024; digits=1), " KiB")
+        return string(round(b / 1024; digits = 1), " KiB")
     elseif b < 1024^3
-        return string(round(b / (1024^2); digits=2), " MiB")
+        return string(round(b / (1024^2); digits = 2), " MiB")
     else
-        return string(round(b / (1024^3); digits=2), " GiB")
+        return string(round(b / (1024^3); digits = 2), " GiB")
     end
 end
 
@@ -83,11 +83,11 @@ const _BENCH_PALETTE = [
 const _BENCH_GROUP_SPLIT_TAGS = Dict(
     "restriction" => ["1D", "2D", "3D"],
     "forms" => ["1D", "2D", "3D"],
-    "precision 1D" => ["Float32", "Float64", "Double64"],
+    "precision 1D" => ["Float32", "Float64", "Double64"]
 )
 
 function _midpoint_clusters(bnames)
-    return (mid=cld(length(bnames), 2); [bnames[1:mid], bnames[(mid + 1):end]])
+    return (mid = cld(length(bnames), 2); [bnames[1:mid], bnames[(mid + 1):end]])
 end
 
 # Bucket `bnames` by whichever configured tag each one contains, in tag order, dropping
@@ -130,21 +130,21 @@ const _BENCH_GROUP_BLURBS = Dict(
     "construction" => "Mesh and grid-space construction, including the quadrature weights `gridspace` builds internally.",
     "startup & latency" => "Time to first `using Bramble` and first operator call — compilation latency, not steady-state performance.",
     "forms" => "Linear and bilinear form assembly, across 1D/2D and the `Serial()`/`Parallel()` backends.",
-    "precision 1D" => "The same 1D workload — restriction, assembly, inner product — repeated in `Float32`, `Float64`, and `Double64`, split by precision since `Double64` (software arithmetic) is an order of magnitude slower.",
+    "precision 1D" => "The same 1D workload — restriction, assembly, inner product — repeated in `Float32`, `Float64`, and `Double64`, split by precision since `Double64` (software arithmetic) is an order of magnitude slower."
 )
 
 function _bench_group_blurb(gname, n_series, n_runs)
     return get(
         _BENCH_GROUP_BLURBS,
         gname,
-        "$n_series benchmark$(n_series == 1 ? "" : "s") in this group, across $n_runs recorded releases.",
+        "$n_series benchmark$(n_series == 1 ? "" : "s") in this group, across $n_runs recorded releases."
     )
 end
 
 # Single run: a horizontal bar per benchmark. No trend to show, so no head-script emission
 # here — the caller (generate_benchmarks_markdown) emits plotlyjs_head() once for the page.
 function _render_plotly_barchart_single(
-    gname, sorted_bnames, runs, max_time_ns, unit_label, unit_divisor
+        gname, sorted_bnames, runs, max_time_ns, unit_label, unit_divisor
 )
     r = runs[1]
     div_id = _next_bench_div_id()
@@ -234,14 +234,14 @@ function _thread_boundaries(runs)
         push!(
             bounds,
             (
-                at=_run_xlabel(runs[i]),
+                at = _run_xlabel(runs[i]),
                 # Half a category to the left of `runs[i]`, so the rule falls between the
                 # two releases instead of striking through the first one recorded at the
                 # new thread count. A category axis takes numeric x as a 0-based index.
-                x=i - 1.5,
-                from=runs[i - 1].threads,
-                to=runs[i].threads,
-            ),
+                x = i - 1.5,
+                from = runs[i - 1].threads,
+                to = runs[i].threads
+            )
         )
     end
     return bounds
@@ -253,19 +253,15 @@ end
 function _thread_boundary_js(runs)
     bounds = _thread_boundaries(runs)
     isempty(bounds) && return ("[]", "[]")
-    shapes = [
-        """{type:'line',xref:'x',yref:'paper',x0:$(b.x),x1:$(b.x),y0:0,y1:1,""" *
-        """layer:'below',line:{color:theme.grid,width:1.5,dash:'dot'}}""" for b in bounds
-    ]
-    notes = [
-        """{xref:'x',yref:'paper',x:$(b.x),y:1.06,text:'$(b.from)→$(b.to) threads',""" *
-        """showarrow:false,font:{color:theme.text,size:9},xanchor:'left'}""" for b in bounds
-    ]
+    shapes = ["""{type:'line',xref:'x',yref:'paper',x0:$(b.x),x1:$(b.x),y0:0,y1:1,""" *
+              """layer:'below',line:{color:theme.grid,width:1.5,dash:'dot'}}""" for b in bounds]
+    notes = ["""{xref:'x',yref:'paper',x:$(b.x),y:1.06,text:'$(b.from)→$(b.to) threads',""" *
+             """showarrow:false,font:{color:theme.text,size:9},xanchor:'left'}""" for b in bounds]
     return ("[" * join(shapes, ",") * "]", "[" * join(notes, ",") * "]")
 end
 
 function _render_one_trend_plot(
-    gname, bnames_subset, runs, use_normalized, unit_label, unit_divisor
+        gname, bnames_subset, runs, use_normalized, unit_label, unit_divisor
 )
     div_id = _next_bench_div_id()
     all_labels_js = "[" * join(("\"$(_run_xlabel(r))\"" for r in runs), ",") * "]"
@@ -285,11 +281,11 @@ function _render_one_trend_plot(
                     "$(_format_time(t_ns)) (" *
                     (
                         if t_ns == t0
-                            "baseline"
-                        else
-                            (t_ns < t0 ? "-" : "+") *
-                            "$(round(abs(t_ns / t0 - 1) * 100, digits = 1))%"
-                        end
+                        "baseline"
+                    else
+                        (t_ns < t0 ? "-" : "+") *
+                        "$(round(abs(t_ns / t0 - 1) * 100, digits = 1))%"
+                    end
                     ) *
                     ")"
                 else
@@ -299,7 +295,7 @@ function _render_one_trend_plot(
                 push!(ys, "$y_val")
                 push!(
                     customdata,
-                    """["$(r.julia)","$delta_str",$(allocs(m)),"$(_format_memory(memory(m)))","$(r.threads)"]""",
+                    """["$(r.julia)","$delta_str",$(allocs(m)),"$(_format_memory(memory(m)))","$(r.threads)"]"""
                 )
             end
             # A run missing this benchmark contributes no point at all, rather than a `null`
@@ -322,7 +318,7 @@ function _render_one_trend_plot(
     line: { color: "$color", width: 2, shape: 'spline', smoothing: 0.3 },
     marker: { color: "$color", size: 7 },
     hovertemplate: '%{x} (Julia %{customdata[0]}, %{customdata[4]} thread(s))<br>$bname: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
-  }""",
+  }"""
         )
     end
 
@@ -341,7 +337,7 @@ function _render_one_trend_plot(
     type: 'scatter',
     line: { color: 'rgba(128,128,128,0.7)', dash: 'dash', width: 1.5 },
     hoverinfo: 'skip',
-  }""",
+  }"""
         )
     end
 
@@ -391,7 +387,7 @@ function _render_one_trend_plot(
 end
 
 function _render_trend_chart(
-    gname, sorted_bnames, runs, max_time_ns, min_time_ns, unit_label, unit_divisor
+        gname, sorted_bnames, runs, max_time_ns, min_time_ns, unit_label, unit_divisor
 )
     num_runs = length(runs)
 
@@ -417,11 +413,9 @@ function _render_trend_chart(
     # labels on the x-axis has no room to lay out cleanly.
     if length(sorted_bnames) > length(_BENCH_PALETTE)
         clusters = _bench_group_clusters(gname, sorted_bnames)
-        panels = [
-            _render_one_trend_plot(
-                gname, names, runs, use_normalized, unit_label, unit_divisor
-            ) for names in clusters
-        ]
+        panels = [_render_one_trend_plot(
+                      gname, names, runs, use_normalized, unit_label, unit_divisor
+                  ) for names in clusters]
         divs = join(("<div style=\"width:100%;\">$p</div>" for p in panels))
         return """
         <div style="display:flex; flex-direction:column; gap:1.5rem; width:100%;">
@@ -436,8 +430,8 @@ function _render_trend_chart(
 end
 
 function generate_benchmarks_markdown(
-    benchmark_dir=normpath(joinpath(@__DIR__, "..", "benchmark", "baselines")),
-    output_path=normpath(joinpath(@__DIR__, "src", "benchmarks.md")),
+        benchmark_dir = normpath(joinpath(@__DIR__, "..", "benchmark", "baselines")),
+        output_path = normpath(joinpath(@__DIR__, "src", "benchmarks.md"))
 )
     json_files = String[]
     for dir in (benchmark_dir, normpath(joinpath(@__DIR__, "..", "benchmark")))
@@ -456,11 +450,11 @@ function generate_benchmarks_markdown(
     println(io)
     println(
         io,
-        "Bramble tracks memory allocations and performance regressions with a dedicated regression suite in `benchmark/benchmarks.jl`.",
+        "Bramble tracks memory allocations and performance regressions with a dedicated regression suite in `benchmark/benchmarks.jl`."
     )
     println(
         io,
-        "All measurements below are run on **1,000,000 grid points** per dimension setup (e.g. \$1000 \\times 1000\$ in 2D, \$100 \\times 100 \\times 100\$ in 3D).",
+        "All measurements below are run on **1,000,000 grid points** per dimension setup (e.g. \$1000 \\times 1000\$ in 2D, \$100 \\times 100 \\times 100\$ in 3D)."
     )
     println(io)
 
@@ -471,7 +465,7 @@ function generate_benchmarks_markdown(
         println(io, "    ```bash")
         println(
             io,
-            "    julia --project=benchmark benchmark/benchmarks.jl --save benchmark/baselines/baseline_\$(git rev-parse --short HEAD).json",
+            "    julia --project=benchmark benchmark/benchmarks.jl --save benchmark/baselines/baseline_\$(git rev-parse --short HEAD).json"
         )
         println(io, "    ```")
         open(output_path, "w") do f
@@ -506,22 +500,22 @@ function generate_benchmarks_markdown(
         push!(
             runs,
             (
-                commit=commit,
-                message=info.message,
-                time=info.time,
-                julia=julia_ver,
-                version=pkg_ver,
+                commit = commit,
+                message = info.message,
+                time = info.time,
+                julia = julia_ver,
+                version = pkg_ver,
                 # The thread count a run was recorded at. `nothing` for baselines saved
                 # before benchmarks.jl tagged it; those read 0 allocations for `Rₕ!`, so
                 # they were single-threaded (see the note in benchmarks.jl's `main`).
-                threads=threads === nothing ? "1" : threads,
-                data=data,
-                path=path,
-            ),
+                threads = threads === nothing ? "1" : threads,
+                data = data,
+                path = path
+            )
         )
     end
     # Order runs chronologically by commit timestamp
-    sort!(runs; by=r -> r.time)
+    sort!(runs; by = r -> r.time)
 
     # Collect all groups dynamically
     group_order = [
@@ -532,7 +526,7 @@ function generate_benchmarks_markdown(
         "restriction",
         "composite",
         "construction",
-        "startup & latency",
+        "startup & latency"
     ]
     all_groups = Set{String}()
     for r in runs
@@ -550,7 +544,7 @@ function generate_benchmarks_markdown(
     if length(runs) >= 2
         println(
             io,
-            "Each chart below tracks one benchmark group across all **$(length(runs))** recorded baselines, in chronological release order, against the earliest run (v$(runs[1].version)) as the reference. Where a group's operations span more than a 20× range, the y-axis shows time relative to that reference instead of absolute time, so a cheap operation isn't flattened onto the same line as an expensive one. Hover any point for its exact time, Julia version, thread count, allocation count, and memory.",
+            "Each chart below tracks one benchmark group across all **$(length(runs))** recorded baselines, in chronological release order, against the earliest run (v$(runs[1].version)) as the reference. Where a group's operations span more than a 20× range, the y-axis shows time relative to that reference instead of absolute time, so a cheap operation isn't flattened onto the same line as an expensive one. Hover any point for its exact time, Julia version, thread count, allocation count, and memory."
         )
         # Guarded on the data: the note disappears once every baseline shares a thread
         # count, so it cannot outlive the discontinuity it describes.
@@ -563,13 +557,13 @@ function generate_benchmarks_markdown(
             println(io, "!!! note \"Thread count changes at $(b.at)\"")
             println(
                 io,
-                "    Baselines before $(b.at) were recorded with $(_threads_phrase(b.from)); from $(b.at) onward, $(_threads_phrase(b.to)). Entries on the `Parallel()` backend are not comparable across that line, and the charts mark it with a dotted rule: at one thread the threaded code path runs its serial branch, so those entries measured task-spawn overhead rather than parallelism. Serial entries are unaffected.",
+                "    Baselines before $(b.at) were recorded with $(_threads_phrase(b.from)); from $(b.at) onward, $(_threads_phrase(b.to)). Entries on the `Parallel()` backend are not comparable across that line, and the charts mark it with a dotted rule: at one thread the threaded code path runs its serial branch, so those entries measured task-spawn overhead rather than parallelism. Serial entries are unaffected."
             )
         end
     else
         println(
             io,
-            "Each chart below shows one benchmark group's timings and allocations for the single recorded baseline. Hover a bar for its exact time.",
+            "Each chart below shows one benchmark group's timings and allocations for the single recorded baseline. Hover a bar for its exact time."
         )
     end
     println(io)
@@ -630,13 +624,13 @@ function generate_benchmarks_markdown(
     println(io, "```bash")
     println(
         io,
-        "julia --project=benchmark benchmark/benchmarks.jl --save benchmark/baselines/baseline_\$(git rev-parse --short HEAD).json",
+        "julia --project=benchmark benchmark/benchmarks.jl --save benchmark/baselines/baseline_\$(git rev-parse --short HEAD).json"
     )
     println(io, "```")
     println(io)
     println(
         io,
-        "Rebuilding the documentation (`julia -e 'using Pkg; Pkg.activate(\"docs\"); include(\"docs/make.jl\")'`) will automatically discover all `baseline_*.json` files and append new comparison columns, delta calculations, and charts.",
+        "Rebuilding the documentation (`julia -e 'using Pkg; Pkg.activate(\"docs\"); include(\"docs/make.jl\")'`) will automatically discover all `baseline_*.json` files and append new comparison columns, delta calculations, and charts."
     )
 
     open(output_path, "w") do f

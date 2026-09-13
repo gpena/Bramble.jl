@@ -24,7 +24,7 @@ using Bramble: diff₋ₓ, diff₋ᵧ, diff₋₂, diff₊ₓ, diff₊ᵧ, diff�
         ("D₊", D₊ₓ, D₊ᵧ, D₊₂),
         ("jump", jumpₓ, jumpᵧ, jump₂),
         ("M₋", M₋ₓ, M₋ᵧ, M₋₂),
-        ("M₊", M₊ₓ, M₊ᵧ, M₊₂),
+        ("M₊", M₊ₓ, M₊ᵧ, M₊₂)
     )
 
     meshes = (
@@ -32,17 +32,17 @@ using Bramble: diff₋ₓ, diff₋ᵧ, diff₋₂, diff₊ₓ, diff₊ᵧ, diff�
         (
             "2D",
             mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 6), (true, false)),
-            2,
+            2
         ),
         (
             "3D",
             mesh(
                 domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
                 (3, 4, 5),
-                (true, false, true),
+                (true, false, true)
             ),
-            3,
-        ),
+            3
+        )
     )
 
     # A distinct, non-symmetric function per component, so a component being written into
@@ -79,6 +79,7 @@ using Bramble: diff₋ₓ, diff₋ᵧ, diff₋₂, diff₊ₓ, diff₊ᵧ, diff�
                     @test all(parent(components(uₕ)[k]) == parent(scalars[k]) for k in 1:NC)
 
                     for (name, ops...) in scalar_ops, d in 1:D
+
                         op = ops[d]
                         rₕ = op(uₕ)
                         @test length(parent(rₕ)) == length(parent(uₕ))
@@ -104,11 +105,12 @@ using Bramble: diff₋ₓ, diff₋ᵧ, diff₋₂, diff₊ₓ, diff₊ᵧ, diff�
             (∇₊ₕ, (D₊ₓ, D₊ᵧ)),
             (diff₋ₕ, (diff₋ₓ, diff₋ᵧ)),
             (jumpₕ, (jumpₓ, jumpᵧ)),
-            (M₋ₕ, (M₋ₓ, M₋ᵧ)),
+            (M₋ₕ, (M₋ₓ, M₋ᵧ))
         )
             g = vec_op(uₕ)
             @test length(g) == 2
             for d in 1:2, k in 1:2
+
                 @test parent(components(g[d])[k]) == parent(scalar_ops_pair[d](scalars[k]))
             end
         end

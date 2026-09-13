@@ -59,8 +59,8 @@ function _pc_space_session(Ωₕ, f, g, marker::Symbol)
     # The other ~40 ms is irreducible for the reason given above this function: `Rₕ!` and
     # `avgₕ!` specialize on the caller's function type, and no workload can warm a closure
     # it does not itself write. Kept because it is nearly free, not because it is a fix.
-    Rₕ!(uₕ, g; markers=(marker,))
-    avgₕ!(vₕ, g; markers=(marker,))
+    Rₕ!(uₕ, g; markers = (marker,))
+    avgₕ!(vₕ, g; markers = (marker,))
 
     Vₕ = gridspace(Ωₕ, Val(2))
     mesh_type(Vₕ)

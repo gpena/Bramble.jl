@@ -43,7 +43,7 @@ using Meshes, MakieCore
         Ω3 = Bramble.mesh(
             Bramble.domain(Bramble.box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
             (3, 3, 3),
-            (true, true, true),
+            (true, true, true)
         )
         @test (Meshes.viz(Ω3); true)
     end

@@ -1,18 +1,18 @@
 using Test
 using Bramble
 using Bramble:
-    IndexedTrialFunction,
-    IndexedTestFunction,
-    TrialFunction,
-    TestFunction,
-    IdentityOperator,
-    ZeroOperator,
-    GridFunctionScale,
-    shift_op,
-    source_function,
-    trial_component_or_nothing,
-    test_component_or_nothing,
-    components
+               IndexedTrialFunction,
+               IndexedTestFunction,
+               TrialFunction,
+               TestFunction,
+               IdentityOperator,
+               ZeroOperator,
+               GridFunctionScale,
+               shift_op,
+               source_function,
+               trial_component_or_nothing,
+               test_component_or_nothing,
+               components
 
 # `component(op, i)` (the mechanism behind `u(1)`, `D₋ₓ(v)(2)`, and the composite
 # `innerₕ(uₕ, r)` shorthand alike) rebuilds a symbolic tree with its trial/test leaves
@@ -80,19 +80,17 @@ using Bramble:
 
         for (short, long) in (
             (
-                v -> inner₊(D₋ₓ(uv), D₋ₓ(v)),
-                v ->
-                    inner₊(D₋ₓ(uv(1)), D₋ₓ(v(1))) +
-                    inner₊(D₋ₓ(uv(2)), D₋ₓ(v(2))) +
-                    inner₊(D₋ₓ(uv(3)), D₋ₓ(v(3))),
-            ),
+            v -> inner₊(D₋ₓ(uv), D₋ₓ(v)),
+            v -> inner₊(D₋ₓ(uv(1)), D₋ₓ(v(1))) +
+                 inner₊(D₋ₓ(uv(2)), D₋ₓ(v(2))) +
+                 inner₊(D₋ₓ(uv(3)), D₋ₓ(v(3)))
+        ),
             (
-                v -> inner₊ᵧ(uv, v + M₋ᵧ(v)),
-                v ->
-                    inner₊ᵧ(uv(1), v(1) + M₋ᵧ(v(1))) +
-                    inner₊ᵧ(uv(2), v(2) + M₋ᵧ(v(2))) +
-                    inner₊ᵧ(uv(3), v(3) + M₋ᵧ(v(3))),
-            ),
+            v -> inner₊ᵧ(uv, v + M₋ᵧ(v)),
+            v -> inner₊ᵧ(uv(1), v(1) + M₋ᵧ(v(1))) +
+                 inner₊ᵧ(uv(2), v(2) + M₋ᵧ(v(2))) +
+                 inner₊ᵧ(uv(3), v(3) + M₋ᵧ(v(3)))
+        )
         )
             b = assemble(form(Vf, short))
             reference = assemble(form(Vf, long))

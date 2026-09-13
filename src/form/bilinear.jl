@@ -25,7 +25,7 @@ is visited in.
 
 See also: [`RecordSink`](@ref), [`ReplaySink`](@ref).
 """
-const NzvalSegment = Tuple{Vector{Int},Vector{Int}}
+const NzvalSegment = Tuple{Vector{Int}, Vector{Int}}
 
 """
     DiagonalSegment{D}
@@ -59,7 +59,7 @@ struct DiagonalSegment{D}
     base::Vector{Int}
     stride::Vector{Int}
     P::Int
-    interior::CartesianIndices{D,NTuple{D,UnitRange{Int}}}
+    interior::CartesianIndices{D, NTuple{D, UnitRange{Int}}}
     boundary::NzvalSegment
 end
 
@@ -71,7 +71,7 @@ Either recorded shape a (term, block) can cache, for a `D`-dimensional form: a f
 two-concrete-member union per `D` -- see [`DiagonalSegment`](@ref) -- rather than leaving
 `D` to vary, so `Vector{AnySegment{D}}` stores unboxed.
 """
-const AnySegment{D} = Union{NzvalSegment,DiagonalSegment{D}}
+const AnySegment{D} = Union{NzvalSegment, DiagonalSegment{D}}
 
 # One `BilinearForm`'s nzval-position cache: valid only for the exact matrix object last
 # assembled into (`A === cache.A`), one `AnySegment{D}` per (term, block) the serial assembly
@@ -82,7 +82,7 @@ const AnySegment{D} = Union{NzvalSegment,DiagonalSegment{D}}
 # it, `segments`'s eltype would be the unparametrized (non-concrete) `AnySegment`, and every
 # push/read would box (see [`DiagonalSegment`](@ref)).
 mutable struct _AssemblyCache{D}
-    A::Union{Nothing,SparseMatrixCSC}
+    A::Union{Nothing, SparseMatrixCSC}
     ast::Any
     segments::Vector{AnySegment{D}}
 end
@@ -114,7 +114,7 @@ a = form(Wₕ, Wₕ, (u, v) -> innerₕ(β * D₋ₓ(u), D₋ₓ(v)))
 assemble!(A, a) # zero allocations, evaluates with β = 3.0
 ```
 """
-struct BilinearForm{D,TrialSpace,TestSpace,AST}
+struct BilinearForm{D, TrialSpace, TestSpace, AST}
     trial_space::TrialSpace
     test_space::TestSpace
     ast::AST
@@ -167,7 +167,7 @@ function form(Wₕ, Vₕ, f)
     raw_ast = f(TrialFunction{D}(), TestFunction{D}())
     _validate_form_expression(raw_ast, Val(D))
     ast = simplify_ast(resolve_ast(raw_ast))
-    return BilinearForm{D,typeof(Wₕ),typeof(Vₕ),typeof(ast)}(
+    return BilinearForm{D, typeof(Wₕ), typeof(Vₕ), typeof(ast)}(
         Wₕ, Vₕ, ast, _AssemblyCache{D}()
     )
 end
@@ -182,11 +182,11 @@ end
 @noinline function _throw_cross_mesh_block(term, Ωu, Ωv)
     throw(
         ArgumentError(
-            "a bilinear term coupling two leaves over different meshes has no assembly: the " *
-            "trial leaf has $(npoints(Ωu, Tuple)) points and the test leaf $(npoints(Ωv, Tuple)), " *
-            "so an index on one names no point on the other. Got $(typeof(term)). Couple leaves " *
-            "that share a mesh, or wrap the trial function in an interpolation operator: `πₕ(Wtrial, u)`.",
-        ),
+        "a bilinear term coupling two leaves over different meshes has no assembly: the " *
+        "trial leaf has $(npoints(Ωu, Tuple)) points and the test leaf $(npoints(Ωv, Tuple)), " *
+        "so an index on one names no point on the other. Got $(typeof(term)). Couple leaves " *
+        "that share a mesh, or wrap the trial function in an interpolation operator: `πₕ(Wtrial, u)`.",
+    ),
     )
 end
 
@@ -211,27 +211,26 @@ end
 @noinline function _throw_interp_space_mismatch(term, Ωsrc, Ωu)
     throw(
         ArgumentError(
-            "the interpolation operator in a bilinear term names a space that is not the trial " *
-            "function's: `πₕ` was given a space over a mesh of $(npoints(Ωsrc, Tuple)) points, " *
-            "while the trial leaf this term assembles into has $(npoints(Ωu, Tuple)). Got " *
-            "$(typeof(term)). `πₕ(Wsrc, u)` interpolates from the space the trial function " *
-            "lives on, so `Wsrc` must be that space.",
-        ),
+        "the interpolation operator in a bilinear term names a space that is not the trial " *
+        "function's: `πₕ` was given a space over a mesh of $(npoints(Ωsrc, Tuple)) points, " *
+        "while the trial leaf this term assembles into has $(npoints(Ωu, Tuple)). Got " *
+        "$(typeof(term)). `πₕ(Wsrc, u)` interpolates from the space the trial function " *
+        "lives on, so `Wsrc` must be that space.",
+    ),
     )
 end
 
-@inline _check_block_meshes(op::OperatorAdd, trial_leaf, test_leaf) =
-    _visit_operator_add1(_check_block_meshes, op, trial_leaf, test_leaf)
+@inline _check_block_meshes(op::OperatorAdd, trial_leaf, test_leaf) = _visit_operator_add1(_check_block_meshes, op, trial_leaf, test_leaf)
 
 # --- Assembly implementations ----------------------------------------------------- #
 
 function apply_dirichlet_labels!(
-    A::AbstractMatrix, form::BilinearForm, dirichlet_labels, dirichlet_components=nothing
+        A::AbstractMatrix, form::BilinearForm, dirichlet_labels, dirichlet_components = nothing
 )
     if dirichlet_labels !== nothing
         if dirichlet_labels isa Symbol
             dirichlet_bc!(
-                A, test_space(form), dirichlet_labels; components=dirichlet_components
+                A, test_space(form), dirichlet_labels; components = dirichlet_components
             )
         elseif dirichlet_labels isa Tuple
             if !isempty(dirichlet_labels)
@@ -239,7 +238,7 @@ function apply_dirichlet_labels!(
                     A,
                     test_space(form),
                     dirichlet_labels...;
-                    components=dirichlet_components,
+                    components = dirichlet_components
                 )
             end
         end
@@ -272,7 +271,7 @@ boundary conditions to the matrix -- a label `Symbol`, a `Tuple` of labels, a `l
 form. `dirichlet_components` restricts which leaf components of a composite trial space
 they bind to (see [`dirichlet_bc!`](@ref)).
 """
-function assemble(form::BilinearForm; dirichlet=nothing, dirichlet_components=nothing)
+function assemble(form::BilinearForm; dirichlet = nothing, dirichlet_components = nothing)
     A = allocate_system_matrix(form, form.ast)
     _assemble_bilinear!(A, form, form.ast, dirichlet, dirichlet_components)
     return A
@@ -295,11 +294,11 @@ ignoring the backend's policy.
 - Dynamic scalars: plain numbers work directly for constant scalars. To update a scalar dynamically across loop iterations, wrap it in a `Ref(val)` (e.g. `β = Ref(1.0); a = form(Wₕ, Wₕ, (u, v) -> innerₕ(β * D₋ₓ(u), D₋ₓ(v)))`). Mutating `β[] = new_val` evaluates live during assembly with 0 allocations.
 """
 function assemble!(
-    A::SparseMatrixCSC,
-    form::BilinearForm;
-    dirichlet=nothing,
-    dirichlet_components=nothing,
-    ast=nothing,
+        A::SparseMatrixCSC,
+        form::BilinearForm;
+        dirichlet = nothing,
+        dirichlet_components = nothing,
+        ast = nothing
 )
     resolved_ast = ast === nothing ? form.ast : (_warn_ast_keyword(:assemble!); ast)
     return _assemble_bilinear!(A, form, resolved_ast, dirichlet, dirichlet_components)
@@ -309,7 +308,7 @@ end
 # resolved and already past the deprecation check, so neither public entry point warns twice
 # calling into the other.
 function _assemble_bilinear!(
-    A::SparseMatrixCSC, form::BilinearForm, ast, dirichlet, dirichlet_components
+        A::SparseMatrixCSC, form::BilinearForm, ast, dirichlet, dirichlet_components
 )
     dirichlet_labels, _ = _normalize_dirichlet(dirichlet)
     fill!(nonzeros(A), zero(eltype(nonzeros(A))))
@@ -336,9 +335,8 @@ not apply `dirichlet_labels`.
 
 Colouring on the test side ensures thread safety when updating stored matrix values concurrently.
 """
-function assemble_parallel!(A::SparseMatrixCSC, form::BilinearForm, ast=nothing)
-    resolved_ast =
-        ast === nothing ? form.ast : (_warn_ast_keyword(:assemble_parallel!); ast)
+function assemble_parallel!(A::SparseMatrixCSC, form::BilinearForm, ast = nothing)
+    resolved_ast = ast === nothing ? form.ast : (_warn_ast_keyword(:assemble_parallel!); ast)
     fill!(nonzeros(A), zero(eltype(nonzeros(A))))
 
     _assemble_bilinear_parallel_core!(A, form.trial_space, form.test_space, resolved_ast)
@@ -368,20 +366,20 @@ is the one-call equivalent of assembling `a` and `l` separately and calling
 [`symmetrize!`](@ref) by hand.
 """
 function assemble(
-    a::BilinearForm,
-    l::LinearForm;
-    dirichlet=nothing,
-    dirichlet_components=nothing,
-    symmetrize::Bool=false,
+        a::BilinearForm,
+        l::LinearForm;
+        dirichlet = nothing,
+        dirichlet_components = nothing,
+        symmetrize::Bool = false
 )
-    A = assemble(a; dirichlet=dirichlet, dirichlet_components=dirichlet_components)
-    F = assemble(l; dirichlet=dirichlet, dirichlet_components=dirichlet_components)
+    A = assemble(a; dirichlet = dirichlet, dirichlet_components = dirichlet_components)
+    F = assemble(l; dirichlet = dirichlet, dirichlet_components = dirichlet_components)
 
     if symmetrize
         dirichlet_labels, _ = _normalize_dirichlet(dirichlet)
         dirichlet_labels === nothing && _throw_symmetrize_without_dirichlet()
         symmetrize!(
-            A, F, test_space(a), dirichlet_labels...; components=dirichlet_components
+            A, F, test_space(a), dirichlet_labels...; components = dirichlet_components
         )
     end
 
@@ -391,8 +389,8 @@ end
 @noinline function _throw_symmetrize_without_dirichlet()
     throw(
         ArgumentError(
-            "symmetrize = true has nothing to symmetrize against without dirichlet naming " *
-            "at least one label.",
-        ),
+        "symmetrize = true has nothing to symmetrize against without dirichlet naming " *
+        "at least one label.",
+    ),
     )
 end

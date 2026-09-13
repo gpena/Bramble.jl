@@ -35,16 +35,15 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
                 h = [spacing(Ωₕ, i) for i in 1:n]
 
                 u = parent(uₕ)
-                want = [
-                    if i == 1
-                        (u[2] - u[1]) / h[1]
-                    elseif i == n
-                        (u[n] - u[n - 1]) / h[n]
-                    else
-                        (h[i] / (h[i] + h[i + 1])) * dm[i + 1] +
-                        (h[i + 1] / (h[i] + h[i + 1])) * dm[i]
-                    end for i in 1:n
-                ]
+                want = [if i == 1
+                            (u[2] - u[1]) / h[1]
+                        elseif i == n
+                            (u[n] - u[n - 1]) / h[n]
+                        else
+                            (h[i] / (h[i] + h[i + 1])) * dm[i + 1] +
+                            (h[i + 1] / (h[i] + h[i + 1])) * dm[i]
+                        end
+                        for i in 1:n]
                 @test parent(Dₕₓ(uₕ)) ≈ want
             end
         end
@@ -114,7 +113,7 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
                 # cross weighting fixes
                 unif || @test !all(
                     parent(Dcₓ(Rₕ(Wₕ, t -> 5t^2 - 2t + 1)))[i] ≈ 10x[i] - 2 for
-                    i in 2:(n - 1)
+                i in 2:(n - 1)
                 )
             end
         end
@@ -140,7 +139,7 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
     @testset "Convergence order" begin
         # Second order on both, which is the point: Dc is first order on a non-uniform
         # grid and this is not.
-        function orders(unif; steps=4)
+        function orders(unif; steps = 4)
             Random.seed!(20260830)
             Ωₕ = mesh(domain(interval(0.0, 1.0)), 21, unif)
             errs = Float64[]
@@ -169,7 +168,7 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
         Vₕ = gridspace(Ωₕ, Val(2))
         uₕ = Rₕ(Wₕ, x -> x[1] * x[2])
 
-        @test ∇ₕ(uₕ) isa NTuple{2,VectorElement}
+        @test ∇ₕ(uₕ) isa NTuple{2, VectorElement}
         @test parent(∇ₕ(uₕ)[1]) == parent(Dₕₓ(uₕ))
         @test parent(∇ₕ(uₕ)[2]) == parent(Dₕᵧ(uₕ))
 
@@ -198,7 +197,7 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
 
         @test @inferred(Dₕₓ(u1)) isa VectorElement
         @test @inferred(Dₕᵧ(u2)) isa VectorElement
-        @test @inferred(∇ₕ(u2)) isa NTuple{2,VectorElement}
+        @test @inferred(∇ₕ(u2)) isa NTuple{2, VectorElement}
 
         @test alloc_test(Dₕₓ, u1) == alloc_test(similar, u1)
         @test alloc_test(Dₕᵧ, u2) == alloc_test(similar, u2)

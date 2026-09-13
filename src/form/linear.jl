@@ -24,7 +24,7 @@ l = form(Wₕ, v -> α * innerₕ(fₕ, v))
 assemble!(b, l) # zero allocations, evaluates with α = 2.5
 ```
 """
-struct LinearForm{D,TestSpace,AST}
+struct LinearForm{D, TestSpace, AST}
     test_space::TestSpace
     ast::AST
 end
@@ -51,10 +51,10 @@ end
 @noinline function (form::LinearForm)(v::AbstractVector)
     throw(
         ArgumentError(
-            "a linear form contracts against an element of its test space, not a bare vector: " *
-            "the length of a vector says nothing about whether its blocks match the components " *
-            "the form routes to. Name the space first, with l(element(test_space(l), v)).",
-        ),
+        "a linear form contracts against an element of its test space, not a bare vector: " *
+        "the length of a vector says nothing about whether its blocks match the components " *
+        "the form routes to. Name the space first, with l(element(test_space(l), v)).",
+    ),
     )
 end
 
@@ -81,7 +81,7 @@ end
 ```
 """
 @inline function evaluate!(
-    scratch::AbstractVector, form::LinearForm, vₕ::VectorElement; ast=nothing
+        scratch::AbstractVector, form::LinearForm, vₕ::VectorElement; ast = nothing
 )
     resolved_ast = ast === nothing ? form.ast : (_warn_ast_keyword(:evaluate!); ast)
     _assemble_linear!(scratch, form, resolved_ast, nothing, nothing)
@@ -91,11 +91,11 @@ end
 @noinline function evaluate!(::AbstractVector, ::LinearForm, v::AbstractVector; kwargs...)
     throw(
         ArgumentError(
-            "a linear form contracts against an element of its test space, not a bare vector: " *
-            "the length of a vector says nothing about whether its blocks match the components " *
-            "the form routes to. Name the space first, with " *
-            "evaluate!(scratch, l, element(test_space(l), v)).",
-        ),
+        "a linear form contracts against an element of its test space, not a bare vector: " *
+        "the length of a vector says nothing about whether its blocks match the components " *
+        "the form routes to. Name the space first, with " *
+        "evaluate!(scratch, l, element(test_space(l), v)).",
+    ),
     )
 end
 
@@ -111,20 +111,20 @@ Return the resolved AST stored inside the linear form.
 @noinline function _validate_form_expression(bad, ::Val{D}) where {D}
     throw(
         ArgumentError(
-            "a linear form's expression has to build an operator over its test argument, and " *
-            "this one returned a $(typeof(bad)). Write it as a function of the test argument (`v -> innerₕ(fₕ, v)`) " *
-            "rather than as a value.",
-        ),
+        "a linear form's expression has to build an operator over its test argument, and " *
+        "this one returned a $(typeof(bad)). Write it as a function of the test argument (`v -> innerₕ(fₕ, v)`) " *
+        "rather than as a value.",
+    ),
     )
 end
 
-@noinline function _validate_form_expression(::LazyOp{E}, ::Val{D}) where {E,D}
+@noinline function _validate_form_expression(::LazyOp{E}, ::Val{D}) where {E, D}
     throw(
         ArgumentError(
-            "a linear form's expression is $(E)-dimensional and its test space is $(D). The " *
-            "operators in the expression have to come from the same space the form is built " *
-            "over.",
-        ),
+        "a linear form's expression is $(E)-dimensional and its test space is $(D). The " *
+        "operators in the expression have to come from the same space the form is built " *
+        "over.",
+    ),
     )
 end
 
@@ -135,15 +135,15 @@ end
 
 # `LinearProduct`'s left side is always a source (`_is_source_only`), its right side never
 # is, so only the left needs lowering.
-function _lower_sources(op::LinearProduct{D,W}, space) where {D,W}
+function _lower_sources(op::LinearProduct{D, W}, space) where {D, W}
     left = _lower_sources(op.left_op, space)
     return left === op.left_op ? op :
-           LinearProduct{D,W,typeof(left),typeof(op.right_op)}(left, op.right_op)
+           LinearProduct{D, W, typeof(left), typeof(op.right_op)}(left, op.right_op)
 end
 
-function _lower_sources(op::ShiftNode{D,Dim}, space) where {D,Dim}
+function _lower_sources(op::ShiftNode{D, Dim}, space) where {D, Dim}
     inner = _lower_sources(op.inner_op, space)
-    return inner === op.inner_op ? op : ShiftNode{D,Dim,typeof(inner)}(op.shift_amount, inner)
+    return inner === op.inner_op ? op : ShiftNode{D, Dim, typeof(inner)}(op.shift_amount, inner)
 end
 
 # --- Eager source lowering across a CompositeGridSpace's leaves (gpena/Bramble.jl#197) --- #
@@ -209,7 +209,7 @@ function form(Wₕ, f)
     _validate_form_expression(raw_ast, Val(D))
     ast = simplify_ast(resolve_ast(raw_ast))
     ast = _lower_sources_for_space(ast, Wₕ)
-    return LinearForm{D,typeof(Wₕ),typeof(ast)}(Wₕ, ast)
+    return LinearForm{D, typeof(Wₕ), typeof(ast)}(Wₕ, ast)
 end
 
 # --- Assembly implementations ----------------------------------------------------- #
@@ -217,11 +217,11 @@ end
 # Nothing to do unless labels are provided. `dirichlet_conditions` defaults to `nothing`
 # to prevent allocations when boundary constraints are absent.
 function apply_dirichlet_conditions!(
-    b::AbstractVector,
-    form::LinearForm,
-    dirichlet_conditions,
-    dirichlet_labels,
-    dirichlet_components=nothing,
+        b::AbstractVector,
+        form::LinearForm,
+        dirichlet_conditions,
+        dirichlet_labels,
+        dirichlet_components = nothing
 )
     dirichlet_labels === nothing && return b
 
@@ -233,7 +233,7 @@ function apply_dirichlet_conditions!(
             test_space(form),
             dirichlet_conditions,
             dirichlet_labels;
-            components=dirichlet_components,
+            components = dirichlet_components
         )
     elseif dirichlet_labels isa Tuple && !isempty(dirichlet_labels)
         dirichlet_bc!(
@@ -241,7 +241,7 @@ function apply_dirichlet_conditions!(
             test_space(form),
             dirichlet_conditions,
             dirichlet_labels...;
-            components=dirichlet_components,
+            components = dirichlet_components
         )
     end
     return b
@@ -250,10 +250,10 @@ end
 @noinline function _throw_labels_without_conditions(labels)
     throw(
         ArgumentError(
-            "dirichlet names label(s) $labels but carries no values for them. A linear " *
-            "form needs both: pass a `label => f` Pair (or a Tuple of them, or constraints " *
-            "from dirichlet_constraints) as `dirichlet`, not a bare label.",
-        ),
+        "dirichlet names label(s) $labels but carries no values for them. A linear " *
+        "form needs both: pass a `label => f` Pair (or a Tuple of them, or constraints " *
+        "from dirichlet_constraints) as `dirichlet`, not a bare label.",
+    ),
     )
 end
 
@@ -272,7 +272,7 @@ Runs serially or across threads following `test_space(form)`'s backend
 [`assemble_parallel!`](@ref) always threads regardless of the backend policy.
 """
 function assemble(
-    form::LinearForm; dirichlet=nothing, dirichlet_components=nothing, ast=nothing
+        form::LinearForm; dirichlet = nothing, dirichlet_components = nothing, ast = nothing
 )
     resolved_ast = ast === nothing ? form.ast : (_warn_ast_keyword(:assemble); ast)
     space = test_space(form)
@@ -320,8 +320,7 @@ end
 # --- Helper cores for function barrier optimization ------------------------------- #
 
 # The scalar case is `_scatter_term!` (below) at offset zero: one leaf, the whole space.
-@inline _assemble_linear_core!(b::AbstractVector, space, ast::AST_TYPE) where {AST_TYPE} =
-    _scatter_term!(b, space, ast, 0)
+@inline _assemble_linear_core!(b::AbstractVector, space, ast::AST_TYPE) where {AST_TYPE} = _scatter_term!(b, space, ast, 0)
 
 # --- Parallel assembly partitioning ------------------------------------------------ #
 
@@ -339,7 +338,7 @@ lock-free parallel assembly.
 An operator reaching only its own point (such as `innerₕ(fₕ, v)` or any form whose test
 argument carries no difference) strides by 1 in every dimension, resulting in a single colour.
 """
-@inline function _colour_strides(offsets::Vector{NTuple{D,Int}}) where {D}
+@inline function _colour_strides(offsets::Vector{NTuple{D, Int}}) where {D}
     isempty(offsets) && return ntuple(_ -> 1, D)
 
     lo = first(offsets)
@@ -353,7 +352,7 @@ end
 
 # One colour of `grid_inds`, represented as a strided subgrid without allocating index vectors.
 @inline function _colour_subgrid(
-    grid_inds::CartesianIndices{D}, c::CartesianIndex{D}, strides::NTuple{D,Int}
+        grid_inds::CartesianIndices{D}, c::CartesianIndex{D}, strides::NTuple{D, Int}
 ) where {D}
     return CartesianIndices(ntuple(d -> c[d]:strides[d]:last(axes(grid_inds, d)), D))
 end
@@ -367,13 +366,13 @@ Add one grid point's stencil contributions to `b`.
 Shared by the banded and the point-coloured sweep, so the two cannot drift apart.
 """
 @inline function _scatter_linear_point!(
-    b::AbstractVector,
-    sp,
-    term::TERM,
-    I::CartesianIndex,
-    lin_indices,
-    mesh_markers,
-    offset::Int,
+        b::AbstractVector,
+        sp,
+        term::TERM,
+        I::CartesianIndex,
+        lin_indices,
+        mesh_markers,
+        offset::Int
 ) where {TERM}
     stencil = local_stencil(term, sp, I, mesh_markers, lin_indices[I])
 
@@ -398,16 +397,16 @@ along the banded axis rules that out on its own, so alternate slabs never race. 
 reaches only its own point cannot collide at all, and then `bidx` is every band at once.
 """
 @noinline function _sweep_linear_band_colour!(
-    b::AbstractVector,
-    sp,
-    term::TERM,
-    ax,
-    bidx,
-    nbands::Int,
-    rest,
-    lin_indices,
-    mesh_markers,
-    offset::Int,
+        b::AbstractVector,
+        sp,
+        term::TERM,
+        ax,
+        bidx,
+        nbands::Int,
+        rest,
+        lin_indices,
+        mesh_markers,
+        offset::Int
 ) where {TERM}
     Threads.@threads for k in bidx
         for I in CartesianIndices((rest..., _band_range(ax, nbands, k)))
@@ -418,7 +417,7 @@ reaches only its own point cannot collide at all, and then `bidx` is every band 
 end
 
 @noinline function _sweep_colour!(
-    b::AbstractVector, sp, term::TERM, idxs, lin_indices, mesh_markers, offset::Int
+        b::AbstractVector, sp, term::TERM, idxs, lin_indices, mesh_markers, offset::Int
 ) where {TERM}
     Threads.@threads for I in idxs
         _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset)
@@ -428,7 +427,7 @@ end
 
 # Every colour in turn.
 function _sweep_parallel!(
-    b::AbstractVector, sp, term::TERM, grid_inds, strides, offset::Int
+        b::AbstractVector, sp, term::TERM, grid_inds, strides, offset::Int
 ) where {TERM}
     Ωsp = mesh(sp)
     lin_indices = LinearIndices(indices(Ωsp))
@@ -466,14 +465,14 @@ function _sweep_parallel!(
             _colour_subgrid(grid_inds, c, strides),
             lin_indices,
             mesh_markers,
-            offset,
+            offset
         )
     end
     return b
 end
 
 function _assemble_linear_parallel_core!(
-    b::AbstractVector, space, ast::AST_TYPE
+        b::AbstractVector, space, ast::AST_TYPE
 ) where {AST_TYPE}
     strides = _colour_strides(stencil_offsets(ast))
     _sweep_parallel!(b, space, ast, indices(mesh(space)), strides, 0)
@@ -481,8 +480,8 @@ function _assemble_linear_parallel_core!(
 end
 
 function _assemble_linear_core!(
-    b::AbstractVector, space::CompositeGridSpace{N}, ast::AST_TYPE
-) where {N,AST_TYPE}
+        b::AbstractVector, space::CompositeGridSpace{N}, ast::AST_TYPE
+) where {N, AST_TYPE}
     return _route_terms!(b, ast, leaf_spaces_offsets(space))
 end
 
@@ -503,10 +502,10 @@ end
 @noinline function _throw_component_out_of_range(target::Int, nblocks::Int)
     throw(
         ArgumentError(
-            "a term of this form names component $target, and its test space has $nblocks. " *
-            "Components are numbered 1 to $nblocks; a term written for a space with more of " *
-            "them contributes nothing here, which is why this is an error rather than a zero.",
-        ),
+        "a term of this form names component $target, and its test space has $nblocks. " *
+        "Components are numbered 1 to $nblocks; a term written for a space with more of " *
+        "them contributes nothing here, which is why this is an error rather than a zero.",
+    ),
     )
 end
 
@@ -546,7 +545,7 @@ end
 # `acc = f(leaf_space, offset, acc)`, for each leaf the term routes to. Separate from
 # `each_routed_leaf` rather than expressed through it: threading the accumulator as a return
 # value is what keeps it concretely typed instead of captured and boxed.
-@inline function fold_routed_leaves(f::F, term, leaves, acc::T) where {F,T}
+@inline function fold_routed_leaves(f::F, term, leaves, acc::T) where {F, T}
     target = _routed_target(term, length(leaves))
     for (c, leaf) in enumerate(leaves)
         _goes_to_leaf(target, c) || continue
@@ -574,18 +573,18 @@ end
 # The scalar case is `_contract_term` (below) at offset zero: one leaf, the whole space.
 @inline _contract_linear_core(
     space, ast::AST_TYPE, v::AbstractVector, acc::T
-) where {AST_TYPE,T} = _contract_term(space, ast, 0, v, acc)
+) where {AST_TYPE, T} = _contract_term(space, ast, 0, v, acc)
 
 function _contract_linear_core(
-    space::CompositeGridSpace{N}, ast::AST_TYPE, v::AbstractVector, acc::T
-) where {N,AST_TYPE,T}
+        space::CompositeGridSpace{N}, ast::AST_TYPE, v::AbstractVector, acc::T
+) where {N, AST_TYPE, T}
     return _route_terms_contract(ast, acc, leaf_spaces_offsets(space), v)
 end
 
 # The counterpart of `_scatter_term!`, functioning as a barrier.
 function _contract_term(
-    sp, term::TERM, offset::Int, v::AbstractVector, acc::T
-) where {TERM,T}
+        sp, term::TERM, offset::Int, v::AbstractVector, acc::T
+) where {TERM, T}
     Ωsp = mesh(sp)
     lin_indices = LinearIndices(indices(Ωsp))
     mesh_markers = markers(Ωsp)
@@ -608,7 +607,7 @@ function _route_terms_contract(op::OperatorAdd, acc, leaves, v)
     return _fold_operator_add(_route_terms_contract, op, acc, leaves, v)
 end
 
-function _route_terms_contract(term::TERM, acc::T, leaves, v) where {TERM,T}
+function _route_terms_contract(term::TERM, acc::T, leaves, v) where {TERM, T}
     return fold_routed_leaves(term, leaves, acc) do sp, offset, a
         return _contract_term(sp, term, offset, v, a)
     end
@@ -650,8 +649,8 @@ function _scatter_term!(b::AbstractVector, sp, term::TERM, offset::Int) where {T
 end
 
 function _assemble_linear_parallel_core!(
-    b::AbstractVector, space::CompositeGridSpace{N}, ast::AST_TYPE
-) where {N,AST_TYPE}
+        b::AbstractVector, space::CompositeGridSpace{N}, ast::AST_TYPE
+) where {N, AST_TYPE}
     return _route_terms_parallel!(b, ast, leaf_spaces_offsets(space))
 end
 
@@ -682,11 +681,11 @@ regardless of backend policy.
 See also [`assemble`](@ref), [`assemble_parallel!`](@ref), and [`evaluate!`](@ref).
 """
 function assemble!(
-    b::AbstractVector,
-    form::LinearForm;
-    dirichlet=nothing,
-    dirichlet_components=nothing,
-    ast=nothing,
+        b::AbstractVector,
+        form::LinearForm;
+        dirichlet = nothing,
+        dirichlet_components = nothing,
+        ast = nothing
 )
     resolved_ast = ast === nothing ? form.ast : (_warn_ast_keyword(:assemble!); ast)
     return _assemble_linear!(b, form, resolved_ast, dirichlet, dirichlet_components)
@@ -696,7 +695,7 @@ end
 # resolved and already past the deprecation check, so neither public entry point warns twice
 # calling into the other.
 function _assemble_linear!(
-    b::AbstractVector, form::LinearForm, ast, dirichlet, dirichlet_components
+        b::AbstractVector, form::LinearForm, ast, dirichlet, dirichlet_components
 )
     dirichlet_labels, dirichlet_conditions = _normalize_dirichlet(dirichlet)
     fill!(b, zero(eltype(b)))
@@ -722,9 +721,8 @@ Refill `b` with the assembled `form` across threads and return it, regardless of
 `test_space(form)`'s backend execution policy. Unlike [`assemble!`](@ref), does not
 apply Dirichlet conditions.
 """
-function assemble_parallel!(b::AbstractVector, form::LinearForm, ast=nothing)
-    resolved_ast =
-        ast === nothing ? form.ast : (_warn_ast_keyword(:assemble_parallel!); ast)
+function assemble_parallel!(b::AbstractVector, form::LinearForm, ast = nothing)
+    resolved_ast = ast === nothing ? form.ast : (_warn_ast_keyword(:assemble_parallel!); ast)
     space = form.test_space
     _validate_term_markers(resolved_ast, markers(mesh(space)), "the form's space")
 

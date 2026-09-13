@@ -1,19 +1,19 @@
 module BrambleVTKExt
 
 using Bramble:
-    Bramble,
-    AbstractMeshType,
-    VectorElement,
-    CompositeGridSpace,
-    points,
-    components,
-    export_vtk,
-    domain,
-    interval,
-    ×,
-    mesh,
-    gridspace,
-    Rₕ
+               Bramble,
+               AbstractMeshType,
+               VectorElement,
+               CompositeGridSpace,
+               points,
+               components,
+               export_vtk,
+               domain,
+               interval,
+               ×,
+               mesh,
+               gridspace,
+               Rₕ
 
 using WriteVTK: WriteVTK, vtk_grid, vtk_save
 using PrecompileTools: @setup_workload, @compile_workload
@@ -34,7 +34,7 @@ _vtk_data(uₕ::VectorElement) = reshape(uₕ)
 _vtk_data(a::AbstractArray) = a
 
 function Bramble._export_vtk(
-    filename::AbstractString, Ωₕ::AbstractMeshType, fields::Pair...
+        filename::AbstractString, Ωₕ::AbstractMeshType, fields::Pair...
 )
     vtk = vtk_grid(filename, _vtk_axes(Ωₕ)...)
     for (name, data) in fields

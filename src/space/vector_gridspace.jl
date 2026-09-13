@@ -18,16 +18,16 @@ It is immutable and stack-allocatable, wrapping a tuple of spaces.
 
   - `spaces::Spaces`: the tuple of constituent sub-spaces.
 """
-struct CompositeGridSpace{N,Spaces<:Tuple} <: AbstractSpaceType{N}
+struct CompositeGridSpace{N, Spaces <: Tuple} <: AbstractSpaceType{N}
     "the tuple of constituent sub-spaces."
     spaces::Spaces
 end
 
 function CompositeGridSpace(spaces::Tuple)
-    return CompositeGridSpace{length(spaces),typeof(spaces)}(spaces)
+    return CompositeGridSpace{length(spaces), typeof(spaces)}(spaces)
 end
-function CompositeGridSpace{N}(spaces::Spaces) where {N,Spaces<:Tuple}
-    return CompositeGridSpace{N,Spaces}(spaces)
+function CompositeGridSpace{N}(spaces::Spaces) where {N, Spaces <: Tuple}
+    return CompositeGridSpace{N, Spaces}(spaces)
 end
 CompositeGridSpace(spaces::AbstractSpaceType...) = CompositeGridSpace(spaces)
 
@@ -98,8 +98,7 @@ value the compiler cannot constant-fold (e.g. threaded through a generic functio
 argument). It also covers every mesh dimension this package supports
 (`Wₕ^dim(mesh)`). For `N > 3`, call `Wₕ^Val(N)` directly, which has no upper bound.
 """
-@inline Base.:^(Wₕ::ScalarGridSpace, ::Val{N}) where {N} =
-    CompositeGridSpace(ntuple(_ -> Wₕ, Val(N)))
+@inline Base.:^(Wₕ::ScalarGridSpace, ::Val{N}) where {N} = CompositeGridSpace(ntuple(_ -> Wₕ, Val(N)))
 @inline Base.:^(Wₕ::ScalarGridSpace, ::Val{1}) = Wₕ
 
 Base.@constprop :aggressive function Base.:^(Wₕ::ScalarGridSpace, N::Int)
@@ -108,8 +107,8 @@ Base.@constprop :aggressive function Base.:^(Wₕ::ScalarGridSpace, N::Int)
     N == 3 && return Wₕ^Val(3)
     throw(
         ArgumentError(
-            "Power N must satisfy 1 <= N <= 3 for Wₕ^N; got $N. Use Wₕ^Val(N) for N > 3."
-        ),
+        "Power N must satisfy 1 <= N <= 3 for Wₕ^N; got $N. Use Wₕ^Val(N) for N > 3."
+    ),
     )
 end
 
@@ -125,8 +124,7 @@ end
 @inline mesh_type(Wₕ::CompositeGridSpace) = typeof(mesh(Wₕ))
 @inline dim(Wₕ::CompositeGridSpace) = dim(first_space(Wₕ))
 @inline eltype(Wₕ::CompositeGridSpace) = eltype(first_space(Wₕ))
-@inline eltype(::Type{<:CompositeGridSpace{<:Any,Spaces}}) where {Spaces} =
-    eltype(fieldtype(Spaces, 1))
+@inline eltype(::Type{<:CompositeGridSpace{<:Any, Spaces}}) where {Spaces} = eltype(fieldtype(Spaces, 1))
 @inline backend(Wₕ::CompositeGridSpace) = backend(first_space(Wₕ))
 @inline execution_policy(Wₕ::CompositeGridSpace) = execution_policy(backend(Wₕ))
 @inline ndofs(Wₕ::CompositeGridSpace) = sum(ndofs, Wₕ.spaces)
@@ -208,10 +206,8 @@ A scalar space is its own only leaf, at offset zero.
 """
 @inline leaf_spaces_offsets(Wₕ) = first(_leaf_spaces_offsets(Wₕ, 0))
 
-@inline _leaf_spaces_offsets(Wₕ::ScalarGridSpace, offset::Int) =
-    (((Wₕ, offset),), offset + ndofs(Wₕ))
-@inline _leaf_spaces_offsets(Wₕ::CompositeGridSpace, offset::Int) =
-    _leaves_of(Wₕ.spaces, offset)
+@inline _leaf_spaces_offsets(Wₕ::ScalarGridSpace, offset::Int) = (((Wₕ, offset),), offset + ndofs(Wₕ))
+@inline _leaf_spaces_offsets(Wₕ::CompositeGridSpace, offset::Int) = _leaves_of(Wₕ.spaces, offset)
 
 @inline _leaves_of(::Tuple{}, offset::Int) = ((), offset)
 @inline function _leaves_of(spaces::Tuple, offset::Int)
@@ -231,7 +227,7 @@ function Base.show(io::IO, Wₕ::CompositeGridSpace{N}) where {N}
         N == 1 ? "" : "s",
         ", ",
         ndofs(Wₕ),
-        " dofs}",
+        " dofs}"
     )
     return nothing
 end
@@ -239,13 +235,13 @@ end
 function Base.show(io::IO, ::MIME"text/plain", Wₕ::CompositeGridSpace{N}) where {N}
     return show_block(io) do io
         pp = PrettyPrinter(io)
-        printstyled(io, "CompositeGridSpace"; bold=true, color=:cyan)
+        printstyled(io, "CompositeGridSpace"; bold = true, color = :cyan)
         print(io, " {")
-        printstyled(io, "$N component$(N == 1 ? "" : "s")"; color=:yellow)
+        printstyled(io, "$N component$(N == 1 ? "" : "s")"; color = :yellow)
         print(io, ", ")
-        printstyled(io, "$(dim(Wₕ))D"; color=:yellow)
+        printstyled(io, "$(dim(Wₕ))D"; color = :yellow)
         print(io, ", ")
-        printstyled(io, "$(eltype(Wₕ))"; color=:yellow)
+        printstyled(io, "$(eltype(Wₕ))"; color = :yellow)
         println(io, "}:")
 
         pp_indented = with_indent(pp, 1)
@@ -257,16 +253,16 @@ function Base.show(io::IO, ::MIME"text/plain", Wₕ::CompositeGridSpace{N}) wher
         if allequal(leaves)
             per = ndofs(first(Wₕ.spaces))
             print_key_value(
-                pp_indented, "Dofs", "$(ndofs(Wₕ)) ($per per component)"; separator=": "
+                pp_indented, "Dofs", "$(ndofs(Wₕ)) ($per per component)"; separator = ": "
             )
             print_key_value(
-                pp_indented, "Components", "$N × $(first(leaves))"; separator=": "
+                pp_indented, "Components", "$N × $(first(leaves))"; separator = ": "
             )
         else
-            print_key_value(pp_indented, "Dofs", string(ndofs(Wₕ)); separator=": ")
+            print_key_value(pp_indented, "Dofs", string(ndofs(Wₕ)); separator = ": ")
             pp_double = with_indent(pp, 2)
             for (i, leaf) in enumerate(leaves)
-                print_key_value(pp_double, string(i), leaf; separator=": ")
+                print_key_value(pp_double, string(i), leaf; separator = ": ")
             end
         end
     end

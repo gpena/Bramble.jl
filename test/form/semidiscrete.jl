@@ -38,24 +38,24 @@ end
 
     @testset "constraint carrier is chosen once, by shape and arity" begin
         @test semidiscretize(a, l).constraints isa Bramble.NoConstraints
-        @test semidiscretize(a, l; dirichlet=:boundary).constraints isa Bramble.LabelsOnly
-        @test semidiscretize(a, l; dirichlet=:boundary => x -> 0.0).constraints isa
-            Bramble.StaticConstraints
+        @test semidiscretize(a, l; dirichlet = :boundary).constraints isa Bramble.LabelsOnly
+        @test semidiscretize(a, l; dirichlet = :boundary => x -> 0.0).constraints isa
+              Bramble.StaticConstraints
 
         # A time domain is not what marks constraints as time dependent -- the conditions'
         # arity is, the same test `dirichlet_constraints` validates with.
         bcs_t = dirichlet_constraints(Ωₕ, I, :boundary => (x, t) -> 2t)
-        @test semidiscretize(a, l; dirichlet=bcs_t).constraints isa
-            Bramble.TimeDependentConstraints
+        @test semidiscretize(a, l; dirichlet = bcs_t).constraints isa
+              Bramble.TimeDependentConstraints
 
         bcs_x = dirichlet_constraints(Ωₕ, :boundary => x -> 1.0)
-        @test semidiscretize(a, l; dirichlet=bcs_x).constraints isa
-            Bramble.StaticConstraints
+        @test semidiscretize(a, l; dirichlet = bcs_x).constraints isa
+              Bramble.StaticConstraints
     end
 
     @testset "mass matrix carries the algebraic rows" begin
         M₀ = assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v)))
-        sd = semidiscretize(a, l; dirichlet=:boundary)
+        sd = semidiscretize(a, l; dirichlet = :boundary)
         M = mass_matrix(sd)
 
         @test iszero(M[1, 1])
@@ -71,17 +71,17 @@ end
     end
 
     @testset "operator matrix is the assembled form" begin
-        sd = semidiscretize(a, l; dirichlet=:boundary)
-        @test operator_matrix(sd) == assemble(a; dirichlet=:boundary)
+        sd = semidiscretize(a, l; dirichlet = :boundary)
+        @test operator_matrix(sd) == assemble(a; dirichlet = :boundary)
         @test Bramble.space(sd) === Wₕ
     end
 
     @testset "residual, Jacobian, and allocations" begin
         bcs = dirichlet_constraints(Ωₕ, I, :boundary => (x, t) -> 2t)
         for dirichlet in (nothing, :boundary, :boundary => x -> 0.5, bcs)
-            sd = semidiscretize(a, l; dirichlet=dirichlet)
+            sd = semidiscretize(a, l; dirichlet = dirichlet)
             A = operator_matrix(sd)
-            u = collect(range(0.25, 1.75; length=n))
+            u = collect(range(0.25, 1.75; length = n))
             du = zeros(n)
             t = 0.3
 
@@ -104,17 +104,17 @@ end
     @testset "boundary values reach the residual" begin
         # Labels without values constrain to zero; `assemble!` cannot express that, so the
         # rows are cleared instead.
-        sd_zero = semidiscretize(a, l; dirichlet=:boundary)
+        sd_zero = semidiscretize(a, l; dirichlet = :boundary)
         F = zeros(n)
         sd_zero(F, zeros(n), nothing, 0.0)
         @test iszero(F[1]) && iszero(F[n])
 
-        sd_static = semidiscretize(a, l; dirichlet=:boundary => x -> 7.0)
+        sd_static = semidiscretize(a, l; dirichlet = :boundary => x -> 7.0)
         sd_static(F, zeros(n), nothing, 0.0)
         @test F[1] ≈ 7.0 && F[n] ≈ 7.0
 
         bcs = dirichlet_constraints(Ωₕ, I, :boundary => (x, t) -> 1 + 3t)
-        sd_time = semidiscretize(a, l; dirichlet=bcs)
+        sd_time = semidiscretize(a, l; dirichlet = bcs)
         sd_time(F, zeros(n), nothing, 0.0)
         @test F[1] ≈ 1.0
         sd_time(F, zeros(n), nothing, 2.0)
@@ -125,7 +125,7 @@ end
     @testset "update_coefficients! runs before each assembly" begin
         seen = Float64[]
         sd = semidiscretize(
-            a, l; (update_coefficients!)=t -> (push!(seen, t); Rₕ!(fₕ, x -> t))
+            a, l; (update_coefficients!) = t -> (push!(seen, t); Rₕ!(fₕ, x -> t))
         )
         F = zeros(n)
         sd(F, zeros(n), nothing, 2.5)
@@ -139,8 +139,8 @@ end
 
     @testset "state exposes u to the forms" begin
         uₕ = Bramble.element(Wₕ, 0.0)
-        sd = semidiscretize(a, l; state=uₕ)
-        u = collect(range(1.0, 2.0; length=n))
+        sd = semidiscretize(a, l; state = uₕ)
+        u = collect(range(1.0, 2.0; length = n))
         sd(zeros(n), u, nothing, 0.0)
         @test parent(uₕ) == u
     end
@@ -150,7 +150,7 @@ end
         # The `Ref` itself goes in the expression, not `α[]`: dereferencing evaluates
         # once, when the form is built, and the coefficient stops being live.
         aα = form(Wₕ, Wₕ, (u, v) -> α * innerₕ(u, v))
-        sd = semidiscretize(aα, l; reassemble=true, (update_coefficients!)=t -> (α[] = t))
+        sd = semidiscretize(aα, l; reassemble = true, (update_coefficients!) = t -> (α[] = t))
         A₁ = copy(operator_matrix(sd))
         sd(zeros(n), zeros(n), nothing, 3.0)
         @test operator_matrix(sd) ≈ 3 .* A₁
@@ -158,7 +158,7 @@ end
         # Without `reassemble` the matrix assembled at construction is reused as is.
         α[] = 1.0
         sd_fixed = semidiscretize(
-            aα, l; reassemble=false, (update_coefficients!)=t -> (α[] = t)
+            aα, l; reassemble = false, (update_coefficients!) = t -> (α[] = t)
         )
         A₂ = copy(operator_matrix(sd_fixed))
         sd_fixed(zeros(n), zeros(n), nothing, 3.0)
@@ -167,13 +167,13 @@ end
 
     @testset "consistent initial conditions" begin
         bcs = dirichlet_constraints(Ωₕ, I, :boundary => (x, t) -> 5 + t)
-        sd = semidiscretize(a, l; dirichlet=bcs)
+        sd = semidiscretize(a, l; dirichlet = bcs)
         u = fill(-1.0, n)
         @test dirichlet_bc!(u, sd, 2.0) === u
         @test u[1] ≈ 7.0 && u[n] ≈ 7.0
         @test u[5] == -1.0
 
-        sd_zero = semidiscretize(a, l; dirichlet=:boundary)
+        sd_zero = semidiscretize(a, l; dirichlet = :boundary)
         v = fill(-1.0, n)
         dirichlet_bc!(v, sd_zero, 0.0)
         @test iszero(v[1]) && iszero(v[n]) && v[5] == -1.0
@@ -185,7 +185,7 @@ end
 
     @testset "display" begin
         bcs = dirichlet_constraints(Ωₕ, I, :boundary => (x, t) -> 0.0)
-        sd = semidiscretize(a, l; dirichlet=bcs)
+        sd = semidiscretize(a, l; dirichlet = bcs)
 
         compact = sprint(show, sd)
         @test compact == "Semidiscretization{$n dofs, 1 constrained label}"
@@ -202,22 +202,22 @@ end
 
         @test occursin(
             "zero on :boundary",
-            sprint(show, MIME"text/plain"(), semidiscretize(a, l; dirichlet=:boundary)),
+            sprint(show, MIME"text/plain"(), semidiscretize(a, l; dirichlet = :boundary))
         )
         @test occursin(
             "g(x) on :boundary",
             sprint(
                 show,
                 MIME"text/plain"(),
-                semidiscretize(a, l; dirichlet=:boundary => x -> 0.0),
-            ),
+                semidiscretize(a, l; dirichlet = :boundary => x -> 0.0)
+            )
         )
         @test occursin(
             "Constraints: none", sprint(show, MIME"text/plain"(), semidiscretize(a, l))
         )
         @test occursin(
             "every step",
-            sprint(show, MIME"text/plain"(), semidiscretize(a, l; reassemble=true)),
+            sprint(show, MIME"text/plain"(), semidiscretize(a, l; reassemble = true))
         )
         @test occursin("constrained labels", sprint(show, semidiscretize(a, l)))
     end
@@ -240,8 +240,8 @@ end
     # Distinct values per component, so a residual that mixed the blocks could not pass.
     l = form(Vₕ, v -> innerₕ(cₕ, v(1)) + 3 * innerₕ(cₕ, v(2)))
 
-    sd = semidiscretize(a, l; dirichlet=:boundary => x -> 0.0)
-    u = collect(range(0.5, 2.5; length=n))
+    sd = semidiscretize(a, l; dirichlet = :boundary => x -> 0.0)
+    u = collect(range(0.5, 2.5; length = n))
     du = zeros(n)
     F = zeros(n)
     sd(F, zeros(n), nothing, 0.0)
@@ -256,7 +256,7 @@ end
     @test iszero(M[nleaf + 1, nleaf + 1]) && iszero(M[n, n])
 
     @testset "dirichlet_components binds the labels to one leaf" begin
-        sd₁ = semidiscretize(a, l; dirichlet=:boundary => x -> 0.0, dirichlet_components=1)
+        sd₁ = semidiscretize(a, l; dirichlet = :boundary => x -> 0.0, dirichlet_components = 1)
         M₁ = mass_matrix(sd₁)
         @test iszero(M₁[1, 1]) && iszero(M₁[nleaf, nleaf])
         @test !iszero(M₁[nleaf + 1, nleaf + 1]) && !iszero(M₁[n, n])
@@ -276,7 +276,7 @@ end
             Ωₕ, Bramble.interval(0.0, _SD_T), :boundary => (x, t) -> 0.0
         )
         sd = semidiscretize(
-            a, l; dirichlet=bcs, (update_coefficients!)=t -> Rₕ!(fₕ, x -> _sd_src(x, t))
+            a, l; dirichlet = bcs, (update_coefficients!) = t -> Rₕ!(fₕ, x -> _sd_src(x, t))
         )
 
         M = mass_matrix(sd)
@@ -307,11 +307,9 @@ end
         push!(spacings, h)
     end
 
-    eoc = [
-        log(errors[i] / errors[i + 1]) / log(spacings[i] / spacings[i + 1]) for
-        i in 1:(length(errors) - 1)
-    ]
+    eoc = [log(errors[i] / errors[i + 1]) / log(spacings[i] / spacings[i + 1]) for
+           i in 1:(length(errors) - 1)]
     @test all(>(1.9), eoc)
     @test last(eoc) > 1.95
-    @test issorted(errors; rev=true)
+    @test issorted(errors; rev = true)
 end

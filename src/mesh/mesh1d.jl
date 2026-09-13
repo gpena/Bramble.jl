@@ -21,10 +21,10 @@ Cartesian indices `indices`, and computational backend `backend`. Also precomput
 
 See also: [`MeshnD`](@ref), [`mesh`](@ref), [`AbstractMeshType`](@ref).
 """
-mutable struct Mesh1D{BT<:Backend,CI<:CartesianIndices{1},VT<:AbstractVector,T} <:
+mutable struct Mesh1D{BT <: Backend, CI <: CartesianIndices{1}, VT <: AbstractVector, T} <:
                AbstractMeshType{1}
     "the geometric domain, a 1D CartesianProduct (interval), over which the mesh is defined."
-    set::CartesianProduct{1,T}
+    set::CartesianProduct{1, T}
     "a dictionary mapping `Symbol` labels to `BitVector`s, marking specific points on the mesh."
     markers::MeshMarkers
     "the `CartesianIndices` of the grid, allowing for array-like iteration and indexing over the points."
@@ -45,8 +45,8 @@ end
 
 @noinline _throw_point_count_mismatch(expected::Int, got::Int) = throw(
     DimensionMismatch(
-        "change_points! keeps the point count: the mesh has $expected points and $got were given",
-    ),
+    "change_points! keeps the point count: the mesh has $expected points and $got were given",
+),
 )
 
 @inline is_collapsed(Ωₕ::Mesh1D) = Ωₕ.collapsed
@@ -83,7 +83,7 @@ Return the cached vector of backward spacings, where `spacings(Ωₕ)[i]` is
 grid points change.
 """
 @inline spacings(Ωₕ::Mesh1D) = Ωₕ.spacings
-@inline spacings!(Ωₕ::Mesh1D, v) = (Ωₕ.spacings=v; return nothing)
+@inline spacings!(Ωₕ::Mesh1D, v) = (Ωₕ.spacings = v; return nothing)
 
 """
     forward_spacings(Ωₕ::Mesh1D) -> AbstractVector
@@ -145,14 +145,14 @@ end
 
 Override the precomputed cell center cache in `Ωₕ`.
 """
-@inline half_points!(Ωₕ::Mesh1D, pts) = (Ωₕ.half_pts=pts; return nothing)
+@inline half_points!(Ωₕ::Mesh1D, pts) = (Ωₕ.half_pts = pts; return nothing)
 
 """
     half_spacings!(Ωₕ::Mesh1D, pts::AbstractVector) -> Nothing
 
 Override the precomputed cell width cache in `Ωₕ`.
 """
-@inline half_spacings!(Ωₕ::Mesh1D, pts) = (Ωₕ.half_spacings=pts; return nothing)
+@inline half_spacings!(Ωₕ::Mesh1D, pts) = (Ωₕ.half_spacings = pts; return nothing)
 
 @inline eltype(::Mesh1D{BT}) where {BT} = eltype(BT)
 @inline eltype(::Type{<:Mesh1D{BT}}) where {BT} = eltype(BT)
@@ -227,8 +227,7 @@ end
     return @inbounds spacings(Ωₕ)[i == n ? n : i + 1]
 end
 
-@inline forward_spacing(Ωₕ::Mesh1D, i::CartesianIndex{1}) =
-    forward_spacing(Ωₕ, _extract_linear_index(i))
+@inline forward_spacing(Ωₕ::Mesh1D, i::CartesianIndex{1}) = forward_spacing(Ωₕ, _extract_linear_index(i))
 
 @inline forward_spacing(Ωₕ::Mesh1D, i, dim::Int) = forward_spacing(Ωₕ, i)
 """
@@ -260,8 +259,7 @@ end
     return Ωₕ.half_spacings[i]
 end
 
-@inline half_spacing(Ωₕ::Mesh1D, idx::CartesianIndex{1}) =
-    half_spacing(Ωₕ, _extract_linear_index(idx))
+@inline half_spacing(Ωₕ::Mesh1D, idx::CartesianIndex{1}) = half_spacing(Ωₕ, _extract_linear_index(idx))
 
 @inline function cell_measure(Ωₕ::Mesh1D, i)
     idx = _extract_linear_index(i)
@@ -373,11 +371,11 @@ end
 
 # Internal constructor function for creating a 1D mesh.
 function _mesh(
-    Ω::Domain{CartesianProduct{1,T}},
-    npts::Tuple{Int},
-    unif::Tuple{Bool},
-    backend;
-    warn_marker_mismatch::Bool=true,
+        Ω::Domain{CartesianProduct{1, T}},
+        npts::Tuple{Int},
+        unif::Tuple{Bool},
+        backend;
+        warn_marker_mismatch::Bool = true
 ) where {T}
     # Unpack the domain's set and markers, and the number of points.
     (; set, markers) = Ω
@@ -418,7 +416,7 @@ function _mesh(
         _half_pts,
         _half_spacings,
         _spacings,
-        is_collapsed,
+        is_collapsed
     )
 
     # Now, calculate the derived geometric quantities for the newly created mesh. The
@@ -506,7 +504,7 @@ function Base.copy(Ωₕ::Mesh1D)
         copy(Ωₕ.half_pts),
         copy(Ωₕ.half_spacings),
         copy(Ωₕ.spacings),
-        Ωₕ.collapsed,
+        Ωₕ.collapsed
     )
 end
 
@@ -523,13 +521,13 @@ function Base.show(io::IO, Ωₕ::Mesh1D)
     return nothing
 end
 
-function Base.show(io::IO, ::MIME"text/plain", Ωₕ::Mesh1D{BT,CI,VT,T}) where {BT,CI,VT,T}
+function Base.show(io::IO, ::MIME"text/plain", Ωₕ::Mesh1D{BT, CI, VT, T}) where {BT, CI, VT, T}
     return show_block(io) do io
         return _show_mesh1d_detailed(io, Ωₕ)
     end
 end
 
-function _show_mesh1d_detailed(io::IO, Ωₕ::Mesh1D{BT,CI,VT,T}) where {BT,CI,VT,T}
+function _show_mesh1d_detailed(io::IO, Ωₕ::Mesh1D{BT, CI, VT, T}) where {BT, CI, VT, T}
     pp = PrettyPrinter(io)
 
     n_pts = npoints(Ωₕ)

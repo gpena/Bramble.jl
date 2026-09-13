@@ -5,31 +5,31 @@
 using Test
 using Bramble
 using Bramble:
-    is_boundary_index,
-    CartesianProduct,
-    MeshnD,
-    Backend,
-    backend,
-    set,
-    is_collapsed,
-    topo_dim,
-    is_uniform,
-    Mesh1D,
-    MeshMarkers,
-    boundary_symbol_to_dict,
-    half_spacings,
-    indices,
-    cell_measure,
-    half_point,
-    half_spacing,
-    forward_spacing,
-    points,
-    point,
-    spacing,
-    spacings,
-    cell_measures,
-    iterative_refinement!,
-    change_points!
+               is_boundary_index,
+               CartesianProduct,
+               MeshnD,
+               Backend,
+               backend,
+               set,
+               is_collapsed,
+               topo_dim,
+               is_uniform,
+               Mesh1D,
+               MeshMarkers,
+               boundary_symbol_to_dict,
+               half_spacings,
+               indices,
+               cell_measure,
+               half_point,
+               half_spacing,
+               forward_spacing,
+               points,
+               point,
+               spacing,
+               spacings,
+               cell_measures,
+               iterative_refinement!,
+               change_points!
 using LinearAlgebra: hypot
 using Random
 using Supposition
@@ -64,7 +64,7 @@ end
 @testset "Multi-dimensional meshes" begin
     # Helper function to create a simple nD domain
     function create_test_nd_domain(
-        intervals::NTuple{D,Tuple{Float64,Float64}}; markers=nothing
+            intervals::NTuple{D, Tuple{Float64, Float64}}; markers = nothing
     ) where {D}
         nd_intervals = map(t -> interval(t[1], t[2]), intervals)
         prod = reduce(×, nd_intervals)
@@ -76,7 +76,7 @@ end
         end
     end
 
-    function create_test_nd_set(intervals::NTuple{D,Tuple{Float64,Float64}}) where {D}
+    function create_test_nd_set(intervals::NTuple{D, Tuple{Float64, Float64}}) where {D}
         nd_intervals = map(t -> interval(t[1], t[2]), intervals)
         prod = reduce(×, nd_intervals)
         return prod
@@ -148,8 +148,8 @@ end
         npts_2d = (4, 5) # Nx=4, Ny=5
         intervals_2d = ((0.0, 3.0), (0.0, 4.0)) # dx=1.0, dy=1.0
         Ω_2d = create_test_nd_domain(intervals_2d)
-        Ωₕ_2d_unif = mesh(Ω_2d, npts_2d, (true, true); backend=backend())
-        Ωₕ_2d_nonunif = mesh(Ω_2d, npts_2d, (false, true); backend=backend())
+        Ωₕ_2d_unif = mesh(Ω_2d, npts_2d, (true, true); backend = backend())
+        Ωₕ_2d_nonunif = mesh(Ω_2d, npts_2d, (false, true); backend = backend())
 
         @testset "Construction and properties" begin
             @test Ωₕ_2d_unif isa MeshnD{2}
@@ -178,7 +178,7 @@ end
             @test all(diff(pts_x) .> 0)
             # Check if second submesh points are uniform
             pts_y = points(Ωₕ_2d_nonunif(2))
-            @test pts_y ≈ range(intervals_2d[2][1], intervals_2d[2][2], length=npts_2d[2])
+            @test pts_y ≈ range(intervals_2d[2][1], intervals_2d[2][2], length = npts_2d[2])
         end
 
         @testset "Geometric properties" begin
@@ -266,10 +266,10 @@ end
                 :LeftWall => :left,
                 :RightWall => :right,
                 :TopBottom => (:top, :bottom),
-                :CenterRegion => p -> 0.8 < p[1] < 2.2 && 1.5 < p[2] < 2.5,
+                :CenterRegion => p -> 0.8 < p[1] < 2.2 && 1.5 < p[2] < 2.5
             )
-            Ω_2d_marked = create_test_nd_domain(intervals_2d, markers=dm_2d)
-            Ωₕ_2d_marked = mesh(Ω_2d_marked, npts_2d, (true, true); backend=backend()) # Pts: x=[0,1,2,3], y=[0,1,2,3,4]
+            Ω_2d_marked = create_test_nd_domain(intervals_2d, markers = dm_2d)
+            Ωₕ_2d_marked = mesh(Ω_2d_marked, npts_2d, (true, true); backend = backend()) # Pts: x=[0,1,2,3], y=[0,1,2,3,4]
         end
 
         @testset "Mesh modification" begin
@@ -277,9 +277,9 @@ end
 
             # Setup for modification tests
             dm_2d = markers(Ω_2d_dummy, :L => :left)
-            Ω_2d_mod = create_test_nd_domain(intervals_2d, markers=dm_2d)
+            Ω_2d_mod = create_test_nd_domain(intervals_2d, markers = dm_2d)
             npts_initial = (3, 3) # Pts: x=[0, 1.5, 3], y=[0, 2, 4]
-            Ωₕ_2d_orig = mesh(Ω_2d_mod, npts_initial, (true, true); backend=backend())
+            Ωₕ_2d_orig = mesh(Ω_2d_mod, npts_initial, (true, true); backend = backend())
 
             # iterative_refinement!
             Ωₕ_2d_refined = deepcopy(Ωₕ_2d_orig)
@@ -307,7 +307,7 @@ end
         npts_3d = (3, 4, 2) # Nx=3, Ny=4, Nz=2
         intervals_3d = ((0.0, 2.0), (0.0, 3.0), (0.0, 1.0)) # dx=1.0, dy=1.0, dz=1.0
         Ω_3d = create_test_nd_domain(intervals_3d)
-        Ωₕ_3d_unif = mesh(Ω_3d, npts_3d, (true, true, true); backend=backend())
+        Ωₕ_3d_unif = mesh(Ω_3d, npts_3d, (true, true, true); backend = backend())
 
         @testset "Construction and properties" begin
             @test Ωₕ_3d_unif isa MeshnD{3}
@@ -363,7 +363,7 @@ end
             npts_3d_larger = (4, 5, 4)
             Ω_3d_larger = create_test_nd_domain(((0.0, 3.0), (0.0, 4.0), (0.0, 3.0)))
             Ωₕ_3d_larger = mesh(
-                Ω_3d_larger, npts_3d_larger, (true, true, true); backend=backend()
+                Ω_3d_larger, npts_3d_larger, (true, true, true); backend = backend()
             )
             idxs_larger = indices(Ωₕ_3d_larger) # (4,5,4)
             int_indices_lg = interior_indices(Ωₕ_3d_larger)
@@ -389,10 +389,10 @@ end
                 _set,
                 :BottomFace => :bottom,
                 :FrontFace => :front,
-                :SmallCorner => p -> p[1] < 0.5 && p[2] < 0.5 && p[3] < 0.5,
+                :SmallCorner => p -> p[1] < 0.5 && p[2] < 0.5 && p[3] < 0.5
             )
-            Ω_3d_marked = create_test_nd_domain(intervals_3d, markers=dm_3d) # (3,4,2) pts, intervals ((0,2),(0,3),(0,1))
-            Ωₕ_3d_marked = mesh(Ω_3d_marked, npts_3d, (true, true, true); backend=backend()) # Pts: x=[0,1,2], y=[0,1,2,3], z=[0,1]
+            Ω_3d_marked = create_test_nd_domain(intervals_3d, markers = dm_3d) # (3,4,2) pts, intervals ((0,2),(0,3),(0,1))
+            Ωₕ_3d_marked = mesh(Ω_3d_marked, npts_3d, (true, true, true); backend = backend()) # Pts: x=[0,1,2], y=[0,1,2,3], z=[0,1]
         end
     end # Dimension D=3 Testset
 
@@ -400,7 +400,7 @@ end
         @testset "Grid iterators" begin
             intervals_2d = ((0.0, 2.0), (0.0, 2.0))
             Ω_2d = create_test_nd_domain(intervals_2d)
-            Ωₕ = mesh(Ω_2d, (3, 3), (true, true); backend=backend()) # 3x3 uniform
+            Ωₕ = mesh(Ω_2d, (3, 3), (true, true); backend = backend()) # 3x3 uniform
 
             # Iterators.product(points(mesh)...)
             pts_iter = Iterators.product(points(Ωₕ)...)
@@ -436,7 +436,7 @@ end
         @testset "Submesh access" begin
             intervals_2d = ((0.0, 1.0), (2.0, 3.0))
             Ω = create_test_nd_domain(intervals_2d)
-            Ωₕ = mesh(Ω, (5, 6), (true, true); backend=backend())
+            Ωₕ = mesh(Ω, (5, 6), (true, true); backend = backend())
 
             # Test submesh access with bounds checking
             @test Ωₕ(1) isa Mesh1D
@@ -452,7 +452,7 @@ end
         @testset "Type stability" begin
             intervals_2d = ((0.0, 1.0), (0.0, 1.0))
             Ω_2d = create_test_nd_domain(intervals_2d)
-            Ωₕ_2d = mesh(Ω_2d, (3, 3), (true, true); backend=backend())
+            Ωₕ_2d = mesh(Ω_2d, (3, 3), (true, true); backend = backend())
 
             # Test eltype on type
             @test eltype(typeof(Ωₕ_2d)) == Float64
@@ -463,14 +463,14 @@ end
 
             intervals_3d = ((0.0, 1.0), (0.0, 1.0), (0.0, 1.0))
             Ω_3d = create_test_nd_domain(intervals_3d)
-            Ωₕ_3d = mesh(Ω_3d, (2, 2, 2), (true, true, true); backend=backend())
+            Ωₕ_3d = mesh(Ω_3d, (2, 2, 2), (true, true, true); backend = backend())
             @test dim(typeof(Ωₕ_3d)) == 3
         end
 
         @testset "Field accessors" begin
             intervals_2d = ((0.0, 1.0), (0.0, 1.0))
             Ω = create_test_nd_domain(intervals_2d)
-            Ωₕ = mesh(Ω, (4, 4), (true, true); backend=backend())
+            Ωₕ = mesh(Ω, (4, 4), (true, true); backend = backend())
 
             # Test set accessor
             @test set(Ωₕ) == interval(0.0, 1.0) × interval(0.0, 1.0)
@@ -489,13 +489,13 @@ end
             # 2D mesh
             intervals_2d = ((0.0, 1.0), (0.0, 1.0))
             Ω_2d = create_test_nd_domain(intervals_2d)
-            Ωₕ_2d = mesh(Ω_2d, (3, 3), (true, true); backend=backend())
+            Ωₕ_2d = mesh(Ω_2d, (3, 3), (true, true); backend = backend())
             @test topo_dim(Ωₕ_2d) == 2
 
             # 1D line in 2D space (collapsed in one dimension)
             intervals_line = ((0.0, 1.0), (0.5, 0.5))
             Ω_line = create_test_nd_domain(intervals_line)
-            Ωₕ_line = mesh(Ω_line, (5, 1), (true, true); backend=backend())
+            Ωₕ_line = mesh(Ω_line, (5, 1), (true, true); backend = backend())
             @test dim(Ωₕ_line) == 2
             @test topo_dim(Ωₕ_line) == 1  # Only 1 non-collapsed dimension
         end
@@ -503,7 +503,7 @@ end
         @testset "Collapsed dimensions" begin
             # A line y = 5 embedded in 2D: the collapsed axis must sit at 5, not 0.
             Ω_line = create_test_nd_domain(((0.0, 1.0), (5.0, 5.0)))
-            Ωₕ_line = mesh(Ω_line, (3, 4), (true, true); backend=backend())
+            Ωₕ_line = mesh(Ω_line, (3, 4), (true, true); backend = backend())
 
             @test npoints(Ωₕ_line, Tuple) == (3, 1)
             @test point(Ωₕ_line, (1, 1)) == (0.0, 5.0)
@@ -512,7 +512,7 @@ end
 
             # A single point embedded in 3D.
             Ω_pt = create_test_nd_domain(((2.0, 2.0), (3.0, 3.0), (4.0, 4.0)))
-            Ωₕ_pt = mesh(Ω_pt, (5, 5, 5), (true, true, true); backend=backend())
+            Ωₕ_pt = mesh(Ω_pt, (5, 5, 5), (true, true, true); backend = backend())
             @test npoints(Ωₕ_pt, Tuple) == (1, 1, 1)
             @test point(Ωₕ_pt, (1, 1, 1)) == (2.0, 3.0, 4.0)
         end
@@ -525,7 +525,7 @@ end
             # a zero-division or out-of-bounds error at that layer with nothing here to
             # catch it.
             Ω_line = create_test_nd_domain(((0.0, 1.0), (5.0, 5.0)))
-            Ωₕ_line = mesh(Ω_line, (9, 4), (true, true); backend=backend())
+            Ωₕ_line = mesh(Ω_line, (9, 4), (true, true); backend = backend())
             Wₕ_line = gridspace(Ωₕ_line)
 
             uₕ = Rₕ(Wₕ_line, x -> sin(pi * x[1]) + x[2])
@@ -541,7 +541,7 @@ end
             @test isfinite(s)
             @test s ≈ sum(
                 cell_measure(Ωₕ_line, idx) * (sin(pi * point(Ωₕ_line, idx)[1]) + 5.0) for
-                idx in idxs
+            idx in idxs
             )
 
             # the live axis differences normally
@@ -569,7 +569,7 @@ end
         @testset "Forward spacing" begin
             intervals_2d = ((0.0, 2.0), (0.0, 2.0))
             Ω = create_test_nd_domain(intervals_2d)
-            Ωₕ = mesh(Ω, (3, 3), (true, true); backend=backend())
+            Ωₕ = mesh(Ω, (3, 3), (true, true); backend = backend())
 
             # Test forward_spacing
             @test forward_spacing(Ωₕ, (1, 1)) == (1.0, 1.0)
@@ -714,7 +714,7 @@ end # Main Testset
 
     @testset "Refinement invariants" begin
         @check function check_refinement_invariants_2d(
-            nx=Data.Integers(3, 8), ny=Data.Integers(3, 8)
+                nx = Data.Integers(3, 8), ny = Data.Integers(3, 8)
         )
             Ωₕ = mesh(
                 domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (nx, ny), (false, false)
@@ -729,14 +729,13 @@ end # Main Testset
 
             ok_dims = npoints(Ωₕ, Tuple) == (new_nx, new_ny)
             ok_total = npoints(Ωₕ) == new_nx * new_ny
-            ok_indices =
-                size(indices(Ωₕ)) == (new_nx, new_ny) &&
-                length(indices(Ωₕ)) == new_nx * new_ny
+            ok_indices = size(indices(Ωₕ)) == (new_nx, new_ny) &&
+                         length(indices(Ωₕ)) == new_nx * new_ny
 
             px = points(Ωₕ(1))
             ok_px_odd = px[1:2:end] == old_px
             ok_px_mid = isapprox(
-                px[2:2:end], (old_px[1:(end - 1)] .+ old_px[2:end]) ./ 2; atol=1e-12
+                px[2:2:end], (old_px[1:(end - 1)] .+ old_px[2:end]) ./ 2; atol = 1e-12
             )
             ok_px_mono = all(diff(px) .> 0)
             ok_px_ends = (px[1] == old_px[1]) && (px[end] == old_px[end])
@@ -744,7 +743,7 @@ end # Main Testset
             py = points(Ωₕ(2))
             ok_py_odd = py[1:2:end] == old_py
             ok_py_mid = isapprox(
-                py[2:2:end], (old_py[1:(end - 1)] .+ old_py[2:end]) ./ 2; atol=1e-12
+                py[2:2:end], (old_py[1:(end - 1)] .+ old_py[2:end]) ./ 2; atol = 1e-12
             )
             ok_py_mono = all(diff(py) .> 0)
             ok_py_ends = (py[1] == old_py[1]) && (py[end] == old_py[end])
@@ -772,7 +771,7 @@ end
     Random.seed!(20260830)
     for (dims, X) in (
         ((7, 9), interval(0.0, 1.0) × interval(0.0, 2.0)),
-        ((5, 6, 4), box((0.0, 0.0, 0.0), (1.0, 2.0, 3.0))),
+        ((5, 6, 4), box((0.0, 0.0, 0.0), (1.0, 2.0, 3.0)))
     )
         D = length(dims)
         for unif in (true, false)

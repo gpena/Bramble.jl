@@ -7,33 +7,33 @@ using LinearAlgebra: Diagonal, dot, I
 using SparseArrays
 using ForwardDiff
 using Bramble:
-    CompositeGridSpace,
-    form,
-    assemble,
-    assemble!,
-    assemble_parallel!,
-    allocate_system_matrix,
-    weights,
-    Innerh,
-    Innerplus,
-    TrialFunction,
-    TestFunction,
-    InterpolationNode,
-    AbsoluteColumn,
-    _trial_column,
-    _all_trial_interpolated,
-    _check_interp_spaces,
-    stencil_shift_trait,
-    TranslationInvariantStencil,
-    PointDependentStencil,
-    shifted_inner_stencil,
-    shift_stencil,
-    local_stencil,
-    markers,
-    LinearProduct,
-    shift_op,
-    jumpₓ,
-    resolve_form_ast
+               CompositeGridSpace,
+               form,
+               assemble,
+               assemble!,
+               assemble_parallel!,
+               allocate_system_matrix,
+               weights,
+               Innerh,
+               Innerplus,
+               TrialFunction,
+               TestFunction,
+               InterpolationNode,
+               AbsoluteColumn,
+               _trial_column,
+               _all_trial_interpolated,
+               _check_interp_spaces,
+               stencil_shift_trait,
+               TranslationInvariantStencil,
+               PointDependentStencil,
+               shifted_inner_stencil,
+               shift_stencil,
+               local_stencil,
+               markers,
+               LinearProduct,
+               shift_op,
+               jumpₓ,
+               resolve_form_ast
 
 # Standalone runner fallback
 if !@isdefined(alloc_test)
@@ -136,7 +136,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         a = form(
             Ws,
             Wt,
-            (u, v) -> 2.0 * innerₕ(πₕ(Ws, u), v) + β * inner₊ₓ(D₋ₓ(πₕ(Ws, u)), D₋ₓ(v)),
+            (u, v) -> 2.0 * innerₕ(πₕ(Ws, u), v) + β * inner₊ₓ(D₋ₓ(πₕ(Ws, u)), D₋ₓ(v))
         )
         A = assemble(a)
         @test A ≈ 2.0 * Hh(Wt) * P + 3.0 * Dx' * Hp(Wt, 1) * Dx * P
@@ -256,8 +256,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         a = form(
             Vh,
             Vh,
-            (u, v) ->
-                innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)) + innerₕ(πₕ(Wsmall, u(2)), v(1)),
+            (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)) + innerₕ(πₕ(Wsmall, u(2)), v(1))
         )
         A = assemble(a)
         @test A[1:nb, 1:nb] ≈ Hh(Wbig)
@@ -269,7 +268,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         Dx = D₋ₓ(Wbig)
         A = assemble(form(Vh, Vh, (u, v) -> inner₊ₓ(D₋ₓ(πₕ(Wsmall, u(2))), D₋ₓ(v(1)))))
         @test A[1:nb, (nb + 1):(nb + ns)] ≈
-            Dx' * Hp(Wbig, 1) * Dx * interpolation_matrix(Wbig, Wsmall)
+              Dx' * Hp(Wbig, 1) * Dx * interpolation_matrix(Wbig, Wsmall)
     end
 
     @testset "Serial and parallel agree" begin
@@ -324,7 +323,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         )
         @test_throws ArgumentError assemble_parallel!(
             spzeros(ndofs(Vh), ndofs(Vh)),
-            form(Vh, Vh, (u, v) -> innerₕ(πₕ(Wbig, u(2)), v(1))),
+            form(Vh, Vh, (u, v) -> innerₕ(πₕ(Wbig, u(2)), v(1)))
         )
 
         # a cross-mesh block with *no* interpolation is still refused, at every entry point:
@@ -380,10 +379,10 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         )
         @test_throws ArgumentError assemble(
             form(
-                Wbig,
-                Wt,
-                (u, v) -> innerₕ(πₕ(Wbig, u), v) + inner₊ₓ(D₋ₓ(πₕ(Wsml, u)), D₋ₓ(v)),
-            ),
+            Wbig,
+            Wt,
+            (u, v) -> innerₕ(πₕ(Wbig, u), v) + inner₊ₓ(D₋ₓ(πₕ(Wsml, u)), D₋ₓ(v))
+        ),
         )
 
         # what must keep working: a sum of interpolations from the *same* space, and a mix on
@@ -456,7 +455,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
             inner = local_stencil(op, Wt, I, mk, 5)
             for δ in (Val(-1), Val(1), 2)
                 @test shifted_inner_stencil(op, inner, Wt, I, mk, Val(1), δ) ==
-                    shift_stencil(inner, Val(1), δ)
+                      shift_stencil(inner, Val(1), δ)
             end
         end
 
@@ -485,7 +484,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         # an absolute column is not bounds-checked against the walked space, on purpose: it
         # numbers the *other* one, which may be larger
         @test _trial_column(li, CartesianIndex(1), AbsoluteColumn(ndofs(Wt) + 4)) ==
-            ndofs(Wt) + 4
+              ndofs(Wt) + 4
     end
 
     @testset "Element type" begin
@@ -502,7 +501,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
             for f in (
                 (u, v) -> innerₕ(πₕ(Ws, u), v),
                 (u, v) -> inner₊ₓ(D₋ₓ(πₕ(Ws, u)), D₋ₓ(v)),
-                (u, v) -> innerₕ(M₋ₓ(πₕ(Ws, u)), v),
+                (u, v) -> innerₕ(M₋ₓ(πₕ(Ws, u)), v)
             )
                 @test eltype(assemble(form(Ws, Wt, f))) === T
             end
@@ -524,7 +523,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         Ws = gridspace(mesh(Ω, 7, true))
         P = interpolation_matrix(Wt, Ws)
         c0 = fill(1.0, ndofs(Wt))
-        want = collect(weights(Wt, Innerh())) .* vec(sum(Matrix(P), dims=2))
+        want = collect(weights(Wt, Innerh())) .* vec(sum(Matrix(P), dims = 2))
 
         f(w) = form(Ws, Wt, (u, v) -> innerₕ(Bramble.element(Wt, w) * πₕ(Ws, u), v))
         @test ForwardDiff.gradient(w -> sum(assemble(f(w))), c0) ≈ want
@@ -548,8 +547,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         # so a gradient of it is zero for reasons that have nothing to do with this operator
         # and would pass against any implementation at all. `rᵀ A s` does not degenerate:
         # `A = Dₓᵀ H₊ diag(c) Dₓ P`, so `d(rᵀAs)/dcᵢ = (Dₓr)ᵢ · H₊ᵢᵢ · (DₓPs)ᵢ`.
-        fd(w) =
-            form(Ws, Wt, (u, v) -> inner₊ₓ(Bramble.element(Wt, w) * D₋ₓ(πₕ(Ws, u)), D₋ₓ(v)))
+        fd(w) = form(Ws, Wt, (u, v) -> inner₊ₓ(Bramble.element(Wt, w) * D₋ₓ(πₕ(Ws, u)), D₋ₓ(v)))
         r = [inv(1.0 + i) for i in 1:ndofs(Wt)]
         sv = [cospi(i / 5) for i in 1:ndofs(Ws)]
         Dx = D₋ₓ(Wt)

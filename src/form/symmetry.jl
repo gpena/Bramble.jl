@@ -29,7 +29,7 @@ the expression at all, and answer `false` immediately otherwise.
 
 _same_operator_shape(::TrialFunction{D}, ::TestFunction{D}) where {D} = true
 function _same_operator_shape(
-    a::IndexedTrialFunction{D}, b::IndexedTestFunction{D}
+        a::IndexedTrialFunction{D}, b::IndexedTestFunction{D}
 ) where {D}
     return a.component_idx == b.component_idx
 end
@@ -49,10 +49,9 @@ for W in (
     :CrossWeightedDifference,
     :BackwardAverage,
     :ForwardAverage,
-    :JumpNode,
+    :JumpNode
 )
-    @eval _same_operator_shape(a::$W{D,Dim}, b::$W{D,Dim}) where {D,Dim} =
-        _same_operator_shape(a.inner_op, b.inner_op)
+    @eval _same_operator_shape(a::$W{D, Dim}, b::$W{D, Dim}) where {D, Dim} = _same_operator_shape(a.inner_op, b.inner_op)
 end
 
 # `shift_amount` is a field, not a type parameter, so — like `RegionRestriction.region` and
@@ -61,7 +60,7 @@ end
 # the generic loop above compared only `D`/`Dim`, so `shift_op(u, 1, 1)` and
 # `shift_op(v, 1, 2)` read as identical, and the fast path this trait guards then evaluates
 # one side only and mirrors it into a matrix that is not what the form asked for.
-function _same_operator_shape(a::ShiftNode{D,Dim}, b::ShiftNode{D,Dim}) where {D,Dim}
+function _same_operator_shape(a::ShiftNode{D, Dim}, b::ShiftNode{D, Dim}) where {D, Dim}
     return a.shift_amount == b.shift_amount && _same_operator_shape(a.inner_op, b.inner_op)
 end
 
@@ -113,12 +112,14 @@ _same_operator_shape(a, b) = false
     assigns = Expr[]
     slot = Matrix{Symbol}(undef, N, N)
     for i in 1:N, j in i:N
+
         s = Symbol(:w_, i, :_, j)
         push!(assigns, :($s = stencil[$i][2] * stencil[$j][2] * vol))
         slot[i, j] = s
     end
     exprs = Expr[]
     for i in 1:N, j in 1:N
+
         s = i <= j ? slot[i, j] : slot[j, i]
         push!(exprs, :((stencil[$i][1], stencil[$j][1], $s)))
     end
@@ -226,16 +227,16 @@ function Base.show(io::IO, ::MIME"text/plain", l::LinearForm{D}) where {D}
         pp = PrettyPrinter(io)
         Vₕ = test_space(l)
 
-        printstyled(io, "LinearForm"; bold=true, color=:cyan)
+        printstyled(io, "LinearForm"; bold = true, color = :cyan)
         print(io, " {")
-        printstyled(io, "$(D)D"; color=:yellow)
+        printstyled(io, "$(D)D"; color = :yellow)
         print(io, ", ")
-        printstyled(io, "$(eltype(Vₕ))"; color=:yellow)
+        printstyled(io, "$(eltype(Vₕ))"; color = :yellow)
         println(io, "}:")
 
         pp_indented = with_indent(pp, 1)
-        print_key_value(pp_indented, "Test space", sprint(show, Vₕ); separator=": ")
-        return print_key_value(pp_indented, "Vector", string(ndofs(Vₕ)); separator=": ")
+        print_key_value(pp_indented, "Test space", sprint(show, Vₕ); separator = ": ")
+        return print_key_value(pp_indented, "Vector", string(ndofs(Vₕ)); separator = ": ")
     end
 end
 
@@ -250,15 +251,15 @@ function Base.show(io::IO, ::MIME"text/plain", a::BilinearForm{D}) where {D}
         Uₕ = trial_space(a)
         Vₕ = test_space(a)
 
-        printstyled(io, "BilinearForm"; bold=true, color=:cyan)
+        printstyled(io, "BilinearForm"; bold = true, color = :cyan)
         print(io, " {")
-        printstyled(io, "$(D)D"; color=:yellow)
+        printstyled(io, "$(D)D"; color = :yellow)
         print(io, ", ")
-        printstyled(io, "$(eltype(Vₕ))"; color=:yellow)
+        printstyled(io, "$(eltype(Vₕ))"; color = :yellow)
         println(io, "}:")
 
         pp_indented = with_indent(pp, 1)
-        print_key_value(pp_indented, "Trial space", sprint(show, Uₕ); separator=": ")
+        print_key_value(pp_indented, "Trial space", sprint(show, Uₕ); separator = ": ")
 
         # `(same as trial)` rather than repeating the line: trial === test is the
         # overwhelmingly common case, and the interesting information is which of the two
@@ -268,12 +269,12 @@ function Base.show(io::IO, ::MIME"text/plain", a::BilinearForm{D}) where {D}
         else
             sprint(show, Vₕ)
         end
-        print_key_value(pp_indented, "Test space", test_text; separator=": ")
+        print_key_value(pp_indented, "Test space", test_text; separator = ": ")
         print_key_value(
-            pp_indented, "Matrix", "$(ndofs(Vₕ)) × $(ndofs(Uₕ))"; separator=": "
+            pp_indented, "Matrix", "$(ndofs(Vₕ)) × $(ndofs(Uₕ))"; separator = ": "
         )
         return print_key_value(
-            pp_indented, "Symmetric", issymmetric(a) ? "yes" : "no"; separator=": "
+            pp_indented, "Symmetric", issymmetric(a) ? "yes" : "no"; separator = ": "
         )
     end
 end

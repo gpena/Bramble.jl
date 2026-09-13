@@ -34,10 +34,8 @@ macro forward(ex, fs)
     field = ex.args[2].value
     fs = Meta.isexpr(fs, :tuple) ? map(esc, fs.args) : [esc(fs)]
     return :($(
-        [
-            :(@inline $f(x::$T, args...; kwargs...) = $f(x.$field, args...; kwargs...)) for
-            f in fs
-        ]...
+        [:(@inline $f(x::$T, args...; kwargs...) = $f(x.$field, args...; kwargs...)) for
+         f in fs]...
     );
     nothing)
 end

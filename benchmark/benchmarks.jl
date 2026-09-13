@@ -110,16 +110,16 @@ function _mesh3_par()
 end
 
 # --- 1. restriction & cell-averaging across 1D, 2D, 3D -------------------- #
-let W1 = gridspace(_mesh1_par()), u1 = element(W1), W2 = gridspace(_mesh2_par()),
-    u2 = element(W2), W3 = gridspace(_mesh3_par()), u3 = element(W3),
+let W1 = gridspace(_mesh1_par()), u1 = element(W1), W2 = gridspace(_mesh2_par()), u2 = element(W2),
+    W3 = gridspace(_mesh3_par()), u3 = element(W3),
     # the plain default backend, which no longer threads at any size (see the note
     # on _mesh1_par above) — the cost of that default is now real and worth tracking
     # alongside the Parallel() numbers, not only the allocation-zero guarantee. Only
     # 1D had a Serial() entry until now; 2D/3D never got one (gpena/Bramble.jl issue
     # noticed while reading the docs page — the trend charts had no serial line to
     # compare the parallel one against past 1D).
-    W1d = gridspace(_mesh1()), u1d = element(W1d), W2d = gridspace(_mesh2()),
-    u2d = element(W2d), W3d = gridspace(_mesh3()), u3d = element(W3d)
+    W1d = gridspace(_mesh1()), u1d = element(W1d), W2d = gridspace(_mesh2()), u2d = element(W2d),
+    W3d = gridspace(_mesh3()), u3d = element(W3d)
 
     g = SUITE["restriction"] = BenchmarkGroup()
     g["Rₕ! 1D, Parallel() backend"] = @benchmarkable Rₕ!($u1, sin)
@@ -192,9 +192,7 @@ let Ωₕ2 = _mesh2_par(), Ωₕ3 = _mesh3_par()
 end
 
 # --- 7. jumps and averages ------------------------------------------------ #
-let uₕ2 = Rₕ(gridspace(_mesh2()), x -> sin(x[1]) * x[2]),
-    uₕ3 = Rₕ(gridspace(_mesh3()), x -> sin(x[1]) + x[3])
-
+let uₕ2 = Rₕ(gridspace(_mesh2()), x -> sin(x[1]) * x[2]), uₕ3 = Rₕ(gridspace(_mesh3()), x -> sin(x[1]) + x[3])
     g = SUITE["jumps & averages"] = BenchmarkGroup()
     g["jumpₓ 2D"] = @benchmarkable jumpₓ($uₕ2)
     g["jumpᵧ 2D"] = @benchmarkable jumpᵧ($uₕ2)
@@ -205,8 +203,7 @@ let uₕ2 = Rₕ(gridspace(_mesh2()), x -> sin(x[1]) * x[2]),
 end
 
 # --- 8. startup latency & TTFX -------------------------------------------- #
-let jl = Base.julia_cmd(),
-    cmd_load = `$jl --project=. --startup-file=no -e "using Bramble"`,
+let jl = Base.julia_cmd(), cmd_load = `$jl --project=. --startup-file=no -e "using Bramble"`,
     cmd_ttfx = `$jl --project=. --startup-file=no -e "using Bramble; m = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (10, 10), (true, true)); W = gridspace(m); u = element(W); D₋ₓ(u)"`
 
     g = SUITE["startup & latency"] = BenchmarkGroup()
@@ -224,27 +221,23 @@ end
 # an order more than a vector fill at the same size, and what is being watched
 # here is the allocation count and the shape of the cost, neither of which needs
 # a million degrees of freedom to show a regression.
-let W1 = gridspace(_mesh1()), f1 = Rₕ(W1, sin), v1 = Rₕ(W1, cos),
-    l1 = Bramble.form(W1, v -> innerₕ(f1, v)), b1 = Bramble.assemble(l1),
-    ast1 = Bramble.resolve_form_ast(l1), W2 = gridspace(_mesh2()),
-    f2 = Rₕ(W2, x -> sin(x[1]) * x[2]), l2 = Bramble.form(W2, v -> innerₕ(f2, v)),
-    b2 = Bramble.assemble(l2), ast2 = Bramble.resolve_form_ast(l2),
+let W1 = gridspace(_mesh1()), f1 = Rₕ(W1, sin), v1 = Rₕ(W1, cos), l1 = Bramble.form(W1, v -> innerₕ(f1, v)),
+    b1 = Bramble.assemble(l1), ast1 = Bramble.resolve_form_ast(l1), W2 = gridspace(_mesh2()),
+    f2 = Rₕ(W2, x -> sin(x[1]) * x[2]), l2 = Bramble.form(W2, v -> innerₕ(f2, v)), b2 = Bramble.assemble(l2),
+    ast2 = Bramble.resolve_form_ast(l2),
     Wm = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)),
-        (300, 300), (true, true))),
-    am = Bramble.form(Wm, Wm, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v))), Am = Bramble.assemble(am),
-    astm = Bramble.resolve_form_ast(am),
+        (300, 300), (true, true))), am = Bramble.form(Wm, Wm, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v))),
+    Am = Bramble.assemble(am), astm = Bramble.resolve_form_ast(am),
     # point 22: assemble!/assemble dispatch on execution_policy(space) now, a
     # different code path from assemble_parallel! below, which always threads
     # regardless of the backend. W1p/amp exercise that dispatch directly through
     # assemble!/assemble themselves, so a regression that breaks the policy check
     # (e.g. it silently stops mattering and one branch is always taken) shows up
     # here, not only in the explicit-override entries.
-    W1p = gridspace(mesh(domain(interval(0.0, 1.0)), N1, true; backend = _PAR)),
-    f1p = Rₕ(W1p, sin), l1p = Bramble.form(W1p, v -> innerₕ(f1p, v)),
-    b1p = Bramble.assemble(l1p), ast1p = Bramble.resolve_form_ast(l1p),
+    W1p = gridspace(mesh(domain(interval(0.0, 1.0)), N1, true; backend = _PAR)), f1p = Rₕ(W1p, sin),
+    l1p = Bramble.form(W1p, v -> innerₕ(f1p, v)), b1p = Bramble.assemble(l1p), ast1p = Bramble.resolve_form_ast(l1p),
     Wmp = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)),
-        (300, 300), (true, true); backend = _PAR)),
-    amp = Bramble.form(Wmp, Wmp, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v)))
+        (300, 300), (true, true); backend = _PAR)), amp = Bramble.form(Wmp, Wmp, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v)))
 
     g = SUITE["forms"] = BenchmarkGroup()
 

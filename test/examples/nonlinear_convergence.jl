@@ -18,8 +18,8 @@ using SparseMatrixColorings: SparseMatrixColorings
 
 const _sparse_ad = AutoSparse(
     AutoForwardDiff();
-    sparsity_detector=SparseConnectivityTracer.TracerSparsityDetector(),
-    coloring_algorithm=SparseMatrixColorings.GreedyColoringAlgorithm(),
+    sparsity_detector = SparseConnectivityTracer.TracerSparsityDetector(),
+    coloring_algorithm = SparseMatrixColorings.GreedyColoringAlgorithm()
 )
 
 @testset "Nonlinear worked examples" begin
@@ -43,7 +43,7 @@ const _sparse_ad = AutoSparse(
         gₕ = element(Wₕ)
         avgₕ!(gₕ, rhs)
         l = form(Wₕ, v -> innerₕ(gₕ, v))
-        F = assemble(l; dirichlet=bcs)
+        F = assemble(l; dirichlet = bcs)
 
         uₙ = element(Wₕ, 0.0)
         αvals = element(Wₕ)
@@ -54,7 +54,7 @@ const _sparse_ad = AutoSparse(
         last_step = Inf
         converged_at = 0
         for it in 1:200
-            assemble!(A, a; dirichlet=:boundary)
+            assemble!(A, a; dirichlet = :boundary)
             unew = A \ F
             last_step = maximum(abs, unew .- parent(uₙ))
             uₙ .= unew
@@ -94,12 +94,12 @@ const _sparse_ad = AutoSparse(
         gₕ = element(Wₕ)
         avgₕ!(gₕ, rhs)
         l = form(Wₕ, v -> innerₕ(gₕ, v))
-        F = assemble(l; dirichlet=bcs)
+        F = assemble(l; dirichlet = bcs)
 
         function diffusion_matrix(uₕ)
             αvals_local = α.(M₋ₕ(uₕ))
             a = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals_local * ∇₋ₕ(U), ∇₋ₕ(V)))
-            return assemble(a; dirichlet=:boundary)
+            return assemble(a; dirichlet = :boundary)
         end
 
         function residual(u_vec::AbstractVector{T}) where {T}
@@ -168,7 +168,7 @@ const _sparse_ad = AutoSparse(
                 f2_c = element(Wc)
                 avgₕ!(f2_c, f2)
                 l_c = form(Vc, q -> innerₕ(f1_c, q(1)) + innerₕ(f2_c, q(2)))
-                F_c = assemble(l_c; dirichlet=bcs_c)
+                F_c = assemble(l_c; dirichlet = bcs_c)
 
                 Ac(wₕ) = begin
                     u_c, v_c = components(wₕ)
@@ -176,14 +176,13 @@ const _sparse_ad = AutoSparse(
                         form(
                             Vc,
                             Vc,
-                            (p, q) ->
-                                inner₊(∇₋ₕ(p(1)), ∇₋ₕ(q(1))) +
-                                innerₕ(p(1), q(1)) +
-                                innerₕ(v_c * p(1), q(1)) +
-                                inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2))) +
-                                innerₕ(p(2), q(2)) - innerₕ(u_c * p(2), q(2)),
+                            (p, q) -> inner₊(∇₋ₕ(p(1)), ∇₋ₕ(q(1))) +
+                                      innerₕ(p(1), q(1)) +
+                                      innerₕ(v_c * p(1), q(1)) +
+                                      inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2))) +
+                                      innerₕ(p(2), q(2)) - innerₕ(u_c * p(2), q(2))
                         );
-                        dirichlet=:boundary,
+                        dirichlet = :boundary
                     )
                 end
                 rc(w::AbstractVector{T}) where {T} = begin
@@ -217,10 +216,9 @@ const _sparse_ad = AutoSparse(
         # Same seed and level count as the doc page's own run, so a failure here and a
         # changed number on the rendered page mean the same thing.
         Random.seed!(20260903)
-        hs, erru, errv = coupled_series(; n0=5, levels=5)
+        hs, erru, errv = coupled_series(; n0 = 5, levels = 5)
 
-        _observed_order(hs, errs) =
-            log(errs[end - 1] / errs[end]) / log(hs[end - 1] / hs[end])
+        _observed_order(hs, errs) = log(errs[end - 1] / errs[end]) / log(hs[end - 1] / hs[end])
         order_u = _observed_order(hs, erru)
         order_v = _observed_order(hs, errv)
 

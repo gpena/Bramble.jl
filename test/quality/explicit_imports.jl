@@ -44,15 +44,15 @@ using ExplicitImports
     @testset "Non-public imports are the declared ones" begin
         @test check_all_explicit_imports_are_public(
             Bramble;
-            ignore=(
+            ignore = (
                 :sparse!,
                 :Backend,
                 :_backend_eye,
                 :_backend_zeros,
                 :BilinearForm,
                 :LinearForm,
-                :CartesianProduct,
-            ),
+                :CartesianProduct
+            )
         ) === nothing
     end
 
@@ -77,7 +77,7 @@ using ExplicitImports
     @testset "Non-public qualified accesses are the declared ones" begin
         @test check_all_qualified_accesses_are_public(
             Bramble;
-            ignore=(
+            ignore = (
                 :ArrayStyle,
                 :BroadcastStyle,
                 :Broadcasted,
@@ -95,8 +95,8 @@ using ExplicitImports
                 :_linear_problem,
                 :_ode_function,
                 :_ode_problem,
-                :_export_vtk,
-            ),
+                :_export_vtk
+            )
         ) === nothing
     end
 
@@ -104,6 +104,6 @@ using ExplicitImports
     # `@forward VectorElement.space (Bramble.mesh,)` name the function they extend in full,
     # which is what the macro takes; unqualified would be a different binding.
     @testset "Self-qualified accesses are the declared ones" begin
-        @test check_no_self_qualified_accesses(Bramble; ignore=(:mesh, :show)) === nothing
+        @test check_no_self_qualified_accesses(Bramble; ignore = (:mesh, :show)) === nothing
     end
 end

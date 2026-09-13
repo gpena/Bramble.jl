@@ -31,7 +31,7 @@ using DifferentiationInterface
     @testset "Mooncake" begin
         if _have(:Mooncake)
             @eval import Mooncake
-            check_backend("AutoMooncake", AutoMooncake(config=nothing))
+            check_backend("AutoMooncake", AutoMooncake(config = nothing))
         else
             @test_skip "Mooncake not in this environment"
         end
@@ -53,14 +53,14 @@ using DifferentiationInterface
             # the failure message names when it is missing.
             mode = Enzyme.set_runtime_activity(Enzyme.Reverse)
             check_backend(
-                "AutoEnzyme", AutoEnzyme(mode=mode, function_annotation=Enzyme.Const)
+                "AutoEnzyme", AutoEnzyme(mode = mode, function_annotation = Enzyme.Const)
             )
 
             # Without the annotation it fails, which is worth pinning: if a later Enzyme
             # infers this on its own, this test tells us the annotation can go.
             scalar, _ = _ad_problems()
             @test_throws Exception DifferentiationInterface.derivative(
-                scalar, AutoEnzyme(mode=mode), 1.3
+                scalar, AutoEnzyme(mode = mode), 1.3
             )
         else
             @test_skip "Enzyme not in this environment"

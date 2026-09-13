@@ -49,6 +49,7 @@ stencil_offsets(op::ZeroOperator) = _origin(op)
 @inline function _reach(inner::Vector, ::Val{Dim}, steps::Tuple) where {Dim}
     out = eltype(inner)[]
     for s in steps, o in inner
+
         p = shift_offset(o, Dim, s)
         p in out || push!(out, p)
     end
@@ -63,14 +64,14 @@ end
 # maintained: it now reads the node's own `_stencil_taps` (gpena/Bramble.jl#70). `_reach`
 # sorts and de-duplicates, so the taps' evaluation order does not matter to it -- only the
 # set does, which is why the same declaration serves both.
-function stencil_offsets(op::TappedNode{D,Dim}) where {D,Dim}
+function stencil_offsets(op::TappedNode{D, Dim}) where {D, Dim}
     return _reach(
         stencil_offsets(op.inner_op), Val(Dim), map(_shift_delta, _stencil_taps(op))
     )
 end
 
 # a shift moves the whole reach and widens nothing
-function stencil_offsets(op::ShiftNode{D,Dim}) where {D,Dim}
+function stencil_offsets(op::ShiftNode{D, Dim}) where {D, Dim}
     return _reach(stencil_offsets(op.inner_op), Val(Dim), (op.shift_amount,))
 end
 

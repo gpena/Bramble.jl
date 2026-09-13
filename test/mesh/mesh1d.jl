@@ -5,34 +5,34 @@
 using Test
 using Bramble
 import Bramble:
-    indices,
-    change_points!,
-    npoints,
-    dim,
-    spacing,
-    half_spacings,
-    generate_indices,
-    boundary_symbol_to_dict,
-    markers,
-    backend,
-    set_indices!,
-    points,
-    set_points!,
-    set_markers!,
-    point,
-    half_point,
-    half_spacing,
-    iterative_refinement!,
-    set,
-    is_collapsed,
-    is_uniform
+                indices,
+                change_points!,
+                npoints,
+                dim,
+                spacing,
+                half_spacings,
+                generate_indices,
+                boundary_symbol_to_dict,
+                markers,
+                backend,
+                set_indices!,
+                points,
+                set_points!,
+                set_markers!,
+                point,
+                half_point,
+                half_spacing,
+                iterative_refinement!,
+                set,
+                is_collapsed,
+                is_uniform
 import Bramble:
-    cell_measure, cell_measures, hₘₐₓ, half_points, boundary_indices, interior_indices
+                cell_measure, cell_measures, hₘₐₓ, half_points, boundary_indices, interior_indices
 import Bramble: DomainMarkers, Mesh1D, Backend, forward_spacing, MeshMarkers
 import Base: diff
 
 @testset "One-dimensional meshes" begin
-    function create_test_domain(a=0.0, b=1.0; markers=nothing)
+    function create_test_domain(a = 0.0, b = 1.0; markers = nothing)
         I = interval(a, b)
 
         if markers isa Nothing
@@ -64,8 +64,8 @@ import Base: diff
     @testset "Construction and properties" begin
         Ω = create_test_domain(0.0, 2.0)
         npts = 5
-        Ωₕ_unif = mesh(Ω, npts, true; backend=backend())
-        Ωₕ_nonunif = mesh(Ω, npts, false; backend=backend())
+        Ωₕ_unif = mesh(Ω, npts, true; backend = backend())
+        Ωₕ_nonunif = mesh(Ω, npts, false; backend = backend())
 
         @testset "Uniform mesh" begin
             @test Ωₕ_unif isa Mesh1D
@@ -105,7 +105,7 @@ import Base: diff
 
         @testset "set_points! & set_indices!" begin
             Ω = create_test_domain(0.0, 1.0)
-            Ωₕ = mesh(Ω, 3, true; backend=backend()) # [0.0, 0.5, 1.0]
+            Ωₕ = mesh(Ω, 3, true; backend = backend()) # [0.0, 0.5, 1.0]
 
             new_pts = [0.0, 0.3, 0.7, 1.0]
             new_indices = CartesianIndices((4,))
@@ -122,11 +122,11 @@ import Base: diff
     @testset "Geometric properties" begin
         npts = 5
         Ω_unif = create_test_domain(0.0, 4.0) # Step = 1.0
-        Ωₕ_unif = mesh(Ω_unif, npts, true; backend=backend()) # Pts: 0, 1, 2, 3, 4
+        Ωₕ_unif = mesh(Ω_unif, npts, true; backend = backend()) # Pts: 0, 1, 2, 3, 4
 
         # Create a non-uniform mesh manually for predictable spacing
         Ω_nonunif = create_test_domain(0.0, 5.0)
-        Ωₕ_nonunif = mesh(Ω_nonunif, 4, true; backend=backend()) # Start uniform
+        Ωₕ_nonunif = mesh(Ω_nonunif, 4, true; backend = backend()) # Start uniform
         nonunif_pts = [0.0, 1.0, 3.0, 5.0] # Spacing: 1.0, 2.0, 2.0
         set_points!(Ωₕ_nonunif, nonunif_pts)
         set_indices!(Ωₕ_nonunif, CartesianIndices((4,)))
@@ -156,11 +156,11 @@ import Base: diff
             # Uniform: h=1.0 => h_half should be 0.5, 1.0, 1.0, 1.0, 0.5
             @test half_spacing(Ωₕ_unif, 1) ≈ 0.5 * spacing(Ωₕ_unif, 1) ≈ 0.5
             @test half_spacing(Ωₕ_unif, 2) ≈
-                0.5 * (spacing(Ωₕ_unif, 2) + spacing(Ωₕ_unif, 3)) ≈
-                1.0
+                  0.5 * (spacing(Ωₕ_unif, 2) + spacing(Ωₕ_unif, 3)) ≈
+                  1.0
             @test half_spacing(Ωₕ_unif, 4) ≈
-                0.5 * (spacing(Ωₕ_unif, 4) + spacing(Ωₕ_unif, 5)) ≈
-                1.0
+                  0.5 * (spacing(Ωₕ_unif, 4) + spacing(Ωₕ_unif, 5)) ≈
+                  1.0
             @test half_spacing(Ωₕ_unif, 5) ≈ 0.5 * spacing(Ωₕ_unif, 5) ≈ 0.5
             @test collect(half_spacings(Ωₕ_unif)) ≈ [0.5, 1.0, 1.0, 1.0, 0.5]
 
@@ -172,11 +172,11 @@ import Base: diff
             # h_half(4) = spacing(4)/2 = 2.0/2 = 1.0
             @test half_spacing(Ωₕ_nonunif, 1) ≈ 0.5 * spacing(Ωₕ_nonunif, 1) ≈ 0.5
             @test half_spacing(Ωₕ_nonunif, 2) ≈
-                0.5 * (spacing(Ωₕ_nonunif, 2) + spacing(Ωₕ_nonunif, 3)) ≈
-                1.5
+                  0.5 * (spacing(Ωₕ_nonunif, 2) + spacing(Ωₕ_nonunif, 3)) ≈
+                  1.5
             @test half_spacing(Ωₕ_nonunif, 3) ≈
-                0.5 * (spacing(Ωₕ_nonunif, 3) + spacing(Ωₕ_nonunif, 4)) ≈
-                2.0
+                  0.5 * (spacing(Ωₕ_nonunif, 3) + spacing(Ωₕ_nonunif, 4)) ≈
+                  2.0
             @test half_spacing(Ωₕ_nonunif, 4) ≈ 0.5 * spacing(Ωₕ_nonunif, 4) ≈ 1.0
             @test collect(half_spacings(Ωₕ_nonunif)) ≈ [0.5, 1.5, 2.0, 1.0]
         end
@@ -229,13 +229,13 @@ import Base: diff
     @testset "Index subsets" begin
         npts = 5
         Ω = create_test_domain(0.0, 1.0)
-        Ωₕ = mesh(Ω, npts, true; backend=backend())
+        Ωₕ = mesh(Ω, npts, true; backend = backend())
 
         @test boundary_indices(Ωₕ) == (CartesianIndex(1), CartesianIndex(npts))
         @test interior_indices(Ωₕ) == CartesianIndices((2:(npts - 1),))
 
         # Edge cases
-        Ωₕ_2 = mesh(Ω, 2, true; backend=backend())
+        Ωₕ_2 = mesh(Ω, 2, true; backend = backend())
         @test boundary_indices(Ωₕ_2) == (CartesianIndex(1), CartesianIndex(2))
         @test isempty(interior_indices(Ωₕ_2)) # Interior is empty range 2:1
 
@@ -255,13 +255,13 @@ import Base: diff
             :Neumann => :right,
             :Mixed => (:left, :right),
             :LowerHalf => x -> x[1] < 0.5,
-            :PointMarker => x -> isapprox(x[1], 0.75),
+            :PointMarker => x -> isapprox(x[1], 0.75)
         )
 
-        Ω = create_test_domain(0.0, 1.0; markers=dm)
+        Ω = create_test_domain(0.0, 1.0; markers = dm)
 
         npts = 5 # Points: 0.0, 0.25, 0.5, 0.75, 1.0
-        Ωₕ = mesh(Ω, npts, true; backend=backend())
+        Ωₕ = mesh(Ω, npts, true; backend = backend())
 
         # Test marker retrieval before explicit setting (should be done by constructor)
         # :boundary/:interior are always present too now (test/mesh/markers.jl covers them).
@@ -280,7 +280,7 @@ import Base: diff
     @testset "Mesh modification" begin
         @testset "iterative_refinement!" begin
             dm = markers(interval(0, 1), :BC => :left, :Center => x -> 0.4 < x[1] < 0.6)
-            Ω = create_test_domain(0.0, 1.0; markers=dm)
+            Ω = create_test_domain(0.0, 1.0; markers = dm)
 
             npts_initial = 3 # Pts: 0.0, 0.5, 1.0
             npts_refined2 = 2 * npts_initial - 1 # 5
@@ -289,13 +289,13 @@ import Base: diff
             # without supplying domain markers now refuses outright -- there is no domain
             # here to re-derive them from -- rather than silently dropping them. Left
             # untouched, not partially refined.
-            Ωₕ = mesh(Ω, npts_initial, true; backend=backend())
+            Ωₕ = mesh(Ω, npts_initial, true; backend = backend())
             @test_throws ArgumentError iterative_refinement!(Ωₕ)
             @test npoints(Ωₕ) == npts_initial
             @test points(Ωₕ) ≈ [0.0, 0.5, 1.0]
 
             # Refine *with* marker update
-            Ωₕ2 = mesh(Ω, npts_initial, true; backend=backend()) # Start fresh: 0.0, 0.5, 1.0
+            Ωₕ2 = mesh(Ω, npts_initial, true; backend = backend()) # Start fresh: 0.0, 0.5, 1.0
             iterative_refinement!(Ωₕ2, dm)
             @test npoints(Ωₕ2) == npts_refined2
             @test indices(Ωₕ2) == CartesianIndices((npts_refined2,))
@@ -308,15 +308,15 @@ import Base: diff
             # (re)apply the domain markers it was given, since `set_markers!` needs no
             # interval to do that. Hoisting both to `AbstractMeshType` in `interface.jl`
             # must not collapse this distinction into a single shared guard.
-            Ω_one = create_test_domain(2.0, 5.0; markers=dm)
-            Ωₕ_one_arg = mesh(Ω_one, 1, true; backend=backend())
+            Ω_one = create_test_domain(2.0, 5.0; markers = dm)
+            Ωₕ_one_arg = mesh(Ω_one, 1, true; backend = backend())
             @test !is_collapsed(Ωₕ_one_arg)
             markers_before = deepcopy(markers(Ωₕ_one_arg))
             iterative_refinement!(Ωₕ_one_arg)
             @test npoints(Ωₕ_one_arg) == 1
             @test markers(Ωₕ_one_arg) == markers_before
 
-            Ωₕ_one_dm = mesh(Ω_one, 1, true; backend=backend())
+            Ωₕ_one_dm = mesh(Ω_one, 1, true; backend = backend())
             iterative_refinement!(Ωₕ_one_dm, dm)
             @test npoints(Ωₕ_one_dm) == 1
             @test haskey(markers(Ωₕ_one_dm), :BC)
@@ -325,9 +325,9 @@ import Base: diff
 
         @testset "change_points!" begin
             dm = markers(interval(0, 1), :Endpoint => :right, :NearStart => x -> x[1] < 0.3)
-            Ω = create_test_domain(0.0, 2.0; markers=dm)
+            Ω = create_test_domain(0.0, 2.0; markers = dm)
             npts = 5 # Pts: 0.0, 0.5, 1.0, 1.5, 2.0
-            Ωₕ = mesh(Ω, npts, true; backend=backend())
+            Ωₕ = mesh(Ω, npts, true; backend = backend())
 
             # Original markers
             new_pts_valid = [0.0, 0.1, 0.5, 1.5, 2.0] # Keep endpoints, change interior
@@ -348,7 +348,7 @@ import Base: diff
 
     @testset "Additional methods" begin
         Ω = create_test_domain(0.0, 4.0)
-        Ωₕ = mesh(Ω, 5, true; backend=backend()) # [0, 1, 2, 3, 4]
+        Ωₕ = mesh(Ω, 5, true; backend = backend()) # [0, 1, 2, 3, 4]
 
         @testset "Field accessors" begin
             # Test set accessor
@@ -359,7 +359,7 @@ import Base: diff
 
             # Collapsed mesh
             Ω_pt = create_test_domain(1.0, 1.0)
-            Ωₕ_pt = mesh(Ω_pt, 1, true; backend=backend())
+            Ωₕ_pt = mesh(Ω_pt, 1, true; backend = backend())
             @test is_collapsed(Ωₕ_pt) == true
             @test spacing(Ωₕ_pt, 1) == 0.0
             @test forward_spacing(Ωₕ_pt, 1) == 0.0
@@ -368,20 +368,20 @@ import Base: diff
         @testset "Single-point mesh" begin
             # A collapsed interval [c, c] must be meshed at c, not at the origin.
             for c in (1.0, 3.0, -2.5)
-                Ωₕ_c = mesh(create_test_domain(c, c), 1, true; backend=backend())
+                Ωₕ_c = mesh(create_test_domain(c, c), 1, true; backend = backend())
                 @test npoints(Ωₕ_c) == 1
                 @test points(Ωₕ_c) == [c]
                 @test point(Ωₕ_c, 1) == c
             end
 
             # Requesting more points on a collapsed interval still yields the one point.
-            Ωₕ_many = mesh(create_test_domain(3.0, 3.0), 7, true; backend=backend())
+            Ωₕ_many = mesh(create_test_domain(3.0, 3.0), 7, true; backend = backend())
             @test npoints(Ωₕ_many) == 1
             @test points(Ωₕ_many) == [3.0]
 
             # A genuine interval reduced to a single point uses the lower bound,
             # and has zero spacing rather than reading past the end of the vector.
-            Ωₕ_one = mesh(create_test_domain(2.0, 5.0), 1, true; backend=backend())
+            Ωₕ_one = mesh(create_test_domain(2.0, 5.0), 1, true; backend = backend())
             @test points(Ωₕ_one) == [2.0]
             @test spacing(Ωₕ_one, 1) == 0.0
             @test forward_spacing(Ωₕ_one, 1) == 0.0

@@ -1,35 +1,35 @@
 using Test
 using Bramble
 using Bramble:
-    TrialFunction,
-    TestFunction,
-    IndexedTrialFunction,
-    IndexedTestFunction,
-    SourceFunction,
-    SourceVector,
-    IdentityOperator,
-    ZeroOperator,
-    LazyOp,
-    OperatorAdd,
-    OperatorScale,
-    GridFunctionScale,
-    trial_function,
-    test_function,
-    source_function,
-    local_stencil,
-    resolve_ast,
-    is_symbolic,
-    zero_offset,
-    shift_offset,
-    shift_stencil,
-    concatenate_stencils,
-    scale_stencil,
-    multiply_stencils_bilinear,
-    multiply_stencils_linear,
-    restrict_to,
-    shift_op,
-    form,
-    assemble
+               TrialFunction,
+               TestFunction,
+               IndexedTrialFunction,
+               IndexedTestFunction,
+               SourceFunction,
+               SourceVector,
+               IdentityOperator,
+               ZeroOperator,
+               LazyOp,
+               OperatorAdd,
+               OperatorScale,
+               GridFunctionScale,
+               trial_function,
+               test_function,
+               source_function,
+               local_stencil,
+               resolve_ast,
+               is_symbolic,
+               zero_offset,
+               shift_offset,
+               shift_stencil,
+               concatenate_stencils,
+               scale_stencil,
+               multiply_stencils_bilinear,
+               multiply_stencils_linear,
+               restrict_to,
+               shift_op,
+               form,
+               assemble
 
 # The AST leaves, the stencil algebra under them, and the two traits every node answers.
 #
@@ -118,7 +118,7 @@ using Bramble:
             TestFunction{2}(),
             IndexedTrialFunction{2}(1),
             IndexedTestFunction{2}(2),
-            id,
+            id
         )
             @test local_stencil(op, Wₕ, I, nothing, lin) == ((O, 1.0),)
         end
@@ -126,7 +126,7 @@ using Bramble:
 
         # and in one dimension the offset is a 1-tuple
         @test local_stencil(TrialFunction{1}(), Wₕ1, CartesianIndex(4), nothing, 4) ==
-            (((0,), 1.0),)
+              (((0,), 1.0),)
     end
 
     @testset "Source node values" begin
@@ -140,7 +140,7 @@ using Bramble:
 
         # a vector of values, read at the linear index
         vec = collect(1.0:Float64(ndofs(Wₕ)))
-        sv = SourceVector{2,Vector{Float64}}(vec)
+        sv = SourceVector{2, Vector{Float64}}(vec)
         @test local_stencil(sv, Wₕ, I, nothing, lin) == ((O, vec[lin]),)
     end
 
@@ -193,9 +193,9 @@ using Bramble:
             IndexedTrialFunction{2}(1),
             IndexedTestFunction{2}(1),
             source_function(sin, Val(2)),
-            SourceVector{2,Vector{Float64}}([1.0]),
+            SourceVector{2, Vector{Float64}}([1.0]),
             id,
-            ZeroOperator(Wₕ),
+            ZeroOperator(Wₕ)
         )
             @test resolve_ast(op) === op
         end
@@ -209,7 +209,7 @@ using Bramble:
         @test resolve_ast(uₕ * id) isa GridFunctionScale
 
         # tuples resolve elementwise, and anything else is returned untouched
-        @test resolve_ast((id, 3 * id)) isa NTuple{2,LazyOp}
+        @test resolve_ast((id, 3 * id)) isa NTuple{2, LazyOp}
         @test resolve_ast(42) === 42
         @test resolve_ast("not an ast") == "not an ast"
 
@@ -228,7 +228,7 @@ using Bramble:
             IndexedTrialFunction{2}(1),
             IndexedTestFunction{2}(1),
             source_function(sin, Val(2)),
-            SourceVector{2,Vector{Float64}}([1.0]),
+            SourceVector{2, Vector{Float64}}([1.0])
         )
             @test is_symbolic(op)
         end
@@ -248,7 +248,7 @@ using Bramble:
             M₊ₓ,
             op -> shift_op(op, 1, 1),
             op -> restrict_to(:interior, op),
-            op -> 3 * op,
+            op -> 3 * op
         )
             @test is_symbolic(wrap(u))
             @test !is_symbolic(wrap(id))
@@ -288,7 +288,7 @@ end
             v -> innerₕ(fₕ, D₋ₓ(v)),
             v -> innerₕ(fₕ, M₋ₓ(v)),
             v -> innerₕ(fₕ, jumpₓ(v)),
-            v -> inner₊ₓ(fₕ, D₋ₓ(v)),
+            v -> inner₊ₓ(fₕ, D₋ₓ(v))
         )
             @test eltype(assemble(form(Wₕ, e))) === T
         end
@@ -310,13 +310,13 @@ end
             @test eltype(Ωₕ) === T
 
             a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
-            A = assemble(a; dirichlet=:walls)
+            A = assemble(a; dirichlet = :walls)
             @test eltype(A) === T
 
             fₕ = Rₕ(Wₕ, x -> sin(x[1]) * x[2])
             l = form(Wₕ, v -> innerₕ(fₕ, v))
             bcs = dirichlet_constraints(Ωₕ, :walls => (x -> zero(T)))
-            b = assemble(l; dirichlet=bcs)
+            b = assemble(l; dirichlet = bcs)
             @test eltype(b) === T
         end
     end

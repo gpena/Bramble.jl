@@ -2,19 +2,19 @@ using Test
 using Bramble
 using ForwardDiff
 using Bramble:
-    source_function,
-    SourceVector,
-    SourceFunction,
-    Innerh,
-    restrict_to,
-    shift_op,
-    form,
-    assemble,
-    assemble!,
-    resolve_form_ast,
-    LinearProduct,
-    CompositeGridSpace,
-    components
+               source_function,
+               SourceVector,
+               SourceFunction,
+               Innerh,
+               restrict_to,
+               shift_op,
+               form,
+               assemble,
+               assemble!,
+               resolve_form_ast,
+               LinearProduct,
+               CompositeGridSpace,
+               components
 
 # An operator wrapped around a *source* in a linear form.
 #
@@ -55,7 +55,7 @@ using Bramble:
             ("jumpₓ", jumpₓ),
             ("Dcₓ", Dcₓ),
             ("Dstar₊ₓ", Dstar₊ₓ),
-            ("Dₕₓ", Dₕₓ),
+            ("Dₕₓ", Dₕₓ)
         )
             b = assemble(form(Wₕ, v -> innerₕ(op(sf), v)))
             @test b ≈ parent(op(fₕ)) .* w                     # the oracle
@@ -85,7 +85,7 @@ using Bramble:
             ("Dcₓ", Dcₓ),
             ("Dcᵧ", Dcᵧ),
             ("Dstar₊ₓ", Dstar₊ₓ),
-            ("Dₕₓ", Dₕₓ),
+            ("Dₕₓ", Dₕₓ)
         )
             b = assemble(form(Wₕ, v -> innerₕ(op(sf), v)))
             @test b ≈ parent(op(fₕ)) .* w
@@ -115,7 +115,7 @@ using Bramble:
         @test isapprox(
             assemble(form(Wₕ, v -> innerₕ(D₋ₓ(D₋ᵧ(sf)), v))),
             parent(D₋ₓ(D₋ᵧ(fₕ))) .* w;
-            atol=1e-12,
+            atol = 1e-12
         )
 
         # scaling by a number, and by a Ref that a caller can rebind between assemblies
@@ -126,14 +126,14 @@ using Bramble:
         gf = source_function(x -> x[2], Val(2))
         gₕ = Rₕ(Wₕ, x -> x[2])
         @test assemble(form(Wₕ, v -> innerₕ(D₋ₓ(sf) + M₋ₓ(sf), v))) ≈
-            (parent(D₋ₓ(fₕ)) .+ parent(M₋ₓ(fₕ))) .* w
+              (parent(D₋ₓ(fₕ)) .+ parent(M₋ₓ(fₕ))) .* w
         @test assemble(form(Wₕ, v -> innerₕ(D₋ₓ(sf) + D₋ᵧ(gf), v))) ≈
-            (parent(D₋ₓ(fₕ)) .+ parent(D₋ᵧ(gₕ))) .* w
+              (parent(D₋ₓ(fₕ)) .+ parent(D₋ᵧ(gₕ))) .* w
 
         for b in (
             assemble(form(Wₕ, v -> innerₕ(D₋ₓ(M₋ᵧ(sf)), v))),
             assemble(form(Wₕ, v -> innerₕ(3 * D₋ₓ(sf), v))),
-            assemble(form(Wₕ, v -> innerₕ(D₋ₓ(sf) + D₋ᵧ(gf), v))),
+            assemble(form(Wₕ, v -> innerₕ(D₋ₓ(sf) + D₋ᵧ(gf), v)))
         )
             @test !all(iszero, b)
         end
@@ -170,9 +170,7 @@ using Bramble:
         w = weights(Wₕ, Innerh())
 
         b = assemble(form(Wₕ, v -> innerₕ(shift_op(sf, 1, 1), v)))
-        expected = [
-            i < length(w) ? parent(fₕ)[i + 1] * w[i] : zero(eltype(w)) for i in eachindex(w)
-        ]
+        expected = [i < length(w) ? parent(fₕ)[i + 1] * w[i] : zero(eltype(w)) for i in eachindex(w)]
         @test b ≈ expected
         @test !all(iszero, b)
 
@@ -183,10 +181,8 @@ using Bramble:
         # point's own value* rather than contribute zero, which a shift of amount 1 cannot
         # tell apart from the correct answer at every row but the last.
         b2 = assemble(form(Wₕ, v -> innerₕ(shift_op(sf, 1, 2), v)))
-        expected2 = [
-            i + 2 <= length(w) ? parent(fₕ)[i + 2] * w[i] : zero(eltype(w)) for
-            i in eachindex(w)
-        ]
+        expected2 = [i + 2 <= length(w) ? parent(fₕ)[i + 2] * w[i] : zero(eltype(w)) for
+                     i in eachindex(w)]
         wrongly_clamped = [parent(fₕ)[min(i + 2, length(w))] * w[i] for i in eachindex(w)]
         @test b2 ≈ expected2
         @test !isapprox(b2, wrongly_clamped)
@@ -214,7 +210,7 @@ using Bramble:
         f = x -> x[1] * x[2] + x[1]
         fₕ = Rₕ(Wₕ, f)
         w = weights(Wₕ, Innerh())
-        sv = SourceVector{2,typeof(parent(fₕ))}(parent(fₕ))
+        sv = SourceVector{2, typeof(parent(fₕ))}(parent(fₕ))
 
         b = assemble(form(Wₕ, v -> innerₕ(D₋ₓ(sv), v)))
         @test b ≈ parent(D₋ₓ(fₕ)) .* w
@@ -323,9 +319,9 @@ using Bramble:
         end
 
         f = x -> x[1]^2 + x[2]
-        plain = Wₕ -> (sf=source_function(f, Val(2)); v -> innerₕ(sf, v))
-        diffed = Wₕ -> (sf=source_function(f, Val(2)); v -> innerₕ(D₋ₓ(sf), v))
-        nested = Wₕ -> (sf=source_function(f, Val(2)); v -> innerₕ(D₋ₓ(M₋ᵧ(sf)), v))
+        plain = Wₕ -> (sf = source_function(f, Val(2)); v -> innerₕ(sf, v))
+        diffed = Wₕ -> (sf = source_function(f, Val(2)); v -> innerₕ(D₋ₓ(sf), v))
+        nested = Wₕ -> (sf = source_function(f, Val(2)); v -> innerₕ(D₋ₓ(M₋ᵧ(sf)), v))
 
         # the source-value path must not cost an allocation, at any size: the branch on
         # `_is_source_only` is decided by the operand's type and folds away

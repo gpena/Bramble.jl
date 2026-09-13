@@ -52,13 +52,13 @@ avgₕ(Wₕ, x -> sin(x[1]) * x[2]; quad_points = Val(4))
 See also: [`avgₕ!`](@ref), [`Rₕ`](@ref).
 """
 Base.@constprop :aggressive function avgₕ(
-    Wₕ::AbstractSpaceType,
-    f;
-    quad_points::Union{Integer,Val}=Val(AVG_QUAD_POINTS),
-    markers::NTuple{N,Symbol}=NTuple{0,Symbol}(),
+        Wₕ::AbstractSpaceType,
+        f;
+        quad_points::Union{Integer, Val} = Val(AVG_QUAD_POINTS),
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
 ) where {N}
     uₕ = element(Wₕ, _restriction_eltype(Wₕ, f, markers))
-    return avgₕ!(uₕ, f; quad_points=quad_points, markers=markers)
+    return avgₕ!(uₕ, f; quad_points = quad_points, markers = markers)
 end
 
 """
@@ -85,26 +85,19 @@ the result into `uₕ`.
 
 See also: [`avgₕ`](@ref), [`Rₕ!`](@ref).
 """
-@inline avgₕ!(uₕ::VectorElement{<:ScalarGridSpace{D}}, f::Tuple{Any}) where {D} =
-    avgₕ!(uₕ, f[1])
+@inline avgₕ!(uₕ::VectorElement{<:ScalarGridSpace{D}}, f::Tuple{Any}) where {D} = avgₕ!(uₕ, f[1])
 
-@inline avgₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f::F) where {F} =
-    project!(uₕ, _average_rule(f, Val(AVG_QUAD_POINTS)))
+@inline avgₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f::F) where {F} = project!(uₕ, _average_rule(f, Val(AVG_QUAD_POINTS)))
 
-@inline avgₕ!(uₕ::VectorElement{<:CompositeGridSpace}, f::Tuple) =
-    project!(uₕ, _average_rule(f, Val(AVG_QUAD_POINTS)))
+@inline avgₕ!(uₕ::VectorElement{<:CompositeGridSpace}, f::Tuple) = project!(uₕ, _average_rule(f, Val(AVG_QUAD_POINTS)))
 
-@inline avgₕ!(uₕ::VectorElement{<:CompositeGridSpace}, f::F) where {F} =
-    project!(uₕ, _average_rule(f, Val(AVG_QUAD_POINTS)))
+@inline avgₕ!(uₕ::VectorElement{<:CompositeGridSpace}, f::F) where {F} = project!(uₕ, _average_rule(f, Val(AVG_QUAD_POINTS)))
 
-@inline avgₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f::F, nq::Val{NQ}) where {F,NQ} =
-    project!(uₕ, _average_rule(f, nq))
+@inline avgₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f::F, nq::Val{NQ}) where {F, NQ} = project!(uₕ, _average_rule(f, nq))
 
-@inline avgₕ!(uₕ::VectorElement{<:CompositeGridSpace}, f::Tuple, nq::Val{NQ}) where {NQ} =
-    project!(uₕ, _average_rule(f, nq))
+@inline avgₕ!(uₕ::VectorElement{<:CompositeGridSpace}, f::Tuple, nq::Val{NQ}) where {NQ} = project!(uₕ, _average_rule(f, nq))
 
-@inline avgₕ!(uₕ::VectorElement{<:CompositeGridSpace}, f::F, nq::Val{NQ}) where {F,NQ} =
-    project!(uₕ, _average_rule(f, nq))
+@inline avgₕ!(uₕ::VectorElement{<:CompositeGridSpace}, f::F, nq::Val{NQ}) where {F, NQ} = project!(uₕ, _average_rule(f, nq))
 
 # A one-component space is a scalar space, so an NC-tuple of functions with
 # NC == 1 must still work.
@@ -118,9 +111,9 @@ See also: [`avgₕ`](@ref), [`Rₕ!`](@ref).
 @inline avgₕ!(
     uₕ::VectorElement{<:ScalarGridSpace},
     f::Tuple{Any};
-    quad_points::Union{Integer,Val}=Val(AVG_QUAD_POINTS),
-    markers::NTuple{N,Symbol}=NTuple{0,Symbol}(),
-) where {N} = avgₕ!(uₕ, f[1]; quad_points=quad_points, markers=markers)
+    quad_points::Union{Integer, Val} = Val(AVG_QUAD_POINTS),
+    markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {N} = avgₕ!(uₕ, f[1]; quad_points = quad_points, markers = markers)
 
 # `NQ` is a compile-time constant here (a type parameter), so the check folds away,
 # costing nothing on the hot path. Without it, `quad_points = Val(0)` reached QuadGK's
@@ -135,11 +128,11 @@ end
 end
 
 Base.@constprop :aggressive function avgₕ!(
-    uₕ::VectorElement,
-    f::F;
-    quad_points::Union{Integer,Val}=Val(AVG_QUAD_POINTS),
-    markers::NTuple{N,Symbol}=NTuple{0,Symbol}(),
-) where {F,N}
+        uₕ::VectorElement,
+        f::F;
+        quad_points::Union{Integer, Val} = Val(AVG_QUAD_POINTS),
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {F, N}
     nq = _to_quad_val(quad_points)
 
     if N > 0
@@ -161,15 +154,15 @@ end
 # `_cell_average` as a plain argument rather than reconstructed inside it from a `Val`
 # (gpena/Bramble.jl#102) -- the same seed a scalar quadrature loop always started from,
 # just named at the call site instead of hidden inside the callee.
-struct _AvgKernel{F,X,IX,NQ,T}
+struct _AvgKernel{F, X, IX, NQ, T}
     f::F
     x::X
     idxs::IX
-    nodes::NTuple{NQ,T}
-    wts::NTuple{NQ,T}
+    nodes::NTuple{NQ, T}
+    wts::NTuple{NQ, T}
 end
-@inline (k::_AvgKernel{F,X,IX,NQ,T})(i) where {F,X,IX,NQ,T} =
-    _cell_average(k.f, k.x, k.idxs[i], k.nodes, k.wts, zero(T))
+@inline (k::_AvgKernel{F, X, IX, NQ, T})(i) where {F, X, IX, NQ, T} = _cell_average(
+    k.f, k.x, k.idxs[i], k.nodes, k.wts, zero(T))
 
 # Same reasoning, for the tuple-valued (composite) quadrature call. `NC` is the space's
 # *leaf* count (`length(components(uₕ))`, which flattens any nesting), not the space's own
@@ -179,34 +172,34 @@ end
 # takes `::Val{NC}` to rebuild this itself (gpena/Bramble.jl#102), since `.+`/`.*` over a
 # `Number` seed already compute the scalar case, and over an `NTuple` seed compute this one,
 # from the same method body.
-struct _AvgScatterKernel{F,X,IX,NQ,T,NC}
+struct _AvgScatterKernel{F, X, IX, NQ, T, NC}
     f::F
     x::X
     idxs::IX
-    nodes::NTuple{NQ,T}
-    wts::NTuple{NQ,T}
+    nodes::NTuple{NQ, T}
+    wts::NTuple{NQ, T}
 end
-@inline (k::_AvgScatterKernel{F,X,IX,NQ,T,NC})(i) where {F,X,IX,NQ,T,NC} =
-    _cell_average(k.f, k.x, k.idxs[i], k.nodes, k.wts, ntuple(_ -> zero(T), Val(NC)))
+@inline (k::_AvgScatterKernel{F, X, IX, NQ, T, NC})(i) where {F, X, IX, NQ, T, NC} = _cell_average(
+    k.f, k.x, k.idxs[i], k.nodes, k.wts, ntuple(_ -> zero(T), Val(NC)))
 
 # `CellAverage`'s side of the `project!` contract (`operators/projection.jl`). The rule
 # carries the quadrature order; the driver decides the space's shape, the masking and the
 # execution policy.
-@inline function _rule_kernel(rule::CellAverage{F,NQ}, sp) where {F,NQ}
+@inline function _rule_kernel(rule::CellAverage{F, NQ}, sp) where {F, NQ}
     Ωₕ = mesh(sp)
     nodes, wts = _gauss_rule(rule.nq, eltype(Ωₕ))
     return _AvgKernel(rule.f, half_points(Ωₕ), indices(Ωₕ), nodes, wts)
 end
 
 @inline function _rule_scatter_kernel(
-    rule::CellAverage{F,NQ}, sp, ::Val{NC}
-) where {F,NQ,NC}
+        rule::CellAverage{F, NQ}, sp, ::Val{NC}
+) where {F, NQ, NC}
     Ωₕ = mesh(sp)
     T = eltype(Ωₕ)
     nodes, wts = _gauss_rule(rule.nq, T)
     x = half_points(Ωₕ)
     idxs = indices(Ωₕ)
-    return _AvgScatterKernel{typeof(rule.f),typeof(x),typeof(idxs),NQ,T,NC}(
+    return _AvgScatterKernel{typeof(rule.f), typeof(x), typeof(idxs), NQ, T, NC}(
         rule.f, x, idxs, nodes, wts
     )
 end
@@ -263,7 +256,7 @@ and `BigFloat` grids get a rule at their own precision rather than a rounded
 `Float64` one. Weights sum to one, which makes the weighted sum over a cell the
 cell average directly.
 """
-@generated function _gauss_rule(::Val{N}, ::Type{T}) where {N,T}
+@generated function _gauss_rule(::Val{N}, ::Type{T}) where {N, T}
     # When `T` is an isbits float its precision is fixed by the type, so the rule
     # depends only on (N, T) and is folded into a compile-time constant: obtaining it
     # then costs nothing at all. This covers Float16/32/64 and equally the stack
@@ -284,9 +277,9 @@ cell average directly.
     return :(_gauss_rule_runtime(Val($N), $T))
 end
 
-@inline function _gauss_rule_runtime(::Val{N}, ::Type{T}) where {N,T}
+@inline function _gauss_rule_runtime(::Val{N}, ::Type{T}) where {N, T}
     x, w = gauss(T, N, zero(T), one(T))
-    return NTuple{N,T}(x), NTuple{N,T}(w)
+    return NTuple{N, T}(x), NTuple{N, T}(w)
 end
 
 # A one-dimensional mesh answers `half_points` with a plain vector but indexes with
@@ -304,10 +297,10 @@ end
     f,
     x::AbstractVector,
     idx::CartesianIndex{1},
-    nodes::NTuple{NQ,T},
-    wts::NTuple{NQ,T},
-    seed,
-) where {NQ,T} = _cell_average(f, x, idx[1], nodes, wts, seed)
+    nodes::NTuple{NQ, T},
+    wts::NTuple{NQ, T},
+    seed
+) where {NQ, T} = _cell_average(f, x, idx[1], nodes, wts, seed)
 
 # Average of `f` over the 1D cell spanned by `x[i] .. x[i+1]`.
 #
@@ -319,8 +312,8 @@ end
 # of zeros for composite (gpena/Bramble.jl#102, collapsing what used to be a `::Val{NC}`
 # pair of methods here).
 @inline function _cell_average(
-    f, x::AbstractVector, i::Int, nodes::NTuple{NQ,T}, wts::NTuple{NQ,T}, seed
-) where {NQ,T}
+        f, x::AbstractVector, i::Int, nodes::NTuple{NQ, T}, wts::NTuple{NQ, T}, seed
+) where {NQ, T}
     @inbounds a = T(x[i])
     @inbounds d = T(x[i + 1]) - a
 
@@ -338,8 +331,8 @@ end
 # answers `half_points` with a plain vector, not a one-tuple of vectors, so it does not
 # reach this NTuple{2}-indexed method in the first place).
 @inline function _cell_average(
-    f, x::NTuple{2}, idx::CartesianIndex{2}, nodes::NTuple{NQ,T}, wts::NTuple{NQ,T}, seed
-) where {NQ,T}
+        f, x::NTuple{2}, idx::CartesianIndex{2}, nodes::NTuple{NQ, T}, wts::NTuple{NQ, T}, seed
+) where {NQ, T}
     @inbounds i, j = idx[1], idx[2]
     @inbounds a1 = T(x[1][i])
     @inbounds d1 = T(x[1][i + 1]) - a1
@@ -367,8 +360,8 @@ end
 
 # 3D cell average, scalar or composite by the `seed` passed in -- see the 1D method above.
 @inline function _cell_average(
-    f, x::NTuple{3}, idx::CartesianIndex{3}, nodes::NTuple{NQ,T}, wts::NTuple{NQ,T}, seed
-) where {NQ,T}
+        f, x::NTuple{3}, idx::CartesianIndex{3}, nodes::NTuple{NQ, T}, wts::NTuple{NQ, T}, seed
+) where {NQ, T}
     @inbounds i, j, k = idx[1], idx[2], idx[3]
     @inbounds a1 = T(x[1][i])
     @inbounds d1 = T(x[1][i + 1]) - a1
@@ -409,8 +402,8 @@ end
 # generic one exists for dispatch correctness at any `D`, tested directly rather than
 # through a mesh.
 @inline function _cell_average(
-    f, x::NTuple{D}, idx::CartesianIndex{D}, nodes::NTuple{NQ,T}, wts::NTuple{NQ,T}, seed
-) where {D,NQ,T}
+        f, x::NTuple{D}, idx::CartesianIndex{D}, nodes::NTuple{NQ, T}, wts::NTuple{NQ, T}, seed
+) where {D, NQ, T}
     a = ntuple(k -> @inbounds(T(x[k][idx[k]])), Val(D))
     b = ntuple(k -> @inbounds(T(x[k][idx[k] + 1])), Val(D))
 

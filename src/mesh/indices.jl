@@ -26,7 +26,7 @@ For scalar input (`Int`), returns 1D `CartesianIndices`. For tuple input, return
 multi-dimensional `CartesianIndices`.
 """
 @inline generate_indices(pts::Int) = CartesianIndices((pts,))
-@inline generate_indices(pts::NTuple{D,Int}) where {D} = CartesianIndices(pts)
+@inline generate_indices(pts::NTuple{D, Int}) where {D} = CartesianIndices(pts)
 
 """
     is_boundary_index(idxs::CartesianIndices{D}, idx) -> Bool

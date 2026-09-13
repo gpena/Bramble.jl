@@ -33,8 +33,7 @@ This zero-argument form is specific to `VectorElement` and does not conflict wit
 result for this type specifically, in favor of the shape a grid function actually has.
 Replaces the former `to_matrix` outright (gpena/Bramble.jl#73).
 """
-@inline Base.reshape(uₕ::VectorElement{<:ScalarGridSpace}) =
-    Base.ReshapedArray(parent(uₕ), npoints(mesh(space(uₕ)), Tuple), ())
+@inline Base.reshape(uₕ::VectorElement{<:ScalarGridSpace}) = Base.ReshapedArray(parent(uₕ), npoints(mesh(space(uₕ)), Tuple), ())
 @inline Base.reshape(uₕ::VectorElement{<:CompositeGridSpace}) = map(reshape, components(uₕ))
 
 # `values!` is gone outright (gpena/Bramble.jl#73): `copyto!(uₕ, s)` already does the same
@@ -110,7 +109,7 @@ Returns the degree-of-freedom ranges for every **leaf** of `Wₕ`, depth-first �
     # so its length and element types are known to the compiler, not just at runtime.
     return map(
         leaves_entry -> (leaves_entry[2] + 1):(leaves_entry[2] + ndofs(leaves_entry[1])),
-        leaf_spaces_offsets(Wₕ),
+        leaf_spaces_offsets(Wₕ)
     )
 end
 
@@ -182,7 +181,7 @@ If `α` is provided, the components are initialized to `α`.
     T = eltype(b)
 
     # Allocate a vector with the correct number of degrees of freedom (DoFs) and return the element.
-    return VectorElement{ST,T,VT}(vector(b, ndofs(Wₕ)), Wₕ)
+    return VectorElement{ST, T, VT}(vector(b, ndofs(Wₕ)), Wₕ)
 end
 
 """
@@ -207,7 +206,7 @@ restricted function returns.
     # `similar` on an empty prototype rather than a `Vector{T}` literal, so the container
     # type stays the backend's and only the element type changes.
     v = similar(vector(b, 0), T, ndofs(Wₕ))
-    return VectorElement{typeof(Wₕ),T,typeof(v)}(v, Wₕ)
+    return VectorElement{typeof(Wₕ), T, typeof(v)}(v, Wₕ)
 end
 
 # Constructor with a fill value `α`. The element type is promoted rather than taken from
@@ -228,8 +227,8 @@ Returns a [`VectorElement`](@ref) for a grid space `Wₕ` with the same coeffici
     # Ensure the provided vector has the correct number of DoFs.
     length(v) == ndofs(Wₕ) || throw(
         DimensionMismatch(
-            "input vector has length $(length(v)), but the space has $(ndofs(Wₕ)) degrees of freedom.",
-        ),
+        "input vector has length $(length(v)), but the space has $(ndofs(Wₕ)) degrees of freedom.",
+    ),
     )
     elem = element(Wₕ, promote_type(eltype(backend(Wₕ)), eltype(v)))
     copyto!(elem, v)
@@ -238,8 +237,7 @@ end
 
 # Enable array-like indexing `uₕ[i]` for VectorElement.
 @inline Base.@propagate_inbounds getindex(uₕ::VectorElement, i) = getindex(uₕ.data, i)
-@inline Base.@propagate_inbounds setindex!(uₕ::VectorElement, val, i) =
-    setindex!(uₕ.data, val, i)
+@inline Base.@propagate_inbounds setindex!(uₕ::VectorElement, val, i) = setindex!(uₕ.data, val, i)
 
 # Create a new, uninitialized VectorElement with the same space as the input.
 #
@@ -249,7 +247,7 @@ end
 # element built the ordinary way the two coincide, so nothing changes for a Float64 run.
 @inline function Base.similar(uₕ::VectorElement)
     v = similar(parent(uₕ))
-    return VectorElement{typeof(space(uₕ)),eltype(v),typeof(v)}(v, space(uₕ))
+    return VectorElement{typeof(space(uₕ)), eltype(v), typeof(v)}(v, space(uₕ))
 end
 
 # Broadcasting
@@ -259,7 +257,7 @@ Base.BroadcastStyle(::Type{<:VectorElement}) = Broadcast.ArrayStyle{VectorElemen
 
 # Define how to create a `similar` container for the broadcast result, preserving the space.
 function Base.similar(
-    bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{VectorElement}}, ::Type{ElType}
+        bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{VectorElement}}, ::Type{ElType}
 ) where {ElType}
     vec_elem = _find_vec_in_broadcast(bc)
     vec_elem === nothing &&
@@ -335,14 +333,12 @@ _find_vec_in_broadcast(::Any, rest) = _find_vec_in_broadcast(rest) # Keep search
 #
 # `Val(D)` so the tuple is built unrolled, with `D` a static parameter rather than a count
 # passed at run time.
-@inline Base.:*(uₕ::VectorElement, vₕ::NTuple{D,VectorElement}) where {D} =
-    ntuple(i -> vₕ[i] .* uₕ, Val(D))
+@inline Base.:*(uₕ::VectorElement, vₕ::NTuple{D, VectorElement}) where {D} = ntuple(i -> vₕ[i] .* uₕ, Val(D))
 
-@inline Base.:*(a::Number, vₕ::NTuple{D,VectorElement}) where {D} =
-    ntuple(i -> a .* vₕ[i], Val(D))
+@inline Base.:*(a::Number, vₕ::NTuple{D, VectorElement}) where {D} = ntuple(i -> a .* vₕ[i], Val(D))
 
-@inline Base.:*(Vₕ::NTuple{D,VectorElement}, a::Number) where {D} = a * Vₕ
-@inline Base.:*(Vₕ::NTuple{D,VectorElement}, uₕ::VectorElement) where {D} = uₕ * Vₕ
+@inline Base.:*(Vₕ::NTuple{D, VectorElement}, a::Number) where {D} = a * Vₕ
+@inline Base.:*(Vₕ::NTuple{D, VectorElement}, uₕ::VectorElement) where {D} = uₕ * Vₕ
 
 """
     f::Function * uₕ::VectorElement -> VectorElement
@@ -377,7 +373,7 @@ function Base.show(io::IO, uₕ::VectorElement)
         io,
         "VectorElement{$(dim(space(uₕ)))D, $(eltype(uₕ)), ",
         length(parent(uₕ)),
-        " dofs}",
+        " dofs}"
     )
     return nothing
 end
@@ -385,19 +381,19 @@ end
 function Base.show(io::IO, ::MIME"text/plain", uₕ::VectorElement)
     return show_block(io) do io
         pp = PrettyPrinter(io)
-        printstyled(io, "VectorElement"; bold=true, color=:cyan)
+        printstyled(io, "VectorElement"; bold = true, color = :cyan)
         print(io, " {")
-        printstyled(io, "$(dim(space(uₕ)))D"; color=:yellow)
+        printstyled(io, "$(dim(space(uₕ)))D"; color = :yellow)
         print(io, ", ")
-        printstyled(io, "$(eltype(uₕ))"; color=:yellow)
+        printstyled(io, "$(eltype(uₕ))"; color = :yellow)
         println(io, "}:")
 
         pp_indented = with_indent(pp, 1)
-        print_key_value(pp_indented, "Space", sprint(show, space(uₕ)); separator=": ")
+        print_key_value(pp_indented, "Space", sprint(show, space(uₕ)); separator = ": ")
         # The values themselves, through the backing array's own display, which already
         # abbreviates a long vector rather than printing every entry.
         print_indent(pp_indented)
-        printstyled(io, "Values"; color=:green)
+        printstyled(io, "Values"; color = :green)
         print(io, ": ")
         return print(IOContext(io, :compact => true, :limit => true), parent(uₕ))
     end

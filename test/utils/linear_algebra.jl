@@ -1,15 +1,15 @@
 using Test
 using Bramble
 using Bramble:
-    _dot,
-    _dot_masked,
-    MarkedIndices,
-    _cpu_threaded_for!,
-    _serial_for!,
-    _cpu_threaded_scatter_for!,
-    _write_components!,
-    Serial,
-    Parallel
+               _dot,
+               _dot_masked,
+               MarkedIndices,
+               _cpu_threaded_for!,
+               _serial_for!,
+               _cpu_threaded_scatter_for!,
+               _write_components!,
+               Serial,
+               Parallel
 using LinearAlgebra: dot
 using StaticArrays
 
@@ -125,6 +125,7 @@ end
         f3 = idx -> Float64(idx[1] + idx[2])
         _serial_for!(A, cart_idxs, f3)
         for i in 1:3, j in 1:4
+
             @test A[i, j] ≈ Float64(i + j)
         end
 
@@ -159,6 +160,7 @@ end
             f3 = idx -> Float64(idx[1] * idx[2])
             _cpu_threaded_for!(policy, B, cart_idxs, f3)
             for i in 1:10, j in 1:10
+
                 @test B[i, j] ≈ Float64(i * j)
             end
         end
@@ -240,7 +242,7 @@ end
 
         # Allocation-free: the whole point of walking chunks instead of `findall`.
         count_bits(m) = (
-            n=0;
+            n = 0;
             for _ in MarkedIndices(m)
                 n += 1
             end;

@@ -10,8 +10,7 @@
 # reading it from the space alone instead of promoting against the data broke ForwardDiff in
 # four separate places, each with the same symptom (`MethodError: no method matching
 # Float64(::Dual)`), each time only on the AD path (bramble-verification §4).
-@inline _matrix_eltype(ast, form::BilinearForm) =
-    promote_type(_assembled_eltype(ast, form.test_space), eltype(form.trial_space))
+@inline _matrix_eltype(ast, form::BilinearForm) = promote_type(_assembled_eltype(ast, form.test_space), eltype(form.trial_space))
 
 # A hint for `sizehint!`, not a real bound: `local_stencil` can return a longer stencil at a
 # boundary point than at this representative interior one, so this can undercount. Cheap to
@@ -48,8 +47,8 @@ Only the structure is preallocated here; all stored entries are zero until `asse
 See also [`assemble`](@ref) and [`assemble!`](@ref).
 """
 function allocate_system_matrix(
-    form::BilinearForm{D,TrialSpace,TestSpace,AST}, ast=form.ast
-) where {D,TrialSpace,TestSpace,AST}
+        form::BilinearForm{D, TrialSpace, TestSpace, AST}, ast = form.ast
+) where {D, TrialSpace, TestSpace, AST}
     # The test space: matrix rows are indexed by the test function and the quadrature weight
     # belongs to the integral over the test space mesh.
     space = form.test_space
@@ -73,13 +72,13 @@ end
 
 # Which entries a term can reach, block by block.
 function _pattern_term!(
-    I_vec::Vector{Int},
-    J_vec::Vector{Int},
-    term::TERM,
-    trial_leaf,
-    test_leaf,
-    row_offset::Int,
-    col_offset::Int,
+        I_vec::Vector{Int},
+        J_vec::Vector{Int},
+        term::TERM,
+        trial_leaf,
+        test_leaf,
+        row_offset::Int,
+        col_offset::Int
 ) where {TERM}
     Ωₕ = mesh(test_leaf)
     mesh_markers = markers(Ωₕ)
@@ -92,7 +91,7 @@ end
 
 # Recursion shape shared via `_visit_operator_add3` (form/common.jl).
 function _pattern_blocks!(
-    I_vec::Vector{Int}, J_vec::Vector{Int}, op::OperatorAdd, trial_leaves, test_leaves
+        I_vec::Vector{Int}, J_vec::Vector{Int}, op::OperatorAdd, trial_leaves, test_leaves
 )
     return _visit_operator_add3(
         _pattern_blocks!, I_vec, J_vec, op, trial_leaves, test_leaves
@@ -100,7 +99,7 @@ function _pattern_blocks!(
 end
 
 function _pattern_blocks!(
-    I_vec::Vector{Int}, J_vec::Vector{Int}, term::TERM, trial_leaves, test_leaves
+        I_vec::Vector{Int}, J_vec::Vector{Int}, term::TERM, trial_leaves, test_leaves
 ) where {TERM}
     for blk in blocks(term, trial_leaves, test_leaves)
         _check_block_meshes(term, blk.trial_leaf, blk.test_leaf)
@@ -111,15 +110,15 @@ function _pattern_blocks!(
             blk.trial_leaf,
             blk.test_leaf,
             blk.row_offset,
-            blk.col_offset,
+            blk.col_offset
         )
     end
     return nothing
 end
 
 function allocate_system_matrix(
-    form::BilinearForm{D,TrialSpace,TestSpace,AST}, ast=form.ast
-) where {D,TrialSpace<:CompositeGridSpace,TestSpace<:CompositeGridSpace,AST}
+        form::BilinearForm{D, TrialSpace, TestSpace, AST}, ast = form.ast
+) where {D, TrialSpace <: CompositeGridSpace, TestSpace <: CompositeGridSpace, AST}
     trial_leaves = leaf_spaces_offsets(form.trial_space)
     test_leaves = leaf_spaces_offsets(form.test_space)
 
@@ -128,9 +127,8 @@ function allocate_system_matrix(
 
     sp = first(first(test_leaves))
     Ωₛ = mesh(sp)
-    hint =
-        length(test_leaves) *
-        _pattern_size_hint(ast, sp, markers(Ωₛ), LinearIndices(indices(Ωₛ)))
+    hint = length(test_leaves) *
+           _pattern_size_hint(ast, sp, markers(Ωₛ), LinearIndices(indices(Ωₛ)))
     sizehint!(I_vec, hint)
     sizehint!(J_vec, hint)
 

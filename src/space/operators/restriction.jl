@@ -52,17 +52,14 @@ Rₕ!(uₕ, x -> (f₁(x), f₂(x)))          # one function returning all compo
 
 See also: [`Rₕ`](@ref), [`avgₕ!`](@ref), [`element`](@ref)
 """
-@inline Rₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f::F) where {F} =
-    project!(uₕ, PointValue(f))
-@inline Rₕ!(uₕ::VectorElement{<:CompositeGridSpace}, f::F) where {F} =
-    project!(uₕ, PointValue(f))
-@inline Rₕ!(uₕ::VectorElement{<:CompositeGridSpace}, f::Tuple) =
-    project!(uₕ, map(PointValue, f))
+@inline Rₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f::F) where {F} = project!(uₕ, PointValue(f))
+@inline Rₕ!(uₕ::VectorElement{<:CompositeGridSpace}, f::F) where {F} = project!(uₕ, PointValue(f))
+@inline Rₕ!(uₕ::VectorElement{<:CompositeGridSpace}, f::Tuple) = project!(uₕ, map(PointValue, f))
 
 # A concretely typed kernel for per-point restriction calls, avoiding anonymous closure
 # captures over (`f`, `Ωₕ`, `idxs`). A named callable struct eliminates compiler indirection
 # and achieves performance parity with a flat loop.
-struct _RₕKernel{F,M,IX}
+struct _RₕKernel{F, M, IX}
     f::F
     Ω::M
     idxs::IX
@@ -79,28 +76,26 @@ end
 # and the leaves' tuple on a composite one, which is exactly what each sweep wants.
 @inline _rule_kernel(rule::PointValue, sp) = _RₕKernel(rule.f, mesh(sp), indices(mesh(sp)))
 
-@inline _rule_scatter_kernel(rule::PointValue, sp, ::Val{NC}) where {NC} =
-    _RₕKernel(rule.f, mesh(sp), indices(mesh(sp)))
+@inline _rule_scatter_kernel(rule::PointValue, sp, ::Val{NC}) where {NC} = _RₕKernel(rule.f, mesh(sp), indices(mesh(sp)))
 
 @inline _rule_component(rule::PointValue, k) = PointValue(pt -> rule.f(pt)[k])
 
 # A one-component space is a scalar space, so generic code that builds an
 # NC-tuple of functions still works when NC == 1.
-@inline Rₕ!(uₕ::VectorElement{<:ScalarGridSpace{D}}, f::Tuple{Any}) where {D} =
-    Rₕ!(uₕ, f[1])
+@inline Rₕ!(uₕ::VectorElement{<:ScalarGridSpace{D}}, f::Tuple{Any}) where {D} = Rₕ!(uₕ, f[1])
 @inline Rₕ!(
     uₕ::VectorElement{<:ScalarGridSpace},
     f::Tuple{Any};
-    markers::NTuple{N,Symbol}=NTuple{0,Symbol}(),
-) where {N} = Rₕ!(uₕ, f[1]; markers=markers)
+    markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {N} = Rₕ!(uₕ, f[1]; markers = markers)
 
 # The general keyword method, typed as broadly as `VectorElement` so it stays less specific
 # than every plain method above, matching the split `avgₕ!` uses. The `N == 0` case never
 # actually runs (the plain methods intercept a no-kwarg call before this method is even
 # looked up), but is kept as a fallback for an explicit `markers = ()`.
 Base.@constprop :aggressive function Rₕ!(
-    uₕ::VectorElement, f::F; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
-) where {F,N}
+        uₕ::VectorElement, f::F; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {F, N}
     if N > 0
         @debug "Using marker-based restriction" markers
     end
@@ -132,11 +127,10 @@ end
 #
 # Calling `promote_type` across the component field types preserves concrete numeric types
 # (e.g. `Float64`), consistent with scalar arithmetic, and is unchanged for homogeneous tuples.
-@inline _scalar_value_type(::Type{T}) where {T<:Tuple} = promote_type(fieldtypes(T)...)
+@inline _scalar_value_type(::Type{T}) where {T <: Tuple} = promote_type(fieldtypes(T)...)
 
 @inline _restricted_value_type(f, p) = _scalar_value_type(typeof(f(p)))
-@inline _restricted_value_type(f::Tuple, p) =
-    promote_type(map(g -> _scalar_value_type(typeof(g(p))), f)...)
+@inline _restricted_value_type(f::Tuple, p) = promote_type(map(g -> _scalar_value_type(typeof(g(p))), f)...)
 
 # Selects a sample point where `f` is evaluated to determine its coefficient return type.
 # When markers are specified, the point must reside within the marked region because `f`
@@ -144,9 +138,9 @@ end
 #
 # If no index is marked, nothing is written and the element type cannot matter, so the
 # first grid point is as good as any.
-@inline _probe_point(Ωₕ, ::NTuple{0,Symbol}) = point(Ωₕ, first(indices(Ωₕ)))
+@inline _probe_point(Ωₕ, ::NTuple{0, Symbol}) = point(Ωₕ, first(indices(Ωₕ)))
 
-function _probe_point(Ωₕ, markers::NTuple{N,Symbol}) where {N}
+function _probe_point(Ωₕ, markers::NTuple{N, Symbol}) where {N}
     idxs = indices(Ωₕ)
     lin = LinearIndices(idxs)
     for m in markers
@@ -159,7 +153,7 @@ function _probe_point(Ωₕ, markers::NTuple{N,Symbol}) where {N}
 end
 
 @inline function _restriction_eltype(
-    Wₕ::AbstractSpaceType, f, markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
+        Wₕ::AbstractSpaceType, f, markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
 ) where {N}
     Ωₕ = mesh(Wₕ)
     return promote_type(
@@ -204,8 +198,8 @@ there is no grid point shared by every component to evaluate it at only once.
 See also: [`Rₕ!`](@ref), [`avgₕ`](@ref).
 """
 function Rₕ(
-    Wₕ::AbstractSpaceType, f; markers::NTuple{N,Symbol}=NTuple{0,Symbol}()
+        Wₕ::AbstractSpaceType, f; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
 ) where {N}
     uₕ = element(Wₕ, _restriction_eltype(Wₕ, f, markers))
-    return Rₕ!(uₕ, f; markers=markers)
+    return Rₕ!(uₕ, f; markers = markers)
 end

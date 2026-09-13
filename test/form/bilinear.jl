@@ -4,35 +4,35 @@ using ForwardDiff
 using LinearAlgebra: Diagonal, I
 using SparseArrays: sparse, nnz, nonzeros
 using Bramble:
-    BilinearForm,
-    form,
-    assemble,
-    assemble!,
-    assemble_parallel!,
-    trial_space,
-    test_space,
-    resolve_form_ast,
-    resolve_ast,
-    allocate_system_matrix,
-    ndofs,
-    Innerh,
-    Innerplus,
-    block_of,
-    trial_component_or_nothing,
-    test_component_or_nothing,
-    Block,
-    blocks,
-    leaf_spaces_offsets,
-    visit_bilinear_stencil,
-    PatternSink,
-    _sink_entry!,
-    _sink_dedups,
-    _entry_target,
-    _trial_column,
-    AbsoluteColumn,
-    TrialFunction,
-    TestFunction,
-    indices
+               BilinearForm,
+               form,
+               assemble,
+               assemble!,
+               assemble_parallel!,
+               trial_space,
+               test_space,
+               resolve_form_ast,
+               resolve_ast,
+               allocate_system_matrix,
+               ndofs,
+               Innerh,
+               Innerplus,
+               block_of,
+               trial_component_or_nothing,
+               test_component_or_nothing,
+               Block,
+               blocks,
+               leaf_spaces_offsets,
+               visit_bilinear_stencil,
+               PatternSink,
+               _sink_entry!,
+               _sink_dedups,
+               _entry_target,
+               _trial_column,
+               AbsoluteColumn,
+               TrialFunction,
+               TestFunction,
+               indices
 
 # Assembling the matrix of a bilinear form.
 #
@@ -57,19 +57,19 @@ using Bramble:
         @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v)))) ≈ H
         @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(u), v)))) ≈ H * Dx
         @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, D₋ₓ(v))))) ≈
-            transpose(Dx) * H
+              transpose(Dx) * H
         @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(M₋ₓ(u), v)))) ≈ H * Mx
 
         # the stiffness matrix, which is the reason the package exists
         @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v))))) ≈
-            transpose(Dx) * Hx * Dx
+              transpose(Dx) * Hx * Dx
 
         # a sum of two kinds, and a linear combination inside one argument
         @test Matrix(
             assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v))))
         ) ≈ H + transpose(Dx) * Hx * Dx
         @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v + 2 * D₋ₓ(v))))) ≈
-            transpose(Idm + 2 * Dx) * H
+              transpose(Idm + 2 * Dx) * H
     end
 
     @testset "Entry point agreement" begin
@@ -92,7 +92,7 @@ using Bramble:
         @test Matrix(Aser) ≈ Matrix(Apar)
 
         # and Dirichlet rows are pinned
-        Abc = assemble(a; dirichlet=:walls)
+        Abc = assemble(a; dirichlet = :walls)
         marked = index_in_marker(Ωₕ, :walls)
         for i in 1:n
             marked[i] || continue
@@ -125,16 +125,16 @@ using Bramble:
         # a full 2x2 system
         Af = assemble(
             form(
-                Vₕ,
-                Vₕ,
-                (u, v) ->
-                    innerₕ(u(1), v(1)) +
-                    innerₕ(u(1), v(2)) +
-                    innerₕ(u(2), v(1)) +
-                    innerₕ(u(2), v(2)),
-            ),
+            Vₕ,
+            Vₕ,
+            (u, v) -> innerₕ(u(1), v(1)) +
+                      innerₕ(u(1), v(2)) +
+                      innerₕ(u(2), v(1)) +
+                      innerₕ(u(2), v(2))
+        ),
         )
         for i in 1:2, j in 1:2
+
             @test blk(Af, i, j) ≈ H
         end
 
@@ -157,7 +157,7 @@ using Bramble:
         a = form(Vₕ, Vₕ, (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)))
         marked = index_in_marker(Ωₕ, :walls)
 
-        A = assemble(a; dirichlet=:walls, dirichlet_components=1)
+        A = assemble(a; dirichlet = :walls, dirichlet_components = 1)
         blk(i, j) = Matrix(A)[((i - 1) * n + 1):(i * n), ((j - 1) * n + 1):(j * n)]
 
         for i in 1:n
@@ -171,12 +171,12 @@ using Bramble:
 
         # assemble! into a pre-allocated matrix follows the same keyword
         A2 = allocate_system_matrix(a)
-        assemble!(A2, a; dirichlet=:walls, dirichlet_components=1)
+        assemble!(A2, a; dirichlet = :walls, dirichlet_components = 1)
         @test Matrix(A2) ≈ Matrix(A)
 
         # without dirichlet_components, the same labels bind to every leaf that has the
         # marker (this is the pre-existing, still-default behaviour, confirmed unchanged).
-        Aboth = assemble(a; dirichlet=:walls)
+        Aboth = assemble(a; dirichlet = :walls)
         blk2(i, j) = Matrix(Aboth)[((i - 1) * n + 1):(i * n), ((j - 1) * n + 1):(j * n)]
         for i in 1:n
             if marked[i]
@@ -213,7 +213,7 @@ using Bramble:
 
         # `:boundary` is reserved and auto-computed on every mesh: index 1 and index n. So
         # each leaf contributes exactly two marked rows/columns, with no domain setup needed.
-        Abc = assemble(a; dirichlet=:boundary)
+        Abc = assemble(a; dirichlet = :boundary)
 
         # The two candidate row sets, computed directly rather than re-derived from the fix:
         # pin using test_space's own offsets (what the interface promises), and, separately,
@@ -238,12 +238,12 @@ using Bramble:
 
         # `assemble!` into a pre-allocated matrix takes the same path and must agree.
         A2 = allocate_system_matrix(a)
-        assemble!(A2, a; dirichlet=:boundary)
+        assemble!(A2, a; dirichlet = :boundary)
         @test Matrix(A2) ≈ Matrix(Abc)
 
         # `dirichlet_components` on an asymmetric form restricts by TEST leaf, since that is
         # what the rows mean: component 1 is test's leaf 1 (W2, offset 0, size n2).
-        A1 = Matrix(assemble(a; dirichlet=:boundary, dirichlet_components=1))
+        A1 = Matrix(assemble(a; dirichlet = :boundary, dirichlet_components = 1))
         @test pinned_rows(A1) == [1, n2]              # only test leaf 1's marked rows
         @test !(1 + n2 in pinned_rows(A1))              # test leaf 2 untouched
     end
@@ -264,15 +264,15 @@ using Bramble:
             ("composite, off-diagonal", Vₕ, (u, v) -> innerₕ(u(1), v(2))),
             ("composite, mixed spellings", Vₕ, (u, v) -> innerₕ(u, v) + innerₕ(u(1), v(2))),
             (
-                "three components, crossed",
-                V3,
-                (u, v) -> innerₕ(u(1), v(3)) + innerₕ(u(3), v(1)),
-            ),
+            "three components, crossed",
+            V3,
+            (u, v) -> innerₕ(u(1), v(3)) + innerₕ(u(3), v(1))
+        ),
             (
-                "blocks with operators",
-                Vₕ,
-                (u, v) -> inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + innerₕ(u(2), v(2)),
-            ),
+            "blocks with operators",
+            Vₕ,
+            (u, v) -> inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + innerₕ(u(2), v(2))
+        )
         )
             a = form(sp, sp, g)
             Aser = assemble(a)
@@ -322,7 +322,7 @@ using Bramble:
             domain(S, :walls => boundary_symbols(S)),
             (9, 7),
             (true, true);
-            backend=backend(policy=Parallel()),
+            backend = backend(policy = Parallel())
         )
         W_par = gridspace(Ω_par)
         @test execution_policy(W_par) isa Parallel
@@ -361,6 +361,7 @@ using Bramble:
         A = assemble(form(nested, nested, (u, v) -> innerₕ(u(1), v(3))))
         @test blk(A, 3, 1) ≈ H
         for i in 1:4, j in 1:4
+
             (i == 3 && j == 1) && continue
             @test all(iszero, blk(A, i, j))
         end
@@ -484,14 +485,13 @@ using Bramble:
         @test ForwardDiff.gradient(c1) do w
             sum(
                 assemble(
-                    form(
-                        Vₕ,
-                        Vₕ,
-                        (u, v) ->
-                            innerₕ(Bramble.element(Wₕ, w) * u(1), v(1)) +
-                            innerₕ(u(2), v(2)),
-                    ),
-                ),
+                form(
+                Vₕ,
+                Vₕ,
+                (u, v) -> innerₕ(Bramble.element(Wₕ, w) * u(1), v(1)) +
+                          innerₕ(u(2), v(2))
+            ),
+            ),
             )
         end ≈ diag(H)
     end
@@ -588,7 +588,7 @@ using Bramble:
             a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
             A = assemble(a)                             # record, unconstrained
             assemble!(A, a)                             # replay, unconstrained
-            assemble!(A, a; dirichlet=:walls)   # replay core, then Dirichlet applied
+            assemble!(A, a; dirichlet = :walls)   # replay core, then Dirichlet applied
             marked = index_in_marker(Ωₕ, :walls)
             for i in 1:n
                 marked[i] || continue
@@ -616,7 +616,7 @@ using Bramble:
                 (u, v) -> innerₕ(u, v),
                 (u, v) -> innerₕ(u(1), v(2)),
                 (u, v) -> innerₕ(u, v) + innerₕ(u(1), v(2)),
-                (u, v) -> inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + innerₕ(u(2), v(1)),
+                (u, v) -> inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + innerₕ(u(2), v(1))
             )
                 a = form(Vₕ, Vₕ, g)
                 A = assemble(a)
@@ -685,11 +685,11 @@ using Bramble:
         # Threaded: same refusal, reached through `add_to_sparse!` rather than the cache.
         Wp = gridspace(
             mesh(
-                domain(interval(0.0, 1.0) × interval(0.0, 1.0)),
-                (6, 5),
-                (true, true);
-                backend=backend(policy=Parallel()),
-            ),
+            domain(interval(0.0, 1.0) × interval(0.0, 1.0)),
+            (6, 5),
+            (true, true);
+            backend = backend(policy = Parallel())
+        ),
         )
         np = form(Wp, Wp, (u, v) -> innerₕ(u, v))
         wp = form(Wp, Wp, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v)))
@@ -706,12 +706,12 @@ using Bramble:
         # that only records. Before this, every property below could only be checked through
         # a fully assembled matrix, where a dropped entry looks like a zero.
         struct CollectSink
-            seen::Vector{Tuple{Int,Int,Float64}}
+            seen::Vector{Tuple{Int, Int, Float64}}
         end
         # The sink contract's fifth argument is the replay slot, which only `ReplaySink`
         # reads; a recording sink ignores it.
-        Bramble._sink_entry!(s::CollectSink, row::Int, col::Int, w, ::Int) =
-            (push!(s.seen, (row, col, Float64(w))); nothing)
+        Bramble._sink_entry!(s::CollectSink, row::Int, col::Int, w, ::Int) = (
+            push!(s.seen, (row, col, Float64(w))); nothing)
 
         Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 6), (true, true))
         W = gridspace(Ω)
@@ -725,7 +725,7 @@ using Bramble:
                 resolve_form_ast(form(W, W, (a, b) -> innerₕ(a, b))),
                 resolve_form_ast(form(W, W, (a, b) -> innerₕ(D₋ₓ(a), D₋ₓ(b)))),
                 resolve_form_ast(form(W, W, (a, b) -> inner₊(∇₋ₕ(a), ∇₋ₕ(b)))),
-                resolve_form_ast(form(W, W, (a, b) -> innerₕ(Dcₓ(a), M₊ᵧ(b)))),
+                resolve_form_ast(form(W, W, (a, b) -> innerₕ(Dcₓ(a), M₊ᵧ(b))))
             )
                 pat = visit_bilinear_stencil(PatternSink(Int[], Int[]), ast, W, 0, 0)
                 pattern = Set(zip(pat.I_vec, pat.J_vec))
@@ -752,7 +752,7 @@ using Bramble:
             @test length(got.seen) == 2 * length(pat.I_vec)
             # and the halving it protects against shows up in the assembled matrix
             @test Matrix(assemble(form(W, W, (a, b) -> innerₕ(a, b) + innerₕ(a, b)))) ≈
-                2 .* Matrix(assemble(form(W, W, (a, b) -> innerₕ(a, b))))
+                  2 .* Matrix(assemble(form(W, W, (a, b) -> innerₕ(a, b))))
         end
 
         @testset "Only the pattern sink asks for de-duplication" begin
@@ -776,9 +776,9 @@ using Bramble:
 
             # inside: the row follows off_v, the column off_u, both shifted by the block
             @test _entry_target(lin, CartesianIndex(3, 3), (0, 0), (0, 0), 0, 0) ==
-                (lin[3, 3], lin[3, 3])
+                  (lin[3, 3], lin[3, 3])
             @test _entry_target(lin, CartesianIndex(3, 3), (0, 0), (0, 0), 10, 5) ==
-                (lin[3, 3] + 10, lin[3, 3] + 5)
+                  (lin[3, 3] + 10, lin[3, 3] + 5)
 
             # a row off the grid drops the entry, and so does a column off the grid
             @test _entry_target(lin, I, (0, 0), (-1, 0), 0, 0) == (0, 0)
@@ -800,15 +800,15 @@ using Bramble:
         # safe for those would silently corrupt the rows nearest the boundary rather than
         # merely running slower.
         using Bramble:
-            _stencil_margin,
-            _peelable,
-            _interior_range,
-            _boundary_shell_slabs,
-            _visit_guarded_region!,
-            shift_op,
-            ShiftNode,
-            markers,
-            mesh
+                       _stencil_margin,
+                       _peelable,
+                       _interior_range,
+                       _boundary_shell_slabs,
+                       _visit_guarded_region!,
+                       shift_op,
+                       ShiftNode,
+                       markers,
+                       mesh
 
         @testset "_stencil_margin reads composed reach, not a hardcoded 1" begin
             u, v = TrialFunction{2}(), TestFunction{2}()
@@ -825,6 +825,7 @@ using Bramble:
 
         @testset "Interior + boundary slabs partition the grid exactly once" begin
             for D in (1, 2, 3), margin in (0, 1, 2)
+
                 Ωd = domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D)))
                 Ω = mesh(Ωd, ntuple(_ -> 7, D), ntuple(_ -> true, D))
                 grid_inds = indices(Ω)
@@ -837,6 +838,7 @@ using Bramble:
                     push!(seen, lin[I])
                 end
                 for slab in _boundary_shell_slabs(ax, margin), I in slab
+
                     push!(seen, lin[I])
                 end
                 # every grid point exactly once: no gap, no double-scatter
@@ -851,10 +853,10 @@ using Bramble:
 
         @testset "Peeled traversal agrees with the guarded fallback, entry for entry" begin
             struct _MarginCollectSink
-                seen::Vector{Tuple{Int,Int,Float64}}
+                seen::Vector{Tuple{Int, Int, Float64}}
             end
-            Bramble._sink_entry!(s::_MarginCollectSink, row::Int, col::Int, w, ::Int) =
-                (push!(s.seen, (row, col, Float64(w))); nothing)
+            Bramble._sink_entry!(s::_MarginCollectSink, row::Int, col::Int, w, ::Int) = (
+                push!(s.seen, (row, col, Float64(w))); nothing)
 
             for D in (1, 2, 3)
                 Ωd = domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D)))
@@ -873,9 +875,9 @@ using Bramble:
                 lin_indices = LinearIndices(indices(Ω))
                 for ast in terms
                     peeled = visit_bilinear_stencil(
-                        _MarginCollectSink(Tuple{Int,Int,Float64}[]), ast, W, 0, 0
+                        _MarginCollectSink(Tuple{Int, Int, Float64}[]), ast, W, 0, 0
                     ).seen
-                    guarded = _MarginCollectSink(Tuple{Int,Int,Float64}[])
+                    guarded = _MarginCollectSink(Tuple{Int, Int, Float64}[])
                     _visit_guarded_region!(
                         guarded, ast, W, mesh_markers, lin_indices, indices(Ω), 0, 0
                     )
@@ -900,11 +902,11 @@ using Bramble:
             bcs = dirichlet_constraints(Ωd, :boundary => sol)
 
             a = form(W, W, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
-            A = assemble(a; dirichlet=:boundary)
+            A = assemble(a; dirichlet = :boundary)
             fₕ = element(W)
             avgₕ!(fₕ, rhs)
             l = form(W, v -> innerₕ(fₕ, v))
-            F = assemble(l; dirichlet=bcs)
+            F = assemble(l; dirichlet = bcs)
 
             uₕ = element(W)
             uₕ .= A \ F

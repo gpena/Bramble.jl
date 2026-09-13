@@ -49,7 +49,7 @@ it at points of whatever mesh the assembly is walking.
 Distinct from the source wrapper `πₕ(uₕ)`, which carries a grid function's values. This node
 carries no values; it carries the map, and its stencil names trial columns.
 """
-struct InterpolationNode{D,S,OpType<:LazyOp{D}} <: LazyOp{D}
+struct InterpolationNode{D, S, OpType <: LazyOp{D}} <: LazyOp{D}
     src_space::S
     inner_op::OpType
 end
@@ -57,13 +57,13 @@ end
 @noinline function _throw_interp_inner(op)
     throw(
         ArgumentError(
-            "πₕ as a bilinear operator wraps a trial function directly (`πₕ(Wsrc, u)` or " *
-            "`πₕ(Wsrc, u(2))`), but received $(typeof(op)). An operator applied before the " *
-            "interpolation (`πₕ(Wsrc, D₋ₓ(u))`, differencing on the source mesh and then " *
-            "interpolating) is a different operator and is not implemented; write the operator " *
-            "outside instead, `D₋ₓ(πₕ(Wsrc, u))`, which differences on the mesh being " *
-            "integrated over.",
-        ),
+        "πₕ as a bilinear operator wraps a trial function directly (`πₕ(Wsrc, u)` or " *
+        "`πₕ(Wsrc, u(2))`), but received $(typeof(op)). An operator applied before the " *
+        "interpolation (`πₕ(Wsrc, D₋ₓ(u))`, differencing on the source mesh and then " *
+        "interpolating) is a different operator and is not implemented; write the operator " *
+        "outside instead, `D₋ₓ(πₕ(Wsrc, u))`, which differences on the mesh being " *
+        "integrated over.",
+    ),
     )
 end
 
@@ -88,13 +88,13 @@ different operation and is refused, since it would difference on the source mesh
 =#
 function πₕ(Wsrc::ScalarGridSpace{D}, op::LazyOp{D}) where {D}
     op isa TrialFunction || op isa IndexedTrialFunction || _throw_interp_inner(op)
-    return InterpolationNode{D,typeof(Wsrc),typeof(op)}(Wsrc, op)
+    return InterpolationNode{D, typeof(Wsrc), typeof(op)}(Wsrc, op)
 end
 
 # --- The stencil: absolute trial columns, with the corner weights ------------------- #
 
 @inline function local_stencil(
-    op::InterpolationNode{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int
+        op::InterpolationNode{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int
 ) where {D}
     return _interp_stencil(mesh(op.src_space), point(mesh(space), I), Val(D))
 end
@@ -120,14 +120,14 @@ end
 # this ensures `innerₕ` constructs a `BilinearProduct` for it.
 _is_source_only(::InterpolationNode) = false
 
-function resolve_ast(op::InterpolationNode{D,S}) where {D,S}
+function resolve_ast(op::InterpolationNode{D, S}) where {D, S}
     inner = resolve_ast(op.inner_op)
-    return InterpolationNode{D,S,typeof(inner)}(op.src_space, inner)
+    return InterpolationNode{D, S, typeof(inner)}(op.src_space, inner)
 end
 
-@inline function component(op::InterpolationNode{D,S}, i::Int) where {D,S}
+@inline function component(op::InterpolationNode{D, S}, i::Int) where {D, S}
     inner = component(op.inner_op, i)
-    return InterpolationNode{D,S,typeof(inner)}(op.src_space, inner)
+    return InterpolationNode{D, S, typeof(inner)}(op.src_space, inner)
 end
 
 # `_collect_region_labels` for `InterpolationNode` comes from its `UnaryWrapper` membership

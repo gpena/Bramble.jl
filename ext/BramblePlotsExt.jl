@@ -1,17 +1,17 @@
 module BramblePlotsExt
 
 using Bramble:
-    Bramble,
-    VectorElement,
-    ScalarGridSpace,
-    CompositeGridSpace,
-    mesh,
-    gridspace,
-    points,
-    domain,
-    interval,
-    ×,
-    Rₕ
+               Bramble,
+               VectorElement,
+               ScalarGridSpace,
+               CompositeGridSpace,
+               mesh,
+               gridspace,
+               points,
+               domain,
+               interval,
+               ×,
+               Rₕ
 
 using RecipesBase: RecipesBase, @recipe
 using PrecompileTools: @setup_workload, @compile_workload
@@ -23,17 +23,17 @@ using PrecompileTools: @setup_workload, @compile_workload
 function _plots_error_composite()
     return throw(
         ArgumentError(
-            "plotting a composite element directly has no single reading — plot each of its " *
-            "components(...) separately.",
-        ),
+        "plotting a composite element directly has no single reading — plot each of its " *
+        "components(...) separately.",
+    ),
     )
 end
 function _plots_error_dim(D)
     return throw(
         ArgumentError(
-            "plotting a $(D)D grid function directly is not implemented — only 1D and 2D. " *
-            "See export_vtk for a full 3D field.",
-        ),
+        "plotting a $(D)D grid function directly is not implemented — only 1D and 2D. " *
+        "See export_vtk for a full 3D field.",
+    ),
     )
 end
 
@@ -76,8 +76,8 @@ if Bramble.PRECOMPILE_WORKLOAD
         u2 = Rₕ(W2, x -> x[1] * x[2])
 
         @compile_workload begin
-            RecipesBase.apply_recipe(Dict{Symbol,Any}(), u1)
-            RecipesBase.apply_recipe(Dict{Symbol,Any}(), u2)
+            RecipesBase.apply_recipe(Dict{Symbol, Any}(), u1)
+            RecipesBase.apply_recipe(Dict{Symbol, Any}(), u2)
         end
     end
 end

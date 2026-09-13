@@ -13,11 +13,11 @@ on every call.
 
 For a detailed explanation of the mathematical formulas corresponding to these weights, please refer to the documentation for [`ScalarGridSpace`](@ref).
 """
-struct SpaceWeights{D,VT<:AbstractVector}
+struct SpaceWeights{D, VT <: AbstractVector}
     "weight vector for the standard discrete ``L^2`` inner product (`:innerₕ`), based on cell measures (``|\\square_k|``)."
     innerh::VT
     "a tuple of weight vectors for modified, staggered inner products (`:inner₊ₓ`, `:inner₊ᵧ`, etc.), with one vector for each spatial dimension."
-    innerplus::NTuple{D,VT}
+    innerplus::NTuple{D, VT}
 end
 
 """
@@ -95,13 +95,13 @@ Here, ``|\\cdot|`` denotes the measure of the set (length, area, or volume). See
 struct ScalarGridSpace{
     D,
     T,                               # Dimension and Element Type
-    VT<:AbstractVector{T},             # Vector Type
-    MType<:AbstractMeshType{D},
+    VT <: AbstractVector{T},             # Vector Type
+    MType <: AbstractMeshType{D}
 } <: AbstractSpaceType{1}
     "the underlying mesh of the grid space."
     mesh::MType
     "a [`SpaceWeights`](@ref) object holding vectors for various discrete inner products."
-    weights::SpaceWeights{D,VT}
+    weights::SpaceWeights{D, VT}
 end
 
 """
@@ -119,7 +119,7 @@ function gridspace(Ωₕ::AbstractMeshType{D}) where {D}
     MType = typeof(Ωₕ)
     T, VT, _, _ = backend_types(backend(Ωₕ))
 
-    return ScalarGridSpace{D,T,VT,MType}(Ωₕ, weights)
+    return ScalarGridSpace{D, T, VT, MType}(Ωₕ, weights)
 end
 
 # Allocates a work vector sized to a mesh. Typed rather than generic: with an
@@ -137,7 +137,7 @@ function space_weights(Ωₕ::AbstractMeshType{1})
     inner_h_vec = __vector(Ωₕ)
     _innerh_weights!(inner_h_vec, Ωₕ)
 
-    return SpaceWeights{1,typeof(inner_h_vec)}(inner_h_vec, (innerplus₁,))
+    return SpaceWeights{1, typeof(inner_h_vec)}(inner_h_vec, (innerplus₁,))
 end
 
 function space_weights(Ωₕ::AbstractMeshType{D}) where {D}
@@ -176,7 +176,7 @@ function space_weights(Ωₕ::AbstractMeshType{D}) where {D}
     _innerh_weights!(inner_h_vec, Ωₕ)
 
     # Return the computed weights wrapped in a dedicated `SpaceWeights` struct.
-    return SpaceWeights{D,typeof(inner_h_vec)}(inner_h_vec, innerplus)
+    return SpaceWeights{D, typeof(inner_h_vec)}(inner_h_vec, innerplus)
 end
 
 # Implementation of the interface functions for AbstractSpaceType
@@ -184,7 +184,7 @@ end
 @inline backend(Wₕ::ScalarGridSpace) = backend(mesh(Wₕ))
 @inline execution_policy(Wₕ::ScalarGridSpace) = execution_policy(backend(Wₕ))
 @inline mesh_type(Wₕ::ScalarGridSpace) = typeof(mesh(Wₕ))
-@inline mesh_type(::Type{<:ScalarGridSpace{<:Any,<:Any,<:Any,MType}}) where {MType} = MType
+@inline mesh_type(::Type{<:ScalarGridSpace{<:Any, <:Any, <:Any, MType}}) where {MType} = MType
 
 """
     weights(Wₕ::ScalarGridSpace) -> SpaceWeights
@@ -282,8 +282,8 @@ Returns the element type of vectors in this space (e.g., `Float64`).
 
 See also: [`backend`](@ref)
 """
-@inline eltype(::ScalarGridSpace{D,T}) where {D,T} = T
-@inline eltype(::Type{<:ScalarGridSpace{D,T}}) where {D,T} = T
+@inline eltype(::ScalarGridSpace{D, T}) where {D, T} = T
+@inline eltype(::Type{<:ScalarGridSpace{D, T}}) where {D, T} = T
 
 """
     _innerh_weights!(u, Ωₕ::AbstractMeshType)
@@ -314,7 +314,7 @@ end
 
 Builds a set of weights based on the spacings, associated with the `component`-th direction, for the modified discrete ``L^2`` inner product on the space of grid functions, following the order of the points provided by `indices(Ωₕ)`. The values are stored in vector `u`.
 """
-function _innerplus_weights!(u::VT, Ωₕ, component=1) where {VT}
+function _innerplus_weights!(u::VT, Ωₕ, component = 1) where {VT}
     T = eltype(VT)
     mesh_component = Ωₕ(component)
 
@@ -331,7 +331,7 @@ end
 
 Builds a set of weights based on the half spacings, associated with the `component`-th direction, for the modified discrete ``L^2`` inner product on the space of grid functions, following the order of the [`points`](@ref). The values are stored in vector `u`.
 """
-function _innerplus_mean_weights!(u::VT, Ωₕ, component::Int=1) where {VT}
+function _innerplus_mean_weights!(u::VT, Ωₕ, component::Int = 1) where {VT}
     T = eltype(VT)
     u[1] = zero(T)
     mesh_component = Ωₕ(component)
@@ -345,7 +345,7 @@ function _innerplus_mean_weights!(u::VT, Ωₕ, component::Int=1) where {VT}
     return nothing
 end
 
-@inline function __prod(diags::NTuple{D,Any}, I) where {D}
+@inline function __prod(diags::NTuple{D, Any}, I) where {D}
     return prod(ntuple(i -> @inbounds(diags[i][I[i]]), Val(D)))
 end
 
@@ -368,24 +368,24 @@ end
 # (gpena/Bramble.jl#17). Two-argument `show` is the embeddable one-liner;
 # `MIME"text/plain"` is the detailed block (gpena/Bramble.jl#45).
 
-function Base.show(io::IO, Wₕ::ScalarGridSpace{D,T}) where {D,T}
+function Base.show(io::IO, Wₕ::ScalarGridSpace{D, T}) where {D, T}
     print(io, "ScalarGridSpace{$(D)D, $T, ", ndofs(Wₕ), " dofs}")
     return nothing
 end
 
-function Base.show(io::IO, ::MIME"text/plain", Wₕ::ScalarGridSpace{D,T}) where {D,T}
+function Base.show(io::IO, ::MIME"text/plain", Wₕ::ScalarGridSpace{D, T}) where {D, T}
     return show_block(io) do io
         pp = PrettyPrinter(io)
-        printstyled(io, "ScalarGridSpace"; bold=true, color=:cyan)
+        printstyled(io, "ScalarGridSpace"; bold = true, color = :cyan)
         print(io, " {")
-        printstyled(io, "$(D)D"; color=:yellow)
+        printstyled(io, "$(D)D"; color = :yellow)
         print(io, ", ")
-        printstyled(io, "$T"; color=:yellow)
+        printstyled(io, "$T"; color = :yellow)
         println(io, "}:")
 
         pp_indented = with_indent(pp, 1)
-        print_key_value(pp_indented, "Mesh", sprint(show, mesh(Wₕ)); separator=": ")
-        return print_key_value(pp_indented, "Dofs", string(ndofs(Wₕ)); separator=": ")
+        print_key_value(pp_indented, "Mesh", sprint(show, mesh(Wₕ)); separator = ": ")
+        return print_key_value(pp_indented, "Dofs", string(ndofs(Wₕ)); separator = ": ")
     end
 end
 

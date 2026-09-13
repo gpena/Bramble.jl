@@ -3,22 +3,22 @@ using Bramble
 using Random
 using SparseArrays
 using Bramble:
-    IdentityOperator,
-    ZeroOperator,
-    TrialFunction,
-    TestFunction,
-    IndexedTrialFunction,
-    SourceVector,
-    LazyOp,
-    stencil_offsets,
-    local_stencil,
-    shift_op,
-    restrict_to,
-    source_function,
-    TrialFunction,
-    TestFunction,
-    LinearProduct,
-    BilinearProduct
+               IdentityOperator,
+               ZeroOperator,
+               TrialFunction,
+               TestFunction,
+               IndexedTrialFunction,
+               SourceVector,
+               LazyOp,
+               stencil_offsets,
+               local_stencil,
+               shift_op,
+               restrict_to,
+               source_function,
+               TrialFunction,
+               TestFunction,
+               LinearProduct,
+               BilinearProduct
 
 # Reading the sparsity pattern off an AST before assembling it.
 #
@@ -67,7 +67,7 @@ end
                 ("jumpₓ", jumpₓ(id1)),
                 ("Dcₓ", Dcₓ(id1)),
                 ("Dstar₊ₓ", Dstar₊ₓ(id1)),
-                ("Dₕₓ", Dₕₓ(id1)),
+                ("Dₕₓ", Dₕₓ(id1))
             )
                 @testset "$nm" begin
                     @test sort(stencil_offsets(node)) == _stencil_at(node, Wₕ1, I, lin1)
@@ -85,7 +85,7 @@ end
                 ("jumpᵧ", jumpᵧ(id2)),
                 ("Dcᵧ", Dcᵧ(id2)),
                 ("Dₕₓ", Dₕₓ(id2)),
-                ("Dstar₊ᵧ", Dstar₊ᵧ(id2)),
+                ("Dstar₊ᵧ", Dstar₊ᵧ(id2))
             )
                 @testset "$nm" begin
                     @test sort(stencil_offsets(node)) == _stencil_at(node, Wₕ2, I, lin2)
@@ -106,7 +106,7 @@ end
             ("jumpₓ", jumpₓ(id1), jumpₓ(Ωₕ1)),
             ("Dcₓ", Dcₓ(id1), Dcₓ(Ωₕ1)),
             ("Dstar₊ₓ", Dstar₊ₓ(id1), Dstar₊ₓ(Ωₕ1)),
-            ("Dₕₓ", Dₕₓ(id1), Dₕₓ(Ωₕ1)),
+            ("Dₕₓ", Dₕₓ(id1), Dₕₓ(Ωₕ1))
         )
             @testset "$nm" begin
                 predicted = sort([o[1] for o in stencil_offsets(node)])
@@ -121,9 +121,9 @@ end
             TestFunction{1}(),
             IndexedTrialFunction{1}(1),
             source_function(sin, Val(1)),
-            SourceVector{1,Vector{Float64}}([1.0]),
+            SourceVector{1, Vector{Float64}}([1.0]),
             id1,
-            ZeroOperator(Wₕ1),
+            ZeroOperator(Wₕ1)
         )
             @test stencil_offsets(op) == [(0,)]
         end
@@ -146,7 +146,7 @@ end
         # a shift moves the reach without widening it
         @test stencil_offsets(shift_op(id1, 1, 2)) == [(2,)]
         @test length(stencil_offsets(shift_op(D₋ₓ(id1), 1, 3))) ==
-            length(stencil_offsets(D₋ₓ(id1)))
+              length(stencil_offsets(D₋ₓ(id1)))
     end
 
     @testset "Reach transformation" begin

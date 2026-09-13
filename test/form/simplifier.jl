@@ -3,23 +3,23 @@ using Bramble
 using LinearAlgebra: Diagonal, issymmetric, isposdef
 using SparseArrays: nnz
 using Bramble:
-    IdentityOperator,
-    ZeroOperator,
-    OperatorAdd,
-    OperatorScale,
-    GridFunctionScale,
-    BilinearProduct,
-    LinearProduct,
-    ShiftNode,
-    shift_op,
-    source_function,
-    simplify_ast,
-    resolve_ast,
-    resolve_form_ast,
-    form,
-    assemble,
-    Innerh,
-    Innerplus
+               IdentityOperator,
+               ZeroOperator,
+               OperatorAdd,
+               OperatorScale,
+               GridFunctionScale,
+               BilinearProduct,
+               LinearProduct,
+               ShiftNode,
+               shift_op,
+               source_function,
+               simplify_ast,
+               resolve_ast,
+               resolve_form_ast,
+               form,
+               assemble,
+               Innerh,
+               Innerplus
 
 # `simplify_ast` rewrites only the algebraic layer (`OperatorAdd`, `OperatorScale`,
 # `GridFunctionScale`) that `ast.jl`'s `+`/`*`/`/` overloads build, into a tree that routes
@@ -237,7 +237,7 @@ end
         @test ast.scalar == 5
         @test ast.inner_op isa BilinearProduct
         @test Matrix(assemble(a)) ≈
-            5 .* Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(u), v))))
+              5 .* Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(u), v))))
     end
 
     @testset "Lifting from a symbolic source (linear form)" begin

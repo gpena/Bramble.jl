@@ -1,16 +1,16 @@
 @noinline function _throw_dot_dim_error(lu::Integer, lv::Integer, lw::Integer)
     throw(
         DimensionMismatch(
-            "Vectors must have matching lengths, but got lengths ($lu, $lv, $lw)."
-        ),
+        "Vectors must have matching lengths, but got lengths ($lu, $lv, $lw)."
+    ),
     )
 end
 
 @noinline function _throw_dot_dim_error(lu::Integer, lv::Integer, lw::Integer, lm::Integer)
     throw(
         DimensionMismatch(
-            "Vectors and mask must have matching lengths, but got lengths ($lu, $lv, $lw, $lm).",
-        ),
+        "Vectors and mask must have matching lengths, but got lengths ($lu, $lv, $lw, $lm).",
+    ),
     )
 end
 
@@ -45,8 +45,7 @@ threads for [`Parallel`](@ref).
 # one core manages 46-55 GB/s and four recover 1.24-1.39x. The point of this method is the
 # removed index conversion, which is a penalty in every power state; the parallel gain on
 # top of it is the machine's to give.
-@inline _cpu_threaded_for!(::Parallel, v, idxs::CartesianIndices, f) =
-    _threaded_axis_for!(v, idxs, f)
+@inline _cpu_threaded_for!(::Parallel, v, idxs::CartesianIndices, f) = _threaded_axis_for!(v, idxs, f)
 
 """
     _threaded_for!(v::AbstractArray, idxs, f::Function) -> Nothing
@@ -124,7 +123,7 @@ nothing and `Threads.@threads` can partition it directly.
 Blocks differ in length by at most one slice: the remainder is spread over the first of
 them rather than left on the last, so no thread receives a double-sized tail.
 """
-struct _LastAxisChunks{D,R<:Tuple,A<:AbstractRange}
+struct _LastAxisChunks{D, R <: Tuple, A <: AbstractRange}
     rest::R
     ax::A
     n::Int
@@ -141,7 +140,7 @@ that axis so no block is empty.
     ax = inds[D]
     nblocks = max(1, min(Int(n), length(ax)))
     rest = Base.front(inds)
-    return _LastAxisChunks{D,typeof(rest),typeof(ax)}(rest, ax, nblocks)
+    return _LastAxisChunks{D, typeof(rest), typeof(ax)}(rest, ax, nblocks)
 end
 
 @inline Base.length(c::_LastAxisChunks) = c.n
@@ -209,8 +208,7 @@ Dispatches to sequential execution for [`Serial`](@ref) or static multithreaded 
     end
     return nothing
 end
-@inline _cpu_threaded_scatter_for!(::Parallel, mats::Tuple, idxs, g) =
-    _threaded_scatter_for!(mats, idxs, g)
+@inline _cpu_threaded_scatter_for!(::Parallel, mats::Tuple, idxs, g) = _threaded_scatter_for!(mats, idxs, g)
 
 # Kept in an isolated function to prevent closure boxing allocations on serial execution paths.
 @noinline function _threaded_scatter_for!(mats::Tuple, idxs, g)
@@ -247,9 +245,9 @@ struct MarkedIndices
     offset::Int
 end
 
-@inline MarkedIndices(mask::BitVector, offset::Int=0) = MarkedIndices(mask.chunks, offset)
+@inline MarkedIndices(mask::BitVector, offset::Int = 0) = MarkedIndices(mask.chunks, offset)
 
-@inline function Base.iterate(m::MarkedIndices, (chunk_idx, rest)=(0, zero(UInt64)))
+@inline function Base.iterate(m::MarkedIndices, (chunk_idx, rest) = (0, zero(UInt64)))
     chunks = m.chunks
     @inbounds while rest == zero(UInt64)
         chunk_idx += 1
@@ -275,19 +273,18 @@ fly instead, so the union is never materialized -- still proportional to the num
 bits, still a whole-word skip wherever every mask's chunk is zero, and allocates nothing.
 """
 struct MarkedIndicesUnion{N}
-    chunks::NTuple{N,Vector{UInt64}}
+    chunks::NTuple{N, Vector{UInt64}}
     len::Int
 end
 
-@inline function MarkedIndicesUnion(masks::NTuple{N,BitVector}) where {N}
+@inline function MarkedIndicesUnion(masks::NTuple{N, BitVector}) where {N}
     return MarkedIndicesUnion{N}(map(m -> m.chunks, masks), length(masks[1]))
 end
 
-@inline _reduce_or_chunk(chunks::NTuple{N,Vector{UInt64}}, i::Int) where {N} =
-    reduce(|, ntuple(k -> chunks[k][i], Val(N)))
+@inline _reduce_or_chunk(chunks::NTuple{N, Vector{UInt64}}, i::Int) where {N} = reduce(|, ntuple(k -> chunks[k][i], Val(N)))
 
 @inline function Base.iterate(
-    m::MarkedIndicesUnion{N}, (chunk_idx, rest)=(0, zero(UInt64))
+        m::MarkedIndicesUnion{N}, (chunk_idx, rest) = (0, zero(UInt64))
 ) where {N}
     nchunks = length(m.chunks[1])
     @inbounds while rest == zero(UInt64)
@@ -366,7 +363,7 @@ identical generated code, so one method now covers both cases.
 - `DimensionMismatch`: If vector or mask lengths do not match.
 """
 @inline function _dot_masked(
-    u::AbstractVector, v::AbstractVector, w::AbstractVector, mask::BitVector
+        u::AbstractVector, v::AbstractVector, w::AbstractVector, mask::BitVector
 )
     (length(u) == length(v) == length(w) == length(mask)) ||
         _throw_dot_dim_error(length(u), length(v), length(w), length(mask))
@@ -384,7 +381,7 @@ end
 # instead of a `BitVector`: `_combined_mask` hands one of these straight in, with no
 # intermediate combined mask to check the length of, so the guard reads `mask.len`.
 @inline function _dot_masked(
-    u::AbstractVector, v::AbstractVector, w::AbstractVector, mask::MarkedIndicesUnion
+        u::AbstractVector, v::AbstractVector, w::AbstractVector, mask::MarkedIndicesUnion
 )
     (length(u) == length(v) == length(w) == mask.len) ||
         _throw_dot_dim_error(length(u), length(v), length(w), mask.len)

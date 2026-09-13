@@ -9,8 +9,10 @@
 
 Shifts a Cartesian offset tuple by `delta` in dimension `dim`.
 """
-@inline shift_offset(offset::NTuple{D,Int}, dim::Int, delta::Int) where {D} =
-    ntuple(i -> i == dim ? offset[i] + delta : offset[i], Val(D))
+@inline shift_offset(offset::NTuple{D, Int}, dim::Int, delta::Int) where {D} = ntuple(
+    i -> i == dim ?
+         offset[i] + delta :
+         offset[i], Val(D))
 
 """
     zero_offset(::Val{D}) -> NTuple{D, Int}
@@ -29,11 +31,13 @@ against a `@generated` version this once was (gpena/Bramble.jl#63): identical ze
 allocations and identical inferred return type, so the code generation bought nothing
 here.
 """
-@inline shift_stencil(inner::Tuple, ::Val{Dim}, ::Val{Delta}) where {Dim,Delta} =
-    map(t -> (shift_offset(t[1], Dim, Delta), t[2]), inner)
+@inline shift_stencil(inner::Tuple, ::Val{Dim}, ::Val{Delta}) where {Dim, Delta} = map(
+    t -> (
+        shift_offset(t[1], Dim, Delta), t[2]), inner)
 
-@inline shift_stencil(inner::Tuple, ::Val{Dim}, delta::Int) where {Dim} =
-    map(t -> (shift_offset(t[1], Dim, delta), t[2]), inner)
+@inline shift_stencil(inner::Tuple, ::Val{Dim}, delta::Int) where {Dim} = map(
+    t -> (
+        shift_offset(t[1], Dim, delta), t[2]), inner)
 
 # `(left..., right...)` is already resolved at compile time for tuples; no metaprogramming
 # needed (gpena/Bramble.jl#63).
@@ -54,8 +58,7 @@ end
     _flatten_tuples(map(l -> map(r -> (r[1], l[2] * r[2] * vol), right), left))
 end
 
-@inline scale_stencil(inner::Tuple, scalar::Number) =
-    map(t -> (Base.front(t)..., t[end] * scalar), inner)
+@inline scale_stencil(inner::Tuple, scalar::Number) = map(t -> (Base.front(t)..., t[end] * scalar), inner)
 
 """
     sum_stencil_values(stencil::Tuple)
@@ -74,7 +77,7 @@ behavior, which is what this calls. This used to be its own `@generated` unrolle
 (gpena/Bramble.jl#63), identical zero allocations and identical inferred type, so the
 `@generated` version bought nothing that `sum` was not already providing.
 """
-@inline sum_stencil_values(stencil::Tuple) = sum(t -> t[end], stencil; init=false)
+@inline sum_stencil_values(stencil::Tuple) = sum(t -> t[end], stencil; init = false)
 
 # ==============================================================================
 # 2. Abstract Syntax Tree (AST) Nodes
@@ -122,7 +125,7 @@ end
 
 An AST node representing a source term defined by a continuous function.
 """
-struct SourceFunction{D,F} <: LazyOp{D}
+struct SourceFunction{D, F} <: LazyOp{D}
     func::F
 end
 
@@ -141,7 +144,7 @@ So `(x -> x[1]) * D₋ₓ(u)` does not do what it reads as: the thunk call fails
 function wants a point. A function of position belongs in a `SourceFunction`, or should be
 restricted to the grid with `Rₕ` first and passed as the vector it becomes.
 """
-struct SourceVector{D,VType<:AbstractVector} <: LazyOp{D}
+struct SourceVector{D, VType <: AbstractVector} <: LazyOp{D}
     vec::VType
 end
 
@@ -157,7 +160,7 @@ barrier, assembling a constant source is 1.6–2.6× faster than through `Source
 the ratio growing with `ndofs` rather than staying fixed, so this is a per-point saving
 rather than one-off overhead. `source_number` is what builds one from a literal `Number`.
 """
-struct SourceConstant{D,T} <: LazyOp{D}
+struct SourceConstant{D, T} <: LazyOp{D}
     value::T
 end
 
@@ -222,8 +225,7 @@ struct PointDependentStencil <: StencilShiftTrait end
 @inline _combine_shift_traits(
     ::TranslationInvariantStencil, ::TranslationInvariantStencil
 ) = TranslationInvariantStencil()
-@inline _combine_shift_traits(::StencilShiftTrait, ::StencilShiftTrait) =
-    PointDependentStencil()
+@inline _combine_shift_traits(::StencilShiftTrait, ::StencilShiftTrait) = PointDependentStencil()
 
 @inline stencil_shift_trait(::LazyOp) = TranslationInvariantStencil()
 
@@ -247,8 +249,8 @@ struct PointDependentStencil <: StencilShiftTrait end
 # its own already-correct behaviour (`locate_cell` extrapolates by design), so `ShiftNode`
 # only takes the `_in_grid` branch when its inner operand is source-only.
 @inline function _clamped_shift(
-    m, I::CartesianIndex{D}, ::Val{Dim}, delta::Int
-) where {D,Dim}
+        m, I::CartesianIndex{D}, ::Val{Dim}, delta::Int
+) where {D, Dim}
     dims = npoints(m, Tuple)
     j = clamp(I[Dim] + delta, 1, dims[Dim])
     return CartesianIndex(ntuple(d -> d == Dim ? j : I[d], Val(D)))
@@ -263,8 +265,7 @@ The check [`ShiftNode`](@ref)'s own `local_stencil` makes for a `PointDependentS
 operator, in place of trusting `_clamped_shift`'s clamp; see the note there for why that
 trust does not extend to this one caller.
 """
-@inline _in_grid(space, I::CartesianIndex{D}) where {D} =
-    checkbounds(Bool, LinearIndices(indices(mesh(space))), I)
+@inline _in_grid(space, I::CartesianIndex{D}) where {D} = checkbounds(Bool, LinearIndices(indices(mesh(space))), I)
 
 """
     shifted_inner_stencil(inner_op, inner, space, I, markers, ::Val{Dim}, delta)
@@ -280,8 +281,8 @@ of the same static length, since it is the same operator either way, so the call
 `concatenate_stencils` sees exactly the shape it always did.
 """
 @inline function shifted_inner_stencil(
-    inner_op, inner, space, I::CartesianIndex{D}, markers, ::Val{Dim}, delta
-) where {D,Dim}
+        inner_op, inner, space, I::CartesianIndex{D}, markers, ::Val{Dim}, delta
+) where {D, Dim}
     return _shifted_inner_stencil(
         stencil_shift_trait(inner_op), inner_op, inner, space, I, markers, Val(Dim), delta
     )
@@ -295,19 +296,19 @@ end
     I::CartesianIndex{D},
     markers,
     ::Val{Dim},
-    delta,
-) where {D,Dim} = shift_stencil(inner, Val(Dim), delta)
+    delta
+) where {D, Dim} = shift_stencil(inner, Val(Dim), delta)
 
 @inline function _shifted_inner_stencil(
-    ::PointDependentStencil,
-    inner_op,
-    inner,
-    space,
-    I::CartesianIndex{D},
-    markers,
-    ::Val{Dim},
-    delta,
-) where {D,Dim}
+        ::PointDependentStencil,
+        inner_op,
+        inner,
+        space,
+        I::CartesianIndex{D},
+        markers,
+        ::Val{Dim},
+        delta
+) where {D, Dim}
     m = mesh(space)
     Ishift = _clamped_shift(m, I, Val(Dim), _shift_delta(delta))
     return local_stencil(
@@ -342,7 +343,7 @@ test_function(::Val{D}) where {D} = TestFunction{D}()
 
 Constructs a `SourceFunction` wrapping function `f`.
 """
-source_function(f, ::Val{D}) where {D} = SourceFunction{D,typeof(f)}(f)
+source_function(f, ::Val{D}) where {D} = SourceFunction{D, typeof(f)}(f)
 
 # --- Eager spatial lowering of source functions (gpena/Bramble.jl#197) ------------- #
 #
@@ -377,7 +378,7 @@ source_function(f, ::Val{D}) where {D} = SourceFunction{D,typeof(f)}(f)
 
 @inline function _lower_sources(op::SourceFunction{D}, space) where {D}
     vec = parent(Rₕ(space, op.func))
-    return SourceVector{D,typeof(vec)}(vec)
+    return SourceVector{D, typeof(vec)}(vec)
 end
 
 function _lower_sources(op::OperatorScale, space)
@@ -416,7 +417,7 @@ end
         "the `ast` keyword measures no benefit over the form's own resolved AST, and its " *
         "only real use -- swapping in another form's AST -- is redundant with assembling " *
         "that form directly. It will be removed in v3.0.0 without replacement.",
-        funcsym,
+        funcsym
     )
     return nothing
 end

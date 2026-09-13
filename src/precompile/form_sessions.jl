@@ -101,7 +101,7 @@ function _pc_form_stencils(Ωₕ::AbstractMeshType, Wₕ, id, u, v, label::Symbo
         3 * D₋ₓ(id),
         D₋ₓ(id) + D₊ₓ(id),
         restrict_to(:interior, id),
-        restrict_to(label, id),
+        restrict_to(label, id)
     )
         local_stencil(op, Wₕ, I, nothing, lin[I])
         local_stencil(op, Wₕ, I, mk, lin[I])
@@ -226,9 +226,9 @@ function _pc_assemble_bilinear_shape(Wₕ, g, label::Symbol)
 
     A = allocate_system_matrix(bf, ast)
     assemble!(A, bf)
-    assemble!(A, bf; dirichlet=label)
+    assemble!(A, bf; dirichlet = label)
     assemble(bf)
-    assemble(bf; dirichlet=label)
+    assemble(bf; dirichlet = label)
 
     uₕ = element(Wₕ, 1.0)
     bf(uₕ, uₕ)
@@ -283,7 +283,7 @@ function _pc_assemble_directional(Wₕ, uₕ, b, ::Val{2})
 end
 
 function _pc_form_assembly(
-    Ωₕ::AbstractMeshType, Wₕ, Vₕ, label::Symbol, f, dim_val::Val{D}
+        Ωₕ::AbstractMeshType, Wₕ, Vₕ, label::Symbol, f, dim_val::Val{D}
 ) where {D}
     uₕ = Rₕ(Wₕ, f)
     b = zeros(eltype(Wₕ), ndofs(Wₕ))
@@ -343,14 +343,14 @@ function _pc_form_assembly(
     # and the constrained right-hand side, which is a different path from the bare one
     bcs = dirichlet_constraints(Ωₕ, label => f)
     lf = form(Wₕ, v -> innerₕ(uₕ, v))
-    assemble(lf; dirichlet=bcs)
+    assemble(lf; dirichlet = bcs)
 
     # The joint (A, F) entry point, every `dirichlet` shape it accepts, with and without
     # symmetrize: a `label => f` Pair, a Tuple of one, and pre-built constraints.
     af = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
-    assemble(af, lf; dirichlet=label => f)
-    assemble(af, lf; dirichlet=(label => f,), symmetrize=true)
-    assemble(af, lf; dirichlet=bcs, symmetrize=true)
+    assemble(af, lf; dirichlet = label => f)
+    assemble(af, lf; dirichlet = (label => f,), symmetrize = true)
+    assemble(af, lf; dirichlet = bcs, symmetrize = true)
 
     # Bilinear forms: mass, stiffness, combination, and transverse
     _pc_assemble_bilinear_shape_threaded(Wₕ, (u, v) -> innerₕ(u, v), label)
@@ -367,7 +367,7 @@ function _pc_form_assembly(
 end
 
 function _pc_form_session(
-    Ωₕ::AbstractMeshType, be, label::Symbol, f, ft, I_time, dim_val::Val{D}
+        Ωₕ::AbstractMeshType, be, label::Symbol, f, ft, I_time, dim_val::Val{D}
 ) where {D}
     Wₕ = gridspace(Ωₕ)
     Vₕ = gridspace(Ωₕ, Val(2))

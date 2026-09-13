@@ -39,10 +39,10 @@ end
 @noinline function _throw_mixed_components(l, r)
     throw(
         ArgumentError(
-            "the two sides of a sum inside one inner product name different components " *
-            "($l and $r). Each inner product belongs to one component: write the sum of " *
-            "products instead, innerₕ(u, v(1)) + innerₕ(u, v(2)).",
-        ),
+        "the two sides of a sum inside one inner product name different components " *
+        "($l and $r). Each inner product belongs to one component: write the sum of " *
+        "products instead, innerₕ(u, v(1)) + innerₕ(u, v(2)).",
+    ),
     )
 end
 
@@ -100,21 +100,21 @@ end
     named, missing_side = tc === nothing ? ("test", "trial") : ("trial", "test")
     throw(
         ArgumentError(
-            "a term of this form names its $named component but not its $missing_side one. " *
-            "A block of a bilinear form takes a component from each side: write " *
-            "innerₕ(u(i), v(j)) for one block, or innerₕ(u, v) for the same integrand on " *
-            "every diagonal block.",
-        ),
+        "a term of this form names its $named component but not its $missing_side one. " *
+        "A block of a bilinear form takes a component from each side: write " *
+        "innerₕ(u(i), v(j)) for one block, or innerₕ(u, v) for the same integrand on " *
+        "every diagonal block.",
+    ),
     )
 end
 
 @noinline function _throw_block_out_of_range(side::String, c::Int, n::Int)
     throw(
         ArgumentError(
-            "a term of this form names $side component $c, and that side has $n blocks. " *
-            "Components are numbered 1 to $n; a term written for a wider space contributes " *
-            "nothing here, which is why this is an error rather than an empty block.",
-        ),
+        "a term of this form names $side component $c, and that side has $n blocks. " *
+        "Components are numbered 1 to $n; a term written for a wider space contributes " *
+        "nothing here, which is why this is an error rather than an empty block.",
+    ),
     )
 end
 
@@ -133,7 +133,7 @@ right order -- one of which got it backwards (gpena/Bramble.jl#48). Naming it he
 caller reads `blk.row_offset`/`blk.col_offset` off the type instead of re-deriving which
 positional element means which.
 """
-struct Block{TrialLeaf,TestLeaf}
+struct Block{TrialLeaf, TestLeaf}
     trial_leaf::TrialLeaf
     test_leaf::TestLeaf
     row_offset::Int
@@ -144,7 +144,7 @@ end
     first(trial_leaves[tc]),
     first(test_leaves[sc]),
     last(test_leaves[sc]),
-    last(trial_leaves[tc]),
+    last(trial_leaves[tc])
 )
 
 @inline function _diagonal_blocks(trial_leaves::Tuple, test_leaves::Tuple)
@@ -186,14 +186,14 @@ function _collect_region_labels(op::RegionRestriction)
 end
 
 _region_labels(region::Symbol) = (region,)
-_region_labels(region::NTuple{N,Symbol}) where {N} = region
+_region_labels(region::NTuple{N, Symbol}) where {N} = region
 
 # `RegionRestriction`'s own method above wins on specificity, so it is untouched by this
 # collapse; only `InterpolationNode`'s separate method (form/operators/interpolation.jl)
 # becomes redundant, since it recursed the same way.
 _collect_region_labels(op::UnaryWrapper) = _collect_region_labels(op.inner_op)
 
-function _collect_region_labels(op::Union{BilinearProduct,LinearProduct,OperatorAdd})
+function _collect_region_labels(op::Union{BilinearProduct, LinearProduct, OperatorAdd})
     return (_collect_region_labels(op.left_op)..., _collect_region_labels(op.right_op)...)
 end
 
@@ -219,11 +219,11 @@ end
 @noinline function _throw_marker_not_on_space(label::Symbol, context::String)
     throw(
         ArgumentError(
-            "the marker :$label is not defined on $context. A marker named in restrict_to or " *
-            "markers = (...) must exist on every space a term reaches; if it is only defined " *
-            "on some of a composite space's leaves, write the term per component instead, one " *
-            "innerₕ(u(i), v(i)) per leaf with that leaf's own markers, rather than one term " *
-            "naming a marker not every leaf it reaches has.",
-        ),
+        "the marker :$label is not defined on $context. A marker named in restrict_to or " *
+        "markers = (...) must exist on every space a term reaches; if it is only defined " *
+        "on some of a composite space's leaves, write the term per component instead, one " *
+        "innerₕ(u(i), v(i)) per leaf with that leaf's own markers, rather than one term " *
+        "naming a marker not every leaf it reaches has.",
+    ),
     )
 end

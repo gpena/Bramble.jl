@@ -50,7 +50,7 @@ end
 Project `f` by averaging it over each cell with `nq` quadrature points per direction. The
 rule behind [`avgₕ!`](@ref).
 """
-struct CellAverage{F,NQ} <: ProjectionRule
+struct CellAverage{F, NQ} <: ProjectionRule
     f::F
     nq::Val{NQ}
 end
@@ -88,18 +88,16 @@ function _rule_component end
 # The marker masks, as a tuple whose length is a type parameter so the `||` chain below
 # unrolls. `index_in_marker` is a dictionary lookup returning the mesh's own array, so this
 # copies nothing.
-@inline _marker_masks(Ωₕ, markers::NTuple{N,Symbol}) where {N} =
-    ntuple(i -> index_in_marker(Ωₕ, markers[i]), Val(N))
+@inline _marker_masks(Ωₕ, markers::NTuple{N, Symbol}) where {N} = ntuple(i -> index_in_marker(Ωₕ, markers[i]), Val(N))
 
 @inline _in_any_marker(::Tuple{}, i) = false
-@inline _in_any_marker(masks::Tuple, i) =
-    (@inbounds masks[1][i]) || _in_any_marker(Base.tail(masks), i)
+@inline _in_any_marker(masks::Tuple, i) = (@inbounds masks[1][i]) || _in_any_marker(Base.tail(masks), i)
 
 # Off-region entries are written as zero rather than skipped. The serial loops this
 # replaces did `fill!(raw, 0)` first and then wrote only the masked entries, which leaves
 # exactly the same array -- but writing every entry is what lets the masked sweep be the
 # same threaded sweep as the unmasked one.
-struct _MaskedKernel{K,M,Z}
+struct _MaskedKernel{K, M, Z}
     kernel::K
     masks::M
     zeroval::Z
@@ -122,9 +120,9 @@ for the public spellings.
 function project! end
 
 @inline function project!(
-    uₕ::VectorElement{<:ScalarGridSpace},
-    rule::ProjectionRule,
-    markers::NTuple{N,Symbol}=NTuple{0,Symbol}(),
+        uₕ::VectorElement{<:ScalarGridSpace},
+        rule::ProjectionRule,
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
 ) where {N}
     sp = space(uₕ)
     Ωₕ = mesh(sp)
@@ -138,9 +136,9 @@ function project! end
 end
 
 @inline function project!(
-    uₕ::VectorElement{<:CompositeGridSpace},
-    rule::ProjectionRule,
-    markers::NTuple{N,Symbol}=NTuple{0,Symbol}(),
+        uₕ::VectorElement{<:CompositeGridSpace},
+        rule::ProjectionRule,
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
 ) where {N}
     comps = components(uₕ)
     if _shares_one_mesh(comps)
@@ -159,7 +157,7 @@ end
         # own points, keeping only that leaf's entry (gpena/Bramble.jl#78).
         ntuple(
             k -> (project!(comps[k], _rule_component(rule, k), markers); nothing),
-            Val(length(comps)),
+            Val(length(comps))
         )
     end
     return uₕ
@@ -169,9 +167,9 @@ end
 # `ntuple` indexing a shared count -- it needs no leaf count, stays correct under any
 # nesting, and errors on a length mismatch the way it always did.
 @inline function project!(
-    uₕ::VectorElement{<:CompositeGridSpace},
-    rules::Tuple,
-    markers::NTuple{N,Symbol}=NTuple{0,Symbol}(),
+        uₕ::VectorElement{<:CompositeGridSpace},
+        rules::Tuple,
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
 ) where {N}
     map((c, r) -> project!(c, r, markers), components(uₕ), rules)
     return uₕ
@@ -181,13 +179,13 @@ end
 @inline project!(
     uₕ::VectorElement{<:ScalarGridSpace},
     rules::Tuple{Any},
-    markers::NTuple{N,Symbol}=NTuple{0,Symbol}(),
+    markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
 ) where {N} = project!(uₕ, rules[1], markers)
 
 # Unmasked stays the bare kernel, so the common path carries no mask check at all.
-@inline _apply_mask(kernel, Ωₕ, ::NTuple{0,Symbol}, zeroval) = kernel
-@inline _apply_mask(kernel, Ωₕ, markers::NTuple{N,Symbol}, zeroval) where {N} =
-    _MaskedKernel(kernel, _marker_masks(Ωₕ, markers), _zero_of(zeroval))
+@inline _apply_mask(kernel, Ωₕ, ::NTuple{0, Symbol}, zeroval) = kernel
+@inline _apply_mask(kernel, Ωₕ, markers::NTuple{N, Symbol}, zeroval) where {N} = _MaskedKernel(
+    kernel, _marker_masks(Ωₕ, markers), _zero_of(zeroval))
 
 @inline _zero_of(::Type{T}) where {T} = zero(T)
 @inline _zero_of(z::Tuple) = z

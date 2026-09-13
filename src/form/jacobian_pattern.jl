@@ -33,8 +33,9 @@ end
 # placeholder -- the same offsets `stencil_offsets` already gives any stencil op, since a
 # coefficient dependency is written exactly the way a form term is (a function of `U`).
 function _coefficient_offsets(::Val{D}, deps::Tuple, U) where {D}
-    offs = NTuple{D,Int}[]
+    offs = NTuple{D, Int}[]
     for dep in deps, op in _as_op_tuple(dep(U))
+
         for o in stencil_offsets(op)
             o in offs || push!(offs, o)
         end
@@ -84,8 +85,8 @@ pattern = jacobian_pattern(a, U -> U(2), U -> U(1))   # block (1,1) reads U(2), 
 ```
 """
 function jacobian_pattern(
-    form::BilinearForm{D,TrialSpace,TestSpace,AST}, coefficient_dependencies::Function...
-) where {D,TrialSpace,TestSpace,AST}
+        form::BilinearForm{D, TrialSpace, TestSpace, AST}, coefficient_dependencies::Function...
+) where {D, TrialSpace, TestSpace, AST}
     ast = form.ast
     space = form.test_space
     _check_block_meshes(ast, form.trial_space, form.test_space)
@@ -100,9 +101,8 @@ function jacobian_pattern(
 
     I_vec = Int[]
     J_vec = Int[]
-    hint =
-        _pattern_size_hint(ast, space, mesh_markers, lin_indices) *
-        (1 + length(coeff_offsets))
+    hint = _pattern_size_hint(ast, space, mesh_markers, lin_indices) *
+           (1 + length(coeff_offsets))
     sizehint!(I_vec, hint)
     sizehint!(J_vec, hint)
 
@@ -156,7 +156,7 @@ end
 
 # One resolved dependency: which leaf it targets (`nothing` = the block's own trial leaf)
 # paired with its own stencil reach.
-const _DependencyOp{D} = Tuple{Union{Int,Nothing},Vector{NTuple{D,Int}}}
+const _DependencyOp{D} = Tuple{Union{Int, Nothing}, Vector{NTuple{D, Int}}}
 
 # Every `(dep(U))` node, flattened across dependencies and across whatever tuple a
 # multi-dimensional stencil op (`∇₋ₕ`, `M₋ₕ` in D > 1) returns -- one entry per node, not
@@ -165,6 +165,7 @@ const _DependencyOp{D} = Tuple{Union{Int,Nothing},Vector{NTuple{D,Int}}}
 function _resolve_dependency_ops(::Val{D}, deps::Tuple, U) where {D}
     entries = _DependencyOp{D}[]
     for dep in deps, op in _as_op_tuple(dep(U))
+
         push!(entries, (trial_component_or_nothing(op), stencil_offsets(op)))
     end
     return entries
@@ -173,11 +174,11 @@ end
 @noinline function _throw_cross_leaf_dependency_mesh(target::Int)
     throw(
         ArgumentError(
-            "a coefficient dependency named component $target, whose leaf does not share the " *
-            "reaching term's own mesh. jacobian_pattern's composite case assumes every leaf a " *
-            "dependency can name is discretised on the same mesh as the term it widens, the " *
-            "same assumption allocate_system_matrix's own composite method makes.",
-        ),
+        "a coefficient dependency named component $target, whose leaf does not share the " *
+        "reaching term's own mesh. jacobian_pattern's composite case assumes every leaf a " *
+        "dependency can name is discretised on the same mesh as the term it widens, the " *
+        "same assumption allocate_system_matrix's own composite method makes.",
+    ),
     )
 end
 
@@ -185,7 +186,7 @@ end
 # hand from the block being widened). An explicit component -> that leaf's own, looked up
 # from `trial_leaves`, guarded the same way `_check_block_meshes` guards a term's own leaves.
 function _dependency_leaf(
-    target::Union{Int,Nothing}, trial_leaves, own_lin_indices, own_col_offset, own_mesh
+        target::Union{Int, Nothing}, trial_leaves, own_lin_indices, own_col_offset, own_mesh
 )
     target === nothing && return (own_lin_indices, own_col_offset)
     leaf_space, leaf_col_offset = trial_leaves[target]
@@ -200,16 +201,16 @@ end
 # does above -- resolved once per block (not per point) into `(lin_indices, col_offset)`
 # pairs, since neither depends on the grid point being visited.
 function _pattern_term_jacobian!(
-    I_vec::Vector{Int},
-    J_vec::Vector{Int},
-    term::TERM,
-    trial_leaf,
-    test_leaf,
-    row_offset::Int,
-    col_offset::Int,
-    trial_leaves,
-    dep_ops::Vector{_DependencyOp{D}},
-) where {TERM,D}
+        I_vec::Vector{Int},
+        J_vec::Vector{Int},
+        term::TERM,
+        trial_leaf,
+        test_leaf,
+        row_offset::Int,
+        col_offset::Int,
+        trial_leaves,
+        dep_ops::Vector{_DependencyOp{D}}
+) where {TERM, D}
     Ωₕ = mesh(test_leaf)
     mesh_markers = markers(Ωₕ)
     _validate_term_markers(term, mesh_markers, "one of the composite space's leaves")
@@ -249,6 +250,7 @@ function _pattern_term_jacobian!(
             row = lin_indices[Iv] + row_offset
 
             for (dep_lin_indices, dep_col_offset, offsets) in resolved, δ in offsets
+
                 Ic = I + CartesianIndex(δ)
                 checkbounds(Bool, dep_lin_indices, Ic) || continue
                 push!(I_vec, row)
@@ -262,12 +264,12 @@ end
 # Recursion shape shared via `_visit_operator_add3` (form/common.jl), the same one
 # `_pattern_blocks!` (form/bilinear.jl) uses for the base (non-Jacobian) pattern.
 function _pattern_blocks_jacobian!(
-    I_vec::Vector{Int},
-    J_vec::Vector{Int},
-    op::OperatorAdd,
-    trial_leaves,
-    test_leaves,
-    dep_ops,
+        I_vec::Vector{Int},
+        J_vec::Vector{Int},
+        op::OperatorAdd,
+        trial_leaves,
+        test_leaves,
+        dep_ops
 )
     return _visit_operator_add3(
         _pattern_blocks_jacobian!, I_vec, J_vec, op, trial_leaves, test_leaves, dep_ops
@@ -275,7 +277,7 @@ function _pattern_blocks_jacobian!(
 end
 
 function _pattern_blocks_jacobian!(
-    I_vec::Vector{Int}, J_vec::Vector{Int}, term::TERM, trial_leaves, test_leaves, dep_ops
+        I_vec::Vector{Int}, J_vec::Vector{Int}, term::TERM, trial_leaves, test_leaves, dep_ops
 ) where {TERM}
     for blk in blocks(term, trial_leaves, test_leaves)
         _check_block_meshes(term, blk.trial_leaf, blk.test_leaf)
@@ -288,15 +290,15 @@ function _pattern_blocks_jacobian!(
             blk.row_offset,
             blk.col_offset,
             trial_leaves,
-            dep_ops,
+            dep_ops
         )
     end
     return nothing
 end
 
 function jacobian_pattern(
-    form::BilinearForm{D,TrialSpace,TestSpace,AST}, coefficient_dependencies::Function...
-) where {D,TrialSpace<:CompositeGridSpace,TestSpace<:CompositeGridSpace,AST}
+        form::BilinearForm{D, TrialSpace, TestSpace, AST}, coefficient_dependencies::Function...
+) where {D, TrialSpace <: CompositeGridSpace, TestSpace <: CompositeGridSpace, AST}
     ast = form.ast
     trial_leaves = leaf_spaces_offsets(form.trial_space)
     test_leaves = leaf_spaces_offsets(form.test_space)

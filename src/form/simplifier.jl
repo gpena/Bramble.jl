@@ -55,7 +55,7 @@ grid functions and components involved, not an approximation.
 # except `_same_operator_shape` (`symmetry.jl`), which compares `a.space === b.space`, and
 # `nothing === nothing` settles that the same way two zero operators over the same space
 # would: they are the same operator.
-@inline _zero_of(::LazyOp{D}) where {D} = ZeroOperator{D,Nothing}(nothing)
+@inline _zero_of(::LazyOp{D}) where {D} = ZeroOperator{D, Nothing}(nothing)
 
 @inline _is_zero_op(::LazyOp) = false
 @inline _is_zero_op(::ZeroOperator) = true
@@ -101,7 +101,7 @@ different subtrees as equal would silently change what the assembled form comput
 is the one thing this pass may never do.
 """
 @inline _ast_equal(::LazyOp, ::LazyOp) = false
-@inline function _ast_equal(a::T, b::T) where {T<:LazyOp}
+@inline function _ast_equal(a::T, b::T) where {T <: LazyOp}
     for name in fieldnames(T)
         fa = getfield(a, name)
         fb = getfield(b, name)
@@ -154,9 +154,9 @@ function simplify_ast(op::OperatorScale)
         # factoring this would otherwise be (rule 2's mirror image).
         return simplify_ast(
             OperatorAdd(
-                _wrap_scale(op.scalar, inner.left_op),
-                _wrap_scale(op.scalar, inner.right_op),
-            ),
+            _wrap_scale(op.scalar, inner.left_op),
+            _wrap_scale(op.scalar, inner.right_op)
+        ),
         )
     end
 
@@ -183,9 +183,9 @@ function simplify_ast(op::GridFunctionScale)
         # over a component-mixing sum rather than hiding it from the router.
         return simplify_ast(
             OperatorAdd(
-                GridFunctionScale(op.grid_function, inner.left_op),
-                GridFunctionScale(op.grid_function, inner.right_op),
-            ),
+            GridFunctionScale(op.grid_function, inner.left_op),
+            GridFunctionScale(op.grid_function, inner.right_op)
+        ),
         )
     end
 
@@ -222,10 +222,10 @@ function simplify_ast(op::OperatorAdd)
         # 2*(c*A)`, true for whatever `c` holds at assembly time.
         cl === cr && return _wrap_scale(2, left)
     elseif (left isa OperatorScale || right isa OperatorScale) &&
-        cl isa Number &&
-        cr isa Number &&
-        cl == cr &&
-        !_mixes_components(al, ar)
+           cl isa Number &&
+           cr isa Number &&
+           cl == cr &&
+           !_mixes_components(al, ar)
         # Factor a common static scalar out of two different subtrees: `c*A + c*B ->
         # c*(A+B)`. Neither side is zero here (caught above), so `cl == cr` implies both
         # are nonzero. Guarded on an actual `OperatorScale` being present so two already
@@ -235,10 +235,10 @@ function simplify_ast(op::OperatorAdd)
         # hide the exact shape the router cannot route as one term.
         return _wrap_scale(cl, OperatorAdd(al, ar))
     elseif (left isa OperatorScale || right isa OperatorScale) &&
-        cl isa Base.RefValue &&
-        cr isa Base.RefValue &&
-        cl === cr &&
-        !_mixes_components(al, ar)
+           cl isa Base.RefValue &&
+           cr isa Base.RefValue &&
+           cl === cr &&
+           !_mixes_components(al, ar)
         # Same reasoning, for a shared dynamic coefficient.
         return OperatorScale(cl, OperatorAdd(al, ar))
     end
@@ -248,7 +248,7 @@ end
 
 # --- Inner products: scalar lifting and component distribution ---------------------- #
 
-function simplify_ast(op::BilinearProduct{D,W}) where {D,W}
+function simplify_ast(op::BilinearProduct{D, W}) where {D, W}
     left = simplify_ast(op.left_op)
     right = simplify_ast(op.right_op)
 
@@ -262,25 +262,25 @@ function simplify_ast(op::BilinearProduct{D,W}) where {D,W}
     if right isa OperatorAdd && _mixes_components(right.left_op, right.right_op)
         return simplify_ast(
             OperatorAdd(
-                BilinearProduct{D,W,typeof(left),typeof(right.left_op)}(
-                    left, right.left_op
-                ),
-                BilinearProduct{D,W,typeof(left),typeof(right.right_op)}(
-                    left, right.right_op
-                ),
+            BilinearProduct{D, W, typeof(left), typeof(right.left_op)}(
+                left, right.left_op
             ),
+            BilinearProduct{D, W, typeof(left), typeof(right.right_op)}(
+                left, right.right_op
+            )
+        ),
         )
     end
     if left isa OperatorAdd && _mixes_components(left.left_op, left.right_op)
         return simplify_ast(
             OperatorAdd(
-                BilinearProduct{D,W,typeof(left.left_op),typeof(right)}(
-                    left.left_op, right
-                ),
-                BilinearProduct{D,W,typeof(left.right_op),typeof(right)}(
-                    left.right_op, right
-                ),
+            BilinearProduct{D, W, typeof(left.left_op), typeof(right)}(
+                left.left_op, right
             ),
+            BilinearProduct{D, W, typeof(left.right_op), typeof(right)}(
+                left.right_op, right
+            )
+        ),
         )
     end
 
@@ -290,11 +290,11 @@ function simplify_ast(op::BilinearProduct{D,W}) where {D,W}
     # between the product and its two arguments.
     cl, al = _scale_parts(left)
     cr, ar = _scale_parts(right)
-    inner = BilinearProduct{D,W,typeof(al),typeof(ar)}(al, ar)
+    inner = BilinearProduct{D, W, typeof(al), typeof(ar)}(al, ar)
     return _lift_scalars(cl, cr, inner)
 end
 
-function simplify_ast(op::LinearProduct{D,W}) where {D,W}
+function simplify_ast(op::LinearProduct{D, W}) where {D, W}
     left = simplify_ast(op.left_op)
     right = simplify_ast(op.right_op)
 
@@ -306,39 +306,39 @@ function simplify_ast(op::LinearProduct{D,W}) where {D,W}
     if right isa OperatorAdd && _mixes_components(right.left_op, right.right_op)
         return simplify_ast(
             OperatorAdd(
-                LinearProduct{D,W,typeof(left),typeof(right.left_op)}(left, right.left_op),
-                LinearProduct{D,W,typeof(left),typeof(right.right_op)}(
-                    left, right.right_op
-                ),
-            ),
+            LinearProduct{D, W, typeof(left), typeof(right.left_op)}(left, right.left_op),
+            LinearProduct{D, W, typeof(left), typeof(right.right_op)}(
+                left, right.right_op
+            )
+        ),
         )
     end
 
     cl, al = _scale_parts(left)
     cr, ar = _scale_parts(right)
-    inner = LinearProduct{D,W,typeof(al),typeof(ar)}(al, ar)
+    inner = LinearProduct{D, W, typeof(al), typeof(ar)}(al, ar)
     return _lift_scalars(cl, cr, inner)
 end
 
 # --- Stencil shifts: idempotence and additive composition ---------------------------- #
 
-function simplify_ast(op::ShiftNode{D,Dim}) where {D,Dim}
+function simplify_ast(op::ShiftNode{D, Dim}) where {D, Dim}
     inner = simplify_ast(op.inner_op)
     op.shift_amount == 0 && return inner  # Shift₀(u) -> u
 
-    if inner isa ShiftNode{D,Dim}
+    if inner isa ShiftNode{D, Dim}
         # Shift_a(Shift_b(u)) -> Shift_{a+b}(u), along the *same* dimension only -- a shift
         # along a different dimension is a different operation and cannot fold into one
         # node. `a + (-a) = 0` collapses straight to `u`, matching the Shift₀ rule above
         # rather than building a zero-shift node and relying on a second pass to remove it.
         total = op.shift_amount + inner.shift_amount
         total == 0 && return inner.inner_op
-        return ShiftNode{D,Dim,typeof(inner.inner_op)}(total, inner.inner_op)
+        return ShiftNode{D, Dim, typeof(inner.inner_op)}(total, inner.inner_op)
     end
 
     return if inner === op.inner_op
         op
     else
-        ShiftNode{D,Dim,typeof(inner)}(op.shift_amount, inner)
+        ShiftNode{D, Dim, typeof(inner)}(op.shift_amount, inner)
     end
 end

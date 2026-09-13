@@ -10,7 +10,7 @@
 
 An AST node representing a backward finite difference operator acting in dimension `Dim`.
 """
-struct BackwardDifference{D,Dim,OpType<:LazyOp{D}} <: LazyOp{D}
+struct BackwardDifference{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
     inner_op::OpType
 end
 
@@ -19,7 +19,7 @@ end
 
 An AST node representing a forward finite difference operator acting in dimension `Dim`.
 """
-struct ForwardDifference{D,Dim,OpType<:LazyOp{D}} <: LazyOp{D}
+struct ForwardDifference{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
     inner_op::OpType
 end
 
@@ -32,9 +32,9 @@ end
 
 Constructs a backward gradient operator tuple, yielding `D`-tuple of `BackwardDifference` operators.
 """
-grad_backward(op::LazyOp{1}) = BackwardDifference{1,1,typeof(op)}(op)
+grad_backward(op::LazyOp{1}) = BackwardDifference{1, 1, typeof(op)}(op)
 function grad_backward(op::LazyOp{D}) where {D}
-    return ntuple(dim -> BackwardDifference{D,dim,typeof(op)}(op), Val(D))
+    return ntuple(dim -> BackwardDifference{D, dim, typeof(op)}(op), Val(D))
 end
 
 """
@@ -42,9 +42,9 @@ end
 
 Constructs a forward gradient operator tuple, yielding `D`-tuple of `ForwardDifference` operators.
 """
-grad_forward(op::LazyOp{1}) = ForwardDifference{1,1,typeof(op)}(op)
+grad_forward(op::LazyOp{1}) = ForwardDifference{1, 1, typeof(op)}(op)
 function grad_forward(op::LazyOp{D}) where {D}
-    return ntuple(dim -> ForwardDifference{D,dim,typeof(op)}(op), Val(D))
+    return ntuple(dim -> ForwardDifference{D, dim, typeof(op)}(op), Val(D))
 end
 
 # Add standard Bramble operator overloads mapped to the fast lazy AST:
@@ -92,12 +92,12 @@ functions, as `∇₋ₕ` does. Returns a tuple of gradient tuples, one per comp
 
 Symbolic finite difference operators in specified coordinate directions (x, y, z).
 """
-D₋ₓ(op::LazyOp{D}) where {D} = BackwardDifference{D,1,typeof(op)}(op)
-D₊ₓ(op::LazyOp{D}) where {D} = ForwardDifference{D,1,typeof(op)}(op)
-D₋ᵧ(op::LazyOp{D}) where {D} = BackwardDifference{D,2,typeof(op)}(op)
-D₊ᵧ(op::LazyOp{D}) where {D} = ForwardDifference{D,2,typeof(op)}(op)
-D₋₂(op::LazyOp{D}) where {D} = BackwardDifference{D,3,typeof(op)}(op)
-D₊₂(op::LazyOp{D}) where {D} = ForwardDifference{D,3,typeof(op)}(op)
+D₋ₓ(op::LazyOp{D}) where {D} = BackwardDifference{D, 1, typeof(op)}(op)
+D₊ₓ(op::LazyOp{D}) where {D} = ForwardDifference{D, 1, typeof(op)}(op)
+D₋ᵧ(op::LazyOp{D}) where {D} = BackwardDifference{D, 2, typeof(op)}(op)
+D₊ᵧ(op::LazyOp{D}) where {D} = ForwardDifference{D, 2, typeof(op)}(op)
+D₋₂(op::LazyOp{D}) where {D} = BackwardDifference{D, 3, typeof(op)}(op)
+D₊₂(op::LazyOp{D}) where {D} = ForwardDifference{D, 3, typeof(op)}(op)
 
 # ==============================================================================
 # Zero-Allocation Stencil Evaluators
@@ -110,16 +110,16 @@ D₊₂(op::LazyOp{D}) where {D} = ForwardDifference{D,3,typeof(op)}(op)
 @inline _stencil_taps(::ForwardDifference) = (Val(1), Val(0))
 
 @inline function _stencil_weights(
-    op::BackwardDifference{D,Dim}, space, I::CartesianIndex{D}
-) where {D,Dim}
+        op::BackwardDifference{D, Dim}, space, I::CartesianIndex{D}
+) where {D, Dim}
     h = spacing(mesh(space), I, Dim)
     mask = I[Dim] == 1 ? 0 : 1
     return (mask / h, -mask / h)
 end
 
 @inline function _stencil_weights(
-    op::ForwardDifference{D,Dim}, space, I::CartesianIndex{D}
-) where {D,Dim}
+        op::ForwardDifference{D, Dim}, space, I::CartesianIndex{D}
+) where {D, Dim}
     m = mesh(space)
     h = forward_spacing(m, I, Dim)
     mask = I[Dim] == npoints(m, Tuple)[Dim] ? 0 : 1
@@ -130,13 +130,13 @@ end
 # AST Resolution
 # ==============================================================================
 
-function resolve_ast(op::BackwardDifference{D,Dim}) where {D,Dim}
-    return BackwardDifference{D,Dim,typeof(resolve_ast(op.inner_op))}(
+function resolve_ast(op::BackwardDifference{D, Dim}) where {D, Dim}
+    return BackwardDifference{D, Dim, typeof(resolve_ast(op.inner_op))}(
         resolve_ast(op.inner_op)
     )
 end
-function resolve_ast(op::ForwardDifference{D,Dim}) where {D,Dim}
-    return ForwardDifference{D,Dim,typeof(resolve_ast(op.inner_op))}(
+function resolve_ast(op::ForwardDifference{D, Dim}) where {D, Dim}
+    return ForwardDifference{D, Dim, typeof(resolve_ast(op.inner_op))}(
         resolve_ast(op.inner_op)
     )
 end
@@ -157,7 +157,7 @@ Not everything can be: `inner₊` takes backward differences alone, because the 
 weights it carries are the ones the summation-by-parts identity pairs with a backward
 difference. Use this alias where the distinction genuinely does not arise.
 """
-const DifferenceNode{D,Dim} = Union{BackwardDifference{D,Dim},ForwardDifference{D,Dim}}
+const DifferenceNode{D, Dim} = Union{BackwardDifference{D, Dim}, ForwardDifference{D, Dim}}
 
 # ==============================================================================
 # The remaining difference families
@@ -185,7 +185,7 @@ Dc(u)_i = \\frac{u_{i+1} - u_{i-1}}{h_i + h_{i+1}}
 
 Truncated at both ends of `Dim`, having no neighbour on one side.
 """
-struct CenteredDifference{D,Dim,OpType<:LazyOp{D}} <: LazyOp{D}
+struct CenteredDifference{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
     inner_op::OpType
 end
 
@@ -201,7 +201,7 @@ D^{*}_{+}(u)_i = \\frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}
 The forward difference over the *averaged* spacing rather than the forward one, which is
 what makes the discrete integration by parts close. Truncated at the far end of `Dim`.
 """
-struct StarDifference{D,Dim,OpType<:LazyOp{D}} <: LazyOp{D}
+struct StarDifference{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
     inner_op::OpType
 end
 
@@ -219,7 +219,7 @@ The same two one-sided differences the centered difference combines, weighted by
 *opposite* spacings. That swap is what makes it second order on a non-uniform grid where
 `Dc` is first, and the two coincide when the spacing is constant. Truncated at both ends.
 """
-struct CrossWeightedDifference{D,Dim,OpType<:LazyOp{D}} <: LazyOp{D}
+struct CrossWeightedDifference{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
     inner_op::OpType
 end
 
@@ -230,9 +230,9 @@ end
 
 Symbolic centered differences in the coordinate directions.
 """
-Dcₓ(op::LazyOp{D}) where {D} = CenteredDifference{D,1,typeof(op)}(op)
-Dcᵧ(op::LazyOp{D}) where {D} = CenteredDifference{D,2,typeof(op)}(op)
-Dc₂(op::LazyOp{D}) where {D} = CenteredDifference{D,3,typeof(op)}(op)
+Dcₓ(op::LazyOp{D}) where {D} = CenteredDifference{D, 1, typeof(op)}(op)
+Dcᵧ(op::LazyOp{D}) where {D} = CenteredDifference{D, 2, typeof(op)}(op)
+Dc₂(op::LazyOp{D}) where {D} = CenteredDifference{D, 3, typeof(op)}(op)
 
 """
     Dstar₊ₓ(op::LazyOp{D}) where D
@@ -241,9 +241,9 @@ Dc₂(op::LazyOp{D}) where {D} = CenteredDifference{D,3,typeof(op)}(op)
 
 Symbolic starred forward differences in the coordinate directions.
 """
-Dstar₊ₓ(op::LazyOp{D}) where {D} = StarDifference{D,1,typeof(op)}(op)
-Dstar₊ᵧ(op::LazyOp{D}) where {D} = StarDifference{D,2,typeof(op)}(op)
-Dstar₊₂(op::LazyOp{D}) where {D} = StarDifference{D,3,typeof(op)}(op)
+Dstar₊ₓ(op::LazyOp{D}) where {D} = StarDifference{D, 1, typeof(op)}(op)
+Dstar₊ᵧ(op::LazyOp{D}) where {D} = StarDifference{D, 2, typeof(op)}(op)
+Dstar₊₂(op::LazyOp{D}) where {D} = StarDifference{D, 3, typeof(op)}(op)
 
 """
     Dₕₓ(op::LazyOp{D}) where D
@@ -252,9 +252,9 @@ Dstar₊₂(op::LazyOp{D}) where {D} = StarDifference{D,3,typeof(op)}(op)
 
 Symbolic cross-weighted centered differences in the coordinate directions.
 """
-Dₕₓ(op::LazyOp{D}) where {D} = CrossWeightedDifference{D,1,typeof(op)}(op)
-Dₕᵧ(op::LazyOp{D}) where {D} = CrossWeightedDifference{D,2,typeof(op)}(op)
-Dₕ₂(op::LazyOp{D}) where {D} = CrossWeightedDifference{D,3,typeof(op)}(op)
+Dₕₓ(op::LazyOp{D}) where {D} = CrossWeightedDifference{D, 1, typeof(op)}(op)
+Dₕᵧ(op::LazyOp{D}) where {D} = CrossWeightedDifference{D, 2, typeof(op)}(op)
+Dₕ₂(op::LazyOp{D}) where {D} = CrossWeightedDifference{D, 3, typeof(op)}(op)
 
 """
     Dcₕ(op::LazyOp{D}) where D
@@ -267,17 +267,17 @@ as `∇₋ₕ` and `∇₊ₕ` already do.
 """
 Dcₕ(op::LazyOp{1}) = Dcₓ(op)
 function Dcₕ(op::LazyOp{D}) where {D}
-    return ntuple(dim -> CenteredDifference{D,dim,typeof(op)}(op), Val(D))
+    return ntuple(dim -> CenteredDifference{D, dim, typeof(op)}(op), Val(D))
 end
 
 Dstar₊ₕ(op::LazyOp{1}) = Dstar₊ₓ(op)
 function Dstar₊ₕ(op::LazyOp{D}) where {D}
-    return ntuple(dim -> StarDifference{D,dim,typeof(op)}(op), Val(D))
+    return ntuple(dim -> StarDifference{D, dim, typeof(op)}(op), Val(D))
 end
 
 ∇ₕ(op::LazyOp{1}) = Dₕₓ(op)
 function ∇ₕ(op::LazyOp{D}) where {D}
-    return ntuple(dim -> CrossWeightedDifference{D,dim,typeof(op)}(op), Val(D))
+    return ntuple(dim -> CrossWeightedDifference{D, dim, typeof(op)}(op), Val(D))
 end
 
 # --- Stencils --------------------------------------------------------------------- #
@@ -286,8 +286,8 @@ end
 @inline _stencil_taps(::StarDifference) = (Val(1), Val(0))
 
 @inline function _stencil_weights(
-    op::CenteredDifference{D,Dim}, space, I::CartesianIndex{D}
-) where {D,Dim}
+        op::CenteredDifference{D, Dim}, space, I::CartesianIndex{D}
+) where {D, Dim}
     m = mesh(space)
     # no neighbour on one side at either end
     mask = (I[Dim] == 1 || I[Dim] == npoints(m, Tuple)[Dim]) ? 0 : 1
@@ -296,8 +296,8 @@ end
 end
 
 @inline function _stencil_weights(
-    op::StarDifference{D,Dim}, space, I::CartesianIndex{D}
-) where {D,Dim}
+        op::StarDifference{D, Dim}, space, I::CartesianIndex{D}
+) where {D, Dim}
     m = mesh(space)
     mask = I[Dim] == npoints(m, Tuple)[Dim] ? 0 : 1
     # the averaged spacing, which is what the starred difference divides by
@@ -315,8 +315,8 @@ end
 @inline _stencil_taps(::CrossWeightedDifference) = (Val(1), Val(0), Val(-1))
 
 @inline function _stencil_weights(
-    op::CrossWeightedDifference{D,Dim}, space, I::CartesianIndex{D}
-) where {D,Dim}
+        op::CrossWeightedDifference{D, Dim}, space, I::CartesianIndex{D}
+) where {D, Dim}
     m = mesh(space)
 
     if I[Dim] == 1
@@ -349,19 +349,19 @@ The three difference nodes that are neither one-sided nor a jump, differencing a
 Grouped so that everything reading only the direction off a node covers all of them at
 once, as `DifferenceNode` does for the one-sided pair.
 """
-const ExtendedDifferenceNode{D,Dim} = Union{
-    CenteredDifference{D,Dim},StarDifference{D,Dim},CrossWeightedDifference{D,Dim}
+const ExtendedDifferenceNode{D, Dim} = Union{
+    CenteredDifference{D, Dim}, StarDifference{D, Dim}, CrossWeightedDifference{D, Dim}
 }
 
-function resolve_ast(op::CenteredDifference{D,Dim}) where {D,Dim}
+function resolve_ast(op::CenteredDifference{D, Dim}) where {D, Dim}
     inner = resolve_ast(op.inner_op)
-    return CenteredDifference{D,Dim,typeof(inner)}(inner)
+    return CenteredDifference{D, Dim, typeof(inner)}(inner)
 end
-function resolve_ast(op::StarDifference{D,Dim}) where {D,Dim}
+function resolve_ast(op::StarDifference{D, Dim}) where {D, Dim}
     inner = resolve_ast(op.inner_op)
-    return StarDifference{D,Dim,typeof(inner)}(inner)
+    return StarDifference{D, Dim, typeof(inner)}(inner)
 end
-function resolve_ast(op::CrossWeightedDifference{D,Dim}) where {D,Dim}
+function resolve_ast(op::CrossWeightedDifference{D, Dim}) where {D, Dim}
     inner = resolve_ast(op.inner_op)
-    return CrossWeightedDifference{D,Dim,typeof(inner)}(inner)
+    return CrossWeightedDifference{D, Dim, typeof(inner)}(inner)
 end

@@ -51,29 +51,29 @@ X = domain(interval(0, 1) × interval(4, 5))
 """
 @inline mesh(
     Ω::Domain,
-    npts::NTuple{D,Int},
-    unif::NTuple{D,Bool};
-    backend=backend(eltype(Ω)),
-    warn_marker_mismatch::Bool=true,
+    npts::NTuple{D, Int},
+    unif::NTuple{D, Bool};
+    backend = backend(eltype(Ω)),
+    warn_marker_mismatch::Bool = true
 ) where {D} = _mesh(Ω, npts, unif, backend; warn_marker_mismatch)
 @inline mesh(
-    Ω::Domain{CartesianProduct{1,T}},
+    Ω::Domain{CartesianProduct{1, T}},
     npts::Int,
     unif::Bool;
-    backend=backend(eltype(Ω)),
-    warn_marker_mismatch::Bool=true,
+    backend = backend(eltype(Ω)),
+    warn_marker_mismatch::Bool = true
 ) where {T} = _mesh(Ω, (npts,), (unif,), backend; warn_marker_mismatch)
 @inline mesh(
-    Ω::Domain{CartesianProduct{1,T}},
+    Ω::Domain{CartesianProduct{1, T}},
     npts::Int;
-    uniform::Bool=true,
-    backend=backend(eltype(Ω)),
-    warn_marker_mismatch::Bool=true,
+    uniform::Bool = true,
+    backend = backend(eltype(Ω)),
+    warn_marker_mismatch::Bool = true
 ) where {T} = _mesh(Ω, (npts,), (uniform,), backend; warn_marker_mismatch)
 @inline mesh(
     Ω::Domain,
-    npts::NTuple{D,Int};
-    uniform::NTuple{D,Bool}=ntuple(_ -> true, Val(D)),
-    backend=backend(eltype(Ω)),
-    warn_marker_mismatch::Bool=true,
+    npts::NTuple{D, Int};
+    uniform::NTuple{D, Bool} = ntuple(_ -> true, Val(D)),
+    backend = backend(eltype(Ω)),
+    warn_marker_mismatch::Bool = true
 ) where {D} = _mesh(Ω, npts, uniform, backend; warn_marker_mismatch)

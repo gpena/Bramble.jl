@@ -3,14 +3,14 @@ using Bramble
 using Random
 using LinearAlgebra: issymmetric, isposdef, cholesky, Symmetric, issuccess
 using Bramble:
-    form,
-    assemble,
-    trial_space,
-    test_space,
-    restrict_to,
-    shift_op,
-    IdentityOperator,
-    ZeroOperator
+               form,
+               assemble,
+               trial_space,
+               test_space,
+               restrict_to,
+               shift_op,
+               IdentityOperator,
+               ZeroOperator
 
 # `issymmetric`/`isposdef` on a `BilinearForm` are a purely structural, symbolic check:
 # every test here has a positive case checked against a real assembled matrix (not just the
@@ -67,7 +67,7 @@ using Bramble:
     @testset "Different spaces" begin
         Wₕ2 = gridspace(Ωₕ)
         @test trial_space(form(Wₕ, Wₕ, (u, v) -> u)) ===
-            test_space(form(Wₕ, Wₕ, (u, v) -> u))
+              test_space(form(Wₕ, Wₕ, (u, v) -> u))
 
         e = form(Wₕ, Wₕ2, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
         @test !issymmetric(e)
@@ -100,8 +100,7 @@ using Bramble:
         h = form(
             Wₕ,
             Wₕ,
-            (u, v) ->
-                inner₊ₓ(restrict_to(:boundary, D₋ₓ(u)), restrict_to(:boundary, D₋ₓ(v))),
+            (u, v) -> inner₊ₓ(restrict_to(:boundary, D₋ₓ(u)), restrict_to(:boundary, D₋ₓ(v)))
         )
         @test issymmetric(h)
         @test isposdef(h)
@@ -110,8 +109,7 @@ using Bramble:
         h2 = form(
             Wₕ,
             Wₕ,
-            (u, v) ->
-                inner₊ₓ(restrict_to(:boundary, D₋ₓ(u)), restrict_to(:interior, D₋ₓ(v))),
+            (u, v) -> inner₊ₓ(restrict_to(:boundary, D₋ₓ(u)), restrict_to(:interior, D₋ₓ(v)))
         )
         @test !issymmetric(h2)
         @test !isposdef(h2)
@@ -211,8 +209,8 @@ using Bramble:
             l = form(Wr, v -> innerₕ(x -> 1.0, v))
             bcs = dirichlet_constraints(Ωr, :boundary => (x -> 0.0))
 
-            A = assemble(a; dirichlet=:boundary)
-            b = assemble(l; dirichlet=bcs)
+            A = assemble(a; dirichlet = :boundary)
+            b = assemble(l; dirichlet = bcs)
             # `dirichlet_bc!` (inside `assemble`) zeros the marked rows, which on its own
             # destroys symmetry; `symmetrize!` restores it by eliminating the marked
             # columns into `b`, so the matrix Cholesky actually sees is the real, complete
@@ -220,7 +218,7 @@ using Bramble:
             symmetrize!(A, b, Ωr, :boundary)
             @test issymmetric(Matrix(A))
 
-            F = cholesky(Symmetric(Matrix(A)); check=false)
+            F = cholesky(Symmetric(Matrix(A)); check = false)
             @test issuccess(F)
         end
     end

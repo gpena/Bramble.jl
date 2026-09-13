@@ -27,7 +27,7 @@ end
 # One full pass over the mesh interface: construction, queries, iteration,
 # mutation and display.
 function _pc_mesh_session(Ω, npts, unif, be, label::Symbol)
-    Ωₕ = mesh(Ω, npts, unif; backend=be)
+    Ωₕ = mesh(Ω, npts, unif; backend = be)
 
     idx = first(indices(Ωₕ))
     _pc_indexed(Ωₕ, Tuple(idx))
@@ -73,7 +73,7 @@ function _pc_mesh_session(Ω, npts, unif, be, label::Symbol)
         spacings(Ωₕ),
         forward_spacings(Ωₕ),
         half_spacings(Ωₕ),
-        (cell_measure(Ωₕ, idx) for idx in indices(Ωₕ)),
+        (cell_measure(Ωₕ, idx) for idx in indices(Ωₕ))
     )
         isempty(iter) || first(iter)
     end

@@ -54,7 +54,7 @@ const DirichletConstraint = DomainMarkers
 Union representing either unevaluated Dirichlet constraints (`DomainMarkers`) or time-evaluated
 constraints (`EvaluatedDomainMarkers`).
 """
-const ConstraintMarkers = Union{DomainMarkers,EvaluatedDomainMarkers}
+const ConstraintMarkers = Union{DomainMarkers, EvaluatedDomainMarkers}
 
 """
     dirichlet_constraints(input, [I::CartesianProduct{1}], pairs::Pair...) -> DomainMarkers
@@ -84,8 +84,7 @@ end
 # `CartesianProduct` -- never wrapped in a `domain(...)` call, so no custom label could
 # exist -- falls back to the generic per-dimension names `boundary_symbols` returns.
 @inline _dirichlet_known_labels(input::ScalarGridSpace) = keys(markers(mesh(input)))
-@inline _dirichlet_known_labels(input::CompositeGridSpace) =
-    keys(markers(mesh(first_space(input))))
+@inline _dirichlet_known_labels(input::CompositeGridSpace) = keys(markers(mesh(first_space(input))))
 @inline _dirichlet_known_labels(input::AbstractMeshType) = keys(markers(input))
 @inline _dirichlet_known_labels(input::Domain) = labels(markers(input))
 @inline _dirichlet_known_labels(input::CartesianProduct) = boundary_symbols(input)
@@ -104,9 +103,9 @@ end
 @noinline function _throw_unknown_dirichlet_label(lbl::Symbol, known)
     throw(
         ArgumentError(
-            "dirichlet_constraints: label `:$lbl` is not registered on this domain/mesh/" *
-            "space. Known labels: $(join(sort(collect(known)), ", ")).",
-        ),
+        "dirichlet_constraints: label `:$lbl` is not registered on this domain/mesh/" *
+        "space. Known labels: $(join(sort(collect(known)), ", ")).",
+    ),
     )
 end
 
@@ -117,7 +116,7 @@ end
 # `func`, since a condition's closure is otherwise never evaluated before assembly.
 function _validate_time_dependent_arity(pairs::Tuple{Vararg{Pair}})
     for (lbl, func) in pairs
-        hasmethod(func, Tuple{Any,Any}) || error(
+        hasmethod(func, Tuple{Any, Any}) || error(
             "dirichlet_constraints: condition for label `:$lbl` must accept (x, t) since a time domain was given, got $(func)",
         )
     end
@@ -127,16 +126,15 @@ end
 # recursive: the first leaf space. Every leaf of a composite space shares the domain, so
 # which one is asked does not matter.
 @inline _constraint_domain(input::CompositeGridSpace) = set(mesh(first_space(input)))
-@inline _constraint_domain(input::Union{CartesianProduct,Domain,AbstractMeshType}) =
-    set(input)
+@inline _constraint_domain(input::Union{CartesianProduct, Domain, AbstractMeshType}) = set(input)
 @inline _constraint_domain(input) = _throw_bad_dirichlet_input(input)
 
 @noinline function _throw_bad_dirichlet_input(input)
     throw(
         ArgumentError(
-            "dirichlet_constraints: `input` must be a CartesianProduct, Domain, " *
-            "AbstractMeshType, ScalarGridSpace, or CompositeGridSpace, got a $(typeof(input))",
-        ),
+        "dirichlet_constraints: `input` must be a CartesianProduct, Domain, " *
+        "AbstractMeshType, ScalarGridSpace, or CompositeGridSpace, got a $(typeof(input))",
+    ),
     )
 end
 
@@ -155,8 +153,8 @@ end
 
 Create a single Dirichlet boundary constraint with function `f` under the `:boundary` label.
 """
-@inline dirichlet_constraints(X::CartesianProduct, f::F) where {F<:Function} =
-    dirichlet_constraints(X, :boundary => f)
+@inline dirichlet_constraints(X::CartesianProduct, f::F) where {F <: Function} = dirichlet_constraints(X, :boundary =>
+    f)
 
 """
     _normalize_dirichlet(dirichlet) -> (labels, conditions)
@@ -178,20 +176,19 @@ labels are read back out. Anything else throws.
 # rather than leaving the two to race for it as an ambiguity.
 @inline _normalize_dirichlet(::Tuple{}) = ((), nothing)
 @inline _normalize_dirichlet(labels::Tuple{Vararg{Symbol}}) = (labels, nothing)
-@inline _normalize_dirichlet(pair::Pair{Symbol}) =
-    ((first(pair),), _create_generic_markers(pair))
-@inline _normalize_dirichlet(pairs::Tuple{Vararg{Pair{Symbol}}}) =
-    (map(first, pairs), _create_generic_markers(pairs...))
+@inline _normalize_dirichlet(pair::Pair{Symbol}) = ((first(pair),), _create_generic_markers(pair))
+@inline _normalize_dirichlet(pairs::Tuple{Vararg{Pair{Symbol}}}) = (
+    map(first, pairs), _create_generic_markers(pairs...))
 @inline _normalize_dirichlet(bcs::ConstraintMarkers) = (labels(bcs), bcs)
 @inline _normalize_dirichlet(dirichlet) = _throw_bad_dirichlet(dirichlet)
 
 @noinline function _throw_bad_dirichlet(dirichlet)
     throw(
         ArgumentError(
-            "dirichlet must be nothing, a Symbol, a Tuple of Symbols, a `label => f` Pair, " *
-            "a Tuple of such Pairs, or constraints from dirichlet_constraints; got a " *
-            "$(typeof(dirichlet))",
-        ),
+        "dirichlet must be nothing, a Symbol, a Tuple of Symbols, a `label => f` Pair, " *
+        "a Tuple of such Pairs, or constraints from dirichlet_constraints; got a " *
+        "$(typeof(dirichlet))",
+    ),
     )
 end
 
@@ -221,18 +218,17 @@ end
 @noinline function _throw_dirichlet_component_out_of_range(c::Int, n_leaves::Int)
     throw(
         ArgumentError(
-            "dirichlet_components names leaf $c, but this space only has $n_leaves leaf " *
-            "space(s); leaves are numbered 1 to $n_leaves, the same order u(1), u(2), ... " *
-            "addresses.",
-        ),
+        "dirichlet_components names leaf $c, but this space only has $n_leaves leaf " *
+        "space(s); leaves are numbered 1 to $n_leaves, the same order u(1), u(2), ... " *
+        "addresses.",
+    ),
     )
 end
 
 # A scalar space has exactly one implicit leaf: `components` may only ask for it or ask for
 # nothing.
 @inline _validate_scalar_components(::Nothing) = nothing
-@inline _validate_scalar_components(components) =
-    _validate_dirichlet_components(components, 1)
+@inline _validate_scalar_components(components) = _validate_dirichlet_components(components, 1)
 
 # Whether the leaf at 1-based position `i` is selected by `components` (`nothing` means
 # all leaves, matching the unrestricted default).
@@ -243,8 +239,8 @@ end
 # Calls `f(sp, offset)` for each leaf selected by `components`, walking the full tuple from
 # `leaf_spaces_offsets` using `Base.tail` recursion rather than creating a dynamic sub-tuple.
 # Walking the statically-shaped tuple keeps leaf types concrete and avoids heap allocation.
-@inline _each_selected_leaf(f::F, ::Tuple{}, components, i::Int=1) where {F} = nothing
-@inline function _each_selected_leaf(f::F, leaves::Tuple, components, i::Int=1) where {F}
+@inline _each_selected_leaf(f::F, ::Tuple{}, components, i::Int = 1) where {F} = nothing
+@inline function _each_selected_leaf(f::F, leaves::Tuple, components, i::Int = 1) where {F}
     sp, offset = first(leaves)
     _leaf_selected(components, i) && f(sp, offset)
     _each_selected_leaf(f, Base.tail(leaves), components, i + 1)
@@ -294,14 +290,14 @@ end
 
 # Overloads for ScalarGridSpace / AbstractSpaceType (single component)
 @inline function dirichlet_bc!(
-    A::AbstractMatrix, space::ScalarGridSpace, labels::Symbol...; components=nothing
+        A::AbstractMatrix, space::ScalarGridSpace, labels::Symbol...; components = nothing
 )
     _validate_scalar_components(components)
     return dirichlet_bc!(A, mesh(space), labels...)
 end
 
 @inline function dirichlet_bc!(
-    v::AbstractVector, space::ScalarGridSpace, bcs, labels::Symbol...; components=nothing
+        v::AbstractVector, space::ScalarGridSpace, bcs, labels::Symbol...; components = nothing
 )
     _validate_scalar_components(components)
     return dirichlet_bc!(v, mesh(space), bcs, labels...)
@@ -335,8 +331,7 @@ end
 # each one's `active` flag, so this stays the same fully-unrolled shape whether or not a
 # caller restricts `components` (see `_each_selected_leaf` for why filtering the tuple
 # itself is avoided).
-@inline _leaf_entries(leaves::Tuple, label::Symbol, components) =
-    _leaf_entries_impl(leaves, label, components, 1)
+@inline _leaf_entries(leaves::Tuple, label::Symbol, components) = _leaf_entries_impl(leaves, label, components, 1)
 @inline _leaf_entries_impl(::Tuple{}, label::Symbol, components, i::Int) = ()
 @inline function _leaf_entries_impl(leaves::Tuple, label::Symbol, components, i::Int)
     sp, offset = first(leaves)
@@ -365,7 +360,7 @@ dirichlet_bc!(A, Wₕ, :left, :right; components = 1)   # velocity only
 Successive calls with different `labels`/`components` pairs compose cleanly.
 """
 function dirichlet_bc!(
-    A::AbstractMatrix, space::CompositeGridSpace, labels::Symbol...; components=nothing
+        A::AbstractMatrix, space::CompositeGridSpace, labels::Symbol...; components = nothing
 )
     leaves = leaf_spaces_offsets(space)
     _validate_dirichlet_components(components, length(leaves))
@@ -419,7 +414,7 @@ function _dirichlet_bc_rows!(A::SparseMatrixCSC, entries::Tuple)
 end
 
 @inline function dirichlet_bc!(
-    v::AbstractVector, space::CompositeGridSpace, bcs, labels::Symbol...; components=nothing
+        v::AbstractVector, space::CompositeGridSpace, bcs, labels::Symbol...; components = nothing
 )
     leaves = leaf_spaces_offsets(space)
     _validate_dirichlet_components(components, length(leaves))
@@ -438,11 +433,11 @@ Write Dirichlet values into `v` at the points marked by `labels`.
 Only the marked entries are modified, with complexity proportional to the boundary cardinality.
 """
 @inline function dirichlet_bc!(
-    v::AbstractVector,
-    Ωₕ::AbstractMeshType,
-    bcs::ConstraintMarkers,
-    labels::NTuple{N,Symbol},
-    offset::Int=0,
+        v::AbstractVector,
+        Ωₕ::AbstractMeshType,
+        bcs::ConstraintMarkers,
+        labels::NTuple{N, Symbol},
+        offset::Int = 0
 ) where {N}
     isempty(labels) && return v
     _apply_conditions!(conditions(bcs), v, Ωₕ, labels, offset)
@@ -529,11 +524,11 @@ function _dirichlet_bc_indices!(A::SparseMatrixCSC, index_in_marker::BitVector)
 end
 
 @inline function _dirichlet_bc_indices!(
-    v::AbstractVector,
-    Ωₕ::AbstractMeshType,
-    index_in_marker::BitVector,
-    func::F,
-    offset::Int=0,
+        v::AbstractVector,
+        Ωₕ::AbstractMeshType,
+        index_in_marker::BitVector,
+        func::F,
+        offset::Int = 0
 ) where {F}
     cart_indices = indices(Ωₕ)
 
@@ -562,18 +557,18 @@ For each index `i` with prescribed Dirichlet boundary conditions:
 """
 # A scalar space carries its mesh, and every other entry point here takes one.
 @inline function symmetrize!(
-    A::AbstractMatrix,
-    F::AbstractVector,
-    Wₕ::ScalarGridSpace,
-    labels::Symbol...;
-    components=nothing,
+        A::AbstractMatrix,
+        F::AbstractVector,
+        Wₕ::ScalarGridSpace,
+        labels::Symbol...;
+        components = nothing
 )
     _validate_scalar_components(components)
     return symmetrize!(A, F, mesh(Wₕ), labels...)
 end
 
 function symmetrize!(
-    A::AbstractMatrix, F::AbstractVector, Ωₕ::AbstractMeshType, labels::Symbol...
+        A::AbstractMatrix, F::AbstractVector, Ωₕ::AbstractMeshType, labels::Symbol...
 )
     for p in labels
         symmetrize!(A, F, index_in_marker(Ωₕ, p), 0)
@@ -594,11 +589,11 @@ components `labels` binds to (1-based positions in `leaf_spaces_offsets(Wₕ)`).
 (the default) applies to every leaf.
 """
 function symmetrize!(
-    A::AbstractMatrix,
-    F::AbstractVector,
-    Wₕ::CompositeGridSpace,
-    labels::Symbol...;
-    components=nothing,
+        A::AbstractMatrix,
+        F::AbstractVector,
+        Wₕ::CompositeGridSpace,
+        labels::Symbol...;
+        components = nothing
 )
     leaves = leaf_spaces_offsets(Wₕ)
     _validate_dirichlet_components(components, length(leaves))
@@ -610,7 +605,7 @@ function symmetrize!(
 end
 
 # Generic implementation for dense matrices
-function symmetrize!(A::AbstractMatrix, F::AbstractVector, mask::BitVector, offset::Int=0)
+function symmetrize!(A::AbstractMatrix, F::AbstractVector, mask::BitVector, offset::Int = 0)
     T = eltype(A)
     _each_marked(mask, offset) do i
         dirichlet_val = F[i]
@@ -633,7 +628,7 @@ end
 # as well as the value.
 #
 # No `@simd`: the branch rules it out, and `F[rows[k]]` is an indirect scatter.
-function symmetrize!(A::SparseMatrixCSC, F::AbstractVector, mask::BitVector, offset::Int=0)
+function symmetrize!(A::SparseMatrixCSC, F::AbstractVector, mask::BitVector, offset::Int = 0)
     T = eltype(A)
     rows = rowvals(A)
     vals = nonzeros(A)

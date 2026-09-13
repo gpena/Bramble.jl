@@ -89,7 +89,7 @@ end
 function _dirichlet_is_time_dependent(constraints::ConstraintMarkers)
     conds = conditions(constraints)
     isempty(conds) && return false
-    return all(m -> hasmethod(identifier(m), Tuple{Any,Any}), conds)
+    return all(m -> hasmethod(identifier(m), Tuple{Any, Any}), conds)
 end
 
 @inline _source_constraints(::Nothing, ::Nothing) = NoConstraints()
@@ -152,7 +152,7 @@ Built by [`semidiscretize`](@ref); read back with [`mass_matrix`](@ref) and
 - `update_coefficients`: callable invoked with `t` before assembly, or `nothing`.
 - `reassemble`: `Val(true)` to refill `A` at every step.
 """
-struct Semidiscretization{A,L,S,MT,VT,BC,LB,CP,ST,TR,R}
+struct Semidiscretization{A, L, S, MT, VT, BC, LB, CP, ST, TR, R}
     operator::A
     source::L
     space::S
@@ -227,14 +227,14 @@ sd = semidiscretize(a, l; dirichlet = bcs)
 See also [`ode_function`](@ref), [`ode_problem`](@ref), [`jacobian!`](@ref).
 """
 function semidiscretize(
-    a::BilinearForm,
-    l::LinearForm;
-    mass=nothing,
-    dirichlet=nothing,
-    dirichlet_components=nothing,
-    state=nothing,
-    (update_coefficients!)=nothing,
-    reassemble::Bool=false,
+        a::BilinearForm,
+        l::LinearForm;
+        mass = nothing,
+        dirichlet = nothing,
+        dirichlet_components = nothing,
+        state = nothing,
+        (update_coefficients!) = nothing,
+        reassemble::Bool = false
 )
     sp = test_space(l)
     _validate_semidiscrete_spaces(a, l)
@@ -242,7 +242,7 @@ function semidiscretize(
     labels, constraint_values = _normalize_dirichlet(dirichlet)
     constraints = _source_constraints(labels, constraint_values)
 
-    A = assemble(a; dirichlet=labels, dirichlet_components=dirichlet_components)
+    A = assemble(a; dirichlet = labels, dirichlet_components = dirichlet_components)
     M = _assemble_mass_matrix(
         mass === nothing ? _default_mass_form(sp) : mass, labels, dirichlet_components
     )
@@ -260,7 +260,7 @@ function semidiscretize(
         dirichlet_components,
         state,
         update_coefficients!,
-        Val(reassemble),
+        Val(reassemble)
     )
 end
 
@@ -271,9 +271,9 @@ function _validate_semidiscrete_spaces(a::BilinearForm, l::LinearForm)
     if ndofs(test_space(a)) != n || ndofs(trial_space(a)) != n
         throw(
             ArgumentError(
-                "semidiscretize: `a` and `l` must be posed on the same space; got " *
-                "$(ndofs(trial_space(a)))×$(ndofs(test_space(a))) for `a` and $n for `l`.",
-            ),
+            "semidiscretize: `a` and `l` must be posed on the same space; got " *
+            "$(ndofs(trial_space(a)))×$(ndofs(test_space(a))) for `a` and $n for `l`.",
+        ),
         )
     end
     return nothing
@@ -288,7 +288,7 @@ function _assemble_mass_matrix(mass::BilinearForm, labels, components)
     M = assemble(mass)
     (labels === nothing || isempty(labels)) && return M
 
-    dirichlet_bc!(M, sp, labels...; components=components)
+    dirichlet_bc!(M, sp, labels...; components = components)
     _each_dirichlet_row(sp, labels, components) do i
         return M[i, i] = zero(eltype(M))
     end
@@ -346,15 +346,14 @@ end
     return eltype(F) === T ? F : similar(du, T)
 end
 
-@inline _assemble_source!(F::AbstractVector, sd::Semidiscretization, ::NoConstraints, t) =
-    assemble!(F, sd.source)
+@inline _assemble_source!(F::AbstractVector, sd::Semidiscretization, ::NoConstraints, t) = assemble!(F, sd.source)
 
 # The conditions are applied through `apply_dirichlet_conditions!` rather than `assemble!`'s
 # `dirichlet` keyword, which would re-run `_normalize_dirichlet` on every call: for
 # constraints that is `Tuple(labels(bcs))` over a generator, and it allocates once per step.
 # The labels were normalised once, in `semidiscretize`, and are passed straight through.
 @inline function _assemble_source!(
-    F::AbstractVector, sd::Semidiscretization, c::StaticConstraints, t
+        F::AbstractVector, sd::Semidiscretization, c::StaticConstraints, t
 )
     assemble!(F, sd.source)
     return apply_dirichlet_conditions!(
@@ -363,7 +362,7 @@ end
 end
 
 @inline function _assemble_source!(
-    F::AbstractVector, sd::Semidiscretization, c::TimeDependentConstraints, t
+        F::AbstractVector, sd::Semidiscretization, c::TimeDependentConstraints, t
 )
     assemble!(F, sd.source)
     return apply_dirichlet_conditions!(
@@ -384,7 +383,7 @@ end
 @inline _refresh_operator!(sd::Semidiscretization, ::Val{false}) = sd.operator_matrix
 @inline function _refresh_operator!(sd::Semidiscretization, ::Val{true})
     A = sd.operator_matrix
-    assemble!(A, sd.operator; dirichlet=sd.labels, dirichlet_components=sd.components)
+    assemble!(A, sd.operator; dirichlet = sd.labels, dirichlet_components = sd.components)
     return A
 end
 
@@ -465,7 +464,7 @@ end
 ) = u
 
 function _apply_initial_constraints!(
-    u::AbstractVector, sd::Semidiscretization, ::LabelsOnly, t
+        u::AbstractVector, sd::Semidiscretization, ::LabelsOnly, t
 )
     _each_dirichlet_row(sd.space, sd.labels, sd.components) do i
         return @inbounds u[i] = zero(eltype(u))
@@ -475,11 +474,11 @@ end
 
 @inline _apply_initial_constraints!(
     u::AbstractVector, sd::Semidiscretization, c::StaticConstraints, t
-) = dirichlet_bc!(u, sd.space, c.constraints, sd.labels...; components=sd.components)
+) = dirichlet_bc!(u, sd.space, c.constraints, sd.labels...; components = sd.components)
 
 @inline _apply_initial_constraints!(
     u::AbstractVector, sd::Semidiscretization, c::TimeDependentConstraints, t
-) = dirichlet_bc!(u, sd.space, c.constraints(t), sd.labels...; components=sd.components)
+) = dirichlet_bc!(u, sd.space, c.constraints(t), sd.labels...; components = sd.components)
 
 # --- Display ------------------------------------------------------------------------ #
 #
@@ -497,41 +496,41 @@ function Base.show(io::IO, sd::Semidiscretization)
 end
 
 function Base.show(
-    io::IO, ::MIME"text/plain", sd::Semidiscretization{A,L,S,MT,VT,BC,LB,CP,ST,TR,R}
-) where {A,L,S,MT,VT,BC,LB,CP,ST,TR,R}
+        io::IO, ::MIME"text/plain",
+        sd::Semidiscretization{A, L, S, MT, VT, BC, LB, CP, ST, TR, R}
+) where {A, L, S, MT, VT, BC, LB, CP, ST, TR, R}
     return show_block(io) do io
         pp = PrettyPrinter(io)
-        printstyled(io, "Semidiscretization"; bold=true, color=:cyan)
+        printstyled(io, "Semidiscretization"; bold = true, color = :cyan)
         print(io, " {")
-        printstyled(io, "M uₕ' = F(t) - A uₕ"; color=:yellow)
+        printstyled(io, "M uₕ' = F(t) - A uₕ"; color = :yellow)
         println(io, "}:")
 
         pp_indented = with_indent(pp, 1)
-        print_key_value(pp_indented, "Space", sprint(show, sd.space); separator=": ")
+        print_key_value(pp_indented, "Space", sprint(show, sd.space); separator = ": ")
         print_key_value(
             pp_indented,
             "Operator",
             _operator_description(sd.operator_matrix);
-            separator=": ",
+            separator = ": "
         )
         print_key_value(
-            pp_indented, "Constraints", _constraints_description(sd); separator=": "
+            pp_indented, "Constraints", _constraints_description(sd); separator = ": "
         )
         return print_key_value(
-            pp_indented, "Reassembled", R ? "every step" : "once"; separator=": "
+            pp_indented, "Reassembled", R ? "every step" : "once"; separator = ": "
         )
     end
 end
 
-@inline _operator_description(A) =
-    string(size(A, 1), "×", size(A, 2), ", ", length(nonzeros(A)), " stored")
+@inline _operator_description(A) = string(size(A, 1), "×", size(A, 2), ", ", length(nonzeros(A)), " stored")
 
 function _constraints_description(sd::Semidiscretization)
     isempty(sd.labels) && return "none"
     return string(
         _constraint_description(sd.constraints),
         " on ",
-        join((string(":", l) for l in sd.labels), ", "),
+        join((string(":", l) for l in sd.labels), ", ")
     )
 end
 
@@ -589,10 +588,10 @@ function ode_function(sd::Semidiscretization; kwargs...)
 end
 
 function ode_function(
-    a::BilinearForm, l::LinearForm; jacobian=jacobian!, jac_prototype=nothing, kwargs...
+        a::BilinearForm, l::LinearForm; jacobian = jacobian!, jac_prototype = nothing, kwargs...
 )
     sd = semidiscretize(a, l; kwargs...)
-    return _ode_function(sd; jacobian=jacobian, jac_prototype=jac_prototype)
+    return _ode_function(sd; jacobian = jacobian, jac_prototype = jac_prototype)
 end
 
 function _ode_function(::Any; kwargs...)
@@ -632,16 +631,16 @@ function ode_problem(sd::Semidiscretization, u₀, I; kwargs...)
 end
 
 function ode_problem(
-    a::BilinearForm,
-    l::LinearForm,
-    u₀,
-    I;
-    jacobian=jacobian!,
-    jac_prototype=nothing,
-    kwargs...,
+        a::BilinearForm,
+        l::LinearForm,
+        u₀,
+        I;
+        jacobian = jacobian!,
+        jac_prototype = nothing,
+        kwargs...
 )
     sd = semidiscretize(a, l; kwargs...)
-    return _ode_problem(sd, u₀, I; jacobian=jacobian, jac_prototype=jac_prototype)
+    return _ode_problem(sd, u₀, I; jacobian = jacobian, jac_prototype = jac_prototype)
 end
 
 function _ode_problem(::Any, u₀, I; kwargs...)

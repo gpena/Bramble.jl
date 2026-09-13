@@ -17,19 +17,19 @@ using Bramble: hₘᵢₙ, diff₋ₓ, diff₊ₓ
 # in the wrong type. These tests are what makes that visible.
 
 const F32_BACKEND = backend(;
-    vector_type=Vector{Float32}, matrix_type=SparseMatrixCSC{Float32,Int}
+    vector_type = Vector{Float32}, matrix_type = SparseMatrixCSC{Float32, Int}
 )
 
 @testset "Element type preservation" begin
     @testset "Meshes & spaces" begin
         @test eltype(F32_BACKEND) === Float32
 
-        Ωₕ1 = mesh(domain(interval(0.0f0, 1.0f0)), 11, true; backend=F32_BACKEND)
+        Ωₕ1 = mesh(domain(interval(0.0f0, 1.0f0)), 11, true; backend = F32_BACKEND)
         Ωₕ2 = mesh(
             domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)),
             (6, 7),
             (true, false);
-            backend=F32_BACKEND,
+            backend = F32_BACKEND
         )
 
         for Ωₕ in (Ωₕ1, Ωₕ2)
@@ -51,7 +51,7 @@ const F32_BACKEND = backend(;
             domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)),
             (6, 7),
             (true, false);
-            backend=F32_BACKEND,
+            backend = F32_BACKEND
         )
         Wₕ = gridspace(Ωₕ)
         uₕ = Rₕ(Wₕ, x -> sin(x[1]) * x[2])
@@ -76,7 +76,7 @@ const F32_BACKEND = backend(;
             domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)),
             (6, 7),
             (true, false);
-            backend=F32_BACKEND,
+            backend = F32_BACKEND
         )
 
         for op in (D₋ₓ, D₊ₓ, diff₋ₓ, diff₊ₓ, jumpₓ, M₋ₓ, M₊ₓ, M₋ᵧ, M₊ᵧ)
@@ -89,7 +89,7 @@ const F32_BACKEND = backend(;
             domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)),
             (6, 7),
             (true, false);
-            backend=F32_BACKEND,
+            backend = F32_BACKEND
         )
         Wₕ = gridspace(Ωₕ)
         uₕ = Rₕ(Wₕ, x -> sin(x[1]) * x[2])

@@ -1,29 +1,29 @@
 module BrambleSciMLExt
 
 using Bramble:
-    Bramble,
-    BilinearForm,
-    LinearForm,
-    Semidiscretization,
-    assemble,
-    jacobian!,
-    jacobian_prototype,
-    mass_matrix,
-    domain,
-    interval,
-    mesh,
-    gridspace,
-    Rₕ,
-    form,
-    inner₊,
-    ∇₋ₕ,
-    innerₕ,
-    dirichlet_constraints,
-    semidiscretize,
-    ode_problem,
-    ode_function,
-    linear_problem,
-    boundary_symbols
+               Bramble,
+               BilinearForm,
+               LinearForm,
+               Semidiscretization,
+               assemble,
+               jacobian!,
+               jacobian_prototype,
+               mass_matrix,
+               domain,
+               interval,
+               mesh,
+               gridspace,
+               Rₕ,
+               form,
+               inner₊,
+               ∇₋ₕ,
+               innerₕ,
+               dirichlet_constraints,
+               semidiscretize,
+               ode_problem,
+               ode_function,
+               linear_problem,
+               boundary_symbols
 using SciMLBase: SciMLBase, LinearProblem, ODEFunction, ODEProblem
 using PrecompileTools: @setup_workload, @compile_workload
 
@@ -39,18 +39,17 @@ using PrecompileTools: @setup_workload, @compile_workload
 # `jacobian!` is only a Picard linearisation there, and the solver should build the real one
 # by (sparse) automatic differentiation from `jac_prototype` instead.
 @inline _jac_closure(::Nothing, ::Semidiscretization) = nothing
-@inline _jac_closure(jacobian::F, sd::Semidiscretization) where {F} =
-    (J, u, p, t) -> jacobian(J, sd, u, p, t)
+@inline _jac_closure(jacobian::F, sd::Semidiscretization) where {F} = (J, u, p, t) -> jacobian(J, sd, u, p, t)
 
 function Bramble._ode_function(
-    sd::Semidiscretization; jacobian=jacobian!, jac_prototype=nothing
+        sd::Semidiscretization; jacobian = jacobian!, jac_prototype = nothing
 )
     prototype = jac_prototype === nothing ? jacobian_prototype(sd) : jac_prototype
     return ODEFunction(
         sd;
-        mass_matrix=mass_matrix(sd),
-        jac_prototype=prototype,
-        jac=_jac_closure(jacobian, sd),
+        mass_matrix = mass_matrix(sd),
+        jac_prototype = prototype,
+        jac = _jac_closure(jacobian, sd)
     )
 end
 
@@ -58,7 +57,7 @@ end
 # `dirichlet_constraints(Ωₕ, I, ...)` takes the same object -- so it is accepted alongside
 # the `(t₀, t₁)` tuple SciMLBase expects.
 @inline _tspan(I::Bramble.CartesianProduct{1}) = extrema(I)
-@inline _tspan(tspan::Tuple{Number,Number}) = tspan
+@inline _tspan(tspan::Tuple{Number, Number}) = tspan
 
 # The initial condition is copied before the algebraic rows are written into it: silently
 # mutating a caller's `u₀` -- which is usually the `Rₕ` of the exact initial datum, and often
@@ -67,28 +66,28 @@ end
 @inline _initial_vector(u₀) = collect(parent(u₀))
 
 function Bramble._ode_problem(
-    sd::Semidiscretization, u₀, I; jacobian=jacobian!, jac_prototype=nothing
+        sd::Semidiscretization, u₀, I; jacobian = jacobian!, jac_prototype = nothing
 )
     tspan = _tspan(I)
     u0 = _initial_vector(u₀)
     Bramble.dirichlet_bc!(u0, sd, first(tspan))
-    f = Bramble._ode_function(sd; jacobian=jacobian, jac_prototype=jac_prototype)
+    f = Bramble._ode_function(sd; jacobian = jacobian, jac_prototype = jac_prototype)
     return ODEProblem(f, u0, tspan)
 end
 
 function Bramble._linear_problem(
-    a::BilinearForm,
-    l::LinearForm;
-    dirichlet=nothing,
-    dirichlet_components=nothing,
-    symmetrize::Bool=false,
+        a::BilinearForm,
+        l::LinearForm;
+        dirichlet = nothing,
+        dirichlet_components = nothing,
+        symmetrize::Bool = false
 )
     A, F = assemble(
         a,
         l;
-        dirichlet=dirichlet,
-        dirichlet_components=dirichlet_components,
-        symmetrize=symmetrize,
+        dirichlet = dirichlet,
+        dirichlet_components = dirichlet_components,
+        symmetrize = symmetrize
     )
     return LinearProblem(A, F)
 end
@@ -109,7 +108,7 @@ if Bramble.PRECOMPILE_WORKLOAD
         a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
         l = form(Wₕ, v -> innerₕ(fₕ, v))
         bcs = dirichlet_constraints(Ωₕ, I_time, :boundary => (x, t) -> 0.0)
-        sd = semidiscretize(a, l; dirichlet=bcs)
+        sd = semidiscretize(a, l; dirichlet = bcs)
         u0 = Rₕ(Wₕ, x -> 0.0)
 
         @compile_workload begin

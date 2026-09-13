@@ -1,13 +1,13 @@
 using Test
 using Bramble
 using Bramble:
-    IdentityOperator,
-    ZeroOperator,
-    OperatorScale,
-    GridFunctionScale,
-    OperatorAdd,
-    is_symbolic,
-    space
+               IdentityOperator,
+               ZeroOperator,
+               OperatorScale,
+               GridFunctionScale,
+               OperatorAdd,
+               is_symbolic,
+               space
 
 @testset "Linear operators" begin
     for D in 1:3

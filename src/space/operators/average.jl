@@ -57,8 +57,7 @@ See also: [`_compute_average`](@ref), [`add_half_shift`](@ref), [`Forward`](@ref
 #
 # Dividing by 2 rather than multiplying by 0.5 keeps the element type: a Float32 grid
 # would otherwise be promoted through Float64 on every point.
-@inline @propagate_inbounds _compute_average(::GridDirection, ::Val{false}, cur, other) =
-    (cur + other) / 2
+@inline @propagate_inbounds _compute_average(::GridDirection, ::Val{false}, cur, other) = (cur + other) / 2
 
 # The one boundary slice has no neighbour, so the average is truncated to zero there.
 # `zero(cur)` rather than a literal keeps the element type of the grid.
@@ -67,8 +66,8 @@ See also: [`_compute_average`](@ref), [`add_half_shift`](@ref), [`Forward`](@ref
 # The traversal is shared with the difference engine; see _stencil_ranges in
 # operators/stencil.jl.
 function _average_engine!(
-    out, in_ref, dims::NTuple{D,Int}, dir::GridDirection, ::Val{DIM}
-) where {D,DIM}
+        out, in_ref, dims::NTuple{D, Int}, dir::GridDirection, ::Val{DIM}
+) where {D, DIM}
     li = LinearIndices(dims)
     step = _stencil_step(Val(DIM), Val(D))
     interior, boundary = _stencil_ranges(axes(li), Val(DIM), dir)
@@ -91,10 +90,10 @@ end
 # Shared by every averaging direction (gpena/Bramble.jl#44): the alias check and the engine
 # call, once, rather than once per direction and again inside each one's composite closure.
 @inline function _apply_averaged!(
-    vₕ::VectorElement{<:ScalarGridSpace},
-    uₕ::VectorElement{<:ScalarGridSpace},
-    dir::GridDirection,
-    dim_val::Val,
+        vₕ::VectorElement{<:ScalarGridSpace},
+        uₕ::VectorElement{<:ScalarGridSpace},
+        dir::GridDirection,
+        dim_val::Val
 )
     _check_no_alias(vₕ, uₕ)
     _average_engine!(vₕ.data, uₕ.data, _grid_dims(uₕ), dir, dim_val)
@@ -105,10 +104,10 @@ end
 # method above re-checks aliasing and re-derives `_grid_dims` per leaf, same as the
 # difference operators' `_apply_spaced!` (operators/difference.jl).
 @inline function _apply_averaged!(
-    vₕ::VectorElement{<:CompositeGridSpace},
-    uₕ::VectorElement{<:CompositeGridSpace},
-    dir::GridDirection,
-    dim_val::Val,
+        vₕ::VectorElement{<:CompositeGridSpace},
+        uₕ::VectorElement{<:CompositeGridSpace},
+        dir::GridDirection,
+        dim_val::Val
 )
     _apply_componentwise!((v, u) -> _apply_averaged!(v, u, dir, dim_val), vₕ, uₕ)
     return vₕ
@@ -118,8 +117,8 @@ end
 # the literal is a Float64 and promotes the whole matrix. On a Float32 backend everything
 # else in the library stayed Float32 and only the averaging matrices came back Float64.
 function add_half_shift(
-    Ωₕ::AbstractMeshType, ::Val{DIFF_DIM}, ::Val{first}, ::Val{second}
-) where {DIFF_DIM,first,second}
+        Ωₕ::AbstractMeshType, ::Val{DIFF_DIM}, ::Val{first}, ::Val{second}
+) where {DIFF_DIM, first, second}
     return (shift(Ωₕ, Val(DIFF_DIM), Val(first)) + shift(Ωₕ, Val(DIFF_DIM), Val(second))) /
            2
 end
@@ -133,7 +132,7 @@ function _average_operator(Ωₕ::AbstractMeshType, ::Backward, ::Val{AVG_DIM}) 
 end
 
 function _average_weights!(
-    v::AbstractVector, Ωₕ::AbstractMeshType, dir::GridDirection, ::Val{DIFF_DIM}
+        v::AbstractVector, Ωₕ::AbstractMeshType, dir::GridDirection, ::Val{DIFF_DIM}
 ) where {DIFF_DIM}
     dims = npoints(Ωₕ, Tuple)
 
@@ -155,21 +154,21 @@ end
 # Configuration array for average operators, expanded with descriptive strings.
 const _AVERAGE_OP_CONFIGS = [
     (
-        direction=Forward(),
-        average_name=:forward_average,
-        average_alias=:M₊,
-        vectorial_average_alias=:M₊ₕ,
-        dir_string_lowercase="forward",
-        math_op="\\frac{u_{i} + u_{i+1}}{2}",
+        direction = Forward(),
+        average_name = :forward_average,
+        average_alias = :M₊,
+        vectorial_average_alias = :M₊ₕ,
+        dir_string_lowercase = "forward",
+        math_op = "\\frac{u_{i} + u_{i+1}}{2}"
     ),
     (
-        direction=Backward(),
-        average_name=:backward_average,
-        average_alias=:M₋,
-        vectorial_average_alias=:M₋ₕ,
-        dir_string_lowercase="backward",
-        math_op="\\frac{u_{i-1} + u_{i}}{2}",
-    ),
+        direction = Backward(),
+        average_name = :backward_average,
+        average_alias = :M₋,
+        vectorial_average_alias = :M₋ₕ,
+        dir_string_lowercase = "backward",
+        math_op = "\\frac{u_{i-1} + u_{i}}{2}"
+    )
 ]
 
 # Metaprogramming loop to generate all specified average operators.
@@ -190,8 +189,8 @@ for config in _AVERAGE_OP_CONFIGS
         Low-level, in-place function to compute the $($dir_string_lowercase) average of vector `in` along dimension `average_dim`, storing the result in `out`. This function computes ``$($math_op)``.
         """
         function $(Symbol(average_name, :_dim!))(
-            out, in, h, dims::NTuple{D,Int}, average_dim::Val{DIFF_DIM}
-        ) where {D,DIFF_DIM}
+                out, in, h, dims::NTuple{D, Int}, average_dim::Val{DIFF_DIM}
+        ) where {D, DIFF_DIM}
             1 <= DIFF_DIM <= D || _throw_stencil_dim_error(DIFF_DIM, D)
             length(out) == length(in) == prod(dims) ||
                 _throw_stencil_size_error(length(out), length(in), dims)
@@ -201,8 +200,8 @@ for config in _AVERAGE_OP_CONFIGS
         end
 
         function $(Symbol(average_name, :_dim!))(
-            out, in, dims::NTuple{D,Int}, average_dim::Val{DIFF_DIM}
-        ) where {D,DIFF_DIM}
+                out, in, dims::NTuple{D, Int}, average_dim::Val{DIFF_DIM}
+        ) where {D, DIFF_DIM}
             return $(Symbol(average_name, :_dim!))(out, in, nothing, dims, average_dim)
         end
 
@@ -213,7 +212,7 @@ for config in _AVERAGE_OP_CONFIGS
         Constructs or applies the $($dir_string_lowercase) averaging operator, representing the operation ``$($math_op)``.
         """
         @inline function $average_name(
-            Ωₕ::AbstractMeshType, dim_val::Val; vector_cache=__vector(Ωₕ)
+                Ωₕ::AbstractMeshType, dim_val::Val; vector_cache = __vector(Ωₕ)
         )
             avg_matrix = _average_operator(Ωₕ, $dir_instance, dim_val)
             _average_weights!(vector_cache, Ωₕ, $dir_instance, dim_val)
@@ -226,8 +225,7 @@ for config in _AVERAGE_OP_CONFIGS
         # (scalar `!`, composite `!`, allocating) comes from
         # `_define_grid_function_forms`, shared with `difference.jl`
         # (gpena/Bramble.jl#101).
-        @inline $average_name(Wₕ::AbstractSpaceType, dim_val::Val) =
-            $average_name(mesh(Wₕ), dim_val)
+        @inline $average_name(Wₕ::AbstractSpaceType, dim_val::Val) = $average_name(mesh(Wₕ), dim_val)
     end
 
     # An average divides by nothing the direction does not already say, so unlike the
@@ -241,6 +239,6 @@ for config in _AVERAGE_OP_CONFIGS
         dir_string_lowercase,
         "average",
         math_op;
-        vectorial_alias=vectorial_average_alias,
+        vectorial_alias = vectorial_average_alias
     )
 end

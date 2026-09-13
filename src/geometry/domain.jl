@@ -12,7 +12,7 @@ Computational domain pairing a geometric set (e.g. [`CartesianProduct`](@ref)) w
 
 See also: [`domain`](@ref), [`CartesianProduct`](@ref), [`DomainMarkers`](@ref).
 """
-struct Domain{SetType,MarkersType} <: DomainBaseType
+struct Domain{SetType, MarkersType} <: DomainBaseType
     set::SetType
     markers::MarkersType
 end
@@ -67,7 +67,7 @@ Return an iterator yielding the identifying symbols, symbol sets, or predicate f
 @inline function marker_identifiers(Ω::Domain)
     return (
         identifier(marker) for
-        marker in Iterators.flatten((symbols(Ω), tuples(Ω), conditions(Ω)))
+    marker in Iterators.flatten((symbols(Ω), tuples(Ω), conditions(Ω)))
     )
 end
 
@@ -103,12 +103,11 @@ dim(Ω) == 1 && eltype(Ω) === Float64
 true
 ```
 """
-@inline domain(X::CartesianProduct) =
-    Domain(X, markers(X, :boundary => boundary_symbols(X)))
+@inline domain(X::CartesianProduct) = Domain(X, markers(X, :boundary => boundary_symbols(X)))
 @inline domain(X::CartesianProduct, markers::DomainMarkers) = Domain(X, markers)
 @inline domain(X::CartesianProduct, pairs::Pair...) = domain(X, markers(X, pairs...))
-@inline domain(space_set::CartesianProduct, time_set::CartesianProduct{1}, pairs::Pair...) =
-    domain(space_set, markers(space_set, time_set, pairs...))
+@inline domain(space_set::CartesianProduct, time_set::CartesianProduct{1}, pairs::Pair...) = domain(
+    space_set, markers(space_set, time_set, pairs...))
 
 """
     (Ω::Domain)(t::Number) -> Domain
@@ -219,12 +218,10 @@ Return the default boundary symbols for dimension `D` or domain `Ω`:
 @inline boundary_symbols(Ω::Domain) = boundary_symbols(set(Ω))
 @inline boundary_symbols(::CartesianProduct{1}) = (:left, :right)
 @inline boundary_symbols(::CartesianProduct{2}) = (:bottom, :top, :left, :right)
-@inline boundary_symbols(::CartesianProduct{3}) =
-    (:bottom, :top, :back, :front, :left, :right)
+@inline boundary_symbols(::CartesianProduct{3}) = (:bottom, :top, :back, :front, :left, :right)
 @inline boundary_symbols(::Type{<:CartesianProduct{1}}) = (:left, :right)
 @inline boundary_symbols(::Type{<:CartesianProduct{2}}) = (:bottom, :top, :left, :right)
-@inline boundary_symbols(::Type{<:CartesianProduct{3}}) =
-    (:bottom, :top, :back, :front, :left, :right)
+@inline boundary_symbols(::Type{<:CartesianProduct{3}}) = (:bottom, :top, :back, :front, :left, :right)
 function boundary_symbols(D::Integer)
     D == 1 && return (:left, :right)
     D == 2 && return (:bottom, :top, :left, :right)
@@ -240,8 +237,7 @@ end
         "Provide explicit boundary names via the markers() interface.",
     )
 end
-@inline boundary_symbols(::Type{<:Domain{SetType}}) where {SetType} =
-    boundary_symbols(SetType)
+@inline boundary_symbols(::Type{<:Domain{SetType}}) where {SetType} = boundary_symbols(SetType)
 
 # The compact, embeddable form (gpena/Bramble.jl#45). It used to read
 # `Domain{2D, Float64}:` -- a trailing colon promising content that never followed it,
@@ -267,11 +263,11 @@ function _show_domain_detailed(io::IO, Ω::Domain)
     pp = PrettyPrinter(io)
     X = set(Ω)
 
-    printstyled(io, "Domain"; bold=true, color=:cyan)
+    printstyled(io, "Domain"; bold = true, color = :cyan)
     print(io, " {")
-    printstyled(io, "$(dim(Ω))D"; color=:yellow)
+    printstyled(io, "$(dim(Ω))D"; color = :yellow)
     print(io, ", ")
-    printstyled(io, "$(eltype(Ω))"; color=:yellow)
+    printstyled(io, "$(eltype(Ω))"; color = :yellow)
     println(io, "}:")
 
     println(io)
@@ -293,7 +289,7 @@ function _show_domain_detailed(io::IO, Ω::Domain)
     else
         if topodim < D
             print(io, "    ")
-            print_colored(pp, "Topological dimension: $topodim"; color=:yellow)
+            print_colored(pp, "Topological dimension: $topodim"; color = :yellow)
             println(io)
         end
         print_set_axes(pp_double_indent, X)

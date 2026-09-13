@@ -23,7 +23,7 @@ AST node representing the jump across interfaces along dimension `Dim`, ``u_{i+1
 Not truncated at the far end: the absent `u_{i+1}` is taken as zero, yielding `-uᵢ` there.
 This matches the space-layer matrix convention, whose boundary row preserves `-1`.
 """
-struct JumpNode{D,Dim,OpType<:LazyOp{D}} <: LazyOp{D}
+struct JumpNode{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
     inner_op::OpType
 end
 
@@ -34,9 +34,9 @@ end
 
 Symbolic jumps across the interfaces along coordinate directions ``x``, ``y``, and ``z``.
 """
-jumpₓ(op::LazyOp{D}) where {D} = JumpNode{D,1,typeof(op)}(op)
-jumpᵧ(op::LazyOp{D}) where {D} = JumpNode{D,2,typeof(op)}(op)
-jump₂(op::LazyOp{D}) where {D} = JumpNode{D,3,typeof(op)}(op)
+jumpₓ(op::LazyOp{D}) where {D} = JumpNode{D, 1, typeof(op)}(op)
+jumpᵧ(op::LazyOp{D}) where {D} = JumpNode{D, 2, typeof(op)}(op)
+jump₂(op::LazyOp{D}) where {D} = JumpNode{D, 3, typeof(op)}(op)
 
 """
     jumpₕ(op::LazyOp{D})
@@ -45,19 +45,19 @@ Symbolic jumps across every coordinate direction simultaneously. Returns a `Jump
 in 1D, or a `NTuple{D, JumpNode}` in higher dimensions.
 """
 jumpₕ(op::LazyOp{1}) = jumpₓ(op)
-jumpₕ(op::LazyOp{D}) where {D} = ntuple(dim -> JumpNode{D,dim,typeof(op)}(op), Val(D))
+jumpₕ(op::LazyOp{D}) where {D} = ntuple(dim -> JumpNode{D, dim, typeof(op)}(op), Val(D))
 
 # only the forward term goes; the local one stays, which is the -uₙ convention
 @inline _stencil_taps(::JumpNode) = (Val(1), Val(0))
 
 @inline function _stencil_weights(
-    op::JumpNode{D,Dim}, space, I::CartesianIndex{D}
-) where {D,Dim}
+        op::JumpNode{D, Dim}, space, I::CartesianIndex{D}
+) where {D, Dim}
     reach = I[Dim] == npoints(mesh(space), Tuple)[Dim] ? 0 : 1
     return (reach, -1)
 end
 
-function resolve_ast(op::JumpNode{D,Dim}) where {D,Dim}
+function resolve_ast(op::JumpNode{D, Dim}) where {D, Dim}
     inner = resolve_ast(op.inner_op)
-    return JumpNode{D,Dim,typeof(inner)}(inner)
+    return JumpNode{D, Dim, typeof(inner)}(inner)
 end

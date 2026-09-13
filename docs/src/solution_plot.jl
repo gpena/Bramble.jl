@@ -20,7 +20,7 @@ A 3D surface plot of a 2D scalar grid function `uₕ`, in physical mesh coordina
 space), with an orthographic camera looking straight down the `z` axis — reads as a flat
 colour map at rest, and drags to tilt the field into view as elevation.
 """
-function surface_plot(uₕ; title::AbstractString="", width::Int=480, height::Int=420)
+function surface_plot(uₕ; title::AbstractString = "", width::Int = 480, height::Int = 420)
     Ωₕ = mesh(space(uₕ))
     nx, ny = npoints(Ωₕ, Tuple)
     xs = [point(Ωₕ(1), i) for i in 1:nx]
@@ -100,7 +100,7 @@ times `ts` the solution was sampled at, e.g. `sol.(range(first(I), last(I); leng
 for a SciML `sol`) — this function only lays them out and does not solve anything itself.
 """
 function spacetime_surface_plot(
-    xs::AbstractVector, ts::AbstractVector, Z::AbstractMatrix; title::AbstractString="", width::Int=480, height::Int=480
+        xs::AbstractVector, ts::AbstractVector, Z::AbstractMatrix; title::AbstractString = "", width::Int = 480, height::Int = 480
 )
     size(Z) == (length(ts), length(xs)) ||
         throw(DimensionMismatch("Z is $(size(Z)), expected (length(ts), length(xs)) = ($(length(ts)), $(length(xs)))"))

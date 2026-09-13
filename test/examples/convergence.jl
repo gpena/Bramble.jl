@@ -46,11 +46,11 @@ function _series(assemble_form, rhs, D::Int, n0::Int, levels::Int)
         Wc = gridspace(Ωc)
         bcs_c = dirichlet_constraints(Ωd, :boundary => sol_d)
 
-        A_c = assemble(assemble_form(Wc); dirichlet=:boundary)
+        A_c = assemble(assemble_form(Wc); dirichlet = :boundary)
         g_c = element(Wc)
         avgₕ!(g_c, x -> rhs(x, D))
         l_c = form(Wc, v -> innerₕ(g_c, v))
-        F_c = assemble(l_c; dirichlet=bcs_c)
+        F_c = assemble(l_c; dirichlet = bcs_c)
 
         u_c = element(Wc)
         u_c .= A_c \ F_c
@@ -100,9 +100,9 @@ end
             Wc -> form(
                 Wc,
                 Wc,
-                (u, v) -> ϵ * inner₊(∇₋ₕ(u), ∇₋ₕ(v)) + b * inner₊(M₋ₕ(u), ∇₋ₕ(v)),
+                (u, v) -> ϵ * inner₊(∇₋ₕ(u), ∇₋ₕ(v)) + b * inner₊(M₋ₕ(u), ∇₋ₕ(v))
             ),
-            (x, D) -> -D * exp(sum(x)) * (b + ϵ),
+            (x, D) -> -D * exp(sum(x)) * (b + ϵ)
         )
 
         @test _asymptotically_second_order(p1, 1.9)
@@ -138,7 +138,7 @@ end
                 gradκ(u) = D == 1 ? κf * ∇₋ₕ(u) : ntuple(i -> κf[i] * ∇₋ₕ(u)[i], D)
                 form(Wc, Wc, (u, v) -> inner₊(gradκ(u), ∇₋ₕ(v)))
             end,
-            (x, D) -> -(dκ(x) + D * κ(x)) * exp(sum(x)),
+            (x, D) -> -(dκ(x) + D * κ(x)) * exp(sum(x))
         )
 
         @test _asymptotically_second_order(p1, 1.9)

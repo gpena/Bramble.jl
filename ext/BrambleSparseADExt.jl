@@ -1,16 +1,16 @@
 module BrambleSparseADExt
 
 using Bramble:
-    Bramble,
-    BilinearForm,
-    jacobian_pattern,
-    ast_sparsity_detector,
-    domain,
-    interval,
-    mesh,
-    gridspace,
-    form,
-    innerₕ
+               Bramble,
+               BilinearForm,
+               jacobian_pattern,
+               ast_sparsity_detector,
+               domain,
+               interval,
+               mesh,
+               gridspace,
+               form,
+               innerₕ
 using ADTypes: ADTypes
 using PrecompileTools: @setup_workload, @compile_workload
 
@@ -18,13 +18,13 @@ using PrecompileTools: @setup_workload, @compile_workload
 # pattern can be recomputed on demand rather than materialized once and stored: cheap either
 # way (see the timings on `docs/src/examples/poisson_nonlinear.md`), and this way a caller
 # never has to remember to rebuild the detector if `a`'s coefficients change identity.
-struct ASTSparsityDetector{F<:BilinearForm,D<:Tuple} <: ADTypes.AbstractSparsityDetector
+struct ASTSparsityDetector{F <: BilinearForm, D <: Tuple} <: ADTypes.AbstractSparsityDetector
     form::F
     coefficient_dependencies::D
 end
 
 function Bramble._ast_sparsity_detector(
-    a::BilinearForm, coefficient_dependencies::Function...
+        a::BilinearForm, coefficient_dependencies::Function...
 )
     return ASTSparsityDetector(a, coefficient_dependencies)
 end

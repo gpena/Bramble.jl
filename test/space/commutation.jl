@@ -38,7 +38,7 @@ using Supposition
         ("M₋ₓ", M₋ₓ, "D₋ᵧ", D₋ᵧ),
         ("M₊ₓ", M₊ₓ, "M₋ᵧ", M₋ᵧ),
         ("diff₋ₓ", diff₋ₓ, "diff₊ᵧ", diff₊ᵧ),
-        ("jumpₓ", jumpₓ, "jumpᵧ", jumpᵧ),
+        ("jumpₓ", jumpₓ, "jumpᵧ", jumpᵧ)
     )
 
     @testset "2D" begin
@@ -67,7 +67,7 @@ using Supposition
                 Ωₕ = mesh(
                     domain(box((0.0, 0.0, 0.0), (1.0, 2.0, 3.0))),
                     (7, 6, 5),
-                    (unif, unif, unif),
+                    (unif, unif, unif)
                 )
                 Wₕ = gridspace(Ωₕ)
                 uₕ = Rₕ(Wₕ, x -> exp(x[1]) * sin(x[2]) * (x[3] + 1) + x[1] * x[3])
@@ -78,7 +78,7 @@ using Supposition
                     ("D₋ᵧ", D₋ᵧ, "D₋₂", D₋₂),
                     ("Dcₓ", Dcₓ, "Dc₂", Dc₂),
                     ("Dₕᵧ", Dₕᵧ, "Dₕ₂", Dₕ₂),
-                    ("M₊ₓ", M₊ₓ, "D₋₂", D₋₂),
+                    ("M₊ₓ", M₊ₓ, "D₋₂", D₋₂)
                 )
                     @testset "$n1 ∘ $n2" begin
                         @test parent(op1(op2(uₕ))) ≈ parent(op2(op1(uₕ)))
@@ -104,16 +104,16 @@ using Supposition
 
     @testset "Random grids (Supposition)" begin
         positive_h = Data.Floats{Float64}(;
-            minimum=0.01, maximum=10.0, nans=false, infs=false
+            minimum = 0.01, maximum = 10.0, nans = false, infs = false
         )
         field_val = Data.Floats{Float64}(;
-            minimum=-100.0, maximum=100.0, nans=false, infs=false
+            minimum = -100.0, maximum = 100.0, nans = false, infs = false
         )
 
         @check function check_commutation_2d(
-            hx=Data.Vectors(positive_h; min_size=3, max_size=7),
-            hy=Data.Vectors(positive_h; min_size=3, max_size=7),
-            u_raw=Data.Vectors(field_val; min_size=64, max_size=64),
+                hx = Data.Vectors(positive_h; min_size = 3, max_size = 7),
+                hy = Data.Vectors(positive_h; min_size = 3, max_size = 7),
+                u_raw = Data.Vectors(field_val; min_size = 64, max_size = 64)
         )
             nx = length(hx) + 1
             ny = length(hy) + 1
@@ -145,7 +145,7 @@ using Supposition
                 res1 = parent(op1(op2(uₕ)))
                 res2 = parent(op2(op1(uₕ)))
                 scale = max(maximum(abs, res1), maximum(abs, res2), 1.0)
-                if !isapprox(res1, res2; atol=1e-10 * scale, rtol=1e-10)
+                if !isapprox(res1, res2; atol = 1e-10 * scale, rtol = 1e-10)
                     all_commute = false
                     break
                 end

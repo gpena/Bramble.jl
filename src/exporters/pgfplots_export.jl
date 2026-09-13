@@ -20,10 +20,10 @@ _pgf_columns(name, a::AbstractVector) = [(string(name), a)]
 function _pgf_error_composite(name)
     return throw(
         ArgumentError(
-            "export_pgfplots writes one scalar field per 2D file: pgfplots' surf/mesh format " *
-            "has no way to encode more than one z-value per (x, y) point. \"$name\" is a " *
-            "composite element; export each of its components(...) separately.",
-        ),
+        "export_pgfplots writes one scalar field per 2D file: pgfplots' surf/mesh format " *
+        "has no way to encode more than one z-value per (x, y) point. \"$name\" is a " *
+        "composite element; export each of its components(...) separately.",
+    ),
     )
 end
 _pgf_grid(name, uₕ::VectorElement{<:CompositeGridSpace}, dims) = _pgf_error_composite(name)
@@ -94,8 +94,8 @@ function export_pgfplots(filename::AbstractString, Ωₕ::AbstractMeshType{1}, f
         for (nm, col) in _pgf_columns(name, data)
             length(col) == n || throw(
                 ArgumentError(
-                    "\"$nm\" has length $(length(col)), but the mesh has $n points"
-                ),
+                "\"$nm\" has length $(length(col)), but the mesh has $n points"
+            ),
             )
             push!(names, nm)
             push!(cols, col)
@@ -115,10 +115,10 @@ end
 function export_pgfplots(filename::AbstractString, Ωₕ::AbstractMeshType{2}, fields::Pair...)
     length(fields) == 1 || throw(
         ArgumentError(
-            "export_pgfplots writes one scalar field per 2D file: pgfplots' surf/mesh format " *
-            "has no way to encode more than one z-value per (x, y) point. Got " *
-            "$(length(fields)) fields; call export_pgfplots once per field.",
-        ),
+        "export_pgfplots writes one scalar field per 2D file: pgfplots' surf/mesh format " *
+        "has no way to encode more than one z-value per (x, y) point. Got " *
+        "$(length(fields)) fields; call export_pgfplots once per field.",
+    ),
     )
     name, data = only(fields)
 
@@ -141,15 +141,15 @@ end
 function export_pgfplots(::AbstractString, ::AbstractMeshType{D}, ::Pair...) where {D}
     return throw(
         ArgumentError(
-            "export_pgfplots supports 1D and 2D meshes only. pgfplots' \\addplot3[surf] plots " *
-            "a height field over a 2D domain, not a true 3D volume, so a $(D)D mesh has no " *
-            "faithful representation in this format; use export_vtk instead.",
-        ),
+        "export_pgfplots supports 1D and 2D meshes only. pgfplots' \\addplot3[surf] plots " *
+        "a height field over a 2D domain, not a true 3D volume, so a $(D)D mesh has no " *
+        "faithful representation in this format; use export_vtk instead.",
+    ),
     )
 end
 
 function export_pgfplots(
-    filename::AbstractString, uₕ::VectorElement, name::AbstractString="u"
+        filename::AbstractString, uₕ::VectorElement, name::AbstractString = "u"
 )
     return export_pgfplots(filename, mesh(uₕ), name => uₕ)
 end

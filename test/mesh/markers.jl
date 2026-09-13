@@ -44,7 +44,7 @@ using Bramble
         full_sum = innerₕ(u, v)
         @test interior_sum < full_sum
         @test interior_sum ≈
-            sum(Bramble.weights(Wₕ, Bramble.Innerh())[Bramble.markers(Ωₕ)[:interior]])
+              sum(Bramble.weights(Wₕ, Bramble.Innerh())[Bramble.markers(Ωₕ)[:interior]])
     end
 
     @testset "Reserved symbol match" begin
@@ -63,7 +63,7 @@ using Bramble
             domain(S, :boundary => :left), (4, 4), (true, true)
         )
         @test Bramble.markers(Ωₕ)[:boundary] !=
-            Bramble.markers(mesh(domain(S), (4, 4), (true, true)))[:boundary]
+              Bramble.markers(mesh(domain(S), (4, 4), (true, true)))[:boundary]
         @test sum(Bramble.markers(Ωₕ)[:boundary]) == 4   # just the :left face on a 4x4 grid
     end
 
@@ -72,7 +72,7 @@ using Bramble
         # redefined the label on purpose" — this is that opt-out, checked in both directions
         # so it silences the warning without silently dropping the custom marker too.
         Ωₕ = @test_logs mesh(
-            domain(S, :boundary => :left), (4, 4), (true, true); warn_marker_mismatch=false
+            domain(S, :boundary => :left), (4, 4), (true, true); warn_marker_mismatch = false
         )
         @test sum(Bramble.markers(Ωₕ)[:boundary]) == 4   # the custom definition still wins
 
@@ -140,7 +140,7 @@ using Bramble
         idxs = Bramble.indices(Ωₕ)
 
         iterate_boundary_facets(idxs) = (
-            c=0;
+            c = 0;
             for face in values(Bramble.boundary_symbol_to_cartesian(idxs))
                 c += length(face)
             end;

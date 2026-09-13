@@ -1,26 +1,26 @@
 using Test
 using Bramble
 using Bramble:
-    Marker,
-    MarkerPair,
-    Domain,
-    DomainMarkers,
-    EvaluatedDomainMarkers,
-    dim,
-    set,
-    markers,
-    labels,
-    CartesianProduct
+               Marker,
+               MarkerPair,
+               Domain,
+               DomainMarkers,
+               EvaluatedDomainMarkers,
+               dim,
+               set,
+               markers,
+               labels,
+               CartesianProduct
 using Bramble: boundary_symbols, label, identifier, domain, symbols, tuples, conditions
 using Bramble: marker_identifiers, process_identifier
 using Bramble:
-    label_identifiers,
-    label_symbols,
-    label_tuples,
-    label_conditions,
-    point_type,
-    topo_dim,
-    is_collapsed
+               label_identifiers,
+               label_symbols,
+               label_tuples,
+               label_conditions,
+               point_type,
+               topo_dim,
+               is_collapsed
 using StaticArrays
 
 if !@isdefined(alloc_test)
@@ -112,7 +112,7 @@ end
         # A vector of symbols normalizes to the same Set as the tuple form.
         @test process_identifier(I2D, [:top, :right]) == Set((:top, :right))
         @test process_identifier(I2D, [:top, :right]) ==
-            process_identifier(I2D, (:top, :right))
+              process_identifier(I2D, (:top, :right))
     end
 
     # Invariant: `DomainMarkers` correctly partitions and deduplicates boundary
@@ -134,7 +134,7 @@ end
             :corners => (:top, :right),
             :all_bnd => (:top, :bottom, :left, :right),
             :region1 => func1,
-            :region2 => func2,
+            :region2 => func2
         )
         dm_mixed = markers(I2D, pairs...)
         @test dm_mixed isa DomainMarkers
@@ -169,8 +169,8 @@ end
         @test set(Ω2_def) === I2D
         @test dim(Ω2_def) == 2
         @test eltype(Ω2_def) === Float32
-        @test point_type(Ω2_def) === NTuple{2,Float32}
-        @test point_type(typeof(Ω2_def)) === NTuple{2,Float32}
+        @test point_type(Ω2_def) === NTuple{2, Float32}
+        @test point_type(typeof(Ω2_def)) === NTuple{2, Float32}
 
         # Domain constructed with preallocated DomainMarkers.
         markers_premade = markers(I2D, :neumann => :top, :fixed => func1)
@@ -199,7 +199,7 @@ end
             :bnd_left => :left,
             :corners => (:top, :right),
             :region1 => func1,
-            :boundary => :top,
+            :boundary => :top
         )
 
         dm_retrieved = markers(Ω)
@@ -221,9 +221,9 @@ end
         # Dimension projection onto 1D coordinate intervals.
         proj1 = projection(Ω, 1)
         proj2 = projection(Ω, 2)
-        @test proj1 isa CartesianProduct{1,Float32}
+        @test proj1 isa CartesianProduct{1, Float32}
         @test proj1.box[1] == (0.0f0, 1.0f0)
-        @test proj2 isa CartesianProduct{1,Float32}
+        @test proj2 isa CartesianProduct{1, Float32}
         @test proj2.box[1] == (2.0f0, 3.0f0)
     end
 
@@ -301,28 +301,28 @@ end
             I2D, :left_bnd => :left, :corner => (:top, :right), :sub => (x -> x[1] > 0.5f0)
         )
         iterate_symbols(dom) = (
-            c=0;
+            c = 0;
             for s in label_symbols(dom)
                 c += 1
             end;
             c
         )
         iterate_tuples(dom) = (
-            c=0;
+            c = 0;
             for t in label_tuples(dom)
                 c += 1
             end;
             c
         )
         iterate_conditions(dom) = (
-            c=0;
+            c = 0;
             for cond in label_conditions(dom)
                 c += 1
             end;
             c
         )
         iterate_label_identifiers(dom) = (
-            c=0;
+            c = 0;
             for l in label_identifiers(dom)
                 c += 1
             end;
@@ -482,11 +482,11 @@ end
     # when evaluating time-dependent marker collections and supports standard iteration.
     @testset "Evaluated domain marker iteration and traits" begin
         using Bramble:
-            EvaluatedDomainMarkers,
-            label_identifiers,
-            label_symbols,
-            label_tuples,
-            label_conditions
+                       EvaluatedDomainMarkers,
+                       label_identifiers,
+                       label_symbols,
+                       label_tuples,
+                       label_conditions
 
         I_time = interval(0.0, 1.0)
         I_space = interval(0.0, 1.0)
@@ -539,9 +539,8 @@ end
     # Invariant: Boundary symbols are defined up to 3D; higher dimensions throw errors.
     @testset "Higher-dimensional domains" begin
         # 4D boxes have no canonical boundary face names; queries throw an ErrorException.
-        X4 =
-            interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0) ×
-            interval(0.0, 1.0)
+        X4 = interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0) ×
+             interval(0.0, 1.0)
         @test dim(X4) == 4
         @test_throws ErrorException boundary_symbols(4)
         @test_throws ErrorException boundary_symbols(typeof(X4))

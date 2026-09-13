@@ -1,17 +1,17 @@
 module BrambleMakieExt
 
 using Bramble:
-    Bramble,
-    VectorElement,
-    ScalarGridSpace,
-    CompositeGridSpace,
-    mesh,
-    gridspace,
-    points,
-    domain,
-    interval,
-    ×,
-    Rₕ
+               Bramble,
+               VectorElement,
+               ScalarGridSpace,
+               CompositeGridSpace,
+               mesh,
+               gridspace,
+               points,
+               domain,
+               interval,
+               ×,
+               Rₕ
 
 using Makie: Makie
 using PrecompileTools: @setup_workload, @compile_workload
@@ -21,9 +21,9 @@ using PrecompileTools: @setup_workload, @compile_workload
 function _makie_error_composite()
     return throw(
         ArgumentError(
-            "plotting a composite element directly has no single reading — plot each of its " *
-            "components(...) separately.",
-        ),
+        "plotting a composite element directly has no single reading — plot each of its " *
+        "components(...) separately.",
+    ),
     )
 end
 
@@ -33,16 +33,16 @@ end
 function _makie_error_dim(D)
     return throw(
         ArgumentError(
-            "plotting a $(D)D grid function directly is not implemented — only 1D and 2D. " *
-            "See export_vtk for a full 3D field.",
-        ),
+        "plotting a $(D)D grid function directly is not implemented — only 1D and 2D. " *
+        "See export_vtk for a full 3D field.",
+    ),
     )
 end
 
 # 1D: `lines(uₕ)`, `scatter(uₕ)`. `PointBased` plot types want a vector of points, not two
 # separate coordinate vectors — that is a Makie 0.10+ requirement, not a style choice.
 function Makie.convert_arguments(
-    ::Makie.PointBased, uₕ::VectorElement{<:ScalarGridSpace{1}}
+        ::Makie.PointBased, uₕ::VectorElement{<:ScalarGridSpace{1}}
 )
     return (Makie.Point2f.(points(mesh(uₕ)), parent(uₕ)),)
 end
@@ -62,7 +62,7 @@ end
 # it wins ordinary dispatch, and returns the two coordinate vectors `convert_arguments`
 # above expects to have been given directly.
 function Makie.expand_dimensions(
-    ::Makie.PointBased, uₕ::VectorElement{<:ScalarGridSpace{1}}
+        ::Makie.PointBased, uₕ::VectorElement{<:ScalarGridSpace{1}}
 )
     return (points(mesh(uₕ)), parent(uₕ))
 end
@@ -71,7 +71,7 @@ end
 # trait — `Heatmap` wants `CellGrid`, `Surface` and `Contour` want `VertexGrid` — but both
 # read the same three arguments the same way, so one method serves both.
 function Makie.convert_arguments(
-    ::Union{Makie.CellGrid,Makie.VertexGrid}, uₕ::VectorElement{<:ScalarGridSpace{2}}
+        ::Union{Makie.CellGrid, Makie.VertexGrid}, uₕ::VectorElement{<:ScalarGridSpace{2}}
 )
     return (points(mesh(uₕ))..., reshape(uₕ))
 end
@@ -80,18 +80,18 @@ function Makie.convert_arguments(::Makie.PointBased, ::VectorElement{<:Composite
     return _makie_error_composite()
 end
 function Makie.convert_arguments(
-    ::Union{Makie.CellGrid,Makie.VertexGrid}, ::VectorElement{<:CompositeGridSpace}
+        ::Union{Makie.CellGrid, Makie.VertexGrid}, ::VectorElement{<:CompositeGridSpace}
 )
     return _makie_error_composite()
 end
 
 function Makie.convert_arguments(
-    ::Makie.PointBased, ::VectorElement{<:ScalarGridSpace{D}}
+        ::Makie.PointBased, ::VectorElement{<:ScalarGridSpace{D}}
 ) where {D}
     return _makie_error_dim(D)
 end
 function Makie.convert_arguments(
-    ::Union{Makie.CellGrid,Makie.VertexGrid}, ::VectorElement{<:ScalarGridSpace{D}}
+        ::Union{Makie.CellGrid, Makie.VertexGrid}, ::VectorElement{<:ScalarGridSpace{D}}
 ) where {D}
     return _makie_error_dim(D)
 end

@@ -57,7 +57,7 @@ end
 
     @testset "Non-differentiated mesh" begin
         # The point of the whole exercise: Dual coefficients over Float64 geometry.
-        a = ForwardDiff.Dual{ForwardDiff.Tag{typeof(identity),Float64}}(1.3, 1.0)
+        a = ForwardDiff.Dual{ForwardDiff.Tag{typeof(identity), Float64}}(1.3, 1.0)
         uₕ = Rₕ(Wₕ1, x -> a * sin(x))
 
         @test eltype(Ωₕ1) === Float64
@@ -81,7 +81,7 @@ end
         # the quadrature rule is the mesh's type at every order, not the field's
         for nq in (2, 3, 6)
             @test _matches_fd(
-                a -> innerₕ(avgₕ(Wₕ1, x -> a * sin(x); quad_points=nq), Rₕ(Wₕ1, x -> a * x))
+                a -> innerₕ(avgₕ(Wₕ1, x -> a * sin(x); quad_points = nq), Rₕ(Wₕ1, x -> a * x))
             )
         end
 
@@ -105,15 +105,15 @@ end
         Wm = gridspace(Ωm)
         @test _matches_fd(
             a -> innerₕ(
-                avgₕ(Wm, x -> a * sin(x); markers=(:left, :right)), Rₕ(Wm, x -> a * x)
-            ),
+            avgₕ(Wm, x -> a * sin(x); markers = (:left, :right)), Rₕ(Wm, x -> a * x)
+        ),
         )
 
         # `innerₕ`'s own `markers` keyword (not `avgₕ`'s, above), with one side Dual-valued
         # and the other Float64: `_dot_masked` promotes rather than requiring both sides
         # (and the weight vector) to already share one element type.
         @test _matches_fd(
-            a -> innerₕ(element(Wm, a), Rₕ(Wm, x -> x); markers=(:left, :right))
+            a -> innerₕ(element(Wm, a), Rₕ(Wm, x -> x); markers = (:left, :right))
         )
     end
 
@@ -128,7 +128,7 @@ end
             ("M₊ₓ", M₊ₓ),
             ("Dstar₊ₓ", Dstar₊ₓ),
             ("Dcₓ", Dcₓ),
-            ("Dₕₓ", Dₕₓ),
+            ("Dₕₓ", Dₕₓ)
         )
             @testset "$nm" begin
                 @test _matches_fd(
@@ -145,14 +145,14 @@ end
             ("∇ₕ", ∇ₕ),
             ("Dstar₊ₕ", Dstar₊ₕ),
             ("M₋ₕ", M₋ₕ),
-            ("jumpₕ", jumpₕ),
+            ("jumpₕ", jumpₕ)
         )
             @testset "$nm" begin
                 @test _matches_fd(
                     function (a)
-                        g = op(Rₕ(Wₕ2, x -> a * sin(x[1]) * x[2] + a^2 * x[1]))
-                        return inner₊(g, g)
-                    end
+                    g = op(Rₕ(Wₕ2, x -> a * sin(x[1]) * x[2] + a^2 * x[1]))
+                    return inner₊(g, g)
+                end
                 )
             end
         end
@@ -165,7 +165,7 @@ end
             ("snorm₁ₕ", snorm₁ₕ),
             ("norm₁ₕ", norm₁ₕ),
             ("inner₊", uₕ -> inner₊(uₕ, uₕ)),
-            ("inner₊ₓ", uₕ -> inner₊ₓ(uₕ, uₕ)),
+            ("inner₊ₓ", uₕ -> inner₊ₓ(uₕ, uₕ))
         )
             @testset "$nm" begin
                 @test _matches_fd(a -> f(Rₕ(Wₕ1, x -> a * sin(x) + a^2 * x)))
@@ -222,7 +222,7 @@ end
         for k in 1:2
             e = zeros(2)
             e[k] = 1e-6
-            @test isapprox(g[k], (J(p0 .+ e) - J(p0 .- e)) / 2e-6; rtol=1e-5)
+            @test isapprox(g[k], (J(p0 .+ e) - J(p0 .- e)) / 2e-6; rtol = 1e-5)
         end
     end
 end

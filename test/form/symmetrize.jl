@@ -23,7 +23,7 @@ using LinearAlgebra: issymmetric
     Ωₕ = mesh(
         domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom, :top => :top),
         (6, 6),
-        (true, true),
+        (true, true)
     )
     Wₕ = gridspace(Ωₕ)
     Vₕ = gridspace(Ωₕ, Val(3))
@@ -217,8 +217,8 @@ using LinearAlgebra: issymmetric
         ev = tb(0.5)
         @test ev isa Bramble.EvaluatedDomainMarkers
 
-        @test which(dirichlet_bc!, Tuple{Vector{Float64},typeof(Ωₕ),typeof(tb),Symbol}) ===
-            which(dirichlet_bc!, Tuple{Vector{Float64},typeof(Ωₕ),typeof(ev),Symbol})
+        @test which(dirichlet_bc!, Tuple{Vector{Float64}, typeof(Ωₕ), typeof(tb), Symbol}) ===
+              which(dirichlet_bc!, Tuple{Vector{Float64}, typeof(Ωₕ), typeof(ev), Symbol})
 
         v = zeros(n)
         dirichlet_bc!(v, Ωₕ, ev, :bottom)
@@ -239,7 +239,7 @@ using LinearAlgebra: issymmetric
             Ω = mesh(
                 domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
                 (N, N),
-                (true, true),
+                (true, true)
             )
             W, V = gridspace(Ω), gridspace(Ω, Val(3))
             m, mv = ndofs(W), ndofs(V)
@@ -254,10 +254,10 @@ using LinearAlgebra: issymmetric
             symmetrize!(Cd, Cdf, V, :bottom)
 
             return (
-                sparse_scalar=@allocated(symmetrize!(As, Fs, Ω, :bottom)),
-                dense_scalar=@allocated(symmetrize!(Ad, Fd, Ω, :bottom)),
-                sparse_composite=@allocated(symmetrize!(Cs, Cf, V, :bottom)),
-                dense_composite=@allocated(symmetrize!(Cd, Cdf, V, :bottom))
+                sparse_scalar = @allocated(symmetrize!(As, Fs, Ω, :bottom)),
+                dense_scalar = @allocated(symmetrize!(Ad, Fd, Ω, :bottom)),
+                sparse_composite = @allocated(symmetrize!(Cs, Cf, V, :bottom)),
+                dense_composite = @allocated(symmetrize!(Cd, Cdf, V, :bottom))
             )
         end
 

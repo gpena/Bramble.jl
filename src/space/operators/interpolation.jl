@@ -109,8 +109,7 @@ transferring a coefficient between two composite leaves, say) should build that 
 see the [`interpolation_matrix`](@ref)-based method below, following the same "build the
 pattern once" shape [`allocate_system_matrix`](@ref)/[`assemble!`](@ref) already use.
 """
-@inline πₕ!(dest::VectorElement, src::VectorElement) =
-    Rₕ!(dest, x -> interpolate_at(src, x))
+@inline πₕ!(dest::VectorElement, src::VectorElement) = Rₕ!(dest, x -> interpolate_at(src, x))
 
 """
     πₕ!(dest::VectorElement, P::SparseMatrixCSC, src::VectorElement) -> VectorElement
@@ -155,7 +154,7 @@ The element type is promoted from `Wₕ`'s and `src`'s own, so interpolating a `
 # step by construction.
 
 function _interpolation_triplets!(
-    rows, cols, vals, Ωdest::AbstractMeshType, Ωsrc::AbstractMeshType{1}
+        rows, cols, vals, Ωdest::AbstractMeshType, Ωsrc::AbstractMeshType{1}
 )
     li_dest = LinearIndices(indices(Ωdest))
     for i in indices(Ωdest)
@@ -169,7 +168,7 @@ function _interpolation_triplets!(
 end
 
 function _interpolation_triplets!(
-    rows, cols, vals, Ωdest::AbstractMeshType, Ωsrc::AbstractMeshType{D}
+        rows, cols, vals, Ωdest::AbstractMeshType, Ωsrc::AbstractMeshType{D}
 ) where {D}
     li_dest = LinearIndices(indices(Ωdest))
     li_src = LinearIndices(indices(Ωsrc))

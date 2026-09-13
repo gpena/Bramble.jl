@@ -68,7 +68,7 @@ if PRECOMPILE_WORKLOAD
         Ω2 = domain(
             S2,
             :wall => (:left, :right),
-            :blob => x -> (x[1] - 0.5)^2 + (x[2] - 0.5)^2 < 0.25,
+            :blob => x -> (x[1] - 0.5)^2 + (x[2] - 0.5)^2 < 0.25
         )
 
         S3 = box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))
@@ -136,8 +136,8 @@ if PRECOMPILE_WORKLOAD
             _pc_parallel_policy_session(Ω1, 5)
 
             # Cross-mesh interpolation sessions (1D and 2D).
-            Ωₕ1_fine = mesh(Ω1, 9, true; backend=be)
-            Ωₕ2_fine = mesh(Ω2, (6, 6), (true, true); backend=be)
+            Ωₕ1_fine = mesh(Ω1, 9, true; backend = be)
+            Ωₕ2_fine = mesh(Ω2, (6, 6), (true, true); backend = be)
             _pc_interpolation_session(Ωₕ1, Ωₕ1_fine)
             _pc_interpolation_session(Ωₕ2, Ωₕ2_fine)
 

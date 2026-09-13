@@ -92,9 +92,9 @@ using Bramble
 
         # at most 2^D = 4 nonzeros per row, and every row sums to 1 (a partition of unity,
         # since the corner weights of any cell always sum to 1)
-        nnz_per_row = vec(sum(!iszero, P2, dims=2))
+        nnz_per_row = vec(sum(!iszero, P2, dims = 2))
         @test all(<=(4), nnz_per_row)
-        @test all(≈(1), vec(sum(P2, dims=2)))
+        @test all(≈(1), vec(sum(P2, dims = 2)))
     end
 
     @testset "πₕ! against a precomputed interpolation_matrix (#14)" begin

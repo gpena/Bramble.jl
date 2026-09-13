@@ -18,13 +18,13 @@ using Aqua
 
     Aqua.test_all(
         Bramble;
-        piracies=true,
-        ambiguities=true,
-        unbound_args=test_unbound,
-        undefined_exports=true,
-        project_extras=true,
-        stale_deps=true,
-        deps_compat=true,
+        piracies = true,
+        ambiguities = true,
+        unbound_args = test_unbound,
+        undefined_exports = true,
+        project_extras = true,
+        stale_deps = true,
+        deps_compat = true,
         # This check ran on every version until ea501d8 guarded it off Julia 1.13, where
         # the wrapper precompilation was exiting without writing Aqua's done.log. That was
         # measured against a 1.13 prerelease a month before the release and does not
@@ -39,7 +39,7 @@ using Aqua
         # over spurious failures with retries (JuliaTesting/Aqua.jl#315). Upstream raised
         # the default to 30 in Aqua.jl#389, merged but unreleased as of 0.8.16 — drop this
         # argument once a release carries it.
-        persistent_tasks=(tmax=30,),
+        persistent_tasks = (tmax = 30,)
     )
-    Aqua.test_ambiguities(Bramble; recursive=false)
+    Aqua.test_ambiguities(Bramble; recursive = false)
 end

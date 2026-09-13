@@ -30,26 +30,24 @@ node's reach and its stencil cannot disagree -- they used to be spelled out twic
 
 # One tap. Tap 0 is the inner stencil itself; any other is the inner stencil relabelled to
 # that neighbour, which is exactly what `shifted_inner_stencil` decides by trait.
-@inline _tap_stencil(op, inner, space, I, markers, ::Val{Dim}, ::Val{0}, w) where {Dim} =
-    scale_stencil(inner, w)
+@inline _tap_stencil(op, inner, space, I, markers, ::Val{Dim}, ::Val{0}, w) where {Dim} = scale_stencil(inner, w)
 
 @inline _tap_stencil(
     op, inner, space, I, markers, ::Val{Dim}, ::Val{Delta}, w
-) where {Dim,Delta} = scale_stencil(
+) where {Dim, Delta} = scale_stencil(
     shifted_inner_stencil(op.inner_op, inner, space, I, markers, Val(Dim), Val(Delta)),
-    w,
+    w
 )
 
 # Recursion rather than a `foldl`, so the tuple length is consumed at compile time and the
 # stencil tuple type stays concrete through every step.
-@inline _fold_taps(op, inner, space, I, markers, vdim, taps::Tuple{Any}, ws::Tuple{Any}) =
-    _tap_stencil(op, inner, space, I, markers, vdim, taps[1], ws[1])
+@inline _fold_taps(op, inner, space, I, markers, vdim, taps::Tuple{Any}, ws::Tuple{Any}) = _tap_stencil(
+    op, inner, space, I, markers, vdim, taps[1], ws[1])
 
-@inline _fold_taps(op, inner, space, I, markers, vdim, taps::Tuple, ws::Tuple) =
-    concatenate_stencils(
-        _tap_stencil(op, inner, space, I, markers, vdim, taps[1], ws[1]),
-        _fold_taps(op, inner, space, I, markers, vdim, Base.tail(taps), Base.tail(ws)),
-    )
+@inline _fold_taps(op, inner, space, I, markers, vdim, taps::Tuple, ws::Tuple) = concatenate_stencils(
+    _tap_stencil(op, inner, space, I, markers, vdim, taps[1], ws[1]),
+    _fold_taps(op, inner, space, I, markers, vdim, Base.tail(taps), Base.tail(ws))
+)
 
 """
     UnaryWrapper{D}
@@ -85,7 +83,7 @@ const UnaryWrapper{D} = Union{
     OperatorScale{D},
     GridFunctionScale{D},
     RegionRestriction{D},
-    InterpolationNode{D},
+    InterpolationNode{D}
 }
 
 # The queries that answer for a wrapper whatever they answer for its operand. One method
@@ -114,20 +112,20 @@ The nodes whose stencil is ordered taps from {+1, 0, -1} along `Dim` with per-no
 the one-sided and extended differences, the two averages, and the jump. `ShiftNode` is not
 one of them -- it relabels its child's whole stencil rather than combining taps.
 """
-const TappedNode{D,Dim} = Union{
-    BackwardDifference{D,Dim},
-    ForwardDifference{D,Dim},
-    CenteredDifference{D,Dim},
-    StarDifference{D,Dim},
-    CrossWeightedDifference{D,Dim},
-    BackwardAverage{D,Dim},
-    ForwardAverage{D,Dim},
-    JumpNode{D,Dim},
+const TappedNode{D, Dim} = Union{
+    BackwardDifference{D, Dim},
+    ForwardDifference{D, Dim},
+    CenteredDifference{D, Dim},
+    StarDifference{D, Dim},
+    CrossWeightedDifference{D, Dim},
+    BackwardAverage{D, Dim},
+    ForwardAverage{D, Dim},
+    JumpNode{D, Dim}
 }
 
 @inline function local_stencil(
-    op::TappedNode{D,Dim}, space, I::CartesianIndex{D}, markers, lin_idx::Int
-) where {D,Dim}
+        op::TappedNode{D, Dim}, space, I::CartesianIndex{D}, markers, lin_idx::Int
+) where {D, Dim}
     inner = local_stencil(op.inner_op, space, I, markers, lin_idx)
     return _fold_taps(
         op,
@@ -137,7 +135,7 @@ const TappedNode{D,Dim} = Union{
         markers,
         Val(Dim),
         _stencil_taps(op),
-        _stencil_weights(op, space, I),
+        _stencil_weights(op, space, I)
     )
 end
 
@@ -155,7 +153,7 @@ end
 ) where {D} = ((zero_offset(Val(D)), 1),)
 
 @inline function local_stencil(
-    op::SourceFunction{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int
+        op::SourceFunction{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int
 ) where {D}
     m = mesh(space)
     x = point(m, I)
@@ -163,19 +161,19 @@ end
 end
 
 @inline function local_stencil(
-    op::SourceVector{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int
+        op::SourceVector{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int
 ) where {D}
     return ((zero_offset(Val(D)), op.vec[lin_idx]),)
 end
 
 @inline function local_stencil(
-    op::SourceConstant{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int
+        op::SourceConstant{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int
 ) where {D}
     return ((zero_offset(Val(D)), op.value),)
 end
 
 @inline function local_stencil(
-    op::OperatorAdd, space, I::CartesianIndex{D}, markers, lin_idx::Int
+        op::OperatorAdd, space, I::CartesianIndex{D}, markers, lin_idx::Int
 ) where {D}
     left_stencil = local_stencil(op.left_op, space, I, markers, lin_idx)
     right_stencil = local_stencil(op.right_op, space, I, markers, lin_idx)
@@ -183,21 +181,21 @@ end
 end
 
 @inline function local_stencil(
-    op::OperatorScale, space, I::CartesianIndex{D}, markers, lin_idx::Int
+        op::OperatorScale, space, I::CartesianIndex{D}, markers, lin_idx::Int
 ) where {D}
     inner = local_stencil(op.inner_op, space, I, markers, lin_idx)
     return scale_stencil(inner, op.scalar)
 end
 
 @inline function local_stencil(
-    op::OperatorScale{D,<:Base.RefValue}, space, I::CartesianIndex{D}, markers, lin_idx::Int
+        op::OperatorScale{D, <:Base.RefValue}, space, I::CartesianIndex{D}, markers, lin_idx::Int
 ) where {D}
     inner = local_stencil(op.inner_op, space, I, markers, lin_idx)
     return scale_stencil(inner, op.scalar[])
 end
 
 @inline function local_stencil(
-    op::GridFunctionScale, space, I::CartesianIndex{D}, markers, lin_idx::Int
+        op::GridFunctionScale, space, I::CartesianIndex{D}, markers, lin_idx::Int
 ) where {D}
     inner = local_stencil(op.inner_op, space, I, markers, lin_idx)
     grid_fn = op.grid_function
@@ -222,30 +220,30 @@ end
 # ==============================================================================
 
 function resolve_ast(op::OperatorAdd{D}) where {D}
-    return OperatorAdd{D,typeof(resolve_ast(op.left_op)),typeof(resolve_ast(op.right_op))}(
+    return OperatorAdd{D, typeof(resolve_ast(op.left_op)), typeof(resolve_ast(op.right_op))}(
         resolve_ast(op.left_op), resolve_ast(op.right_op)
     )
 end
 function resolve_ast(op::OperatorScale{D}) where {D}
-    return OperatorScale{D,typeof(op.scalar),typeof(resolve_ast(op.inner_op))}(
+    return OperatorScale{D, typeof(op.scalar), typeof(resolve_ast(op.inner_op))}(
         op.scalar, resolve_ast(op.inner_op)
     )
 end
 
-function resolve_ast(op::GridFunctionScale{D,VType}) where {D,VType}
-    return GridFunctionScale{D,VType,typeof(resolve_ast(op.inner_op))}(
+function resolve_ast(op::GridFunctionScale{D, VType}) where {D, VType}
+    return GridFunctionScale{D, VType, typeof(resolve_ast(op.inner_op))}(
         op.grid_function, resolve_ast(op.inner_op)
     )
 end
 
-function resolve_ast(op::GridFunctionScale{D,<:Function}) where {D}
+function resolve_ast(op::GridFunctionScale{D, <:Function}) where {D}
     vec = op.grid_function()
-    return GridFunctionScale{D,typeof(vec),typeof(resolve_ast(op.inner_op))}(
+    return GridFunctionScale{D, typeof(vec), typeof(resolve_ast(op.inner_op))}(
         vec, resolve_ast(op.inner_op)
     )
 end
 
-resolve_ast(ops::NTuple{N,Any}) where {N} = map(resolve_ast, ops)
+resolve_ast(ops::NTuple{N, Any}) where {N} = map(resolve_ast, ops)
 # The catch-all every node above without its own method falls through to: TrialFunction,
 # TestFunction, IndexedTrialFunction, IndexedTestFunction, SourceFunction, SourceVector,
 # SourceConstant, IdentityOperator, ZeroOperator, and anything else with nothing to resolve.

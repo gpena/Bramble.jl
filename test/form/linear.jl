@@ -3,28 +3,28 @@ using Bramble
 using ForwardDiff
 using LinearAlgebra: Diagonal, diag, dot, I
 using Bramble:
-    LinearForm,
-    form,
-    assemble,
-    assemble!,
-    assemble_parallel!,
-    test_space,
-    element,
-    resolve_form_ast,
-    apply_dirichlet_conditions!,
-    LinearProduct,
-    TestFunction,
-    TrialFunction,
-    IndexedTestFunction,
-    IndexedTrialFunction,
-    test_component_or_nothing,
-    components,
-    _colour_strides,
-    stencil_offsets,
-    ndofs,
-    Innerh,
-    Innerplus,
-    evaluate!
+               LinearForm,
+               form,
+               assemble,
+               assemble!,
+               assemble_parallel!,
+               test_space,
+               element,
+               resolve_form_ast,
+               apply_dirichlet_conditions!,
+               LinearProduct,
+               TestFunction,
+               TrialFunction,
+               IndexedTestFunction,
+               IndexedTrialFunction,
+               test_component_or_nothing,
+               components,
+               _colour_strides,
+               stencil_offsets,
+               ndofs,
+               Innerh,
+               Innerplus,
+               evaluate!
 
 # Standalone runner fallback
 if !@isdefined(alloc_test)
@@ -68,7 +68,7 @@ end
     Ωₕ = mesh(
         domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
         (8, 8),
-        (true, true),
+        (true, true)
     )
     Wₕ = gridspace(Ωₕ)
     Vₕ = gridspace(Ωₕ, Val(2))
@@ -292,18 +292,16 @@ end
 
             b = assemble(
                 form(
-                    Wf,
-                    v ->
-                        innerₕ(g1, v + 2 * D₋ₓ(v) - M₋ₓ(v)) +
-                        inner₊ₓ(g2, D₋ᵧ(v) + jumpₓ(v)) +
-                        innerₕ(g3, 3 * M₊ᵧ(v) - Dₕₓ(v)),
-                ),
+                Wf,
+                v -> innerₕ(g1, v + 2 * D₋ₓ(v) - M₋ₓ(v)) +
+                     inner₊ₓ(g2, D₋ᵧ(v) + jumpₓ(v)) +
+                     innerₕ(g3, 3 * M₊ᵧ(v) - Dₕₓ(v))
+            ),
             )
 
-            reference =
-                innerₕ(g1, w + 2 * D₋ₓ(w) - M₋ₓ(w)) +
-                inner₊ₓ(g2, D₋ᵧ(w) + jumpₓ(w)) +
-                innerₕ(g3, 3 * M₊ᵧ(w) - Dₕₓ(w))
+            reference = innerₕ(g1, w + 2 * D₋ₓ(w) - M₋ₓ(w)) +
+                        inner₊ₓ(g2, D₋ᵧ(w) + jumpₓ(w)) +
+                        innerₕ(g3, 3 * M₊ᵧ(w) - Dₕₓ(w))
 
             @test dot(b, parent(w)) ≈ reference
             @test !iszero(reference)          # the identity is not being met by both sides
@@ -315,8 +313,8 @@ end
 
             b = assemble(form(Vf, v -> innerₕ(gv, v + 2 * D₋ₓ(v) - M₋ₓ(v))))
             reference = sum(
-                innerₕ(components(gv)[c], (w=components(wv)[c]; w + 2 * D₋ₓ(w) - M₋ₓ(w)))
-                for c in 1:3
+                innerₕ(components(gv)[c], (w = components(wv)[c]; w + 2 * D₋ₓ(w) - M₋ₓ(w)))
+            for c in 1:3
             )
 
             @test dot(b, parent(wv)) ≈ reference
@@ -328,30 +326,27 @@ end
             uv = Rₕ(Vf, (x -> x[1], x -> 100 * x[1], x -> x[2]))
             for (short, long) in (
                 (
-                    v -> innerₕ(uv, v),
-                    v -> innerₕ(uv(1), v(1)) + innerₕ(uv(2), v(2)) + innerₕ(uv(3), v(3)),
-                ),
+                v -> innerₕ(uv, v),
+                v -> innerₕ(uv(1), v(1)) + innerₕ(uv(2), v(2)) + innerₕ(uv(3), v(3))
+            ),
                 (
-                    v -> innerₕ(uv, v + D₋ₓ(v)),
-                    v ->
-                        innerₕ(uv(1), v(1) + D₋ₓ(v(1))) +
-                        innerₕ(uv(2), v(2) + D₋ₓ(v(2))) +
-                        innerₕ(uv(3), v(3) + D₋ₓ(v(3))),
-                ),
+                v -> innerₕ(uv, v + D₋ₓ(v)),
+                v -> innerₕ(uv(1), v(1) + D₋ₓ(v(1))) +
+                     innerₕ(uv(2), v(2) + D₋ₓ(v(2))) +
+                     innerₕ(uv(3), v(3) + D₋ₓ(v(3)))
+            ),
                 (
-                    v -> innerₕ(uv, v + 2 * D₋ₓ(v) - M₋ₓ(v)),
-                    v ->
-                        innerₕ(uv(1), v(1) + 2 * D₋ₓ(v(1)) - M₋ₓ(v(1))) +
-                        innerₕ(uv(2), v(2) + 2 * D₋ₓ(v(2)) - M₋ₓ(v(2))) +
-                        innerₕ(uv(3), v(3) + 2 * D₋ₓ(v(3)) - M₋ₓ(v(3))),
-                ),
+                v -> innerₕ(uv, v + 2 * D₋ₓ(v) - M₋ₓ(v)),
+                v -> innerₕ(uv(1), v(1) + 2 * D₋ₓ(v(1)) - M₋ₓ(v(1))) +
+                     innerₕ(uv(2), v(2) + 2 * D₋ₓ(v(2)) - M₋ₓ(v(2))) +
+                     innerₕ(uv(3), v(3) + 2 * D₋ₓ(v(3)) - M₋ₓ(v(3)))
+            ),
                 (
-                    v -> inner₊ₓ(uv, v - M₊ᵧ(v)),
-                    v ->
-                        inner₊ₓ(uv(1), v(1) - M₊ᵧ(v(1))) +
-                        inner₊ₓ(uv(2), v(2) - M₊ᵧ(v(2))) +
-                        inner₊ₓ(uv(3), v(3) - M₊ᵧ(v(3))),
-                ),
+                v -> inner₊ₓ(uv, v - M₊ᵧ(v)),
+                v -> inner₊ₓ(uv(1), v(1) - M₊ᵧ(v(1))) +
+                     inner₊ₓ(uv(2), v(2) - M₊ᵧ(v(2))) +
+                     inner₊ₓ(uv(3), v(3) - M₊ᵧ(v(3)))
+            )
             )
                 @test assemble(form(Vf, short)) ≈ assemble(form(Vf, long))
             end
@@ -374,7 +369,7 @@ end
             # a sum inside one product takes the component its sides agree on
             @test test_component_or_nothing(innerₕ(Rₕ(Wf, x -> 1.0), v(2) + D₋ₓ(v(2)))) == 2
             @test test_component_or_nothing(innerₕ(Rₕ(Wf, x -> 1.0), v + D₋ₓ(v))) ===
-                nothing
+                  nothing
 
             # and sides naming different components are ill-formed rather than ambiguous
             @test_throws ArgumentError test_component_or_nothing(
@@ -399,7 +394,7 @@ end
             @test _colour_strides([(0,), (-1,)]) == (2,)
             @test _colour_strides([(-1, 0), (0, 0), (1, 0)]) == (3, 1)
             @test _colour_strides([(0, -1), (0, 0)]) == (1, 2)
-            @test _colour_strides(NTuple{2,Int}[]) == (1, 1)
+            @test _colour_strides(NTuple{2, Int}[]) == (1, 1)
 
             # and read off a real form, an operator reaching only its own point gives one
             # colour (the whole grid in a single flat pass), while a difference gives two
@@ -415,7 +410,7 @@ end
 
         for (nm, sp, u) in (
             ("scalar", Wₕ, uₕ),
-            ("composite", Vₕ, Rₕ(Vₕ, (x -> sin(x[1]), x -> cos(x[2])))(1)),
+            ("composite", Vₕ, Rₕ(Vₕ, (x -> sin(x[1]), x -> cos(x[2])))(1))
         )
             lf = form(sp, v -> innerₕ(u, v))
             bs = assemble(lf)
@@ -499,9 +494,9 @@ end
                 ("a linear combination", v -> innerₕ(ub, v + 2 * D₋ₓ(v) - M₋ₓ(v))),
                 ("innerₕ and inner₊ mixed", v -> innerₕ(ub, v) + inner₊(ub, D₋ₓ(v))),
                 (
-                    "differences in both directions",
-                    v -> innerₕ(ub, D₋ₓ(v)) + innerₕ(ub, D₋ᵧ(v)),
-                ),
+                "differences in both directions",
+                v -> innerₕ(ub, D₋ₓ(v)) + innerₕ(ub, D₋ᵧ(v))
+            )
             )
                 lfw = form(Wb, g)
                 @test prod(_colour_strides(stencil_offsets(resolve_form_ast(lfw)))) > 1
@@ -522,14 +517,14 @@ end
                 ("the shorthand", v -> innerₕ(uv2, v)),
                 ("the shorthand with operators", v -> innerₕ(uv2, v + D₋ₓ(v))),
                 (
-                    "routed, with operators",
-                    v -> innerₕ(cv[1], v(1) + 2 * D₋ₓ(v(1))) + innerₕ(cv[2], v(2)),
-                ),
+                "routed, with operators",
+                v -> innerₕ(cv[1], v(1) + 2 * D₋ₓ(v(1))) + innerₕ(cv[2], v(2))
+            ),
                 ("crossed components", v -> innerₕ(cv[1], v(2))),
                 (
-                    "a routed term beside an unrouted one",
-                    v -> innerₕ(cv[1], v(1)) + innerₕ(uv2, v),
-                ),
+                "a routed term beside an unrouted one",
+                v -> innerₕ(cv[1], v(1)) + innerₕ(uv2, v)
+            )
             )
                 lfc = form(Vb, g)
                 bc = assemble(lfc)
@@ -549,9 +544,9 @@ end
             for (cnm, g) in (
                 ("per component", v -> innerₕ(uhet(1), v(1)) + innerₕ(uhet(2), v(2))),
                 (
-                    "routed, with operators",
-                    v -> innerₕ(uhet(1), v(1) + 2 * D₋ₓ(v(1))) + innerₕ(uhet(2), v(2)),
-                ),
+                "routed, with operators",
+                v -> innerₕ(uhet(1), v(1) + 2 * D₋ₓ(v(1))) + innerₕ(uhet(2), v(2))
+            )
             )
                 lfh = form(Vhet, g)
                 bh = assemble(lfh)
@@ -582,7 +577,7 @@ end
             domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
             (8, 8),
             (true, true);
-            backend=backend(policy=Parallel()),
+            backend = backend(policy = Parallel())
         )
         W_par = gridspace(Ω_par)
         u_par = Rₕ(W_par, x -> x[1] + x[2])
@@ -679,7 +674,7 @@ end
         for (nm, g) in (
             ("scalar, a difference", v -> innerₕ(uₕ, D₋ₓ(v))),
             ("scalar, a linear combination", v -> innerₕ(uₕ, v + 2 * D₋ₓ(v) - M₋ₓ(v))),
-            ("scalar, two kinds summed", v -> innerₕ(uₕ, v) + inner₊ₓ(uₕ, D₋ₓ(v))),
+            ("scalar, two kinds summed", v -> innerₕ(uₕ, v) + inner₊ₓ(uₕ, D₋ₓ(v)))
         )
             lfx = form(Wₕ, g)
             @test lfx(uₕ) ≈ sum(assemble(lfx) .* parent(uₕ))
@@ -688,10 +683,10 @@ end
             ("composite shorthand", v -> innerₕ(uc, v)),
             ("composite per component", v -> innerₕ(cc[1], v(1)) + innerₕ(cc[2], v(2))),
             (
-                "composite routed with operators",
-                v -> innerₕ(cc[1], v(1) + D₋ₓ(v(1))) + innerₕ(cc[3], v(3)),
-            ),
-            ("composite crossed", v -> innerₕ(cc[1], v(2))),
+            "composite routed with operators",
+            v -> innerₕ(cc[1], v(1) + D₋ₓ(v(1))) + innerₕ(cc[3], v(3))
+        ),
+            ("composite crossed", v -> innerₕ(cc[1], v(2)))
         )
             lfx = form(Vc, g)
             @test lfx(wc) ≈ sum(assemble(lfx) .* parent(wc))
@@ -774,7 +769,7 @@ end
 
         # which agrees with writing the components out
         @test assemble(form(Vt, v -> innerₕ((1.0, 2.0), v))) ≈
-            assemble(form(Vt, v -> innerₕ(1.0, v(1)) + innerₕ(2.0, v(2))))
+              assemble(form(Vt, v -> innerₕ(1.0, v(1)) + innerₕ(2.0, v(2))))
 
         # an empty tuple names nothing, and says so
         @test_throws ArgumentError form(Vt, v -> innerₕ((), v))
@@ -843,9 +838,9 @@ end
         # a linear combination of operators in the test argument is the same combination of
         # their matrices, and inner products of different kinds add
         @test assemble(form(Wₕ, v -> innerₕ(uₕ, v + 2 * D₋ₓ(v) - M₋ₓ(v)))) ≈
-            transpose(Idm + 2 * Dx - Mx) * (Hh * uu)
+              transpose(Idm + 2 * Dx - Mx) * (Hh * uu)
         @test assemble(form(Wₕ, v -> innerₕ(uₕ, v) + inner₊ₓ(uₕ, D₋ₓ(v)))) ≈
-            Hh * uu + transpose(Dx) * (Hpx * uu)
+              Hh * uu + transpose(Dx) * (Hpx * uu)
 
         # and the Jacobian of a nonlinear residual is the same expression with the
         # nonlinearity's own derivative on the diagonal. This is the shape a Newton step
@@ -856,14 +851,14 @@ end
             assemble!(b, form(Wₕ, v -> g(element(Wₕ, w .^ 2), v)))
             b
         end
-        w0 = collect(range(0.3, 1.7; length=n))
+        w0 = collect(range(0.3, 1.7; length = n))
         dg = Diagonal(2 .* w0)
 
         @test ForwardDiff.jacobian(resid((s, v) -> innerₕ(s, v)), w0) ≈ Hh * dg
         @test ForwardDiff.jacobian(resid((s, v) -> innerₕ(s, D₋ₓ(v))), w0) ≈
-            transpose(Dx) * Hh * dg
+              transpose(Dx) * Hh * dg
         @test ForwardDiff.jacobian(resid((s, v) -> inner₊ₓ(s, D₋ₓ(v))), w0) ≈
-            transpose(Dx) * Hpx * dg
+              transpose(Dx) * Hpx * dg
 
         # the Jacobian's sparsity is the stencil's, which is what makes a sparse-AD colouring
         # unnecessary here: the pattern is known from the AST before anything is evaluated
@@ -882,22 +877,22 @@ end
         marked = index_in_marker(Ωₕ, :bottom)
         @test any(marked)
 
-        b = assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet=bcs)
+        b = assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet = bcs)
         @test all(b[marked] .≈ 5.0)
 
         # the same constraint, spelled as a Tuple of pairs rather than pre-built constraints
-        b2 = assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet=(:bottom => (x -> 5.0),))
+        b2 = assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet = (:bottom => (x -> 5.0),))
         @test b2 ≈ b
 
         # no dirichlet at all is the unconstrained assembly
         plain = assemble(form(Wₕ, v -> innerₕ(uₕ, v)))
-        @test assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet=nothing) ≈ plain
+        @test assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet = nothing) ≈ plain
 
         # naming a label alone, with no values, is a usage error rather than a silent
         # no-op: a linear form has nowhere to read boundary values from.
-        @test_throws ArgumentError assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet=:bottom)
+        @test_throws ArgumentError assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet = :bottom)
         msg = try
-            assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet=:bottom)
+            assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet = :bottom)
         catch e
             sprint(showerror, e)
         end
@@ -905,7 +900,7 @@ end
 
         # and a value dirichlet does not know how to normalize is rejected before
         # anything is assembled
-        @test_throws ArgumentError assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet=3)
+        @test_throws ArgumentError assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet = 3)
     end
 
     @testset "dirichlet_components restriction" begin
@@ -914,7 +909,7 @@ end
         uv = Rₕ(Vₕ, (x -> sin(x[1]), x -> cos(x[2])))
         l = form(Vₕ, v -> innerₕ(uv(1), v(1)) + innerₕ(uv(2), v(2)))
 
-        b = assemble(l; dirichlet=bcs, dirichlet_components=1)
+        b = assemble(l; dirichlet = bcs, dirichlet_components = 1)
         plain = assemble(l)
 
         leaf1, leaf2 = view(b, 1:n), view(b, (n + 1):(2n))
@@ -925,7 +920,7 @@ end
         @test any(i -> marked[i] && leaf1[i] != view(plain, 1:n)[i], 1:n) # leaf 1 changed
 
         # without dirichlet_components, the same labels bind to both leaves
-        b_both = assemble(l; dirichlet=bcs)
+        b_both = assemble(l; dirichlet = bcs)
         @test all(view(b_both, (n + 1):(2n))[i] ≈ 5.0 for i in 1:n if marked[i])
     end
 
@@ -980,7 +975,7 @@ end
             Ωsmall = mesh(
                 domain(interval(0.0, 1.0) × interval(0.0, 1.0)),
                 (max(N ÷ 2, 3), max(N ÷ 2, 3)),
-                (true, true),
+                (true, true)
             )
             V = Bramble.CompositeGridSpace((gridspace(Ωbig), gridspace(Ωsmall)))
             uv = Rₕ(V, (x -> x[1] + x[2], x -> x[1] - x[2]))
@@ -1022,8 +1017,7 @@ end
         # combined: the minimum rejects one-off spikes, then a tolerance allows the
         # genuine floor-level noise that remains; the property under test is "constant",
         # not "bit-for-bit reproducible", which nightly's scheduler does not promise.
-        min_parallel_bytes(space, u1, u2) =
-            minimum(ntuple(_ -> parallel_bytes(space, u1, u2), 5))
+        min_parallel_bytes(space, u1, u2) = minimum(ntuple(_ -> parallel_bytes(space, u1, u2), 5))
         het = min_parallel_bytes(Vhet_alloc, uhet_alloc, uhet_alloc)
         homo = min_parallel_bytes(Vhomo, uhomo, uhomo)
         @test abs(het - homo) <= 256
@@ -1045,7 +1039,7 @@ end
             J(a) = sum(assemble(form(Wₕ, v -> innerₕ(Rₕ(Wₕ, x -> a * (x[1] + x[2])), v))))
             h = 1e-6
             @test isapprox(
-                ForwardDiff.derivative(J, 1.3), (J(1.3 + h) - J(1.3 - h)) / 2h; rtol=1e-5
+                ForwardDiff.derivative(J, 1.3), (J(1.3 + h) - J(1.3 - h)) / 2h; rtol = 1e-5
             )
         end
 
@@ -1068,7 +1062,7 @@ end
 
         @testset "Constrained Jacobian" begin
             bcs = dirichlet_constraints(Ωₕ, :bottom => (x -> 0.0))
-            res(u) = assemble(form(Wₕ, v -> innerₕ(element(Wₕ, u .* u), v)); dirichlet=bcs)
+            res(u) = assemble(form(Wₕ, v -> innerₕ(element(Wₕ, u .* u), v)); dirichlet = bcs)
             Jb = ForwardDiff.jacobian(res, u0)
             @test size(Jb) == (n, n)
 

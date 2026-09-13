@@ -22,7 +22,7 @@ See also: [`Mesh1D`](@ref), [`MeshnD`](@ref)
 
 Check whether the mesh has uniform spacing (within numerical tolerance `tol`).
 """
-function is_uniform(Ωₕ::AbstractMeshType{1}; tol=1e-10)
+function is_uniform(Ωₕ::AbstractMeshType{1}; tol = 1e-10)
     n = npoints(Ωₕ)
     if n <= 1
         return true
@@ -37,8 +37,8 @@ function is_uniform(Ωₕ::AbstractMeshType{1}; tol=1e-10)
     return true
 end
 
-function is_uniform(Ωₕ::AbstractMeshType{D}; tol=1e-10) where {D}
-    return all(i -> is_uniform(Ωₕ(i); tol=tol), 1:D)
+function is_uniform(Ωₕ::AbstractMeshType{D}; tol = 1e-10) where {D}
+    return all(i -> is_uniform(Ωₕ(i); tol = tol), 1:D)
 end
 
 #------------------------------------------------------------------------------------------#
@@ -95,12 +95,12 @@ Return the last valid index of `Ωₕ`.
 
 Iterate over all grid points of `Ωₕ`, returning coordinates `point(Ωₕ, idx)` for each index.
 """
-@inline function Base.iterate(Ωₕ::AbstractMeshType{1}, state=1)
+@inline function Base.iterate(Ωₕ::AbstractMeshType{1}, state = 1)
     state > npoints(Ωₕ) && return nothing
     return (point(Ωₕ, state), state + 1)
 end
 
-@inline function Base.iterate(Ωₕ::AbstractMeshType{D}, state=iterate(indices(Ωₕ))) where {D}
+@inline function Base.iterate(Ωₕ::AbstractMeshType{D}, state = iterate(indices(Ωₕ))) where {D}
     state === nothing && return nothing
     idx, next_state = state
     return (point(Ωₕ, idx), iterate(indices(Ωₕ), next_state))
@@ -153,8 +153,7 @@ locate_cell(Ωₕ, 0.35)  # returns 4 (interval [0.3, 0.4])
 ```
 """
 function locate_cell end
-@inline locate_cell(Ωₕ::AbstractMeshType{D}, x::AbstractVector) where {D} =
-    locate_cell(Ωₕ, Tuple(x))
+@inline locate_cell(Ωₕ::AbstractMeshType{D}, x::AbstractVector) where {D} = locate_cell(Ωₕ, Tuple(x))
 
 """
     normal_vector(Ωₕ::AbstractMeshType{D}, symbol::Symbol) -> NTuple{D, Float64}
@@ -183,8 +182,7 @@ boundary facet label (`:left`, `:right`, `:bottom`, `:top`, `:front`, `:back`).
 
 See also: [`boundary_symbols`](@ref).
 """
-@inline normal_vector(::AbstractMeshType{D}, symbol::Symbol) where {D} =
-    normal_vector(Val(D), symbol)
+@inline normal_vector(::AbstractMeshType{D}, symbol::Symbol) where {D} = normal_vector(Val(D), symbol)
 
 @inline function normal_vector(::Val{1}, symbol::Symbol)
     symbol === :left && return (-1.0,)
@@ -199,8 +197,8 @@ end
     symbol === :top && return (0.0, 1.0)
     throw(
         ArgumentError(
-            "Unknown 2D boundary symbol: :$symbol. Expected :left, :right, :bottom, or :top.",
-        ),
+        "Unknown 2D boundary symbol: :$symbol. Expected :left, :right, :bottom, or :top.",
+    ),
     )
 end
 
@@ -213,7 +211,7 @@ end
     symbol === :top && return (0.0, 0.0, 1.0)
     throw(
         ArgumentError(
-            "Unknown 3D boundary symbol: :$symbol. Expected :left, :right, :bottom, :top, :front, or :back.",
-        ),
+        "Unknown 3D boundary symbol: :$symbol. Expected :left, :right, :bottom, :top, :front, or :back.",
+    ),
     )
 end

@@ -1,29 +1,29 @@
 using Test
 using Bramble
 using Bramble:
-    IdentityOperator,
-    TrialFunction,
-    TestFunction,
-    IndexedTrialFunction,
-    IndexedTestFunction,
-    LazyOp,
-    BilinearProduct,
-    LinearProduct,
-    InnerH,
-    InnerPlus,
-    SourceFunction,
-    SourceVector,
-    SourceConstant,
-    local_stencil,
-    resolve_ast,
-    is_symbolic,
-    source_number,
-    inner_plus,
-    compute_weight,
-    weights,
-    Innerh,
-    Innerplus,
-    values
+               IdentityOperator,
+               TrialFunction,
+               TestFunction,
+               IndexedTrialFunction,
+               IndexedTestFunction,
+               LazyOp,
+               BilinearProduct,
+               LinearProduct,
+               InnerH,
+               InnerPlus,
+               SourceFunction,
+               SourceVector,
+               SourceConstant,
+               local_stencil,
+               resolve_ast,
+               is_symbolic,
+               source_number,
+               inner_plus,
+               compute_weight,
+               weights,
+               Innerh,
+               Innerplus,
+               values
 
 # The inner products, from construction through to the stencil they evaluate to.
 #
@@ -41,7 +41,7 @@ using Bramble:
     Ωₕ = mesh(
         domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
         (5, 6),
-        (true, false),
+        (true, false)
     )
     Wₕ = gridspace(Ωₕ)
     id = IdentityOperator(Wₕ)
@@ -79,14 +79,14 @@ using Bramble:
         @test compute_weight(InnerH(), Wₕ, I, lin) == weights(Wₕ, Innerh())[lin]
         for dim in 1:2
             @test compute_weight(InnerPlus{dim}(), Wₕ, I, lin) ==
-                weights(Wₕ, Innerplus(), dim)[lin]
+                  weights(Wₕ, Innerplus(), dim)[lin]
         end
 
         # and the product's own stencil picks up whichever of them its type names
         for (node, wt) in (
             (innerₕ(id, id), weights(Wₕ, Innerh())[lin]),
             (inner₊ₓ(id, id), weights(Wₕ, Innerplus(), 1)[lin]),
-            (inner₊ᵧ(id, id), weights(Wₕ, Innerplus(), 2)[lin]),
+            (inner₊ᵧ(id, id), weights(Wₕ, Innerplus(), 2)[lin])
         )
             st = local_stencil(node, Wₕ, I, nothing, lin)
             @test only(st)[3] ≈ wt
@@ -96,8 +96,7 @@ using Bramble:
     @testset "Left operands" begin
         # Each builds a LinearProduct wrapping the left operand in the right source node,
         # which is what lets a right-hand side be assembled.
-        for (mk, T) in
-            (((x -> x[1] + 1), SourceFunction), (3.5, SourceConstant), (uₕ, SourceVector))
+        for (mk, T) in (((x -> x[1] + 1), SourceFunction), (3.5, SourceConstant), (uₕ, SourceVector))
             for f in (innerₕ, inner₊, inner₊ₓ, inner₊ᵧ, inner₊₂)
                 p = f(mk, v)
                 @test p isa LinearProduct
@@ -170,18 +169,18 @@ using Bramble:
         # `which` is checked by file rather than by line, which moves.
         numeric_file(T) = basename(String(which(inner₊, T).file))
 
-        @test numeric_file(Tuple{typeof(uₕ),typeof(uₕ)}) == "inner_product.jl"
-        @test numeric_file(Tuple{typeof((uₕ, uₕ)),typeof((uₕ, uₕ))}) == "inner_product.jl"
+        @test numeric_file(Tuple{typeof(uₕ), typeof(uₕ)}) == "inner_product.jl"
+        @test numeric_file(Tuple{typeof((uₕ, uₕ)), typeof((uₕ, uₕ))}) == "inner_product.jl"
 
         grads = map(∇₋ₕ, (IndexedTrialFunction{2}(1), IndexedTrialFunction{2}(2)))
-        @test numeric_file(Tuple{typeof(∇₋ₕ(u)),typeof(∇₋ₕ(v))}) == "inner.jl"
-        @test numeric_file(Tuple{typeof(grads),typeof(grads)}) == "inner.jl"
+        @test numeric_file(Tuple{typeof(∇₋ₕ(u)), typeof(∇₋ₕ(v))}) == "inner.jl"
+        @test numeric_file(Tuple{typeof(grads), typeof(grads)}) == "inner.jl"
 
         # The restriction itself: a tuple of grid functions is not a tuple of tuples, and
         # that is the only reason the symbolic tuple overload does not swallow the numeric
         # one. Widen it to `NTuple{N,Any}` and both of these flip.
-        @test !(typeof((uₕ, uₕ)) <: NTuple{2,<:Tuple})
-        @test typeof(grads) <: NTuple{2,<:Tuple}
+        @test !(typeof((uₕ, uₕ)) <: NTuple{2, <:Tuple})
+        @test typeof(grads) <: NTuple{2, <:Tuple}
 
         # And the two families really do return different kinds of thing, which is what
         # makes a mis-resolution worth catching.

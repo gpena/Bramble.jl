@@ -116,10 +116,8 @@ Only called from the interior core of [`visit_bilinear_stencil`](@ref), where
 `lin_indices` for every entry the term's stencil can produce. An `AbsoluteColumn` names a
 source column outright either way, matching `_trial_column`.
 """
-Base.@propagate_inbounds _trial_column_unguarded(lin_indices, I::CartesianIndex, off_u) =
-    lin_indices[I + CartesianIndex(off_u)]
-@inline _trial_column_unguarded(lin_indices, I::CartesianIndex, off_u::AbsoluteColumn) =
-    off_u.col
+Base.@propagate_inbounds _trial_column_unguarded(lin_indices, I::CartesianIndex, off_u) = lin_indices[I + CartesianIndex(off_u)]
+@inline _trial_column_unguarded(lin_indices, I::CartesianIndex, off_u::AbsoluteColumn) = off_u.col
 
 # --- one traversal, pluggable sinks (gpena/Bramble.jl#50) -------------------------- #
 
@@ -209,7 +207,7 @@ assembly hot path.
 - `Tuple{Int,Int}`: The `(row, col)` to write, or `(0, 0)` to skip the entry.
 """
 Base.@propagate_inbounds function _entry_target(
-    lin_indices, I::CartesianIndex, off_u, off_v, row_offset::Int, col_offset::Int
+        lin_indices, I::CartesianIndex, off_u, off_v, row_offset::Int, col_offset::Int
 )
     Iv = I + CartesianIndex(off_v)
     checkbounds(Bool, lin_indices, Iv) || return (0, 0)
@@ -230,15 +228,15 @@ be merged from three return points: measured against the hand-written loop it co
 phi nodes, 4 integer adds and 3 comparisons per entry, with identical loads, stores and calls.
 """
 Base.@propagate_inbounds function _step_entry!(
-    sink::SINK,
-    lin_indices,
-    I,
-    off_u,
-    off_v,
-    weight,
-    row_offset::Int,
-    col_offset::Int,
-    slot::Int,
+        sink::SINK,
+        lin_indices,
+        I,
+        off_u,
+        off_v,
+        weight,
+        row_offset::Int,
+        col_offset::Int,
+        slot::Int
 ) where {SINK}
     Iv = I + CartesianIndex(off_v)
     checkbounds(Bool, lin_indices, Iv) || return false
@@ -262,15 +260,15 @@ accepts its entry, so it has nothing to answer back and the caller advances `slo
 unconditionally rather than being told to.
 """
 Base.@propagate_inbounds function _step_entry_unguarded!(
-    sink::SINK,
-    lin_indices,
-    I,
-    off_u,
-    off_v,
-    weight,
-    row_offset::Int,
-    col_offset::Int,
-    slot::Int,
+        sink::SINK,
+        lin_indices,
+        I,
+        off_u,
+        off_v,
+        weight,
+        row_offset::Int,
+        col_offset::Int,
+        slot::Int
 ) where {SINK}
     if _sink_needs_coordinates(sink)
         Iv = I + CartesianIndex(off_v)
@@ -291,7 +289,7 @@ end
 # size from 64^2 to 1024^2, because it defeats the unrolling direct iteration gets. Both
 # forms are selected at compile time, so neither carries the other's cost.
 Base.@propagate_inbounds function _visit_entries(
-    sink::SINK, stencil, lin_indices, I, row_offset::Int, col_offset::Int, slot::Int
+        sink::SINK, stencil, lin_indices, I, row_offset::Int, col_offset::Int, slot::Int
 ) where {SINK}
     if _sink_dedups(sink)
         for k in eachindex(stencil)
@@ -316,7 +314,7 @@ end
 # give. Kept as its own loop rather than branching inside `_visit_entries` per entry, which
 # would reintroduce exactly the per-entry branch peeling exists to remove.
 Base.@propagate_inbounds function _visit_entries_unguarded(
-    sink::SINK, stencil, lin_indices, I, row_offset::Int, col_offset::Int, slot::Int
+        sink::SINK, stencil, lin_indices, I, row_offset::Int, col_offset::Int, slot::Int
 ) where {SINK}
     if _sink_dedups(sink)
         for k in eachindex(stencil)
@@ -370,8 +368,7 @@ end
 # guarded loop over the whole grid this file always ran before -- unchanged behaviour, not a
 # regression, for exactly the sizes where peeling would not be safe.
 
-@inline _interior_range(r::AbstractUnitRange{Int}, margin::Int) =
-    (first(r) + margin):(last(r) - margin)
+@inline _interior_range(r::AbstractUnitRange{Int}, margin::Int) = (first(r) + margin):(last(r) - margin)
 @inline _low_rim(r::AbstractUnitRange{Int}, margin::Int) = first(r):(first(r) + margin - 1)
 @inline _high_rim(r::AbstractUnitRange{Int}, margin::Int) = (last(r) - margin + 1):last(r)
 # The unrestricted case in `_boundary_shell_slabs` below, normalized to the same
@@ -382,8 +379,7 @@ end
 # this function allocate 672 B per call instead of 0.
 @inline _full_range(r::AbstractUnitRange{Int}) = first(r):last(r)
 
-@inline _peelable(ax::NTuple{D,AbstractUnitRange{Int}}, margin::Int) where {D} =
-    all(r -> 2 * margin <= length(r), ax)
+@inline _peelable(ax::NTuple{D, AbstractUnitRange{Int}}, margin::Int) where {D} = all(r -> 2 * margin <= length(r), ax)
 
 # The `2D` non-overlapping slabs partitioning `indices(Ωₕ)`'s rim, described above. `Val(2D)`
 # and the inner `Val(D)` are both resolved from `term`/`sp`'s own type parameters, so both
@@ -391,7 +387,7 @@ end
 # `_define_vectorial_alias`'s comment (`space/operators/stencil.jl`) warns a `Val(i)` built
 # from a loop variable would.
 @inline function _boundary_shell_slabs(
-    ax::NTuple{D,AbstractUnitRange{Int}}, margin::Int
+        ax::NTuple{D, AbstractUnitRange{Int}}, margin::Int
 ) where {D}
     return ntuple(Val(2D)) do s
         d = (s + 1) >>> 1
@@ -410,15 +406,15 @@ end
 
 # One point's stencil, guarded -- shared by the whole-grid fallback and every boundary slab.
 @inline function _visit_guarded_region!(
-    sink::SINK,
-    term::TERM,
-    sp,
-    mesh_markers,
-    lin_indices,
-    region,
-    row_offset::Int,
-    col_offset::Int,
-) where {SINK,TERM}
+        sink::SINK,
+        term::TERM,
+        sp,
+        mesh_markers,
+        lin_indices,
+        region,
+        row_offset::Int,
+        col_offset::Int
+) where {SINK, TERM}
     @inbounds for I in region
         lin_idx = lin_indices[I]
         stencil = local_stencil(term, sp, I, mesh_markers, lin_idx)
@@ -430,15 +426,15 @@ end
 
 # One point's stencil, unguarded -- the interior core, safe only where `_peelable` held.
 @inline function _visit_interior!(
-    sink::SINK,
-    term::TERM,
-    sp,
-    mesh_markers,
-    lin_indices,
-    interior,
-    row_offset::Int,
-    col_offset::Int,
-) where {SINK,TERM}
+        sink::SINK,
+        term::TERM,
+        sp,
+        mesh_markers,
+        lin_indices,
+        interior,
+        row_offset::Int,
+        col_offset::Int
+) where {SINK, TERM}
     @inbounds for I in interior
         lin_idx = lin_indices[I]
         stencil = local_stencil(term, sp, I, mesh_markers, lin_idx)
@@ -493,13 +489,13 @@ only [`DiagonalReplaySink`](@ref) needs this, pairing itself (interior) with an 
 See also: [`allocate_system_matrix`](@ref), [`add_to_sparse!`](@ref).
 """
 @inline function visit_bilinear_stencil(
-    interior_sink::SINK1,
-    boundary_sink::SINK2,
-    term::TERM,
-    sp,
-    row_offset::Int,
-    col_offset::Int,
-) where {SINK1,SINK2,TERM}
+        interior_sink::SINK1,
+        boundary_sink::SINK2,
+        term::TERM,
+        sp,
+        row_offset::Int,
+        col_offset::Int
+) where {SINK1, SINK2, TERM}
     Ωₕ = mesh(sp)
     mesh_markers = markers(Ωₕ)
     grid_inds = indices(Ωₕ)
@@ -522,7 +518,7 @@ See also: [`allocate_system_matrix`](@ref), [`add_to_sparse!`](@ref).
             lin_indices,
             interior,
             row_offset,
-            col_offset,
+            col_offset
         )
         @inbounds for slab in _boundary_shell_slabs(ax, margin)
             _visit_guarded_region!(
@@ -533,7 +529,7 @@ See also: [`allocate_system_matrix`](@ref), [`add_to_sparse!`](@ref).
                 lin_indices,
                 slab,
                 row_offset,
-                col_offset,
+                col_offset
             )
         end
     else
@@ -545,7 +541,7 @@ See also: [`allocate_system_matrix`](@ref), [`add_to_sparse!`](@ref).
             lin_indices,
             grid_inds,
             row_offset,
-            col_offset,
+            col_offset
         )
     end
     return boundary_sink
@@ -553,8 +549,8 @@ end
 
 # The ordinary one-sink call every caller but the diagonal replay path uses: the same sink
 # plays both roles, so `visit_bilinear_stencil(sink, ...)` behaves exactly as it always has.
-@inline visit_bilinear_stencil(sink, term, sp, row_offset::Int, col_offset::Int) =
-    visit_bilinear_stencil(sink, sink, term, sp, row_offset, col_offset)
+@inline visit_bilinear_stencil(sink, term, sp, row_offset::Int, col_offset::Int) = visit_bilinear_stencil(
+    sink, sink, term, sp, row_offset, col_offset)
 
 # --- the sinks --------------------------------------------------------------------- #
 
@@ -616,10 +612,10 @@ end
 @noinline function _throw_missing_pattern_entry(term)
     throw(
         ArgumentError(
-            "assembling $(typeof(term)) reached a matrix entry outside its preallocated " *
-            "sparsity pattern. `A` was not built by `allocate_system_matrix` for this exact " *
-            "form, or the form's `ast` changed after `A` was built.",
-        ),
+        "assembling $(typeof(term)) reached a matrix entry outside its preallocated " *
+        "sparsity pattern. `A` was not built by `allocate_system_matrix` for this exact " *
+        "form, or the form's `ast` changed after `A` was built.",
+    ),
     )
 end
 
@@ -643,14 +639,14 @@ The search is the expensive half of assembly, which is why it is done once and r
 
 See also: [`visit_bilinear_stencil`](@ref), [`NzvalSegment`](@ref).
 """
-struct RecordSink{M<:SparseMatrixCSC,TERM}
+struct RecordSink{M <: SparseMatrixCSC, TERM}
     A::M
     term::TERM
     point_ptr::Vector{Int}
     positions::Vector{Int}
 end
-@inline _sink_point!(sink::RecordSink, lin_idx::Int, ::CartesianIndex) =
-    (@inbounds sink.point_ptr[lin_idx] = length(sink.positions) + 1; 0)
+@inline _sink_point!(sink::RecordSink, lin_idx::Int, ::CartesianIndex) = (
+    @inbounds sink.point_ptr[lin_idx] = length(sink.positions) + 1; 0)
 @inline function _sink_entry!(sink::RecordSink, row::Int, col::Int, weight, ::Int)
     pos = _find_nzval_position(sink.A, row, col)
     pos == 0 && _throw_missing_pattern_entry(sink.term)
@@ -677,16 +673,15 @@ sink. Carrying it as a mutable field measured about 20% slower on the cheapest r
 
 See also: [`visit_bilinear_stencil`](@ref).
 """
-struct ReplaySink{M<:SparseMatrixCSC}
+struct ReplaySink{M <: SparseMatrixCSC}
     A::M
     point_ptr::Vector{Int}
     positions::Vector{Int}
 end
-@inline _sink_point!(sink::ReplaySink, lin_idx::Int, ::CartesianIndex) =
-    @inbounds(sink.point_ptr[lin_idx])
+@inline _sink_point!(sink::ReplaySink, lin_idx::Int, ::CartesianIndex) = @inbounds(sink.point_ptr[lin_idx])
 @inline _sink_needs_coordinates(::ReplaySink) = false
 Base.@propagate_inbounds function _sink_entry!(
-    sink::ReplaySink, ::Int, ::Int, weight, slot::Int
+        sink::ReplaySink, ::Int, ::Int, weight, slot::Int
 )
     @inbounds sink.A.nzval[sink.positions[slot]] += weight
     return nothing
@@ -725,9 +720,9 @@ runs at all.
 
 See also: [`visit_bilinear_stencil`](@ref), `_replay_segment!`.
 """
-mutable struct DiagonalReplaySink{M<:SparseMatrixCSC,D,R}
+mutable struct DiagonalReplaySink{M <: SparseMatrixCSC, D, R}
     const A::M
-    const interior::CartesianIndices{D,R}
+    const interior::CartesianIndices{D, R}
     const base::Vector{Int}
     const stride::Vector{Int}
     const P::Int
@@ -750,8 +745,8 @@ end
 # `DiagonalReplaySink`/`DiagonalSegment` built from it allocate (measured 144-384 B per
 # replay before this was named).
 @inline function _interior_rank(
-    interior::CartesianIndices{D,R}, I::CartesianIndex{D}
-) where {D,R}
+        interior::CartesianIndices{D, R}, I::CartesianIndex{D}
+) where {D, R}
     ax = interior.indices
     n = 0
     stride = 1
@@ -769,7 +764,7 @@ end
     return n * sink.P
 end
 Base.@propagate_inbounds function _sink_entry!(
-    sink::DiagonalReplaySink, ::Int, ::Int, weight, slot::Int
+        sink::DiagonalReplaySink, ::Int, ::Int, weight, slot::Int
 )
     n = sink.n
     k0 = slot - n * sink.P

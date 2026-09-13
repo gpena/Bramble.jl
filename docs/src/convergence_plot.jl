@@ -34,11 +34,11 @@ _next_convergence_plot_id() = "bramble_cp_$(_CONVERGENCE_PLOT_COUNTER[] += 1)"
 spatial dimension.
 """
 function convergence_plot(
-    series;
-    title::AbstractString="",
-    reference_slope::Real=2,
-    width::Int=480,
-    height::Int=340,
+        series;
+        title::AbstractString = "",
+        reference_slope::Real = 2,
+        width::Int = 480,
+        height::Int = 340
 )
     div_id = _next_convergence_plot_id()
 
@@ -56,7 +56,7 @@ function convergence_plot(
     mode: 'markers',
     type: 'scatter',
     marker: { color: "$color", size: 8 },
-  }""",
+  }"""
         )
     end
 
@@ -78,7 +78,7 @@ function convergence_plot(
   mode: 'lines',
   type: 'scatter',
   line: { dash: 'dash', width: 1.5, color: 'rgba(128,128,128,0.7)' },
-}""",
+}"""
     )
 
     title_js = isempty(title) ? "''" : "'$title'"

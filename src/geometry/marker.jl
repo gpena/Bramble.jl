@@ -18,7 +18,7 @@ end
 
 Type alias for `Pair{Symbol, F}` used to specify region markers (e.g. `:boundary => :left`).
 """
-const MarkerPair{F} = Pair{Symbol,F}
+const MarkerPair{F} = Pair{Symbol, F}
 
 """
     label(m::Marker) -> Symbol
@@ -53,7 +53,7 @@ are each an unrolled, zero-allocation sweep to iterate.
 
 See also: [`markers`](@ref), [`symbols`](@ref), [`tuples`](@ref), [`conditions`](@ref).
 """
-struct DomainMarkers{ST<:Tuple,TT<:Tuple,CT<:Tuple}
+struct DomainMarkers{ST <: Tuple, TT <: Tuple, CT <: Tuple}
     symbols::ST
     tuples::TT
     conditions::CT
@@ -103,24 +103,22 @@ end
 
 Return an iterator yielding labels of all single-symbol markers.
 """
-@inline label_symbols(domain_markers::DomainMarkers) =
-    (label(marker)::Symbol for marker in symbols(domain_markers))
+@inline label_symbols(domain_markers::DomainMarkers) = (label(marker)::Symbol for marker in symbols(domain_markers))
 
 """
     label_tuples(domain_markers::DomainMarkers)
 
 Return an iterator yielding labels of all multi-symbol markers.
 """
-@inline label_tuples(domain_markers::DomainMarkers) =
-    (label(marker)::Symbol for marker in tuples(domain_markers))
+@inline label_tuples(domain_markers::DomainMarkers) = (label(marker)::Symbol for marker in tuples(domain_markers))
 
 """
     label_conditions(domain_markers::DomainMarkers)
 
 Return an iterator yielding labels of all condition predicate markers.
 """
-@inline label_conditions(domain_markers::DomainMarkers) =
-    (label(marker)::Symbol for marker in conditions(domain_markers))
+@inline label_conditions(domain_markers::DomainMarkers) = (label(marker)::Symbol
+for marker in conditions(domain_markers))
 
 """
     markers(space_set::CartesianProduct, pairs::Pair...) -> DomainMarkers
@@ -145,8 +143,7 @@ length(symbols(m)) == 1 && length(conditions(m)) == 1
 true
 ```
 """
-@inline markers(space_set::CartesianProduct, pairs::Pair...) =
-    _create_generic_markers(pairs...)
+@inline markers(space_set::CartesianProduct, pairs::Pair...) = _create_generic_markers(pairs...)
 @inline markers(
     space_set::CartesianProduct, time_set::CartesianProduct{1}, pairs::Pair...
 ) = _create_generic_markers(pairs...)
@@ -165,7 +162,7 @@ function _extract_identifier_markers(pairs::Tuple)
     for p in pairs
         if p.second isa Symbol
             push!(symbols, Marker(p.first, p.second))
-        elseif p.second isa NTuple{N,Symbol} where {N}
+        elseif p.second isa NTuple{N, Symbol} where {N}
             push!(tuples, Marker(p.first, Set(p.second)))
         end
     end
@@ -190,10 +187,8 @@ end
 end
 
 @inline process_identifier(::CartesianProduct, identifier::Symbol) = identifier
-@inline process_identifier(::CartesianProduct, identifier::NTuple{N,Symbol}) where {N} =
-    Set(identifier)
-@inline process_identifier(::CartesianProduct, identifier::AbstractVector{Symbol}) =
-    Set(identifier)
+@inline process_identifier(::CartesianProduct, identifier::NTuple{N, Symbol}) where {N} = Set(identifier)
+@inline process_identifier(::CartesianProduct, identifier::AbstractVector{Symbol}) = Set(identifier)
 
 """
     EvaluatedDomainMarkers(original_markers::DomainMarkers, evaluation_time::Number)
@@ -204,7 +199,7 @@ Time-evaluated wrapper representing a time-dependent [`DomainMarkers`](@ref) col
 - `original_markers`: Underlying [`DomainMarkers`](@ref) object.
 - `evaluation_time`: Evaluation timestamp `t`.
 """
-struct EvaluatedDomainMarkers{M<:DomainMarkers,T<:Number}
+struct EvaluatedDomainMarkers{M <: DomainMarkers, T <: Number}
     original_markers::M
     evaluation_time::T
 end
@@ -247,18 +242,16 @@ Zero-allocation, like [`label_identifiers(::DomainMarkers)`](@ref).
 @inline label_identifiers(edm::EvaluatedDomainMarkers) = (
     map(label, symbols(edm))...,
     map(label, tuples(edm))...,
-    map(label, conditions(edm))...,
+    map(label, conditions(edm))...
 )
 
 @inline labels(edm::EvaluatedDomainMarkers) = label_identifiers(edm)
 
-@inline label_symbols(edm::EvaluatedDomainMarkers) =
-    (label(m)::Symbol for m in symbols(edm))
+@inline label_symbols(edm::EvaluatedDomainMarkers) = (label(m)::Symbol for m in symbols(edm))
 
 @inline label_tuples(edm::EvaluatedDomainMarkers) = (label(m)::Symbol for m in tuples(edm))
 
-@inline label_conditions(edm::EvaluatedDomainMarkers) =
-    (label(m)::Symbol for m in conditions(edm))
+@inline label_conditions(edm::EvaluatedDomainMarkers) = (label(m)::Symbol for m in conditions(edm))
 
 @inline Base.length(edm::EvaluatedDomainMarkers) = length(edm.original_markers)
 @inline Base.isempty(edm::EvaluatedDomainMarkers) = isempty(edm.original_markers)
@@ -319,10 +312,10 @@ function Base.show(io::IO, ::MIME"text/plain", dm::DomainMarkers)
             pp_double_indent = with_indent(pp, 2)
             for m in dm.tuples
                 print_indent(pp_double_indent)
-                printstyled(io, ":$(label(m))"; color=:green)
+                printstyled(io, ":$(label(m))"; color = :green)
                 print(io, " => (")
                 print_joined(pp, sort!(collect(identifier(m)))) do s
-                    return printstyled(io, ":$s"; color=:blue)
+                    return printstyled(io, ":$s"; color = :blue)
                 end
                 println(io, ")")
             end
@@ -333,9 +326,9 @@ function Base.show(io::IO, ::MIME"text/plain", dm::DomainMarkers)
             pp_double_indent = with_indent(pp, 2)
             for m in dm.conditions
                 print_indent(pp_double_indent)
-                printstyled(io, ":$(label(m))"; color=:green)
+                printstyled(io, ":$(label(m))"; color = :green)
                 print(io, " => ")
-                printstyled(io, "<function>"; color=:magenta)
+                printstyled(io, "<function>"; color = :magenta)
                 println(io)
             end
         end

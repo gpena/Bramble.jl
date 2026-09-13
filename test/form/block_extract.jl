@@ -2,14 +2,14 @@ using Test
 using InteractiveUtils: subtypes
 using Bramble
 using Bramble:
-    IndexedTrialFunction,
-    IndexedTestFunction,
-    TrialFunction,
-    TestFunction,
-    trial_component_or_nothing,
-    test_component_or_nothing,
-    block_of,
-    restrict_to
+               IndexedTrialFunction,
+               IndexedTestFunction,
+               TrialFunction,
+               TestFunction,
+               trial_component_or_nothing,
+               test_component_or_nothing,
+               block_of,
+               restrict_to
 
 # Reading which block of a coupled form a term belongs to.
 #
@@ -49,7 +49,7 @@ using Bramble:
         # than inherit a fallback that looks like an answer.
         u, v = TrialFunction{2}(), TestFunction{2}()
         iu, iv = IndexedTrialFunction{2}(1), IndexedTestFunction{2}(2)
-        sf = Bramble.SourceFunction{2,typeof(sin)}(sin)
+        sf = Bramble.SourceFunction{2, typeof(sin)}(sin)
 
         # every member of the union, wrapped once, for the two component queries
         for wrap in (D₋ₓ, D₊ₓ, Dcₓ, Dstar₊ₓ, Dₕₓ, jumpₓ, M₋ₓ, M₊ₓ)
@@ -103,8 +103,7 @@ using Bramble:
         # So the membership is asserted here rather than maintained by hand. Before the
         # collapse this test could not have been written: there was nothing to compare a
         # node against, only thirteen separate registrations to remember.
-        concrete(T) =
-            isabstracttype(T) ? reduce(vcat, concrete.(subtypes(T)); init=Type[]) : [T]
+        concrete(T) = isabstracttype(T) ? reduce(vcat, concrete.(subtypes(T)); init = Type[]) : [T]
         nodes = concrete(Bramble.LazyOp)
         @test length(nodes) >= 25
 

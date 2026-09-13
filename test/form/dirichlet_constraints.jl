@@ -1,18 +1,18 @@
 import Bramble:
-    CartesianProduct,
-    DirichletConstraint,
-    label_conditions,
-    symbols,
-    labels,
-    DomainMarkers,
-    tuples,
-    conditions,
-    identifier,
-    EvaluatedDomainMarkers,
-    label,
-    markers,
-    point,
-    index_in_marker
+                CartesianProduct,
+                DirichletConstraint,
+                label_conditions,
+                symbols,
+                labels,
+                DomainMarkers,
+                tuples,
+                conditions,
+                identifier,
+                EvaluatedDomainMarkers,
+                label,
+                markers,
+                point,
+                index_in_marker
 using Supposition
 
 @testset "Dirichlet constraints" begin
@@ -151,7 +151,7 @@ using LinearAlgebra: I as LinearAlgebraI
     Ωₕ = mesh(
         domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom, :top => :top),
         (5, 6),
-        (true, true),
+        (true, true)
     )
     Wₕ = gridspace(Ωₕ)
     Vₕ = gridspace(Ωₕ, Val(3))
@@ -189,6 +189,7 @@ using LinearAlgebra: I as LinearAlgebraI
         # a composite space is the scalar one repeated per component: the marked rows are
         # the marked scalar rows shifted by each component's offset
         for c in 0:2, i in 1:nW
+
             row = c * nW + i
             if marked[i]
                 @test A[row, row] == 1.0
@@ -218,8 +219,9 @@ using LinearAlgebra: I as LinearAlgebraI
         # The Stokes-style case this exists for: constrain one field, leave another free.
         @testset "Matrix (single leaf)" begin
             A = _eye(nV)
-            @test dirichlet_bc!(A, Vₕ, :bottom; components=1) === A
+            @test dirichlet_bc!(A, Vₕ, :bottom; components = 1) === A
             for c in 0:2, i in 1:nW
+
                 row = c * nW + i
                 if c == 0 && marked[i]
                     @test A[row, row] == 1.0
@@ -235,8 +237,9 @@ using LinearAlgebra: I as LinearAlgebraI
 
         @testset "Matrix (multiple leaves)" begin
             A = _eye(nV)
-            @test dirichlet_bc!(A, Vₕ, :bottom; components=(1, 3)) === A
+            @test dirichlet_bc!(A, Vₕ, :bottom; components = (1, 3)) === A
             for c in 0:2, i in 1:nW
+
                 row = c * nW + i
                 if c in (0, 2) && marked[i]
                     @test A[row, row] == 1.0
@@ -250,7 +253,7 @@ using LinearAlgebra: I as LinearAlgebraI
         @testset "Vector (single leaf)" begin
             bcs = dirichlet_constraints(Ωₕ, :bottom => (x -> 7.0))
             w = fill(-1.0, nV)
-            @test dirichlet_bc!(w, Vₕ, bcs, :bottom; components=2) === w
+            @test dirichlet_bc!(w, Vₕ, bcs, :bottom; components = 2) === w
             for c in 0:2
                 block = view(w, (c * nW + 1):((c + 1) * nW))
                 if c == 1
@@ -265,7 +268,7 @@ using LinearAlgebra: I as LinearAlgebraI
         @testset "Unrestricted default" begin
             A1, A2 = _eye(nV), _eye(nV)
             dirichlet_bc!(A1, Vₕ, :bottom)
-            dirichlet_bc!(A2, Vₕ, :bottom; components=nothing)
+            dirichlet_bc!(A2, Vₕ, :bottom; components = nothing)
             @test A1 == A2
         end
 
@@ -273,9 +276,10 @@ using LinearAlgebra: I as LinearAlgebraI
             A = Matrix(_eye(nV))
             F = fill(2.0, nV)
             A0 = copy(A)
-            symmetrize!(A, F, Vₕ, :bottom; components=1)
+            symmetrize!(A, F, Vₕ, :bottom; components = 1)
             # only leaf 1's marked rows/columns could have changed anything
             for c in 1:2, i in 1:nW
+
                 row = c * nW + i
                 @test A[:, row] == A0[:, row]
             end
@@ -283,20 +287,20 @@ using LinearAlgebra: I as LinearAlgebraI
 
         @testset "Out-of-range component error" begin
             A = _eye(nV)
-            @test_throws ArgumentError dirichlet_bc!(A, Vₕ, :bottom; components=4)
-            @test_throws ArgumentError dirichlet_bc!(A, Vₕ, :bottom; components=0)
-            @test_throws ArgumentError dirichlet_bc!(A, Vₕ, :bottom; components=(1, 5))
+            @test_throws ArgumentError dirichlet_bc!(A, Vₕ, :bottom; components = 4)
+            @test_throws ArgumentError dirichlet_bc!(A, Vₕ, :bottom; components = 0)
+            @test_throws ArgumentError dirichlet_bc!(A, Vₕ, :bottom; components = (1, 5))
         end
 
         @testset "Scalar single leaf" begin
             A = _eye(nW)
-            @test dirichlet_bc!(A, Wₕ, :bottom; components=1) === A   # a no-op-equivalent ok
-            @test_throws ArgumentError dirichlet_bc!(_eye(nW), Wₕ, :bottom; components=2)
+            @test dirichlet_bc!(A, Wₕ, :bottom; components = 1) === A   # a no-op-equivalent ok
+            @test_throws ArgumentError dirichlet_bc!(_eye(nW), Wₕ, :bottom; components = 2)
         end
 
         @testset "Component argument type" begin
             @test_throws ErrorException dirichlet_bc!(
-                _eye(nV), Vₕ, :bottom; components=:left
+                _eye(nV), Vₕ, :bottom; components = :left
             )
         end
 
@@ -311,7 +315,7 @@ using LinearAlgebra: I as LinearAlgebraI
             @test nVn == 3nW
 
             A = _eye(nVn)
-            @test dirichlet_bc!(A, Vn, :bottom; components=3) === A
+            @test dirichlet_bc!(A, Vn, :bottom; components = 3) === A
             for i in 1:nW
                 row = 2nW + i          # leaf 3's offset, per leaf_spaces_offsets
                 if marked[i]
@@ -360,7 +364,7 @@ using LinearAlgebra: I as LinearAlgebraI
                 interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom, :left => :left
             ),
             (5, 5),
-            (true, true),
+            (true, true)
         )
         Wo = gridspace(Ωo)
         no = ndofs(Wo)
@@ -408,7 +412,7 @@ using LinearAlgebra: I as LinearAlgebraI
         Ωₕ = mesh(
             domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
             (6, 6),
-            (true, true),
+            (true, true)
         )
         Wₕ = gridspace(Ωₕ)
         Vₕ = gridspace(Ωₕ, Val(3))
@@ -431,7 +435,7 @@ using LinearAlgebra: I as LinearAlgebraI
         Iₜ = interval(0.0, 1.0)
         for src in (set(Ωₕ), Ωₕ, Wₕ, Vₕ)
             @test dirichlet_constraints(src, Iₜ, :bottom => ((x, t) -> t * x[1])) isa
-                DirichletConstraint
+                  DirichletConstraint
         end
     end
 
@@ -442,7 +446,7 @@ using LinearAlgebra: I as LinearAlgebraI
         Ωₕ = mesh(
             domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
             (5, 5),
-            (true, true),
+            (true, true)
         )
         Wₕ = gridspace(Ωₕ)
         n = ndofs(Wₕ)
@@ -488,7 +492,7 @@ using LinearAlgebra: I as LinearAlgebraI
             Ω = mesh(
                 domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
                 (n, n),
-                (true, true),
+                (true, true)
             )
             W, V = gridspace(Ω), gridspace(Ω, Val(3))
             bcs = dirichlet_constraints(Ω, :bottom => (x -> 7.0))
@@ -501,22 +505,18 @@ using LinearAlgebra: I as LinearAlgebraI
             dirichlet_bc!(vw, W, bcs, :bottom)
             dirichlet_bc!(vv, V, bcs, :bottom)
 
-            dirichlet_bc!(Av, V, :bottom; components=1)
-            dirichlet_bc!(vv, V, bcs, :bottom; components=1)
+            dirichlet_bc!(Av, V, :bottom; components = 1)
+            dirichlet_bc!(vv, V, bcs, :bottom; components = 1)
 
             return (
-                matrix_scalar=@allocated(dirichlet_bc!(Aw, W, :bottom)),
-                matrix_composite=@allocated(dirichlet_bc!(Av, V, :bottom)),
-                vector_scalar=@allocated(dirichlet_bc!(vw, W, bcs, :bottom)),
-                vector_composite=@allocated(dirichlet_bc!(vv, V, bcs, :bottom)),
+                matrix_scalar = @allocated(dirichlet_bc!(Aw, W, :bottom)),
+                matrix_composite = @allocated(dirichlet_bc!(Av, V, :bottom)),
+                vector_scalar = @allocated(dirichlet_bc!(vw, W, bcs, :bottom)),
+                vector_composite = @allocated(dirichlet_bc!(vv, V, bcs, :bottom)),
                 # `components` restricts the same tuple walk, not a fresh Vector: this must
                 # cost the same zero bytes as the unrestricted call above.
-                matrix_one_component=@allocated(
-                    dirichlet_bc!(Av, V, :bottom; components=1)
-                ),
-                vector_one_component=@allocated(
-                    dirichlet_bc!(vv, V, bcs, :bottom; components=1)
-                )
+                matrix_one_component = @allocated(dirichlet_bc!(Av, V, :bottom; components = 1)),
+                vector_one_component = @allocated(dirichlet_bc!(vv, V, bcs, :bottom; components = 1))
             )
         end
 
@@ -541,7 +541,7 @@ using LinearAlgebra: I as LinearAlgebraI
         Ωt = mesh(
             domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
             (8, 8),
-            (true, true),
+            (true, true)
         )
         Vt = gridspace(Ωt, Val(3))
         @test @inferred(Bramble.leaf_spaces_offsets(Vt)) isa Tuple
@@ -562,10 +562,10 @@ using LinearAlgebra: I as LinearAlgebraI
             Bramble.labels(bcs)
             Bramble._normalize_dirichlet(bcs)
             return (
-                symbols=@allocated(Bramble.symbols(bcs)),
-                tuples=@allocated(Bramble.tuples(bcs)),
-                labels=@allocated(Bramble.labels(bcs)),
-                normalize=@allocated(Bramble._normalize_dirichlet(bcs)),
+                symbols = @allocated(Bramble.symbols(bcs)),
+                tuples = @allocated(Bramble.tuples(bcs)),
+                labels = @allocated(Bramble.labels(bcs)),
+                normalize = @allocated(Bramble._normalize_dirichlet(bcs))
             )
         end
 
@@ -586,13 +586,13 @@ using LinearAlgebra: I as LinearAlgebraI
 
     @testset "Arbitrary fields (Supposition)" begin
         field_val = Data.Floats{Float64}(;
-            minimum=-100.0, maximum=100.0, nans=false, infs=false
+            minimum = -100.0, maximum = 100.0, nans = false, infs = false
         )
 
         @check function check_dirichlet_invariance_2d(
-            nx=Data.Integers(4, 10),
-            ny=Data.Integers(4, 10),
-            v_raw=Data.Vectors(field_val; min_size=100, max_size=100),
+                nx = Data.Integers(4, 10),
+                ny = Data.Integers(4, 10),
+                v_raw = Data.Vectors(field_val; min_size = 100, max_size = 100)
         )
             Ω = domain(
                 interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom, :top => :top
@@ -612,7 +612,7 @@ using LinearAlgebra: I as LinearAlgebraI
 
             # 1. Marked boundary nodes match prescribed values
             ok_marked = all(
-                isapprox(v[i], 2.5 * pts[i][1] + 1.0; atol=1e-12) for i in 1:n if marked[i]
+                isapprox(v[i], 2.5 * pts[i][1] + 1.0; atol = 1e-12) for i in 1:n if marked[i]
             )
 
             # 2. Unmarked nodes remain strictly bitwise unchanged

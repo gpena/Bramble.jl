@@ -1,12 +1,12 @@
 using Test
 using Bramble
 using Bramble:
-    CompositeGridSpace,
-    form,
-    assemble,
-    assemble!,
-    assemble_parallel!,
-    allocate_system_matrix
+               CompositeGridSpace,
+               form,
+               assemble,
+               assemble!,
+               assemble_parallel!,
+               allocate_system_matrix
 
 # Coupling two leaves of a composite space whose meshes differ in size.
 #
@@ -68,7 +68,7 @@ using Bramble:
         for g in (
             (u, v) -> inner₊ₓ(D₋ₓ(u(2)), D₋ₓ(v(1))),
             (u, v) -> innerₕ(M₋ₓ(u(1)), v(2)),
-            (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(1)),
+            (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(1))
         )   # one good term, one bad
             @test_throws ArgumentError assemble(form(Vh, Vh, g))
         end
@@ -104,7 +104,7 @@ using Bramble:
         Ωtwin = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (6, 6), (true, true))
         Vtwin = CompositeGridSpace((Wbig, gridspace(Ωtwin)))
         @test size(assemble(form(Vtwin, Vtwin, (u, v) -> innerₕ(u(2), v(1))))) ==
-            (ndofs(Vtwin), ndofs(Vtwin))
+              (ndofs(Vtwin), ndofs(Vtwin))
 
         # and a plain scalar form, where trial and test are one space
         Wₕ = gridspace(Ωbig)
