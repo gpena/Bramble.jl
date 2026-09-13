@@ -1,7 +1,10 @@
+module SpaceSbpIdentitiesTests
+
 using Test
 using Bramble
 using Random
 using Supposition
+using ..TestUtils: _nonuniform_points, _zero_boundary!
 
 # Discrete integration by parts for the centered divergence.
 #
@@ -258,3 +261,5 @@ using Supposition
         end
     end
 end
+
+end # module SpaceSbpIdentitiesTests

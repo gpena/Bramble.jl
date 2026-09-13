@@ -1,8 +1,12 @@
+module SpaceStarDifferenceTests
+
 using Test
 using Bramble
 using Random
 using Supposition
 using Bramble: components, star_spacings, StarSpacings, submeshes
+using ..TestUtils: alloc_test, @test_allocs, _nonuniform_points, _zero_boundary!
+using ..SpaceDifferenceTests: test_operator_matrix_equivalence
 
 # The starred forward difference and the identity it exists for.
 #
@@ -414,3 +418,5 @@ star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
         @test all(iszero, Matrix(Dstar₊ₓ(Ωm))[n, :])
     end
 end
+
+end # module SpaceStarDifferenceTests

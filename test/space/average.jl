@@ -1,7 +1,12 @@
+module SpaceAverageTests
+
 using Test
+using Bramble
 import Bramble: forward_average, backward_average
 import Bramble: forward_average_dim!, backward_average_dim!
 using LinearAlgebra: norm
+using ..SpaceVectorElementsTests: setup_test_grid
+using ..SpaceDifferenceTests: test_operator_matrix_equivalence
 
 @testset "Averaging operators" begin
     # Backward average operators
@@ -140,3 +145,5 @@ using LinearAlgebra: norm
         @testset "Backward" test_operator_matrix_equivalence(backward_average_ops)
     end
 end
+
+end # module SpaceAverageTests

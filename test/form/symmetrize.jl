@@ -1,8 +1,11 @@
+module FormSymmetrizeTests
+
 using Test
 using Bramble
 using SparseArrays
 using LinearAlgebra: issymmetric
 using Supposition
+using ..TestUtils: _tri
 
 # Symmetrizing the constrained system.
 #
@@ -375,3 +378,5 @@ end
         @test issymmetric(A)
     end
 end
+
+end # module FormSymmetrizeTests

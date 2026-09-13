@@ -1,3 +1,5 @@
+module FormSemidiscreteTests
+
 using Test
 using Bramble
 using SparseArrays
@@ -313,3 +315,5 @@ end
     @test last(eoc) > 1.95
     @test issorted(errors; rev = true)
 end
+
+end # module FormSemidiscreteTests

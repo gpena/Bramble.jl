@@ -1,3 +1,5 @@
+module QualityInvalidationsSnoopTests
+
 #===========================================================================#
 # Run in a fresh process by invalidations.jl (never `include`d into a session
 # that has already loaded Bramble -- `@snoop_invalidations` only sees
@@ -31,3 +33,5 @@ println("OWNED_COUNT=", length(owned))
 for t in owned
     println(t)
 end
+
+end # module QualityInvalidationsSnoopTests

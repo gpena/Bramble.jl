@@ -1,3 +1,5 @@
+module ExtSparseAdExtTests
+
 using Test
 using Bramble
 using ADTypes
@@ -84,3 +86,5 @@ using SparseMatrixColorings: SparseMatrixColorings
         @test norm₁ₕ(uₕ .- Rₕ(Wₕ, sol)) < 1e-2
     end
 end
+
+end # module ExtSparseAdExtTests

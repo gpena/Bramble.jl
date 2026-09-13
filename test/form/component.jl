@@ -1,3 +1,5 @@
+module FormComponentTests
+
 using Test
 using Bramble
 using Bramble:
@@ -14,38 +16,7 @@ using Bramble:
                test_component_or_nothing,
                components,
                restrict_to
-
-if !@isdefined(alloc_test)
-    @inline function alloc_test(f::F, args...; kwargs...) where {F}
-        f(args...; kwargs...)
-        return @allocated(f(args...; kwargs...))
-    end
-end
-
-if !@isdefined(var"@test_allocs")
-    macro test_allocs(call_expr)
-        if Meta.isexpr(call_expr, :call)
-            fn = call_expr.args[1]
-            args = call_expr.args[2:end]
-            quote
-                @test alloc_test($(esc(fn)), $(map(esc, args)...)) == 0
-            end
-        elseif Meta.isexpr(call_expr, :ref)
-            target = call_expr.args[1]
-            indices = call_expr.args[2:end]
-            quote
-                @test alloc_test(getindex, $(esc(target)), $(map(esc, indices)...)) == 0
-            end
-        else
-            quote
-                let
-                    $(esc(call_expr))
-                    @test (@allocated $(esc(call_expr))) == 0
-                end
-            end
-        end
-    end
-end
+using ..TestUtils: alloc_test, @test_allocs
 
 # `component(op, i)` (the mechanism behind `u(1)`, `D₋ₓ(v)(2)`, and the composite
 # `innerₕ(uₕ, r)` shorthand alike) rebuilds a symbolic tree with its trial/test leaves
@@ -271,3 +242,5 @@ end
         @test_allocs q[2]
     end
 end
+
+end # module FormComponentTests

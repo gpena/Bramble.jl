@@ -1,3 +1,5 @@
+module SpaceAutodiffBackendsTests
+
 using Test
 using Bramble
 using ForwardDiff
@@ -83,3 +85,5 @@ end
         @test_skip "ReverseDiff not in this environment"
     end
 end
+
+end # module SpaceAutodiffBackendsTests

@@ -1,7 +1,11 @@
+module SpaceCrossWeightedDifferenceTests
+
 using Test
 using Bramble
 using Random
 using Bramble: components
+using ..TestUtils: alloc_test
+using ..SpaceDifferenceTests: test_operator_matrix_equivalence
 
 # The cross-weighted centered difference.
 #
@@ -228,3 +232,5 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
         @test_throws ArgumentError Dₕₓ(mesh(domain(interval(0.0, 1.0)), 2, true))
     end
 end
+
+end # module SpaceCrossWeightedDifferenceTests

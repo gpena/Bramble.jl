@@ -1,3 +1,5 @@
+module FormExtendedOperatorsTests
+
 using Test
 using Bramble
 using Random
@@ -304,3 +306,5 @@ end
         end
     end
 end
+
+end # module FormExtendedOperatorsTests

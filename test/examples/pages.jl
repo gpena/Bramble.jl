@@ -1,4 +1,7 @@
+module ExamplesPagesTests
+
 using Test
+using ..TestUtils: _run_example_page
 
 # The five worked-example pages that need nothing beyond the every-push test environment.
 # Each is a Literate script under docs/src/examples/, run here through `_run_example_page`
@@ -37,3 +40,5 @@ using Test
         _run_example_page(:elasticity_3d)
     end
 end
+
+end # module ExamplesPagesTests

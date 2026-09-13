@@ -1,3 +1,5 @@
+module ExtSciMlExtTests
+
 using Test
 using Bramble
 using SparseArrays
@@ -150,3 +152,5 @@ end
         @test sol.u[end] ≈ A \ F rtol = 1e-6
     end
 end
+
+end # module ExtSciMlExtTests

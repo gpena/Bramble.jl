@@ -1,3 +1,5 @@
+module FormStencilPatternTests
+
 using Test
 using Bramble
 using Random
@@ -219,3 +221,5 @@ end
         @test sort(stencil_offsets(innerₕ(D₋ₓ(u), D₋ₓ(v)))) == [(-1,), (0,)]
     end
 end
+
+end # module FormStencilPatternTests

@@ -1,3 +1,5 @@
+module FormMarkersTests
+
 using Test
 using Bramble
 using Bramble: dot
@@ -150,3 +152,5 @@ using Bramble: dot
         @test A == A_orig
     end
 end
+
+end # module FormMarkersTests

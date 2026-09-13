@@ -1,3 +1,5 @@
+module ExtMakieExtTests
+
 using Test
 using Bramble
 using Makie
@@ -68,3 +70,5 @@ using Makie
         end
     end
 end
+
+end # module ExtMakieExtTests

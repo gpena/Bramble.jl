@@ -1,3 +1,5 @@
+module QualityExplicitImportsTests
+
 using Test
 using Bramble
 using ExplicitImports
@@ -107,3 +109,5 @@ using ExplicitImports
         @test check_no_self_qualified_accesses(Bramble; ignore = (:mesh, :show)) === nothing
     end
 end
+
+end # module QualityExplicitImportsTests

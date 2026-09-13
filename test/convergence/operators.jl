@@ -1,3 +1,5 @@
+module ConvergenceOperatorsTests
+
 using Test
 using Bramble
 using Random
@@ -150,3 +152,5 @@ end
         @test abs(parent(Rₕ(Wₕ, cos))[1] - 1.0) < 1e-12
     end
 end
+
+end # module ConvergenceOperatorsTests

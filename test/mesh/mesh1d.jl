@@ -1,3 +1,5 @@
+module MeshMesh1dTests
+
 # Unit tests for 1D mesh generation, geometric queries, and refinement operations.
 # Verifies point coordinate generation, half-point and half-spacing caches,
 # marker propagation, and degenerate single-point interval behaviors.
@@ -450,3 +452,5 @@ import Base: diff
         end
     end
 end
+
+end # module MeshMesh1dTests

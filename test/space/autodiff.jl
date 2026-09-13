@@ -1,7 +1,10 @@
+module SpaceAutodiffTests
+
 using Test
 using Bramble
 using ForwardDiff
 using Bramble: components, diff₋ₓ, diff₊ₓ
+using ..TestUtils: _matches_fd
 
 # Differentiating through the library.
 #
@@ -226,3 +229,5 @@ end
         end
     end
 end
+
+end # module SpaceAutodiffTests

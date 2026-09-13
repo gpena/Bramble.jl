@@ -1,0 +1,29 @@
+# Standalone entry point: `include("test/form/runtests.jl")` alone in a fresh session
+# runs this subsystem's tests without going through the full test/runtests.jl.
+isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
+
+@testset "Forms" begin
+    include("dirichlet_constraints.jl")
+    include("difference_ast.jl")
+    include("operators.jl")
+    include("inner_products.jl")
+    include("linear.jl")
+    include("source_operators.jl")
+    include("interpolation.jl")
+    include("bilinear.jl")
+    include("cross_mesh_blocks.jl")
+    include("interpolation_operator.jl")
+    include("symmetry.jl")
+    include("markers.jl")
+    include("extended_operators.jl")
+    include("symmetrize.jl")
+    include("autodiff.jl")
+    include("common.jl")
+    include("simplifier.jl")
+    include("block_extract.jl")
+    include("component.jl")
+    include("stencil_pattern.jl")
+    include("jacobian_pattern.jl")
+    include("type_cached_assemble.jl")
+    include("semidiscrete.jl")
+end

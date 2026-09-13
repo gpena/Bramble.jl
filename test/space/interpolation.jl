@@ -1,3 +1,5 @@
+module SpaceInterpolationTests
+
 using Test
 using Bramble
 
@@ -164,3 +166,5 @@ using Bramble
         @test all(isfinite, parent(mx))
     end
 end
+
+end # module SpaceInterpolationTests

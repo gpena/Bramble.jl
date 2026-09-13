@@ -1,3 +1,5 @@
+module SpaceConservationTests
+
 using Test
 using Bramble
 
@@ -56,3 +58,5 @@ using Bramble
         @test agree(flux, 0.0)
     end
 end
+
+end # module SpaceConservationTests

@@ -1,3 +1,7 @@
+module FormDirichletConstraintsTests
+
+using Test
+using Bramble
 import Bramble:
                 CartesianProduct,
                 DirichletConstraint,
@@ -13,6 +17,7 @@ import Bramble:
                 markers,
                 point,
                 index_in_marker
+using Bramble: set
 using Supposition
 
 @testset "Dirichlet constraints" begin
@@ -640,3 +645,5 @@ using LinearAlgebra: I as LinearAlgebraI
         end
     end
 end
+
+end # module FormDirichletConstraintsTests

@@ -1,3 +1,5 @@
+module UtilsMacrosTests
+
 using Test
 using Bramble: @forward
 
@@ -158,3 +160,5 @@ end
         @test occursin("@forward T.x", sprint(showerror, err))
     end
 end
+
+end # module UtilsMacrosTests

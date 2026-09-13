@@ -1,3 +1,5 @@
+module FormCommonTests
+
 using Test
 using Bramble
 using Bramble:
@@ -395,3 +397,5 @@ end
         @test sprint(show, mixed) == "BilinearForm{2D, 16×9}"
     end
 end
+
+end # module FormCommonTests

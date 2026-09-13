@@ -1,3 +1,5 @@
+module FormInterpolationTests
+
 using Test
 using Bramble
 using Bramble:
@@ -222,3 +224,5 @@ end
         @test_skip "repeated-run race check not exercised: only one thread available"
     end
 end
+
+end # module FormInterpolationTests

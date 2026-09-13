@@ -1,3 +1,5 @@
+module FormDifferenceAstTests
+
 using Test
 using Bramble
 using Bramble:
@@ -130,3 +132,5 @@ using Bramble:
         @test !(∇₊ₕ(id1) isa Tuple)
     end
 end
+
+end # module FormDifferenceAstTests

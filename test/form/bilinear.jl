@@ -1,7 +1,9 @@
+module FormBilinearTests
+
 using Test
 using Bramble
 using ForwardDiff
-using LinearAlgebra: Diagonal, I
+using LinearAlgebra: Diagonal, I, diag, dot
 using SparseArrays: sparse, nnz, nonzeros
 using Random
 using Supposition
@@ -1029,3 +1031,5 @@ end
         @test !isapprox(Matrix(combined), Matrix(mass + stiffness))
     end
 end
+
+end # module FormBilinearTests

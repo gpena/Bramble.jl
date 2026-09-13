@@ -1,3 +1,5 @@
+module FormLinearTests
+
 using Test
 using Bramble
 using ForwardDiff
@@ -25,33 +27,7 @@ using Bramble:
                Innerh,
                Innerplus,
                evaluate!
-
-# Standalone runner fallback
-if !@isdefined(alloc_test)
-    @inline function alloc_test(f::F, args...; kwargs...) where {F}
-        f(args...; kwargs...)
-        return @allocated(f(args...; kwargs...))
-    end
-end
-
-if !@isdefined(var"@test_allocs")
-    macro test_allocs(call_expr)
-        if Meta.isexpr(call_expr, :call)
-            fn = call_expr.args[1]
-            args = call_expr.args[2:end]
-            quote
-                @test alloc_test($(esc(fn)), $(map(esc, args)...)) == 0
-            end
-        else
-            quote
-                let
-                    $(esc(call_expr))
-                    @test (@allocated $(esc(call_expr))) == 0
-                end
-            end
-        end
-    end
-end
+using ..TestUtils: alloc_test, @test_allocs
 
 # Assembling the right-hand side of a system.
 #
@@ -1146,3 +1122,5 @@ end
         @test _evaluate_bytes(scratch, lf, uₕ) == 0
     end
 end
+
+end # module FormLinearTests

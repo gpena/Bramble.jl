@@ -1,3 +1,5 @@
+module ExportersVtkExportTests
+
 using Test
 using Bramble
 using WriteVTK
@@ -100,3 +102,5 @@ using WriteVTK
         @test_throws "export_vtk requires WriteVTK.jl" Bramble._export_vtk("x", 42)
     end
 end
+
+end # module ExportersVtkExportTests

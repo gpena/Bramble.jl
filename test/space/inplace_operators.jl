@@ -1,6 +1,9 @@
+module SpaceInplaceOperatorsTests
+
 using Test
 using Bramble
 using Random
+using ..TestUtils: alloc_test, @test_allocs
 
 # The in-place forms of every directional operator.
 #
@@ -11,32 +14,6 @@ using Random
 # on top of it, which is also why there is no second implementation to keep in step.
 #
 # Per the return contract, a mutating function with a single destination returns it, so
-# Standalone runner fallback
-if !@isdefined(alloc_test)
-    @inline function alloc_test(f::F, args...; kwargs...) where {F}
-        f(args...; kwargs...)
-        return @allocated(f(args...; kwargs...))
-    end
-end
-
-if !@isdefined(var"@test_allocs")
-    macro test_allocs(call_expr)
-        if Meta.isexpr(call_expr, :call)
-            fn = call_expr.args[1]
-            args = call_expr.args[2:end]
-            quote
-                @test alloc_test($(esc(fn)), $(map(esc, args)...)) == 0
-            end
-        else
-            quote
-                let
-                    $(esc(call_expr))
-                    @test (@allocated $(esc(call_expr))) == 0
-                end
-            end
-        end
-    end
-end
 
 # Base names for the 10 directional operator families across spatial dimensions.
 # Deriving the per-dimension list mechanically from this tuple and `_DIR_SUFFIXES`
@@ -217,3 +194,5 @@ end
         @test_throws MethodError D₋ₓ!(similar(uv), uₕ)
     end
 end
+
+end # module SpaceInplaceOperatorsTests

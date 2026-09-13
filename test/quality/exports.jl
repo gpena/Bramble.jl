@@ -1,3 +1,5 @@
+module QualityExportsTests
+
 using Test
 using Bramble
 
@@ -88,3 +90,5 @@ end
     @test parent(uₕ) ≈ [0.0, 0.0625, 0.25, 0.5625, 1.0]
     @test reshape(uₕ) == parent(uₕ)
 end
+
+end # module QualityExportsTests

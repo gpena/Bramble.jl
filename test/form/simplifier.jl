@@ -1,3 +1,5 @@
+module FormSimplifierTests
+
 using Test
 using Bramble
 using LinearAlgebra: Diagonal, issymmetric, isposdef
@@ -348,3 +350,5 @@ end
         @test !(resolve_form_ast(l) isa OperatorAdd)
     end
 end
+
+end # module FormSimplifierTests

@@ -1,3 +1,5 @@
+module SpaceCommutationTests
+
 using Test
 using Bramble
 using Bramble: diff₋ₓ, diff₊ᵧ
@@ -165,3 +167,5 @@ using Supposition
         @test !isapprox(parent(Dcₓ(D₋ₓ(uₕ))), parent(Dₕₓ(D₋ₓ(uₕ))))
     end
 end
+
+end # module SpaceCommutationTests

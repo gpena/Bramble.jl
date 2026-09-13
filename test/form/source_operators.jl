@@ -1,3 +1,5 @@
+module FormSourceOperatorsTests
+
 using Test
 using Bramble
 using ForwardDiff
@@ -495,3 +497,5 @@ using Bramble:
         @test b ≈ parent(cond * uₕ) .* w
     end
 end
+
+end # module FormSourceOperatorsTests

@@ -1,3 +1,6 @@
+module QualityJetTests
+
+using Test
 using JET
 using Bramble
 
@@ -16,3 +19,5 @@ using Bramble
         @test_skip "JET full-package static analysis is skipped on prerelease Julia"
     end
 end
+
+end # module QualityJetTests

@@ -1,3 +1,5 @@
+module FormAutodiffTests
+
 using Test
 using Bramble
 using ForwardDiff
@@ -5,6 +7,7 @@ using ReverseDiff
 using DifferentiationInterface
 using SparseArrays
 using LinearAlgebra: issymmetric, norm
+using ..TestUtils: _tri, _matches_fd
 
 # Differentiating through the constrained linear system.
 #
@@ -287,3 +290,5 @@ end
     @test norm(Jx[1:n, (n + 1):(2n)]) > 0
     @test norm(Jx[1:n, 1:n]) == 0
 end
+
+end # module FormAutodiffTests

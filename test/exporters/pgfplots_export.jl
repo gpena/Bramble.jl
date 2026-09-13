@@ -1,3 +1,5 @@
+module ExportersPgfplotsExportTests
+
 using Test
 using Bramble
 
@@ -176,3 +178,5 @@ using Bramble
         end
     end
 end
+
+end # module ExportersPgfplotsExportTests

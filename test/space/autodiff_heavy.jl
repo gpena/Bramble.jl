@@ -1,7 +1,10 @@
+module SpaceAutodiffHeavyTests
+
 using Test
 using Bramble
 using ForwardDiff
 using DifferentiationInterface
+using ..SpaceAutodiffBackendsTests: check_backend, _have
 
 # The two backends that are expensive to run, and the one that cannot run at all.
 #
@@ -82,3 +85,5 @@ using DifferentiationInterface
         end
     end
 end
+
+end # module SpaceAutodiffHeavyTests

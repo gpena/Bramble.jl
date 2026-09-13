@@ -1,3 +1,5 @@
+module GeometryDomainsTests
+
 using Test
 using Bramble
 using Bramble:
@@ -22,32 +24,7 @@ using Bramble:
                topo_dim,
                is_collapsed
 using StaticArrays
-
-if !@isdefined(alloc_test)
-    @inline function alloc_test(f::F, args...; kwargs...) where {F}
-        f(args...; kwargs...)
-        return @allocated(f(args...; kwargs...))
-    end
-end
-
-if !@isdefined(var"@test_allocs")
-    macro test_allocs(call_expr)
-        if Meta.isexpr(call_expr, :call)
-            fn = call_expr.args[1]
-            args = call_expr.args[2:end]
-            quote
-                @test alloc_test($(esc(fn)), $(map(esc, args)...)) == 0
-            end
-        else
-            quote
-                let
-                    $(esc(call_expr))
-                    @test (@allocated $(esc(call_expr))) == 0
-                end
-            end
-        end
-    end
-end
+using ..TestUtils: alloc_test, @test_allocs
 
 @testset "Computational domains" begin
     # Test data setup: Cartesian products and coordinate indicator predicates.
@@ -576,3 +553,5 @@ end
         @test occursin("Point(3.0)", sprint(show, domain(interval(3.0, 3.0))))
     end
 end
+
+end # module GeometryDomainsTests

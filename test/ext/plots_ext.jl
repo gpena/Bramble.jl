@@ -1,3 +1,5 @@
+module ExtPlotsExtTests
+
 using Test
 using Bramble
 using RecipesBase
@@ -59,3 +61,5 @@ using RecipesBase
         end
     end
 end
+
+end # module ExtPlotsExtTests

@@ -1,28 +1,14 @@
+module SpaceVectorElementsTests
+
+using Test
+using Bramble
 import Bramble:
                 VectorElement, spacing, points, half_points, space, ndofs, half_spacings, indices, point
 using LinearAlgebra: norm
 using SparseArrays
 using Random
 using Supposition
-
-if !@isdefined(var"@test_allocs")
-    macro test_allocs(call_expr)
-        if Meta.isexpr(call_expr, :call)
-            fn = call_expr.args[1]
-            args = call_expr.args[2:end]
-            quote
-                @test alloc_test($(esc(fn)), $(map(esc, args)...)) == 0
-            end
-        else
-            quote
-                let
-                    $(esc(call_expr))
-                    @test (@allocated $(esc(call_expr))) == 0
-                end
-            end
-        end
-    end
-end
+using ..TestUtils: alloc_test, @test_allocs
 
 _idx_read2(u, i, j) = u[i, j]
 _idx_read2_inb(u, i, j) = @inbounds u[i, j]
@@ -38,7 +24,6 @@ _idx_read_ci(u, I) = u[I]
 _idx_read_ci_inb(u, I) = @inbounds u[I]
 _idx_write_ci!(u, val, I) = (u[I] = val; u)
 _idx_write_ci_inb!(u, val, I) = (@inbounds u[I] = val; u)
-
 
 @inline function _func2array!(u::AbstractArray, g, mesh_indices)
     @inbounds for idx in mesh_indices
@@ -187,11 +172,13 @@ end
         u_2d = element(W_2d, 0.0)
 
         for i in 1:5, j in 1:6
+
             u_2d[i, j] = 10.0 * i + j
         end
 
         m_reshaped = reshape(u_2d)
         for i in 1:5, j in 1:6
+
             @test u_2d[i, j] == 10.0 * i + j
             @test u_2d[CartesianIndex(i, j)] == 10.0 * i + j
             @test m_reshaped[i, j] == 10.0 * i + j
@@ -1125,27 +1112,27 @@ end
     # why nothing caught it.
     for (lbl, Ωₕ, fs, f_all) in (
         (
-            "1D",
-            mesh(domain(interval(0.0, 1.0)), 17, true),
-            (sin, cos),
-            x -> (sin(x), cos(x))
-        ),
+        "1D",
+        mesh(domain(interval(0.0, 1.0)), 17, true),
+        (sin, cos),
+        x -> (sin(x), cos(x))
+    ),
         (
-            "2D",
-            mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 8), (true, false)),
-            (x -> sin(x[1]), x -> cos(x[2])),
-            x -> (sin(x[1]), cos(x[2]))
-        ),
+        "2D",
+        mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 8), (true, false)),
+        (x -> sin(x[1]), x -> cos(x[2])),
+        x -> (sin(x[1]), cos(x[2]))
+    ),
         (
-            "3D",
-            mesh(
-                domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
-                (5, 4, 6),
-                (true, true, false)
-            ),
-            (x -> sin(x[1]), x -> cos(x[3])),
-            x -> (sin(x[1]), cos(x[3]))
-        )
+        "3D",
+        mesh(
+            domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
+            (5, 4, 6),
+            (true, true, false)
+        ),
+        (x -> sin(x[1]), x -> cos(x[3])),
+        x -> (sin(x[1]), cos(x[3]))
+    )
     )
         @testset "$lbl" begin
             Vₕ = gridspace(Ωₕ, Val(2))
@@ -1422,3 +1409,5 @@ end
         @test all(_agree(parent(two_point)[i], exact[i]) for i in 1:npoints(Ωₕ))
     end
 end
+
+end # module SpaceVectorElementsTests

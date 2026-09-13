@@ -1,8 +1,14 @@
+module SpaceDifferenceTests
+
+using Test
+using Bramble
 import Bramble: space, eltype, ⊗, _Eye, shift, npoints, spacing
 using Bramble: backward_difference_dim!, forward_difference_dim!
 using Bramble: diff₋ₓ, diff₋ᵧ, diff₋₂, diff₊ₓ, diff₊ᵧ, diff₊₂
 import SparseArrays: issparse, sprand, spdiagm, spzeros
 using Supposition
+using ..UtilsBackendsTests: MockGPUVector, MockGPUMatrix
+using ..SpaceVectorElementsTests: setup_test_grid
 
 # Backward difference operators
 backward_ops(::Val{1}) = (diff₋ₓ, D₋ₓ)
@@ -834,3 +840,5 @@ end
         @test S[5, 1] == 0.0
     end
 end
+
+end # module SpaceDifferenceTests

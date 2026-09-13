@@ -1,3 +1,5 @@
+module FormBlockExtractTests
+
 using Test
 using InteractiveUtils: subtypes
 using Bramble
@@ -197,3 +199,5 @@ using Bramble:
         @test_throws ArgumentError block_of(innerₕ(u(2), v(1)), 1, 2)
     end
 end
+
+end # module FormBlockExtractTests

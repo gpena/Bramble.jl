@@ -1,3 +1,5 @@
+module FormOperatorsTests
+
 using Test
 using Bramble
 using Bramble:
@@ -322,3 +324,5 @@ const _ORIGIN_2D = (0, 0)
               ((_ORIGIN_2D, 1.0),)
     end
 end
+
+end # module FormOperatorsTests

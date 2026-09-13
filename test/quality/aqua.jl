@@ -1,3 +1,7 @@
+module QualityAquaTests
+
+using Test
+using Bramble
 using Aqua
 
 @testset "Aqua" begin
@@ -43,3 +47,5 @@ using Aqua
     )
     Aqua.test_ambiguities(Bramble; recursive = false)
 end
+
+end # module QualityAquaTests

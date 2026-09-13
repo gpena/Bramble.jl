@@ -1,3 +1,5 @@
+module SpaceCompositeOperatorsTests
+
 using Test
 using Bramble
 using Bramble: components, ndofs, _grid_dims, _op_mesh
@@ -139,3 +141,5 @@ using Bramble: diff₋ₓ, diff₋ᵧ, diff₋₂, diff₊ₓ, diff₊ᵧ, diff�
         @test parent(uₕ) == before
     end
 end
+
+end # module SpaceCompositeOperatorsTests

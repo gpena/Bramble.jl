@@ -1,3 +1,5 @@
+module SpaceInferenceAllocationTests
+
 using Test
 using Bramble
 using JET
@@ -16,6 +18,7 @@ using Bramble:
                diff₊₂,
                diff₋ₕ,
                diff₊ₕ
+using ..TestUtils: alloc_test, @test_allocs
 
 # Type stability and allocation across grid spaces, operators and inner products.
 #
@@ -29,33 +32,6 @@ using Bramble:
 #   - the operators wrote out of bounds on composite grid functions.
 #
 # None of it was visible to the suite, because line coverage does not see any of it.
-
-# Standalone runner fallback
-if !@isdefined(alloc_test)
-    @inline function alloc_test(f::F, args...; kwargs...) where {F}
-        f(args...; kwargs...)
-        return @allocated(f(args...; kwargs...))
-    end
-end
-
-if !@isdefined(var"@test_allocs")
-    macro test_allocs(call_expr)
-        if Meta.isexpr(call_expr, :call)
-            fn = call_expr.args[1]
-            args = call_expr.args[2:end]
-            quote
-                @test alloc_test($(esc(fn)), $(map(esc, args)...)) == 0
-            end
-        else
-            quote
-                let
-                    $(esc(call_expr))
-                    @test (@allocated $(esc(call_expr))) == 0
-                end
-            end
-        end
-    end
-end
 
 @testset "Inference and allocations" begin
     Ωₕ1 = mesh(domain(interval(0.0, 1.0)), 64, false)
@@ -281,3 +257,5 @@ end
         @test alloc_test(πₕ!, u_target, u) == 0
     end
 end
+
+end # module SpaceInferenceAllocationTests

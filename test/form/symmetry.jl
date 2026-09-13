@@ -1,3 +1,5 @@
+module FormSymmetryTests
+
 using Test
 using Bramble
 using Random
@@ -223,3 +225,5 @@ using Bramble:
         end
     end
 end
+
+end # module FormSymmetryTests

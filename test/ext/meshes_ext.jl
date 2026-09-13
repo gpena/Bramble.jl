@@ -1,3 +1,5 @@
+module ExtMeshesExtTests
+
 using Test
 using Bramble
 using Meshes, MakieCore
@@ -53,3 +55,5 @@ using Meshes, MakieCore
         @test_logs (:error, r"1D meshes") Meshes.viz(Ω1)
     end
 end
+
+end # module ExtMeshesExtTests

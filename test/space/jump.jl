@@ -1,7 +1,12 @@
+module SpaceJumpTests
+
 using Test
+using Bramble
 import Bramble: forward_difference, jump, jump_dim!
 using LinearAlgebra: norm
 using Supposition
+using ..SpaceVectorElementsTests: setup_test_grid
+using ..SpaceDifferenceTests: test_operator_matrix_equivalence
 
 # There is one jump, not a forward and a backward pair: the jump belongs to the interface
 # between two cells rather than to a direction of travel across it. It is arithmetically
@@ -178,3 +183,5 @@ jump_ops(::Val{3}) = (jumpₓ, jump₂, jump_ops(Val(2))...)
         end
     end
 end
+
+end # module SpaceJumpTests

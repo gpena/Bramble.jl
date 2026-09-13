@@ -1,5 +1,11 @@
+module SpaceInnerProductTests
+
+using Test
+using Bramble
 import Bramble: half_spacings
+using LinearAlgebra: norm
 using Supposition
+using ..SpaceVectorElementsTests: setup_test_grid, valid_interior_range
 
 @testset "Inner products & norms" begin
     for D in 1:3
@@ -430,3 +436,5 @@ end
         end
     end
 end
+
+end # module SpaceInnerProductTests

@@ -1,8 +1,12 @@
+module SpaceCenteredDifferenceTests
+
 using Test
 using Bramble
 using Random
 using Supposition
 using Bramble: components
+using ..TestUtils: alloc_test, _nonuniform_points, _zero_boundary!
+using ..SpaceDifferenceTests: test_operator_matrix_equivalence
 
 # The centered difference.
 #
@@ -401,3 +405,5 @@ centered_ops(::Val{3}) = (Dcₓ, Dcᵧ, Dc₂)
         @test_throws ArgumentError Dcₓ(mesh(domain(interval(0.0, 1.0)), 2, true))
     end
 end
+
+end # module SpaceCenteredDifferenceTests

@@ -1,3 +1,5 @@
+module DriversVariableCoefficientPoissonTests
+
 using Test
 using Bramble
 using Random
@@ -111,3 +113,5 @@ _asymptotically_second_order(p, lower) = lower < p < 3.0
     @test _asymptotically_second_order(p2, 1.9)
     @test _asymptotically_second_order(p3, 1.8)
 end
+
+end # module DriversVariableCoefficientPoissonTests

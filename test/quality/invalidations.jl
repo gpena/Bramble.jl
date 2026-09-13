@@ -1,3 +1,7 @@
+module QualityInvalidationsTests
+
+using Test
+
 #===========================================================================#
 # Zero-tolerance gate on package-owned method invalidations (#198).
 #
@@ -37,3 +41,5 @@
         @test_skip "Invalidation check skipped on prerelease Julia"
     end
 end
+
+end # module QualityInvalidationsTests

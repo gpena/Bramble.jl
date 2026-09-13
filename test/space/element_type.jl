@@ -1,7 +1,9 @@
+module SpaceElementTypeTests
+
 using Test
 using Bramble
 using SparseArrays
-using Bramble: hₘᵢₙ, diff₋ₓ, diff₊ₓ
+using Bramble: hₘᵢₙ, diff₋ₓ, diff₊ₓ, half_spacings, cell_measures
 
 # The element type of the backend survives the whole library.
 #
@@ -106,3 +108,5 @@ const F32_BACKEND = backend(;
         @test inner₊ᵧ(uₕ, uₕ) isa Float32
     end
 end
+
+end # module SpaceElementTypeTests

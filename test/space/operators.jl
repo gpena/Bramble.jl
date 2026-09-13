@@ -1,3 +1,5 @@
+module SpaceOperatorsTests
+
 using Test
 using Bramble
 using Bramble:
@@ -65,3 +67,5 @@ using Bramble:
         end
     end
 end
+
+end # module SpaceOperatorsTests

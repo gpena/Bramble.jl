@@ -1,3 +1,5 @@
+module UtilsBackendsTests
+
 using Test
 using Bramble
 using Bramble:
@@ -15,6 +17,7 @@ using Bramble:
                Parallel
 using SparseArrays
 using LinearAlgebra: diag, I
+using ..TestUtils: alloc_test, @test_allocs
 
 # Minimal DenseArray mock simulating vendor GPU array types (such as MtlArray or CuArray)
 # to verify generic backend dispatch without requiring GPU hardware or optional dependencies.
@@ -198,7 +201,7 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
         if metal_pkg !== nothing
             try
                 @eval using Metal
-                if isdefined(Main, :Metal) && Metal.functional()
+                if isdefined(@__MODULE__, :Metal) && Metal.functional()
                     @testset "Metal GPU backend" begin
                         be_metal = backend(
                             vector_type = MtlVector{Float32}, matrix_type = MtlMatrix{Float32}
@@ -386,7 +389,7 @@ end
     # Invariants tested:
     # 1. metal_backend() without Metal.jl loaded throws an ErrorException instructing the user to load Metal.
     @testset "Metal stub" begin
-        if isdefined(Main, :Metal)
+        if isdefined(@__MODULE__, :Metal)
             @test metal_backend() isa Backend
             @test metal_backend(Float32) isa Backend
         else
@@ -395,3 +398,5 @@ end
         end
     end
 end
+
+end # module UtilsBackendsTests

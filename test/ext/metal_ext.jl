@@ -1,3 +1,5 @@
+module ExtMetalExtTests
+
 using Test
 using Bramble
 using Metal
@@ -69,3 +71,5 @@ using Bramble: Backend, vector, matrix, _backend_eye, _backend_zeros
         end
     end
 end
+
+end # module ExtMetalExtTests

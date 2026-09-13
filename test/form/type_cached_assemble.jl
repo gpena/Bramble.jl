@@ -1,3 +1,5 @@
+module FormTypeCachedAssembleTests
+
 using Test
 using Bramble
 using ForwardDiff, DifferentiationInterface
@@ -5,6 +7,7 @@ using SparseConnectivityTracer: SparseConnectivityTracer
 using SparseMatrixColorings: SparseMatrixColorings
 using SparseArrays: nnz
 using Random
+using ..TestUtils: alloc_test, @test_allocs
 
 # `type_cached_assemble!` (form/type_cached_assemble.jl, gpena/Bramble.jl#20): caches a
 # coefficient-dependent BilinearForm's sparsity pattern per element type, so a Newton
@@ -16,36 +19,6 @@ const _traced_ad = AutoSparse(
     sparsity_detector = SparseConnectivityTracer.TracerSparsityDetector(),
     coloring_algorithm = SparseMatrixColorings.GreedyColoringAlgorithm()
 )
-
-# Standalone runner fallback (`runtests.jl` already defines both when this file is
-# included from there). A top-level, type-parametric function barrier -- unlike a closure
-# written inside a `@testset`, which `@testset`'s own scope-wrapping can box, inflating an
-# allocation count that has nothing to do with the code under test (bramble-verification §1).
-if !@isdefined(alloc_test)
-    @inline function alloc_test(f::F, args...; kwargs...) where {F}
-        f(args...; kwargs...)
-        return @allocated(f(args...; kwargs...))
-    end
-end
-
-if !@isdefined(var"@test_allocs")
-    macro test_allocs(call_expr)
-        if Meta.isexpr(call_expr, :call)
-            fn = call_expr.args[1]
-            args = call_expr.args[2:end]
-            quote
-                @test alloc_test($(esc(fn)), $(map(esc, args)...)) == 0
-            end
-        else
-            quote
-                let
-                    $(esc(call_expr))
-                    @test (@allocated $(esc(call_expr))) == 0
-                end
-            end
-        end
-    end
-end
 
 @testset "type_cached_assemble!" begin
     # Non-uniform (`false`): mesh1d.jl's `_generate_random_points!` draws from the global
@@ -258,3 +231,5 @@ end
         @test norm₁ₕ(uₕ .- Rₕ(Wₕ, sol)) < 1e-2
     end
 end
+
+end # module FormTypeCachedAssembleTests

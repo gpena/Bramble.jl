@@ -1,3 +1,5 @@
+module MeshMeshesTests
+
 # Unit tests for mesh edge cases, multi-dimensional domains, and boundary queries.
 # Focuses on domain variations, marker combinations, predicates, and interface fallbacks.
 
@@ -619,3 +621,5 @@ end
         )
     end
 end
+
+end # module MeshMeshesTests

@@ -1,3 +1,5 @@
+module QualityAlloccheckTests
+
 using Test
 using Bramble
 using AllocCheck
@@ -25,7 +27,7 @@ using Bramble:
 
 # Static allocation verification (gpena/Bramble.jl#118).
 #
-# `@test_allocs` in `test/runtests.jl` counts bytes for one call with one set of values.
+# `@test_allocs` in `test/TestUtils.jl` counts bytes for one call with one set of values.
 # `check_allocs` compiles a method for a given signature and inspects the IR, so it covers
 # every branch of that specialisation rather than the one the sample values took. The two
 # are kept side by side rather than one replacing the other, because measurement shows each
@@ -238,3 +240,5 @@ end
     # `assemble_parallel!` (1,632 B of task-spawn machinery) and `iterative_refinement!`
     # (5,472 B, which builds a new marker dictionary).
 end
+
+end # module QualityAlloccheckTests

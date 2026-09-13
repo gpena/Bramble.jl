@@ -1,3 +1,5 @@
+module FormInnerProductsTests
+
 using Test
 using Bramble
 using Bramble:
@@ -235,3 +237,5 @@ using Bramble:
         @test is_symbolic(innerₕ(u, v) + innerₕ(D₋ₓ(u), D₋ₓ(v)))
     end
 end
+
+end # module FormInnerProductsTests

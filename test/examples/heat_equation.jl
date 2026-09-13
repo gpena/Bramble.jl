@@ -1,4 +1,7 @@
+module ExamplesHeatEquationTests
+
 using Test
+using ..TestUtils: _run_example_page
 
 # The heat-equation page, docs/src/examples/heat_equation.jl, run the same way the other four
 # are (test/examples/pages.jl) -- but from the `ext` group rather than every push: the script
@@ -11,3 +14,5 @@ using Test
 @testset "Heat equation page" begin
     _run_example_page(:heat_equation)
 end
+
+end # module ExamplesHeatEquationTests

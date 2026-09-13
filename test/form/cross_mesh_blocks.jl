@@ -1,3 +1,5 @@
+module FormCrossMeshBlocksTests
+
 using Test
 using Bramble
 using Bramble:
@@ -130,3 +132,5 @@ using Bramble:
         @test !all(iszero, b)
     end
 end
+
+end # module FormCrossMeshBlocksTests

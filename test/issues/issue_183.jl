@@ -1,3 +1,5 @@
+module IssuesIssue183Tests
+
 using Test
 using Bramble
 
@@ -19,3 +21,5 @@ using Bramble
     @test !iszero(d[1])
     @test !iszero(d[n])
 end
+
+end # module IssuesIssue183Tests
