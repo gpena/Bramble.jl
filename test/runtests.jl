@@ -226,7 +226,7 @@ if __bramble_with_unit_tests
             include("space/composite_operators.jl")
             include("space/interpolation.jl")
             include("space/inference_allocation.jl")
-            include("space/convergence.jl")
+            include("convergence/operators.jl")
             include("space/element_type.jl")
             include("space/autodiff.jl")
             include("space/autodiff_backends.jl")
@@ -271,7 +271,19 @@ if __bramble_with_unit_tests
         # operator.
         @testset "Worked examples" begin
             include("examples/pages.jl")
-            include("examples/variable_coefficient.jl")
+        end
+
+        # Bug reproducers that aren't naturally part of one subsystem file's coverage
+        # (STANDARDS.md ties this to a closed GitHub issue). Tests that extend an existing
+        # subsystem file's own coverage stay there, tagged `(#N)` in the testset title.
+        @testset "Issue regressions" begin
+            include("issues/issue_183.jl")
+        end
+
+        # Independent full-pipeline tests (mesh -> space -> assemble -> solve) for a path no
+        # docs page reaches, as opposed to "Worked examples" above, which mirrors a page.
+        @testset "Drivers" begin
+            include("drivers/variable_coefficient_poisson.jl")
         end
 
         # Static allocation verification (#118). Lives under `quality/` because that is what

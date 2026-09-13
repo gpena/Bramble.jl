@@ -28,7 +28,7 @@ const _traced_ad = AutoSparse(
 # `-(α(u)u')' = g`, mirroring docs/src/examples/poisson_nonlinear.jl, generalized to D
 # dimensions the way that page's own `nonlinear_series` does. `Ωd` is the domain the mesh
 # `Ωₕ` was built from (kept around separately, the same way
-# examples/variable_coefficient.jl does, since dirichlet_constraints needs the boundary-marked
+# drivers/variable_coefficient_poisson.jl does, since dirichlet_constraints needs the boundary-marked
 # domain rather than the mesh itself). Returns everything a caller needs to build both the
 # residual and its native pattern.
 function _nonlinear_poisson_setup(D::Int, Ωd, Ωₕ)

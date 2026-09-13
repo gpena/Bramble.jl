@@ -30,13 +30,28 @@ function _interior_error(Ωₕ, op, f, df, drop)
 end
 
 # Successive halvings of the mesh give log2 of the error ratio as the observed order.
+# Returns the per-step ratios alongside the raw errors, so a caller can also fit a slope
+# across every level (`_lsq_order`) rather than only reading the last pair.
 function _orders(Ωₕ, op, f, df, drop; steps = 4)
     errs = Float64[]
     for k in 0:steps
         k > 0 && iterative_refinement!(Ωₕ)
         push!(errs, _interior_error(Ωₕ, op, f, df, drop))
     end
-    return [log2(errs[k] / errs[k + 1]) for k in 1:(length(errs) - 1)]
+    ords = [log2(errs[k] / errs[k + 1]) for k in 1:(length(errs) - 1)]
+    return ords, errs
+end
+
+# Least-squares order across every refinement level, not just the last pair: since each
+# level halves every spacing, err_k ≈ C·h₀^p·2^(-pk), so log2(err_k) is linear in the level
+# index k with slope -p. Fitting the whole series is more robust than the two-point ratio
+# when an early level (still pre-asymptotic) is noisier than the rest.
+function _lsq_order(errs)
+    k = 0:(length(errs) - 1)
+    y = log2.(errs)
+    kbar, ybar = sum(k) / length(k), sum(y) / length(y)
+    slope = sum((k .- kbar) .* (y .- ybar)) / sum(abs2, k .- kbar)
+    return -slope
 end
 
 @testset "Difference convergence" begin
@@ -51,9 +66,10 @@ end
                 )
                     Random.seed!(20250829)
                     Ωₕ = mesh(domain(interval(0.0, 1.0)), 51, unif)
-                    ords = _orders(Ωₕ, op, sin, cos, drop)
+                    ords, errs = _orders(Ωₕ, op, sin, cos, drop)
                     @test all(>(0.9), ords)
                     @test 0.95 < last(ords) < 1.05
+                    @test 0.95 < _lsq_order(errs) < 1.05
                 end
             end
         end
@@ -73,9 +89,10 @@ end
                         (17, 17),
                         (unif, unif)
                     )
-                    ords = _orders(Ωₕ, op, f, df, drop; steps = 3)
+                    ords, errs = _orders(Ωₕ, op, f, df, drop; steps = 3)
                     @test all(>(0.9), ords)
                     @test 0.95 < last(ords) < 1.05
+                    @test 0.95 < _lsq_order(errs) < 1.05
                 end
             end
         end
@@ -104,7 +121,7 @@ end
                     (17, 17),
                     (true, true)
                 )
-                ords = _orders(Ωₕ, op, f, df, drop; steps = 3)
+                ords, _ = _orders(Ωₕ, op, f, df, drop; steps = 3)
                 @test all(>(0.9), ords)
                 @test 0.95 < last(ords) < 1.05
             end

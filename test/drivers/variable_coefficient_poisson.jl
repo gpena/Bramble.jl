@@ -8,7 +8,7 @@ using Random
 # κₕ * ∇₋ₕ(u) mechanism the nonlinear Poisson page's α(u) uses) under an independently-known
 # exact answer.
 #
-# test/space/convergence.jl already pins the *operators* to the derivatives they approximate.
+# test/convergence/operators.jl already pins the *operators* to the derivatives they approximate.
 # This file pins the whole pipeline -- assemble, impose boundary conditions, solve -- which is
 # a different property: a consistent operator can still be wrecked by the assembly or the
 # Dirichlet path, and the resulting solution would be self-consistently wrong at first order
@@ -26,7 +26,7 @@ using Random
 # dyadically split rather than an independent draw with its own noise. Random grids are the
 # point -- a uniform grid makes `exp(sum(x))` nearly exact for this scheme at any mesh size,
 # so a uniform check passes on a broken implementation as readily as a correct one. Seeded,
-# for the reason spelled out at the top of space/convergence.jl.
+# for the reason spelled out at the top of convergence/operators.jl.
 
 # Observed order from the finest pair. The coarse levels are not yet asymptotic, so only
 # the last ratio is worth asserting on.
