@@ -196,18 +196,36 @@ u₁, u₂ = components(uₕ)
 
 ## 5. Logical grid layouts and reshaped matrix views
 
-While degrees of freedom are stored internally as flat 1D vectors for linear algebra operations, finite difference stencils and visualization require indexing points in physical grid dimensions.
+While degrees of freedom are stored internally as flat 1D vectors for linear algebra operations, finite difference stencils and field evaluations often require querying points in physical grid coordinates.
 
-The zero-argument `reshape(uₕ)` reshapes the flat coefficient vector into a multidimensional array matching the mesh geometry:
+### Direct multidimensional and Cartesian indexing
 
-### Scalar elements
+For any [`ScalarGridSpace`](@ref) element, degrees of freedom can be read and mutated directly by grid coordinates (`uₕ[i, j]` in 2D, `uₕ[i, j, k]` in 3D) or by `CartesianIndex` without calling `reshape`:
 
 ```julia
 u_scal = element(Wₕ, 0.0)
+
+# Direct 2D grid coordinate access
+u_scal[2, 3] = 10.0
+@assert u_scal[2, 3] == 10.0
+
+# CartesianIndex indexing across dimensions
+I = CartesianIndex(2, 3)
+u_scal[I] = 20.0
+@assert u_scal[2, 3] == 20.0
+```
+
+These indexing operations translate spatial grid coordinates directly into linear coefficient offsets via the mesh's `LinearIndices` with zero heap allocations and full `@inbounds` transparency.
+
+### Reshaped array views
+
+When full multidimensional matrix operations (such as `size(M) == (nx, ny)`, matrix factorizations, or external plotting) are needed, the zero-argument `reshape(uₕ)` returns a `Base.ReshapedArray` view of the flat coefficient vector matching the mesh geometry:
+
+```julia
 u_grid = reshape(u_scal)
 size(u_grid)  # (5, 5)
 
-# Access value at grid point (i, j)
+# Access or mutate value through the reshaped view
 u_grid[2, 3] = 10.0
 ```
 

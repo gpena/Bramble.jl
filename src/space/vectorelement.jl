@@ -243,9 +243,151 @@ Returns a [`VectorElement`](@ref) for a grid space `Wₕ` with the same coeffici
     return elem
 end
 
-# Enable array-like indexing `uₕ[i]` for VectorElement.
-@inline Base.@propagate_inbounds getindex(uₕ::VectorElement, i) = getindex(uₕ.data, i)
-@inline Base.@propagate_inbounds setindex!(uₕ::VectorElement, val, i) = setindex!(uₕ.data, val, i)
+# ==============================================================================
+# Indexing Interface
+# ==============================================================================
+
+# Enable array-like linear indexing `uₕ[i]` for VectorElement.
+@inline Base.@propagate_inbounds Base.getindex(uₕ::VectorElement, i) = getindex(uₕ.data, i)
+@inline Base.@propagate_inbounds function Base.setindex!(uₕ::VectorElement, val, i)
+    setindex!(uₕ.data, val, i)
+    return uₕ
+end
+
+# Multidimensional and Cartesian bounds checks
+@inline function Base.checkbounds(
+    ::Type{Bool}, uₕ::VectorElement{<:ScalarGridSpace{2}}, i, j
+)
+    return checkbounds(Bool, LinearIndices(indices(mesh(uₕ))), i, j)
+end
+
+@inline function Base.checkbounds(
+    ::Type{Bool}, uₕ::VectorElement{<:ScalarGridSpace{3}}, i, j, k
+)
+    return checkbounds(Bool, LinearIndices(indices(mesh(uₕ))), i, j, k)
+end
+
+@inline function Base.checkbounds(
+    ::Type{Bool}, uₕ::VectorElement{<:ScalarGridSpace{D}}, I::CartesianIndex{D}
+) where {D}
+    return checkbounds(Bool, LinearIndices(indices(mesh(uₕ))), I)
+end
+
+@inline function Base.checkbounds(
+    ::Type{Bool}, uₕ::VectorElement{<:ScalarGridSpace}, I::CartesianIndex
+)
+    return checkbounds(Bool, LinearIndices(indices(mesh(uₕ))), I)
+end
+
+"""
+    getindex(uₕ::VectorElement{<:ScalarGridSpace{2}}, i::Integer, j::Integer)
+    getindex(uₕ::VectorElement{<:ScalarGridSpace{3}}, i::Integer, j::Integer, k::Integer)
+    getindex(uₕ::VectorElement{<:ScalarGridSpace{D}}, I::CartesianIndex{D}) where {D}
+    getindex(uₕ::VectorElement{<:ScalarGridSpace}, I::CartesianIndex)
+
+Access field degrees of freedom by spatial grid coordinates or `CartesianIndex`.
+
+Translates spatial grid coordinates directly into flat linear coefficient offsets using the
+mesh's `LinearIndices` with zero heap allocations and full `@inbounds` transparency.
+
+# Examples
+
+```julia
+Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (10, 10))
+Wₕ = gridspace(Ωₕ)
+uₕ = element(Wₕ, 0.0)
+
+# Set and get via 2D coordinates
+uₕ[2, 3] = 42.0
+uₕ[2, 3] == 42.0
+
+# Access via CartesianIndex
+I = CartesianIndex(2, 3)
+uₕ[I] == 42.0
+```
+
+See also: [`VectorElement`](@ref), [`ScalarGridSpace`](@ref), [`reshape`](@ref)
+"""
+@inline Base.@propagate_inbounds function Base.getindex(
+    uₕ::VectorElement{<:ScalarGridSpace{2}}, i::Integer, j::Integer
+)
+    @boundscheck checkbounds(uₕ, i, j)
+    li = LinearIndices(indices(mesh(uₕ)))
+    return @inbounds uₕ.data[li[i, j]]
+end
+
+@inline Base.@propagate_inbounds function Base.getindex(
+    uₕ::VectorElement{<:ScalarGridSpace{3}}, i::Integer, j::Integer, k::Integer
+)
+    @boundscheck checkbounds(uₕ, i, j, k)
+    li = LinearIndices(indices(mesh(uₕ)))
+    return @inbounds uₕ.data[li[i, j, k]]
+end
+
+@inline Base.@propagate_inbounds function Base.getindex(
+    uₕ::VectorElement{<:ScalarGridSpace{D}}, I::CartesianIndex{D}
+) where {D}
+    @boundscheck checkbounds(uₕ, I)
+    li = LinearIndices(indices(mesh(uₕ)))
+    return @inbounds uₕ.data[li[I]]
+end
+
+@inline Base.@propagate_inbounds function Base.getindex(
+    uₕ::VectorElement{<:ScalarGridSpace}, I::CartesianIndex
+)
+    @boundscheck checkbounds(uₕ, I)
+    li = LinearIndices(indices(mesh(uₕ)))
+    return @inbounds uₕ.data[li[I]]
+end
+
+"""
+    setindex!(uₕ::VectorElement{<:ScalarGridSpace{2}}, val, i::Integer, j::Integer) -> VectorElement
+    setindex!(uₕ::VectorElement{<:ScalarGridSpace{3}}, val, i::Integer, j::Integer, k::Integer) -> VectorElement
+    setindex!(uₕ::VectorElement{<:ScalarGridSpace{D}}, val, I::CartesianIndex{D}) where {D} -> VectorElement
+    setindex!(uₕ::VectorElement{<:ScalarGridSpace}, val, I::CartesianIndex) -> VectorElement
+
+Mutate field degrees of freedom by spatial grid coordinates or `CartesianIndex` in-place.
+
+Translates spatial grid coordinates directly into flat linear coefficient offsets using the
+mesh's `LinearIndices` with zero heap allocations and full `@inbounds` transparency.
+
+Returns `uₕ` matching Base collection conventions.
+"""
+@inline Base.@propagate_inbounds function Base.setindex!(
+    uₕ::VectorElement{<:ScalarGridSpace{2}}, val, i::Integer, j::Integer
+)
+    @boundscheck checkbounds(uₕ, i, j)
+    li = LinearIndices(indices(mesh(uₕ)))
+    @inbounds uₕ.data[li[i, j]] = val
+    return uₕ
+end
+
+@inline Base.@propagate_inbounds function Base.setindex!(
+    uₕ::VectorElement{<:ScalarGridSpace{3}}, val, i::Integer, j::Integer, k::Integer
+)
+    @boundscheck checkbounds(uₕ, i, j, k)
+    li = LinearIndices(indices(mesh(uₕ)))
+    @inbounds uₕ.data[li[i, j, k]] = val
+    return uₕ
+end
+
+@inline Base.@propagate_inbounds function Base.setindex!(
+    uₕ::VectorElement{<:ScalarGridSpace{D}}, val, I::CartesianIndex{D}
+) where {D}
+    @boundscheck checkbounds(uₕ, I)
+    li = LinearIndices(indices(mesh(uₕ)))
+    @inbounds uₕ.data[li[I]] = val
+    return uₕ
+end
+
+@inline Base.@propagate_inbounds function Base.setindex!(
+    uₕ::VectorElement{<:ScalarGridSpace}, val, I::CartesianIndex
+)
+    @boundscheck checkbounds(uₕ, I)
+    li = LinearIndices(indices(mesh(uₕ)))
+    @inbounds uₕ.data[li[I]] = val
+    return uₕ
+end
 
 # Create a new, uninitialized VectorElement with the same space as the input.
 #

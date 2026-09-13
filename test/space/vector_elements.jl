@@ -5,6 +5,41 @@ using SparseArrays
 using Random
 using Supposition
 
+if !@isdefined(var"@test_allocs")
+    macro test_allocs(call_expr)
+        if Meta.isexpr(call_expr, :call)
+            fn = call_expr.args[1]
+            args = call_expr.args[2:end]
+            quote
+                @test alloc_test($(esc(fn)), $(map(esc, args)...)) == 0
+            end
+        else
+            quote
+                let
+                    $(esc(call_expr))
+                    @test (@allocated $(esc(call_expr))) == 0
+                end
+            end
+        end
+    end
+end
+
+_idx_read2(u, i, j) = u[i, j]
+_idx_read2_inb(u, i, j) = @inbounds u[i, j]
+_idx_write2!(u, val, i, j) = (u[i, j] = val; u)
+_idx_write2_inb!(u, val, i, j) = (@inbounds u[i, j] = val; u)
+
+_idx_read3(u, i, j, k) = u[i, j, k]
+_idx_read3_inb(u, i, j, k) = @inbounds u[i, j, k]
+_idx_write3!(u, val, i, j, k) = (u[i, j, k] = val; u)
+_idx_write3_inb!(u, val, i, j, k) = (@inbounds u[i, j, k] = val; u)
+
+_idx_read_ci(u, I) = u[I]
+_idx_read_ci_inb(u, I) = @inbounds u[I]
+_idx_write_ci!(u, val, I) = (u[I] = val; u)
+_idx_write_ci_inb!(u, val, I) = (@inbounds u[I] = val; u)
+
+
 @inline function _func2array!(u::AbstractArray, g, mesh_indices)
     @inbounds for idx in mesh_indices
         u[idx] = g(idx)
@@ -125,13 +160,134 @@ end
     end
 
     @testset "Indexing" begin
+        # 1D Linear and Cartesian indexing
         u = element(W, 1.0:4.0)
         @test u[1] == 1.0
         @test u[4] == 4.0
+        @test u[CartesianIndex(1)] == 1.0
+        @test u[CartesianIndex(4)] == 4.0
 
-        u[3] = 99.0
+        res = (u[3] = 99.0)
+        @test res == 99.0
         @test u[3] == 99.0
         @test parent(u)[3] == 99.0
+
+        u[CartesianIndex(2)] = 77.0
+        @test u[2] == 77.0
+        @test u[CartesianIndex(2)] == 77.0
+
+        @test_throws BoundsError u[0]
+        @test_throws BoundsError u[5]
+        @test_throws BoundsError u[CartesianIndex(0)]
+        @test_throws BoundsError u[CartesianIndex(5)]
+
+        # 2D Multidimensional & Cartesian indexing (#155)
+        Ωₕ_2d = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6))
+        W_2d = gridspace(Ωₕ_2d)
+        u_2d = element(W_2d, 0.0)
+
+        for i in 1:5, j in 1:6
+            u_2d[i, j] = 10.0 * i + j
+        end
+
+        m_reshaped = reshape(u_2d)
+        for i in 1:5, j in 1:6
+            @test u_2d[i, j] == 10.0 * i + j
+            @test u_2d[CartesianIndex(i, j)] == 10.0 * i + j
+            @test m_reshaped[i, j] == 10.0 * i + j
+        end
+
+        # Mutation via CartesianIndex
+        u_2d[CartesianIndex(2, 3)] = 123.0
+        @test u_2d[2, 3] == 123.0
+        @test m_reshaped[2, 3] == 123.0
+
+        # Type inference
+        @test @inferred(u_2d[2, 3]) === 123.0
+        @test @inferred(u_2d[CartesianIndex(2, 3)]) === 123.0
+
+        # Bounds checks for 2D
+        @test_throws BoundsError u_2d[0, 1]
+        @test_throws BoundsError u_2d[6, 1]
+        @test_throws BoundsError u_2d[1, 0]
+        @test_throws BoundsError u_2d[1, 7]
+        @test_throws BoundsError (u_2d[6, 1] = 1.0)
+        @test_throws BoundsError u_2d[CartesianIndex(0, 1)]
+        @test_throws BoundsError u_2d[CartesianIndex(6, 1)]
+        @test_throws BoundsError u_2d[CartesianIndex(1, 7)]
+        @test_throws BoundsError (u_2d[CartesianIndex(6, 1)] = 1.0)
+        @test_throws BoundsError u_2d[CartesianIndex(1, 2, 3)] # Dimension mismatch
+
+        # Verify BoundsError points to VectorElement
+        try
+            u_2d[6, 1]
+            @test false
+        catch e
+            @test e isa BoundsError
+            @test e.a === u_2d
+            @test e.i == (6, 1)
+        end
+
+        # Zero allocations check for 2D
+        @test_allocs _idx_read2(u_2d, 2, 3)
+        @test_allocs _idx_read2_inb(u_2d, 2, 3)
+        @test_allocs _idx_write2!(u_2d, 5.0, 2, 3)
+        @test_allocs _idx_write2_inb!(u_2d, 5.0, 2, 3)
+        @test_allocs _idx_read_ci(u_2d, CartesianIndex(2, 3))
+        @test_allocs _idx_read_ci_inb(u_2d, CartesianIndex(2, 3))
+        @test_allocs _idx_write_ci!(u_2d, 5.0, CartesianIndex(2, 3))
+        @test_allocs _idx_write_ci_inb!(u_2d, 5.0, CartesianIndex(2, 3))
+
+        # 3D Multidimensional & Cartesian indexing (#155)
+        Ωₕ_3d = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)), (3, 4, 5))
+        W_3d = gridspace(Ωₕ_3d)
+        u_3d = element(W_3d, 0.0)
+
+        for i in 1:3, j in 1:4, k in 1:5
+            u_3d[i, j, k] = 100.0 * i + 10.0 * j + k
+        end
+
+        m3_reshaped = reshape(u_3d)
+        for i in 1:3, j in 1:4, k in 1:5
+            @test u_3d[i, j, k] == 100.0 * i + 10.0 * j + k
+            @test u_3d[CartesianIndex(i, j, k)] == 100.0 * i + 10.0 * j + k
+            @test m3_reshaped[i, j, k] == 100.0 * i + 10.0 * j + k
+        end
+
+        u_3d[CartesianIndex(2, 3, 4)] = 999.0
+        @test u_3d[2, 3, 4] == 999.0
+        @test m3_reshaped[2, 3, 4] == 999.0
+
+        @test @inferred(u_3d[2, 3, 4]) === 999.0
+        @test @inferred(u_3d[CartesianIndex(2, 3, 4)]) === 999.0
+
+        # Bounds checks for 3D
+        @test_throws BoundsError u_3d[0, 1, 1]
+        @test_throws BoundsError u_3d[4, 1, 1]
+        @test_throws BoundsError u_3d[1, 5, 1]
+        @test_throws BoundsError u_3d[1, 1, 6]
+        @test_throws BoundsError (u_3d[4, 1, 1] = 1.0)
+        @test_throws BoundsError u_3d[CartesianIndex(4, 1, 1)]
+        @test_throws BoundsError u_3d[CartesianIndex(1, 1, 6)]
+
+        # Zero allocations check for 3D
+        @test_allocs _idx_read3(u_3d, 2, 3, 4)
+        @test_allocs _idx_read3_inb(u_3d, 2, 3, 4)
+        @test_allocs _idx_write3!(u_3d, 7.0, 2, 3, 4)
+        @test_allocs _idx_write3_inb!(u_3d, 7.0, 2, 3, 4)
+
+        # Component view indexing
+        V_comp = W_2d^2
+        u_comp = element(V_comp, 0.0)
+        u_x = components(u_comp)[1]
+        u_y = u_comp(2)
+
+        u_x[2, 3] = 42.0
+        u_y[2, 3] = 84.0
+        @test u_x[2, 3] == 42.0
+        @test u_y[2, 3] == 84.0
+        @test reshape(u_comp)[1][2, 3] == 42.0
+        @test reshape(u_comp)[2][2, 3] == 84.0
     end
 
     @testset "similar" begin
