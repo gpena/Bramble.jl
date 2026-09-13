@@ -1,17 +1,13 @@
 [deps]
 InteractiveUtils = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
 ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
-AMD = "14f7f29c-3bd6-536c-9a0b-7339e30b5a3e"
 Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
 Bramble = "72287966-2ff3-4442-8755-61ed245be5f7"
 DifferentiationInterface = "a0c0ee7d-e4b9-4e03-894e-1c5f64a51d63"
 ExplicitImports = "7d51a73a-1435-4ff3-83d9-f097790105c7"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
-ILUZero = "88f59080-6952-5380-9ea5-54057fb9a43f"
-IncompleteLU = "40713840-3770-5561-ab4c-a76e7d0d7895"
 JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
-LinearSolve = "7ed4a6bd-45f5-4d41-b270-4a48e9bafcae"
 Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
 MakieCore = "20f20a25-4f0e-4fdf-b5d1-57303727442b"
 Meshes = "eacbb407-ea5a-433e-ab97-5258b1ca43fa"
@@ -34,7 +30,6 @@ WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
 Bramble = {path = ".."}
 
 [compat]
-AMD = "0.5"
 ExplicitImports = "1.15"
 OrdinaryDiffEqBDF = "1, 2"
 OrdinaryDiffEqRosenbrock = "1, 2"
