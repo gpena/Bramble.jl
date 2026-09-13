@@ -103,6 +103,86 @@ jobs:
           use_oidc: true
           fail_ci_if_error: false
 
+  # Dependency vulnerability audit against the OSV database, which ingests Julia's own
+  # JLSEC advisories from JuliaLang/SecurityAdvisories.jl alongside the CVE feeds. Weekly
+  # rather than per push: advisories are published on the database's schedule, not on
+  # Bramble's, so a push-triggered run would re-ask the same question for nothing.
+  #
+  # Report, not gate, for the same reason the rest of this workflow is a canary. Measured
+  # on 2026-09-13, the three manifests hold 633 packages and 315 known advisories, and 29
+  # of the 30 affected packages are JLL binaries pinned by the Julia distribution itself
+  # (LibCURL_jll, OpenSSL_jll, MbedTLS_jll, nghttp2_jll and friends) -- Bramble cannot bump
+  # those without a new Julia release, so failing on them would paint the workflow red every
+  # week for something no commit here can fix. The findings go to the job summary for a
+  # person to read; what *is* gated is that the scan actually parsed the manifests.
+  #
+  # Exit codes carry that distinction (osv-scanner docs, "Exit Codes"): 0 is a clean scan,
+  # 1 is "packages scanned, advisories found", and everything else is an error -- notably
+  # 128, "no packages found", which is what a silently broken extractor looks like. So 0
+  # and 1 pass and the rest fails, and a green run means the audit ran rather than that it
+  # found nothing.
+  security-audit:
+    name: Dependency vulnerability audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      # Pinned to an exact release, with the SHA-256 the release publishes. Bump both
+      # together: the checksum is the one thing that makes downloading a binary into CI
+      # different from running whatever the URL happens to serve that morning.
+      OSV_SCANNER_VERSION: v2.5.1
+      OSV_SCANNER_SHA256: f9f25499a2c8cc367b3af45df2ea7eeca7fbccceab9c35079968f4b3652194be
+    steps:
+      - uses: actions/checkout@v4
+
+      # The binary rather than `google/osv-scanner-action`: the scan needs a flag the action
+      # does not pass through (`--experimental-plugins`, below) and needs to read the exit
+      # code itself rather than let a non-zero one fail the step.
+      - name: Install osv-scanner
+        run: |
+          curl -sSfL -o osv-scanner \
+            "https://github.com/google/osv-scanner/releases/download/${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64"
+          echo "${OSV_SCANNER_SHA256}  osv-scanner" | sha256sum --check --strict -
+          chmod +x osv-scanner
+
+      # `--experimental-plugins julia/manifesttoml` is load-bearing, not decorative. The
+      # Julia extractor lives in osv-scalibr and is *not* among the plugins osv-scanner
+      # enables by default (its own supported-lockfiles table lists no Julia), so without
+      # this flag the run ends in "could not determine extractor suitable to this file" and
+      # audits nothing at all. Should the flag graduate or be renamed upstream, the scan
+      # fails with exit 127/128 rather than passing empty -- which is the point of reading
+      # the exit code below.
+      - name: Audit the manifests against the OSV database
+        run: |
+          status=0
+          ./osv-scanner scan source \
+            --experimental-plugins julia/manifesttoml \
+            -L Manifest.toml \
+            -L test/Manifest.toml \
+            -L docs/Manifest.toml \
+            --format markdown > osv-report.md || status=$?
+
+          {
+            echo "## Dependency vulnerability audit"
+            echo
+            cat osv-report.md
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          case "$status" in
+            0) echo "No known advisories against the three manifests." ;;
+            1) echo "::notice::Known advisories found; read the job summary. Weekly.yml audits, it does not gate." ;;
+            *) echo "::error::osv-scanner exited $status: the audit did not run. See the log above."
+               exit "$status" ;;
+          esac
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: osv-report
+          path: osv-report.md
+          if-no-files-found: error
+
   # Docs are not built here, or on any schedule: generation is on-demand only
   # (`docs-on-demand.yml`, `workflow_dispatch`). A broken `@ref` is an error the test suite
   # cannot see (a docstring is only cross-referenced when it is rendered), so that check now
