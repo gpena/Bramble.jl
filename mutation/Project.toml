@@ -1,7 +1,0 @@
-[deps]
-Bramble = "72287966-2ff3-4442-8755-61ed245be5f7"
-Gremlins = "8bb2f624-ef2f-4048-8713-dbabdf2ef7e4"
-
-[sources]
-Bramble = {path = ".."}
-Gremlins = {rev = "fix/self-source-shadow-merge", url = "https://github.com/gpena/Gremlins.jl"}
