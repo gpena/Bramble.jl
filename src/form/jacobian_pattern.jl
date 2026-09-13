@@ -3,8 +3,8 @@
 # Sparsity pattern of a Newton residual's Jacobian, read off a BilinearForm's AST -- no AD
 # tracing (see gpena/Bramble.jl#21).
 #
-# The residual in the nonlinear worked examples (docs/src/examples/poisson_nonlinear.md,
-# coupled_reaction_diffusion.md) has the shape `A(u) * u - F`, where `a` (the `BilinearForm`
+# The residual in the nonlinear worked examples (docs/src/examples/poisson_nonlinear.jl,
+# coupled_reaction_diffusion.jl) has the shape `A(u) * u - F`, where `a` (the `BilinearForm`
 # that assembles `A`) has a `GridFunctionScale` coefficient computed *outside* the AST, e.g.
 # `αvals = α.(M₋ₕ(uₕ))`. `∂residual/∂u` therefore has two contributions at every entry `a`'s
 # own pattern reaches: `A` acting on the explicit `u` (that's `a`'s own sparsity, already

@@ -25,10 +25,10 @@ const _traced_ad = AutoSparse(
     coloring_algorithm = SparseMatrixColorings.GreedyColoringAlgorithm()
 )
 
-# `-(α(u)u')' = g`, mirroring docs/src/examples/poisson_nonlinear.md, generalized to D
-# dimensions the way examples/nonlinear_convergence.jl and the doc's own `nonlinear_series`
-# do. `Ωd` is the domain the mesh `Ωₕ` was built from (kept around separately, the same way
-# examples/convergence.jl does, since dirichlet_constraints needs the boundary-marked
+# `-(α(u)u')' = g`, mirroring docs/src/examples/poisson_nonlinear.jl, generalized to D
+# dimensions the way that page's own `nonlinear_series` does. `Ωd` is the domain the mesh
+# `Ωₕ` was built from (kept around separately, the same way
+# examples/variable_coefficient.jl does, since dirichlet_constraints needs the boundary-marked
 # domain rather than the mesh itself). Returns everything a caller needs to build both the
 # residual and its native pattern.
 function _nonlinear_poisson_setup(D::Int, Ωd, Ωₕ)
@@ -211,7 +211,7 @@ end
     @testset "Composite trial/test spaces" begin
         # `jacobian_pattern` on a composite space (gpena/Bramble.jl#95): a dependency may
         # name a *different* leaf the same way a form term does (`U -> U(2)`), for
-        # "this coefficient is another component's own value" (coupled_reaction_diffusion.md's
+        # "this coefficient is another component's own value" (coupled_reaction_diffusion.jl's
         # `v_c`); `U -> M₋ₕ(U)` (no `(k)`) keeps meaning "this block's own trial leaf",
         # exactly like the non-composite case above.
 
@@ -365,7 +365,7 @@ end
 
         @testset "cross-block dependency through a stencil op, not just identity" begin
             # block(1,1)'s coefficient depends on M₋ₕ(component 2) -- averaged through
-            # another leaf, not read directly the way coupled_reaction_diffusion.md's own
+            # another leaf, not read directly the way coupled_reaction_diffusion.jl's own
             # v_c is.
             Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
             Ωₕ = mesh(Ω, (8, 8), (false, false))

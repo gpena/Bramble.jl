@@ -75,6 +75,25 @@ function _matches_fd(f, a = 1.3; rtol = 1e-5)
     return isapprox(ForwardDiff.derivative(f, a), _fd(f, a); rtol = rtol)
 end
 
+# Runs one worked-example page. The pages under docs/src/examples/ are Literate scripts:
+# docs/make.jl renders each to the markdown Documenter publishes, and the suite runs the same
+# file, so the numbers a reader sees are the numbers asserted here. Their `#src` lines are
+# those assertions -- stripped on the way to the page, executed from here.
+#
+# Each page gets its own module rather than sharing `Main`: the pages write the bare
+# `domain`/`mesh`/`element` a reader would type, they define names like `sol` and `residual`
+# that would collide across pages, and the ext group shares one `Main` with Meshes.jl, which
+# exports three of those names itself.
+function _run_example_page(name::Symbol)
+    path = joinpath(@__DIR__, "..", "docs", "src", "examples", string(name, ".jl"))
+    @test isfile(path)
+    @eval Main module $(Symbol(:Page_, name))
+    using Test
+    include($path)
+    end
+    return nothing
+end
+
 const __bramble_test_group = get(ENV, "BRAMBLE_TEST_GROUP", "all")
 const __bramble_with_quality = __bramble_test_group in ("all", "quality", "full")
 const __bramble_with_unit_tests = __bramble_test_group in ("all", "unit", "full")
@@ -211,16 +230,15 @@ if __bramble_with_unit_tests
             include("exporters/pgfplots_export.jl")
         end
 
-        # End-to-end order of convergence for the worked examples, which the pages
-        # themselves compute but only render, plus regression coverage for the two
-        # nonlinear examples (Picard, Newton, and a differentiated composite residual --
-        # see #81) that convergence.jl alone does not reach. ~1m05s together -- still
-        # cheap enough to run on every push rather than sit behind a group, and it covers
-        # assemble/solve/boundary-conditions and the sparse-AD Newton path as pipelines
-        # rather than operator by operator.
+        # The worked-example pages themselves, run rather than mirrored: each is a
+        # Literate script whose `#src` assertions pin the numbers it renders (#117). Plus
+        # the variable-coefficient case no page covers. ~1m together -- cheap enough to run
+        # on every push rather than sit behind a group, and it covers assemble, the
+        # Dirichlet path, and the sparse-AD Newton loop as pipelines rather than operator by
+        # operator.
         @testset "Worked examples" begin
-            include("examples/convergence.jl")
-            include("examples/nonlinear_convergence.jl")
+            include("examples/pages.jl")
+            include("examples/variable_coefficient.jl")
         end
     end
 end

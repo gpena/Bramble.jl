@@ -3,7 +3,11 @@
 # Mirrors `convergence_plot.jl`'s structure exactly; see `plotly_common.jl` for the shared
 # CDN-loading/theming infrastructure.
 
-include(joinpath(@__DIR__, "..", "plotly_common.jl"))
+# Guarded: a page that draws both a solution surface and a convergence plot includes this
+# file and its sibling, and both reach for plotly_common.jl. Including it twice into one
+# module redefines `plotlyjs_head` and warns about replacing its docstring.
+isdefined(@__MODULE__, :plotlyjs_head) ||
+    include(joinpath(@__DIR__, "..", "plotly_common.jl"))
 
 struct SolutionPlot
     html::String

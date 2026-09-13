@@ -5,7 +5,7 @@
 #
 # A Newton residual generic over `T` (`Float64` on a plain call, `ForwardDiff.Dual` while an
 # AD backend's sparse Jacobian sweep is probing it) cannot reuse one preallocated matrix the
-# way the Picard loop in poisson_nonlinear.md does: a matrix allocated for one element type
+# way the Picard loop in poisson_nonlinear.jl does: a matrix allocated for one element type
 # cannot hold the other, so the doc's own `diffusion_matrix` rebuilds a *fresh* matrix,
 # pattern and values both, on every call. But the *pattern* is exactly as fixed across
 # element types as it is across Newton iterations -- only the coefficient's own values
@@ -32,7 +32,7 @@ still sees the new guess rather than the one `build` first saw.
 
 `build` itself should be a named function defined once, not a closure literal written
 inside whatever function calls `type_cached_assemble!` — the same reason the Picard loop
-in `poisson_nonlinear.md` builds its own form once, outside the loop, rather than on every
+in `poisson_nonlinear.jl` builds its own form once, outside the loop, rather than on every
 iteration: a `do ... end` block re-literalized on every call allocates a new closure each
 time, which is exactly the cost this function exists to avoid paying more than once.
 
@@ -58,7 +58,7 @@ latter allocates a fresh result every call (the same `similar`-based cost every 
 stencil operator has), which would silently reintroduce an O(n) allocation this function's
 whole point is to stop paying repeatedly. `M₋ₓ!` alone covers the 1D case above; a
 D-dimensional coefficient needs one scratch buffer and one `M₋ₓ!`/`M₋ᵧ!`/`M₋₂!` call per
-direction, the same way `poisson_nonlinear.md`'s own `nonlinear_series` builds a
+direction, the same way `poisson_nonlinear.jl`'s own `nonlinear_series` builds a
 D-dimensional coefficient tuple.
 
 `cache` is shared across an entire Newton (or Picard) loop, one `Dict` per residual: the
