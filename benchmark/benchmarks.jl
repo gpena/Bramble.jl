@@ -222,12 +222,11 @@ end
 # here is the allocation count and the shape of the cost, neither of which needs
 # a million degrees of freedom to show a regression.
 let W1 = gridspace(_mesh1()), f1 = Rₕ(W1, sin), v1 = Rₕ(W1, cos), l1 = Bramble.form(W1, v -> innerₕ(f1, v)),
-    b1 = Bramble.assemble(l1), ast1 = Bramble.resolve_form_ast(l1), W2 = gridspace(_mesh2()),
-    f2 = Rₕ(W2, x -> sin(x[1]) * x[2]), l2 = Bramble.form(W2, v -> innerₕ(f2, v)), b2 = Bramble.assemble(l2),
-    ast2 = Bramble.resolve_form_ast(l2),
+    b1 = Bramble.assemble(l1), W2 = gridspace(_mesh2()), f2 = Rₕ(W2, x -> sin(x[1]) * x[2]),
+    l2 = Bramble.form(W2, v -> innerₕ(f2, v)), b2 = Bramble.assemble(l2),
     Wm = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)),
         (300, 300), (true, true))), am = Bramble.form(Wm, Wm, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v))),
-    Am = Bramble.assemble(am), astm = Bramble.resolve_form_ast(am),
+    Am = Bramble.assemble(am),
     # point 22: assemble!/assemble dispatch on execution_policy(space) now, a
     # different code path from assemble_parallel! below, which always threads
     # regardless of the backend. W1p/amp exercise that dispatch directly through
@@ -235,7 +234,7 @@ let W1 = gridspace(_mesh1()), f1 = Rₕ(W1, sin), v1 = Rₕ(W1, cos), l1 = Bramb
     # (e.g. it silently stops mattering and one branch is always taken) shows up
     # here, not only in the explicit-override entries.
     W1p = gridspace(mesh(domain(interval(0.0, 1.0)), N1, true; backend = _PAR)), f1p = Rₕ(W1p, sin),
-    l1p = Bramble.form(W1p, v -> innerₕ(f1p, v)), b1p = Bramble.assemble(l1p), ast1p = Bramble.resolve_form_ast(l1p),
+    l1p = Bramble.form(W1p, v -> innerₕ(f1p, v)), b1p = Bramble.assemble(l1p),
     Wmp = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)),
         (300, 300), (true, true); backend = _PAR)), amp = Bramble.form(Wmp, Wmp, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v)))
 
@@ -254,8 +253,10 @@ let W1 = gridspace(_mesh1()), f1 = Rₕ(W1, sin), v1 = Rₕ(W1, cos), l1 = Bramb
     # be filled in lazily on the first `assemble!` call without `BilinearForm` itself needing
     # to be mutable) — and a `mutable struct` is always heap-boxed in Julia, so constructing
     # one costs exactly one allocation regardless of what it holds. Every fresh form starts
-    # pointing at a single shared, empty `segments` vector (`_NO_SEGMENTS`) rather than
-    # allocating its own, which is what keeps this at one allocation instead of two. Getting
+    # pointing at a single shared, empty `segments` vector (`_no_segments`, one constant per
+    # dimension) rather than allocating its own, which is what keeps this at one allocation
+    # instead of two -- it read 2 until that sharing was restored, having lapsed when the
+    # segment eltype became dimension-parametric (gpena/Bramble.jl#161). Getting
     # to zero would mean moving the cache out of `BilinearForm` entirely (an external
     # identity-keyed cache, e.g. a `WeakKeyDict`) — a bigger, separately-justified change,
     # not something to reach for over one small one-time per-form allocation. `assemble!`
@@ -265,24 +266,27 @@ let W1 = gridspace(_mesh1()), f1 = Rₕ(W1, sin), v1 = Rₕ(W1, cos), l1 = Bramb
     g["form (bilinear, 2D)"] = @benchmarkable Bramble.form(
         $Wm, $Wm, (u, v) -> innerₕ(u, v))
 
-    # filling a vector that already exists, which is the time-loop call
-    g["assemble! 1D"] = @benchmarkable Bramble.assemble!($b1, $l1; ast = $ast1)
-    # `assemble_parallel!` takes the AST positionally where `assemble!` takes it as a
-    # keyword — an inconsistency between the two entry points, not a typo here.
-    g["assemble_parallel! 1D"] = @benchmarkable Bramble.assemble_parallel!(
-        $b1, $l1, $ast1)
-    g["assemble! 2D"] = @benchmarkable Bramble.assemble!($b2, $l2; ast = $ast2)
-    g["assemble_parallel! 2D"] = @benchmarkable Bramble.assemble_parallel!(
-        $b2, $l2, $ast2)
+    # filling a vector that already exists, which is the time-loop call.
+    #
+    # None of these pass an `ast`. The keyword (and `assemble_parallel!`'s positional
+    # equivalent) is deprecated — it measured no benefit, gpena/Bramble.jl#105 — and passing
+    # it now routes through `_warn_ast_keyword`, whose `Base.depwarn` costs 272 B in 2
+    # allocations on *every* call, a fixed cost independent of grid size. That is what the
+    # `ALLOCATION_BOUNDS` entries below are guarding: a form assembles against its own
+    # resolved AST at zero allocations, and passing the deprecated keyword is what breaks it.
+    g["assemble! 1D"] = @benchmarkable Bramble.assemble!($b1, $l1)
+    g["assemble_parallel! 1D"] = @benchmarkable Bramble.assemble_parallel!($b1, $l1)
+    g["assemble! 2D"] = @benchmarkable Bramble.assemble!($b2, $l2)
+    g["assemble_parallel! 2D"] = @benchmarkable Bramble.assemble_parallel!($b2, $l2)
 
     # the fused contraction builds no vector at all, so it must allocate nothing
     g["l(vₕ) 1D"] = @benchmarkable $l1($v1)
-    g["evaluate! 1D"] = @benchmarkable Bramble.evaluate!($b1, $l1, $v1; ast = $ast1)
+    g["evaluate! 1D"] = @benchmarkable Bramble.evaluate!($b1, $l1, $v1)
 
     # the matrix: the pattern is built once, then refilled in place
     g["allocate_system_matrix 2D"] = @benchmarkable Bramble.allocate_system_matrix($am) samples=5 evals=1
     g["assemble! (matrix) 2D"] = @benchmarkable Bramble.assemble!(
-        $Am, $am; ast = $astm) samples=5 evals=1
+        $Am, $am) samples=5 evals=1
 
     # The Parallel() entries below moved when the threaded sweeps started colouring by
     # bands rather than by points (utils/linear_algebra.jl, form/{linear,bilinear}.jl):
@@ -292,7 +296,7 @@ let W1 = gridspace(_mesh1()), f1 = Rₕ(W1, sin), v1 = Rₕ(W1, cos), l1 = Bramb
     #
     # policy dispatch through assemble!/assemble, not assemble_parallel!'s override
     g["assemble! 1D, Parallel() backend"] = @benchmarkable Bramble.assemble!(
-        $b1p, $l1p; ast = $ast1p)
+        $b1p, $l1p)
     # BilinearForm.assemble() used to call assemble_parallel! unconditionally; it now
     # follows the trial space's backend the same way LinearForm.assemble always has.
     # Both allocate a fresh matrix each call (assemble calls allocate_system_matrix
@@ -327,11 +331,10 @@ let N = 100_000
         fₕ = Rₕ(W, sin)
         l = Bramble.form(W, v -> innerₕ(fₕ, v))
         b = Bramble.assemble(l)
-        ast = Bramble.resolve_form_ast(l)
 
         g["Rₕ! $lbl"] = @benchmarkable Rₕ!($u, sin)
         g["avgₕ! $lbl"] = @benchmarkable avgₕ!($u, sin) samples=20
-        g["assemble! $lbl"] = @benchmarkable Bramble.assemble!($b, $l; ast = $ast)
+        g["assemble! $lbl"] = @benchmarkable Bramble.assemble!($b, $l)
         g["innerₕ $lbl"] = @benchmarkable innerₕ($fₕ, $fₕ)
     end
 end

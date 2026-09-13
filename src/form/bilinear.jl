@@ -87,7 +87,27 @@ mutable struct _AssemblyCache{D}
     segments::Vector{AnySegment{D}}
 end
 
-_AssemblyCache{D}() where {D} = _AssemblyCache{D}(nothing, nothing, AnySegment{D}[])
+# One shared, never-written empty `segments` vector per dimension, so a fresh form's cache
+# costs one allocation -- the mutable struct itself -- rather than two. Sharing is safe
+# because nothing ever writes *through* this reference: a cache miss in
+# `_assemble_bilinear_core_cached!` (form/bilinear_execution.jl) builds its own vector and
+# assigns it, deliberately never `push!`ing into or `empty!`ing whatever `segments` points at.
+#
+# One constant per `D` rather than one shared `AnySegment[]`, because the eltype is
+# dimension-parametric (gpena/Bramble.jl#161): an unparametrized `AnySegment` is not concrete,
+# and storing into such a vector boxes every element (see [`DiagonalSegment`](@ref)). Only the
+# dimensions this package meshes get a constant; any other `D` falls back to allocating, which
+# is what every `D` did before this.
+const _NO_SEGMENTS_1 = AnySegment{1}[]
+const _NO_SEGMENTS_2 = AnySegment{2}[]
+const _NO_SEGMENTS_3 = AnySegment{3}[]
+
+_no_segments(::Val{D}) where {D} = AnySegment{D}[]
+_no_segments(::Val{1}) = _NO_SEGMENTS_1
+_no_segments(::Val{2}) = _NO_SEGMENTS_2
+_no_segments(::Val{3}) = _NO_SEGMENTS_3
+
+_AssemblyCache{D}() where {D} = _AssemblyCache{D}(nothing, nothing, _no_segments(Val(D)))
 
 """
     BilinearForm{D, TrialSpace, TestSpace, AST}
