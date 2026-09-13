@@ -67,6 +67,31 @@ _fd(f, a; h = 1e-6) = (f(a + h) - f(a - h)) / (2h)
 # A symmetric, structurally symmetric operator to constrain.
 _tri(m) = spdiagm(0 => fill(4.0, m), 1 => fill(-1.0, m - 1), -1 => fill(-1.0, m - 1))
 
+# The points of an arbitrary non-uniform partition of [0, 1], from a vector of positive
+# step sizes: cumulative sums, normalised by the last one. Every Supposition check of a
+# discrete integration-by-parts identity builds its mesh this way
+# (space/star_difference.jl, space/centered_difference.jl, space/sbp_identities.jl), so
+# the construction lives here rather than once per file.
+function _nonuniform_points(h::AbstractVector{<:Real})
+    pts = zeros(Float64, length(h) + 1)
+    for (i, hᵢ) in enumerate(h)
+        pts[i + 1] = pts[i] + hᵢ
+    end
+    pts ./= pts[end]
+    return pts
+end
+
+# Zeroes the boundary planes of a field laid out on the mesh's point grid, along every
+# direction, which is what puts it in V_{H,0} (homogeneous Dirichlet). Works in 1D, 2D and
+# 3D through `selectdim`, so the identity checks do not spell the slices out per dimension.
+function _zero_boundary!(a::AbstractArray{<:Real, N}) where {N}
+    for d in 1:N
+        selectdim(a, d, 1) .= 0
+        selectdim(a, d, size(a, d)) .= 0
+    end
+    return a
+end
+
 # `f` must be a scalar functional of one parameter, evaluated through the library. Checks
 # that the AD derivative is right, not merely that it ran. Was `_matches_finite_difference`
 # in space/autodiff.jl and `_matches_fd` in form/autodiff.jl (same body, two names, so no
@@ -183,6 +208,7 @@ if __bramble_with_unit_tests
             include("space/star_difference.jl")
             include("space/centered_difference.jl")
             include("space/cross_weighted_difference.jl")
+            include("space/sbp_identities.jl")
             include("space/commutation.jl")
             include("space/jump.jl")
             include("space/average.jl")

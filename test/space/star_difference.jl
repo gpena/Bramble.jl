@@ -200,6 +200,48 @@ star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
             @test !sbp(nonzero, nonzero)
         end
 
+        @testset "Vectorial form" begin
+            # The same identity for a vector field, written through the tuple-valued
+            # operators: the starred divergence as the sum of the directional starred
+            # differences of the components, and the right-hand side as one call to the
+            # tuple method of inner₊ against ∇₋ₕ(wₕ), which sums the directional inner
+            # products. Only wₕ vanishes on the boundary, as in the componentwise form.
+            div_star(vₕ::NTuple{2, VectorElement}) = Dstar₊ₓ(vₕ[1]) + Dstar₊ᵧ(vₕ[2])
+            div_star(vₕ::NTuple{3, VectorElement}) = Dstar₊ₓ(vₕ[1]) + Dstar₊ᵧ(vₕ[2]) +
+                                                     Dstar₊₂(vₕ[3])
+
+            Random.seed!(20260830)
+            Ω1 = mesh(domain(interval(0.0, 1.0)), 41, false)
+            W1 = gridspace(Ω1)
+            v1 = Rₕ(W1, x -> cos(x) + 0.7)          # not zero at the boundary
+            w1 = Rₕ(W1, x -> sin(pi * x))
+            # in one dimension ∇₋ₕ is the grid function D₋ₓ gives, not a tuple
+            @test agree(innerₕ(Dstar₊ₕ(v1), w1), -inner₊(v1, ∇₋ₕ(w1)))
+
+            Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (17, 15), (false, false))
+            W2 = gridspace(Ω2)
+            # distinct per component, so a mix-up between the two cannot pass
+            v2 = (Rₕ(W2, x -> cos(x[1]) + 0.7), Rₕ(W2, x -> x[2]^2 + 0.2x[1]))
+            w2 = Rₕ(W2, x -> sin(pi * x[1]) * sin(pi * x[2]))
+            @test agree(innerₕ(div_star(v2), w2), -inner₊(v2, ∇₋ₕ(w2)))
+
+            Ω3 = mesh(
+                domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (9, 8, 7), (false, false, false)
+            )
+            W3 = gridspace(Ω3)
+            v3 = (
+                Rₕ(W3, x -> cos(x[1]) + 0.7),
+                Rₕ(W3, x -> x[2]^2 + 0.2x[1]),
+                Rₕ(W3, x -> 0.4x[3] + x[1] * x[2])
+            )
+            w3 = Rₕ(W3, x -> sin(pi * x[1]) * sin(pi * x[2]) * sin(pi * x[3]))
+            @test agree(innerₕ(div_star(v3), w3), -inner₊(v3, ∇₋ₕ(w3)))
+
+            # and the tuple route gives what summing the directional inner products gives
+            @test -inner₊(v3, ∇₋ₕ(w3)) ≈ -(inner₊ₓ(v3[1], D₋ₓ(w3)) +
+                                           inner₊ᵧ(v3[2], D₋ᵧ(w3)) + inner₊₂(v3[3], D₋₂(w3)))
+        end
+
         @testset "Random grids (Supposition)" begin
             positive_h = Data.Floats{Float64}(;
                 minimum = 0.01, maximum = 10.0, nans = false, infs = false
@@ -214,24 +256,15 @@ star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
                     u_raw = Data.Vectors(field_val; min_size = 31, max_size = 31),
                     v_raw = Data.Vectors(field_val; min_size = 31, max_size = 31)
             )
-                n = length(h) + 1
-                pts = zeros(Float64, n)
-                for i in 1:length(h)
-                    pts[i + 1] = pts[i] + h[i]
-                end
-                pts ./= pts[end]
+                pts = _nonuniform_points(h)
+                n = length(pts)
 
                 Ωₕ = mesh(domain(interval(0.0, 1.0)), n, false)
                 set_points!(Ωₕ, pts)
                 Wₕ = gridspace(Ωₕ)
 
-                u_vals = copy(u_raw[1:n])
-                v_vals = copy(v_raw[1:n])
-                v_vals[1] = 0.0
-                v_vals[end] = 0.0
-
-                uₕ = element(Wₕ, u_vals)
-                vₕ = element(Wₕ, v_vals)
+                uₕ = element(Wₕ, copy(u_raw[1:n]))                      # unconstrained
+                vₕ = element(Wₕ, _zero_boundary!(copy(v_raw[1:n])))
 
                 lhs = innerₕ(Dstar₊ₓ(uₕ), vₕ)
                 rhs = -inner₊ₓ(uₕ, D₋ₓ(vₕ))
@@ -246,19 +279,9 @@ star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
                     u_raw = Data.Vectors(field_val; min_size = 81, max_size = 81),
                     v_raw = Data.Vectors(field_val; min_size = 81, max_size = 81)
             )
-                nx = length(hx) + 1
-                ny = length(hy) + 1
-                pts_x = zeros(Float64, nx)
-                for i in 1:length(hx)
-                    pts_x[i + 1] = pts_x[i] + hx[i]
-                end
-                pts_x ./= pts_x[end]
-
-                pts_y = zeros(Float64, ny)
-                for j in 1:length(hy)
-                    pts_y[j + 1] = pts_y[j] + hy[j]
-                end
-                pts_y ./= pts_y[end]
+                pts_x = _nonuniform_points(hx)
+                pts_y = _nonuniform_points(hy)
+                nx, ny = length(pts_x), length(pts_y)
 
                 Ωₕ = mesh(
                     domain(interval(0.0, 1.0) × interval(0.0, 1.0)),
@@ -270,16 +293,10 @@ star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
                 Wₕ = gridspace(Ωₕ)
 
                 total = nx * ny
-                u_mat = reshape(copy(u_raw[1:total]), nx, ny)
-                v_mat = reshape(copy(v_raw[1:total]), nx, ny)
+                grid(raw) = reshape(copy(raw[1:total]), nx, ny)
 
-                v_mat[1, :] .= 0.0
-                v_mat[end, :] .= 0.0
-                v_mat[:, 1] .= 0.0
-                v_mat[:, end] .= 0.0
-
-                uₕ = element(Wₕ, vec(u_mat))
-                vₕ = element(Wₕ, vec(v_mat))
+                uₕ = element(Wₕ, vec(grid(u_raw)))                       # unconstrained
+                vₕ = element(Wₕ, vec(_zero_boundary!(grid(v_raw))))
 
                 lhs_x = innerₕ(Dstar₊ₓ(uₕ), vₕ)
                 rhs_x = -inner₊ₓ(uₕ, D₋ₓ(vₕ))
@@ -304,27 +321,10 @@ star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
                     u_raw = Data.Vectors(field_val; min_size = 216, max_size = 216),
                     v_raw = Data.Vectors(field_val; min_size = 216, max_size = 216)
             )
-                nx = length(hx) + 1
-                ny = length(hy) + 1
-                nz = length(hz) + 1
-
-                pts_x = zeros(Float64, nx)
-                for i in 1:length(hx)
-                    pts_x[i + 1] = pts_x[i] + hx[i]
-                end
-                pts_x ./= pts_x[end]
-
-                pts_y = zeros(Float64, ny)
-                for j in 1:length(hy)
-                    pts_y[j + 1] = pts_y[j] + hy[j]
-                end
-                pts_y ./= pts_y[end]
-
-                pts_z = zeros(Float64, nz)
-                for k in 1:length(hz)
-                    pts_z[k + 1] = pts_z[k] + hz[k]
-                end
-                pts_z ./= pts_z[end]
+                pts_x = _nonuniform_points(hx)
+                pts_y = _nonuniform_points(hy)
+                pts_z = _nonuniform_points(hz)
+                nx, ny, nz = length(pts_x), length(pts_y), length(pts_z)
 
                 Ωₕ = mesh(
                     domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
@@ -337,18 +337,10 @@ star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
                 Wₕ = gridspace(Ωₕ)
 
                 total = nx * ny * nz
-                u_arr = reshape(copy(u_raw[1:total]), nx, ny, nz)
-                v_arr = reshape(copy(v_raw[1:total]), nx, ny, nz)
+                grid(raw) = reshape(copy(raw[1:total]), nx, ny, nz)
 
-                v_arr[1, :, :] .= 0.0
-                v_arr[end, :, :] .= 0.0
-                v_arr[:, 1, :] .= 0.0
-                v_arr[:, end, :] .= 0.0
-                v_arr[:, :, 1] .= 0.0
-                v_arr[:, :, end] .= 0.0
-
-                uₕ = element(Wₕ, vec(u_arr))
-                vₕ = element(Wₕ, vec(v_arr))
+                uₕ = element(Wₕ, vec(grid(u_raw)))                       # unconstrained
+                vₕ = element(Wₕ, vec(_zero_boundary!(grid(v_raw))))
 
                 lhs_x = innerₕ(Dstar₊ₓ(uₕ), vₕ)
                 rhs_x = -inner₊ₓ(uₕ, D₋ₓ(vₕ))
@@ -366,6 +358,44 @@ star_ops(::Val{3}) = (Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂)
                 ok_z = isapprox(lhs_z, rhs_z; atol = 1e-10 * scale_z, rtol = 1e-10)
 
                 ok_x && ok_y && ok_z
+            end
+
+            # 2D vector field: the vectorial statement of the identity on a random mesh,
+            # with the two components drawn independently. Goes through inner₊'s tuple
+            # method and ∇₋ₕ rather than the directional calls the checks above make.
+            @check function check_sbp_vectorial_2d(
+                    hx = Data.Vectors(positive_h; min_size = 2, max_size = 8),
+                    hy = Data.Vectors(positive_h; min_size = 2, max_size = 8),
+                    vx_raw = Data.Vectors(field_val; min_size = 81, max_size = 81),
+                    vy_raw = Data.Vectors(field_val; min_size = 81, max_size = 81),
+                    w_raw = Data.Vectors(field_val; min_size = 81, max_size = 81)
+            )
+                pts_x = _nonuniform_points(hx)
+                pts_y = _nonuniform_points(hy)
+                nx, ny = length(pts_x), length(pts_y)
+
+                Ωₕ = mesh(
+                    domain(interval(0.0, 1.0) × interval(0.0, 1.0)),
+                    (nx, ny),
+                    (false, false)
+                )
+                set_points!(Ωₕ(1), pts_x)
+                set_points!(Ωₕ(2), pts_y)
+                Wₕ = gridspace(Ωₕ)
+
+                total = nx * ny
+                grid(raw) = reshape(copy(raw[1:total]), nx, ny)
+
+                vₕ = (
+                    element(Wₕ, vec(grid(vx_raw))),                      # unconstrained
+                    element(Wₕ, vec(grid(vy_raw)))
+                )
+                wₕ = element(Wₕ, vec(_zero_boundary!(grid(w_raw))))
+
+                lhs = innerₕ(Dstar₊ₓ(vₕ[1]) + Dstar₊ᵧ(vₕ[2]), wₕ)
+                rhs = -inner₊(vₕ, ∇₋ₕ(wₕ))
+                scale = max(abs(lhs), abs(rhs), 1.0)
+                isapprox(lhs, rhs; atol = 1e-10 * scale, rtol = 1e-10)
             end
         end
     end

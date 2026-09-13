@@ -285,26 +285,15 @@ centered_ops(::Val{3}) = (Dcₓ, Dcᵧ, Dc₂)
                     u_raw = Data.Vectors(field_val; min_size = 31, max_size = 31),
                     v_raw = Data.Vectors(field_val; min_size = 31, max_size = 31)
             )
-                n = length(h) + 1
-                pts = zeros(Float64, n)
-                for i in 1:length(h)
-                    pts[i + 1] = pts[i] + h[i]
-                end
-                pts ./= pts[end]
+                pts = _nonuniform_points(h)
+                n = length(pts)
 
                 Ωₕ = mesh(domain(interval(0.0, 1.0)), n, false)
                 set_points!(Ωₕ, pts)
                 Wₕ = gridspace(Ωₕ)
 
-                u_vals = copy(u_raw[1:n])
-                v_vals = copy(v_raw[1:n])
-                u_vals[1] = 0.0
-                u_vals[end] = 0.0
-                v_vals[1] = 0.0
-                v_vals[end] = 0.0
-
-                uₕ = element(Wₕ, u_vals)
-                vₕ = element(Wₕ, v_vals)
+                uₕ = element(Wₕ, _zero_boundary!(copy(u_raw[1:n])))
+                vₕ = element(Wₕ, _zero_boundary!(copy(v_raw[1:n])))
 
                 lhs = innerₕ(Dcₓ(uₕ), vₕ)
                 rhs = -innerₕ(uₕ, Dcₓ(vₕ))
@@ -319,19 +308,9 @@ centered_ops(::Val{3}) = (Dcₓ, Dcᵧ, Dc₂)
                     u_raw = Data.Vectors(field_val; min_size = 81, max_size = 81),
                     v_raw = Data.Vectors(field_val; min_size = 81, max_size = 81)
             )
-                nx = length(hx) + 1
-                ny = length(hy) + 1
-                pts_x = zeros(Float64, nx)
-                for i in 1:length(hx)
-                    pts_x[i + 1] = pts_x[i] + hx[i]
-                end
-                pts_x ./= pts_x[end]
-
-                pts_y = zeros(Float64, ny)
-                for j in 1:length(hy)
-                    pts_y[j + 1] = pts_y[j] + hy[j]
-                end
-                pts_y ./= pts_y[end]
+                pts_x = _nonuniform_points(hx)
+                pts_y = _nonuniform_points(hy)
+                nx, ny = length(pts_x), length(pts_y)
 
                 Ωₕ = mesh(
                     domain(interval(0.0, 1.0) × interval(0.0, 1.0)),
@@ -343,20 +322,11 @@ centered_ops(::Val{3}) = (Dcₓ, Dcᵧ, Dc₂)
                 Wₕ = gridspace(Ωₕ)
 
                 total = nx * ny
-                u_mat = reshape(copy(u_raw[1:total]), nx, ny)
-                v_mat = reshape(copy(v_raw[1:total]), nx, ny)
-
-                u_mat[1, :] .= 0.0
-                u_mat[end, :] .= 0.0
-                u_mat[:, 1] .= 0.0
-                u_mat[:, end] .= 0.0
-                v_mat[1, :] .= 0.0
-                v_mat[end, :] .= 0.0
-                v_mat[:, 1] .= 0.0
-                v_mat[:, end] .= 0.0
-
-                uₕ = element(Wₕ, vec(u_mat))
-                vₕ = element(Wₕ, vec(v_mat))
+                field(raw) = element(
+                    Wₕ, vec(_zero_boundary!(reshape(copy(raw[1:total]), nx, ny)))
+                )
+                uₕ = field(u_raw)
+                vₕ = field(v_raw)
 
                 lhs_x = innerₕ(Dcₓ(uₕ), vₕ)
                 rhs_x = -innerₕ(uₕ, Dcₓ(vₕ))
@@ -369,6 +339,46 @@ centered_ops(::Val{3}) = (Dcₓ, Dcᵧ, Dc₂)
                 ok_y = isapprox(lhs_y, rhs_y; atol = 1e-10 * scale_y, rtol = 1e-10)
 
                 ok_x && ok_y
+            end
+
+            # 3D: axis sizes kept smaller than the 2D check's (max 5 intervals, not 8) so
+            # the total point count (up to 6³ = 216) stays a fast random search, as in
+            # star_difference.jl's 3D check
+            @check function check_dc_skew_3d(
+                    hx = Data.Vectors(positive_h; min_size = 3, max_size = 5),
+                    hy = Data.Vectors(positive_h; min_size = 3, max_size = 5),
+                    hz = Data.Vectors(positive_h; min_size = 3, max_size = 5),
+                    u_raw = Data.Vectors(field_val; min_size = 216, max_size = 216),
+                    v_raw = Data.Vectors(field_val; min_size = 216, max_size = 216)
+            )
+                pts_x = _nonuniform_points(hx)
+                pts_y = _nonuniform_points(hy)
+                pts_z = _nonuniform_points(hz)
+                nx, ny, nz = length(pts_x), length(pts_y), length(pts_z)
+
+                Ωₕ = mesh(
+                    domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
+                    (nx, ny, nz),
+                    (false, false, false)
+                )
+                set_points!(Ωₕ(1), pts_x)
+                set_points!(Ωₕ(2), pts_y)
+                set_points!(Ωₕ(3), pts_z)
+                Wₕ = gridspace(Ωₕ)
+
+                total = nx * ny * nz
+                field(raw) = element(
+                    Wₕ, vec(_zero_boundary!(reshape(copy(raw[1:total]), nx, ny, nz)))
+                )
+                uₕ = field(u_raw)
+                vₕ = field(v_raw)
+
+                all((Dcₓ, Dcᵧ, Dc₂)) do op
+                    lhs = innerₕ(op(uₕ), vₕ)
+                    rhs = -innerₕ(uₕ, op(vₕ))
+                    scale = max(abs(lhs), abs(rhs), 1.0)
+                    isapprox(lhs, rhs; atol = 1e-10 * scale, rtol = 1e-10)
+                end
             end
         end
     end
