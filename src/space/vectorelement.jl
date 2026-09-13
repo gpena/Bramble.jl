@@ -462,6 +462,48 @@ _find_vec_in_broadcast(::Tuple{}) = nothing # End of recursion
 _find_vec_in_broadcast(a::VectorElement, rest) = a # Found one
 _find_vec_in_broadcast(::Any, rest) = _find_vec_in_broadcast(rest) # Keep searching
 
+# `dest .= expr` lowers to `copyto!(dest, bc)` and, absent a specialised method, runs
+# Base's generic `AbstractArray` fallback: it indexes `bc[i]` on every iteration, and each
+# `VectorElement` leaf re-enters `getindex`/`checkbounds` there, hiding the contiguous loop
+# over `dest.data` from the compiler. Unwrapping every `VectorElement` leaf down to its own
+# `parent` before delegating lets `copyto!` run directly against the backend's own storage
+# instead -- the plain `Vector` broadcast loop for the default backend, whatever loop a
+# GPU backend's own array type provides otherwise (gpena/Bramble.jl#181).
+@inline function Base.copyto!(
+        dest::VectorElement, bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{VectorElement}}
+)
+    _check_broadcast_space(space(dest), bc)
+    copyto!(parent(dest), _unwrap_broadcast(bc))
+    return dest
+end
+
+# Rebuild the same expression tree over each `VectorElement` leaf's own storage. The
+# reconstructed `Broadcasted` carries no `VectorElement` among its args, so its own style
+# is computed fresh from plain arrays/scalars -- ordinary array broadcasting, not this
+# package's.
+@inline _unwrap_broadcast(bc::Broadcast.Broadcasted) = Broadcast.Broadcasted(bc.f, map(_unwrap_broadcast, bc.args), bc.axes)
+@inline _unwrap_broadcast(x::VectorElement) = parent(x)
+@inline _unwrap_broadcast(x) = x
+
+# Every `VectorElement` operand must share `dest`'s grid space: mixing spaces would
+# silently index one operand's coefficients against another mesh's layout. One check
+# before the loop, not per element -- mirrors `_find_vec_in_broadcast`'s tuple recursion.
+@inline _check_broadcast_space(Wₕ, bc::Broadcast.Broadcasted) = _check_broadcast_space(Wₕ, bc.args)
+@inline function _check_broadcast_space(Wₕ, args::Tuple)
+    _check_broadcast_space(Wₕ, args[1])
+    return _check_broadcast_space(Wₕ, Base.tail(args))
+end
+@inline _check_broadcast_space(Wₕ, ::Tuple{}) = nothing
+@inline function _check_broadcast_space(Wₕ, x::VectorElement)
+    space(x) === Wₕ || _throw_broadcast_space_mismatch()
+    return nothing
+end
+@inline _check_broadcast_space(Wₕ, ::Any) = nothing
+
+@noinline _throw_broadcast_space_mismatch() = throw(
+    ArgumentError("VectorElement operands in a broadcast must share the same grid space"),
+)
+
 # Both of these delegate to broadcasting rather than filling a tuple allocated up front.
 #
 # The type of `a * vₕ` is the type of the product, and `similar(vₕ[i])` gives the type of

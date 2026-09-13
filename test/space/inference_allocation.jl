@@ -252,6 +252,17 @@ using ..TestUtils: alloc_test, @test_allocs
         @test alloc_test(copyto!, u, 1.0) == 0
         @test alloc_test(copyto!, u, parent(u)) == 0
 
+        # Zero allocations for the specialised in-place broadcast copyto!
+        # (gpena/Bramble.jl#181): unwrapping every VectorElement leaf down to its own
+        # `parent` before delegating must not itself allocate, on a compound expression
+        # (multiple operators fused) as well as a single scaling.
+        _compound!(w, u, v, α) = (w .= u .+ v .* α)
+        _scaled!(w, v, β) = (w .= β .* v)
+        w = element(W)
+        v2 = element(W, 2.0)
+        @test alloc_test(_compound!, w, u, v2, 3.0) == 0
+        @test alloc_test(_scaled!, w, v2, 2.0) == 0
+
         W_target = gridspace(mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (8, 8)))
         u_target = element(W_target)
         @test alloc_test(πₕ!, u_target, u) == 0

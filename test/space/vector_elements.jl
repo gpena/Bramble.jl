@@ -336,6 +336,12 @@ end
         # Test scalar assignment via broadcast
         w .= 5.0
         @test all(==(5.0), parent(w))
+
+        # Mixing VectorElements from two different (but same-length) grid spaces must
+        # throw rather than silently mix coefficients across meshes (gpena/Bramble.jl#181).
+        W_other = gridspace(mesh(domain(interval(0.0, 1.0)), 4))
+        v_other = element(W_other, 1.0)
+        @test_throws ArgumentError w .= u .+ v_other
     end
 
     @testset "Arithmetic" begin
