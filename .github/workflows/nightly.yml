@@ -145,7 +145,7 @@ jobs:
         with:
           version: "1"
 
-      - name: Check BlueStyle
+      - name: Check SciMLStyle
         run: |
           julia --color=yes -e '
             using Pkg
@@ -153,5 +153,5 @@ jobs:
             Pkg.add("JuliaFormatter")
             using JuliaFormatter
             format(["src", "test", "docs", "ext", "benchmark"]; overwrite = false) && exit(0)
-            @error "Source is not BlueStyle formatted. Run JuliaFormatter over src, test, docs, ext and benchmark."
+            @error "Source is not SciMLStyle formatted. Run JuliaFormatter over src, test, docs, ext and benchmark."
             exit(1)'
