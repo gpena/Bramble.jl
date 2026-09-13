@@ -240,6 +240,15 @@ if __bramble_with_unit_tests
             include("examples/pages.jl")
             include("examples/variable_coefficient.jl")
         end
+
+        # Static allocation verification (#118). Lives under `quality/` because that is what
+        # it is, but runs with the unit group because it is the one quality gate cheap enough
+        # to pay on every push (3 s, against minutes for JET), and an allocation regression
+        # is exactly the kind of thing that should not wait for the nightly to surface it.
+        # The `quality` group picks it up too, below, when the unit group is not running.
+        @testset "Static allocations" begin
+            include("quality/alloccheck.jl")
+        end
     end
 end
 
@@ -249,6 +258,9 @@ if __bramble_with_quality
         include("quality/exports.jl")
         include("quality/explicit_imports.jl")
         include("quality/jet.jl")
+        # Already run above with the unit group; included here so a `quality`-only run
+        # (nightly's second job) still covers it, without running it twice for `all`.
+        __bramble_with_unit_tests || include("quality/alloccheck.jl")
     end
 end
 
