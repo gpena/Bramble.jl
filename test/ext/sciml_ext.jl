@@ -174,6 +174,56 @@ end
         @test issorted(errors; rev = true)
     end
 
+    # `semidiscretize(build, l; ...)` (src/form/semidiscrete.jl) is the other half of #107:
+    # an operator that genuinely depends on `t` -- not just the source -- built fresh per
+    # element type instead of one fixed `Float64`-typed matrix. This is what lets `Rodas5P`'s
+    # *default* `autodiff` differentiate through `t` at all: the classic `BilinearForm` path
+    # closes over a `Float64` coefficient buffer and throws `InexactError` under that same
+    # sweep (the `AutoFiniteDiff`/BDF workarounds above exist because of exactly this).
+    @testset "type-cached operator: default autodiff through a t-dependent A(t)" begin
+        Ωₕ, Wₕ, I, _, _, _ = _sciml_setup(21)
+        α(t) = 1.0 + t   # x-independent: only the value matters for this cross-check
+
+        function build_diffusion(t)
+            αₕ = Bramble.element(Wₕ, typeof(t))
+            aα = form(Wₕ, Wₕ, (u, v) -> inner₊(αₕ * ∇₋ₕ(u), ∇₋ₕ(v)))
+            refill!(t) = (fill!(parent(αₕ), α(t)); nothing)
+            return aα, refill!
+        end
+
+        # The source is time-independent here on purpose: a `t`-dependent source reached
+        # through `update_coefficients!` has the same `Float64`-buffer limitation the note on
+        # `ode_function` already documents, and is a separate concern from the operator this
+        # testset isolates -- `tgrad`, above, is the fix for that half.
+        fₕ = Rₕ(Wₕ, x -> sinpi(x[1]))
+        l = form(Wₕ, v -> innerₕ(fₕ, v))
+        bcs = dirichlet_constraints(Ωₕ, I, :boundary => (x, t) -> 0.0)
+
+        αₕ_ref = Bramble.element(Wₕ, 0.0)
+        a_ref = form(Wₕ, Wₕ, (u, v) -> inner₊(αₕ_ref * ∇₋ₕ(u), ∇₋ₕ(v)))
+        sd_ref = semidiscretize(
+            a_ref, l; dirichlet = bcs, reassemble = true,
+            (update_coefficients!) = t -> (fill!(parent(αₕ_ref), α(t)); nothing)
+        )
+        u0 = Rₕ(Wₕ, x -> _sciml_uex(x, 0.0))
+        sol_ref = solve(
+            ode_problem(sd_ref, u0, I), FBDF(); reltol = 1e-11, abstol = 1e-13
+        )
+
+        sd = semidiscretize(build_diffusion, l; dirichlet = bcs)
+        prob = ode_problem(sd, u0, I)
+
+        # Default `autodiff`: no `AutoFiniteDiff`, no BDF fallback.
+        sol = solve(prob, Rodas5P(); reltol = 1e-11, abstol = 1e-13)
+        @test SciMLBase.successful_retcode(sol)
+        @test sol.u[end] ≈ sol_ref.u[end] rtol = 1e-6
+
+        # A stiff BDF method on the same `build`-based operator agrees too -- the type
+        # caching is transparent to a stepper that never asks for `t` as a `Dual`.
+        sol_fbdf = solve(prob, FBDF(); reltol = 1e-11, abstol = 1e-13)
+        @test sol_fbdf.u[end] ≈ sol_ref.u[end] rtol = 1e-8
+    end
+
     # A constant Dirichlet value is the steady state the parabolic problem relaxes onto, so
     # stepping far enough must reproduce the solution of `A u = F` -- the same system
     # `linear_problem` hands to LinearSolve. This ties the two entry points together.

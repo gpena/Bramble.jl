@@ -264,6 +264,132 @@ function semidiscretize(
     )
 end
 
+"""
+    semidiscretize(build, l::LinearForm; kwargs...) -> Semidiscretization
+
+Semidiscretise `M u_h' = F(t) - A(t) u_h` from a spatial operator that genuinely depends on
+`t` -- built fresh, once per element type `t` is ever reached at, instead of the single
+`BilinearForm` the other method assembles into one fixed matrix.
+
+`build(t)` is called once for each element type `t` is ever seen at (`Float64` on a normal
+step, a `ForwardDiff.Dual` while a Rosenbrock stepper's `tgrad` differentiates the residual
+through `t`), and must return `(a, refill!)`: the [`BilinearForm`](@ref) to assemble, built
+around whatever live coefficient buffer(s) it needs, and a *one*-argument `refill!(t)`
+updating those buffers from the current `t` -- called on every step, cache hit or miss, so a
+later step at an already-seen type still sees the new `t` rather than the one `build` first
+saw. Same build/refill!/cache discipline as [`type_cached_assemble!`](@ref), keyed on `t`
+instead of a `VectorElement` iterate.
+
+`build` should be a named function, not a closure literal written inline -- the same reason
+[`type_cached_assemble!`](@ref)'s own docstring gives: a `do ... end` block re-literalised on
+every call allocates a new closure each time.
+
+This is what lets a Rosenbrock method (`Rodas5P`, `Rosenbrock23`) capture `-Ȧ(t) u_h` by
+differentiating through `t` directly: the other method's fixed `BilinearForm` closes over a
+`Float64`-typed coefficient buffer, which cannot hold a `Dual` and throws `InexactError`
+under exactly that AD sweep.
+
+# Keywords
+Same as the `BilinearForm` method, except `reassemble` defaults to `true` -- a `build`-based
+operator exists specifically to be rebuilt at every step.
+
+# Examples
+
+```julia
+function build_diffusion_operator(t)
+    αₕ = element(Wₕ, typeof(t))
+    a = form(Wₕ, Wₕ, (u, v) -> inner₊(αₕ * ∇₋ₕ(u), ∇₋ₕ(v)))
+    refill!(t) = (Rₕ!(αₕ, x -> α(x, t)); nothing)
+    return a, refill!
+end
+
+sd = semidiscretize(build_diffusion_operator, l; dirichlet = bcs)
+```
+
+See also [`ode_function`](@ref), [`ode_problem`](@ref).
+"""
+function semidiscretize(
+        build::B,
+        l::LinearForm;
+        mass = nothing,
+        dirichlet = nothing,
+        dirichlet_components = nothing,
+        state = nothing,
+        (update_coefficients!) = nothing,
+        reassemble::Bool = true
+) where {B <: Function}
+    sp = test_space(l)
+
+    labels, constraint_values = _normalize_dirichlet(dirichlet)
+    constraints = _source_constraints(labels, constraint_values)
+
+    t0 = 0.0
+    a0, refill0! = build(t0)
+    _validate_semidiscrete_spaces(a0, l)
+    refill0!(t0)
+    A0 = allocate_system_matrix(a0)
+    assemble!(A0, a0; dirichlet = labels, dirichlet_components = dirichlet_components)
+
+    operator = TypeCachedOperator(build, Dict{DataType, Any}(Float64 => (a0, refill0!, A0)))
+
+    M = _assemble_mass_matrix(
+        mass === nothing ? _default_mass_form(sp) : mass, labels, dirichlet_components
+    )
+    F = parent(element(sp, eltype(A0)))
+
+    return Semidiscretization(
+        operator,
+        l,
+        sp,
+        A0,
+        M,
+        F,
+        constraints,
+        labels === nothing ? () : labels,
+        dirichlet_components,
+        state,
+        update_coefficients!,
+        Val(reassemble)
+    )
+end
+
+"""
+    TypeCachedOperator{F}
+
+A time-dependent spatial operator for [`semidiscretize`](@ref), built by `build(t)` once per
+element type `t` is ever reached at, exactly the discipline [`type_cached_assemble!`](@ref)
+uses for a coefficient that depends on the current iterate: the *pattern* of a time-dependent
+operator is as fixed across element types as it is across time steps, only the coefficient's
+own values differ, and only because they were evaluated at a different `t`.
+
+Not constructed directly: [`semidiscretize`](@ref)`(build, l; ...)` builds one.
+"""
+struct TypeCachedOperator{F}
+    build::F
+    cache::Dict{DataType, Any}
+end
+
+# Mirrors `type_cached_assemble!`'s own cache-dict discipline, with `t` -- rather than a
+# `VectorElement` iterate -- as the thing a fresh element type is ever reached through: the
+# only way a `Semidiscretization`'s operator becomes `T`-typed is a Rosenbrock stepper
+# differentiating its right-hand side through `t` (see `TypeCachedOperator`'s docstring).
+function _fetch_or_build!(op::TypeCachedOperator, ::Type{T}, t) where {T}
+    a, refill!, A = if haskey(op.cache, T)
+        op.cache[T]
+    else
+        a, refill! = op.build(t)
+        # Populated before the pattern walk, not after -- same reason `type_cached_assemble!`
+        # does: a coefficient buffer built `undef` and read before `refill!` ever ran throws
+        # inside `allocate_system_matrix` for a non-`isbits` `T`.
+        refill!(t)
+        entry = (a, refill!, allocate_system_matrix(a))
+        op.cache[T] = entry
+        entry
+    end
+    refill!(t)
+    return a, A
+end
+
 @inline _default_mass_form(sp) = form(sp, sp, (u, v) -> innerₕ(u, v))
 
 function _validate_semidiscrete_spaces(a::BilinearForm, l::LinearForm)
@@ -314,7 +440,7 @@ function (sd::Semidiscretization)(du::AbstractVector, u::AbstractVector, p, t)
     F = _source_buffer(sd, du, t)
     _assemble_source!(F, sd, sd.constraints, t)
 
-    A = _refresh_operator!(sd, sd.reassemble)
+    A = _refresh_operator!(sd, sd.reassemble, du, t)
 
     # `du = F - A u` via the 5-argument `mul!(C, A, B, α, β) = α A B + β C`: fuses the
     # subtraction into the matrix-vector product itself (`du = -1 * A * u + 1 * du`),
@@ -380,10 +506,25 @@ function _assemble_source!(F::AbstractVector, sd::Semidiscretization, ::LabelsOn
     return F
 end
 
-@inline _refresh_operator!(sd::Semidiscretization, ::Val{false}) = sd.operator_matrix
-@inline function _refresh_operator!(sd::Semidiscretization, ::Val{true})
+@inline _refresh_operator!(sd::Semidiscretization, ::Val{false}, x, t) = sd.operator_matrix
+@inline function _refresh_operator!(sd::Semidiscretization, ::Val{true}, x, t)
+    return _reassemble_operator!(sd.operator, sd, x, t)
+end
+
+# The `BilinearForm` path: one fixed, `Float64`-typed matrix, refilled in place every step --
+# unaffected by, and exactly as before, `TypeCachedOperator` existing.
+@inline function _reassemble_operator!(op::BilinearForm, sd::Semidiscretization, x, t)
     A = sd.operator_matrix
-    assemble!(A, sd.operator; dirichlet = sd.labels, dirichlet_components = sd.components)
+    assemble!(A, op; dirichlet = sd.labels, dirichlet_components = sd.components)
+    return A
+end
+
+# The `build`-based path: a fresh matrix, of whichever element type `x` and `t` are running
+# at, fetched from (or added to) `op`'s cache -- see `TypeCachedOperator`.
+function _reassemble_operator!(op::TypeCachedOperator, sd::Semidiscretization, x, t)
+    T = promote_type(eltype(x), typeof(t))
+    a, A = _fetch_or_build!(op, T, t)
+    assemble!(A, a; dirichlet = sd.labels, dirichlet_components = sd.components)
     return A
 end
 
@@ -405,7 +546,7 @@ See also [`jacobian_prototype`](@ref).
 function jacobian!(J, sd::Semidiscretization, u, p, t)
     _sync_state!(sd.state, u)
     _update_coefficients!(sd.update_coefficients, t)
-    A = _refresh_operator!(sd, sd.reassemble)
+    A = _refresh_operator!(sd, sd.reassemble, u, t)
     return _negate_into!(J, A)
 end
 

@@ -3,6 +3,7 @@ module FormSemidiscreteTests
 using Test
 using Bramble
 using SparseArrays
+using ForwardDiff: Dual, value
 
 # `semidiscretize` and the residual it returns (src/form/semidiscrete.jl) need no SciMLBase:
 # a `Semidiscretization` is a callable with the `(du, u, p, t)` signature plus two matrices.
@@ -165,6 +166,51 @@ end
         A₂ = copy(operator_matrix(sd_fixed))
         sd_fixed(zeros(n), zeros(n), nothing, 3.0)
         @test operator_matrix(sd_fixed) == A₂
+    end
+
+    @testset "type-cached (build-based) operator" begin
+        # A genuinely time-dependent coefficient α(t) = 1 + t, refilled into a live buffer --
+        # not baked into the closure -- the way the docstring's own example does it.
+        build_calls = Ref(0)
+        function build_scaled_mass(t)
+            build_calls[] += 1
+            αₕ = Bramble.element(Wₕ, typeof(t))
+            aα = form(Wₕ, Wₕ, (u, v) -> αₕ * innerₕ(u, v))
+            refill!(t) = (fill!(parent(αₕ), one(typeof(t)) + t); nothing)
+            return aα, refill!
+        end
+
+        sd = semidiscretize(build_scaled_mass, l)
+        # `build` runs once at construction (probing the `Float64` pattern), and defaults to
+        # `reassemble = true` -- a `build`-based operator exists specifically to be rebuilt.
+        @test build_calls[] == 1
+        @test occursin("every step", sprint(show, MIME"text/plain"(), sd))
+
+        A₀ = assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v)))
+        sd(zeros(n), zeros(n), nothing, 3.0)
+        @test operator_matrix(sd) ≈ 4 .* A₀      # α(3.0) = 1 + 3 = 4
+        @test build_calls[] == 1                 # same element type: no rebuild, only refill
+
+        # A `ForwardDiff.Dual` `t` -- the same thing a Rosenbrock stepper's `tgrad` reaches
+        # for -- rebuilds once at that new element type, and never throws `InexactError`
+        # trying to write a `Dual` into the `Float64` matrix the classic `BilinearForm` path
+        # would have kept.
+        t_dual = Dual(3.0, 1.0)
+        u_dual = Dual.(zeros(n), 0.0)
+        du_dual = similar(u_dual)
+        sd(du_dual, u_dual, nothing, t_dual)
+        @test build_calls[] == 2
+        @test all(isfinite, value.(du_dual))
+
+        # Calling again at the already-seen `Dual` type refills without rebuilding.
+        sd(du_dual, u_dual, nothing, t_dual)
+        @test build_calls[] == 2
+
+        # The `Float64` path stays exactly as before, unaffected by the Dual excursion in
+        # between: same cached entry, refilled at its own `t` rather than rebuilt.
+        sd(zeros(n), zeros(n), nothing, 1.0)
+        @test operator_matrix(sd) ≈ 2 .* A₀      # α(1.0) = 1 + 1 = 2
+        @test build_calls[] == 2
     end
 
     @testset "consistent initial conditions" begin

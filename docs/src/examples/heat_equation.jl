@@ -159,6 +159,42 @@ normₕ(Rₕ(Wₕ, x -> uexact(x, 1.0)) - uₕ_r)
 # the Jacobian through `u` only, and `tgrad` supplies the `t`-derivative directly.
 @test 1.0e-5 < normₕ(Rₕ(Wₕ, x -> uexact(x, 1.0)) - uₕ_r) < 5.0e-5               #src
 #
+# ## A time-dependent operator
+#
+# `tgrad` fixes the source half of `∂f/∂t`; the other method of [`semidiscretize`](@ref)
+# fixes the operator half, for a spatial operator whose own coefficients vary with `t`. A
+# fixed `BilinearForm` closes over a `Float64` coefficient buffer, which cannot hold the
+# `Dual` a Rosenbrock stepper reaches for either way. `semidiscretize(build, l; ...)` instead
+# takes a `build(t) -> (a, refill!)` factory, called once per element type `t` is ever seen
+# at — `Float64` on an ordinary step, `Dual` while `Rodas5P`'s default `autodiff`
+# differentiates through `t` — so the coefficient buffer it refills is always the right type.
+# The source is held fixed here on purpose, to isolate the operator: a `t`-dependent source
+# reached through `update_coefficients!` has the same `Float64`-buffer limitation `tgrad`
+# fixes above, for the same reason:
+
+α(t) = 1.0 + 0.5 * sinpi(2t)     # a diffusivity that genuinely varies with t
+gₕ = Rₕ(Wₕ, x -> sinpi(x[1]))
+l_t = form(Wₕ, v -> innerₕ(gₕ, v))
+
+function build_diffusion(t)
+    αₕ = element(Wₕ, typeof(t))
+    a_t = form(Wₕ, Wₕ, (u, v) -> inner₊(αₕ * ∇₋ₕ(u), ∇₋ₕ(v)))
+    refill!(t) = (fill!(parent(αₕ), α(t)); nothing)
+    return a_t, refill!
+end
+
+sd_t = semidiscretize(build_diffusion, l_t; dirichlet = bcs)
+prob_t = ode_problem(sd_t, Rₕ(Wₕ, x -> uexact(x, 0.0)), I)
+
+sol_t_rosenbrock = solve(prob_t, Rodas5P(); reltol = 1e-11, abstol = 1e-13)
+sol_t_fbdf = solve(prob_t, FBDF(); reltol = 1e-11, abstol = 1e-13)
+maximum(abs.(sol_t_rosenbrock.u[end] .- sol_t_fbdf.u[end]))
+
+# The same `ODEProblem`, one stepper differentiating through `t` by default and the other
+# needing no `∂f/∂t` at all, land on the same answer -- neither `AutoFiniteDiff()` nor a
+# hand-written `tgrad` was needed for the operator itself.
+@test maximum(abs.(sol_t_rosenbrock.u[end] .- sol_t_fbdf.u[end])) < 1.0e-6              #src
+#
 # ## Checking the answer
 #
 # Second order in space is the promise. Refining the mesh while holding the time tolerance far
