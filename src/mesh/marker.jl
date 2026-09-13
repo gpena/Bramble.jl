@@ -3,36 +3,45 @@
     boundary_symbol_to_cartesian(indices::CartesianIndices{2}) -> NamedTuple
     boundary_symbol_to_cartesian(indices::CartesianIndices{3}) -> NamedTuple
 
-Map standard boundary symbols (`:left`, `:right`, `:top`, `:bottom`, `:front`, `:back`) to their
+Map canonical boundary symbols (`:xmin`, `:xmax`, `:ymin`, `:ymax`, `:zmin`, `:zmax`) and legacy
+viewpoint aliases (`:left`, `:right`, `:top`, `:bottom`, `:front`, `:back`) to their
 corresponding `CartesianIndices` on the mesh boundary.
 
 # Returns
 
 A `NamedTuple` with boundary symbols as keys and `CartesianIndices` as values:
-  - 1D: `:left`, `:right` (single points)
-  - 2D: `:left`, `:right`, `:top`, `:bottom` (faces)
-  - 3D: All six faces of a rectangular prism (`:left`, `:right`, `:top`, `:bottom`, `:front`, `:back`)
+  - 1D: `:xmin`, `:xmax`, `:left`, `:right`
+  - 2D: `:xmin`, `:xmax`, `:ymin`, `:ymax`, `:left`, `:right`, `:bottom`, `:top`
+  - 3D: All six faces: `:xmin`, `:xmax`, `:ymin`, `:ymax`, `:zmin`, `:zmax`, `:back`, `:front`, `:left`, `:right`, `:bottom`, `:top`
 
 # Examples
 
 ```jldoctest
 julia> boundary_symbol_to_cartesian(CartesianIndices((1:3, 1:4)))
-(left = CartesianIndices((1:1, 1:4)), right = CartesianIndices((3:3, 1:4)), top = CartesianIndices((1:3, 4:4)), bottom = CartesianIndices((1:3, 1:1)))
+(xmin = CartesianIndices((1:1, 1:4)), xmax = CartesianIndices((3:3, 1:4)), ymin = CartesianIndices((1:3, 1:1)), ymax = CartesianIndices((1:3, 4:4)), left = CartesianIndices((1:1, 1:4)), right = CartesianIndices((3:3, 1:4)), bottom = CartesianIndices((1:3, 1:1)), top = CartesianIndices((1:3, 4:4)))
 ```
 
 See also: [`boundary_symbol_to_dict`](@ref), [`set_markers!`](@ref).
 """
 @inline boundary_symbol_to_cartesian(indices::CartesianIndices{1}) = (;
-    :left => first(indices), :right => last(indices))
+    :xmin => first(indices),
+    :xmax => last(indices),
+    :left => first(indices),
+    :right => last(indices)
+)
 
 function boundary_symbol_to_cartesian(indices::CartesianIndices{2})
     N, M = size(indices)
 
     return (;
+        :xmin => indices[1:1, 1:M],
+        :xmax => indices[N:N, 1:M],
+        :ymin => indices[1:N, 1:1],
+        :ymax => indices[1:N, M:M],
         :left => indices[1:1, 1:M],
         :right => indices[N:N, 1:M],
-        :top => indices[1:N, M:M],
-        :bottom => indices[1:N, 1:1]
+        :bottom => indices[1:N, 1:1],
+        :top => indices[1:N, M:M]
     )
 end
 
@@ -40,12 +49,18 @@ function boundary_symbol_to_cartesian(indices::CartesianIndices{3})
     N, M, K = size(indices)
 
     return (;
+        :xmin => indices[1:1, 1:M, 1:K],
+        :xmax => indices[N:N, 1:M, 1:K],
+        :ymin => indices[1:N, 1:1, 1:K],
+        :ymax => indices[1:N, M:M, 1:K],
+        :zmin => indices[1:N, 1:M, 1:1],
+        :zmax => indices[1:N, 1:M, K:K],
+        :back => indices[1:1, 1:M, 1:K],
+        :front => indices[N:N, 1:M, 1:K],
         :left => indices[1:N, 1:1, 1:K],
         :right => indices[1:N, M:M, 1:K],
-        :top => indices[1:N, 1:M, K:K],
         :bottom => indices[1:N, 1:M, 1:1],
-        :front => indices[N:N, 1:M, 1:K],
-        :back => indices[1:1, 1:M, 1:K]
+        :top => indices[1:N, 1:M, K:K]
     )
 end
 
@@ -188,7 +203,7 @@ function _ensure_geometric_markers!(
 )
     linear_indices = LinearIndices(npoints(Ωₕ, Tuple))
     boundary_set = falses(npoints(Ωₕ))
-    for idxs in values(boundary_symbol_to_cartesian(indices(Ωₕ)))
+    for idxs in boundary_indices(Ωₕ)
         _mark_indices!(boundary_set, linear_indices, idxs)
     end
 

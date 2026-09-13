@@ -160,58 +160,59 @@ function locate_cell end
     normal_vector(::Val{D}, symbol::Symbol) -> NTuple{D, Float64}
 
 Return the outward unit normal vector (as an `NTuple{D, Float64}`) associated with a standard
-boundary facet label (`:left`, `:right`, `:bottom`, `:top`, `:front`, `:back`).
+boundary facet label (`:xmin`, `:xmax`, `:ymin`, `:ymax`, `:zmin`, `:zmax`) or legacy viewpoint alias
+(`:left`, `:right`, `:bottom`, `:top`, `:front`, `:back`).
 
 # Conventions
 
   - 1D:
-      - `:left`  ``\\to (-1.0)``
-      - `:right` ``\\to (+1.0)``
+      - `:xmin`, `:left`  ``\\to (-1.0)``
+      - `:xmax`, `:right` ``\\to (+1.0)``
   - 2D:
-      - `:left`   ``\\to (-1.0, 0.0)``
-      - `:right`  ``\\to (+1.0, 0.0)``
-      - `:bottom` ``\\to (0.0, -1.0)``
-      - `:top`    ``\\to (0.0, +1.0)``
+      - `:xmin`, `:left`   ``\\to (-1.0, 0.0)``
+      - `:xmax`, `:right`  ``\\to (+1.0, 0.0)``
+      - `:ymin`, `:bottom` ``\\to (0.0, -1.0)``
+      - `:ymax`, `:top`    ``\\to (0.0, +1.0)``
   - 3D:
-      - `:back`   ``\\to (-1.0, 0.0, 0.0)``
-      - `:front`  ``\\to (+1.0, 0.0, 0.0)``
-      - `:left`   ``\\to (0.0, -1.0, 0.0)``
-      - `:right`  ``\\to (0.0, +1.0, 0.0)``
-      - `:bottom` ``\\to (0.0, 0.0, -1.0)``
-      - `:top`    ``\\to (0.0, 0.0, +1.0)``
+      - `:xmin`, `:back`   ``\\to (-1.0, 0.0, 0.0)``
+      - `:xmax`, `:front`  ``\\to (+1.0, 0.0, 0.0)``
+      - `:ymin`, `:left`   ``\\to (0.0, -1.0, 0.0)``
+      - `:ymax`, `:right`  ``\\to (0.0, +1.0, 0.0)``
+      - `:zmin`, `:bottom` ``\\to (0.0, 0.0, -1.0)``
+      - `:zmax`, `:top`    ``\\to (0.0, 0.0, +1.0)``
 
 See also: [`boundary_symbols`](@ref).
 """
 @inline normal_vector(::AbstractMeshType{D}, symbol::Symbol) where {D} = normal_vector(Val(D), symbol)
 
 @inline function normal_vector(::Val{1}, symbol::Symbol)
-    symbol === :left && return (-1.0,)
-    symbol === :right && return (1.0,)
-    throw(ArgumentError("Unknown 1D boundary symbol: :$symbol. Expected :left or :right."))
+    (symbol === :xmin || symbol === :left) && return (-1.0,)
+    (symbol === :xmax || symbol === :right) && return (1.0,)
+    throw(ArgumentError("Unknown 1D boundary symbol: :$symbol. Expected :xmin/:left or :xmax/:right."))
 end
 
 @inline function normal_vector(::Val{2}, symbol::Symbol)
-    symbol === :left && return (-1.0, 0.0)
-    symbol === :right && return (1.0, 0.0)
-    symbol === :bottom && return (0.0, -1.0)
-    symbol === :top && return (0.0, 1.0)
+    (symbol === :xmin || symbol === :left) && return (-1.0, 0.0)
+    (symbol === :xmax || symbol === :right) && return (1.0, 0.0)
+    (symbol === :ymin || symbol === :bottom) && return (0.0, -1.0)
+    (symbol === :ymax || symbol === :top) && return (0.0, 1.0)
     throw(
         ArgumentError(
-        "Unknown 2D boundary symbol: :$symbol. Expected :left, :right, :bottom, or :top.",
+        "Unknown 2D boundary symbol: :$symbol. Expected :xmin/:left, :xmax/:right, :ymin/:bottom, or :ymax/:top.",
     ),
     )
 end
 
 @inline function normal_vector(::Val{3}, symbol::Symbol)
-    symbol === :back && return (-1.0, 0.0, 0.0)
-    symbol === :front && return (1.0, 0.0, 0.0)
-    symbol === :left && return (0.0, -1.0, 0.0)
-    symbol === :right && return (0.0, 1.0, 0.0)
-    symbol === :bottom && return (0.0, 0.0, -1.0)
-    symbol === :top && return (0.0, 0.0, 1.0)
+    (symbol === :xmin || symbol === :back) && return (-1.0, 0.0, 0.0)
+    (symbol === :xmax || symbol === :front) && return (1.0, 0.0, 0.0)
+    (symbol === :ymin || symbol === :left) && return (0.0, -1.0, 0.0)
+    (symbol === :ymax || symbol === :right) && return (0.0, 1.0, 0.0)
+    (symbol === :zmin || symbol === :bottom) && return (0.0, 0.0, -1.0)
+    (symbol === :zmax || symbol === :top) && return (0.0, 0.0, 1.0)
     throw(
         ArgumentError(
-        "Unknown 3D boundary symbol: :$symbol. Expected :left, :right, :bottom, :top, :front, or :back.",
+        "Unknown 3D boundary symbol: :$symbol. Expected :xmin/:back, :xmax/:front, :ymin/:left, :ymax/:right, :zmin/:bottom, or :zmax/:top.",
     ),
     )
 end

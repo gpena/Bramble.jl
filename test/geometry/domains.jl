@@ -86,21 +86,21 @@ end
     # Invariant: Boundary symbols for 1D, 2D, and 3D geometries are extractable
     # from either value instances or type signatures of sets and domains.
     @testset "Boundary symbol extraction" begin
-        @test boundary_symbols(I1D) == (:left, :right)
-        @test boundary_symbols(I2D) == (:bottom, :top, :left, :right)
-        @test boundary_symbols(I3D) == (:bottom, :top, :back, :front, :left, :right)
+        @test boundary_symbols(I1D) == (:xmin, :xmax)
+        @test boundary_symbols(I2D) == (:xmin, :xmax, :ymin, :ymax)
+        @test boundary_symbols(I3D) == (:xmin, :xmax, :ymin, :ymax, :zmin, :zmax)
 
         # Type-level boundary symbols
-        @test boundary_symbols(typeof(I1D)) == (:left, :right)
-        @test boundary_symbols(typeof(I2D)) == (:bottom, :top, :left, :right)
-        @test boundary_symbols(typeof(I3D)) == (:bottom, :top, :back, :front, :left, :right)
+        @test boundary_symbols(typeof(I1D)) == (:xmin, :xmax)
+        @test boundary_symbols(typeof(I2D)) == (:xmin, :xmax, :ymin, :ymax)
+        @test boundary_symbols(typeof(I3D)) == (:xmin, :xmax, :ymin, :ymax, :zmin, :zmax)
 
         # On Domain
         Ω1 = domain(I1D)
         Ω2 = domain(I2D)
-        @test boundary_symbols(Ω1) == (:left, :right)
-        @test boundary_symbols(Ω2) == (:bottom, :top, :left, :right)
-        @test boundary_symbols(typeof(Ω1)) == (:left, :right)
+        @test boundary_symbols(Ω1) == (:xmin, :xmax)
+        @test boundary_symbols(Ω2) == (:xmin, :xmax, :ymin, :ymax)
+        @test boundary_symbols(typeof(Ω1)) == (:xmin, :xmax)
     end
 
     # Invariant: `process_identifier` normalizes symbols, tuples, and vectors
@@ -470,12 +470,12 @@ end
         @test Ω_2d(2) == (1.0, 3.0)
 
         # Boundary symbols from domain instance.
-        @test boundary_symbols(Ω_1d) == (:left, :right)
-        @test boundary_symbols(Ω_2d) == (:bottom, :top, :left, :right)
+        @test boundary_symbols(Ω_1d) == (:xmin, :xmax)
+        @test boundary_symbols(Ω_2d) == (:xmin, :xmax, :ymin, :ymax)
 
         # Boundary symbols from domain type.
-        @test boundary_symbols(typeof(Ω_1d)) == (:left, :right)
-        @test boundary_symbols(typeof(Ω_2d)) == (:bottom, :top, :left, :right)
+        @test boundary_symbols(typeof(Ω_1d)) == (:xmin, :xmax)
+        @test boundary_symbols(typeof(Ω_2d)) == (:xmin, :xmax, :ymin, :ymax)
     end
 
     # Invariant: `EvaluatedDomainMarkers` handles static condition fallbacks
@@ -516,9 +516,9 @@ end
     # Invariant: `boundary_symbols` returns canonical boundary names for
     # dimensions 1, 2, and 3, and raises an error for unsupported dimensions.
     @testset "Default boundary symbol mappings" begin
-        @test boundary_symbols(1) == (:left, :right)
-        @test boundary_symbols(2) == (:bottom, :top, :left, :right)
-        @test boundary_symbols(3) == (:bottom, :top, :back, :front, :left, :right)
+        @test boundary_symbols(1) == (:xmin, :xmax)
+        @test boundary_symbols(2) == (:xmin, :xmax, :ymin, :ymax)
+        @test boundary_symbols(3) == (:xmin, :xmax, :ymin, :ymax, :zmin, :zmax)
         @test_throws ErrorException boundary_symbols(4)
     end
 
@@ -546,9 +546,9 @@ end
         @test_throws ErrorException boundary_symbols(typeof(X4))
 
         # Supported dimensions resolve identically across value and type queries.
-        @test boundary_symbols(1) == (:left, :right)
-        @test boundary_symbols(2) == (:bottom, :top, :left, :right)
-        @test boundary_symbols(3) == (:bottom, :top, :back, :front, :left, :right)
+        @test boundary_symbols(1) == (:xmin, :xmax)
+        @test boundary_symbols(2) == (:xmin, :xmax, :ymin, :ymax)
+        @test boundary_symbols(3) == (:xmin, :xmax, :ymin, :ymax, :zmin, :zmax)
 
         I = interval(0.0, 1.0)
         @test boundary_symbols(I) == boundary_symbols(typeof(I))

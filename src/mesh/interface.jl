@@ -88,8 +88,20 @@ Return the [`MeshMarkers`](@ref) dictionary associated with mesh `Ωₕ`.
     index_in_marker(Ωₕ::AbstractMeshType, label::Symbol) -> BitVector
 
 Return the `BitVector` indicator associated with marker `label` in mesh `Ωₕ`.
+
+If `label` is not directly found in the mesh markers, its coordinate-aligned
+or viewpoint boundary alias (e.g. `:xmin` ↔ `:left` in 2D, `:xmin` ↔ `:back` in 3D) is
+consulted if available.
 """
-@inline index_in_marker(Ωₕ::AbstractMeshType, label::Symbol) = markers(Ωₕ)[label]
+@inline function index_in_marker(Ωₕ::AbstractMeshType{D}, label::Symbol) where {D}
+    m = markers(Ωₕ)
+    haskey(m, label) && return m[label]
+    alias = _boundary_symbol_alias(Val(D), label)
+    if alias !== nothing && haskey(m, alias)
+        return m[alias]
+    end
+    return m[label]
+end
 
 """
     set_indices!(Ωₕ::AbstractMeshType, indices::CartesianIndices) -> Nothing

@@ -349,9 +349,9 @@ When creating a mesh from a labeled [`Domain`](@ref), markers are projected onto
 # Domain with boundary and obstacle markers
 I = interval(0.0, 1.0)
 Ω = domain(I × I,
-           :left_inlet => :left,
-           :right_outlet => :right,
-           :walls => (:top, :bottom),
+           :left_inlet => :xmin,      # or legacy alias :left
+           :right_outlet => :xmax,    # or legacy alias :right
+           :walls => (:ymin, :ymax),  # or legacy alias (:top, :bottom)
            :obstacle => x -> (x[1]-0.5)^2 + (x[2]-0.5)^2 < 0.15^2)
 
 # Generate mesh

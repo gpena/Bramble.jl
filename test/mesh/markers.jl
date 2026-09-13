@@ -1,6 +1,32 @@
 using Test
 using Bramble
 
+if !@isdefined(alloc_test)
+    @inline function alloc_test(f::F, args...; kwargs...) where {F}
+        f(args...; kwargs...)
+        return @allocated(f(args...; kwargs...))
+    end
+end
+
+if !@isdefined(var"@test_allocs")
+    macro test_allocs(call_expr)
+        if Meta.isexpr(call_expr, :call)
+            fn = call_expr.args[1]
+            args = call_expr.args[2:end]
+            quote
+                @test alloc_test($(esc(fn)), $(map(esc, args)...)) == 0
+            end
+        else
+            quote
+                let
+                    $(esc(call_expr))
+                    @test (@allocated $(esc(call_expr))) == 0
+                end
+            end
+        end
+    end
+end
+
 # `:boundary`/`:interior` are reserved markers every mesh now carries automatically,
 # computed from the mesh's own shape (see `_ensure_geometric_markers!`
 # in src/mesh/marker.jl). Every case here is checked against a real mesh's marker
@@ -165,5 +191,67 @@ using Bramble
         Ωₕ = mesh(domain(S, :corners => is_corner), (4, 4), (true, true))
         @test sum(Bramble.markers(Ωₕ)[:corners]) == 4
         @test all(Bramble.index_in_marker(Ωₕ, :corners) .<= Bramble.markers(Ωₕ)[:boundary])   # every corner is on the boundary
+    end
+
+    @testset "Coordinate-aligned boundary symbols (gpena/Bramble.jl#152)" begin
+        # 1D Domains
+        I1 = interval(0.0, 1.0)
+        Ωₕ_1d = mesh(domain(I1, :x_lo => :xmin, :x_hi => :xmax, :l => :left, :r => :right), 5, true)
+        @test Bramble.index_in_marker(Ωₕ_1d, :x_lo) == Bramble.index_in_marker(Ωₕ_1d, :l)
+        @test Bramble.index_in_marker(Ωₕ_1d, :x_hi) == Bramble.index_in_marker(Ωₕ_1d, :r)
+
+        # 2D Domains
+        S2 = interval(0.0, 1.0) × interval(0.0, 2.0)
+        Ωₕ_2d = mesh(
+            domain(
+                S2,
+                :xm => :xmin, :xp => :xmax, :ym => :ymin, :yp => :ymax,
+                :l => :left, :r => :right, :b => :bottom, :t => :top
+            ),
+            (4, 5),
+            (true, true)
+        )
+        @test Bramble.index_in_marker(Ωₕ_2d, :xm) == Bramble.index_in_marker(Ωₕ_2d, :l)
+        @test Bramble.index_in_marker(Ωₕ_2d, :xp) == Bramble.index_in_marker(Ωₕ_2d, :r)
+        @test Bramble.index_in_marker(Ωₕ_2d, :ym) == Bramble.index_in_marker(Ωₕ_2d, :b)
+        @test Bramble.index_in_marker(Ωₕ_2d, :yp) == Bramble.index_in_marker(Ωₕ_2d, :t)
+
+        # 3D Domains: verify axis alignment and resolution of the 3D axis transposition ambiguity
+        # Axis 1 (x): :xmin <-> :back, :xmax <-> :front
+        # Axis 2 (y): :ymin <-> :left, :ymax <-> :right
+        # Axis 3 (z): :zmin <-> :bottom, :zmax <-> :top
+        S3 = interval(0.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 3.0)
+        Ωₕ_3d = mesh(
+            domain(
+                S3,
+                :xm => :xmin, :xp => :xmax,
+                :ym => :ymin, :yp => :ymax,
+                :zm => :zmin, :zp => :zmax,
+                :bk => :back, :fr => :front,
+                :lt => :left, :rt => :right,
+                :bm => :bottom, :tp => :top
+            ),
+            (3, 4, 5),
+            (true, true, true)
+        )
+        @test Bramble.index_in_marker(Ωₕ_3d, :xm) == Bramble.index_in_marker(Ωₕ_3d, :bk)
+        @test Bramble.index_in_marker(Ωₕ_3d, :xp) == Bramble.index_in_marker(Ωₕ_3d, :fr)
+        @test Bramble.index_in_marker(Ωₕ_3d, :ym) == Bramble.index_in_marker(Ωₕ_3d, :lt)
+        @test Bramble.index_in_marker(Ωₕ_3d, :yp) == Bramble.index_in_marker(Ωₕ_3d, :rt)
+        @test Bramble.index_in_marker(Ωₕ_3d, :zm) == Bramble.index_in_marker(Ωₕ_3d, :bm)
+        @test Bramble.index_in_marker(Ωₕ_3d, :zp) == Bramble.index_in_marker(Ωₕ_3d, :tp)
+
+        # Alias fallback in index_in_marker when only one style was registered
+        Ωₕ_alias_test = mesh(domain(S2, :left => :left, :ymax => :ymax), (4, 4), (true, true))
+        @test Bramble.index_in_marker(Ωₕ_alias_test, :xmin) === Bramble.index_in_marker(Ωₕ_alias_test, :left)
+        @test Bramble.index_in_marker(Ωₕ_alias_test, :top) === Bramble.index_in_marker(Ωₕ_alias_test, :ymax)
+
+        # Zero-allocation verification for boundary symbols and alias helper
+        @test_allocs Bramble._boundary_symbol_alias(Val(1), :xmin)
+        @test_allocs Bramble._boundary_symbol_alias(Val(2), :ymin)
+        @test_allocs Bramble._boundary_symbol_alias(Val(3), :zmax)
+        @test_allocs Bramble.index_in_marker(Ωₕ_alias_test, :xmin)
+        @test_allocs Bramble.boundary_indices(Bramble.indices(Ωₕ_2d))
+        @test_allocs Bramble.boundary_indices(Bramble.indices(Ωₕ_3d))
     end
 end

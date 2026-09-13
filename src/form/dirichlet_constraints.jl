@@ -87,16 +87,21 @@ end
 @inline _dirichlet_known_labels(input::CompositeGridSpace) = keys(markers(mesh(first_space(input))))
 @inline _dirichlet_known_labels(input::AbstractMeshType) = keys(markers(input))
 @inline _dirichlet_known_labels(input::Domain) = labels(markers(input))
-@inline _dirichlet_known_labels(input::CartesianProduct) = boundary_symbols(input)
+@inline _dirichlet_known_labels(input::CartesianProduct) = _all_boundary_symbols(input)
 
 # Checked against what `input` actually has registered, not the shape's generic
 # per-dimension names: a mistyped or nonexistent label otherwise passes here silently and
 # only fails (or, on a composite space with `dirichlet_components`, silently does nothing)
 # once `dirichlet_bc!`/`assemble` reaches it, far from the mistake.
+# Both canonical coordinate-aligned symbols and viewpoint aliases are recognized.
 function _validate_dirichlet_pair_labels(input, pairs::Tuple{Vararg{Pair}})
     known = _dirichlet_known_labels(input)
+    D = dim(_constraint_domain(input))
     for (lbl, _) in pairs
-        lbl in known || _throw_unknown_dirichlet_label(lbl, known)
+        if !(lbl in known)
+            alias = _boundary_symbol_alias(Val(D), lbl)
+            (alias !== nothing && alias in known) || _throw_unknown_dirichlet_label(lbl, known)
+        end
     end
 end
 

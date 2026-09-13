@@ -120,23 +120,25 @@ PDE boundary conditions require tagging specific domain boundaries (e.g., Dirich
 
 ### 4.1 Boundary symbol conventions
 
-For a $D$-dimensional domain, the standard boundary facets are:
-- **1D**: `:left`, `:right`
-- **2D**: `:bottom`, `:top`, `:left`, `:right`
-- **3D**: `:bottom`, `:top`, `:back`, `:front`, `:left`, `:right`
+Bramble provides canonical **coordinate-aligned boundary symbols** across all dimensions to eliminate axis transposition ambiguities in multi-dimensional physics simulations:
+- **1D**: `:xmin` (`:left`), `:xmax` (`:right`)
+- **2D**: `:xmin` (`:left`), `:xmax` (`:right`), `:ymin` (`:bottom`), `:ymax` (`:top`)
+- **3D**: `:xmin` (`:back`), `:xmax` (`:front`), `:ymin` (`:left`), `:ymax` (`:right`), `:zmin` (`:bottom`), `:zmax` (`:top`)
+
+Camera- and viewpoint-dependent labels (`:left`, `:right`, `:bottom`, `:top`, `:front`, `:back`) remain supported as 100% backward-compatible aliases.
 
 You can inspect standard boundary symbols using [`boundary_symbols`](@ref):
 
 ```julia
 boundary_symbols(2)
-# (:bottom, :top, :left, :right)
+# (:xmin, :xmax, :ymin, :ymax)
 ```
 
 ```@raw html
 <figure>
 <svg viewBox="0 0 780 280" width="100%" style="max-width:780px;height:auto;font-family:system-ui,-apple-system,'Segoe UI',sans-serif"
      xmlns="http://www.w3.org/2000/svg" role="img"
-     aria-label="Diagram of standard boundary symbols in 2D (:left, :right, :bottom, :top) and 3D (:left, :right, :bottom, :top, :front, :back).">
+     aria-label="Diagram of standard boundary symbols in 2D (:xmin/:left, :xmax/:right, :ymin/:bottom, :ymax/:top) and 3D (:xmin/:back, :xmax/:front, :ymin/:left, :ymax/:right, :zmin/:bottom, :zmax/:top).">
   <!-- Panel 1: 2D Domain -->
   <g transform="translate(30, 20)">
     <rect x="0" y="0" width="320" height="240" rx="6" fill="none" stroke="currentColor" stroke-opacity="0.2" stroke-width="1"/>
@@ -146,22 +148,22 @@ boundary_symbols(2)
     <rect x="80" y="70" width="160" height="120" fill="currentColor" fill-opacity="0.05" stroke="currentColor" stroke-width="2"/>
 
     <!-- Labels -->
-    <!-- :top -->
-    <text x="160" y="58" font-size="12" font-weight="bold" fill="#ef4444" text-anchor="middle">:top (y_max)</text>
+    <!-- :ymax / :top -->
+    <text x="160" y="58" font-size="12" font-weight="bold" fill="#ef4444" text-anchor="middle">:ymax (:top)</text>
     <line x1="80" y1="70" x2="240" y2="70" stroke="#ef4444" stroke-width="3"/>
 
-    <!-- :bottom -->
-    <text x="160" y="210" font-size="12" font-weight="bold" fill="#ef4444" text-anchor="middle">:bottom (y_min)</text>
+    <!-- :ymin / :bottom -->
+    <text x="160" y="210" font-size="12" font-weight="bold" fill="#ef4444" text-anchor="middle">:ymin (:bottom)</text>
     <line x1="80" y1="190" x2="240" y2="190" stroke="#ef4444" stroke-width="3"/>
 
-    <!-- :left -->
-    <text x="30" y="134" font-size="12" font-weight="bold" fill="#3b82f6" text-anchor="middle">:left</text>
-    <text x="30" y="148" font-size="10" fill="#3b82f6" text-anchor="middle">(x_min)</text>
+    <!-- :xmin / :left -->
+    <text x="35" y="134" font-size="12" font-weight="bold" fill="#3b82f6" text-anchor="middle">:xmin</text>
+    <text x="35" y="148" font-size="10" fill="#3b82f6" text-anchor="middle">(:left)</text>
     <line x1="80" y1="70" x2="80" y2="190" stroke="#3b82f6" stroke-width="3"/>
 
-    <!-- :right -->
-    <text x="285" y="134" font-size="12" font-weight="bold" fill="#3b82f6" text-anchor="middle">:right</text>
-    <text x="285" y="148" font-size="10" fill="#3b82f6" text-anchor="middle">(x_max)</text>
+    <!-- :xmax / :right -->
+    <text x="285" y="134" font-size="12" font-weight="bold" fill="#3b82f6" text-anchor="middle">:xmax</text>
+    <text x="285" y="148" font-size="10" fill="#3b82f6" text-anchor="middle">(:right)</text>
     <line x1="240" y1="70" x2="240" y2="190" stroke="#3b82f6" stroke-width="3"/>
   </g>
 
@@ -176,24 +178,24 @@ boundary_symbols(2)
     <line x1="70"  y1="190" x2="130" y2="150" stroke="currentColor" stroke-dasharray="3,3" stroke-width="1" stroke-opacity="0.4"/>
     <line x1="130" y1="150" x2="250" y2="150" stroke="currentColor" stroke-dasharray="3,3" stroke-width="1" stroke-opacity="0.4"/>
 
-    <!-- Top face -->
+    <!-- Top face (:zmax) -->
     <polygon points="70,110 130,70 250,70 190,110" fill="#ef4444" fill-opacity="0.1" stroke="#ef4444" stroke-width="1.5"/>
-    <text x="160" y="94" font-size="11" font-weight="bold" fill="#ef4444" text-anchor="middle">:top (z_max)</text>
+    <text x="160" y="94" font-size="11" font-weight="bold" fill="#ef4444" text-anchor="middle">:zmax (:top)</text>
 
-    <!-- Right face -->
+    <!-- Right face (:ymax) -->
     <polygon points="190,110 250,70 250,150 190,190" fill="#3b82f6" fill-opacity="0.1" stroke="#3b82f6" stroke-width="1.5"/>
-    <text x="225" y="135" font-size="11" font-weight="bold" fill="#3b82f6" text-anchor="middle">:right</text>
+    <text x="225" y="135" font-size="11" font-weight="bold" fill="#3b82f6" text-anchor="middle">:ymax (:right)</text>
 
-    <!-- Front face -->
+    <!-- Front face (:xmax) -->
     <polygon points="70,110 190,110 190,190 70,190" fill="#10b981" fill-opacity="0.1" stroke="#10b981" stroke-width="1.5"/>
-    <text x="130" y="155" font-size="11" font-weight="bold" fill="#10b981" text-anchor="middle">:front (y_max)</text>
+    <text x="130" y="155" font-size="11" font-weight="bold" fill="#10b981" text-anchor="middle">:xmax (:front)</text>
 
-    <!-- Left callout -->
-    <text x="35" y="150" font-size="11" font-weight="bold" fill="#3b82f6" text-anchor="middle">:left</text>
-    <!-- Back callout -->
-    <text x="190" y="60" font-size="11" font-weight="bold" fill="#10b981" text-anchor="middle">:back (y_min)</text>
-    <!-- Bottom callout -->
-    <text x="130" y="215" font-size="11" font-weight="bold" fill="#ef4444" text-anchor="middle">:bottom (z_min)</text>
+    <!-- Left callout (:ymin) -->
+    <text x="35" y="150" font-size="11" font-weight="bold" fill="#3b82f6" text-anchor="middle">:ymin (:left)</text>
+    <!-- Back callout (:xmin) -->
+    <text x="190" y="60" font-size="11" font-weight="bold" fill="#10b981" text-anchor="middle">:xmin (:back)</text>
+    <!-- Bottom callout (:zmin) -->
+    <text x="130" y="215" font-size="11" font-weight="bold" fill="#ef4444" text-anchor="middle">:zmin (:bottom)</text>
   </g>
 </svg>
 </figure>
@@ -351,9 +353,9 @@ sink_geom = interval(0.0, 2.0) × interval(0.0, 2.0) × interval(0.0, 1.0)
 
 sink = domain(
     sink_geom,
-    :heat_source => :bottom,
-    :convection  => :top,
-    :insulated   => (:left, :right, :front, :back)
+    :heat_source => :zmin,  # or legacy alias :bottom
+    :convection  => :zmax,  # or legacy alias :top
+    :insulated   => (:xmin, :xmax, :ymin, :ymax)  # or (:left, :right, :front, :back)
 )
 
 println("3D Domain Center: ", center(sink))

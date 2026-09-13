@@ -98,10 +98,17 @@ using Supposition
             end
 
             # A bare `CartesianProduct` (never wrapped by `domain(...)`) has no custom
-            # labels at all -- only the generic per-axis names `boundary_symbols` gives it.
+            # labels at all -- only the generic per-axis names and their aliases.
             @test_throws "is not registered" dirichlet_constraints(Ω, :gamma_1 => f1)
             known = first(boundary_symbols(Ω))
             @test dirichlet_constraints(Ω, known => f1) isa DirichletConstraint
+            # Coordinate-aligned symbol and legacy viewpoint alias both succeed on CartesianProduct
+            @test dirichlet_constraints(Ω, :xmin => f1) isa DirichletConstraint
+            @test dirichlet_constraints(Ω, :left => f1) isa DirichletConstraint
+
+            # Alias resolution on Domain: domain has :gamma_1 but also accepts alias when symbol registered
+            Ω_alias = domain(Ω, :left => :left)
+            @test dirichlet_constraints(Ω_alias, :xmin => f1) isa DirichletConstraint
 
             # And the time-dependent constructor (`input, I::CartesianProduct{1}, pairs...`)
             # validates the same way, before arity is even checked.
@@ -172,6 +179,12 @@ using LinearAlgebra: I as LinearAlgebraI
             end
         end
         @test any(marked)                  # the marker selects something
+
+        # Alias verification: :ymin on Wₕ (registered as :bottom) yields identical constrained matrix
+        A_alias = _eye(nW)
+        A_alias[1, 2] = 5.0
+        dirichlet_bc!(A_alias, Wₕ, :ymin)
+        @test A_alias == A
     end
 
     @testset "Dense & sparse agreement" begin

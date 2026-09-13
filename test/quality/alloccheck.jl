@@ -3,8 +3,10 @@ using Bramble
 using AllocCheck
 using Bramble:
                ×,
+               _boundary_symbol_alias,
                _dot,
                _expand_uniform,
+               boundary_indices,
                diff₋ₓ!,
                diff₊ₓ!,
                diff₋ᵧ!,
@@ -105,6 +107,12 @@ end
         @test _alloc_report(_expand_uniform, (NTuple{3, Bool}, Val{3})) == ""
     end
 
+    @testset "Boundary symbol aliases" begin
+        @test _alloc_report(_boundary_symbol_alias, (Val{1}, Symbol)) == ""
+        @test _alloc_report(_boundary_symbol_alias, (Val{2}, Symbol)) == ""
+        @test _alloc_report(_boundary_symbol_alias, (Val{3}, Symbol)) == ""
+    end
+
     @testset "Mesh queries" begin
         for (lbl, Ωₕ, I) in (
             ("1D", Ωₕ1, Int), ("2D", Ωₕ2, CartesianIndex{2}), ("3D", Ωₕ3, CartesianIndex{3})
@@ -119,6 +127,7 @@ end
                 @test _alloc_report(npoints, (typeof(Ωₕ),)) == ""
                 @test _alloc_report(spacings, (typeof(Ωₕ),)) == ""
                 @test _alloc_report(normal_vector, (typeof(Ωₕ), Symbol)) == ""
+                @test _alloc_report(boundary_indices, (typeof(Ωₕ),)) == ""
             end
         end
 

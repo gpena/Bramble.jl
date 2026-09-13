@@ -328,6 +328,8 @@ import Bramble:
             @test locate_cell(M1, 1.5) == 10
 
             # normal_vector
+            @test normal_vector(M1, :xmin) == (-1.0,)
+            @test normal_vector(M1, :xmax) == (1.0,)
             @test normal_vector(M1, :left) == (-1.0,)
             @test normal_vector(M1, :right) == (1.0,)
             @test_throws ArgumentError normal_vector(M1, :unknown)
@@ -372,10 +374,10 @@ import Bramble:
             @test locate_cell(M2, [0.35, 1.05]) == CartesianIndex(4, 11)
 
             # normal_vector
-            @test normal_vector(M2, :left) == (-1.0, 0.0)
-            @test normal_vector(M2, :right) == (1.0, 0.0)
-            @test normal_vector(M2, :bottom) == (0.0, -1.0)
-            @test normal_vector(M2, :top) == (0.0, 1.0)
+            @test normal_vector(M2, :xmin) == normal_vector(M2, :left) == (-1.0, 0.0)
+            @test normal_vector(M2, :xmax) == normal_vector(M2, :right) == (1.0, 0.0)
+            @test normal_vector(M2, :ymin) == normal_vector(M2, :bottom) == (0.0, -1.0)
+            @test normal_vector(M2, :ymax) == normal_vector(M2, :top) == (0.0, 1.0)
             @test_throws ArgumentError normal_vector(M2, :invalid)
         end
 
@@ -395,12 +397,12 @@ import Bramble:
             @test locate_cell(M3, (0.5, 0.5, 0.5)) == CartesianIndex(3, 3, 3)
             @test locate_cell(M3, (0.1, 0.3, 0.8)) == CartesianIndex(1, 2, 4)
 
-            @test normal_vector(M3, :back) == (-1.0, 0.0, 0.0)
-            @test normal_vector(M3, :front) == (1.0, 0.0, 0.0)
-            @test normal_vector(M3, :left) == (0.0, -1.0, 0.0)
-            @test normal_vector(M3, :right) == (0.0, 1.0, 0.0)
-            @test normal_vector(M3, :bottom) == (0.0, 0.0, -1.0)
-            @test normal_vector(M3, :top) == (0.0, 0.0, 1.0)
+            @test normal_vector(M3, :xmin) == normal_vector(M3, :back) == (-1.0, 0.0, 0.0)
+            @test normal_vector(M3, :xmax) == normal_vector(M3, :front) == (1.0, 0.0, 0.0)
+            @test normal_vector(M3, :ymin) == normal_vector(M3, :left) == (0.0, -1.0, 0.0)
+            @test normal_vector(M3, :ymax) == normal_vector(M3, :right) == (0.0, 1.0, 0.0)
+            @test normal_vector(M3, :zmin) == normal_vector(M3, :bottom) == (0.0, 0.0, -1.0)
+            @test normal_vector(M3, :zmax) == normal_vector(M3, :top) == (0.0, 0.0, 1.0)
         end
     end
 end
