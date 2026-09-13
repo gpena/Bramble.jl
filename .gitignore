@@ -113,6 +113,7 @@ polygonal_mesh_plan.md
 manual/
 presentation/
 docs/manual_design_preview.html
+docs/preview_poisson_interactive.html
 
 # Working notes for the form-layer unlock, paired with the tracker artifact. Kept out of
 # version control by request: the history and the open questions live here, not on GitHub.
