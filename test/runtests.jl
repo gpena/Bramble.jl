@@ -41,6 +41,12 @@ macro test_allocs(call_expr)
         quote
             @test alloc_test($(esc(fn)), $(map(esc, args)...)) == 0
         end
+    elseif Meta.isexpr(call_expr, :ref)
+        target = call_expr.args[1]
+        indices = call_expr.args[2:end]
+        quote
+            @test alloc_test(getindex, $(esc(target)), $(map(esc, indices)...)) == 0
+        end
     else
         quote
             let

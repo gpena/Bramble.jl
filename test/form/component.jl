@@ -12,7 +12,40 @@ using Bramble:
                source_function,
                trial_component_or_nothing,
                test_component_or_nothing,
-               components
+               components,
+               restrict_to
+
+if !@isdefined(alloc_test)
+    @inline function alloc_test(f::F, args...; kwargs...) where {F}
+        f(args...; kwargs...)
+        return @allocated(f(args...; kwargs...))
+    end
+end
+
+if !@isdefined(var"@test_allocs")
+    macro test_allocs(call_expr)
+        if Meta.isexpr(call_expr, :call)
+            fn = call_expr.args[1]
+            args = call_expr.args[2:end]
+            quote
+                @test alloc_test($(esc(fn)), $(map(esc, args)...)) == 0
+            end
+        elseif Meta.isexpr(call_expr, :ref)
+            target = call_expr.args[1]
+            indices = call_expr.args[2:end]
+            quote
+                @test alloc_test(getindex, $(esc(target)), $(map(esc, indices)...)) == 0
+            end
+        else
+            quote
+                let
+                    $(esc(call_expr))
+                    @test (@allocated $(esc(call_expr))) == 0
+                end
+            end
+        end
+    end
+end
 
 # `component(op, i)` (the mechanism behind `u(1)`, `D₋ₓ(v)(2)`, and the composite
 # `innerₕ(uₕ, r)` shorthand alike) rebuilds a symbolic tree with its trial/test leaves
@@ -128,5 +161,113 @@ using Bramble:
 
             @test_throws ArgumentError form(Vₕ, v -> f((), v))
         end
+    end
+
+    @testset "Bracket indexing and destructuring (gpena/Bramble.jl#153)" begin
+        p = TrialFunction{2, 2}()
+        q = TestFunction{2, 2}()
+
+        # 1. Bracket indexing equivalence
+        @test p[1] isa IndexedTrialFunction{2}
+        @test p[2] isa IndexedTrialFunction{2}
+        @test p[1] == p(1)
+        @test p[2] == p(2)
+        @test q[1] isa IndexedTestFunction{2}
+        @test q[2] isa IndexedTestFunction{2}
+        @test q[1] == q(1)
+        @test q[2] == q(2)
+
+        # Indexing distributes through operators
+        @test test_component_or_nothing((D₋ₓ(q))[1]) == 1
+        @test test_component_or_nothing((D₋ₓ(q))[2]) == 2
+        @test test_component_or_nothing((q + D₋ₓ(q))[2]) == 2
+
+        # 2. Out-of-range checking at AST construction time
+        @test_throws ArgumentError p[3]
+        @test_throws ArgumentError p(3)
+        @test_throws ArgumentError q[3]
+        @test_throws ArgumentError q(3)
+        @test_throws ArgumentError p[0]
+        @test_throws ArgumentError p(-1)
+        @test_throws ArgumentError (D₋ₓ(p))[3]
+
+        # 3. components helper
+        comps_p = components(p)
+        @test comps_p == (p[1], p[2])
+        comps_q = components(q)
+        @test comps_q == (q[1], q[2])
+
+        # Tuple destructuring
+        (u, v) = components(p)
+        @test u == p[1] && v == p[2]
+        (w, z) = components(q)
+        @test w == q[1] && z == q[2]
+
+        # Direct destructuring and iteration
+        (u_dir, v_dir) = p
+        @test u_dir == p[1] && v_dir == p[2]
+        (w_dir, z_dir) = q
+        @test w_dir == q[1] && z_dir == q[2]
+        @test length(p) == 2 && firstindex(p) == 1 && lastindex(p) == 2
+        @test collect(p) == [p[1], p[2]]
+
+        # Unparameterized TrialFunction/TestFunction components helper
+        p_unparam = TrialFunction{2}()
+        @test_throws ArgumentError components(p_unparam)
+        @test components(p_unparam, 2) == (p_unparam[1], p_unparam[2])
+
+        # 4. Form assembly equivalence (Bilinear & Linear)
+        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 5), (true, true))
+        Vₕ = gridspace(Ωₕ, Val(2))
+
+        # Bilinear form
+        a_functor = form(Vₕ, Vₕ, (p, q) -> inner₊ₓ(D₋ₓ(p(1)), D₋ₓ(q(1))) + innerₕ(p(2), q(1)) +
+                                           inner₊ᵧ(D₋ᵧ(p(2)), D₋ᵧ(q(2))))
+        a_bracket = form(Vₕ, Vₕ, (p, q) -> inner₊ₓ(D₋ₓ(p[1]), D₋ₓ(q[1])) + innerₕ(p[2], q[1]) +
+                                           inner₊ᵧ(D₋ᵧ(p[2]), D₋ᵧ(q[2])))
+        a_components = form(Vₕ, Vₕ, (p, q) -> begin
+            u, v = components(p)
+            w, z = components(q)
+            inner₊ₓ(D₋ₓ(u), D₋ₓ(w)) + innerₕ(v, w) + inner₊ᵧ(D₋ᵧ(v), D₋ᵧ(z))
+        end)
+        a_direct = form(Vₕ, Vₕ, (p, q) -> begin
+            u, v = p
+            w, z = q
+            inner₊ₓ(D₋ₓ(u), D₋ₓ(w)) + innerₕ(v, w) + inner₊ᵧ(D₋ᵧ(v), D₋ᵧ(z))
+        end)
+
+        A_ref = assemble(a_functor)
+        @test assemble(a_bracket) == A_ref
+        @test assemble(a_components) == A_ref
+        @test assemble(a_direct) == A_ref
+
+        # Linear form
+        fₕ = Rₕ(Vₕ, (x -> x[1], x -> x[2]))
+        l_functor = form(Vₕ, q -> innerₕ(fₕ(1), q(1)) + innerₕ(fₕ(2), q(2)))
+        l_bracket = form(Vₕ, q -> innerₕ(fₕ(1), q[1]) + innerₕ(fₕ(2), q[2]))
+        l_components = form(Vₕ, q -> begin
+            w, z = components(q)
+            innerₕ(fₕ(1), w) + innerₕ(fₕ(2), z)
+        end)
+        l_direct = form(Vₕ, q -> begin
+            w, z = q
+            innerₕ(fₕ(1), w) + innerₕ(fₕ(2), z)
+        end)
+
+        b_ref = assemble(l_functor)
+        @test assemble(l_bracket) == b_ref
+        @test assemble(l_components) == b_ref
+        @test assemble(l_direct) == b_ref
+
+        # Out-of-range checking during form construction
+        @test_throws ArgumentError form(Vₕ, Vₕ, (p, q) -> innerₕ(p[3], q[1]))
+        @test_throws ArgumentError form(Vₕ, Vₕ, (p, q) -> innerₕ(p[1], q[3]))
+        @test_throws ArgumentError form(Vₕ, q -> innerₕ(fₕ(1), q[3]))
+
+        # Zero allocations
+        @test_allocs components(p)
+        @test_allocs components(q)
+        @test_allocs p[1]
+        @test_allocs q[2]
     end
 end

@@ -206,6 +206,16 @@ A scalar space is its own only leaf, at offset zero.
 """
 @inline leaf_spaces_offsets(Wₕ) = first(_leaf_spaces_offsets(Wₕ, 0))
 
+"""
+    leaf_count(Wₕ::AbstractSpaceType) -> Int
+
+Returns the number of leaf scalar spaces in `Wₕ`. For a scalar space, returns 1.
+For a composite space, returns the total flattened number of scalar leaves.
+"""
+@inline leaf_count(Wₕ::ScalarGridSpace) = 1
+@inline leaf_count(Wₕ::CompositeGridSpace) = length(leaf_spaces_offsets(Wₕ))
+@inline leaf_count(Wₕ::AbstractSpaceType) = length(leaf_spaces_offsets(Wₕ))
+
 @inline _leaf_spaces_offsets(Wₕ::ScalarGridSpace, offset::Int) = (((Wₕ, offset),), offset + ndofs(Wₕ))
 @inline _leaf_spaces_offsets(Wₕ::CompositeGridSpace, offset::Int) = _leaves_of(Wₕ.spaces, offset)
 

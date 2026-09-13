@@ -242,24 +242,33 @@ exactly why the middle line above answers `false` even though the first one answ
 ## 6. Coupled systems
 
 A composite space stacks copies of a space, and a form over one addresses its blocks by
-index: `u(1)` is the trial function of the first block, `v(2)` the test function of the
-second.
+component: `u[1]` (or `u(1)`) is the trial function of the first block, `v[2]` (or `v(2)`) the test function of the
+second. Both functor indexing `u(i)` and standard bracket indexing `u[i]` are supported on trial and test functions,
+as well as on compound operators (`(D₋ₓ(u))[i]`).
+
+In addition, trial and test functions support tuple destructuring via [`components`](@ref) or direct iteration:
 
 ```@example forms
 Vₕ = Wₕ^Val(2)
-ac = form(Vₕ, Vₕ, (u, v) -> innerₕ(u(1), v(1)) + inner₊ₓ(D₋ₓ(u(2)), D₋ₓ(v(2))))
+ac = form(Vₕ, Vₕ, (u, v) -> begin
+    u₁, u₂ = components(u)
+    v₁, v₂ = components(v)
+    innerₕ(u₁, v₁) + inner₊ₓ(D₋ₓ(u₂), D₋ₓ(v₂))
+end)
 Ac = assemble(ac)
 size(Ac)
 ```
 
-Sixty-six by sixty-six: two blocks of 33, assembled into one matrix. A term naming `u(i)` and
-`v(j)` lands in block ``(j, i)``, so off-diagonal coupling is written the same way —
-`innerₕ(u(1), v(2))` fills the block that couples the first unknown to the second equation.
+Sixty-six by sixty-six: two blocks of 33, assembled into one matrix. A term naming `u[i]` and
+`v[j]` lands in block ``(j, i)``, so off-diagonal coupling is written the same way —
+`innerₕ(u[1], v[2])` fills the block that couples the first unknown to the second equation.
 
-A term must name both components or neither:
+Component indices are checked against the number of blocks at form construction time: accessing `u[3]`
+or `u(3)` on a 2-component space raises an immediate `ArgumentError`. Furthermore, a term must name both
+components or neither:
 
 ```julia
-form(Vₕ, Vₕ, (u, v) -> innerₕ(u(1), v))   # ArgumentError
+form(Vₕ, Vₕ, (u, v) -> innerₕ(u[1], v))   # ArgumentError
 ```
 
 Naming one and leaving the other open has no reading as mathematics — the term would belong

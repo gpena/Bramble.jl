@@ -19,6 +19,8 @@ using Bramble:
                locate_cell,
                normal_vector,
                spacings,
+               TrialFunction,
+               TestFunction,
                πₕ!
 
 # Static allocation verification (gpena/Bramble.jl#118).
@@ -111,6 +113,13 @@ end
         @test _alloc_report(_boundary_symbol_alias, (Val{1}, Symbol)) == ""
         @test _alloc_report(_boundary_symbol_alias, (Val{2}, Symbol)) == ""
         @test _alloc_report(_boundary_symbol_alias, (Val{3}, Symbol)) == ""
+    end
+
+    @testset "Form component operations (gpena/Bramble.jl#153)" begin
+        @test _alloc_report(components, (TrialFunction{2, 2},)) == ""
+        @test _alloc_report(components, (TestFunction{2, 2},)) == ""
+        @test _alloc_report(getindex, (TrialFunction{2, 2}, Int)) == ""
+        @test _alloc_report(getindex, (TestFunction{2, 2}, Int)) == ""
     end
 
     @testset "Mesh queries" begin

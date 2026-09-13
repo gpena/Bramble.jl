@@ -791,7 +791,9 @@ end
 
         # every route has to agree: the vector, the in-place vector, the contraction, and
         # the threaded sweep are four separate walks over the same terms
-        lf3 = form(Vt, v -> innerₕ(1.0, v(3)))
+        @test_throws ArgumentError form(Vt, v -> innerₕ(1.0, v(3)))
+        raw_ast = innerₕ(1.0, IndexedTestFunction{2}(3))
+        lf3 = Bramble.LinearForm{2, typeof(Vt), typeof(raw_ast)}(Vt, raw_ast)
         wt = Rₕ(Vt, (x -> 1.0, x -> 1.0))
         @test_throws ArgumentError assemble!(b, lf3)
         @test_throws ArgumentError lf3(wt)

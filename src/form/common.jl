@@ -84,18 +84,23 @@ behavior, which is what this calls. This used to be its own `@generated` unrolle
 # ==============================================================================
 
 """
-    TrialFunction{D} <: LazyOp{D}
+    TrialFunction{D, N} <: LazyOp{D}
 
-An AST node representing the symbolic trial function \$u\$ in a bilinear form.
+An AST node representing the symbolic trial function \$u\$ in a bilinear form over a
+`D`-dimensional space with `N` components.
 """
-struct TrialFunction{D} <: LazyOp{D} end
+struct TrialFunction{D, N} <: LazyOp{D} end
 
 """
-    TestFunction{D} <: LazyOp{D}
+    TestFunction{D, N} <: LazyOp{D}
 
-An AST node representing the symbolic test function \$v\$ in a form.
+An AST node representing the symbolic test function \$v\$ in a form over a
+`D`-dimensional space with `N` components.
 """
-struct TestFunction{D} <: LazyOp{D} end
+struct TestFunction{D, N} <: LazyOp{D} end
+
+@inline TrialFunction{D}() where {D} = TrialFunction{D, nothing}()
+@inline TestFunction{D}() where {D} = TestFunction{D, nothing}()
 
 """
     IndexedTrialFunction{D} <: LazyOp{D}
@@ -325,18 +330,22 @@ end
 # every node type in its signatures.
 
 """
-    trial_function(::Val{D}) -> TrialFunction{D}
+    trial_function(::Val{D}) -> TrialFunction{D, nothing}
+    trial_function(space::AbstractSpaceType) -> TrialFunction{dim(space), leaf_count(space)}
 
-Constructs a `TrialFunction` of dimension `D`.
+Constructs a `TrialFunction` of dimension `D` or for a specific grid `space`.
 """
-trial_function(::Val{D}) where {D} = TrialFunction{D}()
+@inline trial_function(::Val{D}) where {D} = TrialFunction{D, nothing}()
+@inline trial_function(space::AbstractSpaceType) = TrialFunction{dim(space), leaf_count(space)}()
 
 """
-    test_function(::Val{D}) -> TestFunction{D}
+    test_function(::Val{D}) -> TestFunction{D, nothing}
+    test_function(space::AbstractSpaceType) -> TestFunction{dim(space), leaf_count(space)}
 
-Constructs a `TestFunction` of dimension `D`.
+Constructs a `TestFunction` of dimension `D` or for a specific grid `space`.
 """
-test_function(::Val{D}) where {D} = TestFunction{D}()
+@inline test_function(::Val{D}) where {D} = TestFunction{D, nothing}()
+@inline test_function(space::AbstractSpaceType) = TestFunction{dim(space), leaf_count(space)}()
 
 """
     source_function(f, ::Val{D}) -> SourceFunction{D, typeof(f)}

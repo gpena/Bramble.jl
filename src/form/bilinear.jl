@@ -184,7 +184,7 @@ a = form(Vₕ, Vₕ, (u, v) -> inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + inner
 """
 function form(Wₕ, Vₕ, f)
     D = dim(Wₕ)
-    raw_ast = f(TrialFunction{D}(), TestFunction{D}())
+    raw_ast = f(trial_function(Wₕ), test_function(Vₕ))
     _validate_form_expression(raw_ast, Val(D))
     ast = simplify_ast(resolve_ast(raw_ast))
     return BilinearForm{D, typeof(Wₕ), typeof(Vₕ), typeof(ast)}(

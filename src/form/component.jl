@@ -29,13 +29,39 @@ function component end
 
 # --- the leaves -------------------------------------------------------------------- #
 
-@inline component(::TrialFunction{D}, i::Int) where {D} = IndexedTrialFunction{D}(i)
-@inline component(::TestFunction{D}, i::Int) where {D} = IndexedTestFunction{D}(i)
+@inline _check_component_range(i::Int, ::Nothing) = (
+    i >= 1 || throw(ArgumentError("component index must be >= 1, got $i")); nothing)
+@inline function _check_component_range(i::Int, N::Integer)
+    1 <= i <= N || throw(
+        ArgumentError(
+        "component index $i is out of range for a $N-component function space. " *
+        "Components are numbered 1 to $N.",
+    ),
+    )
+    return nothing
+end
+
+@inline function component(op::TrialFunction{D, N}, i::Int) where {D, N}
+    _check_component_range(i, N)
+    return IndexedTrialFunction{D}(i)
+end
+
+@inline function component(op::TestFunction{D, N}, i::Int) where {D, N}
+    _check_component_range(i, N)
+    return IndexedTestFunction{D}(i)
+end
 
 # Already indexed: re-indexing replaces the index, so that `v(1)(2)` is `v(2)` rather than
 # an error or a silent no-op.
-@inline component(::IndexedTrialFunction{D}, i::Int) where {D} = IndexedTrialFunction{D}(i)
-@inline component(::IndexedTestFunction{D}, i::Int) where {D} = IndexedTestFunction{D}(i)
+@inline function component(::IndexedTrialFunction{D}, i::Int) where {D}
+    i >= 1 || throw(ArgumentError("component index must be >= 1, got $i"))
+    return IndexedTrialFunction{D}(i)
+end
+
+@inline function component(::IndexedTestFunction{D}, i::Int) where {D}
+    i >= 1 || throw(ArgumentError("component index must be >= 1, got $i"))
+    return IndexedTestFunction{D}(i)
+end
 
 # A source has no component to name, and neither identity nor zero depends on one.
 @inline component(op::SourceFunction, ::Int) = op
@@ -90,12 +116,57 @@ end
     return OperatorAdd{D, typeof(l), typeof(r)}(l, r)
 end
 
-# --- the functor ------------------------------------------------------------------- #
+# --- the functor & bracket indexing ----------------------------------------------- #
 #
 # Defined on the abstract type, so every node answers and a new one inherits it. What it
 # needs from a node is a `component` method, which is the list above.
 
-@inline (op::LazyOp)(i::Int) = component(op, i)
+@inline (op::LazyOp)(i::Integer) = component(op, Int(i))
+@inline Base.getindex(op::LazyOp, i::Integer) = component(op, Int(i))
+
+@noinline function _throw_unknown_components(op)
+    throw(
+        ArgumentError(
+        "the number of components for $(typeof(op)) is not statically known. " *
+        "Specify the component count explicitly with `components(op, N)` or construct the form with space context.",
+    ),
+    )
+end
+
+"""
+    components(op::Union{TrialFunction, TestFunction}) -> Tuple
+    components(op::LazyOp, N::Integer) -> Tuple
+    components(op::LazyOp, space::AbstractSpaceType) -> Tuple
+
+Returns an `NTuple` of components of the symbolic trial or test function, suitable for
+tuple destructuring: `(u, v) = components(p)`.
+"""
+@inline function components(op::Union{TrialFunction{D, N}, TestFunction{D, N}}) where {D, N}
+    N isa Integer || _throw_unknown_components(op)
+    return ntuple(i -> component(op, i), Val(N))
+end
+
+@inline function components(op::LazyOp, N::Integer)
+    N >= 1 || throw(ArgumentError("component count must be positive, got $N"))
+    return ntuple(i -> component(op, i), Val(Int(N)))
+end
+
+@inline components(op::LazyOp, space::AbstractSpaceType) = components(op, leaf_count(space))
+@inline components(op::Union{IndexedTrialFunction, IndexedTestFunction}) = (op,)
+
+@inline Base.length(op::Union{TrialFunction{D, N}, TestFunction{D, N}}) where {D, N} = N isa Integer ? N :
+                                                                                       _throw_unknown_components(op)
+@inline Base.firstindex(::Union{TrialFunction, TestFunction}) = 1
+@inline Base.lastindex(op::Union{TrialFunction{D, N}, TestFunction{D, N}}) where {D, N} = length(op)
+@inline Base.eachindex(op::Union{TrialFunction{D, N}, TestFunction{D, N}}) where {D, N} = 1:length(op)
+
+@inline function Base.iterate(
+        op::Union{TrialFunction{D, N}, TestFunction{D, N}}, state::Int = 1
+) where {D, N}
+    N isa Integer || _throw_unknown_components(op)
+    state > N && return nothing
+    return (component(op, state), state + 1)
+end
 
 # --- the composite shorthand ------------------------------------------------------- #
 #

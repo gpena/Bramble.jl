@@ -27,7 +27,9 @@ indexing. So both predicates below check `trial_space(a) === test_space(a)` befo
 the expression at all, and answer `false` immediately otherwise.
 =#
 
-_same_operator_shape(::TrialFunction{D}, ::TestFunction{D}) where {D} = true
+function _same_operator_shape(::TrialFunction{D, N}, ::TestFunction{D, M}) where {D, N, M}
+    (N === M || N === nothing || M === nothing)
+end
 function _same_operator_shape(
         a::IndexedTrialFunction{D}, b::IndexedTestFunction{D}
 ) where {D}

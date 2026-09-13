@@ -205,7 +205,7 @@ l = form(Wₕ, v -> innerₕ(fₕ, v))
 """
 function form(Wₕ, f)
     D = dim(Wₕ)
-    raw_ast = f(TestFunction{D}())
+    raw_ast = f(test_function(Wₕ))
     _validate_form_expression(raw_ast, Val(D))
     ast = simplify_ast(resolve_ast(raw_ast))
     ast = _lower_sources_for_space(ast, Wₕ)
