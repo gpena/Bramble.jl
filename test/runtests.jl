@@ -257,5 +257,9 @@ if __bramble_with_ext_backends
         include("ext/metal_ext.jl")
         include("ext/sparse_ad_ext.jl")
         include("ext/sciml_ext.jl")
+        # Runs the worked heat-equation page itself, whose assertions need a stiff solver
+        # for a differential-algebraic system -- so it belongs where OrdinaryDiffEq is
+        # already loaded rather than in the every-push "Worked examples" group.
+        include("examples/heat_equation.jl")
     end
 end

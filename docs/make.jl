@@ -1,8 +1,27 @@
 using Bramble
 using Documenter
+using Literate
 
 include("generate_benchmarks.jl")
 generate_benchmarks_markdown()
+
+# Literate pilot (gpena/Bramble.jl#117). These pages are written as runnable scripts and the
+# markdown Documenter renders is generated from them here, so the page a reader sees and the
+# file the suite runs are the same file. Lines marked `#src` -- the assertions that make the
+# rendered numbers load-bearing -- are stripped on the way to markdown and kept when
+# test/examples/heat_equation.jl includes the script. The generated `.md` is gitignored.
+const LITERATE_EXAMPLES = ["heat_equation.jl"]
+
+let dir = joinpath(@__DIR__, "src", "examples")
+    for file in LITERATE_EXAMPLES
+        Literate.markdown(
+            joinpath(dir, file), dir;
+            documenter = true,
+            credit = false,
+            repo_root_url = "https://github.com/gpena/Bramble.jl/blob/main"
+        )
+    end
+end
 
 home = "Home" => "index.md"
 tutorials = "Tutorials" => [

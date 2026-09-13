@@ -23,6 +23,11 @@ deps/src/
 docs/build/
 docs/site/
 
+# Markdown generated from a Literate example script by docs/make.jl. The script next to it
+# is the source; committing the generated page too would give a second copy to keep in step,
+# which is the duplication the Literate pilot removed (gpena/Bramble.jl#117).
+docs/src/examples/heat_equation.md
+
 # LaTeX build artifacts from the manual. Scoped to manual/ rather than global, so a .tex
 # file kept deliberately elsewhere — a figure source, say — is unaffected.
 #
