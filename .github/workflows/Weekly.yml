@@ -263,6 +263,9 @@ jobs:
         with:
           cache-compiled: "true"
 
+      - name: Instantiate the mutation environment
+        run: julia --project=mutation -e 'using Pkg; Pkg.instantiate()'
+
       - name: Run mutation testing
         run: |
           JULIA_NUM_THREADS=4 julia --project=mutation --threads=4 mutation/run.jl \
