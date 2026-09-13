@@ -35,22 +35,22 @@ jobs:
     name: Full suite (Julia ${{ matrix.version }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
-    # Nothing here gates a merge, but a red run should still mean something specific, so
-    # `nightly` reports rather than counting: it is an unreleased Julia that moves on its
-    # own, and Enzyme and Mooncake — the reason this workflow exists — are the first
-    # packages to stop building on it. The add step below already tolerates a backend it
-    # cannot install and `autodiff_backends.jl` skips one it cannot load, so expect the
-    # nightly legs to cover less than the released ones rather than to fail outright.
-    continue-on-error: ${{ matrix.version == 'nightly' }}
+    # Nothing here gates a merge, but a red run should still mean something specific.
+    # Julia nightly is not in this matrix (see below), so a failure here is Bramble's own —
+    # either the 1.12 floor or the 1.13 release, on either OS.
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        # The 1.12 floor, the 1.13 release, and nightly. Unlike CI.yml and nightly.yml,
-        # this workflow runs every version it can: what it tests is how the differentiation
-        # backends behave, and that is exactly the thing a Julia version change moves.
-        version: ["1.12", "1.13", "nightly"]
+        # The 1.12 floor and the 1.13 release, on both platforms. This is also where the
+        # 1.12 floor gets its only test-suite coverage: nightly.yml runs Julia nightly only
+        # (see its header comment), so this matrix is the sole place a 1.12-only break is
+        # caught. Julia nightly is deliberately not here: what this workflow tests is how
+        # the differentiation backends behave under a Julia version change, and `nightly`
+        # itself moves daily for reasons unrelated to Bramble or to Enzyme/Mooncake, which
+        # would make a red leg here noise rather than signal.
+        version: ["1.12", "1.13"]
         os: [ubuntu-latest, macOS-latest]
     steps:
       - uses: actions/checkout@v4
@@ -84,9 +84,24 @@ jobs:
                 end
             end'
 
+      # Coverage is collected on one leg only: Julia 1.12 on ubuntu-latest, moved here from
+      # nightly.yml along with the rest of the 1.12 floor. See CI.yml's history for why only
+      # one job uploads at all.
       - uses: julia-actions/julia-runtest@v1
+        with:
+          coverage: ${{ matrix.version == '1.12' && matrix.os == 'ubuntu-latest' }}
         env:
           BRAMBLE_TEST_GROUP: full
+
+      - uses: julia-actions/julia-processcoverage@v1
+        if: matrix.version == '1.12' && matrix.os == 'ubuntu-latest'
+      - uses: codecov/codecov-action@v5
+        if: matrix.version == '1.12' && matrix.os == 'ubuntu-latest'
+        with:
+          files: lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+          use_oidc: true
+          fail_ci_if_error: false
 
   # Docs are not built here, or on any schedule: generation is on-demand only
   # (`docs-on-demand.yml`, `workflow_dispatch`). A broken `@ref` is an error the test suite

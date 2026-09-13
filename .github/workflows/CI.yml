@@ -48,9 +48,10 @@ jobs:
     # push has to pass on. It replaced the `~1.13.0-0` canary leg that sat here while
     # 1.13 was in prerelease, allowed to fail.
     #
-    # The 1.12 floor that Project.toml still declares moved to the daily-scheduled
-    # nightly.yml, next to `nightly`. The trade: a break that only 1.12 sees is now caught
-    # the same day rather than the same push. It still fails nightly.yml when it happens.
+    # The 1.12 floor that Project.toml still declares moved to the weekly-scheduled
+    # Weekly.yml, which runs the full suite on 1.12 and 1.13, both OSes. The trade: a break
+    # that only 1.12 sees is now caught the same week rather than the same push. It still
+    # fails Weekly.yml when it happens.
     #
     # Both platforms gate. Linux had been dropped from this workflow because a Linux-only
     # allocation flake in `avgₕ!` — an architecture-dependent `@generated` fold, not a real
