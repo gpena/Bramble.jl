@@ -191,6 +191,7 @@ if __bramble_with_unit_tests
         end
 
         @testset "Meshes" begin
+            include("mesh/constructors.jl")
             include("mesh/mesh1d.jl")
             include("mesh/meshnd.jl")
             include("mesh/meshes.jl")

@@ -4,6 +4,7 @@ using AllocCheck
 using Bramble:
                ×,
                _dot,
+               _expand_uniform,
                diff₋ₓ!,
                diff₊ₓ!,
                diff₋ᵧ!,
@@ -94,6 +95,14 @@ end
                 @test _alloc_report(is_collapsed, (typeof(X), Int)) == ""
             end
         end
+    end
+
+    @testset "Uniformity expansion" begin
+        @test _alloc_report(_expand_uniform, (Bool, Val{1})) == ""
+        @test _alloc_report(_expand_uniform, (Bool, Val{2})) == ""
+        @test _alloc_report(_expand_uniform, (Bool, Val{3})) == ""
+        @test _alloc_report(_expand_uniform, (NTuple{2, Bool}, Val{2})) == ""
+        @test _alloc_report(_expand_uniform, (NTuple{3, Bool}, Val{3})) == ""
     end
 
     @testset "Mesh queries" begin
