@@ -17,7 +17,11 @@
 # with `brambleRegisterPlotlyChart` so the shared theme-change observer can repaint it after a
 # toggle instead of leaving it in the wrong contrast until the next reload.
 
-include(joinpath(@__DIR__, "..", "plotly_common.jl"))
+# Guarded: a page that draws both a solution surface and a convergence plot includes this
+# file and its sibling, and both reach for plotly_common.jl. Including it twice into one
+# module redefines `plotlyjs_head` and warns about replacing its docstring.
+isdefined(@__MODULE__, :plotlyjs_head) ||
+    include(joinpath(@__DIR__, "..", "plotly_common.jl"))
 
 struct ConvergencePlot
     html::String
