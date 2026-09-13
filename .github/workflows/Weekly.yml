@@ -155,8 +155,17 @@ jobs:
       # `resolve`, not `instantiate`: the scan reads pinned versions out of the manifest and
       # never loads a package, so downloading the artifacts behind Makie and friends would
       # be minutes spent on bytes nothing here opens.
+      #
+      # The registry has to be added by hand first. `Pkg.add` installs General on demand
+      # when a depot has no registries, but `Pkg.resolve` does not: on a fresh runner it
+      # fails outright with "no registries have been installed", which is what the first
+      # dispatched run of this job did.
       - name: Resolve the workspace manifest
-        run: julia --project=. -e 'using Pkg; Pkg.resolve()'
+        run: |
+          julia --project=. -e '
+            using Pkg
+            isempty(Pkg.Registry.reachable_registries()) && Pkg.Registry.add("General")
+            Pkg.resolve()'
 
       # The binary rather than `google/osv-scanner-action`: the scan needs a flag the action
       # does not pass through (`--experimental-plugins`, below) and needs to read the exit
