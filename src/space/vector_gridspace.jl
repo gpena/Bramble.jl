@@ -176,13 +176,22 @@ end
 # Cartesian Product (×)
 # ==============================================================================
 
-# Overload product operator for space construction.
-# Scalar × Scalar → 2-element flat composite.
-# CompositeGridSpace × anything → hierarchical composite (no flattening),
-# enabling forms like form(Vh × Wh, Vh × Wh, ((u,p),(v,q)) -> ...).
-@inline ×(X::AbstractSpaceType, Y::AbstractSpaceType) = CompositeGridSpace((X, Y))
+"""
+    ×(W₁::AbstractSpaceType, W₂::AbstractSpaceType) -> CompositeGridSpace
 
-#===========================================================================#
+Construct the Cartesian product space of `W₁` and `W₂`.
+
+Chaining products associatively flattens them into a flat `CompositeGridSpace{N}`,
+matching mathematical product space conventions (e.g. `W₁ × W₂ × W₃ -> CompositeGridSpace{3}`).
+To explicitly construct hierarchical (nested) composite spaces, call [`CompositeGridSpace`](@ref)
+directly (e.g. `CompositeGridSpace(Vh, Qh)`).
+"""
+@inline ×(X::ScalarGridSpace, Y::ScalarGridSpace) = CompositeGridSpace((X, Y))
+@inline ×(X::CompositeGridSpace, Y::ScalarGridSpace) = CompositeGridSpace((X.spaces..., Y))
+@inline ×(X::ScalarGridSpace, Y::CompositeGridSpace) = CompositeGridSpace((X, Y.spaces...))
+@inline ×(X::CompositeGridSpace, Y::CompositeGridSpace) = CompositeGridSpace((X.spaces..., Y.spaces...))
+@inline ×(X::AbstractSpaceType, Y::AbstractSpaceType) = CompositeGridSpace((X, Y))#===========================================================================##===========================================================================#
+
 # Walking a composite space's leaves
 #
 # A `CompositeGridSpace` may nest, so the scalar spaces underneath it form a tree. Several
@@ -194,7 +203,6 @@ end
 # `Vector` of them would become `Vector{Tuple{Any, Int}}`, forcing dynamic typing on every
 # read through a leaf (mesh, dof count, marker mask). A tuple preserves each leaf's concrete
 # type, unrolling the iteration and compiling to zero allocations.
-#===========================================================================#
 
 """
     leaf_spaces_offsets(Wₕ) -> Tuple

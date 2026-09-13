@@ -16,6 +16,32 @@ using LinearAlgebra: norm
 using Random
 using Supposition
 
+if !@isdefined(alloc_test)
+    @inline function alloc_test(f::F, args...; kwargs...) where {F}
+        f(args...; kwargs...)
+        return @allocated(f(args...; kwargs...))
+    end
+end
+
+if !@isdefined(var"@test_allocs")
+    macro test_allocs(call_expr)
+        if Meta.isexpr(call_expr, :call)
+            fn = call_expr.args[1]
+            args = call_expr.args[2:end]
+            quote
+                @test alloc_test($(esc(fn)), $(map(esc, args)...)) == 0
+            end
+        else
+            quote
+                let
+                    $(esc(call_expr))
+                    @test (@allocated $(esc(call_expr))) == 0
+                end
+            end
+        end
+    end
+end
+
 @testset "Grid spaces" begin
     mesh1d = mesh(domain(interval(0, 1)), 10, true)
     mesh2d = mesh(domain(box((0, 0), (0.5, 0.6))), (5, 6), (true, true))
@@ -239,14 +265,80 @@ using Supposition
         end
 
         @testset "Hierarchical spaces" begin
-            # Vh (velocity, 2D) and Qh (pressure, 1D)
+            # Explicit constructor builds nested / hierarchical composite spaces
             Vh = W × W
             Qh = W
-            SystemSpace = Vh × Qh
+            SystemSpace = CompositeGridSpace((Vh, Qh))
             @test SystemSpace isa CompositeGridSpace{2}
             @test SystemSpace[1] isa CompositeGridSpace{2}
             @test SystemSpace[2] isa ScalarGridSpace
             @test ndofs(SystemSpace) == 3 * ndofs(W)
+        end
+
+        @testset "Space product operator (×) and associative flattening (#154)" begin
+            using LinearAlgebra: LinearAlgebra
+            W1 = gridspace(mesh1d)
+            W2 = gridspace(mesh1d)
+            W3 = gridspace(mesh1d)
+            W4 = gridspace(mesh1d)
+
+            _chain2(a, b) = a × b
+            _chain3_l(a, b, c) = a × b × c
+            _chain3_r(a, b, c) = a × (b × c)
+            _chain4(a, b, c, d) = (a × b) × (c × d)
+
+            # Pairwise
+            V2 = W1 × W2
+            @test V2 isa CompositeGridSpace{2}
+            @test V2[1] === W1
+            @test V2[2] === W2
+            @test @inferred(W1 × W2) isa CompositeGridSpace{2}
+            @test_allocs _chain2(W1, W2)
+
+            # Left-chaining: (W1 × W2) × W3 flattens to CompositeGridSpace{3}
+            V3 = W1 × W2 × W3
+            @test V3 isa CompositeGridSpace{3}
+            @test V3[1] === W1
+            @test V3[2] === W2
+            @test V3[3] === W3
+            @test @inferred(W1 × W2 × W3) isa CompositeGridSpace{3}
+            @test_allocs _chain3_l(W1, W2, W3)
+
+            # Right-chaining: W1 × (W2 × W3) flattens to CompositeGridSpace{3}
+            V3_r = W1 × (W2 × W3)
+            @test V3_r isa CompositeGridSpace{3}
+            @test V3_r[1] === W1
+            @test V3_r[2] === W2
+            @test V3_r[3] === W3
+            @test @inferred(W1 × (W2 × W3)) isa CompositeGridSpace{3}
+            @test_allocs _chain3_r(W1, W2, W3)
+
+            # Composite × Composite: (W1 × W2) × (W3 × W4) flattens to CompositeGridSpace{4}
+            V4 = (W1 × W2) × (W3 × W4)
+            @test V4 isa CompositeGridSpace{4}
+            @test V4[1] === W1
+            @test V4[2] === W2
+            @test V4[3] === W3
+            @test V4[4] === W4
+            @test @inferred((W1 × W2) × (W3 × W4)) isa CompositeGridSpace{4}
+            @test_allocs _chain4(W1, W2, W3, W4)
+
+            # Heterogeneous spaces (different meshes or dimensions)
+            W_2d = gridspace(mesh2d)
+            V_het = W1 × W_2d × W1
+            @test V_het isa CompositeGridSpace{3}
+            @test V_het[1] === W1
+            @test V_het[2] === W_2d
+            @test V_het[3] === W1
+            @test ndofs(V_het) == ndofs(W1) + ndofs(W_2d) + ndofs(W1)
+            @test @inferred(W1 × W_2d × W1) isa CompositeGridSpace{3}
+            @test_allocs _chain3_l(W1, W_2d, W1)
+
+            # LinearAlgebra coexistence: vector cross product and space product share ×
+            u_vec = [1.0, 0.0, 0.0]
+            v_vec = [0.0, 1.0, 0.0]
+            @test (u_vec × v_vec) == [0.0, 0.0, 1.0]
+            @test (W1 × W2) isa CompositeGridSpace{2}
         end
     end
 

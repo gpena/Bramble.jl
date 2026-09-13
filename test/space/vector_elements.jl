@@ -542,7 +542,7 @@ end
         # the leaves (`leaf_spaces_offsets`); the two disagreed the moment a space nested.
         # This checks the element-level accessors agree with `leaf_spaces_offsets`
         # directly, which is the ground truth assembly already uses correctly.
-        Wn = (W5 × W9) × W9
+        Wn = CompositeGridSpace((W5 × W9, W9))
         leaves = Bramble.leaf_spaces_offsets(Wn)
         @test length(leaves) == 3                      # not 2 (the immediate-child count)
         @test ndofs.(first.(leaves)) == (5, 9, 9)
@@ -969,27 +969,27 @@ end
     # why nothing caught it.
     for (lbl, Ωₕ, fs, f_all) in (
         (
-        "1D",
-        mesh(domain(interval(0.0, 1.0)), 17, true),
-        (sin, cos),
-        x -> (sin(x), cos(x))
-    ),
-        (
-        "2D",
-        mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 8), (true, false)),
-        (x -> sin(x[1]), x -> cos(x[2])),
-        x -> (sin(x[1]), cos(x[2]))
-    ),
-        (
-        "3D",
-        mesh(
-            domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
-            (5, 4, 6),
-            (true, true, false)
+            "1D",
+            mesh(domain(interval(0.0, 1.0)), 17, true),
+            (sin, cos),
+            x -> (sin(x), cos(x))
         ),
-        (x -> sin(x[1]), x -> cos(x[3])),
-        x -> (sin(x[1]), cos(x[3]))
-    )
+        (
+            "2D",
+            mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 8), (true, false)),
+            (x -> sin(x[1]), x -> cos(x[2])),
+            x -> (sin(x[1]), cos(x[2]))
+        ),
+        (
+            "3D",
+            mesh(
+                domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
+                (5, 4, 6),
+                (true, true, false)
+            ),
+            (x -> sin(x[1]), x -> cos(x[3])),
+            x -> (sin(x[1]), cos(x[3]))
+        )
     )
         @testset "$lbl" begin
             Vₕ = gridspace(Ωₕ, Val(2))

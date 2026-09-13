@@ -323,7 +323,7 @@ using LinearAlgebra: I as LinearAlgebraI
             # above the two coincide, which is why nothing here caught it: `(Wₕ × Wₕ) × Wₕ`
             # has 2 immediate children but 3 leaves, and before the fix `components = 3`
             # validated fine while `u(3)` raised a `BoundsError` on the same space.
-            Vn = (Wₕ × Wₕ) × Wₕ
+            Vn = CompositeGridSpace((Wₕ × Wₕ, Wₕ))
             nVn = ndofs(Vn)
             @test nVn == 3nW
 
