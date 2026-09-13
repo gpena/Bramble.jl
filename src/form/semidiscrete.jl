@@ -562,6 +562,7 @@ to [`semidiscretize`](@ref).
 # Keywords
 - `jacobian`: `jacobian!` (the default) to hand the solver the exact `-A`, or `nothing` to let it build one by automatic differentiation from `jac_prototype`.
 - `jac_prototype`: sparsity for the solver's Jacobian cache (default: [`jacobian_prototype`](@ref)`(sd)`).
+- `tgrad`: analytical `∂f/∂t`, for a Rosenbrock method to use instead of differentiating through `t` (default: `nothing`, AD). Either SciMLBase's own `(dT, u, p, t) -> ...` signature or the Bramble-aware `(dT, sd, u, p, t) -> ...` one, told apart by arity.
 
 The resulting system is a differential-algebraic one whenever any Dirichlet label is
 constrained, since those rows of the mass matrix are zero. Solve it with a method that
@@ -574,8 +575,9 @@ one.
     data, since those values reach the assembled vector as its element type. An
     `update_coefficients!` hook writing into a `Float64` [`VectorElement`](@ref) -- the usual
     `t -> Rₕ!(fₕ, x -> f(x, t))` -- cannot take a `ForwardDiff.Dual` time, and the solve
-    fails on the first step with a time-gradient error. Either pass
-    `Rodas5P(autodiff = AutoFiniteDiff())`, or use a BDF method, which needs no `∂f/∂t` at
+    fails on the first step with a time-gradient error. Three ways out: pass an analytical
+    `tgrad`, which bypasses the differentiation through `t` entirely; pass
+    `Rodas5P(autodiff = AutoFiniteDiff())`; or use a BDF method, which needs no `∂f/∂t` at
     all. `FBDF` and `QNDF` are unaffected either way.
 
 Requires [SciMLBase.jl](https://github.com/SciML/SciMLBase.jl); call `using SciMLBase` (or
@@ -588,10 +590,11 @@ function ode_function(sd::Semidiscretization; kwargs...)
 end
 
 function ode_function(
-        a::BilinearForm, l::LinearForm; jacobian = jacobian!, jac_prototype = nothing, kwargs...
+        a::BilinearForm, l::LinearForm;
+        jacobian = jacobian!, jac_prototype = nothing, tgrad = nothing, kwargs...
 )
     sd = semidiscretize(a, l; kwargs...)
-    return _ode_function(sd; jacobian = jacobian, jac_prototype = jac_prototype)
+    return _ode_function(sd; jacobian = jacobian, jac_prototype = jac_prototype, tgrad = tgrad)
 end
 
 function _ode_function(::Any; kwargs...)
@@ -637,10 +640,13 @@ function ode_problem(
         I;
         jacobian = jacobian!,
         jac_prototype = nothing,
+        tgrad = nothing,
         kwargs...
 )
     sd = semidiscretize(a, l; kwargs...)
-    return _ode_problem(sd, u₀, I; jacobian = jacobian, jac_prototype = jac_prototype)
+    return _ode_problem(
+        sd, u₀, I; jacobian = jacobian, jac_prototype = jac_prototype, tgrad = tgrad
+    )
 end
 
 function _ode_problem(::Any, u₀, I; kwargs...)

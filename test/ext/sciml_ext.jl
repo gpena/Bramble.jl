@@ -60,6 +60,23 @@ end
         proto = spdiagm(0 => ones(n))
         @test ode_function(sd; jac_prototype = proto).jac_prototype === proto
 
+        # `tgrad = nothing` leaves the field unset, for SciML to build ∂f/∂t by AD instead.
+        @test ode_function(sd).tgrad === nothing
+
+        # The plain SciML signature `(dT, u, p, t)` is passed straight through.
+        plain_tgrad(dT, u, p, t) = fill!(dT, t)
+        f_plain = ode_function(sd; tgrad = plain_tgrad)
+        dT = zeros(n)
+        f_plain.tgrad(dT, zeros(n), nothing, 2.0)
+        @test all(==(2.0), dT)
+
+        # The Bramble-aware signature `(dT, sd, u, p, t)` closes over `sd`.
+        aware_tgrad(dT, sd, u, p, t) = fill!(dT, ndofs(space(sd)))
+        f_aware = ode_function(sd; tgrad = aware_tgrad)
+        fill!(dT, 0.0)
+        f_aware.tgrad(dT, zeros(n), nothing, 2.0)
+        @test all(==(n), dT)
+
         # The two-form method builds the semidiscretisation on the way.
         @test ode_function(a, l; dirichlet = :boundary) isa SciMLBase.ODEFunction
     end
@@ -105,9 +122,9 @@ end
     # The space tolerance is loose and the time tolerance tight, so what is measured is the
     # semidiscretisation's second order rather than the stepper's.
     @testset "order of convergence through OrdinaryDiffEq" begin
-        function solve_to(n, alg)
+        function solve_to(n, alg; kwargs...)
             _, Wₕ, I, _, _, sd = _sciml_setup(n)
-            prob = ode_problem(sd, Rₕ(Wₕ, x -> _sciml_uex(x, 0.0)), I)
+            prob = ode_problem(sd, Rₕ(Wₕ, x -> _sciml_uex(x, 0.0)), I; kwargs...)
             sol = solve(prob, alg; reltol = 1e-11, abstol = 1e-13)
             @test SciMLBase.successful_retcode(sol)
             uₕ = Bramble.element(Wₕ)
@@ -132,6 +149,29 @@ end
             @test all(>(1.9), eoc)
             @test issorted(errors; rev = true)
         end
+
+        # An analytical `tgrad` -- exact here since `∂f/∂t = -f` for this manufactured
+        # source -- lets the default Rosenbrock `autodiff` run: no `AutoFiniteDiff`, and no
+        # differentiation through `t` at all. Built the same way `l` itself is (through
+        # `innerₕ`, not raw nodal values), so it carries the same mass weighting as `F(t)`.
+        exact_tgrad(dT, sd, u, p, t) = begin
+            Wₕ = space(sd)
+            gₕ = Rₕ(Wₕ, x -> -_sciml_src(x, t))
+            l_t = form(Wₕ, v -> innerₕ(gₕ, v))
+            assemble!(dT, l_t)
+            return dT
+        end
+        errors = Float64[]
+        spacings = Float64[]
+        for n in (11, 21, 41)
+            e, h = solve_to(n, Rodas5P(); tgrad = exact_tgrad)
+            push!(errors, e)
+            push!(spacings, h)
+        end
+        eoc = [log(errors[i] / errors[i + 1]) / log(spacings[i] / spacings[i + 1]) for
+               i in 1:(length(errors) - 1)]
+        @test all(>(1.9), eoc)
+        @test issorted(errors; rev = true)
     end
 
     # A constant Dirichlet value is the steady state the parabolic problem relaxes onto, so

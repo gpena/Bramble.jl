@@ -41,15 +41,26 @@ using PrecompileTools: @setup_workload, @compile_workload
 @inline _jac_closure(::Nothing, ::Semidiscretization) = nothing
 @inline _jac_closure(jacobian::F, sd::Semidiscretization) where {F} = (J, u, p, t) -> jacobian(J, sd, u, p, t)
 
+# `tgrad` accepts either SciMLBase's own `(dT, u, p, t)` signature or a Bramble-aware
+# `(dT, sd, u, p, t)` one, told apart by arity the same way `_dirichlet_is_time_dependent`
+# tells a time-dependent condition from a spatial one: a 4-argument method exists on the
+# plain SciML signature, a 5-argument one on the Bramble-aware form, and never both.
+@inline _tgrad_closure(::Nothing, ::Semidiscretization) = nothing
+@inline function _tgrad_closure(tgrad::F, sd::Semidiscretization) where {F}
+    return hasmethod(tgrad, Tuple{Any, Any, Any, Any, Any}) ?
+           (dT, u, p, t) -> tgrad(dT, sd, u, p, t) : tgrad
+end
+
 function Bramble._ode_function(
-        sd::Semidiscretization; jacobian = jacobian!, jac_prototype = nothing
+        sd::Semidiscretization; jacobian = jacobian!, jac_prototype = nothing, tgrad = nothing
 )
     prototype = jac_prototype === nothing ? jacobian_prototype(sd) : jac_prototype
     return ODEFunction(
         sd;
         mass_matrix = mass_matrix(sd),
         jac_prototype = prototype,
-        jac = _jac_closure(jacobian, sd)
+        jac = _jac_closure(jacobian, sd),
+        tgrad = _tgrad_closure(tgrad, sd)
     )
 end
 
@@ -66,12 +77,15 @@ end
 @inline _initial_vector(u₀) = collect(parent(u₀))
 
 function Bramble._ode_problem(
-        sd::Semidiscretization, u₀, I; jacobian = jacobian!, jac_prototype = nothing
+        sd::Semidiscretization, u₀, I;
+        jacobian = jacobian!, jac_prototype = nothing, tgrad = nothing
 )
     tspan = _tspan(I)
     u0 = _initial_vector(u₀)
     Bramble.dirichlet_bc!(u0, sd, first(tspan))
-    f = Bramble._ode_function(sd; jacobian = jacobian, jac_prototype = jac_prototype)
+    f = Bramble._ode_function(
+        sd; jacobian = jacobian, jac_prototype = jac_prototype, tgrad = tgrad
+    )
     return ODEProblem(f, u0, tspan)
 end
 

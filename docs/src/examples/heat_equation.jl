@@ -128,8 +128,36 @@ spacetime_surface_plot(points(Ωₕ), collect(ts), Z; title = "Heat equation, x-
 #     `Rodas5P` and friends also want the time derivative of the right-hand side, which they
 #     build by differentiating through `t`. An `update_coefficients!` hook writing into a
 #     `Float64` grid function — the one above does — cannot accept a `ForwardDiff.Dual` time,
-#     so pass `Rodas5P(autodiff = AutoFiniteDiff())` from `ADTypes`, or use a BDF method,
-#     which needs no `∂f/∂t` at all.
+#     so pass `Rodas5P(autodiff = AutoFiniteDiff())` from `ADTypes`, use a BDF method (which
+#     needs no `∂f/∂t` at all), or supply an analytical `tgrad` — see below.
+#
+# ## An analytical `tgrad` for Rosenbrock methods
+#
+# `ode_function`/`ode_problem` take a `tgrad` keyword: an exact `∂f/∂t`, handed straight to
+# `ODEFunction` so a Rosenbrock method never has to differentiate through `t` at all. For this
+# problem `f(t) = F(t) - A u_h` and `A` does not depend on `t`, so `∂f/∂t = ∂F/∂t` — assembled
+# the same way `F` itself is, from the time derivative of the source:
+
+using OrdinaryDiffEqRosenbrock
+
+∂ₜsource(x, t) = -(pi^2 - 1) * exp(-t) * sinpi(x[1])   # ∂ₜ of `source` above
+
+tgrad_heat(dT, sd, u, p, t) = begin
+    gₕ = Rₕ(space(sd), x -> ∂ₜsource(x, t))
+    l_t = form(space(sd), v -> innerₕ(gₕ, v))
+    assemble!(dT, l_t)
+end
+
+prob_rosenbrock = ode_problem(sd, Rₕ(Wₕ, x -> uexact(x, 0.0)), I; tgrad = tgrad_heat)
+sol_rosenbrock = solve(prob_rosenbrock, Rodas5P(); reltol = 1e-11, abstol = 1e-13)
+
+uₕ_r = element(Wₕ)
+parent(uₕ_r) .= sol_rosenbrock.u[end]
+normₕ(Rₕ(Wₕ, x -> uexact(x, 1.0)) - uₕ_r)
+
+# No `AutoFiniteDiff()` and no BDF fallback: the default forward-mode `autodiff` differentiates
+# the Jacobian through `u` only, and `tgrad` supplies the `t`-derivative directly.
+@test 1.0e-5 < normₕ(Rₕ(Wₕ, x -> uexact(x, 1.0)) - uₕ_r) < 5.0e-5               #src
 #
 # ## Checking the answer
 #
