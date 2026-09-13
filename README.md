@@ -63,8 +63,8 @@ Solve $-\Delta u = g$ on $\Omega = (0, 1)^2$ with Dirichlet boundary data $u|_{\
 using Bramble
 
 # 1. Domain and nonuniform mesh
-Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
-Ωₕ = mesh(Ω, (32, 32), (false, false)) # (false, false) creates a random nonuniform grid
+X = interval(0.0, 1.0) × interval(0.0, 1.0)
+Ωₕ = mesh(X, 32, false) # false creates a random nonuniform grid
 Wₕ = gridspace(Ωₕ)
 
 # 2. Problem definitions (manufactured solution u_exact = exp(x + y))
