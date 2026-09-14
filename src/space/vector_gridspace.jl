@@ -190,7 +190,7 @@ directly (e.g. `CompositeGridSpace(Vh, Qh)`).
 @inline ×(X::CompositeGridSpace, Y::ScalarGridSpace) = CompositeGridSpace((X.spaces..., Y))
 @inline ×(X::ScalarGridSpace, Y::CompositeGridSpace) = CompositeGridSpace((X, Y.spaces...))
 @inline ×(X::CompositeGridSpace, Y::CompositeGridSpace) = CompositeGridSpace((X.spaces..., Y.spaces...))
-@inline ×(X::AbstractSpaceType, Y::AbstractSpaceType) = CompositeGridSpace((X, Y))#===========================================================================##===========================================================================#
+@inline ×(X::AbstractSpaceType, Y::AbstractSpaceType) = CompositeGridSpace((X, Y)) #===========================================================================# #===========================================================================#
 
 # Walking a composite space's leaves
 #

@@ -284,25 +284,25 @@ end
 
 # Multidimensional and Cartesian bounds checks
 @inline function Base.checkbounds(
-    ::Type{Bool}, uₕ::VectorElement{<:ScalarGridSpace{2}}, i, j
+        ::Type{Bool}, uₕ::VectorElement{<:ScalarGridSpace{2}}, i, j
 )
     return checkbounds(Bool, LinearIndices(indices(mesh(uₕ))), i, j)
 end
 
 @inline function Base.checkbounds(
-    ::Type{Bool}, uₕ::VectorElement{<:ScalarGridSpace{3}}, i, j, k
+        ::Type{Bool}, uₕ::VectorElement{<:ScalarGridSpace{3}}, i, j, k
 )
     return checkbounds(Bool, LinearIndices(indices(mesh(uₕ))), i, j, k)
 end
 
 @inline function Base.checkbounds(
-    ::Type{Bool}, uₕ::VectorElement{<:ScalarGridSpace{D}}, I::CartesianIndex{D}
+        ::Type{Bool}, uₕ::VectorElement{<:ScalarGridSpace{D}}, I::CartesianIndex{D}
 ) where {D}
     return checkbounds(Bool, LinearIndices(indices(mesh(uₕ))), I)
 end
 
 @inline function Base.checkbounds(
-    ::Type{Bool}, uₕ::VectorElement{<:ScalarGridSpace}, I::CartesianIndex
+        ::Type{Bool}, uₕ::VectorElement{<:ScalarGridSpace}, I::CartesianIndex
 )
     return checkbounds(Bool, LinearIndices(indices(mesh(uₕ))), I)
 end
@@ -337,7 +337,7 @@ uₕ[I] == 42.0
 See also: [`VectorElement`](@ref), [`ScalarGridSpace`](@ref), [`reshape`](@ref)
 """
 @inline Base.@propagate_inbounds function Base.getindex(
-    uₕ::VectorElement{<:ScalarGridSpace{2}}, i::Integer, j::Integer
+        uₕ::VectorElement{<:ScalarGridSpace{2}}, i::Integer, j::Integer
 )
     @boundscheck checkbounds(uₕ, i, j)
     li = LinearIndices(indices(mesh(uₕ)))
@@ -345,7 +345,7 @@ See also: [`VectorElement`](@ref), [`ScalarGridSpace`](@ref), [`reshape`](@ref)
 end
 
 @inline Base.@propagate_inbounds function Base.getindex(
-    uₕ::VectorElement{<:ScalarGridSpace{3}}, i::Integer, j::Integer, k::Integer
+        uₕ::VectorElement{<:ScalarGridSpace{3}}, i::Integer, j::Integer, k::Integer
 )
     @boundscheck checkbounds(uₕ, i, j, k)
     li = LinearIndices(indices(mesh(uₕ)))
@@ -353,7 +353,7 @@ end
 end
 
 @inline Base.@propagate_inbounds function Base.getindex(
-    uₕ::VectorElement{<:ScalarGridSpace{D}}, I::CartesianIndex{D}
+        uₕ::VectorElement{<:ScalarGridSpace{D}}, I::CartesianIndex{D}
 ) where {D}
     @boundscheck checkbounds(uₕ, I)
     li = LinearIndices(indices(mesh(uₕ)))
@@ -361,7 +361,7 @@ end
 end
 
 @inline Base.@propagate_inbounds function Base.getindex(
-    uₕ::VectorElement{<:ScalarGridSpace}, I::CartesianIndex
+        uₕ::VectorElement{<:ScalarGridSpace}, I::CartesianIndex
 )
     @boundscheck checkbounds(uₕ, I)
     li = LinearIndices(indices(mesh(uₕ)))
@@ -382,7 +382,7 @@ mesh's `LinearIndices` with zero heap allocations and full `@inbounds` transpare
 Returns `uₕ` matching Base collection conventions.
 """
 @inline Base.@propagate_inbounds function Base.setindex!(
-    uₕ::VectorElement{<:ScalarGridSpace{2}}, val, i::Integer, j::Integer
+        uₕ::VectorElement{<:ScalarGridSpace{2}}, val, i::Integer, j::Integer
 )
     @boundscheck checkbounds(uₕ, i, j)
     li = LinearIndices(indices(mesh(uₕ)))
@@ -391,7 +391,7 @@ Returns `uₕ` matching Base collection conventions.
 end
 
 @inline Base.@propagate_inbounds function Base.setindex!(
-    uₕ::VectorElement{<:ScalarGridSpace{3}}, val, i::Integer, j::Integer, k::Integer
+        uₕ::VectorElement{<:ScalarGridSpace{3}}, val, i::Integer, j::Integer, k::Integer
 )
     @boundscheck checkbounds(uₕ, i, j, k)
     li = LinearIndices(indices(mesh(uₕ)))
@@ -400,7 +400,7 @@ end
 end
 
 @inline Base.@propagate_inbounds function Base.setindex!(
-    uₕ::VectorElement{<:ScalarGridSpace{D}}, val, I::CartesianIndex{D}
+        uₕ::VectorElement{<:ScalarGridSpace{D}}, val, I::CartesianIndex{D}
 ) where {D}
     @boundscheck checkbounds(uₕ, I)
     li = LinearIndices(indices(mesh(uₕ)))
@@ -409,7 +409,7 @@ end
 end
 
 @inline Base.@propagate_inbounds function Base.setindex!(
-    uₕ::VectorElement{<:ScalarGridSpace}, val, I::CartesianIndex
+        uₕ::VectorElement{<:ScalarGridSpace}, val, I::CartesianIndex
 )
     @boundscheck checkbounds(uₕ, I)
     li = LinearIndices(indices(mesh(uₕ)))
