@@ -178,6 +178,7 @@ if __bramble_with_ext_backends
         include("ext/sparse_ad_ext.jl")
         include("ext/ad_backend_verification.jl")
         include("ext/sciml_ext.jl")
+        include("ext/algebraicmultigrid_ext.jl")
         # Runs the worked heat-equation page itself, whose assertions need a stiff solver
         # for a differential-algebraic system -- so it belongs where OrdinaryDiffEq is
         # already loaded rather than in the every-push "Worked examples" group.
@@ -185,5 +186,8 @@ if __bramble_with_ext_backends
         # Same reasoning: the nonlinear Poisson page's NonlinearSolve.jl comparison needs
         # `NonlinearSolve` loaded, a cost the push path does not otherwise pay.
         include("examples/poisson_nonlinear.jl")
+        # Same reasoning again: the AMG preconditioning page's LU/CG/AMG-CG comparison needs
+        # `LinearSolve` and `AlgebraicMultigrid` loaded.
+        include("examples/amg_preconditioning.jl")
     end
 end

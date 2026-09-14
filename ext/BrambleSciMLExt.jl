@@ -127,7 +127,7 @@ Bramble.VectorElement(sol::LinearSolution, Wₕ::Bramble.AbstractSpaceType) = Br
 
 """
     solve(a::BilinearForm, l::LinearForm; dirichlet = nothing, dirichlet_components = nothing,
-          symmetrize = false, solver = nothing, kwargs...) -> VectorElement
+          symmetrize = false, solver = nothing, preconditioner = nothing, kwargs...) -> VectorElement
 
 Assemble `a` and `l`, solve the resulting linear system, and hand back the solution as a
 `VectorElement` over `a`'s trial space -- the convenience path around [`linear_problem`](@ref)
@@ -139,28 +139,55 @@ bare coefficient vector to wrap by hand.
   as [`linear_problem`](@ref) takes them.
 - `solver`: the `LinearSolve` algorithm, e.g. `KrylovJL_GMRES()`. Default `nothing`: `solve`
   picks its own default.
+- `preconditioner`: `:amg` to precondition an iterative `solver` with
+  [`amg_preconditioner`](@ref) (requires
+  [AlgebraicMultigrid.jl](https://github.com/JuliaLinearAlgebra/AlgebraicMultigrid.jl)), an
+  already-built object with `ldiv!` to use as-is, or `nothing` (default) for none. Passed as
+  `LinearSolve`'s `Pl` -- a `LinearProblem`'s own `Pl`/`Pr` keywords are not honoured by its
+  Krylov algorithms, only ones given to `solve` itself, so this keyword lives here rather
+  than on [`linear_problem`](@ref).
 - Every other keyword forwards to `LinearSolve.solve`.
 
 # Examples
 
 ```julia
 uₕ = solve(a, l; dirichlet = bcs)
+
+using AlgebraicMultigrid
+uₕ = solve(a, l; dirichlet = bcs, solver = KrylovJL_CG(), preconditioner = :amg)
 ```
 
-See also [`linear_problem`](@ref), [`element`](@ref).
+See also [`linear_problem`](@ref), [`amg_preconditioner`](@ref), [`element`](@ref).
 """
 function SciMLBase.solve(
         a::BilinearForm, l::LinearForm;
         dirichlet = nothing, dirichlet_components = nothing, symmetrize::Bool = false,
-        solver = nothing, kwargs...
+        solver = nothing, preconditioner = nothing, kwargs...
 )
     prob = linear_problem(
         a, l; dirichlet = dirichlet, dirichlet_components = dirichlet_components,
         symmetrize = symmetrize
     )
-    sol = solver === nothing ? solve(prob; kwargs...) : solve(prob, solver; kwargs...)
+    Pl = _preconditioner_operator(preconditioner, prob.A)
+    solve_kwargs = Pl === nothing ? kwargs : (; Pl = Pl, kwargs...)
+    sol = solver === nothing ? solve(prob; solve_kwargs...) : solve(prob, solver; solve_kwargs...)
     return Bramble.element(trial_space(a), sol)
 end
+
+# `preconditioner` is resolved here rather than inside `_linear_problem` -- a `LinearProblem`
+# built with `Pl`/`Pr` in its own keywords does not actually reach a Krylov algorithm's
+# solve; only a `Pl` given to `solve` itself does, verified against `LinearSolve` directly.
+# `:amg` reaches AMG through `Bramble._amg_operator`, `BrambleAlgebraicMultigridExt`'s
+# fallback-idiom counterpart to `_amg_preconditioner` (form/amg_preconditioner.jl) -- this
+# extension calls it without ever depending on `AlgebraicMultigrid` itself.
+_preconditioner_operator(::Nothing, ::AbstractMatrix) = nothing
+function _preconditioner_operator(preconditioner::Symbol, A::AbstractMatrix)
+    preconditioner === :amg || throw(
+        ArgumentError("Unknown preconditioner: $preconditioner. Expected :amg or nothing."),
+    )
+    return Bramble._amg_operator(A)
+end
+_preconditioner_operator(preconditioner, ::AbstractMatrix) = preconditioner
 
 # `u0` narrows to `AbstractVector` (a `VectorElement` already is one) rather than `residual`
 # to `::Any` there -- an arbitrary user function has no Bramble type to narrow to, unlike

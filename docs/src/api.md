@@ -393,6 +393,23 @@ linear_problem
 nonlinear_problem
 ```
 
+### Algebraic multigrid preconditioning
+
+`amg_preconditioner` builds an algebraic multigrid hierarchy for a symmetric
+positive-definite matrix -- typically an assembled elliptic `BilinearForm`, whose condition
+number scales as `O(h^-2)` under refinement -- so that an iterative `LinearSolve` solve gets
+grid-independent, `O(1)` iteration counts instead of the `O(h^-1)` an unpreconditioned Krylov
+method needs. It returns the bare `MultiLevel` hierarchy; `AlgebraicMultigrid.aspreconditioner`
+turns that into the object with `ldiv!` that `Pl`/`Pr` expect. `solve(a::BilinearForm,
+l::LinearForm; ...)` (previous section) takes `preconditioner = :amg` directly, building and
+applying that preconditioner in one call.
+
+Requires [AlgebraicMultigrid.jl](https://github.com/JuliaLinearAlgebra/AlgebraicMultigrid.jl).
+
+```@docs
+amg_preconditioner
+```
+
 ### Caching a coefficient-dependent assembly by element type
 
 A Newton residual generic over `T` (`Float64` on a plain call, `ForwardDiff.Dual` while an

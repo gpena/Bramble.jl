@@ -16,6 +16,7 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [weakdeps]
 ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
+AlgebraicMultigrid = "2169fc97-5a83-5252-b627-83903c6c433c"
 Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
 MakieCore = "20f20a25-4f0e-4fdf-b5d1-57303727442b"
 Meshes = "eacbb407-ea5a-433e-ab97-5258b1ca43fa"
@@ -25,6 +26,7 @@ SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
 WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
 
 [extensions]
+BrambleAlgebraicMultigridExt = "AlgebraicMultigrid"
 BrambleMakieExt = "Makie"
 BrambleMeshesExt = ["Meshes", "MakieCore"]
 BrambleMetalExt = "Metal"
@@ -35,6 +37,7 @@ BrambleVTKExt = "WriteVTK"
 
 [compat]
 ADTypes = "1"
+AlgebraicMultigrid = "1, 2"
 Aqua = "0.8"
 JET = "0.12"
 LinearAlgebra = "1"

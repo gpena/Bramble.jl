@@ -125,6 +125,7 @@ export Semidiscretization, semidiscretize, mass_matrix, operator_matrix
 public jacobian!
 export jacobian_prototype
 export ode_function, ode_problem, linear_problem, nonlinear_problem
+export amg_preconditioner
 
 # `DirichletConstraint` is `dirichlet_constraints(...)`'s own return type, reached for an
 # `isa` check rather than constructed by name — the tests already reach it as
@@ -193,6 +194,7 @@ include("form/type_cached_assemble.jl")
 include("form/symmetry.jl")
 include("form/semidiscrete.jl")
 include("form/nonlinear_problem.jl")
+include("form/amg_preconditioner.jl")
 
 include("exporters/vtk_export.jl")
 include("exporters/pgfplots_export.jl")
