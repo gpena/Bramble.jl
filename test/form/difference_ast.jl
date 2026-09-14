@@ -131,6 +131,36 @@ using Bramble:
         @test !(∇₋ₕ(id1) isa Tuple)
         @test !(∇₊ₕ(id1) isa Tuple)
     end
+
+    @testset "Operator tuple scaling" begin
+        k_elem = element(Wₕ, 2.5)
+        kx_elem = element(Wₕ, 1.2)
+        ky_elem = element(Wₕ, 3.4)
+
+        # Scalar and VectorElement scaling
+        g_sc = 3.0 * ∇₋ₕ(id)
+        @test g_sc isa NTuple{2, Bramble.OperatorScale}
+        @test ∇₋ₕ(id) * 3.0 isa NTuple{2, Bramble.OperatorScale}
+
+        g_elem = k_elem * ∇₋ₕ(id)
+        @test g_elem isa NTuple{2, Bramble.GridFunctionScale}
+        @test ∇₋ₕ(id) * k_elem isa NTuple{2, Bramble.GridFunctionScale}
+
+        # Component-wise tuple scaling
+        g_tuple = (kx_elem, ky_elem) * ∇₋ₕ(id)
+        @test g_tuple isa NTuple{2, Bramble.GridFunctionScale}
+        @test g_tuple[1].grid_function === kx_elem
+        @test g_tuple[2].grid_function === ky_elem
+
+        # Assembly correctness
+        a_scaled = form(Wₕ, Wₕ, (u, v) -> inner₊(k_elem * ∇₋ₕ(u), ∇₋ₕ(v)))
+        a_manual = form(Wₕ, Wₕ, (u, v) -> inner₊(k_elem * D₋ₓ(u), D₋ₓ(v)) + inner₊(k_elem * D₋ᵧ(u), D₋ᵧ(v)))
+        @test assemble(a_scaled) ≈ assemble(a_manual)
+
+        a_aniso = form(Wₕ, Wₕ, (u, v) -> inner₊((kx_elem, ky_elem) * ∇₋ₕ(u), ∇₋ₕ(v)))
+        a_aniso_man = form(Wₕ, Wₕ, (u, v) -> inner₊(kx_elem * D₋ₓ(u), D₋ₓ(v)) + inner₊(ky_elem * D₋ᵧ(u), D₋ᵧ(v)))
+        @test assemble(a_aniso) ≈ assemble(a_aniso_man)
+    end
 end
 
 end # module FormDifferenceAstTests
