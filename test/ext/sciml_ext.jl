@@ -3,9 +3,11 @@ module ExtSciMlExtTests
 using Test
 using Bramble
 using SparseArrays
-using SciMLBase: SciMLBase, ODEProblem, LinearProblem, solve
+using LinearAlgebra: mul!
+using SciMLBase: SciMLBase, ODEProblem, LinearProblem, NonlinearProblem, solve
 using OrdinaryDiffEqBDF: FBDF, QNDF
 using OrdinaryDiffEqRosenbrock: Rodas5P
+using NonlinearSolve: NewtonRaphson
 using ADTypes: AutoFiniteDiff
 
 # BrambleSciMLExt: the `ODEFunction`/`ODEProblem`/`LinearProblem` wrapping of a
@@ -116,6 +118,45 @@ end
         prob_s = linear_problem(a, l; dirichlet = :boundary => x -> 1.0, symmetrize = true)
         @test prob_s.A == As
         @test prob_s.b == Fs
+    end
+
+    @testset "nonlinear_problem: residual, jac_prototype, and a copied u0" begin
+        A, F = assemble(a, l; dirichlet = :boundary => x -> 0.0)
+
+        residual(u, p) = A * u .- F
+        function residual!(res, u, p)
+            mul!(res, A, u)
+            return res .-= F
+        end
+
+        u0 = Rₕ(Wₕ, x -> 3.0)
+        before = copy(parent(u0))
+
+        prob = nonlinear_problem(residual, u0)
+        @test prob isa NonlinearProblem
+        @test parent(u0) == before          # u0 is never mutated
+        @test prob.u0 !== parent(u0)
+
+        # A plain vector works as the initial condition too.
+        @test nonlinear_problem(residual, fill(3.0, n)) isa NonlinearProblem
+
+        # Out-of-place and in-place residuals reach the same answer, both agreeing with the
+        # direct linear solve (a linear residual, so Newton converges in one step exactly).
+        sol_oop = solve(nonlinear_problem(residual, zeros(n)), NewtonRaphson())
+        sol_iip = solve(nonlinear_problem(residual!, zeros(n)), NewtonRaphson())
+        @test SciMLBase.successful_retcode(sol_oop)
+        @test SciMLBase.successful_retcode(sol_iip)
+        @test sol_oop.u ≈ A \ F
+        @test sol_iip.u ≈ A \ F
+
+        # `jac_prototype` and `jacobian` are passed straight through to `NonlinearFunction`.
+        proto = spdiagm(0 => ones(n))
+        @test nonlinear_problem(residual, zeros(n); jac_prototype = proto).f.jac_prototype === proto
+        @test nonlinear_problem(residual, zeros(n)).f.jac === nothing
+        # Out-of-place, matching `residual`'s own convention: `NonlinearFunction` requires
+        # `jac`'s in-place/out-of-place convention to match `f`'s, never mixed.
+        manual_jac(u, p) = A
+        @test nonlinear_problem(residual, zeros(n); jacobian = manual_jac).f.jac === manual_jac
     end
 
     # The heat equation with the manufactured solution `exp(-t) sin(πx)`, stepped to t = 1.

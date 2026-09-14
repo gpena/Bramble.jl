@@ -3,7 +3,7 @@ module ExamplesPagesTests
 using Test
 using ..TestUtils: _run_example_page
 
-# The five worked-example pages that need nothing beyond the every-push test environment.
+# The four worked-example pages that need nothing beyond the every-push test environment.
 # Each is a Literate script under docs/src/examples/, run here through `_run_example_page`
 # (test/runtests.jl), which is where its `#src` assertions execute: the convergence rates the
 # pages print, the iteration counts Picard and Newton reach, and the errors against each
@@ -15,9 +15,10 @@ using ..TestUtils: _run_example_page
 # step now (gpena/Bramble.jl#117). What those files covered that the pages do not -- a
 # variable-coefficient operator no page uses -- stays in convergence.jl.
 #
-# The fifth page, heat_equation, runs in the `ext` group instead: it steps a
-# differential-algebraic system with `FBDF`, and loading `OrdinaryDiffEqBDF` is a cost the
-# push path does not otherwise pay.
+# Two pages run in the `ext` group instead (test/examples/heat_equation.jl,
+# test/examples/poisson_nonlinear.jl): heat_equation steps a differential-algebraic system
+# with `FBDF`, and poisson_nonlinear's `nonlinear_problem`/NonlinearSolve.jl comparison needs
+# `NonlinearSolve` -- loading either is a cost the push path does not otherwise pay.
 
 @testset "Worked example pages" begin
     @testset "Linear Poisson" begin
@@ -26,10 +27,6 @@ using ..TestUtils: _run_example_page
 
     @testset "Convection-diffusion" begin
         _run_example_page(:convection_diffusion_linear)
-    end
-
-    @testset "Nonlinear Poisson" begin
-        _run_example_page(:poisson_nonlinear)
     end
 
     @testset "Coupled reaction-diffusion" begin

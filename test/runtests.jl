@@ -182,5 +182,8 @@ if __bramble_with_ext_backends
         # for a differential-algebraic system -- so it belongs where OrdinaryDiffEq is
         # already loaded rather than in the every-push "Worked examples" group.
         include("examples/heat_equation.jl")
+        # Same reasoning: the nonlinear Poisson page's NonlinearSolve.jl comparison needs
+        # `NonlinearSolve` loaded, a cost the push path does not otherwise pay.
+        include("examples/poisson_nonlinear.jl")
     end
 end

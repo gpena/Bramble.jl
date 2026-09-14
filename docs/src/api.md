@@ -367,11 +367,11 @@ rows of a singular mass matrix, so the result is an index-1 differential-algebra
 needing only the boundary data `g`, never its time derivative (see
 [the heat equation example](examples/heat_equation.md)).
 
-Nothing in this group needs a weak dependency except the last three, which name their
-results the way SciMLBase does: `ode_function` and `ode_problem` hand the semidiscretisation
-to `OrdinaryDiffEq`, and `linear_problem` hands a steady system to `LinearSolve` with its
-factorisations and preconditioners. All three require
-[SciMLBase.jl](https://github.com/SciML/SciMLBase.jl).
+Nothing in this group needs a weak dependency except the last four, which name their results
+the way SciMLBase does: `ode_function` and `ode_problem` hand the semidiscretisation to
+`OrdinaryDiffEq`, `linear_problem` hands a steady linear system to `LinearSolve` with its
+factorisations and preconditioners, and `nonlinear_problem` hands a steady nonlinear residual
+to `NonlinearSolve`. All four require [SciMLBase.jl](https://github.com/SciML/SciMLBase.jl).
 
 ```@docs
 semidiscretize
@@ -383,6 +383,7 @@ jacobian_prototype
 ode_function
 ode_problem
 linear_problem
+nonlinear_problem
 ```
 
 ### Caching a coefficient-dependent assembly by element type

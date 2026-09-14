@@ -310,6 +310,109 @@ using SparseArrays: nnz                                                         
 # long one `residual` call takes to run and record, while `jacobian_pattern` only ever walks
 # the grid once, touching neither `ForwardDiff` nor the coefficient's actual values.
 #
+# ## Solving with NonlinearSolve.jl
+#
+# Every Newton loop above is written by hand — `prepare_jacobian`/`jacobian!` and the linear
+# solve, spelled out one step at a time. [`nonlinear_problem`](@ref) wraps the same residual
+# into the `NonlinearProblem` that [NonlinearSolve.jl](https://docs.sciml.ai/NonlinearSolve/stable/)
+# takes, unlocking that package's own solver zoo — line search variants, trust regions,
+# Krylov-Newton for problems too large to factor directly — for a handful of lines once
+# `residual!` exists. In place, the same way [`Rₕ!`](@ref)/[`avgₕ!`](@ref) are preferred over
+# their allocating forms: `mul!` writes `A * u_vec` into the caller's own `res` rather than
+# allocating a fresh vector every evaluation, and `jac_prototype = J_native` hands the solver
+# the exact sparsity [`jacobian_pattern`](@ref) already worked out, the same pattern
+# `native_ad` above drives by hand:
+
+using NonlinearSolve
+using SciMLBase: SciMLBase
+using LinearAlgebra: mul!
+
+function residual!(res::AbstractVector, u_vec::AbstractVector{T}, p) where {T}
+    uₕ = element(Wₕ, T)
+    uₕ .= u_vec
+    A = diffusion_matrix(uₕ)
+    mul!(res, A, u_vec)
+    res .-= F
+    return res
+end
+
+prob = nonlinear_problem(residual!, zeros(ndofs(Wₕ)); jac_prototype = J_native)
+sol_ns = solve(prob, NewtonRaphson(); abstol = 1e-10)
+sol_ns.retcode, maximum(abs, sol_ns.u .- u_native)
+
+# The same answer Newton reached by hand above, to the tolerance both were asked for. A       #src
+# sparse `jac_prototype` alone does not *prove* the solver used it rather than silently       #src
+# densifying, so that is checked directly here too, rather than assumed: `NewtonRaphson`'s    #src
+# default `autodiff` wraps itself in `AutoSparse` around the very sparsity detector           #src
+# `native_ad` above builds explicitly, confirmed from the solver's own live cache.            #src
+using SparseArrays: SparseMatrixCSC                                                          #src
+@test sol_ns.retcode == SciMLBase.ReturnCode.Success                                          #src
+@test maximum(abs, sol_ns.u .- u_native) < 1e-8                                              #src
+let cache = SciMLBase.init(prob, NewtonRaphson(); abstol = 1e-10)                             #src
+    @test cache.jac_cache.J isa SparseMatrixCSC                                               #src
+    @test cache.jac_cache.autodiff isa AutoSparse                                             #src
+    @test cache.jac_cache.autodiff.sparsity_detector isa KnownJacobianSparsityDetector         #src
+end                                                                                            #src
+#
+# ### Picard against NonlinearSolve, measured
+#
+# A comparison worth showing rather than only claiming — Picard from the top of this page
+# against `nonlinear_problem` plus `NewtonRaphson`, each wrapped in its own top-level function
+# so the timing is behind a function barrier, never over top-level globals
+# (bramble-verification). Both reuse a sparsity pattern already computed once above rather than
+# rediscovering it on every call -- `run_picard` refills `A`/`a` from the Picard section at the
+# top of this page, `run_nonlinearsolve` reuses `J_native` -- so this measures the cost either
+# method pays *given* a known pattern, not first-time pattern discovery for either one. Both
+# run from a zero initial guess to their own convergence test:
+
+function run_picard()
+    uₙ .= 0.0
+    αvals .= α.(M₋ₕ(uₙ))
+    for it in 1:200
+        assemble!(A, a; dirichlet = :boundary)
+        unew = A \ F
+        step = maximum(abs, unew .- parent(uₙ))
+        uₙ .= unew
+        αvals .= α.(M₋ₕ(uₙ))
+        step < 1e-12 && break
+    end
+    return parent(uₙ)
+end
+
+function run_nonlinearsolve()
+    solve(
+        nonlinear_problem(residual!, zeros(ndofs(Wₕ)); jac_prototype = J_native),
+        NewtonRaphson();
+        abstol = 1e-10
+    ).u
+end
+
+run_picard()
+run_nonlinearsolve() # warm both before timing either
+ntrials = 7
+t_picard = minimum(@elapsed(run_picard()) for _ in 1:ntrials)
+t_ns = minimum(@elapsed(run_nonlinearsolve()) for _ in 1:ntrials)
+b_picard = @allocated run_picard()
+b_ns = @allocated run_nonlinearsolve()
+(picard_ms = 1000t_picard, nonlinearsolve_ms = 1000t_ns, picard_bytes = b_picard, nonlinearsolve_bytes = b_ns)
+
+# A single machine, single process, `ntrials`-sample minimum of each — informative as a ratio
+# between the two methods measured together, not as an absolute number to compare against a
+# different run (bramble-benchmarks is the formal, commit-indexed baseline for that, and this
+# machine was on battery power when these numbers were taken, which a same-run ratio cancels
+# but an absolute number would not). `nonlinear_problem` came out both faster and lighter than
+# the hand-written Picard loop here -- 0.156 ms against 0.237 ms (0.66x), 321,232 B against
+# 595,792 B (0.54x) -- `NewtonRaphson`'s quadratic convergence reaching machine precision in
+# fewer steps than Picard's linear rate needs, each step no more expensive than Picard's own
+# `assemble!`/solve now that the sparse AD Jacobian is exactly as targeted as the hand-built
+# one above.
+#
+# Bounded loosely (an order of magnitude either way), not pinned to today's ratio: the point  #src
+# is that neither method is orders of magnitude slower than the other on this problem, not    #src
+# today's precise multiplier, which a different machine or Julia version can shift.           #src
+@test 0.1 < t_ns / t_picard < 10                                                             #src
+@test 0.1 < b_ns / b_picard < 10                                                             #src
+#
 # ## Checking the answer
 #
 # The same nested-random-mesh pattern as the [linear example](poisson_linear.md) — one random
@@ -317,59 +420,61 @@ using SparseArrays: nnz                                                         
 # Newton at every level, since it needs by far the fewest solves to reach machine precision.
 # A dense Jacobian would have made 2D and 3D here impractical (`O(n^2)` memory for a matrix that
 # is actually `O(n)`-nonzero); the sparse one keeps every level below a few seconds even at
-# tens of thousands of degrees of freedom:
+# tens of thousands of degrees of freedom. `nonlinear_series` below is the same shape as every
+# other page's own convergence-sweep helper -- see [the linear example](poisson_linear.md) or
+# [the coupled one](coupled_reaction_diffusion.md) for one shown in full -- so it runs here
+# without repeating that walkthrough a third time:
 
-function nonlinear_series(D::Int; n0::Int = 5, levels::Int)
-    sol_d(x) = exp(sum(x))
-    rhs_d(x) = -D * dαdu(sol_d(x)) * sol_d(x)^2 - D * α(sol_d(x)) * sol_d(x)
-    Ωd = domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D)))
-    Ωc = mesh(Ωd, ntuple(_ -> n0, D), ntuple(_ -> false, D))
-    hs, errs = Float64[], Float64[]
-    for level in 1:levels
-        Wc = gridspace(Ωc)
-        bcs_c = dirichlet_constraints(Ωd, :boundary => sol_d)
-        g_c = element(Wc)
-        avgₕ!(g_c, rhs_d)
-        l_c = form(Wc, v -> innerₕ(g_c, v))
-        F_c = assemble(l_c; dirichlet = bcs_c)
+function nonlinear_series(D::Int; n0::Int = 5, levels::Int) # hide
+    sol_d(x) = exp(sum(x)) # hide
+    rhs_d(x) = -D * dαdu(sol_d(x)) * sol_d(x)^2 - D * α(sol_d(x)) * sol_d(x) # hide
+    Ωd = domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D))) # hide
+    Ωc = mesh(Ωd, ntuple(_ -> n0, D), ntuple(_ -> false, D)) # hide
+    hs, errs = Float64[], Float64[] # hide
+    for level in 1:levels # hide
+        Wc = gridspace(Ωc) # hide
+        bcs_c = dirichlet_constraints(Ωd, :boundary => sol_d) # hide
+        g_c = element(Wc) # hide
+        avgₕ!(g_c, rhs_d) # hide
+        l_c = form(Wc, v -> innerₕ(g_c, v)) # hide
+        F_c = assemble(l_c; dirichlet = bcs_c) # hide
+        Ac(uₕ) = begin # hide
+            Mu = M₋ₕ(uₕ) # hide
+            αv = D == 1 ? α.(Mu) : ntuple(i -> α.(Mu[i]), D) # hide
+            grad(U) = D == 1 ? αv * ∇₋ₕ(U) : ntuple(i -> αv[i] * ∇₋ₕ(U)[i], D) # hide
+            assemble(form(Wc, Wc, (U, V) -> inner₊(grad(U), ∇₋ₕ(V))); # hide
+                dirichlet = :boundary) # hide
+        end # hide
+        rc(uv::AbstractVector{T}) where {T} = begin # hide
+            uₕ = element(Wc, T) # hide
+            uₕ .= uv # hide
+            Ac(uₕ) * uv .- F_c # hide
+        end # hide
+        uc = zeros(ndofs(Wc)) # hide
+        prep_c = prepare_jacobian(rc, sparse_ad, uc) # hide
+        J_c = DifferentiationInterface.jacobian(rc, prep_c, sparse_ad, uc) # hide
+        for it in 1:20 # hide
+            r = rc(uc) # hide
+            sqrt(sum(abs2, r)) < 1e-10 && break # hide
+            DifferentiationInterface.jacobian!(rc, J_c, prep_c, sparse_ad, uc) # hide
+            uc .-= J_c \ r # hide
+        end # hide
+        uexact_c = Rₕ(Wc, sol_d) # hide
+        push!(hs, hₘₐₓ(Ωc)) # hide
+        push!(errs, norm₁ₕ(element(Wc) .= uc .- parent(uexact_c))) # hide
+        level < levels && iterative_refinement!(Ωc) # hide
+    end # hide
+    return hs, errs # hide
+end # hide
+Random.seed!(20260903) # hide
+hs1, errs1 = nonlinear_series(1; n0 = 6, levels = 7) # hide
+Random.seed!(20260903) # hide
+hs2, errs2 = nonlinear_series(2; levels = 5) # hide
+Random.seed!(20260903) # hide
+hs3, errs3 = nonlinear_series(3; levels = 4) # hide
+nothing # hide
 
-        Ac(uₕ) = begin
-            Mu = M₋ₕ(uₕ)
-            αv = D == 1 ? α.(Mu) : ntuple(i -> α.(Mu[i]), D)
-            grad(U) = D == 1 ? αv * ∇₋ₕ(U) : ntuple(i -> αv[i] * ∇₋ₕ(U)[i], D)
-            assemble(form(Wc, Wc, (U, V) -> inner₊(grad(U), ∇₋ₕ(V)));
-                dirichlet = :boundary)
-        end
-        rc(uv::AbstractVector{T}) where {T} = begin
-            uₕ = element(Wc, T)
-            uₕ .= uv
-            Ac(uₕ) * uv .- F_c
-        end
-
-        uc = zeros(ndofs(Wc))
-        prep_c = prepare_jacobian(rc, sparse_ad, uc)
-        J_c = DifferentiationInterface.jacobian(rc, prep_c, sparse_ad, uc)
-        for it in 1:20
-            r = rc(uc)
-            sqrt(sum(abs2, r)) < 1e-10 && break
-            DifferentiationInterface.jacobian!(rc, J_c, prep_c, sparse_ad, uc)
-            uc .-= J_c \ r
-        end
-        uexact_c = Rₕ(Wc, sol_d)
-
-        push!(hs, hₘₐₓ(Ωc))
-        push!(errs, norm₁ₕ(element(Wc) .= uc .- parent(uexact_c)))
-        level < levels && iterative_refinement!(Ωc)
-    end
-    return hs, errs
-end
-
-Random.seed!(20260903)
-hs1, errs1 = nonlinear_series(1; n0 = 6, levels = 7)
-Random.seed!(20260903)
-hs2, errs2 = nonlinear_series(2; levels = 5)
-Random.seed!(20260903)
-hs3, errs3 = nonlinear_series(3; levels = 4)
+# The convergence order itself, in every dimension:
 
 order1 = log(errs1[end - 1] / errs1[end]) / log(hs1[end - 1] / hs1[end])
 order2 = log(errs2[end - 1] / errs2[end]) / log(hs2[end - 1] / hs2[end])

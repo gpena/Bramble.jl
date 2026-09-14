@@ -724,7 +724,7 @@ one.
 Requires [SciMLBase.jl](https://github.com/SciML/SciMLBase.jl); call `using SciMLBase` (or
 any package that loads it, such as `OrdinaryDiffEq`) before calling this function.
 
-See also [`ode_problem`](@ref), [`linear_problem`](@ref).
+See also [`ode_problem`](@ref), [`linear_problem`](@ref), [`nonlinear_problem`](@ref).
 """
 function ode_function(sd::Semidiscretization; kwargs...)
     return _ode_function(sd; kwargs...)
@@ -820,7 +820,7 @@ prob = linear_problem(a, l; dirichlet = bcs)
 sol = solve(prob, KrylovJL_GMRES())
 ```
 
-See also [`assemble`](@ref), [`ode_problem`](@ref).
+See also [`assemble`](@ref), [`ode_problem`](@ref), [`nonlinear_problem`](@ref).
 """
 function linear_problem(a::BilinearForm, l::LinearForm; kwargs...)
     return _linear_problem(a, l; kwargs...)
