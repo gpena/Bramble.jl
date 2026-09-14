@@ -52,6 +52,7 @@ include("precompile/mesh_sessions.jl")
 include("precompile/space_sessions.jl")
 include("precompile/operator_sessions.jl")
 include("precompile/form_sessions.jl")
+include("precompile/semidiscretize_sessions.jl")
 include("precompile/parallel_sessions.jl")
 include("precompile/exporters_sessions.jl")
 
@@ -131,6 +132,11 @@ if PRECOMPILE_WORKLOAD
             _pc_jacobian_pattern_session(Wₕ_pc)
             _pc_jacobian_pattern_composite_session(Vₕ_pc)
             _pc_type_cached_assemble_session(Wₕ_pc)
+
+            # `semidiscretize`/`Semidiscretization`, the two Dirichlet constraint kinds
+            # precompiling actually helps (gpena/Bramble.jl#141 -- see the file for why only
+            # these two).
+            _pc_semidiscretize_session(Wₕ_pc, :left)
 
             # The Parallel() execution policy (point 22), otherwise never constructed above.
             _pc_parallel_policy_session(Ω1, 5)
