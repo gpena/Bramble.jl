@@ -3,7 +3,7 @@ module Bramble
 import Base: eltype, length
 import Base: show, first, last, getindex, setindex!, iterate, size, firstindex, lastindex, axes, eachindex
 
-using SparseArrays: SparseMatrixCSC, spdiagm, spzeros, rowvals, nonzeros, nzrange, sparse, sparse!
+using SparseArrays: SparseMatrixCSC, spdiagm, spzeros, rowvals, nonzeros, nzrange, sparse, sparse!, blockdiag
 
 using LinearAlgebra: I, dot, mul!
 import LinearAlgebra: issymmetric, isposdef, ldiv!, Factorization, ×
@@ -117,6 +117,8 @@ export form, assemble, assemble!, assemble_parallel!, allocate_system_matrix, ev
 export jacobian_pattern, ast_sparsity_detector
 export type_cached_assemble!
 export Semidiscretization, semidiscretize, mass_matrix, operator_matrix
+export SecondOrderSemidiscretization,
+       semidiscretize_second_order, damping_matrix, stiffness_matrix, block_mass_matrix
 # `jacobian!` is `public` rather than exported, the same call as `diff₋ₓ` above:
 # `DifferentiationInterface` exports a `jacobian!` of its own, and the two are ambiguous in
 # any session holding both -- which the test suite is, and any user pairing a Bramble
@@ -126,6 +128,7 @@ public jacobian!
 export jacobian_prototype
 export ode_function, ode_problem, linear_problem, nonlinear_problem
 export amg_preconditioner
+export second_order_ode_function, second_order_ode_problem
 
 # `DirichletConstraint` is `dirichlet_constraints(...)`'s own return type, reached for an
 # `isa` check rather than constructed by name — the tests already reach it as
@@ -193,6 +196,7 @@ include("form/jacobian_pattern.jl")
 include("form/type_cached_assemble.jl")
 include("form/symmetry.jl")
 include("form/semidiscrete.jl")
+include("form/second_order_semidiscrete.jl")
 include("form/nonlinear_problem.jl")
 include("form/amg_preconditioner.jl")
 

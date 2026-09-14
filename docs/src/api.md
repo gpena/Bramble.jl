@@ -393,6 +393,28 @@ linear_problem
 nonlinear_problem
 ```
 
+### Second-order (wave) problems
+
+`semidiscretize_second_order` is the second-order-in-time counterpart of `semidiscretize`:
+from a stiffness [`BilinearForm`](@ref) and a source [`LinearForm`](@ref), it produces
+`M üₕ + C u̇ₕ + K uₕ = F(t)`, and `second_order_ode_problem`/`second_order_ode_function`
+hand that to `OrdinaryDiffEq` as a `SecondOrderODEProblem` -- state `(v, u)`, velocity then
+displacement. Dirichlet conditions constrain the displacement `u` the same way `semidiscretize`
+constrains its own state, and the consistent velocity follows from differentiating that
+constraint in time rather than being prescribed separately. Explicit/symplectic solvers
+(`VelocityVerlet` and similar) cannot be used at all -- see
+[`SecondOrderSemidiscretization`](@ref)'s docstring for why.
+
+```@docs
+semidiscretize_second_order
+SecondOrderSemidiscretization
+damping_matrix
+stiffness_matrix
+block_mass_matrix
+second_order_ode_function
+second_order_ode_problem
+```
+
 ### Algebraic multigrid preconditioning
 
 `amg_preconditioner` builds an algebraic multigrid hierarchy for a symmetric

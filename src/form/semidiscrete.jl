@@ -40,6 +40,10 @@ Nothing on this page needs SciMLBase: a [`Semidiscretization`](@ref) is a callab
 `ODEFunction`/`ODEProblem`. Keeping the logic here means the main test suite covers it
 without the weak dependency loaded, and only the wrapper is gated.
 
+Second-order systems `M ü_h + C u̇_h + K u_h = F(t)` -- wave equations, elastodynamics -- are
+[`SecondOrderSemidiscretization`](@ref) (`second_order_semidiscrete.jl`), built by
+[`semidiscretize_second_order`](@ref).
+
 See also: [`semidiscretize`](@ref), [`ode_function`](@ref), [`ode_problem`](@ref)
 =#
 
@@ -130,6 +134,28 @@ end
 # --- The semidiscretisation --------------------------------------------------------- #
 
 """
+    AbstractSemidiscretization
+
+Common supertype for [`Semidiscretization`](@ref) (first-order, `M u_h' = F(t) - A u_h`) and
+[`SecondOrderSemidiscretization`](@ref) (second-order, `M ü_h + C u̇_h + K u_h = F(t)`).
+
+Everything about how the source's boundary values are reached at each step --
+[`NoConstraints`](@ref)/[`LabelsOnly`](@ref)/[`StaticConstraints`](@ref)/
+[`TimeDependentConstraints`](@ref), `_source_constraints`, `_assemble_source!`,
+`_apply_initial_constraints!` -- only ever touches `space`/`labels`/`components`/
+`constraints`/`source`, never the order-specific operator matrices, so it is shared here
+rather than duplicated for the second-order struct.
+"""
+abstract type AbstractSemidiscretization end
+
+"""
+    space(sd::AbstractSemidiscretization)
+
+Return the test space the semidiscretisation was built on.
+"""
+@inline space(sd::AbstractSemidiscretization) = sd.space
+
+"""
     Semidiscretization{...}
 
 Method-of-lines semidiscretisation of `M u_h' = F(t) - A u_h`, callable with the
@@ -152,7 +178,7 @@ Built by [`semidiscretize`](@ref); read back with [`mass_matrix`](@ref) and
 - `update_coefficients`: callable invoked with `t` before assembly, or `nothing`.
 - `reassemble`: `Val(true)` to refill `A` at every step.
 """
-struct Semidiscretization{A, L, S, MT, VT, BC, LB, CP, ST, TR, R}
+struct Semidiscretization{A, L, S, MT, VT, BC, LB, CP, ST, TR, R} <: AbstractSemidiscretization
     operator::A
     source::L
     space::S
@@ -180,13 +206,6 @@ Return the constant mass matrix `M`, whose constrained rows are zero.
 Return the assembled spatial operator `A`, whose constrained rows are `eₖ`.
 """
 @inline operator_matrix(sd::Semidiscretization) = sd.operator_matrix
-
-"""
-    space(sd::Semidiscretization)
-
-Return the test space the semidiscretisation was built on.
-"""
-@inline space(sd::Semidiscretization) = sd.space
 
 """
     semidiscretize(a::BilinearForm, l::LinearForm; kwargs...) -> Semidiscretization
@@ -466,20 +485,20 @@ end
 
 # `eltype(F)` and `T` are both fixed by the argument types, so the comparison folds away and
 # only one branch is ever compiled into a given specialisation.
-@inline function _source_buffer(sd::Semidiscretization, du::AbstractVector, t)
+@inline function _source_buffer(sd::AbstractSemidiscretization, du::AbstractVector, t)
     T = promote_type(eltype(du), typeof(t))
     F = sd.source_vector
     return eltype(F) === T ? F : similar(du, T)
 end
 
-@inline _assemble_source!(F::AbstractVector, sd::Semidiscretization, ::NoConstraints, t) = assemble!(F, sd.source)
+@inline _assemble_source!(F::AbstractVector, sd::AbstractSemidiscretization, ::NoConstraints, t) = assemble!(F, sd.source)
 
 # The conditions are applied through `apply_dirichlet_conditions!` rather than `assemble!`'s
 # `dirichlet` keyword, which would re-run `_normalize_dirichlet` on every call: for
 # constraints that is `Tuple(labels(bcs))` over a generator, and it allocates once per step.
 # The labels were normalised once, in `semidiscretize`, and are passed straight through.
 @inline function _assemble_source!(
-        F::AbstractVector, sd::Semidiscretization, c::StaticConstraints, t
+        F::AbstractVector, sd::AbstractSemidiscretization, c::StaticConstraints, t
 )
     assemble!(F, sd.source)
     return apply_dirichlet_conditions!(
@@ -488,7 +507,7 @@ end
 end
 
 @inline function _assemble_source!(
-        F::AbstractVector, sd::Semidiscretization, c::TimeDependentConstraints, t
+        F::AbstractVector, sd::AbstractSemidiscretization, c::TimeDependentConstraints, t
 )
     assemble!(F, sd.source)
     return apply_dirichlet_conditions!(
@@ -498,7 +517,7 @@ end
 
 # Labels without values constrain `u_h` to zero, which `assemble!` cannot express: handed a
 # bare label it has nothing to write and raises. The rows are cleared here instead.
-function _assemble_source!(F::AbstractVector, sd::Semidiscretization, ::LabelsOnly, t)
+function _assemble_source!(F::AbstractVector, sd::AbstractSemidiscretization, ::LabelsOnly, t)
     assemble!(F, sd.source)
     _each_dirichlet_row(sd.space, sd.labels, sd.components) do i
         return @inbounds F[i] = zero(eltype(F))
@@ -587,25 +606,26 @@ See also [`jacobian!`](@ref).
 # --- Consistent initial conditions -------------------------------------------------- #
 
 """
-    dirichlet_bc!(u::AbstractVector, sd::Semidiscretization, t::Number) -> u
+    dirichlet_bc!(u::AbstractVector, sd::AbstractSemidiscretization, t::Number) -> u
 
 Write `sd`'s Dirichlet values at time `t` into `u` and return it.
 
 An index-1 differential-algebraic system needs its initial condition to satisfy the
 algebraic rows already: a `u` disagreeing with `g(x, 0)` on the boundary is inconsistent,
 and a stiff solver either rejects it or absorbs it into the first step.
-[`ode_problem`](@ref) applies this to a copy of the initial condition it is handed.
+[`ode_problem`](@ref)/[`second_order_ode_problem`](@ref) apply this to a copy of the initial
+condition they are handed.
 """
-function dirichlet_bc!(u::AbstractVector, sd::Semidiscretization, t::Number)
+function dirichlet_bc!(u::AbstractVector, sd::AbstractSemidiscretization, t::Number)
     return _apply_initial_constraints!(u, sd, sd.constraints, t)
 end
 
 @inline _apply_initial_constraints!(
-    u::AbstractVector, sd::Semidiscretization, ::NoConstraints, t
+    u::AbstractVector, sd::AbstractSemidiscretization, ::NoConstraints, t
 ) = u
 
 function _apply_initial_constraints!(
-        u::AbstractVector, sd::Semidiscretization, ::LabelsOnly, t
+        u::AbstractVector, sd::AbstractSemidiscretization, ::LabelsOnly, t
 )
     _each_dirichlet_row(sd.space, sd.labels, sd.components) do i
         return @inbounds u[i] = zero(eltype(u))
@@ -614,11 +634,11 @@ function _apply_initial_constraints!(
 end
 
 @inline _apply_initial_constraints!(
-    u::AbstractVector, sd::Semidiscretization, c::StaticConstraints, t
+    u::AbstractVector, sd::AbstractSemidiscretization, c::StaticConstraints, t
 ) = dirichlet_bc!(u, sd.space, c.constraints, sd.labels...; components = sd.components)
 
 @inline _apply_initial_constraints!(
-    u::AbstractVector, sd::Semidiscretization, c::TimeDependentConstraints, t
+    u::AbstractVector, sd::AbstractSemidiscretization, c::TimeDependentConstraints, t
 ) = dirichlet_bc!(u, sd.space, c.constraints(t), sd.labels...; components = sd.components)
 
 # --- Display ------------------------------------------------------------------------ #
@@ -666,7 +686,7 @@ end
 
 @inline _operator_description(A) = string(size(A, 1), "×", size(A, 2), ", ", length(nonzeros(A)), " stored")
 
-function _constraints_description(sd::Semidiscretization)
+function _constraints_description(sd::AbstractSemidiscretization)
     isempty(sd.labels) && return "none"
     return string(
         _constraint_description(sd.constraints),

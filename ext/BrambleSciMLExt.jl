@@ -5,10 +5,12 @@ using Bramble:
                BilinearForm,
                LinearForm,
                Semidiscretization,
+               SecondOrderSemidiscretization,
                assemble,
                jacobian!,
                jacobian_prototype,
                mass_matrix,
+               block_mass_matrix,
                domain,
                interval,
                mesh,
@@ -20,8 +22,11 @@ using Bramble:
                innerₕ,
                dirichlet_constraints,
                semidiscretize,
+               semidiscretize_second_order,
                ode_problem,
                ode_function,
+               second_order_ode_problem,
+               second_order_ode_function,
                linear_problem,
                nonlinear_problem,
                trial_space,
@@ -32,6 +37,8 @@ using SciMLBase:
                  LinearSolution,
                  ODEFunction,
                  ODEProblem,
+                 DynamicalODEFunction,
+                 SecondOrderODEProblem,
                  NonlinearFunction,
                  NonlinearProblem,
                  solve
@@ -98,6 +105,22 @@ function Bramble._ode_problem(
         sd; jacobian = jacobian, jac_prototype = jac_prototype, tgrad = tgrad
     )
     return ODEProblem(f, u0, tspan)
+end
+
+function Bramble._second_order_ode_function(sd::SecondOrderSemidiscretization)
+    return DynamicalODEFunction(
+        (dv, v, u, p, t) -> sd(dv, v, u, p, t);
+        mass_matrix = block_mass_matrix(sd)
+    )
+end
+
+function Bramble._second_order_ode_problem(sd::SecondOrderSemidiscretization, du₀, u₀, I; kwargs...)
+    tspan = _tspan(I)
+    u0 = _initial_vector(u₀)
+    dv0 = _initial_vector(du₀)
+    Bramble.dirichlet_bc!(u0, sd, first(tspan))
+    f = Bramble._second_order_ode_function(sd)
+    return SecondOrderODEProblem(f, dv0, u0, tspan)
 end
 
 function Bramble._linear_problem(
@@ -224,10 +247,14 @@ if Bramble.PRECOMPILE_WORKLOAD
         bcs = dirichlet_constraints(Ωₕ, I_time, :boundary => (x, t) -> 0.0)
         sd = semidiscretize(a, l; dirichlet = bcs)
         u0 = Rₕ(Wₕ, x -> 0.0)
+        sd2 = semidiscretize_second_order(a, l)
+        du0 = Rₕ(Wₕ, x -> 0.0)
 
         @compile_workload begin
             ode_problem(sd, u0, I_time)
             ode_function(sd)
+            second_order_ode_problem(sd2, du0, u0, I_time)
+            second_order_ode_function(sd2)
             linear_problem(a, l)
             nonlinear_problem((u, p) -> u, u0)
         end

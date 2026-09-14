@@ -43,6 +43,8 @@ using ExplicitImports
     # - `BilinearForm` (BrambleSparseADExt), `LinearForm` (BrambleSciMLExt),
     #   `CartesianProduct` (BrambleMeshesExt, BrambleSciMLExt): internal Bramble types named
     #   in a field or method signature, none of them exported.
+    # - `trial_space` (BrambleSciMLExt): read back off a `BilinearForm` to unwrap a
+    #   `LinearSolution` into a `VectorElement` over the right space.
     @testset "Non-public imports are the declared ones" begin
         @test check_all_explicit_imports_are_public(
             Bramble;
@@ -53,7 +55,8 @@ using ExplicitImports
                 :_backend_zeros,
                 :BilinearForm,
                 :LinearForm,
-                :CartesianProduct
+                :CartesianProduct,
+                :trial_space
             )
         ) === nothing
     end
@@ -71,11 +74,16 @@ using ExplicitImports
     # - `_metal_backend`, `Metal.fill!` (BrambleMetalExt): the backend constructor hook and
     #   Metal's own `fill!` on an `MtlArray`.
     # - `_ast_sparsity_detector` (BrambleSparseADExt), `_ode_function`/`_ode_problem`/
-    #   `_linear_problem` (BrambleSciMLExt), `_export_vtk` (BrambleVTKExt): the
+    #   `_linear_problem`/`_nonlinear_problem`/`_second_order_ode_function`/
+    #   `_second_order_ode_problem` (BrambleSciMLExt), `_export_vtk` (BrambleVTKExt): the
     #   underscored-fallback idiom every weak-dependency entry point uses (`ast_sparsity_
     #   detector`, `ode_function`, `export_vtk`, ...): a helpful error by default in
     #   `Bramble`, overridden by a strict specialisation in the extension so loading it never
     #   tries to replace a method during precompilation.
+    # - `AbstractSpaceType` (BrambleSciMLExt): narrows the `element`/`VectorElement` unwrap
+    #   methods for a `LinearSolution`, the same reason the doctring next to them gives.
+    # - `_amg_operator` (BrambleAlgebraicMultigridExt): the preconditioner-building hook
+    #   `solve`'s `preconditioner = :amg` keyword reaches.
     @testset "Non-public qualified accesses are the declared ones" begin
         @test check_all_qualified_accesses_are_public(
             Bramble;
@@ -97,7 +105,12 @@ using ExplicitImports
                 :_linear_problem,
                 :_ode_function,
                 :_ode_problem,
-                :_export_vtk
+                :_nonlinear_problem,
+                :_second_order_ode_function,
+                :_second_order_ode_problem,
+                :_export_vtk,
+                :AbstractSpaceType,
+                :_amg_operator
             )
         ) === nothing
     end

@@ -3,7 +3,7 @@ module ExtSciMlExtTests
 using Test
 using Bramble
 using SparseArrays
-using LinearAlgebra: mul!
+using LinearAlgebra: mul!, I as Identity
 using SciMLBase: SciMLBase, ODEProblem, LinearProblem, NonlinearProblem, solve
 using OrdinaryDiffEqBDF: FBDF, QNDF
 using OrdinaryDiffEqRosenbrock: Rodas5P
@@ -318,6 +318,110 @@ end
 
         A, F = assemble(a_s, l_s; dirichlet = bc)
         @test sol.u[end] ≈ A \ F rtol = 1e-6
+    end
+
+    # `M ü + K u = F(t)`: the second-order counterpart of everything above. Manufactured
+    # solution `sin(πx) cos(πt)` satisfies the *homogeneous* 1D wave equation with `c = 1`
+    # exactly (both ∂ₜ² and ∂ₓ² give `-π² sin(πx) cos(πt)`), zero at both endpoints for every
+    # `t` -- so `l ≡ 0` and the only Dirichlet data needed is the constant `0`.
+    @testset "second-order semidiscretisation (wave equation)" begin
+        _wave_uex(x, t) = sinpi(x[1]) * cospi(t)
+        _wave_duex(x, t) = -pi * sinpi(x[1]) * sinpi(t)
+
+        function _wave_setup(n)
+            Ωₕ = Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0)), n, true)
+            Wₕ = gridspace(Ωₕ)
+            Iv = Bramble.interval(0.0, 1.0)
+            fₕ = Bramble.element(Wₕ, 0.0)
+            K = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+            l = form(Wₕ, v -> innerₕ(fₕ, v))
+            bcs = dirichlet_constraints(Ωₕ, Iv, :boundary => (x, t) -> 0.0)
+            return Ωₕ, Wₕ, Iv, K, l, bcs
+        end
+
+        Ωₕ, Wₕ, Iv, K, l, bcs = _wave_setup(21)
+        n = ndofs(Wₕ)
+
+        @testset "semidiscretize_second_order: accessors and display" begin
+            sd = semidiscretize_second_order(K, l; dirichlet = bcs)
+            @test sd isa SecondOrderSemidiscretization
+            @test size(stiffness_matrix(sd)) == (n, n)
+            @test size(mass_matrix(sd)) == (n, n)
+            @test damping_matrix(sd) === nothing
+
+            # Constrained rows: `eₖ` on the stiffness, zero on the mass.
+            @test stiffness_matrix(sd)[1, :] == [i == 1 ? 1.0 : 0.0 for i in 1:n]
+            @test all(iszero, mass_matrix(sd)[1, :])
+            @test all(iszero, mass_matrix(sd)[n, :])
+
+            Mb = block_mass_matrix(sd)
+            @test size(Mb) == (2n, 2n)
+            @test Mb[(n + 1):(2n), (n + 1):(2n)] == Identity(n)
+
+            # An optional damping form is assembled the same way, zero rows included.
+            Cform = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
+            sd_c = semidiscretize_second_order(K, l; damping = Cform, dirichlet = bcs)
+            @test damping_matrix(sd_c) !== nothing
+            @test all(iszero, damping_matrix(sd_c)[1, :])
+
+            @test !isempty(sprint(show, sd))
+            @test !isempty(sprint(show, MIME"text/plain"(), sd))
+        end
+
+        @testset "second_order_ode_problem: time domain, and a copied, consistent u₀/du₀" begin
+            u₀ = Rₕ(Wₕ, x -> _wave_uex(x, 0.0))
+            du₀ = Rₕ(Wₕ, x -> _wave_duex(x, 0.0))
+            before_u = copy(parent(u₀))
+            before_du = copy(parent(du₀))
+
+            sd = semidiscretize_second_order(K, l; dirichlet = bcs)
+            prob = second_order_ode_problem(sd, du₀, u₀, Iv)
+
+            @test prob isa SciMLBase.ODEProblem
+            @test prob.tspan == (0.0, 1.0)
+            @test second_order_ode_problem(sd, du₀, u₀, (0.0, 1.0)).tspan == prob.tspan
+
+            @test parent(u₀) == before_u    # u₀ is never mutated
+            @test parent(du₀) == before_du  # du₀ is never mutated
+            @test prob.u0.x[2] !== parent(u₀)
+            @test prob.u0.x[2][1] ≈ 0.0 && prob.u0.x[2][n] ≈ 0.0   # made consistent at t₀
+            @test prob.u0.x[1] == parent(du₀)                       # du₀ passed through as-is
+
+            # The two-form method builds the semidiscretisation on the way.
+            @test second_order_ode_problem(K, l, du₀, u₀, Iv; dirichlet = bcs) isa
+                  SciMLBase.ODEProblem
+        end
+
+        # VelocityVerlet et al. cannot be used at all: `OrdinaryDiffEqCore` refuses any
+        # explicit/symplectic solver unless the mass matrix is *exactly* `I`, and a discrete
+        # `innerₕ` mass matrix never is (its boundary rows always carry a half-weight) --
+        # documented on `SecondOrderSemidiscretization`. `Rodas5P`, already a test dependency
+        # for the first-order suite above, is mass-matrix-aware and used here instead.
+        @testset "order of convergence through OrdinaryDiffEq" begin
+            function solve_to(n)
+                _, Wₕ, Iv, K, l, bcs = _wave_setup(n)
+                sd = semidiscretize_second_order(K, l; dirichlet = bcs)
+                u₀ = Rₕ(Wₕ, x -> _wave_uex(x, 0.0))
+                du₀ = Rₕ(Wₕ, x -> _wave_duex(x, 0.0))
+                prob = second_order_ode_problem(sd, du₀, u₀, Iv)
+                sol = solve(prob, Rodas5P(); reltol = 1e-11, abstol = 1e-13)
+                @test SciMLBase.successful_retcode(sol)
+                uₕ = Bramble.element(Wₕ, sol.u[end].x[2])
+                return normₕ(Rₕ(Wₕ, x -> _wave_uex(x, 1.0)) - uₕ), hₘₐₓ(Bramble.mesh(Wₕ))
+            end
+
+            errors = Float64[]
+            spacings = Float64[]
+            for n in (11, 21, 41)
+                e, h = solve_to(n)
+                push!(errors, e)
+                push!(spacings, h)
+            end
+            eoc = [log(errors[i] / errors[i + 1]) / log(spacings[i] / spacings[i + 1]) for
+                   i in 1:(length(errors) - 1)]
+            @test all(>(1.9), eoc)
+            @test issorted(errors; rev = true)
+        end
     end
 end
 
