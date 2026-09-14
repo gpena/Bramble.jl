@@ -211,18 +211,20 @@ silent all-zero contribution instead of failing loudly.
 """
 function _validate_term_markers(term, mesh_markers, context::String)
     for label in _collect_region_labels(term)
-        haskey(mesh_markers, label) || _throw_marker_not_on_space(label, context)
+        haskey(mesh_markers, label) || _throw_marker_not_on_space(label, mesh_markers, context)
     end
     return nothing
 end
 
-@noinline function _throw_marker_not_on_space(label::Symbol, context::String)
+@noinline function _throw_marker_not_on_space(label::Symbol, mesh_markers, context::String)
+    known = sort!(collect(keys(mesh_markers)))
+    avail = isempty(known) ? "(none)" : join(map(s -> ":$s", known), ", ")
     throw(
         ArgumentError(
-        "the marker :$label is not defined on $context. A marker named in restrict_to or " *
-        "markers = (...) must exist on every space a term reaches; if it is only defined " *
-        "on some of a composite space's leaves, write the term per component instead, one " *
-        "innerₕ(u(i), v(i)) per leaf with that leaf's own markers, rather than one term " *
+        "the marker :$label is not defined on $context. Available marker labels on this space are: $avail. " *
+        "A marker named in restrict_to or markers = (...) must exist on every space a term reaches; " *
+        "if it is only defined on some of a composite space's leaves, write the term per component instead, " *
+        "one innerₕ(u(i), v(i)) per leaf with that leaf's own markers, rather than one term " *
         "naming a marker not every leaf it reaches has.",
     ),
     )

@@ -100,7 +100,17 @@ consulted if available.
     if alias !== nothing && haskey(m, alias)
         return m[alias]
     end
-    return m[label]
+    return _throw_unknown_marker_label(Ωₕ, label)
+end
+
+@noinline function _throw_unknown_marker_label(Ωₕ::AbstractMeshType, label::Symbol)
+    known = sort!(collect(keys(markers(Ωₕ))))
+    avail = isempty(known) ? "(none)" : join(map(s -> ":$s", known), ", ")
+    throw(
+        KeyError(
+        "key :$label not found. Available marker labels on this mesh are: $avail.",
+    ),
+    )
 end
 
 """

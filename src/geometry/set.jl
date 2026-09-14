@@ -341,3 +341,59 @@ function Base.show(io::IO, ::MIME"text/plain", X::CartesianProduct{D, T}) where 
         end
     end
 end
+
+"""
+    boundary_symbols(X::CartesianProduct) -> Tuple{Vararg{Symbol}}
+    boundary_symbols(D::Integer) -> Tuple{Vararg{Symbol}}
+
+Return the canonical coordinate-aligned boundary symbols for dimension `D` or set `X`:
+- 1D ``[x_1, x_2]``: `(:xmin, :xmax)`
+- 2D ``[x_1, x_2] \\times [y_1, y_2]``: `(:xmin, :xmax, :ymin, :ymax)`
+- 3D ``[x_1, x_2] \\times [y_1, y_2] \\times [z_1, z_2]``: `(:xmin, :xmax, :ymin, :ymax, :zmin, :zmax)`
+
+Legacy viewpoint symbols (`:left`, `:right`, `:bottom`, `:top`, `:front`, `:back`) remain
+supported as backward-compatible aliases across the boundary marker interface.
+"""
+@inline boundary_symbols(::CartesianProduct{1}) = (:xmin, :xmax)
+@inline boundary_symbols(::CartesianProduct{2}) = (:xmin, :xmax, :ymin, :ymax)
+@inline boundary_symbols(::CartesianProduct{3}) = (:xmin, :xmax, :ymin, :ymax, :zmin, :zmax)
+@inline boundary_symbols(::Type{<:CartesianProduct{1}}) = (:xmin, :xmax)
+@inline boundary_symbols(::Type{<:CartesianProduct{2}}) = (:xmin, :xmax, :ymin, :ymax)
+@inline boundary_symbols(::Type{<:CartesianProduct{3}}) = (:xmin, :xmax, :ymin, :ymax, :zmin, :zmax)
+function boundary_symbols(D::Integer)
+    D == 1 && return (:xmin, :xmax)
+    D == 2 && return (:xmin, :xmax, :ymin, :ymax)
+    D == 3 && return (:xmin, :xmax, :ymin, :ymax, :zmin, :zmax)
+    return error(
+        "boundary_symbols is not defined for $(D)D domains. " *
+        "Provide explicit boundary names via the markers() interface.",
+    )
+end
+@noinline function boundary_symbols(::Type{<:CartesianProduct{D}}) where {D}
+    error(
+        "boundary_symbols is not defined for $(D)D domains. " *
+        "Provide explicit boundary names via the markers() interface.",
+    )
+end
+
+# All recognized boundary symbols (canonical + legacy aliases) for validation
+@inline _all_boundary_symbols(::CartesianProduct{1}) = (:xmin, :xmax, :left, :right)
+@inline function _all_boundary_symbols(::CartesianProduct{2})
+    return (:xmin, :xmax, :ymin, :ymax, :left, :right, :bottom, :top)
+end
+@inline function _all_boundary_symbols(::CartesianProduct{3})
+    return (:xmin, :xmax, :ymin, :ymax, :zmin, :zmax, :back, :front, :left, :right, :bottom, :top)
+end
+@inline _all_boundary_symbols(::Type{<:CartesianProduct{1}}) = (:xmin, :xmax, :left, :right)
+@inline function _all_boundary_symbols(::Type{<:CartesianProduct{2}})
+    return (:xmin, :xmax, :ymin, :ymax, :left, :right, :bottom, :top)
+end
+@inline function _all_boundary_symbols(::Type{<:CartesianProduct{3}})
+    return (:xmin, :xmax, :ymin, :ymax, :zmin, :zmax, :back, :front, :left, :right, :bottom, :top)
+end
+@inline function _all_boundary_symbols(D::Integer)
+    D == 1 && return (:xmin, :xmax, :left, :right)
+    D == 2 && return (:xmin, :xmax, :ymin, :ymax, :left, :right, :bottom, :top)
+    D == 3 && return (:xmin, :xmax, :ymin, :ymax, :zmin, :zmax, :back, :front, :left, :right, :bottom, :top)
+    return ()
+end

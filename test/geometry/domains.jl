@@ -333,7 +333,7 @@ using ..TestUtils: alloc_test, @test_allocs
 
         # DomainMarkers detailed display, which is `MIME"text/plain"`
         # (gpena/Bramble.jl#45).
-        dm = markers(I1D, :left => :left, :right => (:top, :bottom), :fn => func1)
+        dm = markers(I2D, :left => :left, :right => (:top, :bottom), :fn => func1)
         io = IOBuffer()
         show(io, MIME"text/plain"(), dm)
         str_dm = String(take!(io))
@@ -466,10 +466,10 @@ using ..TestUtils: alloc_test, @test_allocs
                        label_conditions
 
         I_time = interval(0.0, 1.0)
-        I_space = interval(0.0, 1.0)
+        I_space = interval(0.0, 1.0) × interval(0.0, 1.0)
 
         # Static boolean function taking spatial coordinate only (not applicable to scalar time t).
-        staticfunc = x -> x > 0.5
+        staticfunc = x -> x[1] > 0.5
         dm = markers(I_space, :region => staticfunc)
         edm = dm(0.5)
         @test edm isa EvaluatedDomainMarkers

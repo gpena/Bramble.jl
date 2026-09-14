@@ -143,10 +143,113 @@ length(symbols(m)) == 1 && length(conditions(m)) == 1
 true
 ```
 """
-@inline markers(space_set::CartesianProduct, pairs::Pair...) = _create_generic_markers(pairs...)
-@inline markers(
-    space_set::CartesianProduct, time_set::CartesianProduct{1}, pairs::Pair...
-) = _create_generic_markers(pairs...)
+@inline function markers(space_set::CartesianProduct, pairs::Pair...)
+    for p in pairs
+        _validate_marker_pair(space_set, p)
+    end
+    return _create_generic_markers(pairs...)
+end
+
+@inline function markers(
+        space_set::CartesianProduct, time_set::CartesianProduct{1}, pairs::Pair...
+)
+    for p in pairs
+        _validate_marker_pair(space_set, time_set, p)
+    end
+    return _create_generic_markers(pairs...)
+end
+
+function _validate_marker_pair(space_set::CartesianProduct{D}, p::Pair) where {D}
+    lbl = p.first
+    ident = p.second
+    if ident isa Symbol
+        if !(ident in _all_boundary_symbols(space_set))
+            _throw_unknown_boundary_symbol_for_domain(lbl, ident, space_set)
+        end
+    elseif ident isa NTuple{N, Symbol} where {N}
+        for s in ident
+            if !(s in _all_boundary_symbols(space_set))
+                _throw_unknown_boundary_symbol_for_domain(lbl, s, space_set)
+            end
+        end
+    elseif ident isa Function
+        probe = D == 1 ? center(space_set)[1] : center(space_set)
+        res = try
+            ident(probe)
+        catch err
+            if D == 1
+                try
+                    ident((probe,))
+                catch
+                    _throw_invalid_marker_predicate_call(lbl, D, err)
+                end
+            else
+                _throw_invalid_marker_predicate_call(lbl, D, err)
+            end
+        end
+        if !(res isa Bool)
+            _throw_non_bool_marker_predicate(lbl, res)
+        end
+    end
+    return nothing
+end
+
+function _validate_marker_pair(
+        space_set::CartesianProduct{D}, time_set::CartesianProduct{1}, p::Pair
+) where {D}
+    lbl = p.first
+    ident = p.second
+    if ident isa Symbol || ident isa NTuple{N, Symbol} where {N}
+        _validate_marker_pair(space_set, p)
+    elseif ident isa Function
+        probe_x = D == 1 ? center(space_set)[1] : center(space_set)
+        probe_t = first(extrema(time_set))
+        res = try
+            if hasmethod(ident, Tuple{typeof(probe_x), typeof(probe_t)})
+                ident(probe_x, probe_t)
+            else
+                ident(probe_x)
+            end
+        catch err
+            _throw_invalid_marker_predicate_call(lbl, D, err)
+        end
+        if !(res isa Bool)
+            _throw_non_bool_marker_predicate(lbl, res)
+        end
+    end
+    return nothing
+end
+
+@noinline function _throw_non_bool_marker_predicate(lbl::Symbol, res)
+    throw(
+        ArgumentError(
+        "Marker predicate for label :$lbl returned a $(typeof(res)) ($res), " *
+        "but expected a Bool. For level-set or geometric expressions, write a boolean condition " *
+        "(e.g. `x -> predicate(x) <= 0`).",
+    ),
+    )
+end
+
+@noinline function _throw_invalid_marker_predicate_call(lbl::Symbol, D::Int, err)
+    throw(
+        ArgumentError(
+        "Marker predicate for label :$lbl failed when evaluated on sample domain point: " *
+        "expected a function accepting a $(D == 1 ? "1D coordinate (scalar or 1-tuple)" : "$D-element coordinate tuple"). " *
+        "Underlying error: $err",
+    ),
+    )
+end
+
+@noinline function _throw_unknown_boundary_symbol_for_domain(lbl::Symbol, sym::Symbol, space_set)
+    known = sort!(collect(_all_boundary_symbols(space_set)))
+    avail = join(map(s -> ":$s", known), ", ")
+    throw(
+        ArgumentError(
+        "Unknown boundary symbol :$sym for marker :$lbl. " *
+        "Valid boundary symbols for this $(dim(space_set))D domain are: $avail.",
+    ),
+    )
+end
 
 # Parse identifier-based markers (Symbols and Tuples of Symbols) from input pairs.
 # Deduplication needs Set semantics (a `:label => :left` pair repeated verbatim collapses
