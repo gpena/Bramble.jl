@@ -27,11 +27,25 @@
 # rather than worked around.
 
 """
-    pde_solve(A::SparseMatrixCSC, F::AbstractVector) -> Vector
+    pde_solve(A::SparseMatrixCSC, F::AbstractVector; solver = :default, sym = :auto, kwargs...) -> Vector
+    pde_solve(fact::MUMPSFactorization, F::AbstractVector) -> Vector
 
-Solve `A u = F` and return `u`. Identical to `A \\ F` -- this function exists only to be a
-name a reverse-mode AD tool can attach a rule to, since `\\` itself cannot be differentiated
-through (see this file's header comment).
+Solve `A u = F` (or `fact u = F`) and return `u`.
+
+When called with no keyword arguments (or `solver = :default`), identical to `A \\ F` --
+this default path exists to provide a stable name for reverse-mode automatic differentiation
+tools to attach adjoint rules to.
+
+# Solvers
+- `:default` or `:suitesparse`: standard SuiteSparse sparse direct solve (`\\`).
+- `:mumps`: MUMPS multifrontal direct solver (requires [MUMPS.jl](https://github.com/lruthotto/MUMPS.jl)).
+
+# Symmetry options (`sym`)
+For `solver = :mumps`:
+- `:auto` (default): automatic detection.
+- `:spd`, `:definite`, or `1`: symmetric positive definite.
+- `:symmetric` or `2`: general symmetric.
+- `:unsymmetric` or `0`: general unsymmetric.
 
 # Reverse-mode differentiation
 
@@ -70,9 +84,23 @@ end to end -- including gradients with respect to a Dirichlet boundary value.
 ```julia
 A, F = assemble(a, l; dirichlet = :boundary => x -> 0.0)
 u = pde_solve(A, F)
+
+# Using MUMPS
+using MUMPS
+u_mumps = pde_solve(A, F; solver = :mumps)
 ```
 
-See also [`assemble`](@ref), [`linear_problem`](@ref) (the SciML-backed alternative, without
-the adjoint rule).
+See also [`assemble`](@ref), [`mumps_solve`](@ref), [`mumps_factorize`](@ref),
+[`linear_problem`](@ref).
 """
-pde_solve(A::SparseMatrixCSC, F::AbstractVector) = A \ F
+function pde_solve(A::SparseMatrixCSC, F::AbstractVector; solver::Symbol = :default, sym = :auto, kwargs...)
+    if solver === :default || solver === :suitesparse
+        return A \ F
+    elseif solver === :mumps
+        return _mumps_solve(A, F; sym = sym, kwargs...)
+    else
+        throw(ArgumentError("Unknown solver: $solver. Expected :default, :suitesparse, or :mumps."))
+    end
+end
+
+pde_solve(fact::MUMPSFactorization, F::AbstractVector) = fact \ F
