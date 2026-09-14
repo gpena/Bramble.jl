@@ -104,6 +104,7 @@ const UnaryWrapper{D} = Union{
 stencil_shift_trait(op::UnaryWrapper) = stencil_shift_trait(op.inner_op)
 _all_trial_interpolated(op::UnaryWrapper) = _all_trial_interpolated(op.inner_op)
 _check_interp_spaces(op::UnaryWrapper, t) = _check_interp_spaces(op.inner_op, t)
+_is_dirac(op::UnaryWrapper) = _is_dirac(op.inner_op)
 
 """
     TappedNode{D, Dim}
@@ -170,6 +171,58 @@ end
         op::SourceConstant{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int
 ) where {D}
     return ((zero_offset(Val(D)), op.value),)
+end
+
+@inline function _point_strength_val(s)
+    if s isa Function
+        return s()
+    elseif s isa Base.RefValue
+        return s[]
+    else
+        return s
+    end
+end
+
+@inline _interp_cell_frac_pt(Ωₕ::AbstractMeshType{1}, pt::NTuple{1}, ::Val{1}) = (
+    CartesianIndex(_interp_cell_frac(Ωₕ, pt[1])[1]), (_interp_cell_frac(Ωₕ, pt[1])[2],))
+@inline _interp_cell_frac_pt(Ωₕ::AbstractMeshType{D}, pt::NTuple{D}, ::Val{D}) where {D} = _interp_cell_frac(Ωₕ, pt)
+
+@inline _is_corner_inbounds(corner::Tuple) = all(c -> 0 <= c <= 1, corner)
+
+@inline function local_stencil(
+        op::DiracSource{D, <:NTuple{D, Float64}}, space, I::CartesianIndex{D}, markers, lin_idx::Int
+) where {D}
+    Ωₕ = mesh(space)
+    idx, ts = _interp_cell_frac_pt(Ωₕ, op.points, Val(D))
+    corner = Tuple(I - idx)
+    strength_val = _point_strength_val(op.strengths)
+    T = promote_type(Float64, typeof(strength_val))
+    if _is_corner_inbounds(corner)
+        w = _interp_corner_weight(ts, corner, Val(D))
+        return ((zero_offset(Val(D)), strength_val * w),)
+    else
+        return ((zero_offset(Val(D)), zero(T)),)
+    end
+end
+
+@inline function local_stencil(
+        op::DiracSource{D, <:AbstractVector}, space, I::CartesianIndex{D}, markers, lin_idx::Int
+) where {D}
+    Ωₕ = mesh(space)
+    s_first = _point_strength_val(first(op.strengths))
+    T = promote_type(Float64, typeof(s_first))
+    acc = zero(T)
+    for k in eachindex(op.points)
+        pt = op.points[k]
+        s = _point_strength_val(op.strengths[k])
+        idx, ts = _interp_cell_frac_pt(Ωₕ, pt, Val(D))
+        corner = Tuple(I - idx)
+        if _is_corner_inbounds(corner)
+            w = _interp_corner_weight(ts, corner, Val(D))
+            acc += s * w
+        end
+    end
+    return ((zero_offset(Val(D)), acc),)
 end
 
 @inline function local_stencil(
@@ -268,6 +321,7 @@ is_symbolic(::IndexedTestFunction) = true
 is_symbolic(::SourceFunction) = true
 is_symbolic(::SourceVector) = true
 is_symbolic(::SourceConstant) = true
+is_symbolic(::DiracSource) = true
 is_symbolic(op::BilinearProduct) = true
 is_symbolic(op::LinearProduct) = true
 
@@ -302,6 +356,7 @@ _is_source_only(::IndexedTestFunction) = false
 _is_source_only(::SourceFunction) = true
 _is_source_only(::SourceVector) = true
 _is_source_only(::SourceConstant) = true
+_is_source_only(::DiracSource) = true
 
 function _is_source_only(op::OperatorAdd)
     return _is_source_only(op.left_op) && _is_source_only(op.right_op)

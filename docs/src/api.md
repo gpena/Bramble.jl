@@ -331,6 +331,14 @@ assembled system. See the [forms tutorial](tutorials/form.md).
 form
 ```
 
+### Point (Dirac) sources
+
+```@docs
+dirac
+DiracSource
+```
+
+
 ### Assembling
 
 `assemble` allocates its result; the mutating forms refill one that already exists, which is

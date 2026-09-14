@@ -81,6 +81,65 @@ assemble!(b_dyn, l_dyn) # 0 bytes allocated, live 2x scaling
 sum(b_dyn) ≈ 2 * sum(b)
 ```
 
+### Point (Dirac) sources
+
+A continuous source function ``f(x)`` is a density, integrated over cell volumes as
+``\ell(v) = (f, v)_h \approx \sum_i |\square_i| \, f_i \, v_i``. A point source is a singular
+functional:
+
+```math
+\ell(v) = S \, v(x_0)
+```
+
+representing a Dirac distribution ``S \, \delta(x - x_0)``.
+
+Because a point evaluation acts directly on the test function rather than through cell volume
+quadrature, writing [`dirac`](@ref)`(x0, strength)` inside `innerₕ` (or `inner₊`) evaluates this
+functional without cell-measure weighting:
+
+```@example forms
+l_pt = form(Wₕ, v -> innerₕ(dirac(0.5, 2.0), v))
+b_pt = assemble(l_pt)
+sum(b_pt)
+```
+
+- **On-grid points**: When ``x_0`` coincides with a grid node, the exact strength ``S`` is
+  placed directly in that degree of freedom.
+- **Off-grid points**: When ``x_0`` falls inside a cell, ``S`` is distributed across the
+  ``2^D`` surrounding cell vertices via multilinear interpolation weights
+  ``w_c = \prod_d (1 - t_d) \text{ or } t_d``:
+
+```@example forms
+l_off = form(Wₕ, v -> innerₕ(dirac(0.35, 1.0), v))
+b_off = assemble(l_off)
+sum(b_off) ≈ 1.0 # exact conservation of total source strength
+```
+
+The sum of assembled entries ``\sum b_i = S`` is preserved to machine precision, and
+evaluating the form against smooth grid functions contracts with ``\mathcal{O}(h^2)``
+accuracy.
+
+- **Superposition**: A vector of coordinates and intensities describes multiple point sources:
+
+```@example forms
+l_multi = form(Wₕ, v -> innerₕ(dirac([0.2, 0.7], [1.0, -1.0]), v))
+b_multi = assemble(l_multi)
+sum(b_multi) ≈ 0.0 # balanced dipole
+```
+
+- **Dynamic strengths in time loops**: Wrapping a point strength in a `Ref` allows live
+  source updates without reallocating or rebuilding the form:
+
+```@example forms
+S_live = Ref(1.0)
+l_dyn_pt = form(Wₕ, v -> innerₕ(dirac(0.5, S_live), v))
+b_dyn_pt = assemble(l_dyn_pt)
+S_live[] = 3.5
+assemble!(b_dyn_pt, l_dyn_pt) # 0 bytes allocated
+sum(b_dyn_pt) ≈ 3.5
+```
+
+
 ## 3. Contracting without a vector
 
 Often the vector is not wanted, only the number ``\ell(v_h)``. A form is callable, and takes
