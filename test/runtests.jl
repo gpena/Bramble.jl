@@ -186,6 +186,9 @@ if __bramble_with_ext_backends
         # Same reasoning: the nonlinear Poisson page's NonlinearSolve.jl comparison needs
         # `NonlinearSolve` loaded, a cost the push path does not otherwise pay.
         include("examples/poisson_nonlinear.jl")
+        # Same reasoning again: the coupled reaction-diffusion page's nonlinear_problem
+        # section needs `NonlinearSolve` too, once it grew one (#119).
+        include("examples/coupled_reaction_diffusion.jl")
         # Same reasoning again: the AMG preconditioning page's LU/CG/AMG-CG comparison needs
         # `LinearSolve` and `AlgebraicMultigrid` loaded.
         include("examples/amg_preconditioning.jl")
