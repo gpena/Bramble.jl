@@ -5,6 +5,7 @@ using Bramble:
                BilinearForm,
                LinearForm,
                Semidiscretization,
+               SemidiscretizeRHS,
                SecondOrderSemidiscretization,
                assemble,
                jacobian!,
@@ -105,6 +106,17 @@ function Bramble._ode_problem(
         sd; jacobian = jacobian, jac_prototype = jac_prototype, tgrad = tgrad
     )
     return ODEProblem(f, u0, tspan)
+end
+
+# No `dirichlet_bc!` consistency step, unlike the `Semidiscretization` method above:
+# `SemidiscretizeRHS` only ever wraps a `Semidiscretization` built with `dirichlet =
+# nothing` (`Bramble.semidiscretize_rhs` checks), so there are no boundary rows to make
+# consistent. `ODEProblem(rhs, u0, tspan)` carries no `mass_matrix` either -- `rhs` already
+# folded `M⁻¹` in, which is the whole point.
+function Bramble._ode_problem(rhs::SemidiscretizeRHS, u₀, I; kwargs...)
+    tspan = _tspan(I)
+    u0 = _initial_vector(u₀)
+    return ODEProblem(rhs, u0, tspan; kwargs...)
 end
 
 function Bramble._second_order_ode_function(sd::SecondOrderSemidiscretization)

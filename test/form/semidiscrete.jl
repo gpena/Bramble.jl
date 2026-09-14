@@ -23,6 +23,7 @@ _sd_src(x, t) = (pi^2 - 1) * exp(-t) * sinpi(x[1])
 # would count the closure the testset body becomes (bramble-verification §1).
 _sd_residual_allocs(sd, du, u, t) = @allocated sd(du, u, nothing, t)
 _sd_jacobian_allocs(J, sd, u, t) = @allocated Bramble.jacobian!(J, sd, u, nothing, t)
+_sd_rhs_allocs(rhs, du, u, t) = @allocated rhs(du, u, nothing, t)
 
 function _sd_problem(n)
     Ωₕ = Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0)), n)
@@ -360,6 +361,62 @@ end
     @test all(>(1.9), eoc)
     @test last(eoc) > 1.95
     @test issorted(errors; rev = true)
+end
+
+# `semidiscretize_rhs` (gpena/Bramble.jl#163): `du = M⁻¹(F(t) - A u)` with `M`'s diagonal
+# folded in once, instead of a solver factorising `M` at every step. Checked against
+# `weights(Wₕ).innerh`, the space's own independently-computed `L²` weight vector -- not
+# against `mass_matrix(sd)`'s diagonal, which would just check the implementation agrees
+# with itself.
+@testset "semidiscretize_rhs: matrix-free explicit right-hand side" begin
+    Ωₕ, Wₕ, fₕ, a, l = _sd_problem(21)
+    Rₕ!(fₕ, x -> 1.0)
+    n = ndofs(Wₕ)
+    h = Bramble.weights(Wₕ).innerh
+
+    sd = semidiscretize(a, l)
+    @test sd.constraints isa Bramble.NoConstraints
+    rhs = semidiscretize_rhs(sd)
+    @test rhs isa Bramble.SemidiscretizeRHS
+
+    u = collect(range(0.2, 1.7; length = n))
+    du_rhs, du_sd = zeros(n), zeros(n)
+    t = 0.37
+    rhs(du_rhs, u, nothing, t)
+    sd(du_sd, u, nothing, t)
+    @test du_rhs≈du_sd ./ h atol=1e-12 rtol=1e-12
+    @test _sd_rhs_allocs(rhs, du_rhs, u, t) == 0
+
+    @testset "requires NoConstraints: any Dirichlet row makes M singular there" begin
+        sd_static = semidiscretize(a, l; dirichlet = :boundary => x -> 0.0)
+        @test_throws ArgumentError semidiscretize_rhs(sd_static)
+
+        sd_labels = semidiscretize(a, l; dirichlet = :boundary)
+        @test_throws ArgumentError semidiscretize_rhs(sd_labels)
+
+        I = Bramble.interval(0.0, 1.0)
+        bcs_t = dirichlet_constraints(Ωₕ, I, :boundary => (x, t) -> 0.0)
+        sd_time = semidiscretize(a, l; dirichlet = bcs_t)
+        @test_throws ArgumentError semidiscretize_rhs(sd_time)
+    end
+
+    @testset "requires a diagonal mass matrix" begin
+        # A genuine coupling term: `M₋ₓ(v)` reaches `v`'s neighbour, so column `i` of the
+        # assembled mass form has an off-diagonal entry.
+        mass_coupled = form(Wₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(u), M₋ₓ(v)))
+        sd_coupled = semidiscretize(a, l; mass = mass_coupled)
+        @test_throws ArgumentError semidiscretize_rhs(sd_coupled)
+    end
+
+    @testset "requires an invertible (nonzero) diagonal" begin
+        # Diagonal, but exactly zero at the left boundary point (x = 0) -- no coupling
+        # term, so this does not hit the non-diagonal case above; it is its own check.
+        cₕ = Rₕ(Wₕ, x -> x[1])
+        mass_zero = form(Wₕ, Wₕ, (u, v) -> innerₕ(cₕ * u, v))
+        sd_zero = semidiscretize(a, l; mass = mass_zero)
+        @test iszero(mass_matrix(sd_zero)[1, 1])
+        @test_throws ArgumentError semidiscretize_rhs(sd_zero)
+    end
 end
 
 end # module FormSemidiscreteTests
