@@ -393,6 +393,28 @@ linear_problem
 nonlinear_problem
 ```
 
+### A matrix-free explicit right-hand side
+
+`M uₕ' = F(t) - A uₕ` above is deliberately left with `M` un-inverted: a solver factorises
+it, which is the only correct way to do it once any Dirichlet row makes `M` singular there
+(that zero row is an algebraic constraint, not something `M⁻¹` can be taken through). When
+there is no such row at all -- `semidiscretize(a, l)` with no `dirichlet` keyword -- `M` is
+just the diagonal `L²` weight matrix, invertible everywhere, and `uₕ' = M⁻¹(F(t) - A uₕ)`
+means the same thing. `semidiscretize_rhs` folds that diagonal in once, ahead of time,
+instead of leaving `M` for a solver to factorise at every step -- which is what actually
+matters for a solver like `Tsit5` that cannot factor a mass matrix at all: `ode_problem`
+carries no `mass_matrix` for `SemidiscretizeRHS`, so such a solver can be used at all,
+not merely faster.
+
+Its `ode_problem` method is documented alongside `ode_problem(sd::Semidiscretization, ...)`
+above -- `@docs` renders every docstring attached to one binding together, so listing
+`ode_problem` a second time here would conflict with the entry already given it.
+
+```@docs
+SemidiscretizeRHS
+semidiscretize_rhs
+```
+
 ### Second-order (wave) problems
 
 `semidiscretize_second_order` is the second-order-in-time counterpart of `semidiscretize`:

@@ -117,6 +117,7 @@ export form, assemble, assemble!, assemble_parallel!, allocate_system_matrix, ev
 export jacobian_pattern, ast_sparsity_detector
 export type_cached_assemble!
 export Semidiscretization, semidiscretize, mass_matrix, operator_matrix
+export SemidiscretizeRHS, semidiscretize_rhs
 export SecondOrderSemidiscretization,
        semidiscretize_second_order, damping_matrix, stiffness_matrix, block_mass_matrix
 # `jacobian!` is `public` rather than exported, the same call as `diff₋ₓ` above:

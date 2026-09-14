@@ -7,6 +7,7 @@ using LinearAlgebra: mul!, I as Identity
 using SciMLBase: SciMLBase, ODEProblem, LinearProblem, NonlinearProblem, solve
 using OrdinaryDiffEqBDF: FBDF, QNDF
 using OrdinaryDiffEqRosenbrock: Rodas5P
+using OrdinaryDiffEqTsit5: Tsit5
 using NonlinearSolve: NewtonRaphson
 using ADTypes: AutoFiniteDiff
 using LinearSolve: KrylovJL_GMRES
@@ -105,6 +106,38 @@ end
         # A plain vector works as the initial condition too.
         @test ode_problem(sd_bc, fill(3.0, n), I).u0[1] ≈ 5.0
         @test ode_problem(a, l, u₀, I; dirichlet = bcs).u0[1] ≈ 5.0
+    end
+
+    # `semidiscretize_rhs` (gpena/Bramble.jl#163): the point of folding `M⁻¹` in ahead of
+    # time is reaching solvers that cannot touch a mass matrix at all -- `Tsit5` is one, and
+    # is checked to actually reject `sd`'s own `ODEProblem` below, not just to work on
+    # `rhs`'s. Agreement against a mass-matrix-aware `Rodas5P` solve of the same system is
+    # to solver tolerance, not literal bit-exactness: the two formulations reach the answer
+    # through different floating-point operations (`M \ (F - Au)` inside the stepper vs.
+    # `M⁻¹` pre-multiplied), so they need not land on the identical last bit.
+    @testset "semidiscretize_rhs: matrix-free explicit right-hand side reaches solvers ode_problem(sd, ...) cannot" begin
+        sd_free = semidiscretize(a, l)
+        @test sd_free.constraints isa Bramble.NoConstraints
+        rhs = semidiscretize_rhs(sd_free)
+
+        u₀ = Rₕ(Wₕ, x -> sinpi(x[1]))
+        before = copy(parent(u₀))
+        prob_rhs = ode_problem(rhs, u₀, I)
+        @test prob_rhs isa ODEProblem
+        @test prob_rhs.tspan == (0.0, 1.0)
+        @test parent(u₀) == before                  # u₀ is never mutated
+        @test prob_rhs.u0 !== parent(u₀)
+
+        # `Tsit5` cannot step a system with a mass matrix at all -- confirmed directly
+        # against `sd_free`'s own `ODEProblem`, not assumed.
+        prob_sd = ode_problem(sd_free, u₀, I)
+        @test_throws ErrorException solve(prob_sd, Tsit5())
+
+        sol_rhs = solve(prob_rhs, Tsit5(); reltol = 1e-12, abstol = 1e-14)
+        sol_sd = solve(prob_sd, Rodas5P(); reltol = 1e-12, abstol = 1e-14)
+        @test SciMLBase.successful_retcode(sol_rhs)
+        @test SciMLBase.successful_retcode(sol_sd)
+        @test sol_rhs.u[end]≈sol_sd.u[end] atol=1e-10 rtol=1e-10
     end
 
     @testset "linear_problem is the assembled steady system" begin
