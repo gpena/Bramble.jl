@@ -176,6 +176,7 @@ if __bramble_with_ext_backends
         include("ext/meshes_ext.jl")
         include("ext/metal_ext.jl")
         include("ext/sparse_ad_ext.jl")
+        include("ext/ad_backend_verification.jl")
         include("ext/sciml_ext.jl")
         # Runs the worked heat-equation page itself, whose assertions need a stiff solver
         # for a differential-algebraic system -- so it belongs where OrdinaryDiffEq is
