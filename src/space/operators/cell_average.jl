@@ -150,10 +150,9 @@ end
 # closures over captures (`f`, `x`, `idxs`, `nodes`, `wts`). Explicit struct types ensure
 # predictable inlining and eliminate allocation flakes inside parallel loop dispatch.
 #
-# The accumulator seed (`zero(T)`) is built here, once per call, and handed to
-# `_cell_average` as a plain argument rather than reconstructed inside it from a `Val`
-# (gpena/Bramble.jl#102) -- the same seed a scalar quadrature loop always started from,
-# just named at the call site instead of hidden inside the callee.
+# No accumulator seed is built here: `_cell_average` seeds itself from `f`'s own first
+# evaluation, so the mesh's element type `T` never leaks into the quadrature sum
+# (gpena/Bramble.jl#148).
 struct _AvgKernel{F, X, IX, NQ, T}
     f::F
     x::X
@@ -162,16 +161,12 @@ struct _AvgKernel{F, X, IX, NQ, T}
     wts::NTuple{NQ, T}
 end
 @inline (k::_AvgKernel{F, X, IX, NQ, T})(i) where {F, X, IX, NQ, T} = _cell_average(
-    k.f, k.x, k.idxs[i], k.nodes, k.wts, zero(T))
+    k.f, k.x, k.idxs[i], k.nodes, k.wts)
 
 # Same reasoning, for the tuple-valued (composite) quadrature call. `NC` is the space's
 # *leaf* count (`length(components(uₕ))`, which flattens any nesting), not the space's own
-# structural type parameter.
-#
-# Seeded with an `NC`-tuple of zeros rather than a bare `zero(T)`: `_cell_average` no longer
-# takes `::Val{NC}` to rebuild this itself (gpena/Bramble.jl#102), since `.+`/`.*` over a
-# `Number` seed already compute the scalar case, and over an `NTuple` seed compute this one,
-# from the same method body.
+# structural type parameter; kept as a type parameter here for a concrete struct even
+# though `_cell_average` no longer needs it to build a seed.
 struct _AvgScatterKernel{F, X, IX, NQ, T, NC}
     f::F
     x::X
@@ -180,7 +175,7 @@ struct _AvgScatterKernel{F, X, IX, NQ, T, NC}
     wts::NTuple{NQ, T}
 end
 @inline (k::_AvgScatterKernel{F, X, IX, NQ, T, NC})(i) where {F, X, IX, NQ, T, NC} = _cell_average(
-    k.f, k.x, k.idxs[i], k.nodes, k.wts, ntuple(_ -> zero(T), Val(NC)))
+    k.f, k.x, k.idxs[i], k.nodes, k.wts)
 
 # `CellAverage`'s side of the `project!` contract (`operators/projection.jl`). The rule
 # carries the quadrature order; the driver decides the space's shape, the masking and the
@@ -289,49 +284,49 @@ end
 # separates 1D (`x::AbstractVector`) from nD (`x::NTuple{D}`), so nothing else had to know.
 # `CartesianIndex{1}[1]` is free -- confirmed against the allocation gates, not assumed.
 #
-# One method rather than a scalar/composite pair: `seed` used to be reconstructed inside
-# from a trailing `::Val{NC}` (or omitted, for the scalar arity); it is now built once by
-# the caller and passed straight through, so scalar and composite calls share this same
-# unwrap (gpena/Bramble.jl#102).
+# One method rather than a scalar/composite pair: broadcasting `.+`/`.*` over a `Number`
+# accumulator compute exactly the scalar arithmetic `+`/`*` would (bit-for-bit --
+# broadcasting a scalar adds no operation of its own), and over an `NTuple` accumulator
+# compute the per-component sum the old, separately-written composite method did. Which one
+# applies falls out of `f`'s own return type, so no `::Val{NC}` or caller-built seed is
+# needed to tell them apart (gpena/Bramble.jl#102, gpena/Bramble.jl#148).
 @inline _cell_average(
     f,
     x::AbstractVector,
     idx::CartesianIndex{1},
     nodes::NTuple{NQ, T},
-    wts::NTuple{NQ, T},
-    seed
-) where {NQ, T} = _cell_average(f, x, idx[1], nodes, wts, seed)
+    wts::NTuple{NQ, T}
+) where {NQ, T} = _cell_average(f, x, idx[1], nodes, wts)
 
 # Average of `f` over the 1D cell spanned by `x[i] .. x[i+1]`.
 #
-# One method for both the scalar and the composite (tuple-valued `f`) case: `.+`/`.*`
-# broadcast over a `Number` seed compute exactly the scalar arithmetic `+`/`*` would
-# (bit-for-bit -- broadcasting a scalar adds no operation of its own), and over an
-# `NTuple` seed compute the per-component sum the old, separately-written composite method
-# did. The caller picks which by the `seed` it passes: `zero(T)` for scalar, an `NC`-tuple
-# of zeros for composite (gpena/Bramble.jl#102, collapsing what used to be a `::Val{NC}`
-# pair of methods here).
+# The accumulator starts from `f`'s own first evaluation, not `zero(T)`: `T` is the mesh's
+# element type, but `f` can return something else entirely -- a `ForwardDiff.Dual` under
+# AD, say -- and seeding from the mesh forced a mid-loop type change the moment `f`'s
+# result first arrived (gpena/Bramble.jl#148). Element type comes from the data, never from
+# the space, same rule `Rₕ` follows. `zero.(...)` broadcasts over both the scalar and the
+# `NTuple` (composite) return shape, so one method still covers both.
 @inline function _cell_average(
-        f, x::AbstractVector, i::Int, nodes::NTuple{NQ, T}, wts::NTuple{NQ, T}, seed
+        f, x::AbstractVector, i::Int, nodes::NTuple{NQ, T}, wts::NTuple{NQ, T}
 ) where {NQ, T}
     @inbounds a = T(x[i])
     @inbounds d = T(x[i + 1]) - a
 
-    s = seed
+    @inbounds s = zero.(f(a + nodes[1] * d))
     @inbounds for q in 1:NQ
         s = s .+ wts[q] .* f(a + nodes[q] * d)
     end
     return s
 end
 
-# 2D cell average, scalar or composite by the `seed` passed in -- see the 1D method above.
+# 2D cell average, scalar or composite by `f`'s own return type -- see the 1D method above.
 #
 # The composite case is also what a 1D mesh's single-function-returning-all-components
 # form needs on a composite space; the 1D method above covers it directly (a 1D mesh
 # answers `half_points` with a plain vector, not a one-tuple of vectors, so it does not
 # reach this NTuple{2}-indexed method in the first place).
 @inline function _cell_average(
-        f, x::NTuple{2}, idx::CartesianIndex{2}, nodes::NTuple{NQ, T}, wts::NTuple{NQ, T}, seed
+        f, x::NTuple{2}, idx::CartesianIndex{2}, nodes::NTuple{NQ, T}, wts::NTuple{NQ, T}
 ) where {NQ, T}
     @inbounds i, j = idx[1], idx[2]
     @inbounds a1 = T(x[1][i])
@@ -345,7 +340,9 @@ end
     p1s = ntuple(q -> a1 + nodes[q] * d1, Val(NQ))
     p2s = ntuple(q -> a2 + nodes[q] * d2, Val(NQ))
 
-    s = seed
+    # Accumulator seeded from `f`'s own first evaluation, not `zero(T)` -- see the 1D
+    # method above (gpena/Bramble.jl#148).
+    @inbounds s = zero.(f((p1s[1], p2s[1])))
     @inbounds for q2 in 1:NQ
         w2 = wts[q2]
         p2 = p2s[q2]
@@ -358,9 +355,9 @@ end
     return s
 end
 
-# 3D cell average, scalar or composite by the `seed` passed in -- see the 1D method above.
+# 3D cell average, scalar or composite by `f`'s own return type -- see the 1D method above.
 @inline function _cell_average(
-        f, x::NTuple{3}, idx::CartesianIndex{3}, nodes::NTuple{NQ, T}, wts::NTuple{NQ, T}, seed
+        f, x::NTuple{3}, idx::CartesianIndex{3}, nodes::NTuple{NQ, T}, wts::NTuple{NQ, T}
 ) where {NQ, T}
     @inbounds i, j, k = idx[1], idx[2], idx[3]
     @inbounds a1 = T(x[1][i])
@@ -378,7 +375,9 @@ end
     p2s = ntuple(q -> a2 + nodes[q] * d2, Val(NQ))
     p3s = ntuple(q -> a3 + nodes[q] * d3, Val(NQ))
 
-    s = seed
+    # Accumulator seeded from `f`'s own first evaluation, not `zero(T)` -- see the 1D
+    # method above (gpena/Bramble.jl#148).
+    @inbounds s = zero.(f((p1s[1], p2s[1], p3s[1])))
     @inbounds for q3 in 1:NQ
         w3 = wts[q3]
         p3 = p3s[q3]
@@ -397,17 +396,20 @@ end
 
 # Average of `f` over the D-dimensional cell around `idx`, whose corners are the half
 # points `x[k][idx[k]]` and `x[k][idx[k] + 1]` along each axis -- scalar or composite by
-# the `seed` passed in, see the 1D method above. No mesh this package builds is more than
+# `f`'s own return type, see the 1D method above. No mesh this package builds is more than
 # 3D, so the 1D/2D/3D specialized methods above always take priority in practice; this
 # generic one exists for dispatch correctness at any `D`, tested directly rather than
 # through a mesh.
 @inline function _cell_average(
-        f, x::NTuple{D}, idx::CartesianIndex{D}, nodes::NTuple{NQ, T}, wts::NTuple{NQ, T}, seed
+        f, x::NTuple{D}, idx::CartesianIndex{D}, nodes::NTuple{NQ, T}, wts::NTuple{NQ, T}
 ) where {D, NQ, T}
     a = ntuple(k -> @inbounds(T(x[k][idx[k]])), Val(D))
     b = ntuple(k -> @inbounds(T(x[k][idx[k] + 1])), Val(D))
 
-    s = seed
+    # Accumulator seeded from `f`'s own first evaluation, not `zero(T)` -- see the 1D
+    # method above (gpena/Bramble.jl#148).
+    pt1 = ntuple(k -> a[k] + nodes[1] * (b[k] - a[k]), Val(D))
+    s = zero.(f(pt1))
     @inbounds for q in CartesianIndices(ntuple(_ -> NQ, Val(D)))
         w = one(T)
         for k in 1:D

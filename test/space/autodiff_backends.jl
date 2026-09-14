@@ -86,4 +86,21 @@ end
     end
 end
 
+# `avgₕ`'s cell-average quadrature seeded its accumulator from the mesh's element type
+# rather than `f`'s own (gpena/Bramble.jl#148): a `ForwardDiff.Dual`-valued `f`, the shape
+# parameter estimation or sensitivity analysis produces, forced a mid-loop type change from
+# `Float64` to `Dual` on the very first quadrature point. `@inferred` is the point of this
+# test, not just the numeric answer: a boxing regression can still come out numerically
+# right while being far slower and type-unstable.
+@testset "avgₕ cell-average quadrature under AD (gpena/Bramble.jl#148)" begin
+    Ωₕ = mesh(domain(interval(0.0, 1.0)), 6, true)
+    Wₕ = gridspace(Ωₕ)
+    scalar = a -> sum(parent(avgₕ(Wₕ, x -> a * sin(x))))
+
+    a0 = 1.3
+    h = 1e-6
+    d = @inferred ForwardDiff.derivative(scalar, a0)
+    @test isapprox(d, (scalar(a0 + h) - scalar(a0 - h)) / 2h; rtol = 1e-5)
+end
+
 end # module SpaceAutodiffBackendsTests

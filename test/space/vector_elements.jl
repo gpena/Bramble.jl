@@ -623,10 +623,10 @@ end
         end
 
         @testset "Allocation scaling (composite)" begin
-            # The composite (tuple-valued `f`) path shares the same seeded `_cell_average`
-            # methods as the scalar path above, an `NC`-tuple of zeros in place of the
-            # `zero(T)` seed rather than a separately written method (gpena/Bramble.jl#102).
-            # Same guarantee, checked the same way.
+            # The composite (tuple-valued `f`) path shares the same `_cell_average` methods
+            # as the scalar path above, distinguished by `f`'s own return type rather than a
+            # separately written method (gpena/Bramble.jl#102). Same guarantee, checked the
+            # same way.
             fvec(x) = (sin(x[1] + x[2]), cos(x[1] - x[2]))
 
             function avg_bytes_composite(be, n)
@@ -1188,23 +1188,22 @@ end
     import Bramble: _cell_average, _gauss_rule
     nodes, wts = _gauss_rule(Val(3), Float64)
 
-    # `_cell_average`'s generic-D method (one method now, scalar or composite by the
-    # `seed` passed in rather than a `::Val{NC}`, gpena/Bramble.jl#102): specialised
-    # 1D/2D/3D methods exist and take priority for any mesh this package actually builds,
-    # so these are checked directly at D = 4 rather than through avgₕ!/a mesh. Correctness,
-    # not just reachability: an affine function's cell average equals its value at the
-    # cell's midpoint, which is a property of the quadrature rule, not of the specific
-    # dimension.
+    # `_cell_average`'s generic-D method (one method now, scalar or composite by `f`'s own
+    # return type rather than a `::Val{NC}`, gpena/Bramble.jl#102): specialised 1D/2D/3D
+    # methods exist and take priority for any mesh this package actually builds, so these
+    # are checked directly at D = 4 rather than through avgₕ!/a mesh. Correctness, not just
+    # reachability: an affine function's cell average equals its value at the cell's
+    # midpoint, which is a property of the quadrature rule, not of the specific dimension.
     x4 = ntuple(_ -> [0.0, 0.5, 1.0], Val(4))
     idx4 = CartesianIndex(1, 1, 1, 1)
     mid4 = ntuple(_ -> 0.25, Val(4))
 
     f_affine(pt) = 1.0 + sum(pt)
-    s_scalar = _cell_average(f_affine, x4, idx4, nodes, wts, 0.0)
+    s_scalar = _cell_average(f_affine, x4, idx4, nodes, wts)
     @test s_scalar ≈ f_affine(mid4)
 
     f_affine_vec(pt) = (1.0 + sum(pt), 2.0 * sum(pt))
-    s_vec = _cell_average(f_affine_vec, x4, idx4, nodes, wts, (0.0, 0.0))
+    s_vec = _cell_average(f_affine_vec, x4, idx4, nodes, wts)
     @test all(s_vec .≈ f_affine_vec(mid4))
 end
 
