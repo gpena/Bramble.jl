@@ -186,6 +186,7 @@ if __bramble_with_ext_backends
         include("ext/ad_backend_verification.jl")
         include("ext/sciml_ext.jl")
         include("ext/algebraicmultigrid_ext.jl")
+        include("ext/mumps_ext.jl")
         # BrambleChainRulesExt: the pde_solve rrule's own math, checked against finite
         # differences and by hand -- needs only ChainRulesCore, not Enzyme/Mooncake, so it
         # belongs here rather than behind the "ad" group. Enzyme/Mooncake composition is

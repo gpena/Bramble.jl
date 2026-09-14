@@ -454,6 +454,21 @@ Requires [AlgebraicMultigrid.jl](https://github.com/JuliaLinearAlgebra/Algebraic
 amg_preconditioner
 ```
 
+### MUMPS sparse direct solver
+
+`mumps_factorize` and `mumps_solve` provide multifrontal sparse direct factorization and solves
+via [MUMPS.jl](https://github.com/lruthotto/MUMPS.jl). [`MUMPSFactorization`](@ref) wraps the parallel
+factorization, supporting in-place back-substitution via `LinearAlgebra.ldiv!` and non-allocating reuse for
+transient PDE time stepping.
+
+Requires [MUMPS.jl](https://github.com/lruthotto/MUMPS.jl).
+
+```@docs
+MUMPSFactorization
+mumps_factorize
+mumps_solve
+```
+
 ### Caching a coefficient-dependent assembly by element type
 
 A Newton residual generic over `T` (`Float64` on a plain call, `ForwardDiff.Dual` while an

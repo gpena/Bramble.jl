@@ -130,6 +130,7 @@ export jacobian_prototype
 export ode_function, ode_problem, linear_problem, nonlinear_problem
 export amg_preconditioner
 export second_order_ode_function, second_order_ode_problem
+export mumps_factorize, mumps_solve, MUMPSFactorization
 export pde_solve
 
 # `DirichletConstraint` is `dirichlet_constraints(...)`'s own return type, reached for an
@@ -201,6 +202,7 @@ include("form/semidiscrete.jl")
 include("form/second_order_semidiscrete.jl")
 include("form/nonlinear_problem.jl")
 include("form/amg_preconditioner.jl")
+include("form/mumps_solver.jl")
 include("form/pde_solve.jl")
 
 include("exporters/vtk_export.jl")
