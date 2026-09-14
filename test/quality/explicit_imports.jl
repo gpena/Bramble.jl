@@ -45,6 +45,13 @@ using ExplicitImports
     #   in a field or method signature, none of them exported.
     # - `trial_space` (BrambleSciMLExt): read back off a `BilinearForm` to unwrap a
     #   `LinearSolution` into a `VectorElement` over the right space.
+    # - `_vtk_axes`, `_vtk_data` (BrambleVTKExt, BrambleVTKSciMLExt): reshape a mesh/field
+    #   into what `vtk_grid`/`vtk[name] = ...` want. Neither touches a WriteVTK type, so both
+    #   live in core `Bramble` (src/exporters/vtk_export.jl) rather than in either extension,
+    #   letting the two share them without one depending on the other.
+    # - `AbstractSpaceType` (BrambleVTKSciMLExt): narrows `export_vtk`'s solution-export
+    #   method to a real discretisation space, the same reason `BrambleSciMLExt` reaches for
+    #   it below.
     @testset "Non-public imports are the declared ones" begin
         @test check_all_explicit_imports_are_public(
             Bramble;
@@ -56,7 +63,10 @@ using ExplicitImports
                 :BilinearForm,
                 :LinearForm,
                 :CartesianProduct,
-                :trial_space
+                :trial_space,
+                :_vtk_axes,
+                :_vtk_data,
+                :AbstractSpaceType
             )
         ) === nothing
     end
@@ -84,6 +94,13 @@ using ExplicitImports
     #   methods for a `LinearSolution`, the same reason the doctring next to them gives.
     # - `_amg_operator` (BrambleAlgebraicMultigridExt): the preconditioner-building hook
     #   `solve`'s `preconditioner = :amg` keyword reaches.
+    # - `_export_vtk_collection` (BrambleVTKExt), `_export_vtk_solution`
+    #   (BrambleVTKSciMLExt): the same underscored-fallback idiom as `_export_vtk` above, one
+    #   entry point per `export_vtk` method that needs a weak dependency.
+    # - `apply_recipe` (BramblePlotsExt): the function `@recipe` generates methods on;
+    #   warmed by name in the precompile workload rather than through a plotting call, which
+    #   this coverage-dependent check had simply not caught loaded alongside the others
+    #   before.
     @testset "Non-public qualified accesses are the declared ones" begin
         @test check_all_qualified_accesses_are_public(
             Bramble;
@@ -110,7 +127,10 @@ using ExplicitImports
                 :_second_order_ode_problem,
                 :_export_vtk,
                 :AbstractSpaceType,
-                :_amg_operator
+                :_amg_operator,
+                :_export_vtk_collection,
+                :_export_vtk_solution,
+                :apply_recipe
             )
         ) === nothing
     end

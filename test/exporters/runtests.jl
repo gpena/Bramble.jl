@@ -4,5 +4,6 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
 
 @testset "Exporters" begin
     include("vtk_export.jl")
+    include("vtk_collection.jl")
     include("pgfplots_export.jl")
 end

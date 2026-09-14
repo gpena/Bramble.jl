@@ -3,35 +3,18 @@ module BrambleVTKExt
 using Bramble:
                Bramble,
                AbstractMeshType,
-               VectorElement,
-               CompositeGridSpace,
-               points,
-               components,
                export_vtk,
                domain,
                interval,
                ×,
                mesh,
                gridspace,
-               Rₕ
+               Rₕ,
+               _vtk_axes,
+               _vtk_data
 
-using WriteVTK: WriteVTK, vtk_grid, vtk_save
+using WriteVTK: WriteVTK, vtk_grid, vtk_save, paraview_collection
 using PrecompileTools: @setup_workload, @compile_workload
-
-# `vtk_grid` for a rectilinear grid wants at least two coordinate vectors, `z` defaulting to
-# a single point when omitted. A 1D mesh gets a degenerate second axis for the same reason,
-# built by hand since there is only one axis to pad.
-_vtk_axes(Ωₕ::AbstractMeshType{1}) = (points(Ωₕ), [zero(eltype(Ωₕ))])
-_vtk_axes(Ωₕ::AbstractMeshType) = points(Ωₕ)
-
-# What `vtk[name] = ...` wants for one field. A scalar space gives an array shaped like the
-# grid: `reshape(uₕ)` already reshapes a `VectorElement`'s flat storage that way, in the same
-# column-major order `points(Ωₕ)`'s axes imply, so no permutation is needed. A composite
-# space gives a `Tuple` of them: WriteVTK reads `length(data)` off a `Tuple` as the number of
-# vector components, one array per component.
-_vtk_data(uₕ::VectorElement{<:CompositeGridSpace}) = Tuple(reshape.(components(uₕ)))
-_vtk_data(uₕ::VectorElement) = reshape(uₕ)
-_vtk_data(a::AbstractArray) = a
 
 function Bramble._export_vtk(
         filename::AbstractString, Ωₕ::AbstractMeshType, fields::Pair...
@@ -41,6 +24,37 @@ function Bramble._export_vtk(
         vtk[name] = _vtk_data(data)
     end
     return vtk_save(vtk)
+end
+
+# Wraps the `WriteVTK.CollectionFile` (a type WriteVTK does not make public) so that
+# `pvd[t] = (filename, Ωₕ, fields...)` can be a `Base.setindex!` method without committing
+# type piracy: neither `CollectionFile` nor `Tuple` belongs to Bramble, so the method needs a
+# Bramble-owned first argument to be legal. Left untyped rather than importing the
+# non-public `CollectionFile` name just to annotate a field nothing dispatches on. Not
+# exported -- the user only ever sees it as the `pvd` argument of their own `do`-block.
+struct _VTKCollection
+    pvd
+end
+
+function Base.setindex!(coll::_VTKCollection, entry::Tuple, t::Real)
+    filename, Ωₕ, fields... = entry
+    vtk = vtk_grid(filename, _vtk_axes(Ωₕ)...)
+    for (name, data) in fields
+        vtk[name] = _vtk_data(data)
+    end
+    coll.pvd[t] = vtk
+    return coll
+end
+
+# `paraview_collection(filename; append) do pvd ... end` already closes over `try`/`finally`
+# and calls `vtk_save` on both a normal return and an exception (verified by hand: an error
+# raised mid-loop still leaves a `.pvd` with every step assigned before it, and one raised
+# before any assignment still leaves a valid empty `<Collection/>`) -- nothing further to
+# add here beyond wrapping the raw `CollectionFile` `f` receives.
+function Bramble._export_vtk_collection(f::Function, filename::AbstractString; append::Bool = false)
+    return paraview_collection(filename; append = append) do pvd
+        f(_VTKCollection(pvd))
+    end
 end
 
 # Warms `export_vtk` (the public entry point calling `_export_vtk` above) for a 1D and a 2D
@@ -59,6 +73,13 @@ if Bramble.PRECOMPILE_WORKLOAD
             mktempdir() do dir
                 export_vtk(joinpath(dir, "pc1"), Ωₕ1, "u" => u1)
                 export_vtk(joinpath(dir, "pc2"), u2)
+
+                export_vtk(joinpath(dir, "pc3")) do pvd
+                    for (i, t) in enumerate((0.0, 0.5, 1.0))
+                        uₜ = Rₕ(W2, x -> t * x[1] * x[2])
+                        pvd[t] = (joinpath(dir, "pc3_$i"), Ωₕ2, "u" => uₜ)
+                    end
+                end
             end
         end
     end

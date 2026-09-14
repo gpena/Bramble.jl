@@ -119,6 +119,21 @@ ts = range(0.0, 1.0; length = 60)
 Z = reduce(vcat, (sol(t)' for t in ts))
 spacetime_surface_plot(points(Ωₕ), collect(ts), Z; title = "Heat equation, x-t-u")
 
+# `sol` is also a ParaView time series waiting to happen: one `.pvd` collection, one `.vtr`
+# per step, with a working time slider once opened. `Wₕ` (not just the mesh) is what turns
+# each raw solution vector back into a properly shaped field — see the
+# [VTK export tutorial](../tutorials/vtk_export.md#5.-Time-series-for-ParaView) for the
+# hand-written-loop form this is shorthand for.
+
+using WriteVTK
+
+pvd_dir = mktempdir() # hide
+files = export_vtk(joinpath(pvd_dir, "heat"), Wₕ, sol; times = range(0.0, 1.0; length = 20))
+nothing # hide
+
+@test count(f -> endswith(f, ".vtr"), files) == 20 #src
+@test isfile(joinpath(pvd_dir, "heat.pvd"))         #src
+
 # The initial condition handed in is copied, never mutated, and the copy is made consistent
 # with the algebraic rows at ``t_0`` before stepping starts — an index-1 system whose initial
 # condition disagrees with its own constraints is otherwise rejected by the solver or absorbed

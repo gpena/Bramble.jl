@@ -9,6 +9,7 @@ This tutorial covers:
 2. The shorthand for a single field.
 3. A composite element as one vector field, not several scalar ones.
 4. The 1D case.
+5. A time series, for a transient solve.
 
 `export_vtk` needs [WriteVTK.jl](https://github.com/JuliaVTK/WriteVTK.jl), which is a weak
 dependency: `using WriteVTK` before calling it, or the call errors with a message that says
@@ -87,6 +88,55 @@ f1 = Rₕ(W1, sin)
 export_vtk(joinpath(mktempdir(), "curve"), f1)
 nothing # hide
 ```
+
+## 5. Time series for ParaView
+
+A transient solve produces many snapshots, not one. Writing each with `export_vtk` above
+gives ParaView a pile of unrelated `.vtr` files: no time slider, no animation, no correct
+time axis if the steps are non-uniform. A ParaView collection (`.pvd`) ties them together.
+
+`export_vtk(f, filename)` opens the collection, calls `f` with a handle `pvd`, and closes it
+whether `f` returns normally or throws -- an interrupted run still leaves a valid, readable
+partial animation rather than truncated XML. Assign into `pvd` with the same
+`(filename, Ωₕ, name => data, ...)` shape `export_vtk` itself takes, once per time value:
+
+```@example vtk
+Ω1 = mesh(domain(interval(0.0, 1.0)), 41, true)
+W1 = gridspace(Ω1)
+dir = mktempdir()
+
+export_vtk(joinpath(dir, "wave")) do pvd
+    for (i, t) in enumerate((0.0, 0.1, 0.3, 1.0))  # non-uniform, on purpose
+        uₕ = Rₕ(W1, x -> sin(x[1] - t))
+        pvd[t] = (joinpath(dir, "step_$i"), Ω1, "u" => uₕ)
+    end
+end
+nothing # hide
+```
+
+Opening `wave.pvd` in ParaView (`File > Open`, not the individual `.vtr` files) loads all
+four steps as one dataset with a working time slider, each at its own recorded `t` --
+`0.1` and `0.3` a step apart, `0.3` and `1.0` much further, exactly as given. Passing
+`append = true` adds further steps to an existing collection instead of overwriting it.
+
+A `SciMLBase` solution -- what solving an [`ode_problem`](@ref) with `OrdinaryDiffEq` hands
+back -- has a one-call shorthand instead of a hand-written loop:
+
+```julia
+using OrdinaryDiffEqBDF
+
+prob = ode_problem(sd, u₀, I)
+sol = solve(prob, FBDF())
+
+export_vtk(joinpath(mktempdir(), "solution"), Wₕ, sol)                    # every saved step
+export_vtk(joinpath(mktempdir(), "solution"), Wₕ, sol; times = 0:0.1:1.0) # interpolated
+```
+
+`Wₕ` (not just the mesh) is what turns each raw solution vector back into a properly shaped
+field, the same way [`element`](@ref)`(Wₕ, ::AbstractVector)` does anywhere else. The
+default writes exactly `sol`'s own saved times, non-uniform steps included; passing `times`
+samples `sol`'s continuous interpolation at those points instead. See the
+[heat equation example](../examples/heat_equation.md) for this run against a real solve.
 
 ## Where to go next
 
