@@ -160,6 +160,13 @@ if __bramble_with_ad_backends
         # reuses so both files check every backend the same way.
         __bramble_with_unit_tests || include("space/autodiff_backends.jl")
         include("space/autodiff_heavy.jl")
+        # pde_solve's rrule (ext/chainrules_ext.jl, "Package extensions" below) composed with
+        # a real reverse-mode backend -- Enzyme; Mooncake pinned as currently unsupported.
+        # Self-contained, independent of that file's own run.
+        include("ext/chainrules_enzyme_ext.jl")
+        # The boundary-condition-recovery worked example needs Enzyme, unlike every other
+        # example page -- run here rather than in "Worked examples"/"Package extensions".
+        include("examples/inverse_diffusion.jl")
     end
 end
 
@@ -179,6 +186,11 @@ if __bramble_with_ext_backends
         include("ext/ad_backend_verification.jl")
         include("ext/sciml_ext.jl")
         include("ext/algebraicmultigrid_ext.jl")
+        # BrambleChainRulesExt: the pde_solve rrule's own math, checked against finite
+        # differences and by hand -- needs only ChainRulesCore, not Enzyme/Mooncake, so it
+        # belongs here rather than behind the "ad" group. Enzyme/Mooncake composition is
+        # chainrules_enzyme_ext.jl instead, alongside autodiff_heavy.jl below.
+        include("ext/chainrules_ext.jl")
         # Runs the worked heat-equation page itself, whose assertions need a stiff solver
         # for a differential-algebraic system -- so it belongs where OrdinaryDiffEq is
         # already loaded rather than in the every-push "Worked examples" group.

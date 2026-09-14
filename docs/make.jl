@@ -17,7 +17,8 @@ const LITERATE_EXAMPLES = [
     "coupled_reaction_diffusion.jl",
     "elasticity_3d.jl",
     "heat_equation.jl",
-    "amg_preconditioning.jl"
+    "amg_preconditioning.jl",
+    "inverse_diffusion.jl"
 ]
 
 let dir = joinpath(@__DIR__, "src", "examples")
@@ -51,7 +52,8 @@ examples = "Examples" => [
     "examples/coupled_reaction_diffusion.md",
     "examples/elasticity_3d.md",
     "examples/heat_equation.md",
-    "examples/amg_preconditioning.md"
+    "examples/amg_preconditioning.md",
+    "examples/inverse_diffusion.md"
 ]
 benchmarks = "Benchmarks" => "benchmarks.md"
 internals = "Internals" => [
