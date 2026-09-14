@@ -9,6 +9,7 @@ using OrdinaryDiffEqBDF: FBDF, QNDF
 using OrdinaryDiffEqRosenbrock: Rodas5P
 using NonlinearSolve: NewtonRaphson
 using ADTypes: AutoFiniteDiff
+using LinearSolve: KrylovJL_GMRES
 
 # BrambleSciMLExt: the `ODEFunction`/`ODEProblem`/`LinearProblem` wrapping of a
 # `Semidiscretization`. The semidiscretisation itself, and its order of convergence, are
@@ -118,6 +119,42 @@ end
         prob_s = linear_problem(a, l; dirichlet = :boundary => x -> 1.0, symmetrize = true)
         @test prob_s.A == As
         @test prob_s.b == Fs
+    end
+
+    # `element(Wₕ, sol)`/`VectorElement(sol, Wₕ)` unwrap a `LinearSolve` solution into a
+    # `VectorElement`, and `solve(a, l; ...)` does assembly, solve and unwrapping in one call
+    # -- the three pieces #156 asks for, all reached through the steady system `prob`/`A`/`F`
+    # already agree on above.
+    @testset "solve: VectorElement from a LinearSolution" begin
+        A, F = assemble(a, l; dirichlet = :boundary => x -> 0.0)
+        expected = A \ F
+
+        prob = linear_problem(a, l; dirichlet = :boundary => x -> 0.0)
+        sol = solve(prob)
+        @test sol isa SciMLBase.LinearSolution
+
+        uₕ = Bramble.element(Wₕ, sol)
+        @test uₕ isa Bramble.VectorElement
+        @test space(uₕ) === Wₕ
+        @test parent(uₕ) ≈ expected
+
+        vₕ = Bramble.VectorElement(sol, Wₕ)
+        @test vₕ isa Bramble.VectorElement
+        @test parent(vₕ) ≈ expected
+
+        # The high-level convenience: assemble, solve and unwrap in one call.
+        wₕ = solve(a, l; dirichlet = :boundary => x -> 0.0)
+        @test wₕ isa Bramble.VectorElement
+        @test space(wₕ) === Wₕ
+        @test parent(wₕ) ≈ expected
+
+        # `symmetrize` and an explicit `solver` are both forwarded.
+        ws = solve(
+            a, l; dirichlet = :boundary => x -> 1.0, symmetrize = true,
+            solver = KrylovJL_GMRES()
+        )
+        As, Fs = assemble(a, l; dirichlet = :boundary => x -> 1.0, symmetrize = true)
+        @test parent(ws) ≈ As \ Fs
     end
 
     @testset "nonlinear_problem: residual, jac_prototype, and a copied u0" begin

@@ -243,6 +243,34 @@ Returns a [`VectorElement`](@ref) for a grid space `Wₕ` with the same coeffici
     return elem
 end
 
+"""
+    ldiv!(uₕ::VectorElement, A::Factorization, F) -> VectorElement
+
+Solve `A \\ F` and write the result into `uₕ` in place, mutating `parent(uₕ)` rather than
+allocating a new vector.
+
+`A` is a `factorize(A)` (or `lu`/`cholesky`/...) reused across several solves, and `F` a
+plain vector or another `VectorElement` of matching length. Restricted to `Factorization`
+rather than any `A`: `LinearAlgebra` itself already overloads `ldiv!` for a matrix `A` on an
+unrestricted `AbstractVector` destination, and matching that breadth here would make every
+such call ambiguous between the two -- Julia unable to tell whether the `VectorElement`
+destination or the `Factorization` source should win.
+
+# Examples
+
+```julia
+A, F = assemble(a, l; dirichlet = bcs)
+uₕ = element(Wₕ)
+ldiv!(uₕ, factorize(A), F)
+```
+
+See also [`element`](@ref), [`assemble`](@ref).
+"""
+@inline function ldiv!(uₕ::VectorElement, A::Factorization, F::AbstractVector)
+    ldiv!(parent(uₕ), A, F)
+    return uₕ
+end
+
 # ==============================================================================
 # Indexing Interface
 # ==============================================================================

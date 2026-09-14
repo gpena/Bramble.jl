@@ -24,8 +24,17 @@ using Bramble:
                ode_function,
                linear_problem,
                nonlinear_problem,
+               trial_space,
                boundary_symbols
-using SciMLBase: SciMLBase, LinearProblem, ODEFunction, ODEProblem, NonlinearFunction, NonlinearProblem
+using SciMLBase:
+                 SciMLBase,
+                 LinearProblem,
+                 LinearSolution,
+                 ODEFunction,
+                 ODEProblem,
+                 NonlinearFunction,
+                 NonlinearProblem,
+                 solve
 using PrecompileTools: @setup_workload, @compile_workload
 
 # Gated on SciMLBase alone -- the package `ODEFunction`, `ODEProblem`, `LinearProblem`,
@@ -106,6 +115,51 @@ function Bramble._linear_problem(
         symmetrize = symmetrize
     )
     return LinearProblem(A, F)
+end
+
+# `sol.u` is exactly the plain vector `element(Wₕ, ::AbstractVector)` already knows how to
+# wrap, so both unwrapping spellings just reroute to it. `Wₕ` is narrowed to
+# `AbstractSpaceType` -- a `LinearSolution` is itself an `AbstractVector`, so an untyped `Wₕ`
+# here would be ambiguous with `element(Wₕ::AbstractSpaceType, v::AbstractVector)` above:
+# neither method would be strictly more specific than the other.
+Bramble.element(Wₕ::Bramble.AbstractSpaceType, sol::LinearSolution) = Bramble.element(Wₕ, sol.u)
+Bramble.VectorElement(sol::LinearSolution, Wₕ::Bramble.AbstractSpaceType) = Bramble.element(Wₕ, sol.u)
+
+"""
+    solve(a::BilinearForm, l::LinearForm; dirichlet = nothing, dirichlet_components = nothing,
+          symmetrize = false, solver = nothing, kwargs...) -> VectorElement
+
+Assemble `a` and `l`, solve the resulting linear system, and hand back the solution as a
+`VectorElement` over `a`'s trial space -- the convenience path around [`linear_problem`](@ref)
+for a caller who wants the solved grid function directly, not the raw `LinearProblem` and a
+bare coefficient vector to wrap by hand.
+
+# Keywords
+- `dirichlet`, `dirichlet_components`, `symmetrize`: forwarded to [`assemble`](@ref), exactly
+  as [`linear_problem`](@ref) takes them.
+- `solver`: the `LinearSolve` algorithm, e.g. `KrylovJL_GMRES()`. Default `nothing`: `solve`
+  picks its own default.
+- Every other keyword forwards to `LinearSolve.solve`.
+
+# Examples
+
+```julia
+uₕ = solve(a, l; dirichlet = bcs)
+```
+
+See also [`linear_problem`](@ref), [`element`](@ref).
+"""
+function SciMLBase.solve(
+        a::BilinearForm, l::LinearForm;
+        dirichlet = nothing, dirichlet_components = nothing, symmetrize::Bool = false,
+        solver = nothing, kwargs...
+)
+    prob = linear_problem(
+        a, l; dirichlet = dirichlet, dirichlet_components = dirichlet_components,
+        symmetrize = symmetrize
+    )
+    sol = solver === nothing ? solve(prob; kwargs...) : solve(prob, solver; kwargs...)
+    return Bramble.element(trial_space(a), sol)
 end
 
 # `u0` narrows to `AbstractVector` (a `VectorElement` already is one) rather than `residual`

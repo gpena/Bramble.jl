@@ -4,7 +4,7 @@ using Test
 using Bramble
 import Bramble:
                 VectorElement, spacing, points, half_points, space, ndofs, half_spacings, indices, point
-using LinearAlgebra: norm
+using LinearAlgebra: norm, lu
 using SparseArrays
 using Random
 using Supposition
@@ -116,6 +116,24 @@ end
         @test space(u4) === W
         @test all(==(3.0), parent(u4))
         @test eltype(u4) == Float64
+    end
+
+    @testset "ldiv!" begin
+        A = [4.0 1.0 0.0 0.0
+             1.0 3.0 1.0 0.0
+             0.0 1.0 3.0 1.0
+             0.0 0.0 1.0 2.0]
+        F = [1.0, 2.0, 3.0, 4.0]
+        expected = A \ F
+
+        uₕ = element(W)
+        luA = lu(A)
+        @test ldiv!(uₕ, luA, F) === uₕ
+        @test parent(uₕ) ≈ expected
+
+        # Zero heap allocations once the factorisation is warmed (bramble-verification: a
+        # function barrier, never a top-level @allocated).
+        @test_allocs ldiv!(uₕ, luA, F)
     end
 
     @testset "Getters & setters" begin

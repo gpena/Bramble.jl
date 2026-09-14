@@ -149,6 +149,7 @@ components
 component_range
 component_ranges
 Base.:*(::Function, ::VectorElement)
+ldiv!(::VectorElement, ::Factorization, ::AbstractVector)
 ```
 
 ### Restriction and averaging operators
@@ -372,6 +373,12 @@ the way SciMLBase does: `ode_function` and `ode_problem` hand the semidiscretisa
 `OrdinaryDiffEq`, `linear_problem` hands a steady linear system to `LinearSolve` with its
 factorisations and preconditioners, and `nonlinear_problem` hands a steady nonlinear residual
 to `NonlinearSolve`. All four require [SciMLBase.jl](https://github.com/SciML/SciMLBase.jl).
+
+`solve(a::BilinearForm, l::LinearForm; ...)` is a further convenience defined alongside
+`linear_problem`: assemble, solve and unwrap the `LinearSolve` solution into a
+[`VectorElement`](@ref) in one call, for a caller who wants the solved grid function
+directly rather than the raw `LinearProblem`. `element(Wₕ, sol)`/`VectorElement(sol, Wₕ)`
+do the unwrapping step alone, for a `LinearSolution` already in hand.
 
 ```@docs
 semidiscretize

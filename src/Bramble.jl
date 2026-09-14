@@ -6,7 +6,7 @@ import Base: show, first, last, getindex, setindex!, iterate, size, firstindex, 
 using SparseArrays: SparseMatrixCSC, spdiagm, spzeros, rowvals, nonzeros, nzrange, sparse, sparse!
 
 using LinearAlgebra: I, dot, mul!
-import LinearAlgebra: issymmetric, isposdef, ×
+import LinearAlgebra: issymmetric, isposdef, ldiv!, Factorization, ×
 
 import Base: copy
 using Base: @propagate_inbounds
@@ -65,6 +65,7 @@ export ndofs, ncomponents, weights
 # code written *against* a space's type, not for building one (point 70).
 public VectorGridSpace, space_type
 export VectorElement, element, parent, reshape, components, component_range, component_ranges
+export ldiv!
 # `*` is already in scope from Base regardless (a fundamental operator, never shadowed by
 # `using Bramble`), so this export is for documentation purposes alone -- the same reason
 # `parent`/`reshape` above are re-exported despite being Base's own functions too: it is what
