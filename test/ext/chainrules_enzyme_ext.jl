@@ -36,7 +36,7 @@ _central_diff(f, x, h = 1e-6) = (f(x + h) - f(x - h)) / 2h
             a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
 
             function loss(θ::Real)
-                fₕ = Bramble.element(Wₕ, typeof(θ))
+                fₕ = Bramble.element(Wₕ, zero(θ))
                 l = form(Wₕ, v -> innerₕ(fₕ, v))
                 A, F = assemble(a, l; dirichlet = :boundary => x -> θ)
                 u = Bramble.pde_solve(A, F)
@@ -65,7 +65,7 @@ _central_diff(f, x, h = 1e-6) = (f(x + h) - f(x - h)) / 2h
             # fix is noticed" discipline `autodiff_heavy.jl` already follows for its own two
             # annotations.
             function loss_no_bridge(θ::Real)
-                A, F = assemble(a, form(Wₕ, v -> innerₕ(Bramble.element(Wₕ, typeof(θ)), v));
+                A, F = assemble(a, form(Wₕ, v -> innerₕ(Bramble.element(Wₕ, zero(θ)), v));
                     dirichlet = :boundary => x -> θ)
                 return sum(abs2, A \ F)
             end
