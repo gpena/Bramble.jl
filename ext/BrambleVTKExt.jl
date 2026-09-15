@@ -33,7 +33,7 @@ end
 # non-public `CollectionFile` name just to annotate a field nothing dispatches on. Not
 # exported -- the user only ever sees it as the `pvd` argument of their own `do`-block.
 struct _VTKCollection
-    pvd
+    pvd::Any
 end
 
 function Base.setindex!(coll::_VTKCollection, entry::Tuple, t::Real)
