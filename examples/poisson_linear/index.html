@@ -22,107 +22,528 @@ l = form(Wₕ, v -&gt; innerₕ(gₕ, v))
 F = assemble(l; dirichlet = bcs)
 
 uₕ = element(Wₕ)
-uₕ .= A \ F</code></pre><h2 id="Visualizing-the-solution"><a class="docs-heading-anchor" href="#Visualizing-the-solution">Visualizing the solution</a><a id="Visualizing-the-solution-1"></a><a class="docs-heading-anchor-permalink" href="#Visualizing-the-solution" title="Permalink"></a></h2><p>A surface plot of the field just solved for, <code>uₕ</code> from the block above — no new solve needed:</p><script>
-  // See the module note above: hide `define` from Plotly's UMD wrapper so it attaches
-  // `window.Plotly` instead of registering as an anonymous AMD module.
-  window.__bramble_amd_define = window.define;
-  window.define = undefined;
-</script>
-<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
-<script>
-  window.define = window.__bramble_amd_define;
-
-  // Colour tokens read from the page's own theme, not hard-coded — Documenter stamps
-  // `theme--documenter-dark` on <html> when dark mode is active, light mode has no such
-  // class. Recomputed on every call so a caller can re-theme after a toggle.
-  window.bramblePlotlyTheme = function () {
-    const dark = document.documentElement.className.includes('documenter-dark');
-    return dark
-      ? { bg: 'rgba(0,0,0,0)', text: '#c3c2b7', grid: 'rgba(255,255,255,0.12)' }
-      : { bg: 'rgba(0,0,0,0)', text: '#52514e', grid: 'rgba(0,0,0,0.10)' };
-  };
-
-  // Every plot this page creates registers itself (div id + the function that
-  // reapplies theme-dependent layout colours) so one observer can repaint all of them
-  // together when the theme toggles, instead of each plot wiring its own observer.
-  window.__bramble_plotly_charts = window.__bramble_plotly_charts || [];
-  window.brambleRegisterPlotlyChart = function (divId, restyle) {
-    window.__bramble_plotly_charts.push({ divId, restyle });
-  };
-
-  if (!window.__bramble_plotly_theme_observer) {
-    window.__bramble_plotly_theme_observer = new MutationObserver(function () {
-      for (const { divId, restyle } of window.__bramble_plotly_charts) {
-        const layout = restyle();
-        Plotly.relayout(divId, layout);
-      }
-    });
-    window.__bramble_plotly_theme_observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class'],
-    });
+uₕ .= A \ F</code></pre><h2 id="Visualizing-the-solution"><a class="docs-heading-anchor" href="#Visualizing-the-solution">Visualizing the solution</a><a id="Visualizing-the-solution-1"></a><a class="docs-heading-anchor-permalink" href="#Visualizing-the-solution" title="Permalink"></a></h2><p>An interactive panel, seeded from the resolution of <code>uₕ</code> above but solving its own problem in the browser: drag the resolution slider, switch between a uniform and a fully random mesh, or pick a different manufactured solution, and every plot and diagnostic below updates immediately.</p><div style="font-weight: 500; margin-bottom: 6px;">Linear Poisson, 2D</div>
+<iframe id="bramble_sp_1" srcdoc="<!doctype html>
+<html>
+<head>
+<meta charset=&quot;utf-8&quot;>
+<style>
+  :root {
+    --bg: #ffffff;
+    --text: #2c2c2c;
+    --muted: #6b6b6b;
+    --border: #d8d8d4;
+    --canvas-bg: #fafaf8;
+    --accent: #0e7c86;
   }
-
-  // The layout-race fix (see the module note above): once per page, after everything
-  // (fonts included) has truly finished loading, force every plot created so far to
-  // resize against its now-final container.
-  if (!window.__bramble_plotly_load_fix_installed) {
-    window.__bramble_plotly_load_fix_installed = true;
-    const rescue = function () {
-      for (const { divId } of window.__bramble_plotly_charts) {
-        Plotly.Plots.resize(document.getElementById(divId));
-      }
-    };
-    const loaded = document.readyState === 'complete' ? Promise.resolve() :
-      new Promise((r) => window.addEventListener('load', r, { once: true }));
-    Promise.all([loaded, document.fonts.ready]).then(rescue);
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1e1e1e;
+      --text: #dcdcd6;
+      --muted: #9a9a94;
+      --border: #3a3a36;
+      --canvas-bg: #262624;
+      --accent: #4fd1c5;
+    }
   }
-</script>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 12px;
+    font: 13px/1.4 -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;
+    color: var(--text);
+    background: var(--bg);
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 18px;
+    margin-bottom: 12px;
+  }
+  .field { display: flex; flex-direction: column; gap: 2px; min-width: 120px; }
+  .field.wide { min-width: 170px; }
+  label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+  select, input[type=&quot;range&quot;] { font: inherit; color: var(--text); background: var(--canvas-bg); border: 1px solid var(--border); border-radius: 4px; padding: 3px 4px; }
+  input[type=&quot;range&quot;] { padding: 0; accent-color: var(--accent); }
+  .range-row { display: flex; align-items: center; gap: 8px; }
+  .range-row span { font-variant-numeric: tabular-nums; min-width: 2.2em; }
+  .canvases { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 12px; }
+  .panel { display: flex; flex-direction: column; gap: 4px; }
+  .panel-title { font-size: 11px; color: var(--muted); }
+  canvas { border: 1px solid var(--border); border-radius: 4px; background: var(--canvas-bg); display: block; }
+  table { border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 2px 12px 2px 0; }
+  th { color: var(--muted); font-weight: 500; }
+</style>
+</head>
+<body>
+<script>window.__BRAMBLE_INITIAL_N__ = 23;</script>
 
-<div id="bramble_sp_1" style="width:100%; max-width:480px; height:420px; margin: 1em 0;"></div>
+<div class=&quot;controls&quot;>
+  <div class=&quot;field wide&quot;>
+    <label for=&quot;nRange&quot;>Resolution N</label>
+    <div class=&quot;range-row&quot;>
+      <input type=&quot;range&quot; id=&quot;nRange&quot; min=&quot;8&quot; max=&quot;48&quot; step=&quot;1&quot; value=&quot;24&quot;>
+      <span id=&quot;nLabel&quot;>24</span>
+    </div>
+  </div>
+  <div class=&quot;field&quot;>
+    <label for=&quot;meshType&quot;>Mesh</label>
+    <select id=&quot;meshType&quot;>
+      <option value=&quot;uniform&quot;>Uniform</option>
+      <option value=&quot;random&quot; selected>Random</option>
+    </select>
+  </div>
+  <div class=&quot;field wide&quot;>
+    <label for=&quot;solutionSel&quot;>Manufactured solution</label>
+    <select id=&quot;solutionSel&quot;>
+      <option value=&quot;exp&quot; selected>e^(x+y)</option>
+      <option value=&quot;sine&quot;>sin(pi x) sin(pi y)</option>
+      <option value=&quot;poly&quot;>(x^2-x)(y^2-y)</option>
+    </select>
+  </div>
+  <div class=&quot;field&quot;>
+    <label for=&quot;fieldView&quot;>Field</label>
+    <select id=&quot;fieldView&quot;>
+      <option value=&quot;solution&quot; selected>u_h</option>
+      <option value=&quot;error&quot;>|u_h - u|</option>
+    </select>
+  </div>
+  <div class=&quot;field&quot;>
+    <label for=&quot;panel2Sel&quot;>Panel 2</label>
+    <select id=&quot;panel2Sel&quot;>
+      <option value=&quot;spy&quot; selected>Matrix sparsity</option>
+      <option value=&quot;mesh&quot;>Mesh nodes</option>
+    </select>
+  </div>
+  <div class=&quot;field&quot;>
+    <label for=&quot;colormapSel&quot;>Colormap</label>
+    <select id=&quot;colormapSel&quot;>
+      <option value=&quot;viridis&quot; selected>Viridis</option>
+      <option value=&quot;plasma&quot;>Plasma</option>
+      <option value=&quot;turbo&quot;>Turbo</option>
+      <option value=&quot;gray&quot;>Grayscale</option>
+    </select>
+  </div>
+</div>
+
+<div class=&quot;canvases&quot;>
+  <div class=&quot;panel&quot;>
+    <span class=&quot;panel-title&quot; id=&quot;fieldTitle&quot;>u_h(x, y)</span>
+    <canvas id=&quot;fieldCanvas&quot; width=&quot;260&quot; height=&quot;260&quot;></canvas>
+  </div>
+  <div class=&quot;panel&quot;>
+    <span class=&quot;panel-title&quot; id=&quot;panel2Title&quot;>Matrix sparsity</span>
+    <canvas id=&quot;panel2Canvas&quot; width=&quot;260&quot; height=&quot;260&quot;></canvas>
+  </div>
+</div>
+
+<table id=&quot;diagTable&quot;>
+  <tr><th>Degrees of freedom</th><td id=&quot;diagDof&quot;></td>
+      <th>Nonzeros</th><td id=&quot;diagNnz&quot;></td></tr>
+  <tr><th>norm&amp;#x2095;(u&amp;#x2095; - u)</th><td id=&quot;diagL2&quot;></td>
+      <th>norm&amp;#x2081;&amp;#x2095;(u&amp;#x2095; - u)</th><td id=&quot;diagH1&quot;></td></tr>
+  <tr><th>Condition estimate &amp;kappa;(A)</th><td id=&quot;diagCond&quot; colspan=&quot;3&quot;></td></tr>
+</table>
+
 <script>
 (function () {
-  const theme = window.bramblePlotlyTheme();
-  const data = [{
-    type: 'surface',
-    x: [0.0,0.012502137392377821,0.020842341257392705,0.11852515758721183,0.15343091907868456,0.32249003948897226,0.3576216823063697,0.37921442624407653,0.3946900115738672,0.4025723532168787,0.48945867206954463,0.5143492048141987,0.5374653519773097,0.5723496069568588,0.6102520607379804,0.6441393949208799,0.7103315688827332,0.7500938235163731,0.7712076284737498,0.7758339074531879,0.8193450182375079,0.9322079566097954,0.9497250979796771,1.0],
-    y: [0.0,0.012139128962408652,0.1758926683115739,0.21421963940238964,0.26530779193702636,0.3697898798063778,0.4415026994731447,0.45139131547453604,0.472787406827221,0.6135392271877386,0.6383211984049163,0.6750549866631306,0.703006660663805,0.7186645483303223,0.775872374245137,0.787046877606814,0.7893333325080929,0.7917694274025723,0.816421518193467,0.8649399088263278,0.9687950604536418,0.9762430318955249,0.9875622988903799,1.0],
-    z: [[1.0,1.0125806158204116,1.0210610597441678,1.1258351970428713,1.165827247919902,1.3805611396966326,1.4299245523798119,1.4611363081259567,1.4839241203137599,1.4956671376389257,1.6314328407146816,1.6725496602626326,1.7116628963225693,1.7724266688186907,1.8408953577486802,1.9043474327775256,2.0346657786746154,2.1171986503165057,2.162376024509181,2.1724029550626263,2.269013188464242,2.5401114464164194,2.584998940200068,2.718281828459045],[1.0122131072292395,1.0249337912688201,1.0335096368286119,1.1395689250900787,1.1800265823368903,1.3974501251790248,1.4473964889541342,1.4789801118689956,1.502039384416045,1.5139217408402876,1.6513609507188836,1.6929717056868627,1.7325569160085985,1.7940585086471228,1.863359179297729,1.9275788517987242,2.059494281175743,2.1430263972431973,2.188746313313541,2.1988929343015795,2.296665382473414,2.571118187154068,2.6165413305088108,2.7514804959093087],[1.1923100791287429,1.2073272557760282,1.2174482924279282,1.3424869293172101,1.3901678489602596,1.6466075904707786,1.7054359781447723,1.7426317693790714,1.769788797181683,1.7837833910098488,1.9456780595497858,1.994683162508131,2.0413006656671864,2.1137271880420934,2.1953390875245806,2.2709691434199106,2.4263323524553013,2.52469965238013,2.5785375605944805,2.590486020539849,2.7056217629278434,3.028892788930931,3.0823433703208147,3.2410348219842278],[1.2388947350118118,1.2544822953171164,1.2649894914742543,1.3948849713634746,1.4444215957772875,1.7109026536636687,1.7720239678663334,1.810669385503677,1.838884710555501,1.853424608748457,2.0216353680398704,2.0725500918125443,2.1209842412748867,2.1962335968621067,2.281026537110455,2.359604398260845,2.521027018448604,2.623229935532157,2.679167196942432,2.6915815825994747,2.811209727193799,3.1471353253403147,3.2026888400689955,3.3676650455561923],[1.3038322230703567,1.3202247285785398,1.331275386457017,1.4679436455484727,1.5200690174976743,1.8005307980441507,1.8648511791208178,1.905518961639411,1.9352107454509049,1.95051147386133,2.127527502699475,2.1811060736199344,2.23207423487586,2.3112607263720566,2.4004903922022502,2.4831800574610856,2.6530526494556934,2.7606062975936427,2.819472765072381,2.8325373360328787,2.9584335035818348,3.3120013411916878,3.370483710850547,3.544183439331511],[1.4474304483426401,1.4656373805126315,1.4779098784168139,1.6296225533904154,1.6874890111039225,1.998844473572997,2.070250223196432,2.1153970959328685,2.14835888059556,2.165344678775392,2.3618469523881975,2.4213245526160314,2.477904113633653,2.565808346200973,2.6648617767041016,2.7566562358667452,2.945233968014707,3.0646351626080226,3.1299877528481836,3.144492010333515,3.284263017925185,3.676803469688534,3.7417261845555685,3.9345238856881277],[1.555042224797508,1.5745950032378853,1.5877748402564038,1.750732340045854,1.8128930559914125,2.147388418235605,2.224098923183586,2.272599746923411,2.308010360583839,2.3262581600875625,2.5373619467912873,2.6012588793514277,2.6620424188314447,2.756478283050004,2.862892115451034,2.9615079929557053,3.1641009504550914,3.2923767979373606,3.362587353064234,3.378169883023881,3.52833314551096,3.950088354841439,4.019853314040565,4.227043022153591],[1.5704957211439836,1.5902373237930159,1.603545242558532,1.7681169352345747,1.830893223823329,2.168711941778943,2.246183199093481,2.295165215436896,2.3309271345487588,2.3493559170475478,2.5625568108398387,2.6270878840083185,2.688474804511897,2.7838483649411274,2.891318870855512,2.9909138035393936,3.1955191963950353,3.32506873727972,3.3959762365197506,3.411713398726185,3.563367446180823,3.9893162172570533,4.059777168303049,4.269049980458375],[1.604460249421189,1.6246168315294003,1.638206079661498,1.8063268413121023,1.8704563111388592,2.2155796475525515,2.2947229543820207,2.34476257580449,2.38129663320738,2.4001232353075044,2.6179337143932973,2.683858642856233,2.746571802854238,2.8440064570674974,2.953799568656165,3.0555464772195386,3.2645752178122787,3.396924174986049,3.4693633833649398,3.485440403600141,3.6403706455643423,4.07553419098734,4.147524625541322,4.361375140486486],[1.8469566439766363,1.8702095151511795,1.8858815510773645,2.0795292725655243,2.1533822968080623,2.5506784782943543,2.6418006589336254,2.6994134376297496,2.7414767106214817,2.7631527483075553,3.013909081295255,3.089810818582353,3.16201437781432,3.274192630410669,3.400599071859315,3.517742293576613,3.7583915668031156,3.9107615494612693,3.9941580389364084,4.01266680065449,4.191022656286664,4.6918580290543765,4.774671401654102,5.020548683273393],[1.8932997351817806,1.9171221067351076,1.9331798373062326,2.131666337616685,2.207364841442555,2.6146166552307784,2.7080204717334246,2.7670765256477776,2.810193598931506,2.832412597966908,3.0894591371849094,3.167263730031833,3.241277837044712,3.3562697397149663,3.485846903185546,3.6059281087268693,3.8526154993890267,4.0088074240498655,4.094295355085301,4.113268188378615,4.296097559853896,4.809512255834762,4.89441188804374,5.146522265970957],[1.964140974558688,1.9888454248821288,2.0054980359748487,2.211375050470643,2.2898957642716997,2.712358747049538,2.809252238598914,2.8705152077829457,2.915243864725276,2.9382934771905593,3.2049543749342315,3.285669173070918,3.3624518692710588,3.4817456135668023,3.616170641088315,3.7407446555272914,3.996663092712684,4.158699493901576,4.247386414136382,4.267069281106646,4.456741662482203,4.989395286175461,5.077486200729292,5.339088719674721],[2.0198164898225417,2.045214757548417,2.062335329521244,2.2740205905060944,2.354758862264178,2.7891720792103887,2.8888081457164256,2.9518056620990403,2.9978009579745177,3.02150337883938,3.2957207917920948,3.3787230241315185,3.4576818964728497,3.5803570164616074,3.718592616631501,3.846698102676124,4.109872389692313,4.276502936893683,4.367704534684403,4.387945540546911,4.582997201351332,5.1307734934152815,5.221371497405341,5.490430461106549],[2.051691445537366,2.077485829586739,2.094874025973687,2.3098856386189683,2.3918931772199175,2.8331465549313406,2.9343525780622675,2.9983431586754743,3.045063599218446,3.0691396794975314,3.3476837474767738,3.4319955442234047,3.512200378653655,3.636811578923118,3.7772289918046,3.9073563656183645,4.174685162237294,4.343946117293189,4.43658744130297,4.457147948329279,4.655279349138615,5.211713244898157,5.303745548290942,5.577075574009093],[2.172486522042395,2.199800291280999,2.218211576589264,2.44584077671196,2.5326639268850335,2.9998289550698902,3.106989063166387,3.174745285729894,3.2242156756903264,3.2497091300231844,3.544653212240981,3.6339312530920678,3.718860596254449,3.850812315383109,3.999501871219853,4.137295816168989,4.420373652270968,4.599607573951431,4.69770809540989,4.719480338500871,4.929288675710879,5.518526257385097,5.6159888533721105,5.905430635440033],[2.196899125312825,2.224516137364211,2.2431323637409704,2.473311143152906,2.561106470554051,3.0335056527868307,3.1418683070379423,3.210385318101272,3.2604112609596916,3.2861909840411103,3.58445007683212,3.6747314985713597,3.76061552222517,3.894050735201311,4.044412029163161,4.183755077673469,4.470015822260601,4.651264826403607,4.750468164372272,4.772485126352643,4.984652158378789,5.580517471057902,5.679078076138579,5.971790971295424],[2.201927983022838,2.2296074319079295,2.2482658671396143,2.4789698719362674,2.566965460520006,3.0404427341295235,3.14905310766666,3.2177268413942777,3.267867229385935,3.293705922682385,3.592647917463739,3.683136036613993,3.7692167263710235,3.902957543119025,4.053663218161445,4.193325381301198,4.480241801581319,4.661905904026778,4.76133641434797,4.78340378457397,4.996056679440697,5.593287170040203,5.692073969081345,5.9854608238264575],[2.207298627584156,2.2350447574755923,2.2537482731623983,2.4850132136018894,2.5732226771951883,3.047851270854882,3.1567262035335184,3.2255673145080914,3.275829928704389,3.301731601109912,3.6014029224100064,3.6921117913910244,3.7784025175775544,3.9124697143026483,4.063543182296015,4.203546153624806,4.49116281924038,4.673270235067471,4.772943358598865,4.795064562568006,5.008236339504193,5.606924754292096,5.705953124297702,6.000059749344601],[2.2623894153260684,2.2908218346764713,2.3099884357640943,2.547008271803675,2.6374123513998264,3.123848216463156,3.235437589175713,3.3059959194588617,3.3575125696662966,3.3840605410905904,3.6912137353526076,3.784187530179914,3.8726331444863638,4.010048755124147,4.164895473444463,4.308394952803978,4.603195085235944,4.789850327608854,4.892012360793233,4.914685924671325,5.13318055192175,5.746821606767887,5.848328607401509,6.149812036578934],[2.3748633733618543,2.4047018249046492,2.424816966188402,2.673600874493053,2.7684896039340496,3.279013700598344,3.3961487394266716,3.470215597890892,3.524294327913453,3.552162631627735,3.8745957309941765,3.97219593863433,4.0650432417259035,4.209298289114996,4.371851832290803,4.522492519016189,4.831961888339366,5.027904749320974,5.135149492187422,5.158950980722051,5.388313799365485,6.032461730244441,6.139024605647448,6.455547952882476],[2.6347678099735545,2.667916157504461,2.690258222491804,2.9663489542458263,3.071652858094061,3.637694777690857,3.7676930689239194,3.8498969676269765,3.90991556400167,3.940843918926605,4.298604291644496,4.406915227916199,4.509952916388767,4.670038127137674,4.850425748613903,5.017589915930129,5.3609742317699665,5.578407496234954,5.6974155385539325,5.7238273758379465,5.9783307569320785,6.6927977515737025,6.811004313960471,7.162041460059948],[2.6544647454318833,2.687858810035602,2.7103673668581414,2.988516731877036,3.0946193150888504,3.6648362566466823,3.795818117026808,3.878643216782792,3.9391148261700204,3.970276141336444,4.330703068078948,4.439827561391015,4.543638890051584,4.7049240567607,4.886662999148612,5.055079942764229,5.401027317367117,5.620090697636003,5.739992978848157,5.766603198849683,6.023017055149726,6.742788186579883,6.86188815153103,7.215583281792655],[2.684682036774263,2.7184555075844674,2.741220339767523,3.0225245703878967,3.129856992038831,3.706469430247899,3.8389639016788975,3.922743351257858,3.983911090271353,4.015430735120291,4.379944539248439,4.490318608379922,4.595317536239148,4.758443723854756,4.942255855406539,5.112595743577588,5.462472915524715,5.68403787296613,5.80531337650494,5.8322285155596765,6.091575835759776,6.819475769611142,6.939951402788752,7.297722395753898],[2.718281828459045,2.7524794878344947,2.775531724449707,3.060337357961245,3.169047023143088,3.752754259114066,3.886937926801476,3.971780275280525,4.033723971060968,4.065644801667244,4.434694245266039,4.546461348687264,4.6527821475212185,4.817955206126045,5.00407239906285,5.176553021591782,5.530795013158681,5.755142618393373,5.877947453718819,5.905203476837469,6.167817318736268,6.904738787054575,7.026755645731736,7.38905609893065]],
-    colorscale: 'Viridis',
-    showscale: true,
-    colorbar: { tickfont: { color: theme.text } },
-    contours: { z: { show: false } },
-  }];
-  const layout = {
-    title: { text: 'Linear Poisson, 2D', font: { color: theme.text, size: 14 } },
-    paper_bgcolor: theme.bg,
-    plot_bgcolor: theme.bg,
-    font: { color: theme.text },
-    scene: {
-      camera: {
-        eye: { x: 0, y: 0, z: 2.1 },
-        up: { x: 0, y: 1, z: 0 },
-        projection: { type: 'orthographic' },
-      },
-      xaxis: { title: 'x', color: theme.text, gridcolor: theme.grid, backgroundcolor: theme.bg },
-      yaxis: { title: 'y', color: theme.text, gridcolor: theme.grid, backgroundcolor: theme.bg },
-      zaxis: { title: 'u', color: theme.text, gridcolor: theme.grid, backgroundcolor: theme.bg },
-    },
-    margin: { t: 40, l: 10, r: 10, b: 10 },
-  };
-  Plotly.newPlot('bramble_sp_1', data, layout, { displayModeBar: false, responsive: true });
-  window.brambleRegisterPlotlyChart('bramble_sp_1', function () {
-    const t = window.bramblePlotlyTheme();
-    return {
-      'font.color': t.text,
-      'scene.xaxis.color': t.text, 'scene.xaxis.gridcolor': t.grid, 'scene.xaxis.backgroundcolor': t.bg,
-      'scene.yaxis.color': t.text, 'scene.yaxis.gridcolor': t.grid, 'scene.yaxis.backgroundcolor': t.bg,
-      'scene.zaxis.color': t.text, 'scene.zaxis.gridcolor': t.grid, 'scene.zaxis.backgroundcolor': t.bg,
-      'title.font.color': t.text,
+  &quot;use strict&quot;;
+
+  // Deterministic PRNG (mulberry32) so a given (N, mesh type) pair always draws the same
+  // random mesh -- otherwise every slider tick would redraw a fresh random mesh and the
+  // diagnostics table would jitter for reasons unrelated to the parameter being changed.
+  function mulberry32(seed) {
+    return function () {
+      seed |= 0;
+      seed = (seed + 0x6D2B79F5) | 0;
+      var t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
+  }
+
+  // Non-uniform tensor mesh on [0, 1]: interior nodes are independent uniform draws on
+  // (0, 1), not a small jitter of a uniform partition, then sorted and floored on spacing
+  // so no two nodes collapse onto each other.
+  function buildAxis(N, random, seed) {
+    var x = new Float64Array(N + 1);
+    for (var i = 0; i <= N; i++) x[i] = i / N;
+    if (!random) return x;
+
+    var rand = mulberry32(seed);
+    var h = 1 / N;
+    for (i = 1; i < N; i++) x[i] = rand();
+    x = Array.prototype.slice.call(x).sort(function (a, b) { return a - b; });
+
+    var minGap = 0.15 * h;
+    for (i = 1; i < N; i++) {
+      if (x[i] - x[i - 1] < minGap) x[i] = x[i - 1] + minGap;
+    }
+    // Renormalise so the random interior still spans exactly to x[N] = 1.
+    var span = x[N] === x[0] ? 1 : (1 - x[0]) / (x[N] - x[0]);
+    for (i = 0; i <= N; i++) x[i] = x[0] + (x[i] - x[0]) * span;
+    x[0] = 0;
+    x[N] = 1;
+    return Float64Array.from(x);
+  }
+
+  var SOLUTIONS = {
+    exp: {
+      label: &quot;e^(x+y)&quot;,
+      u: function (x, y) { return Math.exp(x + y); },
+      g: function (x, y) { return -2 * Math.exp(x + y); },
+    },
+    sine: {
+      label: &quot;sin(pi x) sin(pi y)&quot;,
+      u: function (x, y) { return Math.sin(Math.PI * x) * Math.sin(Math.PI * y); },
+      g: function (x, y) { return 2 * Math.PI * Math.PI * Math.sin(Math.PI * x) * Math.sin(Math.PI * y); },
+    },
+    poly: {
+      label: &quot;(x^2-x)(y^2-y)&quot;,
+      u: function (x, y) { return (x * x - x) * (y * y - y); },
+      g: function (x, y) { return -2 * ((y * y - y) + (x * x - x)); },
+    },
+  };
+
+  // Matrix-free 5-point finite-volume Laplacian on a non-uniform tensor mesh: the
+  // coefficient a node assigns to a neighbour equals the coefficient that neighbour assigns
+  // back (both are 1/(shared spacing)), so the operator is symmetric positive definite and
+  // plain CG applies without a preconditioner needed for correctness.
+  function assembleProblem(N, X, Y, solKey) {
+    var sol = SOLUTIONS[solKey];
+    var m = N - 1; // interior nodes per axis
+    var dof = m * m;
+    var idx = function (k, l) { return l * m + k; };
+
+    var hxm = new Float64Array(m), hxp = new Float64Array(m);
+    var hym = new Float64Array(m), hyp = new Float64Array(m);
+    for (var k = 0; k < m; k++) { hxm[k] = X[k + 1] - X[k]; hxp[k] = X[k + 2] - X[k + 1]; }
+    for (var l = 0; l < m; l++) { hym[l] = Y[l + 1] - Y[l]; hyp[l] = Y[l + 2] - Y[l + 1]; }
+
+    var b = new Float64Array(dof);
+    var nnzList = []; // [row, col] pairs, diagonal included, for the sparsity panel
+    for (l = 0; l < m; l++) {
+      for (k = 0; k < m; k++) {
+        var ii = k + 1, jj = l + 1;
+        // Flux coefficients weighted by the control volume's transverse face length: a
+        // west/east flux is integrated over the cell's y-extent, a south/north flux over
+        // its x-extent -- omitting this (bare 1/h) breaks the balance with the g*cellVol
+        // right-hand side and silently scales the whole solution by ~h.
+        var faceY = 0.5 * (hym[l] + hyp[l]), faceX = 0.5 * (hxm[k] + hxp[k]);
+        var cW = faceY / hxm[k], cE = faceY / hxp[k], cS = faceX / hym[l], cN = faceX / hyp[l];
+        var cellVol = faceX * faceY;
+        var row = idx(k, l);
+        var rhs = sol.g(X[ii], Y[jj]) * cellVol;
+
+        if (k === 0) rhs += cW * sol.u(X[0], Y[jj]); else nnzList.push([row, idx(k - 1, l)]);
+        if (k === m - 1) rhs += cE * sol.u(X[N], Y[jj]); else nnzList.push([row, idx(k + 1, l)]);
+        if (l === 0) rhs += cS * sol.u(X[ii], Y[0]); else nnzList.push([row, idx(k, l - 1)]);
+        if (l === m - 1) rhs += cN * sol.u(X[ii], Y[N]); else nnzList.push([row, idx(k, l + 1)]);
+        nnzList.push([row, row]);
+
+        b[row] = rhs;
+      }
+    }
+
+    function matvec(v, out) {
+      for (var l2 = 0; l2 < m; l2++) {
+        for (var k2 = 0; k2 < m; k2++) {
+          var faceY2 = 0.5 * (hym[l2] + hyp[l2]), faceX2 = 0.5 * (hxm[k2] + hxp[k2]);
+          var cW2 = faceY2 / hxm[k2], cE2 = faceY2 / hxp[k2], cS2 = faceX2 / hym[l2], cN2 = faceX2 / hyp[l2];
+          var r = idx(k2, l2);
+          var s = (cW2 + cE2 + cS2 + cN2) * v[r];
+          if (k2 > 0) s -= cW2 * v[idx(k2 - 1, l2)];
+          if (k2 < m - 1) s -= cE2 * v[idx(k2 + 1, l2)];
+          if (l2 > 0) s -= cS2 * v[idx(k2, l2 - 1)];
+          if (l2 < m - 1) s -= cN2 * v[idx(k2, l2 + 1)];
+          out[r] = s;
+        }
+      }
+    }
+
+    return { dof: dof, b: b, matvec: matvec, nnz: nnzList, sol: sol, m: m };
+  }
+
+  function dot(a, b) {
+    var s = 0;
+    for (var i = 0; i < a.length; i++) s += a[i] * b[i];
+    return s;
+  }
+
+  // Plain conjugate gradient on the matrix-free operator. Returns the solution together
+  // with every alpha/beta scalar, which is all the Lanczos-CG connection needs to estimate
+  // the extreme eigenvalues of A without ever forming or storing it.
+  function conjugateGradient(dof, matvec, b) {
+    var x = new Float64Array(dof);
+    var r = b.slice();
+    var p = r.slice();
+    var Ap = new Float64Array(dof);
+    var rho = dot(r, r);
+    var rho0 = rho || 1;
+    var alphas = [], betas = [];
+    var maxIter = Math.min(3 * dof, 2000);
+
+    for (var iter = 0; iter < maxIter &amp;&amp; rho / rho0 > 1e-20; iter++) {
+      matvec(p, Ap);
+      var alpha = rho / dot(p, Ap);
+      for (var i = 0; i < dof; i++) { x[i] += alpha * p[i]; r[i] -= alpha * Ap[i]; }
+      var rhoNext = dot(r, r);
+      alphas.push(alpha);
+      if (rhoNext / rho0 <= 1e-20) { rho = rhoNext; break; }
+      var beta = rhoNext / rho;
+      betas.push(beta);
+      for (i = 0; i < dof; i++) p[i] = r[i] + beta * p[i];
+      rho = rhoNext;
+    }
+    return { x: x, alphas: alphas, betas: betas };
+  }
+
+  // Meurant's Lanczos/CG correspondence: the CG scalars are exactly the entries of the
+  // tridiagonal matrix the Lanczos process would have produced on A, so its extreme
+  // eigenvalues -- found here by Sturm-sequence bisection, no full eigendecomposition --
+  // estimate the extreme eigenvalues of A itself.
+  function conditionEstimate(alphas, betas) {
+    var mIter = alphas.length;
+    if (mIter < 2) return 1;
+    var delta = new Float64Array(mIter), gamma = new Float64Array(mIter - 1);
+    delta[0] = 1 / alphas[0];
+    for (var k = 1; k < mIter; k++) delta[k] = 1 / alphas[k] + betas[k - 1] / alphas[k - 1];
+    for (k = 0; k < mIter - 1; k++) gamma[k] = Math.sqrt(betas[k]) / alphas[k];
+
+    function sturmCount(x) {
+      var q = delta[0] - x;
+      var count = q < 0 ? 1 : 0;
+      for (var i = 1; i < mIter; i++) {
+        q = (delta[i] - x) - (gamma[i - 1] * gamma[i - 1]) / (q === 0 ? 1e-300 : q);
+        if (q < 0) count++;
+      }
+      return count;
+    }
+
+    var radius = 0;
+    for (k = 0; k < mIter; k++) {
+      var r = Math.abs(delta[k]) + (k > 0 ? Math.abs(gamma[k - 1]) : 0) + (k < mIter - 1 ? Math.abs(gamma[k]) : 0);
+      radius = Math.max(radius, r);
+    }
+
+    function findEigenvalue(targetCount) {
+      var lo = -radius, hi = radius;
+      for (var it = 0; it < 60; it++) {
+        var mid = 0.5 * (lo + hi);
+        if (sturmCount(mid) < targetCount) lo = mid; else hi = mid;
+      }
+      return hi;
+    }
+
+    var lambdaMin = findEigenvalue(1);
+    var lambdaMax = findEigenvalue(mIter);
+    return lambdaMax / lambdaMin;
+  }
+
+  var COLORMAPS = {
+    viridis: [&quot;#440154&quot;, &quot;#414487&quot;, &quot;#2a788e&quot;, &quot;#22a884&quot;, &quot;#7ad151&quot;, &quot;#fde725&quot;],
+    plasma: [&quot;#0d0887&quot;, &quot;#6a00a8&quot;, &quot;#b12a90&quot;, &quot;#e16462&quot;, &quot;#fca636&quot;, &quot;#f0f921&quot;],
+    turbo: [&quot;#30123b&quot;, &quot;#4147d6&quot;, &quot;#1ba8c9&quot;, &quot;#61c93a&quot;, &quot;#ecd21a&quot;, &quot;#e4460a&quot;, &quot;#7a0403&quot;],
+    gray: [&quot;#000000&quot;, &quot;#ffffff&quot;],
+  };
+  function hexToRgb(h) {
+    var v = parseInt(h.slice(1), 16);
+    return [(v >> 16) &amp; 255, (v >> 8) &amp; 255, v &amp; 255];
+  }
+  function colormapFn(name) {
+    var stops = COLORMAPS[name].map(hexToRgb);
+    return function (t) {
+      t = Math.max(0, Math.min(1, t));
+      var pos = t * (stops.length - 1);
+      var i0 = Math.floor(pos), i1 = Math.min(i0 + 1, stops.length - 1);
+      var f = pos - i0, a = stops[i0], b = stops[i1];
+      return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+    };
+  }
+
+  function drawField(canvas, N, X, Y, values, cmap) {
+    var ctx = canvas.getContext(&quot;2d&quot;);
+    var min = Infinity, max = -Infinity;
+    for (var i = 0; i < values.length; i++) { if (values[i] < min) min = values[i]; if (values[i] > max) max = values[i]; }
+    var range = max - min || 1;
+
+    var off = document.createElement(&quot;canvas&quot;);
+    off.width = N + 1; off.height = N + 1;
+    var octx = off.getContext(&quot;2d&quot;);
+    var img = octx.createImageData(N + 1, N + 1);
+    for (var j = 0; j <= N; j++) {
+      var srcRow = N - j; // flip so y increases upward
+      for (i = 0; i <= N; i++) {
+        var t = (values[srcRow * (N + 1) + i] - min) / range;
+        var rgb = cmap(t);
+        var p = (j * (N + 1) + i) * 4;
+        img.data[p] = rgb[0]; img.data[p + 1] = rgb[1]; img.data[p + 2] = rgb[2]; img.data[p + 3] = 255;
+      }
+    }
+    octx.putImageData(img, 0, 0);
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(off, 0, 0, canvas.width, canvas.height);
+    return [min, max];
+  }
+
+  function drawSpy(canvas, dof, nnzList) {
+    var ctx = canvas.getContext(&quot;2d&quot;);
+    var bg = getComputedStyle(canvas).backgroundColor;
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    var scale = canvas.width / dof;
+    var dot = Math.max(1, Math.ceil(scale));
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue(&quot;--accent&quot;) || &quot;#0e7c86&quot;;
+    for (var n = 0; n < nnzList.length; n++) {
+      var row = nnzList[n][0], col = nnzList[n][1];
+      ctx.fillRect(Math.floor(col * scale), Math.floor(row * scale), dot, dot);
+    }
+  }
+
+  function drawMeshNodes(canvas, X, Y) {
+    var ctx = canvas.getContext(&quot;2d&quot;);
+    var bg = getComputedStyle(canvas).backgroundColor;
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    var margin = 14;
+    var w = canvas.width - 2 * margin, h = canvas.height - 2 * margin;
+    var toPx = function (x) { return margin + x * w; };
+    var toPy = function (y) { return canvas.height - margin - y * h; };
+
+    ctx.strokeStyle = getComputedStyle(canvas).borderColor;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (var i = 0; i < X.length; i++) {
+      ctx.moveTo(toPx(X[i]), toPy(Y[0]));
+      ctx.lineTo(toPx(X[i]), toPy(Y[Y.length - 1]));
+    }
+    for (var j = 0; j < Y.length; j++) {
+      ctx.moveTo(toPx(X[0]), toPy(Y[j]));
+      ctx.lineTo(toPx(X[X.length - 1]), toPy(Y[j]));
+    }
+    ctx.stroke();
+
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue(&quot;--accent&quot;) || &quot;#0e7c86&quot;;
+    for (i = 0; i < X.length; i++) {
+      for (j = 0; j < Y.length; j++) {
+        ctx.beginPath();
+        ctx.arc(toPx(X[i]), toPy(Y[j]), 1.6, 0, 2 * Math.PI);
+        ctx.fill();
+      }
+    }
+  }
+
+  // Bramble's own normₕ and norm₁ₕ (src/space/inner_product.jl), not an independently
+  // chosen discretization: normₕ weights each node by its cell measure (nodal trapezoid
+  // weight -- half the sum of the two adjacent spacings, half-spacing at the boundary,
+  // exactly `half_spacing`/`cell_measure` in scalar_gridspace.jl); norm₁ₕ is
+  // sqrt(normₕ^2 + seminorm^2), the seminorm summing the backward-difference quotient
+  // along each direction weighted by that direction's spacing times the transverse cell
+  // measure -- which multiplies out to the transverse cell measure times (Δu)^2/h, the
+  // form used directly below.
+  function nodalWeights(Z) {
+    var N = Z.length - 1;
+    var w = new Float64Array(N + 1);
+    w[0] = (Z[1] - Z[0]) / 2;
+    w[N] = (Z[N] - Z[N - 1]) / 2;
+    for (var i = 1; i < N; i++) w[i] = (Z[i + 1] - Z[i - 1]) / 2;
+    return w;
+  }
+
+  function computeErrors(N, X, Y, uGrid, sol) {
+    var wx = nodalWeights(X), wy = nodalWeights(Y);
+    var normhSq = 0;
+    var errGrid = new Float64Array((N + 1) * (N + 1));
+    for (var j = 0; j <= N; j++) {
+      for (var i = 0; i <= N; i++) {
+        var e = uGrid[j * (N + 1) + i] - sol.u(X[i], Y[j]);
+        errGrid[j * (N + 1) + i] = e;
+        normhSq += wx[i] * wy[j] * e * e;
+      }
+    }
+    var seminormSq = 0;
+    for (j = 0; j <= N; j++) {
+      for (i = 0; i < N; i++) {
+        var dx = X[i + 1] - X[i];
+        var de = errGrid[j * (N + 1) + i + 1] - errGrid[j * (N + 1) + i];
+        seminormSq += wy[j] * (de / dx) * (de / dx) * dx;
+      }
+    }
+    for (j = 0; j < N; j++) {
+      var dy = Y[j + 1] - Y[j];
+      for (i = 0; i <= N; i++) {
+        var de2 = errGrid[(j + 1) * (N + 1) + i] - errGrid[j * (N + 1) + i];
+        seminormSq += wx[i] * (de2 / dy) * (de2 / dy) * dy;
+      }
+    }
+    return { normh: Math.sqrt(normhSq), norm1h: Math.sqrt(normhSq + seminormSq), errGrid: errGrid };
+  }
+
+  function fmt(x) {
+    if (!isFinite(x)) return &quot;--&quot;;
+    return x.toExponential(3);
+  }
+
+  function recompute() {
+    var N = parseInt(document.getElementById(&quot;nRange&quot;).value, 10);
+    document.getElementById(&quot;nLabel&quot;).textContent = N;
+    var random = document.getElementById(&quot;meshType&quot;).value === &quot;random&quot;;
+    var solKey = document.getElementById(&quot;solutionSel&quot;).value;
+    var fieldView = document.getElementById(&quot;fieldView&quot;).value;
+    var panel2 = document.getElementById(&quot;panel2Sel&quot;).value;
+    var cmap = colormapFn(document.getElementById(&quot;colormapSel&quot;).value);
+
+    // Seed depends on N: without it, every resolution would replay the same PRNG prefix
+    // (the first draws of one fixed sequence), so scrubbing the slider would just add
+    // points to an already-fixed pattern instead of drawing a genuinely different mesh.
+    var X = buildAxis(N, random, 20260916 + N * 7919);
+    var Y = buildAxis(N, random, 20260917 + N * 7919);
+    var problem = assembleProblem(N, X, Y, solKey);
+    var cg = conjugateGradient(problem.dof, problem.matvec, problem.b);
+    var kappa = conditionEstimate(cg.alphas, cg.betas);
+
+    var m = problem.m;
+    var uGrid = new Float64Array((N + 1) * (N + 1));
+    for (var j = 0; j <= N; j++) {
+      for (var i = 0; i <= N; i++) {
+        var interior = i > 0 &amp;&amp; i < N &amp;&amp; j > 0 &amp;&amp; j < N;
+        uGrid[j * (N + 1) + i] = interior ? cg.x[(j - 1) * m + (i - 1)] : problem.sol.u(X[i], Y[j]);
+      }
+    }
+
+    var errors = computeErrors(N, X, Y, uGrid, problem.sol);
+    var displayed = fieldView === &quot;solution&quot; ? uGrid : errors.errGrid.map(Math.abs);
+
+    document.getElementById(&quot;fieldTitle&quot;).textContent = fieldView === &quot;solution&quot; ? &quot;u_h(x, y)&quot; : &quot;|u_h - u|(x, y)&quot;;
+    drawField(document.getElementById(&quot;fieldCanvas&quot;), N, X, Y, displayed, cmap);
+
+    document.getElementById(&quot;panel2Title&quot;).textContent = panel2 === &quot;spy&quot; ? &quot;Matrix sparsity&quot; : &quot;Mesh nodes&quot;;
+    if (panel2 === &quot;spy&quot;) drawSpy(document.getElementById(&quot;panel2Canvas&quot;), problem.dof, problem.nnz);
+    else drawMeshNodes(document.getElementById(&quot;panel2Canvas&quot;), X, Y);
+
+    document.getElementById(&quot;diagDof&quot;).textContent = problem.dof;
+    document.getElementById(&quot;diagNnz&quot;).textContent = problem.nnz.length;
+    document.getElementById(&quot;diagL2&quot;).textContent = fmt(errors.normh);
+    document.getElementById(&quot;diagH1&quot;).textContent = fmt(errors.norm1h);
+    document.getElementById(&quot;diagCond&quot;).textContent = fmt(kappa);
+  }
+
+  [&quot;nRange&quot;, &quot;meshType&quot;, &quot;solutionSel&quot;, &quot;fieldView&quot;, &quot;panel2Sel&quot;, &quot;colormapSel&quot;].forEach(function (id) {
+    document.getElementById(id).addEventListener(&quot;input&quot;, recompute);
   });
+
+  if (window.__BRAMBLE_INITIAL_N__) document.getElementById(&quot;nRange&quot;).value = window.__BRAMBLE_INITIAL_N__;
+  recompute();
 })();
 </script>
+</body>
+</html>
+" width="100%" height="640"
+    style="max-width: 720px; border: 1px solid var(--pre-border-color, #d8d8d4); border-radius: 6px;"
+    sandbox="allow-scripts" loading="lazy"></iframe>
 <h2 id="Checking-the-answer"><a class="docs-heading-anchor" href="#Checking-the-answer">Checking the answer</a><a id="Checking-the-answer-1"></a><a class="docs-heading-anchor-permalink" href="#Checking-the-answer" title="Permalink"></a></h2><p>Not just that it ran — that it converges at the rate the scheme promises, on genuinely random grids, in 1D, 2D and 3D: one random coarse mesh per dimension, refined in place with <a href="../../api/#Bramble.iterative_refinement!"><code>iterative_refinement!</code></a> so every finer level is the <em>same</em> random mesh, dyadically split, rather than a fresh independent draw that would add its own noise to the measured rate.</p><pre><code class="language-julia hljs">function poisson_series(D::Int; n0::Int = 5, levels::Int)
     sol_d(x) = exp(sum(x))
     rhs_d(x) = -D * sol_d(x)
@@ -285,4 +706,4 @@ order3 = log(errs3[end - 1] / errs3[end]) / log(hs3[end - 1] / hs3[end])
   });
 })();
 </script>
-<p>Second order in every dimension, on grids chosen specifically not to make that trivially true — every curve&#39;s markers sit along the same reference slope. 3D uses fewer refinement levels than 2D, and 2D fewer than 1D: the same dyadic split costs <span>$8\times$</span> the points per level in 3D against <span>$4\times$</span> in 2D and <span>$2\times$</span> in 1D, so matching level counts across all three would make the higher dimensions by far the most expensive part of this page for no extra information.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../tutorials/plotting/">« Plotting directly</a><a class="docs-footer-nextpage" href="../poisson_nonlinear/">Nonlinear Poisson equation »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Tuesday 15 September 2026 23:26">Tuesday 15 September 2026</span>. Using Julia version 1.13.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+<p>Second order in every dimension, on grids chosen specifically not to make that trivially true — every curve&#39;s markers sit along the same reference slope. 3D uses fewer refinement levels than 2D, and 2D fewer than 1D: the same dyadic split costs <span>$8\times$</span> the points per level in 3D against <span>$4\times$</span> in 2D and <span>$2\times$</span> in 1D, so matching level counts across all three would make the higher dimensions by far the most expensive part of this page for no extra information.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../tutorials/plotting/">« Plotting directly</a><a class="docs-footer-nextpage" href="../poisson_nonlinear/">Nonlinear Poisson equation »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Tuesday 15 September 2026 23:50">Tuesday 15 September 2026</span>. Using Julia version 1.13.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

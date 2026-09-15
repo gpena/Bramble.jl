@@ -231,3 +231,41 @@ function spacetime_surface_plot(
     """
     return SolutionPlot(html)
 end
+
+"""
+    poisson_interactive_widget(uₕ; title = "", width = 720, height = 640) -> SolutionPlot
+
+An interactive 2D linear Poisson panel, running entirely client-side: a resolution slider,
+uniform/random mesh toggle and manufactured-solution picker drive an embedded
+finite-difference solver, with a solution/error heatmap next to a matrix-sparsity or
+mesh-nodes view and a table of discrete errors, degrees of freedom and a condition estimate.
+
+`uₕ` only sets the slider's starting resolution (its mesh's point count, clamped to the
+widget's `[8, 48]` range) — the panel resolves its own problem in JavaScript rather than
+replaying the Julia solve, since every control on the page needs a solve of its own. Runs in
+a sandboxed `iframe` (`srcdoc`, `allow-scripts` only) so its script and styling stay isolated
+from the surrounding page and every other chart on it.
+"""
+function poisson_interactive_widget(uₕ; title::AbstractString = "", width::Int = 720, height::Int = 640)
+    Ωₕ = mesh(space(uₕ))
+    nx, _ = npoints(Ωₕ, Tuple)
+    default_N = clamp(nx - 1, 8, 48)
+
+    raw_html = read(joinpath(@__DIR__, "assets", "widgets", "poisson_interactive.html"), String)
+    # Escape for use as a double-quoted HTML attribute value (order matters: `&` first, or
+    # the ampersands introduced by escaping `"` would themselves get escaped).
+    escaped = replace(raw_html, "&" => "&amp;")
+    escaped = replace(escaped, "\"" => "&quot;")
+    escaped = replace(escaped, "<body>" => "<body>\n<script>window.__BRAMBLE_INITIAL_N__ = $default_N;</script>")
+
+    div_id = _next_solution_plot_id()
+    title_html = isempty(title) ? "" : "<div style=\"font-weight: 500; margin-bottom: 6px;\">$title</div>"
+
+    html = """
+    $title_html
+    <iframe id="$div_id" srcdoc="$escaped" width="100%" height="$height"
+        style="max-width: $(width)px; border: 1px solid var(--pre-border-color, #d8d8d4); border-radius: 6px;"
+        sandbox="allow-scripts" loading="lazy"></iframe>
+    """
+    return SolutionPlot(html)
+end
