@@ -1,0 +1,124 @@
+module BrambleAppleAccelerateExt
+
+using Bramble: Bramble, AccelerateFactorization, BilinearForm, LinearForm, assemble, element, trial_space
+using AppleAccelerate:
+                       AppleAccelerate,
+                       AAFactorization,
+                       factor!,
+                       refactor!,
+                       SparseFactorizationCholesky,
+                       SparseFactorizationLDLT,
+                       SparseFactorizationLUTPP,
+                       SparseFactorizationQR
+using LinearAlgebra: LinearAlgebra, Factorization, ldiv!, factorize, issymmetric, diag
+using SparseArrays: SparseArrays, SparseMatrixCSC
+
+mutable struct ConcreteAccelerateFactorization{T} <: AccelerateFactorization{T}
+    aa_fact::AAFactorization{T}
+    sym::Symbol
+    dim::Int
+end
+
+Base.size(fact::ConcreteAccelerateFactorization) = (fact.dim, fact.dim)
+Base.size(fact::ConcreteAccelerateFactorization, d::Integer) = d <= 2 ? fact.dim : 1
+
+function _accelerate_fact_kind(A::AbstractMatrix, sym, kind)
+    if kind === :cholesky || sym === :spd || sym === :definite || sym == 1
+        return (SparseFactorizationCholesky, :spd)
+    elseif kind === :ldlt || sym === :symmetric || sym == 2
+        return (SparseFactorizationLDLT, :symmetric)
+    elseif kind === :qr
+        return (SparseFactorizationQR, :qr)
+    elseif kind === :lu || kind === :lutpp || sym === :unsymmetric || sym == 0
+        return (SparseFactorizationLUTPP, :unsymmetric)
+    elseif (sym === :auto || sym === nothing) && (kind === :auto || kind === nothing)
+        if issymmetric(A)
+            d = diag(A)
+            if !isempty(d) && all(x -> real(x) > 0, d)
+                return (SparseFactorizationCholesky, :spd)
+            else
+                return (SparseFactorizationLDLT, :symmetric)
+            end
+        else
+            return (SparseFactorizationLUTPP, :unsymmetric)
+        end
+    else
+        throw(
+            ArgumentError(
+            "Unknown AppleAccelerate symmetry/factorization option: sym=$sym, kind=$kind.",
+        ),
+        )
+    end
+end
+
+function Bramble._accelerate_factorize(A::SparseMatrixCSC; sym = :auto, kind = :auto, kwargs...)
+    if !Sys.isapple()
+        throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))
+    end
+
+    m, n = size(A)
+    m == n || throw(DimensionMismatch("Matrix must be square for sparse direct solve, got $(m)×$(n)"))
+
+    fact_kind, sym_flag = _accelerate_fact_kind(A, sym, kind)
+
+    aa = AAFactorization(A)
+    factor!(aa, fact_kind)
+
+    return ConcreteAccelerateFactorization{eltype(A)}(aa, sym_flag, n)
+end
+
+function LinearAlgebra.ldiv!(
+        x::AbstractVector, fact::ConcreteAccelerateFactorization, b::AbstractVector
+)
+    n = fact.dim
+    length(b) == n || throw(
+        DimensionMismatch("Right-hand side length $(length(b)) does not match matrix dimension $n"),
+    )
+    length(x) == n || throw(
+        DimensionMismatch("Output vector length $(length(x)) does not match matrix dimension $n"),
+    )
+    ldiv!(x, fact.aa_fact, b)
+    return x
+end
+
+function LinearAlgebra.ldiv!(
+        fact::ConcreteAccelerateFactorization, b::AbstractVector
+)
+    n = fact.dim
+    length(b) == n || throw(
+        DimensionMismatch("Vector length $(length(b)) does not match matrix dimension $n"),
+    )
+    ldiv!(fact.aa_fact, b)
+    return b
+end
+
+function Base.:\(fact::ConcreteAccelerateFactorization, b::AbstractVector)
+    return fact.aa_fact \ b
+end
+
+function Bramble._accelerate_refactor!(fact::ConcreteAccelerateFactorization, A::SparseMatrixCSC)
+    if !Sys.isapple()
+        throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))
+    end
+    m, n = size(A)
+    (m == fact.dim && n == fact.dim) || throw(
+        DimensionMismatch("Matrix size $(m)×$(n) does not match factorization dimension $(fact.dim)"),
+    )
+    refactor!(fact.aa_fact, A)
+    return fact
+end
+
+function Bramble._accelerate_solve(A::SparseMatrixCSC, F::AbstractVector; sym = :auto, kind = :auto, kwargs...)
+    fact = Bramble._accelerate_factorize(A; sym = sym, kind = kind, kwargs...)
+    return fact \ F
+end
+
+function LinearAlgebra.factorize(A::SparseMatrixCSC, ::Type{AccelerateFactorization}; kwargs...)
+    return Bramble._accelerate_factorize(A; kwargs...)
+end
+
+function LinearAlgebra.factorize(A::SparseMatrixCSC, ::Type{<:AccelerateFactorization}; kwargs...)
+    return Bramble._accelerate_factorize(A; kwargs...)
+end
+
+end # module

@@ -50,22 +50,22 @@ u = fact \\ F
 
 See also [`pde_solve`](@ref), [`mumps_solve`](@ref), [`assemble`](@ref).
 """
-function mumps_factorize(A::AbstractMatrix; kwargs...)
+function mumps_factorize(A::SparseMatrixCSC; kwargs...)
     return _mumps_factorize(A; kwargs...)
 end
 
 function mumps_factorize(
         a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing,
-        symmetrize::Bool = false, sym = :auto, kwargs...
+        sym = :auto, kwargs...
 )
     A = assemble(
-        a; dirichlet = dirichlet, dirichlet_components = dirichlet_components, symmetrize = symmetrize
+        a; dirichlet = dirichlet, dirichlet_components = dirichlet_components
     )
     return _mumps_factorize(A; sym = sym, kwargs...)
 end
 
 """
-    mumps_solve(A::AbstractMatrix, F::AbstractVector; sym = :auto, kwargs...) -> Vector
+    mumps_solve(A::SparseMatrixCSC, F::AbstractVector; sym = :auto, kwargs...) -> Vector
     mumps_solve(a::BilinearForm, l::LinearForm; dirichlet = nothing, dirichlet_components = nothing,
                 symmetrize = false, sym = :auto, kwargs...) -> VectorElement
 
@@ -89,9 +89,9 @@ A, F = assemble(a, l; dirichlet = :boundary => x -> 0.0)
 u = mumps_solve(A, F)
 ```
 
-See also [`mumps_factorize`](@ref), [`pde_solve`](@ref).
+See also [`mumps_factorize`](@ref), [`refactor!`](@ref), [`pde_solve`](@ref).
 """
-function mumps_solve(A::AbstractMatrix, F::AbstractVector; kwargs...)
+function mumps_solve(A::SparseMatrixCSC, F::AbstractVector; kwargs...)
     return _mumps_solve(A, F; kwargs...)
 end
 
@@ -106,6 +106,19 @@ function mumps_solve(
     return element(trial_space(a), u)
 end
 
+"""
+    mumps_refactor!(fact::MUMPSFactorization, A::SparseMatrixCSC) -> MUMPSFactorization
+
+Recompute the numeric factorization of `A` inside `fact` **reusing the existing symbolic
+factorization** (fill-reducing analysis and ordering). `A` must have the exact same
+sparsity pattern as the matrix originally factored.
+
+See also [`refactor!`](@ref), [`mumps_factorize`](@ref).
+"""
+function mumps_refactor!(fact::MUMPSFactorization, A::SparseMatrixCSC)
+    return _mumps_refactor!(fact, A)
+end
+
 function _mumps_factorize(::Any; kwargs...)
     return error(
         "mumps_factorize requires MUMPS.jl. Add `using MUMPS` before calling this function.",
@@ -115,5 +128,11 @@ end
 function _mumps_solve(::Any, ::Any; kwargs...)
     return error(
         "mumps_solve requires MUMPS.jl. Add `using MUMPS` before calling this function.",
+    )
+end
+
+function _mumps_refactor!(::Any, ::Any)
+    return error(
+        "mumps_refactor! requires MUMPS.jl. Add `using MUMPS` before calling this function.",
     )
 end

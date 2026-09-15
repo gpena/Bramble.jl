@@ -465,6 +465,38 @@ Requires [AlgebraicMultigrid.jl](https://github.com/JuliaLinearAlgebra/Algebraic
 amg_preconditioner
 ```
 
+### Sparse direct solvers and factorization reuse
+
+Bramble provides dedicated, first-class extensions for high-performance sparse linear solvers:
+- **SuiteSparse**: CHOLMOD Cholesky for symmetric positive-definite systems and UMFPACK LU for unsymmetric systems via `SuiteSparse.jl`.
+- **Apple Accelerate**: Native macOS `libSparse` Cholesky, $\mathrm{LDL}^T$, and LUTPP via `AppleAccelerate.jl` (on Apple Silicon / darwin).
+- **MUMPS**: Parallel multifrontal direct solver for large 2D/3D systems via `MUMPS.jl`.
+
+All three solvers support non-allocating symbolic reuse via the unified [`refactor!`](@ref) driver for transient PDE time loops and Newton iterations.
+
+```@docs
+sparse_factorize
+refactor!
+```
+
+### SuiteSparse solver
+
+```@docs
+SuiteSparseFactorization
+suitesparse_factorize
+suitesparse_solve
+suitesparse_refactor!
+```
+
+### Apple Accelerate solver (macOS)
+
+```@docs
+AccelerateFactorization
+accelerate_factorize
+accelerate_solve
+accelerate_refactor!
+```
+
 ### MUMPS sparse direct solver
 
 `mumps_factorize` and `mumps_solve` provide multifrontal sparse direct factorization and solves
@@ -478,6 +510,7 @@ Requires [MUMPS.jl](https://github.com/lruthotto/MUMPS.jl).
 MUMPSFactorization
 mumps_factorize
 mumps_solve
+mumps_refactor!
 ```
 
 ### Caching a coefficient-dependent assembly by element type

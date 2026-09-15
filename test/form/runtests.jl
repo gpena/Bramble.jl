@@ -27,4 +27,5 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
     include("jacobian_pattern.jl")
     include("type_cached_assemble.jl")
     include("semidiscrete.jl")
+    include("sparse_solvers.jl")
 end

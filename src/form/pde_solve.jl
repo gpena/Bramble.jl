@@ -36,11 +36,13 @@ this default path exists to provide a stable name for reverse-mode automatic dif
 tools to attach adjoint rules to.
 
 # Solvers
-- `:default` or `:suitesparse`: standard SuiteSparse sparse direct solve (`\\`).
-- `:mumps`: MUMPS multifrontal direct solver (requires [MUMPS.jl](https://github.com/lruthotto/MUMPS.jl)).
+- `:default`: standard sparse direct solve (`\\`).
+- `:suitesparse`: SuiteSparse direct solve with automatic/explicit symmetry (`CHOLMOD`/`UMFPACK`).
+- `:accelerate`: Apple Accelerate native `libSparse` direct solve on macOS (requires `AppleAccelerate.jl`).
+- `:mumps`: MUMPS multifrontal direct solver (requires `MUMPS.jl`).
 
 # Symmetry options (`sym`)
-For `solver = :mumps`:
+For `solver = :suitesparse`, `:accelerate`, or `:mumps`:
 - `:auto` (default): automatic detection.
 - `:spd`, `:definite`, or `1`: symmetric positive definite.
 - `:symmetric` or `2`: general symmetric.
@@ -114,22 +116,38 @@ end to end -- including gradients with respect to a Dirichlet boundary value.
 A, F = assemble(a, l; dirichlet = :boundary => x -> 0.0)
 u = pde_solve(A, F)
 
+# Using SuiteSparse explicit Cholesky
+using SuiteSparse
+u_ss = pde_solve(A, F; solver = :suitesparse, sym = :spd)
+
+# Using Apple Accelerate (macOS)
+using AppleAccelerate
+u_acc = pde_solve(A, F; solver = :accelerate, sym = :spd)
+
 # Using MUMPS
 using MUMPS
 u_mumps = pde_solve(A, F; solver = :mumps)
 ```
 
-See also [`assemble`](@ref), [`mumps_solve`](@ref), [`mumps_factorize`](@ref),
-[`linear_problem`](@ref).
+See also [`assemble`](@ref), [`sparse_factorize`](@ref), [`suitesparse_solve`](@ref),
+[`accelerate_solve`](@ref), [`mumps_solve`](@ref), [`linear_problem`](@ref).
 """
 function pde_solve(A::SparseMatrixCSC, F::AbstractVector; solver::Symbol = :default, sym = :auto, kwargs...)
-    if solver === :default || solver === :suitesparse
+    if solver === :default
         return A \ F
+    elseif solver === :suitesparse
+        return suitesparse_solve(A, F; sym = sym, kwargs...)
+    elseif solver === :accelerate
+        return accelerate_solve(A, F; sym = sym, kwargs...)
     elseif solver === :mumps
-        return _mumps_solve(A, F; sym = sym, kwargs...)
+        return mumps_solve(A, F; sym = sym, kwargs...)
     else
-        throw(ArgumentError("Unknown solver: $solver. Expected :default, :suitesparse, or :mumps."))
+        throw(
+            ArgumentError(
+            "Unknown solver: $solver. Expected :default, :suitesparse, :accelerate, or :mumps.",
+        ),
+        )
     end
 end
 
-pde_solve(fact::MUMPSFactorization, F::AbstractVector) = fact \ F
+pde_solve(fact::Factorization, F::AbstractVector) = fact \ F
