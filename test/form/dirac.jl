@@ -178,6 +178,83 @@ using Bramble:
         @test u_num ≈ u_exact atol = 1e-12
     end
 
+    @testset "2D Poisson Problem with Dirac Delta Source (Green Function)" begin
+        # -Δu = S δ(x - x0, y - y0) on (0,1)², u = 0 on ∂Ω. Separation of variables gives a
+        # sine series in x with a closed-form (sinh) Green's function in y for each mode --
+        # exponentially convergent in the number of terms, unlike a raw double sine series:
+        #
+        #   G(x, y; x0, y0) = Σₙ 2 sin(nπx) sin(nπx0) sinh(nπ y<) sinh(nπ (1 - y>)) /
+        #                     (nπ sinh(nπ))
+        #
+        # with y< = min(y, y0), y> = max(y, y0). Standard eigenfunction-expansion result for
+        # the Dirichlet Laplacian Green's function on a rectangle.
+        function green2d(x, y, x0, y0; n_terms = 60)
+            total = 0.0
+            ylo, yhi = min(y, y0), max(y, y0)
+            for n in 1:n_terms
+                k = n * pi
+                total += 2 * sin(k * x) * sin(k * x0) * sinh(k * ylo) * sinh(k * (1 - yhi)) /
+                         (k * sinh(k))
+            end
+            return total
+        end
+
+        x0, y0 = 0.35, 0.65
+        S = 3.0
+        eval_pts = ((0.15, 0.15), (0.8, 0.2), (0.5, 0.9))  # away from the singularity
+
+        errors = [Float64[] for _ in eval_pts]
+        for N in (21, 41, 81)
+            Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (N, N), (true, true))
+            Wₕ = gridspace(Ωₕ)
+
+            a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+            l = form(Wₕ, v -> innerₕ(dirac((x0, y0), S), v))
+            A, F = assemble(a, l; dirichlet = :boundary => x -> 0.0)
+
+            uₕ = element(Wₕ)
+            uₕ .= A \ F
+
+            for (i, p) in enumerate(eval_pts)
+                u_exact = S * green2d(p[1], p[2], x0, y0)
+                push!(errors[i], abs(interpolate_at(uₕ, p) - u_exact))
+            end
+        end
+
+        for e in errors
+            rate = log(e[1] / e[end]) / log(4.0)
+            @test rate > 1.8  # 2nd order convergence away from the singularity
+        end
+    end
+
+    @testset "Time-Dependent Strength via semidiscretize" begin
+        # A pulsed/moving source: strength read from a live `Ref`, refilled from `t` by
+        # `update_coefficients!` before each assembly -- the same discipline
+        # test/form/semidiscrete.jl exercises for a scalar coefficient, applied here to a
+        # `dirac` strength so a moving or time-modulated point source works under
+        # `semidiscretize` (#226's own acceptance criterion).
+        Ωₕ = mesh(domain(interval(0.0, 1.0)), 21, false)
+        Wₕ = gridspace(Ωₕ)
+        n = ndofs(Wₕ)
+        x0 = 0.5
+
+        s_ref = Ref(0.0)
+        a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
+        l = form(Wₕ, v -> innerₕ(dirac(x0, s_ref), v))
+
+        strength_at(t) = 2.0 + sin(t)
+        sd = semidiscretize(a, l; (update_coefficients!) = t -> (s_ref[] = strength_at(t)))
+
+        du = zeros(n)
+        sd(du, zeros(n), nothing, 0.7)
+        @test sum(du) ≈ strength_at(0.7)
+
+        du2 = zeros(n)
+        sd(du2, zeros(n), nothing, 2.1)
+        @test sum(du2) ≈ strength_at(2.1)
+        @test !(du2 ≈ du)
+    end
+
     @testset "Composite Space Routing (Non-Uniform)" begin
         Random.seed!(20260914)
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 11, false)
