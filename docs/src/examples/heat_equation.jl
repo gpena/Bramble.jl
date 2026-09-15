@@ -210,6 +210,73 @@ maximum(abs.(sol_t_rosenbrock.u[end] .- sol_t_fbdf.u[end]))
 # hand-written `tgrad` was needed for the operator itself.
 @test maximum(abs.(sol_t_rosenbrock.u[end] .- sol_t_fbdf.u[end])) < 1.0e-6              #src
 #
+# ## Hand-rolled backward Euler with `assemble_add!`
+#
+# `semidiscretize`/`ode_problem` above hide the per-step matrix assembly entirely. Building
+# it explicitly -- the shape a solver without a method-of-lines layer expects -- is what
+# [`assemble_add!`](@ref) exists for: accumulating ``M/\Delta t`` and the ``t``-dependent
+# stiffness piece ``K(t)`` into the same preallocated matrix, in place, with no temporary
+# and no sparse matrix addition of its own on every step. Backward Euler for the same
+# varying-diffusivity problem as the section above,
+#
+# ```math
+# \Bigl(\frac{M}{\Delta t} + K(t^{n+1})\Bigr) u^{n+1} = \frac{M}{\Delta t} u^n + F,
+# ```
+#
+# one linear solve per step (``F`` is the static source `gₕ` from `l_t` above, unchanged by
+# `t`, so it is assembled once outside the loop):
+
+using SparseArrays: nonzeros
+
+Δt = 1 / 200
+nsteps = round(Int, 1 / Δt)
+
+m_form = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
+M_mat = assemble(m_form)
+F_source = assemble(l_t)
+
+αₕ_be = element(Wₕ, 0.0)
+k_form = form(Wₕ, Wₕ, (u, v) -> inner₊(αₕ_be * ∇₋ₕ(u), ∇₋ₕ(v)))
+
+# `a` (the plain Laplacian at the top of this page) shares `k_form`'s stencil for any
+# value of `αₕ_be`, so its pattern is wide enough for both pieces without ever assembling
+# `a` itself into the matrix below.
+A_be = allocate_system_matrix(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇₋ₕ(u), ∇₋ₕ(v))))
+
+bcs_be = dirichlet_constraints(Ωₕ, :boundary => x -> 0.0)
+u_be = parent(Rₕ(Wₕ, x -> uexact(x, 0.0)))
+F_be = zeros(ndofs(Wₕ))
+
+for step in 1:nsteps
+    t = step * Δt
+    fill!(parent(αₕ_be), α(t))       # live coefficient, read by k_form's next assembly
+
+    fill!(nonzeros(A_be), 0.0)
+    assemble_add!(A_be, m_form, 1 / Δt)
+    assemble_add!(A_be, k_form)
+    dirichlet_bc!(A_be, Ωₕ, :boundary)   # constrain once, last -- see assemble_add!'s own note
+
+    F_be .= F_source .+ (M_mat * u_be) ./ Δt
+    dirichlet_bc!(F_be, Ωₕ, bcs_be, :boundary)
+
+    global u_be = A_be \ F_be
+end
+
+maximum(abs.(u_be .- sol_t_fbdf.u[end]))
+
+# `assemble_add!`'s row is `nonzeros(A_be)`, not `A_be` itself: refilling every entry the
+# pattern holds costs the stored nonzeros, where `fill!(A_be, 0)` would walk the whole
+# dense `m × n` index space `SparseMatrixCSC`'s generic `AbstractArray` fallback covers.
+# `dirichlet_bc!` runs *after* both accumulations, never between them -- accumulating a
+# second piece into an already-constrained row would add its own contribution on top of
+# the identity `dirichlet_bc!` wrote there.
+#
+# Backward Euler at ``\Delta t = 1/200`` against the adaptive, high-accuracy `FBDF` solve
+# above: first order in time, so the two are close but not equal -- the discrepancy this
+# checks is bounded well above round-off and well below a scheme that regressed to a wrong
+# answer entirely.
+@test 1.0e-4 < maximum(abs.(u_be .- sol_t_fbdf.u[end])) < 1.0e-3                         #src
+#
 # ## Checking the answer
 #
 # Second order in space is the promise. Refining the mesh while holding the time tolerance far
@@ -303,8 +370,8 @@ u_end = sol_drive.u[end]
 #
 # ## See also
 #
-#   - [`semidiscretize`](@ref), [`ode_problem`](@ref), [`ode_function`](@ref) in the
-#     [API reference](../api.md).
+#   - [`semidiscretize`](@ref), [`ode_problem`](@ref), [`ode_function`](@ref), [`assemble_add!`](@ref)
+#     in the [API reference](../api.md).
 #   - [Linear Poisson](poisson_linear.md) for the steady version of the same spatial operator.
 #   - [Coupled reaction-diffusion](coupled_reaction_diffusion.md) for systems on a composite
 #     space, which `semidiscretize` accepts unchanged.

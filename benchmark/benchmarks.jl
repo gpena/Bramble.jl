@@ -43,6 +43,7 @@
 using BenchmarkTools
 using Bramble
 using DoubleFloats: Double64
+using SparseArrays: nonzeros
 
 # Group 11 (jacobian sparsity) needs the sparse-AD stack `jacobian_pattern`/
 # `ast_sparsity_detector` (#21, #13) are actually compared against. Brought in the same
@@ -302,6 +303,33 @@ let W1 = gridspace(_mesh1()), f1 = Rₕ(W1, sin), v1 = Rₕ(W1, cos), l1 = Bramb
     g["assemble! (matrix) 2D"] = @benchmarkable Bramble.assemble!(
         $Am, $am) samples=5 evals=1
 
+    # assemble_add! (gpena/Bramble.jl#231): the saving it exists for is against the
+    # workaround a caller reaches for without it -- assemble each piece separately and
+    # add, paying for a second matrix's worth of allocation and a full sparse add every
+    # call, not just the first. Both entries below do one representative time step:
+    # combine a mass-like (diagonal) and a stiffness-like (`am`'s own off-diagonal
+    # stencil) piece with a live coefficient, matching M/Δt + θK.
+    am_mass = Bramble.form(Wm, Wm, (u, v) -> innerₕ(u, v))
+    a_wide = Bramble.form(Wm, Wm, (u, v) -> innerₕ(u, v) + innerₕ(D₋ₓ(u), D₋ₓ(v)))
+    A_wide = Bramble.allocate_system_matrix(a_wide)
+    θ = Ref(2.0)
+
+    g["assemble_add! (matrix) 2D"] = @benchmarkable(begin
+            fill!(nonzeros($A_wide), 0.0)
+            Bramble.assemble_add!($A_wide, $am_mass)
+            Bramble.assemble_add!($A_wide, $am, $θ)
+        end,
+        evals=1,
+        samples=5)
+
+    g["assemble-then-add (matrix) 2D"] = @benchmarkable(begin
+            M=Bramble.assemble($am_mass)
+            K=Bramble.assemble($am)
+            M .+ $θ[] .* K
+        end,
+        evals=1,
+        samples=5)
+
     # The Parallel() entries below moved when the threaded sweeps started colouring by
     # bands rather than by points (utils/linear_algebra.jl, form/{linear,bilinear}.jl):
     # measured 1.02-2.05x on bilinear assembly and 1.10-2.17x on linear, most on wide
@@ -475,6 +503,13 @@ const ALLOCATION_BOUNDS = Dict(
     ("forms", "assemble! 1D") => 0,
     ("forms", "assemble! 2D") => 0,
     ("forms", "assemble! (matrix) 2D") => 0,
+    # assemble_add! (gpena/Bramble.jl#231) replays from the same cache assemble! does,
+    # against the same warm (A_wide, am_mass)/(A_wide, am) pairs across every sample --
+    # zero allocation exactly like "assemble! (matrix) 2D" above. Its point of comparison,
+    # "assemble-then-add (matrix) 2D", is deliberately *not* gated: it allocates two fresh
+    # matrices and a third for the sum every call, by construction, which is the cost
+    # assemble_add! exists to avoid -- read by a person, alongside the timing.
+    ("forms", "assemble_add! (matrix) 2D") => 0,
     ("forms", "evaluate! 1D") => 0,
     ("forms", "l(vₕ) 1D") => 0,
     ("forms", "form (linear, 2D)") => 0,

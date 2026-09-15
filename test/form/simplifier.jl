@@ -12,9 +12,11 @@ using Bramble:
                GridFunctionScale,
                BilinearProduct,
                LinearProduct,
+               DiracSource,
                ShiftNode,
                shift_op,
                source_function,
+               dirac,
                simplify_ast,
                resolve_ast,
                resolve_form_ast,
@@ -254,6 +256,23 @@ end
         @test ast.scalar == 5
         @test ast.inner_op isa LinearProduct
         @test assemble(l) ≈ 5 .* assemble(form(Wₕ, v -> innerₕ(sf, v)))
+    end
+
+    @testset "Lifting and combining a DiracSource (linear form)" begin
+        # `dirac(...)` (a `DiracSource`) is a genuine `LazyOp` source exactly like
+        # `source_function` above, so it lifts and combines the same way (#226).
+        d = dirac((0.3, 0.4), 1.0)
+        @test d isa DiracSource
+        l = form(Wₕ, v -> innerₕ(2 * d, v) + innerₕ(3 * d, v))
+        ast = resolve_form_ast(l)
+        @test ast isa OperatorScale
+        @test ast.scalar == 5
+        @test ast.inner_op isa LinearProduct
+        @test assemble(l) ≈ 5 .* assemble(form(Wₕ, v -> innerₕ(d, v)))
+
+        # a zero-scaled DiracSource collapses like any other source
+        l_zero = form(Wₕ, v -> innerₕ(0 * d, v))
+        @test resolve_form_ast(l_zero) isa ZeroOperator
     end
 end
 

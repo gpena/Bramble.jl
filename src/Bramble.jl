@@ -77,7 +77,7 @@ export *
 export Rₕ, Rₕ!, avgₕ, avgₕ!
 export interpolate_at, interpolation_matrix, πₕ, πₕ!
 
-export innerₕ
+export innerₕ, dirac
 export inner₊, inner₊ₓ, inner₊ᵧ, inner₊₂
 export snorm₁ₕ, norm₁ₕ, norm₊, normₕ
 
@@ -113,7 +113,9 @@ export M₋ₓ!, M₋ᵧ!, M₋₂!
 export M₊ₓ!, M₊ᵧ!, M₊₂!
 
 export dirichlet_constraints, dirichlet_bc!, symmetrize!
+export reaction, reaction_density
 export form, assemble, assemble!, assemble_parallel!, allocate_system_matrix, evaluate!
+export assemble_add!
 export jacobian_pattern, ast_sparsity_detector
 export type_cached_assemble!
 export Semidiscretization, semidiscretize, mass_matrix, operator_matrix
@@ -195,9 +197,11 @@ include("form/simplifier.jl")
 include("form/dirichlet_constraints.jl")
 include("form/linear.jl")
 include("form/bilinear.jl")
+include("form/reaction.jl")
 include("form/bilinear_traversal.jl")
 include("form/bilinear_pattern.jl")
 include("form/bilinear_execution.jl")
+include("form/assemble_add.jl")
 include("form/jacobian_pattern.jl")
 include("form/type_cached_assemble.jl")
 include("form/symmetry.jl")

@@ -31,7 +31,7 @@
 # differentiated, independent of (and found only after fixing) the `Union` gpena/Bramble.jl#240
 # was originally filed against.
 function _record_segment!(
-        A::SparseMatrixCSC, term::TERM, sp, row_offset::Int, col_offset::Int
+        A::SparseMatrixCSC, term::TERM, sp, row_offset::Int, col_offset::Int, α
 ) where {TERM}
     n = length(indices(mesh(sp)))
     point_ptr = Vector{Int}(undef, n + 1)
@@ -40,7 +40,7 @@ function _record_segment!(
     total = count_sink.n
     @inbounds point_ptr[n + 1] = total + 1
 
-    sink = RecordSink(A, term, point_ptr, Vector{Int}(undef, total), 0)
+    sink = RecordSink(A, term, point_ptr, Vector{Int}(undef, total), α, 0)
     visit_bilinear_stencil(sink, term, sp, row_offset, col_offset)
     # No `::Segment{D}` type assertion here: `Segment` alone (no `D`) is an abstract
     # `UnionAll`, and asserting a value into it would *widen* what the compiler tracks the
@@ -126,12 +126,15 @@ function _replay_segment!(
         sp,
         row_offset::Int,
         col_offset::Int,
-        segment::Segment
+        segment::Segment,
+        α
 ) where {TERM}
     if segment.is_diagonal
         visit_bilinear_stencil(
-            DiagonalReplaySink(A, segment.interior, segment.base, segment.stride, segment.P),
-            ReplaySink(A, segment.point_ptr, segment.positions),
+            DiagonalReplaySink(
+                A, segment.interior, segment.base, segment.stride, segment.P, α
+            ),
+            ReplaySink(A, segment.point_ptr, segment.positions, α),
             term,
             sp,
             row_offset,
@@ -139,7 +142,11 @@ function _replay_segment!(
         )
     else
         visit_bilinear_stencil(
-            ReplaySink(A, segment.point_ptr, segment.positions), term, sp, row_offset, col_offset
+            ReplaySink(A, segment.point_ptr, segment.positions, α),
+            term,
+            sp,
+            row_offset,
+            col_offset
         )
     end
     return nothing
@@ -153,37 +160,37 @@ end
 # shape at the value level, not the type level) -- no `where {T <: ...}` indirection needed
 # to keep the vector unboxed, unlike the `AnySegment{D}` union this replaced.
 function _record_bilinear_core!(
-        A::SparseMatrixCSC, trial_space, test_space, ast::AST_TYPE, segments::Vector{Segment{D}}
+        A::SparseMatrixCSC, trial_space, test_space, ast::AST_TYPE, segments::Vector{Segment{D}}, α
 ) where {AST_TYPE, D}
     _check_block_meshes(ast, trial_space, test_space)
-    push!(segments, _record_segment!(A, ast, test_space, 0, 0))
+    push!(segments, _record_segment!(A, ast, test_space, 0, 0, α))
     return nothing
 end
 
 function _replay_bilinear_core!(
-        A::SparseMatrixCSC, trial_space, test_space, ast::AST_TYPE, segments::Vector{Segment{D}}
+        A::SparseMatrixCSC, trial_space, test_space, ast::AST_TYPE, segments::Vector{Segment{D}}, α
 ) where {AST_TYPE, D}
     _check_block_meshes(ast, trial_space, test_space)
-    _replay_segment!(A, ast, test_space, 0, 0, segments[1])
+    _replay_segment!(A, ast, test_space, 0, 0, segments[1], α)
     return nothing
 end
 
 function _record_blocks!(
-        A::SparseMatrixCSC, op::OperatorAdd, trial_leaves, test_leaves, segments::Vector{Segment{D}}
+        A::SparseMatrixCSC, op::OperatorAdd, trial_leaves, test_leaves, segments::Vector{Segment{D}}, α
 ) where {D}
-    _record_blocks!(A, op.left_op, trial_leaves, test_leaves, segments)
-    _record_blocks!(A, op.right_op, trial_leaves, test_leaves, segments)
+    _record_blocks!(A, op.left_op, trial_leaves, test_leaves, segments, α)
+    _record_blocks!(A, op.right_op, trial_leaves, test_leaves, segments, α)
     return nothing
 end
 
 function _record_blocks!(
-        A::SparseMatrixCSC, term::TERM, trial_leaves, test_leaves, segments::Vector{Segment{D}}
+        A::SparseMatrixCSC, term::TERM, trial_leaves, test_leaves, segments::Vector{Segment{D}}, α
 ) where {TERM, D}
     for blk in blocks(term, trial_leaves, test_leaves)
         _check_block_meshes(term, blk.trial_leaf, blk.test_leaf)
         push!(
             segments,
-            _record_segment!(A, term, blk.test_leaf, blk.row_offset, blk.col_offset)
+            _record_segment!(A, term, blk.test_leaf, blk.row_offset, blk.col_offset, α)
         )
     end
     return nothing
@@ -198,10 +205,11 @@ function _replay_blocks!(
         trial_leaves,
         test_leaves,
         segments::Vector{Segment{D}},
-        next::Int
+        next::Int,
+        α
 ) where {D}
-    next = _replay_blocks!(A, op.left_op, trial_leaves, test_leaves, segments, next)
-    next = _replay_blocks!(A, op.right_op, trial_leaves, test_leaves, segments, next)
+    next = _replay_blocks!(A, op.left_op, trial_leaves, test_leaves, segments, next, α)
+    next = _replay_blocks!(A, op.right_op, trial_leaves, test_leaves, segments, next, α)
     return next
 end
 
@@ -211,13 +219,14 @@ function _replay_blocks!(
         trial_leaves,
         test_leaves,
         segments::Vector{Segment{D}},
-        next::Int
+        next::Int,
+        α
 ) where {TERM, D}
     for blk in blocks(term, trial_leaves, test_leaves)
         _check_block_meshes(term, blk.trial_leaf, blk.test_leaf)
         next += 1
         _replay_segment!(
-            A, term, blk.test_leaf, blk.row_offset, blk.col_offset, segments[next]
+            A, term, blk.test_leaf, blk.row_offset, blk.col_offset, segments[next], α
         )
     end
     return next
@@ -228,10 +237,11 @@ function _record_bilinear_core!(
         trial_space::CompositeGridSpace,
         test_space::CompositeGridSpace,
         ast::AST_TYPE,
-        segments::Vector{Segment{D}}
+        segments::Vector{Segment{D}},
+        α
 ) where {AST_TYPE, D}
     _record_blocks!(
-        A, ast, leaf_spaces_offsets(trial_space), leaf_spaces_offsets(test_space), segments
+        A, ast, leaf_spaces_offsets(trial_space), leaf_spaces_offsets(test_space), segments, α
     )
     return nothing
 end
@@ -241,7 +251,8 @@ function _replay_bilinear_core!(
         trial_space::CompositeGridSpace,
         test_space::CompositeGridSpace,
         ast::AST_TYPE,
-        segments::Vector{Segment{D}}
+        segments::Vector{Segment{D}},
+        α
 ) where {AST_TYPE, D}
     _replay_blocks!(
         A,
@@ -249,7 +260,8 @@ function _replay_bilinear_core!(
         leaf_spaces_offsets(trial_space),
         leaf_spaces_offsets(test_space),
         segments,
-        0
+        0,
+        α
     )
     return nothing
 end
@@ -260,16 +272,28 @@ end
 # `A`: the cache's positions are only valid for the exact stencil shape they were recorded
 # against, and a different `ast` can visit a different number of entries per point.
 function _assemble_bilinear_core_cached!(
-        A::SparseMatrixCSC, trial_space, test_space, ast::AST_TYPE, cache::_AssemblyCache{D}
+        A::SparseMatrixCSC,
+        trial_space,
+        test_space,
+        ast::AST_TYPE,
+        cache::_AssemblyCache{D},
+        α = true
 ) where {AST_TYPE, D}
     if cache.A === A && cache.ast === ast
-        _replay_bilinear_core!(A, trial_space, test_space, ast, cache.segments)
+        _replay_bilinear_core!(A, trial_space, test_space, ast, cache.segments, α)
     else
         # A fresh vector, not `empty!` on whatever `cache.segments` currently references,
         # in case that reference is ever shared (it never is, today, but nothing here
         # relies on `cache.segments` being exclusively owned).
+        #
+        # Recorded with `α`: recording performs the (first) real scatter as well as
+        # learning the `nzval` positions (`_record_segment!`'s own docstring), so the very
+        # first `assemble_add!(A, a, α)` call must scale that scatter too, not only the
+        # replays after it -- the cache is keyed on `(A, ast)` alone, never on `α`, since
+        # nzval *positions* never depend on it: an `assemble_add!` caller is free to change
+        # `α` (a `Ref`'s current value, say) on every call and still replay from cache.
         segments = Segment{D}[]
-        _record_bilinear_core!(A, trial_space, test_space, ast, segments)
+        _record_bilinear_core!(A, trial_space, test_space, ast, segments, α)
         cache.segments = segments
         cache.A = A
         cache.ast = ast
@@ -290,7 +314,8 @@ end
         lin_indices,
         mesh_markers,
         row_offset::Int,
-        col_offset::Int
+        col_offset::Int,
+        α
 ) where {TERM}
     stencil = local_stencil(term, sp, I, mesh_markers, lin_indices[I])
 
@@ -300,7 +325,7 @@ end
     for (off_u, off_v, weight) in stencil
         row, col = _entry_target(lin_indices, I, off_u, off_v, row_offset, col_offset)
         row == 0 && continue
-        add_to_sparse!(A, row, col, weight, term)
+        add_to_sparse!(A, row, col, α * weight, term)
     end
     return nothing
 end
@@ -314,10 +339,11 @@ end
         lin_indices,
         mesh_markers,
         row_offset::Int,
-        col_offset::Int
+        col_offset::Int,
+        α
 ) where {TERM}
     Threads.@threads for I in idxs
-        _scatter_point!(A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset)
+        _scatter_point!(A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α)
     end
     return nothing
 end
@@ -345,12 +371,13 @@ once.
         lin_indices,
         mesh_markers,
         row_offset::Int,
-        col_offset::Int
+        col_offset::Int,
+        α
 ) where {TERM}
     Threads.@threads for b in bidx
         for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
             _scatter_point!(
-                A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset
+                A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α
             )
         end
     end
@@ -359,7 +386,7 @@ end
 
 # Every colour in turn, using strided subgrids.
 function _sweep_bilinear!(
-        A::SparseMatrixCSC, sp, term::TERM, strides, row_offset::Int, col_offset::Int
+        A::SparseMatrixCSC, sp, term::TERM, strides, row_offset::Int, col_offset::Int, α = true
 ) where {TERM}
     Ωₕ = mesh(sp)
     grid_inds = indices(Ωₕ)
@@ -394,7 +421,8 @@ function _sweep_bilinear!(
                 lin_indices,
                 mesh_markers,
                 row_offset,
-                col_offset
+                col_offset,
+                α
             )
         end
         return A
@@ -404,7 +432,7 @@ function _sweep_bilinear!(
     # colouring has no width requirement.
     if prod(strides) == 1
         _sweep_bilinear_colour!(
-            A, sp, term, grid_inds, lin_indices, mesh_markers, row_offset, col_offset
+            A, sp, term, grid_inds, lin_indices, mesh_markers, row_offset, col_offset, α
         )
         return A
     end
@@ -418,22 +446,23 @@ function _sweep_bilinear!(
             lin_indices,
             mesh_markers,
             row_offset,
-            col_offset
+            col_offset,
+            α
         )
     end
     return A
 end
 
 function _assemble_blocks_parallel!(
-        A::SparseMatrixCSC, op::OperatorAdd, trial_leaves, test_leaves
+        A::SparseMatrixCSC, op::OperatorAdd, trial_leaves, test_leaves, α = true
 )
     return _visit_operator_add2(
-        _assemble_blocks_parallel!, A, op, trial_leaves, test_leaves
+        _assemble_blocks_parallel!, A, op, trial_leaves, test_leaves, α
     )
 end
 
 function _assemble_blocks_parallel!(
-        A::SparseMatrixCSC, term::TERM, trial_leaves, test_leaves
+        A::SparseMatrixCSC, term::TERM, trial_leaves, test_leaves, α = true
 ) where {TERM}
     for blk in blocks(term, trial_leaves, test_leaves)
         _check_block_meshes(term, blk.trial_leaf, blk.test_leaf)
@@ -443,17 +472,18 @@ function _assemble_blocks_parallel!(
             term,
             _colour_strides(stencil_offsets(term)),
             blk.row_offset,
-            blk.col_offset
+            blk.col_offset,
+            α
         )
     end
     return A
 end
 
 function _assemble_bilinear_parallel_core!(
-        A::SparseMatrixCSC, trial_space, test_space, ast::AST_TYPE
+        A::SparseMatrixCSC, trial_space, test_space, ast::AST_TYPE, α = true
 ) where {AST_TYPE}
     _check_block_meshes(ast, trial_space, test_space)
-    _sweep_bilinear!(A, test_space, ast, _colour_strides(stencil_offsets(ast)), 0, 0)
+    _sweep_bilinear!(A, test_space, ast, _colour_strides(stencil_offsets(ast)), 0, 0, α)
     return A
 end
 
@@ -461,10 +491,11 @@ function _assemble_bilinear_parallel_core!(
         A::SparseMatrixCSC,
         trial_space::CompositeGridSpace,
         test_space::CompositeGridSpace,
-        ast::AST_TYPE
+        ast::AST_TYPE,
+        α = true
 ) where {AST_TYPE}
     _assemble_blocks_parallel!(
-        A, ast, leaf_spaces_offsets(trial_space), leaf_spaces_offsets(test_space)
+        A, ast, leaf_spaces_offsets(trial_space), leaf_spaces_offsets(test_space), α
     )
     return A
 end

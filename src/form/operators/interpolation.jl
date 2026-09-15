@@ -164,6 +164,7 @@ stencil_shift_trait(::InterpolationNode) = PointDependentStencil()
 stencil_shift_trait(::SourceFunction) = PointDependentStencil()
 stencil_shift_trait(::SourceVector) = PointDependentStencil()
 stencil_shift_trait(::SourceConstant) = PointDependentStencil()
+stencil_shift_trait(::DiracSource) = PointDependentStencil()
 
 function stencil_shift_trait(op::OperatorAdd)
     return _combine_shift_traits(
@@ -194,6 +195,7 @@ _all_trial_interpolated(::InterpolationNode) = true
 _all_trial_interpolated(::SourceFunction) = true
 _all_trial_interpolated(::SourceVector) = true
 _all_trial_interpolated(::SourceConstant) = true
+_all_trial_interpolated(::DiracSource) = true
 _all_trial_interpolated(::TestFunction) = true
 _all_trial_interpolated(::IndexedTestFunction) = true
 

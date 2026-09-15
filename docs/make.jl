@@ -65,7 +65,7 @@ internals = "Internals" => [
     "internals/autodiff.md",
     "internals/exporters.md"
 ]
-documentation = "Documentation" => ["api.md", internals]
+documentation = "Documentation" => ["api.md", "api_sciml.md", internals]
 
 allpages = [home, tutorials, examples, benchmarks, documentation]
 

@@ -136,6 +136,7 @@ end
 @inline _as_source(l::Function, ::Val{D}) where {D} = SourceFunction{D, typeof(l)}(l)
 @inline _as_source(l::Number, ::Val{D}) where {D} = source_number(l, Val(D))
 @inline _as_source(l::VectorElement, ::Val{D}) where {D} = SourceVector{D, typeof(parent(l))}(parent(l))
+@inline _as_source(d::DiracSource{D}, ::Val{D}) where {D} = d
 
 @inline function _linear_source(::W, l, r::LazyOp{D}) where {W <: AbstractInnerProduct, D}
     sf = _as_source(l, Val(D))
@@ -600,12 +601,18 @@ end
     return ((zero_offset(Val(D)), sum_stencil_values(stencil)),)
 end
 
+@inline _is_dirac(::DiracSource) = true
+@inline _is_dirac(op::OperatorScale) = _is_dirac(op.inner_op)
+@inline _is_dirac(op::GridFunctionScale) = _is_dirac(op.inner_op)
+@inline _is_dirac(::LazyOp) = false
+@inline _is_dirac(::Any) = false
+
 @inline function local_stencil(
         op::LinearProduct{D, InnerType}, space, I::CartesianIndex{D}, markers, lin_idx::Int
 ) where {D, InnerType}
     left_stencil = _contracted_left_stencil(op.left_op, space, I, markers, lin_idx)
     right_stencil = local_stencil(op.right_op, space, I, markers, lin_idx)
-    vol = compute_weight(InnerType(), space, I, lin_idx)
+    vol = _is_dirac(op.left_op) ? 1 : compute_weight(InnerType(), space, I, lin_idx)
     return multiply_stencils_linear(left_stencil, right_stencil, vol)
 end
 

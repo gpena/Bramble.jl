@@ -236,6 +236,7 @@ distribution produces one and something still wraps it from outside.
 ```@autodocs
 Modules = [Bramble]
 Public = false
+Filter = x -> x !== Bramble.DiracSource
 Pages = [
     "form/ast.jl",
     "form/common.jl",

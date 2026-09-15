@@ -320,7 +320,8 @@ end
 # --- Helper cores for function barrier optimization ------------------------------- #
 
 # The scalar case is `_scatter_term!` (below) at offset zero: one leaf, the whole space.
-@inline _assemble_linear_core!(b::AbstractVector, space, ast::AST_TYPE) where {AST_TYPE} = _scatter_term!(b, space, ast, 0)
+@inline _assemble_linear_core!(b::AbstractVector, space, ast::AST_TYPE, α = true) where {AST_TYPE} = _scatter_term!(
+    b, space, ast, 0, α)
 
 # --- Parallel assembly partitioning ------------------------------------------------ #
 
@@ -372,7 +373,8 @@ Shared by the banded and the point-coloured sweep, so the two cannot drift apart
         I::CartesianIndex,
         lin_indices,
         mesh_markers,
-        offset::Int
+        offset::Int,
+        α = true
 ) where {TERM}
     stencil = local_stencil(term, sp, I, mesh_markers, lin_indices[I])
 
@@ -380,7 +382,7 @@ Shared by the banded and the point-coloured sweep, so the two cannot drift apart
         Iv = I + CartesianIndex(off_v)
 
         if checkbounds(Bool, lin_indices, Iv)
-            @inbounds b[lin_indices[Iv] + offset] += weight
+            @inbounds b[lin_indices[Iv] + offset] += α * weight
         end
     end
     return nothing
@@ -406,28 +408,29 @@ reaches only its own point cannot collide at all, and then `bidx` is every band 
         rest,
         lin_indices,
         mesh_markers,
-        offset::Int
+        offset::Int,
+        α = true
 ) where {TERM}
     Threads.@threads for k in bidx
         for I in CartesianIndices((rest..., _band_range(ax, nbands, k)))
-            _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset)
+            _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset, α)
         end
     end
     return nothing
 end
 
 @noinline function _sweep_colour!(
-        b::AbstractVector, sp, term::TERM, idxs, lin_indices, mesh_markers, offset::Int
+        b::AbstractVector, sp, term::TERM, idxs, lin_indices, mesh_markers, offset::Int, α = true
 ) where {TERM}
     Threads.@threads for I in idxs
-        _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset)
+        _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset, α)
     end
     return nothing
 end
 
 # Every colour in turn.
 function _sweep_parallel!(
-        b::AbstractVector, sp, term::TERM, grid_inds, strides, offset::Int
+        b::AbstractVector, sp, term::TERM, grid_inds, strides, offset::Int, α = true
 ) where {TERM}
     Ωsp = mesh(sp)
     lin_indices = LinearIndices(indices(Ωsp))
@@ -446,14 +449,14 @@ function _sweep_parallel!(
         bands = prod(strides) == 1 ? (1:1:nbands,) : (1:2:nbands, 2:2:nbands)
         for bidx in bands
             _sweep_linear_band_colour!(
-                b, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset
+                b, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α
             )
         end
         return b
     end
 
     if prod(strides) == 1
-        _sweep_colour!(b, sp, term, grid_inds, lin_indices, mesh_markers, offset)
+        _sweep_colour!(b, sp, term, grid_inds, lin_indices, mesh_markers, offset, α)
         return b
     end
 
@@ -465,24 +468,25 @@ function _sweep_parallel!(
             _colour_subgrid(grid_inds, c, strides),
             lin_indices,
             mesh_markers,
-            offset
+            offset,
+            α
         )
     end
     return b
 end
 
 function _assemble_linear_parallel_core!(
-        b::AbstractVector, space, ast::AST_TYPE
+        b::AbstractVector, space, ast::AST_TYPE, α = true
 ) where {AST_TYPE}
     strides = _colour_strides(stencil_offsets(ast))
-    _sweep_parallel!(b, space, ast, indices(mesh(space)), strides, 0)
+    _sweep_parallel!(b, space, ast, indices(mesh(space)), strides, 0, α)
     return b
 end
 
 function _assemble_linear_core!(
-        b::AbstractVector, space::CompositeGridSpace{N}, ast::AST_TYPE
+        b::AbstractVector, space::CompositeGridSpace{N}, ast::AST_TYPE, α = true
 ) where {N, AST_TYPE}
-    return _route_terms!(b, ast, leaf_spaces_offsets(space))
+    return _route_terms!(b, ast, leaf_spaces_offsets(space), α)
 end
 
 # A term naming a component the space does not have used to contribute nothing, in silence:
@@ -556,13 +560,13 @@ end
 
 # --- the three consumers ---------------------------------------------------------- #
 
-function _route_terms!(b::AbstractVector, op::OperatorAdd, leaves)
-    return _visit_operator_add2(_route_terms!, b, op, leaves)
+function _route_terms!(b::AbstractVector, op::OperatorAdd, leaves, α = true)
+    return _visit_operator_add2(_route_terms!, b, op, leaves, α)
 end
 
-function _route_terms!(b::AbstractVector, term::TERM, leaves) where {TERM}
+function _route_terms!(b::AbstractVector, term::TERM, leaves, α = true) where {TERM}
     each_routed_leaf(term, leaves) do sp, offset
-        return _scatter_term!(b, sp, term, offset)
+        return _scatter_term!(b, sp, term, offset, α)
     end
     return b
 end
@@ -614,22 +618,22 @@ function _route_terms_contract(term::TERM, acc::T, leaves, v) where {TERM, T}
 end
 
 # Threaded routing by term: hoists component resolution outside the inner loop.
-function _route_terms_parallel!(b::AbstractVector, op::OperatorAdd, leaves)
-    return _visit_operator_add2(_route_terms_parallel!, b, op, leaves)
+function _route_terms_parallel!(b::AbstractVector, op::OperatorAdd, leaves, α = true)
+    return _visit_operator_add2(_route_terms_parallel!, b, op, leaves, α)
 end
 
-function _route_terms_parallel!(b::AbstractVector, term::TERM, leaves) where {TERM}
+function _route_terms_parallel!(b::AbstractVector, term::TERM, leaves, α = true) where {TERM}
     # Hoisted out of the per-leaf call, as before: the colouring depends on the term's
     # stencil, not on which leaf it lands in.
     strides = _colour_strides(stencil_offsets(term))
     each_routed_leaf(term, leaves) do sp, offset
-        return _sweep_parallel!(b, sp, term, indices(mesh(sp)), strides, offset)
+        return _sweep_parallel!(b, sp, term, indices(mesh(sp)), strides, offset, α)
     end
     return b
 end
 
 # Function barrier for term scattering.
-function _scatter_term!(b::AbstractVector, sp, term::TERM, offset::Int) where {TERM}
+function _scatter_term!(b::AbstractVector, sp, term::TERM, offset::Int, α = true) where {TERM}
     Ωsp = mesh(sp)
     lin_indices = LinearIndices(indices(Ωsp))
     mesh_markers = markers(Ωsp)
@@ -641,7 +645,7 @@ function _scatter_term!(b::AbstractVector, sp, term::TERM, offset::Int) where {T
             Iv = I + CartesianIndex(off_v)
 
             if checkbounds(Bool, lin_indices, Iv)
-                @inbounds b[lin_indices[Iv] + offset] += weight
+                @inbounds b[lin_indices[Iv] + offset] += α * weight
             end
         end
     end
@@ -649,9 +653,9 @@ function _scatter_term!(b::AbstractVector, sp, term::TERM, offset::Int) where {T
 end
 
 function _assemble_linear_parallel_core!(
-        b::AbstractVector, space::CompositeGridSpace{N}, ast::AST_TYPE
+        b::AbstractVector, space::CompositeGridSpace{N}, ast::AST_TYPE, α = true
 ) where {N, AST_TYPE}
-    return _route_terms_parallel!(b, ast, leaf_spaces_offsets(space))
+    return _route_terms_parallel!(b, ast, leaf_spaces_offsets(space), α)
 end
 
 """
