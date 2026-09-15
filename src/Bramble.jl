@@ -24,7 +24,7 @@ export ExecutionPolicy, Serial, Parallel, execution_policy
 # generic nouns in the language, and a beginner's own top-level `vector = [...]` after
 # `using Bramble` errors rather than shadows. `Bramble.vector(...)` still reaches them.
 public vector, matrix
-# Backend-extension plumbing (point 70): identity/zero matrices tied to a `Backend` — real,
+# Backend-extension plumbing (point 70): identity/zero matrices tied to a `Backend`, real,
 # tested, reached while implementing a new backend rather than while using one.
 public backend_eye, backend_zeros
 # Read by every package extension's own `@compile_workload` gate (gpena/Bramble.jl#196), so
@@ -36,7 +36,7 @@ public PRECOMPILE_WORKLOAD
 export box, interval, ×, dim, topo_dim, extrema, point, center, projection, boundary_symbols
 export domain, markers, labels
 
-# `set` is `CartesianProduct`'s identity accessor — real, but the single most generic noun
+# `set` is `CartesianProduct`'s identity accessor, real, but the single most generic noun
 # in the language, same reasoning as `vector`/`matrix` above. `is_collapsed`/`point_type`
 # are queries about a `CartesianProduct`'s own internal shape, reached while building
 # geometry helpers, not while using one (point 70).
@@ -51,7 +51,7 @@ export indices, boundary_indices, interior_indices, is_boundary_index, index_in_
 
 # `AbstractMeshType`/`MeshMarkers` are extension points for a new mesh type, not everyday
 # vocabulary; `mesh_type`/`normal_vector`/`hₘᵢₙ`/`half_spacings`/`cell_measures` are the
-# same layer — real, tested, reached while implementing a mesh or a boundary-facing
+# same layer, real, tested, reached while implementing a mesh or a boundary-facing
 # operator rather than while using one (point 70).
 public AbstractMeshType, MeshMarkers
 public mesh_type, hₘᵢₙ, normal_vector, half_spacings, cell_measures
@@ -61,7 +61,7 @@ export gridspace, vector_gridspace, space, spaces, ScalarGridSpace, CompositeGri
 export ndofs, ncomponents, weights
 
 # `VectorGridSpace` is a type alias for `CompositeGridSpace{N}`; `space_type` reads a
-# space's type back off a `VectorElement`. Neither appears in a tutorial — both are for
+# space's type back off a `VectorElement`. Neither appears in a tutorial: both are for
 # code written *against* a space's type, not for building one (point 70).
 public VectorGridSpace, space_type
 export VectorElement, element, parent, reshape, components, component_range, component_ranges
@@ -139,7 +139,7 @@ export sparse_factorize, sparse_refactor!, refactor!
 export pde_solve
 
 # `DirichletConstraint` is `dirichlet_constraints(...)`'s own return type, reached for an
-# `isa` check rather than constructed by name — the tests already reach it as
+# `isa` check rather than constructed by name: the tests already reach it as
 # `import Bramble: DirichletConstraint` rather than through `using` (point 70).
 public DirichletConstraint
 export issymmetric, isposdef

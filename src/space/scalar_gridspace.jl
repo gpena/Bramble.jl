@@ -157,7 +157,6 @@ function space_weights(Ωₕ::AbstractMeshType{1})
 end
 
 function space_weights(Ωₕ::AbstractMeshType{D}) where {D}
-    # Initialize a tuple of D vectors. Each vector will store the final weights for one spatial direction (e.g., x, y, z).
     innerplus = ntuple(i -> __vector(Ωₕ), Val(D))
 
     # Per-axis factors. Neither depends on the direction `i` being assembled, so each
@@ -171,7 +170,6 @@ function space_weights(Ωₕ::AbstractMeshType{D}) where {D}
         _innerplus_mean_weights!(mean[k], Ωₕ, k)
     end
 
-    # Retrieve the number of grid points in each dimension as a tuple (e.g., (Nx, Ny)).
     npts_tuple = npoints(Ωₕ, Tuple)
 
     # Assemble the weights for each difference direction `i` by taking the aligned
@@ -179,11 +177,9 @@ function space_weights(Ωₕ::AbstractMeshType{D}) where {D}
     for i in 1:D
         factors = ntuple(k -> k == i ? main[k] : mean[k], Val(D))
 
-        # Create a D-dimensional array view of the flat `innerplus[i]` vector to
-        # allow for efficient multidimensional operations.
+        # `ReshapedArray` views the flat `innerplus[i]` vector without copying it.
         v = Base.ReshapedArray(innerplus[i], npts_tuple, ())
 
-        # Combine the per-component factors into the final weight for direction 'i'.
         __innerplus_weights!(execution_policy(Ωₕ), v, factors)
     end
 
@@ -191,7 +187,6 @@ function space_weights(Ωₕ::AbstractMeshType{D}) where {D}
     inner_h_vec = __vector(Ωₕ)
     _innerh_weights!(inner_h_vec, Ωₕ)
 
-    # Return the computed weights wrapped in a dedicated `SpaceWeights` struct.
     return SpaceWeights{D, typeof(inner_h_vec)}(
         inner_h_vec, innerplus, _mesh_version(Ωₕ)
     )
@@ -317,7 +312,7 @@ dims = ndofs(Wₕ, Tuple)  # Per dimension (e.g., (100, 100))
 ```
 
 See also: [`npoints`](@ref), [`dim`](@ref). On a [`CompositeGridSpace`](@ref), the
-`Tuple` form means something different — see the warning on [`ndofs`](@ref).
+`Tuple` form means something different: see the warning on [`ndofs`](@ref).
 """
 @inline ndofs(Wₕ::ScalarGridSpace) = npoints(mesh(Wₕ))
 @inline ndofs(Wₕ::ScalarGridSpace, ::Type{Tuple}) = npoints(mesh(Wₕ), Tuple)

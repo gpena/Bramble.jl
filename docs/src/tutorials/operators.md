@@ -479,9 +479,9 @@ in place silently halves the observed order.
 
 Every operator so far maps a grid space to itself. [`πₕ`](@ref) is the one that does not:
 it moves a grid function from one mesh to a genuinely different one, which is what makes a
-heterogeneous composite space — one whose leaves are built over different meshes — useful
+heterogeneous composite space (one whose leaves are built over different meshes) useful
 for more than indexing. Named after [`Rₕ`](@ref)/[`Rₕ!`](@ref)'s own convention: `πₕ`/`πₕ!`
-are the numeric pair here, and the same name `πₕ` — one argument fewer — is also the
+are the numeric pair here, and the same name `πₕ` (one argument fewer) is also the
 symbolic wrapper the next tutorial uses, told apart by argument count.
 
 The idea is the standard piecewise (multi)linear interpolant: to read a value at a
@@ -539,11 +539,11 @@ close ``x`` is to each one.
 </figure>
 ```
 
-The four weights always sum to ``1`` — a partition of unity — so the interpolant never
+The four weights always sum to ``1`` (a partition of unity), so the interpolant never
 overshoots the range of the four corner values. [`interpolate_at`](@ref) computes this
 directly at one point; [`πₕ`](@ref)/[`πₕ!`](@ref) apply it at every point of a destination
 space, and are exactly [`Rₕ`](@ref)/[`Rₕ!`](@ref) applied to the interpolant as an ordinary
-function of position — restricting a continuous function and interpolating a discrete one
+function of position: restricting a continuous function and interpolating a discrete one
 are the same mechanism, `πₕ` is just the case where that function happens to be another
 grid function's own interpolant:
 
@@ -558,11 +558,11 @@ maximum(abs, parent(dest) .- parent(exact))
 ```
 
 Once `πₕ` returns an ordinary [`VectorElement`](@ref), every operator above just applies
-to it as normal — `D₋ₓ(dest)`, `M₋ₓ(dest)`, a bilinear form, anything.
+to it as normal: `D₋ₓ(dest)`, `M₋ₓ(dest)`, a bilinear form, anything.
 
 ### As a matrix
 
-Like [`D₋ₓ`](@ref)`(Wₕ)` above, the interpolant is also available as a matrix — but
+Like [`D₋ₓ`](@ref)`(Wₕ)` above, the interpolant is also available as a matrix, but
 between the *two* spaces rather than one, and rectangular rather than square, since
 `Wdest` and `Wsrc` generally carry a different number of degrees of freedom:
 
@@ -572,8 +572,8 @@ size(P)
 P * parent(src) ≈ parent(dest)
 ```
 
-Each row of `P` has at most ``2^D`` nonzero entries — one destination point's corner
-weights — so it is genuinely sparse, and it is always a `SparseMatrixCSC` regardless of
+Each row of `P` has at most ``2^D`` nonzero entries (one destination point's corner
+weights), so it is genuinely sparse, and it is always a `SparseMatrixCSC` regardless of
 either space's own backend `matrix_type`: unlike the shift-based matrices above, a
 destination point's source cell has no regular diagonal structure to exploit, so `P` is
 assembled directly from `locate_cell` rather than composed from `shift`.
@@ -581,7 +581,7 @@ assembled directly from `locate_cell` rather than composed from `shift`.
 `πₕ!(dest, src)` re-locates every destination point's cell on every call, which is wasted
 work when the same two meshes are interpolated between repeatedly (a time loop moving a
 coefficient across two composite leaves, say). Build `P` once and pass it to `πₕ!` instead:
-zero allocations, no `locate_cell` search, just `mul!` under the hood — the same "build the
+zero allocations, no `locate_cell` search, just `mul!` under the hood: the same "build the
 pattern once" split [`allocate_system_matrix`](@ref)/[`assemble!`](@ref) already use.
 
 ```@repl operators
@@ -594,7 +594,7 @@ parent(dest2) ≈ parent(dest)
 
 The same name, one argument fewer, is also the symbolic counterpart: `πₕ(uₕ)` wraps a grid
 function's interpolant as an AST source, so it composes with the same operators any other
-source does — `D₋ₓ(πₕ(uₕ))`, `M₋ₓ(πₕ(uₕ))` — and can appear on the left of [`innerₕ`](@ref)
+source does (`D₋ₓ(πₕ(uₕ))`, `M₋ₓ(πₕ(uₕ))`), and can appear on the left of [`innerₕ`](@ref)
 inside a [`form`](@ref). Dispatch tells the two `πₕ` apart by argument count, `Wₕ`/`src`
 against `uₕ` alone, not by a different name. See the [forms tutorial](form.md) for a worked
 example against a heterogeneous composite space.

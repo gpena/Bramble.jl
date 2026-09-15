@@ -49,7 +49,7 @@ mutable struct MeshnD{D, BT <: Backend, CI <: CartesianIndices{D}, SM <: Tuple, 
     set::CartesianProduct{D, T}
     "a dictionary mapping `Symbol` labels to `BitVector`s, marking grid points."
     markers::MeshMarkers
-    "the `CartesianIndices` for the full D-dimensional grid, allowing for multi-dimensional indexing."
+    "the `CartesianIndices` for the full D-dimensional grid, for multi-dimensional indexing."
     indices::CI
     "the computational backend used for linear algebra operations."
     backend::BT

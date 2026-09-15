@@ -6,8 +6,8 @@
 Helper struct managing visual formatting, indentation, and styled console output.
 
 Carries no `compact` flag: compact versus detailed is decided by *which* `show` method the
-caller reached — two-argument `show` for the embeddable one-liner, `MIME"text/plain"` for
-the detailed block — rather than by a runtime flag every renderer had to branch on
+caller reached: two-argument `show` for the embeddable one-liner, `MIME"text/plain"` for
+the detailed block, rather than by a runtime flag every renderer had to branch on
 (gpena/Bramble.jl#45). A `PrettyPrinter` is therefore only ever built inside a detailed
 renderer.
 """
@@ -102,7 +102,7 @@ end
 Print each of `items` by calling `f(item)`, separating consecutive ones with `sep`.
 
 Replaces seven hand-rolled variants of the same loop across the geometry and mesh
-renderers (gpena/Bramble.jl#47) — `i < length(xs) && print(io, ", ")` in five places and a
+renderers (gpena/Bramble.jl#47): `i < length(xs) && print(io, ", ")` in five places and a
 `first` flag in `print_marker_summary`, which had to guard three optional groups. `f` is
 passed as a closure in the same style as `_each_marked` in `form/dirichlet_constraints.jl`,
 which measured at zero allocations, so the pattern costs nothing here.
@@ -219,7 +219,7 @@ trailing newline removed: `display` supplies the final newline itself, and a ren
 emitting its own leaves a blank line behind (gpena/Bramble.jl#46).
 
 Replaces an earlier `remove_trailing_newline(io)` that rewrote the caller's stream in
-place and silently did nothing unless `io` happened to be a bare `IOBuffer` — which at the
+place and silently did nothing unless `io` happened to be a bare `IOBuffer`, which at the
 REPL, and inside array display, it never is. Buffering into a stream this function owns is
 what makes the trim actually happen.
 """

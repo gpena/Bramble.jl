@@ -12,13 +12,13 @@
 #
 # The residual per-closure cost stays. Re-measured 2026-09-04 (point 80), after points
 # 51/67 moved Rₕ!/avgₕ! to named kernel structs: roughly 9 ms for Rₕ and 16 ms for avgₕ,
-# a genuinely new closure each time — the reverse of the ~50 ms/~10 ms this comment
+# a genuinely new closure each time, the reverse of the ~50 ms/~10 ms this comment
 # claimed before those points landed, most likely because avgₕ! (point 51) and Rₕ!
 # (point 67, modelled on it) picked up the kernel-struct fix at different times and
 # this number was never revisited after the second one landed. Both are still real,
 # irreducible costs: a second call with the identical closure literal at a *different*
 # source line still pays the full amount, since Julia keys a closure's type by
-# definition site, not text — no workload can warm a closure it does not itself write.
+# definition site, not text: no workload can warm a closure it does not itself write.
 # A type-erasing wrapper around f would remove even that, but it also blocks
 # inlining into the quadrature loop and costs about 2x at run time, which is
 # the wrong trade for a time-stepping loop. See the note in avgₕ!.

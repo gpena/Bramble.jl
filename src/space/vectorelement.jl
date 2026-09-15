@@ -92,7 +92,7 @@ See also: [`space`](@ref), [`VectorElement`](@ref)
     component_range(Wₕ::CompositeGridSpace, i::Int) -> UnitRange{Int}
 
 Returns the degree-of-freedom index range for the `i`-th **leaf** of composite space `Wₕ`,
-numbered depth-first (see [`leaf_spaces_offsets`](@ref)) — the same numbering `uₕ(i)` and
+numbered depth-first (see [`leaf_spaces_offsets`](@ref)), the same numbering `uₕ(i)` and
 [`dirichlet_components`](@ref dirichlet_bc!) use, so it agrees with them regardless of how
 deeply `Wₕ` nests.
 """
@@ -108,7 +108,7 @@ end
 
 `N` is the number of scalar leaves underneath `Wₕ`, counting through any nesting.
 
-Returns the degree-of-freedom ranges for every **leaf** of `Wₕ`, depth-first — see
+Returns the degree-of-freedom ranges for every **leaf** of `Wₕ`, depth-first; see
 [`component_range`](@ref).
 """
 @inline function component_ranges(Wₕ::CompositeGridSpace)
@@ -160,7 +160,7 @@ end
     components(uₕ::VectorElement) -> Tuple
 
 Returns an `NTuple` of [`VectorElement`](@ref) views, one per **leaf** of `uₕ`'s space,
-depth-first — the same leaf a matching-index `uₕ(i)` returns, regardless of nesting.
+depth-first, the same leaf a matching-index `uₕ(i)` returns, regardless of nesting.
 """
 @inline function components(uₕ::VectorElement{<:CompositeGridSpace})
     raw = parent(uₕ)

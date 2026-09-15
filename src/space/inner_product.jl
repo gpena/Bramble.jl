@@ -25,7 +25,7 @@ be assembled from. CONTEXT.md draws that line at the domain level: a form is sym
 grid function is data.
 
 The two families are kept from colliding by the `NTuple{N,<:Tuple}` restriction on the
-symbolic tuple overload — a tuple of grid functions is not a tuple of tuples, so it cannot
+symbolic tuple overload: a tuple of grid functions is not a tuple of tuples, so it cannot
 reach the symbolic method, and the `@generated` methods below stay reachable. Widen either
 side and the collision is real. The constraint is asserted in
 `test/form/inner_products.jl`, testset "Symbolic and numeric families stay apart"
@@ -334,7 +334,7 @@ end
 # allocates 0. The difference is constant propagation, not type stability: `D`/`mesh_dim`
 # come out of a several-branch `if`/`something` chain, and while that chain's return type is
 # already concrete (`Tuple{Int,Int}`), Julia's inliner does not reliably fold it down to the
-# *specific* compile-time value `Val(D)` needs from inside a caller — unlike a plain `map`
+# *specific* compile-time value `Val(D)` needs from inside a caller, unlike a plain `map`
 # or `sum` over an already concretely-sized `Tuple`, which Julia unrolls and specializes on
 # its own (see `form/common.jl`'s stencil primitives, sibling functions in this same
 # investigation that turned out not to need `@generated` at all). So: load-bearing here,

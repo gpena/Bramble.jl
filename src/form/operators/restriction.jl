@@ -58,7 +58,7 @@ end
 ) where {D}
     # A real marker table always carries its own `:interior` (`_ensure_geometric_markers!`
     # guarantees the key, geometric or user-redefined), so it is read directly like every
-    # other region — no exception for `:interior` here. There is exactly one case that still
+    # other region, no exception for `:interior` here. There is exactly one case that still
     # needs one: `markers === nothing`, the "no marker context at all" sentinel above, where
     # `:interior` is defined as the whole grid rather than as `_is_marked`'s blanket `false`
     # for every region. Read directly, a real `:interior` used to be silently overridden by

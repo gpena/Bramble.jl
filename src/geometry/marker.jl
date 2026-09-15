@@ -340,7 +340,7 @@ end
 
 Return a tuple of the `Symbol` label of every marker in evaluated marker collection `edm`.
 
-Zero-allocation, like [`label_identifiers(::DomainMarkers)`](@ref).
+Zero-allocation, like [`label_identifiers`](@ref label_identifiers(::DomainMarkers)).
 """
 @inline label_identifiers(edm::EvaluatedDomainMarkers) = (
     map(label, symbols(edm))...,

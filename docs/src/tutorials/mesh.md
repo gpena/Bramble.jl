@@ -20,7 +20,7 @@ In this tutorial, you will learn how to:
 
 Meshes in `Bramble.jl` are built on top of computational [`Domain`](@ref)s. The primary entry point is the [`mesh`](@ref) function.
 
-Every mesh also carries a linear-algebra [`Backend`](@ref) — chosen with the `backend` keyword below, or left to `mesh`'s own default of `backend(eltype(Ω))` — that fixes its vector/matrix types and whether threading-capable operations run serially or in parallel. See the [backend tutorial](backend.md) for the full picture; nothing below depends on it.
+Every mesh also carries a linear-algebra [`Backend`](@ref), chosen with the `backend` keyword below, or left to `mesh`'s own default of `backend(eltype(Ω))`, that fixes its vector/matrix types and whether threading-capable operations run serially or in parallel. See the [backend tutorial](backend.md) for the full picture; nothing below depends on it.
 
 ### 1.1 One-dimensional meshes
 
@@ -139,7 +139,7 @@ Both positional `unif` and keyword `uniform` accept a single boolean for isotrop
     <text x="90" y="157">1</text><text x="150" y="157">2</text><text x="330" y="157">3</text>
     <text x="570" y="157">4</text><text x="690" y="157">5</text>
   </g>
-  <text x="90" y="137" font-size="13" fill="#3b82f6" text-anchor="start">half_points(Ωₕ) — N+1 cell interfaces</text>
+  <text x="90" y="137" font-size="13" fill="#3b82f6" text-anchor="start">half_points(Ωₕ): N+1 cell interfaces</text>
 
   <!-- grid points -->
   <g fill="currentColor">
@@ -312,12 +312,12 @@ per-axis intervals, so its measure is the product of the per-axis widths:
 
 ```julia
 cell_measure(Ωₕ, CartesianIndex(3, 2))          # 0.2
-half_spacing(Ωₕ(1), 3) * half_spacing(Ωₕ(2), 2)  # 0.2 — the same number
+half_spacing(Ωₕ(1), 3) * half_spacing(Ωₕ(2), 2)  # 0.2, the same number
 ```
 
 `Ωₕ(k)` is the 1D submesh along axis `k`, so anything documented for a 1D mesh applies to
-it directly. As in one dimension the cells tile the domain exactly — here the twelve cell
-measures sum to the area `1.0` — and the cells touching a boundary are correspondingly
+it directly. As in one dimension the cells tile the domain exactly: the twelve cell
+measures sum to the area `1.0`, and the cells touching a boundary are correspondingly
 thinner along that axis.
 
 

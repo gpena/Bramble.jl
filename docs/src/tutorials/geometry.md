@@ -283,7 +283,7 @@ center(Ω)         # (0.5, 0.5)
 Bramble.is_collapsed(Ω)    # false (checks if any dimension is degenerate)
 Bramble.is_collapsed(Ω, 1) # false (checks dimension 1)
 
-# Access underlying set and markers — `set` and `is_collapsed` are `public`, not exported, so they use `Bramble.`
+# Access underlying set and markers: `set` and `is_collapsed` are `public`, not exported, so they use `Bramble.`
 Bramble.set(Ω)    # CartesianProduct{2, Float64}
 markers(Ω)        # DomainMarkers
 collect(labels(Ω)) # [:dirichlet, :neumann]
@@ -315,6 +315,9 @@ rod = domain(
 println("Domain: ", rod)
 println("Dimension: ", dim(rod))
 println("Active Labels: ", collect(labels(rod)))
+
+@assert dim(rod) == 1
+@assert center(rod) == (5.0,)
 ```
 
 ---
@@ -336,7 +339,7 @@ channel = domain(
 )
 
 @assert dim(channel) == 2
-@assert (2.5, 0.5) ∈ channel
+@assert center(channel) == (2.5, 0.5)
 println("Channel labels: ", collect(labels(channel)))
 ```
 
@@ -360,4 +363,6 @@ sink = domain(
 
 println("3D Domain Center: ", center(sink))
 println("Active Labels: ", collect(labels(sink)))
+
+@assert center(sink) == (1.0, 1.0, 0.5)
 ```

@@ -41,8 +41,8 @@ Rₕ!(uₕ, x -> 1.0; markers = (:left,))
 For an `N`-component element either shape of `f` works and both give the same result;
 the single vector-valued function is evaluated once per grid point when every
 component shares the same mesh, whereas the tuple always evaluates each component
-function separately. On a heterogeneous composite — components built over different
-meshes — the single-function form is instead re-evaluated once per component, since
+function separately. On a heterogeneous composite, components built over different
+meshes, the single-function form is instead re-evaluated once per component, since
 there is no grid point shared by every component to evaluate it at only once:
 
 ```julia
@@ -190,8 +190,8 @@ Rₕ(Vₕ, x -> (f₁(x), f₂(x)))        # one function returning all componen
 
 Prefer `x -> (f₁(x), f₂(x))` when components share computation, as it evaluates once
 per grid point on a space whose components share one mesh, whereas `(f₁, f₂)` always
-evaluates each component function separately. On a heterogeneous composite — components
-built over different meshes — the single-function form gives up that advantage, since
+evaluates each component function separately. On a heterogeneous composite (components
+built over different meshes), the single-function form gives up that advantage, since
 there is no grid point shared by every component to evaluate it at only once.
 
 See also: [`Rₕ!`](@ref), [`avgₕ`](@ref).

@@ -56,8 +56,8 @@ for W in (
     @eval _same_operator_shape(a::$W{D, Dim}, b::$W{D, Dim}) where {D, Dim} = _same_operator_shape(a.inner_op, b.inner_op)
 end
 
-# `shift_amount` is a field, not a type parameter, so — like `RegionRestriction.region` and
-# `OperatorScale.scalar` below — it is compared explicitly rather than folded into the
+# `shift_amount` is a field, not a type parameter, so, like `RegionRestriction.region` and
+# `OperatorScale.scalar` below, it is compared explicitly rather than folded into the
 # `where` clause. Two shifts by different amounts are not the same operator: leaving this to
 # the generic loop above compared only `D`/`Dim`, so `shift_op(u, 1, 1)` and
 # `shift_op(v, 1, 2)` read as identical, and the fast path this trait guards then evaluates

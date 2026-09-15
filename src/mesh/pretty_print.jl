@@ -63,15 +63,15 @@ function print_mesh_domain_info(pp::PrettyPrinter, set::CartesianProduct)
     return println(pp.io)
 end
 
+# One method per shape of `uniform` rather than one branching on it: a 1D mesh answers
+# with a `Bool` and an nD one with a tuple, which is a dispatch decision
+# (gpena/Bramble.jl#47).
 """
     print_mesh_spacing_info(pp::PrettyPrinter, uniform::Bool, hmax) -> Nothing
     print_mesh_spacing_info(pp::PrettyPrinter, uniform::Tuple{Vararg{Bool}}, hmax) -> Nothing
 
 Print mesh spacing information and maximum cell diagonal.
 """
-# One method per shape of `uniform` rather than one branching on it: a 1D mesh answers
-# with a `Bool` and an nD one with a tuple, which is a dispatch decision
-# (gpena/Bramble.jl#47).
 function print_mesh_spacing_info(pp::PrettyPrinter, uniform::Bool, hmax)
     _print_spacing_prefix(pp)
     print(pp.io, uniform ? "uniform" : "non-uniform")

@@ -226,9 +226,9 @@ println("Non-zero entries: ", nnz(J))
 `TracerSparsityDetector` works this way for *any* Julia function, which is exactly why it has to
 run `pde_residual` once to find out. `pde_residual` here is not arbitrary, though: its matrix
 `A_sparse` comes from a `BilinearForm`, whose own sparsity is already known directly
-from its AST — no tracing needed for that part. [`jacobian_pattern`](@ref) reads that
+from its AST: no tracing needed for that part. [`jacobian_pattern`](@ref) reads that
 pattern off the form, widened by the reach of each coefficient's own dependence on the
-unknown, named the same way a form term names an operator — a function of the trial
+unknown, named the same way a form term names an operator: a function of the trial
 placeholder. `αvals` here is `1.0 .+ uₕ.^2`, a plain pointwise function of `uₕ` at the *same*
 grid point (no averaging, unlike the staggered `M₋ₕ(u)` coefficient in
 [the nonlinear Poisson example](../examples/poisson_nonlinear.md)), so its dependency is
@@ -252,7 +252,7 @@ J_native = DifferentiationInterface.jacobian(pde_residual, prep_native, native_b
 J == J_native
 ```
 
-`a_for_pattern` only needs *some* concrete coefficient to build a `BilinearForm` from — the
+`a_for_pattern` only needs *some* concrete coefficient to build a `BilinearForm` from: the
 pattern is a property of the AST, not of `αvals0`'s values, so evaluating it at `u = 0` is as
 good as evaluating it at any other point. Same Jacobian either way, but no tracing pass paid
 for it: `jacobian_pattern` only ever walks the grid once, touching neither `ForwardDiff` nor

@@ -72,7 +72,7 @@ end
 @inline _grid_dims(uₕ::VectorElement) = npoints(_op_mesh(uₕ), Tuple)
 
 # `f!` is the single-component applicator; it is called once per *leaf* (`components`
-# flattens any nesting), so this needs no component count of its own — `map` over the two
+# flattens any nesting), so this needs no component count of its own: `map` over the two
 # tuples `components` returns unrolls exactly as the old `ntuple(…, Val(NC))` did, and stays
 # correct regardless of how deeply either space nests.
 @inline function _apply_componentwise!(
@@ -332,7 +332,7 @@ through: `base_name!` on a scalar grid function, `base_name!` on a composite one
 allocating `base_name` built on top of them.
 
 The three are byte-identical across the families apart from which applicator they call and
-what it takes before the direction (gpena/Bramble.jl#101) — `difference.jl` and
+what it takes before the direction (gpena/Bramble.jl#101); `difference.jl` and
 `average.jl` each generated them from their own `@eval` loop before this existed:
 
 | Family | `apply_fn` | `extra_args` |
@@ -350,7 +350,7 @@ The composite method recurses into the scalar one through `apply_fn`'s own compo
 method rather than repeating the walk, so a leaf's own submesh is what each leaf is
 measured against (gpena/Bramble.jl#79).
 
-`docstring`, given non-empty, is attached to the scalar `base_name!` method — the families
+`docstring`, given non-empty, is attached to the scalar `base_name!` method; the families
 whose prose lives here rather than on a separately hand-written matrix form use it.
 """
 function _define_grid_function_forms(
@@ -405,7 +405,7 @@ out once per family in `difference.jl` and once more in `average.jl`
 (gpena/Bramble.jl#101). This is that loop.
 
 `alias_kwargs`/`bang_alias_kwargs` are called as `f(direction, suffix)` and return the
-keyword arguments for that one alias — the notes each family needs are bespoke prose
+keyword arguments for that one alias; the notes each family needs are bespoke prose
 ("over the averaged spacing", "second order on a non-uniform grid, where `Dcₓ` is first"),
 so they are supplied per family rather than templated from `what`/`formula`.
 

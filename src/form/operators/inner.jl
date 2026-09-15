@@ -7,7 +7,7 @@
 # domain level: a form is symbolic, a grid function is data.
 #
 # What keeps the two families from colliding is the `NTuple{N,<:Tuple}` restriction on the
-# tuple overload below — a tuple of grid functions is not a tuple of tuples, so it cannot
+# tuple overload below: a tuple of grid functions is not a tuple of tuples, so it cannot
 # reach this file's method. Widen it, or add a `VectorElement`-shaped overload here, and
 # the collision is real. The constraint is asserted in `test/form/inner_products.jl`,
 # testset "Symbolic and numeric families stay apart" (gpena/Bramble.jl#60), rather than

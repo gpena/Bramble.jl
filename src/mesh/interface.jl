@@ -132,7 +132,7 @@ into.
 """
     is_collapsed(Ωₕ::AbstractMeshType) -> Bool
 
-Whether `Ωₕ` has no interval to refine or measure a spacing over — a [`Mesh1D`](@ref)
+Whether `Ωₕ` has no interval to refine or measure a spacing over, a [`Mesh1D`](@ref)
 built over a single point. A [`MeshnD`](@ref) is never collapsed as a whole: each axis is
 its own `Mesh1D` and may be collapsed individually, which is handled per axis rather than
 at this level, so the default here is `false`.
@@ -141,16 +141,16 @@ at this level, so the default here is `false`.
 
 # The only real difference between `Mesh1D`'s and `MeshnD`'s refinement: a `MeshnD` always
 # has something to refine (each axis handles its own collapse independently, inside
-# `_refine_indices!`), while a `Mesh1D` with fewer than two points — collapsed, or a
-# genuine single-point mesh over a non-degenerate domain — has no interval at all.
+# `_refine_indices!`), while a `Mesh1D` with fewer than two points, collapsed, or a
+# genuine single-point mesh over a non-degenerate domain, has no interval at all.
 @inline _nothing_to_refine(::AbstractMeshType) = false
 
 #===========================================================================#
 # Refinement and point replacement
 #
 # The geometric part (`_refine_indices!`, `change_points!(Ωₕ, pts)`) is type-specific and
-# defined alongside each mesh type. Everything downstream of it — deciding whether there
-# is anything to do, and rebuilding markers afterward — reads only the fields this file
+# defined alongside each mesh type. Everything downstream of it, deciding whether there
+# is anything to do, and rebuilding markers afterward, reads only the fields this file
 # already assumes exist, so it is written once here rather than once per mesh type
 # (gpena/Bramble.jl#68).
 #===========================================================================#
@@ -201,7 +201,7 @@ end
 end
 
 # The two-argument form: a real domain to re-derive markers from, so refinement always
-# proceeds except when there is no interval at all (`is_collapsed`) — unlike the
+# proceeds except when there is no interval at all (`is_collapsed`): unlike the
 # one-argument form above, a single-point, non-collapsed mesh still has its (unchanged)
 # point's markers correctly re-evaluated, since `set_markers!` needs no interval to do that.
 function iterative_refinement!(

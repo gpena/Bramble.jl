@@ -29,7 +29,7 @@ mutable struct Mesh1D{BT <: Backend, CI <: CartesianIndices{1}, VT <: AbstractVe
     set::CartesianProduct{1, T}
     "a dictionary mapping `Symbol` labels to `BitVector`s, marking specific points on the mesh."
     markers::MeshMarkers
-    "the `CartesianIndices` of the grid, allowing for array-like iteration and indexing over the points."
+    "the `CartesianIndices` of the grid, for array-like iteration and indexing over the points."
     indices::CI
     "the computational backend used for linear algebra operations."
     backend::BT
@@ -505,13 +505,10 @@ end
 # (gpena/Bramble.jl#68).
 @inline _nothing_to_refine(Ωₕ::Mesh1D) = is_collapsed(Ωₕ) || npoints(Ωₕ) <= 1
 
-# Core function to replace the grid points of a mesh with a new set of points.
 function change_points!(Ωₕ::Mesh1D, pts)
     npts = npoints(Ωₕ)
-    # Ensure the new points vector has the same size as the old one.
     npts == length(pts) || _throw_point_count_mismatch(npts, length(pts))
 
-    # Call the helper function that handles updating the points and all derived quantities.
     set_points!(Ωₕ, pts)
     return nothing
 end

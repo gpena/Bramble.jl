@@ -246,9 +246,9 @@ function dim end
 Returns the total number of degrees of freedom (DOFs) in the function space `Wₕ`.
 
 !!! warning "The `Tuple` form means something different for a composite space"
-    On a [`ScalarGridSpace`](@ref), `ndofs(Wₕ, Tuple)` is the grid's shape — one entry
+    On a [`ScalarGridSpace`](@ref), `ndofs(Wₕ, Tuple)` is the grid's shape: one entry
     per **spatial dimension** (`Nₓ`, `Nᵧ`, ...). On a [`CompositeGridSpace`](@ref), it is
-    instead one entry per **component**, each that component's own (scalar) DOF count —
+    instead one entry per **component**, each that component's own (scalar) DOF count,
     unrelated to spatial dimension, and not a shape a `prod` should be taken over. Code
     that does not know in advance which kind of space it was given should reach for one
     of the two unambiguous forms instead: `npoints(mesh(Wₕ), Tuple)` for the grid shape,

@@ -157,7 +157,7 @@ Against the all-ones grid function a linear form is the sum of its assembled vec
 the check above. The difference is that `l(oneₕ)` builds no vector: it contracts as it walks
 the grid, and allocates nothing at all. Where the result is a scalar, prefer it.
 
-`evaluate!` is the middle case — it wants the assembled vector *and* the number, so it takes
+`evaluate!` is the middle case: it wants the assembled vector *and* the number, so it takes
 a scratch vector, fills it, and returns the contraction:
 
 ```@example forms
@@ -201,8 +201,8 @@ Inside a time loop, build the pattern once outside it and call `assemble!` withi
 a matrix whose pattern is fixed allocates nothing, where `assemble` allocates a new matrix
 every step.
 
-`a` above is `innerₕ(L(u), L(v))` with the same `D₋ₓ` on both sides, which is symmetric —
-and, since the quadrature weight `inner₊ₓ` carries is positive, positive semi-definite —
+`a` above is `innerₕ(L(u), L(v))` with the same `D₋ₓ` on both sides, which is symmetric,
+and, since the quadrature weight `inner₊ₓ` carries is positive, positive semi-definite,
 purely by that construction. `issymmetric`/`isposdef` answer this from the expression alone,
 without assembling anything:
 
@@ -213,12 +213,12 @@ issymmetric(a), isposdef(a)
 
 ```@example forms
 c = form(Wₕ, Wₕ, (u, v) -> inner₊(u, D₋ₓ(v)))
-issymmetric(c)  # different operators either side — not this pattern
+issymmetric(c)  # different operators either side, not this pattern
 ```
 
 Knowing this before assembling is what makes a positive answer worth something: it says
-`cholesky` is worth trying on the result rather than a general factorization, at a cost —
-a few nanoseconds, against tens of microseconds to assemble even this small a matrix — close
+`cholesky` is worth trying on the result rather than a general factorization, at a cost of
+a few nanoseconds, against tens of microseconds to assemble even this small a matrix, close
 enough to free that there is no reason not to check.
 
 ## 5. Dirichlet conditions, and a Poisson problem
@@ -240,9 +240,9 @@ bd = assemble(ld)
 nothing # hide
 ```
 
-`dirichlet_constraints` records the values, `dirichlet_bc!` applies them — to the matrix by
+`dirichlet_constraints` records the values, `dirichlet_bc!` applies them: to the matrix by
 replacing the constrained rows, and to the vector by writing the boundary values in.
-`dirichlet_constraints` takes the mesh (or a `Domain`/grid space) directly — no need to
+`dirichlet_constraints` takes the mesh (or a `Domain`/grid space) directly; no need to
 extract the underlying `CartesianProduct` first:
 
 ```@example forms
@@ -279,11 +279,11 @@ back. `symmetrize!` moves the constrained columns onto the right-hand side, rest
 symmetry and leaving the solution unchanged:
 
 ```@example forms
-issymmetric(ad)          # true — the form is symmetric by construction, before any boundary condition
+issymmetric(ad)          # true: the form is symmetric by construction, before any boundary condition
 ```
 
 ```@example forms
-issymmetric(Matrix(Ad))  # false — dirichlet_bc! zeroed rows, not columns
+issymmetric(Matrix(Ad))  # false: dirichlet_bc! zeroed rows, not columns
 ```
 
 ```@example forms
@@ -292,12 +292,12 @@ issymmetric(Matrix(Ad))  # true again, and the solution above is unchanged
 ```
 
 `issymmetric(ad)` is a claim about the expression `ad`, not about any one matrix that gets
-assembled from it — it says nothing about what `dirichlet_bc!` alone leaves behind, which is
+assembled from it: it says nothing about what `dirichlet_bc!` alone leaves behind, which is
 exactly why the middle line above answers `false` even though the first one answers `true`.
 
 ### Boundary fluxes: `reaction`
 
-By the time `uh` exists, `dirichlet_bc!` has already overwritten `Ad`'s constrained rows —
+By the time `uh` exists, `dirichlet_bc!` has already overwritten `Ad`'s constrained rows;
 the flux information they carried is gone. [`reaction`](@ref) recovers it by reassembling
 the *unconstrained* `ad`/`ld` (`assemble` with no `dirichlet` keyword) and reading the flux
 straight off the residual `A*uh - F` there, which is `≈ 0` on every unconstrained row and,
@@ -310,7 +310,7 @@ reaction(ad, ld, uh_elt; marker = :left), reaction(ad, ld, uh_elt; marker = :rig
 
 Both come out `≈ π`: for `u = sin(πx)`, the flux `-u'` leaving the domain is `π` at each end,
 and the two together recover the net source `∫₀¹ π² sin(πx) dx = 2π` to round-off, regardless
-of mesh resolution — see [`reaction`](@ref)'s own docstring for the sign convention and
+of mesh resolution. See [`reaction`](@ref)'s own docstring for the sign convention and
 [`reaction_density`](@ref) for the pointwise quantity, suitable for [`export_vtk`](@ref).
 
 ## 6. Coupled systems
@@ -334,24 +334,24 @@ size(Ac)
 ```
 
 Sixty-six by sixty-six: two blocks of 33, assembled into one matrix. A term naming `u[i]` and
-`v[j]` lands in block ``(j, i)``, so off-diagonal coupling is written the same way —
+`v[j]` lands in block ``(j, i)``, so off-diagonal coupling is written the same way:
 `innerₕ(u[1], v[2])` fills the block that couples the first unknown to the second equation.
 
 Component indices are checked against the number of blocks at form construction time: accessing `u[3]`
-or `u(3)` on a 2-component space raises an immediate `ArgumentError`. Furthermore, a term must name both
+or `u(3)` on a 2-component space raises an immediate `ArgumentError`. A term must name both
 components or neither:
 
 ```julia
 form(Vₕ, Vₕ, (u, v) -> innerₕ(u[1], v))   # ArgumentError
 ```
 
-Naming one and leaving the other open has no reading as mathematics — the term would belong
-to every equation at once — so it is refused rather than guessed at. Naming neither is fine
+Naming one and leaving the other open has no reading as mathematics: the term would belong
+to every equation at once, so it is refused rather than guessed at. Naming neither is fine
 and means the diagonal, applied to every block.
 
 ### Constraining one block, leaving another free
 
-`dirichlet` on its own binds to every leaf sharing the named marker — fine when every
+`dirichlet` on its own binds to every leaf sharing the named marker. That is fine when every
 block wants the same treatment, not when they don't. A Stokes-style system prescribing
 velocity while leaving pressure unconstrained needs `dirichlet_components` too: 1-based leaf
 positions, the same order `u(1)`/`u(2)` addressing already uses.
@@ -365,7 +365,7 @@ Ac2 = assemble(ac2; dirichlet = (:left, :right), dirichlet_components = 1)
 nothing # hide
 ```
 
-Block 1 (rows `1:21`) has its boundary rows pinned; block 2 is untouched — still the plain
+Block 1 (rows `1:21`) has its boundary rows pinned; block 2 is untouched, still the plain
 assembled operator, no rows replaced at all. Leaving `dirichlet_components` at its default
 (`nothing`) applies the labels to every leaf, exactly as before this keyword existed; call
 `assemble!`/`dirichlet_bc!` again with a different `dirichlet`/`dirichlet_components`
@@ -373,12 +373,12 @@ pair to constrain another block differently.
 
 ### Interpolating between the leaves of a heterogeneous composite space
 
-The composite spaces above stack copies of *one* space — every leaf shares a mesh. A
+The composite spaces above stack copies of *one* space: every leaf shares a mesh. A
 composite space can also be built directly from a tuple of leaves over different meshes,
 and then a term coupling two leaves needs a way to move a value from one leaf's grid to
 the other's: [`πₕ`](@ref), one argument fewer than the numeric `πₕ`/[`πₕ!`](@ref) pair (see
 the [operators tutorial](operators.md) for the numeric side and a diagram of the
-interpolant itself) — the same name, told apart by dispatch rather than a different one.
+interpolant itself); the same name, told apart by dispatch rather than a different one.
 
 ```@raw html
 <figure>
@@ -399,7 +399,7 @@ interpolant itself) — the same name, told apart by dispatch rather than a diff
 
   <rect x="230" y="45" width="190" height="80" rx="8" fill="none" stroke="#8b5cf6" stroke-width="1.5"/>
   <text x="325" y="70" font-size="12" font-weight="bold" fill="#8b5cf6" text-anchor="middle">πₕ(u(2))</text>
-  <text x="325" y="88" font-size="11" fill="currentColor" opacity="0.75" text-anchor="middle">a SourceFunction —</text>
+  <text x="325" y="88" font-size="11" fill="currentColor" opacity="0.75" text-anchor="middle">a SourceFunction:</text>
   <text x="325" y="103" font-size="11" fill="currentColor" opacity="0.75" text-anchor="middle">composes with D₋ₓ, M₋ₓ, ...</text>
 
   <path d="M 425 85 L 475 85" stroke="currentColor" stroke-width="2" marker-end="url(#arrowFlow)"/>
@@ -412,8 +412,8 @@ interpolant itself) — the same name, told apart by dispatch rather than a diff
 </figure>
 ```
 
-`πₕ(uₕ)` reads exactly like any other source — it is one, an AST leaf wrapping
-`x -> interpolate_at(uₕ, x)` — so it composes with `D₋ₓ`, `M₋ₓ`, and the rest the same way
+`πₕ(uₕ)` reads exactly like any other source: it is one, an AST leaf wrapping
+`x -> interpolate_at(uₕ, x)`, so it composes with `D₋ₓ`, `M₋ₓ`, and the rest the same way
 `sin`, a `VectorElement`, or any other source does, and can sit on the left of `innerₕ`
 inside a coupled form:
 
@@ -433,7 +433,7 @@ maximum(abs, b .- b_plain)
 ```
 
 The two terms land in the same block (leaf 1, `Wbig`) even though the source they read
-from lives on leaf 2's own, coarser mesh — `πₕ` is what makes that a well-posed
+from lives on leaf 2's own, coarser mesh: `πₕ` is what makes that a well-posed
 expression rather than a size mismatch. This is exactly what makes a heterogeneous
 composite space useful for more than indexing: leaf 2 can represent one field at a
 resolution the problem calls for, and a term over leaf 1 can still read it.
@@ -445,7 +445,7 @@ cancelled. The page was green either way, because a zero vector has the right le
 perfectly finite. A worked example should show what it computes.
 
 An operated source is worth a word on what it means. `innerₕ(D₋ₓ(f), v)` is
-``\sum_i |\square_i| \, (D_{-x}f)_i \, v_i`` — the operator acts on the *source*, producing
+``\sum_i |\square_i| \, (D_{-x}f)_i \, v_i``: the operator acts on the *source*, producing
 another grid function, which is then integrated against the test function. It agrees entry
 for entry with applying the numeric operator first:
 `assemble(form(Wₕ, v -> innerₕ(D₋ₓ(fₕ), v)))` equals
@@ -468,7 +468,7 @@ A coupled block is assembled by walking the test leaf's grid and reading the tri
 of that same index space, so it needs the two leaves to agree on what an index means. Two
 leaves over meshes of different sizes do not: index `(3, 3)` on an 8×8 grid and on a 4×4 grid
 name different points, and nothing in the term says how to get from one to the other. So there
-is no assembly to give, and the error says so rather than guessing — in one direction it used
+is no assembly to give, and the error says so rather than guessing: in one direction it used
 to overrun the trial block and throw from deep inside `sparse!`, and in the other it quietly
 filled in-range but wrong columns.
 
@@ -479,8 +479,8 @@ repeating one space (`Wₕ^Val(2)`), including off-diagonal blocks.
 
 `Rₕ!`, `avgₕ!`, gridspace construction and form assembly all thread the same way: `Serial()`
 or `Parallel()`, chosen once when the backend is built, rather than decided per call. See the
-[backend tutorial](backend.md) for backend construction in general — vector/matrix types
-included — and for how to choose between the two policies; this section only covers what the
+[backend tutorial](backend.md) for backend construction in general (vector/matrix types
+included) and for how to choose between the two policies; this section only covers what the
 choice means for assembly specifically.
 
 ```@example forms
@@ -490,7 +490,7 @@ execution_policy(Wₕ_par)
 ```
 
 There is no automatic size threshold. A `Parallel()` backend threads every eligible call,
-however small, however often a time loop repeats it — asking for `Parallel()` and getting it
+however small, however often a time loop repeats it; asking for `Parallel()` and getting it
 is the point, rather than a heuristic guessing on the caller's behalf whether a given call is
 big enough to be worth it. Pick `Serial()` (the default `backend()` already is) for small,
 frequently repeated calls instead.
@@ -505,7 +505,7 @@ nothing # hide
 ```
 
 `assemble_parallel!` still exists underneath, as a lower-level entry point that always
-threads regardless of the backend's policy — useful for a one-off forced comparison or a
+threads regardless of the backend's policy; useful for a one-off forced comparison or a
 benchmark, not the everyday call:
 
 ```@example forms
@@ -519,20 +519,20 @@ offsets a stencil reaches give the width of the footprint one point writes, and 
 separated by at least that width cannot overlap. Points sharing a stride are therefore
 written concurrently with nothing to coordinate.
 
-The common case is one colour. A form whose test argument carries no difference — `innerₕ(fₕ, v)`
-above — reaches only its own point, so the stride is 1 in every direction and the whole grid
+The common case is one colour. A form whose test argument carries no difference (`innerₕ(fₕ, v)`
+above) reaches only its own point, so the stride is 1 in every direction and the whole grid
 is swept in a single flat parallel pass. A gradient term in two dimensions reaches one point
 back along each axis, giving four colours swept in turn.
 
 Whether threading pays depends on the size, and not always in the obvious direction:
 assembly is memory-bound, so the gain flattens well before the thread count does. The
-[benchmarks](../benchmarks.md) page carries the measurements — that is what should decide
+[benchmarks](../benchmarks.md) page carries the measurements; that is what should decide
 which policy a backend is built with, not a guess.
 
 ## 8. Restricting a term to part of the mesh
 
 `innerₕ`, `inner₊` and the directional products all take a `markers` keyword, restricting the
-sum to the union of the regions the labels name — the same idea as `restrict_to`, spelled at
+sum to the union of the regions the labels name; the same idea as `restrict_to`, spelled at
 the call site rather than wrapping an argument:
 
 ```@example forms
@@ -548,13 +548,13 @@ a_boundary = form(Wd, Wd, (u, v) -> innerₕ(u, v; markers = (:boundary,)))
 size(assemble(a_boundary))
 ```
 
-This is a masked *sum* of the existing cell measures — not a surface integral, and the two
+This is a masked *sum* of the existing cell measures, not a surface integral, and the two
 are not interchangeable; a masked `innerₕ` scales like `h` and vanishes under refinement,
 where a true boundary integral does not. `markers` is for the former; a Neumann or Robin
 term needing the latter is a separate, not-yet-built piece (`inner_Γ`).
 
 A marker that does not exist anywhere the term reaches is a loud error rather than a silent
-all-zero contribution — `RegionRestriction`'s own per-point check cannot tell "nothing here
+all-zero contribution: `RegionRestriction`'s own per-point check cannot tell "nothing here
 is marked" from "no such marker", so this is caught once, before assembling anything:
 
 ```@example forms
@@ -566,7 +566,7 @@ end
 ```
 
 On a composite space, a marker used without naming a component reaches every diagonal block,
-and has to exist on every leaf that reaches — write the term per component, each with its own
+and has to exist on every leaf that reaches: write the term per component, each with its own
 markers, if it does not.
 
 ## 9. What `form(...)` simplifies automatically
@@ -577,8 +577,8 @@ because the assembler routes a form's summands one at a time: every `+` in the e
 a separate sweep over the mesh, so an expression with fewer top-level summands assembles
 faster, for exactly the same matrix or vector.
 
-Most of the rewrites touch only `+`, `*` and `/` — never the operators inside them (`D₋ₓ`,
-`inner₊`, `innerₕ`, and the rest) — so they apply to whatever is built from those, coupled
+Most of the rewrites touch only `+`, `*` and `/`, never the operators inside them (`D₋ₓ`,
+`inner₊`, `innerₕ`, and the rest), so they apply to whatever is built from those, coupled
 systems and restricted terms included. A few reach one layer deeper, into an inner product's
 own arguments and into `shift_op`, because leaving them out would mean either a correctness
 gap or a documented dead end; §"What stays as written, and why" below draws the exact line.
@@ -590,15 +590,15 @@ routed and assembled separately:
 
 ```@example forms
 a_dup = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + innerₕ(u, v))
-Bramble.resolve_form_ast(a_dup)  # 2 * innerₕ(u, v) — one term, not two
+Bramble.resolve_form_ast(a_dup)  # 2 * innerₕ(u, v): one term, not two
 ```
 
 ```@example forms
 Matrix(assemble(a_dup)) ≈ 2 .* Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))))
 ```
 
-A form built up piece by piece — accumulating one contribution per physical effect, some of
-which may coincide — pays nothing for the duplication once assembled: write the terms
+A form built up piece by piece (accumulating one contribution per physical effect, some of
+which may coincide) pays nothing for the duplication once assembled: write the terms
 separately if that is the clearer expression of the model, rather than checking by hand
 whether two of them happen to repeat.
 
@@ -612,7 +612,7 @@ evaluate, but one routed term instead of two.
 W2 = gridspace(Ω2)
 
 a_split = form(W2, W2, (u, v) -> 2 * inner₊ₓ(D₋ₓ(u), D₋ₓ(v)) + 2 * inner₊ᵧ(D₋ᵧ(u), D₋ᵧ(v)))
-Bramble.resolve_form_ast(a_split)  # 2 * (inner₊ₓ(...) + inner₊ᵧ(...)) — one routed term
+Bramble.resolve_form_ast(a_split)  # 2 * (inner₊ₓ(...) + inner₊ᵧ(...)): one routed term
 ```
 
 ```@example forms
@@ -621,14 +621,14 @@ a_y = form(W2, W2, (u, v) -> inner₊ᵧ(D₋ᵧ(u), D₋ᵧ(v)))
 Matrix(assemble(a_split)) ≈ 2 .* (Matrix(assemble(a_x)) .+ Matrix(assemble(a_y)))
 ```
 
-An isotropic operator written out direction by direction — the common way to build one before
-reaching for a name like `inner₊`/`∇₋ₕ` that already sums over every direction — assembles as
+An isotropic operator written out direction by direction (the common way to build one before
+reaching for a name like `inner₊`/`∇₋ₕ` that already sums over every direction) assembles as
 cheaply as writing it the terser way by hand.
 
 ### A zero-scaled term leaves no trace
 
-A term scaled by the literal number `0` — a coefficient set to zero for a particular run,
-common in continuation methods and IMEX schemes toggling a physical effect on and off —
+A term scaled by the literal number `0` (a coefficient set to zero for a particular run,
+common in continuation methods and IMEX schemes toggling a physical effect on and off)
 contributes nothing to the sparsity pattern, rather than reserving space for the stencil it
 would otherwise have:
 
@@ -639,13 +639,13 @@ nnz(assemble(a_full)) == nnz(assemble(a_mass))  # the stiffness term left no ent
 ```
 
 Without this, the zero-scaled stiffness term would still reserve its full band in the
-pattern — nonzero *positions* holding the value `0.0` — which costs both memory and a wasted
+pattern (nonzero *positions* holding the value `0.0`), which costs both memory and a wasted
 sweep computing them. Toggling a term off is free to leave in the expression; there is no
 need to branch in Julia code around it.
 
 A dynamic coefficient (a `Ref`, §2's "Live grid coefficients and dynamic scalars") combines
-and factors the same way a static number does, and keeps tracking its own updates afterwards
-— the rewrite only ever moves the `Ref` around, never reads the value inside it:
+and factors the same way a static number does, and keeps tracking its own updates afterwards;
+the rewrite only ever moves the `Ref` around, never reads the value inside it:
 
 ```@example forms
 β = Ref(1.0)
@@ -658,20 +658,20 @@ Matrix(assemble(a_ref)) ≈ 2 .* Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> inne
 Matrix(assemble(a_ref)) ≈ 6 .* Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))))
 ```
 
-Two different `Ref`s, or a `Ref` alongside a plain number, never combine — a rewrite that
+Two different `Ref`s, or a `Ref` alongside a plain number, never combine: a rewrite that
 assumed two independent dynamic coefficients were the same value would be a correctness bug
 the first time they diverged, so it is not attempted; write the shared coefficient as one
 `Ref`, used on every term it scales, if two terms are meant to move together.
 
 ### A scalar inside an inner product's argument is lifted back out
 
-The three rules above stop at `innerₕ`/`inner₊`/... itself — but a scalar written *inside*
+The three rules above stop at `innerₕ`/`inner₊`/... itself, but a scalar written *inside*
 one of their arguments is lifted back out to wrap the whole product, exposing it to exactly
 those rules:
 
 ```@example forms
 a_hidden = form(Wₕ, Wₕ, (u, v) -> innerₕ(2 * D₋ₓ(u), D₋ₓ(v)) + innerₕ(3 * D₋ₓ(u), D₋ₓ(v)))
-Bramble.resolve_form_ast(a_hidden)  # 5 * innerₕ(D₋ₓ(u), D₋ₓ(v)) — one term, not two
+Bramble.resolve_form_ast(a_hidden)  # 5 * innerₕ(D₋ₓ(u), D₋ₓ(v)): one term, not two
 ```
 
 ```@example forms
@@ -679,7 +679,7 @@ Matrix(assemble(a_hidden)) ≈ 5 .* Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> i
 ```
 
 This is not only a routing question. `issymmetric`/`isposdef` (§4) recognise `innerₕ(L(u),
-L(v))` — the same operator on both sides — structurally, and a scalar sitting inside one
+L(v))` (the same operator on both sides) structurally, and a scalar sitting inside one
 argument used to hide that shape from the check, because `2 * D₋ₓ(u)` and `D₋ₓ(v)` are
 different node types even though the pattern is exactly the symmetric one:
 
@@ -687,13 +687,13 @@ different node types even though the pattern is exactly the symmetric one:
 issymmetric(form(Wₕ, Wₕ, (u, v) -> innerₕ(2 * D₋ₓ(u), D₋ₓ(v))))
 ```
 
-Write the scalar wherever reads best — `2 * innerₕ(D₋ₓ(u), D₋ₓ(v))` and `innerₕ(2 * D₋ₓ(u),
+Write the scalar wherever reads best: `2 * innerₕ(D₋ₓ(u), D₋ₓ(v))` and `innerₕ(2 * D₋ₓ(u),
 D₋ₓ(v))` now assemble, and are checked for symmetry, identically.
 
 ### A component-mixing sum inside one inner product
 
 `innerₕ(fₕ, v(1) + v(2))` names two different components of a coupled test space inside one
-product — asking, in effect, for `fₕ`'s contribution to land in two different equations at
+product, asking, in effect, for `fₕ`'s contribution to land in two different equations at
 once. There is no single routed term that means that, so this distributes into two, the same
 shape as writing them separately:
 
@@ -711,13 +711,13 @@ assemble(l_mixed) ≈ assemble(l_split)
 ```
 
 Before this rule, `l_mixed` assembled to an `ArgumentError` naming the two mismatched
-components rather than a vector — writing the sum by hand, as `l_split` does, was the only
+components rather than a vector: writing the sum by hand, as `l_split` does, was the only
 way to couple one source to two equations. Both spellings work now; write whichever reads
 better at the call site.
 
 This is the one rule that can turn a single sweep back into two rather than the reverse: a
 sum naming the *same* component on both sides (`v(1) + D₋ₓ(v(1))`, say) is left as the one
-term it already was, since nothing forces it apart — only a genuine mismatch, which had no
+term it already was, since nothing forces it apart; only a genuine mismatch, which had no
 valid single-term routing to begin with, triggers the split. A coefficient wrapping a mixed
 sum distributes along with it, for the same reason: `2 * innerₕ(fₕ, v(1) + v(2))` assembles
 `2 * innerₕ(fₕ, v(1)) + 2 * innerₕ(fₕ, v(2))`, not an `OperatorScale` hiding the same
@@ -725,7 +725,7 @@ unroutable shape from view.
 
 ### Nested grid-function scalings fuse into one array
 
-`u_h * (v_h * A)` — two grid functions scaling the same operator, one wrapping the other —
+`u_h * (v_h * A)` (two grid functions scaling the same operator, one wrapping the other)
 precomputes their elementwise product once, at construction, rather than reading both arrays
 at every point of every assembly:
 
@@ -745,13 +745,13 @@ the two scalings would have cost the same either way.
 ### Two nested shifts combine, and a zero shift disappears
 
 `shift_op` composes the way integer addition does: two shifts along the *same* dimension
-combine their amounts, and a net shift of zero is the identity — including a shift undone by
+combine their amounts, and a net shift of zero is the identity; including a shift undone by
 its own inverse:
 
 ```@example forms
 using Bramble: shift_op
 a_shift = form(Wₕ, Wₕ, (u, v) -> innerₕ(shift_op(shift_op(u, 1, 2), 1, -2), v))
-Bramble.resolve_form_ast(a_shift)  # innerₕ(u, v) — the two shifts cancelled
+Bramble.resolve_form_ast(a_shift)  # innerₕ(u, v): the two shifts cancelled
 ```
 
 A shift along a *different* dimension never combines with one it wraps: `Shift_x` and
@@ -762,19 +762,19 @@ exactly as written.
 
 Every rule above stops at `BilinearProduct`/`LinearProduct`/`ShiftNode`: none of it descends
 into a difference, an average, a jump, a restriction or an interpolation. A scalar or a shift
-buried one layer further in —
+buried one layer further in:
 
 ```@example forms
 # NOT lifted: the `2` sits inside D₋ₓ's own argument, one layer past where this pass looks
 form(Wₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(2 * u), v))
 ```
 
-— is invisible to it, the same way `innerₕ(2 * u, v)` used to be before the rule above:
+is invisible to it, the same way `innerₕ(2 * u, v)` used to be before the rule above:
 write the scalar where the pass can see it, `2 * innerₕ(D₋ₓ(u), v)` or `innerₕ(2 * D₋ₓ(u),
 v)`, rather than nested inside the difference's own argument.
 
 `πₕ(Wsrc, u)` is never folded away, even when `Wsrc` happens to be exactly the space `u` is
-assembled against — a rewrite that could fire would need to know the trial space a term is
+assembled against: a rewrite that could fire would need to know the trial space a term is
 about to be assembled into, which an expression built before `form` sees any space does not
 have. This is rarely a real cost: coupling two leaves that already share a mesh needs no
 `πₕ` at all (§6, "Interpolating between the leaves of a heterogeneous composite space").

@@ -31,7 +31,7 @@ called on every invocation, cache hit or miss, so a later call at an already-see
 still sees the new guess rather than the one `build` first saw.
 
 `build` itself should be a named function defined once, not a closure literal written
-inside whatever function calls `type_cached_assemble!` — the same reason the Picard loop
+inside whatever function calls `type_cached_assemble!`, the same reason the Picard loop
 in `poisson_nonlinear.jl` builds its own form once, outside the loop, rather than on every
 iteration: a `do ... end` block re-literalized on every call allocates a new closure each
 time, which is exactly the cost this function exists to avoid paying more than once.

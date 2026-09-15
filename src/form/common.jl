@@ -26,7 +26,7 @@ Zero-initialized offset tuple of dimension `D`.
 
 Shifts all coordinates in a stencil tuple by `delta` in dimension `Dim`.
 
-`map` over a `Tuple` unrolls and stays type-stable at compile time in Julia — measured
+`map` over a `Tuple` unrolls and stays type-stable at compile time in Julia, measured
 against a `@generated` version this once was (gpena/Bramble.jl#63): identical zero
 allocations and identical inferred return type, so the code generation bought nothing
 here.
@@ -71,7 +71,7 @@ contributes no matrix structure, only their total. `false` rather than `0` or `z
 the empty-stencil answer: [`RegionRestriction`](@ref) can legitimately produce `()` for a
 point outside its region, and there is no `T` to call `zero` on when there are no entries to
 read one from; `false` promotes to whatever numeric type the other entries (or, empty, the
-caller's own multiplication) turn out to have — exactly `sum(f, itr; init = false)`'s own
+caller's own multiplication) turn out to have: exactly `sum(f, itr; init = false)`'s own
 behavior, which is what this calls. This used to be its own `@generated` unrolled fold
 "like every other stencil-algebra primitive" in this file; measured against `sum` directly
 (gpena/Bramble.jl#63), identical zero allocations and identical inferred type, so the

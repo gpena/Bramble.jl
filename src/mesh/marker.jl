@@ -194,7 +194,7 @@ Seed `:boundary` and `:interior` from the mesh's own geometry, preserving any ex
 custom definitions registered under those names.
 
 If a pre-existing custom marker with the same name disagrees with the geometric boundary,
-a warning is issued because downstream operators (`restrict_to`) assume geometric semantics —
+a warning is issued because downstream operators (`restrict_to`) assume geometric semantics,
 unless `warn_marker_mismatch` is `false`, for a caller that has deliberately redefined the
 label and does not want to be told so on every mesh built from it.
 """

@@ -258,7 +258,7 @@ end
 
 # The two-argument `show` is Julia's compact, embeddable form: what appears inside an
 # array, in `"$X"`, and wherever the value is part of something else. It stays a single
-# line with no type name of its own — the array header already carries the type, and
+# line with no type name of its own: the array header already carries the type, and
 # `mesh/pretty_print.jl` embeds this same rendering inside a mesh's own display, where a
 # repeated `CartesianProduct{…}` would be noise (gpena/Bramble.jl#45).
 function Base.show(io::IO, X::CartesianProduct{D}) where {D}

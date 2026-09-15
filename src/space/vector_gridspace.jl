@@ -135,7 +135,7 @@ end
 
 # No `weights(::CompositeGridSpace, ...)` method: leaves can have different meshes and
 # therefore different weights, so there is no single vector that could correctly answer
-# for the whole composite (gpena/Bramble.jl#67) — the same reason `normₕ`/`norm₊`
+# for the whole composite (gpena/Bramble.jl#67); the same reason `normₕ`/`norm₊`
 # (space/inner_product.jl) are typed for a `ScalarGridSpace` only. A composite raises the
 # `MethodError` those already document as the contract; call `weights` on a `components`
 # leaf instead.
@@ -148,7 +148,7 @@ end
 Whether every leaf element in `comps` (a composite's `components(uₕ)`) sits on the exact
 same mesh object.
 
-A composite's leaves need not share a mesh — heterogeneous composites, whose leaves are
+A composite's leaves need not share a mesh: heterogeneous composites, whose leaves are
 built over differently-sized meshes, are a supported pattern (see the interpolation
 tutorial). When they do share one, a single evaluation of a vector-valued function at one
 leaf's grid points is valid for every leaf, which is what the scatter paths of

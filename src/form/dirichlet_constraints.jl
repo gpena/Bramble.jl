@@ -472,7 +472,7 @@ end
 Internal helper to apply Dirichlet boundary conditions to matrix `A` at the indices marked
 in `index_in_marker`: each marked row is zeroed and its diagonal set to one.
 
-Costs the boundary cardinality, not `ndofs` — the marked indices are walked with
+Costs the boundary cardinality, not `ndofs`: the marked indices are walked with
 `_each_marked` rather than scanned for.
 """
 function _dirichlet_bc_indices!(A::AbstractMatrix, index_in_marker::BitVector)
@@ -549,6 +549,7 @@ end
 
 # --- Symmetrization of the linear system ------------------------------------------- #
 
+# A scalar space carries its mesh, and every other entry point here takes one.
 """
     symmetrize!(A::AbstractMatrix, F::AbstractVector, Ωₕ::AbstractMeshType, labels::Symbol...)
 
@@ -560,7 +561,6 @@ For each index `i` with prescribed Dirichlet boundary conditions:
 - Update `F` by subtracting `dᵢ` from `F` (preserving the `i`-th component);
 - Zero out off-diagonal elements in the `i`-th column of `A`.
 """
-# A scalar space carries its mesh, and every other entry point here takes one.
 @inline function symmetrize!(
         A::AbstractMatrix,
         F::AbstractVector,

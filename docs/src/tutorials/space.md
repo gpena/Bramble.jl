@@ -79,10 +79,10 @@ spaces(Vₕ)       # (Wₕ, Wₕ)
 
 `ndofs(Vₕ, Tuple)` also works, but means something different here than it did for `Wₕ`
 above: on a `ScalarGridSpace` it is the grid's shape, one entry per spatial dimension
-(`Nₓ`, `Nᵧ`); on a `CompositeGridSpace` it is one entry per component instead — `(25, 25)`
+(`Nₓ`, `Nᵧ`); on a `CompositeGridSpace` it is one entry per component instead: `(25, 25)`
 for `Vₕ`, not a shape. `weights`, by contrast, is not defined at all for a
 `CompositeGridSpace`: its components can sit on different meshes, so there is no single
-weight vector to hand back for the whole space — call `weights` on a `components(Vₕ)`
+weight vector to hand back for the whole space: call `weights` on a `components(Vₕ)`
 leaf instead.
 
 Composite spaces can also be constructed from distinct constituent spaces:
@@ -125,7 +125,7 @@ wₕ = 3.0 .* uₕ .+ vₕ
 
 ### Scaling by a continuous function
 
-A plain `Function` has no meaning as a grid function on its own — `f * uₕ` restricts `f` to
+A plain `Function` has no meaning as a grid function on its own: `f * uₕ` restricts `f` to
 `uₕ`'s own space first (`Rₕ(space(uₕ), f)`) and scales elementwise, giving back an ordinary
 `VectorElement`:
 
