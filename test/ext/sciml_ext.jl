@@ -456,6 +456,136 @@ end
             @test issorted(errors; rev = true)
         end
     end
+
+    # v2.13.0's verification gate asks for zero-allocation evaluations *during time
+    # stepping*, which is a stronger claim than the one `test/form/semidiscrete.jl` already
+    # pins: that file calls `sd(du, u, p, t)` at a state it picked itself, while this samples
+    # the states an integrator actually reaches, after it has adapted its step size and, for
+    # the BDF and Rosenbrock methods, refactorised at least once. Both measurements sit
+    # behind a function barrier, since `@allocated` over globals reports the caller's own
+    # boxing rather than the routine's work (`bramble-verification` §1).
+    # Measured through these two argument-passing helpers rather than `@allocated` written
+    # inline in the loop below: with the state read straight out of `integrator.u` at the
+    # measurement site, both readings sat at a constant 16 B and 112 B regardless of mesh
+    # size or stepper, the fixed-cost signature of the call boxing its arguments rather than
+    # of the routine allocating (`bramble-verification` §1). Passed as arguments, both go to
+    # zero, matching what `test/form/semidiscrete.jl` measures the same way.
+    _traj_rhs_allocs(sd, du, u, t) = @allocated sd(du, u, nothing, t)
+    _traj_jac_allocs(J, sd, u, t) = @allocated Bramble.jacobian!(J, sd, u, nothing, t)
+
+    @testset "zero allocations along an integrator's trajectory" begin
+        function _trajectory_allocs(n, alg)
+            _, Wₕ, I, _, _, sd = _sciml_setup(n)
+            u0 = Rₕ(Wₕ, x -> _sciml_uex(x, 0.0))
+            integrator = SciMLBase.init(
+                ode_problem(sd, u0, I), alg; reltol = 1e-8, abstol = 1e-10
+            )
+            du = similar(parent(u0))
+            J = jacobian_prototype(sd)
+
+            # Warm both paths at the integrator's own starting state, so what the loop below
+            # measures is steady-state work rather than first-call compilation.
+            _traj_rhs_allocs(sd, du, integrator.u, integrator.t)
+            _traj_jac_allocs(J, sd, integrator.u, integrator.t)
+
+            worst_rhs = 0
+            worst_jac = 0
+            for _ in 1:8
+                SciMLBase.step!(integrator)
+                worst_rhs = max(
+                    worst_rhs, _traj_rhs_allocs(sd, du, integrator.u, integrator.t)
+                )
+                worst_jac = max(
+                    worst_jac, _traj_jac_allocs(J, sd, integrator.u, integrator.t)
+                )
+            end
+            return worst_rhs, worst_jac
+        end
+
+        for alg in (FBDF(), QNDF(), Rodas5P(; autodiff = AutoFiniteDiff()))
+            rhs_allocs, jac_allocs = _trajectory_allocs(21, alg)
+            @test rhs_allocs == 0
+            @test jac_allocs == 0
+        end
+    end
+
+    # The same gate asks for manufactured solutions verified across the *PDE* solvers, not
+    # only the ODE ones. `test/drivers/variable_coefficient_poisson.jl` already pins the
+    # assemble -> boundary-condition -> solve pipeline, but it solves with `\`; what that
+    # leaves unverified is the order actually delivered through the SciML entry points, which
+    # is what a caller of this extension gets. Elsewhere in this file those wrappers are only
+    # checked against `A \ F`'s own answer, which cannot catch an error both paths share.
+    @testset "manufactured solutions through the steady solvers" begin
+        _poisson_uex(x) = sinpi(x[1])
+        _poisson_src(x) = pi^2 * sinpi(x[1])
+
+        function _linear_error(n)
+            Ωₕ = Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0)), n)
+            Wₕ = gridspace(Ωₕ)
+            fₕ = Bramble.element(Wₕ)
+            avgₕ!(fₕ, _poisson_src)
+            a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+            l = form(Wₕ, v -> innerₕ(fₕ, v))
+            uₕ = solve(a, l; dirichlet = :boundary => _poisson_uex)
+            return normₕ(Rₕ(Wₕ, _poisson_uex) - uₕ), hₘₐₓ(Ωₕ)
+        end
+
+        # The nonlinear counterpart: -(α(u) u')' = f with α(u) = 3 + 1/(1 + u²), whose
+        # manufactured solution is exp(x). Solved through `nonlinear_problem` and
+        # `NewtonRaphson`, so the second order has to survive the Newton path as well as the
+        # linear one.
+        _nl_sol(x) = exp(x[1])
+        _nl_α(u) = 3 + 1 / (1 + u^2)
+        _nl_dα(u) = -2u / (1 + u^2)^2
+        _nl_src(x) = -_nl_dα(_nl_sol(x)) * _nl_sol(x)^2 - _nl_α(_nl_sol(x)) * _nl_sol(x)
+
+        function _nonlinear_error(n)
+            Ω = Bramble.domain(Bramble.interval(0.0, 1.0))
+            Ωₕ = Bramble.mesh(Ω, n)
+            Wₕ = gridspace(Ωₕ)
+            bcs = dirichlet_constraints(Ω, :boundary => _nl_sol)
+            gₕ = Bramble.element(Wₕ)
+            avgₕ!(gₕ, _nl_src)
+            F = assemble(form(Wₕ, v -> innerₕ(gₕ, v)); dirichlet = bcs)
+
+            # `eltype(u)`, not the space's own: `NewtonRaphson` builds its Jacobian by
+            # forward-mode AD, so this is called with `ForwardDiff.Dual` state. Typing the
+            # element from the space instead is exactly the defect `bramble-verification` §4
+            # collects, and shows up here as `MethodError: Float64(::Dual)`.
+            function residual!(r, u, p)
+                uₕ = Bramble.element(Wₕ, eltype(u))
+                parent(uₕ) .= u
+                αv = _nl_α.(M₋ₕ(uₕ))
+                A = assemble(
+                    form(Wₕ, Wₕ, (U, V) -> inner₊(αv * ∇₋ₕ(U), ∇₋ₕ(V))); dirichlet = :boundary
+                )
+                mul!(r, A, u)
+                r .-= F
+                return nothing
+            end
+
+            sol = solve(nonlinear_problem(residual!, copy(F)), NewtonRaphson())
+            @test SciMLBase.successful_retcode(sol)
+            uₕ = Bramble.element(Wₕ)
+            parent(uₕ) .= sol.u
+            return normₕ(Rₕ(Wₕ, _nl_sol) - uₕ), hₘₐₓ(Ωₕ)
+        end
+
+        for (name, errfn) in (("linear_problem", _linear_error),
+            ("nonlinear_problem", _nonlinear_error))
+            errors = Float64[]
+            spacings = Float64[]
+            for n in (11, 21, 41)
+                e, h = errfn(n)
+                push!(errors, e)
+                push!(spacings, h)
+            end
+            eoc = [log(errors[i] / errors[i + 1]) / log(spacings[i] / spacings[i + 1]) for
+                   i in 1:(length(errors) - 1)]
+            @test all(>(1.9), eoc)
+            @test issorted(errors; rev = true)
+        end
+    end
 end
 
 end # module ExtSciMlExtTests
