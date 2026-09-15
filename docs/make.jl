@@ -73,7 +73,16 @@ makedocs(;
     format = Documenter.HTML(;
         prettyurls = get(ENV, "CI", nothing) == "true",
         size_threshold = 400 * 1024,
-        size_threshold_warn = 250 * 1024
+        size_threshold_warn = 250 * 1024,
+        # "Signal" theme (#132): retokenizes Documenter's own sidebar/content/breadcrumb
+        # shell in place, so search/doctest/@ref keep working unmodified.
+        assets = [
+            Documenter.asset(
+                "https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&family=Source+Sans+3:wght@400;600&display=swap";
+                class = :css
+            ),
+            "assets/custom.css"
+        ]
     ),
     sitename = "Bramble.jl",
     pages = allpages,

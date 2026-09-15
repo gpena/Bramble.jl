@@ -2,6 +2,23 @@
 
 This documentation is for `Bramble.jl`, a Julia library implementing discretization methods to solve partial differential equations using finite differences on nonuniform grids.
 
+```@raw html
+<div class="bramble-home-cards">
+  <a class="bramble-card" href="examples/poisson_linear.html">
+    <div class="bramble-card-title">Quick start</div>
+    <div class="bramble-card-body">Build a mesh, a grid space, and assemble a first Poisson system in under twenty lines.</div>
+  </a>
+  <a class="bramble-card" href="tutorials/operators.html">
+    <div class="bramble-card-title">Mathematical foundations</div>
+    <div class="bramble-card-body">The discrete calculus behind every operator: difference quotients, jumps, averages, and how they compose.</div>
+  </a>
+  <a class="bramble-card" href="examples/heat_equation.html">
+    <div class="bramble-card-title">Gallery of PDEs</div>
+    <div class="bramble-card-body">Linear and nonlinear Poisson, convection&ndash;diffusion, reaction&ndash;diffusion, elasticity, a heat equation.</div>
+  </a>
+</div>
+```
+
 For more information on the types of discretizations encompassed by `Bramble.jl`, please consult the papers
 * J. A. Ferreira and R. D. Grigorieff, [On the supraconvergence of elliptic finite difference schemes](https://doi.org/10.1016/S0168-9274(98)00048-8), Applied Numerical Mathematics 28 (1998), pp. 275-292
 
