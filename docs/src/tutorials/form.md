@@ -119,10 +119,13 @@ The sum of assembled entries ``\sum b_i = S`` is preserved to machine precision,
 evaluating the form against smooth grid functions contracts with ``\mathcal{O}(h^2)``
 accuracy.
 
-- **Superposition**: A vector of coordinates and intensities describes multiple point sources:
+- **Superposition**: A vector of coordinates and intensities describes multiple point
+  sources. Each coordinate is wrapped (a 1-tuple here, in 1D) rather than passed as a bare
+  number, since a bare `AbstractVector{<:Real}` is read as the coordinates of one point in
+  `length(x0)` dimensions, not a list of scalar points:
 
 ```@example forms
-l_multi = form(Wₕ, v -> innerₕ(dirac([0.2, 0.7], [1.0, -1.0]), v))
+l_multi = form(Wₕ, v -> innerₕ(dirac([(0.2,), (0.7,)], [1.0, -1.0]), v))
 b_multi = assemble(l_multi)
 sum(b_multi) ≈ 0.0 # balanced dipole
 ```
