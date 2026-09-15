@@ -295,6 +295,24 @@ issymmetric(Matrix(Ad))  # true again, and the solution above is unchanged
 assembled from it — it says nothing about what `dirichlet_bc!` alone leaves behind, which is
 exactly why the middle line above answers `false` even though the first one answers `true`.
 
+### Boundary fluxes: `reaction`
+
+By the time `uh` exists, `dirichlet_bc!` has already overwritten `Ad`'s constrained rows —
+the flux information they carried is gone. [`reaction`](@ref) recovers it by reassembling
+the *unconstrained* `ad`/`ld` (`assemble` with no `dirichlet` keyword) and reading the flux
+straight off the residual `A*uh - F` there, which is `≈ 0` on every unconstrained row and,
+on a constrained one, exactly the flux the condition had to supply:
+
+```@example forms
+uh_elt = element(Wd, uh)
+reaction(ad, ld, uh_elt; marker = :left), reaction(ad, ld, uh_elt; marker = :right)
+```
+
+Both come out `≈ π`: for `u = sin(πx)`, the flux `-u'` leaving the domain is `π` at each end,
+and the two together recover the net source `∫₀¹ π² sin(πx) dx = 2π` to round-off, regardless
+of mesh resolution — see [`reaction`](@ref)'s own docstring for the sign convention and
+[`reaction_density`](@ref) for the pointwise quantity, suitable for [`export_vtk`](@ref).
+
 ## 6. Coupled systems
 
 A composite space stacks copies of a space, and a form over one addresses its blocks by
