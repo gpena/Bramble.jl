@@ -69,6 +69,8 @@ benchmark/*
 research/
 .agents/
 .claude/
+.caliper/
+graphify-out/
 LocalPreferences.toml
 
 # The manual is written and built outside version control, by request.
