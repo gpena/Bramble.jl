@@ -148,6 +148,56 @@ newton_residuals_native
 # of those values. `SparseConnectivityTracer`'s tracer still works here regardless of how
 # `coupled_matrix` was built, composite space and all — the case to reach for it is a residual
 # whose matrix does not come from a `BilinearForm` in the first place, which is not this one.
+#
+# ## Solving with NonlinearSolve.jl
+#
+# Everything above is a hand-written Newton loop, the same as [the nonlinear Poisson
+# example](poisson_nonlinear.md). [`nonlinear_problem`](@ref) wraps a residual into the
+# `NonlinearProblem` that [NonlinearSolve.jl](https://docs.sciml.ai/NonlinearSolve/stable/)
+# takes regardless of what space the residual is built over — a composite space changes
+# nothing about the wrapping, only what `jac_prototype` looks like once built. `J_native`
+# above is already that prototype, the block-sparse pattern [`ast_sparsity_detector`](@ref)
+# read off `a_for_pattern`'s two components, so it is handed through unchanged. In place,
+# the same way `coupled_matrix` is written out-of-place above and `residual!` here is not:
+# `mul!` writes `A * w_vec` into the caller's own `res` rather than allocating a fresh vector
+# every evaluation.
+
+using NonlinearSolve
+using SciMLBase: SciMLBase
+using LinearAlgebra: mul!
+
+function residual!(res::AbstractVector, w_vec::AbstractVector{T}, p) where {T}
+    wₕ = element(Vₕ, T)
+    wₕ .= w_vec
+    A = coupled_matrix(wₕ)
+    mul!(res, A, w_vec)
+    res .-= F
+    return res
+end
+
+prob = nonlinear_problem(residual!, zeros(ndofs(Vₕ)); jac_prototype = J_native)
+sol_ns = solve(prob, NewtonRaphson(); abstol = 1e-10)
+sol_ns.retcode, maximum(abs, sol_ns.u .- w_native)
+
+# The same answer Newton reached by hand above, to the tolerance both were asked for --      #src
+# checked per species, not only combined: a routing mistake in the composite Jacobian would  #src
+# show up as one species converging while the other silently used the wrong block, which a   #src
+# single combined comparison could hide (bramble-verification §5, the same reason the        #src
+# exact-solution check above is split by species).                                           #src
+@test sol_ns.retcode == SciMLBase.ReturnCode.Success                                          #src
+@test maximum(abs, sol_ns.u .- w_native) < 1e-8                                              #src
+wₕ_ns = element(Vₕ)                                                                          #src
+wₕ_ns .= sol_ns.u                                                                             #src
+uₕ_ns, vₕ_ns = components(wₕ_ns)                                                              #src
+uₕ_native, vₕ_native = components(element(Vₕ, w_native))                                     #src
+@test maximum(abs, parent(uₕ_ns) .- parent(uₕ_native)) < 1e-8                                 #src
+@test maximum(abs, parent(vₕ_ns) .- parent(vₕ_native)) < 1e-8                                 #src
+#
+# Quadratic convergence over a composite space carries over unchanged to `NonlinearSolve.jl`
+# too -- the block sparsity pattern is all a composite residual ever needed to hand it, and
+# `NewtonRaphson` reaches the same solution the hand-written loops above do. See [the nonlinear
+# Poisson example](poisson_nonlinear.md) for a measured Picard-against-NonlinearSolve
+# comparison; the same contrast holds here and is not repeated a second time.
 
 wₕ = element(Vₕ)
 wₕ .= w

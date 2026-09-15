@@ -119,6 +119,21 @@ ts = range(0.0, 1.0; length = 60)
 Z = reduce(vcat, (sol(t)' for t in ts))
 spacetime_surface_plot(points(Ωₕ), collect(ts), Z; title = "Heat equation, x-t-u")
 
+# `sol` is also a ParaView time series waiting to happen: one `.pvd` collection, one `.vtr`
+# per step, with a working time slider once opened. `Wₕ` (not just the mesh) is what turns
+# each raw solution vector back into a properly shaped field — see the
+# [VTK export tutorial](../tutorials/vtk_export.md#5.-Time-series-for-ParaView) for the
+# hand-written-loop form this is shorthand for.
+
+using WriteVTK
+
+pvd_dir = mktempdir() # hide
+files = export_vtk(joinpath(pvd_dir, "heat"), Wₕ, sol; times = range(0.0, 1.0; length = 20))
+nothing # hide
+
+@test count(f -> endswith(f, ".vtr"), files) == 20 #src
+@test isfile(joinpath(pvd_dir, "heat.pvd"))         #src
+
 # The initial condition handed in is copied, never mutated, and the copy is made consistent
 # with the algebraic rows at ``t_0`` before stepping starts — an index-1 system whose initial
 # condition disagrees with its own constraints is otherwise rejected by the solver or absorbed
@@ -128,8 +143,72 @@ spacetime_surface_plot(points(Ωₕ), collect(ts), Z; title = "Heat equation, x-
 #     `Rodas5P` and friends also want the time derivative of the right-hand side, which they
 #     build by differentiating through `t`. An `update_coefficients!` hook writing into a
 #     `Float64` grid function — the one above does — cannot accept a `ForwardDiff.Dual` time,
-#     so pass `Rodas5P(autodiff = AutoFiniteDiff())` from `ADTypes`, or use a BDF method,
-#     which needs no `∂f/∂t` at all.
+#     so pass `Rodas5P(autodiff = AutoFiniteDiff())` from `ADTypes`, use a BDF method (which
+#     needs no `∂f/∂t` at all), or supply an analytical `tgrad` — see below.
+#
+# ## An analytical `tgrad` for Rosenbrock methods
+#
+# `ode_function`/`ode_problem` take a `tgrad` keyword: an exact `∂f/∂t`, handed straight to
+# `ODEFunction` so a Rosenbrock method never has to differentiate through `t` at all. For this
+# problem `f(t) = F(t) - A u_h` and `A` does not depend on `t`, so `∂f/∂t = ∂F/∂t` — assembled
+# the same way `F` itself is, from the time derivative of the source:
+
+using OrdinaryDiffEqRosenbrock
+
+∂ₜsource(x, t) = -(pi^2 - 1) * exp(-t) * sinpi(x[1])   # ∂ₜ of `source` above
+
+tgrad_heat(dT, sd, u, p, t) = begin
+    gₕ = Rₕ(space(sd), x -> ∂ₜsource(x, t))
+    l_t = form(space(sd), v -> innerₕ(gₕ, v))
+    assemble!(dT, l_t)
+end
+
+prob_rosenbrock = ode_problem(sd, Rₕ(Wₕ, x -> uexact(x, 0.0)), I; tgrad = tgrad_heat)
+sol_rosenbrock = solve(prob_rosenbrock, Rodas5P(); reltol = 1e-11, abstol = 1e-13)
+
+uₕ_r = element(Wₕ)
+parent(uₕ_r) .= sol_rosenbrock.u[end]
+normₕ(Rₕ(Wₕ, x -> uexact(x, 1.0)) - uₕ_r)
+
+# No `AutoFiniteDiff()` and no BDF fallback: the default forward-mode `autodiff` differentiates
+# the Jacobian through `u` only, and `tgrad` supplies the `t`-derivative directly.
+@test 1.0e-5 < normₕ(Rₕ(Wₕ, x -> uexact(x, 1.0)) - uₕ_r) < 5.0e-5               #src
+#
+# ## A time-dependent operator
+#
+# `tgrad` fixes the source half of `∂f/∂t`; the other method of [`semidiscretize`](@ref)
+# fixes the operator half, for a spatial operator whose own coefficients vary with `t`. A
+# fixed `BilinearForm` closes over a `Float64` coefficient buffer, which cannot hold the
+# `Dual` a Rosenbrock stepper reaches for either way. `semidiscretize(build, l; ...)` instead
+# takes a `build(t) -> (a, refill!)` factory, called once per element type `t` is ever seen
+# at — `Float64` on an ordinary step, `Dual` while `Rodas5P`'s default `autodiff`
+# differentiates through `t` — so the coefficient buffer it refills is always the right type.
+# The source is held fixed here on purpose, to isolate the operator: a `t`-dependent source
+# reached through `update_coefficients!` has the same `Float64`-buffer limitation `tgrad`
+# fixes above, for the same reason:
+
+α(t) = 1.0 + 0.5 * sinpi(2t)     # a diffusivity that genuinely varies with t
+gₕ = Rₕ(Wₕ, x -> sinpi(x[1]))
+l_t = form(Wₕ, v -> innerₕ(gₕ, v))
+
+function build_diffusion(t)
+    αₕ = element(Wₕ, typeof(t))
+    a_t = form(Wₕ, Wₕ, (u, v) -> inner₊(αₕ * ∇₋ₕ(u), ∇₋ₕ(v)))
+    refill!(t) = (fill!(parent(αₕ), α(t)); nothing)
+    return a_t, refill!
+end
+
+sd_t = semidiscretize(build_diffusion, l_t; dirichlet = bcs)
+prob_t = ode_problem(sd_t, Rₕ(Wₕ, x -> uexact(x, 0.0)), I)
+
+sol_t_rosenbrock = solve(prob_t, Rodas5P(); reltol = 1e-11, abstol = 1e-13)
+sol_t_fbdf = solve(prob_t, FBDF(); reltol = 1e-11, abstol = 1e-13)
+maximum(abs.(sol_t_rosenbrock.u[end] .- sol_t_fbdf.u[end]))
+
+# The same `ODEProblem`, one stepper differentiating through `t` by default and the other
+# needing no `∂f/∂t` at all, land on the same answer -- neither `AutoFiniteDiff()` nor a
+# hand-written `tgrad` was needed for the operator itself.
+@test maximum(abs.(sol_t_rosenbrock.u[end] .- sol_t_fbdf.u[end])) < 1.0e-6              #src
 #
 # ## Checking the answer
 #
