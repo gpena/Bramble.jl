@@ -62,14 +62,20 @@ using ..TestUtils: alloc_test, @test_allocs
         end
 
         @testset "_innerplus_mean_weights!" begin
+            # The transverse factor: every entry, boundary included, is the mesh's own
+            # half_spacing there (gpena/Bramble.jl#236) -- unlike _innerplus_weights!
+            # above, the *aligned* factor, whose first entry is correctly zero (no cell
+            # behind node 1 along the direction being differenced). Hand-zeroing the two
+            # boundary entries here used to delete real quadrature weight instead: see
+            # _innerplus_mean_weights!'s own docstring for why that was wrong and how it
+            # was checked against the discrete summation-by-parts identities before fixing.
             u = vector(backend(mesh1d), npoints(mesh1d))
             N = npoints(mesh1d)
             _innerplus_mean_weights!(u, mesh1d, 1)
-            @test u[1] == 0.0
-            @test u[N] == 0.0
-            for i in 2:(N - 1)
+            for i in 1:N
                 @test u[i] ≈ half_spacing(mesh1d, i)
             end
+            @test u[1] > 0 && u[N] > 0
         end
 
         @testset "__innerplus_weights!" begin

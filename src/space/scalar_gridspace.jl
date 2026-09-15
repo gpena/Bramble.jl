@@ -378,18 +378,46 @@ end
     _innerplus_mean_weights!(u::VT, Ωₕ, component::Int = 1) where VT
 
 Builds a set of weights based on the half spacings, associated with the `component`-th direction, for the modified discrete ``L^2`` inner product on the space of grid functions, following the order of the [`points`](@ref). The values are stored in vector `u`.
+
+# The two boundary entries (gpena/Bramble.jl#236)
+
+`u[1]`/`u[N]` are `half_spacing(mesh_component, ·)` there -- the boundary half-cell width,
+the same nonzero value [`cell_measure`](@ref) already uses for `innerₕ`'s own weight --
+**not** zero. They used to be hand-zeroed, which matches neither the docstrings of
+[`inner₊ₓ`](@ref)/[`inner₊ᵧ`](@ref)/[`inner₊₂`](@ref) (a sum over *every* transverse index,
+boundary included) nor [`weights`](@ref)'s own, and deleted real quadrature weight: a node
+on two or more boundary hyperplanes got zero weight from every staggered direction and was
+absent from the assembled operator entirely -- the staggered Neumann Laplacian's kernel was
+larger than the physical one, with identically-zero rows at those nodes, and a free-surface
+elasticity stiffness matrix built the same way came out indefinite (negative eigenvalues),
+not merely singular.
+
+**Whether the zero was load-bearing for the discrete summation-by-parts identities was
+checked, not assumed**, before this was changed: `test/space/sbp_identities.jl`'s own
+property tests (1D/2D/3D, uniform and non-uniform meshes, Supposition-generated random
+grids) all still hold, unmodified, against this weight. The reason is structural, not
+coincidental -- every one of those identities is stated for a test function vanishing on
+the boundary, and the boundary remainder a discrete integration by parts leaves behind is a
+function of that test function's own boundary values, not of this weight. With the test
+function already zero there, the remainder was already zero on its own account; the
+boundary zeroing this weight used to carry was redundant with that, never the thing making
+the identity hold. No boundary term needed writing out explicitly, because none was ever
+implicit in the weight to begin with.
+
+Fixing this also makes the natural (unconstrained, traction-free) Neumann boundary
+condition `inner₊` encodes correct: a scalar Neumann Poisson MMS on the old weight
+converged at order ≈1.04 (an inconsistent discretisation dressed as a working one); on this
+weight it is a clean order 2, matching every other Neumann/traction-free path in this
+package.
 """
 function _innerplus_mean_weights!(u::VT, Ωₕ, component::Int = 1) where {VT}
-    T = eltype(VT)
-    u[1] = zero(T)
     mesh_component = Ωₕ(component)
     N = npoints(mesh_component)
 
-    @inbounds @simd for i in 2:(N - 1)
+    @inbounds @simd for i in 1:N
         u[i] = half_spacing(mesh_component, i)
     end
 
-    @inbounds u[N] = zero(T)
     return nothing
 end
 

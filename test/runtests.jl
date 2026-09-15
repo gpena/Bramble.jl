@@ -99,6 +99,7 @@ if __bramble_with_unit_tests
             include("space/inplace_operators.jl")
             include("space/operators.jl")
             include("space/inner_product.jl")
+            include("space/inner_plus_boundary.jl")
             include("space/conservation.jl")
             include("space/composite_operators.jl")
             include("space/interpolation.jl")
