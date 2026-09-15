@@ -61,10 +61,13 @@ nothing # hide
 
 # ## Visualizing the solution
 #
-# A surface plot of the field just solved for, `uₕ` from the block above — no new solve needed:
+# An interactive panel, seeded from the resolution of `uₕ` above but solving its own problem
+# in the browser: drag the resolution slider, switch between a uniform and a fully random
+# mesh, or pick a different manufactured solution, and every plot and diagnostic below
+# updates immediately.
 
 include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
-surface_plot(uₕ; title = "Linear Poisson, 2D") # hide
+poisson_interactive_widget(uₕ; title = "Linear Poisson, 2D") # hide
 
 # ## Checking the answer
 #
