@@ -27,17 +27,18 @@
 #
 # !!! note "Why a boundary value, not a diffusion coefficient"
 #     The issue's own motivating example is recovering a *diffusion coefficient* -- `θ`
-#     scaling the stiffness form itself, `θ K uₕ = F`. That case currently hits an unrelated,
-#     pre-existing limitation: `Enzyme` cannot reverse-mode differentiate through
-#     `bilinear_execution.jl`'s record/replay assembly engine, which uses a `Union`-typed
-#     `AnySegment{D}` internally (`src/form/bilinear.jl`'s own docstring) that
-#     `Enzyme.API.strictAliasing` rejects (`IllegalTypeAnalysisException`) -- confirmed
-#     directly, not assumed, and independent of [`pde_solve`](@ref)'s own rule, which is not
-#     what fails. A gradient with respect to the *Dirichlet boundary value* hits none of this,
-#     since only `F` -- filled by `dirichlet_bc!`'s own value-writing path, not by the AST
-#     execution engine -- depends on `θ`; `assemble`'s stiffness half stays fixed and
-#     `Float64`-typed throughout. Recovering an operator-level coefficient this way is a
-#     follow-up once the assembly engine itself is made Enzyme-compatible.
+#     scaling the stiffness form itself, `θ K uₕ = F`. A gradient with respect to the
+#     *Dirichlet boundary value*, as on this page, reaches only `F`, filled by
+#     `dirichlet_bc!`'s own value-writing path; `assemble`'s stiffness half stays fixed and
+#     `Float64`-typed throughout, so none of what follows applies to it.
+#
+#     A coefficient gradient instead makes `Enzyme` differentiate `assemble`'s own recording
+#     pass, which is not currently supported: from a fully inferred call site a `Union` left
+#     in the assembly path raises `IllegalTypeAnalysisException`, and above roughly a dozen
+#     machine words of stencil -- any difference operator in 2D or 3D -- Enzyme cannot type
+#     the mixed offset/weight tuple at all. [`pde_solve`](@ref)'s own docstring states both
+#     limits and what does work instead; lifting them is follow-up work
+#     (gpena/Bramble.jl#240).
 #
 # ## Solving it
 
@@ -75,19 +76,19 @@ loss(θ::Real) = sum(abs2, forward(θ)[obs_idx[k]] - u_obs[k] for k in eachindex
 
 # ## Gradient descent, driven by the adjoint
 #
-# `ChainRulesCore` must be loaded before `Enzyme`'s own `@import_rrule` bridge exists at all
-# -- it lives in `Enzyme`'s `EnzymeChainRulesCoreExt`, a weak-dependency extension of `Enzyme`
-# itself, gated on `ChainRulesCore` being loaded, the same idiom [`pde_solve`](@ref)'s own
-# `BrambleChainRulesExt` uses. `Enzyme.@import_rrule` then makes that rule reachable from
-# `Enzyme.gradient` -- without it, Enzyme tries to trace into the LU factorisation directly
-# and raises `IllegalTypeAnalysisException`, not a wrong answer (`pde_solve`'s own docstring).
+# `using Enzyme` is all the setup this needs: `BrambleEnzymeExt` defines a native
+# `EnzymeRules` reverse rule for [`pde_solve`](@ref), so `Enzyme.gradient` reaches the adjoint
+# directly. Do *not* add `Enzyme.@import_rrule(typeof(pde_solve), ...)` here -- besides
+# defining a second rule for the same signature, that bridge corrupts Enzyme's shadow of a
+# sparse `A` whenever the cotangent carries an explicit zero, and returns a wrong gradient
+# with no error at all (`pde_solve`'s own docstring, gpena/Bramble.jl#240).
+#
 # `loss` closes over `Wₕ`/`a`/`l`, which Enzyme cannot prove read-only on its own, so the
 # function argument is wrapped `Const` -- the same annotation `docs/src/tutorials/autodiff.md`
 # and `test/space/autodiff_heavy.jl` already document for the ordinary (non-solve) path.
 
-using ChainRulesCore, Enzyme, SparseArrays
+using Enzyme
 
-Enzyme.@import_rrule(typeof(Bramble.pde_solve), SparseMatrixCSC, AbstractVector)
 mode = Enzyme.set_runtime_activity(Enzyme.Reverse)
 
 θ = 0.3   # deliberately far from θ_true = 0.7

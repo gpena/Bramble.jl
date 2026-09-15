@@ -28,63 +28,74 @@ See also: [`RecordSink`](@ref), [`ReplaySink`](@ref).
 const NzvalSegment = Tuple{Vector{Int}, Vector{Int}}
 
 """
-    DiagonalSegment{D}
+    Segment{D}
 
-One term's recorded nzval positions for one block, on a `D`-dimensional structured grid
-where the term's own [`_stencil_margin`](@ref) let its interior peel away from a boundary
-shell (gpena/Bramble.jl#160): interior entries are `base[k] + stride[k] * n` for the `n`-th
-point `interior`'s own iteration order visits (`n` zero-based, `_interior_rank`),
-rather than one stored `Int` per entry -- `positions` never carries the interior's
-`O(N * P)` share at all. `boundary` is an ordinary [`NzvalSegment`](@ref) covering only the
-shell, indexed exactly as before.
+One term's recorded nzval positions for one block, on a `D`-dimensional structured grid.
+Replaces a former `Union{NzvalSegment,DiagonalSegment{D}}` (`AnySegment{D}`) with a single
+concrete struct (gpena/Bramble.jl#240): `Enzyme`'s strict-aliasing type analysis rejects a
+`Union` return outright (`IllegalTypeAnalysisException`), regardless of whether the segment
+itself is ever the target of differentiation, so `_try_diagonal_segment` needed a return type
+Enzyme can reason about -- a discriminated struct, not a two-branch `Union`.
 
-Built by `_record_segment!` only when every interior point produces the same number
-of entries `P` and the same per-tap stride holds across the whole interior -- checked once,
-not assumed, because a form summing terms of different margins can make a column's true
-`nzval` footprint vary inside what this one term calls its own interior (see
-[`_stencil_margin`](@ref)). Any point where the check fails falls back to a plain
-[`NzvalSegment`](@ref), the general shape [`ReplaySink`](@ref) already handles.
+`is_diagonal` selects which shape is populated:
+- `false` (flat): `point_ptr`/`positions` cover every entry, exactly as [`NzvalSegment`](@ref)
+  always has; `base`/`stride`/`interior` are unused placeholders (empty, zero).
+- `true` (diagonal, gpena/Bramble.jl#160): `point_ptr`/`positions` cover only the boundary
+  shell; `base`/`stride`/`P`/`interior` carry the interior's per-tap stride arithmetic --
+  interior entries are `base[k] + stride[k] * n` for the `n`-th point `interior`'s own
+  iteration order visits (`n` zero-based, `_interior_rank`), rather than one stored `Int` per
+  entry, so `positions` never carries the interior's `O(N * P)` share at all.
+
+Built by `_record_segment!` only when every interior point produces the same number of
+entries `P` and the same per-tap stride holds across the whole interior -- checked once, not
+assumed, because a form summing terms of different margins can make a column's true `nzval`
+footprint vary inside what this one term calls its own interior (see [`_stencil_margin`](@ref)).
+Any point where the check fails falls back to the flat shape instead, the general case
+[`ReplaySink`](@ref) already handles.
 
 Parametrized by `D` alone -- `interior`'s ranges-tuple type is pinned to
-`NTuple{D,UnitRange{Int}}` (what `_interior_range` always produces), never left as
-an independent free parameter -- so that for one `BilinearForm`'s fixed dimension,
-`AnySegment{D}` is a two-member union of *concrete* types. A `CartesianIndices{D}` alone, or
-a `DiagonalSegment` with `D` left to vary, is not concrete (its ranges type is still a
-`UnionAll`) and stores boxed: exactly what made an early version of this allocate 80-400 B on
-every replay, `@test_allocs`-checked paths included.
+`NTuple{D,UnitRange{Int}}` (what `_interior_range` always produces), never left as an
+independent free parameter -- so that for one `BilinearForm`'s fixed dimension, `Segment{D}`
+is concrete. A `CartesianIndices{D}` alone, or a `Segment` with `D` left to vary, is not
+concrete (its ranges type is still a `UnionAll`) and stores boxed: exactly what made an early
+version of this allocate 80-400 B on every replay, `@test_allocs`-checked paths included.
 
-See also: [`DiagonalReplaySink`](@ref), [`AnySegment`](@ref).
+See also: [`DiagonalReplaySink`](@ref).
 """
-struct DiagonalSegment{D}
+struct Segment{D}
+    is_diagonal::Bool
+    point_ptr::Vector{Int}
+    positions::Vector{Int}
     base::Vector{Int}
     stride::Vector{Int}
     P::Int
     interior::CartesianIndices{D, NTuple{D, UnitRange{Int}}}
-    boundary::NzvalSegment
 end
 
-"""
-    AnySegment{D} = Union{NzvalSegment,DiagonalSegment{D}}
+# A concrete, zero-length placeholder for `interior` on the flat path, where nothing reads
+# it -- still has to be a real `CartesianIndices{D,NTuple{D,UnitRange{Int}}}` value, since
+# `Segment{D}` has no field left optional (that is the entire point: one concrete shape,
+# not a Union of two).
+_empty_interior(::Val{D}) where {D} = CartesianIndices(ntuple(_ -> 1:0, D))
 
-Either recorded shape a (term, block) can cache, for a `D`-dimensional form: a flat
-[`NzvalSegment`](@ref) or, where the structure held, a [`DiagonalSegment`](@ref). Kept as a
-two-concrete-member union per `D` -- see [`DiagonalSegment`](@ref) -- rather than leaving
-`D` to vary, so `Vector{AnySegment{D}}` stores unboxed.
-"""
-const AnySegment{D} = Union{NzvalSegment, DiagonalSegment{D}}
+# The flat shape: built at every early return in `_try_diagonal_segment` (bilinear_execution.jl)
+# where the interior/boundary split does not hold or is not worth it.
+function _flat_segment(::Val{D}, point_ptr::Vector{Int}, positions::Vector{Int}) where {D}
+    Segment{D}(false, point_ptr, positions, Int[], Int[], 0, _empty_interior(Val(D)))
+end
 
 # One `BilinearForm`'s nzval-position cache: valid only for the exact matrix object last
-# assembled into (`A === cache.A`), one `AnySegment{D}` per (term, block) the serial assembly
+# assembled into (`A === cache.A`), one `Segment{D}` per (term, block) the serial assembly
 # walk visits, in visitation order. A companion *value*, not a type parameter of
 # `BilinearForm` -- so it can be filled in lazily, on the first `assemble!` call, without the
 # form itself needing to be mutable or its type to depend on whether a cache exists yet. `D`
 # itself, though, is threaded in at construction (matching `BilinearForm`'s own `D`): without
-# it, `segments`'s eltype would be the unparametrized (non-concrete) `AnySegment`, and every
-# push/read would box (see [`DiagonalSegment`](@ref)).
+# it, `segments`'s eltype would be the unparametrized (non-concrete) `Segment`, and every
+# push/read would box (see [`Segment`](@ref)).
 mutable struct _AssemblyCache{D}
     A::Union{Nothing, SparseMatrixCSC}
     ast::Any
-    segments::Vector{AnySegment{D}}
+    segments::Vector{Segment{D}}
 end
 
 # One shared, never-written empty `segments` vector per dimension, so a fresh form's cache
@@ -93,16 +104,16 @@ end
 # `_assemble_bilinear_core_cached!` (form/bilinear_execution.jl) builds its own vector and
 # assigns it, deliberately never `push!`ing into or `empty!`ing whatever `segments` points at.
 #
-# One constant per `D` rather than one shared `AnySegment[]`, because the eltype is
-# dimension-parametric (gpena/Bramble.jl#161): an unparametrized `AnySegment` is not concrete,
-# and storing into such a vector boxes every element (see [`DiagonalSegment`](@ref)). Only the
+# One constant per `D` rather than one shared `Segment[]`, because the eltype is
+# dimension-parametric (gpena/Bramble.jl#161): an unparametrized `Segment` is not concrete,
+# and storing into such a vector boxes every element (see [`Segment`](@ref)). Only the
 # dimensions this package meshes get a constant; any other `D` falls back to allocating, which
 # is what every `D` did before this.
-const _NO_SEGMENTS_1 = AnySegment{1}[]
-const _NO_SEGMENTS_2 = AnySegment{2}[]
-const _NO_SEGMENTS_3 = AnySegment{3}[]
+const _NO_SEGMENTS_1 = Segment{1}[]
+const _NO_SEGMENTS_2 = Segment{2}[]
+const _NO_SEGMENTS_3 = Segment{3}[]
 
-_no_segments(::Val{D}) where {D} = AnySegment{D}[]
+_no_segments(::Val{D}) where {D} = Segment{D}[]
 _no_segments(::Val{1}) = _NO_SEGMENTS_1
 _no_segments(::Val{2}) = _NO_SEGMENTS_2
 _no_segments(::Val{3}) = _NO_SEGMENTS_3
