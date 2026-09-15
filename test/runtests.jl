@@ -83,6 +83,7 @@ if __bramble_with_unit_tests
 
         @testset "Grid spaces" begin
             include("space/gridspaces.jl")
+            include("space/weights_staleness.jl")
             include("space/vector_elements.jl")
         end
 

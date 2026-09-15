@@ -1,6 +1,6 @@
 """
-    SpaceWeights(innerh::VT, innerplus::NTuple{D, VT})
-    SpaceWeights{D, VT}(innerh::VT, innerplus::NTuple{D, VT})
+    SpaceWeights(innerh::VT, innerplus::NTuple{D, VT}, built_version::Int)
+    SpaceWeights{D, VT}(innerh::VT, innerplus::NTuple{D, VT}, built_version::Int)
 
 Holds the diagonal weight vectors for a grid space's discrete inner products, both the
 standard ``L^2`` weights and the staggered ones, precomputed once rather than recomputed
@@ -10,6 +10,11 @@ on every call.
 
   - `innerh::VT`: weight vector for the standard discrete ``L^2`` inner product (`:innerₕ`), based on cell measures (``|\\square_k|``).
   - `innerplus::NTuple{D, VT}`: tuple of weight vectors for modified, staggered inner products (`:inner₊ₓ`, `:inner₊ᵧ`, etc.), with one vector for each spatial dimension.
+  - `built_version::Int`: the mesh's [`_mesh_version`](@ref) at the moment these weights
+    were computed (gpena/Bramble.jl#221) -- [`weights`](@ref) re-checks it against the
+    mesh's current version on every access, so a space built before an in-place mutation
+    (`set_points!`, `change_points!`, `iterative_refinement!`) throws naming the mismatch
+    rather than silently returning weights for a mesh that no longer exists.
 
 For a detailed explanation of the mathematical formulas corresponding to these weights, please refer to the documentation for [`ScalarGridSpace`](@ref).
 """
@@ -18,6 +23,8 @@ struct SpaceWeights{D, VT <: AbstractVector}
     innerh::VT
     "a tuple of weight vectors for modified, staggered inner products (`:inner₊ₓ`, `:inner₊ᵧ`, etc.), with one vector for each spatial dimension."
     innerplus::NTuple{D, VT}
+    "the mesh's `_mesh_version` when these weights were built; see the staleness note above."
+    built_version::Int
 end
 
 """
@@ -112,6 +119,13 @@ weights listed in [`ScalarGridSpace`](@ref).
 
 Scratch memory is supplied explicitly by callers through in-place mutating operators
 (such as `D₋ₓ!(vₕ, uₕ)`), avoiding hidden internal vector buffers.
+
+Weights are a snapshot: they read `Ωₕ`'s grid at the moment of this call and are never
+refreshed afterward. If `Ωₕ` is later mutated in place (`set_points!`, `change_points!`,
+`iterative_refinement!`), the space this call returns keeps the *old* weights, and its
+`innerₕ`/`inner₊*`/every norm then throw naming the mismatch rather than silently computing
+against a mesh that no longer exists (gpena/Bramble.jl#221) -- call `gridspace(Ωₕ)` again to
+get a space that reads the mutated mesh.
 """
 function gridspace(Ωₕ::AbstractMeshType{D}) where {D}
     weights = space_weights(Ωₕ)
@@ -137,7 +151,9 @@ function space_weights(Ωₕ::AbstractMeshType{1})
     inner_h_vec = __vector(Ωₕ)
     _innerh_weights!(inner_h_vec, Ωₕ)
 
-    return SpaceWeights{1, typeof(inner_h_vec)}(inner_h_vec, (innerplus₁,))
+    return SpaceWeights{1, typeof(inner_h_vec)}(
+        inner_h_vec, (innerplus₁,), _mesh_version(Ωₕ)
+    )
 end
 
 function space_weights(Ωₕ::AbstractMeshType{D}) where {D}
@@ -176,7 +192,9 @@ function space_weights(Ωₕ::AbstractMeshType{D}) where {D}
     _innerh_weights!(inner_h_vec, Ωₕ)
 
     # Return the computed weights wrapped in a dedicated `SpaceWeights` struct.
-    return SpaceWeights{D, typeof(inner_h_vec)}(inner_h_vec, innerplus)
+    return SpaceWeights{D, typeof(inner_h_vec)}(
+        inner_h_vec, innerplus, _mesh_version(Ωₕ)
+    )
 end
 
 # Implementation of the interface functions for AbstractSpaceType
@@ -230,13 +248,43 @@ weights, so there is no single vector that could correctly answer for the whole 
 A [`CompositeGridSpace`](@ref) raises a `MethodError`; take a scalar component of it with
 [`components`](@ref) first.
 
+# Staleness (gpena/Bramble.jl#221)
+
+Every method here funnels through the one-argument form, which checks `Wₕ`'s stored
+[`SpaceWeights`](@ref) against `mesh(Wₕ)`'s *current* [`_mesh_version`](@ref) and throws
+naming the mismatch if an in-place mutator (`set_points!`, `change_points!`,
+`iterative_refinement!`) has run on the mesh since these weights were built -- rather than
+`innerₕ`/`inner₊*`/every norm silently computing against weights for a mesh that no longer
+exists. Call [`gridspace`](@ref) again to get a space that reads the mutated mesh. On a
+`CompositeGridSpace` this is checked per leaf, the moment `innerₕ`/etc. recurse into it --
+there is no separate composite-level check to keep in step.
+
 See also: [`SpaceWeights`](@ref), [`Innerh`](@ref), [`Innerplus`](@ref), `innerₕ`
 """
-@inline weights(Wₕ::ScalarGridSpace) = Wₕ.weights
+@inline function weights(Wₕ::ScalarGridSpace)
+    w = Wₕ.weights
+    w.built_version == _mesh_version(mesh(Wₕ)) || _throw_stale_weights(Wₕ)
+    return w
+end
 @inline weights(Wₕ::ScalarGridSpace, ::Innerh) = weights(Wₕ).innerh
 @inline weights(Wₕ::ScalarGridSpace, ::Innerplus) = weights(Wₕ).innerplus
 @inline weights(Wₕ::ScalarGridSpace, ::Innerh, i) = weights(Wₕ, Innerh())
 @inline weights(Wₕ::ScalarGridSpace, ::Innerplus, i) = weights(Wₕ, Innerplus())[i]
+
+# Kept out of `weights` itself so the success path -- one integer comparison -- is all
+# that is ever compiled inline there; the message (and `summary`, which walks the space's
+# type parameters) is built only once a mismatch is already known to have happened.
+@noinline function _throw_stale_weights(Wₕ::ScalarGridSpace)
+    throw(
+        ArgumentError(
+        "$(summary(Wₕ))'s weights were computed from its mesh before an in-place " *
+        "mutation (set_points!, change_points!, or iterative_refinement!) changed it -- " *
+        "innerₕ/inner₊*/every norm through this space would silently use weights for a " *
+        "mesh that no longer exists. Call gridspace(mesh(Wₕ)) again to get a space that " *
+        "reads the mutated mesh.",
+    ),
+    )
+end
 
 """
     dim(Wₕ::ScalarGridSpace) -> Int

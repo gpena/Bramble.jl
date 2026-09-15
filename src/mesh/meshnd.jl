@@ -141,6 +141,13 @@ Return the `i`-th 1D submesh of `Ωₕ` along coordinate axis `i`.
     return @inbounds Ωₕ.submeshes[i]
 end
 
+# See `_mesh_version`'s own docstring (mesh1d.jl): a `MeshnD` has no point storage of its
+# own, so its version is the sum of its submeshes' -- strictly increasing whenever any one
+# axis is mutated (`change_points!(Ωₕ::MeshnD, ...)` delegates per-axis, so this stays
+# correct however many axes actually change), with no second counter to keep in sync.
+# `Ωₕ.submeshes` is a `Tuple`, so this unrolls at compile time and allocates nothing.
+@inline _mesh_version(Ωₕ::MeshnD) = sum(_mesh_version, Ωₕ.submeshes)
+
 #------------------------------------------------------------------------------------------#
 # Macros for Boilerplate Reduction
 #

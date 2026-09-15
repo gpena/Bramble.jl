@@ -18,6 +18,8 @@ Cartesian indices `indices`, and computational backend `backend`. Also precomput
   - `half_spacings`: Precomputed cell widths (control volume measures) ``h_{i+1/2}`` for ``i = 1, \\dots, N``.
   - `spacings`: Precomputed backward grid spacings ``h_i = x_i - x_{i-1}``, with ``h_1 = x_2 - x_1``.
   - `collapsed`: Boolean flag indicating whether the interval is degenerate (a single point).
+  - `version`: Monotone counter bumped by every in-place point mutation (gpena/Bramble.jl#221);
+    see [`set_points!`](@ref) and [`_mesh_version`](@ref).
 
 See also: [`MeshnD`](@ref), [`mesh`](@ref), [`AbstractMeshType`](@ref).
 """
@@ -41,6 +43,8 @@ mutable struct Mesh1D{BT <: Backend, CI <: CartesianIndices{1}, VT <: AbstractVe
     spacings::VT
     "a boolean flag indicating if the domain is degenerate (a single point)."
     collapsed::Bool
+    "monotone counter bumped by every in-place point mutation; see `_mesh_version`."
+    version::Int
 end
 
 @noinline _throw_point_count_mismatch(expected::Int, got::Int) = throw(
@@ -50,6 +54,21 @@ end
 )
 
 @inline is_collapsed(Ωₕ::Mesh1D) = Ωₕ.collapsed
+
+"""
+    _mesh_version(Ωₕ::AbstractMeshType) -> Int
+
+The monotone counter `set_points!` bumps every in-place point mutation
+(gpena/Bramble.jl#221) -- what a [`ScalarGridSpace`](@ref)'s [`SpaceWeights`](@ref) records
+at construction and every discrete inner product/norm re-checks against, to catch weights
+computed from a mesh that has since been mutated underneath them.
+
+A `Mesh1D` reads its own stored counter directly. A `MeshnD` has no coordinates of its own
+-- only [`submeshes`](@ref), each independently mutated by `change_points!(Ωₕ::MeshnD, ...)`
+-- so its version is the sum of theirs: strictly increasing whenever any one axis changes,
+regardless of which, with no second counter of its own to keep in sync.
+"""
+@inline _mesh_version(Ωₕ::Mesh1D) = Ωₕ.version
 
 @inline points(Ωₕ::Mesh1D) = Ωₕ.pts
 
@@ -114,8 +133,17 @@ end
 
 Override the grid coordinates in `Ωₕ`. Recalculates cached [`spacings`](@ref),
 [`half_points`](@ref), and [`half_spacings`](@ref).
+
+Bumps `Ωₕ`'s mesh version (gpena/Bramble.jl#221): every [`ScalarGridSpace`](@ref) already
+built on `Ωₕ` -- via [`gridspace`](@ref), directly or as a leaf of a
+[`CompositeGridSpace`](@ref) -- keeps its own weights, precomputed from the mesh *before*
+this call. Its `innerₕ`/`inner₊*`/norms now throw naming the mismatch instead of silently
+computing against stale weights; call `gridspace(Ωₕ)` again for a space that reads the
+mutated mesh. This is also what [`change_points!`](@ref) and [`iterative_refinement!`](@ref)
+go through, so the same applies to both.
 """
 @inline function set_points!(Ωₕ::Mesh1D, pts)
+    Ωₕ.version += 1
     n = length(pts)
 
     if length(Ωₕ.pts) == n
@@ -416,7 +444,8 @@ function _mesh(
         _half_pts,
         _half_spacings,
         _spacings,
-        is_collapsed
+        is_collapsed,
+        0
     )
 
     # Now, calculate the derived geometric quantities for the newly created mesh. The
@@ -504,7 +533,8 @@ function Base.copy(Ωₕ::Mesh1D)
         copy(Ωₕ.half_pts),
         copy(Ωₕ.half_spacings),
         copy(Ωₕ.spacings),
-        Ωₕ.collapsed
+        Ωₕ.collapsed,
+        Ωₕ.version
     )
 end
 

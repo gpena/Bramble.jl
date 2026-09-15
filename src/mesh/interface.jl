@@ -432,6 +432,13 @@ Without `domain_markers`, any custom marker `Ωₕ` carries beyond `:boundary`/`
 no domain here to re-derive it from, so this throws an `ArgumentError` rather than silently
 dropping it. Pass `domain_markers` (the same ones the mesh was built with, or equivalent) to
 keep them.
+
+!!! warning "Invalidates every ScalarGridSpace already built on Ωₕ"
+    Bumps `Ωₕ`'s mesh version (gpena/Bramble.jl#221; see [`set_points!`](@ref), which this
+    goes through). A [`ScalarGridSpace`](@ref) built with [`gridspace`](@ref)`(Ωₕ)` before
+    this call keeps weights computed from the *old* grid; `innerₕ`, every `inner₊*`, and
+    every norm through it now throw naming the mismatch instead of silently computing a
+    wrong answer. Call `gridspace(Ωₕ)` again afterward.
 """
 function iterative_refinement! end
 
@@ -440,5 +447,12 @@ function iterative_refinement! end
 
 Update the coordinates of mesh `Ωₕ` in-place using new point coordinates in `pts`,
 recalculating all cached half-points and cell spacings.
+
+!!! warning "Invalidates every ScalarGridSpace already built on Ωₕ"
+    Bumps `Ωₕ`'s mesh version (gpena/Bramble.jl#221; see [`set_points!`](@ref), which this
+    goes through). A [`ScalarGridSpace`](@ref) built with [`gridspace`](@ref)`(Ωₕ)` before
+    this call keeps weights computed from the *old* grid; `innerₕ`, every `inner₊*`, and
+    every norm through it now throw naming the mismatch instead of silently computing a
+    wrong answer. Call `gridspace(Ωₕ)` again afterward.
 """
 function change_points! end
