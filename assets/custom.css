@@ -159,29 +159,43 @@ article.content pre {
   margin: 1.5rem 0 2rem;
 }
 
-.bramble-home-cards a.bramble-card {
-  display: block;
+/* Each card is a plain <div> around real Markdown (see index.md): a bold link paragraph
+   (the title) followed by a plain description paragraph, not an <a> wrapping title/body
+   divs -- that would have needed a raw-HTML href Documenter never gets to rewrite for
+   pretty vs. plain URLs. */
+.bramble-home-cards .bramble-card {
   padding: 1rem 1.1rem;
   border: 1px solid var(--s-rule);
   border-radius: 12px;
   background: var(--s-surface);
-  text-decoration: none !important;
   transition: border-color 0.15s ease;
 }
 
-.bramble-home-cards a.bramble-card:hover {
+.bramble-home-cards .bramble-card:hover {
   border-color: var(--s-accent);
 }
 
-.bramble-home-cards .bramble-card-title {
+.bramble-home-cards .bramble-card p {
+  margin: 0;
+}
+
+.bramble-home-cards .bramble-card p:first-child {
+  margin-bottom: 0.35rem;
+}
+
+.bramble-home-cards .bramble-card p:first-child a {
   font-family: 'Manrope', sans-serif;
   font-weight: 800;
   font-size: 0.95rem;
   color: var(--s-ink);
-  margin-bottom: 0.35rem;
+  text-decoration: none;
 }
 
-.bramble-home-cards .bramble-card-body {
+.bramble-home-cards .bramble-card p:first-child a:hover {
+  color: var(--s-accent);
+}
+
+.bramble-home-cards .bramble-card p:last-child {
   font-size: 0.85rem;
   line-height: 1.5;
   color: var(--s-ink-soft);
