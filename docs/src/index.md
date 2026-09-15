@@ -3,19 +3,40 @@
 This documentation is for `Bramble.jl`, a Julia library implementing discretization methods to solve partial differential equations using finite differences on nonuniform grids.
 
 ```@raw html
+<!-- Real Markdown links below, not raw HTML <a> tags: Documenter rewrites a `.md`-target
+     link to the right URL for whichever build mode is active (pretty "page/" on the
+     deployed site, plain "page.html" locally) automatically. A raw HTML href would have
+     to guess that itself, and had been guessing wrong for the deployed site. These
+     <div>s only wrap the styling; the interspersed plain Markdown still goes through
+     Documenter's normal link resolution. -->
 <div class="bramble-home-cards">
-  <a class="bramble-card" href="examples/poisson_linear.html">
-    <div class="bramble-card-title">Quick start</div>
-    <div class="bramble-card-body">Build a mesh, a grid space, and assemble a first Poisson system in under twenty lines.</div>
-  </a>
-  <a class="bramble-card" href="tutorials/operators.html">
-    <div class="bramble-card-title">Mathematical foundations</div>
-    <div class="bramble-card-body">The discrete calculus behind every operator: difference quotients, jumps, averages, and how they compose.</div>
-  </a>
-  <a class="bramble-card" href="examples/heat_equation.html">
-    <div class="bramble-card-title">Gallery of PDEs</div>
-    <div class="bramble-card-body">Linear and nonlinear Poisson, convection&ndash;diffusion, reaction&ndash;diffusion, elasticity, a heat equation.</div>
-  </a>
+<div class="bramble-card">
+```
+
+**[Quick start](examples/poisson_linear.md)**
+
+Build a mesh, a grid space, and assemble a first Poisson system in under twenty lines.
+
+```@raw html
+</div>
+<div class="bramble-card">
+```
+
+**[Mathematical foundations](tutorials/operators.md)**
+
+The discrete calculus behind every operator: difference quotients, jumps, averages, and how they compose.
+
+```@raw html
+</div>
+<div class="bramble-card">
+```
+
+**[Gallery of PDEs](examples/heat_equation.md)**
+
+Linear and nonlinear Poisson, convection–diffusion, reaction–diffusion, elasticity, a heat equation.
+
+```@raw html
+</div>
 </div>
 ```
 
