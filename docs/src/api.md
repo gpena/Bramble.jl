@@ -436,10 +436,13 @@ boundary value -- the adjoint solves `Aᵀ λ = ∂J/∂u` once, reusing the for
 factorisation, and returns `∂J/∂A = -λ uᵀ` restricted to `A`'s sparsity (never densified) and
 `∂J/∂F = λ`.
 
-Requires [ChainRulesCore.jl](https://github.com/JuliaDiff/ChainRulesCore.jl). Verified against
-`Enzyme` (needs `Enzyme.@import_rrule` -- see [`pde_solve`](@ref)'s own docstring); `Mooncake`
-is not currently supported (a gap in `Mooncake.jl`'s own sparse-array tangent support, also
-documented there). See the [inverse problem worked example](examples/inverse_diffusion.md).
+Requires [ChainRulesCore.jl](https://github.com/JuliaDiff/ChainRulesCore.jl), and serves every
+`ChainRulesCore` consumer. `Enzyme` instead reaches the same adjoint through `BrambleEnzymeExt`'s
+own native `EnzymeRules` rule, which `using Enzyme` is enough to load -- do not call
+`Enzyme.@import_rrule`, whose bridge returns a wrong gradient here (see [`pde_solve`](@ref)'s own
+docstring). `Mooncake` is not currently supported (a gap in `Mooncake.jl`'s own sparse-array
+tangent support, also documented there). See the
+[inverse problem worked example](examples/inverse_diffusion.md).
 
 ```@docs
 pde_solve

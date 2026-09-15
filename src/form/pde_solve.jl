@@ -14,11 +14,10 @@
 #
 # `pde_solve` itself needs no weak dependency: without `ChainRulesCore` loaded it is exactly
 # `\\`, same result, same cost, just not differentiable. `BrambleChainRulesExt` supplies the
-# `ChainRulesCore.rrule`; a caller on `Enzyme` additionally needs
-# `Enzyme.@import_rrule(typeof(pde_solve), SparseMatrixCSC, AbstractVector)` -- Enzyme does not
-# adopt an arbitrary `ChainRulesCore.rrule` merely because `ChainRulesCore` is loaded, so this
-# is spelled out on both `pde_solve`'s own docstring and the rrule's, not left to be
-# discovered from an `IllegalTypeAnalysisException`. `Mooncake` cannot currently be bridged
+# `ChainRulesCore.rrule`, and `BrambleEnzymeExt` a native `EnzymeRules` rule -- Enzyme gets
+# its own rather than a bridged one because `Enzyme.@import_rrule`'s bridge corrupts the
+# shadow of a sparse `A` whenever the cotangent carries an explicit zero
+# (gpena/Bramble.jl#240, and this file's docstring below). `Mooncake` cannot currently be bridged
 # this way at all: `Mooncake.@from_rrule`/`build_rrule` both accept the bridge without
 # complaint, but the first time the rule actually *runs* it needs a real tangent value for
 # the `SparseMatrixCSC` argument, and `Mooncake` has no `increment_and_get_rdata!` for that
@@ -62,15 +61,45 @@ themselves already reverse-mode-differentiable, wrapping only this one function 
 differentiate an entire `θ -> assemble(a(θ), l(θ); dirichlet = θ) -> pde_solve -> J(u)` chain
 end to end -- including gradients with respect to a Dirichlet boundary value.
 
-!!! note "Enzyme needs one extra line, and ChainRulesCore loaded first"
-    `Enzyme` does not automatically adopt a `ChainRulesCore.rrule`. `using ChainRulesCore`
-    before `using Enzyme` (`Enzyme`'s own bridge lives in its `EnzymeChainRulesCoreExt`, a
-    weak-dependency extension of `Enzyme` gated on `ChainRulesCore` being loaded -- without
-    it, `Enzyme.@import_rrule` itself is undefined), then add
-    `Enzyme.@import_rrule(typeof(pde_solve), SparseMatrixCSC, AbstractVector)` once, before
-    calling `Enzyme.gradient`/`Enzyme.autodiff` on code that reaches `pde_solve` -- without
-    it, Enzyme tries to trace into `lu`'s internals directly and raises
-    `IllegalTypeAnalysisException`, not merely a slow or wrong answer.
+!!! note "Enzyme needs nothing beyond `using Enzyme`"
+    `using Enzyme` is enough: `BrambleEnzymeExt` defines a native `EnzymeRules` reverse rule
+    for `pde_solve`, so `Enzyme.gradient`/`Enzyme.autodiff` reach the adjoint directly.
+
+    Do **not** call `Enzyme.@import_rrule(typeof(pde_solve), ...)`. Besides now defining a
+    second rule for the same signature, that bridge is itself unsound here
+    (gpena/Bramble.jl#240): merging the rrule's returned `SparseMatrixCSC` into Enzyme's
+    shadow drops the cotangent's explicit zeros from `nzval` while leaving `colptr`/`rowval`
+    unchanged, so the shadow stops being a well-formed sparse matrix and the gradient comes
+    back wrong without any error. A homogeneous Dirichlet problem produces such a zero
+    routinely, since a constrained row's solution entry is exactly its boundary value.
+
+    A closure that captures a grid space or a form still needs `Enzyme.Const(f)` and
+    `Enzyme.set_runtime_activity(Enzyme.Reverse)`, the same two annotations
+    `docs/src/tutorials/autodiff.md` documents for the ordinary (non-solve) path.
+
+!!! warning "Gradients with respect to an operator's own coefficient are not supported"
+    A gradient with respect to a *Dirichlet value or source term* works for any form: `θ`
+    reaches `F` through `dirichlet_bc!`'s value-writing path, never the assembly engine.
+
+    A gradient with respect to the operator's own coefficient (`θ` scaling the bilinear form
+    itself) additionally needs `Enzyme` to differentiate `assemble`'s recording pass, and
+    that is not currently reliable. Two separate limits bite:
+
+    - From a fully inferred call site, a `Union` still left in the assembly path raises
+      `IllegalTypeAnalysisException`. It happens to compile when the same call is
+      dynamically dispatched instead -- from a script's untyped globals, say -- which is far
+      too fragile a distinction to rely on.
+    - Above roughly a dozen machine words of stencil (any difference operator in 2D or 3D,
+      larger sums of terms in 1D), Enzyme cannot type the mixed offset/weight tuple once it
+      is passed through memory, and raises `EnzymeNoTypeError`. Raising
+      `Enzyme.API.maxtypeoffset!`/`maxtypedepth!` does not move that threshold, and
+      `looseTypeAnalysis!` buys compilation at the price of silently wrong answers, so it is
+      not a workaround.
+
+    Splitting the stencil's `Int` offsets from its `Float64` weights, so what Enzyme
+    differentiates is uniformly typed, is the fix; it is follow-up work on
+    gpena/Bramble.jl#240. Until then, use `ForwardDiff` for coefficient sensitivities, or
+    differentiate with respect to boundary/source data.
 
 !!! warning "Mooncake is not supported"
     `Mooncake.@from_rrule`/`build_rrule` both accept a bridge for `pde_solve` without

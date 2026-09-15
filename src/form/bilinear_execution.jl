@@ -14,34 +14,47 @@
 # built against (gpena/Bramble.jl#26).
 #
 # The parallel path below is untouched by this cache: it always threads, and recording is an
-# inherently serial, one-time pass (`push!` from multiple threads would race), so caching it
-# would mean its first call silently stopped threading -- breaking `assemble_parallel!`'s own
-# documented contract ("always threads").
+# inherently serial, one-time pass (concurrent writes into a shared cache would race), so
+# caching it would mean its first call silently stopped threading -- breaking
+# `assemble_parallel!`'s own documented contract ("always threads").
 
 # One term into one block, serially, searching for each entry's nzval position (once) and
-# recording it into a fresh `AnySegment` alongside performing the (first) real scatter.
+# recording it into a fresh `Segment` alongside performing the (first) real scatter.
 # `row_offset` comes from the test leaf and `col_offset` from the trial leaf: a matrix row
 # is indexed by the test function.
+#
+# Two passes, not one: `_SegmentCountSink` walks the term first to learn exactly how many
+# entries it has, so `RecordSink`'s own `positions` can be preallocated to that size and
+# filled with `setindex!` -- never grown with `push!` (gpena/Bramble.jl#240). See
+# `_SegmentCountSink`'s own docstring for why: `push!` here is what made `Enzyme` unable to
+# compile this function at all when the term's own coefficient is what is being
+# differentiated, independent of (and found only after fixing) the `Union` gpena/Bramble.jl#240
+# was originally filed against.
 function _record_segment!(
         A::SparseMatrixCSC, term::TERM, sp, row_offset::Int, col_offset::Int
 ) where {TERM}
     n = length(indices(mesh(sp)))
-    sink = RecordSink(A, term, Vector{Int}(undef, n + 1), Int[])
+    point_ptr = Vector{Int}(undef, n + 1)
+    count_sink = _SegmentCountSink(point_ptr, 0)
+    visit_bilinear_stencil(count_sink, term, sp, row_offset, col_offset)
+    total = count_sink.n
+    @inbounds point_ptr[n + 1] = total + 1
+
+    sink = RecordSink(A, term, point_ptr, Vector{Int}(undef, total), 0)
     visit_bilinear_stencil(sink, term, sp, row_offset, col_offset)
-    @inbounds sink.point_ptr[n + 1] = length(sink.positions) + 1
-    # No `::AnySegment{D}` type assertion here: `AnySegment` alone (no `D`) is an abstract
+    # No `::Segment{D}` type assertion here: `Segment` alone (no `D`) is an abstract
     # `UnionAll`, and asserting a value into it would *widen* what the compiler tracks the
-    # result as, discarding the concrete two-member union `_try_diagonal_segment` actually
-    # returns for this specialization -- exactly the boxing `DiagonalSegment{D}`'s own
-    # docstring warns about, just moved one call up.
+    # result as, discarding the concrete `Segment{D}` `_try_diagonal_segment` actually
+    # returns for this specialization -- exactly the boxing `Segment{D}`'s own docstring
+    # warns about, just moved one call up.
     return _try_diagonal_segment(term, sp, sink.point_ptr, sink.positions)
 end
 
-# Attempts to repackage a freshly recorded flat segment as a `DiagonalSegment`, restricted to
-# `term`'s own interior/boundary split (gpena/Bramble.jl#160): `_visit_interior!` -- called by
-# `visit_bilinear_stencil` before any boundary slab -- pushes every interior point's `P`
-# entries, in `LinearIndices(interior)` order, so `positions[1:n_interior*P]` already *is*
-# the interior in that order, with no need to touch `point_ptr` to find it.
+# Attempts to repackage a freshly recorded flat segment as a diagonal `Segment`, restricted
+# to `term`'s own interior/boundary split (gpena/Bramble.jl#160): `_visit_interior!` --
+# called by `visit_bilinear_stencil` before any boundary slab -- pushes every interior
+# point's `P` entries, in `LinearIndices(interior)` order, so `positions[1:n_interior*P]`
+# already *is* the interior in that order, with no need to touch `point_ptr` to find it.
 #
 # Validated against the actual recorded positions, not assumed from `term`'s own margin
 # (gpena/Bramble.jl#161): a form summing terms of different margins into the same block
@@ -49,28 +62,32 @@ end
 # term's own "interior" can still include columns whose true `nzval` footprint -- set by
 # every segment sharing that column, not just this one -- varies where a wider-margin
 # sibling still adds taps. That shows up here as a non-constant per-tap stride; any mismatch,
-# or too little interior to bother, falls back to the plain `NzvalSegment` unchanged, which
+# or too little interior to bother, falls back to the plain flat segment unchanged, which
 # `ReplaySink` already handles.
+#
+# Every early return builds a `Segment{D}` via `_flat_segment`, never a bare tuple: the
+# return type must stay the single concrete `Segment{D}` on every path, not a `Union` with
+# some other flat representation -- that Union is exactly what gpena/Bramble.jl#240 removed.
 function _try_diagonal_segment(
         term::TERM, sp, point_ptr::Vector{Int}, positions::Vector{Int}
 ) where {TERM}
-    flat = (point_ptr, positions)::NzvalSegment
     grid_inds = indices(mesh(sp))
     ax = axes(grid_inds)
+    D = length(ax)
     margin = _stencil_margin(term)
-    _peelable(ax, margin) || return flat
+    _peelable(ax, margin) || return _flat_segment(Val(D), point_ptr, positions)
 
     interior = CartesianIndices(map(r -> _interior_range(r, margin), ax))
     n_interior = length(interior)
-    n_interior < 2 && return flat
+    n_interior < 2 && return _flat_segment(Val(D), point_ptr, positions)
 
     first_lin = LinearIndices(grid_inds)[first(interior)]
-    @inbounds point_ptr[first_lin] == 1 || return flat
+    @inbounds point_ptr[first_lin] == 1 || return _flat_segment(Val(D), point_ptr, positions)
     @inbounds P = point_ptr[first_lin + 1] - point_ptr[first_lin]
-    P == 0 && return flat
+    P == 0 && return _flat_segment(Val(D), point_ptr, positions)
 
     total_interior = n_interior * P
-    total_interior > length(positions) && return flat
+    total_interior > length(positions) && return _flat_segment(Val(D), point_ptr, positions)
 
     base = positions[1:P]
     stride = Vector{Int}(undef, P)
@@ -81,94 +98,87 @@ function _try_diagonal_segment(
         off = n * P
         prev = off - P
         for k in 1:P
-            positions[off + k] - positions[prev + k] == stride[k] || return flat
+            positions[off + k] - positions[prev + k] == stride[k] ||
+                return _flat_segment(Val(D), point_ptr, positions)
         end
     end
 
     boundary_positions = positions[(total_interior + 1):end]
     boundary_point_ptr = point_ptr .- total_interior
-    return DiagonalSegment(
-        base, stride, P, interior, (boundary_point_ptr, boundary_positions)
-    )
+    return Segment{D}(true, boundary_point_ptr, boundary_positions, base, stride, P, interior)
 end
 
 # The replay counterpart: same walk, same fresh stencil evaluation (weights may be live --
 # only positions are fixed), but each entry's nzval index comes from `segment` instead of a
 # search. `point_ptr[lin_idx]` addresses each point's own slice of `positions` directly, so
 # this stays correct regardless of what order grid points are visited in.
+#
+# One method branching on `segment.is_diagonal`, not two dispatching on `NzvalSegment` versus
+# `DiagonalSegment` (gpena/Bramble.jl#240): both branches are fully concrete (`Segment{D}`
+# has one shape, not a Union), so the runtime `if` costs nothing extra over the dispatch it
+# replaced -- flat replays exactly as before through `ReplaySink`; diagonal replays the
+# interior core through `DiagonalReplaySink`'s stride arithmetic and the boundary shell
+# through an ordinary `ReplaySink`, the two-sink form of `visit_bilinear_stencil` running
+# both in the one walk.
 function _replay_segment!(
         A::SparseMatrixCSC,
         term::TERM,
         sp,
         row_offset::Int,
         col_offset::Int,
-        segment::NzvalSegment
+        segment::Segment
 ) where {TERM}
-    point_ptr, positions = segment
-    visit_bilinear_stencil(
-        ReplaySink(A, point_ptr, positions), term, sp, row_offset, col_offset
-    )
-    return nothing
-end
-
-# The diagonal counterpart: the interior core replays through `DiagonalReplaySink`'s stride
-# arithmetic, and the boundary shell replays exactly as `NzvalSegment` always has, through an
-# ordinary `ReplaySink` over `segment.boundary` -- the two-sink form of
-# `visit_bilinear_stencil` runs both in the one walk.
-function _replay_segment!(
-        A::SparseMatrixCSC,
-        term::TERM,
-        sp,
-        row_offset::Int,
-        col_offset::Int,
-        segment::DiagonalSegment
-) where {TERM}
-    boundary_point_ptr, boundary_positions = segment.boundary
-    visit_bilinear_stencil(
-        DiagonalReplaySink(A, segment.interior, segment.base, segment.stride, segment.P),
-        ReplaySink(A, boundary_point_ptr, boundary_positions),
-        term,
-        sp,
-        row_offset,
-        col_offset
-    )
+    if segment.is_diagonal
+        visit_bilinear_stencil(
+            DiagonalReplaySink(A, segment.interior, segment.base, segment.stride, segment.P),
+            ReplaySink(A, segment.point_ptr, segment.positions),
+            term,
+            sp,
+            row_offset,
+            col_offset
+        )
+    else
+        visit_bilinear_stencil(
+            ReplaySink(A, segment.point_ptr, segment.positions), term, sp, row_offset, col_offset
+        )
+    end
     return nothing
 end
 
 # The scalar case: one block, no offsets, so exactly one segment either way.
 #
-# `segments::Vector{T}) where {...,T<:AnySegment{D}}` throughout this file, rather than the
-# nominally simpler `segments::Vector{AnySegment{D}}`: `D` is fixed per call (the form's own
-# dimension), but which of `NzvalSegment`/`DiagonalSegment{D}` each *element* is stays a
-# per-element concrete choice `_record_segment!` makes -- `T` is that two-member union,
-# inferred, not `AnySegment{D}` the abstract alias itself.
+# `segments::Vector{Segment{D}}` throughout this file: `D` is fixed per call (the form's own
+# dimension) and, since gpena/Bramble.jl#240, `Segment{D}` is the single concrete element
+# type regardless of whether a given element is flat or diagonal (`is_diagonal` selects the
+# shape at the value level, not the type level) -- no `where {T <: ...}` indirection needed
+# to keep the vector unboxed, unlike the `AnySegment{D}` union this replaced.
 function _record_bilinear_core!(
-        A::SparseMatrixCSC, trial_space, test_space, ast::AST_TYPE, segments::Vector{T}
-) where {AST_TYPE, T <: AnySegment}
+        A::SparseMatrixCSC, trial_space, test_space, ast::AST_TYPE, segments::Vector{Segment{D}}
+) where {AST_TYPE, D}
     _check_block_meshes(ast, trial_space, test_space)
     push!(segments, _record_segment!(A, ast, test_space, 0, 0))
     return nothing
 end
 
 function _replay_bilinear_core!(
-        A::SparseMatrixCSC, trial_space, test_space, ast::AST_TYPE, segments::Vector{T}
-) where {AST_TYPE, T <: AnySegment}
+        A::SparseMatrixCSC, trial_space, test_space, ast::AST_TYPE, segments::Vector{Segment{D}}
+) where {AST_TYPE, D}
     _check_block_meshes(ast, trial_space, test_space)
     _replay_segment!(A, ast, test_space, 0, 0, segments[1])
     return nothing
 end
 
 function _record_blocks!(
-        A::SparseMatrixCSC, op::OperatorAdd, trial_leaves, test_leaves, segments::Vector{T}
-) where {T <: AnySegment}
+        A::SparseMatrixCSC, op::OperatorAdd, trial_leaves, test_leaves, segments::Vector{Segment{D}}
+) where {D}
     _record_blocks!(A, op.left_op, trial_leaves, test_leaves, segments)
     _record_blocks!(A, op.right_op, trial_leaves, test_leaves, segments)
     return nothing
 end
 
 function _record_blocks!(
-        A::SparseMatrixCSC, term::TERM, trial_leaves, test_leaves, segments::Vector{T}
-) where {TERM, T <: AnySegment}
+        A::SparseMatrixCSC, term::TERM, trial_leaves, test_leaves, segments::Vector{Segment{D}}
+) where {TERM, D}
     for blk in blocks(term, trial_leaves, test_leaves)
         _check_block_meshes(term, blk.trial_leaf, blk.test_leaf)
         push!(
@@ -187,9 +197,9 @@ function _replay_blocks!(
         op::OperatorAdd,
         trial_leaves,
         test_leaves,
-        segments::Vector{T},
+        segments::Vector{Segment{D}},
         next::Int
-) where {T <: AnySegment}
+) where {D}
     next = _replay_blocks!(A, op.left_op, trial_leaves, test_leaves, segments, next)
     next = _replay_blocks!(A, op.right_op, trial_leaves, test_leaves, segments, next)
     return next
@@ -200,9 +210,9 @@ function _replay_blocks!(
         term::TERM,
         trial_leaves,
         test_leaves,
-        segments::Vector{T},
+        segments::Vector{Segment{D}},
         next::Int
-) where {TERM, T <: AnySegment}
+) where {TERM, D}
     for blk in blocks(term, trial_leaves, test_leaves)
         _check_block_meshes(term, blk.trial_leaf, blk.test_leaf)
         next += 1
@@ -218,8 +228,8 @@ function _record_bilinear_core!(
         trial_space::CompositeGridSpace,
         test_space::CompositeGridSpace,
         ast::AST_TYPE,
-        segments::Vector{T}
-) where {AST_TYPE, T <: AnySegment}
+        segments::Vector{Segment{D}}
+) where {AST_TYPE, D}
     _record_blocks!(
         A, ast, leaf_spaces_offsets(trial_space), leaf_spaces_offsets(test_space), segments
     )
@@ -231,8 +241,8 @@ function _replay_bilinear_core!(
         trial_space::CompositeGridSpace,
         test_space::CompositeGridSpace,
         ast::AST_TYPE,
-        segments::Vector{T}
-) where {AST_TYPE, T <: AnySegment}
+        segments::Vector{Segment{D}}
+) where {AST_TYPE, D}
     _replay_blocks!(
         A,
         ast,
@@ -258,7 +268,7 @@ function _assemble_bilinear_core_cached!(
         # A fresh vector, not `empty!` on whatever `cache.segments` currently references,
         # in case that reference is ever shared (it never is, today, but nothing here
         # relies on `cache.segments` being exclusively owned).
-        segments = AnySegment{D}[]
+        segments = Segment{D}[]
         _record_bilinear_core!(A, trial_space, test_space, ast, segments)
         cache.segments = segments
         cache.A = A

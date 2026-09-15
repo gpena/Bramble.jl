@@ -3,7 +3,7 @@ module ExtChainRulesEnzymeExtTests
 using Test
 using Bramble
 using ChainRulesCore
-using SparseArrays: SparseMatrixCSC
+using SparseArrays: SparseMatrixCSC, nnz
 using LinearAlgebra: I
 
 # Enzyme composition for `BrambleChainRulesExt`'s `pde_solve` rrule. Behind the "ad"/"full"
@@ -21,23 +21,32 @@ using LinearAlgebra: I
 # factorisation, documented in `docs/src/tutorials/autodiff.md` §5) -- reverse-mode through
 # the hand-written adjoint has no such restriction, since it never asks UMFPACK to factor
 # anything but a plain `Float64` matrix.
+#
+# Enzyme reaches `pde_solve` through `BrambleEnzymeExt`'s own native `EnzymeRules` rule now,
+# not through `Enzyme.@import_rrule` (gpena/Bramble.jl#240): the import bridge corrupts the
+# `SparseMatrixCSC` shadow whenever the cotangent carries an explicit zero -- `nzval` is left
+# shorter than `colptr`/`rowval` claim -- and a homogeneous Dirichlet problem produces such a
+# zero routinely, so the gradient came back confidently wrong rather than failing. The
+# `nnz`/buffer-consistency check below pins that, and no test in this file may call
+# `@import_rrule`: doing so defines a second rule for the same signature.
 
 _have(mod::Symbol) = Base.identify_package(String(mod)) !== nothing
 _central_diff(f, x, h = 1e-6) = (f(x + h) - f(x - h)) / 2h
 
 @testset "BrambleChainRulesExt + Enzyme" begin
-    @testset "Enzyme, with @import_rrule" begin
+    @testset "Enzyme, through BrambleEnzymeExt's native rule" begin
         if _have(:Enzyme)
             @eval import Enzyme
-            @eval Enzyme.@import_rrule(typeof(Bramble.pde_solve), SparseMatrixCSC, AbstractVector)
 
             Ωₕ = Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0)), 21, true)
             Wₕ = gridspace(Ωₕ)
             a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+            fₕ = Rₕ(Wₕ, x -> pi^2 * sinpi(x[1]))
+            l_fixed = form(Wₕ, v -> innerₕ(fₕ, v))
 
             function loss(θ::Real)
-                fₕ = Bramble.element(Wₕ, zero(θ))
-                l = form(Wₕ, v -> innerₕ(fₕ, v))
+                gₕ = Bramble.element(Wₕ, zero(θ))
+                l = form(Wₕ, v -> innerₕ(gₕ, v))
                 A, F = assemble(a, l; dirichlet = :boundary => x -> θ)
                 u = Bramble.pde_solve(A, F)
                 return sum(abs2, u)
@@ -58,18 +67,73 @@ _central_diff(f, x, h = 1e-6) = (f(x + h) - f(x - h)) / 2h
             d_enzyme = Enzyme.gradient(mode, Enzyme.Const(loss), θ0)[1]
             @test d_enzyme≈d_fd rtol=1e-4
 
-            # Pinned failure: without `@import_rrule`, Enzyme tries to trace into `lu`'s
-            # CHOLMOD/UMFPACK internals directly and raises `IllegalTypeAnalysisException` on
-            # a `Union` type it cannot strictly alias -- if a future Enzyme release fixes
-            # this on its own, this test starts failing and says so, the same "pin it so a
-            # fix is noticed" discipline `autodiff_heavy.jl` already follows for its own two
-            # annotations.
-            function loss_no_bridge(θ::Real)
+            # `symmetrize = true` rewrites both `A` and `F` after assembly, restoring
+            # symmetry once the constrained rows are cleared: the adjoint has to stay correct
+            # across that rewrite too.
+            function loss_symmetrized(θ::Real)
+                gₕ = Bramble.element(Wₕ, zero(θ))
+                l = form(Wₕ, v -> innerₕ(gₕ, v))
+                A, F = assemble(
+                    a, l; dirichlet = :boundary => x -> θ, symmetrize = true
+                )
+                return sum(abs2, Bramble.pde_solve(A, F))
+            end
+            @test Enzyme.gradient(mode, Enzyme.Const(loss_symmetrized), θ0)[1] ≈
+                  _central_diff(loss_symmetrized, θ0) rtol=1e-4
+
+            # No test here differentiates with respect to the *operator's own* coefficient,
+            # deliberately. That path reaches `assemble`'s recording engine rather than only
+            # `F`, and Enzyme still cannot compile it from a fully inferred call site: a
+            # `Union` remains somewhere in the assembly path and raises
+            # `IllegalTypeAnalysisException`. It happens to succeed when the call is
+            # dynamically dispatched instead (a script's untyped globals, as on the
+            # inverse-diffusion page), which is too fragile a distinction to pin as a
+            # supported guarantee -- `pde_solve`'s own docstring states the limitation, and
+            # lifting it is follow-up work on gpena/Bramble.jl#240.
+
+            # The defect the native rule exists to avoid, pinned at the level it actually
+            # showed up: `@import_rrule`'s bridge merged the rrule's returned
+            # `SparseMatrixCSC` into Enzyme's shadow by dropping the cotangent's explicit
+            # zeros from `nzval` alone, leaving `colptr`/`rowval` claiming more entries than
+            # `nzval` holds. `Matrix(shadow)` then trips SparseArrays' own `_goodbuffers`
+            # assertion, and any gradient read off that shadow is silently wrong. A
+            # homogeneous Dirichlet problem supplies such a zero for free: a constrained
+            # row's solution entry is exactly its boundary value, so `u[j] == 0` makes a
+            # whole column of `-λuᵀ` exactly zero.
+            aθ0 = form(Wₕ, Wₕ, (u, v) -> 0.7 * inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+            A0, F0 = assemble(aθ0, l_fixed; dirichlet = :boundary => x -> 0.0)
+            @test count(iszero, A0 \ F0) > 0          # the zero that triggered it exists here
+            dA = SparseMatrixCSC(
+                size(A0, 1), size(A0, 2), copy(A0.colptr), copy(A0.rowval), zeros(nnz(A0))
+            )
+            solve_loss(Ain, Fin) = sum(abs2, Bramble.pde_solve(Ain, Fin))
+            Enzyme.autodiff(
+                mode, Enzyme.Const(solve_loss), Enzyme.Active,
+                Enzyme.Duplicated(copy(A0), dA), Enzyme.Const(F0)
+            )
+            @test length(dA.nzval) == dA.colptr[end] - 1
+            @test length(dA.rowval) == dA.colptr[end] - 1
+            @test Matrix(dA) isa Matrix                # the `_goodbuffers` assertion itself
+
+            # The shadow must also hold the right numbers, not merely a well-formed shape:
+            # compared against `BrambleChainRulesExt`'s own pullback, which
+            # `test/ext/chainrules_ext.jl` checks against finite differences independently.
+            _, pullback = ChainRulesCore.rrule(Bramble.pde_solve, A0, F0)
+            _, Ā_rrule, _ = pullback(2 .* (A0 \ F0))
+            @test Matrix(dA)≈Matrix(Ā_rrule) rtol=1e-10
+
+            # Pinned failure: handed `A \ F` directly rather than `pde_solve`, Enzyme has no
+            # rule to reach and tries to trace into CHOLMOD/UMFPACK's own internals, raising
+            # `IllegalTypeAnalysisException` on a `Union` type it cannot strictly alias -- if
+            # a future Enzyme release handles that on its own, this test starts failing and
+            # says so, the same "pin it so a fix is noticed" discipline `autodiff_heavy.jl`
+            # already follows for its own two annotations.
+            function loss_no_rule(θ::Real)
                 A, F = assemble(a, form(Wₕ, v -> innerₕ(Bramble.element(Wₕ, zero(θ)), v));
                     dirichlet = :boundary => x -> θ)
                 return sum(abs2, A \ F)
             end
-            @test_throws Exception Enzyme.gradient(mode, Enzyme.Const(loss_no_bridge), θ0)
+            @test_throws Exception Enzyme.gradient(mode, Enzyme.Const(loss_no_rule), θ0)
         else
             @test_skip "Enzyme not in this environment"
         end
@@ -88,11 +152,9 @@ _central_diff(f, x, h = 1e-6) = (f(x + h) - f(x - h)) / 2h
             # point of `pde_solve`'s own docstring saying "revisit if a future release adds
             # sparse-array tangent support" -- a newly-failing `@test_throws` (because it
             # stops throwing) is exactly the signal that revisit is due.
-            @eval Mooncake.@from_rrule(
-                Mooncake.DefaultCtx,
+            @eval Mooncake.@from_rrule(Mooncake.DefaultCtx,
                 Tuple{typeof(Bramble.pde_solve), SparseMatrixCSC, AbstractVector},
-                false
-            )
+                false)
             n = 4
             A = SparseMatrixCSC(Matrix(2.0I, n, n))
             f(F) = sum(abs2, Bramble.pde_solve(A, F))

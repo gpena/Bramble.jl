@@ -620,14 +620,60 @@ end
 end
 
 """
-    RecordSink(A::SparseMatrixCSC, term, point_ptr::Vector{Int}, positions::Vector{Int})
+    _SegmentCountSink(point_ptr::Vector{Int})
+
+Count-only pass over a term's stencil: how many entries each grid point contributes and how
+many the whole block has, with `A` never touched at all (weights are still evaluated -- the
+shared traversal computes them before any sink sees an entry -- just discarded).
+
+Exists solely so [`RecordSink`](@ref) can preallocate its own `positions` to the exact right
+size instead of growing it with `push!` (gpena/Bramble.jl#240): `push!`, called from inside
+`_record_segment!` while a term's own coefficient is what is being differentiated, is what
+made `Enzyme` fail to compile the recording pass at all (`EnzymeNoTypeError`) -- confirmed
+directly by isolating it, not assumed: a hand-rolled sink identical to `RecordSink` except
+for pre-sized, `setindex!`-only `positions` compiled and differentiated correctly, matching
+finite differences, with no `Enzyme.API` flag of any kind. The one-time cost is walking a
+term's stencil twice during recording (once to count, once to search and scatter) rather than
+once -- recording is already the expensive half of assembly and happens once per matrix
+(replayed thereafter by [`ReplaySink`](@ref)), so this doubles a cost paid once, never the
+per-replay cost `assemble!`'s zero-allocation guarantee actually protects.
+
+Uses the same coordinate-computing path `RecordSink` does (`_sink_needs_coordinates` left at
+its default `true`), deliberately not the cheaper coordinate-free path `ReplaySink`/
+`DiagonalReplaySink` use: this pass's whole point is to agree with `RecordSink`'s own entry
+count exactly, and sharing its guard branch removes any risk of the two disagreeing.
+
+See also: [`RecordSink`](@ref), [`visit_bilinear_stencil`](@ref).
+"""
+mutable struct _SegmentCountSink
+    const point_ptr::Vector{Int}
+    n::Int
+end
+# Not `@inline` -- deliberately: `@inline` here is what made `Enzyme` unable to compile
+# `_record_segment!` at all when the term's coefficient is what is being differentiated
+# (`EnzymeNoTypeError`), confirmed directly by isolating it (`@inline` alone reproduces the
+# failure, `const` fields do not). One-time recording cost either way; no measurable effect
+# on `assemble!`'s own zero-allocation replay, which never touches this sink.
+function _sink_point!(sink::_SegmentCountSink, lin_idx::Int, ::CartesianIndex)
+    (
+        @inbounds sink.point_ptr[lin_idx] = sink.n + 1; 0)
+end
+function _sink_entry!(sink::_SegmentCountSink, ::Int, ::Int, weight, ::Int)
+    sink.n += 1
+    return nothing
+end
+
+"""
+    RecordSink(A::SparseMatrixCSC, term, point_ptr::Vector{Int}, positions::Vector{Int}, n::Int)
 
 Add a term's values to `A` and record where each entry landed, building the replay cache.
 
 For each entry it searches `A` for the `(row, col)`'s slot in `nzval`, adds the weight
-there, and appends the slot to `positions`. [`_sink_point!`](@ref) opens each grid point's
-own slice of that list in `point_ptr`, so a later replay can address a point directly
-instead of relying on the walk order.
+there, and writes the slot into `positions[n]` for a running `n` (`positions` is
+preallocated to its final size by [`_SegmentCountSink`](@ref) before `RecordSink` ever runs --
+see its docstring for why this is `setindex!`, not `push!`). [`_sink_point!`](@ref) opens each
+grid point's own slice of that list in `point_ptr`, so a later replay can address a point
+directly instead of relying on the walk order.
 
 The search is the expensive half of assembly, which is why it is done once and replayed by
 [`ReplaySink`](@ref) afterwards.
@@ -639,19 +685,23 @@ The search is the expensive half of assembly, which is why it is done once and r
 
 See also: [`visit_bilinear_stencil`](@ref), [`NzvalSegment`](@ref).
 """
-struct RecordSink{M <: SparseMatrixCSC, TERM}
-    A::M
-    term::TERM
-    point_ptr::Vector{Int}
-    positions::Vector{Int}
+mutable struct RecordSink{M <: SparseMatrixCSC, TERM}
+    const A::M
+    const term::TERM
+    const point_ptr::Vector{Int}
+    const positions::Vector{Int}
+    n::Int
 end
-@inline _sink_point!(sink::RecordSink, lin_idx::Int, ::CartesianIndex) = (
-    @inbounds sink.point_ptr[lin_idx] = length(sink.positions) + 1; 0)
-@inline function _sink_entry!(sink::RecordSink, row::Int, col::Int, weight, ::Int)
+# Not `@inline` -- see `_SegmentCountSink`'s comment just above: the same reason, verified
+# the same way.
+_sink_point!(sink::RecordSink, lin_idx::Int, ::CartesianIndex) = (
+    @inbounds sink.point_ptr[lin_idx] = sink.n + 1; 0)
+function _sink_entry!(sink::RecordSink, row::Int, col::Int, weight, ::Int)
     pos = _find_nzval_position(sink.A, row, col)
     pos == 0 && _throw_missing_pattern_entry(sink.term)
     @inbounds sink.A.nzval[pos] += weight
-    push!(sink.positions, pos)
+    sink.n += 1
+    @inbounds sink.positions[sink.n] = pos
     return nothing
 end
 
@@ -692,7 +742,7 @@ end
 # as `slot - n * P` (a multiply and a subtract). The alternative -- reconstructing `n` from
 # `slot` alone via `divrem(slot, P)` -- needs a genuine integer division every entry, because
 # `P` is a runtime field (it varies per term/segment, so it cannot be a type parameter
-# without reopening the boxing `DiagonalSegment`'s docstring already describes for a
+# without reopening the boxing `Segment`'s docstring already describes for a
 # per-element-varying parameter). Measured: the `divrem` version replayed a 1D interior
 # 30-40% *slower* than the flat `ReplaySink` it was meant to beat, even though it read no
 # `positions` array at all -- division dominated the saving.
@@ -706,7 +756,7 @@ end
 """
     DiagonalReplaySink(A::SparseMatrixCSC, interior::CartesianIndices, base::Vector{Int}, stride::Vector{Int}, P::Int)
 
-Add a term's values to `A`'s interior core using [`DiagonalSegment`](@ref)'s per-tap stride
+Add a term's values to `A`'s interior core using [`Segment`](@ref)'s per-tap stride
 instead of a stored position per entry.
 
 Paired with an ordinary [`ReplaySink`](@ref) for the boundary shell through the two-sink
@@ -742,7 +792,7 @@ end
 # `CartesianIndices{D,R}` names *both* type parameters deliberately: `CartesianIndices{D}`
 # alone is still a `UnionAll` over the ranges-tuple type `R`, not a concrete type, and a
 # struct field or argument declared that way is stored boxed -- this is what made every
-# `DiagonalReplaySink`/`DiagonalSegment` built from it allocate (measured 144-384 B per
+# `DiagonalReplaySink`/`Segment` built from it allocate (measured 144-384 B per
 # replay before this was named).
 @inline function _interior_rank(
         interior::CartesianIndices{D, R}, I::CartesianIndex{D}
