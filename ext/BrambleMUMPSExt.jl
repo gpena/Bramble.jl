@@ -33,6 +33,9 @@ mutable struct ConcreteMUMPSFactorization{T, TR} <: MUMPSFactorization{T}
     dim::Int
 end
 
+Base.size(fact::ConcreteMUMPSFactorization) = (fact.dim, fact.dim)
+Base.size(fact::ConcreteMUMPSFactorization, d::Integer) = d <= 2 ? fact.dim : 1
+
 Base.finalize(fact::ConcreteMUMPSFactorization) = finalize!(fact.mumps)
 
 _mumps_val_type(::Type{T}) where {T <: Union{Float32, Float64, ComplexF32, ComplexF64}} = T
@@ -65,7 +68,7 @@ function _mumps_sym_flag(A::AbstractMatrix, sym)
 end
 
 function Bramble._mumps_factorize(
-        A::AbstractMatrix; sym = :auto, icntl = nothing, cntl = nothing, kwargs...
+        A::SparseMatrixCSC; sym = :auto, icntl = nothing, cntl = nothing, kwargs...
 )
     _ensure_mpi_init()
 
@@ -134,10 +137,22 @@ function Base.:\(fact::ConcreteMUMPSFactorization{T}, b::AbstractVector) where {
 end
 
 function Bramble._mumps_solve(
-        A::AbstractMatrix, F::AbstractVector; sym = :auto, icntl = nothing, cntl = nothing, kwargs...
+        A::SparseMatrixCSC, F::AbstractVector; sym = :auto, icntl = nothing, cntl = nothing, kwargs...
 )
     fact = Bramble._mumps_factorize(A; sym = sym, icntl = icntl, cntl = cntl, kwargs...)
     return fact \ F
+end
+
+function Bramble._mumps_refactor!(fact::ConcreteMUMPSFactorization{T}, A::SparseMatrixCSC) where {T}
+    m, n = size(A)
+    (m == fact.dim && n == fact.dim) || throw(
+        DimensionMismatch("Matrix size $(m)×$(n) does not match factorization dimension $(fact.dim)"),
+    )
+    A_mat = convert(SparseMatrixCSC{T, Int}, A)
+    associate_matrix!(fact.mumps, A_mat)
+    fact.mumps.job = MUMPS.FACTOR
+    MUMPS.invoke_mumps!(fact.mumps)
+    return fact
 end
 
 function LinearAlgebra.factorize(A::SparseMatrixCSC, ::Type{MUMPSFactorization}; kwargs...)

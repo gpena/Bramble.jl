@@ -133,6 +133,42 @@ using MUMPS
 
         # pde_solve with MUMPSFactorization directly
         @test isapprox(pde_solve(fact, F), u; atol = 1e-12)
+
+        # Refactor (numeric update reusing symbolic METIS analysis) via unique refactor! driver
+        A_modified = copy(A)
+        A_modified[1, 1] += 5.0
+        refactor!(fact, A_modified)
+        u_mod = fact \ F
+        @test isapprox(u_mod, A_modified \ F; atol = 1e-12)
+
+        # Unified sparse_factorize and refactor! on Matrix and BilinearForm
+        fact_unified = sparse_factorize(A; solver = :mumps, sym = :spd)
+        @test fact_unified isa MUMPSFactorization
+        @test isapprox(fact_unified \ F, u; atol = 1e-12)
+        refactor!(fact_unified, A_modified)
+        @test isapprox(fact_unified \ F, u_mod; atol = 1e-12)
+
+        # Direct mumps_refactor! call
+        mumps_refactor!(fact, A_modified)
+        @test isapprox(fact \ F, u_mod; atol = 1e-12)
+
+        # Alias sparse_refactor! check
+        sparse_refactor!(fact_unified, A_modified)
+        @test isapprox(fact_unified \ F, u_mod; atol = 1e-12)
+
+        # Refactor unsymmetric factorization directly with BilinearForm
+        A_unsym, F_unsym = assemble(a, l; dirichlet = :boundary => x -> 0.0, symmetrize = false)
+        fact_lu = mumps_factorize(A_unsym; sym = :unsymmetric)
+        refactor!(fact_lu, a; dirichlet = :boundary => x -> 0.0)
+        @test isapprox(fact_lu \ F_unsym, A_unsym \ F_unsym; atol = 1e-12)
+
+        # Alias with BilinearForm
+        sparse_refactor!(fact_lu, a; dirichlet = :boundary => x -> 0.0)
+        @test isapprox(fact_lu \ F_unsym, A_unsym \ F_unsym; atol = 1e-12)
+
+        # Type safety: reject dense matrices
+        @test_throws ArgumentError refactor!(fact, Matrix(A_modified))
+        @test_throws ArgumentError sparse_refactor!(fact, Matrix(A_modified))
     end
 
     @testset "Error handling & validation" begin
