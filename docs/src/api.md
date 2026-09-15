@@ -353,6 +353,17 @@ allocate_system_matrix
 evaluate!
 ```
 
+### Additive accumulation
+
+`assemble_add!` adds a form's contribution to a matrix or vector that already holds
+something, without the `fill!` `assemble!` does first -- for `M/Δt + θK`-style operators
+built from several independently assembled pieces. See its own docstring for why this
+needed no new traversal, and for the Dirichlet-ordering note.
+
+```@docs
+assemble_add!
+```
+
 ### Jacobian sparsity
 
 For a Newton residual built from a [`BilinearForm`](@ref) with a live nonlinear

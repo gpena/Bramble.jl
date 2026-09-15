@@ -664,7 +664,7 @@ function _sink_entry!(sink::_SegmentCountSink, ::Int, ::Int, weight, ::Int)
 end
 
 """
-    RecordSink(A::SparseMatrixCSC, term, point_ptr::Vector{Int}, positions::Vector{Int}, n::Int)
+    RecordSink(A::SparseMatrixCSC, term, point_ptr::Vector{Int}, positions::Vector{Int}, α, n::Int)
 
 Add a term's values to `A` and record where each entry landed, building the replay cache.
 
@@ -685,11 +685,12 @@ The search is the expensive half of assembly, which is why it is done once and r
 
 See also: [`visit_bilinear_stencil`](@ref), [`NzvalSegment`](@ref).
 """
-mutable struct RecordSink{M <: SparseMatrixCSC, TERM}
+mutable struct RecordSink{M <: SparseMatrixCSC, TERM, S}
     const A::M
     const term::TERM
     const point_ptr::Vector{Int}
     const positions::Vector{Int}
+    const α::S
     n::Int
 end
 # Not `@inline` -- see `_SegmentCountSink`'s comment just above: the same reason, verified
@@ -699,14 +700,14 @@ _sink_point!(sink::RecordSink, lin_idx::Int, ::CartesianIndex) = (
 function _sink_entry!(sink::RecordSink, row::Int, col::Int, weight, ::Int)
     pos = _find_nzval_position(sink.A, row, col)
     pos == 0 && _throw_missing_pattern_entry(sink.term)
-    @inbounds sink.A.nzval[pos] += weight
+    @inbounds sink.A.nzval[pos] += sink.α * weight
     sink.n += 1
     @inbounds sink.positions[sink.n] = pos
     return nothing
 end
 
 """
-    ReplaySink(A::SparseMatrixCSC, point_ptr::Vector{Int}, positions::Vector{Int})
+    ReplaySink(A::SparseMatrixCSC, point_ptr::Vector{Int}, positions::Vector{Int}, α)
 
 Add a term's values to `A` using slots recorded earlier by [`RecordSink`](@ref).
 
@@ -723,17 +724,18 @@ sink. Carrying it as a mutable field measured about 20% slower on the cheapest r
 
 See also: [`visit_bilinear_stencil`](@ref).
 """
-struct ReplaySink{M <: SparseMatrixCSC}
+struct ReplaySink{M <: SparseMatrixCSC, S}
     A::M
     point_ptr::Vector{Int}
     positions::Vector{Int}
+    α::S
 end
 @inline _sink_point!(sink::ReplaySink, lin_idx::Int, ::CartesianIndex) = @inbounds(sink.point_ptr[lin_idx])
 @inline _sink_needs_coordinates(::ReplaySink) = false
 Base.@propagate_inbounds function _sink_entry!(
         sink::ReplaySink, ::Int, ::Int, weight, slot::Int
 )
-    @inbounds sink.A.nzval[sink.positions[slot]] += weight
+    @inbounds sink.A.nzval[sink.positions[slot]] += sink.α * weight
     return nothing
 end
 
@@ -754,7 +756,7 @@ end
 # docstring and others' made to it and to its neighbours, all silently broken the same way).
 # The docstring must be the last thing before the struct, so this note moved above it.
 """
-    DiagonalReplaySink(A::SparseMatrixCSC, interior::CartesianIndices, base::Vector{Int}, stride::Vector{Int}, P::Int)
+    DiagonalReplaySink(A::SparseMatrixCSC, interior::CartesianIndices, base::Vector{Int}, stride::Vector{Int}, P::Int, α)
 
 Add a term's values to `A`'s interior core using [`Segment`](@ref)'s per-tap stride
 instead of a stored position per entry.
@@ -770,16 +772,17 @@ runs at all.
 
 See also: [`visit_bilinear_stencil`](@ref), `_replay_segment!`.
 """
-mutable struct DiagonalReplaySink{M <: SparseMatrixCSC, D, R}
+mutable struct DiagonalReplaySink{M <: SparseMatrixCSC, D, R, S}
     const A::M
     const interior::CartesianIndices{D, R}
     const base::Vector{Int}
     const stride::Vector{Int}
     const P::Int
+    const α::S
     n::Int
 end
-function DiagonalReplaySink(A, interior, base, stride, P)
-    return DiagonalReplaySink(A, interior, base, stride, P, 0)
+function DiagonalReplaySink(A, interior, base, stride, P, α)
+    return DiagonalReplaySink(A, interior, base, stride, P, α, 0)
 end
 
 # `interior`'s axes are `_interior_range`'s output -- typically not 1-based (a margin-1
@@ -818,6 +821,6 @@ Base.@propagate_inbounds function _sink_entry!(
 )
     n = sink.n
     k0 = slot - n * sink.P
-    @inbounds sink.A.nzval[sink.base[k0 + 1] + sink.stride[k0 + 1] * n] += weight
+    @inbounds sink.A.nzval[sink.base[k0 + 1] + sink.stride[k0 + 1] * n] += sink.α * weight
     return nothing
 end
