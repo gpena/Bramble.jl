@@ -370,4 +370,87 @@ end
     end
 end
 
+@testset "Sums of three or more mixing components do not throw (#235)" begin
+    # `_mixes_components` used to reuse `trial_component_or_nothing`/
+    # `test_component_or_nothing` (block_extract.jl) directly, which *throw* the moment
+    # either side already mixes components -- true of the inner `(A + B)` node on every
+    # left-associated three-or-more-term sum, `2.0 * (A + B + C)` parsing as
+    # `2.0 * ((A + B) + C)`. Every check below is against a hand-distributed reference
+    # (never against another call to the code under test), following bramble-verification.
+    Ωₕ = mesh(domain(interval(0.0, 1.0)), 11, true)
+    Wₕ = gridspace(Ωₕ)
+    V3 = Wₕ^Val(3)
+    V4 = Wₕ^Val(4)
+    fₕ = Rₕ(Wₕ, x -> sin(π * x[1]))
+    cₕ = Rₕ(Wₕ, x -> 1.0 + x[1])
+
+    @testset "Linear form: scalar × sum of 3 and 4 mixing test components" begin
+        for (V, n) in ((V3, 3), (V4, 4))
+            l = form(V, v -> 2.0 * sum(innerₕ(fₕ, v(i)) for i in 1:n))
+            @test resolve_form_ast(l) isa OperatorAdd
+
+            l_dist = form(V, v -> sum(2.0 * innerₕ(fₕ, v(i)) for i in 1:n))
+            @test assemble(l) ≈ assemble(l_dist)
+        end
+    end
+
+    @testset "Linear form: a grid-function coefficient distributes the same way" begin
+        for (V, n) in ((V3, 3), (V4, 4))
+            l = form(V, v -> cₕ * sum(innerₕ(fₕ, v(i)) for i in 1:n))
+            @test resolve_form_ast(l) isa OperatorAdd
+
+            l_dist = form(V, v -> sum(cₕ * innerₕ(fₕ, v(i)) for i in 1:n))
+            @test assemble(l) ≈ assemble(l_dist)
+        end
+    end
+
+    @testset "Bilinear form: one trial component against a sum of 3 and 4 test components" begin
+        for (V, n) in ((V3, 3), (V4, 4))
+            a = form(V, V, (u, v) -> innerₕ(u(1), sum(v(i) for i in 1:n)))
+            @test resolve_form_ast(a) isa OperatorAdd
+
+            a_dist = form(V, V, (u, v) -> sum(innerₕ(u(1), v(i)) for i in 1:n))
+            @test Matrix(assemble(a)) ≈ Matrix(assemble(a_dist))
+        end
+    end
+
+    @testset "Association does not change the result" begin
+        # Left-associated (`+`'s own default) against an explicitly right-associated tree
+        # built the same way `foldr` would.
+        l_left = form(V4, v -> innerₕ(fₕ, v(1)) + innerₕ(fₕ, v(2)) + innerₕ(fₕ, v(3)) + innerₕ(fₕ, v(4)))
+        l_right = form(
+            V4,
+            v -> innerₕ(fₕ, v(1)) +
+                 (innerₕ(fₕ, v(2)) + (innerₕ(fₕ, v(3)) + innerₕ(fₕ, v(4))))
+        )
+        @test assemble(l_left) ≈ assemble(l_right)
+    end
+
+    @testset "innerₕ(divₕ(u), divₕ(v)) in 3D: a three-term mixing sum on both sides" begin
+        # The motivating case: the 3D discrete divergence inner product could not be
+        # written at all before this fix (its 2D counterpart, a two-term sum, already
+        # worked). Checked against the nine written-out (i, j) single-component products.
+        Ω3 = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 4, 4), (true, true, true))
+        W3 = gridspace(Ω3)
+        V3d = W3 × W3 × W3
+        ops = (D₋ₓ, D₋ᵧ, D₋₂)
+
+        a_div = form(
+            V3d, V3d,
+            (p, q) -> innerₕ(
+                D₋ₓ(p(1)) + D₋ᵧ(p(2)) + D₋₂(p(3)), D₋ₓ(q(1)) + D₋ᵧ(q(2)) + D₋₂(q(3))
+            )
+        )
+        A_div = Matrix(assemble(a_div))
+
+        A_nine = zeros(size(A_div))
+        for i in 1:3, j in 1:3
+
+            a_ij = form(V3d, V3d, (p, q) -> innerₕ(ops[i](p(i)), ops[j](q(j))))
+            A_nine .+= Matrix(assemble(a_ij))
+        end
+        @test A_div ≈ A_nine
+    end
+end
+
 end # module FormSimplifierTests

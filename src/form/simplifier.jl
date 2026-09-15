@@ -116,18 +116,61 @@ end
 
 # --- Component-routing safety -------------------------------------------------------- #
 
-# Whether the router could route `a` and `b` as one opaque term: it recurses through any
-# `UnaryWrapper` (including `OperatorScale`/`GridFunctionScale`) down to
-# `trial_component_or_nothing`/`test_component_or_nothing`, and *throws*
-# (`_throw_mixed_components`, `block_extract.jl`) if the two sides of a sum it meets along
-# the way name different components. So a rewrite may hide `OperatorAdd(a, b)` inside a
-# scale or a grid-function scaling only when this answers `false`; when it answers `true`,
-# distributing over `a`/`b` is the only routing-safe shape; leaving them combined would not
-# merely miss an optimisation, it would make an already-throwing pattern reachable through a
-# path (a factored scalar, a scale wrapping a distributed sum) that never existed before.
+# `_mixes_components` is a *classifying* query -- it must answer for the exact shape it is
+# asked to tell apart, a component-mixing `OperatorAdd`, not refuse to look at it
+# (gpena/Bramble.jl#235). `trial_component_or_nothing`/`test_component_or_nothing`
+# (block_extract.jl) cannot be reused directly for that: they throw
+# (`_throw_mixed_components`) the moment *either side itself* already mixes components,
+# which a three-or-more-term sum's left-associated `+` makes true of an inner node on every
+# recursive call past the first two terms -- `2.0 * (A + B + C)` parses as `2.0 * ((A + B)
+# + C)`, and asking whether `(A + B)` and `C` route as one term meant first asking what
+# component `(A + B)` itself names, which is exactly the question that node has no single
+# answer to and is not what is being asked here.
+#
+# `_component_class` is the non-throwing mirror those two need: a third value, `Mixed()`,
+# stands for "this subtree already names more than one component" instead of throwing.
+# `Mixed() !== <anything>`, including another `Mixed()` from an unrelated subtree, so two
+# differently-mixing sides still compare as "differ" -- which is the answer `_mixes_components`
+# needs (mixed *anything* is never routable as one opaque term). This mirrors
+# `trial_component_or_nothing`/`test_component_or_nothing`'s own recursion field for field,
+# not just the top-level shape, so it agrees with them everywhere they do answer.
+struct _MixedComponents end
+
+@inline _component_combine(l, r) = l === r ? l : _MixedComponents()
+
+@inline _test_component_class(op::IndexedTestFunction) = op.component_idx
+@inline _test_component_class(op::UnaryWrapper) = _test_component_class(op.inner_op)
+@inline _test_component_class(op::LinearProduct) = _test_component_class(op.right_op)
+@inline _test_component_class(op::BilinearProduct) = _test_component_class(op.right_op)
+@inline function _test_component_class(op::OperatorAdd)
+    return _component_combine(
+        _test_component_class(op.left_op), _test_component_class(op.right_op)
+    )
+end
+@inline _test_component_class(::Any) = nothing
+
+@inline _trial_component_class(op::IndexedTrialFunction) = op.component_idx
+@inline _trial_component_class(op::UnaryWrapper) = _trial_component_class(op.inner_op)
+@inline _trial_component_class(op::BilinearProduct) = _trial_component_class(op.left_op)
+@inline function _trial_component_class(op::OperatorAdd)
+    return _component_combine(
+        _trial_component_class(op.left_op), _trial_component_class(op.right_op)
+    )
+end
+@inline _trial_component_class(::Any) = nothing
+
+# Whether the router could route `a` and `b` as one opaque term. So a rewrite may hide
+# `OperatorAdd(a, b)` inside a scale or a grid-function scaling only when this answers
+# `false`; when it answers `true`, distributing over `a`/`b` is the only routing-safe
+# shape -- and, since it never throws, that distribution itself is what eventually turns
+# every mixing subtree into single-component leaves, the recursion `simplify_ast` already
+# performs (`OperatorScale`, `GridFunctionScale`, `BilinearProduct`) reaching a fixed point
+# where `_component_class` on every remaining node is a plain `Int` or `nothing`, never
+# `Mixed()` -- at which point `block_of`'s own throwing query is the one that runs, and only
+# ever on a term that genuinely cannot route (one side named, the other not).
 @inline function _mixes_components(a::LazyOp, b::LazyOp)
-    return trial_component_or_nothing(a) !== trial_component_or_nothing(b) ||
-           test_component_or_nothing(a) !== test_component_or_nothing(b)
+    return _trial_component_class(a) !== _trial_component_class(b) ||
+           _test_component_class(a) !== _test_component_class(b)
 end
 
 # --- The pass ------------------------------------------------------------------------ #
