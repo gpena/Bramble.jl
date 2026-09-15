@@ -383,6 +383,8 @@ do the unwrapping step alone, for a `LinearSolution` already in hand.
 ```@docs
 semidiscretize
 Semidiscretization
+semidiscretize_rhs
+SemidiscretizeRHS
 mass_matrix
 operator_matrix
 Bramble.jacobian!
