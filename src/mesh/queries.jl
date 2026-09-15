@@ -145,11 +145,20 @@ Locate the cell containing continuous coordinate `x`:
     (clamped to the domain boundaries).
   - For nD meshes: returns a `CartesianIndex{D}` locating the bounding cell along each dimension.
 
+**`x` outside `[x_1, x_N]` is silently clamped to the boundary cell** -- `locate_cell` never
+throws and never signals that `x` was out of range, so a caller that assumes the returned
+cell means `x` was inside the mesh inherits that assumption unknowingly. This is exactly
+what [`interpolate_at`](@ref)'s `outside` keyword (gpena/Bramble.jl#223) exists to make an
+explicit, checked choice about one layer up, rather than leaving to a bare cell lookup with
+no way to say "no" -- a new caller of `locate_cell` directly should decide its own
+out-of-range policy the same way, not assume this one already did.
+
 # Examples
 
 ```julia
 Ωₕ = mesh(domain(interval(0.0, 1.0)), 11)  # h = 0.1
 locate_cell(Ωₕ, 0.35)  # returns 4 (interval [0.3, 0.4])
+locate_cell(Ωₕ, 5.0)   # returns 10 (the last cell) -- no error, x = 5.0 is well outside [0, 1]
 ```
 """
 function locate_cell end

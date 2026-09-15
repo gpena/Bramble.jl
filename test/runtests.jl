@@ -102,6 +102,7 @@ if __bramble_with_unit_tests
             include("space/conservation.jl")
             include("space/composite_operators.jl")
             include("space/interpolation.jl")
+            include("space/interpolation_bounds.jl")
             include("space/inference_allocation.jl")
             include("convergence/runtests.jl")
             include("space/element_type.jl")

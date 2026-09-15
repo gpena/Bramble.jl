@@ -5,7 +5,7 @@
 # `πₕ` the numeric layer defines (dispatch distinguishes them by arity), not a separate name.
 
 """
-    πₕ(uₕ::VectorElement) -> LazyOp
+    πₕ(uₕ::VectorElement; outside = :error) -> LazyOp
 
 The interpolant of `uₕ`, as a symbolic source term; usable anywhere a source is, including
 inside another operator: `innerₕ(D₋ₓ(πₕ(uₕ)), D₋ₓ(v))` differentiates the interpolated field
@@ -13,14 +13,18 @@ the same way `D₋ₓ` differentiates any other source, `innerₕ(M₋ₓ(πₕ(
 and so on. This enables a coupled form to evaluate a leaf's grid function on a different
 leaf's mesh.
 
-Built as `source_function(x -> interpolate_at(uₕ, x), Val(D))`: a `SourceFunction`'s own
-`local_stencil` evaluates its function at the current point of whichever mesh is
-being walked, so `uₕ` can originate from another leaf without special handling; the
-interpolation occurs once per point inside `interpolate_at`, where ordinary source
-function calls occur.
+Built as `source_function(x -> interpolate_at(uₕ, x; outside), Val(D))`: a
+`SourceFunction`'s own `local_stencil` evaluates its function at the current point of
+whichever mesh is being walked, so `uₕ` can originate from another leaf without special
+handling; the interpolation occurs once per point inside `interpolate_at`, where ordinary
+source function calls occur. `outside` (gpena/Bramble.jl#223) is forwarded to
+[`interpolate_at`](@ref) unchanged, fill values included -- this is a source (a function of
+`uₕ`'s values), not a linear map, so unlike [`πₕ`](@ref)`(Wsrc, op)` below it carries no
+such restriction.
 """
-function πₕ(uₕ::VectorElement{<:ScalarGridSpace{D}}) where {D}
-    return source_function(x -> interpolate_at(uₕ, x), Val(D))
+function πₕ(uₕ::VectorElement{<:ScalarGridSpace{D}}; outside = :error) where {D}
+    _validate_outside(outside)
+    return source_function(x -> interpolate_at(uₕ, x; outside), Val(D))
 end
 
 #===========================================================================#
@@ -48,10 +52,16 @@ it at points of whatever mesh the assembly is walking.
 
 Distinct from the source wrapper `πₕ(uₕ)`, which carries a grid function's values. This node
 carries no values; it carries the map, and its stencil names trial columns.
+
+`outside` (gpena/Bramble.jl#223) is one of `:error`, `:clamp` or `:extrapolate` -- never a
+fill value, since this node's stencil is a *linear* map (weighted trial columns), and a
+constant independent of the trial unknowns cannot be written that way; see
+[`interpolation_matrix`](@ref)'s docstring for the same restriction.
 """
 struct InterpolationNode{D, S, OpType <: LazyOp{D}} <: LazyOp{D}
     src_space::S
     inner_op::OpType
+    outside::Symbol
 end
 
 @noinline function _throw_interp_inner(op)
@@ -68,7 +78,7 @@ end
 end
 
 #=
-    πₕ(Wsrc::ScalarGridSpace{D}, op::LazyOp{D}) -> InterpolationNode
+    πₕ(Wsrc::ScalarGridSpace{D}, op::LazyOp{D}; outside = :error) -> InterpolationNode
 
 The interpolation operator from `Wsrc` onto whichever mesh the form integrates over, applied
 to the trial function `op`.
@@ -84,11 +94,14 @@ Operators wrap it from the outside, acting on the mesh being integrated over:
 `inner₊(D₋ₓ(πₕ(Wsrc, u)), D₋ₓ(v))` is `D_x^⊤ H_+ D_x P`. Writing an operator inside is a
 different operation and is refused, since it would difference on the source mesh instead.
 
-`op` must be a trial-function leaf, plain or indexed.
+`op` must be a trial-function leaf, plain or indexed. `outside` (gpena/Bramble.jl#223)
+accepts only `:error` (the default), `:clamp` and `:extrapolate` -- see
+[`InterpolationNode`](@ref)'s own docstring for why a fill value is refused here.
 =#
-function πₕ(Wsrc::ScalarGridSpace{D}, op::LazyOp{D}) where {D}
+function πₕ(Wsrc::ScalarGridSpace{D}, op::LazyOp{D}; outside = :error) where {D}
     op isa TrialFunction || op isa IndexedTrialFunction || _throw_interp_inner(op)
-    return InterpolationNode{D, typeof(Wsrc), typeof(op)}(Wsrc, op)
+    _validate_outside_linear(outside)
+    return InterpolationNode{D, typeof(Wsrc), typeof(op)}(Wsrc, op, outside)
 end
 
 # --- The stencil: absolute trial columns, with the corner weights ------------------- #
@@ -96,16 +109,16 @@ end
 @inline function local_stencil(
         op::InterpolationNode{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int
 ) where {D}
-    return _interp_stencil(mesh(op.src_space), point(mesh(space), I), Val(D))
+    return _interp_stencil(mesh(op.src_space), point(mesh(space), I), Val(D), op.outside)
 end
 
-@inline function _interp_stencil(Ωsrc::AbstractMeshType{1}, x, ::Val{1})
-    j, t = _interp_cell_frac(Ωsrc, x)
+@inline function _interp_stencil(Ωsrc::AbstractMeshType{1}, x, ::Val{1}, outside::Symbol)
+    j, t = _interp_cell_frac(Ωsrc, x, outside)
     return ((AbsoluteColumn(j), 1 - t), (AbsoluteColumn(j + 1), t))
 end
 
-@inline function _interp_stencil(Ωsrc::AbstractMeshType{D}, x, ::Val{D}) where {D}
-    idx, ts = _interp_cell_frac(Ωsrc, x)
+@inline function _interp_stencil(Ωsrc::AbstractMeshType{D}, x, ::Val{D}, outside::Symbol) where {D}
+    idx, ts = _interp_cell_frac(Ωsrc, x, outside)
     li = LinearIndices(indices(Ωsrc))
     # the `2ᴰ` corners, decoded from the bits of `k - 1` so the tuple length is static
     return ntuple(Val(1 << D)) do k
@@ -122,12 +135,12 @@ _is_source_only(::InterpolationNode) = false
 
 function resolve_ast(op::InterpolationNode{D, S}) where {D, S}
     inner = resolve_ast(op.inner_op)
-    return InterpolationNode{D, S, typeof(inner)}(op.src_space, inner)
+    return InterpolationNode{D, S, typeof(inner)}(op.src_space, inner, op.outside)
 end
 
 @inline function component(op::InterpolationNode{D, S}, i::Int) where {D, S}
     inner = component(op.inner_op, i)
-    return InterpolationNode{D, S, typeof(inner)}(op.src_space, inner)
+    return InterpolationNode{D, S, typeof(inner)}(op.src_space, inner, op.outside)
 end
 
 # `_collect_region_labels` for `InterpolationNode` comes from its `UnaryWrapper` membership
@@ -140,11 +153,15 @@ end
 # names a trial-side space, not a test one.
 stencil_offsets(op::InterpolationNode) = stencil_offsets(op.inner_op)
 
-# Two interpolations are the same shape only when they interpolate from the same space. The
-# symmetry fast path compares the two sides of a product for structural equality, and an
-# interpolation on one side only must not read as symmetric.
+# Two interpolations are the same shape only when they interpolate from the same space
+# under the same out-of-domain policy (gpena/Bramble.jl#223) -- :clamp and :extrapolate
+# disagree exactly at the points that matter, so treating them as interchangeable here
+# would let symmetry detection paper over a real difference. The symmetry fast path
+# compares the two sides of a product for structural equality, and an interpolation on one
+# side only must not read as symmetric.
 function _same_operator_shape(a::InterpolationNode{D}, b::InterpolationNode{D}) where {D}
-    return a.src_space === b.src_space && _same_operator_shape(a.inner_op, b.inner_op)
+    return a.src_space === b.src_space && a.outside === b.outside &&
+           _same_operator_shape(a.inner_op, b.inner_op)
 end
 
 # --- The shift trait: which nodes carry something a relabelled offset cannot express -- #

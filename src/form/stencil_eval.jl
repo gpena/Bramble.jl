@@ -183,9 +183,18 @@ end
     end
 end
 
+# `outside = :extrapolate`, always: a `DiracSource` point is a modelling choice (where the
+# source physically sits), not a query that #223's `outside` policy is about, and this
+# keeps its behaviour exactly what it was before that policy existed -- #226's own note
+# ("out-of-domain handling consistent with whatever #223 settles for interpolate_at") is
+# deliberately left for a follow-up, not folded into #223's own scope (its own "Subsystems
+# to Update" list never names this file).
 @inline _interp_cell_frac_pt(Ωₕ::AbstractMeshType{1}, pt::NTuple{1}, ::Val{1}) = (
-    CartesianIndex(_interp_cell_frac(Ωₕ, pt[1])[1]), (_interp_cell_frac(Ωₕ, pt[1])[2],))
-@inline _interp_cell_frac_pt(Ωₕ::AbstractMeshType{D}, pt::NTuple{D}, ::Val{D}) where {D} = _interp_cell_frac(Ωₕ, pt)
+    CartesianIndex(_interp_cell_frac(Ωₕ, pt[1], :extrapolate)[1]),
+    (_interp_cell_frac(Ωₕ, pt[1], :extrapolate)[2],))
+@inline _interp_cell_frac_pt(Ωₕ::AbstractMeshType{D}, pt::NTuple{D}, ::Val{D}) where {D} = _interp_cell_frac(
+    Ωₕ, pt, :extrapolate
+)
 
 @inline _is_corner_inbounds(corner::Tuple) = all(c -> 0 <= c <= 1, corner)
 
