@@ -4,6 +4,7 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
 
 @testset "Forms" begin
     include("dirichlet_constraints.jl")
+    include("reaction_flux.jl")
     include("difference_ast.jl")
     include("operators.jl")
     include("inner_products.jl")

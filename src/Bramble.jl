@@ -113,6 +113,7 @@ export M₋ₓ!, M₋ᵧ!, M₋₂!
 export M₊ₓ!, M₊ᵧ!, M₊₂!
 
 export dirichlet_constraints, dirichlet_bc!, symmetrize!
+export reaction, reaction_density
 export form, assemble, assemble!, assemble_parallel!, allocate_system_matrix, evaluate!
 export jacobian_pattern, ast_sparsity_detector
 export type_cached_assemble!
@@ -195,6 +196,7 @@ include("form/simplifier.jl")
 include("form/dirichlet_constraints.jl")
 include("form/linear.jl")
 include("form/bilinear.jl")
+include("form/reaction.jl")
 include("form/bilinear_traversal.jl")
 include("form/bilinear_pattern.jl")
 include("form/bilinear_execution.jl")
