@@ -1,22 +1,19 @@
 module BrambleMUMPSExt
 
-using Bramble: Bramble, MUMPSFactorization, BilinearForm, LinearForm, assemble, element, trial_space
+using Bramble: Bramble, MUMPSFactorization
 using MUMPS:
              MUMPS,
              Mumps,
              associate_matrix!,
              associate_rhs!,
              factorize!,
-             solve!,
-             get_sol,
              get_sol!,
              suppress_display!,
              set_icntl!,
              set_cntl!,
              finalize!
-using LinearAlgebra: LinearAlgebra, Factorization, ldiv!, factorize, issymmetric, isposdef, diag
+using LinearAlgebra: LinearAlgebra, ldiv!, issymmetric, diag
 using SparseArrays: SparseArrays, SparseMatrixCSC
-using PrecompileTools: @setup_workload, @compile_workload
 
 function _ensure_mpi_init()
     if isdefined(MUMPS, :MPI)

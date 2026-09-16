@@ -1,8 +1,8 @@
 module BrambleSparspakExt
 
-using Bramble: Bramble, SparspakFactorization, BilinearForm, LinearForm, assemble, element, trial_space
+using Bramble: Bramble, SparspakFactorization
 using Sparspak: Sparspak, sparspaklu, sparspaklu!
-using LinearAlgebra: LinearAlgebra, Factorization, ldiv!, factorize
+using LinearAlgebra: LinearAlgebra, ldiv!
 using SparseArrays: SparseArrays, SparseMatrixCSC
 
 mutable struct ConcreteSparspakFactorization{T, LUT} <: SparspakFactorization{T}
