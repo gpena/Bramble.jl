@@ -38,8 +38,10 @@ tools to attach adjoint rules to.
 # Solvers
 - `:default`: standard sparse direct solve (`\\`).
 - `:suitesparse`: SuiteSparse direct solve with automatic/explicit symmetry (`CHOLMOD`/`UMFPACK`).
+- `:spqr`: SuiteSparse sparse QR (least-squares or rectangular `A`; needs only `SparseArrays`).
 - `:accelerate`: Apple Accelerate native `libSparse` direct solve on macOS (requires `AppleAccelerate.jl`).
 - `:mumps`: MUMPS multifrontal direct solver (requires `MUMPS.jl`).
+- `:sparspak`: pure-Julia sparse direct LU, zero binary dependencies (requires `Sparspak.jl`).
 
 # Symmetry options (`sym`)
 For `solver = :suitesparse`, `:accelerate`, or `:mumps`:
@@ -127,24 +129,36 @@ u_acc = pde_solve(A, F; solver = :accelerate, sym = :spd)
 # Using MUMPS
 using MUMPS
 u_mumps = pde_solve(A, F; solver = :mumps)
+
+# Using Sparspak (pure Julia, no binary dependency)
+using Sparspak
+u_sparspak = pde_solve(A, F; solver = :sparspak)
+
+# Using SuiteSparse's SPQR (least-squares / rectangular systems)
+u_qr = pde_solve(A, F; solver = :spqr)
 ```
 
 See also [`assemble`](@ref), [`sparse_factorize`](@ref), [`suitesparse_solve`](@ref),
-[`accelerate_solve`](@ref), [`mumps_solve`](@ref), [`linear_problem`](@ref).
+[`suitesparse_qr_solve`](@ref), [`accelerate_solve`](@ref), [`mumps_solve`](@ref),
+[`sparspak_solve`](@ref), [`linear_problem`](@ref).
 """
 function pde_solve(A::SparseMatrixCSC, F::AbstractVector; solver::Symbol = :default, sym = :auto, kwargs...)
     if solver === :default
         return A \ F
     elseif solver === :suitesparse
         return suitesparse_solve(A, F; sym = sym, kwargs...)
+    elseif solver === :spqr
+        return suitesparse_qr_solve(A, F; kwargs...)
     elseif solver === :accelerate
         return accelerate_solve(A, F; sym = sym, kwargs...)
     elseif solver === :mumps
         return mumps_solve(A, F; sym = sym, kwargs...)
+    elseif solver === :sparspak
+        return sparspak_solve(A, F)
     else
         throw(
             ArgumentError(
-            "Unknown solver: $solver. Expected :default, :suitesparse, :accelerate, or :mumps.",
+            "Unknown solver: $solver. Expected :default, :suitesparse, :spqr, :accelerate, :mumps, or :sparspak.",
         ),
         )
     end

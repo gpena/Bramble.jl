@@ -6,7 +6,7 @@ import Base: show, first, last, getindex, setindex!, iterate, size, firstindex, 
 using SparseArrays: SparseMatrixCSC, spdiagm, spzeros, rowvals, nonzeros, nzrange, sparse, sparse!, blockdiag
 
 using LinearAlgebra: I, dot, mul!
-import LinearAlgebra: issymmetric, isposdef, ldiv!, Factorization, ×
+import LinearAlgebra: issymmetric, isposdef, ldiv!, Factorization, ×, qr
 
 import Base: copy
 using Base: @propagate_inbounds
@@ -133,8 +133,10 @@ export ode_function, ode_problem, linear_problem, nonlinear_problem
 export amg_preconditioner
 export second_order_ode_function, second_order_ode_problem
 export SuiteSparseFactorization, suitesparse_factorize, suitesparse_solve, suitesparse_refactor!
+export suitesparse_qr_factorize, suitesparse_qr_solve
 export AccelerateFactorization, accelerate_factorize, accelerate_solve, accelerate_refactor!
 export MUMPSFactorization, mumps_factorize, mumps_solve, mumps_refactor!
+export SparspakFactorization, sparspak_factorize, sparspak_solve, sparspak_refactor!
 export sparse_factorize, sparse_refactor!, refactor!
 export pde_solve
 
@@ -212,6 +214,7 @@ include("form/amg_preconditioner.jl")
 include("form/suitesparse_solver.jl")
 include("form/accelerate_solver.jl")
 include("form/mumps_solver.jl")
+include("form/sparspak_solver.jl")
 include("form/sparse_solvers.jl")
 include("form/pde_solve.jl")
 

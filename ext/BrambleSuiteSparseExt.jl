@@ -45,9 +45,9 @@ function Bramble._suitesparse_factorize(A::SparseMatrixCSC; sym = :auto, kwargs.
     sym_flag = _suitesparse_sym_flag(A, sym)
 
     fact_obj = if sym_flag === :spd
-        cholesky(Symmetric(A))
+        cholesky(Symmetric(A); kwargs...)
     else
-        lu(A)
+        lu(A; kwargs...)
     end
 
     return ConcreteSuiteSparseFactorization{eltype(A), typeof(fact_obj)}(fact_obj, sym_flag, n)

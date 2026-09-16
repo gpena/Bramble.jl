@@ -113,3 +113,68 @@ function _suitesparse_refactor!(::Any, ::Any)
         "suitesparse_refactor! requires SuiteSparse.jl. Add `using SuiteSparse` before calling this function.",
     )
 end
+
+# `qr` on a `SparseMatrixCSC` is SPQR (`SparseArrays.SPQR`), always available since
+# `SparseArrays` is a hard dependency of Bramble -- unlike `suitesparse_factorize` above,
+# these need no `using SuiteSparse` and no extension.
+
+"""
+    suitesparse_qr_factorize(A::AbstractMatrix; tol = ..., ordering = ..., kwargs...) -> QRSparse
+    suitesparse_qr_factorize(a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing,
+                             kwargs...) -> QRSparse
+
+Compute the sparse direct QR factorization of `A` (or the assembled matrix of `a`) using
+SuiteSparse's SPQR, suited to overdetermined least-squares systems and the rectangular
+blocks of a constrained saddle-point form. Unlike [`suitesparse_factorize`](@ref), `A` need
+not be square, and this needs only `SparseArrays` -- already a dependency of Bramble, no
+`using SuiteSparse` required.
+
+`kwargs` (`tol`, `ordering`, ...) are forwarded to `SparseArrays.SPQR.qr`.
+
+# Examples
+
+```julia
+A, F = assemble(a, l; dirichlet = :boundary => x -> 0.0)
+fact = suitesparse_qr_factorize(A)
+u = fact \\ F
+```
+
+See also [`suitesparse_qr_solve`](@ref), [`suitesparse_factorize`](@ref), [`pde_solve`](@ref).
+"""
+function suitesparse_qr_factorize(A::SparseMatrixCSC; kwargs...)
+    return qr(A; kwargs...)
+end
+
+function suitesparse_qr_factorize(
+        a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing, kwargs...
+)
+    A = assemble(
+        a; dirichlet = dirichlet, dirichlet_components = dirichlet_components
+    )
+    return qr(A; kwargs...)
+end
+
+"""
+    suitesparse_qr_solve(A::SparseMatrixCSC, F::AbstractVector; tol = ..., ordering = ..., kwargs...) -> Vector
+    suitesparse_qr_solve(a::BilinearForm, l::LinearForm; dirichlet = nothing, dirichlet_components = nothing,
+                        kwargs...) -> VectorElement
+
+Directly solve `A u = F` (exactly if square, least-squares if overdetermined) using
+SuiteSparse's SPQR sparse QR factorization. Needs only `SparseArrays`; no `using
+SuiteSparse` required.
+
+See also [`suitesparse_qr_factorize`](@ref), [`pde_solve`](@ref).
+"""
+function suitesparse_qr_solve(A::SparseMatrixCSC, F::AbstractVector; kwargs...)
+    return qr(A; kwargs...) \ F
+end
+
+function suitesparse_qr_solve(
+        a::BilinearForm, l::LinearForm; dirichlet = nothing, dirichlet_components = nothing, kwargs...
+)
+    A, F = assemble(
+        a, l; dirichlet = dirichlet, dirichlet_components = dirichlet_components
+    )
+    u = qr(A; kwargs...) \ F
+    return element(trial_space(a), u)
+end

@@ -196,6 +196,7 @@ if __bramble_with_ext_backends
         include("ext/suitesparse_ext.jl")
         include("ext/appleaccelerate_ext.jl")
         include("ext/mumps_ext.jl")
+        include("ext/sparspak_ext.jl")
         # BrambleChainRulesExt: the pde_solve rrule's own math, checked against finite
         # differences and by hand -- needs only ChainRulesCore, not Enzyme/Mooncake, so it
         # belongs here rather than behind the "ad" group. Enzyme/Mooncake composition is

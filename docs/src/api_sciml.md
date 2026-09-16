@@ -111,11 +111,12 @@ amg_preconditioner
 ## Sparse direct solvers and factorization reuse
 
 Bramble provides dedicated, first-class extensions for high-performance sparse linear solvers:
-- **SuiteSparse**: CHOLMOD Cholesky for symmetric positive-definite systems and UMFPACK LU for unsymmetric systems via `SuiteSparse.jl`.
+- **SuiteSparse**: CHOLMOD Cholesky for symmetric positive-definite systems and UMFPACK LU for unsymmetric systems via `SuiteSparse.jl`, plus SPQR sparse QR (below) which needs only `SparseArrays`.
 - **Apple Accelerate**: Native macOS `libSparse` Cholesky, $\mathrm{LDL}^T$, and LUTPP via `AppleAccelerate.jl` (on Apple Silicon / darwin).
 - **MUMPS**: Parallel multifrontal direct solver for large 2D/3D systems via `MUMPS.jl`.
+- **Sparspak**: Pure-Julia sparse direct LU (George & Liu's Waterloo package) via `Sparspak.jl` -- zero binary dependency, so it factors matrices whose entries are `Float32`, `BigFloat`, or a `ForwardDiff.Dual`, where the other three backends require `Float64`/`ComplexF64`.
 
-All three solvers support non-allocating symbolic reuse via the unified [`refactor!`](@ref) driver for transient PDE time loops and Newton iterations.
+All four solvers support non-allocating symbolic reuse via the unified [`refactor!`](@ref) driver for transient PDE time loops and Newton iterations.
 
 ```@docs
 sparse_factorize
@@ -124,11 +125,29 @@ refactor!
 
 ### SuiteSparse solver
 
+`suitesparse_factorize`/`suitesparse_solve` accept the same ordering and pivoting
+parameters as Julia's own `cholesky`/`lu` on a `SparseMatrixCSC` -- a fill-reducing `perm`
+for CHOLMOD, or a column ordering `q` and an 8-element `control` vector for UMFPACK -- and
+forward them unchanged, so `suitesparse_factorize(A; sym = :spd, perm = my_ordering)`
+reaches CHOLMOD's own ordering routine rather than Bramble's default.
+
 ```@docs
 SuiteSparseFactorization
 suitesparse_factorize
 suitesparse_solve
 suitesparse_refactor!
+```
+
+### SPQR sparse QR (least-squares and rectangular systems)
+
+`suitesparse_qr_factorize`/`suitesparse_qr_solve` wrap `SparseArrays.SPQR.qr` for
+overdetermined least-squares systems and the rectangular blocks of a constrained
+saddle-point form -- `A` need not be square. Unlike the rest of this section these need
+only `SparseArrays`, already a dependency of Bramble, so no `using SuiteSparse` is required.
+
+```@docs
+suitesparse_qr_factorize
+suitesparse_qr_solve
 ```
 
 ### Apple Accelerate solver (macOS)
@@ -147,6 +166,15 @@ MUMPSFactorization
 mumps_factorize
 mumps_solve
 mumps_refactor!
+```
+
+### Sparspak sparse direct solver (pure Julia)
+
+```@docs
+SparspakFactorization
+sparspak_factorize
+sparspak_solve
+sparspak_refactor!
 ```
 
 ## Caching a coefficient-dependent assembly by element type

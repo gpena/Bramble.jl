@@ -148,6 +148,63 @@ using SuiteSparse
         @test_throws ArgumentError sparse_refactor!(fact_spd, Matrix(A_mod))
     end
 
+    @testset "Ordering/pivot control parameters are forwarded" begin
+        I2 = interval(0.0, 1.0) × interval(0.0, 1.0)
+        Ω = mesh(domain(I2, :boundary => boundary_symbols(I2)), (8, 8), (true, true))
+        W = gridspace(Ω)
+        a = form(W, W, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+        l = form(W, v -> innerₕ(Rₕ(W, x -> 1.0), v))
+        A, F = assemble(a, l; dirichlet = :boundary => x -> 0.0, symmetrize = true)
+        n = size(A, 1)
+
+        # CHOLMOD's `perm`: a user-supplied fill-reducing permutation. A permutation of the
+        # right length still solves correctly; a wrong-length one must error, which is only
+        # true if the keyword actually reaches CHOLMOD instead of being silently dropped.
+        fact_perm = suitesparse_factorize(A; sym = :spd, perm = collect(n:-1:1))
+        @test isapprox(fact_perm \ F, A \ F; atol = 1e-12)
+        @test_throws BoundsError suitesparse_factorize(A; sym = :spd, perm = [1])
+
+        # UMFPACK's `q`: same check on the unsymmetric path.
+        A_unsym, F_unsym = assemble(a, l; dirichlet = :boundary => x -> 0.0, symmetrize = false)
+        fact_q = suitesparse_factorize(A_unsym; sym = :unsymmetric, q = collect(n:-1:1))
+        @test isapprox(fact_q \ F_unsym, A_unsym \ F_unsym; atol = 1e-12)
+        @test_throws ArgumentError suitesparse_factorize(A_unsym; sym = :unsymmetric, q = [1])
+    end
+
+    @testset "SPQR (least-squares / rectangular systems)" begin
+        I2 = interval(0.0, 1.0) × interval(0.0, 1.0)
+        Ω = mesh(domain(I2, :boundary => boundary_symbols(I2)), (8, 8), (true, true))
+        W = gridspace(Ω)
+        a = form(W, W, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+        l = form(W, v -> innerₕ(Rₕ(W, x -> 1.0), v))
+        A, F = assemble(a, l; dirichlet = :boundary => x -> 0.0, symmetrize = true)
+
+        # Square system: same answer as the default sparse solve.
+        u_ref = A \ F
+        u_qr = pde_solve(A, F; solver = :spqr)
+        @test isapprox(u_qr, u_ref; atol = 1e-10)
+
+        fact = suitesparse_qr_factorize(A)
+        @test isapprox(fact \ F, u_ref; atol = 1e-10)
+
+        u_direct = suitesparse_qr_solve(A, F)
+        @test isapprox(u_direct, u_ref; atol = 1e-10)
+
+        u_elem = suitesparse_qr_solve(a, l; dirichlet = :boundary => x -> 0.0)
+        @test u_elem isa Bramble.VectorElement
+        @test isapprox(parent(u_elem), u_ref; atol = 1e-10)
+
+        # Overdetermined least-squares: stack A on top of itself plus noise so the
+        # normal-equations solution differs from an exact solve of the top block.
+        A_ls = [A; A]
+        F_ls = [F; F .+ 1.0e-3]
+        u_ls = suitesparse_qr_solve(A_ls, F_ls)
+        @test length(u_ls) == size(A, 2)
+        # a genuine least-squares residual is orthogonal to A_ls's column space
+        residual = A_ls * u_ls - F_ls
+        @test isapprox(A_ls' * residual, zeros(size(A_ls, 2)); atol = 1e-8)
+    end
+
     @testset "Error handling & validation" begin
         I1 = interval(0.0, 1.0)
         Ω1 = mesh(domain(I1, :boundary => boundary_symbols(I1)), 5, true)

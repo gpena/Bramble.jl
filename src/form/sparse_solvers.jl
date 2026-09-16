@@ -16,12 +16,15 @@ requested solver backend.
 - `:default` or `:suitesparse`: SuiteSparse (CHOLMOD for SPD/symmetric, UMFPACK for unsymmetric).
 - `:accelerate`: Apple Accelerate native `libSparse` on macOS (Cholesky, LDLᵀ, LUTPP, QR).
 - `:mumps`: MUMPS multifrontal parallel direct solver.
+- `:sparspak`: pure-Julia sparse direct LU, zero binary dependencies.
 
 # Symmetry options (`sym`)
 - `:auto`: automatically detect matrix symmetry (and diagonal positivity).
 - `:spd`, `:definite`, or `1`: symmetric positive definite.
 - `:symmetric` or `2`: general symmetric.
 - `:unsymmetric` or `0`: general unsymmetric.
+
+Ignored by `:sparspak`, which always factors as general unsymmetric LU.
 
 # Examples
 
@@ -31,7 +34,8 @@ u = fact \\ F
 ```
 
 See also [`refactor!`](@ref), [`pde_solve`](@ref), [`suitesparse_factorize`](@ref),
-[`accelerate_factorize`](@ref), [`mumps_factorize`](@ref).
+[`suitesparse_qr_factorize`](@ref), [`accelerate_factorize`](@ref), [`mumps_factorize`](@ref),
+[`sparspak_factorize`](@ref).
 """
 function sparse_factorize(A::SparseMatrixCSC; solver::Symbol = :default, sym = :auto, kwargs...)
     if solver === :default || solver === :suitesparse
@@ -40,10 +44,12 @@ function sparse_factorize(A::SparseMatrixCSC; solver::Symbol = :default, sym = :
         return accelerate_factorize(A; sym = sym, kwargs...)
     elseif solver === :mumps
         return mumps_factorize(A; sym = sym, kwargs...)
+    elseif solver === :sparspak
+        return sparspak_factorize(A)
     else
         throw(
             ArgumentError(
-            "Unknown solver: $solver. Expected :default, :suitesparse, :accelerate, or :mumps.",
+            "Unknown solver: $solver. Expected :default, :suitesparse, :accelerate, :mumps, or :sparspak.",
         ),
         )
     end
@@ -71,6 +77,7 @@ Dispatches automatically via multiple dispatch to the appropriate backend:
 - [`SuiteSparseFactorization`](@ref): updates CHOLMOD or UMFPACK numeric values.
 - [`AccelerateFactorization`](@ref): updates Apple Accelerate `libSparse` numeric values.
 - [`MUMPSFactorization`](@ref): updates MUMPS multifrontal numerical factorization (`job = 2`).
+- [`SparspakFactorization`](@ref): updates Sparspak's numeric LU values.
 
 See also [`sparse_factorize`](@ref), [`pde_solve`](@ref).
 """
@@ -84,6 +91,10 @@ end
 
 function refactor!(fact::MUMPSFactorization, A::SparseMatrixCSC)
     return mumps_refactor!(fact, A)
+end
+
+function refactor!(fact::SparspakFactorization, A::SparseMatrixCSC)
+    return sparspak_refactor!(fact, A)
 end
 
 function refactor!(
