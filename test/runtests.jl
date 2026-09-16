@@ -151,6 +151,10 @@ if __bramble_with_quality
         include("quality/explicit_imports.jl")
         include("quality/jet.jl")
         include("quality/invalidations.jl")
+        # Decoupled from docs/make.jl (doctest = false there) so a doctest regression is
+        # caught here, in parallel with the rest of this group, instead of during every docs
+        # build (gpena/Bramble.jl#251).
+        include("quality/doctests.jl")
         # Already run above with the unit group; included here so a `quality`-only run
         # (nightly's second job) still covers it, without running it twice for `all`.
         __bramble_with_unit_tests || include("quality/alloccheck.jl")

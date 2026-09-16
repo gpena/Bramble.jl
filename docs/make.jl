@@ -21,8 +21,18 @@ const LITERATE_EXAMPLES = [
     "inverse_diffusion.jl"
 ]
 
+if Threads.nthreads() == 1
+    @info "docs/make.jl is running single-threaded — pass `--threads=auto` for a faster build" *
+          " (the worked examples' own `@example` blocks below are the slow part, not this)."
+end
+
+# `asyncmap` rather than a serial loop: harmless either way since `Literate.markdown` with
+# `documenter = true` only rewrites `.jl` syntax into `@example`-tagged markdown here, it
+# does not execute any of it (that happens later, inside `makedocs`, one page at a time) —
+# measured at ~1.7s total for all 8 files serially, so this is not where a slow build's time
+# goes (gpena/Bramble.jl#251), but there is no reason to keep it serial either.
 let dir = joinpath(@__DIR__, "src", "examples")
-    for file in LITERATE_EXAMPLES
+    asyncmap(LITERATE_EXAMPLES) do file
         Literate.markdown(
             joinpath(dir, file), dir;
             documenter = true,
@@ -92,7 +102,14 @@ makedocs(;
     # rather than because they help. The rule that matters (every *exported* name has a
     # docstring) is enforced in test/quality/exports.jl instead, where it has no false
     # positives. A broken `@ref` is always a real mistake, so that one is an error.
-    warnonly = [:missing_docs]
+    warnonly = [:missing_docs],
+    # Decoupled (gpena/Bramble.jl#251): checked instead by test/quality/doctests.jl, in
+    # parallel with the rest of that group, rather than on every docs build. This only skips
+    # Documenter's own separate "Doctest" pipeline stage (the handful of `@jldoctest` blocks
+    # in `src/`) — it does *not* skip executing the worked examples' `@example` blocks, which
+    # "ExpandTemplates" always runs regardless of this setting and is where a slow build's
+    # time actually goes.
+    doctest = false
 )
 
 deploydocs(;
