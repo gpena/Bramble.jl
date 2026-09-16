@@ -38,8 +38,14 @@ jobs:
     # Nothing here gates a merge, but a red run should still mean something specific.
     # Julia nightly is not in this matrix (see below), so a failure here is Bramble's own —
     # either the 1.12 floor or the 1.13 release, on either OS.
+    #
+    # id-token: write is for the codecov-action step below (`use_oidc: true`, Julia 1.12 on
+    # ubuntu-latest only) -- without it, requesting an OIDC token throws an unhandled error
+    # in the action's own github-script substep before its own `fail_ci_if_error: false`
+    # ever gets a chance to apply, failing the whole job even though every test passed.
     permissions:
       contents: read
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
