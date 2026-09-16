@@ -1,0 +1,484 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root {
+    --bg: #ffffff;
+    --text: #2c2c2c;
+    --muted: #6b6b6b;
+    --border: #d8d8d4;
+    --canvas-bg: #fafaf8;
+    --accent: #0e7c86;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1e1e1e;
+      --text: #dcdcd6;
+      --muted: #9a9a94;
+      --border: #3a3a36;
+      --canvas-bg: #262624;
+      --accent: #4fd1c5;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 12px;
+    font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: var(--text);
+    background: var(--bg);
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 18px;
+    margin-bottom: 12px;
+  }
+  .field { display: flex; flex-direction: column; gap: 2px; min-width: 120px; }
+  .field.wide { min-width: 170px; }
+  label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+  select, input[type="range"] { font: inherit; color: var(--text); background: var(--canvas-bg); border: 1px solid var(--border); border-radius: 4px; padding: 3px 4px; }
+  input[type="range"] { padding: 0; accent-color: var(--accent); }
+  .range-row { display: flex; align-items: center; gap: 8px; }
+  .range-row span { font-variant-numeric: tabular-nums; min-width: 2.4em; }
+  .canvases { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 12px; }
+  .panel { display: flex; flex-direction: column; gap: 4px; }
+  .panel-title { font-size: 11px; color: var(--muted); }
+  canvas { border: 1px solid var(--border); border-radius: 4px; background: var(--canvas-bg); display: block; }
+  table { border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 2px 12px 2px 0; }
+  th { color: var(--muted); font-weight: 500; }
+</style>
+</head>
+<body>
+
+<div class="controls">
+  <div class="field wide">
+    <label for="nRange">Resolution N</label>
+    <div class="range-row">
+      <input type="range" id="nRange" min="8" max="48" step="1" value="24">
+      <span id="nLabel">24</span>
+    </div>
+  </div>
+  <div class="field wide">
+    <label for="peRange">P&eacute;clet number Pe</label>
+    <div class="range-row">
+      <input type="range" id="peRange" min="0" max="200" step="1" value="20">
+      <span id="peLabel">20</span>
+    </div>
+  </div>
+  <div class="field wide">
+    <label for="angleRange">Flow angle &theta;</label>
+    <div class="range-row">
+      <input type="range" id="angleRange" min="0" max="360" step="5" value="45">
+      <span id="angleLabel">45&deg;</span>
+    </div>
+  </div>
+  <div class="field">
+    <label for="stencilSel">Stencil</label>
+    <select id="stencilSel">
+      <option value="centered" selected>Centered</option>
+      <option value="upwind">Upwind</option>
+    </select>
+  </div>
+  <div class="field">
+    <label for="panel2Sel">Panel 2</label>
+    <select id="panel2Sel">
+      <option value="spy" selected>Matrix sparsity</option>
+      <option value="mesh">Mesh nodes</option>
+    </select>
+  </div>
+  <div class="field">
+    <label for="colormapSel">Colormap</label>
+    <select id="colormapSel">
+      <option value="viridis" selected>Viridis</option>
+      <option value="plasma">Plasma</option>
+      <option value="turbo">Turbo</option>
+      <option value="gray">Grayscale</option>
+    </select>
+  </div>
+</div>
+
+<div class="canvases">
+  <div class="panel">
+    <span class="panel-title">u_h(x, y) with flow direction</span>
+    <canvas id="fieldCanvas" width="260" height="260"></canvas>
+  </div>
+  <div class="panel">
+    <span class="panel-title" id="panel2Title">Matrix sparsity</span>
+    <canvas id="panel2Canvas" width="260" height="260"></canvas>
+  </div>
+</div>
+
+<table id="diagTable">
+  <tr><th>Degrees of freedom</th><td id="diagDof"></td>
+      <th>Nonzeros</th><td id="diagNnz"></td></tr>
+  <tr><th>Cell P&eacute;clet Pe&#x2095;</th><td id="diagPeh"></td>
+      <th>Boundary layer estimate &delta;</th><td id="diagBL"></td></tr>
+  <tr><th>Matrix asymmetry &Vert;A - A&#x1d40;&Vert; ratio</th><td id="diagAsym"></td>
+      <th>Discrete L&sup2; error vs finer grid</th><td id="diagL2Ref"></td></tr>
+</table>
+
+<script>
+(function () {
+  "use strict";
+
+  // No source term and a fixed Dirichlet step (u = 1 at x = 0, u = 0 on the rest of the
+  // boundary) rather than a manufactured solution: with a manufactured right-hand side the
+  // discrete solution is forced back to the same prescribed answer regardless of Pe and flow
+  // angle, so the field itself would barely change as those sliders move -- only a
+  // vanishingly small error field would. This homogeneous step problem is the standard
+  // textbook setup precisely because its shape (a smeared front under diffusion, a sharp
+  // boundary layer under advection) responds directly to the physics being demonstrated.
+  function boundaryValue(x) {
+    return x === 0 ? 1 : 0;
+  }
+
+  // Constant diffusion epsilon = 1 and unit domain (L = 1), so Pe = ||beta|| L / epsilon
+  // reduces to Pe = ||beta||: the slider sets the advection speed directly.
+  var EPSILON = 1;
+
+  // Uniform grid, constant coefficients (epsilon, beta), 5-point stencil: the coefficient
+  // a node assigns each neighbour is the same everywhere except at the domain boundary
+  // (handled by moving the known Dirichlet value to the right-hand side), so the whole
+  // linear operator is captured by five scalars instead of per-node arrays.
+  function stencilCoefficients(h, betaX, betaY, stencil) {
+    var diffDiag = 4 * EPSILON / (h * h);
+    var diffOff = -EPSILON / (h * h);
+    var cDiag = diffDiag, cW = diffOff, cE = diffOff, cS = diffOff, cN = diffOff;
+
+    if (stencil === "centered") {
+      cE += betaX / (2 * h); cW -= betaX / (2 * h);
+      cN += betaY / (2 * h); cS -= betaY / (2 * h);
+    } else {
+      if (betaX >= 0) { cDiag += betaX / h; cW -= betaX / h; } else { cDiag -= betaX / h; cE += betaX / h; }
+      if (betaY >= 0) { cDiag += betaY / h; cS -= betaY / h; } else { cDiag -= betaY / h; cN += betaY / h; }
+    }
+    return { cDiag: cDiag, cW: cW, cE: cE, cS: cS, cN: cN };
+  }
+
+  function assembleProblem(N, betaX, betaY, stencil) {
+    var h = 1 / N;
+    var c = stencilCoefficients(h, betaX, betaY, stencil);
+    var m = N - 1;
+    var dof = m * m;
+    var idx = function (k, l) { return l * m + k; };
+
+    // No source term: every right-hand side entry comes only from a boundary neighbour's
+    // known Dirichlet value, and boundaryValue is 0 except on the k === 0 (x = 0) edge.
+    var b = new Float64Array(dof);
+    var nnzList = [];
+    for (var l = 0; l < m; l++) {
+      for (var k = 0; k < m; k++) {
+        var jj = l + 1;
+        var row = idx(k, l);
+        var rhs = 0;
+
+        if (k === 0) rhs -= c.cW * boundaryValue(0); else nnzList.push([row, idx(k - 1, l)]);
+        if (k === m - 1) rhs -= c.cE * boundaryValue(1); else nnzList.push([row, idx(k + 1, l)]);
+        if (l === 0) rhs -= c.cS * boundaryValue((k + 1) * h); else nnzList.push([row, idx(k, l - 1)]);
+        if (l === m - 1) rhs -= c.cN * boundaryValue((k + 1) * h); else nnzList.push([row, idx(k, l + 1)]);
+        nnzList.push([row, row]);
+
+        b[row] = rhs;
+      }
+    }
+
+    function matvec(v, out) {
+      for (var l2 = 0; l2 < m; l2++) {
+        for (var k2 = 0; k2 < m; k2++) {
+          var r = idx(k2, l2);
+          var s = c.cDiag * v[r];
+          if (k2 > 0) s += c.cW * v[idx(k2 - 1, l2)];
+          if (k2 < m - 1) s += c.cE * v[idx(k2 + 1, l2)];
+          if (l2 > 0) s += c.cS * v[idx(k2, l2 - 1)];
+          if (l2 < m - 1) s += c.cN * v[idx(k2, l2 + 1)];
+          out[r] = s;
+        }
+      }
+    }
+
+    return { dof: dof, b: b, matvec: matvec, nnz: nnzList, m: m, h: h, coeffs: c };
+  }
+
+  // Solves at resolution N and returns the full (N+1)x(N+1) grid, boundary values included --
+  // used both for the coarse solution shown and for a finer reference solve error is measured
+  // against, since no closed-form solution exists for this homogeneous step problem.
+  function solveGrid(N, betaX, betaY, stencil) {
+    var problem = assembleProblem(N, betaX, betaY, stencil);
+    var x = bicgstab(problem.dof, problem.matvec, problem.b, problem.coeffs.cDiag);
+    var m = problem.m, h = problem.h;
+    var grid = new Float64Array((N + 1) * (N + 1));
+    for (var j = 0; j <= N; j++) {
+      for (var i = 0; i <= N; i++) {
+        var interior = i > 0 && i < N && j > 0 && j < N;
+        grid[j * (N + 1) + i] = interior ? x[(j - 1) * m + (i - 1)] : boundaryValue(i * h);
+      }
+    }
+    return { problem: problem, grid: grid };
+  }
+
+  function dot(a, b) {
+    var s = 0;
+    for (var i = 0; i < a.length; i++) s += a[i] * b[i];
+    return s;
+  }
+
+  // BiCGSTAB (Van der Vorst), Jacobi-preconditioned: the natural transpose-free
+  // generalization of the conjugate gradient the Poisson widget uses, needed here because
+  // advection breaks the symmetry CG relies on. The preconditioner is a scalar divide
+  // (1/cDiag) since the diagonal is the same constant at every node.
+  function bicgstab(dof, matvec, b, diagVal) {
+    var x = new Float64Array(dof);
+    var r = b.slice();
+    var rhat = r.slice();
+    var rho = 1, alpha = 1, omega = 1;
+    var v = new Float64Array(dof), p = new Float64Array(dof);
+    var y = new Float64Array(dof), z = new Float64Array(dof);
+    var s = new Float64Array(dof), t = new Float64Array(dof);
+    var normB = Math.sqrt(dot(b, b)) || 1;
+    var maxIter = Math.min(8 * dof, 4000);
+    var i;
+
+    for (var iter = 0; iter < maxIter; iter++) {
+      var rhoNew = dot(rhat, r);
+      if (rhoNew === 0) break;
+      if (iter === 0) {
+        for (i = 0; i < dof; i++) p[i] = r[i];
+      } else {
+        var beta = (rhoNew / rho) * (alpha / omega);
+        for (i = 0; i < dof; i++) p[i] = r[i] + beta * (p[i] - omega * v[i]);
+      }
+      for (i = 0; i < dof; i++) y[i] = p[i] / diagVal;
+      matvec(y, v);
+      alpha = rhoNew / dot(rhat, v);
+      for (i = 0; i < dof; i++) s[i] = r[i] - alpha * v[i];
+      if (Math.sqrt(dot(s, s)) / normB < 1e-10) {
+        for (i = 0; i < dof; i++) x[i] += alpha * y[i];
+        break;
+      }
+      for (i = 0; i < dof; i++) z[i] = s[i] / diagVal;
+      matvec(z, t);
+      var tt = dot(t, t);
+      omega = tt === 0 ? 0 : dot(t, s) / tt;
+      for (i = 0; i < dof; i++) x[i] += alpha * y[i] + omega * z[i];
+      for (i = 0; i < dof; i++) r[i] = s[i] - omega * t[i];
+      if (Math.sqrt(dot(r, r)) / normB < 1e-10) break;
+      rho = rhoNew;
+      if (omega === 0) break;
+    }
+    return x;
+  }
+
+  var COLORMAPS = {
+    viridis: ["#440154", "#414487", "#2a788e", "#22a884", "#7ad151", "#fde725"],
+    plasma: ["#0d0887", "#6a00a8", "#b12a90", "#e16462", "#fca636", "#f0f921"],
+    turbo: ["#30123b", "#4147d6", "#1ba8c9", "#61c93a", "#ecd21a", "#e4460a", "#7a0403"],
+    gray: ["#000000", "#ffffff"],
+  };
+  function hexToRgb(h) {
+    var v = parseInt(h.slice(1), 16);
+    return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+  }
+  function colormapFn(name) {
+    var stops = COLORMAPS[name].map(hexToRgb);
+    return function (t) {
+      t = Math.max(0, Math.min(1, t));
+      var pos = t * (stops.length - 1);
+      var i0 = Math.floor(pos), i1 = Math.min(i0 + 1, stops.length - 1);
+      var f = pos - i0, a = stops[i0], b = stops[i1];
+      return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+    };
+  }
+
+  function drawField(canvas, N, values, cmap, betaX, betaY) {
+    var ctx = canvas.getContext("2d");
+    var min = Infinity, max = -Infinity;
+    for (var i = 0; i < values.length; i++) { if (values[i] < min) min = values[i]; if (values[i] > max) max = values[i]; }
+    var range = max - min || 1;
+
+    var off = document.createElement("canvas");
+    off.width = N + 1; off.height = N + 1;
+    var octx = off.getContext("2d");
+    var img = octx.createImageData(N + 1, N + 1);
+    for (var j = 0; j <= N; j++) {
+      var srcRow = N - j;
+      for (i = 0; i <= N; i++) {
+        var t = (values[srcRow * (N + 1) + i] - min) / range;
+        var rgb = cmap(t);
+        var p = (j * (N + 1) + i) * 4;
+        img.data[p] = rgb[0]; img.data[p + 1] = rgb[1]; img.data[p + 2] = rgb[2]; img.data[p + 3] = 255;
+      }
+    }
+    octx.putImageData(img, 0, 0);
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(off, 0, 0, canvas.width, canvas.height);
+
+    // Flow-direction overlay: beta is constant over the domain, so a streamline is just a
+    // straight line -- a sparse quiver of identical arrows conveys direction and relative
+    // magnitude without the visual noise of drawing a dozen redundant parallel segments.
+    var speed = Math.sqrt(betaX * betaX + betaY * betaY);
+    if (speed > 1e-9) {
+      var ux = betaX / speed, uy = betaY / speed;
+      var len = Math.min(22, 10 + speed);
+      var cols = 5, rows = 5;
+      ctx.strokeStyle = "rgba(255,255,255,0.85)";
+      ctx.fillStyle = "rgba(255,255,255,0.85)";
+      ctx.lineWidth = 1.5;
+      for (var gy = 0; gy < rows; gy++) {
+        for (var gx = 0; gx < cols; gx++) {
+          var cx = ((gx + 0.5) / cols) * canvas.width;
+          var cy = canvas.height - ((gy + 0.5) / rows) * canvas.height;
+          var ex = cx + ux * len, ey = cy - uy * len;
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(ex, ey);
+          ctx.stroke();
+          var ah = 4;
+          var angle = Math.atan2(cy - ey, ex - cx);
+          ctx.beginPath();
+          ctx.moveTo(ex, ey);
+          ctx.lineTo(ex - ah * Math.cos(angle - Math.PI / 6), ey + ah * Math.sin(angle - Math.PI / 6));
+          ctx.lineTo(ex - ah * Math.cos(angle + Math.PI / 6), ey + ah * Math.sin(angle + Math.PI / 6));
+          ctx.closePath();
+          ctx.fill();
+        }
+      }
+    }
+  }
+
+  function drawSpy(canvas, dof, nnzList) {
+    var ctx = canvas.getContext("2d");
+    var bg = getComputedStyle(canvas).backgroundColor;
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    var scale = canvas.width / dof;
+    var dot = Math.max(1, Math.ceil(scale));
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--accent") || "#0e7c86";
+    for (var n = 0; n < nnzList.length; n++) {
+      var row = nnzList[n][0], col = nnzList[n][1];
+      ctx.fillRect(Math.floor(col * scale), Math.floor(row * scale), dot, dot);
+    }
+  }
+
+  function drawMeshNodes(canvas, N) {
+    var ctx = canvas.getContext("2d");
+    var bg = getComputedStyle(canvas).backgroundColor;
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    var margin = 14;
+    var w = canvas.width - 2 * margin, h = canvas.height - 2 * margin;
+    var toPx = function (t) { return margin + t * w; };
+    var toPy = function (t) { return canvas.height - margin - t * h; };
+
+    ctx.strokeStyle = getComputedStyle(canvas).borderColor;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (var i = 0; i <= N; i++) {
+      var t = i / N;
+      ctx.moveTo(toPx(t), toPy(0)); ctx.lineTo(toPx(t), toPy(1));
+      ctx.moveTo(toPx(0), toPy(t)); ctx.lineTo(toPx(1), toPy(t));
+    }
+    ctx.stroke();
+
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--accent") || "#0e7c86";
+    for (i = 0; i <= N; i++) {
+      for (var j = 0; j <= N; j++) {
+        ctx.beginPath();
+        ctx.arc(toPx(i / N), toPy(j / N), 1.6, 0, 2 * Math.PI);
+        ctx.fill();
+      }
+    }
+  }
+
+  // No closed-form solution exists for this problem (that is the point -- see boundaryValue
+  // above), so accuracy is measured the other standard way: against a reference solve on a
+  // much finer grid. REF_FACTOR is chosen so the fine grid's nodes land exactly on the coarse
+  // grid's (fine spacing = h / REF_FACTOR), which makes restricting the reference down to the
+  // coarse grid a plain stride, not an interpolation.
+  var REF_FACTOR = 3;
+
+  function discreteL2(N, h, grid) {
+    var s = 0;
+    for (var j = 0; j <= N; j++) {
+      var wy = (j === 0 || j === N) ? h / 2 : h;
+      for (var i = 0; i <= N; i++) {
+        var wx = (i === 0 || i === N) ? h / 2 : h;
+        var v = grid[j * (N + 1) + i];
+        s += wx * wy * v * v;
+      }
+    }
+    return Math.sqrt(s);
+  }
+
+  function errorAgainstFinerGrid(N, h, uGrid, betaX, betaY, stencil) {
+    var Nref = N * REF_FACTOR;
+    var refGrid = solveGrid(Nref, betaX, betaY, stencil).grid;
+    var err = new Float64Array((N + 1) * (N + 1));
+    for (var j = 0; j <= N; j++) {
+      for (var i = 0; i <= N; i++) {
+        var refVal = refGrid[(j * REF_FACTOR) * (Nref + 1) + (i * REF_FACTOR)];
+        err[j * (N + 1) + i] = uGrid[j * (N + 1) + i] - refVal;
+      }
+    }
+    return discreteL2(N, h, err);
+  }
+
+  function fmt(x) {
+    if (!isFinite(x)) return "--";
+    return x.toExponential(3);
+  }
+
+  function recompute() {
+    var N = parseInt(document.getElementById("nRange").value, 10);
+    document.getElementById("nLabel").textContent = N;
+    var Pe = parseFloat(document.getElementById("peRange").value);
+    document.getElementById("peLabel").textContent = Pe;
+    var angleDeg = parseFloat(document.getElementById("angleRange").value);
+    document.getElementById("angleLabel").textContent = angleDeg + "°";
+    var stencil = document.getElementById("stencilSel").value;
+    var panel2 = document.getElementById("panel2Sel").value;
+    var cmap = colormapFn(document.getElementById("colormapSel").value);
+
+    var theta = angleDeg * Math.PI / 180;
+    var betaX = Pe * Math.cos(theta), betaY = Pe * Math.sin(theta);
+
+    var solved = solveGrid(N, betaX, betaY, stencil);
+    var problem = solved.problem, uGrid = solved.grid, h = problem.h;
+    var l2Error = errorAgainstFinerGrid(N, h, uGrid, betaX, betaY, stencil);
+
+    drawField(document.getElementById("fieldCanvas"), N, uGrid, cmap, betaX, betaY);
+
+    document.getElementById("panel2Title").textContent = panel2 === "spy" ? "Matrix sparsity" : "Mesh nodes";
+    if (panel2 === "spy") drawSpy(document.getElementById("panel2Canvas"), problem.dof, problem.nnz);
+    else drawMeshNodes(document.getElementById("panel2Canvas"), N);
+
+    var speed = Math.sqrt(betaX * betaX + betaY * betaY);
+    var cellPe = speed * h / (2 * EPSILON);
+    var boundaryLayer = speed > 1e-9 ? EPSILON / speed : Infinity;
+    var c = problem.coeffs;
+    var asymNum = Math.sqrt((c.cE - c.cW) * (c.cE - c.cW) + (c.cN - c.cS) * (c.cN - c.cS));
+    var asymDen = Math.sqrt(c.cE * c.cE + c.cW * c.cW + c.cN * c.cN + c.cS * c.cS) || 1;
+
+    document.getElementById("diagDof").textContent = problem.dof;
+    document.getElementById("diagNnz").textContent = problem.nnz.length;
+    document.getElementById("diagPeh").textContent = fmt(cellPe);
+    document.getElementById("diagBL").textContent = isFinite(boundaryLayer) ? fmt(boundaryLayer) : "n/a (Pe = 0)";
+    document.getElementById("diagAsym").textContent = fmt(asymNum / asymDen);
+    document.getElementById("diagL2Ref").textContent = fmt(l2Error) + " (vs N = " + (N * REF_FACTOR) + ")";
+  }
+
+  ["nRange", "peRange", "angleRange", "stencilSel", "panel2Sel", "colormapSel"]
+    .forEach(function (id) {
+      document.getElementById(id).addEventListener("input", recompute);
+    });
+
+  if (window.__BRAMBLE_INITIAL_N__) document.getElementById("nRange").value = window.__BRAMBLE_INITIAL_N__;
+  recompute();
+})();
+</script>
+</body>
+</html>

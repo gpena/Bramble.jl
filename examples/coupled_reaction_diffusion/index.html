@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Coupled nonlinear reaction-diffusion system · Bramble.jl</title><meta name="title" content="Coupled nonlinear reaction-diffusion system · Bramble.jl"/><meta property="og:title" content="Coupled nonlinear reaction-diffusion system · Bramble.jl"/><meta property="twitter:title" content="Coupled nonlinear reaction-diffusion system · Bramble.jl"/><meta name="description" content="Documentation for Bramble.jl."/><meta property="og:description" content="Documentation for Bramble.jl."/><meta property="twitter:description" content="Documentation for Bramble.jl."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&amp;family=Source+Sans+3:wght@400;600&amp;display=swap" rel="stylesheet" type="text/css"/><link href="../../assets/custom.css" rel="stylesheet" type="text/css"/></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img src="../../assets/logo.svg" alt="Bramble.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">Bramble.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../../tutorials/geometry/">Geometry tutorial</a></li><li><a class="tocitem" href="../../tutorials/mesh/">Mesh tutorial</a></li><li><a class="tocitem" href="../../tutorials/backend/">Backend tutorial</a></li><li><a class="tocitem" href="../../tutorials/space/">Grid spaces and discrete functions</a></li><li><a class="tocitem" href="../../tutorials/operators/">Difference, jump and average operators</a></li><li><a class="tocitem" href="../../tutorials/form/">Linear and bilinear forms</a></li><li><a class="tocitem" href="../../tutorials/autodiff/">Automatic differentiation tutorial</a></li><li><a class="tocitem" href="../../tutorials/vtk_export/">Writing VTK files</a></li><li><a class="tocitem" href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a></li><li><a class="tocitem" href="../../tutorials/plotting/">Plotting directly</a></li></ul></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../poisson_linear/">Linear Poisson equation</a></li><li><a class="tocitem" href="../poisson_nonlinear/">Nonlinear Poisson equation</a></li><li><a class="tocitem" href="../convection_diffusion_linear/">Convection-diffusion equation</a></li><li class="is-active"><a class="tocitem" href>Coupled nonlinear reaction-diffusion system</a><ul class="internal"><li><a class="tocitem" href="#Problem"><span>Problem</span></a></li><li><a class="tocitem" href="#Newton&#39;s-method-on-a-composite-residual"><span>Newton&#39;s method on a composite residual</span></a></li><li><a class="tocitem" href="#Skipping-the-tracer-here-too"><span>Skipping the tracer here too</span></a></li><li><a class="tocitem" href="#Solving-with-NonlinearSolve.jl"><span>Solving with NonlinearSolve.jl</span></a></li><li><a class="tocitem" href="#Visualizing-the-solution"><span>Visualizing the solution</span></a></li><li><a class="tocitem" href="#Checking-the-answer"><span>Checking the answer</span></a></li></ul></li><li><a class="tocitem" href="../elasticity_3d/">Linear elasticity in three dimensions</a></li><li><a class="tocitem" href="../heat_equation/">Heat equation</a></li><li><a class="tocitem" href="../amg_preconditioning/">Algebraic multigrid preconditioning</a></li><li><a class="tocitem" href="../inverse_diffusion/">Recovering a boundary condition (adjoint gradients)</a></li></ul></li><li><a class="tocitem" href="../../benchmarks/">Benchmarks</a></li><li><span class="tocitem">Documentation</span><ul><li><a class="tocitem" href="../../api/">API reference</a></li><li><a class="tocitem" href="../../api_sciml/">Scientific computing: SciML, AD and solvers</a></li><li><input class="collapse-toggle" id="menuitem-5-3" type="checkbox"/><label class="tocitem" for="menuitem-5-3"><span class="docs-label">Internals</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../internals/utils/">Utilities</a></li><li><a class="tocitem" href="../../internals/geometry/">Geometry</a></li><li><a class="tocitem" href="../../internals/mesh/">Mesh</a></li><li><a class="tocitem" href="../../internals/space/">Spaces</a></li><li><a class="tocitem" href="../../internals/form/">Forms</a></li><li><a class="tocitem" href="../../internals/autodiff/">Automatic differentiation</a></li><li><a class="tocitem" href="../../internals/exporters/">Exporters</a></li></ul></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Examples</a></li><li class="is-active"><a href>Coupled nonlinear reaction-diffusion system</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Coupled nonlinear reaction-diffusion system</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/examples/coupled_reaction_diffusion.jl" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Coupled-nonlinear-reaction-diffusion-system"><a class="docs-heading-anchor" href="#Coupled-nonlinear-reaction-diffusion-system">Coupled nonlinear reaction-diffusion system</a><a id="Coupled-nonlinear-reaction-diffusion-system-1"></a><a class="docs-heading-anchor-permalink" href="#Coupled-nonlinear-reaction-diffusion-system" title="Permalink"></a></h1><p>Two species, coupled through a quadratic reaction term, solved with Newton&#39;s method the same way the <a href="../poisson_nonlinear/">nonlinear Poisson example</a> does — except now the Jacobian differentiates through a <em>composite</em> space&#39;s assembly, not a scalar one. Every number and every plot below was produced by the code shown.</p><h2 id="Problem"><a class="docs-heading-anchor" href="#Problem">Problem</a><a id="Problem-1"></a><a class="docs-heading-anchor-permalink" href="#Problem" title="Permalink"></a></h2><p class="math-container">\[\begin{aligned}
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Coupled nonlinear reaction-diffusion system · Bramble.jl</title><meta name="title" content="Coupled nonlinear reaction-diffusion system · Bramble.jl"/><meta property="og:title" content="Coupled nonlinear reaction-diffusion system · Bramble.jl"/><meta property="twitter:title" content="Coupled nonlinear reaction-diffusion system · Bramble.jl"/><meta name="description" content="Documentation for Bramble.jl."/><meta property="og:description" content="Documentation for Bramble.jl."/><meta property="twitter:description" content="Documentation for Bramble.jl."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&amp;family=Source+Sans+3:wght@400;600&amp;display=swap" rel="stylesheet" type="text/css"/><link href="../../assets/custom.css" rel="stylesheet" type="text/css"/></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img src="../../assets/logo.svg" alt="Bramble.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">Bramble.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../../tutorials/geometry/">Geometry tutorial</a></li><li><a class="tocitem" href="../../tutorials/mesh/">Mesh tutorial</a></li><li><a class="tocitem" href="../../tutorials/backend/">Backend tutorial</a></li><li><a class="tocitem" href="../../tutorials/space/">Grid spaces and discrete functions</a></li><li><a class="tocitem" href="../../tutorials/operators/">Difference, jump and average operators</a></li><li><a class="tocitem" href="../../tutorials/form/">Linear and bilinear forms</a></li><li><a class="tocitem" href="../../tutorials/autodiff/">Automatic differentiation tutorial</a></li><li><a class="tocitem" href="../../tutorials/vtk_export/">Writing VTK files</a></li><li><a class="tocitem" href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a></li><li><a class="tocitem" href="../../tutorials/plotting/">Plotting directly</a></li></ul></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../poisson_linear/">Linear Poisson equation</a></li><li><a class="tocitem" href="../poisson_nonlinear/">Nonlinear Poisson equation</a></li><li><a class="tocitem" href="../convection_diffusion_linear/">Convection-diffusion equation</a></li><li class="is-active"><a class="tocitem" href>Coupled nonlinear reaction-diffusion system</a><ul class="internal"><li><a class="tocitem" href="#Problem"><span>Problem</span></a></li><li><a class="tocitem" href="#Newton&#39;s-method-on-a-composite-residual"><span>Newton&#39;s method on a composite residual</span></a></li><li><a class="tocitem" href="#Skipping-the-tracer-here-too"><span>Skipping the tracer here too</span></a></li><li><a class="tocitem" href="#Solving-with-NonlinearSolve.jl"><span>Solving with NonlinearSolve.jl</span></a></li><li><a class="tocitem" href="#Exploring-the-system-interactively"><span>Exploring the system interactively</span></a></li><li><a class="tocitem" href="#Checking-the-answer"><span>Checking the answer</span></a></li></ul></li><li><a class="tocitem" href="../elasticity_3d/">Linear elasticity in three dimensions</a></li><li><a class="tocitem" href="../heat_equation/">Heat equation</a></li><li><a class="tocitem" href="../amg_preconditioning/">Algebraic multigrid preconditioning</a></li><li><a class="tocitem" href="../inverse_diffusion/">Recovering a boundary condition (adjoint gradients)</a></li></ul></li><li><a class="tocitem" href="../../benchmarks/">Benchmarks</a></li><li><span class="tocitem">Documentation</span><ul><li><a class="tocitem" href="../../api/">API reference</a></li><li><a class="tocitem" href="../../api_sciml/">Scientific computing: SciML, AD and solvers</a></li><li><input class="collapse-toggle" id="menuitem-5-3" type="checkbox"/><label class="tocitem" for="menuitem-5-3"><span class="docs-label">Internals</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../internals/utils/">Utilities</a></li><li><a class="tocitem" href="../../internals/geometry/">Geometry</a></li><li><a class="tocitem" href="../../internals/mesh/">Mesh</a></li><li><a class="tocitem" href="../../internals/space/">Spaces</a></li><li><a class="tocitem" href="../../internals/form/">Forms</a></li><li><a class="tocitem" href="../../internals/autodiff/">Automatic differentiation</a></li><li><a class="tocitem" href="../../internals/exporters/">Exporters</a></li></ul></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Examples</a></li><li class="is-active"><a href>Coupled nonlinear reaction-diffusion system</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Coupled nonlinear reaction-diffusion system</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/examples/coupled_reaction_diffusion.jl" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Coupled-nonlinear-reaction-diffusion-system"><a class="docs-heading-anchor" href="#Coupled-nonlinear-reaction-diffusion-system">Coupled nonlinear reaction-diffusion system</a><a id="Coupled-nonlinear-reaction-diffusion-system-1"></a><a class="docs-heading-anchor-permalink" href="#Coupled-nonlinear-reaction-diffusion-system" title="Permalink"></a></h1><p>Two species, coupled through a quadratic reaction term, solved with Newton&#39;s method the same way the <a href="../poisson_nonlinear/">nonlinear Poisson example</a> does — except now the Jacobian differentiates through a <em>composite</em> space&#39;s assembly, not a scalar one. Every number and every plot below was produced by the code shown.</p><h2 id="Problem"><a class="docs-heading-anchor" href="#Problem">Problem</a><a id="Problem-1"></a><a class="docs-heading-anchor-permalink" href="#Problem" title="Permalink"></a></h2><p class="math-container">\[\begin{aligned}
 -\Delta u + u + uv &amp;= f_1 \\
 -\Delta v + v - uv &amp;= f_2
 \end{aligned}
@@ -55,7 +55,7 @@ for it in 1:20
     DifferentiationInterface.jacobian!(residual, J, prep, sparse_ad, w)
     w .-= J \ r
 end
-length(newton_residuals), newton_residuals</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(4, [2.5762825732242143, 0.02192029918716173, 1.2892755987507398e-6, 4.9583421918330345e-14])</code></pre><p>Quadratic convergence, same as the single-species case — the composite space changes what the Jacobian differentiates through, not how well Newton converges once it has a correct one.</p><h2 id="Skipping-the-tracer-here-too"><a class="docs-heading-anchor" href="#Skipping-the-tracer-here-too">Skipping the tracer here too</a><a id="Skipping-the-tracer-here-too-1"></a><a class="docs-heading-anchor-permalink" href="#Skipping-the-tracer-here-too" title="Permalink"></a></h2><p><code>v_c</code> scaling a term routed into block <code>(1,1)</code> is a <em>different</em> leaf&#39;s component reaching into this one — <a href="../../api/#Bramble.jacobian_pattern"><code>jacobian_pattern</code></a> reads that the same way a form term names a component, <code>U -&gt; U(2)</code> rather than a stencil op, since <code>v_c</code> is read directly rather than averaged first. Block <code>(2,2)</code>&#39;s own <code>u_c</code> dependency is named the same way, <code>U -&gt; U(1)</code>:</p><pre><code class="language-julia hljs">using ADTypes
+length(newton_residuals), newton_residuals</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(4, [2.5762825732242143, 0.02192029918716197, 1.2892755985117513e-6, 4.3604932320433394e-14])</code></pre><p>Quadratic convergence, same as the single-species case — the composite space changes what the Jacobian differentiates through, not how well Newton converges once it has a correct one.</p><h2 id="Skipping-the-tracer-here-too"><a class="docs-heading-anchor" href="#Skipping-the-tracer-here-too">Skipping the tracer here too</a><a id="Skipping-the-tracer-here-too-1"></a><a class="docs-heading-anchor-permalink" href="#Skipping-the-tracer-here-too" title="Permalink"></a></h2><p><code>v_c</code> scaling a term routed into block <code>(1,1)</code> is a <em>different</em> leaf&#39;s component reaching into this one — <a href="../../api/#Bramble.jacobian_pattern"><code>jacobian_pattern</code></a> reads that the same way a form term names a component, <code>U -&gt; U(2)</code> rather than a stencil op, since <code>v_c</code> is read directly rather than averaged first. Block <code>(2,2)</code>&#39;s own <code>u_c</code> dependency is named the same way, <code>U -&gt; U(1)</code>:</p><pre><code class="language-julia hljs">using ADTypes
 
 u_c0, v_c0 = components(element(Vₕ, 0.0))
 a_for_pattern = form(Vₕ,
@@ -80,9 +80,9 @@ for it in 1:20
 end
 newton_residuals_native</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">4-element Vector{Float64}:
  2.5762825732242143
- 0.02192029918716133
- 1.2892755987293357e-6
- 4.083592084640994e-14</code></pre><p>Same quadratic convergence, no tracing pass paid for it: <code>v_c0</code>/<code>u_c0</code> are read at <code>w = 0</code> only to build <em>some</em> concrete <code>BilinearForm</code> — the pattern is a property of <code>a</code>&#39;s AST, not of those values. <code>SparseConnectivityTracer</code>&#39;s tracer still works here regardless of how <code>coupled_matrix</code> was built, composite space and all — the case to reach for it is a residual whose matrix does not come from a <code>BilinearForm</code> in the first place, which is not this one.</p><h2 id="Solving-with-NonlinearSolve.jl"><a class="docs-heading-anchor" href="#Solving-with-NonlinearSolve.jl">Solving with NonlinearSolve.jl</a><a id="Solving-with-NonlinearSolve.jl-1"></a><a class="docs-heading-anchor-permalink" href="#Solving-with-NonlinearSolve.jl" title="Permalink"></a></h2><p>Everything above is a hand-written Newton loop, the same as <a href="../poisson_nonlinear/">the nonlinear Poisson example</a>. <a href="../../api_sciml/#Bramble.nonlinear_problem"><code>nonlinear_problem</code></a> wraps a residual into the <code>NonlinearProblem</code> that <a href="https://docs.sciml.ai/NonlinearSolve/stable/">NonlinearSolve.jl</a> takes regardless of what space the residual is built over — a composite space changes nothing about the wrapping, only what <code>jac_prototype</code> looks like once built. <code>J_native</code> above is already that prototype, the block-sparse pattern <a href="../../api/#Bramble.ast_sparsity_detector"><code>ast_sparsity_detector</code></a> read off <code>a_for_pattern</code>&#39;s two components, so it is handed through unchanged. In place, the same way <code>coupled_matrix</code> is written out-of-place above and <code>residual!</code> here is not: <code>mul!</code> writes <code>A * w_vec</code> into the caller&#39;s own <code>res</code> rather than allocating a fresh vector every evaluation.</p><pre><code class="language-julia hljs">using NonlinearSolve
+ 0.02192029918716111
+ 1.2892755984228692e-6
+ 4.4098248980011264e-14</code></pre><p>Same quadratic convergence, no tracing pass paid for it: <code>v_c0</code>/<code>u_c0</code> are read at <code>w = 0</code> only to build <em>some</em> concrete <code>BilinearForm</code> — the pattern is a property of <code>a</code>&#39;s AST, not of those values. <code>SparseConnectivityTracer</code>&#39;s tracer still works here regardless of how <code>coupled_matrix</code> was built, composite space and all — the case to reach for it is a residual whose matrix does not come from a <code>BilinearForm</code> in the first place, which is not this one.</p><h2 id="Solving-with-NonlinearSolve.jl"><a class="docs-heading-anchor" href="#Solving-with-NonlinearSolve.jl">Solving with NonlinearSolve.jl</a><a id="Solving-with-NonlinearSolve.jl-1"></a><a class="docs-heading-anchor-permalink" href="#Solving-with-NonlinearSolve.jl" title="Permalink"></a></h2><p>Everything above is a hand-written Newton loop, the same as <a href="../poisson_nonlinear/">the nonlinear Poisson example</a>. <a href="../../api_sciml/#Bramble.nonlinear_problem"><code>nonlinear_problem</code></a> wraps a residual into the <code>NonlinearProblem</code> that <a href="https://docs.sciml.ai/NonlinearSolve/stable/">NonlinearSolve.jl</a> takes regardless of what space the residual is built over — a composite space changes nothing about the wrapping, only what <code>jac_prototype</code> looks like once built. <code>J_native</code> above is already that prototype, the block-sparse pattern <a href="../../api/#Bramble.ast_sparsity_detector"><code>ast_sparsity_detector</code></a> read off <code>a_for_pattern</code>&#39;s two components, so it is handed through unchanged. In place, the same way <code>coupled_matrix</code> is written out-of-place above and <code>residual!</code> here is not: <code>mul!</code> writes <code>A * w_vec</code> into the caller&#39;s own <code>res</code> rather than allocating a fresh vector every evaluation.</p><pre><code class="language-julia hljs">using NonlinearSolve
 using SciMLBase: SciMLBase
 using LinearAlgebra: mul!
 
@@ -97,212 +97,784 @@ end
 
 prob = nonlinear_problem(residual!, zeros(ndofs(Vₕ)); jac_prototype = J_native)
 sol_ns = solve(prob, NewtonRaphson(); abstol = 1e-10)
-sol_ns.retcode, maximum(abs, sol_ns.u .- w_native)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(SciMLBase.ReturnCode.Success, 1.6482926135097387e-11)</code></pre><p>Quadratic convergence over a composite space carries over unchanged to <code>NonlinearSolve.jl</code> too – the block sparsity pattern is all a composite residual ever needed to hand it, and <code>NewtonRaphson</code> reaches the same solution the hand-written loops above do. See <a href="../poisson_nonlinear/">the nonlinear Poisson example</a> for a measured Picard-against-NonlinearSolve comparison; the same contrast holds here and is not repeated a second time.</p><pre><code class="language-julia hljs">wₕ = element(Vₕ)
+sol_ns.retcode, maximum(abs, sol_ns.u .- w_native)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(SciMLBase.ReturnCode.Success, 1.64817048897703e-11)</code></pre><p>Quadratic convergence over a composite space carries over unchanged to <code>NonlinearSolve.jl</code> too – the block sparsity pattern is all a composite residual ever needed to hand it, and <code>NewtonRaphson</code> reaches the same solution the hand-written loops above do. See <a href="../poisson_nonlinear/">the nonlinear Poisson example</a> for a measured Picard-against-NonlinearSolve comparison; the same contrast holds here and is not repeated a second time.</p><pre><code class="language-julia hljs">wₕ = element(Vₕ)
 wₕ .= w
 uₕ, vₕ = components(wₕ)
 uexact, vexact = Rₕ(Wₕ, u_ex), Rₕ(Wₕ, v_ex)
-norm₁ₕ(uₕ .- uexact), norm₁ₕ(vₕ .- vexact)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(0.019779214731516854, 0.10747520241691953)</code></pre><h2 id="Visualizing-the-solution"><a class="docs-heading-anchor" href="#Visualizing-the-solution">Visualizing the solution</a><a id="Visualizing-the-solution-1"></a><a class="docs-heading-anchor-permalink" href="#Visualizing-the-solution" title="Permalink"></a></h2><p>Each species is its own 2D scalar field — <code>components(wₕ)</code> gives a view directly onto it, no new solve or copy needed:</p><script>
-  // See the module note above: hide `define` from Plotly's UMD wrapper so it attaches
-  // `window.Plotly` instead of registering as an anonymous AMD module.
-  window.__bramble_amd_define = window.define;
-  window.define = undefined;
-</script>
-<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
-<script>
-  window.define = window.__bramble_amd_define;
-
-  // Colour tokens read from the page's own theme, not hard-coded — Documenter stamps
-  // `theme--documenter-dark` on <html> when dark mode is active, light mode has no such
-  // class. Recomputed on every call so a caller can re-theme after a toggle.
-  window.bramblePlotlyTheme = function () {
-    const dark = document.documentElement.className.includes('documenter-dark');
-    return dark
-      ? { bg: 'rgba(0,0,0,0)', text: '#c3c2b7', grid: 'rgba(255,255,255,0.12)' }
-      : { bg: 'rgba(0,0,0,0)', text: '#52514e', grid: 'rgba(0,0,0,0.10)' };
-  };
-
-  // Every plot this page creates registers itself (div id + the function that
-  // reapplies theme-dependent layout colours) so one observer can repaint all of them
-  // together when the theme toggles, instead of each plot wiring its own observer.
-  window.__bramble_plotly_charts = window.__bramble_plotly_charts || [];
-  window.brambleRegisterPlotlyChart = function (divId, restyle) {
-    window.__bramble_plotly_charts.push({ divId, restyle });
-  };
-
-  if (!window.__bramble_plotly_theme_observer) {
-    window.__bramble_plotly_theme_observer = new MutationObserver(function () {
-      for (const { divId, restyle } of window.__bramble_plotly_charts) {
-        const layout = restyle();
-        Plotly.relayout(divId, layout);
-      }
-    });
-    window.__bramble_plotly_theme_observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class'],
-    });
+norm₁ₕ(uₕ .- uexact), norm₁ₕ(vₕ .- vexact)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(0.019779214731516177, 0.10747520241691726)</code></pre><h2 id="Exploring-the-system-interactively"><a class="docs-heading-anchor" href="#Exploring-the-system-interactively">Exploring the system interactively</a><a id="Exploring-the-system-interactively-1"></a><a class="docs-heading-anchor-permalink" href="#Exploring-the-system-interactively" title="Permalink"></a></h2><p>The panel below is <em>not</em> a replay of the solve above, and does not share its manufactured solution — it poses a different boundary-value problem in the same two unknowns, chosen so every slider has a visible effect rather than being fought back to a fixed answer:</p><p class="math-container">\[\begin{aligned}
+-D_u\Delta u + au + \gamma uv &amp;= 0 \\
+-D_v\Delta v + bv - \gamma uv &amp;= 0
+\end{aligned}
+\qquad \text{in } \Omega = (0,1)^2, \qquad u = v = 1 \text{ on } \partial\Omega,\]</p><p>with no volumetric source anywhere: <code>f1 = f2 = 0</code>. A manufactured right-hand side would force the discrete solution back to the same prescribed answer regardless of <code>a</code>, <code>b</code>, <code>γ</code> or <code>D_u/D_v</code> — only a vanishingly small error field would move. Here the <em>only</em> input is a constant Dirichlet supply of both species on the boundary (it has to be nonzero for both: the reaction terms only ever reach the diagonal of each field&#39;s own block, the same way <code>coupled_matrix</code> above assembles them, so a field with nothing driving it directly solves to exactly zero and leaves the other field&#39;s <code>γuv</code> coupling with nothing to act on). Because this boundary-value problem has no closed-form solution, the panel measures its own discretization error against a solve on a fixed, much finer uniform reference mesh instead of against <code>u_ex</code>/<code>v_ex</code>.</p><p>Each species is its own 2D scalar field — <code>components(wₕ)</code> gives a view directly onto it, no new solve or copy needed, though the panel below solves its own problem rather than reusing <code>uₕ</code>/<code>vₕ</code>. It runs its own block Gauss-Seidel Picard iteration client-side, so the reaction coefficients <code>a</code>, <code>b</code>, coupling <code>γ</code> and diffusion ratio <code>D_u/D_v</code> sliders can be swept without a round trip to Julia — dragging them re-solves both fields and redraws the linked <code>u_h</code>/<code>v_h</code> heatmaps, the <code>2×2</code> Jacobian block-sparsity spy plot, and the cross-section profile in place:</p><div style="font-weight: 500; margin-bottom: 6px;">Coupled reaction-diffusion</div>
+<iframe id="bramble_sp_1" srcdoc="<!doctype html>
+<html>
+<head>
+<meta charset=&quot;utf-8&quot;>
+<style>
+  :root {
+    --bg: #ffffff;
+    --text: #2c2c2c;
+    --muted: #6b6b6b;
+    --border: #d8d8d4;
+    --canvas-bg: #fafaf8;
+    --accent: #0e7c86;
+    --accent2: #b1443e;
   }
-
-  // The layout-race fix (see the module note above): once per page, after everything
-  // (fonts included) has truly finished loading, force every plot created so far to
-  // resize against its now-final container.
-  if (!window.__bramble_plotly_load_fix_installed) {
-    window.__bramble_plotly_load_fix_installed = true;
-    const rescue = function () {
-      for (const { divId } of window.__bramble_plotly_charts) {
-        Plotly.Plots.resize(document.getElementById(divId));
-      }
-    };
-    const loaded = document.readyState === 'complete' ? Promise.resolve() :
-      new Promise((r) => window.addEventListener('load', r, { once: true }));
-    Promise.all([loaded, document.fonts.ready]).then(rescue);
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1e1e1e;
+      --text: #dcdcd6;
+      --muted: #9a9a94;
+      --border: #3a3a36;
+      --canvas-bg: #262624;
+      --accent: #4fd1c5;
+      --accent2: #e8837c;
+    }
   }
-</script>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 12px;
+    font: 13px/1.4 -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;
+    color: var(--text);
+    background: var(--bg);
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 18px;
+    margin-bottom: 12px;
+  }
+  .eqn { font-size: 12px; color: var(--muted); margin: 0 0 10px; line-height: 1.5; }
+  .field { display: flex; flex-direction: column; gap: 2px; min-width: 110px; }
+  .field.wide { min-width: 160px; }
+  label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+  select, input[type=&quot;range&quot;] { font: inherit; color: var(--text); background: var(--canvas-bg); border: 1px solid var(--border); border-radius: 4px; padding: 3px 4px; }
+  input[type=&quot;range&quot;] { padding: 0; accent-color: var(--accent); }
+  .range-row { display: flex; align-items: center; gap: 8px; }
+  .range-row span { font-variant-numeric: tabular-nums; min-width: 2.6em; }
+  .hidden { display: none !important; }
+  .canvases { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 8px; }
+  .panel { display: flex; flex-direction: column; gap: 4px; }
+  .panel-title { font-size: 11px; color: var(--muted); }
+  canvas { border: 1px solid var(--border); border-radius: 4px; background: var(--canvas-bg); display: block; }
+  #cursorReadout { font-size: 11px; color: var(--muted); margin-bottom: 10px; min-height: 1.4em; font-variant-numeric: tabular-nums; }
+  table { border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 2px 12px 2px 0; }
+  th { color: var(--muted); font-weight: 500; }
+</style>
+</head>
+<body>
+<script>window.__BRAMBLE_INITIAL_N__ = 23;</script>
 
-<div id="bramble_sp_1" style="width:100%; max-width:480px; height:420px; margin: 1em 0;"></div>
+<p class=&quot;eqn&quot;>
+  Steady, source-free reaction&amp;ndash;diffusion in &amp;Omega; = (0,1)&amp;sup2;:
+  &amp;minus;D&amp;#x1D64;&amp;Delta;u + a&amp;middot;u + &amp;gamma;&amp;middot;u&amp;middot;v = 0,
+  &amp;minus;D&amp;#x1D65;&amp;Delta;v + b&amp;middot;v &amp;minus; &amp;gamma;&amp;middot;u&amp;middot;v = 0,
+  with u = v = 1 on &amp;part;&amp;Omega; (the boundary supply is the only input; there is no
+  volumetric source, and no closed-form solution to compare against).
+</p>
+
+<div class=&quot;controls&quot;>
+  <div class=&quot;field wide&quot;>
+    <label for=&quot;nRange&quot; title=&quot;Interior grid points per axis for the mesh the sliders control. The fixed fine reference mesh below is unaffected.&quot;>Resolution N</label>
+    <div class=&quot;range-row&quot;>
+      <input type=&quot;range&quot; id=&quot;nRange&quot; min=&quot;8&quot; max=&quot;28&quot; step=&quot;1&quot; value=&quot;16&quot;>
+      <span id=&quot;nLabel&quot;>16</span>
+    </div>
+  </div>
+  <div class=&quot;field&quot;>
+    <label for=&quot;meshType&quot; title=&quot;Uniform, or the same randomly perturbed tensor mesh poisson_interactive.html uses.&quot;>Mesh</label>
+    <select id=&quot;meshType&quot;>
+      <option value=&quot;uniform&quot; selected>Uniform</option>
+      <option value=&quot;random&quot;>Random</option>
+    </select>
+  </div>
+  <div class=&quot;field wide&quot;>
+    <label for=&quot;aRange&quot; title=&quot;Linear decay rate of u: the a in -D_u*Delta(u) + a*u + gamma*u*v = 0.&quot;>Reaction a (u)</label>
+    <div class=&quot;range-row&quot;>
+      <input type=&quot;range&quot; id=&quot;aRange&quot; min=&quot;0.2&quot; max=&quot;3&quot; step=&quot;0.1&quot; value=&quot;1&quot;>
+      <span id=&quot;aLabel&quot;>1.0</span>
+    </div>
+  </div>
+  <div class=&quot;field wide&quot;>
+    <label for=&quot;bRange&quot; title=&quot;Linear decay rate of v: the b in -D_v*Delta(v) + b*v - gamma*u*v = 0.&quot;>Reaction b (v)</label>
+    <div class=&quot;range-row&quot;>
+      <input type=&quot;range&quot; id=&quot;bRange&quot; min=&quot;0.2&quot; max=&quot;3&quot; step=&quot;0.1&quot; value=&quot;1&quot;>
+      <span id=&quot;bLabel&quot;>1.0</span>
+    </div>
+  </div>
+  <div class=&quot;field wide&quot;>
+    <label for=&quot;gammaRange&quot; title=&quot;Strength of the pointwise u*v coupling: depletes u's equation, feeds v's. Zero decouples the two fields entirely.&quot;>Coupling &amp;gamma;</label>
+    <div class=&quot;range-row&quot;>
+      <input type=&quot;range&quot; id=&quot;gammaRange&quot; min=&quot;0&quot; max=&quot;2&quot; step=&quot;0.1&quot; value=&quot;1&quot;>
+      <span id=&quot;gammaLabel&quot;>1.0</span>
+    </div>
+  </div>
+  <div class=&quot;field wide&quot;>
+    <label for=&quot;ratioRange&quot; title=&quot;Ratio D_u / D_v of u's diffusion coefficient to v's (D_v is fixed at 1).&quot;>D&amp;#x1D64;/D&amp;#x1D65;</label>
+    <div class=&quot;range-row&quot;>
+      <input type=&quot;range&quot; id=&quot;ratioRange&quot; min=&quot;0.2&quot; max=&quot;5&quot; step=&quot;0.1&quot; value=&quot;1&quot;>
+      <span id=&quot;ratioLabel&quot;>1.0</span>
+    </div>
+  </div>
+  <div class=&quot;field&quot;>
+    <label for=&quot;colormapSel&quot; title=&quot;Colour scale applied to both heatmaps.&quot;>Colormap</label>
+    <select id=&quot;colormapSel&quot;>
+      <option value=&quot;viridis&quot; selected>Viridis</option>
+      <option value=&quot;plasma&quot;>Plasma</option>
+      <option value=&quot;turbo&quot;>Turbo</option>
+      <option value=&quot;gray&quot;>Grayscale</option>
+    </select>
+  </div>
+  <div class=&quot;field wide&quot;>
+    <label for=&quot;panel2Sel&quot; title=&quot;What the third panel shows.&quot;>Bottom panel</label>
+    <select id=&quot;panel2Sel&quot;>
+      <option value=&quot;spy&quot; selected>Jacobian block sparsity</option>
+      <option value=&quot;cross&quot;>Cross-section profile</option>
+      <option value=&quot;mesh&quot;>Mesh nodes</option>
+    </select>
+  </div>
+  <div class=&quot;field&quot; id=&quot;crossAxisField&quot;>
+    <label for=&quot;crossAxisSel&quot; title=&quot;Direction of the 1D slice drawn in the cross-section panel.&quot;>Slice</label>
+    <select id=&quot;crossAxisSel&quot;>
+      <option value=&quot;x&quot; selected>Along x (fixed y)</option>
+      <option value=&quot;y&quot;>Along y (fixed x)</option>
+    </select>
+  </div>
+  <div class=&quot;field wide&quot; id=&quot;crossPosField&quot;>
+    <label for=&quot;crossPosRange&quot; title=&quot;Position of the fixed coordinate the slice is cut at.&quot;>Slice position</label>
+    <div class=&quot;range-row&quot;>
+      <input type=&quot;range&quot; id=&quot;crossPosRange&quot; min=&quot;0&quot; max=&quot;1&quot; step=&quot;0.01&quot; value=&quot;0.5&quot;>
+      <span id=&quot;crossPosLabel&quot;>0.50</span>
+    </div>
+  </div>
+</div>
+
+<div class=&quot;canvases&quot;>
+  <div class=&quot;panel&quot;>
+    <span class=&quot;panel-title&quot;>u&amp;#x2095;(x, y) — activator</span>
+    <canvas id=&quot;fieldUCanvas&quot; width=&quot;230&quot; height=&quot;230&quot;></canvas>
+  </div>
+  <div class=&quot;panel&quot;>
+    <span class=&quot;panel-title&quot;>v&amp;#x2095;(x, y) — inhibitor</span>
+    <canvas id=&quot;fieldVCanvas&quot; width=&quot;230&quot; height=&quot;230&quot;></canvas>
+  </div>
+  <div class=&quot;panel&quot;>
+    <span class=&quot;panel-title&quot; id=&quot;panel2Title&quot;>Jacobian block sparsity</span>
+    <canvas id=&quot;panel2Canvas&quot; width=&quot;230&quot; height=&quot;230&quot;></canvas>
+  </div>
+</div>
+
+<div id=&quot;cursorReadout&quot;>Hover a heatmap to read (x, y, u&amp;#x2095;, v&amp;#x2095;).</div>
+
+<table id=&quot;diagTable&quot;>
+  <tr><th>Degrees of freedom</th><td id=&quot;diagDof&quot;></td>
+      <th>Picard iterations</th><td id=&quot;diagIters&quot;></td>
+      <th>Final update</th><td id=&quot;diagResidual&quot;></td></tr>
+  <tr><th title=&quot;Compared to a solve on a fixed uniform N=48 reference mesh -- this boundary-value problem has no closed-form solution.&quot;>norm&amp;#x2095;(u&amp;#x2095; &amp;minus; u&amp;#x1D63;&amp;#x2091;&amp;#x1D63;)</th><td id=&quot;diagL2U&quot;></td>
+      <th title=&quot;Compared to the same N=48 reference mesh.&quot;>norm&amp;#x2081;&amp;#x2095;(u&amp;#x2095; &amp;minus; u&amp;#x1D63;&amp;#x2091;&amp;#x1D63;)</th><td id=&quot;diagH1U&quot;></td></tr>
+  <tr><th title=&quot;Compared to a solve on a fixed uniform N=48 reference mesh -- this boundary-value problem has no closed-form solution.&quot;>norm&amp;#x2095;(v&amp;#x2095; &amp;minus; v&amp;#x1D63;&amp;#x2091;&amp;#x1D63;)</th><td id=&quot;diagL2V&quot;></td>
+      <th title=&quot;Compared to the same N=48 reference mesh.&quot;>norm&amp;#x2081;&amp;#x2095;(v&amp;#x2095; &amp;minus; v&amp;#x1D63;&amp;#x2091;&amp;#x1D63;)</th><td id=&quot;diagH1V&quot;></td></tr>
+</table>
+
 <script>
 (function () {
-  const theme = window.bramblePlotlyTheme();
-  const data = [{
-    type: 'surface',
-    x: [0.0,0.012502137392377821,0.020842341257392705,0.11852515758721183,0.15343091907868456,0.32249003948897226,0.3576216823063697,0.37921442624407653,0.3946900115738672,0.4025723532168787,0.48945867206954463,0.5143492048141987,0.5374653519773097,0.5723496069568588,0.6102520607379804,0.6441393949208799,0.7103315688827332,0.7500938235163731,0.7712076284737498,0.7758339074531879,0.8193450182375079,0.9322079566097954,0.9497250979796771,1.0],
-    y: [0.0,0.012139128962408652,0.1758926683115739,0.21421963940238964,0.26530779193702636,0.3697898798063778,0.4415026994731447,0.45139131547453604,0.472787406827221,0.6135392271877386,0.6383211984049163,0.6750549866631306,0.703006660663805,0.7186645483303223,0.775872374245137,0.787046877606814,0.7893333325080929,0.7917694274025723,0.816421518193467,0.8649399088263278,0.9687950604536418,0.9762430318955249,0.9875622988903799,1.0],
-    z: [[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],[0.0,0.0015788759919309668,0.002635746759666106,0.014127148097195678,0.018212687784943952,0.03265387235843928,0.03479161318304161,0.0358767111007669,0.03654957419626827,0.036859619118150916,0.03862759585892101,0.03860775202483757,0.038376151641994795,0.03764528252809786,0.03633809981798406,0.03472361817777255,0.030515237331917074,0.02730382429985397,0.025404642638068756,0.02497025668456104,0.02066975639869758,0.008291489950174518,0.006126800282252699,0.0],[0.0,0.020623618511516086,0.03436533405097419,0.19010405048592666,0.24248726222196917,0.43989245673223565,0.4676292687265221,0.48189295101885204,0.4907603605015363,0.49483310161872246,0.5191758988043752,0.5190170124283167,0.5160212314292555,0.5063525065600468,0.4889402962363124,0.4674647501930612,0.4105430211695698,0.36752663427059074,0.34228357804759996,0.3365457575177057,0.279306938525453,0.11025279685188474,0.08202399652467768,0.0],[0.0,0.02462844151419685,0.04104255471717908,0.22656579366833554,0.2892210790014747,0.5240965761379186,0.5572107076505998,0.5742203282391266,0.5847882805502004,0.5896407445679517,0.6185204926311197,0.6182852293258195,0.6146741453938585,0.6030998178931325,0.5823044868055045,0.5566765904225635,0.48887244750572895,0.43761642461357014,0.4075296308068629,0.4006890802492127,0.33248462475719254,0.13140868605759515,0.09773062837314293,0.0],[0.0,0.029357452315371565,0.04892278258936422,0.2698815158408867,0.3446026441684849,0.6240960858830088,0.6635545800222027,0.6838171198706444,0.6964021945740472,0.7021794347700211,0.7364736999930734,0.7361615647064358,0.7318317444222235,0.7180073328644359,0.6932056901082377,0.6626607923269152,0.5819142049418883,0.5208732242709131,0.48504204502547493,0.4768955550032653,0.3956838308411835,0.1564846539515777,0.11637568661867265,0.0],[0.0,0.036408033115725484,0.06067079366191067,0.3349446966979879,0.4275404378848635,0.7746485049303519,0.823571724170043,0.8486976830569813,0.8643029545380571,0.8714659668661385,0.9139080593969663,0.9135107264831828,0.9081278270243462,0.8909519089849638,0.8601522382659966,0.8222350123472578,0.7219814831283299,0.6462267196777994,0.60176762439428,0.5916606334604945,0.49090337499382086,0.19412291568274886,0.14438338520501168,0.0],[0.0,0.03904089858375253,0.06505820883161802,0.35918341094933,0.4584283534440537,0.8308583623347244,0.8833552319816641,0.9103212300651934,0.9270717863747834,0.9347613421404425,0.9802277336893566,0.9798263236712708,0.9740740454104839,0.9556725341609142,0.9226508824628088,0.8819882502465669,0.7744380044697009,0.6931573169764512,0.6454499559287087,0.6346041285220118,0.5264905169413419,0.20826262026073242,0.1548961631940661,0.0],[0.0,0.03925189823151848,0.06541013934227777,0.36111424665503916,0.46088142339790644,0.8353361132041125,0.8881259429799561,0.915244688029773,0.9320919175540857,0.9398268631002392,0.9855456225530196,0.9851544840625283,0.9793810574204793,0.9608908648607688,0.927698853454207,0.8868208649884897,0.7786861588578958,0.6969570045556172,0.6489837121106218,0.6380769525859796,0.5293600076703532,0.20941023892359356,0.1557456545917398,0.0],[0.0,0.03957751181632538,0.06595228453657835,0.36409534687266365,0.46465430605235475,0.8422528750102042,0.895500023742702,0.9228598746525728,0.9398609004875368,0.947668263369417,0.993782331766052,0.9934159436018257,0.9876170758296242,0.9689974526141607,0.9355477198442098,0.8943403659418925,0.7852986796589707,0.7028694534607038,0.6544795234298086,0.6434774745186292,0.5338148651644048,0.2111972665614217,0.15706838621994498,0.0],[0.0,0.03728819351356321,0.062138326470578965,0.34304030391792656,0.4377603451760909,0.7938796197787222,0.844013184097942,0.8697483710885838,0.8857267343676934,0.8930599773414747,0.935918462416644,0.9354677089603641,0.9299088399412957,0.9122236050830889,0.880578527658371,0.8416740827841969,0.7388769553397659,0.6612337644028763,0.615661445889488,0.6053002584295188,0.5020653488122351,0.19882568918864552,0.14786222945457872,0.0],[0.0,0.03607460656178519,0.060114470792746885,0.33195977855484454,0.423559884390412,0.7682880749155531,0.8167967994994084,0.8417033757593255,0.857169397875245,0.8642682351269758,0.9057371118785361,0.9053143814624262,0.8999456704610664,0.882841430360376,0.852224881810765,0.8145819580667882,0.7150883785654346,0.6399416733829626,0.5958348032911405,0.5858070622487331,0.4858909805095722,0.19241049565389845,0.14309643475330336,0.0],[0.0,0.03388732652453084,0.05647023982750624,0.3118713753888203,0.3978953996512159,0.7218930826235526,0.7674714531742327,0.7908746863741198,0.8054083885020696,0.8120798348811507,0.8510263910098322,0.8506389759902702,0.8456029872984233,0.829540653641029,0.800779781582269,0.7654142487374538,0.6719220044508722,0.6013074519095898,0.5598595186419355,0.5504359883225933,0.45654336533996126,0.18079108165546964,0.13445263338845378,0.0],[0.0,0.03191907565724194,0.05319057656678667,0.2937917632669124,0.3748084515706421,0.680111053163909,0.723047728974534,0.7450950975436772,0.7587871428996743,0.7650724401127019,0.8017527977338578,0.8013914287585785,0.7966503008635188,0.7815213615090091,0.754428143494175,0.7211118417205444,0.6330271916831817,0.5664983270267611,0.5274486940994081,0.5185703457581962,0.4301106741792588,0.17032010786657664,0.1266659401174103,0.0],[0.0,0.03070665895972004,0.0511689065493752,0.2826661648615419,0.36059764555643953,0.6543868857974171,0.6956934549623611,0.7169052080887636,0.7300781768446213,0.7361247712683155,0.7714120825762371,0.7710647688788618,0.7665037734943464,0.7519479905283575,0.7258803900005797,0.6938258970175321,0.6090706115972234,0.5450586967065223,0.5074875279406593,0.49894585064329894,0.4138354192695367,0.1638671826971357,0.12187170945945541,0.0],[0.0,0.02570368281299203,0.042834182502069676,0.23653178249560644,0.3017793647331302,0.5476696035392495,0.5822543550817746,0.6000099593179671,0.6110365940043831,0.6160987583854818,0.6456164743040153,0.6453269691751297,0.6415103383651843,0.6293288216322921,0.6075123284887806,0.5806825408081437,0.509751896374224,0.45617557300389094,0.42472583973401146,0.41757481587597384,0.3463318283521061,0.13715555220931427,0.10199250481458824,0.0],[0.0,0.024616347638254127,0.041021135129096865,0.22656165386031366,0.2890460019337873,0.5246018464168215,0.5577205026945486,0.5747239973314295,0.5852829660929164,0.5901298470385935,0.6183979290998728,0.6181170593508604,0.6144586724938732,0.6027875211443211,0.5818881464883213,0.5561886529372841,0.48824495624616676,0.43692943005582047,0.40680876013133294,0.39996047595445355,0.33172840371658485,0.13135977244184482,0.09768789784683542,0.0],[0.0,0.02439003119498547,0.04064372187014671,0.2244867216567634,0.28639584141438884,0.5198009646822953,0.5526143586948629,0.5694612555779524,0.5799228529564275,0.5847248910285733,0.612732873601095,0.6124537474655113,0.6088282533063565,0.5972632738536867,0.5765547412179147,0.5510904814424852,0.48376843478763293,0.4329235035160621,0.4030794962294981,0.3962942583367085,0.3286889743753656,0.13015331245463307,0.09679189209985985,0.0],[0.0,0.024147525114330118,0.04023929634601357,0.22226327172121182,0.2835559968693146,0.5146564041048023,0.5471426679599114,0.563821742526817,0.5741789928920557,0.57893297093963,0.6066622331846006,0.6063849661688052,0.6027947104319343,0.5913434930882349,0.5708394578093776,0.5456272662014504,0.4789713781578754,0.4286307470690127,0.39908321225034893,0.3923655440554615,0.3254319398987581,0.12886045760621698,0.09583171007342241,0.0],[0.0,0.02161891648153171,0.036025692364957375,0.1990617298463474,0.25393398696325953,0.46097271830153863,0.4900504045390097,0.5049786821552271,0.5142477100569215,0.5185017409906756,0.5433233068657001,0.5430666892476843,0.5398445055645499,0.5295807809729242,0.5112110552580055,0.4886281400996399,0.4289250337954226,0.38384624125441824,0.35739104071488986,0.3513767195708381,0.29144837977412047,0.11537753013975177,0.08581081433613288,0.0],[0.0,0.016290359824343723,0.02714546968527221,0.15011878827726954,0.19146265144806912,0.3476916106381901,0.3695879134592669,0.38082810654718247,0.3878053014643118,0.39100640443323775,0.40970466655586674,0.4094957925191263,0.407053525118633,0.3992991361719772,0.38543531415252225,0.36840065334603317,0.3233696224135478,0.289388346013975,0.26945278226829406,0.26492150036704104,0.2197624507181498,0.08694999331340661,0.06467959465475288,0.0],[0.0,0.003933671000726476,0.006557713617565214,0.03593720210467256,0.04596641317031306,0.08316632003810291,0.08847380638361778,0.09119297016095781,0.0928814923075736,0.09365746177426275,0.09815806046917412,0.0981180028891051,0.0975407477552212,0.09569391093757286,0.09238083550091385,0.08829871217772296,0.07753430522151933,0.06937784751678851,0.06458067744458901,0.06348839583952316,0.052623262797133065,0.02091159665625812,0.01552769438865888,0.0],[0.0,0.0029963211846188997,0.004992866337350238,0.027380345722324503,0.03501570388819303,0.06335867664026278,0.06739979276166819,0.06947158520213427,0.0707579340026178,0.07134837934521862,0.07477848637181274,0.07474755317856789,0.07430776938324864,0.07290078892701317,0.07037671338314032,0.06726749888451697,0.059066013352277784,0.05285205673361949,0.04919786066578904,0.04836670457929174,0.040090651198850184,0.01592795924887072,0.011831493972773768,0.0],[0.0,0.001569221912934662,0.002614367127073931,0.014345438253901187,0.018343112223112672,0.03319313074530224,0.03530919696174413,0.03639464682666926,0.03706847032180036,0.037377578552983216,0.039175281897862534,0.03915888848963325,0.038928469867526135,0.03819136545746582,0.03686900264784664,0.0352404122549635,0.03094332075260253,0.02768782891904264,0.025773762969293536,0.02533857446497028,0.02100353100133625,0.00834310904449711,0.006199244326114721,0.0],[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]],
-    colorscale: 'Viridis',
-    showscale: true,
-    colorbar: { tickfont: { color: theme.text } },
-    contours: { z: { show: false } },
-  }];
-  const layout = {
-    title: { text: 'Coupled reaction-diffusion, u', font: { color: theme.text, size: 14 } },
-    paper_bgcolor: theme.bg,
-    plot_bgcolor: theme.bg,
-    font: { color: theme.text },
-    scene: {
-      camera: {
-        eye: { x: 0, y: 0, z: 2.1 },
-        up: { x: 0, y: 1, z: 0 },
-        projection: { type: 'orthographic' },
-      },
-      xaxis: { title: 'x', color: theme.text, gridcolor: theme.grid, backgroundcolor: theme.bg },
-      yaxis: { title: 'y', color: theme.text, gridcolor: theme.grid, backgroundcolor: theme.bg },
-      zaxis: { title: 'u', color: theme.text, gridcolor: theme.grid, backgroundcolor: theme.bg },
-    },
-    margin: { t: 40, l: 10, r: 10, b: 10 },
-  };
-  Plotly.newPlot('bramble_sp_1', data, layout, { displayModeBar: false, responsive: true });
-  window.brambleRegisterPlotlyChart('bramble_sp_1', function () {
-    const t = window.bramblePlotlyTheme();
-    return {
-      'font.color': t.text,
-      'scene.xaxis.color': t.text, 'scene.xaxis.gridcolor': t.grid, 'scene.xaxis.backgroundcolor': t.bg,
-      'scene.yaxis.color': t.text, 'scene.yaxis.gridcolor': t.grid, 'scene.yaxis.backgroundcolor': t.bg,
-      'scene.zaxis.color': t.text, 'scene.zaxis.gridcolor': t.grid, 'scene.zaxis.backgroundcolor': t.bg,
-      'title.font.color': t.text,
+  &quot;use strict&quot;;
+
+  // Same deterministic PRNG and non-uniform axis builder as poisson_interactive.html --
+  // kept byte-identical so the two widgets draw the same family of meshes for the same
+  // (N, mesh type) pair.
+  function mulberry32(seed) {
+    return function () {
+      seed |= 0;
+      seed = (seed + 0x6D2B79F5) | 0;
+      var t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
-  });
-})();
-</script>
-<script>
-  // See the module note above: hide `define` from Plotly's UMD wrapper so it attaches
-  // `window.Plotly` instead of registering as an anonymous AMD module.
-  window.__bramble_amd_define = window.define;
-  window.define = undefined;
-</script>
-<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
-<script>
-  window.define = window.__bramble_amd_define;
+  }
 
-  // Colour tokens read from the page's own theme, not hard-coded — Documenter stamps
-  // `theme--documenter-dark` on <html> when dark mode is active, light mode has no such
-  // class. Recomputed on every call so a caller can re-theme after a toggle.
-  window.bramblePlotlyTheme = function () {
-    const dark = document.documentElement.className.includes('documenter-dark');
-    return dark
-      ? { bg: 'rgba(0,0,0,0)', text: '#c3c2b7', grid: 'rgba(255,255,255,0.12)' }
-      : { bg: 'rgba(0,0,0,0)', text: '#52514e', grid: 'rgba(0,0,0,0.10)' };
-  };
+  function buildAxis(N, random, seed) {
+    var x = new Float64Array(N + 1);
+    for (var i = 0; i <= N; i++) x[i] = i / N;
+    if (!random) return x;
 
-  // Every plot this page creates registers itself (div id + the function that
-  // reapplies theme-dependent layout colours) so one observer can repaint all of them
-  // together when the theme toggles, instead of each plot wiring its own observer.
-  window.__bramble_plotly_charts = window.__bramble_plotly_charts || [];
-  window.brambleRegisterPlotlyChart = function (divId, restyle) {
-    window.__bramble_plotly_charts.push({ divId, restyle });
-  };
+    var rand = mulberry32(seed);
+    var h = 1 / N;
+    for (i = 1; i < N; i++) x[i] = rand();
+    x = Array.prototype.slice.call(x).sort(function (a, b) { return a - b; });
 
-  if (!window.__bramble_plotly_theme_observer) {
-    window.__bramble_plotly_theme_observer = new MutationObserver(function () {
-      for (const { divId, restyle } of window.__bramble_plotly_charts) {
-        const layout = restyle();
-        Plotly.relayout(divId, layout);
+    var minGap = 0.15 * h;
+    for (i = 1; i < N; i++) {
+      if (x[i] - x[i - 1] < minGap) x[i] = x[i - 1] + minGap;
+    }
+    var span = x[N] === x[0] ? 1 : (1 - x[0]) / (x[N] - x[0]);
+    for (i = 0; i <= N; i++) x[i] = x[0] + (x[i] - x[0]) * span;
+    x[0] = 0;
+    x[N] = 1;
+    return Float64Array.from(x);
+  }
+
+  // No forcing anywhere in the domain (f1 = f2 = 0): unlike the worked example, which needs
+  // a manufactured source to have a known closed-form answer to test against, this widget's
+  // only input is a constant Dirichlet supply of both species on the boundary. That supply
+  // has to be nonzero for *both* fields -- the reaction terms only ever reach the diagonal
+  // of each field's own block (see `coupled_matrix` in coupled_reaction_diffusion.jl and the
+  // spy-plot comment below), so a field with nothing driving it directly (no source, no
+  // boundary data) solves to exactly zero and the gamma coupling would have nothing to act
+  // on: the other field's equation would see u*v with a v that never leaves zero.
+  function gU(x, y) { return 1; }
+  function gV(x, y) { return 1; }
+
+  // The right-hand side is then pure boundary flux: node (k, l) borrows the corresponding
+  // poisson_interactive.html term (`cW * g(...)`, etc.) for whichever of its four faces sits
+  // on partial-Omega, and nothing else -- there is no cellVol * source term to add since the
+  // interior is source-free.
+  function buildBoundaryRHS(mesh, X, Y, N, g) {
+    var m = mesh.m, idx = mesh.idx;
+    var cW = mesh.cW, cE = mesh.cE, cS = mesh.cS, cN = mesh.cN;
+    var b = new Float64Array(mesh.dof);
+    for (var l = 0; l < m; l++) {
+      for (var k = 0; k < m; k++) {
+        var row = idx(k, l), ii = k + 1, jj = l + 1, rhs = 0;
+        if (k === 0) rhs += cW[row] * g(X[0], Y[jj]);
+        if (k === m - 1) rhs += cE[row] * g(X[N], Y[jj]);
+        if (l === 0) rhs += cS[row] * g(X[ii], Y[0]);
+        if (l === m - 1) rhs += cN[row] * g(X[ii], Y[N]);
+        b[row] = rhs;
       }
-    });
-    window.__bramble_plotly_theme_observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class'],
+    }
+    return b;
+  }
+
+  // Mesh geometry and the 5-point finite-volume flux coefficients, shared by both species
+  // since -Delta u and -Delta v are discretised on the same mesh -- only the diffusion
+  // scale D and the reaction diagonal differ per block (assembled separately below).
+  // `pattern` is the diagonal-block sparsity (neighbour + self pairs), reused verbatim for
+  // both A_uu and A_vv in the spy plot since they share this same stencil.
+  function buildMesh(N, X, Y) {
+    var m = N - 1;
+    var dof = m * m;
+    var idx = function (k, l) { return l * m + k; };
+
+    var hxm = new Float64Array(m), hxp = new Float64Array(m);
+    var hym = new Float64Array(m), hyp = new Float64Array(m);
+    for (var k = 0; k < m; k++) { hxm[k] = X[k + 1] - X[k]; hxp[k] = X[k + 2] - X[k + 1]; }
+    for (var l = 0; l < m; l++) { hym[l] = Y[l + 1] - Y[l]; hyp[l] = Y[l + 2] - Y[l + 1]; }
+
+    var cW = new Float64Array(dof), cE = new Float64Array(dof);
+    var cS = new Float64Array(dof), cN = new Float64Array(dof);
+    var cellVol = new Float64Array(dof);
+    var pattern = [];
+    for (l = 0; l < m; l++) {
+      for (k = 0; k < m; k++) {
+        var faceY = 0.5 * (hym[l] + hyp[l]), faceX = 0.5 * (hxm[k] + hxp[k]);
+        var row = idx(k, l);
+        cW[row] = faceY / hxm[k]; cE[row] = faceY / hxp[k];
+        cS[row] = faceX / hym[l]; cN[row] = faceX / hyp[l];
+        cellVol[row] = faceX * faceY;
+        if (k > 0) pattern.push([row, idx(k - 1, l)]);
+        if (k < m - 1) pattern.push([row, idx(k + 1, l)]);
+        if (l > 0) pattern.push([row, idx(k, l - 1)]);
+        if (l < m - 1) pattern.push([row, idx(k, l + 1)]);
+        pattern.push([row, row]);
+      }
+    }
+    return { m: m, dof: dof, idx: idx, cW: cW, cE: cE, cS: cS, cN: cN, cellVol: cellVol, pattern: pattern };
+  }
+
+  // Matrix-free operator for one block: D * (-Delta) + diag(diagArr). `diagArr` carries the
+  // raw reaction coefficient (a or b) plus the frozen coupling term (gamma * other field);
+  // it is weighted here by the same nodal cell measure the flux balance and the right-hand
+  // side already use (`mesh.cellVol`), since innerₕ -- what the reaction terms assemble
+  // through in coupled_reaction_diffusion.jl's `coupled_matrix` -- is that cell-measure-
+  // weighted inner product, not a bare pointwise product.
+  function makeMatvec(mesh, D, diagArr) {
+    var m = mesh.m, cW = mesh.cW, cE = mesh.cE, cS = mesh.cS, cN = mesh.cN;
+    var cellVol = mesh.cellVol, idx = mesh.idx;
+    return function (v, out) {
+      for (var l = 0; l < m; l++) {
+        for (var k = 0; k < m; k++) {
+          var r = idx(k, l);
+          var s = D * (cW[r] + cE[r] + cS[r] + cN[r]) * v[r] + diagArr[r] * cellVol[r] * v[r];
+          if (k > 0) s -= D * cW[r] * v[idx(k - 1, l)];
+          if (k < m - 1) s -= D * cE[r] * v[idx(k + 1, l)];
+          if (l > 0) s -= D * cS[r] * v[idx(k, l - 1)];
+          if (l < m - 1) s -= D * cN[r] * v[idx(k, l + 1)];
+          out[r] = s;
+        }
+      }
+    };
+  }
+
+  function dot(a, b) {
+    var s = 0;
+    for (var i = 0; i < a.length; i++) s += a[i] * b[i];
+    return s;
+  }
+  function norm2(a) { return Math.sqrt(dot(a, a)); }
+
+  // Unpreconditioned BiCGStab rather than CG: the reaction diagonal a + gamma * v (or
+  // b - gamma * u) is frozen at the *other* field's current Picard iterate, which need not
+  // stay positive across the parameter sliders' full range, so the block is not guaranteed
+  // symmetric positive definite the way the pure Laplacian block in poisson_interactive.html
+  // is -- BiCGStab only needs the operator nonsingular.
+  function bicgstab(dof, matvec, b, maxIter, tol) {
+    var x = new Float64Array(dof);
+    var r = b.slice();
+    var rhat = r.slice();
+    var bnorm = norm2(b) || 1;
+    var rho = 1, alpha = 1, omega = 1;
+    var v = new Float64Array(dof), p = new Float64Array(dof);
+    var s = new Float64Array(dof), t = new Float64Array(dof);
+    var rhoPrev;
+
+    for (var iter = 0; iter < maxIter; iter++) {
+      rhoPrev = rho;
+      rho = dot(rhat, r);
+      if (rho === 0) break;
+      if (iter === 0) {
+        p.set(r);
+      } else {
+        var beta = (rho / rhoPrev) * (alpha / omega);
+        for (var i = 0; i < dof; i++) p[i] = r[i] + beta * (p[i] - omega * v[i]);
+      }
+      matvec(p, v);
+      alpha = rho / dot(rhat, v);
+      for (i = 0; i < dof; i++) s[i] = r[i] - alpha * v[i];
+      if (norm2(s) < tol * bnorm) {
+        for (i = 0; i < dof; i++) x[i] += alpha * p[i];
+        break;
+      }
+      matvec(s, t);
+      var tt = dot(t, t);
+      omega = tt === 0 ? 0 : dot(t, s) / tt;
+      for (i = 0; i < dof; i++) { x[i] += alpha * p[i] + omega * s[i]; r[i] = s[i] - omega * t[i]; }
+      if (norm2(r) < tol * bnorm) break;
+      if (omega === 0) break;
+    }
+    return x;
+  }
+
+  var COLORMAPS = {
+    viridis: [&quot;#440154&quot;, &quot;#414487&quot;, &quot;#2a788e&quot;, &quot;#22a884&quot;, &quot;#7ad151&quot;, &quot;#fde725&quot;],
+    plasma: [&quot;#0d0887&quot;, &quot;#6a00a8&quot;, &quot;#b12a90&quot;, &quot;#e16462&quot;, &quot;#fca636&quot;, &quot;#f0f921&quot;],
+    turbo: [&quot;#30123b&quot;, &quot;#4147d6&quot;, &quot;#1ba8c9&quot;, &quot;#61c93a&quot;, &quot;#ecd21a&quot;, &quot;#e4460a&quot;, &quot;#7a0403&quot;],
+    gray: [&quot;#000000&quot;, &quot;#ffffff&quot;],
+  };
+  function hexToRgb(h) {
+    var v = parseInt(h.slice(1), 16);
+    return [(v >> 16) &amp; 255, (v >> 8) &amp; 255, v &amp; 255];
+  }
+  function colormapFn(name) {
+    var stops = COLORMAPS[name].map(hexToRgb);
+    return function (t) {
+      t = Math.max(0, Math.min(1, t));
+      var pos = t * (stops.length - 1);
+      var i0 = Math.floor(pos), i1 = Math.min(i0 + 1, stops.length - 1);
+      var f = pos - i0, a = stops[i0], b = stops[i1];
+      return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+    };
+  }
+
+  // Renders into an offscreen (N+1)x(N+1) canvas kept around in `state` so a mousemove can
+  // redraw the crosshair on top without recomputing the field itself.
+  function renderField(canvas, N, values, cmap) {
+    var min = Infinity, max = -Infinity;
+    for (var i = 0; i < values.length; i++) { if (values[i] < min) min = values[i]; if (values[i] > max) max = values[i]; }
+    var range = max - min || 1;
+
+    var off = document.createElement(&quot;canvas&quot;);
+    off.width = N + 1; off.height = N + 1;
+    var octx = off.getContext(&quot;2d&quot;);
+    var img = octx.createImageData(N + 1, N + 1);
+    for (var j = 0; j <= N; j++) {
+      var srcRow = N - j;
+      for (i = 0; i <= N; i++) {
+        var t = (values[srcRow * (N + 1) + i] - min) / range;
+        var rgb = cmap(t);
+        var p = (j * (N + 1) + i) * 4;
+        img.data[p] = rgb[0]; img.data[p + 1] = rgb[1]; img.data[p + 2] = rgb[2]; img.data[p + 3] = 255;
+      }
+    }
+    octx.putImageData(img, 0, 0);
+    drawBase(canvas, off);
+    return off;
+  }
+
+  function drawBase(canvas, off) {
+    var ctx = canvas.getContext(&quot;2d&quot;);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(off, 0, 0, canvas.width, canvas.height);
+  }
+
+  function drawCrosshair(canvas, off, N, i, j) {
+    drawBase(canvas, off);
+    var ctx = canvas.getContext(&quot;2d&quot;);
+    var px = (i / N) * canvas.width, py = (1 - j / N) * canvas.height;
+    ctx.strokeStyle = &quot;#ffffff&quot;;
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(px, py, 5, 0, 2 * Math.PI); ctx.stroke();
+    ctx.strokeStyle = &quot;#000000&quot;;
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(px, py, 5, 0, 2 * Math.PI); ctx.stroke();
+  }
+
+  // Full 2n x 2n Jacobian sparsity: diagonal blocks A_uu, A_vv reuse the shared Laplacian
+  // stencil pattern (offset into the top-left and bottom-right quadrants); the off-diagonal
+  // coupling blocks A_uv = d(residual_u)/dv = gamma * u and A_vu = d(residual_v)/du =
+  // -gamma * v are diagonal matrices (the reaction term is pointwise -- no derivative
+  // spreads it to a neighbouring node), so each contributes exactly one entry per row,
+  // present only when gamma != 0.
+  function drawBlockSpy(canvas, mesh, gamma) {
+    var dof = mesh.dof, dof2 = 2 * dof;
+    var ctx = canvas.getContext(&quot;2d&quot;);
+    var bg = getComputedStyle(canvas).backgroundColor;
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    var scale = canvas.width / dof2;
+    var dotSize = Math.max(1, Math.ceil(scale));
+
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue(&quot;--accent&quot;) || &quot;#0e7c86&quot;;
+    for (var n = 0; n < mesh.pattern.length; n++) {
+      var row = mesh.pattern[n][0], col = mesh.pattern[n][1];
+      ctx.fillRect(Math.floor(col * scale), Math.floor(row * scale), dotSize, dotSize);
+      ctx.fillRect(Math.floor((col + dof) * scale), Math.floor((row + dof) * scale), dotSize, dotSize);
+    }
+    if (gamma !== 0) {
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue(&quot;--accent2&quot;) || &quot;#b1443e&quot;;
+      for (var r = 0; r < dof; r++) {
+        ctx.fillRect(Math.floor((dof + r) * scale), Math.floor(r * scale), dotSize, dotSize);
+        ctx.fillRect(Math.floor(r * scale), Math.floor((dof + r) * scale), dotSize, dotSize);
+      }
+    }
+  }
+
+  function drawMeshNodes(canvas, X, Y) {
+    var ctx = canvas.getContext(&quot;2d&quot;);
+    var bg = getComputedStyle(canvas).backgroundColor;
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    var margin = 14;
+    var w = canvas.width - 2 * margin, h = canvas.height - 2 * margin;
+    var toPx = function (x) { return margin + x * w; };
+    var toPy = function (y) { return canvas.height - margin - y * h; };
+
+    ctx.strokeStyle = getComputedStyle(canvas).borderColor;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (var i = 0; i < X.length; i++) {
+      ctx.moveTo(toPx(X[i]), toPy(Y[0]));
+      ctx.lineTo(toPx(X[i]), toPy(Y[Y.length - 1]));
+    }
+    for (var j = 0; j < Y.length; j++) {
+      ctx.moveTo(toPx(X[0]), toPy(Y[j]));
+      ctx.lineTo(toPx(X[X.length - 1]), toPy(Y[j]));
+    }
+    ctx.stroke();
+
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue(&quot;--accent&quot;) || &quot;#0e7c86&quot;;
+    for (i = 0; i < X.length; i++) {
+      for (j = 0; j < Y.length; j++) {
+        ctx.beginPath();
+        ctx.arc(toPx(X[i]), toPy(Y[j]), 1.6, 0, 2 * Math.PI);
+        ctx.fill();
+      }
+    }
+  }
+
+  function drawCrossSection(canvas, N, uGrid, vGrid, axis, pos) {
+    var ctx = canvas.getContext(&quot;2d&quot;);
+    var bg = getComputedStyle(canvas).backgroundColor;
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    var fixedIdx = Math.round(pos * N);
+    var uLine = new Float64Array(N + 1), vLine = new Float64Array(N + 1);
+    for (var s = 0; s <= N; s++) {
+      var i = axis === &quot;x&quot; ? s : fixedIdx;
+      var j = axis === &quot;x&quot; ? fixedIdx : s;
+      uLine[s] = uGrid[j * (N + 1) + i];
+      vLine[s] = vGrid[j * (N + 1) + i];
+    }
+
+    var min = Math.min.apply(null, uLine), max = Math.max.apply(null, uLine);
+    for (s = 0; s <= N; s++) { min = Math.min(min, vLine[s]); max = Math.max(max, vLine[s]); }
+    var range = max - min || 1;
+    var margin = 14;
+    var w = canvas.width - 2 * margin, h = canvas.height - 2 * margin;
+    var toPx = function (t) { return margin + (t / N) * w; };
+    var toPy = function (val) { return canvas.height - margin - ((val - min) / range) * h; };
+
+    ctx.strokeStyle = getComputedStyle(canvas).borderColor;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(margin, margin, w, h);
+
+    function drawLine(line, color) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (var s2 = 0; s2 <= N; s2++) {
+        var px = toPx(s2), py = toPy(line[s2]);
+        if (s2 === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+    }
+    drawLine(uLine, getComputedStyle(document.documentElement).getPropertyValue(&quot;--accent&quot;) || &quot;#0e7c86&quot;);
+    drawLine(vLine, getComputedStyle(document.documentElement).getPropertyValue(&quot;--accent2&quot;) || &quot;#b1443e&quot;);
+  }
+
+  // Same nodal weighting as Bramble's normₕ/norm₁ₕ (src/space/inner_product.jl) used by
+  // poisson_interactive.html -- see that file's comment for the derivation.
+  function nodalWeights(Z) {
+    var N = Z.length - 1;
+    var w = new Float64Array(N + 1);
+    w[0] = (Z[1] - Z[0]) / 2;
+    w[N] = (Z[N] - Z[N - 1]) / 2;
+    for (var i = 1; i < N; i++) w[i] = (Z[i + 1] - Z[i - 1]) / 2;
+    return w;
+  }
+  function fieldErrors(N, X, Y, grid, exact) {
+    var wx = nodalWeights(X), wy = nodalWeights(Y);
+    var normhSq = 0;
+    var errGrid = new Float64Array((N + 1) * (N + 1));
+    for (var j = 0; j <= N; j++) {
+      for (var i = 0; i <= N; i++) {
+        var e = grid[j * (N + 1) + i] - exact(X[i], Y[j]);
+        errGrid[j * (N + 1) + i] = e;
+        normhSq += wx[i] * wy[j] * e * e;
+      }
+    }
+    var seminormSq = 0;
+    for (j = 0; j <= N; j++) {
+      for (i = 0; i < N; i++) {
+        var dx = X[i + 1] - X[i];
+        var de = errGrid[j * (N + 1) + i + 1] - errGrid[j * (N + 1) + i];
+        seminormSq += wy[j] * (de / dx) * (de / dx) * dx;
+      }
+    }
+    for (j = 0; j < N; j++) {
+      var dy = Y[j + 1] - Y[j];
+      for (i = 0; i <= N; i++) {
+        var de2 = errGrid[(j + 1) * (N + 1) + i] - errGrid[j * (N + 1) + i];
+        seminormSq += wx[i] * (de2 / dy) * (de2 / dy) * dy;
+      }
+    }
+    return { normh: Math.sqrt(normhSq), norm1h: Math.sqrt(normhSq + seminormSq) };
+  }
+
+  // No closed-form solution exists for this boundary-value problem (that is the point -- see
+  // gU/gV above), so accuracy is measured the way convection_diffusion_interactive.html's
+  // widget does: against a reference solve on a much finer grid. That widget's reference grid
+  // lines up exactly on the coarse one because both are uniform; this widget also offers a
+  // *random* coarse mesh, whose nodes never land on a fixed fine grid, so the fine reference
+  // here is always solved on a fixed uniform N_REF mesh and read off by bilinear
+  // interpolation instead of an exact stride.
+  function makeFineInterpolant(Nref, grid) {
+    var h = 1 / Nref;
+    return function (x, y) {
+      var fx = x / h, fy = y / h;
+      var i0 = Math.max(0, Math.min(Nref - 1, Math.floor(fx)));
+      var j0 = Math.max(0, Math.min(Nref - 1, Math.floor(fy)));
+      var tx = Math.min(1, Math.max(0, fx - i0)), ty = Math.min(1, Math.max(0, fy - j0));
+      var v00 = grid[j0 * (Nref + 1) + i0], v10 = grid[j0 * (Nref + 1) + i0 + 1];
+      var v01 = grid[(j0 + 1) * (Nref + 1) + i0], v11 = grid[(j0 + 1) * (Nref + 1) + i0 + 1];
+      return (1 - tx) * (1 - ty) * v00 + tx * (1 - ty) * v10 + (1 - tx) * ty * v01 + tx * ty * v11;
+    };
+  }
+  var N_REF = 48;
+
+  function fmt(x) {
+    if (!isFinite(x)) return &quot;--&quot;;
+    return x.toExponential(3);
+  }
+
+  // One steady Picard solve of the source-free, boundary-driven system, shared by both the
+  // coarse mesh the sliders control and the fixed fine reference mesh below -- same equations,
+  // same solver, only the mesh differs.
+  function solveSteady(mesh, X, Y, N, a, b, gamma, Du, Dv) {
+    var m = mesh.m, dof = mesh.dof;
+    var bU = buildBoundaryRHS(mesh, X, Y, N, gU);
+    var bV = buildBoundaryRHS(mesh, X, Y, N, gV);
+
+    // Block Gauss-Seidel Picard iteration: freeze the *other* field's current iterate inside
+    // each block's reaction diagonal, solve the two decoupled linear systems, repeat. This is
+    // the same linearisation coupled_reaction_diffusion.jl's `coupled_matrix` uses for its
+    // hand-written Newton loop (v_c/u_c frozen coefficients), just iterated to convergence
+    // here instead of driven by an outer Newton step, since this widget solves each block
+    // matrix-free rather than forming and factoring the full sparse Jacobian in JavaScript.
+    // Under-relaxation (0.7) keeps the sweep stable across the full slider range, including
+    // combinations where the frozen diagonal briefly loses definiteness (b - gamma * u can go
+    // negative once gamma * u exceeds b).
+    var uGuess = new Float64Array(dof), vGuess = new Float64Array(dof);
+    var bicgMax = Math.min(6 * dof, 800);
+    var relax = 0.7, maxPicard = 30, tol = 1e-7;
+    var iterUsed = 0, residual = Infinity;
+    for (var iter = 0; iter < maxPicard; iter++) {
+      var diagU = new Float64Array(dof);
+      for (var r = 0; r < dof; r++) diagU[r] = a + gamma * vGuess[r];
+      var uNew = bicgstab(dof, makeMatvec(mesh, Du, diagU), bU, bicgMax, 1e-9);
+      for (r = 0; r < dof; r++) uNew[r] = uGuess[r] + relax * (uNew[r] - uGuess[r]);
+
+      var diagV = new Float64Array(dof);
+      for (r = 0; r < dof; r++) diagV[r] = b - gamma * uNew[r];
+      var vNew = bicgstab(dof, makeMatvec(mesh, Dv, diagV), bV, bicgMax, 1e-9);
+      for (r = 0; r < dof; r++) vNew[r] = vGuess[r] + relax * (vNew[r] - vGuess[r]);
+
+      var change = 0;
+      for (r = 0; r < dof; r++) {
+        change = Math.max(change, Math.abs(uNew[r] - uGuess[r]), Math.abs(vNew[r] - vGuess[r]));
+      }
+      uGuess = uNew; vGuess = vNew;
+      iterUsed = iter + 1;
+      residual = change;
+      if (change < tol) break;
+    }
+
+    // Boundary nodes hold gU/gV, not zero -- both are nonzero here (see gU/gV above), unlike
+    // the homogeneous-Dirichlet steady examples elsewhere in this file's history.
+    var uGrid = new Float64Array((N + 1) * (N + 1));
+    var vGrid = new Float64Array((N + 1) * (N + 1));
+    for (var j = 0; j <= N; j++) {
+      for (var i = 0; i <= N; i++) {
+        var interior = i > 0 &amp;&amp; i < N &amp;&amp; j > 0 &amp;&amp; j < N;
+        uGrid[j * (N + 1) + i] = interior ? uGuess[(j - 1) * m + (i - 1)] : gU(X[i], Y[j]);
+        vGrid[j * (N + 1) + i] = interior ? vGuess[(j - 1) * m + (i - 1)] : gV(X[i], Y[j]);
+      }
+    }
+    return { uGrid: uGrid, vGrid: vGrid, iterUsed: iterUsed, residual: residual };
+  }
+
+  var state = { N: 0, X: null, Y: null, uGrid: null, vGrid: null, offU: null, offV: null };
+
+  function recompute() {
+    var N = parseInt(document.getElementById(&quot;nRange&quot;).value, 10);
+    document.getElementById(&quot;nLabel&quot;).textContent = N;
+    var random = document.getElementById(&quot;meshType&quot;).value === &quot;random&quot;;
+    var a = parseFloat(document.getElementById(&quot;aRange&quot;).value);
+    var b = parseFloat(document.getElementById(&quot;bRange&quot;).value);
+    var gamma = parseFloat(document.getElementById(&quot;gammaRange&quot;).value);
+    var ratio = parseFloat(document.getElementById(&quot;ratioRange&quot;).value);
+    document.getElementById(&quot;aLabel&quot;).textContent = a.toFixed(1);
+    document.getElementById(&quot;bLabel&quot;).textContent = b.toFixed(1);
+    document.getElementById(&quot;gammaLabel&quot;).textContent = gamma.toFixed(1);
+    document.getElementById(&quot;ratioLabel&quot;).textContent = ratio.toFixed(1);
+    var cmap = colormapFn(document.getElementById(&quot;colormapSel&quot;).value);
+    var panel2 = document.getElementById(&quot;panel2Sel&quot;).value;
+
+    var Dv = 1, Du = ratio; // D_v fixed at 1; the slider sets the ratio D_u / D_v directly.
+
+    // Same per-(N, mesh type) seeding rationale as poisson_interactive.html: without mixing
+    // N into the seed every resolution would replay the same PRNG prefix.
+    var X = buildAxis(N, random, 20260916 + N * 7919);
+    var Y = buildAxis(N, random, 20260917 + N * 7919);
+    var mesh = buildMesh(N, X, Y);
+    var dof = mesh.dof;
+
+    var coarse = solveSteady(mesh, X, Y, N, a, b, gamma, Du, Dv);
+    var uGrid = coarse.uGrid, vGrid = coarse.vGrid;
+
+    // Fixed uniform reference mesh, independent of the coarse mesh's own N and mesh-type
+    // sliders -- see the makeFineInterpolant comment above for why it can't just be a finer
+    // version of whatever (possibly random) mesh the sliders currently select.
+    var Xref = buildAxis(N_REF, false, 0), Yref = buildAxis(N_REF, false, 0);
+    var meshRef = buildMesh(N_REF, Xref, Yref);
+    var fine = solveSteady(meshRef, Xref, Yref, N_REF, a, b, gamma, Du, Dv);
+    var fineU = makeFineInterpolant(N_REF, fine.uGrid);
+    var fineV = makeFineInterpolant(N_REF, fine.vGrid);
+
+    state.N = N; state.X = X; state.Y = Y; state.uGrid = uGrid; state.vGrid = vGrid;
+    state.offU = renderField(document.getElementById(&quot;fieldUCanvas&quot;), N, uGrid, cmap);
+    state.offV = renderField(document.getElementById(&quot;fieldVCanvas&quot;), N, vGrid, cmap);
+
+    var panel2Canvas = document.getElementById(&quot;panel2Canvas&quot;);
+    if (panel2 === &quot;spy&quot;) {
+      document.getElementById(&quot;panel2Title&quot;).textContent = &quot;Jacobian block sparsity&quot;;
+      drawBlockSpy(panel2Canvas, mesh, gamma);
+    } else if (panel2 === &quot;cross&quot;) {
+      document.getElementById(&quot;panel2Title&quot;).textContent = &quot;Cross-section profile&quot;;
+      var axis = document.getElementById(&quot;crossAxisSel&quot;).value;
+      var pos = parseFloat(document.getElementById(&quot;crossPosRange&quot;).value);
+      drawCrossSection(panel2Canvas, N, uGrid, vGrid, axis, pos);
+    } else {
+      document.getElementById(&quot;panel2Title&quot;).textContent = &quot;Mesh nodes&quot;;
+      drawMeshNodes(panel2Canvas, X, Y);
+    }
+
+    var errU = fieldErrors(N, X, Y, uGrid, fineU);
+    var errV = fieldErrors(N, X, Y, vGrid, fineV);
+    document.getElementById(&quot;diagDof&quot;).textContent = 2 * dof;
+    document.getElementById(&quot;diagIters&quot;).textContent = coarse.iterUsed;
+    document.getElementById(&quot;diagResidual&quot;).textContent = fmt(coarse.residual);
+    document.getElementById(&quot;diagL2U&quot;).textContent = fmt(errU.normh);
+    document.getElementById(&quot;diagH1U&quot;).textContent = fmt(errU.norm1h);
+    document.getElementById(&quot;diagL2V&quot;).textContent = fmt(errV.normh);
+    document.getElementById(&quot;diagH1V&quot;).textContent = fmt(errV.norm1h);
+  }
+
+  function updatePanel2Visibility() {
+    var isCross = document.getElementById(&quot;panel2Sel&quot;).value === &quot;cross&quot;;
+    document.getElementById(&quot;crossAxisField&quot;).classList.toggle(&quot;hidden&quot;, !isCross);
+    document.getElementById(&quot;crossPosField&quot;).classList.toggle(&quot;hidden&quot;, !isCross);
+  }
+
+  // Linked cursor: hovering either heatmap reads the same (i, j) node on both, since they
+  // share one mesh -- the crosshair and the readout below always describe one physical point.
+  function attachLinkedCursor() {
+    var uCanvas = document.getElementById(&quot;fieldUCanvas&quot;);
+    var vCanvas = document.getElementById(&quot;fieldVCanvas&quot;);
+
+    function handleMove(evt, canvas) {
+      if (!state.X) return;
+      var rect = canvas.getBoundingClientRect();
+      var px = (evt.clientX - rect.left) / rect.width * canvas.width;
+      var py = (evt.clientY - rect.top) / rect.height * canvas.height;
+      var N = state.N;
+      var i = Math.max(0, Math.min(N, Math.round((px / canvas.width) * N)));
+      var j = Math.max(0, Math.min(N, Math.round(N - (py / canvas.height) * N)));
+      drawCrosshair(uCanvas, state.offU, N, i, j);
+      drawCrosshair(vCanvas, state.offV, N, i, j);
+      var u = state.uGrid[j * (N + 1) + i], v = state.vGrid[j * (N + 1) + i];
+      document.getElementById(&quot;cursorReadout&quot;).textContent =
+        &quot;x = &quot; + state.X[i].toFixed(3) + &quot;, y = &quot; + state.Y[j].toFixed(3) +
+        &quot;, uₕ = &quot; + u.toExponential(3) + &quot;, vₕ = &quot; + v.toExponential(3);
+    }
+    function handleLeave() {
+      if (!state.offU) return;
+      drawBase(uCanvas, state.offU);
+      drawBase(vCanvas, state.offV);
+    }
+    [uCanvas, vCanvas].forEach(function (c) {
+      c.addEventListener(&quot;mousemove&quot;, function (evt) { handleMove(evt, c); });
+      c.addEventListener(&quot;mouseleave&quot;, handleLeave);
     });
   }
 
-  // The layout-race fix (see the module note above): once per page, after everything
-  // (fonts included) has truly finished loading, force every plot created so far to
-  // resize against its now-final container.
-  if (!window.__bramble_plotly_load_fix_installed) {
-    window.__bramble_plotly_load_fix_installed = true;
-    const rescue = function () {
-      for (const { divId } of window.__bramble_plotly_charts) {
-        Plotly.Plots.resize(document.getElementById(divId));
-      }
-    };
-    const loaded = document.readyState === 'complete' ? Promise.resolve() :
-      new Promise((r) => window.addEventListener('load', r, { once: true }));
-    Promise.all([loaded, document.fonts.ready]).then(rescue);
-  }
-</script>
-
-<div id="bramble_sp_2" style="width:100%; max-width:480px; height:420px; margin: 1em 0;"></div>
-<script>
-(function () {
-  const theme = window.bramblePlotlyTheme();
-  const data = [{
-    type: 'surface',
-    x: [0.0,0.012502137392377821,0.020842341257392705,0.11852515758721183,0.15343091907868456,0.32249003948897226,0.3576216823063697,0.37921442624407653,0.3946900115738672,0.4025723532168787,0.48945867206954463,0.5143492048141987,0.5374653519773097,0.5723496069568588,0.6102520607379804,0.6441393949208799,0.7103315688827332,0.7500938235163731,0.7712076284737498,0.7758339074531879,0.8193450182375079,0.9322079566097954,0.9497250979796771,1.0],
-    y: [0.0,0.012139128962408652,0.1758926683115739,0.21421963940238964,0.26530779193702636,0.3697898798063778,0.4415026994731447,0.45139131547453604,0.472787406827221,0.6135392271877386,0.6383211984049163,0.6750549866631306,0.703006660663805,0.7186645483303223,0.775872374245137,0.787046877606814,0.7893333325080929,0.7917694274025723,0.816421518193467,0.8649399088263278,0.9687950604536418,0.9762430318955249,0.9875622988903799,1.0],
-    z: [[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],[0.0,0.007224563989923144,0.012092216082802532,0.05565860774863466,0.06951861017987761,0.075619444735028,0.06501523722397398,0.05693781829205812,0.05042098346062208,0.04684765554882464,0.007208137330978928,-0.006254936384764348,-0.018391172665584016,-0.035413002933510115,-0.05184115203537997,-0.06424419387947382,-0.07871946532510399,-0.08126110770676191,-0.08045536904530642,-0.08006842590610243,-0.0730943794472189,-0.035382087734315726,-0.025973639979800064,0.0],[0.0,0.07151803880242362,0.1190229244244773,0.6078916401586492,0.7408218622247216,0.809779176608395,0.7017551874913599,0.6186341408754342,0.5522411001432502,0.516458185645101,0.06951988828931616,-0.06966840045129798,-0.19716249520234194,-0.3800117135560186,-0.5570718848186794,-0.6886622927210326,-0.8491464161379486,-0.8765690503815403,-0.8688708468875831,-0.8651241507110187,-0.7948076720128378,-0.3680583977156021,-0.27633370714631417,0.0],[0.0,0.07870535249706968,0.13101969406341715,0.6657248614017619,0.8122374620977105,0.8875915517862071,0.7688484269562006,0.6775432299386469,0.6045899062960928,0.5652427605862591,0.07660076474368044,-0.07619820987904902,-0.21606277910480629,-0.4164542015772714,-0.6104694643747044,-0.754759009451374,-0.9303547750399086,-0.9603915503054591,-0.9519068153927391,-0.9477809591715542,-0.8705029810828887,-0.40407730998693386,-0.3030710728177969,0.0],[0.0,0.0806412482958065,0.13422616968395473,0.6817143268354812,0.8318569321945224,0.9089669048509873,0.7872352085796859,0.6936632395949222,0.6189312506137643,0.5786442380678436,0.07849481457760221,-0.07795868241568826,-0.22119831741015858,-0.42643787879259715,-0.6251308899766992,-0.7728758128531785,-0.952612317838401,-0.9833269778657971,-0.9746206764876514,-0.9703939667579882,-0.8912546636578605,-0.41399142481100165,-0.31055838735754193,0.0],[0.0,0.05945027761563271,0.09896030363423186,0.5010723441696674,0.6118702828137247,0.6685298374713241,0.578812652888049,0.5098841810551882,0.45483746242015033,0.4251598271093736,0.05790563391295639,-0.05725490398918082,-0.1626627020450235,-0.3136171302172239,-0.4597342045941743,-0.568413189697929,-0.7004405156263968,-0.7229973624582131,-0.7165629107178977,-0.7134447048276408,-0.6551421806017418,-0.3047983004010706,-0.2285427263911321,0.0],[0.0,0.028724387285781746,0.047854095773491895,0.24205229034174502,0.29555593268680624,0.32305181338939254,0.279852114399471,0.24662385113423846,0.22002350808591742,0.20563887235059664,0.027942964367536818,-0.0278002224162734,-0.07874584930986556,-0.15164123929210524,-0.22222577452121114,-0.2747916872004913,-0.3386901914200252,-0.34967782836835515,-0.34659653735484863,-0.3450897563108102,-0.3168817731811352,-0.14711595011418127,-0.11014450149559493,0.0],[0.0,0.023612392328398464,0.0393126273998403,0.20058544162375733,0.2444381536687293,0.2673207259103108,0.23174548480755228,0.20434728439289587,0.18242682651508188,0.1705933524476026,0.02290675651212751,-0.023096305538963538,-0.06519240398374733,-0.12552710366939085,-0.18396524244401233,-0.22743485428238727,-0.28047175284430553,-0.28957719863634795,-0.28705268358317243,-0.2858165213778222,-0.2625817803344491,-0.12140650382336639,-0.09105672490606948,0.0],[0.0,0.012212865931928068,0.02028681275609536,0.10838545407802054,0.13072935600878063,0.14335389484897845,0.1247512865504919,0.11033810333095678,0.0988402739047791,0.09267129238258233,0.01168553847093419,-0.012644294753435786,-0.03504498557784845,-0.06743878521733933,-0.0988616064014702,-0.12209612976051325,-0.15098235244143604,-0.155899802656517,-0.15461717561741173,-0.1539824402713507,-0.1418225706918236,-0.064200346288437,-0.04858392885808006,0.0],[0.0,-0.05195126228914765,-0.08644263888650729,-0.44343135010295315,-0.5398089928965771,-0.59029545922839,-0.5117653362359809,-0.4513036866606027,-0.40301859465597184,-0.3770080512168387,-0.05048073732067708,0.050825096612440675,0.1436685093105879,0.2769372114699281,0.40601178619624795,0.5018911254257125,0.6190561700826481,0.6390816433784964,0.6335162042340383,0.6308005494080569,0.5797010916907128,0.2678599857658392,0.20126669894211982,0.0],[0.0,-0.061348021130587155,-0.10213828760473227,-0.5199192550339318,-0.6340160270064075,-0.693025080377732,-0.60047781260556,-0.5292902655946221,-0.47239180707400585,-0.44168930778935706,-0.059727832075186595,0.0595168216226254,0.16866304876426114,0.325085141056143,0.47655393608887414,0.589198367305752,0.7264136233592822,0.7499120828993143,0.7433243254327535,0.7401115805979869,0.6798599249893444,0.315187416717389,0.23642154209678337,0.0],[0.0,-0.0720686526111748,-0.11996396860126064,-0.609200948982149,-0.7433605740568711,-0.8123638626383892,-0.7036332036334912,-0.6200387094764563,-0.5532571690448483,-0.5172472318923611,-0.07020773185914185,0.06962910460935232,0.1976347009706907,0.3810255788581426,0.5585730024566951,0.6906143974025588,0.8512665746583753,0.8787475547423151,0.8709804720879987,0.8672049025245459,0.7964840184325855,0.3698556156859919,0.2774044677144094,0.0],[0.0,-0.07758924788897646,-0.12914898159936247,-0.6553712578477419,-0.7998630136381389,-0.8740214758061111,-0.7569391332767827,-0.6669445441558732,-0.5950641858141342,-0.556311555179092,-0.07560537619212235,0.07486124280964569,0.21260302529677697,0.4099281541291701,0.6009526825888893,0.7430132182528452,0.9157808091136024,0.945315743639082,0.9369404904321343,0.9328743674619085,0.8567550267120201,0.39808715413493156,0.29857636916361086,0.0],[0.0,-0.07962861536671857,-0.132547894266981,-0.6723644176698074,-0.820683825437795,-0.8967292893752967,-0.7765665902425244,-0.6842136212561509,-0.6104503465598626,-0.5706796080132195,-0.07760404929336859,0.0767884739002234,0.21811872899803347,0.4205725478263896,0.6165581925935665,0.7623120296218879,0.9395338477474701,0.9698259487710493,0.9612259254979536,0.9570519040852021,0.8789376276714574,0.40850051208615634,0.30636817556382295,0.0],[0.0,-0.0802092026481324,-0.13351421186498183,-0.6773726461549568,-0.8267807174842563,-0.9033116023221153,-0.7822595242195652,-0.6892262756635925,-0.6149220302536802,-0.5748604480261866,-0.0781662513586277,0.07735323938422743,0.21971848866702665,0.42366175898643244,0.6210897817540468,0.7679109205265537,0.9464280767586641,0.9769334738413089,0.9682677178865443,0.9640628516280773,0.8853807948520859,0.41152534950121844,0.30864854370038947,0.0],[0.0,-0.07905979139780861,-0.13159907668655874,-0.6678661616134857,-0.8151226961791999,-0.8905769924448028,-0.7712508342103863,-0.6795402703341686,-0.6062937778109544,-0.5668039750991093,-0.07704072379743163,0.0762727999943712,0.21662411787741526,0.41769394970813356,0.6123422683911072,0.757090194499319,0.9331072455328704,0.963182500315696,0.9546410605724969,0.9504964344987169,0.872935478776016,0.40568884983852993,0.30428923487558523,0.0],[0.0,-0.07877512549679837,-0.13112420580960896,-0.6655079722193045,-0.8122310205081259,-0.8874188285508589,-0.7685205763045923,-0.6771378664747542,-0.6041535018564059,-0.5648058455439698,-0.0767616843195642,0.07600467165725203,0.21585660508289056,0.4162138641302851,0.6101728105084504,0.7544065536060746,0.9298035686378809,0.9597721767463978,0.9512615439238704,0.9471319030277171,0.8698489520018939,0.40424140161046185,0.3032083383527201,0.0],[0.0,-0.07845356820964128,-0.13058764157966404,-0.6628424887415045,-0.8089627577476567,-0.88384949928518,-0.7654347858634711,-0.6744225501751395,-0.6017343454590091,-0.5625474079968367,-0.07644641239624006,0.07570157152975793,0.2149891417869554,0.41454105160304133,0.6077208579431871,0.7513734858445074,0.9260696935447442,0.9559177879769846,0.9474419625429907,0.943329269255084,0.8663604708528954,0.4026056122988657,0.3019867622365002,0.0],[0.0,-0.07416773615515665,-0.12345291923440664,-0.6271847730701308,-0.7652923895213314,-0.8361534614499976,-0.7241876254290643,-0.6381219979226449,-0.5693846808632137,-0.5323279687271018,-0.07225611509993886,0.0716482618774509,0.20339949755897377,0.39218426587345634,0.5749476401542821,0.7108411762481096,0.8761595155009193,0.9044011100280797,0.8963905899388279,0.892502559523024,0.819719736831349,0.3807778309856106,0.2856539467490168,0.0],[0.0,-0.06063857268499511,-0.10091991420963674,-0.5141551282386898,-0.6269808243824571,-0.6850977170655344,-0.593495243218092,-0.523058208206452,-0.46681263381577515,-0.436501500889535,-0.059035514416489326,0.058772551479775136,0.16667122434969567,0.32136201485898175,0.4711327026683858,0.5824528754393027,0.7180301321608107,0.7411757636361148,0.7346314038250089,0.7314536605876027,0.6719075449354407,0.31173500424626205,0.233986891135609,0.0],[0.0,-0.01659287014437744,-0.02765691069835498,-0.13669499291926213,-0.1678836881464835,-0.18316356341926618,-0.15827524405543733,-0.13920431740487893,-0.12394612404520475,-0.11568852353763683,-0.016289509475899203,0.015513210281753863,0.04452217363476881,0.08585849594239849,0.12583487323401177,0.1556677369580726,0.19153781650359958,0.19769174658733774,0.19587361480827434,0.1949974941484901,0.1787954439584296,0.0840930841064745,0.0627456539618079,0.0],[0.0,-0.01265756387366435,-0.02106473578746349,-0.10436581984310749,-0.1281199203228598,-0.13979204454338248,-0.12080240829569244,-0.10624268649470522,-0.09460448198136005,-0.0883340908115969,-0.012406132320634613,0.011833425131720612,0.033968970707465296,0.06552868576468737,0.09604662903003294,0.11880434136620832,0.14619461617696178,0.1508837835932436,0.14949455410673834,0.14882895957289252,0.13647941527687574,0.06414859930601363,0.04792180870809733,0.0],[0.0,-0.006635812187495712,-0.011036223071302295,-0.054795315096450956,-0.06723944168885176,-0.07337037945271993,-0.06340594145668113,-0.05576331275043153,-0.04966122158895511,-0.046380218716192786,-0.006499285061052098,0.006208572424318279,0.017823809180495295,0.03439323502071481,0.05041422978153186,0.06235380444659747,0.07673612899441343,0.07919376123520319,0.07846441108845965,0.07811584945062548,0.07164183135403236,0.03365428688965117,0.025165978996483623,0.0],[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]],
-    colorscale: 'Viridis',
-    showscale: true,
-    colorbar: { tickfont: { color: theme.text } },
-    contours: { z: { show: false } },
-  }];
-  const layout = {
-    title: { text: 'Coupled reaction-diffusion, v', font: { color: theme.text, size: 14 } },
-    paper_bgcolor: theme.bg,
-    plot_bgcolor: theme.bg,
-    font: { color: theme.text },
-    scene: {
-      camera: {
-        eye: { x: 0, y: 0, z: 2.1 },
-        up: { x: 0, y: 1, z: 0 },
-        projection: { type: 'orthographic' },
-      },
-      xaxis: { title: 'x', color: theme.text, gridcolor: theme.grid, backgroundcolor: theme.bg },
-      yaxis: { title: 'y', color: theme.text, gridcolor: theme.grid, backgroundcolor: theme.bg },
-      zaxis: { title: 'u', color: theme.text, gridcolor: theme.grid, backgroundcolor: theme.bg },
-    },
-    margin: { t: 40, l: 10, r: 10, b: 10 },
-  };
-  Plotly.newPlot('bramble_sp_2', data, layout, { displayModeBar: false, responsive: true });
-  window.brambleRegisterPlotlyChart('bramble_sp_2', function () {
-    const t = window.bramblePlotlyTheme();
-    return {
-      'font.color': t.text,
-      'scene.xaxis.color': t.text, 'scene.xaxis.gridcolor': t.grid, 'scene.xaxis.backgroundcolor': t.bg,
-      'scene.yaxis.color': t.text, 'scene.yaxis.gridcolor': t.grid, 'scene.yaxis.backgroundcolor': t.bg,
-      'scene.zaxis.color': t.text, 'scene.zaxis.gridcolor': t.grid, 'scene.zaxis.backgroundcolor': t.bg,
-      'title.font.color': t.text,
-    };
+  [&quot;nRange&quot;, &quot;meshType&quot;, &quot;aRange&quot;, &quot;bRange&quot;, &quot;gammaRange&quot;, &quot;ratioRange&quot;, &quot;colormapSel&quot;,
+   &quot;crossAxisSel&quot;, &quot;crossPosRange&quot;].forEach(function (id) {
+    document.getElementById(id).addEventListener(&quot;input&quot;, recompute);
   });
+  document.getElementById(&quot;panel2Sel&quot;).addEventListener(&quot;input&quot;, function () {
+    updatePanel2Visibility();
+    recompute();
+  });
+  document.getElementById(&quot;crossPosRange&quot;).addEventListener(&quot;input&quot;, function () {
+    document.getElementById(&quot;crossPosLabel&quot;).textContent = parseFloat(this.value).toFixed(2);
+  });
+
+  attachLinkedCursor();
+  updatePanel2Visibility();
+  if (window.__BRAMBLE_INITIAL_N__) document.getElementById(&quot;nRange&quot;).value = window.__BRAMBLE_INITIAL_N__;
+  recompute();
 })();
 </script>
+</body>
+</html>
+" width="100%" height="760"
+    style="max-width: 760px; border: 1px solid var(--pre-border-color, #d8d8d4); border-radius: 6px;"
+    sandbox="allow-scripts" loading="lazy"></iframe>
 <h2 id="Checking-the-answer"><a class="docs-heading-anchor" href="#Checking-the-answer">Checking the answer</a><a id="Checking-the-answer-1"></a><a class="docs-heading-anchor-permalink" href="#Checking-the-answer" title="Permalink"></a></h2><p>The same nested-random-mesh pattern as every other example, checking each species&#39; own error separately — a routing mistake would show up as one converging correctly while the other silently used the wrong block, which a single combined error could hide. A <em>dense</em> <code>ForwardDiff.jacobian</code> over two coupled species would cost <code>(2n)^2</code> against the scalar examples&#39; <code>n^2</code>, and was what forced this example to stay at three small refinement levels before switching to sparse AD; with it, this reaches five levels — the same order of tens of thousands of degrees of freedom the <a href="../convection_diffusion_linear/">linear coupled example</a> reaches at six — in about a second per level:</p><pre><code class="language-julia hljs">Random.seed!(20260903)
 
 function coupled_series(; n0::Int = 5, levels::Int)
@@ -362,7 +934,7 @@ end
 hs, erru, errv = coupled_series(; levels = 5)
 order_u = log(erru[end - 1] / erru[end]) / log(hs[end - 1] / hs[end])
 order_v = log(errv[end - 1] / errv[end]) / log(hs[end - 1] / hs[end])
-(order_u, order_v)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(1.998070809315084, 1.9904359603737627)</code></pre><pre><code class="language-julia hljs">order_u &gt; 1.9 &amp;&amp; order_v &gt; 1.9</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">true</code></pre><script>
+(order_u, order_v)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(1.9980708093155761, 1.9904359603728763)</code></pre><pre><code class="language-julia hljs">order_u &gt; 1.9 &amp;&amp; order_v &gt; 1.9</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">true</code></pre><script>
   // See the module note above: hide `define` from Plotly's UMD wrapper so it attaches
   // `window.Plotly` instead of registering as an anonymous AMD module.
   window.__bramble_amd_define = window.define;
@@ -426,7 +998,7 @@ order_v = log(errv[end - 1] / errv[end]) / log(hs[end - 1] / hs[end])
   const data = [{
   name: "u",
   x: [0.7281398631056489,0.3640699315528245,0.18203496577641226,0.09101748288820616,0.045508741444103114],
-  y: [0.13509580614559974,0.03655058875874418,0.009285014420413348,0.0023331110596302345,0.0005840582532897437],
+  y: [0.13509580614559974,0.03655058875874418,0.0092850144204161,0.0023331110596354187,0.0005840582532908423],
   mode: 'markers',
   type: 'scatter',
   marker: { color: "#5B5FC7", size: 8 },
@@ -434,7 +1006,7 @@ order_v = log(errv[end - 1] / errv[end]) / log(hs[end - 1] / hs[end])
 {
   name: "v",
   x: [0.7281398631056489,0.3640699315528245,0.18203496577641226,0.09101748288820616,0.045508741444103114],
-  y: [0.8035909996433601,0.23130629735192365,0.06228236898218091,0.015954707817459328,0.004015206879135126],
+  y: [0.8035909996433601,0.2313062973519236,0.0622823689821809,0.015954707817457836,0.004015206879137218],
   mode: 'markers',
   type: 'scatter',
   marker: { color: "#0E7C86", size: 8 },
@@ -442,7 +1014,7 @@ order_v = log(errv[end - 1] / errv[end]) / log(hs[end - 1] / hs[end])
 {
   name: "slope 2",
   x: [0.045508741444103114, 0.7281398631056489],
-  y: [0.0005840582532897437, 0.14951891284217403],
+  y: [0.0005840582532908423, 0.14951891284245528],
   mode: 'lines',
   type: 'scatter',
   line: { dash: 'dash', width: 1.5, color: 'rgba(128,128,128,0.7)' },
@@ -476,4 +1048,4 @@ order_v = log(errv[end - 1] / errv[end]) / log(hs[end - 1] / hs[end])
   });
 })();
 </script>
-<p>Second order for both species, same rate as every other example — the composite space and the quadratic coupling change how the residual and its Jacobian are built, not the discretization&#39;s own accuracy once Newton has converged to it.</p><p><code>coupled_series</code> above uses <code>sparse_ad</code>, the tracer, at every level — <code>native_ad</code>&#39;s substitution (<code>ast_sparsity_detector(a, U -&gt; U(2), U -&gt; U(1))</code> in place of <code>sparse_ad</code>&#39;s <code>sparsity_detector</code>) works here unchanged too. Not re-run a second time here, the same reason <a href="../poisson_nonlinear/#Checking-the-answer">the nonlinear Poisson example</a> does not re-run its own convergence sweep a second time either.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../convection_diffusion_linear/">« Convection-diffusion equation</a><a class="docs-footer-nextpage" href="../elasticity_3d/">Linear elasticity in three dimensions »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Tuesday 15 September 2026 23:50">Tuesday 15 September 2026</span>. Using Julia version 1.13.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+<p>Second order for both species, same rate as every other example — the composite space and the quadratic coupling change how the residual and its Jacobian are built, not the discretization&#39;s own accuracy once Newton has converged to it.</p><p><code>coupled_series</code> above uses <code>sparse_ad</code>, the tracer, at every level — <code>native_ad</code>&#39;s substitution (<code>ast_sparsity_detector(a, U -&gt; U(2), U -&gt; U(1))</code> in place of <code>sparse_ad</code>&#39;s <code>sparsity_detector</code>) works here unchanged too. Not re-run a second time here, the same reason <a href="../poisson_nonlinear/#Checking-the-answer">the nonlinear Poisson example</a> does not re-run its own convergence sweep a second time either.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../convection_diffusion_linear/">« Convection-diffusion equation</a><a class="docs-footer-nextpage" href="../elasticity_3d/">Linear elasticity in three dimensions »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Wednesday 16 September 2026 00:58">Wednesday 16 September 2026</span>. Using Julia version 1.13.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

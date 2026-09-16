@@ -269,3 +269,90 @@ function poisson_interactive_widget(uₕ; title::AbstractString = "", width::Int
     """
     return SolutionPlot(html)
 end
+
+"""
+    coupled_reaction_diffusion_widget(uₕ, vₕ; title = "", width = 760, height = 760) -> SolutionPlot
+
+An interactive panel posing a *different* boundary-value problem in `u`/`v` than the worked
+example solves: source-free (`f1 = f2 = 0`), driven only by a constant Dirichlet supply
+(`u = v = 1`) on the boundary, so every slider has a visible effect instead of being fought
+back to a fixed manufactured answer. Shows synchronized `u_h`/`v_h` heatmaps with a linked
+cursor, sliders for the reaction coefficients `a`, `b`, coupling `γ` and diffusion ratio
+`D_u/D_v`, a `2×2` Jacobian block-sparsity spy plot (`A_uu`, `A_vv` diagonal blocks, `A_uv`,
+`A_vu` pointwise coupling blocks), and a real-time 1D cross-section profile along `x` or `y`.
+
+Like [`poisson_interactive_widget`](@ref), the panel resolves its own block Gauss-Seidel
+Picard iteration in JavaScript rather than replaying the Julia solve — `uₕ`/`vₕ` only set the
+slider's starting resolution (clamped to the widget's `[8, 28]` range). This boundary-value
+problem has no closed-form solution, so discretization error is measured against a solve on a
+fixed, much finer uniform reference mesh instead. Runs in a sandboxed `iframe` (`srcdoc`,
+`allow-scripts` only).
+"""
+function coupled_reaction_diffusion_widget(
+        uₕ, vₕ; title::AbstractString = "", width::Int = 760, height::Int = 760
+)
+    Ωₕ = mesh(space(uₕ))
+    nx, _ = npoints(Ωₕ, Tuple)
+    default_N = clamp(nx - 1, 8, 28)
+
+    raw_html = read(joinpath(@__DIR__, "assets", "widgets", "reaction_diffusion_interactive.html"), String)
+    escaped = replace(raw_html, "&" => "&amp;")
+    escaped = replace(escaped, "\"" => "&quot;")
+    escaped = replace(escaped, "<body>" => "<body>\n<script>window.__BRAMBLE_INITIAL_N__ = $default_N;</script>")
+
+    div_id = _next_solution_plot_id()
+    title_html = isempty(title) ? "" : "<div style=\"font-weight: 500; margin-bottom: 6px;\">$title</div>"
+
+    html = """
+    $title_html
+    <iframe id="$div_id" srcdoc="$escaped" width="100%" height="$height"
+        style="max-width: $(width)px; border: 1px solid var(--pre-border-color, #d8d8d4); border-radius: 6px;"
+        sandbox="allow-scripts" loading="lazy"></iframe>
+    """
+    return SolutionPlot(html)
+end
+
+"""
+    convection_diffusion_interactive_widget(uₕ; title = "", width = 760, height = 640) -> SolutionPlot
+
+An interactive 2D linear convection-diffusion panel: sliders for the Péclet number and flow
+angle, and a centered/upwind stencil switch, drive a matrix-free BiCGSTAB solve in
+JavaScript, with a solution heatmap (a quiver overlay draws the constant advection
+direction) next to a matrix-sparsity or mesh-nodes view, and diagnostics for the cell Péclet
+number, an asymptotic boundary-layer width estimate, a matrix-asymmetry ratio, and the
+discrete ``L^2`` error against a solve on a ``3\\times`` finer grid — no closed-form solution
+exists for this problem (homogeneous equation, ``u = 1`` on the inflow edge and ``u = 0``
+elsewhere on the boundary, chosen so the field itself moves with Pe and the flow angle
+instead of always resolving to the same prescribed answer), so accuracy is measured the
+other standard way. The centered stencil is second order but develops the classic grid-scale
+oscillation once the cell Péclet number passes ``O(1)``; upwind stays first order and
+monotone at every Péclet number.
+
+Like [`poisson_interactive_widget`](@ref), `uₕ` only seeds the slider's starting resolution
+(clamped to the widget's `[8, 48]` range) — the panel resolves its own problem in JavaScript
+rather than replaying the Julia solve. Runs in a sandboxed `iframe` (`srcdoc`,
+`allow-scripts` only).
+"""
+function convection_diffusion_interactive_widget(
+        uₕ; title::AbstractString = "", width::Int = 760, height::Int = 640
+)
+    Ωₕ = mesh(space(uₕ))
+    nx, _ = npoints(Ωₕ, Tuple)
+    default_N = clamp(nx - 1, 8, 48)
+
+    raw_html = read(joinpath(@__DIR__, "assets", "widgets", "convection_diffusion_interactive.html"), String)
+    escaped = replace(raw_html, "&" => "&amp;")
+    escaped = replace(escaped, "\"" => "&quot;")
+    escaped = replace(escaped, "<body>" => "<body>\n<script>window.__BRAMBLE_INITIAL_N__ = $default_N;</script>")
+
+    div_id = _next_solution_plot_id()
+    title_html = isempty(title) ? "" : "<div style=\"font-weight: 500; margin-bottom: 6px;\">$title</div>"
+
+    html = """
+    $title_html
+    <iframe id="$div_id" srcdoc="$escaped" width="100%" height="$height"
+        style="max-width: $(width)px; border: 1px solid var(--pre-border-color, #d8d8d4); border-radius: 6px;"
+        sandbox="allow-scripts" loading="lazy"></iframe>
+    """
+    return SolutionPlot(html)
+end
