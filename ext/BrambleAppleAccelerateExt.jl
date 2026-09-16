@@ -1,7 +1,7 @@
 module BrambleAppleAccelerateExt
 
-using Bramble: Bramble, AccelerateFactorization, BilinearForm, LinearForm, assemble, element, trial_space
-using LinearAlgebra: LinearAlgebra, Factorization, ldiv!, factorize, issymmetric, diag
+using Bramble: Bramble, AccelerateFactorization
+using LinearAlgebra: LinearAlgebra, ldiv!, issymmetric, diag
 using SparseArrays: SparseArrays, SparseMatrixCSC
 
 # AppleAccelerate.jl only defines its sparse factorization types (`AAFactorization` and

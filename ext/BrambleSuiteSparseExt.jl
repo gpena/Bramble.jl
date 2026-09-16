@@ -1,8 +1,8 @@
 module BrambleSuiteSparseExt
 
-using Bramble: Bramble, SuiteSparseFactorization, BilinearForm, LinearForm, assemble, element, trial_space
+using Bramble: Bramble, SuiteSparseFactorization
 using SuiteSparse: SuiteSparse, CHOLMOD, UMFPACK
-using LinearAlgebra: LinearAlgebra, Factorization, ldiv!, factorize, issymmetric, Symmetric, cholesky, cholesky!, lu,
+using LinearAlgebra: LinearAlgebra, Factorization, ldiv!, issymmetric, Symmetric, cholesky, cholesky!, lu,
                      lu!, diag
 using SparseArrays: SparseArrays, SparseMatrixCSC
 
