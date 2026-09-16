@@ -214,14 +214,15 @@ norm₁ₕ(uₕ .- uexact), norm₁ₕ(vₕ .- vexact)
 # ## Visualizing the solution
 #
 # Each species is its own 2D scalar field — `components(wₕ)` gives a view directly onto it, no
-# new solve or copy needed:
+# new solve or copy needed. The panel below is not a replay of the solve above: it runs its own
+# block Gauss-Seidel Picard iteration client-side against the same manufactured solution, so the
+# reaction coefficients `a`, `b`, coupling `γ` and diffusion ratio `D_u/D_v` sliders can be swept
+# without a round trip to Julia — dragging them re-solves both fields and redraws the linked
+# `u_h`/`v_h` heatmaps, the `2×2` Jacobian block-sparsity spy plot, and the cross-section profile
+# in place:
 
 include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
-surface_plot(uₕ; title = "Coupled reaction-diffusion, u") # hide
-
-#-
-
-surface_plot(vₕ; title = "Coupled reaction-diffusion, v") # hide
+coupled_reaction_diffusion_widget(uₕ, vₕ; title = "Coupled reaction-diffusion") # hide
 
 # ## Checking the answer
 #
