@@ -54,6 +54,12 @@ using ExplicitImports
     #   it below.
     # - `CHOLMOD`, `UMFPACK` (BrambleSuiteSparseExt): SuiteSparse's own Cholesky/LU submodules,
     #   reached for the factorization backends.
+    # - `AAFactorization`, `factor!`, `refactor!`, `SparseFactorizationCholesky`,
+    #   `SparseFactorizationLDLT`, `SparseFactorizationLUTPP`, `SparseFactorizationQR`
+    #   (BrambleAppleAccelerateExt): AppleAccelerate's own factorization type and the
+    #   kind/hook names its `factor!`/`refactor!` calls need, none of them public there.
+    # - `finalize!`, `get_sol!`, `set_cntl!`, `set_icntl!`, `suppress_display!`
+    #   (BrambleMUMPSExt): MUMPS's own solver-control API, none of it public there.
     @testset "Non-public imports are the declared ones" begin
         @test check_all_explicit_imports_are_public(
             Bramble;
@@ -70,7 +76,19 @@ using ExplicitImports
                 :_vtk_data,
                 :AbstractSpaceType,
                 :CHOLMOD,
-                :UMFPACK
+                :UMFPACK,
+                :AAFactorization,
+                :factor!,
+                :refactor!,
+                :SparseFactorizationCholesky,
+                :SparseFactorizationLDLT,
+                :SparseFactorizationLUTPP,
+                :SparseFactorizationQR,
+                :finalize!,
+                :get_sol!,
+                :set_cntl!,
+                :set_icntl!,
+                :suppress_display!
             )
         ) === nothing
     end
@@ -109,6 +127,22 @@ using ExplicitImports
     #   warmed by name in the precompile workload rather than through a plotting call, which
     #   this coverage-dependent check had simply not caught loaded alongside the others
     #   before.
+    # - `_sparspak_factorize`, `_sparspak_refactor!`, `_sparspak_solve` (BrambleSparspakExt):
+    #   the preconditioner-building hooks its `factorize`/`refactor!`/`\` methods reach,
+    #   the same underscored-fallback idiom as `_amg_operator` above.
+    # - `_accelerate_factorize`, `_accelerate_refactor!`, `_accelerate_solve`
+    #   (BrambleAppleAccelerateExt): the same underscored-fallback idiom, one entry point
+    #   per AppleAccelerate-backed `factorize`/`refactor!`/`\` method.
+    # - `_mumps_factorize`, `_mumps_refactor!`, `_mumps_solve` (BrambleMUMPSExt): the same
+    #   underscored-fallback idiom again, one entry point per MUMPS-backed
+    #   `factorize`/`refactor!`/`\` method.
+    # - `MPI`, `Init`, `Initialized` (BrambleMUMPSExt): MUMPS's own re-export of its MPI
+    #   submodule, reached once to initialise MPI lazily on first use.
+    # - `FACTOR`, `SOLVE`, `invoke_mumps!` (BrambleMUMPSExt): MUMPS's job-type constants and
+    #   the low-level driver call its `ldiv!`/`refactor!` methods issue directly.
+    # - `_suitesparse_factorize`, `_suitesparse_refactor!`, `_suitesparse_solve`
+    #   (BrambleSuiteSparseExt): the same underscored-fallback idiom again, one entry point
+    #   per SuiteSparse-backed `factorize`/`refactor!`/`\` method.
     @testset "Non-public qualified accesses are the declared ones" begin
         @test check_all_qualified_accesses_are_public(
             Bramble;
@@ -141,7 +175,25 @@ using ExplicitImports
                 :_ilu_preconditioner,
                 :_export_vtk_collection,
                 :_export_vtk_solution,
-                :apply_recipe
+                :apply_recipe,
+                :_sparspak_factorize,
+                :_sparspak_refactor!,
+                :_sparspak_solve,
+                :_accelerate_factorize,
+                :_accelerate_refactor!,
+                :_accelerate_solve,
+                :_mumps_factorize,
+                :_mumps_refactor!,
+                :_mumps_solve,
+                :MPI,
+                :Init,
+                :Initialized,
+                :FACTOR,
+                :SOLVE,
+                :invoke_mumps!,
+                :_suitesparse_factorize,
+                :_suitesparse_refactor!,
+                :_suitesparse_solve
             )
         ) === nothing
     end
