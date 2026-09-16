@@ -116,18 +116,18 @@ A = assemble(a; dirichlet = :boundary)
 ## Workflow architecture
 
 ```
-┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│    Domain    │ ──> │     Mesh     │ ──> │  Grid Space  │
-│  (Intervals, │     │ (Primary and │     │ (Scalar and  │
-│   Markers)   │     │  Dual Grids) │     │  Composite)  │
-└──────────────┘     └──────────────┘     └──────────────┘
-                                                  │
-                                                  ▼
-┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│ Linear Solve │ <── │   Assemble   │ <── │ Form Syntax  │
-│  (A \ F or   │     │ (Sparse CSC, │     │ (Bilinear,   │
+╭──────────────╮     ╭──────────────╮     ╭──────────────╮
+│    Domain    │     │     Mesh     │     │  Grid Space  │
+│ (Intervals,  │ ━━► │ (Primary and │ ━━► │  (Scalar &   │
+│   Markers)   │     │ Dual Grids)  │     │  Composite)  │
+╰──────────────╯     ╰──────────────╯     ╰──────┬───────╯
+                                                 │
+                                                 ▼
+╭──────────────╮     ╭──────────────╮     ╭──────────────╮
+│ Linear Solve │     │   Assemble   │     │ Form Syntax  │
+│   (A \ F /   │ ◄━━ │ (Sparse CSC, │ ◄━━ │  (Bilinear,  │
 │  Iterative)  │     │ Constraints) │     │   Linear)    │
-└──────────────┘     └──────────────┘     └──────────────┘
+╰──────────────╯     ╰──────────────╯     ╰──────────────╯
 ```
 
 ---
