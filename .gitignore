@@ -78,7 +78,6 @@ LocalPreferences.toml
 manual/
 presentation/
 docs/manual_design_preview.html
-docs/preview_poisson_interactive.html
 
 # Agent instructions and the standards index they point into, kept local alongside
 # .agents/ and .claude/ above. Both are about *working on* the package, and both index
