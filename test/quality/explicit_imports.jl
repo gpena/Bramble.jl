@@ -92,8 +92,12 @@ using ExplicitImports
     #   tries to replace a method during precompilation.
     # - `AbstractSpaceType` (BrambleSciMLExt): narrows the `element`/`VectorElement` unwrap
     #   methods for a `LinearSolution`, the same reason the doctring next to them gives.
-    # - `_amg_operator` (BrambleAlgebraicMultigridExt): the preconditioner-building hook
-    #   `solve`'s `preconditioner = :amg` keyword reaches.
+    # - `_amg_operator` (BrambleAlgebraicMultigridExt), `_ilu_operator` (BrambleILUZeroExt):
+    #   the preconditioner-building hooks `solve`'s `preconditioner = :amg`/`:ilu0` keywords
+    #   reach.
+    # - `_amg_preconditioner` (BrambleAlgebraicMultigridExt), `_ilu_preconditioner`
+    #   (BrambleILUZeroExt): the public `amg_preconditioner`/`ilu_preconditioner` functions'
+    #   own underscored fallbacks.
     # - `_export_vtk_collection` (BrambleVTKExt), `_export_vtk_solution`
     #   (BrambleVTKSciMLExt): the same underscored-fallback idiom as `_export_vtk` above, one
     #   entry point per `export_vtk` method that needs a weak dependency.
@@ -128,6 +132,9 @@ using ExplicitImports
                 :_export_vtk,
                 :AbstractSpaceType,
                 :_amg_operator,
+                :_amg_preconditioner,
+                :_ilu_operator,
+                :_ilu_preconditioner,
                 :_export_vtk_collection,
                 :_export_vtk_solution,
                 :apply_recipe
