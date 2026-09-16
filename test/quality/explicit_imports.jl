@@ -52,6 +52,8 @@ using ExplicitImports
     # - `AbstractSpaceType` (BrambleVTKSciMLExt): narrows `export_vtk`'s solution-export
     #   method to a real discretisation space, the same reason `BrambleSciMLExt` reaches for
     #   it below.
+    # - `CHOLMOD`, `UMFPACK` (BrambleSuiteSparseExt): SuiteSparse's own Cholesky/LU submodules,
+    #   reached for the factorization backends.
     @testset "Non-public imports are the declared ones" begin
         @test check_all_explicit_imports_are_public(
             Bramble;
@@ -66,7 +68,9 @@ using ExplicitImports
                 :trial_space,
                 :_vtk_axes,
                 :_vtk_data,
-                :AbstractSpaceType
+                :AbstractSpaceType,
+                :CHOLMOD,
+                :UMFPACK
             )
         ) === nothing
     end
