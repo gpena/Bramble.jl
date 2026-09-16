@@ -177,6 +177,143 @@ sparspak_solve
 sparspak_refactor!
 ```
 
+## JuliaSparse ecosystem evaluation
+
+[gpena/Bramble.jl#244](https://github.com/gpena/Bramble.jl/issues/244) asked whether other
+packages in the [JuliaSparse](https://github.com/JuliaSparse) organization and its
+neighbours are worth adopting for assembly, direct solves, or iterative preconditioning.
+Each candidate below was installed on Julia 1.12 and measured directly against Bramble's
+own functions -- never a synthetic microbenchmark standing in for them (see
+`bramble-verification`) -- so a "no" here is a measured "no", not a guess. Numbers are a
+single run on one machine, not a tracked baseline; treat them as directional.
+
+### Assembly & storage formats
+
+**`SparseMatricesCOO.jl`: not adopted.** Bramble's own assembly already skips the triplet
+stage entirely: `assemble` determines the sparsity pattern once (`PatternSink`, the
+lock-free colouring sweep documented in [Forms](internals/form.md)) and every subsequent call writes
+straight into `nzval` via `add_to_sparse!`, never building `(I, J, V)` at all. Measured on
+a 2D 60×60 Poisson system (`n = 3600`, `nnz = 17760`):
+
+| Path | Time |
+|:--- |:--- |
+| Bramble `assemble` (first call, builds the pattern) | 0.37 ms |
+| Bramble `assemble` (repeat call, pattern cached) | 0.37 ms |
+| `Base.sparse(I, J, V)` on the identical triplets | 0.06 ms |
+| `SparseMatricesCOO.jl` COO→CSC on the identical triplets | 203 **seconds** |
+
+`SparseMatricesCOO.jl` defines no specialised `SparseMatrixCSC(::SparseMatrixCOO)`
+constructor, so the conversion falls through to Julia's generic dense-iteration
+`AbstractMatrix` fallback -- an `O(m \cdot n \cdot \mathrm{nnz})` scan through every
+`getindex`, itself an `O(\mathrm{nnz})` linear search of the triplet arrays (confirmed by
+reading `SparseMatricesCOO.jl`'s source, not assumed from the number alone). The package
+is designed by [JuliaSmoothOptimizers](https://github.com/JuliaSmoothOptimizers) as an
+NLP-solver interop format (handing Jacobian/Hessian triplets to IPOPT-style solvers that
+want COO directly), not as a fast intermediate for building a `SparseMatrixCSC` -- the
+wrong tool for what this issue asked it to do here. Bramble's first assembly is already
+about as fast as its thousandth, which is the actual bar a triplet library would need to
+clear.
+
+**`SymRCM.jl`**: evaluated under reordering, below -- not for assembly.
+
+### Direct sparse solvers
+
+**Sparspak.jl: done, not re-evaluated here.** Built in
+[gpena/Bramble.jl#247](https://github.com/gpena/Bramble.jl/issues/247); see
+[Sparspak sparse direct solver (pure Julia)](@ref) above.
+
+**`Pardiso.jl`: not adopted, for a licensing reason rather than a technical one.**
+`Pardiso.jl` bridges to one of two backends, and neither is available without something
+Bramble cannot bundle:
+- Intel MKL PARDISO needs a separately installed MKL; `Pardiso.mkl_is_available()` is
+  `false` on a plain Julia 1.12 environment, and constructing an `MKLPardisoSolver` throws
+  `"MKL is not available"`.
+- Panua (formerly the free academic) PARDISO needs a separately downloaded, licensed
+  shared library; constructing a `PardisoSolver` throws `"Panua pardiso library was not
+  loaded"`.
+
+Both were reproduced directly (not assumed) on a fresh Julia 1.12 environment. This is the
+same shape of blocker that closed
+[gpena/Bramble.jl#245](https://github.com/gpena/Bramble.jl/issues/245) (`ThreadedSparseCSR.jl`)
+as won't-fix: a real, verified dependency the package cannot satisfy on behalf of a user,
+rather than missing integration work. A user who already holds an MKL or Panua license and
+wants to use it can still call `Pardiso.jl` directly against `A`/`F` from
+[`assemble`](@ref) -- nothing in Bramble stands in the way of that -- it is just not
+something this package can wire up as a first-class `solver` option for everyone.
+
+### Iterative solvers & preconditioners
+
+Krylov methods are already reachable through `solve` with `solver =
+KrylovJL_GMRES()` etc. (`BrambleSciMLExt`), and [`amg_preconditioner`](@ref) already covers
+algebraic multigrid preconditioning. What #244 asked to evaluate is whether `ILUZero.jl` /
+`IncompleteLU.jl` add anything beyond that. Measured on an unsymmetric 2D convection-diffusion
+system (90×90 grid, `n = 8100`, diffusion `1\mathrm{e}{-2}` against unit advection in both
+directions -- the convection-dominated regime the issue named), unrestarted GMRES to
+`atol = rtol = 1\mathrm{e}{-10}`:
+
+| Preconditioner | Time | Iterations | Converged |
+|:--- |:--- |:--- |:--- |
+| none | 51.4 ms | 179 | yes |
+| AMG (`ruge_stuben`) | 6475.9 ms | 2000 (capped) | **no** |
+| `IncompleteLU.jl` (τ = 0.01) | 19.6 ms | 95 | yes |
+| `ILUZero.jl` (ILU(0)) | 4.5 ms | 18 | yes |
+
+Classical algebraic multigrid assumes something close to an M-matrix and does not fail
+gracefully once advection dominates diffusion this strongly -- it neither converges nor
+finishes quickly here, which is a known limitation of `ruge_stuben`-style coarsening on
+non-symmetric, convection-dominated operators, not a bug in `AlgebraicMultigrid.jl`.
+`ILUZero.jl`'s zero-fill ILU(0), reusing `A`'s own sparsity pattern, is the clear winner:
+about 11× fewer iterations and 11× less wall time than no preconditioner, and 4× less than
+`IncompleteLU.jl`'s drop-tolerance variant, at a fraction of the setup cost either of the
+others carries. This is a real, actionable finding: an `ilu_preconditioner` extension
+mirroring [`amg_preconditioner`](@ref)'s shape (`ILUZero.jl`, zero binary dependency) is
+worth a dedicated follow-up issue for convection-dominated forms, where AMG is this
+issue's own worked counter-example for why it should not be the only option offered.
+
+`Metis.jl`'s graph partitioning was evaluated under reordering, not as a preconditioner,
+below.
+
+### Fill-reducing reordering
+
+Measured on a 3D 24×24×24 Poisson system (`n = 13824`, `nnz = 93312`), CHOLMOD Cholesky
+factorization with three orderings:
+
+| Ordering | Factor time | `nnz(L)` |
+|:--- |:--- |:--- |
+| CHOLMOD default (built-in AMD) | 25.0 ms | 2,147,132 |
+| `Metis.jl` (nested dissection) | 20.1 ms | 1,654,868 |
+| `SymRCM.jl` (Cuthill-McKee) | 53.3 ms | 4,768,508 |
+
+`Metis.jl`'s nested-dissection ordering measurably beats CHOLMOD's own default AMD here --
+about 20% less factorization time and 23% less fill -- a genuine, reproducible win on a 3D
+system. `SymRCM.jl` is worse on both counts: Cuthill-McKee minimises bandwidth, not fill,
+and 3D discretizations are exactly where that distinction costs the most. Both orderings
+reach `suitesparse_factorize`/`sparse_factorize` **today, with no new extension needed** --
+[gpena/Bramble.jl#248](https://github.com/gpena/Bramble.jl/issues/248) already forwards a
+`perm` keyword straight to CHOLMOD:
+
+```julia
+using Metis
+perm, _ = Metis.permutation(A)
+fact = suitesparse_factorize(A; sym = :spd, perm = Int.(perm))
+```
+
+`Metis.jl` is worth naming explicitly in the ordering documentation rather than building
+anything further for it.
+
+### Summary
+
+| Package | Verdict |
+|:--- |:--- |
+| `SparseMatricesCOO.jl` | Not adopted -- wrong tool for this use, and Bramble's own path is already faster |
+| `Sparspak.jl` | Done -- [#247](https://github.com/gpena/Bramble.jl/issues/247) |
+| `Pardiso.jl` | Not adopted -- no usable backend without a separate license, same shape as [#245](https://github.com/gpena/Bramble.jl/issues/245) |
+| `Krylov.jl` | Already available via `solve`'s `solver` keyword |
+| `IncompleteLU.jl` | Works, but `ILUZero.jl` dominates it here |
+| `ILUZero.jl` | **Recommended** -- clear win for convection-dominated systems; candidate for a future `ilu_preconditioner` extension |
+| `Metis.jl` | **Recommended** -- genuine fill/time win on 3D systems, usable today via existing `perm` forwarding |
+| `SymRCM.jl` | Not adopted -- worse fill than the CHOLMOD default on the systems Bramble assembles |
+
 ## Caching a coefficient-dependent assembly by element type
 
 A Newton residual generic over `T` (`Float64` on a plain call, `ForwardDiff.Dual` while an
