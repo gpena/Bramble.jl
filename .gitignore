@@ -24,6 +24,7 @@ docs/src/examples/coupled_reaction_diffusion.md
 docs/src/examples/elasticity_3d.md
 docs/src/examples/heat_equation.md
 docs/src/examples/amg_preconditioning.md
+docs/src/examples/inverse_diffusion.md
 
 # LaTeX build artifacts from the manual. Scoped to manual/ rather than global, so a .tex
 # file kept deliberately elsewhere — a figure source, say — is unaffected.

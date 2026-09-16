@@ -53,7 +53,8 @@ tutorials = "Tutorials" => [
     "tutorials/autodiff.md",
     "tutorials/vtk_export.md",
     "tutorials/pgfplots_export.md",
-    "tutorials/plotting.md"
+    "tutorials/plotting.md",
+    "tutorials/solvers.md"
 ]
 examples = "Examples" => [
     "examples/poisson_linear.md",
