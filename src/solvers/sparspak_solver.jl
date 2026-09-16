@@ -3,8 +3,8 @@
 # `sparspak_factorize`/`sparspak_solve`: pure-Julia sparse direct LU factorization (the
 # Waterloo Sparse Linear Equations Package, George & Liu) for the sparse linear systems
 # Bramble discretizes, with zero binary dependencies. Implemented in `BrambleSparspakExt`,
-# same underscored-fallback idiom as `mumps_factorize` (form/mumps_solver.jl) and
-# `accelerate_factorize` (form/accelerate_solver.jl). Unlike SuiteSparse or MUMPS, Sparspak's
+# same underscored-fallback idiom as `mumps_factorize` (solvers/mumps_solver.jl) and
+# `accelerate_factorize` (solvers/accelerate_solver.jl). Unlike SuiteSparse or MUMPS, Sparspak's
 # factorization is generic over the matrix element type, so it also factors matrices of
 # `Float32`, `BigFloat`, or `ForwardDiff.Dual` entries.
 

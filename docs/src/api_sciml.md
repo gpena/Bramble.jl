@@ -108,6 +108,33 @@ Requires [AlgebraicMultigrid.jl](https://github.com/JuliaLinearAlgebra/Algebraic
 amg_preconditioner
 ```
 
+## ILU(0) preconditioning for convection-dominated systems
+
+[gpena/Bramble.jl#244](https://github.com/gpena/Bramble.jl/issues/244) measured classical
+algebraic multigrid failing to converge on an unsymmetric, convection-dominated system
+(diffusion `1e-2` against unit advection, `ruge_stuben` capped at 2000 GMRES iterations
+without converging) -- AMG assumes something close to an M-matrix, which strong advection
+breaks. `ILUZero.jl`'s zero-fill incomplete LU (ILU(0)) does not share that assumption: on
+the same system, GMRES took 18 iterations against 179 unpreconditioned, at a fraction of
+AMG's setup cost, since ILU(0) reuses `A`'s own sparsity pattern with no fill-in parameter to
+tune. `ilu_preconditioner` mirrors [`amg_preconditioner`](@ref)'s shape, but returns an
+object with `ldiv!` directly -- `ILUZero.ilu0` needs no `aspreconditioner`-style wrapping the
+way an AMG hierarchy does. `solve(a::BilinearForm, l::LinearForm; ...)` takes
+`preconditioner = :ilu0` the same way it takes `:amg`.
+
+**When to prefer which**: AMG's grid-independent, `O(1)` iteration count wins at scale on
+elliptic, symmetric positive-definite forms (Poisson, diffusion-dominated), where its
+M-matrix-like assumption holds. ILU(0) is the better default for unsymmetric,
+convection-dominated forms, where AMG is this issue's own worked counter-example for why it
+should not be the only option offered -- see [`amg_preconditioner`](@ref) for the elliptic
+case.
+
+Requires [ILUZero.jl](https://github.com/mohamed82008/ILUZero.jl).
+
+```@docs
+ilu_preconditioner
+```
+
 ## Sparse direct solvers and factorization reuse
 
 Bramble provides dedicated, first-class extensions for high-performance sparse linear solvers:
@@ -265,10 +292,10 @@ non-symmetric, convection-dominated operators, not a bug in `AlgebraicMultigrid.
 `ILUZero.jl`'s zero-fill ILU(0), reusing `A`'s own sparsity pattern, is the clear winner:
 about 11× fewer iterations and 11× less wall time than no preconditioner, and 4× less than
 `IncompleteLU.jl`'s drop-tolerance variant, at a fraction of the setup cost either of the
-others carries. This is a real, actionable finding: an `ilu_preconditioner` extension
-mirroring [`amg_preconditioner`](@ref)'s shape (`ILUZero.jl`, zero binary dependency) is
-worth a dedicated follow-up issue for convection-dominated forms, where AMG is this
-issue's own worked counter-example for why it should not be the only option offered.
+others carries. Built as [`ilu_preconditioner`](@ref) in
+[gpena/Bramble.jl#255](https://github.com/gpena/Bramble.jl/issues/255), mirroring
+[`amg_preconditioner`](@ref)'s shape -- see "ILU(0) preconditioning for convection-dominated
+systems" above.
 
 `Metis.jl`'s graph partitioning was evaluated under reordering, not as a preconditioner,
 below.
@@ -310,7 +337,7 @@ anything further for it.
 | `Pardiso.jl` | Not adopted -- no usable backend without a separate license, same shape as [#245](https://github.com/gpena/Bramble.jl/issues/245) |
 | `Krylov.jl` | Already available via `solve`'s `solver` keyword |
 | `IncompleteLU.jl` | Works, but `ILUZero.jl` dominates it here |
-| `ILUZero.jl` | **Recommended** -- clear win for convection-dominated systems; candidate for a future `ilu_preconditioner` extension |
+| `ILUZero.jl` | Done -- [`ilu_preconditioner`](@ref), [#255](https://github.com/gpena/Bramble.jl/issues/255) |
 | `Metis.jl` | **Recommended** -- genuine fill/time win on 3D systems, usable today via existing `perm` forwarding |
 | `SymRCM.jl` | Not adopted -- worse fill than the CHOLMOD default on the systems Bramble assembles |
 

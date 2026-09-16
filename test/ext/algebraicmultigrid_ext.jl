@@ -8,7 +8,7 @@ using LinearSolve: KrylovJL_CG
 using LinearAlgebra: norm, issymmetric
 
 # BrambleAlgebraicMultigridExt: `amg_preconditioner` builds the AMG hierarchy
-# (form/amg_preconditioner.jl explains the underscored-fallback idiom), and
+# (solvers/amg_preconditioner.jl explains the underscored-fallback idiom), and
 # `BrambleSciMLExt`'s `preconditioner = :amg` reaches the same hierarchy, wrapped by
 # `AlgebraicMultigrid.aspreconditioner`, through `solve`. What is checked here: the
 # hierarchy from a plain matrix and from a `BilinearForm` agree, `aspreconditioner` of the
@@ -83,7 +83,7 @@ end
         ml_matrix = amg_preconditioner(A)
         @test ml_matrix isa AlgebraicMultigrid.MultiLevel
 
-        # `assemble(a; dirichlet = ...)` alone does not symmetrize (form/amg_preconditioner.jl
+        # `assemble(a; dirichlet = ...)` alone does not symmetrize (solvers/amg_preconditioner.jl
         # documents why), so the `BilinearForm` method's own matrix differs from the
         # symmetrized `A` above by the boundary columns only -- both are still valid AMG
         # input, and this checks the convenience path actually reaches the same routine.

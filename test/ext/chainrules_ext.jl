@@ -6,7 +6,7 @@ using ChainRulesCore: ChainRulesCore, rrule
 using SparseArrays
 using LinearAlgebra: Tridiagonal
 
-# BrambleChainRulesExt: the `ChainRulesCore.rrule` for `pde_solve` (src/form/pde_solve.jl
+# BrambleChainRulesExt: the `ChainRulesCore.rrule` for `pde_solve` (src/solvers/pde_solve.jl
 # explains why this one function is the entire adjoint story -- `assemble`/`dirichlet_bc!`
 # are already reverse-mode-differentiable on their own). What is checked here needs no
 # reverse-mode AD package at all, only `ChainRulesCore` itself: the rrule's raw pullback

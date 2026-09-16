@@ -8,7 +8,7 @@ using PrecompileTools: @setup_workload, @compile_workload
 
 # Gated on `ChainRulesCore` alone -- no `SciMLBase`/`LinearSolve` coupling, so a caller who
 # only wants gradients through a Bramble solve never needs either. `pde_solve`'s own docstring
-# (`src/form/pde_solve.jl`) explains why this one function is the entire adjoint story: nothing
+# (`src/solvers/pde_solve.jl`) explains why this one function is the entire adjoint story: nothing
 # else in the assemble/Dirichlet path needs a hand-written rule, since it is already
 # reverse-mode-differentiable on its own.
 

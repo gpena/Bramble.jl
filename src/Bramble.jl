@@ -131,6 +131,7 @@ public jacobian!
 export jacobian_prototype
 export ode_function, ode_problem, linear_problem, nonlinear_problem
 export amg_preconditioner
+export ilu_preconditioner
 export second_order_ode_function, second_order_ode_problem
 export SuiteSparseFactorization, suitesparse_factorize, suitesparse_solve, suitesparse_refactor!
 export suitesparse_qr_factorize, suitesparse_qr_solve
@@ -210,13 +211,14 @@ include("form/symmetry.jl")
 include("form/semidiscrete.jl")
 include("form/second_order_semidiscrete.jl")
 include("form/nonlinear_problem.jl")
-include("form/amg_preconditioner.jl")
-include("form/suitesparse_solver.jl")
-include("form/accelerate_solver.jl")
-include("form/mumps_solver.jl")
-include("form/sparspak_solver.jl")
-include("form/sparse_solvers.jl")
-include("form/pde_solve.jl")
+include("solvers/amg_preconditioner.jl")
+include("solvers/ilu_preconditioner.jl")
+include("solvers/suitesparse_solver.jl")
+include("solvers/accelerate_solver.jl")
+include("solvers/mumps_solver.jl")
+include("solvers/sparspak_solver.jl")
+include("solvers/sparse_solvers.jl")
+include("solvers/pde_solve.jl")
 
 include("exporters/vtk_export.jl")
 include("exporters/pgfplots_export.jl")

@@ -3,7 +3,7 @@
 # `mumps_factorize`/`mumps_solve`: MUMPS (MUltifrontal Massively Parallel sparse direct
 # Solver) parallel multifrontal LU, LDLᵀ, and Cholesky factorizations for the sparse
 # linear systems Bramble discretizes. Implemented in `BrambleMUMPSExt`, same
-# underscored-fallback idiom as `amg_preconditioner` (form/amg_preconditioner.jl) and
+# underscored-fallback idiom as `amg_preconditioner` (solvers/amg_preconditioner.jl) and
 # `linear_problem` (form/semidiscrete.jl).
 
 """

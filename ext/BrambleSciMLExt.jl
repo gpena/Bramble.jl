@@ -176,7 +176,10 @@ bare coefficient vector to wrap by hand.
   picks its own default.
 - `preconditioner`: `:amg` to precondition an iterative `solver` with
   [`amg_preconditioner`](@ref) (requires
-  [AlgebraicMultigrid.jl](https://github.com/JuliaLinearAlgebra/AlgebraicMultigrid.jl)), an
+  [AlgebraicMultigrid.jl](https://github.com/JuliaLinearAlgebra/AlgebraicMultigrid.jl)),
+  `:ilu0` for [`ilu_preconditioner`](@ref) (requires
+  [ILUZero.jl](https://github.com/mohamed82008/ILUZero.jl); a better fit than `:amg` for
+  unsymmetric, convection-dominated forms, see [`ilu_preconditioner`](@ref)), an
   already-built object with `ldiv!` to use as-is, or `nothing` (default) for none. Passed as
   `LinearSolve`'s `Pl` -- a `LinearProblem`'s own `Pl`/`Pr` keywords are not honoured by its
   Krylov algorithms, only ones given to `solve` itself, so this keyword lives here rather
@@ -192,7 +195,8 @@ using AlgebraicMultigrid
 uₕ = solve(a, l; dirichlet = bcs, solver = KrylovJL_CG(), preconditioner = :amg)
 ```
 
-See also [`linear_problem`](@ref), [`amg_preconditioner`](@ref), [`element`](@ref).
+See also [`linear_problem`](@ref), [`amg_preconditioner`](@ref), [`ilu_preconditioner`](@ref),
+[`element`](@ref).
 """
 function SciMLBase.solve(
         a::BilinearForm, l::LinearForm;
@@ -212,15 +216,22 @@ end
 # `preconditioner` is resolved here rather than inside `_linear_problem` -- a `LinearProblem`
 # built with `Pl`/`Pr` in its own keywords does not actually reach a Krylov algorithm's
 # solve; only a `Pl` given to `solve` itself does, verified against `LinearSolve` directly.
-# `:amg` reaches AMG through `Bramble._amg_operator`, `BrambleAlgebraicMultigridExt`'s
-# fallback-idiom counterpart to `_amg_preconditioner` (form/amg_preconditioner.jl) -- this
-# extension calls it without ever depending on `AlgebraicMultigrid` itself.
+# `:amg`/`:ilu0` reach AMG/ILU(0) through `Bramble._amg_operator`/`Bramble._ilu_operator`,
+# `BrambleAlgebraicMultigridExt`/`BrambleILUZeroExt`'s fallback-idiom counterparts to
+# `_amg_preconditioner`/`_ilu_preconditioner` (solvers/amg_preconditioner.jl,
+# solvers/ilu_preconditioner.jl) -- this extension calls them without ever depending on
+# `AlgebraicMultigrid`/`ILUZero` itself.
 _preconditioner_operator(::Nothing, ::AbstractMatrix) = nothing
 function _preconditioner_operator(preconditioner::Symbol, A::AbstractMatrix)
-    preconditioner === :amg || throw(
-        ArgumentError("Unknown preconditioner: $preconditioner. Expected :amg or nothing."),
-    )
-    return Bramble._amg_operator(A)
+    if preconditioner === :amg
+        return Bramble._amg_operator(A)
+    elseif preconditioner === :ilu0
+        return Bramble._ilu_operator(A)
+    else
+        throw(
+            ArgumentError("Unknown preconditioner: $preconditioner. Expected :amg, :ilu0, or nothing."),
+        )
+    end
 end
 _preconditioner_operator(preconditioner, ::AbstractMatrix) = preconditioner
 

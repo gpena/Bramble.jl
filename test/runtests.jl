@@ -193,6 +193,7 @@ if __bramble_with_ext_backends
         include("ext/ad_backend_verification.jl")
         include("ext/sciml_ext.jl")
         include("ext/algebraicmultigrid_ext.jl")
+        include("ext/iluzero_ext.jl")
         include("ext/suitesparse_ext.jl")
         include("ext/appleaccelerate_ext.jl")
         include("ext/mumps_ext.jl")
