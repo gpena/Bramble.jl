@@ -12,10 +12,17 @@ subtree underneath it. Fewer top-level `OperatorAdd` nodes is therefore fewer sw
 same matrix or vector:
 
   - `c * A + c * B` (same `c`, different `A`/`B`) factors to `c * (A + B)`: two routed terms
-    become one.
+    become one. Only for an `Integer` `c`, for the same reason the zero collapse below is --
+    "same `c`" is decided by comparing the two coefficients, and a comparison of two runtime
+    numbers is not something the compiler can settle. A shared `Ref` still factors: that
+    comparison is object identity.
   - `c1 * A + c2 * A` (same `A`) combines to `(c1 + c2) * A`: two routed terms become one.
   - `0 * A` collapses to a zero term with a one-point sparsity pattern instead of `A`'s full
-    stencil, and `A + 0` / `0 + A` drops the zero term from the tree entirely.
+    stencil, and `A + 0` / `0 + A` drops the zero term from the tree entirely. Only for an
+    `Integer` coefficient -- `0.0 * A` keeps its term. See `_wrap_scale` below for why
+    (gpena/Bramble.jl#240): that collapse reads the coefficient's *value*, so allowing it on
+    a `Float64` would make `form`'s return type depend on a number the compiler need not
+    know.
 
 Two more rules reach one layer deeper, into `BilinearProduct`/`LinearProduct` (the nodes
 `innerₕ`/`inner₊`/... build) and `ShiftNode`, because leaving them out would mean either a
@@ -69,11 +76,29 @@ grid functions and components involved, not an approximation.
 
 # `c * A` for a coefficient just computed by combining/factoring/lifting -- collapsing back
 # to the identity/zero cases a fresh `OperatorScale(c, A)` would otherwise re-introduce.
-@inline function _wrap_scale(c::Number, A::LazyOp)
+#
+# Only for an `Integer` coefficient, and that restriction is the whole point
+# (gpena/Bramble.jl#240). Collapsing on the *value* of `c` makes the node type this returns
+# -- and so the `AST` type parameter of the `BilinearForm`/`LinearForm` built from it --
+# depend on a number the compiler may not know: with `c` a runtime `Float64`, `form` infers
+# as `Union{BilinearForm{...,ZeroOperator}, BilinearForm{...,OperatorScale},
+# BilinearForm{...,<inner>}}` instead of one concrete type. That costs every caller a
+# dynamic dispatch through the assembly engine, and it is exactly the `Union` Enzyme's
+# strict-aliasing type analysis rejects with `IllegalTypeAnalysisException`, which is what
+# blocks a gradient with respect to an operator's own coefficient.
+#
+# An `Integer` coefficient keeps the collapse because that is where it is worth having: `1`
+# is what `_scale_parts` reports for every bare node (so every lifted inner product would
+# otherwise gain a `1 *` wrapper it never had), `0` is what `A - A` and `A + 0 * B` reduce
+# to, and no AD backend differentiates an `Integer`. A floating-point coefficient is treated
+# as an opaque runtime value instead -- write `0 * A` / `1 * A`, not `0.0 * A` / `1.0 * A`,
+# to get the structural collapse.
+@inline function _wrap_scale(c::Integer, A::LazyOp)
     iszero(c) && return _zero_of(A)
     isone(c) && return A
     return OperatorScale(c, A)
 end
+@inline _wrap_scale(c::Number, A::LazyOp) = OperatorScale(c, A)
 # A `RefValue` coefficient is never statically zero or one; wrap unconditionally.
 @inline _wrap_scale(c::Base.RefValue, A::LazyOp) = OperatorScale(c, A)
 
@@ -203,12 +228,20 @@ function simplify_ast(op::OperatorScale)
         )
     end
 
-    if op.scalar isa Number
+    # `Integer`, not `Number`, and for the reason `_wrap_scale` spells out: collapsing on the
+    # value of a `Float64` coefficient makes this method's return type depend on a number the
+    # compiler may not know (gpena/Bramble.jl#240).
+    if op.scalar isa Integer
         iszero(op.scalar) && return _zero_of(inner)
         isone(op.scalar) && return inner
+    end
+
+    if op.scalar isa Number
         # `c1 * (c2 * A) -> (c1 * c2) * A`, only when both scalars are static numbers: a
         # `RefValue` on either side can change after construction, so folding through one
-        # would bake in whatever value it happened to hold right now.
+        # would bake in whatever value it happened to hold right now. Type-stable whatever
+        # the values are: both operands' types are known here, so `_wrap_scale` dispatches
+        # on a known type and the product's type follows from them alone.
         if inner isa OperatorScale && inner.scalar isa Number
             return _wrap_scale(op.scalar * inner.scalar, inner.inner_op)
         end
@@ -265,8 +298,8 @@ function simplify_ast(op::OperatorAdd)
         # 2*(c*A)`, true for whatever `c` holds at assembly time.
         cl === cr && return _wrap_scale(2, left)
     elseif (left isa OperatorScale || right isa OperatorScale) &&
-           cl isa Number &&
-           cr isa Number &&
+           cl isa Integer &&
+           cr isa Integer &&
            cl == cr &&
            !_mixes_components(al, ar)
         # Factor a common static scalar out of two different subtrees: `c*A + c*B ->
@@ -276,6 +309,16 @@ function simplify_ast(op::OperatorAdd)
         # otherwise this pass would not be idempotent on its own output. Guarded on
         # `!_mixes_components` too: factoring `A`/`B` naming different components would
         # hide the exact shape the router cannot route as one term.
+        #
+        # `Integer`, not `Number`, for the reason `_wrap_scale` gives (gpena/Bramble.jl#240):
+        # whether this rule fires is decided by comparing two coefficients, so with `Float64`
+        # coefficients the *type* of what this method returns -- `OperatorScale` here,
+        # `OperatorAdd` at the bottom -- depends on a comparison the compiler cannot make.
+        # That is a `Union` in `form`'s return type for every sum of runtime-scaled terms,
+        # and `IllegalTypeAnalysisException` under Enzyme. `2 * A + 2 * B` still factors;
+        # `2.0 * A + 2.0 * B` assembles as the two terms it was written as. Shared `Ref`
+        # coefficients are unaffected -- the branch below compares object identity, which
+        # inference settles from the types alone whenever they differ.
         return _wrap_scale(cl, OperatorAdd(al, ar))
     elseif (left isa OperatorScale || right isa OperatorScale) &&
            cl isa Base.RefValue &&

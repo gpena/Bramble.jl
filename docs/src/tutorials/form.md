@@ -605,7 +605,12 @@ whether two of them happen to repeat.
 ### A shared scalar factors out of a sum
 
 `c * A + c * B`, for two different `A` and `B`, becomes `c * (A + B)`: still two operators to
-evaluate, but one routed term instead of two.
+evaluate, but one routed term instead of two. As with the zero collapse below, `c` has to be
+an `Integer` (or the same `Ref` on both terms): whether the rule applies is decided by
+comparing the two coefficients, and the result's *type* differs between the two outcomes, so
+allowing it on `Float64` would cost `form` its inferred return type whenever the coefficient
+is a runtime value (gpena/Bramble.jl#240). `2.0 * A + 2.0 * B` assembles as the two terms it
+was written as.
 
 ```@example forms
 Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (12, 10), (true, true))
@@ -627,13 +632,13 @@ cheaply as writing it the terser way by hand.
 
 ### A zero-scaled term leaves no trace
 
-A term scaled by the literal number `0` (a coefficient set to zero for a particular run,
+A term scaled by the integer literal `0` (a coefficient set to zero for a particular run,
 common in continuation methods and IMEX schemes toggling a physical effect on and off)
 contributes nothing to the sparsity pattern, rather than reserving space for the stencil it
 would otherwise have:
 
 ```@example forms
-a_full = form(W2, W2, (u, v) -> innerₕ(u, v) + 0.0 * inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
+a_full = form(W2, W2, (u, v) -> innerₕ(u, v) + 0 * inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
 a_mass = form(W2, W2, (u, v) -> innerₕ(u, v))
 nnz(assemble(a_full)) == nnz(assemble(a_mass))  # the stiffness term left no entries at all
 ```
@@ -643,8 +648,21 @@ pattern (nonzero *positions* holding the value `0.0`), which costs both memory a
 sweep computing them. Toggling a term off is free to leave in the expression; there is no
 need to branch in Julia code around it.
 
+Write `0`, not `0.0`: the collapse is restricted to `Integer` coefficients, and so is the
+matching `1 * A -> A` one. Deciding either reads the coefficient's *value*, which would make
+the type of the form depend on a number the compiler need not know -- costing `form` its
+inferred return type whenever the coefficient is a runtime value, and blocking `Enzyme` from
+differentiating with respect to it at all (gpena/Bramble.jl#240). A `Float64` coefficient is
+carried through as written:
+
+```@example forms
+a_float = form(W2, W2, (u, v) -> innerₕ(u, v) + 0.0 * inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
+nnz(assemble(a_float)) > nnz(assemble(a_mass))   # same numbers, stencil band kept as zeros
+```
+
 A dynamic coefficient (a `Ref`, §2's "Live grid coefficients and dynamic scalars") combines
-and factors the same way a static number does, and keeps tracking its own updates afterwards;
+and factors the same way an integer one does -- two terms sharing a `Ref` are recognised by
+object identity, not by comparing values -- and keeps tracking its own updates afterwards;
 the rewrite only ever moves the `Ref` around, never reads the value inside it:
 
 ```@example forms

@@ -81,29 +81,43 @@ end to end -- including gradients with respect to a Dirichlet boundary value.
     `Enzyme.set_runtime_activity(Enzyme.Reverse)`, the same two annotations
     `docs/src/tutorials/autodiff.md` documents for the ordinary (non-solve) path.
 
-!!! warning "Gradients with respect to an operator's own coefficient are not supported"
+!!! warning "Gradients with respect to an operator's own coefficient are limited"
     A gradient with respect to a *Dirichlet value or source term* works for any form: `θ`
     reaches `F` through `dirichlet_bc!`'s value-writing path, never the assembly engine.
 
     A gradient with respect to the operator's own coefficient (`θ` scaling the bilinear form
     itself) additionally needs `Enzyme` to differentiate `assemble`'s recording pass, and
-    that is not currently reliable. Two separate limits bite:
+    that works, from a fully inferred call site, for a form rebuilt inside the differentiated
+    closure:
 
-    - From a fully inferred call site, a `Union` still left in the assembly path raises
-      `IllegalTypeAnalysisException`. It happens to compile when the same call is
-      dynamically dispatched instead -- from a script's untyped globals, say -- which is far
-      too fragile a distinction to rely on.
-    - Above roughly a dozen machine words of stencil (any difference operator in 2D or 3D,
-      larger sums of terms in 1D), Enzyme cannot type the mixed offset/weight tuple once it
-      is passed through memory, and raises `EnzymeNoTypeError`. Raising
-      `Enzyme.API.maxtypeoffset!`/`maxtypedepth!` does not move that threshold, and
-      `looseTypeAnalysis!` buys compilation at the price of silently wrong answers, so it is
-      not a workaround.
+    ```julia
+    loss(θ, W, l) = sum(abs2, pde_solve(assemble(
+        form(W, W, (u, v) -> θ * inner₊(∇₋ₕ(u), ∇₋ₕ(v))), l;
+        dirichlet = :boundary => x -> 0.0)...))
+    ```
 
-    Splitting the stencil's `Int` offsets from its `Float64` weights, so what Enzyme
-    differentiates is uniformly typed, is the fix; it is follow-up work on
-    gpena/Bramble.jl#240. Until then, use `ForwardDiff` for coefficient sensitivities, or
-    differentiate with respect to boundary/source data.
+    It did not before gpena/Bramble.jl#240: `simplify_ast` used to decide whether to elide a
+    scaling, combine like terms or factor a shared coefficient by reading the coefficients'
+    *values*, so `form`'s return type became a `Union` of the rewritten and unrewritten trees
+    whenever the compiler could not fold the comparison -- and `IllegalTypeAnalysisException`
+    is what Enzyme's strict-aliasing type analysis makes of that `Union`. Those rules are now
+    restricted to `Integer` coefficients (`form/simplifier.jl`), which leaves `form` one
+    concrete return type for any runtime coefficient.
+
+    One shape is still outside that: two *structurally identical* terms in the same sum
+    (`θ * a(u, v) + θ * a(u, v)`). Whether the like-term rule fires is decided by
+    `_ast_equal`, which compares the two subtrees field by field at run time, so that `Union`
+    remains. Write the term once.
+
+    One limit still bites: above roughly a dozen machine words of stencil (any difference
+    operator in 2D or 3D, larger sums of terms in 1D), Enzyme cannot type the mixed
+    offset/weight tuple once it is passed through memory, and raises `EnzymeNoTypeError`.
+    Raising `Enzyme.API.maxtypeoffset!`/`maxtypedepth!` does not move that threshold, and
+    `looseTypeAnalysis!` buys compilation at the price of silently wrong answers, so it is
+    not a workaround. Splitting the stencil's `Int` offsets from its `Float64` weights, so
+    what Enzyme differentiates is uniformly typed, is the fix; it is follow-up work on
+    gpena/Bramble.jl#240. Until then, use `ForwardDiff` for coefficient sensitivities on a
+    form that limit catches.
 
 !!! warning "Mooncake is not supported"
     `Mooncake.@from_rrule`/`build_rrule` both accept a bridge for `pde_solve` without

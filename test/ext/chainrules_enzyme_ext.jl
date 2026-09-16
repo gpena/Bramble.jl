@@ -81,15 +81,48 @@ _central_diff(f, x, h = 1e-6) = (f(x + h) - f(x - h)) / 2h
             @test Enzyme.gradient(mode, Enzyme.Const(loss_symmetrized), θ0)[1] ≈
                   _central_diff(loss_symmetrized, θ0) rtol=1e-4
 
-            # No test here differentiates with respect to the *operator's own* coefficient,
-            # deliberately. That path reaches `assemble`'s recording engine rather than only
-            # `F`, and Enzyme still cannot compile it from a fully inferred call site: a
-            # `Union` remains somewhere in the assembly path and raises
-            # `IllegalTypeAnalysisException`. It happens to succeed when the call is
-            # dynamically dispatched instead (a script's untyped globals, as on the
-            # inverse-diffusion page), which is too fragile a distinction to pin as a
-            # supported guarantee -- `pde_solve`'s own docstring states the limitation, and
-            # lifting it is follow-up work on gpena/Bramble.jl#240.
+            # A gradient with respect to the *operator's own* coefficient: `θ` scales the
+            # bilinear form itself, so it reaches `assemble`'s recording engine rather than
+            # only `F`, and the form is rebuilt inside the differentiated closure. This used
+            # to raise `IllegalTypeAnalysisException` -- `simplify_ast` decided whether to
+            # elide a scaling by reading the coefficient's *value*, which put a `Union` of
+            # three `BilinearForm` types (`ZeroOperator`/`OperatorScale`/the bare product)
+            # into `form`'s return type whenever the compiler could not fold the comparison.
+            # Restricting those rules to `Integer` coefficients (gpena/Bramble.jl#240) leaves
+            # one concrete type, and the gradient compiles.
+            #
+            # `Wₕ`/`l_fixed` are testset locals, so the closure captures them at concrete
+            # types and this is the fully inferred call site, not the dynamically dispatched
+            # one that happened to compile before.
+            function loss_coeff(θ::Real)
+                aθ = form(Wₕ, Wₕ, (u, v) -> θ * inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+                A, F = assemble(aθ, l_fixed; dirichlet = :boundary => x -> 0.0)
+                return sum(abs2, Bramble.pde_solve(A, F))
+            end
+            @test Enzyme.gradient(mode, Enzyme.Const(loss_coeff), θ0)[1] ≈
+                  _central_diff(loss_coeff, θ0) rtol=1e-4
+
+            # A sum of terms, each with its own runtime coefficient -- the shape an inverse
+            # problem actually has. This one needed the *factoring* rule (`c*A + c*B ->
+            # c*(A+B)`) restricted too: it decides by comparing the two coefficients, and
+            # comparing two runtime numbers leaves the same kind of `Union` behind.
+            function loss_coeff_sum(θ::Real)
+                aθ = form(
+                    Wₕ, Wₕ, (u, v) -> θ * inner₊(∇₋ₕ(u), ∇₋ₕ(v)) + (1 - θ) * innerₕ(u, v)
+                )
+                A, F = assemble(aθ, l_fixed; dirichlet = :boundary => x -> 0.0)
+                return sum(abs2, Bramble.pde_solve(A, F))
+            end
+            @test Enzyme.gradient(mode, Enzyme.Const(loss_coeff_sum), θ0)[1] ≈
+                  _central_diff(loss_coeff_sum, θ0) rtol=1e-4
+
+            # The gradient is not merely *a* number Enzyme was willing to produce: it has to
+            # be the one the adjoint says it is. `θ * a(u, v)` scales `A` by `θ`, so
+            # `u(θ) = u(1)/θ` and `J(θ) = ‖u(1)‖²/θ²`, whose derivative is `-2J(θ)/θ`
+            # in closed form -- checked here against the analytic value, not only against the
+            # finite difference above, which shares the same forward code path.
+            @test Enzyme.gradient(mode, Enzyme.Const(loss_coeff), θ0)[1] ≈
+                  -2 * loss_coeff(θ0) / θ0 rtol=1e-8
 
             # The defect the native rule exists to avoid, pinned at the level it actually
             # showed up: `@import_rrule`'s bridge merged the rrule's returned
