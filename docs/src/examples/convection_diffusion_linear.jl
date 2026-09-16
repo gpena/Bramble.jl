@@ -54,10 +54,27 @@ nothing # hide
 
 @test 1.0e-4 < norm₁ₕ(uₕ .- Rₕ(Wₕ, sol)) < 1.0e-1                                           #src
 
-# ## Visualizing the solution
+# ## Exploring Péclet number and flow direction
+#
+# A different problem from the one just solved, not a plot of `uₕ` above: constant-coefficient
+# convection-diffusion again, but on a domain-independent, boundary-driven flow rather than a
+# manufactured solution, so the field itself moves as the parameters change instead of always
+# resolving to the same prescribed answer.
+#
+# ```math
+# -\nabla \cdot (\epsilon \nabla u) + \mathbf{\beta} \cdot \nabla u = 0 \text{ in } \Omega = (0,1)^2,
+# \qquad u = 1 \text{ on } \{x = 0\}, \qquad u = 0 \text{ on the rest of } \partial\Omega
+# ```
+#
+# with ``\epsilon = 1`` fixed and ``\mathbf{\beta} = \text{Pe}``, so the
+# Péclet slider sets the advection speed directly. An interactive panel, seeded only from the
+# resolution of `uₕ` above but solving this boundary-driven problem itself in the browser: drag
+# the Péclet number slider past the point where the cell Péclet number `Pe_h` crosses `1` with
+# the centered stencil selected, and the classic grid-scale oscillation appears — switch to
+# upwind to see it damp back out, at the cost of accuracy.
 
 include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
-surface_plot(uₕ; title = "Convection-diffusion, 2D") # hide
+convection_diffusion_interactive_widget(uₕ; title = "Convection-diffusion, 2D") # hide
 
 # ## Checking the answer
 #
@@ -95,21 +112,17 @@ function convdiff_series(D::Int; n0::Int = 5, levels::Int)
     return hs, errs
 end
 
-Random.seed!(20260903)
-hs1, errs1 = convdiff_series(1; n0 = 6, levels = 7)
-Random.seed!(20260903)
-hs2, errs2 = convdiff_series(2; levels = 6)
-Random.seed!(20260903)
-hs3, errs3 = convdiff_series(3; levels = 4)
+Random.seed!(20260903) # hide
+hs1, errs1 = convdiff_series(1; n0 = 6, levels = 7) # hide
+Random.seed!(20260903) # hide
+hs2, errs2 = convdiff_series(2; levels = 6) # hide
+Random.seed!(20260903) # hide
+hs3, errs3 = convdiff_series(3; levels = 4) # hide
 
-order1 = log(errs1[end - 1] / errs1[end]) / log(hs1[end - 1] / hs1[end])
-order2 = log(errs2[end - 1] / errs2[end]) / log(hs2[end - 1] / hs2[end])
-order3 = log(errs3[end - 1] / errs3[end]) / log(hs3[end - 1] / hs3[end])
-(order1, order2, order3)
-
-#-
-
-order1 > 1.9 && order2 > 1.9 && order3 > 1.8
+order1 = log(errs1[end - 1] / errs1[end]) / log(hs1[end - 1] / hs1[end]) # hide
+order2 = log(errs2[end - 1] / errs2[end]) / log(hs2[end - 1] / hs2[end]) # hide
+order3 = log(errs3[end - 1] / errs3[end]) / log(hs3[end - 1] / hs3[end]) # hide
+nothing # hide
 
 # Bracketed above as well as below, for the reason poisson_linear.jl gives.                 #src
 @test 1.9 < order1 < 3.0                                                                    #src
@@ -119,7 +132,7 @@ order1 > 1.9 && order2 > 1.9 && order3 > 1.8
 #-
 
 include(joinpath(@__DIR__, "..", "convergence_plot.jl")) # hide
-convergence_plot([(hs1, errs1, "1D", "#5B5FC7"), (hs2, errs2, "2D", "#0E7C86"), (hs3, errs3, "3D", "#B26A00")];
+convergence_plot([(hs1, errs1, "1D", "#5B5FC7"), (hs2, errs2, "2D", "#0E7C86"), (hs3, errs3, "3D", "#B26A00")]; # hide
     title = "Convection-diffusion, ‖·‖₁ₕ") # hide
 
 # Second order in every dimension. The convective term does not change the rate — it changes
