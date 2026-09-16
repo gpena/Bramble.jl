@@ -37,6 +37,7 @@
     gap: 10px 18px;
     margin-bottom: 12px;
   }
+  .eqn { font-size: 12px; color: var(--muted); margin: 0 0 10px; line-height: 1.5; }
   .field { display: flex; flex-direction: column; gap: 2px; min-width: 110px; }
   .field.wide { min-width: 160px; }
   label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
@@ -57,51 +58,59 @@
 </head>
 <body>
 
+<p class="eqn">
+  Steady, source-free reaction&ndash;diffusion in &Omega; = (0,1)&sup2;:
+  &minus;D&#x1D64;&Delta;u + a&middot;u + &gamma;&middot;u&middot;v = 0,
+  &minus;D&#x1D65;&Delta;v + b&middot;v &minus; &gamma;&middot;u&middot;v = 0,
+  with u = v = 1 on &part;&Omega; (the boundary supply is the only input; there is no
+  volumetric source, and no closed-form solution to compare against).
+</p>
+
 <div class="controls">
   <div class="field wide">
-    <label for="nRange">Resolution N</label>
+    <label for="nRange" title="Interior grid points per axis for the mesh the sliders control. The fixed fine reference mesh below is unaffected.">Resolution N</label>
     <div class="range-row">
       <input type="range" id="nRange" min="8" max="28" step="1" value="16">
       <span id="nLabel">16</span>
     </div>
   </div>
   <div class="field">
-    <label for="meshType">Mesh</label>
+    <label for="meshType" title="Uniform, or the same randomly perturbed tensor mesh poisson_interactive.html uses.">Mesh</label>
     <select id="meshType">
       <option value="uniform" selected>Uniform</option>
       <option value="random">Random</option>
     </select>
   </div>
   <div class="field wide">
-    <label for="aRange">Reaction a (u)</label>
+    <label for="aRange" title="Linear decay rate of u: the a in -D_u*Delta(u) + a*u + gamma*u*v = 0.">Reaction a (u)</label>
     <div class="range-row">
       <input type="range" id="aRange" min="0.2" max="3" step="0.1" value="1">
       <span id="aLabel">1.0</span>
     </div>
   </div>
   <div class="field wide">
-    <label for="bRange">Reaction b (v)</label>
+    <label for="bRange" title="Linear decay rate of v: the b in -D_v*Delta(v) + b*v - gamma*u*v = 0.">Reaction b (v)</label>
     <div class="range-row">
       <input type="range" id="bRange" min="0.2" max="3" step="0.1" value="1">
       <span id="bLabel">1.0</span>
     </div>
   </div>
   <div class="field wide">
-    <label for="gammaRange">Coupling &gamma;</label>
+    <label for="gammaRange" title="Strength of the pointwise u*v coupling: depletes u's equation, feeds v's. Zero decouples the two fields entirely.">Coupling &gamma;</label>
     <div class="range-row">
       <input type="range" id="gammaRange" min="0" max="2" step="0.1" value="1">
       <span id="gammaLabel">1.0</span>
     </div>
   </div>
   <div class="field wide">
-    <label for="ratioRange">D&#x1D64;/D&#x1D65;</label>
+    <label for="ratioRange" title="Ratio D_u / D_v of u's diffusion coefficient to v's (D_v is fixed at 1).">D&#x1D64;/D&#x1D65;</label>
     <div class="range-row">
       <input type="range" id="ratioRange" min="0.2" max="5" step="0.1" value="1">
       <span id="ratioLabel">1.0</span>
     </div>
   </div>
   <div class="field">
-    <label for="colormapSel">Colormap</label>
+    <label for="colormapSel" title="Colour scale applied to both heatmaps.">Colormap</label>
     <select id="colormapSel">
       <option value="viridis" selected>Viridis</option>
       <option value="plasma">Plasma</option>
@@ -110,7 +119,7 @@
     </select>
   </div>
   <div class="field wide">
-    <label for="panel2Sel">Bottom panel</label>
+    <label for="panel2Sel" title="What the third panel shows.">Bottom panel</label>
     <select id="panel2Sel">
       <option value="spy" selected>Jacobian block sparsity</option>
       <option value="cross">Cross-section profile</option>
@@ -118,14 +127,14 @@
     </select>
   </div>
   <div class="field" id="crossAxisField">
-    <label for="crossAxisSel">Slice</label>
+    <label for="crossAxisSel" title="Direction of the 1D slice drawn in the cross-section panel.">Slice</label>
     <select id="crossAxisSel">
       <option value="x" selected>Along x (fixed y)</option>
       <option value="y">Along y (fixed x)</option>
     </select>
   </div>
   <div class="field wide" id="crossPosField">
-    <label for="crossPosRange">Slice position</label>
+    <label for="crossPosRange" title="Position of the fixed coordinate the slice is cut at.">Slice position</label>
     <div class="range-row">
       <input type="range" id="crossPosRange" min="0" max="1" step="0.01" value="0.5">
       <span id="crossPosLabel">0.50</span>
@@ -154,10 +163,10 @@
   <tr><th>Degrees of freedom</th><td id="diagDof"></td>
       <th>Picard iterations</th><td id="diagIters"></td>
       <th>Final update</th><td id="diagResidual"></td></tr>
-  <tr><th>norm&#x2095;(u&#x2095; - u)</th><td id="diagL2U"></td>
-      <th>norm&#x2081;&#x2095;(u&#x2095; - u)</th><td id="diagH1U"></td></tr>
-  <tr><th>norm&#x2095;(v&#x2095; - v)</th><td id="diagL2V"></td>
-      <th>norm&#x2081;&#x2095;(v&#x2095; - v)</th><td id="diagH1V"></td></tr>
+  <tr><th title="Compared to a solve on a fixed uniform N=48 reference mesh -- this boundary-value problem has no closed-form solution.">norm&#x2095;(u&#x2095; &minus; u&#x1D63;&#x2091;&#x1D63;)</th><td id="diagL2U"></td>
+      <th title="Compared to the same N=48 reference mesh.">norm&#x2081;&#x2095;(u&#x2095; &minus; u&#x1D63;&#x2091;&#x1D63;)</th><td id="diagH1U"></td></tr>
+  <tr><th title="Compared to a solve on a fixed uniform N=48 reference mesh -- this boundary-value problem has no closed-form solution.">norm&#x2095;(v&#x2095; &minus; v&#x1D63;&#x2091;&#x1D63;)</th><td id="diagL2V"></td>
+      <th title="Compared to the same N=48 reference mesh.">norm&#x2081;&#x2095;(v&#x2095; &minus; v&#x1D63;&#x2091;&#x1D63;)</th><td id="diagH1V"></td></tr>
 </table>
 
 <script>
@@ -198,23 +207,36 @@
     return Float64Array.from(x);
   }
 
-  // Manufactured solution fixed to the same pair the worked example uses
-  // (docs/src/examples/coupled_reaction_diffusion.jl): u_ex = sin(pi x) sin(pi y),
-  // v_ex = sin(2 pi x) sin(2 pi y), both vanishing on the boundary, so Dirichlet data is
-  // zero and the flux-based right-hand side below never needs a boundary correction term.
-  // Both are eigenfunctions of -Delta on the unit square (eigenvalues 2 pi^2 and 8 pi^2
-  // respectively), which is what lets the source terms below be written in closed form for
-  // any (a, b, gamma, D_u/D_v) instead of only the a = b = gamma = D_u/D_v = 1 case the
-  // static example fixes.
-  function uExact(x, y) { return Math.sin(Math.PI * x) * Math.sin(Math.PI * y); }
-  function vExact(x, y) { return Math.sin(2 * Math.PI * x) * Math.sin(2 * Math.PI * y); }
-  function source1(x, y, a, gamma, Du) {
-    var u = uExact(x, y), v = vExact(x, y);
-    return Du * 2 * Math.PI * Math.PI * u + a * u + gamma * u * v;
-  }
-  function source2(x, y, b, gamma, Dv) {
-    var u = uExact(x, y), v = vExact(x, y);
-    return Dv * 8 * Math.PI * Math.PI * v - gamma * u * v + b * v;
+  // No forcing anywhere in the domain (f1 = f2 = 0): unlike the worked example, which needs
+  // a manufactured source to have a known closed-form answer to test against, this widget's
+  // only input is a constant Dirichlet supply of both species on the boundary. That supply
+  // has to be nonzero for *both* fields -- the reaction terms only ever reach the diagonal
+  // of each field's own block (see `coupled_matrix` in coupled_reaction_diffusion.jl and the
+  // spy-plot comment below), so a field with nothing driving it directly (no source, no
+  // boundary data) solves to exactly zero and the gamma coupling would have nothing to act
+  // on: the other field's equation would see u*v with a v that never leaves zero.
+  function gU(x, y) { return 1; }
+  function gV(x, y) { return 1; }
+
+  // The right-hand side is then pure boundary flux: node (k, l) borrows the corresponding
+  // poisson_interactive.html term (`cW * g(...)`, etc.) for whichever of its four faces sits
+  // on partial-Omega, and nothing else -- there is no cellVol * source term to add since the
+  // interior is source-free.
+  function buildBoundaryRHS(mesh, X, Y, N, g) {
+    var m = mesh.m, idx = mesh.idx;
+    var cW = mesh.cW, cE = mesh.cE, cS = mesh.cS, cN = mesh.cN;
+    var b = new Float64Array(mesh.dof);
+    for (var l = 0; l < m; l++) {
+      for (var k = 0; k < m; k++) {
+        var row = idx(k, l), ii = k + 1, jj = l + 1, rhs = 0;
+        if (k === 0) rhs += cW[row] * g(X[0], Y[jj]);
+        if (k === m - 1) rhs += cE[row] * g(X[N], Y[jj]);
+        if (l === 0) rhs += cS[row] * g(X[ii], Y[0]);
+        if (l === m - 1) rhs += cN[row] * g(X[ii], Y[N]);
+        b[row] = rhs;
+      }
+    }
+    return b;
   }
 
   // Mesh geometry and the 5-point finite-volume flux coefficients, shared by both species
@@ -534,9 +556,86 @@
     return { normh: Math.sqrt(normhSq), norm1h: Math.sqrt(normhSq + seminormSq) };
   }
 
+  // No closed-form solution exists for this boundary-value problem (that is the point -- see
+  // gU/gV above), so accuracy is measured the way convection_diffusion_interactive.html's
+  // widget does: against a reference solve on a much finer grid. That widget's reference grid
+  // lines up exactly on the coarse one because both are uniform; this widget also offers a
+  // *random* coarse mesh, whose nodes never land on a fixed fine grid, so the fine reference
+  // here is always solved on a fixed uniform N_REF mesh and read off by bilinear
+  // interpolation instead of an exact stride.
+  function makeFineInterpolant(Nref, grid) {
+    var h = 1 / Nref;
+    return function (x, y) {
+      var fx = x / h, fy = y / h;
+      var i0 = Math.max(0, Math.min(Nref - 1, Math.floor(fx)));
+      var j0 = Math.max(0, Math.min(Nref - 1, Math.floor(fy)));
+      var tx = Math.min(1, Math.max(0, fx - i0)), ty = Math.min(1, Math.max(0, fy - j0));
+      var v00 = grid[j0 * (Nref + 1) + i0], v10 = grid[j0 * (Nref + 1) + i0 + 1];
+      var v01 = grid[(j0 + 1) * (Nref + 1) + i0], v11 = grid[(j0 + 1) * (Nref + 1) + i0 + 1];
+      return (1 - tx) * (1 - ty) * v00 + tx * (1 - ty) * v10 + (1 - tx) * ty * v01 + tx * ty * v11;
+    };
+  }
+  var N_REF = 48;
+
   function fmt(x) {
     if (!isFinite(x)) return "--";
     return x.toExponential(3);
+  }
+
+  // One steady Picard solve of the source-free, boundary-driven system, shared by both the
+  // coarse mesh the sliders control and the fixed fine reference mesh below -- same equations,
+  // same solver, only the mesh differs.
+  function solveSteady(mesh, X, Y, N, a, b, gamma, Du, Dv) {
+    var m = mesh.m, dof = mesh.dof;
+    var bU = buildBoundaryRHS(mesh, X, Y, N, gU);
+    var bV = buildBoundaryRHS(mesh, X, Y, N, gV);
+
+    // Block Gauss-Seidel Picard iteration: freeze the *other* field's current iterate inside
+    // each block's reaction diagonal, solve the two decoupled linear systems, repeat. This is
+    // the same linearisation coupled_reaction_diffusion.jl's `coupled_matrix` uses for its
+    // hand-written Newton loop (v_c/u_c frozen coefficients), just iterated to convergence
+    // here instead of driven by an outer Newton step, since this widget solves each block
+    // matrix-free rather than forming and factoring the full sparse Jacobian in JavaScript.
+    // Under-relaxation (0.7) keeps the sweep stable across the full slider range, including
+    // combinations where the frozen diagonal briefly loses definiteness (b - gamma * u can go
+    // negative once gamma * u exceeds b).
+    var uGuess = new Float64Array(dof), vGuess = new Float64Array(dof);
+    var bicgMax = Math.min(6 * dof, 800);
+    var relax = 0.7, maxPicard = 30, tol = 1e-7;
+    var iterUsed = 0, residual = Infinity;
+    for (var iter = 0; iter < maxPicard; iter++) {
+      var diagU = new Float64Array(dof);
+      for (var r = 0; r < dof; r++) diagU[r] = a + gamma * vGuess[r];
+      var uNew = bicgstab(dof, makeMatvec(mesh, Du, diagU), bU, bicgMax, 1e-9);
+      for (r = 0; r < dof; r++) uNew[r] = uGuess[r] + relax * (uNew[r] - uGuess[r]);
+
+      var diagV = new Float64Array(dof);
+      for (r = 0; r < dof; r++) diagV[r] = b - gamma * uNew[r];
+      var vNew = bicgstab(dof, makeMatvec(mesh, Dv, diagV), bV, bicgMax, 1e-9);
+      for (r = 0; r < dof; r++) vNew[r] = vGuess[r] + relax * (vNew[r] - vGuess[r]);
+
+      var change = 0;
+      for (r = 0; r < dof; r++) {
+        change = Math.max(change, Math.abs(uNew[r] - uGuess[r]), Math.abs(vNew[r] - vGuess[r]));
+      }
+      uGuess = uNew; vGuess = vNew;
+      iterUsed = iter + 1;
+      residual = change;
+      if (change < tol) break;
+    }
+
+    // Boundary nodes hold gU/gV, not zero -- both are nonzero here (see gU/gV above), unlike
+    // the homogeneous-Dirichlet steady examples elsewhere in this file's history.
+    var uGrid = new Float64Array((N + 1) * (N + 1));
+    var vGrid = new Float64Array((N + 1) * (N + 1));
+    for (var j = 0; j <= N; j++) {
+      for (var i = 0; i <= N; i++) {
+        var interior = i > 0 && i < N && j > 0 && j < N;
+        uGrid[j * (N + 1) + i] = interior ? uGuess[(j - 1) * m + (i - 1)] : gU(X[i], Y[j]);
+        vGrid[j * (N + 1) + i] = interior ? vGuess[(j - 1) * m + (i - 1)] : gV(X[i], Y[j]);
+      }
+    }
+    return { uGrid: uGrid, vGrid: vGrid, iterUsed: iterUsed, residual: residual };
   }
 
   var state = { N: 0, X: null, Y: null, uGrid: null, vGrid: null, offU: null, offV: null };
@@ -563,59 +662,19 @@
     var X = buildAxis(N, random, 20260916 + N * 7919);
     var Y = buildAxis(N, random, 20260917 + N * 7919);
     var mesh = buildMesh(N, X, Y);
-    var m = mesh.m, dof = mesh.dof, idx = mesh.idx;
+    var dof = mesh.dof;
 
-    var f1b = new Float64Array(dof), f2b = new Float64Array(dof);
-    for (var l = 0; l < m; l++) {
-      for (var k = 0; k < m; k++) {
-        var row = idx(k, l), ii = k + 1, jj = l + 1;
-        f1b[row] = source1(X[ii], Y[jj], a, gamma, Du) * mesh.cellVol[row];
-        f2b[row] = source2(X[ii], Y[jj], b, gamma, Dv) * mesh.cellVol[row];
-      }
-    }
+    var coarse = solveSteady(mesh, X, Y, N, a, b, gamma, Du, Dv);
+    var uGrid = coarse.uGrid, vGrid = coarse.vGrid;
 
-    // Block Gauss-Seidel Picard iteration: freeze the *other* field's current iterate inside
-    // each block's reaction diagonal, solve the two decoupled linear systems, repeat. This
-    // is the same linearisation coupled_reaction_diffusion.jl's `coupled_matrix` uses for its
-    // hand-written Newton loop (v_c/u_c frozen coefficients), just iterated to convergence
-    // here instead of driven by an outer Newton step, since this widget solves each block
-    // matrix-free rather than forming and factoring the full sparse Jacobian in JavaScript.
-    // Under-relaxation (0.7) keeps the sweep stable across the full slider range, including
-    // combinations where the frozen diagonal briefly loses definiteness.
-    var uGuess = new Float64Array(dof), vGuess = new Float64Array(dof);
-    var bicgMax = Math.min(6 * dof, 800);
-    var relax = 0.7, maxPicard = 30, tol = 1e-7;
-    var iterUsed = 0, residual = Infinity;
-    for (var iter = 0; iter < maxPicard; iter++) {
-      var diagU = new Float64Array(dof);
-      for (var r = 0; r < dof; r++) diagU[r] = a + gamma * vGuess[r];
-      var uNew = bicgstab(dof, makeMatvec(mesh, Du, diagU), f1b, bicgMax, 1e-9);
-      for (r = 0; r < dof; r++) uNew[r] = uGuess[r] + relax * (uNew[r] - uGuess[r]);
-
-      var diagV = new Float64Array(dof);
-      for (r = 0; r < dof; r++) diagV[r] = b - gamma * uNew[r];
-      var vNew = bicgstab(dof, makeMatvec(mesh, Dv, diagV), f2b, bicgMax, 1e-9);
-      for (r = 0; r < dof; r++) vNew[r] = vGuess[r] + relax * (vNew[r] - vGuess[r]);
-
-      var change = 0;
-      for (r = 0; r < dof; r++) {
-        change = Math.max(change, Math.abs(uNew[r] - uGuess[r]), Math.abs(vNew[r] - vGuess[r]));
-      }
-      uGuess = uNew; vGuess = vNew;
-      iterUsed = iter + 1;
-      residual = change;
-      if (change < tol) break;
-    }
-
-    var uGrid = new Float64Array((N + 1) * (N + 1));
-    var vGrid = new Float64Array((N + 1) * (N + 1));
-    for (var j = 0; j <= N; j++) {
-      for (var i = 0; i <= N; i++) {
-        var interior = i > 0 && i < N && j > 0 && j < N;
-        uGrid[j * (N + 1) + i] = interior ? uGuess[(j - 1) * m + (i - 1)] : 0;
-        vGrid[j * (N + 1) + i] = interior ? vGuess[(j - 1) * m + (i - 1)] : 0;
-      }
-    }
+    // Fixed uniform reference mesh, independent of the coarse mesh's own N and mesh-type
+    // sliders -- see the makeFineInterpolant comment above for why it can't just be a finer
+    // version of whatever (possibly random) mesh the sliders currently select.
+    var Xref = buildAxis(N_REF, false, 0), Yref = buildAxis(N_REF, false, 0);
+    var meshRef = buildMesh(N_REF, Xref, Yref);
+    var fine = solveSteady(meshRef, Xref, Yref, N_REF, a, b, gamma, Du, Dv);
+    var fineU = makeFineInterpolant(N_REF, fine.uGrid);
+    var fineV = makeFineInterpolant(N_REF, fine.vGrid);
 
     state.N = N; state.X = X; state.Y = Y; state.uGrid = uGrid; state.vGrid = vGrid;
     state.offU = renderField(document.getElementById("fieldUCanvas"), N, uGrid, cmap);
@@ -635,11 +694,11 @@
       drawMeshNodes(panel2Canvas, X, Y);
     }
 
-    var errU = fieldErrors(N, X, Y, uGrid, uExact);
-    var errV = fieldErrors(N, X, Y, vGrid, vExact);
+    var errU = fieldErrors(N, X, Y, uGrid, fineU);
+    var errV = fieldErrors(N, X, Y, vGrid, fineV);
     document.getElementById("diagDof").textContent = 2 * dof;
-    document.getElementById("diagIters").textContent = iterUsed;
-    document.getElementById("diagResidual").textContent = fmt(residual);
+    document.getElementById("diagIters").textContent = coarse.iterUsed;
+    document.getElementById("diagResidual").textContent = fmt(coarse.residual);
     document.getElementById("diagL2U").textContent = fmt(errU.normh);
     document.getElementById("diagH1U").textContent = fmt(errU.norm1h);
     document.getElementById("diagL2V").textContent = fmt(errV.normh);

@@ -211,15 +211,37 @@ norm₁ₕ(uₕ .- uexact), norm₁ₕ(vₕ .- vexact)
 @test 1.0e-6 < norm₁ₕ(uₕ .- uexact) < 1.0e-1                                                 #src
 @test 1.0e-6 < norm₁ₕ(vₕ .- vexact) < 5.0e-1   # v oscillates twice as fast as u              #src
 
-# ## Visualizing the solution
+# ## Exploring the system interactively
+#
+# The panel below is *not* a replay of the solve above, and does not share its manufactured
+# solution — it poses a different boundary-value problem in the same two unknowns, chosen so
+# every slider has a visible effect rather than being fought back to a fixed answer:
+#
+# ```math
+# \begin{aligned}
+# -D_u\Delta u + au + \gamma uv &= 0 \\
+# -D_v\Delta v + bv - \gamma uv &= 0
+# \end{aligned}
+# \qquad \text{in } \Omega = (0,1)^2, \qquad u = v = 1 \text{ on } \partial\Omega,
+# ```
+#
+# with no volumetric source anywhere: `f1 = f2 = 0`. A manufactured right-hand side would
+# force the discrete solution back to the same prescribed answer regardless of `a`, `b`, `γ`
+# or `D_u/D_v` — only a vanishingly small error field would move. Here the *only* input is a
+# constant Dirichlet supply of both species on the boundary (it has to be nonzero for both:
+# the reaction terms only ever reach the diagonal of each field's own block, the same way
+# `coupled_matrix` above assembles them, so a field with nothing driving it directly solves to
+# exactly zero and leaves the other field's `γuv` coupling with nothing to act on). Because
+# this boundary-value problem has no closed-form solution, the panel measures its own
+# discretization error against a solve on a fixed, much finer uniform reference mesh instead
+# of against `u_ex`/`v_ex`.
 #
 # Each species is its own 2D scalar field — `components(wₕ)` gives a view directly onto it, no
-# new solve or copy needed. The panel below is not a replay of the solve above: it runs its own
-# block Gauss-Seidel Picard iteration client-side against the same manufactured solution, so the
-# reaction coefficients `a`, `b`, coupling `γ` and diffusion ratio `D_u/D_v` sliders can be swept
-# without a round trip to Julia — dragging them re-solves both fields and redraws the linked
-# `u_h`/`v_h` heatmaps, the `2×2` Jacobian block-sparsity spy plot, and the cross-section profile
-# in place:
+# new solve or copy needed, though the panel below solves its own problem rather than reusing
+# `uₕ`/`vₕ`. It runs its own block Gauss-Seidel Picard iteration client-side, so the reaction
+# coefficients `a`, `b`, coupling `γ` and diffusion ratio `D_u/D_v` sliders can be swept without
+# a round trip to Julia — dragging them re-solves both fields and redraws the linked `u_h`/`v_h`
+# heatmaps, the `2×2` Jacobian block-sparsity spy plot, and the cross-section profile in place:
 
 include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
 coupled_reaction_diffusion_widget(uₕ, vₕ; title = "Coupled reaction-diffusion") # hide
