@@ -881,6 +881,41 @@ using ..TestUtils: alloc_test, @test_allocs
         @test_throws ArgumentError assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet = 3)
     end
 
+    @testset "Dirichlet boundary value under ForwardDiff" begin
+        # `assemble`'s own allocation used to be sized only from the ast/space
+        # (`_assembled_eltype`), never from `dirichlet`'s condition function: a boundary
+        # value built from a `ForwardDiff.Dual` -- the parameter of a forward-mode
+        # sensitivity, not any coefficient inside `a`/`l` -- threw
+        # `MethodError: no method matching Float64(::Dual)` from deep inside
+        # `dirichlet_bc!`'s `setindex!`, before any solve ran. Checked against a central
+        # difference, so a wrong derivative fails rather than merely not crashing.
+        a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+        l = form(Wₕ, v -> innerₕ(Rₕ(Wₕ, x -> 1.0), v))
+        h = 1e-6
+        θ0 = 1.3
+
+        # the path the original crash traced to: `assemble(a, l; dirichlet, symmetrize)`
+        g(θ) = begin
+            _, F = assemble(a, l; dirichlet = :bottom => x -> θ, symmetrize = true)
+            sum(F)
+        end
+        d_fd = (g(θ0 + h) - g(θ0 - h)) / 2h
+        @test ForwardDiff.derivative(g, θ0)≈d_fd rtol=1e-6
+
+        # the bare `LinearForm` path underneath it
+        b(θ) = sum(assemble(l; dirichlet = :bottom => x -> θ))
+        d_fd_b = (b(θ0 + h) - b(θ0 - h)) / 2h
+        @test ForwardDiff.derivative(b, θ0)≈d_fd_b rtol=1e-6
+
+        # and on a composite space, with per-leaf values that cannot be confused (1 vs
+        # 100) so a probe that only inspects one leaf cannot pass by accident
+        uv = Rₕ(Vₕ, (x -> 1.0, x -> 100.0))
+        lv = form(Vₕ, v -> innerₕ(uv(1), v(1)) + innerₕ(uv(2), v(2)))
+        bv(θ) = sum(assemble(lv; dirichlet = :bottom => x -> θ))
+        d_fd_v = (bv(θ0 + h) - bv(θ0 - h)) / 2h
+        @test ForwardDiff.derivative(bv, θ0)≈d_fd_v rtol=1e-6
+    end
+
     @testset "dirichlet_components restriction" begin
         bcs = dirichlet_constraints(Ωₕ, :bottom => (x -> 5.0))
         marked = index_in_marker(Ωₕ, :bottom)

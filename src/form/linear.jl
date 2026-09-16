@@ -276,8 +276,11 @@ function assemble(
 )
     resolved_ast = ast === nothing ? form.ast : (_warn_ast_keyword(:assemble); ast)
     space = test_space(form)
+    _, dirichlet_conditions = _normalize_dirichlet(dirichlet)
+    T = _assembled_eltype(resolved_ast, space)
+    T = _dirichlet_probed_eltype(dirichlet_conditions, space, T)
     # `parent(element(space, T))` reuses the space's backend container type.
-    b = parent(element(space, _assembled_eltype(resolved_ast, space)))
+    b = parent(element(space, T))
     return _assemble_linear!(b, form, resolved_ast, dirichlet, dirichlet_components)
 end
 
@@ -285,6 +288,26 @@ end
 # against the space's (not the space's outright), supporting autodiff types like `ForwardDiff.Dual`.
 function _assembled_eltype(ast, space)
     return _probed_eltype(ast, space, eltype(space))
+end
+
+# `dirichlet`'s own condition function(s) can return a richer type than the ast/space do --
+# a boundary value built from a `ForwardDiff.Dual`, say, while every weight in the form
+# itself stays `Float64`. Probed the same way `_probed_eltype` probes the ast: evaluate each
+# condition once, at an arbitrary mesh point, and promote against what has been seen so far.
+@inline _dirichlet_probed_eltype(::Nothing, space, T) = T
+
+function _dirichlet_probed_eltype(dirichlet_conditions::ConstraintMarkers, space, T)
+    return _conditions_probed_eltype(conditions(dirichlet_conditions), space, T)
+end
+
+@inline _conditions_probed_eltype(::Tuple{}, space, T) = T
+
+@inline function _conditions_probed_eltype(markers::Tuple, space, T)
+    marker = first(markers)
+    Ωₕ = mesh(space)
+    x = point(Ωₕ, first(indices(Ωₕ)))
+    T = promote_type(T, typeof(identifier(marker)(x)))
+    return _conditions_probed_eltype(Base.tail(markers), space, T)
 end
 
 # Composite: terms naming components are routed and probed on their respective leaf spaces.
