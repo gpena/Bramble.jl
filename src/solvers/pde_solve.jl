@@ -109,15 +109,14 @@ end to end -- including gradients with respect to a Dirichlet boundary value.
     `_ast_equal`, which compares the two subtrees field by field at run time, so that `Union`
     remains. Write the term once.
 
-    One limit still bites: above roughly a dozen machine words of stencil (any difference
-    operator in 2D or 3D, larger sums of terms in 1D), Enzyme cannot type the mixed
-    offset/weight tuple once it is passed through memory, and raises `EnzymeNoTypeError`.
-    Raising `Enzyme.API.maxtypeoffset!`/`maxtypedepth!` does not move that threshold, and
-    `looseTypeAnalysis!` buys compilation at the price of silently wrong answers, so it is
-    not a workaround. Splitting the stencil's `Int` offsets from its `Float64` weights, so
-    what Enzyme differentiates is uniformly typed, is the fix; it is follow-up work on
-    gpena/Bramble.jl#240. Until then, use `ForwardDiff` for coefficient sensitivities on a
-    form that limit catches.
+    A second limit used to bite alongside it -- `EnzymeNoTypeError` for any difference
+    operator in 2D or 3D, and for larger sums of terms in 1D -- and is gone
+    (gpena/Bramble.jl#249). The assembly traversal reads a stencil entry's offsets and its
+    weight from two separate containers now ([`entry_offsets`](@ref)/[`entry_weights`](@ref)),
+    which is what Enzyme's type analysis needs from a function that reads both halves and is
+    not inlined into the one being differentiated. A coefficient scaling the form and a
+    `VectorElement` coefficient both differentiate correctly in 1D, 2D and 3D, mass and
+    stiffness alike, with no `Enzyme.API` flag.
 
 !!! warning "Mooncake is not supported"
     `Mooncake.@from_rrule`/`build_rrule` both accept a bridge for `pde_solve` without

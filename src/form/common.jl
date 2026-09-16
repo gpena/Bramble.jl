@@ -61,6 +61,38 @@ end
 @inline scale_stencil(inner::Tuple, scalar::Number) = map(t -> (Base.front(t)..., t[end] * scalar), inner)
 
 """
+    entry_offsets(stencil::Tuple)
+    entry_weights(stencil::Tuple)
+
+A stencil's offsets and its coefficients, as two separate containers: `entry_offsets` keeps
+each entry's offsets alone (`(off_u, off_v)` for a bilinear entry, `(off_v,)` for a linear
+one) and `entry_weights` keeps the coefficients.
+
+Taken apart for `Enzyme`, which cannot type a stencil entry's mixed `Int`/`Float64` tuple
+in a function that reads *both* halves of it and is not inlined into the function being
+differentiated (gpena/Bramble.jl#249). All three conditions are needed, measured one at a
+time: the same loop written inside the differentiated closure compiles, so does one that
+reads only the offsets, and so does one that reads only the weights -- what fails is the
+combination, with `EnzymeNoTypeError` inside `_visit_guarded_region!`. Reading the offsets
+from a container of `Int`s and the weights from a container of `Float64`s removes it, for a
+coefficient scaling the form and for a `VectorElement` coefficient alike, in 1D, 2D and 3D.
+
+The stencil itself is unchanged: `local_stencil` returns what it always did, and the split
+happens where the entries are consumed ([`_visit_entries`](@ref)). That is enough, and the
+narrower change: every `local_stencil` method, the stencil algebra above and the tests that
+compare stencils against literal tuples all stay as they are. Enzyme differentiates
+`local_stencil` and `scale_stencil` themselves correctly at any stencil size measured, up
+to 63 machine words -- the size threshold gpena/Bramble.jl#249 was filed against is really
+[`_peelable`](@ref) selecting the guarded walk, not an aggregate Enzyme cannot type.
+
+`map` over a `Tuple` unrolls and stays type-stable, the same property the rest of the
+stencil algebra in this file relies on, so neither call allocates.
+"""
+@inline entry_offsets(stencil::Tuple) = map(Base.front, stencil)
+
+@inline entry_weights(stencil::Tuple) = map(last, stencil)
+
+"""
     sum_stencil_values(stencil::Tuple)
 
 The sum of a stencil's coefficients, ignoring its offsets entirely.
