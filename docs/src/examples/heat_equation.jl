@@ -339,12 +339,15 @@ sol_drive = solve(ode_problem(sd_drive, element(Wₕ, 0.0), I), FBDF();
 u_end = sol_drive.u[end]
 (u_end[1], u_end[51], u_end[101])
 
-# The ends hold g exactly; the midpoint is short of the steady 0.5 for the reason the prose #src
-# below gives, and the window is tight enough that reaching the steady line would fail.     #src
-@test u_end[1] == 1.0 && u_end[101] == 0.0                       #src
+# The ends hold g to solver tolerance -- the Dirichlet rows are algebraic constraints in    #src
+# the DAE, satisfied by FBDF's nonlinear solve up to its own convergence criterion, not      #src
+# bit-exactly -- and the midpoint is short of the steady 0.5 for the reason the prose below   #src
+# gives, with the window tight enough that reaching the steady line would fail.              #src
+@test u_end[1]≈1.0 atol=1e-8 rtol=1e-8                            #src
+@test u_end[101]≈0.0 atol=1e-8 rtol=1e-8                          #src
 @test 0.43 < u_end[51] < 0.45                                    #src
 
-# At ``t = 1`` the ends hold exactly the prescribed ``g``: one and zero. The interior is
+# At ``t = 1`` the ends hold the prescribed ``g`` to solver tolerance: one and zero. The interior is
 # climbing towards the straight line ``1 - x`` that the source-free steady problem gives, but
 # has not arrived — ``0.44`` at the midpoint against the steady ``0.5``. It should not have:
 # the left end was still moving over the whole interval, so diffusion is chasing a boundary
