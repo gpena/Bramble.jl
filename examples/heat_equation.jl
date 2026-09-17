@@ -5,7 +5,7 @@
 # from the SciML stack. Every number below was produced by the code shown.
 #
 # This page is generated from `docs/src/examples/heat_equation.jl` by Literate.jl, and the
-# same file runs under `test/examples/heat_equation.jl` with the assertions that the page
+# same file runs under `test/examples/ext_pages.jl` with the assertions that the page
 # renders but does not check. Lines marked `#src` there are the assertions; they never reach
 # the page.
 #
