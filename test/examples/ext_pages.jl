@@ -52,6 +52,16 @@ using ..TestUtils: _run_example_page
     @testset "AMG preconditioning page" begin
         _run_example_page(:amg_preconditioning)
     end
+
+    # The second-order (wave) counterpart of the heat-equation page: it steps a
+    # `SecondOrderODEProblem` with `Rodas5P`, so it needs `OrdinaryDiffEqRosenbrock` rather
+    # than the BDF stepper above. Its assertions pin the error at `t = 1` against the exact
+    # standing wave, bracketed away from zero so a solution reproduced by construction would
+    # fail; the relative energy drift the page reports; and the second-order spatial rate
+    # over three meshes.
+    @testset "2D wave equation page" begin
+        _run_example_page(:wave_equation_2d)
+    end
 end
 
 end # module ExamplesExtPagesTests

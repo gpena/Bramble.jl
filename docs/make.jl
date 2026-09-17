@@ -27,7 +27,11 @@ const LITERATE_EXAMPLES = [
     "heat_equation.jl",
     "amg_preconditioning.jl",
     "inverse_diffusion.jl",
-    "transient_inverse_problem.jl"
+    "transient_inverse_problem.jl",
+    "wave_equation_2d.jl",
+    "point_sources_flux.jl",
+    "transient_inplace.jl",
+    "boundary_layer_graded.jl"
 ]
 
 if Threads.nthreads() == 1
@@ -86,7 +90,11 @@ examples = "Examples" => [
     "examples/heat_equation.md",
     "examples/amg_preconditioning.md",
     "examples/inverse_diffusion.md",
-    "examples/transient_inverse_problem.md"
+    "examples/transient_inverse_problem.md",
+    "examples/wave_equation_2d.md",
+    "examples/point_sources_flux.md",
+    "examples/transient_inplace.md",
+    "examples/boundary_layer_graded.md"
 ]
 benchmarks = "Benchmarks" => "benchmarks.md"
 internals = "Internals" => [

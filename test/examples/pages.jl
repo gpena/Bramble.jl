@@ -31,6 +31,32 @@ using ..TestUtils: _run_example_page
     @testset "3D linear elasticity" begin
         _run_example_page(:elasticity_3d)
     end
+
+    # Point sources and the flux the Dirichlet condition supplies: its `#src` assertions
+    # pin the solution against the rectangle's Green's function at three points away from
+    # the singularity, and the two conservation statements that hold on any mesh rather
+    # than in the limit -- one well's boundary flux equals its strength, and an
+    # injector/producer pair's net flux is zero.
+    @testset "Point sources and boundary flux" begin
+        _run_example_page(:point_sources_flux)
+    end
+
+    # The in-place Crank-Nicolson loop: pattern reuse, one factorization, and a backsolve
+    # into the solution's own storage. Its assertions pin the per-step allocation under a
+    # bound loose enough to survive a compiler change but tight enough to catch a closure
+    # built inside the loop (a few hundred bytes per step), the error at t = 1 bracketed
+    # away from zero, and the order in time.
+    @testset "Transient loop, in place" begin
+        _run_example_page(:transient_inplace)
+    end
+
+    # Uniform against graded points on a convection-diffusion layer at ε = 1e-3. Its
+    # assertions pin the three-orders-of-magnitude gap at equal degrees of freedom, that
+    # the graded mesh at 41 points beats the uniform one at 641, and that the best grading
+    # strength is an interior point of the sweep rather than its weakest end.
+    @testset "Graded mesh for a boundary layer" begin
+        _run_example_page(:boundary_layer_graded)
+    end
 end
 
 end # module ExamplesPagesTests
