@@ -193,6 +193,11 @@ if __bramble_with_ext_backends
         include("ext/ad_backend_verification.jl")
         include("ext/sciml_ext.jl")
         include("ext/sciml_sensitivity_ext.jl")
+        # Runs the transient-inverse-problem page itself, whose #src assertions need
+        # `SciMLSensitivity` -- same reasoning as `inverse_diffusion.jl` needing `Enzyme`
+        # behind the "ad" group, one line up (here it is `sciml_sensitivity_ext.jl` above)
+        # rather than in the every-push "Worked examples" group.
+        include("examples/transient_inverse_problem.jl")
         include("ext/algebraicmultigrid_ext.jl")
         include("ext/iluzero_ext.jl")
         include("ext/suitesparse_ext.jl")

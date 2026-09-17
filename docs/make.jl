@@ -1,6 +1,14 @@
 using Bramble
 using Documenter
 using Literate
+# Loaded here, not only inside `transient_inverse_problem.jl`'s own `@example` block: the
+# `@docs Bramble.adjoint_sensitivities` block on `api_sciml.md` needs `BrambleSciMLSensitivityExt`
+# already loaded to pick up that method's own (richer) docstring alongside the core stub's --
+# `Base.Docs.doc` merges both once both are loaded, but only if `SciMLSensitivity` is loaded
+# before Documenter processes that `@docs` block, not merely before this script exits. Page
+# processing order is not something to rely on for that (measured: loading it only inside the
+# example page left `api_sciml.md`'s block showing the stub alone).
+using SciMLSensitivity
 
 include("generate_benchmarks.jl")
 generate_benchmarks_markdown()
@@ -18,7 +26,8 @@ const LITERATE_EXAMPLES = [
     "elasticity_3d.jl",
     "heat_equation.jl",
     "amg_preconditioning.jl",
-    "inverse_diffusion.jl"
+    "inverse_diffusion.jl",
+    "transient_inverse_problem.jl"
 ]
 
 if Threads.nthreads() == 1
@@ -64,7 +73,8 @@ examples = "Examples" => [
     "examples/elasticity_3d.md",
     "examples/heat_equation.md",
     "examples/amg_preconditioning.md",
-    "examples/inverse_diffusion.md"
+    "examples/inverse_diffusion.md",
+    "examples/transient_inverse_problem.md"
 ]
 benchmarks = "Benchmarks" => "benchmarks.md"
 internals = "Internals" => [

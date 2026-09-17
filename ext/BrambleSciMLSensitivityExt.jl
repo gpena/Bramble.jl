@@ -57,16 +57,16 @@ using SciMLSensitivity: SciMLSensitivity, InterpolatingAdjoint, BrownFullBasicIn
     Bramble.adjoint_sensitivities(sol::ODESolution, alg; kwargs...) -> (du0, dp)
 
 Adjoint sensitivities of a [`Semidiscretization`](@ref)'s solved trajectory `sol` (from
-[`ode_problem`](@ref)/`solve`) with respect to its initial condition (`du0`) and its `p`
+[`Bramble.ode_problem`](@ref)/`solve`) with respect to its initial condition (`du0`) and its `p`
 (`dp`), via `SciMLSensitivity.adjoint_sensitivities` -- one backward solve for *every*
-parameter at once, the same O(1)-in-parameter-count trade [`pde_solve`](@ref)'s own adjoint
+parameter at once, the same O(1)-in-parameter-count trade [`Bramble.pde_solve`](@ref)'s own adjoint
 rule makes for the steady case.
 
 # Keywords
 Every keyword `SciMLSensitivity.adjoint_sensitivities` takes, plus these two defaults chosen
 for a `Semidiscretization`'s index-1 DAE specifically (both overridable):
 - `sensealg`: `InterpolatingAdjoint(autojacvec = false)` -- `autojacvec = false` uses
-  [`jacobian!`](@ref)'s own exact `-A` for the `u`-vjp, so no AD tool ever needs to
+  [`Bramble.jacobian!`](@ref)'s own exact `-A` for the `u`-vjp, so no AD tool ever needs to
   differentiate through the residual's mutating buffers for that half.
 - `initializealg`: `BrownFullBasicInit()` -- restores the adjoint's own algebraic
   consistency at `t = T` rather than merely checking it (the default `CheckInit` rejects a
@@ -92,7 +92,7 @@ dgdu!(out, u, p, t, i) = (@. out = 2 * (u - obs[i]); nothing)
 du0, dp = Bramble.adjoint_sensitivities(sol, FBDF(); t = ts, dgdu_discrete = dgdu!)
 ```
 
-See also [`ode_problem`](@ref), [`pde_solve`](@ref) for the steady-state adjoint this
+See also [`Bramble.ode_problem`](@ref), [`Bramble.pde_solve`](@ref) for the steady-state adjoint this
 mirrors.
 """
 function Bramble.adjoint_sensitivities(
