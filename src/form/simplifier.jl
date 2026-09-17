@@ -93,6 +93,20 @@ grid functions and components involved, not an approximation.
 # to, and no AD backend differentiates an `Integer`. A floating-point coefficient is treated
 # as an opaque runtime value instead -- write `0 * A` / `1 * A`, not `0.0 * A` / `1.0 * A`,
 # to get the structural collapse.
+#
+# The restriction buys stability only because an `Integer` coefficient is, in practice, a
+# literal: `iszero`/`isone` are then constant-folded and this method has one return type per
+# call site. That is a real contract, not an accident, so state it plainly -- **an `Integer`
+# coefficient must be a compile-time constant**. A genuinely runtime one (`n::Int` read from a
+# parameter) cannot be folded and this method returns
+# `Union{ZeroOperator{D,Nothing}, typeof(A), OperatorScale{D,typeof(c),typeof(A)}}`, which is
+# the same instability the `Float64` case was restricted to avoid. There is no way to ask, from
+# inside a function, whether a value is known to inference, and removing the value branch
+# altogether would cost `0 * A` and `1 * A` their collapse -- both documented, and `1` is what
+# `_scale_parts` reports for every bare node. So the hole stays, deliberately, with a narrow
+# fix available to the caller: pass a runtime scalar as a `Float64` (`float(n)`) or wrap it in
+# a `Ref`. `test/form/simplifier.jl` pins the `Union` so a future change to this trade-off has
+# to be made on purpose.
 @inline function _wrap_scale(c::Integer, A::LazyOp)
     iszero(c) && return _zero_of(A)
     isone(c) && return A
@@ -138,6 +152,29 @@ is the one thing this pass may never do.
     end
     return true
 end
+
+# Whether `_ast_equal(a, b)` is settled by the two types alone, with no field read. The
+# like-term rule is gated on this *before* it asks `_ast_equal` anything: the rule returns a
+# different *node type* depending on the answer, so an answer the compiler cannot fold makes
+# `form`'s return type a `Union` of the rewritten and unrewritten trees -- the same defect
+# gpena/Bramble.jl#240 fixed for coefficient *values*, one level down, in the subtrees those
+# coefficients scale. It bit every sum of two same-shaped terms carrying runtime data, not
+# only the duplicate expressions it was once thought to: `innerₕ(g₁ * u, v) + innerₕ(g₂ * u, v)`
+# for distinct grid functions `g₁`, `g₂` inferred as `Union{OperatorAdd, OperatorScale}`, and
+# `IllegalTypeAnalysisException` is what Enzyme makes of that.
+#
+# `issingletontype` is exactly the property needed: a type with no non-singleton fields has
+# one value, so any two of its instances are `===` and `_ast_equal` is constant-`true` after
+# inlining. Anything else -- a `GridFunctionScale` holding an array, a `DiracSource`, an
+# `IndexedTrialFunction` whose `component_idx` is a field rather than a type parameter -- is
+# left as the sum it was written as. That costs a routed term and changes no number.
+#
+# The pure-operator trees `form` actually builds *are* singletons: a `BilinearProduct` over
+# `TrialFunction`/`TestFunction` and any stack of difference or average wrappers has singleton
+# fields all the way down, so `innerₕ(u, v) + innerₕ(u, v)` and every `Ref`-coefficient sum
+# still combine.
+@inline _statically_equal(::LazyOp, ::LazyOp) = false
+@inline _statically_equal(::T, ::T) where {T <: LazyOp} = Base.issingletontype(T)
 
 # --- Component-routing safety -------------------------------------------------------- #
 
@@ -286,10 +323,22 @@ function simplify_ast(op::OperatorAdd)
     cl, al = _scale_parts(left)
     cr, ar = _scale_parts(right)
 
-    if _ast_equal(al, ar)
-        # Combine like terms: `c1 * A + c2 * A -> (c1 + c2) * A`. Structurally equal `al`,
-        # `ar` name the same component (or none) by construction -- `_ast_equal` already
-        # compared every field, `component_idx` included -- so this is always routing-safe.
+    if _statically_equal(al, ar) && _ast_equal(al, ar)
+        # Combine like terms: `c1 * A + c2 * A -> (c1 + c2) * A`. `_ast_equal` stays the
+        # definition of "the same subtree"; `_statically_equal` in front of it is the gate on
+        # whether that question may be *asked* at all. This branch and the fall-through below
+        # return different node types, so the decision has to be one inference can fold
+        # (gpena/Bramble.jl#240 -- see `_statically_equal`'s own comment for the `Union` this
+        # otherwise produces). Past a `true` gate the type is a singleton and `_ast_equal`
+        # folds to `true` as well, so the pair costs one constant, not two comparisons.
+        #
+        # Routing-safe because a singleton type has no runtime `component_idx` for the two
+        # sides to disagree on -- `IndexedTrialFunction`/`IndexedTestFunction` carry theirs as
+        # a field, so they are never singletons and never reach here.
+        #
+        # Three exits, not two: with a `RefValue` on one side and a number on the other,
+        # neither `return` fires and control reaches the `OperatorAdd` at the bottom. Under a
+        # statically-`true` guard the compiler folds all three, so the spread costs nothing.
         #
         # Only when both coefficients are static numbers -- summing across a `RefValue`
         # would freeze a value meant to keep changing.

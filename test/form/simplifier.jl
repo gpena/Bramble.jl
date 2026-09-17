@@ -20,6 +20,8 @@ using Bramble:
                simplify_ast,
                resolve_ast,
                resolve_form_ast,
+               trial_function,
+               test_function,
                form,
                assemble,
                Innerh,
@@ -36,6 +38,16 @@ using Bramble:
     Wₕ = gridspace(Ωₕ)
     A = IdentityOperator(Wₕ)   # a leaf standing in for an arbitrary operator
     B = D₋ₓ(A)                 # a second leaf, structurally different from `A`
+
+    # Like-term combining fires only when the two subtrees' equality is settled by their types
+    # alone -- `_statically_equal`, i.e. `Base.issingletontype` (gpena/Bramble.jl#240). `A` and
+    # `B` above are *not* singletons: `IdentityOperator` carries the grid space in a field, so
+    # two of them are only equal by a run-time comparison. `S` and `T` are the singleton
+    # counterparts -- an inner product of a trial and a test function, which is the shape every
+    # form built from operators alone actually has -- and they are what the combining rules are
+    # checked against below.
+    S = innerₕ(trial_function(Wₕ), test_function(Wₕ))
+    T = inner₊ₓ(D₋ₓ(trial_function(Wₕ)), D₋ₓ(test_function(Wₕ)))
 
     @testset "Zero and identity" begin
         @test simplify_ast(0 * A) isa ZeroOperator
@@ -73,39 +85,58 @@ using Bramble:
     end
 
     @testset "Combining like terms" begin
-        # `A + A -> 2 * A`
-        c = simplify_ast(A + A)
+        # `S + S -> 2 * S`
+        c = simplify_ast(S + S)
         @test c isa OperatorScale
         @test c.scalar == 2
-        @test c.inner_op === A
+        @test c.inner_op === S
 
-        # `c1 * A + c2 * A -> (c1 + c2) * A`
-        c = simplify_ast(2 * A + 3 * A)
+        # `c1 * S + c2 * S -> (c1 + c2) * S`
+        c = simplify_ast(2 * S + 3 * S)
         @test c isa OperatorScale
         @test c.scalar == 5
-        @test c.inner_op === A
+        @test c.inner_op === S
 
-        # `A - A -> 0`
-        @test simplify_ast(A - A) isa ZeroOperator
+        # `S - S -> 0`
+        @test simplify_ast(S - S) isa ZeroOperator
 
         # structurally different subtrees are never merged, however they compare numerically
+        @test !(simplify_ast(S + T) isa OperatorScale)
         @test !(simplify_ast(A + B) isa OperatorScale)
+    end
 
-        # two independently-built grid functions are never treated as the same operator,
-        # even scaling the same inner term identically -- only object identity counts
+    @testset "Data-carrying terms are never combined" begin
+        # The gate, stated as tests: equality decided by reading a field at run time would make
+        # this method's return type depend on that read, and `form`'s return type a `Union` of
+        # the combined and uncombined trees -- which is what Enzyme rejects
+        # (gpena/Bramble.jl#240). So a node holding data is left as the sum it was written as,
+        # *even when both sides hold the identical object*. One extra routed term, same numbers.
         vₕ = Rₕ(Wₕ, x -> x[1])
-        wₕ = Rₕ(Wₕ, x -> x[1])  # same values, different array: must not be merged
+
+        same_array = simplify_ast(2 * (vₕ * B) + 3 * (vₕ * B))
+        @test same_array isa OperatorAdd
+        @test same_array.left_op isa OperatorScale
+        @test same_array.right_op isa OperatorScale
+
+        # `IdentityOperator` carries its grid space, so it is in the same boat as the array
+        @test simplify_ast(A + A) isa OperatorAdd
+        @test !(simplify_ast(A - A) isa ZeroOperator)
+
+        # ... and the numbers are unchanged by not combining, which is the only thing that
+        # may never move. Checked through `form`, against the single-term form scaled by hand.
+        five = form(Wₕ, Wₕ, (u, v) -> 2 * innerₕ(vₕ * u, v) + 3 * innerₕ(vₕ * u, v))
+        one_term = form(Wₕ, Wₕ, (u, v) -> innerₕ(vₕ * u, v))
+        @test resolve_form_ast(five) isa OperatorAdd
+        @test Matrix(assemble(five)) ≈ 5 .* Matrix(assemble(one_term))
+
+        # two independently-built grid functions were never merged even before the gate --
+        # only object identity ever counted -- but the common `2` still factors out
+        wₕ = Rₕ(Wₕ, x -> x[1])  # same values, different array
         different = simplify_ast(2 * (vₕ * B) + 2 * (wₕ * B))
-        @test different isa OperatorScale  # still factors the common `2`
+        @test different isa OperatorScale
         @test different.inner_op isa OperatorAdd
         @test different.inner_op.left_op isa GridFunctionScale
         @test different.inner_op.right_op isa GridFunctionScale
-
-        # the same grid function reused on both sides combines the coefficients
-        same = simplify_ast(2 * (vₕ * B) + 3 * (vₕ * B))
-        @test same isa OperatorScale
-        @test same.scalar == 5
-        @test same.inner_op isa GridFunctionScale
     end
 
     @testset "Distributive factoring" begin
@@ -130,15 +161,23 @@ using Bramble:
     end
 
     @testset "Idempotent and recursive" begin
+        vₕ_deep = Rₕ(Wₕ, x -> x[1])
+
         # simplifying an already-simplified tree is a no-op
         t = simplify_ast(2 * A + 2 * B)
         @test simplify_ast(t) === t
 
-        # the rules apply however deep the algebra sits, not only at the root
-        nested = simplify_ast(A + (0 * B + (1 * A)))
+        # the rules apply however deep the algebra sits, not only at the root. `S`, not `A`:
+        # the innermost step is a like-term combine, which needs a singleton leaf.
+        nested = simplify_ast(S + (0 * T + (1 * S)))
         @test nested isa OperatorScale
         @test nested.scalar == 2
-        @test nested.inner_op === A
+        @test nested.inner_op === S
+
+        # the zero and identity collapses themselves are leaf-agnostic -- they read the
+        # coefficient, not the subtree -- so they still reach a data-carrying leaf
+        @test simplify_ast(A + (0 * B + (1 * A))) isa OperatorAdd
+        @test simplify_ast(0 * (vₕ_deep * B)) isa ZeroOperator
     end
 end
 
@@ -277,11 +316,18 @@ end
         # `source_function` above, so it lifts and combines the same way (#226).
         d = dirac((0.3, 0.4), 1.0)
         @test d isa DiracSource
+        # Each coefficient still lifts out of its own inner product. The two terms are *not*
+        # combined into `5 * innerₕ(d, v)`, though: a `DiracSource` carries its points and
+        # strengths in fields, so deciding the two sides are the same subtree would mean
+        # reading those at run time -- and the rule's two outcomes are different node types,
+        # which is what cost `form` its inferred return type (gpena/Bramble.jl#240). What may
+        # never change is the vector, and it does not.
         l = form(Wₕ, v -> innerₕ(2 * d, v) + innerₕ(3 * d, v))
         ast = resolve_form_ast(l)
-        @test ast isa OperatorScale
-        @test ast.scalar == 5
-        @test ast.inner_op isa LinearProduct
+        @test ast isa OperatorAdd
+        @test ast.left_op isa OperatorScale
+        @test ast.left_op.inner_op isa LinearProduct
+        @test ast.right_op isa OperatorScale
         @test assemble(l) ≈ 5 .* assemble(form(Wₕ, v -> innerₕ(d, v)))
 
         # a zero-scaled DiracSource collapses like any other source
@@ -487,6 +533,28 @@ _rt_equal(θ::Float64, W) = form(W, W, (u, v) -> θ * inner₊ₓ(D₋ₓ(u), D�
 _rt_lifted(θ::Float64, W) = form(W, W, (u, v) -> innerₕ(θ * u, v))
 _rt_linear(θ::Float64, W, fₕ) = form(W, v -> θ * innerₕ(fₕ, v))
 
+# Two terms of the *same shape* carrying runtime data. These were the two shapes the `Integer`
+# restriction above did not reach: the like-term rule used to be decided by comparing the two
+# subtrees field by field at run time, so `form` inferred as `Union{..., OperatorAdd},
+# {..., OperatorScale}}` for any sum of same-typed data-carrying terms -- not just the
+# duplicate expressions that limitation was first described as. Two distinct diffusion
+# coefficients in one bilinear form, or two source vectors in one linear form, are the
+# ordinary way to write a model, and both were affected. The rule is now gated on
+# `_statically_equal`, so these infer concretely and the sums assemble as written.
+_rt_two_coeffs(W, g₁, g₂) = form(W, W, (u, v) -> innerₕ(g₁ * u, v) + innerₕ(g₂ * u, v))
+_rt_two_sources(W, g₁, g₂) = form(W, v -> innerₕ(g₁, v) + innerₕ(g₂, v))
+
+# A runtime `Integer` coefficient, which is the one shape deliberately left unstable. The
+# `0 * A -> 0` and `1 * A -> A` collapses read the coefficient's *value*, and that is free
+# only when the value is a literal inference constant-folds. `n::Int` taken from an argument
+# is not, so `_wrap_scale`/`simplify_ast(::OperatorScale)` return
+# `Union{ZeroOperator, typeof(A), OperatorScale}` and `form`'s own return type follows.
+# Removing the value branch would cost `0 * A` and `1 * A` their collapse -- both documented,
+# and `1` is what `_scale_parts` reports for every bare node -- so the trade-off stands and the
+# caller's fix is `float(n)` or a `Ref`. Pinned here, asserted *false*, so that changing the
+# trade-off has to be a deliberate edit to this test rather than a silent drift either way.
+_rt_runtime_int(n::Int, W) = form(W, W, (u, v) -> n * innerₕ(u, v))
+
 _infers(f, sig) = isconcretetype(only(Base.return_types(f, sig)))
 
 @testset "A runtime coefficient leaves `form` type-stable" begin
@@ -502,13 +570,24 @@ _infers(f, sig) = isconcretetype(only(Base.return_types(f, sig)))
     @test _infers(_rt_lifted, (Float64, W))
     @test _infers(_rt_linear, (Float64, W, typeof(fₕ)))
 
+    # Two same-shaped terms carrying distinct runtime data, bilinear and linear
+    # (gpena/Bramble.jl#240). These were `false` before the like-term rule was gated.
+    g₁ = Rₕ(Wₕ, x -> 1.0 + x[1])
+    g₂ = Rₕ(Wₕ, x -> 2.0 - x[2])
+    @test _infers(_rt_two_coeffs, (W, typeof(g₁), typeof(g₂)))
+    @test _infers(_rt_two_sources, (W, typeof(g₁), typeof(g₂)))
+
+    # ... and the deliberate hole, asserted as such: see `_rt_runtime_int`'s comment.
+    @test !_infers(_rt_runtime_int, (Int, W))
+
     # The rewrites themselves are unchanged for the `Integer` coefficients they are written
     # for, which is what makes the restriction affordable -- these are the same trees the
     # rules built before, still built.
     A = IdentityOperator(Wₕ)
     B = D₋ₓ(A)
+    S = innerₕ(trial_function(Wₕ), test_function(Wₕ))
     @test simplify_ast(2 * A + 2 * B) isa OperatorScale     # common factor, still factored
-    @test simplify_ast(2 * A + 3 * A) isa OperatorScale     # like terms, still combined
+    @test simplify_ast(2 * S + 3 * S) isa OperatorScale     # like terms, still combined
     @test simplify_ast(0 * A) isa ZeroOperator              # still elided
     @test simplify_ast(1 * A) === A
 

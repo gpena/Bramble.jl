@@ -166,8 +166,8 @@ smaller number of sweeps for the same matrix or vector:
 | `A + 0`, `0 + A` | `A` | the zero term is not a term at all |
 | `1 * A` | `A` | no wrapper node to route through |
 | `c1 * (c2 * A)`, both static | `(c1 * c2) * A` | unchanged term count, one multiply instead of two |
-| `A + A` | `2 * A` | two routed terms become one |
-| `c1 * A + c2 * A`, same `A` | `(c1 + c2) * A` | two routed terms become one |
+| `A + A`, `A` a singleton node | `2 * A` | two routed terms become one |
+| `c1 * A + c2 * A`, same singleton `A` | `(c1 + c2) * A` | two routed terms become one |
 | `c * A + c * B`, same `c` | `c * (A + B)` | two routed terms become one |
 
 `ZeroOperator{D,Nothing}(nothing)` is synthesized for the zero case rather than reusing a
@@ -178,16 +178,36 @@ consumer of `ZeroOperator` (`local_stencil`, `stencil_offsets`, `component`) rea
 `a.space === b.space`, settles `nothing === nothing` the same way two zero operators over
 the same space would.
 
-"Same `A`"/"same `c`" is `_ast_equal` (`form/simplifier.jl`), a structural equality over `LazyOp`
-subtrees: the same concrete node type, and every field equal — recursively for a field that
-is itself a `LazyOp`, by `===` otherwise. `===` rather than `==` for a leaf field (a grid
+"Same `A`" is two predicates, not one. `_ast_equal` (`form/simplifier.jl`) is the *definition*:
+a structural equality over `LazyOp` subtrees — the same concrete node type, and every field
+equal, recursively for a field that is itself a `LazyOp`, by `===` otherwise. `===` rather than `==` for a leaf field (a grid
 function, a closure, a component index) is deliberate: two arrays holding equal values right
 now are not the same operator once one of them is mutated in place and the other is not, and
 two independently built closures are never "the same" scaling function merely because they
 compute the same thing. Missing an equal-but-distinct pair only forgoes a rewrite; treating
 two different subtrees as equal would change what an assembled form computes, silently, which
 none of these rules may ever do — every rewrite here is an algebraic identity, so the
-assembled matrix or vector is unaffected down to the bit.
+assembled matrix or vector is unaffected up to floating-point association (folding `2 * x +
+3 * x` into `5 * x` can move the last bit; not folding it does too, in the other direction).
+
+`_statically_equal` is the *gate*, and it is what the like-term rule actually branches on:
+whether `_ast_equal`'s answer is settled by the two types alone, which is
+`Base.issingletontype`. The rule has to be gated this way because its two outcomes return
+different node types — an `OperatorScale` when it fires, an `OperatorAdd` when it does not — so
+an answer inference cannot fold makes `form`'s return type a `Union` of both, costing every
+caller a dynamic dispatch into the assembly engine and drawing
+`IllegalTypeAnalysisException` from Enzyme (gpena/Bramble.jl#240). That bit every sum of two
+same-shaped terms carrying runtime data, not just the duplicate expressions it was first
+thought to: `innerₕ(g₁ * u, v) + innerₕ(g₂ * u, v)` for distinct grid functions `g₁ ≠ g₂`, or
+two source vectors in a linear form.
+
+In practice the gate is generous, because the trees `form` builds out of pure operators *are*
+singletons: a `BilinearProduct` over `TrialFunction`/`TestFunction`, wrapped in any stack of
+difference or average nodes, has singleton fields all the way down. What it excludes is a node
+carrying data — a `GridFunctionScale` holding an array, a `SourceVector`, a `DiracSource`, an
+`IndexedTrialFunction` whose `component_idx` is a field rather than a type parameter. Those
+sums assemble as the two terms they were written as: one extra routed term, and the same
+numbers.
 
 A `Base.RefValue` coefficient (§2's dynamic scalar coefficients) is never dereferenced by the
 pass and never combined with a static number, or with a different `Ref`, only recognized as

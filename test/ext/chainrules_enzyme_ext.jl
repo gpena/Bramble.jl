@@ -173,6 +173,28 @@ _central_diff(f, x, h = 1e-6) = (f(x + h) - f(x - h)) / 2h
             @test Enzyme.gradient(mode, Enzyme.Const(loss_field_2d), θ0)[1] ≈
                   _central_diff(loss_field_2d, θ0) rtol=1e-3
 
+            # Two *distinct* coefficient fields on same-shaped terms in one sum. This is the
+            # ordinary way to write a two-material model, and it raised
+            # `IllegalTypeAnalysisException` until the like-term rule stopped being decided by
+            # a run-time comparison (gpena/Bramble.jl#240): `_ast_equal` walked the two
+            # `GridFunctionScale` subtrees field by field, the compiler could not fold the
+            # result, and `form` inferred as `Union{..., OperatorAdd}, {..., OperatorScale}}`.
+            # The rule is gated on `_statically_equal` now, so a data-carrying term is left as
+            # written and `form` has one concrete type. Measured on this exact loss: the
+            # exception before, this gradient after.
+            #
+            # Not a duplicate of `loss_field_2d` above: that one has a single coefficient
+            # field, so the sum -- and with it the rule that used to fire here -- never enters.
+            function loss_two_fields_2d(θ::Real)
+                g₁ = Bramble.element(W2, θ)
+                g₂ = Bramble.element(W2, 2θ)
+                a = form(W2, W2, (u, v) -> innerₕ(g₁ * u, v) + innerₕ(g₂ * u, v))
+                A, F = assemble(a, l2; dirichlet = :boundary => x -> 0.0)
+                return sum(abs2, Bramble.pde_solve(A, F))
+            end
+            @test Enzyme.gradient(mode, Enzyme.Const(loss_two_fields_2d), θ0)[1] ≈
+                  _central_diff(loss_two_fields_2d, θ0) rtol=1e-3
+
             # A 1D sum of three terms: the other shape that used to fail, at the same
             # stencil width as 2D stiffness but reached by summing rather than by dimension.
             function loss_sum_three(θ::Real)

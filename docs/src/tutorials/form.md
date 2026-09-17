@@ -602,6 +602,25 @@ which may coincide) pays nothing for the duplication once assembled: write the t
 separately if that is the clearer expression of the model, rather than checking by hand
 whether two of them happen to repeat.
 
+The merge applies to terms built out of operators alone — inner products of trial and test
+functions under any stack of differences, averages, shifts or jumps. A term that carries
+*data* (a grid-function coefficient, a source vector, a Dirac payload) is left as written,
+even when both summands hold the very same array. Deciding otherwise would mean comparing the
+two subtrees' contents at run time, and since the rule's two outcomes are different node
+types, `form` would lose its inferred return type — which is what stops `Enzyme`
+differentiating the form at all (gpena/Bramble.jl#240). The cost of leaving them apart is one
+extra routed term; the numbers are the same:
+
+```@example forms
+gₕ = Rₕ(Wₕ, x -> 1.0)
+a_two = form(Wₕ, Wₕ, (u, v) -> innerₕ(gₕ * u, v) + innerₕ(gₕ * u, v))
+Bramble.resolve_form_ast(a_two) isa Bramble.OperatorAdd   # two terms, kept apart
+```
+
+```@example forms
+Matrix(assemble(a_two)) ≈ 2 .* Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(gₕ * u, v))))
+```
+
 ### A shared scalar factors out of a sum
 
 `c * A + c * B`, for two different `A` and `B`, becomes `c * (A + B)`: still two operators to
@@ -658,6 +677,20 @@ carried through as written:
 ```@example forms
 a_float = form(W2, W2, (u, v) -> innerₕ(u, v) + 0.0 * inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
 nnz(assemble(a_float)) > nnz(assemble(a_mass))   # same numbers, stencil band kept as zeros
+```
+
+The converse is the one sharp edge here: writing `0` and `1` as literals is not a style
+preference, it is the contract. These rules read the coefficient's value, and that is only
+free when the value is a literal inference can fold. A genuinely runtime integer --- `n::Int`
+taken from a parameter, not written into the expression --- cannot be folded, and `n * A` then
+costs `form` the very inferred return type the `Integer` restriction exists to protect. Pass
+such a scalar as a `Float64` (`float(n)`), or wrap it in a `Ref` if it needs to keep changing:
+
+```@example forms
+n = 3
+a_literal = form(W2, W2, (u, v) -> 3 * innerₕ(u, v))         # folds: 3 is a literal
+a_runtime = form(W2, W2, (u, v) -> float(n) * innerₕ(u, v))  # safe: runtime value, as Float64
+Matrix(assemble(a_literal)) ≈ Matrix(assemble(a_runtime))
 ```
 
 A dynamic coefficient (a `Ref`, §2's "Live grid coefficients and dynamic scalars") combines

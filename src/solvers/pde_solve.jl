@@ -102,12 +102,20 @@ end to end -- including gradients with respect to a Dirichlet boundary value.
     whenever the compiler could not fold the comparison -- and `IllegalTypeAnalysisException`
     is what Enzyme's strict-aliasing type analysis makes of that `Union`. Those rules are now
     restricted to `Integer` coefficients (`form/simplifier.jl`), which leaves `form` one
-    concrete return type for any runtime coefficient.
+    concrete return type for any runtime *floating-point* or `Ref` coefficient.
 
-    One shape is still outside that: two *structurally identical* terms in the same sum
-    (`θ * a(u, v) + θ * a(u, v)`). Whether the like-term rule fires is decided by
-    `_ast_equal`, which compares the two subtrees field by field at run time, so that `Union`
-    remains. Write the term once.
+    A runtime `Integer` is the one coefficient still outside that, and deliberately so: the
+    `0 * A -> 0` and `1 * A -> A` collapses read the value, which works only because an
+    integer coefficient is normally a literal the compiler folds. Pass a scalar that is only
+    known at run time as a `Float64` (`float(n)`) or wrap it in a `Ref`; an `n::Int` read from
+    a parameter puts the `Union` back.
+
+    Like-term combining used to cost stability too -- any sum of two same-shaped terms
+    carrying runtime data, such as `innerₕ(g₁ * u, v) + innerₕ(g₂ * u, v)` for distinct grid
+    functions, inferred as a `Union` because the rule was decided by a field-by-field run-time
+    comparison. It is now gated on whether that comparison is settled by the types alone, so
+    those sums infer concretely; a term carrying a grid function, a source array or a Dirac
+    payload simply assembles as the two terms it was written as.
 
     A second limit used to bite alongside it -- `EnzymeNoTypeError` for any difference
     operator in 2D or 3D, and for larger sums of terms in 1D -- and is gone
