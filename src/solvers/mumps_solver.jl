@@ -4,7 +4,7 @@
 # Solver) parallel multifrontal LU, LDLᵀ, and Cholesky factorizations for the sparse
 # linear systems Bramble discretizes. Implemented in `BrambleMUMPSExt`, same
 # underscored-fallback idiom as `amg_preconditioner` (solvers/amg_preconditioner.jl) and
-# `linear_problem` (form/semidiscrete.jl).
+# `linear_problem` (form/semidiscrete_problems.jl).
 
 """
     MUMPSFactorization{T} <: Factorization{T}

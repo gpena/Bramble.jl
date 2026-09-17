@@ -279,7 +279,7 @@ Base.summary(sd::SecondOrderSemidiscretization) = sprint(show, sd)
 # --- SciMLBase handoff -------------------------------------------------------------- #
 #
 # Implemented in `BrambleSciMLExt`, mirroring `ode_function`/`ode_problem`'s own
-# underscored-fallback idiom -- see `semidiscrete.jl`'s header comment for why.
+# underscored-fallback idiom -- see `semidiscrete_problems.jl`'s header comment for why.
 
 """
     second_order_ode_function(sd::SecondOrderSemidiscretization) -> DynamicalODEFunction

@@ -125,7 +125,7 @@ end
 #
 # The whole `pairs` tuple must agree on one shape, not mix them: `semidiscretize` decides
 # once, for the *entire* constraint set, whether to route through `TimeDependentConstraints`
-# or `TimeParamDependentConstraints` (`form/semidiscrete.jl`), by checking that every
+# or `TimeParamDependentConstraints` (`form/semidiscrete_constraints.jl`), by checking that every
 # condition has the same arity. A mix would silently fall through to neither and only fail
 # once a residual call actually invoked the wrong-arity closure -- caught here instead, at
 # the point that already knows every condition's arity.

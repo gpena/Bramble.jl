@@ -1,7 +1,7 @@
 # nonlinear_problem.jl
 #
 # `nonlinear_problem`: the SciMLBase handoff for a steady nonlinear residual, alongside
-# `ode_problem`/`linear_problem` (form/semidiscrete.jl). Implemented in `BrambleSciMLExt`,
+# `ode_problem`/`linear_problem` (form/semidiscrete_problems.jl). Implemented in `BrambleSciMLExt`,
 # same underscored-fallback idiom as those two and `ast_sparsity_detector`/`export_vtk`: the
 # extension's method narrows on `u0` (`::AbstractVector`, which a `VectorElement` already is)
 # rather than on `residual`, which has no Bramble type to narrow to -- an arbitrary residual

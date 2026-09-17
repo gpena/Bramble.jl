@@ -3,7 +3,7 @@
 # `amg_preconditioner`: algebraic multigrid hierarchies (smoothed aggregation or classical
 # Ruge-Stüben) for the symmetric positive-definite matrices Bramble's SBP forms assemble.
 # Implemented in `BrambleAlgebraicMultigridExt`, same underscored-fallback idiom as
-# `ode_problem`/`linear_problem` (form/semidiscrete.jl) and `nonlinear_problem`
+# `ode_problem`/`linear_problem` (form/semidiscrete_problems.jl) and `nonlinear_problem`
 # (form/nonlinear_problem.jl): the extension's method narrows on `A::AbstractMatrix`, a
 # strict specialisation of this file's `::Any` fallback.
 #
