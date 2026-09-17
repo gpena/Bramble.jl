@@ -78,12 +78,12 @@ from a container of `Int`s and the weights from a container of `Float64`s remove
 coefficient scaling the form and for a `VectorElement` coefficient alike, in 1D, 2D and 3D.
 
 The stencil itself is unchanged: `local_stencil` returns what it always did, and the split
-happens where the entries are consumed ([`_visit_entries`](@ref)). That is enough, and the
+happens where the entries are consumed (`_visit_entries`). That is enough, and the
 narrower change: every `local_stencil` method, the stencil algebra above and the tests that
 compare stencils against literal tuples all stay as they are. Enzyme differentiates
 `local_stencil` and `scale_stencil` themselves correctly at any stencil size measured, up
 to 63 machine words -- the size threshold gpena/Bramble.jl#249 was filed against is really
-[`_peelable`](@ref) selecting the guarded walk, not an aggregate Enzyme cannot type.
+`_peelable` selecting the guarded walk, not an aggregate Enzyme cannot type.
 
 `map` over a `Tuple` unrolls and stays type-stable, the same property the rest of the
 stencil algebra in this file relies on, so neither call allocates.
@@ -91,6 +91,8 @@ stencil algebra in this file relies on, so neither call allocates.
 @inline entry_offsets(stencil::Tuple) = map(Base.front, stencil)
 
 @inline entry_weights(stencil::Tuple) = map(last, stencil)
+
+@doc (@doc entry_offsets) entry_weights
 
 """
     sum_stencil_values(stencil::Tuple)
