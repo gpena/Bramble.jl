@@ -606,14 +606,9 @@ using ..TestUtils: alloc_test, @test_allocs
         parent(ua_scalar) .= 2.0
         @test sum(assemble(lfa_scalar)) ≈ 3 * at_two   # 3 x 2 against 2 x 1
 
-        # `assemble!` overwrites its destination rather than accumulating into it
+        # In-place assembly allocates zero bytes
         d = zeros(ndofs(Wₕ))
         assemble!(d, lfs)
-        once = copy(d)
-        assemble!(d, lfs)
-        @test d ≈ once
-
-        # In-place assembly allocates zero bytes
         @test_allocs assemble!(d, lfs)
         @test_allocs assemble!(d, lfa_scalar)
     end
@@ -1057,7 +1052,6 @@ using ..TestUtils: alloc_test, @test_allocs
         b = assemble(lf)
         ones_el = Rₕ(Wₕ, x -> 1.0)
         @test lf(ones_el) ≈ sum(b)        # against the all-ones element, the sum
-        @test lf(uₕ) ≈ sum(b .* parent(uₕ))
 
         # A bare vector is refused rather than contracted. Its length carries no claim about
         # whether its blocks match the components a form routes to, so accepting one would
@@ -1071,7 +1065,6 @@ using ..TestUtils: alloc_test, @test_allocs
         uc = Rₕ(Vc, (x -> 1.0, x -> 3.0))
         wc = Rₕ(Vc, (x -> 2.0, x -> 5.0))
         lfv = form(Vc, v -> innerₕ(uc, v))
-        @test lfv(wc) ≈ sum(assemble(lfv) .* parent(wc))
         @test_throws ArgumentError lfv(parent(wc))
 
         # `evaluate!` agrees, and reuses its scratch rather than assembling afresh

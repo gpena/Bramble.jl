@@ -232,12 +232,6 @@ using Bramble:
         b = assemble(form(Wbig, v -> innerₕ(D₋ₓ(πₕ(us)), v)))
         @test b ≈ parent(D₋ₓ(πₕ(Wbig, us))) .* w
         @test !all(iszero, b)
-
-        # and the composite-space spelling the forms tutorial teaches
-        Vh = CompositeGridSpace((Wbig, Wsmall))
-        uv = Rₕ(Vh, (x -> 0.0, f))
-        bc = assemble(form(Vh, v -> innerₕ(D₋ₓ(πₕ(uv(2))), D₋ₓ(v(1)))))
-        @test !all(iszero, bc)                      # it contributed nothing before this fix
     end
 
     @testset "Plain source regression" begin

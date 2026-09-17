@@ -398,16 +398,6 @@ using Bramble:
         # and a component the space does not have is an error rather than an empty block
         @test_throws ArgumentError assemble(form(Vₕ, Vₕ, (u, v) -> innerₕ(u(1), v(5))))
         @test_throws ArgumentError assemble(form(Vₕ, Vₕ, (u, v) -> innerₕ(u(0), v(1))))
-
-        # the walks themselves, which is where the decision is made
-        u = Bramble.TrialFunction{2}()
-        v = Bramble.TestFunction{2}()
-        @test trial_component_or_nothing(innerₕ(u(1), v(2))) == 1
-        @test test_component_or_nothing(innerₕ(u(1), v(2))) == 2
-        @test trial_component_or_nothing(innerₕ(u, v)) === nothing
-        @test block_of(innerₕ(u(1), v(2)), 2, 2) == (1, 2)
-        @test block_of(innerₕ(u, v), 2, 2) === nothing
-        @test_throws ArgumentError block_of(innerₕ(u(1), v), 2, 2)
     end
 
     @testset "Block resolution (#49)" begin

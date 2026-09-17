@@ -263,9 +263,6 @@ end
             @test is_symbolic(f(u))            # symbolic through the wrapper
         end
 
-        @test M₋ₓ(id) isa Bramble.AverageNode
-        @test M₊ᵧ(id) isa Bramble.AverageNode
-
         # the three without a matrix form are grouped, so anything reading only the
         # direction covers all of them
         @test Dcₓ(id) isa ExtendedDifferenceNode

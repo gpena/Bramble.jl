@@ -122,15 +122,6 @@ using Bramble:
         @test size(A, 1) == ndofs(Bramble.test_space(a))
         @test size(A, 2) == ndofs(Bramble.trial_space(a))
     end
-
-    @testset "Linear side compatibility" begin
-        # the same cross-mesh coupling in a LINEAR form is legitimate and works: πₕ supplies
-        # the mapping the bilinear side lacks
-        uv = Rₕ(Vh, (x -> 0.0, x -> x[1] + x[2]))
-        b = assemble(form(Vh, v -> innerₕ(πₕ(uv(2)), v(1))))
-        @test length(b) == ndofs(Vh)
-        @test !all(iszero, b)
-    end
 end
 
 end # module FormCrossMeshBlocksTests

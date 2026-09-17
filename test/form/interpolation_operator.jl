@@ -302,12 +302,9 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
             form(Vh, Vh, (u, v) -> innerₕ(πₕ(Wbig, u(2)), v(1)))
         )
 
-        # a cross-mesh block with *no* interpolation is still refused, at every entry point:
-        # the exemption is for the term that says how to map, not for cross-mesh generally
-        for g in ((u, v) -> innerₕ(u(2), v(1)), (u, v) -> innerₕ(u(1), v(2)))
-            @test_throws ArgumentError assemble(form(Vh, Vh, g))
-            @test_throws ArgumentError allocate_system_matrix(form(Vh, Vh, g))
-        end
+        # a cross-mesh pair with *no* interpolation is still refused: the exemption is for
+        # the term that says how to map, not for cross-mesh generally. The composite-block
+        # spelling of the same refusal is cross_mesh_blocks.jl's "Entry point refusal".
         @test_throws ArgumentError assemble(form(Ws, Wt, (u, v) -> innerₕ(u, v)))
 
         # a sum in which only one summand interpolates does not exempt the other

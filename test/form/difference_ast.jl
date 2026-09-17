@@ -86,23 +86,16 @@ using Bramble:
     end
 
     @testset "AST equivalence" begin
+        # an indexed trial/test pair, for the symbolic-leaf checks below. The component
+        # walk over these nodes is block_extract.jl's "Component search".
+        u, v = IndexedTrialFunction{2}(3), IndexedTestFunction{2}(2)
+
         for (bwd, fwd) in ((D₋ₓ(id), D₊ₓ(id)), (D₋ᵧ(id), D₊ᵧ(id)))
             @test is_symbolic(bwd) == is_symbolic(fwd) == false
             @test resolve_ast(bwd) isa BackwardDifference
             @test resolve_ast(fwd) isa ForwardDifference
             @test bwd isa DifferenceNode
             @test fwd isa DifferenceNode
-        end
-
-        # the block walk reaches its leaf through either node, and through a scaling on
-        # top of it. Its leaf is an indexed trial or test function (that is what it is
-        # looking for), so it is those the nodes wrap here, not the identity.
-        u, v = IndexedTrialFunction{2}(3), IndexedTestFunction{2}(2)
-        for D in (D₋ₓ, D₊ₓ, D₋ᵧ, D₊ᵧ)
-            @test trial_component_or_nothing(D(u)) == 3
-            @test test_component_or_nothing(D(v)) == 2
-            @test trial_component_or_nothing(7 * D(u)) == 3
-            @test test_component_or_nothing(7 * D(v)) == 2
         end
 
         # a symbolic leaf makes the whole node symbolic, either way round

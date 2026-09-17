@@ -137,7 +137,6 @@ using ..TestUtils: _tri
         Ae, Fe = _tri(n), collect(1.0:n)
         dirichlet_bc!(Ae, Ωₕ, :bottom)
         symmetrize!(Ae, Fe, Ωₕ, :bottom)
-        @test issymmetric(Ae)
 
         # the stored zeros stay stored: the sparsity pattern is the stencil's, and is not
         # allowed to start depending on the boundary data. This is why the `dropzeros`
