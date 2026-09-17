@@ -62,6 +62,51 @@ function _nonlinear_poisson_setup(D::Int, Ωd, Ωₕ)
     return Wₕ, sol, diffusion_form, residual
 end
 
+# The coupled reaction-diffusion system two testsets below both build:
+# -Δu + u + uv = f₁, -Δv + v - uv = f₂, so that `v_c` scales block (1,1) and `u_c` scales
+# block (2,2) -- the case jacobian_pattern's composite support exists for. They differ
+# only in how fine a mesh they run it on, so the system itself is built once here.
+function _coupled_reaction_diffusion(n)
+    u_ex(x) = sin(π * x[1]) * sin(π * x[2])
+    v_ex(x) = sin(2π * x[1]) * sin(2π * x[2])
+    f1(x) = 2π^2 * u_ex(x) + u_ex(x) + u_ex(x) * v_ex(x)
+    f2(x) = 8π^2 * v_ex(x) + v_ex(x) - u_ex(x) * v_ex(x)
+
+    Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
+    Ωₕ = mesh(Ω, (n, n), (false, false))
+    Wₕ = gridspace(Ωₕ)
+    Vₕ = Wₕ^Val(2)
+
+    bcs = dirichlet_constraints(Ω, :boundary => x -> 0.0)
+    f1ₕ = element(Wₕ)
+    avgₕ!(f1ₕ, f1)
+    f2ₕ = element(Wₕ)
+    avgₕ!(f2ₕ, f2)
+    l = form(Vₕ, q -> innerₕ(f1ₕ, q(1)) + innerₕ(f2ₕ, q(2)))
+    F = assemble(l; dirichlet = bcs)
+
+    function coupled_form(wₕ)
+        u_c, v_c = components(wₕ)
+        return form(
+            Vₕ,
+            Vₕ,
+            (p, q) -> inner₊(∇₋ₕ(p(1)), ∇₋ₕ(q(1))) +
+                      innerₕ(p(1), q(1)) +
+                      innerₕ(v_c * p(1), q(1)) +
+                      inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2))) +
+                      innerₕ(p(2), q(2)) - innerₕ(u_c * p(2), q(2))
+        )
+    end
+    function residual(w::AbstractVector{T}) where {T}
+        wₕ = element(Vₕ, T)
+        wₕ .= w
+        A = assemble(coupled_form(wₕ); dirichlet = :boundary)
+        return A * w .- F
+    end
+
+    return (; Vₕ = Vₕ, coupled_form = coupled_form, residual = residual)
+end
+
 @testset "jacobian_pattern" begin
     @testset "Safe superset of the AD-traced pattern ($D D)" for (D, n) in ((1, 12), (2, 6), (3, 4))
         Ω = domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D)))
@@ -218,44 +263,8 @@ end
         # exactly like the non-composite case above.
 
         @testset "coupled reaction-diffusion's own coupling (identity cross-block)" begin
-            # -Δu + u + uv = f₁, -Δv + v - uv = f₂: `v_c` scales block (1,1), `u_c` scales
-            # block (2,2) -- the case jacobian_pattern's composite support exists for.
-            u_ex(x) = sin(π * x[1]) * sin(π * x[2])
-            v_ex(x) = sin(2π * x[1]) * sin(2π * x[2])
-            f1(x) = 2π^2 * u_ex(x) + u_ex(x) + u_ex(x) * v_ex(x)
-            f2(x) = 8π^2 * v_ex(x) + v_ex(x) - u_ex(x) * v_ex(x)
-
-            Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
-            Ωₕ = mesh(Ω, (10, 10), (false, false))
-            Wₕ = gridspace(Ωₕ)
-            Vₕ = Wₕ^Val(2)
-
-            bcs = dirichlet_constraints(Ω, :boundary => x -> 0.0)
-            f1ₕ = element(Wₕ)
-            avgₕ!(f1ₕ, f1)
-            f2ₕ = element(Wₕ)
-            avgₕ!(f2ₕ, f2)
-            l = form(Vₕ, q -> innerₕ(f1ₕ, q(1)) + innerₕ(f2ₕ, q(2)))
-            F = assemble(l; dirichlet = bcs)
-
-            function coupled_form(wₕ)
-                u_c, v_c = components(wₕ)
-                return form(
-                    Vₕ,
-                    Vₕ,
-                    (p, q) -> inner₊(∇₋ₕ(p(1)), ∇₋ₕ(q(1))) +
-                              innerₕ(p(1), q(1)) +
-                              innerₕ(v_c * p(1), q(1)) +
-                              inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2))) +
-                              innerₕ(p(2), q(2)) - innerₕ(u_c * p(2), q(2))
-                )
-            end
-            function residual(w::AbstractVector{T}) where {T}
-                wₕ = element(Vₕ, T)
-                wₕ .= w
-                A = assemble(coupled_form(wₕ); dirichlet = :boundary)
-                return A * w .- F
-            end
+            sys = _coupled_reaction_diffusion(10)
+            Vₕ, coupled_form, residual = sys.Vₕ, sys.coupled_form, sys.residual
 
             a = coupled_form(element(Vₕ, 0.0))
             mine = jacobian_pattern(a, U -> U(2), U -> U(1))
@@ -457,43 +466,9 @@ end
             # and see the same residual function, so they must reach the same root if the
             # native pattern is exact enough for Newton to behave identically -- confirmed
             # to agree to ~1e-14 across repeated runs.
-            u_ex(x) = sin(π * x[1]) * sin(π * x[2])
-            v_ex(x) = sin(2π * x[1]) * sin(2π * x[2])
-            f1(x) = 2π^2 * u_ex(x) + u_ex(x) + u_ex(x) * v_ex(x)
-            f2(x) = 8π^2 * v_ex(x) + v_ex(x) - u_ex(x) * v_ex(x)
-
             Random.seed!(20260912)
-            Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
-            Ωₕ = mesh(Ω, (16, 16), (false, false))
-            Wₕ = gridspace(Ωₕ)
-            Vₕ = Wₕ^Val(2)
-
-            bcs = dirichlet_constraints(Ω, :boundary => x -> 0.0)
-            f1ₕ = element(Wₕ)
-            avgₕ!(f1ₕ, f1)
-            f2ₕ = element(Wₕ)
-            avgₕ!(f2ₕ, f2)
-            l = form(Vₕ, q -> innerₕ(f1ₕ, q(1)) + innerₕ(f2ₕ, q(2)))
-            F = assemble(l; dirichlet = bcs)
-
-            function coupled_form(wₕ)
-                u_c, v_c = components(wₕ)
-                return form(
-                    Vₕ,
-                    Vₕ,
-                    (p, q) -> inner₊(∇₋ₕ(p(1)), ∇₋ₕ(q(1))) +
-                              innerₕ(p(1), q(1)) +
-                              innerₕ(v_c * p(1), q(1)) +
-                              inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2))) +
-                              innerₕ(p(2), q(2)) - innerₕ(u_c * p(2), q(2))
-                )
-            end
-            function residual(w::AbstractVector{T}) where {T}
-                wₕ = element(Vₕ, T)
-                wₕ .= w
-                A = assemble(coupled_form(wₕ); dirichlet = :boundary)
-                return A * w .- F
-            end
+            sys = _coupled_reaction_diffusion(16)
+            Vₕ, coupled_form, residual = sys.Vₕ, sys.coupled_form, sys.residual
 
             function newton(ad)
                 w = zeros(ndofs(Vₕ))
