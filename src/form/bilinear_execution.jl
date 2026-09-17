@@ -276,9 +276,9 @@ function _assemble_bilinear_core_cached!(
         trial_space,
         test_space,
         ast::AST_TYPE,
-        cache::_AssemblyCache{D},
+        cache::_AssemblyCache{D, CACHED_AST},
         α = true
-) where {AST_TYPE, D}
+) where {AST_TYPE, D, CACHED_AST}
     if cache.valid && cache.A_id === objectid(A) && cache.ast === ast
         _replay_bilinear_core!(A, trial_space, test_space, ast, cache.segments, α)
     else
@@ -294,13 +294,32 @@ function _assemble_bilinear_core_cached!(
         # `α` (a `Ref`'s current value, say) on every call and still replay from cache.
         segments = Segment{D}[]
         _record_bilinear_core!(A, trial_space, test_space, ast, segments, α)
-        cache.segments = segments
-        cache.A_id = objectid(A)
-        cache.ast = ast
-        cache.valid = true
+        _store_recording!(cache, ast, segments, A)
     end
     return A
 end
+
+# Keeps `cache` in step with a recording that just ran, but only for an `ast` of the type the
+# cache was built around -- `form.ast`'s type, since `form` constructs the two together.
+@inline function _store_recording!(
+        cache::_AssemblyCache{D, AST}, ast::AST, segments::Vector{Segment{D}}, A
+) where {D, AST}
+    cache.segments = segments
+    cache.A_id = objectid(A)
+    cache.ast = ast
+    cache.valid = true
+    return nothing
+end
+
+# A differently-typed `ast` records and scatters, then stores nothing. This is the deprecated
+# `assemble!(A, form; ast = <another form's tree>)` keyword (gpena/Bramble.jl#105, removed in
+# v3.0.0): the cache's `AST` parameter belongs to `form.ast`, so there is nothing to store it
+# in. Dropping the write also leaves whatever `form.ast` recording the cache already holds
+# intact and still correct -- `nzval` positions depend on `A`'s sparsity pattern, which a
+# scatter does not change -- so the next ordinary `assemble!` still replays instead of paying
+# for a re-record. Before the cache carried its AST as a type parameter this case overwrote
+# the cache with the substitute tree; now it cannot, and need not.
+@inline _store_recording!(::_AssemblyCache, _ast, _segments, _A) = nothing
 
 # --- Threaded: band-coloured sweeps ------------------------------------------------ #
 
