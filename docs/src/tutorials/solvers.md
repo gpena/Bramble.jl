@@ -6,17 +6,7 @@ Accelerate, MUMPS, Sparspak -- [`sparse_factorize`](@ref)'s own docstring lists 
 behind one [`sparse_factorize`](@ref)/[`refactor!`](@ref) interface, iterative Krylov methods
 through `LinearSolve`, and two preconditioners, [`amg_preconditioner`](@ref) and
 [`ilu_preconditioner`](@ref). This tutorial is about *choosing* among them, not about any one
-of their APIs in isolation. It covers:
-
-1. Symmetric positive-definite systems: direct factorization against CG, unpreconditioned and
-   AMG-preconditioned.
-2. Unsymmetric, convection-dominated systems: the same comparison, with ILU(0) taking AMG's
-   place -- and a look at where AMG actually fails, not just underperforms.
-3. Steady vs. unsteady problems: one linear solve against many, and why that changes which
-   strategy wins -- factorize-once-and-reuse against a warm-started iterative solve.
-
-Every number below was produced by the code shown, the same convention the [forms
-tutorial](form.md) uses.
+of their APIs in isolation. Every number below was produced by the code shown.
 
 ## 1. Symmetric positive-definite systems
 

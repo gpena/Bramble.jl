@@ -3,19 +3,10 @@
 Once a solution exists (the result of the [forms tutorial](form.md), or any grid function),
 the last step is usually getting it into a viewer. `export_vtk` writes a mesh and any
 number of named fields to a `.vtr` file, readable by ParaView or any other VTK-aware tool.
-This tutorial covers:
-
-1. Writing a mesh with a named field.
-2. The shorthand for a single field.
-3. A composite element as one vector field, not several scalar ones.
-4. The 1D case.
-5. A time series, for a transient solve.
-
 `export_vtk` needs [WriteVTK.jl](https://github.com/JuliaVTK/WriteVTK.jl), which is a weak
 dependency: `using WriteVTK` before calling it, or the call errors with a message that says
-so rather than a bare `MethodError`.
-
-Every code block below was run before being written down, and each produces the files it claims to.
+so rather than a bare `MethodError`. Every block below runs when this page is built, and
+writes the files it claims to.
 
 ## 1. A mesh and a named field
 

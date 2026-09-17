@@ -4,94 +4,46 @@ CollapsedDocStrings = false
 
 # Automatic differentiation tutorial
 
-`Bramble.jl` is generic over its scalar types, allowing discrete operators, grid functions, and weak form assemblies to be differentiated with Julia's automatic differentiation (AD) ecosystem.
-
-This tutorial covers:
-1. The 5 AD backends supported by `Bramble.jl` through [DifferentiationInterface.jl](https://github.com/JuliaDiff/DifferentiationInterface.jl).
-2. Configuration details and annotations required by each backend.
-3. Four practical use cases: scalar parameter sensitivity, multi-parameter gradients for inverse problems, differentiating through Dirichlet boundary solves, and sparse Jacobian assembly for nonlinear PDEs.
-4. Guidelines for choosing the best backend for a given problem.
+Bramble's operators, grid functions and form assembly are generic over the scalar type, so
+a discrete quantity can be differentiated with respect to whatever parameter produced it.
+Backends reach the code through
+[DifferentiationInterface.jl](https://github.com/JuliaDiff/DifferentiationInterface.jl),
+so switching between forward and reverse mode leaves the objective untouched.
 
 ---
 
-## 1. Supported differentiation backends
+## 1. Backends
 
-Because `Bramble.jl` implements difference stencils and discrete operators via mutating loops (`setindex!`) over preallocated arrays, AD backends that support array mutation work out of the box.
+The stencil kernels write into preallocated arrays, so a backend has to support array
+mutation. That rules out `Zygote.jl`; the five below work.
 
-Standardizing calls through `DifferentiationInterface.jl` allows switching between forward and reverse backends without changing user objective functions:
-
-| Backend | Mode | Primary strength | Required packages |
+| Backend | Mode | Reach for it when | Construction |
 | :--- | :--- | :--- | :--- |
-| **ForwardDiff** | Forward | Zero setup, fastest for $\le 20$ parameters and Jacobian columns | `ForwardDiff` |
-| **PolyesterForwardDiff** | Forward | Multi-threaded forward chunks across CPU threads | `PolyesterForwardDiff` |
-| **ReverseDiff** | Reverse | Tape-based reverse mode, sub-second compile time for scalar losses | `ReverseDiff` |
-| **Mooncake** | Reverse | Modern source-to-source reverse mode supporting mutation | `Mooncake` |
-| **Enzyme** | Reverse | LLVM-level AD with peak performance for large parameter counts | `Enzyme` |
+| ForwardDiff | forward | $\le 20$ parameters or Jacobian colours | `AutoForwardDiff()` |
+| PolyesterForwardDiff | forward | the same, with chunks spread over threads | `AutoPolyesterForwardDiff()` |
+| ReverseDiff | reverse | a scalar loss over many parameters, compiled in under a second | `AutoReverseDiff()` |
+| Mooncake | reverse | the same, source-to-source, no tape recorded up front | `AutoMooncake(; config = nothing)` |
+| Enzyme | reverse | many parameters and the tightest reverse-mode cost | see below |
 
-> [!NOTE]
-> Backends that forbid array mutation (such as `Zygote.jl`) cannot differentiate Bramble's stencil kernels.
+Enzyme needs two annotations whenever the differentiated closure captures a mesh or a grid
+space, which in this package it almost always does:
+
+```@example autodiff_tutorial
+using Bramble, Enzyme, DifferentiationInterface
+
+enzyme_backend = AutoEnzyme(;
+    mode = Enzyme.set_runtime_activity(Enzyme.Reverse),
+    function_annotation = Enzyme.Const)
+```
+
+`set_runtime_activity` lets Enzyme track activity through the captured geometry, and
+`Enzyme.Const` declares the function object itself, which holds those references, as not
+differentiated. [`pde_solve`](@ref) additionally carries its own `EnzymeRules` adjoint, so
+differentiating through a linear solve needs nothing beyond `using Enzyme`.
 
 ---
 
-## 2. Setting up the backends
-
-### ForwardDiff
-
-[`ForwardDiff.jl`](https://github.com/JuliaDiff/ForwardDiff.jl) propagates `Dual` numbers through arithmetic and array operations. It requires no configuration:
-
-```julia
-using ForwardDiff, DifferentiationInterface
-
-backend = AutoForwardDiff()
-```
-
-### PolyesterForwardDiff
-
-[`PolyesterForwardDiff.jl`](https://github.com/JuliaSIMD/PolyesterForwardDiff.jl) parallelises `ForwardDiff` chunk evaluations over threads with low scheduling overhead:
-
-```julia
-using PolyesterForwardDiff, DifferentiationInterface
-
-backend = AutoPolyesterForwardDiff()
-```
-
-### ReverseDiff
-
-[`ReverseDiff.jl`](https://github.com/JuliaDiff/ReverseDiff.jl) records operations to a tape and evaluates gradients in reverse mode. It compiles quickly (typically $< 1$ s) and handles mutating operations:
-
-```julia
-using ReverseDiff, DifferentiationInterface
-
-backend = AutoReverseDiff()
-```
-
-### Mooncake
-
-[`Mooncake.jl`](https://github.com/compintell/Mooncake.jl) is a source-to-source reverse-mode AD tool that handles Julia language features and mutating routines:
-
-```julia
-using Mooncake, DifferentiationInterface
-
-backend = AutoMooncake(; config = nothing)
-```
-
-### Enzyme
-
-[`Enzyme.jl`](https://github.com/EnzymeAD/Enzyme.jl) performs differentiation at the LLVM compiler level. When differentiating closures that capture grid spaces or mesh objects, two settings are required:
-
-1. `Enzyme.set_runtime_activity(Enzyme.Reverse)`: allows Enzyme to track activity through captured geometry.
-2. `function_annotation = Enzyme.Const`: declares that the function object itself (which holds references to the mesh and grid space) is constant and not differentiated:
-
-```julia
-using Enzyme, DifferentiationInterface
-
-mode = Enzyme.set_runtime_activity(Enzyme.Reverse)
-backend = AutoEnzyme(; mode = mode, function_annotation = Enzyme.Const)
-```
-
----
-
-## 3. Use case: scalar parameter sensitivity
+## 2. Use case: scalar parameter sensitivity
 
 In this use case, we compute the sensitivity of a discrete energy norm with respect to a scalar scaling factor $a$:
 
@@ -102,7 +54,7 @@ In this use case, we compute the sensitivity of a discrete energy norm with resp
 Analytically, $\int_0^1 \sin^2(\pi x)\,dx = \frac{1}{2}$, so $\mathcal{J}(a) \approx \frac{1}{2} a^2$ and $\frac{d\mathcal{J}}{da} \approx a$.
 
 ```@example autodiff_tutorial
-using Bramble, ForwardDiff, DifferentiationInterface
+using ForwardDiff
 
 Ω = domain(interval(0.0, 1.0))
 Ωₕ = mesh(Ω, 32, true)
@@ -122,7 +74,7 @@ println("dJ/da at a = $a_val: ", round(dJ, digits = 4))
 
 ---
 
-## 4. Use case: multi-parameter gradient for inverse problems
+## 3. Use case: multi-parameter gradient for inverse problems
 
 When estimating parameters (such as source coefficients or material properties), we compute the gradient of an objective functional with respect to a parameter vector $\mathbf{p}$:
 
@@ -147,7 +99,7 @@ For problems with many parameters, swapping `AutoForwardDiff()` for `AutoReverse
 
 ---
 
-## 5. Use case: differentiating through Dirichlet constraints and linear solves
+## 4. Use case: differentiating through Dirichlet constraints and linear solves
 
 Parameter sensitivities can also enter boundary conditions and linear form sources.
 
@@ -186,7 +138,7 @@ println("Sensitivity w.r.t. [boundary_val, source_scale]: ", round.(grad_solve, 
 
 ---
 
-## 6. Use case: sparse Jacobian for nonlinear PDE residuals
+## 5. Use case: sparse Jacobian for nonlinear PDE residuals
 
 For nonlinear PDEs, residuals $R(u) = A(u)u - F$ have a localized stencil structure. Computing the Jacobian $\partial R / \partial u$ entry-by-entry with dense AD is wasteful.
 
@@ -267,30 +219,16 @@ which is the case to reach for it.
 
 ---
 
-## 7. Choosing the right backend
+## 6. Choosing a backend
 
-- **Use ForwardDiff** for low-dimensional parameter sets ($N \le 20$), directional derivatives, and column-colored sparse Jacobians.
-- **Use PolyesterForwardDiff** when evaluating forward sweeps across multi-threaded CPU environments.
-- **Use ReverseDiff** when differentiating a scalar objective with respect to many parameters ($N > 50$), especially when low compilation latency is desired.
-- **Use Mooncake** for reverse-mode sensitivity without tape pre-recording.
-- **Use Enzyme** when peak reverse-mode performance and minimal memory footprint are required, keeping in mind the need for `set_runtime_activity` and `function_annotation = Enzyme.Const`.
+ForwardDiff for a handful of parameters, a directional derivative, or a colour-compressed
+sparse Jacobian. ReverseDiff, Mooncake or Enzyme once the parameter count grows past a few
+dozen and the objective is scalar: one reverse sweep then replaces one forward sweep per
+parameter. Enzyme is the fastest of the three here and the one with an adjoint rule for
+[`pde_solve`](@ref); ReverseDiff compiles fastest.
 
-### Large sparse nonlinear PDEs
-
-For large systems stemming from nonlinear PDEs ($N \sim 10^5 - 10^7+$ degrees of freedom), both Jacobian construction and linear solves require scaling strategies:
-
-1. **Compressed sparse forward AD ($N \le 10^6$)**:
-   Because Bramble's Cartesian difference stencils have local footprints, the column-coloring count $C$ is independent of grid size $N$ (typically $4$–$9$ colors in 2D, $8$–$27$ in 3D). `AutoSparse(AutoForwardDiff())` evaluates the full sparse Jacobian in only $C$ directional sweeps. Always reuse `prepare_jacobian` and evaluate into preallocated storage using `DifferentiationInterface.jacobian!`.
-2. **Jacobian-free Newton-Krylov ($N > 10^6$ or 3D)**:
-   When storing or factoring the sparse Jacobian exceeds available memory, switch to matrix-free Krylov iterations (e.g. GMRES or BiCGStab via `LinearSolve.jl` or `Krylov.jl`). Krylov solvers require only Jacobian-vector products $J(u) \cdot v$, which forward-mode AD computes directly via pushforwards (`DifferentiationInterface.pushforward`) at the cost of one extra residual evaluation per Krylov step, requiring zero Jacobian storage.
-3. **Preconditioning and linear solvers**:
-   Direct factorization (`\`, UMFPACK) scales poorly in 3D due to fill-in. Pair iterative Krylov solvers with incomplete factorizations (`IncompleteLU.jl`) or algebraic multigrid (`AlgebraicMultigrid.jl`) built on a lagged or Picard linearization $A(u^k)$.
-4. **Allocation-free residual evaluations**:
-   Newton loops repeatedly evaluate residuals under `Float64` during line searches and `ForwardDiff.Dual` during Jacobian sweeps. Use `PreallocationTools.jl` (`DiffCache`) or pre-allocated scratch buffers to eliminate intermediate allocations in `residual(u)`.
-
-| Problem scale | Jacobian strategy | Linear solve | Recommended tooling |
-| :--- | :--- | :--- | :--- |
-| **$N \le 10^5$ (2D)** | Compressed sparse AD | Direct sparse LU (`A \ F`) | `DifferentiationInterface` + `SparseMatrixColorings` |
-| **$10^5 < N \le 10^6$** | Compressed sparse AD (`jacobian!`) | Preconditioned GMRES / BiCGStab | `LinearSolve.jl` + `IncompleteLU.jl` or `AlgebraicMultigrid.jl` |
-| **$N > 10^6$ (3D)** | Matrix-free JFNK (`pushforward`) | GMRES + Lagged preconditioner | `NonlinearSolve.jl` + `Krylov.jl` + `AlgebraicMultigrid.jl` |
-
+Sparse forward mode stays competitive far longer than the parameter count suggests, because
+the colour count is set by the stencil rather than by the mesh: a Cartesian difference
+stencil needs the same handful of colours at every resolution. Past the point where storing
+or factorizing the Jacobian is the binding constraint, the
+[solvers tutorial](solvers.md) covers what to do with the linear system itself.

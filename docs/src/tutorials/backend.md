@@ -9,16 +9,6 @@ configuration saying which vector and matrix types to allocate, and whether
 threading-capable operations run serially or in parallel. Chosen once, when a mesh is
 built, and inherited by everything constructed from it afterwards.
 
-In this tutorial, you will learn how to:
-1. Build a [`Backend`](@ref) with [`backend`](@ref), choosing its vector, matrix and
-   element types.
-2. Attach one to a [`mesh`](@ref), and see it propagate to grid spaces and forms.
-3. Choose [`Serial`](@ref) or [`Parallel`](@ref), what it actually changes, and when it
-   pays.
-4. Call the ordinary entry points (`Rₕ!`, `avgₕ!`, `assemble!`, `assemble`), the same
-   way regardless of which policy the backend carries.
-5. Build a Metal GPU backend.
-
 ---
 
 ## 1. What a backend is
@@ -149,3 +139,26 @@ it throws.
 ```@example backend
 backend_types(be)
 ```
+
+## 8. The precompilation workload
+
+`Bramble.jl` ships a precompilation workload that exercises 1D, 2D and 3D meshes on
+load. It costs a few seconds when the package is first built and cuts the time to
+first result by roughly a factor of four.
+
+While working on the package itself you may prefer faster rebuilds over faster first
+use. To skip the workload:
+
+```julia
+using Preferences, Bramble
+set_preferences!(Bramble, "precompile_workload" => false)
+```
+
+Julia tracks preferences in the precompilation cache, so the change takes effect on
+the next `using Bramble` with no manual cache clearing. Restore the default with
+
+```julia
+delete_preferences!(Bramble, "precompile_workload"; force = true)
+```
+
+The setting is written to `LocalPreferences.toml` next to your active project.

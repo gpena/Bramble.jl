@@ -2,16 +2,6 @@
 
 Bramble provides the finite difference building blocks that discrete schemes are written
 in: differences, jumps, averages, and their algebraic structures.
-This tutorial covers:
-
-1. The three operator families and how their names are built.
-2. Applying an operator to a grid function, and what happens at the boundary.
-3. The same operator as a sparse matrix.
-4. Gradients and the other vectorial forms.
-5. Summation by parts and skew-symmetry.
-6. A convergence study, and the boundary effect that will otherwise spoil it.
-7. Interpolating a grid function onto a different mesh, numerically and symbolically.
-
 Every number below was produced by the code shown.
 
 ## 1. The operator families
@@ -381,17 +371,10 @@ innerₕ(Dcₓ(pₕ), qₕ)
 -innerₕ(pₕ, Dcₓ(qₕ))                               # equal to machine precision
 ```
 
-The reason is the same cancellation that gives `Dstar₊ₓ` its identity in section 6:
-`innerₕ` weights point ``i`` by the cell measure ``(h_i + h_{i+1})/2``, which is exactly
-half the centered denominator. The weights cancel, and the left side collapses to
-
-```math
-\tfrac{1}{2} \sum_i (u_{i+1} - u_{i-1})\, v_i
-```
-
-which shifting the index by one turns into minus the right side. Unlike the `Dstar₊ₓ`
-identity, which needs only `vₕ` to vanish, this one needs both: the discarded boundary
-term is symmetric in the two.
+The cancellation is the one from section 6: `innerₕ`'s weight at point ``i`` is exactly half
+the centered denominator, so the weights drop out and shifting the index by one turns what
+is left into minus the right side. Unlike the `Dstar₊ₓ` identity, this one needs both
+functions to vanish at the boundary, since the discarded term is symmetric in the two.
 
 Accuracy follows the usual rule: the centered difference approximates the derivative at
 the midpoint of its stencil, which is ``x_i`` only when the two spacings match. So it is
@@ -592,9 +575,7 @@ parent(dest2) ≈ parent(dest)
 
 ### Composing symbolically, inside a form
 
-The same name, one argument fewer, is also the symbolic counterpart: `πₕ(uₕ)` wraps a grid
-function's interpolant as an AST source, so it composes with the same operators any other
-source does (`D₋ₓ(πₕ(uₕ))`, `M₋ₓ(πₕ(uₕ))`), and can appear on the left of [`innerₕ`](@ref)
-inside a [`form`](@ref). Dispatch tells the two `πₕ` apart by argument count, `Wₕ`/`src`
-against `uₕ` alone, not by a different name. See the [forms tutorial](form.md) for a worked
-example against a heterogeneous composite space.
+`πₕ(uₕ)`, one argument fewer, is the symbolic counterpart: it wraps the interpolant as an
+AST source, so it composes with the other operators and can sit inside a [`form`](@ref).
+Dispatch tells the two apart by argument count. The [forms tutorial](form.md) works it
+through against a heterogeneous composite space.

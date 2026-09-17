@@ -2,21 +2,7 @@
 
 The operators in the previous tutorial act on grid functions. A form is the other half: an
 expression written in the *test* function, which Bramble assembles into the vector or the
-matrix a solver wants.
-This tutorial covers:
-
-1. Writing a linear form and assembling its vector.
-2. Refilling that vector inside a time loop, and why the pattern is built once.
-3. Contracting a form against a grid function without building a vector at all.
-4. Bilinear forms and the system matrix.
-5. Imposing Dirichlet conditions, and solving a Poisson problem.
-6. Coupled systems, where a term names which block it belongs to, including a term that
-   reads from a leaf built over a different mesh.
-7. Threaded assembly, and why it needs no locks.
-8. Restricting a term to part of the mesh.
-9. What `form(...)` simplifies automatically, and how to write a form so it can.
-
-Every number below was produced by the code shown.
+matrix a solver wants. Every number below was produced by the code shown.
 
 ## 1. A form is an expression in the test function
 
@@ -262,18 +248,6 @@ maximum(abs, uh .- parent(exact))
 
 Eight parts in ten thousand on 33 points, which is second order behaving itself.
 
-!!! note "Choosing the best solver for each problem scale"
-    Bramble leaves linear solver selection to the caller via [`pde_solve`](@ref), `\`, or solver-specific extensions:
-
-    - **Transient and repeated solves (time-stepping with fixed pattern)**: Always factorize once and reuse via back-substitution. Direct factorizations reduce each step to pure forward/backward substitution, running $10\times\text{--}36\times$ faster per step than iterative AMG-CG or GMRES.
-    - **2D systems (up to $10^6$ DOFs)**:
-      - *Symmetric positive-definite*: Apple Accelerate Cholesky on macOS (`solver = :accelerate`), or SuiteSparse CHOLMOD (`solver = :suitesparse`).
-      - *Unsymmetric*: `Sparspak.jl` (fastest pure-Julia LU) or SuiteSparse UMFPACK.
-    - **3D systems ($> 50^3$ DOFs)**:
-      - *MUMPS* (`solver = :mumps`): Best scalability and memory efficiency for large 3D grids. Multifrontal elimination with METIS avoids the steep fill-in explosion of standard sparse LU (which exhausts physical RAM beyond $50^3$).
-      - *Apple Accelerate*: Minimal memory footprint for 3D direct solves on macOS (~16 MB at $50^3$).
-      - *Iterative AMG-CG* ([`amg_preconditioner`](@ref)): Necessary when 3D direct factorizations exceed available RAM ($\mathcal{O}(N)$ memory scaling).
-
 Imposing conditions by replacing rows destroys symmetry, and a symmetric solver will want it
 back. `symmetrize!` moves the constrained columns onto the right-hand side, restoring
 symmetry and leaving the solution unchanged:
@@ -442,11 +416,9 @@ expression rather than a size mismatch. This is exactly what makes a heterogeneo
 composite space useful for more than indexing: leaf 2 can represent one field at a
 resolution the problem calls for, and a term over leaf 1 can still read it.
 
-That last line is the check worth keeping, not `length(b) == ndofs(Vh)`. An earlier draft of
-this page showed the shape instead, and the differenced term contributed *exactly zero*: an
-operator wrapped around a source had its offsets discarded, so `D₋ₓ`'s `+s/h` and `−s/h`
-cancelled. The page was green either way, because a zero vector has the right length and is
-perfectly finite. A worked example should show what it computes.
+That last line is the check worth keeping, not `length(b) == ndofs(Vh)`: a differenced
+source whose offsets are discarded assembles to exactly zero, and a zero vector has the
+right length and is perfectly finite.
 
 An operated source is worth a word on what it means. `innerₕ(D₋ₓ(f), v)` is
 ``\sum_i |\square_i| \, (D_{-x}f)_i \, v_i``: the operator acts on the *source*, producing
@@ -485,57 +457,37 @@ repeating one space (`Wₕ^Val(2)`), including off-diagonal blocks.
 
 ## 7. Threading, chosen once on the backend
 
-`Rₕ!`, `avgₕ!`, gridspace construction and form assembly all thread the same way: `Serial()`
-or `Parallel()`, chosen once when the backend is built, rather than decided per call. See the
-[backend tutorial](backend.md) for backend construction in general (vector/matrix types
-included) and for how to choose between the two policies; this section only covers what the
-choice means for assembly specifically.
+Assembly reads the execution policy off the space it is given, so `assemble!`/`assemble`
+thread when the backend says `Parallel()` and nothing about the call changes. The
+[backend tutorial](backend.md) covers building a backend and choosing the policy.
 
 ```@example forms
 Wₕ_par = gridspace(mesh(domain(interval(0.0, 1.0)), 33, true;
     backend = backend(policy = Parallel())))
+
+l_par = form(Wₕ_par, v -> innerₕ(Rₕ(Wₕ_par, x -> sin(π * x)), v))
+b_par = assemble(l_par)      # threads, because Wₕ_par's backend says Parallel()
+
 execution_policy(Wₕ_par)
 ```
 
-There is no automatic size threshold. A `Parallel()` backend threads every eligible call,
-however small, however often a time loop repeats it; asking for `Parallel()` and getting it
-is the point, rather than a heuristic guessing on the caller's behalf whether a given call is
-big enough to be worth it. Pick `Serial()` (the default `backend()` already is) for small,
-frequently repeated calls instead.
-
-`assemble!`/`assemble` follow `test_space(form)`'s (or, for a `BilinearForm`, `trial_space`'s)
-policy directly, so the ordinary entry points already thread when the backend says to:
-
-```@example forms
-l_par = form(Wₕ_par, v -> innerₕ(Rₕ(Wₕ_par, x -> sin(π * x)), v))
-b_par = assemble(l_par)      # threads, because Wₕ_par's backend says Parallel()
-nothing # hide
-```
-
-`assemble_parallel!` still exists underneath, as a lower-level entry point that always
-threads regardless of the backend's policy; useful for a one-off forced comparison or a
-benchmark, not the everyday call:
+`assemble_parallel!` is the lower-level entry point that threads whatever the backend says,
+for a forced comparison or a benchmark rather than everyday use:
 
 ```@example forms
 bp = similar(b)
-assemble_parallel!(bp, l)    # always threads, whatever l's own backend says
+assemble_parallel!(bp, l)
+
 bp ≈ b
 ```
 
-Threading takes no locks, and needs none. Assembly partitions the grid by *stride*: the
-offsets a stencil reaches give the width of the footprint one point writes, and two points
-separated by at least that width cannot overlap. Points sharing a stride are therefore
-written concurrently with nothing to coordinate.
-
-The common case is one colour. A form whose test argument carries no difference (`innerₕ(fₕ, v)`
-above) reaches only its own point, so the stride is 1 in every direction and the whole grid
-is swept in a single flat parallel pass. A gradient term in two dimensions reaches one point
-back along each axis, giving four colours swept in turn.
-
-Whether threading pays depends on the size, and not always in the obvious direction:
-assembly is memory-bound, so the gain flattens well before the thread count does. The
-[benchmarks](../benchmarks.md) page carries the measurements; that is what should decide
-which policy a backend is built with, not a guess.
+No locks are involved. Assembly partitions the grid by stride: two points further apart than
+the stencil's own footprint cannot write to the same entry, so points sharing a stride are
+written concurrently. A term whose test argument carries no difference has stride 1 in every
+direction and sweeps the grid in one pass; a 2D gradient term needs four colours. The
+[internals page](../internals/form.md) has the colouring itself, and the
+[benchmarks](../benchmarks.md) measure when threading pays, which is what should decide the
+policy.
 
 ## 8. Restricting a term to part of the mesh
 
@@ -579,264 +531,39 @@ markers, if it does not.
 
 ## 9. What `form(...)` simplifies automatically
 
-`form(Wₕ, Vₕ, f)`/`form(Wₕ, f)` resolve the expression once and then run it through an
-algebraic simplification pass before storing it. This matters for how you *write* a form,
-because the assembler routes a form's summands one at a time: every `+` in the expression is
-a separate sweep over the mesh, so an expression with fewer top-level summands assembles
-faster, for exactly the same matrix or vector.
+`form` resolves the expression once and runs an algebraic simplification pass before storing
+it. This decides how a form is worth writing: the assembler routes summands one at a time, so
+every top-level `+` is a separate sweep over the mesh, and fewer summands means the same
+matrix assembled in fewer sweeps.
 
-Most of the rewrites touch only `+`, `*` and `/`, never the operators inside them (`D₋ₓ`,
-`inner₊`, `innerₕ`, and the rest), so they apply to whatever is built from those, coupled
-systems and restricted terms included. A few reach one layer deeper, into an inner product's
-own arguments and into `shift_op`, because leaving them out would mean either a correctness
-gap or a documented dead end; §"What stays as written, and why" below draws the exact line.
-
-### Identical terms combine into one term
-
-Two summands that are the same expression merge into a single scaled term, rather than being
-routed and assembled separately:
+Identical terms merge, so a form accumulated one physical effect at a time costs nothing for
+the repetition:
 
 ```@example forms
 a_dup = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + innerₕ(u, v))
-Bramble.resolve_form_ast(a_dup)  # 2 * innerₕ(u, v): one term, not two
+Bramble.resolve_form_ast(a_dup)     # 2 * innerₕ(u, v): one term, not two
 ```
 
 ```@example forms
 Matrix(assemble(a_dup)) ≈ 2 .* Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))))
 ```
 
-A form built up piece by piece (accumulating one contribution per physical effect, some of
-which may coincide) pays nothing for the duplication once assembled: write the terms
-separately if that is the clearer expression of the model, rather than checking by hand
-whether two of them happen to repeat.
-
-The merge applies to terms built out of operators alone — inner products of trial and test
-functions under any stack of differences, averages, shifts or jumps. A term that carries
-*data* (a grid-function coefficient, a source vector, a Dirac payload) is left as written,
-even when both summands hold the very same array. Deciding otherwise would mean comparing the
-two subtrees' contents at run time, and since the rule's two outcomes are different node
-types, `form` would lose its inferred return type — which is what stops `Enzyme`
-differentiating the form at all (gpena/Bramble.jl#240). The cost of leaving them apart is one
-extra routed term; the numbers are the same:
+A zero-scaled term leaves nothing behind, which is what lets a coefficient switch a term off
+without a branch around the form:
 
 ```@example forms
-gₕ = Rₕ(Wₕ, x -> 1.0)
-a_two = form(Wₕ, Wₕ, (u, v) -> innerₕ(gₕ * u, v) + innerₕ(gₕ * u, v))
-Bramble.resolve_form_ast(a_two) isa Bramble.OperatorAdd   # two terms, kept apart
+a_off = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + 0 * inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+
+Matrix(assemble(a_off)) ≈ Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))))
 ```
 
-```@example forms
-Matrix(assemble(a_two)) ≈ 2 .* Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(gₕ * u, v))))
-```
-
-### A shared scalar factors out of a sum
-
-`c * A + c * B`, for two different `A` and `B`, becomes `c * (A + B)`: still two operators to
-evaluate, but one routed term instead of two. As with the zero collapse below, `c` has to be
-an `Integer` (or the same `Ref` on both terms): whether the rule applies is decided by
-comparing the two coefficients, and the result's *type* differs between the two outcomes, so
-allowing it on `Float64` would cost `form` its inferred return type whenever the coefficient
-is a runtime value (gpena/Bramble.jl#240). `2.0 * A + 2.0 * B` assembles as the two terms it
-was written as.
-
-```@example forms
-Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (12, 10), (true, true))
-W2 = gridspace(Ω2)
-
-a_split = form(W2, W2, (u, v) -> 2 * inner₊ₓ(D₋ₓ(u), D₋ₓ(v)) + 2 * inner₊ᵧ(D₋ᵧ(u), D₋ᵧ(v)))
-Bramble.resolve_form_ast(a_split)  # 2 * (inner₊ₓ(...) + inner₊ᵧ(...)): one routed term
-```
-
-```@example forms
-a_x = form(W2, W2, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
-a_y = form(W2, W2, (u, v) -> inner₊ᵧ(D₋ᵧ(u), D₋ᵧ(v)))
-Matrix(assemble(a_split)) ≈ 2 .* (Matrix(assemble(a_x)) .+ Matrix(assemble(a_y)))
-```
-
-An isotropic operator written out direction by direction (the common way to build one before
-reaching for a name like `inner₊`/`∇₋ₕ` that already sums over every direction) assembles as
-cheaply as writing it the terser way by hand.
-
-### A zero-scaled term leaves no trace
-
-A term scaled by the integer literal `0` (a coefficient set to zero for a particular run,
-common in continuation methods and IMEX schemes toggling a physical effect on and off)
-contributes nothing to the sparsity pattern, rather than reserving space for the stencil it
-would otherwise have:
-
-```@example forms
-a_full = form(W2, W2, (u, v) -> innerₕ(u, v) + 0 * inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
-a_mass = form(W2, W2, (u, v) -> innerₕ(u, v))
-nnz(assemble(a_full)) == nnz(assemble(a_mass))  # the stiffness term left no entries at all
-```
-
-Without this, the zero-scaled stiffness term would still reserve its full band in the
-pattern (nonzero *positions* holding the value `0.0`), which costs both memory and a wasted
-sweep computing them. Toggling a term off is free to leave in the expression; there is no
-need to branch in Julia code around it.
-
-Write `0`, not `0.0`: the collapse is restricted to `Integer` coefficients, and so is the
-matching `1 * A -> A` one. Deciding either reads the coefficient's *value*, which would make
-the type of the form depend on a number the compiler need not know -- costing `form` its
-inferred return type whenever the coefficient is a runtime value, and blocking `Enzyme` from
-differentiating with respect to it at all (gpena/Bramble.jl#240). A `Float64` coefficient is
-carried through as written:
-
-```@example forms
-a_float = form(W2, W2, (u, v) -> innerₕ(u, v) + 0.0 * inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
-nnz(assemble(a_float)) > nnz(assemble(a_mass))   # same numbers, stencil band kept as zeros
-```
-
-The converse is the one sharp edge here: writing `0` and `1` as literals is not a style
-preference, it is the contract. These rules read the coefficient's value, and that is only
-free when the value is a literal inference can fold. A genuinely runtime integer --- `n::Int`
-taken from a parameter, not written into the expression --- cannot be folded, and `n * A` then
-costs `form` the very inferred return type the `Integer` restriction exists to protect. Pass
-such a scalar as a `Float64` (`float(n)`), or wrap it in a `Ref` if it needs to keep changing:
-
-```@example forms
-n = 3
-a_literal = form(W2, W2, (u, v) -> 3 * innerₕ(u, v))         # folds: 3 is a literal
-a_runtime = form(W2, W2, (u, v) -> float(n) * innerₕ(u, v))  # safe: runtime value, as Float64
-Matrix(assemble(a_literal)) ≈ Matrix(assemble(a_runtime))
-```
-
-A dynamic coefficient (a `Ref`, §2's "Live grid coefficients and dynamic scalars") combines
-and factors the same way an integer one does -- two terms sharing a `Ref` are recognised by
-object identity, not by comparing values -- and keeps tracking its own updates afterwards;
-the rewrite only ever moves the `Ref` around, never reads the value inside it:
-
-```@example forms
-β = Ref(1.0)
-a_ref = form(Wₕ, Wₕ, (u, v) -> β * innerₕ(u, v) + β * innerₕ(u, v))
-Matrix(assemble(a_ref)) ≈ 2 .* Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))))
-```
-
-```@example forms
-β[] = 3.0
-Matrix(assemble(a_ref)) ≈ 6 .* Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))))
-```
-
-Two different `Ref`s, or a `Ref` alongside a plain number, never combine: a rewrite that
-assumed two independent dynamic coefficients were the same value would be a correctness bug
-the first time they diverged, so it is not attempted; write the shared coefficient as one
-`Ref`, used on every term it scales, if two terms are meant to move together.
-
-### A scalar inside an inner product's argument is lifted back out
-
-The three rules above stop at `innerₕ`/`inner₊`/... itself, but a scalar written *inside*
-one of their arguments is lifted back out to wrap the whole product, exposing it to exactly
-those rules:
-
-```@example forms
-a_hidden = form(Wₕ, Wₕ, (u, v) -> innerₕ(2 * D₋ₓ(u), D₋ₓ(v)) + innerₕ(3 * D₋ₓ(u), D₋ₓ(v)))
-Bramble.resolve_form_ast(a_hidden)  # 5 * innerₕ(D₋ₓ(u), D₋ₓ(v)): one term, not two
-```
-
-```@example forms
-Matrix(assemble(a_hidden)) ≈ 5 .* Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v)))))
-```
-
-This is not only a routing question. `issymmetric`/`isposdef` (§4) recognise `innerₕ(L(u),
-L(v))` (the same operator on both sides) structurally, and a scalar sitting inside one
-argument used to hide that shape from the check, because `2 * D₋ₓ(u)` and `D₋ₓ(v)` are
-different node types even though the pattern is exactly the symmetric one:
-
-```@example forms
-issymmetric(form(Wₕ, Wₕ, (u, v) -> innerₕ(2 * D₋ₓ(u), D₋ₓ(v))))
-```
-
-Write the scalar wherever reads best: `2 * innerₕ(D₋ₓ(u), D₋ₓ(v))` and `innerₕ(2 * D₋ₓ(u),
-D₋ₓ(v))` now assemble, and are checked for symmetry, identically.
-
-### A component-mixing sum inside one inner product
-
-`innerₕ(fₕ, v(1) + v(2))` names two different components of a coupled test space inside one
-product, asking, in effect, for `fₕ`'s contribution to land in two different equations at
-once. There is no single routed term that means that, so this distributes into two, the same
-shape as writing them separately:
-
-```@example forms
-Vₕ = Wₕ^Val(2)
-fₕ = Rₕ(Wₕ, x -> sin(π * x[1]))
-
-l_mixed = form(Vₕ, v -> innerₕ(fₕ, v(1) + v(2)))
-Bramble.resolve_form_ast(l_mixed)  # innerₕ(fₕ, v(1)) + innerₕ(fₕ, v(2))
-```
-
-```@example forms
-l_split = form(Vₕ, v -> innerₕ(fₕ, v(1)) + innerₕ(fₕ, v(2)))
-assemble(l_mixed) ≈ assemble(l_split)
-```
-
-Before this rule, `l_mixed` assembled to an `ArgumentError` naming the two mismatched
-components rather than a vector: writing the sum by hand, as `l_split` does, was the only
-way to couple one source to two equations. Both spellings work now; write whichever reads
-better at the call site.
-
-This is the one rule that can turn a single sweep back into two rather than the reverse: a
-sum naming the *same* component on both sides (`v(1) + D₋ₓ(v(1))`, say) is left as the one
-term it already was, since nothing forces it apart; only a genuine mismatch, which had no
-valid single-term routing to begin with, triggers the split. A coefficient wrapping a mixed
-sum distributes along with it, for the same reason: `2 * innerₕ(fₕ, v(1) + v(2))` assembles
-`2 * innerₕ(fₕ, v(1)) + 2 * innerₕ(fₕ, v(2))`, not an `OperatorScale` hiding the same
-unroutable shape from view.
-
-### Nested grid-function scalings fuse into one array
-
-`u_h * (v_h * A)` (two grid functions scaling the same operator, one wrapping the other)
-precomputes their elementwise product once, at construction, rather than reading both arrays
-at every point of every assembly:
-
-```@example forms
-vₕ = Rₕ(Wₕ, x -> x[1] + 1.0)
-wₕ = Rₕ(Wₕ, x -> 2.0)
-a_fused = form(Wₕ, Wₕ, (u, v) -> vₕ * (wₕ * innerₕ(u, v)))
-Bramble.resolve_form_ast(a_fused).grid_function ≈ parent(vₕ) .* parent(wₕ)
-```
-
-Unlike the rules above, this one is not free: fusing two coefficients into one is an
-elementwise multiply over the whole array, paid once when the form is built rather than once
-per assembly. Worth it whenever the form outlives a single assembly (a time loop, a residual
-evaluated repeatedly), which is the common case; if a form is truly built and assembled once,
-the two scalings would have cost the same either way.
-
-### Two nested shifts combine, and a zero shift disappears
-
-`shift_op` composes the way integer addition does: two shifts along the *same* dimension
-combine their amounts, and a net shift of zero is the identity; including a shift undone by
-its own inverse:
-
-```@example forms
-using Bramble: shift_op
-a_shift = form(Wₕ, Wₕ, (u, v) -> innerₕ(shift_op(shift_op(u, 1, 2), 1, -2), v))
-Bramble.resolve_form_ast(a_shift)  # innerₕ(u, v): the two shifts cancelled
-```
-
-A shift along a *different* dimension never combines with one it wraps: `Shift_x` and
-`Shift_y` are different operations, not two amounts of the same one, so nesting them stays
-exactly as written.
-
-### What stays as written, and why
-
-Every rule above stops at `BilinearProduct`/`LinearProduct`/`ShiftNode`: none of it descends
-into a difference, an average, a jump, a restriction or an interpolation. A scalar or a shift
-buried one layer further in:
-
-```@example forms
-# NOT lifted: the `2` sits inside D₋ₓ's own argument, one layer past where this pass looks
-form(Wₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(2 * u), v))
-```
-
-is invisible to it, the same way `innerₕ(2 * u, v)` used to be before the rule above:
-write the scalar where the pass can see it, `2 * innerₕ(D₋ₓ(u), v)` or `innerₕ(2 * D₋ₓ(u),
-v)`, rather than nested inside the difference's own argument.
-
-`πₕ(Wsrc, u)` is never folded away, even when `Wsrc` happens to be exactly the space `u` is
-assembled against: a rewrite that could fire would need to know the trial space a term is
-about to be assembled into, which an expression built before `form` sees any space does not
-have. This is rarely a real cost: coupling two leaves that already share a mesh needs no
-`πₕ` at all (§6, "Interpolating between the leaves of a heterogeneous composite space").
+Two limits are worth knowing while writing a form. A rule whose two outcomes have different
+node types only fires when the compiler can settle it from the types alone, so a scalar
+coefficient has to be an `Integer` (or the same `Ref` on both terms) for the like-term and
+factoring rules to apply; a `Float64` coefficient known at run time leaves the terms apart,
+with the same numbers and one extra sweep. And the pass stops at an inner product's own
+arguments: a scalar buried inside a difference, as in `innerₕ(D₋ₓ(2 * u), v)`, is invisible
+to it. Write it where the pass can see it, `2 * innerₕ(D₋ₓ(u), v)`.
 
 ## Where to go next
 
