@@ -52,6 +52,12 @@ end
         @test semidiscretize(a, l; dirichlet = bcs_t).constraints isa
               Bramble.TimeDependentConstraints
 
+        # A three-argument (x, t, p) condition is its own carrier, not folded into the
+        # (x, t) one: `_dirichlet_is_time_param_dependent` checks a stricter arity.
+        bcs_tp = dirichlet_constraints(Ωₕ, I, :boundary => (x, t, p) -> p[1] * t)
+        @test semidiscretize(a, l; dirichlet = bcs_tp).constraints isa
+              Bramble.TimeParamDependentConstraints
+
         bcs_x = dirichlet_constraints(Ωₕ, :boundary => x -> 1.0)
         @test semidiscretize(a, l; dirichlet = bcs_x).constraints isa
               Bramble.StaticConstraints
@@ -126,6 +132,36 @@ end
         @test F[n] ≈ 7.0
     end
 
+    @testset "boundary values reach p when given (x, t, p)" begin
+        bcs = dirichlet_constraints(Ωₕ, I, :boundary => (x, t, p) -> p[1] + p[2] * t)
+        sd = semidiscretize(a, l; dirichlet = bcs)
+        F = zeros(n)
+
+        sd(F, zeros(n), (1.0, 3.0), 0.0)
+        @test F[1] ≈ 1.0 && F[n] ≈ 1.0
+        sd(F, zeros(n), (1.0, 3.0), 2.0)
+        @test F[1] ≈ 7.0 && F[n] ≈ 7.0
+
+        # A different `p` at the same `t` -- confirms `p` is read fresh every call, not
+        # captured once at construction.
+        sd(F, zeros(n), (2.0, 1.0), 2.0)
+        @test F[1] ≈ 4.0 && F[n] ≈ 4.0
+
+        # `dirichlet_bc!`'s own initial-condition consistency step takes the same `p`.
+        u0 = zeros(n)
+        Bramble.dirichlet_bc!(u0, sd, 2.0, (1.0, 3.0))
+        @test u0[1] ≈ 7.0 && u0[n] ≈ 7.0
+    end
+
+    @testset "mixed (x, t) / (x, t, p) arity across labels is rejected" begin
+        Ωₕ2 = Bramble.mesh(
+            Bramble.domain(Bramble.interval(0.0, 1.0), :left => :left, :right => :right), 11
+        )
+        @test_throws ErrorException dirichlet_constraints(
+            Ωₕ2, I, :left => (x, t) -> t, :right => (x, t, p) -> p * t
+        )
+    end
+
     @testset "update_coefficients! runs before each assembly" begin
         seen = Float64[]
         sd = semidiscretize(
@@ -139,6 +175,29 @@ end
         Rₕ!(fₕ, x -> 1.0)
         assemble!(G, l)
         @test F ≈ 2.5 .* G
+    end
+
+    @testset "update_coefficients! reaches p when given (t, p)" begin
+        seen = Tuple{Float64, Float64}[]
+        sd = semidiscretize(
+            a, l; (update_coefficients!) = (t, p) -> (push!(seen, (t, p)); Rₕ!(fₕ, x -> t * p))
+        )
+        F = zeros(n)
+        sd(F, zeros(n), 3.0, 2.5)
+        @test seen == [(2.5, 3.0)]
+        G = zeros(n)
+        Rₕ!(fₕ, x -> 1.0)
+        assemble!(G, l)
+        @test F ≈ (2.5 * 3.0) .* G
+
+        # The existing one-argument form still dispatches exactly as before: a raw closure
+        # is stored (never wrapped in `ParametricUpdate`), so this is not merely "the p case
+        # still works with p = nothing" but the untouched original code path.
+        seen1 = Float64[]
+        sd1 = semidiscretize(a, l; (update_coefficients!) = t -> push!(seen1, t))
+        sd1(zeros(n), zeros(n), 99.0, 1.5)
+        @test seen1 == [1.5]
+        @test !(sd1.update_coefficients isa Bramble.ParametricUpdate)
     end
 
     @testset "state exposes u to the forms" begin
