@@ -979,9 +979,17 @@ Build the `ODEProblem` stepping `sd` over the time domain `I`, from the initial 
 `u₀` is copied, never mutated, and the copy is made consistent with the Dirichlet rows at
 `t₀` (see [`dirichlet_bc!`](@ref)), against `p` when one is given.
 
-Keywords are those of [`ode_function`](@ref), plus `p` (default `SciMLBase.NullParameters()`)
-for a residual whose `update_coefficients!` or Dirichlet conditions were given a
-parameter-dependent, `(t, p)`/`(x, t, p)` form (see [`semidiscretize`](@ref)'s own keywords).
+Keywords are those of [`ode_function`](@ref), plus:
+- `p` (default `SciMLBase.NullParameters()`) for a residual whose `update_coefficients!` or
+  Dirichlet conditions were given a parameter-dependent, `(t, p)`/`(x, t, p)` form (see
+  [`semidiscretize`](@ref)'s own keywords).
+- `specialize` (default `nothing`, `ODEProblem`'s own choice untouched) -- pass
+  `SciMLBase.FullSpecialize` before handing the solved trajectory to
+  `Bramble.adjoint_sensitivities`: without it, a `p`-vjp calls the residual with a
+  differently-`eltype`-`p` than the forward solve used, which the default specialization
+  cannot dispatch and fails with "No matching function wrapper was found!" rather than
+  differentiating.
+
 The two-form method also forwards its other keywords to [`semidiscretize`](@ref).
 
 Requires [SciMLBase.jl](https://github.com/SciML/SciMLBase.jl).
@@ -1015,18 +1023,20 @@ function ode_problem(
         jac_prototype = nothing,
         tgrad = nothing,
         p = nothing,
+        specialize = nothing,
         kwargs...
 )
     sd = semidiscretize(a, l; kwargs...)
-    # `p` is pulled out here rather than left in `kwargs...`: `semidiscretize` above has no
-    # `p` keyword of its own (nothing about assembling `sd` needs it) and no catch-all either,
-    # so it would raise on an unrecognized keyword. Omitted entirely (not forwarded as
-    # `p = nothing`) when the caller didn't ask for it, so `_ode_problem`'s own default
-    # (`SciMLBase.NullParameters()`) applies exactly as it did before `p` existed here.
+    # `p`/`specialize` are pulled out here rather than left in `kwargs...`: `semidiscretize`
+    # above has no keyword of its own for either (nothing about assembling `sd` needs them)
+    # and no catch-all either, so an unrecognized keyword would raise. Each is omitted
+    # entirely (not forwarded as `= nothing`) when the caller didn't ask for it, so
+    # `_ode_problem`'s own defaults apply exactly as they did before either existed here.
     p_kwargs = p === nothing ? (;) : (; p = p)
+    specialize_kwargs = specialize === nothing ? (;) : (; specialize = specialize)
     return _ode_problem(
         sd, u₀, I; jacobian = jacobian, jac_prototype = jac_prototype, tgrad = tgrad,
-        p_kwargs...
+        p_kwargs..., specialize_kwargs...
     )
 end
 
@@ -1062,6 +1072,27 @@ function _ode_problem(::Any, u₀, I; kwargs...)
     return error(
         "ode_problem requires SciMLBase.jl. Add `using SciMLBase` (or a package that " *
         "loads it, such as OrdinaryDiffEq) before calling this function.",
+    )
+end
+
+"""
+    adjoint_sensitivities(sol::ODESolution, alg; kwargs...) -> (du0, dp)
+
+Adjoint sensitivities of a [`Semidiscretization`](@ref)'s solved trajectory, via
+`SciMLSensitivity.adjoint_sensitivities` with two Bramble-specific corrections applied.
+Full documentation lives on `BrambleSciMLSensitivityExt`'s own method, the only one that
+exists once `SciMLSensitivity` is loaded -- this stub exists so that method has a function to
+extend, and so calling this without `SciMLSensitivity` loaded gives a clear error rather than
+`UndefVarError`.
+
+Deliberately not exported, unlike [`pde_solve`](@ref): `SciMLSensitivity` itself exports a
+function of this exact name, so `using Bramble, SciMLSensitivity` together would collide on
+the bare name regardless of what Bramble does. Call this one as `Bramble.adjoint_sensitivities`.
+"""
+function adjoint_sensitivities(sol, alg; kwargs...)
+    return error(
+        "adjoint_sensitivities requires SciMLSensitivity.jl. Add `using SciMLSensitivity` " *
+        "before calling this function.",
     )
 end
 

@@ -192,6 +192,7 @@ if __bramble_with_ext_backends
         include("ext/sparse_ad_ext.jl")
         include("ext/ad_backend_verification.jl")
         include("ext/sciml_ext.jl")
+        include("ext/sciml_sensitivity_ext.jl")
         include("ext/algebraicmultigrid_ext.jl")
         include("ext/iluzero_ext.jl")
         include("ext/suitesparse_ext.jl")

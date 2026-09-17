@@ -10,11 +10,11 @@ using ExplicitImports
 # already has none unused -- so this file is a ratchet, not a cleanup: it fails when a new
 # import drifts from that, not today. Coverage depends on which extensions are loaded when
 # this runs: `test/utils/backends.jl` loads Metal incidentally on Apple Silicon even in the
-# unit group, so `BrambleMetalExt` is usually checked too; the other five extensions are
-# reached only when the "ext"/"full" group has loaded their triggers earlier in the same
-# process. Every ignore entry below was verified against all six loaded together, so the
-# check is exact under "full" and a (harmless) subset of it otherwise -- an ignored name
-# never encountered is not an error.
+# unit group, so `BrambleMetalExt` is usually checked too; the rest -- now including
+# `BrambleSciMLSensitivityExt` -- are reached only when the "ext"/"full" group has loaded
+# their triggers earlier in the same process. Every ignore entry below was verified against
+# all of them loaded together, so the check is exact under "full" and a (harmless) subset of
+# it otherwise -- an ignored name never encountered is not an error.
 #
 # The two checks worth having most are the cheap ones. `check_no_implicit_imports` keeps a
 # bare `using X` from pulling in names nobody can see at the call site. `check_no_stale_
@@ -28,8 +28,18 @@ using ExplicitImports
         @test check_no_stale_explicit_imports(Bramble) === nothing
     end
 
+    # `BrownFullBasicInit` (BrambleSciMLSensitivityExt): `SciMLSensitivity`'s own `using
+    # OrdinaryDiffEqCore: ..., BrownFullBasicInit, ...` brings it in without re-exporting it,
+    # so `Base.which` traces the true owner past `SciMLSensitivity` -- to `OrdinaryDiffEqCore`
+    # in some resolutions, further still to `DiffEqBase` in others, since `OrdinaryDiffEqCore`
+    # itself only re-exports it too. `SciMLSensitivity` is the intended, documented way to
+    # reach it (the same "reached through a re-export" shape as `MPI`/`Init`/`Initialized`
+    # below, from MUMPS's own re-export of its MPI submodule); depending on either deeper
+    # package directly, just to import one name past what actually uses it, would be worse.
     @testset "Imports come from the module that owns them" begin
-        @test check_all_explicit_imports_via_owners(Bramble) === nothing
+        @test check_all_explicit_imports_via_owners(
+            Bramble; ignore = (:BrownFullBasicInit,)
+        ) === nothing
     end
 
     # Every name below is a deliberate reach into another module's internals -- spelling it
@@ -60,6 +70,10 @@ using ExplicitImports
     #   kind/hook names its `factor!`/`refactor!` calls need, none of them public there.
     # - `finalize!`, `get_sol!`, `set_cntl!`, `set_icntl!`, `suppress_display!`
     #   (BrambleMUMPSExt): MUMPS's own solver-control API, none of it public there.
+    # - `BrownFullBasicInit` (BrambleSciMLSensitivityExt): brought into `SciMLSensitivity`'s
+    #   own namespace from `OrdinaryDiffEqCore` without being re-exported (the "owners" check
+    #   above has the full chain) -- reached the same way `MPI`/`Init`/`Initialized` below
+    #   reach MUMPS's un-exported MPI submodule.
     @testset "Non-public imports are the declared ones" begin
         @test check_all_explicit_imports_are_public(
             Bramble;
@@ -75,6 +89,7 @@ using ExplicitImports
                 :_vtk_axes,
                 :_vtk_data,
                 :AbstractSpaceType,
+                :BrownFullBasicInit,
                 :CHOLMOD,
                 :UMFPACK,
                 :AAFactorization,
@@ -105,6 +120,24 @@ using ExplicitImports
     #   for `VectorElement` -- confirmed by rendering, see the file's own note.
     # - `_metal_backend`, `Metal.fill!` (BrambleMetalExt): the backend constructor hook and
     #   Metal's own `fill!` on an `MtlArray`.
+    # - `EnzymeRules.augmented_primal`/`reverse`/`width`/`needs_primal`/`needs_shadow`
+    #   (BrambleEnzymeExt): the custom-rule interface `EnzymeRules` documents extending this
+    #   way, none of it exported (an exported `reverse` would shadow `Base`'s own for anyone
+    #   who `using`s `EnzymeRules` directly). Which of the five this check actually flags
+    #   depends on exactly what else is loaded alongside `Enzyme` when it runs -- `reverse`
+    #   alone with `SciMLSensitivity` loaded but not `Enzyme`/`ChainRulesCore` directly
+    #   (`EnzymeCore` only transitively), `augmented_primal` too once `Enzyme` itself joins
+    #   -- so all five are listed together rather than chased one at a time as the loaded
+    #   set shifts. Nothing about `BrambleEnzymeExt` changed; only what else was loaded
+    #   alongside it did, once `SciMLSensitivity` (BrambleSciMLSensitivityExt) joined the
+    #   "ext" group's set.
+    # - `adjoint_sensitivities` (BrambleSciMLSensitivityExt): the one entry point not
+    #   underscored -- `Bramble.adjoint_sensitivities` is meant to be called, just not
+    #   exported, since `SciMLSensitivity` exports a function of the exact same name and
+    #   `using Bramble, SciMLSensitivity` together would collide on the bare name regardless
+    #   of what Bramble does (the stub's own docstring, `form/semidiscrete.jl`, has the
+    #   reasoning). Its core fallback still gives the same helpful error the underscored ones
+    #   below do.
     # - `_ast_sparsity_detector` (BrambleSparseADExt), `_ode_function`/`_ode_problem`/
     #   `_linear_problem`/`_nonlinear_problem`/`_second_order_ode_function`/
     #   `_second_order_ode_problem` (BrambleSciMLExt), `_export_vtk` (BrambleVTKExt): the
@@ -159,6 +192,12 @@ using ExplicitImports
                 :expand_dimensions,
                 :_metal_backend,
                 Symbol("fill!"),
+                :augmented_primal,
+                :reverse,
+                :width,
+                :needs_primal,
+                :needs_shadow,
+                :adjoint_sensitivities,
                 :_ast_sparsity_detector,
                 :CartesianProduct,
                 :_linear_problem,

@@ -100,10 +100,19 @@ end
 # (the method a plain callable `f`/`rhs` reaches, as opposed to the `@add_kwonly`-generated
 # one an `AbstractODEFunction` reaches) does not bind a `p` keyword to that positional
 # argument at all; it would silently land in `kwargs` instead and never reach the residual.
+#
+# `specialize` defaults to `nothing`, leaving `ODEProblem`'s own specialization choice
+# untouched -- existing callers get exactly the problem they always did. Passing
+# `SciMLBase.FullSpecialize` is what `Bramble.adjoint_sensitivities`
+# (`BrambleSciMLSensitivityExt`) needs: without it, calling the residual with a
+# differently-`eltype`-`p` than the forward solve used (exactly what computing a `p`-vjp
+# does) fails with "No matching function wrapper was found!" rather than differentiating.
+# The type-parameterized `ODEProblem{iip, specialize}` constructor is the only one that
+# accepts a choice of specialization at all -- there is no keyword for it on the plain one.
 function Bramble._ode_problem(
         sd::Semidiscretization, u₀, I;
         jacobian = jacobian!, jac_prototype = nothing, tgrad = nothing,
-        p = SciMLBase.NullParameters()
+        p = SciMLBase.NullParameters(), specialize = nothing
 )
     tspan = _tspan(I)
     u0 = _initial_vector(u₀)
@@ -111,7 +120,8 @@ function Bramble._ode_problem(
     f = Bramble._ode_function(
         sd; jacobian = jacobian, jac_prototype = jac_prototype, tgrad = tgrad
     )
-    return ODEProblem(f, u0, tspan, p)
+    return specialize === nothing ? ODEProblem(f, u0, tspan, p) :
+           ODEProblem{true, specialize}(f, u0, tspan, p)
 end
 
 # No `dirichlet_bc!` consistency step, unlike the `Semidiscretization` method above:
