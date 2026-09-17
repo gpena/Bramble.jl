@@ -122,6 +122,18 @@ The two grid functions must have the same number of components.
 
 `markers` restricts the sum to the union of the labelled regions' points (a masked sum of
 the same cell measures, not a surface integral; see the note above `_combined_mask`).
+
+# Examples
+
+```jldoctest
+using Bramble
+Wₕ = gridspace(mesh(domain(interval(0.0, 1.0)), 101))
+uₕ = Rₕ(Wₕ, x -> 1.0)
+isapprox(innerₕ(uₕ, uₕ), 1.0; atol = 1.0e-12) && isapprox(normₕ(uₕ), 1.0; atol = 1.0e-12)
+
+# output
+true
+```
 """
 @inline function innerₕ(
         uₕ::VectorElement{<:ScalarGridSpace},

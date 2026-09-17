@@ -23,7 +23,7 @@ abstract type MUMPSFactorization{T} <: Factorization{T} end
 Compute the sparse direct multifrontal factorization of `A` (or the assembled matrix of `a`)
 using [MUMPS.jl](https://github.com/lruthotto/MUMPS.jl).
 
-# Symmetry options (`sym`)
+# Symmetry options
 - `:auto` (default): automatically detects symmetry. If `A` is symmetric and positive definite
   (or `symmetrize = true`), uses symmetric positive-definite factorization (`sym = 1`). If
   symmetric, uses general symmetric ``LDL^T`` (`sym = 2`). Otherwise, uses unsymmetric LU (`sym = 0`).
@@ -71,7 +71,7 @@ end
 
 Directly solve `A u = F` (or `assemble(a, l)` system) using MUMPS direct factorization.
 
-# Symmetry options (`sym`)
+# Symmetry options
 - `:auto` (default): automatically detects symmetry.
 - `:spd`, `:definite`, or `1`: symmetric positive definite.
 - `:symmetric` or `2`: general symmetric.

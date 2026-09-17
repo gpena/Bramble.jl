@@ -1,45 +1,19 @@
-#=
 # dirichlet_constraints.jl
-
-This file implements Dirichlet boundary condition handling for finite element assembly.
-
-## Mathematical background
-
-Dirichlet boundary conditions impose constraints of the form:
-```math
-u(x) = g(x) \\quad \\text{for } x \\in \\Gamma_D
-```
-
-where Γ_D is the Dirichlet boundary and g is the prescribed function.
-
-## Usage pattern
-
-```julia
-# Define boundary conditions
-bc = dirichlet_constraints(Ωₕ, :left => x -> 0.0, :right => x -> 1.0)
-
-# Apply to matrix and vector
-dirichlet_bc!(A, mesh(Wₕ), :left, :right)
-dirichlet_bc!(F, mesh(Wₕ), bc, :left, :right)
-
-# Symmetrize system after BCs
-symmetrize!(A, F, mesh(Wₕ), :left, :right)
-```
-
-## Performance optimizations
-
-- Constrained indices are walked, never scanned for: `_each_marked` calls
-  `MarkedIndices` (utils/linear_algebra.jl), which skips empty `BitVector` chunks and
-  steps set bits with `trailing_zeros`, so every routine here costs the boundary
-  cardinality rather than `ndofs`. It is the one iterator; nothing else in this file walks a
-  mask by hand.
-- Sparse matrices are modified through their CSC arrays directly, in a single sweep that
-  writes the diagonal where it meets it. Calling `A[i, i] = one(T)` afterwards would
-  binary-search the column, so the sweeps that can avoid that do.
-- No `@simd` anywhere: every one of these loops is branch-driven, which rules it out.
-
-See also: [`dirichlet_constraints`](@ref), [`dirichlet_bc!`](@ref), [`symmetrize!`](@ref)
-=#
+#
+# Dirichlet conditions for the discrete variational assembly: `u = g` on a marked part of the
+# boundary, imposed by replacing the constrained rows of the assembled system.
+#
+#   bc = dirichlet_constraints(Ωₕ, :left => x -> 0.0, :right => x -> 1.0)
+#   dirichlet_bc!(A, mesh(Wₕ), :left, :right)
+#   dirichlet_bc!(F, mesh(Wₕ), bc, :left, :right)
+#   symmetrize!(A, F, mesh(Wₕ), :left, :right)
+#
+# Constrained indices are walked rather than scanned for: `_each_marked` calls
+# `MarkedIndices` (utils/linear_algebra.jl), which skips empty `BitVector` chunks and steps
+# set bits with `trailing_zeros`, so every routine here costs the boundary cardinality rather
+# than `ndofs`. Sparse matrices are modified through their CSC arrays in one sweep that writes
+# the diagonal where it meets it, since `A[i, i] = one(T)` afterwards would binary-search the
+# column. No `@simd` anywhere: these loops are branch-driven.
 
 """
     DirichletConstraint = DomainMarkers

@@ -1,12 +1,10 @@
-"""
 # constructors.jl
-
-Top-level `mesh(Ω, npts, ...)` factory dispatch: the user-facing entry points that parse
-positional and keyword arguments and route to each concrete mesh type's `_mesh`
-constructor.
-
-See also: [`Mesh1D`](@ref), [`MeshnD`](@ref), [`Domain`](@ref)
-"""
+#
+# Top-level `mesh(Ω, npts, ...)` factory dispatch: the user-facing entry points that parse
+# positional and keyword arguments and route to each concrete mesh type's `_mesh`
+# constructor.
+#
+# See also: `Mesh1D`, `MeshnD`, `Domain`
 
 #------------------------------------------------------------------------------------------#
 # High-Level Mesh Constructor Dispatch

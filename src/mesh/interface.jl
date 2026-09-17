@@ -1,19 +1,17 @@
-"""
 # interface.jl
-
-Abstract supertype, interface contracts, and shared fallbacks for every mesh type in
-Bramble: `AbstractMeshType{D}`, field getters, bounds checking, refinement
-(`iterative_refinement!`, `change_points!`), and interface stubs (`eltype`, `dim`,
-`topo_dim`, `points`, `point`, `half_points`, `half_point`, `spacing`, `forward_spacing`,
-`half_spacings`, `half_spacing`, `npoints`, `hₘₐₓ`, `hₘᵢₙ`, `cell_measure`).
-
-Cartesian index generation and boundary/interior predicates live in `mesh/indices.jl`; the
-public `mesh(...)` constructor dispatch lives in `mesh/constructors.jl`; `is_uniform`,
-`stepsize`, `locate_cell`, `normal_vector`, and the `Base` collection interface live in
-`mesh/queries.jl`.
-
-See also: [`Mesh1D`](@ref), [`MeshnD`](@ref), [`Domain`](@ref)
-"""
+#
+# Abstract supertype, interface contracts, and shared fallbacks for every mesh type in
+# Bramble: `AbstractMeshType{D}`, field getters, bounds checking, refinement
+# (`iterative_refinement!`, `change_points!`), and interface stubs (`eltype`, `dim`,
+# `topo_dim`, `points`, `point`, `half_points`, `half_point`, `spacing`, `forward_spacing`,
+# `half_spacings`, `half_spacing`, `npoints`, `hₘₐₓ`, `hₘᵢₙ`, `cell_measure`).
+#
+# Cartesian index generation and boundary/interior predicates live in `mesh/indices.jl`; the
+# public `mesh(...)` constructor dispatch lives in `mesh/constructors.jl`; `is_uniform`,
+# `stepsize`, `locate_cell`, `normal_vector`, and the `Base` collection interface live in
+# `mesh/queries.jl`.
+#
+# See also: `Mesh1D`, `MeshnD`, `Domain`
 
 #------------------------------------------------------------------------------------------#
 # Abstract Supertype

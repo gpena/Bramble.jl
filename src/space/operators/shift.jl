@@ -107,7 +107,7 @@ Returns the matrix that shifts a grid function by `i` points along direction
     identity. The stencil is truncated at the boundary rather than wrapped, so the
     matrix has `n - |i|` nonzeros per direction rather than `n`.
 
-# Tensor-Product Structure
+# Tensor-product structure
 
 A mesh is a tensor product of its one-dimensional meshes, and its degrees of freedom are
 flattened in column-major order, so a shift along one direction is the identity in every

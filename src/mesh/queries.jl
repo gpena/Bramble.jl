@@ -1,17 +1,15 @@
-"""
 # queries.jl
-
-Uniformity checks, the `Base` collection interface, and higher-level spatial queries
-shared by every mesh type in Bramble.
-
-- `is_uniform`: uniform-spacing check.
-- `Base.size`, `Base.length`, `Base.axes`, `Base.firstindex`, `Base.lastindex`,
-  `Base.iterate`: the collection interface over mesh points.
-- `stepsize`, `locate_cell`, `normal_vector`: constant-spacing, cell lookup, and boundary
-  normal queries.
-
-See also: [`Mesh1D`](@ref), [`MeshnD`](@ref)
-"""
+#
+# Uniformity checks, the `Base` collection interface, and higher-level spatial queries
+# shared by every mesh type in Bramble.
+#
+# - `is_uniform`: uniform-spacing check.
+# - `Base.size`, `Base.length`, `Base.axes`, `Base.firstindex`, `Base.lastindex`,
+#   `Base.iterate`: the collection interface over mesh points.
+# - `stepsize`, `locate_cell`, `normal_vector`: constant-spacing, cell lookup, and boundary
+#   normal queries.
+#
+# See also: `Mesh1D`, `MeshnD`
 
 #------------------------------------------------------------------------------------------#
 # Uniformity Query

@@ -218,6 +218,18 @@ sparspak_solve
 sparspak_refactor!
 ```
 
+## Caching a coefficient-dependent assembly by element type
+
+A Newton residual generic over `T` (`Float64` on a plain call, `ForwardDiff.Dual` while an
+AD backend's sparse Jacobian sweep is probing it) cannot preallocate one matrix the way a
+Picard loop can. `type_cached_assemble!` gives the sparsity pattern a place to live per
+element type it is ever reached at instead, so only the very first call at a given type
+pays for it.
+
+```@docs
+type_cached_assemble!
+```
+
 ## JuliaSparse ecosystem evaluation
 
 [gpena/Bramble.jl#244](https://github.com/gpena/Bramble.jl/issues/244) asked whether other
@@ -354,15 +366,3 @@ anything further for it.
 | `ILUZero.jl` | Done -- [`ilu_preconditioner`](@ref), [#255](https://github.com/gpena/Bramble.jl/issues/255) |
 | `Metis.jl` | **Recommended** -- genuine fill/time win on 3D systems, usable today via existing `perm` forwarding |
 | `SymRCM.jl` | Not adopted -- worse fill than the CHOLMOD default on the systems Bramble assembles |
-
-## Caching a coefficient-dependent assembly by element type
-
-A Newton residual generic over `T` (`Float64` on a plain call, `ForwardDiff.Dual` while an
-AD backend's sparse Jacobian sweep is probing it) cannot preallocate one matrix the way a
-Picard loop can. `type_cached_assemble!` gives the sparsity pattern a place to live per
-element type it is ever reached at instead, so only the very first call at a given type
-pays for it.
-
-```@docs
-type_cached_assemble!
-```
