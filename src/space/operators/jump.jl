@@ -71,55 +71,26 @@ are the same quantity.
 """
 @inline jump!(vₕ, uₕ, dim_val::Val) = forward_difference!(vₕ, uₕ, dim_val)
 
-# The aliases are written out rather than taken from `@operator_family` and its
-# `_alias_expr`/`_vectorial_expr` builders: those generators put a direction word into the docstring
-# ("The `forward` jump along …"), and there is no direction to name here.
-for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
-    alias = Symbol(:jump, suffix)
-    direction = _BRAMBLE_var2label[i]
-    @eval begin
-        @doc """
-            $($(QuoteNode(alias)))(arg)
-
-        The jump across the interfaces along the `$($direction)` direction,
-        ``\\\\llbracket u \\\\rrbracket = u_{i+1} - u_i``.
-
-        Alias for `jump(arg, Val($($i)))`. `arg` is a mesh, a grid space or a
-        [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
-        third applies it and returns a `VectorElement`.
-
-        Accepts a grid function of a scalar or of a composite grid space. On a composite
-        one the operator is applied to each component in turn, and the result is the
-        composite grid function whose components are those results.
-
-        The last point along `$($direction)` has no forward neighbour and is treated as
-        though it were zero, as in [`diff₊$($suffix)`](@ref).
-        """
-        @inline $alias(arg) = jump(arg, Val($i))
-
-        @doc """
-            $($(QuoteNode(alias)))!(vₕ, uₕ)
-
-        The in-place form of [`$($(QuoteNode(alias)))`](@ref): writes the jump into `vₕ`
-        and returns it, allocating nothing. `vₕ` and `uₕ` must belong to the same space
-        and must not be the same object.
-        """
-        @inline $(Symbol(alias, :!))(vₕ, uₕ) = jump!(vₕ, uₕ, Val($i))
-    end
-end
-
-"""
-    jumpₕ(arg)
-
-The jump of `arg` along every coordinate, as a tuple with one entry per spatial dimension.
-On a one-dimensional mesh it returns that single entry rather than a one-tuple.
-
-For a 2D space, `jumpₕ(uₕ)` is `(jump(uₕ, Val(1)), jump(uₕ, Val(2)))`. `arg` is a mesh, a
-grid space or a [`VectorElement`](@ref), as for [`jump`](@ref).
-
-Accepts a grid function of a scalar or of a composite grid space, componentwise on the
-latter: each entry of the tuple is then itself a composite grid function.
-"""
-@inline jumpₕ(arg) = jumpₕ(arg, Val(dim(_op_mesh(arg))))
-@inline jumpₕ(arg, ::Val{1}) = jump(arg, Val(1))
-@inline jumpₕ(arg, ::Val{D}) where {D} = ntuple(i -> jump(arg, Val(i)), Val(D))
+# The alias surface comes from `@operator_family` like every other family's
+# (gpena/Bramble.jl#258). It was written out here for years because the shared generators
+# put a direction word into the docstring ("The `forward` jump along ..."), and a jump has
+# no direction to name: it belongs to the interface between two cells, not to a direction of
+# travel across it. `opening_sentence` and `bang_opening_sentence` now say what the family
+# needs said, so there is nothing left for a second copy of the loop to do.
+#
+# Folding it in also gives `jumpₕ` the unrolled `Val{2}`/`Val{3}` methods every other
+# vectorial alias has. The hand-written version closed over `ntuple(i -> jump(arg, Val(i)),
+# Val(D))`, which boxes `i` as a runtime `Int` and so cannot constant-fold into the stencil
+# engine -- the shape gpena/Bramble.jl#146 measured on the other families and fixed there.
+@operator_family(base=jump,
+    stem=jump,
+    opening_sentence="The jump across the interfaces along the `{direction}` "*
+    "direction, ``\\llbracket u \\rrbracket = u_{i+1} - u_i``.",
+    trailing_note="The last point along `{direction}` has no forward neighbour and is "*
+    "treated as though it were zero, as in [`diff₊{suffix}`](@ref).",
+    bang_opening_sentence="The jump across the interfaces along the `{direction}` "*
+                          "direction, ``\\llbracket u \\rrbracket = u_{i+1} - u_i``, "*
+                          "written into `vₕ`.",
+    vectorial_alias=jumpₕ,
+    vectorial_dir_string="",
+    vectorial_what="jump")

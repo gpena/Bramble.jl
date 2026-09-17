@@ -201,6 +201,11 @@ let uₕ2 = Rₕ(gridspace(_mesh2()), x -> sin(x[1]) * x[2]), uₕ3 = Rₕ(grids
     g["M₊ᵧ 2D"] = @benchmarkable M₊ᵧ($uₕ2)
     g["jump₂ 3D"] = @benchmarkable jump₂($uₕ3)
     g["M₊₂ 3D"] = @benchmarkable M₊₂($uₕ3)
+    # The vectorial alias, added when it stopped building its tuple through a closure
+    # (gpena/Bramble.jl#258): `ntuple(i -> jump(arg, Val(i)), Val(D))` boxed `i` and cost
+    # two allocations per direction on top of the `similar` each direction needs anyway.
+    g["jumpₕ 2D"] = @benchmarkable jumpₕ($uₕ2)
+    g["jumpₕ 3D"] = @benchmarkable jumpₕ($uₕ3)
 end
 
 # --- 8. startup latency & TTFX -------------------------------------------- #
@@ -489,6 +494,10 @@ const ALLOCATION_BOUNDS = Dict(
     ("jumps & averages", "M₊ᵧ 2D") => 3,
     ("jumps & averages", "jump₂ 3D") => 3,
     ("jumps & averages", "M₊₂ 3D") => 3,
+    # three per direction, and nothing else: the boxed closure that used to add two more
+    # per direction is gone (10 allocations in 2D and 15 in 3D before gpena/Bramble.jl#258)
+    ("jumps & averages", "jumpₕ 2D") => 6,
+    ("jumps & averages", "jumpₕ 3D") => 9,
     # form assembly. Only the zeros are gated, deliberately: `assemble_parallel!`
     # and `Rₕ!`/`avgₕ!` allocate one task set per call, so their counts move with
     # the thread count, and `allocate_system_matrix` builds three coordinate

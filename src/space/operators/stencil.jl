@@ -336,10 +336,14 @@ function _vectorial_expr(
         base_op_name, alias_name, dir_string, what; note::String = "", source = nothing
 )
     n = isempty(note) ? "" : " " * note
+    # A family with no direction word to give -- the jump belongs to an interface, not to a
+    # direction of travel -- passes `dir_string` empty, and the qualifier collapses to
+    # `what` alone rather than leaving a double space in the sentence.
+    qualifier = isempty(dir_string) ? what : "$dir_string $what"
     doc_string = """
         $alias_name(arg)
 
-    The $dir_string $what of `arg` along every coordinate, as a tuple with one entry per
+    The $qualifier of `arg` along every coordinate, as a tuple with one entry per
     spatial dimension. On a one-dimensional mesh it returns that single entry rather than
     a one-tuple.
 

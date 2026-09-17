@@ -383,19 +383,15 @@ scalar or of a composite grid space, componentwise on the latter.
 ### jumpₓ
     jumpₓ(arg)
 
-The jump across the interfaces along the `x` direction,
-``\\llbracket u \\rrbracket = u_{i+1} - u_i``.
+The jump across the interfaces along the `x` direction, ``\llbracket u \rrbracket = u_{i+1} - u_i``.
 
-Alias for `jump(arg, Val(1))`. `arg` is a mesh, a grid space or a
-[`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
-third applies it and returns a `VectorElement`.
+Alias for `jump(arg, Val(1))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`. The last point along `x` has no forward neighbour and is treated as though it were zero, as in [`diff₊ₓ`](@ref).
 
-Accepts a grid function of a scalar or of a composite grid space. On a composite
-one the operator is applied to each component in turn, and the result is the
-composite grid function whose components are those results.
-
-The last point along `x` has no forward neighbour and is treated as
-though it were zero, as in [`diff₊ₓ`](@ref).
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
 
 ---
     jumpₓ(op::LazyOp{D}) -> JumpNode
@@ -408,61 +404,80 @@ Symbolic jumps across the interfaces along coordinate directions ``x``, ``y``, a
 ### jumpₓ!
     jumpₓ!(vₕ, uₕ)
 
-The in-place form of [`jumpₓ`](@ref): writes the jump into `vₕ`
-and returns it, allocating nothing. `vₕ` and `uₕ` must belong to the same space
-and must not be the same object.
+The jump across the interfaces along the `x` direction, ``\llbracket u \rrbracket = u_{i+1} - u_i``, written into `vₕ`.
+
+The in-place form of [`jumpₓ`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(jumpₓ!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `jump!(vₕ, uₕ, Val(1))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
 
 ### end jumpₓ!
 ### jumpᵧ
     jumpᵧ(arg)
 
-The jump across the interfaces along the `y` direction,
-``\\llbracket u \\rrbracket = u_{i+1} - u_i``.
+The jump across the interfaces along the `y` direction, ``\llbracket u \rrbracket = u_{i+1} - u_i``.
 
-Alias for `jump(arg, Val(2))`. `arg` is a mesh, a grid space or a
-[`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
-third applies it and returns a `VectorElement`.
+Alias for `jump(arg, Val(2))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`. The last point along `y` has no forward neighbour and is treated as though it were zero, as in [`diff₊ᵧ`](@ref).
 
-Accepts a grid function of a scalar or of a composite grid space. On a composite
-one the operator is applied to each component in turn, and the result is the
-composite grid function whose components are those results.
-
-The last point along `y` has no forward neighbour and is treated as
-though it were zero, as in [`diff₊ᵧ`](@ref).
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
 
 ### end jumpᵧ
 ### jumpᵧ!
     jumpᵧ!(vₕ, uₕ)
 
-The in-place form of [`jumpᵧ`](@ref): writes the jump into `vₕ`
-and returns it, allocating nothing. `vₕ` and `uₕ` must belong to the same space
-and must not be the same object.
+The jump across the interfaces along the `y` direction, ``\llbracket u \rrbracket = u_{i+1} - u_i``, written into `vₕ`.
+
+The in-place form of [`jumpᵧ`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(jumpᵧ!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `jump!(vₕ, uₕ, Val(2))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
 
 ### end jumpᵧ!
 ### jump₂
     jump₂(arg)
 
-The jump across the interfaces along the `z` direction,
-``\\llbracket u \\rrbracket = u_{i+1} - u_i``.
+The jump across the interfaces along the `z` direction, ``\llbracket u \rrbracket = u_{i+1} - u_i``.
 
-Alias for `jump(arg, Val(3))`. `arg` is a mesh, a grid space or a
-[`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
-third applies it and returns a `VectorElement`.
+Alias for `jump(arg, Val(3))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`. The last point along `z` has no forward neighbour and is treated as though it were zero, as in [`diff₊₂`](@ref).
 
-Accepts a grid function of a scalar or of a composite grid space. On a composite
-one the operator is applied to each component in turn, and the result is the
-composite grid function whose components are those results.
-
-The last point along `z` has no forward neighbour and is treated as
-though it were zero, as in [`diff₊₂`](@ref).
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
 
 ### end jump₂
 ### jump₂!
     jump₂!(vₕ, uₕ)
 
-The in-place form of [`jump₂`](@ref): writes the jump into `vₕ`
-and returns it, allocating nothing. `vₕ` and `uₕ` must belong to the same space
-and must not be the same object.
+The jump across the interfaces along the `z` direction, ``\llbracket u \rrbracket = u_{i+1} - u_i``, written into `vₕ`.
+
+The in-place form of [`jump₂`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(jump₂!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `jump!(vₕ, uₕ, Val(3))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
 
 ### end jump₂!
 ### M₋ₓ
@@ -1047,14 +1062,16 @@ the latter: each entry of the tuple is then itself a composite grid function.
 ### jumpₕ
     jumpₕ(arg)
 
-The jump of `arg` along every coordinate, as a tuple with one entry per spatial dimension.
-On a one-dimensional mesh it returns that single entry rather than a one-tuple.
+The jump of `arg` along every coordinate, as a tuple with one entry per
+spatial dimension. On a one-dimensional mesh it returns that single entry rather than
+a one-tuple.
 
-For a 2D space, `jumpₕ(uₕ)` is `(jump(uₕ, Val(1)), jump(uₕ, Val(2)))`. `arg` is a mesh, a
-grid space or a [`VectorElement`](@ref), as for [`jump`](@ref).
+For a 2D space, `jumpₕ(uₕ)` is
+`(jump(uₕ, Val(1)), jump(uₕ, Val(2)))`. `arg` is a mesh, a grid
+space or a [`VectorElement`](@ref), as for `jump`.
 
-Accepts a grid function of a scalar or of a composite grid space, componentwise on the
-latter: each entry of the tuple is then itself a composite grid function.
+Accepts a grid function of a scalar or of a composite grid space, componentwise on
+the latter: each entry of the tuple is then itself a composite grid function.
 
 ---
     jumpₕ(op::LazyOp{D})
