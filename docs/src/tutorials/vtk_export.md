@@ -3,19 +3,10 @@
 Once a solution exists (the result of the [forms tutorial](form.md), or any grid function),
 the last step is usually getting it into a viewer. `export_vtk` writes a mesh and any
 number of named fields to a `.vtr` file, readable by ParaView or any other VTK-aware tool.
-This tutorial covers:
-
-1. Writing a mesh with a named field.
-2. The shorthand for a single field.
-3. A composite element as one vector field, not several scalar ones.
-4. The 1D case.
-5. A time series, for a transient solve.
-
 `export_vtk` needs [WriteVTK.jl](https://github.com/JuliaVTK/WriteVTK.jl), which is a weak
 dependency: `using WriteVTK` before calling it, or the call errors with a message that says
-so rather than a bare `MethodError`.
-
-Every code block below was run before being written down, and each produces the files it claims to.
+so rather than a bare `MethodError`. Every block below runs when this page is built, and
+writes the files it claims to.
 
 ## 1. A mesh and a named field
 
@@ -122,17 +113,28 @@ four steps as one dataset with a working time slider, each at its own recorded `
 A `SciMLBase` solution -- what solving an [`ode_problem`](@ref) with `OrdinaryDiffEq` hands
 back -- has a one-call shorthand instead of a hand-written loop:
 
-```julia
+```@example vtk
 using OrdinaryDiffEqBDF
 
-prob = ode_problem(sd, u₀, I)
+Ωt = domain(interval(0.0, 1.0), :left => :left, :right => :right)
+Ωₕt = mesh(Ωt, 41)
+Wₕt = gridspace(Ωₕt)
+fₕ = element(Wₕt, 0.0)
+
+a = form(Wₕt, Wₕt, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+l = form(Wₕt, v -> innerₕ(fₕ, v))
+bcs = dirichlet_constraints(Ωₕt, interval(0.0, 1.0), :boundary => (x, t) -> 0.0)
+sd = semidiscretize(a, l; dirichlet = bcs)
+
+prob = ode_problem(sd, Rₕ(Wₕt, x -> sinpi(x[1])), interval(0.0, 1.0))
 sol = solve(prob, FBDF())
 
-export_vtk(joinpath(mktempdir(), "solution"), Wₕ, sol)                    # every saved step
-export_vtk(joinpath(mktempdir(), "solution"), Wₕ, sol; times = 0:0.1:1.0) # interpolated
+export_vtk(joinpath(mktempdir(), "solution"), Wₕt, sol)                    # every saved step
+export_vtk(joinpath(mktempdir(), "solution"), Wₕt, sol; times = 0:0.1:1.0) # interpolated
+nothing # hide
 ```
 
-`Wₕ` (not just the mesh) is what turns each raw solution vector back into a properly shaped
+`Wₕt` (not just the mesh) is what turns each raw solution vector back into a properly shaped
 field, the same way [`element`](@ref)`(Wₕ, ::AbstractVector)` does anywhere else. The
 default writes exactly `sol`'s own saved times, non-uniform steps included; passing `times`
 samples `sol`'s continuous interpolation at those points instead. See the

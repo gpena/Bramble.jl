@@ -151,7 +151,7 @@ end
 Construct a symbolic point (Dirac delta) source term at coordinate `x0` with scalar `strength`,
 or a collection of point sources at `points` with corresponding `strengths`.
 
-# Mathematical Formulation
+# Mathematical formulation
 A point source represents the continuous linear functional:
 ```math
 \\ell(v) = \\int_\\Omega S \\, \\delta(x - x_0) \\, v(x) \\, dx = S \\cdot v(x_0)

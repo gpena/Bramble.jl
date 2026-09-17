@@ -64,6 +64,36 @@ end
 # AD test checks the derivative against this rather than merely checking that it ran.
 _fd(f, a; h = 1e-6) = (f(a + h) - f(a - h)) / (2h)
 
+# Is a package resolvable from this environment? The files behind the `ad` and `ext`
+# groups use it to `@test_skip` rather than error on a backend the environment does not
+# have. It was defined five times over -- once per such file, plus once in
+# space/autodiff_backends.jl, which autodiff_heavy.jl then imported by name, coupling the
+# two files' include order to a one-line predicate.
+_have(mod::Symbol) = Base.identify_package(String(mod)) !== nothing
+
+# Refines a manufactured problem and checks it converges at second order. `errfn(n)`
+# returns `(error, spacing)` for an n-point grid; the observed order between consecutive
+# refinements must clear `order`, and the errors themselves must fall monotonically -- a
+# rate alone can look right while the errors sit on a plateau. Returns the observed orders
+# so a caller can pin the finest one further.
+#
+# This sweep was written out five times (four in ext/sciml_ext.jl, once in
+# form/semidiscrete.jl), differing only in the closure it measured.
+function _check_eoc(errfn, ns; order = 1.9)
+    errors = Float64[]
+    spacings = Float64[]
+    for n in ns
+        e, h = errfn(n)
+        push!(errors, e)
+        push!(spacings, h)
+    end
+    eoc = [log(errors[i] / errors[i + 1]) / log(spacings[i] / spacings[i + 1])
+           for i in 1:(length(errors) - 1)]
+    @test all(>(order), eoc)
+    @test issorted(errors; rev = true)
+    return eoc
+end
+
 # A symmetric, structurally symmetric operator to constrain.
 _tri(m) = spdiagm(0 => fill(4.0, m), 1 => fill(-1.0, m - 1), -1 => fill(-1.0, m - 1))
 

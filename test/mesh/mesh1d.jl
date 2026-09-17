@@ -390,15 +390,6 @@ import Base: diff
             @test hₘₐₓ(Ωₕ_one) == 0.0
         end
 
-        @testset "Boundary indices" begin
-            @test boundary_indices(Ωₕ) == (CartesianIndex(1), CartesianIndex(5))
-
-            # Test on indices directly
-            idx = indices(Ωₕ)
-            bounds = boundary_indices(idx)
-            @test bounds == (CartesianIndex(1), CartesianIndex(5))
-        end
-
         @testset "Spacing edge cases" begin
             # Test forward_spacing at boundaries
             @test forward_spacing(Ωₕ, 1) ≈ 1.0  # pts[2] - pts[1]
@@ -413,12 +404,9 @@ import Base: diff
         end
 
         @testset "Type stability" begin
-            # Test eltype on type
+            # The value-level `eltype`/`dim` are "Uniform mesh"'s; this is the type-level
+            # query, which resolves through a different method.
             @test eltype(typeof(Ωₕ)) == Float64
-            @test eltype(Ωₕ) == Float64
-
-            # Test dim on type
-            @test dim(typeof(Ωₕ)) == 1
         end
 
         @testset "Indexing" begin

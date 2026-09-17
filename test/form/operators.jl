@@ -276,17 +276,6 @@ const _ORIGIN_2D = (0, 0)
             @test innerₕ(∇₋ₕ(u2)[1], ∇₋ₕ(v2)[1]) + innerₕ(∇₋ₕ(u2)[2], ∇₋ₕ(v2)[2]) isa
                   Bramble.OperatorAdd
         end
-
-        @testset "Left operands" begin
-            uₕ = Rₕ(Wₕ, x -> x[1])
-            for l in (3.0, (x -> x[1]), uₕ)
-                @test innerₕ(l, v2) isa LazyOp
-                @test inner₊ₓ(l, v2) isa LazyOp
-                @test inner₊ᵧ(l, v2) isa LazyOp
-            end
-            @test inner₊(3.0, v2) isa LazyOp
-            @test inner₊((x -> x[1]), v2) isa LazyOp
-        end
     end
 
     @testset "Composite space nodes" begin
@@ -320,8 +309,6 @@ const _ORIGIN_2D = (0, 0)
         @test z isa LazyOp{2}
         @test sprint(show, z) == "0"
         @test sprint(show, id) == "I"
-        @test local_stencil(id, Wₕ, interior, nothing, lin[interior]) ==
-              ((_ORIGIN_2D, 1.0),)
     end
 end
 

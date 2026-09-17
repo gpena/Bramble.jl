@@ -18,7 +18,7 @@ using Bramble: vector
 using LinearAlgebra: norm
 using Random
 using Supposition
-using ..TestUtils: alloc_test, @test_allocs
+using ..TestUtils: alloc_test, @test_allocs, _nonuniform_points
 
 @testset "Grid spaces" begin
     mesh1d = mesh(domain(interval(0, 1)), 10, true)
@@ -393,9 +393,6 @@ using ..TestUtils: alloc_test, @test_allocs
 
         W = gridspace(mesh2d)
         @test space(W) === W
-        @test spaces(W) === (W,)
-        @test ncomponents(W) == 1
-        @test ncomponents(typeof(W)) == 1
 
         V = W^Val(3)
         @test ncomponents(V) == 3
@@ -424,14 +421,11 @@ using ..TestUtils: alloc_test, @test_allocs
         @test Vv isa CompositeGridSpace{3}
         @test all(sp === spaces(Vv)[1] for sp in spaces(Vv))
 
-        # firstindex / lastindex / eachindex / keys
+        # firstindex / lastindex / eachindex / keys are generic in the component count
+        # and asserted by "Collection interface"; indexing through them is not.
         # Note: firstindex is an @inline method whose body is the literal 1, so
         # Julia emits no coverage point for it and it reads as uncovered however
         # it is called. It is exercised here regardless.
-        @test firstindex(Vv) == 1
-        @test lastindex(Vv) == 3
-        @test eachindex(Vv) == 1:3
-        @test keys(Vv) == 1:3
         @test Vv[firstindex(Vv)] === Vv[1]
         @test Vv[lastindex(Vv)] === Vv[3]
     end
@@ -615,21 +609,12 @@ end
         minimum = 0.01, maximum = 10.0, nans = false, infs = false
     )
 
-    function _partition(h)
-        pts = zeros(Float64, length(h) + 1)
-        for i in eachindex(h)
-            pts[i + 1] = pts[i] + h[i]
-        end
-        pts ./= pts[end]
-        return pts
-    end
-
     # The k-th component is `10^(2(k-1))` times a shape that is not constant, so a block
     # that receives the wrong source shows it in the number rather than agreeing by accident.
     _component(k) = x -> 10.0^(2 * (k - 1)) * (sin(3x) + 2)
 
     function _setup(h, ncomp)
-        pts = _partition(h)
+        pts = _nonuniform_points(h)
         Ωₕ = mesh(domain(interval(0.0, 1.0)), length(pts), false)
         set_points!(Ωₕ, pts)
         Wₕ = gridspace(Ωₕ)

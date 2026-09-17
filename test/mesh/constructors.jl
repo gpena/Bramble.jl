@@ -2,7 +2,7 @@ module MeshConstructorsTests
 
 using Test
 using Bramble
-using Bramble: _expand_uniform, Backend, Serial, normal_vector, hₘᵢₙ
+using Bramble: _expand_uniform, Backend, Serial
 using ..TestUtils: alloc_test, @test_allocs
 
 @testset "Mesh constructors" begin
@@ -176,43 +176,14 @@ using ..TestUtils: alloc_test, @test_allocs
         @test_logs mesh(Ω_disagree, (8, 8); warn_marker_mismatch = false)
     end
 
-    @testset "Zero allocations on helpers and queries" begin
+    @testset "Zero allocations in _expand_uniform" begin
         @test_allocs _expand_uniform(true, Val(1))
         @test_allocs _expand_uniform(false, Val(2))
         @test_allocs _expand_uniform((true, false), Val(2))
         @test_allocs _expand_uniform(true, Val(3))
 
-        I = interval(0.0, 1.0)
-        X2 = interval(0.0, 1.0) × interval(0.0, 2.0)
-        X3 = box((0.0, 0.0, 0.0), (1.0, 2.0, 3.0))
-
-        M1 = mesh(I, 11)
-        M2 = mesh(X2, 15)
-        M3 = mesh(X3, 8)
-
-        @test_allocs point(M1, 3)
-        @test_allocs spacing(M1, 3)
-        @test_allocs cell_measure(M1, 3)
-        @test_allocs hₘₐₓ(M1)
-        @test_allocs hₘᵢₙ(M1)
-        @test_allocs npoints(M1)
-        @test_allocs normal_vector(M1, :left)
-
-        @test_allocs point(M2, CartesianIndex(2, 3))
-        @test_allocs spacing(M2, CartesianIndex(2, 3))
-        @test_allocs cell_measure(M2, CartesianIndex(2, 3))
-        @test_allocs hₘₐₓ(M2)
-        @test_allocs hₘᵢₙ(M2)
-        @test_allocs npoints(M2)
-        @test_allocs normal_vector(M2, :left)
-
-        @test_allocs point(M3, CartesianIndex(2, 3, 4))
-        @test_allocs spacing(M3, CartesianIndex(2, 3, 4))
-        @test_allocs cell_measure(M3, CartesianIndex(2, 3, 4))
-        @test_allocs hₘₐₓ(M3)
-        @test_allocs hₘᵢₙ(M3)
-        @test_allocs npoints(M3)
-        @test_allocs normal_vector(M3, :top)
+        # The mesh accessors themselves are measured in mesh/inference_allocation.jl's
+        # "Zero allocations"; what belongs here is the constructor helper above.
     end
 end
 

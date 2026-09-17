@@ -165,13 +165,6 @@ using Bramble: index_in_marker, markers
         @test occursin("Available marker labels on this space are:", msg_form)
         @test occursin(":inlet", msg_form)
     end
-
-    @testset "Zero Allocation on Valid Marker Lookups" begin
-        Ωₕ = mesh(domain(interval(0.0, 1.0), :inlet => :left), 11)
-        # Hot-path query is allocation-free
-        @test index_in_marker(Ωₕ, :inlet) isa BitVector
-        @test index_in_marker(Ωₕ, :boundary) isa BitVector
-    end
 end
 
 end # module

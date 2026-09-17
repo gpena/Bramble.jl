@@ -124,11 +124,6 @@ if __bramble_with_unit_tests
             include("examples/pages.jl")
         end
 
-        # Bug reproducers that aren't naturally part of one subsystem file's coverage
-        # (STANDARDS.md ties this to a closed GitHub issue). Tests that extend an existing
-        # subsystem file's own coverage stay there, tagged `(#N)` in the testset title.
-        include("issues/runtests.jl")
-
         # Independent full-pipeline tests (mesh -> space -> assemble -> solve) for a path no
         # docs page reaches, as opposed to "Worked examples" above, which mirrors a page.
         include("drivers/runtests.jl")
@@ -163,8 +158,9 @@ end
 
 if __bramble_with_ad_backends
     @testset verbose=true "AD backends (expensive)" begin
-        # autodiff_backends.jl first: it defines `check_backend` and `_have`, which this
-        # reuses so both files check every backend the same way.
+        # autodiff_backends.jl first: it defines `check_backend` and `_ad_problems`, which
+        # this reuses so both files check every backend the same way. (`_have` used to come
+        # from here too and is now TestUtils'.)
         __bramble_with_unit_tests || include("space/autodiff_backends.jl")
         include("space/autodiff_heavy.jl")
         # pde_solve's rrule (ext/chainrules_ext.jl, "Package extensions" below) composed with
@@ -185,6 +181,14 @@ end
 
 if __bramble_with_ext_backends
     @testset verbose=true "Package extensions" begin
+        # The contract the four direct-solver backend files share, loaded before them and
+        # reached as `using ..ExtSolverContracts: ...`. The guard lives here rather than
+        # inside those modules: an `include` executed inside one of them would define
+        # `TestSuiteSparseExt.ExtSolverContracts`, which `using ..ExtSolverContracts` would
+        # not then resolve to. Same shape as the `TestUtils` guards in the subsystem
+        # runtests.jl files.
+        isdefined(Main, :ExtSolverContracts) || include("ext/SolverContracts.jl")
+
         include("ext/plots_ext.jl")
         include("ext/makie_ext.jl")
         include("ext/meshes_ext.jl")
@@ -209,18 +213,12 @@ if __bramble_with_ext_backends
         # belongs here rather than behind the "ad" group. Enzyme/Mooncake composition is
         # chainrules_enzyme_ext.jl instead, alongside autodiff_heavy.jl below.
         include("ext/chainrules_ext.jl")
-        # Runs the worked heat-equation page itself, whose assertions need a stiff solver
-        # for a differential-algebraic system -- so it belongs where OrdinaryDiffEq is
-        # already loaded rather than in the every-push "Worked examples" group.
-        include("examples/heat_equation.jl")
-        # Same reasoning: the nonlinear Poisson page's NonlinearSolve.jl comparison needs
-        # `NonlinearSolve` loaded, a cost the push path does not otherwise pay.
-        include("examples/poisson_nonlinear.jl")
-        # Same reasoning again: the coupled reaction-diffusion page's nonlinear_problem
-        # section needs `NonlinearSolve` too, once it grew one (#119).
-        include("examples/coupled_reaction_diffusion.jl")
-        # Same reasoning again: the AMG preconditioning page's LU/CG/AMG-CG comparison needs
-        # `LinearSolve` and `AlgebraicMultigrid` loaded.
-        include("examples/amg_preconditioning.jl")
+        # The four worked-example pages that belong to this group rather than the
+        # every-push one, for what they load rather than what they assert: a stiff solver
+        # for the differential-algebraic step, `NonlinearSolve` for the two pages with a
+        # `nonlinear_problem` section (#119), and `LinearSolve`/`AlgebraicMultigrid` for
+        # the preconditioning comparison. Last, so the ext tests above have already paid
+        # those load costs.
+        include("examples/ext_pages.jl")
     end
 end

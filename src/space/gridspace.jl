@@ -150,7 +150,7 @@ For a 2D grid in the x-direction:
 (u_h, v_h)_{+x} = \\sum_{i,j} h_{x,i} h_{y,j+1/2} u_h(x_i, y_j) v_h(x_i, y_j)
 ```
 
-# Example
+# Examples
 
 ```julia
 # These functions use Innerplus internally
@@ -180,7 +180,7 @@ For a 2D grid:
 
 where ``|\\square_{i,j}|`` is the area of the cell centered at ``(x_i, y_j)``.
 
-# Example
+# Examples
 
 ```julia
 # Compute L² inner product

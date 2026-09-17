@@ -4,6 +4,7 @@ using Test
 using Bramble
 using SparseArrays
 using ForwardDiff: Dual, value
+using ..TestUtils: _check_eoc
 
 # `semidiscretize` and the residual it returns (src/form/semidiscrete.jl) need no SciMLBase:
 # a `Semidiscretization` is a callable with the `(du, u, p, t)` signature plus two matrices.
@@ -407,19 +408,8 @@ end
         return normₕ(Rₕ(Wₕ, x -> _sd_uex(x, _SD_T)) - uₕ), h
     end
 
-    errors = Float64[]
-    spacings = Float64[]
-    for n in (11, 21, 41, 81)
-        e, h = step_to(n)
-        push!(errors, e)
-        push!(spacings, h)
-    end
-
-    eoc = [log(errors[i] / errors[i + 1]) / log(spacings[i] / spacings[i + 1]) for
-           i in 1:(length(errors) - 1)]
-    @test all(>(1.9), eoc)
+    eoc = _check_eoc(step_to, (11, 21, 41, 81))
     @test last(eoc) > 1.95
-    @test issorted(errors; rev = true)
 end
 
 # `semidiscretize_rhs` (gpena/Bramble.jl#163): `du = M⁻¹(F(t) - A u)` with `M`'s diagonal

@@ -3,15 +3,8 @@
 `export_vtk` writes a full grid for a viewer like ParaView. For a plot going straight into a
 LaTeX document, that is usually more than is wanted: `export_pgfplots` writes the plain
 whitespace-separated table `pgfplots` reads directly with `\addplot table {...}`, needing no
-package beyond `Base`. This tutorial covers:
-
-1. A 1D curve, and more than one field in the same file.
-2. A composite field, which becomes one column per component.
-3. A 2D surface, and the blank lines that make it one.
-4. What is refused, and why.
-
-Every code block below was run before being written down, and each produces the file it
-claims to.
+package beyond `Base`. Every block below runs when this page is built, and writes the file
+it claims to.
 
 ## 1. A 1D curve
 

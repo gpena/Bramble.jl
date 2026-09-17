@@ -18,7 +18,7 @@ requested solver backend.
 - `:mumps`: MUMPS multifrontal parallel direct solver.
 - `:sparspak`: pure-Julia sparse direct LU, zero binary dependencies.
 
-# Symmetry options (`sym`)
+# Symmetry options
 - `:auto`: automatically detect matrix symmetry (and diagonal positivity).
 - `:spd`, `:definite`, or `1`: symmetric positive definite.
 - `:symmetric` or `2`: general symmetric.

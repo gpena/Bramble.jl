@@ -5,6 +5,7 @@ using Bramble
 using ADTypes
 using ForwardDiff, ReverseDiff, FiniteDiff, DifferentiationInterface
 using Random
+using ..ExtSparseAdExtTests: nonlinear_diffusion_problem
 
 # Verifies two things gpena/Bramble.jl#122 asks for: that `jacobian_pattern` never misses a
 # structural nonzero the real Jacobian has (a false zero would silently corrupt a sparse
@@ -31,38 +32,12 @@ using Random
 # backends (ReverseDiff, a different differentiation direction; FiniteDiff, no
 # differentiation machinery at all) is what actually corroborates it.
 
-sol1d(x) = exp(x[1])
-α(u) = 3 + 1 / (1 + u^2)
-dαdu(u) = -2u / (1 + u^2)^2
-rhs1d(x) = -dαdu(sol1d(x)) * sol1d(x)^2 - α(sol1d(x)) * sol1d(x)
-
-# The scalar nonlinear residual `A(u) * u - F` from test/ext/sparse_ad_ext.jl, at a size
-# small enough for a dense `ForwardDiff.jacobian` reference to cost nothing (n = 8).
+# The scalar nonlinear problem is sparse_ad_ext.jl's `nonlinear_diffusion_problem`, which
+# the ext group includes first -- at n = 8 here, small enough for the dense
+# `ForwardDiff.jacobian` reference below to cost nothing.
 function _scalar_residual_problem(n = 8)
-    Ω = Bramble.domain(Bramble.interval(0.0, 1.0))
-    Ωₕ = Bramble.mesh(Ω, n, false)
-    Wₕ = gridspace(Ωₕ)
-
-    bcs = dirichlet_constraints(Ω, :boundary => sol1d)
-    gₕ = Bramble.element(Wₕ)
-    avgₕ!(gₕ, rhs1d)
-    l = form(Wₕ, v -> innerₕ(gₕ, v))
-    F = assemble(l; dirichlet = bcs)
-
-    diffusion_form(uₕ) = begin
-        αv = α.(M₋ₕ(uₕ))
-        form(Wₕ, Wₕ, (U, V) -> inner₊(αv * ∇₋ₕ(U), ∇₋ₕ(V)))
-    end
-
-    residual(u_vec::AbstractVector{T}) where {T} = begin
-        uₕ = Bramble.element(Wₕ, T)
-        uₕ .= u_vec
-        A = assemble(diffusion_form(uₕ); dirichlet = :boundary)
-        A * u_vec .- F
-    end
-
-    a_for_pattern = diffusion_form(Bramble.element(Wₕ, 0.0))
-    return residual, a_for_pattern, ndofs(Wₕ)
+    p = nonlinear_diffusion_problem(n)
+    return p.residual, p.a, ndofs(p.Wₕ)
 end
 
 u_ex2d(x) = sin(π * x[1]) * sin(π * x[2])

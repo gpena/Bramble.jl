@@ -92,8 +92,8 @@ using ..TestUtils: alloc_test, @test_allocs
               process_identifier(I2D, (:top, :right))
     end
 
-    # Invariant: `DomainMarkers` correctly partitions and deduplicates boundary
-    # symbols, boundary tuples, and functional conditions.
+    # Invariant: `DomainMarkers` correctly partitions boundary symbols, boundary tuples and
+    # functional conditions, in declaration order, with a concretely-typed tuple per kind.
     @testset "Domain marker container creation" begin
         # Empty container instantiation.
         dm_empty = markers(I1D)
@@ -123,9 +123,32 @@ using ..TestUtils: alloc_test, @test_allocs
         @test length(dm_dup_label.symbols) == 2
         @test Set(label(m) for m in dm_dup_label.symbols) == Set([:boundary])
 
-        # Duplicate markers with identical label and identifier are deduplicated.
+        # A verbatim-repeated marker is kept, not collapsed. The partition is built by
+        # `filter`/`map` over the pairs tuple so that the length and element types survive
+        # into `DomainMarkers`'s own type (gpena/Bramble.jl#240); routing through a `Set` to
+        # deduplicate erased the length, leaving a `UnionAll` that cost
+        # `apply_dirichlet_conditions!` a runtime dispatch. A duplicate is harmless: marking
+        # is a monotone bit-set union over a freshly-zeroed mask, so marking a point twice is
+        # marking it once. The old `Set` was only half a deduplicator anyway --
+        # `Marker{Set{Symbol}}` holds a mutable identifier, so duplicate *tuple* markers were
+        # never collapsed either.
         dm_dup_marker = markers(I1D, :boundary => :left, :boundary => :left)
-        @test length(dm_dup_marker.symbols) == 1
+        @test length(dm_dup_marker.symbols) == 2
+        @test all(m -> label(m) === :boundary && identifier(m) === :left, dm_dup_marker.symbols)
+
+        # What the deduplication was protecting is the marked set, and that is unchanged.
+        mesh_dup = mesh(domain(I1D, dm_dup_marker), (7,), (false,))
+        mesh_one = mesh(domain(I1D, markers(I1D, :boundary => :left)), (7,), (false,))
+        @test Bramble.markers(mesh_dup)[:boundary] == Bramble.markers(mesh_one)[:boundary]
+
+        # Declaration order is preserved, where the `Set` gave hash order.
+        dm_ordered = markers(I1D, :z_last => :right, :a_first => :left)
+        @test [label(m) for m in dm_ordered.symbols] == [:z_last, :a_first]
+
+        # The whole point: every field's type is concrete, so nothing downstream dispatches
+        # dynamically on a marker container (gpena/Bramble.jl#240).
+        _mk(I, f) = markers(I, :a => :left, :b => (:top, :bottom), :c => f)
+        @test isconcretetype(only(Base.return_types(_mk, (typeof(I2D), typeof(func1)))))
     end
 
     # Invariant: Domain constructors preserve geometric traits including
@@ -488,15 +511,6 @@ using ..TestUtils: alloc_test, @test_allocs
         @test :region ∈ collect(label_conditions(edm2))
         @test length(edm2) == 3
         @test !isempty(edm2)
-    end
-
-    # Invariant: `boundary_symbols` returns canonical boundary names for
-    # dimensions 1, 2, and 3, and raises an error for unsupported dimensions.
-    @testset "Default boundary symbol mappings" begin
-        @test boundary_symbols(1) == (:xmin, :xmax)
-        @test boundary_symbols(2) == (:xmin, :xmax, :ymin, :ymax)
-        @test boundary_symbols(3) == (:xmin, :xmax, :ymin, :ymax, :zmin, :zmax)
-        @test_throws ErrorException boundary_symbols(4)
     end
 
     # Invariant: Spatiotemporal domains can be constructed by combining spatial

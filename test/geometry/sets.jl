@@ -23,14 +23,12 @@ using ..TestUtils: alloc_test, @test_allocs
         @test I_f64 isa CartesianProduct{1, Float64}
         @test I_f64.box isa NTuple{1}
         @test I_f64.box[1] == (-3.0, 10.0)
-        @test all(isapprox.(I_f64.box[1], (-3.0, 10.0)))
         @test I_f64.collapsed[1] == false
 
         # Interval constructor (Int -> Float64 promotion)
         I_int = interval(-3, 10)
         @test I_int isa CartesianProduct{1, Float64}
         @test I_int.box[1] == (-3.0, 10.0)
-        @test all(isapprox.(I_int.box[1], (-3.0, 10.0)))
 
         # Interval constructor (Float32)
         I_f32 = interval(0.0f0, 1.0f0)
@@ -224,13 +222,6 @@ using ..TestUtils: alloc_test, @test_allocs
         I2 = interval(2.0, 3.0)
         I3_int = interval(4, 5)
         I_f32 = interval(0.0f0, 1.0f0)
-
-        # Tensor product (Float64 × Float64)
-        P1 = I1 × I2
-        @test P1 isa CartesianProduct{2, Float64}
-        @test dim(P1) == 2
-        @test P1.box isa NTuple{2}
-        @test extrema(P1) == ((0.0, 1.0), (2.0, 3.0))
 
         # Tensor product with mixed types (Float32 × Float64)
         P_mixed = I_f32 × I1

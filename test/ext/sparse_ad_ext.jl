@@ -18,14 +18,19 @@ using SparseMatrixColorings: SparseMatrixColorings
 # `using Bramble, Makie, Meshes` together (all `include`d into the same `Main`) makes the
 # generic-sounding bare names ambiguous (Meshes.jl has its own `domain`/`mesh`/`element`).
 
-@testset "BrambleSparseADExt" begin
-    sol(x) = exp(x[1])
-    α(u) = 3 + 1 / (1 + u^2)
-    dαdu(u) = -2u / (1 + u^2)^2
-    rhs(x) = -dαdu(sol(x)) * sol(x)^2 - α(sol(x)) * sol(x)
+# The scalar nonlinear problem `A(u) u = F` with `α(u) = 3 + 1/(1+u²)`, whose residual is
+# what every sparse-AD check here differentiates. `n` is a parameter because
+# ad_backend_verification.jl wants it small enough for a dense `ForwardDiff.jacobian`
+# reference to cost nothing, where this file wants a realistic size; it imports this
+# function rather than building the problem a second time (STANDARDS.md, Tests).
+sol(x) = exp(x[1])
+α(u) = 3 + 1 / (1 + u^2)
+dαdu(u) = -2u / (1 + u^2)^2
+rhs(x) = -dαdu(sol(x)) * sol(x)^2 - α(sol(x)) * sol(x)
 
+function nonlinear_diffusion_problem(n)
     Ω = Bramble.domain(Bramble.interval(0.0, 1.0))
-    Ωₕ = Bramble.mesh(Ω, 20, false)
+    Ωₕ = Bramble.mesh(Ω, n, false)
     Wₕ = gridspace(Ωₕ)
 
     bcs = dirichlet_constraints(Ω, :boundary => sol)
@@ -46,7 +51,12 @@ using SparseMatrixColorings: SparseMatrixColorings
         return A * u_vec .- F
     end
 
-    a = diffusion_form(Bramble.element(Wₕ, 0.0))
+    return (; Wₕ = Wₕ, residual = residual, a = diffusion_form(Bramble.element(Wₕ, 0.0)))
+end
+
+@testset "BrambleSparseADExt" begin
+    prob = nonlinear_diffusion_problem(20)
+    Wₕ, residual, a = prob.Wₕ, prob.residual, prob.a
     detector = ast_sparsity_detector(a, U -> M₋ₕ(U))
 
     @testset "isa AbstractSparsityDetector" begin

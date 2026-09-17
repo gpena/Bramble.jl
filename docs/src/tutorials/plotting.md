@@ -53,7 +53,7 @@ lines(components(vₕ)[2])
 ```julia
 using Bramble, Plots
 
-plot(uₕ)     # a line by default, matching Rₕ! above
+plot(uₕ)     # a line by default, the same field as above
 heatmap(u2)  # same 2D field as above
 ```
 

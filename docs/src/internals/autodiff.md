@@ -46,7 +46,11 @@ Bilinear forms assembled with `assemble(a)` or refilled in-place with `assemble!
 
 ### Dirichlet boundary conditions
 Boundary conditions constructed with `dirichlet_constraints` store raw closures without type erasure. When boundary data depends on a differentiated parameter:
-```julia
+```@example internals_ad
+using Bramble
+
+Ωₕ = mesh(domain(interval(0.0, 1.0)), 11)
+a = 2.0
 bcs = dirichlet_constraints(Ωₕ, :boundary => (x -> a * sin(x[1])))
 ```
 `dirichlet_bc!` writes sensitivity values directly into the target vector. When eliminating Dirichlet rows in `symmetrize!`, zero checks use `iszero(d)`, which tests both the nominal value and all partial derivatives. A boundary perturbation that evaluates nominally to zero with non-zero sensitivity is therefore correctly retained rather than skipped.

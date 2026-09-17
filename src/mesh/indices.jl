@@ -1,16 +1,14 @@
-"""
 # indices.jl
-
-Cartesian index generation and boundary/interior facet predicates shared by every mesh
-type in Bramble.
-
-- `generate_indices`: build the `CartesianIndices` of a mesh from its point counts.
-- `is_boundary_index`, `boundary_indices`, `interior_indices`: facet and interior
-  predicates over `CartesianIndices` directly, or over an `AbstractMeshType` by
-  delegating to its own indices.
-
-See also: [`Mesh1D`](@ref), [`MeshnD`](@ref)
-"""
+#
+# Cartesian index generation and boundary/interior facet predicates shared by every mesh
+# type in Bramble.
+#
+# - `generate_indices`: build the `CartesianIndices` of a mesh from its point counts.
+# - `is_boundary_index`, `boundary_indices`, `interior_indices`: facet and interior
+#   predicates over `CartesianIndices` directly, or over an `AbstractMeshType` by
+#   delegating to its own indices.
+#
+# See also: `Mesh1D`, `MeshnD`
 
 #------------------------------------------------------------------------------------------#
 # Cartesian Index Generation & Boundary Queries

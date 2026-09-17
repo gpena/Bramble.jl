@@ -64,11 +64,10 @@ using Bramble:
         @test trial_component_or_nothing(2.0 * iu) == 1
         @test test_component_or_nothing(Bramble.restrict_to(:left, iv)) == 2
 
-        # _is_source_only: a wrapped source stays a source, a wrapped trial never is
-        @test Bramble._is_source_only(D₋ₓ(sf))
+        # _is_source_only: a wrapped source stays a source, through a double wrap and a
+        # scale (the single wrap is interpolation.jl's "_is_source_only")
         @test Bramble._is_source_only(M₊ᵧ(D₋ₓ(sf)))
         @test Bramble._is_source_only(2.0 * jumpₓ(sf))
-        @test !Bramble._is_source_only(D₋ₓ(u))
 
         # stencil_shift_trait: this one overrides an *abstract* fallback that answers
         # translation-invariant, so a wrapper that stopped recursing would relabel a
@@ -87,10 +86,8 @@ using Bramble:
             mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 5), (true, true))
         )
         πu = πₕ(W, u)
-        @test Bramble._all_trial_interpolated(πu)
         @test Bramble._all_trial_interpolated(D₋ₓ(πu))
         @test Bramble._all_trial_interpolated(2.0 * M₊ᵧ(πu))
-        @test !Bramble._all_trial_interpolated(D₋ₓ(u))
     end
 
     @testset "Every single-operand node is in UnaryWrapper (#52)" begin

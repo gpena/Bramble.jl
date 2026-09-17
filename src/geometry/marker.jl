@@ -252,25 +252,31 @@ end
 end
 
 # Parse identifier-based markers (Symbols and Tuples of Symbols) from input pairs.
-# Deduplication needs Set semantics (a `:label => :left` pair repeated verbatim collapses
-# to one marker), but that is a one-time construction cost, not a per-query one -- the
-# result is converted to a Tuple so every later read of DomainMarkers is zero-allocation.
-function _extract_identifier_markers(pairs::Tuple)
-    symbols = Set{Marker{Symbol}}()
-    tuples = Set{Marker{Set{Symbol}}}()
-    n = length(pairs)
-    sizehint!(symbols, n ÷ 2 + 1)
-    sizehint!(tuples, n ÷ 2 + 1)
+#
+# `filter` on the tuple, not a `Set` collected into one. `pairs` is a statically-typed tuple
+# of `Pair`s at every call site, and the two predicates are pure type tests, so `Base.filter`
+# -- `afoldl` over the elements -- const-folds them and hands back a tuple whose length and
+# element types are both known. Routing through a `Set` threw that away: `Tuple(::Set)` has no
+# length in its type, so `DomainMarkers` inferred as a `UnionAll`
+# (`DomainMarkers{ST, TT, …} where {ST<:Tuple{Vararg{Marker{Symbol}}}, …}`) and every read of
+# a marker field went through a non-concrete object, costing `apply_dirichlet_conditions!` a
+# runtime dispatch. This is the same shape `_pairs_to_tuple_conditions` below already used,
+# and it stays concrete past the `Any16` boundary (a 20-pair input gives `NTuple{10, …}`).
+#
+# The contract this fixes on: declaration order is preserved, and a verbatim-repeated pair
+# yields two markers rather than one. The `Set` was only ever half a deduplicator anyway --
+# `Marker{Set{Symbol}}` holds a mutable identifier, so two structurally identical tuple
+# markers were never `===` and never collapsed. Duplicates are harmless downstream: marking is
+# a monotone bit-set union (`_mark_indices!`, `mesh/marker.jl`) run after `_init_mesh_markers`
+# has zeroed everything, so marking a point twice is marking it once, and nothing reads the
+# order of `symbols`/`tuples`. `conditions` *is* order-sensitive (last declaration wins on an
+# overlapping node) and already came from this same order-preserving `filter`.
+@inline function _extract_identifier_markers(pairs::Tuple)
+    symbol_pairs = filter(p -> p.second isa Symbol, pairs)
+    tuple_pairs = filter(p -> p.second isa NTuple{N, Symbol} where {N}, pairs)
 
-    for p in pairs
-        if p.second isa Symbol
-            push!(symbols, Marker(p.first, p.second))
-        elseif p.second isa NTuple{N, Symbol} where {N}
-            push!(tuples, Marker(p.first, Set(p.second)))
-        end
-    end
-
-    return Tuple(symbols), Tuple(tuples)
+    return map(p -> Marker(p.first, p.second), symbol_pairs),
+    map(p -> Marker(p.first, Set(p.second)), tuple_pairs)
 end
 
 # Construct DomainMarkers from label-identifier pairs, extracting symbol and tuple sets

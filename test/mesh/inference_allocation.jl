@@ -103,6 +103,11 @@ using ..TestUtils: alloc_test, @test_allocs
         @test_allocs npoints(Ωₕ2, Tuple)
         @test_allocs point(Ωₕ3, CartesianIndex(2, 3, 4))
         @test_allocs cell_measure(Ωₕ3, CartesianIndex(2, 3, 4))
+        @test_allocs spacing(Ωₕ3, CartesianIndex(2, 3, 4))
+        @test_allocs hₘₐₓ(Ωₕ3)
+        @test_allocs hₘᵢₙ(Ωₕ3)
+        @test_allocs npoints(Ωₕ3)
+        @test_allocs npoints(Ωₕ2)
 
         # Multi-dimensional metric queries and projections
         @test_allocs dim(Ωₕ2)

@@ -198,9 +198,16 @@ see the note on `_lower_sources` in `form/common.jl` for why, and for the docume
 alternative (`update_coefficients!`) a source meant to keep varying should use instead.
 
 # Examples
-```julia
-# 1D linear form: l(v) = (f, v)
-l = form(Wₕ, v -> innerₕ(fₕ, v))
+
+```jldoctest
+using Bramble
+Wₕ = gridspace(mesh(domain(interval(0.0, 1.0)), 11))
+fₕ = Rₕ(Wₕ, x -> 1.0)
+l = form(Wₕ, v -> innerₕ(fₕ, v))    # l(v) = (fₕ, v)ₕ
+isapprox(sum(assemble(l)), 1.0; atol = 1.0e-12)
+
+# output
+true
 ```
 """
 function form(Wₕ, f)

@@ -13,18 +13,18 @@ This documentation is for `Bramble.jl`, a Julia library implementing discretizat
 <div class="bramble-card">
 ```
 
-**[Quick start](examples/poisson_linear.md)**
+**[Getting started](getting_started.md)**
 
-Build a mesh, a grid space, and assemble a first Poisson system in under twenty lines.
+A Poisson problem end to end in twenty lines: domain, mesh, grid space, form, solve.
 
 ```@raw html
 </div>
 <div class="bramble-card">
 ```
 
-**[Mathematical foundations](tutorials/operators.md)**
+**[Discrete foundations](tutorials/geometry.md)**
 
-The discrete calculus behind every operator: difference quotients, jumps, averages, and how they compose.
+Domains, meshes and their metric, grid spaces, and the discrete calculus the operators are built from.
 
 ```@raw html
 </div>
@@ -46,26 +46,3 @@ For more information on the types of discretizations encompassed by `Bramble.jl`
 * S. Barbeiro, J. A. Ferreira and R. D. Grigorieff, [Supraconvergence of a finite difference scheme for solutions in ``H^s(0,L)``](https://doi.org/10.1093/imanum/dri018), IMA Journal of Numerical Analysis 25.4 (2005), pp. 797–811
 
 * J. A. Ferreira and R. D. Grigorieff, [Supraconvergence and Supercloseness of a Scheme for Elliptic Equations on Nonuniform Grids](https://doi.org/10.1080/01630560600796485), Numerical Functional Analysis and Optimization 27.5-6 (2006), pp. 539–564
-
-## Precompilation
-
-`Bramble.jl` ships a precompilation workload that exercises 1D, 2D and 3D meshes on
-load. It costs a few seconds when the package is first built and cuts the time to
-first result by roughly a factor of four.
-
-While working on the package itself you may prefer faster rebuilds over faster first
-use. To skip the workload:
-
-```julia
-using Preferences, Bramble
-set_preferences!(Bramble, "precompile_workload" => false)
-```
-
-Julia tracks preferences in the precompilation cache, so the change takes effect on
-the next `using Bramble` with no manual cache clearing. Restore the default with
-
-```julia
-delete_preferences!(Bramble, "precompile_workload"; force = true)
-```
-
-The setting is written to `LocalPreferences.toml` next to your active project.

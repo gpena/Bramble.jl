@@ -64,11 +64,10 @@ end
                 pvd[1.0] = (joinpath(dir, "curve"), Ω1, "u" => u1)
             end
 
-            xml_vec = read(joinpath(dir, "vec.vtr"), String)
-            @test occursin("Name=\"velocity\" NumberOfComponents=\"2\"", xml_vec)
-
-            xml_curve = read(joinpath(dir, "curve.vtr"), String)
-            @test occursin("WholeExtent=\"0 5 0 0 0 0\"", xml_curve)
+            # The per-file content is vtk_export.jl's ("Composite field", "1D export"),
+            # written by the same per-step writer; what the series owes is both files.
+            @test isfile(joinpath(dir, "vec.vtr"))
+            @test isfile(joinpath(dir, "curve.vtr"))
 
             entries = _dataset_entries(pvd_path * ".pvd")
             @test length(entries) == 2

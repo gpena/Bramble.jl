@@ -126,6 +126,17 @@ refreshed afterward. If `Ωₕ` is later mutated in place (`set_points!`, `chang
 `innerₕ`/`inner₊*`/every norm then throw naming the mismatch rather than silently computing
 against a mesh that no longer exists (gpena/Bramble.jl#221) -- call `gridspace(Ωₕ)` again to
 get a space that reads the mutated mesh.
+
+# Examples
+
+```jldoctest
+using Bramble
+Wₕ = gridspace(mesh(domain(interval(0.0, 1.0)), 11))
+ndofs(Wₕ) == 11 && sum(weights(Wₕ, Bramble.Innerh())) ≈ 1.0
+
+# output
+true
+```
 """
 function gridspace(Ωₕ::AbstractMeshType{D}) where {D}
     weights = space_weights(Ωₕ)

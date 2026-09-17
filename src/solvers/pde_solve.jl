@@ -31,99 +31,37 @@
 
 Solve `A u = F` (or `fact u = F`) and return `u`.
 
-When called with no keyword arguments (or `solver = :default`), identical to `A \\ F` --
-this default path exists to provide a stable name for reverse-mode automatic differentiation
-tools to attach adjoint rules to.
+With no keyword arguments this is `A \\ F`. The name exists so that reverse-mode AD tools
+have one function to attach an adjoint rule to, which is what makes a whole
+`θ -> assemble -> pde_solve -> J(u)` chain differentiable.
 
-# Solvers
-- `:default`: standard sparse direct solve (`\\`).
-- `:suitesparse`: SuiteSparse direct solve with automatic/explicit symmetry (`CHOLMOD`/`UMFPACK`).
-- `:spqr`: SuiteSparse sparse QR (least-squares or rectangular `A`; needs only `SparseArrays`).
-- `:accelerate`: Apple Accelerate native `libSparse` direct solve on macOS (requires `AppleAccelerate.jl`).
-- `:mumps`: MUMPS multifrontal direct solver (requires `MUMPS.jl`).
-- `:sparspak`: pure-Julia sparse direct LU, zero binary dependencies (requires `Sparspak.jl`).
+# Keywords
+- `solver`: `:default` (`\\`), `:suitesparse` (CHOLMOD/UMFPACK), `:spqr` (sparse QR, for a
+  least-squares or rectangular `A`), `:accelerate` (Apple `libSparse`, needs
+  `AppleAccelerate.jl`), `:mumps` (needs `MUMPS.jl`), `:sparspak` (pure Julia, needs
+  `Sparspak.jl`).
+- `sym`: symmetry hint for `:suitesparse`, `:accelerate` and `:mumps`. `:auto` (default)
+  detects it; `:spd`/`:definite`/`1`, `:symmetric`/`2` and `:unsymmetric`/`0` state it.
 
-# Symmetry options (`sym`)
-For `solver = :suitesparse`, `:accelerate`, or `:mumps`:
-- `:auto` (default): automatic detection.
-- `:spd`, `:definite`, or `1`: symmetric positive definite.
-- `:symmetric` or `2`: general symmetric.
-- `:unsymmetric` or `0`: general unsymmetric.
+# Returns
+- `Vector`: the solution, of the promoted element type of `A` and `F`.
 
 # Reverse-mode differentiation
 
-Requires [ChainRulesCore.jl](https://github.com/JuliaDiff/ChainRulesCore.jl) loaded (`using
-ChainRulesCore` or any package that re-exports/bridges to it) for the
-`ChainRulesCore.rrule(::typeof(pde_solve), A, F)` this package's `BrambleChainRulesExt`
-defines to take effect.
+With `ChainRulesCore.jl` loaded, `BrambleChainRulesExt`'s `rrule` solves the adjoint system
+`Aᵀ λ = ∂J/∂u` once, reusing the forward solve's own factorisation, and returns
+`∂J/∂A = -λ uᵀ` restricted to `A`'s sparsity (never densified) and `∂J/∂F = λ`. `using Enzyme`
+is enough for the same adjoint through `BrambleEnzymeExt`'s native `EnzymeRules` rule; do not
+call `Enzyme.@import_rrule`, whose bridge drops the cotangent's explicit zeros from `nzval`
+and returns a wrong gradient without any error. `Mooncake` cannot represent a
+`SparseMatrixCSC` cotangent at all and is unsupported.
 
-For a functional `J(u)` of the solution, the rule solves the adjoint system `Aᵀ λ = ∂J/∂u`
-once -- reusing the same LU factorisation the forward solve already computed, via `fact' \\ b`,
-whether or not `A` is symmetric -- and returns `∂J/∂A = -λ uᵀ`, restricted to `A`'s own
-sparsity pattern and never densified, and `∂J/∂F = λ`. Since `assemble`/`dirichlet_bc!` are
-themselves already reverse-mode-differentiable, wrapping only this one function is enough to
-differentiate an entire `θ -> assemble(a(θ), l(θ); dirichlet = θ) -> pde_solve -> J(u)` chain
-end to end -- including gradients with respect to a Dirichlet boundary value.
-
-!!! note "Enzyme needs nothing beyond `using Enzyme`"
-    `using Enzyme` is enough: `BrambleEnzymeExt` defines a native `EnzymeRules` reverse rule
-    for `pde_solve`, so `Enzyme.gradient`/`Enzyme.autodiff` reach the adjoint directly.
-
-    Do **not** call `Enzyme.@import_rrule(typeof(pde_solve), ...)`. Besides now defining a
-    second rule for the same signature, that bridge is itself unsound here
-    (gpena/Bramble.jl#240): merging the rrule's returned `SparseMatrixCSC` into Enzyme's
-    shadow drops the cotangent's explicit zeros from `nzval` while leaving `colptr`/`rowval`
-    unchanged, so the shadow stops being a well-formed sparse matrix and the gradient comes
-    back wrong without any error. A homogeneous Dirichlet problem produces such a zero
-    routinely, since a constrained row's solution entry is exactly its boundary value.
-
-    A closure that captures a grid space or a form still needs `Enzyme.Const(f)` and
-    `Enzyme.set_runtime_activity(Enzyme.Reverse)`, the same two annotations
-    `docs/src/tutorials/autodiff.md` documents for the ordinary (non-solve) path.
-
-!!! warning "Gradients with respect to an operator's own coefficient are limited"
-    A gradient with respect to a *Dirichlet value or source term* works for any form: `θ`
-    reaches `F` through `dirichlet_bc!`'s value-writing path, never the assembly engine.
-
-    A gradient with respect to the operator's own coefficient (`θ` scaling the bilinear form
-    itself) additionally needs `Enzyme` to differentiate `assemble`'s recording pass, and
-    that works, from a fully inferred call site, for a form rebuilt inside the differentiated
-    closure:
-
-    ```julia
-    loss(θ, W, l) = sum(abs2, pde_solve(assemble(
-        form(W, W, (u, v) -> θ * inner₊(∇₋ₕ(u), ∇₋ₕ(v))), l;
-        dirichlet = :boundary => x -> 0.0)...))
-    ```
-
-    It did not before gpena/Bramble.jl#240: `simplify_ast` used to decide whether to elide a
-    scaling, combine like terms or factor a shared coefficient by reading the coefficients'
-    *values*, so `form`'s return type became a `Union` of the rewritten and unrewritten trees
-    whenever the compiler could not fold the comparison -- and `IllegalTypeAnalysisException`
-    is what Enzyme's strict-aliasing type analysis makes of that `Union`. Those rules are now
-    restricted to `Integer` coefficients (`form/simplifier.jl`), which leaves `form` one
-    concrete return type for any runtime coefficient.
-
-    One shape is still outside that: two *structurally identical* terms in the same sum
-    (`θ * a(u, v) + θ * a(u, v)`). Whether the like-term rule fires is decided by
-    `_ast_equal`, which compares the two subtrees field by field at run time, so that `Union`
-    remains. Write the term once.
-
-    A second limit used to bite alongside it -- `EnzymeNoTypeError` for any difference
-    operator in 2D or 3D, and for larger sums of terms in 1D -- and is gone
-    (gpena/Bramble.jl#249). The assembly traversal reads a stencil entry's offsets and its
-    weight from two separate containers now ([`entry_offsets`](@ref)/[`entry_weights`](@ref)),
-    which is what Enzyme's type analysis needs from a function that reads both halves and is
-    not inlined into the one being differentiated. A coefficient scaling the form and a
-    `VectorElement` coefficient both differentiate correctly in 1D, 2D and 3D, mass and
-    stiffness alike, with no `Enzyme.API` flag.
-
-!!! warning "Mooncake is not supported"
-    `Mooncake.@from_rrule`/`build_rrule` both accept a bridge for `pde_solve` without
-    complaint, but running the resulting rule fails: `Mooncake` has no
-    `increment_and_get_rdata!` method to represent a `SparseMatrixCSC` cotangent, regardless
-    of whether `∂J/∂A` is ever requested. This is a gap in `Mooncake.jl` itself; revisit if a
-    future release adds sparse-array tangent support.
+A closure capturing a grid space or a form needs `Enzyme.Const(f)` and
+`Enzyme.set_runtime_activity(Enzyme.Reverse)`, as the automatic
+differentiation tutorial describes for every other path. A gradient with
+respect to a *runtime* scalar coefficient of the form should be a `Float64` or a `Ref`: an
+`Integer` coefficient known only at run time costs `form` its inferred return type, which
+Enzyme's type analysis rejects.
 
 # Examples
 
@@ -131,24 +69,8 @@ end to end -- including gradients with respect to a Dirichlet boundary value.
 A, F = assemble(a, l; dirichlet = :boundary => x -> 0.0)
 u = pde_solve(A, F)
 
-# Using SuiteSparse explicit Cholesky
 using SuiteSparse
-u_ss = pde_solve(A, F; solver = :suitesparse, sym = :spd)
-
-# Using Apple Accelerate (macOS)
-using AppleAccelerate
-u_acc = pde_solve(A, F; solver = :accelerate, sym = :spd)
-
-# Using MUMPS
-using MUMPS
-u_mumps = pde_solve(A, F; solver = :mumps)
-
-# Using Sparspak (pure Julia, no binary dependency)
-using Sparspak
-u_sparspak = pde_solve(A, F; solver = :sparspak)
-
-# Using SuiteSparse's SPQR (least-squares / rectangular systems)
-u_qr = pde_solve(A, F; solver = :spqr)
+u_spd = pde_solve(A, F; solver = :suitesparse, sym = :spd)
 ```
 
 See also [`assemble`](@ref), [`sparse_factorize`](@ref), [`suitesparse_solve`](@ref),

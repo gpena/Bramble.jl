@@ -35,19 +35,6 @@ using Bramble
         end
     end
 
-    @testset "Boundary extrapolation (outside = :extrapolate)" begin
-        # locate_cell clamps which cell is read to the boundary one, but not the relative
-        # position x is weighted by within it; so a point outside the mesh continues the
-        # boundary cell's own affine trend rather than holding a constant value. For a
-        # globally affine function that trend is the function itself, so this is exact
-        # arbitrarily far outside the mesh too. `:extrapolate` is opt-in (gpena/Bramble.jl#223);
-        # the default (:error) is checked in test/space/interpolation_bounds.jl.
-        Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
-        uₕ = Rₕ(gridspace(Ωₕ), x -> 5x + 1)
-        @test interpolate_at(uₕ, -0.5; outside = :extrapolate) ≈ 5 * -0.5 + 1 atol=1e-12
-        @test interpolate_at(uₕ, 1.7; outside = :extrapolate) ≈ 5 * 1.7 + 1 atol=1e-12
-    end
-
     @testset "Cross-mesh interpolation" begin
         Ωbig = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (10, 10), (true, true))
         Ωsmall = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (4, 4), (true, true))

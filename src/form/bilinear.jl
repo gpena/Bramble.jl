@@ -105,10 +105,24 @@ end
 # through `BilinearForm` itself. `objectid` needs none of that: identity comparison is all
 # the cache ever wanted, `UInt` is concrete regardless of backend, and `UInt(0)` never
 # collides with a real object's id under `valid = false`.
-mutable struct _AssemblyCache{D}
+#
+# `AST` is threaded in for the same reason `D` is, one paragraph up: the field has to be
+# concrete or every cache hit loads it as `Any`. Leaving it untyped was measurable --
+# `Base.getproperty(cache, :ast)::ANY` in `_assemble_bilinear_core_cached!`'s IR -- but only
+# for an AST that *carries data* (a grid-function coefficient, a source array), since a
+# singleton AST makes the whole `===` comparison a compile-time constant and the load folds
+# away. Data-carrying is exactly the case a differentiated closure builds, so the untyped
+# field cost nothing on the forms that did not need it and put boxed, untyped heap data on
+# Enzyme's tape for the ones that did.
+#
+# The parameter costs nothing to supply: `BilinearForm` already carries `AST`, and `form`
+# builds the cache where `typeof(ast)` is known. It also sharpens the guard -- a foreign AST
+# of a different type now folds `cache.ast === ast` to `false` at compile time instead of
+# comparing at run time.
+mutable struct _AssemblyCache{D, AST}
     valid::Bool
     A_id::UInt
-    ast::Any
+    ast::AST
     segments::Vector{Segment{D}}
 end
 
@@ -132,7 +146,12 @@ _no_segments(::Val{1}) = _NO_SEGMENTS_1
 _no_segments(::Val{2}) = _NO_SEGMENTS_2
 _no_segments(::Val{3}) = _NO_SEGMENTS_3
 
-_AssemblyCache{D}() where {D} = _AssemblyCache{D}(false, UInt(0), nothing, _no_segments(Val(D)))
+# Takes the AST the form was built from, so the cache's own `AST` parameter comes from the
+# same expression tree `BilinearForm` stores -- never `nothing`, which would have made the
+# parameter a lie on the first cache miss.
+function _AssemblyCache{D}(ast::AST) where {D, AST}
+    return _AssemblyCache{D, AST}(false, UInt(0), ast, _no_segments(Val(D)))
+end
 
 """
     BilinearForm{D, TrialSpace, TestSpace, AST}
@@ -163,7 +182,7 @@ struct BilinearForm{D, TrialSpace, TestSpace, AST}
     trial_space::TrialSpace
     test_space::TestSpace
     ast::AST
-    cache::_AssemblyCache{D}
+    cache::_AssemblyCache{D, AST}
 end
 
 """
@@ -213,7 +232,7 @@ function form(Wₕ, Vₕ, f)
     _validate_form_expression(raw_ast, Val(D))
     ast = simplify_ast(resolve_ast(raw_ast))
     return BilinearForm{D, typeof(Wₕ), typeof(Vₕ), typeof(ast)}(
-        Wₕ, Vₕ, ast, _AssemblyCache{D}()
+        Wₕ, Vₕ, ast, _AssemblyCache{D}(ast)
     )
 end
 

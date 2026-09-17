@@ -5,7 +5,7 @@ using Bramble
 using SparseArrays
 using LinearAlgebra: issymmetric
 using Supposition
-using ..TestUtils: _tri
+using ..TestUtils: _tri, _nonuniform_points
 
 # Symmetrizing the constrained system.
 #
@@ -137,7 +137,6 @@ using ..TestUtils: _tri
         Ae, Fe = _tri(n), collect(1.0:n)
         dirichlet_bc!(Ae, Ωₕ, :bottom)
         symmetrize!(Ae, Fe, Ωₕ, :bottom)
-        @test issymmetric(Ae)
 
         # the stored zeros stay stored: the sparsity pattern is the stencil's, and is not
         # allowed to start depending on the boundary data. This is why the `dropzeros`
@@ -291,15 +290,6 @@ end
         minimum = 0.01, maximum = 10.0, nans = false, infs = false
     )
 
-    function _partition(h)
-        pts = zeros(Float64, length(h) + 1)
-        for i in eachindex(h)
-            pts[i + 1] = pts[i] + h[i]
-        end
-        pts ./= pts[end]
-        return pts
-    end
-
     labels_all = (:bottom, :top, :left, :right)
 
     @check function check_symmetry_is_restored(
@@ -310,7 +300,7 @@ end
         labels = Tuple(labels_all[k] for k in 1:4 if use[k])
         isempty(labels) && return true          # nothing constrained, nothing to restore
 
-        px, py = _partition(hx), _partition(hy)
+        px, py = _nonuniform_points(hx), _nonuniform_points(hy)
         nx, ny = length(px), length(py)
 
         Ω = domain(

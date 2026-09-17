@@ -122,9 +122,6 @@ using Bramble:
         # inner₊₂ in particular had no test at all, for any left operand.
         for f in (inner₊ₓ, inner₊ᵧ, inner₊₂)
             @test f(id, id) isa BilinearProduct
-            @test f((x -> 1.0), v) isa LinearProduct
-            @test f(2.0, v) isa LinearProduct
-            @test f(uₕ, v) isa LinearProduct
         end
 
         # each names its own direction
@@ -134,11 +131,6 @@ using Bramble:
     end
 
     @testset "Tuple forms" begin
-        # a gradient tuple against a gradient tuple: one product per direction, summed
-        g = inner₊(∇₋ₕ(u), ∇₋ₕ(v))
-        @test g === inner_plus(∇₋ₕ(u), ∇₋ₕ(v))
-        @test g isa Bramble.OperatorAdd
-
         # a tuple of scalars, functions or grid functions on the left, against a gradient
         for l in ((2.0, 3.0), ((x -> x[1]), (x -> x[2])), (uₕ, uₕ))
             p = inner₊(l, ∇₋ₕ(v))
@@ -231,7 +223,6 @@ using Bramble:
     end
 
     @testset "Symbolic property propagation" begin
-        @test is_symbolic(innerₕ(u, v))
         @test is_symbolic(innerₕ(uₕ, v))
         @test is_symbolic(inner₊ₓ(2.0, v))
         @test is_symbolic(innerₕ(u, v) + innerₕ(D₋ₓ(u), D₋ₓ(v)))

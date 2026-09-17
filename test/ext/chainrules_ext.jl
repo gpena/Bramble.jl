@@ -5,6 +5,7 @@ using Bramble
 using ChainRulesCore: ChainRulesCore, rrule
 using SparseArrays
 using LinearAlgebra: Tridiagonal
+using ..TestUtils: _fd
 
 # BrambleChainRulesExt: the `ChainRulesCore.rrule` for `pde_solve` (src/solvers/pde_solve.jl
 # explains why this one function is the entire adjoint story -- `assemble`/`dirichlet_bc!`
@@ -25,8 +26,6 @@ using LinearAlgebra: Tridiagonal
 #
 # `Bramble.domain`/`Bramble.mesh`/`Bramble.element` are qualified throughout for the reason
 # meshes_ext.jl gives: every ext file is included into the same `Main`.
-
-_central_diff(f, x, h = 1e-6) = (f(x + h) - f(x - h)) / 2h
 
 @testset "BrambleChainRulesExt" begin
     @testset "rrule: pullback matches finite differences, Ā never densified" begin
@@ -66,7 +65,7 @@ _central_diff(f, x, h = 1e-6) = (f(x + h) - f(x - h)) / 2h
         loss(θ) = sum(abs2, Bramble.pde_solve(build_A(θ), F))
 
         θ0 = 0.3
-        d_fd = _central_diff(loss, θ0)
+        d_fd = _fd(loss, θ0)
 
         # Chain the rrule by hand: ∂A/∂θ has a single nonzero (the (2,2) entry), so
         # ⟨Ā, ∂A/∂θ⟩ is just Ā[2,2].
@@ -96,7 +95,7 @@ _central_diff(f, x, h = 1e-6) = (f(x + h) - f(x - h)) / 2h
         loss(θ) = sum(abs2, Bramble.pde_solve(assemble(a, l; dirichlet = :boundary => x -> θ)...))
 
         θ0 = 0.7
-        d_fd = _central_diff(loss, θ0)
+        d_fd = _fd(loss, θ0)
 
         # Chain the rrule by hand against the same reference: F's dependence on θ at the
         # boundary rows is exactly `dg/dθ = 1`, everywhere else `0` -- so ⟨F̄, ∂F/∂θ⟩ collapses
@@ -121,7 +120,7 @@ _central_diff(f, x, h = 1e-6) = (f(x + h) - f(x - h)) / 2h
         loss(θ) = sum(abs2, Bramble.pde_solve(assemble(a, l; dirichlet = :boundary => x -> θ)...))
 
         θ0 = 1.3
-        d_fd = _central_diff(loss, θ0)
+        d_fd = _fd(loss, θ0)
 
         A0, F0 = assemble(a, l; dirichlet = :boundary => x -> θ0)
         u0 = Bramble.pde_solve(A0, F0)

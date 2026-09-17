@@ -469,7 +469,7 @@ which function space should be used for the result.
   - The first `VectorElement` found in the expression tree
   - `nothing` if no `VectorElement` is found
 
-# Implementation Notes
+# Implementation notes
 
 Uses multiple dispatch to handle:
 

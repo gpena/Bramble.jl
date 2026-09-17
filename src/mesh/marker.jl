@@ -17,8 +17,13 @@ A `NamedTuple` with boundary symbols as keys and `CartesianIndices` as values:
 # Examples
 
 ```jldoctest
-julia> boundary_symbol_to_cartesian(CartesianIndices((1:3, 1:4)))
-(xmin = CartesianIndices((1:1, 1:4)), xmax = CartesianIndices((3:3, 1:4)), ymin = CartesianIndices((1:3, 1:1)), ymax = CartesianIndices((1:3, 4:4)), left = CartesianIndices((1:1, 1:4)), right = CartesianIndices((3:3, 1:4)), bottom = CartesianIndices((1:3, 1:1)), top = CartesianIndices((1:3, 4:4)))
+faces = boundary_symbol_to_cartesian(CartesianIndices((1:3, 1:4)))
+faces.xmin == CartesianIndices((1:1, 1:4)) && faces.ymax == CartesianIndices((1:3, 4:4)) &&
+    faces.left === faces.xmin && faces.top === faces.ymax
+
+# output
+
+true
 ```
 
 See also: [`boundary_symbol_to_dict`](@ref), [`set_markers!`](@ref).

@@ -100,13 +100,11 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
         v_default = vector(be_default, n)
         @test v_default isa Vector{Float64}
         @test length(v_default) == n
-        @test eltype(v_default) === Float64
 
         be_f32 = backend(vector_type = Vector{Float32}, matrix_type = Matrix{Float32})
         v_f32 = vector(be_f32, n)
         @test v_f32 isa Vector{Float32}
         @test length(v_f32) == n
-        @test eltype(v_f32) === Float32
 
         v_zero = vector(be_default, 0)
         @test v_zero isa Vector{Float64}
@@ -124,14 +122,12 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
         M_default = matrix(be_default, m, n)
         @test M_default isa SparseMatrixCSC{Float64, Int}
         @test size(M_default) == (m, n)
-        @test eltype(M_default) === Float64
         @test nnz(M_default) == 0
 
         be_dense = backend(vector_type = Vector{Float64}, matrix_type = Matrix{Float64})
         M_dense = matrix(be_dense, m, n)
         @test M_dense isa Matrix{Float64}
         @test size(M_dense) == (m, n)
-        @test eltype(M_dense) === Float64
 
         be_f32_sparse = backend(
             vector_type = Vector{Float32}, matrix_type = SparseMatrixCSC{Float32, Int32}
@@ -139,7 +135,6 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
         M_f32 = matrix(be_f32_sparse, m, n)
         @test M_f32 isa SparseMatrixCSC{Float32, Int32}
         @test size(M_f32) == (m, n)
-        @test eltype(M_f32) === Float32
 
         # Degenerate matrix dimensions
         M_zero_row = matrix(be_default, 0, n)
@@ -285,7 +280,6 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
 
         I_dense = backend_eye(be_dense, n)
         @test I_dense isa Matrix{Float64}
-        @test size(I_dense) == (n, n)
         @test I_dense == Matrix{Float64}(I, n, n)
 
         Z_sparse = backend_zeros(be_default, n)

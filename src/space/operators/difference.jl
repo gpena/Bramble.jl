@@ -1,76 +1,14 @@
-##############################################################################
-#                                                                            #
-#             Implementation of (Finite) Difference Operators                #
-#                                                                            #
-##############################################################################
-
-#=
 # difference.jl
-
-This file implements difference and finite difference operators for grid functions.
-
-## Mathematical formulation
-
-### Simple difference operators (no grid spacing)
-
-**Forward difference**:
-    Δ₊uᵢ = uᵢ₊₁ - uᵢ
-
-**Backward difference**:
-    Δ₋uᵢ = uᵢ - uᵢ₋₁
-
-### Finite difference operators (with grid spacing h)
-
-**Forward finite difference** (approximates ∂u/∂x at xᵢ):
-    δ₊uᵢ = (uᵢ₊₁ - uᵢ) / hᵢ
-
-**Backward finite difference** (approximates ∂u/∂x at xᵢ):
-    δ₋uᵢ = (uᵢ - uᵢ₋₁) / hᵢ
-
-## Boundary treatment
-
-At domain boundaries where neighbors don't exist:
-- Forward at last point: Δ₊uₙ = -uₙ (enforces zero beyond boundary)
-- Backward at first point: Δ₋u₁ = u₁ (enforces zero before boundary)
-
-This convention:
-1. Maintains operator size consistency
-2. Respects homogeneous Dirichlet-like conditions
-3. Ensures matrix operators remain well-defined
-
-## Grid spacing support
-
-The operators support:
-- Uniform grids: `h` is a scalar or nothing
-- Non-uniform grids: `h` is a vector of local spacings
-- Adaptive spacing: `h` is a function `h(i)` returning spacing at index i
-
-## Use cases
-
-Simple differences: measure changes without physical units
-```julia
-Δu = Δ₊(uₕ, dim)  # Dimensionless change
-```
-
-Finite differences: approximate derivatives with physical meaning
-```julia
-∂u_∂x = δ₊(uₕ, dim, mesh)  # Has units of [u]/[x]
-```
-
-## Performance optimizations
-
-- `@propagate_inbounds`: Eliminates bounds checking in inner loops
-- `@simd`: Enables SIMD vectorization
-- Separate loops for interior (2-point stencil) and boundary (1-point)
-
-## Accuracy
-
-These are first-order accurate methods:
-- Truncation error: O(h) for first derivatives
-- For higher accuracy, see centered differences or higher-order stencils
-
-See also: [`Δ₊`](@ref), [`Δ₋`](@ref), [`δ₊`](@ref), [`δ₋`](@ref), [`Forward`](@ref), [`Backward`](@ref)
-=#
+#
+# The difference families over grid functions: the undivided difference (`diff₋`/`diff₊`),
+# the divided one that approximates a derivative (`D₋`/`D₊`), the summation-by-parts pairing
+# `Dstar₊`, the centered `Dc`, and the second-order non-uniform `Dₕ`. Each is generated per
+# coordinate from the templates below.
+#
+# A stencil that runs off the grid is truncated rather than extrapolated: a backward operator
+# at the first point and a forward one at the last read the missing neighbour as zero, which
+# keeps the operator square and matches a homogeneous Dirichlet condition. The docs tutorial
+# on operators shows what that does to each family's boundary slice.
 
 # --- Type System for Dispatch ---
 # GridDirection, Forward and Backward moved to stencil.jl (gpena/Bramble.jl#42): the

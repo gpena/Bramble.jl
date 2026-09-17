@@ -60,16 +60,13 @@ end
     @testset "Prediction match" begin
         @testset "1D" begin
             I = CartesianIndex(5)
+            # Only the nodes "Uniform point offsets" below leaves out. That testset makes
+            # this same comparison for the difference nodes, at every index rather than
+            # at this one, so repeating them here would add nothing.
             for (nm, node) in (
                 ("identity", id1),
-                ("D₋ₓ", D₋ₓ(id1)),
-                ("D₊ₓ", D₊ₓ(id1)),
                 ("M₋ₓ", M₋ₓ(id1)),
-                ("M₊ₓ", M₊ₓ(id1)),
-                ("jumpₓ", jumpₓ(id1)),
-                ("Dcₓ", Dcₓ(id1)),
-                ("Dstar₊ₓ", Dstar₊ₓ(id1)),
-                ("Dₕₓ", Dₕₓ(id1))
+                ("M₊ₓ", M₊ₓ(id1))
             )
                 @testset "$nm" begin
                     @test sort(stencil_offsets(node)) == _stencil_at(node, Wₕ1, I, lin1)
@@ -172,8 +169,7 @@ end
         @test sort(stencil_offsets(D₊ₓ(D₊ₓ(id1)))) == [(0,), (1,), (2,)]
         @test sort(stencil_offsets(Dₕₓ(D₋ₓ(id1)))) == [(-2,), (-1,), (0,), (1,)]
 
-        # a shift moves the reach without widening it
-        @test length(stencil_offsets(shift_op(D₋ₓ(id1), 1, 3))) == length(base)
+        # a shift moves the reach without widening it, and moves it exactly
         @test sort(stencil_offsets(shift_op(D₋ₓ(id1), 1, 3))) == [(2,), (3,)]
 
         # and the answer has no repeats, however the tree is built
