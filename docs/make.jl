@@ -98,6 +98,7 @@ makedocs(;
         # "Signal" theme (#132): retokenizes Documenter's own sidebar/content/breadcrumb
         # shell in place, so search/doctest/@ref keep working unmodified.
         assets = [
+            "assets/favicon.ico",
             Documenter.asset(
                 "https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&family=Source+Sans+3:wght@400;600&display=swap";
                 class = :css
@@ -107,7 +108,7 @@ makedocs(;
     ),
     sitename = "Bramble.jl",
     pages = allpages,
-    authors = "Gonçalo Pena and Gemini",
+    authors = "Gonçalo Pena",
     # `missing_docs` stays a warning: Documenter reports every internal helper it cannot
     # find a page for, so making it an error would mean adding `@docs` stubs to silence it
     # rather than because they help. The rule that matters (every *exported* name has a
