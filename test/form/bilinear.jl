@@ -559,6 +559,37 @@ using Bramble:
         @test _loop_bytes(assemble(a_mixed), a_mixed) == 0
     end
 
+    @testset "Diagonal-segment replay (zero allocations)" begin
+        # The third replay shape, alongside the scalar and composite cores above: a term
+        # whose recorded positions come out as a constant per-tap stride, which
+        # `_try_diagonal_segment` repackages so `DiagonalReplaySink` can walk the interior
+        # by arithmetic instead of reading a position list. Nothing pinned its allocations
+        # until #249 touched the entry loops both replay shapes share
+        # (`_visit_entries`/`_visit_entries_unguarded`, form/bilinear_traversal.jl).
+        #
+        # The assertion on `is_diagonal` is what makes this test about that path rather
+        # than a fourth copy of the flat one: a stencil-margin or peeling change that
+        # stopped producing diagonal segments would otherwise leave this quietly measuring
+        # the flat replay again.
+        # A 1D uniform mesh, not this file's 2D `Wₕ`: the repackaging needs a constant
+        # per-tap stride across the interior, which a 2D stiffness term does not have (its
+        # recorded positions jump by a row's worth at each row boundary) -- `assemble` on
+        # `Wₕ` records a flat segment, and asserting otherwise is what the first version of
+        # this test got wrong.
+        Ω1d = mesh(domain(interval(0.0, 1.0)), 41, true)
+        W1d = gridspace(Ω1d)
+        a_stiff = form(W1d, W1d, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+        A_stiff = assemble(a_stiff)
+        assemble!(A_stiff, a_stiff)
+        @test a_stiff.cache.segments[1].is_diagonal
+
+        function _loop_bytes(A, a)
+            assemble!(A, a)
+            return @allocated assemble!(A, a)
+        end
+        @test _loop_bytes(A_stiff, a_stiff) == 0
+    end
+
     @testset "Cached nzval positions (#26)" begin
         # `assemble!` used to search for every scattered entry's nzval position on every
         # call. It now records that search's result the first time a given matrix is

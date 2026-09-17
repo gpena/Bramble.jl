@@ -26,6 +26,9 @@ using Bramble:
                shift_stencil,
                concatenate_stencils,
                scale_stencil,
+               entry_offsets,
+               entry_weights,
+               _offsets_seen_before,
                multiply_stencils_bilinear,
                multiply_stencils_linear,
                restrict_to,
@@ -112,6 +115,63 @@ using Bramble:
         @test l == (((0, 1), 20.0), ((0, 1), 30.0))
         @test all(e -> length(e) == 2, l)
         @test all(e -> length(e) == 3, b)
+    end
+
+    @testset "Offsets and weights split apart (#249)" begin
+        # `_visit_entries` (form/bilinear_traversal.jl) reads a stencil entry's offsets and
+        # its weight from these two containers rather than from the entry's own mixed
+        # `Int`/`Float64` tuple, which is what lets Enzyme differentiate assembly with
+        # respect to an operator's coefficient. `test/ext/chainrules_enzyme_ext.jl` checks
+        # the gradients themselves; what matters here is the property the traversal relies
+        # on -- that the two containers stay aligned with the stencil, entry for entry, for
+        # a bilinear entry and a linear one alike.
+        s1 = ((O, 2.0), ((1, 0), 3.0))
+        s2 = (((0, 1), 5.0),)
+        b = multiply_stencils_bilinear(s1, s2, 2.0)
+
+        # bilinear: two offsets per entry, the weight last
+        @test entry_offsets(b) == ((O, (0, 1)), ((1, 0), (0, 1)))
+        @test entry_weights(b) == (20.0, 30.0)
+
+        # linear: one offset per entry, kept as a 1-tuple so indexing reads the same way
+        l = multiply_stencils_linear(s1, s2, 2.0)
+        @test entry_offsets(l) == (((0, 1),), ((0, 1),))
+        @test entry_weights(l) == (20.0, 30.0)
+
+        # and the pair reconstructs the stencil it came from, which is the alignment the
+        # traversal depends on
+        @test map((o, w) -> (o..., w), entry_offsets(b), entry_weights(b)) == b
+        @test map((o, w) -> (o..., w), entry_offsets(l), entry_weights(l)) == l
+
+        # an empty stencil (a `RegionRestriction` outside its region) stays empty
+        @test entry_offsets(()) == ()
+        @test entry_weights(()) == ()
+
+        # homogeneous containers, not a tuple of mixed tuples: the whole point, since a
+        # container Enzyme has to type per element is what it could not handle
+        @test eltype(entry_weights(b)) == Float64
+        @test isconcretetype(typeof(entry_offsets(b)))
+
+        # neither allocates, which is what keeps `assemble!`'s replay at 0 bytes
+        function _split_bytes(st)
+            entry_offsets(st)                             # warm both, then measure
+            entry_weights(st)
+            return @allocated (entry_offsets(st), entry_weights(st))
+        end
+        @test _split_bytes(b) == 0
+        @test _split_bytes(l) == 0
+
+        # `_offsets_seen_before` is called with both shapes: `entry_offsets(stencil)` from
+        # the traversal, and the raw stencil from the pattern builders in
+        # form/jacobian_pattern.jl, which never read a weight. Both have to answer the same.
+        dup = ((O, (0, 1), 1.0), ((1, 0), (0, 1), 2.0), (O, (0, 1), 4.0))
+        for k in eachindex(dup)
+            @test _offsets_seen_before(entry_offsets(dup), k, dup[k][1], dup[k][2]) ==
+                  _offsets_seen_before(dup, k, dup[k][1], dup[k][2])
+        end
+        @test !_offsets_seen_before(entry_offsets(dup), 1, dup[1][1], dup[1][2])
+        @test !_offsets_seen_before(entry_offsets(dup), 2, dup[2][1], dup[2][2])
+        @test _offsets_seen_before(entry_offsets(dup), 3, dup[3][1], dup[3][2])
     end
 
     @testset "Unit leaf stencils" begin
