@@ -181,6 +181,14 @@ end
 
 if __bramble_with_ext_backends
     @testset verbose=true "Package extensions" begin
+        # The contract the four direct-solver backend files share, loaded before them and
+        # reached as `using ..ExtSolverContracts: ...`. The guard lives here rather than
+        # inside those modules: an `include` executed inside one of them would define
+        # `TestSuiteSparseExt.ExtSolverContracts`, which `using ..ExtSolverContracts` would
+        # not then resolve to. Same shape as the `TestUtils` guards in the subsystem
+        # runtests.jl files.
+        isdefined(Main, :ExtSolverContracts) || include("ext/SolverContracts.jl")
+
         include("ext/plots_ext.jl")
         include("ext/makie_ext.jl")
         include("ext/meshes_ext.jl")
