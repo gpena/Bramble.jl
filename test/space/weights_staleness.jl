@@ -20,8 +20,8 @@ using ..TestUtils: alloc_test, @test_allocs
 
         change_points!(Ωₕ, markers(Ω), [0.0, 0.1, 0.2, 0.3, 1.0])
 
-        @test_throws ArgumentError weights(Wₕ)
-
+        # that this throws at all is "All three mutators trigger staleness"'s; what is
+        # reproduced here is the numbers a fresh space gives instead.
         Wₕ_fresh = gridspace(Ωₕ)
         @test weights(Wₕ_fresh).innerh ≈ [0.05, 0.1, 0.1, 0.4, 0.35]
 

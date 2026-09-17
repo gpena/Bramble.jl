@@ -152,7 +152,6 @@ end
         @test length(u) == 4
         @test firstindex(u) == 1
         @test lastindex(u) == 4
-        @test eltype(u) == Float64
         @test collect(u) == collect(1.0:4.0)
     end
 

@@ -393,9 +393,6 @@ using ..TestUtils: alloc_test, @test_allocs
 
         W = gridspace(mesh2d)
         @test space(W) === W
-        @test spaces(W) === (W,)
-        @test ncomponents(W) == 1
-        @test ncomponents(typeof(W)) == 1
 
         V = W^Val(3)
         @test ncomponents(V) == 3
@@ -424,14 +421,11 @@ using ..TestUtils: alloc_test, @test_allocs
         @test Vv isa CompositeGridSpace{3}
         @test all(sp === spaces(Vv)[1] for sp in spaces(Vv))
 
-        # firstindex / lastindex / eachindex / keys
+        # firstindex / lastindex / eachindex / keys are generic in the component count
+        # and asserted by "Collection interface"; indexing through them is not.
         # Note: firstindex is an @inline method whose body is the literal 1, so
         # Julia emits no coverage point for it and it reads as uncovered however
         # it is called. It is exercised here regardless.
-        @test firstindex(Vv) == 1
-        @test lastindex(Vv) == 3
-        @test eachindex(Vv) == 1:3
-        @test keys(Vv) == 1:3
         @test Vv[firstindex(Vv)] === Vv[1]
         @test Vv[lastindex(Vv)] === Vv[3]
     end

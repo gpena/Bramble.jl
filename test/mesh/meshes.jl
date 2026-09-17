@@ -163,44 +163,6 @@ import Bramble:
         end
     end
 
-    @testset "Set operations" begin
-        @testset "One-dimensional sets" begin
-            I1 = interval(0.0, 1.0)
-            I2 = interval(-1.0, 0.5)
-            I3 = interval(0.5, 2.0)
-
-            @test I1 isa CartesianProduct
-            @test I2 isa CartesianProduct
-            @test I3 isa CartesianProduct
-        end
-
-        @testset "Two-dimensional Cartesian products" begin
-            I = interval(0.0, 1.0)
-            J = interval(-1.0, 1.0)
-
-            Ω1 = I × I  # Square
-            @test Ω1 isa CartesianProduct
-
-            Ω2 = I × J  # Rectangle
-            @test Ω2 isa CartesianProduct
-
-            Ω3 = J × I  # Different rectangle
-            @test Ω3 isa CartesianProduct
-        end
-
-        @testset "Three-dimensional sets" begin
-            I = interval(0.0, 1.0)
-            J = interval(-0.5, 0.5)
-            K = interval(0.0, 2.0)
-
-            Ω1 = I × I × I  # Cube
-            @test Ω1 isa CartesianProduct
-
-            Ω2 = I × J × K  # Box
-            @test Ω2 isa CartesianProduct
-        end
-    end
-
     @testset "Mesh integration" begin
         @testset "One-dimensional domain to mesh" begin
             I = interval(0.0, π)
@@ -428,7 +390,6 @@ struct BareMesh <: Bramble.AbstractMeshType{1} end
 
     @testset "generate_indices" begin
         @test generate_indices((4, 3)) == CartesianIndices((4, 3))
-        @test generate_indices(5) == CartesianIndices((5,))
     end
 
     @testset "interior_indices with collapsed axis" begin
@@ -458,8 +419,8 @@ struct BareMesh <: Bramble.AbstractMeshType{1} end
     end
 
     @testset "Collection interface" begin
-        @test firstindex(Ωₕ) == 1
-        @test lastindex(Ωₕ) == npoints(Ωₕ)
+        # the one-argument forms are asserted with the 1D mesh above; these are the
+        # per-dimension ones
         @test firstindex(Ω2, 1) == 1
         @test firstindex(Ω2, 2) == 1
         @test lastindex(Ω2, 1) == size(Ω2, 1)

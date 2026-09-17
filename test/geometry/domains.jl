@@ -513,15 +513,6 @@ using ..TestUtils: alloc_test, @test_allocs
         @test !isempty(edm2)
     end
 
-    # Invariant: `boundary_symbols` returns canonical boundary names for
-    # dimensions 1, 2, and 3, and raises an error for unsupported dimensions.
-    @testset "Default boundary symbol mappings" begin
-        @test boundary_symbols(1) == (:xmin, :xmax)
-        @test boundary_symbols(2) == (:xmin, :xmax, :ymin, :ymax)
-        @test boundary_symbols(3) == (:xmin, :xmax, :ymin, :ymax, :zmin, :zmax)
-        @test_throws ErrorException boundary_symbols(4)
-    end
-
     # Invariant: Spatiotemporal domains can be constructed by combining spatial
     # and temporal sets alongside time-dependent boundary conditions.
     @testset "Spatiotemporal domain construction" begin

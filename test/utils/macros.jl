@@ -52,10 +52,8 @@ end
     # 1. Forwarded methods return identical results to direct field access.
     @testset "Basic forwarding" begin
         sw = SimpleWrapper([1.0, 2.0, 3.0, 4.0])
-        @test length(sw) == 4
-        @test size(sw) == (4,)
-        @test length(sw) == length(sw.data)
-        @test size(sw) == size(sw.data)
+        @test length(sw) == length(sw.data) == 4
+        @test size(sw) == size(sw.data) == (4,)
     end
 
     # Invariants tested:

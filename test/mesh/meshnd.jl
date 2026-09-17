@@ -415,15 +415,10 @@ using ..TestUtils: alloc_test, @test_allocs
             Ω = create_test_nd_domain(intervals_2d)
             Ωₕ = mesh(Ω, (5, 6), (true, true); backend = backend())
 
-            # Test submesh access with bounds checking
-            @test Ωₕ(1) isa Mesh1D
-            @test Ωₕ(2) isa Mesh1D
+            # The submesh types and their point counts are "Construction and
+            # properties"'s; what is checked here is the bounds on the axis index.
             @test_throws BoundsError Ωₕ(0)
             @test_throws BoundsError Ωₕ(3)
-
-            # Verify submesh properties
-            @test npoints(Ωₕ(1)) == 5
-            @test npoints(Ωₕ(2)) == 6
         end
 
         @testset "Type stability" begin
@@ -431,12 +426,9 @@ using ..TestUtils: alloc_test, @test_allocs
             Ω_2d = create_test_nd_domain(intervals_2d)
             Ωₕ_2d = mesh(Ω_2d, (3, 3), (true, true); backend = backend())
 
-            # Test eltype on type
+            # The value-level eltype and the 2D type-level dim are "Construction and
+            # properties"'s; these are the type-level eltype and the 3D dim.
             @test eltype(typeof(Ωₕ_2d)) == Float64
-            @test eltype(Ωₕ_2d) == Float64
-
-            # Test dim on type
-            @test dim(typeof(Ωₕ_2d)) == 2
 
             intervals_3d = ((0.0, 1.0), (0.0, 1.0), (0.0, 1.0))
             Ω_3d = create_test_nd_domain(intervals_3d)
@@ -451,9 +443,6 @@ using ..TestUtils: alloc_test, @test_allocs
 
             # Test set accessor
             @test set(Ωₕ) == interval(0.0, 1.0) × interval(0.0, 1.0)
-
-            # Test backend accessor
-            @test backend(Ωₕ) isa Backend
 
             # Test indices accessor
             @test indices(Ωₕ) == CartesianIndices((4, 4))

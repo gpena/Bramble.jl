@@ -45,6 +45,10 @@ using ..TestUtils: alloc_test, @test_allocs
             @test interpolate_at(uₕ, 5.0; outside = :clamp) ≈ 3 * 1.0 + 1 atol = 1e-10
             @test interpolate_at(uₕ, -3.0; outside = :clamp) ≈ 3 * 0.0 + 1 atol = 1e-10
             @test interpolate_at(uₕ, 5.0; outside = :extrapolate) ≈ 3 * 5.0 + 1 atol = 1e-10
+            # below the lower bound too: locate_cell clamps which cell is read, not the
+            # relative position within it, so the boundary cell's affine trend continues
+            # in both directions (gpena/Bramble.jl#223)
+            @test interpolate_at(uₕ, -3.0; outside = :extrapolate) ≈ 3 * -3.0 + 1 atol = 1e-10
             @test interpolate_at(uₕ, 5.0; outside = 0.0) == 0.0
             @test interpolate_at(uₕ, 5.0; outside = NaN) |> isnan
         end
