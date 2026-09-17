@@ -90,6 +90,14 @@ end
         b = copy(x)
         ldiv!(P, b)
         @test b ≈ y
+
+        # Regression: a `VectorElement` destination used to hit a method ambiguity between
+        # `ILUZero`'s own `ldiv!(::AbstractVector, ::ILU0Precon, ::AbstractVector)` and
+        # Bramble's `ldiv!(::VectorElement, ::Factorization, ::AbstractVector)`, since
+        # `ILU0Precon <: Factorization`.
+        uₕ_pc = element(Bramble.trial_space(a))
+        @test ldiv!(uₕ_pc, P, x) === uₕ_pc
+        @test parent(uₕ_pc) ≈ y
     end
 
     @testset "preconditioner = :ilu0 in solve reaches the direct answer" begin

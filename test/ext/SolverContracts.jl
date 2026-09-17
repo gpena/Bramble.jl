@@ -140,7 +140,8 @@ end
     refactor_contract(p; atol, solver, facttype, factorize, backend_refactor!,
                         unified_kwargs = (;))
 
-`size`, both `ldiv!` forms, and every route to a numeric refactorisation of a matrix whose
+`size`, every `ldiv!` form (including the `VectorElement` destination), a complex
+right-hand side, and every route to a numeric refactorisation of a matrix whose
 sparsity pattern has not changed: the unique `refactor!` driver, the backend's own
 `X_refactor!`, the unified `sparse_factorize`, and the `sparse_refactor!` alias -- plus the
 rejection of a dense matrix. `p` comes from `poisson_system`, passed in because the
@@ -167,6 +168,26 @@ function refactor_contract(
     b_in_place = copy(F)
     ldiv!(fact, b_in_place)
     @test isapprox(b_in_place, x; atol = atol)
+
+    # gpena/Bramble.jl#261: a `VectorElement` destination was ambiguous between Bramble's
+    # `ldiv!(::VectorElement, ::Factorization, ::AbstractVector)` and each extension's
+    # three-argument `ldiv!` on an `AbstractVector` destination -- neither more specific
+    # than the other, since `VectorElement <: AbstractVector` and every concrete
+    # factorisation is `<: Factorization`. Asserted here rather than once per backend file,
+    # since the ambiguity was the same in all four.
+    uₕ = element(p.Wₕ)
+    @test ldiv!(uₕ, fact, F) === uₕ
+    @test isapprox(parent(uₕ), p.u_ref; atol = atol)
+
+    # gpena/Bramble.jl#261, the same shape on the other operator: a complex right-hand side
+    # was ambiguous between each extension's `\(::Factorization, ::AbstractVector)` and
+    # `LinearAlgebra`'s `\(::Factorization{T}, ::Vector{Complex{T}})`. The answer is the
+    # real solve applied to each part.
+    F_complex = complex.(F, 2 .* F)
+    u_complex = fact \ F_complex
+    @test u_complex isa Vector{ComplexF64}
+    @test isapprox(real(u_complex), p.u_ref; atol = atol)
+    @test isapprox(imag(u_complex), A \ (2 .* F); atol = atol)
 
     # same sparsity pattern, different values, through the unique `refactor!` driver
     A_mod = copy(A)

@@ -1,7 +1,8 @@
 module BrambleILUZeroExt
 
 using Bramble: Bramble
-using ILUZero: ILUZero, ilu0
+using ILUZero: ILUZero, ilu0, ILU0Precon
+using LinearAlgebra: LinearAlgebra, ldiv!
 using PrecompileTools: @setup_workload, @compile_workload
 using SparseArrays: SparseMatrixCSC
 
@@ -18,6 +19,20 @@ end
 
 function Bramble._ilu_operator(A::SparseMatrixCSC; kwargs...)
     return ilu0(A; kwargs...)
+end
+
+# `ILU0Precon <: Factorization`, so `ILUZero`'s own
+# `ldiv!(::AbstractVector{M}, ::ILU0Precon{T, N, M}, ::AbstractVector{M})` and Bramble's
+# `ldiv!(::VectorElement, ::Factorization, ::AbstractVector)` are equally specific for a
+# `VectorElement` destination. This method is more specific than both, so applying an ilu0
+# preconditioner into a `VectorElement` resolves instead of erroring. The element-type
+# parameters `M` and `N` are repeated from `ILUZero`'s signature: a method left generic in
+# either would itself be ambiguous with that one.
+function LinearAlgebra.ldiv!(
+        uₕ::Bramble.VectorElement{<:Any, M}, P::ILU0Precon{T, N, M}, b::AbstractVector{M}
+) where {T, N <: Integer, M}
+    ldiv!(parent(uₕ), P, b)
+    return uₕ
 end
 
 # Warms `ilu_preconditioner` on a small unsymmetric system, plus the `_ilu_operator` path
