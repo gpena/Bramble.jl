@@ -219,7 +219,7 @@ combining like terms, and eliding zero-scaled ones -- before it is stored.
 
 # Examples
 ```julia
-# a(u, v) = (∇₋ₕu, ∇₋ₕv)₊
+# a(u, v) = (∇ₕu, ∇ₕv)₊
 a = form(Wₕ, Wₕ, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
 
 # a coupled system, one term per block

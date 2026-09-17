@@ -55,7 +55,7 @@ using ..TestUtils: alloc_test, @test_allocs
 
         # the whole directional family generated in difference.jl/average.jl/jump.jl:
         # every one rebuilds around the indexed leaf rather than being left behind
-        for op in (D₋ₓ, D₊ₓ, Dcₓ, Dstar₊ₓ, Dₕₓ, jumpₓ, M₋ₓ, M₊ₓ)
+        for op in (D₋ₓ, D₊ₓ, Dcₓ, D̽ₓ, Dₕₓ, jumpₓ, Mₓ, M₊ₓ)
             @test test_component_or_nothing(op(v)(3)) == 3
         end
 
@@ -90,10 +90,10 @@ using ..TestUtils: alloc_test, @test_allocs
                  inner₊(D₋ₓ(uv(3)), D₋ₓ(v(3)))
         ),
             (
-            v -> inner₊ᵧ(uv, v + M₋ᵧ(v)),
-            v -> inner₊ᵧ(uv(1), v(1) + M₋ᵧ(v(1))) +
-                 inner₊ᵧ(uv(2), v(2) + M₋ᵧ(v(2))) +
-                 inner₊ᵧ(uv(3), v(3) + M₋ᵧ(v(3)))
+            v -> inner₊ᵧ(uv, v + Mᵧ(v)),
+            v -> inner₊ᵧ(uv(1), v(1) + Mᵧ(v(1))) +
+                 inner₊ᵧ(uv(2), v(2) + Mᵧ(v(2))) +
+                 inner₊ᵧ(uv(3), v(3) + Mᵧ(v(3)))
         )
         )
             b = assemble(form(Vf, short))

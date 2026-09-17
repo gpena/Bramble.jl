@@ -34,7 +34,7 @@ x₀ = (0.35, 0.65)
 Ωₕ = mesh(Ω, (61, 61), (true, true))
 Wₕ = gridspace(Ωₕ)
 
-a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
 l = form(Wₕ, v -> innerₕ(dirac(x₀, Q), v))
 
 A, F = assemble(a, l; dirichlet = :boundary => x -> 0.0)

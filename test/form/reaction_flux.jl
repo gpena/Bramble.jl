@@ -38,7 +38,7 @@ using Bramble: reaction, reaction_density
             Ωₕ = mesh(I, N, true)
             Wₕ = gridspace(Ωₕ)
 
-            a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+            a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
             l = form(Wₕ, v -> innerₕ(Rₕ(Wₕ, src), v))
             A, F = assemble(a, l; dirichlet = :boundary => sol)
 
@@ -62,7 +62,7 @@ using Bramble: reaction, reaction_density
             Ωₕ = mesh(I, N, false)
             Wₕ = gridspace(Ωₕ)
 
-            a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+            a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
             l = form(Wₕ, v -> innerₕ(Rₕ(Wₕ, src), v))
             A, F = assemble(a, l; dirichlet = :boundary => sol)
 
@@ -93,7 +93,7 @@ using Bramble: reaction, reaction_density
             Ωₕ = mesh(Ω, (N, N), (true, true))
             Wₕ = gridspace(Ωₕ)
 
-            a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+            a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
             l = form(Wₕ, v -> innerₕ(Rₕ(Wₕ, src), v))
             A, F = assemble(a, l; dirichlet = :boundary => sol)
 
@@ -115,7 +115,7 @@ using Bramble: reaction, reaction_density
         # limit -- unlike the per-side convergence above).
         Ωₕ = mesh(Ω, (21, 21), (true, true))
         Wₕ = gridspace(Ωₕ)
-        a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+        a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
         l = form(Wₕ, v -> innerₕ(Rₕ(Wₕ, src), v))
         A, F = assemble(a, l; dirichlet = :boundary => sol)
         uₕ = element(Wₕ)
@@ -135,7 +135,7 @@ using Bramble: reaction, reaction_density
         Ωₕ = mesh(Ω, (15, 15, 15), (true, true, true))
         Wₕ = gridspace(Ωₕ)
 
-        a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+        a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
         l = form(Wₕ, v -> innerₕ(Rₕ(Wₕ, src), v))
         A, F = assemble(a, l; dirichlet = :boundary => sol)
 
@@ -208,7 +208,7 @@ using Bramble: reaction, reaction_density
         Wₕ = gridspace(Ωₕ)
         W = Wₕ × Wₕ
 
-        a = form(W, W, (u, v) -> inner₊(∇₋ₕ(u(1)), ∇₋ₕ(v(1))) + inner₊(∇₋ₕ(u(2)), ∇₋ₕ(v(2))))
+        a = form(W, W, (u, v) -> inner₊(∇ₕ(u(1)), ∇ₕ(v(1))) + inner₊(∇ₕ(u(2)), ∇ₕ(v(2))))
         l = form(
             W,
             v -> innerₕ(Rₕ(Wₕ, src1), v(1)) + innerₕ(Rₕ(Wₕ, src2), v(2))
@@ -243,7 +243,7 @@ using Bramble: reaction, reaction_density
         Ωₕ = mesh(I, 21, true)
         Wₕ = gridspace(Ωₕ)
 
-        a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+        a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
         l = form(Wₕ, v -> innerₕ(Rₕ(Wₕ, src), v))
         A, F = assemble(a, l; dirichlet = :boundary => sol)
 

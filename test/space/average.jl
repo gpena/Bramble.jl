@@ -10,9 +10,9 @@ using ..SpaceDifferenceTests: test_operator_matrix_equivalence
 
 @testset "Averaging operators" begin
     # Backward average operators
-    backward_average_ops(::Val{1}) = (M₋ₓ,)
-    backward_average_ops(::Val{2}) = (M₋ₓ, M₋ᵧ)
-    backward_average_ops(::Val{3}) = (M₋ₓ, M₋ᵧ, M₋₂)
+    backward_average_ops(::Val{1}) = (Mₓ,)
+    backward_average_ops(::Val{2}) = (Mₓ, Mᵧ)
+    backward_average_ops(::Val{3}) = (Mₓ, Mᵧ, M₂)
 
     # Forward average operators
     forward_average_ops(::Val{1}) = (M₊ₓ,)
@@ -86,7 +86,7 @@ using ..SpaceDifferenceTests: test_operator_matrix_equivalence
                 end
             end
 
-            @testset "Backward average (M₋)" begin
+            @testset "Backward average (M)" begin
                 for i in 1:D
                     # --- Calculate the analytical expected result ---
                     expected_vals = similar(uₕ.data)
@@ -116,17 +116,17 @@ using ..SpaceDifferenceTests: test_operator_matrix_equivalence
 
                 # --- Test aliases ---
                 if D >= 1
-                    @test norm(M₋ₓ(uₕ) - backward_average(uₕ, Val(1))) < 1e-12
+                    @test norm(Mₓ(uₕ) - backward_average(uₕ, Val(1))) < 1e-12
                 end
                 if D >= 2
-                    @test norm(M₋ᵧ(uₕ) - backward_average(uₕ, Val(2))) < 1e-12
+                    @test norm(Mᵧ(uₕ) - backward_average(uₕ, Val(2))) < 1e-12
                 end
                 if D >= 3
-                    @test norm(M₋₂(uₕ) - backward_average(uₕ, Val(3))) < 1e-12
+                    @test norm(M₂(uₕ) - backward_average(uₕ, Val(3))) < 1e-12
                 end
 
                 # --- Test vectorial alias ---
-                averages = M₋ₕ(uₕ)
+                averages = Mₕ(uₕ)
                 if D == 1
                     @test averages isa VectorElement
                     @test norm(averages - backward_average(uₕ, Val(1))) < 1e-12

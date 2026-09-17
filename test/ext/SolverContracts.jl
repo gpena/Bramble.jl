@@ -62,7 +62,7 @@ function poisson_system(
     Iᴰ = _unit_cube(dim)
     Ωd = domain(Iᴰ, :boundary => boundary_symbols(Iᴰ))
     Wₕ = gridspace(_grid(dim, Ωd, n))
-    a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+    a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
     fₕ = Rₕ(Wₕ, source)
     l = form(Wₕ, v -> innerₕ(fₕ, v))
     A, F = assemble(a, l; dirichlet = ZERO_BC, symmetrize = symmetrize)
@@ -82,7 +82,7 @@ function convection_diffusion_system(n::Integer; βx = 2.0, βy = 1.0)
     Wₕ = gridspace(mesh(Ωd, (n, n), (true, true)))
     a = form(
         Wₕ, Wₕ,
-        (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)) + βx * innerₕ(D₊ₓ(u), v) + βy * innerₕ(D₊ᵧ(u), v)
+        (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + βx * innerₕ(D₊ₓ(u), v) + βy * innerₕ(D₊ᵧ(u), v)
     )
     l = form(Wₕ, v -> innerₕ(Rₕ(Wₕ, x -> 1.0), v))
     A, F = assemble(a, l; dirichlet = ZERO_BC, symmetrize = false)

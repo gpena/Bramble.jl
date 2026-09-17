@@ -33,7 +33,7 @@
 #     weights regression, which 1D did not show.
 #   - innerₕ and norm₁ₕ: the reduction path, including the seminorm's sum over
 #     directions.
-#   - ∇₋ₕ in 3D, where the boxing regressions were worst.
+#   - ∇ₕ in 3D, where the boxing regressions were worst.
 #   - one composite operator, which dispatches per component and so calls the
 #     engine N times with a view rather than once with a vector.
 #   - gridspace construction, which builds the quadrature weights, the path
@@ -145,7 +145,7 @@ let Wₕ = gridspace(_mesh2()), uₕ = Rₕ(Wₕ, x -> sin(x[1]) * x[2])
     g = SUITE["operators 2D"] = BenchmarkGroup()
     g["D₋ₓ"] = @benchmarkable D₋ₓ($uₕ)            # along the contiguous direction
     g["D₋ᵧ"] = @benchmarkable D₋ᵧ($uₕ)            # across it
-    g["M₋ₓ"] = @benchmarkable M₋ₓ($uₕ)
+    g["Mₓ"] = @benchmarkable Mₓ($uₕ)
     g["Dcₓ"] = @benchmarkable Dcₓ($uₕ)
 end
 
@@ -161,7 +161,7 @@ end
 # --- 4. 3D, where the boxing regressions were worst ----------------------- #
 let uₕ = Rₕ(gridspace(_mesh3()), x -> sin(x[1]) + x[3])
     g = SUITE["operators 3D"] = BenchmarkGroup()
-    g["∇₋ₕ"] = @benchmarkable ∇₋ₕ($uₕ)
+    g["∇ₕ"] = @benchmarkable ∇ₕ($uₕ)
     g["D₋₂"] = @benchmarkable D₋₂($uₕ)
     g["innerₕ"] = @benchmarkable innerₕ($uₕ, $uₕ)
 end
@@ -171,7 +171,7 @@ let Vₕ = gridspace(_mesh2(), Val(3))
     cₕ = Rₕ(Vₕ, (x -> x[1] * x[2], x -> sin(x[1]), x -> x[2]^2))
     g = SUITE["composite"] = BenchmarkGroup()
     g["D₋ₓ (3 components)"] = @benchmarkable D₋ₓ($cₕ)
-    g["∇₋ₕ (3 components)"] = @benchmarkable ∇₋ₕ($cₕ)
+    g["∇ₕ (3 components)"] = @benchmarkable ∇ₕ($cₕ)
 end
 
 # --- 6. construction ------------------------------------------------------ #
@@ -415,8 +415,8 @@ let
         F = Bramble.assemble(l; dirichlet = bcs)
 
         function diffusion_form(uₕ)
-            αv = α.(M₋ₕ(uₕ))
-            return Bramble.form(Wₕ, Wₕ, (U, V) -> inner₊(αv * ∇₋ₕ(U), ∇₋ₕ(V)))
+            αv = α.(Mₕ(uₕ))
+            return Bramble.form(Wₕ, Wₕ, (U, V) -> inner₊(αv * ∇ₕ(U), ∇ₕ(V)))
         end
         function residual(u_vec::AbstractVector{T}) where {T}
             uₕ = element(Wₕ, T)
@@ -439,7 +439,7 @@ let
             sparsity_detector = SparseConnectivityTracer.TracerSparsityDetector(),
             coloring_algorithm = SparseMatrixColorings.GreedyColoringAlgorithm())
         native_ad = AutoSparse(AutoForwardDiff();
-            sparsity_detector = Bramble.ast_sparsity_detector(a, U -> M₋ₕ(U)),
+            sparsity_detector = Bramble.ast_sparsity_detector(a, U -> Mₕ(U)),
             coloring_algorithm = SparseMatrixColorings.GreedyColoringAlgorithm())
 
         g["prepare_jacobian (traced), $lbl"] = @benchmarkable prepare_jacobian(
@@ -475,11 +475,11 @@ const ALLOCATION_BOUNDS = Dict(
     # contiguous-direction difference: 3 allocs for similar(::VectorElement)
     ("operators 2D", "D₋ₓ") => 3,
     ("operators 2D", "D₋ᵧ") => 3,
-    ("operators 2D", "M₋ₓ") => 3,
+    ("operators 2D", "Mₓ") => 3,
     ("operators 2D", "Dcₓ") => 3,
     ("operators 3D", "D₋₂") => 3,
     # one per spatial direction
-    ("operators 3D", "∇₋ₕ") => 15,
+    ("operators 3D", "∇ₕ") => 15,
     # reductions allocate nothing at all
     ("inner products 2D", "innerₕ") => 0,
     ("inner products 2D", "normₕ") => 0,

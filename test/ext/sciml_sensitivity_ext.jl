@@ -49,7 +49,7 @@ using ..TestUtils: _have
             Wₕ = gridspace(Ωₕ)
             I = Bramble.interval(0.0, 0.5)
             fₕ = Bramble.element(Wₕ, 0.0)
-            a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+            a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
             l = form(Wₕ, v -> innerₕ(fₕ, v))
             bcs = dirichlet_constraints(Ωₕ, I, :boundary => (x, t, p) -> p[1] * t)
             sd = semidiscretize(a, l; dirichlet = bcs)

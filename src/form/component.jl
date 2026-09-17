@@ -177,7 +177,7 @@ end
 #     innerₕ(uₕ, r) = Σ_c innerₕ(uₕ(c), r(c))
 #
 # and because the index distributes, `r` can be any expression in the test function rather
-# than only the bare leaf: `innerₕ(uₕ, v + 2 * D₋ₓ(v) - M₋ₓ(v))` expands term by term and
+# than only the bare leaf: `innerₕ(uₕ, v + 2 * D₋ₓ(v) - Mₓ(v))` expands term by term and
 # component by component.
 #
 # Without these methods the call did not fail; it took the scalar overload, wrapped the

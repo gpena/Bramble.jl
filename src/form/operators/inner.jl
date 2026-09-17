@@ -285,7 +285,7 @@ end
         ArgumentError(
         "inner₊ of two symbolic operators in $D dimensions names no direction, and its " *
         "weights are directional. Write inner₊ₓ, inner₊ᵧ or inner₊₂ for a specific one, " *
-        "pass gradient tuples such as inner₊(∇₋ₕ(u), ∇₋ₕ(v)) to sum over all of them, or " *
+        "pass gradient tuples such as inner₊(∇ₕ(u), ∇ₕ(v)) to sum over all of them, or " *
         "difference both sides along the same direction as in inner₊(D₋ₓ(u), D₋ₓ(v)). " *
         "Got $(typeof(left)) and $(typeof(right)).",
     ),
@@ -355,7 +355,7 @@ end
 
 Vector-field `inner₊`: sums per-component inner products.
 Used when `left` and `right` are **tuples of gradient tuples**, e.g.
-`inner₊(∇₋ₕ(u), ∇₋ₕ(v))` where `u = (u1, u2)` is a velocity tuple.
+`inner₊(∇ₕ(u), ∇ₕ(v))` where `u = (u1, u2)` is a velocity tuple.
 Each element pair `(left[k], right[k])` is a `D`-tuple of `LazyOp` (a gradient),
 which dispatches to the existing `inner₊(::NTuple{D,LazyOp}, ::NTuple{D,LazyOp})`.
 
@@ -470,7 +470,7 @@ end
 end
 
 # The right-hand side in this branch carries no trial or test function, so there is
-# nothing for the product to be a form in: `∇₋ₕ(IdentityOperator(Wₕ))` has no argument to
+# nothing for the product to be a form in: `∇ₕ(IdentityOperator(Wₕ))` has no argument to
 # differentiate.
 @noinline function _inner₊_numeric_tuple_unsupported(r)
     throw(
@@ -478,7 +478,7 @@ end
         "inner₊ of a tuple of grid functions against a tuple of non-symbolic operators " *
         "has no definition: the right-hand side carries no trial or test function, so " *
         "there is nothing for the product to be a form in. Got $(typeof(r)). Pair the " *
-        "grid functions with a symbolic gradient such as ∇₋ₕ(u), or take the numeric " *
+        "grid functions with a symbolic gradient such as ∇ₕ(u), or take the numeric " *
         "inner₊ of two grid functions directly.",
     ),
     )

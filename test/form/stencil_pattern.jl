@@ -65,7 +65,7 @@ end
             # at this one, so repeating them here would add nothing.
             for (nm, node) in (
                 ("identity", id1),
-                ("M₋ₓ", M₋ₓ(id1)),
+                ("Mₓ", Mₓ(id1)),
                 ("M₊ₓ", M₊ₓ(id1))
             )
                 @testset "$nm" begin
@@ -84,7 +84,7 @@ end
                 ("jumpᵧ", jumpᵧ(id2)),
                 ("Dcᵧ", Dcᵧ(id2)),
                 ("Dₕₓ", Dₕₓ(id2)),
-                ("Dstar₊ᵧ", Dstar₊ᵧ(id2))
+                ("D̽ᵧ", D̽ᵧ(id2))
             )
                 @testset "$nm" begin
                     @test sort(stencil_offsets(node)) == _stencil_at(node, Wₕ2, I, lin2)
@@ -100,11 +100,11 @@ end
         for (nm, node, mat) in (
             ("D₋ₓ", D₋ₓ(id1), D₋ₓ(Ωₕ1)),
             ("D₊ₓ", D₊ₓ(id1), D₊ₓ(Ωₕ1)),
-            ("M₋ₓ", M₋ₓ(id1), M₋ₓ(Ωₕ1)),
+            ("Mₓ", Mₓ(id1), Mₓ(Ωₕ1)),
             ("M₊ₓ", M₊ₓ(id1), M₊ₓ(Ωₕ1)),
             ("jumpₓ", jumpₓ(id1), jumpₓ(Ωₕ1)),
             ("Dcₓ", Dcₓ(id1), Dcₓ(Ωₕ1)),
-            ("Dstar₊ₓ", Dstar₊ₓ(id1), Dstar₊ₓ(Ωₕ1)),
+            ("D̽ₓ", D̽ₓ(id1), D̽ₓ(Ωₕ1)),
             ("Dₕₓ", Dₕₓ(id1), Dₕₓ(Ωₕ1))
         )
             @testset "$nm" begin
@@ -183,7 +183,7 @@ end
         # its coefficients, so one prediction covers the grid. If a node ever truncated by
         # dropping entries instead, the pattern would depend on position and this would
         # stop being sound.
-        for node in (D₋ₓ(id1), D₊ₓ(id1), Dcₓ(id1), Dₕₓ(id1), Dstar₊ₓ(id1), jumpₓ(id1))
+        for node in (D₋ₓ(id1), D₊ₓ(id1), Dcₓ(id1), Dₕₓ(id1), D̽ₓ(id1), jumpₓ(id1))
             predicted = sort(stencil_offsets(node))
             for i in 1:npoints(Ωₕ1)
                 @test _stencil_at(node, Wₕ1, CartesianIndex(i), lin1) == predicted

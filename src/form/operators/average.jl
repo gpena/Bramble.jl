@@ -63,20 +63,20 @@ end
 # AST-based average operators (distinct names)
 
 """
-    M₋ₓ(op::LazyOp{D}) where D
+    Mₓ(op::LazyOp{D}) where D
     M₊ₓ(op::LazyOp{D}) where D
-    M₋ᵧ(op::LazyOp{D}) where D
+    Mᵧ(op::LazyOp{D}) where D
     M₊ᵧ(op::LazyOp{D}) where D
-    M₋₂(op::LazyOp{D}) where D
+    M₂(op::LazyOp{D}) where D
     M₊₂(op::LazyOp{D}) where D
 
 Symbolic averaging operators in specified coordinate directions (x, y, z).
 """
-M₋ₓ(op::LazyOp{D}) where {D} = BackwardAverage{D, 1, typeof(op)}(op)
+Mₓ(op::LazyOp{D}) where {D} = BackwardAverage{D, 1, typeof(op)}(op)
 M₊ₓ(op::LazyOp{D}) where {D} = ForwardAverage{D, 1, typeof(op)}(op)
-M₋ᵧ(op::LazyOp{D}) where {D} = BackwardAverage{D, 2, typeof(op)}(op)
+Mᵧ(op::LazyOp{D}) where {D} = BackwardAverage{D, 2, typeof(op)}(op)
 M₊ᵧ(op::LazyOp{D}) where {D} = ForwardAverage{D, 2, typeof(op)}(op)
-M₋₂(op::LazyOp{D}) where {D} = BackwardAverage{D, 3, typeof(op)}(op)
+M₂(op::LazyOp{D}) where {D} = BackwardAverage{D, 3, typeof(op)}(op)
 M₊₂(op::LazyOp{D}) where {D} = ForwardAverage{D, 3, typeof(op)}(op)
 
 """
@@ -100,11 +100,11 @@ end
 vectorial_avg_forward(op::LazyOp{1}) = ForwardAverage{1, 1, typeof(op)}(op)
 
 """
-    M₋ₕ(op::LazyOp{D}) where D
+    Mₕ(op::LazyOp{D}) where D
 
 Symbolic backward spatial averaging operator tuple.
 """
-M₋ₕ(op::LazyOp{D}) where {D} = vectorial_avg_backward(op)
+Mₕ(op::LazyOp{D}) where {D} = vectorial_avg_backward(op)
 
 """
     M₊ₕ(op::LazyOp{D}) where D

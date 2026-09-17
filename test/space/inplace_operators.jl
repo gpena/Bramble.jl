@@ -18,7 +18,7 @@ using ..TestUtils: alloc_test, @test_allocs
 # Base names for the 10 directional operator families across spatial dimensions.
 # Deriving the per-dimension list mechanically from this tuple and `_DIR_SUFFIXES`
 # ensures complete and uniform test coverage across 1D, 2D, and 3D.
-const _INPLACE_FAMILIES = (:D₋, :D₊, :diff₋, :diff₊, :M₋, :M₊, :jump, :Dc, :Dstar₊, :Dₕ)
+const _INPLACE_FAMILIES = (:D₋, :D₊, :diff₋, :diff₊, :M, :M₊, :jump, :Dc, :D̽, :Dₕ)
 const _DIR_SUFFIXES = ("ₓ", "ᵧ", "₂")
 
 function _ops(::Val{D}) where {D}

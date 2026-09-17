@@ -38,7 +38,7 @@ using Bramble: dot
     end
 
     @testset "Gradient tuple inner₊" begin
-        a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v); markers = (:bottom,)))
+        a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v); markers = (:bottom,)))
         b = form(
             Wₕ,
             Wₕ,

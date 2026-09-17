@@ -45,7 +45,7 @@ nothing # hide
 #
 # The right-hand side never changes across the iteration — only the diffusion matrix does,
 # since only it depends on the current guess for ``u``. `α` is evaluated at the average of the
-# previous iterate, `M₋ₕ`, the standard discretization for a nonlinear flux.
+# previous iterate, `Mₕ`, the standard discretization for a nonlinear flux.
 #
 # ## Fixed-point (Picard) iteration
 #
@@ -54,14 +54,14 @@ nothing # hide
 # the values in it do, so it is allocated once with [`allocate_system_matrix`](@ref) and refilled
 # with [`assemble!`](@ref) rather than rebuilt with `assemble` every step. `αvals` is a plain
 # [`VectorElement`](@ref) the form closes over, not a fresh vector computed each time: mutating
-# it in place (`αvals .= α.(M₋ₕ(uₙ))`) is what `assemble!` picks up on the next refill, the same
+# it in place (`αvals .= α.(Mₕ(uₙ))`) is what `assemble!` picks up on the next refill, the same
 # "live coefficient" the [forms tutorial](../tutorials/form.md#Live-grid-coefficients-and-dynamic-scalars)
 # relies on:
 
 uₙ = element(Wₕ, 0.0)
 αvals = element(Wₕ)
-αvals .= α.(M₋ₕ(uₙ))
-a = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals * ∇₋ₕ(U), ∇₋ₕ(V)))
+αvals .= α.(Mₕ(uₙ))
+a = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals * ∇ₕ(U), ∇ₕ(V)))
 A = allocate_system_matrix(a)
 
 picard_steps = Float64[]
@@ -71,7 +71,7 @@ for it in 1:200
     step = maximum(abs, unew .- parent(uₙ))
     push!(picard_steps, step)
     uₙ .= unew
-    αvals .= α.(M₋ₕ(uₙ))
+    αvals .= α.(Mₕ(uₙ))
     step < 1e-12 && break
 end
 length(picard_steps), picard_steps[[1, 2, 3, end]]
@@ -118,8 +118,8 @@ const sparse_ad = AutoSparse(AutoForwardDiff();
     coloring_algorithm = SparseMatrixColorings.GreedyColoringAlgorithm())
 
 function diffusion_matrix(uₕ)
-    αvals_local = α.(M₋ₕ(uₕ))
-    a = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals_local * ∇₋ₕ(U), ∇₋ₕ(V)))
+    αvals_local = α.(Mₕ(uₕ))
+    a = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals_local * ∇ₕ(U), ∇ₕ(V)))
     return assemble(a; dirichlet = :boundary)
 end
 
@@ -184,15 +184,15 @@ norm₁ₕ(uₕ_newton .- uexact), norm₁ₕ(uₙ .- uexact)
 # [`type_cached_assemble!`](@ref) gives that pattern a place to live per type it is ever reached
 # at, instead of rebuilding it from nothing every time. `build_diffusion` is named and defined
 # once, the same reason `a` above is built once outside the Picard loop rather than inside it;
-# `refill!` reaches for `M₋ₓ!` rather than `M₋ₕ`, which would allocate a fresh result
+# `refill!` reaches for `Mₓ!` rather than `Mₕ`, which would allocate a fresh result
 # every call and reintroduce exactly the cost this is meant to stop paying:
 
 function build_diffusion(uₕ)
     Mu = element(Wₕ, eltype(uₕ))
     αvals = element(Wₕ, eltype(uₕ))
-    a = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals * ∇₋ₕ(U), ∇₋ₕ(V)))
+    a = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals * ∇ₕ(U), ∇ₕ(V)))
     refill!(uₕ) = begin
-        M₋ₓ!(Mu, uₕ)
+        Mₓ!(Mu, uₕ)
         αvals .= α.(Mu)
     end
     return a, refill!
@@ -249,16 +249,16 @@ newton_residuals_cached, maximum(abs.(u_cached .- u))
 # from [`allocate_system_matrix`](@ref), whose own sparsity is already known directly from
 # `a`'s AST — no tracing needed for that part at all. The only piece missing from `A`'s own
 # pattern is the extra chain-rule term from `αvals_local`'s own dependence on `u` through
-# `M₋ₕ`. [`jacobian_pattern`](@ref) supplies exactly that piece — named the same way the
-# coefficient itself was built, `U -> M₋ₕ(U)` — and hands the result to
+# `Mₕ`. [`jacobian_pattern`](@ref) supplies exactly that piece — named the same way the
+# coefficient itself was built, `U -> Mₕ(U)` — and hands the result to
 # [`ADTypes.KnownJacobianSparsityDetector`](https://github.com/SciML/ADTypes.jl) in place of
 # the tracer:
 
 using ADTypes: KnownJacobianSparsityDetector
 
-αvals_pattern = α.(M₋ₕ(element(Wₕ, 0.0)))
-a_for_pattern = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals_pattern * ∇₋ₕ(U), ∇₋ₕ(V)))
-pattern = jacobian_pattern(a_for_pattern, U -> M₋ₕ(U))
+αvals_pattern = α.(Mₕ(element(Wₕ, 0.0)))
+a_for_pattern = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals_pattern * ∇ₕ(U), ∇ₕ(V)))
+pattern = jacobian_pattern(a_for_pattern, U -> Mₕ(U))
 
 sparse_ad_manual = AutoSparse(AutoForwardDiff();
     sparsity_detector = KnownJacobianSparsityDetector(pattern),
@@ -272,7 +272,7 @@ nothing # hide
 # it desugars to:
 
 native_ad = AutoSparse(AutoForwardDiff();
-    sparsity_detector = ast_sparsity_detector(a_for_pattern, U -> M₋ₕ(U)),
+    sparsity_detector = ast_sparsity_detector(a_for_pattern, U -> Mₕ(U)),
     coloring_algorithm = SparseMatrixColorings.GreedyColoringAlgorithm())
 nothing # hide
 
@@ -367,13 +367,13 @@ end                                                                             
 
 function run_picard()
     uₙ .= 0.0
-    αvals .= α.(M₋ₕ(uₙ))
+    αvals .= α.(Mₕ(uₙ))
     for it in 1:200
         assemble!(A, a; dirichlet = :boundary)
         unew = A \ F
         step = maximum(abs, unew .- parent(uₙ))
         uₙ .= unew
-        αvals .= α.(M₋ₕ(uₙ))
+        αvals .= α.(Mₕ(uₙ))
         step < 1e-12 && break
     end
     return parent(uₙ)
@@ -439,10 +439,10 @@ function nonlinear_series(D::Int; n0::Int = 5, levels::Int) # hide
         l_c = form(Wc, v -> innerₕ(g_c, v)) # hide
         F_c = assemble(l_c; dirichlet = bcs_c) # hide
         Ac(uₕ) = begin # hide
-            Mu = M₋ₕ(uₕ) # hide
+            Mu = Mₕ(uₕ) # hide
             αv = D == 1 ? α.(Mu) : ntuple(i -> α.(Mu[i]), D) # hide
-            grad(U) = D == 1 ? αv * ∇₋ₕ(U) : ntuple(i -> αv[i] * ∇₋ₕ(U)[i], D) # hide
-            assemble(form(Wc, Wc, (U, V) -> inner₊(grad(U), ∇₋ₕ(V))); # hide
+            grad(U) = D == 1 ? αv * ∇ₕ(U) : ntuple(i -> αv[i] * ∇ₕ(U)[i], D) # hide
+            assemble(form(Wc, Wc, (U, V) -> inner₊(grad(U), ∇ₕ(V))); # hide
                 dirichlet = :boundary) # hide
         end # hide
         rc(uv::AbstractVector{T}) where {T} = begin # hide
@@ -500,9 +500,9 @@ convergence_plot([(hs1, errs1, "1D", "#5B5FC7"), (hs2, errs2, "2D", "#0E7C86"), 
 # many solves it takes to reach a given ``u``, not the discretization's own accuracy once it has.
 #
 # `nonlinear_series` above uses `sparse_ad`, the tracer, at every level and dimension — the
-# same substitution shown earlier (`ast_sparsity_detector(a, U -> M₋ₕ(U))` in place of
+# same substitution shown earlier (`ast_sparsity_detector(a, U -> Mₕ(U))` in place of
 # `sparse_ad`'s `sparsity_detector`) works here unchanged, `D`-tuple coefficient and all:
-# `jacobian_pattern` flattens whatever `M₋ₕ(U)` returns — one node in 1D, a `D`-tuple in
+# `jacobian_pattern` flattens whatever `Mₕ(U)` returns — one node in 1D, a `D`-tuple in
 # 2D/3D — the same way before taking its reach, so nothing about `Ac`/`grad` above needs to
 # change to swap it in. Not re-run a second time here only to save the doc build the cost of
 # solving the same nine problems twice for an answer already shown identical above.

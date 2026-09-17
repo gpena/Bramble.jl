@@ -41,7 +41,7 @@ using Bramble
 Wₕ = gridspace(Ωₕ)
 I = interval(0.0, 0.5)
 fₕ = Rₕ(Wₕ, x -> 0.0)
-a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
 l = form(Wₕ, v -> innerₕ(fₕ, v))
 bcs = dirichlet_constraints(Ωₕ, I, :boundary => (x, t, β) -> β[1] * t)
 sd = semidiscretize(a, l; dirichlet = bcs)

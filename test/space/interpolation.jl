@@ -147,7 +147,7 @@ using Bramble
 
         dest = πₕ(Wbig, src)
         dx = D₋ₓ(dest)
-        mx = M₋ₓ(dest)
+        mx = Mₓ(dest)
         @test space(dx) === Wbig
         @test space(mx) === Wbig
         @test all(isfinite, parent(dx))

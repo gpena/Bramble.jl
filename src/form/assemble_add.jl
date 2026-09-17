@@ -86,7 +86,7 @@ constrain once, last.
 θ = Ref(1.0)
 
 # For the pattern alone: never assembled itself, just wide enough for both pieces.
-wide_form = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+wide_form = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
 A = allocate_system_matrix(wide_form)
 
 for step in 1:nsteps

@@ -38,11 +38,11 @@ time, which is exactly the cost this function exists to avoid paying more than o
 
 ```julia
 function build_diffusion(uₕ)
-    Mu = element(Wₕ, eltype(uₕ))     # scratch for M₋ₓ!'s own output
+    Mu = element(Wₕ, eltype(uₕ))     # scratch for Mₓ!'s own output
     αvals = element(Wₕ, eltype(uₕ))
-    a = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals * ∇₋ₕ(U), ∇₋ₕ(V)))
+    a = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals * ∇ₕ(U), ∇ₕ(V)))
     refill!(uₕ) = begin
-        M₋ₓ!(Mu, uₕ)          # in place: `M₋ₓ(uₕ)` alone would allocate a fresh result
+        Mₓ!(Mu, uₕ)          # in place: `Mₓ(uₕ)` alone would allocate a fresh result
         αvals .= α.(Mu)
     end
     return a, refill!
@@ -53,11 +53,11 @@ diffusion_matrix(uₕ) = type_cached_assemble!(
     build_diffusion, cache, uₕ; dirichlet = :boundary)
 ```
 
-`refill!` reaches for `M₋ₓ!` rather than the non-mutating `M₋ₓ`/`M₋ₕ` deliberately: the
+`refill!` reaches for `Mₓ!` rather than the non-mutating `Mₓ`/`Mₕ` deliberately: the
 latter allocates a fresh result every call (the same `similar`-based cost every allocating
 stencil operator has), which would silently reintroduce an O(n) allocation this function's
-whole point is to stop paying repeatedly. `M₋ₓ!` alone covers the 1D case above; a
-D-dimensional coefficient needs one scratch buffer and one `M₋ₓ!`/`M₋ᵧ!`/`M₋₂!` call per
+whole point is to stop paying repeatedly. `Mₓ!` alone covers the 1D case above; a
+D-dimensional coefficient needs one scratch buffer and one `Mₓ!`/`Mᵧ!`/`M₂!` call per
 direction, the same way `poisson_nonlinear.jl`'s own `nonlinear_series` builds a
 D-dimensional coefficient tuple.
 

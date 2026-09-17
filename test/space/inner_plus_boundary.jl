@@ -70,7 +70,7 @@ using LinearAlgebra: Symmetric, eigvals, isposdef
     @testset "The staggered Neumann Laplacian has a 1D kernel and no zero rows" begin
         function check(Ωₕ, D)
             Wₕ = gridspace(Ωₕ)
-            a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+            a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
             A = Matrix(assemble(a))
             ev = eigvals(Symmetric(A))
             kernel_dim = count(x -> abs(x) < 1e-8 * maximum(abs, ev), ev)
@@ -111,7 +111,7 @@ using LinearAlgebra: Symmetric, eigvals, isposdef
         function solve_neumann(n)
             Ωₕ = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (n, n), (true, true))
             Wₕ = gridspace(Ωₕ)
-            a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+            a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
             l = form(Wₕ, v -> innerₕ(Rₕ(Wₕ, src), v))
             A = assemble(a)
             F = assemble(l)

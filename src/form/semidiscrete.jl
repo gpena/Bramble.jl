@@ -15,7 +15,7 @@ M \\frac{\\mathrm{d} u_h}{\\mathrm{d} t} = F(t) - A u_h,
 
 where `A` is `a` assembled, `F(t)` is `l` assembled at time `t`, and `M` is the mass matrix
 of the discrete inner product. Writing `a` the way the steady problem is written -- positive
-definite, as in `inner₊(∇₋ₕ(u), ∇₋ₕ(v))` -- makes the steady state of this system the
+definite, as in `inner₊(∇ₕ(u), ∇ₕ(v))` -- makes the steady state of this system the
 solution of `A u = F`, which is the sign convention every example here already uses.
 
 ## Dirichlet conditions are algebraic constraints, not eliminated rows
@@ -145,7 +145,7 @@ Wₕ = gridspace(Ωₕ)
 I = interval(0.0, 1.0)
 
 fₕ = Rₕ(Wₕ, x -> 1.0)
-a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
 l = form(Wₕ, v -> innerₕ(fₕ, v))
 bcs = dirichlet_constraints(Ωₕ, I, :boundary => (x, t) -> 0.0)
 
@@ -226,7 +226,7 @@ operator exists specifically to be rebuilt at every step.
 ```julia
 function build_diffusion_operator(t)
     αₕ = element(Wₕ, typeof(t))
-    a = form(Wₕ, Wₕ, (u, v) -> inner₊(αₕ * ∇₋ₕ(u), ∇₋ₕ(v)))
+    a = form(Wₕ, Wₕ, (u, v) -> inner₊(αₕ * ∇ₕ(u), ∇ₕ(v)))
     refill!(t) = (Rₕ!(αₕ, x -> α(x, t)); nothing)
     return a, refill!
 end

@@ -172,7 +172,7 @@ methods that dispatch tells apart by what they are given rather than by differen
   building block both are written in terms of, and [`interpolation_matrix`](@ref) is the same
   interpolant as a sparse matrix rather than applied pointwise.
 - `πₕ(uₕ)` — the **symbolic source**, wrapping a grid function's interpolant as an AST leaf,
-  composable with [`D₋ₓ`](@ref)/[`M₋ₓ`](@ref)/... inside [`innerₕ`](@ref). For the *known*
+  composable with [`D₋ₓ`](@ref)/[`Mₓ`](@ref)/... inside [`innerₕ`](@ref). For the *known*
   side of a linear form.
 
 See the [operators tutorial](tutorials/operators.md) for the numeric side and the pattern
@@ -218,7 +218,7 @@ D₋ᵧ
 D₋ᵧ!
 D₋₂
 D₋₂!
-∇₋ₕ
+∇ₕ
 D₊ₓ
 D₊ₓ!
 D₊ᵧ
@@ -230,17 +230,17 @@ D₊₂!
 
 The forward difference over the averaged spacing, which is the one that satisfies
 the discrete summation-by-parts identity
-``(\textrm{Dstar}_{+x} u_h, v_h)_h = -(u_h, D_{-x} v_h)_{+x}`` for grid functions
+``(\overset{\times}{\textrm{D}}_{+x} u_h, v_h)_h = -(u_h, D_{-x} v_h)_{+x}`` for grid functions
 `vₕ` vanishing on the boundary.
 
 ```@docs
-Dstar₊ₓ
-Dstar₊ₓ!
-Dstar₊ᵧ
-Dstar₊ᵧ!
-Dstar₊₂
-Dstar₊₂!
-Dstar₊ₕ
+D̽ₓ
+D̽ₓ!
+D̽ᵧ
+D̽ᵧ!
+D̽₂
+D̽₂!
+D̽ₕ
 ```
 
 The centered difference, over the span its stencil covers. It reproduces the derivative
@@ -268,7 +268,7 @@ Dₕᵧ
 Dₕᵧ!
 Dₕ₂
 Dₕ₂!
-∇ₕ
+Dₕ
 ```
 
 Jumps across an interface, ``\llbracket u \rrbracket = u_{i+1} - u_i``. There is one
@@ -288,13 +288,13 @@ jumpₕ
 Averages of a point with its neighbour.
 
 ```@docs
-M₋ₓ
-M₋ₓ!
-M₋ᵧ
-M₋ᵧ!
-M₋₂
-M₋₂!
-M₋ₕ
+Mₓ
+Mₓ!
+Mᵧ
+Mᵧ!
+M₂
+M₂!
+Mₕ
 M₊ₓ
 M₊ₓ!
 M₊ᵧ

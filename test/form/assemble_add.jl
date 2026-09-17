@@ -33,8 +33,8 @@ _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
             @testset "$lbl" begin
                 Wₕ = gridspace(Ωₕ)
                 m_form = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
-                k_form = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
-                wide = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+                k_form = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+                wide = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
 
                 A = allocate_system_matrix(wide)
                 fill!(nonzeros(A), 0.0)
@@ -51,8 +51,8 @@ _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (11, 13), (true, true))
         Wₕ = gridspace(Ωₕ)
         m_form = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
-        k_form = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
-        wide = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+        k_form = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+        wide = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
         M = Matrix(assemble(m_form))
         K = Matrix(assemble(k_form))
 
@@ -85,8 +85,8 @@ _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
             Ωₕ = mesh(domain(interval(0.0, 1.0)), 31, true)
             Wₕ = gridspace(Ωₕ)
             m_form = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
-            k_form = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
-            wide = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+            k_form = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+            wide = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
             A = allocate_system_matrix(wide)
             θ = Ref(2.0)
 
@@ -109,9 +109,9 @@ _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
         W = Wₕ × Wₕ
 
         a1 = form(W, W, (u, v) -> innerₕ(u(1), v(1)))
-        a2 = form(W, W, (u, v) -> inner₊(∇₋ₕ(u(2)), ∇₋ₕ(v(2))))
+        a2 = form(W, W, (u, v) -> inner₊(∇ₕ(u(2)), ∇ₕ(v(2))))
         wide = form(
-            W, W, (u, v) -> innerₕ(u(1), v(1)) + inner₊(∇₋ₕ(u(2)), ∇₋ₕ(v(2)))
+            W, W, (u, v) -> innerₕ(u(1), v(1)) + inner₊(∇ₕ(u(2)), ∇ₕ(v(2)))
         )
 
         A = allocate_system_matrix(wide)
@@ -127,7 +127,7 @@ _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 21, true)
         Wₕ = gridspace(Ωₕ)
         narrow_form = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))  # diagonal-only pattern
-        wide_form = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))  # off-diagonal too
+        wide_form = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))  # off-diagonal too
 
         A = allocate_system_matrix(narrow_form)
         @test_throws ArgumentError assemble_add!(A, wide_form)
@@ -148,10 +148,10 @@ _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
 
         m_form = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
         m_par = form(W_par, W_par, (u, v) -> innerₕ(u, v))
-        k_form = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
-        k_par = form(W_par, W_par, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+        k_form = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+        k_par = form(W_par, W_par, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
         wide_par = form(
-            W_par, W_par, (u, v) -> innerₕ(u, v) + inner₊(∇₋ₕ(u), ∇₋ₕ(v))
+            W_par, W_par, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))
         )
 
         Aref = Matrix(assemble(m_form)) .+ 2.0 .* Matrix(assemble(k_form))

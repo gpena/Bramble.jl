@@ -24,7 +24,7 @@ using ILUZero
 function spd_system(n)
     Ωₕ = mesh(Ωd, (n, n), (true, true))
     Wₕ = gridspace(Ωₕ)
-    a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+    a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
     fₕ = element(Wₕ)
     avgₕ!(fₕ, x -> exp(x[1] + x[2]))
     l = form(Wₕ, v -> innerₕ(fₕ, v))
@@ -69,7 +69,7 @@ holds, while AMG's memory stays `O(N)`.
 ## 2. Unsymmetric, convection-dominated systems
 
 Adding advection to the same operator breaks the symmetry AMG's hierarchy relies on. The
-convective term below, `inner₊(M₋ₕ(u), ∇₋ₕ(v))`, is the same SBP-staggered discretization the
+convective term below, `inner₊(Mₕ(u), ∇ₕ(v))`, is the same SBP-staggered discretization the
 [convection-diffusion tutorial](../examples/convection_diffusion_linear.md) uses -- not a bare
 forward difference, which is unstable for a positive advection direction and produces a
 matrix so far from diagonally dominant that even ILU(0) breaks down on it.
@@ -78,7 +78,7 @@ matrix so far from diagonally dominant that even ILU(0) breaks down on it.
 function convection_diffusion_system(n; eps = 1.0e-2)
     Ωₕ = mesh(Ωd, (n, n), (true, true))
     Wₕ = gridspace(Ωₕ)
-    a = form(Wₕ, Wₕ, (u, v) -> eps * inner₊(∇₋ₕ(u), ∇₋ₕ(v)) + inner₊(M₋ₕ(u), ∇₋ₕ(v)))
+    a = form(Wₕ, Wₕ, (u, v) -> eps * inner₊(∇ₕ(u), ∇ₕ(v)) + inner₊(Mₕ(u), ∇ₕ(v)))
     fₕ = element(Wₕ)
     avgₕ!(fₕ, x -> exp(x[1] + x[2]))
     l = form(Wₕ, v -> innerₕ(fₕ, v))
@@ -147,7 +147,7 @@ n = 40
 Ωₕ = mesh(Ωd, (n, n), (true, true))
 Wₕ = gridspace(Ωₕ)
 M = assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v)))
-K = assemble(form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v))))
+K = assemble(form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v))))
 dt = 0.01
 nsteps = 15
 c(t) = 1.0 + 0.5 * sin(4t)   # always positive, so A(t) stays SPD

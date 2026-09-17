@@ -378,7 +378,7 @@ interpolant itself); the same name, told apart by dispatch rather than a differe
   <rect x="230" y="45" width="190" height="80" rx="8" fill="none" stroke="#8b5cf6" stroke-width="1.5"/>
   <text x="325" y="70" font-size="12" font-weight="bold" fill="#8b5cf6" text-anchor="middle">πₕ(u(2))</text>
   <text x="325" y="88" font-size="11" fill="currentColor" opacity="0.75" text-anchor="middle">a SourceFunction:</text>
-  <text x="325" y="103" font-size="11" fill="currentColor" opacity="0.75" text-anchor="middle">composes with D₋ₓ, M₋ₓ, ...</text>
+  <text x="325" y="103" font-size="11" fill="currentColor" opacity="0.75" text-anchor="middle">composes with D₋ₓ, Mₓ, ...</text>
 
   <path d="M 425 85 L 475 85" stroke="currentColor" stroke-width="2" marker-end="url(#arrowFlow)"/>
 
@@ -391,7 +391,7 @@ interpolant itself); the same name, told apart by dispatch rather than a differe
 ```
 
 `πₕ(uₕ)` reads exactly like any other source: it is one, an AST leaf wrapping
-`x -> interpolate_at(uₕ, x)`, so it composes with `D₋ₓ`, `M₋ₓ`, and the rest the same way
+`x -> interpolate_at(uₕ, x)`, so it composes with `D₋ₓ`, `Mₓ`, and the rest the same way
 `sin`, a `VectorElement`, or any other source does, and can sit on the left of `innerₕ`
 inside a coupled form:
 
@@ -552,7 +552,7 @@ A zero-scaled term leaves nothing behind, which is what lets a coefficient switc
 without a branch around the form:
 
 ```@example forms
-a_off = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + 0 * inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+a_off = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + 0 * inner₊(∇ₕ(u), ∇ₕ(v)))
 
 Matrix(assemble(a_off)) ≈ Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))))
 ```

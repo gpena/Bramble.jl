@@ -9,7 +9,7 @@
 
 The interpolant of `uₕ`, as a symbolic source term; usable anywhere a source is, including
 inside another operator: `innerₕ(D₋ₓ(πₕ(uₕ)), D₋ₓ(v))` differentiates the interpolated field
-the same way `D₋ₓ` differentiates any other source, `innerₕ(M₋ₓ(πₕ(uₕ)), v)` averages it,
+the same way `D₋ₓ` differentiates any other source, `innerₕ(Mₓ(πₕ(uₕ)), v)` averages it,
 and so on. This enables a coupled form to evaluate a leaf's grid function on a different
 leaf's mesh.
 

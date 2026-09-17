@@ -66,9 +66,9 @@ function _composite_residual_problem(n = 5)
         a = form(
             Vₕ,
             Vₕ,
-            (p, q) -> inner₊(∇₋ₕ(p(1)), ∇₋ₕ(q(1))) + innerₕ(p(1), q(1)) +
+            (p, q) -> inner₊(∇ₕ(p(1)), ∇ₕ(q(1))) + innerₕ(p(1), q(1)) +
                       innerₕ(v_c * p(1), q(1)) +
-                      inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2))) + innerₕ(p(2), q(2)) -
+                      inner₊(∇ₕ(p(2)), ∇ₕ(q(2))) + innerₕ(p(2), q(2)) -
                       innerₕ(u_c * p(2), q(2))
         )
         assemble(a; dirichlet = :boundary)
@@ -85,9 +85,9 @@ function _composite_residual_problem(n = 5)
     a_for_pattern = form(
         Vₕ,
         Vₕ,
-        (p, q) -> inner₊(∇₋ₕ(p(1)), ∇₋ₕ(q(1))) + innerₕ(p(1), q(1)) +
+        (p, q) -> inner₊(∇ₕ(p(1)), ∇ₕ(q(1))) + innerₕ(p(1), q(1)) +
                   innerₕ(v_c0 * p(1), q(1)) +
-                  inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2))) + innerₕ(p(2), q(2)) -
+                  inner₊(∇ₕ(p(2)), ∇ₕ(q(2))) + innerₕ(p(2), q(2)) -
                   innerₕ(u_c0 * p(2), q(2))
     )
     return residual, a_for_pattern, ndofs(Vₕ)
@@ -99,7 +99,7 @@ end
 
         @testset "scalar" begin
             residual, a_for_pattern, n = _scalar_residual_problem()
-            pattern = jacobian_pattern(a_for_pattern, U -> M₋ₕ(U))
+            pattern = jacobian_pattern(a_for_pattern, U -> Mₕ(U))
             for _ in 1:3
                 J = ForwardDiff.jacobian(residual, rand(n))
                 @test all(iszero(J[i, j]) || pattern[i, j] for i in axes(J, 1), j in axes(J, 2))

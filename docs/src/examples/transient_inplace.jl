@@ -38,7 +38,7 @@ uexact(x, t) = exp(-t) * sinpi(x[1])
 Wₕ = gridspace(Ωₕ)
 
 m = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
-k = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+k = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
 
 # ## The two operators, built once
 #
@@ -49,7 +49,7 @@ k = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
 
 Δt = 1 / 200
 
-pattern = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+pattern = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
 A = allocate_system_matrix(pattern)
 B = similar(A)
 

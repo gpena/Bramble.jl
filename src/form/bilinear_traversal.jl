@@ -585,7 +585,7 @@ end
 #
 # So `sparse!` does identical work and the traversal itself is about 10% slower, on forms
 # whose stencils carry several distinct offset pairs per point; `innerₕ(u, v)` came out
-# faster and `inner₊(∇₋ₕ(u), ∇₋ₕ(v))` unchanged. The enclosing function's LLVM is
+# faster and `inner₊(∇ₕ(u), ∇ₕ(v))` unchanged. The enclosing function's LLVM is
 # near-identical, so the difference is a codegen subtlety that was not localised further.
 #
 # Accepted deliberately. `allocate_system_matrix` runs once per form, and the per-refill

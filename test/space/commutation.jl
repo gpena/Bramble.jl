@@ -35,10 +35,10 @@ using Supposition
         ("D₋ₓ", D₋ₓ, "D₊ᵧ", D₊ᵧ),
         ("Dcₓ", Dcₓ, "Dcᵧ", Dcᵧ),
         ("Dₕₓ", Dₕₓ, "Dₕᵧ", Dₕᵧ),
-        ("Dstar₊ₓ", Dstar₊ₓ, "D₋ᵧ", D₋ᵧ),
+        ("D̽ₓ", D̽ₓ, "D₋ᵧ", D₋ᵧ),
         ("Dcₓ", Dcₓ, "Dₕᵧ", Dₕᵧ),
-        ("M₋ₓ", M₋ₓ, "D₋ᵧ", D₋ᵧ),
-        ("M₊ₓ", M₊ₓ, "M₋ᵧ", M₋ᵧ),
+        ("Mₓ", Mₓ, "D₋ᵧ", D₋ᵧ),
+        ("M₊ₓ", M₊ₓ, "Mᵧ", Mᵧ),
         ("diff₋ₓ", diff₋ₓ, "diff₊ᵧ", diff₊ᵧ),
         ("jumpₓ", jumpₓ, "jumpᵧ", jumpᵧ)
     )
@@ -99,7 +99,7 @@ using Supposition
         Vₕ = gridspace(Ωₕ, Val(3))
         cₕ = Rₕ(Vₕ, (x -> x[1] * x[2], x -> sin(x[1]), x -> exp(x[2])))
 
-        for (op1, op2) in ((D₋ₓ, D₋ᵧ), (Dcₓ, Dcᵧ), (Dₕₓ, Dₕᵧ), (M₋ₓ, D₊ᵧ))
+        for (op1, op2) in ((D₋ₓ, D₋ᵧ), (Dcₓ, Dcᵧ), (Dₕₓ, Dₕᵧ), (Mₓ, D₊ᵧ))
             @test parent(op1(op2(cₕ))) ≈ parent(op2(op1(cₕ)))
         end
     end
@@ -163,7 +163,7 @@ using Supposition
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 17, false)
         uₕ = Rₕ(gridspace(Ωₕ), x -> exp(x) + x^3)
 
-        @test !isapprox(parent(D₋ₓ(M₋ₓ(uₕ))), parent(M₋ₓ(D₊ₓ(uₕ))))
+        @test !isapprox(parent(D₋ₓ(Mₓ(uₕ))), parent(Mₓ(D₊ₓ(uₕ))))
         @test !isapprox(parent(Dcₓ(D₋ₓ(uₕ))), parent(Dₕₓ(D₋ₓ(uₕ))))
     end
 end

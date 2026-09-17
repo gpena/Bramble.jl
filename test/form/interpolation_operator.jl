@@ -71,7 +71,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         Wt = gridspace(mesh(Ω, 11, true))      # test space: the mesh integrated over
         Ws = gridspace(mesh(Ω, 7, true))       # source space: where the unknown lives
         P = interpolation_matrix(Wt, Ws)
-        Dx, Mx = D₋ₓ(Wt), M₋ₓ(Wt)
+        Dx, Mx = D₋ₓ(Wt), Mₓ(Wt)
         # `Hₕ · P`, the cross-mesh mass matrix: the term interpolation on trial spaces exists for
         A = assemble(form(Ws, Wt, (u, v) -> innerₕ(πₕ(Ws, u), v)))
         @test size(A) == (ndofs(Wt), ndofs(Ws))
@@ -84,7 +84,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         @test A ≈ Dx' * Hp(Wt, 1) * Dx * P
 
         # the average, whose mask is ½ rather than 1/h: a different weight over the same shift
-        A = assemble(form(Ws, Wt, (u, v) -> inner₊ₓ(M₋ₓ(πₕ(Ws, u)), v)))
+        A = assemble(form(Ws, Wt, (u, v) -> inner₊ₓ(Mₓ(πₕ(Ws, u)), v)))
         @test A ≈ Hp(Wt, 1) * Mx * P
 
         # `D₊ₓ`, which shifts the other way
@@ -277,7 +277,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         # is a different operator from `D₋ₓ(πₕ(…))` and is not implemented; refused rather
         # than quietly treated as the one that is
         @test_throws ArgumentError πₕ(Ws, D₋ₓ(TrialFunction{1}()))
-        @test_throws ArgumentError πₕ(Ws, M₋ₓ(TrialFunction{1}()))
+        @test_throws ArgumentError πₕ(Ws, Mₓ(TrialFunction{1}()))
         # and the test function has nothing to interpolate: the rows are the mesh being
         # integrated over, so interpolating them is not a thing to ask for
         @test_throws ArgumentError πₕ(Ws, TestFunction{1}())
@@ -380,7 +380,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         # tower of wrappers. Not "does an interpolation appear anywhere" (see the mixed-sum
         # testset below for why that distinction is the whole ballgame).
         @test _all_trial_interpolated(node)
-        @test _all_trial_interpolated(D₋ₓ(M₋ₓ(node)))
+        @test _all_trial_interpolated(D₋ₓ(Mₓ(node)))
         @test _all_trial_interpolated(2.0 * node)
         @test _all_trial_interpolated(node + node)
         @test _all_trial_interpolated(innerₕ(node, v))
@@ -406,7 +406,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         @test _check_interp_spaces(D₋ₓ(node), Ws) === nothing
         @test _check_interp_spaces(u, Ws) === nothing
         @test_throws ArgumentError _check_interp_spaces(node, Wt)
-        @test_throws ArgumentError _check_interp_spaces(D₋ₓ(M₋ₓ(node)), Wt)
+        @test_throws ArgumentError _check_interp_spaces(D₋ₓ(Mₓ(node)), Wt)
         @test_throws ArgumentError _check_interp_spaces(πₕ(Wt, u) + node, Ws)
         @test_throws ArgumentError _check_interp_spaces(node + πₕ(Wt, u), Ws)
 
@@ -414,7 +414,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         @test stencil_shift_trait(node) isa PointDependentStencil
         @test stencil_shift_trait(D₋ₓ(node)) isa PointDependentStencil
         @test stencil_shift_trait(u) isa TranslationInvariantStencil
-        @test stencil_shift_trait(D₋ₓ(M₋ₓ(u))) isa TranslationInvariantStencil
+        @test stencil_shift_trait(D₋ₓ(Mₓ(u))) isa TranslationInvariantStencil
         @test stencil_shift_trait(u + node) isa PointDependentStencil
         @test stencil_shift_trait(u + D₋ₓ(u)) isa TranslationInvariantStencil
 
@@ -424,7 +424,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         Ωₕ = mesh(Wt)
         mk = markers(Ωₕ)
         I = CartesianIndex(5)
-        for op in (u, D₋ₓ(u), M₋ₓ(D₊ₓ(u)), 2.0 * u)
+        for op in (u, D₋ₓ(u), Mₓ(D₊ₓ(u)), 2.0 * u)
             inner = local_stencil(op, Wt, I, mk, 5)
             for δ in (Val(-1), Val(1), 2)
                 @test shifted_inner_stencil(op, inner, Wt, I, mk, Val(1), δ) ==
@@ -474,7 +474,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
             for f in (
                 (u, v) -> innerₕ(πₕ(Ws, u), v),
                 (u, v) -> inner₊ₓ(D₋ₓ(πₕ(Ws, u)), D₋ₓ(v)),
-                (u, v) -> innerₕ(M₋ₓ(πₕ(Ws, u)), v)
+                (u, v) -> innerₕ(Mₓ(πₕ(Ws, u)), v)
             )
                 @test eltype(assemble(form(Ws, Wt, f))) === T
             end

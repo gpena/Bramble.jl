@@ -72,7 +72,7 @@ u_exact(x) = exp(x[1] + x[2])
 rhs(x) = -2 * u_exact(x)
 
 # 3. Bilinear form (discrete Laplacian) and matrix assembly
-a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
 A = assemble(a; dirichlet = :boundary)
 
 # 4. Linear form (source term) and Dirichlet boundary conditions
@@ -104,8 +104,8 @@ Vₕ = Wₕ^Val(2)
 
 # Coupled bilinear form accessing components directly
 a = form(Vₕ, Vₕ, (p, q) ->
-    inner₊(∇₋ₕ(p(1)), ∇₋ₕ(q(1))) + innerₕ(p(1), q(1)) +
-    inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2))) + innerₕ(p(2), q(2))
+    inner₊(∇ₕ(p(1)), ∇ₕ(q(1))) + innerₕ(p(1), q(1)) +
+    inner₊(∇ₕ(p(2)), ∇ₕ(q(2))) + innerₕ(p(2), q(2))
 )
 
 A = assemble(a; dirichlet = :boundary)

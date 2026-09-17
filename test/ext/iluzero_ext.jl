@@ -22,7 +22,7 @@ using LinearAlgebra: ldiv!, norm, issymmetric
 # Diffusion `1e-2` against unit advection in both directions -- the convection-dominated
 # regime gpena/Bramble.jl#244 measured (90x90 grid, diffusion 1e-2, unit advection): far from
 # an M-matrix, exactly where classical AMG stops converging and ILU(0) does not. The
-# convective term is `inner₊(M₋ₕ(u), ∇₋ₕ(v))`, the same SBP-staggered discretization
+# convective term is `inner₊(Mₕ(u), ∇ₕ(v))`, the same SBP-staggered discretization
 # `docs/src/examples/convection_diffusion_linear.jl` uses, not a bare forward difference: an
 # unstable (downwind) discretization of the advection term leaves the assembled matrix so far
 # from diagonally dominant that ILU(0) itself breaks down (a one-shot application inflated a
@@ -32,7 +32,7 @@ function _convection_diffusion_2d(n; eps = 1.0e-2)
     Ωd = Bramble.domain(Bramble.interval(0.0, 1.0) × Bramble.interval(0.0, 1.0))
     Ωₕ = Bramble.mesh(Ωd, (n, n), (true, true))
     Wₕ = gridspace(Ωₕ)
-    a = form(Wₕ, Wₕ, (u, v) -> eps * inner₊(∇₋ₕ(u), ∇₋ₕ(v)) + inner₊(M₋ₕ(u), ∇₋ₕ(v)))
+    a = form(Wₕ, Wₕ, (u, v) -> eps * inner₊(∇ₕ(u), ∇ₕ(v)) + inner₊(Mₕ(u), ∇ₕ(v)))
     fₕ = Bramble.element(Wₕ)
     # `exp(x + y)` as the source density: broadband spectral content, the same reasoning
     # test/ext/algebraicmultigrid_ext.jl gives for its own right-hand side -- not a

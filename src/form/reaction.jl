@@ -119,7 +119,7 @@ Wₕ = gridspace(Ωₕ)
 sol(x) = sin(pi * x[1])
 src(x) = pi^2 * sin(pi * x[1])
 
-a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
 l = form(Wₕ, v -> innerₕ(Rₕ(Wₕ, src), v))
 A, F = assemble(a, l; dirichlet = :boundary => sol)
 

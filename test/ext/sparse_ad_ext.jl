@@ -40,8 +40,8 @@ function nonlinear_diffusion_problem(n)
     F = assemble(l; dirichlet = bcs)
 
     function diffusion_form(uₕ)
-        αv = α.(M₋ₕ(uₕ))
-        return form(Wₕ, Wₕ, (U, V) -> inner₊(αv * ∇₋ₕ(U), ∇₋ₕ(V)))
+        αv = α.(Mₕ(uₕ))
+        return form(Wₕ, Wₕ, (U, V) -> inner₊(αv * ∇ₕ(U), ∇ₕ(V)))
     end
 
     function residual(u_vec::AbstractVector{T}) where {T}
@@ -57,7 +57,7 @@ end
 @testset "BrambleSparseADExt" begin
     prob = nonlinear_diffusion_problem(20)
     Wₕ, residual, a = prob.Wₕ, prob.residual, prob.a
-    detector = ast_sparsity_detector(a, U -> M₋ₕ(U))
+    detector = ast_sparsity_detector(a, U -> Mₕ(U))
 
     @testset "isa AbstractSparsityDetector" begin
         @test detector isa ADTypes.AbstractSparsityDetector
@@ -66,7 +66,7 @@ end
     @testset "matches jacobian_pattern directly" begin
         u_probe = zeros(ndofs(Wₕ))
         @test ADTypes.jacobian_sparsity(residual, u_probe, detector) ==
-              jacobian_pattern(a, U -> M₋ₕ(U))
+              jacobian_pattern(a, U -> Mₕ(U))
     end
 
     @testset "drives Newton to the right answer through AutoSparse" begin

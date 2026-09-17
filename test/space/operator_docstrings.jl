@@ -17,10 +17,10 @@ using Bramble
 #
 # and read the diff before committing it -- a surprise in that diff is the point of the test.
 
-const STEMS = ("diff₋", "diff₊", "D₋", "D₊", "jump", "M₋", "M₊", "Dstar₊", "Dc", "Dₕ")
+const STEMS = ("diff₋", "diff₊", "D₋", "D₊", "jump", "M", "M₊", "D̽", "Dc", "Dₕ")
 const SUFFIXES = ("ₓ", "ᵧ", "₂")
 const VECTORIAL = (
-    "∇₋ₕ", "∇₊ₕ", "diff₋ₕ", "diff₊ₕ", "jumpₕ", "M₋ₕ", "M₊ₕ", "Dstar₊ₕ", "Dcₕ", "∇ₕ"
+    "∇ₕ", "∇₊ₕ", "diff₋ₕ", "diff₊ₕ", "jumpₕ", "Mₕ", "M₊ₕ", "D̽ₕ", "Dcₕ", "Dₕ"
 )
 
 # The scalar `!` method each family applies a grid function through; it carries the family's

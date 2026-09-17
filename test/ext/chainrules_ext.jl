@@ -88,7 +88,7 @@ using ..TestUtils: _fd
     @testset "Dirichlet boundary value gradient (1D)" begin
         Ωₕ = Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0)), 21, true)
         Wₕ = gridspace(Ωₕ)
-        a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+        a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
         fₕ = Bramble.element(Wₕ, 0.0)
         l = form(Wₕ, v -> innerₕ(fₕ, v))
 
@@ -113,7 +113,7 @@ using ..TestUtils: _fd
         Ωd = Bramble.domain(Bramble.interval(0.0, 1.0) × Bramble.interval(0.0, 1.0))
         Ωₕ = Bramble.mesh(Ωd, (11, 11), (true, true))
         Wₕ = gridspace(Ωₕ)
-        a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+        a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
         fₕ = Bramble.element(Wₕ, 0.0)
         l = form(Wₕ, v -> innerₕ(fₕ, v))
 

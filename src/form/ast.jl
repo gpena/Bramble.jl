@@ -285,12 +285,12 @@ show(io::IO, ::ZeroOperator) = print(io, "0")
 @inline Base.:*(vₕ::Function, op::LazyOp) = GridFunctionScale(vₕ, op)
 @inline Base.:*(op::LazyOp, vₕ::Function) = GridFunctionScale(vₕ, op)
 
-# Operator tuple scaling: c * ∇₋ₕ(u) and (c1, c2) * ∇₋ₕ(u)
+# Operator tuple scaling: c * ∇ₕ(u) and (c1, c2) * ∇ₕ(u)
 #
 # `Tuple{LazyOp, Vararg{LazyOp}}` rather than `Tuple{Vararg{LazyOp}}`: the latter also
 # matches the empty tuple `()`, which is ambiguous with `vectorelement.jl`'s own
 # `NTuple{D, VectorElement}` scaling methods at `D = 0`. Excluding it here is free -- an
-# empty operator tuple is not a real value ∇₋ₕ ever produces.
+# empty operator tuple is not a real value ∇ₕ ever produces.
 @inline Base.:*(
     c::Union{Number, AbstractVector, Function, Base.RefValue{<:Number}},
     ops::Tuple{LazyOp, Vararg{LazyOp}}

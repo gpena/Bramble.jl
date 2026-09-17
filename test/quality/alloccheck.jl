@@ -155,7 +155,7 @@ end
         )
             @testset "$suffix" begin
                 for stem in (
-                    "D₋", "D₊", "Dc", "Dstar₊", "Dₕ", "M₋", "M₊", "diff₋", "diff₊", "jump"
+                    "D₋", "D₊", "Dc", "D̽", "Dₕ", "M", "M₊", "diff₋", "diff₊", "jump"
                 )
                     op = getfield(Bramble, Symbol(stem, suffix, "!"))
                     @test _alloc_report(op, (typeof(dst), typeof(src))) == ""
@@ -166,7 +166,7 @@ end
         # A composite space routes each component through the same kernel; the routing is
         # where gpena/Bramble.jl#64 put a `Core.Box`.
         @test _alloc_report(D₋ₓ!, (typeof(dₕ2), typeof(cₕ2))) == ""
-        @test _alloc_report(M₋ₓ!, (typeof(dₕ2), typeof(cₕ2))) == ""
+        @test _alloc_report(Mₓ!, (typeof(dₕ2), typeof(cₕ2))) == ""
     end
 
     @testset "Restriction, averaging and interpolation" begin

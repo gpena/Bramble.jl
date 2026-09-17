@@ -50,20 +50,20 @@ end
 # Add standard Bramble operator overloads mapped to the fast lazy AST:
 
 """
-    ∇₋ₕ(op::LazyOp{D}) where D
+    ∇ₕ(op::LazyOp{D}) where D
 
 Symbolic backward gradient operator.
 """
-∇₋ₕ(op::LazyOp{D}) where {D} = grad_backward(op)
+∇ₕ(op::LazyOp{D}) where {D} = grad_backward(op)
 
 """
-    ∇₋ₕ(ops::Tuple)
+    ∇ₕ(ops::Tuple)
 
 Applies the backward gradient component-wise to a **tuple** of scalar symbolic
 functions (e.g. the velocity components `(u1, u2)` of a composite space).
 Returns a tuple of gradient tuples, one per component.
 """
-∇₋ₕ(ops::Tuple) = map(grad_backward, ops)
+∇ₕ(ops::Tuple) = map(grad_backward, ops)
 
 """
     ∇₊ₕ(op::LazyOp{D}) where D
@@ -76,7 +76,7 @@ Symbolic forward gradient operator.
     ∇₊ₕ(ops::Tuple)
 
 Applies the forward gradient component-wise to a **tuple** of scalar symbolic
-functions, as `∇₋ₕ` does. Returns a tuple of gradient tuples, one per component.
+functions, as `∇ₕ` does. Returns a tuple of gradient tuples, one per component.
 """
 ∇₊ₕ(ops::Tuple) = map(grad_forward, ops)
 
@@ -235,15 +235,15 @@ Dcᵧ(op::LazyOp{D}) where {D} = CenteredDifference{D, 2, typeof(op)}(op)
 Dc₂(op::LazyOp{D}) where {D} = CenteredDifference{D, 3, typeof(op)}(op)
 
 """
-    Dstar₊ₓ(op::LazyOp{D}) where D
-    Dstar₊ᵧ(op::LazyOp{D}) where D
-    Dstar₊₂(op::LazyOp{D}) where D
+    D̽ₓ(op::LazyOp{D}) where D
+    D̽ᵧ(op::LazyOp{D}) where D
+    D̽₂(op::LazyOp{D}) where D
 
 Symbolic starred forward differences in the coordinate directions.
 """
-Dstar₊ₓ(op::LazyOp{D}) where {D} = StarDifference{D, 1, typeof(op)}(op)
-Dstar₊ᵧ(op::LazyOp{D}) where {D} = StarDifference{D, 2, typeof(op)}(op)
-Dstar₊₂(op::LazyOp{D}) where {D} = StarDifference{D, 3, typeof(op)}(op)
+D̽ₓ(op::LazyOp{D}) where {D} = StarDifference{D, 1, typeof(op)}(op)
+D̽ᵧ(op::LazyOp{D}) where {D} = StarDifference{D, 2, typeof(op)}(op)
+D̽₂(op::LazyOp{D}) where {D} = StarDifference{D, 3, typeof(op)}(op)
 
 """
     Dₕₓ(op::LazyOp{D}) where D
@@ -258,25 +258,25 @@ Dₕ₂(op::LazyOp{D}) where {D} = CrossWeightedDifference{D, 3, typeof(op)}(op)
 
 """
     Dcₕ(op::LazyOp{D}) where D
-    Dstar₊ₕ(op::LazyOp{D}) where D
-    ∇ₕ(op::LazyOp{D}) where D
+    D̽ₕ(op::LazyOp{D}) where D
+    Dₕ(op::LazyOp{D}) where D
 
 The vector forms: every direction at once, as a `D`-tuple of nodes. In one dimension there
 is only one direction, so the node itself is returned rather than a one-element tuple,
-as `∇₋ₕ` and `∇₊ₕ` already do.
+as `∇ₕ` and `∇₊ₕ` already do.
 """
 Dcₕ(op::LazyOp{1}) = Dcₓ(op)
 function Dcₕ(op::LazyOp{D}) where {D}
     return ntuple(dim -> CenteredDifference{D, dim, typeof(op)}(op), Val(D))
 end
 
-Dstar₊ₕ(op::LazyOp{1}) = Dstar₊ₓ(op)
-function Dstar₊ₕ(op::LazyOp{D}) where {D}
+D̽ₕ(op::LazyOp{1}) = D̽ₓ(op)
+function D̽ₕ(op::LazyOp{D}) where {D}
     return ntuple(dim -> StarDifference{D, dim, typeof(op)}(op), Val(D))
 end
 
-∇ₕ(op::LazyOp{1}) = Dₕₓ(op)
-function ∇ₕ(op::LazyOp{D}) where {D}
+Dₕ(op::LazyOp{1}) = Dₕₓ(op)
+function Dₕ(op::LazyOp{D}) where {D}
     return ntuple(dim -> CrossWeightedDifference{D, dim, typeof(op)}(op), Val(D))
 end
 

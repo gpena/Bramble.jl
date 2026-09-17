@@ -28,7 +28,7 @@ using Bramble:
         # silent, and produced a wrong answer that summed to something plausible.
         u, v = IndexedTrialFunction{2}(3), IndexedTestFunction{2}(2)
 
-        for D in (D₋ₓ, D₊ₓ, D₋ᵧ, D₊ᵧ, M₋ₓ, M₊ₓ, jumpₓ, Dcₓ, Dstar₊ₓ, Dₕₓ)
+        for D in (D₋ₓ, D₊ₓ, D₋ᵧ, D₊ᵧ, Mₓ, M₊ₓ, jumpₓ, Dcₓ, D̽ₓ, Dₕₓ)
             @test trial_component_or_nothing(D(u)) == 3
             @test test_component_or_nothing(D(v)) == 2
         end
@@ -54,7 +54,7 @@ using Bramble:
         sf = Bramble.SourceFunction{2, typeof(sin)}(sin)
 
         # every member of the union, wrapped once, for the two component queries
-        for wrap in (D₋ₓ, D₊ₓ, Dcₓ, Dstar₊ₓ, Dₕₓ, jumpₓ, M₋ₓ, M₊ₓ)
+        for wrap in (D₋ₓ, D₊ₓ, Dcₓ, D̽ₓ, Dₕₓ, jumpₓ, Mₓ, M₊ₓ)
             @test test_component_or_nothing(wrap(iv)) == 2
             @test trial_component_or_nothing(wrap(iu)) == 1
             @test test_component_or_nothing(wrap(v)) === nothing
@@ -165,7 +165,7 @@ using Bramble:
 
         @test test_component_or_nothing(v(2) + D₋ₓ(v(2))) == 2
         @test test_component_or_nothing(v + D₋ₓ(v)) === nothing
-        @test trial_component_or_nothing(u(1) + M₋ₓ(u(1))) == 1
+        @test trial_component_or_nothing(u(1) + Mₓ(u(1))) == 1
 
         @test_throws ArgumentError test_component_or_nothing(v(1) + v(2))
         @test_throws ArgumentError trial_component_or_nothing(u(1) + u(3))

@@ -127,9 +127,9 @@ end
             ("diff₋ₓ", diff₋ₓ),
             ("diff₊ₓ", diff₊ₓ),
             ("jumpₓ", jumpₓ),
-            ("M₋ₓ", M₋ₓ),
+            ("Mₓ", Mₓ),
             ("M₊ₓ", M₊ₓ),
-            ("Dstar₊ₓ", Dstar₊ₓ),
+            ("D̽ₓ", D̽ₓ),
             ("Dcₓ", Dcₓ),
             ("Dₕₓ", Dₕₓ)
         )
@@ -142,12 +142,12 @@ end
 
         # the vectorial forms, in 2D, consumed through the ₊ inner product
         for (nm, op) in (
-            ("∇₋ₕ", ∇₋ₕ),
+            ("∇ₕ", ∇ₕ),
             ("∇₊ₕ", ∇₊ₕ),
             ("Dcₕ", Dcₕ),
-            ("∇ₕ", ∇ₕ),
-            ("Dstar₊ₕ", Dstar₊ₕ),
-            ("M₋ₕ", M₋ₕ),
+            ("Dₕ", Dₕ),
+            ("D̽ₕ", D̽ₕ),
+            ("Mₕ", Mₕ),
             ("jumpₕ", jumpₕ)
         )
             @testset "$nm" begin
@@ -174,7 +174,7 @@ end
                 @test _matches_fd(a -> f(Rₕ(Wₕ1, x -> a * sin(x) + a^2 * x)))
             end
         end
-        @test _matches_fd(a -> norm₊(∇₋ₕ(Rₕ(Wₕ2, x -> a * sin(x[1]) * x[2]))))
+        @test _matches_fd(a -> norm₊(∇ₕ(Rₕ(Wₕ2, x -> a * sin(x[1]) * x[2]))))
         @test _matches_fd(
             a -> inner₊ᵧ(Rₕ(Wₕ2, x -> a * x[1] * x[2]), Rₕ(Wₕ2, x -> a * x[2]))
         )
@@ -206,7 +206,7 @@ end
     @testset "Dual matrix products" begin
         # The matrices are built from the mesh, so they stay Float64; the product with a
         # Dual vector promotes.
-        for (nm, op) in (("D₋ₓ", D₋ₓ), ("M₋ₓ", M₋ₓ), ("jumpₓ", jumpₓ))
+        for (nm, op) in (("D₋ₓ", D₋ₓ), ("Mₓ", Mₓ), ("jumpₓ", jumpₓ))
             @testset "$nm" begin
                 @test _matches_fd(a -> sum(op(Ωₕ1) * parent(Rₕ(Wₕ1, x -> a * sin(x)))))
             end

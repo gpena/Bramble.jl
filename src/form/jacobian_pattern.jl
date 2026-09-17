@@ -6,13 +6,13 @@
 # The residual in the nonlinear worked examples (docs/src/examples/poisson_nonlinear.jl,
 # coupled_reaction_diffusion.jl) has the shape `A(u) * u - F`, where `a` (the `BilinearForm`
 # that assembles `A`) has a `GridFunctionScale` coefficient computed *outside* the AST, e.g.
-# `αvals = α.(M₋ₕ(uₕ))`. `∂residual/∂u` therefore has two contributions at every entry `a`'s
+# `αvals = α.(Mₕ(uₕ))`. `∂residual/∂u` therefore has two contributions at every entry `a`'s
 # own pattern reaches: `A` acting on the explicit `u` (that's `a`'s own sparsity, already
 # exact -- see allocate_system_matrix), plus the chain-rule term through `αvals`'s own
 # dependence on `u`. `local_stencil`'s `GridFunctionScale` case (form/common.jl) reads that
 # coefficient as `grid_fn[lin_idx]` -- the SAME point `I` the assembly loop is currently at,
 # not shifted by the term's own offsets -- so the second contribution's reach is exactly `I`
-# widened by whatever stencil op the coefficient was itself built from (e.g. M₋ₕ's `{0,-1}`),
+# widened by whatever stencil op the coefficient was itself built from (e.g. Mₕ's `{0,-1}`),
 # at every row the term reaches from `I`. That composition is what this file adds.
 
 # Whether an earlier stencil entry already named this row offset -- so the coefficient's own
@@ -24,8 +24,8 @@
     return false
 end
 
-# `dep(U)` may return a single `LazyOp` (e.g. `M₋ₕ(U)` in 1D) or a `D`-tuple of them (e.g.
-# `∇₋ₕ(U)` in D > 1); normalized to always iterate as a tuple.
+# `dep(U)` may return a single `LazyOp` (e.g. `Mₕ(U)` in 1D) or a `D`-tuple of them (e.g.
+# `∇ₕ(U)` in D > 1); normalized to always iterate as a tuple.
 @inline _as_op_tuple(result::Tuple) = result
 @inline _as_op_tuple(result) = (result,)
 
@@ -52,7 +52,7 @@ Sparsity pattern of the Jacobian of a Newton residual `A(u) * u - F`, where `a` 
 `coefficient_dependencies` names, symbolically, the stencil operator one of `a`'s live
 coefficients was itself computed from -- written the same way a form term names an
 operator, as a function of the trial placeholder. If `a`'s diffusion coefficient was built
-as `αvals = α.(M₋ₕ(uₕ))`, pass `U -> M₋ₕ(U)`.
+as `αvals = α.(Mₕ(uₕ))`, pass `U -> Mₕ(U)`.
 
 Derived entirely from `a`'s AST and each dependency's own stencil reach -- no AD
 tracing, no coefficient values needed. A safe superset of the exact pattern (a pointwise
@@ -60,8 +60,8 @@ nonlinear `α` can never narrow the reach its argument already has), suitable fo
 [`ADTypes.KnownJacobianSparsityDetector`](https://github.com/SciML/ADTypes.jl):
 
 ```julia
-a = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals * ∇₋ₕ(U), ∇₋ₕ(V)))   # αvals = α.(M₋ₕ(uₕ))
-pattern = jacobian_pattern(a, U -> M₋ₕ(U))
+a = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals * ∇ₕ(U), ∇ₕ(V)))   # αvals = α.(Mₕ(uₕ))
+pattern = jacobian_pattern(a, U -> Mₕ(U))
 sparse_ad = AutoSparse(AutoForwardDiff();
     sparsity_detector = KnownJacobianSparsityDetector(pattern),
     coloring_algorithm = GreedyColoringAlgorithm())
@@ -72,15 +72,15 @@ sparse_ad = AutoSparse(AutoForwardDiff();
 A dependency may also name a *different* leaf, the same way a form term does --
 `U -> U(2)` for a coefficient that is component 2's own value (no stencil op, as in
 [the coupled reaction-diffusion example](examples/coupled_reaction_diffusion.md)'s `v_c`),
-or `U -> M₋ₕ(U(2))` for one built from a stencil op applied to that other component.
-`nothing` named (`U -> M₋ₕ(U)`, no `(k)`) means the coefficient depends on *this block's
+or `U -> Mₕ(U(2))` for one built from a stencil op applied to that other component.
+`nothing` named (`U -> Mₕ(U)`, no `(k)`) means the coefficient depends on *this block's
 own* trial leaf, exactly like the non-composite case above. Every dependency still applies
 to every block the walk visits, whichever leaf it names -- a safe superset stays safe
 however many blocks end up seeing an entry they did not strictly need.
 
 ```julia
-# a = form(Vₕ, Vₕ, (p, q) -> inner₊(∇₋ₕ(p(1)), ∇₋ₕ(q(1))) + innerₕ(v_c * p(1), q(1)) +
-#                            inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2))) - innerₕ(u_c * p(2), q(2)))
+# a = form(Vₕ, Vₕ, (p, q) -> inner₊(∇ₕ(p(1)), ∇ₕ(q(1))) + innerₕ(v_c * p(1), q(1)) +
+#                            inner₊(∇ₕ(p(2)), ∇ₕ(q(2))) - innerₕ(u_c * p(2), q(2)))
 pattern = jacobian_pattern(a, U -> U(2), U -> U(1))   # block (1,1) reads U(2), (2,2) reads U(1)
 ```
 """
@@ -149,7 +149,7 @@ end
 # --- composite trial/test spaces --------------------------------------------------- #
 #
 # A dependency op's own reach (`stencil_offsets`) is unchanged by which leaf it names --
-# `M₋ₕ(U(2))`'s reach is exactly `M₋ₕ(U)`'s, since `component` only replaces the leaf type,
+# `Mₕ(U(2))`'s reach is exactly `Mₕ(U)`'s, since `component` only replaces the leaf type,
 # never wraps it in anything `stencil_offsets` sees. What is new is *where* that reach
 # lands: `trial_component_or_nothing` (form/block_extract.jl) reads which leaf a resolved
 # op names, `nothing` meaning "the block currently being widened, not a different one."
@@ -159,7 +159,7 @@ end
 const _DependencyOp{D} = Tuple{Union{Int, Nothing}, Vector{NTuple{D, Int}}}
 
 # Every `(dep(U))` node, flattened across dependencies and across whatever tuple a
-# multi-dimensional stencil op (`∇₋ₕ`, `M₋ₕ` in D > 1) returns -- one entry per node, not
+# multi-dimensional stencil op (`∇ₕ`, `Mₕ` in D > 1) returns -- one entry per node, not
 # unioned by target, so a point-anchored composition (below) can pull each entry's own
 # `lin_indices`/`col_offset` independently.
 function _resolve_dependency_ops(::Val{D}, deps::Tuple, U) where {D}
@@ -323,7 +323,7 @@ one detected by tracing:
 
 ```julia
 sparse_ad = AutoSparse(AutoForwardDiff();
-    sparsity_detector = ast_sparsity_detector(a, U -> M₋ₕ(U)),
+    sparsity_detector = ast_sparsity_detector(a, U -> Mₕ(U)),
     coloring_algorithm = GreedyColoringAlgorithm())
 ```
 

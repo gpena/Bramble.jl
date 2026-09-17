@@ -264,8 +264,8 @@ opening sentence (the diff/finite-difference families use this to contrast the t
 does not apply to an average); `alias_note` follows the `Alias for ...` sentence, before
 `arg` is described (`Dₕ` uses this to compare itself with `Dc`); `trailing_note` follows
 the description of `arg`, before the closing "Accepts a grid function..." paragraph
-(`Dstar₊`, `Dc` and `Dₕ` use this for their boundary-behaviour and precondition caveats,
-which differ both in what happens at the ends -- `Dstar₊`/`Dc` truncate, `Dₕ` falls back
+(`D̽`, `Dc` and `Dₕ` use this for their boundary-behaviour and precondition caveats,
+which differ both in what happens at the ends -- `D̽`/`Dc` truncate, `Dₕ` falls back
 to a one-sided difference (gpena/Bramble.jl#183) -- and in whether a mesh needs at least
 three points along the direction).
 
@@ -325,11 +325,11 @@ Returns the expressions defining the `ₕ` alias that applies `base_op_name` alo
 coordinate and returns a tuple, one entry per spatial dimension, as a `Vector{Expr}`. On a
 one-dimensional mesh the alias returns that single entry rather than a one-tuple.
 
-The counterpart of `_alias_expr` for the tuple-valued aliases (`∇₋ₕ`, `diff₋ₕ`, `M₋ₕ`). The
+The counterpart of `_alias_expr` for the tuple-valued aliases (`∇ₕ`, `diff₋ₕ`, `Mₕ`). The
 operator families generated the same three methods independently before this existed.
 
 `note`, given non-empty, is an extra sentence appended after the worked 2D example --
-`∇ₕ` uses this to place itself relative to `∇₋ₕ`/`∇₊ₕ`, a comparison none of the other
+`Dₕ` uses this to place itself relative to `∇ₕ`/`∇₊ₕ`, a comparison none of the other
 vectorial aliases need.
 """
 function _vectorial_expr(
@@ -396,7 +396,7 @@ what it takes before the direction (gpena/Bramble.jl#101); `difference.jl` and
 |:--|:--|:--|
 | unscaled difference | `_apply_spaced!` | `(_no_spacing, _no_precheck)` |
 | finite difference | `_apply_spaced!` | `(spacings_func, _no_precheck)` |
-| `Dstar₊`/`Dc`/`Dₕ` | `_apply_spaced!` | `(spacing_func, precheck)` |
+| `D̽`/`Dc`/`Dₕ` | `_apply_spaced!` | `(spacing_func, precheck)` |
 | average | `_apply_averaged!` | `()` |
 
 `extra_args` are spliced as bare identifiers, so each generated method names an ordinary
@@ -446,7 +446,7 @@ end
                            trailing_note = "", bang_opening_sentence = "", source = nothing)
 
 Returns the expressions defining one family's whole alias surface, as a `Vector{Expr}`: the
-per-coordinate `alias_stem` pair for every direction (`Dcₓ`/`Dcₓ!`, `M₋ᵧ`/`M₋ᵧ!`, …) and,
+per-coordinate `alias_stem` pair for every direction (`Dcₓ`/`Dcₓ!`, `Mᵧ`/`Mᵧ!`, …) and,
 when `vectorial_alias` is given, the `ₕ` alias over every coordinate at once.
 
 [`_alias_expr`](@ref)/[`_alias_bang_expr`](@ref) and [`_vectorial_expr`](@ref) were already
@@ -462,8 +462,8 @@ first") travel as string literals instead.
 
 `vectorial_dir_string`/`vectorial_what` default to `dir_string`/`what` and exist for the
 families that describe the tuple-valued alias differently from the per-coordinate ones:
-`Dstar₊`/`Dc`/`Dₕ` override every directional `opening_sentence` and so pass `dir_string`
-and `what` empty, while `Dstar₊ₕ`/`Dcₕ`/`∇ₕ` still want "the centered difference of `arg`
+`D̽`/`Dc`/`Dₕ` override every directional `opening_sentence` and so pass `dir_string`
+and `what` empty, while `D̽ₕ`/`Dcₕ`/`Dₕ` still want "the centered difference of `arg`
 along every coordinate".
 """
 function _operator_aliases_expr(

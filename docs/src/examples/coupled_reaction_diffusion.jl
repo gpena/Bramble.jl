@@ -61,8 +61,8 @@ function coupled_matrix(wₕ)
     u_c, v_c = components(wₕ)
     a = form(Vₕ,
         Vₕ,
-        (p, q) -> inner₊(∇₋ₕ(p(1)), ∇₋ₕ(q(1))) + innerₕ(p(1), q(1)) + innerₕ(v_c * p(1), q(1)) +
-                  inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2))) + innerₕ(p(2), q(2)) - innerₕ(u_c * p(2), q(2)))
+        (p, q) -> inner₊(∇ₕ(p(1)), ∇ₕ(q(1))) + innerₕ(p(1), q(1)) + innerₕ(v_c * p(1), q(1)) +
+                  inner₊(∇ₕ(p(2)), ∇ₕ(q(2))) + innerₕ(p(2), q(2)) - innerₕ(u_c * p(2), q(2)))
     return assemble(a; dirichlet = :boundary)
 end
 nothing # hide
@@ -119,8 +119,8 @@ using ADTypes
 u_c0, v_c0 = components(element(Vₕ, 0.0))
 a_for_pattern = form(Vₕ,
     Vₕ,
-    (p, q) -> inner₊(∇₋ₕ(p(1)), ∇₋ₕ(q(1))) + innerₕ(p(1), q(1)) + innerₕ(v_c0 * p(1), q(1)) +
-              inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2))) + innerₕ(p(2), q(2)) - innerₕ(u_c0 * p(2), q(2)))
+    (p, q) -> inner₊(∇ₕ(p(1)), ∇ₕ(q(1))) + innerₕ(p(1), q(1)) + innerₕ(v_c0 * p(1), q(1)) +
+              inner₊(∇ₕ(p(2)), ∇ₕ(q(2))) + innerₕ(p(2), q(2)) - innerₕ(u_c0 * p(2), q(2)))
 
 native_ad = AutoSparse(AutoForwardDiff();
     sparsity_detector = ast_sparsity_detector(a_for_pattern, U -> U(2), U -> U(1)),
@@ -279,9 +279,9 @@ function coupled_series(; n0::Int = 5, levels::Int)
             assemble(
                 form(Vc,
                     Vc,
-                    (p, q) -> inner₊(∇₋ₕ(p(1)), ∇₋ₕ(q(1))) + innerₕ(p(1), q(1)) +
+                    (p, q) -> inner₊(∇ₕ(p(1)), ∇ₕ(q(1))) + innerₕ(p(1), q(1)) +
                               innerₕ(v_c * p(1), q(1)) +
-                              inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2))) + innerₕ(p(2), q(2)) -
+                              inner₊(∇ₕ(p(2)), ∇ₕ(q(2))) + innerₕ(p(2), q(2)) -
                               innerₕ(u_c * p(2), q(2)));
                 dirichlet = :boundary)
         end

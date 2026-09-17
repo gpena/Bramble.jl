@@ -110,7 +110,7 @@ When solving $A u = F(p)$:
 
 ```@example autodiff_tutorial
 # Discrete Laplacian on nonuniform grid
-a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
 A = assemble(a; dirichlet = :boundary)
 Adense = Matrix(A)
 
@@ -160,7 +160,7 @@ function pde_residual(u_vec)
 
     # Local diffusion coefficient depending on the state
     αvals = 1.0 .+ uₕ .^ 2
-    a = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals * ∇₋ₕ(U), ∇₋ₕ(V)))
+    a = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals * ∇ₕ(U), ∇ₕ(V)))
     A_sparse = assemble(a; dirichlet = :boundary)
 
     F = ones(T, ndofs(Wₕ))
@@ -182,7 +182,7 @@ from its AST: no tracing needed for that part. [`jacobian_pattern`](@ref) reads 
 pattern off the form, widened by the reach of each coefficient's own dependence on the
 unknown, named the same way a form term names an operator: a function of the trial
 placeholder. `αvals` here is `1.0 .+ uₕ.^2`, a plain pointwise function of `uₕ` at the *same*
-grid point (no averaging, unlike the staggered `M₋ₕ(u)` coefficient in
+grid point (no averaging, unlike the staggered `Mₕ(u)` coefficient in
 [the nonlinear Poisson example](../examples/poisson_nonlinear.md)), so its dependency is
 just the trial placeholder itself, `U -> U`. [`ast_sparsity_detector`](@ref) hands the
 result straight to `AutoSparse` in place of the tracer, once
@@ -192,7 +192,7 @@ result straight to `AutoSparse` in place of the tracer, once
 using ADTypes
 
 αvals0 = 1.0 .+ parent(element(Wₕ, 0.0)) .^ 2
-a_for_pattern = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals0 * ∇₋ₕ(U), ∇₋ₕ(V)))
+a_for_pattern = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals0 * ∇ₕ(U), ∇ₕ(V)))
 
 const native_backend = AutoSparse(AutoForwardDiff();
     sparsity_detector = ast_sparsity_detector(a_for_pattern, U -> U),

@@ -172,15 +172,15 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
         Vₕ = gridspace(Ωₕ, Val(2))
         uₕ = Rₕ(Wₕ, x -> x[1] * x[2])
 
-        @test ∇ₕ(uₕ) isa NTuple{2, VectorElement}
-        @test parent(∇ₕ(uₕ)[1]) == parent(Dₕₓ(uₕ))
-        @test parent(∇ₕ(uₕ)[2]) == parent(Dₕᵧ(uₕ))
+        @test Dₕ(uₕ) isa NTuple{2, VectorElement}
+        @test parent(Dₕ(uₕ)[1]) == parent(Dₕₓ(uₕ))
+        @test parent(Dₕ(uₕ)[2]) == parent(Dₕᵧ(uₕ))
 
-        # in one dimension the tuple and the grid function coincide, as for ∇₋ₕ
+        # in one dimension the tuple and the grid function coincide, as for ∇ₕ
         Ω1 = mesh(domain(interval(0.0, 1.0)), 7, true)
         u1 = Rₕ(gridspace(Ω1), sin)
-        @test !(∇ₕ(u1) isa Tuple)
-        @test parent(∇ₕ(u1)) == parent(Dₕₓ(u1))
+        @test !(Dₕ(u1) isa Tuple)
+        @test parent(Dₕ(u1)) == parent(Dₕₓ(u1))
 
         # composite grid functions apply componentwise, as the other operators do
         fs = (x -> x[1], x -> x[2]^2)
@@ -201,7 +201,7 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
 
         @test @inferred(Dₕₓ(u1)) isa VectorElement
         @test @inferred(Dₕᵧ(u2)) isa VectorElement
-        @test @inferred(∇ₕ(u2)) isa NTuple{2, VectorElement}
+        @test @inferred(Dₕ(u2)) isa NTuple{2, VectorElement}
 
         @test alloc_test(Dₕₓ, u1) == alloc_test(similar, u1)
         @test alloc_test(Dₕᵧ, u2) == alloc_test(similar, u2)

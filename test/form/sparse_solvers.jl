@@ -9,7 +9,7 @@ using SparseArrays
     I1 = interval(0.0, 1.0)
     Ω1 = mesh(domain(I1, :boundary => boundary_symbols(I1)), 10, true)
     W1 = gridspace(Ω1)
-    a1 = form(W1, W1, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+    a1 = form(W1, W1, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
     l1 = form(W1, v -> innerₕ(Rₕ(W1, x -> sin(π * x)), v))
     A, F = assemble(a1, l1; dirichlet = :boundary => x -> 0.0, symmetrize = true)
 

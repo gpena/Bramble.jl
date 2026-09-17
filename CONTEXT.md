@@ -84,7 +84,7 @@ _Avoid_: device, mode
 
 **Difference operator**:
 A discrete derivative — `D₋ₓ` backward, `Dcₓ` centred, subscript naming the direction.
-_Avoid_: derivative (reserve for the continuous object), gradient (that is `∇₋ₕ`)
+_Avoid_: derivative (reserve for the continuous object), gradient (that is `∇ₕ`)
 
 **Restriction (`Rₕ`)**:
 The projection of a continuous function onto the space of grid functions, taken by

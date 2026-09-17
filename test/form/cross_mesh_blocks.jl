@@ -69,7 +69,7 @@ using Bramble:
     @testset "Operator wrapper check" begin
         for g in (
             (u, v) -> inner₊ₓ(D₋ₓ(u(2)), D₋ₓ(v(1))),
-            (u, v) -> innerₕ(M₋ₓ(u(1)), v(2)),
+            (u, v) -> innerₕ(Mₓ(u(1)), v(2)),
             (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(1))
         )   # one good term, one bad
             @test_throws ArgumentError assemble(form(Vh, Vh, g))

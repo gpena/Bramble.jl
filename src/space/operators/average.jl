@@ -164,8 +164,8 @@ const _AVERAGE_OP_CONFIGS = [
     (
         direction = Backward(),
         average_name = :backward_average,
-        average_alias = :M₋,
-        vectorial_average_alias = :M₋ₕ,
+        average_alias = :M,
+        vectorial_average_alias = :Mₕ,
         dir_string_lowercase = "backward",
         math_op = "\\frac{u_{i-1} + u_{i}}{2}"
     )
@@ -247,10 +247,10 @@ end
     vectorial_alias=M₊ₕ)
 
 @operator_family(base=backward_average,
-    stem=M₋,
+    stem=M,
     apply_fn=_apply_averaged!,
     direction=Backward(),
     dir_string="backward",
     what="average",
     formula="\\frac{u_{i-1} + u_{i}}{2}",
-    vectorial_alias=M₋ₕ)
+    vectorial_alias=Mₕ)

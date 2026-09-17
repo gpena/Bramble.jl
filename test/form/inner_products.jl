@@ -133,7 +133,7 @@ using Bramble:
     @testset "Tuple forms" begin
         # a tuple of scalars, functions or grid functions on the left, against a gradient
         for l in ((2.0, 3.0), ((x -> x[1]), (x -> x[2])), (uₕ, uₕ))
-            p = inner₊(l, ∇₋ₕ(v))
+            p = inner₊(l, ∇ₕ(v))
             @test p isa Bramble.OperatorAdd
             @test is_symbolic(p)
         end
@@ -141,7 +141,7 @@ using Bramble:
         # tuples of gradient tuples: a velocity field against a velocity field
         vec_trial = (IndexedTrialFunction{2}(1), IndexedTrialFunction{2}(2))
         vec_test = (IndexedTestFunction{2}(1), IndexedTestFunction{2}(2))
-        p = inner₊(map(∇₋ₕ, vec_trial), map(∇₋ₕ, vec_test))
+        p = inner₊(map(∇ₕ, vec_trial), map(∇ₕ, vec_test))
         @test p isa Bramble.OperatorAdd
         @test is_symbolic(p)
 
@@ -166,8 +166,8 @@ using Bramble:
         @test numeric_file(Tuple{typeof(uₕ), typeof(uₕ)}) == "inner_product.jl"
         @test numeric_file(Tuple{typeof((uₕ, uₕ)), typeof((uₕ, uₕ))}) == "inner_product.jl"
 
-        grads = map(∇₋ₕ, (IndexedTrialFunction{2}(1), IndexedTrialFunction{2}(2)))
-        @test numeric_file(Tuple{typeof(∇₋ₕ(u)), typeof(∇₋ₕ(v))}) == "inner.jl"
+        grads = map(∇ₕ, (IndexedTrialFunction{2}(1), IndexedTrialFunction{2}(2)))
+        @test numeric_file(Tuple{typeof(∇ₕ(u)), typeof(∇ₕ(v))}) == "inner.jl"
         @test numeric_file(Tuple{typeof(grads), typeof(grads)}) == "inner.jl"
 
         # The restriction itself: a tuple of grid functions is not a tuple of tuples, and
@@ -179,7 +179,7 @@ using Bramble:
         # And the two families really do return different kinds of thing, which is what
         # makes a mis-resolution worth catching.
         @test inner₊(uₕ, uₕ) isa Real
-        @test inner₊(∇₋ₕ(u), ∇₋ₕ(v)) isa LazyOp
+        @test inner₊(∇ₕ(u), ∇ₕ(v)) isa LazyOp
     end
 
     @testset "Non-symbolic tuple refusal" begin
@@ -188,7 +188,7 @@ using Bramble:
         # could never resolve, in a branch nothing reached). It is entered when the right
         # side carries no trial or test function, so there is nothing for the product to be
         # a form in, and it now says that.
-        concrete = ∇₋ₕ(id)
+        concrete = ∇ₕ(id)
         @test !is_symbolic(concrete)
         @test_throws ArgumentError inner₊((uₕ, uₕ), concrete)
 
@@ -198,7 +198,7 @@ using Bramble:
             sprint(showerror, e)
         end
         @test occursin("no trial or test function", msg)
-        @test occursin("∇₋ₕ(u)", msg)
+        @test occursin("∇ₕ(u)", msg)
     end
 
     @testset "Bilateral resolution" begin

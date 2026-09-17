@@ -59,7 +59,7 @@ l = form(Wₕ, v -> innerₕ(fₕ, v))
 # Enzyme differentiates through is a new object each time, not a fixed one closed over.
 
 function forward(κ::Real)
-    aκ = form(Wₕ, Wₕ, (u, v) -> κ * inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+    aκ = form(Wₕ, Wₕ, (u, v) -> κ * inner₊(∇ₕ(u), ∇ₕ(v)))
     A, F = assemble(aκ, l; dirichlet = :boundary => x -> 0.0)
     return Bramble.pde_solve(A, F)
 end

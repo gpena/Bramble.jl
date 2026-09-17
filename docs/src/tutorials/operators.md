@@ -35,7 +35,7 @@ A name is a stem, a direction, and a coordinate:
 | `ₕ` | every coordinate at once, returning a tuple |
 
 So `D₋ₓ` is the backward finite difference along ``x``, `M₊ᵧ` the forward average along
-``y``, and `∇₋ₕ` the backward finite difference in every coordinate, which is the discrete
+``y``, and `∇ₕ` the backward finite difference in every coordinate, which is the discrete
 gradient and has that extra name for it.
 
 `jump` takes no direction, for the reason given above: it is `jumpₓ`, `jumpᵧ`, `jump₂` and
@@ -66,11 +66,11 @@ The two backward operators on that grid function:
 
 ```@repl operators
 parent(D₋ₓ(uₕ))
-parent(M₋ₓ(uₕ))
+parent(Mₓ(uₕ))
 ```
 
 Reading the second entry of each: the plain difference is ``u_2 - u_1 = 0.0625``, so
-`D₋ₓ` divides that by ``h_2 = 0.25`` to get ``0.25``, and `M₋ₓ` averages
+`D₋ₓ` divides that by ``h_2 = 0.25`` to get ``0.25``, and `Mₓ` averages
 ``(u_1 + u_2)/2 = 0.03125``.
 
 The jump has no backward form; forward, it is that plain difference, undivided:
@@ -238,7 +238,7 @@ In two or more dimensions, directional operators apply along the coordinate line
     <text x="60" y="138" font-size="11" fill="currentColor" opacity="0.8">= (u[i, j] - u[i, j-1]) / hᵧ,ⱼ</text>
     <text x="60" y="153" font-size="11" fill="#3b82f6">Zero on bottom boundary (j = 1)</text>
 
-    <text x="140" y="178" font-size="11" fill="#10b981" font-weight="bold" text-anchor="middle">∇₋ₕ(uₕ) = (D₋ₓ(uₕ), D₋ᵧ(uₕ))</text>
+    <text x="140" y="178" font-size="11" fill="#10b981" font-weight="bold" text-anchor="middle">∇ₕ(uₕ) = (D₋ₓ(uₕ), D₋ᵧ(uₕ))</text>
   </g>
 </svg>
 </figure>
@@ -269,23 +269,23 @@ rather than a one-tuple.
 Ω₂ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 4), (true, true));
 W₂ = gridspace(Ω₂);
 vₕ = Rₕ(W₂, x -> x[1] + 2x[2]);
-g = ∇₋ₕ(vₕ);
+g = ∇ₕ(vₕ);
 length(g)
 ```
 
 Away from the truncated slices, `g[1]` is `1.0` and `g[2]` is `2.0`, the two partial
 derivatives of ``x + 2y``. The same suffix works for the other families as `jumpₕ` and
-`M₋ₕ`, and all of them accept a mesh, a grid space or a grid function.
+`Mₕ`, and all of them accept a mesh, a grid space or a grid function.
 
-## 6. Summation by parts, and `Dstar₊ₓ`
+## 6. Summation by parts, and `D̽ₓ`
 
 Continuous integration by parts, ``\int u' v = -\int u v'`` for ``v`` vanishing on the
 boundary, has a discrete counterpart, and which forward difference it holds for is not
-the obvious one. The operator that satisfies it is `Dstar₊ₓ`: the forward difference
+the obvious one. The operator that satisfies it is `D̽ₓ`: the forward difference
 divided by the **averaged** spacing rather than by the forward spacing,
 
 ```math
-\textrm{Dstar}_{+x}(u_h)(i) = \frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}
+\overset{\times}{\textrm{D}}_{+x}(u_h)(i) = \frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}
 ```
 
 with the last point truncated to zero, as `D₊ₓ` is. On a uniform grid ``h_i = h_{i+1}``
@@ -296,13 +296,13 @@ and it coincides with `D₊ₓ`; the two differ only where the spacing varies:
 set_points!(Ωₙ, [0.0, 0.1, 0.3, 0.7, 1.0])
 uₙ = Rₕ(gridspace(Ωₙ), x -> x^2);
 parent(D₊ₓ(uₙ))
-parent(Dstar₊ₓ(uₙ))
+parent(D̽ₓ(uₙ))
 ```
 
 The identity is
 
 ```math
-(\textrm{Dstar}_{+x} u_h,\, v_h)_h = -(u_h,\, D_{-x} v_h)_{+x}
+(\overset{\times}{\textrm{D}}_{+x} u_h,\, v_h)_h = -(u_h,\, D_{-x} v_h)_{+x}
 ```
 
 for any `vₕ` that vanishes on the boundary. Note which product sits on each side: the
@@ -315,19 +315,19 @@ term the identity discards is a product of the two.
 Wᵣ = gridspace(Ωᵣ);
 aₕ = Rₕ(Wᵣ, x -> cos(x) + 0.7);                     # not zero at the boundary
 bₕ = Rₕ(Wᵣ, x -> sin(pi * x));                      # zero at both ends
-innerₕ(Dstar₊ₓ(aₕ), bₕ)
+innerₕ(D̽ₓ(aₕ), bₕ)
 -inner₊ₓ(aₕ, D₋ₓ(bₕ))                              # equal to machine precision
 innerₕ(D₊ₓ(aₕ), bₕ)                                # D₊ₓ does not agree
 ```
 
-It holds per coordinate in two and three dimensions as well, with `Dstar₊ᵧ`, `Dstar₊₂`
-and their inner products. `Dstar₊ₕ` returns all coordinates at once, as `∇₊ₕ` does.
+It holds per coordinate in two and three dimensions as well, with `D̽ᵧ`, `D̽₂`
+and their inner products. `D̽ₕ` returns all coordinates at once, as `∇₊ₕ` does.
 
 This is why the operator exists. Energy estimates for these schemes are derived by
 moving a difference from one factor to the other, and that step is exact only with this
 pairing: with `D₊ₓ` it leaves a residual that does not vanish under refinement, since it
 is a difference of quadrature weights and not a truncation error. Like the other
-difference families, `Dstar₊` can also be had as a sparse matrix: `Dstar₊ₓ(Wₕ)` is
+difference families, `D̽` can also be had as a sparse matrix: `D̽ₓ(Wₕ)` is
 `diag(2/(hᵢ + hᵢ₊₁))` times the undivided forward difference ``u_{i+1} - u_i``, with an
 empty last row.
 
@@ -373,7 +373,7 @@ innerₕ(Dcₓ(pₕ), qₕ)
 
 The cancellation is the one from section 6: `innerₕ`'s weight at point ``i`` is exactly half
 the centered denominator, so the weights drop out and shifting the index by one turns what
-is left into minus the right side. Unlike the `Dstar₊ₓ` identity, this one needs both
+is left into minus the right side. Unlike the `D̽ₓ` identity, this one needs both
 functions to vanish at the boundary, since the discarded term is symmetric in the two.
 
 Accuracy follows the usual rule: the centered difference approximates the derivative at
@@ -420,8 +420,8 @@ nested:
 
 `Dₕₓ` is not skew-symmetric, so `Dcₓ` remains the one to reach for when the scheme needs
 that structure and `Dₕₓ` the one to reach for when it needs the order. Both accept a mesh
-or a grid space for the matrix and a grid function to apply it, and `∇ₕ` gives every
-coordinate at once, the centered counterpart of `∇₋ₕ` and `∇₊ₕ`. They differ at the
+or a grid space for the matrix and a grid function to apply it, and `Dₕ` gives every
+coordinate at once, the centered counterpart of `∇ₕ` and `∇₊ₕ`. They differ at the
 boundary: `Dcₓ` truncates both end rows to zero, while `Dₕₓ` has no truncated-boundary
 convention of its own and falls back to `D₊ₓ`/`D₋ₓ` there instead.
 
@@ -541,7 +541,7 @@ maximum(abs, parent(dest) .- parent(exact))
 ```
 
 Once `πₕ` returns an ordinary [`VectorElement`](@ref), every operator above just applies
-to it as normal: `D₋ₓ(dest)`, `M₋ₓ(dest)`, a bilinear form, anything.
+to it as normal: `D₋ₓ(dest)`, `Mₓ(dest)`, a bilinear form, anything.
 
 ### As a matrix
 

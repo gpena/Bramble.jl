@@ -90,26 +90,26 @@ public diff₊ₓ, diff₊ᵧ, diff₊₂, diff₊ₕ
 public diff₋ₓ!, diff₋ᵧ!, diff₋₂!
 public diff₊ₓ!, diff₊ᵧ!, diff₊₂!
 
-export D₋ₓ, D₋ᵧ, D₋₂, ∇₋ₕ
+export D₋ₓ, D₋ᵧ, D₋₂, ∇ₕ
 export D₊ₓ, D₊ᵧ, D₊₂, ∇₊ₕ
 export D₋ₓ!, D₋ᵧ!, D₋₂!
 export D₊ₓ!, D₊ᵧ!, D₊₂!
 
-export Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂, Dstar₊ₕ
-export Dstar₊ₓ!, Dstar₊ᵧ!, Dstar₊₂!
+export D̽ₓ, D̽ᵧ, D̽₂, D̽ₕ
+export D̽ₓ!, D̽ᵧ!, D̽₂!
 
 export Dcₓ, Dcᵧ, Dc₂, Dcₕ
 export Dcₓ!, Dcᵧ!, Dc₂!
 
-export Dₕₓ, Dₕᵧ, Dₕ₂, ∇ₕ
+export Dₕₓ, Dₕᵧ, Dₕ₂, Dₕ
 export Dₕₓ!, Dₕᵧ!, Dₕ₂!
 
 export jumpₓ, jumpᵧ, jump₂, jumpₕ
 export jumpₓ!, jumpᵧ!, jump₂!
 
-export M₋ₓ, M₋ᵧ, M₋₂, M₋ₕ
+export Mₓ, Mᵧ, M₂, Mₕ
 export M₊ₓ, M₊ᵧ, M₊₂, M₊ₕ
-export M₋ₓ!, M₋ᵧ!, M₋₂!
+export Mₓ!, Mᵧ!, M₂!
 export M₊ₓ!, M₊ᵧ!, M₊₂!
 
 export dirichlet_constraints, dirichlet_bc!, symmetrize!

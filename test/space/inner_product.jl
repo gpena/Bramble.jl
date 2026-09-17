@@ -17,7 +17,7 @@ using ..SpaceVectorElementsTests: setup_test_grid, valid_interior_range
         end
 
         u .= 1.0
-        der = ∇₋ₕ(u)
+        der = ∇ₕ(u)
 
         if D == 1
             @test norm(der[valid_interior_range(1, dims)...]) ≈ 0.0
@@ -32,7 +32,7 @@ using ..SpaceVectorElementsTests: setup_test_grid, valid_interior_range
         wf(x, i) = x[i]
         for dimension in 1:D
             Rₕ!(u, Base.Fix2(wf, dimension))
-            der = ∇₋ₕ(u)
+            der = ∇ₕ(u)
 
             if D == 1
                 @views ee = der[valid_interior_range(1, dims)...]
@@ -213,7 +213,7 @@ end
 end
 
 @testset "H¹ seminorm gradient" begin
-    # snorm₁ₕ(uₕ) == norm₊(∇₋ₕ(uₕ)) is the definition of the discrete H¹ seminorm, and
+    # snorm₁ₕ(uₕ) == norm₊(∇ₕ(uₕ)) is the definition of the discrete H¹ seminorm, and
     # snorm₁ₕ computes it without materialising the gradient. The two routes must agree
     # in every dimension, on uniform and non-uniform grids.
     meshes = (
@@ -239,7 +239,7 @@ end
             f = Ωₕ isa Bramble.Mesh1D ? (x -> sin(3x) + x) : (x -> sin(3x[1]) + x[end]^2)
             uₕ = Rₕ(Wₕ, f)
 
-            @test snorm₁ₕ(uₕ) ≈ norm₊(∇₋ₕ(uₕ))
+            @test snorm₁ₕ(uₕ) ≈ norm₊(∇ₕ(uₕ))
             # the H¹ norm is built from the two of them
             @test norm₁ₕ(uₕ)^2 ≈ normₕ(uₕ)^2 + snorm₁ₕ(uₕ)^2
             # a constant has zero gradient, so zero seminorm
@@ -290,9 +290,9 @@ end
             inn = innerₕ(uₕ, uₕ)
             ok1 = isapprox(n_sq, inn; atol = 1e-10 * max(n_sq, 1.0), rtol = 1e-10)
 
-            # snorm₁ₕ(uₕ) == norm₊(∇₋ₕ(uₕ))
+            # snorm₁ₕ(uₕ) == norm₊(∇ₕ(uₕ))
             sn = snorm₁ₕ(uₕ)
-            grad_norm = norm₊(∇₋ₕ(uₕ))
+            grad_norm = norm₊(∇ₕ(uₕ))
             ok2 = isapprox(sn, grad_norm; atol = 1e-10 * max(sn, 1.0), rtol = 1e-10)
 
             # norm₁ₕ(uₕ)² == normₕ(uₕ)² + snorm₁ₕ(uₕ)²

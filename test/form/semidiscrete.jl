@@ -30,7 +30,7 @@ function _sd_problem(n)
     Ωₕ = Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0)), n)
     Wₕ = gridspace(Ωₕ)
     fₕ = Bramble.element(Wₕ, 0.0)
-    a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+    a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
     l = form(Wₕ, v -> innerₕ(fₕ, v))
     return Ωₕ, Wₕ, fₕ, a, l
 end
@@ -345,7 +345,7 @@ end
     nleaf = ndofs(Wₕ)
 
     cₕ = Rₕ(Wₕ, x -> 1.0)
-    a = form(Vₕ, Vₕ, (u, v) -> inner₊(∇₋ₕ(u(1)), ∇₋ₕ(v(1))) + inner₊(∇₋ₕ(u(2)), ∇₋ₕ(v(2))))
+    a = form(Vₕ, Vₕ, (u, v) -> inner₊(∇ₕ(u(1)), ∇ₕ(v(1))) + inner₊(∇ₕ(u(2)), ∇ₕ(v(2))))
     # Distinct values per component, so a residual that mixed the blocks could not pass.
     l = form(Vₕ, v -> innerₕ(cₕ, v(1)) + 3 * innerₕ(cₕ, v(2)))
 
@@ -450,9 +450,9 @@ end
     end
 
     @testset "requires a diagonal mass matrix" begin
-        # A genuine coupling term: `M₋ₓ(v)` reaches `v`'s neighbour, so column `i` of the
+        # A genuine coupling term: `Mₓ(v)` reaches `v`'s neighbour, so column `i` of the
         # assembled mass form has an off-diagonal entry.
-        mass_coupled = form(Wₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(u), M₋ₓ(v)))
+        mass_coupled = form(Wₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(u), Mₓ(v)))
         sd_coupled = semidiscretize(a, l; mass = mass_coupled)
         @test_throws ArgumentError semidiscretize_rhs(sd_coupled)
     end

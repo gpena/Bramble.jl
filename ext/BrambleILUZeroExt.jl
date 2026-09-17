@@ -44,7 +44,7 @@ if Bramble.PRECOMPILE_WORKLOAD
         Ωₕ = Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0)), 5, true)
         Wₕ = Bramble.gridspace(Ωₕ)
         a = Bramble.form(
-            Wₕ, Wₕ, (u, v) -> Bramble.inner₊(Bramble.∇₋ₕ(u), Bramble.∇₋ₕ(v)) + Bramble.innerₕ(Bramble.D₊ₓ(u), v)
+            Wₕ, Wₕ, (u, v) -> Bramble.inner₊(Bramble.∇ₕ(u), Bramble.∇ₕ(v)) + Bramble.innerₕ(Bramble.D₊ₓ(u), v)
         )
         A = Bramble.assemble(a; dirichlet = :boundary)
 

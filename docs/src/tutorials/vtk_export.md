@@ -121,7 +121,7 @@ using OrdinaryDiffEqBDF
 Wₕt = gridspace(Ωₕt)
 fₕ = element(Wₕt, 0.0)
 
-a = form(Wₕt, Wₕt, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+a = form(Wₕt, Wₕt, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
 l = form(Wₕt, v -> innerₕ(fₕ, v))
 bcs = dirichlet_constraints(Ωₕt, interval(0.0, 1.0), :boundary => (x, t) -> 0.0)
 sd = semidiscretize(a, l; dirichlet = bcs)

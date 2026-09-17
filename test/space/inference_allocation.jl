@@ -60,9 +60,9 @@ using ..TestUtils: alloc_test, @test_allocs
     @testset "Type stability (operators)" begin
         # scalar operators, per direction, in each dimension
         for (lbl, uₕ, ops) in (
-            ("1D", uₕ1, (diff₋ₓ, diff₊ₓ, D₋ₓ, D₊ₓ, jumpₓ, M₋ₓ, M₊ₓ)),
-            ("2D", uₕ2, (diff₋ᵧ, diff₊ᵧ, D₋ᵧ, D₊ᵧ, jumpᵧ, M₋ᵧ, M₊ᵧ)),
-            ("3D", uₕ3, (diff₋₂, diff₊₂, D₋₂, D₊₂, jump₂, M₋₂, M₊₂))
+            ("1D", uₕ1, (diff₋ₓ, diff₊ₓ, D₋ₓ, D₊ₓ, jumpₓ, Mₓ, M₊ₓ)),
+            ("2D", uₕ2, (diff₋ᵧ, diff₊ᵧ, D₋ᵧ, D₊ᵧ, jumpᵧ, Mᵧ, M₊ᵧ)),
+            ("3D", uₕ3, (diff₋₂, diff₊₂, D₋₂, D₊₂, jump₂, M₂, M₊₂))
         )
             @testset "$lbl" begin
                 for op in ops
@@ -72,15 +72,15 @@ using ..TestUtils: alloc_test, @test_allocs
         end
 
         # the tuple-valued aliases: a bare element in 1D, an NTuple above it
-        @test @inferred(∇₋ₕ(uₕ1)) isa VectorElement
-        for op in (∇₋ₕ, ∇₊ₕ, diff₋ₕ, diff₊ₕ, jumpₕ, M₋ₕ, M₊ₕ)
+        @test @inferred(∇ₕ(uₕ1)) isa VectorElement
+        for op in (∇ₕ, ∇₊ₕ, diff₋ₕ, diff₊ₕ, jumpₕ, Mₕ, M₊ₕ)
             @test @inferred(op(uₕ2)) isa NTuple{2, VectorElement}
             @test @inferred(op(uₕ3)) isa NTuple{3, VectorElement}
         end
 
         # composite grid functions go through a separate dispatch
         @test @inferred(D₋ₓ(cₕ2)) isa VectorElement
-        @test @inferred(∇₋ₕ(cₕ2)) isa NTuple{2, VectorElement}
+        @test @inferred(∇ₕ(cₕ2)) isa NTuple{2, VectorElement}
     end
 
     @testset "Type stability (inner products)" begin
@@ -91,7 +91,7 @@ using ..TestUtils: alloc_test, @test_allocs
                 @test @inferred(normₕ(uₕ)) isa Float64
                 @test @inferred(snorm₁ₕ(uₕ)) isa Float64
                 @test @inferred(norm₁ₕ(uₕ)) isa Float64
-                g = ∇₋ₕ(uₕ)
+                g = ∇ₕ(uₕ)
                 @test @inferred(norm₊(g)) isa Float64
                 @test @inferred(inner₊(g, g)) isa Float64
             end
@@ -121,14 +121,14 @@ using ..TestUtils: alloc_test, @test_allocs
     end
 
     @testset "Zero dynamic dispatch (vectorial aliases)" begin
-        # gpena/Bramble.jl#146: `∇₋ₕ`/`∇₊ₕ`/`diff₋ₕ`/`diff₊ₕ`/`M₋ₕ`/`M₊ₕ`/`Dstar₊ₕ`/`Dcₕ`/`∇ₕ`
+        # gpena/Bramble.jl#146: `∇ₕ`/`∇₊ₕ`/`diff₋ₕ`/`diff₊ₕ`/`Mₕ`/`M₊ₕ`/`D̽ₕ`/`Dcₕ`/`Dₕ`
         # used to generate their 2D/3D methods from `ntuple(i -> base_op(arg, Val(i)),
         # Val(D))`, which boxes `i` as a runtime Int inside the closure: `Val(i)` can
         # never constant-fold, so every coordinate paid for dynamic dispatch all the way
         # down the difference-engine call stack (2-8 dispatches per call, per JET).
         # `_vectorial_expr` now writes the 2D/3D methods out with literal `Val(1)`,
         # `Val(2)`, `Val(3)` calls instead, so this must report zero.
-        for op in (∇₋ₕ, ∇₊ₕ, diff₋ₕ, diff₊ₕ, jumpₕ, M₋ₕ, M₊ₕ, Dstar₊ₕ, Dcₕ, ∇ₕ)
+        for op in (∇ₕ, ∇₊ₕ, diff₋ₕ, diff₊ₕ, jumpₕ, Mₕ, M₊ₕ, D̽ₕ, Dcₕ, Dₕ)
             rep2 = JET.report_call(op, (typeof(uₕ2),))
             @test isempty(JET.get_reports(rep2))
             rep3 = JET.report_call(op, (typeof(uₕ3),))
@@ -177,9 +177,9 @@ using ..TestUtils: alloc_test, @test_allocs
         # The exact property, not a bound: applying an operator costs one `similar`.
         # It is what fails first when a closure starts boxing or a temporary creeps in.
         for (lbl, uₕ, ops) in (
-            ("1D", uₕ1, (diff₋ₓ, D₋ₓ, M₋ₓ, jumpₓ)),
-            ("2D", uₕ2, (diff₋ᵧ, D₋ᵧ, M₋ᵧ, jumpᵧ)),
-            ("3D", uₕ3, (diff₋₂, D₋₂, M₋₂, jump₂))
+            ("1D", uₕ1, (diff₋ₓ, D₋ₓ, Mₓ, jumpₓ)),
+            ("2D", uₕ2, (diff₋ᵧ, D₋ᵧ, Mᵧ, jumpᵧ)),
+            ("3D", uₕ3, (diff₋₂, D₋₂, M₂, jump₂))
         )
             @testset "$lbl" begin
                 baseline = alloc_test(similar, uₕ)

@@ -109,11 +109,11 @@ using Bramble:
     @testset "Gradient shapes" begin
         @test grad_backward(id) isa NTuple{2, BackwardDifference}
         @test grad_forward(id) isa NTuple{2, ForwardDifference}
-        @test ∇₋ₕ(id) === grad_backward(id)
+        @test ∇ₕ(id) === grad_backward(id)
         @test ∇₊ₕ(id) === grad_forward(id)
 
-        # the tuple form, applied component-wise, which only ∇₋ₕ used to have
-        @test ∇₋ₕ((id, id)) == map(grad_backward, (id, id))
+        # the tuple form, applied component-wise, which only ∇ₕ used to have
+        @test ∇ₕ((id, id)) == map(grad_backward, (id, id))
         @test ∇₊ₕ((id, id)) == map(grad_forward, (id, id))
         @test length(∇₊ₕ((id, id))) == 2
         @test all(g -> g isa NTuple{2, ForwardDifference}, ∇₊ₕ((id, id)))
@@ -121,7 +121,7 @@ using Bramble:
         # in one dimension the gradient is the node itself, not a 1-tuple
         Ω1 = mesh(domain(interval(0.0, 1.0)), 7, true)
         id1 = IdentityOperator(gridspace(Ω1))
-        @test !(∇₋ₕ(id1) isa Tuple)
+        @test !(∇ₕ(id1) isa Tuple)
         @test !(∇₊ₕ(id1) isa Tuple)
     end
 
@@ -131,26 +131,26 @@ using Bramble:
         ky_elem = element(Wₕ, 3.4)
 
         # Scalar and VectorElement scaling
-        g_sc = 3.0 * ∇₋ₕ(id)
+        g_sc = 3.0 * ∇ₕ(id)
         @test g_sc isa NTuple{2, Bramble.OperatorScale}
-        @test ∇₋ₕ(id) * 3.0 isa NTuple{2, Bramble.OperatorScale}
+        @test ∇ₕ(id) * 3.0 isa NTuple{2, Bramble.OperatorScale}
 
-        g_elem = k_elem * ∇₋ₕ(id)
+        g_elem = k_elem * ∇ₕ(id)
         @test g_elem isa NTuple{2, Bramble.GridFunctionScale}
-        @test ∇₋ₕ(id) * k_elem isa NTuple{2, Bramble.GridFunctionScale}
+        @test ∇ₕ(id) * k_elem isa NTuple{2, Bramble.GridFunctionScale}
 
         # Component-wise tuple scaling
-        g_tuple = (kx_elem, ky_elem) * ∇₋ₕ(id)
+        g_tuple = (kx_elem, ky_elem) * ∇ₕ(id)
         @test g_tuple isa NTuple{2, Bramble.GridFunctionScale}
         @test g_tuple[1].grid_function === kx_elem
         @test g_tuple[2].grid_function === ky_elem
 
         # Assembly correctness
-        a_scaled = form(Wₕ, Wₕ, (u, v) -> inner₊(k_elem * ∇₋ₕ(u), ∇₋ₕ(v)))
+        a_scaled = form(Wₕ, Wₕ, (u, v) -> inner₊(k_elem * ∇ₕ(u), ∇ₕ(v)))
         a_manual = form(Wₕ, Wₕ, (u, v) -> inner₊(k_elem * D₋ₓ(u), D₋ₓ(v)) + inner₊(k_elem * D₋ᵧ(u), D₋ᵧ(v)))
         @test assemble(a_scaled) ≈ assemble(a_manual)
 
-        a_aniso = form(Wₕ, Wₕ, (u, v) -> inner₊((kx_elem, ky_elem) * ∇₋ₕ(u), ∇₋ₕ(v)))
+        a_aniso = form(Wₕ, Wₕ, (u, v) -> inner₊((kx_elem, ky_elem) * ∇ₕ(u), ∇ₕ(v)))
         a_aniso_man = form(Wₕ, Wₕ, (u, v) -> inner₊(kx_elem * D₋ₓ(u), D₋ₓ(v)) + inner₊(ky_elem * D₋ᵧ(u), D₋ᵧ(v)))
         @test assemble(a_aniso) ≈ assemble(a_aniso_man)
     end

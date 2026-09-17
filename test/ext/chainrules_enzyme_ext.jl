@@ -38,7 +38,7 @@ using ..TestUtils: _fd, _have
 
             Ωₕ = Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0)), 21, true)
             Wₕ = gridspace(Ωₕ)
-            a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+            a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
             fₕ = Rₕ(Wₕ, x -> pi^2 * sinpi(x[1]))
             l_fixed = form(Wₕ, v -> innerₕ(fₕ, v))
 
@@ -93,7 +93,7 @@ using ..TestUtils: _fd, _have
             # types and this is the fully inferred call site, not the dynamically dispatched
             # one that happened to compile before.
             function loss_coeff(θ::Real)
-                aθ = form(Wₕ, Wₕ, (u, v) -> θ * inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+                aθ = form(Wₕ, Wₕ, (u, v) -> θ * inner₊(∇ₕ(u), ∇ₕ(v)))
                 A, F = assemble(aθ, l_fixed; dirichlet = :boundary => x -> 0.0)
                 return sum(abs2, Bramble.pde_solve(A, F))
             end
@@ -106,7 +106,7 @@ using ..TestUtils: _fd, _have
             # comparing two runtime numbers leaves the same kind of `Union` behind.
             function loss_coeff_sum(θ::Real)
                 aθ = form(
-                    Wₕ, Wₕ, (u, v) -> θ * inner₊(∇₋ₕ(u), ∇₋ₕ(v)) + (1 - θ) * innerₕ(u, v)
+                    Wₕ, Wₕ, (u, v) -> θ * inner₊(∇ₕ(u), ∇ₕ(v)) + (1 - θ) * innerₕ(u, v)
                 )
                 A, F = assemble(aθ, l_fixed; dirichlet = :boundary => x -> 0.0)
                 return sum(abs2, Bramble.pde_solve(A, F))
@@ -144,7 +144,7 @@ using ..TestUtils: _fd, _have
             l3 = form(W3, v -> innerₕ(Rₕ(W3, x -> 1.0), v))
 
             function loss_stiff_2d(θ::Real)
-                aθ = form(W2, W2, (u, v) -> θ * inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+                aθ = form(W2, W2, (u, v) -> θ * inner₊(∇ₕ(u), ∇ₕ(v)))
                 A, F = assemble(aθ, l2; dirichlet = :boundary => x -> 0.0)
                 return sum(abs2, Bramble.pde_solve(A, F))
             end
@@ -152,7 +152,7 @@ using ..TestUtils: _fd, _have
                   _fd(loss_stiff_2d, θ0) rtol=1e-3
 
             function loss_stiff_3d(θ::Real)
-                aθ = form(W3, W3, (u, v) -> θ * inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+                aθ = form(W3, W3, (u, v) -> θ * inner₊(∇ₕ(u), ∇ₕ(v)))
                 A, F = assemble(aθ, l3; dirichlet = :boundary => x -> 0.0)
                 return sum(abs2, Bramble.pde_solve(A, F))
             end
@@ -164,7 +164,7 @@ using ..TestUtils: _fd, _have
             # `GridFunctionScale`'s vector rather than through an `OperatorScale`'s number.
             function loss_field_2d(θ::Real)
                 κₕ = Bramble.element(W2, θ)
-                aκ = form(W2, W2, (u, v) -> inner₊(κₕ * ∇₋ₕ(u), ∇₋ₕ(v)))
+                aκ = form(W2, W2, (u, v) -> inner₊(κₕ * ∇ₕ(u), ∇ₕ(v)))
                 A, F = assemble(aκ, l2; dirichlet = :boundary => x -> 0.0)
                 return sum(abs2, Bramble.pde_solve(A, F))
             end
@@ -199,8 +199,8 @@ using ..TestUtils: _fd, _have
                 aθ = form(
                     Wₕ,
                     Wₕ,
-                    (u, v) -> θ * (innerₕ(u, v) + inner₊(∇₋ₕ(u), ∇₋ₕ(v)) +
-                                   inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+                    (u, v) -> θ * (innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)) +
+                                   inner₊(∇ₕ(u), ∇ₕ(v)))
                 )
                 A, F = assemble(aθ, l_fixed; dirichlet = :boundary => x -> 0.0)
                 return sum(abs2, Bramble.pde_solve(A, F))
@@ -217,7 +217,7 @@ using ..TestUtils: _fd, _have
             # homogeneous Dirichlet problem supplies such a zero for free: a constrained
             # row's solution entry is exactly its boundary value, so `u[j] == 0` makes a
             # whole column of `-λuᵀ` exactly zero.
-            aθ0 = form(Wₕ, Wₕ, (u, v) -> 0.7 * inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+            aθ0 = form(Wₕ, Wₕ, (u, v) -> 0.7 * inner₊(∇ₕ(u), ∇ₕ(v)))
             A0, F0 = assemble(aθ0, l_fixed; dirichlet = :boundary => x -> 0.0)
             @test count(iszero, A0 \ F0) > 0          # the zero that triggered it exists here
             dA = SparseMatrixCSC(

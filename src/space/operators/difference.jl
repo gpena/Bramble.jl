@@ -2,7 +2,7 @@
 #
 # The difference families over grid functions: the undivided difference (`diff₋`/`diff₊`),
 # the divided one that approximates a derivative (`D₋`/`D₊`), the summation-by-parts pairing
-# `Dstar₊`, the centered `Dc`, and the second-order non-uniform `Dₕ`. Each is generated per
+# `D̽`, the centered `Dc`, and the second-order non-uniform `Dₕ`. Each is generated per
 # coordinate from the templates below.
 #
 # A stencil that runs off the grid is truncated rather than extrapolated: a backward operator
@@ -69,7 +69,7 @@ end
 # a point and its neighbour. `Centered` does not read the middle one; it is passed anyway
 # so that both centered operators can share one traversal.
 #
-# `h` is the averaged spacing, the same view `Dstar₊` divides by, because
+# `h` is the averaged spacing, the same view `D̽` divides by, because
 #
 #     x_{i+1} - x_{i-1} = h_i + h_{i+1} = 2 h*_i
 #
@@ -103,7 +103,7 @@ end
 @inline @propagate_inbounds _compute_difference(::GridDirection, ::Val{true}, cur, h, i) = zero(cur)
 
 # The two-sided (centred) engine's boundary call carries the one neighbour still on the
-# grid, in addition to `cur` -- `Centered`/`Dstar₊` (the latter routed through the one-sided
+# grid, in addition to `cur` -- `Centered`/`D̽` (the latter routed through the one-sided
 # engine and the fallback above; only `Centered` reaches this one) still have no stencil at
 # a truncated end and read zero regardless, ignoring it. `CrossWeighted` overrides this
 # below to use it (gpena/Bramble.jl#183).
@@ -126,7 +126,7 @@ end
 
 # --- The starred forward difference ----------------------------------------------- #
 #
-#   Dstar₊(uₕ)(i) = (u(xᵢ₊₁) - u(xᵢ)) / ((hᵢ + hᵢ₊₁) / 2)
+#   D̽(uₕ)(i) = (u(xᵢ₊₁) - u(xᵢ)) / ((hᵢ + hᵢ₊₁) / 2)
 #
 # The forward difference divided by the averaged spacing rather than by the forward
 # spacing. Away from the boundary that denominator is the width of the cell around xᵢ,
@@ -141,7 +141,7 @@ end
     StarSpacings(h)
 
 Lazy view of the averaged spacings ``(h_i + h_{i+1})/2`` over a mesh's cached backward
-spacings `h`, which is what [`Dstar₊ₓ`](@ref) divides by.
+spacings `h`, which is what [`D̽ₓ`](@ref) divides by.
 
 Entry `i` reads `h[i]` and `h[i+1]`, so it is defined for `i < length(h)`. That is exactly
 the range the forward stencil's interior covers; the last point has no forward neighbour
@@ -198,7 +198,7 @@ end
 
 # --- Deriving h and checking preconditions from a leaf's own submesh -------------- #
 #
-# Every family below (unscaled and finite differences, Dstar₊, Dc, Dₕ) shares one shape:
+# Every family below (unscaled and finite differences, D̽, Dc, Dₕ) shares one shape:
 # derive `h` (or nothing) from the direction's submesh, optionally check a precondition on
 # it, then apply the stencil. Only what `h` is and whether there is a precondition differ.
 # `spacing_func`/`precheck` are ordinary named functions, never closures over local state,
@@ -406,7 +406,7 @@ const _DIFFERENCE_OP_CONFIGS = [
         diff_alias = :diff₋,
         finite_diff_alias = :D₋,
         grad_alias = :diff₋ₕ,
-        finite_grad_alias = :∇₋ₕ,
+        finite_grad_alias = :∇ₕ,
         dir_string = "Backward",
         dir_string_lowercase = "backward",
         math_op = "u_{i} - u_{i-1}",
@@ -552,9 +552,9 @@ end
     what="finite difference",
     formula="\\frac{u_{i} - u_{i-1}}{h_i}",
     formula_note="The unscaled difference is not divided by the grid spacing; the finite difference is.",
-    vectorial_alias=∇₋ₕ)
+    vectorial_alias=∇ₕ)
 
-# --- The three centred families: Dstar₊, Dc, Dₕ ------------------------------------ #
+# --- The three centred families: D̽, Dc, Dₕ ------------------------------------ #
 #
 # Each family's grid-function form is the same three-method shape `_DIFFERENCE_OP_CONFIGS`
 # already generates above for the two one-sided families: a scalar `!`, a composite `!`
@@ -573,7 +573,7 @@ end
 # gpena/Bramble.jl#258 removed the `Core.eval` these were generated through.
 
 @operator_family(base=forward_star_difference,
-    stem=Dstar₊,
+    stem=D̽,
     apply_fn=_apply_spaced!,
     extra_args=(star_spacings, _no_precheck),
     direction=Forward(),
@@ -583,11 +583,11 @@ end
       The forward difference of `uₕ` along `dim_val`, divided by the averaged spacing:
 
       ```math
-      \\textrm{Dstar}_{+}(\\textrm{u}_h)(i) =
+      \\overset{\\times}{\\textrm{D}}_{+}(\\textrm{u}_h)(i) =
           \\frac{\\textrm{u}_h(x_{i+1}) - \\textrm{u}_h(x_i)}{(h_i + h_{i+1})/2}
       ```
 
-      Reached through [`Dstar₊ₓ`](@ref) and its siblings, and takes a mesh, a grid space or a
+      Reached through [`D̽ₓ`](@ref) and its siblings, and takes a mesh, a grid space or a
       grid function as the other difference families do.
 
       The last point has no forward neighbour, so it is truncated to zero, as in
@@ -603,7 +603,7 @@ end
                           "direction over the averaged spacing, "*
                           "``\\frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}``, written "*
                           "into `vₕ`.",
-    vectorial_alias=Dstar₊ₕ,
+    vectorial_alias=D̽ₕ,
     vectorial_dir_string="starred forward",
     vectorial_what="difference")
 
@@ -691,10 +691,10 @@ end
                           "the `{direction}` direction, the backward differences "*
                           "at ``x_{i+1}`` and ``x_i`` weighted by ``h_i`` and "*
                           "``h_{i+1}``, written into `vₕ`.",
-    vectorial_alias=∇ₕ,
+    vectorial_alias=Dₕ,
     vectorial_dir_string="cross-weighted centered",
     vectorial_what="difference",
-    vectorial_note="The centered counterpart of [`∇₋ₕ`](@ref) and [`∇₊ₕ`](@ref), "*
+    vectorial_note="The centered counterpart of [`∇ₕ`](@ref) and [`∇₊ₕ`](@ref), "*
                    "built from [`Dₕₓ`](@ref) rather than from the one-sided "*
                    "differences.")
 
@@ -702,7 +702,7 @@ end
 # Matrix forms for the three centred families
 # ==============================================================================
 #
-# `Dstar₊`, `Dc` and `Dₕ` had grid-function forms only, so of the eight operator families
+# `D̽`, `Dc` and `Dₕ` had grid-function forms only, so of the eight operator families
 # five could be had as a matrix and three could not. That asymmetry had to be explained in
 # every one of their docstrings, and it left the form layer's nodes for them with nothing
 # to be checked against.
@@ -710,7 +710,7 @@ end
 # Each is a diagonal scaling of unscaled difference matrices this file already builds, so
 # none needs a new traversal:
 #
-#     Dstar₊ = diag(2/(hᵢ + hᵢ₊₁))                  · (shift₊₁ - shift₀)
+#     D̽ = diag(2/(hᵢ + hᵢ₊₁))                  · (shift₊₁ - shift₀)
 #     Dc     = diag(1/(hᵢ + hᵢ₊₁))                  · (shift₊₁ - shift₋₁)
 #     Dₕ     = diag(hᵢ/((hᵢ+hᵢ₊₁)hᵢ₊₁))             · diff₊
 #            + diag(hᵢ₊₁/((hᵢ+hᵢ₊₁)hᵢ))             · diff₋

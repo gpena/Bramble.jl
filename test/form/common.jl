@@ -306,7 +306,7 @@ using Bramble:
         for wrap in (
             D₋ₓ,
             D₊ₓ,
-            M₋ₓ,
+            Mₓ,
             M₊ₓ,
             op -> shift_op(op, 1, 1),
             op -> restrict_to(:interior, op),
@@ -348,7 +348,7 @@ end
         for e in (
             v -> innerₕ(fₕ, v),
             v -> innerₕ(fₕ, D₋ₓ(v)),
-            v -> innerₕ(fₕ, M₋ₓ(v)),
+            v -> innerₕ(fₕ, Mₓ(v)),
             v -> innerₕ(fₕ, jumpₓ(v)),
             v -> inner₊ₓ(fₕ, D₋ₓ(v))
         )
