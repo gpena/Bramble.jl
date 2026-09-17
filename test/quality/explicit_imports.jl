@@ -135,7 +135,7 @@ using ExplicitImports
     #   underscored -- `Bramble.adjoint_sensitivities` is meant to be called, just not
     #   exported, since `SciMLSensitivity` exports a function of the exact same name and
     #   `using Bramble, SciMLSensitivity` together would collide on the bare name regardless
-    #   of what Bramble does (the stub's own docstring, `form/semidiscrete.jl`, has the
+    #   of what Bramble does (the stub's own docstring, `form/semidiscrete_problems.jl`, has the
     #   reasoning). Its core fallback still gives the same helpful error the underscored ones
     #   below do.
     # - `_ast_sparsity_detector` (BrambleSparseADExt), `_ode_function`/`_ode_problem`/

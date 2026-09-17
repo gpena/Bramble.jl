@@ -104,6 +104,23 @@ using SuiteSparse
         ldiv!(fact_spd, b_in_place)
         @test isapprox(b_in_place, x; atol = 1e-12)
 
+        # Regression: a `VectorElement` destination used to hit a method ambiguity
+        # between Bramble's `ldiv!(::VectorElement, ::Factorization, ::AbstractVector)`
+        # and this extension's three-argument `ldiv!` on an `AbstractVector` destination.
+        uₕ = element(W)
+        @test ldiv!(uₕ, fact_spd, F) === uₕ
+        @test isapprox(parent(uₕ), A \ F; atol = 1e-12)
+
+        # Regression: a complex right-hand side used to be ambiguous between this
+        # extension's `\(::Concrete...Factorization, ::AbstractVector)` and
+        # `LinearAlgebra`'s `\(::Factorization{T}, ::Vector{Complex{T}})`. The answer is
+        # the real solve applied to each part.
+        F_complex = complex.(F, 2 .* F)
+        u_complex = fact_spd \ F_complex
+        @test u_complex isa Vector{ComplexF64}
+        @test isapprox(real(u_complex), A \ F; atol = 1e-12)
+        @test isapprox(imag(u_complex), A \ (2 .* F); atol = 1e-12)
+
         # Modify values with same sparsity pattern via unique refactor! driver
         A_mod = copy(A)
         A_mod[1, 1] += 5.0

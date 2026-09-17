@@ -96,8 +96,34 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
         return b
     end
 
+    # Disambiguates the two equally specific candidates for a `VectorElement` destination:
+    # Bramble's generic `ldiv!(::VectorElement, ::Factorization, ::AbstractVector)` and the
+    # `ldiv!(::AbstractVector, ::ConcreteAccelerateFactorization, ::AbstractVector)` above.
+    # `VectorElement <: AbstractVector` and `ConcreteAccelerateFactorization <:
+    # Factorization`, so neither method is more specific and `ldiv!(uₕ, fact, F)` would
+    # otherwise be an ambiguity error. Unwraps the destination and returns the
+    # `VectorElement`, matching the contract of Bramble's method.
+    function LinearAlgebra.ldiv!(
+            uₕ::Bramble.VectorElement, fact::ConcreteAccelerateFactorization, b::AbstractVector
+    )
+        ldiv!(parent(uₕ), fact, b)
+        return uₕ
+    end
+
     function Base.:\(fact::ConcreteAccelerateFactorization, b::AbstractVector)
         return fact.aa_fact \ b
+    end
+
+    # `LinearAlgebra` defines `\(::Factorization{T}, ::Vector{Complex{T}})` for real
+    # factorizations against a complex right-hand side, and `ConcreteAccelerateFactorization
+    # <: Factorization`, so that method and the one above are equally specific for a complex
+    # vector -- the call would be ambiguous without this one. It restates what
+    # `LinearAlgebra` does: solve the real and imaginary parts separately and recombine
+    # them.
+    function Base.:\(
+            fact::ConcreteAccelerateFactorization{T}, b::Vector{Complex{T}}
+    ) where {T <: Union{Float32, Float64}}
+        return complex.(fact \ real(b), fact \ imag(b))
     end
 
     function Bramble._accelerate_refactor!(fact::ConcreteAccelerateFactorization, A::SparseMatrixCSC)
