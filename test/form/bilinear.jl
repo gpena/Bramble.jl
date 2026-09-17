@@ -7,6 +7,7 @@ using LinearAlgebra: Diagonal, I, diag, dot
 using SparseArrays: sparse, nnz, nonzeros
 using Random
 using Supposition
+using ..TestUtils: _nonuniform_points
 using Bramble:
                BilinearForm,
                form,
@@ -983,15 +984,6 @@ end
         minimum = -5.0, maximum = 5.0, nans = false, infs = false
     )
 
-    function _partition(h)
-        pts = zeros(Float64, length(h) + 1)
-        for i in eachindex(h)
-            pts[i + 1] = pts[i] + h[i]
-        end
-        pts ./= pts[end]
-        return pts
-    end
-
     # Absolute floor beside the relative one: a drawn partition can make an entry
     # analytically zero land at round-off.
     _agree(A, B) = isapprox(Matrix(A), Matrix(B); atol = 1e-10, rtol = 1e-10)
@@ -999,7 +991,7 @@ end
     @check function check_assembly_is_linear_in_terms(
             h = Data.Vectors(positive_h; min_size = 3, max_size = 10), α = scalar
     )
-        pts = _partition(h)
+        pts = _nonuniform_points(h)
         Ωₕ = mesh(domain(interval(0.0, 1.0)), length(pts), false)
         set_points!(Ωₕ, pts)
         Wₕ = gridspace(Ωₕ)
@@ -1019,7 +1011,7 @@ end
     @check function check_linear_form_is_linear_in_source(
             h = Data.Vectors(positive_h; min_size = 3, max_size = 10), α = scalar
     )
-        pts = _partition(h)
+        pts = _nonuniform_points(h)
         Ωₕ = mesh(domain(interval(0.0, 1.0)), length(pts), false)
         set_points!(Ωₕ, pts)
         Wₕ = gridspace(Ωₕ)

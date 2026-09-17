@@ -8,6 +8,7 @@ using SciMLBase: SciMLBase, ODEProblem, LinearProblem, NonlinearProblem, solve
 using OrdinaryDiffEqBDF: FBDF, QNDF
 using OrdinaryDiffEqRosenbrock: Rodas5P
 using OrdinaryDiffEqTsit5: Tsit5
+using ..TestUtils: _check_eoc
 using NonlinearSolve: NewtonRaphson
 using ADTypes: AutoFiniteDiff
 using LinearSolve: KrylovJL_GMRES
@@ -278,17 +279,7 @@ end
         # differentiating through `t` -- hence `AutoFiniteDiff`. The BDF methods need no
         # `∂f/∂t` at all. See the note on `ode_function`.
         for alg in (FBDF(), QNDF(), Rodas5P(; autodiff = AutoFiniteDiff()))
-            errors = Float64[]
-            spacings = Float64[]
-            for n in (11, 21, 41)
-                e, h = solve_to(n, alg)
-                push!(errors, e)
-                push!(spacings, h)
-            end
-            eoc = [log(errors[i] / errors[i + 1]) / log(spacings[i] / spacings[i + 1]) for
-                   i in 1:(length(errors) - 1)]
-            @test all(>(1.9), eoc)
-            @test issorted(errors; rev = true)
+            _check_eoc(n -> solve_to(n, alg), (11, 21, 41))
         end
 
         # An analytical `tgrad` -- exact here since `∂f/∂t = -f` for this manufactured
@@ -302,17 +293,7 @@ end
             assemble!(dT, l_t)
             return dT
         end
-        errors = Float64[]
-        spacings = Float64[]
-        for n in (11, 21, 41)
-            e, h = solve_to(n, Rodas5P(); tgrad = exact_tgrad)
-            push!(errors, e)
-            push!(spacings, h)
-        end
-        eoc = [log(errors[i] / errors[i + 1]) / log(spacings[i] / spacings[i + 1]) for
-               i in 1:(length(errors) - 1)]
-        @test all(>(1.9), eoc)
-        @test issorted(errors; rev = true)
+        _check_eoc(n -> solve_to(n, Rodas5P(); tgrad = exact_tgrad), (11, 21, 41))
     end
 
     # `semidiscretize(build, l; ...)` (src/form/semidiscrete.jl) is the other half of #107:
@@ -473,17 +454,7 @@ end
                 return normₕ(Rₕ(Wₕ, x -> _wave_uex(x, 1.0)) - uₕ), hₘₐₓ(Bramble.mesh(Wₕ))
             end
 
-            errors = Float64[]
-            spacings = Float64[]
-            for n in (11, 21, 41)
-                e, h = solve_to(n)
-                push!(errors, e)
-                push!(spacings, h)
-            end
-            eoc = [log(errors[i] / errors[i + 1]) / log(spacings[i] / spacings[i + 1]) for
-                   i in 1:(length(errors) - 1)]
-            @test all(>(1.9), eoc)
-            @test issorted(errors; rev = true)
+            _check_eoc(solve_to, (11, 21, 41))
         end
     end
 
@@ -603,17 +574,7 @@ end
 
         for (name, errfn) in (("linear_problem", _linear_error),
             ("nonlinear_problem", _nonlinear_error))
-            errors = Float64[]
-            spacings = Float64[]
-            for n in (11, 21, 41)
-                e, h = errfn(n)
-                push!(errors, e)
-                push!(spacings, h)
-            end
-            eoc = [log(errors[i] / errors[i + 1]) / log(spacings[i] / spacings[i + 1]) for
-                   i in 1:(length(errors) - 1)]
-            @test all(>(1.9), eoc)
-            @test issorted(errors; rev = true)
+            _check_eoc(errfn, (11, 21, 41))
         end
     end
 end

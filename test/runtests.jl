@@ -205,18 +205,12 @@ if __bramble_with_ext_backends
         # belongs here rather than behind the "ad" group. Enzyme/Mooncake composition is
         # chainrules_enzyme_ext.jl instead, alongside autodiff_heavy.jl below.
         include("ext/chainrules_ext.jl")
-        # Runs the worked heat-equation page itself, whose assertions need a stiff solver
-        # for a differential-algebraic system -- so it belongs where OrdinaryDiffEq is
-        # already loaded rather than in the every-push "Worked examples" group.
-        include("examples/heat_equation.jl")
-        # Same reasoning: the nonlinear Poisson page's NonlinearSolve.jl comparison needs
-        # `NonlinearSolve` loaded, a cost the push path does not otherwise pay.
-        include("examples/poisson_nonlinear.jl")
-        # Same reasoning again: the coupled reaction-diffusion page's nonlinear_problem
-        # section needs `NonlinearSolve` too, once it grew one (#119).
-        include("examples/coupled_reaction_diffusion.jl")
-        # Same reasoning again: the AMG preconditioning page's LU/CG/AMG-CG comparison needs
-        # `LinearSolve` and `AlgebraicMultigrid` loaded.
-        include("examples/amg_preconditioning.jl")
+        # The four worked-example pages that belong to this group rather than the
+        # every-push one, for what they load rather than what they assert: a stiff solver
+        # for the differential-algebraic step, `NonlinearSolve` for the two pages with a
+        # `nonlinear_problem` section (#119), and `LinearSolve`/`AlgebraicMultigrid` for
+        # the preconditioning comparison. Last, so the ext tests above have already paid
+        # those load costs.
+        include("examples/ext_pages.jl")
     end
 end

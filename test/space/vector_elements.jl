@@ -8,7 +8,7 @@ using LinearAlgebra: norm, lu
 using SparseArrays
 using Random
 using Supposition
-using ..TestUtils: alloc_test, @test_allocs
+using ..TestUtils: alloc_test, @test_allocs, _nonuniform_points
 
 _idx_read2(u, i, j) = u[i, j]
 _idx_read2_inb(u, i, j) = @inbounds u[i, j]
@@ -1345,15 +1345,6 @@ end
     # A partition of [0, 1] from a vector of spacings: cumulative sum, rescaled. Same
     # construction as test/space/commutation.jl's, which is where this file's random
     # partitions have to match if a failure is to be comparable between them.
-    function _partition(h)
-        pts = zeros(Float64, length(h) + 1)
-        for i in eachindex(h)
-            pts[i + 1] = pts[i] + h[i]
-        end
-        pts ./= pts[end]
-        return pts
-    end
-
     # The exact mean of `c0 + c1 x + c2 x^2` over `[a, b]`, from the antiderivative.
     function _exact_mean(c0, c1, c2, a, b)
         F(x) = c0 * x + c1 * x^2 / 2 + c2 * x^3 / 3
@@ -1369,7 +1360,7 @@ end
             h = Data.Vectors(positive_h; min_size = 3, max_size = 12),
             c0 = coefficient, c1 = coefficient, c2 = coefficient
     )
-        pts = _partition(h)
+        pts = _nonuniform_points(h)
         n = length(pts)
         Ωₕ = mesh(domain(interval(0.0, 1.0)), n, false)
         set_points!(Ωₕ, pts)
@@ -1391,7 +1382,7 @@ end
             c0 = coefficient, c1 = coefficient, c2 = coefficient, d0 = coefficient,
             d1 = coefficient
     )
-        px, py = _partition(hx), _partition(hy)
+        px, py = _nonuniform_points(hx), _nonuniform_points(hy)
         nx, ny = length(px), length(py)
 
         Ωₕ = mesh(

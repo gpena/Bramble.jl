@@ -15,12 +15,9 @@ using ..TestUtils: _run_example_page
 # step now (gpena/Bramble.jl#117). What those files covered that the pages do not -- a
 # variable-coefficient operator no page uses -- stays in convergence.jl.
 #
-# Three pages run in the `ext` group instead (test/examples/heat_equation.jl,
-# test/examples/poisson_nonlinear.jl, test/examples/coupled_reaction_diffusion.jl):
-# heat_equation steps a differential-algebraic system with `FBDF`, and poisson_nonlinear and
-# coupled_reaction_diffusion each grew a `nonlinear_problem`/NonlinearSolve.jl comparison
-# needing `NonlinearSolve` -- loading any of these is a cost the push path does not otherwise
-# pay.
+# Four more pages run in the `ext` group instead (test/examples/ext_pages.jl), for what they
+# load rather than what they assert, and two more behind a differentiation backend
+# (test/examples/inverse_diffusion.jl, test/examples/transient_inverse_problem.jl).
 
 @testset "Worked example pages" begin
     @testset "Linear Poisson" begin

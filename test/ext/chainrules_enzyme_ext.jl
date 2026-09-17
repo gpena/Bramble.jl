@@ -31,7 +31,6 @@ using ..TestUtils: _fd, _have
 # `nnz`/buffer-consistency check below pins that, and no test in this file may call
 # `@import_rrule`: doing so defines a second rule for the same signature.
 
-
 @testset "BrambleChainRulesExt + Enzyme" begin
     @testset "Enzyme, through BrambleEnzymeExt's native rule" begin
         if _have(:Enzyme)

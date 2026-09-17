@@ -17,7 +17,6 @@ using ..TestUtils: _run_example_page, _have
 # boundary-value ramp rate) against their true values, within the synthetic observation
 # noise, and that the loss actually decreased from the starting guess.
 
-
 @testset "Transient inverse problem page" begin
     if _have(:SciMLSensitivity)
         _run_example_page(:transient_inverse_problem)

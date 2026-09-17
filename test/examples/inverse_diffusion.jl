@@ -15,7 +15,6 @@ using ..TestUtils: _run_example_page, _have
 # the synthetic observation noise) and that the loss actually decreased from the starting
 # guess.
 
-
 @testset "Inverse diffusion page" begin
     if _have(:Enzyme)
         _run_example_page(:inverse_diffusion)

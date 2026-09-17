@@ -165,7 +165,6 @@ using Bramble: index_in_marker, markers
         @test occursin("Available marker labels on this space are:", msg_form)
         @test occursin(":inlet", msg_form)
     end
-
 end
 
 end # module

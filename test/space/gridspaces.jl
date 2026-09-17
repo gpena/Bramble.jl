@@ -18,7 +18,7 @@ using Bramble: vector
 using LinearAlgebra: norm
 using Random
 using Supposition
-using ..TestUtils: alloc_test, @test_allocs
+using ..TestUtils: alloc_test, @test_allocs, _nonuniform_points
 
 @testset "Grid spaces" begin
     mesh1d = mesh(domain(interval(0, 1)), 10, true)
@@ -609,21 +609,12 @@ end
         minimum = 0.01, maximum = 10.0, nans = false, infs = false
     )
 
-    function _partition(h)
-        pts = zeros(Float64, length(h) + 1)
-        for i in eachindex(h)
-            pts[i + 1] = pts[i] + h[i]
-        end
-        pts ./= pts[end]
-        return pts
-    end
-
     # The k-th component is `10^(2(k-1))` times a shape that is not constant, so a block
     # that receives the wrong source shows it in the number rather than agreeing by accident.
     _component(k) = x -> 10.0^(2 * (k - 1)) * (sin(3x) + 2)
 
     function _setup(h, ncomp)
-        pts = _partition(h)
+        pts = _nonuniform_points(h)
         Ωₕ = mesh(domain(interval(0.0, 1.0)), length(pts), false)
         set_points!(Ωₕ, pts)
         Wₕ = gridspace(Ωₕ)

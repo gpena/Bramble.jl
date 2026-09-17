@@ -27,7 +27,6 @@ using ..TestUtils: _fd
 # `Bramble.domain`/`Bramble.mesh`/`Bramble.element` are qualified throughout for the reason
 # meshes_ext.jl gives: every ext file is included into the same `Main`.
 
-
 @testset "BrambleChainRulesExt" begin
     @testset "rrule: pullback matches finite differences, Ā never densified" begin
         n = 6
