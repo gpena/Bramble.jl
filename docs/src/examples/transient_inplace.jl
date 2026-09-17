@@ -92,14 +92,16 @@ length(F), uₕ[1]
 # ## One step
 #
 # Five in-place calls: set the time factor, refill the load, add `B uⁿ` onto it, overwrite the
-# constrained entries, and backsolve into `uₕ`'s own storage.
+# constrained entries, and backsolve into `uₕ`'s own storage. The last one takes the
+# [`VectorElement`](@ref) itself as its destination and writes through to the coefficients
+# behind it, so the solution never moves and nothing is allocated to hold it.
 
 function step!(uₕ, F, decay, B, fact, l, Ωₕ, bcs, t)
     decay[] = exp(-t)                            # the form reads this live
     assemble!(F, l)                              # refill, no allocation
     mul!(F, B, parent(uₕ), 1.0, 1.0)             # F += B uⁿ
     dirichlet_bc!(F, Ωₕ, bcs, :boundary)
-    ldiv!(parent(uₕ), fact, F)                   # uⁿ⁺¹ into the same storage
+    ldiv!(uₕ, fact, F)                           # uⁿ⁺¹ into the same storage
     return nothing
 end
 
