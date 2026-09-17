@@ -126,7 +126,7 @@ using ..TestUtils: alloc_test, @test_allocs
         # Val(D))`, which boxes `i` as a runtime Int inside the closure: `Val(i)` can
         # never constant-fold, so every coordinate paid for dynamic dispatch all the way
         # down the difference-engine call stack (2-8 dispatches per call, per JET).
-        # `_define_vectorial_alias` now writes the 2D/3D methods out with literal `Val(1)`,
+        # `_vectorial_expr` now writes the 2D/3D methods out with literal `Val(1)`,
         # `Val(2)`, `Val(3)` calls instead, so this must report zero.
         for op in (∇₋ₕ, ∇₊ₕ, diff₋ₕ, diff₊ₕ, jumpₕ, M₋ₕ, M₊ₕ, Dstar₊ₕ, Dcₕ, ∇ₕ)
             rep2 = JET.report_call(op, (typeof(uₕ2),))

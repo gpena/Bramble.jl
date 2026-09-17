@@ -405,7 +405,7 @@ end
 # The `2D` non-overlapping slabs partitioning `indices(Ωₕ)`'s rim, described above. `Val(2D)`
 # and the inner `Val(D)` are both resolved from `term`/`sp`'s own type parameters, so both
 # `ntuple`s unroll at compile time -- no closure captures a runtime dimension count the way
-# `_define_vectorial_alias`'s comment (`space/operators/stencil.jl`) warns a `Val(i)` built
+# `_vectorial_expr`'s comment (`space/operators/stencil.jl`) warns a `Val(i)` built
 # from a loop variable would.
 @inline function _boundary_shell_slabs(
         ax::NTuple{D, AbstractUnitRange{Int}}, margin::Int

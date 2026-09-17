@@ -223,22 +223,34 @@ for config in _AVERAGE_OP_CONFIGS
         #
         # Only the mesh-forwarding overload is generated here; the grid-function trio
         # (scalar `!`, composite `!`, allocating) comes from
-        # `_define_grid_function_forms`, shared with `difference.jl`
+        # `@operator_family` below, shared with `difference.jl`
         # (gpena/Bramble.jl#101).
         @inline $average_name(Wₕ::AbstractSpaceType, dim_val::Val) = $average_name(mesh(Wₕ), dim_val)
     end
-
-    # An average divides by nothing the direction does not already say, so unlike the
-    # differences it needs no spacing function and no precondition: `_apply_averaged!`
-    # takes the direction alone.
-    _define_grid_function_forms(average_name, :_apply_averaged!, (), dir_instance)
-
-    _define_operator_aliases(
-        average_name,
-        average_alias,
-        dir_string_lowercase,
-        "average",
-        math_op;
-        vectorial_alias = vectorial_average_alias
-    )
 end
+
+# The grid-function forms and the alias surface, one `@operator_family` call per family.
+# They sit outside the loop above because a macro is expanded where it is written: the
+# family's configuration has to be literal at that point, not a `config.field` read at load
+# time (gpena/Bramble.jl#258).
+#
+# An average divides by nothing the direction does not already say, so unlike the
+# differences it needs no spacing function and no precondition: `_apply_averaged!` takes the
+# direction alone, and `extra_args` is left out.
+@operator_family(base=forward_average,
+    stem=M₊,
+    apply_fn=_apply_averaged!,
+    direction=Forward(),
+    dir_string="forward",
+    what="average",
+    formula="\\frac{u_{i} + u_{i+1}}{2}",
+    vectorial_alias=M₊ₕ)
+
+@operator_family(base=backward_average,
+    stem=M₋,
+    apply_fn=_apply_averaged!,
+    direction=Backward(),
+    dir_string="backward",
+    what="average",
+    formula="\\frac{u_{i-1} + u_{i}}{2}",
+    vectorial_alias=M₋ₕ)

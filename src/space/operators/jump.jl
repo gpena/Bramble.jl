@@ -71,8 +71,8 @@ are the same quantity.
 """
 @inline jump!(vₕ, uₕ, dim_val::Val) = forward_difference!(vₕ, uₕ, dim_val)
 
-# The aliases are written out rather than taken from `_define_directional_alias` and
-# `_define_vectorial_alias`: those generators put a direction word into the docstring
+# The aliases are written out rather than taken from `@operator_family` and its
+# `_alias_expr`/`_vectorial_expr` builders: those generators put a direction word into the docstring
 # ("The `forward` jump along …"), and there is no direction to name here.
 for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
     alias = Symbol(:jump, suffix)

@@ -125,25 +125,81 @@ end
 end
 
 # --- Alias and docstring generators -------------------------------------------------- #
+#
+# Every generator below *returns* the expression that defines its methods; nothing is
+# evaluated here (gpena/Bramble.jl#258). The `@operator_family` macro at the end of the
+# file splices those expressions into its own expansion, so each operator method reaches
+# the compiler as an ordinary declaration the parser already saw, rather than as something
+# `Core.eval`ed into the module while it loads.
+#
+# The prose a family needs per alias used to arrive as a closure over `direction`/`suffix`.
+# A macro cannot call a closure -- it only ever sees the expression that would build one --
+# so the notes are string literals carrying `{direction}` and `{suffix}` placeholders
+# instead, substituted here at expansion time.
 
 """
-    _define_directional_alias!(base_op_name, alias_name, dir_string, suffix,
-                               direction_index, what, formula; opening_sentence = "")
+    _relocate!(ex, source)
 
-Defines `alias_name(vₕ, uₕ)` as `base_op_name(vₕ, uₕ, Val(direction_index))` and attaches a
-docstring to it.
+Rewrites every `LineNumberNode` in `ex` to `source`, and returns `ex`.
 
-The in-place sibling of `_define_directional_alias`. Two generators rather than one
-because the shapes differ: the allocating alias takes a single argument that may be a mesh,
-a space or a grid function, while this one takes a destination and a source and is only ever
-about grid functions.
+A generated method otherwise reports the `:(...)` quote it was built from -- one shared line
+in this file for every family -- because that is the line info the quote carries. Rewriting
+it to the `__source__` the macro was expanded at makes `methods(D₋ₓ)`, a stacktrace and an
+editor's "go to definition" all land on the family's own `@operator_family` call.
+
+`source` given as `nothing` leaves `ex` untouched, which is what a direct call outside the
+macro gets.
+"""
+_relocate!(ex, ::Nothing) = ex
+_relocate!(ex, ::LineNumberNode) = ex
+
+function _relocate!(ex::Expr, source::LineNumberNode)
+    for (i, arg) in enumerate(ex.args)
+        if arg isa LineNumberNode
+            ex.args[i] = source
+        elseif arg isa Expr
+            _relocate!(arg, source)
+        end
+    end
+    return ex
+end
+
+"""
+    _subst(template, direction, suffix)
+
+Substitutes the `{direction}` and `{suffix}` placeholders in a family's prose template.
+
+Both placeholders are replaced in a single pass, so neither can be rewritten by the other's
+replacement text. An empty template stays empty, which is how a family says it needs no note
+at that insertion point.
+"""
+@inline function _subst(template::AbstractString, direction, suffix)
+    isempty(template) && return ""
+    return replace(String(template), "{direction}" => direction, "{suffix}" => suffix)
+end
+
+"""
+    _alias_bang_expr(base_op_name, alias_name, dir_string, suffix, direction_index, what,
+                     formula; opening_sentence = "", source = nothing)
+
+Returns the expression defining `alias_name(vₕ, uₕ)` as
+`base_op_name(vₕ, uₕ, Val(direction_index))`, with its docstring attached.
+
+The in-place sibling of `_alias_expr`. Two generators rather than one because the shapes
+differ: the allocating alias takes a single argument that may be a mesh, a space or a grid
+function, while this one takes a destination and a source and is only ever about grid
+functions.
 
 `opening_sentence`, given non-empty, replaces the generic "The `\$dir_string` `\$what` of
 `uₕ` along the `\$suffix` direction, ``\$formula``, written into `vₕ`." the same way it does
-for `_define_directional_alias` -- `Dc!`/`Dₕ!` have no backward/forward adjective to put in
-`dir_string` either.
+for `_alias_expr` -- `Dc!`/`Dₕ!` have no backward/forward adjective to put in `dir_string`
+either.
+
+`source` is the `LineNumberNode` the generated method is attributed to; the macro passes its
+own `__source__`, so a generated method reports the family's call site rather than the quoted
+line in this file.
 """
-function _define_directional_alias!(
+function _alias_bang_expr(
         base_op_name,
         alias_name,
         dir_string,
@@ -151,7 +207,8 @@ function _define_directional_alias!(
         direction_index,
         what,
         formula;
-        opening_sentence::String = ""
+        opening_sentence::String = "",
+        source = nothing
 )
     opening = if isempty(opening_sentence)
         "The `$dir_string` $what of `uₕ` along the `$suffix` direction, " *
@@ -176,21 +233,21 @@ function _define_directional_alias!(
     scalar or of a composite grid space, componentwise on the latter.
     """
 
-    func_def_expr = :(@inline $(alias_name)(vₕ, uₕ) = $(base_op_name)(vₕ, uₕ, Val($(direction_index))))
-    final_expr = Expr(
-        :macrocall, GlobalRef(Core, Symbol("@doc")), nothing, doc_string, func_def_expr
+    func_def_expr = _relocate!(
+        :(@inline $(alias_name)(vₕ, uₕ) = $(base_op_name)(vₕ, uₕ, Val($(direction_index)))), source
     )
-    return Core.eval(@__MODULE__, final_expr)
+    return Expr(
+        :macrocall, GlobalRef(Core, Symbol("@doc")), source, doc_string, func_def_expr
+    )
 end
 
 """
-    _define_directional_alias(base_op_name, alias_name, dir_string, suffix,
-                              direction_index, what, formula;
-                              opening_sentence = "", formula_note = "", alias_note = "",
-                              trailing_note = "")
+    _alias_expr(base_op_name, alias_name, dir_string, suffix, direction_index, what,
+                formula; opening_sentence = "", formula_note = "", alias_note = "",
+                trailing_note = "", source = nothing)
 
-Defines `alias_name(arg)` as `base_op_name(arg, Val(direction_index))` and attaches a
-docstring to it.
+Returns the expression defining `alias_name(arg)` as `base_op_name(arg, Val(direction_index))`,
+with its docstring attached.
 
 `what` names the quantity, such as `"finite difference"`, and `formula` is the LaTeX for
 it. Both are needed because the four operator families share this generator: describing
@@ -211,8 +268,11 @@ the description of `arg`, before the closing "Accepts a grid function..." paragr
 which differ both in what happens at the ends -- `Dstar₊`/`Dc` truncate, `Dₕ` falls back
 to a one-sided difference (gpena/Bramble.jl#183) -- and in whether a mesh needs at least
 three points along the direction).
+
+`source` attributes the generated method to the family's own call site, as in
+[`_alias_bang_expr`](@ref).
 """
-function _define_directional_alias(
+function _alias_expr(
         base_op_name,
         alias_name,
         dir_string,
@@ -223,7 +283,8 @@ function _define_directional_alias(
         opening_sentence::String = "",
         formula_note::String = "",
         alias_note::String = "",
-        trailing_note::String = ""
+        trailing_note::String = "",
+        source = nothing
 )
     fn = isempty(formula_note) ? "" : " " * formula_note
     an = isempty(alias_note) ? "" : " " * alias_note
@@ -234,7 +295,6 @@ function _define_directional_alias(
         opening_sentence
     end
 
-    # 1. Construct the docstring content.
     doc_string = """
         $alias_name(arg)
 
@@ -249,36 +309,31 @@ function _define_directional_alias(
     grid function whose components are those results.
     """
 
-    # 2. Construct the function definition as an expression.
-    func_def_expr = :(@inline $(alias_name)(arg) = $(base_op_name)(arg, Val($(direction_index))))
-
-    # 3. Combine them using the @doc macro syntax into a final expression.
-    #    The `__source__` variable is replaced with `nothing`.
-    final_expr = Expr(
-        :macrocall, GlobalRef(Core, Symbol("@doc")), nothing, doc_string, func_def_expr
+    func_def_expr = _relocate!(
+        :(@inline $(alias_name)(arg) = $(base_op_name)(arg, Val($(direction_index)))), source
     )
 
-    # 4. Evaluate the final, complete expression in the module's global scope.
-    return Core.eval(@__MODULE__, final_expr)
+    return Expr(
+        :macrocall, GlobalRef(Core, Symbol("@doc")), source, doc_string, func_def_expr
+    )
 end
 
 """
-    _define_vectorial_alias(base_op_name, alias_name, dir_string, what; note = "")
+    _vectorial_expr(base_op_name, alias_name, dir_string, what; note = "", source = nothing)
 
-Defines the `ₕ` alias that applies `base_op_name` along every coordinate and returns a
-tuple, one entry per spatial dimension. On a one-dimensional mesh it returns that single
-entry rather than a one-tuple.
+Returns the expressions defining the `ₕ` alias that applies `base_op_name` along every
+coordinate and returns a tuple, one entry per spatial dimension, as a `Vector{Expr}`. On a
+one-dimensional mesh the alias returns that single entry rather than a one-tuple.
 
-The counterpart of `_define_directional_alias` for the tuple-valued aliases
-(`∇₋ₕ`, `diff₋ₕ`, `M₋ₕ`). The operator families generated the same three methods
-independently before this existed.
+The counterpart of `_alias_expr` for the tuple-valued aliases (`∇₋ₕ`, `diff₋ₕ`, `M₋ₕ`). The
+operator families generated the same three methods independently before this existed.
 
 `note`, given non-empty, is an extra sentence appended after the worked 2D example --
 `∇ₕ` uses this to place itself relative to `∇₋ₕ`/`∇₊ₕ`, a comparison none of the other
 vectorial aliases need.
 """
-function _define_vectorial_alias(
-        base_op_name, alias_name, dir_string, what; note::String = ""
+function _vectorial_expr(
+        base_op_name, alias_name, dir_string, what; note::String = "", source = nothing
 )
     n = isempty(note) ? "" : " " * note
     doc_string = """
@@ -296,8 +351,8 @@ function _define_vectorial_alias(
     the latter: each entry of the tuple is then itself a composite grid function.
     """
 
-    # Built one at a time, as in _define_directional_alias: @doc takes a single
-    # definition, and only the entry point carries the docstring.
+    # Returned one at a time, as in _alias_expr: @doc takes a single definition, and only
+    # the entry point carries the docstring.
     #
     # 2D/3D are written out rather than generated from a generic `ntuple(i -> ...,
     # Val(D)) where D` method: inside that closure, `Val(i)` boxes `i` as a runtime
@@ -314,22 +369,20 @@ function _define_vectorial_alias(
         $(base_op_name)(arg, Val(3))
     ))
 
-    final_expr = Expr(
-        :macrocall, GlobalRef(Core, Symbol("@doc")), nothing, doc_string, entry
+    documented_entry = Expr(
+        :macrocall, GlobalRef(Core, Symbol("@doc")), source, doc_string, entry
     )
-    Core.eval(@__MODULE__, final_expr)
-    Core.eval(@__MODULE__, one_d)
-    Core.eval(@__MODULE__, two_d)
-    return Core.eval(@__MODULE__, three_d)
+    return Expr[_relocate!(e, source) for e in (documented_entry, one_d, two_d, three_d)]
 end
 
 """
-    _define_grid_function_forms(base_name, apply_fn, extra_args, dir_instance;
-                                docstring = "")
+    _grid_function_forms_expr(base_name, apply_fn, extra_args, dir_instance;
+                              docstring = "", source = nothing)
 
-Defines the three methods every directional operator family applies a grid function
-through: `base_name!` on a scalar grid function, `base_name!` on a composite one, and the
-allocating `base_name` built on top of them.
+Returns the expressions defining the three methods every directional operator family
+applies a grid function through, as a `Vector{Expr}`: `base_name!` on a scalar grid
+function, `base_name!` on a composite one, and the allocating `base_name` built on top of
+them.
 
 The three are byte-identical across the families apart from which applicator they call and
 what it takes before the direction (gpena/Bramble.jl#101); `difference.jl` and
@@ -353,8 +406,9 @@ measured against (gpena/Bramble.jl#79).
 `docstring`, given non-empty, is attached to the scalar `base_name!` method; the families
 whose prose lives here rather than on a separately hand-written matrix form use it.
 """
-function _define_grid_function_forms(
-        base_name, apply_fn, extra_args, dir_instance; docstring::String = ""
+function _grid_function_forms_expr(
+        base_name, apply_fn, extra_args, dir_instance;
+        docstring::String = "", source = nothing
 )
     bang_name = Symbol(base_name, :!)
     extra = Any[extra_args...]
@@ -373,41 +427,34 @@ function _define_grid_function_forms(
 
     allocating = :(@inline $(base_name)(uₕ::VectorElement, dim_val::Val) = $(bang_name)(similar(uₕ), uₕ, dim_val))
 
-    if isempty(docstring)
-        Core.eval(@__MODULE__, scalar)
+    documented_scalar = if isempty(docstring)
+        scalar
     else
-        Core.eval(
-            @__MODULE__,
-            Expr(:macrocall, GlobalRef(Core, Symbol("@doc")), nothing, docstring, scalar)
-        )
+        Expr(:macrocall, GlobalRef(Core, Symbol("@doc")), source, docstring, scalar)
     end
-    Core.eval(@__MODULE__, composite)
-    return Core.eval(@__MODULE__, allocating)
+    return Expr[_relocate!(e, source) for e in (documented_scalar, composite, allocating)]
 end
 
-# The default for a family that needs no extra prose on a given alias: every keyword of
-# `_define_directional_alias` is already optional.
-@inline _no_alias_kwargs(direction, suffix) = (;)
-
 """
-    _define_operator_aliases(base_name, alias_stem, dir_string, what, formula;
-                             vectorial_alias = nothing, vectorial_note = "",
-                             alias_kwargs = _no_alias_kwargs,
-                             bang_alias_kwargs = _no_alias_kwargs)
+    _operator_aliases_expr(base_name, alias_stem, dir_string, what, formula;
+                           vectorial_alias = nothing, vectorial_note = "",
+                           opening_sentence = "", formula_note = "", alias_note = "",
+                           trailing_note = "", bang_opening_sentence = "", source = nothing)
 
-Defines one family's whole alias surface: the per-coordinate `alias_stem` pair for every
-direction (`Dcₓ`/`Dcₓ!`, `M₋ᵧ`/`M₋ᵧ!`, …) and, when `vectorial_alias` is given, the `ₕ`
-alias over every coordinate at once.
+Returns the expressions defining one family's whole alias surface, as a `Vector{Expr}`: the
+per-coordinate `alias_stem` pair for every direction (`Dcₓ`/`Dcₓ!`, `M₋ᵧ`/`M₋ᵧ!`, …) and,
+when `vectorial_alias` is given, the `ₕ` alias over every coordinate at once.
 
-[`_define_directional_alias`](@ref)/[`_define_directional_alias!`](@ref) and
-[`_define_vectorial_alias`](@ref) were already shared; the *loop* calling them was written
-out once per family in `difference.jl` and once more in `average.jl`
-(gpena/Bramble.jl#101). This is that loop.
+[`_alias_expr`](@ref)/[`_alias_bang_expr`](@ref) and [`_vectorial_expr`](@ref) were already
+shared; the *loop* calling them was written out once per family in `difference.jl` and once
+more in `average.jl` (gpena/Bramble.jl#101). This is that loop.
 
-`alias_kwargs`/`bang_alias_kwargs` are called as `f(direction, suffix)` and return the
-keyword arguments for that one alias; the notes each family needs are bespoke prose
-("over the averaged spacing", "second order on a non-uniform grid, where `Dcₓ` is first"),
-so they are supplied per family rather than templated from `what`/`formula`.
+The five note keywords are prose templates rather than finished sentences: each may carry
+`{direction}` and `{suffix}`, substituted per alias by [`_subst`](@ref). They were closures
+taking `(direction, suffix)` until gpena/Bramble.jl#258 -- a macro sees the expression that
+would build a closure, never the closure itself, so the notes a family needs
+("over the averaged spacing", "second order on a non-uniform grid, where `Dc{suffix}` is
+first") travel as string literals instead.
 
 `vectorial_dir_string`/`vectorial_what` default to `dir_string`/`what` and exist for the
 families that describe the tuple-valued alias differently from the per-coordinate ones:
@@ -415,7 +462,7 @@ families that describe the tuple-valued alias differently from the per-coordinat
 and `what` empty, while `Dstar₊ₕ`/`Dcₕ`/`∇ₕ` still want "the centered difference of `arg`
 along every coordinate".
 """
-function _define_operator_aliases(
+function _operator_aliases_expr(
         base_name,
         alias_stem,
         dir_string,
@@ -425,44 +472,161 @@ function _define_operator_aliases(
         vectorial_dir_string = dir_string,
         vectorial_what = what,
         vectorial_note::String = "",
-        alias_kwargs = _no_alias_kwargs,
-        bang_alias_kwargs = _no_alias_kwargs
+        opening_sentence::String = "",
+        formula_note::String = "",
+        alias_note::String = "",
+        trailing_note::String = "",
+        bang_opening_sentence::String = "",
+        source = nothing
 )
     bang_name = Symbol(base_name, :!)
+    exprs = Expr[]
 
     for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
         # The human-readable label ("x"), not the subscript ("ₓ"): this lands in the
         # generic "along the `x` direction" sentence, which a family overriding
         # `opening_sentence` never reaches but the templated ones do.
         direction = _BRAMBLE_var2label[i]
-        _define_directional_alias(
-            base_name,
-            Symbol(alias_stem, suffix),
-            dir_string,
-            direction,
-            i,
-            what,
-            formula;
-            alias_kwargs(direction, suffix)...
+        push!(
+            exprs,
+            _alias_expr(
+                base_name,
+                Symbol(alias_stem, suffix),
+                dir_string,
+                direction,
+                i,
+                what,
+                formula;
+                opening_sentence = _subst(opening_sentence, direction, suffix),
+                formula_note = _subst(formula_note, direction, suffix),
+                alias_note = _subst(alias_note, direction, suffix),
+                trailing_note = _subst(trailing_note, direction, suffix),
+                source
+            )
         )
-        _define_directional_alias!(
-            bang_name,
-            Symbol(alias_stem, suffix, :!),
-            dir_string,
-            direction,
-            i,
-            what,
-            formula;
-            bang_alias_kwargs(direction, suffix)...
+        push!(
+            exprs,
+            _alias_bang_expr(
+                bang_name,
+                Symbol(alias_stem, suffix, :!),
+                dir_string,
+                direction,
+                i,
+                what,
+                formula;
+                opening_sentence = _subst(bang_opening_sentence, direction, suffix),
+                source
+            )
         )
     end
 
-    vectorial_alias === nothing && return nothing
-    return _define_vectorial_alias(
-        base_name,
-        vectorial_alias,
-        vectorial_dir_string,
-        vectorial_what;
-        note = vectorial_note
+    vectorial_alias === nothing && return exprs
+    append!(
+        exprs,
+        _vectorial_expr(
+            base_name,
+            vectorial_alias,
+            vectorial_dir_string,
+            vectorial_what;
+            note = vectorial_note,
+            source
+        )
     )
+    return exprs
+end
+
+# --- The family macro ---------------------------------------------------------------- #
+
+"""
+    @operator_family(kwargs...)
+
+Defines one operator family's grid-function forms and its whole alias surface, declaratively.
+
+Replaces the `Core.eval` generators this file used to carry (gpena/Bramble.jl#258): the
+methods now arrive through macro expansion, so the parser sees each definition where it is
+written instead of the module growing methods while it loads.
+
+Keywords, all optional except `base` and `stem`:
+
+| Keyword | Meaning |
+|:--|:--|
+| `base` | the base operator name the aliases forward to, e.g. `backward_finite_difference` |
+| `stem` | the alias stem, e.g. `D₋`, giving `D₋ₓ`, `D₋ᵧ`, `D₋₂` and their `!` forms |
+| `apply_fn`, `extra_args`, `direction` | passed to [`_grid_function_forms_expr`](@ref); omitting `apply_fn` skips the grid-function forms, for a family that writes them itself |
+| `docstring` | attached to the scalar `base!` method |
+| `dir_string`, `what`, `formula` | fill the generic docstring template |
+| `vectorial_alias`, `vectorial_dir_string`, `vectorial_what`, `vectorial_note` | the `ₕ` alias over every coordinate |
+| `opening_sentence`, `formula_note`, `alias_note`, `trailing_note`, `bang_opening_sentence` | prose templates; see [`_operator_aliases_expr`](@ref) for where each lands and for the `{direction}`/`{suffix}` placeholders |
+
+Every value is a literal: a symbol for a name, a string for prose, a call such as
+`Backward()` for the direction tag. Nothing is evaluated at expansion time beyond assembling
+the docstrings, which is ordinary string building over those literals.
+"""
+macro operator_family(kwargs...)
+    opts = Dict{Symbol, Any}()
+    for kw in kwargs
+        (kw isa Expr && kw.head === :(=)) ||
+            error("@operator_family takes `key = value` arguments, got $(kw)")
+        opts[kw.args[1]] = kw.args[2]
+    end
+
+    get_str(key) = _macro_string(get(opts, key, ""))
+    exprs = Expr[]
+
+    if haskey(opts, :apply_fn)
+        append!(
+            exprs,
+            _grid_function_forms_expr(
+                opts[:base],
+                opts[:apply_fn],
+                Tuple(_tuple_args(get(opts, :extra_args, Expr(:tuple)))),
+                opts[:direction];
+                docstring = get_str(:docstring),
+                source = __source__
+            )
+        )
+    end
+
+    append!(
+        exprs,
+        _operator_aliases_expr(
+            opts[:base],
+            opts[:stem],
+            get_str(:dir_string),
+            get_str(:what),
+            get_str(:formula);
+            vectorial_alias = get(opts, :vectorial_alias, nothing),
+            vectorial_dir_string = _get_str_or(opts, :vectorial_dir_string, get_str(:dir_string)),
+            vectorial_what = _get_str_or(opts, :vectorial_what, get_str(:what)),
+            vectorial_note = get_str(:vectorial_note),
+            opening_sentence = get_str(:opening_sentence),
+            formula_note = get_str(:formula_note),
+            alias_note = get_str(:alias_note),
+            trailing_note = get_str(:trailing_note),
+            bang_opening_sentence = get_str(:bang_opening_sentence),
+            source = __source__
+        )
+    )
+
+    return esc(Expr(:block, exprs...))
+end
+
+# `extra_args = (spacings_func, _no_precheck)` reaches the macro as a tuple expression; a
+# family that needs none writes nothing and gets the empty tuple.
+_tuple_args(ex::Expr) = ex.head === :tuple ? ex.args : Any[ex]
+_tuple_args(s::Symbol) = Any[s]
+
+# A keyword that defaults to another keyword's value rather than to the empty string.
+_get_str_or(opts, key, fallback) = haskey(opts, key) ? _macro_string(opts[key]) : fallback
+
+# Prose long enough to wrap is written as `"..." * "..."` in the family's call, so what
+# reaches the macro is the concatenation expression rather than one literal. Folding it here
+# keeps the source readable without making the macro evaluate anything: only `*` chains of
+# string literals are accepted, and anything else is a mistake worth reporting as one.
+_macro_string(s::AbstractString) = String(s)
+
+function _macro_string(ex::Expr)
+    (ex.head === :call && ex.args[1] === :*) ||
+        error("expected a string literal or a `*` concatenation of string literals, got $(ex)")
+    return join(_macro_string(a) for a in ex.args[2:end])
 end
