@@ -5,6 +5,7 @@ using Bramble
 using ChainRulesCore
 using SparseArrays: SparseMatrixCSC, nnz
 using LinearAlgebra: I
+using ..TestUtils: _fd, _have
 
 # Enzyme composition for `BrambleChainRulesExt`'s `pde_solve` rrule. Behind the "ad"/"full"
 # groups, same reasoning and the same `_have`/`@test_skip` idiom `autodiff_heavy.jl` already
@@ -30,8 +31,6 @@ using LinearAlgebra: I
 # `nnz`/buffer-consistency check below pins that, and no test in this file may call
 # `@import_rrule`: doing so defines a second rule for the same signature.
 
-_have(mod::Symbol) = Base.identify_package(String(mod)) !== nothing
-_central_diff(f, x, h = 1e-6) = (f(x + h) - f(x - h)) / 2h
 
 @testset "BrambleChainRulesExt + Enzyme" begin
     @testset "Enzyme, through BrambleEnzymeExt's native rule" begin
@@ -53,7 +52,7 @@ _central_diff(f, x, h = 1e-6) = (f(x + h) - f(x - h)) / 2h
             end
 
             θ0 = 0.7
-            d_fd = _central_diff(loss, θ0)
+            d_fd = _fd(loss, θ0)
 
             # Closures reaching a grid space/mesh need `set_runtime_activity` -- the same
             # documented Enzyme quirk `autodiff_heavy.jl`'s own Enzyme testset already pins
@@ -79,7 +78,7 @@ _central_diff(f, x, h = 1e-6) = (f(x + h) - f(x - h)) / 2h
                 return sum(abs2, Bramble.pde_solve(A, F))
             end
             @test Enzyme.gradient(mode, Enzyme.Const(loss_symmetrized), θ0)[1] ≈
-                  _central_diff(loss_symmetrized, θ0) rtol=1e-4
+                  _fd(loss_symmetrized, θ0) rtol=1e-4
 
             # A gradient with respect to the *operator's own* coefficient: `θ` scales the
             # bilinear form itself, so it reaches `assemble`'s recording engine rather than
@@ -100,7 +99,7 @@ _central_diff(f, x, h = 1e-6) = (f(x + h) - f(x - h)) / 2h
                 return sum(abs2, Bramble.pde_solve(A, F))
             end
             @test Enzyme.gradient(mode, Enzyme.Const(loss_coeff), θ0)[1] ≈
-                  _central_diff(loss_coeff, θ0) rtol=1e-4
+                  _fd(loss_coeff, θ0) rtol=1e-4
 
             # A sum of terms, each with its own runtime coefficient -- the shape an inverse
             # problem actually has. This one needed the *factoring* rule (`c*A + c*B ->
@@ -114,7 +113,7 @@ _central_diff(f, x, h = 1e-6) = (f(x + h) - f(x - h)) / 2h
                 return sum(abs2, Bramble.pde_solve(A, F))
             end
             @test Enzyme.gradient(mode, Enzyme.Const(loss_coeff_sum), θ0)[1] ≈
-                  _central_diff(loss_coeff_sum, θ0) rtol=1e-4
+                  _fd(loss_coeff_sum, θ0) rtol=1e-4
 
             # The gradient is not merely *a* number Enzyme was willing to produce: it has to
             # be the one the adjoint says it is. `θ * a(u, v)` scales `A` by `θ`, so
@@ -151,7 +150,7 @@ _central_diff(f, x, h = 1e-6) = (f(x + h) - f(x - h)) / 2h
                 return sum(abs2, Bramble.pde_solve(A, F))
             end
             @test Enzyme.gradient(mode, Enzyme.Const(loss_stiff_2d), θ0)[1] ≈
-                  _central_diff(loss_stiff_2d, θ0) rtol=1e-3
+                  _fd(loss_stiff_2d, θ0) rtol=1e-3
 
             function loss_stiff_3d(θ::Real)
                 aθ = form(W3, W3, (u, v) -> θ * inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
@@ -159,7 +158,7 @@ _central_diff(f, x, h = 1e-6) = (f(x + h) - f(x - h)) / 2h
                 return sum(abs2, Bramble.pde_solve(A, F))
             end
             @test Enzyme.gradient(mode, Enzyme.Const(loss_stiff_3d), θ0)[1] ≈
-                  _central_diff(loss_stiff_3d, θ0) rtol=1e-3
+                  _fd(loss_stiff_3d, θ0) rtol=1e-3
 
             # A `VectorElement` coefficient inside the form, which is what recovering a
             # diffusion *field* needs: the active values reach the walk through
@@ -171,7 +170,7 @@ _central_diff(f, x, h = 1e-6) = (f(x + h) - f(x - h)) / 2h
                 return sum(abs2, Bramble.pde_solve(A, F))
             end
             @test Enzyme.gradient(mode, Enzyme.Const(loss_field_2d), θ0)[1] ≈
-                  _central_diff(loss_field_2d, θ0) rtol=1e-3
+                  _fd(loss_field_2d, θ0) rtol=1e-3
 
             # Two *distinct* coefficient fields on same-shaped terms in one sum. This is the
             # ordinary way to write a two-material model, and it raised
@@ -193,7 +192,7 @@ _central_diff(f, x, h = 1e-6) = (f(x + h) - f(x - h)) / 2h
                 return sum(abs2, Bramble.pde_solve(A, F))
             end
             @test Enzyme.gradient(mode, Enzyme.Const(loss_two_fields_2d), θ0)[1] ≈
-                  _central_diff(loss_two_fields_2d, θ0) rtol=1e-3
+                  _fd(loss_two_fields_2d, θ0) rtol=1e-3
 
             # A 1D sum of three terms: the other shape that used to fail, at the same
             # stencil width as 2D stiffness but reached by summing rather than by dimension.
@@ -208,7 +207,7 @@ _central_diff(f, x, h = 1e-6) = (f(x + h) - f(x - h)) / 2h
                 return sum(abs2, Bramble.pde_solve(A, F))
             end
             @test Enzyme.gradient(mode, Enzyme.Const(loss_sum_three), θ0)[1] ≈
-                  _central_diff(loss_sum_three, θ0) rtol=1e-3
+                  _fd(loss_sum_three, θ0) rtol=1e-3
 
             # The defect the native rule exists to avoid, pinned at the level it actually
             # showed up: `@import_rrule`'s bridge merged the rrule's returned

@@ -124,11 +124,6 @@ if __bramble_with_unit_tests
             include("examples/pages.jl")
         end
 
-        # Bug reproducers that aren't naturally part of one subsystem file's coverage
-        # (STANDARDS.md ties this to a closed GitHub issue). Tests that extend an existing
-        # subsystem file's own coverage stay there, tagged `(#N)` in the testset title.
-        include("issues/runtests.jl")
-
         # Independent full-pipeline tests (mesh -> space -> assemble -> solve) for a path no
         # docs page reaches, as opposed to "Worked examples" above, which mirrors a page.
         include("drivers/runtests.jl")
@@ -163,8 +158,9 @@ end
 
 if __bramble_with_ad_backends
     @testset verbose=true "AD backends (expensive)" begin
-        # autodiff_backends.jl first: it defines `check_backend` and `_have`, which this
-        # reuses so both files check every backend the same way.
+        # autodiff_backends.jl first: it defines `check_backend` and `_ad_problems`, which
+        # this reuses so both files check every backend the same way. (`_have` used to come
+        # from here too and is now TestUtils'.)
         __bramble_with_unit_tests || include("space/autodiff_backends.jl")
         include("space/autodiff_heavy.jl")
         # pde_solve's rrule (ext/chainrules_ext.jl, "Package extensions" below) composed with

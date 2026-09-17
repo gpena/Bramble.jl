@@ -1,7 +1,7 @@
 module ExamplesTransientInverseProblemTests
 
 using Test
-using ..TestUtils: _run_example_page
+using ..TestUtils: _run_example_page, _have
 
 # The transient-inverse-problem page, docs/src/examples/transient_inverse_problem.jl, run
 # the same way the other worked-example pages are -- but from the "ext"/"full" groups rather
@@ -17,7 +17,6 @@ using ..TestUtils: _run_example_page
 # boundary-value ramp rate) against their true values, within the synthetic observation
 # noise, and that the loss actually decreased from the starting guess.
 
-_have(mod::Symbol) = Base.identify_package(String(mod)) !== nothing
 
 @testset "Transient inverse problem page" begin
     if _have(:SciMLSensitivity)

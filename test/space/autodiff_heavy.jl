@@ -4,7 +4,8 @@ using Test
 using Bramble
 using ForwardDiff
 using DifferentiationInterface
-using ..SpaceAutodiffBackendsTests: check_backend, _have, _ad_problems
+using ..SpaceAutodiffBackendsTests: check_backend, _ad_problems
+using ..TestUtils: _have
 
 # The two backends that are expensive to run, and the one that cannot run at all.
 #
@@ -13,7 +14,8 @@ using ..SpaceAutodiffBackendsTests: check_backend, _have, _ad_problems
 # *backend* changes rather than when Bramble does, so they sit behind the `ad` group and the
 # weekly workflow rather than running on every push.
 #
-# `check_backend` and `_have` come from autodiff_backends.jl, which the group includes first.
+# `check_backend` comes from autodiff_backends.jl, which the group includes first; `_have`
+# is TestUtils'.
 
 @testset "AD backends (slow)" begin
     @testset "PolyesterForwardDiff" begin

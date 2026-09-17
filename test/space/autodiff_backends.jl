@@ -4,6 +4,7 @@ using Test
 using Bramble
 using ForwardDiff
 using DifferentiationInterface
+using ..TestUtils: _have
 
 # Which differentiation backends can differentiate through Bramble, and through one API.
 #
@@ -37,8 +38,6 @@ using DifferentiationInterface
 # It also nests its threading inside kernels that already thread, and it is the one backend
 # that has failed on specific CI runners, where it passes locally at one and four
 # threads. Weekly is the right place for a canary like that.
-
-_have(mod::Symbol) = Base.identify_package(String(mod)) !== nothing
 
 # The two shapes worth checking: a scalar parameter, and a gradient in two. Both run the
 # parameter through Rₕ and then an operator, which is the path that mutates.

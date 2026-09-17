@@ -53,7 +53,7 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
         end
     end
 
-    @testset "Boundary is one-sided, not truncated" begin
+    @testset "Boundary is one-sided, not truncated (#183)" begin
         # gpena/Bramble.jl#183: Dₕ used to truncate both ends to zero; it now falls back
         # to the one-sided difference the near side still defines, so nothing here is
         # zero for a function with no flat point.

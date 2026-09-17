@@ -5,6 +5,7 @@ using Bramble
 using LinearAlgebra: dot
 using SciMLBase: SciMLBase, solve
 using OrdinaryDiffEqBDF: FBDF
+using ..TestUtils: _have
 
 # `Bramble.adjoint_sensitivities`: `SciMLSensitivity.adjoint_sensitivities` wrapped with the
 # two corrections gpena/Bramble.jl#239's own composition experiment found necessary --
@@ -22,8 +23,6 @@ using OrdinaryDiffEqBDF: FBDF
 # run skip that compile cost entirely rather than merely defer loading it. `Weekly.yml`'s
 # "add the expensive differentiation backends" step installs it at CI runtime for exactly
 # this group.
-
-_have(mod::Symbol) = Base.identify_package(String(mod)) !== nothing
 
 @testset "BrambleSciMLSensitivityExt" begin
     @testset "a non-ODESolution first argument still reaches the core stub" begin

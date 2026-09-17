@@ -64,6 +64,13 @@ end
 # AD test checks the derivative against this rather than merely checking that it ran.
 _fd(f, a; h = 1e-6) = (f(a + h) - f(a - h)) / (2h)
 
+# Is a package resolvable from this environment? The files behind the `ad` and `ext`
+# groups use it to `@test_skip` rather than error on a backend the environment does not
+# have. It was defined five times over -- once per such file, plus once in
+# space/autodiff_backends.jl, which autodiff_heavy.jl then imported by name, coupling the
+# two files' include order to a one-line predicate.
+_have(mod::Symbol) = Base.identify_package(String(mod)) !== nothing
+
 # A symmetric, structurally symmetric operator to constrain.
 _tri(m) = spdiagm(0 => fill(4.0, m), 1 => fill(-1.0, m - 1), -1 => fill(-1.0, m - 1))
 
