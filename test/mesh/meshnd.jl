@@ -247,6 +247,27 @@ using ..TestUtils: alloc_test, @test_allocs
             )
             Ω_2d_marked = create_test_nd_domain(intervals_2d, markers = dm_2d)
             Ωₕ_2d_marked = mesh(Ω_2d_marked, npts_2d, (true, true); backend = backend()) # Pts: x=[0,1,2,3], y=[0,1,2,3,4]
+
+            # Each marker against the predicate it was declared with, evaluated over the
+            # grid point by point: a mask that merely exists, or has the right count but
+            # sits on the wrong face, fails here. In 2D `:left`/`:right` are xmin/xmax and
+            # `:bottom`/`:top` are ymin/ymax (src/mesh/marker.jl).
+            idxs_2d = indices(Ωₕ_2d_marked)
+            mask_2d(pred) = BitVector(pred(point(Ωₕ_2d_marked, I)) for I in vec(idxs_2d))
+
+            @test Bramble.index_in_marker(Ωₕ_2d_marked, :LeftWall) == mask_2d(p -> p[1] == 0.0)
+            @test Bramble.index_in_marker(Ωₕ_2d_marked, :RightWall) == mask_2d(p -> p[1] == 3.0)
+            @test Bramble.index_in_marker(Ωₕ_2d_marked, :TopBottom) ==
+                  mask_2d(p -> p[2] == 0.0 || p[2] == 4.0)
+            @test Bramble.index_in_marker(Ωₕ_2d_marked, :CenterRegion) ==
+                  mask_2d(p -> 0.8 < p[1] < 2.2 && 1.5 < p[2] < 2.5)
+
+            # and the counts those masks imply, spelled out so a silently empty marker
+            # cannot pass by agreeing with an equally empty oracle
+            @test count(Bramble.index_in_marker(Ωₕ_2d_marked, :LeftWall)) == npts_2d[2]
+            @test count(Bramble.index_in_marker(Ωₕ_2d_marked, :RightWall)) == npts_2d[2]
+            @test count(Bramble.index_in_marker(Ωₕ_2d_marked, :TopBottom)) == 2 * npts_2d[1]
+            @test count(Bramble.index_in_marker(Ωₕ_2d_marked, :CenterRegion)) == 2  # (1,2) and (2,2)
         end
 
         @testset "Mesh modification" begin
@@ -370,6 +391,23 @@ using ..TestUtils: alloc_test, @test_allocs
             )
             Ω_3d_marked = create_test_nd_domain(intervals_3d, markers = dm_3d) # (3,4,2) pts, intervals ((0,2),(0,3),(0,1))
             Ωₕ_3d_marked = mesh(Ω_3d_marked, npts_3d, (true, true, true); backend = backend()) # Pts: x=[0,1,2], y=[0,1,2,3], z=[0,1]
+
+            # Same oracle in 3D, where the viewpoint aliases name different axes than they
+            # do in 2D: `:front` is xmax and `:bottom` is zmin (src/mesh/marker.jl). A
+            # marker landing on the 2D face instead would pass a count check and fail this.
+            idxs_3d = indices(Ωₕ_3d_marked)
+            mask_3d(pred) = BitVector(pred(point(Ωₕ_3d_marked, I)) for I in vec(idxs_3d))
+
+            @test Bramble.index_in_marker(Ωₕ_3d_marked, :BottomFace) == mask_3d(p -> p[3] == 0.0)
+            @test Bramble.index_in_marker(Ωₕ_3d_marked, :FrontFace) == mask_3d(p -> p[1] == 2.0)
+            @test Bramble.index_in_marker(Ωₕ_3d_marked, :SmallCorner) ==
+                  mask_3d(p -> p[1] < 0.5 && p[2] < 0.5 && p[3] < 0.5)
+
+            @test count(Bramble.index_in_marker(Ωₕ_3d_marked, :BottomFace)) ==
+                  npts_3d[1] * npts_3d[2]
+            @test count(Bramble.index_in_marker(Ωₕ_3d_marked, :FrontFace)) ==
+                  npts_3d[2] * npts_3d[3]
+            @test count(Bramble.index_in_marker(Ωₕ_3d_marked, :SmallCorner)) == 1  # the origin alone
         end
     end # Dimension D=3 Testset
 

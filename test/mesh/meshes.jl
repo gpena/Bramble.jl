@@ -17,9 +17,12 @@ import Bramble:
             X1 = domain(I)
             @test set(X1) isa CartesianProduct
 
+            # `domain(X)` with no markers still declares `:boundary` itself
+            @test Set(labels(markers(X1))) == Set((:boundary,))
+
             # Domain with single marker
             X2 = domain(I, markers(I, :left => x -> x[1] < -0.5))
-            @test !isnothing(markers(X2))
+            @test Set(labels(markers(X2))) == Set((:left,))
 
             # Domain with multiple markers
             X3 = domain(
@@ -31,7 +34,7 @@ import Bramble:
                     :center => x -> -0.5 ≤ x[1] ≤ 1.5
                 )
             )
-            @test !isnothing(markers(X3))
+            @test Set(labels(markers(X3))) == Set((:left, :right, :center))
         end
 
         @testset "Two-dimensional domain variations" begin
@@ -40,7 +43,8 @@ import Bramble:
 
             # Domain without markers
             X1 = domain(Ω)
-            @test !isnothing(X1)
+            @test set(X1) === Ω
+            @test Set(labels(markers(X1))) == Set((:boundary,))
 
             # Domain with boundary markers
             X2 = domain(
@@ -53,13 +57,13 @@ import Bramble:
                     :right => x -> x[1] > 0.99
                 )
             )
-            @test !isnothing(X2)
+            @test Set(labels(markers(X2))) == Set((:bottom, :top, :left, :right))
 
             # Domain with interior markers
             X3 = domain(
                 Ω, markers(Ω, :interior => x -> 0.25 < x[1] < 0.75 && 0.25 < x[2] < 0.75)
             )
-            @test !isnothing(X3)
+            @test Set(labels(markers(X3))) == Set((:interior,))
         end
 
         @testset "Three-dimensional domain" begin
@@ -67,7 +71,7 @@ import Bramble:
             Ω = I × I × I
 
             X = domain(Ω, markers(Ω, :boundary => x -> any(x .< 0.01) || any(x .> 0.99)))
-            @test !isnothing(X)
+            @test Set(labels(markers(X))) == Set((:boundary,))
             @test set(X) isa CartesianProduct
         end
     end
@@ -88,6 +92,15 @@ import Bramble:
 
             Mh = mesh(X, 10, false)
             @test Mh isa Mesh1D
+
+            # the three predicates partition the line, so their masks must partition the
+            # grid: every point in exactly one of them, whatever the non-uniform spacing
+            # put where
+            r1 = Bramble.index_in_marker(Mh, :region1)
+            r2 = Bramble.index_in_marker(Mh, :region2)
+            r3 = Bramble.index_in_marker(Mh, :region3)
+            @test all(r1 .+ r2 .+ r3 .== 1)
+            @test count(r1) > 0 && count(r2) > 0 && count(r3) > 0
         end
 
         @testset "Overlapping markers" begin
@@ -103,6 +116,18 @@ import Bramble:
 
             Mh = mesh(X, 10, false)
             @test Mh isa Mesh1D
+
+            # these deliberately overlap: 0.4 ≤ x ≤ 0.6 is in both halves, and the whole
+            # line is covered by the two of them
+            left = Bramble.index_in_marker(Mh, :left_half)
+            right = Bramble.index_in_marker(Mh, :right_half)
+            @test any(left .& right)
+            @test all(left .| right)
+            # and :center straddles the seam: it meets both halves rather than sitting
+            # inside either one
+            center = Bramble.index_in_marker(Mh, :center)
+            @test any(center .& left)
+            @test any(center .& right)
         end
 
         @testset "Nested markers" begin
@@ -119,47 +144,72 @@ import Bramble:
 
             Mh = mesh(X, (5, 5), (false, false))
             @test Mh isa MeshnD
+
+            # nested boxes, so the masks must nest too: inner ⊆ middle ⊆ outer
+            outer = Bramble.index_in_marker(Mh, :outer)
+            middle = Bramble.index_in_marker(Mh, :middle)
+            inner = Bramble.index_in_marker(Mh, :inner)
+            @test all(inner .<= middle)
+            @test all(middle .<= outer)
+            @test count(outer) > 0
         end
     end
 
     @testset "Marker evaluation" begin
         I = interval(0.0, 1.0)
 
+        # Each predicate is bound once and used twice: to declare the marker, and as the
+        # oracle the resulting mask is compared against point by point. Comparing against
+        # the same function the marker was built from is what makes this independent of
+        # where the grid points happen to fall, rather than a hand-counted constant that
+        # would have to be rederived whenever the mesh changes.
         @testset "Boolean marker functions" begin
-            # Simple threshold
-            m1 = markers(I, :boundary => x -> x[1] < 0.1 || x[1] > 0.9)
-            @test !isnothing(m1)
+            threshold = x -> x[1] < 0.1 || x[1] > 0.9
+            region = x -> (x[1] > 0.2 && x[1] < 0.4) || (x[1] > 0.6 && x[1] < 0.8)
 
-            # Complex logical expression
-            m2 = markers(
-                I, :region => x -> (x[1] > 0.2 && x[1] < 0.4) || (x[1] > 0.6 && x[1] < 0.8)
-            )
-            @test !isnothing(m2)
+            Ωₕ = mesh(domain(I, markers(I, :boundary => threshold, :region => region)), 11, true)
+            mask(pred) = BitVector(pred(point(Ωₕ, i)) for i in indices(Ωₕ))
+
+            @test Bramble.index_in_marker(Ωₕ, :boundary) == mask(threshold)
+            @test Bramble.index_in_marker(Ωₕ, :region) == mask(region)
+
+            # and neither is vacuous nor everything: an always-false predicate would
+            # satisfy the comparison above against its own equally empty oracle. The
+            # counts are deliberately not pinned to a literal -- `range(0, 1, 11)` lands a
+            # point at 0.2000000000000000111, which is > 0.2, so :region catches three
+            # points rather than the two the interval endpoints suggest.
+            @test count(Bramble.index_in_marker(Ωₕ, :boundary)) == 2   # x = 0.0 and x = 1.0
+            @test 0 < count(Bramble.index_in_marker(Ωₕ, :region)) < npoints(Ωₕ)
         end
 
         @testset "Marker with different predicates" begin
             Ω = I × I
-
-            # Distance-based marker
             center = (0.5, 0.5)
-            m1 = markers(
-                Ω, :circle => x -> sqrt((x[1] - center[1])^2 + (x[2] - center[2])^2) < 0.3
-            )
-            @test !isnothing(m1)
+            radius = x -> sqrt((x[1] - center[1])^2 + (x[2] - center[2])^2)
 
-            # Box marker
-            m2 = markers(Ω, :box => x -> all(0.2 .≤ x .≤ 0.8))
-            @test !isnothing(m2)
+            circle = x -> radius(x) < 0.3
+            box = x -> all(0.2 .≤ x .≤ 0.8)
+            annulus = x -> 0.2 < radius(x) < 0.4
 
-            # Annulus marker
-            m3 = markers(
-                Ω,
-                :annulus => x -> begin
-                    r = sqrt((x[1] - center[1])^2 + (x[2] - center[2])^2)
-                    0.2 < r < 0.4
-                end
+            Ωₕ = mesh(
+                domain(Ω, markers(Ω, :circle => circle, :box => box, :annulus => annulus)),
+                (11, 11), (true, true)
             )
-            @test !isnothing(m3)
+            mask(pred) = BitVector(pred(point(Ωₕ, I2)) for I2 in vec(indices(Ωₕ)))
+
+            @test Bramble.index_in_marker(Ωₕ, :circle) == mask(circle)
+            @test Bramble.index_in_marker(Ωₕ, :box) == mask(box)
+            @test Bramble.index_in_marker(Ωₕ, :annulus) == mask(annulus)
+
+            # the shapes relate as their definitions say. The disc (r < 0.3) and the
+            # annulus (0.2 < r < 0.4) are not disjoint -- they share the band
+            # 0.2 < r < 0.3 -- and the annulus also reaches beyond the disc.
+            circle_mask = Bramble.index_in_marker(Ωₕ, :circle)
+            annulus_mask = Bramble.index_in_marker(Ωₕ, :annulus)
+            @test any(circle_mask .& annulus_mask)
+            @test any(annulus_mask .& .!circle_mask)
+            @test 0 < count(circle_mask) < npoints(Ωₕ)
+            @test 0 < count(Bramble.index_in_marker(Ωₕ, :box)) < npoints(Ωₕ)
         end
     end
 
@@ -219,8 +269,7 @@ import Bramble:
             )
         )
 
-        m = markers(X)
-        @test !isnothing(m)
+        @test Set(labels(markers(X))) == Set((:left, :right, :bottom, :top))
 
         Mh = mesh(X, (5, 5), (true, true))
         @test haskey(markers(Mh), :left)
@@ -236,28 +285,30 @@ import Bramble:
             I = interval(0.0, 1.0)
             X = domain(I)
 
-            @test !isnothing(X)
-            # Should work with mesh even without markers
+            # Should work with mesh even without markers -- `domain(X)` declares only the
+            # `:boundary` one it adds itself
             Mh = mesh(X, 5, false)
             @test Mh isa Mesh1D
+            @test count(Bramble.index_in_marker(Mh, :boundary)) == 2   # the two endpoints
         end
 
         @testset "Marker that includes everything" begin
             I = interval(0.0, 1.0)
             X = domain(I, markers(I, :all => x -> true))
 
-            @test !isnothing(X)
             Mh = mesh(X, 5, false)
             @test Mh isa Mesh1D
+            @test all(Bramble.index_in_marker(Mh, :all))
+            @test count(Bramble.index_in_marker(Mh, :all)) == npoints(Mh)
         end
 
         @testset "Marker that includes nothing" begin
             I = interval(0.0, 1.0)
             X = domain(I, markers(I, :none => x -> false))
 
-            @test !isnothing(X)
             Mh = mesh(X, 5, false)
             @test Mh isa Mesh1D
+            @test !any(Bramble.index_in_marker(Mh, :none))
         end
     end
 
