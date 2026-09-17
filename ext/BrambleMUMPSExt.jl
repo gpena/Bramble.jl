@@ -128,9 +128,34 @@ function LinearAlgebra.ldiv!(
     return b
 end
 
+# Disambiguates the two equally specific candidates for a `VectorElement` destination:
+# Bramble's generic `ldiv!(::VectorElement, ::Factorization, ::AbstractVector)` and the
+# `ldiv!(::AbstractVector, ::ConcreteMUMPSFactorization, ::AbstractVector)` above.
+# `VectorElement <: AbstractVector` and `ConcreteMUMPSFactorization <: Factorization`, so
+# neither method is more specific and `ldiv!(uₕ, fact, F)` would otherwise be an ambiguity
+# error. Unwraps the destination and returns the `VectorElement`, matching the contract of
+# Bramble's method.
+function LinearAlgebra.ldiv!(
+        uₕ::Bramble.VectorElement, fact::ConcreteMUMPSFactorization{T}, b::AbstractVector
+) where {T}
+    ldiv!(parent(uₕ), fact, b)
+    return uₕ
+end
+
 function Base.:\(fact::ConcreteMUMPSFactorization{T}, b::AbstractVector) where {T}
     x = similar(b, promote_type(T, eltype(b)))
     return ldiv!(x, fact, b)
+end
+
+# `LinearAlgebra` defines `\(::Factorization{T}, ::Vector{Complex{T}})` for real
+# factorizations against a complex right-hand side, and `ConcreteMUMPSFactorization <:
+# Factorization`, so that method and the one above are equally specific for a complex vector
+# -- the call would be ambiguous without this one. It restates what `LinearAlgebra` does:
+# solve the real and imaginary parts separately and recombine them.
+function Base.:\(
+        fact::ConcreteMUMPSFactorization{T}, b::Vector{Complex{T}}
+) where {T <: Union{Float32, Float64}}
+    return complex.(fact \ real(b), fact \ imag(b))
 end
 
 function Bramble._mumps_solve(
