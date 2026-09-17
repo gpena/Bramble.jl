@@ -341,8 +341,12 @@ Component indices are checked against the number of blocks at form construction 
 or `u(3)` on a 2-component space raises an immediate `ArgumentError`. A term must name both
 components or neither:
 
-```julia
-form(Vₕ, Vₕ, (u, v) -> innerₕ(u[1], v))   # ArgumentError
+```@example forms
+try
+    form(Vₕ, Vₕ, (u, v) -> innerₕ(u[1], v))
+catch e
+    println(e)
+end
 ```
 
 Naming one and leaving the other open has no reading as mathematics: the term would belong
@@ -455,8 +459,12 @@ for entry with applying the numeric operator first:
 A *bilinear* term coupling two leaves over different meshes is a different matter, and it is
 refused:
 
-```julia
-assemble(form(Vh, Vh, (u, v) -> innerₕ(u(2), v(1))))   # ArgumentError: ... over different meshes ...
+```@example forms
+try
+    assemble(form(Vh, Vh, (u, v) -> innerₕ(u(2), v(1))))
+catch e
+    println(e)
+end
 ```
 
 (The refusal is raised when the matrix is built, not when the form is written: `form` resolves

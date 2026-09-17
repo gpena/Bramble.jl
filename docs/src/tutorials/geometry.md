@@ -4,50 +4,36 @@ CurrentModule = Bramble
 
 # [Geometry tutorial](@id tutorial_geometry)
 
-`Bramble.jl` provides a high-performance, zero-allocation geometric modeling subsystem designed for partial differential equations (PDEs) and numerical discretization schemes on Cartesian and tensor-product meshes.
-
-In this tutorial, you will learn how to:
-1. Construct 1D intervals and multi-dimensional [`CartesianProduct`](@ref)s.
-2. Handle collapsed (lower-dimensional) geometries.
-3. Query spatial and topological dimensions, bounds, centers, and containment.
-4. Define boundary labels and markers with [`markers`](@ref).
-5. Build complete computational [`Domain`](@ref)s ready for mesh generation and PDE solvers.
+Every Bramble problem starts here: a set, the labels naming its boundary pieces, and the
+domain that carries both into [`mesh`](@ref). Every block below runs when this page is
+built, so the printed values are the ones the code produces.
 
 ---
 
 ## 1. Sets and intervals
 
-At the core of the geometry system is `CartesianProduct{D, T}`, which represents the Cartesian product of $D$ closed intervals in $\mathbb{R}^D$ with coordinate type `T`.
+`CartesianProduct{D, T}` is a product of $D$ closed intervals in $\mathbb{R}^D$ with
+coordinate type `T`.
 
 ### 1.1 Creating 1D intervals
 
-Use [`interval`](@ref) to define closed intervals $[a, b] \subset \mathbb{R}$:
+[`interval`](@ref) builds a closed interval $[a, b] \subset \mathbb{R}$:
 
-```julia
+```@example geometry
 using Bramble
 
-# Define the interval [0.0, 1.0]
 I = interval(0.0, 1.0)
-
-# Automatic conversion of integer bounds to floating point
-I_int = interval(0, 2)  # CartesianProduct{1, Float64}
-
-# Create a single degenerate point [0.5, 0.5]
-P = point(0.5)
-
-# Bounding box of any two numbers (ordered automatically)
-B = box(1.5, 0.2)       # [0.2, 1.5]
+I_int = interval(0, 2)   # integer bounds are converted to Float64
+P = point(0.5)           # the degenerate interval [0.5, 0.5]
+B = box(1.5, 0.2)        # bounds are sorted
 ```
 
-### 1.2 Multi-dimensional sets via the tensor product operator `×`
+### 1.2 Multi-dimensional sets with `×`
 
-Multi-dimensional hyper-rectangles are constructed intuitively by taking the tensor product of lower-dimensional sets using the `×` (`\times<tab>`) operator:
+The tensor product operator `×` (`\times<tab>`) builds hyper-rectangles:
 
-```julia
-# 2D Unit square: [0, 1] × [0, 1]
+```@example geometry
 Ω_2d = interval(0.0, 1.0) × interval(0.0, 1.0)
-
-# 3D Cuboid: [-1, 1] × [0, 2] × [0, 0.5]
 Ω_3d = interval(-1.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 0.5)
 ```
 
@@ -55,85 +41,72 @@ Multi-dimensional hyper-rectangles are constructed intuitively by taking the ten
 
 ## 2. Querying geometric properties
 
-`Bramble.jl` provides a type-stable interface for querying geometric properties:
-
-```julia
+```@example geometry
 X = interval(0.0, 2.0) × interval(-1.0, 1.0)
 
-# Spatial embedding dimension (D = 2)
-dim(X)            # 2
+dim(X), topo_dim(X)
+```
 
-# Topological dimension
-topo_dim(X)       # 2
+`dim` is the embedding dimension and `topo_dim` the topological one; they differ only for a
+collapsed set (§3). Bounds, center and per-axis projection:
 
-# Interval bounds
-extrema(X)          # ((0.0, 2.0), (-1.0, 1.0))
-extrema(X, 1)       # (0.0, 2.0)  -- bounds in dimension 1
-extrema(X, 2)       # (-1.0, 1.0) -- bounds in dimension 2
+```@example geometry
+extrema(X), extrema(X, 1), center(X)
+```
 
-# Geometric center
-center(X)         # (1.0, 0.0)
-
-# 1D projection onto a specific axis
-proj_x = projection(X, 1)  # interval(0.0, 2.0)
+```@example geometry
+projection(X, 1)
 ```
 
 ### Point containment
 
-Check whether a point lies within a `CartesianProduct`:
+`∈` accepts a number in 1D, and a tuple, `SVector` or `Vector` above it:
 
-```julia
-# In 1D:
-I = interval(0.0, 1.0)
-0.5 ∈ I           # true
-1.5 ∈ I           # false
-
-# In 2D (supports Tuples, SVector, and Vectors):
-X = interval(0.0, 1.0) × interval(0.0, 1.0)
-(0.5, 0.5) ∈ X    # true
-(1.2, 0.3) ∈ X    # false
+```@example geometry
+0.5 ∈ I, 1.5 ∈ I, (0.5, 0.5) ∈ Ω_2d, (1.2, 0.3) ∈ Ω_2d
 ```
 
 ---
 
 ## 3. Collapsed and lower-dimensional geometries
 
-A dimension is considered **collapsed** when its interval is degenerate ($a = b$). Bramble tracks collapsed dimensions without heap allocations, so a lower-dimensional surface or interface embedded in a higher-dimensional space can be modeled directly:
+A dimension is **collapsed** when its interval is degenerate ($a = b$), which is how a
+surface or interface embedded in a higher-dimensional space is written:
 
-```julia
-# 1D line embedded in 2D space: x ∈ [0, 1], y = 0
+```@example geometry
 line_in_2d = interval(0.0, 1.0) × point(0.0)
 
-dim(line_in_2d)       # 2 (spatial embedding dimension)
-topo_dim(line_in_2d)  # 1 (topological dimension)
+dim(line_in_2d), topo_dim(line_in_2d)
+```
 
-# Check if individual dimensions are collapsed
-line_in_2d.collapsed[1]  # false (x-axis is extended)
-line_in_2d.collapsed[2]  # true  (y-axis is collapsed)
+[`Bramble.is_collapsed`](@ref) answers per axis. It is public but not exported, hence the
+`Bramble.` prefix:
+
+```@example geometry
+Bramble.is_collapsed(line_in_2d, 1), Bramble.is_collapsed(line_in_2d, 2)
 ```
 
 ---
 
 ## 4. Boundary markers
 
-PDE boundary conditions require tagging specific domain boundaries (e.g., Dirichlet, Neumann, Robin, inflow/outflow).
+A marker names a piece of the boundary so a condition can later be attached to that name.
 
 ### 4.1 Boundary symbol conventions
 
-Bramble provides canonical **coordinate-aligned boundary symbols** across all dimensions to eliminate axis transposition ambiguities in multi-dimensional physics simulations:
+Boundary symbols are coordinate-aligned, so the same name means the same face in every
+dimension:
+
 - **1D**: `:xmin` (`:left`), `:xmax` (`:right`)
 - **2D**: `:xmin` (`:left`), `:xmax` (`:right`), `:ymin` (`:bottom`), `:ymax` (`:top`)
 - **3D**: `:xmin` (`:back`), `:xmax` (`:front`), `:ymin` (`:left`), `:ymax` (`:right`), `:zmin` (`:bottom`), `:zmax` (`:top`)
 
-Camera- and viewpoint-dependent labels (`:left`, `:right`, `:bottom`, `:top`, `:front`, `:back`) remain supported as 100% backward-compatible aliases.
+The viewpoint-dependent names in parentheses are aliases and keep working.
+[`boundary_symbols`](@ref) lists the canonical set for a given dimension:
 
-You can inspect standard boundary symbols using [`boundary_symbols`](@ref):
-
-```julia
+```@example geometry
 boundary_symbols(2)
-# (:xmin, :xmax, :ymin, :ymax)
 ```
-
 ```@raw html
 <figure>
 <svg viewBox="0 0 780 280" width="100%" style="max-width:780px;height:auto;font-family:system-ui,-apple-system,'Segoe UI',sans-serif"
@@ -203,166 +176,120 @@ boundary_symbols(2)
 
 ### 4.2 Creating markers
 
-Markers are defined as `:label => identifier` pairs where `identifier` can be a single boundary symbol, a tuple of symbols, or a boolean function:
+A marker is a `:label => identifier` pair, where the identifier is one boundary symbol, a
+tuple of them, or a predicate:
 
-```julia
+```@example geometry
 geom = interval(0.0, 5.0) × interval(0.0, 1.0)
 
-# 1. Using the markers() constructor
-# Define markers using pairs of :label => boundary_spec
 m1 = markers(
     geom,
-    :inflow  => :left,
+    :inflow => :left,
     :outflow => :right,
-    :wall    => (:top, :bottom)
+    :wall => (:top, :bottom)
 )
 
-# Retrieve all defined labels
 collect(labels(m1))
-# [:inflow, :outflow, :wall]
 ```
 
-!!! tip "Zero-allocation marker iteration"
-    `labels(m1)` aggregates all marker types using `Iterators.flatten`. In performance-critical inner loops where zero heap allocations are required, iterate directly over `label_symbols(m1)`, `label_tuples(m1)`, or `label_conditions(m1)`, which allocate 0 bytes.
+`labels` flattens the three marker kinds through `Iterators.flatten`. Inside a loop that
+must not allocate, iterate `label_symbols`, `label_tuples` or `label_conditions` instead.
 
-### 4.3 Function-based and time-dependent markers
+### 4.3 Predicate and time-dependent markers
 
-You can also define internal or geometric subset markers using boolean condition functions, as well as time-dependent markers:
+A predicate marks any subset, not only a face, and a marker set built over a time interval
+takes `(p, t)` predicates:
 
-```julia
-# Condition-based marker: tag a subsection of the boundary or domain
+```@example geometry
+using LinearAlgebra
+
 m_cond = markers(
     geom,
-    :inflow    => :left,
-    :hot_spot  => (p -> p[1] > 2.5 && p[2] ≈ 0.0)
+    :inflow => :left,
+    :hot_spot => (p -> p[1] > 2.5 && p[2] ≈ 0.0)
 )
 
-# Time-dependent markers:
-time_span = interval(0.0, 10.0)
 m_time = markers(
     geom,
-    time_span,
+    interval(0.0, 10.0),
     :moving_source => ((p, t) -> norm(p .- [t, 0.5]) < 0.2)
 )
 
-# Evaluate time-dependent markers at time t = 1.5
-m_evaluated = m_time(1.5)
+m_time(1.5)      # the marker set frozen at t = 1.5
 ```
 
 ---
 
 ## 5. Computational domains
 
-A [`Domain`](@ref) joins a geometric set (`CartesianProduct`) with its boundary markers into a single unified object:
+A [`Domain`](@ref) is a set together with its markers, and it is what [`mesh`](@ref) takes:
 
-```julia
-# 1. Define geometry
-geom = interval(0.0, 1.0) × interval(0.0, 1.0)
-
-# 2. Construct domain with inline boundary markers
+```@example geometry
 Ω = domain(
-    geom,
+    interval(0.0, 1.0) × interval(0.0, 1.0),
     :dirichlet => (:left, :right),
-    :neumann   => (:top, :bottom)
+    :neumann => (:top, :bottom)
 )
 
-# Or create a default domain marking all external boundaries as :boundary
-Ω_default = domain(geom)
+collect(labels(Ω))
 ```
+
+`domain(geom)` alone marks the whole external boundary `:boundary`.
 
 ### 5.1 Domain traits
 
-`Domain` automatically delegates geometric and marker methods directly:
+A `Domain` forwards the geometric queries of §2 to its set:
 
-```julia
-dim(Ω)            # 2
-topo_dim(Ω)       # 2
-extrema(Ω)        # ((0.0, 1.0), (0.0, 1.0))
-center(Ω)         # (0.5, 0.5)
-(0.5, 0.5) ∈ Ω    # true
-Bramble.is_collapsed(Ω)    # false (checks if any dimension is degenerate)
-Bramble.is_collapsed(Ω, 1) # false (checks dimension 1)
-
-# Access underlying set and markers: `set` and `is_collapsed` are `public`, not exported, so they use `Bramble.`
-Bramble.set(Ω)    # CartesianProduct{2, Float64}
-markers(Ω)        # DomainMarkers
-collect(labels(Ω)) # [:dirichlet, :neumann]
+```@example geometry
+dim(Ω), center(Ω), (0.5, 0.5) ∈ Ω, Bramble.is_collapsed(Ω)
 ```
 
-Iterating directly over `label_symbols(Ω)`, `label_tuples(Ω)`, or `label_conditions(Ω)` allocates 0 bytes.
+```@example geometry
+Bramble.set(Ω)
+```
 
 ---
 
-## 6. Practical examples
+## 6. Three domains, three dimensions
 
-### Example 1: 1D rod with mixed boundary conditions
-
-Consider heat conduction along a 1D rod $\Omega = [0, L]$ with $L = 10.0$, fixed temperature at $x = 0$ (`:left`) and insulated end at $x = L$ (`:right`):
+The same two lines in 1D, 2D and 3D. A rod held at one end and insulated at the other:
 
 ![1D Rod Domain](../assets/geometry_example1_1d_rod.svg)
 
-```julia
-L = 10.0
-rod_geom = interval(0.0, L)
+```@example geometry
+rod = domain(interval(0.0, 10.0), :dirichlet => :left, :neumann => :right)
 
-# Define domain with Dirichlet left boundary and Neumann right boundary
-rod = domain(
-    rod_geom,
-    :dirichlet => :left,
-    :neumann   => :right
-)
-
-println("Domain: ", rod)
-println("Dimension: ", dim(rod))
-println("Active Labels: ", collect(labels(rod)))
-
-@assert dim(rod) == 1
-@assert center(rod) == (5.0,)
+dim(rod), center(rod), collect(labels(rod))
 ```
 
----
-
-### Example 2: 2D channel flow domain
-
-Consider fluid flow in a rectangular channel $[0, 5] \times [0, 1]$ with an inflow on the left, outflow on the right, and no-slip walls on top and bottom:
+A channel with inflow, outflow and no-slip walls:
 
 ![2D Channel Flow Domain](../assets/geometry_example2_2d_channel.svg)
 
-```julia
-channel_geom = interval(0.0, 5.0) × interval(0.0, 1.0)
-
+```@example geometry
 channel = domain(
-    channel_geom,
-    :inflow  => :left,
+    interval(0.0, 5.0) × interval(0.0, 1.0),
+    :inflow => :left,
     :outflow => :right,
-    :wall    => (:top, :bottom)
+    :wall => (:top, :bottom)
 )
 
-@assert dim(channel) == 2
-@assert center(channel) == (2.5, 0.5)
-println("Channel labels: ", collect(labels(channel)))
+dim(channel), center(channel)
 ```
 
----
-
-### Example 3: 3D heat sink domain
-
-Consider heat dissipation across a 3D block $[0, 2] \times [0, 2] \times [0, 1]$ subjected to a bottom heat source, top convective cooling, and insulated lateral walls:
+A heat sink, heated below, cooled above, insulated on its four sides:
 
 ![3D Heat Sink Domain](../assets/geometry_example3_3d_heatsink.svg)
 
-```julia
-sink_geom = interval(0.0, 2.0) × interval(0.0, 2.0) × interval(0.0, 1.0)
-
+```@example geometry
 sink = domain(
-    sink_geom,
-    :heat_source => :zmin,  # or legacy alias :bottom
-    :convection  => :zmax,  # or legacy alias :top
-    :insulated   => (:xmin, :xmax, :ymin, :ymax)  # or (:left, :right, :front, :back)
+    interval(0.0, 2.0) × interval(0.0, 2.0) × interval(0.0, 1.0),
+    :heat_source => :zmin,
+    :convection => :zmax,
+    :insulated => (:xmin, :xmax, :ymin, :ymax)
 )
 
-println("3D Domain Center: ", center(sink))
-println("Active Labels: ", collect(labels(sink)))
-
-@assert center(sink) == (1.0, 1.0, 0.5)
+center(sink), collect(labels(sink))
 ```
+
+Next: [meshes](mesh.md), which discretize a domain into points.

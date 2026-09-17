@@ -4,107 +4,76 @@ CurrentModule = Bramble
 
 # [Mesh tutorial](@id tutorial_mesh)
 
-`Bramble.jl` provides structured, zero-allocation Cartesian and tensor-product mesh representations optimized for finite difference, finite volume, and mimetic discretization schemes.
-
-In this tutorial, you will learn how to:
-1. Construct 1D meshes ([`Mesh1D`](@ref)) and multi-dimensional tensor-product meshes ([`MeshnD`](@ref)).
-2. Configure uniform and non-uniform coordinate distributions.
-3. Query mesh geometric properties: coordinates, half-points (cell centers), spacings, cell measures, and $h_{\max}$.
-4. Query mesh boundaries and interiors using `CartesianIndices`.
-5. Access and evaluate boundary and region markers on meshes.
-6. Perform in-place mesh refinement ([`iterative_refinement!`](@ref)) and coordinate relocation ([`change_points!`](@ref)).
+A mesh discretizes a [`Domain`](@ref) into points, and carries the metric quantities every
+difference operator reads: spacings, half points and cell measures. Every block below runs
+when this page is built.
 
 ---
 
 ## 1. Constructing meshes
 
-Meshes in `Bramble.jl` are built on top of computational [`Domain`](@ref)s. The primary entry point is the [`mesh`](@ref) function.
+[`mesh`](@ref) takes a domain (or a bare geometric set) and a point count. The count is one
+integer per axis, or a single integer for the same resolution along every axis:
 
-Every mesh also carries a linear-algebra [`Backend`](@ref), chosen with the `backend` keyword below, or left to `mesh`'s own default of `backend(eltype(Ω))`, that fixes its vector/matrix types and whether threading-capable operations run serially or in parallel. See the [backend tutorial](backend.md) for the full picture; nothing below depends on it.
-
-### 1.1 One-dimensional meshes
-
-To construct a 1D mesh with $N$ points over an interval $[a, b]$:
-
-```julia
+```@example mesh
 using Bramble
 
-# 1. Define a domain
 Ω = domain(interval(0.0, 1.0))
+Ωₕ = mesh(Ω, 11)          # 11 uniformly spaced points
 
-# 2. Build a uniform mesh with 11 grid points (step h = 0.1)
-Ωₕ = mesh(Ω, 11)
+points(Ωₕ)
 ```
 
-By default, `mesh` generates a **uniform** grid. You can also specify non-uniform point distributions:
+The third positional argument, or the `uniform` keyword, chooses the point distribution per
+axis. `false` draws interior points at random and sorts them, which is what the convergence
+studies elsewhere in this manual use to expose order reduction on non-uniform grids:
 
-```julia
-# Explicit non-uniform 1D mesh
-Ωₕ_nonunif = mesh(Ω, 11, false)
+```@example mesh
+Ωₕ_rand = mesh(Ω, 11, false)
+
+is_uniform(Ωₕ), is_uniform(Ωₕ_rand)
 ```
 
-For 1D meshes, [`is_uniform`](@ref) checks whether all cell widths are identical:
+Above one dimension a mesh is a tensor product of 1D submeshes, stored per axis, so
+coordinate storage is $O(N_x + N_y + N_z)$ while the grid it addresses is the full product.
+The distribution flag is per axis there: `(true, false)` would be uniform in $x$ and random
+in $y$.
 
-```julia
-is_uniform(Ωₕ)          # true
-is_uniform(Ωₕ_nonunif)   # false
+```@example mesh
+Ωₕ_2d = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (10, 20), (true, true))
+
+npoints(Ωₕ_2d, Tuple), size(Ωₕ_2d)
 ```
 
-### 1.2 Multi-dimensional tensor-product meshes
+`Ωₕ_2d(k)` is the submesh along axis `k`, and everything documented for a 1D mesh applies
+to it:
 
-For 2D and 3D domains, `Bramble.jl` constructs a [`MeshnD`](@ref) as a Cartesian product of 1D submeshes. This allows $O(N_x + N_y + N_z)$ coordinate storage while providing full $O(N_x \times N_y \times N_z)$ grid traversal:
-
-```julia
-# 2D Unit square: [0, 1] × [0, 2]
-Ω_2d = domain(interval(0.0, 1.0) × interval(0.0, 2.0))
-
-# Create a 2D mesh with 10 × 20 grid points (uniform in both directions)
-Ωₕ_2d = mesh(Ω_2d, (10, 20))
-
-# Create a 2D mesh with mixed uniformity (uniform in x, non-uniform in y)
-Ωₕ_mixed = mesh(Ω_2d, (10, 20), (true, false))
+```@example mesh
+Ωₕ_2d(1)
 ```
 
-You can retrieve the underlying 1D submesh along any coordinate axis using functor call syntax:
+A geometric set can be passed directly when no custom labels are needed; `:boundary` and
+`:interior` are provisioned either way:
 
-```julia
-x_mesh = Ωₕ_2d(1)  # 1D submesh in x-direction
-y_mesh = Ωₕ_2d(2)  # 1D submesh in y-direction
-```
-
-### 1.3 Direct Cartesian set input and isotropic resolution
-
-When custom boundary markers are not required, you can pass a [`CartesianProduct`](@ref) geometric set directly to [`mesh`](@ref) without wrapping it in [`domain`](@ref). The default geometric markers `:boundary` and `:interior` are provisioned automatically:
-
-```julia
-# Direct discretization of intervals, products, and boxes
+```@example mesh
 X = interval(0.0, 1.0) × interval(0.0, 2.0)
-Ωₕ_direct = mesh(X, (10, 20))
+Ωₕ_direct = mesh(X, 20)      # isotropic: 20 × 20
 
-# Default boundary and interior markers are available immediately
-:boundary in keys(markers(Ωₕ_direct)) # true
-:interior in keys(markers(Ωₕ_direct)) # true
+:boundary in keys(markers(Ωₕ_direct)), :interior in keys(markers(Ωₕ_direct))
 ```
-
-In any dimension $D \ge 1$, passing a single integer `npts::Int` creates an isotropic grid with the same resolution across all coordinate axes:
-
-```julia
-# Isotropic 20 × 20 grid directly from the geometric set
-Ωₕ_iso = mesh(X, 20)
-size(Ωₕ_iso) # (20, 20)
-
-# Isotropic resolution on a Domain
-Ω = domain(X)
-Ωₕ_iso_domain = mesh(Ω, 20)
-size(Ωₕ_iso_domain) # (20, 20)
-```
-
-Both positional `unif` and keyword `uniform` accept a single boolean for isotropic uniformity (e.g. `mesh(X, 20, false)` or `mesh(Ω, (10, 20); uniform = false)`) or an `NTuple{D, Bool}` for per-axis control.
 
 ---
 
-## 2. Accessing grid coordinates and metric properties
+## 2. Coordinates and metric properties
 
+One non-uniform 1D mesh exposes every convention at once:
+
+```@example mesh
+Ωₕ_fig = mesh(domain(interval(0.0, 1.0)), 4, true)
+Bramble.set_points!(Ωₕ_fig, [0.0, 0.2, 0.6, 1.0])
+
+points(Ωₕ_fig)
+```
 ```@raw html
 <figure style="margin:1.5em 0;text-align:center">
 <svg viewBox="0 0 780 360" width="100%" style="max-width:780px;font-family:system-ui,-apple-system,'Segoe UI',sans-serif" role="img"
@@ -172,84 +141,66 @@ Both positional `unif` and keyword `uniform` accept a single boolean for isotrop
 </figure>
 ```
 
-The mesh above is `[0.0, 0.2, 0.6, 1.0]`, deliberately non-uniform. Four conventions are
-worth reading off it, because they are the ones that most often surprise:
+Four conventions are worth reading off that picture, because they are the ones that
+surprise:
 
-  - **`half_points` has `N + 1` entries, not `N`.** They are the cell interfaces, and the
-    first and last *coincide with* `x₁` and `x_N` rather than being extrapolated outside
-    the domain. Here they are `[0.0, 0.1, 0.4, 0.8, 1.0]`.
-  - **The cell around `xᵢ` spans `half_points[i] .. half_points[i+1]`**, and its width is
-    exactly `half_spacing(Ωₕ, i)`, which is what `cell_measure(Ωₕ, i)` returns. The four
-    cells here measure `[0.1, 0.3, 0.4, 0.2]` and sum to the domain length.
-  - **Boundary cells are half-width.** `x₁` and `x_N` sit on the edge of their own cell,
-    not at its centre, which is why the first and last measures are the smallest.
-  - **`spacing` looks backward and `forward_spacing` looks forward**, so
-    `spacing(Ωₕ, i) = xᵢ − xᵢ₋₁` and `forward_spacing(Ωₕ, i) = xᵢ₊₁ − xᵢ`. Each has one
-    special case at the boundary where the neighbour is missing: `spacing(Ωₕ, 1)` returns
-    `x₂ − x₁` and `forward_spacing(Ωₕ, N)` returns `x_N − x_{N−1}`.
+- **`half_points` has `N + 1` entries.** They are the cell interfaces, and the first and
+  last coincide with `x₁` and `x_N` rather than sitting outside the domain.
+- **The cell around `xᵢ` spans `half_points[i]` to `half_points[i+1]`**, with width
+  `half_spacing(Ωₕ, i)`, which is what `cell_measure(Ωₕ, i)` returns.
+- **Boundary cells are half-width**, since `x₁` and `x_N` sit on the edge of their own cell
+  rather than at its centre.
+- **`spacing` looks backward, `forward_spacing` forward**: `spacing(Ωₕ, i) = xᵢ - xᵢ₋₁` and
+  `forward_spacing(Ωₕ, i) = xᵢ₊₁ - xᵢ`, each falling back to its neighbour at the end where
+  the stencil runs out.
 
-### 2.1 Points and coordinates
-
-- **`points(Ωₕ)`**: Returns the coordinate vector (1D) or tuple of coordinate vectors (nD).
-- **`point(Ωₕ, idx)`** or direct indexing **`Ωₕ[idx]`**: Evaluates the coordinate at linear index `i`, coordinate tuple `(i, j)`, or `CartesianIndex(i, j)`.
-
-```julia
-# 1D mesh point access
-p3 = Ωₕ[3]          # Coordinate x₃
-p3_alt = point(Ωₕ, 3)
-
-# 2D mesh point access
-p_ij = Ωₕ[2, 5]     # Coordinate tuple (x₂, y₅)
+```@example mesh
+half_points(Ωₕ_fig), [cell_measure(Ωₕ_fig, i) for i in 1:4]
 ```
 
-### 2.2 Half-points and cell centers
+The four cells sum to the domain length, and the two boundary cells are the smallest.
 
-Finite volume and staggered-grid methods frequently require cell midpoints $x_{i+1/2}$:
+### 2.1 Points
 
-```julia
-# Pre-computed cell centers
-hp = half_points(Ωₕ)
-hp_i = half_point(Ωₕ, 3)  # x_{3+1/2}
+`points` returns the coordinate vector, or a tuple of them above 1D. A single coordinate
+comes from `point(Ωₕ, idx)` or from indexing, with a linear index, a tuple or a
+`CartesianIndex`:
+
+```@example mesh
+Ωₕ_fig[3], point(Ωₕ_fig, 3)
+```
+
+```@example mesh
+Ωₕ_2d[2, 5], point(Ωₕ_2d, CartesianIndex(2, 5))
+```
+
+### 2.2 Half points
+
+```@example mesh
+half_points(Ωₕ_fig), half_point(Ωₕ_fig, 3)
 ```
 
 ### 2.3 Spacings and cell measures
 
 | Function | Meaning |
 | --- | --- |
-| `spacing(Ωₕ, i)` | Backward spacing $h_i = x_i - x_{i-1}$ (for $i=1$, returns $x_2 - x_1$) |
-| `forward_spacing(Ωₕ, i)` | Forward spacing $h_{i+1} = x_{i+1} - x_i$ |
-| `half_spacing(Ωₕ, i)` | Cell width $h_{i+1/2} = \frac{h_i + h_{i+1}}{2}$ |
-| `cell_measure(Ωₕ, idx)` | Volume/area of the control volume centered at `idx`: $h_{i+1/2}$ in 1D, $h_{x,i+1/2} \times h_{y,j+1/2}$ in 2D, and that product times $h_{z,l+1/2}$ in 3D |
-| `hₘₐₓ(Ωₕ)` | Maximum diagonal cell measure across the mesh |
+| `spacing(Ωₕ, i)` | backward spacing $h_i = x_i - x_{i-1}$ ($x_2 - x_1$ at $i = 1$) |
+| `forward_spacing(Ωₕ, i)` | forward spacing $h_{i+1} = x_{i+1} - x_i$ |
+| `half_spacing(Ωₕ, i)` | cell width $h_{i+1/2} = (h_i + h_{i+1})/2$ |
+| `cell_measure(Ωₕ, idx)` | measure of the control volume at `idx`: the product of the per-axis cell widths |
+| `hₘₐₓ(Ωₕ)` | largest cell measure in the mesh |
 
-A 1D mesh stores its backward spacings rather than recomputing them, so
-`spacings(Ωₕ)` hands back the whole vector and `spacing(Ωₕ, i)` is a single array read.
-`forward_spacing(Ωₕ, i)` reads the same vector one entry along, since
-$x_{i+1} - x_i$ is the backward spacing at $i+1$. The cache is rebuilt by
-`set_points!`, and so by `iterative_refinement!` and `change_points!` as well, meaning
-it always matches the current points.
+A 1D mesh stores its backward spacings, so `spacings` hands back the whole vector and the
+accessors index it. The cache is rebuilt by `set_points!`, and so by
+[`iterative_refinement!`](@ref) and [`change_points!`](@ref) as well:
 
-```julia
-Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, false)
-
-spacings(Ωₕ)                       # every hᵢ at once
-spacings(Ωₕ)[3] == spacing(Ωₕ, 3)  # true, the accessor just indexes it
+```@example mesh
+spacings(Ωₕ_fig), spacings(Ωₕ_fig)[3] == spacing(Ωₕ_fig, 3)
 ```
 
-This matters for the difference operators, which need one spacing per grid point: reading
-the cached vector directly, rather than boxing the spacing accessor as a generic callable
-passed into the inner stencil loop, keeps that loop allocation-free.
-
-```julia
-# Maximum grid stepsize
-h = hₘₐₓ(Ωₕ_2d)
-
-# Control volume measure at cell (3, 4)
-vol = cell_measure(Ωₕ_2d, (3, 4))
+```@example mesh
+hₘₐₓ(Ωₕ_fig), cell_measure(Ωₕ_2d, (3, 4))
 ```
-
----
-
 ```@raw html
 <figure style="margin:1.5em 0;text-align:center">
 <svg viewBox="0 0 700 380" width="100%" style="max-width:700px;font-family:system-ui,-apple-system,'Segoe UI',sans-serif" role="img"
@@ -306,83 +257,81 @@ vol = cell_measure(Ωₕ_2d, (3, 4))
 </figure>
 ```
 
-An `n`-dimensional mesh is a tensor product of 1D meshes, and every quantity above is
-built the same way. The cell around `(xᵢ, yⱼ)` is the rectangle spanned by the two
-per-axis intervals, so its measure is the product of the per-axis widths:
+The cell around `(xᵢ, yⱼ)` is the rectangle spanned by the two per-axis intervals, so its
+measure is the product of the per-axis widths. On the mesh drawn above:
 
-```julia
-cell_measure(Ωₕ, CartesianIndex(3, 2))          # 0.2
-half_spacing(Ωₕ(1), 3) * half_spacing(Ωₕ(2), 2)  # 0.2, the same number
+```@example mesh
+Ω_prod = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
+Ωₕ_prod = mesh(Ω_prod, (4, 3), (true, true))
+change_points!(Ωₕ_prod, markers(Ω_prod), ([0.0, 0.2, 0.6, 1.0], [0.0, 0.5, 1.0]))
+
+cell_measure(Ωₕ_prod, CartesianIndex(3, 2)),
+half_spacing(Ωₕ_prod(1), 3) * half_spacing(Ωₕ_prod(2), 2)
 ```
 
-`Ωₕ(k)` is the 1D submesh along axis `k`, so anything documented for a 1D mesh applies to
-it directly. As in one dimension the cells tile the domain exactly: the twelve cell
-measures sum to the area `1.0`, and the cells touching a boundary are correspondingly
-thinner along that axis.
+The cells tile the domain exactly here too: the twelve measures sum to the area.
 
+```@example mesh
+sum(cell_measure(Ωₕ_prod, I) for I in indices(Ωₕ_prod))
+```
+
+---
 
 ## 3. Boundary and interior indexing
 
-`Bramble.jl` uses Julia's native `CartesianIndices` for zero-overhead, multi-dimensional grid navigation:
+Indices are Julia's own `CartesianIndices`:
 
-```julia
-# Complete Cartesian grid indices
-idxs = indices(Ωₕ_2d)  # CartesianIndices((1:10, 1:20))
-
-# Interior indices (excluding all boundaries)
-interior = interior_indices(Ωₕ_2d)  # CartesianIndices((2:9, 2:19))
-
-# Boundary facets as a tuple of CartesianIndices
-facets = boundary_indices(Ωₕ_2d)
-
-# Test whether an index lies on the domain boundary
-is_boundary = is_boundary_index(Ωₕ_2d, CartesianIndex(1, 5))  # true
+```@example mesh
+indices(Ωₕ_prod), interior_indices(Ωₕ_prod)
 ```
+
+```@example mesh
+is_boundary_index(Ωₕ_prod, CartesianIndex(1, 2)),
+is_boundary_index(Ωₕ_prod, CartesianIndex(2, 2))
+```
+
+`boundary_indices(Ωₕ)` gives the facets separately, as a tuple of index sets.
 
 ---
 
 ## 4. Markers on meshes
 
-When creating a mesh from a labeled [`Domain`](@ref), markers are projected onto the grid points as highly efficient `BitVector`s:
+Building a mesh over a labelled domain projects each marker onto the grid points as a
+`BitVector`, so membership is one lookup:
 
-```julia
-# Domain with boundary and obstacle markers
+```@example mesh
 I = interval(0.0, 1.0)
-Ω = domain(I × I,
-           :left_inlet => :xmin,      # or legacy alias :left
-           :right_outlet => :xmax,    # or legacy alias :right
-           :walls => (:ymin, :ymax),  # or legacy alias (:top, :bottom)
-           :obstacle => x -> (x[1]-0.5)^2 + (x[2]-0.5)^2 < 0.15^2)
+Ω_marked = domain(I × I,
+    :left_inlet => :xmin,
+    :right_outlet => :xmax,
+    :walls => (:ymin, :ymax),
+    :obstacle => x -> (x[1] - 0.5)^2 + (x[2] - 0.5)^2 < 0.15^2)
 
-# Generate mesh
-Ωₕ = mesh(Ω, (20, 20))
+Ωₕ_marked = mesh(Ω_marked, (20, 20))
 
-# Query markers
-m_dict = markers(Ωₕ)
-
-# Retrieve bit-vector for a specific label
-is_wall = index_in_marker(Ωₕ, :walls)
-is_obs  = index_in_marker(Ωₕ, :obstacle)
+sum(index_in_marker(Ωₕ_marked, :walls)), sum(index_in_marker(Ωₕ_marked, :obstacle))
 ```
 
 ---
 
-## 5. Mesh adaptation and modification
+## 5. Mesh adaptation
 
-Meshes in `Bramble.jl` are mutable structures designed for adaptive algorithms:
+### 5.1 In-place refinement
 
-### 5.1 In-place mesh refinement
+[`iterative_refinement!`](@ref) inserts a point at every cell midpoint, updating indices and
+reapplying the domain's markers. Refinement is uniform and dyadic: `N` points become
+`2N - 1` along every axis.
 
-Halves every cell by inserting new points at each cell midpoint, simultaneously updating indices and reapplying domain markers:
+A mesh carrying custom markers needs the two-argument form: the labels are re-evaluated on
+the new points, and refining without a domain to re-derive them from is an error rather than
+a silent loss.
 
-```julia
-# Refine mesh in-place
-iterative_refinement!(Ωₕ)
+```@example mesh
+Ωₕ_ref = mesh(Ω_marked, (20, 20))
+iterative_refinement!(Ωₕ_ref, markers(Ω_marked))
 
-# Point count increases: (2N_x - 1) × (2N_y - 1)
-npoints(Ωₕ, Tuple)  # (39, 39)
+npoints(Ωₕ_ref, Tuple), sum(index_in_marker(Ωₕ_ref, :obstacle))
 ```
-
 ```@raw html
 <figure>
 <svg viewBox="0 0 740 210" width="100%" style="max-width:740px;height:auto;font-family:system-ui,-apple-system,'Segoe UI',sans-serif"
@@ -455,18 +404,20 @@ npoints(Ωₕ, Tuple)  # (39, 39)
 </figure>
 ```
 
-### 5.2 Relocating mesh coordinates
+### 5.2 Relocating coordinates
 
-For moving-boundary problems or non-uniform smoothing:
+[`change_points!`](@ref) replaces the coordinates of an existing mesh, keeping the point
+count, which is what a moving boundary or a graded grid needs:
 
-```julia
-# Supply new coordinates for a 1D mesh (matching the 11 points of Ωₕ)
-new_pts = range(0.0, 1.0, length=npoints(Ωₕ)) |> collect
-change_points!(Ωₕ, new_pts)
+```@example mesh
+Ωₕ_move = mesh(domain(interval(0.0, 1.0)), 11)
+change_points!(Ωₕ_move, collect(range(0.0, 1.0, length = npoints(Ωₕ_move)) .^ 2))
 
-# Or update points and re-evaluate markers for a multi-dimensional mesh
-nx, ny = npoints(Ωₕ, Tuple)
-new_x_pts = range(0.0, 1.0, length=nx) |> collect
-new_y_pts = range(0.0, 1.0, length=ny) |> collect
-change_points!(Ωₕ, markers(Ω), (new_x_pts, new_y_pts))
+points(Ωₕ_move)
 ```
+
+Above 1D, pass the markers alongside the per-axis coordinate vectors so the labels are
+re-evaluated at the new positions, as §2's product mesh does. `Bramble.set_points!` is the
+variant that also accepts a different point count.
+
+Next: [grid spaces](space.md), which put discrete functions on a mesh.
