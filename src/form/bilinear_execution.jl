@@ -279,7 +279,7 @@ function _assemble_bilinear_core_cached!(
         cache::_AssemblyCache{D},
         α = true
 ) where {AST_TYPE, D}
-    if cache.A === A && cache.ast === ast
+    if cache.valid && cache.A_id === objectid(A) && cache.ast === ast
         _replay_bilinear_core!(A, trial_space, test_space, ast, cache.segments, α)
     else
         # A fresh vector, not `empty!` on whatever `cache.segments` currently references,
@@ -295,8 +295,9 @@ function _assemble_bilinear_core_cached!(
         segments = Segment{D}[]
         _record_bilinear_core!(A, trial_space, test_space, ast, segments, α)
         cache.segments = segments
-        cache.A = A
+        cache.A_id = objectid(A)
         cache.ast = ast
+        cache.valid = true
     end
     return A
 end

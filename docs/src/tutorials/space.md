@@ -24,7 +24,7 @@ using Bramble
 # 1. Define a 2D domain: [0, 1] × [0, 1]
 Ω = domain(box((0.0, 0.0), (1.0, 1.0)))
 
-# 2. Discretize into a uniform 5 × 5 mesh with periodic boundary conditions
+# 2. Discretize into a 5 × 5 mesh, uniformly spaced along both axes
 Ωₕ = mesh(Ω, (5, 5), (true, true))
 
 # 3. Construct a scalar grid space on the mesh

@@ -6,7 +6,9 @@ name: Weekly
 # call between them, against 1.1 s for ReverseDiff and PolyesterForwardDiff, which run on
 # every push instead. What the expensive pair establishes changes when a *backend* changes
 # rather than when Bramble does, so paying it per push would be paying it for nothing almost
-# every time.
+# every time. `SciMLSensitivity` (gpena/Bramble.jl#239's adjoint entry point) joined this
+# list for the same reason and at a comparable cost -- it pulls in Zygote, Tracker,
+# ReverseDiff and NNlib, none of which anything else here needs.
 #
 # So this is a canary rather than a gate: it is not required for a merge, and a failure here
 # most often means an upstream release moved rather than that Bramble regressed. Read it
@@ -14,7 +16,9 @@ name: Weekly
 #
 # The backends are added at run time rather than declared in `test/Project.toml`, which
 # keeps Enzyme out of the dependency graph of every ordinary test run. `autodiff_backends.jl`
-# skips any backend it cannot find, so the group is harmless without them.
+# skips any backend it cannot find, and `test/ext/sciml_sensitivity_ext.jl`/`test/examples/
+# transient_inverse_problem.jl` skip the same way when `SciMLSensitivity` is absent, so the
+# group is harmless without any of them.
 
 on:
   schedule:
@@ -78,11 +82,11 @@ jobs:
       # because they are slow to compile, PolyesterForwardDiff because it adds nothing
       # ForwardDiff does not cover and nests threading inside kernels that already thread. Failing to add one is not fatal: the test file skips a backend it cannot
       # load, and the run still reports on the others.
-      - name: Add the expensive differentiation backends
+      - name: Add the expensive differentiation backends and SciMLSensitivity
         run: |
           julia --project=test -e '
             using Pkg
-            for p in ("PolyesterForwardDiff", "Mooncake", "Enzyme")
+            for p in ("PolyesterForwardDiff", "Mooncake", "Enzyme", "SciMLSensitivity")
                 try
                     Pkg.add(p)
                 catch err

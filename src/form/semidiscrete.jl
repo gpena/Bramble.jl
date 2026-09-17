@@ -87,19 +87,42 @@ struct TimeDependentConstraints{C}
     constraints::C
 end
 
-# Time dependence is read off the conditions' arity, the same test
+"""
+    TimeParamDependentConstraints{C}
+
+Source constraint carrier for boundary values `g(x, t, p)`, evaluated at each step through
+`(dm::DomainMarkers)(t, p)` -- the same residual `p` [`semidiscretize`](@ref)'s `(du, u, p,
+t)` call receives and, until now, never used. Kept as a separate carrier from
+[`TimeDependentConstraints`](@ref) rather than a `p === nothing` branch inside it, matching
+[`EvaluatedParametricDomainMarkers`](@ref)'s own reason for existing alongside
+[`EvaluatedDomainMarkers`](@ref).
+"""
+struct TimeParamDependentConstraints{C}
+    constraints::C
+end
+
+# Time/parameter dependence is read off the conditions' arity, the same test
 # `_validate_time_dependent_arity` uses to check a time domain was passed honestly. A
-# spatial condition `x -> ...` has no two-argument method, so the two never collide.
+# spatial condition `x -> ...` has no two- or three-argument method, and a `(x, t) -> ...`
+# one has no three-argument method, so the three never collide.
 function _dirichlet_is_time_dependent(constraints::ConstraintMarkers)
     conds = conditions(constraints)
     isempty(conds) && return false
     return all(m -> hasmethod(identifier(m), Tuple{Any, Any}), conds)
 end
 
+function _dirichlet_is_time_param_dependent(constraints::ConstraintMarkers)
+    conds = conditions(constraints)
+    isempty(conds) && return false
+    return all(m -> hasmethod(identifier(m), Tuple{Any, Any, Any}), conds)
+end
+
 @inline _source_constraints(::Nothing, ::Nothing) = NoConstraints()
 @inline _source_constraints(::Any, ::Nothing) = LabelsOnly()
 @inline _source_constraints(::Any, constraints) =
-    if _dirichlet_is_time_dependent(constraints)
+    if _dirichlet_is_time_param_dependent(constraints)
+        TimeParamDependentConstraints(constraints)
+    elseif _dirichlet_is_time_dependent(constraints)
         TimeDependentConstraints(constraints)
     else
         StaticConstraints(constraints)
@@ -141,9 +164,10 @@ Common supertype for [`Semidiscretization`](@ref) (first-order, `M u_h' = F(t) -
 
 Everything about how the source's boundary values are reached at each step --
 [`NoConstraints`](@ref)/[`LabelsOnly`](@ref)/[`StaticConstraints`](@ref)/
-[`TimeDependentConstraints`](@ref), `_source_constraints`, `_assemble_source!`,
-`_apply_initial_constraints!` -- only ever touches `space`/`labels`/`components`/
-`constraints`/`source`, never the order-specific operator matrices, so it is shared here
+[`TimeDependentConstraints`](@ref)/[`TimeParamDependentConstraints`](@ref),
+`_source_constraints`, `_assemble_source!`, `_apply_initial_constraints!` -- only ever
+touches `space`/`labels`/`components`/`constraints`/`source`, never the order-specific
+operator matrices, so it is shared here
 rather than duplicated for the second-order struct.
 """
 abstract type AbstractSemidiscretization end
@@ -171,11 +195,11 @@ Built by [`semidiscretize`](@ref); read back with [`mass_matrix`](@ref) and
 - `operator_matrix`: `A`, with `eₖ` rows on the constrained degrees of freedom.
 - `mass_matrix`: `M`, with zero rows on the constrained degrees of freedom.
 - `source_vector`: the reusable `F` buffer, refilled in place.
-- `constraints`: how the source's boundary values are reached -- one of `NoConstraints`, `LabelsOnly`, `StaticConstraints` or `TimeDependentConstraints`.
+- `constraints`: how the source's boundary values are reached -- one of `NoConstraints`, `LabelsOnly`, `StaticConstraints`, `TimeDependentConstraints` or `TimeParamDependentConstraints`.
 - `labels`: constrained boundary labels.
 - `components`: leaf components the labels bind to, or `nothing` for all.
 - `state`: [`VectorElement`](@ref) receiving `u` before assembly, or `nothing`.
-- `update_coefficients`: callable invoked with `t` before assembly, or `nothing`.
+- `update_coefficients`: callable invoked with `t` (or, wrapped in `ParametricUpdate`, with `t` and the residual's own `p`) before assembly, or `nothing`.
 - `reassemble`: `Val(true)` to refill `A` at every step.
 """
 struct Semidiscretization{A, L, S, MT, VT, BC, LB, CP, ST, TR, R} <: AbstractSemidiscretization
@@ -218,15 +242,23 @@ returned system solves `A u_h = F`.
 
 # Keywords
 - `mass`: [`BilinearForm`](@ref) defining `M` (default: `innerₕ(u, v)`, the discrete `L²` inner product, which is diagonal).
-- `dirichlet`: constrained labels and, where they carry values, the values -- every form [`assemble`](@ref) accepts, including time-dependent constraints from [`dirichlet_constraints`](@ref)`(Ωₕ, I, :label => (x, t) -> ...)` (default: `nothing`).
+- `dirichlet`: constrained labels and, where they carry values, the values -- every form [`assemble`](@ref) accepts, including time-dependent constraints from [`dirichlet_constraints`](@ref)`(Ωₕ, I, :label => (x, t) -> ...)`, or parameter-dependent ones from `(x, t, p) -> ...` for a value reached by the residual's own `p` (default: `nothing`).
 - `dirichlet_components`: leaf components of a composite space the labels bind to (default: `nothing`, all leaves).
 - `state`: [`VectorElement`](@ref) the current `u` is copied into before each assembly, for forms whose coefficients read it (default: `nothing`).
-- `update_coefficients!`: called with the current `t` before each assembly, for coefficients that vary in time -- `t -> Rₕ!(fₕ, x -> f(x, t))` for a time-dependent source, or `t -> (α[] = t)` for a scalar `Ref` (default: `nothing`).
+- `update_coefficients!`: called with the current `t` before each assembly, for coefficients that vary in time -- `t -> Rₕ!(fₕ, x -> f(x, t))` for a time-dependent source, or `t -> (α[] = t)` for a scalar `Ref` (default: `nothing`). A two-argument `(t, p) -> ...` also reaches the residual's own `p`, the same way a three-argument Dirichlet condition does.
 - `reassemble`: refill `A` at every step, for an operator whose coefficients change with `t` or `u` (default: `false`).
 
-Time dependence of the Dirichlet values is detected by arity, exactly as
-[`dirichlet_constraints`](@ref) validates it: conditions accepting `(x, t)` are evaluated at
-each step, conditions accepting `(x)` are not.
+Time and parameter dependence of the Dirichlet values is detected by arity, exactly as
+[`dirichlet_constraints`](@ref) validates it: conditions accepting `(x, t, p)` are evaluated
+at each step against the residual's own `p`, conditions accepting `(x, t)` are evaluated at
+each step without it, and conditions accepting `(x)` are not evaluated per step at all.
+`update_coefficients!` is detected the same way, between its one- and two-argument forms.
+
+!!! note "`p` reaches only the source, never the operator"
+    `A` (and therefore [`jacobian!`](@ref)) stays fixed for a given `t`, regardless of `p`:
+    an operator coefficient that itself depends on `p` is not read by anything here. Use the
+    `build`-based method below for an operator that depends on `t`; a `p`-dependent operator
+    is not yet supported by either method.
 
 # Examples
 
@@ -278,7 +310,7 @@ function semidiscretize(
         labels === nothing ? () : labels,
         dirichlet_components,
         state,
-        update_coefficients!,
+        _wrap_update(update_coefficients!),
         Val(reassemble)
     )
 end
@@ -367,7 +399,7 @@ function semidiscretize(
         labels === nothing ? () : labels,
         dirichlet_components,
         state,
-        update_coefficients!,
+        _wrap_update(update_coefficients!),
         Val(reassemble)
     )
 end
@@ -451,13 +483,18 @@ Allocates nothing (**0 bytes**) whenever `eltype(du)` and `typeof(t)` match the 
 element type -- the path every step of a real solve takes. A wider element type (a
 `ForwardDiff.Dual` `t`, from the time gradient a Rosenbrock method needs) is met by
 allocating a matching source buffer for that call alone.
+
+`p` reaches [`update_coefficients!`](@ref semidiscretize) and a time-dependent Dirichlet
+condition written as `(x, t, p) -> ...`, if either was given one of those shapes; otherwise
+it is unused, exactly as before this was possible. See the "`p` reaches only the source"
+note on [`semidiscretize`](@ref).
 """
 function (sd::Semidiscretization)(du::AbstractVector, u::AbstractVector, p, t)
     _sync_state!(sd.state, u)
-    _update_coefficients!(sd.update_coefficients, t)
+    _update_coefficients!(sd.update_coefficients, p, t)
 
     F = _source_buffer(sd, du, t)
-    _assemble_source!(F, sd, sd.constraints, t)
+    _assemble_source!(F, sd, sd.constraints, p, t)
 
     A = _refresh_operator!(sd, sd.reassemble, du, t)
 
@@ -477,9 +514,32 @@ end
     return nothing
 end
 
-@inline _update_coefficients!(::Nothing, t) = nothing
-@inline function _update_coefficients!(update!::F, t) where {F}
+"""
+    ParametricUpdate{F}
+
+Wraps an `update_coefficients!` callable that reads the residual's own `p`, i.e. one given to
+[`semidiscretize`](@ref) as `(t, p) -> ...` rather than `t -> ...`. Built once by
+[`_wrap_update`](@ref), never directly -- the same "decided once, at construction" discipline
+[`_source_constraints`](@ref) uses for the Dirichlet carriers above, so `_update_coefficients!`
+below dispatches on it rather than re-checking arity on every residual call.
+"""
+struct ParametricUpdate{F}
+    f::F
+end
+
+@inline _wrap_update(::Nothing) = nothing
+@inline _wrap_update(f) = hasmethod(f, Tuple{Any, Any}) ? ParametricUpdate(f) : f
+
+@inline _update_coefficients!(::Nothing, p, t) = nothing
+# The existing one-argument path, untouched: a concrete `ParametricUpdate` method is more
+# specific than this `where {F}` fallback, so wrapping only the new case above does not
+# change how a plain `t -> ...` closure -- stored raw, exactly as before -- dispatches here.
+@inline function _update_coefficients!(update!::F, p, t) where {F}
     update!(t)
+    return nothing
+end
+@inline function _update_coefficients!(update!::ParametricUpdate, p, t)
+    update!.f(t, p)
     return nothing
 end
 
@@ -491,14 +551,14 @@ end
     return eltype(F) === T ? F : similar(du, T)
 end
 
-@inline _assemble_source!(F::AbstractVector, sd::AbstractSemidiscretization, ::NoConstraints, t) = assemble!(F, sd.source)
+@inline _assemble_source!(F::AbstractVector, sd::AbstractSemidiscretization, ::NoConstraints, p, t) = assemble!(F, sd.source)
 
 # The conditions are applied through `apply_dirichlet_conditions!` rather than `assemble!`'s
 # `dirichlet` keyword, which would re-run `_normalize_dirichlet` on every call: for
 # constraints that is `Tuple(labels(bcs))` over a generator, and it allocates once per step.
 # The labels were normalised once, in `semidiscretize`, and are passed straight through.
 @inline function _assemble_source!(
-        F::AbstractVector, sd::AbstractSemidiscretization, c::StaticConstraints, t
+        F::AbstractVector, sd::AbstractSemidiscretization, c::StaticConstraints, p, t
 )
     assemble!(F, sd.source)
     return apply_dirichlet_conditions!(
@@ -507,7 +567,7 @@ end
 end
 
 @inline function _assemble_source!(
-        F::AbstractVector, sd::AbstractSemidiscretization, c::TimeDependentConstraints, t
+        F::AbstractVector, sd::AbstractSemidiscretization, c::TimeDependentConstraints, p, t
 )
     assemble!(F, sd.source)
     return apply_dirichlet_conditions!(
@@ -515,9 +575,18 @@ end
     )
 end
 
+@inline function _assemble_source!(
+        F::AbstractVector, sd::AbstractSemidiscretization, c::TimeParamDependentConstraints, p, t
+)
+    assemble!(F, sd.source)
+    return apply_dirichlet_conditions!(
+        F, sd.source, c.constraints(t, p), sd.labels, sd.components
+    )
+end
+
 # Labels without values constrain `u_h` to zero, which `assemble!` cannot express: handed a
 # bare label it has nothing to write and raises. The rows are cleared here instead.
-function _assemble_source!(F::AbstractVector, sd::AbstractSemidiscretization, ::LabelsOnly, t)
+function _assemble_source!(F::AbstractVector, sd::AbstractSemidiscretization, ::LabelsOnly, p, t)
     assemble!(F, sd.source)
     _each_dirichlet_row(sd.space, sd.labels, sd.components) do i
         return @inbounds F[i] = zero(eltype(F))
@@ -564,7 +633,7 @@ See also [`jacobian_prototype`](@ref).
 """
 function jacobian!(J, sd::Semidiscretization, u, p, t)
     _sync_state!(sd.state, u)
-    _update_coefficients!(sd.update_coefficients, t)
+    _update_coefficients!(sd.update_coefficients, p, t)
     A = _refresh_operator!(sd, sd.reassemble, u, t)
     return _negate_into!(J, A)
 end
@@ -719,10 +788,10 @@ assembled element type.
 function (rhs::SemidiscretizeRHS)(du::AbstractVector, u::AbstractVector, p, t)
     sd = rhs.sd
     _sync_state!(sd.state, u)
-    _update_coefficients!(sd.update_coefficients, t)
+    _update_coefficients!(sd.update_coefficients, p, t)
 
     F = _source_buffer(sd, du, t)
-    _assemble_source!(F, sd, sd.constraints, t)
+    _assemble_source!(F, sd, sd.constraints, p, t)
 
     A = _refresh_operator!(sd, sd.reassemble, du, t)
 
@@ -735,26 +804,27 @@ end
 # --- Consistent initial conditions -------------------------------------------------- #
 
 """
-    dirichlet_bc!(u::AbstractVector, sd::AbstractSemidiscretization, t::Number) -> u
+    dirichlet_bc!(u::AbstractVector, sd::AbstractSemidiscretization, t::Number, p = nothing) -> u
 
-Write `sd`'s Dirichlet values at time `t` into `u` and return it.
+Write `sd`'s Dirichlet values at time `t` (and, for a parameter-dependent condition,
+parameter `p`) into `u` and return it.
 
 An index-1 differential-algebraic system needs its initial condition to satisfy the
 algebraic rows already: a `u` disagreeing with `g(x, 0)` on the boundary is inconsistent,
 and a stiff solver either rejects it or absorbs it into the first step.
 [`ode_problem`](@ref)/[`second_order_ode_problem`](@ref) apply this to a copy of the initial
-condition they are handed.
+condition they are handed, forwarding whatever `p` the caller gave the `ODEProblem`.
 """
-function dirichlet_bc!(u::AbstractVector, sd::AbstractSemidiscretization, t::Number)
-    return _apply_initial_constraints!(u, sd, sd.constraints, t)
+function dirichlet_bc!(u::AbstractVector, sd::AbstractSemidiscretization, t::Number, p = nothing)
+    return _apply_initial_constraints!(u, sd, sd.constraints, p, t)
 end
 
 @inline _apply_initial_constraints!(
-    u::AbstractVector, sd::AbstractSemidiscretization, ::NoConstraints, t
+    u::AbstractVector, sd::AbstractSemidiscretization, ::NoConstraints, p, t
 ) = u
 
 function _apply_initial_constraints!(
-        u::AbstractVector, sd::AbstractSemidiscretization, ::LabelsOnly, t
+        u::AbstractVector, sd::AbstractSemidiscretization, ::LabelsOnly, p, t
 )
     _each_dirichlet_row(sd.space, sd.labels, sd.components) do i
         return @inbounds u[i] = zero(eltype(u))
@@ -763,12 +833,16 @@ function _apply_initial_constraints!(
 end
 
 @inline _apply_initial_constraints!(
-    u::AbstractVector, sd::AbstractSemidiscretization, c::StaticConstraints, t
+    u::AbstractVector, sd::AbstractSemidiscretization, c::StaticConstraints, p, t
 ) = dirichlet_bc!(u, sd.space, c.constraints, sd.labels...; components = sd.components)
 
 @inline _apply_initial_constraints!(
-    u::AbstractVector, sd::AbstractSemidiscretization, c::TimeDependentConstraints, t
+    u::AbstractVector, sd::AbstractSemidiscretization, c::TimeDependentConstraints, p, t
 ) = dirichlet_bc!(u, sd.space, c.constraints(t), sd.labels...; components = sd.components)
+
+@inline _apply_initial_constraints!(
+    u::AbstractVector, sd::AbstractSemidiscretization, c::TimeParamDependentConstraints, p, t
+) = dirichlet_bc!(u, sd.space, c.constraints(t, p), sd.labels...; components = sd.components)
 
 # --- Display ------------------------------------------------------------------------ #
 #
@@ -828,6 +902,7 @@ end
 @inline _constraint_description(::LabelsOnly) = "zero"
 @inline _constraint_description(::StaticConstraints) = "g(x)"
 @inline _constraint_description(::TimeDependentConstraints) = "g(x, t)"
+@inline _constraint_description(::TimeParamDependentConstraints) = "g(x, t, p)"
 
 Base.summary(sd::Semidiscretization) = sprint(show, sd)
 
@@ -902,10 +977,20 @@ Build the `ODEProblem` stepping `sd` over the time domain `I`, from the initial 
 `u₀` -- a [`VectorElement`](@ref) or a plain vector. `I` may equally be a `(t₀, t₁)` tuple.
 
 `u₀` is copied, never mutated, and the copy is made consistent with the Dirichlet rows at
-`t₀` (see [`dirichlet_bc!`](@ref)).
+`t₀` (see [`dirichlet_bc!`](@ref)), against `p` when one is given.
 
-Keywords are those of [`ode_function`](@ref); the two-form method also forwards to
-[`semidiscretize`](@ref).
+Keywords are those of [`ode_function`](@ref), plus:
+- `p` (default `SciMLBase.NullParameters()`) for a residual whose `update_coefficients!` or
+  Dirichlet conditions were given a parameter-dependent, `(t, p)`/`(x, t, p)` form (see
+  [`semidiscretize`](@ref)'s own keywords).
+- `specialize` (default `nothing`, `ODEProblem`'s own choice untouched) -- pass
+  `SciMLBase.FullSpecialize` before handing the solved trajectory to
+  `Bramble.adjoint_sensitivities`: without it, a `p`-vjp calls the residual with a
+  differently-`eltype`-`p` than the forward solve used, which the default specialization
+  cannot dispatch and fails with "No matching function wrapper was found!" rather than
+  differentiating.
+
+The two-form method also forwards its other keywords to [`semidiscretize`](@ref).
 
 Requires [SciMLBase.jl](https://github.com/SciML/SciMLBase.jl).
 
@@ -915,6 +1000,12 @@ Requires [SciMLBase.jl](https://github.com/SciML/SciMLBase.jl).
 sd = semidiscretize(a, l; dirichlet = bcs)
 prob = ode_problem(sd, Rₕ(Wₕ, x -> sinpi(x[1])), interval(0.0, 1.0))
 sol = solve(prob, FBDF())
+```
+
+```julia
+bcs = dirichlet_constraints(Ωₕ, I, :boundary => (x, t, p) -> p[1] * t)
+sd = semidiscretize(a, l; dirichlet = bcs)
+prob = ode_problem(sd, u₀, I; p = [0.7])
 ```
 
 See also [`ode_function`](@ref), [`semidiscretize`](@ref).
@@ -931,11 +1022,21 @@ function ode_problem(
         jacobian = jacobian!,
         jac_prototype = nothing,
         tgrad = nothing,
+        p = nothing,
+        specialize = nothing,
         kwargs...
 )
     sd = semidiscretize(a, l; kwargs...)
+    # `p`/`specialize` are pulled out here rather than left in `kwargs...`: `semidiscretize`
+    # above has no keyword of its own for either (nothing about assembling `sd` needs them)
+    # and no catch-all either, so an unrecognized keyword would raise. Each is omitted
+    # entirely (not forwarded as `= nothing`) when the caller didn't ask for it, so
+    # `_ode_problem`'s own defaults apply exactly as they did before either existed here.
+    p_kwargs = p === nothing ? (;) : (; p = p)
+    specialize_kwargs = specialize === nothing ? (;) : (; specialize = specialize)
     return _ode_problem(
-        sd, u₀, I; jacobian = jacobian, jac_prototype = jac_prototype, tgrad = tgrad
+        sd, u₀, I; jacobian = jacobian, jac_prototype = jac_prototype, tgrad = tgrad,
+        p_kwargs..., specialize_kwargs...
     )
 end
 
@@ -971,6 +1072,27 @@ function _ode_problem(::Any, u₀, I; kwargs...)
     return error(
         "ode_problem requires SciMLBase.jl. Add `using SciMLBase` (or a package that " *
         "loads it, such as OrdinaryDiffEq) before calling this function.",
+    )
+end
+
+"""
+    adjoint_sensitivities(sol::ODESolution, alg; kwargs...) -> (du0, dp)
+
+Adjoint sensitivities of a [`Semidiscretization`](@ref)'s solved trajectory, via
+`SciMLSensitivity.adjoint_sensitivities` with two Bramble-specific corrections applied.
+Full documentation lives on `BrambleSciMLSensitivityExt`'s own method, the only one that
+exists once `SciMLSensitivity` is loaded -- this stub exists so that method has a function to
+extend, and so calling this without `SciMLSensitivity` loaded gives a clear error rather than
+`UndefVarError`.
+
+Deliberately not exported, unlike [`pde_solve`](@ref): `SciMLSensitivity` itself exports a
+function of this exact name, so `using Bramble, SciMLSensitivity` together would collide on
+the bare name regardless of what Bramble does. Call this one as `Bramble.adjoint_sensitivities`.
+"""
+function adjoint_sensitivities(sol, alg; kwargs...)
+    return error(
+        "adjoint_sensitivities requires SciMLSensitivity.jl. Add `using SciMLSensitivity` " *
+        "before calling this function.",
     )
 end
 

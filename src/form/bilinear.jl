@@ -85,15 +85,29 @@ function _flat_segment(::Val{D}, point_ptr::Vector{Int}, positions::Vector{Int})
 end
 
 # One `BilinearForm`'s nzval-position cache: valid only for the exact matrix object last
-# assembled into (`A === cache.A`), one `Segment{D}` per (term, block) the serial assembly
-# walk visits, in visitation order. A companion *value*, not a type parameter of
-# `BilinearForm` -- so it can be filled in lazily, on the first `assemble!` call, without the
-# form itself needing to be mutable or its type to depend on whether a cache exists yet. `D`
-# itself, though, is threaded in at construction (matching `BilinearForm`'s own `D`): without
-# it, `segments`'s eltype would be the unparametrized (non-concrete) `Segment`, and every
-# push/read would box (see [`Segment`](@ref)).
+# assembled into, one `Segment{D}` per (term, block) the serial assembly walk visits, in
+# visitation order. A companion *value*, not a type parameter of `BilinearForm` -- so it can
+# be filled in lazily, on the first `assemble!` call, without the form itself needing to be
+# mutable or its type to depend on whether a cache exists yet. `D` itself, though, is
+# threaded in at construction (matching `BilinearForm`'s own `D`): without it, `segments`'s
+# eltype would be the unparametrized (non-concrete) `Segment`, and every push/read would box
+# (see [`Segment`](@ref)).
+#
+# `A_id::UInt` (`objectid(A)`), not `A::SparseMatrixCSC` compared with `===`: the field
+# needs to be concrete for the same reason `Segment` does (gpena/Bramble.jl#240 -- one level
+# up from the `Segment`/`AnySegment{D}` union that issue originally reported, surviving that
+# fix because it sits here rather than in `_try_diagonal_segment`, and only showing up once
+# a differentiated closure builds the `BilinearForm` itself, putting the cache on Enzyme's
+# active graph). A bare `SparseMatrixCSC` field is already a `UnionAll` (unparametrized in
+# `Tv`/`Ti`), and different backends genuinely use different matrix types (`matrix_type`,
+# `src/utils/backend.jl`), so pinning the field to one concrete `SparseMatrixCSC{Tv,Ti}`
+# would either be wrong for another backend or force threading a matrix-type parameter
+# through `BilinearForm` itself. `objectid` needs none of that: identity comparison is all
+# the cache ever wanted, `UInt` is concrete regardless of backend, and `UInt(0)` never
+# collides with a real object's id under `valid = false`.
 mutable struct _AssemblyCache{D}
-    A::Union{Nothing, SparseMatrixCSC}
+    valid::Bool
+    A_id::UInt
     ast::Any
     segments::Vector{Segment{D}}
 end
@@ -118,7 +132,7 @@ _no_segments(::Val{1}) = _NO_SEGMENTS_1
 _no_segments(::Val{2}) = _NO_SEGMENTS_2
 _no_segments(::Val{3}) = _NO_SEGMENTS_3
 
-_AssemblyCache{D}() where {D} = _AssemblyCache{D}(nothing, nothing, _no_segments(Val(D)))
+_AssemblyCache{D}() where {D} = _AssemblyCache{D}(false, UInt(0), nothing, _no_segments(Val(D)))
 
 """
     BilinearForm{D, TrialSpace, TestSpace, AST}

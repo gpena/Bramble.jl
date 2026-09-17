@@ -65,10 +65,14 @@ way on the serial recording pass.
     return nothing
 end
 
-# Whether an earlier entry of this stencil already named the same pair of offsets.
-@inline function _offsets_seen_before(stencil, k::Int, off_u, off_v)
+# Whether an earlier entry already named the same pair of offsets. `entries` is anything
+# whose `k`-th element starts with `(off_u, off_v)`: `entry_offsets(stencil)`
+# (form/common.jl) from `_visit_entries`, which keeps offsets and weights in separate
+# containers for Enzyme's sake, or the stencil itself from the pattern builders in
+# form/jacobian_pattern.jl, which never read a weight at all.
+@inline function _offsets_seen_before(entries, k::Int, off_u, off_v)
     @inbounds for l in 1:(k - 1)
-        stencil[l][1] == off_u && stencil[l][2] == off_v && return true
+        entries[l][1] == off_u && entries[l][2] == off_v && return true
     end
     return false
 end
@@ -280,29 +284,43 @@ Base.@propagate_inbounds function _step_entry_unguarded!(
     return nothing
 end
 
-# One point's entries, in two forms chosen by the de-duplication trait.
+# One point's entries.
 #
-# A de-duplicating sink needs each entry's index, to ask `_offsets_seen_before` about the
-# ones before it, so its loop runs over `eachindex`. A value sink does not, and gets plain
-# iteration over the stencil tuple instead: measured, indexing a heterogeneous tuple by a
-# loop variable costs 8% on the stiffness replay and 17% on the mass one, at every problem
-# size from 64^2 to 1024^2, because it defeats the unrolling direct iteration gets. Both
-# forms are selected at compile time, so neither carries the other's cost.
+# The offsets and the weights are read from two separate containers ([`entry_offsets`](@ref)
+# /[`entry_weights`](@ref), form/common.jl) rather than from the stencil's own mixed
+# `Int`/`Float64` tuples. That is what lets `Enzyme` differentiate assembly with respect to
+# an operator's own coefficient (gpena/Bramble.jl#249): this function reads both halves of
+# every entry and is inlined into `_visit_guarded_region!` rather than into whatever closure
+# is being differentiated, which is exactly the combination Enzyme's type analysis cannot
+# handle on the entries as they come out of `local_stencil`.
+#
+# Both loops now index by `k`, where the value-sink branch used to iterate the stencil tuple
+# directly: indexing a *heterogeneous* tuple by a loop variable cost 8% on the stiffness
+# replay and 17% on the mass one (measured, gpena/Bramble.jl#50), because it defeats the
+# unrolling direct iteration gets. `entry_offsets`/`entry_weights` are homogeneous, which is
+# what makes indexing them affordable -- re-measured on the same replay benchmarks, not
+# assumed.
+#
+# The de-duplication branch is still chosen at compile time, so a value sink pays nothing
+# for `_offsets_seen_before`.
 Base.@propagate_inbounds function _visit_entries(
         sink::SINK, stencil, lin_indices, I, row_offset::Int, col_offset::Int, slot::Int
 ) where {SINK}
+    offs = entry_offsets(stencil)
+    wts = entry_weights(stencil)
     if _sink_dedups(sink)
-        for k in eachindex(stencil)
-            off_u, off_v, weight = stencil[k]
-            _offsets_seen_before(stencil, k, off_u, off_v) && continue
+        for k in eachindex(wts)
+            off_u, off_v = offs[k]
+            _offsets_seen_before(offs, k, off_u, off_v) && continue
             _step_entry!(
-                sink, lin_indices, I, off_u, off_v, weight, row_offset, col_offset, slot
+                sink, lin_indices, I, off_u, off_v, wts[k], row_offset, col_offset, slot
             ) && (slot += 1)
         end
     else
-        for (off_u, off_v, weight) in stencil
+        for k in eachindex(wts)
+            off_u, off_v = offs[k]
             _step_entry!(
-                sink, lin_indices, I, off_u, off_v, weight, row_offset, col_offset, slot
+                sink, lin_indices, I, off_u, off_v, wts[k], row_offset, col_offset, slot
             ) && (slot += 1)
         end
     end
@@ -316,19 +334,22 @@ end
 Base.@propagate_inbounds function _visit_entries_unguarded(
         sink::SINK, stencil, lin_indices, I, row_offset::Int, col_offset::Int, slot::Int
 ) where {SINK}
+    offs = entry_offsets(stencil)
+    wts = entry_weights(stencil)
     if _sink_dedups(sink)
-        for k in eachindex(stencil)
-            off_u, off_v, weight = stencil[k]
-            _offsets_seen_before(stencil, k, off_u, off_v) && continue
+        for k in eachindex(wts)
+            off_u, off_v = offs[k]
+            _offsets_seen_before(offs, k, off_u, off_v) && continue
             _step_entry_unguarded!(
-                sink, lin_indices, I, off_u, off_v, weight, row_offset, col_offset, slot
+                sink, lin_indices, I, off_u, off_v, wts[k], row_offset, col_offset, slot
             )
             slot += 1
         end
     else
-        for (off_u, off_v, weight) in stencil
+        for k in eachindex(wts)
+            off_u, off_v = offs[k]
             _step_entry_unguarded!(
-                sink, lin_indices, I, off_u, off_v, weight, row_offset, col_offset, slot
+                sink, lin_indices, I, off_u, off_v, wts[k], row_offset, col_offset, slot
             )
             slot += 1
         end

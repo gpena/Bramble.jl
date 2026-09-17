@@ -216,7 +216,7 @@ function (sd::SecondOrderSemidiscretization)(
         dv::AbstractVector, v::AbstractVector, u::AbstractVector, p, t
 )
     F = _source_buffer(sd, dv, t)
-    _assemble_source!(F, sd, sd.constraints, t)
+    _assemble_source!(F, sd, sd.constraints, p, t)
 
     copyto!(dv, F)
     mul!(dv, sd.stiffness_matrix, u, -1, 1)

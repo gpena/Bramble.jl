@@ -95,28 +95,46 @@ end
 @inline _initial_vector(u₀::AbstractVector) = collect(u₀)
 @inline _initial_vector(u₀) = collect(parent(u₀))
 
+# `p` defaults to `SciMLBase.NullParameters()`, `ODEProblem`'s own default -- passed
+# positionally rather than as a `kwargs...` entry, since `ODEProblem(f, u0, tspan; kwargs...)`
+# (the method a plain callable `f`/`rhs` reaches, as opposed to the `@add_kwonly`-generated
+# one an `AbstractODEFunction` reaches) does not bind a `p` keyword to that positional
+# argument at all; it would silently land in `kwargs` instead and never reach the residual.
+#
+# `specialize` defaults to `nothing`, leaving `ODEProblem`'s own specialization choice
+# untouched -- existing callers get exactly the problem they always did. Passing
+# `SciMLBase.FullSpecialize` is what `Bramble.adjoint_sensitivities`
+# (`BrambleSciMLSensitivityExt`) needs: without it, calling the residual with a
+# differently-`eltype`-`p` than the forward solve used (exactly what computing a `p`-vjp
+# does) fails with "No matching function wrapper was found!" rather than differentiating.
+# The type-parameterized `ODEProblem{iip, specialize}` constructor is the only one that
+# accepts a choice of specialization at all -- there is no keyword for it on the plain one.
 function Bramble._ode_problem(
         sd::Semidiscretization, u₀, I;
-        jacobian = jacobian!, jac_prototype = nothing, tgrad = nothing
+        jacobian = jacobian!, jac_prototype = nothing, tgrad = nothing,
+        p = SciMLBase.NullParameters(), specialize = nothing
 )
     tspan = _tspan(I)
     u0 = _initial_vector(u₀)
-    Bramble.dirichlet_bc!(u0, sd, first(tspan))
+    Bramble.dirichlet_bc!(u0, sd, first(tspan), p)
     f = Bramble._ode_function(
         sd; jacobian = jacobian, jac_prototype = jac_prototype, tgrad = tgrad
     )
-    return ODEProblem(f, u0, tspan)
+    return specialize === nothing ? ODEProblem(f, u0, tspan, p) :
+           ODEProblem{true, specialize}(f, u0, tspan, p)
 end
 
 # No `dirichlet_bc!` consistency step, unlike the `Semidiscretization` method above:
 # `SemidiscretizeRHS` only ever wraps a `Semidiscretization` built with `dirichlet =
 # nothing` (`Bramble.semidiscretize_rhs` checks), so there are no boundary rows to make
-# consistent. `ODEProblem(rhs, u0, tspan)` carries no `mass_matrix` either -- `rhs` already
-# folded `M⁻¹` in, which is the whole point.
-function Bramble._ode_problem(rhs::SemidiscretizeRHS, u₀, I; kwargs...)
+# consistent. `ODEProblem(rhs, u0, tspan, p)` carries no `mass_matrix` either -- `rhs`
+# already folded `M⁻¹` in, which is the whole point.
+function Bramble._ode_problem(
+        rhs::SemidiscretizeRHS, u₀, I; p = SciMLBase.NullParameters(), kwargs...
+)
     tspan = _tspan(I)
     u0 = _initial_vector(u₀)
-    return ODEProblem(rhs, u0, tspan; kwargs...)
+    return ODEProblem(rhs, u0, tspan, p; kwargs...)
 end
 
 function Bramble._second_order_ode_function(sd::SecondOrderSemidiscretization)

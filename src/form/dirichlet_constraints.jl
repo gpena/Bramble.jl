@@ -61,7 +61,7 @@ const ConstraintMarkers = Union{DomainMarkers, EvaluatedDomainMarkers}
 
 Create Dirichlet boundary constraints.
 
-Each `pair` is of the form `:label => func`, where `:label` identifies the boundary region and `func` defines the Dirichlet values. If the optional time domain `I` is provided, `func` must be a time-dependent function `func(x, t)`; this is checked by arity, since nothing about `func` itself can be evaluated at construction time.
+Each `pair` is of the form `:label => func`, where `:label` identifies the boundary region and `func` defines the Dirichlet values. If the optional time domain `I` is provided, `func` must be a time-dependent function `func(x, t)`, or a time- and parameter-dependent one `func(x, t, p)` for a value that a [`semidiscretize`](@ref) residual's own `p` should reach; this is checked by arity, since nothing about `func` itself can be evaluated at construction time. Every `pair` given alongside `I` must agree on which of the two shapes it uses.
 
 `input` can be a `CartesianProduct`, a `Domain`, an `AbstractMeshType`, a `ScalarGridSpace`, or a `CompositeGridSpace` from which the mesh is extracted. The `:label` must match a label in the mesh definition.
 """
@@ -115,16 +115,36 @@ end
 end
 
 # A time domain `I` promises the evaluation path (`(dm::DomainMarkers)(t)`, which does
-# `Base.Fix2(func, t)`) that every `func` here accepts `(x, t)`. Nothing downstream checks
-# this: `Fix2` builds regardless of arity and only fails once the resulting closure is
+# `Base.Fix2(func, t)`, or `(dm::DomainMarkers)(t, p)`, which composes a `Base.Fix{3}` for
+# `p` with a `Base.Fix2` for `t` -- see `conditions(::EvaluatedParametricDomainMarkers)`,
+# marker.jl, for why that specific order and not the other one) that every `func` here
+# accepts `(x, t)` or, uniformly, `(x, t, p)`. Nothing downstream
+# checks this: `Fix2` builds regardless of arity and only fails once the resulting closure is
 # called during assembly, far from the mistake. Caught here by arity alone, not by calling
 # `func`, since a condition's closure is otherwise never evaluated before assembly.
+#
+# The whole `pairs` tuple must agree on one shape, not mix them: `semidiscretize` decides
+# once, for the *entire* constraint set, whether to route through `TimeDependentConstraints`
+# or `TimeParamDependentConstraints` (`form/semidiscrete.jl`), by checking that every
+# condition has the same arity. A mix would silently fall through to neither and only fail
+# once a residual call actually invoked the wrong-arity closure -- caught here instead, at
+# the point that already knows every condition's arity.
 function _validate_time_dependent_arity(pairs::Tuple{Vararg{Pair}})
+    n2 = count(pair -> hasmethod(last(pair), Tuple{Any, Any}), pairs)
+    n3 = count(pair -> hasmethod(last(pair), Tuple{Any, Any, Any}), pairs)
+    n2 == length(pairs) && return nothing
+    n3 == length(pairs) && return nothing
     for (lbl, func) in pairs
-        hasmethod(func, Tuple{Any, Any}) || error(
-            "dirichlet_constraints: condition for label `:$lbl` must accept (x, t) since a time domain was given, got $(func)",
-        )
+        hasmethod(func, Tuple{Any, Any}) || hasmethod(func, Tuple{Any, Any, Any}) ||
+            error(
+                "dirichlet_constraints: condition for label `:$lbl` must accept (x, t) or " *
+                "(x, t, p) since a time domain was given, got $(func)",
+            )
     end
+    error(
+        "dirichlet_constraints: conditions must uniformly accept (x, t) or uniformly " *
+        "accept (x, t, p); got a mix across labels $(map(first, pairs)).",
+    )
 end
 
 @inline _constraint_domain(input::ScalarGridSpace) = set(mesh(input))
@@ -464,6 +484,34 @@ end
 
 @inline dirichlet_bc!(
     v::AbstractVector, Ωₕ::AbstractMeshType, bcs::ConstraintMarkers, labels::Symbol...
+) = dirichlet_bc!(v, Ωₕ, bcs, labels, 0)
+
+"""
+    dirichlet_bc!(v::AbstractVector, Ωₕ::AbstractMeshType, bcs::EvaluatedParametricDomainMarkers, labels::Symbol...) -> AbstractVector
+
+Write Dirichlet values into `v` at the points marked by `labels`, from a time- and
+parameter-evaluated constraint set (see [`EvaluatedParametricDomainMarkers`](@ref)).
+
+A separate method rather than a third member of [`ConstraintMarkers`](@ref): the body is
+otherwise identical to the `bcs::ConstraintMarkers` method above, but widening that `Union`
+is exactly the shape of change gpena/Bramble.jl#240 removed from the assembly path for
+Enzyme's sake, and this method sits on the same residual Enzyme/SciMLSensitivity
+differentiate for a `p`-dependent boundary value.
+"""
+@inline function dirichlet_bc!(
+        v::AbstractVector,
+        Ωₕ::AbstractMeshType,
+        bcs::EvaluatedParametricDomainMarkers,
+        labels::NTuple{N, Symbol},
+        offset::Int = 0
+) where {N}
+    isempty(labels) && return v
+    _apply_conditions!(conditions(bcs), v, Ωₕ, labels, offset)
+    return v
+end
+
+@inline dirichlet_bc!(
+    v::AbstractVector, Ωₕ::AbstractMeshType, bcs::EvaluatedParametricDomainMarkers, labels::Symbol...
 ) = dirichlet_bc!(v, Ωₕ, bcs, labels, 0)
 
 """

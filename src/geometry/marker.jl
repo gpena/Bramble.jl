@@ -366,6 +366,82 @@ Evaluate time-dependent condition markers at timestamp `t`.
 """
 (dm::DomainMarkers)(t::Number) = EvaluatedDomainMarkers(dm, t)
 
+"""
+    EvaluatedParametricDomainMarkers(original_markers::DomainMarkers, evaluation_time::Number, p)
+
+Time- and parameter-evaluated wrapper for a [`DomainMarkers`](@ref) collection whose
+conditions accept `(x, t, p)` rather than `(x, t)`, evaluated at timestamp `t` and parameter
+`p`.
+
+Kept separate from [`EvaluatedDomainMarkers`](@ref) rather than adding a `p` field to it: the
+two-argument `Base.Fix2(identifier(m), t)` this file already builds for the `(x, t)` case
+would otherwise need a runtime branch on whether `p` is present, and this exact kind of
+branch-carrying `Union`/optional field is what made Enzyme's strict-aliasing type analysis
+reject `AnySegment{D}` (gpena/Bramble.jl#240) -- a fresh concrete type costs a few duplicated
+one-line accessors instead, and keeps every existing `EvaluatedDomainMarkers` call site
+untouched.
+
+# Fields
+- `original_markers`: Underlying [`DomainMarkers`](@ref) object.
+- `evaluation_time`: Evaluation timestamp `t`.
+- `p`: Evaluation parameter, passed through unmodified (e.g. a `Vector` or a scalar).
+"""
+struct EvaluatedParametricDomainMarkers{M <: DomainMarkers, T <: Number, P}
+    original_markers::M
+    evaluation_time::T
+    p::P
+end
+
+"""
+    (dm::DomainMarkers)(t::Number, p) -> EvaluatedParametricDomainMarkers
+
+Evaluate parameter- and time-dependent condition markers at timestamp `t` and parameter `p`.
+"""
+(dm::DomainMarkers)(t::Number, p) = EvaluatedParametricDomainMarkers(dm, t, p)
+
+@inline symbols(edm::EvaluatedParametricDomainMarkers) = symbols(edm.original_markers)
+@inline tuples(edm::EvaluatedParametricDomainMarkers) = tuples(edm.original_markers)
+
+"""
+    conditions(edm::EvaluatedParametricDomainMarkers) -> Tuple
+
+Return condition markers evaluated at `edm.evaluation_time` and `edm.p`, converting `f(x, t,
+p)` closures into unary spatial predicates `f(x)`.
+
+`Base.Fix{N}` generalizes `Base.Fix1`/`Base.Fix2` to insert its fixed value at position `N`
+of *whatever args a given call supplies*, not at position `N` of `f`'s own argument list
+(`Base.Fix`'s own docstring example: `Fix{1}(Fix{2}(f, 4), 4)` fixes the first and second
+arg, not the first and fourth). So `Base.Fix{3}(f, p)` first, fixing `f`'s own third
+argument to `p` and leaving a 2-argument `(x, t) -> f(x, t, p)`; `Base.Fix2` on *that* then
+fixes its second argument to `t`, landing on `x -> f(x, t, p)`. Reversing the order --
+`Base.Fix2(Base.Fix2(f, p), t)`, the tempting reading of "fix p, then fix t" -- instead
+inserts `p` at position 2 and shoves `t` to position 3, calling `f(x, p, t)` (caught by the
+test that checks a `(1.0, 3.0)` vs a swapped-order failure, not by inspection).
+"""
+function conditions(edm::EvaluatedParametricDomainMarkers)
+    t = edm.evaluation_time
+    p = edm.p
+    return map(
+        m -> Marker(label(m), Base.Fix2(Base.Fix{3}(identifier(m), p), t)),
+        conditions(edm.original_markers)
+    )
+end
+
+@inline label_identifiers(edm::EvaluatedParametricDomainMarkers) = (
+    map(label, symbols(edm))...,
+    map(label, tuples(edm))...,
+    map(label, conditions(edm))...
+)
+
+@inline labels(edm::EvaluatedParametricDomainMarkers) = label_identifiers(edm)
+
+@inline label_symbols(edm::EvaluatedParametricDomainMarkers) = (label(m)::Symbol for m in symbols(edm))
+@inline label_tuples(edm::EvaluatedParametricDomainMarkers) = (label(m)::Symbol for m in tuples(edm))
+@inline label_conditions(edm::EvaluatedParametricDomainMarkers) = (label(m)::Symbol for m in conditions(edm))
+
+@inline Base.length(edm::EvaluatedParametricDomainMarkers) = length(edm.original_markers)
+@inline Base.isempty(edm::EvaluatedParametricDomainMarkers) = isempty(edm.original_markers)
+
 function Base.show(io::IO, m::Marker{F}) where {F}
     if F <: Symbol
         print(io, "Marker(:$(m.label) => :$(m.identifier))")

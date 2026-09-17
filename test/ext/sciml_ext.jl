@@ -108,6 +108,36 @@ end
         @test ode_problem(a, l, u₀, I; dirichlet = bcs).u0[1] ≈ 5.0
     end
 
+    @testset "ode_problem: p reaches a parametric residual" begin
+        # `θ` scales the boundary value and its rate, `(x, t, θ) -> θ[1] + θ[2] * t`, threaded
+        # through the residual's own `p` -- gpena/Bramble.jl#239's own gap: nothing before this
+        # let a Dirichlet condition see the ODEProblem's parameter at all.
+        bcs = dirichlet_constraints(Ωₕ, I, :boundary => (x, t, θ) -> θ[1] + θ[2] * t)
+        sd_p = semidiscretize(a, l; dirichlet = bcs)
+        u₀ = Rₕ(Wₕ, x -> 0.0)
+        θ = (1.0, 2.0)
+
+        prob = ode_problem(sd_p, u₀, I; p = θ)
+        @test prob.p === θ
+        @test prob.u0[1] ≈ 1.0 && prob.u0[n] ≈ 1.0   # dirichlet_bc!'s own consistency step used θ too
+
+        sol = solve(prob, FBDF())
+        @test SciMLBase.successful_retcode(sol)
+        @test sol.u[end][1] ≈ θ[1] + θ[2] * sol.t[end]
+        @test sol.u[end][n] ≈ θ[1] + θ[2] * sol.t[end]
+
+        # A different θ at the same problem reaches a different trajectory -- confirms θ is
+        # read fresh from `p` on every residual call, not captured once at `ode_problem` time.
+        sol2 = solve(ode_problem(sd_p, u₀, I; p = (0.0, 1.0)), FBDF())
+        @test sol2.u[end][1] ≈ sol2.t[end]
+
+        # Omitting `p` on a non-parametric problem is unchanged: `NullParameters`, not an
+        # error, exactly as before `p` reached anything.
+        bcs_t = dirichlet_constraints(Ωₕ, I, :boundary => (x, t) -> 1 + t)
+        sd_t = semidiscretize(a, l; dirichlet = bcs_t)
+        @test ode_problem(sd_t, u₀, I).p isa SciMLBase.NullParameters
+    end
+
     # `semidiscretize_rhs` (gpena/Bramble.jl#163): the point of folding `M⁻¹` in ahead of
     # time is reaching solvers that cannot touch a mass matrix at all -- `Tsit5` is one, and
     # is checked to actually reject `sd`'s own `ODEProblem` below, not just to work on

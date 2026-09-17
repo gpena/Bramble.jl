@@ -39,9 +39,15 @@ using Bramble:
 
     @testset "Zero and identity" begin
         @test simplify_ast(0 * A) isa ZeroOperator
-        @test simplify_ast(0.0 * A) isa ZeroOperator
         @test simplify_ast(1 * A) === A
-        @test simplify_ast(1.0 * A) === A
+
+        # A floating-point coefficient is deliberately left alone, however it compares to
+        # `0` or `1` (gpena/Bramble.jl#240): collapsing on the value would make the node
+        # type -- and so the `AST` type parameter of any form built from it -- depend on a
+        # number the compiler need not know, which costs `form` its inferred return type
+        # for a runtime coefficient and raises `IllegalTypeAnalysisException` under Enzyme.
+        @test simplify_ast(0.0 * A) isa OperatorScale
+        @test simplify_ast(1.0 * A) isa OperatorScale
 
         # the zero side of a sum vanishes from the tree entirely, on either side
         @test simplify_ast(A + 0 * B) === A
@@ -148,7 +154,7 @@ end
 
     @testset "Zero-scaled term elides from the sparsity pattern" begin
         a_ref = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
-        a_zero = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + 0.0 * inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
+        a_zero = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + 0 * inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
 
         A_ref = assemble(a_ref)
         A_zero = assemble(a_zero)
@@ -157,6 +163,14 @@ end
         # pattern: without elision it would add its own (much wider) stencil's nonzeros.
         @test nnz(A_zero) == nnz(A_ref)
         @test !(resolve_form_ast(a_zero) isa OperatorAdd)
+
+        # The integer `0` above is what buys that, and the restriction is deliberate
+        # (gpena/Bramble.jl#240): a floating-point `0.0` keeps its term, so the matrix
+        # still holds the stiffness band as stored zeros. Same numbers, wider pattern.
+        a_zero_float = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + 0.0 * inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
+        A_zero_float = assemble(a_zero_float)
+        @test Matrix(A_zero_float) ≈ Matrix(A_ref)
+        @test nnz(A_zero_float) > nnz(A_ref)
     end
 
     @testset "Combining like terms merges two sweeps into one" begin
@@ -451,6 +465,64 @@ end
         end
         @test A_div ≈ A_nine
     end
+end
+
+# --- Type stability under a runtime coefficient ------------------------------------- #
+#
+# Every rewrite in `simplify_ast` decides what *node type* to return, so a rule that reads a
+# coefficient's value makes `form`'s return type depend on that value: inferred as a `Union`
+# of the rewritten and unrewritten trees whenever the compiler cannot fold the comparison.
+# That costs every caller a dynamic dispatch into the assembly engine, and it is what Enzyme
+# rejects with `IllegalTypeAnalysisException` when differentiating with respect to an
+# operator's own coefficient (gpena/Bramble.jl#240). The value-reading rules are therefore
+# restricted to `Integer` coefficients, and these are the checks that pin it: `isconcretetype`
+# on the inferred return type, which is exactly the property that was false before.
+#
+# `Float64` arguments rather than literals on purpose -- a literal coefficient is constant
+# -folded by inference and comes out concrete either way, so a literal proves nothing here.
+_rt_single(θ::Float64, W) = form(W, W, (u, v) -> θ * innerₕ(u, v))
+_rt_sum(θ::Float64, W) = form(W, W, (u, v) -> θ * inner₊ₓ(D₋ₓ(u), D₋ₓ(v)) + (1 - θ) * innerₕ(u, v))
+_rt_bare(θ::Float64, W) = form(W, W, (u, v) -> θ * inner₊ₓ(D₋ₓ(u), D₋ₓ(v)) + innerₕ(u, v))
+_rt_equal(θ::Float64, W) = form(W, W, (u, v) -> θ * inner₊ₓ(D₋ₓ(u), D₋ₓ(v)) + θ * innerₕ(u, v))
+_rt_lifted(θ::Float64, W) = form(W, W, (u, v) -> innerₕ(θ * u, v))
+_rt_linear(θ::Float64, W, fₕ) = form(W, v -> θ * innerₕ(fₕ, v))
+
+_infers(f, sig) = isconcretetype(only(Base.return_types(f, sig)))
+
+@testset "A runtime coefficient leaves `form` type-stable" begin
+    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6), (true, true))
+    Wₕ = gridspace(Ωₕ)
+    W = typeof(Wₕ)
+    fₕ = Rₕ(Wₕ, x -> x[1])
+
+    @test _infers(_rt_single, (Float64, W))
+    @test _infers(_rt_sum, (Float64, W))
+    @test _infers(_rt_bare, (Float64, W))
+    @test _infers(_rt_equal, (Float64, W))
+    @test _infers(_rt_lifted, (Float64, W))
+    @test _infers(_rt_linear, (Float64, W, typeof(fₕ)))
+
+    # The rewrites themselves are unchanged for the `Integer` coefficients they are written
+    # for, which is what makes the restriction affordable -- these are the same trees the
+    # rules built before, still built.
+    A = IdentityOperator(Wₕ)
+    B = D₋ₓ(A)
+    @test simplify_ast(2 * A + 2 * B) isa OperatorScale     # common factor, still factored
+    @test simplify_ast(2 * A + 3 * A) isa OperatorScale     # like terms, still combined
+    @test simplify_ast(0 * A) isa ZeroOperator              # still elided
+    @test simplify_ast(1 * A) === A
+
+    # ... and a `Float64` coefficient is carried through as written instead. Assembling it
+    # must still give the same matrix: this pass may change how a form is routed, never what
+    # it computes.
+    @test simplify_ast(2.0 * A + 2.0 * B) isa OperatorAdd
+    @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> 2.0 * innerₕ(u, v) + 2.0 * inner₊ₓ(D₋ₓ(u), D₋ₓ(v))))) ≈
+          2.0 .* Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))))
+
+    # A shared `Ref` coefficient still factors: that rule compares object identity, which
+    # inference settles from the types, so it never cost stability in the first place.
+    β = Ref(1.5)
+    @test simplify_ast(β * A + β * B) isa OperatorScale
 end
 
 end # module FormSimplifierTests

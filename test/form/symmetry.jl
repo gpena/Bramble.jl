@@ -143,10 +143,11 @@ using Bramble:
         #
         # A grid-function-of-ones rather than the literal `1.0 *` this used to be: `form`
         # now runs `simplify_ast` (gpena/Bramble.jl#159), which lifts *any* `OperatorScale`
-        # sitting directly inside an inner product's argument back out -- `1.0` included, an
-        # identity scalar that then vanishes entirely -- so a literal `1.0 * shift_op(...)`
-        # no longer builds the wrapper this test needs. `GridFunctionScale` is not something
-        # that pass touches inside a product's argument, so it still forces the mismatch.
+        # sitting directly inside an inner product's argument back out to scale the whole
+        # product -- so a literal `1.0 * shift_op(...)` no longer builds the wrapper this
+        # test needs between the product and its argument. `GridFunctionScale` is not
+        # something that pass touches inside a product's argument, so it still forces the
+        # mismatch.
         onesₕ = Rₕ(Wₕ, x -> 1.0)
         m2_general = form(
             Wₕ, Wₕ, (u, v) -> innerₕ(shift_op(u, 1, 1), onesₕ * shift_op(v, 1, 2))
