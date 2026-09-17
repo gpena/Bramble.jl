@@ -52,18 +52,30 @@ let dir = joinpath(@__DIR__, "src", "examples")
 end
 
 home = "Home" => "index.md"
-tutorials = "Tutorials" => [
+getting_started = "Getting started" => "getting_started.md"
+
+# Grouped by where a page sits in the workflow rather than as one flat "Tutorials" list:
+# a reader meets geometry, meshes, spaces and operators before forms, and the solver,
+# AD and backend pages after. `tutorials/backend.md` appears here and nowhere else --
+# listing a page twice is a fatal Documenter error, as is leaving one out.
+foundations = "Discrete foundations" => [
     "tutorials/geometry.md",
     "tutorials/mesh.md",
-    "tutorials/backend.md",
     "tutorials/space.md",
-    "tutorials/operators.md",
-    "tutorials/form.md",
+    "tutorials/operators.md"
+]
+forms = "Forms and assembly" => [
+    "tutorials/form.md"
+]
+scientific = "Solvers and scientific computing" => [
+    "tutorials/solvers.md",
     "tutorials/autodiff.md",
-    "tutorials/vtk_export.md",
-    "tutorials/pgfplots_export.md",
+    "tutorials/backend.md"
+]
+visualization = "Visualization and export" => [
     "tutorials/plotting.md",
-    "tutorials/solvers.md"
+    "tutorials/vtk_export.md",
+    "tutorials/pgfplots_export.md"
 ]
 examples = "Examples" => [
     "examples/poisson_linear.md",
@@ -88,7 +100,8 @@ internals = "Internals" => [
 ]
 documentation = "Documentation" => ["api.md", "api_sciml.md", internals]
 
-allpages = [home, tutorials, examples, benchmarks, documentation]
+allpages = [home, getting_started, foundations, forms, scientific,
+    visualization, examples, benchmarks, documentation]
 
 makedocs(;
     format = Documenter.HTML(;

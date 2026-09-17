@@ -13,18 +13,18 @@ This documentation is for `Bramble.jl`, a Julia library implementing discretizat
 <div class="bramble-card">
 ```
 
-**[Quick start](examples/poisson_linear.md)**
+**[Getting started](getting_started.md)**
 
-Build a mesh, a grid space, and assemble a first Poisson system in under twenty lines.
+A Poisson problem end to end in twenty lines: domain, mesh, grid space, form, solve.
 
 ```@raw html
 </div>
 <div class="bramble-card">
 ```
 
-**[Mathematical foundations](tutorials/operators.md)**
+**[Discrete foundations](tutorials/geometry.md)**
 
-The discrete calculus behind every operator: difference quotients, jumps, averages, and how they compose.
+Domains, meshes and their metric, grid spaces, and the discrete calculus the operators are built from.
 
 ```@raw html
 </div>
