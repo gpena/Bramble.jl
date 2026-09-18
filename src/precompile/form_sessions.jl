@@ -23,7 +23,7 @@ function _pc_form_ast_interp(Wₕ::ScalarGridSpace, u)
     π_src = πₕ(element(Wₕ, 1.0))
     is_symbolic(π_src)
     resolve_ast(π_src)
-    π_node = πₕ(Wₕ, u)
+    π_node = πₕ(u)
     is_symbolic(π_node)
     resolve_ast(π_node)
     return nothing

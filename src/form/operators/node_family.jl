@@ -169,6 +169,25 @@ function _node_resolve_expr(node_name; source = nothing)
     )
 end
 
+"""
+    _node_bind_expr(node_name; source = nothing)
+
+Returns the expression defining `_bind_interp_spaces` for one node family.
+
+The interpolation binding pass (`form/operators/interpolation.jl`) walks a term the way
+`resolve_ast` does, and a directional node's share of that walk is the same line per family
+as its `resolve_ast`: rebuild with the bound operand inside.
+"""
+function _node_bind_expr(node_name; source = nothing)
+    return _relocate!(
+        :(function _bind_interp_spaces(op::$(node_name){D, Dim}, trial_leaf) where {D, Dim}
+            inner = _bind_interp_spaces(op.inner_op, trial_leaf)
+            return $(node_name){D, Dim, typeof(inner)}(inner)
+        end),
+        source
+    )
+end
+
 # --- The family macro ---------------------------------------------------------------- #
 
 """
@@ -187,6 +206,9 @@ Keywords, all optional except `node`, `stem` and `what`:
 | `vectorial_alias` | the tuple-valued alias over every coordinate, e.g. `∇ₕ` |
 | `componentwise` | `true` adds `alias(ops::Tuple)`; only the two gradients use it |
 | `resolve` | `false` skips the generated `resolve_ast`, for a node that writes its own |
+
+`_bind_interp_spaces` is generated unconditionally: it is the same rebuild as `resolve_ast`,
+and a family that opts out of the latter still has to pass a bound operand through.
 
 The space-layer counterpart is `@operator_family` in `space/operators/stencil.jl`, and the
 generators it shares -- `_relocate!` for line attribution, and `_BRAMBLE_var2symbol` /
@@ -242,6 +264,8 @@ macro node_family(kwargs...)
 
     get(opts, :resolve, true) === false ||
         push!(exprs, _node_resolve_expr(node_name; source = __source__))
+
+    push!(exprs, _node_bind_expr(node_name; source = __source__))
 
     return esc(Expr(:block, exprs...))
 end

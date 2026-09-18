@@ -167,3 +167,10 @@ function resolve_ast(op::ShiftNode{D, Dim}) where {D, Dim}
         op.shift_amount, resolve_ast(op.inner_op)
     )
 end
+
+# `ShiftNode` carries a second field, so it writes its own binder rather than taking the one
+# `@node_family` generates (form/operators/interpolation.jl explains the pass).
+function _bind_interp_spaces(op::ShiftNode{D, Dim}, trial_leaf) where {D, Dim}
+    inner = _bind_interp_spaces(op.inner_op, trial_leaf)
+    return ShiftNode{D, Dim, typeof(inner)}(op.shift_amount, inner)
+end

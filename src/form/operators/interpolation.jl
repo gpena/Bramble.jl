@@ -19,8 +19,8 @@ whichever mesh is being walked, so `uₕ` can originate from another leaf withou
 handling; the interpolation occurs once per point inside `interpolate_at`, where ordinary
 source function calls occur. `outside` (gpena/Bramble.jl#223) is forwarded to
 [`interpolate_at`](@ref) unchanged, fill values included -- this is a source (a function of
-`uₕ`'s values), not a linear map, so unlike [`πₕ`](@ref)`(Wsrc, op)` below it carries no
-such restriction.
+`uₕ`'s values), not a linear map, so unlike the operator [`πₕ`](@ref)`(op)` below it
+carries no such restriction.
 """
 function πₕ(uₕ::VectorElement{<:ScalarGridSpace{D}}; outside = :error) where {D}
     _validate_outside(outside)
@@ -50,6 +50,11 @@ end
 The symbolic interpolation operator: `inner_op` lives on `src_space`, and this node evaluates
 it at points of whatever mesh the assembly is walking.
 
+`src_space` is `nothing` until assembly binds it. `πₕ(op)` cannot name the space itself: on a
+composite space the leaf a term interpolates from is only resolved block by block, so
+`_bind_interp_spaces` stamps the trial leaf in at that point, once per block, and the
+`S === Nothing` node exists only between construction and that binding.
+
 Distinct from the source wrapper `πₕ(uₕ)`, which carries a grid function's values. This node
 carries no values; it carries the map, and its stencil names trial columns.
 
@@ -67,41 +72,43 @@ end
 @noinline function _throw_interp_inner(op)
     throw(
         ArgumentError(
-        "πₕ as a bilinear operator wraps a trial function directly (`πₕ(Wsrc, u)` or " *
-        "`πₕ(Wsrc, u(2))`), but received $(typeof(op)). An operator applied before the " *
-        "interpolation (`πₕ(Wsrc, D₋ₓ(u))`, differencing on the source mesh and then " *
-        "interpolating) is a different operator and is not implemented; write the operator " *
-        "outside instead, `D₋ₓ(πₕ(Wsrc, u))`, which differences on the mesh being " *
-        "integrated over.",
+        "πₕ as a bilinear operator wraps a trial function directly (`πₕ(u)` or `πₕ(u(2))`), " *
+        "but received $(typeof(op)). An operator applied before the interpolation " *
+        "(`πₕ(D₋ₓ(u))`, differencing on the source mesh and then interpolating) is a " *
+        "different operator and is not implemented; write the operator outside instead, " *
+        "`D₋ₓ(πₕ(u))`, which differences on the mesh being integrated over.",
     ),
     )
 end
 
-#=
-    πₕ(Wsrc::ScalarGridSpace{D}, op::LazyOp{D}; outside = :error) -> InterpolationNode
+"""
+    πₕ(op::LazyOp{D}; outside = :error) -> InterpolationNode
 
-The interpolation operator from `Wsrc` onto whichever mesh the form integrates over, applied
-to the trial function `op`.
+The interpolation operator onto whichever mesh the form integrates over, applied to the
+trial function `op`. The space interpolated *from* is the trial function's own, and is not
+written here: it is bound during assembly, once the concrete trial leaf is known
+(`_bind_interp_spaces`), which is also what makes this work on a composite space, where the
+leaf a term names is only resolved block by block.
 
 This is the bilinear counterpart of `πₕ(uₕ)`: that one interpolates a grid function whose
 values are already known, and belongs on the source side of a linear form; this one
-interpolates the unknown, and so contributes matrix columns. `innerₕ(πₕ(Wsrc, u), v)`
-assembles `Hᵥ · P`, with `P` the same matrix `interpolation_matrix` builds: computed a row
-at a time during the sweep rather than as a matrix product, which allows `assemble!`
-to refill it with zero allocations.
+interpolates the unknown, and so contributes matrix columns. `innerₕ(πₕ(u), v)` assembles
+`Hᵥ · P`, with `P` the same matrix `interpolation_matrix` builds: computed a row at a time
+during the sweep rather than as a matrix product, which allows `assemble!` to refill it with
+zero allocations.
 
 Operators wrap it from the outside, acting on the mesh being integrated over:
-`inner₊(D₋ₓ(πₕ(Wsrc, u)), D₋ₓ(v))` is `D_x^⊤ H_+ D_x P`. Writing an operator inside is a
-different operation and is refused, since it would difference on the source mesh instead.
+`inner₊(D₋ₓ(πₕ(u)), D₋ₓ(v))` is `D_x^⊤ H_+ D_x P`. Writing an operator inside is a different
+operation and is refused, since it would difference on the source mesh instead.
 
 `op` must be a trial-function leaf, plain or indexed. `outside` (gpena/Bramble.jl#223)
 accepts only `:error` (the default), `:clamp` and `:extrapolate` -- see
 [`InterpolationNode`](@ref)'s own docstring for why a fill value is refused here.
-=#
-function πₕ(Wsrc::ScalarGridSpace{D}, op::LazyOp{D}; outside = :error) where {D}
+"""
+function πₕ(op::LazyOp{D}; outside = :error) where {D}
     op isa TrialFunction || op isa IndexedTrialFunction || _throw_interp_inner(op)
     _validate_outside_linear(outside)
-    return InterpolationNode{D, typeof(Wsrc), typeof(op)}(Wsrc, op, outside)
+    return InterpolationNode{D, Nothing, typeof(op)}(nothing, op, outside)
 end
 
 # --- The stencil: absolute trial columns, with the corner weights ------------------- #
@@ -110,6 +117,22 @@ end
         op::InterpolationNode{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int
 ) where {D}
     return _interp_stencil(mesh(op.src_space), point(mesh(space), I), Val(D), op.outside)
+end
+
+# An unbound node reaching the sweep means an assembly path walked a term without calling
+# `_bind_interp_spaces` first. Caught by dispatch rather than by a `nothing` check inside
+# the bound method, so the common path carries no test, and loudly, since the alternative
+# is a `MethodError` from `mesh(nothing)` several frames deeper.
+@noinline function local_stencil(
+        ::InterpolationNode{D, Nothing}, space, I::CartesianIndex{D}, markers, lin_idx::Int
+) where {D}
+    throw(
+        ArgumentError(
+        "an interpolation node reached the assembly sweep without a source space. Every " *
+        "path that walks a bilinear term over a block binds one first with " *
+        "`_bind_interp_spaces(term, trial_leaf)`; this one did not.",
+    ),
+    )
 end
 
 @inline function _interp_stencil(Ωsrc::AbstractMeshType{1}, x, ::Val{1}, outside::Symbol)
@@ -195,15 +218,16 @@ end
 #
 # `_all_trial_interpolated` verifies whether every trial column contributed by the term originates
 # from an interpolation. Only in that case is the term exempt from the cross-mesh refusal
-# (`_check_block_meshes`). A sum like `πₕ(Wsrc, u) + u` contributes absolute columns from one
+# (`_check_block_meshes`). A sum like `πₕ(u) + u` contributes absolute columns from one
 # summand and ordinary offsets from the other; the offsets still require both leaves to share an
 # index space.
 #
-# `_check_interp_spaces` then validates each interpolation in the term against the trial
-# leaf: the columns are numbered in that node's own `Wsrc` and written into the trial leaf's
-# column range, so every node must agree with it.
+# `_bind_interp_spaces` then supplies each interpolation with the leaf whose columns it writes
+# into. Nothing validates the two against each other any more: the node is given that leaf and
+# has no other space to disagree with, which is what dropping `πₕ`'s space argument bought
+# (gpena/Bramble.jl#10).
 #
-# Both queries are decided by the operator's type alone, allowing each rung to fold to a constant.
+# Both are decided by the operator's type alone, allowing each rung to fold to a constant.
 
 # A node that contributes no trial column at all (such as a source or test function) answers `true`
 # vacuously, as no mesh correspondence is required.
@@ -228,17 +252,45 @@ end
 _all_trial_interpolated(op::BilinearProduct) = _all_trial_interpolated(op.left_op)
 _all_trial_interpolated(op::LinearProduct) = true
 
-# Validate every interpolation the term carries against the leaf whose columns it writes into.
-_check_interp_spaces(::Any, trial_leaf) = nothing
-function _check_interp_spaces(op::InterpolationNode, trial_leaf)
-    return _check_one_interp_space(op, op.src_space, trial_leaf)
+# Bind every interpolation the term carries to the leaf whose columns it writes into.
+#
+# `πₕ(u)` names no space: the columns it produces are numbered in the trial function's own
+# space, which is exactly `blk.trial_leaf`, and on a composite space that leaf is only known
+# once `blocks` has resolved the term's `component_idx`. This pass stamps it in, with the
+# recursion shape of `resolve_ast` -- the fallback returns the term untouched, so a term
+# carrying no interpolation rebuilds nothing.
+#
+# Every method is decided by the operator's type alone, so the walk folds away at compile
+# time and a bound term is as concrete as the one it came from. Pattern discovery and
+# execution must bind identically, or the pattern reserves entries the sweep never fills.
+_bind_interp_spaces(op::Any, trial_leaf) = op
+
+function _bind_interp_spaces(op::InterpolationNode{D}, trial_leaf) where {D}
+    inner = _bind_interp_spaces(op.inner_op, trial_leaf)
+    return InterpolationNode{D, typeof(trial_leaf), typeof(inner)}(
+        trial_leaf, inner, op.outside
+    )
 end
 
-function _check_interp_spaces(op::OperatorAdd, t)
-    _check_interp_spaces(op.left_op, t)
-    _check_interp_spaces(op.right_op, t)
-    return nothing
+function _bind_interp_spaces(op::OperatorAdd{D}, trial_leaf) where {D}
+    left = _bind_interp_spaces(op.left_op, trial_leaf)
+    right = _bind_interp_spaces(op.right_op, trial_leaf)
+    return OperatorAdd{D, typeof(left), typeof(right)}(left, right)
 end
 
-_check_interp_spaces(op::BilinearProduct, t) = _check_interp_spaces(op.left_op, t)
-_check_interp_spaces(op::LinearProduct, t) = nothing
+# Only the trial side of a product carries columns, so only the trial side is bound -- the
+# same asymmetry `_all_trial_interpolated` reads. A `LinearProduct` contracts its left
+# factor away and can hold no interpolation node at all (`_is_source_only` answers false for
+# one, which is what makes `innerₕ` build a `BilinearProduct` instead), so it binds nothing.
+function _bind_interp_spaces(
+        op::BilinearProduct{D, InnerType}, trial_leaf
+) where {D, InnerType}
+    left = _bind_interp_spaces(op.left_op, trial_leaf)
+    return BilinearProduct{D, InnerType, typeof(left), typeof(op.right_op)}(
+        left, op.right_op
+    )
+end
+
+_bind_interp_spaces(ops::NTuple{N, Any}, trial_leaf) where {N} = map(
+    op -> _bind_interp_spaces(op, trial_leaf), ops
+)

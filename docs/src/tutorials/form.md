@@ -354,9 +354,11 @@ pair to constrain another block differently.
 The composite spaces above stack copies of *one* space: every leaf shares a mesh. A
 composite space can also be built directly from a tuple of leaves over different meshes,
 and then a term coupling two leaves needs a way to move a value from one leaf's grid to
-the other's: [`πₕ`](@ref), one argument fewer than the numeric `πₕ`/[`πₕ!`](@ref) pair (see
-the [operators tutorial](operators.md) for the numeric side and a diagram of the
-interpolant itself); the same name, told apart by dispatch rather than a different one.
+the other's: [`πₕ`](@ref), applied to the trial function alone (see the
+[operators tutorial](operators.md) for the numeric side and a diagram of the interpolant
+itself); the same name as the numeric `πₕ`/[`πₕ!`](@ref) pair, told apart by dispatch
+rather than a different one. It names no source space: the space it interpolates from is
+the trial function's own, and assembly supplies it once the leaf is known.
 
 ```@raw html
 <figure>

@@ -52,6 +52,7 @@ function allocate_system_matrix(
     # The test space: matrix rows are indexed by the test function and the quadrature weight
     # belongs to the integral over the test space mesh.
     space = form.test_space
+    ast = _bind_interp_spaces(ast, form.trial_space)
     _check_block_meshes(ast, form.trial_space, form.test_space)
     Ωₕ = mesh(space)
     mesh_markers = markers(Ωₕ)
@@ -102,11 +103,12 @@ function _pattern_blocks!(
         I_vec::Vector{Int}, J_vec::Vector{Int}, term::TERM, trial_leaves, test_leaves
 ) where {TERM}
     for blk in blocks(term, trial_leaves, test_leaves)
-        _check_block_meshes(term, blk.trial_leaf, blk.test_leaf)
+        bound = _bind_interp_spaces(term, blk.trial_leaf)
+        _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
         _pattern_term!(
             I_vec,
             J_vec,
-            term,
+            bound,
             blk.trial_leaf,
             blk.test_leaf,
             blk.row_offset,
@@ -127,8 +129,14 @@ function allocate_system_matrix(
 
     sp = first(first(test_leaves))
     Ωₛ = mesh(sp)
+    # Both scaffolding walks below -- the size hint and the element-type probe -- evaluate a
+    # stencil once, so an interpolation in the term needs a source space for them too. The
+    # first leaf serves: neither walk reads which columns come back, only how many and what
+    # their weights' type is, and every leaf answers those the same way. The entries
+    # themselves are produced by `_pattern_blocks!`, which binds the term block by block.
+    probe_ast = _bind_interp_spaces(ast, first(first(trial_leaves)))
     hint = length(test_leaves) *
-           _pattern_size_hint(ast, sp, markers(Ωₛ), LinearIndices(indices(Ωₛ)))
+           _pattern_size_hint(probe_ast, sp, markers(Ωₛ), LinearIndices(indices(Ωₛ)))
     sizehint!(I_vec, hint)
     sizehint!(J_vec, hint)
 
@@ -136,6 +144,6 @@ function allocate_system_matrix(
 
     ncols = ndofs(form.trial_space)
     nrows = ndofs(form.test_space)
-    V_vec = _zeros_of(_matrix_eltype(ast, form), length(I_vec))
+    V_vec = _zeros_of(_matrix_eltype(probe_ast, form), length(I_vec))
     return sparse!(I_vec, J_vec, V_vec, nrows, ncols, +)
 end

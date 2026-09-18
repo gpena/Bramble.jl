@@ -130,6 +130,6 @@ function _pc_interpolation_session(Ω_src, Ω_dest)
     interpolation_matrix(W_dest, W_src)
 
     assemble(form(W_dest, v -> innerₕ(πₕ(u_src), v)))
-    assemble(form(W_src, W_dest, (u, v) -> innerₕ(πₕ(W_src, u), v)))
+    assemble(form(W_src, W_dest, (u, v) -> innerₕ(πₕ(u), v)))
     return nothing
 end

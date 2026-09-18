@@ -87,7 +87,7 @@ pattern = jacobian_pattern(a, U -> U(2), U -> U(1))   # block (1,1) reads U(2), 
 function jacobian_pattern(
         form::BilinearForm{D, TrialSpace, TestSpace, AST}, coefficient_dependencies::Function...
 ) where {D, TrialSpace, TestSpace, AST}
-    ast = form.ast
+    ast = _bind_interp_spaces(form.ast, form.trial_space)
     space = form.test_space
     _check_block_meshes(ast, form.trial_space, form.test_space)
     Ωₕ = mesh(space)
@@ -280,11 +280,12 @@ function _pattern_blocks_jacobian!(
         I_vec::Vector{Int}, J_vec::Vector{Int}, term::TERM, trial_leaves, test_leaves, dep_ops
 ) where {TERM}
     for blk in blocks(term, trial_leaves, test_leaves)
-        _check_block_meshes(term, blk.trial_leaf, blk.test_leaf)
+        bound = _bind_interp_spaces(term, blk.trial_leaf)
+        _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
         _pattern_term_jacobian!(
             I_vec,
             J_vec,
-            term,
+            bound,
             blk.trial_leaf,
             blk.test_leaf,
             blk.row_offset,

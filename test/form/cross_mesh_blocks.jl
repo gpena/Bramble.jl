@@ -26,7 +26,7 @@ using Bramble:
 #
 # There is no correspondence between an index on one mesh and an index on the other, so the
 # term has no assembly until something says how to map between them, such as an interpolation
-# operator `πₕ(Wsrc, u)`. Without that mapping it is refused at every entry point.
+# operator `πₕ(u)`. Without that mapping it is refused at every entry point.
 
 @testset "Cross-mesh blocks" begin
     Ωbig = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (6, 6), (true, true))

@@ -87,7 +87,7 @@ using Bramble:
         W = gridspace(
             mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 5), (true, true))
         )
-        πu = πₕ(W, u)
+        πu = πₕ(u)
         @test Bramble._all_trial_interpolated(D₋ₓ(πu))
         @test Bramble._all_trial_interpolated(2.0 * M₊ᵧ(πu))
     end
@@ -145,7 +145,7 @@ using Bramble:
         W = gridspace(
             mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 5), (true, true))
         )
-        @test Bramble._collect_region_labels(restrict_to(:top, πₕ(W, u))) == (:top,)
+        @test Bramble._collect_region_labels(restrict_to(:top, πₕ(u))) == (:top,)
     end
 
     @testset "Unindexed terms" begin

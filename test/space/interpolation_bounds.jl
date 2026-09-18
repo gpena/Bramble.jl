@@ -132,7 +132,7 @@ using ..TestUtils: alloc_test, @test_allocs
         end
     end
 
-    @testset "interpolation_matrix and the bilinear πₕ(Wsrc, u) refuse a fill value" begin
+    @testset "interpolation_matrix and the bilinear πₕ(u) refuse a fill value" begin
         Ωdest = mesh(domain(interval(0.0, 1.0)), 6, true)
         Ωsrc = mesh(domain(interval(0.0, 1.0)), 5, true)
         Wdest, Wsrc = gridspace(Ωdest), gridspace(Ωsrc)
@@ -141,7 +141,7 @@ using ..TestUtils: alloc_test, @test_allocs
         @test occursin("linear", sprint(showerror, err.value))
 
         @test_throws ArgumentError form(
-            Wsrc, Wdest, (u, v) -> innerₕ(πₕ(Wsrc, u; outside = NaN), v)
+            Wsrc, Wdest, (u, v) -> innerₕ(πₕ(u; outside = NaN), v)
         )
     end
 
@@ -173,10 +173,10 @@ using ..TestUtils: alloc_test, @test_allocs
             end
         end
 
-        @testset "Bilinear operator πₕ(Wsrc, u)" begin
+        @testset "Bilinear operator πₕ(u)" begin
             for pol in (:clamp, :extrapolate)
                 P = interpolation_matrix(Wdest, Wsrc; outside = pol)
-                a = form(Wsrc, Wdest, (u, v) -> innerₕ(πₕ(Wsrc, u; outside = pol), v))
+                a = form(Wsrc, Wdest, (u, v) -> innerₕ(πₕ(u; outside = pol), v))
                 A = assemble(a)
                 Href = weights(Wdest, Bramble.Innerh())
                 @test A * parent(src) ≈ Href .* (P * parent(src))
