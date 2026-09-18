@@ -16,11 +16,17 @@ Documentation for `Bramble.jl`'s public API.
 ```@docs
 backend
 ExecutionPolicy
+CpuPolicy
+CpuSerial
+CpuThreaded
+GpuPolicy
+GpuAsync
 Serial
 Parallel
 execution_policy
 vector
 matrix
+supports_undef_construction
 vector_type
 matrix_type
 backend_types
@@ -174,6 +180,10 @@ methods that dispatch tells apart by what they are given rather than by differen
 - `πₕ(uₕ)` — the **symbolic source**, wrapping a grid function's interpolant as an AST leaf,
   composable with [`D₋ₓ`](@ref)/[`Mₓ`](@ref)/... inside [`innerₕ`](@ref). For the *known*
   side of a linear form.
+- `πₕ(u)` over a **trial function** — the **bilinear operator**, contributing matrix columns
+  rather than values. For the *unknown* side. It names no source space: that is the trial
+  function's own, and assembly supplies it once the leaf is known
+  ([#10](https://github.com/gpena/Bramble.jl/issues/10)).
 
 See the [operators tutorial](tutorials/operators.md) for the numeric side and the pattern
 this exists for: a heterogeneous composite space whose leaves live on different meshes.

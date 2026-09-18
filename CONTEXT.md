@@ -77,7 +77,7 @@ _Avoid_: component (used for the `components` keyword, which *selects* leaves), 
 
 **Backend**:
 Where a space's arrays live and how they are iterated, carrying the execution policy
-(`Serial()` or `Parallel()`) as a trait.
+(`CpuSerial()`/`Serial()`, `CpuThreaded()`/`Parallel()`, or `GpuAsync()`) as a trait.
 _Avoid_: device, mode
 
 ### Operators
