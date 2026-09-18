@@ -14,9 +14,8 @@ name: Nightly
 # leaner, faster push CI — a failure here is caught and fixed the same day rather than the
 # same minute.
 #
-# Docs are not built here: generation is on-demand only (`docs-on-demand.yml`,
-# `workflow_dispatch`), run right after a docs-affecting push rather than waiting for this
-# schedule or bundling it with an unrelated full-matrix run.
+# Docs are not built here: `docs-on-demand.yml` owns them, and it deploys on a release tag
+# or on demand -- never on a schedule, and never bundled into an unrelated full-matrix run.
 #
 # 06:00 UTC, after CompatHelper's 00:00 run, for the same reason Weekly.yml picks its own
 # time after CompatHelper: a compat bump it opens has already landed or not by the time this
@@ -96,6 +95,12 @@ jobs:
         # compiler -- so running one version here would leave the other unchecked. This job
         # was pinned to 1.12 alone while test/quality/aqua.jl still skipped the
         # persistent_tasks check on 1.13; it no longer does.
+        #
+        # This is the *only* place the quality group runs in CI. Weekly.yml used to re-derive
+        # it as part of `full`, on a 2x2 matrix, to learn nothing this daily job had not
+        # already reported; `full` stopped implying `quality` (test/runtests.jl) rather than
+        # this job's cadence being reduced, because a quality regression found six days late
+        # is a quality regression found six days late.
         version: ["1.12", "1.13"]
     steps:
       - uses: actions/checkout@v4

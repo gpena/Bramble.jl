@@ -1,23 +1,39 @@
-name: Docs (on demand)
+name: Docs
 
-# A standalone trigger for exactly one thing: rebuild and redeploy the documentation site
-# right now, rather than waiting for Nightly.yml's own docs job to run on its 06:00 UTC
-# schedule (or the rest of that workflow's full test matrix along with it). Same steps as
-# Nightly.yml's `docs` job, factored out here rather than shared, since a push to `main`
-# is exactly the moment this is wanted and Nightly.yml's own schedule already covers the
-# routine case — this is for "I just pushed a docs fix and don't want to wait until
-# tomorrow," not a replacement for the nightly job.
+# The only thing that deploys the documentation site. Two ways in:
 #
-# Julia 1.13, the same release every other docs job now builds on. That used to be the
-# difference between this workflow and Nightly.yml's docs job, which built on Julia
-# nightly; both are on the release since 1.13 went final, so keep the two in step when
+#   * a release tag (`v*`) -- the normal path. The release procedure records this version's
+#     benchmark baseline *before* the tag, so the tag commit already carries its own data
+#     point and this build publishes a complete `benchmarks.md`. Nothing has to be
+#     dispatched by hand afterwards.
+#   * `workflow_dispatch` -- for a docs-only fix, a re-run of a failed deploy, or a
+#     backfill of an older version's docs.
+#
+# **Dispatch with a tag ref selected, not `main`.** `docs/make.jl` sets `devbranch = "main"`,
+# so a build from `main` deploys to `dev/` -- a directory the version selector does not list
+# (`versions` in `docs/make.jl` has no `dev` entry), which makes it invisible rather than
+# absent. Dispatching a tag redeploys that version where it belongs.
+#
+# The file keeps its old name so every `gh workflow run docs-on-demand.yml` written down
+# anywhere still works; only the display name changed when tags started triggering it.
+#
+# Julia 1.13, the same release every other job builds on -- keep the two in step when
 # either moves.
 
 permissions:
   contents: read
 
 on:
+  push:
+    tags: ["v*"]
   workflow_dispatch:
+
+# Serialised, never cancelled: two deploys racing on `gh-pages` is the failure this avoids,
+# and cancelling one half-way through a push leaves the published tree in a worse state than
+# making it wait.
+concurrency:
+  group: docs-deploy
+  cancel-in-progress: false
 
 jobs:
   docs:

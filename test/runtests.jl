@@ -18,7 +18,17 @@ using Bramble
 include("TestUtils.jl")
 
 const __bramble_test_group = get(ENV, "BRAMBLE_TEST_GROUP", "all")
-const __bramble_with_quality = __bramble_test_group in ("all", "quality", "full")
+
+# `full` deliberately does *not* imply `quality`. `full` has exactly one caller, `Weekly.yml`,
+# and Aqua/JET/explicit-imports/exports/invalidations already run daily in `nightly.yml`'s
+# own `quality` job -- weekly was re-deriving them on a 2x2 matrix, four times over, to learn
+# nothing the daily run had not already reported. `full` now means "everything the daily
+# workflows do not already cover": the unit suite across both Julia versions, the expensive
+# AD backends, the package extensions and the manual snippets.
+#
+# A local `.claude/scripts/test.sh` run is unaffected: it passes no group at all and so gets
+# `all`, which still includes quality.
+const __bramble_with_quality = __bramble_test_group in ("all", "quality")
 const __bramble_with_unit_tests = __bramble_test_group in ("all", "unit", "full")
 
 # The differentiation backend survey is split by what it costs, measured per backend:

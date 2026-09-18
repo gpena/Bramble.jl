@@ -145,10 +145,18 @@ makedocs(;
     doctest = false
 )
 
+# Versioned since v3.0.0. `stable` follows the newest tag, each minor release keeps its own
+# directory, and there is no `dev` entry: nothing publishes a development build on a schedule,
+# and a `dev/` that updates only when someone dispatches this workflow by hand looks live
+# without being live. (Documenter still *writes* `dev/` for a build from `devbranch`; leaving
+# it out of `versions` keeps it off the selector.)
+#
+# The reason it is on at all: v3.0.0 breaks the v2 interface, so a v2.17 reader needs a
+# reference that did not move under them. `push_preview` was removed with the same change --
+# it enabled PR preview deploys, and no workflow builds docs on a pull request.
 deploydocs(;
     repo = "github.com/gpena/Bramble.jl.git",
     devbranch = "main",
     branch = "gh-pages",
-    versions = nothing,
-    push_preview = true
+    versions = ["stable" => "v^", "v#.#"]
 )
