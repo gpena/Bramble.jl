@@ -100,6 +100,14 @@ jobs:
     # `@test_allocs` in test/runtests.jl, which says a future Julia perturbing these counts
     # should fail loudly rather than quietly skip — but it is upstream news, not a defect
     # here, and it should not turn the whole nightly run red.
+    #
+    # It runs `slow`, not `unit`. `unit` is what a push runs, and it is now deliberately the
+    # cheap core: the worked-example pages, form/jacobian_pattern.jl and the Supposition
+    # properties moved out of it (test/TestUtils.jl's `WITH_SLOW_TESTS`). Those are exactly
+    # the blocks most likely to notice a compiler change -- the pages pin per-step
+    # allocations, jacobian_pattern cross-checks an AD-traced sparsity pattern, and the
+    # properties search their input space -- so running `unit` here would have narrowed the
+    # early warning this job exists to give, as a side effect of trimming the push gate.
     continue-on-error: true
     permissions:
       contents: read
@@ -125,7 +133,7 @@ jobs:
 
       - uses: julia-actions/julia-runtest@v1
         env:
-          BRAMBLE_TEST_GROUP: unit
+          BRAMBLE_TEST_GROUP: slow
 
   quality:
     name: Quality (Aqua & JET, Julia ${{ matrix.version }})
