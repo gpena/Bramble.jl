@@ -155,4 +155,37 @@ end
     end
 end
 
+# The discrete Laplacian (gpena/Bramble.jl#158). Its stencil is truncated at both ends of
+# every axis, so the error is measured away from them, as it is for the differences above,
+# and the meshes are refined by halving rather than redrawn, for the reason the header of
+# this file gives.
+#
+# The two orders differ, and the difference is the point. On a uniform mesh the conservative
+# form is second order pointwise. On a non-uniform one it is only first order pointwise: the
+# flux difference is centred on the cell face, not on the node, and the two half-cells have
+# different widths. That is not a defect of this implementation -- the same stencil is second
+# order in the discrete `normₕ`, which is what a solved problem sees (supraconvergence), and
+# what `test/space/inner_product.jl` and the MMS suites measure. Asserting 2 here would be
+# asserting something false about the operator.
+@testset "Δₕ convergence" begin
+    f2(x) = sin(1.7 * x[1]) * exp(0.6 * x[2])
+    lap2(x) = (-1.7^2 + 0.6^2) * f2(x)
+
+    Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
+    drop_rim(e) = @view e[2:(end - 1), 2:(end - 1)]
+
+    @testset "uniform: second order" begin
+        Ωₕ = mesh(Ω, (9, 9), (true, true))
+        _, errs = _orders(Ωₕ, Δₕ, f2, lap2, drop_rim; steps = 3)
+        @test 1.9 < _lsq_order(errs) < 2.1
+    end
+
+    @testset "non-uniform: first order pointwise" begin
+        Random.seed!(20250829)
+        Ωₕ = mesh(Ω, (9, 9), (false, false))
+        _, errs = _orders(Ωₕ, Δₕ, f2, lap2, drop_rim; steps = 3)
+        @test 0.9 < _lsq_order(errs) < 1.6
+    end
+end
+
 end # module ConvergenceOperatorsTests

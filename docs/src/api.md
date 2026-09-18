@@ -307,6 +307,22 @@ Dₕ₂!
 Dₕ
 ```
 
+The vector calculus operators built on those differences: the divergence and the curl of a
+vector field, and the conservative discrete Laplacian of a grid function. The unsubscripted
+spellings use the backward differences, as [`∇ₕ`](@ref) does; `div₊ₕ` and `curl₊ₕ` are their
+forward twins.
+
+```@docs
+divₕ
+divₕ!
+div₊ₕ
+curlₕ
+curlₕ!
+curl₊ₕ
+Δₕ
+Δₕ!
+```
+
 Jumps across an interface, ``\llbracket u \rrbracket = u_{i+1} - u_i``. There is one
 of these rather than a forward and a backward pair: a jump belongs to the interface
 between two cells, not to a direction of travel across it.

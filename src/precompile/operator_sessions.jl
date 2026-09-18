@@ -91,6 +91,19 @@ end
 
 _pc_vectorial_ops(uₕ) = _pc_apply_each(_PC_OPS_ALL, uₕ)
 
+# The vector calculus operators (gpena/Bramble.jl#158). Each recurses over directions, so a
+# session per dimension is what caches the recursion's own specializations; the gradient is
+# the field they are most often applied to.
+function _pc_vector_calculus(uₕ, ::Val{D}) where {D}
+    gₕ = ∇ₕ(uₕ)
+    Δₕ(uₕ)
+    Δₕ!(similar(uₕ), uₕ)
+    divₕ(gₕ)
+    divₕ!(similar(uₕ), gₕ)
+    D >= 2 && curlₕ(ntuple(_ -> uₕ, Val(D)))
+    return nothing
+end
+
 # innerₕ and the norms built on it take a grid function of a scalar space; inner₊
 # and norm₊ take the gradient tuple, which in 1D is the bare element.
 #
@@ -143,6 +156,7 @@ function _pc_operator_session(uₕ, cₕ, dim_val::Val)
     _pc_directional_ops(uₕ, dim_val)
     _pc_vectorial_ops(uₕ)
     _pc_inner_products(uₕ, dim_val)
+    _pc_vector_calculus(uₕ, dim_val)
 
     v_out = similar(uₕ)
     _pc_directional_ops_inplace(v_out, uₕ, dim_val)

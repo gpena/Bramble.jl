@@ -115,6 +115,12 @@ export snorm₁ₕ, norm₁ₕ, norm₊, normₕ
 # `D₋(uₕ, 2)` reaches the same method `D₋ᵧ(uₕ)` does, but only the survivors are exported or
 # `public`.
 export D₋ₓ, D₋ᵧ, D₋₂, ∇ₕ, D₋
+
+# The vector calculus operators built on those differences (gpena/Bramble.jl#158). The
+# backward-difference spellings are exported beside `∇ₕ`, which is also the backward one;
+# the forward twins are `public` for the same reason `∇₊ₕ` is (#211).
+export divₕ, divₕ!, curlₕ, curlₕ!, Δₕ, Δₕ!
+public div₊ₕ, div₊ₕ!, curl₊ₕ, curl₊ₕ!
 export D₋ₓ!, D₋ᵧ!, D₋₂!
 
 # `public` rather than nothing at all, unlike the unscaled differences above: the forward
@@ -214,6 +220,7 @@ include("space/operators/difference.jl")
 include("space/operators/jump.jl")
 include("space/operators/average.jl")
 include("space/operators/interpolation.jl")
+include("space/operators/vector_calculus.jl")
 include("space/inner_product.jl")
 
 include("form/ast.jl")
