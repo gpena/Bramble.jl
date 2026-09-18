@@ -89,7 +89,7 @@ export *
 export Rₕ, Rₕ!, avgₕ, avgₕ!
 export interpolate_at, interpolation_matrix, πₕ, πₕ!
 
-export innerₕ, inner_Γ, dirac
+export innerₕ, inner_Γ, dirac, skew_symmetric
 export n
 export inner₊, inner₊ₓ, inner₊ᵧ, inner₊₂
 export snorm₁ₕ, norm₁ₕ, norm₊, normₕ, norminf_h, norm∞ₕ
@@ -238,6 +238,7 @@ include("form/operators/average.jl")
 include("form/operators/restriction.jl")
 include("form/operators/inner.jl")
 include("form/operators/normal.jl")
+include("form/operators/skew.jl")
 include("form/operators/interpolation.jl")
 include("form/stencil_eval.jl")
 include("form/component.jl")
