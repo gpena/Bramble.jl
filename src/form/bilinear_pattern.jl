@@ -50,10 +50,12 @@ function allocate_system_matrix(
         form::BilinearForm{D, TrialSpace, TestSpace, AST}, ast = form.ast
 ) where {D, TrialSpace, TestSpace, AST}
     # The test space: matrix rows are indexed by the test function and the quadrature weight
-    # belongs to the integral over the test space mesh.
-    space = form.test_space
-    ast = _bind_interp_spaces(ast, form.trial_space)
+    # belongs to the integral over the test space mesh -- unless the test side is what
+    # interpolates, in which case the trial leaf is the one that stays native and supplies
+    # both (gpena/Bramble.jl#263, `_walked_leaf`).
+    ast = _bind_interp_spaces(ast, form.trial_space, form.test_space)
     _check_block_meshes(ast, form.trial_space, form.test_space)
+    space = _walked_leaf(ast, form.trial_space, form.test_space)
     Ωₕ = mesh(space)
     mesh_markers = markers(Ωₕ)
     _validate_term_markers(ast, mesh_markers, "the form's space")
@@ -81,12 +83,11 @@ function _pattern_term!(
         row_offset::Int,
         col_offset::Int
 ) where {TERM}
-    Ωₕ = mesh(test_leaf)
+    sp = _walked_leaf(term, trial_leaf, test_leaf)
+    Ωₕ = mesh(sp)
     mesh_markers = markers(Ωₕ)
     _validate_term_markers(term, mesh_markers, "one of the composite space's leaves")
-    visit_bilinear_stencil(
-        PatternSink(I_vec, J_vec), term, test_leaf, row_offset, col_offset
-    )
+    visit_bilinear_stencil(PatternSink(I_vec, J_vec), term, sp, row_offset, col_offset)
     return nothing
 end
 
@@ -103,7 +104,7 @@ function _pattern_blocks!(
         I_vec::Vector{Int}, J_vec::Vector{Int}, term::TERM, trial_leaves, test_leaves
 ) where {TERM}
     for blk in blocks(term, trial_leaves, test_leaves)
-        bound = _bind_interp_spaces(term, blk.trial_leaf)
+        bound = _bind_interp_spaces(term, blk.trial_leaf, blk.test_leaf)
         _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
         _pattern_term!(
             I_vec,
@@ -134,7 +135,9 @@ function allocate_system_matrix(
     # first leaf serves: neither walk reads which columns come back, only how many and what
     # their weights' type is, and every leaf answers those the same way. The entries
     # themselves are produced by `_pattern_blocks!`, which binds the term block by block.
-    probe_ast = _bind_interp_spaces(ast, first(first(trial_leaves)))
+    probe_ast = _bind_interp_spaces(
+        ast, first(first(trial_leaves)), first(first(test_leaves))
+    )
     hint = length(test_leaves) *
            _pattern_size_hint(probe_ast, sp, markers(Ωₛ), LinearIndices(indices(Ωₛ)))
     sizehint!(I_vec, hint)

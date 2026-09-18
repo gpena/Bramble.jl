@@ -86,8 +86,8 @@ function resolve_ast(op::RegionRestriction{D, RegionType}) where {D, RegionType}
 end
 
 function _bind_interp_spaces(
-        op::RegionRestriction{D, RegionType}, trial_leaf
+        op::RegionRestriction{D, RegionType}, trial_leaf, test_leaf
 ) where {D, RegionType}
-    inner = _bind_interp_spaces(op.inner_op, trial_leaf)
+    inner = _bind_interp_spaces(op.inner_op, trial_leaf, test_leaf)
     return RegionRestriction{D, RegionType, typeof(inner)}(op.region, inner)
 end

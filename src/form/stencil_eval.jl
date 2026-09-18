@@ -103,6 +103,9 @@ const UnaryWrapper{D} = Union{
 # to make impossible: there is now one method to get right per query, not thirteen.
 stencil_shift_trait(op::UnaryWrapper) = stencil_shift_trait(op.inner_op)
 _all_trial_interpolated(op::UnaryWrapper) = _all_trial_interpolated(op.inner_op)
+_all_test_interpolated(op::UnaryWrapper) = _all_test_interpolated(op.inner_op)
+_has_test_interp(op::UnaryWrapper) = _has_test_interp(op.inner_op)
+_has_trial_interp(op::UnaryWrapper) = _has_trial_interp(op.inner_op)
 _is_dirac(op::UnaryWrapper) = _is_dirac(op.inner_op)
 
 """
@@ -310,13 +313,15 @@ resolve_ast(ops::NTuple{N, Any}) where {N} = map(resolve_ast, ops)
 # beside their `resolve_ast` because they are the same walk. `GridFunctionScale`'s thunk
 # form has already been evaluated by `resolve_ast` when binding runs, so one method covers
 # both: the scale itself is carried across untouched.
-function _bind_interp_spaces(op::OperatorScale{D}, trial_leaf) where {D}
-    inner = _bind_interp_spaces(op.inner_op, trial_leaf)
+function _bind_interp_spaces(op::OperatorScale{D}, trial_leaf, test_leaf) where {D}
+    inner = _bind_interp_spaces(op.inner_op, trial_leaf, test_leaf)
     return OperatorScale{D, typeof(op.scalar), typeof(inner)}(op.scalar, inner)
 end
 
-function _bind_interp_spaces(op::GridFunctionScale{D, VType}, trial_leaf) where {D, VType}
-    inner = _bind_interp_spaces(op.inner_op, trial_leaf)
+function _bind_interp_spaces(
+        op::GridFunctionScale{D, VType}, trial_leaf, test_leaf
+) where {D, VType}
+    inner = _bind_interp_spaces(op.inner_op, trial_leaf, test_leaf)
     return GridFunctionScale{D, VType, typeof(inner)}(op.grid_function, inner)
 end
 # The catch-all every node above without its own method falls through to: TrialFunction,

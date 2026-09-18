@@ -125,8 +125,33 @@ the sum once rather than each term separately.
     return if _is_source_only(left)
         LinearProduct{D, W, typeof(left), typeof(right)}(left, right)
     else
+        _check_one_interpolated_side(left, right)
         BilinearProduct{D, W, typeof(left), typeof(right)}(left, right)
     end
+end
+
+# A term may interpolate one side or the other, never both (gpena/Bramble.jl#10, restated in
+# #263). Whichever side stays native is the one supplying the mesh with the quadrature
+# weights and the grid the sweep walks; with both sides interpolated there is no such mesh,
+# and the operators are pure nodal blends carrying no quadrature of their own to stand in for
+# one. Decided by type, so an ordinary product pays nothing for the check.
+@inline function _check_one_interpolated_side(left, right)
+    if _has_trial_interp(left) && _has_test_interp(right)
+        _throw_both_sides_interpolated(left, right)
+    end
+    return nothing
+end
+
+@noinline function _throw_both_sides_interpolated(left, right)
+    throw(
+        ArgumentError(
+        "a bilinear term cannot interpolate both sides: got πₕ on the trial side " *
+        "($(typeof(left))) and on the test side ($(typeof(right))). One side has to stay " *
+        "native, since it is the side whose mesh carries the quadrature weight the product " *
+        "integrates against; the interpolation operators are nodal blends and have no " *
+        "quadrature of their own. Interpolate the trial side or the test side, not both.",
+    ),
+    )
 end
 
 @inline _inner(w::AbstractInnerProduct, left::LazyOp, right::LazyOp, markers) = _restrict_by_markers(_product(w, left, right), markers)

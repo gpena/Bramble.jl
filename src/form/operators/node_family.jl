@@ -180,8 +180,10 @@ as its `resolve_ast`: rebuild with the bound operand inside.
 """
 function _node_bind_expr(node_name; source = nothing)
     return _relocate!(
-        :(function _bind_interp_spaces(op::$(node_name){D, Dim}, trial_leaf) where {D, Dim}
-            inner = _bind_interp_spaces(op.inner_op, trial_leaf)
+        :(function _bind_interp_spaces(
+                op::$(node_name){D, Dim}, trial_leaf, test_leaf
+        ) where {D, Dim}
+            inner = _bind_interp_spaces(op.inner_op, trial_leaf, test_leaf)
             return $(node_name){D, Dim, typeof(inner)}(inner)
         end),
         source

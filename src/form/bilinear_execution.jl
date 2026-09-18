@@ -162,18 +162,20 @@ end
 function _record_bilinear_core!(
         A::SparseMatrixCSC, trial_space, test_space, ast::AST_TYPE, segments::Vector{Segment{D}}, α
 ) where {AST_TYPE, D}
-    bound = _bind_interp_spaces(ast, trial_space)
+    bound = _bind_interp_spaces(ast, trial_space, test_space)
     _check_block_meshes(bound, trial_space, test_space)
-    push!(segments, _record_segment!(A, bound, test_space, 0, 0, α))
+    sp = _walked_leaf(bound, trial_space, test_space)
+    push!(segments, _record_segment!(A, bound, sp, 0, 0, α))
     return nothing
 end
 
 function _replay_bilinear_core!(
         A::SparseMatrixCSC, trial_space, test_space, ast::AST_TYPE, segments::Vector{Segment{D}}, α
 ) where {AST_TYPE, D}
-    bound = _bind_interp_spaces(ast, trial_space)
+    bound = _bind_interp_spaces(ast, trial_space, test_space)
     _check_block_meshes(bound, trial_space, test_space)
-    _replay_segment!(A, bound, test_space, 0, 0, segments[1], α)
+    sp = _walked_leaf(bound, trial_space, test_space)
+    _replay_segment!(A, bound, sp, 0, 0, segments[1], α)
     return nothing
 end
 
@@ -189,11 +191,11 @@ function _record_blocks!(
         A::SparseMatrixCSC, term::TERM, trial_leaves, test_leaves, segments::Vector{Segment{D}}, α
 ) where {TERM, D}
     for blk in blocks(term, trial_leaves, test_leaves)
-        bound = _bind_interp_spaces(term, blk.trial_leaf)
+        bound = _bind_interp_spaces(term, blk.trial_leaf, blk.test_leaf)
         _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
+        sp = _walked_leaf(bound, blk.trial_leaf, blk.test_leaf)
         push!(
-            segments,
-            _record_segment!(A, bound, blk.test_leaf, blk.row_offset, blk.col_offset, α)
+            segments, _record_segment!(A, bound, sp, blk.row_offset, blk.col_offset, α)
         )
     end
     return nothing
@@ -226,11 +228,12 @@ function _replay_blocks!(
         α
 ) where {TERM, D}
     for blk in blocks(term, trial_leaves, test_leaves)
-        bound = _bind_interp_spaces(term, blk.trial_leaf)
+        bound = _bind_interp_spaces(term, blk.trial_leaf, blk.test_leaf)
         _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
+        sp = _walked_leaf(bound, blk.trial_leaf, blk.test_leaf)
         next += 1
         _replay_segment!(
-            A, bound, blk.test_leaf, blk.row_offset, blk.col_offset, segments[next], α
+            A, bound, sp, blk.row_offset, blk.col_offset, segments[next], α
         )
     end
     return next
@@ -408,6 +411,32 @@ once.
     return nothing
 end
 
+# The serial fallback for a term whose rows are not a fixed reach from the point being
+# visited.
+#
+# Colouring keeps two concurrently-swept points from writing the same row, and it decides
+# which points may run together from the term's own offsets (`_colour_strides` over
+# `stencil_offsets`). A test-side interpolation (gpena/Bramble.jl#263) names its rows
+# absolutely, through `locate_cell`, so no offset set describes them and two points in
+# different colours can land on the same row. The term is swept on one thread instead, which
+# is correct at the cost of the threading, and `_has_test_interp` decides it from the type,
+# so an ordinary term pays nothing for the choice.
+function _sweep_bilinear_serial!(
+        A::SparseMatrixCSC, sp, term::TERM, row_offset::Int, col_offset::Int, α = true
+) where {TERM}
+    Ωₕ = mesh(sp)
+    grid_inds = indices(Ωₕ)
+    lin_indices = LinearIndices(grid_inds)
+    mesh_markers = markers(Ωₕ)
+
+    @inbounds for I in grid_inds
+        _scatter_point!(
+            A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α
+        )
+    end
+    return nothing
+end
+
 # Every colour in turn, using strided subgrids.
 function _sweep_bilinear!(
         A::SparseMatrixCSC, sp, term::TERM, strides, row_offset::Int, col_offset::Int, α = true
@@ -489,17 +518,22 @@ function _assemble_blocks_parallel!(
         A::SparseMatrixCSC, term::TERM, trial_leaves, test_leaves, α = true
 ) where {TERM}
     for blk in blocks(term, trial_leaves, test_leaves)
-        bound = _bind_interp_spaces(term, blk.trial_leaf)
+        bound = _bind_interp_spaces(term, blk.trial_leaf, blk.test_leaf)
         _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
-        _sweep_bilinear!(
-            A,
-            blk.test_leaf,
-            bound,
-            _colour_strides(stencil_offsets(bound)),
-            blk.row_offset,
-            blk.col_offset,
-            α
-        )
+        sp = _walked_leaf(bound, blk.trial_leaf, blk.test_leaf)
+        if _has_test_interp(bound)
+            _sweep_bilinear_serial!(A, sp, bound, blk.row_offset, blk.col_offset, α)
+        else
+            _sweep_bilinear!(
+                A,
+                sp,
+                bound,
+                _colour_strides(stencil_offsets(bound)),
+                blk.row_offset,
+                blk.col_offset,
+                α
+            )
+        end
     end
     return A
 end
@@ -507,9 +541,14 @@ end
 function _assemble_bilinear_parallel_core!(
         A::SparseMatrixCSC, trial_space, test_space, ast::AST_TYPE, α = true
 ) where {AST_TYPE}
-    bound = _bind_interp_spaces(ast, trial_space)
+    bound = _bind_interp_spaces(ast, trial_space, test_space)
     _check_block_meshes(bound, trial_space, test_space)
-    _sweep_bilinear!(A, test_space, bound, _colour_strides(stencil_offsets(bound)), 0, 0, α)
+    sp = _walked_leaf(bound, trial_space, test_space)
+    if _has_test_interp(bound)
+        _sweep_bilinear_serial!(A, sp, bound, 0, 0, α)
+    else
+        _sweep_bilinear!(A, sp, bound, _colour_strides(stencil_offsets(bound)), 0, 0, α)
+    end
     return A
 end
 

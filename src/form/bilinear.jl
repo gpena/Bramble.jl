@@ -249,13 +249,18 @@ end
         "a bilinear term coupling two leaves over different meshes has no assembly: the " *
         "trial leaf has $(npoints(Ωu, Tuple)) points and the test leaf $(npoints(Ωv, Tuple)), " *
         "so an index on one names no point on the other. Got $(typeof(term)). Couple leaves " *
-        "that share a mesh, or wrap the trial function in an interpolation operator: `πₕ(u)`.",
+        "that share a mesh, or wrap the trial or the test function in an interpolation " *
+        "operator: `πₕ(u)`, `πₕ(v)`.",
     ),
     )
 end
 
 @inline function _check_block_meshes(term, trial_leaf, test_leaf)
+    # Either side interpolating is a mapping between the two index spaces, so the leaves need
+    # not share one: the trial side names columns on its own mesh, the test side rows on its
+    # own (gpena/Bramble.jl#263).
     _all_trial_interpolated(term) && return nothing
+    _all_test_interpolated(term) && return nothing
 
     Ωu = mesh(trial_leaf)
     Ωv = mesh(test_leaf)

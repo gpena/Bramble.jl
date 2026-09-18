@@ -87,9 +87,9 @@ pattern = jacobian_pattern(a, U -> U(2), U -> U(1))   # block (1,1) reads U(2), 
 function jacobian_pattern(
         form::BilinearForm{D, TrialSpace, TestSpace, AST}, coefficient_dependencies::Function...
 ) where {D, TrialSpace, TestSpace, AST}
-    ast = _bind_interp_spaces(form.ast, form.trial_space)
-    space = form.test_space
+    ast = _bind_interp_spaces(form.ast, form.trial_space, form.test_space)
     _check_block_meshes(ast, form.trial_space, form.test_space)
+    space = _walked_leaf(ast, form.trial_space, form.test_space)
     Ωₕ = mesh(space)
     mesh_markers = markers(Ωₕ)
     _validate_term_markers(ast, mesh_markers, "the form's space")
@@ -211,7 +211,8 @@ function _pattern_term_jacobian!(
         trial_leaves,
         dep_ops::Vector{_DependencyOp{D}}
 ) where {TERM, D}
-    Ωₕ = mesh(test_leaf)
+    sp = _walked_leaf(term, trial_leaf, test_leaf)
+    Ωₕ = mesh(sp)
     mesh_markers = markers(Ωₕ)
     _validate_term_markers(term, mesh_markers, "one of the composite space's leaves")
     lin_indices = LinearIndices(indices(Ωₕ))
@@ -225,16 +226,16 @@ function _pattern_term_jacobian!(
     end
 
     @inbounds for I in indices(Ωₕ)
-        stencil = local_stencil(term, test_leaf, I, mesh_markers, lin_indices[I])
+        stencil = local_stencil(term, sp, I, mesh_markers, lin_indices[I])
 
         for k in eachindex(stencil)
             off_u, off_v, _ = stencil[k]
             _offsets_seen_before(stencil, k, off_u, off_v) && continue
 
-            Iv = I + CartesianIndex(off_v)
+            row = _test_row(lin_indices, I, off_v)
             col = _trial_column(lin_indices, I, off_u)
-            if checkbounds(Bool, lin_indices, Iv) && col != 0
-                push!(I_vec, lin_indices[Iv] + row_offset)
+            if row != 0 && col != 0
+                push!(I_vec, row + row_offset)
                 push!(J_vec, col + col_offset)
             end
         end
@@ -245,9 +246,9 @@ function _pattern_term_jacobian!(
             off_u, off_v, _ = stencil[k]
             _row_offset_seen_before(stencil, k, off_v) && continue
 
-            Iv = I + CartesianIndex(off_v)
-            checkbounds(Bool, lin_indices, Iv) || continue
-            row = lin_indices[Iv] + row_offset
+            row_base = _test_row(lin_indices, I, off_v)
+            row_base == 0 && continue
+            row = row_base + row_offset
 
             for (dep_lin_indices, dep_col_offset, offsets) in resolved, δ in offsets
 
@@ -280,7 +281,7 @@ function _pattern_blocks_jacobian!(
         I_vec::Vector{Int}, J_vec::Vector{Int}, term::TERM, trial_leaves, test_leaves, dep_ops
 ) where {TERM}
     for blk in blocks(term, trial_leaves, test_leaves)
-        bound = _bind_interp_spaces(term, blk.trial_leaf)
+        bound = _bind_interp_spaces(term, blk.trial_leaf, blk.test_leaf)
         _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
         _pattern_term_jacobian!(
             I_vec,

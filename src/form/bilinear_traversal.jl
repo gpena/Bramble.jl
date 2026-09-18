@@ -111,6 +111,42 @@ end
 @inline _trial_inbounds(lin_indices, I::CartesianIndex, off_u::AbsoluteColumn) = true
 
 """
+    _test_row(lin_indices, I::CartesianIndex, off_v) -> Int
+
+Which row of the test block a stencil entry's test slot names, or `0` for none.
+
+The mirror of [`_trial_column`](@ref). An ordinary offset is bounds-checked against the grid
+and answers `0` outside it; a test-side interpolation carries an [`AbsoluteRow`](@ref)
+instead, naming a row of the other mesh outright (gpena/Bramble.jl#263).
+"""
+Base.@propagate_inbounds function _test_row(lin_indices, I::CartesianIndex, off_v)
+    Iv = I + CartesianIndex(off_v)
+    return checkbounds(Bool, lin_indices, Iv) ? lin_indices[Iv] : 0
+end
+
+@inline _test_row(lin_indices, I::CartesianIndex, off_v::AbsoluteRow) = off_v.row
+
+"""
+    _test_inbounds(lin_indices, I::CartesianIndex, off_v) -> Bool
+
+Whether `off_v`'s test index survives, without computing the row [`_test_row`](@ref) would
+return. An [`AbsoluteRow`](@ref) always survives, matching `_test_row`.
+"""
+Base.@propagate_inbounds function _test_inbounds(lin_indices, I::CartesianIndex, off_v)
+    return checkbounds(Bool, lin_indices, I + CartesianIndex(off_v))
+end
+@inline _test_inbounds(lin_indices, I::CartesianIndex, off_v::AbsoluteRow) = true
+
+"""
+    _test_row_unguarded(lin_indices, I::CartesianIndex, off_v) -> Int
+
+[`_test_row`](@ref), without the bounds check: the interior-core counterpart, matching
+[`_trial_column_unguarded`](@ref).
+"""
+Base.@propagate_inbounds _test_row_unguarded(lin_indices, I::CartesianIndex, off_v) = lin_indices[I + CartesianIndex(off_v)]
+@inline _test_row_unguarded(lin_indices, I::CartesianIndex, off_v::AbsoluteRow) = off_v.row
+
+"""
     _trial_column_unguarded(lin_indices, I::CartesianIndex, off_u) -> Int
 
 [`_trial_column`](@ref), without the bounds check.
@@ -213,11 +249,11 @@ assembly hot path.
 Base.@propagate_inbounds function _entry_target(
         lin_indices, I::CartesianIndex, off_u, off_v, row_offset::Int, col_offset::Int
 )
-    Iv = I + CartesianIndex(off_v)
-    checkbounds(Bool, lin_indices, Iv) || return (0, 0)
+    row = _test_row(lin_indices, I, off_v)
+    row == 0 && return (0, 0)
     col = _trial_column(lin_indices, I, off_u)
     col == 0 && return (0, 0)
-    return (lin_indices[Iv] + row_offset, col + col_offset)
+    return (row + row_offset, col + col_offset)
 end
 
 """
@@ -242,13 +278,14 @@ Base.@propagate_inbounds function _step_entry!(
         col_offset::Int,
         slot::Int
 ) where {SINK}
-    Iv = I + CartesianIndex(off_v)
-    checkbounds(Bool, lin_indices, Iv) || return false
     if _sink_needs_coordinates(sink)
+        row = _test_row(lin_indices, I, off_v)
+        row == 0 && return false
         col = _trial_column(lin_indices, I, off_u)
         col == 0 && return false
-        _sink_entry!(sink, lin_indices[Iv] + row_offset, col + col_offset, weight, slot)
+        _sink_entry!(sink, row + row_offset, col + col_offset, weight, slot)
     else
+        _test_inbounds(lin_indices, I, off_v) || return false
         _trial_inbounds(lin_indices, I, off_u) || return false
         _sink_entry!(sink, 0, 0, weight, slot)
     end
@@ -275,9 +312,9 @@ Base.@propagate_inbounds function _step_entry_unguarded!(
         slot::Int
 ) where {SINK}
     if _sink_needs_coordinates(sink)
-        Iv = I + CartesianIndex(off_v)
+        row = _test_row_unguarded(lin_indices, I, off_v)
         col = _trial_column_unguarded(lin_indices, I, off_u)
-        _sink_entry!(sink, lin_indices[Iv] + row_offset, col + col_offset, weight, slot)
+        _sink_entry!(sink, row + row_offset, col + col_offset, weight, slot)
     else
         _sink_entry!(sink, 0, 0, weight, slot)
     end
