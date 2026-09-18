@@ -676,7 +676,7 @@ end
         fs = ntuple(_component, ncomp)
         uₕ = Rₕ(Vₕ, fs)
 
-        for op in (D₋ₓ, M₋ₓ, jumpₓ)
+        for op in (D₋ₓ, Mₓ, jumpₓ)
             composite = op(uₕ)
             for k in 1:ncomp
                 scalar = parent(op(Rₕ(Wₕ, fs[k])))

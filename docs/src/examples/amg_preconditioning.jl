@@ -54,7 +54,7 @@ function poisson_system(n)
     Wₕ = gridspace(Ωₕ)
     bcs = dirichlet_constraints(Ω, :boundary => uex)
 
-    a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+    a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
     gₕ = element(Wₕ)
     avgₕ!(gₕ, rhs)
     l = form(Wₕ, v -> innerₕ(gₕ, v))

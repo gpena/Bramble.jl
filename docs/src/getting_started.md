@@ -80,7 +80,7 @@ Wₕ = gridspace(Ωₕ)                                    # one unknown per poi
 gₕ = element(Wₕ)
 Rₕ!(gₕ, g)                                            # the source, sampled at the points
 
-a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))    # the discrete Laplacian
+a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))    # the discrete Laplacian
 l = form(Wₕ, v -> innerₕ(gₕ, v))                      # the load
 bcs = dirichlet_constraints(Ω, :boundary => uexact)
 
@@ -102,7 +102,7 @@ function poisson_error(n)
     gₕ = element(Wₕ)
     Rₕ!(gₕ, g)
     A, F = assemble(
-        form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v))),
+        form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v))),
         form(Wₕ, v -> innerₕ(gₕ, v));
         dirichlet = dirichlet_constraints(Ω, :boundary => uexact))
     uₕ = element(Wₕ)

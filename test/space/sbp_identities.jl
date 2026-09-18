@@ -2,6 +2,8 @@ module SpaceSbpIdentitiesTests
 
 using Test
 using Bramble
+# Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
+import Bramble: M₊ₓ
 using Random
 using Supposition
 using ..TestUtils: _nonuniform_points, _zero_boundary!
@@ -9,15 +11,15 @@ using ..TestUtils: _nonuniform_points, _zero_boundary!
 # Discrete integration by parts for the centered divergence.
 #
 #   innerₕ(Dcₓ(uₓ) + Dcᵧ(u_y) + Dc₂(u_z), vₕ)
-#       == -(inner₊ₓ(M₋ₓ(uₓ), D₋ₓ(vₕ)) + inner₊ᵧ(M₋ᵧ(u_y), D₋ᵧ(vₕ)) + inner₊₂(M₋₂(u_z), D₋₂(vₕ)))
+#       == -(inner₊ₓ(Mₓ(uₓ), D₋ₓ(vₕ)) + inner₊ᵧ(Mᵧ(u_y), D₋ᵧ(vₕ)) + inner₊₂(M₂(u_z), D₋₂(vₕ)))
 #
 # The centered divergence of a vector field pairs with the backward gradient of a scalar
 # through the *backward* average, not the forward one. The reason is indexing: inner₊ₓ
 # weights index i by the backward spacing hᵢ, and D₋ₓ(vₕ)(i) = (vᵢ - vᵢ₋₁)/hᵢ reads the
 # interval [xᵢ₋₁, xᵢ], so the average that sits on that same interval is
-# M₋ₓ(uₓ)(i) = (uᵢ₋₁ + uᵢ)/2. The literature writes this operator as Mₕ on the dual grid,
+# Mₓ(uₓ)(i) = (uᵢ₋₁ + uᵢ)/2. The literature writes this operator as Mₕ on the dual grid,
 # where the same average carries the half index i - 1/2; with Bramble's whole-index
-# convention that is M₋, and pairing M₊ instead shifts one factor by a cell and breaks the
+# convention that is M, and pairing M₊ instead shifts one factor by a cell and breaks the
 # identity (pinned below in "Forward average does not close it").
 #
 # Only vₕ has to vanish on the boundary. The identity is stated for uₕ ∈ [V_{H,0}]^D and
@@ -37,18 +39,18 @@ using ..TestUtils: _nonuniform_points, _zero_boundary!
     agree(a, b) = isapprox(a, b; atol = 1e-12, rtol = 1e-12)
 
     # The identity, per direction and summed, for a vector field given componentwise.
-    divergence_ibp(uₕ::VectorElement, vₕ) = (innerₕ(Dcₓ(uₕ), vₕ), -inner₊ₓ(M₋ₓ(uₕ), D₋ₓ(vₕ)))
+    divergence_ibp(uₕ::VectorElement, vₕ) = (innerₕ(Dcₓ(uₕ), vₕ), -inner₊ₓ(Mₓ(uₕ), D₋ₓ(vₕ)))
 
     function divergence_ibp(uₕ::NTuple{2, VectorElement}, vₕ)
         lhs = innerₕ(Dcₓ(uₕ[1]) + Dcᵧ(uₕ[2]), vₕ)
-        rhs = -(inner₊ₓ(M₋ₓ(uₕ[1]), D₋ₓ(vₕ)) + inner₊ᵧ(M₋ᵧ(uₕ[2]), D₋ᵧ(vₕ)))
+        rhs = -(inner₊ₓ(Mₓ(uₕ[1]), D₋ₓ(vₕ)) + inner₊ᵧ(Mᵧ(uₕ[2]), D₋ᵧ(vₕ)))
         return (lhs, rhs)
     end
 
     function divergence_ibp(uₕ::NTuple{3, VectorElement}, vₕ)
         lhs = innerₕ(Dcₓ(uₕ[1]) + Dcᵧ(uₕ[2]) + Dc₂(uₕ[3]), vₕ)
-        rhs = -(inner₊ₓ(M₋ₓ(uₕ[1]), D₋ₓ(vₕ)) + inner₊ᵧ(M₋ᵧ(uₕ[2]), D₋ᵧ(vₕ)) +
-                inner₊₂(M₋₂(uₕ[3]), D₋₂(vₕ)))
+        rhs = -(inner₊ₓ(Mₓ(uₕ[1]), D₋ₓ(vₕ)) + inner₊ᵧ(Mᵧ(uₕ[2]), D₋ᵧ(vₕ)) +
+                inner₊₂(M₂(uₕ[3]), D₋₂(vₕ)))
         return (lhs, rhs)
     end
 
@@ -102,7 +104,7 @@ using ..TestUtils: _nonuniform_points, _zero_boundary!
     end
 
     @testset "Vectorial form" begin
-        # The same identity written through the tuple-valued operators: ∇₋ₕ for the
+        # The same identity written through the tuple-valued operators: ∇ₕ for the
         # backward gradient and the tuple method of inner₊, which sums the directional
         # inner products. The right-hand side is then one call rather than a sum of D of
         # them, and it goes through inner₊'s generated tuple path instead of the scalar one.
@@ -114,7 +116,7 @@ using ..TestUtils: _nonuniform_points, _zero_boundary!
         vₕ = Rₕ(Wₕ, x -> b(x) * sin(2pi * x[1]))
 
         lhs = innerₕ(Dcₓ(uₕ[1]) + Dcᵧ(uₕ[2]), vₕ)
-        rhs = -inner₊((M₋ₓ(uₕ[1]), M₋ᵧ(uₕ[2])), ∇₋ₕ(vₕ))
+        rhs = -inner₊((Mₓ(uₕ[1]), Mᵧ(uₕ[2])), ∇ₕ(vₕ))
 
         @test agree(lhs, rhs)
         # and it is the same number the componentwise form gives
@@ -137,7 +139,7 @@ using ..TestUtils: _nonuniform_points, _zero_boundary!
     end
 
     @testset "Forward average does not close it" begin
-        # The control for the M₋/M₊ convention above: substituting the forward average
+        # The control for the M/M₊ convention above: substituting the forward average
         # shifts one factor by a cell, and the identity fails even on fields vanishing on
         # the whole boundary.
         Random.seed!(20260913)
@@ -184,7 +186,7 @@ using ..TestUtils: _nonuniform_points, _zero_boundary!
             vₕ = element(Wₕ, _zero_boundary!(copy(v_raw[1:n])))
 
             lhs = innerₕ(Dcₓ(uₕ), vₕ)
-            rhs = -inner₊ₓ(M₋ₓ(uₕ), D₋ₓ(vₕ))
+            rhs = -inner₊ₓ(Mₓ(uₕ), D₋ₓ(vₕ))
             scaled_agree(lhs, rhs)
         end
 
@@ -216,7 +218,7 @@ using ..TestUtils: _nonuniform_points, _zero_boundary!
             vₕ = field(v_raw)
 
             lhs = innerₕ(Dcₓ(uₕ[1]) + Dcᵧ(uₕ[2]), vₕ)
-            rhs = -(inner₊ₓ(M₋ₓ(uₕ[1]), D₋ₓ(vₕ)) + inner₊ᵧ(M₋ᵧ(uₕ[2]), D₋ᵧ(vₕ)))
+            rhs = -(inner₊ₓ(Mₓ(uₕ[1]), D₋ₓ(vₕ)) + inner₊ᵧ(Mᵧ(uₕ[2]), D₋ᵧ(vₕ)))
             scaled_agree(lhs, rhs)
         end
 
@@ -255,8 +257,8 @@ using ..TestUtils: _nonuniform_points, _zero_boundary!
             vₕ = field(v_raw)
 
             lhs = innerₕ(Dcₓ(uₕ[1]) + Dcᵧ(uₕ[2]) + Dc₂(uₕ[3]), vₕ)
-            rhs = -(inner₊ₓ(M₋ₓ(uₕ[1]), D₋ₓ(vₕ)) + inner₊ᵧ(M₋ᵧ(uₕ[2]), D₋ᵧ(vₕ)) +
-                    inner₊₂(M₋₂(uₕ[3]), D₋₂(vₕ)))
+            rhs = -(inner₊ₓ(Mₓ(uₕ[1]), D₋ₓ(vₕ)) + inner₊ᵧ(Mᵧ(uₕ[2]), D₋ᵧ(vₕ)) +
+                    inner₊₂(M₂(uₕ[3]), D₋₂(vₕ)))
             scaled_agree(lhs, rhs)
         end
     end

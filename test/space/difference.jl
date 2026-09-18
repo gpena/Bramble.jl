@@ -2,7 +2,8 @@ module SpaceDifferenceTests
 
 using Test
 using Bramble
-import Bramble: space, eltype, ⊗, _Eye, shift, npoints, spacing
+import Bramble: space, eltype, ⊗, _Eye, shift, npoints, spacing, diff₋ₓ, diff₋ᵧ, diff₋₂, diff₊ₓ, diff₊ᵧ, diff₊₂, D₊ₓ,
+                D₊ᵧ, D₊₂
 using Bramble: backward_difference_dim!, forward_difference_dim!
 using Bramble: diff₋ₓ, diff₋ᵧ, diff₋₂, diff₊ₓ, diff₊ᵧ, diff₊₂
 import SparseArrays: issparse, sprand, spdiagm, spzeros

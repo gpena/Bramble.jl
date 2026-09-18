@@ -33,7 +33,7 @@
 #     weights regression, which 1D did not show.
 #   - innerₕ and norm₁ₕ: the reduction path, including the seminorm's sum over
 #     directions.
-#   - ∇₋ₕ in 3D, where the boxing regressions were worst.
+#   - ∇ₕ in 3D, where the boxing regressions were worst.
 #   - one composite operator, which dispatches per component and so calls the
 #     engine N times with a view rather than once with a vector.
 #   - gridspace construction, which builds the quadrature weights, the path
@@ -42,6 +42,8 @@
 
 using BenchmarkTools
 using Bramble
+# Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
+import Bramble: M₊ₓ, M₊ᵧ, M₊₂
 using DoubleFloats: Double64
 using SparseArrays: nonzeros
 
@@ -145,8 +147,18 @@ let Wₕ = gridspace(_mesh2()), uₕ = Rₕ(Wₕ, x -> sin(x[1]) * x[2])
     g = SUITE["operators 2D"] = BenchmarkGroup()
     g["D₋ₓ"] = @benchmarkable D₋ₓ($uₕ)            # along the contiguous direction
     g["D₋ᵧ"] = @benchmarkable D₋ᵧ($uₕ)            # across it
-    g["M₋ₓ"] = @benchmarkable M₋ₓ($uₕ)
+    g["Mₓ"] = @benchmarkable Mₓ($uₕ)
     g["Dcₓ"] = @benchmarkable Dcₓ($uₕ)
+
+    # The dimensional entry point (gpena/Bramble.jl#74), with `d` coming from a loop rather
+    # than written as a literal. This is the entry that would catch a boxed `Val`: the value
+    # tests cannot see one, since boxing changes how a result is reached and not what it is,
+    # and JET only runs nightly. `ALLOCATION_BOUNDS` gates it at the same 3 allocations the
+    # subscript aliases below cost, once per direction -- boxing would add one per call and
+    # a dynamic dispatch through the whole engine on top.
+    g["D₋(uₕ, d) over d"] = @benchmarkable(for d in 1:2
+        D₋($uₕ, d)
+    end)
 end
 
 # --- 3. reductions -------------------------------------------------------- #
@@ -161,7 +173,7 @@ end
 # --- 4. 3D, where the boxing regressions were worst ----------------------- #
 let uₕ = Rₕ(gridspace(_mesh3()), x -> sin(x[1]) + x[3])
     g = SUITE["operators 3D"] = BenchmarkGroup()
-    g["∇₋ₕ"] = @benchmarkable ∇₋ₕ($uₕ)
+    g["∇ₕ"] = @benchmarkable ∇ₕ($uₕ)
     g["D₋₂"] = @benchmarkable D₋₂($uₕ)
     g["innerₕ"] = @benchmarkable innerₕ($uₕ, $uₕ)
 end
@@ -171,7 +183,7 @@ let Vₕ = gridspace(_mesh2(), Val(3))
     cₕ = Rₕ(Vₕ, (x -> x[1] * x[2], x -> sin(x[1]), x -> x[2]^2))
     g = SUITE["composite"] = BenchmarkGroup()
     g["D₋ₓ (3 components)"] = @benchmarkable D₋ₓ($cₕ)
-    g["∇₋ₕ (3 components)"] = @benchmarkable ∇₋ₕ($cₕ)
+    g["∇ₕ (3 components)"] = @benchmarkable ∇ₕ($cₕ)
 end
 
 # --- 6. construction ------------------------------------------------------ #
@@ -201,6 +213,11 @@ let uₕ2 = Rₕ(gridspace(_mesh2()), x -> sin(x[1]) * x[2]), uₕ3 = Rₕ(grids
     g["M₊ᵧ 2D"] = @benchmarkable M₊ᵧ($uₕ2)
     g["jump₂ 3D"] = @benchmarkable jump₂($uₕ3)
     g["M₊₂ 3D"] = @benchmarkable M₊₂($uₕ3)
+    # The vectorial alias, added when it stopped building its tuple through a closure
+    # (gpena/Bramble.jl#258): `ntuple(i -> jump(arg, Val(i)), Val(D))` boxed `i` and cost
+    # two allocations per direction on top of the `similar` each direction needs anyway.
+    g["jumpₕ 2D"] = @benchmarkable jumpₕ($uₕ2)
+    g["jumpₕ 3D"] = @benchmarkable jumpₕ($uₕ3)
 end
 
 # --- 8. startup latency & TTFX -------------------------------------------- #
@@ -410,8 +427,8 @@ let
         F = Bramble.assemble(l; dirichlet = bcs)
 
         function diffusion_form(uₕ)
-            αv = α.(M₋ₕ(uₕ))
-            return Bramble.form(Wₕ, Wₕ, (U, V) -> inner₊(αv * ∇₋ₕ(U), ∇₋ₕ(V)))
+            αv = α.(Mₕ(uₕ))
+            return Bramble.form(Wₕ, Wₕ, (U, V) -> inner₊(αv * ∇ₕ(U), ∇ₕ(V)))
         end
         function residual(u_vec::AbstractVector{T}) where {T}
             uₕ = element(Wₕ, T)
@@ -434,7 +451,7 @@ let
             sparsity_detector = SparseConnectivityTracer.TracerSparsityDetector(),
             coloring_algorithm = SparseMatrixColorings.GreedyColoringAlgorithm())
         native_ad = AutoSparse(AutoForwardDiff();
-            sparsity_detector = Bramble.ast_sparsity_detector(a, U -> M₋ₕ(U)),
+            sparsity_detector = Bramble.ast_sparsity_detector(a, U -> Mₕ(U)),
             coloring_algorithm = SparseMatrixColorings.GreedyColoringAlgorithm())
 
         g["prepare_jacobian (traced), $lbl"] = @benchmarkable prepare_jacobian(
@@ -470,11 +487,14 @@ const ALLOCATION_BOUNDS = Dict(
     # contiguous-direction difference: 3 allocs for similar(::VectorElement)
     ("operators 2D", "D₋ₓ") => 3,
     ("operators 2D", "D₋ᵧ") => 3,
-    ("operators 2D", "M₋ₓ") => 3,
+    ("operators 2D", "Mₓ") => 3,
     ("operators 2D", "Dcₓ") => 3,
+    # the loop runs both directions, so 2 x 3 and not a byte more: a `Val` boxed from the
+    # loop variable would show up here as the extra allocation it is (gpena/Bramble.jl#74)
+    ("operators 2D", "D₋(uₕ, d) over d") => 6,
     ("operators 3D", "D₋₂") => 3,
     # one per spatial direction
-    ("operators 3D", "∇₋ₕ") => 15,
+    ("operators 3D", "∇ₕ") => 15,
     # reductions allocate nothing at all
     ("inner products 2D", "innerₕ") => 0,
     ("inner products 2D", "normₕ") => 0,
@@ -489,6 +509,10 @@ const ALLOCATION_BOUNDS = Dict(
     ("jumps & averages", "M₊ᵧ 2D") => 3,
     ("jumps & averages", "jump₂ 3D") => 3,
     ("jumps & averages", "M₊₂ 3D") => 3,
+    # three per direction, and nothing else: the boxed closure that used to add two more
+    # per direction is gone (10 allocations in 2D and 15 in 3D before gpena/Bramble.jl#258)
+    ("jumps & averages", "jumpₕ 2D") => 6,
+    ("jumps & averages", "jumpₕ 3D") => 9,
     # form assembly. Only the zeros are gated, deliberately: `assemble_parallel!`
     # and `Rₕ!`/`avgₕ!` allocate one task set per call, so their counts move with
     # the thread count, and `allocate_system_matrix` builds three coordinate

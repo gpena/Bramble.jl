@@ -162,16 +162,18 @@ end
 function _record_bilinear_core!(
         A::SparseMatrixCSC, trial_space, test_space, ast::AST_TYPE, segments::Vector{Segment{D}}, α
 ) where {AST_TYPE, D}
-    _check_block_meshes(ast, trial_space, test_space)
-    push!(segments, _record_segment!(A, ast, test_space, 0, 0, α))
+    bound = _bind_interp_spaces(ast, trial_space)
+    _check_block_meshes(bound, trial_space, test_space)
+    push!(segments, _record_segment!(A, bound, test_space, 0, 0, α))
     return nothing
 end
 
 function _replay_bilinear_core!(
         A::SparseMatrixCSC, trial_space, test_space, ast::AST_TYPE, segments::Vector{Segment{D}}, α
 ) where {AST_TYPE, D}
-    _check_block_meshes(ast, trial_space, test_space)
-    _replay_segment!(A, ast, test_space, 0, 0, segments[1], α)
+    bound = _bind_interp_spaces(ast, trial_space)
+    _check_block_meshes(bound, trial_space, test_space)
+    _replay_segment!(A, bound, test_space, 0, 0, segments[1], α)
     return nothing
 end
 
@@ -187,10 +189,11 @@ function _record_blocks!(
         A::SparseMatrixCSC, term::TERM, trial_leaves, test_leaves, segments::Vector{Segment{D}}, α
 ) where {TERM, D}
     for blk in blocks(term, trial_leaves, test_leaves)
-        _check_block_meshes(term, blk.trial_leaf, blk.test_leaf)
+        bound = _bind_interp_spaces(term, blk.trial_leaf)
+        _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
         push!(
             segments,
-            _record_segment!(A, term, blk.test_leaf, blk.row_offset, blk.col_offset, α)
+            _record_segment!(A, bound, blk.test_leaf, blk.row_offset, blk.col_offset, α)
         )
     end
     return nothing
@@ -223,10 +226,11 @@ function _replay_blocks!(
         α
 ) where {TERM, D}
     for blk in blocks(term, trial_leaves, test_leaves)
-        _check_block_meshes(term, blk.trial_leaf, blk.test_leaf)
+        bound = _bind_interp_spaces(term, blk.trial_leaf)
+        _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
         next += 1
         _replay_segment!(
-            A, term, blk.test_leaf, blk.row_offset, blk.col_offset, segments[next], α
+            A, bound, blk.test_leaf, blk.row_offset, blk.col_offset, segments[next], α
         )
     end
     return next
@@ -485,12 +489,13 @@ function _assemble_blocks_parallel!(
         A::SparseMatrixCSC, term::TERM, trial_leaves, test_leaves, α = true
 ) where {TERM}
     for blk in blocks(term, trial_leaves, test_leaves)
-        _check_block_meshes(term, blk.trial_leaf, blk.test_leaf)
+        bound = _bind_interp_spaces(term, blk.trial_leaf)
+        _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
         _sweep_bilinear!(
             A,
             blk.test_leaf,
-            term,
-            _colour_strides(stencil_offsets(term)),
+            bound,
+            _colour_strides(stencil_offsets(bound)),
             blk.row_offset,
             blk.col_offset,
             α
@@ -502,8 +507,9 @@ end
 function _assemble_bilinear_parallel_core!(
         A::SparseMatrixCSC, trial_space, test_space, ast::AST_TYPE, α = true
 ) where {AST_TYPE}
-    _check_block_meshes(ast, trial_space, test_space)
-    _sweep_bilinear!(A, test_space, ast, _colour_strides(stencil_offsets(ast)), 0, 0, α)
+    bound = _bind_interp_spaces(ast, trial_space)
+    _check_block_meshes(bound, trial_space, test_space)
+    _sweep_bilinear!(A, test_space, bound, _colour_strides(stencil_offsets(bound)), 0, 0, α)
     return A
 end
 

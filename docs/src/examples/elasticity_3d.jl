@@ -94,7 +94,7 @@ using ForwardDiff
 using Random
 
 const Dm = (D₋ₓ, D₋ᵧ, D₋₂)
-const Mm = (M₋ₓ, M₋ᵧ, M₋₂)
+const Mm = (Mₓ, Mᵧ, M₂)
 
 """
     stagger_ratio(Wₕ, S, scale) -> VectorElement

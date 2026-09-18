@@ -95,6 +95,32 @@ So the choice belongs to you, not a heuristic:
 The [benchmarks page](../benchmarks.md) carries the actual measurements across sizes;
 that is what should decide, not a guess.
 
+### The policy hierarchy
+
+`Serial` and `Parallel` are the names above, and they are aliases: `Serial === CpuSerial`
+and `Parallel === CpuThreaded`. The types they alias sit in a hierarchy that says *where*
+the work runs, not only how much of it runs at once:
+
+```
+ExecutionPolicy
+├── CpuPolicy
+│   ├── CpuSerial      (Serial)    -- one CPU thread
+│   └── CpuThreaded    (Parallel)  -- Base.Threads.@threads
+└── GpuPolicy
+    └── GpuAsync                   -- launched on the device
+```
+
+The split exists because "serial or threaded" had no way to say where
+([#191](https://github.com/gpena/Bramble.jl/issues/191)). A GPU backend was constructed
+with `Serial()` -- a policy meaning one CPU thread walks the array element by element,
+which is the one thing a device array refuses. `metal_backend()` now carries `GpuAsync()`,
+and the CPU sweeps refuse a `GpuPolicy` with a message rather than failing on scalar
+indexing several frames deeper.
+
+Both spellings work everywhere; use whichever reads better. There is no `CpuBatch`: a
+Polyester-backed policy arrives with the extension that implements it
+([#190](https://github.com/gpena/Bramble.jl/issues/190)), not before.
+
 ## 5. One interface, governed by the backend
 
 Call `assemble!`/`assemble`, `Rₕ!`/`avgₕ!` the same way regardless of which policy the
@@ -121,8 +147,8 @@ of how assembly uses it.
 ```julia
 using Bramble, Metal
 
-gpu = metal_backend()                    # Float32, Serial()
-gpu_par = metal_backend(Float16; policy = Parallel())
+gpu = metal_backend()                    # Float32, GpuAsync()
+gpu_cpu = metal_backend(Float16; policy = CpuSerial())  # means what it says: CPU loops
 ```
 
 `Float64` is not supported on Apple Silicon GPUs; use `Float32` or `Float16`.

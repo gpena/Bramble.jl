@@ -23,7 +23,7 @@ The number of colours is `prod(strides)`, and the common case is one:
 |:--- |:--- |:--- |:--- |
 | `innerₕ(fₕ, v)` | `(0, 0)` | `(1, 1)` | 1 |
 | `innerₕ(fₕ, D₋ₓ(v))` | `(-1, 0)`, `(0, 0)` | `(2, 1)` | 2 |
-| `inner₊(∇₋ₕ(fₕ), ∇₋ₕ(v))` | `(-1, 0)`, `(0, -1)`, `(0, 0)` | `(2, 2)` | 4 |
+| `inner₊(∇ₕ(fₕ), ∇ₕ(v))` | `(-1, 0)`, `(0, -1)`, `(0, 0)` | `(2, 2)` | 4 |
 
 Any form whose test argument carries no difference strides by 1 in every dimension, and is
 swept as a single flat parallel loop with no phases at all: both `_sweep_parallel!` and

@@ -86,7 +86,7 @@ constrain once, last.
 θ = Ref(1.0)
 
 # For the pattern alone: never assembled itself, just wide enough for both pieces.
-wide_form = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+wide_form = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
 A = allocate_system_matrix(wide_form)
 
 for step in 1:nsteps
@@ -101,7 +101,7 @@ end
 See also: [`assemble!`](@ref), [`assemble`](@ref).
 """
 function assemble_add!(A::SparseMatrixCSC, a::BilinearForm)
-    if execution_policy(a.trial_space) isa Serial
+    if execution_policy(a.trial_space) isa CpuSerial
         _assemble_bilinear_core_cached!(A, a.trial_space, a.test_space, a.ast, a.cache)
     else
         _assemble_bilinear_parallel_core!(A, a.trial_space, a.test_space, a.ast)
@@ -111,7 +111,7 @@ end
 
 function assemble_add!(A::SparseMatrixCSC, a::BilinearForm, α)
     αv = _scale_value(α)
-    if execution_policy(a.trial_space) isa Serial
+    if execution_policy(a.trial_space) isa CpuSerial
         _assemble_bilinear_core_cached!(A, a.trial_space, a.test_space, a.ast, a.cache, αv)
     else
         _assemble_bilinear_parallel_core!(A, a.trial_space, a.test_space, a.ast, αv)
@@ -143,7 +143,7 @@ See also: [`assemble!`](@ref), [`assemble`](@ref).
 function assemble_add!(F::AbstractVector, l::LinearForm)
     space = test_space(l)
     _validate_term_markers(l.ast, markers(mesh(space)), "the form's space")
-    if execution_policy(space) isa Serial
+    if execution_policy(space) isa CpuSerial
         _assemble_linear_core!(F, space, l.ast)
     else
         _assemble_linear_parallel_core!(F, space, l.ast)
@@ -155,7 +155,7 @@ function assemble_add!(F::AbstractVector, l::LinearForm, α)
     αv = _scale_value(α)
     space = test_space(l)
     _validate_term_markers(l.ast, markers(mesh(space)), "the form's space")
-    if execution_policy(space) isa Serial
+    if execution_policy(space) isa CpuSerial
         _assemble_linear_core!(F, space, l.ast, αv)
     else
         _assemble_linear_parallel_core!(F, space, l.ast, αv)

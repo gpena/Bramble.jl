@@ -29,7 +29,7 @@ uₕ = Rₕ(Wₕ, x -> sin(x[1]))
 
 # Apply operators
 vₕ = D₊ₓ(uₕ)  # Differentiate in x
-wₕ = M₋ᵧ(vₕ)  # Average in y
+wₕ = Mᵧ(vₕ)  # Average in y
 
 # Compute inner products
 norm = normₕ(uₕ)
@@ -46,7 +46,7 @@ These symbols are used to generate directional operator aliases via metaprogramm
 
 # Examples
 - `D₊ₓ` - forward difference in x-direction
-- `M₋ᵧ` - backward average in y-direction
+- `Mᵧ` - backward average in y-direction
 - `jump₂` - jump in the z-direction
 
 See also: [`_BRAMBLE_var2label`](@ref)

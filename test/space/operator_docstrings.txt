@@ -1,0 +1,1735 @@
+### diff₋ₓ
+    diff₋ₓ(arg)
+
+The `backward` unscaled difference along the `x` direction, ``u_{i} - u_{i-1}``. The unscaled difference is not divided by the grid spacing; the finite difference is.
+
+Alias for `backward_difference(arg, Val(1))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+### end diff₋ₓ
+### diff₋ₓ!
+    diff₋ₓ!(vₕ, uₕ)
+
+The `backward` unscaled difference of `uₕ` along the `x` direction, ``u_{i} - u_{i-1}``, written into `vₕ`.
+
+The in-place form of [`diff₋ₓ`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(diff₋ₓ!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `backward_difference!(vₕ, uₕ, Val(1))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end diff₋ₓ!
+### diff₋ᵧ
+    diff₋ᵧ(arg)
+
+The `backward` unscaled difference along the `y` direction, ``u_{i} - u_{i-1}``. The unscaled difference is not divided by the grid spacing; the finite difference is.
+
+Alias for `backward_difference(arg, Val(2))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+### end diff₋ᵧ
+### diff₋ᵧ!
+    diff₋ᵧ!(vₕ, uₕ)
+
+The `backward` unscaled difference of `uₕ` along the `y` direction, ``u_{i} - u_{i-1}``, written into `vₕ`.
+
+The in-place form of [`diff₋ᵧ`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(diff₋ᵧ!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `backward_difference!(vₕ, uₕ, Val(2))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end diff₋ᵧ!
+### diff₋₂
+    diff₋₂(arg)
+
+The `backward` unscaled difference along the `z` direction, ``u_{i} - u_{i-1}``. The unscaled difference is not divided by the grid spacing; the finite difference is.
+
+Alias for `backward_difference(arg, Val(3))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+### end diff₋₂
+### diff₋₂!
+    diff₋₂!(vₕ, uₕ)
+
+The `backward` unscaled difference of `uₕ` along the `z` direction, ``u_{i} - u_{i-1}``, written into `vₕ`.
+
+The in-place form of [`diff₋₂`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(diff₋₂!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `backward_difference!(vₕ, uₕ, Val(3))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end diff₋₂!
+### diff₊ₓ
+    diff₊ₓ(arg)
+
+The `forward` unscaled difference along the `x` direction, ``u_{i+1} - u_i``. The unscaled difference is not divided by the grid spacing; the finite difference is.
+
+Alias for `forward_difference(arg, Val(1))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+### end diff₊ₓ
+### diff₊ₓ!
+    diff₊ₓ!(vₕ, uₕ)
+
+The `forward` unscaled difference of `uₕ` along the `x` direction, ``u_{i+1} - u_i``, written into `vₕ`.
+
+The in-place form of [`diff₊ₓ`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(diff₊ₓ!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `forward_difference!(vₕ, uₕ, Val(1))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end diff₊ₓ!
+### diff₊ᵧ
+    diff₊ᵧ(arg)
+
+The `forward` unscaled difference along the `y` direction, ``u_{i+1} - u_i``. The unscaled difference is not divided by the grid spacing; the finite difference is.
+
+Alias for `forward_difference(arg, Val(2))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+### end diff₊ᵧ
+### diff₊ᵧ!
+    diff₊ᵧ!(vₕ, uₕ)
+
+The `forward` unscaled difference of `uₕ` along the `y` direction, ``u_{i+1} - u_i``, written into `vₕ`.
+
+The in-place form of [`diff₊ᵧ`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(diff₊ᵧ!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `forward_difference!(vₕ, uₕ, Val(2))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end diff₊ᵧ!
+### diff₊₂
+    diff₊₂(arg)
+
+The `forward` unscaled difference along the `z` direction, ``u_{i+1} - u_i``. The unscaled difference is not divided by the grid spacing; the finite difference is.
+
+Alias for `forward_difference(arg, Val(3))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+### end diff₊₂
+### diff₊₂!
+    diff₊₂!(vₕ, uₕ)
+
+The `forward` unscaled difference of `uₕ` along the `z` direction, ``u_{i+1} - u_i``, written into `vₕ`.
+
+The in-place form of [`diff₊₂`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(diff₊₂!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `forward_difference!(vₕ, uₕ, Val(3))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end diff₊₂!
+### D₋ₓ
+    D₋ₓ(arg)
+
+The `backward` finite difference along the `x` direction, ``\frac{u_{i} - u_{i-1}}{h_i}``. The unscaled difference is not divided by the grid spacing; the finite difference is.
+
+Alias for `backward_finite_difference(arg, Val(1))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+---
+    D₋ₓ(op::LazyOp{D})
+
+The symbolic backward finite difference of `op` along the `x` direction.
+
+Alias for `D₋(op, Val(1))`.
+
+### end D₋ₓ
+### D₋ₓ!
+    D₋ₓ!(vₕ, uₕ)
+
+The `backward` finite difference of `uₕ` along the `x` direction, ``\frac{u_{i} - u_{i-1}}{h_i}``, written into `vₕ`.
+
+The in-place form of [`D₋ₓ`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(D₋ₓ!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `backward_finite_difference!(vₕ, uₕ, Val(1))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end D₋ₓ!
+### D₋ᵧ
+    D₋ᵧ(arg)
+
+The `backward` finite difference along the `y` direction, ``\frac{u_{i} - u_{i-1}}{h_i}``. The unscaled difference is not divided by the grid spacing; the finite difference is.
+
+Alias for `backward_finite_difference(arg, Val(2))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+---
+    D₋ᵧ(op::LazyOp{D})
+
+The symbolic backward finite difference of `op` along the `y` direction.
+
+Alias for `D₋(op, Val(2))`.
+
+### end D₋ᵧ
+### D₋ᵧ!
+    D₋ᵧ!(vₕ, uₕ)
+
+The `backward` finite difference of `uₕ` along the `y` direction, ``\frac{u_{i} - u_{i-1}}{h_i}``, written into `vₕ`.
+
+The in-place form of [`D₋ᵧ`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(D₋ᵧ!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `backward_finite_difference!(vₕ, uₕ, Val(2))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end D₋ᵧ!
+### D₋₂
+    D₋₂(arg)
+
+The `backward` finite difference along the `z` direction, ``\frac{u_{i} - u_{i-1}}{h_i}``. The unscaled difference is not divided by the grid spacing; the finite difference is.
+
+Alias for `backward_finite_difference(arg, Val(3))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+---
+    D₋₂(op::LazyOp{D})
+
+The symbolic backward finite difference of `op` along the `z` direction.
+
+Alias for `D₋(op, Val(3))`.
+
+### end D₋₂
+### D₋₂!
+    D₋₂!(vₕ, uₕ)
+
+The `backward` finite difference of `uₕ` along the `z` direction, ``\frac{u_{i} - u_{i-1}}{h_i}``, written into `vₕ`.
+
+The in-place form of [`D₋₂`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(D₋₂!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `backward_finite_difference!(vₕ, uₕ, Val(3))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end D₋₂!
+### D₊ₓ
+    D₊ₓ(arg)
+
+The `forward` finite difference along the `x` direction, ``\frac{u_{i+1} - u_i}{h_i}``. The unscaled difference is not divided by the grid spacing; the finite difference is.
+
+Alias for `forward_finite_difference(arg, Val(1))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+---
+    D₊ₓ(op::LazyOp{D})
+
+The symbolic forward finite difference of `op` along the `x` direction.
+
+Alias for `D₊(op, Val(1))`.
+
+### end D₊ₓ
+### D₊ₓ!
+    D₊ₓ!(vₕ, uₕ)
+
+The `forward` finite difference of `uₕ` along the `x` direction, ``\frac{u_{i+1} - u_i}{h_i}``, written into `vₕ`.
+
+The in-place form of [`D₊ₓ`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(D₊ₓ!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `forward_finite_difference!(vₕ, uₕ, Val(1))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end D₊ₓ!
+### D₊ᵧ
+    D₊ᵧ(arg)
+
+The `forward` finite difference along the `y` direction, ``\frac{u_{i+1} - u_i}{h_i}``. The unscaled difference is not divided by the grid spacing; the finite difference is.
+
+Alias for `forward_finite_difference(arg, Val(2))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+---
+    D₊ᵧ(op::LazyOp{D})
+
+The symbolic forward finite difference of `op` along the `y` direction.
+
+Alias for `D₊(op, Val(2))`.
+
+### end D₊ᵧ
+### D₊ᵧ!
+    D₊ᵧ!(vₕ, uₕ)
+
+The `forward` finite difference of `uₕ` along the `y` direction, ``\frac{u_{i+1} - u_i}{h_i}``, written into `vₕ`.
+
+The in-place form of [`D₊ᵧ`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(D₊ᵧ!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `forward_finite_difference!(vₕ, uₕ, Val(2))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end D₊ᵧ!
+### D₊₂
+    D₊₂(arg)
+
+The `forward` finite difference along the `z` direction, ``\frac{u_{i+1} - u_i}{h_i}``. The unscaled difference is not divided by the grid spacing; the finite difference is.
+
+Alias for `forward_finite_difference(arg, Val(3))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+---
+    D₊₂(op::LazyOp{D})
+
+The symbolic forward finite difference of `op` along the `z` direction.
+
+Alias for `D₊(op, Val(3))`.
+
+### end D₊₂
+### D₊₂!
+    D₊₂!(vₕ, uₕ)
+
+The `forward` finite difference of `uₕ` along the `z` direction, ``\frac{u_{i+1} - u_i}{h_i}``, written into `vₕ`.
+
+The in-place form of [`D₊₂`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(D₊₂!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `forward_finite_difference!(vₕ, uₕ, Val(3))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end D₊₂!
+### jumpₓ
+    jumpₓ(arg)
+
+The jump across the interfaces along the `x` direction, ``\llbracket u \rrbracket = u_{i+1} - u_i``.
+
+Alias for `jump(arg, Val(1))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`. The last point along `x` has no forward neighbour and is treated as though it were zero, as in [`diff₊ₓ`](@ref).
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+---
+    jumpₓ(op::LazyOp{D})
+
+The symbolic jump across the interfaces of `op` along the `x` direction.
+
+Alias for `jump(op, Val(1))`.
+
+### end jumpₓ
+### jumpₓ!
+    jumpₓ!(vₕ, uₕ)
+
+The jump across the interfaces along the `x` direction, ``\llbracket u \rrbracket = u_{i+1} - u_i``, written into `vₕ`.
+
+The in-place form of [`jumpₓ`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(jumpₓ!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `jump!(vₕ, uₕ, Val(1))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end jumpₓ!
+### jumpᵧ
+    jumpᵧ(arg)
+
+The jump across the interfaces along the `y` direction, ``\llbracket u \rrbracket = u_{i+1} - u_i``.
+
+Alias for `jump(arg, Val(2))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`. The last point along `y` has no forward neighbour and is treated as though it were zero, as in [`diff₊ᵧ`](@ref).
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+---
+    jumpᵧ(op::LazyOp{D})
+
+The symbolic jump across the interfaces of `op` along the `y` direction.
+
+Alias for `jump(op, Val(2))`.
+
+### end jumpᵧ
+### jumpᵧ!
+    jumpᵧ!(vₕ, uₕ)
+
+The jump across the interfaces along the `y` direction, ``\llbracket u \rrbracket = u_{i+1} - u_i``, written into `vₕ`.
+
+The in-place form of [`jumpᵧ`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(jumpᵧ!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `jump!(vₕ, uₕ, Val(2))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end jumpᵧ!
+### jump₂
+    jump₂(arg)
+
+The jump across the interfaces along the `z` direction, ``\llbracket u \rrbracket = u_{i+1} - u_i``.
+
+Alias for `jump(arg, Val(3))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`. The last point along `z` has no forward neighbour and is treated as though it were zero, as in [`diff₊₂`](@ref).
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+---
+    jump₂(op::LazyOp{D})
+
+The symbolic jump across the interfaces of `op` along the `z` direction.
+
+Alias for `jump(op, Val(3))`.
+
+### end jump₂
+### jump₂!
+    jump₂!(vₕ, uₕ)
+
+The jump across the interfaces along the `z` direction, ``\llbracket u \rrbracket = u_{i+1} - u_i``, written into `vₕ`.
+
+The in-place form of [`jump₂`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(jump₂!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `jump!(vₕ, uₕ, Val(3))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end jump₂!
+### Mₓ
+    Mₓ(arg)
+
+The `backward` average along the `x` direction, ``\frac{u_{i-1} + u_{i}}{2}``.
+
+Alias for `backward_average(arg, Val(1))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+---
+    Mₓ(op::LazyOp{D})
+
+The symbolic backward spatial average of `op` along the `x` direction.
+
+Alias for `Mₕ(op, Val(1))`.
+
+### end Mₓ
+### Mₓ!
+    Mₓ!(vₕ, uₕ)
+
+The `backward` average of `uₕ` along the `x` direction, ``\frac{u_{i-1} + u_{i}}{2}``, written into `vₕ`.
+
+The in-place form of [`Mₓ`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(Mₓ!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `backward_average!(vₕ, uₕ, Val(1))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end Mₓ!
+### Mᵧ
+    Mᵧ(arg)
+
+The `backward` average along the `y` direction, ``\frac{u_{i-1} + u_{i}}{2}``.
+
+Alias for `backward_average(arg, Val(2))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+---
+    Mᵧ(op::LazyOp{D})
+
+The symbolic backward spatial average of `op` along the `y` direction.
+
+Alias for `Mₕ(op, Val(2))`.
+
+### end Mᵧ
+### Mᵧ!
+    Mᵧ!(vₕ, uₕ)
+
+The `backward` average of `uₕ` along the `y` direction, ``\frac{u_{i-1} + u_{i}}{2}``, written into `vₕ`.
+
+The in-place form of [`Mᵧ`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(Mᵧ!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `backward_average!(vₕ, uₕ, Val(2))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end Mᵧ!
+### M₂
+    M₂(arg)
+
+The `backward` average along the `z` direction, ``\frac{u_{i-1} + u_{i}}{2}``.
+
+Alias for `backward_average(arg, Val(3))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+---
+    M₂(op::LazyOp{D})
+
+The symbolic backward spatial average of `op` along the `z` direction.
+
+Alias for `Mₕ(op, Val(3))`.
+
+### end M₂
+### M₂!
+    M₂!(vₕ, uₕ)
+
+The `backward` average of `uₕ` along the `z` direction, ``\frac{u_{i-1} + u_{i}}{2}``, written into `vₕ`.
+
+The in-place form of [`M₂`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(M₂!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `backward_average!(vₕ, uₕ, Val(3))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end M₂!
+### M₊ₓ
+    M₊ₓ(arg)
+
+The `forward` average along the `x` direction, ``\frac{u_{i} + u_{i+1}}{2}``.
+
+Alias for `forward_average(arg, Val(1))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+---
+    M₊ₓ(op::LazyOp{D})
+
+The symbolic forward spatial average of `op` along the `x` direction.
+
+Alias for `M₊ₕ(op, Val(1))`.
+
+### end M₊ₓ
+### M₊ₓ!
+    M₊ₓ!(vₕ, uₕ)
+
+The `forward` average of `uₕ` along the `x` direction, ``\frac{u_{i} + u_{i+1}}{2}``, written into `vₕ`.
+
+The in-place form of [`M₊ₓ`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(M₊ₓ!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `forward_average!(vₕ, uₕ, Val(1))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end M₊ₓ!
+### M₊ᵧ
+    M₊ᵧ(arg)
+
+The `forward` average along the `y` direction, ``\frac{u_{i} + u_{i+1}}{2}``.
+
+Alias for `forward_average(arg, Val(2))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+---
+    M₊ᵧ(op::LazyOp{D})
+
+The symbolic forward spatial average of `op` along the `y` direction.
+
+Alias for `M₊ₕ(op, Val(2))`.
+
+### end M₊ᵧ
+### M₊ᵧ!
+    M₊ᵧ!(vₕ, uₕ)
+
+The `forward` average of `uₕ` along the `y` direction, ``\frac{u_{i} + u_{i+1}}{2}``, written into `vₕ`.
+
+The in-place form of [`M₊ᵧ`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(M₊ᵧ!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `forward_average!(vₕ, uₕ, Val(2))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end M₊ᵧ!
+### M₊₂
+    M₊₂(arg)
+
+The `forward` average along the `z` direction, ``\frac{u_{i} + u_{i+1}}{2}``.
+
+Alias for `forward_average(arg, Val(3))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+---
+    M₊₂(op::LazyOp{D})
+
+The symbolic forward spatial average of `op` along the `z` direction.
+
+Alias for `M₊ₕ(op, Val(3))`.
+
+### end M₊₂
+### M₊₂!
+    M₊₂!(vₕ, uₕ)
+
+The `forward` average of `uₕ` along the `z` direction, ``\frac{u_{i} + u_{i+1}}{2}``, written into `vₕ`.
+
+The in-place form of [`M₊₂`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(M₊₂!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `forward_average!(vₕ, uₕ, Val(3))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end M₊₂!
+### D̽ₓ
+    D̽ₓ(arg)
+
+The forward difference of `uₕ` along the `x` direction over the averaged spacing, ``\frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}``.
+
+Alias for `forward_star_difference(arg, Val(1))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`. The last point along `x` is truncated to zero.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+---
+    D̽ₓ(op::LazyOp{D})
+
+The symbolic starred forward difference of `op` along the `x` direction.
+
+Alias for `D̽(op, Val(1))`.
+
+### end D̽ₓ
+### D̽ₓ!
+    D̽ₓ!(vₕ, uₕ)
+
+The forward difference of `uₕ` along the `x` direction over the averaged spacing, ``\frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}``, written into `vₕ`.
+
+The in-place form of [`D̽ₓ`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(D̽ₓ!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `forward_star_difference!(vₕ, uₕ, Val(1))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end D̽ₓ!
+### D̽ᵧ
+    D̽ᵧ(arg)
+
+The forward difference of `uₕ` along the `y` direction over the averaged spacing, ``\frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}``.
+
+Alias for `forward_star_difference(arg, Val(2))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`. The last point along `y` is truncated to zero.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+---
+    D̽ᵧ(op::LazyOp{D})
+
+The symbolic starred forward difference of `op` along the `y` direction.
+
+Alias for `D̽(op, Val(2))`.
+
+### end D̽ᵧ
+### D̽ᵧ!
+    D̽ᵧ!(vₕ, uₕ)
+
+The forward difference of `uₕ` along the `y` direction over the averaged spacing, ``\frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}``, written into `vₕ`.
+
+The in-place form of [`D̽ᵧ`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(D̽ᵧ!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `forward_star_difference!(vₕ, uₕ, Val(2))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end D̽ᵧ!
+### D̽₂
+    D̽₂(arg)
+
+The forward difference of `uₕ` along the `z` direction over the averaged spacing, ``\frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}``.
+
+Alias for `forward_star_difference(arg, Val(3))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`. The last point along `z` is truncated to zero.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+---
+    D̽₂(op::LazyOp{D})
+
+The symbolic starred forward difference of `op` along the `z` direction.
+
+Alias for `D̽(op, Val(3))`.
+
+### end D̽₂
+### D̽₂!
+    D̽₂!(vₕ, uₕ)
+
+The forward difference of `uₕ` along the `z` direction over the averaged spacing, ``\frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}``, written into `vₕ`.
+
+The in-place form of [`D̽₂`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(D̽₂!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `forward_star_difference!(vₕ, uₕ, Val(3))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end D̽₂!
+### Dcₓ
+    Dcₓ(arg)
+
+The centered difference of `uₕ` along the `x` direction, ``\frac{u_{i+1} - u_{i-1}}{h_i + h_{i+1}}``.
+
+Alias for `centered_difference(arg, Val(1))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`. The first and last points along `x` are truncated to zero, so the mesh needs at least three points along `x` and an `ArgumentError` is thrown when it has fewer.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+---
+    Dcₓ(op::LazyOp{D})
+
+The symbolic centered difference of `op` along the `x` direction.
+
+Alias for `Dc(op, Val(1))`.
+
+### end Dcₓ
+### Dcₓ!
+    Dcₓ!(vₕ, uₕ)
+
+The centered difference of `uₕ` along the `x` direction, ``\frac{u_{i+1} - u_{i-1}}{h_i + h_{i+1}}``, written into `vₕ`.
+
+The in-place form of [`Dcₓ`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(Dcₓ!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `centered_difference!(vₕ, uₕ, Val(1))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end Dcₓ!
+### Dcᵧ
+    Dcᵧ(arg)
+
+The centered difference of `uₕ` along the `y` direction, ``\frac{u_{i+1} - u_{i-1}}{h_i + h_{i+1}}``.
+
+Alias for `centered_difference(arg, Val(2))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`. The first and last points along `y` are truncated to zero, so the mesh needs at least three points along `y` and an `ArgumentError` is thrown when it has fewer.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+---
+    Dcᵧ(op::LazyOp{D})
+
+The symbolic centered difference of `op` along the `y` direction.
+
+Alias for `Dc(op, Val(2))`.
+
+### end Dcᵧ
+### Dcᵧ!
+    Dcᵧ!(vₕ, uₕ)
+
+The centered difference of `uₕ` along the `y` direction, ``\frac{u_{i+1} - u_{i-1}}{h_i + h_{i+1}}``, written into `vₕ`.
+
+The in-place form of [`Dcᵧ`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(Dcᵧ!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `centered_difference!(vₕ, uₕ, Val(2))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end Dcᵧ!
+### Dc₂
+    Dc₂(arg)
+
+The centered difference of `uₕ` along the `z` direction, ``\frac{u_{i+1} - u_{i-1}}{h_i + h_{i+1}}``.
+
+Alias for `centered_difference(arg, Val(3))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`. The first and last points along `z` are truncated to zero, so the mesh needs at least three points along `z` and an `ArgumentError` is thrown when it has fewer.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+---
+    Dc₂(op::LazyOp{D})
+
+The symbolic centered difference of `op` along the `z` direction.
+
+Alias for `Dc(op, Val(3))`.
+
+### end Dc₂
+### Dc₂!
+    Dc₂!(vₕ, uₕ)
+
+The centered difference of `uₕ` along the `z` direction, ``\frac{u_{i+1} - u_{i-1}}{h_i + h_{i+1}}``, written into `vₕ`.
+
+The in-place form of [`Dc₂`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(Dc₂!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `centered_difference!(vₕ, uₕ, Val(3))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end Dc₂!
+### Dₕₓ
+    Dₕₓ(arg)
+
+The cross-weighted centered difference of `uₕ` along the `x` direction, the backward differences at ``x_{i+1}`` and ``x_i`` weighted by ``h_i`` and ``h_{i+1}``.
+
+Alias for `cross_weighted_difference(arg, Val(1))`. Second order on a non-uniform grid, where [`Dcₓ`](@ref) is first. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`. Unlike [`Dcₓ`](@ref), the first and last points along `x` are not truncated: with no neighbour on the far side, each collapses to the one-sided difference the near side still gives, [`D₊ₓ`](@ref) at the first point and [`D₋ₓ`](@ref) at the last. The mesh still needs at least three points along `x`, and an `ArgumentError` is thrown when it has fewer.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+---
+    Dₕₓ(op::LazyOp{D})
+
+The symbolic cross-weighted centered difference of `op` along the `x` direction.
+
+Alias for `Dₕ(op, Val(1))`.
+
+### end Dₕₓ
+### Dₕₓ!
+    Dₕₓ!(vₕ, uₕ)
+
+The cross-weighted centered difference of `uₕ` along the `x` direction, the backward differences at ``x_{i+1}`` and ``x_i`` weighted by ``h_i`` and ``h_{i+1}``, written into `vₕ`.
+
+The in-place form of [`Dₕₓ`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(Dₕₓ!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `cross_weighted_difference!(vₕ, uₕ, Val(1))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end Dₕₓ!
+### Dₕᵧ
+    Dₕᵧ(arg)
+
+The cross-weighted centered difference of `uₕ` along the `y` direction, the backward differences at ``x_{i+1}`` and ``x_i`` weighted by ``h_i`` and ``h_{i+1}``.
+
+Alias for `cross_weighted_difference(arg, Val(2))`. Second order on a non-uniform grid, where [`Dcᵧ`](@ref) is first. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`. Unlike [`Dcᵧ`](@ref), the first and last points along `y` are not truncated: with no neighbour on the far side, each collapses to the one-sided difference the near side still gives, [`D₊ᵧ`](@ref) at the first point and [`D₋ᵧ`](@ref) at the last. The mesh still needs at least three points along `y`, and an `ArgumentError` is thrown when it has fewer.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+---
+    Dₕᵧ(op::LazyOp{D})
+
+The symbolic cross-weighted centered difference of `op` along the `y` direction.
+
+Alias for `Dₕ(op, Val(2))`.
+
+### end Dₕᵧ
+### Dₕᵧ!
+    Dₕᵧ!(vₕ, uₕ)
+
+The cross-weighted centered difference of `uₕ` along the `y` direction, the backward differences at ``x_{i+1}`` and ``x_i`` weighted by ``h_i`` and ``h_{i+1}``, written into `vₕ`.
+
+The in-place form of [`Dₕᵧ`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(Dₕᵧ!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `cross_weighted_difference!(vₕ, uₕ, Val(2))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end Dₕᵧ!
+### Dₕ₂
+    Dₕ₂(arg)
+
+The cross-weighted centered difference of `uₕ` along the `z` direction, the backward differences at ``x_{i+1}`` and ``x_i`` weighted by ``h_i`` and ``h_{i+1}``.
+
+Alias for `cross_weighted_difference(arg, Val(3))`. Second order on a non-uniform grid, where [`Dc₂`](@ref) is first. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`. Unlike [`Dc₂`](@ref), the first and last points along `z` are not truncated: with no neighbour on the far side, each collapses to the one-sided difference the near side still gives, [`D₊₂`](@ref) at the first point and [`D₋₂`](@ref) at the last. The mesh still needs at least three points along `z`, and an `ArgumentError` is thrown when it has fewer.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+---
+    Dₕ₂(op::LazyOp{D})
+
+The symbolic cross-weighted centered difference of `op` along the `z` direction.
+
+Alias for `Dₕ(op, Val(3))`.
+
+### end Dₕ₂
+### Dₕ₂!
+    Dₕ₂!(vₕ, uₕ)
+
+The cross-weighted centered difference of `uₕ` along the `z` direction, the backward differences at ``x_{i+1}`` and ``x_i`` weighted by ``h_i`` and ``h_{i+1}``, written into `vₕ`.
+
+The in-place form of [`Dₕ₂`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(Dₕ₂!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `cross_weighted_difference!(vₕ, uₕ, Val(3))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end Dₕ₂!
+### ∇ₕ
+    ∇ₕ(arg)
+
+The backward finite difference of `arg` along every coordinate, as a tuple with one entry per
+spatial dimension. On a one-dimensional mesh it returns that single entry rather than
+a one-tuple.
+
+For a 2D space, `∇ₕ(uₕ)` is
+`(backward_finite_difference(uₕ, Val(1)), backward_finite_difference(uₕ, Val(2)))`. `arg` is a mesh, a grid
+space or a [`VectorElement`](@ref), as for `backward_finite_difference`.
+
+Accepts a grid function of a scalar or of a composite grid space, componentwise on
+the latter: each entry of the tuple is then itself a composite grid function.
+
+---
+    ∇ₕ(op::LazyOp{D})
+
+The symbolic backward finite difference of `op` along every coordinate, as a `D`-tuple of nodes. In one
+dimension there is one direction, so the node itself is returned rather than a
+one-element tuple.
+
+---
+    ∇ₕ(ops::Tuple)
+
+Applies ∇ₕ component-wise to a tuple of scalar symbolic functions, such as
+the velocity components `(u1, u2)` of a composite space. Returns a tuple of results,
+one per component.
+
+### end ∇ₕ
+### ∇₊ₕ
+    ∇₊ₕ(arg)
+
+The forward finite difference of `arg` along every coordinate, as a tuple with one entry per
+spatial dimension. On a one-dimensional mesh it returns that single entry rather than
+a one-tuple.
+
+For a 2D space, `∇₊ₕ(uₕ)` is
+`(forward_finite_difference(uₕ, Val(1)), forward_finite_difference(uₕ, Val(2)))`. `arg` is a mesh, a grid
+space or a [`VectorElement`](@ref), as for `forward_finite_difference`.
+
+Accepts a grid function of a scalar or of a composite grid space, componentwise on
+the latter: each entry of the tuple is then itself a composite grid function.
+
+---
+    ∇₊ₕ(op::LazyOp{D})
+
+The symbolic forward finite difference of `op` along every coordinate, as a `D`-tuple of nodes. In one
+dimension there is one direction, so the node itself is returned rather than a
+one-element tuple.
+
+---
+    ∇₊ₕ(ops::Tuple)
+
+Applies ∇₊ₕ component-wise to a tuple of scalar symbolic functions, such as
+the velocity components `(u1, u2)` of a composite space. Returns a tuple of results,
+one per component.
+
+### end ∇₊ₕ
+### diff₋ₕ
+    diff₋ₕ(arg)
+
+The backward unscaled difference of `arg` along every coordinate, as a tuple with one entry per
+spatial dimension. On a one-dimensional mesh it returns that single entry rather than
+a one-tuple.
+
+For a 2D space, `diff₋ₕ(uₕ)` is
+`(backward_difference(uₕ, Val(1)), backward_difference(uₕ, Val(2)))`. `arg` is a mesh, a grid
+space or a [`VectorElement`](@ref), as for `backward_difference`.
+
+Accepts a grid function of a scalar or of a composite grid space, componentwise on
+the latter: each entry of the tuple is then itself a composite grid function.
+
+### end diff₋ₕ
+### diff₊ₕ
+    diff₊ₕ(arg)
+
+The forward unscaled difference of `arg` along every coordinate, as a tuple with one entry per
+spatial dimension. On a one-dimensional mesh it returns that single entry rather than
+a one-tuple.
+
+For a 2D space, `diff₊ₕ(uₕ)` is
+`(forward_difference(uₕ, Val(1)), forward_difference(uₕ, Val(2)))`. `arg` is a mesh, a grid
+space or a [`VectorElement`](@ref), as for `forward_difference`.
+
+Accepts a grid function of a scalar or of a composite grid space, componentwise on
+the latter: each entry of the tuple is then itself a composite grid function.
+
+### end diff₊ₕ
+### jumpₕ
+    jumpₕ(arg)
+
+The jump of `arg` along every coordinate, as a tuple with one entry per
+spatial dimension. On a one-dimensional mesh it returns that single entry rather than
+a one-tuple.
+
+For a 2D space, `jumpₕ(uₕ)` is
+`(jump(uₕ, Val(1)), jump(uₕ, Val(2)))`. `arg` is a mesh, a grid
+space or a [`VectorElement`](@ref), as for `jump`.
+
+Accepts a grid function of a scalar or of a composite grid space, componentwise on
+the latter: each entry of the tuple is then itself a composite grid function.
+
+---
+    jumpₕ(op::LazyOp{D})
+
+The symbolic jump across the interfaces of `op` along every coordinate, as a `D`-tuple of nodes. In one
+dimension there is one direction, so the node itself is returned rather than a
+one-element tuple.
+
+### end jumpₕ
+### Mₕ
+    Mₕ(arg, d)
+
+The `backward` average along the `d` direction, ``\frac{u_{i-1} + u_{i}}{2}``.
+
+`d` names the direction three ways: a `Val` (`Val(1)`), an `Int` (`1`, `2`, `3`) or a
+`Symbol` (`:x`, `:y`, `:z`). The `Val` form is the one
+[`Mₓ`](@ref) and its siblings forward through; the other two select between
+literal `Val`s, one arm per direction the mesh has, so the direction still reaches the
+stencil engine as a compile-time constant and a loop over `d` allocates nothing beyond
+its results. An `Int` outside `1:dim(mesh)`, or a `Symbol` that is not `:x`/`:y`/`:z`,
+throws an `ArgumentError`.
+
+Alias for `backward_average(arg, Val(d))`. `arg` is a mesh, a grid space or a
+[`VectorElement`](@ref): the first two give the operator as a sparse matrix, the third
+applies it and returns a `VectorElement`.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+---
+    Mₕ(arg)
+
+The backward average of `arg` along every coordinate, as a tuple with one entry per
+spatial dimension. On a one-dimensional mesh it returns that single entry rather than
+a one-tuple.
+
+For a 2D space, `Mₕ(uₕ)` is
+`(backward_average(uₕ, Val(1)), backward_average(uₕ, Val(2)))`. `arg` is a mesh, a grid
+space or a [`VectorElement`](@ref), as for `backward_average`.
+
+Accepts a grid function of a scalar or of a composite grid space, componentwise on
+the latter: each entry of the tuple is then itself a composite grid function.
+
+---
+    Mₕ(op::LazyOp{D}, ::Val{Dim})
+
+The symbolic backward spatial average of `op` along direction `Dim`, as a `BackwardAverage` node.
+
+The entry point [`Mₓ`](@ref) and its siblings forward through, and the same
+function the space layer applies to a grid function: `Mₕ(uₕ, Val(1))` computes
+values, `Mₕ(U, Val(1))` builds the node that will compute them during assembly.
+
+Takes a `Val` and not an `Int`, unlike its space-layer namesake: `Dim` is a type
+parameter of the node, so a runtime direction would make the return type a `Union`.
+
+---
+    Mₕ(op::LazyOp{D})
+
+The symbolic backward spatial average of `op` along every coordinate, as a `D`-tuple of nodes. In one
+dimension there is one direction, so the node itself is returned rather than a
+one-element tuple.
+
+### end Mₕ
+### M₊ₕ
+    M₊ₕ(arg, d)
+
+The `forward` average along the `d` direction, ``\frac{u_{i} + u_{i+1}}{2}``.
+
+`d` names the direction three ways: a `Val` (`Val(1)`), an `Int` (`1`, `2`, `3`) or a
+`Symbol` (`:x`, `:y`, `:z`). The `Val` form is the one
+[`M₊ₓ`](@ref) and its siblings forward through; the other two select between
+literal `Val`s, one arm per direction the mesh has, so the direction still reaches the
+stencil engine as a compile-time constant and a loop over `d` allocates nothing beyond
+its results. An `Int` outside `1:dim(mesh)`, or a `Symbol` that is not `:x`/`:y`/`:z`,
+throws an `ArgumentError`.
+
+Alias for `forward_average(arg, Val(d))`. `arg` is a mesh, a grid space or a
+[`VectorElement`](@ref): the first two give the operator as a sparse matrix, the third
+applies it and returns a `VectorElement`.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+---
+    M₊ₕ(arg)
+
+The forward average of `arg` along every coordinate, as a tuple with one entry per
+spatial dimension. On a one-dimensional mesh it returns that single entry rather than
+a one-tuple.
+
+For a 2D space, `M₊ₕ(uₕ)` is
+`(forward_average(uₕ, Val(1)), forward_average(uₕ, Val(2)))`. `arg` is a mesh, a grid
+space or a [`VectorElement`](@ref), as for `forward_average`.
+
+Accepts a grid function of a scalar or of a composite grid space, componentwise on
+the latter: each entry of the tuple is then itself a composite grid function.
+
+---
+    M₊ₕ(op::LazyOp{D}, ::Val{Dim})
+
+The symbolic forward spatial average of `op` along direction `Dim`, as a `ForwardAverage` node.
+
+The entry point [`M₊ₓ`](@ref) and its siblings forward through, and the same
+function the space layer applies to a grid function: `M₊ₕ(uₕ, Val(1))` computes
+values, `M₊ₕ(U, Val(1))` builds the node that will compute them during assembly.
+
+Takes a `Val` and not an `Int`, unlike its space-layer namesake: `Dim` is a type
+parameter of the node, so a runtime direction would make the return type a `Union`.
+
+---
+    M₊ₕ(op::LazyOp{D})
+
+The symbolic forward spatial average of `op` along every coordinate, as a `D`-tuple of nodes. In one
+dimension there is one direction, so the node itself is returned rather than a
+one-element tuple.
+
+### end M₊ₕ
+### D̽ₕ
+    D̽ₕ(arg)
+
+The starred forward difference of `arg` along every coordinate, as a tuple with one entry per
+spatial dimension. On a one-dimensional mesh it returns that single entry rather than
+a one-tuple.
+
+For a 2D space, `D̽ₕ(uₕ)` is
+`(forward_star_difference(uₕ, Val(1)), forward_star_difference(uₕ, Val(2)))`. `arg` is a mesh, a grid
+space or a [`VectorElement`](@ref), as for `forward_star_difference`.
+
+Accepts a grid function of a scalar or of a composite grid space, componentwise on
+the latter: each entry of the tuple is then itself a composite grid function.
+
+---
+    D̽ₕ(op::LazyOp{D})
+
+The symbolic starred forward difference of `op` along every coordinate, as a `D`-tuple of nodes. In one
+dimension there is one direction, so the node itself is returned rather than a
+one-element tuple.
+
+### end D̽ₕ
+### Dcₕ
+    Dcₕ(arg)
+
+The centered difference of `arg` along every coordinate, as a tuple with one entry per
+spatial dimension. On a one-dimensional mesh it returns that single entry rather than
+a one-tuple.
+
+For a 2D space, `Dcₕ(uₕ)` is
+`(centered_difference(uₕ, Val(1)), centered_difference(uₕ, Val(2)))`. `arg` is a mesh, a grid
+space or a [`VectorElement`](@ref), as for `centered_difference`.
+
+Accepts a grid function of a scalar or of a composite grid space, componentwise on
+the latter: each entry of the tuple is then itself a composite grid function.
+
+---
+    Dcₕ(op::LazyOp{D})
+
+The symbolic centered difference of `op` along every coordinate, as a `D`-tuple of nodes. In one
+dimension there is one direction, so the node itself is returned rather than a
+one-element tuple.
+
+### end Dcₕ
+### Dₕ
+    Dₕ(arg, d)
+
+The cross-weighted centered difference of `uₕ` along the `d` direction, the backward differences at ``x_{i+1}`` and ``x_i`` weighted by ``h_i`` and ``h_{i+1}``.
+
+`d` names the direction three ways: a `Val` (`Val(1)`), an `Int` (`1`, `2`, `3`) or a
+`Symbol` (`:x`, `:y`, `:z`). The `Val` form is the one
+[`Dₕₓ`](@ref) and its siblings forward through; the other two select between
+literal `Val`s, one arm per direction the mesh has, so the direction still reaches the
+stencil engine as a compile-time constant and a loop over `d` allocates nothing beyond
+its results. An `Int` outside `1:dim(mesh)`, or a `Symbol` that is not `:x`/`:y`/`:z`,
+throws an `ArgumentError`.
+
+Alias for `cross_weighted_difference(arg, Val(d))`. `arg` is a mesh, a grid space or a
+[`VectorElement`](@ref): the first two give the operator as a sparse matrix, the third
+applies it and returns a `VectorElement`.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+---
+    Dₕ(arg)
+
+The cross-weighted centered difference of `arg` along every coordinate, as a tuple with one entry per
+spatial dimension. On a one-dimensional mesh it returns that single entry rather than
+a one-tuple.
+
+For a 2D space, `Dₕ(uₕ)` is
+`(cross_weighted_difference(uₕ, Val(1)), cross_weighted_difference(uₕ, Val(2)))`. `arg` is a mesh, a grid
+space or a [`VectorElement`](@ref), as for `cross_weighted_difference`. The centered counterpart of [`∇ₕ`](@ref) and [`∇₊ₕ`](@ref), built from [`Dₕₓ`](@ref) rather than from the one-sided differences.
+
+Accepts a grid function of a scalar or of a composite grid space, componentwise on
+the latter: each entry of the tuple is then itself a composite grid function.
+
+---
+    Dₕ(op::LazyOp{D}, ::Val{Dim})
+
+The symbolic cross-weighted centered difference of `op` along direction `Dim`, as a `CrossWeightedDifference` node.
+
+The entry point [`Dₕₓ`](@ref) and its siblings forward through, and the same
+function the space layer applies to a grid function: `Dₕ(uₕ, Val(1))` computes
+values, `Dₕ(U, Val(1))` builds the node that will compute them during assembly.
+
+Takes a `Val` and not an `Int`, unlike its space-layer namesake: `Dim` is a type
+parameter of the node, so a runtime direction would make the return type a `Union`.
+
+---
+    Dₕ(op::LazyOp{D})
+
+The symbolic cross-weighted centered difference of `op` along every coordinate, as a `D`-tuple of nodes. In one
+dimension there is one direction, so the node itself is returned rather than a
+one-element tuple.
+
+### end Dₕ
+### diff₋
+    diff₋(arg, d)
+
+The `backward` unscaled difference along the `d` direction, ``u_{i} - u_{i-1}``.
+
+`d` names the direction three ways: a `Val` (`Val(1)`), an `Int` (`1`, `2`, `3`) or a
+`Symbol` (`:x`, `:y`, `:z`). The `Val` form is the one
+[`diff₋ₓ`](@ref) and its siblings forward through; the other two select between
+literal `Val`s, one arm per direction the mesh has, so the direction still reaches the
+stencil engine as a compile-time constant and a loop over `d` allocates nothing beyond
+its results. An `Int` outside `1:dim(mesh)`, or a `Symbol` that is not `:x`/`:y`/`:z`,
+throws an `ArgumentError`.
+
+Alias for `backward_difference(arg, Val(d))`. `arg` is a mesh, a grid space or a
+[`VectorElement`](@ref): the first two give the operator as a sparse matrix, the third
+applies it and returns a `VectorElement`.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+### end diff₋
+### diff₊
+    diff₊(arg, d)
+
+The `forward` unscaled difference along the `d` direction, ``u_{i+1} - u_i``.
+
+`d` names the direction three ways: a `Val` (`Val(1)`), an `Int` (`1`, `2`, `3`) or a
+`Symbol` (`:x`, `:y`, `:z`). The `Val` form is the one
+[`diff₊ₓ`](@ref) and its siblings forward through; the other two select between
+literal `Val`s, one arm per direction the mesh has, so the direction still reaches the
+stencil engine as a compile-time constant and a loop over `d` allocates nothing beyond
+its results. An `Int` outside `1:dim(mesh)`, or a `Symbol` that is not `:x`/`:y`/`:z`,
+throws an `ArgumentError`.
+
+Alias for `forward_difference(arg, Val(d))`. `arg` is a mesh, a grid space or a
+[`VectorElement`](@ref): the first two give the operator as a sparse matrix, the third
+applies it and returns a `VectorElement`.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+### end diff₊
+### D₋
+    D₋(arg, d)
+
+The `backward` finite difference along the `d` direction, ``\frac{u_{i} - u_{i-1}}{h_i}``.
+
+`d` names the direction three ways: a `Val` (`Val(1)`), an `Int` (`1`, `2`, `3`) or a
+`Symbol` (`:x`, `:y`, `:z`). The `Val` form is the one
+[`D₋ₓ`](@ref) and its siblings forward through; the other two select between
+literal `Val`s, one arm per direction the mesh has, so the direction still reaches the
+stencil engine as a compile-time constant and a loop over `d` allocates nothing beyond
+its results. An `Int` outside `1:dim(mesh)`, or a `Symbol` that is not `:x`/`:y`/`:z`,
+throws an `ArgumentError`.
+
+Alias for `backward_finite_difference(arg, Val(d))`. `arg` is a mesh, a grid space or a
+[`VectorElement`](@ref): the first two give the operator as a sparse matrix, the third
+applies it and returns a `VectorElement`.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+---
+    D₋(op::LazyOp{D}, ::Val{Dim})
+
+The symbolic backward finite difference of `op` along direction `Dim`, as a `BackwardDifference` node.
+
+The entry point [`D₋ₓ`](@ref) and its siblings forward through, and the same
+function the space layer applies to a grid function: `D₋(uₕ, Val(1))` computes
+values, `D₋(U, Val(1))` builds the node that will compute them during assembly.
+
+Takes a `Val` and not an `Int`, unlike its space-layer namesake: `Dim` is a type
+parameter of the node, so a runtime direction would make the return type a `Union`.
+
+### end D₋
+### D₊
+    D₊(arg, d)
+
+The `forward` finite difference along the `d` direction, ``\frac{u_{i+1} - u_i}{h_i}``.
+
+`d` names the direction three ways: a `Val` (`Val(1)`), an `Int` (`1`, `2`, `3`) or a
+`Symbol` (`:x`, `:y`, `:z`). The `Val` form is the one
+[`D₊ₓ`](@ref) and its siblings forward through; the other two select between
+literal `Val`s, one arm per direction the mesh has, so the direction still reaches the
+stencil engine as a compile-time constant and a loop over `d` allocates nothing beyond
+its results. An `Int` outside `1:dim(mesh)`, or a `Symbol` that is not `:x`/`:y`/`:z`,
+throws an `ArgumentError`.
+
+Alias for `forward_finite_difference(arg, Val(d))`. `arg` is a mesh, a grid space or a
+[`VectorElement`](@ref): the first two give the operator as a sparse matrix, the third
+applies it and returns a `VectorElement`.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+---
+    D₊(op::LazyOp{D}, ::Val{Dim})
+
+The symbolic forward finite difference of `op` along direction `Dim`, as a `ForwardDifference` node.
+
+The entry point [`D₊ₓ`](@ref) and its siblings forward through, and the same
+function the space layer applies to a grid function: `D₊(uₕ, Val(1))` computes
+values, `D₊(U, Val(1))` builds the node that will compute them during assembly.
+
+Takes a `Val` and not an `Int`, unlike its space-layer namesake: `Dim` is a type
+parameter of the node, so a runtime direction would make the return type a `Union`.
+
+### end D₊
+### jump
+    jump(arg, dim_val::Val)
+
+The jump across the interfaces along the direction `dim_val`, ``u_{i+1} - u_i``.
+
+`arg` is a mesh, a grid space or a [`VectorElement`](@ref): the first two give the operator
+as a sparse matrix, the third applies it and returns a `VectorElement`.
+
+Forwards to [`forward_difference`](@ref), since a jump across an interface and an unscaled
+forward difference are the same quantity. The name records which of the two is meant.
+
+---
+    jump(arg, d)
+
+The jump across the interfaces along the `d` direction, ``\llbracket u \rrbracket = u_{i+1} - u_i``.
+
+`d` names the direction three ways: a `Val` (`Val(1)`), an `Int` (`1`, `2`, `3`) or a
+`Symbol` (`:x`, `:y`, `:z`). The `Val` form is the one
+[`jumpₓ`](@ref) and its siblings forward through; the other two select between
+literal `Val`s, one arm per direction the mesh has, so the direction still reaches the
+stencil engine as a compile-time constant and a loop over `d` allocates nothing beyond
+its results. An `Int` outside `1:dim(mesh)`, or a `Symbol` that is not `:x`/`:y`/`:z`,
+throws an `ArgumentError`.
+
+Alias for `jump(arg, Val(d))`. `arg` is a mesh, a grid space or a
+[`VectorElement`](@ref): the first two give the operator as a sparse matrix, the third
+applies it and returns a `VectorElement`.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+---
+    jump(op::LazyOp{D}, ::Val{Dim})
+
+The symbolic jump across the interfaces of `op` along direction `Dim`, as a `JumpNode` node.
+
+The entry point [`jumpₓ`](@ref) and its siblings forward through, and the same
+function the space layer applies to a grid function: `jump(uₕ, Val(1))` computes
+values, `jump(U, Val(1))` builds the node that will compute them during assembly.
+
+Takes a `Val` and not an `Int`, unlike its space-layer namesake: `Dim` is a type
+parameter of the node, so a runtime direction would make the return type a `Union`.
+
+### end jump
+### D̽
+    D̽(arg, d)
+
+The forward difference of `uₕ` along the `d` direction over the averaged spacing, ``\frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}``.
+
+`d` names the direction three ways: a `Val` (`Val(1)`), an `Int` (`1`, `2`, `3`) or a
+`Symbol` (`:x`, `:y`, `:z`). The `Val` form is the one
+[`D̽ₓ`](@ref) and its siblings forward through; the other two select between
+literal `Val`s, one arm per direction the mesh has, so the direction still reaches the
+stencil engine as a compile-time constant and a loop over `d` allocates nothing beyond
+its results. An `Int` outside `1:dim(mesh)`, or a `Symbol` that is not `:x`/`:y`/`:z`,
+throws an `ArgumentError`.
+
+Alias for `forward_star_difference(arg, Val(d))`. `arg` is a mesh, a grid space or a
+[`VectorElement`](@ref): the first two give the operator as a sparse matrix, the third
+applies it and returns a `VectorElement`.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+---
+    D̽(op::LazyOp{D}, ::Val{Dim})
+
+The symbolic starred forward difference of `op` along direction `Dim`, as a `StarDifference` node.
+
+The entry point [`D̽ₓ`](@ref) and its siblings forward through, and the same
+function the space layer applies to a grid function: `D̽(uₕ, Val(1))` computes
+values, `D̽(U, Val(1))` builds the node that will compute them during assembly.
+
+Takes a `Val` and not an `Int`, unlike its space-layer namesake: `Dim` is a type
+parameter of the node, so a runtime direction would make the return type a `Union`.
+
+### end D̽
+### Dc
+    Dc(arg, d)
+
+The centered difference of `uₕ` along the `d` direction, ``\frac{u_{i+1} - u_{i-1}}{h_i + h_{i+1}}``.
+
+`d` names the direction three ways: a `Val` (`Val(1)`), an `Int` (`1`, `2`, `3`) or a
+`Symbol` (`:x`, `:y`, `:z`). The `Val` form is the one
+[`Dcₓ`](@ref) and its siblings forward through; the other two select between
+literal `Val`s, one arm per direction the mesh has, so the direction still reaches the
+stencil engine as a compile-time constant and a loop over `d` allocates nothing beyond
+its results. An `Int` outside `1:dim(mesh)`, or a `Symbol` that is not `:x`/`:y`/`:z`,
+throws an `ArgumentError`.
+
+Alias for `centered_difference(arg, Val(d))`. `arg` is a mesh, a grid space or a
+[`VectorElement`](@ref): the first two give the operator as a sparse matrix, the third
+applies it and returns a `VectorElement`.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+---
+    Dc(op::LazyOp{D}, ::Val{Dim})
+
+The symbolic centered difference of `op` along direction `Dim`, as a `CenteredDifference` node.
+
+The entry point [`Dcₓ`](@ref) and its siblings forward through, and the same
+function the space layer applies to a grid function: `Dc(uₕ, Val(1))` computes
+values, `Dc(U, Val(1))` builds the node that will compute them during assembly.
+
+Takes a `Val` and not an `Int`, unlike its space-layer namesake: `Dim` is a type
+parameter of the node, so a runtime direction would make the return type a `Union`.
+
+### end Dc
+### backward_difference!
+<no docstring>
+### end backward_difference!
+### forward_difference!
+<no docstring>
+### end forward_difference!
+### backward_finite_difference!
+<no docstring>
+### end backward_finite_difference!
+### forward_finite_difference!
+<no docstring>
+### end forward_finite_difference!
+### forward_star_difference!
+    forward_star_difference(uₕ::VectorElement, dim_val::Val)
+
+The forward difference of `uₕ` along `dim_val`, divided by the averaged spacing:
+
+```math
+\overset{\times}{\textrm{D}}_{+}(\textrm{u}_h)(i) =
+    \frac{\textrm{u}_h(x_{i+1}) - \textrm{u}_h(x_i)}{(h_i + h_{i+1})/2}
+```
+
+Reached through [`D̽ₓ`](@ref) and its siblings, and takes a mesh, a grid space or a
+grid function as the other difference families do.
+
+The last point has no forward neighbour, so it is truncated to zero, as in
+[`D₊ₓ`](@ref).
+
+See also: [`star_spacings`](@ref), [`D₊ₓ`](@ref).
+
+### end forward_star_difference!
+### centered_difference!
+    centered_difference(uₕ::VectorElement, dim_val::Val)
+
+The centered difference of `uₕ` along `dim_val`:
+
+```math
+\textrm{Dc}(\textrm{u}_h)(i) =
+    \frac{\textrm{u}_h(x_{i+1}) - \textrm{u}_h(x_{i-1})}{h_i + h_{i+1}}
+```
+
+Reached through [`Dcₓ`](@ref) and its siblings, and takes a mesh, a grid space or a grid
+function as the other difference families do.
+
+The denominator is ``x_{i+1} - x_{i-1}``, so the operator reproduces the derivative of an
+affine function exactly on any grid, uniform or not. Both the first and the last point
+lack a neighbour on one side, so both are truncated to zero.
+
+See also: [`star_spacings`](@ref), [`D₋ₓ`](@ref), [`D₊ₓ`](@ref).
+
+### end centered_difference!
+### cross_weighted_difference!
+    cross_weighted_difference(uₕ::VectorElement, dim_val::Val)
+
+The cross-weighted centered difference of `uₕ` along `dim_val`:
+
+```math
+\textrm{D}_{h}(\textrm{u}_h)(i) =
+    \frac{h_i}{h_i + h_{i+1}}\, \textrm{D}_{-}\textrm{u}_h(x_{i+1}) +
+    \frac{h_{i+1}}{h_i + h_{i+1}}\, \textrm{D}_{-}\textrm{u}_h(x_i)
+```
+
+Reached through [`Dₕₓ`](@ref) and its siblings, and takes a mesh, a grid space or a grid
+function as the other difference families do.
+
+It is the same two one-sided differences [`Dcₓ`](@ref) combines, weighted by the opposite
+spacings. That is the combination which cancels the leading truncation term on a
+non-uniform grid, so this is second order where `Dcₓ` is first, and the two coincide when
+the spacing is constant.
+
+The first and the last point each lack a neighbour on one side, but unlike `Dcₓ` neither
+is truncated: each collapses to the one-sided difference its near side still defines,
+[`D₊ₓ`](@ref)`(uₕ)` at the first point and [`D₋ₓ`](@ref)`(uₕ)` at the last.
+
+See also: [`Dcₓ`](@ref), [`D₋ₓ`](@ref), [`D₊ₓ`](@ref).
+
+### end cross_weighted_difference!
+### forward_average!
+<no docstring>
+### end forward_average!
+### backward_average!
+<no docstring>
+### end backward_average!
+### jump!
+    jump!(vₕ, uₕ, dim_val::Val)
+
+The jump across the interfaces along `dim_val`, written into `vₕ`, which is returned.
+
+Forwards to `forward_difference!`, as the allocating form forwards to
+`forward_difference`: a jump across an interface and an unscaled forward difference
+are the same quantity.
+
+### end jump!

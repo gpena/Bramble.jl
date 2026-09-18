@@ -19,6 +19,10 @@ using QuadGK: gauss
 # Utilities
 export backend, metal_backend, vector_type, matrix_type, backend_types
 export ExecutionPolicy, Serial, Parallel, execution_policy
+# The CPU/GPU split of the policy hierarchy (gpena/Bramble.jl#191). `Serial` and `Parallel`
+# stay exported above: they are aliases of the first two of these, and every call site,
+# test and benchmark key in this repository spells them that way.
+export CpuPolicy, CpuSerial, CpuThreaded, GpuPolicy, GpuAsync
 
 # `vector`/`matrix` build a raw backend array (point 70): real API, but two of the most
 # generic nouns in the language, and a beginner's own top-level `vector = [...]` after
@@ -27,6 +31,10 @@ public vector, matrix
 # Backend-extension plumbing (point 70): identity/zero matrices tied to a `Backend`, real,
 # tested, reached while implementing a new backend rather than while using one.
 public backend_eye, backend_zeros
+# The contract a custom backend array type implements (gpena/Bramble.jl#100): declared by
+# whoever adds an array type, never called by a user of one, so `public` rather than
+# exported, alongside the allocators that read it.
+public supports_undef_construction
 # Read by every package extension's own `@compile_workload` gate (gpena/Bramble.jl#196), so
 # a user's `set_preferences!(Bramble, "precompile_workload" => false)` disables the
 # extensions' workloads along with the core one, not just the core one.
@@ -81,36 +89,60 @@ export innerₕ, dirac
 export inner₊, inner₊ₓ, inner₊ᵧ, inner₊₂
 export snorm₁ₕ, norm₁ₕ, norm₊, normₕ
 
-# The unscaled differences are `public` rather than exported: unlike every other operator
-# family they have no form-layer node, so they cannot appear inside a bilinear form, and
-# `diff₊` is the same arithmetic as `jump`, which carries the intent a caller reaching for
-# it usually means. Reached as `Bramble.diff₋ₓ` by anyone who wants the raw difference.
-public diff₋ₓ, diff₋ᵧ, diff₋₂, diff₋ₕ
-public diff₊ₓ, diff₊ᵧ, diff₊₂, diff₊ₕ
-public diff₋ₓ!, diff₋ᵧ!, diff₋₂!
-public diff₊ₓ!, diff₊ᵧ!, diff₊₂!
+# Three families are internal in v3.0 (gpena/Bramble.jl#211): the unscaled differences
+# `diff₋*`/`diff₊*`, the forward differences `D₊*`/`∇₊ₕ`, and the forward averages `M₊*`.
+# They keep their definitions, their docstrings and their entries in the API reference, and
+# are reached as `Bramble.D₊ₓ`; what they lose is a place on the surface `using Bramble`
+# brings in.
+#
+# The reasons differ by family. The unscaled differences have no form-layer node, so they
+# cannot appear inside a bilinear form, and `diff₊` is the same arithmetic as `jump`, which
+# carries the intent a caller reaching for it usually means. The forward difference and the
+# forward average are the duals the backward ones are built and checked against: Bramble
+# discretises with the backward operator paired with `inner₊`, and a user writing a form
+# reaches for `D₋ₓ` and `Mₓ`. Keeping their forward partners exported offered a choice that
+# the discretisation does not actually leave open.
 
-export D₋ₓ, D₋ᵧ, D₋₂, ∇₋ₕ
-export D₊ₓ, D₊ᵧ, D₊₂, ∇₊ₕ
+# The dimensional entry points (gpena/Bramble.jl#74) travel with their family: `D₋` is
+# exported because `D₋ₓ` is, `D₊` is `public` because `D₊ₓ` is, and `diff₋`/`diff₊` are
+# neither because their subscripts are neither. Two families have no entry point of their
+# own: the averages put theirs on `Mₕ`/`M₊ₕ`, already listed below, rather than mint a bare
+# `M` that `using Bramble` would take away from a caller's mass matrix.
+#
+# This is also where gpena/Bramble.jl#74 and gpena/Bramble.jl#211 have to be reconciled. #74
+# was written before #211 and says the subscript names are retained "permanently"; #211 then
+# took 28 of them off this surface. #211 wins: every forwarder below is still *defined*, and
+# `D₋(uₕ, 2)` reaches the same method `D₋ᵧ(uₕ)` does, but only the survivors are exported or
+# `public`.
+export D₋ₓ, D₋ᵧ, D₋₂, ∇ₕ, D₋
 export D₋ₓ!, D₋ᵧ!, D₋₂!
-export D₊ₓ!, D₊ᵧ!, D₊₂!
 
-export Dstar₊ₓ, Dstar₊ᵧ, Dstar₊₂, Dstar₊ₕ
-export Dstar₊ₓ!, Dstar₊ᵧ!, Dstar₊₂!
+# `public` rather than nothing at all, unlike the unscaled differences above: the forward
+# difference and the forward average are what the backward ones are checked against, so
+# `Bramble.D₊ₓ` is a supported thing to reach for -- the summation-by-parts tests and
+# `ext/BrambleILUZeroExt.jl`'s workload both do. Declaring them keeps that access honest
+# under `ExplicitImports.check_all_qualified_accesses_are_public`, and keeps them in
+# `names(Bramble)`, which is what requires them to stay documented.
+public D₊ₓ, D₊ᵧ, D₊₂, ∇₊ₕ, D₊
+public D₊ₓ!, D₊ᵧ!, D₊₂!
 
-export Dcₓ, Dcᵧ, Dc₂, Dcₕ
+export D̽ₓ, D̽ᵧ, D̽₂, D̽ₕ, D̽
+export D̽ₓ!, D̽ᵧ!, D̽₂!
+
+export Dcₓ, Dcᵧ, Dc₂, Dcₕ, Dc
 export Dcₓ!, Dcᵧ!, Dc₂!
 
-export Dₕₓ, Dₕᵧ, Dₕ₂, ∇ₕ
+export Dₕₓ, Dₕᵧ, Dₕ₂, Dₕ
 export Dₕₓ!, Dₕᵧ!, Dₕ₂!
 
-export jumpₓ, jumpᵧ, jump₂, jumpₕ
+export jumpₓ, jumpᵧ, jump₂, jumpₕ, jump
 export jumpₓ!, jumpᵧ!, jump₂!
 
-export M₋ₓ, M₋ᵧ, M₋₂, M₋ₕ
-export M₊ₓ, M₊ᵧ, M₊₂, M₊ₕ
-export M₋ₓ!, M₋ᵧ!, M₋₂!
-export M₊ₓ!, M₊ᵧ!, M₊₂!
+export Mₓ, Mᵧ, M₂, Mₕ
+export Mₓ!, Mᵧ!, M₂!
+
+public M₊ₓ, M₊ᵧ, M₊₂, M₊ₕ
+public M₊ₓ!, M₊ᵧ!, M₊₂!
 
 export dirichlet_constraints, dirichlet_bc!, symmetrize!
 export reaction, reaction_density
@@ -186,6 +218,7 @@ include("space/inner_product.jl")
 
 include("form/ast.jl")
 include("form/common.jl")
+include("form/operators/node_family.jl")
 include("form/operators/difference.jl")
 include("form/operators/jump.jl")
 include("form/operators/average.jl")

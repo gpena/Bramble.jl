@@ -58,7 +58,7 @@ function wave_system(n)
     I = interval(0.0, 1.0)                       # the time domain
 
     fₕ = element(Wₕ, 0.0)                        # no forcing
-    K = form(Wₕ, Wₕ, (u, v) -> c^2 * inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+    K = form(Wₕ, Wₕ, (u, v) -> c^2 * inner₊(∇ₕ(u), ∇ₕ(v)))
     l = form(Wₕ, v -> innerₕ(fₕ, v))
     bcs = dirichlet_constraints(Ωₕ, I, :boundary => (x, t) -> 0.0)
 

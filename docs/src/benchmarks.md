@@ -114,7 +114,7 @@ The finite-difference stencil engine on a 1000×1000 grid: the difference operat
   hovertemplate: '%{x} (Julia %{customdata[0]}, %{customdata[4]} thread(s))<br>D₋ₓ: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
 },
 {
-  name: "M₋ₓ",
+  name: "Mₓ",
   x: ["v2.0.0","v2.1.0","v2.2.0","v2.3.0","v2.4.0","v2.5.0","v2.6.0","v2.7.0","v2.8.0","v2.9.0","v2.10.0","v2.11.0","v2.13.0","v2.16.0","v2.17.0"],
   y: [171.959,161.458,180.583,179.917,167.5,171.791,171.458,173.584,171.5,160.4375,171.583,172.25,173.584,171.291,169.125],
   customdata: [["1.12.7","172.0 μs",3,"7.64 MiB","1"],["1.12.7","161.5 μs",3,"7.64 MiB","1"],["1.12.7","180.6 μs",3,"7.64 MiB","1"],["1.12.7","179.9 μs",3,"7.64 MiB","1"],["1.12.7","167.5 μs",3,"7.64 MiB","1"],["1.12.7","171.8 μs",3,"7.64 MiB","1"],["1.12.7","171.5 μs",3,"7.64 MiB","1"],["1.12.7","173.6 μs",3,"7.64 MiB","1"],["1.12.7","171.5 μs",3,"7.64 MiB","1"],["1.13.0","160.4 μs",3,"7.64 MiB","4"],["1.13.0","171.6 μs",3,"7.64 MiB","4"],["1.13.0","172.2 μs",3,"7.64 MiB","4"],["1.13.0","173.6 μs",3,"7.64 MiB","4"],["1.13.0","171.3 μs",3,"7.64 MiB","4"],["1.13.0","169.1 μs",3,"7.64 MiB","4"]],
@@ -122,7 +122,7 @@ The finite-difference stencil engine on a 1000×1000 grid: the difference operat
   type: 'scatter',
   line: { color: "#8b5cf6", width: 2, shape: 'spline', smoothing: 0.3 },
   marker: { color: "#8b5cf6", size: 7 },
-  hovertemplate: '%{x} (Julia %{customdata[0]}, %{customdata[4]} thread(s))<br>M₋ₓ: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
+  hovertemplate: '%{x} (Julia %{customdata[0]}, %{customdata[4]} thread(s))<br>Mₓ: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
 }];
   const layout = {
     paper_bgcolor: theme.bg,
@@ -163,7 +163,7 @@ The finite-difference stencil engine on a 1000×1000 grid: the difference operat
 
 ### Operators 3D
 
-The same stencil engine in 3D (`D₋₂`), together with the inner product `innerₕ` and the full gradient `∇₋ₕ`.
+The same stencil engine in 3D (`D₋₂`), together with the inner product `innerₕ` and the full gradient `∇ₕ`.
 
 ```@raw html
 <div style="width:100%; margin:1.2rem 0 2.5rem 0;">
@@ -194,7 +194,7 @@ The same stencil engine in 3D (`D₋₂`), together with the inner product `inne
   hovertemplate: '%{x} (Julia %{customdata[0]}, %{customdata[4]} thread(s))<br>innerₕ: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
 },
 {
-  name: "∇₋ₕ",
+  name: "∇ₕ",
   x: ["v2.0.0","v2.1.0","v2.2.0","v2.3.0","v2.4.0","v2.5.0","v2.6.0","v2.7.0","v2.8.0","v2.9.0","v2.10.0","v2.11.0","v2.13.0","v2.16.0","v2.17.0"],
   y: [690.75,696.667,685.875,700.646,694.291,690.75,699.833,691.375,685.5,779.7295,680.125,694.75,694.542,684.292,692.417],
   customdata: [["1.12.7","690.8 μs",15,"22.92 MiB","1"],["1.12.7","696.7 μs",15,"22.92 MiB","1"],["1.12.7","685.9 μs",15,"22.92 MiB","1"],["1.12.7","700.6 μs",15,"22.92 MiB","1"],["1.12.7","694.3 μs",15,"22.92 MiB","1"],["1.12.7","690.8 μs",15,"22.92 MiB","1"],["1.12.7","699.8 μs",15,"22.92 MiB","1"],["1.12.7","691.4 μs",15,"22.92 MiB","1"],["1.12.7","685.5 μs",15,"22.92 MiB","1"],["1.13.0","779.7 μs",15,"22.92 MiB","4"],["1.13.0","680.1 μs",9,"22.92 MiB","4"],["1.13.0","694.8 μs",9,"22.92 MiB","4"],["1.13.0","694.5 μs",9,"22.92 MiB","4"],["1.13.0","684.3 μs",9,"22.92 MiB","4"],["1.13.0","692.4 μs",9,"22.92 MiB","4"]],
@@ -202,7 +202,7 @@ The same stencil engine in 3D (`D₋₂`), together with the inner product `inne
   type: 'scatter',
   line: { color: "#f59e0b", width: 2, shape: 'spline', smoothing: 0.3 },
   marker: { color: "#f59e0b", size: 7 },
-  hovertemplate: '%{x} (Julia %{customdata[0]}, %{customdata[4]} thread(s))<br>∇₋ₕ: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
+  hovertemplate: '%{x} (Julia %{customdata[0]}, %{customdata[4]} thread(s))<br>∇ₕ: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
 }];
   const layout = {
     paper_bgcolor: theme.bg,
@@ -761,7 +761,7 @@ A composite (multi-component) operator, which dispatches per component and calls
   hovertemplate: '%{x} (Julia %{customdata[0]}, %{customdata[4]} thread(s))<br>D₋ₓ (3 components): %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
 },
 {
-  name: "∇₋ₕ (3 components)",
+  name: "∇ₕ (3 components)",
   x: ["v2.0.0","v2.1.0","v2.2.0","v2.3.0","v2.4.0","v2.5.0","v2.6.0","v2.7.0","v2.8.0","v2.9.0","v2.10.0","v2.11.0","v2.13.0","v2.16.0","v2.17.0"],
   y: [1.380625,1.407666,1.395312,1.4914585,1.42925,1.425667,1.457334,1.510709,1.435042,1.712125,1.5270625,1.532709,1.469875,1.474709,1.651],
   customdata: [["1.12.7","1.38 ms",10,"45.78 MiB","1"],["1.12.7","1.41 ms",10,"45.78 MiB","1"],["1.12.7","1.4 ms",10,"45.78 MiB","1"],["1.12.7","1.49 ms",10,"45.78 MiB","1"],["1.12.7","1.43 ms",10,"45.78 MiB","1"],["1.12.7","1.43 ms",12,"45.78 MiB","1"],["1.12.7","1.46 ms",12,"45.78 MiB","1"],["1.12.7","1.51 ms",12,"45.78 MiB","1"],["1.12.7","1.44 ms",12,"45.78 MiB","1"],["1.13.0","1.71 ms",12,"45.78 MiB","4"],["1.13.0","1.53 ms",6,"45.78 MiB","4"],["1.13.0","1.53 ms",6,"45.78 MiB","4"],["1.13.0","1.47 ms",6,"45.78 MiB","4"],["1.13.0","1.47 ms",6,"45.78 MiB","4"],["1.13.0","1.65 ms",6,"45.78 MiB","4"]],
@@ -769,7 +769,7 @@ A composite (multi-component) operator, which dispatches per component and calls
   type: 'scatter',
   line: { color: "#10b981", width: 2, shape: 'spline', smoothing: 0.3 },
   marker: { color: "#10b981", size: 7 },
-  hovertemplate: '%{x} (Julia %{customdata[0]}, %{customdata[4]} thread(s))<br>∇₋ₕ (3 components): %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
+  hovertemplate: '%{x} (Julia %{customdata[0]}, %{customdata[4]} thread(s))<br>∇ₕ (3 components): %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
 }];
   const layout = {
     paper_bgcolor: theme.bg,

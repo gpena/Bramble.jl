@@ -122,7 +122,7 @@ _run_xlabel(r) = "v$(r.version)"
 # instead of silently rendering with no introduction at all.
 const _BENCH_GROUP_BLURBS = Dict(
     "operators 2D" => "The finite-difference stencil engine on a 1000×1000 grid: the difference operator along the grid's contiguous storage direction (`D₋ₓ`) versus across it (`D₋ᵧ`), which access memory very differently and so can perform very differently.",
-    "operators 3D" => "The same stencil engine in 3D (`D₋₂`), together with the inner product `innerₕ` and the full gradient `∇₋ₕ`.",
+    "operators 3D" => "The same stencil engine in 3D (`D₋₂`), together with the inner product `innerₕ` and the full gradient `∇ₕ`.",
     "jumps & averages" => "Jump and average operators across cell interfaces, in 2D and 3D.",
     "inner products 2D" => "The reduction path — inner products and norms — including the seminorm's sum over directions.",
     "restriction" => "Point interpolation (`Rₕ!`) and cell-averaging (`avgₕ!`), compared across the `Serial()` (the allocation-free default) and `Parallel()` backends, split by dimension.",

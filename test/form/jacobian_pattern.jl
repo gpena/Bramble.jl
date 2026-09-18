@@ -47,9 +47,9 @@ function _nonlinear_poisson_setup(D::Int, Ωd, Ωₕ)
     F = assemble(l; dirichlet = bcs)
 
     function diffusion_form(uₕ)
-        αv = D == 1 ? α.(M₋ₕ(uₕ)) : ntuple(i -> α.(M₋ₕ(uₕ)[i]), D)
-        grad(U) = D == 1 ? αv * ∇₋ₕ(U) : ntuple(i -> αv[i] * ∇₋ₕ(U)[i], D)
-        return form(Wₕ, Wₕ, (U, V) -> inner₊(grad(U), ∇₋ₕ(V)))
+        αv = D == 1 ? α.(Mₕ(uₕ)) : ntuple(i -> α.(Mₕ(uₕ)[i]), D)
+        grad(U) = D == 1 ? αv * ∇ₕ(U) : ntuple(i -> αv[i] * ∇ₕ(U)[i], D)
+        return form(Wₕ, Wₕ, (U, V) -> inner₊(grad(U), ∇ₕ(V)))
     end
 
     function residual(u_vec::AbstractVector{T}) where {T}
@@ -90,10 +90,10 @@ function _coupled_reaction_diffusion(n)
         return form(
             Vₕ,
             Vₕ,
-            (p, q) -> inner₊(∇₋ₕ(p(1)), ∇₋ₕ(q(1))) +
+            (p, q) -> inner₊(∇ₕ(p(1)), ∇ₕ(q(1))) +
                       innerₕ(p(1), q(1)) +
                       innerₕ(v_c * p(1), q(1)) +
-                      inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2))) +
+                      inner₊(∇ₕ(p(2)), ∇ₕ(q(2))) +
                       innerₕ(p(2), q(2)) - innerₕ(u_c * p(2), q(2))
         )
     end
@@ -115,7 +115,7 @@ end
 
         u0 = element(Wₕ, 0.0)
         a = diffusion_form(u0)
-        mine = jacobian_pattern(a, U -> M₋ₕ(U))
+        mine = jacobian_pattern(a, U -> Mₕ(U))
 
         u_probe = rand(ndofs(Wₕ))
         prep = prepare_jacobian(residual, _traced_ad, u_probe)
@@ -140,7 +140,7 @@ end
 
         u0 = element(Wₕ, 0.0)
         a = diffusion_form(u0)
-        pattern = jacobian_pattern(a, U -> M₋ₕ(U))
+        pattern = jacobian_pattern(a, U -> Mₕ(U))
         sparse_ad = AutoSparse(
             AutoForwardDiff();
             sparsity_detector = KnownJacobianSparsityDetector(pattern),
@@ -175,7 +175,7 @@ end
 
         u02 = element(Wₕ2, 0.0)
         a2 = diffusion_form2(u02)
-        pattern2 = jacobian_pattern(a2, U -> M₋ₕ(U))
+        pattern2 = jacobian_pattern(a2, U -> Mₕ(U))
         sparse_ad2 = AutoSparse(
             AutoForwardDiff();
             sparsity_detector = KnownJacobianSparsityDetector(pattern2),
@@ -205,14 +205,14 @@ end
     @testset "No coefficient dependencies degenerates to A's own pattern" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 10, false)
         Wₕ = gridspace(Ωₕ)
-        a = form(Wₕ, Wₕ, (U, V) -> inner₊(∇₋ₕ(U), ∇₋ₕ(V)))
+        a = form(Wₕ, Wₕ, (U, V) -> inner₊(∇ₕ(U), ∇ₕ(V)))
 
         A = assemble(a)
         @test jacobian_pattern(a) == (A .!= 0)
     end
 
     @testset "Multiple independent nonlinear coefficients" begin
-        # -(α(M₋ₕ(u))u')' + β(D₋ₓ(u))u = g: two terms, each nonlinear through a
+        # -(α(Mₕ(u))u')' + β(D₋ₓ(u))u = g: two terms, each nonlinear through a
         # *different* stencil op. Passing both dependencies together must still be a
         # safe superset of the true pattern -- neither term's reach may be dropped just
         # because the other one was declared too.
@@ -232,9 +232,9 @@ end
         F = assemble(l; dirichlet = bcs)
 
         function build_form(uₕ)
-            αv = α.(M₋ₕ(uₕ))
+            αv = α.(Mₕ(uₕ))
             βv = β.(D₋ₓ(uₕ))
-            return form(Wₕ, Wₕ, (U, V) -> inner₊(αv * ∇₋ₕ(U), ∇₋ₕ(V)) + innerₕ(βv * U, V))
+            return form(Wₕ, Wₕ, (U, V) -> inner₊(αv * ∇ₕ(U), ∇ₕ(V)) + innerₕ(βv * U, V))
         end
         function residual(u_vec::AbstractVector{T}) where {T}
             uₕ = element(Wₕ, T)
@@ -244,7 +244,7 @@ end
         end
 
         a = build_form(element(Wₕ, 0.0))
-        mine = jacobian_pattern(a, U -> M₋ₕ(U), U -> D₋ₓ(U))
+        mine = jacobian_pattern(a, U -> Mₕ(U), U -> D₋ₓ(U))
 
         u_probe = rand(ndofs(Wₕ))
         prep = prepare_jacobian(residual, _traced_ad, u_probe)
@@ -259,7 +259,7 @@ end
         # `jacobian_pattern` on a composite space (gpena/Bramble.jl#95): a dependency may
         # name a *different* leaf the same way a form term does (`U -> U(2)`), for
         # "this coefficient is another component's own value" (coupled_reaction_diffusion.jl's
-        # `v_c`); `U -> M₋ₕ(U)` (no `(k)`) keeps meaning "this block's own trial leaf",
+        # `v_c`); `U -> Mₕ(U)` (no `(k)`) keeps meaning "this block's own trial leaf",
         # exactly like the non-composite case above.
 
         @testset "coupled reaction-diffusion's own coupling (identity cross-block)" begin
@@ -297,11 +297,11 @@ end
                 return form(
                     Vₕ,
                     Vₕ,
-                    (p, q) -> inner₊(∇₋ₕ(p(1)), ∇₋ₕ(q(1))) +
+                    (p, q) -> inner₊(∇ₕ(p(1)), ∇ₕ(q(1))) +
                               innerₕ((1.0 .+ c2 .^ 2) * p(1), q(1)) +
-                              inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2))) +
+                              inner₊(∇ₕ(p(2)), ∇ₕ(q(2))) +
                               innerₕ((1.0 .+ c3 .^ 2) * p(2), q(2)) +
-                              inner₊(∇₋ₕ(p(3)), ∇₋ₕ(q(3))) +
+                              inner₊(∇ₕ(p(3)), ∇ₕ(q(3))) +
                               innerₕ((1.0 .+ c1 .^ 2) * p(3), q(3))
                 )
             end
@@ -325,7 +325,7 @@ end
         end
 
         @testset "mixed same-block (stencil op) and cross-block (identity) dependencies" begin
-            # block(1,1)'s coefficient depends on BOTH M₋ₕ of its own leaf (same-block,
+            # block(1,1)'s coefficient depends on BOTH Mₕ of its own leaf (same-block,
             # the non-composite mechanism) AND directly on component 2 (cross-block) --
             # neither must shadow the other.
             Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
@@ -343,15 +343,15 @@ end
 
             function mixed_form(wₕ)
                 c1, c2 = components(wₕ)
-                Mc1 = M₋ₕ(c1)
+                Mc1 = Mₕ(c1)
                 αv = ntuple(i -> α.(Mc1[i]), 2)
-                grad1(p) = ntuple(i -> αv[i] * ∇₋ₕ(p(1))[i], 2)
+                grad1(p) = ntuple(i -> αv[i] * ∇ₕ(p(1))[i], 2)
                 return form(
                     Vₕ,
                     Vₕ,
-                    (p, q) -> inner₊(grad1(p), ∇₋ₕ(q(1))) +
+                    (p, q) -> inner₊(grad1(p), ∇ₕ(q(1))) +
                               innerₕ((1.0 .+ c2 .^ 2) * p(1), q(1)) +
-                              inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2))) +
+                              inner₊(∇ₕ(p(2)), ∇ₕ(q(2))) +
                               innerₕ(p(2), q(2))
                 )
             end
@@ -363,7 +363,7 @@ end
             end
 
             a = mixed_form(element(Vₕ, 0.0))
-            mine = jacobian_pattern(a, U -> M₋ₕ(U(1)), U -> U(2))
+            mine = jacobian_pattern(a, U -> Mₕ(U(1)), U -> U(2))
 
             u_probe = rand(ndofs(Vₕ))
             prep = prepare_jacobian(residual, _traced_ad, u_probe)
@@ -375,7 +375,7 @@ end
         end
 
         @testset "cross-block dependency through a stencil op, not just identity" begin
-            # block(1,1)'s coefficient depends on M₋ₕ(component 2) -- averaged through
+            # block(1,1)'s coefficient depends on Mₕ(component 2) -- averaged through
             # another leaf, not read directly the way coupled_reaction_diffusion.jl's own
             # v_c is.
             Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
@@ -393,14 +393,14 @@ end
 
             function averaged_cross_form(wₕ)
                 c1, c2 = components(wₕ)
-                Mc2 = M₋ₕ(c2)
+                Mc2 = Mₕ(c2)
                 βv = ntuple(i -> β.(Mc2[i]), 2)
-                grad1(p) = ntuple(i -> βv[i] * ∇₋ₕ(p(1))[i], 2)
+                grad1(p) = ntuple(i -> βv[i] * ∇ₕ(p(1))[i], 2)
                 return form(
                     Vₕ,
                     Vₕ,
-                    (p, q) -> inner₊(grad1(p), ∇₋ₕ(q(1))) +
-                              inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2))) +
+                    (p, q) -> inner₊(grad1(p), ∇ₕ(q(1))) +
+                              inner₊(∇ₕ(p(2)), ∇ₕ(q(2))) +
                               innerₕ(p(2), q(2))
                 )
             end
@@ -412,7 +412,7 @@ end
             end
 
             a = averaged_cross_form(element(Vₕ, 0.0))
-            mine = jacobian_pattern(a, U -> M₋ₕ(U(2)))
+            mine = jacobian_pattern(a, U -> Mₕ(U(2)))
 
             u_probe = rand(ndofs(Vₕ))
             prep = prepare_jacobian(residual, _traced_ad, u_probe)
@@ -437,7 +437,7 @@ end
             a = form(
                 Vₕ,
                 Vₕ,
-                (p, q) -> inner₊(∇₋ₕ(p(1)), ∇₋ₕ(q(1))) + inner₊(∇₋ₕ(p(2)), ∇₋ₕ(q(2)))
+                (p, q) -> inner₊(∇ₕ(p(1)), ∇ₕ(q(1))) + inner₊(∇ₕ(p(2)), ∇ₕ(q(2)))
             )
             A = assemble(a)
             stored = fill(false, size(A))

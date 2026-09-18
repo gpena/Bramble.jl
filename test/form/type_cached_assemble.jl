@@ -41,22 +41,22 @@ const _traced_ad = AutoSparse(
     # The direct (uncached) equivalent, one fresh matrix per call -- the ground truth
     # `type_cached_assemble!` must reproduce exactly, values and all.
     function diffusion_matrix_direct(uₕ)
-        αvals = α.(M₋ₕ(uₕ))
-        a = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals * ∇₋ₕ(U), ∇₋ₕ(V)))
+        αvals = α.(Mₕ(uₕ))
+        a = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals * ∇ₕ(U), ∇ₕ(V)))
         return assemble(a; dirichlet = :boundary)
     end
 
     # `build` is a named, top-level function (not a `do ... end` literal written inside a
     # repeatedly-called function) precisely so passing it doesn't allocate a fresh closure
-    # every call -- the point the docstring itself warns about. `refill!` uses `M₋ₓ!`
-    # (in place) rather than `M₋ₓ`/`M₋ₕ`, which would allocate a fresh result every call --
+    # every call -- the point the docstring itself warns about. `refill!` uses `Mₓ!`
+    # (in place) rather than `Mₓ`/`Mₕ`, which would allocate a fresh result every call --
     # exactly the cost the "allocates nothing" test below checks was not reintroduced.
     function _build_diffusion(uₕ)
         Mu = element(Wₕ, eltype(uₕ))
         αvals = element(Wₕ, eltype(uₕ))
-        a = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals * ∇₋ₕ(U), ∇₋ₕ(V)))
+        a = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals * ∇ₕ(U), ∇ₕ(V)))
         refill!(uₕ) = begin
-            M₋ₓ!(Mu, uₕ)
+            Mₓ!(Mu, uₕ)
             αvals .= α.(Mu)
         end
         return a, refill!
@@ -150,16 +150,16 @@ const _traced_ad = AutoSparse(
         function _build_diffusion_big(uₕ)
             Mu = element(Wₕ_big, eltype(uₕ))
             αvals = element(Wₕ_big, eltype(uₕ))
-            a = form(Wₕ_big, Wₕ_big, (U, V) -> inner₊(αvals * ∇₋ₕ(U), ∇₋ₕ(V)))
+            a = form(Wₕ_big, Wₕ_big, (U, V) -> inner₊(αvals * ∇ₕ(U), ∇ₕ(V)))
             refill!(uₕ) = begin
-                M₋ₓ!(Mu, uₕ)
+                Mₓ!(Mu, uₕ)
                 αvals .= α.(Mu)
             end
             return a, refill!
         end
         function diffusion_matrix_direct_big(uₕ)
-            αvals = α.(M₋ₕ(uₕ))
-            a = form(Wₕ_big, Wₕ_big, (U, V) -> inner₊(αvals * ∇₋ₕ(U), ∇₋ₕ(V)))
+            αvals = α.(Mₕ(uₕ))
+            a = form(Wₕ_big, Wₕ_big, (U, V) -> inner₊(αvals * ∇ₕ(U), ∇ₕ(V)))
             return assemble(a; dirichlet = :boundary)
         end
         diffusion_matrix_cached_big = let cache_big = Dict()
@@ -198,8 +198,8 @@ const _traced_ad = AutoSparse(
         function residual_direct(u_vec::AbstractVector{T}) where {T}
             uₕ = element(Wₕ, T)
             uₕ .= u_vec
-            αvals = α.(M₋ₕ(uₕ))
-            a = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals * ∇₋ₕ(U), ∇₋ₕ(V)))
+            αvals = α.(Mₕ(uₕ))
+            a = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals * ∇ₕ(U), ∇ₕ(V)))
             A = assemble(a; dirichlet = :boundary)
             return A * u_vec .- F_sol
         end

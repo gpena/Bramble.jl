@@ -7,7 +7,7 @@ using Random
 # Order of convergence for an operator no worked example uses: -div(κ(x)∇u) with a smooth,
 # spatially varying κ. Every page in docs/src/examples/ states a constant coefficient in its
 # own problem statement, so none of them reaches the live grid-coefficient path (the same
-# κₕ * ∇₋ₕ(u) mechanism the nonlinear Poisson page's α(u) uses) under an independently-known
+# κₕ * ∇ₕ(u) mechanism the nonlinear Poisson page's α(u) uses) under an independently-known
 # exact answer.
 #
 # test/convergence/operators.jl already pins the *operators* to the derivatives they approximate.
@@ -95,16 +95,16 @@ _asymptotically_second_order(p, lower) = lower < p < 3.0
     p1, p2, p3 = _orders(
         Wc -> begin
             # Evaluating κ at the nodes and multiplying it straight into the nodal
-            # gradient degrades to first order: `∇₋ₕ(u)` lives at the staggered
+            # gradient degrades to first order: `∇ₕ(u)` lives at the staggered
             # half-points, so a nodal κ is an O(h) mismatch in *location*, not just a
-            # discretization choice. `M₋ₕ` -- the same averaging poisson_nonlinear.jl
+            # discretization choice. `Mₕ` -- the same averaging poisson_nonlinear.jl
             # uses to move its solution-dependent α onto the staggered grid -- moves κ
             # there too, direction by direction.
             κₕ = Rₕ(Wc, κ)
             D = dim(Wc)
-            κf = M₋ₕ(κₕ)
-            gradκ(u) = D == 1 ? κf * ∇₋ₕ(u) : ntuple(i -> κf[i] * ∇₋ₕ(u)[i], D)
-            form(Wc, Wc, (u, v) -> inner₊(gradκ(u), ∇₋ₕ(v)))
+            κf = Mₕ(κₕ)
+            gradκ(u) = D == 1 ? κf * ∇ₕ(u) : ntuple(i -> κf[i] * ∇ₕ(u)[i], D)
+            form(Wc, Wc, (u, v) -> inner₊(gradκ(u), ∇ₕ(v)))
         end,
         (x, D) -> -(dκ(x) + D * κ(x)) * exp(sum(x))
     )

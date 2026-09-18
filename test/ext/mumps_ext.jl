@@ -38,7 +38,7 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
         W2 = gridspace(Ω2)
         # Shifted Helmholtz: -Δu - k²u = f (indefinite symmetric matrix)
         k2 = 50.0
-        a_helm = form(W2, W2, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)) - k2 * innerₕ(u, v))
+        a_helm = form(W2, W2, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) - k2 * innerₕ(u, v))
         f_helm = Rₕ(W2, x -> 1.0)
         l_helm = form(W2, v -> innerₕ(f_helm, v))
         A_h, F_h = assemble(a_helm, l_helm; dirichlet = ZERO_BC, symmetrize = true)

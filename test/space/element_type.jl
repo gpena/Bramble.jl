@@ -2,6 +2,8 @@ module SpaceElementTypeTests
 
 using Test
 using Bramble
+# Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
+import Bramble: diff₋ₓ, diff₊ₓ, D₊ₓ, ∇₊ₕ, M₊ₓ, M₊ᵧ
 using SparseArrays
 using Bramble: hₘᵢₙ, diff₋ₓ, diff₊ₓ, half_spacings, cell_measures
 
@@ -62,11 +64,11 @@ const F32_BACKEND = backend(;
         @test eltype(parent(avgₕ(Wₕ, x -> sin(x[1]) * x[2]))) === Float32
 
         for op in (
-            diff₋ₓ, diff₊ₓ, D₋ₓ, D₊ₓ, jumpₓ, M₋ₓ, M₊ₓ, Dstar₊ₓ, Dcₓ, Dₕₓ, D₋ᵧ, M₊ᵧ, Dcᵧ, Dₕᵧ
+            diff₋ₓ, diff₊ₓ, D₋ₓ, D₊ₓ, jumpₓ, Mₓ, M₊ₓ, D̽ₓ, Dcₓ, Dₕₓ, D₋ᵧ, M₊ᵧ, Dcᵧ, Dₕᵧ
         )
             @test eltype(parent(op(uₕ))) === Float32
         end
-        for op in (∇₋ₕ, ∇₊ₕ, Dstar₊ₕ, Dcₕ, ∇ₕ, M₋ₕ, jumpₕ)
+        for op in (∇ₕ, ∇₊ₕ, D̽ₕ, Dcₕ, Dₕ, Mₕ, jumpₕ)
             @test all(g -> eltype(parent(g)) === Float32, op(uₕ))
         end
     end
@@ -81,7 +83,7 @@ const F32_BACKEND = backend(;
             backend = F32_BACKEND
         )
 
-        for op in (D₋ₓ, D₊ₓ, diff₋ₓ, diff₊ₓ, jumpₓ, M₋ₓ, M₊ₓ, M₋ᵧ, M₊ᵧ)
+        for op in (D₋ₓ, D₊ₓ, diff₋ₓ, diff₊ₓ, jumpₓ, Mₓ, M₊ₓ, Mᵧ, M₊ᵧ)
             @test eltype(op(Ωₕ)) === Float32
         end
     end
@@ -95,7 +97,7 @@ const F32_BACKEND = backend(;
         )
         Wₕ = gridspace(Ωₕ)
         uₕ = Rₕ(Wₕ, x -> sin(x[1]) * x[2])
-        gₕ = ∇₋ₕ(uₕ)
+        gₕ = ∇ₕ(uₕ)
 
         @test innerₕ(uₕ, uₕ) isa Float32
         @test normₕ(uₕ) isa Float32

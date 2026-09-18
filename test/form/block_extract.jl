@@ -3,6 +3,8 @@ module FormBlockExtractTests
 using Test
 using InteractiveUtils: subtypes
 using Bramble
+# Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
+import Bramble: D₊ₓ, D₊ᵧ, M₊ₓ, M₊ᵧ
 using Bramble:
                IndexedTrialFunction,
                IndexedTestFunction,
@@ -28,7 +30,7 @@ using Bramble:
         # silent, and produced a wrong answer that summed to something plausible.
         u, v = IndexedTrialFunction{2}(3), IndexedTestFunction{2}(2)
 
-        for D in (D₋ₓ, D₊ₓ, D₋ᵧ, D₊ᵧ, M₋ₓ, M₊ₓ, jumpₓ, Dcₓ, Dstar₊ₓ, Dₕₓ)
+        for D in (D₋ₓ, D₊ₓ, D₋ᵧ, D₊ᵧ, Mₓ, M₊ₓ, jumpₓ, Dcₓ, D̽ₓ, Dₕₓ)
             @test trial_component_or_nothing(D(u)) == 3
             @test test_component_or_nothing(D(v)) == 2
         end
@@ -54,7 +56,7 @@ using Bramble:
         sf = Bramble.SourceFunction{2, typeof(sin)}(sin)
 
         # every member of the union, wrapped once, for the two component queries
-        for wrap in (D₋ₓ, D₊ₓ, Dcₓ, Dstar₊ₓ, Dₕₓ, jumpₓ, M₋ₓ, M₊ₓ)
+        for wrap in (D₋ₓ, D₊ₓ, Dcₓ, D̽ₓ, Dₕₓ, jumpₓ, Mₓ, M₊ₓ)
             @test test_component_or_nothing(wrap(iv)) == 2
             @test trial_component_or_nothing(wrap(iu)) == 1
             @test test_component_or_nothing(wrap(v)) === nothing
@@ -85,7 +87,7 @@ using Bramble:
         W = gridspace(
             mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 5), (true, true))
         )
-        πu = πₕ(W, u)
+        πu = πₕ(u)
         @test Bramble._all_trial_interpolated(D₋ₓ(πu))
         @test Bramble._all_trial_interpolated(2.0 * M₊ᵧ(πu))
     end
@@ -143,7 +145,7 @@ using Bramble:
         W = gridspace(
             mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 5), (true, true))
         )
-        @test Bramble._collect_region_labels(restrict_to(:top, πₕ(W, u))) == (:top,)
+        @test Bramble._collect_region_labels(restrict_to(:top, πₕ(u))) == (:top,)
     end
 
     @testset "Unindexed terms" begin
@@ -165,7 +167,7 @@ using Bramble:
 
         @test test_component_or_nothing(v(2) + D₋ₓ(v(2))) == 2
         @test test_component_or_nothing(v + D₋ₓ(v)) === nothing
-        @test trial_component_or_nothing(u(1) + M₋ₓ(u(1))) == 1
+        @test trial_component_or_nothing(u(1) + Mₓ(u(1))) == 1
 
         @test_throws ArgumentError test_component_or_nothing(v(1) + v(2))
         @test_throws ArgumentError trial_component_or_nothing(u(1) + u(3))

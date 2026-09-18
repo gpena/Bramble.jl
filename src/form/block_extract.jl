@@ -22,7 +22,7 @@ test_component_or_nothing(op::IndexedTestFunction) = op.component_idx
 test_component_or_nothing(op::UnaryWrapper) = test_component_or_nothing(op.inner_op)
 test_component_or_nothing(op::LinearProduct) = test_component_or_nothing(op.right_op)
 test_component_or_nothing(op::BilinearProduct) = test_component_or_nothing(op.right_op)
-# A sum inside one inner product, `innerₕ(uₕ, v + 2 * D₋ₓ(v) - M₋ₓ(v))`, is still one
+# A sum inside one inner product, `innerₕ(uₕ, v + 2 * D₋ₓ(v) - Mₓ(v))`, is still one
 # term of the form, and every test leaf in it names the same component or none. So the
 # component of a sum is the component its sides agree on.
 #

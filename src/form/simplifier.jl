@@ -46,9 +46,11 @@ routing at all) or a documented dead end (a hidden scalar defeating symmetry det
 What is not attempted: this stops at `BilinearProduct`/`LinearProduct`/`ShiftNode` and does
 not descend into differences, averages, jumps, restrictions or interpolation -- a scalar or
 shift buried one layer further in (`D₋ₓ(2 * u)`, say) is not reached. Nor does it fold
-`πₕ(Wsrc, u)` away when `Wsrc` happens to be the space `u` is assembled against: that
+`πₕ(u)` away when the space it interpolates from is the one `u` is assembled against: that
 equality is only known once a concrete trial space is available, which a context-free
-rewrite over the expression alone does not have.
+rewrite over the expression alone does not have. Since gpena/Bramble.jl#10 that space is
+supplied by `_bind_interp_spaces` at block time, so the fold is available to a pass that
+runs there -- not to this one.
 
 Bit-exact with the unsimplified AST: every rule is an algebraic identity over the scalars,
 grid functions and components involved, not an approximation.

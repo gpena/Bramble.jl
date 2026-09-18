@@ -713,7 +713,7 @@ function _assemble_linear!(
     space = form.test_space
     _validate_term_markers(ast, markers(mesh(space)), "the form's space")
 
-    if execution_policy(space) isa Serial
+    if execution_policy(space) isa CpuSerial
         _assemble_linear_core!(b, space, ast)
     else
         _assemble_linear_parallel_core!(b, space, ast)

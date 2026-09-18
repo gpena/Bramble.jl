@@ -219,7 +219,7 @@ combining like terms, and eliding zero-scaled ones -- before it is stored.
 
 # Examples
 ```julia
-# a(u, v) = (∇₋ₕu, ∇₋ₕv)₊
+# a(u, v) = (∇ₕu, ∇ₕv)₊
 a = form(Wₕ, Wₕ, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
 
 # a coupled system, one term per block
@@ -249,39 +249,18 @@ end
         "a bilinear term coupling two leaves over different meshes has no assembly: the " *
         "trial leaf has $(npoints(Ωu, Tuple)) points and the test leaf $(npoints(Ωv, Tuple)), " *
         "so an index on one names no point on the other. Got $(typeof(term)). Couple leaves " *
-        "that share a mesh, or wrap the trial function in an interpolation operator: `πₕ(Wtrial, u)`.",
+        "that share a mesh, or wrap the trial function in an interpolation operator: `πₕ(u)`.",
     ),
     )
 end
 
 @inline function _check_block_meshes(term, trial_leaf, test_leaf)
-    _check_interp_spaces(term, trial_leaf)
     _all_trial_interpolated(term) && return nothing
 
     Ωu = mesh(trial_leaf)
     Ωv = mesh(test_leaf)
     npoints(Ωu, Tuple) == npoints(Ωv, Tuple) || _throw_cross_mesh_block(term, Ωu, Ωv)
     return nothing
-end
-
-@inline function _check_one_interp_space(term, Wsrc, trial_leaf)
-    Ωsrc = mesh(Wsrc)
-    Ωu = mesh(trial_leaf)
-    npoints(Ωsrc, Tuple) == npoints(Ωu, Tuple) ||
-        _throw_interp_space_mismatch(term, Ωsrc, Ωu)
-    return nothing
-end
-
-@noinline function _throw_interp_space_mismatch(term, Ωsrc, Ωu)
-    throw(
-        ArgumentError(
-        "the interpolation operator in a bilinear term names a space that is not the trial " *
-        "function's: `πₕ` was given a space over a mesh of $(npoints(Ωsrc, Tuple)) points, " *
-        "while the trial leaf this term assembles into has $(npoints(Ωu, Tuple)). Got " *
-        "$(typeof(term)). `πₕ(Wsrc, u)` interpolates from the space the trial function " *
-        "lives on, so `Wsrc` must be that space.",
-    ),
-    )
 end
 
 @inline _check_block_meshes(op::OperatorAdd, trial_leaf, test_leaf) = _visit_operator_add1(_check_block_meshes, op, trial_leaf, test_leaf)
@@ -377,7 +356,7 @@ function _assemble_bilinear!(
     dirichlet_labels, _ = _normalize_dirichlet(dirichlet)
     fill!(nonzeros(A), zero(eltype(nonzeros(A))))
 
-    if execution_policy(form.trial_space) isa Serial
+    if execution_policy(form.trial_space) isa CpuSerial
         _assemble_bilinear_core_cached!(
             A, form.trial_space, form.test_space, ast, form.cache
         )

@@ -18,7 +18,7 @@ using Bramble:
                innerₕ,
                inner₊,
                inner₊ₓ,
-               ∇₋ₕ,
+               ∇ₕ,
                dirac,
                ndofs,
                locate_cell,
@@ -168,7 +168,7 @@ using Bramble:
         x0 = pts_grid[21]
         S = 2.0
 
-        a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+        a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
         l = form(Wₕ, v -> innerₕ(dirac(x0, S), v))
 
         A, F = assemble(a, l; dirichlet = :boundary => x -> 0.0)
@@ -208,7 +208,7 @@ using Bramble:
             Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (N, N), (true, true))
             Wₕ = gridspace(Ωₕ)
 
-            a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+            a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
             l = form(Wₕ, v -> innerₕ(dirac((x0, y0), S), v))
             A, F = assemble(a, l; dirichlet = :boundary => x -> 0.0)
 

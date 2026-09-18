@@ -2,6 +2,8 @@ module SpaceCompositeOperatorsTests
 
 using Test
 using Bramble
+# Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
+import Bramble: diff₋ₓ, diff₋ᵧ, diff₋₂, diff₋ₕ, diff₊ₓ, diff₊ᵧ, diff₊₂, D₊ₓ, D₊ᵧ, D₊₂, ∇₊ₕ, M₊ₓ, M₊ᵧ, M₊₂
 using Bramble: components, ndofs, _grid_dims, _op_mesh
 using Bramble: diff₋ₓ, diff₋ᵧ, diff₋₂, diff₊ₓ, diff₊ᵧ, diff₊₂, diff₋ₕ
 
@@ -25,7 +27,7 @@ using Bramble: diff₋ₓ, diff₋ᵧ, diff₋₂, diff₊ₓ, diff₊ᵧ, diff�
         ("D₋", D₋ₓ, D₋ᵧ, D₋₂),
         ("D₊", D₊ₓ, D₊ᵧ, D₊₂),
         ("jump", jumpₓ, jumpᵧ, jump₂),
-        ("M₋", M₋ₓ, M₋ᵧ, M₋₂),
+        ("M", Mₓ, Mᵧ, M₂),
         ("M₊", M₊ₓ, M₊ᵧ, M₊₂)
     )
 
@@ -103,11 +105,11 @@ using Bramble: diff₋ₓ, diff₋ᵧ, diff₋₂, diff₊ₓ, diff₊ᵧ, diff�
         scalars = (Rₕ(Wₕ, fs[1]), Rₕ(Wₕ, fs[2]))
 
         for (vec_op, scalar_ops_pair) in (
-            (∇₋ₕ, (D₋ₓ, D₋ᵧ)),
+            (∇ₕ, (D₋ₓ, D₋ᵧ)),
             (∇₊ₕ, (D₊ₓ, D₊ᵧ)),
             (diff₋ₕ, (diff₋ₓ, diff₋ᵧ)),
             (jumpₕ, (jumpₓ, jumpᵧ)),
-            (M₋ₕ, (M₋ₓ, M₋ᵧ))
+            (Mₕ, (Mₓ, Mᵧ))
         )
             g = vec_op(uₕ)
             @test length(g) == 2
@@ -126,7 +128,7 @@ using Bramble: diff₋ₓ, diff₋ᵧ, diff₋₂, diff₊ₓ, diff₊ᵧ, diff�
         f = x -> exp(-x) * sin(3x)
         uₕ = Rₕ(V₁, (f,))
         sₕ = Rₕ(Wₕ, f)
-        for op in (diff₋ₓ, diff₊ₓ, D₋ₓ, D₊ₓ, jumpₓ, M₋ₓ, M₊ₓ)
+        for op in (diff₋ₓ, diff₊ₓ, D₋ₓ, D₊ₓ, jumpₓ, Mₓ, M₊ₓ)
             @test parent(op(uₕ)) == parent(op(sₕ))
         end
     end

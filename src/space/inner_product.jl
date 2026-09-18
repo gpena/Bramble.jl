@@ -14,7 +14,7 @@ grid function -- `components(uₕ)[i]` has a ScalarGridSpace -- so those are acc
 and are the way to take the product of one component.
 
 The staggered product weights a different direction per entry, so its argument is a
-tuple with one grid function per direction: the gradient ∇₋ₕ(uₕ) is exactly that
+tuple with one grid function per direction: the gradient ∇ₕ(uₕ) is exactly that
 shape. In one dimension a one-tuple and the grid function coincide, so the scalar
 form is accepted there.
 
@@ -533,11 +533,11 @@ Returns the discrete ``H^1`` seminorm of the grid function `uₕ`,
 |\\textrm{u}_h|_{1h} \\vcentcolon = \\Vert \\nabla_h \\textrm{u}_h \\Vert_+
 ```
 
-so that `snorm₁ₕ(uₕ) == norm₊(∇₋ₕ(uₕ))` in one, two and three dimensions. The argument is
+so that `snorm₁ₕ(uₕ) == norm₊(∇ₕ(uₕ))` in one, two and three dimensions. The argument is
 the grid function itself; the backward gradient is taken internally, and without
 materialising it, so this allocates nothing.
 
-See also: [`norm₁ₕ`](@ref), [`norm₊`](@ref), [`∇₋ₕ`](@ref).
+See also: [`norm₁ₕ`](@ref), [`norm₊`](@ref), [`∇ₕ`](@ref).
 
 Defined for grid functions of a [`ScalarGridSpace`](@ref) only. A grid function of a
 composite grid space is rejected at dispatch; take a scalar component of it with

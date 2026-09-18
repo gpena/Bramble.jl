@@ -2,6 +2,8 @@ module FormInterpolationTests
 
 using Test
 using Bramble
+# Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
+import Bramble: D₊ₓ, M₊ₓ
 using Bramble:
                SourceFunction,
                TrialFunction,
@@ -14,7 +16,7 @@ using Bramble:
                OperatorAdd
 
 # πₕ(uₕ) wraps a grid function's interpolant as a genuine LazyOp source (SourceFunction), so
-# it composes with the same operators (D₋ₓ, M₋ₓ, ...) any other source does. The one thing
+# it composes with the same operators (D₋ₓ, Mₓ, ...) any other source does. The one thing
 # that is not automatic is `innerₕ`'s own dispatch: its generic LazyOp×LazyOp constructor used
 # to assume "trial × test" unconditionally and build a BilinearProduct, which is the wrong AST
 # shape for a source: `πₕ(uₕ)` (and `D₋ₓ(πₕ(uₕ))`, etc.) never reaches the Function/Number/
@@ -33,7 +35,7 @@ using Bramble:
     @test _is_source_only(src)
     @test _is_source_only(D₋ₓ(src))
     @test _is_source_only(D₊ₓ(src))
-    @test _is_source_only(M₋ₓ(src))
+    @test _is_source_only(Mₓ(src))
     @test _is_source_only(M₊ₓ(src))
     @test _is_source_only(D₋ₓ(D₋ᵧ(src)))          # nested wrapping, still source-only
     @test _is_source_only(2 * src)
@@ -74,7 +76,7 @@ end
     lf2 = form(Vh, v -> innerₕ(D₋ₓ(πₕ(u_leaf2)), D₋ₓ(v(1))))
     @test resolve_form_ast(lf2) isa LinearProduct
 
-    lf3 = form(Vh, v -> innerₕ(M₋ₓ(πₕ(u_leaf2)), v(1)))
+    lf3 = form(Vh, v -> innerₕ(Mₓ(πₕ(u_leaf2)), v(1)))
     @test resolve_form_ast(lf3) isa LinearProduct
 
     # and it actually assembles, rather than only type-checking.
@@ -92,7 +94,7 @@ end
     @test !all(iszero, b3)
 
     # the averaged interpolant against the numeric layer, block 1: an oracle, not a shape check
-    @test b3[1:ndofs(Wbig)] ≈ parent(M₋ₓ(πₕ(Wbig, u_leaf2))) .* weights(Wbig, Innerh())
+    @test b3[1:ndofs(Wbig)] ≈ parent(Mₓ(πₕ(Wbig, u_leaf2))) .* weights(Wbig, Innerh())
 
     # numeric consistency: innerₕ(πₕ(u), v(1)) scatters |cell_i| * interpolate_at(u, x_i) into
     # block 1, so it must equal the numeric πₕ path times the weights directly
@@ -182,7 +184,7 @@ end
     for (nm, g) in (
         ("plain interpolant", v -> innerₕ(πₕ(u_leaf2), v(1))),
         ("difference of the interpolant", v -> innerₕ(D₋ₓ(πₕ(u_leaf2)), D₋ₓ(v(1)))),
-        ("average of the interpolant", v -> innerₕ(M₋ₓ(πₕ(u_leaf2)), v(1)))
+        ("average of the interpolant", v -> innerₕ(Mₓ(πₕ(u_leaf2)), v(1)))
     )
         lf = form(Vh, g)
         bs = assemble(lf)

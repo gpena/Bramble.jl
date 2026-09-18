@@ -32,7 +32,7 @@ uexact(x) = x[1] - (exp((x[1] - 1) / ε) - exp(-1 / ε)) / (1 - exp(-1 / ε))
 
 Ω = domain(interval(0.0, 1.0), :left => :left, :right => :right)
 
-# The convective term is `inner₊(M₋ₕ(u), ∇₋ₕ(v))`, the same staggered discretisation the
+# The convective term is `inner₊(Mₕ(u), ∇ₕ(v))`, the same staggered discretisation the
 # [convection-diffusion example](convection_diffusion_linear.md) uses. It is the discrete
 # counterpart of ``\int u v'``, which integration by parts turns into ``-\int u' v``, so a
 # convective term `+u'` in the equation enters the form with a minus sign.
@@ -42,7 +42,7 @@ function solve_on(pts)
     change_points!(Ωₕ, collect(pts))
     Wₕ = gridspace(Ωₕ)
 
-    a = form(Wₕ, Wₕ, (u, v) -> ε * inner₊(∇₋ₕ(u), ∇₋ₕ(v)) - inner₊(M₋ₕ(u), ∇₋ₕ(v)))
+    a = form(Wₕ, Wₕ, (u, v) -> ε * inner₊(∇ₕ(u), ∇ₕ(v)) - inner₊(Mₕ(u), ∇ₕ(v)))
     l = form(Wₕ, v -> innerₕ(Rₕ(Wₕ, x -> 1.0), v))
 
     A, F = assemble(a, l; dirichlet = :boundary => x -> 0.0)

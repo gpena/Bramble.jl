@@ -16,11 +16,17 @@ Documentation for `Bramble.jl`'s public API.
 ```@docs
 backend
 ExecutionPolicy
+CpuPolicy
+CpuSerial
+CpuThreaded
+GpuPolicy
+GpuAsync
 Serial
 Parallel
 execution_policy
 vector
 matrix
+supports_undef_construction
 vector_type
 matrix_type
 backend_types
@@ -172,8 +178,12 @@ methods that dispatch tells apart by what they are given rather than by differen
   building block both are written in terms of, and [`interpolation_matrix`](@ref) is the same
   interpolant as a sparse matrix rather than applied pointwise.
 - `πₕ(uₕ)` — the **symbolic source**, wrapping a grid function's interpolant as an AST leaf,
-  composable with [`D₋ₓ`](@ref)/[`M₋ₓ`](@ref)/... inside [`innerₕ`](@ref). For the *known*
+  composable with [`D₋ₓ`](@ref)/[`Mₓ`](@ref)/... inside [`innerₕ`](@ref). For the *known*
   side of a linear form.
+- `πₕ(u)` over a **trial function** — the **bilinear operator**, contributing matrix columns
+  rather than values. For the *unknown* side. It names no source space: that is the trial
+  function's own, and assembly supplies it once the leaf is known
+  ([#10](https://github.com/gpena/Bramble.jl/issues/10)).
 
 See the [operators tutorial](tutorials/operators.md) for the numeric side and the pattern
 this exists for: a heterogeneous composite space whose leaves live on different meshes.
@@ -191,11 +201,31 @@ interpolation_matrix
 The finite difference, the jump and the average, per coordinate and over every coordinate
 at once. See the [operators tutorial](tutorials/operators.md).
 
+Every family also takes the direction as an argument rather than as part of the name:
+`D₋(uₕ, 2)`, `D₋(uₕ, :y)` and `D₋(uₕ, Val(2))` are all `D₋ᵧ(uₕ)`. That is what makes a
+dimension-agnostic expression writable — `sum(innerₕ(D₋(uₕ, d), D₋(uₕ, d)) for d in 1:D)`
+reads the same in 1D, 2D and 3D — and it costs nothing: the `Int` and `Symbol` forms branch
+over literal `Val`s, so the direction still reaches the stencil engine as a compile-time
+constant. The averages put this on `Mₕ`/`M₊ₕ` rather than on a bare `M`, which would take
+the most common local name in finite-element code away from anyone writing `using Bramble`;
+`Mₕ(uₕ)` is still the tuple over every coordinate and `Mₕ(uₕ, 2)` is the `y` average.
+
+The same names carry the symbolic form: `D₋(uₕ, Val(1))` differences a grid function now,
+`D₋(U, Val(1))` builds the AST node that will difference it during assembly. Inside a form
+the direction must be a `Val`, since it is a type parameter of the node.
+
+Three families are documented here but not exported, so `using Bramble` does not bring them
+into scope and they are written `Bramble.D₊ₓ` or imported by name: the unscaled differences
+`diff₋*`/`diff₊*`, the forward differences `D₊*`/`∇₊ₕ`, and the forward averages `M₊*`.
+Bramble discretises with the backward operator paired with [`inner₊`](@ref), so the forward
+ones are what the backward ones are built and checked against rather than what a form is
+written with.
+
 The unscaled differences (`diff₋ₓ` and its siblings) are the plain, undivided differences
-these are built from. They are reached as `Bramble.diff₋ₓ` rather than brought into scope
-by `using Bramble`: they have no form-layer node, so they cannot appear inside a bilinear
-form, and in a form the undivided forward difference is spelled [`jumpₓ`](@ref), which
-says which of the two is meant.
+these are built from, and are the one family of the three that is not even declared
+`public`: they have no form-layer node, so they cannot appear inside a bilinear form, and in
+a form the undivided forward difference is spelled [`jumpₓ`](@ref), which says which of the
+two is meant.
 
 ```@docs
 diff₋ₓ
@@ -212,13 +242,15 @@ diff₊ᵧ!
 diff₊₂
 diff₊₂!
 diff₊ₕ
+diff₋
+diff₊
 D₋ₓ
 D₋ₓ!
 D₋ᵧ
 D₋ᵧ!
 D₋₂
 D₋₂!
-∇₋ₕ
+∇ₕ
 D₊ₓ
 D₊ₓ!
 D₊ᵧ
@@ -226,21 +258,24 @@ D₊ᵧ!
 D₊₂
 D₊₂!
 ∇₊ₕ
+D₋
+D₊
 ```
 
 The forward difference over the averaged spacing, which is the one that satisfies
 the discrete summation-by-parts identity
-``(\textrm{Dstar}_{+x} u_h, v_h)_h = -(u_h, D_{-x} v_h)_{+x}`` for grid functions
+``(\overset{\times}{\textrm{D}}_{+x} u_h, v_h)_h = -(u_h, D_{-x} v_h)_{+x}`` for grid functions
 `vₕ` vanishing on the boundary.
 
 ```@docs
-Dstar₊ₓ
-Dstar₊ₓ!
-Dstar₊ᵧ
-Dstar₊ᵧ!
-Dstar₊₂
-Dstar₊₂!
-Dstar₊ₕ
+D̽ₓ
+D̽ₓ!
+D̽ᵧ
+D̽ᵧ!
+D̽₂
+D̽₂!
+D̽ₕ
+D̽
 ```
 
 The centered difference, over the span its stencil covers. It reproduces the derivative
@@ -255,6 +290,7 @@ Dcᵧ!
 Dc₂
 Dc₂!
 Dcₕ
+Dc
 ```
 
 The cross-weighted centered difference, the same two one-sided differences weighted by
@@ -268,7 +304,7 @@ Dₕᵧ
 Dₕᵧ!
 Dₕ₂
 Dₕ₂!
-∇ₕ
+Dₕ
 ```
 
 Jumps across an interface, ``\llbracket u \rrbracket = u_{i+1} - u_i``. There is one
@@ -283,18 +319,19 @@ jumpᵧ!
 jump₂
 jump₂!
 jumpₕ
+jump
 ```
 
 Averages of a point with its neighbour.
 
 ```@docs
-M₋ₓ
-M₋ₓ!
-M₋ᵧ
-M₋ᵧ!
-M₋₂
-M₋₂!
-M₋ₕ
+Mₓ
+Mₓ!
+Mᵧ
+Mᵧ!
+M₂
+M₂!
+Mₕ
 M₊ₓ
 M₊ₓ!
 M₊ᵧ

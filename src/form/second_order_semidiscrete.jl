@@ -159,7 +159,7 @@ Wₕ = gridspace(Ωₕ)
 I = interval(0.0, 1.0)
 
 fₕ = Rₕ(Wₕ, x -> 0.0)
-K = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+K = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
 l = form(Wₕ, v -> innerₕ(fₕ, v))
 
 sd = semidiscretize_second_order(K, l)

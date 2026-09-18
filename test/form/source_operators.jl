@@ -2,6 +2,8 @@ module FormSourceOperatorsTests
 
 using Test
 using Bramble
+# Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
+import Bramble: D₊ₓ, D₊ᵧ, M₊ₓ, M₊ᵧ
 using ForwardDiff
 using Bramble:
                source_function,
@@ -29,7 +31,7 @@ using Bramble:
 # whose coefficient *is* a value read at the current point).
 #
 # Previously, `innerₕ(D₋ₓ(f), v)` assembled to exactly zero (the two
-# relabelled copies of f(xᵢ) cancelled) and `innerₕ(M₋ₓ(f), v)` reproduced `innerₕ(f, v)`
+# relabelled copies of f(xᵢ) cancelled) and `innerₕ(Mₓ(f), v)` reproduced `innerₕ(f, v)`
 # (they summed back to f(xᵢ)): the operator silently dropped either way.
 # Now, `_contracted_left_stencil` reads the subtree's own `local_stencil`, correct once a
 # source is marked `PointDependentStencil` (`form/operators/interpolation.jl`).
@@ -52,11 +54,11 @@ using Bramble:
         for (nm, op) in (
             ("D₋ₓ", D₋ₓ),
             ("D₊ₓ", D₊ₓ),
-            ("M₋ₓ", M₋ₓ),
+            ("Mₓ", Mₓ),
             ("M₊ₓ", M₊ₓ),
             ("jumpₓ", jumpₓ),
             ("Dcₓ", Dcₓ),
-            ("Dstar₊ₓ", Dstar₊ₓ),
+            ("D̽ₓ", D̽ₓ),
             ("Dₕₓ", Dₕₓ)
         )
             b = assemble(form(Wₕ, v -> innerₕ(op(sf), v)))
@@ -78,15 +80,15 @@ using Bramble:
             ("D₋ᵧ", D₋ᵧ),
             ("D₊ₓ", D₊ₓ),
             ("D₊ᵧ", D₊ᵧ),
-            ("M₋ₓ", M₋ₓ),
-            ("M₋ᵧ", M₋ᵧ),
+            ("Mₓ", Mₓ),
+            ("Mᵧ", Mᵧ),
             ("M₊ₓ", M₊ₓ),
             ("M₊ᵧ", M₊ᵧ),
             ("jumpₓ", jumpₓ),
             ("jumpᵧ", jumpᵧ),
             ("Dcₓ", Dcₓ),
             ("Dcᵧ", Dcᵧ),
-            ("Dstar₊ₓ", Dstar₊ₓ),
+            ("D̽ₓ", D̽ₓ),
             ("Dₕₓ", Dₕₓ)
         )
             b = assemble(form(Wₕ, v -> innerₕ(op(sf), v)))
@@ -106,8 +108,8 @@ using Bramble:
         # a difference of an average, and an average of a difference: the outer operator has
         # to re-read the inner subtree at the shifted point, which is precisely what
         # relabelling an offset cannot do
-        @test assemble(form(Wₕ, v -> innerₕ(D₋ₓ(M₋ᵧ(sf)), v))) ≈ parent(D₋ₓ(M₋ᵧ(fₕ))) .* w
-        @test assemble(form(Wₕ, v -> innerₕ(M₋ₓ(D₋ₓ(sf)), v))) ≈ parent(M₋ₓ(D₋ₓ(fₕ))) .* w
+        @test assemble(form(Wₕ, v -> innerₕ(D₋ₓ(Mᵧ(sf)), v))) ≈ parent(D₋ₓ(Mᵧ(fₕ))) .* w
+        @test assemble(form(Wₕ, v -> innerₕ(Mₓ(D₋ₓ(sf)), v))) ≈ parent(Mₓ(D₋ₓ(fₕ))) .* w
 
         # `f` is separable, x²  +  sin(3y), so its mixed difference is mathematically zero at
         # every point (both sides here are machine-epsilon noise (~1e-16), not a value an
@@ -127,13 +129,13 @@ using Bramble:
         # sources: the addends are contracted independently
         gf = source_function(x -> x[2], Val(2))
         gₕ = Rₕ(Wₕ, x -> x[2])
-        @test assemble(form(Wₕ, v -> innerₕ(D₋ₓ(sf) + M₋ₓ(sf), v))) ≈
-              (parent(D₋ₓ(fₕ)) .+ parent(M₋ₓ(fₕ))) .* w
+        @test assemble(form(Wₕ, v -> innerₕ(D₋ₓ(sf) + Mₓ(sf), v))) ≈
+              (parent(D₋ₓ(fₕ)) .+ parent(Mₓ(fₕ))) .* w
         @test assemble(form(Wₕ, v -> innerₕ(D₋ₓ(sf) + D₋ᵧ(gf), v))) ≈
               (parent(D₋ₓ(fₕ)) .+ parent(D₋ᵧ(gₕ))) .* w
 
         for b in (
-            assemble(form(Wₕ, v -> innerₕ(D₋ₓ(M₋ᵧ(sf)), v))),
+            assemble(form(Wₕ, v -> innerₕ(D₋ₓ(Mᵧ(sf)), v))),
             assemble(form(Wₕ, v -> innerₕ(3 * D₋ₓ(sf), v))),
             assemble(form(Wₕ, v -> innerₕ(D₋ₓ(sf) + D₋ᵧ(gf), v)))
         )
@@ -317,7 +319,7 @@ using Bramble:
         f = x -> x[1]^2 + x[2]
         plain = Wₕ -> (sf = source_function(f, Val(2)); v -> innerₕ(sf, v))
         diffed = Wₕ -> (sf = source_function(f, Val(2)); v -> innerₕ(D₋ₓ(sf), v))
-        nested = Wₕ -> (sf = source_function(f, Val(2)); v -> innerₕ(D₋ₓ(M₋ᵧ(sf)), v))
+        nested = Wₕ -> (sf = source_function(f, Val(2)); v -> innerₕ(D₋ₓ(Mᵧ(sf)), v))
 
         # the source-value path must not cost an allocation, at any size: the branch on
         # `_is_source_only` is decided by the operand's type and folds away

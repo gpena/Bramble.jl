@@ -32,15 +32,15 @@ Wₕ = gridspace(Ωₕ)
 # points from the global RNG, so without it the mesh -- and every figure on this page --
 # would differ from build to build, and the suite could not assert what the page prints.
 #
-# `inner₊(M₋ₕ(u), ∇₋ₕ(v))` is the convective term: `M₋ₕ` averages the trial function onto the
-# same staggered points `∇₋ₕ` differences on, one pair per direction, and `inner₊`'s own
+# `inner₊(Mₕ(u), ∇ₕ(v))` is the convective term: `Mₕ` averages the trial function onto the
+# same staggered points `∇ₕ` differences on, one pair per direction, and `inner₊`'s own
 # gradient-tuple overload sums them — the identical spelling whether `D` is 1 or 3, since
-# `M₋ₕ`/`∇₋ₕ` collapse to a bare node instead of a one-element tuple in 1D and `inner₊` has a
+# `Mₕ`/`∇ₕ` collapse to a bare node instead of a one-element tuple in 1D and `inner₊` has a
 # method for both:
 
 bcs = dirichlet_constraints(Ω, :boundary => sol)
 
-a = form(Wₕ, Wₕ, (u, v) -> ϵ * inner₊(∇₋ₕ(u), ∇₋ₕ(v)) + b * inner₊(M₋ₕ(u), ∇₋ₕ(v)))
+a = form(Wₕ, Wₕ, (u, v) -> ϵ * inner₊(∇ₕ(u), ∇ₕ(v)) + b * inner₊(Mₕ(u), ∇ₕ(v)))
 A = assemble(a; dirichlet = :boundary)
 
 gₕ = element(Wₕ)
@@ -94,7 +94,7 @@ function convdiff_series(D::Int; n0::Int = 5, levels::Int)
         bcs_c = dirichlet_constraints(Ωd, :boundary => sol_d)
 
         a_c = form(Wc, Wc,
-            (u, v) -> ϵ * inner₊(∇₋ₕ(u), ∇₋ₕ(v)) + b * inner₊(M₋ₕ(u), ∇₋ₕ(v)))
+            (u, v) -> ϵ * inner₊(∇ₕ(u), ∇ₕ(v)) + b * inner₊(Mₕ(u), ∇ₕ(v)))
         A_c = assemble(a_c; dirichlet = :boundary)
         g_c = element(Wc)
         avgₕ!(g_c, rhs_d)
@@ -136,6 +136,6 @@ convergence_plot([(hs1, errs1, "1D", "#5B5FC7"), (hs2, errs2, "2D", "#0E7C86"), 
     title = "Convection-diffusion, ‖·‖₁ₕ") # hide
 
 # Second order in every dimension. The convective term does not change the rate — it changes
-# the matrix from symmetric to non-symmetric (`inner₊(M₋ₕ(u), ∇₋ₕ(v)) ≠ inner₊(M₋ₕ(v), ∇₋ₕ(u))`
+# the matrix from symmetric to non-symmetric (`inner₊(Mₕ(u), ∇ₕ(v)) ≠ inner₊(Mₕ(v), ∇ₕ(u))`
 # in general), which is why this example does not also check `issymmetric`, unlike the
 # [forms tutorial](../tutorials/form.md)'s pure-diffusion Poisson problem.

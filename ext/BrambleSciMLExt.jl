@@ -19,7 +19,7 @@ using Bramble:
                Rₕ,
                form,
                inner₊,
-               ∇₋ₕ,
+               ∇ₕ,
                innerₕ,
                dirichlet_constraints,
                semidiscretize,
@@ -283,7 +283,7 @@ if Bramble.PRECOMPILE_WORKLOAD
         Wₕ = gridspace(Ωₕ)
         I_time = interval(0.0, 1.0)
         fₕ = Rₕ(Wₕ, x -> 1.0)
-        a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+        a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
         l = form(Wₕ, v -> innerₕ(fₕ, v))
         bcs = dirichlet_constraints(Ωₕ, I_time, :boundary => (x, t) -> 0.0)
         sd = semidiscretize(a, l; dirichlet = bcs)

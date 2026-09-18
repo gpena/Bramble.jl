@@ -23,7 +23,7 @@ function _pc_form_ast_interp(Wₕ::ScalarGridSpace, u)
     π_src = πₕ(element(Wₕ, 1.0))
     is_symbolic(π_src)
     resolve_ast(π_src)
-    π_node = πₕ(Wₕ, u)
+    π_node = πₕ(u)
     is_symbolic(π_node)
     resolve_ast(π_node)
     return nothing
@@ -46,7 +46,7 @@ function _pc_form_ast(Wₕ, ::Val{D}) where {D}
     _pc_form_ast_interp(Wₕ, u)
 
     # the one-sided families, the averages, the shift and the restriction
-    for op in (D₋ₓ(id), D₊ₓ(id), M₋ₓ(id), M₊ₓ(id), jumpₓ(id), Dcₓ(id), Dstar₊ₓ(id), Dₕₓ(id))
+    for op in (D₋ₓ(id), D₊ₓ(id), Mₓ(id), M₊ₓ(id), jumpₓ(id), Dcₓ(id), D̽ₓ(id), Dₕₓ(id))
         is_symbolic(op)
         resolve_ast(op)
         stencil_offsets(op)
@@ -60,13 +60,13 @@ function _pc_form_ast(Wₕ, ::Val{D}) where {D}
     resolve_ast(scaled)
     resolve_ast(summed)
     stencil_offsets(summed)
-    ∇₋ₕ(id)
-    ∇₊ₕ(id)
     ∇ₕ(id)
+    ∇₊ₕ(id)
+    Dₕ(id)
     jumpₕ(id)
     Dcₕ(id)
-    Dstar₊ₕ(id)
-    M₋ₕ(id)
+    D̽ₕ(id)
+    Mₕ(id)
     M₊ₕ(id)
 
     return id, u, v
@@ -80,7 +80,7 @@ function _pc_form_stencils(Ωₕ::AbstractMeshType, Wₕ, id, u, v, label::Symbo
     mk = markers(Ωₕ)
 
     # Bilinear and linear products for each weight kind.
-    for prod in (innerₕ(D₋ₓ(id), D₋ₓ(id)), inner₊ₓ(M₋ₓ(id), M₋ₓ(id)), innerₕ(id, D₋ₓ(id)))
+    for prod in (innerₕ(D₋ₓ(id), D₋ₓ(id)), inner₊ₓ(Mₓ(id), Mₓ(id)), innerₕ(id, D₋ₓ(id)))
         local_stencil(prod, Wₕ, I, nothing, lin[I])
         local_stencil(prod, Wₕ, I, mk, lin[I])
         resolve_ast(prod)
@@ -92,10 +92,10 @@ function _pc_form_stencils(Ωₕ::AbstractMeshType, Wₕ, id, u, v, label::Symbo
         id,
         D₋ₓ(id),
         D₊ₓ(id),
-        M₋ₓ(id),
+        Mₓ(id),
         jumpₓ(id),
         Dcₓ(id),
-        Dstar₊ₓ(id),
+        D̽ₓ(id),
         Dₕₓ(id),
         shift_op(id, 1, 1),
         3 * D₋ₓ(id),
@@ -113,7 +113,7 @@ function _pc_form_stencils(Ωₕ::AbstractMeshType, Wₕ, id, u, v, label::Symbo
     innerₕ(x -> 1.0, v)
     inner₊(u, D₋ₓ(v))
     inner₊(D₋ₓ(u), D₋ₓ(v))
-    inner₊(∇₋ₕ(u), ∇₋ₕ(v))
+    inner₊(∇ₕ(u), ∇ₕ(v))
     inner₊ₓ(u, v)
     inner₊ᵧ(u, v)
     return nothing
@@ -309,7 +309,7 @@ function _pc_form_assembly(
     # test argument: the three shapes a form is most likely to be written as.
     _pc_assemble_shape(Wₕ, v -> inner₊ₓ(uₕ, D₋ₓ(v)), b)
     _pc_assemble_shape(Wₕ, v -> innerₕ(uₕ, v) + inner₊ₓ(uₕ, D₋ₓ(v)), b)
-    _pc_assemble_shape(Wₕ, v -> innerₕ(uₕ, v + 2 * D₋ₓ(v) - M₋ₓ(v)), b)
+    _pc_assemble_shape(Wₕ, v -> innerₕ(uₕ, v + 2 * D₋ₓ(v) - Mₓ(v)), b)
     _pc_assemble_directional(Wₕ, uₕ, b, dim_val)
 
     # A raw closure source, not a VectorElement: exercises form(Wₕ, f)'s eager lowering
@@ -396,7 +396,7 @@ _pc_alpha(u) = 3.0 + 1.0 / (1.0 + u^2)
 # assembled makes no difference to the pattern.
 function _pc_diffusion_form(Wₕ, uₕ)
     αvals = element(Wₕ, eltype(uₕ))
-    αvals .= _pc_alpha.(M₋ₓ(uₕ))
+    αvals .= _pc_alpha.(Mₓ(uₕ))
     return form(Wₕ, Wₕ, (U, V) -> inner₊(αvals * D₋ₓ(U), D₋ₓ(V)))
 end
 
@@ -408,7 +408,7 @@ function _pc_build_diffusion(Wₕ)
         αvals = element(Wₕ, eltype(uₕ))
         a = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals * D₋ₓ(U), D₋ₓ(V)))
         refill!(uₕ) = begin
-            M₋ₓ!(Mu, uₕ)
+            Mₓ!(Mu, uₕ)
             αvals .= _pc_alpha.(Mu)
         end
         return a, refill!
@@ -417,7 +417,7 @@ end
 
 function _pc_jacobian_pattern_session(Wₕ)
     u0 = element(Wₕ, 0.0)
-    jacobian_pattern(_pc_diffusion_form(Wₕ, u0), U -> M₋ₓ(U))
+    jacobian_pattern(_pc_diffusion_form(Wₕ, u0), U -> Mₓ(U))
     return nothing
 end
 

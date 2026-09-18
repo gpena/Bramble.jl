@@ -36,13 +36,13 @@ Wₕ = gridspace(Ωₕ)
 # points from the global RNG, so without it the mesh -- and every figure on this page --
 # would differ from build to build, and the suite could not assert what the page prints.
 #
-# The bilinear form is the discrete Laplacian, the same `inner₊(∇₋ₕ(u), ∇₋ₕ(v))` the
+# The bilinear form is the discrete Laplacian, the same `inner₊(∇ₕ(u), ∇ₕ(v))` the
 # [forms tutorial](../tutorials/form.md#5.-Dirichlet-conditions,-and-a-Poisson-problem) builds
 # in one dimension:
 
 bcs = dirichlet_constraints(Ω, :boundary => sol)
 
-a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
 A = assemble(a; dirichlet = :boundary)
 
 gₕ = element(Wₕ)
@@ -88,7 +88,7 @@ function poisson_series(D::Int; n0::Int = 5, levels::Int)
         Wc = gridspace(Ωc)
         bcs_c = dirichlet_constraints(Ωd, :boundary => sol_d)
 
-        a_c = form(Wc, Wc, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+        a_c = form(Wc, Wc, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
         A_c = assemble(a_c; dirichlet = :boundary)
         g_c = element(Wc)
         avgₕ!(g_c, rhs_d)

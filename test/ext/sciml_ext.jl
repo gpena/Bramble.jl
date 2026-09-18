@@ -34,7 +34,7 @@ function _sciml_setup(n; T = 1.0)
     Wₕ = gridspace(Ωₕ)
     I = Bramble.interval(0.0, T)
     fₕ = Bramble.element(Wₕ, 0.0)
-    a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+    a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
     l = form(Wₕ, v -> innerₕ(fₕ, v))
     bcs = dirichlet_constraints(Ωₕ, I, :boundary => (x, t) -> 0.0)
     sd = semidiscretize(
@@ -308,7 +308,7 @@ end
 
         function build_diffusion(t)
             αₕ = Bramble.element(Wₕ, typeof(t))
-            aα = form(Wₕ, Wₕ, (u, v) -> inner₊(αₕ * ∇₋ₕ(u), ∇₋ₕ(v)))
+            aα = form(Wₕ, Wₕ, (u, v) -> inner₊(αₕ * ∇ₕ(u), ∇ₕ(v)))
             refill!(t) = (fill!(parent(αₕ), α(t)); nothing)
             return aα, refill!
         end
@@ -322,7 +322,7 @@ end
         bcs = dirichlet_constraints(Ωₕ, I, :boundary => (x, t) -> 0.0)
 
         αₕ_ref = Bramble.element(Wₕ, 0.0)
-        a_ref = form(Wₕ, Wₕ, (u, v) -> inner₊(αₕ_ref * ∇₋ₕ(u), ∇₋ₕ(v)))
+        a_ref = form(Wₕ, Wₕ, (u, v) -> inner₊(αₕ_ref * ∇ₕ(u), ∇ₕ(v)))
         sd_ref = semidiscretize(
             a_ref, l; dirichlet = bcs, reassemble = true,
             (update_coefficients!) = t -> (fill!(parent(αₕ_ref), α(t)); nothing)
@@ -352,7 +352,7 @@ end
     @testset "long-time limit is the steady solve" begin
         Ωₕ, Wₕ, _, _, _, _ = _sciml_setup(21)
         gₕ = Rₕ(Wₕ, x -> 1.0)
-        a_s = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+        a_s = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
         l_s = form(Wₕ, v -> innerₕ(gₕ, v))
         bc = :boundary => x -> 0.0
 
@@ -377,7 +377,7 @@ end
             Wₕ = gridspace(Ωₕ)
             Iv = Bramble.interval(0.0, 1.0)
             fₕ = Bramble.element(Wₕ, 0.0)
-            K = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+            K = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
             l = form(Wₕ, v -> innerₕ(fₕ, v))
             bcs = dirichlet_constraints(Ωₕ, Iv, :boundary => (x, t) -> 0.0)
             return Ωₕ, Wₕ, Iv, K, l, bcs
@@ -525,7 +525,7 @@ end
             Wₕ = gridspace(Ωₕ)
             fₕ = Bramble.element(Wₕ)
             avgₕ!(fₕ, _poisson_src)
-            a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+            a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
             l = form(Wₕ, v -> innerₕ(fₕ, v))
             uₕ = solve(a, l; dirichlet = :boundary => _poisson_uex)
             return normₕ(Rₕ(Wₕ, _poisson_uex) - uₕ), hₘₐₓ(Ωₕ)
@@ -556,9 +556,9 @@ end
             function residual!(r, u, p)
                 uₕ = Bramble.element(Wₕ, eltype(u))
                 parent(uₕ) .= u
-                αv = _nl_α.(M₋ₕ(uₕ))
+                αv = _nl_α.(Mₕ(uₕ))
                 A = assemble(
-                    form(Wₕ, Wₕ, (U, V) -> inner₊(αv * ∇₋ₕ(U), ∇₋ₕ(V))); dirichlet = :boundary
+                    form(Wₕ, Wₕ, (U, V) -> inner₊(αv * ∇ₕ(U), ∇ₕ(V))); dirichlet = :boundary
                 )
                 mul!(r, A, u)
                 r .-= F

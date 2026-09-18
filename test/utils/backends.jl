@@ -39,6 +39,34 @@ Base.fill!(A::MockGPUArray{T}, v) where {T} = (fill!(A.data, v); A)
 const MockGPUVector{T} = MockGPUArray{T, 1}
 const MockGPUMatrix{T} = MockGPUArray{T, 2}
 
+@testset "Execution policy hierarchy" begin
+    # Invariants tested (gpena/Bramble.jl#191):
+    # 1. CPU and GPU policies are separate branches under ExecutionPolicy.
+    # 2. Serial and Parallel are aliases, identically, so every existing call site and every
+    #    benchmark baseline key still resolves.
+    # 3. A GpuPolicy handed to a CPU sweep is refused with a message, not a scalar-indexing
+    #    failure several frames deeper.
+    @test CpuSerial <: CpuPolicy <: ExecutionPolicy
+    @test CpuThreaded <: CpuPolicy
+    @test GpuAsync <: GpuPolicy <: ExecutionPolicy
+    @test !(GpuPolicy <: CpuPolicy)
+    @test !(CpuPolicy <: GpuPolicy)
+
+    @test Serial === CpuSerial
+    @test Parallel === CpuThreaded
+    @test Serial() === CpuSerial()
+    @test Parallel() === CpuThreaded()
+    @test backend(policy = Serial()) === backend(policy = CpuSerial())
+
+    # a policy is still a singleton with nothing in it, so it costs nothing to carry
+    @test isbitstype(CpuSerial)
+    @test isbitstype(GpuAsync)
+
+    # CpuBatch is deliberately absent until the Polyester extension implements it
+    # (gpena/Bramble.jl#190): a policy nothing dispatches on is a trap, not a placeholder.
+    @test !isdefined(Bramble, :CpuBatch)
+end
+
 @testset "Backend configuration and allocation" begin
     # Invariants tested:
     # 1. Default configuration: Vector{Float64}, SparseMatrixCSC{Float64, Int}, Serial() policy.
@@ -339,8 +367,9 @@ end
     end
 
     # Invariants tested:
-    # 1. Types lacking undef constructors fall back to size-based constructors VT(n) and MT(n, m).
-    # 2. Types failing both undef and size-based allocation raise actionable ErrorException diagnostics.
+    # 1. Types declaring supports_undef_construction = false are built by VT(n) and MT(n, m).
+    # 2. Types declaring the trait they do not honour raise actionable ErrorException diagnostics.
+    # 3. The trait's default is true, and it is read from the type rather than probed.
     @testset "Fallback constructors" begin
         struct SizeConstructibleVec{T} <: DenseVector{T}
             data::Vector{T}
@@ -348,6 +377,9 @@ end
         SizeConstructibleVec{T}(n::Integer) where {T} = SizeConstructibleVec{T}(zeros(T, n))
         Base.size(v::SizeConstructibleVec) = size(v.data)
         Base.getindex(v::SizeConstructibleVec, i) = v.data[i]
+        # The opt-out (gpena/Bramble.jl#100). Before the trait, this type was found by
+        # calling `SizeConstructibleVec{Float64}(undef, n)` and catching the MethodError.
+        Bramble.supports_undef_construction(::Type{<:SizeConstructibleVec}) = false
 
         struct SizeConstructibleMat{T} <: AbstractMatrix{T}
             data::Matrix{T}
@@ -355,6 +387,15 @@ end
         SizeConstructibleMat{T}(n::Integer, m::Integer) where {T} = SizeConstructibleMat{T}(zeros(T, n, m))
         Base.size(v::SizeConstructibleMat) = size(v.data)
         Base.getindex(v::SizeConstructibleMat, i, j) = v.data[i, j]
+        Bramble.supports_undef_construction(::Type{<:SizeConstructibleMat}) = false
+
+        @test !Bramble.supports_undef_construction(SizeConstructibleVec{Float64})
+        @test !Bramble.supports_undef_construction(SizeConstructibleMat{Float64})
+        # the default, which is what an ordinary array type answers
+        @test Bramble.supports_undef_construction(Vector{Float64})
+        @test Bramble.supports_undef_construction(Matrix{Float64})
+        # read from the type, so it folds rather than being probed at run time
+        @test @inferred(Bramble.supports_undef_construction(Vector{Float64}))
 
         be_custom = backend(
             vector_type = SizeConstructibleVec{Float64},
@@ -369,7 +410,9 @@ end
         @test M isa SizeConstructibleMat{Float64}
         @test size(M) == (3, 4)
 
-        # Unconstructible types trigger _throw_vector_error and _throw_matrix_error
+        # A type keeping the default trait but defining no `undef` constructor: the one
+        # failure the static choice leaves, and it still reports which constructor is
+        # missing rather than "tried both, both failed"
         struct UnconstructibleVec{T} <: DenseVector{T} end
         struct UnconstructibleMat{T} <: AbstractMatrix{T} end
 
@@ -378,6 +421,7 @@ end
         )
         @test_throws ErrorException vector(be_fail, 5)
         @test_throws ErrorException matrix(be_fail, 3, 4)
+        @test_throws ErrorException backend_zeros(be_fail, 4)
     end
 
     # Invariants tested:

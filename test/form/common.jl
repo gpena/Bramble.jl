@@ -2,6 +2,8 @@ module FormCommonTests
 
 using Test
 using Bramble
+# Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
+import Bramble: D₊ₓ, M₊ₓ, M₊ᵧ
 using Bramble:
                TrialFunction,
                TestFunction,
@@ -306,7 +308,7 @@ using Bramble:
         for wrap in (
             D₋ₓ,
             D₊ₓ,
-            M₋ₓ,
+            Mₓ,
             M₊ₓ,
             op -> shift_op(op, 1, 1),
             op -> restrict_to(:interior, op),
@@ -348,7 +350,7 @@ end
         for e in (
             v -> innerₕ(fₕ, v),
             v -> innerₕ(fₕ, D₋ₓ(v)),
-            v -> innerₕ(fₕ, M₋ₓ(v)),
+            v -> innerₕ(fₕ, Mₓ(v)),
             v -> innerₕ(fₕ, jumpₓ(v)),
             v -> inner₊ₓ(fₕ, D₋ₓ(v))
         )

@@ -36,7 +36,7 @@ if Bramble.PRECOMPILE_WORKLOAD
     @setup_workload begin
         Ωₕ = Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0)), 5, true)
         Wₕ = Bramble.gridspace(Ωₕ)
-        a = Bramble.form(Wₕ, Wₕ, (u, v) -> Bramble.inner₊(Bramble.∇₋ₕ(u), Bramble.∇₋ₕ(v)))
+        a = Bramble.form(Wₕ, Wₕ, (u, v) -> Bramble.inner₊(Bramble.∇ₕ(u), Bramble.∇ₕ(v)))
         A = Bramble.assemble(a; dirichlet = :boundary)
 
         @compile_workload begin

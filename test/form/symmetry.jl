@@ -208,7 +208,7 @@ using Bramble:
             Ωd = domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D)))
             Ωr = D == 1 ? mesh(Ωd, n, false) : mesh(Ωd, n, ntuple(_ -> false, D))
             Wr = gridspace(Ωr)
-            a = form(Wr, Wr, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+            a = form(Wr, Wr, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
             l = form(Wr, v -> innerₕ(x -> 1.0, v))
             bcs = dirichlet_constraints(Ωr, :boundary => (x -> 0.0))
 

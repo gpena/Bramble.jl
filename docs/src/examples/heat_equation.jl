@@ -50,7 +50,7 @@ Wₕ = gridspace(Ωₕ)
 I = interval(0.0, 1.0)          # the time domain
 
 fₕ = element(Wₕ, 0.0)
-a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
 l = form(Wₕ, v -> innerₕ(fₕ, v))
 
 bcs = dirichlet_constraints(Ωₕ, I, :boundary => (x, t) -> 0.0)
@@ -193,7 +193,7 @@ l_t = form(Wₕ, v -> innerₕ(gₕ, v))
 
 function build_diffusion(t)
     αₕ = element(Wₕ, typeof(t))
-    a_t = form(Wₕ, Wₕ, (u, v) -> inner₊(αₕ * ∇₋ₕ(u), ∇₋ₕ(v)))
+    a_t = form(Wₕ, Wₕ, (u, v) -> inner₊(αₕ * ∇ₕ(u), ∇ₕ(v)))
     refill!(t) = (fill!(parent(αₕ), α(t)); nothing)
     return a_t, refill!
 end
@@ -236,12 +236,12 @@ M_mat = assemble(m_form)
 F_source = assemble(l_t)
 
 αₕ_be = element(Wₕ, 0.0)
-k_form = form(Wₕ, Wₕ, (u, v) -> inner₊(αₕ_be * ∇₋ₕ(u), ∇₋ₕ(v)))
+k_form = form(Wₕ, Wₕ, (u, v) -> inner₊(αₕ_be * ∇ₕ(u), ∇ₕ(v)))
 
 # `a` (the plain Laplacian at the top of this page) shares `k_form`'s stencil for any
 # value of `αₕ_be`, so its pattern is wide enough for both pieces without ever assembling
 # `a` itself into the matrix below.
-A_be = allocate_system_matrix(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇₋ₕ(u), ∇₋ₕ(v))))
+A_be = allocate_system_matrix(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))))
 
 bcs_be = dirichlet_constraints(Ωₕ, :boundary => x -> 0.0)
 u_be = parent(Rₕ(Wₕ, x -> uexact(x, 0.0)))
@@ -288,7 +288,7 @@ function heat_series(ns)
         Ωc = mesh(Ω, n)
         Wc = gridspace(Ωc)
         fc = element(Wc, 0.0)
-        ac = form(Wc, Wc, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+        ac = form(Wc, Wc, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
         lc = form(Wc, v -> innerₕ(fc, v))
         bc = dirichlet_constraints(Ωc, I, :boundary => (x, t) -> 0.0)
 

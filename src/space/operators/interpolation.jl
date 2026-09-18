@@ -76,11 +76,11 @@ end
     throw(
         ArgumentError(
         "outside = $(repr(outside)) cannot be represented here: interpolation_matrix and " *
-        "the symbolic bilinear πₕ(Wsrc, u) are linear maps, P * parent(src), and a row " *
+        "the symbolic bilinear πₕ(u) are linear maps, P * parent(src), and a row " *
         "that returns a constant regardless of src cannot be written as a weighted " *
         "combination of src's own entries unless that constant is zero. Use :error, " *
         ":clamp, or :extrapolate here; a fill value is only meaningful for the pointwise " *
-        "interpolate_at/πₕ/πₕ! and the one-argument symbolic πₕ(uₕ).",
+        "interpolate_at/πₕ/πₕ! and the symbolic source πₕ(uₕ).",
     ),
     )
 end

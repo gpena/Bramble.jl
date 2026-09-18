@@ -74,7 +74,7 @@ using ..TestUtils: _fd
         # Sparspak's triangular solve additionally requires the right-hand side to share
         # the matrix's own element type exactly, hence the explicit `eltype(Aθ).(...)`.
         function g(θ)
-            aθ = form(Wₕ, Wₕ, (u, v) -> (1.0 + θ) * inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+            aθ = form(Wₕ, Wₕ, (u, v) -> (1.0 + θ) * inner₊(∇ₕ(u), ∇ₕ(v)))
             Aθ, Fθ0 = assemble(aθ, l; dirichlet = ZERO_BC)
             Fθ = eltype(Aθ).(Fθ0)
             uθ = sparspak_solve(Aθ, Fθ)

@@ -2,7 +2,7 @@
 #
 # The difference families over grid functions: the undivided difference (`diff₋`/`diff₊`),
 # the divided one that approximates a derivative (`D₋`/`D₊`), the summation-by-parts pairing
-# `Dstar₊`, the centered `Dc`, and the second-order non-uniform `Dₕ`. Each is generated per
+# `D̽`, the centered `Dc`, and the second-order non-uniform `Dₕ`. Each is generated per
 # coordinate from the templates below.
 #
 # A stencil that runs off the grid is truncated rather than extrapolated: a backward operator
@@ -69,7 +69,7 @@ end
 # a point and its neighbour. `Centered` does not read the middle one; it is passed anyway
 # so that both centered operators can share one traversal.
 #
-# `h` is the averaged spacing, the same view `Dstar₊` divides by, because
+# `h` is the averaged spacing, the same view `D̽` divides by, because
 #
 #     x_{i+1} - x_{i-1} = h_i + h_{i+1} = 2 h*_i
 #
@@ -103,7 +103,7 @@ end
 @inline @propagate_inbounds _compute_difference(::GridDirection, ::Val{true}, cur, h, i) = zero(cur)
 
 # The two-sided (centred) engine's boundary call carries the one neighbour still on the
-# grid, in addition to `cur` -- `Centered`/`Dstar₊` (the latter routed through the one-sided
+# grid, in addition to `cur` -- `Centered`/`D̽` (the latter routed through the one-sided
 # engine and the fallback above; only `Centered` reaches this one) still have no stencil at
 # a truncated end and read zero regardless, ignoring it. `CrossWeighted` overrides this
 # below to use it (gpena/Bramble.jl#183).
@@ -126,7 +126,7 @@ end
 
 # --- The starred forward difference ----------------------------------------------- #
 #
-#   Dstar₊(uₕ)(i) = (u(xᵢ₊₁) - u(xᵢ)) / ((hᵢ + hᵢ₊₁) / 2)
+#   D̽(uₕ)(i) = (u(xᵢ₊₁) - u(xᵢ)) / ((hᵢ + hᵢ₊₁) / 2)
 #
 # The forward difference divided by the averaged spacing rather than by the forward
 # spacing. Away from the boundary that denominator is the width of the cell around xᵢ,
@@ -141,7 +141,7 @@ end
     StarSpacings(h)
 
 Lazy view of the averaged spacings ``(h_i + h_{i+1})/2`` over a mesh's cached backward
-spacings `h`, which is what [`Dstar₊ₓ`](@ref) divides by.
+spacings `h`, which is what [`D̽ₓ`](@ref) divides by.
 
 Entry `i` reads `h[i]` and `h[i+1]`, so it is defined for `i < length(h)`. That is exactly
 the range the forward stencil's interior covers; the last point has no forward neighbour
@@ -198,7 +198,7 @@ end
 
 # --- Deriving h and checking preconditions from a leaf's own submesh -------------- #
 #
-# Every family below (unscaled and finite differences, Dstar₊, Dc, Dₕ) shares one shape:
+# Every family below (unscaled and finite differences, D̽, Dc, Dₕ) shares one shape:
 # derive `h` (or nothing) from the direction's submesh, optionally check a precondition on
 # it, then apply the stencil. Only what `h` is and whether there is a precondition differ.
 # `spacing_func`/`precheck` are ordinary named functions, never closures over local state,
@@ -406,7 +406,7 @@ const _DIFFERENCE_OP_CONFIGS = [
         diff_alias = :diff₋,
         finite_diff_alias = :D₋,
         grad_alias = :diff₋ₕ,
-        finite_grad_alias = :∇₋ₕ,
+        finite_grad_alias = :∇ₕ,
         dir_string = "Backward",
         dir_string_lowercase = "backward",
         math_op = "u_{i} - u_{i-1}",
@@ -494,48 +494,67 @@ for config in _DIFFERENCE_OP_CONFIGS
         #
         # Only the mesh-forwarding overloads are generated here; the grid-function trio
         # (scalar `!`, composite `!`, allocating) comes from
-        # `_define_grid_function_forms` below, which `average.jl` and the centred families
+        # `@operator_family` below, which `average.jl` and the centred families
         # share (gpena/Bramble.jl#101).
         @inline $diff_name(Wₕ::AbstractSpaceType, dim_val::Val) = $diff_name(mesh(Wₕ), dim_val)
 
         @inline $finite_diff_name(Wₕ::AbstractSpaceType, dim_val::Val) = $finite_diff_name(mesh(Wₕ), dim_val)
     end
-
-    # The unscaled difference divides by nothing, so it passes `_no_spacing`. The finite
-    # one hands the engine the mesh's *cached* spacings vector rather than a callable:
-    # indexing it is 3.6x faster than one call per grid point, and it allocates nothing.
-    _define_grid_function_forms(
-        diff_name, :_apply_spaced!, (:_no_spacing, :_no_precheck), dir_instance
-    )
-    _define_grid_function_forms(
-        finite_diff_name, :_apply_spaced!, (spacings_func, :_no_precheck), dir_instance
-    )
-
-    unscaled_vs_finite_note = "The unscaled difference is not divided by the grid " *
-                              "spacing; the finite difference is."
-    contrast_kwargs = (direction, suffix) -> (; formula_note = unscaled_vs_finite_note)
-
-    _define_operator_aliases(
-        diff_name,
-        diff_alias,
-        dir_string_lowercase,
-        "unscaled difference",
-        math_op;
-        vectorial_alias = grad_alias,
-        alias_kwargs = contrast_kwargs
-    )
-    _define_operator_aliases(
-        finite_diff_name,
-        finite_diff_alias,
-        dir_string_lowercase,
-        "finite difference",
-        math_finite_op;
-        vectorial_alias = finite_grad_alias,
-        alias_kwargs = contrast_kwargs
-    )
 end
 
-# --- The three centred families: Dstar₊, Dc, Dₕ ------------------------------------ #
+# The grid-function forms and the alias surface of the four one-sided families, one
+# `@operator_family` call each. They sit outside the loop above because a macro is expanded
+# where it is written: the family's configuration has to be literal at that point, not a
+# `config.field` read at load time (gpena/Bramble.jl#258).
+#
+# The unscaled difference divides by nothing, so it passes `_no_spacing`. The finite one
+# hands the engine the mesh's *cached* spacings vector rather than a callable: indexing it
+# is 3.6x faster than one call per grid point, and it allocates nothing.
+@operator_family(base=forward_difference,
+    stem=diff₊,
+    apply_fn=_apply_spaced!,
+    extra_args=(_no_spacing, _no_precheck),
+    direction=Forward(),
+    dir_string="forward",
+    what="unscaled difference",
+    formula="u_{i+1} - u_i",
+    formula_note="The unscaled difference is not divided by the grid spacing; the finite difference is.",
+    vectorial_alias=diff₊ₕ)
+
+@operator_family(base=forward_finite_difference,
+    stem=D₊,
+    apply_fn=_apply_spaced!,
+    extra_args=(forward_spacings_for_derivative, _no_precheck),
+    direction=Forward(),
+    dir_string="forward",
+    what="finite difference",
+    formula="\\frac{u_{i+1} - u_i}{h_i}",
+    formula_note="The unscaled difference is not divided by the grid spacing; the finite difference is.",
+    vectorial_alias=∇₊ₕ)
+
+@operator_family(base=backward_difference,
+    stem=diff₋,
+    apply_fn=_apply_spaced!,
+    extra_args=(_no_spacing, _no_precheck),
+    direction=Backward(),
+    dir_string="backward",
+    what="unscaled difference",
+    formula="u_{i} - u_{i-1}",
+    formula_note="The unscaled difference is not divided by the grid spacing; the finite difference is.",
+    vectorial_alias=diff₋ₕ)
+
+@operator_family(base=backward_finite_difference,
+    stem=D₋,
+    apply_fn=_apply_spaced!,
+    extra_args=(backward_spacings_for_derivative, _no_precheck),
+    direction=Backward(),
+    dir_string="backward",
+    what="finite difference",
+    formula="\\frac{u_{i} - u_{i-1}}{h_i}",
+    formula_note="The unscaled difference is not divided by the grid spacing; the finite difference is.",
+    vectorial_alias=∇ₕ)
+
+# --- The three centred families: D̽, Dc, Dₕ ------------------------------------ #
 #
 # Each family's grid-function form is the same three-method shape `_DIFFERENCE_OP_CONFIGS`
 # already generates above for the two one-sided families: a scalar `!`, a composite `!`
@@ -545,188 +564,145 @@ end
 # whatever `spacing_func` derives is rebuilt per leaf, gpena/Bramble.jl#79) lives once, on
 # `_apply_spaced!`'s composite method above, rather than repeated per family here.
 #
-# Kept in its own, smaller config array rather than folded into `_DIFFERENCE_OP_CONFIGS`
-# itself: these three have no unscaled/finite split and no weight function, and each
-# alias's own docstring text ("over the averaged spacing", "truncated to zero", "second
-# order... where Dc is first") is bespoke prose rather than something `math_op`/
-# `dir_string` could template, so it is config data (a closure per family) instead of a
-# shared string.
-const _CENTERED_DIFFERENCE_OP_CONFIGS = [
-    (
-        name = :forward_star_difference,
-        direction = Forward(),
-        spacing_func = :star_spacings,
-        precheck = :_no_precheck,
-        alias_prefix = :Dstar₊,
-        vectorial_alias = :Dstar₊ₕ,
-        vectorial_dir_string = "starred forward",
-        vectorial_note = "",
-        alias_kwargs = (direction, suffix) -> (;
-            opening_sentence = "The forward difference of `uₕ` along the `$direction` " *
-                               "direction over the averaged spacing, " *
-                               "``\\frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}``.",
-            trailing_note = "The last point along `$direction` is truncated to zero."
-        ),
-        alias_kwargs_bang = (direction, suffix) -> (;
-            opening_sentence = "The forward difference of `uₕ` along the `$direction` " *
-                               "direction over the averaged spacing, " *
-                               "``\\frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}``, written " *
-                               "into `vₕ`."
-        ),
-        docstring = """
-            forward_star_difference(uₕ::VectorElement, dim_val::Val)
+# Each is its own `@operator_family` call rather than an entry in a shared config array:
+# these three have no unscaled/finite split and no weight function, and each alias's own
+# docstring text ("over the averaged spacing", "truncated to zero", "second order... where
+# Dc is first") is bespoke prose rather than something `math_op`/`dir_string` could
+# template. That prose travels as a string literal carrying `{direction}`/`{suffix}`
+# placeholders, which is what a macro can take; it was a closure per family until
+# gpena/Bramble.jl#258 removed the `Core.eval` these were generated through.
 
-        The forward difference of `uₕ` along `dim_val`, divided by the averaged spacing:
+@operator_family(base=forward_star_difference,
+    stem=D̽,
+    apply_fn=_apply_spaced!,
+    extra_args=(star_spacings, _no_precheck),
+    direction=Forward(),
+    docstring="""
+          forward_star_difference(uₕ::VectorElement, dim_val::Val)
 
-        ```math
-        \\textrm{Dstar}_{+}(\\textrm{u}_h)(i) =
-            \\frac{\\textrm{u}_h(x_{i+1}) - \\textrm{u}_h(x_i)}{(h_i + h_{i+1})/2}
-        ```
+      The forward difference of `uₕ` along `dim_val`, divided by the averaged spacing:
 
-        Reached through [`Dstar₊ₓ`](@ref) and its siblings, and takes a mesh, a grid space or a
-        grid function as the other difference families do.
+      ```math
+      \\overset{\\times}{\\textrm{D}}_{+}(\\textrm{u}_h)(i) =
+          \\frac{\\textrm{u}_h(x_{i+1}) - \\textrm{u}_h(x_i)}{(h_i + h_{i+1})/2}
+      ```
 
-        The last point has no forward neighbour, so it is truncated to zero, as in
-        [`D₊ₓ`](@ref).
+      Reached through [`D̽ₓ`](@ref) and its siblings, and takes a mesh, a grid space or a
+      grid function as the other difference families do.
 
-        See also: [`star_spacings`](@ref), [`D₊ₓ`](@ref).
-        """
-    ),
-    (
-        name = :centered_difference,
-        direction = Centered(),
-        spacing_func = :star_spacings,
-        precheck = :_check_centered_points,
-        alias_prefix = :Dc,
-        vectorial_alias = :Dcₕ,
-        vectorial_dir_string = "centered",
-        vectorial_note = "",
-        alias_kwargs = (direction, suffix) -> (;
-            opening_sentence = "The centered difference of `uₕ` along the `$direction` " *
-                               "direction, ``\\frac{u_{i+1} - u_{i-1}}{h_i + h_{i+1}}``.",
-            trailing_note = "The first and last points along `$direction` are truncated " *
-                            "to zero, so the mesh needs at least three points along " *
-                            "`$direction` and an `ArgumentError` is thrown when it has " *
-                            "fewer."
-        ),
-        alias_kwargs_bang = (direction, suffix) -> (;
-            opening_sentence = "The centered difference of `uₕ` along the `$direction` " *
-                               "direction, ``\\frac{u_{i+1} - u_{i-1}}{h_i + h_{i+1}}``, " *
-                               "written into `vₕ`."
-        ),
-        docstring = """
-            centered_difference(uₕ::VectorElement, dim_val::Val)
+      The last point has no forward neighbour, so it is truncated to zero, as in
+      [`D₊ₓ`](@ref).
 
-        The centered difference of `uₕ` along `dim_val`:
+      See also: [`star_spacings`](@ref), [`D₊ₓ`](@ref).
+      """,
+    opening_sentence="The forward difference of `uₕ` along the `{direction}` "*
+                     "direction over the averaged spacing, "*
+                     "``\\frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}``.",
+    trailing_note="The last point along `{direction}` is truncated to zero.",
+    bang_opening_sentence="The forward difference of `uₕ` along the `{direction}` "*
+                          "direction over the averaged spacing, "*
+                          "``\\frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}``, written "*
+                          "into `vₕ`.",
+    vectorial_alias=D̽ₕ,
+    vectorial_dir_string="starred forward",
+    vectorial_what="difference")
 
-        ```math
-        \\textrm{Dc}(\\textrm{u}_h)(i) =
-            \\frac{\\textrm{u}_h(x_{i+1}) - \\textrm{u}_h(x_{i-1})}{h_i + h_{i+1}}
-        ```
+@operator_family(base=centered_difference,
+    stem=Dc,
+    apply_fn=_apply_spaced!,
+    extra_args=(star_spacings, _check_centered_points),
+    direction=Centered(),
+    docstring="""
+          centered_difference(uₕ::VectorElement, dim_val::Val)
 
-        Reached through [`Dcₓ`](@ref) and its siblings, and takes a mesh, a grid space or a grid
-        function as the other difference families do.
+      The centered difference of `uₕ` along `dim_val`:
 
-        The denominator is ``x_{i+1} - x_{i-1}``, so the operator reproduces the derivative of an
-        affine function exactly on any grid, uniform or not. Both the first and the last point
-        lack a neighbour on one side, so both are truncated to zero.
+      ```math
+      \\textrm{Dc}(\\textrm{u}_h)(i) =
+          \\frac{\\textrm{u}_h(x_{i+1}) - \\textrm{u}_h(x_{i-1})}{h_i + h_{i+1}}
+      ```
 
-        See also: [`star_spacings`](@ref), [`D₋ₓ`](@ref), [`D₊ₓ`](@ref).
-        """
-    ),
-    (
-        name = :cross_weighted_difference,
-        direction = CrossWeighted(),
-        spacing_func = :spacings,
-        precheck = :_check_centered_points,
-        alias_prefix = :Dₕ,
-        vectorial_alias = :∇ₕ,
-        vectorial_dir_string = "cross-weighted centered",
-        vectorial_note = "The centered counterpart of [`∇₋ₕ`](@ref) and [`∇₊ₕ`](@ref), " *
-                         "built from [`Dₕₓ`](@ref) rather than from the one-sided " *
-                         "differences.",
-        alias_kwargs = (direction, suffix) -> (;
-            opening_sentence = "The cross-weighted centered difference of `uₕ` along " *
-                               "the `$direction` direction, the backward differences " *
-                               "at ``x_{i+1}`` and ``x_i`` weighted by ``h_i`` and " *
-                               "``h_{i+1}``.",
-            alias_note = "Second order on a non-uniform grid, where [`Dc$suffix`](@ref) " *
-                         "is first.",
-            trailing_note = "Unlike [`Dc$suffix`](@ref), the first and last points along " *
-                            "`$direction` are not truncated: with no neighbour on the " *
-                            "far side, each collapses to the one-sided difference the " *
-                            "near side still gives, [`D₊$suffix`](@ref) at the first " *
-                            "point and [`D₋$suffix`](@ref) at the last. The mesh still " *
-                            "needs at least three points along `$direction`, and an " *
-                            "`ArgumentError` is thrown when it has fewer."
-        ),
-        alias_kwargs_bang = (direction, suffix) -> (;
-            opening_sentence = "The cross-weighted centered difference of `uₕ` along " *
-                               "the `$direction` direction, the backward differences " *
-                               "at ``x_{i+1}`` and ``x_i`` weighted by ``h_i`` and " *
-                               "``h_{i+1}``, written into `vₕ`."
-        ),
-        docstring = """
-            cross_weighted_difference(uₕ::VectorElement, dim_val::Val)
+      Reached through [`Dcₓ`](@ref) and its siblings, and takes a mesh, a grid space or a grid
+      function as the other difference families do.
 
-        The cross-weighted centered difference of `uₕ` along `dim_val`:
+      The denominator is ``x_{i+1} - x_{i-1}``, so the operator reproduces the derivative of an
+      affine function exactly on any grid, uniform or not. Both the first and the last point
+      lack a neighbour on one side, so both are truncated to zero.
 
-        ```math
-        \\textrm{D}_{h}(\\textrm{u}_h)(i) =
-            \\frac{h_i}{h_i + h_{i+1}}\\, \\textrm{D}_{-}\\textrm{u}_h(x_{i+1}) +
-            \\frac{h_{i+1}}{h_i + h_{i+1}}\\, \\textrm{D}_{-}\\textrm{u}_h(x_i)
-        ```
+      See also: [`star_spacings`](@ref), [`D₋ₓ`](@ref), [`D₊ₓ`](@ref).
+      """,
+    opening_sentence="The centered difference of `uₕ` along the `{direction}` "*
+    "direction, ``\\frac{u_{i+1} - u_{i-1}}{h_i + h_{i+1}}``.",
+    trailing_note="The first and last points along `{direction}` are truncated "*
+                  "to zero, so the mesh needs at least three points along "*
+                  "`{direction}` and an `ArgumentError` is thrown when it has "*
+                  "fewer.",
+    bang_opening_sentence="The centered difference of `uₕ` along the `{direction}` "*
+                          "direction, ``\\frac{u_{i+1} - u_{i-1}}{h_i + h_{i+1}}``, "*
+                          "written into `vₕ`.",
+    vectorial_alias=Dcₕ,
+    vectorial_dir_string="centered",
+    vectorial_what="difference")
 
-        Reached through [`Dₕₓ`](@ref) and its siblings, and takes a mesh, a grid space or a grid
-        function as the other difference families do.
+@operator_family(base=cross_weighted_difference,
+    stem=Dₕ,
+    apply_fn=_apply_spaced!,
+    extra_args=(spacings, _check_centered_points),
+    direction=CrossWeighted(),
+    docstring="""
+          cross_weighted_difference(uₕ::VectorElement, dim_val::Val)
 
-        It is the same two one-sided differences [`Dcₓ`](@ref) combines, weighted by the opposite
-        spacings. That is the combination which cancels the leading truncation term on a
-        non-uniform grid, so this is second order where `Dcₓ` is first, and the two coincide when
-        the spacing is constant.
+      The cross-weighted centered difference of `uₕ` along `dim_val`:
 
-        The first and the last point each lack a neighbour on one side, but unlike `Dcₓ` neither
-        is truncated: each collapses to the one-sided difference its near side still defines,
-        [`D₊ₓ`](@ref)`(uₕ)` at the first point and [`D₋ₓ`](@ref)`(uₕ)` at the last.
+      ```math
+      \\textrm{D}_{h}(\\textrm{u}_h)(i) =
+          \\frac{h_i}{h_i + h_{i+1}}\\, \\textrm{D}_{-}\\textrm{u}_h(x_{i+1}) +
+          \\frac{h_{i+1}}{h_i + h_{i+1}}\\, \\textrm{D}_{-}\\textrm{u}_h(x_i)
+      ```
 
-        See also: [`Dcₓ`](@ref), [`D₋ₓ`](@ref), [`D₊ₓ`](@ref).
-        """
-    )
-]
+      Reached through [`Dₕₓ`](@ref) and its siblings, and takes a mesh, a grid space or a grid
+      function as the other difference families do.
 
-for config in _CENTERED_DIFFERENCE_OP_CONFIGS
-    name = config.name
-    _define_grid_function_forms(
-        name,
-        :_apply_spaced!,
-        (config.spacing_func, config.precheck),
-        config.direction;
-        docstring = config.docstring
-    )
+      It is the same two one-sided differences [`Dcₓ`](@ref) combines, weighted by the opposite
+      spacings. That is the combination which cancels the leading truncation term on a
+      non-uniform grid, so this is second order where `Dcₓ` is first, and the two coincide when
+      the spacing is constant.
 
-    # `dir_string`/`what`/`formula` are empty here: every alias of these three supplies its
-    # own `opening_sentence`, so the generic "The `backward` difference along the `x`
-    # direction" template they would fill is never reached.
-    _define_operator_aliases(
-        name,
-        config.alias_prefix,
-        "",
-        "",
-        "";
-        vectorial_alias = config.vectorial_alias,
-        vectorial_dir_string = config.vectorial_dir_string,
-        vectorial_what = "difference",
-        vectorial_note = config.vectorial_note,
-        alias_kwargs = config.alias_kwargs,
-        bang_alias_kwargs = config.alias_kwargs_bang
-    )
-end
+      The first and the last point each lack a neighbour on one side, but unlike `Dcₓ` neither
+      is truncated: each collapses to the one-sided difference its near side still defines,
+      [`D₊ₓ`](@ref)`(uₕ)` at the first point and [`D₋ₓ`](@ref)`(uₕ)` at the last.
+
+      See also: [`Dcₓ`](@ref), [`D₋ₓ`](@ref), [`D₊ₓ`](@ref).
+      """,
+    opening_sentence="The cross-weighted centered difference of `uₕ` along "*
+                     "the `{direction}` direction, the backward differences "*
+                     "at ``x_{i+1}`` and ``x_i`` weighted by ``h_i`` and "*
+                     "``h_{i+1}``.",
+    alias_note="Second order on a non-uniform grid, where [`Dc{suffix}`](@ref) "*
+    "is first.",
+    trailing_note="Unlike [`Dc{suffix}`](@ref), the first and last points along "*
+                  "`{direction}` are not truncated: with no neighbour on the "*
+                  "far side, each collapses to the one-sided difference the "*
+                  "near side still gives, [`D₊{suffix}`](@ref) at the first "*
+                  "point and [`D₋{suffix}`](@ref) at the last. The mesh still "*
+                  "needs at least three points along `{direction}`, and an "*
+                  "`ArgumentError` is thrown when it has fewer.",
+    bang_opening_sentence="The cross-weighted centered difference of `uₕ` along "*
+                          "the `{direction}` direction, the backward differences "*
+                          "at ``x_{i+1}`` and ``x_i`` weighted by ``h_i`` and "*
+                          "``h_{i+1}``, written into `vₕ`.",
+    vectorial_alias=Dₕ,
+    vectorial_dir_string="cross-weighted centered",
+    vectorial_what="difference",
+    vectorial_note="The centered counterpart of [`∇ₕ`](@ref) and [`∇₊ₕ`](@ref), "*
+                   "built from [`Dₕₓ`](@ref) rather than from the one-sided "*
+                   "differences.")
 
 # ==============================================================================
 # Matrix forms for the three centred families
 # ==============================================================================
 #
-# `Dstar₊`, `Dc` and `Dₕ` had grid-function forms only, so of the eight operator families
+# `D̽`, `Dc` and `Dₕ` had grid-function forms only, so of the eight operator families
 # five could be had as a matrix and three could not. That asymmetry had to be explained in
 # every one of their docstrings, and it left the form layer's nodes for them with nothing
 # to be checked against.
@@ -734,7 +710,7 @@ end
 # Each is a diagonal scaling of unscaled difference matrices this file already builds, so
 # none needs a new traversal:
 #
-#     Dstar₊ = diag(2/(hᵢ + hᵢ₊₁))                  · (shift₊₁ - shift₀)
+#     D̽ = diag(2/(hᵢ + hᵢ₊₁))                  · (shift₊₁ - shift₀)
 #     Dc     = diag(1/(hᵢ + hᵢ₊₁))                  · (shift₊₁ - shift₋₁)
 #     Dₕ     = diag(hᵢ/((hᵢ+hᵢ₊₁)hᵢ₊₁))             · diff₊
 #            + diag(hᵢ₊₁/((hᵢ+hᵢ₊₁)hᵢ))             · diff₋

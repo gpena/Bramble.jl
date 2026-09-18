@@ -19,17 +19,19 @@ end
 
 Apply `f` across indices `idxs` and write the result into `v` in place.
 
-Dispatches to sequential iteration for [`Serial`](@ref) or static work partitioning across
-threads for [`Parallel`](@ref).
+Dispatches to sequential iteration for [`CpuSerial`](@ref) or static work partitioning across
+threads for [`CpuThreaded`](@ref). A [`GpuPolicy`](@ref) is refused: this is a CPU loop, and
+running one over a device array is a scalar-indexing failure several frames deeper.
 
 # Arguments
-- `policy`: Execution policy ([`Serial`](@ref) or [`Parallel`](@ref)).
+- `policy`: Execution policy ([`CpuSerial`](@ref) or [`CpuThreaded`](@ref)).
 - `v`: Destination array mutated in place.
 - `idxs`: Iterable collection of linear or Cartesian indices.
 - `f`: Kernel mapping each index `idx` to the scalar value stored in `v[idx]`.
 """
-@inline _cpu_threaded_for!(::Serial, v, idxs, f) = _serial_for!(v, idxs, f)
-@inline _cpu_threaded_for!(::Parallel, v, idxs, f) = _threaded_for!(v, idxs, f)
+@inline _cpu_threaded_for!(::CpuSerial, v, idxs, f) = _serial_for!(v, idxs, f)
+@inline _cpu_threaded_for!(::CpuThreaded, v, idxs, f) = _threaded_for!(v, idxs, f)
+@noinline _cpu_threaded_for!(policy::GpuPolicy, v, idxs, f) = _throw_gpu_in_cpu_loop(policy)
 
 # `Threads.@threads` needs an indexable collection, so handed a `CartesianIndices` it
 # linearly indexes it and pays an index conversion per point, where the serial loop
@@ -45,7 +47,21 @@ threads for [`Parallel`](@ref).
 # one core manages 46-55 GB/s and four recover 1.24-1.39x. The point of this method is the
 # removed index conversion, which is a penalty in every power state; the parallel gain on
 # top of it is the machine's to give.
-@inline _cpu_threaded_for!(::Parallel, v, idxs::CartesianIndices, f) = _threaded_axis_for!(v, idxs, f)
+@inline _cpu_threaded_for!(::CpuThreaded, v, idxs::CartesianIndices, f) = _threaded_axis_for!(v, idxs, f)
+
+# The one message both CPU sweeps give a device policy. Stated here rather than left to a
+# `MethodError`, which would name `_cpu_threaded_for!` and not say why a GPU backend has no
+# business in it (gpena/Bramble.jl#191).
+@noinline function _throw_gpu_in_cpu_loop(policy)
+    throw(
+        ArgumentError(
+        "execution policy $(typeof(policy)) is a GpuPolicy, and this is a CPU loop: it " *
+        "indexes the destination element by element, which a device array refuses. Build " *
+        "the backend with a CpuPolicy (CpuSerial() or CpuThreaded()) to run this on the " *
+        "host, or reach for a kernel that runs on the device.",
+    ),
+    )
+end
 
 """
     _threaded_for!(v::AbstractArray, idxs, f::Function) -> Nothing
@@ -197,18 +213,19 @@ Evaluate tuple-valued kernel `g` across `idxs` and scatter results into destinat
 Dispatches to sequential execution for [`Serial`](@ref) or static multithreaded execution for [`Parallel`](@ref).
 
 # Arguments
-- `policy`: Execution policy ([`Serial`](@ref) or [`Parallel`](@ref)).
+- `policy`: Execution policy ([`CpuSerial`](@ref) or [`CpuThreaded`](@ref)).
 - `mats`: Tuple of destination arrays mutated in place.
 - `idxs`: Iterable collection of indices.
 - `g`: Kernel mapping each index to a tuple of values matching `length(mats)`.
 """
-@inline function _cpu_threaded_scatter_for!(::Serial, mats::Tuple, idxs, g)
+@inline function _cpu_threaded_scatter_for!(::CpuSerial, mats::Tuple, idxs, g)
     @inbounds for idx in idxs
         _write_components!(mats, g(idx), idx)
     end
     return nothing
 end
-@inline _cpu_threaded_scatter_for!(::Parallel, mats::Tuple, idxs, g) = _threaded_scatter_for!(mats, idxs, g)
+@inline _cpu_threaded_scatter_for!(::CpuThreaded, mats::Tuple, idxs, g) = _threaded_scatter_for!(mats, idxs, g)
+@noinline _cpu_threaded_scatter_for!(policy::GpuPolicy, mats::Tuple, idxs, g) = _throw_gpu_in_cpu_loop(policy)
 
 # Kept in an isolated function to prevent closure boxing allocations on serial execution paths.
 @noinline function _threaded_scatter_for!(mats::Tuple, idxs, g)

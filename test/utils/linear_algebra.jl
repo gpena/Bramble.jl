@@ -11,12 +11,39 @@ using Bramble:
                _cpu_threaded_scatter_for!,
                _write_components!,
                Serial,
-               Parallel
+               Parallel,
+               CpuSerial,
+               CpuThreaded,
+               GpuAsync
 using LinearAlgebra: dot
 using StaticArrays
 using ..TestUtils: alloc_test, @test_allocs
 
 @testset "Linear algebra utilities" begin
+    # Invariants tested (gpena/Bramble.jl#191):
+    # 1. A GpuPolicy reaching either CPU sweep is refused, with a message naming the policy.
+    # 2. The alias spellings still select the same two CPU methods they always did.
+    @testset "CPU sweeps refuse a device policy" begin
+        v = zeros(4)
+        @test_throws ArgumentError _cpu_threaded_for!(GpuAsync(), v, 1:4, identity)
+        @test_throws ArgumentError _cpu_threaded_scatter_for!(
+            GpuAsync(), (v,), 1:4, i -> (float(i),)
+        )
+        err = try
+            _cpu_threaded_for!(GpuAsync(), v, 1:4, identity)
+        catch e
+            e
+        end
+        @test occursin("GpuAsync", sprint(showerror, err))
+        @test occursin("CpuSerial", sprint(showerror, err))
+
+        _cpu_threaded_for!(Serial(), v, 1:4, i -> 2.0 * i)
+        @test v == [2.0, 4.0, 6.0, 8.0]
+        fill!(v, 0.0)
+        _cpu_threaded_for!(CpuSerial(), v, 1:4, i -> 3.0 * i)
+        @test v == [3.0, 6.0, 9.0, 12.0]
+    end
+
     # Invariants tested:
     # 1. Trilinear form evaluation: ∑ u_i * v_i * w_i matches hand-calculated expected values.
     # 2. Annihilation: any zero vector argument produces a zero result.

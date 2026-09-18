@@ -2,6 +2,8 @@ module FormLinearTests
 
 using Test
 using Bramble
+# Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
+import Bramble: M₊ᵧ
 using ForwardDiff
 using LinearAlgebra: Diagonal, diag, dot, I
 using Bramble:
@@ -269,13 +271,13 @@ using ..TestUtils: alloc_test, @test_allocs
             b = assemble(
                 form(
                 Wf,
-                v -> innerₕ(g1, v + 2 * D₋ₓ(v) - M₋ₓ(v)) +
+                v -> innerₕ(g1, v + 2 * D₋ₓ(v) - Mₓ(v)) +
                      inner₊ₓ(g2, D₋ᵧ(v) + jumpₓ(v)) +
                      innerₕ(g3, 3 * M₊ᵧ(v) - Dₕₓ(v))
             ),
             )
 
-            reference = innerₕ(g1, w + 2 * D₋ₓ(w) - M₋ₓ(w)) +
+            reference = innerₕ(g1, w + 2 * D₋ₓ(w) - Mₓ(w)) +
                         inner₊ₓ(g2, D₋ᵧ(w) + jumpₓ(w)) +
                         innerₕ(g3, 3 * M₊ᵧ(w) - Dₕₓ(w))
 
@@ -287,9 +289,9 @@ using ..TestUtils: alloc_test, @test_allocs
             gv = Rₕ(Vf, (x -> x[1] + 2x[2], x -> exp(x[1]), x -> 1 + x[2]^2))
             wv = Rₕ(Vf, (x -> sin(3x[1]) + 1, x -> cos(2x[2]) + 2, x -> x[1] * x[2] + 1))
 
-            b = assemble(form(Vf, v -> innerₕ(gv, v + 2 * D₋ₓ(v) - M₋ₓ(v))))
+            b = assemble(form(Vf, v -> innerₕ(gv, v + 2 * D₋ₓ(v) - Mₓ(v))))
             reference = sum(
-                innerₕ(components(gv)[c], (w = components(wv)[c]; w + 2 * D₋ₓ(w) - M₋ₓ(w)))
+                innerₕ(components(gv)[c], (w = components(wv)[c]; w + 2 * D₋ₓ(w) - Mₓ(w)))
             for c in 1:3
             )
 
@@ -312,10 +314,10 @@ using ..TestUtils: alloc_test, @test_allocs
                      innerₕ(uv(3), v(3) + D₋ₓ(v(3)))
             ),
                 (
-                v -> innerₕ(uv, v + 2 * D₋ₓ(v) - M₋ₓ(v)),
-                v -> innerₕ(uv(1), v(1) + 2 * D₋ₓ(v(1)) - M₋ₓ(v(1))) +
-                     innerₕ(uv(2), v(2) + 2 * D₋ₓ(v(2)) - M₋ₓ(v(2))) +
-                     innerₕ(uv(3), v(3) + 2 * D₋ₓ(v(3)) - M₋ₓ(v(3)))
+                v -> innerₕ(uv, v + 2 * D₋ₓ(v) - Mₓ(v)),
+                v -> innerₕ(uv(1), v(1) + 2 * D₋ₓ(v(1)) - Mₓ(v(1))) +
+                     innerₕ(uv(2), v(2) + 2 * D₋ₓ(v(2)) - Mₓ(v(2))) +
+                     innerₕ(uv(3), v(3) + 2 * D₋ₓ(v(3)) - Mₓ(v(3)))
             ),
                 (
                 v -> inner₊ₓ(uv, v - M₊ᵧ(v)),
@@ -338,8 +340,8 @@ using ..TestUtils: alloc_test, @test_allocs
         @testset "Index distribution" begin
             v = TestFunction{2}()
             @test (v + D₋ₓ(v))(1) == v(1) + D₋ₓ(v(1))
-            @test (3 * M₋ᵧ(v))(2) == 3 * M₋ᵧ(v(2))
-            @test (v + 2 * D₋ₓ(v) - M₋ₓ(v))(2) == v(2) + 2 * D₋ₓ(v(2)) - M₋ₓ(v(2))
+            @test (3 * Mᵧ(v))(2) == 3 * Mᵧ(v(2))
+            @test (v + 2 * D₋ₓ(v) - Mₓ(v))(2) == v(2) + 2 * D₋ₓ(v(2)) - Mₓ(v(2))
             @test v(1)(2) === IndexedTestFunction{2}(2)      # re-indexing replaces
 
             # a sum inside one product takes the component its sides agree on
@@ -467,7 +469,7 @@ using ..TestUtils: alloc_test, @test_allocs
             # single-colour cases above exercise none of them.
             for (cnm, g) in (
                 ("one difference", v -> innerₕ(ub, D₋ₓ(v))),
-                ("a linear combination", v -> innerₕ(ub, v + 2 * D₋ₓ(v) - M₋ₓ(v))),
+                ("a linear combination", v -> innerₕ(ub, v + 2 * D₋ₓ(v) - Mₓ(v))),
                 ("innerₕ and inner₊ mixed", v -> innerₕ(ub, v) + inner₊(ub, D₋ₓ(v))),
                 (
                 "differences in both directions",
@@ -644,7 +646,7 @@ using ..TestUtils: alloc_test, @test_allocs
         cc = components(uc)
         for (nm, g) in (
             ("scalar, a difference", v -> innerₕ(uₕ, D₋ₓ(v))),
-            ("scalar, a linear combination", v -> innerₕ(uₕ, v + 2 * D₋ₓ(v) - M₋ₓ(v))),
+            ("scalar, a linear combination", v -> innerₕ(uₕ, v + 2 * D₋ₓ(v) - Mₓ(v))),
             ("scalar, two kinds summed", v -> innerₕ(uₕ, v) + inner₊ₓ(uₕ, D₋ₓ(v)))
         )
             lfx = form(Wₕ, g)
@@ -800,17 +802,17 @@ using ..TestUtils: alloc_test, @test_allocs
         Hh = Diagonal(collect(weights(Wₕ, Innerh())))
         Hpx = Diagonal(collect(weights(Wₕ, Innerplus(), 1)))
         Dx = Matrix(D₋ₓ(Wₕ))
-        Mx = Matrix(M₋ₓ(Wₕ))
+        Mx = Matrix(Mₓ(Wₕ))
         Idm = Matrix(1.0I, n, n)
 
         @test assemble(form(Wₕ, v -> innerₕ(uₕ, v))) ≈ Hh * uu
         @test assemble(form(Wₕ, v -> innerₕ(uₕ, D₋ₓ(v)))) ≈ transpose(Dx) * (Hh * uu)
-        @test assemble(form(Wₕ, v -> innerₕ(uₕ, M₋ₓ(v)))) ≈ transpose(Mx) * (Hh * uu)
+        @test assemble(form(Wₕ, v -> innerₕ(uₕ, Mₓ(v)))) ≈ transpose(Mx) * (Hh * uu)
         @test assemble(form(Wₕ, v -> inner₊ₓ(uₕ, D₋ₓ(v)))) ≈ transpose(Dx) * (Hpx * uu)
 
         # a linear combination of operators in the test argument is the same combination of
         # their matrices, and inner products of different kinds add
-        @test assemble(form(Wₕ, v -> innerₕ(uₕ, v + 2 * D₋ₓ(v) - M₋ₓ(v)))) ≈
+        @test assemble(form(Wₕ, v -> innerₕ(uₕ, v + 2 * D₋ₓ(v) - Mₓ(v)))) ≈
               transpose(Idm + 2 * Dx - Mx) * (Hh * uu)
         @test assemble(form(Wₕ, v -> innerₕ(uₕ, v) + inner₊ₓ(uₕ, D₋ₓ(v)))) ≈
               Hh * uu + transpose(Dx) * (Hpx * uu)

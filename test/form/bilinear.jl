@@ -2,6 +2,8 @@ module FormBilinearTests
 
 using Test
 using Bramble
+# Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
+import Bramble: M₊ᵧ
 using ForwardDiff
 using LinearAlgebra: Diagonal, I, diag, dot
 using SparseArrays: sparse, nnz, nonzeros
@@ -55,7 +57,7 @@ using Bramble:
     H = Matrix(Diagonal(collect(weights(Wₕ, Innerh()))))
     Hx = Matrix(Diagonal(collect(weights(Wₕ, Innerplus(), 1))))
     Dx = Matrix(D₋ₓ(Wₕ))
-    Mx = Matrix(M₋ₓ(Wₕ))
+    Mx = Matrix(Mₓ(Wₕ))
     Idm = Matrix(1.0I, n, n)
 
     @testset "Matrix expression equivalence" begin
@@ -63,7 +65,7 @@ using Bramble:
         @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(u), v)))) ≈ H * Dx
         @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, D₋ₓ(v))))) ≈
               transpose(Dx) * H
-        @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(M₋ₓ(u), v)))) ≈ H * Mx
+        @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(Mₓ(u), v)))) ≈ H * Mx
 
         # the stiffness matrix, which is the reason the package exists
         @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v))))) ≈
@@ -569,7 +571,7 @@ using Bramble:
         # this test got wrong.
         Ω1d = mesh(domain(interval(0.0, 1.0)), 41, true)
         W1d = gridspace(Ω1d)
-        a_stiff = form(W1d, W1d, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+        a_stiff = form(W1d, W1d, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
         A_stiff = assemble(a_stiff)
         assemble!(A_stiff, a_stiff)
         @test a_stiff.cache.segments[1].is_diagonal
@@ -750,7 +752,7 @@ using Bramble:
             for ast in (
                 resolve_form_ast(form(W, W, (a, b) -> innerₕ(a, b))),
                 resolve_form_ast(form(W, W, (a, b) -> innerₕ(D₋ₓ(a), D₋ₓ(b)))),
-                resolve_form_ast(form(W, W, (a, b) -> inner₊(∇₋ₕ(a), ∇₋ₕ(b)))),
+                resolve_form_ast(form(W, W, (a, b) -> inner₊(∇ₕ(a), ∇ₕ(b)))),
                 resolve_form_ast(form(W, W, (a, b) -> innerₕ(Dcₓ(a), M₊ᵧ(b))))
             )
                 pat = visit_bilinear_stencil(PatternSink(Int[], Int[]), ast, W, 0, 0)
@@ -891,7 +893,7 @@ using Bramble:
                 u, v = TrialFunction{D}(), TestFunction{D}()
 
                 terms = Any[resolve_ast(innerₕ(u, v)), resolve_ast(innerₕ(D₋ₓ(u), D₋ₓ(v)))]
-                D >= 2 && push!(terms, resolve_ast(inner₊(∇₋ₕ(u), ∇₋ₕ(v))))
+                D >= 2 && push!(terms, resolve_ast(inner₊(∇ₕ(u), ∇ₕ(v))))
                 # margin 2: a composed difference and a multi-cell shift, neither a
                 # single tap -- exactly the case a hardcoded 1-cell rim would get wrong.
                 push!(terms, resolve_ast(innerₕ(D₋ₓ(D₋ₓ(u)), v)))
@@ -933,7 +935,7 @@ using Bramble:
             W = gridspace(Ω)
             bcs = dirichlet_constraints(Ωd, :boundary => sol)
 
-            a = form(W, W, (u, v) -> inner₊(∇₋ₕ(u), ∇₋ₕ(v)))
+            a = form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
             A = assemble(a; dirichlet = :boundary)
             fₕ = element(W)
             avgₕ!(fₕ, rhs)

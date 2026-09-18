@@ -164,8 +164,8 @@ const _AVERAGE_OP_CONFIGS = [
     (
         direction = Backward(),
         average_name = :backward_average,
-        average_alias = :M₋,
-        vectorial_average_alias = :M₋ₕ,
+        average_alias = :M,
+        vectorial_average_alias = :Mₕ,
         dir_string_lowercase = "backward",
         math_op = "\\frac{u_{i-1} + u_{i}}{2}"
     )
@@ -223,22 +223,45 @@ for config in _AVERAGE_OP_CONFIGS
         #
         # Only the mesh-forwarding overload is generated here; the grid-function trio
         # (scalar `!`, composite `!`, allocating) comes from
-        # `_define_grid_function_forms`, shared with `difference.jl`
+        # `@operator_family` below, shared with `difference.jl`
         # (gpena/Bramble.jl#101).
         @inline $average_name(Wₕ::AbstractSpaceType, dim_val::Val) = $average_name(mesh(Wₕ), dim_val)
     end
-
-    # An average divides by nothing the direction does not already say, so unlike the
-    # differences it needs no spacing function and no precondition: `_apply_averaged!`
-    # takes the direction alone.
-    _define_grid_function_forms(average_name, :_apply_averaged!, (), dir_instance)
-
-    _define_operator_aliases(
-        average_name,
-        average_alias,
-        dir_string_lowercase,
-        "average",
-        math_op;
-        vectorial_alias = vectorial_average_alias
-    )
 end
+
+# The grid-function forms and the alias surface, one `@operator_family` call per family.
+# They sit outside the loop above because a macro is expanded where it is written: the
+# family's configuration has to be literal at that point, not a `config.field` read at load
+# time (gpena/Bramble.jl#258).
+#
+# An average divides by nothing the direction does not already say, so unlike the
+# differences it needs no spacing function and no precondition: `_apply_averaged!` takes the
+# direction alone, and `extra_args` is left out.
+#
+# `dispatch_alias` is the one place these two differ from every other family
+# (gpena/Bramble.jl#74). Elsewhere the dimensional entry point takes the family's stem --
+# `D₋(uₕ, d)` next to `D₋ₓ` -- but the average's stem is `M`, and `M` is the most common
+# local name in finite-element code for a mass matrix. Minting it would mean `using Bramble`
+# reserved it, and a caller writing `M = assemble(a, Wₕ)` at top level would get "cannot
+# assign a value to imported variable M" for their trouble. So the averages put the
+# direction argument on the tuple-valued alias they already export instead: `Mₕ(uₕ)` is
+# still the tuple, `Mₕ(uₕ, 2)` is the `y` average, and no new name enters the surface.
+@operator_family(base=forward_average,
+    stem=M₊,
+    apply_fn=_apply_averaged!,
+    direction=Forward(),
+    dir_string="forward",
+    what="average",
+    formula="\\frac{u_{i} + u_{i+1}}{2}",
+    dispatch_alias=M₊ₕ,
+    vectorial_alias=M₊ₕ)
+
+@operator_family(base=backward_average,
+    stem=M,
+    apply_fn=_apply_averaged!,
+    direction=Backward(),
+    dir_string="backward",
+    what="average",
+    formula="\\frac{u_{i-1} + u_{i}}{2}",
+    dispatch_alias=Mₕ,
+    vectorial_alias=Mₕ)
