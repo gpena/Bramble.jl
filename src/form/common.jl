@@ -219,6 +219,22 @@ struct AbsoluteColumn
     col::Int
 end
 
+"""
+    AbsoluteRow
+
+A stencil entry's test slot, naming a row of the test space directly rather than an offset
+from the point being evaluated.
+
+The mirror of [`AbsoluteColumn`](@ref), and it exists for the mirror reason: a test-side
+interpolation (`innerₕ(u, πₕ(w))`, gpena/Bramble.jl#263) determines which rows a point's
+contribution scatters into, on a mesh other than the one being walked, so it names them
+outright. The walked mesh is then the trial function's -- whichever side stays native is the
+side that supplies the quadrature weight and the grid being swept.
+"""
+struct AbsoluteRow
+    row::Int
+end
+
 # --- Whether an operator's stencil may be shifted by relabelling its offsets -------- #
 #
 # Every wrapper that reaches a neighbour (the differences, the averages, Sₓ, the jumps)

@@ -270,6 +270,122 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         @test_allocs assemble!(As, a)
     end
 
+    # The mirror of everything above: the *test* side interpolates, so the trial mesh is the
+    # one integrated over, the entries name absolute rows, and the assembled block is
+    # `Pᵀ · H · (trial factor)` (gpena/Bramble.jl#263). Every identity here is checked against
+    # `interpolation_matrix` and the quadrature weight, not against the trial-side path, so
+    # the two would have to be wrong in the same way to agree.
+    @testset "Test-side interpolation (#263)" begin
+        Ω = domain(interval(0.0, 1.0))
+        Wu = gridspace(mesh(Ω, 9, true))        # trial: stays native, supplies the weight
+        Wv = gridspace(mesh(Ω, 6, false))       # test: interpolated from
+
+        @testset "The mass block is Pᵀ H" begin
+            A = assemble(form(Wu, Wv, (u, v) -> innerₕ(u, πₕ(v))))
+            P = interpolation_matrix(Wu, Wv)
+            @test size(A) == (ndofs(Wv), ndofs(Wu))
+            @test A ≈ transpose(P) * Hh(Wu)
+        end
+
+        @testset "An operator outside the interpolation acts on the walked mesh" begin
+            # `D₋ₓ(πₕ(v))` differences on the trial mesh, the one being integrated over, so
+            # the block is `(Dx P)ᵀ H₊ Dx` -- the same reading as the trial-side twin, with
+            # the roles exchanged.
+            Dx = D₋ₓ(Wu)
+            A = assemble(form(Wu, Wv, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(πₕ(v)))))
+            P = interpolation_matrix(Wu, Wv)
+            @test A ≈ transpose(Dx * P) * Hp(Wu, 1) * Dx
+        end
+
+        @testset "It is the transpose of the trial-side form" begin
+            # a(u, πₕ(v)) and a(πₕ(u), v) over the swapped spaces are the same bilinear form
+            # read the other way round, so the matrices are transposes. This is what would
+            # break if the rows and the columns disagreed about which mesh they live on.
+            A = assemble(form(Wu, Wv, (u, v) -> innerₕ(u, πₕ(v))))
+            B = assemble(form(Wv, Wu, (u, v) -> innerₕ(πₕ(u), v)))
+            @test A ≈ transpose(B)
+        end
+
+        @testset "Higher dimensions" begin
+            Ω2 = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
+            Wu2 = gridspace(mesh(Ω2, (7, 6), (true, true)))
+            Wv2 = gridspace(mesh(Ω2, (4, 5), (false, false)))
+            A = assemble(form(Wu2, Wv2, (u, v) -> innerₕ(u, πₕ(v))))
+            @test A ≈ transpose(interpolation_matrix(Wu2, Wv2)) * Hh(Wu2)
+        end
+
+        @testset "Same-mesh interpolation is the identity" begin
+            # P is then the identity, so the form is the plain mass matrix: the case where a
+            # wrong row would still be in range, and so would pass a shape check.
+            W = gridspace(mesh(Ω, 8, true))
+            A = assemble(form(W, W, (u, v) -> innerₕ(u, πₕ(v))))
+            @test A ≈ Hh(W)
+        end
+
+        @testset "Composite blocks, interpolated leaf not the first" begin
+            # A heterogeneous composite where the interpolated side is leaf 2: binding the
+            # wrong leaf would still produce plausible numbers on leaf 1, so the assertion is
+            # placed where only the right leaf can pass it.
+            Wbig = gridspace(mesh(Ω, 9, true))
+            Wsmall = gridspace(mesh(Ω, 5, true))
+            Vh = CompositeGridSpace((Wbig, Wsmall))
+            nb, ns = ndofs(Wbig), ndofs(Wsmall)
+
+            # trial on the big leaf, test interpolated from the small one
+            A = assemble(form(Vh, Vh, (u, v) -> innerₕ(u(1), πₕ(v(2)))))
+            @test A[(nb + 1):(nb + ns), 1:nb] ≈
+                  transpose(interpolation_matrix(Wbig, Wsmall)) * Hh(Wbig)
+            @test iszero(A[1:nb, :])
+            @test iszero(A[(nb + 1):(nb + ns), (nb + 1):(nb + ns)])
+
+            # and the other direction, so neither leaf order is privileged
+            A = assemble(form(Vh, Vh, (u, v) -> innerₕ(u(2), πₕ(v(1)))))
+            @test A[1:nb, (nb + 1):(nb + ns)] ≈
+                  transpose(interpolation_matrix(Wsmall, Wbig)) * Hh(Wsmall)
+            @test iszero(A[(nb + 1):(nb + ns), :])
+
+            # a test-side interpolation beside ordinary diagonal terms: the exemption the
+            # interpolating term gets must not reach them
+            a = form(
+                Vh,
+                Vh,
+                (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)) + innerₕ(u(1), πₕ(v(2)))
+            )
+            A = assemble(a)
+            @test A[1:nb, 1:nb] ≈ Hh(Wbig)
+            @test A[(nb + 1):(nb + ns), (nb + 1):(nb + ns)] ≈ Hh(Wsmall)
+            @test A[(nb + 1):(nb + ns), 1:nb] ≈
+                  transpose(interpolation_matrix(Wbig, Wsmall)) * Hh(Wbig)
+            @test_allocs assemble!(A, a)
+        end
+
+        @testset "Serial and parallel agree, and the pattern is exact" begin
+            a = form(Wu, Wv, (u, v) -> innerₕ(u, πₕ(v)) + inner₊ₓ(D₋ₓ(u), D₋ₓ(πₕ(v))))
+            As = assemble(a)
+
+            # Colouring reads the *test* reach, and a test-side interpolation has none to
+            # read: its rows come from `locate_cell`, so two colours can land on the same
+            # row. `assemble_parallel!` sweeps such a term on one thread instead, and this is
+            # what would fail if it did not -- a race gives a wrong sum, not an error.
+            Ap = allocate_system_matrix(a)
+            assemble_parallel!(Ap, a)
+            @test As ≈ Ap
+            assemble_parallel!(Ap, a)
+            @test As ≈ Ap
+
+            # the pattern reserves exactly what the trial-side twin reserves, transposed:
+            # binding or scattering the wrong side would show up as a different count. (Not
+            # `count(!iszero, As)`: a corner weight is legitimately zero where a point of the
+            # walked mesh falls on a node of the interpolated one, so a reserved entry may
+            # hold an exact zero. `add_to_sparse!` is what guarantees the other direction --
+            # an entry the sweep writes but the pattern did not reserve throws.)
+            B = assemble(form(Wv, Wu, (u, v) -> innerₕ(πₕ(u), v) + inner₊ₓ(D₋ₓ(πₕ(u)), D₋ₓ(v))))
+            @test nnz(As) == nnz(B)
+            @test As ≈ transpose(B)
+            @test_allocs assemble!(As, a)
+        end
+    end
+
     @testset "Refusals" begin
         Ω = domain(interval(0.0, 1.0))
         Wt = gridspace(mesh(Ω, 11, true))
@@ -280,9 +396,16 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         # than quietly treated as the one that is
         @test_throws ArgumentError πₕ(D₋ₓ(TrialFunction{1}()))
         @test_throws ArgumentError πₕ(Mₓ(TrialFunction{1}()))
-        # and the test function has nothing to interpolate: the rows are the mesh being
-        # integrated over, so interpolating them is not a thing to ask for
-        @test_throws ArgumentError πₕ(TestFunction{1}())
+        # A test function is now accepted (gpena/Bramble.jl#263): it interpolates the rows,
+        # and the trial mesh becomes the one integrated over.
+        @test πₕ(TestFunction{1}()) isa InterpolationNode
+        @test πₕ(Bramble.IndexedTestFunction{1}(2)) isa InterpolationNode
+        # an operator inside is refused on that side too, for the same reason
+        @test_throws ArgumentError πₕ(D₋ₓ(TestFunction{1}()))
+
+        # both sides at once has no assembly: neither mesh is left to carry the quadrature
+        # weight, and the blends have none of their own
+        @test_throws ArgumentError innerₕ(πₕ(TrialFunction{1}()), πₕ(TestFunction{1}()))
 
         # Three refusals this file used to carry are gone with the space argument
         # (gpena/Bramble.jl#10): `πₕ` given a space that was not the trial function's, and
@@ -399,21 +522,21 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         # walk finds: the binding pass has to reach through every wrapper, both summands and
         # the trial side of a product
         @test node.src_space === nothing
-        @test _bind_interp_spaces(node, Ws).src_space === Ws
-        @test _bind_interp_spaces(D₋ₓ(node), Ws).inner_op.src_space === Ws
-        @test _bind_interp_spaces(D₋ₓ(Mₓ(node)), Ws).inner_op.inner_op.src_space === Ws
-        @test _bind_interp_spaces(2.0 * node, Ws).inner_op.src_space === Ws
-        let bound = _bind_interp_spaces(node + node, Ws)
+        @test _bind_interp_spaces(node, Ws, Wt).src_space === Ws
+        @test _bind_interp_spaces(D₋ₓ(node), Ws, Wt).inner_op.src_space === Ws
+        @test _bind_interp_spaces(D₋ₓ(Mₓ(node)), Ws, Wt).inner_op.inner_op.src_space === Ws
+        @test _bind_interp_spaces(2.0 * node, Ws, Wt).inner_op.src_space === Ws
+        let bound = _bind_interp_spaces(node + node, Ws, Wt)
             @test bound.left_op.src_space === Ws
             @test bound.right_op.src_space === Ws
         end
-        @test _bind_interp_spaces(innerₕ(node, v), Ws).left_op.src_space === Ws
+        @test _bind_interp_spaces(innerₕ(node, v), Ws, Wt).left_op.src_space === Ws
         # a term carrying no interpolation is returned untouched, identically
-        @test _bind_interp_spaces(u, Ws) === u
-        @test _bind_interp_spaces(D₋ₓ(u), Ws) === D₋ₓ(u)
+        @test _bind_interp_spaces(u, Ws, Wt) === u
+        @test _bind_interp_spaces(D₋ₓ(u), Ws, Wt) === D₋ₓ(u)
         # and binding is idempotent: rebinding a bound node to the same leaf changes nothing
-        @test _bind_interp_spaces(_bind_interp_spaces(node, Ws), Ws) ===
-              _bind_interp_spaces(node, Ws)
+        @test _bind_interp_spaces(_bind_interp_spaces(node, Ws, Wt), Ws, Wt) ===
+              _bind_interp_spaces(node, Ws, Wt)
         # an unbound node reaching the sweep is an error, not a `nothing` dereference
         @test_throws ArgumentError local_stencil(
             node, Wt, CartesianIndex(1), markers(mesh(Wt)), 1
@@ -444,7 +567,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         # the interpolation's own stencil: `2ᴰ` entries naming absolute columns, weights
         # summing to one, which is what keeps the interpolant from overshooting. Bound
         # first: only assembly binds a node, and this walks one by hand.
-        st = local_stencil(_bind_interp_spaces(node, Ws), Wt, I, mk, 5)
+        st = local_stencil(_bind_interp_spaces(node, Ws, Wt), Wt, I, mk, 5)
         @test length(st) == 2
         @test all(e -> e[1] isa AbsoluteColumn, st)
         @test sum(e -> e[2], st) ≈ 1
@@ -552,7 +675,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         @test _all_trial_interpolated(a.ast)
         # the resolved tree still carries the node, unbound, and binding still reaches it
         # through both the coefficient scale and the product
-        @test _bind_interp_spaces(a.ast, Ws).left_op.inner_op.src_space === Ws
+        @test _bind_interp_spaces(a.ast, Ws, Wt).left_op.inner_op.src_space === Ws
         @test assemble(a) ≈ Hh(Wt) * Diagonal(parent(cₕ)) * interpolation_matrix(Wt, Ws)
     end
 end

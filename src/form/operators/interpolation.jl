@@ -50,43 +50,84 @@ end
 The symbolic interpolation operator: `inner_op` lives on `src_space`, and this node evaluates
 it at points of whatever mesh the assembly is walking.
 
+`Side` is [`TrialSide`](@ref) or [`TestSide`](@ref), taken from the leaf `πₕ` wrapped. It
+decides which leaf `_bind_interp_spaces` stamps into `src_space`, whether the stencil names
+[`AbsoluteColumn`](@ref)s or [`AbsoluteRow`](@ref)s, and which leaf's grid the sweep walks:
+always the other one, the side that stays native (gpena/Bramble.jl#263).
+
 `src_space` is `nothing` until assembly binds it. `πₕ(op)` cannot name the space itself: on a
 composite space the leaf a term interpolates from is only resolved block by block, so
-`_bind_interp_spaces` stamps the trial leaf in at that point, once per block, and the
+`_bind_interp_spaces` stamps that leaf in at that point, once per block, and the
 `S === Nothing` node exists only between construction and that binding.
 
 Distinct from the source wrapper `πₕ(uₕ)`, which carries a grid function's values. This node
-carries no values; it carries the map, and its stencil names trial columns.
+carries no values; it carries the map, and its stencil names degrees of freedom of the space
+it interpolates from.
 
 `outside` (gpena/Bramble.jl#223) is one of `:error`, `:clamp` or `:extrapolate` -- never a
 fill value, since this node's stencil is a *linear* map (weighted trial columns), and a
 constant independent of the trial unknowns cannot be written that way; see
 [`interpolation_matrix`](@ref)'s docstring for the same restriction.
 """
-struct InterpolationNode{D, S, OpType <: LazyOp{D}} <: LazyOp{D}
+struct InterpolationNode{D, S, OpType <: LazyOp{D}, Side} <: LazyOp{D}
     src_space::S
     inner_op::OpType
     outside::Symbol
 end
 
+"""
+    TrialSide
+    TestSide
+
+Which side of a bilinear term an [`InterpolationNode`](@ref) sits on.
+
+A trial-side interpolation names absolute *columns* and leaves the rows to the walked mesh; a
+test-side one names absolute *rows* and leaves the columns to it (gpena/Bramble.jl#263). The
+side is a type parameter rather than a field so the node stays a singleton the like-term
+simplifier can fold, and so every walk that reads it folds away at compile time.
+
+The walked mesh is the native side's in both cases: it is the one carrying the quadrature
+weight the product integrates against.
+"""
+struct TrialSide end
+
+@doc (@doc TrialSide)
+struct TestSide end
+
+# Which leaf a node of each side binds to, and which slot type its stencil entries name.
+@inline _interp_slot(::Type{TrialSide}) = AbsoluteColumn
+@inline _interp_slot(::Type{TestSide}) = AbsoluteRow
+
+# The side as a value, read off the type. Every side-dependent query goes through this rather
+# than dispatching on the parameter directly: `UnaryWrapper` (form/stencil_eval.jl) names
+# `InterpolationNode{D}`, and a method fixing a *later* parameter than `D` is neither more
+# nor less specific than that union, which makes the pair ambiguous. One method on the
+# unparameterized type is not, and the branch still folds away, since `Side` is in the type.
+@inline _interp_side(::InterpolationNode{D, S, O, Side}) where {D, S, O, Side} = Side
+
 @noinline function _throw_interp_inner(op)
     throw(
         ArgumentError(
-        "πₕ as a bilinear operator wraps a trial function directly (`πₕ(u)` or `πₕ(u(2))`), " *
-        "but received $(typeof(op)). An operator applied before the interpolation " *
-        "(`πₕ(D₋ₓ(u))`, differencing on the source mesh and then interpolating) is a " *
-        "different operator and is not implemented; write the operator outside instead, " *
-        "`D₋ₓ(πₕ(u))`, which differences on the mesh being integrated over.",
+        "πₕ as a bilinear operator wraps a trial or test function directly (`πₕ(u)`, " *
+        "`πₕ(u(2))`, `πₕ(v)`), but received $(typeof(op)). An operator applied before the " *
+        "interpolation (`πₕ(D₋ₓ(u))`, differencing on the source mesh and then " *
+        "interpolating) is a different operator and is not implemented; write the operator " *
+        "outside instead, `D₋ₓ(πₕ(u))`, which differences on the mesh being integrated over.",
     ),
     )
 end
+
+# The side a leaf puts the interpolation on. Both leaf kinds are accepted, plain or indexed
+# (gpena/Bramble.jl#263); anything else is the operator-inside-interpolation refusal above.
+@inline _interp_side_of(::Union{TrialFunction, IndexedTrialFunction}) = TrialSide
+@inline _interp_side_of(::Union{TestFunction, IndexedTestFunction}) = TestSide
 
 """
     πₕ(op::LazyOp{D}; outside = :error) -> InterpolationNode
 
 The interpolation operator onto whichever mesh the form integrates over, applied to the
-trial function `op`. The space interpolated *from* is the trial function's own, and is not
-written here: it is bound during assembly, once the concrete trial leaf is known
+trial or the test function `op`. The space interpolated *from* is that function's own, and is
+not written here: it is bound during assembly, once the concrete leaf is known
 (`_bind_interp_spaces`), which is also what makes this work on a composite space, where the
 leaf a term names is only resolved block by block.
 
@@ -101,22 +142,36 @@ Operators wrap it from the outside, acting on the mesh being integrated over:
 `inner₊(D₋ₓ(πₕ(u)), D₋ₓ(v))` is `D_x^⊤ H_+ D_x P`. Writing an operator inside is a different
 operation and is refused, since it would difference on the source mesh instead.
 
-`op` must be a trial-function leaf, plain or indexed. `outside` (gpena/Bramble.jl#223)
-accepts only `:error` (the default), `:clamp` and `:extrapolate` -- see
+`innerₕ(u, πₕ(w))` is the mirror (gpena/Bramble.jl#263): the test side interpolates, so the
+*trial* mesh is the one integrated over and the entries name absolute rows instead of absolute
+columns. The assembled matrix is `Pᵀ · H · (trial factor)`. A single term interpolating both
+sides is refused -- one side has to stay native, since it is the side whose mesh carries the
+quadrature weight.
+
+`op` must be a trial- or test-function leaf, plain or indexed. `outside`
+(gpena/Bramble.jl#223) accepts only `:error` (the default), `:clamp` and `:extrapolate` -- see
 [`InterpolationNode`](@ref)'s own docstring for why a fill value is refused here.
 """
 function πₕ(op::LazyOp{D}; outside = :error) where {D}
-    op isa TrialFunction || op isa IndexedTrialFunction || _throw_interp_inner(op)
+    _is_interp_leaf(op) || _throw_interp_inner(op)
     _validate_outside_linear(outside)
-    return InterpolationNode{D, Nothing, typeof(op)}(nothing, op, outside)
+    return InterpolationNode{D, Nothing, typeof(op), _interp_side_of(op)}(
+        nothing, op, outside
+    )
 end
+
+@inline _is_interp_leaf(op) = op isa TrialFunction || op isa IndexedTrialFunction ||
+                              op isa TestFunction || op isa IndexedTestFunction
 
 # --- The stencil: absolute trial columns, with the corner weights ------------------- #
 
 @inline function local_stencil(
-        op::InterpolationNode{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int
-) where {D}
-    return _interp_stencil(mesh(op.src_space), point(mesh(space), I), Val(D), op.outside)
+        op::InterpolationNode{D, S, OpType, Side}, space, I::CartesianIndex{D}, markers,
+        lin_idx::Int
+) where {D, S, OpType, Side}
+    return _interp_stencil(
+        mesh(op.src_space), point(mesh(space), I), Val(D), op.outside, _interp_slot(Side)
+    )
 end
 
 # An unbound node reaching the sweep means an assembly path walked a term without calling
@@ -135,18 +190,25 @@ end
     )
 end
 
-@inline function _interp_stencil(Ωsrc::AbstractMeshType{1}, x, ::Val{1}, outside::Symbol)
+# `Slot` is `AbsoluteColumn` on the trial side and `AbsoluteRow` on the test side: the
+# blend itself is the same map either way, and only which half of the matrix position it
+# names differs (gpena/Bramble.jl#263).
+@inline function _interp_stencil(
+        Ωsrc::AbstractMeshType{1}, x, ::Val{1}, outside::Symbol, Slot
+)
     j, t = _interp_cell_frac(Ωsrc, x, outside)
-    return ((AbsoluteColumn(j), 1 - t), (AbsoluteColumn(j + 1), t))
+    return ((Slot(j), 1 - t), (Slot(j + 1), t))
 end
 
-@inline function _interp_stencil(Ωsrc::AbstractMeshType{D}, x, ::Val{D}, outside::Symbol) where {D}
+@inline function _interp_stencil(
+        Ωsrc::AbstractMeshType{D}, x, ::Val{D}, outside::Symbol, Slot
+) where {D}
     idx, ts = _interp_cell_frac(Ωsrc, x, outside)
     li = LinearIndices(indices(Ωsrc))
     # the `2ᴰ` corners, decoded from the bits of `k - 1` so the tuple length is static
     return ntuple(Val(1 << D)) do k
         corner = CartesianIndex(ntuple(d -> ((k - 1) >> (d - 1)) & 1, Val(D)))
-        (AbsoluteColumn(li[idx + corner]), _interp_corner_weight(ts, corner, Val(D)))
+        (Slot(li[idx + corner]), _interp_corner_weight(ts, corner, Val(D)))
     end
 end
 
@@ -156,14 +218,16 @@ end
 # this ensures `innerₕ` constructs a `BilinearProduct` for it.
 _is_source_only(::InterpolationNode) = false
 
-function resolve_ast(op::InterpolationNode{D, S}) where {D, S}
+function resolve_ast(op::InterpolationNode{D, S, OpType, Side}) where {D, S, OpType, Side}
     inner = resolve_ast(op.inner_op)
-    return InterpolationNode{D, S, typeof(inner)}(op.src_space, inner, op.outside)
+    return InterpolationNode{D, S, typeof(inner), Side}(op.src_space, inner, op.outside)
 end
 
-@inline function component(op::InterpolationNode{D, S}, i::Int) where {D, S}
+@inline function component(
+        op::InterpolationNode{D, S, OpType, Side}, i::Int
+) where {D, S, OpType, Side}
     inner = component(op.inner_op, i)
-    return InterpolationNode{D, S, typeof(inner)}(op.src_space, inner, op.outside)
+    return InterpolationNode{D, S, typeof(inner), Side}(op.src_space, inner, op.outside)
 end
 
 # `_collect_region_labels` for `InterpolationNode` comes from its `UnaryWrapper` membership
@@ -182,9 +246,11 @@ stencil_offsets(op::InterpolationNode) = stencil_offsets(op.inner_op)
 # would let symmetry detection paper over a real difference. The symmetry fast path
 # compares the two sides of a product for structural equality, and an interpolation on one
 # side only must not read as symmetric.
+# Two interpolations on opposite sides are never the same shape either: one names columns and
+# the other rows, so the symmetry fast path must not read such a product as symmetric.
 function _same_operator_shape(a::InterpolationNode{D}, b::InterpolationNode{D}) where {D}
-    return a.src_space === b.src_space && a.outside === b.outside &&
-           _same_operator_shape(a.inner_op, b.inner_op)
+    return _interp_side(a) === _interp_side(b) && a.src_space === b.src_space &&
+           a.outside === b.outside && _same_operator_shape(a.inner_op, b.inner_op)
 end
 
 # --- The shift trait: which nodes carry something a relabelled offset cannot express -- #
@@ -222,9 +288,10 @@ end
 # summand and ordinary offsets from the other; the offsets still require both leaves to share an
 # index space.
 #
-# `_bind_interp_spaces` then supplies each interpolation with the leaf whose columns it writes
-# into. Nothing validates the two against each other any more: the node is given that leaf and
-# has no other space to disagree with, which is what dropping `πₕ`'s space argument bought
+# `_bind_interp_spaces` then supplies each interpolation with the leaf whose degrees of freedom
+# it names -- the trial leaf for a trial-side node, the test leaf for a test-side one. Nothing
+# validates the two against each other any more: the node is given that leaf and has no other
+# space to disagree with, which is what dropping `πₕ`'s space argument bought
 # (gpena/Bramble.jl#10).
 #
 # Both are decided by the operator's type alone, allowing each rung to fold to a constant.
@@ -232,13 +299,79 @@ end
 # A node that contributes no trial column at all (such as a source or test function) answers `true`
 # vacuously, as no mesh correspondence is required.
 _all_trial_interpolated(::LazyOp) = false
-_all_trial_interpolated(::InterpolationNode) = true
+_all_trial_interpolated(op::InterpolationNode) = _interp_side(op) === TrialSide
 _all_trial_interpolated(::SourceFunction) = true
 _all_trial_interpolated(::SourceVector) = true
 _all_trial_interpolated(::SourceConstant) = true
 _all_trial_interpolated(::DiracSource) = true
 _all_trial_interpolated(::TestFunction) = true
 _all_trial_interpolated(::IndexedTestFunction) = true
+
+# The mirror question, for a test-side interpolation (gpena/Bramble.jl#263): whether every
+# row the term scatters into is named by an interpolation. That is the other way a block may
+# straddle two meshes without the two leaves having to share an index space.
+_all_test_interpolated(::LazyOp) = false
+_all_test_interpolated(op::InterpolationNode) = _interp_side(op) === TestSide
+_all_test_interpolated(::SourceFunction) = true
+_all_test_interpolated(::SourceVector) = true
+_all_test_interpolated(::SourceConstant) = true
+_all_test_interpolated(::DiracSource) = true
+_all_test_interpolated(::TrialFunction) = true
+_all_test_interpolated(::IndexedTrialFunction) = true
+
+function _all_test_interpolated(op::OperatorAdd)
+    return _all_test_interpolated(op.left_op) && _all_test_interpolated(op.right_op)
+end
+
+_all_test_interpolated(op::BilinearProduct) = _all_test_interpolated(op.right_op)
+_all_test_interpolated(op::LinearProduct) = true
+
+# Whether the term carries a test-side interpolation anywhere. This is what decides which
+# leaf's grid the sweep walks: the native side's, since that is the side whose mesh supplies
+# the quadrature weight the product integrates against. Decided by type alone, so the choice
+# folds away at compile time.
+_has_test_interp(::LazyOp) = false
+_has_test_interp(op::InterpolationNode) = _interp_side(op) === TestSide
+
+# The same question for the trial side, which only `_check_one_interpolated_side`
+# (form/operators/inner.jl) asks: the walked leaf does not depend on it, since a trial-side
+# interpolation leaves the test side native and that is where the sweep already walks.
+_has_trial_interp(::LazyOp) = false
+_has_trial_interp(op::InterpolationNode) = _interp_side(op) === TrialSide
+
+function _has_trial_interp(op::OperatorAdd)
+    return _has_trial_interp(op.left_op) || _has_trial_interp(op.right_op)
+end
+
+function _has_trial_interp(op::BilinearProduct)
+    return _has_trial_interp(op.left_op) || _has_trial_interp(op.right_op)
+end
+
+_has_trial_interp(op::LinearProduct) = false
+
+function _has_test_interp(op::OperatorAdd)
+    return _has_test_interp(op.left_op) || _has_test_interp(op.right_op)
+end
+
+function _has_test_interp(op::BilinearProduct)
+    return _has_test_interp(op.left_op) || _has_test_interp(op.right_op)
+end
+
+_has_test_interp(op::LinearProduct) = false
+
+"""
+    _walked_leaf(term, trial_leaf, test_leaf)
+
+The leaf whose grid the assembly sweep walks for `term`, and whose weights and markers its
+stencil sees.
+
+The test leaf, as it has always been, unless the term interpolates on the test side: then the
+rows are named absolutely and the trial leaf is the one that stays native, so it supplies the
+grid, the quadrature weight and the columns (gpena/Bramble.jl#263).
+"""
+@inline function _walked_leaf(term, trial_leaf, test_leaf)
+    return _has_test_interp(term) ? trial_leaf : test_leaf
+end
 
 # A sum requires both summands to interpolate.
 function _all_trial_interpolated(op::OperatorAdd)
@@ -263,34 +396,50 @@ _all_trial_interpolated(op::LinearProduct) = true
 # Every method is decided by the operator's type alone, so the walk folds away at compile
 # time and a bound term is as concrete as the one it came from. Pattern discovery and
 # execution must bind identically, or the pattern reserves entries the sweep never fills.
-_bind_interp_spaces(op::Any, trial_leaf) = op
+_bind_interp_spaces(op::Any, trial_leaf, test_leaf) = op
 
-function _bind_interp_spaces(op::InterpolationNode{D}, trial_leaf) where {D}
-    inner = _bind_interp_spaces(op.inner_op, trial_leaf)
-    return InterpolationNode{D, typeof(trial_leaf), typeof(inner)}(
+# Each node binds to the leaf whose degrees of freedom it names: the trial leaf for a
+# trial-side interpolation, the test leaf for a test-side one (gpena/Bramble.jl#263). Both
+# leaves are threaded through the whole walk, so one form may interpolate on either side in
+# different terms.
+function _bind_interp_spaces(
+        op::InterpolationNode{D, S, OpType, TrialSide}, trial_leaf, test_leaf
+) where {D, S, OpType}
+    inner = _bind_interp_spaces(op.inner_op, trial_leaf, test_leaf)
+    return InterpolationNode{D, typeof(trial_leaf), typeof(inner), TrialSide}(
         trial_leaf, inner, op.outside
     )
 end
 
-function _bind_interp_spaces(op::OperatorAdd{D}, trial_leaf) where {D}
-    left = _bind_interp_spaces(op.left_op, trial_leaf)
-    right = _bind_interp_spaces(op.right_op, trial_leaf)
-    return OperatorAdd{D, typeof(left), typeof(right)}(left, right)
-end
-
-# Only the trial side of a product carries columns, so only the trial side is bound -- the
-# same asymmetry `_all_trial_interpolated` reads. A `LinearProduct` contracts its left
-# factor away and can hold no interpolation node at all (`_is_source_only` answers false for
-# one, which is what makes `innerₕ` build a `BilinearProduct` instead), so it binds nothing.
 function _bind_interp_spaces(
-        op::BilinearProduct{D, InnerType}, trial_leaf
-) where {D, InnerType}
-    left = _bind_interp_spaces(op.left_op, trial_leaf)
-    return BilinearProduct{D, InnerType, typeof(left), typeof(op.right_op)}(
-        left, op.right_op
+        op::InterpolationNode{D, S, OpType, TestSide}, trial_leaf, test_leaf
+) where {D, S, OpType}
+    inner = _bind_interp_spaces(op.inner_op, trial_leaf, test_leaf)
+    return InterpolationNode{D, typeof(test_leaf), typeof(inner), TestSide}(
+        test_leaf, inner, op.outside
     )
 end
 
-_bind_interp_spaces(ops::NTuple{N, Any}, trial_leaf) where {N} = map(
-    op -> _bind_interp_spaces(op, trial_leaf), ops
-)
+function _bind_interp_spaces(op::OperatorAdd{D}, trial_leaf, test_leaf) where {D}
+    left = _bind_interp_spaces(op.left_op, trial_leaf, test_leaf)
+    right = _bind_interp_spaces(op.right_op, trial_leaf, test_leaf)
+    return OperatorAdd{D, typeof(left), typeof(right)}(left, right)
+end
+
+# Both sides of a product are bound, since either may carry an interpolation: the trial side
+# names columns and the test side rows. A `LinearProduct` contracts its left factor away and
+# can hold no interpolation node at all (`_is_source_only` answers false for one, which is
+# what makes `innerₕ` build a `BilinearProduct` instead), so it binds nothing.
+function _bind_interp_spaces(
+        op::BilinearProduct{D, InnerType}, trial_leaf, test_leaf
+) where {D, InnerType}
+    left = _bind_interp_spaces(op.left_op, trial_leaf, test_leaf)
+    right = _bind_interp_spaces(op.right_op, trial_leaf, test_leaf)
+    return BilinearProduct{D, InnerType, typeof(left), typeof(right)}(left, right)
+end
+
+function _bind_interp_spaces(ops::NTuple{N, Any}, trial_leaf, test_leaf) where {N}
+    map(
+        op -> _bind_interp_spaces(op, trial_leaf, test_leaf), ops
+    )
+end

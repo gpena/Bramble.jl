@@ -170,7 +170,9 @@ end
 
 # `ShiftNode` carries a second field, so it writes its own binder rather than taking the one
 # `@node_family` generates (form/operators/interpolation.jl explains the pass).
-function _bind_interp_spaces(op::ShiftNode{D, Dim}, trial_leaf) where {D, Dim}
-    inner = _bind_interp_spaces(op.inner_op, trial_leaf)
+function _bind_interp_spaces(
+        op::ShiftNode{D, Dim}, trial_leaf, test_leaf
+) where {D, Dim}
+    inner = _bind_interp_spaces(op.inner_op, trial_leaf, test_leaf)
     return ShiftNode{D, Dim, typeof(inner)}(op.shift_amount, inner)
 end
