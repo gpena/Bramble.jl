@@ -1,0 +1,206 @@
+/* "Signal" documentation theme (issue #132). Restyles Documenter's default HTML output —
+   the sidebar/content/breadcrumb/TOC shell stays exactly as Documenter builds it; this file
+   only retokenizes color and type. Selectors target Documenter's own class names, so no
+   template overrides are needed and search/doctest/@ref keep working untouched.
+
+   Dark mode: Documenter stamps `theme--documenter-dark` on <html> (see themeswap.js) rather
+   than the `data-theme` attribute convention used elsewhere, so overrides key off that class
+   instead. */
+
+:root {
+  --s-bg: #ffffff;
+  --s-surface: #f5f7fc;
+  --s-ink: #191c26;
+  --s-ink-soft: #5a5f70;
+  --s-accent: #4063d8;
+  --s-accent-soft: #e8edfb;
+  --s-green: #2e8b22;
+  --s-purple: #9558b2;
+  --s-red: #c13a31;
+  --s-rule: #e3e6ee;
+}
+
+html.theme--documenter-dark {
+  --s-bg: #0f1219;
+  --s-surface: #171b24;
+  --s-ink: #e7e9f1;
+  --s-ink-soft: #8a8fa1;
+  --s-accent: #7c97f0;
+  --s-accent-soft: #202a46;
+  --s-green: #57c143;
+  --s-purple: #b37fce;
+  --s-red: #e8635b;
+  --s-rule: #262b38;
+}
+
+/* ---------- Typography ---------- */
+
+body, #documenter {
+  font-family: 'Source Sans 3', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+  background: var(--s-bg);
+  color: var(--s-ink);
+}
+
+h1, h2, h3, h4, h5, h6,
+.docs-package-name, .docs-package-name a {
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+/* Excludes .docs-heading-anchor: every heading's text sits inside one of these permalink
+   links, so a plain `a` rule here would paint heading text with the accent color too. */
+article.content a:not(.docs-heading-anchor, .docs-heading-anchor-permalink) { color: var(--s-accent); }
+article.content a:not(.docs-heading-anchor, .docs-heading-anchor-permalink):hover { text-decoration: underline; }
+article.content h1, article.content h2, article.content h3,
+article.content h4, article.content h5, article.content h6 {
+  color: var(--s-ink);
+}
+
+pre, code, kbd, .hljs {
+  font-family: JuliaMono, ui-monospace, 'IBM Plex Mono', monospace !important;
+}
+
+/* ---------- Sidebar ---------- */
+
+.docs-sidebar {
+  background: var(--s-surface);
+  border-right: 1px solid var(--s-rule);
+}
+
+.docs-sidebar .docs-logo, .docs-package-name {
+  padding-top: 1.1rem;
+}
+
+#documenter-search-query {
+  background: var(--s-bg);
+  border: 1px solid var(--s-rule);
+  color: var(--s-ink-soft);
+}
+
+.docs-menu > ul > li > a.tocitem,
+.docs-menu > ul > li > span.tocitem {
+  font-weight: 700;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--s-ink-soft);
+}
+
+.docs-menu .tocitem {
+  color: var(--s-ink);
+  border-radius: 8px;
+}
+
+.docs-menu li.is-active > .tocitem {
+  background: var(--s-accent-soft);
+  color: var(--s-accent);
+  font-weight: 700;
+}
+
+.docs-menu li.is-active > .tocitem:not(:hover) {
+  background: var(--s-accent-soft);
+}
+
+/* ---------- Top bar / breadcrumb ---------- */
+
+.docs-navbar {
+  background: var(--s-bg);
+  border-bottom: 1px solid var(--s-rule);
+}
+
+.docs-navbar .breadcrumb a { color: var(--s-ink-soft); }
+.docs-navbar .breadcrumb li.is-active a { color: var(--s-ink); font-weight: 600; }
+
+/* ---------- Content ---------- */
+
+.docs-main {
+  background: var(--s-bg);
+}
+
+article.content pre {
+  background: var(--s-surface);
+  border: 1px solid var(--s-rule);
+  border-radius: 10px;
+}
+
+/* ---------- Admonitions, recolored from the Julia brand palette ---------- */
+
+.admonition {
+  border-radius: 10px;
+  border: 1px solid var(--s-rule);
+  border-left-width: 4px;
+}
+
+.admonition.is-info    { border-left-color: var(--s-accent); background: var(--s-accent-soft); }
+.admonition.is-success { border-left-color: var(--s-green); }
+.admonition.is-warning { border-left-color: #d99a1f; }
+.admonition.is-danger  { border-left-color: var(--s-red); }
+.admonition.is-compat  { border-left-color: var(--s-purple); }
+
+.admonition-header {
+  font-family: 'Manrope', sans-serif;
+  font-weight: 700;
+}
+
+/* ---------- Footer nav ---------- */
+
+.docs-footer {
+  border-top: 1px solid var(--s-rule);
+}
+
+/* ---------- Homepage entry cards (docs/src/index.md) ---------- */
+
+.bramble-home-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin: 1.5rem 0 2rem;
+}
+
+/* Each card is a plain <div> around real Markdown (see index.md): a bold link paragraph
+   (the title) followed by a plain description paragraph, not an <a> wrapping title/body
+   divs -- that would have needed a raw-HTML href Documenter never gets to rewrite for
+   pretty vs. plain URLs. */
+.bramble-home-cards .bramble-card {
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--s-rule);
+  border-radius: 12px;
+  background: var(--s-surface);
+  transition: border-color 0.15s ease;
+}
+
+.bramble-home-cards .bramble-card:hover {
+  border-color: var(--s-accent);
+}
+
+.bramble-home-cards .bramble-card p {
+  margin: 0;
+}
+
+.bramble-home-cards .bramble-card p:first-child {
+  margin-bottom: 0.35rem;
+}
+
+.bramble-home-cards .bramble-card p:first-child a {
+  font-family: 'Manrope', sans-serif;
+  font-weight: 800;
+  font-size: 0.95rem;
+  color: var(--s-ink);
+  text-decoration: none;
+}
+
+.bramble-home-cards .bramble-card p:first-child a:hover {
+  color: var(--s-accent);
+}
+
+.bramble-home-cards .bramble-card p:last-child {
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--s-ink-soft);
+}
+
+@media (max-width: 760px) {
+  .bramble-home-cards { grid-template-columns: 1fr; }
+}
