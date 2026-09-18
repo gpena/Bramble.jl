@@ -19,6 +19,10 @@ using QuadGK: gauss
 # Utilities
 export backend, metal_backend, vector_type, matrix_type, backend_types
 export ExecutionPolicy, Serial, Parallel, execution_policy
+# The CPU/GPU split of the policy hierarchy (gpena/Bramble.jl#191). `Serial` and `Parallel`
+# stay exported above: they are aliases of the first two of these, and every call site,
+# test and benchmark key in this repository spells them that way.
+export CpuPolicy, CpuSerial, CpuThreaded, GpuPolicy, GpuAsync
 
 # `vector`/`matrix` build a raw backend array (point 70): real API, but two of the most
 # generic nouns in the language, and a beginner's own top-level `vector = [...]` after
@@ -27,6 +31,10 @@ public vector, matrix
 # Backend-extension plumbing (point 70): identity/zero matrices tied to a `Backend`, real,
 # tested, reached while implementing a new backend rather than while using one.
 public backend_eye, backend_zeros
+# The contract a custom backend array type implements (gpena/Bramble.jl#100): declared by
+# whoever adds an array type, never called by a user of one, so `public` rather than
+# exported, alongside the allocators that read it.
+public supports_undef_construction
 # Read by every package extension's own `@compile_workload` gate (gpena/Bramble.jl#196), so
 # a user's `set_preferences!(Bramble, "precompile_workload" => false)` disables the
 # extensions' workloads along with the core one, not just the core one.

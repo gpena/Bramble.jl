@@ -356,7 +356,7 @@ function _assemble_bilinear!(
     dirichlet_labels, _ = _normalize_dirichlet(dirichlet)
     fill!(nonzeros(A), zero(eltype(nonzeros(A))))
 
-    if execution_policy(form.trial_space) isa Serial
+    if execution_policy(form.trial_space) isa CpuSerial
         _assemble_bilinear_core_cached!(
             A, form.trial_space, form.test_space, ast, form.cache
         )

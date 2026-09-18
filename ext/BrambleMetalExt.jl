@@ -16,7 +16,7 @@ import Bramble: vector, matrix, _backend_eye, _backend_zeros
 # ---------------------------------------------------------------------------
 
 """
-	metal_backend(T::Type = Float32; policy = Serial())
+	metal_backend(T::Type = Float32; policy = GpuAsync())
 
 Returns a [`Backend`](@ref) that uses Apple Metal GPU arrays via
 [Metal.jl](https://github.com/JuliaGPU/Metal.jl).
@@ -29,7 +29,7 @@ on Apple Silicon GPUs.
 
 ```julia
 using Bramble, Metal
-b   = metal_backend()          # Backend{MtlVector{Float32}, MtlMatrix{Float32}, Serial}
+b   = metal_backend()          # Backend{MtlVector{Float32}, MtlMatrix{Float32}, GpuAsync}
 b32 = metal_backend(Float32)   # same
 b16 = metal_backend(Float16)   # half-precision
 ```

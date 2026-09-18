@@ -3,35 +3,97 @@
 
 Abstract supertype for backend execution policies.
 
-Directs grid operations and form assembly to execute either sequentially via
-[`Serial`](@ref) or across threads via [`Parallel`](@ref).
+Two regimes sit under it, and the split is the point (gpena/Bramble.jl#191): [`CpuPolicy`](@ref)
+for work a CPU loop drives, [`GpuPolicy`](@ref) for work a device schedules. Before the split
+there was only "serial or threaded", which had no way to say *where*: a GPU backend was
+constructed with `Serial()`, a policy that says a single CPU thread walks the array element by
+element -- the one thing a device array refuses.
 """
 abstract type ExecutionPolicy end
 
 """
-    Serial() <: ExecutionPolicy
+    CpuPolicy <: ExecutionPolicy
+
+Abstract supertype for the policies a CPU loop executes: [`CpuSerial`](@ref) and
+[`CpuThreaded`](@ref).
+
+The CPU sweeps dispatch on this rather than on each concrete policy, so a `GpuPolicy` reaching
+one is a method error with a message rather than a scalar-indexing failure several frames in.
+"""
+abstract type CpuPolicy <: ExecutionPolicy end
+
+"""
+    CpuSerial() <: CpuPolicy
 
 Sequential execution policy.
 
 Directs grid operations and form assembly to execute via single-threaded loops.
 This is the default execution policy.
 
-See also: [`Parallel`](@ref), [`ExecutionPolicy`](@ref).
+Spelled `Serial()` as often as not: `const Serial = CpuSerial`, kept because it is what every
+call site, every test and every benchmark key in this repository already says.
+
+See also: [`CpuThreaded`](@ref), [`ExecutionPolicy`](@ref).
 """
-struct Serial <: ExecutionPolicy end
+struct CpuSerial <: CpuPolicy end
 
 """
-    Parallel() <: ExecutionPolicy
+    CpuThreaded() <: CpuPolicy
 
 Multithreaded execution policy.
 
 Directs grid operations and form assembly to execute across CPU threads via static partitioning.
 Execution is unconditional: no per-call size thresholds are imposed. For workloads dominated
-by small, frequently repeated calls, use [`Serial`](@ref).
+by small, frequently repeated calls, use [`CpuSerial`](@ref).
 
-See also: [`Serial`](@ref), [`ExecutionPolicy`](@ref).
+Spelled `Parallel()` as often as not: `const Parallel = CpuThreaded`.
+
+`Base.Threads.@threads` is the primitive, and naming it that way leaves room for the others
+that are not this one -- Polyester's `@batch` (gpena/Bramble.jl#190) and MPI. Neither has a
+policy yet: a policy nothing implements is worse than one added alongside its implementation,
+so `CpuBatch` arrives with the Polyester extension, not before it.
+
+See also: [`CpuSerial`](@ref), [`ExecutionPolicy`](@ref).
 """
-struct Parallel <: ExecutionPolicy end
+struct CpuThreaded <: CpuPolicy end
+
+"""
+    GpuPolicy <: ExecutionPolicy
+
+Abstract supertype for the policies a device executes, currently [`GpuAsync`](@ref).
+
+See also: [`CpuPolicy`](@ref), [`ExecutionPolicy`](@ref).
+"""
+abstract type GpuPolicy <: ExecutionPolicy end
+
+"""
+    GpuAsync() <: GpuPolicy
+
+Device execution policy: kernels are launched on the accelerator and complete asynchronously.
+
+What [`metal_backend`](@ref) carries by default. A GPU is massively parallel and cannot execute
+serially, so the old default of `Serial()` was not a conservative choice but a false statement
+about the hardware, and it sent CPU assembly loops at device arrays.
+
+See also: [`GpuPolicy`](@ref), [`ExecutionPolicy`](@ref).
+"""
+struct GpuAsync <: GpuPolicy end
+
+"""
+    Serial
+
+Alias for [`CpuSerial`](@ref). The spelling this package used before the CPU/GPU split
+(gpena/Bramble.jl#191), and the one its call sites, tests and benchmark baseline keys use.
+"""
+const Serial = CpuSerial
+
+"""
+    Parallel
+
+Alias for [`CpuThreaded`](@ref). The spelling this package used before the CPU/GPU split
+(gpena/Bramble.jl#191).
+"""
+const Parallel = CpuThreaded
 
 """
     Backend{VT, MT, EP}()
@@ -138,16 +200,68 @@ Return a 4-tuple containing `(eltype(VT), VT, MT, Backend{VT, MT, EP})`.
 @inline backend_types(backend::Backend{VT, MT, EP}) where {VT, MT, EP} = eltype(VT), VT, MT, typeof(backend)
 @inline backend_types(::Type{<:Backend{VT, MT, EP}}) where {VT, MT, EP} = eltype(VT), VT, MT, Backend{VT, MT, EP}
 
-@noinline function _throw_vector_error(VT, n, e_undef, e_size)
+"""
+    supports_undef_construction(::Type{AT}) -> Bool
+
+Whether an array type builds from an `undef` initializer, `AT(undef, dims...)`, rather than
+from its dimensions alone, `AT(dims...)`.
+
+The contract a custom array type opts into to be usable as a backend's `vector_type` or
+`matrix_type`. `true` by default, which is what every `AbstractArray` in `Base` and in every
+GPU package this repository has seen answers; a type constructed from its size alone
+declares otherwise:
+
+```julia
+Bramble.supports_undef_construction(::Type{<:MySizedArray}) = false
+```
+
+Read at compile time from the type, so the branch it guards folds away
+(gpena/Bramble.jl#100). This replaced a `try`/`catch` that called the `undef` constructor
+and caught its failure to decide the same question: exceptions as a dispatch mechanism,
+which blocks the compiler from seeing through the allocation path, and which reported a
+genuinely broken array type as "tried both, both failed" rather than as the one thing that
+was wrong. The three shipped backends never reached it either way -- `Vector`,
+`DenseMatrix` and `SparseMatrixCSC` each have their own `@inline` method below -- so what
+this buys is a stated contract for the types that do.
+"""
+supports_undef_construction(::Type{<:AbstractArray}) = true
+
+@noinline function _throw_vector_error(VT, n, undef_form::Bool)
+    tried = undef_form ? "$VT(undef, n)" : "$VT(n)"
+    other = undef_form ? "supports_undef_construction($VT) = false" :
+            "supports_undef_construction($VT) = true"
     error(
-        "Cannot create vector of type $VT with size $n. Tried $VT(undef, n) (failed: $e_undef) and $VT(n) (failed: $e_size).",
+        "Cannot create vector of type $VT with size $n: $tried is not defined. Define it, or, if this type constructs the other way, declare Bramble.$other.",
     )
 end
 
-@noinline function _throw_matrix_error(MT, n, m, e_undef, e_size)
+@noinline function _throw_matrix_error(MT, n, m, undef_form::Bool)
+    tried = undef_form ? "$MT(undef, n, m)" : "$MT(n, m)"
+    other = undef_form ? "supports_undef_construction($MT) = false" :
+            "supports_undef_construction($MT) = true"
     error(
-        "Cannot create matrix of type $MT with size ($n, $m). Tried $MT(undef, n, m) (failed: $e_undef) and $MT(n, m) (failed: $e_size).",
+        "Cannot create matrix of type $MT with size ($n, $m): $tried is not defined. Define it, or, if this type constructs the other way, declare Bramble.$other.",
     )
+end
+
+# The one place either constructor is chosen. `hasmethod` catches a type that declares the
+# trait it does not honour, which is the only failure left once the choice itself is static.
+@inline function _undef_or_sized(::Type{AT}, n::Integer, thrower) where {AT}
+    if supports_undef_construction(AT)
+        hasmethod(AT, Tuple{UndefInitializer, Int}) || thrower(AT, n, true)
+        return AT(undef, n)
+    end
+    hasmethod(AT, Tuple{Int}) || thrower(AT, n, false)
+    return AT(n)
+end
+
+@inline function _undef_or_sized(::Type{AT}, n::Integer, m::Integer, thrower) where {AT}
+    if supports_undef_construction(AT)
+        hasmethod(AT, Tuple{UndefInitializer, Int, Int}) || thrower(AT, n, m, true)
+        return AT(undef, n, m)
+    end
+    hasmethod(AT, Tuple{Int, Int}) || thrower(AT, n, m, false)
+    return AT(n, m)
 end
 
 """
@@ -159,19 +273,14 @@ Allocate an uninitialized vector of length `n` using vector type `VT` configured
 - `backend`: Target backend instance.
 - `n`: Number of vector elements.
 
+Which constructor is used is decided by [`supports_undef_construction`](@ref)`(VT)`, from
+the type alone.
+
 # Throws
-- `ErrorException`: If neither `VT(undef, n)` nor `VT(n)` succeeds.
+- `ErrorException`: If `VT` does not define the constructor its trait declares.
 """
 function vector(::Backend{VT, MT, EP}, n::Integer) where {VT, MT, EP}
-    try
-        return VT(undef, n)
-    catch e_undef
-        try
-            return VT(n)
-        catch e_size
-            _throw_vector_error(VT, n, e_undef, e_size)
-        end
-    end
+    return _undef_or_sized(VT, n, _throw_vector_error)
 end
 
 # Specialized zero-overhead method for standard Vector{T}
@@ -190,19 +299,14 @@ For sparse matrix types (`SparseMatrixCSC`), allocates an empty sparse matrix vi
 - `n`: Number of rows.
 - `m`: Number of columns.
 
+Which constructor is used is decided by [`supports_undef_construction`](@ref)`(MT)`, from
+the type alone.
+
 # Throws
-- `ErrorException`: If `MT` cannot be constructed with dimensions `(n, m)`.
+- `ErrorException`: If `MT` does not define the constructor its trait declares.
 """
-function matrix(backend::Backend{VT, MT, EP}, n::Integer, m::Integer) where {VT, MT, EP}
-    try
-        return MT(undef, n, m)
-    catch e_undef
-        try
-            return MT(n, m)
-        catch e_size
-            _throw_matrix_error(MT, n, m, e_undef, e_size)
-        end
-    end
+function matrix(::Backend{VT, MT, EP}, n::Integer, m::Integer) where {VT, MT, EP}
+    return _undef_or_sized(MT, n, m, _throw_matrix_error)
 end
 
 # Specialized zero-overhead methods for dense (CPU/GPU) and sparse matrix types
@@ -222,7 +326,7 @@ Construct an ``n \\times n`` identity matrix matching the matrix type configured
 @inline _backend_eye(::Type{<:SparseMatrixCSC{T, Ti}}, n::Integer) where {T, Ti} = SparseMatrixCSC{T, Ti}(I, n, n)
 @inline _backend_eye(::Type{<:Matrix{T}}, n::Integer) where {T} = Matrix{T}(I, n, n)
 function _backend_eye(::Type{MT}, n::Integer) where {T, MT <: AbstractMatrix{T}}
-    A = MT(undef, n, n)
+    A = _undef_or_sized(MT, n, n, _throw_matrix_error)
     fill!(A, zero(T))
     for i in 1:n
         A[i, i] = one(T)
@@ -238,11 +342,7 @@ Construct an ``n \\times n`` zero matrix matching the matrix type configured in 
 @inline backend_zeros(backend::Backend, n::Integer) = _backend_zeros(matrix_type(backend), n)
 @inline _backend_zeros(::Type{<:SparseMatrixCSC{T, Ti}}, n::Integer) where {T, Ti} = spzeros(T, Ti, n, n)
 function _backend_zeros(::Type{MT}, n::Integer) where {T, MT <: AbstractMatrix{T}}
-    try
-        return fill!(MT(undef, n, n), zero(T))
-    catch
-        return fill!(MT(n, n), zero(T))
-    end
+    return fill!(_undef_or_sized(MT, n, n, _throw_matrix_error), zero(T))
 end
 
 """
@@ -263,7 +363,7 @@ function Base.show(io::IO, be::Backend{VT, MT, EP}) where {VT, MT, EP}
 end
 
 """
-    metal_backend(::Type{T} = Float32; policy::ExecutionPolicy = Serial()) -> Backend
+    metal_backend(::Type{T} = Float32; policy::ExecutionPolicy = GpuAsync()) -> Backend
 
 Construct a Metal GPU [`Backend`](@ref) backed by `Metal.jl` arrays.
 
@@ -274,12 +374,15 @@ and `Float16`, but do not support 64-bit floating point arithmetic.
 - `T`: Floating-point element type (`Float32` or `Float16`, default: `Float32`).
 
 # Keywords
-- `policy`: Execution policy instance ([`Serial`](@ref) or [`Parallel`](@ref), default: `Serial()`).
+- `policy`: Execution policy instance (default: [`GpuAsync`](@ref)). A [`CpuPolicy`](@ref) is
+  accepted and means what it says -- CPU loops over device arrays -- which currently fails on
+  scalar indexing; the default says where the work runs instead of understating it
+  (gpena/Bramble.jl#191).
 
 # Throws
 - `ErrorException`: If `Metal.jl` is not loaded.
 """
-function metal_backend(T::Type = Float32; policy::ExecutionPolicy = Serial())
+function metal_backend(T::Type = Float32; policy::ExecutionPolicy = GpuAsync())
     return _metal_backend(T, policy)
 end
 function _metal_backend(::Type, ::ExecutionPolicy)

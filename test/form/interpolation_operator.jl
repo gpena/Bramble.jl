@@ -44,7 +44,7 @@ using ..TestUtils: alloc_test, @test_allocs
 # `πₕ(uₕ)` over a grid function whose values are known (test/form/interpolation.jl).
 #
 # What makes this its own mechanism rather than another wrapper is that its stencil entries
-# name **absolute columns** of `Wsrc` (the `2ᴰ` corners `locate_cell` picks out for the point
+# name **absolute columns** of the trial leaf (the `2ᴰ` corners `locate_cell` picks out for the point
 # being visited), where every other node's entries are offsets from that point. Two
 # consequences, and this file exists to hold both to their word:
 #

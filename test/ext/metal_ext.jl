@@ -26,6 +26,12 @@ using Bramble: Backend, vector, matrix, _backend_eye, _backend_zeros
     else
         @testset "metal_backend element types" begin
             @test metal_backend() isa Backend
+            # a GPU is massively parallel and cannot execute serially, so the default says
+            # so (gpena/Bramble.jl#191); it used to be Serial()
+            @test execution_policy(metal_backend()) === GpuAsync()
+            @test execution_policy(metal_backend(Float16)) === GpuAsync()
+            # and a CPU policy is still accepted, meaning exactly what it says
+            @test execution_policy(metal_backend(; policy = CpuSerial())) === CpuSerial()
             @test metal_backend(Float32) isa Backend
             @test metal_backend(Float16) isa Backend
             # Float64 is unsupported on Apple Silicon GPUs. The Metal-loaded method only
