@@ -4,6 +4,7 @@ using Test
 using Bramble
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: diff₋ₓ, diff₋ᵧ, diff₋₂, diff₋ₕ, diff₊ₓ, diff₊ᵧ, diff₊₂, diff₊ₕ, D₊ₓ, D₊ᵧ, D₊₂, ∇₊ₕ, M₊ₓ, M₊ᵧ, M₊₂, M₊ₕ
+import Bramble: div₊ₕ!
 using JET
 using Bramble:
                components,
@@ -108,6 +109,19 @@ using ..TestUtils: alloc_test, @test_allocs
         @test @inferred(inner_Γ(uₕ3, uₕ3, :boundary)) isa Float64
     end
 
+    @testset "Type stability (vector calculus)" begin
+        # gpena/Bramble.jl#158: each of these recurses over directions on `Val(d)` rather
+        # than looping, for the same boxing reason the vectorial aliases do (#146).
+        for (lbl, uₕ) in (("1D", uₕ1), ("2D", uₕ2), ("3D", uₕ3))
+            @testset "$lbl" begin
+                @test @inferred(Δₕ(uₕ)) isa VectorElement
+                @test @inferred(divₕ(∇ₕ(uₕ))) isa VectorElement
+            end
+        end
+        @test @inferred(curlₕ((uₕ2, uₕ2))) isa VectorElement
+        @test @inferred(curlₕ((uₕ3, uₕ3, uₕ3))) isa NTuple{3, VectorElement}
+    end
+
     @testset "Zero allocations (inner products)" begin
         # A time-stepping loop evaluates these every step, so any allocation here is
         # per-step garbage.
@@ -131,6 +145,17 @@ using ..TestUtils: alloc_test, @test_allocs
         @test_allocs norminf_h(cₕ2)
         @test_allocs inner_Γ(uₕ2, uₕ2, :ymin)
         @test_allocs inner_Γ(uₕ3, uₕ3, :boundary)
+
+        # the mutating vector-calculus forms accumulate into their destination in one
+        # traversal per direction, so none of them needs a scratch grid function (#158)
+        let v1 = similar(uₕ1), v2 = similar(uₕ2), v3 = similar(uₕ3)
+            @test_allocs Δₕ!(v1, uₕ1)
+            @test_allocs Δₕ!(v2, uₕ2)
+            @test_allocs Δₕ!(v3, uₕ3)
+            @test_allocs divₕ!(v2, (uₕ2, uₕ2))
+            @test_allocs div₊ₕ!(v2, (uₕ2, uₕ2))
+            @test_allocs curlₕ!(v2, (uₕ2, uₕ2))
+        end
     end
 
     @testset "Zero dynamic dispatch (vectorial aliases)" begin

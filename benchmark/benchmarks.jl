@@ -150,6 +150,16 @@ let Wₕ = gridspace(_mesh2()), uₕ = Rₕ(Wₕ, x -> sin(x[1]) * x[2])
     g["Mₓ"] = @benchmarkable Mₓ($uₕ)
     g["Dcₓ"] = @benchmarkable Dcₓ($uₕ)
 
+    # The vector calculus operators (gpena/Bramble.jl#158). `Δₕ!` is the entry that matters:
+    # it is one traversal per direction against the two a `D̽(D₋(u))` composition walks, and
+    # it carries no scratch grid function, so the bound below is 0 and stays 0.
+    let vₕ = similar(uₕ), gₕ = ∇ₕ(uₕ)
+        g["Δₕ"] = @benchmarkable Δₕ($uₕ)
+        g["Δₕ!"] = @benchmarkable Δₕ!($vₕ, $uₕ)
+        g["divₕ!"] = @benchmarkable divₕ!($vₕ, $gₕ)
+        g["curlₕ!"] = @benchmarkable curlₕ!($vₕ, $gₕ)
+    end
+
     # The dimensional entry point (gpena/Bramble.jl#74), with `d` coming from a loop rather
     # than written as a literal. This is the entry that would catch a boxed `Val`: the value
     # tests cannot see one, since boxing changes how a result is reached and not what it is,
@@ -493,6 +503,12 @@ const ALLOCATION_BOUNDS = Dict(
     # loop variable would show up here as the extra allocation it is (gpena/Bramble.jl#74)
     ("operators 2D", "D₋(uₕ, d) over d") => 6,
     ("operators 3D", "D₋₂") => 3,
+    # the allocating Laplacian allocates its result and nothing else; the mutating forms
+    # accumulate in place, so they allocate nothing at all (gpena/Bramble.jl#158)
+    ("operators 2D", "Δₕ") => 3,
+    ("operators 2D", "Δₕ!") => 0,
+    ("operators 2D", "divₕ!") => 0,
+    ("operators 2D", "curlₕ!") => 0,
     # one per spatial direction
     ("operators 3D", "∇ₕ") => 15,
     # reductions allocate nothing at all
