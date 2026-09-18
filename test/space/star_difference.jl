@@ -6,6 +6,7 @@ using Bramble
 import Bramble: D₊ₓ
 using Random
 using Supposition
+using ..TestUtils: WITH_SLOW_TESTS
 using Bramble: components, star_spacings, StarSpacings, submeshes
 using ..TestUtils: alloc_test, @test_allocs, _nonuniform_points, _zero_boundary!
 using ..SpaceDifferenceTests: test_operator_matrix_equivalence
@@ -248,7 +249,7 @@ star_ops(::Val{3}) = (D̽ₓ, D̽ᵧ, D̽₂)
                                           inner₊ᵧ(v3[2], D₋ᵧ(w3)) + inner₊₂(v3[3], D₋₂(w3)))
         end
 
-        @testset "Random grids (Supposition)" begin
+        WITH_SLOW_TESTS && @testset "Random grids (Supposition)" begin
             positive_h = Data.Floats{Float64}(;
                 minimum = 0.01, maximum = 10.0, nans = false, infs = false
             )

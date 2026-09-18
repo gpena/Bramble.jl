@@ -8,6 +8,7 @@ using Bramble: backward_difference_dim!, forward_difference_dim!
 using Bramble: diff₋ₓ, diff₋ᵧ, diff₋₂, diff₊ₓ, diff₊ᵧ, diff₊₂
 import SparseArrays: issparse, sprand, spdiagm, spzeros
 using Supposition
+using ..TestUtils: WITH_SLOW_TESTS
 using ..UtilsBackendsTests: MockGPUVector, MockGPUMatrix
 using ..SpaceVectorElementsTests: setup_test_grid
 
@@ -706,7 +707,7 @@ end
         @testset "Backward" test_operator_matrix_equivalence(backward_ops)
         @testset "Forward" test_operator_matrix_equivalence(forward_ops)
 
-        @testset "Random grids (Supposition)" begin
+        WITH_SLOW_TESTS && @testset "Random grids (Supposition)" begin
             positive_h = Data.Floats{Float64}(;
                 minimum = 0.01, maximum = 10.0, nans = false, infs = false
             )

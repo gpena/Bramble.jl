@@ -18,6 +18,7 @@ using Bramble: vector
 using LinearAlgebra: norm
 using Random
 using Supposition
+using ..TestUtils: WITH_SLOW_TESTS
 using ..TestUtils: alloc_test, @test_allocs, _nonuniform_points
 
 @testset "Grid spaces" begin
@@ -478,7 +479,7 @@ end
         end
     end
 
-    @testset "Partition of unity" begin
+    WITH_SLOW_TESTS && @testset "Partition of unity" begin
         positive_float = Data.Floats{Float64}(;
             minimum = 0.1, maximum = 10.0, nans = false, infs = false
         )
@@ -604,7 +605,7 @@ end
 # invisible when every component carries the same number, and `innerₕ` on a composite space
 # once returned `[0.5, 0.5]` where the answer was `[0.5, 50.0]` and passed every test there
 # was.
-@testset "Composite space properties (Supposition)" begin
+WITH_SLOW_TESTS && @testset "Composite space properties (Supposition)" begin
     positive_h = Data.Floats{Float64}(;
         minimum = 0.01, maximum = 10.0, nans = false, infs = false
     )

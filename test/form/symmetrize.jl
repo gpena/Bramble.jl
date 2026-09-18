@@ -5,6 +5,7 @@ using Bramble
 using SparseArrays
 using LinearAlgebra: issymmetric
 using Supposition
+using ..TestUtils: WITH_SLOW_TESTS
 using ..TestUtils: _tri, _nonuniform_points
 
 # Symmetrizing the constrained system.
@@ -285,7 +286,7 @@ end
 # The operator is assembled from a form rather than built by `_tri`, so what is checked is
 # the constraint pair against the matrices Bramble actually produces, on partitions drawn by
 # Supposition.
-@testset "Symmetry restoration (Supposition)" begin
+WITH_SLOW_TESTS && @testset "Symmetry restoration (Supposition)" begin
     positive_h = Data.Floats{Float64}(;
         minimum = 0.01, maximum = 10.0, nans = false, infs = false
     )

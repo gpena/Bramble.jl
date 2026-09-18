@@ -7,6 +7,7 @@ import Bramble: diff₋ₓ, diff₊ᵧ, D₊ₓ, D₊ᵧ, M₊ₓ
 using Bramble: diff₋ₓ, diff₊ᵧ
 using Random
 using Supposition
+using ..TestUtils: WITH_SLOW_TESTS
 
 # Mixed differences commute.
 #
@@ -106,7 +107,7 @@ using Supposition
         end
     end
 
-    @testset "Random grids (Supposition)" begin
+    WITH_SLOW_TESTS && @testset "Random grids (Supposition)" begin
         positive_h = Data.Floats{Float64}(;
             minimum = 0.01, maximum = 10.0, nans = false, infs = false
         )

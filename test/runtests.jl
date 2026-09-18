@@ -17,7 +17,10 @@ using Bramble
 # explicitly via `using ..TestUtils: ...` from whichever file needs them.
 include("TestUtils.jl")
 
-const __bramble_test_group = get(ENV, "BRAMBLE_TEST_GROUP", "all")
+# Read from TestUtils rather than from `ENV` directly, so that a subsystem's own
+# `runtests.jl` -- a standalone entry point that never reaches this file -- resolves the
+# group the same way this does.
+const __bramble_test_group = TestUtils.TEST_GROUP
 
 # `full` deliberately does *not* imply `quality`. `full` has exactly one caller, `Weekly.yml`,
 # and Aqua/JET/explicit-imports/exports/invalidations already run daily in `nightly.yml`'s
@@ -29,7 +32,12 @@ const __bramble_test_group = get(ENV, "BRAMBLE_TEST_GROUP", "all")
 # A local `.claude/scripts/test.sh` run is unaffected: it passes no group at all and so gets
 # `all`, which still includes quality.
 const __bramble_with_quality = __bramble_test_group in ("all", "quality")
-const __bramble_with_unit_tests = __bramble_test_group in ("all", "unit", "full")
+const __bramble_with_unit_tests = __bramble_test_group in ("all", "unit", "full", "slow")
+
+# `slow` is `unit` plus the blocks whose cost is out of proportion to what a *push*
+# learns from them -- CI.yml runs `unit` and skips them, nightly.yml runs `slow` on both
+# platforms daily. TestUtils holds the definition, and the list, with measured costs.
+const __bramble_with_slow_tests = TestUtils.WITH_SLOW_TESTS
 
 # The differentiation backend survey is split by what it costs, measured per backend:
 #
@@ -127,13 +135,17 @@ if __bramble_with_unit_tests
         include("exporters/runtests.jl")
 
         # The worked-example pages themselves, run rather than mirrored: each is a
-        # Literate script whose `#src` assertions pin the numbers it renders (#117). Plus
-        # the variable-coefficient case no page covers. ~1m together -- cheap enough to run
-        # on every push rather than sit behind a group, and it covers assemble, the
-        # Dirichlet path, and the sparse-AD Newton loop as pipelines rather than operator by
-        # operator.
-        @testset "Worked examples" begin
-            include("examples/pages.jl")
+        # Literate script whose `#src` assertions pin the numbers it renders (#117). It
+        # covers assemble, the Dirichlet path, and the sparse-AD Newton loop as pipelines
+        # rather than operator by operator -- but so, more cheaply, does `drivers/` below,
+        # on a variable-coefficient path no page reaches. What these pages uniquely catch is
+        # a number the documentation *publishes* going stale, and at 1m03.8s of a 6m06.5s
+        # run they were the largest single block on the every-push gate. So they sit behind
+        # `slow` now: daily on both platforms, not per push. See TestUtils.WITH_SLOW_TESTS.
+        if __bramble_with_slow_tests
+            @testset "Worked examples" begin
+                include("examples/pages.jl")
+            end
         end
 
         # Independent full-pipeline tests (mesh -> space -> assemble -> solve) for a path no

@@ -5,6 +5,7 @@ using Bramble
 import Bramble: forward_difference, jump, jump_dim!, diff₊ₓ, M₊ₓ, M₊ᵧ
 using LinearAlgebra: norm
 using Supposition
+using ..TestUtils: WITH_SLOW_TESTS
 using ..SpaceVectorElementsTests: setup_test_grid
 using ..SpaceDifferenceTests: test_operator_matrix_equivalence
 
@@ -90,7 +91,7 @@ jump_ops(::Val{3}) = (jumpₓ, jump₂, jump_ops(Val(2))...)
         test_operator_matrix_equivalence(jump_ops)
     end
 
-    @testset "Leibniz product rule" begin
+    WITH_SLOW_TESTS && @testset "Leibniz product rule" begin
         positive_h = Data.Floats{Float64}(;
             minimum = 0.01, maximum = 10.0, nans = false, infs = false
         )

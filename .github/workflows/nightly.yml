@@ -4,12 +4,17 @@ name: Nightly
 # nightly, and the checks that are not canaries but don't need every-push feedback either.
 # The 1.12 floor is covered weekly instead — see Weekly.yml.
 #
-# CI.yml's push gate is macOS-only now. Linux moved here because of a Linux-only allocation
-# flake in `avgₕ!` (test/space/vector_elements.jl's "allocations do not grow with the grid"
-# — an architecture-dependent `@generated` fold, documented there, not a real regression each
-# time it fires) that turned an unrelated PR's gate red too often to be worth blocking pushes
-# on. Julia nightly changes underneath every push regardless of what Bramble does, so gating
-# on it meant the same kind of unrelated red gate. Formatting and quality (Aqua & JET) are
+# CI.yml's push gate is macOS-only, and runs the `unit` group. Linux lives here, in the
+# `slow` job below, on the same released Julia 1.13 — a second platform on the gate doubles
+# the runner time for a leg that agrees with the first one almost always, and when it does
+# not, the disagreement has historically been a Linux-only allocation flake in `avgₕ!`
+# (test/space/vector_elements.jl's "allocations do not grow with the grid" — an
+# architecture-dependent `@generated` fold, documented there, not a real regression each time
+# it fires) rather than a break. That same job runs the `slow` group, which is `unit` plus
+# the blocks whose cost is out of proportion to what a *push* learns from them; see
+# test/TestUtils.jl's `WITH_SLOW_TESTS` for the list and the measurement. Julia nightly
+# changes underneath every push regardless of what Bramble does, so gating on it meant the
+# same kind of unrelated red gate. Formatting and quality (Aqua & JET) are
 # not canaries in that sense, but moving them off every push trades same-push feedback for a
 # leaner, faster push CI — a failure here is caught and fixed the same day rather than the
 # same minute.
@@ -41,6 +46,47 @@ env:
   JULIA_NUM_THREADS: auto
 
 jobs:
+  # The released Julia that CI.yml gates on, on both platforms, plus everything CI.yml
+  # leaves off the gate for cost. CI.yml runs `unit` on macOS only, to keep a push's
+  # feedback short; this runs `slow`, which is `unit` plus the deferred blocks
+  # (test/TestUtils.jl's `WITH_SLOW_TESTS` names them, with what each one costs). One job
+  # therefore covers both the Linux platform check and the deferred blocks, and covers them
+  # on macOS too, so a block that moved off the gate is not thereby moved off macOS.
+  #
+  # It gates — no `continue-on-error` — because, unlike the `test` job below, it runs a
+  # released compiler over Bramble's own code: a red leg here is Bramble's, not upstream's.
+  #
+  # Keep the version in step with CI.yml's matrix. The point of the ubuntu leg is that the
+  # two platforms run the same thing; a drift makes it a different question.
+  slow:
+    name: Julia 1.13 + deferred tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macOS-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.13"
+
+      - uses: julia-actions/cache@v2
+        with:
+          cache-compiled: "true"
+
+      - uses: julia-actions/julia-buildpkg@v1
+
+      - uses: julia-actions/julia-runtest@v1
+        env:
+          BRAMBLE_TEST_GROUP: slow
+
   test:
     name: Julia nightly (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

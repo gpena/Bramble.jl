@@ -5,6 +5,7 @@ using Bramble
 using Bramble: CartesianProduct, set, is_collapsed, point_type
 using StaticArrays
 using Supposition
+using ..TestUtils: WITH_SLOW_TESTS
 using ..TestUtils: alloc_test, @test_allocs
 
 @testset "CartesianProduct sets" begin
@@ -555,7 +556,7 @@ end
 # Supposition: a tensor product is a conjunction over its axes, `projection` and `extrema`
 # read the same box, the centre is in the set, and a collapsed axis is one whose endpoints
 # coincide. Each is a statement about every valid `CartesianProduct`, not about a chosen one.
-@testset "Geometry properties (Supposition)" begin
+WITH_SLOW_TESTS && @testset "Geometry properties (Supposition)" begin
     coordinate = Data.Floats{Float64}(;
         minimum = -10.0, maximum = 10.0, nans = false, infs = false
     )

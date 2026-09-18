@@ -8,6 +8,7 @@ using LinearAlgebra: norm, lu
 using SparseArrays
 using Random
 using Supposition
+using ..TestUtils: WITH_SLOW_TESTS
 using ..TestUtils: alloc_test, @test_allocs, _nonuniform_points
 
 _idx_read2(u, i, j) = u[i, j]
@@ -1334,7 +1335,7 @@ end
 # Supposition, which is where a rule that silently used the cell's midpoint spacing instead
 # of its own endpoints, or mismatched a weight to a node near the boundary half-cells, would
 # show up.
-@testset "Cell average reproduction (Supposition)" begin
+WITH_SLOW_TESTS && @testset "Cell average reproduction (Supposition)" begin
     positive_h = Data.Floats{Float64}(;
         minimum = 0.01, maximum = 10.0, nans = false, infs = false
     )
@@ -1397,7 +1398,6 @@ end
 
         xh, yh = half_points(Ωₕ)
         for j in 1:ny, i in 1:nx
-
             expected = _exact_mean(c0, c1, c2, xh[i], xh[i + 1]) *
                        _exact_mean(d0, d1, 0.0, yh[j], yh[j + 1])
             _agree(uₕ[i, j], expected) || return false
