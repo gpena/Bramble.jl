@@ -513,7 +513,25 @@ size(assemble(a_boundary))
 This is a masked *sum* of the existing cell measures, not a surface integral, and the two
 are not interchangeable; a masked `innerₕ` scales like `h` and vanishes under refinement,
 where a true boundary integral does not. `markers` is for the former; a Neumann or Robin
-term needing the latter is a separate, not-yet-built piece (`inner_Γ`).
+term needs the latter, which is [`inner_Γ`](@ref):
+
+```@example forms
+# a Robin boundary mass and a Neumann flux, on the right end of this 1D mesh
+β, g = 1.7, x -> 2.0 + x[1]
+a_robin = form(Wd, Wd, (u, v) -> inner_Γ(β * u, v; markers = (:xmax,)))
+l_neumann = form(Wd, v -> inner_Γ(g, v; markers = (:xmax,)))
+sum(assemble(l_neumann))
+```
+
+That is `g(x_N)` exactly, and it stays what it is under refinement, which is what makes it a
+surface integral rather than a masked sum. In 1D a ``(D-1)``-face is a *point*, of measure 1,
+so the term is the plain endpoint pairing `g(x_N) v(x_N)` with no spacing in it; in 2D the
+same expression gives an edge integral, weighing each point of the edge by its transverse
+half-spacing, and in 3D a face integral.
+
+`inner_Γ` integrates over whole coordinate faces — `:boundary`, `:xmin`…`:zmax`, or a
+viewpoint alias — and needs no marker declared in `domain(...)`, since it reads the face from
+the point's index rather than from a marker table.
 
 A marker that does not exist anywhere the term reaches is a loud error rather than a silent
 all-zero contribution: `RegionRestriction`'s own per-point check cannot tell "nothing here

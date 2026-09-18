@@ -345,6 +345,7 @@ M₊ₕ
 
 ```@docs
 innerₕ
+inner_Γ
 inner₊
 inner₊ₓ
 inner₊ᵧ

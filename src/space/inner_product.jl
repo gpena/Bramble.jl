@@ -49,7 +49,7 @@ This is a *masked sum of the existing cell measures*, not a surface integral; th
 not interchangeable and differ by a factor of `h`. Measured on a 5×5 uniform mesh of the unit
 square, restricted to `:bottom`: the masked sum here gives 0.125, which scales like `h` and
 vanishes under refinement, where the true boundary integral `∫_Γ u v ds` gives 1.0 and is
-mesh-independent. See `inner_Γ` below and point 11 of `docs/form-unlock-plan.md`.
+mesh-independent. See `inner_Γ` below (gpena/Bramble.jl#157).
 =#
 
 @inline function _combined_mask(Ωₕ, markers::NTuple{1, Symbol})
@@ -170,32 +170,92 @@ end
 end
 
 """
-    inner_Γ(uₕ::VectorElement, vₕ::VectorElement, labels::Symbol...)
+    inner_Γ(uₕ::VectorElement, vₕ::VectorElement, labels::Symbol...) -> Real
 
-Placeholder for the true, ``(D-1)``-dimensional boundary integral ``\\int_\\Gamma u\\,v\\,ds``
-over the mesh regions `labels` name.
+Returns the ``(D-1)``-dimensional boundary integral of `uₕ * vₕ` over the grid faces `labels`
+name,
+
+```math
+(\\textrm{u}_h, \\textrm{v}_h)_\\Gamma \\vcentcolon =
+\\int_\\Gamma \\textrm{u}_h \\textrm{v}_h \\, ds
+\\approx \\sum_{I \\in \\Gamma_h} \\omega(I) \\textrm{u}_h(I) \\textrm{v}_h(I)
+```
+
+with the lumped surface weight ``\\omega`` described in `mesh/queries.jl`: the sum, over the
+normal directions of the surface pieces through a point, of the product of the *transverse*
+half-spacings. In 1D a face is a point of measure 1, so `inner_Γ(uₕ, vₕ, :boundary)` is
+`u(x₀)v(x₀) + u(x_N)v(x_N)`, with no spacing anywhere -- the correct pairing for a 1D Neumann
+term, and not comparable dimensionally with the 2D and 3D cases.
 
 **Not the same quantity as `innerₕ(uₕ, vₕ; markers = labels)`.** That is a masked sum of the
 existing cell measures (a ``D``-dimensional quantity restricted to a set of points), and it
 scales like `h`, vanishing under refinement: 0.125 on a 5×5 mesh of the unit square restricted
-to `:bottom`. This function is meant for the mesh-independent surface integral a Neumann or
-Robin term needs (1.0 on that same mesh and region), which is a genuinely different quantity,
-not a bug in the other one. See point 11 of `docs/form-unlock-plan.md`.
+to `:bottom`, against 1.0 here on the same mesh and region, on every mesh.
 
-**Not yet implemented.** No ``(D-1)``-dimensional surface quadrature weight exists anywhere in
-the package today: only `Innerh` (cell measures) and `Innerplus` (directional, still
-``D``-dimensional). This always throws until that weight is built; kept unexported until it
-does something.
+`labels` name whole coordinate faces: `:boundary`, the canonical `:xmin`…`:zmax`, or their
+viewpoint aliases. A user-defined marker covering part of a face, an interior interface or a
+staircase is a genuinely more general surface -- the weight stops factorising where the
+surface is cut at an interior transverse index, and needs the explicit one-sided face sum --
+and is refused rather than silently given the factorised weight.
+
+The symbolic twin, for use inside a form, is `inner_Γ(g, v; markers = …)`
+(`form/operators/inner.jl`). It takes its regions as a keyword, to sit beside `innerₕ`; this
+one keeps the positional labels it has always had.
+
+# Examples
+
+```jldoctest
+Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 5), (true, true))
+Wₕ = gridspace(Ωₕ)
+uₕ = Rₕ(Wₕ, x -> 1.0)
+
+# the length of the bottom edge, on this mesh and on every refinement of it
+inner_Γ(uₕ, uₕ, :bottom)
+
+# output
+
+1.0
+```
+
+See also: [`innerₕ`](@ref)
 """
-function inner_Γ(uₕ::VectorElement, vₕ::VectorElement, labels::Symbol...)
-    return throw(
-        ErrorException(
-        "inner_Γ (the true boundary integral) is not yet implemented: no (D-1)-dimensional " *
-        "surface quadrature weight exists in the package. innerₕ(uₕ, vₕ; markers = labels) " *
-        "computes a related but NOT equivalent quantity: a masked sum of cell measures that " *
-        "scales like h and vanishes under refinement, not a mesh-independent surface integral.",
+function inner_Γ(
+        uₕ::VectorElement{<:ScalarGridSpace{D}},
+        vₕ::VectorElement{<:ScalarGridSpace{D}},
+        labels::Symbol...
+) where {D}
+    Ωₕ = mesh(space(uₕ))
+    mask = _face_mask(Val(D), labels)
+    _no_faces(mask) && _throw_no_surface_labels()
+    _check_surface_is_thin(Ωₕ, mask)
+    return _surface_sum(Ωₕ, mask, parent(uₕ), parent(vₕ))
+end
+
+@noinline function _throw_no_surface_labels()
+    throw(
+        ArgumentError(
+        "inner_Γ needs at least one surface to integrate over; name `:boundary` or a " *
+        "coordinate face such as `:xmin`.",
     ),
     )
+end
+
+# Walks the whole grid rather than the marked points alone: `ω` is zero off the surface, the
+# grid walk is the one every other inner product here does, and the boundary is a vanishing
+# fraction of the points, so the arithmetic saved by a marked-index walk is not worth a
+# second traversal shape. The same weight is read per point by the symbolic path
+# (`compute_weight(::InnerGamma, …)`, form/operators/inner.jl), so the two layers compute the
+# same number by construction.
+@inline function _surface_sum(Ωₕ, mask, u, v)
+    acc = zero(eltype(u)) * zero(eltype(v)) * zero(eltype(Ωₕ))
+    lin = LinearIndices(indices(Ωₕ))
+    @inbounds for I in indices(Ωₕ)
+        w = _surface_weight(Ωₕ, mask, I)
+        iszero(w) && continue
+        k = lin[I]
+        acc += w * u[k] * v[k]
+    end
+    return acc
 end
 
 """
