@@ -219,6 +219,8 @@ end
 
         rates = [log2(errs[i] / errs[i + 1]) for i in 1:(length(errs) - 1)]
         @test all(r -> 1.9 < r < 2.1, rates)
+    end
+end
 
 # The discrete Laplacian (gpena/Bramble.jl#158). Its stencil is truncated at both ends of
 # every axis, so the error is measured away from them, as it is for the differences above,
