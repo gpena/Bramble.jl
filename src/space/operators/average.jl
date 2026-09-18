@@ -237,6 +237,15 @@ end
 # An average divides by nothing the direction does not already say, so unlike the
 # differences it needs no spacing function and no precondition: `_apply_averaged!` takes the
 # direction alone, and `extra_args` is left out.
+#
+# `dispatch_alias` is the one place these two differ from every other family
+# (gpena/Bramble.jl#74). Elsewhere the dimensional entry point takes the family's stem --
+# `D₋(uₕ, d)` next to `D₋ₓ` -- but the average's stem is `M`, and `M` is the most common
+# local name in finite-element code for a mass matrix. Minting it would mean `using Bramble`
+# reserved it, and a caller writing `M = assemble(a, Wₕ)` at top level would get "cannot
+# assign a value to imported variable M" for their trouble. So the averages put the
+# direction argument on the tuple-valued alias they already export instead: `Mₕ(uₕ)` is
+# still the tuple, `Mₕ(uₕ, 2)` is the `y` average, and no new name enters the surface.
 @operator_family(base=forward_average,
     stem=M₊,
     apply_fn=_apply_averaged!,
@@ -244,6 +253,7 @@ end
     dir_string="forward",
     what="average",
     formula="\\frac{u_{i} + u_{i+1}}{2}",
+    dispatch_alias=M₊ₕ,
     vectorial_alias=M₊ₕ)
 
 @operator_family(base=backward_average,
@@ -253,4 +263,5 @@ end
     dir_string="backward",
     what="average",
     formula="\\frac{u_{i-1} + u_{i}}{2}",
+    dispatch_alias=Mₕ,
     vectorial_alias=Mₕ)

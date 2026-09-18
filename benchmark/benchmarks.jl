@@ -149,6 +149,16 @@ let Wₕ = gridspace(_mesh2()), uₕ = Rₕ(Wₕ, x -> sin(x[1]) * x[2])
     g["D₋ᵧ"] = @benchmarkable D₋ᵧ($uₕ)            # across it
     g["Mₓ"] = @benchmarkable Mₓ($uₕ)
     g["Dcₓ"] = @benchmarkable Dcₓ($uₕ)
+
+    # The dimensional entry point (gpena/Bramble.jl#74), with `d` coming from a loop rather
+    # than written as a literal. This is the entry that would catch a boxed `Val`: the value
+    # tests cannot see one, since boxing changes how a result is reached and not what it is,
+    # and JET only runs nightly. `ALLOCATION_BOUNDS` gates it at the same 3 allocations the
+    # subscript aliases below cost, once per direction -- boxing would add one per call and
+    # a dynamic dispatch through the whole engine on top.
+    g["D₋(uₕ, d) over d"] = @benchmarkable(for d in 1:2
+        D₋($uₕ, d)
+    end)
 end
 
 # --- 3. reductions -------------------------------------------------------- #
@@ -479,6 +489,9 @@ const ALLOCATION_BOUNDS = Dict(
     ("operators 2D", "D₋ᵧ") => 3,
     ("operators 2D", "Mₓ") => 3,
     ("operators 2D", "Dcₓ") => 3,
+    # the loop runs both directions, so 2 x 3 and not a byte more: a `Val` boxed from the
+    # loop variable would show up here as the extra allocation it is (gpena/Bramble.jl#74)
+    ("operators 2D", "D₋(uₕ, d) over d") => 6,
     ("operators 3D", "D₋₂") => 3,
     # one per spatial direction
     ("operators 3D", "∇ₕ") => 15,

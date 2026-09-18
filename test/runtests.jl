@@ -96,6 +96,7 @@ if __bramble_with_unit_tests
             include("space/commutation.jl")
             include("space/jump.jl")
             include("space/average.jl")
+            include("space/dimensional_dispatch.jl")
             include("space/inplace_operators.jl")
             include("space/operators.jl")
             include("space/operator_docstrings.jl")

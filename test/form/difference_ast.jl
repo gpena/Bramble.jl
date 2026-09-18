@@ -16,9 +16,7 @@ using Bramble:
                is_symbolic,
                resolve_ast,
                trial_component_or_nothing,
-               test_component_or_nothing,
-               grad_backward,
-               grad_forward
+               test_component_or_nothing
 
 # The two one-sided difference nodes of the symbolic layer.
 #
@@ -109,14 +107,17 @@ using Bramble:
     end
 
     @testset "Gradient shapes" begin
-        @test grad_backward(id) isa NTuple{2, BackwardDifference}
-        @test grad_forward(id) isa NTuple{2, ForwardDifference}
-        @test ∇ₕ(id) === grad_backward(id)
-        @test ∇₊ₕ(id) === grad_forward(id)
+        # `grad_backward`/`grad_forward` were these two under another name until
+        # gpena/Bramble.jl#74 generated the families; the gradients themselves are what
+        # they always were.
+        @test ∇ₕ(id) isa NTuple{2, BackwardDifference}
+        @test ∇₊ₕ(id) isa NTuple{2, ForwardDifference}
+        @test ∇ₕ(id) === (D₋(id, Val(1)), D₋(id, Val(2)))
+        @test ∇₊ₕ(id) === (Bramble.D₊(id, Val(1)), Bramble.D₊(id, Val(2)))
 
         # the tuple form, applied component-wise, which only ∇ₕ used to have
-        @test ∇ₕ((id, id)) == map(grad_backward, (id, id))
-        @test ∇₊ₕ((id, id)) == map(grad_forward, (id, id))
+        @test ∇ₕ((id, id)) == map(∇ₕ, (id, id))
+        @test ∇₊ₕ((id, id)) == map(∇₊ₕ, (id, id))
         @test length(∇₊ₕ((id, id))) == 2
         @test all(g -> g isa NTuple{2, ForwardDifference}, ∇₊ₕ((id, id)))
 

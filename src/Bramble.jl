@@ -95,7 +95,18 @@ export snorm₁ₕ, norm₁ₕ, norm₊, normₕ
 # reaches for `D₋ₓ` and `Mₓ`. Keeping their forward partners exported offered a choice that
 # the discretisation does not actually leave open.
 
-export D₋ₓ, D₋ᵧ, D₋₂, ∇ₕ
+# The dimensional entry points (gpena/Bramble.jl#74) travel with their family: `D₋` is
+# exported because `D₋ₓ` is, `D₊` is `public` because `D₊ₓ` is, and `diff₋`/`diff₊` are
+# neither because their subscripts are neither. Two families have no entry point of their
+# own: the averages put theirs on `Mₕ`/`M₊ₕ`, already listed below, rather than mint a bare
+# `M` that `using Bramble` would take away from a caller's mass matrix.
+#
+# This is also where gpena/Bramble.jl#74 and gpena/Bramble.jl#211 have to be reconciled. #74
+# was written before #211 and says the subscript names are retained "permanently"; #211 then
+# took 28 of them off this surface. #211 wins: every forwarder below is still *defined*, and
+# `D₋(uₕ, 2)` reaches the same method `D₋ᵧ(uₕ)` does, but only the survivors are exported or
+# `public`.
+export D₋ₓ, D₋ᵧ, D₋₂, ∇ₕ, D₋
 export D₋ₓ!, D₋ᵧ!, D₋₂!
 
 # `public` rather than nothing at all, unlike the unscaled differences above: the forward
@@ -104,19 +115,19 @@ export D₋ₓ!, D₋ᵧ!, D₋₂!
 # `ext/BrambleILUZeroExt.jl`'s workload both do. Declaring them keeps that access honest
 # under `ExplicitImports.check_all_qualified_accesses_are_public`, and keeps them in
 # `names(Bramble)`, which is what requires them to stay documented.
-public D₊ₓ, D₊ᵧ, D₊₂, ∇₊ₕ
+public D₊ₓ, D₊ᵧ, D₊₂, ∇₊ₕ, D₊
 public D₊ₓ!, D₊ᵧ!, D₊₂!
 
-export D̽ₓ, D̽ᵧ, D̽₂, D̽ₕ
+export D̽ₓ, D̽ᵧ, D̽₂, D̽ₕ, D̽
 export D̽ₓ!, D̽ᵧ!, D̽₂!
 
-export Dcₓ, Dcᵧ, Dc₂, Dcₕ
+export Dcₓ, Dcᵧ, Dc₂, Dcₕ, Dc
 export Dcₓ!, Dcᵧ!, Dc₂!
 
 export Dₕₓ, Dₕᵧ, Dₕ₂, Dₕ
 export Dₕₓ!, Dₕᵧ!, Dₕ₂!
 
-export jumpₓ, jumpᵧ, jump₂, jumpₕ
+export jumpₓ, jumpᵧ, jump₂, jumpₕ, jump
 export jumpₓ!, jumpᵧ!, jump₂!
 
 export Mₓ, Mᵧ, M₂, Mₕ
@@ -199,6 +210,7 @@ include("space/inner_product.jl")
 
 include("form/ast.jl")
 include("form/common.jl")
+include("form/operators/node_family.jl")
 include("form/operators/difference.jl")
 include("form/operators/jump.jl")
 include("form/operators/average.jl")

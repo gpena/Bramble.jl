@@ -26,8 +26,6 @@ using Bramble:
                restrict_to,
                shift_op,
                inner_plus,
-               vectorial_avg_backward,
-               vectorial_avg_forward,
                is_symbolic,
                markers
 
@@ -99,8 +97,11 @@ const _ORIGIN_2D = (0, 0)
         end
 
         @testset "Vector forms" begin
-            @test Mₕ(id) === vectorial_avg_backward(id)
-            @test M₊ₕ(id) === vectorial_avg_forward(id)
+            # `vectorial_avg_backward`/`vectorial_avg_forward` were `Mₕ`/`M₊ₕ` under
+            # another name until gpena/Bramble.jl#74 generated the families. The direction
+            # argument the same names now also take is the one thing that is new.
+            @test Mₕ(id) === (Mₕ(id, Val(1)), Mₕ(id, Val(2)))
+            @test M₊ₕ(id) === (M₊ₕ(id, Val(1)), M₊ₕ(id, Val(2)))
             @test Mₕ(id) isa NTuple{2, BackwardAverage}
             @test M₊ₕ(id) isa NTuple{2, ForwardAverage}
             @test Mₕ(id)[1] === Mₓ(id)

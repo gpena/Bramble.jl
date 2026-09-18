@@ -58,7 +58,7 @@ as a sparse matrix, the third applies it and returns a `VectorElement`.
 Forwards to [`forward_difference`](@ref), since a jump across an interface and an unscaled
 forward difference are the same quantity. The name records which of the two is meant.
 """
-@inline jump(arg, dim_val::Val) = forward_difference(arg, dim_val)
+@inline jump(arg::OperatorArgument, dim_val::Val) = forward_difference(arg, dim_val)
 
 """
     jump!(vₕ, uₕ, dim_val::Val)

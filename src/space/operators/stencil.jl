@@ -34,6 +34,8 @@ struct Backward <: GridDirection end
 # size mismatch as an AssertionError, which is not what a caller should have to catch.
 @noinline _throw_stencil_dim_error(dim::Int, D::Int) = throw(ArgumentError("the stencil direction must be between 1 and $D, got $dim"))
 
+@noinline _throw_stencil_symbol_error(d::Symbol) = throw(ArgumentError("the stencil direction must be :x, :y or :z, got :$d"))
+
 @noinline function _throw_stencil_size_error(lout::Int, lin::Int, dims)
     throw(
         DimensionMismatch(
@@ -60,6 +62,78 @@ end
 @inline _op_mesh(Ωₕ::AbstractMeshType) = Ωₕ
 @inline _op_mesh(Wₕ::AbstractSpaceType) = mesh(Wₕ)
 @inline _op_mesh(uₕ::VectorElement) = mesh(space(uₕ))
+
+"""
+    OperatorArgument
+
+The three things a discrete operator accepts: a mesh, a grid space or a
+[`VectorElement`](@ref). Exactly the three `_op_mesh` has a method for.
+
+Named so that the dimensional entry points can say it. The per-coordinate aliases take an
+untyped `arg`, which is harmless at one argument, but `D₋(arg, d)` shares its name with the
+form layer's `D₋(op::LazyOp, ::Val)`: an untyped two-argument method would swallow a
+`LazyOp` and hand it to the grid engines, and an `Int` direction on a symbolic node cannot
+be type-stable anyway (`BackwardDifference{D, 1, …}` and `{D, 2, …}` are different types).
+Spelling the union keeps that a `MethodError` (gpena/Bramble.jl#74).
+"""
+const OperatorArgument = Union{AbstractMeshType, AbstractSpaceType, VectorElement}
+
+# --- Runtime direction selection ----------------------------------------------------- #
+#
+# `Val(d)` built from a non-constant `d` boxes it, and nothing downstream of the boxed
+# `Val` can constant-fold: that is the regression gpena/Bramble.jl#146 measured through
+# `ntuple(i -> …, Val(D))` closures, and the reason the vectorial aliases are unrolled
+# rather than looped. A runtime `Int` therefore never reaches `Val` directly. It selects
+# between literal `Val`s instead, one arm per direction the mesh actually has, so every
+# call the compiler sees carries a `Val` it can read.
+#
+# Branching on the mesh dimension first is what keeps the arms exhaustive *and* correct:
+# a 1D mesh gets one arm and an honest "must be between 1 and 1" for anything else, rather
+# than a `Val(3)` specialisation of the engines that no 1D grid can serve.
+
+@inline function _dim_index(d::Symbol)
+    d === :x && return 1
+    d === :y && return 2
+    d === :z && return 3
+    return _throw_stencil_symbol_error(d)
+end
+
+@inline _dispatch_dim(f::F, arg, d::Int) where {F} = _dispatch_dim(
+    f, arg, d, Val(dim(_op_mesh(arg)))
+)
+
+@inline _dispatch_dim(f::F, arg, d::Int, ::Val{1}) where {F} = d == 1 ? f(arg, Val(1)) :
+                                                               _throw_stencil_dim_error(
+    d, 1
+)
+
+@inline function _dispatch_dim(f::F, arg, d::Int, ::Val{2}) where {F}
+    d == 1 && return f(arg, Val(1))
+    d == 2 && return f(arg, Val(2))
+    return _throw_stencil_dim_error(d, 2)
+end
+
+@inline function _dispatch_dim(f::F, arg, d::Int, ::Val{3}) where {F}
+    d == 1 && return f(arg, Val(1))
+    d == 2 && return f(arg, Val(2))
+    d == 3 && return f(arg, Val(3))
+    return _throw_stencil_dim_error(d, 3)
+end
+
+# The tuple-valued aliases' unrolling, written once rather than generated per family.
+#
+# It lived in `_vectorial_expr` as three `alias(arg, ::Val{D})` methods until
+# gpena/Bramble.jl#74. That put the *mesh dimension* on a public two-argument signature,
+# which is the signature #74 needs for the *direction*: on a 2D mesh `Dₕ(u, Val(2))` meant
+# the pair, and has to mean the `y` difference. `Dₕ` is the one family whose stem and
+# vectorial alias are the same name, so only it collided -- but moving the unrolling here
+# removes the shape rather than special-casing the one name, and drops three generated
+# methods per family while doing it.
+@inline _vectorial_apply(f::F, arg, ::Val{1}) where {F} = f(arg, Val(1))
+@inline _vectorial_apply(f::F, arg, ::Val{2}) where {F} = (f(arg, Val(1)), f(arg, Val(2)))
+@inline _vectorial_apply(f::F, arg, ::Val{3}) where {F} = (
+    f(arg, Val(1)), f(arg, Val(2)), f(arg, Val(3))
+)
 
 # A composite grid function is a stack of scalar ones, so an operator applies to each
 # component in turn. Their `components` are views onto the parent, so writing into the
@@ -321,7 +395,7 @@ end
 """
     _vectorial_expr(base_op_name, alias_name, dir_string, what; note = "", source = nothing)
 
-Returns the expressions defining the `ₕ` alias that applies `base_op_name` along every
+Returns the expression defining the `ₕ` alias that applies `base_op_name` along every
 coordinate and returns a tuple, one entry per spatial dimension, as a `Vector{Expr}`. On a
 one-dimensional mesh the alias returns that single entry rather than a one-tuple.
 
@@ -355,28 +429,109 @@ function _vectorial_expr(
     the latter: each entry of the tuple is then itself a composite grid function.
     """
 
-    # Returned one at a time, as in _alias_expr: @doc takes a single definition, and only
-    # the entry point carries the docstring.
+    # One method, not four. The per-dimension unrolling is `_vectorial_apply` above,
+    # shared by every family: it used to be generated here as three `alias(arg, ::Val{D})`
+    # methods, and that two-argument signature is the one the dimensional entry point needs
+    # for the *direction* (gpena/Bramble.jl#74).
     #
-    # 2D/3D are written out rather than generated from a generic `ntuple(i -> ...,
-    # Val(D)) where D` method: inside that closure, `Val(i)` boxes `i` as a runtime
-    # Int, so calling `base_op_name(arg, Val(i))` can never constant-fold down the
-    # difference-engine call stack and every coordinate pays for dynamic dispatch
-    # (gpena/Bramble.jl#146). Meshes are strictly 1D/2D/3D here (boundary_symbols has
-    # no names past :front/:back), so these three literal methods are exhaustive.
-    entry = :(@inline $(alias_name)(arg) = $(alias_name)(arg, Val(dim(_op_mesh(arg)))))
-    one_d = :(@inline $(alias_name)(arg, ::Val{1}) = $(base_op_name)(arg, Val(1)))
-    two_d = :(@inline $(alias_name)(arg, ::Val{2}) = ($(base_op_name)(arg, Val(1)), $(base_op_name)(arg, Val(2))))
-    three_d = :(@inline $(alias_name)(arg, ::Val{3}) = (
-        $(base_op_name)(arg, Val(1)),
-        $(base_op_name)(arg, Val(2)),
-        $(base_op_name)(arg, Val(3))
+    # `Val(dim(_op_mesh(arg)))` is read off the mesh *type*, so it is a literal by the time
+    # `_vectorial_apply` dispatches on it; no `Val` here is ever built from a runtime value
+    # (gpena/Bramble.jl#146).
+    entry = :(@inline $(alias_name)(arg) = _vectorial_apply(
+        $(base_op_name), arg, Val(dim(_op_mesh(arg)))
     ))
 
     documented_entry = Expr(
         :macrocall, GlobalRef(Core, Symbol("@doc")), source, doc_string, entry
     )
-    return Expr[_relocate!(e, source) for e in (documented_entry, one_d, two_d, three_d)]
+    return Expr[_relocate!(documented_entry, source)]
+end
+
+"""
+    _dimensional_expr(base_op_name, alias_name, alias_stem, dir_string, what, formula;
+                      opening_sentence = "", source = nothing)
+
+Returns the expressions defining one family's dimensional entry point, as a `Vector{Expr}`:
+`alias_name(arg, d)` for `d` a `Val`, an `Int` or a `Symbol`.
+
+The name gpena/Bramble.jl#74 adds over machinery that was already there. Every family
+bottoms out in a `Val`-parameterised base function, and the 63 subscript aliases are
+one-line `Val` bindings over it; what was missing was a way to say "this operator, along
+*that* direction" with the direction a value. `sum(D₋(uₕ, d) for d in 1:D)` is the first
+dimension-agnostic form the package can express, and the subscripts stop being the only way
+in.
+
+The `Val` method is omitted when `alias_name` is `base_op_name` itself, as it is for
+`jump`: the family's own file already wrote that method, and generating it again would
+define `jump(arg, ::Val) = jump(arg, ::Val)`.
+
+`alias_stem` is the family's subscript stem, which the docstring cross-references: it is
+`alias_name` for most families, but the averages put their entry point on the tuple-valued
+`Mₕ`/`M₊ₕ` while the per-coordinate aliases are still `Mₓ`/`M₊ₓ`, and `Mₕₓ` is not a name.
+
+`opening_sentence` is the family's own prose template, substituted with `d` as the
+direction; the families that do not override it get the generic
+"The `\$dir_string` `\$what` along the `d` direction, ``\$formula``." instead.
+"""
+function _dimensional_expr(
+        base_op_name,
+        alias_name,
+        alias_stem,
+        dir_string,
+        what,
+        formula;
+        opening_sentence::String = "",
+        source = nothing
+)
+    opening = if isempty(opening_sentence)
+        "The `$dir_string` $what along the `d` direction, ``$formula``."
+    else
+        _subst(opening_sentence, "d", "")
+    end
+
+    doc_string = """
+        $alias_name(arg, d)
+
+    $opening
+
+    `d` names the direction three ways: a `Val` (`Val(1)`), an `Int` (`1`, `2`, `3`) or a
+    `Symbol` (`:x`, `:y`, `:z`). The `Val` form is the one
+    [`$(alias_stem)ₓ`](@ref) and its siblings forward through; the other two select between
+    literal `Val`s, one arm per direction the mesh has, so the direction still reaches the
+    stencil engine as a compile-time constant and a loop over `d` allocates nothing beyond
+    its results. An `Int` outside `1:dim(mesh)`, or a `Symbol` that is not `:x`/`:y`/`:z`,
+    throws an `ArgumentError`.
+
+    Alias for `$base_op_name(arg, Val(d))`. `arg` is a mesh, a grid space or a
+    [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the third
+    applies it and returns a `VectorElement`.
+
+    Accepts a grid function of a scalar or of a composite grid space. On a composite one
+    the operator is applied to each component in turn, and the result is the composite
+    grid function whose components are those results.
+    """
+
+    int_method = :(@inline $(alias_name)(arg::OperatorArgument, d::Int) = _dispatch_dim(
+        $(base_op_name), arg, d
+    ))
+    sym_method = :(@inline $(alias_name)(arg::OperatorArgument, d::Symbol) = _dispatch_dim(
+        $(base_op_name), arg, _dim_index(d)
+    ))
+
+    documented_int = Expr(
+        :macrocall, GlobalRef(Core, Symbol("@doc")), source, doc_string, int_method
+    )
+
+    exprs = Expr[documented_int, sym_method]
+    if alias_name !== base_op_name
+        pushfirst!(
+            exprs,
+            :(@inline $(alias_name)(arg::OperatorArgument, dim_val::Val) = $(base_op_name)(
+                arg, dim_val
+            ))
+        )
+    end
+    return Expr[_relocate!(e, source) for e in exprs]
 end
 
 """
@@ -446,8 +601,15 @@ end
                            trailing_note = "", bang_opening_sentence = "", source = nothing)
 
 Returns the expressions defining one family's whole alias surface, as a `Vector{Expr}`: the
-per-coordinate `alias_stem` pair for every direction (`Dcₓ`/`Dcₓ!`, `Mᵧ`/`Mᵧ!`, …) and,
-when `vectorial_alias` is given, the `ₕ` alias over every coordinate at once.
+per-coordinate `alias_stem` pair for every direction (`Dcₓ`/`Dcₓ!`, `Mᵧ`/`Mᵧ!`, …), the
+dimensional entry point `dispatch_alias(arg, d)`, and, when `vectorial_alias` is given, the
+`ₕ` alias over every coordinate at once.
+
+`dispatch_alias` defaults to `alias_stem`, which is what every difference family wants:
+`D₋ₓ`, `D₋ᵧ`, `D₋₂` and `D₋(uₕ, d)`. The averages pass their tuple-valued alias instead, so
+that the family gains a direction argument without minting a bare `M` -- the single most
+common local name in finite-element code, and one `using Bramble` would then reserve.
+Passing `nothing` skips the entry point altogether.
 
 [`_alias_expr`](@ref)/[`_alias_bang_expr`](@ref) and [`_vectorial_expr`](@ref) were already
 shared; the *loop* calling them was written out once per family in `difference.jl` and once
@@ -472,6 +634,7 @@ function _operator_aliases_expr(
         dir_string,
         what,
         formula;
+        dispatch_alias = alias_stem,
         vectorial_alias = nothing,
         vectorial_dir_string = dir_string,
         vectorial_what = what,
@@ -524,6 +687,22 @@ function _operator_aliases_expr(
         )
     end
 
+    if dispatch_alias !== nothing
+        append!(
+            exprs,
+            _dimensional_expr(
+                base_name,
+                dispatch_alias,
+                alias_stem,
+                dir_string,
+                what,
+                formula;
+                opening_sentence,
+                source
+            )
+        )
+    end
+
     vectorial_alias === nothing && return exprs
     append!(
         exprs,
@@ -559,6 +738,7 @@ Keywords, all optional except `base` and `stem`:
 | `apply_fn`, `extra_args`, `direction` | passed to [`_grid_function_forms_expr`](@ref); omitting `apply_fn` skips the grid-function forms, for a family that writes them itself |
 | `docstring` | attached to the scalar `base!` method |
 | `dir_string`, `what`, `formula` | fill the generic docstring template |
+| `dispatch_alias` | the name carrying the dimensional entry point `f(arg, d)`; defaults to `stem` (gpena/Bramble.jl#74) |
 | `vectorial_alias`, `vectorial_dir_string`, `vectorial_what`, `vectorial_note` | the `ₕ` alias over every coordinate |
 | `opening_sentence`, `formula_note`, `alias_note`, `trailing_note`, `bang_opening_sentence` | prose templates; see [`_operator_aliases_expr`](@ref) for where each lands and for the `{direction}`/`{suffix}` placeholders |
 
@@ -599,6 +779,7 @@ macro operator_family(kwargs...)
             get_str(:dir_string),
             get_str(:what),
             get_str(:formula);
+            dispatch_alias = get(opts, :dispatch_alias, opts[:stem]),
             vectorial_alias = get(opts, :vectorial_alias, nothing),
             vectorial_dir_string = _get_str_or(opts, :vectorial_dir_string, get_str(:dir_string)),
             vectorial_what = _get_str_or(opts, :vectorial_what, get_str(:what)),

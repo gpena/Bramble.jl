@@ -41,6 +41,37 @@ gradient and has that extra name for it.
 `jump` takes no direction, for the reason given above: it is `jumpₓ`, `jumpᵧ`, `jump₂` and
 `jumpₕ`.
 
+### [1.2 The direction as an argument](@id operators_direction_argument)
+
+Every family also answers to its stem with the direction passed in, which is what the
+coordinate suffix is spelling:
+
+| Written | Same as |
+|:--|:--|
+| `D₋(uₕ, 1)` | `D₋ₓ(uₕ)` |
+| `D₋(uₕ, :y)` | `D₋ᵧ(uₕ)` |
+| `D₋(uₕ, Val(3))` | `D₋₂(uₕ)` |
+
+`Dc`, `D̽`, `Dₕ` and `jump` work the same way. The averages use `Mₕ`/`M₊ₕ` for this rather
+than a bare `M`: `M` is what most finite-element code calls its mass matrix, and exporting
+it would take the name away from anyone writing `using Bramble`. So `Mₕ(uₕ)` is the tuple
+over every coordinate and `Mₕ(uₕ, 2)` is the average along ``y`` — the same name, told apart
+by how many arguments it is given. `Dₕ` carries both in the same way.
+
+The point of it is a loop the subscript names cannot express, because the direction is part
+of the name there and cannot come from a variable:
+
+```julia
+# the discrete H¹ seminorm squared, in any dimension
+sum(innerₕ(D₋(uₕ, d), D₋(uₕ, d)) for d in 1:dim(mesh(space(uₕ))))
+```
+
+This costs nothing over writing the coordinate out. An `Int` or a `Symbol` selects between
+literal `Val`s, one branch per direction the mesh has, so the direction still reaches the
+stencil engine as a compile-time constant; the loop above allocates exactly what the
+spelled-out version does. An out-of-range direction throws an `ArgumentError`, and the bound
+is the mesh's own dimension: `D₋(uₕ, :y)` on a 1D grid is an error, not a silent zero.
+
 ## 2. Applying an operator
 
 An operator takes a [`VectorElement`](@ref) and returns a new one on the same space.
@@ -281,6 +312,18 @@ length(g)
 Away from the truncated slices, `g[1]` is `1.0` and `g[2]` is `2.0`, the two partial
 derivatives of ``x + 2y``. The same suffix works for the other families as `jumpₕ` and
 `Mₕ`, and all of them accept a mesh, a grid space or a grid function.
+
+These are separate names from the dimensional entry points of [1.2](@ref
+operators_direction_argument) rather than one name with an extra argument, and deliberately:
+`∇ₕ(uₕ)` returns a tuple where `D₋(uₕ, d)` returns a grid function, so folding them together
+would make the return type depend on whether an argument was passed at all. `Dₕ` and
+`Mₕ`/`M₊ₕ` are the exception, and they get away with it because the two meanings differ by
+arity rather than by the value of an argument:
+
+```@repl operators
+Dₕ(vₕ) == (Dₕ(vₕ, 1), Dₕ(vₕ, 2))
+Mₕ(vₕ) == (Mₕ(vₕ, :x), Mₕ(vₕ, :y))
+```
 
 ## 6. Summation by parts, and `D̽ₓ`
 

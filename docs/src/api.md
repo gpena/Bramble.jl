@@ -191,6 +191,19 @@ interpolation_matrix
 The finite difference, the jump and the average, per coordinate and over every coordinate
 at once. See the [operators tutorial](tutorials/operators.md).
 
+Every family also takes the direction as an argument rather than as part of the name:
+`D₋(uₕ, 2)`, `D₋(uₕ, :y)` and `D₋(uₕ, Val(2))` are all `D₋ᵧ(uₕ)`. That is what makes a
+dimension-agnostic expression writable — `sum(innerₕ(D₋(uₕ, d), D₋(uₕ, d)) for d in 1:D)`
+reads the same in 1D, 2D and 3D — and it costs nothing: the `Int` and `Symbol` forms branch
+over literal `Val`s, so the direction still reaches the stencil engine as a compile-time
+constant. The averages put this on `Mₕ`/`M₊ₕ` rather than on a bare `M`, which would take
+the most common local name in finite-element code away from anyone writing `using Bramble`;
+`Mₕ(uₕ)` is still the tuple over every coordinate and `Mₕ(uₕ, 2)` is the `y` average.
+
+The same names carry the symbolic form: `D₋(uₕ, Val(1))` differences a grid function now,
+`D₋(U, Val(1))` builds the AST node that will difference it during assembly. Inside a form
+the direction must be a `Val`, since it is a type parameter of the node.
+
 Three families are documented here but not exported, so `using Bramble` does not bring them
 into scope and they are written `Bramble.D₊ₓ` or imported by name: the unscaled differences
 `diff₋*`/`diff₊*`, the forward differences `D₊*`/`∇₊ₕ`, and the forward averages `M₊*`.
@@ -219,6 +232,8 @@ diff₊ᵧ!
 diff₊₂
 diff₊₂!
 diff₊ₕ
+diff₋
+diff₊
 D₋ₓ
 D₋ₓ!
 D₋ᵧ
@@ -233,6 +248,8 @@ D₊ᵧ!
 D₊₂
 D₊₂!
 ∇₊ₕ
+D₋
+D₊
 ```
 
 The forward difference over the averaged spacing, which is the one that satisfies
@@ -248,6 +265,7 @@ D̽ᵧ!
 D̽₂
 D̽₂!
 D̽ₕ
+D̽
 ```
 
 The centered difference, over the span its stencil covers. It reproduces the derivative
@@ -262,6 +280,7 @@ Dcᵧ!
 Dc₂
 Dc₂!
 Dcₕ
+Dc
 ```
 
 The cross-weighted centered difference, the same two one-sided differences weighted by
@@ -290,6 +309,7 @@ jumpᵧ!
 jump₂
 jump₂!
 jumpₕ
+jump
 ```
 
 Averages of a point with its neighbour.
