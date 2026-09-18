@@ -26,7 +26,13 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
     include("block_extract.jl")
     include("component.jl")
     include("stencil_pattern.jl")
-    include("jacobian_pattern.jl")
+    # Behind the `slow` group (TestUtils.WITH_SLOW_TESTS): at ~46s it is the most expensive
+    # file in this subsystem, and most of that is the structural half -- the AST-derived
+    # pattern checked against SparseConnectivityTracer's AD-traced one as ground truth, in
+    # 1D, 2D and 3D. That is a cross-check against another package, so it moves when that
+    # package or the simplifier moves rather than when an operator does. Daily on both
+    # platforms, and in any run with no group set, including this file's own standalone one.
+    TestUtils.WITH_SLOW_TESTS && include("jacobian_pattern.jl")
     include("type_cached_assemble.jl")
     include("semidiscrete.jl")
     include("sparse_solvers.jl")

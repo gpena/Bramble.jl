@@ -6,6 +6,7 @@ using Bramble
 import Bramble: M₊ₓ
 using Random
 using Supposition
+using ..TestUtils: WITH_SLOW_TESTS
 using ..TestUtils: _nonuniform_points, _zero_boundary!
 
 # Discrete integration by parts for the centered divergence.
@@ -153,7 +154,7 @@ using ..TestUtils: _nonuniform_points, _zero_boundary!
         @test !agree(lhs, -inner₊ₓ(M₊ₓ(uₕ), D₋ₓ(vₕ)))
     end
 
-    @testset "Random grids (Supposition)" begin
+    WITH_SLOW_TESTS && @testset "Random grids (Supposition)" begin
         positive_h = Data.Floats{Float64}(;
             minimum = 0.01, maximum = 10.0, nans = false, infs = false
         )

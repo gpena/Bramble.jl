@@ -9,6 +9,7 @@ using LinearAlgebra: Diagonal, I, diag, dot
 using SparseArrays: sparse, nnz, nonzeros
 using Random
 using Supposition
+using ..TestUtils: WITH_SLOW_TESTS
 using ..TestUtils: _nonuniform_points
 using Bramble:
                BilinearForm,
@@ -978,7 +979,7 @@ end
 # The grids are drawn by Supposition, so the property is checked on non-uniform partitions
 # with no relation between the directions -- the case where a term picking up the wrong
 # metric weight cannot cancel against another term's.
-@testset "Assembly linearity (Supposition)" begin
+WITH_SLOW_TESTS && @testset "Assembly linearity (Supposition)" begin
     positive_h = Data.Floats{Float64}(;
         minimum = 0.01, maximum = 10.0, nans = false, infs = false
     )

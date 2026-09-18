@@ -35,6 +35,7 @@ using Bramble:
 using LinearAlgebra: hypot
 using Random
 using Supposition
+using ..TestUtils: WITH_SLOW_TESTS
 using ..TestUtils: alloc_test, @test_allocs
 
 # --- Test Suite ---
@@ -716,7 +717,7 @@ end # Main Testset
         @test length(indices(Ωₕ)) == npoints(Ωₕ)
     end
 
-    @testset "Refinement invariants" begin
+    WITH_SLOW_TESTS && @testset "Refinement invariants" begin
         @check function check_refinement_invariants_2d(
                 nx = Data.Integers(3, 8), ny = Data.Integers(3, 8)
         )

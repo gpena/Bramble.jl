@@ -19,6 +19,7 @@ import Bramble:
                 index_in_marker
 using Bramble: set
 using Supposition
+using ..TestUtils: WITH_SLOW_TESTS
 
 @testset "Dirichlet constraints" begin
     # --- Setup ---
@@ -602,7 +603,7 @@ using LinearAlgebra: I as LinearAlgebraI
         end
     end
 
-    @testset "Arbitrary fields (Supposition)" begin
+    WITH_SLOW_TESTS && @testset "Arbitrary fields (Supposition)" begin
         field_val = Data.Floats{Float64}(;
             minimum = -100.0, maximum = 100.0, nans = false, infs = false
         )

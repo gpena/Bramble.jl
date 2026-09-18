@@ -4,6 +4,7 @@ using Test
 using Bramble
 using LinearAlgebra: norm
 using Supposition
+using ..TestUtils: WITH_SLOW_TESTS
 using ..SpaceVectorElementsTests: setup_test_grid, valid_interior_range
 
 @testset "Inner products & norms" begin
@@ -247,7 +248,7 @@ end
         end
     end
 
-    @testset "Random grids (Supposition)" begin
+    WITH_SLOW_TESTS && @testset "Random grids (Supposition)" begin
         positive_h = Data.Floats{Float64}(;
             minimum = 0.01, maximum = 10.0, nans = false, infs = false
         )

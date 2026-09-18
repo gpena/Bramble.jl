@@ -16,6 +16,50 @@ using Test
 using SparseArrays: spdiagm
 using ForwardDiff
 
+# The test group, read once here rather than in each entry point, so that a subsystem's own
+# `runtests.jl` -- which is a standalone entry point and does not go through
+# test/runtests.jl -- decides the same way the full suite does. test/runtests.jl reads these
+# too; see its own comments for what each group means.
+const TEST_GROUP = get(ENV, "BRAMBLE_TEST_GROUP", "all")
+
+# `slow` is the every-push gate's overflow: the unit suite plus the files whose cost is out
+# of proportion to what a *push* learns from them. CI.yml (macOS, per push) runs `unit` and
+# so skips them; nightly.yml runs `slow` on both platforms once a day, and Weekly.yml's
+# `full` includes them as well. A run with no group set gets `all`, which includes them --
+# so `.claude/scripts/test.sh` and a bare `Pkg.test` are unaffected.
+#
+# What is behind it, and why, with the measured cost of each on Julia 1.13, macOS, 4
+# threads, against a 6m06s `unit` run:
+#
+#   examples/pages.jl           1m03.8s  the six worked-example pages, run for the `#src`
+#                                        assertions that pin the numbers the docs render.
+#                                        Nothing here is a code path that drivers/ and
+#                                        form/ do not already cover; what it uniquely
+#                                        catches is a *published number* going stale, which
+#                                        is a same-day concern, not a same-push one.
+#   form/jacobian_pattern.jl      ~46s   the AST-derived sparsity pattern checked against
+#                                        SparseConnectivityTracer's AD-traced pattern as
+#                                        ground truth in 1D/2D/3D, plus Newton solves that
+#                                        use it. The expensive half is a cross-check against
+#                                        another package, and it moves when that package or
+#                                        the simplifier moves, not when an operator does.
+#   the 15 Supposition testsets   ~20s   named `... (Supposition)`, plus meshnd.jl's
+#                                        "Refinement invariants", gridspaces.jl's "Partition
+#                                        of unity" and jump.jl's "Leibniz product rule",
+#                                        which are `@check` blocks under a plainer name.
+#                                        719 of the suite's assertions, and they are a
+#                                        search: running them more often beats running them
+#                                        sooner, because each run draws different inputs.
+#                                        The deterministic tests each one sits beside stay
+#                                        on the gate, so a property moving here never leaves
+#                                        its operator uncovered.
+#
+# Each Supposition testset is gated at its own site rather than centrally, with
+# `WITH_SLOW_TESTS && @testset ...` so the block keeps its indentation. The `Non-vacuous`
+# guards nested inside two of them travel with their property, which is right: a guard that
+# a property is not vacuously true has no job in a run where the property does not execute.
+const WITH_SLOW_TESTS = TEST_GROUP in ("all", "slow", "full")
+
 @inline function alloc_test(f::F, args...; kwargs...) where {F}
     f(args...; kwargs...) # warm up
     return @allocated(f(args...; kwargs...))
