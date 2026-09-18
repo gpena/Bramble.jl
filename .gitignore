@@ -94,3 +94,9 @@ CLAUDE.md
 STANDARDS.md
 DOCUMENTATION_PLAN.md
 TYPE_INSTABILITIES_REVIEW.md
+
+# Supposition's example database. Every `@check function check_<name>(...)` that runs writes
+# a binary cache beside the test file, named `check_<name>(<argtypes>)_check_<name>` with no
+# extension, so it shows up untracked after any local property-test run. It is regenerable
+# and machine-specific; there is nothing to share.
+check_*_check_*
