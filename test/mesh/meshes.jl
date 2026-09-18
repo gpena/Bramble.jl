@@ -90,12 +90,14 @@ import Bramble:
                 )
             )
 
-            Mh = mesh(X, 10, false)
+            # A uniform mesh: this testset is about marker semantics, not about spacing,
+            # and a random grid only makes whether any point lands in a given third a
+            # matter of luck rather than a property of the code.
+            Mh = mesh(X, 10, true)
             @test Mh isa Mesh1D
 
             # the three predicates partition the line, so their masks must partition the
-            # grid: every point in exactly one of them, whatever the non-uniform spacing
-            # put where
+            # grid: every point is in exactly one of them
             r1 = Bramble.index_in_marker(Mh, :region1)
             r2 = Bramble.index_in_marker(Mh, :region2)
             r3 = Bramble.index_in_marker(Mh, :region3)
@@ -114,7 +116,9 @@ import Bramble:
                 )
             )
 
-            Mh = mesh(X, 10, false)
+            # Uniform again, for the same reason: whether a point falls in the overlap
+            # is not something these assertions should be left to draw for.
+            Mh = mesh(X, 10, true)
             @test Mh isa Mesh1D
 
             # these deliberately overlap: 0.4 ≤ x ≤ 0.6 is in both halves, and the whole
@@ -142,7 +146,11 @@ import Bramble:
                 )
             )
 
-            Mh = mesh(X, (5, 5), (false, false))
+            # A uniform 5x5 grid puts points at 0, 0.25, 0.5, 0.75 and 1 along each axis,
+            # so every one of the three boxes catches at least one of them. On a random
+            # grid the innermost box is usually empty, which would make the nesting
+            # assertions below pass vacuously.
+            Mh = mesh(X, (5, 5), (true, true))
             @test Mh isa MeshnD
 
             # nested boxes, so the masks must nest too: inner ⊆ middle ⊆ outer
@@ -151,6 +159,9 @@ import Bramble:
             inner = Bramble.index_in_marker(Mh, :inner)
             @test all(inner .<= middle)
             @test all(middle .<= outer)
+            # and the nesting above is only meaningful because none of the masks is empty
+            @test count(inner) > 0
+            @test count(middle) > 0
             @test count(outer) > 0
         end
     end
