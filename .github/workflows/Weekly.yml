@@ -2,6 +2,12 @@ name: Weekly
 
 # Everything the per-push CI deliberately leaves out, once a week.
 #
+# Not the quality group, though -- Aqua, JET, explicit-imports, exports and invalidations run
+# daily in nightly.yml, and `full` used to drag them in here as well, four times over on this
+# matrix. `full` no longer implies `quality` (see test/runtests.jl); this job is the unit
+# suite across both Julia versions and both platforms, plus the expensive AD backends, the
+# package extensions, the manual snippets and coverage.
+#
 # Enzyme and Mooncake are the reason this exists. They spend 58 seconds compiling on first
 # call between them, against 1.1 s for ReverseDiff and PolyesterForwardDiff, which run on
 # every push instead. What the expensive pair establishes changes when a *backend* changes
@@ -224,7 +230,7 @@ jobs:
           path: osv-report.md
           if-no-files-found: error
 
-  # Docs are not built here, or on any schedule: generation is on-demand only
-  # (`docs-on-demand.yml`, `workflow_dispatch`). A broken `@ref` is an error the test suite
-  # cannot see (a docstring is only cross-referenced when it is rendered), so that check now
-  # runs only when the on-demand workflow is dispatched, not on a weekly cadence.
+  # Docs are not built here, or on any schedule: `docs-on-demand.yml` owns them and deploys
+  # on a release tag or on demand. A broken `@ref` is an error the test suite cannot see (a
+  # docstring is only cross-referenced when it is rendered), so that check runs when the docs
+  # are built -- at release time, and in the local gate the release procedure requires.
