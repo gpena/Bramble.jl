@@ -5,8 +5,8 @@ import Base: show, first, last, getindex, setindex!, iterate, size, firstindex, 
 
 using SparseArrays: SparseMatrixCSC, spdiagm, spzeros, rowvals, nonzeros, nzrange, sparse, sparse!, blockdiag
 
-using LinearAlgebra: I, dot, mul!
-import LinearAlgebra: issymmetric, isposdef, ldiv!, Factorization, ×, qr
+using LinearAlgebra: I, mul!
+import LinearAlgebra: issymmetric, isposdef, ldiv!, Factorization, ×, qr, dot
 
 import Base: copy
 using Base: @propagate_inbounds
@@ -62,7 +62,11 @@ export indices, boundary_indices, interior_indices, is_boundary_index, index_in_
 # same layer, real, tested, reached while implementing a mesh or a boundary-facing
 # operator rather than while using one (point 70).
 public AbstractMeshType, MeshMarkers
-public mesh_type, hₘᵢₙ, normal_vector, half_spacings, cell_measures
+public mesh_type, hₘᵢₙ, half_spacings, cell_measures
+
+# Exported since v3.1 (gpena/Bramble.jl#213): the outward normal is part of writing a
+# Neumann or Robin term, not an internal query, now that `inner_Γ` exists.
+export normal_vector
 
 # Space handling
 export gridspace, vector_gridspace, space, spaces, ScalarGridSpace, CompositeGridSpace
@@ -86,6 +90,7 @@ export Rₕ, Rₕ!, avgₕ, avgₕ!
 export interpolate_at, interpolation_matrix, πₕ, πₕ!
 
 export innerₕ, inner_Γ, dirac
+export n
 export inner₊, inner₊ₓ, inner₊ᵧ, inner₊₂
 export snorm₁ₕ, norm₁ₕ, norm₊, normₕ, norminf_h, norm∞ₕ
 
@@ -221,6 +226,7 @@ include("space/operators/jump.jl")
 include("space/operators/average.jl")
 include("space/operators/interpolation.jl")
 include("space/operators/vector_calculus.jl")
+include("space/operators/normal.jl")
 include("space/inner_product.jl")
 
 include("form/ast.jl")
@@ -231,6 +237,7 @@ include("form/operators/jump.jl")
 include("form/operators/average.jl")
 include("form/operators/restriction.jl")
 include("form/operators/inner.jl")
+include("form/operators/normal.jl")
 include("form/operators/interpolation.jl")
 include("form/stencil_eval.jl")
 include("form/component.jl")

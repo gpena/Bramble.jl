@@ -118,8 +118,12 @@ allpages = [home, getting_started, upgrading, foundations, forms, scientific,
 makedocs(;
     format = Documenter.HTML(;
         prettyurls = get(ENV, "CI", nothing) == "true",
-        size_threshold = 400 * 1024,
-        size_threshold_warn = 250 * 1024,
+        # The API reference is one page listing every exported name's docstring, so it grows
+        # with the package and crossed 400 KiB when the surface integral and the normal were
+        # added (gpena/Bramble.jl#157, #213). Raised rather than split: one searchable page
+        # is the point of it, and the threshold exists to catch a page that grew by accident.
+        size_threshold = 600 * 1024,
+        size_threshold_warn = 450 * 1024,
         # "Signal" theme (#132): retokenizes Documenter's own sidebar/content/breadcrumb
         # shell in place, so search/doctest/@ref keep working unmodified.
         assets = [
