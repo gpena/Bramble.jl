@@ -107,6 +107,7 @@ internals = "Internals" => [
     "internals/mesh.md",
     "internals/space.md",
     "internals/form.md",
+    "internals/gridap_evaluation.md",
     "internals/autodiff.md",
     "internals/exporters.md"
 ]
