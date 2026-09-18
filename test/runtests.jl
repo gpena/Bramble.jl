@@ -111,6 +111,8 @@ if __bramble_with_unit_tests
             include("space/centered_difference.jl")
             include("space/cross_weighted_difference.jl")
             include("space/sbp_identities.jl")
+            include("space/sobolev_inequalities.jl")
+            include("space/discrete_calculus_identities.jl")
             include("space/commutation.jl")
             include("space/jump.jl")
             include("space/average.jl")
