@@ -329,11 +329,29 @@ The stencil `inner_op` contributes `delta` points away in direction `Dim`, given
 stencil already evaluated at `I`.
 
 The one place the "shift by relabelling" assumption is made, so the one place a node that
-cannot be relabelled has to be handled: [`TranslationInvariantStencil`](@ref) relabels
-`inner`'s offsets and never touches `inner_op` again, [`PointDependentStencil`](@ref)
-discards `inner` and evaluates `inner_op` at the shifted point instead. Both produce a tuple
-of the same static length, since it is the same operator either way, so the callers'
-`concatenate_stencils` sees exactly the shape it always did.
+cannot be relabelled has to be handled. The default dispatches on
+`stencil_shift_trait`: [`TranslationInvariantStencil`](@ref) relabels `inner`'s
+offsets and never touches `inner_op` again; [`PointDependentStencil`](@ref) discards `inner`
+and evaluates `inner_op` at the shifted point instead.
+
+Two node types override this default outright rather than answering through the trait alone,
+because the trait's two stock branches cannot express what they need: re-evaluating the
+whole subtree at the shifted point is exact for a source, which carries only a value, but
+wrong for anything that also carries a trial or test column, since that column has to move
+by relabelling while whatever multiplies it has to be read at the new point:
+
+  - `GridFunctionScale` shifts its operand by the operand's own rule (a recursive call to
+    this same function), then reads its coefficient at the shifted point and scales by it,
+    so `D₋ₓ(cₕ * u)` moves the trial column *and* re-reads `cₕ` at the tap
+    (gpena/Bramble.jl#271).
+  - `OperatorAdd` recurses into each summand and `concatenate_stencils` the two results,
+    since a sum can mix a point-dependent summand (one carrying a `GridFunctionScale`) with
+    a translation-invariant one, and the generic point-dependent branch would re-evaluate
+    the translation-invariant summand at the shifted point too, discarding its trial column.
+
+Every branch -- the two default ones and these two overrides -- produces a tuple of the same
+static length, since it is the same operator either way, so the callers' `concatenate_stencils`
+sees exactly the shape it always did.
 """
 @inline function shifted_inner_stencil(
         inner_op, inner, space, I::CartesianIndex{D}, markers, ::Val{Dim}, delta
@@ -369,6 +387,75 @@ end
     return local_stencil(
         inner_op, space, Ishift, markers, LinearIndices(indices(m))[Ishift]
     )
+end
+
+"""
+    _grid_function_value(grid_function, lin_idx::Int)
+
+The value a [`GridFunctionScale`](@ref) coefficient contributes at linear index `lin_idx`.
+
+`grid_function` is whatever `GridFunctionScale.grid_function` may hold: a zero-argument
+`Function` thunk deferred until `resolve_ast` calls it (see [`SourceVector`](@ref)'s
+docstring for why a thunk, not a plain vector, is the wire format), a bare `Number` for a
+uniform scale, or an array of per-point values. Shared by `local_stencil(::GridFunctionScale,
+...)` (`form/stencil_eval.jl`), which reads the coefficient at the point being visited, and
+the `shifted_inner_stencil` override below, which reads it at the point a tap shifts to --
+previously the same three-way branch, written out twice.
+"""
+@inline function _grid_function_value(grid_function, lin_idx::Int)
+    if grid_function isa Function
+        val = grid_function()
+        return val isa Number ? val : val[lin_idx]
+    else
+        return grid_function isa Number ? grid_function : grid_function[lin_idx]
+    end
+end
+
+# `GridFunctionScale` is marked `PointDependentStencil` in form/operators/interpolation.jl,
+# but the generic `PointDependentStencil` branch above is wrong for it: discarding `inner`
+# and re-evaluating the whole node at `Ishift` would lose the trial or test column the
+# operand contributes (`GridFunctionScale(c, u)` evaluated fresh at `Ishift` reduces to `c`
+# read there times `u`'s own stencil *at* `Ishift` -- offset zero, not `delta`). What is
+# needed instead is the operand shifted by its own rule, with the coefficient read
+# separately at the shifted point, which is what this override gives it ahead of the
+# generic trait dispatch (gpena/Bramble.jl#271). `inner` is discarded, the same as the
+# generic point-dependent branch discards it: it was evaluated at `I`, and the coefficient
+# this tap needs is the one at `Ishift`.
+@inline function shifted_inner_stencil(
+        inner_op::GridFunctionScale, inner, space, I::CartesianIndex{D}, markers, ::Val{Dim}, delta
+) where {D, Dim}
+    m = mesh(space)
+    lins = LinearIndices(indices(m))
+    Ishift = _clamped_shift(m, I, Val(Dim), _shift_delta(delta))
+    sub = local_stencil(inner_op.inner_op, space, I, markers, lins[I])
+    shifted = shifted_inner_stencil(inner_op.inner_op, sub, space, I, markers, Val(Dim), delta)
+    return scale_stencil(shifted, _grid_function_value(inner_op.grid_function, lins[Ishift]))
+end
+
+# A sum inherits `PointDependentStencil` (`_combine_shift_traits`,
+# form/operators/interpolation.jl) the moment either side does, which now includes any side
+# holding a `GridFunctionScale`. Without this override the generic branch above would
+# re-evaluate *both* summands at `Ishift`, including a translation-invariant one, losing its
+# trial column exactly as the unwrapped `GridFunctionScale` case above would; recursing into
+# each summand instead lets the translation-invariant side keep relabelling while the
+# point-dependent side re-reads its coefficient. The tuple length is unchanged from the
+# generic branch: that one already returned `local_stencil(::OperatorAdd, Ishift)`, itself a
+# concatenation of the same two halves.
+@inline function shifted_inner_stencil(
+        inner_op::OperatorAdd, inner, space, I::CartesianIndex{D}, markers, ::Val{Dim}, delta
+) where {D, Dim}
+    lin_idx = LinearIndices(indices(mesh(space)))[I]
+    left = shifted_inner_stencil(
+        inner_op.left_op,
+        local_stencil(inner_op.left_op, space, I, markers, lin_idx),
+        space, I, markers, Val(Dim), delta
+    )
+    right = shifted_inner_stencil(
+        inner_op.right_op,
+        local_stencil(inner_op.right_op, space, I, markers, lin_idx),
+        space, I, markers, Val(Dim), delta
+    )
+    return concatenate_stencils(left, right)
 end
 
 # ==============================================================================

@@ -272,6 +272,25 @@ stencil_shift_trait(::SourceVector) = PointDependentStencil()
 stencil_shift_trait(::SourceConstant) = PointDependentStencil()
 stencil_shift_trait(::DiracSource) = PointDependentStencil()
 
+# A `GridFunctionScale` is point-dependent in its own right, whatever it wraps: the
+# coefficient it reads varies from point to point exactly like a source's value does, so a
+# neighbour's contribution needs the coefficient re-read there, not relabelled here. Without
+# this, `UnaryWrapper`'s fallback (`stencil_shift_trait(op.inner_op)`, form/stencil_eval.jl)
+# forwards to whatever the wrapped trial/test function reports -- translation-invariant --
+# and `D₋ₓ(cₕ * u)` reads the coefficient at the point being visited instead of the point
+# the difference's tap reaches (gpena/Bramble.jl#271).
+#
+# This line alone is not enough, and briefly worse than the bug it targets: the generic
+# `PointDependentStencil` branch (form/common.jl) discards the operand's own stencil and
+# re-evaluates the whole node at the shifted point, which for a `GridFunctionScale` loses
+# the trial or test column the operand contributed -- `local_stencil(GridFunctionScale(c, u),
+# ..., Ishift)` returns a single entry at offset zero, not the trial column shifted by
+# `delta`. The two `shifted_inner_stencil` overrides in form/common.jl are what make this
+# line correct: they shift the operand by its own rule and read the coefficient at the
+# shifted point separately, instead of asking the trait's two stock branches to do both at
+# once.
+stencil_shift_trait(::GridFunctionScale) = PointDependentStencil()
+
 function stencil_shift_trait(op::OperatorAdd)
     return _combine_shift_traits(
         stencil_shift_trait(op.left_op), stencil_shift_trait(op.right_op)

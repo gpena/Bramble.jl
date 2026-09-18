@@ -61,6 +61,9 @@ getting_started = "Getting started" => "getting_started.md"
 # page is it; it sits next to "Getting started" because that is where someone arriving with
 # v2 code looks first.
 upgrading = "Upgrading to v3.0" => "upgrading_v3.md"
+# v3.1 changes assembled *values* silently rather than breaking compilation, so it gets its
+# own page rather than an addendum to the v3.0 one -- gpena/Bramble.jl#271.
+upgrading_v3_1 = "Upgrading to v3.1" => "upgrading_v3_1.md"
 
 # Grouped by where a page sits in the workflow rather than as one flat "Tutorials" list:
 # a reader meets geometry, meshes, spaces and operators before forms, and the solver,
@@ -112,7 +115,7 @@ internals = "Internals" => [
 ]
 documentation = "Documentation" => ["api.md", "api_sciml.md", internals]
 
-allpages = [home, getting_started, upgrading, foundations, forms, scientific,
+allpages = [home, getting_started, upgrading, upgrading_v3_1, foundations, forms, scientific,
     visualization, examples, benchmarks, documentation]
 
 makedocs(;

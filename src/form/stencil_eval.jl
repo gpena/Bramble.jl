@@ -262,14 +262,7 @@ end
         op::GridFunctionScale, space, I::CartesianIndex{D}, markers, lin_idx::Int
 ) where {D}
     inner = local_stencil(op.inner_op, space, I, markers, lin_idx)
-    grid_fn = op.grid_function
-    local_val = if grid_fn isa Function
-        val = grid_fn()
-        val isa Number ? val : val[lin_idx]
-    else
-        grid_fn isa Number ? grid_fn : grid_fn[lin_idx]
-    end
-    return scale_stencil(inner, local_val)
+    return scale_stencil(inner, _grid_function_value(op.grid_function, lin_idx))
 end
 
 @inline local_stencil(
