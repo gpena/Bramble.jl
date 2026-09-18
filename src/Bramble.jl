@@ -81,19 +81,31 @@ export innerₕ, dirac
 export inner₊, inner₊ₓ, inner₊ᵧ, inner₊₂
 export snorm₁ₕ, norm₁ₕ, norm₊, normₕ
 
-# The unscaled differences are `public` rather than exported: unlike every other operator
-# family they have no form-layer node, so they cannot appear inside a bilinear form, and
-# `diff₊` is the same arithmetic as `jump`, which carries the intent a caller reaching for
-# it usually means. Reached as `Bramble.diff₋ₓ` by anyone who wants the raw difference.
-public diff₋ₓ, diff₋ᵧ, diff₋₂, diff₋ₕ
-public diff₊ₓ, diff₊ᵧ, diff₊₂, diff₊ₕ
-public diff₋ₓ!, diff₋ᵧ!, diff₋₂!
-public diff₊ₓ!, diff₊ᵧ!, diff₊₂!
+# Three families are internal in v3.0 (gpena/Bramble.jl#211): the unscaled differences
+# `diff₋*`/`diff₊*`, the forward differences `D₊*`/`∇₊ₕ`, and the forward averages `M₊*`.
+# They keep their definitions, their docstrings and their entries in the API reference, and
+# are reached as `Bramble.D₊ₓ`; what they lose is a place on the surface `using Bramble`
+# brings in.
+#
+# The reasons differ by family. The unscaled differences have no form-layer node, so they
+# cannot appear inside a bilinear form, and `diff₊` is the same arithmetic as `jump`, which
+# carries the intent a caller reaching for it usually means. The forward difference and the
+# forward average are the duals the backward ones are built and checked against: Bramble
+# discretises with the backward operator paired with `inner₊`, and a user writing a form
+# reaches for `D₋ₓ` and `Mₓ`. Keeping their forward partners exported offered a choice that
+# the discretisation does not actually leave open.
 
 export D₋ₓ, D₋ᵧ, D₋₂, ∇ₕ
-export D₊ₓ, D₊ᵧ, D₊₂, ∇₊ₕ
 export D₋ₓ!, D₋ᵧ!, D₋₂!
-export D₊ₓ!, D₊ᵧ!, D₊₂!
+
+# `public` rather than nothing at all, unlike the unscaled differences above: the forward
+# difference and the forward average are what the backward ones are checked against, so
+# `Bramble.D₊ₓ` is a supported thing to reach for -- the summation-by-parts tests and
+# `ext/BrambleILUZeroExt.jl`'s workload both do. Declaring them keeps that access honest
+# under `ExplicitImports.check_all_qualified_accesses_are_public`, and keeps them in
+# `names(Bramble)`, which is what requires them to stay documented.
+public D₊ₓ, D₊ᵧ, D₊₂, ∇₊ₕ
+public D₊ₓ!, D₊ᵧ!, D₊₂!
 
 export D̽ₓ, D̽ᵧ, D̽₂, D̽ₕ
 export D̽ₓ!, D̽ᵧ!, D̽₂!
@@ -108,9 +120,10 @@ export jumpₓ, jumpᵧ, jump₂, jumpₕ
 export jumpₓ!, jumpᵧ!, jump₂!
 
 export Mₓ, Mᵧ, M₂, Mₕ
-export M₊ₓ, M₊ᵧ, M₊₂, M₊ₕ
 export Mₓ!, Mᵧ!, M₂!
-export M₊ₓ!, M₊ᵧ!, M₊₂!
+
+public M₊ₓ, M₊ᵧ, M₊₂, M₊ₕ
+public M₊ₓ!, M₊ᵧ!, M₊₂!
 
 export dirichlet_constraints, dirichlet_bc!, symmetrize!
 export reaction, reaction_density

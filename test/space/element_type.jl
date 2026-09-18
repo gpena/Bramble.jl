@@ -2,6 +2,8 @@ module SpaceElementTypeTests
 
 using Test
 using Bramble
+# Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
+import Bramble: diff₋ₓ, diff₊ₓ, D₊ₓ, ∇₊ₕ, M₊ₓ, M₊ᵧ
 using SparseArrays
 using Bramble: hₘᵢₙ, diff₋ₓ, diff₊ₓ, half_spacings, cell_measures
 

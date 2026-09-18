@@ -2,6 +2,8 @@ module FormExtendedOperatorsTests
 
 using Test
 using Bramble
+# Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
+import Bramble: D₊ₓ, M₊ₓ
 using Random
 using Bramble:
                IdentityOperator,

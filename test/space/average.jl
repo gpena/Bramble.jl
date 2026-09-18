@@ -2,7 +2,7 @@ module SpaceAverageTests
 
 using Test
 using Bramble
-import Bramble: forward_average, backward_average
+import Bramble: forward_average, backward_average, M₊ₓ, M₊ᵧ, M₊₂, M₊ₕ
 import Bramble: forward_average_dim!, backward_average_dim!
 using LinearAlgebra: norm
 using ..SpaceVectorElementsTests: setup_test_grid

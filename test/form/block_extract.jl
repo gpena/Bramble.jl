@@ -3,6 +3,8 @@ module FormBlockExtractTests
 using Test
 using InteractiveUtils: subtypes
 using Bramble
+# Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
+import Bramble: D₊ₓ, D₊ᵧ, M₊ₓ, M₊ᵧ
 using Bramble:
                IndexedTrialFunction,
                IndexedTestFunction,

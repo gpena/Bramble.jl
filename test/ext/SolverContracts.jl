@@ -22,6 +22,8 @@ module ExtSolverContracts
 
 using Test
 using Bramble
+# Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
+import Bramble: D₊ₓ, D₊ᵧ
 using LinearAlgebra: ldiv!
 using SparseArrays: SparseMatrixCSC, spzeros
 

@@ -54,6 +54,11 @@ Random.seed!(20260830)
 
 ```@repl operators
 using Bramble
+# The forward difference and the forward average are `public` but not exported in v3.0:
+# Bramble discretises with the backward operator paired with `inner₊`, so the forward ones
+# are the duals you check against rather than the ones you write a form with. They are
+# imported here because this page compares the two families side by side.
+import Bramble: D₊ₓ, ∇₊ₕ, M₊ₓ
 Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true);
 Wₕ = gridspace(Ωₕ);
 points(Ωₕ)

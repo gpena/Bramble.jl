@@ -191,11 +191,18 @@ interpolation_matrix
 The finite difference, the jump and the average, per coordinate and over every coordinate
 at once. See the [operators tutorial](tutorials/operators.md).
 
+Three families are documented here but not exported, so `using Bramble` does not bring them
+into scope and they are written `Bramble.D₊ₓ` or imported by name: the unscaled differences
+`diff₋*`/`diff₊*`, the forward differences `D₊*`/`∇₊ₕ`, and the forward averages `M₊*`.
+Bramble discretises with the backward operator paired with [`inner₊`](@ref), so the forward
+ones are what the backward ones are built and checked against rather than what a form is
+written with.
+
 The unscaled differences (`diff₋ₓ` and its siblings) are the plain, undivided differences
-these are built from. They are reached as `Bramble.diff₋ₓ` rather than brought into scope
-by `using Bramble`: they have no form-layer node, so they cannot appear inside a bilinear
-form, and in a form the undivided forward difference is spelled [`jumpₓ`](@ref), which
-says which of the two is meant.
+these are built from, and are the one family of the three that is not even declared
+`public`: they have no form-layer node, so they cannot appear inside a bilinear form, and in
+a form the undivided forward difference is spelled [`jumpₓ`](@ref), which says which of the
+two is meant.
 
 ```@docs
 diff₋ₓ

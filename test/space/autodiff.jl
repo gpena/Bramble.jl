@@ -2,6 +2,8 @@ module SpaceAutodiffTests
 
 using Test
 using Bramble
+# Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
+import Bramble: diff₋ₓ, diff₊ₓ, D₊ₓ, ∇₊ₕ, M₊ₓ
 using ForwardDiff
 using Bramble: components, diff₋ₓ, diff₊ₓ
 using ..TestUtils: _matches_fd

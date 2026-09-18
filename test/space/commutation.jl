@@ -2,6 +2,8 @@ module SpaceCommutationTests
 
 using Test
 using Bramble
+# Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
+import Bramble: diff₋ₓ, diff₊ᵧ, D₊ₓ, D₊ᵧ, M₊ₓ
 using Bramble: diff₋ₓ, diff₊ᵧ
 using Random
 using Supposition

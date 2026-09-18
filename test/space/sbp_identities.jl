@@ -2,6 +2,8 @@ module SpaceSbpIdentitiesTests
 
 using Test
 using Bramble
+# Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
+import Bramble: M₊ₓ
 using Random
 using Supposition
 using ..TestUtils: _nonuniform_points, _zero_boundary!

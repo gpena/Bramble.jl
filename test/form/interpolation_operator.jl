@@ -2,6 +2,8 @@ module FormInterpolationOperatorTests
 
 using Test
 using Bramble
+# Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
+import Bramble: D₊ₓ
 # Named, not bare: a bare `using LinearAlgebra` here would export its own `×` (cross
 # product) into this shared Main session, ambiguous with Bramble's own `×` for every
 # file included afterward -- the same trap flagged elsewhere in this suite.

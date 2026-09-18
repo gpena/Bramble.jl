@@ -2,6 +2,8 @@ module FormDifferenceAstTests
 
 using Test
 using Bramble
+# Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
+import Bramble: D₊ₓ, D₊ᵧ, ∇₊ₕ
 using Bramble:
                IdentityOperator,
                IndexedTrialFunction,

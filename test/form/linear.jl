@@ -2,6 +2,8 @@ module FormLinearTests
 
 using Test
 using Bramble
+# Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
+import Bramble: M₊ᵧ
 using ForwardDiff
 using LinearAlgebra: Diagonal, diag, dot, I
 using Bramble:
