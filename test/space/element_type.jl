@@ -106,6 +106,8 @@ const F32_BACKEND = backend(;
         @test inner₊(uₕ, uₕ) isa Float32
         @test inner₊(gₕ, gₕ) isa Float32
         @test norm₊(gₕ) isa Float32
+        @test norminf_h(uₕ) isa Float32
+        @test norminf_h(gₕ) isa Float32
         @test inner₊ₓ(uₕ, uₕ) isa Float32
         @test inner₊ᵧ(uₕ, uₕ) isa Float32
     end

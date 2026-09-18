@@ -355,6 +355,86 @@ end
     end
 end
 
+# The maximum norm carries no quadrature weight, so every check below is against a value
+# computed independently of the grid: an analytic extremum attained at a grid point, or a
+# hand-placed spike whose magnitude is known.
+@testset "Discrete maximum norm (#186)" begin
+    @testset "Scalar spaces, 1D/2D/3D" begin
+        # x ↦ x on a uniform mesh of [0,1] attains its maximum at the last grid point, so
+        # the answer is exactly 1.0 and does not depend on the number of points.
+        Ω1 = mesh(domain(interval(0.0, 1.0)), 11, true)
+        W1 = gridspace(Ω1)
+        @test norminf_h(Rₕ(W1, x -> x[1])) ≈ 1.0
+        @test norm∞ₕ(Rₕ(W1, x -> x[1])) ≈ 1.0
+
+        # the absolute value is taken before the maximum: a field that is everywhere
+        # negative has a positive norm
+        @test norminf_h(Rₕ(W1, x -> -2.0 - x[1])) ≈ 3.0
+
+        # the zero element is the only one with zero norm
+        @test norminf_h(Rₕ(W1, x -> 0.0)) == 0.0
+
+        Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (7, 9), (true, true))
+        W2 = gridspace(Ω2)
+        @test norminf_h(Rₕ(W2, x -> x[1] + x[2])) ≈ 3.0        # attained at (1, 2)
+        @test norminf_h(Rₕ(W2, x -> -x[2])) ≈ 2.0
+
+        Ω3 = mesh(
+            domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 3.0)),
+            (5, 5, 6), (true, true, true))
+        W3 = gridspace(Ω3)
+        @test norminf_h(Rₕ(W3, x -> x[3])) ≈ 3.0
+
+        # a single spike dominates everything else, wherever it sits
+        uₕ = Rₕ(W3, x -> 0.1)
+        parent(uₕ)[7] = -42.0
+        @test norminf_h(uₕ) ≈ 42.0
+    end
+
+    @testset "Non-uniform meshes do not change it" begin
+        # unlike normₕ, no weight enters, so refining or grading the mesh leaves the norm
+        # of a restricted function fixed once the extremum sits on a grid point
+        Ωa = mesh(domain(interval(0.0, 1.0)), 9, true)
+        Ωb = mesh(domain(interval(0.0, 1.0)), 33, false)
+        @test norminf_h(Rₕ(gridspace(Ωa), x -> x[1])) ≈
+              norminf_h(Rₕ(gridspace(Ωb), x -> x[1]))
+    end
+
+    @testset "Composite spaces take the maximum across components" begin
+        # distinct values per component, so a wrong component cannot pass
+        Ωc = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (12, 12), (true, true))
+        Vc = gridspace(Ωc, Val(3))
+        uv = Rₕ(Vc, (x -> 2.0 * x[1], x -> -5.0 * x[2], x -> 0.25))
+
+        @test norminf_h(uv) ≈ 5.0
+        @test norminf_h(uv) ≈ maximum(norminf_h, Bramble.components(uv))
+        # per component, so the 5.0 above is demonstrably the second one's
+        comps = Bramble.components(uv)
+        @test norminf_h(comps[1]) ≈ 2.0
+        @test norminf_h(comps[2]) ≈ 5.0
+        @test norminf_h(comps[3]) ≈ 0.25
+    end
+
+    @testset "Tuples of grid functions" begin
+        # what the vectorial aliases return: ∇ₕ(uₕ) is an NTuple{D, VectorElement} in 2D
+        Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 9), (true, true))
+        W2 = gridspace(Ω2)
+        aₕ = Rₕ(W2, x -> 1.5)
+        bₕ = Rₕ(W2, x -> -4.0)
+        @test norminf_h((aₕ, bₕ)) ≈ 4.0
+        @test norminf_h((aₕ,)) ≈ norminf_h(aₕ)
+    end
+
+    @testset "The element type comes from the data" begin
+        # bramble-verification §4. The Float32 half of this lives in
+        # test/space/element_type.jl, where the backend actually carries that element type.
+        Ω1 = mesh(domain(interval(0.0, 1.0)), 7, true)
+        uₕ = Rₕ(gridspace(Ω1), x -> x[1])
+        @test norminf_h(uₕ) isa Float64
+        @test @inferred(norminf_h(uₕ)) isa Float64
+    end
+end
+
 # A masked sum of existing cell measures, restricted by `markers`, is a volumetric
 # masked sum rather than a codimension-1 surface integral. Every test here maintains
 # that distinction explicitly.

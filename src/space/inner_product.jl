@@ -213,6 +213,41 @@ the inner product there: the square root of the sum of the components' squared n
 @inline normₕ(uₕ::VectorElement{<:ScalarGridSpace}) = sqrt(innerₕ(uₕ, uₕ))
 @inline normₕ(uₕ::VectorElement{<:CompositeGridSpace}) = sqrt(innerₕ(uₕ, uₕ))
 
+"""
+    norminf_h(uₕ::VectorElement) -> Real
+    norminf_h(uₕ::NTuple{D, VectorElement}) -> Real
+
+Returns the discrete maximum norm of the grid function `uₕ`, defined as
+
+```math
+\\Vert \\textrm{u}_h \\Vert_{h,\\infty} \\vcentcolon = \\max_{I} \\vert \\textrm{u}_h(I) \\vert
+```
+
+Unlike the ``L^2``-type norms, this one carries no quadrature weight, so the same expression
+serves a [`ScalarGridSpace`](@ref) and a [`CompositeGridSpace`](@ref): the maximum over a
+composite's degrees of freedom is the maximum over its components. On an `NTuple` of grid
+functions -- what the vectorial aliases such as [`∇ₕ`](@ref) return -- it is the maximum over
+every entry of every component.
+
+The element type comes from the data, not from the space, so a `ForwardDiff.Dual`-valued grid
+function returns a `Dual`.
+
+See also: [`normₕ`](@ref), [`norm₁ₕ`](@ref)
+"""
+@inline function norminf_h(uₕ::VectorElement)
+    data = parent(uₕ)
+    return mapreduce(abs, max, data; init = abs(zero(eltype(data))))
+end
+
+@inline norminf_h(uₕ::NTuple{<:Any, VectorElement}) = maximum(norminf_h, uₕ)
+
+"""
+    norm∞ₕ(uₕ::VectorElement) -> Real
+
+Unicode alias for [`norminf_h`](@ref).
+"""
+const norm∞ₕ = norminf_h
+
 ################################################################################
 #                 Discrete Modified L² Inner Product and Norm                  #
 ################################################################################
