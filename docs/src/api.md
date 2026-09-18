@@ -363,6 +363,7 @@ M₊ₕ
 innerₕ
 inner_Γ
 n
+skew_symmetric
 inner₊
 inner₊ₓ
 inner₊ᵧ
