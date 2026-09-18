@@ -4,12 +4,14 @@ name: Nightly
 # nightly, and the checks that are not canaries but don't need every-push feedback either.
 # The 1.12 floor is covered weekly instead — see Weekly.yml.
 #
-# CI.yml's push gate is macOS-only now. Linux moved here because of a Linux-only allocation
-# flake in `avgₕ!` (test/space/vector_elements.jl's "allocations do not grow with the grid"
-# — an architecture-dependent `@generated` fold, documented there, not a real regression each
-# time it fires) that turned an unrelated PR's gate red too often to be worth blocking pushes
-# on. Julia nightly changes underneath every push regardless of what Bramble does, so gating
-# on it meant the same kind of unrelated red gate. Formatting and quality (Aqua & JET) are
+# CI.yml's push gate is macOS-only. Linux lives here, in the `linux` job below, on the same
+# released Julia 1.13 and the same `unit` group: a second platform on the gate doubles the
+# runner time for a leg that agrees with the first one almost always, and when it does not,
+# the disagreement has historically been a Linux-only allocation flake in `avgₕ!`
+# (test/space/vector_elements.jl's "allocations do not grow with the grid" — an
+# architecture-dependent `@generated` fold, documented there, not a real regression each time
+# it fires) rather than a break. Julia nightly changes underneath every push regardless of
+# what Bramble does, so gating on it meant the same kind of unrelated red gate. Formatting and quality (Aqua & JET) are
 # not canaries in that sense, but moving them off every push trades same-push feedback for a
 # leaner, faster push CI — a failure here is caught and fixed the same day rather than the
 # same minute.
@@ -41,6 +43,39 @@ env:
   JULIA_NUM_THREADS: auto
 
 jobs:
+  # The Linux leg of the *released* Julia that CI.yml gates on. CI.yml runs macOS only, to
+  # keep a push's feedback short; this is the same `unit` group, the same Julia 1.13, on
+  # ubuntu-latest, once a day. It gates — no `continue-on-error` — because unlike the
+  # `test` job below it runs a released compiler over Bramble's own code, so a red leg here
+  # is Bramble's, not upstream's.
+  #
+  # Keep the version in step with CI.yml's matrix: the point of this job is that the two
+  # platforms run the same thing, and a drift makes it a different question.
+  linux:
+    name: Julia 1.13 (ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.13"
+
+      - uses: julia-actions/cache@v2
+        with:
+          cache-compiled: "true"
+
+      - uses: julia-actions/julia-buildpkg@v1
+
+      - uses: julia-actions/julia-runtest@v1
+        env:
+          BRAMBLE_TEST_GROUP: unit
+
   test:
     name: Julia nightly (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

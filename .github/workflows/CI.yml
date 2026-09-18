@@ -58,19 +58,23 @@ jobs:
     # that only 1.12 sees is now caught the same week rather than the same push. It still
     # fails Weekly.yml when it happens.
     #
-    # Both platforms gate. Linux had been dropped from this workflow because a Linux-only
-    # allocation flake in `avgₕ!` — an architecture-dependent `@generated` fold, not a real
-    # regression each time it appeared — reddened the gate on unrelated pushes. That is a
-    # deliberate reversal: a package that supports Linux should not learn about a Linux
-    # break a day late, and the flake was never a wrong answer, only an allocation count
-    # moving.
+    # macOS only, deliberately. This gate exists to give a push fast feedback, and a second
+    # platform doubles the runner time without doubling what is learned: the two legs run
+    # the same suite over the same tree and disagree only where something is genuinely
+    # architecture-dependent. Linux runs the same `unit` group daily in nightly.yml's
+    # `linux` job, on the same Julia 1.13, so a Linux-only break is caught within the day
+    # rather than not at all.
     #
-    # The risk is not gone. `_gauss_rule` (src/space/operators/cell_average.jl) is still
-    # `@generated`, and it is the fold that was implicated. gpena/Bramble.jl#69 and #51
-    # rewrote everything around it — the `Val{1}`/`Val{D}` split is gone and `avgₕ!` now
-    # runs through `project!` — so the shape that flaked is not the shape running today, but
-    # that is a reason to expect less of it, not a fix. If a Linux-only allocation
-    # assertion starts failing here, that fold is where to look first.
+    # There is a specific thing that Linux-only leg is watching for, and it is the reason
+    # it lives on a cadence rather than on the gate: a Linux-only allocation flake in
+    # `avgₕ!` (test/space/vector_elements.jl's "allocations do not grow with the grid") that
+    # used to redden this gate on unrelated pushes. `_gauss_rule`
+    # (src/space/operators/cell_average.jl) is still `@generated` and is the fold that was
+    # implicated. gpena/Bramble.jl#69 and #51 rewrote everything around it — the
+    # `Val{1}`/`Val{D}` split is gone and `avgₕ!` now runs through `project!` — so the shape
+    # that flaked is not the shape running today, but that is a reason to expect less of it,
+    # not a fix. If a Linux-only allocation assertion fails in nightly, that fold is where
+    # to look first.
     permissions:
       contents: read
     strategy:
@@ -81,7 +85,7 @@ jobs:
         # range would pick up a `1.13.1-rc1` prerelease as soon as one is published.
         # `1.13` tracks released 1.13.x and nothing else.
         version: ["1.13"]
-        os: [ubuntu-latest, macOS-latest]
+        os: [macOS-latest]
     steps:
       - uses: actions/checkout@v4
         with:
