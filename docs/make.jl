@@ -149,18 +149,22 @@ makedocs(;
     doctest = false
 )
 
-# Versioned since v3.0.0. `stable` follows the newest tag, each minor release keeps its own
-# directory, and there is no `dev` entry: nothing publishes a development build on a schedule,
-# and a `dev/` that updates only when someone dispatches this workflow by hand looks live
-# without being live. (Documenter still *writes* `dev/` for a build from `devbranch`; leaving
-# it out of `versions` keeps it off the selector.)
+# Unversioned, deliberately: one build at the root of `gh-pages`, always the current one.
 #
-# The reason it is on at all: v3.0.0 breaks the v2 interface, so a v2.17 reader needs a
-# reference that did not move under them. `push_preview` was removed with the same change --
-# it enabled PR preview deploys, and no workflow builds docs on a pull request.
+# Versioning was switched on briefly at v3.0.0 and switched back off. It works -- `stable`,
+# per-minor directories, a selector, an outdated-version banner -- but it turns one site into
+# a tree of them, and the cost lands on every reader and every link: an extra path segment in
+# every URL, a root that only redirects, and old versions that have to be built and kept.
+# For a package with one supported line at a time, that is machinery without a reader.
+#
+# A v2 reference still exists: the `v2.17.0` tag, and `docs/src/upgrading_v3.md` describes the
+# move in prose.
+#
+# `push_preview` is not set: it enables PR preview deploys, and no workflow builds docs on a
+# pull request.
 deploydocs(;
     repo = "github.com/gpena/Bramble.jl.git",
     devbranch = "main",
     branch = "gh-pages",
-    versions = ["stable" => "v^", "v#.#"]
+    versions = nothing
 )
