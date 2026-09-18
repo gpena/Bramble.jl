@@ -223,3 +223,178 @@ end
     ),
     )
 end
+
+################################################################################
+#              (D-1)-dimensional surface weights on grid faces                 #
+################################################################################
+
+#=
+The lumped quadrature weight of a union of axis-aligned grid faces (gpena/Bramble.jl#157).
+
+At a grid point `p`, with `N(p)` the set of normal directions of the surface pieces through
+`p`,
+
+    ω(p) = Σ_{d ∈ N(p)} ∏_{e ≠ d} half_spacing(Ωₕ(e), I[e])
+
+which is what the general definition
+
+    ω(p) = 2^{-(D-1)} Σ_{F ⊂ Γ, p ∈ F} |F|
+
+collapses to once every face with a given normal is present: the `2^(D-1)` faces with normal
+`d` differ by taking the forward or the backward cell on each transverse axis, so their sum
+factorises into a product of averaged spacings, and `half_spacing` is exactly that average.
+
+Corners need no special case, because `half_spacing!` (mesh/mesh1d.jl) already truncates at
+the two ends: `half_spacings[1] = h₁/2` and `half_spacings[n] = h_N/2` are the one-sided
+halves a point at the end of a surface needs. A corner of the unit square therefore receives
+`(h₁ + k₁)/2`, the sum of its two incident edges' halves, and a marker union needs no
+special handling either: `ω(:xmin) + ω(:ymin) == ω(:xmin, :ymin)` pointwise.
+
+**1D is counting measure, not a limit of the 2D formula.** A `(D-1)`-face is then a *point*,
+of measure 1, the product over `e ≠ d` is empty, and `ω ≡ 1`. That is the correct pairing for
+a 1D Neumann term `g·v|∂Ω`: dimensionless, with no spacing anywhere. It falls out of the
+empty product rather than needing a branch, but a reader carrying 2D intuition will look for
+an `h/2` that must not be there.
+
+The face set is carried as a mask, `NTuple{D, NTuple{2, Bool}}` -- per axis, whether the
+`min` and the `max` face belong to the surface. Its *type* is fixed by `D` alone, so the
+weight is type-stable and allocation-free whether the mask is a runtime value (the numeric
+`inner_Γ`) or a type parameter (the symbolic `InnerGamma`, form/operators/inner.jl).
+=#
+
+# Canonical symbols and the legacy viewpoint aliases, per dimension. The 3D aliases are not
+# the 2D ones extended: there `:left`/`:right` name the y faces and `:front`/`:back` the x
+# ones (mesh/marker.jl, `boundary_symbol_to_cartesian`). Read from there rather than guessed.
+@inline function _face_of_symbol(::Val{1}, s::Symbol)
+    (s === :xmin || s === :left) && return (1, 1)
+    (s === :xmax || s === :right) && return (1, 2)
+    return _throw_not_a_face(s, 1)
+end
+
+@inline function _face_of_symbol(::Val{2}, s::Symbol)
+    (s === :xmin || s === :left) && return (1, 1)
+    (s === :xmax || s === :right) && return (1, 2)
+    (s === :ymin || s === :bottom) && return (2, 1)
+    (s === :ymax || s === :top) && return (2, 2)
+    return _throw_not_a_face(s, 2)
+end
+
+@inline function _face_of_symbol(::Val{3}, s::Symbol)
+    (s === :xmin || s === :back) && return (1, 1)
+    (s === :xmax || s === :front) && return (1, 2)
+    (s === :ymin || s === :left) && return (2, 1)
+    (s === :ymax || s === :right) && return (2, 2)
+    (s === :zmin || s === :bottom) && return (3, 1)
+    (s === :zmax || s === :top) && return (3, 2)
+    return _throw_not_a_face(s, 3)
+end
+
+@noinline function _throw_not_a_face(s::Symbol, D::Int)
+    throw(
+        ArgumentError(
+        "inner_Γ integrates over whole coordinate faces, and :$s does not name one in $(D)D. " *
+        "Expected `:boundary` or a canonical face symbol (:xmin, :xmax" *
+        (D > 1 ? ", :ymin, :ymax" : "") * (D > 2 ? ", :zmin, :zmax" : "") *
+        ") or one of its aliases. A user-defined marker naming part of a face, an interior " *
+        "interface or a staircase is a genuinely more general surface: its weight does not " *
+        "factorise where the surface is cut at an interior index, so it needs the one-sided " *
+        "face sum, which is not implemented yet.",
+    ),
+    )
+end
+
+"""
+    _face_mask(::Val{D}, labels::NTuple{N, Symbol}) -> NTuple{D, NTuple{2, Bool}}
+
+The face set `labels` names, as a per-axis `(min, max)` mask.
+
+`:boundary` is every face. Everything else has to name a whole coordinate face; see
+[`inner_Γ`](@ref) for why a general marked set is a different computation.
+"""
+@inline function _face_mask(::Val{D}, labels::NTuple{N, Symbol}) where {D, N}
+    mask = ntuple(_ -> (false, false), Val(D))
+    for s in labels
+        mask = s === :boundary ? ntuple(_ -> (true, true), Val(D)) :
+               _add_face(mask, _face_of_symbol(Val(D), s), Val(D))
+    end
+    return mask
+end
+
+@inline function _add_face(mask::NTuple{D, NTuple{2, Bool}}, face, ::Val{D}) where {D}
+    axis, side = face
+    return ntuple(Val(D)) do d
+        d == axis ? (mask[d][1] || side == 1, mask[d][2] || side == 2) : mask[d]
+    end
+end
+
+@inline _no_faces(mask) = all(m -> !m[1] && !m[2], mask)
+
+"""
+    _check_surface_is_thin(Ωₕ::AbstractMeshType{D}, mask) -> Nothing
+
+Refuse a face set that is not a surface on this mesh.
+
+An axis carrying both its faces and at most two points puts *every* grid point on the set, so
+it has dimension `D` rather than `D - 1` and no `(D-1)`-dimensional weight is defined on it.
+It fires on a 2x2 mesh of the square asked for `:boundary`, and on any mesh too coarse to
+separate the two ends of an axis; it never fires with three or more points on every axis.
+"""
+@inline function _check_surface_is_thin(Ωₕ::AbstractMeshType{D}, mask) where {D}
+    np = npoints(Ωₕ, Tuple)
+    for d in 1:D
+        mask[d][1] && mask[d][2] && np[d] <= 2 && _throw_surface_not_thin(d, np[d])
+    end
+    return nothing
+end
+
+@noinline function _throw_surface_not_thin(d::Int, n::Int)
+    throw(
+        ArgumentError(
+        "the requested surface is not (D-1)-dimensional on this mesh: axis $d carries both " *
+        "of its faces and only $n point(s), so every grid point lies on the surface and no " *
+        "surface weight is defined. Refine that axis to at least three points.",
+    ),
+    )
+end
+
+"""
+    _surface_weight(Ωₕ::AbstractMeshType{D}, mask, I::CartesianIndex{D}) -> Real
+
+The lumped surface weight `ω(I)` of the face set `mask`, zero off the surface.
+
+Computed from the mesh's live `half_spacings` on every call: there is no vector to store, key
+by label set, or stamp with a mesh version, so `SpaceWeights` (space/scalar_gridspace.jl)
+needs no fourth family and the staleness question does not arise here.
+"""
+@inline function _surface_weight(
+        Ωₕ::AbstractMeshType{D}, mask, I::CartesianIndex{D}
+) where {D}
+    return _surface_weight_dir(Ωₕ, mask, I, npoints(Ωₕ, Tuple), Val(D), Val(D))
+end
+
+# One direction per rung, recursing on `Val(d)` rather than summing a comprehension: a
+# closure over `d` boxes it (gpena/Bramble.jl#146), and this is called per grid point.
+@inline function _surface_weight_dir(
+        Ωₕ, mask, I, np, ::Val{d}, ::Val{D}
+) where {d, D}
+    on_face = (mask[d][1] && I[d] == 1) || (mask[d][2] && I[d] == np[d])
+    m = _transverse_measure(Ωₕ, I, Val(d), Val(D))
+    return ifelse(on_face, m, zero(m)) +
+           _surface_weight_dir(Ωₕ, mask, I, np, Val(d - 1), Val(D))
+end
+
+@inline _surface_weight_dir(Ωₕ, mask, I, np, ::Val{0}, ::Val{D}) where {D} = zero(
+    eltype(Ωₕ)
+)
+
+# `∏_{e ≠ d}`, empty in 1D, so a 1D face weighs 1 rather than half a cell.
+@inline function _transverse_measure(Ωₕ, I, ::Val{d}, ::Val{D}) where {d, D}
+    return prod(
+        ntuple(Val(D)) do e
+        e == d ? one(eltype(Ωₕ)) :
+        _apply_hs_logic(half_spacing(Ωₕ(e), I[e]))
+    end
+    )
+end
+
+@inline _transverse_measure(Ωₕ, I, ::Val{1}, ::Val{1}) = one(eltype(Ωₕ))

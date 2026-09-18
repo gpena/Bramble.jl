@@ -39,6 +39,19 @@ Quadrature weights for the modified \$L^2_+\$ inner product in a specific coordi
 struct InnerPlus{Dim} <: AbstractInnerProduct end
 
 """
+    InnerGamma{MASK} <: AbstractInnerProduct
+
+Quadrature weights for the \$(D-1)\$-dimensional surface integral over the grid faces `MASK`
+names (gpena/Bramble.jl#157).
+
+`MASK` is the per-axis `(min, max)` face mask `_face_mask` (mesh/queries.jl) resolves the
+form's `markers` into, carried as a type parameter rather than a field so the node stays a
+singleton the like-term simplifier can fold and `compute_weight` reads a compile-time literal.
+It is resolved once, when the form is built.
+"""
+struct InnerGamma{MASK} <: AbstractInnerProduct end
+
+"""
     BilinearProduct{D,InnerType,LeftType,RightType} <: LazyOp{D}
 
 An AST node representing a bilinear integration term \$(u, v)\$ in a bilinear form.
@@ -71,6 +84,16 @@ end
 @inline compute_weight(
     ::InnerPlus{ActiveDim}, space, I::CartesianIndex{D}, lin_idx::Int
 ) where {ActiveDim, D} = weights(space, Innerplus(), ActiveDim)[lin_idx]
+
+# The surface weight is computed from the mesh's live half-spacings rather than read from a
+# stored vector, so `SpaceWeights` grows no family for it and there is no staleness token to
+# keep: the whole contract a weight owes the assembly layer is this one scalar per point, and
+# `_surface_weight` (mesh/queries.jl) answers it in a few multiplies. The same function
+# answers for the numeric `inner_Γ`, so the two layers agree by construction rather than by
+# two implementations being written to match.
+@inline compute_weight(
+    ::InnerGamma{MASK}, space, I::CartesianIndex{D}, lin_idx::Int
+) where {MASK, D} = _surface_weight(mesh(space), MASK, I)
 
 # ==============================================================================
 # User-Facing API & Overloads
@@ -222,6 +245,70 @@ function innerₕ(
         left::LazyOp{D}, right::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
 ) where {D, N}
     return _inner(InnerH(), left, right, markers)
+end
+
+"""
+    inner_Γ(left::LazyOp{D}, right::LazyOp{D}; markers) -> LazyOp{D}
+    inner_Γ(g::Union{Function, Number, VectorElement}, v::LazyOp{D}; markers) -> LazyOp{D}
+
+Constructs a symbolic ``(D-1)``-dimensional surface integral over the grid faces `markers`
+names, the term a natural boundary condition is written with:
+
+```math
+\\int_{\\Gamma_N} g\\, v \\, ds \\qquad\\text{and}\\qquad \\int_{\\Gamma_R} \\beta\\, u\\, v \\, ds
+```
+
+A source on the left gives a [`LinearForm`](@ref) contribution (the Neumann flux vector); a
+trial function gives a [`BilinearForm`](@ref) one (the Robin boundary mass). The weight is the
+same lumped surface weight the numeric [`inner_Γ`](@ref) uses, so `uᵀ A v` equals
+`inner_Γ(uₕ, vₕ, markers...)` for the bilinear mass term.
+
+`markers` is a keyword here, matching [`innerₕ`](@ref), where the numeric twin takes its
+labels positionally; and it names whole coordinate faces (`:boundary`, `:xmin`…`:zmax`, or a
+viewpoint alias), for the reason the numeric one's docstring gives.
+
+The assembled block carries a structural entry at every point the surrounding operators
+reach, not only on `Γ`: the weight is zero off the surface rather than the entry being
+absent. For a Robin term added to a Laplacian, which is what this is for, those entries are
+in the pattern already.
+
+# Examples
+
+```julia
+# -Δu = f with a Neumann flux g on the right edge and Robin data on the top one
+a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + inner_Γ(β * u, v; markers = (:ymax,)))
+l = form(Wₕ, v -> innerₕ(fₕ, v) + inner_Γ(g, v; markers = (:xmax,)))
+```
+
+See also: [`innerₕ`](@ref), [`inner₊`](@ref)
+"""
+function inner_Γ(left::LazyOp{D}, right::LazyOp{D}; markers = ()) where {D}
+    return _product(_inner_gamma(Val(D), markers), left, right)
+end
+
+function inner_Γ(l::Function, r::LazyOp{D}; markers = ()) where {D}
+    return _linear_source(_inner_gamma(Val(D), markers), l, r)
+end
+function inner_Γ(l::Number, r::LazyOp{D}; markers = ()) where {D}
+    return _linear_source(_inner_gamma(Val(D), markers), l, r)
+end
+function inner_Γ(l::VectorElement, r::LazyOp{D}; markers = ()) where {D}
+    return _linear_source(_inner_gamma(Val(D), markers), l, r)
+end
+
+# A bare symbol is the common spelling and reads better than a one-tuple. Normalized here
+# rather than by a second method, since a keyword's type does not take part in dispatch.
+@inline _as_labels(s::Symbol) = (s,)
+@inline _as_labels(t::NTuple{N, Symbol}) where {N} = t
+
+# Resolving the labels is a runtime computation producing a *type*, so it happens once, here,
+# when the form is built -- not once per grid point. The node that comes out is concrete, so
+# assembly is as typed as it is for any other weight.
+@inline function _inner_gamma(::Val{D}, markers) where {D}
+    labels = _as_labels(markers)
+    mask = _face_mask(Val(D), labels)
+    _no_faces(mask) && _throw_no_surface_labels()
+    return InnerGamma{mask}()
 end
 
 # There is deliberately no `innerₕ` over gradient tuples. `inner₊` has one because its

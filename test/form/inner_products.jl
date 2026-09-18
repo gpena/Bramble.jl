@@ -2,6 +2,8 @@ module FormInnerProductsTests
 
 using Test
 using Bramble
+using LinearAlgebra: Diagonal, diag, dot
+using ..TestUtils: @test_allocs
 using Bramble:
                IdentityOperator,
                TrialFunction,
@@ -226,6 +228,81 @@ using Bramble:
         @test is_symbolic(innerₕ(uₕ, v))
         @test is_symbolic(inner₊ₓ(2.0, v))
         @test is_symbolic(innerₕ(u, v) + innerₕ(D₋ₓ(u), D₋ₓ(v)))
+    end
+end
+
+# The symbolic surface integral (gpena/Bramble.jl#157). Every assertion ties the assembled
+# matrix or vector to the *numeric* `inner_Γ`, which `test/space/inner_product.jl` in turn
+# pins to closed forms -- so the chain ends at an edge length, not at a second copy of this
+# code.
+@testset "inner_Γ, the symbolic surface integral" begin
+    Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
+
+    @testset "The bilinear term is the surface mass matrix" begin
+        Wₕ = gridspace(mesh(Ω, (9, 8), (true, true)))
+        A = assemble(form(Wₕ, Wₕ, (u, v) -> inner_Γ(u, v; markers = (:ymin,))))
+
+        uₕ = Rₕ(Wₕ, x -> sin(x[1]) + x[2])
+        vₕ = Rₕ(Wₕ, x -> cos(x[2]) * x[1])
+        @test dot(parent(vₕ), A * parent(uₕ)) ≈ inner_Γ(uₕ, vₕ, :ymin)
+
+        # it is diagonal, and carries a nonzero only on the face
+        @test A ≈ Diagonal(diag(A))
+        one_h = Rₕ(Wₕ, x -> 1.0)
+        @test sum(diag(A)) ≈ inner_Γ(one_h, one_h, :ymin)
+
+        # corner sharing survives assembly: the two faces' diagonals add to the union's
+        Ax = assemble(form(Wₕ, Wₕ, (u, v) -> inner_Γ(u, v; markers = (:xmin,))))
+        Au = assemble(form(Wₕ, Wₕ, (u, v) -> inner_Γ(u, v; markers = (:ymin, :xmin))))
+        @test diag(A) + diag(Ax) ≈ diag(Au)
+
+        # a single symbol spells the same thing as a one-tuple
+        @test assemble(form(Wₕ, Wₕ, (u, v) -> inner_Γ(u, v; markers = :ymin))) ≈ A
+    end
+
+    @testset "A coefficient scales it, as anywhere else" begin
+        Wₕ = gridspace(mesh(Ω, (7, 7), (true, true)))
+        β = 1.7
+        A = assemble(form(Wₕ, Wₕ, (u, v) -> inner_Γ(β * u, v; markers = (:ymax,))))
+        B = assemble(form(Wₕ, Wₕ, (u, v) -> inner_Γ(u, v; markers = (:ymax,))))
+        @test A ≈ β * B
+    end
+
+    @testset "The linear term is the Neumann flux vector" begin
+        Wₕ = gridspace(mesh(Ω, (9, 6), (true, true)))
+        g(x) = 2.0 + x[1]
+        F = assemble(form(Wₕ, v -> inner_Γ(g, v; markers = (:ymin,))))
+        vₕ = Rₕ(Wₕ, x -> cos(x[2]) * x[1] + 1.0)
+        @test dot(F, parent(vₕ)) ≈ inner_Γ(Rₕ(Wₕ, g), vₕ, :ymin)
+
+        # a number and a grid function on the left work the same way
+        @test assemble(form(Wₕ, v -> inner_Γ(2.0, v; markers = (:ymin,)))) ≈
+              assemble(form(Wₕ, v -> inner_Γ(x -> 2.0, v; markers = (:ymin,))))
+        @test assemble(form(Wₕ, v -> inner_Γ(Rₕ(Wₕ, g), v; markers = (:ymin,)))) ≈ F
+    end
+
+    @testset "In 1D it is the endpoint pairing" begin
+        Wₕ = gridspace(mesh(domain(interval(0.0, 1.0)), 11, true))
+        A = assemble(form(Wₕ, Wₕ, (u, v) -> inner_Γ(u, v; markers = (:boundary,))))
+        # ω ≡ 1 at the two endpoints and nowhere else: the matrix is diag(1, 0, …, 0, 1)
+        @test diag(A) ≈ [1.0; zeros(ndofs(Wₕ) - 2); 1.0]
+    end
+
+    @testset "Refilling in place changes nothing, and allocates nothing" begin
+        Wₕ = gridspace(mesh(Ω, (9, 9), (true, true)))
+        a = form(Wₕ, Wₕ,
+            (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + inner_Γ(u, v; markers = (:ymin, :ymax)))
+        A = assemble(a)
+        B = copy(A)
+        assemble!(B, a)
+        @test A ≈ B
+        @test_allocs assemble!(B, a)
+    end
+
+    @testset "Construction refusals" begin
+        u, v = TrialFunction{2}(), TestFunction{2}()
+        @test_throws ArgumentError inner_Γ(u, v; markers = (:inlet,))
+        @test_throws ArgumentError inner_Γ(u, v)
     end
 end
 

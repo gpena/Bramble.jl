@@ -85,7 +85,7 @@ export *
 export Rₕ, Rₕ!, avgₕ, avgₕ!
 export interpolate_at, interpolation_matrix, πₕ, πₕ!
 
-export innerₕ, dirac
+export innerₕ, inner_Γ, dirac
 export inner₊, inner₊ₓ, inner₊ᵧ, inner₊₂
 export snorm₁ₕ, norm₁ₕ, norm₊, normₕ, norminf_h, norm∞ₕ
 

@@ -496,12 +496,103 @@ end
         @test vals[end] < vals[1] / 4
     end
 
-    @testset "inner_Γ placeholder" begin
-        @test_throws ErrorException Bramble.inner_Γ(uₕ, vₕ, :bottom)
-        try
-            Bramble.inner_Γ(uₕ, vₕ, :bottom)
-        catch e
-            @test occursin("not yet implemented", sprint(showerror, e))
+    # The genuine surface integral, against which the masked sums above are the *other*
+    # quantity: mesh-independent where those scale like h (gpena/Bramble.jl#157). Every
+    # figure here is a closed form -- an edge length, a perimeter, a surface area, a
+    # hand-computed corner weight -- never a second call to the code under test.
+    @testset "inner_Γ (#157)" begin
+        @testset "2D: edge lengths and the perimeter, on every mesh" begin
+            Ω2 = domain(interval(0.0, 2.0) × interval(0.0, 3.0))
+            for n in ((5, 5), (9, 9), (17, 16))
+                W = gridspace(mesh(Ω2, n, (true, true)))
+                one_h = Rₕ(W, x -> 1.0)
+                @test inner_Γ(one_h, one_h, :ymin) ≈ 2.0          # the bottom edge
+                @test inner_Γ(one_h, one_h, :xmax) ≈ 3.0          # the right edge
+                @test inner_Γ(one_h, one_h, :boundary) ≈ 10.0     # 2(2 + 3)
+            end
+        end
+
+        @testset "Marker unions add, corners included" begin
+            # ω(:ymin) + ω(:xmin) == ω(:ymin, :xmin) pointwise: at the shared corner the two
+            # contributions are h₁/2 and k₁/2 and the union's is their sum, so no point is
+            # counted twice and none is missed.
+            W = gridspace(mesh(domain(interval(0.0, 2.0) × interval(0.0, 3.0)), (7, 6),
+                (true, true)))
+            one_h = Rₕ(W, x -> 1.0)
+            @test inner_Γ(one_h, one_h, :ymin) + inner_Γ(one_h, one_h, :xmin) ≈
+                  inner_Γ(one_h, one_h, :ymin, :xmin)
+            @test inner_Γ(one_h, one_h, :left) ≈ inner_Γ(one_h, one_h, :xmin)
+        end
+
+        @testset "The pointwise weight matches the closed 2D form" begin
+            # a non-uniform mesh, so a wrong weight cannot hide behind a uniform spacing
+            Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 5), (false, false))
+            W = gridspace(Ωₕ)
+            hx = Bramble.half_spacings(Ωₕ(1))
+            hy = Bramble.half_spacings(Ωₕ(2))
+            n1, n2 = npoints(Ωₕ, Tuple)
+
+            # a bottom-edge interior point weighs the transverse half-spacing in x
+            probe(i, j) = (e = element(W, 0.0);
+                parent(e)[LinearIndices(indices(Ωₕ))[i, j]] = 1.0; e)
+            for i in 2:(n1 - 1)
+                @test inner_Γ(probe(i, 1), probe(i, 1), :ymin) ≈ hx[i]
+            end
+            # and a corner on two requested faces weighs the sum of the two halves
+            @test inner_Γ(probe(1, 1), probe(1, 1), :xmin, :ymin) ≈ hx[1] + hy[1]
+            # off the surface it is zero
+            @test inner_Γ(probe(3, 3), probe(3, 3), :boundary) == 0.0
+        end
+
+        @testset "1D is counting measure" begin
+            # A (D-1)-face is a point, of measure 1: the empty product, not a limit of the 2D
+            # formula. Any spacing factor here would break a 1D Neumann problem's order.
+            for n in (5, 9, 33), uniform in (true, false)
+
+                W = gridspace(mesh(domain(interval(0.0, 1.0)), n, uniform))
+                one_h = Rₕ(W, x -> 1.0)
+                @test inner_Γ(one_h, one_h, :boundary) ≈ 2.0
+                @test inner_Γ(one_h, one_h, :xmin) ≈ 1.0
+            end
+        end
+
+        @testset "3D: the surface area of a box" begin
+            Ωₕ = mesh(
+                domain(interval(0.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 3.0)),
+                (5, 6, 7), (true, true, true))
+            W = gridspace(Ωₕ)
+            one_h = Rₕ(W, x -> 1.0)
+            @test inner_Γ(one_h, one_h, :boundary) ≈ 2 * (1 * 2 + 1 * 3 + 2 * 3)
+            @test inner_Γ(one_h, one_h, :zmax) ≈ 1 * 2
+        end
+
+        @testset "It is bilinear in its two arguments" begin
+            W = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 8),
+                (true, true)))
+            a = Rₕ(W, x -> sin(x[1]) + x[2])
+            b = Rₕ(W, x -> cos(x[2]) * x[1])
+            @test inner_Γ(a, b, :ymin) ≈ inner_Γ(b, a, :ymin)
+            @test inner_Γ(2.0 * a, b, :ymin) ≈ 2.0 * inner_Γ(a, b, :ymin)
+        end
+
+        @testset "Refusals" begin
+            W = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 7),
+                (true, true)))
+            one_h = Rₕ(W, x -> 1.0)
+            # a marker that does not name a whole coordinate face
+            @test_throws ArgumentError inner_Γ(one_h, one_h, :inlet)
+            @test_throws ArgumentError inner_Γ(one_h, one_h, :interior)
+            # and no labels at all
+            @test_throws ArgumentError inner_Γ(one_h, one_h)
+
+            # a face set that is not (D-1)-dimensional on this mesh: with two points on an
+            # axis, both of its faces together cover every grid point
+            Wc = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (2, 2),
+                (true, true)))
+            oc = Rₕ(Wc, x -> 1.0)
+            @test_throws ArgumentError inner_Γ(oc, oc, :boundary)
+            # one face of that axis alone is still a surface
+            @test inner_Γ(oc, oc, :ymin) ≈ 1.0
         end
     end
 end

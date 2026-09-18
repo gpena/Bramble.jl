@@ -155,4 +155,71 @@ end
     end
 end
 
+# Natural boundary conditions through `inner_Γ` (gpena/Bramble.jl#157).
+#
+# A wrong surface weight is invisible to a value comparison -- the assembled boundary term is
+# self-consistent whatever weight it carries -- and invisible to a pure Dirichlet problem,
+# which never uses it. What exposes it is the order of the solution: a weight off by a factor
+# of two, or missing its corner share, drops a second-order scheme to first order.
+@testset "Natural boundary conditions converge at order two" begin
+    @testset "2D, mixed Dirichlet-Neumann-Robin, graded mesh" begin
+        u_ex(x) = cos(2.2 * x[1]) * exp(0.7 * x[2])
+        ux(x) = -2.2 * sin(2.2 * x[1]) * exp(0.7 * x[2])
+        uy(x) = 0.7 * cos(2.2 * x[1]) * exp(0.7 * x[2])
+        f(x) = (2.2^2 - 0.7^2 + 1.0) * u_ex(x)
+        β = 1.7
+        # the outward normal is -y on :ymin and +y on :ymax, so the two Robin data differ
+        gN(x) = ux(x)
+        gR_min(x) = -uy(x) + β * u_ex(x)
+        gR_max(x) = uy(x) + β * u_ex(x)
+
+        Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0),
+            :xmin => :xmin, :xmax => :xmax, :ymin => :ymin, :ymax => :ymax)
+        bcs = dirichlet_constraints(Ω, :xmin => u_ex)
+
+        errs = map((9, 17, 33, 65)) do n
+            Wₕ = gridspace(mesh(Ω, (n, n), (true, true)))
+            a = form(Wₕ, Wₕ,
+                (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v) +
+                          inner_Γ(β * u, v; markers = (:ymin, :ymax)))
+            l = form(Wₕ,
+                v -> innerₕ(f, v) + inner_Γ(gN, v; markers = (:xmax,)) +
+                     inner_Γ(gR_min, v; markers = (:ymin,)) +
+                     inner_Γ(gR_max, v; markers = (:ymax,)))
+            A, F = assemble(a, l; dirichlet = bcs)
+            uₕ = element(Wₕ)
+            parent(uₕ) .= Matrix(A) \ Vector(F)
+            return normₕ(uₕ - Rₕ(Wₕ, u_ex))
+        end
+
+        rates = [log2(errs[i] / errs[i + 1]) for i in 1:(length(errs) - 1)]
+        @test all(r -> 1.95 < r < 2.05, rates)
+        @test _lsq_order(errs) > 1.95
+    end
+
+    @testset "1D Neumann, where the weight is 1 and not half a cell" begin
+        # The case a 2D intuition gets wrong: a `(D-1)`-face is a point, of measure 1, so any
+        # `h/2` at the endpoint would break exactly this order.
+        u_ex(x) = sin(1.3 * x[1]) + 0.4 * x[1]^2
+        du(x) = 1.3 * cos(1.3 * x[1]) + 0.8 * x[1]
+        f(x) = 1.3^2 * sin(1.3 * x[1]) - 0.8 + u_ex(x)
+
+        Ω = domain(interval(0.0, 1.0), :xmin => :xmin, :xmax => :xmax)
+        bcs = dirichlet_constraints(Ω, :xmin => u_ex)
+
+        errs = map((9, 17, 33, 65)) do n
+            Wₕ = gridspace(mesh(Ω, n, true))
+            a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v))
+            l = form(Wₕ, v -> innerₕ(f, v) + inner_Γ(du, v; markers = (:xmax,)))
+            A, F = assemble(a, l; dirichlet = bcs)
+            uₕ = element(Wₕ)
+            parent(uₕ) .= Matrix(A) \ Vector(F)
+            return normₕ(uₕ - Rₕ(Wₕ, u_ex))
+        end
+
+        rates = [log2(errs[i] / errs[i + 1]) for i in 1:(length(errs) - 1)]
+        @test all(r -> 1.9 < r < 2.1, rates)
+    end
+end
+
 end # module ConvergenceOperatorsTests

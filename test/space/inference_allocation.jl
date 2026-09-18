@@ -102,6 +102,10 @@ using ..TestUtils: alloc_test, @test_allocs
         end
         @test @inferred(inner₊ₓ(uₕ2, uₕ2)) isa Float64
         @test @inferred(inner₊ᵧ(uₕ2, uₕ2)) isa Float64
+        # the surface weight is computed per point rather than read from a stored vector,
+        # so it is worth pinning that it still infers and still allocates nothing (#157)
+        @test @inferred(inner_Γ(uₕ2, uₕ2, :ymin)) isa Float64
+        @test @inferred(inner_Γ(uₕ3, uₕ3, :boundary)) isa Float64
     end
 
     @testset "Zero allocations (inner products)" begin
@@ -125,6 +129,8 @@ using ..TestUtils: alloc_test, @test_allocs
         @test_allocs snorm₁ₕ(c)
         @test_allocs norminf_h(c)
         @test_allocs norminf_h(cₕ2)
+        @test_allocs inner_Γ(uₕ2, uₕ2, :ymin)
+        @test_allocs inner_Γ(uₕ3, uₕ3, :boundary)
     end
 
     @testset "Zero dynamic dispatch (vectorial aliases)" begin
