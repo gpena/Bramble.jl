@@ -93,9 +93,11 @@ using ..TestUtils: alloc_test, @test_allocs
                 @test @inferred(normₕ(uₕ)) isa Float64
                 @test @inferred(snorm₁ₕ(uₕ)) isa Float64
                 @test @inferred(norm₁ₕ(uₕ)) isa Float64
+                @test @inferred(norminf_h(uₕ)) isa Float64
                 g = ∇ₕ(uₕ)
                 @test @inferred(norm₊(g)) isa Float64
                 @test @inferred(inner₊(g, g)) isa Float64
+                @test @inferred(norminf_h(g)) isa Float64
             end
         end
         @test @inferred(inner₊ₓ(uₕ2, uₕ2)) isa Float64
@@ -112,6 +114,7 @@ using ..TestUtils: alloc_test, @test_allocs
                 @test_allocs normₕ(uₕ)
                 @test_allocs snorm₁ₕ(uₕ)
                 @test_allocs norm₁ₕ(uₕ)
+                @test_allocs norminf_h(uₕ)
             end
         end
         # a component of a composite grid function is a scalar grid function, and the
@@ -120,6 +123,8 @@ using ..TestUtils: alloc_test, @test_allocs
         @test_allocs innerₕ(c, c)
         @test_allocs normₕ(c)
         @test_allocs snorm₁ₕ(c)
+        @test_allocs norminf_h(c)
+        @test_allocs norminf_h(cₕ2)
     end
 
     @testset "Zero dynamic dispatch (vectorial aliases)" begin

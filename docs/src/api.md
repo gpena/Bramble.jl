@@ -353,6 +353,8 @@ normₕ
 norm₁ₕ
 snorm₁ₕ
 norm₊
+norminf_h
+norm∞ₕ
 ```
 
 ---

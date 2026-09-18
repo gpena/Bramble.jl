@@ -87,7 +87,7 @@ export interpolate_at, interpolation_matrix, πₕ, πₕ!
 
 export innerₕ, dirac
 export inner₊, inner₊ₓ, inner₊ᵧ, inner₊₂
-export snorm₁ₕ, norm₁ₕ, norm₊, normₕ
+export snorm₁ₕ, norm₁ₕ, norm₊, normₕ, norminf_h, norm∞ₕ
 
 # Three families are internal in v3.0 (gpena/Bramble.jl#211): the unscaled differences
 # `diff₋*`/`diff₊*`, the forward differences `D₊*`/`∇₊ₕ`, and the forward averages `M₊*`.
