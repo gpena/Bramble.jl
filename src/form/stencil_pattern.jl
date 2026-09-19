@@ -329,7 +329,14 @@ function blockbandwidths(a)
             db = last(ou) - last(ov)
             l_blk = max(l_blk, -db)
             u_blk = max(u_blk, db)
-            ds = _lex_distance(Base.front(ou), Base.front(ov), sub_strides)
+            # `ou`/`ov` come from `stencil_offsets`, documented to return `Vector{NTuple{D, Int}}`
+            # -- always a `Tuple`, never a `NamedTuple` -- but a form built through enough
+            # generic wrapper nodes (`OperatorAdd`, `RegionRestriction`, ...) infers that Vector's
+            # element type no more precisely than `Any`. `Base.front` has methods for both `Tuple`
+            # and `NamedTuple`, so calling it on an `Any` union-splits into both, and only the
+            # `Tuple` branch has a matching `_lex_distance` method. The assertions state what is
+            # already true of every `stencil_offsets` result, not a new constraint on it.
+            ds = _lex_distance(Base.front(ou)::Tuple, Base.front(ov)::Tuple, sub_strides)
             l_sub = max(l_sub, -ds)
             u_sub = max(u_sub, ds)
         end

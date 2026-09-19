@@ -65,6 +65,17 @@ function sparse_factorize(
     return sparse_factorize(A; solver = solver, sym = sym, kwargs...)
 end
 
+# `assemble(a::BilinearForm)` is generic over the backend's matrix type (gpena/Bramble.jl#12)
+# and a dense-backed form assembles into a `Matrix`, not a `SparseMatrixCSC` -- so the call
+# above genuinely can reach here. `sparse_factorize` only ever supported `SparseMatrixCSC`
+# (test/form/sparse_solvers.jl: "Type safety: sparse_factorize only accepts SparseMatrixCSC",
+# `@test_throws MethodError`), and this states that as an actual method instead of leaving it
+# an inference-only gap: same exception a plain dispatch failure would raise, just reachable
+# from an analysis that has to consider every backend a `BilinearForm` could name.
+function sparse_factorize(A::AbstractMatrix; kwargs...)
+    throw(MethodError(sparse_factorize, (A,)))
+end
+
 """
     refactor!(fact::Factorization, A::SparseMatrixCSC) -> Factorization
     refactor!(fact::Factorization, a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing) -> Factorization

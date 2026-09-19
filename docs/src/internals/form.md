@@ -267,7 +267,7 @@ traversal (`visit_bilinear_stencil`, above) and into `allocate_system_matrix`:
 |:--- |:--- |:--- |:--- |
 | `_scatter_position(A, row, col) -> Int` | `bilinear_traversal.jl` | search `colptr`/`rowval`, `0` if absent | `LinearIndices(A)[row, col]`, never `0` |
 | `_scatter_add!(A, pos, val)` | `bilinear_traversal.jl` | `A.nzval[pos] += val` | `A[pos] += val` (linear indexing) |
-| `_allocate_from_pattern(::Type{MT}, nrows, ncols, I, J, V) -> MT` | `bilinear_pattern.jl` | `sparse!(I, J, V, nrows, ncols, +)` | `zeros(eltype(V), nrows, ncols)`, scattered from `(I, J, V)` with `+=` |
+| `_allocate_from_pattern(::Type{MT}, nrows, ncols, I, J, V) -> MT` | `bilinear_pattern.jl` | `sparse!(I, J, V, nrows, ncols, +)` | `Array{T}(undef, nrows, ncols)` filled with zeros, scattered from `(I, J, V)` with `+=` |
 | `_zero_stored!(A)` | `bilinear.jl` | `fill!(nonzeros(A), 0)` | `fill!(A, 0)` |
 
 `PatternSink`, `RecordSink`, `ReplaySink` and `DiagonalReplaySink` (`bilinear_traversal.jl`)

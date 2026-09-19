@@ -439,8 +439,10 @@ function mul!(y::AbstractVector, K::KroneckerLinearOperator{T}, x::AbstractVecto
     return y
 end
 
+# Only the one-argument method. `AbstractArray` derives `size(A, i)` from it, and defining
+# that second method here invalidates every existing caller of the generic one, which the
+# invalidation gate (gpena/Bramble.jl#198) rejects.
 Base.size(K::KroneckerLinearOperator) = (K.n, K.n)
-Base.size(K::KroneckerLinearOperator, i::Integer) = i in (1, 2) ? K.n : 1
 Base.eltype(::KroneckerLinearOperator{T}) where {T} = T
 
 """

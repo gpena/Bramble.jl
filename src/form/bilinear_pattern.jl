@@ -34,9 +34,18 @@ end
 
 function _allocate_from_pattern(
         ::Type{MT}, nrows::Int, ncols::Int, I_vec::Vector{Int}, J_vec::Vector{Int},
-        V_vec::AbstractVector
-) where {MT <: AbstractMatrix}
-    A = zeros(eltype(V_vec), nrows, ncols)
+        V_vec::AbstractVector{T}
+) where {MT <: AbstractMatrix, T}
+    # Built via `Array{T}(undef, ...)` + `fill!`, not `zeros(T, nrows, ncols)`: `zeros`
+    # dispatches on its first argument as an ordinary value, and analysed abstractly (a
+    # `V_vec` too generic to pin `T` down at inference time, as `report_package` does) that
+    # argument's own inferred type is `Any`, which inference can't rule out being another
+    # `Integer` dimension rather than a type -- so it also considers `zeros(dims::Integer...)`,
+    # producing a phantom `Array{Float64, 3}` no backend ever actually returns
+    # (gpena/Bramble.jl#12, JET gate). `Array{T}` is `Core.apply_type`, not a value-dispatched
+    # call, so it carries no such ambiguity.
+    A = Array{T}(undef, nrows, ncols)
+    fill!(A, zero(T))
     @inbounds for k in eachindex(I_vec, J_vec, V_vec)
         A[I_vec[k], J_vec[k]] += V_vec[k]
     end
