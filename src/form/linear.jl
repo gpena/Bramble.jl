@@ -482,7 +482,7 @@ end
 """
     _batch_linear_colour_sweep!(b, sp, term, idxs, lin_indices, mesh_markers, offset, α) -> Nothing
 
-[`CpuBatch`](@ref)'s counterpart of the `Threads.@threads` body in [`_sweep_colour!`](@ref),
+[`CpuBatch`](@ref)'s counterpart of the `Threads.@threads` body in `_sweep_colour!`,
 filled by `BramblePolyesterExt` (gpena/Bramble.jl#190). The only `src/` method errors
 naming Polyester.
 """

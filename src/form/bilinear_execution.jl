@@ -401,7 +401,7 @@ end
     _batch_bilinear_colour_sweep!(A, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset, α) -> Nothing
 
 [`CpuBatch`](@ref)'s counterpart of the `Threads.@threads` body in
-[`_sweep_bilinear_colour!`](@ref), filled by `BramblePolyesterExt` (gpena/Bramble.jl#190).
+`_sweep_bilinear_colour!`, filled by `BramblePolyesterExt` (gpena/Bramble.jl#190).
 The only `src/` method errors naming Polyester.
 """
 @noinline function _batch_bilinear_colour_sweep!(

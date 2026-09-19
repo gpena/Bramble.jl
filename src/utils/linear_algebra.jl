@@ -85,7 +85,7 @@ end
 
 [`CpuBatch`](@ref)'s counterpart of [`_threaded_for!`](@ref), filled by
 `BramblePolyesterExt` (gpena/Bramble.jl#190). The only `src/` method errors naming
-Polyester, the way [`_metal_backend`](@ref) errors naming Metal.
+Polyester, the way `_metal_backend` errors naming Metal.
 """
 @noinline function _batch_for!(v, idxs, f)
     return _throw_cpubatch_without_polyester(:_batch_for!)
@@ -291,7 +291,7 @@ end
 """
     _batch_scatter_for!(mats::Tuple, idxs, g::Function) -> Nothing
 
-[`CpuBatch`](@ref)'s counterpart of [`_threaded_scatter_for!`](@ref), filled by
+[`CpuBatch`](@ref)'s counterpart of `_threaded_scatter_for!`, filled by
 `BramblePolyesterExt`. The only `src/` method errors naming Polyester.
 """
 @noinline function _batch_scatter_for!(mats::Tuple, idxs, g)

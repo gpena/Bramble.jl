@@ -19,6 +19,7 @@ ExecutionPolicy
 CpuPolicy
 CpuSerial
 CpuThreaded
+CpuBatch
 GpuPolicy
 GpuAsync
 Serial
@@ -33,6 +34,7 @@ backend_types
 backend_eye
 backend_zeros
 metal_backend
+csr_backend
 ```
 
 ---
@@ -310,7 +312,9 @@ Dₕ
 The vector calculus operators built on those differences: the divergence and the curl of a
 vector field, and the conservative discrete Laplacian of a grid function. The unsubscripted
 spellings use the backward differences, as [`∇ₕ`](@ref) does; `div₊ₕ` and `curl₊ₕ` are their
-forward twins.
+forward twins. [`εₕ`](@ref)/[`εₕ!`](@ref) are the discrete symmetric small-strain tensor,
+over a composite `VectorElement` at runtime or, inside a [`form`](@ref), over a composite
+trial or test function -- the same name spans both, dispatching on what it is given.
 
 ```@docs
 divₕ
@@ -321,6 +325,8 @@ curlₕ!
 curl₊ₕ
 Δₕ
 Δₕ!
+εₕ
+εₕ!
 ```
 
 Jumps across an interface, ``\llbracket u \rrbracket = u_{i+1} - u_i``. There is one
@@ -411,6 +417,26 @@ allocate_system_matrix
 evaluate!
 ```
 
+### Matrix-free Kronecker operators
+
+For a separable `BilinearForm` -- one whose assembled matrix is an exact sum of Kronecker
+products of one-dimensional factors over a `MeshnD`, such as `innerₕ(u, v) +
+inner₊(∇ₕ(u), ∇ₕ(v))` -- `kronecker_operator` builds a `KroneckerLinearOperator` that
+applies by sum factorisation instead of ever assembling the `D`-dimensional matrix: a
+`200^3` mesh stores `O(200)` numbers per axis rather than the assembled matrix's `O(200^3)`
+stored entries ([#162](https://github.com/gpena/Bramble.jl/issues/162)). `is_separable`
+checks the condition beforehand. `fdm_solve` requires `using Kronecker` (the
+`BrambleKroneckerExt` extension, [#259](https://github.com/gpena/Bramble.jl/issues/259))
+and solves a separable, constant-coefficient system by fast diagonalisation instead of a
+general sparse factorisation.
+
+```@docs
+is_separable
+kronecker_operator
+KroneckerLinearOperator
+fdm_solve
+```
+
 ### Additive accumulation
 
 `assemble_add!` adds a form's contribution to a matrix or vector that already holds
@@ -441,6 +467,18 @@ move to their own [scientific computing reference](api_sciml.md): the SciML stac
 (`semidiscretize`, `ode_problem`, `linear_problem`, `nonlinear_problem`, ...), second-order
 wave problems, `pde_solve`'s adjoint rule, AMG preconditioning, the SuiteSparse/Apple
 Accelerate/MUMPS direct solvers, and `type_cached_assemble!`.
+
+### Bandwidth analysis
+
+`bandwidths`/`blockbandwidths` read a `BilinearForm`'s resolved AST alone, without
+assembling anything, and answer what storage the assembled matrix would need: the plain
+bandwidth in 1D, or the block/sub-block bandwidth pair a `D >= 2` mesh's blocked
+lexicographic layout has ([#175](https://github.com/gpena/Bramble.jl/issues/175)).
+
+```@docs
+bandwidths
+blockbandwidths
+```
 
 ### Dirichlet conditions
 

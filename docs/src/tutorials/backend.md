@@ -105,7 +105,8 @@ the work runs, not only how much of it runs at once:
 ExecutionPolicy
 ├── CpuPolicy
 │   ├── CpuSerial      (Serial)    -- one CPU thread
-│   └── CpuThreaded    (Parallel)  -- Base.Threads.@threads
+│   ├── CpuThreaded    (Parallel)  -- Base.Threads.@threads
+│   └── CpuBatch                   -- Polyester.jl's @batch
 └── GpuPolicy
     └── GpuAsync                   -- launched on the device
 ```
@@ -117,9 +118,10 @@ which is the one thing a device array refuses. `metal_backend()` now carries `Gp
 and the CPU sweeps refuse a `GpuPolicy` with a message rather than failing on scalar
 indexing several frames deeper.
 
-Both spellings work everywhere; use whichever reads better. There is no `CpuBatch`: a
-Polyester-backed policy arrives with the extension that implements it
-([#190](https://github.com/gpena/Bramble.jl/issues/190)), not before.
+Both spellings work everywhere; use whichever reads better. [`CpuBatch`](@ref) is a third
+`CpuPolicy`, a Polyester-backed sibling of `CpuThreaded`
+([#190](https://github.com/gpena/Bramble.jl/issues/190)) -- §7 below covers what it needs
+before its first sweep.
 
 ## 5. One interface, governed by the backend
 
@@ -142,7 +144,69 @@ the threaded path irrespective of the ambient backend. Build the backend you wan
 call the ordinary entry point; see the [forms tutorial](form.md) for the full picture
 of how assembly uses it.
 
-## 6. A GPU backend (Metal)
+## 6. Backend storage: CSC or CSR
+
+Every backend above keeps `SparseMatrixCSC{Float64,Int}`, the default `matrix_type`.
+[`csr_backend`](@ref) swaps that for `SparseMatricesCSR.jl`'s `SparseMatrixCSR{1,T,Int}`
+instead (the one-based variant, matching Bramble's own indexing), built the same way as
+any other backend:
+
+```julia
+using Bramble, SparseMatricesCSR
+
+be = csr_backend()                 # Float64, Serial()
+matrix_type(be)                    # SparseMatrixCSR{1, Float64, Int}
+```
+
+[`csr_backend`](@ref) requires `SparseMatricesCSR.jl` loaded alongside `Bramble.jl`;
+without it, it throws, the same way [`metal_backend`](@ref) does without `using Metal`.
+
+### Which one to reach for
+
+A finite-difference stencil is assembled row by row, which CSR storage reaches without
+the column scatter a `SparseMatrixCSC` assembly needs
+([#214](https://github.com/gpena/Bramble.jl/issues/214)). Measured on one machine (AC
+power, 1-minute load 2.13, 4 threads):
+
+- **Assembly is a wash between CSC and CSR**: first assembly and `assemble!` refill both
+  land within about 0.94-1.05x of each other across 1D, 2D and 3D, and neither backend
+  allocates in `assemble!`.
+- **CSR stores the same matrix in roughly half the memory**: 5.3 MiB against CSC's
+  10.7 MiB in 1D, 24.4 against 59.1 MiB in 3D.
+- **CSR loses the direct solve**, 2.4x to 4.2x slower than CSC across the sizes measured
+  -- `A \ F` on a `SparseMatrixCSR` routes through a transpose wrapper around a sparse LU
+  rather than reaching UMFPACK directly the way CSC's `\` does.
+
+So: reach for [`csr_backend`](@ref) when memory is the constraint and assembly, not a
+direct solve, dominates; keep the default CSC backend when `A \ F` is on the critical
+path. These are one run on one machine, not a guarantee -- re-measure before leaning on
+them for a specific problem size.
+
+## 7. A Polyester-batched CPU policy
+
+[`CpuBatch`](@ref) is a third [`CpuPolicy`](@ref), alongside [`CpuSerial`](@ref) and
+[`CpuThreaded`](@ref): it directs grid operations and form assembly through
+`Polyester.jl`'s `@batch` instead of `Base.Threads.@threads`, a primitive whose lower
+per-call overhead can pay off on grids where `CpuThreaded`'s threading does not
+([#190](https://github.com/gpena/Bramble.jl/issues/190)).
+
+```julia
+using Bramble, Polyester
+
+be = backend(policy = CpuBatch())
+Ωₕ = mesh(domain(interval(0.0, 1.0)), 100_000; backend = be)
+Wₕ = gridspace(Ωₕ)
+execution_policy(Wₕ)   # CpuBatch()
+```
+
+The policy type ships with `Bramble.jl` itself, but the sweeps it selects live in the
+`BramblePolyesterExt` package extension: `using Polyester` must be loaded before a
+`CpuBatch` backend runs its first sweep, or the call errors, naming `Polyester.jl` -- the
+same precedent as [`csr_backend`](@ref) and [`metal_backend`](@ref) without their own
+package. Call `assemble!`/`assemble`, `Rₕ!`/`avgₕ!` exactly as with any other backend;
+choosing `CpuBatch()` on the backend is the only thing that changes.
+
+## 8. A GPU backend (Metal)
 
 ```julia
 using Bramble, Metal
@@ -155,7 +219,7 @@ gpu_cpu = metal_backend(Float16; policy = CpuSerial())  # means what it says: CP
 [`metal_backend`](@ref) requires `Metal.jl` loaded alongside `Bramble.jl`; without it,
 it throws.
 
-## 7. Introspection
+## 9. Introspection
 
 - [`vector_type`](@ref)`(be)`, [`matrix_type`](@ref)`(be)`: the two type parameters.
 - [`backend_types`](@ref)`(be)`: `(eltype, VT, MT, typeof(be))`, all four at once.
@@ -166,7 +230,7 @@ it throws.
 backend_types(be)
 ```
 
-## 8. The precompilation workload
+## 10. The precompilation workload
 
 `Bramble.jl` ships a precompilation workload that exercises 1D, 2D and 3D meshes on
 load. It costs a few seconds when the package is first built and cuts the time to

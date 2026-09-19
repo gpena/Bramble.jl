@@ -71,11 +71,11 @@ on every call.
   - `innerplus::NTuple{D, SeparableWeights{D, T, VT}}`: one such lazy weight per spatial
     direction, for the modified, staggered inner products (`:inner₊ₓ`, `:inner₊ᵧ`, etc.).
   - `aligned::NTuple{D, VT}`: per-axis factor ``h_d(i)`` (length `npoints(Ωₕ, d)`, not the
-    full grid) -- the same values [`innerplus`](@ref) uses on the axis aligned with its own
+    full grid) -- the same values `innerplus` uses on the axis aligned with its own
     difference direction. Kept so [`weights`](@ref)`(Wₕ, Val(S))` can build any staggered
     set from `O(D)` numbers instead of a fresh `O(n^D)` vector (gpena/Bramble.jl#115, #234).
   - `cellfactor::NTuple{D, VT}`: per-axis factor ``h_d(i+1/2)`` (also length
-    `npoints(Ωₕ, d)`). This is [`innerh`](@ref)'s own per-axis cell measure -- `innerh`'s
+    `npoints(Ωₕ, d)`). This is `innerh`'s own per-axis cell measure -- `innerh`'s
     `factors` tuple *is* `cellfactor`, not a copy of it -- and doubles as every staggered
     direction's transverse factor: the two coincide for any axis with more than one point
     (both read the submesh's own cached half-spacings), so one vector serves both roles

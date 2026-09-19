@@ -11,7 +11,7 @@
     _scatter_position(A::AbstractMatrix, row::Int, col::Int) -> Int
 
 Where entry `(row, col)` lives in `A`'s own storage, or `0` for a matrix type that can
-answer "not stored" (only [`SparseMatrixCSC`](@ref) does; every dense fallback below always
+answer "not stored" (only `SparseMatrixCSC` does; every dense fallback below always
 answers a valid position).
 
 The seam a new backend's matrix type implements to plug into assembly (S1.1,
