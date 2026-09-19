@@ -18,10 +18,9 @@ using QuadGK: gauss
 
 # Utilities
 export backend, metal_backend, vector_type, matrix_type, backend_types
-# Backend constructors for the memory-scaling milestone (gpena/Bramble.jl#214 #216): all
-# three are `metal_backend`-style stubs whose real methods arrive with their respective
-# package extensions.
-export csr_backend, banded_backend, block_banded_backend
+# The CSR backend constructor for the memory-scaling milestone (gpena/Bramble.jl#214): a
+# `metal_backend`-style stub whose real method arrives with the SparseMatricesCSR extension.
+export csr_backend
 export ExecutionPolicy, Serial, Parallel, execution_policy
 # The CPU/GPU split of the policy hierarchy (gpena/Bramble.jl#191). `Serial` and `Parallel`
 # stay exported above: they are aliases of the first two of these, and every call site,

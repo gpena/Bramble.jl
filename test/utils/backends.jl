@@ -440,12 +440,11 @@ end
 end
 
 @testset "Extension-backed backend stubs" begin
-    # Invariants tested (gpena/Bramble.jl#214 #216): csr_backend, banded_backend and
-    # block_banded_backend follow the metal_backend precedent -- calling them without their
-    # package loaded errors, naming the package, rather than a MethodError deeper in.
-    for (fn, pkg) in ((csr_backend, "SparseMatricesCSR"),
-                      (banded_backend, "BandedMatrices"),
-                      (block_banded_backend, "BlockBandedMatrices"))
+    # Invariants tested (gpena/Bramble.jl#214): csr_backend follows the metal_backend
+    # precedent -- calling it without its package loaded errors, naming the package, rather
+    # than a MethodError deeper in. The banded constructors were removed with their backend
+    # on 2026-09-19, so there is nothing of theirs left to assert here.
+    for (fn, pkg) in ((csr_backend, "SparseMatricesCSR"),)
         err = try
             fn()
             nothing
