@@ -57,13 +57,6 @@ end
 
 home = "Home" => "index.md"
 getting_started = "Getting started" => "getting_started.md"
-# The v2 -> v3 migration path. There is no CHANGELOG and no deprecation warnings, so this
-# page is it; it sits next to "Getting started" because that is where someone arriving with
-# v2 code looks first.
-upgrading = "Upgrading to v3.0" => "upgrading_v3.md"
-# v3.1 changes assembled *values* silently rather than breaking compilation, so it gets its
-# own page rather than an addendum to the v3.0 one -- gpena/Bramble.jl#271.
-upgrading_v3_1 = "Upgrading to v3.1" => "upgrading_v3_1.md"
 
 # Grouped by where a page sits in the workflow rather than as one flat "Tutorials" list:
 # a reader meets geometry, meshes, spaces and operators before forms, and the solver,
@@ -115,7 +108,7 @@ internals = "Internals" => [
 ]
 documentation = "Documentation" => ["api.md", "api_sciml.md", internals]
 
-allpages = [home, getting_started, upgrading, upgrading_v3_1, foundations, forms, scientific,
+allpages = [home, getting_started, foundations, forms, scientific,
     visualization, examples, benchmarks, documentation]
 
 makedocs(;
@@ -164,8 +157,7 @@ makedocs(;
 # every URL, a root that only redirects, and old versions that have to be built and kept.
 # For a package with one supported line at a time, that is machinery without a reader.
 #
-# A v2 reference still exists: the `v2.17.0` tag, and `docs/src/upgrading_v3.md` describes the
-# move in prose.
+# A v2 reference still exists: the `v2.17.0` tag.
 #
 # `push_preview` is not set: it enables PR preview deploys, and no workflow builds docs on a
 # pull request.
