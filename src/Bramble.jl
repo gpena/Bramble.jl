@@ -31,6 +31,19 @@ export CpuPolicy, CpuSerial, CpuThreaded, GpuPolicy, GpuAsync
 # The Polyester-backed policy (gpena/Bramble.jl#190): the type ships here, the sweeps it
 # selects arrive with the BramblePolyesterExt package extension.
 export CpuBatch
+# The sweep hooks a `CpuBatch` backend dispatches to. `src/` declares each one as an
+# error-only stub naming Polyester; `BramblePolyesterExt` supplies the real methods
+# (gpena/Bramble.jl#190). They are `public` rather than exported because they are an
+# extension contract, not something a user calls: an extension has to reach them by name,
+# and a name an extension is expected to implement is not internal.
+public _batch_for!, _batch_axis_for!, _batch_scatter_for!, _batch_dot, _batch_dot_masked
+public _batch_bilinear_colour_sweep!, _batch_bilinear_band_sweep!
+public _batch_linear_colour_sweep!, _batch_linear_band_sweep!
+# The matrix-type assembly seam (gpena/Bramble.jl#12), documented in
+# `docs/src/internals/form.md`: the four methods a storage type implements to be usable as a
+# backend's `matrix_type`. `public` for the same reason as the hooks above -- an extension
+# has to reach them by name, so they are a contract rather than an internal.
+public _allocate_from_pattern, _scatter_position, _scatter_add!, _zero_stored!
 
 # `vector`/`matrix` build a raw backend array (point 70): real API, but two of the most
 # generic nouns in the language, and a beginner's own top-level `vector = [...]` after

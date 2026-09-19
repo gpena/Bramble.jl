@@ -469,11 +469,11 @@ function Base.getindex(K::KroneckerLinearOperator{T, D}, i::Int, j::Int) where {
     return total
 end
 
-function Base.:*(K::KroneckerLinearOperator{T}, x::AbstractVector) where {T}
-    y = Vector{promote_type(T, eltype(x))}(undef, K.n)
-    mul!(y, K, x)
-    return y
-end
+# No `*` method of its own. `KroneckerLinearOperator <: AbstractMatrix`, so `LinearAlgebra`
+# already derives `K * x` from the `mul!` above, and defining the two-argument form here was
+# ambiguous against any package that dispatches `*` on its own vector type -- `NamedDims`'
+# `*(::AbstractMatrix, ::NamedDimsArray{_, _, 1})` among them, which the extension ambiguity
+# gate reports whenever such a package is loaded alongside Bramble.
 
 """
     issymmetric(K::KroneckerLinearOperator) -> Bool

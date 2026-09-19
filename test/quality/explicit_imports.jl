@@ -78,6 +78,17 @@ using ExplicitImports
         @test check_all_explicit_imports_are_public(
             Bramble;
             ignore = (
+                # BramblePolyesterExt (gpena/Bramble.jl#190) reimplements the `CpuThreaded`
+                # sweeps with `Polyester.@batch`, so it needs the same internals those sweeps
+                # are built from: the colour/band geometry, the scatter primitives and the
+                # masked-index iterator. None is public, and none should be.
+                :MarkedIndicesUnion,
+                :_band_range,
+                :_reduce_or_chunk,
+                :_scatter_linear_point!,
+                :_scatter_point!,
+                :_throw_dot_dim_error,
+                :_write_components!,
                 :sparse!,
                 :Backend,
                 :_backend_eye,
@@ -180,6 +191,22 @@ using ExplicitImports
         @test check_all_qualified_accesses_are_public(
             Bramble;
             ignore = (
+                # Internals this milestone's extensions reach into, the same way
+                # `_metal_backend` below already is. `_csr_backend` is the stub
+                # BrambleSparseMatricesCSRExt fills (gpena/Bramble.jl#214), exactly
+                # `_metal_backend`'s shape; `_backend_eye`/`_backend_zeros`,
+                # `_dirichlet_bc_rows!`/`_dirichlet_bc_indices!` and `_each_marked` are the
+                # allocation and constraint internals a storage backend has to specialise;
+                # `_kron_coeff` (BrambleKroneckerExt, gpena/Bramble.jl#259) is the scale a
+                # separable term carries, read when the extension rebuilds that sum as a
+                # `Kronecker.jl` object. None is something a user calls.
+                :_csr_backend,
+                :_backend_eye,
+                :_backend_zeros,
+                :_dirichlet_bc_rows!,
+                :_dirichlet_bc_indices!,
+                :_each_marked,
+                :_kron_coeff,
                 :ArrayStyle,
                 :BroadcastStyle,
                 :Broadcasted,

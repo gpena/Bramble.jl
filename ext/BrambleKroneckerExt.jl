@@ -32,7 +32,6 @@ module BrambleKroneckerExt
 using Bramble: Bramble, BilinearForm, is_separable, kronecker_operator, KroneckerLinearOperator
 using Kronecker: Kronecker, ⊗
 using LinearAlgebra: Diagonal, Symmetric, eigen
-using SparseArrays: SparseMatrixCSC
 
 # --- 1. Conversion to a Kronecker.jl object ------------------------------------------ #
 
