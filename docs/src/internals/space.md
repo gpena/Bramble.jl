@@ -22,8 +22,8 @@ that figure, and worse in higher `D`.
 
 ### What is stored, what is computed on demand
 
-`SpaceWeights` now also carries two `NTuple{D}` fields of *per-axis* vectors, each of
-length `npoints(Ωₕ, d)` rather than the full grid:
+`SpaceWeights` carries two `NTuple{D}` fields of *per-axis* vectors, each of length
+`npoints(Ωₕ, d)` rather than the full grid:
 
   - `aligned[d]`: the factor ``h_d(i)`` used on the axis a difference is taken along
     (today's `innerplus[d]`'s own construction).
@@ -37,59 +37,171 @@ length `npoints(Ωₕ, d)` rather than the full grid:
     call, not a measured regression -- see `_innerplus_mean_weights!`'s own docstring
     for the boundary-weight history this interacts with.)
 
-`weights(Wₕ, Val(S))` answers any staggered set `S ⊆ 1:D` from these two tuples:
-entry `I` is ``\prod_{d \in S} h_d(I_d) \cdot \prod_{d \notin S} h_d(I_d + 1/2)``.
-`S = ()` and every singleton `S = (d,)` return `innerh`/`innerplus[d]` directly -- the
-same dense vectors the four pre-existing families always have, unchanged, so nothing
-reading them by linear index (`_dot`, `src/form/operators/inner.jl`'s `compute_weight`)
-slows down. Every other `S` (the pairs and the full-`D` set new to this milestone)
-returns a `SeparableWeights`: a lazy `AbstractVector` computed from `aligned`
-and `cellfactor` at access time and never materialised over the whole grid. It is not
-cached, since nothing yet asks for the same new set twice in a hot loop; a future
-subplan that does (`inner₊(u, v, Val(S))`, #234) can add that once it exists.
+`weights(Wₕ, Val(S))` answers any staggered set `S ⊆ 1:D` from these two tuples: entry
+`I` is ``\prod_{d \in S} h_d(I_d) \cdot \prod_{d \notin S} h_d(I_d + 1/2)``. `S = ()`
+(`weights(Wₕ, Innerh())`) and every singleton `S = (d,)` (`weights(Wₕ, Innerplus(), d)`)
+return `innerh`/`innerplus[d]` directly -- the identical `SeparableWeights` object built
+once, at `gridspace` construction time, from `aligned`/`cellfactor`, and returned
+unchanged on every call rather than recomputed. Every other `S` (a pair, or the full-`D`
+combination) builds a fresh `SeparableWeights` on every call instead, from the same two
+tuples; it is not cached, since nothing yet asks for the same such set twice in a hot
+loop. Either way, nothing `weights` can return for any `S` is ever a plain `Vector` over
+the whole grid.
 
-This is a deliberate compromise rather than the fully lazy design the exploration notes
-(`.agents/plans/v3-3-0-memory-scaling-notes.md` §2) measured as their headline number:
-a lazy vector's linear `getindex` costs a division per axis, measured there at 2.4-4.9x
-a dense read. `src/form/operators/inner.jl` and `src/space/inner_product.jl` -- the
-consumers that read weights by linear index in assembly's inner loop and in `_dot` --
-belong to other subplans of this milestone and are out of this one's file ownership, so
-keeping the four pre-existing families dense was the only way to guarantee their
-performance is unaffected here, verified rather than assumed (below).
+### The four pre-existing families stop being eagerly dense
+
+That last sentence was not always true. S6.2, which first wrote this section, kept
+`innerh` and `innerplus` themselves as dense, full-grid vectors on purpose: the two
+places that read a weight in a hot loop -- `_dot`/`_dot_masked`
+(`src/space/inner_product.jl`) for the numeric `innerₕ`/`inner₊`, and `compute_weight`
+(`src/form/operators/inner.jl`) for the symbolic ones inside a form -- belonged to
+subplans S6.3 and S6.4, outside S6.2's own file ownership, and neither yet had a way to
+read a `SeparableWeights` without paying a division per axis on every point. Keeping
+`innerh`/`innerplus` densely materialised was the only way to guarantee those two hot
+paths were unaffected by the per-axis-factor change at the time.
+
+S6.3 then gave `_dot`/`_dot_masked` a `SeparableWeights` specialization that walks
+`CartesianIndices(w.dims)` directly instead of converting a flat index; S6.4 gave
+`compute_weight` a matching `CartesianIndex` read, for the `InnerPlusSet` node built for
+`|S| ≥ 2`. Once both existed, keeping `innerh`/`innerplus` dense had nothing left to
+protect, and this subplan (S6.8, gpena/Bramble.jl#115) removes it: `space_weights` now
+builds them the same way as every other `S`, from `aligned`/`cellfactor` alone, with no
+full-grid vector filled anywhere in the function. `SpaceWeights` has no dense branch left
+-- every weight it returns, for every `S`, is a `SeparableWeights`.
+
+One asymmetry survives this change and is worth naming. `InnerH` and `InnerPlus{Dim}`'s
+own `compute_weight` still reads `weights(space, Innerh())[lin_idx]` by *linear* index,
+not by the `CartesianIndex` the assembly loop already has in hand -- only the
+`InnerPlusSet` node S6.4 added reads by `CartesianIndex`. So a symbolic `innerₕ(u, v)` or
+`inner₊ₓ(u, v)` term inside a form now pays the same division-per-axis a linear
+`SeparableWeights` access always costs, once per assembled point, where before it read a
+dense vector directly. That is not a regression in the numbers below: a `CartesianIndex`
+conversion is a small fraction of what `local_stencil` already spends on each point
+(several operators' own stencils, Dirichlet handling, the sparse write itself), and
+nothing measured here moves outside the range already on record for the same form.
+
+### The one-dimensional case
+
+`space_weights(Ωₕ::AbstractMeshType{1})` (`src/space/scalar_gridspace.jl`) wraps its
+single per-axis vector in a `SeparableWeights{1}` the same way the `D ≥ 2` method wraps
+`D` of them -- there is no separate, dense-vector code path kept for one dimension, even
+though a one-factor product has nothing left to separate. The comment above that method
+calls this measured rather than assumed, and the measurement is narrower than it might
+sound: a `SeparableWeights{1}`'s linear `getindex` converts index `i` to
+`CartesianIndices((n,))[i]`, which for a one-dimensional shape is the identity, and then
+reads `factors[1][i]` -- the same single array access a plain `Vector`'s own `getindex`
+already is, with nothing left for the wrapper to add. Measured directly (a `10^6`-point
+1D space, summing every entry by linear index, minimum of 15 back-to-back calls): 0.109
+ms for the `SeparableWeights{1}` against 0.109 ms for the plain `Vector` underneath it, a
+ratio of 0.997 -- no detectable difference, confirming the comment.
+
+That claim is about single-element access, not about the whole-vector reduction
+`_dot`/`_dot_masked` runs. Measured the same way on the same 1D space, `_dot` against the
+`SeparableWeights{1}` costs 0.857 ms to the 0.230 ms dense reduction it replaces, a ratio
+of 3.73 -- essentially the same penalty measured on the `100³` space below, not a smaller
+one for having only one axis. Dimension is not what the `_dot` specialization's cost
+tracks: its loop walks `CartesianIndices(w.dims)` with no `@simd` annotation, where the
+dense reduction and the generic `_dot` both carry one, and that gap is present whether
+`w.dims` has one entry or three. The fast path a single factor buys is real, but it
+belongs to `getindex`, not to reduction: uniformity buys nothing extra for `_dot` at
+`D = 1`, and costs nothing extra either -- the same fixed penalty this section measures
+at `D = 3` below.
 
 ### Measured
 
-`Base.summarysize(weights(Wₕ))`, before this change and after, same mesh:
+Machine state at measurement time was mixed, not clean: the session started on battery
+power (97%, discharging, load average 2.29 against 8 cores) and had moved to AC power
+partway through (charging, load average 4.6-6.1), because a `julia` language-server
+process for this editor was already running, not because of a competing test or
+benchmark run. Per `bramble-verification` §2/§9, absolute milliseconds under those
+conditions are not trustworthy alone; every figure below is a same-process,
+back-to-back, minimum-of-`N` measurement (`N ≥ 5`, warmed up first), and the ratios
+between paired measurements are the load-bearing numbers, not the raw times.
 
-| mesh | before (4 dense vectors) | after (4 dense + 6 small per-axis) |
-|---|---|---|
-| `(6, 5, 4)`, 120 dofs | ≈ 3,840 B | 4,568 B |
-| `(100, 100, 100)`, ``10^6`` dofs | 32,000,000 B | 32,005,288 B |
+`Base.summarysize(weights(Wₕ))` on the `100³` mesh this subplan's `CHECK` targets:
 
-The absolute overhead (≈ 700-5,300 B, from the twelve small per-axis vectors) is fixed
-by `D` and the per-axis point counts, not by the grid's total size, so it is a
-measurable fraction of a tiny space and negligible (0.017% here) on a realistic one. The
-counterfactual this buys: the pairs and the full-`(1,2,3)` set added by this milestone
-cost this same fixed overhead combined, not another 32,000,000 B apiece.
+| stage | summarysize |
+|---|---|
+| before #115 (4 dense vectors) | 32,000,000 B |
+| after S6.2 (per-axis factors added, 4 families still dense) | 32,005,288 B |
+| after S6.8 (no family left dense) | 5,288 B |
 
-One `assemble!` refill of `innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))` on a uniform `60³` mesh
-(`ndofs = 216,000`, `nnz(A) = 1,490,400`), timed after a warm-up call, minimum of 5 runs
--- the same harness and form the exploration notes' baseline used (§2.4: 2.96 ms, 0 B,
-range 2.96-4.24 ms across 5 runs on that same machine and session):
+The `CHECK` script reproduces the last row directly (`summarysize(weights) on 100^3:
+5288 B`). That is a ~6,053x reduction from the S6.2 figure, and a ~6,053x reduction from
+the original dense one as well, since the twelve small per-axis vectors S6.2 added cost
+the same fixed handful of kilobytes regardless.
 
-| threads | min time | range | allocation |
+`innerₕ(u, u)` and `inner₊ₓ(u, u)` on the same `100³` space, against a dense-vector
+reduction over the identical values (the same `muladd`/`@simd` shape `_dot` uses for a
+plain `AbstractVector`), minimum of 7 back-to-back calls each, warmed up first:
+
+| call | time | dense equivalent | ratio |
 |---|---|---|---|
-| 4 (this repository's standard, `bramble-benchmarks` §1) | 4.04 ms | 4.04-4.97 ms | 0 B, all 5 runs |
-| 1 (matches the notes' own methodology exactly) | 5.60 ms | 5.60-15.3 ms | 0 B, all 5 runs |
+| `innerₕ(u, u)` | 0.868 ms | 0.231-0.240 ms | 3.6-3.8x |
+| `inner₊ₓ(u, u)` | 0.868 ms | 0.227-0.234 ms | 3.7-3.8x |
 
-Allocation is unchanged: zero bytes, matching the documented zero-allocation `assemble!`
-contract. Time sits above the notes' own baseline, but not clearly outside the noise
-that baseline already reports for identical code across five consecutive runs in one
-process (a 43% spread, 2.96 to 4.24 ms) -- a different session, a different moment's
-background load on the same machine cannot be ruled out as the explanation, and nothing
-on the read path assembly exercises (`weights(Wₕ, Innerh())`, `weights(Wₕ, Innerplus(),
-d)`) changed which object or algorithm answers it. Recorded here rather than asserted
-either way, per `bramble-verification`.
+Both agree with the dense reduction to `rtol = 1e-12`.
+
+`_dot` itself, called directly rather than through `innerₕ`, minimum of 15 back-to-back
+calls: `SeparableWeights` 0.868-0.892 ms against the dense vector's 0.180-0.182 ms, a
+ratio of 4.81-4.90. `@which` confirms dispatch reaches the `CartesianIndex`-walking
+specialization (`src/space/inner_product.jl:333`), not the generic `AbstractVector`
+method (`src/utils/linear_algebra.jl:408`) -- so this is the intended path, not the
+linear-`getindex` fallback. The ratio measured here sits near that fallback's own ≈4.9x
+figure rather than nearer the ≈2.475x S6.3 recorded for this same specialization; the
+likely reason, from reading the loop (previous section): it carries no `@simd`
+annotation. The load and power state moved during this session (above), so a second
+contributor cannot be ruled out; both figures are reported rather than one silently
+preferred, per `bramble-verification`.
+
+One `assemble!` refill of `innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))` on the uniform `60³` mesh
+S6.2 used (`ndofs = 216,000`, `nnz(A) = 1,490,400`), warmed up, minimum of 5, at 4
+threads (this repository's standard, `bramble-benchmarks` §1):
+
+| stage | min time | range | allocation |
+|---|---|---|---|
+| S6.2 (4 dense families) | 4.04 ms | 4.04-4.97 ms | 0 B, all 5 runs |
+| S6.8 (no dense families) | 3.16-3.19 ms | 3.16-4.58 ms | 0 B, all 5 runs |
+
+No regression: the refill sits at or below S6.2's own range, and allocation is still zero
+on every run, matching the documented zero-allocation `assemble!` contract. The
+division-per-axis `InnerH`/`InnerPlus{Dim}`'s `compute_weight` now pays (previous
+section) does not show up here -- it is a small fraction of everything else one
+assembled point costs.
+
+`gridspace` construction on the same `100³` mesh, warmed up, minimum of 7: 0.00008-0.00013
+ms (83-125 ns), allocating 2,784 B. That allocation is the `D = 3` per-axis `aligned`
+vectors plus the `SpaceWeights`/`ScalarGridSpace` structs themselves; `cellfactor` is a
+zero-copy reference to the mesh's own cached half-spacings and adds nothing. Construction
+was not timed before this change and cannot safely be now, since reproducing the pre-#115
+code would mean checking out a different tree; what is measured is that today's
+construction fills no `O(n^D)` vector, allocates in the hundreds of bytes rather than
+tens of megabytes, and completes in well under a microsecond on a `10^6`-point mesh.
+
+### Why the trade is worth taking
+
+Eliminating the last `O(n^D)` storage costs roughly a 3.7-4.9x slower `innerₕ`/`inner₊`
+whole-vector reduction, against weights that no longer scale with the grid at all: 5,288
+B instead of 32,005,288 B on `100³`, a figure that would only have grown had the `2^D`
+staggered family S6.3/S6.4 added stayed dense alongside it. The one path that matters for
+a typical solve, `assemble!`, is unaffected -- it does not move outside the range already
+on record.
+
+The case that would make this the wrong trade: an algorithm that calls
+`innerₕ`/`inner₊` (or `normₕ`/`norm₊`, built on them) as its own per-iteration hot loop,
+at a frequency comparable to `assemble!` itself, on a grid small enough that the old
+dense storage was still affordable. A Krylov solver checking a residual norm once per
+outer iteration does not qualify -- that is `O(1)` calls per solve, not one per assembled
+point -- but a method recomputing `normₕ` on every inner-loop pass over a grid well under
+`100³` would pay the 3.7-4.9x penalty often enough to matter, with nothing to show for it
+in memory saved.
+
+### Adding a new weight consumer
+
+Read a weight by the `CartesianIndex` you already hold, the way `compute_weight`'s
+`InnerPlusSet` branch and `_dot`/`_dot_masked` both do, rather than by a linear index
+built from it -- and expect `weights(Wₕ, ...)` to hand back a `SeparableWeights`, never a
+`Vector`, whichever inner product it names.
 
 ## Operator matrices: stencil_matrix versus the Kronecker construction
 
