@@ -1124,6 +1124,17 @@ Applies ∇ₕ component-wise to a tuple of scalar symbolic functions, such as
 the velocity components `(u1, u2)` of a composite space. Returns a tuple of results,
 one per component.
 
+---
+    ∇ₕ(u::Union{TrialFunction, TestFunction})
+
+The backward gradient tensor of a composite trial or test function `u`: an `N`-tuple (one
+per component of `u`) of `D`-tuples (one per spatial direction), `∇ₕ(u)[c][d]` the backward
+difference of component `c` along direction `d`.
+
+Equivalent to `∇ₕ(components(u))`, spelled without the explicit `components` call so `u`
+alone can be passed to a vectorial operator. On a scalar space (one component) this is the
+same `D`-tuple `∇ₕ` already returns for any operator.
+
 ### end ∇ₕ
 ### ∇₊ₕ
     ∇₊ₕ(arg)
@@ -1152,6 +1163,11 @@ one-element tuple.
 Applies ∇₊ₕ component-wise to a tuple of scalar symbolic functions, such as
 the velocity components `(u1, u2)` of a composite space. Returns a tuple of results,
 one per component.
+
+---
+    ∇₊ₕ(u::Union{TrialFunction, TestFunction})
+
+The forward twin of [`∇ₕ`](@ref)`(u::Union{TrialFunction,TestFunction})`.
 
 ### end ∇₊ₕ
 ### diff₋ₕ
