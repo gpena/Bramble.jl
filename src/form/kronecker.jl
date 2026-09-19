@@ -494,7 +494,7 @@ times the Kronecker product of its `D` one-dimensional factors, last axis leftmo
 and inspection only -- this is exactly the `D`-dimensional matrix [`kronecker_operator`](@ref)
 is built to avoid forming.
 """
-function SparseMatrixCSC(K::KroneckerLinearOperator{T}) where {T}
+function SparseArrays.SparseMatrixCSC(K::KroneckerLinearOperator{T}) where {T}
     A = spzeros(T, K.n, K.n)
     for term in K.terms
         c = _kron_coeff(term.scales)
