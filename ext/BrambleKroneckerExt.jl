@@ -18,18 +18,15 @@
 #      `assemble(a) \ F` (optionally with homogeneous Dirichlet on the whole mesh
 #      boundary) by fast diagonalisation -- see the derivation comment below.
 #
-# Neither name is declared anywhere in `src/`: `Kronecker.kronecker` is `Kronecker.jl`'s own
-# generic function, extended here like any other package extension method, but `fdm_solve`
-# has no forward stub the way `sparspak_solve`/`_sparspak_solve`
-# (`src/solvers/sparspak_solver.jl`) does for the Sparspak extension -- and a package
-# extension cannot introduce a *new* binding into its parent module's namespace (confirmed
-# directly: `function Bramble.fdm_solve(...)` from this file throws `UndefVarError:
-# fdm_solve not defined in Bramble` at precompile time, since `Bramble` never bound that
-# name first). `fdm_solve` is therefore a plain function of this module, reached as
-# `Base.get_extension(Bramble, :BrambleKroneckerExt).fdm_solve(...)` until a future
-# integration step adds a stub (`function fdm_solve end`) and `export fdm_solve` to
-# `src/Bramble.jl`, the same shape `_sparspak_solve` already has -- reported to the
-# integrator alongside this file.
+# `Kronecker.kronecker` is `Kronecker.jl`'s own generic function, extended here like any
+# other package extension method. `fdm_solve` is Bramble's: `src/Bramble.jl` declares
+# `function fdm_solve end` and exports it, the same shape `_sparspak_factorize` has for the
+# Sparspak extension, and the methods below attach to that binding. They must therefore be
+# written `function Bramble.fdm_solve(...)`, dot-qualified: an unqualified
+# `function fdm_solve(...)` alongside `using Bramble: Bramble` defines a *different*
+# function local to this module, which then answers nobody's call to `Bramble.fdm_solve`.
+# That is what happened here first, and it is silent -- the extension loads, the tests that
+# reach it through `Base.get_extension` pass, and only the exported spelling stays empty.
 module BrambleKroneckerExt
 
 using Bramble: Bramble, BilinearForm, is_separable, kronecker_operator, KroneckerLinearOperator
@@ -314,7 +311,7 @@ fdm_solve(a, F) ≈ assemble(a) \\ F
 
 See also: [`is_separable`](@ref), [`kronecker_operator`](@ref).
 """
-function fdm_solve(a::BilinearForm, F::AbstractVector; dirichlet = nothing)
+function Bramble.fdm_solve(a::BilinearForm, F::AbstractVector; dirichlet = nothing)
     is_separable(a) || _throw_fdm_not_separable(a)
     K = kronecker_operator(a)
     return _fdm_solve_core(K, F, dirichlet)
@@ -337,7 +334,7 @@ Dirichlet.
 
 See also: [`fdm_solve(::BilinearForm, ::AbstractVector)`](@ref).
 """
-function fdm_solve(K::KroneckerLinearOperator, F::AbstractVector)
+function Bramble.fdm_solve(K::KroneckerLinearOperator, F::AbstractVector)
     return _fdm_solve_core(K, F, nothing)
 end
 

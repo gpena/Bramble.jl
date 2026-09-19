@@ -39,4 +39,12 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
     include("type_cached_assemble.jl")
     include("semidiscrete.jl")
     include("sparse_solvers.jl")
+    # v3.3.0 plan (memory scaling): `bandwidths`/`blockbandwidths` read from the AST alone
+    # (S4.1), the dependency-free Kronecker operator (S5.1), and composite trial/test
+    # functions through the symbolic `∇ₕ`/`εₕ`/`divₕ` builders (S6.5). None needs a weak
+    # dependency, so all three run with the rest of this subsystem rather than behind the
+    # `ext` group.
+    include("bandwidth.jl")
+    include("kronecker.jl")
+    include("vector_calculus.jl")
 end

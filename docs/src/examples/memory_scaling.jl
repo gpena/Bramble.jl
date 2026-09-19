@@ -121,14 +121,10 @@ maximum(abs.(sol_cg.u .- xref))
 # A separable, constant-coefficient system like this one also admits a direct solve that
 # never factorises a matrix at all: `fdm_solve` diagonalises each axis's own generalised
 # eigenproblem once and combines the `D` small eigendecompositions instead. It lives in the
-# `Kronecker.jl` extension rather than in `Bramble` itself -- a package extension cannot add
-# a new exported name to its parent module -- so today it is reached off the loaded
-# extension directly; the plain `fdm_solve(...)` spelling arrives once a later step exports
-# it from `Bramble`.
-
-KronExt = Base.get_extension(Bramble, :BrambleKroneckerExt)
-KronExt === nothing && error("BrambleKroneckerExt did not load -- is Kronecker.jl loaded?")
-fdm_solve = KronExt.fdm_solve
+# `Kronecker.jl` extension rather than in `Bramble` itself, since the fast-diagonalisation
+# solve needs that package's types. `Bramble` declares the name and exports it, and the
+# extension attaches its methods to it once `using Kronecker` has loaded, so it is spelled
+# plainly here.
 
 x_fdm = fdm_solve(a, F)
 maximum(abs.(x_fdm .- xref))

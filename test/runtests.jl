@@ -234,6 +234,14 @@ if __bramble_with_ext_backends
         include("ext/appleaccelerate_ext.jl")
         include("ext/mumps_ext.jl")
         include("ext/sparspak_ext.jl")
+        # The memory-scaling milestone's own backend/operator extensions (v3.3.0 plan S3.1,
+        # S5.2, S7.2): SparseMatrixCSR assembly, the Kronecker.jl fast-diagonalisation solve,
+        # and the Polyester-backed CpuBatch sweeps. Grouped with the other package-extension
+        # files above rather than the every-push suite because each needs its own weak
+        # dependency loaded.
+        include("ext/sparse_csr_ext.jl")
+        include("ext/kronecker_ext.jl")
+        include("ext/polyester_ext.jl")
         # BrambleChainRulesExt: the pde_solve rrule's own math, checked against finite
         # differences and by hand -- needs only ChainRulesCore, not Enzyme/Mooncake, so it
         # belongs here rather than behind the "ad" group. Enzyme/Mooncake composition is

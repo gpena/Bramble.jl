@@ -16,7 +16,11 @@ using Random
 # loaded extension module itself.
 const KronExt = Base.get_extension(Bramble, :BrambleKroneckerExt)
 @assert KronExt !== nothing "BrambleKroneckerExt did not load -- is Kronecker.jl a test dependency?"
-const fdm_solve = KronExt.fdm_solve
+# `fdm_solve` is Bramble's own binding (`function fdm_solve end` in `src/Bramble.jl`), and
+# this extension adds methods to it, so the exported spelling is the one to test: reaching
+# into the extension module would pass even if the methods had attached to a function of
+# the extension's own instead, which is precisely the failure this asserts against.
+@assert !isempty(methods(Bramble.fdm_solve)) "fdm_solve has no methods -- are the extension's definitions dot-qualified as `Bramble.fdm_solve`?" 
 
 const KRON_EXT_SEED = 20260919
 

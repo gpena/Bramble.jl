@@ -60,8 +60,15 @@ using Bramble:
             mentioning("ForwardDifference"), mentioning("BackwardDifference")
         )
 
-        # `inner₊` is the documented exception, and the only one
-        @test backward_only == Set([:inner₊])
+        # Two exceptions, and both are the same exception. `inner₊` is the documented one:
+        # the modified inner product is defined against backward differences and has no
+        # forward counterpart. `_separable_axis` (`src/form/kronecker.jl`, gpena/Bramble.jl#162)
+        # inherits it rather than introducing a second asymmetry -- it matches
+        # `BilinearProduct{D, InnerPlus{Dim}, ...}`, so it can only ever see the operand
+        # `inner₊` itself admits. A form written with forward differences is simply not
+        # recognised as separable, which is the conservative direction: `is_separable` may
+        # answer no to something separable, never yes to something that is not.
+        @test backward_only == Set([:inner₊, :_separable_axis])
         @test isempty(forward_only)
     end
 

@@ -57,6 +57,16 @@ using ..TestUtils: _run_example_page
     @testset "Graded mesh for a boundary layer" begin
         _run_example_page(:boundary_layer_graded)
     end
+
+    # The matrix-free Kronecker operator worked example (v3.3.0 plan S5.3, gpena/Bramble.jl#259).
+    # It needs `using Kronecker`, but that is a lightweight, pure-Julia weak dependency --
+    # unlike the stiff DAE solver, `NonlinearSolve` and `AlgebraicMultigrid` that justify
+    # holding the four pages in test/examples/ext_pages.jl behind the `ext` group -- and
+    # `LinearSolve`, which this page also uses, is already a test dependency loaded by other
+    # pages in this every-push file. It stays here rather than there.
+    @testset "Memory scaling with a matrix-free Kronecker operator" begin
+        _run_example_page(:memory_scaling)
+    end
 end
 
 end # module ExamplesPagesTests

@@ -133,11 +133,12 @@ export D₋ₓ, D₋ᵧ, D₋₂, ∇ₕ, D₋
 export divₕ, divₕ!, curlₕ, curlₕ!, Δₕ, Δₕ!
 public div₊ₕ, div₊ₕ!, curl₊ₕ, curl₊ₕ!
 
-# The symbolic small-strain tensor over a composite trial/test function (gpena/Bramble.jl#234).
-# Builder-only -- it returns a `Bramble._StrainTensor`, consumed immediately by `inner₊` and
-# never a grid function -- so there is no in-place `εₕ!` to pair it with the way `divₕ!`
-# pairs with `divₕ` above.
-export εₕ
+# The small-strain tensor (gpena/Bramble.jl#234): `εₕ`/`εₕ!` are the runtime pair over a
+# `VectorElement` or composite grid function, the same shape as `divₕ`/`divₕ!` above.
+# `εₕ` also has a builder-only symbolic method returning a `Bramble._StrainTensor`, consumed
+# immediately by `inner₊` inside a `form(...)` body and never a grid function -- that method
+# has no in-place counterpart, but the runtime one does, and both share this export.
+export εₕ, εₕ!
 export D₋ₓ!, D₋ᵧ!, D₋₂!
 
 # `public` rather than nothing at all, unlike the unscaled differences above: the forward
@@ -171,6 +172,12 @@ export dirichlet_constraints, dirichlet_bc!, symmetrize!
 export reaction, reaction_density
 export form, assemble, assemble!, assemble_parallel!, allocate_system_matrix, evaluate!
 export is_separable, kronecker_operator, KroneckerLinearOperator
+# `bandwidths`/`blockbandwidths` (gpena/Bramble.jl#175): the lower/upper (block) bandwidth a
+# form's matrix occupies, read from the resolved AST alone. Their only caller was the banded
+# backend extension, removed 2026-09-19 (v3.3.0 plan, "Removed: the banded backends"); they
+# stay and are exported because they answer a question about a form independently of any
+# storage type.
+export bandwidths, blockbandwidths
 export assemble_add!
 export jacobian_pattern, ast_sparsity_detector
 export type_cached_assemble!
@@ -196,6 +203,44 @@ export MUMPSFactorization, mumps_factorize, mumps_solve, mumps_refactor!
 export SparspakFactorization, sparspak_factorize, sparspak_solve, sparspak_refactor!
 export sparse_factorize, sparse_refactor!, refactor!
 export pde_solve
+# `fdm_solve` (gpena/Bramble.jl#259): a direct solve for a separable, constant-coefficient
+# `BilinearForm` by fast diagonalisation, implemented in `ext/BrambleKroneckerExt.jl` (S5.2).
+# A package extension cannot introduce a new binding into its parent module, so this stub
+# gives it one to add methods to, the way `csr_backend`/`_csr_backend` above and
+# `sparspak_solve`/`_sparspak_solve` (`src/solvers/sparspak_solver.jl`) let their extensions
+# extend a name this module already owns.
+#
+# Verified 2026-09-19 (S9.1) that this alone is *not* enough here: unlike those two, the
+# extension's `fdm_solve(a::BilinearForm, ...)`/`fdm_solve(K::KroneckerLinearOperator, ...)`
+# are written unqualified, and `using Bramble: Bramble, ...` (no `fdm_solve` in that list)
+# does not let an unqualified `function fdm_solve(...)` extend this stub -- Julia only
+# extends a parent's function through `import Parent: name` or a dot-qualified
+# `function Parent.name(...)` definition, confirmed by a minimal repro of the same shape.
+# After `using Bramble, Kronecker`, `methods(Bramble.fdm_solve)` is empty and
+# `Bramble.fdm_solve !== Base.get_extension(Bramble, :BrambleKroneckerExt).fdm_solve`: the
+# plain spelling does not yet work, and reaching the real implementation still needs
+# `Base.get_extension(Bramble, :BrambleKroneckerExt).fdm_solve`. Fixing this needs an edit
+# inside `ext/BrambleKroneckerExt.jl` (outside S9.1's ownership) to import `fdm_solve` from
+# `Bramble` or qualify its two method definitions as `Bramble.fdm_solve`; reported to the
+# integrator rather than done here.
+"""
+    fdm_solve(a::BilinearForm, F::AbstractVector; dirichlet = nothing) -> Vector
+    fdm_solve(K::KroneckerLinearOperator, F::AbstractVector) -> Vector
+
+Directly solve `assemble(a) \\ F` (or the linear system `K` represents) for a separable,
+constant-coefficient `BilinearForm` by fast diagonalisation, without assembling `a`'s matrix.
+
+`dirichlet`, when given, must request homogeneous Dirichlet conditions on the whole mesh
+boundary; `K` alone carries no boundary handling, since a `KroneckerLinearOperator` has no
+tensor structure of its own to restrict.
+
+Requires [Kronecker.jl](https://github.com/MichielStock/Kronecker.jl); call `using Kronecker`
+before calling this function.
+
+See also: [`kronecker_operator`](@ref), [`KroneckerLinearOperator`](@ref), [`is_separable`](@ref).
+"""
+function fdm_solve end
+export fdm_solve
 
 # `DirichletConstraint` is `dirichlet_constraints(...)`'s own return type, reached for an
 # `isa` check rather than constructed by name: the tests already reach it as
