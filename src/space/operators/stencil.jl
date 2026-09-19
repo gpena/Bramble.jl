@@ -55,63 +55,54 @@ end
 @inline _check_no_alias(vₕ::VectorElement, uₕ::VectorElement) = Base.mightalias(parent(vₕ), parent(uₕ)) &&
                                                                 _throw_alias_error()
 
-# --- Diagonal scaling of an operator matrix (kept for the retained Kronecker oracle) --- #
+# --- Diagonal scaling of an operator matrix ----------------------------------------- #
+# Every weighted operator in this subsystem is a diagonal scaling of an unscaled one: build
+# the matrix out of shifts, then multiply row `i` by a weight that depends on `i` alone.
 #
-# Every weighted family in this subsystem used to compute its matrix as a diagonal scaling
-# of an unscaled one, `w .* A` -- a dense vector broadcast against a `SparseMatrixCSC`,
-# which is a separately measured `SparseArrays` memory bug (notes on gpena/Bramble.jl#185
-# §1.9) fixed independently of this subplan for every *production* weighted matrix.
-# `stencil_matrix` never had that step to begin with, weights being written directly into
-# `nzval` at scatter time (below); `_scale_rows!` is kept here only so
-# `kronecker_operator_matrix`'s retained `_kron_*` bodies (`difference.jl`, `average.jl`)
-# scale rows the same way that fix does, rather than reintroducing the broadcast in the one
-# place still doing the old Kronecker-then-scale construction.
+# `w .* A` is the obvious spelling of that and the wrong one. Broadcasting a dense vector
+# against a `SparseMatrixCSC` sizes the result's `rowval` and `nzval` buffers for the dense
+# `n x n` case and shrinks them to the sparse result afterwards, and shrinking an array does
+# not release the `Memory` behind it. What comes back is numerically right and reports the
+# right `nnz`, `length(nzval)` and `sizeof(nzval)`, but it carries two buffers of `n^2`
+# elements for as long as the operator lives. Measured on a 100 x 100 mesh: `D₋ₓ` has 19800
+# stored entries and a `Base.summarysize` of 1.51 GiB, against 400 KB for the unscaled
+# `backward_difference` it scales. `Base.summarysize` is the only size that shows it.
 #
-# `SparseArrays.dropzeros!` is not reachable from this file without adding it to the
-# `using SparseArrays: ...` list in `src/Bramble.jl`, out of scope for this subplan (owned
-# by the fix above); the drop is inlined as a compaction over the same three CSC arrays
-# instead of calling it by name. `_drop_zero_entries!` is the same operation `dropzeros!`
-# performs, so a later merge of that fix needs at most a name swap here, not new logic.
-@inline function _scale_rows!(A::SparseMatrixCSC, w::AbstractVector)
+# Scaling the stored entries in place touches the nonzeros alone. `rowvals(A)[k]` is the row
+# owning stored value `k`, whichever column it sits in, and that row is exactly the index
+# into the weight vector. Every caller passes a matrix `shift` has just built for it, so
+# mutating that matrix in place is safe.
+#
+# `dropzeros!` is not tidying: a truncated boundary slice is expressed as a zero weight, and
+# the broadcast this replaces pruned the entries that weight annihilated. Keeping them would
+# leave the operators with a wider stored pattern than they have always had.
+#
+# One method with an `isa` branch, rather than the pair of methods this subsystem would
+# otherwise reach for. The branch is on the argument's *type*, so it folds away wherever the
+# backend's matrix type is known, and the method returns `A` itself, which keeps the return
+# type equal to the argument type. A `SparseMatrixCSC`/`AbstractMatrix` pair instead joins
+# the two returns to `AbstractArray` wherever the matrix type is not known statically, and
+# JET reads that back as a missing `innerₕ` method in `_pc_form_stencils`, whose operand is
+# untyped.
+@inline function _scale_rows!(A::AbstractMatrix, w::AbstractVector)
     @boundscheck length(w) == size(A, 1) ||
                  throw(DimensionMismatch("the weight vector has $(length(w)) entries and the operator has $(size(A, 1)) rows"))
 
-    rows = rowvals(A)
-    nz = nonzeros(A)
-    @inbounds for k in eachindex(nz)
-        nz[k] *= w[rows[k]]
-    end
+    if A isa SparseMatrixCSC
+        rows = rowvals(A)
+        nz = nonzeros(A)
 
-    return _drop_zero_entries!(A)
-end
-
-# A dense or GPU backend has no stored-entry list to walk, and nothing is saved by avoiding
-# the full matrix: the broadcast is in place and allocates nothing.
-@inline function _scale_rows!(A::AbstractMatrix, w::AbstractVector)
-    A .= w .* A
-    return A
-end
-
-function _drop_zero_entries!(A::SparseMatrixCSC)
-    colptr = A.colptr
-    rows = A.rowval
-    nz = A.nzval
-    dest = 1
-    @inbounds for col in 1:size(A, 2)
-        stop = colptr[col + 1] - 1
-        start = colptr[col]
-        colptr[col] = dest
-        for k in start:stop
-            if !iszero(nz[k])
-                rows[dest] = rows[k]
-                nz[dest] = nz[k]
-                dest += 1
-            end
+        @inbounds for k in eachindex(nz)
+            nz[k] *= w[rows[k]]
         end
+
+        dropzeros!(A)
+    else
+        # A dense or GPU backend has no stored-entry list to walk, and nothing is saved by
+        # avoiding the full matrix: the broadcast is in place and allocates nothing.
+        A .= w .* A
     end
-    colptr[size(A, 2) + 1] = dest
-    resize!(rows, dest - 1)
-    resize!(nz, dest - 1)
+
     return A
 end
 

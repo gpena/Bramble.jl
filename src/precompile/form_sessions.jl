@@ -73,7 +73,15 @@ function _pc_form_ast(Wₕ, ::Val{D}) where {D}
 end
 
 # The products, and the stencils they evaluate to. This is the path assembly will take.
-function _pc_form_stencils(Ωₕ::AbstractMeshType, Wₕ, id, u, v, label::Symbol)
+#
+# `id` is annotated where the other operands are not: `_pc_form_ast` builds it from an
+# untyped space, so it arrives here as `Any`, and `D₋ₓ(id)` then has both the symbolic node
+# and the operator matrix as candidate results. The two products below are defined on the
+# symbolic node alone, so JET reports the matrix half of that union as a missing method --
+# a node this workload never builds. `IdentityOperator` is what every caller passes.
+function _pc_form_stencils(
+        Ωₕ::AbstractMeshType, Wₕ, id::IdentityOperator, u, v, label::Symbol
+)
     idx = indices(Ωₕ)
     lin = LinearIndices(idx)
     I = first(idx)
