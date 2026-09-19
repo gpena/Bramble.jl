@@ -31,7 +31,8 @@ const LITERATE_EXAMPLES = [
     "wave_equation_2d.jl",
     "point_sources_flux.jl",
     "transient_inplace.jl",
-    "boundary_layer_graded.jl"
+    "boundary_layer_graded.jl",
+    "memory_scaling.jl"
 ]
 
 if Threads.nthreads() == 1
@@ -94,7 +95,8 @@ examples = "Examples" => [
     "examples/wave_equation_2d.md",
     "examples/point_sources_flux.md",
     "examples/transient_inplace.md",
-    "examples/boundary_layer_graded.md"
+    "examples/boundary_layer_graded.md",
+    "examples/memory_scaling.md"
 ]
 benchmarks = "Benchmarks" => "benchmarks.md"
 internals = "Internals" => [
