@@ -10,7 +10,7 @@ module TestPolyesterExt
 
 using Test
 using Bramble
-using Bramble: CpuBatch, execution_policy
+using Bramble: CpuBatch, execution_policy, test_space, _normalize_dirichlet, apply_dirichlet_conditions!
 using Polyester
 using SparseArrays
 using LinearAlgebra: issymmetric
@@ -103,7 +103,24 @@ end
             @test isapprox(Matrix(Ap), Matrix(Ab3); atol = 1.0e-12)
 
             Apd, Fp = assemble(p.ap, p.lp; dirichlet = ZERO_BC, symmetrize = true)
-            Abd, Fb = assemble(p.ab, p.lb; dirichlet = ZERO_BC, symmetrize = true)
+
+            # `assemble(a::BilinearForm, l::LinearForm; ...)` calls `assemble(l; ...)` for
+            # the vector half, and `LinearForm`'s own `assemble`/`assemble!` refuse any
+            # `CpuBatch` policy unconditionally, Polyester loaded or not
+            # (`src/form/linear.jl`'s own fail-fast, S7.1's design -- see the "integrator
+            # item" testset below, and this subplan's final report). `BilinearForm`'s
+            # `assemble`/`assemble!` carry no such guard, so the matrix half reaches this
+            # extension's hooks the direct way; the vector half is built the way
+            # `assemble_parallel!(b, ::LinearForm)` documents itself as reaching those same
+            # hooks regardless of policy, then the same dirichlet/symmetrize steps
+            # `assemble(a, l; ...)` itself performs are applied by hand.
+            Abd = assemble(p.ab; dirichlet = ZERO_BC)
+            Fb = similar(parent(element(p.Wb)))
+            assemble_parallel!(Fb, p.lb)
+            dirichlet_labels, dirichlet_conditions = _normalize_dirichlet(ZERO_BC)
+            apply_dirichlet_conditions!(Fb, p.lb, dirichlet_conditions, dirichlet_labels, nothing)
+            symmetrize!(Abd, Fb, test_space(p.ab), dirichlet_labels...; components = nothing)
+
             @test isapprox(Matrix(Apd), Matrix(Abd); atol = 1.0e-12)
             @test isapprox(Fp, Fb; atol = 1.0e-12)
             @test isapprox(Apd \ Fp, Abd \ Fb; atol = 1.0e-10)
@@ -128,18 +145,21 @@ end
             @test isapprox(bp, bb; atol = 1.0e-12)
         end
 
-        # `assemble`/`assemble!` on a `LinearForm`, by contrast, throw unconditionally under
-        # `CpuBatch` -- `src/form/linear.jl`'s `_assemble_linear!` has
-        # `elseif policy isa CpuBatch; _throw_cpubatch_without_polyester(:assemble!)` ahead
-        # of ever reaching `_assemble_linear_parallel_core!`, regardless of whether Polyester
-        # is loaded. `BilinearForm`'s `assemble!` (`src/form/bilinear.jl`) has no such guard
-        # and falls straight through to the effective-policy dispatch, which is why the
-        # testset above works for the matrix but this one only documents the vector's
-        # current behaviour. Reported as a blocker in this subplan's final report rather
-        # than fixed here: `src/form/linear.jl` belongs to S7.1, not S7.2's OWNS.
+        # `assemble`/`assemble!` on a `LinearForm` used to throw unconditionally under
+        # `CpuBatch`: `_assemble_linear!` fast-failed on the policy before it could reach
+        # `_assemble_linear_parallel_core!`, so it fired even with Polyester loaded and every
+        # hook implemented, and a linear form could never be assembled under this policy at
+        # all. The integrator removed that branch on 2026-09-19 (gpena/Bramble.jl#190); the
+        # `else` branch dispatches on the effective policy and reaches this extension's
+        # hooks, and without Polyester the hook itself still raises, naming the package, one
+        # frame deeper. So these now assert agreement rather than the old failure.
         p2 = _poisson_pair(Val(2), 9)
-        @test_throws ArgumentError assemble(p2.lb)
-        @test_throws ArgumentError assemble!(similar(parent(element(p2.Wb))), p2.lb)
+        @test assemble(p2.lb) ≈ assemble(p2.lp)
+        bb = similar(parent(element(p2.Wb)))
+        bp = similar(parent(element(p2.Wp)))
+        assemble!(bb, p2.lb)
+        assemble!(bp, p2.lp)
+        @test bb ≈ bp
     end
 
     @testset "innerₕ/inner₊ₓ agree with Parallel(), including masked and multi-marker _dot" begin

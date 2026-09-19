@@ -144,9 +144,19 @@ end
 # scheduler changes nothing about correctness. `_scatter_point!` is the single shared entry
 # rule both this and the `CpuThreaded` sweep call, so the two can never drift apart on what a
 # stencil tap writes.
+#
+# `A::AbstractMatrix` (matching the `CpuThreaded` reference signature in
+# bilinear_execution.jl), rather than the stub's fully unconstrained `A`, so this is a genuine
+# specialisation of the `src/` stub and not a redefinition of the identical signature: the
+# actual cause of this file's precompilation failure before this fix -- these four sweep
+# hooks were the only ones left unconstrained, so `BramblePolyesterExt`'s own module body
+# aborted evaluating itself partway through (right here), leaving everything defined after
+# this point in the file -- including the linear sweeps below -- never installed, which is
+# why a bilinear `assemble!` under `CpuBatch` still reached the `src/` error stub with
+# Polyester loaded.
 
 function Bramble._batch_bilinear_colour_sweep!(
-        A, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset, α
+        A::AbstractMatrix, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset, α
 )
     @batch for I in idxs
         _scatter_point!(A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α)
@@ -155,7 +165,7 @@ function Bramble._batch_bilinear_colour_sweep!(
 end
 
 function Bramble._batch_bilinear_band_sweep!(
-        A, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset, col_offset, α
+        A::AbstractMatrix, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset, col_offset, α
 )
     @batch for b in bidx
         for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
@@ -171,8 +181,11 @@ end
 #
 # As above, for the right-hand-side sweep: `_scatter_linear_point!` is the shared entry rule
 # with `_sweep_colour!`/`_sweep_linear_band_colour!`'s `CpuThreaded` bodies.
+#
+# `b::AbstractVector` (matching the `CpuThreaded` reference signature in linear.jl), for the
+# same reason the bilinear pair above is now constrained on `A`.
 
-function Bramble._batch_linear_colour_sweep!(b, sp, term, idxs, lin_indices, mesh_markers, offset, α)
+function Bramble._batch_linear_colour_sweep!(b::AbstractVector, sp, term, idxs, lin_indices, mesh_markers, offset, α)
     @batch for I in idxs
         _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset, α)
     end
@@ -180,7 +193,7 @@ function Bramble._batch_linear_colour_sweep!(b, sp, term, idxs, lin_indices, mes
 end
 
 function Bramble._batch_linear_band_sweep!(
-        b, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α
+        b::AbstractVector, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α
 )
     @batch for k in bidx
         for I in CartesianIndices((rest..., _band_range(ax, nbands, k)))

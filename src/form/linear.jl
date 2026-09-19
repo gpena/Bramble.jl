@@ -777,16 +777,17 @@ function _assemble_linear!(
 
     # A genuine 3-way dispatch, not a binary `isa CpuSerial` check (gpena/Bramble.jl#190):
     # `CpuBatch` is neither `CpuSerial` nor `CpuThreaded`'s `Threads.@threads` path, and
-    # must error here rather than fall into the `else` branch and silently thread with the
-    # wrong mechanism -- `_assemble_linear_parallel_core!`'s own sweep would in fact catch
-    # this too (`_sweep_parallel!` computes the effective policy itself), but failing fast
-    # here, before the call chain, keeps this branch honest about the three policies it
-    # actually distinguishes.
+    # Two branches, not three: `CpuSerial` runs the serial core, and everything else goes
+    # to `_assemble_linear_parallel_core!`, whose own `_sweep_parallel!` computes the
+    # effective policy and dispatches to `Threads.@threads` for `CpuThreaded` or to the
+    # `_batch_*` hook for `CpuBatch`. A `CpuBatch` fast-fail used to sit here, on the
+    # reasoning that failing before the call chain was more honest; it was neither, since
+    # it fired even with Polyester loaded and the hooks implemented, so `assemble` on a
+    # `LinearForm` could never work under `CpuBatch` at all (gpena/Bramble.jl#190). Without
+    # Polyester the hook still raises, one frame deeper, naming the package.
     policy = execution_policy(space)
     if policy isa CpuSerial
         _assemble_linear_core!(b, space, ast)
-    elseif policy isa CpuBatch
-        _throw_cpubatch_without_polyester(:assemble!)
     else
         _assemble_linear_parallel_core!(b, space, ast)
     end
