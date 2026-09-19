@@ -6,7 +6,8 @@ import Bramble: space, eltype, ⊗, _Eye, shift, npoints, spacing, diff₋ₓ, d
                 D₊ᵧ, D₊₂
 using Bramble: backward_difference_dim!, forward_difference_dim!
 using Bramble: diff₋ₓ, diff₋ᵧ, diff₋₂, diff₊ₓ, diff₊ᵧ, diff₊₂
-import SparseArrays: issparse, sprand, spdiagm, spzeros
+import SparseArrays: issparse, sprand, spdiagm, spzeros, nnz
+using Bramble: forward_star_difference, centered_difference, cross_weighted_difference
 using Supposition
 using ..TestUtils: WITH_SLOW_TESTS
 using ..UtilsBackendsTests: MockGPUVector, MockGPUMatrix
@@ -840,6 +841,46 @@ end
         @test count(!iszero, S) == 5 - 1
         @test all(S[i, i + 1] == 1.0 for i in 1:4)
         @test S[5, 1] == 0.0
+    end
+end
+
+# The weighted matrices are a diagonal scaling of an unscaled one, and that scaling used to
+# be written `w .* A`: a dense vector broadcast against a `SparseMatrixCSC`. The result was
+# numerically right and reported the right `nnz`, `length(nzval)` and `sizeof(nzval)`, but
+# it carried `rowval` and `nzval` buffers sized for the dense case, which nothing except
+# `Base.summarysize` reveals. On the mesh below `D₋ₓ` held 19800 stored entries and
+# 1.51 GiB. A bound per stored entry is what pins it: the storage has to follow `nnz`, not
+# `nrows * ncols`.
+const _BYTES_PER_STORED_ENTRY = 64
+
+# Measuring the builder rather than what it returns, since `cross_weighted_difference` sums
+# two weighted matrices and the sum rebuilds its own storage: the finished operator was
+# never the oversized one, the two summands were. Behind a function barrier, because
+# `@allocated` at `@testset` scope measures the enclosing closure instead.
+_cross_weighted_bytes(Ωₕ) = @allocated cross_weighted_difference(Ωₕ, Val(1))
+
+@testset "Weighted operators store bytes proportional to nnz" begin
+    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (100, 100))
+    n = npoints(Ωₕ)
+    @test n == 10000
+
+    operators = (
+        "D₋ₓ" => D₋ₓ(Ωₕ),
+        "D₊ₓ" => D₊ₓ(Ωₕ),
+        "forward_star_difference" => forward_star_difference(Ωₕ, Val(1)),
+        "centered_difference" => centered_difference(Ωₕ, Val(1))
+    )
+
+    for (name, A) in operators
+        @testset "$name" begin
+            @test nnz(A) <= 2 * n
+            @test Base.summarysize(A) <= _BYTES_PER_STORED_ENTRY * nnz(A)
+        end
+    end
+
+    @testset "cross_weighted_difference" begin
+        cross_weighted_difference(Ωₕ, Val(1))
+        @test _cross_weighted_bytes(Ωₕ) <= _BYTES_PER_STORED_ENTRY * 8 * n
     end
 end
 

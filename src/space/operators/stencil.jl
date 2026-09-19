@@ -55,6 +55,57 @@ end
 @inline _check_no_alias(vₕ::VectorElement, uₕ::VectorElement) = Base.mightalias(parent(vₕ), parent(uₕ)) &&
                                                                 _throw_alias_error()
 
+# --- Diagonal scaling of an operator matrix ----------------------------------------- #
+# Every weighted operator in this subsystem is a diagonal scaling of an unscaled one: build
+# the matrix out of shifts, then multiply row `i` by a weight that depends on `i` alone.
+#
+# `w .* A` is the obvious spelling of that and the wrong one. Broadcasting a dense vector
+# against a `SparseMatrixCSC` sizes the result's `rowval` and `nzval` buffers for the dense
+# `n x n` case and shrinks them to the sparse result afterwards, and shrinking an array does
+# not release the `Memory` behind it. What comes back is numerically right and reports the
+# right `nnz`, `length(nzval)` and `sizeof(nzval)`, but it carries two buffers of `n^2`
+# elements for as long as the operator lives. Measured on a 100 x 100 mesh: `D₋ₓ` has 19800
+# stored entries and a `Base.summarysize` of 1.51 GiB, against 400 KB for the unscaled
+# `backward_difference` it scales. `Base.summarysize` is the only size that shows it.
+#
+# Scaling the stored entries in place touches the nonzeros alone. `rowvals(A)[k]` is the row
+# owning stored value `k`, whichever column it sits in, and that row is exactly the index
+# into the weight vector. Every caller passes a matrix `shift` has just built for it, so
+# mutating that matrix in place is safe.
+#
+# `dropzeros!` is not tidying: a truncated boundary slice is expressed as a zero weight, and
+# the broadcast this replaces pruned the entries that weight annihilated. Keeping them would
+# leave the operators with a wider stored pattern than they have always had.
+#
+# One method with an `isa` branch, rather than the pair of methods this subsystem would
+# otherwise reach for. The branch is on the argument's *type*, so it folds away wherever the
+# backend's matrix type is known, and the method returns `A` itself, which keeps the return
+# type equal to the argument type. A `SparseMatrixCSC`/`AbstractMatrix` pair instead joins
+# the two returns to `AbstractArray` wherever the matrix type is not known statically, and
+# JET reads that back as a missing `innerₕ` method in `_pc_form_stencils`, whose operand is
+# untyped.
+@inline function _scale_rows!(A::AbstractMatrix, w::AbstractVector)
+    @boundscheck length(w) == size(A, 1) ||
+                 throw(DimensionMismatch("the weight vector has $(length(w)) entries and the operator has $(size(A, 1)) rows"))
+
+    if A isa SparseMatrixCSC
+        rows = rowvals(A)
+        nz = nonzeros(A)
+
+        @inbounds for k in eachindex(nz)
+            nz[k] *= w[rows[k]]
+        end
+
+        dropzeros!(A)
+    else
+        # A dense or GPU backend has no stored-entry list to walk, and nothing is saved by
+        # avoiding the full matrix: the broadcast is in place and allocates nothing.
+        A .= w .* A
+    end
+
+    return A
+end
+
 # --- Argument handling shared by every operator ------------------------------------- #
 # The operators accept a mesh, a grid space or a grid function, and the vectorial aliases
 # need the spatial dimension of whichever was passed. Going through `space` alone would

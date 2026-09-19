@@ -3,7 +3,8 @@ module Bramble
 import Base: eltype, length
 import Base: show, first, last, getindex, setindex!, iterate, size, firstindex, lastindex, axes, eachindex
 
-using SparseArrays: SparseMatrixCSC, spdiagm, spzeros, rowvals, nonzeros, nzrange, sparse, sparse!, blockdiag
+using SparseArrays: SparseMatrixCSC, spdiagm, spzeros, rowvals, nonzeros, nzrange, sparse, sparse!, blockdiag,
+                    dropzeros!
 
 using LinearAlgebra: I, mul!
 import LinearAlgebra: issymmetric, isposdef, ldiv!, Factorization, ×, qr, dot

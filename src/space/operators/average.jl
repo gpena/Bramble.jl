@@ -216,7 +216,7 @@ for config in _AVERAGE_OP_CONFIGS
         )
             avg_matrix = _average_operator(Ωₕ, $dir_instance, dim_val)
             _average_weights!(vector_cache, Ωₕ, $dir_instance, dim_val)
-            return vector_cache .* avg_matrix
+            return _scale_rows!(avg_matrix, vector_cache)
         end
 
         # --- Generic applicators ---

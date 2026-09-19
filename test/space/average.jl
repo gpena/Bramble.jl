@@ -5,6 +5,7 @@ using Bramble
 import Bramble: forward_average, backward_average, M₊ₓ, M₊ᵧ, M₊₂, M₊ₕ
 import Bramble: forward_average_dim!, backward_average_dim!
 using LinearAlgebra: norm
+using SparseArrays: nnz
 using ..SpaceVectorElementsTests: setup_test_grid
 using ..SpaceDifferenceTests: test_operator_matrix_equivalence
 
@@ -143,6 +144,21 @@ using ..SpaceDifferenceTests: test_operator_matrix_equivalence
     @testset "Operator vs matrix" begin
         @testset "Forward" test_operator_matrix_equivalence(forward_average_ops)
         @testset "Backward" test_operator_matrix_equivalence(backward_average_ops)
+    end
+end
+
+# The averaging matrices carry the same weighting as the differences do, and carried the
+# same defect with it: `w .* A` returned a matrix whose storage was sized for the dense
+# case. See the matching testset in `test/space/difference.jl` for the measurement.
+@testset "Weighted averages store bytes proportional to nnz" begin
+    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (100, 100))
+    n = npoints(Ωₕ)
+
+    for (name, A) in ("M₊ₓ" => forward_average(Ωₕ, Val(1)), "Mₓ" => backward_average(Ωₕ, Val(1)))
+        @testset "$name" begin
+            @test nnz(A) <= 2 * n
+            @test Base.summarysize(A) <= 64 * nnz(A)
+        end
     end
 end
 

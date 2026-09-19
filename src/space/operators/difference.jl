@@ -487,7 +487,7 @@ for config in _DIFFERENCE_OP_CONFIGS
         )
             diff_matrix = $diff_name(Ωₕ, dim_val)
             $weights_func!(vector_cache, Ωₕ, dim_val)
-            return vector_cache .* diff_matrix
+            return _scale_rows!(diff_matrix, vector_cache)
         end
 
         # --- Generic applicators ---
@@ -726,8 +726,8 @@ end
 # is also what the form layer's stencils do.
 
 # Returns `w`, as a mutating function with a single destination does, so that the builders
-# below can write `_extended_weights!(cache, …) .* matrix` rather than filling the cache on
-# one line and reaching for it on the next.
+# below can write `_scale_rows!(matrix, _extended_weights!(cache, …))` rather than filling
+# the cache on one line and reaching for it on the next.
 @inline function _extended_weights!(
         w::AbstractVector, Ωₕ::AbstractMeshType, ::Val{DIFF_DIM}, weight::F
 ) where {F, DIFF_DIM}
@@ -773,7 +773,7 @@ function forward_star_difference(
         Ωₕ::AbstractMeshType, dim_val::Val; vector_cache = __vector(Ωₕ)
 )
     w = _extended_weights!(vector_cache, Ωₕ, dim_val, _star_weight)
-    return w .* _difference_operator(Ωₕ, Forward(), dim_val)
+    return _scale_rows!(_difference_operator(Ωₕ, Forward(), dim_val), w)
 end
 
 """
@@ -791,7 +791,7 @@ function centered_difference(
     n >= 3 || _throw_centered_too_few_points(DIM, n)
 
     w = _extended_weights!(vector_cache, Ωₕ, dim_val, _centered_weight)
-    return w .* difference_shift(Ωₕ, dim_val, Val(1), Val(-1))
+    return _scale_rows!(difference_shift(Ωₕ, dim_val, Val(1), Val(-1)), w)
 end
 
 """
@@ -810,12 +810,12 @@ function cross_weighted_difference(
     n = npoints(Ωₕ(DIM))
     n >= 3 || _throw_centered_too_few_points(DIM, n)
 
-    forward = _extended_weights!(vector_cache, Ωₕ, dim_val, _cross_forward_weight) .*
-              _difference_operator(Ωₕ, Forward(), dim_val)
+    forward = _scale_rows!(_difference_operator(Ωₕ, Forward(), dim_val),
+        _extended_weights!(vector_cache, Ωₕ, dim_val, _cross_forward_weight))
 
-    # the product above is materialised, so the cache is free to be rewritten
-    backward = _extended_weights!(vector_cache, Ωₕ, dim_val, _cross_backward_weight) .*
-               _difference_operator(Ωₕ, Backward(), dim_val)
+    # the scaling above is already applied, so the cache is free to be rewritten
+    backward = _scale_rows!(_difference_operator(Ωₕ, Backward(), dim_val),
+        _extended_weights!(vector_cache, Ωₕ, dim_val, _cross_backward_weight))
     return forward + backward
 end
 
