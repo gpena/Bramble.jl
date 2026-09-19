@@ -353,10 +353,20 @@ end
 
 @inline _stagger_set(i::Int, j::Int) = i == j ? (i,) : (min(i, j), max(i, j))
 
-# One entry εᵢⱼ(u) of the strain tensor.
-@inline function _strain_entry(u, i::Int, j::Int)
-    i == j && return _vc_bwd(u(i), i)
-    return 0.5 * _vc_avg(_vc_bwd(u(i), j), i) + 0.5 * _vc_avg(_vc_bwd(u(j), i), j)
+# The additive pieces of one entry εᵢⱼ(u) of the strain tensor, kept apart rather than
+# summed into one node. `ε_ii` is a single piece; `ε_ij` (`i != j`) is the two half-averaged
+# cross differences the definition adds together. Keeping them apart is what lets
+# `inner₊(::_StrainTensor, ::_StrainTensor)` below expand their cross product into clean
+# single-component terms at the builder: a *summed* `ε_ij(u)` mixes trial (or test)
+# components `i` and `j` in one subtree, and `simplify_ast`'s component-distribution rule
+# only compares one node's class against its sibling's -- once a scale wraps the whole
+# tensor's sum and two already-mixing siblings meet, both report the same "mixed" marker and
+# the rule cannot tell them apart, leaving the scale over a term `block_of` cannot route.
+# Building the four cross terms directly, the way a user would expand `(a+b)*(c+d)` by hand,
+# means no node here ever mixes components in the first place.
+@inline function _strain_pieces(u, i::Int, j::Int)
+    i == j && return (_vc_bwd(u(i), i),)
+    return (0.5 * _vc_avg(_vc_bwd(u(i), j), i), 0.5 * _vc_avg(_vc_bwd(u(j), i), j))
 end
 
 # One term of the divergence: D_{-i}(u_i), averaged onto the shared cell centre by every
@@ -370,9 +380,10 @@ end
 """
     Bramble._StrainTensor{D}
 
-Builder-only container for [`εₕ`](@ref)'s `D × D` entries. Never reaches assembly or an AST
-walker: [`inner₊`](@ref) on two of these expands immediately into the sum of single-block
-products a user would write out by hand.
+Builder-only container for [`εₕ`](@ref)'s `D × D` entries, each held as its additive pieces
+(`Bramble._strain_pieces`) rather than their sum. Never reaches assembly or an AST walker:
+[`inner₊`](@ref) on two of these expands immediately into the sum of single-block products a
+user would write out by hand.
 """
 struct _StrainTensor{D, T}
     entries::T
@@ -399,22 +410,33 @@ See also: [`divₕ`](@ref), [`∇ₕ`](@ref).
 function εₕ(u::LazyOp{D}) where {D}
     entries = ntuple(Val(D)) do i
         ntuple(Val(D)) do j
-            _strain_entry(u, i, j)
+            _strain_pieces(u, i, j)
         end
     end
     return _StrainTensor{D, typeof(entries)}(entries)
 end
 
+# The cross product of two entries' additive pieces, each pair expanded into its own
+# `inner₊(..., Val(S))` term -- the builder-time equivalent of multiplying out `(a+b)*(c+d)`
+# by hand, so that every term reaching `inner₊` already carries one component per side and
+# `simplify_ast` is never asked to untangle a mixing sum (see `_strain_pieces` above).
+@inline _cross_terms(lu::Tuple, lv::Tuple, ::Val{S}) where {S} = _flatten_tuples(
+    map(a -> map(b -> inner₊(a, b, Val(S)), lv), lu)
+)
+
 @inline function inner₊(left::_StrainTensor{D}, right::_StrainTensor{D}) where {D}
-    return foldl(
-        +, ntuple(Val(D)) do i
-            foldl(
-                +, ntuple(Val(D)) do j
-                    inner₊(left.entries[i][j], right.entries[i][j], Val(_stagger_set(i, j)))
+    terms = _flatten_tuples(
+        ntuple(Val(D)) do i
+            _flatten_tuples(
+                ntuple(Val(D)) do j
+                    _cross_terms(
+                        left.entries[i][j], right.entries[i][j], Val(_stagger_set(i, j))
+                    )
                 end
             )
         end
     )
+    return foldl(+, terms)
 end
 
 """
