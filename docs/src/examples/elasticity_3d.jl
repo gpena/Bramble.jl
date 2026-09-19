@@ -133,7 +133,7 @@ function _hand_elasticity_form(Vₕ, μ, λ)                                    
     cdiv = _hand_stagger_ratio(Wₕ, (1, 2, 3), λ)                                                    #src
     return form(Vₕ, Vₕ,                                                                             #src
         (p, q) -> sum(innerₕ(cε[i == j ? (i,) : minmax(i, j)] * _hand_strain(p, i, j),              #src
-        _hand_strain(q, i, j)) for i in 1:3, j in 1:3) +                                            #src
+                          _hand_strain(q, i, j)) for i in 1:3, j in 1:3) +                                            #src
                   sum(innerₕ(cdiv * _hand_div_term(p, i), _hand_div_term(q, j))                     #src
         for i in 1:3, j in 1:3))                                                                    #src
 end                                                                                                 #src

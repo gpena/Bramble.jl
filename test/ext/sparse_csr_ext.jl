@@ -24,9 +24,11 @@ _sine_source(::Val{1}) = x -> sin(π * x)
 _sine_source(::Val{D}) where {D} = x -> prod(sin(π * xᵢ) for xᵢ in x)
 
 _grid(::Val{1}, Ωd, n; backend) = mesh(Ωd, n, true; backend = backend)
-_grid(::Val{D}, Ωd, n; backend) where {D} = mesh(
-    Ωd, ntuple(_ -> n, Val(D)), ntuple(_ -> true, Val(D)); backend = backend
-)
+function _grid(::Val{D}, Ωd, n; backend) where {D}
+    mesh(
+        Ωd, ntuple(_ -> n, Val(D)), ntuple(_ -> true, Val(D)); backend = backend
+    )
+end
 
 # One matched CSC/CSR pair -- same domain, same mesh sizes, same discretisation -- for the
 # Poisson problem every backend file in test/ext/ shares (`SolverContracts.poisson_system`),

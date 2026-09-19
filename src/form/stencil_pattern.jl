@@ -280,6 +280,7 @@ function bandwidths(a)
     u = 0
     for (trial_offsets, test_offsets) in _bilinear_terms(ast)
         for ou in trial_offsets, ov in test_offsets
+
             d = _lex_distance(ou, ov, strides)
             l = max(l, -d)
             u = max(u, d)
@@ -324,6 +325,7 @@ function blockbandwidths(a)
     u_sub = 0
     for (trial_offsets, test_offsets) in _bilinear_terms(ast)
         for ou in trial_offsets, ov in test_offsets
+
             db = last(ou) - last(ov)
             l_blk = max(l_blk, -db)
             u_blk = max(u_blk, db)

@@ -46,12 +46,14 @@ end
 
 # One entry of the hand-expanded strain tensor, `εₕ(p, i, j)` in the docs page.
 hand_strain(p, Dm, Mm, i, j) = i == j ? Dm[i](p(i)) :
-                                0.5 * Mm[i](Dm[j](p(i))) + 0.5 * Mm[j](Dm[i](p(j)))
+                               0.5 * Mm[i](Dm[j](p(i))) + 0.5 * Mm[j](Dm[i](p(j)))
 
 # One term of the hand-expanded staggered divergence, `divₜ(p, i)` in the docs page.
-hand_div_term(p, Dm, Mm, i, ::Val{D}) where {D} = foldl(
-    (op, d) -> Mm[d](op), Iterators.filter(!=(i), 1:D); init = Dm[i](p(i))
-)
+function hand_div_term(p, Dm, Mm, i, ::Val{D}) where {D}
+    foldl(
+        (op, d) -> Mm[d](op), Iterators.filter(!=(i), 1:D); init = Dm[i](p(i))
+    )
+end
 
 # The 27-term (3D) / 8-term (2D) hand-expanded elasticity form: every `(i, j)` pair of the
 # strain and the divergence written out as its own `innerₕ` against a precomputed weight
@@ -86,9 +88,11 @@ compact_elasticity_form(Vₕ, μ, λ) = form(
 
 # The gradient-tensor inner product, hand-expanded as a plain double sum over component and
 # direction, versus the compact `inner₊(∇ₕ(u), ∇ₕ(v))` over a composite trial/test function.
-hand_grad_form(Vₕ, Dm, ::Val{D}) where {D} = form(
-    Vₕ, Vₕ, (u, v) -> sum(inner₊(Dm[d](u(c)), Dm[d](v(c))) for c in 1:D, d in 1:D)
-)
+function hand_grad_form(Vₕ, Dm, ::Val{D}) where {D}
+    form(
+        Vₕ, Vₕ, (u, v) -> sum(inner₊(Dm[d](u(c)), Dm[d](v(c))) for c in 1:D, d in 1:D)
+    )
+end
 compact_grad_form(Vₕ) = form(Vₕ, Vₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
 
 # --- block_of over every leaf of an assembled AST ------------------------------------------- #

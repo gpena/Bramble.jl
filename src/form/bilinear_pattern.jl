@@ -26,13 +26,15 @@ matrix type implements exactly this to be usable with [`allocate_system_matrix`]
 allocates zeros and scatters into it, since a dense matrix has no sparsity pattern to build.
 """
 @inline function _allocate_from_pattern(
-        ::Type{MT}, nrows::Int, ncols::Int, I_vec::Vector{Int}, J_vec::Vector{Int}, V_vec::AbstractVector
+        ::Type{MT}, nrows::Int, ncols::Int, I_vec::Vector{Int}, J_vec::Vector{Int},
+        V_vec::AbstractVector
 ) where {MT <: SparseMatrixCSC}
     return sparse!(I_vec, J_vec, V_vec, nrows, ncols, +)
 end
 
 function _allocate_from_pattern(
-        ::Type{MT}, nrows::Int, ncols::Int, I_vec::Vector{Int}, J_vec::Vector{Int}, V_vec::AbstractVector
+        ::Type{MT}, nrows::Int, ncols::Int, I_vec::Vector{Int}, J_vec::Vector{Int},
+        V_vec::AbstractVector
 ) where {MT <: AbstractMatrix}
     A = zeros(eltype(V_vec), nrows, ncols)
     @inbounds for k in eachindex(I_vec, J_vec, V_vec)

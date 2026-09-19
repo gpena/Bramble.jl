@@ -39,9 +39,9 @@ const KRON_SEED = 20260919
                     @test is_separable(form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v))))
                     @test is_separable(
                         form(
-                            Wₕ, Wₕ,
-                            (u, v) -> innerₕ(u, v) + 2.5 * inner₊(∇ₕ(u), ∇ₕ(v))
-                        )
+                        Wₕ, Wₕ,
+                        (u, v) -> innerₕ(u, v) + 2.5 * inner₊(∇ₕ(u), ∇ₕ(v))
+                    )
                     )
                 end
             end

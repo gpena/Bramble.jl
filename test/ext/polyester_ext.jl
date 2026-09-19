@@ -22,9 +22,11 @@ _sine_source(::Val{1}) = x -> sin(π * x)
 _sine_source(::Val{D}) where {D} = x -> prod(sin(π * xᵢ) for xᵢ in x)
 
 _grid(::Val{1}, Ωd, n; backend) = mesh(Ωd, n, true; backend = backend)
-_grid(::Val{D}, Ωd, n; backend) where {D} = mesh(
-    Ωd, ntuple(_ -> n, Val(D)), ntuple(_ -> true, Val(D)); backend = backend
-)
+function _grid(::Val{D}, Ωd, n; backend) where {D}
+    mesh(
+        Ωd, ntuple(_ -> n, Val(D)), ntuple(_ -> true, Val(D)); backend = backend
+    )
+end
 
 # One matched CpuBatch/Parallel/Serial triple -- same domain, same mesh size, one backend
 # swapped for another -- mirroring test/ext/sparse_csr_ext.jl's own `_poisson_pair`.

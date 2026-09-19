@@ -72,6 +72,7 @@ function _diagonal_or_throw(M::AbstractMatrix)
     n = size(M, 1)
     d = zeros(eltype(M), n)
     for j in 1:n, i in 1:n
+
         if i == j
             d[j] = M[i, j]
         elseif !iszero(M[i, j])

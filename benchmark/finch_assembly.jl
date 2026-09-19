@@ -127,6 +127,7 @@ function _finch_build!(B, Acoo)
     @finch begin
         B .= 0
         for j in _, i in _
+
             B[i, j] = Acoo[i, j]
         end
     end

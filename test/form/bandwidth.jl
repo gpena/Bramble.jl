@@ -61,15 +61,17 @@ end
 # One family of forms, generic in the grid space so the same set runs in 1D, 2D and 3D:
 # every operator here is either dimension-agnostic (`innerₕ`) or names the x-direction
 # alone, which every dimension has.
-_bandwidth_test_forms() = (
-    ("innerₕ(u,v)", (u, v) -> innerₕ(u, v)),
-    ("innerₕ(D₋ₓ(u), v)", (u, v) -> innerₕ(D₋ₓ(u), v)),
-    ("inner₊(∇ₕ(u), ∇ₕ(v))", (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v))),
-    ("innerₕ(Dcₓ(u), Dcₓ(v))", (u, v) -> innerₕ(Dcₓ(u), Dcₓ(v))),
-    ("innerₕ(Dₕₓ(u), v)", (u, v) -> innerₕ(Dₕₓ(u), v)),
-    ("innerₕ(jumpₓ(u), v)", (u, v) -> innerₕ(jumpₓ(u), v)),
-    ("innerₕ(Mₓ(u), v)", (u, v) -> innerₕ(Mₓ(u), v))
-)
+function _bandwidth_test_forms()
+    (
+        ("innerₕ(u,v)", (u, v) -> innerₕ(u, v)),
+        ("innerₕ(D₋ₓ(u), v)", (u, v) -> innerₕ(D₋ₓ(u), v)),
+        ("inner₊(∇ₕ(u), ∇ₕ(v))", (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v))),
+        ("innerₕ(Dcₓ(u), Dcₓ(v))", (u, v) -> innerₕ(Dcₓ(u), Dcₓ(v))),
+        ("innerₕ(Dₕₓ(u), v)", (u, v) -> innerₕ(Dₕₓ(u), v)),
+        ("innerₕ(jumpₓ(u), v)", (u, v) -> innerₕ(jumpₓ(u), v)),
+        ("innerₕ(Mₓ(u), v)", (u, v) -> innerₕ(Mₓ(u), v))
+    )
+end
 
 @testset "Bandwidths from the AST" begin
     Random.seed!(20260919)

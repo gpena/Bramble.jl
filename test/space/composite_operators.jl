@@ -190,6 +190,7 @@ using ..TestUtils: alloc_test, @test_allocs
                     g = ∇ₕ(uₕ)
                     @test length(g) == D
                     for i in 1:D, j in 1:D
+
                         @test parent(components(g[i])[j]) == parent(Dm[i](scalars[j]))
                     end
                 end
@@ -200,9 +201,10 @@ using ..TestUtils: alloc_test, @test_allocs
                         @test parent(ε[i][i]) == parent(Dm[i](scalars[i]))
                     end
                     for i in 1:D, j in 1:D
+
                         i == j && continue
                         oracle = 0.5 .* (parent(Mm[i](Dm[j](scalars[i]))) .+
-                                  parent(Mm[j](Dm[i](scalars[j]))))
+                                         parent(Mm[j](Dm[i](scalars[j]))))
                         @test parent(ε[i][j]) ≈ oracle
                         @test parent(ε[i][j]) == parent(ε[j][i]) # symmetry
                     end
@@ -213,6 +215,7 @@ using ..TestUtils: alloc_test, @test_allocs
                     εₕ!(dest, uₕ)
                     ε = εₕ(uₕ)
                     for i in 1:D, j in 1:D
+
                         @test parent(dest[i][j]) == parent(ε[i][j])
                     end
                     @test_allocs εₕ!(dest, uₕ)

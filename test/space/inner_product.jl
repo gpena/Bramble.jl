@@ -186,7 +186,7 @@ end
     end
 
     all_subsets(D) = Tuple(
-        Tuple(d for d in 1:D if ((m >> (d - 1)) & 1) == 1) for m in 0:(2^D - 1)
+        Tuple(d for d in 1:D if ((m >> (d - 1)) & 1) == 1) for m in 0:(2 ^ D - 1)
     )
 
     @testset "3D: all 8 sets" begin

@@ -150,9 +150,11 @@ _source(::Val{1}) = x -> sin(π * x)
 _source(::Val{D}) where {D} = x -> prod(sin(π * xᵢ) for xᵢ in x)
 
 _grid(::Val{1}, Ωd, n; backend) = mesh(Ωd, n, true; backend = backend)
-_grid(::Val{D}, Ωd, n; backend) where {D} = mesh(
-    Ωd, ntuple(_ -> n, Val(D)), ntuple(_ -> true, Val(D)); backend = backend
-)
+function _grid(::Val{D}, Ωd, n; backend) where {D}
+    mesh(
+        Ωd, ntuple(_ -> n, Val(D)), ntuple(_ -> true, Val(D)); backend = backend
+    )
+end
 
 # Poisson plus a mass term (test/form/bilinear.jl's own "mass" + "stiffness"
 # combination, `innerₕ(u, v)` for the mass half).
@@ -184,6 +186,7 @@ function _to_csc(A::SparseMatrixCSR{1})
     rowptr, colval, nzval = A.rowptr, A.colval, A.nzval
     I = Vector{Int}(undef, length(nzval))
     @inbounds for i in 1:m, k in rowptr[i]:(rowptr[i + 1] - 1)
+
         I[k] = i
     end
     return sparse(I, colval, nzval, m, n)

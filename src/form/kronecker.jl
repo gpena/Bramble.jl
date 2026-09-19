@@ -89,7 +89,7 @@ end
         ::BilinearProduct{
         D, InnerPlus{Dim}, <:BackwardDifference{D, Dim, <:TrialFunction{D}},
         <:BackwardDifference{D, Dim, <:TestFunction{D}}
-    }
+}
 ) where {D, Dim}
     return Some(Dim)
 end

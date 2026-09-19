@@ -427,14 +427,14 @@ end
 @inline function inner₊(left::_StrainTensor{D}, right::_StrainTensor{D}) where {D}
     terms = _flatten_tuples(
         ntuple(Val(D)) do i
-            _flatten_tuples(
-                ntuple(Val(D)) do j
-                    _cross_terms(
-                        left.entries[i][j], right.entries[i][j], Val(_stagger_set(i, j))
-                    )
-                end
+        _flatten_tuples(
+            ntuple(Val(D)) do j
+            _cross_terms(
+                left.entries[i][j], right.entries[i][j], Val(_stagger_set(i, j))
             )
         end
+        )
+    end
     )
     return foldl(+, terms)
 end
