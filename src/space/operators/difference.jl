@@ -394,7 +394,9 @@ const _DIFFERENCE_OP_CONFIGS = [
         dir_string = "Forward",
         dir_string_lowercase = "forward",
         math_op = "u_{i+1} - u_i",
-        math_finite_op = "\\frac{u_{i+1} - u_i}{h_i}"
+        math_finite_op = "\\frac{u_{i+1} - u_i}{h_i}",
+        unscaled_stencil_op = :UnscaledForwardDiffOp,
+        finite_stencil_op = :ForwardFiniteDiffOp
     ),
     (
         direction = Backward(),
@@ -410,7 +412,9 @@ const _DIFFERENCE_OP_CONFIGS = [
         dir_string = "Backward",
         dir_string_lowercase = "backward",
         math_op = "u_{i} - u_{i-1}",
-        math_finite_op = "\\frac{u_{i} - u_{i-1}}{h_i}"
+        math_finite_op = "\\frac{u_{i} - u_{i-1}}{h_i}",
+        unscaled_stencil_op = :UnscaledBackwardDiffOp,
+        finite_stencil_op = :BackwardFiniteDiffOp
     )
 ]
 
@@ -431,6 +435,8 @@ for config in _DIFFERENCE_OP_CONFIGS
     dir_string_lowercase = config.dir_string_lowercase
     math_op = config.math_op
     math_finite_op = config.math_finite_op
+    unscaled_stencil_op = config.unscaled_stencil_op
+    finite_stencil_op = config.finite_stencil_op
 
     # This first @eval block is fine because it doesn't depend on any inner loops.
     @eval begin
@@ -469,26 +475,35 @@ for config in _DIFFERENCE_OP_CONFIGS
             _derivative_weights!(v, Ωₕ, $spacing_func, diff_dim)
         end
 
-        # --- Matrix operator functions ---
+        # --- Retained Kronecker oracle (gpena/Bramble.jl#185) ---
+        #
+        # The bodies `$diff_name`/`$finite_diff_name` used to have, kept under `_kron_`
+        # names so `kronecker_operator_matrix` has an independent construction to check
+        # `stencil_matrix` against.
+        @inline $(Symbol(:_kron_, diff_name))(Ωₕ::AbstractMeshType, dim_val::Val) = _difference_operator(Ωₕ, $dir_instance, dim_val)
+
+        function $(Symbol(:_kron_, finite_diff_name))(
+                Ωₕ::AbstractMeshType, dim_val::Val; vector_cache = __vector(Ωₕ)
+        )
+            diff_matrix = $(Symbol(:_kron_, diff_name))(Ωₕ, dim_val)
+            $weights_func!(vector_cache, Ωₕ, dim_val)
+            return _scale_rows!(diff_matrix, vector_cache)
+        end
+
+        # --- Matrix operator functions (single-pass, gpena/Bramble.jl#185) ---
         @doc """
             $($(QuoteNode(diff_name)))(arg, dim_val::Val)
 
         Constructs the **unscaled** $($dir_string_lowercase) difference operator, representing the operation ``$($math_op)``.
         """
-        @inline $diff_name(Ωₕ::AbstractMeshType, dim_val::Val) = _difference_operator(Ωₕ, $dir_instance, dim_val)
+        @inline $diff_name(Ωₕ::AbstractMeshType, dim_val::Val{DIM}) where {DIM} = stencil_matrix(Ωₕ, $(unscaled_stencil_op){DIM}())
 
         @doc """
             $($(QuoteNode(finite_diff_name)))(arg, dim_val::Val)
 
         Constructs the $($dir_string_lowercase) **finite difference** operator, which approximates the first derivative using the formula ``$($math_finite_op)``.
         """
-        function $finite_diff_name(
-                Ωₕ::AbstractMeshType, dim_val::Val; vector_cache = __vector(Ωₕ)
-        )
-            diff_matrix = $diff_name(Ωₕ, dim_val)
-            $weights_func!(vector_cache, Ωₕ, dim_val)
-            return vector_cache .* diff_matrix
-        end
+        @inline $finite_diff_name(Ωₕ::AbstractMeshType, dim_val::Val{DIM}) where {DIM} = stencil_matrix(Ωₕ, $(finite_stencil_op){DIM}())
 
         # --- Generic applicators ---
         #
@@ -726,8 +741,8 @@ end
 # is also what the form layer's stencils do.
 
 # Returns `w`, as a mutating function with a single destination does, so that the builders
-# below can write `_extended_weights!(cache, …) .* matrix` rather than filling the cache on
-# one line and reaching for it on the next.
+# below can write `_scale_rows!(matrix, _extended_weights!(cache, …))` rather than filling
+# the cache on one line and reaching for it on the next.
 @inline function _extended_weights!(
         w::AbstractVector, Ωₕ::AbstractMeshType, ::Val{DIFF_DIM}, weight::F
 ) where {F, DIFF_DIM}
@@ -769,11 +784,8 @@ The starred forward difference along `dim_val`, as a sparse matrix.
 The forward difference scaled by the averaged spacing instead of the forward one. The last
 point along the direction has no forward neighbour, so its row is empty.
 """
-function forward_star_difference(
-        Ωₕ::AbstractMeshType, dim_val::Val; vector_cache = __vector(Ωₕ)
-)
-    w = _extended_weights!(vector_cache, Ωₕ, dim_val, _star_weight)
-    return w .* _difference_operator(Ωₕ, Forward(), dim_val)
+function forward_star_difference(Ωₕ::AbstractMeshType, dim_val::Val{DIM}) where {DIM}
+    return stencil_matrix(Ωₕ, StarDiffOp{DIM}())
 end
 
 """
@@ -784,14 +796,11 @@ The centered difference along `dim_val`, as a sparse matrix.
 Reaches one point either side, so both end rows are empty and the mesh needs at least three
 points along the direction.
 """
-function centered_difference(
-        Ωₕ::AbstractMeshType, dim_val::Val{DIM}; vector_cache = __vector(Ωₕ)
-) where {DIM}
+function centered_difference(Ωₕ::AbstractMeshType, dim_val::Val{DIM}) where {DIM}
     n = npoints(Ωₕ(DIM))
     n >= 3 || _throw_centered_too_few_points(DIM, n)
 
-    w = _extended_weights!(vector_cache, Ωₕ, dim_val, _centered_weight)
-    return w .* difference_shift(Ωₕ, dim_val, Val(1), Val(-1))
+    return stencil_matrix(Ωₕ, CenteredDiffOp{DIM}())
 end
 
 """
@@ -804,19 +813,65 @@ far side, row 1 agrees with [`D₊ₓ`](@ref)`(Ωₕ, dim_val)` and row `n` with
 [`D₋ₓ`](@ref)`(Ωₕ, dim_val)`, each under its own diagonal weight alongside the interior
 cross-weighting. The mesh still needs at least three points along the direction.
 """
-function cross_weighted_difference(
+function cross_weighted_difference(Ωₕ::AbstractMeshType, dim_val::Val{DIM}) where {DIM}
+    n = npoints(Ωₕ(DIM))
+    n >= 3 || _throw_centered_too_few_points(DIM, n)
+
+    return stencil_matrix(Ωₕ, CrossWeightedDiffOp{DIM}())
+end
+
+# --- Retained Kronecker oracle (gpena/Bramble.jl#185) --------------------------------- #
+#
+# The bodies the three functions above used to have, kept so `kronecker_operator_matrix`
+# has an independent construction to check `stencil_matrix` against.
+
+function _kron_forward_star_difference(
+        Ωₕ::AbstractMeshType, dim_val::Val; vector_cache = __vector(Ωₕ)
+)
+    w = _extended_weights!(vector_cache, Ωₕ, dim_val, _star_weight)
+    return _scale_rows!(_difference_operator(Ωₕ, Forward(), dim_val), w)
+end
+
+function _kron_centered_difference(
         Ωₕ::AbstractMeshType, dim_val::Val{DIM}; vector_cache = __vector(Ωₕ)
 ) where {DIM}
     n = npoints(Ωₕ(DIM))
     n >= 3 || _throw_centered_too_few_points(DIM, n)
 
-    forward = _extended_weights!(vector_cache, Ωₕ, dim_val, _cross_forward_weight) .*
-              _difference_operator(Ωₕ, Forward(), dim_val)
+    w = _extended_weights!(vector_cache, Ωₕ, dim_val, _centered_weight)
+    return _scale_rows!(difference_shift(Ωₕ, dim_val, Val(1), Val(-1)), w)
+end
 
-    # the product above is materialised, so the cache is free to be rewritten
-    backward = _extended_weights!(vector_cache, Ωₕ, dim_val, _cross_backward_weight) .*
-               _difference_operator(Ωₕ, Backward(), dim_val)
+function _kron_cross_weighted_difference(
+        Ωₕ::AbstractMeshType, dim_val::Val{DIM}; vector_cache = __vector(Ωₕ)
+) where {DIM}
+    n = npoints(Ωₕ(DIM))
+    n >= 3 || _throw_centered_too_few_points(DIM, n)
+
+    forward = _scale_rows!(_difference_operator(Ωₕ, Forward(), dim_val),
+        _extended_weights!(vector_cache, Ωₕ, dim_val, _cross_forward_weight))
+
+    # the scaling above is already applied, so the cache is free to be rewritten
+    backward = _scale_rows!(_difference_operator(Ωₕ, Backward(), dim_val),
+        _extended_weights!(vector_cache, Ωₕ, dim_val, _cross_backward_weight))
     return forward + backward
+end
+
+# --- Kronecker oracle dispatch (gpena/Bramble.jl#185) --------------------------------- #
+#
+# `kronecker_operator_matrix` is declared in shift.jl; each family's dispatch method maps
+# its public per-axis alias to the `_kron_*` construction kept above.
+for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
+    for (stem, kron_fn) in (
+        (:D₋, :_kron_backward_finite_difference),
+        (:D₊, :_kron_forward_finite_difference),
+        (:D̽, :_kron_forward_star_difference),
+        (:Dc, :_kron_centered_difference),
+        (:Dₕ, :_kron_cross_weighted_difference)
+    )
+        alias = Symbol(stem, suffix)
+        @eval kronecker_operator_matrix(Ωₕ::AbstractMeshType, ::typeof($alias)) = $kron_fn(Ωₕ, Val($i))
+    end
 end
 
 # A grid space carries its mesh, as for every other family here.

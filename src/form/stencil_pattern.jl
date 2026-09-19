@@ -167,3 +167,170 @@ end
 function _stencil_margin(op::OperatorAdd)
     return max(_stencil_margin(op.left_op), _stencil_margin(op.right_op))
 end
+
+# --- bandwidths and blockbandwidths, read from the AST alone ----------------------- #
+#
+# `bandwidths`/`blockbandwidths` take a `BilinearForm`, but that type is defined later
+# (`form/bilinear.jl`, included after this file): a type annotation naming it here would
+# need it to already exist at `include` time, which it does not. The argument is left
+# untyped instead -- `resolve_form_ast`, `trial_space`, `test_space` and
+# `CompositeGridSpace` below are ordinary calls, looked up when the function actually
+# runs rather than when this file loads, so the forward reference costs nothing once the
+# package has finished loading (gpena/Bramble.jl#175).
+
+@noinline function _throw_composite_not_banded()
+    throw(
+        ArgumentError(
+        "bandwidths and blockbandwidths are not defined for a composite trial or test " *
+        "space. A composite system matrix is assembled block by block (leaf_spaces_offsets), " *
+        "and a leaf's own mesh can differ in point count from another leaf's, so a block's " *
+        "offset is not, in general, one lexicographic distance in a single shared ordering. " *
+        "Compute the bandwidth of one leaf pair's block instead, on the non-composite form " *
+        "that block alone would be.",
+    ),
+    )
+end
+
+@noinline function _throw_interpolation_not_banded()
+    throw(
+        ArgumentError(
+        "bandwidths and blockbandwidths are not defined for a form containing an " *
+        "interpolation operator (πₕ). Interpolation addresses an absolute column or row " *
+        "on another mesh, which has no grid-relative offset and so no lexicographic " *
+        "distance to report.",
+    ),
+    )
+end
+
+# Composite spaces, any interpolation anywhere, and a genuine cross-mesh pairing (two
+# leaves that share neither a mesh nor an interpolation between them, `_throw_cross_mesh_block`
+# in `form/bilinear.jl`) are the three ways a form has no single lexicographic bandwidth.
+# The first two are refused outright; the third reuses the same guard `allocate_system_matrix`
+# already runs, rather than duplicating its mesh-compatibility check.
+function _check_bandable(a)
+    (trial_space(a) isa CompositeGridSpace || test_space(a) isa CompositeGridSpace) &&
+        _throw_composite_not_banded()
+    ast = resolve_form_ast(a)
+    (_has_trial_interp(ast) || _has_test_interp(ast)) && _throw_interpolation_not_banded()
+    _check_block_meshes(ast, trial_space(a), test_space(a))
+    return nothing
+end
+
+# The strides a column-major, first-axis-fastest lexicographic index uses: moving one step
+# along axis `d` moves the linear index by `stride[d] = n₁⋯n_{d-1}` (`stride[1] = 1`, the
+# empty product).
+@inline _lex_strides(n::NTuple{D, Int}) where {D} = ntuple(k -> prod(n[1:(k - 1)]), D)
+
+# The column-minus-row distance a trial offset `ou` paired with a test offset `ov`
+# contributes, in the ordering `strides` describes.
+@inline function _lex_distance(
+        ou::NTuple{D, Int}, ov::NTuple{D, Int}, strides::NTuple{D, Int}
+) where {D}
+    return sum(ntuple(d -> (ou[d] - ov[d]) * strides[d], D))
+end
+
+# Every `BilinearProduct` a form's AST sums, as its (trial, test) offset reach -- the one
+# pairing `stencil_offsets(::BilinearProduct)` itself does not keep, since its one caller
+# (`_colour_strides`) only ever needs the test side. A sum reaches every term either side
+# has; scaling, a grid-function coefficient or a restriction changes no term's reach, only
+# its coefficients, so the walk passes straight through them to their own `inner_op`.
+function _collect_bilinear_terms!(terms, op::OperatorAdd)
+    _collect_bilinear_terms!(terms, op.left_op)
+    _collect_bilinear_terms!(terms, op.right_op)
+    return terms
+end
+
+function _collect_bilinear_terms!(terms, op::BilinearProduct)
+    push!(terms, (stencil_offsets(op.left_op), stencil_offsets(op.right_op)))
+    return terms
+end
+
+_collect_bilinear_terms!(terms, op::UnaryWrapper) = _collect_bilinear_terms!(terms, op.inner_op)
+_collect_bilinear_terms!(terms, ::LazyOp) = terms
+
+_bilinear_terms(ast) = _collect_bilinear_terms!(Tuple{Vector, Vector}[], ast)
+
+"""
+    bandwidths(a::BilinearForm) -> Tuple{Int, Int}
+
+The lower and upper bandwidth `(l, u)` of the matrix `a` assembles into, in the
+lexicographic ordering [`indices`](@ref)`(Ωₕ)` walks: column-major, first axis fastest.
+Row `i` can only carry a stored entry in column `j` when `-l <= j - i <= u`.
+
+Read entirely from the resolved AST, without assembling anything. `a` is a sum of
+`BilinearProduct` terms; for each, [`stencil_offsets`](@ref) gives the trial (column) and
+test (row) reach along every axis. An offset `(o₁, …, o_D)` moves the lexicographic index
+by `o₁ + o₂n₁ + o₃n₁n₂ + …`, where `(n₁, …, n_D)` are the mesh's per-axis point counts
+([`npoints`](@ref)`(Ωₕ, Tuple)`). `l` and `u` are the largest such distance, negated and
+as-is, taken over every pairing of a trial offset with a test offset with the
+corresponding row's offset, over every term of the sum.
+
+# Throws
+- `ArgumentError`: the trial or test space is a `CompositeGridSpace`; the form contains
+  an interpolation operator (`πₕ`); or the trial and test spaces couple two leaves that
+  share neither a mesh nor an interpolation between them.
+
+See also: [`blockbandwidths`](@ref), [`stencil_offsets`](@ref).
+"""
+function bandwidths(a)
+    _check_bandable(a)
+    ast = resolve_form_ast(a)
+    strides = _lex_strides(npoints(mesh(test_space(a)), Tuple))
+    l = 0
+    u = 0
+    for (trial_offsets, test_offsets) in _bilinear_terms(ast)
+        for ou in trial_offsets, ov in test_offsets
+            d = _lex_distance(ou, ov, strides)
+            l = max(l, -d)
+            u = max(u, d)
+        end
+    end
+    return (l, u)
+end
+
+"""
+    blockbandwidths(a::BilinearForm) -> Tuple{Tuple{Int, Int}, Tuple{Int, Int}}
+
+The block bandwidth and sub-block bandwidth of the matrix `a` assembles into, reading its
+lexicographic index as an outer block along the last axis and an inner lexicographic
+index over the remaining `D - 1` axes -- the layout `BlockBandedMatrices.jl`'s
+`BandedBlockBandedMatrix` expects, `(blockbandwidths, subblockbandwidths)`.
+
+For `D == 1` every block is a single point, so this is `((0, 0), bandwidths(a))`.
+
+For `D >= 2`, blocks are the `n₁⋯n_{D-1}`-point rectangles indexed by the `D`-th axis:
+`l_blk`/`u_blk` are the largest reach a term's `D`-th-axis offsets carry between a trial
+and a test point, `l_sub`/`u_sub` the largest lexicographic distance the remaining
+`D - 1` axes carry, both computed the same way [`bandwidths`](@ref) computes its one
+pair, just restricted to their own axes.
+
+# Throws
+- `ArgumentError`: same conditions as [`bandwidths`](@ref).
+
+See also: [`bandwidths`](@ref).
+"""
+function blockbandwidths(a)
+    D = dim(test_space(a))
+    D == 1 && return ((0, 0), bandwidths(a))
+
+    _check_bandable(a)
+    ast = resolve_form_ast(a)
+    n = npoints(mesh(test_space(a)), Tuple)
+    sub_strides = _lex_strides(Base.front(n))
+
+    l_blk = 0
+    u_blk = 0
+    l_sub = 0
+    u_sub = 0
+    for (trial_offsets, test_offsets) in _bilinear_terms(ast)
+        for ou in trial_offsets, ov in test_offsets
+            db = last(ou) - last(ov)
+            l_blk = max(l_blk, -db)
+            u_blk = max(u_blk, db)
+            ds = _lex_distance(Base.front(ou), Base.front(ov), sub_strides)
+            l_sub = max(l_sub, -ds)
+            u_sub = max(u_sub, ds)
+        end
+    end
+    return ((l_blk, u_blk), (l_sub, u_sub))
+end

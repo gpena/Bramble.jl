@@ -269,6 +269,58 @@ clear.
 
 **`SymRCM.jl`**: evaluated under reordering, below -- not for assembly.
 
+### Tensor-compiler assembly
+
+**Finch.jl: not adopted.** [gpena/Bramble.jl#217](https://github.com/gpena/Bramble.jl/issues/217)
+asked whether a `@finch`-compiled loop nest -- [Finch.jl](https://github.com/finch-tensor/Finch.jl)'s
+domain-specific compiler for structured and sparse tensors -- beats Bramble's own
+`RecordSink`/`ReplaySink` assembly by enough to justify a dedicated backend. The issue set its
+own threshold: greater than 1.5x speedup or greater than 50% memory reduction on the resulting
+object, at N = 1e6.
+
+`benchmark/finch_assembly.jl` measured 1D, 2D and 3D Poisson and convection-diffusion forms, N
+from 1e2 to 1e6 on non-uniform (seeded `rand!`) meshes: Bramble's first `assemble` (pattern
+discovery plus fill) against Finch's first `@finch` build, Bramble's `assemble!` refill against
+Finch's refill, `Base.summarysize` of the resulting matrix/tensor, and time to first execution
+(TTFX). Every one of the 18 (dimension, form, size) cases produced a Finch tensor identical to
+Bramble's matrix to `1e-12` -- both are built from the same non-uniform-mesh `(row, col, value)`
+triplets, `findnz` on the CSC matrix Bramble already assembled -- which is what makes the timing
+comparison meaningful rather than a comparison between two different answers. The six N = 1e6
+cases, the ones the adoption rule is evaluated against:
+
+| Dim | Form | Bramble refill (ms) | Bramble size (MiB) | Finch refill (ms) | Finch size (MiB) | Refill speedup | Size Δ% | Match |
+|:--- |:--- |:--- |:--- |:--- |:--- |:--- |:--- |:--- |
+| 1 | Poisson | 4.372 | 91.553 | 12.383 | 71.63 | 0.35 | 21.8 | true |
+| 1 | Convection-diffusion | 6.101 | 129.7 | 10.373 | 71.63 | 0.59 | 44.8 | true |
+| 2 | Poisson | 7.504 | 175.43 | 13.34 | 135.63 | 0.56 | 22.7 | true |
+| 2 | Convection-diffusion | 12.711 | 251.709 | 12.239 | 135.63 | 1.04 | 46.1 | true |
+| 3 | Poisson | 15.008 | 258.713 | 16.19 | 135.63 | 0.93 | 47.6 | true |
+| 3 | Convection-diffusion | 53.266 | 372.925 | 18.312 | 135.63 | 2.91 | 63.6 | true |
+
+Only one of the six clears the bar: 3D convection-diffusion, a 2.91x refill speedup and a 63.6%
+smaller resident tensor. The rule needs at least two qualifying cases out of six, so the table
+alone already falls short. Finch's own compilation cost settles it further: time to first
+execution -- the very first `@finch` call in the process, before any warm-up -- was about 39
+seconds against Bramble's 0.1 millisecond. A package whose users open a REPL, run one assembly
+and look at the result cannot pay a 39-second tax on the first call, even for a backend that
+eventually wins on refills. Nothing in `ext/` was written: `finch_backend` and
+`BrambleFinchExt.jl` from the issue's proposed architecture do not exist.
+
+Two things bound how far this "no" reaches. First, a methodology departure recorded in
+`benchmark/finch_assembly.jl`'s own header: the script hands Finch the `(row, col, value)`
+triplets Bramble's assembly already computed and times only how fast a `@finch` loop nest copies
+them into a `Tensor(Dense(SparseList(Element(0.0))))` -- the insertion half of assembly, not the
+fused stencil-evaluation-and-insertion Finch's compiler actually promises and the issue's own
+Problem Statement names as the point. That measures an upper bound favouring Finch, and Finch
+still lost under it. Second, both the Bramble and the Finch runs were made on battery power
+under heavy concurrent load, so the ratios in the table, not the absolute millisecond figures,
+carry this decision.
+
+What would change the answer: a fused evaluate-and-insert extension, where Finch compiles the
+stencil evaluation itself from Bramble's own AST rather than consuming triplets Bramble already
+produced, together with a way to amortise the roughly 39-second TTFX across precompilation
+rather than a user's first call.
+
 ### Direct sparse solvers
 
 **Sparspak.jl: done, not re-evaluated here.** Built in

@@ -49,13 +49,31 @@ by small, frequently repeated calls, use [`CpuSerial`](@ref).
 Spelled `Parallel()` as often as not: `const Parallel = CpuThreaded`.
 
 `Base.Threads.@threads` is the primitive, and naming it that way leaves room for the others
-that are not this one -- Polyester's `@batch` (gpena/Bramble.jl#190) and MPI. Neither has a
-policy yet: a policy nothing implements is worse than one added alongside its implementation,
-so `CpuBatch` arrives with the Polyester extension, not before it.
+that are not this one -- Polyester's `@batch` (gpena/Bramble.jl#190) and MPI. [`CpuBatch`](@ref)
+is that Polyester-backed sibling: the policy type ships here, but the sweeps it selects live
+in the `BramblePolyesterExt` package extension, and requesting one without `using Polyester`
+errors the way [`metal_backend`](@ref) does without `using Metal`.
 
-See also: [`CpuSerial`](@ref), [`ExecutionPolicy`](@ref).
+See also: [`CpuSerial`](@ref), [`CpuBatch`](@ref), [`ExecutionPolicy`](@ref).
 """
 struct CpuThreaded <: CpuPolicy end
+
+"""
+    CpuBatch() <: CpuPolicy
+
+Polyester-batched execution policy.
+
+Directs grid operations and form assembly through `Polyester.jl`'s `@batch`, a primitive
+whose per-call overhead is low enough to pay off on grids where [`CpuThreaded`](@ref)'s
+`Threads.@threads` does not (gpena/Bramble.jl#190). The sweeps this policy selects are
+implemented in the `BramblePolyesterExt` package extension, not here: `using Polyester` must
+be loaded before this policy reaches one of them, or the call errors naming the package,
+matching [`metal_backend`](@ref)'s precedent. `Parallel()` is untouched and keeps meaning
+`Threads.@threads`.
+
+See also: [`CpuThreaded`](@ref), [`CpuSerial`](@ref), [`ExecutionPolicy`](@ref).
+"""
+struct CpuBatch <: CpuPolicy end
 
 """
     GpuPolicy <: ExecutionPolicy
@@ -103,7 +121,7 @@ Compile-time descriptor specifying vector type `VT`, matrix type `MT`, and execu
 # Type parameters
 - `VT<:DenseVector`: Concrete dense vector type (for CPU or GPU).
 - `MT<:AbstractMatrix`: Concrete matrix type (e.g. `SparseMatrixCSC{Float64, Int}` or `Matrix{Float64}`).
-- `EP<:ExecutionPolicy`: Execution policy ([`Serial`](@ref) or [`Parallel`](@ref)).
+- `EP<:ExecutionPolicy`: Execution policy ([`Serial`](@ref), [`Parallel`](@ref), or [`CpuBatch`](@ref)).
 
 See also: [`backend`](@ref), [`vector_type`](@ref), [`matrix_type`](@ref), [`execution_policy`](@ref).
 """
@@ -388,5 +406,88 @@ end
 function _metal_backend(::Type, ::ExecutionPolicy)
     return error(
         "metal_backend requires Metal.jl. Add `using Metal` before calling this function."
+    )
+end
+
+"""
+    csr_backend(::Type{T} = Float64; policy::ExecutionPolicy = Serial()) -> Backend
+
+Construct a `SparseMatrixCSR` [`Backend`](@ref) backed by `SparseMatricesCSR.jl`.
+
+Requires `using SparseMatricesCSR` in the caller environment. A finite-difference stencil
+is assembled row by row, which compressed sparse row storage reaches without the column
+scatter a `SparseMatrixCSC` assembly needs (gpena/Bramble.jl#214).
+
+# Arguments
+- `T`: Coordinate and scalar element type (default: `Float64`).
+
+# Keywords
+- `policy`: Execution policy instance (default: [`Serial`](@ref)).
+
+# Throws
+- `ErrorException`: If `SparseMatricesCSR.jl` is not loaded.
+"""
+function csr_backend(T::Type = Float64; policy::ExecutionPolicy = Serial())
+    return _csr_backend(T, policy)
+end
+function _csr_backend(::Type, ::ExecutionPolicy)
+    return error(
+        "csr_backend requires SparseMatricesCSR.jl. Add `using SparseMatricesCSR` before calling this function."
+    )
+end
+
+"""
+    banded_backend(::Type{T} = Float64; policy::ExecutionPolicy = Serial()) -> Backend
+
+Construct a `BandedMatrix` [`Backend`](@ref) backed by `BandedMatrices.jl`.
+
+Requires `using BandedMatrices` in the caller environment. A high-order stencil on a
+Cartesian mesh has a fixed, small bandwidth, which a banded LAPACK factorization
+(`gbtrf!`/`gbtrs!`) solves without the fill-in a general sparse factorization pays for
+(gpena/Bramble.jl#216).
+
+# Arguments
+- `T`: Coordinate and scalar element type (default: `Float64`).
+
+# Keywords
+- `policy`: Execution policy instance (default: [`Serial`](@ref)).
+
+# Throws
+- `ErrorException`: If `BandedMatrices.jl` is not loaded.
+"""
+function banded_backend(T::Type = Float64; policy::ExecutionPolicy = Serial())
+    return _banded_backend(T, policy)
+end
+function _banded_backend(::Type, ::ExecutionPolicy)
+    return error(
+        "banded_backend requires BandedMatrices.jl. Add `using BandedMatrices` before calling this function."
+    )
+end
+
+"""
+    block_banded_backend(::Type{T} = Float64; policy::ExecutionPolicy = Serial()) -> Backend
+
+Construct a `BlockBandedMatrix` [`Backend`](@ref) backed by `BlockBandedMatrices.jl`.
+
+Requires `using BlockBandedMatrices` in the caller environment. In 2D and 3D, lexicographic
+ordering of a Cartesian mesh turns a banded stencil into a matrix that is block-banded, with
+banded sub-blocks, which `BlockBandedMatrices.jl` stores and factorizes without a general
+sparse matrix's fill-in (gpena/Bramble.jl#216).
+
+# Arguments
+- `T`: Coordinate and scalar element type (default: `Float64`).
+
+# Keywords
+- `policy`: Execution policy instance (default: [`Serial`](@ref)).
+
+# Throws
+- `ErrorException`: If `BlockBandedMatrices.jl` is not loaded.
+"""
+function block_banded_backend(T::Type = Float64; policy::ExecutionPolicy = Serial())
+    return _block_banded_backend(T, policy)
+end
+function _block_banded_backend(::Type, ::ExecutionPolicy)
+    return error(
+        "block_banded_backend requires BlockBandedMatrices.jl. Add `using BlockBandedMatrices` before calling this function."
     )
 end

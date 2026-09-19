@@ -15,6 +15,7 @@ using Bramble:
                LinearProduct,
                InnerH,
                InnerPlus,
+               InnerPlusSet,
                SourceFunction,
                SourceVector,
                SourceConstant,
@@ -27,6 +28,9 @@ using Bramble:
                weights,
                Innerh,
                Innerplus,
+               SeparableWeights,
+               spacing,
+               half_spacing,
                values
 
 # The inner products, from construction through to the stencil they evaluate to.
@@ -228,6 +232,122 @@ using Bramble:
         @test is_symbolic(innerₕ(uₕ, v))
         @test is_symbolic(inner₊ₓ(2.0, v))
         @test is_symbolic(innerₕ(u, v) + innerₕ(D₋ₓ(u), D₋ₓ(v)))
+    end
+end
+
+# The general staggered-set entry point, inner₊(u, v, Val(S)) (gpena/Bramble.jl#115, #234).
+#
+# `S = ()` and a singleton `S` are aliases for innerₕ/inner₊ₓ,ᵧ,₂'s own nodes -- checked by
+# comparing the assembled matrix and the AST's own InnerType parameter, not just the value,
+# since the whole point of routing them there is that they are the *same* node, which is
+# what lets a term written either way fold the same way in the simplifier and resolve to the
+# same `which(inner₊, ...).file`. `|S| >= 2` is genuinely new: `InnerPlusSet`, read at
+# assembly through the lazy `SeparableWeights` `weights(Wₕ, Val(S))` returns for those sets
+# (never a full-grid vector), which this checks is really what gets exercised, not a silent
+# fallback to something dense.
+@testset "inner₊(u, v, Val(S)), the general staggered-set entry point" begin
+    # Independent of `weights`: the mesh's own spacing/half_spacing, hand-multiplied per
+    # axis, exactly as test/space/gridspaces.jl's own `weights(Wₕ, Val(S))` testset checks
+    # `SpaceWeights` itself.
+    aligned(m, d, i) = i == 1 ? 0.0 : spacing(m(d), i)
+    cellfac(m, d, i) = half_spacing(m(d), i)
+    function hand_built_weight(m, S, dims)
+        w = Vector{Float64}(undef, prod(dims))
+        li = LinearIndices(dims)
+        for I in CartesianIndices(dims)
+            w[li[I]] = prod(d -> (d in S ? aligned(m, d, I[d]) : cellfac(m, d, I[d])), 1:length(dims))
+        end
+        return w
+    end
+
+    @testset "2D" begin
+        Ω2 = domain(interval(0.0, 1.0) × interval(0.0, 1.3))
+        Ωₕ2 = mesh(Ω2, (7, 6), (false, false))
+        Wₕ2 = gridspace(Ωₕ2)
+        u2, v2 = TrialFunction{2}(), TestFunction{2}()
+        dims2 = npoints(Ωₕ2, Tuple)
+
+        @testset "S = () is innerₕ's own node" begin
+            p = inner₊(u2, v2, Val(()))
+            @test typeof(p).parameters[2] === InnerH
+            @test assemble(form(Wₕ2, Wₕ2, (u, v) -> inner₊(u, v, Val(())))) ==
+                  assemble(form(Wₕ2, Wₕ2, (u, v) -> innerₕ(u, v)))
+        end
+
+        @testset "a singleton S is inner₊ₓ/inner₊ᵧ's own node" begin
+            px = inner₊(u2, v2, Val((1,)))
+            @test typeof(px).parameters[2] === InnerPlus{1}
+            @test assemble(form(Wₕ2, Wₕ2, (u, v) -> inner₊(u, v, Val((1,))))) ==
+                  assemble(form(Wₕ2, Wₕ2, (u, v) -> inner₊ₓ(u, v)))
+
+            py = inner₊(u2, v2, Val((2,)))
+            @test typeof(py).parameters[2] === InnerPlus{2}
+            @test assemble(form(Wₕ2, Wₕ2, (u, v) -> inner₊(u, v, Val((2,))))) ==
+                  assemble(form(Wₕ2, Wₕ2, (u, v) -> inner₊ᵧ(u, v)))
+        end
+
+        @testset "S = (1, 2) is a new InnerPlusSet node, read through SeparableWeights" begin
+            S = (1, 2)
+            @test weights(Wₕ2, Val(S)) isa SeparableWeights
+
+            p = inner₊(D₋ₓ(u2), D₋ₓ(v2), Val(S))
+            @test typeof(p).parameters[2] === InnerPlusSet{S}
+
+            A = assemble(form(Wₕ2, Wₕ2, (u, v) -> inner₊(D₋ₓ(u), D₋ₓ(v), Val(S))))
+            Dx = D₋ₓ(Ωₕ2)
+            wS = hand_built_weight(Ωₕ2, S, dims2)
+            @test A ≈ Dx' * Diagonal(wS) * Dx
+        end
+
+        @testset "S order does not matter: Val((1,2)) and Val((2,1)) build the same node" begin
+            p12 = inner₊(u2, v2, Val((1, 2)))
+            p21 = inner₊(u2, v2, Val((2, 1)))
+            @test typeof(p12) === typeof(p21)
+            @test typeof(p12).parameters[2] === InnerPlusSet{(1, 2)}
+        end
+
+        @testset "an invalid staggered set throws" begin
+            @test_throws ArgumentError inner₊(u2, v2, Val((1, 3)))   # 3 is out of range for D=2
+            @test_throws ArgumentError inner₊(u2, v2, Val((1, 1)))   # repeated axis
+        end
+    end
+
+    @testset "3D" begin
+        Ω3 = domain(box((0.0, 0.0, 0.0), (0.5, 0.6, 0.7)))
+        Ωₕ3 = mesh(Ω3, (4, 5, 3), (false, false, false))
+        Wₕ3 = gridspace(Ωₕ3)
+        u3, v3 = TrialFunction{3}(), TestFunction{3}()
+        dims3 = npoints(Ωₕ3, Tuple)
+
+        @testset "S = (1, 2, 3), the full set, is InnerPlusSet through SeparableWeights" begin
+            S = (1, 2, 3)
+            @test weights(Wₕ3, Val(S)) isa SeparableWeights
+
+            p = inner₊(u3, v3, Val(S))
+            @test typeof(p).parameters[2] === InnerPlusSet{S}
+
+            A = assemble(form(Wₕ3, Wₕ3, (u, v) -> inner₊(u, v, Val(S))))
+            wS = hand_built_weight(Ωₕ3, S, dims3)
+            @test A ≈ Diagonal(wS)
+        end
+
+        @testset "a genuine pair S = (1, 2) also goes through SeparableWeights" begin
+            S = (1, 2)
+            @test weights(Wₕ3, Val(S)) isa SeparableWeights
+
+            A = assemble(form(Wₕ3, Wₕ3, (u, v) -> inner₊(u, v, Val(S))))
+            wS = hand_built_weight(Ωₕ3, S, dims3)
+            @test A ≈ Diagonal(wS)
+        end
+    end
+
+    @testset "which(...).file: the new arity stays in this file, not inner_product.jl" begin
+        Wₕ2 = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 4), (true, true)))
+        u2, v2 = TrialFunction{2}(), TestFunction{2}()
+        method_file(T) = basename(String(which(inner₊, T).file))
+        @test method_file(Tuple{typeof(u2), typeof(v2), Val{(1, 2)}}) == "inner.jl"
+        @test method_file(Tuple{typeof(u2), typeof(v2), Val{()}}) == "inner.jl"
+        @test method_file(Tuple{typeof(u2), typeof(v2), Val{(1,)}}) == "inner.jl"
     end
 end
 

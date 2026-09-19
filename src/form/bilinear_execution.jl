@@ -31,7 +31,7 @@
 # differentiated, independent of (and found only after fixing) the `Union` gpena/Bramble.jl#240
 # was originally filed against.
 function _record_segment!(
-        A::SparseMatrixCSC, term::TERM, sp, row_offset::Int, col_offset::Int, α
+        A::AbstractMatrix, term::TERM, sp, row_offset::Int, col_offset::Int, α
 ) where {TERM}
     n = length(indices(mesh(sp)))
     point_ptr = Vector{Int}(undef, n + 1)
@@ -121,7 +121,7 @@ end
 # through an ordinary `ReplaySink`, the two-sink form of `visit_bilinear_stencil` running
 # both in the one walk.
 function _replay_segment!(
-        A::SparseMatrixCSC,
+        A::AbstractMatrix,
         term::TERM,
         sp,
         row_offset::Int,
@@ -160,7 +160,7 @@ end
 # shape at the value level, not the type level) -- no `where {T <: ...}` indirection needed
 # to keep the vector unboxed, unlike the `AnySegment{D}` union this replaced.
 function _record_bilinear_core!(
-        A::SparseMatrixCSC, trial_space, test_space, ast::AST_TYPE, segments::Vector{Segment{D}}, α
+        A::AbstractMatrix, trial_space, test_space, ast::AST_TYPE, segments::Vector{Segment{D}}, α
 ) where {AST_TYPE, D}
     bound = _bind_interp_spaces(ast, trial_space, test_space)
     _check_block_meshes(bound, trial_space, test_space)
@@ -170,7 +170,7 @@ function _record_bilinear_core!(
 end
 
 function _replay_bilinear_core!(
-        A::SparseMatrixCSC, trial_space, test_space, ast::AST_TYPE, segments::Vector{Segment{D}}, α
+        A::AbstractMatrix, trial_space, test_space, ast::AST_TYPE, segments::Vector{Segment{D}}, α
 ) where {AST_TYPE, D}
     bound = _bind_interp_spaces(ast, trial_space, test_space)
     _check_block_meshes(bound, trial_space, test_space)
@@ -180,7 +180,7 @@ function _replay_bilinear_core!(
 end
 
 function _record_blocks!(
-        A::SparseMatrixCSC, op::OperatorAdd, trial_leaves, test_leaves, segments::Vector{Segment{D}}, α
+        A::AbstractMatrix, op::OperatorAdd, trial_leaves, test_leaves, segments::Vector{Segment{D}}, α
 ) where {D}
     _record_blocks!(A, op.left_op, trial_leaves, test_leaves, segments, α)
     _record_blocks!(A, op.right_op, trial_leaves, test_leaves, segments, α)
@@ -188,7 +188,7 @@ function _record_blocks!(
 end
 
 function _record_blocks!(
-        A::SparseMatrixCSC, term::TERM, trial_leaves, test_leaves, segments::Vector{Segment{D}}, α
+        A::AbstractMatrix, term::TERM, trial_leaves, test_leaves, segments::Vector{Segment{D}}, α
 ) where {TERM, D}
     for blk in blocks(term, trial_leaves, test_leaves)
         bound = _bind_interp_spaces(term, blk.trial_leaf, blk.test_leaf)
@@ -205,7 +205,7 @@ end
 # this stays allocation-free: the segment index the *next* leaf-term/block should consume,
 # in the same left-then-right order `_record_blocks!` built `segments` in.
 function _replay_blocks!(
-        A::SparseMatrixCSC,
+        A::AbstractMatrix,
         op::OperatorAdd,
         trial_leaves,
         test_leaves,
@@ -219,7 +219,7 @@ function _replay_blocks!(
 end
 
 function _replay_blocks!(
-        A::SparseMatrixCSC,
+        A::AbstractMatrix,
         term::TERM,
         trial_leaves,
         test_leaves,
@@ -240,7 +240,7 @@ function _replay_blocks!(
 end
 
 function _record_bilinear_core!(
-        A::SparseMatrixCSC,
+        A::AbstractMatrix,
         trial_space::CompositeGridSpace,
         test_space::CompositeGridSpace,
         ast::AST_TYPE,
@@ -254,7 +254,7 @@ function _record_bilinear_core!(
 end
 
 function _replay_bilinear_core!(
-        A::SparseMatrixCSC,
+        A::AbstractMatrix,
         trial_space::CompositeGridSpace,
         test_space::CompositeGridSpace,
         ast::AST_TYPE,
@@ -279,7 +279,7 @@ end
 # `A`: the cache's positions are only valid for the exact stencil shape they were recorded
 # against, and a different `ast` can visit a different number of entries per point.
 function _assemble_bilinear_core_cached!(
-        A::SparseMatrixCSC,
+        A::AbstractMatrix,
         trial_space,
         test_space,
         ast::AST_TYPE,
@@ -334,7 +334,7 @@ end
 # below: it always searches (never caches), so a serial recording pass is never required
 # before a `Parallel()`-backend form's first assembly.
 @inline function _scatter_point!(
-        A::SparseMatrixCSC,
+        A::AbstractMatrix,
         term::TERM,
         sp,
         I::CartesianIndex,
@@ -357,9 +357,14 @@ end
     return nothing
 end
 
-# One colour, threaded, writing directly into the matrix.
+# One colour, threaded, writing directly into the matrix. Dispatches on the *effective*
+# execution policy (`_sweep_bilinear!` computes it): `CpuThreaded` keeps `Threads.@threads`
+# exactly as before; `CpuBatch` reaches its own hook instead, so it never silently threads
+# with the wrong mechanism (gpena/Bramble.jl#190). `CpuSerial` never reaches this function --
+# `_effective_parallel_policy` only ever hands it `CpuThreaded` or `CpuBatch`.
 @noinline function _sweep_bilinear_colour!(
-        A::SparseMatrixCSC,
+        ::CpuThreaded,
+        A::AbstractMatrix,
         sp,
         term::TERM,
         idxs,
@@ -375,6 +380,36 @@ end
     return nothing
 end
 
+@noinline function _sweep_bilinear_colour!(
+        ::CpuBatch,
+        A::AbstractMatrix,
+        sp,
+        term::TERM,
+        idxs,
+        lin_indices,
+        mesh_markers,
+        row_offset::Int,
+        col_offset::Int,
+        α
+) where {TERM}
+    return _batch_bilinear_colour_sweep!(
+        A, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset, α
+    )
+end
+
+"""
+    _batch_bilinear_colour_sweep!(A, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset, α) -> Nothing
+
+[`CpuBatch`](@ref)'s counterpart of the `Threads.@threads` body in
+[`_sweep_bilinear_colour!`](@ref), filled by `BramblePolyesterExt` (gpena/Bramble.jl#190).
+The only `src/` method errors naming Polyester.
+"""
+@noinline function _batch_bilinear_colour_sweep!(
+        A, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset, α
+)
+    return _throw_cpubatch_without_polyester(:_batch_bilinear_colour_sweep!)
+end
+
 """
     _sweep_band_colour!(A, sp, term, ax, parity, nbands, rest, lin_indices, mesh_markers, row_offset, col_offset) -> Nothing
 
@@ -388,7 +423,8 @@ that reaches only its own point cannot collide at all, and then `bidx` is every 
 once.
 """
 @noinline function _sweep_band_colour!(
-        A::SparseMatrixCSC,
+        ::CpuThreaded,
+        A::AbstractMatrix,
         sp,
         term::TERM,
         ax,
@@ -411,6 +447,39 @@ once.
     return nothing
 end
 
+@noinline function _sweep_band_colour!(
+        ::CpuBatch,
+        A::AbstractMatrix,
+        sp,
+        term::TERM,
+        ax,
+        bidx,
+        nbands::Int,
+        rest,
+        lin_indices,
+        mesh_markers,
+        row_offset::Int,
+        col_offset::Int,
+        α
+) where {TERM}
+    return _batch_bilinear_band_sweep!(
+        A, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset, col_offset, α
+    )
+end
+
+"""
+    _batch_bilinear_band_sweep!(A, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset, col_offset, α) -> Nothing
+
+[`CpuBatch`](@ref)'s counterpart of the `Threads.@threads` body in
+[`_sweep_band_colour!`](@ref), filled by `BramblePolyesterExt` (gpena/Bramble.jl#190). The
+only `src/` method errors naming Polyester.
+"""
+@noinline function _batch_bilinear_band_sweep!(
+        A, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset, col_offset, α
+)
+    return _throw_cpubatch_without_polyester(:_batch_bilinear_band_sweep!)
+end
+
 # The serial fallback for a term whose rows are not a fixed reach from the point being
 # visited.
 #
@@ -422,7 +491,7 @@ end
 # is correct at the cost of the threading, and `_has_test_interp` decides it from the type,
 # so an ordinary term pays nothing for the choice.
 function _sweep_bilinear_serial!(
-        A::SparseMatrixCSC, sp, term::TERM, row_offset::Int, col_offset::Int, α = true
+        A::AbstractMatrix, sp, term::TERM, row_offset::Int, col_offset::Int, α = true
 ) where {TERM}
     Ωₕ = mesh(sp)
     grid_inds = indices(Ωₕ)
@@ -437,14 +506,21 @@ function _sweep_bilinear_serial!(
     return nothing
 end
 
-# Every colour in turn, using strided subgrids.
+# Every colour in turn, using strided subgrids. `policy` is the *effective* policy
+# (`_effective_parallel_policy(sp)`, computed once here): `CpuSerial` is coerced to
+# `CpuThreaded` since every call into this function is already on the forced-threaded path
+# (`_assemble_bilinear_parallel_core!`, always entered from a non-`CpuSerial` branch, or from
+# `assemble_parallel!`'s own "regardless of policy" contract); `CpuBatch` passes through
+# unchanged so the colour/band sweeps below reach their own hook instead of `Threads.@threads`
+# (gpena/Bramble.jl#190).
 function _sweep_bilinear!(
-        A::SparseMatrixCSC, sp, term::TERM, strides, row_offset::Int, col_offset::Int, α = true
+        A::AbstractMatrix, sp, term::TERM, strides, row_offset::Int, col_offset::Int, α = true
 ) where {TERM}
     Ωₕ = mesh(sp)
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
     mesh_markers = markers(Ωₕ)
+    policy = _effective_parallel_policy(sp)
 
     # Bands first: a colour is then a slab of whole rows, walked contiguously, and there
     # are two of them however wide the stencil is. Point colouring strides every axis and
@@ -464,6 +540,7 @@ function _sweep_bilinear!(
         bands = prod(strides) == 1 ? (1:1:nbands,) : (1:2:nbands, 2:2:nbands)
         for bidx in bands
             _sweep_band_colour!(
+                policy,
                 A,
                 sp,
                 term,
@@ -485,13 +562,14 @@ function _sweep_bilinear!(
     # colouring has no width requirement.
     if prod(strides) == 1
         _sweep_bilinear_colour!(
-            A, sp, term, grid_inds, lin_indices, mesh_markers, row_offset, col_offset, α
+            policy, A, sp, term, grid_inds, lin_indices, mesh_markers, row_offset, col_offset, α
         )
         return A
     end
 
     for c in CartesianIndices(strides)
         _sweep_bilinear_colour!(
+            policy,
             A,
             sp,
             term,
@@ -507,7 +585,7 @@ function _sweep_bilinear!(
 end
 
 function _assemble_blocks_parallel!(
-        A::SparseMatrixCSC, op::OperatorAdd, trial_leaves, test_leaves, α = true
+        A::AbstractMatrix, op::OperatorAdd, trial_leaves, test_leaves, α = true
 )
     return _visit_operator_add2(
         _assemble_blocks_parallel!, A, op, trial_leaves, test_leaves, α
@@ -515,7 +593,7 @@ function _assemble_blocks_parallel!(
 end
 
 function _assemble_blocks_parallel!(
-        A::SparseMatrixCSC, term::TERM, trial_leaves, test_leaves, α = true
+        A::AbstractMatrix, term::TERM, trial_leaves, test_leaves, α = true
 ) where {TERM}
     for blk in blocks(term, trial_leaves, test_leaves)
         bound = _bind_interp_spaces(term, blk.trial_leaf, blk.test_leaf)
@@ -538,8 +616,17 @@ function _assemble_blocks_parallel!(
     return A
 end
 
+# Matrix-type generic since S7.1 (gpena/Bramble.jl#190): the band-coloured sweep above
+# (`_scatter_point!`/`_sweep_bilinear!`/`_assemble_blocks_parallel!`) only ever calls
+# `add_to_sparse!`, itself matrix-type generic since S1.1 (`bilinear_traversal.jl`), so
+# nothing here races any differently for a dense `Matrix` than for `SparseMatrixCSC` --
+# verified equal to the serial record/replay pass on a dense backend (S7.1's own check).
+# `_sweep_bilinear!` reads the space's effective policy itself (`_effective_parallel_policy`)
+# and only `Threads.@threads`es under `CpuThreaded`; a `CpuBatch` backend reaches its own
+# hook instead of silently threading with the wrong mechanism, so this function no longer
+# needs a separate non-threading fallback for a matrix type it cannot thread.
 function _assemble_bilinear_parallel_core!(
-        A::SparseMatrixCSC, trial_space, test_space, ast::AST_TYPE, α = true
+        A::AbstractMatrix, trial_space, test_space, ast::AST_TYPE, α = true
 ) where {AST_TYPE}
     bound = _bind_interp_spaces(ast, trial_space, test_space)
     _check_block_meshes(bound, trial_space, test_space)
@@ -553,7 +640,7 @@ function _assemble_bilinear_parallel_core!(
 end
 
 function _assemble_bilinear_parallel_core!(
-        A::SparseMatrixCSC,
+        A::AbstractMatrix,
         trial_space::CompositeGridSpace,
         test_space::CompositeGridSpace,
         ast::AST_TYPE,

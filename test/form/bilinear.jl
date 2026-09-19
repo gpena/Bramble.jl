@@ -6,7 +6,7 @@ using Bramble
 import Bramble: M₊ᵧ
 using ForwardDiff
 using LinearAlgebra: Diagonal, I, diag, dot
-using SparseArrays: sparse, nnz, nonzeros
+using SparseArrays: sparse, nnz, nonzeros, SparseMatrixCSC
 using Random
 using Supposition
 using ..TestUtils: WITH_SLOW_TESTS
@@ -965,6 +965,65 @@ using Bramble:
 
         # and a malformed expression fails here rather than at the first assemble
         @test_throws ArgumentError form(Wₕ, Wₕ, (u, v) -> 42)
+    end
+
+    # The matrix-type seam (S1.1, gpena/Bramble.jl#12): `allocate_system_matrix`, `assemble`,
+    # `assemble!` and `assemble_parallel!` read the matrix type from
+    # `matrix_type(backend(test_space(form)))` rather than hardcoding `SparseMatrixCSC`,
+    # reaching storage through `_scatter_position`/`_scatter_add!` (bilinear_traversal.jl),
+    # `_allocate_from_pattern` (bilinear_pattern.jl) and `_zero_stored!` (bilinear.jl), each
+    # with a `SparseMatrixCSC` method and a generic `AbstractMatrix` fallback. A dense
+    # `Matrix{Float64}` backend exercises that fallback -- the positive control proving the
+    # seam is real -- and must assemble the exact same values as the default CSC backend,
+    # with and without Dirichlet and `symmetrize!`, while the CSC path keeps its
+    # zero-allocation refill.
+    @testset "Dense backend" begin
+        Sd = interval(0.0, 1.0) × interval(0.0, 1.0)
+        Ωd_domain = domain(Sd, :dir => (x) -> x[1] ≈ 0.0)
+        Ωc = mesh(Ωd_domain, (7, 6), (true, true))
+        Ωd = mesh(Ωd_domain, (7, 6), (true, true); backend = backend(matrix_type = Matrix{Float64}))
+        Wc, Wd = gridspace(Ωc), gridspace(Ωd)
+
+        κ = x -> 1 + x[1] * x[2]
+        f = (W) -> begin
+            kh = Rₕ(W, κ)
+            form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(kh * u, v))
+        end
+
+        @testset "assemble agrees with CSC" begin
+            Ac, Ad = assemble(f(Wc)), assemble(f(Wd))
+            @test Ac isa SparseMatrixCSC
+            @test Ad isa Matrix{Float64}
+            @test isapprox(Matrix(Ac), Ad; atol = 1e-13)
+            @test count(!iszero, Ad) == nnz(Ac)
+        end
+
+        @testset "Dirichlet and symmetrize agree with CSC" begin
+            Acd = assemble(f(Wc); dirichlet = (:dir,))
+            Add = assemble(f(Wd); dirichlet = (:dir,))
+            @test isapprox(Matrix(Acd), Add; atol = 1e-13)
+
+            Fc, Fd = ones(ndofs(Wc)), ones(ndofs(Wd))
+            Bc, Bd = copy(Acd), copy(Add)
+            symmetrize!(Bc, Fc, Wc, :dir)
+            symmetrize!(Bd, Fd, Wd, :dir)
+            @test isapprox(Matrix(Bc), Bd; atol = 1e-13)
+            @test isapprox(Fc, Fd)
+        end
+
+        @testset "assemble! refills, CSC stays zero-allocation" begin
+            Ac2, Ad2 = allocate_system_matrix(f(Wc)), allocate_system_matrix(f(Wd))
+            @test Ac2 isa SparseMatrixCSC
+            @test Ad2 isa Matrix{Float64}
+
+            fc, fd = f(Wc), f(Wd)
+            assemble!(Ac2, fc)
+            assemble!(Ad2, fd)
+            @test isapprox(Matrix(Ac2), Ad2; atol = 1e-13)
+
+            assemble!(Ac2, fc)
+            @test (@allocated assemble!(Ac2, fc)) == 0
+        end
     end
 end
 

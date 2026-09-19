@@ -4,7 +4,7 @@ using Test
 using Bramble
 using LinearAlgebra: norm
 using Supposition
-using ..TestUtils: WITH_SLOW_TESTS
+using ..TestUtils: WITH_SLOW_TESTS, @test_allocs
 using ..SpaceVectorElementsTests: setup_test_grid, valid_interior_range
 
 @testset "Inner products & norms" begin
@@ -152,6 +152,157 @@ using ..SpaceVectorElementsTests: setup_test_grid, valid_interior_range
             )
 
             @test snorm₁ₕ(u1)^2 ≈ expected_value_snorm
+        end
+    end
+end
+
+# Runtime `inner₊(uₕ, vₕ, Val(S))` for every staggered set `S ⊆ 1:D` (gpena/Bramble.jl#115,
+# #234): the existing four (`innerₕ`, `inner₊ₓ`, `inner₊ᵧ`, `inner₊₂`) are the `S = ()` and
+# singleton cases, kept as aliases sharing this implementation; every other `S` -- a pair, or
+# the full `1:D` set -- is new with this milestone and reduces against the lazy
+# `SeparableWeights` `weights(Wₕ, Val(S))` returns for it.
+@testset "inner₊(u, v, Val(S)) for every staggered set (#234)" begin
+    # A weight for `S`, built directly from `spacing`/`cell_measure` rather than from
+    # `weights`/`SpaceWeights`: entry `I` is the product, over every axis `d`, of the
+    # backward spacing at `I[d]` (zeroed at `I[d] == 1`, where a backward difference has no
+    # stencil) when `d ∈ S`, and the cell-measure factor otherwise -- the same formula
+    # `weights(Wₕ, Val(S))`'s own docstring states, re-derived here rather than trusted.
+    function hand_weights(Ωₕ, S, ::Val{D}) where {D}
+        dims = npoints(Ωₕ, Tuple)
+        w = Vector{Float64}(undef, prod(dims))
+        li = LinearIndices(dims)
+        for I in CartesianIndices(dims)
+            p = 1.0
+            for d in 1:D
+                p *= if d in S
+                    I[d] == 1 ? 0.0 : spacing(Ωₕ(d), I[d])
+                else
+                    cell_measure(Ωₕ(d), I[d])
+                end
+            end
+            w[li[I]] = p
+        end
+        return w
+    end
+
+    all_subsets(D) = Tuple(
+        Tuple(d for d in 1:D if ((m >> (d - 1)) & 1) == 1) for m in 0:(2^D - 1)
+    )
+
+    @testset "3D: all 8 sets" begin
+        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 3.0)),
+            (6, 5, 4), (true, false, true))
+        Wₕ = gridspace(Ωₕ)
+        u = Rₕ(Wₕ, x -> x[1] + 2x[2] - x[3])
+        v = Rₕ(Wₕ, x -> 1.0 + x[1] * x[3])
+
+        for S in all_subsets(3)
+            w = hand_weights(Ωₕ, S, Val(3))
+            expected = sum(parent(u) .* w .* parent(v))
+            @test inner₊(u, v, Val(S)) ≈ expected
+        end
+    end
+
+    @testset "2D: all 4 sets" begin
+        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.5)), (7, 6), (false, true))
+        Wₕ = gridspace(Ωₕ)
+        u = Rₕ(Wₕ, x -> sin(x[1]) + x[2])
+        v = Rₕ(Wₕ, x -> cos(x[2]))
+
+        for S in all_subsets(2)
+            w = hand_weights(Ωₕ, S, Val(2))
+            expected = sum(parent(u) .* w .* parent(v))
+            @test inner₊(u, v, Val(S)) ≈ expected
+        end
+    end
+
+    @testset "Alias identities" begin
+        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)),
+            (5, 4, 6), (true, true, false))
+        Wₕ = gridspace(Ωₕ)
+        u = Rₕ(Wₕ, x -> x[1] * x[2] + x[3])
+        v = Rₕ(Wₕ, x -> 1.0)
+
+        @test inner₊(u, v, Val(())) === innerₕ(u, v)
+        @test inner₊(u, v, Val((1,))) === inner₊ₓ(u, v)
+        @test inner₊(u, v, Val((2,))) === inner₊ᵧ(u, v)
+        @test inner₊(u, v, Val((3,))) === inner₊₂(u, v)
+    end
+
+    @testset "markers masking" begin
+        S = interval(0.0, 1.0) × interval(0.0, 1.0)
+        Ωₕ = mesh(domain(S, :bottom => :bottom, :left => :left), (6, 6), (true, true))
+        Wₕ = gridspace(Ωₕ)
+        u = Rₕ(Wₕ, x -> 1.0)
+        v = Rₕ(Wₕ, x -> 1.0)
+
+        w12 = weights(Wₕ, Val((1, 2)))
+        mask = Bramble.index_in_marker(Ωₕ, :bottom)
+        byhand = sum(w12[i] for i in eachindex(w12) if mask[i])
+        @test inner₊(u, v, Val((1, 2)); markers = (:bottom,)) ≈ byhand
+
+        mask2 = Bramble.index_in_marker(Ωₕ, :bottom) .| Bramble.index_in_marker(Ωₕ, :left)
+        byhand2 = sum(w12[i] for i in eachindex(w12) if mask2[i])
+        @test inner₊(u, v, Val((1, 2)); markers = (:bottom, :left)) ≈ byhand2
+
+        @test inner₊(u, v, Val((1, 2)); markers = ()) == inner₊(u, v, Val((1, 2)))
+    end
+
+    @testset "0-byte allocation, empty set and singletons" begin
+        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)),
+            (6, 5, 4), (true, true, true))
+        Wₕ = gridspace(Ωₕ)
+        u = Rₕ(Wₕ, x -> x[1])
+        v = Rₕ(Wₕ, x -> 1.0)
+
+        @test_allocs inner₊(u, v, Val(()))
+        @test_allocs inner₊(u, v, Val((1,)))
+        @test_allocs inner₊(u, v, Val((2,)))
+        @test_allocs inner₊(u, v, Val((3,)))
+    end
+
+    @testset "CpuBatch reaches the Polyester hook, never the Cartesian loop (#190)" begin
+        # `inner₊(uₕ, vₕ, Val(S))` passes `execution_policy(space(uₕ))` through to the
+        # policy-dispatched `_dot`/`_dot_masked` (S7.1, `src/utils/linear_algebra.jl`):
+        # `CpuSerial`/`CpuThreaded` fall through to the plain methods (positive control
+        # below); `CpuBatch` must reach S7.1's `_batch_dot`/`_batch_dot_masked` hook and
+        # its "Polyester not loaded" error, for a dense weight and for a `SeparableWeights`
+        # alike, without ever running this file's Cartesian loop. A `CpuBatch` grid space
+        # cannot be built at all without Polyester (`space_weights` itself needs the
+        # policy-dispatched sweep), so this calls `_dot`/`_dot_masked` directly rather than
+        # constructing one.
+        u = [1.0, 2.0, 3.0, 4.0]
+        v = [2.0, 2.0, 2.0, 2.0]
+        w_dense = [1.0, 0.5, 0.25, 2.0]
+        w_sep = Bramble.SeparableWeights{2, Float64, Vector{Float64}}(
+            ([1.0, 2.0], [0.5, 4.0]), (2, 2)
+        )
+        mask = BitVector([true, false, true, false])
+
+        for w in (w_dense, w_sep)
+            expected = Bramble._dot(u, w, v)
+            @test Bramble._dot(Bramble.CpuSerial(), u, w, v) == expected
+            @test Bramble._dot(Bramble.CpuThreaded(), u, w, v) == expected
+            err = try
+                Bramble._dot(Bramble.CpuBatch(), u, w, v)
+                nothing
+            catch e
+                e
+            end
+            @test err isa ArgumentError
+            @test occursin("Polyester", err.msg)
+
+            expected_m = Bramble._dot_masked(u, w, v, mask)
+            @test Bramble._dot_masked(Bramble.CpuSerial(), u, w, v, mask) == expected_m
+            @test Bramble._dot_masked(Bramble.CpuThreaded(), u, w, v, mask) == expected_m
+            err_m = try
+                Bramble._dot_masked(Bramble.CpuBatch(), u, w, v, mask)
+                nothing
+            catch e
+                e
+            end
+            @test err_m isa ArgumentError
+            @test occursin("Polyester", err_m.msg)
         end
     end
 end

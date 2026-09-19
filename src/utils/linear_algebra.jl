@@ -31,6 +31,7 @@ running one over a device array is a scalar-indexing failure several frames deep
 """
 @inline _cpu_threaded_for!(::CpuSerial, v, idxs, f) = _serial_for!(v, idxs, f)
 @inline _cpu_threaded_for!(::CpuThreaded, v, idxs, f) = _threaded_for!(v, idxs, f)
+@noinline _cpu_threaded_for!(::CpuBatch, v, idxs, f) = _batch_for!(v, idxs, f)
 @noinline _cpu_threaded_for!(policy::GpuPolicy, v, idxs, f) = _throw_gpu_in_cpu_loop(policy)
 
 # `Threads.@threads` needs an indexable collection, so handed a `CartesianIndices` it
@@ -48,6 +49,7 @@ running one over a device array is a scalar-indexing failure several frames deep
 # removed index conversion, which is a penalty in every power state; the parallel gain on
 # top of it is the machine's to give.
 @inline _cpu_threaded_for!(::CpuThreaded, v, idxs::CartesianIndices, f) = _threaded_axis_for!(v, idxs, f)
+@noinline _cpu_threaded_for!(::CpuBatch, v, idxs::CartesianIndices, f) = _batch_axis_for!(v, idxs, f)
 
 # The one message both CPU sweeps give a device policy. Stated here rather than left to a
 # `MethodError`, which would name `_cpu_threaded_for!` and not say why a GPU backend has no
@@ -62,6 +64,56 @@ running one over a device array is a scalar-indexing failure several frames deep
     ),
     )
 end
+
+# The message every `CpuBatch` hook gives without `Polyester` loaded (gpena/Bramble.jl#190).
+# `CpuBatch`'s own sweeps have no `src/` implementation -- `BramblePolyesterExt` (S7.2) adds
+# it -- so a `CpuBatch` backend used without that extension loaded stops here, named, rather
+# than silently falling through to `CpuThreaded`'s `Threads.@threads` code (which would
+# defeat the whole point of choosing `CpuBatch`) or a bare `MethodError`. Mirrors
+# `_throw_gpu_in_cpu_loop` above and `_metal_backend` (`src/utils/backend.jl`).
+@noinline function _throw_cpubatch_without_polyester(fname::Symbol)
+    throw(
+        ArgumentError(
+        "CpuBatch requires Polyester.jl. Add `using Polyester` before calling $(fname) " *
+        "under a CpuBatch backend.",
+    ),
+    )
+end
+
+"""
+    _batch_for!(v::AbstractArray, idxs, f::Function) -> Nothing
+
+[`CpuBatch`](@ref)'s counterpart of [`_threaded_for!`](@ref), filled by
+`BramblePolyesterExt` (gpena/Bramble.jl#190). The only `src/` method errors naming
+Polyester, the way [`_metal_backend`](@ref) errors naming Metal.
+"""
+@noinline function _batch_for!(v, idxs, f)
+    return _throw_cpubatch_without_polyester(:_batch_for!)
+end
+
+"""
+    _batch_axis_for!(v::AbstractArray, idxs::CartesianIndices, f::Function) -> Nothing
+
+[`CpuBatch`](@ref)'s counterpart of [`_threaded_axis_for!`](@ref), filled by
+`BramblePolyesterExt`. The only `src/` method errors naming Polyester.
+"""
+@noinline function _batch_axis_for!(v, idxs::CartesianIndices, f)
+    return _throw_cpubatch_without_polyester(:_batch_axis_for!)
+end
+
+"""
+    _effective_parallel_policy(sp) -> CpuPolicy
+
+The policy a forced-threaded sweep (`assemble_parallel!`, or the non-serial branch of
+`assemble!`/`assemble_add!`) actually runs under: [`CpuSerial`](@ref) is coerced to
+[`CpuThreaded`](@ref) -- a threaded sweep threads even from a serially configured backend,
+which is the entire point of forcing it -- while [`CpuThreaded`](@ref) and [`CpuBatch`](@ref)
+pass through unchanged, so a `CpuBatch` backend still runs its own (Polyester) sweep, or
+errors clearly without it, rather than silently substituting `Threads.@threads`.
+"""
+@inline _effective_parallel_policy(sp) = _coerce_serial_to_threaded(execution_policy(sp))
+@inline _coerce_serial_to_threaded(::CpuSerial) = CpuThreaded()
+@inline _coerce_serial_to_threaded(policy::CpuPolicy) = policy
 
 """
     _threaded_for!(v::AbstractArray, idxs, f::Function) -> Nothing
@@ -225,6 +277,7 @@ Dispatches to sequential execution for [`Serial`](@ref) or static multithreaded 
     return nothing
 end
 @inline _cpu_threaded_scatter_for!(::CpuThreaded, mats::Tuple, idxs, g) = _threaded_scatter_for!(mats, idxs, g)
+@noinline _cpu_threaded_scatter_for!(::CpuBatch, mats::Tuple, idxs, g) = _batch_scatter_for!(mats, idxs, g)
 @noinline _cpu_threaded_scatter_for!(policy::GpuPolicy, mats::Tuple, idxs, g) = _throw_gpu_in_cpu_loop(policy)
 
 # Kept in an isolated function to prevent closure boxing allocations on serial execution paths.
@@ -233,6 +286,16 @@ end
         @inbounds _write_components!(mats, g(idx), idx)
     end
     return nothing
+end
+
+"""
+    _batch_scatter_for!(mats::Tuple, idxs, g::Function) -> Nothing
+
+[`CpuBatch`](@ref)'s counterpart of [`_threaded_scatter_for!`](@ref), filled by
+`BramblePolyesterExt`. The only `src/` method errors naming Polyester.
+"""
+@noinline function _batch_scatter_for!(mats::Tuple, idxs, g)
+    return _throw_cpubatch_without_polyester(:_batch_scatter_for!)
 end
 
 #===========================================================================#
@@ -410,4 +473,55 @@ end
     end
 
     return s
+end
+
+# --- Execution-policy-dispatched reduction entries (gpena/Bramble.jl#190, S7.1) ---------- #
+#
+# No call site passes a policy into `_dot`/`_dot_masked` today (`innerₕ`/`inner₊`, in
+# `src/space/inner_product.jl`, call the unadorned methods above directly) -- these methods
+# are added ahead of that wiring, not in place of it, so `BramblePolyesterExt` (S7.2) has a
+# parallel `_dot`/`_dot_masked` to implement and a future policy-aware call site has
+# something to dispatch on. `CpuSerial`/`CpuThreaded` both fall through to today's single
+# (already vectorised) implementation -- there is no separate threaded reduction to pick
+# between, only a `CpuBatch` one, which the `_batch_dot`/`_batch_dot_masked` hooks below
+# supply once `BramblePolyesterExt` is loaded.
+
+"""
+    _dot(policy::ExecutionPolicy, u, v, w) -> Real
+
+Policy-dispatched [`_dot`](@ref): [`CpuSerial`](@ref) and [`CpuThreaded`](@ref) fall
+through to the plain three-vector method; [`CpuBatch`](@ref) reaches [`_batch_dot`](@ref).
+"""
+@inline _dot(::CpuSerial, u, v, w) = _dot(u, v, w)
+@inline _dot(::CpuThreaded, u, v, w) = _dot(u, v, w)
+@noinline _dot(::CpuBatch, u, v, w) = _batch_dot(u, v, w)
+
+"""
+    _dot_masked(policy::ExecutionPolicy, u, v, w, mask) -> Real
+
+Policy-dispatched [`_dot_masked`](@ref): [`CpuSerial`](@ref) and [`CpuThreaded`](@ref) fall
+through to the plain masked method; [`CpuBatch`](@ref) reaches [`_batch_dot_masked`](@ref).
+"""
+@inline _dot_masked(::CpuSerial, u, v, w, mask) = _dot_masked(u, v, w, mask)
+@inline _dot_masked(::CpuThreaded, u, v, w, mask) = _dot_masked(u, v, w, mask)
+@noinline _dot_masked(::CpuBatch, u, v, w, mask) = _batch_dot_masked(u, v, w, mask)
+
+"""
+    _batch_dot(u, v, w) -> Real
+
+[`CpuBatch`](@ref)'s counterpart of [`_dot`](@ref), filled by `BramblePolyesterExt`. The
+only `src/` method errors naming Polyester.
+"""
+@noinline function _batch_dot(u, v, w)
+    return _throw_cpubatch_without_polyester(:_batch_dot)
+end
+
+"""
+    _batch_dot_masked(u, v, w, mask) -> Real
+
+[`CpuBatch`](@ref)'s counterpart of [`_dot_masked`](@ref), filled by
+`BramblePolyesterExt`. The only `src/` method errors naming Polyester.
+"""
+@noinline function _batch_dot_masked(u, v, w, mask)
+    return _throw_cpubatch_without_polyester(:_batch_dot_masked)
 end

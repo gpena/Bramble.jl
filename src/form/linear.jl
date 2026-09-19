@@ -406,6 +406,7 @@ along the banded axis rules that out on its own, so alternate slabs never race. 
 reaches only its own point cannot collide at all, and then `bidx` is every band at once.
 """
 @noinline function _sweep_linear_band_colour!(
+        ::CpuThreaded,
         b::AbstractVector,
         sp,
         term::TERM,
@@ -426,8 +427,45 @@ reaches only its own point cannot collide at all, and then `bidx` is every band 
     return nothing
 end
 
+@noinline function _sweep_linear_band_colour!(
+        ::CpuBatch,
+        b::AbstractVector,
+        sp,
+        term::TERM,
+        ax,
+        bidx,
+        nbands::Int,
+        rest,
+        lin_indices,
+        mesh_markers,
+        offset::Int,
+        α = true
+) where {TERM}
+    return _batch_linear_band_sweep!(
+        b, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α
+    )
+end
+
+"""
+    _batch_linear_band_sweep!(b, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α) -> Nothing
+
+[`CpuBatch`](@ref)'s counterpart of the `Threads.@threads` body in
+[`_sweep_linear_band_colour!`](@ref), filled by `BramblePolyesterExt`
+(gpena/Bramble.jl#190). The only `src/` method errors naming Polyester.
+"""
+@noinline function _batch_linear_band_sweep!(
+        b, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α
+)
+    return _throw_cpubatch_without_polyester(:_batch_linear_band_sweep!)
+end
+
+# Dispatches on the *effective* execution policy (`_sweep_parallel!` computes it):
+# `CpuThreaded` keeps `Threads.@threads` exactly as before; `CpuBatch` reaches its own hook
+# instead, so it never silently threads with the wrong mechanism (gpena/Bramble.jl#190).
+# `CpuSerial` never reaches this function -- `_effective_parallel_policy` only ever hands it
+# `CpuThreaded` or `CpuBatch`.
 @noinline function _sweep_colour!(
-        b::AbstractVector, sp, term::TERM, idxs, lin_indices, mesh_markers, offset::Int, α = true
+        ::CpuThreaded, b::AbstractVector, sp, term::TERM, idxs, lin_indices, mesh_markers, offset::Int, α = true
 ) where {TERM}
     Threads.@threads for I in idxs
         _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset, α)
@@ -435,13 +473,36 @@ end
     return nothing
 end
 
-# Every colour in turn.
+@noinline function _sweep_colour!(
+        ::CpuBatch, b::AbstractVector, sp, term::TERM, idxs, lin_indices, mesh_markers, offset::Int, α = true
+) where {TERM}
+    return _batch_linear_colour_sweep!(b, sp, term, idxs, lin_indices, mesh_markers, offset, α)
+end
+
+"""
+    _batch_linear_colour_sweep!(b, sp, term, idxs, lin_indices, mesh_markers, offset, α) -> Nothing
+
+[`CpuBatch`](@ref)'s counterpart of the `Threads.@threads` body in [`_sweep_colour!`](@ref),
+filled by `BramblePolyesterExt` (gpena/Bramble.jl#190). The only `src/` method errors
+naming Polyester.
+"""
+@noinline function _batch_linear_colour_sweep!(b, sp, term, idxs, lin_indices, mesh_markers, offset, α)
+    return _throw_cpubatch_without_polyester(:_batch_linear_colour_sweep!)
+end
+
+# Every colour in turn. `policy` is the *effective* policy (`_effective_parallel_policy(sp)`,
+# computed once here): `CpuSerial` is coerced to `CpuThreaded` since every call into this
+# function is already on the forced-threaded path (`_assemble_linear_parallel_core!`,
+# entered from a non-`CpuSerial` branch, or from `assemble_parallel!`'s own "regardless of
+# policy" contract); `CpuBatch` passes through unchanged so the colour/band sweeps below
+# reach their own hook instead of `Threads.@threads` (gpena/Bramble.jl#190).
 function _sweep_parallel!(
         b::AbstractVector, sp, term::TERM, grid_inds, strides, offset::Int, α = true
 ) where {TERM}
     Ωsp = mesh(sp)
     lin_indices = LinearIndices(indices(Ωsp))
     mesh_markers = markers(Ωsp)
+    policy = _effective_parallel_policy(sp)
 
     # Bands before colours, for the reason spelled out in `_sweep_bilinear!`: two slabs
     # instead of `prod(strides)` strided colours, each walked contiguously.
@@ -456,19 +517,20 @@ function _sweep_parallel!(
         bands = prod(strides) == 1 ? (1:1:nbands,) : (1:2:nbands, 2:2:nbands)
         for bidx in bands
             _sweep_linear_band_colour!(
-                b, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α
+                policy, b, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α
             )
         end
         return b
     end
 
     if prod(strides) == 1
-        _sweep_colour!(b, sp, term, grid_inds, lin_indices, mesh_markers, offset, α)
+        _sweep_colour!(policy, b, sp, term, grid_inds, lin_indices, mesh_markers, offset, α)
         return b
     end
 
     for c in CartesianIndices(strides)
         _sweep_colour!(
+            policy,
             b,
             sp,
             term,
@@ -713,8 +775,18 @@ function _assemble_linear!(
     space = form.test_space
     _validate_term_markers(ast, markers(mesh(space)), "the form's space")
 
-    if execution_policy(space) isa CpuSerial
+    # A genuine 3-way dispatch, not a binary `isa CpuSerial` check (gpena/Bramble.jl#190):
+    # `CpuBatch` is neither `CpuSerial` nor `CpuThreaded`'s `Threads.@threads` path, and
+    # must error here rather than fall into the `else` branch and silently thread with the
+    # wrong mechanism -- `_assemble_linear_parallel_core!`'s own sweep would in fact catch
+    # this too (`_sweep_parallel!` computes the effective policy itself), but failing fast
+    # here, before the call chain, keeps this branch honest about the three policies it
+    # actually distinguishes.
+    policy = execution_policy(space)
+    if policy isa CpuSerial
         _assemble_linear_core!(b, space, ast)
+    elseif policy isa CpuBatch
+        _throw_cpubatch_without_polyester(:assemble!)
     else
         _assemble_linear_parallel_core!(b, space, ast)
     end

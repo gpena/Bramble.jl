@@ -95,14 +95,14 @@ struct Semidiscretization{A, L, S, MT, VT, BC, LB, CP, ST, TR, R} <: AbstractSem
 end
 
 """
-    mass_matrix(sd::Semidiscretization) -> SparseMatrixCSC
+    mass_matrix(sd::Semidiscretization) -> AbstractMatrix
 
 Return the constant mass matrix `M`, whose constrained rows are zero.
 """
 @inline mass_matrix(sd::Semidiscretization) = sd.mass_matrix
 
 """
-    operator_matrix(sd::Semidiscretization) -> SparseMatrixCSC
+    operator_matrix(sd::Semidiscretization) -> AbstractMatrix
 
 Return the assembled spatial operator `A`, whose constrained rows are `eₖ`.
 """
@@ -536,7 +536,7 @@ function _negate_into_generic!(J, A)
 end
 
 """
-    jacobian_prototype(sd::Semidiscretization) -> SparseMatrixCSC
+    jacobian_prototype(sd::Semidiscretization) -> AbstractMatrix
 
 Return a matrix carrying the sparsity of `∂/∂u (F(t) - A u)`, for a solver to use as its
 Jacobian cache.
@@ -592,6 +592,12 @@ function Base.show(
     end
 end
 
-@inline _operator_description(A) = string(size(A, 1), "×", size(A, 2), ", ", length(nonzeros(A)), " stored")
+# `nonzeros` only exists for a `SparseMatrixCSC`; a dense-backend matrix (S1.2's extension of
+# the matrix-type seam, gpena/Bramble.jl#12) has no separate notion of "stored" entries, so
+# every entry counts.
+@inline _stored_count(A::SparseMatrixCSC) = length(nonzeros(A))
+@inline _stored_count(A::AbstractMatrix) = length(A)
+
+@inline _operator_description(A) = string(size(A, 1), "×", size(A, 2), ", ", _stored_count(A), " stored")
 
 Base.summary(sd::Semidiscretization) = sprint(show, sd)

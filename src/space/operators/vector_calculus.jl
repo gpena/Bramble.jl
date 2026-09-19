@@ -347,3 +347,210 @@ end
 end
 
 @inline _laplacian_direction!(out, u, Ωₕ, dims, ::Val{0}, ::Val{D}) where {D} = nothing
+
+# --- Strain tensor -------------------------------------------------------------------- #
+#
+# gpena/Bramble.jl#234 (runtime half, v3.3.0 plan S6.7): the discrete strain tensor of a
+# vector field,
+#
+#     εₕ(uₕ) = (∇ₕ(uₕ) + ∇ₕ(uₕ)ᵀ) / 2
+#
+# The gradient tensor itself needs no new code. `∇ₕ`/`∇₊ₕ` (operators/difference.jl) already
+# accept a `D`-leaf composite grid function through the same generic dispatch every composite
+# grid function goes through -- one leaf at a time -- and for a `D`-leaf composite on a
+# `D`-dimensional mesh that componentwise gradient already *is* the gradient tensor:
+# `components(∇ₕ(uₕ)[i])[j]` is `D₋ᵢ(uⱼ)`, the `(i, j)` entry. That dispatch is also the one
+# `test/space/composite_operators.jl`'s "Componentwise equality"/"Vectorial forms" testsets
+# exercise for leaf counts that have nothing to do with the mesh dimension (a multi-field
+# space, not a vector field); giving `∇ₕ` a second, more specific method for `D`-leaf
+# composites -- the only way to make it reject a mismatched leaf count -- would take over
+# every composite call regardless of leaf count (Julia dispatch has no way to prefer it only
+# when the leaf count happens to match `D`) and break that already-tested generic behaviour.
+# So no method is added here: the vector-field reading of `∇ₕ(uₕ)`/`∇₊ₕ(uₕ)` for a `D`-leaf
+# composite is the existing one, not a new one, and it does not reject other leaf counts --
+# only `εₕ` below does, since it has no such pre-existing generic meaning to preserve.
+#
+# The strain tensor is not simply that sum, though. `D₋ⱼ(uᵢ)` and `D₋ᵢ(uⱼ)` are staggered at
+# different points -- a backward difference along `xⱼ` sits half a cell along `j`, one along
+# `xᵢ` sits half a cell along `i` -- so adding them where they stand would add values that do
+# not belong to the same grid point. The averages `M₋ᵢ`/`M₋ⱼ` (operators/average.jl) relocate
+# each term to the point the two share before the sum, which is what pins `ε_ii` to a face
+# centre (offset in one direction) and `ε_ij` (`i != j`) to an edge centre (offset in two):
+#
+#     ε_ii(uₕ) = D₋ᵢ(uᵢ)
+#     ε_ij(uₕ) = (M₋ᵢ(D₋ⱼ(uᵢ)) + M₋ⱼ(D₋ᵢ(uⱼ))) / 2                                  (i != j)
+#
+# the same convention `docs/src/examples/elasticity_3d.jl` hand-expands term by term (its own
+# document-local `εₕ(p, i, j)` closure), which this replaces as a general operator.
+#
+# `divₕ` needs no extension for this. #158's `divₕ` (above) is the unstaggered
+# `Σᵢ D₋ᵢ(uᵢ)`, the SBP dual `∇ₕ`/`inner₊` already close an integration-by-parts identity
+# against (`test/space/discrete_calculus_identities.jl`, `test/space/sbp_identities.jl`,
+# `test/space/inference_allocation.jl`); it already accepts a `D`-leaf composite and returns a
+# grid function, which is everything this subplan's goal asks of `divₕ`. The elasticity
+# example's own divergence term, `Σᵢ M₋ⱼM₋ₖ(D₋ᵢuᵢ)` (bringing every direction's contribution to
+# the one cell-centred point before summing, `{j, k}` the two directions other than `i`), is a
+# *different* object with a different staggering, needed only there; folding it into `divₕ`
+# would change what `divₕ` means for every existing caller of that identity rather than extend
+# it, so it is left to whatever the elasticity example itself becomes (S6.6) instead.
+
+# The backward average, in place: `out[I] = (out[I] + out[I - eᵢ]) / 2` along `DIM`, zero on
+# the first slice, exactly `_average_engine!`'s `Backward()` case (operators/average.jl)
+# computes out of place. `_stencil_ranges`/`_stencil_step` are the same shared traversal
+# helpers `_difference_engine!` (difference.jl) and the accumulating engines above build the
+# in-place, `@inbounds @simd` engines out of; this one cannot join them, because it needs the
+# *reverse* of their order.
+#
+# Reversed, because `out[I - eᵢ]` must still hold its pre-averaged value when `I` is visited.
+# Two points that differ only along `DIM` keep their relative order under a full reversal of
+# `CartesianIndices` (their linear indices differ by a fixed positive multiple of `step`
+# alone, so whichever is smaller stays smaller, just later in the reversed sequence) even
+# though the reversed traversal interleaves points from other lines (other coordinates)
+# between them -- irrelevant here, since those touch different memory. That is what lets the
+# strain tensor's off-diagonal entries average a freshly-written difference into its own
+# destination without a scratch array of their own. Not `@simd`: consecutive iterations can be
+# the very two points this loop's own carried dependency links.
+@inline function _avg_backward_inplace!(
+        out::AbstractVector, dims::NTuple{D, Int}, ::Val{DIM}
+) where {D, DIM}
+    li = LinearIndices(dims)
+    step = _stencil_step(Val(DIM), Val(D))
+    interior, boundary = _stencil_ranges(axes(li), Val(DIM), Backward())
+
+    # The interior's first slice (`I[DIM] == 2`) reads the boundary slice
+    # (`I[DIM] == 1`) as its neighbour, so the boundary is zeroed *after* the interior
+    # pass has read it, not before -- zeroing it first would feed the interior loop's
+    # last read a value the average operator itself put there, not the field's own.
+    @inbounds for I in Iterators.reverse(CartesianIndices(interior))
+        idx = li[I]
+        out[idx] = (out[idx] + out[li[I - step]]) / 2
+    end
+
+    @inbounds for I in CartesianIndices(boundary)
+        out[li[I]] = zero(eltype(out))
+    end
+    return nothing
+end
+
+# `ε_ii = D₋ᵢ(uᵢ)`, written straight into its destination's own storage: no averaging, so no
+# in-place hazard to work around.
+@inline function _strain_diag!(dest, comps, Ωₕ, dims, ::Val{i}) where {i}
+    h = backward_spacings_for_derivative(Ωₕ(i))
+    _difference_engine!(parent(dest[i][i]), parent(comps[i]), h, dims, Backward(), Val(i))
+    return nothing
+end
+
+# `ε_ij = (M₋ᵢ(D₋ⱼ(uᵢ)) + M₋ⱼ(D₋ᵢ(uⱼ))) / 2`, `i != j`, computed once and copied into both
+# `dest[i][j]` and `dest[j][i]` -- symmetric by construction, rather than by two equal but
+# independent computations that would only agree to floating-point rounding. Each half of the
+# sum is written into its own destination slot (`dest[i][j]` and `dest[j][i]` in turn), then
+# averaged into itself in place, so the pair needs no scratch array beyond the two
+# destinations the caller already owns.
+@inline function _strain_pair!(dest, comps, Ωₕ, dims, ::Val{i}, ::Val{j}) where {i, j}
+    dij, dji = dest[i][j], dest[j][i]
+    hj = backward_spacings_for_derivative(Ωₕ(j))
+    hi = backward_spacings_for_derivative(Ωₕ(i))
+
+    _difference_engine!(parent(dij), parent(comps[i]), hj, dims, Backward(), Val(j))
+    _avg_backward_inplace!(parent(dij), dims, Val(i))
+
+    _difference_engine!(parent(dji), parent(comps[j]), hi, dims, Backward(), Val(i))
+    _avg_backward_inplace!(parent(dji), dims, Val(j))
+
+    dij .= (dij .+ dji) ./ 2
+    dji .= dij
+    return nothing
+end
+
+# One row (fixed `i`) of the tensor: the diagonal entry, then every off-diagonal pair
+# `(i, j)` with `j > i` (the mirror `(j, i)` is filled by the same call, `_strain_pair!`
+# writing both). Recursion on `Val(d)` rather than a loop over `1:D`, for the same boxing
+# reason `_accumulate_direction!` above is written this way (gpena/Bramble.jl#146).
+@inline function _strain_offdiag!(dest, comps, Ωₕ, dims, ::Val{i}, ::Val{j}, ::Val{D}) where {i, j, D}
+    j > i && _strain_pair!(dest, comps, Ωₕ, dims, Val(i), Val(j))
+    _strain_offdiag!(dest, comps, Ωₕ, dims, Val(i), Val(j - 1), Val(D))
+    return nothing
+end
+
+@inline _strain_offdiag!(dest, comps, Ωₕ, dims, ::Val{i}, ::Val{0}, ::Val{D}) where {i, D} = nothing
+
+@inline function _strain_rows!(dest, comps, Ωₕ, dims, ::Val{i}, ::Val{D}) where {i, D}
+    _strain_diag!(dest, comps, Ωₕ, dims, Val(i))
+    _strain_offdiag!(dest, comps, Ωₕ, dims, Val(i), Val(D), Val(D))
+    _strain_rows!(dest, comps, Ωₕ, dims, Val(i - 1), Val(D))
+    return nothing
+end
+
+@inline _strain_rows!(dest, comps, Ωₕ, dims, ::Val{0}, ::Val{D}) where {D} = nothing
+
+@inline _strain_alloc(comps, ::Val{D}) where {D} = ntuple(
+    _ -> ntuple(_ -> similar(first(comps)), Val(D)), Val(D)
+)
+
+"""
+    εₕ(uₕ) -> NTuple{D, NTuple{D, VectorElement}}
+
+Returns the discrete strain tensor of the vector field `uₕ`,
+
+```math
+\\varepsilon_h(\\textrm{u}_h) = \\tfrac{1}{2}\\left(\\nabla_h \\textrm{u}_h +
+    (\\nabla_h \\textrm{u}_h)^{T}\\right),
+```
+
+entry by entry
+
+```math
+\\varepsilon^{ii}_h(\\textrm{u}_h) = \\textrm{D}_{-,x_i}(\\textrm{u}_{h,i}), \\qquad
+\\varepsilon^{ij}_h(\\textrm{u}_h) = \\tfrac{1}{2}\\left(
+    \\textrm{M}_{-,x_i}\\big(\\textrm{D}_{-,x_j}(\\textrm{u}_{h,i})\\big) +
+    \\textrm{M}_{-,x_j}\\big(\\textrm{D}_{-,x_i}(\\textrm{u}_{h,j})\\big)\\right), \\quad i \\neq j.
+```
+
+`uₕ` is an `NTuple{D, VectorElement}` -- what [`∇ₕ`](@ref) returns -- or a grid function of a
+[`CompositeGridSpace`](@ref) with one leaf per spatial dimension, exactly as [`divₕ`](@ref)
+takes it.
+
+`ε_ii` sits on the face centre a backward difference along `xᵢ` alone reaches; `ε_ij`
+(`i != j`) sits on the edge centre the two averages bring the two halves of the shear term
+to. The result is a `D`-by-`D` nested tuple of grid functions, symmetric by construction:
+`εₕ(uₕ)[i][j] === εₕ(uₕ)[j][i]`.
+
+[`εₕ!`](@ref) writes into a preallocated `D`-by-`D` nested tuple of destinations instead, and
+allocates nothing.
+
+See also: [`∇ₕ`](@ref), [`divₕ`](@ref)
+"""
+function εₕ(uₕ)
+    comps = _field_components(uₕ)
+    Wₕ = _field_space(uₕ)
+    D = dim(mesh(Wₕ))
+    _check_field_arity(comps, Val(D), "εₕ")
+    dest = _strain_alloc(comps, Val(D))
+    return εₕ!(dest, uₕ)
+end
+
+"""
+    εₕ!(dest::NTuple{D, NTuple{D, VectorElement}}, uₕ) -> dest
+
+The in-place form of [`εₕ`](@ref): the discrete strain tensor of `uₕ`, written into `dest`.
+
+Allocates nothing, where the allocating form allocates its `D * D` results. Returns `dest`,
+so it composes.
+
+`dest[i][j]` and `dest[j][i]` end up holding the same values for `i != j` (`εₕ` is symmetric
+by construction); both are written, so either may be read.
+"""
+function εₕ!(dest::NTuple{D, NTuple{D, VectorElement}}, uₕ) where {D}
+    comps = _field_components(uₕ)
+    Wₕ = _field_space(uₕ)
+    dim(mesh(Wₕ)) == D || throw(
+        DimensionMismatch(
+        "εₕ! destination is $(D)x$D but the mesh is $(dim(mesh(Wₕ)))D"
+    ),
+    )
+    _check_field_arity(comps, Val(D), "εₕ!")
+    Ωₕ = mesh(Wₕ)
+    dims = npoints(Ωₕ, Tuple)
+    _strain_rows!(dest, comps, Ωₕ, dims, Val(D), Val(D))
+    return dest
+end

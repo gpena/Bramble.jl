@@ -70,6 +70,11 @@ Manifest.toml
 benchmark/*
 !benchmark/benchmarks.jl
 !benchmark/Project.toml
+# v3.3.0 standalone measurement scripts (gpena/Bramble.jl#185 #217 #175 #190)
+!benchmark/operator_matrices.jl
+!benchmark/finch_assembly.jl
+!benchmark/backends.jl
+!benchmark/polyester_crossover.jl
 !benchmark/baselines/
 !benchmark/baselines/*.json
 research/

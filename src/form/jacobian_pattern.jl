@@ -14,6 +14,13 @@
 # not shifted by the term's own offsets -- so the second contribution's reach is exactly `I`
 # widened by whatever stencil op the coefficient was itself built from (e.g. Mₕ's `{0,-1}`),
 # at every row the term reaches from `I`. That composition is what this file adds.
+#
+# Left out of the matrix-type seam (S1.2, gpena/Bramble.jl#12): both methods below always
+# return a `SparseMatrixCSC{Bool}`, regardless of `a`'s own backend. A Jacobian sparsity
+# pattern for `ADTypes.AbstractSparsityDetector` is a sparsity pattern, not a system matrix
+# the backend controls, and neither method here ever reads `matrix_type(backend(...))` --
+# they only walk `a`'s AST and push `(row, col)` pairs into `sparse!`. A dense-backend form
+# is expected to produce the same nonzero *count* as CSC, not the same matrix type.
 
 # Whether an earlier stencil entry already named this row offset -- so the coefficient's own
 # reach is added once per point per distinct row, not once per (off_u, off_v) pair.

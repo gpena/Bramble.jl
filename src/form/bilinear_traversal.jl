@@ -7,10 +7,25 @@
 
 # --- Utility helpers -------------------------------------------------------------- #
 
-# The nzval index storing (row, col) in A, or 0 if it names no stored entry. A linear scan
-# of the column when it holds few entries, a binary search otherwise -- both rely on
-# `SparseMatrixCSC`'s own invariant that `rowval` is sorted within each column.
-@inline function _find_nzval_position(A::SparseMatrixCSC, row::Int, col::Int)
+"""
+    _scatter_position(A::AbstractMatrix, row::Int, col::Int) -> Int
+
+Where entry `(row, col)` lives in `A`'s own storage, or `0` for a matrix type that can
+answer "not stored" (only [`SparseMatrixCSC`](@ref) does; every dense fallback below always
+answers a valid position).
+
+The seam a new backend's matrix type implements to plug into assembly (S1.1,
+gpena/Bramble.jl#12): `PatternSink`, `RecordSink`, `ReplaySink`, `DiagonalReplaySink` and
+[`add_to_sparse!`](@ref) reduce to this and [`_scatter_add!`](@ref) once the raw `nzval`/
+linear-index field access each used to do directly is factored out here.
+
+The `SparseMatrixCSC` method is exactly the position search this file always ran: a linear
+scan of the column when it holds few entries, a binary search otherwise -- both rely on
+`SparseMatrixCSC`'s own invariant that `rowval` is sorted within each column. The generic
+`AbstractMatrix` fallback needs no search at all: every `(row, col)` inside the matrix's
+bounds is "stored" for a dense backend, at `LinearIndices(A)[row, col]`.
+"""
+@inline function _scatter_position(A::SparseMatrixCSC, row::Int, col::Int)
     p1 = A.colptr[col]
     p2 = A.colptr[col + 1] - 1
 
@@ -38,8 +53,28 @@
     return 0
 end
 
+@inline _scatter_position(A::AbstractMatrix, row::Int, col::Int) = LinearIndices(A)[row, col]
+
 """
-    add_to_sparse!(A::SparseMatrixCSC, row::Int, col::Int, val::Number, term) -> Nothing
+    _scatter_add!(A::AbstractMatrix, pos::Int, val) -> Nothing
+
+Add `val` at the position [`_scatter_position`](@ref) named in `A`'s own storage.
+
+`SparseMatrixCSC`'s method writes `nzval[pos]`; the generic `AbstractMatrix` fallback writes
+`A[pos]` directly (linear indexing into the backing array), the other half of the seam
+[`_scatter_position`](@ref) documents.
+"""
+@inline function _scatter_add!(A::SparseMatrixCSC, pos::Int, val)
+    @inbounds A.nzval[pos] += val
+    return nothing
+end
+@inline function _scatter_add!(A::AbstractMatrix, pos::Int, val)
+    @inbounds A[pos] += val
+    return nothing
+end
+
+"""
+    add_to_sparse!(A::AbstractMatrix, row::Int, col::Int, val::Number, term) -> Nothing
 
 Add `val` to `A[row, col]`, which the preallocated sparsity pattern is required to contain.
 
@@ -58,10 +93,10 @@ branch that throws.
 See also: [`allocate_system_matrix`](@ref) and [`RecordSink`](@ref), which raises the same
 way on the serial recording pass.
 """
-@inline function add_to_sparse!(A::SparseMatrixCSC, row::Int, col::Int, val::Number, term)
-    pos = _find_nzval_position(A, row, col)
+@inline function add_to_sparse!(A::AbstractMatrix, row::Int, col::Int, val::Number, term)
+    pos = _scatter_position(A, row, col)
     pos == 0 && _throw_missing_pattern_entry(term)
-    @inbounds A.nzval[pos] += val
+    _scatter_add!(A, pos, val)
     return nothing
 end
 
@@ -722,16 +757,16 @@ function _sink_entry!(sink::_SegmentCountSink, ::Int, ::Int, weight, ::Int)
 end
 
 """
-    RecordSink(A::SparseMatrixCSC, term, point_ptr::Vector{Int}, positions::Vector{Int}, α, n::Int)
+    RecordSink(A::AbstractMatrix, term, point_ptr::Vector{Int}, positions::Vector{Int}, α, n::Int)
 
 Add a term's values to `A` and record where each entry landed, building the replay cache.
 
-For each entry it searches `A` for the `(row, col)`'s slot in `nzval`, adds the weight
-there, and writes the slot into `positions[n]` for a running `n` (`positions` is
-preallocated to its final size by [`_SegmentCountSink`](@ref) before `RecordSink` ever runs --
-see its docstring for why this is `setindex!`, not `push!`). [`_sink_point!`](@ref) opens each
-grid point's own slice of that list in `point_ptr`, so a later replay can address a point
-directly instead of relying on the walk order.
+For each entry it finds the `(row, col)`'s slot via [`_scatter_position`](@ref), adds the
+weight there with [`_scatter_add!`](@ref), and writes the slot into `positions[n]` for a
+running `n` (`positions` is preallocated to its final size by [`_SegmentCountSink`](@ref)
+before `RecordSink` ever runs -- see its docstring for why this is `setindex!`, not `push!`).
+[`_sink_point!`](@ref) opens each grid point's own slice of that list in `point_ptr`, so a
+later replay can address a point directly instead of relying on the walk order.
 
 The search is the expensive half of assembly, which is why it is done once and replayed by
 [`ReplaySink`](@ref) afterwards.
@@ -743,7 +778,7 @@ The search is the expensive half of assembly, which is why it is done once and r
 
 See also: [`visit_bilinear_stencil`](@ref), [`NzvalSegment`](@ref).
 """
-mutable struct RecordSink{M <: SparseMatrixCSC, TERM, S}
+mutable struct RecordSink{M <: AbstractMatrix, TERM, S}
     const A::M
     const term::TERM
     const point_ptr::Vector{Int}
@@ -756,16 +791,16 @@ end
 _sink_point!(sink::RecordSink, lin_idx::Int, ::CartesianIndex) = (
     @inbounds sink.point_ptr[lin_idx] = sink.n + 1; 0)
 function _sink_entry!(sink::RecordSink, row::Int, col::Int, weight, ::Int)
-    pos = _find_nzval_position(sink.A, row, col)
+    pos = _scatter_position(sink.A, row, col)
     pos == 0 && _throw_missing_pattern_entry(sink.term)
-    @inbounds sink.A.nzval[pos] += sink.α * weight
+    _scatter_add!(sink.A, pos, sink.α * weight)
     sink.n += 1
     @inbounds sink.positions[sink.n] = pos
     return nothing
 end
 
 """
-    ReplaySink(A::SparseMatrixCSC, point_ptr::Vector{Int}, positions::Vector{Int}, α)
+    ReplaySink(A::AbstractMatrix, point_ptr::Vector{Int}, positions::Vector{Int}, α)
 
 Add a term's values to `A` using slots recorded earlier by [`RecordSink`](@ref).
 
@@ -782,7 +817,7 @@ sink. Carrying it as a mutable field measured about 20% slower on the cheapest r
 
 See also: [`visit_bilinear_stencil`](@ref).
 """
-struct ReplaySink{M <: SparseMatrixCSC, S}
+struct ReplaySink{M <: AbstractMatrix, S}
     A::M
     point_ptr::Vector{Int}
     positions::Vector{Int}
@@ -793,7 +828,7 @@ end
 Base.@propagate_inbounds function _sink_entry!(
         sink::ReplaySink, ::Int, ::Int, weight, slot::Int
 )
-    @inbounds sink.A.nzval[sink.positions[slot]] += sink.α * weight
+    @inbounds _scatter_add!(sink.A, sink.positions[slot], sink.α * weight)
     return nothing
 end
 
@@ -814,7 +849,7 @@ end
 # docstring and others' made to it and to its neighbours, all silently broken the same way).
 # The docstring must be the last thing before the struct, so this note moved above it.
 """
-    DiagonalReplaySink(A::SparseMatrixCSC, interior::CartesianIndices, base::Vector{Int}, stride::Vector{Int}, P::Int, α)
+    DiagonalReplaySink(A::AbstractMatrix, interior::CartesianIndices, base::Vector{Int}, stride::Vector{Int}, P::Int, α)
 
 Add a term's values to `A`'s interior core using [`Segment`](@ref)'s per-tap stride
 instead of a stored position per entry.
@@ -830,7 +865,7 @@ runs at all.
 
 See also: [`visit_bilinear_stencil`](@ref), `_replay_segment!`.
 """
-mutable struct DiagonalReplaySink{M <: SparseMatrixCSC, D, R, S}
+mutable struct DiagonalReplaySink{M <: AbstractMatrix, D, R, S}
     const A::M
     const interior::CartesianIndices{D, R}
     const base::Vector{Int}
@@ -879,6 +914,6 @@ Base.@propagate_inbounds function _sink_entry!(
 )
     n = sink.n
     k0 = slot - n * sink.P
-    @inbounds sink.A.nzval[sink.base[k0 + 1] + sink.stride[k0 + 1] * n] += sink.α * weight
+    @inbounds _scatter_add!(sink.A, sink.base[k0 + 1] + sink.stride[k0 + 1] * n, sink.α * weight)
     return nothing
 end

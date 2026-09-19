@@ -253,6 +253,53 @@ fire when `A`/`B` mix components, and `simplify_ast(::OperatorScale)`/
 mixes, rather than wrapping it, whenever `BilinearProduct`'s/`LinearProduct`'s own
 distribution produces one and something still wraps it from outside.
 
+## The matrix-type seam (S1.1)
+
+Assembly used to name `SparseMatrixCSC` in every signature between `allocate_system_matrix`
+and the sinks that scatter into it — 20 methods across `bilinear_execution.jl` alone. The
+milestone that made a `Matrix{Float64}` backend assemble the same values as CSC
+([gpena/Bramble.jl#12](https://github.com/gpena/Bramble.jl/issues/12)) narrowed that down to
+four primitives, each with a `SparseMatrixCSC` method and a generic `AbstractMatrix`
+fallback. A new backend's matrix type implements exactly these to plug into the shared
+traversal (`visit_bilinear_stencil`, above) and into `allocate_system_matrix`:
+
+| Primitive | Where | `SparseMatrixCSC` | Generic `AbstractMatrix` fallback |
+|:--- |:--- |:--- |:--- |
+| `_scatter_position(A, row, col) -> Int` | `bilinear_traversal.jl` | search `colptr`/`rowval`, `0` if absent | `LinearIndices(A)[row, col]`, never `0` |
+| `_scatter_add!(A, pos, val)` | `bilinear_traversal.jl` | `A.nzval[pos] += val` | `A[pos] += val` (linear indexing) |
+| `_allocate_from_pattern(::Type{MT}, nrows, ncols, I, J, V) -> MT` | `bilinear_pattern.jl` | `sparse!(I, J, V, nrows, ncols, +)` | `zeros(eltype(V), nrows, ncols)`, scattered from `(I, J, V)` with `+=` |
+| `_zero_stored!(A)` | `bilinear.jl` | `fill!(nonzeros(A), 0)` | `fill!(A, 0)` |
+
+`PatternSink`, `RecordSink`, `ReplaySink` and `DiagonalReplaySink` (`bilinear_traversal.jl`)
+reduce to the first two: their `_sink_entry!` methods call `_scatter_position`/
+`_scatter_add!` instead of reading `nzval`/`rowval` directly, so `RecordSink{M<:AbstractMatrix,...}`
+et al. record and replay through the seam rather than around it. `add_to_sparse!` (the
+threaded path's per-point scatter) is the same two calls. `allocate_system_matrix`
+(`bilinear_pattern.jl`) reads `matrix_type(backend(test_space(form)))` and hands the
+coordinate triplet `PatternSink` collected to `_allocate_from_pattern`; `assemble`/`assemble!`
+(`bilinear.jl`) then just operate on whatever concrete `A` that returned, dispatching through
+the same four primitives via ordinary Julia method dispatch, not by inspecting the type
+themselves.
+
+`dirichlet_constraints.jl` needed none of this: `dirichlet_bc!`, `_dirichlet_bc_rows!`,
+`_dirichlet_bc_indices!` and `symmetrize!` already carried a `SparseMatrixCSC` fast path
+beside a dense `AbstractMatrix` fallback before this milestone, and both agree with each
+other today ("Dense & sparse agreement", `test/form/symmetrize.jl`).
+
+The band-coloured threaded sweep (`_scatter_point!`, `_sweep_bilinear!`,
+`_assemble_blocks_parallel!`, all in `bilinear_execution.jl`) stays `SparseMatrixCSC`-only:
+it already calls the now-generic `add_to_sparse!`, so nothing about it is unsafe for another
+matrix type, but nobody has measured whether threading it buys anything over the serial
+record/replay pass for a dense or future banded/tridiagonal layout. `assemble_parallel!` on
+any other matrix type falls back to the ordinary serial assembly instead
+(`_assemble_bilinear_parallel_core!(A::AbstractMatrix, ...)`), documented in a comment there
+rather than silently. Threading a non-CSC backend is future work.
+
+`test/form/bilinear.jl`'s "Dense backend" testset is the regression check: a
+`backend(matrix_type = Matrix{Float64})` mesh assembles to a `Matrix{Float64}` equal to the
+default CSC assembly, with and without `dirichlet`/`symmetrize!`, and `assemble!` refills it
+— while the CSC path's own `assemble!` keeps allocating zero bytes.
+
 ```@autodocs
 Modules = [Bramble]
 Public = false

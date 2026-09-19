@@ -62,9 +62,11 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
     @test isbitstype(CpuSerial)
     @test isbitstype(GpuAsync)
 
-    # CpuBatch is deliberately absent until the Polyester extension implements it
-    # (gpena/Bramble.jl#190): a policy nothing dispatches on is a trap, not a placeholder.
-    @test !isdefined(Bramble, :CpuBatch)
+    # CpuBatch ships as a policy type here (gpena/Bramble.jl#190); the sweeps it selects
+    # are implemented by the BramblePolyesterExt package extension, not tested in this file.
+    @test CpuBatch <: CpuPolicy <: ExecutionPolicy
+    @test CpuBatch() isa CpuPolicy
+    @test isbitstype(CpuBatch)
 end
 
 @testset "Backend configuration and allocation" begin
@@ -434,6 +436,34 @@ end
             @test_throws ErrorException metal_backend()
             @test_throws ErrorException metal_backend(Float32)
         end
+    end
+end
+
+@testset "Extension-backed backend stubs" begin
+    # Invariants tested (gpena/Bramble.jl#214 #216): csr_backend, banded_backend and
+    # block_banded_backend follow the metal_backend precedent -- calling them without their
+    # package loaded errors, naming the package, rather than a MethodError deeper in.
+    for (fn, pkg) in ((csr_backend, "SparseMatricesCSR"),
+                      (banded_backend, "BandedMatrices"),
+                      (block_banded_backend, "BlockBandedMatrices"))
+        err = try
+            fn()
+            nothing
+        catch e
+            e
+        end
+        @test err isa ErrorException
+        @test occursin(pkg, sprint(showerror, err))
+
+        # the policy keyword is still accepted, only the resolution errors
+        err_policy = try
+            fn(Float32; policy = Parallel())
+            nothing
+        catch e
+            e
+        end
+        @test err_policy isa ErrorException
+        @test occursin(pkg, sprint(showerror, err_policy))
     end
 end
 

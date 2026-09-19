@@ -159,7 +159,8 @@ const _AVERAGE_OP_CONFIGS = [
         average_alias = :M₊,
         vectorial_average_alias = :M₊ₕ,
         dir_string_lowercase = "forward",
-        math_op = "\\frac{u_{i} + u_{i+1}}{2}"
+        math_op = "\\frac{u_{i} + u_{i+1}}{2}",
+        stencil_op = :ForwardAvgOp
     ),
     (
         direction = Backward(),
@@ -167,7 +168,8 @@ const _AVERAGE_OP_CONFIGS = [
         average_alias = :M,
         vectorial_average_alias = :Mₕ,
         dir_string_lowercase = "backward",
-        math_op = "\\frac{u_{i-1} + u_{i}}{2}"
+        math_op = "\\frac{u_{i-1} + u_{i}}{2}",
+        stencil_op = :BackwardAvgOp
     )
 ]
 
@@ -180,6 +182,7 @@ for config in _AVERAGE_OP_CONFIGS
     vectorial_average_alias = config.vectorial_average_alias
     dir_string_lowercase = config.dir_string_lowercase
     math_op = config.math_op
+    stencil_op = config.stencil_op
 
     @eval begin
         # --- In-place applicators ---
@@ -205,19 +208,26 @@ for config in _AVERAGE_OP_CONFIGS
             return $(Symbol(average_name, :_dim!))(out, in, nothing, dims, average_dim)
         end
 
-        # --- Matrix operator functions ---
+        # --- Retained Kronecker oracle (gpena/Bramble.jl#185) ---
+        #
+        # The body `$average_name` used to have, kept under a `_kron_` name so
+        # `kronecker_operator_matrix` has an independent construction to check
+        # `stencil_matrix` against.
+        function $(Symbol(:_kron_, average_name))(
+                Ωₕ::AbstractMeshType, dim_val::Val; vector_cache = __vector(Ωₕ)
+        )
+            avg_matrix = _average_operator(Ωₕ, $dir_instance, dim_val)
+            _average_weights!(vector_cache, Ωₕ, $dir_instance, dim_val)
+            return _scale_rows!(avg_matrix, vector_cache)
+        end
+
+        # --- Matrix operator functions (single-pass, gpena/Bramble.jl#185) ---
         @doc """
             $($(QuoteNode(average_name)))(arg, dim_val::Val)
 
         Constructs or applies the $($dir_string_lowercase) averaging operator, representing the operation ``$($math_op)``.
         """
-        @inline function $average_name(
-                Ωₕ::AbstractMeshType, dim_val::Val; vector_cache = __vector(Ωₕ)
-        )
-            avg_matrix = _average_operator(Ωₕ, $dir_instance, dim_val)
-            _average_weights!(vector_cache, Ωₕ, $dir_instance, dim_val)
-            return vector_cache .* avg_matrix
-        end
+        @inline $average_name(Ωₕ::AbstractMeshType, dim_val::Val{DIM}) where {DIM} = stencil_matrix(Ωₕ, $(stencil_op){DIM}())
 
         # --- Generic applicators ---
         #
@@ -265,3 +275,14 @@ end
     formula="\\frac{u_{i-1} + u_{i}}{2}",
     dispatch_alias=Mₕ,
     vectorial_alias=Mₕ)
+
+# --- Kronecker oracle dispatch (gpena/Bramble.jl#185) --------------------------------- #
+#
+# `kronecker_operator_matrix` is declared in shift.jl; each family's dispatch method maps
+# its public per-axis alias to the `_kron_*` construction kept above.
+for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
+    for (stem, kron_fn) in ((:M, :_kron_backward_average), (:M₊, :_kron_forward_average))
+        alias = Symbol(stem, suffix)
+        @eval kronecker_operator_matrix(Ωₕ::AbstractMeshType, ::typeof($alias)) = $kron_fn(Ωₕ, Val($i))
+    end
+end

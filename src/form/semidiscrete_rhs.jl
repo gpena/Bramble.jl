@@ -65,6 +65,27 @@ function _diagonal_or_throw(M::SparseMatrixCSC)
     return d
 end
 
+# Generic `AbstractMatrix` fallback (S1.2's extension of the matrix-type seam,
+# gpena/Bramble.jl#12): no `nonzeros`/`rowvals` to walk on a dense-backend matrix, so the
+# off-diagonal check reads every entry directly instead.
+function _diagonal_or_throw(M::AbstractMatrix)
+    n = size(M, 1)
+    d = zeros(eltype(M), n)
+    for j in 1:n, i in 1:n
+        if i == j
+            d[j] = M[i, j]
+        elseif !iszero(M[i, j])
+            throw(
+                ArgumentError(
+                "semidiscretize_rhs requires a diagonal mass matrix; column $j of the " *
+                "assembled `mass` form has an off-diagonal entry.",
+            ),
+            )
+        end
+    end
+    return d
+end
+
 """
     semidiscretize_rhs(sd::Semidiscretization) -> SemidiscretizeRHS
 

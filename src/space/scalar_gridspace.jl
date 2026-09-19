@@ -1,6 +1,6 @@
 """
-    SpaceWeights(innerh::VT, innerplus::NTuple{D, VT}, built_version::Int)
-    SpaceWeights{D, VT}(innerh::VT, innerplus::NTuple{D, VT}, built_version::Int)
+    SpaceWeights(innerh::VT, innerplus::NTuple{D, VT}, aligned::NTuple{D, VT}, cellfactor::NTuple{D, VT}, built_version::Int)
+    SpaceWeights{D, VT}(innerh::VT, innerplus::NTuple{D, VT}, aligned::NTuple{D, VT}, cellfactor::NTuple{D, VT}, built_version::Int)
 
 Holds the diagonal weight vectors for a grid space's discrete inner products, both the
 standard ``L^2`` weights and the staggered ones, precomputed once rather than recomputed
@@ -10,6 +10,15 @@ on every call.
 
   - `innerh::VT`: weight vector for the standard discrete ``L^2`` inner product (`:innerₕ`), based on cell measures (``|\\square_k|``).
   - `innerplus::NTuple{D, VT}`: tuple of weight vectors for modified, staggered inner products (`:inner₊ₓ`, `:inner₊ᵧ`, etc.), with one vector for each spatial dimension.
+  - `aligned::NTuple{D, VT}`: per-axis factor ``h_d(i)`` (length `npoints(Ωₕ, d)`, not the
+    full grid) -- the same values [`innerplus`](@ref) uses on the axis aligned with its own
+    difference direction. Kept so [`weights`](@ref)`(Wₕ, Val(S))` can build any staggered
+    set from `O(D)` numbers instead of a fresh `O(n^D)` vector (gpena/Bramble.jl#115, #234).
+  - `cellfactor::NTuple{D, VT}`: per-axis factor ``h_d(i+1/2)`` (also length
+    `npoints(Ωₕ, d)`). This is [`innerh`](@ref)'s own per-axis cell measure, and doubles as
+    every staggered direction's transverse factor: the two coincide for any axis with more
+    than one point (both read the submesh's own cached half-spacings), so one vector serves
+    both roles rather than two.
   - `built_version::Int`: the mesh's [`_mesh_version`](@ref) at the moment these weights
     were computed (gpena/Bramble.jl#221) -- [`weights`](@ref) re-checks it against the
     mesh's current version on every access, so a space built before an in-place mutation
@@ -23,6 +32,10 @@ struct SpaceWeights{D, VT <: AbstractVector}
     innerh::VT
     "a tuple of weight vectors for modified, staggered inner products (`:inner₊ₓ`, `:inner₊ᵧ`, etc.), with one vector for each spatial dimension."
     innerplus::NTuple{D, VT}
+    "per-axis aligned factor ``h_d(i)``, one vector of length `npoints(Ωₕ, d)` per axis."
+    aligned::NTuple{D, VT}
+    "per-axis cell-measure factor ``h_d(i+1/2)``, one vector of length `npoints(Ωₕ, d)` per axis; shared by `innerh` and every staggered direction's transverse factor."
+    cellfactor::NTuple{D, VT}
     "the mesh's `_mesh_version` when these weights were built; see the staleness note above."
     built_version::Int
 end
@@ -162,31 +175,36 @@ function space_weights(Ωₕ::AbstractMeshType{1})
     inner_h_vec = __vector(Ωₕ)
     _innerh_weights!(inner_h_vec, Ωₕ)
 
+    # One dimension has no transverse axis, so the aligned and cell-measure per-axis
+    # factors *are* the two full-length vectors above -- no separate small vector to build.
     return SpaceWeights{1, typeof(inner_h_vec)}(
-        inner_h_vec, (innerplus₁,), _mesh_version(Ωₕ)
+        inner_h_vec, (innerplus₁,), (innerplus₁,), (inner_h_vec,), _mesh_version(Ωₕ)
     )
 end
 
 function space_weights(Ωₕ::AbstractMeshType{D}) where {D}
     innerplus = ntuple(i -> __vector(Ωₕ), Val(D))
 
-    # Per-axis factors. Neither depends on the direction `i` being assembled, so each
-    # is computed once here rather than D times inside the loop below:
-    #   `main[k]`  applies to the axis aligned with the difference direction,
-    #   `mean[k]`  applies to every transverse axis.
-    main = ntuple(k -> __vector(Ωₕ(k)), Val(D))
-    mean = ntuple(k -> __vector(Ωₕ(k)), Val(D))
+    # Per-axis factors, kept on `SpaceWeights` (not just used and discarded here) so
+    # `weights(Wₕ, Val(S))` can answer any staggered set from `O(D)` numbers rather than a
+    # fresh `O(n^D)` vector (gpena/Bramble.jl#115, #234):
+    #   `aligned[k]`     applies to the axis aligned with the difference direction.
+    #   `cellfactor[k]`  applies to every transverse axis, and is exactly the submesh's own
+    #                    cell measures -- the two coincide for any axis with more than one
+    #                    point, since both read the same cached half-spacings vector, so
+    #                    this is a zero-copy reference rather than a second fill.
+    aligned = ntuple(k -> __vector(Ωₕ(k)), Val(D))
+    cellfactor = ntuple(k -> cell_measures(Ωₕ(k)), Val(D))
     for k in 1:D
-        _innerplus_weights!(main[k], Ωₕ, k)
-        _innerplus_mean_weights!(mean[k], Ωₕ, k)
+        _innerplus_weights!(aligned[k], Ωₕ, k)
     end
 
     npts_tuple = npoints(Ωₕ, Tuple)
 
     # Assemble the weights for each difference direction `i` by taking the aligned
-    # factor on axis `i` and the mean factor on all the others.
+    # factor on axis `i` and the cell-measure factor on all the others.
     for i in 1:D
-        factors = ntuple(k -> k == i ? main[k] : mean[k], Val(D))
+        factors = ntuple(k -> k == i ? aligned[k] : cellfactor[k], Val(D))
 
         # `ReshapedArray` views the flat `innerplus[i]` vector without copying it.
         v = Base.ReshapedArray(innerplus[i], npts_tuple, ())
@@ -199,7 +217,7 @@ function space_weights(Ωₕ::AbstractMeshType{D}) where {D}
     _innerh_weights!(inner_h_vec, Ωₕ)
 
     return SpaceWeights{D, typeof(inner_h_vec)}(
-        inner_h_vec, innerplus, _mesh_version(Ωₕ)
+        inner_h_vec, innerplus, aligned, cellfactor, _mesh_version(Ωₕ)
     )
 end
 
@@ -215,10 +233,11 @@ end
     weights(Wₕ::ScalarGridSpace, ::Innerh) -> AbstractVector
     weights(Wₕ::ScalarGridSpace, ::Innerplus) -> NTuple{D, AbstractVector}
     weights(Wₕ::ScalarGridSpace, ::InnerProductType, i::Int) -> AbstractVector
+    weights(Wₕ::ScalarGridSpace{D}, ::Val{S}) where {D, S} -> AbstractVector
 
 Returns the precomputed weight vectors for discrete inner products.
 
-The weights are diagonal matrices (stored as vectors) used in computing discrete 
+The weights are diagonal matrices (stored as vectors) used in computing discrete
 ``L^2`` inner products. They represent cell measures or staggered grid spacings.
 
 # Methods
@@ -229,6 +248,13 @@ The weights are diagonal matrices (stored as vectors) used in computing discrete
 4. `weights(Wₕ, Innerplus(), i)` - Returns weights for modified inner product in direction `i`
 5. `weights(Wₕ, Innerh(), i)` - Same as `weights(Wₕ, Innerh())`; the cell measures do not
    depend on a direction, so `i` is accepted and ignored for interface symmetry
+6. `weights(Wₕ, Val(S))` - Returns the weights for the staggered set `S ⊆ 1:D`, whose entry
+   at grid index `I` is ``\\prod_{d \\in S} h_d(I_d) \\cdot \\prod_{d \\notin S} h_d(I_d +
+   1/2)`` (gpena/Bramble.jl#115, #234). `S` is an `NTuple{K, Int}` with `K ≤ D` and any
+   axis order; `weights(Wₕ, Val(()))` is `weights(Wₕ, Innerh())` and `weights(Wₕ,
+   Val((d,)))` is `weights(Wₕ, Innerplus(), d)`, returning the very same vector rather than
+   a recomputed copy. Every other `S` returns a [`SeparableWeights`](@ref), computed lazily
+   from the per-axis factors rather than materialised over the whole grid.
 
 # Examples
 
@@ -265,7 +291,7 @@ exists. Call [`gridspace`](@ref) again to get a space that reads the mutated mes
 `CompositeGridSpace` this is checked per leaf, the moment `innerₕ`/etc. recurse into it --
 there is no separate composite-level check to keep in step.
 
-See also: [`SpaceWeights`](@ref), [`Innerh`](@ref), [`Innerplus`](@ref), `innerₕ`
+See also: [`SpaceWeights`](@ref), [`SeparableWeights`](@ref), [`Innerh`](@ref), [`Innerplus`](@ref), `innerₕ`
 """
 @inline function weights(Wₕ::ScalarGridSpace)
     w = Wₕ.weights
@@ -276,6 +302,68 @@ end
 @inline weights(Wₕ::ScalarGridSpace, ::Innerplus) = weights(Wₕ).innerplus
 @inline weights(Wₕ::ScalarGridSpace, ::Innerh, i) = weights(Wₕ, Innerh())
 @inline weights(Wₕ::ScalarGridSpace, ::Innerplus, i) = weights(Wₕ, Innerplus())[i]
+
+"""
+    SeparableWeights{D, T, VT}(factors::NTuple{D, VT}, dims::NTuple{D, Int})
+
+A lazy, separable weight vector over a `D`-dimensional grid: entry `I` (linear or
+`CartesianIndex{D}`) is ``\\prod_{d=1}^D`` `factors[d][I[d]]`, computed on every access
+rather than stored once for the whole grid.
+
+Returned by [`weights`](@ref)`(Wₕ, Val(S))` for a staggered set `S` that is neither empty
+nor a singleton (those two return one of [`SpaceWeights`](@ref)'s own dense vectors
+directly): `factors[d]` is then the per-axis `aligned` factor for `d ∈ S` and the per-axis
+`cellfactor` for `d ∉ S`, each of length `npoints(Ωₕ, d)` rather than the full grid, so
+building one of these costs `O(D)` numbers, not a fresh `O(n^D)` vector
+(gpena/Bramble.jl#115, #234). A linear `getindex` converts to a `CartesianIndex` first
+(one division per axis); a caller that already holds the `CartesianIndex` -- an assembly
+loop over `local_stencil`, for instance -- should use it directly and skip that cost.
+
+# Fields
+
+  - `factors::NTuple{D, VT}`: the per-axis vectors multiplied together at each index.
+  - `dims::NTuple{D, Int}`: the grid shape, `npoints(Ωₕ, Tuple)`.
+
+See also: [`weights`](@ref), [`SpaceWeights`](@ref).
+"""
+struct SeparableWeights{D, T, VT <: AbstractVector{T}} <: AbstractVector{T}
+    "the per-axis vectors multiplied together at each index."
+    factors::NTuple{D, VT}
+    "the grid shape, `npoints(Ωₕ, Tuple)`."
+    dims::NTuple{D, Int}
+end
+
+@inline Base.size(w::SeparableWeights) = (prod(w.dims),)
+@inline Base.IndexStyle(::Type{<:SeparableWeights}) = IndexLinear()
+
+# No `@boundscheck` here: a `CartesianIndex{D}` doesn't fit the generic `checkbounds`
+# machinery for a 1-dimensional `AbstractVector` (its `size` is `(prod(dims),)`, not
+# `dims`), and every caller with a `CartesianIndex` in hand already has it from iterating
+# `CartesianIndices(dims)` -- the same trust `__prod`'s own callers already extend it.
+@inline function Base.getindex(w::SeparableWeights{D}, I::CartesianIndex{D}) where {D}
+    return __prod(w.factors, I)
+end
+
+@inline function Base.getindex(w::SeparableWeights{D}, li::Int) where {D}
+    @boundscheck checkbounds(w, li)
+    return @inbounds w[CartesianIndices(w.dims)[li]]
+end
+
+@inline weights(Wₕ::ScalarGridSpace, ::Val{()}) = weights(Wₕ, Innerh())
+
+@inline function weights(Wₕ::ScalarGridSpace, ::Val{S}) where {S}
+    return _weights_val(Wₕ, Val(S), Val(length(S)))
+end
+
+@inline _weights_val(Wₕ::ScalarGridSpace{D}, ::Val{S}, ::Val{1}) where {D, S} = weights(Wₕ, Innerplus(), only(S))
+
+@inline function _weights_val(Wₕ::ScalarGridSpace{D}, ::Val{S}, ::Val{K}) where {D, S, K}
+    w = weights(Wₕ)
+    factors = ntuple(d -> (d in S ? w.aligned[d] : w.cellfactor[d]), Val(D))
+    return SeparableWeights{D, eltype(w.innerh), typeof(w.innerh)}(
+        factors, npoints(mesh(Wₕ), Tuple)
+    )
+end
 
 # Kept out of `weights` itself so the success path -- one integer comparison -- is all
 # that is ever compiled inline there; the message (and `summary`, which walks the space's

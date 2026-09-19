@@ -111,14 +111,14 @@ struct SecondOrderSemidiscretization{K, C, L, S, MT, CM, VT, BC, LB, CP} <:
 end
 
 """
-    mass_matrix(sd::SecondOrderSemidiscretization) -> SparseMatrixCSC
+    mass_matrix(sd::SecondOrderSemidiscretization) -> AbstractMatrix
 
 Return the constant mass matrix `M`, whose constrained rows are zero.
 """
 @inline mass_matrix(sd::SecondOrderSemidiscretization) = sd.mass_matrix
 
 """
-    damping_matrix(sd::SecondOrderSemidiscretization) -> Union{SparseMatrixCSC, Nothing}
+    damping_matrix(sd::SecondOrderSemidiscretization) -> Union{AbstractMatrix, Nothing}
 
 Return the assembled damping operator `C`, whose constrained rows are zero, or `nothing` for
 an undamped system.
@@ -126,7 +126,7 @@ an undamped system.
 @inline damping_matrix(sd::SecondOrderSemidiscretization) = sd.damping_matrix
 
 """
-    stiffness_matrix(sd::SecondOrderSemidiscretization) -> SparseMatrixCSC
+    stiffness_matrix(sd::SecondOrderSemidiscretization) -> AbstractMatrix
 
 Return the assembled spatial stiffness operator `K`, whose constrained rows are `eₖ`.
 """
@@ -225,7 +225,7 @@ function (sd::SecondOrderSemidiscretization)(
 end
 
 """
-    block_mass_matrix(sd::SecondOrderSemidiscretization) -> SparseMatrixCSC
+    block_mass_matrix(sd::SecondOrderSemidiscretization) -> AbstractMatrix
 
 Return the `2n × 2n` block-diagonal `blockdiag(mass_matrix(sd), I)`, the mass matrix
 [`second_order_ode_function`](@ref) hands `DynamicalODEFunction`: the `I` block leaves the
@@ -234,7 +234,21 @@ Dirichlet row-zeroing `sd` was built with.
 """
 @inline function block_mass_matrix(sd::SecondOrderSemidiscretization)
     n = size(sd.mass_matrix, 1)
-    return blockdiag(sd.mass_matrix, sparse(I, n, n))
+    return _block_diag_with_identity(sd.mass_matrix, n)
+end
+
+# `SparseArrays.blockdiag` only accepts sparse arguments; a dense-backend `mass_matrix`
+# (S1.2's extension of the matrix-type seam, gpena/Bramble.jl#12) needs its own block
+# assembly instead.
+@inline _block_diag_with_identity(M::SparseMatrixCSC, n) = blockdiag(M, sparse(I, n, n))
+function _block_diag_with_identity(M::AbstractMatrix, n)
+    m = size(M, 1)
+    B = zeros(eltype(M), m + n, m + n)
+    @views B[1:m, 1:m] .= M
+    for i in 1:n
+        B[m + i, m + i] = one(eltype(M))
+    end
+    return B
 end
 
 # --- Display ------------------------------------------------------------------------ #

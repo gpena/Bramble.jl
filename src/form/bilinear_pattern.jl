@@ -12,6 +12,35 @@
 # Float64(::Dual)`), each time only on the AD path (bramble-verification §4).
 @inline _matrix_eltype(ast, form::BilinearForm) = promote_type(_assembled_eltype(ast, form.test_space), eltype(form.trial_space))
 
+"""
+    _allocate_from_pattern(::Type{MT}, nrows::Int, ncols::Int, I::Vector{Int}, J::Vector{Int}, V::AbstractVector) -> MT
+
+Build the `nrows × ncols` matrix a form's sparsity pattern describes, from the coordinate
+triplet `(I, J, V)` `visit_bilinear_stencil`/`PatternSink` collected -- summing `V[k]` into
+any `(row, col)` that `I`/`J` name more than once, matching `sparse!`'s own combiner.
+
+The one place a fresh system matrix is born (S1.1, gpena/Bramble.jl#12): every backend's
+matrix type implements exactly this to be usable with [`allocate_system_matrix`](@ref).
+`SparseMatrixCSC`'s method is `sparse!` itself, consuming `I`/`J` in place. The generic
+`AbstractMatrix` fallback -- the dense `Matrix{Float64}` positive control among them --
+allocates zeros and scatters into it, since a dense matrix has no sparsity pattern to build.
+"""
+@inline function _allocate_from_pattern(
+        ::Type{MT}, nrows::Int, ncols::Int, I_vec::Vector{Int}, J_vec::Vector{Int}, V_vec::AbstractVector
+) where {MT <: SparseMatrixCSC}
+    return sparse!(I_vec, J_vec, V_vec, nrows, ncols, +)
+end
+
+function _allocate_from_pattern(
+        ::Type{MT}, nrows::Int, ncols::Int, I_vec::Vector{Int}, J_vec::Vector{Int}, V_vec::AbstractVector
+) where {MT <: AbstractMatrix}
+    A = zeros(eltype(V_vec), nrows, ncols)
+    @inbounds for k in eachindex(I_vec, J_vec, V_vec)
+        A[I_vec[k], J_vec[k]] += V_vec[k]
+    end
+    return A
+end
+
 # A hint for `sizehint!`, not a real bound: `local_stencil` can return a longer stencil at a
 # boundary point than at this representative interior one, so this can undercount. Cheap to
 # get wrong, since the only cost is a reallocation of `I_vec`/`J_vec` -- computing the true
@@ -26,10 +55,12 @@ function _pattern_size_hint(ast::AST_TYPE, sp, mesh_markers, lin_indices) where 
 end
 
 """
-    allocate_system_matrix(form::BilinearForm, ast = resolve_form_ast(form)) -> SparseMatrixCSC
+    allocate_system_matrix(form::BilinearForm, ast = resolve_form_ast(form)) -> AbstractMatrix
 
-Build the sparse matrix a `BilinearForm` assembles into: the appropriate size, correct sparsity
-pattern, and stored zeros throughout.
+Build the matrix a `BilinearForm` assembles into: the appropriate size, correct sparsity
+pattern, and stored zeros throughout, in `matrix_type(backend(test_space(form)))` --
+`SparseMatrixCSC{Float64,Int}` by default, or whatever [`backend`](@ref) the space's mesh was
+built with (see [`_allocate_from_pattern`](@ref)).
 
 The pattern follows from the stencil rather than coefficient values, remaining invariant while the mesh
 and expression structure are unchanged. Preallocating the matrix once outside loops allows zero-allocation
@@ -69,8 +100,11 @@ function allocate_system_matrix(
 
     visit_bilinear_stencil(PatternSink(I_vec, J_vec), ast, space, 0, 0)
 
+    MT = matrix_type(backend(form.test_space))
     V_vec = _zeros_of(_matrix_eltype(ast, form), length(I_vec))
-    return sparse!(I_vec, J_vec, V_vec, ndofs(form.test_space), ndofs(form.trial_space), +)
+    return _allocate_from_pattern(
+        MT, ndofs(form.test_space), ndofs(form.trial_space), I_vec, J_vec, V_vec
+    )
 end
 
 # Which entries a term can reach, block by block.
@@ -147,6 +181,7 @@ function allocate_system_matrix(
 
     ncols = ndofs(form.trial_space)
     nrows = ndofs(form.test_space)
+    MT = matrix_type(backend(form.test_space))
     V_vec = _zeros_of(_matrix_eltype(probe_ast, form), length(I_vec))
-    return sparse!(I_vec, J_vec, V_vec, nrows, ncols, +)
+    return _allocate_from_pattern(MT, nrows, ncols, I_vec, J_vec, V_vec)
 end

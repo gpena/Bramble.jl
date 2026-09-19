@@ -2,8 +2,12 @@ module SpaceOperatorsTests
 
 using Test
 using Bramble
+using SparseArrays: SparseMatrixCSC, nnz
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: D₊ₓ, D₊ᵧ, D₊₂, D₊, div₊ₕ, curl₊ₕ, forward_star_difference
+# `M₊*` is `public`, not `export`ed (average.jl's own note on why); `kronecker_operator_matrix`
+# is neither, the oracle `stencil_matrix` (gpena/Bramble.jl#185) is checked against.
+import Bramble: M₊ₓ, M₊ᵧ, M₊₂, kronecker_operator_matrix
 using Bramble:
                IdentityOperator,
                ZeroOperator,
@@ -191,6 +195,40 @@ end
         # there is no 1D curl
         W1 = gridspace(mesh(Ω1, 9, true))
         @test_throws ArgumentError curlₕ((Rₕ(W1, sin),))
+    end
+end
+
+# `stencil_matrix` (gpena/Bramble.jl#185): every family's public per-axis alias now
+# routes through the single-pass builder in `src/space/operators/stencil.jl`, rather than
+# through the Kronecker products of shift matrices `kronecker_operator_matrix` still
+# builds (`src/space/operators/shift.jl`, kept as the retained oracle). Checked entrywise,
+# `nnz` included, on non-uniform meshes in 1D/2D/3D so a boundary weight that would only
+# coincidentally match on a uniform grid cannot hide a mistake.
+@testset "stencil_matrix agrees with the Kronecker oracle (#185)" begin
+    meshes = (
+        mesh(domain(interval(0.0, 1.0)), 11, false),
+        mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (9, 7), false),
+        mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (6, 5, 4), false)
+    )
+    families = (
+        (:D₋, (D₋ₓ, D₋ᵧ, D₋₂)),
+        (:D₊, (D₊ₓ, D₊ᵧ, D₊₂)),
+        (:D̽, (D̽ₓ, D̽ᵧ, D̽₂)),
+        (:Dc, (Dcₓ, Dcᵧ, Dc₂)),
+        (:Dₕ, (Dₕₓ, Dₕᵧ, Dₕ₂)),
+        (:jump, (jumpₓ, jumpᵧ, jump₂)),
+        (:M, (Mₓ, Mᵧ, M₂)),
+        (:M₊, (M₊ₓ, M₊ᵧ, M₊₂))
+    )
+    for Ωₕ in meshes, (name, ops) in families, d in 1:dim(Ωₕ)
+        op = ops[d]
+        @testset "$name axis $d, $(dim(Ωₕ))D" begin
+            A = op(Ωₕ)
+            B = kronecker_operator_matrix(Ωₕ, op)
+            @test A isa SparseMatrixCSC
+            @test A == B
+            @test nnz(A) == nnz(B)
+        end
     end
 end
 

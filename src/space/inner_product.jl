@@ -140,9 +140,7 @@ true
         vₕ::VectorElement{<:ScalarGridSpace};
         markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
 ) where {N}
-    N == 0 && return _dot(uₕ.data, weights(space(uₕ), Innerh()), vₕ.data)
-    mask = _combined_marked_indices(mesh(space(uₕ)), markers)
-    return _dot_masked(uₕ.data, weights(space(uₕ), Innerh()), vₕ.data, mask)
+    return inner₊(uₕ, vₕ, Val(()); markers = markers)
 end
 
 # Summed over the *leaves* (`components` flattens any nesting), unrolled via `map` over the
@@ -312,15 +310,129 @@ const norm∞ₕ = norminf_h
 #                 Discrete Modified L² Inner Product and Norm                  #
 ################################################################################
 
+# Weight-side specializations of `_dot`/`_dot_masked` (src/utils/linear_algebra.jl) for a
+# lazy `SeparableWeights` (src/space/scalar_gridspace.jl): `weights(Wₕ, Val(S))` returns one
+# of these for every staggered set `S` that is neither `()` nor a singleton
+# (gpena/Bramble.jl#115, #234). Both walk `CartesianIndices(w.dims)` -- or convert a masked
+# linear index to one -- and then read `w` through its `CartesianIndex` `getindex`, which
+# multiplies the per-axis factors directly, rather than through `SeparableWeights`'s own
+# linear `getindex`, which divides by each axis length in turn to recover the
+# `CartesianIndex` first. Measured on a 100³ grid
+# (`.agents/plans/v3-3-0-memory-scaling-notes.md` §2.3): the Cartesian loop here costs
+# ≈2.4x a dense `_dot`; the same reduction through the linear `getindex` fallback costs
+# ≈4.9x -- the gap this specialization exists to avoid.
+#
+# No separate `CpuBatch` override is needed here: `inner₊(uₕ, vₕ, Val(S))` calls the
+# policy-dispatched `_dot`/`_dot_masked(policy, u, v, w[, mask])` (S7.1,
+# `src/utils/linear_algebra.jl`), whose `CpuSerial`/`CpuThreaded` methods fall through to
+# the plain three/four-argument methods below -- where ordinary dispatch on the weight
+# argument's runtime type reaches this specialization -- while its `CpuBatch` method calls
+# `_batch_dot`/`_batch_dot_masked` directly, before the weight's type is ever consulted, so
+# a `CpuBatch` policy reaches S7.1's Polyester hook (or its "not loaded" error) regardless
+# of whether the weight is dense or a `SeparableWeights`, never this loop.
+@inline function _dot(u::AbstractVector, w::SeparableWeights{D}, v::AbstractVector) where {D}
+    n = length(w)
+    (length(u) == n == length(v)) || _throw_dot_dim_error(length(u), n, length(v))
+    T = promote_type(eltype(u), eltype(w), eltype(v))
+    s = zero(T)
+    li = LinearIndices(w.dims)
+    @inbounds for I in CartesianIndices(w.dims)
+        i = li[I]
+        s = muladd(T(u[i]) * T(v[i]), T(w[I]), s)
+    end
+    return s
+end
+
+@inline function _dot_masked(
+        u::AbstractVector, w::SeparableWeights{D}, v::AbstractVector, mask::BitVector
+) where {D}
+    n = length(w)
+    (length(u) == n == length(v) == length(mask)) ||
+        _throw_dot_dim_error(length(u), n, length(v), length(mask))
+    T = promote_type(eltype(u), eltype(w), eltype(v))
+    s = zero(T)
+    cart = CartesianIndices(w.dims)
+    @inbounds for i in MarkedIndices(mask)
+        s = muladd(T(u[i]) * T(v[i]), T(w[cart[i]]), s)
+    end
+    return s
+end
+
+@inline function _dot_masked(
+        u::AbstractVector, w::SeparableWeights{D}, v::AbstractVector, mask::MarkedIndicesUnion
+) where {D}
+    n = length(w)
+    (length(u) == n == length(v) == mask.len) ||
+        _throw_dot_dim_error(length(u), n, length(v), mask.len)
+    T = promote_type(eltype(u), eltype(w), eltype(v))
+    s = zero(T)
+    cart = CartesianIndices(w.dims)
+    @inbounds for i in mask
+        s = muladd(T(u[i]) * T(v[i]), T(w[cart[i]]), s)
+    end
+    return s
+end
+
+"""
+    inner₊(uₕ::VectorElement, vₕ::VectorElement, ::Val{S}; markers = ()) -> Real
+
+Returns the discrete inner product of the grid functions `uₕ` and `vₕ` weighted by the
+staggered set `S ⊆ 1:D`, [`weights`](@ref)`(space(uₕ), Val(S))`: entry `I` weighs
+``\\prod_{d \\in S} h_d(I_d) \\cdot \\prod_{d \\notin S} h_d(I_d + 1/2)`` (gpena/Bramble.jl#115,
+#234).
+
+`Val(())` is [`innerₕ`](@ref), and `Val((1,))`/`Val((2,))`/`Val((3,))` are
+[`inner₊ₓ`](@ref)/[`inner₊ᵧ`](@ref)/[`inner₊₂`](@ref) respectively -- those four functions
+are aliases of this one, sharing its implementation, and return the identical number to it
+because [`weights`](@ref)`(Wₕ, Val(S))` returns the very same dense vector for those four
+`S`, not a recomputed copy. Every other `S` -- a pair, or the full `1:D` combination --
+reduces against a lazily-computed [`SeparableWeights`](@ref) instead, through the
+`_dot`/`_dot_masked` specializations above, so no `O(n^D)` vector is ever materialised for
+it.
+
+`markers` restricts the sum to the union of the labelled regions' points, as it does for
+[`innerₕ`](@ref) (a masked sum of the weight above, not a surface integral).
+
+Defined for grid functions of a [`ScalarGridSpace`](@ref) only, the same restriction every
+other `inner₊*` in this file has: a composite grid function has no single weighting of its
+own; take a scalar component of it with [`components`](@ref) first, which is itself a
+scalar grid function and is accepted.
+
+# Examples
+
+```jldoctest
+using Bramble
+Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 5), (true, true))
+Wₕ = gridspace(Ωₕ)
+uₕ = Rₕ(Wₕ, x -> 1.0)
+inner₊(uₕ, uₕ, Val(())) == innerₕ(uₕ, uₕ)
+
+# output
+true
+```
+
+See also: [`inner₊`](@ref), [`weights`](@ref), [`SeparableWeights`](@ref).
+"""
+@inline function inner₊(
+        uₕ::VectorElement{<:ScalarGridSpace},
+        vₕ::VectorElement{<:ScalarGridSpace},
+        ::Val{S};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {S, N}
+    w = weights(space(uₕ), Val(S))
+    policy = execution_policy(space(uₕ))
+    N == 0 && return _dot(policy, uₕ.data, w, vₕ.data)
+    mask = _combined_marked_indices(mesh(space(uₕ)), markers)
+    return _dot_masked(policy, uₕ.data, w, vₕ.data, mask)
+end
+
 @inline function _directional_inner_plus(
         uₕ::VectorElement{<:ScalarGridSpace},
         vₕ::VectorElement{<:ScalarGridSpace},
         ::Val{DIM};
         markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
 ) where {DIM, N}
-    N == 0 && return _dot(uₕ.data, weights(space(uₕ), Innerplus(), DIM), vₕ.data)
-    mask = _combined_marked_indices(mesh(space(uₕ)), markers)
-    return _dot_masked(uₕ.data, weights(space(uₕ), Innerplus(), DIM), vₕ.data, mask)
+    return inner₊(uₕ, vₕ, Val((DIM,)); markers = markers)
 end
 
 """

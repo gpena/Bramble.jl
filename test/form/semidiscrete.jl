@@ -337,6 +337,82 @@ end
     end
 end
 
+# The matrix-type seam extended to the consumers of assembly (S1.2, gpena/Bramble.jl#12):
+# `semidiscretize`, `mass_matrix` and `operator_matrix` read whatever matrix type the form's
+# own backend produces -- the `Semidiscretization{...,MT,...}` parameter already carried for
+# both matrices -- rather than assuming `SparseMatrixCSC`. A dense `Matrix{Float64}` backend
+# must semidiscretise to the exact same numbers as the default CSC backend, and the residual
+# built from it must agree too.
+@testset "Dense backend" begin
+    I = Bramble.interval(0.0, 1.0)
+    Ωc = Bramble.mesh(Bramble.domain(I), 21, false)
+    Ωd = Bramble.mesh(Bramble.domain(I), 21, false; backend = backend(matrix_type = Matrix{Float64}))
+    set_points!(Ωd, points(Ωc))
+    Wc, Wd = gridspace(Ωc), gridspace(Ωd)
+
+    function _sd_forms(W)
+        fₕ = Rₕ(W, x -> 1.0)
+        a = form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+        l = form(W, v -> innerₕ(fₕ, v))
+        return a, l
+    end
+    ac, lc = _sd_forms(Wc)
+    ad, ld = _sd_forms(Wd)
+
+    bcs_c = dirichlet_constraints(Ωc, I, :boundary => (x, t) -> 0.0)
+    bcs_d = dirichlet_constraints(Ωd, I, :boundary => (x, t) -> 0.0)
+
+    sdc = semidiscretize(ac, lc; dirichlet = bcs_c)
+    sdd = semidiscretize(ad, ld; dirichlet = bcs_d)
+
+    @testset "operator_matrix and mass_matrix agree with CSC" begin
+        @test operator_matrix(sdc) isa SparseMatrixCSC
+        @test operator_matrix(sdd) isa Matrix{Float64}
+        @test isapprox(Matrix(operator_matrix(sdc)), operator_matrix(sdd); atol = 1e-13)
+        @test mass_matrix(sdc) isa SparseMatrixCSC
+        @test mass_matrix(sdd) isa Matrix{Float64}
+        @test isapprox(Matrix(mass_matrix(sdc)), mass_matrix(sdd); atol = 1e-13)
+    end
+
+    @testset "the residual agrees with CSC" begin
+        n = ndofs(Wc)
+        u = collect(range(0.25, 1.75; length = n))
+        duc, dud = zeros(n), zeros(n)
+        t = 0.3
+        sdc(duc, u, nothing, t)
+        sdd(dud, u, nothing, t)
+        @test duc ≈ dud
+    end
+
+    @testset "assemble_add! agrees with CSC" begin
+        mc = form(Wc, Wc, (u, v) -> innerₕ(u, v))
+        md = form(Wd, Wd, (u, v) -> innerₕ(u, v))
+
+        Ac = allocate_system_matrix(ac)
+        Ad = allocate_system_matrix(ad)
+        assemble_add!(Ac, mc, 2.0)
+        assemble_add!(Ac, ac, 0.5)
+        assemble_add!(Ad, md, 2.0)
+        assemble_add!(Ad, ad, 0.5)
+        @test isapprox(Matrix(Ac), Ad; atol = 1e-13)
+    end
+
+    @testset "type_cached_assemble! agrees with CSC" begin
+        cache_c, cache_d = Dict(), Dict()
+        build(a) = uₕ -> (a, _ -> nothing)
+        Bc = type_cached_assemble!(build(ac), cache_c, Bramble.element(Wc, 0.0))
+        Bd = type_cached_assemble!(build(ad), cache_d, Bramble.element(Wd, 0.0))
+        @test isapprox(Matrix(Bc), Bd; atol = 1e-13)
+    end
+
+    @testset "jacobian_pattern keeps the same nonzero count" begin
+        Pc = jacobian_pattern(ac)
+        Pd = jacobian_pattern(ad)
+        @test Pc isa SparseMatrixCSC
+        @test count(!iszero, Matrix(Pc)) == count(!iszero, Matrix(Pd))
+    end
+end
+
 @testset "semidiscretize on a composite space" begin
     Ωₕ = Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0)), 11)
     Wₕ = gridspace(Ωₕ)

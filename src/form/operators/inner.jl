@@ -39,6 +39,27 @@ Quadrature weights for the modified \$L^2_+\$ inner product in a specific coordi
 struct InnerPlus{Dim} <: AbstractInnerProduct end
 
 """
+    InnerPlusSet{S} <: AbstractInnerProduct
+
+Quadrature weights for the modified \$L^2_+\$ inner product staggered in every direction the
+set `S` names at once, for `|S| \\geq 2` (gpena/Bramble.jl#115, #234).
+
+The empty set is [`InnerH`](@ref) and a one-element set is [`InnerPlus`](@ref): those two
+keep their own node types rather than becoming a special case of this one, because other
+code matches on their literal types (`src/form/kronecker.jl`'s separability match, and the
+`typeof(inner₊ₓ(id, id)).parameters[2] === InnerPlus{1}`-style pin in
+`test/form/inner_products.jl`) and widening what they resolve to would change what those
+match. [`inner₊`](@ref)`(u, v, Val(S))` is what builds this node; it is never constructed
+for `S` shorter than 2.
+
+`S` is stored sorted (`_canonical_set`, this file) so two callers naming the same set in a
+different order -- `Val((1,2))` and `Val((2,1))` -- produce the identical singleton type,
+which is what lets the like-term simplifier fold them and `which(inner₊, ...)` resolve one
+way regardless of the order the caller wrote `S` in.
+"""
+struct InnerPlusSet{S} <: AbstractInnerProduct end
+
+"""
     InnerGamma{MASK} <: AbstractInnerProduct
 
 Quadrature weights for the \$(D-1)\$-dimensional surface integral over the grid faces `MASK`
@@ -84,6 +105,16 @@ end
 @inline compute_weight(
     ::InnerPlus{ActiveDim}, space, I::CartesianIndex{D}, lin_idx::Int
 ) where {ActiveDim, D} = weights(space, Innerplus(), ActiveDim)[lin_idx]
+
+# `weights(space, Val(S))` for `length(S) >= 2` is a `SeparableWeights` (scalar_gridspace.jl),
+# a lazy per-axis product with no full-grid vector behind it. It answers a `CartesianIndex`
+# directly, at whatever point this is called for -- the currently-visited one, or a shifted
+# neighbour, whichever `local_stencil` passes in -- with no linear-index division/modulo, so
+# `I` is used here rather than `lin_idx` (the dense-vector path above keeps using `lin_idx`,
+# unchanged).
+@inline compute_weight(
+    ::InnerPlusSet{S}, space, I::CartesianIndex{D}, lin_idx::Int
+) where {S, D} = weights(space, Val(S))[I]
 
 # The surface weight is computed from the mesh's live half-spacings rather than read from a
 # stored vector, so `SpaceWeights` grows no family for it and there is no staleness token to
@@ -486,6 +517,102 @@ function inner₊(
         markers::NTuple{M, Symbol} = NTuple{0, Symbol}()
 ) where {N, M}
     return _restrict_by_markers(foldl(+, map(inner₊, left, right)), markers)
+end
+
+# ==============================================================================
+# The general staggered-set entry point, inner₊(u, v, Val(S))
+# ==============================================================================
+
+"""
+    inner₊(left::LazyOp{D}, right::LazyOp{D}, ::Val{S}; markers = ()) where {D, S}
+
+Constructs the symbolic modified \$L^2_+\$ inner product staggered in the direction set
+`S ⊆ 1:D` (gpena/Bramble.jl#115, #234): the weight at grid index `I` is
+``\\prod_{d \\in S} h_d(I_d) \\cdot \\prod_{d \\notin S} h_d(I_d + 1/2)``, matching
+[`weights`](@ref)`(Wₕ, Val(S))`.
+
+This is the general entry point [`innerₕ`](@ref) (`S = ()`) and
+[`inner₊ₓ`](@ref)/[`inner₊ᵧ`](@ref)/[`inner₊₂`](@ref) (`S` a singleton) are aliases of: for
+those two shapes it builds exactly the same [`InnerH`](@ref)/[`InnerPlus`](@ref) node they
+do, not a new node under a shared name, so a term written either way folds the same way in
+the simplifier and resolves to the same `which(inner₊, ...).file`. Every other `S`
+(`|S| ≥ 2`) builds an [`InnerPlusSet`](@ref) node, whose weight at assembly comes from the
+lazy `SeparableWeights` [`weights`](@ref)`(Wₕ, Val(S))` returns for those sets.
+
+`S` must be a subset of `1:D` with no axis repeated, and is accepted in any order --
+`Val((1,2))` and `Val((2,1))` build the identical node.
+
+Constructs a `LinearProduct` if `left` is source-only ([`_is_source_only`](@ref)), a
+`BilinearProduct` otherwise, matching [`innerₕ`](@ref).
+
+`markers` restricts the sum as it does for [`innerₕ`](@ref).
+
+# Examples
+
+```julia
+inner₊(u, v, Val((1, 2)))      # xy-edge centres in 3D, an ε_{12}-style placement
+inner₊(u, v, Val((1, 2, 3)))   # cell centres in 3D, a divₕ-style placement
+inner₊(u, v, Val(()))          # what innerₕ(u, v) is
+inner₊(u, v, Val((1,)))        # what inner₊ₓ(u, v) is
+```
+"""
+@inline function inner₊(
+        left::LazyOp{D}, right::LazyOp{D}, ::Val{S};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {D, S, N}
+    return _inner₊_val(left, right, Val(D), Val(S), markers)
+end
+
+# `S = ()` is innerₕ's own weight -- routed to InnerH rather than InnerPlusSet{()}, so the
+# two spellings are the same node (see InnerPlusSet's docstring for why that matters).
+@inline _inner₊_val(left, right, ::Val{D}, ::Val{()}, markers) where {D} = _inner(InnerH(), left, right, markers)
+
+@inline function _inner₊_val(left, right, ::Val{D}, ::Val{S}, markers) where {D, S}
+    _check_staggered_set(Val(D), Val(S))
+    return _inner₊_val(left, right, Val(D), Val(S), Val(length(S)), markers)
+end
+
+# A singleton `S` is inner₊ₓ/ᵧ/₂'s own weight -- routed to InnerPlus{only(S)} rather than
+# InnerPlusSet{S}, for the same reason as the `S = ()` case above.
+@inline _inner₊_val(left, right, ::Val{D}, ::Val{S}, ::Val{1}, markers) where {D, S} = _inner(
+    InnerPlus{only(S)}(), left, right, markers
+)
+
+# `|S| >= 2`: genuinely a new node, since neither InnerH nor InnerPlus{Dim} names more than
+# one (or zero) directions. `_canonical_set` sorts `S` so the node built from `Val((1,2))`
+# and `Val((2,1))` is the same type.
+@inline function _inner₊_val(left, right, ::Val{D}, ::Val{S}, ::Val{K}, markers) where {D, S, K}
+    return _inner(InnerPlusSet{_canonical_set(S)}(), left, right, markers)
+end
+
+@inline function _check_staggered_set(::Val{D}, ::Val{S}) where {D, S}
+    (allunique(S) && all(d -> 1 <= d <= D, S)) || _throw_invalid_staggered_set(S, D)
+    return nothing
+end
+
+@noinline function _throw_invalid_staggered_set(S, D)
+    throw(
+        ArgumentError(
+        "inner₊(u, v, Val(S)) got S = $S, which is not a subset of 1:$D with no repeated " *
+        "axes: every entry of S must be between 1 and the space's dimension ($D), and name " *
+        "each axis at most once.",
+    ),
+    )
+end
+
+# `D <= 3` everywhere in this package (`dim(Wₕ)` is documented 1, 2 or 3), so a valid `S`
+# (checked above: distinct entries, each in `1:D`) never has more than 3 entries -- these
+# two are the only arities `_canonical_set` needs, both allocation-free sorting networks
+# rather than a generic `sort`, since this runs once per `form(...)` call, not per point,
+# but still on the same "no unnecessary allocation" footing as the rest of this file.
+@inline _canonical_set(S::NTuple{2, Int}) = S[1] < S[2] ? S : (S[2], S[1])
+
+@inline function _canonical_set(S::NTuple{3, Int})
+    a, b, c = S
+    a, b = a < b ? (a, b) : (b, a)
+    b, c = b < c ? (b, c) : (c, b)
+    a, b = a < b ? (a, b) : (b, a)
+    return (a, b, c)
 end
 
 """

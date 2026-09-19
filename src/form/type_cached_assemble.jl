@@ -14,7 +14,7 @@
 
 """
     type_cached_assemble!(build, cache::AbstractDict, uₕ::VectorElement;
-        dirichlet = nothing, dirichlet_components = nothing) -> SparseMatrixCSC
+        dirichlet = nothing, dirichlet_components = nothing) -> AbstractMatrix
 
 Assembles a coefficient-dependent [`BilinearForm`](@ref) into a matrix whose sparsity
 pattern is built once per distinct element type `uₕ` is ever passed at, rather than on

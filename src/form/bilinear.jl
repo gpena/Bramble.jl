@@ -146,6 +146,27 @@ _no_segments(::Val{1}) = _NO_SEGMENTS_1
 _no_segments(::Val{2}) = _NO_SEGMENTS_2
 _no_segments(::Val{3}) = _NO_SEGMENTS_3
 
+"""
+    _zero_stored!(A::AbstractMatrix) -> AbstractMatrix
+
+Zero every value a refill will touch, before `_assemble_bilinear_core_cached!`/
+`_assemble_bilinear_parallel_core!` add each term's contribution back in.
+
+Part of the matrix-type seam (S1.1, gpena/Bramble.jl#12): `SparseMatrixCSC` only has to zero
+its stored `nzval` entries (the sparsity pattern itself never changes between refills), while
+a dense `Matrix` -- the seam's positive control -- has no such distinction and zeros the
+whole backing array. A future backend (tridiagonal, banded, ...) implements whichever of the
+two shapes its own storage has.
+"""
+@inline function _zero_stored!(A::SparseMatrixCSC)
+    fill!(nonzeros(A), zero(eltype(A)))
+    return A
+end
+@inline function _zero_stored!(A::AbstractMatrix)
+    fill!(A, zero(eltype(A)))
+    return A
+end
+
 # Takes the AST the form was built from, so the cache's own `AST` parameter comes from the
 # same expression tree `BilinearForm` stores -- never `nothing`, which would have made the
 # parameter a lie on the first cache miss.
@@ -294,9 +315,11 @@ function apply_dirichlet_labels!(
 end
 
 """
-    assemble(form::BilinearForm; dirichlet = nothing, dirichlet_components = nothing) -> SparseMatrixCSC
+    assemble(form::BilinearForm; dirichlet = nothing, dirichlet_components = nothing) -> AbstractMatrix
 
-Allocate a matrix with the form's sparsity pattern and assemble into it.
+Allocate a matrix with the form's sparsity pattern and assemble into it. The matrix type is
+`matrix_type(backend(test_space(form)))` -- `SparseMatrixCSC{Float64,Int}` by default, or
+whatever [`backend`](@ref) the space's mesh was built with.
 
 **Call this once, then assemble into what it returns.** Building the sparsity pattern is the
 larger part of the work (at 250,000 degrees of freedom it is 9,700 us and 52 MB against 1,500 us
@@ -326,9 +349,10 @@ function assemble(form::BilinearForm; dirichlet = nothing, dirichlet_components 
 end
 
 """
-    assemble!(A::SparseMatrixCSC, form::BilinearForm; dirichlet = nothing, dirichlet_components = nothing) -> SparseMatrixCSC
+    assemble!(A::AbstractMatrix, form::BilinearForm; dirichlet = nothing, dirichlet_components = nothing) -> AbstractMatrix
 
-Assemble the `BilinearForm` into the preallocated sparse matrix `A`, allocating nothing (**0 bytes**).
+Assemble the `BilinearForm` into the preallocated matrix `A`, allocating nothing (**0 bytes**)
+when `A` is the default `SparseMatrixCSC`.
 
 Runs serially or across threads following `form.trial_space`'s backend
 [`execution_policy`](@ref): [`Serial`](@ref) (the default) or [`Parallel`](@ref).
@@ -342,7 +366,7 @@ ignoring the backend's policy.
 - Dynamic scalars: plain numbers work directly for constant scalars. To update a scalar dynamically across loop iterations, wrap it in a `Ref(val)` (e.g. `β = Ref(1.0); a = form(Wₕ, Wₕ, (u, v) -> innerₕ(β * D₋ₓ(u), D₋ₓ(v)))`). Mutating `β[] = new_val` evaluates live during assembly with 0 allocations.
 """
 function assemble!(
-        A::SparseMatrixCSC,
+        A::AbstractMatrix,
         form::BilinearForm;
         dirichlet = nothing,
         dirichlet_components = nothing,
@@ -356,10 +380,10 @@ end
 # resolved and already past the deprecation check, so neither public entry point warns twice
 # calling into the other.
 function _assemble_bilinear!(
-        A::SparseMatrixCSC, form::BilinearForm, ast, dirichlet, dirichlet_components
+        A::AbstractMatrix, form::BilinearForm, ast, dirichlet, dirichlet_components
 )
     dirichlet_labels, _ = _normalize_dirichlet(dirichlet)
-    fill!(nonzeros(A), zero(eltype(nonzeros(A))))
+    _zero_stored!(A)
 
     if execution_policy(form.trial_space) isa CpuSerial
         _assemble_bilinear_core_cached!(
@@ -374,7 +398,7 @@ function _assemble_bilinear!(
 end
 
 """
-    assemble_parallel!(A::SparseMatrixCSC, form::BilinearForm) -> SparseMatrixCSC
+    assemble_parallel!(A::AbstractMatrix, form::BilinearForm) -> AbstractMatrix
 
 Refill `A` with the assembled `form` across threads and return it, regardless of
 `form.trial_space`'s backend policy. `A` must already carry the correct sparsity pattern from
@@ -382,10 +406,13 @@ Refill `A` with the assembled `form` across threads and return it, regardless of
 not apply `dirichlet_labels`.
 
 Colouring on the test side ensures thread safety when updating stored matrix values concurrently.
+The band-coloured sweep runs for every matrix type: it reaches storage only through the
+matrix-type seam (`_scatter_position`/`_scatter_add!`), so a dense, banded or CSR backend
+colours exactly as `SparseMatrixCSC` does (gpena/Bramble.jl#12, #190).
 """
-function assemble_parallel!(A::SparseMatrixCSC, form::BilinearForm, ast = nothing)
+function assemble_parallel!(A::AbstractMatrix, form::BilinearForm, ast = nothing)
     resolved_ast = ast === nothing ? form.ast : (_warn_ast_keyword(:assemble_parallel!); ast)
-    fill!(nonzeros(A), zero(eltype(nonzeros(A))))
+    _zero_stored!(A)
 
     _assemble_bilinear_parallel_core!(A, form.trial_space, form.test_space, resolved_ast)
 

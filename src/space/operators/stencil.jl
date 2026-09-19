@@ -55,6 +55,66 @@ end
 @inline _check_no_alias(vₕ::VectorElement, uₕ::VectorElement) = Base.mightalias(parent(vₕ), parent(uₕ)) &&
                                                                 _throw_alias_error()
 
+# --- Diagonal scaling of an operator matrix (kept for the retained Kronecker oracle) --- #
+#
+# Every weighted family in this subsystem used to compute its matrix as a diagonal scaling
+# of an unscaled one, `w .* A` -- a dense vector broadcast against a `SparseMatrixCSC`,
+# which is a separately measured `SparseArrays` memory bug (notes on gpena/Bramble.jl#185
+# §1.9) fixed independently of this subplan for every *production* weighted matrix.
+# `stencil_matrix` never had that step to begin with, weights being written directly into
+# `nzval` at scatter time (below); `_scale_rows!` is kept here only so
+# `kronecker_operator_matrix`'s retained `_kron_*` bodies (`difference.jl`, `average.jl`)
+# scale rows the same way that fix does, rather than reintroducing the broadcast in the one
+# place still doing the old Kronecker-then-scale construction.
+#
+# `SparseArrays.dropzeros!` is not reachable from this file without adding it to the
+# `using SparseArrays: ...` list in `src/Bramble.jl`, out of scope for this subplan (owned
+# by the fix above); the drop is inlined as a compaction over the same three CSC arrays
+# instead of calling it by name. `_drop_zero_entries!` is the same operation `dropzeros!`
+# performs, so a later merge of that fix needs at most a name swap here, not new logic.
+@inline function _scale_rows!(A::SparseMatrixCSC, w::AbstractVector)
+    @boundscheck length(w) == size(A, 1) ||
+                 throw(DimensionMismatch("the weight vector has $(length(w)) entries and the operator has $(size(A, 1)) rows"))
+
+    rows = rowvals(A)
+    nz = nonzeros(A)
+    @inbounds for k in eachindex(nz)
+        nz[k] *= w[rows[k]]
+    end
+
+    return _drop_zero_entries!(A)
+end
+
+# A dense or GPU backend has no stored-entry list to walk, and nothing is saved by avoiding
+# the full matrix: the broadcast is in place and allocates nothing.
+@inline function _scale_rows!(A::AbstractMatrix, w::AbstractVector)
+    A .= w .* A
+    return A
+end
+
+function _drop_zero_entries!(A::SparseMatrixCSC)
+    colptr = A.colptr
+    rows = A.rowval
+    nz = A.nzval
+    dest = 1
+    @inbounds for col in 1:size(A, 2)
+        stop = colptr[col + 1] - 1
+        start = colptr[col]
+        colptr[col] = dest
+        for k in start:stop
+            if !iszero(nz[k])
+                rows[dest] = rows[k]
+                nz[dest] = nz[k]
+                dest += 1
+            end
+        end
+    end
+    colptr[size(A, 2) + 1] = dest
+    resize!(rows, dest - 1)
+    resize!(nz, dest - 1)
+    return A
+end
+
 # --- Argument handling shared by every operator ------------------------------------- #
 # The operators accept a mesh, a grid space or a grid function, and the vectorial aliases
 # need the spatial dimension of whichever was passed. Going through `space` alone would
@@ -196,6 +256,274 @@ end
         d -> d == DIM ? (first(full_axes[d]):first(full_axes[d])) : full_axes[d], Val(D)
     )
     return interior, boundary
+end
+
+# --- Single-pass operator matrices: stencil_matrix ----------------------------------- #
+#
+# gpena/Bramble.jl#185: every matrix form in difference.jl/average.jl/jump.jl built its
+# result as a Kronecker product of 1D shift matrices (`shift`, `_recursive_shift`,
+# `_difference_operator`, `_average_operator`, `add_half_shift`), each product and
+# subtraction/sum along the way an intermediate `SparseMatrixCSC` of its own, built and
+# thrown away. That is a second, independent implementation of every family's arithmetic
+# next to the one `local_stencil` already carries for form assembly (issue #185's own
+# complaint: "any change to operator boundary conventions requires manually keeping three
+# independent codebases in sync"), and it is not the cheapest way to fill a matrix whose
+# sparsity pattern is known ahead of a single stencil's reach.
+#
+# `stencil_matrix(Ωₕ, op)` replaces the Kronecker construction with one sweep over
+# `CartesianIndices(Ωₕ)` that writes `colptr`/`rowval`/`nzval` directly: two passes (count,
+# then fill), no intermediate matrix. `op` names one operator family along one axis --
+# `_stencil_taps(op)` gives its fixed neighbour offsets along that axis, `_stencil_weights`
+# the coefficients matching those offsets at a grid point.
+#
+# This mirrors, rather than calls, the offsets and arithmetic `local_stencil` uses for the
+# same families in `src/form/operators/{difference,average,jump}.jl` (their own
+# `_stencil_taps`/`_stencil_weights`, keyed on AST node types such as `BackwardDifference`
+# and `JumpNode`). Calling those directly would mean constructing a `LazyOp` tree from this
+# file to stand in for the node's `inner_op` field, which `src/space/` has no business
+# doing: forms are built on top of the space layer's operators, not the other way around,
+# and `src/form/` is out of scope for this subplan besides. The two are proved equal by the
+# equality test against `kronecker_operator_matrix` below instead of by sharing code --
+# reported as the duplication the plan anticipated rather than resolved.
+
+"""
+    StencilOp{Dim}
+
+One operator family along axis `Dim`, as [`stencil_matrix`](@ref) takes it. Each concrete
+subtype answers [`_stencil_taps`](@ref) (its fixed neighbour offsets along `Dim`) and
+[`_stencil_weights`](@ref) (the coefficients matching those offsets at a grid point).
+"""
+abstract type StencilOp{Dim} end
+
+struct BackwardFiniteDiffOp{Dim} <: StencilOp{Dim} end
+struct ForwardFiniteDiffOp{Dim} <: StencilOp{Dim} end
+struct UnscaledBackwardDiffOp{Dim} <: StencilOp{Dim} end
+struct UnscaledForwardDiffOp{Dim} <: StencilOp{Dim} end
+struct StarDiffOp{Dim} <: StencilOp{Dim} end
+struct CenteredDiffOp{Dim} <: StencilOp{Dim} end
+struct CrossWeightedDiffOp{Dim} <: StencilOp{Dim} end
+struct BackwardAvgOp{Dim} <: StencilOp{Dim} end
+struct ForwardAvgOp{Dim} <: StencilOp{Dim} end
+
+"""
+    _stencil_taps(op::StencilOp) -> NTuple{K,Int}
+
+The fixed neighbour offsets along `op`'s axis that its stencil reads, in the same order
+[`_stencil_weights`](@ref) returns their coefficients. A tap whose neighbour falls outside
+the grid contributes no entry at all (checked in [`stencil_matrix`](@ref)), rather than a
+stored zero.
+"""
+@inline _stencil_taps(::BackwardFiniteDiffOp) = (0, -1)
+@inline _stencil_taps(::ForwardFiniteDiffOp) = (1, 0)
+@inline _stencil_taps(::UnscaledBackwardDiffOp) = (0, -1)
+@inline _stencil_taps(::UnscaledForwardDiffOp) = (1, 0)
+@inline _stencil_taps(::StarDiffOp) = (1, 0)
+@inline _stencil_taps(::CenteredDiffOp) = (1, -1)
+@inline _stencil_taps(::CrossWeightedDiffOp) = (1, 0, -1)
+@inline _stencil_taps(::BackwardAvgOp) = (0, -1)
+@inline _stencil_taps(::ForwardAvgOp) = (1, 0)
+
+"""
+    _stencil_weights(op::StencilOp{Dim}, Ωₕ::AbstractMeshType, I::CartesianIndex) -> NTuple{K}
+
+The coefficients matching [`_stencil_taps`](@ref)`(op)` at `I`. The unscaled families'
+self-weight is always ±1 regardless of boundary -- their truncation is entirely the "tap
+falls outside the grid" exclusion `stencil_matrix` applies -- while the scaled and averaged
+families additionally zero their own weight at a boundary that a Kronecker construction
+would reach through a since-zeroed weight vector rather than exclude, which this reproduces
+explicitly.
+"""
+@inline _stencil_weights(::UnscaledBackwardDiffOp, Ωₕ::AbstractMeshType, I::CartesianIndex) = (1, -1)
+@inline _stencil_weights(::UnscaledForwardDiffOp, Ωₕ::AbstractMeshType, I::CartesianIndex) = (1, -1)
+
+@inline function _stencil_weights(
+        ::BackwardFiniteDiffOp{Dim}, Ωₕ::AbstractMeshType, I::CartesianIndex
+) where {Dim}
+    h = spacing(Ωₕ, I, Dim)
+    mask = I[Dim] == 1 ? 0 : 1
+    return (mask / h, -mask / h)
+end
+
+@inline function _stencil_weights(
+        ::ForwardFiniteDiffOp{Dim}, Ωₕ::AbstractMeshType, I::CartesianIndex
+) where {Dim}
+    n = npoints(Ωₕ, Tuple)[Dim]
+    h = forward_spacing(Ωₕ, I, Dim)
+    mask = I[Dim] == n ? 0 : 1
+    return (mask / h, -mask / h)
+end
+
+@inline function _stencil_weights(::StarDiffOp{Dim}, Ωₕ::AbstractMeshType, I::CartesianIndex) where {Dim}
+    n = npoints(Ωₕ, Tuple)[Dim]
+    mask = I[Dim] == n ? 0 : 1
+    c = 2 * mask / (spacing(Ωₕ, I, Dim) + forward_spacing(Ωₕ, I, Dim))
+    return (c, -c)
+end
+
+@inline function _stencil_weights(::CenteredDiffOp{Dim}, Ωₕ::AbstractMeshType, I::CartesianIndex) where {Dim}
+    n = npoints(Ωₕ, Tuple)[Dim]
+    mask = (I[Dim] == 1 || I[Dim] == n) ? 0 : 1
+    c = mask / (spacing(Ωₕ, I, Dim) + forward_spacing(Ωₕ, I, Dim))
+    return (c, -c)
+end
+
+@inline function _stencil_weights(
+        ::CrossWeightedDiffOp{Dim}, Ωₕ::AbstractMeshType, I::CartesianIndex
+) where {Dim}
+    n = npoints(Ωₕ, Tuple)[Dim]
+    if I[Dim] == 1
+        a = inv(spacing(Ωₕ, I, Dim))
+        return (a, -a, zero(a))
+    elseif I[Dim] == n
+        b = inv(spacing(Ωₕ, I, Dim))
+        return (zero(b), b, -b)
+    else
+        h = spacing(Ωₕ, I, Dim)
+        hf = forward_spacing(Ωₕ, I, Dim)
+        total = h + hf
+        a = h / (total * hf)
+        b = hf / (total * h)
+        return (a, b - a, -b)
+    end
+end
+
+@inline function _stencil_weights(::BackwardAvgOp{Dim}, Ωₕ::AbstractMeshType, I::CartesianIndex) where {Dim}
+    T = eltype(Ωₕ)
+    mask = I[Dim] == 1 ? zero(T) : T(1) / 2
+    return (mask, mask)
+end
+
+@inline function _stencil_weights(::ForwardAvgOp{Dim}, Ωₕ::AbstractMeshType, I::CartesianIndex) where {Dim}
+    T = eltype(Ωₕ)
+    n = npoints(Ωₕ, Tuple)[Dim]
+    mask = I[Dim] == n ? zero(T) : T(1) / 2
+    return (mask, mask)
+end
+
+"""
+    stencil_matrix(Ωₕ::AbstractMeshType, op::StencilOp)
+    stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)
+
+Builds `op`'s operator matrix in one pass over `Ωₕ`'s grid points, in the matrix type
+`matrix_type(backend(Ωₕ))` picked: a `SparseMatrixCSC` backend writes `colptr`/`rowval`/
+`nzval` directly (two passes, count then fill; no intermediate matrix, no broadcast), any
+other `AbstractMatrix` backend falls back to a plain dense fill. `Ωₕ` may be a mesh or a
+grid space, taken as `mesh(Wₕ)`.
+
+Checked entrywise, `nnz` included, against [`kronecker_operator_matrix`](@ref), the
+Kronecker-product construction every operator family used before (gpena/Bramble.jl#185).
+"""
+@inline function stencil_matrix(Ωₕ::AbstractMeshType, op::StencilOp)
+    return _stencil_matrix(matrix_type(backend(Ωₕ)), Ωₕ, op)
+end
+
+@inline stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp) = stencil_matrix(mesh(Wₕ), op)
+
+function _stencil_matrix(
+        ::Type{<:SparseMatrixCSC{Tv, Ti}}, Ωₕ::AbstractMeshType, op::StencilOp{Dim}
+) where {Tv, Ti, Dim}
+    dims = npoints(Ωₕ, Tuple)
+    D = length(dims)
+    n = dims[Dim]
+    N = prod(dims)
+    li = LinearIndices(dims)
+    step = _stencil_step(Val(Dim), Val(D))
+    taps = _stencil_taps(op)
+    K = length(taps)
+
+    # Pass 1: how many stored entries land in each column -- one per (row, tap) whose
+    # neighbour stays on the grid *and* whose weight is not exactly zero, tallied at
+    # `colptr[col + 1]` and turned into the standard CSC column-start array by the running
+    # sum below.
+    #
+    # The weight check matches what the Kronecker oracle does: its own weighting step,
+    # `_scale_rows!` (above), drops a stored entry outright when scaling takes it to exactly
+    # zero, rather than keeping it as an explicit zero. That is what happens at a family's
+    # zeroed boundary weight (a `BackwardFiniteDiffOp`'s row 1, an average's row 1 or `n`):
+    # the entry is column-absent in the oracle, not merely zero-valued, so `stencil_matrix`
+    # drops it too rather than storing a value the equality check's `nnz` comparison would
+    # then disagree on.
+    colptr = zeros(Ti, N + 1)
+    @inbounds for I in CartesianIndices(dims)
+        idim = I[Dim]
+        w = _stencil_weights(op, Ωₕ, I)
+        for k in 1:K
+            j = idim + taps[k]
+            (1 <= j <= n) || continue
+            iszero(w[k]) && continue
+            col = li[I + taps[k] * step]
+            colptr[col + 1] += 1
+        end
+    end
+    colptr[1] = 1
+    @inbounds for col in 1:N
+        colptr[col + 1] += colptr[col]
+    end
+
+    # Pass 2: fill, walking the same rows in the same order, so a column's entries land
+    # sorted by row (row increases monotonically across the whole sweep, and each column's
+    # entries are the subsequence of rows that happen to reach it). `colptr` itself doubles
+    # as the fill cursor -- `colptr[col]` is incremented as each of the column's entries is
+    # placed -- rather than a second copy of it, so this needs one array fewer than the
+    # count-then-fill idiom usually does; the loop below it undoes the shift that leaves it
+    # in afterwards.
+    nz = colptr[N + 1] - 1
+    rowval = Vector{Ti}(undef, nz)
+    nzval = Vector{Tv}(undef, nz)
+
+    @inbounds for I in CartesianIndices(dims)
+        idim = I[Dim]
+        w = _stencil_weights(op, Ωₕ, I)
+        row = li[I]
+        for k in 1:K
+            j = idim + taps[k]
+            (1 <= j <= n) || continue
+            iszero(w[k]) && continue
+            col = li[I + taps[k] * step]
+            pos = colptr[col]
+            rowval[pos] = row
+            nzval[pos] = Tv(w[k])
+            colptr[col] = pos + 1
+        end
+    end
+
+    # `colptr[col]` (1 <= col <= N) now holds what `colptr[col + 1]` held before the fill
+    # pass (each column's cursor walked from its start to its end, which is the next
+    # column's start); shift it back into the column-start array `SparseMatrixCSC` expects.
+    @inbounds for col in N:-1:2
+        colptr[col] = colptr[col - 1]
+    end
+    colptr[1] = 1
+
+    return SparseMatrixCSC{Tv, Ti}(N, N, colptr, rowval, nzval)
+end
+
+function _stencil_matrix(
+        ::Type{MT}, Ωₕ::AbstractMeshType, op::StencilOp{Dim}
+) where {T, MT <: AbstractMatrix{T}, Dim}
+    dims = npoints(Ωₕ, Tuple)
+    D = length(dims)
+    n = dims[Dim]
+    N = prod(dims)
+    li = LinearIndices(dims)
+    step = _stencil_step(Val(Dim), Val(D))
+    taps = _stencil_taps(op)
+    K = length(taps)
+
+    A = MT(undef, N, N)
+    fill!(A, zero(T))
+    @inbounds for I in CartesianIndices(dims)
+        idim = I[Dim]
+        w = _stencil_weights(op, Ωₕ, I)
+        row = li[I]
+        for k in 1:K
+            j = idim + taps[k]
+            (1 <= j <= n) || continue
+            iszero(w[k]) && continue
+            A[row, li[I + taps[k] * step]] = T(w[k])
+        end
+    end
+    return A
 end
 
 # --- Alias and docstring generators -------------------------------------------------- #

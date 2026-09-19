@@ -5,8 +5,8 @@ import Base: show, first, last, getindex, setindex!, iterate, size, firstindex, 
 
 using SparseArrays: SparseMatrixCSC, spdiagm, spzeros, rowvals, nonzeros, nzrange, sparse, sparse!, blockdiag
 
-using LinearAlgebra: I, mul!
-import LinearAlgebra: issymmetric, isposdef, ldiv!, Factorization, ×, qr, dot
+using LinearAlgebra: I, Diagonal, kron
+import LinearAlgebra: mul!, issymmetric, isposdef, ldiv!, Factorization, ×, qr, dot
 
 import Base: copy
 using Base: @propagate_inbounds
@@ -18,11 +18,18 @@ using QuadGK: gauss
 
 # Utilities
 export backend, metal_backend, vector_type, matrix_type, backend_types
+# Backend constructors for the memory-scaling milestone (gpena/Bramble.jl#214 #216): all
+# three are `metal_backend`-style stubs whose real methods arrive with their respective
+# package extensions.
+export csr_backend, banded_backend, block_banded_backend
 export ExecutionPolicy, Serial, Parallel, execution_policy
 # The CPU/GPU split of the policy hierarchy (gpena/Bramble.jl#191). `Serial` and `Parallel`
 # stay exported above: they are aliases of the first two of these, and every call site,
 # test and benchmark key in this repository spells them that way.
 export CpuPolicy, CpuSerial, CpuThreaded, GpuPolicy, GpuAsync
+# The Polyester-backed policy (gpena/Bramble.jl#190): the type ships here, the sweeps it
+# selects arrive with the BramblePolyesterExt package extension.
+export CpuBatch
 
 # `vector`/`matrix` build a raw backend array (point 70): real API, but two of the most
 # generic nouns in the language, and a beginner's own top-level `vector = [...]` after
@@ -126,6 +133,12 @@ export D₋ₓ, D₋ᵧ, D₋₂, ∇ₕ, D₋
 # the forward twins are `public` for the same reason `∇₊ₕ` is (#211).
 export divₕ, divₕ!, curlₕ, curlₕ!, Δₕ, Δₕ!
 public div₊ₕ, div₊ₕ!, curl₊ₕ, curl₊ₕ!
+
+# The symbolic small-strain tensor over a composite trial/test function (gpena/Bramble.jl#234).
+# Builder-only -- it returns a `Bramble._StrainTensor`, consumed immediately by `inner₊` and
+# never a grid function -- so there is no in-place `εₕ!` to pair it with the way `divₕ!`
+# pairs with `divₕ` above.
+export εₕ
 export D₋ₓ!, D₋ᵧ!, D₋₂!
 
 # `public` rather than nothing at all, unlike the unscaled differences above: the forward
@@ -158,6 +171,7 @@ public M₊ₓ!, M₊ᵧ!, M₊₂!
 export dirichlet_constraints, dirichlet_bc!, symmetrize!
 export reaction, reaction_density
 export form, assemble, assemble!, assemble_parallel!, allocate_system_matrix, evaluate!
+export is_separable, kronecker_operator, KroneckerLinearOperator
 export assemble_add!
 export jacobian_pattern, ast_sparsity_detector
 export type_cached_assemble!
@@ -252,6 +266,7 @@ include("form/reaction.jl")
 include("form/bilinear_traversal.jl")
 include("form/bilinear_pattern.jl")
 include("form/bilinear_execution.jl")
+include("form/kronecker.jl")
 include("form/assemble_add.jl")
 include("form/jacobian_pattern.jl")
 include("form/type_cached_assemble.jl")

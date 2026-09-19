@@ -6,6 +6,10 @@ using Bramble
 import Bramble: diff₋ₓ, diff₋ᵧ, diff₋₂, diff₋ₕ, diff₊ₓ, diff₊ᵧ, diff₊₂, D₊ₓ, D₊ᵧ, D₊₂, ∇₊ₕ, M₊ₓ, M₊ᵧ, M₊₂
 using Bramble: components, ndofs, _grid_dims, _op_mesh
 using Bramble: diff₋ₓ, diff₋ᵧ, diff₋₂, diff₊ₓ, diff₊ᵧ, diff₊₂, diff₋ₕ
+# εₕ/εₕ! (gpena/Bramble.jl#234, S6.7): new names, not yet exported -- the integrator adds
+# `export εₕ, εₕ!` to src/Bramble.jl alongside divₕ/curlₕ/Δₕ.
+import Bramble: εₕ, εₕ!
+using ..TestUtils: alloc_test, @test_allocs
 
 # Operators on composite grid functions.
 #
@@ -141,6 +145,102 @@ using Bramble: diff₋ₓ, diff₋ᵧ, diff₋₂, diff₊ₓ, diff₊ᵧ, diff�
         rₕ = D₋ₓ(uₕ)
         rₕ[1] = -1234.0
         @test parent(uₕ) == before
+    end
+
+    # gpena/Bramble.jl#234 (v3.3.0 plan S6.7): ∇ₕ, εₕ and divₕ over a *vector field* -- a
+    # `D`-leaf composite VectorElement on a `D`-dimensional mesh -- rather than the
+    # arbitrary-leaf-count multi-field composites the testsets above exercise.
+    @testset "Vector calculus over composites (gpena/Bramble.jl#234 S6.7)" begin
+        Dm = (D₋ₓ, D₋ᵧ, D₋₂)
+        Mm = (Mₓ, Mᵧ, M₂)
+
+        vc_cases = (
+            (
+                "2D",
+                mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 6), (true, true)),
+                2,
+                (x -> sin(x[1]) + x[2]^2, x -> cos(x[2]) + x[1]^2)
+            ),
+            (
+                "3D",
+                mesh(
+                    domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (5, 4, 6),
+                    (true, true, true)
+                ),
+                3,
+                (
+                    x -> sin(x[1]) + x[2] * x[3],
+                    x -> cos(x[2]) + x[1] * x[3],
+                    x -> sin(x[3]) + x[1] * x[2]
+                )
+            )
+        )
+
+        for (lbl, Ωₕ, D, fs) in vc_cases
+            @testset "$lbl" begin
+                Wₕ = gridspace(Ωₕ)
+                Vₕ = gridspace(Ωₕ, Val(D))
+                uₕ = Rₕ(Vₕ, fs)
+                # The independent oracle: each component built as its own scalar grid
+                # function and differenced/averaged directly, never through `∇ₕ`/`εₕ`
+                # applied to the composite.
+                scalars = ntuple(k -> Rₕ(Wₕ, fs[k]), D)
+
+                @testset "∇ₕ gradient tensor against a scalar D₋ oracle" begin
+                    g = ∇ₕ(uₕ)
+                    @test length(g) == D
+                    for i in 1:D, j in 1:D
+                        @test parent(components(g[i])[j]) == parent(Dm[i](scalars[j]))
+                    end
+                end
+
+                @testset "εₕ against a hand-built symmetrised oracle" begin
+                    ε = εₕ(uₕ)
+                    for i in 1:D
+                        @test parent(ε[i][i]) == parent(Dm[i](scalars[i]))
+                    end
+                    for i in 1:D, j in 1:D
+                        i == j && continue
+                        oracle = 0.5 .* (parent(Mm[i](Dm[j](scalars[i]))) .+
+                                  parent(Mm[j](Dm[i](scalars[j]))))
+                        @test parent(ε[i][j]) ≈ oracle
+                        @test parent(ε[i][j]) == parent(ε[j][i]) # symmetry
+                    end
+                end
+
+                @testset "εₕ! agrees with εₕ and allocates nothing" begin
+                    dest = ntuple(_ -> ntuple(_ -> similar(first(scalars)), Val(D)), Val(D))
+                    εₕ!(dest, uₕ)
+                    ε = εₕ(uₕ)
+                    for i in 1:D, j in 1:D
+                        @test parent(dest[i][j]) == parent(ε[i][j])
+                    end
+                    @test_allocs εₕ!(dest, uₕ)
+                end
+
+                @testset "divₕ already covers the composite vector field (#158)" begin
+                    # Independent oracle: the plain, unstaggered sum of D₋ᵢ over each
+                    # scalar leaf -- exactly what divₕ (#158) already computes, and all
+                    # this subplan's goal asks of it. No extension was needed.
+                    oracle = mapreduce(k -> parent(Dm[k](scalars[k])), +, 1:D)
+                    @test parent(divₕ(uₕ)) ≈ oracle
+                end
+            end
+        end
+
+        @testset "Rejected inputs" begin
+            Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 5), (true, true))
+            W2 = gridspace(Ω2)
+            V3 = gridspace(Ω2, Val(3))
+
+            # a non-composite (scalar) element on a 2D mesh: arity 1 != 2
+            scalar_uₕ = Rₕ(W2, x -> x[1] + x[2])
+            @test_throws DimensionMismatch εₕ(scalar_uₕ)
+
+            # a composite whose leaf count (3) differs from the mesh dimension (2)
+            wrong_uₕ = Rₕ(V3, (x -> x[1], x -> x[2], x -> x[1] + x[2]))
+            @test_throws DimensionMismatch εₕ(wrong_uₕ)
+        end
     end
 end
 

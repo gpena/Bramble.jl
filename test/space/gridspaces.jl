@@ -159,6 +159,41 @@ using ..TestUtils: alloc_test, @test_allocs, _nonuniform_points
             @test weights(W2, Innerplus(), 1) === w_plus[1]
             @test weights(W2, Innerplus(), 2) === w_plus[2]
         end
+
+        # weights(Wₕ, Val(S)) for every staggered set S ⊆ 1:D (gpena/Bramble.jl#115, #234).
+        # Checked against the mesh's own spacing/half_spacing directly, hand-multiplied per
+        # axis -- independent of the per-axis factors `SpaceWeights` stores internally.
+        @testset "weights(Wₕ, Val(S))" begin
+            Ω3 = domain(box((0.0, 0.0, 0.0), (0.5, 0.6, 0.7)))
+            Ωₕ3 = mesh(Ω3, (4, 3, 5), (false, false, false))
+            W3v = gridspace(Ωₕ3)
+            n = npoints(Ωₕ3, Tuple)
+
+            aligned(d, i) = i == 1 ? 0.0 : spacing(Ωₕ3(d), i)
+            cellfac(d, i) = half_spacing(Ωₕ3(d), i)
+
+            subsets = ((), (1,), (2,), (3,), (1, 2), (1, 3), (2, 3), (1, 2, 3))
+            for S in subsets
+                w = weights(W3v, Val(S))
+                @test length(w) == prod(n)
+                for I in CartesianIndices(n)
+                    expected = prod(d -> (d in S ? aligned(d, I[d]) : cellfac(d, I[d])), 1:3)
+                    @test w[LinearIndices(n)[I]] ≈ expected
+                    # The two existing families (S = () and singletons) return one of
+                    # SpaceWeights' own plain, dense vectors -- 1-dimensional, so only
+                    # linear indexing applies. Every other S returns a `SeparableWeights`,
+                    # which also answers a `CartesianIndex` directly (the access pattern
+                    # an assembly loop already has for free -- see its own docstring).
+                    length(S) in (0, 1) || @test w[I] ≈ expected
+                end
+            end
+
+            # The four existing families are the same objects, not recomputed copies.
+            @test weights(W3v, Val(())) === weights(W3v, Innerh())
+            for d in 1:3
+                @test weights(W3v, Val((d,))) === weights(W3v, Innerplus(), d)
+            end
+        end
     end
 
     @testset "CompositeGridSpace" begin

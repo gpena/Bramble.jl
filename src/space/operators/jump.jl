@@ -94,3 +94,12 @@ are the same quantity.
     vectorial_alias=jumpₕ,
     vectorial_dir_string="",
     vectorial_what="jump")
+
+# --- Kronecker oracle dispatch (gpena/Bramble.jl#185) --------------------------------- #
+#
+# The jump forwards to the unscaled forward difference (`_kron_forward_difference`,
+# `difference.jl`), as `jump` itself forwards to `forward_difference` at runtime.
+for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
+    alias = Symbol(:jump, suffix)
+    @eval kronecker_operator_matrix(Ωₕ::AbstractMeshType, ::typeof($alias)) = _kron_forward_difference(Ωₕ, Val($i))
+end
