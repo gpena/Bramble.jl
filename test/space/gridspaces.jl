@@ -96,7 +96,7 @@ using ..TestUtils: alloc_test, @test_allocs, _nonuniform_points
         VT2 = vector_type(b2)
 
         sw2 = space_weights(mesh2d)
-        @test sw2 isa SpaceWeights{D2, VT2}
+        @test sw2 isa SpaceWeights{D2, eltype(VT2), VT2}
         @test length(sw2.innerh) == npoints(mesh2d)
         @test length(sw2.innerplus) == D2
         @test all(length(w) == npoints(mesh2d) for w in sw2.innerplus)
@@ -179,12 +179,12 @@ using ..TestUtils: alloc_test, @test_allocs, _nonuniform_points
                 for I in CartesianIndices(n)
                     expected = prod(d -> (d in S ? aligned(d, I[d]) : cellfac(d, I[d])), 1:3)
                     @test w[LinearIndices(n)[I]] ≈ expected
-                    # The two existing families (S = () and singletons) return one of
-                    # SpaceWeights' own plain, dense vectors -- 1-dimensional, so only
-                    # linear indexing applies. Every other S returns a `SeparableWeights`,
-                    # which also answers a `CartesianIndex` directly (the access pattern
-                    # an assembly loop already has for free -- see its own docstring).
-                    length(S) in (0, 1) || @test w[I] ≈ expected
+                    # Every S, including the two existing families (S = () and
+                    # singletons), returns a `SeparableWeights` (gpena/Bramble.jl#115,
+                    # S6.8), which answers a `CartesianIndex` directly (the access pattern
+                    # an assembly loop already has for free -- see its own docstring) as
+                    # well as a linear index.
+                    @test w[I] ≈ expected
                 end
             end
 

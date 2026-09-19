@@ -1,6 +1,60 @@
 """
-    SpaceWeights(innerh::VT, innerplus::NTuple{D, VT}, aligned::NTuple{D, VT}, cellfactor::NTuple{D, VT}, built_version::Int)
-    SpaceWeights{D, VT}(innerh::VT, innerplus::NTuple{D, VT}, aligned::NTuple{D, VT}, cellfactor::NTuple{D, VT}, built_version::Int)
+    SeparableWeights{D, T, VT}(factors::NTuple{D, VT}, dims::NTuple{D, Int})
+
+A lazy, separable weight vector over a `D`-dimensional grid: entry `I` (linear or
+`CartesianIndex{D}`) is ``\\prod_{d=1}^D`` `factors[d][I[d]]`, computed on every access
+rather than stored once for the whole grid.
+
+Every family [`SpaceWeights`](@ref) offers is one of these (gpena/Bramble.jl#115, #234,
+#115 again for the 100³-under-1MB target S6.8 set): `innerh` and each entry of
+`innerplus` are built once, when the space is constructed, from the per-axis `aligned`
+and `cellfactor` factors, and stored on `SpaceWeights` -- so reading them costs no more
+than the field access plus whatever the caller's own indexing does. [`weights`](@ref)`(Wₕ,
+Val(S))` for `|S| ≥ 2` builds a fresh one on every call instead, from those same two
+tuples, since nothing yet asks for the same larger set twice in a hot loop.
+
+A linear `getindex` converts to a `CartesianIndex` first (one division per axis); a caller
+that already holds the `CartesianIndex` -- an assembly loop over `local_stencil`, for
+instance -- should use it directly and skip that cost. `src/space/inner_product.jl`'s
+`_dot`/`_dot_masked` do this for every weight family alike. `src/form/operators/inner.jl`'s
+`compute_weight` does it only for `InnerPlusSet` (`|S| ≥ 2`); `InnerH` and `InnerPlus{Dim}`
+still index by linear position, so a symbolic `innerₕ`/`inner₊ₓ`/etc. term inside a form now
+pays that division per point during assembly, not only the two hot paths already routed
+through the `CartesianIndex` -- measured in `docs/src/internals/space.md`.
+
+# Fields
+
+  - `factors::NTuple{D, VT}`: the per-axis vectors multiplied together at each index.
+  - `dims::NTuple{D, Int}`: the grid shape, `npoints(Ωₕ, Tuple)`.
+
+See also: [`weights`](@ref), [`SpaceWeights`](@ref).
+"""
+struct SeparableWeights{D, T, VT <: AbstractVector{T}} <: AbstractVector{T}
+    "the per-axis vectors multiplied together at each index."
+    factors::NTuple{D, VT}
+    "the grid shape, `npoints(Ωₕ, Tuple)`."
+    dims::NTuple{D, Int}
+end
+
+@inline Base.size(w::SeparableWeights) = (prod(w.dims),)
+@inline Base.IndexStyle(::Type{<:SeparableWeights}) = IndexLinear()
+
+# No `@boundscheck` here: a `CartesianIndex{D}` doesn't fit the generic `checkbounds`
+# machinery for a 1-dimensional `AbstractVector` (its `size` is `(prod(dims),)`, not
+# `dims`), and every caller with a `CartesianIndex` in hand already has it from iterating
+# `CartesianIndices(dims)` -- the same trust `__prod`'s own callers already extend it.
+@inline function Base.getindex(w::SeparableWeights{D}, I::CartesianIndex{D}) where {D}
+    return __prod(w.factors, I)
+end
+
+@inline function Base.getindex(w::SeparableWeights{D}, li::Int) where {D}
+    @boundscheck checkbounds(w, li)
+    return @inbounds w[CartesianIndices(w.dims)[li]]
+end
+
+"""
+    SpaceWeights(innerh::SeparableWeights, innerplus::NTuple{D}, aligned::NTuple{D, VT}, cellfactor::NTuple{D, VT}, built_version::Int)
+    SpaceWeights{D, T, VT}(innerh, innerplus, aligned::NTuple{D, VT}, cellfactor::NTuple{D, VT}, built_version::Int)
 
 Holds the diagonal weight vectors for a grid space's discrete inner products, both the
 standard ``L^2`` weights and the staggered ones, precomputed once rather than recomputed
@@ -8,17 +62,24 @@ on every call.
 
 # Fields
 
-  - `innerh::VT`: weight vector for the standard discrete ``L^2`` inner product (`:innerₕ`), based on cell measures (``|\\square_k|``).
-  - `innerplus::NTuple{D, VT}`: tuple of weight vectors for modified, staggered inner products (`:inner₊ₓ`, `:inner₊ᵧ`, etc.), with one vector for each spatial dimension.
+  - `innerh::SeparableWeights{D, T, VT}`: weight for the standard discrete ``L^2`` inner
+    product (`:innerₕ`), based on cell measures (``|\\square_k|``). Built once, straight
+    from `cellfactor` (no axis is in `S = ()`), and stored here rather than recomputed on
+    every access -- it is a lazy per-axis product rather than a full-grid vector
+    (gpena/Bramble.jl#115, #234), so `weights(Wₕ, Innerh())` costs the field read plus
+    whatever the caller's own indexing does; see [`SeparableWeights`](@ref).
+  - `innerplus::NTuple{D, SeparableWeights{D, T, VT}}`: one such lazy weight per spatial
+    direction, for the modified, staggered inner products (`:inner₊ₓ`, `:inner₊ᵧ`, etc.).
   - `aligned::NTuple{D, VT}`: per-axis factor ``h_d(i)`` (length `npoints(Ωₕ, d)`, not the
     full grid) -- the same values [`innerplus`](@ref) uses on the axis aligned with its own
     difference direction. Kept so [`weights`](@ref)`(Wₕ, Val(S))` can build any staggered
     set from `O(D)` numbers instead of a fresh `O(n^D)` vector (gpena/Bramble.jl#115, #234).
   - `cellfactor::NTuple{D, VT}`: per-axis factor ``h_d(i+1/2)`` (also length
-    `npoints(Ωₕ, d)`). This is [`innerh`](@ref)'s own per-axis cell measure, and doubles as
-    every staggered direction's transverse factor: the two coincide for any axis with more
-    than one point (both read the submesh's own cached half-spacings), so one vector serves
-    both roles rather than two.
+    `npoints(Ωₕ, d)`). This is [`innerh`](@ref)'s own per-axis cell measure -- `innerh`'s
+    `factors` tuple *is* `cellfactor`, not a copy of it -- and doubles as every staggered
+    direction's transverse factor: the two coincide for any axis with more than one point
+    (both read the submesh's own cached half-spacings), so one vector serves both roles
+    rather than two.
   - `built_version::Int`: the mesh's [`_mesh_version`](@ref) at the moment these weights
     were computed (gpena/Bramble.jl#221) -- [`weights`](@ref) re-checks it against the
     mesh's current version on every access, so a space built before an in-place mutation
@@ -27,11 +88,11 @@ on every call.
 
 For a detailed explanation of the mathematical formulas corresponding to these weights, please refer to the documentation for [`ScalarGridSpace`](@ref).
 """
-struct SpaceWeights{D, VT <: AbstractVector}
-    "weight vector for the standard discrete ``L^2`` inner product (`:innerₕ`), based on cell measures (``|\\square_k|``)."
-    innerh::VT
-    "a tuple of weight vectors for modified, staggered inner products (`:inner₊ₓ`, `:inner₊ᵧ`, etc.), with one vector for each spatial dimension."
-    innerplus::NTuple{D, VT}
+struct SpaceWeights{D, T, VT <: AbstractVector{T}}
+    "weight for the standard discrete ``L^2`` inner product (`:innerₕ`), based on cell measures (``|\\square_k|``)."
+    innerh::SeparableWeights{D, T, VT}
+    "one lazy weight per spatial direction, for the modified, staggered inner products (`:inner₊ₓ`, `:inner₊ᵧ`, etc.)."
+    innerplus::NTuple{D, SeparableWeights{D, T, VT}}
     "per-axis aligned factor ``h_d(i)``, one vector of length `npoints(Ωₕ, d)` per axis."
     aligned::NTuple{D, VT}
     "per-axis cell-measure factor ``h_d(i+1/2)``, one vector of length `npoints(Ωₕ, d)` per axis; shared by `innerh` and every staggered direction's transverse factor."
@@ -41,8 +102,8 @@ struct SpaceWeights{D, VT <: AbstractVector}
 end
 
 """
-    ScalarGridSpace(mesh::MType, weights::SpaceWeights{D, VT})
-    ScalarGridSpace{D, T, VT, MType}(mesh::MType, weights::SpaceWeights{D, VT})
+    ScalarGridSpace(mesh::MType, weights::SpaceWeights{D, T, VT})
+    ScalarGridSpace{D, T, VT, MType}(mesh::MType, weights::SpaceWeights{D, T, VT})
 
 Represents a function space for **scalar fields** defined on a mesh.
 
@@ -52,7 +113,7 @@ A `ScalarGridSpace` pairs the mesh with the precomputed weight vectors
 # Fields
 
   - `mesh::MType`: the underlying mesh of the grid space.
-  - `weights::SpaceWeights{D, VT}`: precomputed inner product weight vectors.
+  - `weights::SpaceWeights{D, T, VT}`: precomputed inner product weight vectors.
 
 ## Discrete inner products
 
@@ -121,7 +182,7 @@ struct ScalarGridSpace{
     "the underlying mesh of the grid space."
     mesh::MType
     "a [`SpaceWeights`](@ref) object holding vectors for various discrete inner products."
-    weights::SpaceWeights{D, VT}
+    weights::SpaceWeights{D, T, VT}
 end
 
 """
@@ -164,10 +225,18 @@ end
 # untyped signature this also admits spaces, for which npoints has no method.
 @inline __vector(Ωₕ::AbstractMeshType) = vector(backend(Ωₕ), npoints(Ωₕ))
 
-# One dimension has no transverse direction, so two of the four full-length vectors the
-# general method builds are dead weight: the mean factor is never selected, since `k == i`
-# always holds, and the product over a single factor is a copy. Filling the weight vector
-# directly drops both, along with the two passes that fill them.
+# `innerh`/`innerplus` are lazy `SeparableWeights` for every `D`, including `D = 1`
+# (gpena/Bramble.jl#115, #234, S6.8), rather than one dense `O(n)` vector for one dimension
+# and a lazy `O(D)`-factor product from `D = 2` on: `SpaceWeights{D, T, VT}` fixes the
+# field type at `SeparableWeights{D, T, VT}` for every `D`, and a second, dense-vector
+# variant of that field would need a further type parameter on `SpaceWeights` (and, since
+# `ScalarGridSpace` stores `SpaceWeights{D, T, VT}` in its own field type, on
+# `ScalarGridSpace` too) purely to special-case one dimension. Measured instead of assumed
+# (`docs/src/internals/space.md`): wrapping the 1D vector costs nothing detectable, since
+# `SeparableWeights` with one factor degenerates to that same vector's own indexing after
+# inlining. One dimension still skips building a *second* full-length vector for the
+# transverse factor -- there is none, since `aligned` and `cellfactor` already *are*
+# `innerplus₁` and `inner_h_vec` below, zero-copy.
 function space_weights(Ωₕ::AbstractMeshType{1})
     innerplus₁ = __vector(Ωₕ)
     _innerplus_weights!(innerplus₁, Ωₕ, 1)
@@ -175,16 +244,18 @@ function space_weights(Ωₕ::AbstractMeshType{1})
     inner_h_vec = __vector(Ωₕ)
     _innerh_weights!(inner_h_vec, Ωₕ)
 
-    # One dimension has no transverse axis, so the aligned and cell-measure per-axis
-    # factors *are* the two full-length vectors above -- no separate small vector to build.
-    return SpaceWeights{1, typeof(inner_h_vec)}(
-        inner_h_vec, (innerplus₁,), (innerplus₁,), (inner_h_vec,), _mesh_version(Ωₕ)
+    VT = typeof(inner_h_vec)
+    T = eltype(VT)
+    dims = npoints(Ωₕ, Tuple)
+
+    return SpaceWeights{1, T, VT}(
+        SeparableWeights{1, T, VT}((inner_h_vec,), dims),
+        (SeparableWeights{1, T, VT}((innerplus₁,), dims),),
+        (innerplus₁,), (inner_h_vec,), _mesh_version(Ωₕ)
     )
 end
 
 function space_weights(Ωₕ::AbstractMeshType{D}) where {D}
-    innerplus = ntuple(i -> __vector(Ωₕ), Val(D))
-
     # Per-axis factors, kept on `SpaceWeights` (not just used and discarded here) so
     # `weights(Wₕ, Val(S))` can answer any staggered set from `O(D)` numbers rather than a
     # fresh `O(n^D)` vector (gpena/Bramble.jl#115, #234):
@@ -200,25 +271,21 @@ function space_weights(Ωₕ::AbstractMeshType{D}) where {D}
     end
 
     npts_tuple = npoints(Ωₕ, Tuple)
+    VT = typeof(first(aligned))
+    T = eltype(VT)
 
-    # Assemble the weights for each difference direction `i` by taking the aligned
-    # factor on axis `i` and the cell-measure factor on all the others.
-    for i in 1:D
+    # `innerh` and each `innerplus[i]` used to be filled, full grid, by
+    # `_innerh_weights!`/`__innerplus_weights!` into a fresh `O(n^D)` vector apiece --
+    # exactly the cost this milestone removes (gpena/Bramble.jl#115): `SeparableWeights`
+    # answers the same values from `aligned`/`cellfactor` alone, computed at access time,
+    # so `space_weights` itself never allocates more than the `2D` per-axis vectors above.
+    innerh = SeparableWeights{D, T, VT}(cellfactor, npts_tuple)
+    innerplus = ntuple(Val(D)) do i
         factors = ntuple(k -> k == i ? aligned[k] : cellfactor[k], Val(D))
-
-        # `ReshapedArray` views the flat `innerplus[i]` vector without copying it.
-        v = Base.ReshapedArray(innerplus[i], npts_tuple, ())
-
-        __innerplus_weights!(execution_policy(Ωₕ), v, factors)
+        SeparableWeights{D, T, VT}(factors, npts_tuple)
     end
 
-    # --- Compute the `inner_h` weights (cell volumes) ---
-    inner_h_vec = __vector(Ωₕ)
-    _innerh_weights!(inner_h_vec, Ωₕ)
-
-    return SpaceWeights{D, typeof(inner_h_vec)}(
-        inner_h_vec, innerplus, aligned, cellfactor, _mesh_version(Ωₕ)
-    )
+    return SpaceWeights{D, T, VT}(innerh, innerplus, aligned, cellfactor, _mesh_version(Ωₕ))
 end
 
 # Implementation of the interface functions for AbstractSpaceType
@@ -240,6 +307,11 @@ Returns the precomputed weight vectors for discrete inner products.
 The weights are diagonal matrices (stored as vectors) used in computing discrete
 ``L^2`` inner products. They represent cell measures or staggered grid spacings.
 
+Every one of them is a [`SeparableWeights`](@ref) (gpena/Bramble.jl#115, #234): a lazy
+per-axis product, not a full-grid vector, whatever `S` is asked for. `innerh` and each
+`innerplus[d]` are built once, at `gridspace` construction time, and returned unchanged
+here; the rest are built fresh on each call from the same per-axis factors.
+
 # Methods
 
 1. `weights(Wₕ)` - Returns the full [`SpaceWeights`](@ref) struct
@@ -252,9 +324,8 @@ The weights are diagonal matrices (stored as vectors) used in computing discrete
    at grid index `I` is ``\\prod_{d \\in S} h_d(I_d) \\cdot \\prod_{d \\notin S} h_d(I_d +
    1/2)`` (gpena/Bramble.jl#115, #234). `S` is an `NTuple{K, Int}` with `K ≤ D` and any
    axis order; `weights(Wₕ, Val(()))` is `weights(Wₕ, Innerh())` and `weights(Wₕ,
-   Val((d,)))` is `weights(Wₕ, Innerplus(), d)`, returning the very same vector rather than
-   a recomputed copy. Every other `S` returns a [`SeparableWeights`](@ref), computed lazily
-   from the per-axis factors rather than materialised over the whole grid.
+   Val((d,)))` is `weights(Wₕ, Innerplus(), d)`, returning the very same object rather than
+   a recomputed copy. Every other `S` returns a freshly-built [`SeparableWeights`](@ref).
 
 # Examples
 
@@ -262,13 +333,13 @@ The weights are diagonal matrices (stored as vectors) used in computing discrete
 Wₕ = gridspace(Ωₕ)
 
 # Get all weights
-w = weights(Wₕ)  # Returns SpaceWeights{D, VT}
+w = weights(Wₕ)  # Returns SpaceWeights{D, T, VT}
 
 # Get standard L² weights
-w_h = weights(Wₕ, Innerh())  # Vector of cell volumes
+w_h = weights(Wₕ, Innerh())  # SeparableWeights, entry I = cell volume at I
 
 # Get modified inner product weights for x-direction
-w_plus_x = weights(Wₕ, Innerplus(), 1)  # Vector for x-direction
+w_plus_x = weights(Wₕ, Innerplus(), 1)  # SeparableWeights for x-direction
 
 # Use in inner product
 result = dot(uₕ.data, w_h, vₕ.data)  # Weighted inner product
@@ -303,52 +374,6 @@ end
 @inline weights(Wₕ::ScalarGridSpace, ::Innerh, i) = weights(Wₕ, Innerh())
 @inline weights(Wₕ::ScalarGridSpace, ::Innerplus, i) = weights(Wₕ, Innerplus())[i]
 
-"""
-    SeparableWeights{D, T, VT}(factors::NTuple{D, VT}, dims::NTuple{D, Int})
-
-A lazy, separable weight vector over a `D`-dimensional grid: entry `I` (linear or
-`CartesianIndex{D}`) is ``\\prod_{d=1}^D`` `factors[d][I[d]]`, computed on every access
-rather than stored once for the whole grid.
-
-Returned by [`weights`](@ref)`(Wₕ, Val(S))` for a staggered set `S` that is neither empty
-nor a singleton (those two return one of [`SpaceWeights`](@ref)'s own dense vectors
-directly): `factors[d]` is then the per-axis `aligned` factor for `d ∈ S` and the per-axis
-`cellfactor` for `d ∉ S`, each of length `npoints(Ωₕ, d)` rather than the full grid, so
-building one of these costs `O(D)` numbers, not a fresh `O(n^D)` vector
-(gpena/Bramble.jl#115, #234). A linear `getindex` converts to a `CartesianIndex` first
-(one division per axis); a caller that already holds the `CartesianIndex` -- an assembly
-loop over `local_stencil`, for instance -- should use it directly and skip that cost.
-
-# Fields
-
-  - `factors::NTuple{D, VT}`: the per-axis vectors multiplied together at each index.
-  - `dims::NTuple{D, Int}`: the grid shape, `npoints(Ωₕ, Tuple)`.
-
-See also: [`weights`](@ref), [`SpaceWeights`](@ref).
-"""
-struct SeparableWeights{D, T, VT <: AbstractVector{T}} <: AbstractVector{T}
-    "the per-axis vectors multiplied together at each index."
-    factors::NTuple{D, VT}
-    "the grid shape, `npoints(Ωₕ, Tuple)`."
-    dims::NTuple{D, Int}
-end
-
-@inline Base.size(w::SeparableWeights) = (prod(w.dims),)
-@inline Base.IndexStyle(::Type{<:SeparableWeights}) = IndexLinear()
-
-# No `@boundscheck` here: a `CartesianIndex{D}` doesn't fit the generic `checkbounds`
-# machinery for a 1-dimensional `AbstractVector` (its `size` is `(prod(dims),)`, not
-# `dims`), and every caller with a `CartesianIndex` in hand already has it from iterating
-# `CartesianIndices(dims)` -- the same trust `__prod`'s own callers already extend it.
-@inline function Base.getindex(w::SeparableWeights{D}, I::CartesianIndex{D}) where {D}
-    return __prod(w.factors, I)
-end
-
-@inline function Base.getindex(w::SeparableWeights{D}, li::Int) where {D}
-    @boundscheck checkbounds(w, li)
-    return @inbounds w[CartesianIndices(w.dims)[li]]
-end
-
 @inline weights(Wₕ::ScalarGridSpace, ::Val{()}) = weights(Wₕ, Innerh())
 
 @inline function weights(Wₕ::ScalarGridSpace, ::Val{S}) where {S}
@@ -360,7 +385,8 @@ end
 @inline function _weights_val(Wₕ::ScalarGridSpace{D}, ::Val{S}, ::Val{K}) where {D, S, K}
     w = weights(Wₕ)
     factors = ntuple(d -> (d in S ? w.aligned[d] : w.cellfactor[d]), Val(D))
-    return SeparableWeights{D, eltype(w.innerh), typeof(w.innerh)}(
+    VT = typeof(w.aligned[1])
+    return SeparableWeights{D, eltype(VT), VT}(
         factors, npoints(mesh(Wₕ), Tuple)
     )
 end
@@ -441,6 +467,9 @@ function _innerh_weights!(u, Ωₕ::AbstractMeshType{1})
     return nothing
 end
 
+# No longer called by `space_weights` for `D ≥ 2` (gpena/Bramble.jl#115, S6.8): the
+# `SeparableWeights` `innerh` there is `cellfactor` itself, needing no full-grid fill.
+# Kept as the tested, directly-callable building block it always was.
 function _innerh_weights!(u, Ωₕ::AbstractMeshType{D}) where {D}
     # The submeshes already hold these, so they are read rather than rebuilt: the
     # comprehension this replaces allocated one vector per axis on every call.
