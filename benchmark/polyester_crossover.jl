@@ -289,7 +289,8 @@ if !load_settled
         "proceeds rather than waiting further.",
     )
 end
-_out("Julia threads : $(Threads.nthreads())" * (Threads.nthreads() == 4 ? "" : "  WARNING: expected 4 (bramble-benchmarks §1)"))
+_out("Julia threads : $(Threads.nthreads())" *
+     (Threads.nthreads() == 4 ? "" : "  WARNING: expected 4 (bramble-benchmarks §1)"))
 _out("Julia version : $(VERSION), OS: $(Sys.MACHINE)")
 _out()
 
@@ -306,12 +307,16 @@ const BENCH_SAMPLES = SMOKE ? 3 : 15
 
 # --- Geometry / spaces -------------------------------------------------------- #
 
-_space2d(n::Int, policy::ExecutionPolicy) = gridspace(
-    mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), n, true; backend = backend(Float64; policy = policy))
-)
-_space1d(n::Int, policy::ExecutionPolicy) = gridspace(
-    mesh(domain(interval(0.0, 1.0)), n, true; backend = backend(Float64; policy = policy))
-)
+function _space2d(n::Int, policy::ExecutionPolicy)
+    gridspace(
+        mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), n, true; backend = backend(Float64; policy = policy))
+    )
+end
+function _space1d(n::Int, policy::ExecutionPolicy)
+    gridspace(
+        mesh(domain(interval(0.0, 1.0)), n, true; backend = backend(Float64; policy = policy))
+    )
+end
 
 _f2d(x) = sin(2π * x[1]) * cos(2π * x[2])
 _f1d(x) = sin(2π * x)
