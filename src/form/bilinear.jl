@@ -167,6 +167,20 @@ end
     return A
 end
 
+# Deliberately policy-blind, and measured rather than assumed. Zeroing is the one serial
+# stretch of an otherwise threaded refill, so it looks like the obvious candidate for a
+# policy-dispatched sweep: it is 4.3% of `assemble_parallel!` at 1024^2 (0.40 ms of 9.48 ms,
+# 5,238,784 stored entries), which by Amdahl's law alone would cap a four-thread speedup at
+# 3.55x, close to the 3.47x actually measured. That reasoning is wrong, because the 4.3% is
+# not compute. Writing 40 MB of zeros saturates memory bandwidth on one core, so splitting
+# the write gains nothing: measured on the reference M2 at 1024^2, `fill!` takes 0.492 ms
+# serially, 0.495 ms under `Threads.@threads :static` (0.99x) and 0.633 ms under
+# `Polyester.@batch` (0.78x -- per-call overhead with no compute to hide behind). Even a free
+# zeroing would take the sweep from 9.84 ms to about 8.5 ms and leave it behind `assemble!`'s
+# cached replay at 6.9 ms. Dispatching this on the execution policy would also change a
+# `public` seam method (gpena/Bramble.jl#12) that out-of-tree backends implement, for a gain
+# that measures as zero. `benchmark/polyester_crossover.jl` carries the surrounding numbers.
+
 # Takes the AST the form was built from, so the cache's own `AST` parameter comes from the
 # same expression tree `BilinearForm` stores -- never `nothing`, which would have made the
 # parameter a lie on the first cache miss.
