@@ -31,15 +31,21 @@
 
 Solve `A u = F` (or `fact u = F`) and return `u`.
 
-With no keyword arguments this is `A \\ F`. The name exists so that reverse-mode AD tools
-have one function to attach an adjoint rule to, which is what makes a whole
-`θ -> assemble -> pde_solve -> J(u)` chain differentiable.
+With no keyword arguments this is `A \\ F`, unless `AppleAccelerate.jl` is loaded on macOS (see
+`:default` below), in which case it is `accelerate_solve(A, F; sym)`. The name exists so that
+reverse-mode AD tools have one function to attach an adjoint rule to, which is what makes a
+whole `θ -> assemble -> pde_solve -> J(u)` chain differentiable.
 
 # Keywords
-- `solver`: `:default` (`\\`), `:suitesparse` (CHOLMOD/UMFPACK), `:spqr` (sparse QR, for a
-  least-squares or rectangular `A`), `:accelerate` (Apple `libSparse`, needs
-  `AppleAccelerate.jl`), `:mumps` (needs `MUMPS.jl`), `:sparspak` (pure Julia, needs
-  `Sparspak.jl`).
+- `solver`: `:default` -- `A \\ F` on Linux, Windows, and macOS without `AppleAccelerate.jl`
+  loaded; on macOS with `using AppleAccelerate` in effect, dispatches to `accelerate_solve`
+  instead (same as passing `solver = :accelerate` explicitly). This only ever narrows which
+  solver runs on macOS; Linux and Windows are never affected, and a matrix Accelerate cannot
+  factor (e.g. non-square) throws from `accelerate_solve` exactly as `solver = :accelerate`
+  would -- `:default` never silently falls back to `\\` after picking Accelerate.
+  `:suitesparse` (CHOLMOD/UMFPACK), `:spqr` (sparse QR, for a least-squares or rectangular
+  `A`), `:accelerate` (Apple `libSparse`, needs `AppleAccelerate.jl`), `:mumps` (needs
+  `MUMPS.jl`), `:sparspak` (pure Julia, needs `Sparspak.jl`).
 - `sym`: symmetry hint for `:suitesparse`, `:accelerate` and `:mumps`. `:auto` (default)
   detects it; `:spd`/`:definite`/`1`, `:symmetric`/`2` and `:unsymmetric`/`0` state it.
 
@@ -79,6 +85,9 @@ See also [`assemble`](@ref), [`sparse_factorize`](@ref), [`suitesparse_solve`](@
 """
 function pde_solve(A::SparseMatrixCSC, F::AbstractVector; solver::Symbol = :default, sym = :auto, kwargs...)
     if solver === :default
+        if Sys.isapple() && Base.get_extension(Bramble, :BrambleAppleAccelerateExt) !== nothing
+            return accelerate_solve(A, F; sym = sym, kwargs...)
+        end
         return A \ F
     elseif solver === :suitesparse
         return suitesparse_solve(A, F; sym = sym, kwargs...)

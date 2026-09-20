@@ -87,11 +87,24 @@ abstract type GpuPolicy <: ExecutionPolicy end
 """
     GpuAsync() <: GpuPolicy
 
-Device execution policy: kernels are launched on the accelerator and complete asynchronously.
+Device execution policy: work is dispatched to the accelerator rather than to a host loop.
 
 What [`metal_backend`](@ref) carries by default. A GPU is massively parallel and cannot execute
 serially, so the old default of `Serial()` was not a conservative choice but a false statement
 about the hardware, and it sent CPU assembly loops at device arrays.
+
+**Despite the name, a call under this policy does not return before the device has finished.**
+Every kernel launched from `BrambleKernelAbstractionsExt` is followed by a
+`KernelAbstractions.synchronize`, so the launch is asynchronous but the Bramble-level call that
+issued it is not: `Rₕ!`, `avgₕ!` and the difference and average operators have all completed on
+the device by the time they return. Nothing in the package currently exposes a way to queue work
+and synchronise later.
+
+The name therefore describes the launch, not the call, and that is a wart rather than a design:
+`Async` states a property of the API that the API does not have. Renaming it is breaking and
+needs a deprecation cycle, so it is scheduled after the locality work rather than as part of it.
+That work is gpena/Bramble.jl#298, which separates the memory locality this policy also encodes
+-- already implied by the backend's array types -- from the execution strategy it selects.
 
 See also: [`GpuPolicy`](@ref), [`ExecutionPolicy`](@ref).
 """
@@ -407,6 +420,142 @@ function _metal_backend(::Type, ::ExecutionPolicy)
     return error(
         "metal_backend requires Metal.jl. Add `using Metal` before calling this function."
     )
+end
+
+"""
+    metal_sparse_csr(A::SparseMatrixCSC) -> MetalSparseMatrixCSR
+
+Convert a host `SparseMatrixCSC` to a sparse matrix in compressed sparse row (CSR) format,
+stored in Metal device memory (gpena/Bramble.jl#250).
+
+Requires `using Metal` in the caller environment. The conversion is sparse-to-sparse
+throughout -- `A` is never densified.
+
+# Arguments
+- `A`: The host sparse matrix to convert.
+
+# Throws
+- `ErrorException`: If `Metal.jl` is not loaded.
+"""
+function metal_sparse_csr(A)
+    return error(
+        "metal_sparse_csr requires Metal.jl. Add `using Metal` before calling this function."
+    )
+end
+
+"""
+    metal_sparse_csc(A::SparseMatrixCSC) -> MetalSparseMatrixCSC
+
+Convert a host `SparseMatrixCSC` to a sparse matrix in compressed sparse column (CSC) format,
+stored in Metal device memory (gpena/Bramble.jl#250).
+
+Requires `using Metal` in the caller environment. `SparseMatrixCSC`'s own storage already is
+CSC, so no format conversion happens -- its fields are placed in device memory as-is.
+
+# Arguments
+- `A`: The host sparse matrix to convert.
+
+# Throws
+- `ErrorException`: If `Metal.jl` is not loaded.
+"""
+function metal_sparse_csc(A)
+    return error(
+        "metal_sparse_csc requires Metal.jl. Add `using Metal` before calling this function."
+    )
+end
+
+"""
+    _gpu_functional(::Val{name}) -> Bool
+
+Whether the GPU extension named by `name` (a `Symbol`, e.g. `:metal`) has a functional
+device, not merely that the corresponding package loaded.
+
+Defaults to `false` for every name: loading a GPU package extension (`using Metal`, and
+in future `using CUDA`/`using AMDGPU`) succeeds on any platform, whether or not that
+host actually has the accelerator's hardware and drivers -- it degrades gracefully
+rather than erroring. `ext/BrambleMetalExt.jl` overrides this for `Val(:metal)` with
+`Metal.functional()`, the one call that actually probes the device
+(gpena/Bramble.jl#192). [`gpu_backend`](@ref) requires both this and the extension being
+loaded before handing back a backend, so a loaded-but-broken GPU package is refused here
+rather than failing on first use.
+
+Declared with the generic `::Val` signature (rather than `::Val{:metal}` itself) so that
+`BrambleMetalExt`'s own `Val(:metal)` method is strictly more specific than this stub --
+otherwise the extension's method would silently overwrite this one instead of adding to
+it, which precompilation reports as method overwriting.
+"""
+_gpu_functional(::Val) = false
+
+"""
+    gpu_backend(::Type{T} = Float32; policy::ExecutionPolicy = GpuAsync()) -> Backend
+
+Construct a GPU [`Backend`](@ref) for whichever accelerator extension is loaded **and**
+has a functional device.
+
+Detects a loaded GPU package extension with `Base.get_extension`, checks
+[`_gpu_functional`](@ref) for that device, and forwards to the backend's own constructor:
+currently [`metal_backend`](@ref), under `using Metal` with `Metal.functional()` true. A
+CUDA or AMDGPU extension joins this dispatch once it exists (gpena/Bramble.jl#11, v3.5.0).
+
+# Arguments
+- `T`: Floating-point element type (default: `Float32`).
+
+# Keywords
+- `policy`: Execution policy instance (default: [`GpuAsync`](@ref)).
+
+# Throws
+- `ErrorException`: two distinct diagnoses, deliberately not sharing a message. If no GPU
+  extension is loaded at all, the message names the package to load, chosen from the host
+  architecture: Metal on Apple Silicon, CUDA on Linux/Windows, and a generic "no GPU
+  hardware" message otherwise. If a GPU extension *is* loaded but its device is not
+  functional (e.g. `using Metal` on a host without working Metal drivers), the message
+  says so instead -- that is a driver, hardware or virtualisation problem, not a missing
+  `using`.
+
+See also: [`metal_backend`](@ref), [`backend`](@ref).
+"""
+function gpu_backend(T::Type = Float32; policy::ExecutionPolicy = GpuAsync())
+    if Base.get_extension(Bramble, :BrambleMetalExt) !== nothing
+        _gpu_functional(Val(:metal)) || return _throw_metal_not_functional()
+        return metal_backend(T; policy)
+    end
+    return _throw_no_gpu_backend()
+end
+
+# Kept distinct from `_throw_no_gpu_backend` below on purpose (gpena/Bramble.jl#192, S1.4):
+# a functional-device failure is a driver, hardware or virtualisation problem, which no
+# `using` statement fixes, so it must not share a message with the "nothing loaded" case.
+@noinline function _throw_metal_not_functional()
+    return error(
+        "gpu_backend found Metal.jl loaded, but Metal.functional() is false: no functional " *
+        "Metal device was found. This is a driver, hardware or virtualisation problem, not " *
+        "a missing `using Metal`.",
+    )
+end
+
+# `BrambleMetalExt` is the only GPU extension this package has today; a `BrambleCUDAExt`/
+# `BrambleAMDGPUExt` check joins the chain above the same way once those extensions and
+# their own `cuda_backend`/`amdgpu_backend` constructors exist (gpena/Bramble.jl#11,
+# v3.5.0). `Base.get_extension` on a name nothing declares simply never returns non-`nothing`,
+# so there is nowhere to hook a check in today without calling a constructor this package
+# does not yet define.
+@noinline function _throw_no_gpu_backend()
+    if Sys.isapple() && Sys.ARCH === :aarch64
+        return error(
+            "gpu_backend found no loaded GPU extension. Apple Silicon GPU detected: add " *
+            "`using Metal` before calling this function to activate the Metal backend.",
+        )
+    elseif Sys.islinux() || Sys.iswindows()
+        return error(
+            "gpu_backend found no loaded GPU extension. Add `using CUDA` before calling " *
+            "this function to activate the CUDA backend.",
+        )
+    else
+        return error(
+            "gpu_backend found no loaded GPU extension, and no supported GPU hardware was " *
+            "found on this host.",
+        )
+    end
 end
 
 """

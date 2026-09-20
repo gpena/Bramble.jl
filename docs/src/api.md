@@ -33,6 +33,7 @@ matrix_type
 backend_types
 backend_eye
 backend_zeros
+gpu_backend
 metal_backend
 csr_backend
 ```

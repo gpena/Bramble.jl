@@ -38,6 +38,15 @@ Rₕ!(uₕ, x -> sin(x[1]) * cos(x[2]))   # 2D: x is a Tuple{Float64,Float64}
 Rₕ!(uₕ, x -> 1.0; markers = (:left,))
 ```
 
+On a Metal (or other device) backend, `f` runs *on the device*, evaluated once per grid
+point inside a compiled kernel (gpena/Bramble.jl#94, #174). It must therefore be
+GPU-compilable: `x -> sin(x[1])` is, but a closure boxing a captured value (a `Ref`, a
+`mutable struct` field, a global variable) or calling a function the device compiler cannot
+inline is not, and fails at kernel-compile time with a `GPUCompiler.InvalidIRError` naming
+the offending call -- inherent to GPU execution, not specific to `Rₕ!`. A masked call
+(`markers` non-empty) and a mesh of more than one dimension currently fall back to the same
+per-index sweep the CPU backend uses, which is not device-compatible either.
+
 For an `N`-component element either shape of `f` works and both give the same result;
 the single vector-valued function is evaluated once per grid point when every
 component shares the same mesh, whereas the tuple always evaluates each component
@@ -79,6 +88,100 @@ end
 @inline _rule_scatter_kernel(rule::PointValue, sp, ::Val{NC}) where {NC} = _RₕKernel(rule.f, mesh(sp), indices(mesh(sp)))
 
 @inline _rule_component(rule::PointValue, k) = PointValue(pt -> rule.f(pt)[k])
+
+#------------------------------------------------------------------------------------------#
+# Device kernel launch stubs (gpena/Bramble.jl#94, #174, S2.3 of
+# .agents/plans/metal-and-apple-silicon-acceleration.md)
+#
+# `PointValue`'s side of the `_device_project!`/`_device_scatter_project!` contract
+# (`operators/projection.jl`): a 1D leaf space evaluates `rule.f` directly against the
+# mesh's own coordinate vector `points(Ωₕ)`, through `ka_device` and one of the launchers
+# below, which `ext/BrambleKernelAbstractionsExt.jl` implements as a
+# `KernelAbstractions.@kernel`. Without that extension loaded, the launcher throws a named
+# diagnostic instead of failing several frames later on a scalar index.
+#------------------------------------------------------------------------------------------#
+
+@noinline function _throw_no_ka_projection_kernel(fname::String)
+    return error(
+        "$fname requires KernelAbstractions.jl to fill a device-backed VectorElement. Add " *
+        "`using KernelAbstractions` (and the package providing this backend's device, e.g. " *
+        "`using Metal`) before calling Rₕ!/Rₕ on this backend.",
+    )
+end
+
+# Deliberately untyped on the array/kernel arguments (matching the `ka_device`/
+# `_launch_uniform_points!` fallback idiom): the extension's methods are typed on
+# `AbstractVector`/`Tuple`, and a fallback with the same signature would overwrite them
+# instead of adding a genuinely more specific dispatch.
+_launch_restriction!(v, pts, f, dev) = _throw_no_ka_projection_kernel("_launch_restriction!")
+_launch_restriction_scatter!(mats, pts, f, dev) = _throw_no_ka_projection_kernel("_launch_restriction_scatter!")
+
+# The `D >= 2` counterparts: a tensor-product mesh stores one coordinate vector per axis
+# (`points(Ωₕ::MeshnD) -> NTuple{D,AbstractVector}`), so the point at Cartesian index `I`
+# is `ntuple(d -> pts[d][I[d]], Val(D))` -- built *inside* the kernel from `pts` (a `Tuple`
+# of top-level device arrays, which `Adapt.jl` does convert element-wise) and `idxs`
+# (`indices(Ωₕ)`, a bits `CartesianIndices`), never from the mesh object itself. See the
+# module comment at the top of `ext/BrambleKernelAbstractionsExt.jl` for why that
+# distinction is load-bearing on a device.
+_launch_restriction_nd!(v, pts, idxs, f, dev) = _throw_no_ka_projection_kernel("_launch_restriction_nd!")
+function _launch_restriction_scatter_nd!(mats, pts, idxs, f, dev)
+    _throw_no_ka_projection_kernel(
+        "_launch_restriction_scatter_nd!"
+    )
+end
+
+"""
+    _device_project!(::GpuPolicy, rule::PointValue, raw::AbstractVector, sp::ScalarGridSpace{1}) -> Bool
+    _device_project!(::GpuPolicy, rule::PointValue, raw::AbstractVector, sp::ScalarGridSpace{D}) where {D} -> Bool
+
+Fills `raw` with `rule.f` evaluated at every point of the mesh `mesh(sp)`, via a device
+kernel (gpena/Bramble.jl#94, #174, S2.3). The 1D method reads the mesh's own coordinate
+vector directly; the `D`-dimensional method (`D` here is never `1`, since the method above
+is strictly more specific and wins dispatch for it) builds each point from the `D` per-axis
+coordinate vectors instead. `rule.f` runs on the device either way: see [`_gpu_for!`](@ref)
+for what that requires of it.
+"""
+@inline function _device_project!(
+        ::GpuPolicy, rule::PointValue, raw::AbstractVector, sp::ScalarGridSpace{1}
+)
+    Ωₕ = mesh(sp)
+    dev = ka_device(backend(sp))
+    _launch_restriction!(raw, points(Ωₕ), rule.f, dev)
+    return true
+end
+
+@inline function _device_project!(
+        ::GpuPolicy, rule::PointValue, raw::AbstractVector, sp::ScalarGridSpace{D}
+) where {D}
+    Ωₕ = mesh(sp)
+    dev = ka_device(backend(sp))
+    _launch_restriction_nd!(raw, points(Ωₕ), indices(Ωₕ), rule.f, dev)
+    return true
+end
+
+"""
+    _device_scatter_project!(::GpuPolicy, rule::PointValue, raws::Tuple, sp, ::Val{NC}) -> Bool
+
+The scatter counterpart of [`_device_project!`](@ref) above, for an `NC`-component
+composite space `sp` whose leaves share one mesh: `rule.f` is evaluated once per point and
+its `NC` components scattered into `raws` in the same device kernel. `sp` is typed
+generically (not `ScalarGridSpace`) because the caller is always the composite branch of
+[`project!`](@ref); the dimension the mesh has determines which launcher runs (1D or the
+`D`-dimensional counterpart), checked on `mesh(sp)` at runtime since it cannot be expressed
+as a type constraint on the composite space itself.
+"""
+@inline function _device_scatter_project!(
+        ::GpuPolicy, rule::PointValue, raws::Tuple, sp, ::Val{NC}
+) where {NC}
+    Ωₕ = mesh(sp)
+    dev = ka_device(backend(sp))
+    if Ωₕ isa AbstractMeshType{1}
+        _launch_restriction_scatter!(raws, points(Ωₕ), rule.f, dev)
+    else
+        _launch_restriction_scatter_nd!(raws, points(Ωₕ), indices(Ωₕ), rule.f, dev)
+    end
+    return true
+end
 
 # A one-component space is a scalar space, so generic code that builds an
 # NC-tuple of functions still works when NC == 1.
@@ -138,7 +241,7 @@ end
 #
 # If no index is marked, nothing is written and the element type cannot matter, so the
 # first grid point is as good as any.
-@inline _probe_point(Ωₕ, ::NTuple{0, Symbol}) = point(Ωₕ, first(indices(Ωₕ)))
+@inline _probe_point(Ωₕ, ::NTuple{0, Symbol}) = _probe_point_value(Ωₕ, first(indices(Ωₕ)))
 
 function _probe_point(Ωₕ, markers::NTuple{N, Symbol}) where {N}
     idxs = indices(Ωₕ)
@@ -146,9 +249,36 @@ function _probe_point(Ωₕ, markers::NTuple{N, Symbol}) where {N}
         # `findfirst` on a `BitVector` already scans a word (64 bits) at a time via
         # `trailing_zeros`, rather than testing one Cartesian index per iteration.
         i = findfirst(index_in_marker(Ωₕ, m))
-        i === nothing || return point(Ωₕ, idxs[i])
+        i === nothing || return _probe_point_value(Ωₕ, idxs[i])
     end
-    return point(Ωₕ, first(idxs))
+    return _probe_point_value(Ωₕ, first(idxs))
+end
+
+# `point(Ωₕ, idx)` (src/mesh/mesh1d.jl) is `points(Ωₕ)[idx]`, a scalar `getindex` that
+# `GPUArraysCore` disallows outside a kernel once `points(Ωₕ)` is device-backed
+# (gpena/Bramble.jl#94, #174, S2.3 of .agents/plans/metal-and-apple-silicon-acceleration.md).
+# `Rₕ`/`avgₕ` (never `Rₕ!`/`avgₕ!`) reach this once per call, on the host, purely to sample
+# `f`'s return type -- not a hot path -- so the fix is a single-element array-to-array copy
+# rather than teaching `point` itself about the backend.
+@inline _probe_point_value(Ωₕ, idx) = point(Ωₕ, idx)
+@inline function _probe_point_value(Ωₕ::AbstractMeshType{1}, idx)
+    return _probe_point_value(points(Ωₕ), Ωₕ, idx)
+end
+@inline _probe_point_value(::Array, Ωₕ, idx) = point(Ωₕ, idx)
+@inline function _probe_point_value(pts::AbstractVector, Ωₕ, idx)
+    i = _extract_linear_index(idx)
+    return @inbounds Array(view(pts, i:i))[1]
+end
+
+# `MeshnD` (`D >= 2`): `point(Ωₕ, idx)` (src/mesh/meshnd.jl) combines each axis's own
+# scalar read via `@generate_mesh_ntuple_func_with_idx point`, one `getindex` per axis on
+# that axis's own coordinate vector -- the identical failure the method above fixes for a
+# 1D mesh. Rather than a second array-copy implementation, this probes each submesh (a
+# `Mesh1D`, so `Ωₕ(d)` reaches the very method above) with its own share of `idx`. Coexists
+# with the `AbstractMeshType{1}` method without ambiguity: that one is strictly more
+# specific and wins dispatch whenever `D == 1`.
+@inline function _probe_point_value(Ωₕ::AbstractMeshType{D}, idx) where {D}
+    return ntuple(d -> _probe_point_value(Ωₕ(d), idx[d]), Val(D))
 end
 
 @inline function _restriction_eltype(

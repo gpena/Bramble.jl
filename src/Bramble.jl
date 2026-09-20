@@ -19,7 +19,7 @@ using Preferences: @load_preference
 using QuadGK: gauss
 
 # Utilities
-export backend, metal_backend, vector_type, matrix_type, backend_types
+export backend, gpu_backend, metal_backend, vector_type, matrix_type, backend_types
 # The CSR backend constructor for the memory-scaling milestone (gpena/Bramble.jl#214): a
 # `metal_backend`-style stub whose real method arrives with the SparseMatricesCSR extension.
 export csr_backend
@@ -56,6 +56,12 @@ public backend_eye, backend_zeros
 # whoever adds an array type, never called by a user of one, so `public` rather than
 # exported, alongside the allocators that read it.
 public supports_undef_construction
+# The KernelAbstractions device-kernel substrate (gpena/Bramble.jl#174): a GPU backend
+# implements this to name the `KernelAbstractions.Backend` its own arrays run kernels on, so
+# every `@kernel` in `BrambleKernelAbstractionsExt` becomes available on that backend for
+# free. Declared by whoever adds a GPU backend, never called by a user of one, so `public`
+# rather than exported, alongside `supports_undef_construction` above.
+public ka_device
 # Read by every package extension's own `@compile_workload` gate (gpena/Bramble.jl#196), so
 # a user's `set_preferences!(Bramble, "precompile_workload" => false)` disables the
 # extensions' workloads along with the core one, not just the core one.
@@ -268,6 +274,7 @@ export export_pgfplots
 
 include("utils/macros.jl")
 include("utils/backend.jl")
+include("utils/device_kernels.jl")
 include("utils/linear_algebra.jl")
 
 include("geometry/pretty_print.jl")

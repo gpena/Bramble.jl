@@ -246,6 +246,12 @@ end
                         @test z isa MtlMatrix{Float32}
                         @test size(z) == (4, 4)
                     end
+                else
+                    # gpena/Bramble.jl#84's failure mode: leaving this branch empty would
+                    # make the testset "pass" while running nothing, on precisely the hosts
+                    # (e.g. a macOS CI runner without real GPU access) this matters most for.
+                    @warn "Metal GPU backend tests skipped: Metal.jl loaded but Metal.functional() is false on this host"
+                    @test_skip "Metal GPU backend tests skipped: Metal.functional() is false on this host"
                 end
             catch e
                 @info "Metal is installed but initialization skipped in this environment" exception=e
@@ -435,6 +441,114 @@ end
         else
             @test_throws ErrorException metal_backend()
             @test_throws ErrorException metal_backend(Float32)
+        end
+    end
+
+    # Invariants tested (gpena/Bramble.jl#192):
+    # 1. gpu_backend() resolves to metal_backend() once the Metal extension is loaded,
+    #    including element-type and policy keyword forwarding.
+    # 2. Metal.functional() gates anything that actually touches a device -- a skip here
+    #    warns and is recorded (@test_skip), rather than the branch simply being left out,
+    #    which is gpena/Bramble.jl#84's failure mode: a test that "passes" while running
+    #    nothing.
+    # 3. The no-extension diagnostic names the package this host's architecture needs.
+    #    `using Metal`, once it happens (in the "Metal GPU backend" testset above, on this
+    #    host), cannot be undone within this process, so gpu_backend()'s own no-extension
+    #    branch cannot be driven for real here. test/ext/metal_ext.jl hits the identical
+    #    wall testing metal_backend's Float64 stub and works around it by reaching the
+    #    *same* fallback through a route that does not require unloading Metal; no
+    #    equivalent route exists for gpu_backend (it does not branch on T), so the real
+    #    branch is instead verified end-to-end in a fresh subprocess that never loads
+    #    Metal -- the same idiom test/quality/invalidations.jl uses for what a live
+    #    process cannot show directly.
+    # 4. gpu_backend() refuses a loaded-but-non-functional extension (gpena/Bramble.jl#192,
+    #    S1.4), with a diagnostic distinct from the no-extension one. This host has a
+    #    functional Metal device (checked below), so Metal.functional() cannot be made to
+    #    answer false for real; `Bramble._gpu_functional(::Val{:metal})` is redefined to
+    #    `false` for the duration of one call and restored immediately after, in a
+    #    try/finally so a failing @test still leaves the predicate correct for every test
+    #    that follows.
+    @testset "gpu_backend resolution" begin
+        if isdefined(@__MODULE__, :Metal)
+            @test gpu_backend() === metal_backend()
+            @test gpu_backend(Float16) === metal_backend(Float16)
+            @test gpu_backend(; policy = CpuSerial()) === metal_backend(; policy = CpuSerial())
+            @test execution_policy(gpu_backend()) === GpuAsync()
+
+            if Metal.functional()
+                v = vector(gpu_backend(), 6)
+                @test v isa MtlVector{Float32}
+                @test length(v) == 6
+            else
+                @warn "gpu_backend device allocation not exercised: Metal.functional() is false on this host"
+                @test_skip "gpu_backend device allocation not exercised: Metal.functional() is false on this host"
+            end
+
+            @testset "refuses a loaded but non-functional extension" begin
+                # `Bramble` itself never imports `Metal` (only `BrambleMetalExt` does), so the
+                # restored method below closes over a plain `Bool` rather than re-calling
+                # `Metal.functional()` from a module that cannot see `Metal` at all.
+                really_functional = Metal.functional()
+                @eval Bramble _gpu_functional(::Val{:metal}) = false
+                try
+                    err = try
+                        gpu_backend()
+                        nothing
+                    catch e
+                        e
+                    end
+                    @test err isa ErrorException
+                    msg = sprint(showerror, err)
+                    @test occursin("functional", msg)
+                    @test occursin("Metal", msg)
+                    # distinct from the no-extension diagnostic's own wording
+                    @test !occursin("no loaded GPU extension", msg)
+                finally
+                    @eval Bramble _gpu_functional(::Val{:metal}) = $really_functional
+                end
+                # the predicate is back to reflecting reality
+                @test Bramble._gpu_functional(Val(:metal)) === really_functional
+            end
+
+            jl = Base.julia_cmd()
+            project = Base.active_project()
+            script = "using Bramble; try; gpu_backend(); println(\"NO_ERROR\"); " *
+                     "catch e; println(\"CAUGHT:\", sprint(showerror, e)); end"
+
+            out = try
+                read(`$jl --project=$project --startup-file=no -e $script`, String)
+            catch e
+                @test_skip "gpu_backend no-extension diagnostic (subprocess) failed to run: $e"
+                nothing
+            end
+
+            if out !== nothing
+                @test occursin("CAUGHT:", out)
+                if Sys.isapple() && Sys.ARCH === :aarch64
+                    @test occursin("Metal", out)
+                elseif Sys.islinux() || Sys.iswindows()
+                    @test occursin("CUDA", out)
+                end
+            end
+        else
+            # Metal genuinely never loaded in this process (e.g. Linux/Windows CI, or a
+            # macOS host without the Metal package resolvable): gpu_backend()'s
+            # no-extension branch fires for real, no subprocess needed.
+            err = try
+                gpu_backend()
+                nothing
+            catch e
+                e
+            end
+            @test err isa ErrorException
+            msg = sprint(showerror, err)
+            if Sys.isapple() && Sys.ARCH === :aarch64
+                @test occursin("Metal", msg)
+            elseif Sys.islinux() || Sys.iswindows()
+                @test occursin("CUDA", msg)
+            else
+                @test occursin("no supported GPU hardware", msg)
+            end
         end
     end
 end

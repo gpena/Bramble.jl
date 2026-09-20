@@ -213,12 +213,19 @@ true
 ```
 """
 function gridspace(Ωₕ::AbstractMeshType{D}) where {D}
-    weights = space_weights(Ωₕ)
+    return _gridspace(Ωₕ, space_weights(Ωₕ))
+end
 
-    MType = typeof(Ωₕ)
-    T, VT, _, _ = backend_types(backend(Ωₕ))
-
-    return ScalarGridSpace{D, T, VT, MType}(Ωₕ, weights)
+# Split out so `T`/`VT` are read off `weights`' own concrete type parameters (gpena/Bramble.jl#94,
+# #174, S2.2 of .agents/plans/metal-and-apple-silicon-acceleration.md) rather than from
+# `backend_types(backend(Ωₕ))`: on a Metal backend, `Backend{VT, MT, EP}`'s own `VT` (e.g.
+# `MtlVector{Float32}`) leaves the storage-mode parameter free, but `vector`/`space_weights`
+# allocate the concretely-typed `MtlVector{Float32, <storage>}` -- a different, invariant type
+# parameter -- so building `ScalarGridSpace{D, T, VT, MType}` from the backend's `VT` failed to
+# convert `weights` into its own field. Reading the parameters back off `weights` keeps the two
+# in sync by construction, on every backend.
+@inline function _gridspace(Ωₕ::AbstractMeshType{D}, weights::SpaceWeights{D, T, VT}) where {D, T, VT}
+    return ScalarGridSpace{D, T, VT, typeof(Ωₕ)}(Ωₕ, weights)
 end
 
 # Allocates a work vector sized to a mesh. Typed rather than generic: with an
@@ -458,12 +465,23 @@ See also: [`backend`](@ref)
 
 Builds the weights for the standard discrete ``L^2`` inner product, ``inner_h(\\cdot, \\cdot)``, on the space of grid functions, following the order of the points provided by `indices(Ωₕ)`. The values are stored in vector `u`.
 """
-function _innerh_weights!(u, Ωₕ::AbstractMeshType{1})
+function _innerh_weights!(u::Array, Ωₕ::AbstractMeshType{1})
     idxs = indices(Ωₕ)
     @inbounds @simd for idx in idxs
         i = idx[1]
         u[i] = cell_measure(Ωₕ, i)
     end
+    return nothing
+end
+
+# Device counterpart (gpena/Bramble.jl#94, #174, S2.2 of
+# .agents/plans/metal-and-apple-silicon-acceleration.md): `cell_measure(Ωₕ, i)` is
+# `_apply_hs_logic(half_spacing(Ωₕ, i))` (src/mesh/mesh1d.jl:292-296), the same formula at
+# every index with no boundary special case, so it needs no `@kernel` of its own -- it is
+# `_apply_hs_logic` broadcast over the mesh's own `half_spacings` vector, which dispatches
+# to a GPUArrays broadcast kernel instead of scalar `getindex`/`setindex!`.
+function _innerh_weights!(u::AbstractVector, Ωₕ::AbstractMeshType{1})
+    u .= _apply_hs_logic.(half_spacings(Ωₕ))
     return nothing
 end
 
@@ -485,7 +503,7 @@ end
 
 Builds a set of weights based on the spacings, associated with the `component`-th direction, for the modified discrete ``L^2`` inner product on the space of grid functions, following the order of the points provided by `indices(Ωₕ)`. The values are stored in vector `u`.
 """
-function _innerplus_weights!(u::VT, Ωₕ, component = 1) where {VT}
+function _innerplus_weights!(u::VT, Ωₕ, component = 1) where {VT <: Array}
     T = eltype(VT)
     mesh_component = Ωₕ(component)
 
@@ -494,6 +512,19 @@ function _innerplus_weights!(u::VT, Ωₕ, component = 1) where {VT}
     copyto!(u, spacings(mesh_component))
 
     @inbounds u[1] = zero(T)
+    return nothing
+end
+
+# Device counterpart: `copyto!` above is already bulk, so the only scalar operation is
+# `u[1] = zero(T)`. Assigning into a one-element `view` keeps that write inside GPU
+# broadcasting (`materialize!`) instead of a host-side scalar `setindex!`.
+function _innerplus_weights!(u::AbstractVector, Ωₕ, component = 1)
+    T = eltype(u)
+    mesh_component = Ωₕ(component)
+
+    copyto!(u, spacings(mesh_component))
+
+    view(u, 1:1) .= zero(T)
     return nothing
 end
 
@@ -533,7 +564,7 @@ converged at order ≈1.04 (an inconsistent discretisation dressed as a working 
 weight it is a clean order 2, matching every other Neumann/traction-free path in this
 package.
 """
-function _innerplus_mean_weights!(u::VT, Ωₕ, component::Int = 1) where {VT}
+function _innerplus_mean_weights!(u::VT, Ωₕ, component::Int = 1) where {VT <: Array}
     mesh_component = Ωₕ(component)
     N = npoints(mesh_component)
 
@@ -541,6 +572,15 @@ function _innerplus_mean_weights!(u::VT, Ωₕ, component::Int = 1) where {VT}
         u[i] = half_spacing(mesh_component, i)
     end
 
+    return nothing
+end
+
+# Device counterpart: `half_spacing(Ωₕ, i)` is a bounds-checked read of `Ωₕ.half_spacings[i]`
+# with no boundary branch (src/mesh/mesh1d.jl:285-288), so this fill is exactly a copy of
+# that backing vector -- a bulk `copyto!`, not a per-index scalar read.
+function _innerplus_mean_weights!(u::AbstractVector, Ωₕ, component::Int = 1)
+    mesh_component = Ωₕ(component)
+    copyto!(u, half_spacings(mesh_component))
     return nothing
 end
 

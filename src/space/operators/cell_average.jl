@@ -49,6 +49,11 @@ avgₕ(Wₕ, x -> sin(x))
 avgₕ(Wₕ, x -> sin(x[1]) * x[2]; quad_points = Val(4))
 ```
 
+On a Metal (or other device) backend, `f` runs *on the device* inside the quadrature
+kernel, evaluated `quad_points^D` times per cell (gpena/Bramble.jl#94, #174), so it must be
+GPU-compilable in the same sense [`Rₕ!`](@ref)'s docstring describes. A masked call and a
+mesh of more than one dimension currently fall back to the CPU-only per-index sweep.
+
 See also: [`avgₕ!`](@ref), [`Rₕ`](@ref).
 """
 Base.@constprop :aggressive function avgₕ(
@@ -200,6 +205,90 @@ end
 end
 
 @inline _rule_component(rule::CellAverage, k) = CellAverage(pt -> rule.f(pt)[k], rule.nq)
+
+#------------------------------------------------------------------------------------------#
+# Device kernel launch stubs (gpena/Bramble.jl#94, #174, S2.3 of
+# .agents/plans/metal-and-apple-silicon-acceleration.md)
+#
+# `CellAverage`'s side of the `_device_project!`/`_device_scatter_project!` contract
+# (`operators/projection.jl`): the quadrature loop is exactly `_cell_average` above, called
+# per point with the mesh's own `half_points(Ωₕ)` vector as a top-level kernel argument
+# rather than nested inside a wrapper struct -- see `restriction.jl`'s stubs for why that
+# distinction matters on a device. Without the KA extension loaded, the launcher throws a
+# named diagnostic instead of failing several frames later on a scalar index.
+#------------------------------------------------------------------------------------------#
+
+_launch_cell_average!(v, x, nodes, wts, f, dev) = _throw_no_ka_projection_kernel("_launch_cell_average!")
+function _launch_cell_average_scatter!(mats, x, nodes, wts, f, dev)
+    _throw_no_ka_projection_kernel(
+        "_launch_cell_average_scatter!"
+    )
+end
+
+# The `D >= 2` counterparts: `half_points(Ωₕ::MeshnD) -> NTuple{D,AbstractVector}` is
+# already the exact shape `_cell_average`'s 2D/3D methods take as `x` -- one coordinate
+# vector per axis -- so the device kernel calls it directly with `x` (a `Tuple` of
+# top-level device arrays) and `idxs` (`indices(Ωₕ)`, a bits `CartesianIndices`), the same
+# non-nesting rule `restriction.jl`'s `_nd` launchers follow.
+_launch_cell_average_nd!(v, x, idxs, nodes, wts, f, dev) = _throw_no_ka_projection_kernel("_launch_cell_average_nd!")
+function _launch_cell_average_scatter_nd!(mats, x, idxs, nodes, wts, f, dev)
+    _throw_no_ka_projection_kernel(
+        "_launch_cell_average_scatter_nd!"
+    )
+end
+
+"""
+    _device_project!(::GpuPolicy, rule::CellAverage, raw::AbstractVector, sp::ScalarGridSpace{1}) -> Bool
+    _device_project!(::GpuPolicy, rule::CellAverage, raw::AbstractVector, sp::ScalarGridSpace{D}) where {D} -> Bool
+
+Fills `raw` with the cell average of `rule.f` over every cell of the mesh `mesh(sp)`, via a
+device kernel that calls the same [`_cell_average`](@ref) quadrature the CPU sweep uses
+(gpena/Bramble.jl#94, #174, S2.3) -- the 1D method reads `half_points(Ωₕ)` directly, the
+`D`-dimensional one (never reached for `D == 1`, since the method above is strictly more
+specific) hands it the per-axis tuple `_cell_average`'s own 2D/3D methods already expect.
+`rule.f` runs on the device either way: see [`_gpu_for!`](@ref) for what that requires of it.
+"""
+@inline function _device_project!(
+        ::GpuPolicy, rule::CellAverage, raw::AbstractVector, sp::ScalarGridSpace{1}
+)
+    Ωₕ = mesh(sp)
+    nodes, wts = _gauss_rule(rule.nq, eltype(Ωₕ))
+    dev = ka_device(backend(sp))
+    _launch_cell_average!(raw, half_points(Ωₕ), nodes, wts, rule.f, dev)
+    return true
+end
+
+@inline function _device_project!(
+        ::GpuPolicy, rule::CellAverage, raw::AbstractVector, sp::ScalarGridSpace{D}
+) where {D}
+    Ωₕ = mesh(sp)
+    nodes, wts = _gauss_rule(rule.nq, eltype(Ωₕ))
+    dev = ka_device(backend(sp))
+    _launch_cell_average_nd!(raw, half_points(Ωₕ), indices(Ωₕ), nodes, wts, rule.f, dev)
+    return true
+end
+
+"""
+    _device_scatter_project!(::GpuPolicy, rule::CellAverage, raws::Tuple, sp, ::Val{NC}) -> Bool
+
+The scatter counterpart of [`_device_project!`](@ref) above, for an `NC`-component
+composite space `sp` whose leaves share one mesh. `sp` is typed generically for the same
+reason `restriction.jl`'s counterpart is: the mesh's own dimension, checked on `mesh(sp)`
+at runtime, picks the 1D or `D`-dimensional launcher.
+"""
+@inline function _device_scatter_project!(
+        ::GpuPolicy, rule::CellAverage, raws::Tuple, sp, ::Val{NC}
+) where {NC}
+    Ωₕ = mesh(sp)
+    nodes, wts = _gauss_rule(rule.nq, eltype(Ωₕ))
+    dev = ka_device(backend(sp))
+    if Ωₕ isa AbstractMeshType{1}
+        _launch_cell_average_scatter!(raws, half_points(Ωₕ), nodes, wts, rule.f, dev)
+    else
+        _launch_cell_average_scatter_nd!(raws, half_points(Ωₕ), indices(Ωₕ), nodes, wts, rule.f, dev)
+    end
+    return true
+end
 
 #=
 Cell averages are computed with a fixed tensor-product Gauss-Legendre rule per

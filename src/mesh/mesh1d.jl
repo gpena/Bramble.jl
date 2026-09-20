@@ -300,6 +300,46 @@ end
     sort!(v)  # In-place sort
     return nothing
 end
+
+#------------------------------------------------------------------------------------------#
+# Device kernel launch stubs (gpena/Bramble.jl#94, #174, S2.1 of
+# .agents/plans/metal-and-apple-silicon-acceleration.md)
+#
+# Every filler below (`_points!`, `half_points!`, `spacing!`, `half_spacing!`,
+# `_refine_indices!`) keeps its `x isa Array` method exactly as it always was -- a CPU loop
+# -- and gains a sibling method for a non-`Array` destination (a device-backed vector, e.g.
+# `MtlVector`). That sibling computes only the host-side scalars the kernel needs, then goes
+# through `ka_device` (`src/utils/device_kernels.jl`) and one of the launchers below, which
+# `ext/BrambleKernelAbstractionsExt.jl` implements as a `KernelAbstractions.@kernel`. Without
+# that extension loaded, the launcher throws a named diagnostic instead of failing several
+# frames later on a scalar index.
+#------------------------------------------------------------------------------------------#
+
+@noinline function _throw_no_ka_mesh_kernel(fname::String)
+    return error(
+        "$fname requires KernelAbstractions.jl to fill a device-backed mesh vector. Add " *
+        "`using KernelAbstractions` (and the package providing this backend's device, e.g. " *
+        "`using Metal`) before constructing or refining a mesh on this backend.",
+    )
+end
+
+# Deliberately untyped (matching the `ka_device(be)`/`metal_backend`/`_metal_backend`
+# fallback idiom, `src/utils/device_kernels.jl`): the extension's method for each of these
+# is typed on `AbstractVector`, and a fallback with the same signature would overwrite it
+# instead of adding a genuinely more specific dispatch (method overwriting is an error during
+# precompilation).
+_launch_uniform_points!(x, a, h, dev) = _throw_no_ka_mesh_kernel("_launch_uniform_points!")
+_launch_half_points!(x, pts, n, dev) = _throw_no_ka_mesh_kernel("_launch_half_points!")
+_launch_spacing!(x, pts, n, dev) = _throw_no_ka_mesh_kernel("_launch_spacing!")
+_launch_half_spacing!(x, h, n, dev) = _throw_no_ka_mesh_kernel("_launch_half_spacing!")
+_launch_refine_indices!(new_points, old_points, N_old, dev) = _throw_no_ka_mesh_kernel("_launch_refine_indices!")
+
+@noinline _throw_no_gpu_nonuniform_points() = error(
+    "non-uniform mesh point generation needs a GPU-compatible RNG and sort, which is not " *
+    "implemented for a device backend. Build this mesh with unif = true (the uniform " *
+    "path), or generate the points on the CPU and transfer them with set_points!.",
+)
+
 # Internal function to populate a vector `x` with grid point coordinates over a 1D interval `I`.
 @inline function _points!(x, I::CartesianProduct{1}, unif::Bool)
     # Get the number of points and the interval's element type and bounds.
@@ -337,8 +377,29 @@ end
     return nothing
 end
 
+# Device counterpart of the method above: same three cases (single point, uniform,
+# non-uniform), but the uniform fill goes through a device kernel instead of a scalar CPU
+# loop. Takes the mesh's `backend` explicitly, since `x` alone (unlike `Ωₕ` below) carries
+# no reference back to it.
+function _points!(x::AbstractVector, I::CartesianProduct{1}, unif::Bool, backend)
+    npts = length(x)
+    a, b = extrema(I)
+
+    if npts == 1
+        x .= a
+        return nothing
+    end
+
+    unif || _throw_no_gpu_nonuniform_points()
+
+    h = (b - a) / (npts - 1)
+    dev = ka_device(backend)
+    _launch_uniform_points!(x, a, h, dev)
+    return nothing
+end
+
 # Calculates the "half points" (cell centers) for a 1D mesh.
-@inline function half_points!(x, Ωₕ)
+@inline function half_points!(x::Array, Ωₕ)
     n = npoints(Ωₕ)
     pts = points(Ωₕ)
 
@@ -355,10 +416,21 @@ end
     return nothing
 end
 
+# Device counterpart: the whole computation (boundary entries and interior midpoints) runs
+# in a single kernel over 1:(n+1), since scalar-reading `pts[1]`/`pts[n]` from the host is
+# exactly the "Scalar indexing is disallowed" failure this exists to avoid.
+function half_points!(x::AbstractVector, Ωₕ)
+    n = npoints(Ωₕ)
+    pts = points(Ωₕ)
+    dev = ka_device(backend(Ωₕ))
+    _launch_half_points!(x, pts, n, dev)
+    return nothing
+end
+
 # Calculates the "half spacings" (cell widths/measures) for a 1D mesh.
 # Fills `x` with the backward spacings of `Ωₕ`. Must run before half_spacing!, which
 # reads them back through `spacing`.
-@inline function spacing!(x, Ωₕ::Mesh1D)
+@inline function spacing!(x::Array, Ωₕ::Mesh1D)
     pts = points(Ωₕ)
     n = length(pts)
     T = eltype(Ωₕ)
@@ -381,7 +453,24 @@ end
     return nothing
 end
 
-@inline function half_spacing!(x, Ωₕ)
+# Device counterpart: the collapsed/short-mesh case is still a plain `fill!`, which is not
+# scalar indexing and needs no kernel; only the general case goes through one.
+function spacing!(x::AbstractVector, Ωₕ::Mesh1D)
+    pts = points(Ωₕ)
+    n = length(pts)
+    T = eltype(Ωₕ)
+
+    if is_collapsed(Ωₕ) || n < 2
+        fill!(x, zero(T))
+        return nothing
+    end
+
+    dev = ka_device(backend(Ωₕ))
+    _launch_spacing!(x, pts, n, dev)
+    return nothing
+end
+
+@inline function half_spacing!(x::Array, Ωₕ)
     n = npoints(Ωₕ)
 
     # The boundary cell widths are defined as half of the spacing of the first/last interval.
@@ -394,6 +483,17 @@ end
         x[i] = (spacing(Ωₕ, i) + spacing(Ωₕ, i+1)) * 0.5
     end
 
+    return nothing
+end
+
+# Device counterpart: reads the backing `spacings(Ωₕ)` vector directly (rather than calling
+# the bounds-checked `spacing(Ωₕ, i)` accessor per element), so the kernel closes only over
+# plain arrays and integers.
+function half_spacing!(x::AbstractVector, Ωₕ)
+    n = npoints(Ωₕ)
+    h = spacings(Ωₕ)
+    dev = ka_device(backend(Ωₕ))
+    _launch_half_spacing!(x, h, n, dev)
     return nothing
 end
 
@@ -422,8 +522,13 @@ function _mesh(
 
     # Allocate a vector for the grid points using the specified backend.
     pts = vector(backend, n_points)
-    # Populate the vector with coordinates, either uniformly or non-uniformly.
-    _points!(pts, set, is_uniform)
+    # Populate the vector with coordinates, either uniformly or non-uniformly. The device
+    # method needs `backend` itself (to reach `ka_device`), which `pts` alone does not carry.
+    if pts isa Array
+        _points!(pts, set, is_uniform)
+    else
+        _points!(pts, set, is_uniform, backend)
+    end
 
     # Allocate vectors for derived quantities (cell centers and widths).
     _half_pts = vector(backend, n_points + 1)
@@ -459,6 +564,24 @@ function _mesh(
     return mesh
 end
 
+# The refinement fill itself, split out so it can dispatch on the destination's array type:
+# the `Array` method is the original CPU loop, unchanged; the other goes through a kernel.
+@inline function _refine_indices_fill!(new_points::Array, old_points, N_old, backend)
+    @inbounds @simd for i in 1:N_old
+        new_points[2i - 1] = old_points[i]
+        if i < N_old
+            new_points[2i] = (old_points[i] + old_points[i + 1]) * 0.5
+        end
+    end
+    return nothing
+end
+
+function _refine_indices_fill!(new_points::AbstractVector, old_points, N_old, backend)
+    dev = ka_device(backend)
+    _launch_refine_indices!(new_points, old_points, N_old, dev)
+    return nothing
+end
+
 # The geometric refinement alone, with markers left untouched: shared by both public
 # methods below, neither of which wants the *other*'s marker handling as an intermediate
 # step of its own.
@@ -482,12 +605,7 @@ function _refine_indices!(Ωₕ::Mesh1D)
     new_points = vector(backend(Ωₕ), N_new)
     old_points = points(Ωₕ)
 
-    @inbounds @simd for i in 1:N_old
-        new_points[2i - 1] = old_points[i]
-        if i < N_old
-            new_points[2i] = (old_points[i] + old_points[i + 1]) * 0.5
-        end
-    end
+    _refine_indices_fill!(new_points, old_points, N_old, backend(Ωₕ))
 
     # Generate new indices for the refined mesh.
     new_indices = generate_indices(N_new)

@@ -3,6 +3,15 @@
 # `accelerate_factorize`/`accelerate_solve`/`accelerate_refactor!`: Apple Accelerate
 # (`libSparse`) sparse Cholesky, LDLᵀ, and LUTPP factorizations for the sparse linear systems
 # Bramble discretizes on macOS. Implemented in `BrambleAppleAccelerateExt`.
+#
+# The dense `accelerate_factorize(A::AbstractMatrix; ...)` method below is different: it is
+# plain `LinearAlgebra.lu`/`cholesky`/`qr`, defined unconditionally here (no macOS guard, no
+# `BrambleAppleAccelerateExt` involvement). AppleAccelerate.jl has no dense `lu`/`cholesky`/
+# LAPACK bindings to call -- its `__init__` instead registers itself with
+# libblastrampoline, so ordinary `LinearAlgebra` calls already run on Accelerate's BLAS/LAPACK
+# once `using AppleAccelerate` has been evaluated. This method only gives dense callers the
+# same name and `sym`/`kind` vocabulary as the sparse methods; see its own docstring.
+import LinearAlgebra: lu, cholesky
 
 """
     AccelerateFactorization{T} <: Factorization{T}
@@ -14,7 +23,7 @@ and non-allocating symbolic reuse via `accelerate_refactor!`. Available only on 
 abstract type AccelerateFactorization{T} <: Factorization{T} end
 
 """
-    accelerate_factorize(A::AbstractMatrix; sym = :auto, kind = :auto, kwargs...) -> AccelerateFactorization
+    accelerate_factorize(A::SparseMatrixCSC; sym = :auto, kind = :auto, kwargs...) -> AccelerateFactorization
     accelerate_factorize(a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing,
                          symmetrize = false, sym = :auto, kind = :auto, kwargs...) -> AccelerateFactorization
 
@@ -63,6 +72,54 @@ function accelerate_factorize(
         a; dirichlet = dirichlet, dirichlet_components = dirichlet_components
     )
     return _accelerate_factorize(A; sym = sym, kind = kind, kwargs...)
+end
+
+"""
+    accelerate_factorize(A::AbstractMatrix; sym = :auto, kind = :auto, kwargs...) -> LinearAlgebra.Factorization
+
+Dense factorization of `A`, via ordinary `LinearAlgebra.lu`, `LinearAlgebra.cholesky`, or
+`LinearAlgebra.qr` -- **not** Apple Accelerate's `libSparse` used by the `SparseMatrixCSC`
+method above, and not gated on macOS.
+
+AppleAccelerate.jl (checked against v0.7.0) defines no dense `lu`, `cholesky`, `getrf`,
+`potrf`, `gemm`, or other LAPACK/BLAS bindings for Bramble to call. What its `__init__` does
+is register Accelerate with libblastrampoline (`BLAS.lbt_forward`), so plain
+`LinearAlgebra.lu`/`cholesky`/`qr` are *already* running on Accelerate's BLAS/LAPACK the
+moment `using AppleAccelerate` has been evaluated, on every call site in Bramble or anywhere
+else, with no Bramble dispatch involved. This method adds no acceleration beyond that; it
+exists so dense callers can spell `accelerate_factorize` with the same `sym`/`kind`
+vocabulary as the sparse methods above. `kwargs...` is accepted but unused.
+
+# Symmetry and factorization options
+- `sym = :auto` (default): `LinearAlgebra.cholesky` if `A` is symmetric positive definite,
+  otherwise `LinearAlgebra.lu`.
+- `sym = :spd`, `:definite`, or `1` (or `kind = :cholesky`): `LinearAlgebra.cholesky`.
+- `sym = :unsymmetric` or `0` (or `kind = :lu`): `LinearAlgebra.lu`.
+- `kind = :qr`: `LinearAlgebra.qr`.
+- `sym = :symmetric`, `2`, or `kind = :ldlt`: not implemented here. The dense analogue of a
+  sparse `LDLᵀ` factorization is `LinearAlgebra.bunchkaufman`, which this method does not
+  wrap; call it directly.
+
+See also [`accelerate_solve`](@ref).
+"""
+function accelerate_factorize(A::AbstractMatrix; sym = :auto, kind = :auto, kwargs...)
+    if kind === :cholesky || sym === :spd || sym === :definite || sym == 1
+        return cholesky(A)
+    elseif kind === :lu || sym === :unsymmetric || sym == 0
+        return lu(A)
+    elseif kind === :qr
+        return qr(A)
+    elseif kind === :ldlt || sym === :symmetric || sym == 2
+        throw(
+            ArgumentError(
+            "accelerate_factorize does not wrap dense symmetric indefinite factorization; call LinearAlgebra.bunchkaufman(A) directly.",
+        ),
+        )
+    elseif (sym === :auto || sym === nothing) && (kind === :auto || kind === nothing)
+        return issymmetric(A) && isposdef(A) ? cholesky(A) : lu(A)
+    else
+        throw(ArgumentError("Unknown factorization option for accelerate_factorize: sym=$sym, kind=$kind."))
+    end
 end
 
 """

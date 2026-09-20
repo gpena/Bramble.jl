@@ -87,6 +87,30 @@ function _average_engine!(
     return nothing
 end
 
+#------------------------------------------------------------------------------------------#
+# Device kernel launch stub (gpena/Bramble.jl#94, #174, S2.4 of
+# .agents/plans/metal-and-apple-silicon-acceleration.md)
+#
+# `_apply_averaged!` reaches this once `execution_policy` names a `GpuPolicy`, instead of
+# `_average_engine!`'s scalar-indexing CPU sweep above. `ext/BrambleKernelAbstractionsExt.jl`
+# fills it in with a `KernelAbstractions.@kernel` that calls the very `_compute_average`
+# methods above, once per grid point -- see `operators/difference.jl`'s matching stub for
+# why that keeps the device and host answers identical by construction. Without the
+# extension loaded, the launcher throws a named diagnostic instead of failing on a scalar
+# index.
+#------------------------------------------------------------------------------------------#
+
+@noinline function _throw_no_ka_average_kernel(fname::String)
+    return error(
+        "$fname requires KernelAbstractions.jl to apply an average operator to a " *
+        "device-backed VectorElement. Add `using KernelAbstractions` (and the package " *
+        "providing this backend's device, e.g. `using Metal`) before calling it on this " *
+        "backend.",
+    )
+end
+
+_launch_average_engine!(out, in_ref, dims, dir, dim_val, dev) = _throw_no_ka_average_kernel("_launch_average_engine!")
+
 # Shared by every averaging direction (gpena/Bramble.jl#44): the alias check and the engine
 # call, once, rather than once per direction and again inside each one's composite closure.
 @inline function _apply_averaged!(
@@ -96,7 +120,13 @@ end
         dim_val::Val
 )
     _check_no_alias(vₕ, uₕ)
-    _average_engine!(vₕ.data, uₕ.data, _grid_dims(uₕ), dir, dim_val)
+    sp = space(uₕ)
+    if execution_policy(sp) isa GpuPolicy
+        dev = ka_device(backend(sp))
+        _launch_average_engine!(vₕ.data, uₕ.data, _grid_dims(uₕ), dir, dim_val, dev)
+    else
+        _average_engine!(vₕ.data, uₕ.data, _grid_dims(uₕ), dir, dim_val)
+    end
     return vₕ
 end
 
@@ -132,11 +162,16 @@ function _average_operator(Ωₕ::AbstractMeshType, ::Backward, ::Val{AVG_DIM}) 
 end
 
 function _average_weights!(
-        v::AbstractVector, Ωₕ::AbstractMeshType, dir::GridDirection, ::Val{DIFF_DIM}
+        v::AbstractVector, Ωₕ::AbstractMeshType, dir::GridDirection, dim_val::Val{DIFF_DIM}
 ) where {DIFF_DIM}
     dims = npoints(Ωₕ, Tuple)
 
     1 <= DIFF_DIM <= dim(Ωₕ) || _throw_stencil_dim_error(DIFF_DIM, dim(Ωₕ))
+
+    if execution_policy(Ωₕ) isa GpuPolicy
+        _device_average_weights!(v, dims, dir, dim_val)
+        return nothing
+    end
 
     li = LinearIndices(dims)
 
@@ -148,6 +183,32 @@ function _average_weights!(
             v[li[I]] = idx == 1 ? zero(eltype(v)) : one(eltype(v))
         end
     end
+    return nothing
+end
+
+# The `GpuPolicy` branch above (S2.4 of
+# .agents/plans/metal-and-apple-silicon-acceleration.md): every entry is one except a
+# single boundary slice along `DIFF_DIM`, which is exactly a broadcast fill followed by a
+# bulk zero over a `view` of that one slice -- no per-element kernel needed, matching S2.2's
+# "reach for a broadcast before a kernel" precedent. `reshape` and `view` both work on a
+# device array without scalar indexing, unlike the `li[I]`-indexed CPU loop above.
+@inline function _device_average_weights!(
+        v::AbstractVector, dims::NTuple{D, Int}, ::Forward, ::Val{DIFF_DIM}
+) where {D, DIFF_DIM}
+    v .= one(eltype(v))
+    vr = reshape(v, dims)
+    slice = ntuple(d -> d == DIFF_DIM ? (dims[d]:dims[d]) : Colon(), Val(D))
+    view(vr, slice...) .= zero(eltype(v))
+    return nothing
+end
+
+@inline function _device_average_weights!(
+        v::AbstractVector, dims::NTuple{D, Int}, ::Backward, ::Val{DIFF_DIM}
+) where {D, DIFF_DIM}
+    v .= one(eltype(v))
+    vr = reshape(v, dims)
+    slice = ntuple(d -> d == DIFF_DIM ? (1:1) : Colon(), Val(D))
+    view(vr, slice...) .= zero(eltype(v))
     return nothing
 end
 

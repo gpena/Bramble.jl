@@ -37,6 +37,16 @@ struct CrossWeighted <: CenteredStencil end
 end
 @inline _get_h_val(h::F, i::Int) where {F <: Function} = h(i)
 
+# The device kernels in `ext/BrambleKernelAbstractionsExt.jl` (S2.4 of
+# .agents/plans/metal-and-apple-silicon-acceleration.md) need, per grid point, exactly the
+# boundary test `_stencil_ranges` (operators/stencil.jl) already encodes as index ranges: a
+# forward stencil has no neighbour at the last point along the direction, a backward one at
+# the first. Read here as a single index comparison instead of re-deriving a
+# `CartesianIndices` split inside the kernel body. Shared by the difference and average
+# engines, since both stencils are one-sided in exactly the same sense.
+@inline _stencil_boundary_dim(::Forward, n::Int) = n
+@inline _stencil_boundary_dim(::Backward, n::Int) = 1
+
 # The kernels take the point and its neighbour in that order, whichever direction the
 # stencil runs, so that the engine can hand them `(cur, other)` without knowing which
 # is which. `Val{false}` is an interior point, which has a neighbour; `Val{true}` is
@@ -169,6 +179,22 @@ width gives half of it, the boundary cell being a half cell.
 """
 @inline star_spacings(Ωₕ::Mesh1D) = StarSpacings(spacings(Ωₕ))
 
+# The device kernels below (S2.4 of .agents/plans/metal-and-apple-silicon-acceleration.md)
+# take `h` as a plain top-level array or `nothing`, never as a wrapper struct: a struct
+# nesting a device array fails kernel compilation even as a top-level kernel argument
+# (`ext/BrambleKernelAbstractionsExt.jl`'s module comment explains why, gpena/Bramble.jl#94,
+# #174). `StarSpacings` is exactly such a wrapper, so its lazy averaging is materialized
+# into a plain vector once, with the same two-array bulk arithmetic S2.2's device kernels
+# use for the mesh's own O(n) setup, before any difference kernel launches. Every other
+# shape `_apply_spaced!` ever derives -- `nothing`, or a plain vector/view of cached
+# spacings -- is already kernel-safe and passes through unchanged.
+@inline _resolve_device_spacing(::Nothing) = nothing
+@inline _resolve_device_spacing(h::AbstractVector) = h
+@inline function _resolve_device_spacing(h::StarSpacings)
+    hv = h.h
+    return (@view(hv[1:(end - 1)]) .+ @view(hv[2:end])) ./ 2
+end
+
 # A centered stencil reads both neighbours, so it needs a point on each side and is
 # undefined on a mesh with fewer than three points along the direction it differences.
 # Without this the operator returns all zeros (every point being truncated), which is a
@@ -192,7 +218,15 @@ end
         dim_val::Val
 )
     _check_no_alias(vₕ, uₕ)
-    _difference_engine!(vₕ.data, uₕ.data, h, _grid_dims(uₕ), dir, dim_val)
+    sp = space(uₕ)
+    if execution_policy(sp) isa GpuPolicy
+        dev = ka_device(backend(sp))
+        _launch_stencil_engine!(
+            vₕ.data, uₕ.data, _resolve_device_spacing(h), _grid_dims(uₕ), dir, dim_val, dev
+        )
+    else
+        _difference_engine!(vₕ.data, uₕ.data, h, _grid_dims(uₕ), dir, dim_val)
+    end
     return nothing
 end
 
@@ -331,6 +365,53 @@ function _difference_engine!(
     end
 
     return nothing
+end
+
+#------------------------------------------------------------------------------------------#
+# Device kernel launch stubs (gpena/Bramble.jl#94, #174, S2.4 of
+# .agents/plans/metal-and-apple-silicon-acceleration.md)
+#
+# `_apply_stencil!` reaches these once `execution_policy` names a `GpuPolicy`, instead of
+# `_difference_engine!`'s scalar-indexing CPU sweep above, which a device array refuses.
+# `ext/BrambleKernelAbstractionsExt.jl` fills in the two launchers with a
+# `KernelAbstractions.@kernel` that calls the very `_compute_difference` methods above, once
+# per grid point, so the device and host answers stay identical by construction rather than
+# by two implementations agreeing -- the same reasoning `avgₕ!`'s device path
+# (`operators/cell_average.jl`) documents. Without that extension loaded, the launcher
+# throws a named diagnostic instead of failing several frames later on a scalar index.
+#------------------------------------------------------------------------------------------#
+
+@noinline function _throw_no_ka_stencil_kernel(fname::String)
+    return error(
+        "$fname requires KernelAbstractions.jl to apply a difference operator to a " *
+        "device-backed VectorElement. Add `using KernelAbstractions` (and the package " *
+        "providing this backend's device, e.g. `using Metal`) before calling it on this " *
+        "backend.",
+    )
+end
+
+# Deliberately untyped, matching the `_launch_restriction!`/`_launch_uniform_points!`
+# fallback idiom (`operators/restriction.jl`, `src/mesh/mesh1d.jl`): the extension's methods
+# are typed on `AbstractVector`/`Tuple`, and a fallback with the same signature would
+# overwrite them instead of adding a genuinely more specific dispatch.
+function _launch_difference_onesided!(out, in_ref, h, dims, dir, dim_val, dev)
+    _throw_no_ka_stencil_kernel(
+        "_launch_difference_onesided!"
+    )
+end
+function _launch_difference_centered!(out, in_ref, h, dims, dir, dim_val, dev)
+    _throw_no_ka_stencil_kernel(
+        "_launch_difference_centered!"
+    )
+end
+
+# One-sided (`Forward`/`Backward`) and centered (`Centered`/`CrossWeighted`) stencils reach
+# different launchers, the same split `_difference_engine!` itself makes above.
+@inline function _launch_stencil_engine!(out, in_ref, h, dims, dir::GridDirection, dim_val, dev)
+    return _launch_difference_onesided!(out, in_ref, h, dims, dir, dim_val, dev)
+end
+@inline function _launch_stencil_engine!(out, in_ref, h, dims, dir::CenteredStencil, dim_val, dev)
+    return _launch_difference_centered!(out, in_ref, h, dims, dir, dim_val, dev)
 end
 
 function difference_shift(

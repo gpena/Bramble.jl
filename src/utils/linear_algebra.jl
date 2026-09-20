@@ -20,8 +20,10 @@ end
 Apply `f` across indices `idxs` and write the result into `v` in place.
 
 Dispatches to sequential iteration for [`CpuSerial`](@ref) or static work partitioning across
-threads for [`CpuThreaded`](@ref). A [`GpuPolicy`](@ref) is refused: this is a CPU loop, and
-running one over a device array is a scalar-indexing failure several frames deeper.
+threads for [`CpuThreaded`](@ref). A [`GpuPolicy`](@ref) reaches [`_gpu_for!`](@ref) instead:
+this is a CPU loop, so it hands off to a device sweep rather than indexing `v` element by
+element itself (gpena/Bramble.jl#94, #174, S2.3 of
+.agents/plans/metal-and-apple-silicon-acceleration.md).
 
 # Arguments
 - `policy`: Execution policy ([`CpuSerial`](@ref) or [`CpuThreaded`](@ref)).
@@ -32,7 +34,7 @@ running one over a device array is a scalar-indexing failure several frames deep
 @inline _cpu_threaded_for!(::CpuSerial, v, idxs, f) = _serial_for!(v, idxs, f)
 @inline _cpu_threaded_for!(::CpuThreaded, v, idxs, f) = _threaded_for!(v, idxs, f)
 @noinline _cpu_threaded_for!(::CpuBatch, v, idxs, f) = _batch_for!(v, idxs, f)
-@noinline _cpu_threaded_for!(policy::GpuPolicy, v, idxs, f) = _throw_gpu_in_cpu_loop(policy)
+@noinline _cpu_threaded_for!(policy::GpuPolicy, v, idxs, f) = _gpu_for!(policy, v, idxs, f)
 
 # `Threads.@threads` needs an indexable collection, so handed a `CartesianIndices` it
 # linearly indexes it and pays an index conversion per point, where the serial loop
@@ -51,9 +53,10 @@ running one over a device array is a scalar-indexing failure several frames deep
 @inline _cpu_threaded_for!(::CpuThreaded, v, idxs::CartesianIndices, f) = _threaded_axis_for!(v, idxs, f)
 @noinline _cpu_threaded_for!(::CpuBatch, v, idxs::CartesianIndices, f) = _batch_axis_for!(v, idxs, f)
 
-# The one message both CPU sweeps give a device policy. Stated here rather than left to a
-# `MethodError`, which would name `_cpu_threaded_for!` and not say why a GPU backend has no
-# business in it (gpena/Bramble.jl#191).
+# The one message both CPU sweeps give a device policy when no device sweep is available
+# either. Stated here rather than left to a `MethodError`, which would name
+# `_cpu_threaded_for!` and not say why a GPU backend has no business in it
+# (gpena/Bramble.jl#191).
 @noinline function _throw_gpu_in_cpu_loop(policy)
     throw(
         ArgumentError(
@@ -64,6 +67,53 @@ running one over a device array is a scalar-indexing failure several frames deep
     ),
     )
 end
+
+#===========================================================================#
+# The GpuPolicy device sweep seam (gpena/Bramble.jl#94, #174, S2.3 of
+# .agents/plans/metal-and-apple-silicon-acceleration.md).
+#
+# `_cpu_threaded_for!`/`_cpu_threaded_scatter_for!` hand a `GpuPolicy` to `_gpu_for!`/
+# `_gpu_scatter_for!` rather than refusing it outright. Both are declared here with their
+# array/index/kernel arguments deliberately untyped -- matching the `ka_device`/
+# `_launch_uniform_points!` fallback idiom (`src/utils/device_kernels.jl`,
+# `src/mesh/mesh1d.jl`) -- so `ext/BrambleKernelAbstractionsExt.jl` can add a strictly more
+# specific method (typed on `AbstractArray`) instead of overwriting this one. Without that
+# extension loaded, both fall straight through to the same `_throw_gpu_in_cpu_loop` message
+# CPU callers have always seen, so the diagnostic never regresses into a bare `MethodError`.
+#===========================================================================#
+
+"""
+    _gpu_for!(policy::GpuPolicy, v::AbstractArray, idxs, f::Function) -> Nothing
+
+The [`GpuPolicy`](@ref) counterpart of [`_serial_for!`](@ref)/[`_threaded_for!`](@ref):
+fills `v[idx]` with `f(idx)` across `idxs` with a `KernelAbstractions.@kernel` launch on
+`v`'s own device, filled by `ext/BrambleKernelAbstractionsExt.jl`.
+
+`f` runs on the device, so it must be GPU-compilable: no heap allocation, no boxed
+captures (a `Ref`, a `mutable struct` field, a global), and every function it calls must
+itself compile for the device. A closure over a plain number or over another device array
+works; one that allocates or calls a non-inlineable function fails at kernel-compile time
+with a `GPUCompiler.InvalidIRError`, not a Bramble-specific message -- this is inherent to
+GPU execution.
+
+# Throws
+- `ArgumentError`: no `KernelAbstractions` extension is loaded, so there is no device sweep
+  to reach ([`_throw_gpu_in_cpu_loop`](@ref)).
+"""
+@noinline _gpu_for!(policy, v, idxs, f) = _throw_gpu_in_cpu_loop(policy)
+
+"""
+    _gpu_scatter_for!(policy::GpuPolicy, mats::Tuple, idxs, g::Function) -> Nothing
+
+The [`GpuPolicy`](@ref) counterpart of [`_threaded_scatter_for!`](@ref): evaluates
+tuple-valued `g` across `idxs` and scatters the results into `mats` with a
+`KernelAbstractions.@kernel` launch, filled by `ext/BrambleKernelAbstractionsExt.jl`. Same
+GPU-compilability requirement on `g` as [`_gpu_for!`](@ref).
+
+# Throws
+- `ArgumentError`: no `KernelAbstractions` extension is loaded ([`_throw_gpu_in_cpu_loop`](@ref)).
+"""
+@noinline _gpu_scatter_for!(policy, mats, idxs, g) = _throw_gpu_in_cpu_loop(policy)
 
 # The message every `CpuBatch` hook gives without `Polyester` loaded (gpena/Bramble.jl#190).
 # `CpuBatch`'s own sweeps have no `src/` implementation -- `BramblePolyesterExt` (S7.2) adds
@@ -262,7 +312,9 @@ end
 
 Evaluate tuple-valued kernel `g` across `idxs` and scatter results into destination arrays `mats`.
 
-Dispatches to sequential execution for [`Serial`](@ref) or static multithreaded execution for [`Parallel`](@ref).
+Dispatches to sequential execution for [`Serial`](@ref) or static multithreaded execution for
+[`Parallel`](@ref). A [`GpuPolicy`](@ref) reaches [`_gpu_scatter_for!`](@ref) instead, the
+same device-sweep handoff [`_cpu_threaded_for!`](@ref) makes.
 
 # Arguments
 - `policy`: Execution policy ([`CpuSerial`](@ref) or [`CpuThreaded`](@ref)).
@@ -278,7 +330,7 @@ Dispatches to sequential execution for [`Serial`](@ref) or static multithreaded 
 end
 @inline _cpu_threaded_scatter_for!(::CpuThreaded, mats::Tuple, idxs, g) = _threaded_scatter_for!(mats, idxs, g)
 @noinline _cpu_threaded_scatter_for!(::CpuBatch, mats::Tuple, idxs, g) = _batch_scatter_for!(mats, idxs, g)
-@noinline _cpu_threaded_scatter_for!(policy::GpuPolicy, mats::Tuple, idxs, g) = _throw_gpu_in_cpu_loop(policy)
+@noinline _cpu_threaded_scatter_for!(policy::GpuPolicy, mats::Tuple, idxs, g) = _gpu_scatter_for!(policy, mats, idxs, g)
 
 # Kept in an isolated function to prevent closure boxing allocations on serial execution paths.
 @noinline function _threaded_scatter_for!(mats::Tuple, idxs, g)

@@ -206,7 +206,7 @@ same precedent as [`csr_backend`](@ref) and [`metal_backend`](@ref) without thei
 package. Call `assemble!`/`assemble`, `Rₕ!`/`avgₕ!` exactly as with any other backend;
 choosing `CpuBatch()` on the backend is the only thing that changes.
 
-## 8. A GPU backend (Metal)
+## 8. A GPU backend (Metal), or letting `gpu_backend` pick it
 
 ```julia
 using Bramble, Metal
@@ -218,6 +218,38 @@ gpu_cpu = metal_backend(Float16; policy = CpuSerial())  # means what it says: CP
 `Float64` is not supported on Apple Silicon GPUs; use `Float32` or `Float16`.
 [`metal_backend`](@ref) requires `Metal.jl` loaded alongside `Bramble.jl`; without it,
 it throws.
+
+[`gpu_backend`](@ref) is the entry point to reach for when you do not want to name a
+device backend by hand:
+
+```julia
+using Bramble, Metal
+
+gpu = gpu_backend()                      # resolves to metal_backend(): Float32, GpuAsync()
+```
+
+It checks which GPU package extension is loaded, with `Base.get_extension`, and
+forwards to that backend's own constructor -- currently only [`metal_backend`](@ref),
+under `using Metal`. A CUDA or AMDGPU extension joins the same dispatch once one exists
+(gpena/Bramble.jl#11, v3.5.0).
+
+The check requires both: the extension *loaded* and its device *functional*
+(`Metal.functional()`). `using Metal` succeeds on any platform, degrading gracefully
+rather than erroring, so loading it alone does not prove a working GPU is present --
+`gpu_backend()` on a host where `Metal` is loaded but `Metal.functional()` is false
+refuses immediately, rather than handing back a `metal_backend()` that would only fail
+once actually used.
+
+Two failures give two different diagnostics, deliberately not sharing a message:
+
+- **No GPU extension loaded at all**: `gpu_backend` throws an error naming the package
+  to load, chosen from the host architecture: `using Metal` on Apple Silicon, `using
+  CUDA` on Linux or Windows, and a generic message naming no supported hardware
+  otherwise. Fixed by an import.
+- **An extension is loaded but its device is not functional**: `gpu_backend` throws a
+  separate error saying so. This points at a driver, hardware or virtualisation problem
+  -- not something an import can fix, which is why it reads differently from the first
+  case.
 
 ## 9. Introspection
 

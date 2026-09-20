@@ -4,6 +4,16 @@ using Bramble: Bramble, AccelerateFactorization
 using LinearAlgebra: LinearAlgebra, ldiv!, issymmetric, diag
 using SparseArrays: SparseArrays, SparseMatrixCSC
 
+# This module implements only the *sparse* `_accelerate_factorize`/`_accelerate_refactor!`
+# hooks below, over AppleAccelerate.jl's `libSparse` bindings (`AAFactorization` and
+# friends). There is no dense counterpart here, and none is needed: AppleAccelerate.jl
+# (v0.7.0) has no dense `lu`/`cholesky`/LAPACK entry points to hook. Its `__init__` instead
+# calls `BLAS.lbt_forward` to register Accelerate as a libblastrampoline provider, so plain
+# `LinearAlgebra.lu`/`cholesky`/`qr` run on Accelerate's BLAS/LAPACK the moment `using
+# AppleAccelerate` has been evaluated, with no dispatch through Bramble or this extension.
+# The dense `accelerate_factorize(A::AbstractMatrix; ...)` method lives unconditionally in
+# `src/solvers/accelerate_solver.jl` for exactly this reason -- see its docstring.
+
 # AppleAccelerate.jl only defines its sparse factorization types (`AAFactorization` and
 # friends) on macOS. Referencing one in a struct field type -- even behind a runtime
 # `Sys.isapple()` check -- still fails to precompile on Linux/Windows CI, since the field
