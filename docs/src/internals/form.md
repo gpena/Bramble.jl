@@ -300,6 +300,34 @@ rather than silently. Threading a non-CSC backend is future work.
 default CSC assembly, with and without `dirichlet`/`symmetrize!`, and `assemble!` refills it
 — while the CSC path's own `assemble!` keeps allocating zero bytes.
 
+## The extension contract
+
+The eight names below are declared `public` in `src/Bramble.jl` rather than exported, because
+an extension has to reach them by name to implement a storage type or a threading policy. That
+makes them a contract rather than an internal, so they are documented here even though the rest
+of this page is private API. The block above filters to private names only, which would
+otherwise drop every one of them -- and with them the cross-references the surrounding
+docstrings make.
+
+```@autodocs
+Modules = [Bramble]
+Public = true
+Private = false
+Filter = x -> x in (
+    Bramble._allocate_from_pattern, Bramble._scatter_position, Bramble._scatter_add!,
+    Bramble._zero_stored!, Bramble._batch_bilinear_colour_sweep!,
+    Bramble._batch_bilinear_band_sweep!, Bramble._batch_linear_colour_sweep!,
+    Bramble._batch_linear_band_sweep!
+)
+Pages = [
+    "form/linear.jl",
+    "form/bilinear.jl",
+    "form/bilinear_traversal.jl",
+    "form/bilinear_pattern.jl",
+    "form/bilinear_execution.jl"
+]
+```
+
 ```@autodocs
 Modules = [Bramble]
 Public = false
