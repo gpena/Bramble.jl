@@ -596,7 +596,7 @@ Builds the weights for the modified discrete ``L^2`` inner product on the space 
 function __innerplus_weights!(policy, v, innerplus_per_component)
     idxs = CartesianIndices(v)
     f = Base.Fix1(__prod, innerplus_per_component)
-    return _cpu_threaded_for!(policy, v, idxs, f)
+    return _sweep_for!(policy, v, idxs, f)
 end
 
 # --- Display ---------------------------------------------------------------------- #

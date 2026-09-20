@@ -25,7 +25,7 @@ function _pc_linear_algebra(be)
     _dot_masked(u, w, v, BitVector([true, false, true, false]))
 
     _serial_for!(similar(u), 1:4, i -> Float64(i))
-    _cpu_threaded_for!(Serial(), similar(u), 1:4, i -> Float64(i))
-    _cpu_threaded_for!(Parallel(), similar(u), 1:4, i -> Float64(i))
+    _sweep_for!(Serial(), similar(u), 1:4, i -> Float64(i))
+    _sweep_for!(Parallel(), similar(u), 1:4, i -> Float64(i))
     return nothing
 end

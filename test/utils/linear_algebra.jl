@@ -6,9 +6,9 @@ using Bramble:
                _dot,
                _dot_masked,
                MarkedIndices,
-               _cpu_threaded_for!,
+               _sweep_for!,
                _serial_for!,
-               _cpu_threaded_scatter_for!,
+               _sweep_scatter_for!,
                _write_components!,
                Serial,
                Parallel,
@@ -20,28 +20,67 @@ using StaticArrays
 using ..TestUtils: alloc_test, @test_allocs
 
 @testset "Linear algebra utilities" begin
-    # Invariants tested (gpena/Bramble.jl#191):
-    # 1. A GpuPolicy reaching either CPU sweep is refused, with a message naming the policy.
-    # 2. The alias spellings still select the same two CPU methods they always did.
-    @testset "CPU sweeps refuse a device policy" begin
+    # Invariants tested (gpena/Bramble.jl#191, #298 defect 2):
+    # 1. A host destination under a GpuPolicy is refused (message 1), naming both the
+    #    destination's locality and the policy's.
+    # 2. A device-locality destination under a CpuPolicy is refused too (message 2), naming
+    #    both localities, and never advising a CpuPolicy backend rebuild -- that combination
+    #    is itself rejected at construction (gpena/Bramble.jl#296). No GPU is needed to
+    #    exercise this: the seam reads locality from the destination array's own type.
+    # 3. Locality-agreeing pairs (a host destination under CpuSerial/CpuThreaded) still
+    #    sweep and produce correct values -- this testset is not throw-only.
+    # 4. The alias spellings still select the same two CPU methods they always did.
+    @testset "Sweep guard refuses locality mismatches" begin
         v = zeros(4)
-        @test_throws ArgumentError _cpu_threaded_for!(GpuAsync(), v, 1:4, identity)
-        @test_throws ArgumentError _cpu_threaded_scatter_for!(
+        @test_throws ArgumentError _sweep_for!(GpuAsync(), v, 1:4, identity)
+        @test_throws ArgumentError _sweep_scatter_for!(
             GpuAsync(), (v,), 1:4, i -> (float(i),)
         )
         err = try
-            _cpu_threaded_for!(GpuAsync(), v, 1:4, identity)
+            _sweep_for!(GpuAsync(), v, 1:4, identity)
         catch e
             e
         end
-        @test occursin("GpuAsync", sprint(showerror, err))
-        @test occursin("CpuSerial", sprint(showerror, err))
+        msg = sprint(showerror, err)
+        @test occursin("destination array has host locality", msg)
+        @test occursin("claims device locality", msg)
+        @test occursin("GpuAsync", msg)
 
-        _cpu_threaded_for!(Serial(), v, 1:4, i -> 2.0 * i)
+        _sweep_for!(Serial(), v, 1:4, i -> 2.0 * i)
         @test v == [2.0, 4.0, 6.0, 8.0]
         fill!(v, 0.0)
-        _cpu_threaded_for!(CpuSerial(), v, 1:4, i -> 3.0 * i)
+        _sweep_for!(CpuSerial(), v, 1:4, i -> 3.0 * i)
         @test v == [3.0, 6.0, 9.0, 12.0]
+        fill!(v, 0.0)
+        _sweep_for!(CpuThreaded(), v, 1:4, i -> 4.0 * i)
+        @test v == [4.0, 8.0, 12.0, 16.0]
+
+        # Reverse direction (gpena/Bramble.jl#298 defect 2): a device-locality destination
+        # under a CpuPolicy, with no GPU or KernelAbstractions involved -- a small host-backed
+        # array type that claims DeviceLocality() through the trait is enough.
+        struct _FakeDeviceVector{T} <: DenseVector{T}
+            data::Vector{T}
+        end
+        Base.size(v::_FakeDeviceVector) = size(v.data)
+        Base.getindex(v::_FakeDeviceVector, i::Int) = getindex(v.data, i)
+        Base.setindex!(v::_FakeDeviceVector, val, i::Int) = setindex!(v.data, val, i)
+        Base.IndexStyle(::Type{<:_FakeDeviceVector}) = IndexLinear()
+
+        Bramble.locality(::Type{<:_FakeDeviceVector}) = Bramble.DeviceLocality()
+
+        v_dev = _FakeDeviceVector(zeros(4))
+        @test_throws ArgumentError _sweep_for!(CpuSerial(), v_dev, 1:4, identity)
+        err2 = try
+            _sweep_for!(CpuSerial(), v_dev, 1:4, identity)
+        catch e
+            e
+        end
+        msg2 = sprint(showerror, err2)
+        @test occursin("destination array has device locality", msg2)
+        @test occursin("claims host locality", msg2)
+        @test occursin("CpuSerial", msg2)
+        @test !occursin("build this backend with a CpuPolicy", msg2)
+        @test !occursin("build the backend with a CpuPolicy", msg2)
     end
 
     # Invariants tested:
@@ -148,13 +187,13 @@ using ..TestUtils: alloc_test, @test_allocs
             idxs = 1:n
 
             f = i -> Float64(i^2)
-            _cpu_threaded_for!(policy, v, idxs, f)
+            _sweep_for!(policy, v, idxs, f)
             @test v == [Float64(i^2) for i in 1:n]
 
             v2 = ones(n)
             idxs_partial = 10:50
             f2 = i -> Float64(i * 2)
-            _cpu_threaded_for!(policy, v2, idxs_partial, f2)
+            _sweep_for!(policy, v2, idxs_partial, f2)
             @test v2[1:9] == ones(9)
             @test v2[10:50] == [Float64(i * 2) for i in 10:50]
             @test v2[51:100] == ones(50)
@@ -162,7 +201,7 @@ using ..TestUtils: alloc_test, @test_allocs
             B = zeros(10, 10)
             cart_idxs = CartesianIndices(B)
             f3 = idx -> Float64(idx[1] * idx[2])
-            _cpu_threaded_for!(policy, B, cart_idxs, f3)
+            _sweep_for!(policy, B, cart_idxs, f3)
             for i in 1:10, j in 1:10
 
                 @test B[i, j] ≈ Float64(i * j)
@@ -175,14 +214,14 @@ using ..TestUtils: alloc_test, @test_allocs
         v_serial = zeros(n)
         v_parallel = zeros(n)
         f_test = i -> sin(Float64(i)) + cos(Float64(i))
-        _cpu_threaded_for!(Serial(), v_serial, idxs, f_test)
-        _cpu_threaded_for!(Parallel(), v_parallel, idxs, f_test)
+        _sweep_for!(Serial(), v_serial, idxs, f_test)
+        _sweep_for!(Parallel(), v_parallel, idxs, f_test)
         @test v_serial ≈ v_parallel
 
         # Zero allocations during Serial() policy execution
         v_serial_alloc = zeros(100)
         f_alloc = i -> Float64(i^2)
-        @test_allocs _cpu_threaded_for!(Serial(), v_serial_alloc, 1:100, f_alloc)
+        @test_allocs _sweep_for!(Serial(), v_serial_alloc, 1:100, f_alloc)
     end
 
     # Invariants tested:
@@ -257,7 +296,7 @@ using ..TestUtils: alloc_test, @test_allocs
 
     # Invariants tested:
     # 1. _write_components! unrolls via recursion on tuple types without allocations.
-    # 2. _cpu_threaded_scatter_for! scatters multi-component kernel evaluations in a single pass.
+    # 2. _sweep_scatter_for! scatters multi-component kernel evaluations in a single pass.
     # 3. Serial() and Parallel() execution policies yield identical results.
     @testset "Component scattering" begin
         a = zeros(3)
@@ -279,7 +318,7 @@ using ..TestUtils: alloc_test, @test_allocs
             m1 = zeros(n)
             m2 = zeros(n)
             g = i -> (Float64(i), Float64(2i))
-            _cpu_threaded_scatter_for!(policy, (m1, m2), 1:n, g)
+            _sweep_scatter_for!(policy, (m1, m2), 1:n, g)
             @test m1 == [Float64(i) for i in 1:n]
             @test m2 == [Float64(2i) for i in 1:n]
         end
@@ -289,15 +328,15 @@ using ..TestUtils: alloc_test, @test_allocs
         m1_s, m2_s = zeros(n), zeros(n)
         m1_p, m2_p = zeros(n), zeros(n)
         g_fn = i -> (sin(Float64(i)), cos(Float64(i)))
-        _cpu_threaded_scatter_for!(Serial(), (m1_s, m2_s), 1:n, g_fn)
-        _cpu_threaded_scatter_for!(Parallel(), (m1_p, m2_p), 1:n, g_fn)
+        _sweep_scatter_for!(Serial(), (m1_s, m2_s), 1:n, g_fn)
+        _sweep_scatter_for!(Parallel(), (m1_p, m2_p), 1:n, g_fn)
         @test m1_s ≈ m1_p
         @test m2_s ≈ m2_p
 
         # Zero allocations during Serial() component scattering
         scatter_targets = (zeros(50), zeros(50))
         g_scatter = i -> (Float64(i), Float64(2i))
-        @test_allocs _cpu_threaded_scatter_for!(Serial(), scatter_targets, 1:50, g_scatter)
+        @test_allocs _sweep_scatter_for!(Serial(), scatter_targets, 1:50, g_scatter)
     end
 
     # Invariants tested:

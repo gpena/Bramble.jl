@@ -62,10 +62,31 @@ public supports_undef_construction
 # free. Declared by whoever adds a GPU backend, never called by a user of one, so `public`
 # rather than exported, alongside `supports_undef_construction` above.
 public ka_device
+# The memory-locality trait (gpena/Bramble.jl#298): derived from an array type, never
+# declared, so a `Backend`'s storage and its execution policy can be checked against each
+# other instead of each independently claiming a locality that need not agree. A GPU package
+# extension adds one method of `locality` for its own array type, the same contract as
+# `ka_device` above; `public` rather than exported for the same reason.
+public locality, Locality, HostLocality, DeviceLocality
 # Read by every package extension's own `@compile_workload` gate (gpena/Bramble.jl#196), so
 # a user's `set_preferences!(Bramble, "precompile_workload" => false)` disables the
 # extensions' workloads along with the core one, not just the core one.
 public PRECOMPILE_WORKLOAD
+
+# The device-kernel launch hooks (gpena/Bramble.jl#94, #174): `src/` declares each one as an
+# error-only stub naming KernelAbstractions, exactly the `CpuBatch`/Polyester idiom above --
+# `BrambleKernelAbstractionsExt` supplies the real `@kernel`-backed methods. They are
+# `public` rather than exported for the same reason as the `_batch_*` hooks: an extension
+# has to reach them by name, and a name an extension is expected to implement is not
+# internal.
+public _gpu_for!, _gpu_scatter_for!
+public _launch_uniform_points!, _launch_half_points!, _launch_spacing!, _launch_half_spacing!
+public _launch_refine_indices!
+public _launch_restriction!, _launch_restriction_scatter!
+public _launch_restriction_nd!, _launch_restriction_scatter_nd!
+public _launch_cell_average!, _launch_cell_average_scatter!
+public _launch_cell_average_nd!, _launch_cell_average_scatter_nd!
+public _launch_difference_onesided!, _launch_difference_centered!, _launch_average_engine!
 
 # domain/interval handling functions
 export box, interval, ×, dim, topo_dim, extrema, point, center, projection, boundary_symbols

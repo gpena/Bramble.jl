@@ -94,7 +94,8 @@ end
 # .agents/plans/metal-and-apple-silicon-acceleration.md)
 #
 # `PointValue`'s side of the `_device_project!`/`_device_scatter_project!` contract
-# (`operators/projection.jl`): a 1D leaf space evaluates `rule.f` directly against the
+# (`operators/projection.jl`), keyed on `DeviceLocality` so `project!`'s locality-based
+# dispatch reaches them: a 1D leaf space evaluates `rule.f` directly against the
 # mesh's own coordinate vector `points(Ωₕ)`, through `ka_device` and one of the launchers
 # below, which `ext/BrambleKernelAbstractionsExt.jl` implements as a
 # `KernelAbstractions.@kernel`. Without that extension loaded, the launcher throws a named
@@ -113,7 +114,30 @@ end
 # `_launch_uniform_points!` fallback idiom): the extension's methods are typed on
 # `AbstractVector`/`Tuple`, and a fallback with the same signature would overwrite them
 # instead of adding a genuinely more specific dispatch.
+"""
+    _launch_restriction!(v::AbstractVector, pts::AbstractVector, f, dev) -> Nothing
+
+Fills `v` with `f` evaluated at every point of a 1D mesh's coordinate vector `pts`
+(`v[i] = f(pts[i])`), via a `KernelAbstractions.@kernel` launch on `dev`, filled by
+`ext/BrambleKernelAbstractionsExt.jl`. `f` runs on the device, so it must be GPU-compilable
+in the sense [`Rₕ!`](@ref)'s docstring describes.
+
+# Throws
+- `ErrorException`: no `KernelAbstractions` extension is loaded, so there is no device
+  kernel to reach (`_throw_no_ka_projection_kernel`).
+"""
 _launch_restriction!(v, pts, f, dev) = _throw_no_ka_projection_kernel("_launch_restriction!")
+
+"""
+    _launch_restriction_scatter!(mats::Tuple, pts::AbstractVector, f, dev) -> Nothing
+
+The scatter counterpart of [`_launch_restriction!`](@ref): evaluates `f(pts[i])` once per
+point of a 1D mesh and scatters its components into the destination tuple `mats`, via a
+`KernelAbstractions.@kernel` launch on `dev`. Same GPU-compilability requirement on `f`.
+
+# Throws
+- `ErrorException`: no `KernelAbstractions` extension is loaded (`_throw_no_ka_projection_kernel`).
+"""
 _launch_restriction_scatter!(mats, pts, f, dev) = _throw_no_ka_projection_kernel("_launch_restriction_scatter!")
 
 # The `D >= 2` counterparts: a tensor-product mesh stores one coordinate vector per axis
@@ -123,7 +147,30 @@ _launch_restriction_scatter!(mats, pts, f, dev) = _throw_no_ka_projection_kernel
 # (`indices(Ωₕ)`, a bits `CartesianIndices`), never from the mesh object itself. See the
 # module comment at the top of `ext/BrambleKernelAbstractionsExt.jl` for why that
 # distinction is load-bearing on a device.
+"""
+    _launch_restriction_nd!(v::AbstractVector, pts::Tuple, idxs, f, dev) -> Nothing
+
+The `D >= 2` counterpart of [`_launch_restriction!`](@ref): builds each grid point from the
+per-axis coordinate vectors `pts` at Cartesian index `idxs[i]` and fills `v[i] = f(point)`,
+via a `KernelAbstractions.@kernel` launch on `dev`. Same GPU-compilability requirement on
+`f`.
+
+# Throws
+- `ErrorException`: no `KernelAbstractions` extension is loaded (`_throw_no_ka_projection_kernel`).
+"""
 _launch_restriction_nd!(v, pts, idxs, f, dev) = _throw_no_ka_projection_kernel("_launch_restriction_nd!")
+
+"""
+    _launch_restriction_scatter_nd!(mats::Tuple, pts::Tuple, idxs, f, dev) -> Nothing
+
+The `D >= 2`, scatter counterpart of [`_launch_restriction!`](@ref): builds each grid point
+from the per-axis coordinate vectors `pts` at Cartesian index `idxs[i]`, evaluates `f` at it
+once, and scatters its components into the destination tuple `mats`, via a
+`KernelAbstractions.@kernel` launch on `dev`. Same GPU-compilability requirement on `f`.
+
+# Throws
+- `ErrorException`: no `KernelAbstractions` extension is loaded (`_throw_no_ka_projection_kernel`).
+"""
 function _launch_restriction_scatter_nd!(mats, pts, idxs, f, dev)
     _throw_no_ka_projection_kernel(
         "_launch_restriction_scatter_nd!"
@@ -131,8 +178,8 @@ function _launch_restriction_scatter_nd!(mats, pts, idxs, f, dev)
 end
 
 """
-    _device_project!(::GpuPolicy, rule::PointValue, raw::AbstractVector, sp::ScalarGridSpace{1}) -> Bool
-    _device_project!(::GpuPolicy, rule::PointValue, raw::AbstractVector, sp::ScalarGridSpace{D}) where {D} -> Bool
+    _device_project!(::DeviceLocality, rule::PointValue, raw::AbstractVector, sp::ScalarGridSpace{1}) -> Bool
+    _device_project!(::DeviceLocality, rule::PointValue, raw::AbstractVector, sp::ScalarGridSpace{D}) where {D} -> Bool
 
 Fills `raw` with `rule.f` evaluated at every point of the mesh `mesh(sp)`, via a device
 kernel (gpena/Bramble.jl#94, #174, S2.3). The 1D method reads the mesh's own coordinate
@@ -142,7 +189,7 @@ coordinate vectors instead. `rule.f` runs on the device either way: see [`_gpu_f
 for what that requires of it.
 """
 @inline function _device_project!(
-        ::GpuPolicy, rule::PointValue, raw::AbstractVector, sp::ScalarGridSpace{1}
+        ::DeviceLocality, rule::PointValue, raw::AbstractVector, sp::ScalarGridSpace{1}
 )
     Ωₕ = mesh(sp)
     dev = ka_device(backend(sp))
@@ -151,7 +198,7 @@ for what that requires of it.
 end
 
 @inline function _device_project!(
-        ::GpuPolicy, rule::PointValue, raw::AbstractVector, sp::ScalarGridSpace{D}
+        ::DeviceLocality, rule::PointValue, raw::AbstractVector, sp::ScalarGridSpace{D}
 ) where {D}
     Ωₕ = mesh(sp)
     dev = ka_device(backend(sp))
@@ -160,7 +207,7 @@ end
 end
 
 """
-    _device_scatter_project!(::GpuPolicy, rule::PointValue, raws::Tuple, sp, ::Val{NC}) -> Bool
+    _device_scatter_project!(::DeviceLocality, rule::PointValue, raws::Tuple, sp, ::Val{NC}) -> Bool
 
 The scatter counterpart of [`_device_project!`](@ref) above, for an `NC`-component
 composite space `sp` whose leaves share one mesh: `rule.f` is evaluated once per point and
@@ -171,7 +218,7 @@ generically (not `ScalarGridSpace`) because the caller is always the composite b
 as a type constraint on the composite space itself.
 """
 @inline function _device_scatter_project!(
-        ::GpuPolicy, rule::PointValue, raws::Tuple, sp, ::Val{NC}
+        ::DeviceLocality, rule::PointValue, raws::Tuple, sp, ::Val{NC}
 ) where {NC}
     Ωₕ = mesh(sp)
     dev = ka_device(backend(sp))
@@ -269,6 +316,13 @@ end
     i = _extract_linear_index(idx)
     return @inbounds Array(view(pts, i:i))[1]
 end
+
+# `points` on a 1D mesh reached through the `MeshnD{D}` ntuple wrapper (`@generate_mesh_ntuple_func
+# points` in `mesh/meshnd.jl`) comes back as a 1-tuple, `(points(Ωₕ(1)),)`, rather than the bare
+# vector `points(::Mesh1D)` returns directly -- the two shapes JET's union split on `points(Ωₕ)`
+# flags for `AbstractMeshType{1}`. Both name the same single coordinate vector, so unwrap and
+# re-dispatch instead of duplicating the `Array`/`AbstractVector` cases above.
+@inline _probe_point_value(pts::Tuple, Ωₕ, idx) = _probe_point_value(only(pts), Ωₕ, idx)
 
 # `MeshnD` (`D >= 2`): `point(Ωₕ, idx)` (src/mesh/meshnd.jl) combines each axis's own
 # scalar read via `@generate_mesh_ntuple_func_with_idx point`, one `getindex` per axis on

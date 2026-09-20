@@ -328,10 +328,71 @@ end
 # is typed on `AbstractVector`, and a fallback with the same signature would overwrite it
 # instead of adding a genuinely more specific dispatch (method overwriting is an error during
 # precompilation).
+"""
+    _launch_uniform_points!(x::AbstractVector, a, h, dev) -> Nothing
+
+Fills `x` with `length(x)` uniformly spaced points starting at `a` with spacing `h`
+(`x[i] = a + (i - 1) * h`), via a `KernelAbstractions.@kernel` launch on `dev`, filled by
+`ext/BrambleKernelAbstractionsExt.jl`. The device counterpart of `_points!`'s uniform-branch
+CPU loop.
+
+# Throws
+- `ErrorException`: no `KernelAbstractions` extension is loaded, so there is no device
+  kernel to reach (`_throw_no_ka_mesh_kernel`).
+"""
 _launch_uniform_points!(x, a, h, dev) = _throw_no_ka_mesh_kernel("_launch_uniform_points!")
+
+"""
+    _launch_half_points!(x::AbstractVector, pts, n::Int, dev) -> Nothing
+
+Fills `x` (length `n + 1`) with the mesh's half points: the boundary entries `x[1] = pts[1]`
+and `x[n + 1] = pts[n]`, and the interior midpoints `x[i] = (pts[i] + pts[i - 1]) / 2`, via a
+`KernelAbstractions.@kernel` launch on `dev`. The device counterpart of `half_points!`'s CPU
+loop.
+
+# Throws
+- `ErrorException`: no `KernelAbstractions` extension is loaded (`_throw_no_ka_mesh_kernel`).
+"""
 _launch_half_points!(x, pts, n, dev) = _throw_no_ka_mesh_kernel("_launch_half_points!")
+
+"""
+    _launch_spacing!(x::AbstractVector, pts, n::Int, dev) -> Nothing
+
+Fills `x` (length `n`) with the backward spacings of `pts`: the boundary entry
+`x[1] = pts[2] - pts[1]`, and `x[i] = pts[i] - pts[i - 1]` elsewhere, via a
+`KernelAbstractions.@kernel` launch on `dev`. The device counterpart of `spacing!`'s CPU
+loop.
+
+# Throws
+- `ErrorException`: no `KernelAbstractions` extension is loaded (`_throw_no_ka_mesh_kernel`).
+"""
 _launch_spacing!(x, pts, n, dev) = _throw_no_ka_mesh_kernel("_launch_spacing!")
+
+"""
+    _launch_half_spacing!(x::AbstractVector, h, n::Int, dev) -> Nothing
+
+Fills `x` (length `n`) with the mesh's half spacings: the boundary entries
+`x[1] = h[1] / 2` and `x[n] = h[n] / 2`, and the interior `x[i] = (h[i] + h[i + 1]) / 2`, via
+a `KernelAbstractions.@kernel` launch on `dev`. The device counterpart of `half_spacing!`'s
+CPU loop.
+
+# Throws
+- `ErrorException`: no `KernelAbstractions` extension is loaded (`_throw_no_ka_mesh_kernel`).
+"""
 _launch_half_spacing!(x, h, n, dev) = _throw_no_ka_mesh_kernel("_launch_half_spacing!")
+
+"""
+    _launch_refine_indices!(new_points::AbstractVector, old_points, N_old::Int, dev) -> Nothing
+
+Fills `new_points` (length `2 * N_old - 1`) with the refined mesh: `new_points[2i - 1] =
+old_points[i]` copies each old point to its odd slot, and `new_points[2i] = (old_points[i] +
+old_points[i + 1]) / 2` inserts the midpoint at the even slot for `i < N_old`, via a
+`KernelAbstractions.@kernel` launch on `dev`. The device counterpart of
+`_refine_indices_fill!`'s CPU loop.
+
+# Throws
+- `ErrorException`: no `KernelAbstractions` extension is loaded (`_throw_no_ka_mesh_kernel`).
+"""
 _launch_refine_indices!(new_points, old_points, N_old, dev) = _throw_no_ka_mesh_kernel("_launch_refine_indices!")
 
 @noinline _throw_no_gpu_nonuniform_points() = error(

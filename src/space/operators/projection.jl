@@ -22,7 +22,7 @@ signatures and docstrings and become thin wrappers over `project!`.
 plain serial loops that ignored `execution_policy`, while the unmasked ones threaded. A
 caller who added `markers = (...)` silently lost threading, with nothing in either
 interface saying so. Masking is now a property of the kernel (`_MaskedKernel` below), not
-of the sweep, so both go through the same `_cpu_threaded_for!` and the policy is honoured
+of the sweep, so both go through the same `_sweep_for!` and the policy is honoured
 either way.
 =#
 
@@ -97,53 +97,56 @@ function _rule_component end
 # top-level arguments rather than nested inside a wrapper struct.
 #
 # Both default to `false` -- "no device kernel for this rule/space/marker combination" --
-# so `project!` falls back to the generic sweep above unchanged: on a `CpuPolicy` that is
-# every call (the CPU path never even asks); on a `GpuPolicy` it is only an unmasked
+# so `project!` falls back to the generic sweep above unchanged: on `HostLocality` that is
+# every call (the CPU path never even asks); on `DeviceLocality` it is only an unmasked
 # `PointValue`/`CellAverage` on a 1D leaf space that answers `true`. A masked call, a
 # higher-dimensional mesh, or a future rule this file has not been taught about all fall
-# through to `_cpu_threaded_for!`/`_cpu_threaded_scatter_for!`'s own `GpuPolicy` handling,
+# through to `_sweep_for!`/`_sweep_scatter_for!`'s own `DeviceLocality` handling,
 # which either runs (if `f`'s fields happen to be GPU-safe) or fails with a real device
 # compiler diagnostic -- never silently the wrong answer.
 
 """
-    _device_project!(policy, rule, raw, sp) -> Bool
+    _device_project!(loc, rule, raw, sp) -> Bool
 
 Attempt a dedicated device kernel filling `raw` (a leaf's coefficient vector) according to
 `rule` on space `sp`. Returns `true` when it did; `false` when no such kernel exists for
-this `policy`/`rule`/`sp` combination, so the caller runs the generic
-[`_cpu_threaded_for!`](@ref) sweep instead. Always `false` for a [`CpuPolicy`](@ref): the
-CPU sweep already indexes `raw` directly and never needs this path.
+this `rule`/`sp` combination on this locality, so the caller runs the generic
+[`_sweep_for!`](@ref) sweep instead. Always `false` on [`HostLocality`](@ref): the
+CPU sweep already indexes `raw` directly and never needs this path. Legality here is a
+locality question, not a policy question (gpena/Bramble.jl#298): a device kernel either
+exists for this destination's storage or it doesn't, regardless of which strategy the
+policy names within that locality.
 """
-@inline _device_project!(::CpuPolicy, rule, raw, sp) = false
-@inline _device_project!(::GpuPolicy, rule, raw, sp) = false
+@inline _device_project!(::HostLocality, rule, raw, sp) = false
+@inline _device_project!(::DeviceLocality, rule, raw, sp) = false
 
 """
-    _device_scatter_project!(policy, rule, raws::Tuple, sp, ::Val{NC}) -> Bool
+    _device_scatter_project!(loc, rule, raws::Tuple, sp, ::Val{NC}) -> Bool
 
 The scatter counterpart of [`_device_project!`](@ref): a dedicated device kernel filling
 every leaf array in `raws` (`NC` of them, all sharing `sp`'s mesh) in one launch. Same
-`true`/`false` contract.
+`true`/`false` contract, keyed on locality for the same reason.
 """
-@inline _device_scatter_project!(::CpuPolicy, rule, raws, sp, ::Val) = false
-@inline _device_scatter_project!(::GpuPolicy, rule, raws, sp, ::Val) = false
+@inline _device_scatter_project!(::HostLocality, rule, raws, sp, ::Val) = false
+@inline _device_scatter_project!(::DeviceLocality, rule, raws, sp, ::Val) = false
 
 # A masked call (`markers` non-empty) has no dedicated device kernel (the mask would have
 # to be transferred to the device and folded into the kernel, gpena/Bramble.jl#94, #174):
-# it falls through to the generic `_cpu_threaded_for!`/`_cpu_threaded_scatter_for!` sweep
-# below like any other case `_device_project!`/`_device_scatter_project!` declines. On a
-# `CpuPolicy` that sweep runs exactly as it always has. On a `GpuPolicy`, though, the
+# it falls through to the generic `_sweep_for!`/`_sweep_scatter_for!` sweep
+# below like any other case `_device_project!`/`_device_scatter_project!` declines. On
+# `HostLocality` that sweep runs exactly as it always has. On `DeviceLocality`, though, the
 # kernel it would build there closes over the mesh *and* the marker masks -- both fail to
 # compile with a `GPUCompiler` wall of text, not a Bramble message. Caught here instead,
 # before that sweep ever launches.
-@inline _throw_no_device_masked_projection(::CpuPolicy) = nothing
-@noinline function _throw_no_device_masked_projection(policy::GpuPolicy)
+@inline _throw_no_device_masked_projection(::HostLocality) = nothing
+@noinline function _throw_no_device_masked_projection(::DeviceLocality)
     throw(
         ArgumentError(
-        "a masked Rₕ!/avgₕ! call (markers non-empty) has no device kernel on " *
-        "$(typeof(policy)): the per-point mask would have to be transferred to the " *
-        "device and folded into the kernel, which is not implemented. Restrict the call " *
-        "to the unmasked form, or build this backend with a CpuPolicy " *
-        "(CpuSerial()/CpuThreaded()) to run the masked sweep on the host.",
+        "a masked Rₕ!/avgₕ! call (markers non-empty) has no device kernel: the " *
+        "per-point mask would have to be transferred to the device and folded into the " *
+        "kernel, which is not implemented (gpena/Bramble.jl#297). On a device backend " *
+        "the options are to restrict the call to the unmasked form, or to use a host " *
+        "backend built from host array types.",
     ),
     )
 end
@@ -193,13 +196,14 @@ function project! end
     Ωₕ = mesh(sp)
     raw = parent(uₕ)
     policy = execution_policy(sp)
-    if N == 0 && _device_project!(policy, rule, raw, sp)
+    loc = locality(typeof(raw))
+    if N == 0 && _device_project!(loc, rule, raw, sp)
         return uₕ
     end
-    N > 0 && _throw_no_device_masked_projection(policy)
+    N > 0 && _throw_no_device_masked_projection(loc)
     n = length(indices(Ωₕ))
     kernel = _rule_kernel(rule, sp)
-    _cpu_threaded_for!(
+    _sweep_for!(
         policy, raw, 1:n, _apply_mask(kernel, Ωₕ, markers, eltype(raw))
     )
     return uₕ
@@ -217,14 +221,15 @@ end
         raws = map(parent, comps)
         NC = length(comps)
         policy = execution_policy(sp)
-        if N == 0 && _device_scatter_project!(policy, rule, raws, sp, Val(NC))
+        loc = locality(typeof(raws[1]))
+        if N == 0 && _device_scatter_project!(loc, rule, raws, sp, Val(NC))
             return uₕ
         end
-        N > 0 && _throw_no_device_masked_projection(policy)
+        N > 0 && _throw_no_device_masked_projection(loc)
         n = length(indices(Ωₕ))
         kernel = _rule_scatter_kernel(rule, sp, Val(NC))
         zeros_nc = ntuple(_ -> zero(eltype(first(raws))), Val(NC))
-        _cpu_threaded_scatter_for!(
+        _sweep_scatter_for!(
             policy, raws, 1:n, _apply_mask(kernel, Ωₕ, markers, zeros_nc)
         )
     else

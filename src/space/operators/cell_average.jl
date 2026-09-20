@@ -211,14 +211,40 @@ end
 # .agents/plans/metal-and-apple-silicon-acceleration.md)
 #
 # `CellAverage`'s side of the `_device_project!`/`_device_scatter_project!` contract
-# (`operators/projection.jl`): the quadrature loop is exactly `_cell_average` above, called
+# (`operators/projection.jl`), keyed on `DeviceLocality` so `project!`'s locality-based
+# dispatch reaches them: the quadrature loop is exactly `_cell_average` above, called
 # per point with the mesh's own `half_points(Ωₕ)` vector as a top-level kernel argument
 # rather than nested inside a wrapper struct -- see `restriction.jl`'s stubs for why that
 # distinction matters on a device. Without the KA extension loaded, the launcher throws a
 # named diagnostic instead of failing several frames later on a scalar index.
 #------------------------------------------------------------------------------------------#
 
+"""
+    _launch_cell_average!(v::AbstractVector, x::AbstractVector, nodes, wts, f, dev) -> Nothing
+
+Fills `v[i]` with the [`_cell_average`](@ref) of `f` over the 1D cell around grid point `i`,
+using the Gauss-Legendre `nodes`/`wts` and the mesh's half points `x`, via a
+`KernelAbstractions.@kernel` launch on `dev`, filled by
+`ext/BrambleKernelAbstractionsExt.jl`. `f` runs on the device: same GPU-compilability
+requirement as [`_gpu_for!`](@ref).
+
+# Throws
+- `ErrorException`: no `KernelAbstractions` extension is loaded, so there is no device
+  kernel to reach (`_throw_no_ka_projection_kernel`).
+"""
 _launch_cell_average!(v, x, nodes, wts, f, dev) = _throw_no_ka_projection_kernel("_launch_cell_average!")
+
+"""
+    _launch_cell_average_scatter!(mats::Tuple, x::AbstractVector, nodes, wts, f, dev) -> Nothing
+
+The scatter counterpart of [`_launch_cell_average!`](@ref): computes the
+[`_cell_average`](@ref) of `f` over each 1D cell once and scatters its components into the
+destination tuple `mats`, via a `KernelAbstractions.@kernel` launch on `dev`. Same
+GPU-compilability requirement on `f`.
+
+# Throws
+- `ErrorException`: no `KernelAbstractions` extension is loaded (`_throw_no_ka_projection_kernel`).
+"""
 function _launch_cell_average_scatter!(mats, x, nodes, wts, f, dev)
     _throw_no_ka_projection_kernel(
         "_launch_cell_average_scatter!"
@@ -230,7 +256,30 @@ end
 # vector per axis -- so the device kernel calls it directly with `x` (a `Tuple` of
 # top-level device arrays) and `idxs` (`indices(Ωₕ)`, a bits `CartesianIndices`), the same
 # non-nesting rule `restriction.jl`'s `_nd` launchers follow.
+"""
+    _launch_cell_average_nd!(v::AbstractVector, x::Tuple, idxs, nodes, wts, f, dev) -> Nothing
+
+The `D >= 2` counterpart of [`_launch_cell_average!`](@ref): fills `v[i]` with the
+[`_cell_average`](@ref) of `f` over the cell at Cartesian index `idxs[i]`, using the
+per-axis half-point vectors `x` and the Gauss-Legendre `nodes`/`wts`, via a
+`KernelAbstractions.@kernel` launch on `dev`. Same GPU-compilability requirement on `f`.
+
+# Throws
+- `ErrorException`: no `KernelAbstractions` extension is loaded (`_throw_no_ka_projection_kernel`).
+"""
 _launch_cell_average_nd!(v, x, idxs, nodes, wts, f, dev) = _throw_no_ka_projection_kernel("_launch_cell_average_nd!")
+
+"""
+    _launch_cell_average_scatter_nd!(mats::Tuple, x::Tuple, idxs, nodes, wts, f, dev) -> Nothing
+
+The `D >= 2`, scatter counterpart of [`_launch_cell_average!`](@ref): computes the
+[`_cell_average`](@ref) of `f` over the cell at Cartesian index `idxs[i]` once and scatters
+its components into the destination tuple `mats`, via a `KernelAbstractions.@kernel` launch
+on `dev`. Same GPU-compilability requirement on `f`.
+
+# Throws
+- `ErrorException`: no `KernelAbstractions` extension is loaded (`_throw_no_ka_projection_kernel`).
+"""
 function _launch_cell_average_scatter_nd!(mats, x, idxs, nodes, wts, f, dev)
     _throw_no_ka_projection_kernel(
         "_launch_cell_average_scatter_nd!"
@@ -238,8 +287,8 @@ function _launch_cell_average_scatter_nd!(mats, x, idxs, nodes, wts, f, dev)
 end
 
 """
-    _device_project!(::GpuPolicy, rule::CellAverage, raw::AbstractVector, sp::ScalarGridSpace{1}) -> Bool
-    _device_project!(::GpuPolicy, rule::CellAverage, raw::AbstractVector, sp::ScalarGridSpace{D}) where {D} -> Bool
+    _device_project!(::DeviceLocality, rule::CellAverage, raw::AbstractVector, sp::ScalarGridSpace{1}) -> Bool
+    _device_project!(::DeviceLocality, rule::CellAverage, raw::AbstractVector, sp::ScalarGridSpace{D}) where {D} -> Bool
 
 Fills `raw` with the cell average of `rule.f` over every cell of the mesh `mesh(sp)`, via a
 device kernel that calls the same [`_cell_average`](@ref) quadrature the CPU sweep uses
@@ -249,7 +298,7 @@ specific) hands it the per-axis tuple `_cell_average`'s own 2D/3D methods alread
 `rule.f` runs on the device either way: see [`_gpu_for!`](@ref) for what that requires of it.
 """
 @inline function _device_project!(
-        ::GpuPolicy, rule::CellAverage, raw::AbstractVector, sp::ScalarGridSpace{1}
+        ::DeviceLocality, rule::CellAverage, raw::AbstractVector, sp::ScalarGridSpace{1}
 )
     Ωₕ = mesh(sp)
     nodes, wts = _gauss_rule(rule.nq, eltype(Ωₕ))
@@ -259,7 +308,7 @@ specific) hands it the per-axis tuple `_cell_average`'s own 2D/3D methods alread
 end
 
 @inline function _device_project!(
-        ::GpuPolicy, rule::CellAverage, raw::AbstractVector, sp::ScalarGridSpace{D}
+        ::DeviceLocality, rule::CellAverage, raw::AbstractVector, sp::ScalarGridSpace{D}
 ) where {D}
     Ωₕ = mesh(sp)
     nodes, wts = _gauss_rule(rule.nq, eltype(Ωₕ))
@@ -269,7 +318,7 @@ end
 end
 
 """
-    _device_scatter_project!(::GpuPolicy, rule::CellAverage, raws::Tuple, sp, ::Val{NC}) -> Bool
+    _device_scatter_project!(::DeviceLocality, rule::CellAverage, raws::Tuple, sp, ::Val{NC}) -> Bool
 
 The scatter counterpart of [`_device_project!`](@ref) above, for an `NC`-component
 composite space `sp` whose leaves share one mesh. `sp` is typed generically for the same
@@ -277,7 +326,7 @@ reason `restriction.jl`'s counterpart is: the mesh's own dimension, checked on `
 at runtime, picks the 1D or `D`-dimensional launcher.
 """
 @inline function _device_scatter_project!(
-        ::GpuPolicy, rule::CellAverage, raws::Tuple, sp, ::Val{NC}
+        ::DeviceLocality, rule::CellAverage, raws::Tuple, sp, ::Val{NC}
 ) where {NC}
     Ωₕ = mesh(sp)
     nodes, wts = _gauss_rule(rule.nq, eltype(Ωₕ))
@@ -366,19 +415,36 @@ end
     return NTuple{N, T}(x), NTuple{N, T}(w)
 end
 
-# A one-dimensional mesh answers `half_points` with a plain vector but indexes with
-# `CartesianIndex{1}`, and unwrapping that to its `Int` is the *only* thing the whole
-# `Val{1}`/`Val{D}` split in this file ever did (gpena/Bramble.jl#69). Doing it here, once,
-# lets the D-dimensional kernels and sweeps cover one dimension too: dispatch already
-# separates 1D (`x::AbstractVector`) from nD (`x::NTuple{D}`), so nothing else had to know.
-# `CartesianIndex{1}[1]` is free -- confirmed against the allocation gates, not assumed.
-#
-# One method rather than a scalar/composite pair: broadcasting `.+`/`.*` over a `Number`
-# accumulator compute exactly the scalar arithmetic `+`/`*` would (bit-for-bit --
-# broadcasting a scalar adds no operation of its own), and over an `NTuple` accumulator
-# compute the per-component sum the old, separately-written composite method did. Which one
-# applies falls out of `f`'s own return type, so no `::Val{NC}` or caller-built seed is
-# needed to tell them apart (gpena/Bramble.jl#102, gpena/Bramble.jl#148).
+"""
+    _cell_average(f, x::AbstractVector, idx::CartesianIndex{1}, nodes::NTuple{NQ, T}, wts::NTuple{NQ, T}) where {NQ, T}
+    _cell_average(f, x::AbstractVector, i::Int, nodes::NTuple{NQ, T}, wts::NTuple{NQ, T}) where {NQ, T}
+    _cell_average(f, x::NTuple{D}, idx::CartesianIndex{D}, nodes::NTuple{NQ, T}, wts::NTuple{NQ, T}) where {D, NQ, T}
+
+`NQ`-point Gauss-Legendre average of `f` over the cell spanned by the half points around
+`idx`, along every axis at once. Scalar or composite (`NTuple`) by `f`'s own return type:
+broadcasting `.+`/`.*` over a `Number` accumulator computes exactly the scalar arithmetic
+`+`/`*` would, and over an `NTuple` accumulator the per-component sum, so no `::Val{NC}` or
+caller-built seed is needed to tell the two apart (gpena/Bramble.jl#102, #148). The
+accumulator is seeded from `f`'s own first evaluation rather than `zero(T)`, so `T` (the
+mesh's element type) never leaks into the sum when `f` returns something else, such as a
+`ForwardDiff.Dual` under AD (gpena/Bramble.jl#148).
+
+A one-dimensional mesh answers `half_points` with a plain vector but indexes with
+`CartesianIndex{1}`; the `CartesianIndex{1}` method unwraps that to the `Int` the
+`x::AbstractVector` method takes, which is the only thing the 1D/`D`-dimensional split in
+this file ever did (gpena/Bramble.jl#69). The 1D, 2D and 3D methods are specialised for the
+meshes this package builds (`D <= 3`); the generic `NTuple{D}` method exists for dispatch
+correctness at any `D` and is tested directly rather than through a mesh.
+
+# Arguments
+- `f`: Function evaluated at quadrature points, returning a scalar or an `NTuple`.
+- `x`: Half points along each axis (`AbstractVector` in 1D, `NTuple{D}` otherwise).
+- `idx`/`i`: The cell's `CartesianIndex` (or, in 1D, its `Int`).
+- `nodes`, `wts`: Gauss-Legendre nodes and weights on `[0, 1]` from [`_gauss_rule`](@ref).
+
+# Returns
+- The cell average of `f`, matching `f`'s own return shape.
+"""
 @inline _cell_average(
     f,
     x::AbstractVector,

@@ -15,12 +15,37 @@ using Bramble: Backend, vector, matrix, _backend_eye, _backend_zeros
 # PDE assembly pipeline; building that pipeline on a GPU-resident mesh is a separate gap,
 # outside the extension's own scope.
 #
-# `Metal.functional()` gates everything below: precompiling and loading `Metal` succeeds on
-# any platform (it degrades gracefully rather than erroring, the same convention CUDA.jl
-# uses), but only a real Apple Silicon Mac has a working device, so a CI runner without one
-# skips rather than fails.
+# `Metal.functional()` gates every testset here that touches an actual device array:
+# precompiling and loading `Metal` succeeds on any platform (it degrades gracefully rather
+# than erroring, the same convention CUDA.jl uses), but only a real Apple Silicon Mac has a
+# working device, so a CI runner without one skips those rather than fails. The
+# "rejects a CPU policy over device storage" testset below is the one exception: it checks a
+# construction-time `ArgumentError` derived from type information alone, so it runs whenever
+# Metal is loaded, functional or not.
 
 @testset "BrambleMetalExt" begin
+    # A device VT (MtlVector) under a host CpuPolicy is rejected at construction
+    # (gpena/Bramble.jl#296, #298): `_metal_backend` only builds `Backend{MtlVector{T},
+    # MtlMatrix{T}, typeof(policy)}()`, a type-level construction that never allocates a
+    # device array, so the rejection fires from `MtlVector`/`policy` type information alone.
+    # That means it needs `using Metal` to be loaded (for the `MtlVector` type and the
+    # `_metal_backend` method to exist) but not a functional device, so it runs outside the
+    # `Metal.functional()` gate below and is exercised on any host with Metal loaded.
+    @testset "metal_backend rejects a CPU policy over device storage" begin
+        for cpu_policy in (CpuSerial(), CpuThreaded())
+            err = try
+                metal_backend(; policy = cpu_policy)
+                nothing
+            catch e
+                e
+            end
+            @test err isa ArgumentError
+            msg = sprint(showerror, err)
+            @test occursin("MtlVector", msg)
+            @test occursin(string(typeof(cpu_policy)), msg)
+        end
+    end
+
     if !Metal.functional()
         @test_skip "Metal backend not exercised: Metal.functional() is false on this host"
     else
@@ -30,8 +55,6 @@ using Bramble: Backend, vector, matrix, _backend_eye, _backend_zeros
             # so (gpena/Bramble.jl#191); it used to be Serial()
             @test execution_policy(metal_backend()) === GpuAsync()
             @test execution_policy(metal_backend(Float16)) === GpuAsync()
-            # and a CPU policy is still accepted, meaning exactly what it says
-            @test execution_policy(metal_backend(; policy = CpuSerial())) === CpuSerial()
             @test metal_backend(Float32) isa Backend
             @test metal_backend(Float16) isa Backend
             # Float64 is unsupported on Apple Silicon GPUs. The Metal-loaded method only

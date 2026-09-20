@@ -36,6 +36,13 @@ Base.setindex!(A::MockGPUArray, v, i::Int...) = setindex!(A.data, v, i...)
 Base.IndexStyle(::Type{<:MockGPUArray}) = IndexLinear()
 Base.fill!(A::MockGPUArray{T}, v) where {T} = (fill!(A.data, v); A)
 
+# Answers `DeviceLocality()` (gpena/Bramble.jl#298) although the storage underneath is a
+# plain host `Array`: this is what makes the `Backend` constructor's locality rejection
+# testable with no GPU hardware present -- MockGPUArray *claims* device locality the same
+# way a real vendor array would, so pairing it with a CpuPolicy or a host matrix type must
+# be refused exactly as it would be for MtlVector/MtlMatrix.
+Bramble.locality(::Type{<:MockGPUArray}) = Bramble.DeviceLocality()
+
 const MockGPUVector{T} = MockGPUArray{T, 1}
 const MockGPUMatrix{T} = MockGPUArray{T, 2}
 
@@ -67,6 +74,98 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
     @test CpuBatch <: CpuPolicy <: ExecutionPolicy
     @test CpuBatch() isa CpuPolicy
     @test isbitstype(CpuBatch)
+end
+
+@testset "Backend locality enforcement" begin
+    # Invariants tested (gpena/Bramble.jl#298, #296, decided Q16 -- O11 "rejection is
+    # testable with no GPU"): MockGPUArray answers DeviceLocality() while remaining
+    # host-backed, so every shape a real vendor array (MtlVector, a future CuArray) would
+    # trigger is exercised here without any GPU hardware or optional dependency.
+    @testset "locality trait" begin
+        @test Bramble.locality(Vector{Float64}) === Bramble.HostLocality()
+        @test Bramble.locality(Matrix{Float64}) === Bramble.HostLocality()
+        @test Bramble.locality(MockGPUVector{Float32}) === Bramble.DeviceLocality()
+        @test Bramble.locality(MockGPUMatrix{Float32}) === Bramble.DeviceLocality()
+
+        @test Bramble.locality(CpuSerial()) === Bramble.HostLocality()
+        @test Bramble.locality(CpuThreaded()) === Bramble.HostLocality()
+        @test Bramble.locality(CpuBatch()) === Bramble.HostLocality()
+        @test Bramble.locality(GpuAsync()) === Bramble.DeviceLocality()
+
+        @test Bramble.HostLocality() isa Bramble.Locality
+        @test Bramble.DeviceLocality() isa Bramble.Locality
+
+        be_host = backend()
+        @test Bramble.locality(be_host) === Bramble.HostLocality()
+        @test Bramble.locality(typeof(be_host)) === Bramble.HostLocality()
+
+        be_device = backend(
+            vector_type = MockGPUVector{Float32}, matrix_type = MockGPUMatrix{Float32},
+            policy = GpuAsync()
+        )
+        @test Bramble.locality(be_device) === Bramble.DeviceLocality()
+        @test Bramble.locality(typeof(be_device)) === Bramble.DeviceLocality()
+    end
+
+    @testset "mismatched Backend construction is rejected" begin
+        # device VT + a CpuPolicy: a host loop cannot scalar-index device memory.
+        for cpu_policy in (CpuSerial(), CpuThreaded(), CpuBatch())
+            err = try
+                backend(
+                    vector_type = MockGPUVector{Float32},
+                    matrix_type = MockGPUMatrix{Float32}, policy = cpu_policy
+                )
+                nothing
+            catch e
+                e
+            end
+            @test err isa ArgumentError
+            msg = sprint(showerror, err)
+            @test occursin("MockGPUVector", msg) || occursin("MockGPUArray", msg)
+            @test occursin(string(typeof(cpu_policy)), msg)
+        end
+
+        # host VT + GpuAsync(): there is no device for the sweep to schedule against.
+        err_host_gpu = try
+            backend(
+                vector_type = Vector{Float32}, matrix_type = Matrix{Float32},
+                policy = GpuAsync()
+            )
+            nothing
+        catch e
+            e
+        end
+        @test err_host_gpu isa ArgumentError
+        msg_host_gpu = sprint(showerror, err_host_gpu)
+        @test occursin("Vector{Float32}", msg_host_gpu)
+        @test occursin("GpuAsync", msg_host_gpu)
+
+        # device VT + host MT: a backend must be wholly host or wholly device.
+        err_mixed = try
+            backend(
+                vector_type = MockGPUVector{Float32}, matrix_type = Matrix{Float32},
+                policy = GpuAsync()
+            )
+            nothing
+        catch e
+            e
+        end
+        @test err_mixed isa ArgumentError
+        msg_mixed = sprint(showerror, err_mixed)
+        @test occursin("MockGPUVector", msg_mixed) || occursin("MockGPUArray", msg_mixed)
+        @test occursin("Matrix{Float32}", msg_mixed)
+
+        # Positive controls -- a constructor that threw for everything would pass a suite
+        # that only checks that things throw.
+        be_device = backend(
+            vector_type = MockGPUVector{Float32}, matrix_type = MockGPUMatrix{Float32},
+            policy = GpuAsync()
+        )
+        @test be_device isa Backend
+
+        @test backend() isa Backend
+        @test backend(Float64) isa Backend
+    end
 end
 
 @testset "Backend configuration and allocation" begin
@@ -192,8 +291,12 @@ end
     # 1. Custom DenseArray subtypes integrate seamlessly with backend factory functions.
     # 2. backend_zeros and backend_eye populate correct dimensions and values.
     @testset "Mock GPU backend" begin
+        # MockGPUVector/MockGPUMatrix now answer DeviceLocality() (gpena/Bramble.jl#298), so
+        # the default Serial() policy -- HostLocality() -- no longer agrees with them; a
+        # GpuAsync() policy is required for this Backend to construct at all.
         be_gpu = backend(
-            vector_type = MockGPUVector{Float32}, matrix_type = MockGPUMatrix{Float32}
+            vector_type = MockGPUVector{Float32}, matrix_type = MockGPUMatrix{Float32},
+            policy = GpuAsync()
         )
         @test vector_type(be_gpu) === MockGPUVector{Float32}
         @test matrix_type(be_gpu) === MockGPUMatrix{Float32}
@@ -228,8 +331,12 @@ end
                 @eval using Metal
                 if isdefined(@__MODULE__, :Metal) && Metal.functional()
                     @testset "Metal GPU backend" begin
+                        # MtlVector/MtlMatrix answer DeviceLocality() (gpena/Bramble.jl#298,
+                        # ext/BrambleMetalExt.jl), so the default Serial() policy --
+                        # HostLocality() -- no longer agrees with them; GpuAsync() is required.
                         be_metal = backend(
-                            vector_type = MtlVector{Float32}, matrix_type = MtlMatrix{Float32}
+                            vector_type = MtlVector{Float32}, matrix_type = MtlMatrix{Float32},
+                            policy = GpuAsync()
                         )
                         @test vector_type(be_metal) === MtlVector{Float32}
                         @test matrix_type(be_metal) === MtlMatrix{Float32}
@@ -447,6 +554,9 @@ end
     # Invariants tested (gpena/Bramble.jl#192):
     # 1. gpu_backend() resolves to metal_backend() once the Metal extension is loaded,
     #    including element-type and policy keyword forwarding.
+    # 1b. A CpuPolicy is refused, not accepted (gpena/Bramble.jl#298, #296): Metal's device
+    #     arrays answer DeviceLocality(), a CpuPolicy answers HostLocality(), and the two
+    #     disagreeing is a construction error for both metal_backend and gpu_backend.
     # 2. Metal.functional() gates anything that actually touches a device -- a skip here
     #    warns and is recorded (@test_skip), rather than the branch simply being left out,
     #    which is gpena/Bramble.jl#84's failure mode: a test that "passes" while running
@@ -472,7 +582,9 @@ end
         if isdefined(@__MODULE__, :Metal)
             @test gpu_backend() === metal_backend()
             @test gpu_backend(Float16) === metal_backend(Float16)
-            @test gpu_backend(; policy = CpuSerial()) === metal_backend(; policy = CpuSerial())
+            @test gpu_backend(; policy = GpuAsync()) === metal_backend(; policy = GpuAsync())
+            @test_throws ArgumentError gpu_backend(; policy = CpuSerial())
+            @test_throws ArgumentError metal_backend(; policy = CpuSerial())
             @test execution_policy(gpu_backend()) === GpuAsync()
 
             if Metal.functional()

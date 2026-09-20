@@ -394,11 +394,39 @@ end
 # fallback idiom (`operators/restriction.jl`, `src/mesh/mesh1d.jl`): the extension's methods
 # are typed on `AbstractVector`/`Tuple`, and a fallback with the same signature would
 # overwrite them instead of adding a genuinely more specific dispatch.
+"""
+    _launch_difference_onesided!(out::AbstractVector, in_ref, h, dims::Tuple, dir::GridDirection, dim_val::Val, dev) -> Nothing
+
+Fills `out` with the one-sided (`Forward`/`Backward`) difference of `in_ref` along the axis
+`dim_val`, scaled by `h` when given (`nothing` for the unscaled difference), truncating the
+one boundary slice with no neighbour to zero, matching `_compute_difference`'s
+`GridDirection` methods. Runs via a `KernelAbstractions.@kernel` launch on `dev`, filled by
+`ext/BrambleKernelAbstractionsExt.jl`. The device counterpart of the one-sided branch of
+`_difference_engine!`'s CPU sweep above.
+
+# Throws
+- `ErrorException`: no `KernelAbstractions` extension is loaded, so there is no device
+  kernel to reach (`_throw_no_ka_stencil_kernel`).
+"""
 function _launch_difference_onesided!(out, in_ref, h, dims, dir, dim_val, dev)
     _throw_no_ka_stencil_kernel(
         "_launch_difference_onesided!"
     )
 end
+
+"""
+    _launch_difference_centered!(out::AbstractVector, in_ref, h, dims::Tuple, dir::CenteredStencil, dim_val::Val, dev) -> Nothing
+
+Fills `out` with the centered (`Centered`/`CrossWeighted`) difference of `in_ref` along the
+axis `dim_val`, scaled by `h`. At the two boundary slices it defers to `dir`'s own
+`CenteredStencil` boundary rule in `_compute_difference` -- zero for `Centered`, the
+one-sided difference the near side still defines for `CrossWeighted`. Runs via a
+`KernelAbstractions.@kernel` launch on `dev`. The device counterpart of the centered branch
+of `_difference_engine!`'s CPU sweep above.
+
+# Throws
+- `ErrorException`: no `KernelAbstractions` extension is loaded (`_throw_no_ka_stencil_kernel`).
+"""
 function _launch_difference_centered!(out, in_ref, h, dims, dir, dim_val, dev)
     _throw_no_ka_stencil_kernel(
         "_launch_difference_centered!"

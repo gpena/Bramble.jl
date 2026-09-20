@@ -15,26 +15,38 @@ end
 end
 
 """
-    _cpu_threaded_for!(policy::ExecutionPolicy, v::AbstractArray, idxs, f::Function) -> Nothing
+    _sweep_for!(loc::Locality, policy::ExecutionPolicy, v::AbstractArray, idxs, f::Function) -> Nothing
+    _sweep_for!(policy::ExecutionPolicy, v::AbstractArray, idxs, f::Function) -> Nothing
 
 Apply `f` across indices `idxs` and write the result into `v` in place.
 
-Dispatches to sequential iteration for [`CpuSerial`](@ref) or static work partitioning across
-threads for [`CpuThreaded`](@ref). A [`GpuPolicy`](@ref) reaches [`_gpu_for!`](@ref) instead:
-this is a CPU loop, so it hands off to a device sweep rather than indexing `v` element by
-element itself (gpena/Bramble.jl#94, #174, S2.3 of
-.agents/plans/metal-and-apple-silicon-acceleration.md).
+Legality first, strategy second (gpena/Bramble.jl#298): a [`HostLocality`](@ref) destination
+paired with a [`CpuPolicy`](@ref) dispatches to sequential iteration for [`CpuSerial`](@ref)
+or static work partitioning across threads for [`CpuThreaded`](@ref); a
+[`DeviceLocality`](@ref) destination paired with a [`GpuPolicy`](@ref) reaches
+[`_gpu_for!`](@ref). Any other pairing -- a host `v` under a `GpuPolicy`, or a device `v`
+under a `CpuPolicy` -- throws via [`_throw_locality_mismatch`](@ref) rather than indexing `v`
+element by element or reaching for a device sweep that does not exist.
+
+The four-argument method is the seam; the three-argument method is the thin wrapper every
+caller actually uses, deriving `loc` from the destination array itself
+(`locality(typeof(v))`) so callers pass a policy alone and never compute a locality.
 
 # Arguments
-- `policy`: Execution policy ([`CpuSerial`](@ref) or [`CpuThreaded`](@ref)).
+- `loc`: [`Locality`](@ref) of the destination array (derived, not passed by callers).
+- `policy`: Execution policy ([`CpuSerial`](@ref), [`CpuThreaded`](@ref), [`CpuBatch`](@ref)
+  or a [`GpuPolicy`](@ref)).
 - `v`: Destination array mutated in place.
 - `idxs`: Iterable collection of linear or Cartesian indices.
 - `f`: Kernel mapping each index `idx` to the scalar value stored in `v[idx]`.
 """
-@inline _cpu_threaded_for!(::CpuSerial, v, idxs, f) = _serial_for!(v, idxs, f)
-@inline _cpu_threaded_for!(::CpuThreaded, v, idxs, f) = _threaded_for!(v, idxs, f)
-@noinline _cpu_threaded_for!(::CpuBatch, v, idxs, f) = _batch_for!(v, idxs, f)
-@noinline _cpu_threaded_for!(policy::GpuPolicy, v, idxs, f) = _gpu_for!(policy, v, idxs, f)
+@inline _sweep_for!(::HostLocality, ::CpuSerial, v, idxs, f) = _serial_for!(v, idxs, f)
+@inline _sweep_for!(::HostLocality, ::CpuThreaded, v, idxs, f) = _threaded_for!(v, idxs, f)
+@noinline _sweep_for!(::HostLocality, ::CpuBatch, v, idxs, f) = _batch_for!(v, idxs, f)
+@noinline _sweep_for!(::DeviceLocality, policy::GpuPolicy, v, idxs, f) = _gpu_for!(policy, v, idxs, f)
+@noinline _sweep_for!(loc::Locality, policy, v, idxs, f) = _throw_locality_mismatch(loc, policy)
+
+@inline _sweep_for!(policy::ExecutionPolicy, v, idxs, f) = _sweep_for!(locality(typeof(v)), policy, v, idxs, f)
 
 # `Threads.@threads` needs an indexable collection, so handed a `CartesianIndices` it
 # linearly indexes it and pays an index conversion per point, where the serial loop
@@ -50,31 +62,82 @@ element itself (gpena/Bramble.jl#94, #174, S2.3 of
 # one core manages 46-55 GB/s and four recover 1.24-1.39x. The point of this method is the
 # removed index conversion, which is a penalty in every power state; the parallel gain on
 # top of it is the machine's to give.
-@inline _cpu_threaded_for!(::CpuThreaded, v, idxs::CartesianIndices, f) = _threaded_axis_for!(v, idxs, f)
-@noinline _cpu_threaded_for!(::CpuBatch, v, idxs::CartesianIndices, f) = _batch_axis_for!(v, idxs, f)
+@inline _sweep_for!(::HostLocality, ::CpuThreaded, v, idxs::CartesianIndices, f) = _threaded_axis_for!(v, idxs, f)
+@noinline _sweep_for!(::HostLocality, ::CpuBatch, v, idxs::CartesianIndices, f) = _batch_axis_for!(v, idxs, f)
 
-# The one message both CPU sweeps give a device policy when no device sweep is available
-# either. Stated here rather than left to a `MethodError`, which would name
-# `_cpu_threaded_for!` and not say why a GPU backend has no business in it
-# (gpena/Bramble.jl#191).
+"""
+    _throw_locality_mismatch(loc::Locality, policy)
+
+Throw the `ArgumentError` [`_sweep_for!`](@ref)/[`_sweep_scatter_for!`](@ref) give when the
+destination's locality and the execution policy's locality disagree, in either direction
+(gpena/Bramble.jl#191, #298).
+
+Stated here rather than left to a `MethodError`, which would name `_sweep_for!` and not say
+which half disagreed. Dispatched on the destination's own locality so each direction names
+what actually disagreed -- the destination's locality and the policy's -- rather than
+assuming a [`GpuPolicy`](@ref) is always the one out of place. Neither method advises
+building the backend with a [`CpuPolicy`](@ref) as a fix for device storage: that
+combination is itself rejected at construction (gpena/Bramble.jl#296), and is not a route
+this message may point to.
+
+# Arguments
+- `loc`: [`Locality`](@ref) of the destination array.
+- `policy`: The execution policy whose locality disagrees with `loc`.
+
+# Throws
+- `ArgumentError`: always.
+"""
+@noinline function _throw_locality_mismatch(::HostLocality, policy)
+    throw(
+        ArgumentError(
+        "the destination array has host locality, but execution policy $(typeof(policy)) " *
+        "claims device locality: a sweep cannot mix the two. Reach for a kernel that runs " *
+        "on the device, or pass a policy whose locality matches the destination -- " *
+        "CpuSerial(), CpuThreaded() or CpuBatch().",
+    ),
+    )
+end
+@noinline function _throw_locality_mismatch(::DeviceLocality, policy)
+    throw(
+        ArgumentError(
+        "the destination array has device locality, but execution policy $(typeof(policy)) " *
+        "claims host locality: a sweep cannot mix the two. A host loop cannot scalar-index " *
+        "device memory; pass a GpuPolicy (GpuAsync()) instead, with the device extension " *
+        "that recognises the destination's array type loaded.",
+    ),
+    )
+end
+
+"""
+    _throw_gpu_in_cpu_loop(policy)
+
+Throw the `ArgumentError` [`_gpu_for!`](@ref)/[`_gpu_scatter_for!`](@ref) give when no device
+sweep implementation is available at all -- a case [`_throw_locality_mismatch`](@ref) never
+reaches, since it is only called once locality has already been checked to agree.
+
+# Arguments
+- `policy`: The [`GpuPolicy`](@ref) with no device sweep loaded for it.
+
+# Throws
+- `ArgumentError`: always.
+"""
 @noinline function _throw_gpu_in_cpu_loop(policy)
     throw(
         ArgumentError(
-        "execution policy $(typeof(policy)) is a GpuPolicy, and this is a CPU loop: it " *
-        "indexes the destination element by element, which a device array refuses. Build " *
-        "the backend with a CpuPolicy (CpuSerial() or CpuThreaded()) to run this on the " *
-        "host, or reach for a kernel that runs on the device.",
+        "execution policy $(typeof(policy)) is a GpuPolicy, but no device sweep is loaded " *
+        "for it. Add `using KernelAbstractions` and the package providing the destination " *
+        "array's device (e.g. `using Metal`) before calling this.",
     ),
     )
 end
 
 #===========================================================================#
-# The GpuPolicy device sweep seam (gpena/Bramble.jl#94, #174, S2.3 of
+# The GpuPolicy device sweep seam (gpena/Bramble.jl#94, #174, #298, S2.3 of
 # .agents/plans/metal-and-apple-silicon-acceleration.md).
 #
-# `_cpu_threaded_for!`/`_cpu_threaded_scatter_for!` hand a `GpuPolicy` to `_gpu_for!`/
-# `_gpu_scatter_for!` rather than refusing it outright. Both are declared here with their
-# array/index/kernel arguments deliberately untyped -- matching the `ka_device`/
+# `_sweep_for!`/`_sweep_scatter_for!` hand a `(DeviceLocality, GpuPolicy)` pair to
+# `_gpu_for!`/`_gpu_scatter_for!` rather than refusing it outright. Both are declared here
+# with their array/index/kernel arguments deliberately untyped -- matching the `ka_device`/
 # `_launch_uniform_points!` fallback idiom (`src/utils/device_kernels.jl`,
 # `src/mesh/mesh1d.jl`) -- so `ext/BrambleKernelAbstractionsExt.jl` can add a strictly more
 # specific method (typed on `AbstractArray`) instead of overwriting this one. Without that
@@ -308,31 +371,52 @@ Recursion on tuples unrolls at compile time with zero heap allocations.
 end
 
 """
-    _cpu_threaded_scatter_for!(policy::ExecutionPolicy, mats::Tuple, idxs, g::Function) -> Nothing
+    _sweep_scatter_for!(loc::Locality, policy::ExecutionPolicy, mats::Tuple, idxs, g::Function) -> Nothing
+    _sweep_scatter_for!(policy::ExecutionPolicy, mats::Tuple, idxs, g::Function) -> Nothing
 
 Evaluate tuple-valued kernel `g` across `idxs` and scatter results into destination arrays `mats`.
 
-Dispatches to sequential execution for [`Serial`](@ref) or static multithreaded execution for
-[`Parallel`](@ref). A [`GpuPolicy`](@ref) reaches [`_gpu_scatter_for!`](@ref) instead, the
-same device-sweep handoff [`_cpu_threaded_for!`](@ref) makes.
+Legality first, strategy second (gpena/Bramble.jl#298), the same shape as [`_sweep_for!`](@ref):
+a [`HostLocality`](@ref) destination paired with a [`CpuPolicy`](@ref) dispatches to sequential
+execution for [`CpuSerial`](@ref) or static multithreaded execution for [`CpuThreaded`](@ref);
+a [`DeviceLocality`](@ref) destination paired with a [`GpuPolicy`](@ref) reaches
+[`_gpu_scatter_for!`](@ref). Any other pairing throws via [`_throw_locality_mismatch`](@ref).
+
+The five-argument method is the seam; the four-argument method is the thin wrapper every
+caller actually uses, deriving `loc` from the first destination array (`locality(typeof(mats[1]))`)
+so callers pass a policy alone and never compute a locality.
 
 # Arguments
-- `policy`: Execution policy ([`CpuSerial`](@ref) or [`CpuThreaded`](@ref)).
+- `loc`: [`Locality`](@ref) of the destination arrays (derived, not passed by callers).
+- `policy`: Execution policy ([`CpuSerial`](@ref), [`CpuThreaded`](@ref), [`CpuBatch`](@ref)
+  or a [`GpuPolicy`](@ref)).
 - `mats`: Tuple of destination arrays mutated in place.
 - `idxs`: Iterable collection of indices.
 - `g`: Kernel mapping each index to a tuple of values matching `length(mats)`.
 """
-@inline function _cpu_threaded_scatter_for!(::CpuSerial, mats::Tuple, idxs, g)
+@inline function _sweep_scatter_for!(::HostLocality, ::CpuSerial, mats::Tuple, idxs, g)
     @inbounds for idx in idxs
         _write_components!(mats, g(idx), idx)
     end
     return nothing
 end
-@inline _cpu_threaded_scatter_for!(::CpuThreaded, mats::Tuple, idxs, g) = _threaded_scatter_for!(mats, idxs, g)
-@noinline _cpu_threaded_scatter_for!(::CpuBatch, mats::Tuple, idxs, g) = _batch_scatter_for!(mats, idxs, g)
-@noinline _cpu_threaded_scatter_for!(policy::GpuPolicy, mats::Tuple, idxs, g) = _gpu_scatter_for!(policy, mats, idxs, g)
+@inline _sweep_scatter_for!(::HostLocality, ::CpuThreaded, mats::Tuple, idxs, g) = _threaded_scatter_for!(mats, idxs, g)
+@noinline _sweep_scatter_for!(::HostLocality, ::CpuBatch, mats::Tuple, idxs, g) = _batch_scatter_for!(mats, idxs, g)
+@noinline _sweep_scatter_for!(::DeviceLocality, policy::GpuPolicy, mats::Tuple, idxs, g) = _gpu_scatter_for!(policy, mats, idxs, g)
+@noinline _sweep_scatter_for!(loc::Locality, policy, mats::Tuple, idxs, g) = _throw_locality_mismatch(loc, policy)
 
-# Kept in an isolated function to prevent closure boxing allocations on serial execution paths.
+@inline _sweep_scatter_for!(policy::ExecutionPolicy, mats::Tuple, idxs, g) = _sweep_scatter_for!(
+    locality(typeof(mats[1])), policy, mats, idxs, g)
+
+"""
+    _threaded_scatter_for!(mats::Tuple, idxs, g::Function) -> Nothing
+
+Evaluate tuple-valued `g` across `idxs` and scatter the results into `mats`, statically
+partitioning `idxs` across threads.
+
+Kept in an isolated function to prevent `Threads.@threads` closure boxing allocations on
+paths that execute serially.
+"""
 @noinline function _threaded_scatter_for!(mats::Tuple, idxs, g)
     Threads.@threads :static for idx in idxs
         @inbounds _write_components!(mats, g(idx), idx)

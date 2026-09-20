@@ -98,8 +98,8 @@ that is what should decide, not a guess.
 ### The policy hierarchy
 
 `Serial` and `Parallel` are the names above, and they are aliases: `Serial === CpuSerial`
-and `Parallel === CpuThreaded`. The types they alias sit in a hierarchy that says *where*
-the work runs, not only how much of it runs at once:
+and `Parallel === CpuThreaded`. The types they alias sit in a hierarchy that splits by
+which processor a strategy targets, not only how much of the work runs at once:
 
 ```
 ExecutionPolicy
@@ -111,17 +111,61 @@ ExecutionPolicy
     └── GpuAsync                   -- launched on the device
 ```
 
-The split exists because "serial or threaded" had no way to say where
+The split exists because "serial or threaded" had no way to say which processor
 ([#191](https://github.com/gpena/Bramble.jl/issues/191)). A GPU backend was constructed
 with `Serial()` -- a policy meaning one CPU thread walks the array element by element,
-which is the one thing a device array refuses. `metal_backend()` now carries `GpuAsync()`,
-and the CPU sweeps refuse a `GpuPolicy` with a message rather than failing on scalar
-indexing several frames deeper.
+which is the one thing a device array refuses. `metal_backend()` now carries `GpuAsync()`
+by default, and pairing device storage with a `CpuPolicy` (or host storage with a
+`GpuPolicy`) is rejected outright rather than left to fail on scalar indexing several
+frames deeper -- the next subsection covers why, and what the rejection looks like.
 
 Both spellings work everywhere; use whichever reads better. [`CpuBatch`](@ref) is a third
 `CpuPolicy`, a Polyester-backed sibling of `CpuThreaded`
 ([#190](https://github.com/gpena/Bramble.jl/issues/190)) -- §7 below covers what it needs
 before its first sweep.
+
+### Locality and strategy
+
+The hierarchy above groups policies by which processor they target, but *where* a
+backend's work can legally run is not chosen through the policy at all -- it is decided
+by the array types the backend was built with. That is [`locality`](@ref):
+[`HostLocality`](@ref) for storage a CPU loop can index element by element,
+[`DeviceLocality`](@ref) for storage an accelerator schedules against instead.
+`locality`, `Locality`, `HostLocality` and `DeviceLocality` are `public`, not exported, so
+they are called qualified:
+
+```@example backend
+Bramble.locality(Vector{Float64}), Bramble.locality(CpuSerial()), Bramble.locality(GpuAsync())
+```
+
+Locality is derived from the array type, never declared. A [`CpuPolicy`](@ref) claims
+[`HostLocality`](@ref) and a [`GpuPolicy`](@ref) claims [`DeviceLocality`](@ref) -- that is
+what lets a backend check the two against each other. An array type this package has not
+been taught otherwise about counts as host memory (the fallback method is
+`Bramble.locality(::Type{<:AbstractArray}) = Bramble.HostLocality()`), so a custom wrapper
+array works as a `vector_type`/`matrix_type` without registering anything, as long as it
+genuinely is host-indexable. A GPU package extension adds one method for its own array
+type to answer [`DeviceLocality`](@ref) instead: `BrambleMetalExt` does this for
+`MtlVector` and `MtlMatrix` (and both Metal sparse matrix types).
+
+Strategy is the genuine choice, and it only exists *within* one locality: host storage
+admits [`CpuSerial`](@ref), [`CpuThreaded`](@ref) and [`CpuBatch`](@ref); device storage
+admits the device kernel, [`GpuAsync`](@ref). A policy whose locality does not match the
+storage it is paired with cannot execute anything -- a CPU loop cannot scalar-index device
+memory, and a host array has no device to schedule against -- so [`Backend`](@ref)'s inner
+constructor checks that the vector type and the policy agree on locality (and, since a
+backend must be wholly host or wholly one GPU's, that the matrix type agrees with the
+vector type too) and rejects the combination before it exists:
+
+```julia
+using Bramble, Metal
+
+metal_backend(; policy = CpuSerial())
+# ERROR: ArgumentError: Backend vector type MtlVector{Float32} has locality
+# Bramble.DeviceLocality(), but execution policy CpuSerial has locality
+# Bramble.HostLocality(): a Backend's storage and its execution policy must agree on
+# locality, or the combination cannot execute anything.
+```
 
 ## 5. One interface, governed by the backend
 
@@ -212,12 +256,13 @@ choosing `CpuBatch()` on the backend is the only thing that changes.
 using Bramble, Metal
 
 gpu = metal_backend()                    # Float32, GpuAsync()
-gpu_cpu = metal_backend(Float16; policy = CpuSerial())  # means what it says: CPU loops
 ```
 
 `Float64` is not supported on Apple Silicon GPUs; use `Float32` or `Float16`.
 [`metal_backend`](@ref) requires `Metal.jl` loaded alongside `Bramble.jl`; without it,
-it throws.
+it throws. A [`CpuPolicy`](@ref) is rejected too, at construction: `MtlVector`/
+`MtlMatrix` storage has device locality, and a CPU loop cannot scalar-index it -- see
+"Locality and strategy" in §4 above for the mismatch and what it looks like.
 
 [`gpu_backend`](@ref) is the entry point to reach for when you do not want to name a
 device backend by hand:

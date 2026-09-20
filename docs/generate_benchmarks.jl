@@ -217,7 +217,7 @@ end
 # own beginning rather than cycling into a color the other chart already used.
 # Where the recorded thread count changes from one release to the next, and what it was
 # either side. A threaded benchmark is not comparable across that line: at one thread
-# `_cpu_threaded_for!` takes its serial branch, so a `Parallel() backend` entry measures the
+# `_sweep_for!` takes its serial branch, so a `Parallel() backend` entry measures the
 # threaded code path running serially -- task-spawn overhead and nothing about parallelism.
 # Measured on the reference machine, `Rₕ!` 2D goes 6.53 ms to 1.67 ms from one thread to
 # four, so the step is roughly fourfold and looks exactly like an improvement.

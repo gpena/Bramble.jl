@@ -5,7 +5,7 @@ using Metal: Metal, MtlArray, MtlMatrix, MtlVector, MetalBackend, mtl
 using LinearAlgebra: I
 using SparseArrays: SparseArrays, SparseMatrixCSC
 
-import Bramble: vector, matrix, _backend_eye, _backend_zeros, ka_device, _gpu_functional
+import Bramble: vector, matrix, _backend_eye, _backend_zeros, ka_device
 
 # Deliberately no `@compile_workload` here (gpena/Bramble.jl#196): every method below
 # allocates real Metal GPU arrays, which needs an actual Metal-capable device. Precompiling
@@ -46,6 +46,17 @@ end
 # ---------------------------------------------------------------------------
 
 ka_device(::Backend{<:MtlVector, MT, EP}) where {MT, EP} = MetalBackend()
+
+# ---------------------------------------------------------------------------
+# locality — the storage-locality trait (gpena/Bramble.jl#298)
+# ---------------------------------------------------------------------------
+#
+# Locality is derived from storage, not from a caller's intent: an array living in Metal
+# device memory answers `DeviceLocality()`, overriding the `HostLocality()` fallback in
+# src/utils/backend.jl. This is the one method a GPU extension adds.
+
+Bramble.locality(::Type{<:MtlVector}) = Bramble.DeviceLocality()
+Bramble.locality(::Type{<:MtlMatrix}) = Bramble.DeviceLocality()
 
 # ---------------------------------------------------------------------------
 # _gpu_functional — the loaded-and-functional predicate gpu_backend needs
@@ -175,6 +186,17 @@ else
         )
     end
 end
+
+# ---------------------------------------------------------------------------
+# locality for the device sparse types (gpena/Bramble.jl#298)
+# ---------------------------------------------------------------------------
+#
+# Same rule as MtlVector/MtlMatrix above -- locality is derived from storage, and these are
+# device storage too, whether the name above resolved to the upstream Metal.jl type or to
+# the Bramble-owned placeholder.
+
+Bramble.locality(::Type{<:MetalSparseMatrixCSR}) = Bramble.DeviceLocality()
+Bramble.locality(::Type{<:MetalSparseMatrixCSC}) = Bramble.DeviceLocality()
 
 # ---------------------------------------------------------------------------
 # Host -> device conversion (gpena/Bramble.jl#250)

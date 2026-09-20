@@ -207,6 +207,19 @@ using ExplicitImports
                 :_dirichlet_bc_indices!,
                 :_each_marked,
                 :_kron_coeff,
+                # `BrambleKernelAbstractionsExt` (gpena/Bramble.jl#94, #174): the stencil and
+                # component helpers its `@kernel`s call so the device answer is computed by
+                # the very same quadrature/stencil arithmetic the CPU sweep uses, rather than
+                # a second implementation kept in sync by hand. None is a launch hook an
+                # extension implements (those are the `public _launch_*`/`_gpu_*` contract in
+                # `src/Bramble.jl`) -- these are plain internals the kernels reach into.
+                :_cell_average,
+                :_compute_average,
+                :_compute_difference,
+                :_neighbour,
+                :_stencil_step,
+                :_stencil_boundary_dim,
+                :_write_components!,
                 :ArrayStyle,
                 :BroadcastStyle,
                 :Broadcasted,
@@ -259,7 +272,30 @@ using ExplicitImports
                 :invoke_mumps!,
                 :_suitesparse_factorize,
                 :_suitesparse_refactor!,
-                :_suitesparse_solve
+                :_suitesparse_solve,
+                # BrambleMetalExt reaching into Bramble's own internals (gpena/Bramble.jl#192,
+                # #250): `_gpu_functional` is the loaded-and-functional predicate `gpu_backend`
+                # dispatches on by `Val`, more specific than the stub in `src/utils/backend.jl`
+                # and not itself public. `metal_sparse_csr`/`metal_sparse_csc` carry docstrings
+                # on their `src/utils/backend.jl` stubs, but neither is exported nor declared
+                # `public` in `src/Bramble.jl`, nor documented in `docs/src/api.md` -- so today
+                # they are unqualified internals too, the same as the extension's other entry
+                # points above.
+                :_gpu_functional,
+                :metal_sparse_csr,
+                :metal_sparse_csc,
+                # BrambleMetalExt's device sparse placeholder types (gpena/Bramble.jl#250)
+                # subtype `Metal.GPUArrays`'s own `AbstractGPUSparseMatrixCSR`/
+                # `AbstractGPUSparseMatrixCSC` until tagged Metal.jl ships the real
+                # `MtlSparseMatrixCSR`/`MtlSparseMatrixCSC` -- upstream internals that neither
+                # `Metal` nor `GPUArrays` declares public, with no public alternative to reach
+                # them by. Adapting those placeholders to the device
+                # (`Metal.Adapt.adapt_structure`/`adapt`) reaches `Adapt` and `GPUArrays`
+                # themselves the same way, through `Metal`'s own non-public re-export of each.
+                :AbstractGPUSparseMatrixCSR,
+                :AbstractGPUSparseMatrixCSC,
+                :Adapt,
+                :GPUArrays
             )
         ) === nothing
     end

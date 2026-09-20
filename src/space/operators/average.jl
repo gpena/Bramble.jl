@@ -109,6 +109,19 @@ end
     )
 end
 
+"""
+    _launch_average_engine!(out::AbstractVector, in_ref, dims::Tuple, dir::GridDirection, dim_val::Val, dev) -> Nothing
+
+Fills `out` with the two-point average (`_compute_average`) of `in_ref` along the axis
+`dim_val`, in direction `dir` (`Forward`/`Backward`), truncating the one boundary slice with
+no neighbour to zero, via a `KernelAbstractions.@kernel` launch on `dev`, filled by
+`ext/BrambleKernelAbstractionsExt.jl`. The device counterpart of `_average_engine!`'s CPU
+sweep above.
+
+# Throws
+- `ErrorException`: no `KernelAbstractions` extension is loaded, so there is no device
+  kernel to reach (`_throw_no_ka_average_kernel`).
+"""
 _launch_average_engine!(out, in_ref, dims, dir, dim_val, dev) = _throw_no_ka_average_kernel("_launch_average_engine!")
 
 # Shared by every averaging direction (gpena/Bramble.jl#44): the alias check and the engine

@@ -180,7 +180,12 @@ end
     )
 end
 
-# --- the generic `_cpu_threaded_for!`/`_cpu_threaded_scatter_for!` seam ------------------ #
+# --- the generic `_sweep_for!`/`_sweep_scatter_for!` seam ------------------ #
+#
+# `_sweep_for!`/`_sweep_scatter_for!` (`src/utils/linear_algebra.jl`, gpena/Bramble.jl#298)
+# check locality before reaching here: only a `DeviceLocality` destination paired with a
+# `GpuPolicy` dispatches to `_gpu_for!`/`_gpu_scatter_for!` below, which keep their own names
+# and signatures -- the rename only touched the seam above them.
 
 @kernel function _generic_for_kernel!(v, @Const(idxs), f)
     i = @index(Global)

@@ -29,8 +29,10 @@ using Polyester: Polyester, @batch
 # --- _batch_for!/_batch_axis_for! (src/utils/linear_algebra.jl) -------------------- #
 #
 # Direct translations of `_threaded_for!`/`_threaded_axis_for!`'s bodies: `idxs` is whatever
-# `_cpu_threaded_for!` was handed (a linear range for `_batch_for!`, a `CartesianIndices` for
-# `_batch_axis_for!`), and `@batch` partitions it without any conversion of its own.
+# `_sweep_for!` was handed (a linear range for `_batch_for!`, a `CartesianIndices` for
+# `_batch_axis_for!`), and `@batch` partitions it without any conversion of its own. Only the
+# `_sweep_for!` seam itself was renamed (gpena/Bramble.jl#298); `_batch_for!`/`_batch_axis_for!`
+# below it, implemented in this extension, keep their names unchanged.
 
 #
 # `v::AbstractArray` (rather than an unconstrained `v`) so each of these is a genuine

@@ -1,4 +1,80 @@
 """
+    Locality
+
+Abstract supertype for where an array's storage lives: [`HostLocality`](@ref) for memory a
+CPU loop can index element by element, [`DeviceLocality`](@ref) for memory an accelerator
+schedules against instead.
+
+Never declared directly -- [`locality`](@ref) derives it from an array type, an
+[`ExecutionPolicy`](@ref), or a [`Backend`](@ref). Introduced by gpena/Bramble.jl#298 so a
+`Backend`'s storage and its execution policy answer the same question and can be checked
+against each other, rather than each independently claiming a locality that need not agree.
+
+See also: [`locality`](@ref), [`HostLocality`](@ref), [`DeviceLocality`](@ref).
+"""
+abstract type Locality end
+
+"""
+    HostLocality() <: Locality
+
+Storage a CPU loop can index element by element: `Vector`, `Matrix`, `SparseMatrixCSC`, and,
+by default, any array type [`locality`](@ref) has not been taught otherwise about.
+
+See also: [`Locality`](@ref), [`DeviceLocality`](@ref), [`locality`](@ref).
+"""
+struct HostLocality <: Locality end
+
+"""
+    DeviceLocality() <: Locality
+
+Storage an accelerator schedules against rather than a CPU loop indexing it directly:
+`MtlVector`/`MtlMatrix` and any future GPU array type. Scalar indexing such storage from a
+host loop is the failure this trait exists to catch before it happens (gpena/Bramble.jl#298).
+
+See also: [`Locality`](@ref), [`HostLocality`](@ref), [`locality`](@ref).
+"""
+struct DeviceLocality <: Locality end
+
+"""
+    locality(x) -> Locality
+
+Return the [`Locality`](@ref) of `x` -- an array type, an [`ExecutionPolicy`](@ref), or a
+[`Backend`](@ref).
+
+Locality is derived from storage, never declared. The fallback method,
+`locality(::Type{<:AbstractArray}) = HostLocality()`, treats any array type this package has
+not been taught otherwise about as host memory. A GPU package extension adds one method for
+its own array type to change that answer -- `BrambleMetalExt` answers `DeviceLocality()` for
+`MtlVector`/`MtlMatrix` -- the same idiom as [`ka_device`](@ref): a method a package
+extension supplies for its own type, picked up automatically once loaded.
+
+For an [`ExecutionPolicy`](@ref), `locality` answers what the policy claims: a
+[`CpuPolicy`](@ref) claims [`HostLocality`](@ref), a [`GpuPolicy`](@ref) claims
+[`DeviceLocality`](@ref). For a [`Backend`](@ref), it answers the locality of the backend's
+vector type `VT` alone: `VT` is the storage a sweep actually indexes, so that is the
+locality that matters for legality. The matrix type `MT` is not consulted
+(gpena/Bramble.jl#298), so a device `MT` paired with a host `VT` goes unchecked.
+
+# Examples
+```jldoctest
+using Bramble
+const B = Bramble
+B.locality(Vector{Float64}) === B.HostLocality() &&
+    B.locality(B.CpuSerial()) === B.HostLocality() &&
+    B.locality(B.GpuAsync()) === B.DeviceLocality()
+
+# output
+true
+```
+
+See also: [`Locality`](@ref), [`HostLocality`](@ref), [`DeviceLocality`](@ref),
+[`ka_device`](@ref).
+"""
+function locality end
+
+@inline locality(::Type{<:AbstractArray}) = HostLocality()
+
+"""
     ExecutionPolicy
 
 Abstract supertype for backend execution policies.
@@ -21,6 +97,10 @@ The CPU sweeps dispatch on this rather than on each concrete policy, so a `GpuPo
 one is a method error with a message rather than a scalar-indexing failure several frames in.
 """
 abstract type CpuPolicy <: ExecutionPolicy end
+
+# The policy half of the locality trait (gpena/Bramble.jl#298): every `CpuPolicy` claims
+# host memory, checked against what the backend's vector type actually is.
+@inline locality(::CpuPolicy) = HostLocality()
 
 """
     CpuSerial() <: CpuPolicy
@@ -84,6 +164,10 @@ See also: [`CpuPolicy`](@ref), [`ExecutionPolicy`](@ref).
 """
 abstract type GpuPolicy <: ExecutionPolicy end
 
+# The other half of the locality trait (gpena/Bramble.jl#298): every `GpuPolicy` claims
+# device memory, checked against what the backend's vector type actually is.
+@inline locality(::GpuPolicy) = DeviceLocality()
+
 """
     GpuAsync() <: GpuPolicy
 
@@ -126,6 +210,41 @@ Alias for [`CpuThreaded`](@ref). The spelling this package used before the CPU/G
 """
 const Parallel = CpuThreaded
 
+# The one message a Backend gives when its storage locality and its policy locality disagree
+# (gpena/Bramble.jl#298, #296): device storage under a CpuPolicy is memory a CPU loop cannot
+# index element by element, and host storage under a GpuPolicy has no device to schedule
+# against, so neither combination can execute anything. Lives in the inner constructor below
+# rather than in `backend`'s keyword functions, so a direct `Backend{VT, MT, EP}()` spelling
+# is caught too, not only the keyword paths. Kept distinct from `_throw_gpu_in_cpu_loop`
+# (`src/utils/linear_algebra.jl`), which is about a host loop reached at call time, not a
+# backend that should never have been constructed.
+@noinline function _throw_backend_locality_mismatch(VT, EP)
+    throw(
+        ArgumentError(
+        "Backend vector type $VT has locality $(locality(VT)), but execution policy $EP has " *
+        "locality $(locality(EP())): a Backend's storage and its execution policy must agree " *
+        "on locality, or the combination cannot execute anything.",
+    ),
+    )
+end
+
+# The one message a Backend gives when its vector and matrix storage disagree on locality
+# (gpena/Bramble.jl#298, #296): a backend is meant to be wholly host or wholly device, and a
+# device VT with a host MT (or the reverse) is not a configuration anyone means to build.
+# Kept as its own helper rather than folded into `_throw_backend_locality_mismatch` above --
+# that message is already VERIFIED and asserted on by a test, and this one names a different
+# pair of arguments (VT, MT rather than VT, EP), so sharing a helper would mean branching on
+# which pair to print rather than just calling the right one.
+@noinline function _throw_backend_matrix_locality_mismatch(VT, MT)
+    throw(
+        ArgumentError(
+        "Backend vector type $VT has locality $(locality(VT)), but matrix type $MT has " *
+        "locality $(locality(MT)): a Backend's vector and matrix storage must agree on " *
+        "locality, or the combination cannot execute anything.",
+    ),
+    )
+end
+
 """
     Backend{VT, MT, EP}()
 
@@ -136,9 +255,27 @@ Compile-time descriptor specifying vector type `VT`, matrix type `MT`, and execu
 - `MT<:AbstractMatrix`: Concrete matrix type (e.g. `SparseMatrixCSC{Float64, Int}` or `Matrix{Float64}`).
 - `EP<:ExecutionPolicy`: Execution policy ([`Serial`](@ref), [`Parallel`](@ref), or [`CpuBatch`](@ref)).
 
-See also: [`backend`](@ref), [`vector_type`](@ref), [`matrix_type`](@ref), [`execution_policy`](@ref).
+All three parameters must agree on [`locality`](@ref): a backend is meant to be wholly host --
+a `Vector` alongside a CPU sparse or dense matrix, run under a [`CpuPolicy`](@ref) -- or wholly
+device -- once a vendor is chosen, `VT`, `MT` and the policy are all that vendor's. Any other
+combination (a device `VT` with a host `MT`, a device `VT` with a `CpuPolicy`, or a host `VT`
+with a `GpuPolicy`) is rejected at construction rather than accepted and left to fail on first
+use (gpena/Bramble.jl#298, #296).
+
+# Throws
+- `ArgumentError`: `locality(VT) != locality(EP())`.
+- `ArgumentError`: `locality(MT) != locality(VT)`.
+
+See also: [`backend`](@ref), [`vector_type`](@ref), [`matrix_type`](@ref), [`execution_policy`](@ref), [`locality`](@ref).
 """
-struct Backend{VT <: DenseVector, MT <: AbstractMatrix, EP <: ExecutionPolicy} end
+struct Backend{VT <: DenseVector, MT <: AbstractMatrix, EP <: ExecutionPolicy}
+    function Backend{VT, MT, EP}() where {
+            VT <: DenseVector, MT <: AbstractMatrix, EP <: ExecutionPolicy}
+        locality(VT) === locality(EP()) || _throw_backend_locality_mismatch(VT, EP)
+        locality(MT) === locality(VT) || _throw_backend_matrix_locality_mismatch(VT, MT)
+        return new{VT, MT, EP}()
+    end
+end
 
 """
     vector_type(backend::Backend{VT}) -> Type{VT}
@@ -148,6 +285,12 @@ Return the vector type `VT` configured for `backend`.
 """
 @inline vector_type(::Backend{VT, MT, EP}) where {VT, MT, EP} = VT
 @inline vector_type(::Type{<:Backend{VT, MT, EP}}) where {VT, MT, EP} = VT
+
+# `Backend`'s half of the locality trait (gpena/Bramble.jl#298): reads `VT` alone, since `VT`
+# is the storage a sweep actually indexes. `MT` is not consulted, so a device `MT` paired
+# with a host `VT` is not caught by this method.
+@inline locality(be::Backend) = locality(vector_type(be))
+@inline locality(::Type{BT}) where {BT <: Backend} = locality(vector_type(BT))
 
 """
     matrix_type(backend::Backend{<:Any, MT}) -> Type{MT}
@@ -179,6 +322,10 @@ Construct a [`Backend`](@ref) configuration.
 
 # Returns
 - `Backend`: Singleton instance parameterized by `(vector_type, matrix_type, typeof(policy))`.
+
+# Throws
+- `ArgumentError`: `vector_type`, `matrix_type` and `policy` disagree on [`locality`](@ref) --
+  see [`Backend`](@ref).
 
 # Examples
 ```jldoctest
@@ -406,12 +553,14 @@ and `Float16`, but do not support 64-bit floating point arithmetic.
 
 # Keywords
 - `policy`: Execution policy instance (default: [`GpuAsync`](@ref)). A [`CpuPolicy`](@ref) is
-  accepted and means what it says -- CPU loops over device arrays -- which currently fails on
-  scalar indexing; the default says where the work runs instead of understating it
-  (gpena/Bramble.jl#191).
+  rejected at construction, not accepted and left to fail on first use: Metal's device arrays
+  answer [`DeviceLocality`](@ref) to [`locality`](@ref), a `CpuPolicy` answers
+  [`HostLocality`](@ref), and [`Backend`](@ref)'s inner constructor requires the two to agree
+  (gpena/Bramble.jl#298, #296).
 
 # Throws
 - `ErrorException`: If `Metal.jl` is not loaded.
+- `ArgumentError`: If `policy` is a [`CpuPolicy`](@ref) (locality mismatch).
 """
 function metal_backend(T::Type = Float32; policy::ExecutionPolicy = GpuAsync())
     return _metal_backend(T, policy)

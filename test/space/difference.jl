@@ -72,12 +72,14 @@ end
         # a dense Matrix here, and a generic AbstractMatrix (any vendor array type, e.g. a
         # GPU array) via the scalar-indexing fallback -- MockGPUMatrix (test/utils/backends.jl,
         # already in Main by this point) stands in for that without needing real GPU hardware.
+        # MockGPUVector/MockGPUMatrix answer DeviceLocality(), so this Backend now needs a
+        # device policy to construct at all.
         be_dense = backend(vector_type = Vector{T}, matrix_type = Matrix{T})
         S_dense = _Eye(be_dense, 5, Val(1))
         @test S_dense isa Matrix{T}
         @test S_dense == Matrix(spdiagm(1 => ones(4)))
 
-        be_generic = backend(vector_type = MockGPUVector{T}, matrix_type = MockGPUMatrix{T})
+        be_generic = backend(vector_type = MockGPUVector{T}, matrix_type = MockGPUMatrix{T}, policy = GpuAsync())
         S_generic = _Eye(be_generic, 5, Val(-2))
         @test S_generic isa MockGPUMatrix{T}
         @test S_generic.data == Matrix(spdiagm(-2 => ones(3)))

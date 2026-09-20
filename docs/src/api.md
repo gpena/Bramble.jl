@@ -15,6 +15,10 @@ Documentation for `Bramble.jl`'s public API.
 
 ```@docs
 backend
+Locality
+HostLocality
+DeviceLocality
+locality
 ExecutionPolicy
 CpuPolicy
 CpuSerial
@@ -33,6 +37,7 @@ matrix_type
 backend_types
 backend_eye
 backend_zeros
+ka_device
 gpu_backend
 metal_backend
 csr_backend
