@@ -430,6 +430,23 @@ end
     return nothing
 end
 
+# Ambiguous against `ReverseDiff.mul!(::TrackedArray, ::AbstractMatrix, ::TrackedArray{V,
+# D, 1})` whenever `ReverseDiff` is loaded alongside Bramble: `KroneckerLinearOperator <:
+# AbstractMatrix`, so it satisfies ReverseDiff's unconstrained middle argument, while a
+# `TrackedVector` (`TrackedArray{V, D, 1}`) satisfies this method's `AbstractVector` on both
+# `y` and `x` -- the classic diagonal clash where each method wins on a different argument
+# and neither dominates. Unlike the `*` method removed below, this one cannot simply be
+# deleted: `mul!` is the primitive `AbstractMatrix` operations are built from, not something
+# derived from a richer method the way `K * x` is derived from this `mul!`. Narrowing `y`/`x`
+# to something other than `AbstractVector` was considered and rejected: this operator's own
+# docstring commits it to plugging into `LinearProblem`/`KrylovJL_CG` "the same way an
+# assembled matrix does", and those callers are entitled to pass any `AbstractVector` (a
+# view, a solver's own work buffer), not just `Vector`. The only real fix is a disambiguating
+# `mul!(::ReverseDiff.TrackedArray, ::KroneckerLinearOperator, ::ReverseDiff.TrackedArray)`,
+# which needs a (weak) dependency on `ReverseDiff` that Bramble does not have -- it is a test
+# dependency only, pulled in to check that `pde_solve`'s AD rules compose with third-party
+# backends, not something Bramble's own code touches. `test/quality/aqua.jl`'s "Extension
+# method ambiguity" testset documents and excludes this specific pair for the same reason.
 function mul!(y::AbstractVector, K::KroneckerLinearOperator{T}, x::AbstractVector) where {T}
     n = K.n
     (length(x) == n && length(y) == n) || _throw_kron_dimmismatch(K, x, y)

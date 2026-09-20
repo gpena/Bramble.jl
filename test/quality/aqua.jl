@@ -66,10 +66,15 @@ using Aqua
     #
     # The list covers the extensions that define `ldiv!` or `\` on a `Factorization`
     # subtype, which is where this class of clash lives. `BrambleAlgebraicMultigridExt` is
-    # deliberately absent: loading `AlgebraicMultigrid` also loads `LHLFactorization`, whose
+    # absent because it defines neither -- it only wraps `AlgebraicMultigrid`'s multigrid
+    # hierarchy as a preconditioner, so adding it to `loaded_exts` would inspect a module
+    # with nothing relevant in it. That absence does not, however, keep the ambiguity out of
+    # sight: loading `AlgebraicMultigrid` also loads `LHLFactorization`, whose
     # `ldiv!(::AbstractVector, ::SparseLHLFactorization, ::AbstractVector)` is ambiguous with
-    # Bramble's `VectorElement` method in exactly the same way -- and Bramble cannot add the
-    # disambiguating method for a package it has no (weak) dependency on.
+    # Bramble's `VectorElement` method below regardless of what `loaded_exts` contains --
+    # `Test.detect_ambiguities(Bramble, loaded_exts...)` pairs Bramble's own methods against
+    # every method already loaded in the process, not only against `loaded_exts`'s. See the
+    # explicit exclusion list below for this pair and two more of the same shape.
     #
     # Only extensions whose trigger package is loadable are checked; the rest are reported
     # and skipped, so this file stays runnable wherever one of them is missing.
@@ -97,8 +102,60 @@ using Aqua
         end
     end
 
+    # Three ambiguity pairs are excluded below because Bramble has no way to resolve them
+    # itself: the clashing method belongs to a package Bramble has no (weak) dependency on,
+    # loaded only transitively through a package it does depend on (weakly) or through a test
+    # dependency, so there is nowhere in this codebase to hang a disambiguating method. Each
+    # entry names the generic function and the external module defining the clashing method;
+    # a pair is dropped only when one of its two methods is Bramble's own and the other
+    # matches one of these (function, module) pairs exactly, so a genuinely new ambiguity
+    # involving `ldiv!` or `mul!` but a different module -- Bramble's own or a third party's
+    # -- still fails the test below.
+    #
+    # `LHLFactorizationSparseExt` (loaded as part of `AlgebraicMultigrid`, see the comment
+    # above) defines `ldiv!(::AbstractVector, ::SparseLHLFactorization, ::AbstractVector)`,
+    # ambiguous with Bramble's `ldiv!(::VectorElement, ::Factorization, ::AbstractVector)`
+    # (src/space/vectorelement.jl) in exactly the shape the sparse direct solver extensions
+    # each resolve with their own disambiguating method -- except this one belongs to
+    # `LHLFactorization`, not to a package Bramble extends. Dropped until `LHLFactorization`
+    # adds the disambiguating method upstream, the way every solver extension Bramble does
+    # depend on already has.
+    #
+    # `PureKLUForwardDiffExt` (`PureKLU`'s own extension, loaded once `ForwardDiff` is also
+    # in the process -- both already test dependencies, for the AD-backend and sparse-solver
+    # tests respectively) defines `ldiv!(::AbstractArray{<:ForwardDiff.Dual}, ::
+    # KLUFactorization, ::AbstractArray{<:ForwardDiff.Dual})`, ambiguous with the same
+    # Bramble method for the same reason. `PureKLU` is a dependency of `LinearSolve`'s
+    # default sparse factorization, not one Bramble names directly. Dropped for the same
+    # reason and until the same kind of upstream fix.
+    #
+    # `ReverseDiff` (a test dependency, used to check that `pde_solve`'s AD rules compose
+    # with third-party backends) defines
+    # `mul!(::TrackedArray, ::AbstractMatrix, ::TrackedArray{V, D, 1})` directly, not in an
+    # extension, ambiguous with `KroneckerLinearOperator`'s own
+    # `mul!(::AbstractVector, ::KroneckerLinearOperator, ::AbstractVector)`
+    # (src/form/kronecker.jl) because `KroneckerLinearOperator <: AbstractMatrix` satisfies
+    # ReverseDiff's unconstrained middle argument. See the comment beside that `mul!` for why
+    # neither narrowing it nor deleting it resolves this. Dropped until Bramble gains a (weak)
+    # dependency on `ReverseDiff` to define the disambiguating method, or `ReverseDiff`
+    # narrows its own signature away from bare `AbstractMatrix`.
+    known_unfixable_ambiguities = (
+        (:ldiv!, :LHLFactorizationSparseExt),
+        (:ldiv!, :PureKLUForwardDiffExt),
+        (:mul!, :ReverseDiff)
+    )
+
+    function _is_known_unfixable(m1::Method, m2::Method)
+        bramble_method, other_method = m1.module === Bramble ? (m1, m2) : (m2, m1)
+        bramble_method.module === Bramble || return false
+        return any(known_unfixable_ambiguities) do (fname, modname)
+            other_method.name === fname && nameof(other_method.module) === modname
+        end
+    end
+
     @testset "Extension method ambiguity" begin
         ext_ambiguities = Test.detect_ambiguities(Bramble, loaded_exts...; recursive = false)
+        ext_ambiguities = filter(((m1, m2),) -> !_is_known_unfixable(m1, m2), ext_ambiguities)
         if !isempty(ext_ambiguities)
             for (m1, m2) in ext_ambiguities
                 @error "Ambiguous method pair" m1 m2
