@@ -3,14 +3,11 @@ module BrambleMetalExt
 using Bramble: Bramble, Backend, ExecutionPolicy
 using Metal: Metal, MtlArray, MtlMatrix, MtlVector, MetalBackend, mtl
 using LinearAlgebra: I
+import LinearAlgebra: mul!
 using SparseArrays: SparseArrays, SparseMatrixCSC
 
 import Bramble: vector, matrix, _backend_eye, _backend_zeros, ka_device
-
-# Deliberately no `@compile_workload` here (gpena/Bramble.jl#196): every method below
-# allocates real Metal GPU arrays, which needs an actual Metal-capable device. Precompiling
-# that on a headless CI runner or a non-Apple-Silicon machine would fail or hang, not just
-# run slow -- unlike every other extension in `ext/`, this one is excluded on purpose.
+using PrecompileTools: @setup_workload, @compile_workload
 
 # ---------------------------------------------------------------------------
 # Convenience constructor
@@ -216,6 +213,142 @@ end
 
 function Bramble.metal_sparse_csc(A::SparseMatrixCSC{Tv, Ti}) where {Tv, Ti}
     return MetalSparseMatrixCSC{Tv, Ti}(mtl(A.colptr), mtl(A.rowval), mtl(A.nzval), size(A))
+end
+
+# ---------------------------------------------------------------------------
+# _allocate_from_pattern -- born a form's system matrix in device memory
+# (gpena/Bramble.jl#94)
+# ---------------------------------------------------------------------------
+#
+# `matrix_type(backend(form.test_space))` for a Metal backend is `MtlMatrix{T}`
+# (`metal_backend`'s own constructor), so an unmodified call falls into the generic
+# `::Type{<:AbstractMatrix}` fallback (`bilinear_pattern.jl:35-53`) -- built with
+# `Array{T}(undef, ...)` and scattered into with scalar `setindex!`, which fails on a device
+# array. `MtlMatrix <: AbstractMatrix`, so a method keyed on `::Type{<:MtlMatrix}` here is
+# strictly more specific and wins dispatch without touching that file. The pattern is still
+# discovered on the host from `(I_vec, J_vec, V_vec)` -- unchanged, exactly as the
+# `SparseMatrixCSC` method reads it -- and only the destination changes: build the CSR arrays
+# host-side with `sparse!` (the same combiner `SparseMatrixCSC`'s own method uses) and
+# transfer once with `metal_sparse_csr`, rather than allocating dense and scattering
+# element-by-element on the device.
+function Bramble._allocate_from_pattern(
+        ::Type{MT}, nrows::Int, ncols::Int, I_vec::Vector{Int}, J_vec::Vector{Int},
+        V_vec::AbstractVector
+) where {MT <: MtlMatrix}
+    host = SparseArrays.sparse!(I_vec, J_vec, V_vec, nrows, ncols, +)
+    return Bramble.metal_sparse_csr(host)
+end
+
+# ---------------------------------------------------------------------------
+# SpMV / SpMM -- mul!(y, A::CSR, x, α, β) and mul!(C, A::CSR, B, α, β) (gpena/Bramble.jl#250)
+# ---------------------------------------------------------------------------
+#
+# The kernels themselves are `KernelAbstractions` kernels in `BrambleKernelAbstractionsExt`
+# (gpena/Bramble.jl#174's departure from #250's `@metal` text -- see this plan's S3.2), so
+# these methods do the type/dimension checks and forward the raw `rowPtr`/`colVal`/`nzVal`
+# arrays -- never `A` itself, since a struct nesting a device array fails kernel compilation.
+
+@noinline function _check_metal_sparse_eltype(::Type{Tv}) where {Tv}
+    Tv <: Union{Float16, Float32} && return nothing
+    throw(ArgumentError(
+        "Metal sparse mul! supports Float16/Float32 only, got $Tv -- Apple Silicon GPUs " *
+        "do not support Float64.",
+    ))
+end
+
+function mul!(
+        y::AbstractVector{Tv}, A::MetalSparseMatrixCSR{Tv, Ti}, x::AbstractVector{Tv},
+        α::Number, β::Number
+) where {Tv, Ti}
+    _check_metal_sparse_eltype(Tv)
+    m, n = size(A)
+    length(x) == n || throw(DimensionMismatch(
+        "A has dimensions $(size(A)) but x has length $(length(x))"
+    ))
+    length(y) == m || throw(DimensionMismatch(
+        "A has dimensions $(size(A)) but y has length $(length(y))"
+    ))
+    Bramble._launch_spmv_csr!(y, A.rowPtr, A.colVal, A.nzVal, x, Tv(α), Tv(β))
+    return y
+end
+
+function mul!(
+        C::AbstractMatrix{Tv}, A::MetalSparseMatrixCSR{Tv, Ti}, B::AbstractMatrix{Tv},
+        α::Number, β::Number
+) where {Tv, Ti}
+    _check_metal_sparse_eltype(Tv)
+    m, n = size(A)
+    size(B, 1) == n || throw(DimensionMismatch(
+        "A has dimensions $(size(A)) but B has dimensions $(size(B))"
+    ))
+    size(C) == (m, size(B, 2)) || throw(DimensionMismatch(
+        "A has dimensions $(size(A)) but C has dimensions $(size(C))"
+    ))
+    Bramble._launch_spmm_csr!(C, A.rowPtr, A.colVal, A.nzVal, B, Tv(α), Tv(β))
+    return C
+end
+
+# `MetalSparseMatrixCSC` has no `mul!` of its own -- matching JuliaGPU/Metal.jl#909's own
+# convention (a row-major kernel needs row-major storage), the error names the fix rather
+# than leaving a CSC matrix to fail some other, less legible way (a `MethodError`, or a
+# silent fall-through to a dense generic fallback via `Metal.GPUArrays`).
+#
+# Split into a vector and a matrix method, rather than one `::AbstractVecOrMat` method,
+# because `LinearAlgebra` itself ships a generic
+# `mul!(y::AbstractVector, A::AbstractVecOrMat, x::AbstractVector, α, β)`
+# (`stdlib/LinearAlgebra/src/matmul.jl`) that a single `AbstractVecOrMat` method here would
+# tie with once `y`/`x` are concretely `AbstractVector` -- an `ArgumentError` needs to win
+# outright, not raise a `MethodError: ... is ambiguous` instead.
+function mul!(
+        ::AbstractVector, A::MetalSparseMatrixCSC, ::AbstractVector, ::Number, ::Number
+)
+    throw(ArgumentError(_metal_sparse_csc_mul_message))
+end
+
+function mul!(
+        ::AbstractMatrix, A::MetalSparseMatrixCSC, ::AbstractMatrix, ::Number, ::Number
+)
+    throw(ArgumentError(_metal_sparse_csc_mul_message))
+end
+
+const _metal_sparse_csc_mul_message = "mul! is not supported for MetalSparseMatrixCSC " *
+                                      "(matching JuliaGPU/Metal.jl#909's own convention) " *
+                                      "-- convert to CSR first, e.g. " *
+                                      "`Bramble.metal_sparse_csr(SparseArrays.SparseMatrixCSC(A))`."
+
+if Bramble.PRECOMPILE_WORKLOAD && Sys.isapple() && Metal.functional()
+    @setup_workload begin
+        @compile_workload begin
+            b = Bramble.metal_backend(Float32)
+            v = Bramble.vector(b, 4)
+            M = Bramble.matrix(b, 4, 4)
+            Bramble._backend_eye(b, 4)
+            Bramble._backend_zeros(b, 4)
+            Bramble.ka_device(b)
+
+            S = SparseMatrixCSC{Float32, Int32}(LinearAlgebra.I, 4, 4)
+            csr = Bramble.metal_sparse_csr(S)
+            csc = Bramble.metal_sparse_csc(S)
+            y = Bramble.vector(b, 4)
+            x = Bramble.vector(b, 4)
+            mul!(y, csr, x, 1.0f0, 0.0f0)
+
+            I1 = Bramble.interval(0.0f0, 1.0f0)
+            dom1 = Bramble.domain(I1, :left => :left, :right => :right)
+            m1 = Bramble.mesh(dom1, 4, true; backend = b)
+            w1 = Bramble.gridspace(m1)
+            u1 = Bramble.Rₕ(w1, x -> sin(Float32(pi) * x[1]))
+            Bramble.D₋ₓ(u1)
+            Bramble.innerₕ(u1, u1)
+
+            dom2 = Bramble.domain(I1 × I1)
+            m2 = Bramble.mesh(dom2, 4, true; backend = b)
+            w2 = Bramble.gridspace(m2)
+            u2 = Bramble.Rₕ(w2, x -> sin(Float32(pi) * x[1]) * cos(Float32(pi) * x[2]))
+            Bramble.D₋ₓ(u2)
+            Bramble.innerₕ(u2, u2)
+        end
+    end
 end
 
 end # module BrambleMetalExt

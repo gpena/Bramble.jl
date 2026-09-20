@@ -95,6 +95,34 @@ So the choice belongs to you, not a heuristic:
 The [benchmarks page](../benchmarks.md) carries the actual measurements across sizes;
 that is what should decide, not a guess.
 
+### Measured crossovers
+
+Where `CpuThreaded` and [`CpuBatch`](@ref) (§7 below) start beating `CpuSerial` was
+measured per workload, not assumed, on an Apple M2 host, `--threads=4`, on AC power
+(`benchmark/polyester_crossover.jl`, commit `4b76d62b`): the smallest grid size at which
+each policy beats `CpuSerial` twice running.
+
+| Workload | `CpuThreaded` | `CpuBatch` |
+|---|---|---|
+| `Rₕ!` unmasked | 64-96 points/axis | 8-24 |
+| `Rₕ!` masked | 256 | 16 |
+| `avgₕ!` (nq=3) | 24-32 | 8 |
+| `innerₕ`/`_dot` | -- | 1,000 elements |
+
+The blank `CpuThreaded` cell for `innerₕ`/`_dot` is not a missing measurement: `_dot(::CpuThreaded, ...)`
+(`src/utils/linear_algebra.jl`) forwards to the identical serial reduction, so an inner
+product does not thread under this policy at all
+([#112](https://github.com/gpena/Bramble.jl/issues/112)) -- it runs exactly as fast, or
+slow, as `CpuSerial` regardless of size, and there is no crossover to report.
+
+The crossover differs by an order of magnitude between workloads, so a figure measured
+for one does not transfer to another -- that is why four rows are published here rather
+than a single number. Where both policies have an entry, `CpuBatch` beats `CpuThreaded`
+at every crossover measured, falling one to two orders of magnitude below it.
+
+These are one machine's numbers, taken under one power state, not a portable constant:
+re-measure before leaning on them for a different host.
+
 ### The policy hierarchy
 
 `Serial` and `Parallel` are the names above, and they are aliases: `Serial === CpuSerial`

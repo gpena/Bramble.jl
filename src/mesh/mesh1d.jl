@@ -105,6 +105,29 @@ grid points change.
 @inline spacings!(Ωₕ::Mesh1D, v) = (Ωₕ.spacings = v; return nothing)
 
 """
+    host_spacings(Ωₕ::Mesh1D) -> Vector
+
+Return [`spacings`](@ref)`(Ωₕ)` as a host-resident `Array`, in one bulk transfer regardless
+of where `Ωₕ`'s storage lives (gpena/Bramble.jl#94).
+
+[`spacing`](@ref)`(Ωₕ, i)` and [`forward_spacing`](@ref)`(Ωₕ, i)` read `spacings(Ωₕ)` one
+element at a time, which a device-backed mesh (Metal.jl, ...) refuses outright: its scalar-
+indexing guard throws before a per-point loop over either accessor gets anywhere. Call this
+once instead to bring every spacing to the host in a single transfer, then index the `Array`
+it returns as many times as needed -- `stencil.jl`'s dense stencil-matrix builder does exactly
+that.
+
+On a host-backed mesh, `spacings(Ωₕ)` already is an `Array`, so this returns it directly with
+no copy; only a device-backed mesh pays the one bulk `Array(...)` transfer.
+
+See also: [`spacings`](@ref), [`spacing`](@ref), [`forward_spacing`](@ref).
+"""
+@inline host_spacings(Ωₕ::Mesh1D) = _host_spacings(locality(typeof(spacings(Ωₕ))), Ωₕ)
+
+@inline _host_spacings(::HostLocality, Ωₕ::Mesh1D) = spacings(Ωₕ)
+@inline _host_spacings(::DeviceLocality, Ωₕ::Mesh1D) = Array(spacings(Ωₕ))
+
+"""
     forward_spacings(Ωₕ::Mesh1D) -> AbstractVector
 
 Return the forward spacings of `Ωₕ`, where `forward_spacings(Ωₕ)[i]` is
@@ -199,6 +222,13 @@ Return the `i`-th submesh of `Ωₕ`. A 1D mesh is its own only submesh, returni
 @inline hₘₐₓ(Ωₕ::Mesh1D) = maximum(spacings(Ωₕ))
 @inline hₘᵢₙ(Ωₕ::Mesh1D) = minimum(spacings(Ωₕ))
 
+# On a device-backed mesh, indexing `spacings(Ωₕ)` here scalar-indexes a device array and
+# is refused by that array type's own scalar-indexing guard (gpena/Bramble.jl#94) -- left as
+# the raw upstream error deliberately, the same one every other GPU array in the ecosystem
+# raises for the same mistake. Catching it here to redirect to `host_spacings` would put a
+# locality check in the single most-called accessor in this file for a message this array
+# type already gives; a caller that hits it once should stop calling this per point and call
+# `host_spacings(Ωₕ)` once instead, as `stencil.jl` now does.
 @inline function spacing(Ωₕ::Mesh1D, i::Int)
     _check_point_bounds(Ωₕ, i, "spacing")
     return @inbounds spacings(Ωₕ)[i]
@@ -247,6 +277,9 @@ the forward difference has no stencil at the right boundary.
     return @inbounds @view h[min(2, length(h)):end]
 end
 
+# Same device-mesh tradeoff as `spacing` above, and the same choice: this scalar-indexes
+# `spacings(Ωₕ)` and is left to throw the array type's own raw scalar-indexing error rather
+# than a redirect added here. Use `host_spacings(Ωₕ)` for a per-point loop instead.
 @inline function forward_spacing(Ωₕ::Mesh1D, i::Int)
     _check_point_bounds(Ωₕ, i, "forward_spacing")
     # forward_spacing(i) is spacing(i + 1) away from the last point, and repeats the

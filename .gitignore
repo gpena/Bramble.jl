@@ -76,6 +76,7 @@ benchmark/*
 !benchmark/finch_assembly.jl
 !benchmark/backends.jl
 !benchmark/polyester_crossover.jl
+!benchmark/accelerate_solvers.jl
 !benchmark/baselines/
 !benchmark/baselines/*.json
 research/

@@ -373,6 +373,89 @@ end
     return s
 end
 
+# Device counterparts of the three specializations above (gpena/Bramble.jl#94, #174, S2.5 of
+# .agents/plans/metal-and-apple-silicon-acceleration.md). A device-backed space's
+# `SeparableWeights.factors` are themselves device arrays (S2.2), so the
+# `CartesianIndices`/scalar-`getindex` walk above would scalar-index the device once per
+# grid point -- not merely slow, an error under `GPUArrays`' default scalar-indexing guard.
+#
+# `_separable_weights_full` materializes the D-dimensional weight tensor instead, one
+# reshape-and-broadcast per axis rather than a `@kernel`: each `factors[d]` is reshaped to
+# broadcast only along its own axis (singleton elsewhere), and multiplying the D reshaped
+# factors together broadcasts out to the full `dims` shape, exactly `SeparableWeights`'s own
+# `__prod`, computed once for the whole grid instead of once per point. `reshape(u, dims)`
+# is a view, not a copy, so the reduction below is one `GPUArrays` `sum` over a broadcasted
+# expression (S2.5 notes: reductions need no kernel).
+@inline function _separable_weights_full(w::SeparableWeights{D}) where {D}
+    dims = w.dims
+    shaped = ntuple(D) do d
+        reshape(w.factors[d], ntuple(k -> k == d ? dims[d] : 1, D))
+    end
+    return reduce((a, b) -> a .* b, shaped)
+end
+
+"""
+    _dot(::DeviceLocality, ::GpuPolicy, u, w::SeparableWeights, v) -> Real
+
+The device counterpart of [`_dot`](@ref)`(u, w::SeparableWeights, v)` above: the weight
+tensor is materialized once via [`_separable_weights_full`](@ref), then the product with
+`u` and `v` (reshaped to the grid's own `dims`, not copied) is one broadcasted reduction.
+"""
+@noinline function _dot(
+        ::DeviceLocality, ::GpuPolicy, u::AbstractVector, w::SeparableWeights{D}, v::AbstractVector
+) where {D}
+    n = length(w)
+    (length(u) == n == length(v)) || _throw_dot_dim_error(length(u), n, length(v))
+    dims = w.dims
+    wfull = _separable_weights_full(w)
+    return sum(reshape(u, dims) .* reshape(v, dims) .* wfull)
+end
+
+"""
+    _dot_masked(::DeviceLocality, ::GpuPolicy, u, w::SeparableWeights, v, mask::BitVector) -> Real
+
+The device counterpart of the `BitVector`-masked specialization above: `mask` (always host
+memory, gpena/Bramble.jl#298) is copied onto `u`'s own device once, reshaped to `dims`
+alongside `u` and `v`, and the masked sum is one broadcasted reduction.
+"""
+@noinline function _dot_masked(
+        ::DeviceLocality, ::GpuPolicy, u::AbstractVector, w::SeparableWeights{D},
+        v::AbstractVector, mask::BitVector
+) where {D}
+    n = length(w)
+    (length(u) == n == length(v) == length(mask)) ||
+        _throw_dot_dim_error(length(u), n, length(v), length(mask))
+    dims = w.dims
+    wfull = _separable_weights_full(w)
+    md = similar(u, Bool)
+    copyto!(md, Vector{Bool}(mask))
+    return sum(reshape(u, dims) .* reshape(v, dims) .* wfull .* reshape(md, dims))
+end
+
+"""
+    _dot_masked(::DeviceLocality, ::GpuPolicy, u, w::SeparableWeights, v, mask::MarkedIndicesUnion) -> Real
+
+The multi-marker counterpart: `mask` is walked once, on the host, into a plain `BitVector`,
+then handled exactly as the `BitVector` method above.
+"""
+@noinline function _dot_masked(
+        ::DeviceLocality, ::GpuPolicy, u::AbstractVector, w::SeparableWeights{D},
+        v::AbstractVector, mask::MarkedIndicesUnion
+) where {D}
+    n = length(w)
+    (length(u) == n == length(v) == mask.len) ||
+        _throw_dot_dim_error(length(u), n, length(v), mask.len)
+    hostmask = falses(mask.len)
+    @inbounds for i in mask
+        hostmask[i] = true
+    end
+    dims = w.dims
+    wfull = _separable_weights_full(w)
+    md = similar(u, Bool)
+    copyto!(md, Vector{Bool}(hostmask))
+    return sum(reshape(u, dims) .* reshape(v, dims) .* wfull .* reshape(md, dims))
+end
+
 """
     inner₊(uₕ::VectorElement, vₕ::VectorElement, ::Val{S}; markers = ()) -> Real
 
@@ -724,10 +807,48 @@ end
                                                                           _sum_dirs(
     data, space, Ωₕ, li, Val(d - 1), Val(D))
 
+# Device counterpart of `_seminorm_sq_along`/`_sum_dirs` above (gpena/Bramble.jl#94, #174,
+# S2.5): `data`, `h` and `w`'s factors are all device arrays for a device-backed space, so
+# the scalar `@inbounds @simd` walk above would scalar-index the device once per grid
+# point. `_seminorm_sq_along_device` reshapes `data` to the grid's own `dims` and takes the
+# backward difference along axis `d` as one strided slice minus another -- exactly the
+# `interior` the host version walks, since truncating the first index along `d` is the same
+# set of points the host loop's `interior` range already restricts to -- divides by `h`
+# reshaped to broadcast along that axis alone, and weights the result by the same
+# `SeparableWeights` tensor `_dot`'s device path builds, restricted along axis `d` to match.
+# One broadcasted `sum`, no `@kernel`.
+@inline function _seminorm_sq_along_device(
+        data, w::SeparableWeights{D}, h::AbstractVector, dims::NTuple{D, Int}, ::Val{d}
+) where {D, d}
+    datar = reshape(data, dims)
+    lo = selectdim(datar, d, 1:(dims[d] - 1))
+    hi = selectdim(datar, d, 2:dims[d])
+    hinterior = @view h[2:dims[d]]
+    hr = reshape(hinterior, ntuple(k -> k == d ? length(hinterior) : 1, D))
+    δ = (hi .- lo) ./ hr
+    factors = ntuple(D) do k
+        f = k == d ? (@view w.factors[k][2:dims[k]]) : w.factors[k]
+        reshape(f, ntuple(j -> j == k ? length(f) : 1, D))
+    end
+    wfull = reduce((a, b) -> a .* b, factors)
+    return sum(wfull .* δ .* δ)
+end
+
+@inline _sum_dirs_device(data, space, Ωₕ, dims, ::Val{0}, ::Val{D}) where {D} = zero(eltype(data))
+@inline function _sum_dirs_device(data, space, Ωₕ, dims, ::Val{d}, ::Val{D}) where {d, D}
+    h = backward_spacings_for_derivative(Ωₕ(d))
+    w = weights(space, Innerplus(), d)
+    return _seminorm_sq_along_device(data, w, h, dims, Val(d)) +
+           _sum_dirs_device(data, space, Ωₕ, dims, Val(d - 1), Val(D))
+end
+
 @inline function _snorm₁ₕ_sq(uₕ::VectorElement{<:ScalarGridSpace{D}}) where {D}
     (; data, space) = uₕ
     Ωₕ = mesh(space)
-    li = LinearIndices(npoints(Ωₕ, Tuple))
+    dims = npoints(Ωₕ, Tuple)
+    locality(typeof(data)) isa DeviceLocality &&
+        return _sum_dirs_device(data, space, Ωₕ, dims, Val(D), Val(D))
+    li = LinearIndices(dims)
     return _sum_dirs(data, space, Ωₕ, li, Val(D), Val(D))
 end
 

@@ -43,21 +43,26 @@ See also: [`shift`](@ref)
 @inline _Eye(be, npts::Int, ::Val{i}) where {i} = _shift_ones(matrix_type(be), npts, i, npts - abs(i))
 
 # The three-way dispatch mirrors `_backend_eye` (backend.jl): a fast path for
-# `SparseMatrixCSC` and for dense `Matrix`, and a generic scalar-indexing fallback for
-# anything else. `spdiagm` alone carries the offset arithmetic, so the two fast paths only
-# differ in whether the sparse result is converted afterwards.
+# `SparseMatrixCSC` and for dense `Matrix`, and a generic fallback for anything else.
+# `spdiagm` alone carries the offset arithmetic, so the two fast paths only differ in
+# whether the sparse result is converted afterwards.
 @inline _shift_ones(
     ::Type{<:SparseMatrixCSC{T, Ti}}, npts::Int, i::Int, nz::Int
 ) where {T, Ti} = spdiagm(npts, npts, i => fill(one(T), nz))
 @inline _shift_ones(::Type{<:Matrix{T}}, npts::Int, i::Int, nz::Int) where {T} = Matrix{T}(spdiagm(npts, npts, i =>
     fill(one(T), nz)))
+# The generic fallback (gpena/Bramble.jl#94): `nz` scalar `setindex!` calls straight into a
+# device array error outright under Metal.jl's scalar-indexing guard, rather than merely
+# running slowly -- measured, not assumed, in the plan's S2.6 subplan. Built on the host,
+# where `setindex!` is a plain memory write, and handed to `MT` in one `copyto!` instead.
 function _shift_ones(::Type{MT}, npts::Int, i::Int, nz::Int) where {T, MT <: AbstractMatrix{T}}
-    A = MT(undef, npts, npts)
-    fill!(A, zero(T))
+    host = zeros(T, npts, npts)
     r0, c0 = i >= 0 ? (0, i) : (-i, 0)
     for k in 1:nz
-        A[r0 + k, c0 + k] = one(T)
+        host[r0 + k, c0 + k] = one(T)
     end
+    A = MT(undef, npts, npts)
+    copyto!(A, host)
     return A
 end
 

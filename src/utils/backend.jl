@@ -113,6 +113,9 @@ This is the default execution policy.
 Spelled `Serial()` as often as not: `const Serial = CpuSerial`, kept because it is what every
 call site, every test and every benchmark key in this repository already says.
 
+The grid sizes at which [`CpuThreaded`](@ref) and [`CpuBatch`](@ref) start beating this policy
+were measured per workload rather than assumed -- see their own docstrings for the numbers.
+
 See also: [`CpuThreaded`](@ref), [`ExecutionPolicy`](@ref).
 """
 struct CpuSerial <: CpuPolicy end
@@ -134,6 +137,18 @@ is that Polyester-backed sibling: the policy type ships here, but the sweeps it 
 in the `BramblePolyesterExt` package extension, and requesting one without `using Polyester`
 errors the way [`metal_backend`](@ref) does without `using Metal`.
 
+Where "small" ends was measured per workload rather than assumed (gpena/Bramble.jl#299,
+`benchmark/polyester_crossover.jl`, commit 4b76d62b, on the Apple M2 host this milestone's
+other measurements were taken on, `--threads=4`, AC power): the smallest grid size at which
+this policy beats `CpuSerial` twice running is 64-96 points per axis for unmasked `Rₕ!`, 256
+for masked `Rₕ!` (an O(perimeter) write against the mesh's `:boundary` marker, not O(n^D)),
+and 24-32 for `avgₕ!` at `nq = 3`. Below those sizes `CpuSerial` is faster; the crossover
+differs by an order of magnitude between workloads, so a number from one does not transfer to
+another. `innerₕ`/`normₕ` have no entry here because they do not thread under this policy at
+all: `_dot(::CpuThreaded, ...)` (`src/utils/linear_algebra.jl`) forwards to the identical
+serial reduction, so switching to this policy leaves an inner product exactly as fast, or slow,
+as [`CpuSerial`](@ref) (gpena/Bramble.jl#112, open).
+
 See also: [`CpuSerial`](@ref), [`CpuBatch`](@ref), [`ExecutionPolicy`](@ref).
 """
 struct CpuThreaded <: CpuPolicy end
@@ -150,6 +165,16 @@ implemented in the `BramblePolyesterExt` package extension, not here: `using Pol
 be loaded before this policy reaches one of them, or the call errors naming the package,
 matching [`metal_backend`](@ref)'s precedent. `Parallel()` is untouched and keeps meaning
 `Threads.@threads`.
+
+The crossover against `CpuSerial` was measured per workload, closing the last open acceptance
+criterion of gpena/Bramble.jl#190 (gpena/Bramble.jl#299, `benchmark/polyester_crossover.jl`,
+commit 4b76d62b, same Apple M2 host, `--threads=4` and AC power as [`CpuThreaded`](@ref)'s
+figures): the smallest grid size at which this policy beats `CpuSerial` twice running is 8-24
+points per axis for unmasked `Rₕ!`, 16 for masked `Rₕ!`, 8 for `avgₕ!` at `nq = 3`, and 1,000
+elements for `innerₕ`/`_dot` -- a real comparison here, unlike under [`CpuThreaded`](@ref),
+whose `_dot` forwards to the serial reduction instead of threading. Every one of these
+crossovers falls one to two orders of magnitude below [`CpuThreaded`](@ref)'s own crossover for
+the same workload, and this policy beats [`CpuThreaded`](@ref) at every crossover measured.
 
 See also: [`CpuThreaded`](@ref), [`CpuSerial`](@ref), [`ExecutionPolicy`](@ref).
 """

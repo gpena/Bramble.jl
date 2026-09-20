@@ -47,7 +47,9 @@ import Bramble:
                 _launch_cell_average_scatter_nd!,
                 _launch_difference_onesided!,
                 _launch_difference_centered!,
-                _launch_average_engine!
+                _launch_average_engine!,
+                _launch_spmv_csr!,
+                _launch_spmm_csr!
 
 # ---------------------------------------------------------------------------
 # `_points!` uniform branch (src/mesh/mesh1d.jl:322-324 is the CPU original)
@@ -477,6 +479,62 @@ function _launch_average_engine!(out::AbstractVector, in_ref, dims::Tuple, dir, 
         synchronize(dev)
     catch err
         _wrap_device_kernel_error(err, "average operator")
+    end
+    return nothing
+end
+
+# --- Row-parallel SpMV/SpMM for a device CSR matrix (gpena/Bramble.jl#250, #174, S3.2) -- #
+#
+# `BrambleMetalExt`'s `mul!` methods for `MetalSparseMatrixCSR` call `_launch_spmv_csr!`/
+# `_launch_spmm_csr!` with the matrix's raw `rowPtr`/`colVal`/`nzVal` arrays -- never the
+# struct itself, per this file's own header comment -- so these kernels are written against
+# `KernelAbstractions.Backend` alone and never see `Metal.MtlVector`. One work item owns one
+# output row (SpMV) or one output entry of a row (SpMM), so there are no write conflicts and
+# no atomics; the device is read off the destination array with `get_backend`, the same
+# idiom `_gpu_for!` above uses, rather than threaded through as its own argument.
+
+@kernel function _spmv_csr_kernel!(y, @Const(rowPtr), @Const(colVal), @Const(nzVal), @Const(x), α, β)
+    row = @index(Global)
+    @inbounds begin
+        acc = zero(eltype(y))
+        for k in rowPtr[row]:(rowPtr[row + 1] - 1)
+            acc += nzVal[k] * x[colVal[k]]
+        end
+        y[row] = iszero(β) ? α * acc : α * acc + β * y[row]
+    end
+end
+
+function _launch_spmv_csr!(y::AbstractVector, rowPtr, colVal, nzVal, x::AbstractVector, α, β)
+    dev = get_backend(y)
+    try
+        _spmv_csr_kernel!(dev)(y, rowPtr, colVal, nzVal, x, α, β; ndrange = length(y))
+        synchronize(dev)
+    catch err
+        _wrap_device_kernel_error(err, "Metal sparse mul! (SpMV)")
+    end
+    return nothing
+end
+
+@kernel function _spmm_csr_kernel!(C, @Const(rowPtr), @Const(colVal), @Const(nzVal), @Const(B), α, β)
+    I = @index(Global, Cartesian)
+    row = I[1]
+    col = I[2]
+    @inbounds begin
+        acc = zero(eltype(C))
+        for k in rowPtr[row]:(rowPtr[row + 1] - 1)
+            acc += nzVal[k] * B[colVal[k], col]
+        end
+        C[row, col] = iszero(β) ? α * acc : α * acc + β * C[row, col]
+    end
+end
+
+function _launch_spmm_csr!(C::AbstractMatrix, rowPtr, colVal, nzVal, B::AbstractMatrix, α, β)
+    dev = get_backend(C)
+    try
+        _spmm_csr_kernel!(dev)(C, rowPtr, colVal, nzVal, B, α, β; ndrange = size(C))
+        synchronize(dev)
+    catch err
+        _wrap_device_kernel_error(err, "Metal sparse mul! (SpMM)")
     end
     return nothing
 end

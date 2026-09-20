@@ -81,6 +81,44 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
             @test isapprox(u_auto, cd.u_ref; atol = 1.0e-12)
         end
 
+        # gpena/Bramble.jl#246 (R2): `:default` used to dispatch every macOS solve to
+        # Accelerate whenever the extension was loaded, but Accelerate only wins the
+        # factorisations it reaches on the symmetric side (SPD/Cholesky, LDLᵀ) -- measured at
+        # 1.2-1.3x -- and loses 2.3-3.6x to plain `A \ F` on unsymmetric systems, of which
+        # convection-diffusion is an ordinary example, not an edge case. `:default` now takes
+        # Accelerate only when `issymmetric(A)` (`sym = :auto`, the default) or an explicit
+        # symmetric `sym` hint says so; an explicit `sym = :unsymmetric` is trusted the same
+        # way and skips straight to `A \ F` without paying for the check. This testset pins
+        # that narrowing so it cannot regress silently.
+        @testset "pde_solve(:default) is narrowed to the symmetric win (#246)" begin
+            p = poisson_system(Val(2), 8; source = x -> 1.0)
+            @test issymmetric(p.A)
+            @test Bramble._default_wants_accelerate(p.A, :auto)
+            @test isapprox(pde_solve(p.A, p.F), p.u_ref; atol = 1.0e-12)
+
+            cd = convection_diffusion_system(20)
+            @test !issymmetric(cd.A)
+            @test !Bramble._default_wants_accelerate(cd.A, :auto)
+            # `:default` on an unsymmetric matrix must be exactly `A \ F`, not merely close to
+            # it: unlike a genuine Accelerate result (not bit-identical across separate
+            # dispatches, per the #142 audit above), `A \ F` here is deterministic, so exact
+            # equality is what shows it never touched Accelerate at all.
+            @test pde_solve(cd.A, cd.F) == cd.A \ cd.F
+
+            # An explicit `sym` hint is trusted outright under `:default` and skips the
+            # `issymmetric` check, in either direction.
+            @test Bramble._default_wants_accelerate(cd.A, :spd)
+            @test Bramble._default_wants_accelerate(cd.A, :symmetric)
+            @test !Bramble._default_wants_accelerate(p.A, :unsymmetric)
+
+            # An explicit `solver = :accelerate` is honoured unconditionally, symmetric or
+            # not -- this narrows only the automatic `:default` choice.
+            @test isapprox(
+                pde_solve(cd.A, cd.F; solver = :accelerate, sym = :unsymmetric), cd.u_ref;
+                atol = 1.0e-12
+            )
+        end
+
         @testset "Factorization reuse and refactoring (accelerate_refactor!)" begin
             p = poisson_system(Val(2), 8; source = x -> 1.0)
 
@@ -115,8 +153,8 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
         # numerically from the plain `LinearAlgebra` path enough to need new suite
         # tolerances? Answered here by relative residual, ‖A*x - b‖ / ‖b‖, computed for
         # every symmetry branch `accelerate_factorize` dispatches on (sparse SPD Cholesky,
-        # symmetric LDLᵀ, unsymmetric LUTPP, sparse QR, `pde_solve(:default)`) plus the
-        # dense `accelerate_factorize` methods (:cholesky, :lu, :qr, :auto), against the
+        # symmetric LDLᵀ, unsymmetric LUTPP, sparse QR) plus the dense `accelerate_factorize`
+        # methods (:cholesky, :lu, :qr, :auto), against the
         # same right-hand sides solved by plain `LinearAlgebra.lu`/`\\`. `worst[]` is the
         # maximum observed across all of that -- the figure S5.5 quotes when answering
         # #142 -- printed at the end so it shows up in a plain `include` of this file, not
@@ -161,19 +199,16 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
             record!("sparse symmetric LDLᵀ, accelerate", relres(p2.A, x_ldlt, p2.F))
             record!("sparse QR (square), accelerate", relres(p2.A, x_qr_sq, p2.F))
 
-            # unsymmetric LUTPP, and pde_solve(:default) routing through accelerate_solve
+            # unsymmetric LUTPP. `pde_solve(:default)` on this same system is no longer part
+            # of this audit: since #246/S5.6, `:default` routes an unsymmetric matrix to
+            # plain `A \ F` rather than Accelerate, so it has nothing to do with Accelerate's
+            # accuracy -- that routing is pinned in the "narrowed to the symmetric win"
+            # testset above instead.
             cd = convection_diffusion_system(20)
             x_lutpp = accelerate_solve(cd.A, cd.F; sym = :unsymmetric)
             x_lu_dense_un = lu(Matrix(cd.A)) \ cd.F
-            x_default = pde_solve(cd.A, cd.F)
             record!("sparse unsymmetric LUTPP, accelerate", relres(cd.A, x_lutpp, cd.F))
             record!("sparse unsymmetric, dense lu ref", relres(cd.A, x_lu_dense_un, cd.F))
-            record!("pde_solve(:default) on macOS w/ AppleAccelerate", relres(cd.A, x_default, cd.F))
-            # Not `==`: vecLib's internal threading can reorder floating-point reductions
-            # between two separately-dispatched calls to the same LUTPP factorization, so
-            # bit-identity is not guaranteed even though both pick the same factorization
-            # kind (`:auto` on an unsymmetric matrix and explicit `:unsymmetric` agree).
-            @test isapprox(x_default, x_lutpp; atol = 1.0e-12)
 
             # dense accelerate_factorize vs plain LinearAlgebra, fixed seed for reproducibility
             rng = Random.Xoshiro(20260920)

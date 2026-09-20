@@ -398,8 +398,10 @@ end
 Builds `op`'s operator matrix in one pass over `Ωₕ`'s grid points, in the matrix type
 `matrix_type(backend(Ωₕ))` picked: a `SparseMatrixCSC` backend writes `colptr`/`rowval`/
 `nzval` directly (two passes, count then fill; no intermediate matrix, no broadcast), any
-other `AbstractMatrix` backend falls back to a plain dense fill. `Ωₕ` may be a mesh or a
-grid space, taken as `mesh(Wₕ)`.
+other `AbstractMatrix` backend falls back to a plain dense fill, built on the host and
+handed to the backend's matrix type in one `copyto!` -- never one scalar write per stored
+entry into device memory (gpena/Bramble.jl#94). `Ωₕ` may be a mesh or a grid space, taken
+as `mesh(Wₕ)`.
 
 Checked entrywise, `nnz` included, against [`kronecker_operator_matrix`](@ref), the
 Kronecker-product construction every operator family used before (gpena/Bramble.jl#185).
@@ -489,6 +491,35 @@ function _stencil_matrix(
     return SparseMatrixCSC{Tv, Ti}(N, N, colptr, rowval, nzval)
 end
 
+# --- Host mirror for the dense fallback's per-point weight reads --------------------- #
+#
+# `_stencil_weights` reads its mesh through `spacing`/`forward_spacing`/`npoints`/`eltype`
+# alone (checked against all nine methods above). For a device-backed mesh (Metal.jl),
+# `spacing`/`forward_spacing` scalar-index a device array and are refused outright by the
+# scalar-indexing guard -- not merely slow, an error before the dense fallback below ever
+# gets to write anything (gpena/Bramble.jl#94, measured in S2.6). The dense fallback only
+# ever needs `op`'s own axis, so this mirrors *that axis alone* to the host once per
+# `_stencil_matrix` call, via `host_spacings` (`mesh1d.jl`, gpena/Bramble.jl#94 S2.10) -- one
+# bulk transfer, not one scalar read per point, and free on a host-backed mesh since
+# `host_spacings` returns the existing array there instead of copying it -- and answers the
+# same four queries, so every existing `_stencil_weights` method, sparse and dense alike,
+# runs against it unmodified: `AbstractMeshType` is what those methods dispatch on, and this
+# mirror is one so they resolve without a second copy of any of their math.
+struct _HostAxisSpacings{T, Dim} <: AbstractMeshType{Dim}
+    h::Vector{T}
+end
+
+@inline eltype(::_HostAxisSpacings{T, Dim}) where {T, Dim} = T
+@inline npoints(m::_HostAxisSpacings{T, Dim}, ::Type{Tuple}) where {T, Dim} = ntuple(
+    _ -> length(m.h), Val(Dim)
+)
+@inline spacing(m::_HostAxisSpacings, I::CartesianIndex, dim::Int) = @inbounds m.h[I[dim]]
+@inline function forward_spacing(m::_HostAxisSpacings, I::CartesianIndex, dim::Int)
+    n = length(m.h)
+    i = I[dim]
+    return @inbounds m.h[i == n ? n : i + 1]
+end
+
 function _stencil_matrix(
         ::Type{MT}, Ωₕ::AbstractMeshType, op::StencilOp{Dim}
 ) where {T, MT <: AbstractMatrix{T}, Dim}
@@ -501,19 +532,25 @@ function _stencil_matrix(
     taps = _stencil_taps(op)
     K = length(taps)
 
-    A = MT(undef, N, N)
-    fill!(A, zero(T))
+    # Built on the host, where `setindex!` is a plain memory write, and handed to `MT` in
+    # one `copyto!` -- not one device-side scalar write per stored entry (gpena/Bramble.jl#94;
+    # see `_shift_ones` for the same trade). `mirror` (above) is what makes `_stencil_weights`
+    # itself safe to call in this loop despite `Ωₕ` possibly being device-backed.
+    mirror = _HostAxisSpacings{T, Dim}(host_spacings(Ωₕ(Dim)))
+    host = zeros(T, N, N)
     @inbounds for I in CartesianIndices(dims)
         idim = I[Dim]
-        w = _stencil_weights(op, Ωₕ, I)
+        w = _stencil_weights(op, mirror, I)
         row = li[I]
         for k in 1:K
             j = idim + taps[k]
             (1 <= j <= n) || continue
             iszero(w[k]) && continue
-            A[row, li[I + taps[k] * step]] = T(w[k])
+            host[row, li[I + taps[k] * step]] = T(w[k])
         end
     end
+    A = MT(undef, N, N)
+    copyto!(A, host)
     return A
 end
 

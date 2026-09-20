@@ -413,6 +413,101 @@ end
     )
 end
 
+# --- Host mirror for the form assembly pattern walk (gpena/Bramble.jl#94 S4.0) ------- #
+#
+# The third instance of one recurring shape (`_probe_point`/`_restriction_eltype` -> S2.3,
+# `spacing`/`forward_spacing` -> S2.10's `host_spacings`, this one): a host-side accessor
+# left alone when the layer below it landed, blocking the next layer up.
+# `_pattern_size_hint`/`allocate_system_matrix` (`form/bilinear_pattern.jl`) walk a form's
+# AST through `local_stencil`, which reads a `ScalarGridSpace` through `weights(space,
+# ...)[i]` (`SeparableWeights`'s `getindex` -> `__prod` just below) for an `innerₕ`/
+# `inner₊*` node, and through `spacing`/`forward_spacing`
+# (`mesh(space)`, `mesh/mesh1d.jl`) for a difference/average/jump node
+# (`form/operators/difference.jl` and siblings). Both scalar-index a device array, and
+# neither `form/operators/inner.jl` nor `form/operators/difference.jl`/`mesh/mesh1d.jl` is
+# owned by this subplan, so the fix has to happen at the pattern walk's own call site
+# instead of inside either accessor.
+#
+# `host_weights` hands that walk a host-resident mirror of the *whole* space it would
+# otherwise scalar-index -- mesh included, not only the weight vectors the name might
+# suggest on its own -- because mirroring the weights alone still throws one call deeper, at
+# the very next difference/average/jump node in the same AST. `Mesh1D`/`MeshnD` are genuine,
+# independently constructed mesh objects here, not a narrow duck-typed stand-in like
+# `stencil.jl`'s `_HostAxisSpacings` (built for one axis and four methods because that
+# caller never needed more): every accessor any AST node could reach -- `point`, `spacing`,
+# `npoints`, `markers`, ... -- already has a correct host-side method on them, so nothing
+# new needs teaching.
+@inline _host_mirror_mesh(Ωₕ::AbstractMeshType) = _host_mirror_mesh(locality(backend(Ωₕ)), Ωₕ)
+@inline _host_mirror_mesh(::HostLocality, Ωₕ::AbstractMeshType) = Ωₕ
+
+function _host_mirror_mesh(::DeviceLocality, Ωₕ::Mesh1D)
+    return Mesh1D(
+        Ωₕ.set,
+        Ωₕ.markers,
+        Ωₕ.indices,
+        backend(eltype(Ωₕ)),
+        Array(Ωₕ.pts),
+        Array(Ωₕ.half_pts),
+        Array(Ωₕ.half_spacings),
+        Array(Ωₕ.spacings),
+        Ωₕ.collapsed,
+        Ωₕ.version
+    )
+end
+
+function _host_mirror_mesh(::DeviceLocality, Ωₕ::MeshnD{D}) where {D}
+    return MeshnD(
+        Ωₕ.set,
+        Ωₕ.markers,
+        Ωₕ.indices,
+        backend(eltype(Ωₕ)),
+        ntuple(k -> _host_mirror_mesh(DeviceLocality(), Ωₕ.submeshes[k]), Val(D))
+    )
+end
+
+# One bulk `Array(...)` per per-axis factor -- `aligned`/`cellfactor` are length
+# `npoints(Ωₕ, d)`, not the full grid (gpena/Bramble.jl#115) -- reusing `space_weights`'s own
+# `innerh`/`innerplus` construction shape rather than a second copy of that rule, just fed
+# from the already-computed factors instead of the mesh's spacings.
+function _host_space_weights(w::SpaceWeights{D, T}) where {D, T}
+    haligned = map(Array, w.aligned)
+    hcellfactor = map(Array, w.cellfactor)
+    VT = typeof(first(haligned))
+    dims = w.innerh.dims
+    innerh = SeparableWeights{D, T, VT}(hcellfactor, dims)
+    innerplus = ntuple(Val(D)) do i
+        factors = ntuple(k -> k == i ? haligned[k] : hcellfactor[k], Val(D))
+        SeparableWeights{D, T, VT}(factors, dims)
+    end
+    return SpaceWeights{D, T, VT}(innerh, innerplus, haligned, hcellfactor, w.built_version)
+end
+
+"""
+    host_weights(Wₕ::ScalarGridSpace) -> ScalarGridSpace
+
+Return a `ScalarGridSpace` with the same shape and numbers as `Wₕ`, but entirely
+host-resident -- mesh and weights alike, one bulk transfer per underlying array rather than
+one scalar read per grid point (gpena/Bramble.jl#94 S4.0).
+
+A no-op on a space that already lives on the host: `host_weights(Wc) === Wc`, not a copy,
+the same guarantee [`host_spacings`](@ref) gives on a CPU mesh (S2.10's own fixed bug --
+`Array(v) === v` is `false` for a `Vector`, so a copy-on-host would silently repeat it here).
+
+Built for [`allocate_system_matrix`](@ref)'s sparsity-pattern walk, which evaluates a form's
+AST through `local_stencil` and so reads both this space's weights and its mesh's spacings
+one grid point at a time; see the comment above [`_host_mirror_mesh`](@ref) for why both,
+not only the weight vectors the name alone might suggest.
+
+See also: [`host_spacings`](@ref), [`weights`](@ref), [`SeparableWeights`](@ref).
+"""
+@inline host_weights(Wₕ::ScalarGridSpace) = _host_weights(locality(backend(Wₕ)), Wₕ)
+
+@inline _host_weights(::HostLocality, Wₕ::ScalarGridSpace) = Wₕ
+
+function _host_weights(::DeviceLocality, Wₕ::ScalarGridSpace)
+    return _gridspace(_host_mirror_mesh(mesh(Wₕ)), _host_space_weights(weights(Wₕ)))
+end
+
 """
     dim(Wₕ::ScalarGridSpace) -> Int
     dim(::Type{<:ScalarGridSpace}) -> Int

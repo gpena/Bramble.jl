@@ -613,14 +613,11 @@ end
 
 # --- Execution-policy-dispatched reduction entries (gpena/Bramble.jl#190, S7.1) ---------- #
 #
-# No call site passes a policy into `_dot`/`_dot_masked` today (`innerₕ`/`inner₊`, in
-# `src/space/inner_product.jl`, call the unadorned methods above directly) -- these methods
-# are added ahead of that wiring, not in place of it, so `BramblePolyesterExt` (S7.2) has a
-# parallel `_dot`/`_dot_masked` to implement and a future policy-aware call site has
-# something to dispatch on. `CpuSerial`/`CpuThreaded` both fall through to today's single
-# (already vectorised) implementation -- there is no separate threaded reduction to pick
-# between, only a `CpuBatch` one, which the `_batch_dot`/`_batch_dot_masked` hooks below
-# supply once `BramblePolyesterExt` is loaded.
+# `inner₊` (`src/space/inner_product.jl`) does pass a policy into `_dot`/`_dot_masked`.
+# `CpuSerial`/`CpuThreaded` both fall through to today's single (already vectorised)
+# implementation -- there is no separate threaded reduction to pick between, only a
+# `CpuBatch` one, which the `_batch_dot`/`_batch_dot_masked` hooks below supply once
+# `BramblePolyesterExt` is loaded, and a `GpuPolicy` one, below the CpuBatch hooks.
 
 """
     _dot(policy::ExecutionPolicy, u, v, w) -> Real
@@ -660,4 +657,93 @@ end
 """
 @noinline function _batch_dot_masked(u, v, w, mask)
     return _throw_cpubatch_without_polyester(:_batch_dot_masked)
+end
+
+#===========================================================================#
+# Device reductions (gpena/Bramble.jl#94, #174, S2.5 of
+# .agents/plans/metal-and-apple-silicon-acceleration.md).
+#
+# `CpuSerial`/`CpuThreaded`/`CpuBatch` above are each a concrete `CpuPolicy`, so a
+# `GpuPolicy` (`GpuAsync`) never matches one of them and falls through to the generic
+# `ExecutionPolicy` method below instead. That method derives locality from the policy
+# itself -- `locality(::GpuPolicy) = DeviceLocality()` (`src/utils/backend.jl`) -- the same
+# "legality first, strategy second" shape `_sweep_for!` uses, so the actual device
+# implementation keys on `DeviceLocality`, never on `GpuPolicy` alone: a call site that
+# later starts passing a `Locality` directly (as `_device_project!` now does, gpena/Bramble.jl#298)
+# would still reach it.
+#
+# No `@kernel` is needed for either reduction: `GPUArrays` already provides `sum` and
+# broadcasting over device arrays, so the weighted sum is one broadcasted reduction rather
+# than a scalar loop. `mask` always comes from a mesh marker (`index_in_marker`), which is
+# host memory regardless of backend, so it is copied onto `u`'s own device once before the
+# masked reduction, rather than walked index by index (which would scalar-index the device
+# array once per set bit).
+#===========================================================================#
+
+@inline _dot(policy::ExecutionPolicy, u, v, w) = _dot(locality(policy), policy, u, v, w)
+@inline _dot_masked(policy::ExecutionPolicy, u, v, w, mask) = _dot_masked(
+    locality(policy), policy, u, v, w, mask)
+
+"""
+    _dot(::DeviceLocality, ::GpuPolicy, u::AbstractVector, v::AbstractVector, w::AbstractVector) -> Real
+
+The device counterpart of [`_dot`](@ref)`(u, v, w)`: `sum(u .* v .* w)`, one broadcasted
+`GPUArrays` reduction, reached once a [`GpuPolicy`](@ref) derives [`DeviceLocality`](@ref)
+from itself.
+
+# Throws
+- `DimensionMismatch`: If `length(u)`, `length(v)`, and `length(w)` do not match.
+"""
+@noinline function _dot(
+        ::DeviceLocality, ::GpuPolicy, u::AbstractVector, v::AbstractVector, w::AbstractVector
+)
+    (length(u) == length(v) == length(w)) ||
+        _throw_dot_dim_error(length(u), length(v), length(w))
+    return sum(u .* v .* w)
+end
+
+"""
+    _dot_masked(::DeviceLocality, ::GpuPolicy, u, v, w, mask::BitVector) -> Real
+
+The device counterpart of [`_dot_masked`](@ref)`(u, v, w, mask)`: `mask` is copied onto
+`u`'s own device once, then the masked sum is `sum(u .* v .* w .* md)`, one broadcasted
+reduction instead of a walk over [`MarkedIndices`](@ref).
+
+# Throws
+- `DimensionMismatch`: If vector or mask lengths do not match.
+"""
+@noinline function _dot_masked(
+        ::DeviceLocality, ::GpuPolicy, u::AbstractVector, v::AbstractVector,
+        w::AbstractVector, mask::BitVector
+)
+    (length(u) == length(v) == length(w) == length(mask)) ||
+        _throw_dot_dim_error(length(u), length(v), length(w), length(mask))
+    md = similar(u, Bool)
+    copyto!(md, Vector{Bool}(mask))
+    return sum(u .* v .* w .* md)
+end
+
+"""
+    _dot_masked(::DeviceLocality, ::GpuPolicy, u, v, w, mask::MarkedIndicesUnion) -> Real
+
+The multi-marker counterpart of the `BitVector` method above: `mask` is walked once, on the
+host, to build a plain `BitVector` (the same union [`_combined_mask`](@ref) would have
+materialized), which is then copied onto `u`'s own device exactly as above.
+
+# Throws
+- `DimensionMismatch`: If vector or mask lengths do not match.
+"""
+@noinline function _dot_masked(
+        ::DeviceLocality, ::GpuPolicy, u::AbstractVector, v::AbstractVector,
+        w::AbstractVector, mask::MarkedIndicesUnion
+)
+    (length(u) == length(v) == length(w) == mask.len) ||
+        _throw_dot_dim_error(length(u), length(v), length(w), mask.len)
+    hostmask = falses(mask.len)
+    @inbounds for i in mask
+        hostmask[i] = true
+    end
+    md = similar(u, Bool)
+    copyto!(md, Vector{Bool}(hostmask))
+    return sum(u .* v .* w .* md)
 end

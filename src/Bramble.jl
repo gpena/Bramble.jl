@@ -52,6 +52,10 @@ public vector, matrix
 # Backend-extension plumbing (point 70): identity/zero matrices tied to a `Backend`, real,
 # tested, reached while implementing a new backend rather than while using one.
 public backend_eye, backend_zeros
+# Host -> device sparse conversion (gpena/Bramble.jl#250): real, documented, but not part of
+# the top-level "pick a backend" API that `metal_backend`/`gpu_backend` are exported for --
+# same tier as `vector`/`matrix`/`backend_eye`/`backend_zeros` above.
+public metal_sparse_csr, metal_sparse_csc
 # The contract a custom backend array type implements (gpena/Bramble.jl#100): declared by
 # whoever adds an array type, never called by a user of one, so `public` rather than
 # exported, alongside the allocators that read it.
@@ -87,6 +91,12 @@ public _launch_restriction_nd!, _launch_restriction_scatter_nd!
 public _launch_cell_average!, _launch_cell_average_scatter!
 public _launch_cell_average_nd!, _launch_cell_average_scatter_nd!
 public _launch_difference_onesided!, _launch_difference_centered!, _launch_average_engine!
+# Row-parallel SpMV/SpMM for a device CSR matrix (gpena/Bramble.jl#250, #174): same
+# extension-contract idiom as the launch hooks above -- `BrambleMetalExt`'s `mul!` methods
+# for `MetalSparseMatrixCSR` call into these, and `BrambleKernelAbstractionsExt` supplies
+# the real `KernelAbstractions`-backed methods (stub definitions further down this file,
+# beside `fdm_solve`, since neither has a CPU call-site file of its own to live in).
+public _launch_spmv_csr!, _launch_spmm_csr!
 
 # domain/interval handling functions
 export box, interval, ×, dim, topo_dim, extrema, point, center, projection, boundary_symbols
@@ -111,6 +121,12 @@ export indices, boundary_indices, interior_indices, is_boundary_index, index_in_
 # operator rather than while using one (point 70).
 public AbstractMeshType, MeshMarkers
 public mesh_type, hₘᵢₙ, half_spacings, cell_measures
+# `host_spacings` (gpena/Bramble.jl#94, S2.10): pulls a device-backed mesh's spacings to the
+# host in one bulk transfer, for a per-point caller (`spacing`/`forward_spacing`) that a
+# device array's own scalar-indexing guard refuses outright. Left `public`-only rather than
+# exported by S2.10, which could not reach this file; added here by S4.0, alongside
+# `host_weights` below, the space-layer sibling that needed the same treatment.
+public host_spacings
 
 # Exported since v3.1 (gpena/Bramble.jl#213): the outward normal is part of writing a
 # Neumann or Robin term, not an internal query, now that `inner_Γ` exists.
@@ -124,6 +140,12 @@ export ndofs, ncomponents, weights
 # space's type back off a `VectorElement`. Neither appears in a tutorial: both are for
 # code written *against* a space's type, not for building one (point 70).
 public VectorGridSpace, space_type
+# `host_weights` (gpena/Bramble.jl#94, S4.0): mirrors a device-backed `ScalarGridSpace` --
+# mesh and weights alike -- to the host in one bulk transfer per underlying array, for the
+# sparsity-pattern walk (`allocate_system_matrix`) that reads both one grid point at a time.
+# Same tier as `host_spacings` above: real, tested, reached while implementing a device
+# backend or a form-assembly caller rather than while writing a form itself (point 70).
+public host_weights
 export VectorElement, element, parent, reshape, components, component_range, component_ranges
 export ldiv!
 # `*` is already in scope from Base regardless (a fundamental operator, never shadowed by
@@ -283,6 +305,62 @@ See also: [`kronecker_operator`](@ref), [`KroneckerLinearOperator`](@ref), [`is_
 """
 function fdm_solve end
 export fdm_solve
+
+# `_launch_spmv_csr!`/`_launch_spmm_csr!` (gpena/Bramble.jl#250, #174, S3.2 of
+# .agents/plans/metal-and-apple-silicon-acceleration.md): the extension contract
+# `BrambleMetalExt`'s `mul!` methods for `MetalSparseMatrixCSR` reach into, exactly the
+# `fdm_solve`/`Kronecker` idiom above -- a package extension cannot introduce a new binding
+# into this module, so these stubs give it one to add methods to. Unlike `fdm_solve`, a
+# plain `ErrorException` fallback rather than a bare `MethodError` when the caller has not
+# loaded `KernelAbstractions`, matching `ka_device`/`_launch_uniform_points!`'s idiom
+# (`src/utils/device_kernels.jl`, `src/mesh/mesh1d.jl`): `BrambleKernelAbstractionsExt`
+# supplies the real methods, written against `KernelAbstractions.Backend` alone, so a
+# future GPU backend inherits the same SpMV/SpMM kernel for the cost of one `ka_device`
+# method.
+
+"""
+    _launch_spmv_csr!(y, rowPtr, colVal, nzVal, x, α, β) -> Nothing
+
+Row-parallel sparse matrix-vector product `y .= α .* (A * x) .+ β .* y`, where `A`'s
+storage is given as the raw CSR arrays `rowPtr`, `colVal`, `nzVal` -- never a struct
+wrapping them, since a struct nesting a device array fails `KernelAbstractions` kernel
+compilation. One work item owns one output row, so there are no write conflicts and no
+atomics.
+
+Requires `using KernelAbstractions`; the real method is supplied by
+`BrambleKernelAbstractionsExt`.
+
+# Throws
+- `ErrorException`: if `KernelAbstractions` is not loaded.
+"""
+function _launch_spmv_csr!(y, rowPtr, colVal, nzVal, x, α, β)
+    return _throw_no_ka_sparse_kernel("_launch_spmv_csr!")
+end
+
+"""
+    _launch_spmm_csr!(C, rowPtr, colVal, nzVal, B, α, β) -> Nothing
+
+Row-parallel sparse matrix-matrix product `C .= α .* (A * B) .+ β .* C` for a dense
+right-hand side `B`, where `A`'s storage is given as the raw CSR arrays `rowPtr`, `colVal`,
+`nzVal`. See [`_launch_spmv_csr!`](@ref) for the extension contract and why the arrays are
+passed separately rather than as a struct.
+
+Requires `using KernelAbstractions`; the real method is supplied by
+`BrambleKernelAbstractionsExt`.
+
+# Throws
+- `ErrorException`: if `KernelAbstractions` is not loaded.
+"""
+function _launch_spmm_csr!(C, rowPtr, colVal, nzVal, B, α, β)
+    return _throw_no_ka_sparse_kernel("_launch_spmm_csr!")
+end
+
+@noinline function _throw_no_ka_sparse_kernel(name::String)
+    return error(
+        "$name has no method loaded. Add `using KernelAbstractions` before calling " *
+        "Metal sparse `mul!`.",
+    )
+end
 
 # `DirichletConstraint` is `dirichlet_constraints(...)`'s own return type, reached for an
 # `isa` check rather than constructed by name: the tests already reach it as

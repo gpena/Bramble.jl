@@ -3,8 +3,10 @@ module ExtMetalExtTests
 using Test
 using Bramble
 using Metal
-using LinearAlgebra: I
-using Bramble: Backend, vector, matrix, _backend_eye, _backend_zeros
+using SparseArrays
+using LinearAlgebra: I, mul!
+using Bramble: Backend, vector, matrix, _backend_eye, _backend_zeros, metal_sparse_csr,
+               metal_sparse_csc
 
 # BrambleMetalExt's backend allocation primitives. Nothing here builds a mesh/gridspace on
 # a Metal-backed vector: `mesh` construction fills point coordinates with a scalar CPU
@@ -98,6 +100,131 @@ using Bramble: Backend, vector, matrix, _backend_eye, _backend_zeros
             copyto!(v, data)
             @test Array(v) == data
         end
+    end
+end
+
+# ---------------------------------------------------------------------------
+# Sparse CSR/CSC: construction, conversion, and SpMV/SpMM accuracy (gpena/Bramble.jl#250)
+# ---------------------------------------------------------------------------
+#
+# Gated on `Metal.functional()` like the testset above, but the skip path here `@warn`s
+# instead of only `@test_skip`ing: a silent skip is issue #84's failure mode, and this
+# milestone has already shipped one silent skip that had to be fixed later, so a host
+# without a functional device is loud about what it did not check.
+if !Metal.functional()
+    @warn "Skipping Metal sparse CSR/CSC tests: Metal.functional() is false on this host"
+    @test_skip "Metal sparse CSR/CSC tests not exercised: Metal.functional() is false"
+else
+    @testset "metal_sparse_csr / metal_sparse_csc: non-densifying, round-trips" begin
+        A = sprand(Float32, 100, 60, 0.05)
+        @test nnz(A) > 0
+
+        Gr = metal_sparse_csr(A)
+        @test nnz(Gr) == nnz(A)
+        @test SparseMatrixCSC(Gr) == A
+
+        Gc = metal_sparse_csc(A)
+        @test nnz(Gc) == nnz(A)
+        @test SparseMatrixCSC(Gc) == A
+    end
+
+    @testset "SpMV: mul!(y, A::CSR, x, α, β) matches CPU SparseMatrixCSC * Vector" begin
+        m, n = 50, 90 # non-square
+        A = sprand(Float32, m, n, 0.05)
+        x = rand(Float32, n)
+        G = metal_sparse_csr(A)
+
+        # β = 0: an uninitialised destination is never read, only overwritten.
+        y = MtlArray{Float32}(undef, m)
+        mul!(y, G, mtl(x), 1.0f0, 0.0f0)
+        @test isapprox(Array(y), A * x; atol = 1.0f-5)
+
+        # β != 0 against a non-zero destination: `iszero(β)` is special-cased, so a test
+        # that only ever passes β = 0 would not catch a destination wrongly left untouched
+        # or wrongly zeroed (gpena/Bramble.jl#250, S3.2).
+        y0 = rand(Float32, m)
+        α, β = 2.0f0, 3.0f0
+        y = mtl(copy(y0))
+        mul!(y, G, mtl(x), α, β)
+        @test isapprox(Array(y), α .* (A * x) .+ β .* y0; atol = 1.0f-5)
+    end
+
+    @testset "SpMM: mul!(C, A::CSR, B, α, β) for dense right-hand sides" begin
+        m, n, k = 50, 90, 4 # non-square A
+        A = sprand(Float32, m, n, 0.05)
+        B = rand(Float32, n, k)
+        G = metal_sparse_csr(A)
+
+        C = MtlArray{Float32}(undef, m, k)
+        mul!(C, G, mtl(B), 1.0f0, 0.0f0)
+        @test isapprox(Array(C), A * B; atol = 1.0f-5)
+
+        # β != 0 against a non-zero destination -- same reason as the SpMV case above.
+        C0 = rand(Float32, m, k)
+        α, β = 2.0f0, 3.0f0
+        C = mtl(copy(C0))
+        mul!(C, G, mtl(B), α, β)
+        @test isapprox(Array(C), α .* (A * B) .+ β .* C0; atol = 1.0f-5)
+    end
+
+    @testset "Float16 SpMV" begin
+        A = sprand(Float16, 20, 20, 0.1)
+        x = rand(Float16, 20)
+        G = metal_sparse_csr(A)
+        y = MtlArray{Float16}(undef, 20)
+        mul!(y, G, mtl(x), Float16(1.0), Float16(0.0))
+        @test isapprox(Array(y), A * x; atol = Float16(1.0e-2))
+    end
+
+    @testset "CSC mul! raises ArgumentError naming the CSR conversion" begin
+        m, n = 20, 20
+        A = sprand(Float32, m, n, 0.1)
+        Gc = metal_sparse_csc(A)
+
+        # Split into vector and matrix `mul!` methods on purpose (gpena/Bramble.jl#250,
+        # S3.2): a single `::AbstractVecOrMat` signature ties with LinearAlgebra's own
+        # generic `mul!` and raises `MethodError: ... is ambiguous` instead of this
+        # `ArgumentError` -- so assert the error type and message, not merely that
+        # something throws.
+        err = try
+            mul!(MtlArray{Float32}(undef, m), Gc, mtl(rand(Float32, n)), 1.0f0, 0.0f0)
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test occursin("CSR", sprint(showerror, err))
+
+        err = try
+            mul!(MtlArray{Float32}(undef, m, 3), Gc, mtl(rand(Float32, n, 3)), 1.0f0, 0.0f0)
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test occursin("CSR", sprint(showerror, err))
+    end
+
+    # #250 also asks for an `ArgumentError` on `Float64`. That guard
+    # (`_check_metal_sparse_eltype` inside `mul!`, ext/BrambleMetalExt.jl) is real but
+    # unreachable through the normal path: `metal_sparse_csr` on a `Float64` matrix already
+    # throws inside Metal.jl's own `mtl()`, because `MtlVector{Float64}` cannot be
+    # constructed at all in this Metal.jl version -- confirmed directly rather than
+    # contrived. So this tests the behaviour a user actually gets: refusal at construction,
+    # with a message naming both `Float64` and `Float32`, rather than reaching for a way to
+    # exercise the deeper, currently-unreachable guard.
+    @testset "Float64 is refused before it ever reaches mul!" begin
+        A64 = sprand(Float64, 10, 10, 0.3)
+        err = try
+            metal_sparse_csr(A64)
+            nothing
+        catch e
+            e
+        end
+        @test !isnothing(err)
+        msg = sprint(showerror, err)
+        @test occursin("Float64", msg)
+        @test occursin("Float32", msg)
     end
 end
 

@@ -25,29 +25,50 @@
 # not something this package can route around, so it is left unsupported and documented
 # rather than worked around.
 
+# Whether `pde_solve`'s `:default` route (macOS, `AppleAccelerate.jl` loaded) should take
+# `accelerate_solve` rather than `A \\ F`. gpena/Bramble.jl#246 (R2): Accelerate only wins
+# against the previous `:default` on the symmetric factorisations it reaches (SPD/Cholesky,
+# LDLᵀ) -- 1.2-1.3x -- and loses 2.3-3.6x on unsymmetric systems, so the automatic choice is
+# narrowed to `issymmetric(A)`. An explicit `sym` hint is trusted outright rather than
+# re-checked: the caller has already asserted the property, and `:unsymmetric` is exactly the
+# case this narrowing exists to route away from Accelerate.
+_default_wants_accelerate(A, sym) = sym === :spd || sym === :definite || sym == 1 ||
+                                     sym === :symmetric || sym == 2 ||
+                                     (sym === :auto && issymmetric(A))
+
 """
     pde_solve(A::SparseMatrixCSC, F::AbstractVector; solver = :default, sym = :auto, kwargs...) -> Vector
     pde_solve(fact::MUMPSFactorization, F::AbstractVector) -> Vector
 
 Solve `A u = F` (or `fact u = F`) and return `u`.
 
-With no keyword arguments this is `A \\ F`, unless `AppleAccelerate.jl` is loaded on macOS (see
-`:default` below), in which case it is `accelerate_solve(A, F; sym)`. The name exists so that
-reverse-mode AD tools have one function to attach an adjoint rule to, which is what makes a
-whole `θ -> assemble -> pde_solve -> J(u)` chain differentiable.
+With no keyword arguments this is `A \\ F`, unless `AppleAccelerate.jl` is loaded on macOS
+*and* the system is symmetric (see `:default` below), in which case it is
+`accelerate_solve(A, F; sym)`. The name exists so that reverse-mode AD tools have one function
+to attach an adjoint rule to, which is what makes a whole `θ -> assemble -> pde_solve -> J(u)`
+chain differentiable.
 
 # Keywords
-- `solver`: `:default` -- `A \\ F` on Linux, Windows, and macOS without `AppleAccelerate.jl`
-  loaded; on macOS with `using AppleAccelerate` in effect, dispatches to `accelerate_solve`
-  instead (same as passing `solver = :accelerate` explicitly). This only ever narrows which
-  solver runs on macOS; Linux and Windows are never affected, and a matrix Accelerate cannot
-  factor (e.g. non-square) throws from `accelerate_solve` exactly as `solver = :accelerate`
-  would -- `:default` never silently falls back to `\\` after picking Accelerate.
-  `:suitesparse` (CHOLMOD/UMFPACK), `:spqr` (sparse QR, for a least-squares or rectangular
-  `A`), `:accelerate` (Apple `libSparse`, needs `AppleAccelerate.jl`), `:mumps` (needs
+- `solver`: `:default` -- `A \\ F` on Linux, Windows, macOS without `AppleAccelerate.jl`
+  loaded, and macOS on an unsymmetric `A`; on macOS with `using AppleAccelerate` in effect and
+  `A` symmetric, dispatches to `accelerate_solve` instead (same as passing
+  `solver = :accelerate` explicitly). Symmetry is `issymmetric(A)` under `sym = :auto` (the
+  default), or trusted outright from an explicit `sym = :spd`/`:definite`/`:symmetric` (and
+  conversely `:unsymmetric` skips straight to `A \\ F`) -- the caller has already asserted the
+  property, so it is not checked again. The narrowing exists because Accelerate is only a win
+  on the symmetric factorisations it reaches (SPD/Cholesky, LDLᵀ): measured on this host against
+  forms assembled on real 2D grid spaces, `:default` was a 1.2-1.3x win on a symmetric
+  Poisson-plus-mass system and a 2.3-3.6x **loss** on an unsymmetric convection-diffusion one
+  (gpena/Bramble.jl#246). This only ever narrows which solver runs on macOS; Linux and Windows
+  are never affected, and a matrix Accelerate cannot factor (e.g. non-square) throws from
+  `accelerate_solve` exactly as `solver = :accelerate` would -- `:default` never silently falls
+  back to `\\` after picking Accelerate. `:suitesparse` (CHOLMOD/UMFPACK), `:spqr` (sparse QR,
+  for a least-squares or rectangular `A`), `:accelerate` (Apple `libSparse`, needs
+  `AppleAccelerate.jl`, honoured unconditionally regardless of symmetry), `:mumps` (needs
   `MUMPS.jl`), `:sparspak` (pure Julia, needs `Sparspak.jl`).
-- `sym`: symmetry hint for `:suitesparse`, `:accelerate` and `:mumps`. `:auto` (default)
-  detects it; `:spd`/`:definite`/`1`, `:symmetric`/`2` and `:unsymmetric`/`0` state it.
+- `sym`: symmetry hint for `:suitesparse`, `:accelerate` and `:mumps` (and, on macOS, for
+  `:default`'s own choice of solver -- see above). `:auto` (default) detects it;
+  `:spd`/`:definite`/`1`, `:symmetric`/`2` and `:unsymmetric`/`0` state it.
 
 # Returns
 - `Vector`: the solution, of the promoted element type of `A` and `F`.
@@ -85,7 +106,8 @@ See also [`assemble`](@ref), [`sparse_factorize`](@ref), [`suitesparse_solve`](@
 """
 function pde_solve(A::SparseMatrixCSC, F::AbstractVector; solver::Symbol = :default, sym = :auto, kwargs...)
     if solver === :default
-        if Sys.isapple() && Base.get_extension(Bramble, :BrambleAppleAccelerateExt) !== nothing
+        if Sys.isapple() && Base.get_extension(Bramble, :BrambleAppleAccelerateExt) !== nothing &&
+           _default_wants_accelerate(A, sym)
             return accelerate_solve(A, F; sym = sym, kwargs...)
         end
         return A \ F
