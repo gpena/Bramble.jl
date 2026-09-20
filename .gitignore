@@ -30,6 +30,7 @@ docs/src/examples/point_sources_flux.md
 docs/src/examples/transient_inplace.md
 docs/src/examples/boundary_layer_graded.md
 docs/src/examples/transient_inverse_problem.md
+docs/src/examples/memory_scaling.md
 
 # LaTeX build artifacts from the manual. Scoped to manual/ rather than global, so a .tex
 # file kept deliberately elsewhere — a figure source, say — is unaffected.
