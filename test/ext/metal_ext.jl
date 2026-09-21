@@ -6,16 +6,18 @@ using Metal
 using SparseArrays
 using LinearAlgebra: I, mul!
 using Bramble: Backend, vector, matrix, _backend_eye, _backend_zeros, metal_sparse_csr,
-               metal_sparse_csc
+               metal_sparse_csc, host_points, host_weights, half_spacings
 
-# BrambleMetalExt's backend allocation primitives. Nothing here builds a mesh/gridspace on
-# a Metal-backed vector: `mesh` construction fills point coordinates with a scalar CPU
-# loop (`_points!`), which GPUArrays refuses on a device array ("Scalar indexing is
-# disallowed") -- confirmed directly, not assumed. So a Metal backend is currently only
-# exercised at the allocation layer this extension actually implements
-# (`vector`/`matrix`/`_backend_eye`/`_backend_zeros`/`metal_backend`), not through a full
-# PDE assembly pipeline; building that pipeline on a GPU-resident mesh is a separate gap,
-# outside the extension's own scope.
+# BrambleMetalExt's backend allocation primitives
+# (`vector`/`matrix`/`_backend_eye`/`_backend_zeros`/`metal_backend`). Meshes and
+# gridspaces on a Metal-backed vector are built further below, in the #307-#312
+# device-quirk testsets: `mesh` construction no longer fills point coordinates with a
+# scalar CPU loop (which GPUArrays refuses on a device array, "Scalar indexing is
+# disallowed"). A uniform device mesh fills its four arrays in one `KernelAbstractions`
+# launch (gpena/Bramble.jl#303), and a non-uniform one generates its coordinates on the
+# host and transfers them in a single `copyto!` (gpena/Bramble.jl#304). What is still not
+# exercised anywhere here is a full PDE assembly pipeline on a GPU-resident mesh; that
+# remains a separate gap, outside the extension's own scope.
 #
 # `Metal.functional()` gates every testset here that touches an actual device array:
 # precompiling and loading `Metal` succeeds on any platform (it degrades gracefully rather
@@ -225,6 +227,334 @@ else
         msg = sprint(showerror, err)
         @test occursin("Float64", msg)
         @test occursin("Float32", msg)
+    end
+end
+
+# ---------------------------------------------------------------------------
+# Mesh and space quirks fixed by #307-#312 (S14 of
+# .agents/plans/v3-4-0-device-quirks-and-kernels.md): one testset per issue. None of them
+# uses `@allowscalar` -- every device value below reaches the host through a bulk
+# transfer (`Array`, `host_points`, `host_weights`, ...) or a closed-form/host-side
+# computation, exactly the paths S1-S7 added, never a per-point scalar read of a device
+# array. Gated on `Metal.functional()` with a loud `@warn` skip, like the sparse
+# CSR/CSC block above.
+# ---------------------------------------------------------------------------
+if !Metal.functional()
+    @warn "Skipping mesh/space device-quirk tests: Metal.functional() is false on this host"
+    @test_skip "mesh/space device-quirk tests not exercised: Metal.functional() is false"
+else
+    @testset "#307: is_uniform, stepsize and show on a device mesh" begin
+        b = metal_backend()
+
+        # Uniform Float32 device mesh: the tolerance regression. The old absolute
+        # tol = 1e-10 was unreachable for Float32 (eps 1.19e-7), so a uniform Float32
+        # device mesh used to answer false here.
+        Ω_u = mesh(domain(interval(0.0f0, 1.0f0)), 10, true; backend = b)
+        @test is_uniform(Ω_u)
+        @test isapprox(stepsize(Ω_u), 1.0f0 / 9; rtol = 1.0f-5)
+
+        # A genuinely non-uniform Float32 device mesh must still answer false -- the
+        # widened tolerance must not swallow real non-uniformity.
+        Ω_nu = mesh(domain(interval(0.0f0, 1.0f0)), 10, false; backend = b)
+        @test !is_uniform(Ω_nu)
+
+        # Small-domain spans: 1e-3, 1e-5 and 1e-6 all answered wrongly at some point
+        # during development (the span-scaled eps term against the absolute 1e-10 floor).
+        for span in (1.0f-3, 1.0f-5, 1.0f-6)
+            Ω_span_u = mesh(domain(interval(0.0f0, span)), 10, true; backend = b)
+            @test is_uniform(Ω_span_u)
+
+            Ω_span_nu = mesh(domain(interval(0.0f0, span)), 10, false; backend = b)
+            @test !is_uniform(Ω_span_nu)
+        end
+
+        s = sprint(show, MIME"text/plain"(), Ω_u)
+        @test !isempty(s)
+        @test occursin("Mesh1D", s)
+    end
+
+    @testset "#308: host_points and locate_cell on a device mesh" begin
+        b = metal_backend()
+
+        # host_points is the identical object on a host mesh (===), and a genuine
+        # Vector (a bulk-transferred copy, not a zero-copy alias) on a device mesh.
+        Ω_host = mesh(domain(interval(0.0f0, 1.0f0)), 12, true)
+        @test host_points(Ω_host) === points(Ω_host)
+
+        Ω_dev = mesh(domain(interval(0.0f0, 1.0f0)), 12, true; backend = b)
+        hp = host_points(Ω_dev)
+        @test hp isa Vector
+        @test length(hp) == 12
+
+        # locate_cell must agree with searchsortedlast on the host points at every cell
+        # midpoint, every grid node -- the case that was wrong: the closed-form branch
+        # floored 2.9999999999999996 to the cell on the left -- one ULP either side of
+        # every node, and outside both ends.
+        for unif in (true, false), n in (5, 12, 33)
+
+            Ω = mesh(domain(interval(0.0f0, 1.0f0)), n, unif; backend = b)
+            pts = host_points(Ω)
+            expected(x) = clamp(searchsortedlast(pts, x), 1, n - 1)
+
+            for i in 1:(n - 1)
+                mid = (pts[i] + pts[i + 1]) / 2
+                @test locate_cell(Ω, mid) == expected(mid)
+            end
+
+            for i in 1:n
+                x = pts[i]
+                @test locate_cell(Ω, x) == expected(x)
+                @test locate_cell(Ω, prevfloat(x)) == expected(prevfloat(x))
+                @test locate_cell(Ω, nextfloat(x)) == expected(nextfloat(x))
+            end
+
+            @test locate_cell(Ω, pts[1] - 1.0f0) == 1
+            @test locate_cell(Ω, pts[end] + 1.0f0) == n - 1
+        end
+    end
+
+    @testset "#304: non-uniform device mesh built on the host and copied over" begin
+        b = metal_backend()
+
+        Ω = mesh(domain(interval(0.0f0, 1.0f0)), 16, false; backend = b)
+        p = Array(points(Ω))
+        @test issorted(p)
+        @test p[1] == 0.0f0
+        @test p[end] == 1.0f0
+        @test !is_uniform(Ω)
+
+        # Independent control: device spacings/half_points/half_spacings match a host
+        # mesh given the identical coordinates via set_points!.
+        n = 24
+        Ω_dev = mesh(domain(interval(0.0f0, 1.0f0)), n, false; backend = b)
+        coords = Array(points(Ω_dev))
+
+        Ω_host = mesh(domain(interval(0.0f0, 1.0f0)), n, true)
+        set_points!(Ω_host, coords)
+
+        @test Array(spacings(Ω_dev)) ≈ spacings(Ω_host)
+        @test Array(half_points(Ω_dev)) ≈ half_points(Ω_host)
+        @test Array(half_spacings(Ω_dev)) ≈ half_spacings(Ω_host)
+
+        # 2D, mixed uniformity.
+        Ω2 = mesh(
+            domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)),
+            (12, 12), (true, false); backend = b
+        )
+        p1 = Array(points(Ω2(1)))
+        p2 = Array(points(Ω2(2)))
+        @test issorted(p1) && issorted(p2)
+        @test is_uniform(Ω2(1))
+        @test !is_uniform(Ω2(2))
+    end
+
+    @testset "#309: condition markers on device meshes match the host" begin
+        b = metal_backend()
+
+        # 1D: a selective, an empty and a total predicate give index sets IDENTICAL to
+        # the host's, not merely both non-empty.
+        d1 = domain(
+            interval(0.0f0, 1.0f0),
+            :selective => (p -> p[1] < 0.3f0),
+            :empty => (p -> p[1] < 0.0f0),
+            :total => (p -> true)
+        )
+        Ω1_dev = mesh(d1, 11, true; backend = b)
+        Ω1_host = mesh(d1, 11, true)
+        for label in (:selective, :empty, :total)
+            @test index_in_marker(Ω1_dev, label) == index_in_marker(Ω1_host, label)
+        end
+        @test count(index_in_marker(Ω1_dev, :selective)) > 0
+        @test count(index_in_marker(Ω1_dev, :empty)) == 0
+        @test count(index_in_marker(Ω1_dev, :total)) == 11
+
+        # 2D
+        d2 = domain(
+            interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0),
+            :selective => (p -> p[1] < 0.3f0 && p[2] < 0.3f0),
+            :empty => (p -> p[1] < 0.0f0),
+            :total => (p -> true)
+        )
+        Ω2_dev = mesh(d2, (9, 9), (true, true); backend = b)
+        Ω2_host = mesh(d2, (9, 9), (true, true))
+        for label in (:selective, :empty, :total)
+            @test index_in_marker(Ω2_dev, label) == index_in_marker(Ω2_host, label)
+        end
+
+        # 3D
+        d3 = domain(
+            interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0),
+            :selective => (p -> p[1] < 0.5f0 && p[2] < 0.5f0 && p[3] < 0.5f0),
+            :empty => (p -> p[1] < 0.0f0),
+            :total => (p -> true)
+        )
+        Ω3_dev = mesh(d3, (7, 7, 7), (true, true, true); backend = b)
+        Ω3_host = mesh(d3, (7, 7, 7), (true, true, true))
+        for label in (:selective, :empty, :total)
+            @test index_in_marker(Ω3_dev, label) == index_in_marker(Ω3_host, label)
+        end
+    end
+
+    @testset "#310: SeparableWeights Array/host_weights on a device space" begin
+        Ω = mesh(
+            domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)),
+            (5, 5), (true, true); backend = metal_backend()
+        )
+        W = gridspace(Ω)
+        w = weights(W, Bramble.Innerh())
+
+        a = Array(w)
+        @test length(a) == 25
+        @test isapprox(sum(a), 1.0f0; rtol = 1.0f-4)
+
+        hw = host_weights(w)
+        @test hw isa Bramble.SeparableWeights
+        @test Array(hw) ≈ a
+
+        err = try
+            w[CartesianIndex(1, 1)]
+            nothing
+        catch e
+            e
+        end
+        @test !isnothing(err)
+        @test occursin("host_weights", sprint(showerror, err))
+    end
+
+    @testset "#311: inner_Γ and normal_vector on a device space" begin
+        b = metal_backend()
+        n = 16
+        Ω_dev = mesh(
+            domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)), (n, n),
+            (true, true); backend = b
+        )
+        Ω_host = mesh(
+            domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)), (n, n),
+            (true, true)
+        )
+        W_dev = gridspace(Ω_dev)
+        W_host = gridspace(Ω_host)
+
+        # Non-constant: a constant integrand hides indexing errors.
+        f(p) = 1.0f0 + p[1]^2 + 2.0f0 * p[2]
+
+        u_dev = Rₕ(W_dev, f)
+        u_host = Rₕ(W_host, f)
+
+        for label in (:xmin, :ymax, :boundary)
+            g_dev = inner_Γ(u_dev, u_dev, label)
+            g_host = inner_Γ(u_host, u_host, label)
+            @test isapprox(g_dev, g_host; rtol = 1.0f-4)
+        end
+
+        nu_dev = normal_vector(W_dev, :ymax)
+        nu_host = normal_vector(W_host, :ymax)
+        for d in 1:2
+            @test Array(parent(nu_dev[d])) ≈ parent(nu_host[d])
+        end
+
+        # Outward and zero off the face: :ymax's normal is (0, 1) on the top row and
+        # zero everywhere else.
+        nx = Array(parent(nu_dev[1]))
+        @test all(==(0.0f0), nx)
+
+        ny = reshape(Array(parent(nu_dev[2])), n, n)
+        @test all(==(0.0f0), ny[:, 1:(n - 1)])
+        @test all(==(1.0f0), ny[:, n])
+    end
+
+    @testset "#312: interpolation between device spaces matches the host" begin
+        b = metal_backend()
+
+        # Non-linear: a constant or linear source would not exercise the corner
+        # weights the way a genuinely curved function does.
+        f(x) = x^2 - 2.0f0 * x + 1.0f0
+
+        # Device-to-device, refinement (5 -> 9) and coarsening (9 -> 5).
+        for (n_src, n_dst) in ((5, 9), (9, 5))
+            Ω_src_dev = mesh(domain(interval(0.0f0, 1.0f0)), n_src, true; backend = b)
+            Ω_dst_dev = mesh(domain(interval(0.0f0, 1.0f0)), n_dst, true; backend = b)
+            W_src_dev = gridspace(Ω_src_dev)
+            W_dst_dev = gridspace(Ω_dst_dev)
+
+            Ω_src_host = mesh(domain(interval(0.0f0, 1.0f0)), n_src, true)
+            Ω_dst_host = mesh(domain(interval(0.0f0, 1.0f0)), n_dst, true)
+            W_src_host = gridspace(Ω_src_host)
+            W_dst_host = gridspace(Ω_dst_host)
+
+            u_src_dev = Rₕ(W_src_dev, f)
+            u_src_host = Rₕ(W_src_host, f)
+
+            u_dst_dev = element(W_dst_dev, 0.0f0)
+            πₕ!(u_dst_dev, u_src_dev)
+            u_dst_host = element(W_dst_host, 0.0f0)
+            πₕ!(u_dst_host, u_src_host)
+
+            @test Array(parent(u_dst_dev)) ≈ parent(u_dst_host)
+
+            # host-to-device
+            u_dst_h2d = element(W_dst_dev, 0.0f0)
+            πₕ!(u_dst_h2d, u_src_host)
+            @test Array(parent(u_dst_h2d)) ≈ parent(u_dst_host)
+
+            # device-to-host
+            u_dst_d2h = element(W_dst_host, 0.0f0)
+            πₕ!(u_dst_d2h, u_src_dev)
+            @test parent(u_dst_d2h) ≈ parent(u_dst_host)
+        end
+
+        # Non-uniform device source mesh: exercises locate_cell's search path, not the
+        # closed-form uniform one.
+        Ω_src_nu_dev = mesh(domain(interval(0.0f0, 1.0f0)), 11, false; backend = b)
+        Ω_dst_dev = mesh(domain(interval(0.0f0, 1.0f0)), 15, true; backend = b)
+        W_src_nu_dev = gridspace(Ω_src_nu_dev)
+        W_dst_dev = gridspace(Ω_dst_dev)
+
+        coords = Array(points(Ω_src_nu_dev))
+        Ω_src_nu_host = mesh(domain(interval(0.0f0, 1.0f0)), 11, true)
+        set_points!(Ω_src_nu_host, coords)
+        W_src_nu_host = gridspace(Ω_src_nu_host)
+        Ω_dst_host = mesh(domain(interval(0.0f0, 1.0f0)), 15, true)
+        W_dst_host = gridspace(Ω_dst_host)
+
+        u_src_nu_dev = Rₕ(W_src_nu_dev, f)
+        u_src_nu_host = Rₕ(W_src_nu_host, f)
+
+        u_dst_dev = element(W_dst_dev, 0.0f0)
+        πₕ!(u_dst_dev, u_src_nu_dev)
+        u_dst_host = element(W_dst_host, 0.0f0)
+        πₕ!(u_dst_host, u_src_nu_host)
+
+        @test Array(parent(u_dst_dev)) ≈ parent(u_dst_host)
+
+        # 2D
+        f2(p) = p[1]^2 - 2.0f0 * p[1] * p[2] + p[2]^2
+
+        Ω1_2d_dev = mesh(
+            domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)), (5, 5),
+            (true, true); backend = b
+        )
+        Ω2_2d_dev = mesh(
+            domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)), (9, 9),
+            (true, true); backend = b
+        )
+        W1_2d_dev = gridspace(Ω1_2d_dev)
+        W2_2d_dev = gridspace(Ω2_2d_dev)
+
+        Ω1_2d_host = mesh(domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)), (5, 5), (true, true))
+        Ω2_2d_host = mesh(domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)), (9, 9), (true, true))
+        W1_2d_host = gridspace(Ω1_2d_host)
+        W2_2d_host = gridspace(Ω2_2d_host)
+
+        u1_2d_dev = Rₕ(W1_2d_dev, f2)
+        u2_2d_dev = element(W2_2d_dev, 0.0f0)
+        πₕ!(u2_2d_dev, u1_2d_dev)
+
+        u1_2d_host = Rₕ(W1_2d_host, f2)
+        u2_2d_host = element(W2_2d_host, 0.0f0)
+        πₕ!(u2_2d_host, u1_2d_host)
+
+        @test Array(parent(u2_2d_dev)) ≈ parent(u2_2d_host)
     end
 end
 

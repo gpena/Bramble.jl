@@ -186,6 +186,14 @@ end
 @generate_mesh_ntuple_func half_spacings
 
 """
+    host_points(Ωₕ::MeshnD{D}) -> NTuple{D, Vector}
+
+Return the per-axis [`host_points`](@ref)`(Ωₕ(i))` of each submesh, one bulk transfer per
+axis regardless of where that axis's storage lives (gpena/Bramble.jl#308).
+"""
+@generate_mesh_ntuple_func host_points
+
+"""
     spacings(Ωₕ::MeshnD{D}) -> NTuple{D, AbstractVector}
 
 Return the per-axis backward spacings as an `NTuple{D}` of vectors, where

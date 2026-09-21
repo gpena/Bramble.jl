@@ -226,7 +226,8 @@ function inner_Γ(
     mask = _face_mask(Val(D), labels)
     _no_faces(mask) && _throw_no_surface_labels()
     _check_surface_is_thin(Ωₕ, mask)
-    return _surface_sum(Ωₕ, mask, parent(uₕ), parent(vₕ))
+    policy = execution_policy(space(uₕ))
+    return _surface_sum(policy, Ωₕ, mask, parent(uₕ), parent(vₕ))
 end
 
 @noinline function _throw_no_surface_labels()
@@ -254,6 +255,107 @@ end
         acc += w * u[k] * v[k]
     end
     return acc
+end
+
+# Policy-dispatched entry point (gpena/Bramble.jl#311), the same shape as `_dot`/`_dot_masked`
+# (src/utils/linear_algebra.jl): a `CpuPolicy` reaches the host loop above unchanged, whatever
+# its concrete flavour, since `_surface_sum` above does no threading of its own; a `GpuPolicy`
+# reaches the device method below instead of scalar-indexing `u`/`v` and `half_spacings`.
+@inline _surface_sum(policy::ExecutionPolicy, Ωₕ, mask, u, v) = _surface_sum(
+    locality(policy), policy, Ωₕ, mask, u, v)
+
+@inline _surface_sum(::HostLocality, ::CpuSerial, Ωₕ, mask, u, v) = _surface_sum(Ωₕ, mask, u, v)
+@inline _surface_sum(::HostLocality, ::CpuThreaded, Ωₕ, mask, u, v) = _surface_sum(Ωₕ, mask, u, v)
+@inline _surface_sum(::HostLocality, ::CpuBatch, Ωₕ, mask, u, v) = _surface_sum(Ωₕ, mask, u, v)
+
+@noinline _surface_sum(loc::Locality, policy, Ωₕ, mask, u, v) = _throw_locality_mismatch(loc, policy)
+
+"""
+    _surface_sum(::DeviceLocality, ::GpuPolicy, Ωₕ, mask, u, v) -> Real
+
+Device counterpart of [`_surface_sum`](@ref) above: a canonical face (or a union of them) is
+a set of at most `2D` axis-aligned `(D-1)`-dimensional slices of the grid, so the CPU walk
+over every grid point -- reading `half_spacings` and `u`/`v` one scalar at a time -- becomes,
+per active face, one broadcasted reduction over that slice.
+
+`u` and `v` are reshaped to the grid's own `dims` (a view, not a copy). For each axis `d` and
+side (`min`/`max`) the mask marks, `selectdim` takes the boundary slice directly -- no mask
+array is built or walked here, unlike [`_dot_masked`](@ref)'s device path, since a coordinate
+face is already a contiguous slice rather than an arbitrary marked set. The transverse surface
+measure for that slice is built once from [`host_half_spacings`](@ref) (never read on the
+device), then copied onto `u`'s own device in one transfer via
+[`_transverse_weight_device`](@ref); the reduction itself is `sum(su .* sv .* w)`, no `@kernel`.
+
+Faces are summed independently rather than through one shared mask, exactly as the host
+`_surface_weight_dir` recursion does: a corner point on two active faces receives both
+faces' contributions, which is the intended, non-double-counting definition documented above
+`_face_mask`.
+"""
+@noinline function _surface_sum(
+        ::DeviceLocality, ::GpuPolicy, Ωₕ::AbstractMeshType{D}, mask,
+        u::AbstractVector, v::AbstractVector
+) where {D}
+    dims = npoints(Ωₕ, Tuple)
+    ur = reshape(u, dims)
+    vr = reshape(v, dims)
+    return _surface_sum_dirs(Ωₕ, mask, ur, vr, u, dims, Val(D), Val(D))
+end
+
+@inline _surface_sum_dirs(Ωₕ, mask, ur, vr, u, dims, ::Val{0}, ::Val{D}) where {D} = zero(eltype(ur)) *
+                                                                                     zero(eltype(vr)) * zero(eltype(Ωₕ))
+
+# One direction per rung, recursing on `Val(d)` for the same reason `_surface_weight_dir`
+# does: a closure over a runtime `d` would box it (gpena/Bramble.jl#146), and while this is
+# called `2D` times rather than once per grid point, there is no reason to give up the idiom
+# the host recursion already uses right next to it.
+@inline function _surface_sum_dirs(Ωₕ, mask, ur, vr, u, dims, ::Val{d}, ::Val{D}) where {d, D}
+    s = zero(eltype(ur)) * zero(eltype(vr)) * zero(eltype(Ωₕ))
+    mask[d][1] && (s += _boundary_face_sum(Ωₕ, ur, vr, u, Val(d), 1, Val(D)))
+    mask[d][2] && (s += _boundary_face_sum(Ωₕ, ur, vr, u, Val(d), dims[d], Val(D)))
+    return s + _surface_sum_dirs(Ωₕ, mask, ur, vr, u, dims, Val(d - 1), Val(D))
+end
+
+# `su`/`sv` and `w` share the same `(D-1)`-dimensional shape (the grid's `dims` with axis `d`
+# dropped), so the masked sum from `_surface_weight_dir` becomes one broadcasted reduction
+# over the slice instead of a per-point lookup.
+@inline function _boundary_face_sum(Ωₕ, ur, vr, u, ::Val{d}, idx::Int, ::Val{D}) where {d, D}
+    su = selectdim(ur, d, idx)
+    sv = selectdim(vr, d, idx)
+    w = _transverse_weight_device(Ωₕ, u, Val(d), Val(D))
+    return sum(su .* sv .* w)
+end
+
+# 1D has no transverse axis at all -- a face is a point of measure 1 (see the note above
+# `_face_of_symbol`) -- so this returns the same scalar `_transverse_measure` does, with no
+# device array built or transferred.
+@inline _transverse_weight_device(Ωₕ, u, ::Val{d}, ::Val{1}) where {d} = one(eltype(Ωₕ))
+
+"""
+    _transverse_weight_device(Ωₕ::AbstractMeshType{D}, u, ::Val{d}, ::Val{D}) -> AbstractArray
+
+The `(D-1)`-dimensional transverse surface measure for the face normal to axis `d`, as a
+device array matching `u`'s own backend.
+
+Built the way `_separable_weights_full` builds the full weight tensor -- one
+reshape per transverse axis so broadcasting multiplies them out to the full transverse shape
+-- except every factor here comes from [`host_half_spacings`](@ref) rather than a
+`SeparableWeights` factor that is already device-resident, since this is a fresh geometric
+quantity with nothing cached to read. The host tensor is built once, from vectors of length
+`O(n^{1/D})`, then copied onto `u`'s device in a single transfer -- never read back scalar by
+scalar the way `half_spacing` would on the host path.
+"""
+@inline function _transverse_weight_device(
+        Ωₕ::AbstractMeshType{D}, u, ::Val{d}, ::Val{D}
+) where {d, D}
+    factors = ntuple(Val(D - 1)) do k
+        e = k < d ? k : k + 1
+        hs = _apply_hs_logic.(host_half_spacings(Ωₕ(e)))
+        reshape(hs, ntuple(j -> j == k ? length(hs) : 1, D - 1))
+    end
+    hostw = reduce((a, b) -> a .* b, factors)
+    devw = similar(u, eltype(hostw), length(hostw))
+    copyto!(devw, vec(hostw))
+    return reshape(devw, size(hostw))
 end
 
 """

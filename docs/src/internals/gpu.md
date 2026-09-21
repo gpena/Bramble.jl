@@ -49,7 +49,7 @@ device-specific method in the package keys on `::DeviceLocality`, never on `::Gp
 A method written `f(::GpuPolicy, ...)` instead of `f(::DeviceLocality, ::GpuPolicy, ...)`
 is silently unreachable: `locality` is checked on the *storage*, and the dispatch tables
 this package builds (`_sweep_for!`/`_sweep_scatter_for!` in
-`src/utils/linear_algebra.jl`, `_resolve_device_mirror`/`_flush_device_scatter!`/
+`src/utils/linear_algebra.jl`, `_scatter_position`/`_scatter_add!`/`_flush_device_scatter!`/
 `_zero_stored!` in `src/form/bilinear_traversal.jl`) all branch on locality first, policy
 second. Keying on the policy alone skips that branch and never gets called.
 
@@ -101,6 +101,23 @@ own `vector`/`matrix`/`_backend_eye`/`_backend_zeros` allocation methods and a
 Once `ka_device` answers for a storage type, every `@kernel` in the extension is already
 available on it.
 
+**What a device sparse type must provide.** A device-resident CSR matrix that wants to
+plug into bilinear form assembly (gpena/Bramble.jl#313) carries a field named `mirror`,
+holding `rowptr`/`colval`/`nzval` host-side `Vector`s: `rowptr`/`colval` are host copies of
+the matrix's own CSR structure, carried in the matrix's own index type `Ti` rather than
+widened to `Int` -- on hardware where the device and host share physical memory (Apple
+Silicon's unified DRAM), an `Int`-hardcoded mirror would cost more host memory than the
+device arrays it stages for the moment `Ti` is narrower than `Int` -- and `nzval` is what a
+scatter into the matrix actually accumulates into (the device array itself is left alone
+until the sweep finishes). `src/form/bilinear_traversal.jl`'s `_scatter_position`/
+`_scatter_add!` read `A.mirror` straight off the matrix under `::DeviceLocality`, duck-typed
+rather than dispatched on a concrete type -- this file has no dependency on Metal or
+`GPUArrays` and cannot name `MetalSparseMatrixCSR` -- so any type providing this one field,
+of this shape, is a sparsity-search-and-scatter-ready backend with no further code in
+`src/form/` at all. `MetalSparseMatrixCSR` (`ext/BrambleMetalExt.jl`) builds its `mirror`
+once, when the matrix itself is built, straight from the host `Vector{Ti}`s already on hand
+before they are uploaded to the device -- no conversion, no separate transfer.
+
 ## Where the kernels live, and where they do not
 
 Every `@kernel` in the package lives in `ext/BrambleKernelAbstractionsExt.jl`. The file's
@@ -109,7 +126,7 @@ own header states the rule it holds itself to: written against
 device array type. The file mentions `Mtl`/`Metal` only inside comments stating this
 agnosticism rule -- there is no executable reference to Metal anywhere in it. It carries:
 
-- Mesh coordinate kernels (`_uniform_points_kernel!`, `_half_points_kernel!`,
+- Mesh coordinate kernels (`_half_points_kernel!`,
   `_spacing_kernel!`, `_half_spacing_kernel!`, `_refine_indices_kernel!`), one per
   `src/mesh/mesh1d.jl` CPU loop they mirror.
 - The generic `_gpu_for!`/`_gpu_scatter_for!` seam that `_sweep_for!`/`_sweep_scatter_for!`
@@ -179,7 +196,8 @@ JuliaGPU/Metal.jl#909's own convention that a row-parallel kernel needs row-majo
 system matrix's sparsity host-side with `SparseArrays.sparse!` -- the same combiner the
 `SparseMatrixCSC` method already uses -- and transfers it once with `metal_sparse_csr`.
 The matrix is *born* device-resident; nothing scatters into it element by element on the
-device.
+device. `metal_sparse_csr` also builds the matrix's `mirror` field at this point (below),
+straight from the host CSR arrays already in hand.
 
 ## Form assembly on a device
 
@@ -194,11 +212,74 @@ per call, and the walk reads that mirror instead of the device space. On a host 
 `host_weights` is a no-op (`host_weights(Wc) === Wc`, not a copy).
 
 Scatter never writes a device array element by element either. `_scatter_add!` for a
-`DeviceLocality` matrix accumulates into a host-resident mirror of the matrix's
-`nzval`/`colval`/`rowptr` (`_resolve_device_mirror`, `src/form/bilinear_traversal.jl`),
-resolved once before a sweep starts and threaded through every scatter call by hand rather
-than looked up again per entry. `_flush_device_scatter!` ends the sweep with one
-`copyto!(A.nzVal, mirror.nzval)` -- a single bulk transfer, not one write per nonzero.
+`DeviceLocality` matrix accumulates into `A`'s own `mirror` field
+(`src/form/bilinear_traversal.jl`) -- read straight off the matrix, never resolved from a
+cache -- and `_flush_device_scatter!` ends the sweep with one
+`copyto!(A.nzVal, A.mirror.nzval)`, a single bulk transfer, not one write per nonzero. See
+"What a device sparse type must provide" above for the field's shape.
+
+## A target architecture, not yet built
+
+Recorded in [gpena/Bramble.jl#317](https://github.com/gpena/Bramble.jl/issues/317) (the
+comment "Stated target architecture for the GPU path", 2026-09-21), so the decision does
+not have to be rederived later. Everything above this section describes what exists
+today: a host-discovered sparsity pattern, a `mirror` that scatter accumulates into, and
+one bulk `copyto!` per assembly. What follows is a *target* -- where the device path is
+headed if #317 decides a form still needs to assemble a full matrix on the device at all.
+None of it is built, and nothing above should be read as already following it.
+
+Across Metal, CUDA and ROCm, the target follows the architecture
+[cuda-dolfinx](https://github.com/bpachev/cuda-dolfinx) uses for DOLFINx:
+
+1. Mesh geometry, coefficients, constraint markers and the CSR structure would live
+   entirely on the device once uploaded; the host would never read or write matrix values
+   during assembly. That is what a design meant to work off unified memory needs, and it
+   is precisely what the current mirror path (above) does not do -- the mirror
+   deliberately keeps that structure host-readable.
+2. Scatter positions would be precomputed into a table instead of searched on every
+   assembly: a setup pass records the CSR position of every contribution once, and each
+   later assembly indexes that scatter position table rather than calling
+   `_scatter_position`. This is [gpena/Bramble.jl#318](https://github.com/gpena/Bramble.jl/issues/318),
+   the first piece of the architecture and the one that pays off under either outcome of
+   #317 -- it speeds up the host-side search that exists today exactly as much as it would
+   a future device scatter.
+3. Constrained entries would be carried in that table as a negative sentinel, so the
+   scatter kernel has no boundary-condition branch -- it skips whenever the position it
+   reads is negative.
+4. Accumulation would be atomic rather than colour-scheduled. `src/form/` colours
+   contributions into non-conflicting bands so CPU threads can scatter without a race; on
+   a device, an atomic add is meant to be cheaper than reproducing that colouring.
+
+Four qualifications travel with the decision, each one a defect if the architecture were
+copied without it:
+
+- **The table's interleave stride is a backend property, not the literal `32`.**
+  cuda-dolfinx hardcodes `warpSize` to keep the table's accesses coalesced. Apple
+  SIMD-groups and NVIDIA warps are both 32 wide, but AMD wavefronts are 64 on CDNA and 32
+  on RDNA -- hardcoding 32 would silently lose the coalescing on exactly the backend most
+  likely to need it.
+- **Metal's `Float32` atomic support has to be verified before any design leans on it.**
+  The scatter above rests entirely on a `Float32` atomic add; CUDA and ROCm have had it
+  for years, but what Metal.jl and Atomix expose through KernelAbstractions for Metal is
+  narrower and arrived later. If it turns out to be missing or slow, the design does not
+  degrade gracefully on its own -- the fallback is cuda-dolfinx's own rowwise variant,
+  which inverts the map so each thread owns a row and gathers its contributions by
+  recomputing them, avoiding atomics entirely.
+- **The runtime source generation cuda-dolfinx relies on is a workaround for its own
+  toolchain, and must not be copied.** cuda-dolfinx templates CUDA C into strings and
+  compiles them with NVRTC because FFCx hands it C kernels to wrap. Bramble does not have
+  that problem: one `@kernel` written against `KernelAbstractions.Backend` already covers
+  every device ("Where the kernels live, and where they do not", above) -- the thing
+  cuda-dolfinx's code generation works hardest for, this package already has for free.
+- **The diagonal/off-diagonal block split waits for v3.6.0.** It exists in cuda-dolfinx
+  only because PETSc matrices are MPI-distributed; Bramble has no MPI-distributed matrix
+  yet, so there is nothing for that split to do until one lands.
+
+None of this is settled. #317 has not yet decided how much of it a matrix-free operator
+apply would make unnecessary -- if the apply belongs matrix-free and only a coarser
+preconditioner operator stays assembled, the device-resident path above may never be
+worth building. [gpena/Bramble.jl#316](https://github.com/gpena/Bramble.jl/issues/316)
+(Metal shared storage) is blocked on that same decision.
 
 ## Traps worth knowing before touching any of this
 
@@ -228,8 +309,8 @@ than looked up again per entry. `_flush_device_scatter!` ends the sweep with one
   which is an asynchronous kernel on a device matrix with nothing ordering it against the
   later scatter flush; a late-landing zero-fill silently wiped entries the flush had
   already written. The fix removed the second writer instead of ordering the two:
-  `_zero_stored!` for a `DeviceLocality` matrix now zeroes the host-resident mirror alone
-  (`fill!(mirror.nzval, zero(...))`) rather than `A.nzVal` itself, since
+  `_zero_stored!` for a `DeviceLocality` matrix now zeroes `A`'s own mirror alone
+  (`fill!(A.mirror.nzval, zero(...))`) rather than `A.nzVal` itself, since
   `_flush_device_scatter!` already overwrites every stored entry from the mirror
   unconditionally. Any future device write needs the same discipline: order it against
   whatever else touches the same buffer, or remove the second writer, and do not trust a

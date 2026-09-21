@@ -37,6 +37,7 @@ matrix_type
 backend_types
 backend_eye
 backend_zeros
+metal_sparse_csr
 ka_device
 gpu_backend
 metal_backend
@@ -93,14 +94,17 @@ submeshes
 ```@docs
 npoints
 points
+host_points
 half_points
 half_point
 spacing
 forward_spacing
 half_spacing
 spacings
+host_spacings
 forward_spacings
 half_spacings
+host_half_spacings
 hₘₐₓ
 hₘᵢₙ
 stepsize
@@ -147,6 +151,7 @@ vector_gridspace
 ```@docs
 ndofs
 weights
+host_weights
 spaces
 space
 ncomponents

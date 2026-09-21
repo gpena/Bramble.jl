@@ -72,16 +72,106 @@ regardless of which, with no second counter of its own to keep in sync.
 
 @inline points(Ωₕ::Mesh1D) = Ωₕ.pts
 
+# `point` is the choke point every mesh iteration (`Base.iterate`, `Ωₕ[i]`, and `MeshnD`'s
+# per-submesh `point`) goes through one index at a time. A host-backed mesh reads straight
+# off `points(Ωₕ)`; a device-backed one throws a named error instead of attempting `N`
+# sequential scalar reads that its own scalar-indexing guard would refuse one at a time
+# anyway (gpena/Bramble.jl#308) -- call [`host_points`](@ref) once and index or iterate that
+# `Array` instead.
 @inline function point(Ωₕ::Mesh1D, i)
     idx = _extract_linear_index(i)
     _check_point_bounds(Ωₕ, idx, "point")
-    return @inbounds points(Ωₕ)[idx]
+    return _point(locality(typeof(points(Ωₕ))), Ωₕ, idx)
 end
 
+@inline _point(::HostLocality, Ωₕ::Mesh1D, idx) = @inbounds points(Ωₕ)[idx]
+@noinline _point(::DeviceLocality, Ωₕ::Mesh1D, idx) = _throw_no_scalar_point()
+
+# Kept out of `point` itself so its success path -- one type-level `locality` check the
+# compiler folds away -- is all that is ever compiled inline there, matching
+# `_throw_device_scalar_weights` (`space/scalar_gridspace.jl`).
+@noinline _throw_no_scalar_point() = error(
+    "point(Ωₕ, i) scalar-indexes a device-backed mesh's coordinates one point at a time, " *
+    "which its own scalar-indexing guard refuses -- and iterating the mesh (`for p in Ωₕ`, " *
+    "`Ωₕ[i]`, `collect(Ωₕ)`) goes through this same call once per point. Call " *
+    "host_points(Ωₕ) once to bring every coordinate to the host in a single transfer, then " *
+    "index or iterate that Array as many times as needed.",
+)
+
+"""
+    host_points(Ωₕ::Mesh1D) -> Vector
+
+Return [`points`](@ref)`(Ωₕ)` as a host-resident `Array`, in one bulk transfer regardless
+of where `Ωₕ`'s storage lives, the same way [`host_spacings`](@ref) does for
+[`spacings`](@ref) (gpena/Bramble.jl#308).
+
+[`point`](@ref)`(Ωₕ, i)` throws outright on a device-backed mesh rather than scalar-reading
+it one point at a time. Call this once instead to bring every coordinate to the host in a
+single transfer, then index the `Array` it returns as many times as needed --
+[`locate_cell`](@ref)'s non-uniform search does exactly that.
+
+On a host-backed mesh, `points(Ωₕ)` already is an `Array`, so this returns it directly with
+no copy -- `host_points(Ωₕ) === points(Ωₕ)`; only a device-backed mesh pays the one bulk
+`Array(...)` transfer.
+
+See also: [`host_spacings`](@ref), [`points`](@ref), [`point`](@ref).
+"""
+@inline host_points(Ωₕ::Mesh1D) = _host_points(locality(typeof(points(Ωₕ))), Ωₕ)
+
+@inline _host_points(::HostLocality, Ωₕ::Mesh1D) = points(Ωₕ)
+@inline _host_points(::DeviceLocality, Ωₕ::Mesh1D) = Array(points(Ωₕ))
+
+"""
+    locate_cell(Ωₕ::Mesh1D, x::Real) -> Int
+
+See [`locate_cell`](@ref)'s generic docstring (`mesh/queries.jl`) for the contract: the
+largest node index `i` with `pts[i] <= x`, clamped to `1:n-1` -- exactly what
+`searchsortedlast` on the point array answers, and what this method must keep answering,
+uniform or not.
+
+A uniform mesh answers with no array read at all, device-backed or not
+(gpena/Bramble.jl#308): a first estimate `clamp(floor(Int, (x - a) / h) + 1, 1, n - 1)` on
+the interval's own endpoint `a` and stepsize `h = (b - a) / (n - 1)`, matching how `_points!`
+built the grid, then one correction step against the closed-form coordinates of that
+estimate's own neighbouring nodes (`a + idx * h`, `a + (idx - 1) * h`) rather than the
+estimate's raw division. `(x - a) / h` rounds to either side of an integer at a node
+coordinate -- worse in `Float32` (Metal's only type, relative error ~1e-7) than in
+`Float64` (~1e-16) -- so the first estimate can land one cell short or one cell over at an
+exact grid point; the correction is what keeps this path agreeing with `searchsortedlast`
+there; see gpena/Bramble.jl#308 (round 2) for the measured Float64 disagreement this fixes.
+
+A non-uniform mesh has no formula to fall back on and searches [`host_points`](@ref)`(Ωₕ)`
+instead of the raw, possibly device-resident `points(Ωₕ)`.
+"""
 function locate_cell(Ωₕ::Mesh1D, x::Real)
-    pts = Ωₕ.pts
-    n = length(pts)
+    n = npoints(Ωₕ)
     n <= 1 && return 1
+
+    if is_uniform(Ωₕ)
+        a, b = extrema(Ωₕ.set)
+        h = (b - a) / (n - 1)
+        idx = floor(Int, (x - a) / h) + 1
+
+        # `idx` is a candidate for the largest node index with node <= x, built from
+        # `(x - a) / h` alone; that division can round either side of an integer at an
+        # exact node coordinate, so re-derive both of `idx`'s neighbouring nodes the same
+        # closed-form way (never by reading `pts`) and shift by one if `x` actually sits
+        # past the upper one or short of the lower one. At most one of the two branches
+        # below can fire, since they move `idx` in opposite directions.
+        upper = a + idx * h
+        if x >= upper
+            idx += 1
+        else
+            lower = a + (idx - 1) * h
+            if x < lower
+                idx -= 1
+            end
+        end
+
+        return clamp(idx, 1, n - 1)
+    end
+
+    pts = host_points(Ωₕ)
     if x <= pts[1]
         return 1
     elseif x >= pts[n]
@@ -126,6 +216,23 @@ See also: [`spacings`](@ref), [`spacing`](@ref), [`forward_spacing`](@ref).
 
 @inline _host_spacings(::HostLocality, Ωₕ::Mesh1D) = spacings(Ωₕ)
 @inline _host_spacings(::DeviceLocality, Ωₕ::Mesh1D) = Array(spacings(Ωₕ))
+
+"""
+    host_half_spacings(Ωₕ::Mesh1D) -> Vector
+
+Return [`half_spacings`](@ref)`(Ωₕ)` as a host-resident `Array`, in one bulk transfer
+regardless of where `Ωₕ`'s storage lives, the same way [`host_spacings`](@ref) does for
+[`spacings`](@ref) (gpena/Bramble.jl#307).
+
+On a host-backed mesh, `half_spacings(Ωₕ)` already is an `Array`, so this returns it
+directly with no copy; only a device-backed mesh pays the one bulk `Array(...)` transfer.
+
+See also: [`host_spacings`](@ref), [`half_spacings`](@ref), [`half_spacing`](@ref).
+"""
+@inline host_half_spacings(Ωₕ::Mesh1D) = _host_half_spacings(locality(typeof(half_spacings(Ωₕ))), Ωₕ)
+
+@inline _host_half_spacings(::HostLocality, Ωₕ::Mesh1D) = half_spacings(Ωₕ)
+@inline _host_half_spacings(::DeviceLocality, Ωₕ::Mesh1D) = Array(half_spacings(Ωₕ))
 
 """
     forward_spacings(Ωₕ::Mesh1D) -> AbstractVector
@@ -179,14 +286,24 @@ go through, so the same applies to both.
         spacings!(Ωₕ, vector(backend(Ωₕ), n))
     end
 
-    # The spacings come first: half_spacing! below reads them back through `spacing`.
-    spacing!(spacings(Ωₕ), Ωₕ)
+    # A device-backed mesh with at least two points fills its three derived arrays in the
+    # one fused, non-uniform-formula kernel (gpena/Bramble.jl#305) -- the same kernel
+    # `_mesh` dispatches to for a non-uniform device mesh at construction, and valid here
+    # for any points (uniform or not), since `set_points!` carries no uniformity flag to
+    # branch on. Everything else (host-backed, or a single/no-interval mesh) keeps the
+    # three separate passes; the spacings come first there, since half_spacing! below
+    # reads them back through `spacing`.
+    if n >= 2 && !(points(Ωₕ) isa Array)
+        _nonuniform_mesh1d_metrics!(Ωₕ)
+    else
+        spacing!(spacings(Ωₕ), Ωₕ)
 
-    # Re-compute the cell centers (half_pts) using the new grid points.
-    half_points!(half_points(Ωₕ), Ωₕ)
+        # Re-compute the cell centers (half_pts) using the new grid points.
+        half_points!(half_points(Ωₕ), Ωₕ)
 
-    # Re-compute the cell widths (half_spacings) using the new grid points.
-    half_spacing!(half_spacings(Ωₕ), Ωₕ)
+        # Re-compute the cell widths (half_spacings) using the new grid points.
+        half_spacing!(half_spacings(Ωₕ), Ωₕ)
+    end
 
     return nothing
 end
@@ -362,18 +479,25 @@ end
 # instead of adding a genuinely more specific dispatch (method overwriting is an error during
 # precompilation).
 """
-    _launch_uniform_points!(x::AbstractVector, a, h, dev) -> Nothing
+    _launch_uniform_mesh1d_init!(pts, half_pts, spacings, half_spacings, a, h, n::Int, dev) -> Nothing
 
-Fills `x` with `length(x)` uniformly spaced points starting at `a` with spacing `h`
-(`x[i] = a + (i - 1) * h`), via a `KernelAbstractions.@kernel` launch on `dev`, filled by
-`ext/BrambleKernelAbstractionsExt.jl`. The device counterpart of `_points!`'s uniform-branch
-CPU loop.
+Fills all four of a uniform mesh's arrays -- `pts`, `half_pts`, `spacings` and
+`half_spacings` -- in a single `KernelAbstractions.@kernel` launch on `dev`, over
+`1:(n + 1)` work items: `pts[i] = a + (i - 1) * h`, `spacings[i] = h`, `half_spacings[i] =
+h / 2` at `i = 1` or `i = n` and `h` elsewhere, and `half_pts[i] = a` at `i = 1`,
+`a + (n - 1) * h` at `i = n + 1`, and the midpoint formula in between. Every entry comes
+from `a`, `h` and `n` alone, with no read of `pts` itself -- the fusion of the uniform
+point fill, [`_launch_spacing!`](@ref), [`_launch_half_points!`](@ref)
+and [`_launch_half_spacing!`](@ref) into one kernel for a uniform device mesh
+(gpena/Bramble.jl#303).
 
 # Throws
 - `ErrorException`: no `KernelAbstractions` extension is loaded, so there is no device
   kernel to reach (`_throw_no_ka_mesh_kernel`).
 """
-_launch_uniform_points!(x, a, h, dev) = _throw_no_ka_mesh_kernel("_launch_uniform_points!")
+function _launch_uniform_mesh1d_init!(pts, half_pts, spacings, half_spacings, a, h, n, dev)
+    _throw_no_ka_mesh_kernel("_launch_uniform_mesh1d_init!")
+end
 
 """
     _launch_half_points!(x::AbstractVector, pts, n::Int, dev) -> Nothing
@@ -415,6 +539,29 @@ CPU loop.
 _launch_half_spacing!(x, h, n, dev) = _throw_no_ka_mesh_kernel("_launch_half_spacing!")
 
 """
+    _launch_nonuniform_mesh1d_metrics!(half_pts, spacings, half_spacings, pts, n::Int, dev) -> Nothing
+
+Fills a non-uniform mesh's three derived arrays -- `spacings`, `half_pts` and
+`half_spacings` -- in a single `KernelAbstractions.@kernel` launch on `dev`, over
+`1:(n + 1)` work items, from `pts` alone: `spacings[i] = pts[i] - pts[i - 1]` (`pts[2] -
+pts[1]` at `i = 1`); `half_pts[i] = (pts[i] + pts[i - 1]) / 2` for `2 <= i <= n`, with
+boundary entries `pts[1]` at `i = 1` and `pts[n]` at `i = n + 1`; and `half_spacings[i] =
+spacing(i) / 2` at `i = 1` or `i = n`, and the telescoped interior form `(pts[i + 1] -
+pts[i - 1]) / 2` elsewhere -- the fusion of [`_launch_spacing!`](@ref),
+[`_launch_half_points!`](@ref) and [`_launch_half_spacing!`](@ref) into one kernel for a
+non-uniform device mesh (gpena/Bramble.jl#305). Each thread reads only its own 3-point
+local stencil of `pts`, so `spacings` never has to be written to device memory before
+`half_spacings` can be computed from it.
+
+# Throws
+- `ErrorException`: no `KernelAbstractions` extension is loaded, so there is no device
+  kernel to reach (`_throw_no_ka_mesh_kernel`).
+"""
+function _launch_nonuniform_mesh1d_metrics!(half_pts, spacings, half_spacings, pts, n, dev)
+    _throw_no_ka_mesh_kernel("_launch_nonuniform_mesh1d_metrics!")
+end
+
+"""
     _launch_refine_indices!(new_points::AbstractVector, old_points, N_old::Int, dev) -> Nothing
 
 Fills `new_points` (length `2 * N_old - 1`) with the refined mesh: `new_points[2i - 1] =
@@ -427,12 +574,6 @@ old_points[i + 1]) / 2` inserts the midpoint at the even slot for `i < N_old`, v
 - `ErrorException`: no `KernelAbstractions` extension is loaded (`_throw_no_ka_mesh_kernel`).
 """
 _launch_refine_indices!(new_points, old_points, N_old, dev) = _throw_no_ka_mesh_kernel("_launch_refine_indices!")
-
-@noinline _throw_no_gpu_nonuniform_points() = error(
-    "non-uniform mesh point generation needs a GPU-compatible RNG and sort, which is not " *
-    "implemented for a device backend. Build this mesh with unif = true (the uniform " *
-    "path), or generate the points on the CPU and transfer them with set_points!.",
-)
 
 # Internal function to populate a vector `x` with grid point coordinates over a 1D interval `I`.
 @inline function _points!(x, I::CartesianProduct{1}, unif::Bool)
@@ -471,12 +612,19 @@ _launch_refine_indices!(new_points, old_points, N_old, dev) = _throw_no_ka_mesh_
     return nothing
 end
 
-# Device counterpart of the method above: same three cases (single point, uniform,
-# non-uniform), but the uniform fill goes through a device kernel instead of a scalar CPU
-# loop. Takes the mesh's `backend` explicitly, since `x` alone (unlike `Ωₕ` below) carries
-# no reference back to it.
+# Device counterpart of the method above, reached only for the two cases `_mesh` does not
+# route through the fused `_uniform_mesh1d_init!` kernel (gpena/Bramble.jl#303): a
+# single-point mesh, and a non-uniform one. `unif` and `backend` are carried to keep this
+# method's signature distinct from the `Array` one above -- with `unif` dropped, a
+# three-argument device method would be ambiguous with it. Past the single-point guard
+# `unif` is always `false`, so there is no uniform branch here to take. The non-uniform fill
+# has no device RNG/sort to launch, so it generates the coordinates on the host with the
+# same routine the `Array` method above uses, into a scratch `Vector`, and transfers them to
+# `x` in one `copyto!` (gpena/Bramble.jl#304) -- a one-time O(n) construction cost, not a
+# per-iteration one.
 function _points!(x::AbstractVector, I::CartesianProduct{1}, unif::Bool, backend)
     npts = length(x)
+    T = eltype(I)
     a, b = extrema(I)
 
     if npts == 1
@@ -484,11 +632,16 @@ function _points!(x::AbstractVector, I::CartesianProduct{1}, unif::Bool, backend
         return nothing
     end
 
-    unif || _throw_no_gpu_nonuniform_points()
+    cpu_pts = Vector{T}(undef, npts)
+    cpu_pts[1] = zero(T)
+    cpu_pts[npts] = one(T)
 
-    h = (b - a) / (npts - 1)
-    dev = ka_device(backend)
-    _launch_uniform_points!(x, a, h, dev)
+    v = view(cpu_pts, 2:(npts - 1))
+    _generate_random_points!(v)
+
+    @. cpu_pts = a + cpu_pts * (b - a)
+
+    copyto!(x, cpu_pts)
     return nothing
 end
 
@@ -591,6 +744,39 @@ function half_spacing!(x::AbstractVector, Ωₕ)
     return nothing
 end
 
+# Fused device counterpart of `_points!` + `spacing!` + `half_points!` + `half_spacing!`
+# together (gpena/Bramble.jl#303): one kernel launch fills `pts`, `half_pts`, `spacings`
+# and `half_spacings` from `a`, `h` and `n` alone. `_mesh` below is the only caller, before
+# a `Mesh1D` exists to pass in, which is why this takes the raw arrays rather than `Ωₕ`.
+@inline function _uniform_mesh1d_init!(
+        pts::AbstractVector,
+        half_pts,
+        spacings,
+        half_spacings,
+        a,
+        h,
+        n::Int,
+        backend
+)
+    dev = ka_device(backend)
+    _launch_uniform_mesh1d_init!(pts, half_pts, spacings, half_spacings, a, h, n, dev)
+    return nothing
+end
+
+# Fused device counterpart of `spacing!` + `half_points!` + `half_spacing!` together
+# (gpena/Bramble.jl#305): one kernel launch fills `spacings`, `half_pts` and
+# `half_spacings` from `pts` alone, over `1:(n + 1)` work items, reading only each thread's
+# own 3-point local stencil of `pts`. Dispatched from both `_mesh` (construction) and
+# `set_points!`, for any device-backed mesh with at least two points -- the formula is
+# correct whether or not the points happen to be evenly spaced.
+@inline function _nonuniform_mesh1d_metrics!(Ωₕ::Mesh1D)
+    n = npoints(Ωₕ)
+    pts = points(Ωₕ)
+    dev = ka_device(backend(Ωₕ))
+    _launch_nonuniform_mesh1d_metrics!(half_points(Ωₕ), spacings(Ωₕ), half_spacings(Ωₕ), pts, n, dev)
+    return nothing
+end
+
 # Internal constructor function for creating a 1D mesh.
 function _mesh(
         Ω::Domain{CartesianProduct{1, T}},
@@ -616,18 +802,42 @@ function _mesh(
 
     # Allocate a vector for the grid points using the specified backend.
     pts = vector(backend, n_points)
-    # Populate the vector with coordinates, either uniformly or non-uniformly. The device
-    # method needs `backend` itself (to reach `ka_device`), which `pts` alone does not carry.
-    if pts isa Array
-        _points!(pts, set, is_uniform)
-    else
-        _points!(pts, set, is_uniform, backend)
-    end
 
     # Allocate vectors for derived quantities (cell centers and widths).
     _half_pts = vector(backend, n_points + 1)
     _half_spacings = vector(backend, n_points)
     _spacings = vector(backend, n_points)
+
+    # A uniform, non-collapsed, device-backed mesh fills all four arrays above in the one
+    # fused kernel (gpena/Bramble.jl#303); a non-uniform, non-collapsed, device-backed mesh
+    # fills its three derived arrays in a different fused kernel instead
+    # (gpena/Bramble.jl#305), once `pts` itself is generated below; every other case
+    # (host-backed, or a single-point mesh) keeps going through the three separate
+    # derived-quantity kernels/loops.
+    fused_uniform_device = is_uniform && n_points >= 2 && !(pts isa Array)
+    fused_nonuniform_device = !is_uniform && n_points >= 2 && !(pts isa Array)
+
+    if fused_uniform_device
+        a, b = extrema(set)
+        h = (b - a) / (n_points - 1)
+        _uniform_mesh1d_init!(
+            pts,
+            _half_pts,
+            _spacings,
+            _half_spacings,
+            a,
+            h,
+            n_points,
+            backend
+        )
+    elseif pts isa Array
+        # Populate the vector with coordinates, either uniformly or non-uniformly.
+        _points!(pts, set, is_uniform)
+    else
+        # The device method needs `backend` itself (to reach `ka_device`), which `pts`
+        # alone does not carry.
+        _points!(pts, set, is_uniform, backend)
+    end
 
     # Generate the CartesianIndices for the grid.
     idxs = generate_indices(n_points)
@@ -647,11 +857,19 @@ function _mesh(
         0
     )
 
-    # Now, calculate the derived geometric quantities for the newly created mesh. The
-    # spacings come first: half_spacing! reads them back through `spacing`.
-    spacing!(spacings(mesh), mesh)
-    half_points!(half_points(mesh), mesh)
-    half_spacing!(half_spacings(mesh), mesh)
+    # The fused uniform path above already filled spacings/half_pts/half_spacings. A fused
+    # non-uniform device mesh has `pts` filled (by `_points!` above) but still needs its
+    # three derived arrays, from the one kernel `_nonuniform_mesh1d_metrics!` dispatches to
+    # (gpena/Bramble.jl#305). Everything else still needs the three separate
+    # derived-quantity passes; spacings come first there, since half_spacing! reads them
+    # back through `spacing`.
+    if fused_nonuniform_device
+        _nonuniform_mesh1d_metrics!(mesh)
+    elseif !fused_uniform_device
+        spacing!(spacings(mesh), mesh)
+        half_points!(half_points(mesh), mesh)
+        half_spacing!(half_spacings(mesh), mesh)
+    end
 
     # Finally, apply the domain markers to the mesh points.
     set_markers!(mesh, markers; warn_marker_mismatch)

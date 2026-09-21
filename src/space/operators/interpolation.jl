@@ -262,20 +262,52 @@ Every call here re-locates, via [`locate_cell`](@ref), which cell of `src`'s mes
 transferring a coefficient between two composite leaves, say) should build that once instead:
 see the [`interpolation_matrix`](@ref)-based method below, following the same "build the
 pattern once" shape [`allocate_system_matrix`](@ref)/[`assemble!`](@ref) already use.
+
+When `dest` and `src` are both host-backed, this evaluates `interpolate_at` pointwise as
+described above. When either is device-backed (gpena/Bramble.jl#312), the pointwise path
+would compile a device kernel around the host closure `x -> interpolate_at(src, x)` --
+which cannot compile, since `interpolate_at` dispatches, calls `locate_cell` and reads
+`src`'s own coefficients on the host. Instead, this assembles
+`interpolation_matrix(space(dest), space(src); outside)` once and runs it through the
+`mul!`-based method below, which uploads `P` and `src` next to `dest` as needed -- so a
+fill value (`outside::Number`, meaningless as a linear map) throws the same
+`ArgumentError` [`interpolation_matrix`](@ref) itself throws, naming that function.
 """
-@inline πₕ!(dest::VectorElement, src::VectorElement; outside = :error) = Rₕ!(
+@inline function πₕ!(dest::VectorElement, src::VectorElement; outside = :error)
+    return _πₕ!(locality(typeof(parent(dest))), locality(typeof(parent(src))), dest, src, outside)
+end
+
+@inline _πₕ!(::HostLocality, ::HostLocality, dest, src, outside) = Rₕ!(
     dest, x -> interpolate_at(src, x; outside)
 )
 
+# At least one of dest/src is device-backed: assemble the matrix once and reuse the
+# mul!-based method below rather than launching a host closure inside a device kernel.
+function _πₕ!(dest_loc, src_loc, dest, src, outside)
+    _validate_outside_linear(outside)
+    P = interpolation_matrix(space(dest), space(src); outside)
+    return πₕ!(dest, P, src)
+end
+
 """
-    πₕ!(dest::VectorElement, P::SparseMatrixCSC, src::VectorElement) -> VectorElement
+    πₕ!(dest::VectorElement, P::AbstractMatrix, src::VectorElement) -> VectorElement
 
 Fills `dest` via a precomputed [`interpolation_matrix`](@ref) `P` instead of re-locating
 each destination point's cell: `parent(dest) .= P * parent(src)`, computed in place via
-`mul!` (zero allocations, once `P` and `dest` already exist).
+`mul!`.
 
 `P` must be `interpolation_matrix(space(dest), space(src))` (or an equal-shape matrix
 built the same way) -- a mismatched size throws the usual `DimensionMismatch` from `mul!`.
+`interpolation_matrix` always returns a host `SparseMatrixCSC`, regardless of `dest`'s own
+backend (gpena/Bramble.jl#312): passing it straight to a device-backed `dest`/`src` would
+otherwise fall through `SparseArrays`' own generic sparse-times-vector method, which
+scalar-indexes the device vectors one entry at a time. So `P` and `src` are each brought
+to `dest`'s own locality first -- `P` uploaded with [`metal_sparse_csr`](@ref) if `dest` is
+device-backed and `P` is not already, `src` copied wholesale (never scalar-read) if its
+locality disagrees with `dest`'s -- and only then does `mul!` run, zero-allocation once
+`P` already lives next to `dest` and `src` (the loop in [`πₕ!`](@ref)'s own docstring
+above).
+
 Repeated interpolation between the same two meshes should build `P` once and reuse it here
 every subsequent call, exactly as `allocate_system_matrix`/`assemble!` split the sparsity
 pattern (expensive, built once) from refilling values (cheap, every step):
@@ -288,9 +320,33 @@ for step in 1:nsteps
 end
 ```
 """
-@inline function πₕ!(dest::VectorElement, P::SparseMatrixCSC, src::VectorElement)
-    mul!(parent(dest), P, parent(src))
+@inline function πₕ!(dest::VectorElement, P::AbstractMatrix, src::VectorElement)
+    dest_loc = locality(typeof(parent(dest)))
+    Pm = _πₕ_matrix(dest_loc, P)
+    xs = _πₕ_vector(dest_loc, parent(dest), parent(src))
+    mul!(parent(dest), Pm, xs)
     return dest
+end
+
+# `P` already lives at `dest`'s locality: nothing to move.
+@inline _πₕ_matrix(dest_loc, P) = _πₕ_matrix_at(dest_loc, locality(typeof(P)), P)
+@inline _πₕ_matrix_at(loc, ::T, P) where {T} = P
+
+# `dest` is device-backed and `P` is the host SparseMatrixCSC interpolation_matrix
+# returns: upload it once (gpena/Bramble.jl#250, #313), a bulk sparse-to-sparse transfer,
+# never a per-entry scalar write into device memory.
+@inline _πₕ_matrix_at(::DeviceLocality, ::HostLocality, P) = metal_sparse_csr(P)
+
+@inline _πₕ_vector(dest_loc, dest_parent, v) = _πₕ_vector_at(dest_loc, locality(typeof(v)), dest_parent, v)
+@inline _πₕ_vector_at(loc, ::T, dest_parent, v) where {T} = v
+
+# `src`'s locality disagrees with `dest`'s: move it in one bulk transfer (never a scalar
+# read/write) rather than have `mul!` fail trying to read across localities itself.
+@inline _πₕ_vector_at(::HostLocality, ::DeviceLocality, dest_parent, v) = Array(v)
+@inline function _πₕ_vector_at(::DeviceLocality, ::HostLocality, dest_parent, v)
+    xs = similar(dest_parent, length(v))
+    copyto!(xs, v)
+    return xs
 end
 
 """
@@ -313,16 +369,52 @@ undifferentiated `Wₕ`. `outside` is forwarded to [`interpolate_at`](@ref) unch
 # triplets instead of accumulating a value against one src's data, so the two are kept in
 # step by construction. `outside` is already validated down to :error/:clamp/:extrapolate
 # by `interpolation_matrix` before this runs (see this file's header note on why a fill
-# value cannot be represented here), so `_interp_cell_frac` below never returns `nothing`.
+# value cannot be represented here), so the fraction helpers below never see the fill-value
+# short-circuit `_interp_cell_frac` carries for `interpolate_at` alone.
+#
+# `point(Ωdest, ·)` and `_interp_cell_frac` both read straight off `points`/`points(Ωₕ(d))`,
+# which throws outright on a device-backed mesh (gpena/Bramble.jl#308) rather than
+# scalar-indexing it one point at a time. `host_points` (#308) is called exactly once per
+# mesh below -- not once per destination point -- so the whole assembly is a host loop over
+# host arrays regardless of where `Ωdest`/`Ωsrc` actually live; `locate_cell` (also #308) is
+# the one per-point mesh query left, already safe on a device mesh by construction.
+
+@inline function _interp_triplet_frac(Ωsrc::AbstractMeshType{1}, pts_src, x, outside::Symbol)
+    lo, hi = pts_src[1], pts_src[end]
+    xc = _interp_resolve_coord(x, lo, hi, outside)
+    i = locate_cell(Ωsrc, xc)
+    plo, phi = pts_src[i], pts_src[i + 1]
+    t = phi > plo ? (xc - plo) / (phi - plo) : zero(xc - plo)
+    return i, t
+end
+
+@inline function _interp_triplet_frac(
+        Ωsrc::AbstractMeshType{D}, pts_src::NTuple{D}, x, outside::Symbol
+) where {D}
+    xc = ntuple(Val(D)) do d
+        pts = pts_src[d]
+        _interp_resolve_coord(x[d], pts[1], pts[end], outside)
+    end
+    idx = locate_cell(Ωsrc, xc)
+    ts = ntuple(Val(D)) do d
+        pts = pts_src[d]
+        i = idx[d]
+        lo, hi = pts[i], pts[i + 1]
+        hi > lo ? (xc[d] - lo) / (hi - lo) : zero(xc[d] - lo)
+    end
+    return idx, ts
+end
 
 function _interpolation_triplets!(
         rows, cols, vals, Ωdest::AbstractMeshType, Ωsrc::AbstractMeshType{1}, outside::Symbol
 )
     li_dest = LinearIndices(indices(Ωdest))
+    pts_dest = host_points(Ωdest)
+    pts_src = host_points(Ωsrc)
     for i in indices(Ωdest)
-        x = point(Ωdest, i)
-        j, t = _interp_cell_frac(Ωsrc, x, outside)
         row = li_dest[i]
+        x = pts_dest[row]
+        j, t = _interp_triplet_frac(Ωsrc, pts_src, x, outside)
         push!(rows, row, row)
         push!(cols, j, j + 1)
         push!(vals, 1 - t, t)
@@ -334,11 +426,13 @@ function _interpolation_triplets!(
 ) where {D}
     li_dest = LinearIndices(indices(Ωdest))
     li_src = LinearIndices(indices(Ωsrc))
+    pts_dest = host_points(Ωdest)
+    pts_src = host_points(Ωsrc)
     for I in indices(Ωdest)
-        x = point(Ωdest, I)
-        idx, ts = _interp_cell_frac(Ωsrc, x, outside)
-
         row = li_dest[I]
+        x = ntuple(d -> pts_dest[d][I[d]], Val(D))
+        idx, ts = _interp_triplet_frac(Ωsrc, pts_src, x, outside)
+
         for corner in CartesianIndices(ntuple(_ -> 0:1, Val(D)))
             push!(rows, row)
             push!(cols, li_src[idx + corner])

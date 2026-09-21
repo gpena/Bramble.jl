@@ -138,7 +138,7 @@ end
 # `_sweep_for!`/`_sweep_scatter_for!` hand a `(DeviceLocality, GpuPolicy)` pair to
 # `_gpu_for!`/`_gpu_scatter_for!` rather than refusing it outright. Both are declared here
 # with their array/index/kernel arguments deliberately untyped -- matching the `ka_device`/
-# `_launch_uniform_points!` fallback idiom (`src/utils/device_kernels.jl`,
+# `_launch_half_points!` fallback idiom (`src/utils/device_kernels.jl`,
 # `src/mesh/mesh1d.jl`) -- so `ext/BrambleKernelAbstractionsExt.jl` can add a strictly more
 # specific method (typed on `AbstractArray`) instead of overwriting this one. Without that
 # extension loaded, both fall straight through to the same `_throw_gpu_in_cpu_loop` message

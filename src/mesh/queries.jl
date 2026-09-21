@@ -16,27 +16,70 @@
 #------------------------------------------------------------------------------------------#
 
 """
-    is_uniform(Ωₕ::AbstractMeshType; tol = 1e-10) -> Bool
+    is_uniform(Ωₕ::AbstractMeshType; tol = nothing) -> Bool
 
-Check whether the mesh has uniform spacing (within numerical tolerance `tol`).
+Check whether the mesh has uniform spacing, within a numerical tolerance.
+
+When `tol` is not given, the tolerance is `_default_is_uniform_tol(eltype(Ωₕ), h₁, n)`, which
+keeps today's `1e-10` for `Float64` and widens it for `Float32` (gpena/Bramble.jl#307); see
+that function for the measurement behind the constant. Passing `tol` explicitly uses it
+verbatim, with no further scaling.
 """
-function is_uniform(Ωₕ::AbstractMeshType{1}; tol = 1e-10)
-    n = npoints(Ωₕ)
+function is_uniform(Ωₕ::AbstractMeshType{1}; tol = nothing)
+    h = host_spacings(Ωₕ)
+    n = length(h)
     if n <= 1
         return true
     end
 
-    h_ref = spacing(Ωₕ, 1)
+    h_ref = h[1]
+    atol = tol === nothing ? _default_is_uniform_tol(eltype(Ωₕ), h_ref, n) : tol
     @inbounds for i in 2:n
-        if abs(spacing(Ωₕ, i) - h_ref) >= tol
+        if abs(h[i] - h_ref) >= atol
             return false
         end
     end
     return true
 end
 
-function is_uniform(Ωₕ::AbstractMeshType{D}; tol = 1e-10) where {D}
+function is_uniform(Ωₕ::AbstractMeshType{D}; tol = nothing) where {D}
     return all(i -> is_uniform(Ωₕ(i); tol = tol), 1:D)
+end
+
+# Float64 keeps the historical bare `1e-10`: eps(Float64) times a mesh span of order 1 is
+# ~2e-16, so the floor below always wins and nothing changes for an existing Float64 mesh
+# (gpena/Bramble.jl#307's constraint 1).
+#
+# Float32 is Metal's only floating type, and its uniform-mesh construction
+# (`x[i] = a + (i - 1) * h` in `_points!`, then `pts[i] - pts[i - 1]` in `spacing!`,
+# `src/mesh/mesh1d.jl`) leaves a few ULPs of drift between spacings that are mathematically
+# equal. That drift tracks the mesh's span, not `h_ref` alone -- `n * abs(h_ref)` estimates
+# the span of a uniform mesh without any extra array read -- so the eps term below scales
+# with it instead of with `h_ref` directly, which would need a forever-growing constant as
+# the mesh is refined (`h_ref` shrinks while the span, and the rounding it carries, does
+# not). The span is used as-is, with no lower clamp: clamping it to `one(T)` would pin the
+# tolerance at `4 * eps(T)` for a sub-unit domain while the mesh's own spacings keep
+# shrinking with it, so a genuinely non-uniform mesh on, say, a micrometre-scale domain
+# would come out uniform. Below span 1, the `1e-10` floor takes over instead, which is
+# already far under any spacing spread worth calling non-uniform (see the b = 1e-6 row in
+# the measurement below).
+#
+# `c = 4` was picked from measuring this repo's own drift on a uniform Float32 mesh, host
+# backend, `n * abs(h_ref)` in parentheses: 2.24e-8 (n = 10, span 1.0), 6.71e-8 (n = 16, span
+# 1.0), 6.15e-8 (n = 64, span 1.0). `4 * eps(Float32) * 1.0 ≈ 4.77e-7` clears the worst of
+# those (6.71e-8) with over 7x to spare. A genuinely non-uniform Float32 mesh at span 1 sits
+# many orders of magnitude past this floor; at span 1e-6 (n = 16) the eps term itself falls
+# to ~4.8e-13, so the `1e-10` floor takes over, and a non-uniform mesh's spread there
+# (~3.2e-7) clears it by three orders of magnitude.
+#
+# Returns `T`, not `Float64`: `1e-10` is a `Float64` literal, and without the `T(...)`
+# conversion every call would promote the per-point comparison in `is_uniform` to `Float64`
+# regardless of `T`. `T(1e-10)` underflows to `0` for `Float16` (below its smallest
+# subnormal), which is harmless here since the `eps(T)` term already dominates at any `T`
+# fine enough to underflow the floor.
+@inline function _default_is_uniform_tol(::Type{T}, h_ref, n) where {T}
+    span = n * abs(h_ref)
+    return max(T(1e-10), 4 * eps(T) * span)
 end
 
 #------------------------------------------------------------------------------------------#
@@ -123,8 +166,9 @@ See also: [`is_uniform`](@ref), [`spacing`](@ref).
 """
 @inline function stepsize(Ωₕ::AbstractMeshType{1})
     is_uniform(Ωₕ) || _throw_not_uniform()
-    npoints(Ωₕ) <= 1 && return zero(eltype(Ωₕ))
-    return spacing(Ωₕ, 2)
+    h = host_spacings(Ωₕ)
+    length(h) <= 1 && return zero(eltype(Ωₕ))
+    return h[2]
 end
 
 @inline function stepsize(Ωₕ::AbstractMeshType{D}) where {D}

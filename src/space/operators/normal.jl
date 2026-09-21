@@ -43,14 +43,51 @@ function normal_vector(Wₕ::ScalarGridSpace{D}, marker::Symbol) where {D}
     np = npoints(Ωₕ, Tuple)
     lin = LinearIndices(indices(Ωₕ))
 
-    nₕ = ntuple(_ -> element(Wₕ, zero(eltype(Wₕ))), Val(D))
+    # `element(Wₕ, zero(eltype(Wₕ)))` fills through the `VectorElement` wrapper's generic
+    # `setindex!`, which scalar-writes a device array once per point (a gap in
+    # `element(::AbstractSpaceType, ::Number)`, src/space/vectorelement.jl, outside this
+    # file's ownership). Building the element uninitialized and zeroing its `parent` directly
+    # reaches the array's own `fill!` instead -- correct and no slower on a host array either.
+    T = eltype(Wₕ)
+    nₕ = ntuple(_ -> element(Wₕ, T), Val(D))
+    for d in 1:D
+        fill!(parent(nₕ[d]), zero(T))
+    end
+    _fill_normal!(locality(backend(Wₕ)), nₕ, Ωₕ, mask, ν, np, lin, Val(D))
+    return nₕ
+end
+
+# Host fill: the per-point loop `normal_vector` always ran, moved behind a locality-dispatched
+# helper (gpena/Bramble.jl#311) so a device-backed space can take the bulk-copy path below
+# instead, without duplicating the mask/index setup above in a second method.
+@inline function _fill_normal!(::HostLocality, nₕ, Ωₕ, mask, ν, np, lin, ::Val{D}) where {D}
     @inbounds for I in indices(Ωₕ)
         _on_face(mask, I, np, Val(D)) || continue
+        k = lin[I]
         for d in 1:D
-            parent(nₕ[d])[lin[I]] = ν[d]
+            parent(nₕ[d])[k] = ν[d]
         end
     end
-    return nₕ
+    return nothing
+end
+
+# Device counterpart: the loop above would scalar-write a device array once per boundary
+# point. Fill one host buffer per component with the same loop, then `copyto!` it onto the
+# device array once -- one transfer per component instead of one write per boundary point.
+@noinline function _fill_normal!(::DeviceLocality, nₕ, Ωₕ, mask, ν, np, lin, ::Val{D}) where {D}
+    T = eltype(parent(nₕ[1]))
+    host = ntuple(_ -> zeros(T, length(lin)), Val(D))
+    @inbounds for I in indices(Ωₕ)
+        _on_face(mask, I, np, Val(D)) || continue
+        k = lin[I]
+        for d in 1:D
+            host[d][k] = ν[d]
+        end
+    end
+    for d in 1:D
+        copyto!(parent(nₕ[d]), host[d])
+    end
+    return nothing
 end
 
 # Whether `I` lies on any face of the mask. `_surface_weight` asks the same question per

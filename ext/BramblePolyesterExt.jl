@@ -157,38 +157,35 @@ end
 # why a bilinear `assemble!` under `CpuBatch` still reached the `src/` error stub with
 # Polyester loaded.
 #
-# `mirror = nothing` (gpena/Bramble.jl#94, S4.2): added to the `CpuThreaded` reference
-# signature after this extension was first written, to thread a resolved device-sparse
-# mirror through the sweep instead of `_scatter_position`/`_scatter_add!` re-resolving it
-# from `A` on every scattered entry (`bilinear_traversal.jl`'s own `_resolve_device_mirror`
-# docstring has the full story). This extension's copy went stale when that arity changed --
-# the call from `_sweep_band_colour!`/`_sweep_bilinear_colour!` started arriving with a
-# trailing `mirror` argument these methods did not accept, so it silently stopped matching
-# and fell through to the `src/` stub, whose error ("you forgot to load Polyester") was
-# actively wrong: Polyester *was* loaded, the arity just no longer matched. `mirror` is always
-# `nothing` here in practice -- a `CpuBatch` backend's storage is host-only (`CpuPolicy`
-# claims `HostLocality`, `Backend`'s own inner constructor enforces vector/matrix/policy
-# locality agreement, `src/utils/backend.jl`), so `add_to_sparse!(..., mirror)` always takes
-# its `mirror === nothing` branch below -- but the parameter still has to exist for the call
-# to dispatch here at all, and it is forwarded rather than dropped so this file does not need
-# updating again the next time a device-only feature adds another one.
+# A trailing device-only parameter once lived here (gpena/Bramble.jl#94, S4.2), threading a
+# resolved device-sparse staging object through the sweep by hand. Adding it to the
+# `CpuThreaded` reference signature in `bilinear_execution.jl` without updating this
+# extension's copy is exactly what caused the precompilation failure above: the arities
+# stopped matching, dispatch silently fell through to the `src/` error stub, and its message
+# ("you forgot to load Polyester") was actively wrong -- Polyester *was* loaded, the arity just
+# no longer matched. gpena/Bramble.jl#313 removed the parameter for good: a device sparse
+# matrix now carries the staging object as a field of its own, so `add_to_sparse!` reads it
+# off `A` directly and nothing device-specific is threaded through the sweep chain at all.
+# Kept as a cautionary comment rather than deleted outright -- the next signature this
+# extension has to match should be diffed against `bilinear_execution.jl` rather than assumed
+# unchanged.
 
 function Bramble._batch_bilinear_colour_sweep!(
-        A::AbstractMatrix, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset, α, mirror = nothing
+        A::AbstractMatrix, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset, α
 )
     @batch for I in idxs
-        _scatter_point!(A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α, mirror)
+        _scatter_point!(A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α)
     end
     return nothing
 end
 
 function Bramble._batch_bilinear_band_sweep!(
-        A::AbstractMatrix, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset, col_offset, α, mirror = nothing
+        A::AbstractMatrix, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset, col_offset, α
 )
     @batch for b in bidx
         for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
             _scatter_point!(
-                A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α, mirror
+                A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α
             )
         end
     end

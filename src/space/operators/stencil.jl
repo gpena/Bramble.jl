@@ -379,7 +379,7 @@ explicitly.
 
 `Ωₕ` is typed as `Union{AbstractMeshType, _HostAxisSpacings}` rather than `AbstractMeshType`
 alone: every method below reads its mesh through `_axis_spacing`/`_axis_forward_spacing`/
-`_axis_npoints`/`_axis_eltype` only, and [`_HostAxisSpacings`](@ref) answers exactly those
+`_axis_npoints`/`_axis_eltype` only, and `_HostAxisSpacings` answers exactly those
 four without claiming to be a mesh (see its own docstring).
 """
 @inline _stencil_weights(

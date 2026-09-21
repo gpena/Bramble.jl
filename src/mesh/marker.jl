@@ -295,15 +295,38 @@ end
     __process_condition!(mesh_marker::BitVector, identifier, Ωₕ::AbstractMeshType) -> Nothing
 
 Core logic for evaluating a function-based (level-set) marker predicate across all mesh points.
+
+Reads coordinates once through [`host_points`](@ref) rather than [`point`](@ref)`(Ωₕ, idx)`
+per point, so `identifier` -- an arbitrary user predicate that must keep running on the
+host -- is evaluated against a host-resident array whether `Ωₕ` itself is device-backed or
+not (gpena/Bramble.jl#309).
 """
 function __process_condition!(mesh_marker, identifier, Ωₕ)
+    pts = host_points(Ωₕ)
     linear_indices = LinearIndices(npoints(Ωₕ, Tuple))
     @inbounds for idx in indices(Ωₕ)
-        if identifier(point(Ωₕ, idx))
+        if identifier(_condition_point(pts, idx))
             mesh_marker[linear_indices[idx]] = true
         end
     end
     return nothing
+end
+
+"""
+    _condition_point(pts, idx) -> Union{Real, NTuple}
+
+Read the coordinate at `idx` from `pts`, [`host_points`](@ref)`(Ωₕ)`'s return value.
+
+A `Mesh1D` gives a `Vector` and `idx` is a `CartesianIndex{1}`; a `MeshnD` gives the
+per-axis `NTuple{D, Vector}` and `idx` is a `CartesianIndex{D}`, assembled here into the
+coordinate tuple the same way [`point`](@ref)`(Ωₕ::MeshnD, idx)` does.
+"""
+@inline _condition_point(pts::AbstractVector, idx::CartesianIndex{1}) = @inbounds pts[idx[1]]
+
+@inline function _condition_point(
+        pts::NTuple{D, AbstractVector}, idx::CartesianIndex{D}
+) where {D}
+    return ntuple(d -> (@inbounds pts[d][idx[d]]), Val(D))
 end
 
 """

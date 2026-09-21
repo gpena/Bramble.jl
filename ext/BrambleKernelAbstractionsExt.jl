@@ -30,10 +30,11 @@ using Bramble: Bramble
 using KernelAbstractions: KernelAbstractions, @kernel, @index, @Const, synchronize, get_backend
 
 import Bramble:
-                _launch_uniform_points!,
+                _launch_uniform_mesh1d_init!,
                 _launch_half_points!,
                 _launch_spacing!,
                 _launch_half_spacing!,
+                _launch_nonuniform_mesh1d_metrics!,
                 _launch_refine_indices!,
                 _gpu_for!,
                 _gpu_scatter_for!,
@@ -53,17 +54,40 @@ import Bramble:
                 ka_synchronize
 
 # ---------------------------------------------------------------------------
-# `_points!` uniform branch (src/mesh/mesh1d.jl:322-324 is the CPU original)
+# Fused uniform mesh init (gpena/Bramble.jl#303, S9 of
+# .agents/plans/v3-4-0-device-quirks-and-kernels.md): one kernel over `1:(n + 1)` fills
+# points, spacings, half points and half spacings together, replacing a uniform point fill
+# plus the three sequential launches below (`_launch_spacing!`, `_launch_half_points!`,
+# `_launch_half_spacing!`) for a uniform device mesh. Every entry is closed-form arithmetic
+# on `a`, `h` and `n` alone -- unlike `_half_points_kernel!`/`_half_spacing_kernel!` below,
+# which read `pts`/`h` back from global memory, this kernel reads nothing. `src/mesh/mesh1d.jl`
+# dispatches only the uniform, non-collapsed, device-backed, `n >= 2` case here; a
+# non-uniform or host-backed mesh keeps going through the three kernels below.
 # ---------------------------------------------------------------------------
 
-@kernel function _uniform_points_kernel!(x, a, h)
+@kernel function _uniform_mesh1d_init_kernel!(pts, half_pts, spacings, half_spacings, a, h, n)
     i = @index(Global)
-    @inbounds x[i] = a + (i - 1) * h
+    @inbounds begin
+        if i <= n
+            pts[i] = a + (i - 1) * h
+            spacings[i] = h
+            half_spacings[i] = (i == 1 || i == n) ? h / 2 : h
+        end
+        if i == 1
+            half_pts[i] = a
+        elseif i == n + 1
+            half_pts[i] = a + (n - 1) * h
+        else
+            half_pts[i] = a + (2i - 3) * h / 2
+        end
+    end
 end
 
-function _launch_uniform_points!(x::AbstractVector, a, h, dev)
-    _uniform_points_kernel!(dev)(x, a, h; ndrange = length(x))
-    synchronize(dev)
+function _launch_uniform_mesh1d_init!(
+        pts::AbstractVector, half_pts::AbstractVector, spacings::AbstractVector,
+        half_spacings::AbstractVector, a, h, n::Int, dev
+)
+    _uniform_mesh1d_init_kernel!(dev)(pts, half_pts, spacings, half_spacings, a, h, n; ndrange = n + 1)
     return nothing
 end
 
@@ -84,7 +108,6 @@ end
 
 function _launch_half_points!(x::AbstractVector, pts, n::Int, dev)
     _half_points_kernel!(dev)(x, pts, n; ndrange = n + 1)
-    synchronize(dev)
     return nothing
 end
 
@@ -103,7 +126,6 @@ end
 
 function _launch_spacing!(x::AbstractVector, pts, n::Int, dev)
     _spacing_kernel!(dev)(x, pts, n; ndrange = n)
-    synchronize(dev)
     return nothing
 end
 
@@ -124,7 +146,56 @@ end
 
 function _launch_half_spacing!(x::AbstractVector, h, n::Int, dev)
     _half_spacing_kernel!(dev)(x, h, n; ndrange = n)
-    synchronize(dev)
+    return nothing
+end
+
+# ---------------------------------------------------------------------------
+# Fused non-uniform mesh metrics (gpena/Bramble.jl#305, S10 of
+# .agents/plans/v3-4-0-device-quirks-and-kernels.md): one kernel over `1:(n + 1)` work
+# items fills `spacings`, `half_pts` and `half_spacings` together from `pts` alone,
+# replacing the three sequential launches above (`_launch_spacing!`, `_launch_half_points!`,
+# `_launch_half_spacing!`) for a non-uniform device mesh. Each thread reads only its own
+# 3-point local stencil of `pts` -- unlike `_half_spacing_kernel!` above, which reads
+# `spacings` back from global memory, the interior half spacing here telescopes to
+# `(pts[i + 1] - pts[i - 1]) / 2`, so `spacings` never has to be written to memory before
+# this kernel can read it back. `src/mesh/mesh1d.jl` dispatches a non-uniform,
+# non-collapsed, device-backed, `n >= 2` mesh here, at both construction and
+# `set_points!`; the formula is correct for any coordinates, not only genuinely
+# non-uniform ones, which is what lets `set_points!` (with no uniformity flag to branch
+# on) use it unconditionally for a device destination.
+# ---------------------------------------------------------------------------
+
+@kernel function _nonuniform_mesh1d_metrics_kernel!(half_pts, spacings, half_spacings, @Const(pts), n)
+    i = @index(Global)
+    @inbounds begin
+        if i <= n
+            if i == 1
+                h = pts[2] - pts[1]
+                spacings[i] = h
+                half_spacings[i] = h / 2
+                half_pts[i] = pts[1]
+            elseif i == n
+                h = pts[i] - pts[i - 1]
+                spacings[i] = h
+                half_spacings[i] = h / 2
+                half_pts[i] = (pts[i] + pts[i - 1]) / 2
+            else
+                spacings[i] = pts[i] - pts[i - 1]
+                half_spacings[i] = (pts[i + 1] - pts[i - 1]) / 2
+                half_pts[i] = (pts[i] + pts[i - 1]) / 2
+            end
+        end
+        if i == n + 1
+            half_pts[i] = pts[n]
+        end
+    end
+end
+
+function _launch_nonuniform_mesh1d_metrics!(
+        half_pts::AbstractVector, spacings::AbstractVector, half_spacings::AbstractVector,
+        pts::AbstractVector, n::Int, dev
+)
+    _nonuniform_mesh1d_metrics_kernel!(dev)(half_pts, spacings, half_spacings, pts, n; ndrange = n + 1)
     return nothing
 end
 
@@ -144,7 +215,6 @@ end
 
 function _launch_refine_indices!(new_points::AbstractVector, old_points, N_old::Int, dev)
     _refine_indices_kernel!(dev)(new_points, old_points, N_old; ndrange = N_old)
-    synchronize(dev)
     return nothing
 end
 
@@ -200,7 +270,6 @@ function _gpu_for!(policy, v::AbstractArray, idxs, f)
     dev = get_backend(v)
     try
         _generic_for_kernel!(dev)(v, idxs, f; ndrange = length(idxs))
-        synchronize(dev)
     catch err
         _wrap_device_kernel_error(err, "_gpu_for!")
     end
@@ -218,7 +287,6 @@ function _gpu_scatter_for!(policy, mats::Tuple, idxs, g)
     dev = get_backend(mats[1])
     try
         _generic_scatter_kernel!(dev)(mats, idxs, g; ndrange = length(idxs))
-        synchronize(dev)
     catch err
         _wrap_device_kernel_error(err, "_gpu_scatter_for!")
     end
@@ -235,7 +303,6 @@ end
 function _launch_restriction!(v::AbstractVector, pts::AbstractVector, f, dev)
     try
         _restriction_kernel!(dev)(v, pts, f; ndrange = length(v))
-        synchronize(dev)
     catch err
         _wrap_device_kernel_error(err, "Rₕ!")
     end
@@ -251,7 +318,6 @@ end
 function _launch_restriction_scatter!(mats::Tuple, pts::AbstractVector, f, dev)
     try
         _restriction_scatter_kernel!(dev)(mats, pts, f; ndrange = length(pts))
-        synchronize(dev)
     catch err
         _wrap_device_kernel_error(err, "Rₕ!")
     end
@@ -275,7 +341,6 @@ end
 function _launch_restriction_nd!(v::AbstractVector, pts::Tuple, idxs, f, dev)
     try
         _restriction_nd_kernel!(dev)(v, pts, idxs, f; ndrange = length(v))
-        synchronize(dev)
     catch err
         _wrap_device_kernel_error(err, "Rₕ!")
     end
@@ -293,7 +358,6 @@ end
 function _launch_restriction_scatter_nd!(mats::Tuple, pts::Tuple, idxs, f, dev)
     try
         _restriction_scatter_nd_kernel!(dev)(mats, pts, idxs, f; ndrange = length(idxs))
-        synchronize(dev)
     catch err
         _wrap_device_kernel_error(err, "Rₕ!")
     end
@@ -314,7 +378,6 @@ end
 function _launch_cell_average!(v::AbstractVector, x::AbstractVector, nodes, wts, f, dev)
     try
         _cell_average_kernel!(dev)(v, x, nodes, wts, f; ndrange = length(v))
-        synchronize(dev)
     catch err
         _wrap_device_kernel_error(err, "avgₕ!")
     end
@@ -331,7 +394,6 @@ function _launch_cell_average_scatter!(mats::Tuple, x::AbstractVector, nodes, wt
     n = length(x) - 1
     try
         _cell_average_scatter_kernel!(dev)(mats, x, nodes, wts, f; ndrange = n)
-        synchronize(dev)
     catch err
         _wrap_device_kernel_error(err, "avgₕ!")
     end
@@ -351,7 +413,6 @@ end
 function _launch_cell_average_nd!(v::AbstractVector, x::Tuple, idxs, nodes, wts, f, dev)
     try
         _cell_average_nd_kernel!(dev)(v, x, idxs, nodes, wts, f; ndrange = length(v))
-        synchronize(dev)
     catch err
         _wrap_device_kernel_error(err, "avgₕ!")
     end
@@ -368,7 +429,6 @@ end
 function _launch_cell_average_scatter_nd!(mats::Tuple, x::Tuple, idxs, nodes, wts, f, dev)
     try
         _cell_average_scatter_nd_kernel!(dev)(mats, x, idxs, nodes, wts, f; ndrange = length(idxs))
-        synchronize(dev)
     catch err
         _wrap_device_kernel_error(err, "avgₕ!")
     end
@@ -417,7 +477,6 @@ end
 function _launch_difference_onesided!(out::AbstractVector, in_ref, h, dims::Tuple, dir, dim_val::Val, dev)
     try
         _difference_onesided_kernel!(dev)(out, in_ref, h, dims, dir, dim_val; ndrange = dims)
-        synchronize(dev)
     catch err
         _wrap_device_kernel_error(err, "difference operator")
     end
@@ -451,7 +510,6 @@ end
 function _launch_difference_centered!(out::AbstractVector, in_ref, h, dims::Tuple, dir, dim_val::Val, dev)
     try
         _difference_centered_kernel!(dev)(out, in_ref, h, dims, dir, dim_val; ndrange = dims)
-        synchronize(dev)
     catch err
         _wrap_device_kernel_error(err, "centered difference operator")
     end
@@ -477,7 +535,6 @@ end
 function _launch_average_engine!(out::AbstractVector, in_ref, dims::Tuple, dir, dim_val::Val, dev)
     try
         _average_kernel!(dev)(out, in_ref, dims, dir, dim_val; ndrange = dims)
-        synchronize(dev)
     catch err
         _wrap_device_kernel_error(err, "average operator")
     end
@@ -509,7 +566,6 @@ function _launch_spmv_csr!(y::AbstractVector, rowPtr, colVal, nzVal, x::Abstract
     dev = get_backend(y)
     try
         _spmv_csr_kernel!(dev)(y, rowPtr, colVal, nzVal, x, α, β; ndrange = length(y))
-        synchronize(dev)
     catch err
         _wrap_device_kernel_error(err, "Metal sparse mul! (SpMV)")
     end
@@ -533,34 +589,51 @@ function _launch_spmm_csr!(C::AbstractMatrix, rowPtr, colVal, nzVal, B::Abstract
     dev = get_backend(C)
     try
         _spmm_csr_kernel!(dev)(C, rowPtr, colVal, nzVal, B, α, β; ndrange = size(C))
-        synchronize(dev)
     catch err
         _wrap_device_kernel_error(err, "Metal sparse mul! (SpMM)")
     end
     return nothing
 end
 
-# --- Device-write synchronisation (gpena/Bramble.jl#94, S4.2) ---------------------------- #
+# --- Device-write synchronisation (gpena/Bramble.jl#94, S4.2; revised #302, #306, S11) -- #
 #
-# Every kernel launch above calls `synchronize(dev)` right after launching -- this is the
-# same call, generalised to a caller that has a device array but no kernel of its own,
-# because a plain `copyto!` into device memory is asynchronous exactly like a kernel launch
-# is. `_flush_device_scatter!` (`src/form/bilinear_traversal.jl`) is the first caller: it
-# ends a device-resident matrix's assembly with `copyto!(A.nzVal, mirror.nzval)`, and without
-# this, a caller reading `A` immediately after `assemble` returns could race that copy --
-# found at `n = 513` over repeated assemblies, invisible at the milestone's small `CHECK`
-# size (S2.7's full-stack test hit it; the diagnosis and the fix are S4.2's).
+# Through S10, every launcher above called `synchronize(dev)` right after launching, so
+# each device kernel paid a host round-trip before the next one could even be enqueued --
+# exactly what `GpuAsync` (`src/utils/backend.jl`) claims not to do. S11 removes that call
+# from every launcher in this file: a kernel launch now only enqueues onto the device's own
+# command queue and returns, so a chain of them (`D₋ₓ` into `D₋ᵧ` into a sum, say) pipelines
+# instead of blocking after each step. Kernels enqueued on the same queue still run in that
+# queue's order, so one kernel reading what an earlier one wrote (the entire point of
+# chaining operators) needs no synchronisation between them -- only code that leaves the
+# queue and touches the array some other way needs a barrier first.
 #
-# One generic method, not one per backend: `get_backend` is `KernelAbstractions`' own
-# dispatch on any array implementing its device-array interface, so this covers a future
-# CUDA/ROCm/oneAPI array the moment that backend's extension exists, with nothing added here.
+# `GpuAsync` is the only `GpuPolicy` that exists today, and no `_launch_*!` here is ever
+# reached under anything else, so there is deliberately no policy argument threaded through
+# to branch on: adding one now would be conditional logic with nothing to condition on.
+# `ka_synchronize` below is that barrier, kept for the two kinds of caller that still need
+# one:
 #
-# `x::AbstractArray` rather than bare `x`: `Bramble.ka_synchronize(x)`'s own stub
-# (`src/utils/device_kernels.jl`) already has that exact untyped signature, and Julia treats
-# a same-signature method in another module as an *overwrite*, not an addition -- precompiling
-# this extension errored on it ("Method overwriting is not permitted during Module
-# precompilation") until this was narrowed, the same reason every `_launch_*!` method above
-# restricts its array arguments instead of leaving them untyped.
+#   - a genuine host boundary: converting a device array to a host one (`Array(...)`,
+#     `host_points`, ...), a host-side reduction or assertion, or anything else that reads
+#     the array outside the device's own command queue;
+#   - a write that reaches device memory through something other than a `@kernel` launch on
+#     that queue -- a plain `copyto!`, which queues a transfer exactly like a kernel launch
+#     does but is not itself one of the launches this file just stopped synchronising.
+#     `_flush_device_scatter!` and `_zero_stored!` (`src/form/bilinear_traversal.jl`) are
+#     this second kind: `_flush_device_scatter!` ends a device-resident matrix's assembly
+#     with `copyto!(A.nzVal, mirror.nzval)` and calls `ka_synchronize` right after, exactly
+#     as it already did before S11 -- that call was never one of the ones removed above, and
+#     it is what keeps `assemble`/`assemble!` from returning before the write lands (S4.2's
+#     race, found at `n = 513` over repeated assemblies, invisible at a small `CHECK` size).
+#     S11's own check script re-runs that exact shape at n = 513, 1025 and 2049 over 40
+#     assemblies each, since removing synchronisation elsewhere is precisely the change that
+#     could resurrect it if this file's other launchers were what had been masking it.
+#
+# A host reduction is a boundary of the first kind without any extra call needed: `_dot`'s
+# device method (`src/utils/linear_algebra.jl`) is `sum(u .* v .* w)`, and fetching a
+# `GPUArrays` reduction's result to a host scalar already forces the device to finish
+# everything queued before it -- `innerₕ`/`normₕ` synchronise by returning a plain number,
+# not by this file calling anything.
 function ka_synchronize(x::AbstractArray)
     synchronize(get_backend(x))
     return nothing

@@ -47,14 +47,29 @@ end
 Block the calling thread until every `KernelAbstractions.jl` kernel and device transfer
 already queued against `x`'s device backend has completed.
 
-The extension contract every `@kernel` launch in `BrambleKernelAbstractionsExt` already
-follows itself (each one calls `synchronize(get_backend(...))` right after launching), and
-that any other device write must follow too: a plain `copyto!` into a device array queues
-the transfer and returns immediately, exactly like a kernel launch does, so a caller reading
-that array right after gets whatever has landed by then, not what the write intended
-(gpena/Bramble.jl#94, S4.2 -- `_flush_device_scatter!` in `src/form/bilinear_traversal.jl`
-is this function's first caller, added after that race surfaced at `n = 513` in a full-stack
-test the milestone's own 33-point `CHECK` was too small to catch).
+Through gpena/Bramble.jl#94's S4.2, every `@kernel` launch in `BrambleKernelAbstractionsExt`
+called this right after launching, unconditionally. gpena/Bramble.jl#302/#306 (S11) removed
+that: under [`GpuAsync`](@ref) -- the only [`GpuPolicy`](@ref) there is -- a kernel launch
+now only enqueues onto the device's own command queue and returns, so a chain of operators
+(`D₋ₓ` into `D₋ᵧ`, say) pipelines instead of paying a host round-trip after each step.
+Kernels enqueued on the same queue still run in that queue's order, so this is *not* needed
+between chained device calls, only at a genuine host boundary:
+
+  - converting a device array to a host one (`Array(...)`, `host_points`, ...), or any other
+    host-side read, reduction or assertion -- though a `GPUArrays` reduction that returns a
+    plain host scalar (`sum`, which `_dot`'s device method in `src/utils/linear_algebra.jl`
+    uses, and so `innerₕ`/`normₕ` too) already synchronises by fetching that scalar, with no
+    call to this function needed;
+  - a write that reaches device memory some way other than a `@kernel` launch on that same
+    queue -- a plain `copyto!`, which queues asynchronously exactly like a kernel launch
+    does, but is not one of the launches above. `_flush_device_scatter!`
+    (`src/form/bilinear_traversal.jl`) is this function's first caller for exactly that
+    reason: it ends a device-resident matrix's assembly with
+    `copyto!(A.nzVal, mirror.nzval)`, and calling this right after is what keeps
+    `assemble`/`assemble!` from returning before that write lands (S4.2's race, found at
+    `n = 513` over repeated assemblies, invisible at a small `CHECK` size);
+  - an explicit call from user code that needs a hard barrier before doing something this
+    package cannot see, such as timing a device computation in isolation.
 
 Same idiom as [`ka_device`](@ref): a helpful error naming the packages to load, not a bare
 `MethodError`, and the real method comes from `BrambleKernelAbstractionsExt`

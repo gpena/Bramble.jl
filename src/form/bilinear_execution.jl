@@ -334,14 +334,10 @@ end
 # below: it always searches (never caches), so a serial recording pass is never required
 # before a `Parallel()`-backend form's first assembly.
 #
-# `mirror`, threaded through every function from here to `_assemble_bilinear_parallel_core!`
-# (gpena/Bramble.jl#94, S4.2, round 7): `nothing` for a host matrix, or the exact
-# `_DeviceSparseMirror` [`_resolve_device_mirror`](@ref) resolved once before the sweep
-# started, for a device one. Forwarded verbatim to [`add_to_sparse!`](@ref), never
-# re-resolved from `A` at any point in between -- see `_resolve_device_mirror`'s own
-# docstring (`bilinear_traversal.jl`) for why a per-call re-lookup, keyed on `A`, was the
-# actual bug a repeated-assembly stress test found here, invisible to reasoning about the
-# code and to every synchronisation fix tried before it.
+# No device-specific parameter here (gpena/Bramble.jl#313): `add_to_sparse!` reads a device
+# matrix's own `mirror` field off `A` directly, so this function -- and every sweep function
+# between it and `_assemble_bilinear_parallel_core!` -- carries the same signature whether
+# `A` is host- or device-resident.
 @inline function _scatter_point!(
         A::AbstractMatrix,
         term::TERM,
@@ -351,8 +347,7 @@ end
         mesh_markers,
         row_offset::Int,
         col_offset::Int,
-        α,
-        mirror = nothing
+        α
 ) where {TERM}
     stencil = local_stencil(term, sp, I, mesh_markers, lin_indices[I])
 
@@ -362,7 +357,7 @@ end
     for (off_u, off_v, weight) in stencil
         row, col = _entry_target(lin_indices, I, off_u, off_v, row_offset, col_offset)
         row == 0 && continue
-        add_to_sparse!(A, row, col, α * weight, term, mirror)
+        add_to_sparse!(A, row, col, α * weight, term)
     end
     return nothing
 end
@@ -382,11 +377,10 @@ end
         mesh_markers,
         row_offset::Int,
         col_offset::Int,
-        α,
-        mirror = nothing
+        α
 ) where {TERM}
     Threads.@threads for I in idxs
-        _scatter_point!(A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α, mirror)
+        _scatter_point!(A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α)
     end
     return nothing
 end
@@ -401,23 +395,22 @@ end
         mesh_markers,
         row_offset::Int,
         col_offset::Int,
-        α,
-        mirror = nothing
+        α
 ) where {TERM}
     return _batch_bilinear_colour_sweep!(
-        A, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset, α, mirror
+        A, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset, α
     )
 end
 
 """
-    _batch_bilinear_colour_sweep!(A, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset, α, mirror) -> Nothing
+    _batch_bilinear_colour_sweep!(A, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset, α) -> Nothing
 
 [`CpuBatch`](@ref)'s counterpart of the `Threads.@threads` body in
 `_sweep_bilinear_colour!`, filled by `BramblePolyesterExt` (gpena/Bramble.jl#190).
 The only `src/` method errors naming Polyester.
 """
 @noinline function _batch_bilinear_colour_sweep!(
-        A, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset, α, mirror = nothing
+        A, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset, α
 )
     return _throw_cpubatch_without_polyester(:_batch_bilinear_colour_sweep!)
 end
@@ -447,13 +440,12 @@ once.
         mesh_markers,
         row_offset::Int,
         col_offset::Int,
-        α,
-        mirror = nothing
+        α
 ) where {TERM}
     Threads.@threads for b in bidx
         for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
             _scatter_point!(
-                A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α, mirror
+                A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α
             )
         end
     end
@@ -473,23 +465,22 @@ end
         mesh_markers,
         row_offset::Int,
         col_offset::Int,
-        α,
-        mirror = nothing
+        α
 ) where {TERM}
     return _batch_bilinear_band_sweep!(
-        A, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset, col_offset, α, mirror
+        A, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset, col_offset, α
     )
 end
 
 """
-    _batch_bilinear_band_sweep!(A, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset, col_offset, α, mirror) -> Nothing
+    _batch_bilinear_band_sweep!(A, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset, col_offset, α) -> Nothing
 
 [`CpuBatch`](@ref)'s counterpart of the `Threads.@threads` body in
 [`_sweep_band_colour!`](@ref), filled by `BramblePolyesterExt` (gpena/Bramble.jl#190). The
 only `src/` method errors naming Polyester.
 """
 @noinline function _batch_bilinear_band_sweep!(
-        A, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset, col_offset, α, mirror = nothing
+        A, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset, col_offset, α
 )
     return _throw_cpubatch_without_polyester(:_batch_bilinear_band_sweep!)
 end
@@ -505,7 +496,7 @@ end
 # is correct at the cost of the threading, and `_has_test_interp` decides it from the type,
 # so an ordinary term pays nothing for the choice.
 function _sweep_bilinear_serial!(
-        A::AbstractMatrix, sp, term::TERM, row_offset::Int, col_offset::Int, α = true, mirror = nothing
+        A::AbstractMatrix, sp, term::TERM, row_offset::Int, col_offset::Int, α = true
 ) where {TERM}
     Ωₕ = mesh(sp)
     grid_inds = indices(Ωₕ)
@@ -514,7 +505,7 @@ function _sweep_bilinear_serial!(
 
     @inbounds for I in grid_inds
         _scatter_point!(
-            A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α, mirror
+            A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α
         )
     end
     return nothing
@@ -528,7 +519,7 @@ end
 # unchanged so the colour/band sweeps below reach their own hook instead of `Threads.@threads`
 # (gpena/Bramble.jl#190).
 function _sweep_bilinear!(
-        A::AbstractMatrix, sp, term::TERM, strides, row_offset::Int, col_offset::Int, α = true, mirror = nothing
+        A::AbstractMatrix, sp, term::TERM, strides, row_offset::Int, col_offset::Int, α = true
 ) where {TERM}
     Ωₕ = mesh(sp)
     grid_inds = indices(Ωₕ)
@@ -566,8 +557,7 @@ function _sweep_bilinear!(
                 mesh_markers,
                 row_offset,
                 col_offset,
-                α,
-                mirror
+                α
             )
         end
         return A
@@ -577,7 +567,7 @@ function _sweep_bilinear!(
     # colouring has no width requirement.
     if prod(strides) == 1
         _sweep_bilinear_colour!(
-            policy, A, sp, term, grid_inds, lin_indices, mesh_markers, row_offset, col_offset, α, mirror
+            policy, A, sp, term, grid_inds, lin_indices, mesh_markers, row_offset, col_offset, α
         )
         return A
     end
@@ -593,23 +583,22 @@ function _sweep_bilinear!(
             mesh_markers,
             row_offset,
             col_offset,
-            α,
-            mirror
+            α
         )
     end
     return A
 end
 
 function _assemble_blocks_parallel!(
-        A::AbstractMatrix, op::OperatorAdd, trial_leaves, test_leaves, α = true, mirror = nothing
+        A::AbstractMatrix, op::OperatorAdd, trial_leaves, test_leaves, α = true
 )
     return _visit_operator_add2(
-        _assemble_blocks_parallel!, A, op, trial_leaves, test_leaves, α, mirror
+        _assemble_blocks_parallel!, A, op, trial_leaves, test_leaves, α
     )
 end
 
 function _assemble_blocks_parallel!(
-        A::AbstractMatrix, term::TERM, trial_leaves, test_leaves, α = true, mirror = nothing
+        A::AbstractMatrix, term::TERM, trial_leaves, test_leaves, α = true
 ) where {TERM}
     for blk in blocks(term, trial_leaves, test_leaves)
         bound = _bind_interp_spaces(term, blk.trial_leaf, blk.test_leaf)
@@ -624,7 +613,7 @@ function _assemble_blocks_parallel!(
         # `SeparableWeights.__prod` -> S4.0). A no-op on a host leaf (`host_weights(Wc) === Wc`).
         sp = host_weights(_walked_leaf(bound, blk.trial_leaf, blk.test_leaf))
         if _has_test_interp(bound)
-            _sweep_bilinear_serial!(A, sp, bound, blk.row_offset, blk.col_offset, α, mirror)
+            _sweep_bilinear_serial!(A, sp, bound, blk.row_offset, blk.col_offset, α)
         else
             _sweep_bilinear!(
                 A,
@@ -633,8 +622,7 @@ function _assemble_blocks_parallel!(
                 _colour_strides(stencil_offsets(bound)),
                 blk.row_offset,
                 blk.col_offset,
-                α,
-                mirror
+                α
             )
         end
     end
@@ -653,40 +641,19 @@ end
 function _assemble_bilinear_parallel_core!(
         A::AbstractMatrix, trial_space, test_space, ast::AST_TYPE, α = true
 ) where {AST_TYPE}
-    # `_resolve_device_mirror`/`_flush_device_scatter!` (gpena/Bramble.jl#94, S4.2): resolved
-    # once, here, before the sweep starts, and threaded through every sweep function below as
-    # a plain argument (`mirror`) rather than left to `_scatter_position`/`_scatter_add!`
-    # (`bilinear_traversal.jl`) to re-resolve from `A` on every single scattered entry.
-    #
-    # That per-call re-resolution -- looking `A` up in the mirror cache again inside the hot
-    # loop, on every call -- was S4.2's actual, round-7 bug, found only by an instrumented
-    # stress test at `n = 513`/`1025`/`2049` over 40+ repeated assemblies, each compared
-    # against the CPU result: a handful of near-boundary entries came out missing their whole
-    # contribution, `2/h` off. `GC.@preserve A`, `ka_synchronize` at several points, and
-    # keying the cache on `objectid(A)` with a `WeakRef` guard were all tried first, each
-    # measurably reduced the failure rate, and none reached zero. Bypassing the keyed lookup
-    # entirely -- resolving `mirror` once and passing it by hand from here down to
-    # `add_to_sparse!` -- reached zero failures outright, confirmed with a plain `Ref` standing
-    # in for the cache before this shape was written the "real" way. `_device_csr_mirror`
-    # (`bilinear_traversal.jl`) still exists and is still called, exactly once, right here --
-    # it is what makes a *second* `assemble!` on the same long-lived `A` reuse the already
-    # -downloaded `rowPtr`/`colVal` rather than re-fetching them -- but nothing downstream of
-    # this line ever asks it for the mirror again.
-    #
-    # Both `_resolve_device_mirror` and `_flush_device_scatter!` are no-ops for a host matrix
-    # (`_zero_stored!` already reset the device one's cached `nzval` before this function was
-    # ever called).
-    mirror = _resolve_device_mirror(A)
     bound = _bind_interp_spaces(ast, trial_space, test_space)
     _check_block_meshes(bound, trial_space, test_space)
     # `host_weights` (gpena/Bramble.jl#94, S4.2) -- see `_assemble_blocks_parallel!` above for why.
     sp = host_weights(_walked_leaf(bound, trial_space, test_space))
     if _has_test_interp(bound)
-        _sweep_bilinear_serial!(A, sp, bound, 0, 0, α, mirror)
+        _sweep_bilinear_serial!(A, sp, bound, 0, 0, α)
     else
-        _sweep_bilinear!(A, sp, bound, _colour_strides(stencil_offsets(bound)), 0, 0, α, mirror)
+        _sweep_bilinear!(A, sp, bound, _colour_strides(stencil_offsets(bound)), 0, 0, α)
     end
-    _flush_device_scatter!(A, mirror)
+    # A no-op for a host matrix; for a device one, copies `A`'s own mirror (gpena/Bramble.jl#313)
+    # back across in one bulk `copyto!` -- see `_flush_device_scatter!`'s own docstring
+    # (`bilinear_traversal.jl`).
+    _flush_device_scatter!(A)
     return A
 end
 
@@ -697,15 +664,13 @@ function _assemble_bilinear_parallel_core!(
         ast::AST_TYPE,
         α = true
 ) where {AST_TYPE}
-    # One mirror, resolved once, threaded explicitly through every leaf block
-    # `_assemble_blocks_parallel!` walks below -- each block gets its own `host_weights` leaf
-    # (different leaves can sit on different meshes), but they all scatter into the same `A`,
-    # through the same `mirror`. See the leaf-space method above for why this is resolved
-    # once and passed by hand rather than looked up again per scattered entry.
-    mirror = _resolve_device_mirror(A)
+    # Every leaf block `_assemble_blocks_parallel!` walks below gets its own `host_weights`
+    # leaf (different leaves can sit on different meshes), but they all scatter into the same
+    # `A`, and therefore the same `A.mirror` -- `add_to_sparse!` reads it off `A` directly, so
+    # nothing needs resolving or threading through here (gpena/Bramble.jl#313).
     _assemble_blocks_parallel!(
-        A, ast, leaf_spaces_offsets(trial_space), leaf_spaces_offsets(test_space), α, mirror
+        A, ast, leaf_spaces_offsets(trial_space), leaf_spaces_offsets(test_space), α
     )
-    _flush_device_scatter!(A, mirror)
+    _flush_device_scatter!(A)
     return A
 end

@@ -111,7 +111,7 @@ end
 end
 
 # Deliberately untyped on the array/kernel arguments (matching the `ka_device`/
-# `_launch_uniform_points!` fallback idiom): the extension's methods are typed on
+# `_launch_half_points!` fallback idiom): the extension's methods are typed on
 # `AbstractVector`/`Tuple`, and a fallback with the same signature would overwrite them
 # instead of adding a genuinely more specific dispatch.
 """

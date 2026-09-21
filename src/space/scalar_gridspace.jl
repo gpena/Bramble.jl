@@ -22,6 +22,12 @@ still index by linear position, so a symbolic `innerₕ`/`inner₊ₓ`/etc. term
 pays that division per point during assembly, not only the two hot paths already routed
 through the `CartesianIndex` -- measured in `docs/src/internals/space.md`.
 
+On device-backed `factors` (gpena/Bramble.jl#310), `getindex` raises an error naming
+[`host_weights`](@ref) rather than letting `GPUArraysCore` throw its own scalar-indexing
+message: `Array(w)` and `host_weights(w)` are the two bulk-transfer
+escapes, each pulling the `D` per-axis factor vectors to the host once and evaluating the
+tensor product (or keeping it lazy, for `host_weights`) there instead.
+
 # Fields
 
   - `factors::NTuple{D, VT}`: the per-axis vectors multiplied together at each index.
@@ -43,9 +49,26 @@ end
 # machinery for a 1-dimensional `AbstractVector` (its `size` is `(prod(dims),)`, not
 # `dims`), and every caller with a `CartesianIndex` in hand already has it from iterating
 # `CartesianIndices(dims)` -- the same trust `__prod`'s own callers already extend it.
-@inline function Base.getindex(w::SeparableWeights{D}, I::CartesianIndex{D}) where {D}
+#
+# The `locality(VT)` check (gpena/Bramble.jl#310) guards against scalar-indexing a
+# device-backed factor: every legitimate device path around `SeparableWeights`
+# (`_dot`/`_dot_masked`'s `DeviceLocality`/`GpuPolicy` methods, `src/space/inner_product.jl`)
+# already reaches the factors through `_separable_weights_full`'s broadcast instead of this
+# `getindex`, so nothing correct is lost by refusing it here -- only the bare
+# `GPUArraysCore.ScalarIndexingDisallowed` this would otherwise hit, one call deeper and with
+# no hint of the fix.
+@inline function Base.getindex(w::SeparableWeights{D, T, VT}, I::CartesianIndex{D}) where {D, T, VT}
+    locality(VT) isa DeviceLocality && _throw_device_scalar_weights()
     return __prod(w.factors, I)
 end
+
+# Kept out of `getindex` itself so its success path -- one type-level `locality` check the
+# compiler folds away -- is all that is ever compiled inline there; the message is built
+# only once a device-backed factor is already known to have been scalar-indexed.
+@noinline _throw_device_scalar_weights() = error(
+    "scalar getindex on a device-backed SeparableWeights is not supported -- call " *
+    "host_weights(w) or Array(w) to bring the weights to the host first.",
+)
 
 @inline function Base.getindex(w::SeparableWeights{D}, li::Int) where {D}
     @boundscheck checkbounds(w, li)
@@ -484,19 +507,23 @@ end
 
 """
     host_weights(Wₕ::ScalarGridSpace) -> ScalarGridSpace
+    host_weights(w::SeparableWeights) -> SeparableWeights
 
-Return a `ScalarGridSpace` with the same shape and numbers as `Wₕ`, but entirely
-host-resident -- mesh and weights alike, one bulk transfer per underlying array rather than
-one scalar read per grid point (gpena/Bramble.jl#94 S4.0).
+Return a host-resident mirror of `Wₕ`/`w`, one bulk transfer per underlying array rather
+than one scalar read per grid point (gpena/Bramble.jl#94 S4.0, #310).
 
-A no-op on a space that already lives on the host: `host_weights(Wc) === Wc`, not a copy,
-the same guarantee [`host_spacings`](@ref) gives on a CPU mesh (S2.10's own fixed bug --
-`Array(v) === v` is `false` for a `Vector`, so a copy-on-host would silently repeat it here).
+On a `ScalarGridSpace`, mesh and weights alike come along: [`allocate_system_matrix`](@ref)'s
+sparsity-pattern walk evaluates a form's AST through `local_stencil` and so reads both this
+space's weights and its mesh's spacings one grid point at a time; see the comment above
+[`_host_mirror_mesh`](@ref) for why both, not only the weight vectors the name alone might
+suggest. On a bare `SeparableWeights` (gpena/Bramble.jl#310), only its `D` per-axis factor
+vectors move -- `map(Array, w.factors)` -- since that is everything a `SeparableWeights`
+owns; `Array(w)` calls this first and then forms the tensor product on the host.
 
-Built for [`allocate_system_matrix`](@ref)'s sparsity-pattern walk, which evaluates a form's
-AST through `local_stencil` and so reads both this space's weights and its mesh's spacings
-one grid point at a time; see the comment above [`_host_mirror_mesh`](@ref) for why both,
-not only the weight vectors the name alone might suggest.
+A no-op on a space or weight that already lives on the host: `host_weights(Wc) === Wc` /
+`host_weights(w) === w`, not a copy, the same guarantee [`host_spacings`](@ref) gives on a
+CPU mesh (S2.10's own fixed bug -- `Array(v) === v` is `false` for a `Vector`, so a
+copy-on-host would silently repeat it here).
 
 See also: [`host_spacings`](@ref), [`weights`](@ref), [`SeparableWeights`](@ref).
 """
@@ -506,6 +533,25 @@ See also: [`host_spacings`](@ref), [`weights`](@ref), [`SeparableWeights`](@ref)
 
 function _host_weights(::DeviceLocality, Wₕ::ScalarGridSpace)
     return _gridspace(_host_mirror_mesh(mesh(Wₕ)), _host_space_weights(weights(Wₕ)))
+end
+
+@inline host_weights(w::SeparableWeights{D, T, VT}) where {D, T, VT} = _host_weights(locality(VT), w)
+
+@inline _host_weights(::HostLocality, w::SeparableWeights) = w
+
+function _host_weights(::DeviceLocality, w::SeparableWeights{D, T}) where {D, T}
+    hfactors = map(Array, w.factors)
+    return SeparableWeights{D, T, typeof(first(hfactors))}(hfactors, w.dims)
+end
+
+# `host_weights` above pulls only the `D` per-axis factor vectors to the host (bulk, one
+# `Array(...)` apiece); this evaluates the tensor product those factors define, still on the
+# host, into the same flat layout `getindex`'s `CartesianIndices(w.dims)` linearisation
+# already produces -- so this is a drop-in replacement for the generic `AbstractArray`
+# fallback (element-by-element `getindex`), not a different ordering (gpena/Bramble.jl#310).
+function Base.Array(w::SeparableWeights{D}) where {D}
+    factors = host_weights(w).factors
+    return vec([__prod(factors, I) for I in CartesianIndices(w.dims)])
 end
 
 """

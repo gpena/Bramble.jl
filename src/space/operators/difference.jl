@@ -390,7 +390,7 @@ end
     )
 end
 
-# Deliberately untyped, matching the `_launch_restriction!`/`_launch_uniform_points!`
+# Deliberately untyped, matching the `_launch_restriction!`/`_launch_half_points!`
 # fallback idiom (`operators/restriction.jl`, `src/mesh/mesh1d.jl`): the extension's methods
 # are typed on `AbstractVector`/`Tuple`, and a fallback with the same signature would
 # overwrite them instead of adding a genuinely more specific dispatch.

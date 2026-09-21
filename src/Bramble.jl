@@ -91,7 +91,7 @@ public PRECOMPILE_WORKLOAD
 # has to reach them by name, and a name an extension is expected to implement is not
 # internal.
 public _gpu_for!, _gpu_scatter_for!
-public _launch_uniform_points!, _launch_half_points!, _launch_spacing!, _launch_half_spacing!
+public _launch_half_points!, _launch_spacing!, _launch_half_spacing!
 public _launch_refine_indices!
 public _launch_restriction!, _launch_restriction_scatter!
 public _launch_restriction_nd!, _launch_restriction_scatter_nd!
@@ -134,6 +134,17 @@ public mesh_type, hₘᵢₙ, half_spacings, cell_measures
 # exported by S2.10, which could not reach this file; added here by S4.0, alongside
 # `host_weights` below, the space-layer sibling that needed the same treatment.
 public host_spacings
+# `host_half_spacings` (gpena/Bramble.jl#307, S1): the same bulk-transfer treatment as
+# `host_spacings` above, but for `half_spacings` -- a device-backed mesh's cell widths, not
+# its backward spacings. Left `public`-only rather than exported by S1, which could not
+# reach this file; declared here by S17, alongside `host_points` below.
+public host_half_spacings
+# `host_points` (gpena/Bramble.jl#308, S2): pulls a device-backed mesh's coordinates to the
+# host in one bulk transfer -- `Mesh1D`'s directly, `MeshnD`'s per-axis -- for `point`'s own
+# scalar-indexing guard, which throws outright rather than reading a device array one point
+# at a time, and for `locate_cell`'s non-uniform search. Left `public`-only rather than
+# exported by S2, which could not reach this file; declared here by S17.
+public host_points
 
 # Exported since v3.1 (gpena/Bramble.jl#213): the outward normal is part of writing a
 # Neumann or Robin term, not an internal query, now that `inner_Γ` exists.
@@ -319,7 +330,7 @@ export fdm_solve
 # `fdm_solve`/`Kronecker` idiom above -- a package extension cannot introduce a new binding
 # into this module, so these stubs give it one to add methods to. Unlike `fdm_solve`, a
 # plain `ErrorException` fallback rather than a bare `MethodError` when the caller has not
-# loaded `KernelAbstractions`, matching `ka_device`/`_launch_uniform_points!`'s idiom
+# loaded `KernelAbstractions`, matching `ka_device`/`_launch_half_points!`'s idiom
 # (`src/utils/device_kernels.jl`, `src/mesh/mesh1d.jl`): `BrambleKernelAbstractionsExt`
 # supplies the real methods, written against `KernelAbstractions.Backend` alone, so a
 # future GPU backend inherits the same SpMV/SpMM kernel for the cost of one `ka_device`

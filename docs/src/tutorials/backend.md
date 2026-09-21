@@ -324,6 +324,65 @@ Two failures give two different diagnostics, deliberately not sharing a message:
   -- not something an import can fix, which is why it reads differently from the first
   case.
 
+### Asynchronous execution and synchronization points
+
+Every device kernel under [`GpuAsync`](@ref) -- the only [`GpuPolicy`](@ref) there is --
+only enqueues onto the device's own command queue and returns; it does not wait for that
+work to finish. A chain of device operators therefore pipelines instead of paying a host
+round-trip after each step:
+
+```julia
+using Bramble, Metal
+
+Ωₕ = mesh(domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)), (1025, 1025), (true, true);
+    backend = metal_backend())
+Wₕ = gridspace(Ωₕ)
+uₕ = Rₕ(Wₕ, x -> sin(x[1]) * cos(x[2]))
+
+vₕ = D₋ₓ(uₕ) + D₋ᵧ(uₕ)   # two kernel launches, neither blocks on the other
+s  = normₕ(vₕ)           # the actual wait happens here
+```
+
+Kernels enqueued on the same queue still run in the order they were launched, so
+`D₋ᵧ(uₕ)` reading what `D₋ₓ(uₕ)` wrote needs nothing beyond that queue ordering -- the
+whole point of chaining several device operators is that nothing here has to wait until
+`s` is asked for. Synchronization happens at a handful of genuine boundaries instead of
+after every call:
+
+- **Converting a device array to a host one** -- `Array(...)`, `host_points`, and every
+  other accessor that copies device memory to the host.
+- **A host-side reduction or assertion.** `innerₕ`/`normₕ`/`norm₁ₕ` on a device grid
+  function already synchronize by returning a plain host scalar (`sum` on a `GPUArrays`
+  array forces every queued kernel to finish before it can hand back a number) -- nothing
+  extra to call for this.
+- **An explicit call.** [`ka_synchronize`](@ref) blocks until everything queued against an
+  array's device backend has completed; reach for it when timing a device computation in
+  isolation, or when code outside this package's own operators writes to a device array
+  some way other than a `@kernel` launch on that same queue.
+
+### Preallocate and prefer the in-place forms
+
+Every allocating operator (`D₋ₓ`, `D₋ᵧ`, ...) is `similar(uₕ)` plus a kernel launch. On a
+GPU backend that `similar` is a device allocation, and repeating it inside a loop adds a
+real cost on top of the kernel itself -- exactly the situation issue #302 measured. Prefer
+the in-place forms (`D₋ₓ!`, `D₋ᵧ!`, ...) with a buffer allocated once outside the loop:
+
+```julia
+tmp = element(Wₕ)
+out = element(Wₕ)
+for _ in 1:steps
+    D₋ₓ!(tmp, uₕ)
+    D₋ᵧ!(out, tmp)
+    # ... advance uₕ from out ...
+end
+normₕ(out)   # the synchronization point for this step
+```
+
+This is the same preallocation discipline the CPU path already asks for; it matters more
+on a GPU backend, where every allocation is also a round trip through the device's own
+memory allocator. The [internals page on the GPU substrate](../internals/gpu.md) covers
+the kernel side of this in more depth.
+
 ## 9. Introspection
 
 - [`vector_type`](@ref)`(be)`, [`matrix_type`](@ref)`(be)`: the two type parameters.

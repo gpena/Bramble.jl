@@ -1,6 +1,6 @@
 module BrambleMetalExt
 
-using Bramble: Bramble, Backend, ExecutionPolicy
+using Bramble: Bramble, Backend, ExecutionPolicy, _DeviceSparseMirror
 using Metal: Metal, MtlArray, MtlMatrix, MtlVector, MetalBackend, mtl
 using LinearAlgebra: I
 import LinearAlgebra: mul!
@@ -111,17 +111,24 @@ else
         MetalSparseMatrixCSR{Tv, Ti} <: Metal.GPUArrays.AbstractGPUSparseMatrixCSR{Tv, Ti}
 
     A sparse matrix in compressed sparse row (CSR) format, stored in Metal device memory as
-    `MtlVector` fields `rowPtr`, `colVal`, `nzVal`, plus the matrix `dims`.
+    `MtlVector` fields `rowPtr`, `colVal`, `nzVal`, plus the matrix `dims`, and its own
+    `mirror` field ([`_DeviceSparseMirror`](@ref), gpena/Bramble.jl#313): the host staging
+    copies of `rowPtr`/`colVal`/`nzVal` that `src/form/bilinear_traversal.jl`'s
+    `_scatter_position`/`_scatter_add!` search and accumulate into without ever
+    scalar-indexing device memory. See `docs/src/internals/gpu.md` for the contract every
+    device sparse matrix type carries this field to satisfy.
 
     A Bramble-owned placeholder for `Metal.MtlSparseMatrixCSR`, which tagged Metal.jl does not
     yet provide (JuliaGPU/Metal.jl#909). Once that type ships, this name aliases to it and no
-    Bramble call site changes.
+    Bramble call site changes -- except `metal_sparse_csr` below, which would then need to
+    hand the mirror to upstream's own constructor instead of this one.
     """
     struct MetalSparseMatrixCSR{Tv, Ti} <: Metal.GPUArrays.AbstractGPUSparseMatrixCSR{Tv, Ti}
         rowPtr::MtlVector{Ti}
         colVal::MtlVector{Ti}
         nzVal::MtlVector{Tv}
         dims::NTuple{2, Int}
+        mirror::_DeviceSparseMirror{Tv, Ti}
     end
 
     Base.size(A::MetalSparseMatrixCSR) = A.dims
@@ -141,10 +148,12 @@ else
         return SparseMatrixCSC(transpose(Aᵀ))
     end
 
+    # `A.mirror` carries plain host `Vector`s, never a device array, so it passes through
+    # unadapted -- there is nothing for `Adapt` to convert.
     function Metal.Adapt.adapt_structure(to, A::MetalSparseMatrixCSR)
         MetalSparseMatrixCSR(
             Metal.Adapt.adapt(to, A.rowPtr), Metal.Adapt.adapt(to, A.colVal),
-            Metal.Adapt.adapt(to, A.nzVal), A.dims
+            Metal.Adapt.adapt(to, A.nzVal), A.dims, A.mirror
         )
     end
 end
@@ -208,7 +217,17 @@ function Bramble.metal_sparse_csr(A::SparseMatrixCSC{Tv, Ti}) where {Tv, Ti}
     # CSC(transpose(A)) is exactly A's row-major (CSR) storage: a sparse-to-sparse conversion,
     # not a densifying one.
     Aᵀ = SparseMatrixCSC(transpose(A))
-    return MetalSparseMatrixCSR{Tv, Ti}(mtl(Aᵀ.colptr), mtl(Aᵀ.rowval), mtl(Aᵀ.nzval), (m, n))
+    # The mirror (gpena/Bramble.jl#313) is built right here, from the very host arrays about
+    # to be uploaded: `Aᵀ.colptr`/`Aᵀ.rowval` are already `Vector{Ti}`s on the host at this
+    # point (`SparseMatrixCSC{Tv,Ti}`'s own index type), so this needs no conversion and no
+    # separate device-to-host transfer -- carrying them in `Ti` rather than widening to `Int`
+    # is what keeps the mirror no larger than the device arrays it stages for, on hardware
+    # where both live in the same physical memory. `nzval` starts at all zeros: nothing has
+    # been scattered into this matrix yet.
+    mirror = _DeviceSparseMirror{Tv, Ti}(Aᵀ.colptr, Aᵀ.rowval, zeros(Tv, length(Aᵀ.rowval)))
+    return MetalSparseMatrixCSR{Tv, Ti}(
+        mtl(Aᵀ.colptr), mtl(Aᵀ.rowval), mtl(Aᵀ.nzval), (m, n), mirror
+    )
 end
 
 function Bramble.metal_sparse_csc(A::SparseMatrixCSC{Tv, Ti}) where {Tv, Ti}

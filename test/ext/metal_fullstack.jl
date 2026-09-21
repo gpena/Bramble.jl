@@ -189,6 +189,36 @@ else
             @test isapprox(Array(SparseMatrixCSC(Ag2)), Array(Ac2); rtol = _TOL)
         end
 
+        # The device scatter mirror used to live in a module-global `Dict` keyed on
+        # `objectid(A)`, threaded through ten sweep functions by hand as a trailing `mirror`
+        # argument (gpena/Bramble.jl#94, S4.2). Issue #313 moved it onto the matrix itself: a
+        # `MetalSparseMatrixCSR` now carries its own `mirror` field (host `rowptr`/`colval`
+        # copies in the matrix's own index type, plus the `nzval` staging vector), and
+        # `_scatter_position`/`_scatter_add!` read it off `A` directly instead of resolving it
+        # from a cache. This testset checks that field is actually there and actually reused,
+        # not just that assembly still gives the right answer (the testsets above already
+        # cover that).
+        @testset "the device CSR carries its own scatter mirror (issue #313)" begin
+            a1(u, v) = inner₊ₓ(D₋ₓ(u), D₋ₓ(v))
+            Ag1 = assemble(form(Wg1, Wg1, a1))
+            Ac1 = assemble(form(Wc1, Wc1, a1))
+
+            @test hasproperty(Ag1, :mirror)
+            @test eltype(Ag1.mirror.nzval) == eltype(Ag1.nzVal)
+            @test eltype(Ag1.mirror.rowptr) == eltype(Ag1.rowPtr)
+            @test eltype(Ag1.mirror.colval) == eltype(Ag1.colVal)
+            @test length(Ag1.mirror.nzval) == length(Ag1.nzVal)
+
+            # A second `assemble!` on the same matrix must reuse the same mirror object rather
+            # than rebuild it: the module-global cache this replaced could rebuild mid-sweep
+            # and lose entries already scattered into the discarded instance (S4.2, round 7).
+            # With the mirror a field of `A`, there is nothing left to rebuild.
+            mirror_before = Ag1.mirror
+            assemble!(Ag1, form(Wg1, Wg1, a1))
+            @test Ag1.mirror === mirror_before
+            @test isapprox(Array(SparseMatrixCSC(Ag1)), Array(Ac1); rtol = _TOL)
+        end
+
         # Two device-scatter races (both now fixed in `src/form/`) only ever surfaced at a grid
         # large enough to give the sweep many scattered entries, and only across many repeated
         # assemblies -- a single small assembly (the testset above, n=33/(9,7)) always looked
