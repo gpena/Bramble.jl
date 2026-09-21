@@ -40,3 +40,38 @@ end
         "this function.",
     )
 end
+
+"""
+    ka_synchronize(x) -> Nothing
+
+Block the calling thread until every `KernelAbstractions.jl` kernel and device transfer
+already queued against `x`'s device backend has completed.
+
+The extension contract every `@kernel` launch in `BrambleKernelAbstractionsExt` already
+follows itself (each one calls `synchronize(get_backend(...))` right after launching), and
+that any other device write must follow too: a plain `copyto!` into a device array queues
+the transfer and returns immediately, exactly like a kernel launch does, so a caller reading
+that array right after gets whatever has landed by then, not what the write intended
+(gpena/Bramble.jl#94, S4.2 -- `_flush_device_scatter!` in `src/form/bilinear_traversal.jl`
+is this function's first caller, added after that race surfaced at `n = 513` in a full-stack
+test the milestone's own 33-point `CHECK` was too small to catch).
+
+Same idiom as [`ka_device`](@ref): a helpful error naming the packages to load, not a bare
+`MethodError`, and the real method comes from `BrambleKernelAbstractionsExt`
+(`synchronize(get_backend(x))`) -- written against `KernelAbstractions` alone, so a future
+GPU backend inherits it for free.
+
+# Throws
+- `ErrorException`: if no loaded package defines `ka_synchronize` for `x`. Requires
+  `using KernelAbstractions`.
+"""
+function ka_synchronize(x)
+    return _throw_no_ka_synchronize(x)
+end
+
+@noinline function _throw_no_ka_synchronize(x)
+    return error(
+        "ka_synchronize has no method for $(typeof(x)). Add `using KernelAbstractions` " *
+        "before calling this function.",
+    )
+end

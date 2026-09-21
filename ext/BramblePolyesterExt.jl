@@ -156,23 +156,39 @@ end
 # this point in the file -- including the linear sweeps below -- never installed, which is
 # why a bilinear `assemble!` under `CpuBatch` still reached the `src/` error stub with
 # Polyester loaded.
+#
+# `mirror = nothing` (gpena/Bramble.jl#94, S4.2): added to the `CpuThreaded` reference
+# signature after this extension was first written, to thread a resolved device-sparse
+# mirror through the sweep instead of `_scatter_position`/`_scatter_add!` re-resolving it
+# from `A` on every scattered entry (`bilinear_traversal.jl`'s own `_resolve_device_mirror`
+# docstring has the full story). This extension's copy went stale when that arity changed --
+# the call from `_sweep_band_colour!`/`_sweep_bilinear_colour!` started arriving with a
+# trailing `mirror` argument these methods did not accept, so it silently stopped matching
+# and fell through to the `src/` stub, whose error ("you forgot to load Polyester") was
+# actively wrong: Polyester *was* loaded, the arity just no longer matched. `mirror` is always
+# `nothing` here in practice -- a `CpuBatch` backend's storage is host-only (`CpuPolicy`
+# claims `HostLocality`, `Backend`'s own inner constructor enforces vector/matrix/policy
+# locality agreement, `src/utils/backend.jl`), so `add_to_sparse!(..., mirror)` always takes
+# its `mirror === nothing` branch below -- but the parameter still has to exist for the call
+# to dispatch here at all, and it is forwarded rather than dropped so this file does not need
+# updating again the next time a device-only feature adds another one.
 
 function Bramble._batch_bilinear_colour_sweep!(
-        A::AbstractMatrix, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset, α
+        A::AbstractMatrix, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset, α, mirror = nothing
 )
     @batch for I in idxs
-        _scatter_point!(A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α)
+        _scatter_point!(A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α, mirror)
     end
     return nothing
 end
 
 function Bramble._batch_bilinear_band_sweep!(
-        A::AbstractMatrix, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset, col_offset, α
+        A::AbstractMatrix, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset, col_offset, α, mirror = nothing
 )
     @batch for b in bidx
         for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
             _scatter_point!(
-                A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α
+                A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α, mirror
             )
         end
     end

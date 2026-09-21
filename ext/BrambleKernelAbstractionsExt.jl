@@ -49,7 +49,8 @@ import Bramble:
                 _launch_difference_centered!,
                 _launch_average_engine!,
                 _launch_spmv_csr!,
-                _launch_spmm_csr!
+                _launch_spmm_csr!,
+                ka_synchronize
 
 # ---------------------------------------------------------------------------
 # `_points!` uniform branch (src/mesh/mesh1d.jl:322-324 is the CPU original)
@@ -536,6 +537,32 @@ function _launch_spmm_csr!(C::AbstractMatrix, rowPtr, colVal, nzVal, B::Abstract
     catch err
         _wrap_device_kernel_error(err, "Metal sparse mul! (SpMM)")
     end
+    return nothing
+end
+
+# --- Device-write synchronisation (gpena/Bramble.jl#94, S4.2) ---------------------------- #
+#
+# Every kernel launch above calls `synchronize(dev)` right after launching -- this is the
+# same call, generalised to a caller that has a device array but no kernel of its own,
+# because a plain `copyto!` into device memory is asynchronous exactly like a kernel launch
+# is. `_flush_device_scatter!` (`src/form/bilinear_traversal.jl`) is the first caller: it
+# ends a device-resident matrix's assembly with `copyto!(A.nzVal, mirror.nzval)`, and without
+# this, a caller reading `A` immediately after `assemble` returns could race that copy --
+# found at `n = 513` over repeated assemblies, invisible at the milestone's small `CHECK`
+# size (S2.7's full-stack test hit it; the diagnosis and the fix are S4.2's).
+#
+# One generic method, not one per backend: `get_backend` is `KernelAbstractions`' own
+# dispatch on any array implementing its device-array interface, so this covers a future
+# CUDA/ROCm/oneAPI array the moment that backend's extension exists, with nothing added here.
+#
+# `x::AbstractArray` rather than bare `x`: `Bramble.ka_synchronize(x)`'s own stub
+# (`src/utils/device_kernels.jl`) already has that exact untyped signature, and Julia treats
+# a same-signature method in another module as an *overwrite*, not an addition -- precompiling
+# this extension errored on it ("Method overwriting is not permitted during Module
+# precompilation") until this was narrowed, the same reason every `_launch_*!` method above
+# restricts its array arguments instead of leaving them untyped.
+function ka_synchronize(x::AbstractArray)
+    synchronize(get_backend(x))
     return nothing
 end
 

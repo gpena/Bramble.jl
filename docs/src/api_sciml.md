@@ -193,6 +193,51 @@ suitesparse_qr_solve
 
 ### Apple Accelerate solver (macOS)
 
+[gpena/Bramble.jl#142](https://github.com/gpena/Bramble.jl/issues/142) asked whether
+`AppleAccelerate.jl` is worth wiring in on macOS. It is, but only for the symmetric
+factorisations it actually wins on -- [`pde_solve`](@ref)'s own docstring states the
+narrowed dispatch; this section answers the issue's four questions from measurement.
+
+**Speedup.** Against `A \ F` -- what `:default` did before Accelerate existed -- a
+symmetric Poisson-plus-mass system is a 1.2-1.3x win (0.78-0.83x the runtime, measured at
+`n = 80` and `n = 120`) and an unsymmetric convection-diffusion system is now exactly
+1.00x, because `:default` no longer routes it to Accelerate at all
+(gpena/Bramble.jl#246, integrator re-measurement). Earlier, broader factorisation-level
+numbers against `:suitesparse` (not `A \ F`) put sparse SPD Cholesky at 0.75-0.85x and
+sparse symmetric LDLᵀ at 0.26-0.78x across `n = 40, 80, 160`, while unsymmetric LUTPP was
+1.66-4.07x **slower** -- the reason `:default` never reaches Accelerate for an unsymmetric
+system.
+
+**Extension scoping.** Settled: the guard is `Sys.isapple() &&
+Base.get_extension(Bramble, :BrambleAppleAccelerateExt) !== nothing`, so `using
+AppleAccelerate` on Linux or Windows still resolves `:default` to `A \ F` and Accelerate
+never becomes a hard dependency of Bramble or of CI on any platform.
+
+**Threading.** `AppleAccelerate.jl` exports `BLAS_THREADING_MULTI_THREADED` and
+`BLAS_THREADING_SINGLE_THREADED`, the knob for vecLib's own internal thread pool, alongside
+a setter that reads vecLib's threading API directly. No dedicated measurement isolated
+vecLib threading against Bramble's own `Threads.@threads`/`@batch` assembly sweeps running
+concurrently: the benchmarks behind the speedup figures above ran at `--threads=4`
+(factorisation comparison) and `--threads=2` (dispatch-narrowing check) without symptoms
+attributable to thread contention, but that is not the same as a study built to detect it.
+A caller who suspects contention on a heavily loaded machine can force vecLib to
+`BLAS_THREADING_SINGLE_THREADED` explicitly; Bramble does not set this itself.
+
+**Accuracy vs. OpenBLAS.** Audited against `LinearAlgebra`'s own factorisations across
+sparse SPD/LDLᵀ/QR/LUTPP and the dense `accelerate_factorize` kinds: the worst observed
+relative residual was `3.637...e-14` (sparse SPD Cholesky via Accelerate), and a dense QR
+least-squares case matched to `0.0`. Every `atol` in the test suite guarding a solve is
+`1.0e-12`, two orders of magnitude looser than that residual, so no tolerance needed
+tightening or loosening. Two calls into the same factorisation are not always bit-identical
+-- vecLib reorders floating-point reductions across calls -- so compare with `isapprox`,
+never `==`.
+
+**A `sym` caveat.** Under `:default`, an unrecognised `sym` (anything other than
+`:auto`/`:spd`/`:definite`/`:symmetric`/`:unsymmetric` and their integer aliases) silently
+falls back to `A \ F` rather than raising, matching `:default`'s pre-Accelerate behaviour of
+ignoring `sym` entirely. This is looser than `solver = :accelerate`, which validates `sym`
+and throws on an unrecognised value.
+
 ```@docs
 AccelerateFactorization
 accelerate_factorize

@@ -398,7 +398,7 @@ end
     _dot(::DeviceLocality, ::GpuPolicy, u, w::SeparableWeights, v) -> Real
 
 The device counterpart of [`_dot`](@ref)`(u, w::SeparableWeights, v)` above: the weight
-tensor is materialized once via [`_separable_weights_full`](@ref), then the product with
+tensor is materialized once via `_separable_weights_full`, then the product with
 `u` and `v` (reshaped to the grid's own `dims`, not copied) is one broadcasted reduction.
 """
 @noinline function _dot(

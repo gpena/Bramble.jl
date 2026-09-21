@@ -249,6 +249,46 @@ for a warm-started iterative solve instead when the matrix is too large to facto
 (§1's memory argument, now applied per step rather than once), where the reduction above is
 free on top of whatever iteration count the preconditioner alone already bought.
 
+## 4. macOS: when the default solve reaches for Apple Accelerate
+
+[`pde_solve`](@ref)'s `:default` solver -- the one every `\` in the sections above sits on
+top of -- reaches for Apple's Accelerate framework instead of a bare `A \ F` on macOS, but
+only when `AppleAccelerate.jl` is loaded (`using AppleAccelerate`) **and** the system is
+symmetric:
+
+```julia
+using Bramble, AppleAccelerate  # loading it is enough to opt in; no other setup
+
+A_sym, F_sym = spd_system(80)                      # symmetric: Accelerate's Cholesky/LDLᵀ path
+A_uns, F_uns = convection_diffusion_system(80)     # unsymmetric: stays on `A \ F`
+
+u_sym = pde_solve(A_sym, F_sym)   # == pde_solve(A_sym, F_sym; solver = :accelerate)
+u_uns = pde_solve(A_uns, F_uns)   # == A_uns \ F_uns, Accelerate never runs
+```
+
+This is narrower than Accelerate's own availability suggests, and deliberately so
+([gpena/Bramble.jl#246](https://github.com/gpena/Bramble.jl/issues/246)): measured against
+`A \ F` on Bramble-shaped systems, the symmetric path is a 1.2-1.3x win (`n = 80`: 0.83x
+the runtime; `n = 120`: 0.78x), while an unsymmetric convection-diffusion system was
+2.3-3.6x **slower** through Accelerate before the dispatch was narrowed to
+`issymmetric(A)`. `solver = :accelerate` still honours an explicit request on an
+unsymmetric system -- only the automatic `:default` choice avoids it.
+
+Symmetry can be asserted rather than detected: `sym = :spd`/`:definite`/`:symmetric` takes
+the Accelerate path without testing `issymmetric(A)` again, and `sym = :unsymmetric` skips
+straight to `A \ F`. An unrecognised `sym` under `:default` does not error -- it silently
+falls back to `A \ F`, the same as `:default` ignoring `sym` entirely before this dispatch
+existed. `solver = :accelerate` spelled out explicitly does validate `sym` and throws on a
+value it does not recognise, so the two are not symmetric in strictness.
+
+The choice is macOS-only and opt-in: without `using AppleAccelerate`, or on Linux/Windows,
+`:default` is exactly `A \ F`, unchanged. [`accelerate_factorize`](@ref) and
+[`accelerate_solve`](@ref)'s own documentation covers the extension-scoping, threading and
+accuracy questions [gpena/Bramble.jl#142](https://github.com/gpena/Bramble.jl/issues/142)
+asked about Accelerate in full, including the measured worst-case residual against
+`LinearAlgebra` and the `BLAS_THREADING_MULTI_THREADED`/`BLAS_THREADING_SINGLE_THREADED`
+knob for vecLib's own internal threading.
+
 ## Where to go next
 
 [`sparse_factorize`](@ref)'s own docstring lists every direct backend and when each is

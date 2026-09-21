@@ -161,11 +161,9 @@ function _record!(case, n, dofs, t_accel, t_baseline, baseline_name)
             ratio = t_accel / t_baseline
         )
     )
-    @printf(
-        "  n=%-4d dofs=%-7d accelerate=%9.3f ms  %s=%9.3f ms  accelerate/%s=%.3fx%s\n",
+    @printf("  n=%-4d dofs=%-7d accelerate=%9.3f ms  %s=%9.3f ms  accelerate/%s=%.3fx%s\n",
         n, dofs, t_accel * 1e3, baseline_name, t_baseline * 1e3, baseline_name,
-        t_accel / t_baseline, t_accel > t_baseline ? "  (Accelerate SLOWER)" : ""
-    )
+        t_accel / t_baseline, t_accel > t_baseline ? "  (Accelerate SLOWER)" : "")
     return nothing
 end
 
@@ -183,7 +181,7 @@ function _bench_sparse_spd_cholesky()
         A, F = _poisson_system(n)
         dofs = length(F)
         t_accel = @belapsed accelerate_solve($A, $F; sym = :spd) samples=10 evals=1 seconds=15
-        t_ss = @belapsed cholesky(Symmetric($A)) \ $F samples=10 evals=1 seconds=15
+        t_ss = @belapsed cholesky(Symmetric($A))\$F samples=10 evals=1 seconds=15
         _record!("sparse SPD Cholesky", n, dofs, t_accel, t_ss, "suitesparse")
     end
 end
@@ -198,7 +196,7 @@ function _bench_sparse_symmetric_ldlt()
         A, F = _poisson_system(n)
         dofs = length(F)
         t_accel = @belapsed accelerate_solve($A, $F; kind = :ldlt) samples=10 evals=1 seconds=15
-        t_ss = @belapsed ldlt(Symmetric($A)) \ $F samples=10 evals=1 seconds=15
+        t_ss = @belapsed ldlt(Symmetric($A))\$F samples=10 evals=1 seconds=15
         _record!("sparse symmetric LDLᵀ", n, dofs, t_accel, t_ss, "suitesparse")
     end
 end
@@ -209,7 +207,7 @@ function _bench_sparse_unsymmetric_lutpp()
         A, F = _convection_diffusion_system(n)
         dofs = length(F)
         t_accel = @belapsed accelerate_solve($A, $F; sym = :unsymmetric) samples=10 evals=1 seconds=15
-        t_ss = @belapsed lu($A) \ $F samples=10 evals=1 seconds=15
+        t_ss = @belapsed lu($A)\$F samples=10 evals=1 seconds=15
         _record!("sparse unsymmetric LUTPP", n, dofs, t_accel, t_ss, "suitesparse")
     end
 end
@@ -223,7 +221,7 @@ function _bench_pde_solve_default()
         # The generic `A \ F` SuiteSparse route a caller got before S5.1's default-routing
         # change: UMFPACK LU, ignoring the matrix's own symmetry, since `A` here is a bare
         # `SparseMatrixCSC` and not wrapped `Symmetric`.
-        t_ss = @belapsed $A \ $F samples=10 evals=1 seconds=15
+        t_ss = @belapsed $A\$F samples=10 evals=1 seconds=15
         _record!("pde_solve(:default) equivalent", n, dofs, t_accel, t_ss, "suitesparse")
     end
 end
@@ -279,7 +277,7 @@ function _bench_dense()
     println(
         "\n-- dense LU/Cholesky: two separate processes, since the moment this (main) ",
         "process's own `using AppleAccelerate` above runs, plain `LinearAlgebra.lu`/",
-        "`cholesky` in THIS process are already Accelerate-forwarded -- see the trap note",
+        "`cholesky` in THIS process are already Accelerate-forwarded -- see the trap note"
     )
     println(
         "   arm \"plain\"      = a fresh process that never loads AppleAccelerate (system BLAS/LAPACK, i.e. OpenBLAS)"
@@ -315,11 +313,9 @@ function _bench_dense()
                     baseline = "plain(openblas)", ratio = ratio
                 )
             )
-            @printf(
-                "    n=%-4d dofs=%-5d accelerate-forwarded=%9.3f ms  plain(openblas)=%9.3f ms  accelerate/plain=%.3fx%s\n",
+            @printf("    n=%-4d dofs=%-5d accelerate-forwarded=%9.3f ms  plain(openblas)=%9.3f ms  accelerate/plain=%.3fx%s\n",
                 n, rp.dofs, ra.time_s * 1e3, rp.time_s * 1e3, ratio,
-                ratio > 1 ? "  (Accelerate SLOWER)" : ""
-            )
+                ratio > 1 ? "  (Accelerate SLOWER)" : "")
         end
     end
     return nothing

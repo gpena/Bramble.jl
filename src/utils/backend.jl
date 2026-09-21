@@ -573,6 +573,14 @@ Construct a Metal GPU [`Backend`](@ref) backed by `Metal.jl` arrays.
 Requires `using Metal` in the caller environment. Apple Silicon GPUs support `Float32`
 and `Float16`, but do not support 64-bit floating point arithmetic.
 
+**A function projected on this backend has to be GPU-compilable.** `Rₕ(W, f)` on a
+`metal_backend` space compiles `f` into a device kernel rather than calling it from a host
+loop, so `f` must be device-compilable: no `Float64` literals (a bare literal like `0.5`
+forces double precision, which Apple Silicon GPUs do not support -- write `x[1] / 2`, not
+`x[1] * 0.5`), no allocations, and no calls to a non-inlineable or host-only function.
+`x -> sin(x[1])` compiles; anything capturing a boxed value or calling out to the host does
+not, and fails at compile time with a dynamic-invocation error rather than at the call site.
+
 # Arguments
 - `T`: Floating-point element type (`Float32` or `Float16`, default: `Float32`).
 

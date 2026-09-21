@@ -66,6 +66,13 @@ public supports_undef_construction
 # free. Declared by whoever adds a GPU backend, never called by a user of one, so `public`
 # rather than exported, alongside `supports_undef_construction` above.
 public ka_device
+# The device-write synchronisation hook (gpena/Bramble.jl#94, S4.2): the same
+# extension-contract idiom as `ka_device` just above, for a different gap it does not cover
+# -- a plain `copyto!` into a device array (not a `@kernel` launch) queues asynchronously
+# too, and needs the same `synchronize` a kernel launch already gets. `BrambleMetalExt` calls
+# nothing new to supply this: `BrambleKernelAbstractionsExt` implements it once, generically,
+# against `KernelAbstractions` alone.
+public ka_synchronize
 # The memory-locality trait (gpena/Bramble.jl#298): derived from an array type, never
 # declared, so a `Backend`'s storage and its execution policy can be checked against each
 # other instead of each independently claiming a locality that need not agree. A GPU package

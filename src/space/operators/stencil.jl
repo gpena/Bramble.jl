@@ -314,6 +314,59 @@ stored zero.
 @inline _stencil_taps(::BackwardAvgOp) = (0, -1)
 @inline _stencil_taps(::ForwardAvgOp) = (1, 0)
 
+# --- Host mirror for the dense fallback's per-point weight reads --------------------- #
+#
+# `_stencil_weights` reads its mesh through four queries alone (checked against all nine
+# methods below): the spacing at a point, the spacing to its forward neighbour, the point
+# count along one axis, and the element type. For a device-backed mesh (Metal.jl), reading
+# spacing straight off the mesh scalar-indexes a device array and is refused outright by the
+# scalar-indexing guard -- not merely slow, an error before the dense fallback (below,
+# `_stencil_matrix`) ever gets to write anything (gpena/Bramble.jl#94, measured in S2.6). The
+# dense fallback only ever needs `op`'s own axis, so this mirrors *that axis alone* to the
+# host once per `_stencil_matrix` call, via `host_spacings` (`mesh1d.jl`, gpena/Bramble.jl#94
+# S2.10) -- one bulk transfer, not one scalar read per point, and free on a host-backed mesh
+# since `host_spacings` returns the existing array there instead of copying it.
+#
+# It neither subtypes `AbstractMeshType` nor overloads `spacing`/`forward_spacing`/
+# `npoints`/`eltype` (gpena/Bramble.jl#94, JET cleanup, S2.6): a first attempt did both, and
+# `report_package` flagged it twice over, in two different ways. Subtyping `AbstractMeshType`
+# while answering only four of its methods made every `AbstractMeshType`-typed function in
+# the package -- not just `_stencil_weights` below -- pick this mirror up in a union split
+# and report the methods it does not implement (`point`, `_mesh_version`, calling a mesh as
+# `Ωₕ(dim)`) as missing. Dropping the supertype but keeping the four overloads traded that
+# for a subtler version of the same problem: `report_package` widens an untyped argument's
+# candidate type set to *every* concrete type answering the same call shape anywhere in the
+# package, not only the ones related through `AbstractMeshType` -- so this mirror's own
+# `npoints(m, ::Type{Tuple})` matched unrelated `npoints(Ωₕ, Tuple)` calls in
+# `src/mesh/marker.jl`, `src/space/operators/restriction.jl` and `src/space/inner_product.jl`,
+# widened those functions' inferred argument type to include it, and every *other* call on
+# that same variable then flagged it missing too -- a new report in a different file for
+# every fix, each patchable only by adding this mirror to an interface it has no business
+# answering. `_axis_spacing`/`_axis_forward_spacing`/`_axis_npoints`/`_axis_eltype` below give
+# `_stencil_weights` the same four queries under names nothing else in the package calls, so
+# this mirror never becomes a candidate for a dispatch it was not built to answer.
+struct _HostAxisSpacings{T, Dim}
+    h::Vector{T}
+end
+
+@inline _axis_eltype(Ωₕ::AbstractMeshType) = eltype(Ωₕ)
+@inline _axis_eltype(::_HostAxisSpacings{T, Dim}) where {T, Dim} = T
+
+@inline _axis_npoints(Ωₕ::AbstractMeshType, dim::Int) = npoints(Ωₕ, Tuple)[dim]
+@inline _axis_npoints(m::_HostAxisSpacings, ::Int) = length(m.h)
+
+@inline _axis_spacing(Ωₕ::AbstractMeshType, I::CartesianIndex, dim::Int) = spacing(Ωₕ, I, dim)
+@inline _axis_spacing(m::_HostAxisSpacings, I::CartesianIndex, dim::Int) = @inbounds m.h[I[dim]]
+
+@inline _axis_forward_spacing(Ωₕ::AbstractMeshType, I::CartesianIndex, dim::Int) = forward_spacing(
+    Ωₕ, I, dim
+)
+@inline function _axis_forward_spacing(m::_HostAxisSpacings, I::CartesianIndex, dim::Int)
+    n = length(m.h)
+    i = I[dim]
+    return @inbounds m.h[i == n ? n : i + 1]
+end
+
 """
     _stencil_weights(op::StencilOp{Dim}, Ωₕ::AbstractMeshType, I::CartesianIndex) -> NTuple{K}
 
@@ -323,54 +376,67 @@ falls outside the grid" exclusion `stencil_matrix` applies -- while the scaled a
 families additionally zero their own weight at a boundary that a Kronecker construction
 would reach through a since-zeroed weight vector rather than exclude, which this reproduces
 explicitly.
+
+`Ωₕ` is typed as `Union{AbstractMeshType, _HostAxisSpacings}` rather than `AbstractMeshType`
+alone: every method below reads its mesh through `_axis_spacing`/`_axis_forward_spacing`/
+`_axis_npoints`/`_axis_eltype` only, and [`_HostAxisSpacings`](@ref) answers exactly those
+four without claiming to be a mesh (see its own docstring).
 """
-@inline _stencil_weights(::UnscaledBackwardDiffOp, Ωₕ::AbstractMeshType, I::CartesianIndex) = (1, -1)
-@inline _stencil_weights(::UnscaledForwardDiffOp, Ωₕ::AbstractMeshType, I::CartesianIndex) = (1, -1)
+@inline _stencil_weights(
+    ::UnscaledBackwardDiffOp, Ωₕ::Union{AbstractMeshType, _HostAxisSpacings}, I::CartesianIndex
+) = (1, -1)
+@inline _stencil_weights(
+    ::UnscaledForwardDiffOp, Ωₕ::Union{AbstractMeshType, _HostAxisSpacings}, I::CartesianIndex
+) = (1, -1)
 
 @inline function _stencil_weights(
-        ::BackwardFiniteDiffOp{Dim}, Ωₕ::AbstractMeshType, I::CartesianIndex
+        ::BackwardFiniteDiffOp{Dim}, Ωₕ::Union{AbstractMeshType, _HostAxisSpacings}, I::CartesianIndex
 ) where {Dim}
-    h = spacing(Ωₕ, I, Dim)
+    h = _axis_spacing(Ωₕ, I, Dim)
     mask = I[Dim] == 1 ? 0 : 1
     return (mask / h, -mask / h)
 end
 
 @inline function _stencil_weights(
-        ::ForwardFiniteDiffOp{Dim}, Ωₕ::AbstractMeshType, I::CartesianIndex
+        ::ForwardFiniteDiffOp{Dim}, Ωₕ::Union{AbstractMeshType, _HostAxisSpacings}, I::CartesianIndex
 ) where {Dim}
-    n = npoints(Ωₕ, Tuple)[Dim]
-    h = forward_spacing(Ωₕ, I, Dim)
+    n = _axis_npoints(Ωₕ, Dim)
+    h = _axis_forward_spacing(Ωₕ, I, Dim)
     mask = I[Dim] == n ? 0 : 1
     return (mask / h, -mask / h)
 end
 
-@inline function _stencil_weights(::StarDiffOp{Dim}, Ωₕ::AbstractMeshType, I::CartesianIndex) where {Dim}
-    n = npoints(Ωₕ, Tuple)[Dim]
+@inline function _stencil_weights(
+        ::StarDiffOp{Dim}, Ωₕ::Union{AbstractMeshType, _HostAxisSpacings}, I::CartesianIndex
+) where {Dim}
+    n = _axis_npoints(Ωₕ, Dim)
     mask = I[Dim] == n ? 0 : 1
-    c = 2 * mask / (spacing(Ωₕ, I, Dim) + forward_spacing(Ωₕ, I, Dim))
-    return (c, -c)
-end
-
-@inline function _stencil_weights(::CenteredDiffOp{Dim}, Ωₕ::AbstractMeshType, I::CartesianIndex) where {Dim}
-    n = npoints(Ωₕ, Tuple)[Dim]
-    mask = (I[Dim] == 1 || I[Dim] == n) ? 0 : 1
-    c = mask / (spacing(Ωₕ, I, Dim) + forward_spacing(Ωₕ, I, Dim))
+    c = 2 * mask / (_axis_spacing(Ωₕ, I, Dim) + _axis_forward_spacing(Ωₕ, I, Dim))
     return (c, -c)
 end
 
 @inline function _stencil_weights(
-        ::CrossWeightedDiffOp{Dim}, Ωₕ::AbstractMeshType, I::CartesianIndex
+        ::CenteredDiffOp{Dim}, Ωₕ::Union{AbstractMeshType, _HostAxisSpacings}, I::CartesianIndex
 ) where {Dim}
-    n = npoints(Ωₕ, Tuple)[Dim]
+    n = _axis_npoints(Ωₕ, Dim)
+    mask = (I[Dim] == 1 || I[Dim] == n) ? 0 : 1
+    c = mask / (_axis_spacing(Ωₕ, I, Dim) + _axis_forward_spacing(Ωₕ, I, Dim))
+    return (c, -c)
+end
+
+@inline function _stencil_weights(
+        ::CrossWeightedDiffOp{Dim}, Ωₕ::Union{AbstractMeshType, _HostAxisSpacings}, I::CartesianIndex
+) where {Dim}
+    n = _axis_npoints(Ωₕ, Dim)
     if I[Dim] == 1
-        a = inv(spacing(Ωₕ, I, Dim))
+        a = inv(_axis_spacing(Ωₕ, I, Dim))
         return (a, -a, zero(a))
     elseif I[Dim] == n
-        b = inv(spacing(Ωₕ, I, Dim))
+        b = inv(_axis_spacing(Ωₕ, I, Dim))
         return (zero(b), b, -b)
     else
-        h = spacing(Ωₕ, I, Dim)
-        hf = forward_spacing(Ωₕ, I, Dim)
+        h = _axis_spacing(Ωₕ, I, Dim)
+        hf = _axis_forward_spacing(Ωₕ, I, Dim)
         total = h + hf
         a = h / (total * hf)
         b = hf / (total * h)
@@ -378,15 +444,19 @@ end
     end
 end
 
-@inline function _stencil_weights(::BackwardAvgOp{Dim}, Ωₕ::AbstractMeshType, I::CartesianIndex) where {Dim}
-    T = eltype(Ωₕ)
+@inline function _stencil_weights(
+        ::BackwardAvgOp{Dim}, Ωₕ::Union{AbstractMeshType, _HostAxisSpacings}, I::CartesianIndex
+) where {Dim}
+    T = _axis_eltype(Ωₕ)
     mask = I[Dim] == 1 ? zero(T) : T(1) / 2
     return (mask, mask)
 end
 
-@inline function _stencil_weights(::ForwardAvgOp{Dim}, Ωₕ::AbstractMeshType, I::CartesianIndex) where {Dim}
-    T = eltype(Ωₕ)
-    n = npoints(Ωₕ, Tuple)[Dim]
+@inline function _stencil_weights(
+        ::ForwardAvgOp{Dim}, Ωₕ::Union{AbstractMeshType, _HostAxisSpacings}, I::CartesianIndex
+) where {Dim}
+    T = _axis_eltype(Ωₕ)
+    n = _axis_npoints(Ωₕ, Dim)
     mask = I[Dim] == n ? zero(T) : T(1) / 2
     return (mask, mask)
 end
@@ -491,34 +561,11 @@ function _stencil_matrix(
     return SparseMatrixCSC{Tv, Ti}(N, N, colptr, rowval, nzval)
 end
 
-# --- Host mirror for the dense fallback's per-point weight reads --------------------- #
+# --- Dense fallback: mirror the axis to the host, then copy in one shot --------------- #
 #
-# `_stencil_weights` reads its mesh through `spacing`/`forward_spacing`/`npoints`/`eltype`
-# alone (checked against all nine methods above). For a device-backed mesh (Metal.jl),
-# `spacing`/`forward_spacing` scalar-index a device array and are refused outright by the
-# scalar-indexing guard -- not merely slow, an error before the dense fallback below ever
-# gets to write anything (gpena/Bramble.jl#94, measured in S2.6). The dense fallback only
-# ever needs `op`'s own axis, so this mirrors *that axis alone* to the host once per
-# `_stencil_matrix` call, via `host_spacings` (`mesh1d.jl`, gpena/Bramble.jl#94 S2.10) -- one
-# bulk transfer, not one scalar read per point, and free on a host-backed mesh since
-# `host_spacings` returns the existing array there instead of copying it -- and answers the
-# same four queries, so every existing `_stencil_weights` method, sparse and dense alike,
-# runs against it unmodified: `AbstractMeshType` is what those methods dispatch on, and this
-# mirror is one so they resolve without a second copy of any of their math.
-struct _HostAxisSpacings{T, Dim} <: AbstractMeshType{Dim}
-    h::Vector{T}
-end
-
-@inline eltype(::_HostAxisSpacings{T, Dim}) where {T, Dim} = T
-@inline npoints(m::_HostAxisSpacings{T, Dim}, ::Type{Tuple}) where {T, Dim} = ntuple(
-    _ -> length(m.h), Val(Dim)
-)
-@inline spacing(m::_HostAxisSpacings, I::CartesianIndex, dim::Int) = @inbounds m.h[I[dim]]
-@inline function forward_spacing(m::_HostAxisSpacings, I::CartesianIndex, dim::Int)
-    n = length(m.h)
-    i = I[dim]
-    return @inbounds m.h[i == n ? n : i + 1]
-end
+# `_HostAxisSpacings`, defined above (before `_stencil_weights`, which is typed to accept
+# it) alongside the other `StencilOp` scaffolding, is what the dense fallback below mirrors
+# `op`'s axis onto.
 
 function _stencil_matrix(
         ::Type{MT}, Ωₕ::AbstractMeshType, op::StencilOp{Dim}

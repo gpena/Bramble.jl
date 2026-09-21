@@ -684,6 +684,20 @@ end
 @inline _dot_masked(policy::ExecutionPolicy, u, v, w, mask) = _dot_masked(
     locality(policy), policy, u, v, w, mask)
 
+# Completes the `(Locality, ExecutionPolicy)` dispatch the two lines above open, the same
+# shape `_sweep_for!` already uses: a `HostLocality` destination reaches straight back to the
+# concrete-policy methods above (no behaviour change on CPU), the `DeviceLocality`/`GpuPolicy`
+# methods below are the device side, and the catch-all at the end of this file throws via
+# `_throw_locality_mismatch` for the two mismatched pairings. Without these, `report_package`
+# only sees the `(DeviceLocality, GpuPolicy)` case and flags the rest as unreachable dispatch.
+@inline _dot(::HostLocality, ::CpuSerial, u, v, w) = _dot(u, v, w)
+@inline _dot(::HostLocality, ::CpuThreaded, u, v, w) = _dot(u, v, w)
+@noinline _dot(::HostLocality, ::CpuBatch, u, v, w) = _batch_dot(u, v, w)
+
+@inline _dot_masked(::HostLocality, ::CpuSerial, u, v, w, mask) = _dot_masked(u, v, w, mask)
+@inline _dot_masked(::HostLocality, ::CpuThreaded, u, v, w, mask) = _dot_masked(u, v, w, mask)
+@noinline _dot_masked(::HostLocality, ::CpuBatch, u, v, w, mask) = _batch_dot_masked(u, v, w, mask)
+
 """
     _dot(::DeviceLocality, ::GpuPolicy, u::AbstractVector, v::AbstractVector, w::AbstractVector) -> Real
 
@@ -727,7 +741,7 @@ end
     _dot_masked(::DeviceLocality, ::GpuPolicy, u, v, w, mask::MarkedIndicesUnion) -> Real
 
 The multi-marker counterpart of the `BitVector` method above: `mask` is walked once, on the
-host, to build a plain `BitVector` (the same union [`_combined_mask`](@ref) would have
+host, to build a plain `BitVector` (the same union `_combined_mask` would have
 materialized), which is then copied onto `u`'s own device exactly as above.
 
 # Throws
@@ -747,3 +761,9 @@ materialized), which is then copied onto `u`'s own device exactly as above.
     copyto!(md, Vector{Bool}(hostmask))
     return sum(u .* v .* w .* md)
 end
+
+# The `_sweep_for!` catch-all's counterpart: a locality/policy pairing neither the host nor
+# the device methods above claim (a device destination under a `CpuPolicy`, or a host one
+# under a `GpuPolicy`) names which half disagreed instead of falling through to a `MethodError`.
+@noinline _dot(loc::Locality, policy, u, v, w) = _throw_locality_mismatch(loc, policy)
+@noinline _dot_masked(loc::Locality, policy, u, v, w, mask) = _throw_locality_mismatch(loc, policy)

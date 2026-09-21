@@ -32,9 +32,11 @@
 # narrowed to `issymmetric(A)`. An explicit `sym` hint is trusted outright rather than
 # re-checked: the caller has already asserted the property, and `:unsymmetric` is exactly the
 # case this narrowing exists to route away from Accelerate.
-_default_wants_accelerate(A, sym) = sym === :spd || sym === :definite || sym == 1 ||
-                                     sym === :symmetric || sym == 2 ||
-                                     (sym === :auto && issymmetric(A))
+function _default_wants_accelerate(A, sym)
+    sym === :spd || sym === :definite || sym == 1 ||
+        sym === :symmetric || sym == 2 ||
+        (sym === :auto && issymmetric(A))
+end
 
 """
     pde_solve(A::SparseMatrixCSC, F::AbstractVector; solver = :default, sym = :auto, kwargs...) -> Vector

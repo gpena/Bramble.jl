@@ -280,10 +280,14 @@ using ExplicitImports
                 # on their `src/utils/backend.jl` stubs, but neither is exported nor declared
                 # `public` in `src/Bramble.jl`, nor documented in `docs/src/api.md` -- so today
                 # they are unqualified internals too, the same as the extension's other entry
-                # points above.
+                # points above. `SparseArrays.sparse!` (gpena/Bramble.jl#94) is that package's
+                # in-place `sparse`, never marked public there, and how `_allocate_from_pattern`
+                # builds the host-side CSR arrays it hands to `metal_sparse_csr` -- the same
+                # combiner `SparseMatrixCSC`'s own method already reaches for by the same name.
                 :_gpu_functional,
                 :metal_sparse_csr,
                 :metal_sparse_csc,
+                Symbol("sparse!"),
                 # BrambleMetalExt's device sparse placeholder types (gpena/Bramble.jl#250)
                 # subtype `Metal.GPUArrays`'s own `AbstractGPUSparseMatrixCSR`/
                 # `AbstractGPUSparseMatrixCSC` until tagged Metal.jl ships the real

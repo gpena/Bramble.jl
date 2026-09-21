@@ -53,7 +53,8 @@ bounds is "stored" for a dense backend, at `LinearIndices(A)[row, col]`.
     return 0
 end
 
-@inline _scatter_position(A::AbstractMatrix, row::Int, col::Int) = LinearIndices(A)[row, col]
+@inline _scatter_position(A::AbstractMatrix, row::Int, col::Int) = _scatter_position(locality(typeof(A)), A, row, col)
+@inline _scatter_position(::HostLocality, A::AbstractMatrix, row::Int, col::Int) = LinearIndices(A)[row, col]
 
 """
     _scatter_add!(A::AbstractMatrix, pos::Int, val) -> Nothing
@@ -68,13 +69,298 @@ Add `val` at the position [`_scatter_position`](@ref) named in `A`'s own storage
     @inbounds A.nzval[pos] += val
     return nothing
 end
-@inline function _scatter_add!(A::AbstractMatrix, pos::Int, val)
+@inline _scatter_add!(A::AbstractMatrix, pos::Int, val) = _scatter_add!(locality(typeof(A)), A, pos, val)
+@inline function _scatter_add!(::HostLocality, A::AbstractMatrix, pos::Int, val)
     @inbounds A[pos] += val
     return nothing
 end
 
+# --- device-resident CSR: search and scatter without scalar indexing (gpena/Bramble.jl#94,
+# S4.2) --------------------------------------------------------------------------------- #
+#
+# A Bramble-owned device CSR (`BrambleMetalExt.MetalSparseMatrixCSR` today, a future
+# `CuSparseMatrixCSR`/etc. tomorrow) is not a `SparseMatrixCSC`, so unmodified it fell into
+# the generic `AbstractMatrix` fallbacks above, which scalar-index the backing array and
+# throw `Scalar indexing is disallowed` the moment `assemble!`/`assemble_parallel!` reach it.
+#
+# This file has no dependency on Metal (or on `GPUArrays`), so it cannot name
+# `MetalSparseMatrixCSR` and dispatch on it directly -- exactly the reason every new device
+# method in this milestone keys on `::DeviceLocality` (derived from storage,
+# `Bramble.locality`), never on a concrete backend type. What *is* named here is a field
+# layout, not a type: `rowPtr`/`colVal`/`nzVal`/`dims`, the row-major CSR convention
+# `BrambleMetalExt` already documents and that CUDA.jl's own `CuSparseMatrixCSR` shares --
+# the whole point of `ka_device`'s GPU-agnostic design (S0.1) is that a second backend
+# inherits this for free by matching the same field names.
+#
+# The search itself needs `rowPtr`/`colVal` off the device, and per-entry scatter needs
+# somewhere to accumulate that is not a scalar `setindex!` into device memory. Both host
+# mirrors are cached per matrix object (`_device_csr_mirror`), built once with two bulk
+# transfers (`Array(A.rowPtr)`, `Array(A.colVal)`) rather than one scalar read per entry --
+# the same "one bulk transfer, never one per element" rule `host_weights` (S4.0) follows.
+# `_zero_stored!` resets the cached `nzval` mirror itself (below) -- never `A.nzVal` on a
+# device matrix, which would race the flush (see that method's own comment) -- so a second
+# `assemble!` on the same `A` does not accumulate on top of the first.
+#
+# `visit_bilinear_stencil`'s own sinks (`RecordSink`/`ReplaySink`) reduce to exactly
+# `_scatter_position`/`_scatter_add!` too, so they pick up this method for free; the only
+# path that actually reaches a device matrix today is the band-coloured sweep
+# (`_assemble_bilinear_parallel_core!`, `bilinear_execution.jl`) that a `GpuPolicy` backend's
+# assembly is forced into (see `_coerce_serial_to_threaded` below).
+#
+# The cache exists for exactly one reason: so a *second* `assemble!` on the same long-lived
+# `A` reuses the already-downloaded `rowPtr`/`colVal` instead of re-fetching them every call.
+# It is **not** consulted per scattered entry -- `bilinear_execution.jl` resolves a matrix's
+# mirror once, before its sweep starts (`_resolve_device_mirror`), and threads that one object
+# through the whole sweep and the flush as a plain argument. That distinction is the result of
+# S4.2's actual bug (round 7), not a design chosen up front: a per-call re-lookup keyed on `A`
+# -- what every earlier round of this cache still did, however it was guarded -- lost the odd
+# near-boundary matrix entry in a repeated-assembly stress test (`n = 513`/`1025`/`2049`, 40+
+# assemblies each, every one compared against the CPU result), and neither `GC.@preserve A`
+# around the sweep, nor `ka_synchronize` at several points, nor a `ReentrantLock` around every
+# access, nor swapping the container from `IdDict` to `Dict`, closed it alone. Bypassing the
+# lookup during the sweep entirely did, immediately and completely -- confirmed first with a
+# plain `Ref` standing in for this whole cache, then written the "real" way below. See
+# [`_resolve_device_mirror`](@ref)'s own docstring for the full account.
+#
+# The cache is keyed on `objectid(A)` -- a plain `UInt`, not `A` itself -- with a `WeakRef`
+# carried alongside to confirm the key was not reused by an unrelated later object once `A`
+# is collected. `IdDict{Any,_DeviceSparseMirror}` keyed directly on `A` was the first version
+# of this and leaked: an `IdDict` holds its keys strongly, so `A` -- and through it, its
+# device `rowPtr`/`colVal`/`nzVal` -- stayed reachable, and therefore unfreed, for the rest
+# of the session, however many forms were assembled and discarded after it (review finding,
+# S4.2, round 2). Neither `A` itself nor the host mirror is ever kept alive by anything other
+# than the `WeakRef`, so once nothing else references `A`, this entry decays to a dead
+# `WeakRef` that the next `_device_csr_mirror` call on a colliding `objectid` replaces
+# outright. `Dict`, not `IdDict`, backs the cache itself: the key here is a plain `UInt`
+# value, not an object with a meaningful notion of identity beyond its value, which is
+# exactly what ordinary `==`/`hash` comparison is for and `IdDict`'s `===` semantics are not
+# -- keeping `IdDict` for this key type was one of the things tried and measurably wrong.
+#
+# A dead entry is still a second leak on its own, smaller but real (review finding, round 2):
+# the dict keeps the *tuple* -- `WeakRef` and `_DeviceSparseMirror` alike -- reachable forever
+# once inserted, so a dead `WeakRef` leaves its three host vectors (`rowptr`/`colval`/`nzval`,
+# each `nnz` long) stranded rather than freed. `_device_csr_mirror` prunes every dead entry
+# each time it builds a new one: pruning is a linear scan of the whole cache, and a build
+# already pays for two device-to-host transfers, so amortising the scan there costs nothing
+# extra that matters -- and, now that a build happens once per assembly rather than once per
+# scattered entry, the scan runs far less often than it once would have.
+mutable struct _DeviceSparseMirror{Tv}
+    const rowptr::Vector{Int}
+    const colval::Vector{Int}
+    const nzval::Vector{Tv}
+end
+
+const _device_sparse_mirrors = Dict{UInt, Tuple{WeakRef, _DeviceSparseMirror}}()
+
+# Guards every access now that a build can, in principle, run concurrently with another
+# thread's read of a *different* matrix's entry (`Threads.@threads`-driven assembly is not
+# ruled out anywhere in this package): `Dict` inserts are not thread-safe, and this is cheap
+# insurance against it now that it only runs once per assembly rather than once per scattered
+# entry.
+const _device_sparse_mirrors_lock = ReentrantLock()
+
+@inline function _existing_device_mirror(A)
+    entry = lock(_device_sparse_mirrors_lock) do
+        get(_device_sparse_mirrors, objectid(A), nothing)
+    end
+    entry === nothing && return nothing
+    wr, mirror = entry
+    return wr.value === A ? mirror : nothing
+end
+
+@inline function _device_csr_mirror(A)
+    mirror = _existing_device_mirror(A)
+    mirror === nothing || return mirror
+    ka_synchronize(A.rowPtr)
+    rowptr = Vector{Int}(Array(A.rowPtr))
+    colval = Vector{Int}(Array(A.colVal))
+    built = _DeviceSparseMirror{eltype(A)}(rowptr, colval, zeros(eltype(A), length(colval)))
+    lock(_device_sparse_mirrors_lock) do
+        # Prune dead entries before inserting the new one -- see the comment above the cache
+        # itself for why this is here and not in `_existing_device_mirror`.
+        filter!(kv -> kv.second[1].value !== nothing, _device_sparse_mirrors)
+        _device_sparse_mirrors[objectid(A)] = (WeakRef(A), built)
+    end
+    return built
+end
+
 """
-    add_to_sparse!(A::AbstractMatrix, row::Int, col::Int, val::Number, term) -> Nothing
+    _resolve_device_mirror(A::AbstractMatrix) -> Union{Nothing, _DeviceSparseMirror}
+
+Build (or confirm cached) the host mirror [`_scatter_position`](@ref)/[`_scatter_add!`](@ref)
+need for a `DeviceLocality` matrix, before any threaded sweep starts, and return it.
+
+`nothing` for a host matrix. `bilinear_execution.jl` calls this exactly once per assembly,
+ahead of the band-coloured sweep, and threads the returned object through the sweep and the
+flush as a plain argument from then on -- **not** by handing every caller `A` and letting
+`_scatter_position`/`_scatter_add!` look the mirror up again via `_device_csr_mirror`
+each time.
+
+That per-call lookup was S4.2's actual bug, round 7, found only by an instrumented stress
+test and not by reasoning about it: a 40+-assembly repeated-assembly check at `n = 513`,
+`n = 1025` and `n = 2049` lost the odd near-boundary matrix entry (`_zero_stored!`'s device
+`fill!` race, `A`'s GC liveness during the sweep, and the cache's `IdDict` vs `Dict` key
+semantics were each tried, each measurably helped, and none alone reached zero failures) --
+until the lookup itself was replaced with a single value resolved once and passed by hand,
+which reached zero failures outright and stayed there. Once the mechanism was identified,
+what varied between rounds stopped mattering: a *global, keyed* re-lookup on every scattered
+entry is the shape of bug this file no longer has, regardless of which container backs it.
+`_device_csr_mirror`'s cache (below) still exists, and is still worth keeping, for the one
+thing a keyed lookup is actually needed for: recognising the *same* long-lived `A` across
+repeated `assemble!` calls, so its `rowPtr`/`colVal` are not re-downloaded every time.
+"""
+@inline _resolve_device_mirror(A::AbstractMatrix) = _resolve_device_mirror(locality(typeof(A)), A)
+@inline _resolve_device_mirror(::HostLocality, A::AbstractMatrix) = nothing
+@inline _resolve_device_mirror(::DeviceLocality, A::AbstractMatrix) = _device_csr_mirror(A)
+
+"""
+    _flush_device_scatter!(A::AbstractMatrix, mirror) -> Nothing
+
+Copy the host-staged `nzval` mirror back to `A`'s device storage in one bulk `copyto!`, and
+block until that copy has actually landed.
+
+A no-op for a host matrix (`mirror === nothing` always, there), and for a device matrix with
+no mirror yet (nothing was ever scattered into it). `bilinear_execution.jl` calls this
+exactly once, after its band-coloured sweep returns, passing the *same* mirror object
+[`_resolve_device_mirror`](@ref) gave it before the sweep started -- never re-fetched here --
+for the reason [`_resolve_device_mirror`](@ref)'s own docstring gives in full. One `copyto!`
+of the whole array per assembly, not one per entry, now that owning `bilinear_execution.jl`
+gives this seam a place to run from (S4.2's first round scattered each entry straight to
+`A.nzVal` piecemeal; correct, but hundreds of thousands of 4-byte device transfers on a real
+matrix).
+
+The `copyto!` alone was not enough either (S4.2, round 4): a device write queues
+asynchronously exactly like a `@kernel` launch does, and every kernel launch in this
+milestone is followed by a `synchronize` -- this one was not, so `assemble`/`assemble!` could
+return before the copy had actually landed, and a caller reading `A` right after got
+whatever was there so far. [`ka_synchronize`](@ref) is the fix, following that same
+kernel-launch idiom for a caller that has a device array but no kernel of its own.
+"""
+@inline _flush_device_scatter!(A::AbstractMatrix, mirror) = _flush_device_scatter!(locality(typeof(A)), A, mirror)
+@inline _flush_device_scatter!(::HostLocality, A::AbstractMatrix, mirror) = nothing
+@inline function _flush_device_scatter!(::DeviceLocality, A::AbstractMatrix, mirror)
+    mirror === nothing && return nothing
+    copyto!(A.nzVal, mirror.nzval)
+    ka_synchronize(A.nzVal)
+    return nothing
+end
+
+# The CSR mirror image of the `SparseMatrixCSC` search above: `row` picks the slice of
+# `colVal` (sorted ascending within it, `BrambleMetalExt.metal_sparse_csr`'s own invariant,
+# built from `SparseMatrixCSC(transpose(A))`) and the search is for `col` inside it.
+#
+# Takes the mirror directly rather than looking it up from `A` -- see
+# [`_resolve_device_mirror`](@ref)'s docstring for why a per-call lookup keyed on `A` is
+# exactly the bug this shape avoids. [`_scatter_position`](@ref)'s own `::DeviceLocality`
+# method below still does that lookup, for the sinks in this file (`RecordSink`/`ReplaySink`)
+# that only ever carry `A`, not a resolved mirror; it is unreachable for a device matrix
+# today (a `GpuPolicy` backend's assembly never takes the sink-based path,
+# `bilinear_execution.jl`'s own header comment), kept only so the seam still behaves if that
+# changes, not as the fast path.
+@inline function _scatter_position_mirror(mirror::_DeviceSparseMirror, row::Int, col::Int)
+    rowptr = mirror.rowptr
+    colval = mirror.colval
+    p1 = rowptr[row]
+    p2 = rowptr[row + 1] - 1
+
+    if (p2 - p1) < 32
+        idx = p1
+        @inbounds while idx <= p2
+            colval[idx] == col && return idx
+            idx += 1
+        end
+    else
+        lo = p1
+        hi = p2
+        @inbounds while lo <= hi
+            mid = (lo + hi) >>> 1
+            mid_col = colval[mid]
+            if mid_col < col
+                lo = mid + 1
+            elseif mid_col > col
+                hi = mid - 1
+            else
+                return mid
+            end
+        end
+    end
+    return 0
+end
+
+@inline _scatter_position(::DeviceLocality, A::AbstractMatrix, row::Int, col::Int) = _scatter_position_mirror(
+    _device_csr_mirror(A), row, col)
+
+# Accumulates into the host mirror only -- never a device scalar read or write: `+=` would
+# need the former, and `A.nzVal` is left untouched until `_flush_device_scatter!` copies the
+# whole mirror across once, after the sweep that calls this returns. The device array is
+# stale for the duration of that sweep, but nothing reads it before then: the pattern this
+# file guarantees ("every scattered entry is in the pattern") says where an entry lands, not
+# when `A` itself becomes readable, and `bilinear_execution.jl` never hands `A` back to a
+# caller mid-sweep.
+#
+# Takes the mirror directly -- see `_scatter_position_mirror` just above for why.
+@inline function _scatter_add_mirror!(mirror::_DeviceSparseMirror, pos::Int, val)
+    @inbounds mirror.nzval[pos] += val
+    return nothing
+end
+
+@inline _scatter_add!(::DeviceLocality, A::AbstractMatrix, pos::Int, val) = _scatter_add_mirror!(_device_csr_mirror(A), pos, val)
+
+# The other half of `_zero_stored!`'s matrix-type seam (`bilinear.jl`): any
+# `AbstractSparseMatrix` that is not the concrete `SparseMatrixCSC` above -- a device CSR
+# included, since `MetalSparseMatrixCSR <: ... <: AbstractSparseMatrix` through
+# `GPUArrays.AbstractGPUSparseArray` -- zeros its stored values, generically. The plain
+# `AbstractMatrix` fallback in `bilinear.jl` would otherwise reach `fill!(A, ...)`, which
+# tries `setindex!` at every `(i, j)` including positions no sparse format stores at all --
+# wrong for any sparse matrix, not only a device one, and the reason this needs to be its own
+# method.
+#
+# This DOES need a `DeviceLocality` split, unlike the first two rounds assumed (S4.2, round
+# 5): `nonzeros(A)` resolves to `A.nzVal` on a device matrix, and `fill!` on an `MtlVector` is
+# an asynchronous device kernel -- a second, unordered writer racing
+# `_flush_device_scatter!`'s `copyto!` at the end of the same assembly. Nothing orders "queue
+# the zeroing kernel" against "sweep the host mirror, then blit it over `A.nzVal`", so the
+# zero-fill could land *after* the flush and silently wipe entries the sweep had just written
+# correctly -- reproduced at `n = 1025` (2-3 wrong matrices per 40, worst element error
+# `2048.0`, matching `2/h` at `h = 1/1024`), invisible at small `n` only because the fill
+# kernel happens to finish before the host-side sweep does. `ka_synchronize` after the flush
+# does not touch this: the corruption is already committed to `A.nzVal` before anything reads
+# it, so no amount of synchronising a *read* afterwards helps.
+#
+# The fix removes the second writer instead of ordering the two: `_flush_device_scatter!`
+# unconditionally overwrites every stored entry of `A.nzVal` from `mirror.nzval`, so zeroing
+# the device array first is redundant work as well as the race's other half. Zeroing the
+# *mirror* -- host memory, no device kernel, no timing to get wrong -- is what the sweep
+# actually reads and writes, so that alone is both correct and one fewer device kernel per
+# assembly. `_scatter_add!` accumulates into it with `+=`, so a second `assemble!` on the
+# same `A` would double the first assembly's contribution at every entry the new one also
+# touches, without this reset.
+@inline _zero_stored!(A::SparseArrays.AbstractSparseMatrix) = _zero_stored!(locality(typeof(A)), A)
+@inline function _zero_stored!(::HostLocality, A::SparseArrays.AbstractSparseMatrix)
+    fill!(nonzeros(A), zero(eltype(A)))
+    return A
+end
+@inline function _zero_stored!(::DeviceLocality, A::SparseArrays.AbstractSparseMatrix)
+    ka_synchronize(nonzeros(A))
+    mirror = _existing_device_mirror(A)
+    mirror === nothing || fill!(mirror.nzval, zero(eltype(mirror.nzval)))
+    return A
+end
+
+# `_effective_parallel_policy` (`linear_algebra.jl`) coerces `CpuSerial` to `CpuThreaded` so
+# a forced-threaded sweep always threads; it has no answer for a `GpuPolicy` backend, which
+# reaches it because `_assemble_bilinear!` (`bilinear.jl`) sends anything that is not
+# `CpuSerial` down the same forced-parallel path. The band-coloured sweep itself is already
+# matrix-type generic (`_sweep_bilinear_colour!`/`_sweep_band_colour!`, `bilinear_execution.jl`
+# -- both dispatch on `CpuThreaded`/`CpuBatch` and reach storage only through
+# `_scatter_position`/`_scatter_add!` above), so a `GpuPolicy` backend can run the exact same
+# `Threads.@threads` sweep as any CPU one: coloring already keeps two concurrently-swept
+# points from writing the same row, which is the only safety property either side of this
+# seam needs.
+@inline _coerce_serial_to_threaded(::GpuPolicy) = CpuThreaded()
+
+"""
+    add_to_sparse!(A::AbstractMatrix, row::Int, col::Int, val::Number, term, mirror = nothing) -> Nothing
 
 Add `val` to `A[row, col]`, which the preallocated sparsity pattern is required to contain.
 
@@ -90,13 +376,28 @@ for that is `test/form/bilinear.jl`, "Composite blocks".
 `term` is carried only to name the offending node in the message, and read only on the
 branch that throws.
 
+`mirror`, when given, is a `_DeviceSparseMirror` [`_resolve_device_mirror`](@ref) already
+built for `A`: `bilinear_execution.jl`'s band-coloured sweep passes the *same* one on every
+call for one assembly, so the search and the add below go straight to it
+(`_scatter_position_mirror`/`_scatter_add_mirror!`) instead of resolving it
+from `A` again each time -- the per-call re-lookup was S4.2's actual bug (see
+[`_resolve_device_mirror`](@ref)'s docstring). Left as `nothing` (the default), this falls
+back to the ordinary `_scatter_position(A, ...)`/`_scatter_add!(A, ...)` dispatch, correct
+for a host matrix and for a device one reached some other way.
+
 See also: [`allocate_system_matrix`](@ref) and [`RecordSink`](@ref), which raises the same
 way on the serial recording pass.
 """
-@inline function add_to_sparse!(A::AbstractMatrix, row::Int, col::Int, val::Number, term)
-    pos = _scatter_position(A, row, col)
-    pos == 0 && _throw_missing_pattern_entry(term)
-    _scatter_add!(A, pos, val)
+@inline function add_to_sparse!(A::AbstractMatrix, row::Int, col::Int, val::Number, term, mirror = nothing)
+    if mirror === nothing
+        pos = _scatter_position(A, row, col)
+        pos == 0 && _throw_missing_pattern_entry(term)
+        _scatter_add!(A, pos, val)
+    else
+        pos = _scatter_position_mirror(mirror, row, col)
+        pos == 0 && _throw_missing_pattern_entry(term)
+        _scatter_add_mirror!(mirror, pos, val)
+    end
     return nothing
 end
 

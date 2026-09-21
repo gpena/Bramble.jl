@@ -87,7 +87,9 @@ end
 Build the matrix a `BilinearForm` assembles into: the appropriate size, correct sparsity
 pattern, and stored zeros throughout, in `matrix_type(backend(test_space(form)))` --
 `SparseMatrixCSC{Float64,Int}` by default, or whatever [`backend`](@ref) the space's mesh was
-built with (see [`_allocate_from_pattern`](@ref)).
+built with (see [`_allocate_from_pattern`](@ref)). On a [`metal_backend`](@ref) space this
+returns a device-resident `BrambleMetalExt.MetalSparseMatrixCSR{Float32,Int64}`, not a host
+`SparseMatrixCSC` -- verified against real triplets (gpena/Bramble.jl#94 S4.1).
 
 The pattern follows from the stencil rather than coefficient values, remaining invariant while the mesh
 and expression structure are unchanged. Preallocating the matrix once outside loops allows zero-allocation
