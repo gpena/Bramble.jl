@@ -131,5 +131,13 @@ function _pc_interpolation_session(Ω_src, Ω_dest)
 
     assemble(form(W_dest, v -> innerₕ(πₕ(u_src), v)))
     assemble(form(W_src, W_dest, (u, v) -> innerₕ(πₕ(u), v)))
+    # Two more shapes test/form/interpolation_operator.jl repeats often enough (3-4 times
+    # each) to be worth precompiling here rather than paying ~0.5s per occurrence fresh:
+    # interpolating the test argument instead of the trial, and a difference operator
+    # wrapped around the interpolant. (A third candidate, `πₕ(u) + u` across two different
+    # meshes, was dropped -- that shape is almost always the cross-mesh-mismatch
+    # `ArgumentError` the pattern layer is deliberately checking for, not something to warm.)
+    assemble(form(W_dest, W_src, (u, v) -> innerₕ(u, πₕ(v))))
+    assemble(form(W_src, W_dest, (u, v) -> inner₊ₓ(D₋ₓ(πₕ(u)), D₋ₓ(v))))
     return nothing
 end
