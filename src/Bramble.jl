@@ -98,6 +98,9 @@ public _launch_restriction_nd!, _launch_restriction_scatter_nd!
 public _launch_cell_average!, _launch_cell_average_scatter!
 public _launch_cell_average_nd!, _launch_cell_average_scatter_nd!
 public _launch_difference_onesided!, _launch_difference_centered!, _launch_average_engine!
+public _launch_uniform_mesh1d_init!, _launch_nonuniform_mesh1d_metrics!
+public _launch_fused_divergence!, _launch_fused_curl2d!, _launch_fused_curl3d!
+public _launch_fused_laplacian!, _launch_fused_strain_offdiag!
 # Row-parallel SpMV/SpMM for a device CSR matrix (gpena/Bramble.jl#250, #174): same
 # extension-contract idiom as the launch hooks above -- `BrambleMetalExt`'s `mul!` methods
 # for `MetalSparseMatrixCSR` call into these, and `BrambleKernelAbstractionsExt` supplies

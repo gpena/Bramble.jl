@@ -96,6 +96,10 @@ using ExplicitImports
                 :BilinearForm,
                 :LinearForm,
                 :CartesianProduct,
+                # `_DeviceSparseMirror` (BrambleMetalExt, gpena/Bramble.jl#313): the host
+                # staging buffer type named in `MetalSparseMatrixCSR`'s own `mirror` field,
+                # the same "internal type in a field signature" shape as `BilinearForm` above.
+                :_DeviceSparseMirror,
                 :trial_space,
                 :_vtk_axes,
                 :_vtk_data,
@@ -220,6 +224,15 @@ using ExplicitImports
                 :_stencil_step,
                 :_stencil_boundary_dim,
                 :_write_components!,
+                # The direction/stencil-kind dispatch types the fused vector-calculus and
+                # difference kernels are parametrised over (src/space/operators/stencil.jl,
+                # src/space/operators/difference.jl) -- named in the `@kernel`s' own method
+                # signatures, the same way `CartesianProduct` below is, and none exported.
+                :GridDirection,
+                :Forward,
+                :Backward,
+                :Centered,
+                :CrossWeighted,
                 :ArrayStyle,
                 :BroadcastStyle,
                 :Broadcasted,
