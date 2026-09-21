@@ -3,6 +3,9 @@ module ExtMetalExtTests
 using Test
 using Bramble
 using Metal
+# BrambleMetalExt's trigger is now the pair `["Metal", "GPUArrays"]` (gpena/Bramble.jl#321),
+# not `Metal` alone -- both must be `using`'d here for the extension to load at all.
+using GPUArrays
 using SparseArrays
 using LinearAlgebra: I, mul!
 using Bramble: Backend, vector, matrix, _backend_eye, _backend_zeros, metal_sparse_csr,

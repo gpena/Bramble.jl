@@ -43,10 +43,14 @@ Return the [`Locality`](@ref) of `x` -- an array type, an [`ExecutionPolicy`](@r
 
 Locality is derived from storage, never declared. The fallback method,
 `locality(::Type{<:AbstractArray}) = HostLocality()`, treats any array type this package has
-not been taught otherwise about as host memory. A GPU package extension adds one method for
-its own array type to change that answer -- `BrambleMetalExt` answers `DeviceLocality()` for
-`MtlVector`/`MtlMatrix` -- the same idiom as [`ka_device`](@ref): a method a package
-extension supplies for its own type, picked up automatically once loaded.
+not been taught otherwise about as host memory. Any array type subtyping
+`GPUArraysCore.AbstractGPUArray` answers `DeviceLocality()` generically (gpena/Bramble.jl#321),
+so a GPU package extension no longer has to add its own method for that to hold -- Metal's
+`MtlVector`/`MtlMatrix` already subtype it, and any future CUDA/ROCm/oneAPI array type gets
+the right answer the same way, for free. `BrambleMetalExt` keeps its own
+`MtlVector`/`MtlMatrix`/sparse-matrix methods regardless: Julia dispatches to the more
+specific method, and those predate this generic one -- the same idiom as [`ka_device`](@ref):
+a method a package extension supplies for its own type, picked up automatically once loaded.
 
 For an [`ExecutionPolicy`](@ref), `locality` answers what the policy claims: a
 [`CpuPolicy`](@ref) claims [`HostLocality`](@ref), a [`GpuPolicy`](@ref) claims
@@ -73,6 +77,17 @@ See also: [`Locality`](@ref), [`HostLocality`](@ref), [`DeviceLocality`](@ref),
 function locality end
 
 @inline locality(::Type{<:AbstractArray}) = HostLocality()
+
+# GPUArraysCore is a direct dependency for exactly this (gpena/Bramble.jl#321): its
+# `AbstractGPUArray` is the abstract supertype every GPU array type subtypes -- Metal.jl's
+# `MtlArray` among them -- so this one generic method answers `DeviceLocality()` for any
+# device array type without that backend's extension needing to redeclare it. Kept more
+# specific than the `AbstractArray` fallback above but strictly less specific than
+# `BrambleMetalExt`'s own `MtlVector`/`MtlMatrix`/sparse-matrix methods, which Julia still
+# dispatches to and which this change does not touch.
+import GPUArraysCore
+
+@inline locality(::Type{<:GPUArraysCore.AbstractGPUArray}) = DeviceLocality()
 
 """
     ExecutionPolicy

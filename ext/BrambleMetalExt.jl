@@ -2,6 +2,7 @@ module BrambleMetalExt
 
 using Bramble: Bramble, Backend, ExecutionPolicy, _DeviceSparseMirror
 using Metal: Metal, MtlArray, MtlMatrix, MtlVector, MetalBackend, mtl
+using GPUArrays: GPUArrays
 using LinearAlgebra: I
 import LinearAlgebra: mul!
 using SparseArrays: SparseArrays, SparseMatrixCSC
@@ -98,7 +99,7 @@ end
 # ---------------------------------------------------------------------------
 #
 # Tagged Metal.jl (checked at v1.10.0 on this host) defines neither `MtlSparseMatrixCSR` nor
-# `MtlSparseMatrixCSC` (JuliaGPU/Metal.jl#909 is open, not yet tagged). `Metal.GPUArrays`
+# `MtlSparseMatrixCSC` (JuliaGPU/Metal.jl#909 is open, not yet tagged). `GPUArrays`
 # (checked at v11.5.14) already ships the abstract taxonomy -- `AbstractGPUSparseMatrixCSR`
 # and `AbstractGPUSparseMatrixCSC` -- so these types subtype it directly instead of inventing
 # a Bramble-owned hierarchy, and alias to the upstream concrete type the moment it ships, with
@@ -108,7 +109,7 @@ if isdefined(Metal, :MtlSparseMatrixCSR)
     const MetalSparseMatrixCSR = Metal.MtlSparseMatrixCSR
 else
     """
-        MetalSparseMatrixCSR{Tv, Ti} <: Metal.GPUArrays.AbstractGPUSparseMatrixCSR{Tv, Ti}
+        MetalSparseMatrixCSR{Tv, Ti} <: GPUArrays.AbstractGPUSparseMatrixCSR{Tv, Ti}
 
     A sparse matrix in compressed sparse row (CSR) format, stored in Metal device memory as
     `MtlVector` fields `rowPtr`, `colVal`, `nzVal`, plus the matrix `dims`, and its own
@@ -123,7 +124,7 @@ else
     Bramble call site changes -- except `metal_sparse_csr` below, which would then need to
     hand the mirror to upstream's own constructor instead of this one.
     """
-    struct MetalSparseMatrixCSR{Tv, Ti} <: Metal.GPUArrays.AbstractGPUSparseMatrixCSR{Tv, Ti}
+    struct MetalSparseMatrixCSR{Tv, Ti} <: GPUArrays.AbstractGPUSparseMatrixCSR{Tv, Ti}
         rowPtr::MtlVector{Ti}
         colVal::MtlVector{Ti}
         nzVal::MtlVector{Tv}
@@ -134,7 +135,7 @@ else
     Base.size(A::MetalSparseMatrixCSR) = A.dims
     SparseArrays.nnz(A::MetalSparseMatrixCSR) = length(A.nzVal)
 
-    # `Metal.GPUArrays` supplies `Array`/`collect` generically for any
+    # `GPUArrays` supplies `Array`/`collect` generically for any
     # `AbstractGPUSparseMatrixCSR` in terms of this method -- it has no generic
     # `SparseMatrixCSC(::AbstractGPUSparseMatrixCSR)` of its own (unlike the CSC case below),
     # so it is defined here.
@@ -162,7 +163,7 @@ if isdefined(Metal, :MtlSparseMatrixCSC)
     const MetalSparseMatrixCSC = Metal.MtlSparseMatrixCSC
 else
     """
-        MetalSparseMatrixCSC{Tv, Ti} <: Metal.GPUArrays.AbstractGPUSparseMatrixCSC{Tv, Ti}
+        MetalSparseMatrixCSC{Tv, Ti} <: GPUArrays.AbstractGPUSparseMatrixCSC{Tv, Ti}
 
     A sparse matrix in compressed sparse column (CSC) format, stored in Metal device memory as
     `MtlVector` fields `colPtr`, `rowVal`, `nzVal`, plus the matrix `dims`.
@@ -171,7 +172,7 @@ else
     `Metal.MtlSparseMatrixCSC`, aliased away once tagged Metal.jl provides it
     (JuliaGPU/Metal.jl#909).
     """
-    struct MetalSparseMatrixCSC{Tv, Ti} <: Metal.GPUArrays.AbstractGPUSparseMatrixCSC{Tv, Ti}
+    struct MetalSparseMatrixCSC{Tv, Ti} <: GPUArrays.AbstractGPUSparseMatrixCSC{Tv, Ti}
         colPtr::MtlVector{Ti}
         rowVal::MtlVector{Ti}
         nzVal::MtlVector{Tv}
@@ -181,7 +182,7 @@ else
     Base.size(A::MetalSparseMatrixCSC) = A.dims
     SparseArrays.nnz(A::MetalSparseMatrixCSC) = length(A.nzVal)
 
-    # No `SparseMatrixCSC` method needed here: `Metal.GPUArrays` already supplies one
+    # No `SparseMatrixCSC` method needed here: `GPUArrays` already supplies one
     # generically for any `AbstractGPUSparseMatrixCSC`, built from `size`, `getcolptr`,
     # `rowvals` and `nonzeros` -- all of which resolve from the field names above.
 
@@ -310,7 +311,7 @@ end
 # `MetalSparseMatrixCSC` has no `mul!` of its own -- matching JuliaGPU/Metal.jl#909's own
 # convention (a row-major kernel needs row-major storage), the error names the fix rather
 # than leaving a CSC matrix to fail some other, less legible way (a `MethodError`, or a
-# silent fall-through to a dense generic fallback via `Metal.GPUArrays`).
+# silent fall-through to a dense generic fallback via `GPUArrays`).
 #
 # Split into a vector and a matrix method, rather than one `::AbstractVecOrMat` method,
 # because `LinearAlgebra` itself ships a generic
