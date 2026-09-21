@@ -388,6 +388,25 @@ undifferentiated `Wₕ`. `outside` is forwarded to [`interpolate_at`](@ref) unch
     return i, t
 end
 
+# The method above assumes `pts_src` is the flat vector `host_points(::Mesh1D)` actually
+# returns; the D-dimensional method below assumes `pts_src::NTuple{D}`, which at D=1 is
+# also a 1-tuple. Both match an `AbstractMeshType{1}` called with a 1-tuple `pts_src`
+# (Aqua's ambiguity report), which is otherwise only a static possibility -- `mesh()` always
+# builds `Mesh1D`, never a degenerate `MeshnD{1}`, for a 1D domain, so `host_points` never
+# actually returns a 1-tuple here. Disambiguating with this method, rather than by
+# restricting either of the two above, keeps both behaviours and simply unwraps the 1-tuple
+# down to the same scalar arithmetic the flat-vector method uses, so the case behaves
+# correctly if it is ever reached after all.
+@inline function _interp_triplet_frac(Ωsrc::AbstractMeshType{1}, pts_src::Tuple{Any}, x, outside::Symbol)
+    pts = pts_src[1]
+    lo, hi = pts[1], pts[end]
+    xc = _interp_resolve_coord(x, lo, hi, outside)
+    i = locate_cell(Ωsrc, xc)
+    plo, phi = pts[i], pts[i + 1]
+    t = phi > plo ? (xc - plo) / (phi - plo) : zero(xc - plo)
+    return i, t
+end
+
 @inline function _interp_triplet_frac(
         Ωsrc::AbstractMeshType{D}, pts_src::NTuple{D}, x, outside::Symbol
 ) where {D}

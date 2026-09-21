@@ -73,7 +73,15 @@ end
 # `host_weights` (gpena/Bramble.jl#94 S4.0): `local_stencil` reads `sp`'s weights and its
 # mesh's spacings one grid point at a time, which a device-backed `sp` refuses outright --
 # a no-op on a host-backed `sp`, so the CPU path pays one locality check and nothing else.
-function _pattern_size_hint(ast::AST_TYPE, sp, mesh_markers, lin_indices) where {AST_TYPE}
+#
+# `sp` is typed `::ScalarGridSpace` (every call site passes a walked leaf, which bottoms
+# out at one) rather than left generic: `host_weights` also has a method for
+# `SeparableWeights`, and an untyped `sp` makes JET consider that branch reachable here too,
+# reporting `mesh(::SeparableWeights)` as unresolved below even though nothing ever calls
+# this with one -- a static inference artefact, not a live path.
+function _pattern_size_hint(
+        ast::AST_TYPE, sp::ScalarGridSpace, mesh_markers, lin_indices
+) where {AST_TYPE}
     hp = host_weights(sp)
     grid_inds = indices(mesh(hp))
     npts = length(grid_inds)

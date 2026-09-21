@@ -328,7 +328,7 @@ end
 # 1D has no transverse axis at all -- a face is a point of measure 1 (see the note above
 # `_face_of_symbol`) -- so this returns the same scalar `_transverse_measure` does, with no
 # device array built or transferred.
-@inline _transverse_weight_device(Ωₕ, u, ::Val{d}, ::Val{1}) where {d} = one(eltype(Ωₕ))
+@inline _transverse_weight_device(Ωₕ::AbstractMeshType{1}, u, ::Val{d}, ::Val{1}) where {d} = one(eltype(Ωₕ))
 
 """
     _transverse_weight_device(Ωₕ::AbstractMeshType{D}, u, ::Val{d}, ::Val{D}) -> AbstractArray
