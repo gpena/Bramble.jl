@@ -43,6 +43,14 @@ const TEST_GROUP = get(ENV, "BRAMBLE_TEST_GROUP", "all")
 #                                        use it. The expensive half is a cross-check against
 #                                        another package, and it moves when that package or
 #                                        the simplifier moves, not when an operator does.
+#   form/vector_calculus.jl     ~159s   composite ∇ₕ/εₕ/divₕ checked against a hand-expanded
+#                                        form (S6.5). The cost is 100% compile: the
+#                                        hand-expanded helpers branch on `i == j` to return
+#                                        structurally different `LazyOp` subtrees, so Julia
+#                                        infers a `Union`, then sums D² (9 in 3D) of them
+#                                        through `innerₕ`/`+`/`assemble`. A cost of how the
+#                                        test is written, not of the feature -- see its own
+#                                        comment in form/runtests.jl.
 #   the 15 Supposition testsets   ~20s   named `... (Supposition)`, plus meshnd.jl's
 #                                        "Refinement invariants", gridspaces.jl's "Partition
 #                                        of unity" and jump.jl's "Leibniz product rule",

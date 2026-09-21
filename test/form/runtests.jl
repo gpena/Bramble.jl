@@ -40,11 +40,19 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
     include("semidiscrete.jl")
     include("sparse_solvers.jl")
     # v3.3.0 plan (memory scaling): `bandwidths`/`blockbandwidths` read from the AST alone
-    # (S4.1), the dependency-free Kronecker operator (S5.1), and composite trial/test
-    # functions through the symbolic `∇ₕ`/`εₕ`/`divₕ` builders (S6.5). None needs a weak
-    # dependency, so all three run with the rest of this subsystem rather than behind the
-    # `ext` group.
+    # (S4.1) and the dependency-free Kronecker operator (S5.1). Neither needs a weak
+    # dependency, so both run with the rest of this subsystem rather than behind the `ext`
+    # group.
     include("bandwidth.jl")
     include("kronecker.jl")
-    include("vector_calculus.jl")
+    # Composite trial/test functions through the symbolic `∇ₕ`/`εₕ`/`divₕ` builders (S6.5).
+    # Behind `slow`: its hand-expanded comparison functions (`hand_strain`, in particular)
+    # branch on `i == j` to return structurally different `LazyOp` subtrees, so Julia infers
+    # their result as a `Union`; summing D² (9 in 3D) of those unioned subtrees through
+    # `innerₕ`/`+`/`assemble` is what costs this file ~159s of its ~160s total -- 100%
+    # compile, on meshes too small to cost anything at runtime. That is a cost of how the
+    # *test* is written, not of the feature, so it is parked behind `slow` (daily on both
+    # platforms) rather than paid on every push until the hand-expanded helpers are
+    # rewritten to keep each term's type concrete (gpena/Bramble.jl -- compile-time issue).
+    TestUtils.WITH_SLOW_TESTS && include("vector_calculus.jl")
 end
