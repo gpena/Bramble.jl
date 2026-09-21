@@ -18,6 +18,84 @@
 # The vector field is an `NTuple{D, VectorElement}` -- what `∇ₕ` returns -- or a composite
 # grid function with `D` leaves. Both spellings reach the same kernels.
 
+# --- Device dispatch for the fused vector-calculus kernels (gpena/Bramble.jl#306, #302,
+# S12, part 4) ------------------------------------------------------------------------- #
+#
+# Every accumulating engine below (`_accumulate_backward!`, `_accumulate_forward!`,
+# `_accumulate_laplacian!`, `_avg_backward_inplace!`) is a host `@inbounds @simd for` loop
+# that scalar-indexes its destination, which a device-backed `VectorElement` refuses
+# outright. `divₕ!`/`div₊ₕ!`/`curlₕ!`/`curl₊ₕ!`/`Δₕ!`/`εₕ!` each check `locality` on their
+# destination first and, on a device array, route to one fused `KernelAbstractions.@kernel`
+# launch that reads every component it needs exactly once per grid point -- instead of the
+# CPU path's one pass per spatial direction (or, for `εₕ!`'s off-diagonal entries, one pass
+# each for a difference and the average composed onto it) -- rather than raising
+# `ScalarIndexingDisallowed` partway through the first accumulation. `ext/BrambleKernelAbstractionsExt.jl`
+# fills in each launcher; without that extension loaded, the launcher throws a named
+# diagnostic instead, matching every other device stub in this package.
+function _throw_no_ka_vector_calculus_kernel(fname::String)
+    error(
+        "$fname requires KernelAbstractions.jl to apply a vector-calculus operator to a " *
+        "device-backed VectorElement. Add `using KernelAbstractions` (and the package " *
+        "providing this backend's device, e.g. `using Metal`) before calling it on this " *
+        "backend.",
+    )
+end
+
+"""
+    _launch_fused_divergence!(out, comps::Tuple, hs::Tuple, dims::Tuple, dir::GridDirection, dev) -> Nothing
+
+Fills `out` with the discrete divergence of the `D`-component vector field `comps`
+(`divₕ`/`div₊ₕ`'s `Backward`/`Forward` forms), one fused device kernel reading every
+component once per grid point, filled by `ext/BrambleKernelAbstractionsExt.jl`.
+"""
+_launch_fused_divergence!(out, comps, hs, dims, dir, dev) = _throw_no_ka_vector_calculus_kernel("divₕ!/div₊ₕ!")
+
+"""
+    _launch_fused_curl2d!(out, u1, u2, h1, h2, dims::Tuple, dir::GridDirection, dev) -> Nothing
+
+Fills `out` with the 2D scalar curl `D_{dir,x}(u2) - D_{dir,y}(u1)`, one fused device
+kernel, filled by `ext/BrambleKernelAbstractionsExt.jl`.
+"""
+_launch_fused_curl2d!(out, u1, u2, h1, h2, dims, dir, dev) = _throw_no_ka_vector_calculus_kernel("curlₕ!/curl₊ₕ!")
+
+"""
+    _launch_fused_curl3d!(out1, out2, out3, u1, u2, u3, h1, h2, h3, dims::Tuple, dir::GridDirection, dev) -> Nothing
+
+Fills the three components of the 3D curl, one fused device kernel reading `u1`, `u2` and
+`u3` once per grid point, filled by `ext/BrambleKernelAbstractionsExt.jl`.
+"""
+function _launch_fused_curl3d!(out1, out2, out3, u1, u2, u3, h1, h2, h3, dims, dir, dev)
+    _throw_no_ka_vector_calculus_kernel(
+        "curlₕ!/curl₊ₕ!"
+    )
+end
+
+"""
+    _launch_fused_laplacian!(out, u, hbs::Tuple, hss::Tuple, dims::Tuple, dev) -> Nothing
+
+Fills `out` with the conservative discrete Laplacian of `u`, one fused device kernel
+summing every direction's flux difference per grid point, filled by
+`ext/BrambleKernelAbstractionsExt.jl`.
+"""
+_launch_fused_laplacian!(out, u, hbs, hss, dims, dev) = _throw_no_ka_vector_calculus_kernel("Δₕ!")
+
+"""
+    _launch_fused_strain_offdiag!(out, ui, uj, hi, hj, dims::Tuple, dim_i::Val, dim_j::Val, dev) -> Nothing
+
+Fills `out` with the off-diagonal strain tensor entry
+`(M₋ᵢ(D₋ⱼ(uᵢ)) + M₋ⱼ(D₋ᵢ(uⱼ))) / 2`, one fused device kernel composing the difference and
+the average in a single pass rather than two, filled by
+`ext/BrambleKernelAbstractionsExt.jl`.
+"""
+_launch_fused_strain_offdiag!(out, ui, uj, hi, hj, dims, dim_i, dim_j, dev) = _throw_no_ka_vector_calculus_kernel(
+    "εₕ!"
+)
+
+@inline _direction_spacing(sub, ::Backward) = backward_spacings_for_derivative(sub)
+@inline _direction_spacing(sub, ::Forward) = forward_spacings_for_derivative(sub)
+
+@inline _is_device(v::AbstractVector) = locality(typeof(v)) isa DeviceLocality
+
 # --- The accumulating engines ------------------------------------------------------- #
 #
 # `_difference_engine!` (operators/difference.jl) *writes* its result, one direction at a
@@ -174,8 +252,15 @@ end
 function _divergence!(vₕ, comps, Wₕ, dir, ::Val{D}) where {D}
     Ωₕ = mesh(Wₕ)
     dims = npoints(Ωₕ, Tuple)
-    fill!(parent(vₕ), zero(eltype(parent(vₕ))))
-    _accumulate_direction!(vₕ, comps, Ωₕ, dims, dir, Val(D), Val(D))
+    out = parent(vₕ)
+    if _is_device(out)
+        hs = ntuple(d -> _direction_spacing(Ωₕ(d), dir), Val(D))
+        dev = ka_device(backend(Ωₕ))
+        _launch_fused_divergence!(out, map(parent, comps), hs, dims, dir, dev)
+    else
+        fill!(out, zero(eltype(out)))
+        _accumulate_direction!(vₕ, comps, Ωₕ, dims, dir, Val(D), Val(D))
+    end
     return nothing
 end
 
@@ -267,9 +352,16 @@ function _curl!(vₕ::VectorElement, uₕ, dir)
     _check_field_arity(comps, Val(2), "curlₕ")
 
     out = parent(vₕ)
-    fill!(out, zero(eltype(out)))
-    _accumulate_one!(out, parent(comps[2]), Ωₕ, dims, dir, Val(1), true)
-    _accumulate_one!(out, parent(comps[1]), Ωₕ, dims, dir, Val(2), -true)
+    if _is_device(out)
+        h1 = _resolve_device_spacing(_direction_spacing(Ωₕ(1), dir))
+        h2 = _resolve_device_spacing(_direction_spacing(Ωₕ(2), dir))
+        dev = ka_device(backend(Ωₕ))
+        _launch_fused_curl2d!(out, parent(comps[1]), parent(comps[2]), h1, h2, dims, dir, dev)
+    else
+        fill!(out, zero(eltype(out)))
+        _accumulate_one!(out, parent(comps[2]), Ωₕ, dims, dir, Val(1), true)
+        _accumulate_one!(out, parent(comps[1]), Ωₕ, dims, dir, Val(2), -true)
+    end
     return vₕ
 end
 
@@ -279,17 +371,27 @@ function _curl!(vₕ::NTuple{3, VectorElement}, uₕ, dir)
     dims = npoints(Ωₕ, Tuple)
     _check_field_arity(comps, Val(3), "curlₕ")
 
-    # (∂₂u₃ - ∂₃u₂, ∂₃u₁ - ∂₁u₃, ∂₁u₂ - ∂₂u₁), written out rather than looped over cyclic
-    # index triples: the directions have to stay compile-time literals.
-    for k in 1:3
-        fill!(parent(vₕ[k]), zero(eltype(parent(vₕ[k]))))
+    outs = map(parent, vₕ)
+    if _is_device(outs[1])
+        hs = ntuple(d -> _resolve_device_spacing(_direction_spacing(Ωₕ(d), dir)), Val(3))
+        dev = ka_device(backend(Ωₕ))
+        _launch_fused_curl3d!(
+            outs[1], outs[2], outs[3], parent(comps[1]), parent(comps[2]), parent(comps[3]),
+            hs[1], hs[2], hs[3], dims, dir, dev
+        )
+    else
+        # (∂₂u₃ - ∂₃u₂, ∂₃u₁ - ∂₁u₃, ∂₁u₂ - ∂₂u₁), written out rather than looped over
+        # cyclic index triples: the directions have to stay compile-time literals.
+        for k in 1:3
+            fill!(outs[k], zero(eltype(outs[k])))
+        end
+        _accumulate_one!(outs[1], parent(comps[3]), Ωₕ, dims, dir, Val(2), true)
+        _accumulate_one!(outs[1], parent(comps[2]), Ωₕ, dims, dir, Val(3), -true)
+        _accumulate_one!(outs[2], parent(comps[1]), Ωₕ, dims, dir, Val(3), true)
+        _accumulate_one!(outs[2], parent(comps[3]), Ωₕ, dims, dir, Val(1), -true)
+        _accumulate_one!(outs[3], parent(comps[2]), Ωₕ, dims, dir, Val(1), true)
+        _accumulate_one!(outs[3], parent(comps[1]), Ωₕ, dims, dir, Val(2), -true)
     end
-    _accumulate_one!(parent(vₕ[1]), parent(comps[3]), Ωₕ, dims, dir, Val(2), true)
-    _accumulate_one!(parent(vₕ[1]), parent(comps[2]), Ωₕ, dims, dir, Val(3), -true)
-    _accumulate_one!(parent(vₕ[2]), parent(comps[1]), Ωₕ, dims, dir, Val(3), true)
-    _accumulate_one!(parent(vₕ[2]), parent(comps[3]), Ωₕ, dims, dir, Val(1), -true)
-    _accumulate_one!(parent(vₕ[3]), parent(comps[2]), Ωₕ, dims, dir, Val(1), true)
-    _accumulate_one!(parent(vₕ[3]), parent(comps[1]), Ωₕ, dims, dir, Val(2), -true)
     return vₕ
 end
 
@@ -333,8 +435,16 @@ function Δₕ!(vₕ::VectorElement, uₕ::VectorElement)
     Ωₕ = mesh(space(uₕ))
     dims = npoints(Ωₕ, Tuple)
     out = parent(vₕ)
-    fill!(out, zero(eltype(out)))
-    _laplacian_direction!(out, parent(uₕ), Ωₕ, dims, Val(dim(Ωₕ)), Val(dim(Ωₕ)))
+    if _is_device(out)
+        D = dim(Ωₕ)
+        hbs = ntuple(d -> _resolve_device_spacing(backward_spacings_for_derivative(Ωₕ(d))), Val(D))
+        hss = ntuple(d -> _resolve_device_spacing(star_spacings(Ωₕ(d))), Val(D))
+        dev = ka_device(backend(Ωₕ))
+        _launch_fused_laplacian!(out, parent(uₕ), hbs, hss, dims, dev)
+    else
+        fill!(out, zero(eltype(out)))
+        _laplacian_direction!(out, parent(uₕ), Ωₕ, dims, Val(dim(Ωₕ)), Val(dim(Ωₕ)))
+    end
     return vₕ
 end
 
@@ -433,10 +543,18 @@ end
 end
 
 # `ε_ii = D₋ᵢ(uᵢ)`, written straight into its destination's own storage: no averaging, so no
-# in-place hazard to work around.
+# in-place hazard to work around. On device this is exactly the same one-sided finite
+# difference `D₋ₓ!`/`D₋ᵧ!`/`D₋₂!` already apply, so it reuses that launcher rather than a
+# new kernel of its own.
 @inline function _strain_diag!(dest, comps, Ωₕ, dims, ::Val{i}) where {i}
+    out = parent(dest[i][i])
     h = backward_spacings_for_derivative(Ωₕ(i))
-    _difference_engine!(parent(dest[i][i]), parent(comps[i]), h, dims, Backward(), Val(i))
+    if _is_device(out)
+        dev = ka_device(backend(Ωₕ))
+        _launch_difference_onesided!(out, parent(comps[i]), _resolve_device_spacing(h), dims, Backward(), Val(i), dev)
+    else
+        _difference_engine!(out, parent(comps[i]), h, dims, Backward(), Val(i))
+    end
     return nothing
 end
 
@@ -448,17 +566,27 @@ end
 # destinations the caller already owns.
 @inline function _strain_pair!(dest, comps, Ωₕ, dims, ::Val{i}, ::Val{j}) where {i, j}
     dij, dji = dest[i][j], dest[j][i]
+    out_ij = parent(dij)
     hj = backward_spacings_for_derivative(Ωₕ(j))
     hi = backward_spacings_for_derivative(Ωₕ(i))
 
-    _difference_engine!(parent(dij), parent(comps[i]), hj, dims, Backward(), Val(j))
-    _avg_backward_inplace!(parent(dij), dims, Val(i))
+    if _is_device(out_ij)
+        dev = ka_device(backend(Ωₕ))
+        _launch_fused_strain_offdiag!(
+            out_ij, parent(comps[i]), parent(comps[j]), _resolve_device_spacing(hi),
+            _resolve_device_spacing(hj), dims, Val(i), Val(j), dev
+        )
+        copyto!(parent(dji), out_ij)
+    else
+        _difference_engine!(out_ij, parent(comps[i]), hj, dims, Backward(), Val(j))
+        _avg_backward_inplace!(out_ij, dims, Val(i))
 
-    _difference_engine!(parent(dji), parent(comps[j]), hi, dims, Backward(), Val(i))
-    _avg_backward_inplace!(parent(dji), dims, Val(j))
+        _difference_engine!(parent(dji), parent(comps[j]), hi, dims, Backward(), Val(i))
+        _avg_backward_inplace!(parent(dji), dims, Val(j))
 
-    dij .= (dij .+ dji) ./ 2
-    dji .= dij
+        dij .= (dij .+ dji) ./ 2
+        dji .= dij
+    end
     return nothing
 end
 

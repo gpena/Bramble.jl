@@ -51,6 +51,11 @@ import Bramble:
                 _launch_average_engine!,
                 _launch_spmv_csr!,
                 _launch_spmm_csr!,
+                _launch_fused_divergence!,
+                _launch_fused_curl2d!,
+                _launch_fused_curl3d!,
+                _launch_fused_laplacian!,
+                _launch_fused_strain_offdiag!,
                 ka_synchronize
 
 # ---------------------------------------------------------------------------
@@ -442,41 +447,215 @@ end
 # `jump!` forward straight into `forward_difference_dim!`/`forward_difference!`, so the
 # one-sided launcher below already covers it.
 #
-# Every kernel calls the very `Bramble._compute_difference`/`Bramble._compute_average`
-# methods the CPU sweep calls, once per grid point, so the device and host answers stay
-# identical by construction -- the same reasoning `avgₕ!`'s kernels above rely on for
-# `_cell_average`. `h` arrives already resolved to either `nothing` or a plain top-level
-# array by `Bramble._resolve_device_spacing` (`difference.jl`): never the `StarSpacings`
-# wrapper, which -- like any struct nesting a device array -- fails kernel compilation.
+# Revised by S12 (gpena/Bramble.jl#306, #302): through S11 every kernel here built a
+# `CartesianIndex` via `@index(Global, Cartesian)`, then converted it back to a linear index
+# with `LinearIndices(dims)` -- once for the point itself, once more for its neighbour -- and
+# branched on `I[DIM]` with a data-dependent `if`/`elseif`, which is exactly the boundary
+# divergence #306 measured splitting Metal's memory transactions and dropping bus throughput
+# from ~74 GB/s to ~18 GB/s. Every kernel below instead launches over a flat linear
+# `ndrange = length(out)`, takes the *scalar* stride along `DIM` (`_axis_stride`, computed
+# once on the host before the launch, from `dims` and `DIM` -- both compile-time `Val`s, so
+# the loop inside it unrolls to nothing at runtime) and derives the point's own coordinate
+# along `DIM` from one `fld`/`mod` pair, never a `CartesianIndex`. The boundary test becomes
+# one index comparison, and the branch itself is replaced by `ifelse` (a predicated select,
+# not a divergent instruction stream): both the interior and boundary values are computed
+# unconditionally -- reading a clamped, always-in-bounds neighbour index when the true one
+# would fall off the grid -- and `ifelse` picks the one that matters. Every SIMD-group thread
+# now runs the identical instruction sequence regardless of where it sits on the grid.
 #
-# `D >= 1` in one kernel each, following this module's own guidance for the `D >= 2`
-# restriction/cell-average kernels above: `dims` is a bits `NTuple{D,Int}`, and
-# `@index(Global, Cartesian)` gives the `CartesianIndex{D}` the CPU engine's own
-# `CartesianIndices(dims)` loop walks, so one kernel body serves every dimension the mesh
-# has rather than a 1D/nD split.
+# Every kernel still calls the very `Bramble._compute_difference`/`Bramble._compute_average`
+# methods the CPU sweep calls, so the device and host answers stay identical by construction
+# for every family except the two named in the reciprocal-spacing note below. `h` arrives
+# already resolved to either `nothing` or a plain top-level array by
+# `Bramble._resolve_device_spacing` (`difference.jl`): never the `StarSpacings` wrapper,
+# which -- like any struct nesting a device array -- fails kernel compilation.
+#
+# --- Threadgroup shape, measured and rejected -------------------------------------------
+#
+# The stride/branch-free rewrite above leaves this kernel at ~20% of the 73.5 GB/s Metal
+# peak (measured on a 3000x3000 mesh: ~4.9 ms on a uniform mesh, ~4.67 ms on the non-uniform
+# one `benchmark/gpu_stencils.jl`'s own workgroup-shape section reruns) with the GPU busy
+# essentially the whole wall-clock time -- not launch overhead, and not (per the device-side
+# profile) idle time either, so #306/#302's own remaining proposal was worth checking:
+# "configure threadgroups for optimal SIMD coalescing (e.g. (16, 16) or (32, 8))". Measured
+# directly, `Metal.@bprofile` device-side busy time, three repeated in-process runs, same
+# non-uniform 3000x3000 case:
+#
+#   flat `ndrange = length(out)`, default workgroupsize (shipped):  ~4.67 ms/launch
+#   flat `ndrange = length(out)`, explicit workgroupsize 256/512/1024: ~4.67 ms/launch (no
+#     measurable difference from the default -- KernelAbstractions' own choice already
+#     matches whatever these three do)
+#   2D `ndrange = dims`, workgroupsize (16, 16):  ~8.53 ms/launch (1.8x SLOWER)
+#   2D `ndrange = dims`, workgroupsize (32, 8):   ~8.49 ms/launch (1.8x SLOWER)
+#   2D `ndrange = dims`, default workgroupsize:   ~8.57 ms/launch (1.8x SLOWER)
+#
+# All three were stable to <0.01 ms across the three runs -- not noise. `@index(Global)`
+# under a 2D `ndrange` was confirmed separately to return the identical column-major linear
+# index a flat `ndrange` gives (so the flat-index stride arithmetic above did not have to
+# change to try this; only the launch's `ndrange`/`workgroupsize` did), which rules out a
+# correctness difference explaining the gap -- both shapes were checked against the CPU
+# reference and agree to the same tolerance. The 2D dispatch is simply slower on this
+# device: shipped stays the flat `ndrange`, default `workgroupsize`, exactly as it already
+# was before this was tried. #302's own hand-written 2D kernel measurement (293.5 us at
+# 1024x1024, predicting ~2.5 ms scaled to 3000x3000) does not reproduce here, on Metal.jl
+# 1.10 and this M2 -- reported as measured, not assumed.
+#
+# --- 64-bit index arithmetic, the actual bottleneck the threadgroup-shape and reciprocal-
+#     spacing measurements above were both taken *underneath* --------------------------- #
+#
+# A control settles what the ~20%-of-peak figure above means: a plain KernelAbstractions
+# copy kernel, same element count, same flat `ndrange`, same `@index(Global)` pattern,
+# reaches ~98% of this machine's own measured ceiling (a KA copy kernel here: 72.35 GB/s,
+# not #306's 73.5 GB/s Metal spec figure -- see the note on percentages below). So neither
+# kernel launch overhead nor KA's indexing pattern in general explains the gap: the copy
+# kernel pays the same overhead and still saturates. The one thing the difference kernel
+# does that the copy kernel does not is recover the axis coordinate from the flat index
+# with `i_dim = mod(fld(idx - 1, s), n) + 1` -- one integer division and one modulo, every
+# thread, every launch -- and `idx`, `s`, `n` are all Julia's default `Int` (`Int64`).
+# Apple GPUs are 32-bit-native; Metal.jl 1.10 shipping `UInt16` variants of every thread-
+# and grid-indexing intrinsic, and gpena/Bramble.jl#319 independently arguing for `Int32`
+# sparse indices on this same hardware, are both symptoms of the same fact: 64-bit integer
+# division on this hardware is not native-width arithmetic.
+#
+# Measured directly (three repeated `Metal.@bprofile` device-side-busy-time runs, same
+# non-uniform 3000x3000 case, `D₋ₓ!`): doing the *exact same* `fld`/`mod` recovery in
+# `Int32` instead of `Int64` -- convert `idx` once at kernel entry, take `n`/`s` in as
+# `Int32` from the launcher so nothing widens back inside the kernel, convert the *result*
+# back to `Int` only where array indexing needs it -- took the kernel from 4.67-5.00 ms/launch
+# to 1.155-1.203 ms/launch, stable to within 0.05 ms across two of the three runs (the first
+# run's outlier reads as compile/warm-up noise inside the profiling window, matching the
+# pattern seen elsewhere in this file). Two diagnostics taken first, to make sure the right
+# thing was being isolated before reaching for this fix: a scalar-`h`/no-index-recovery
+# variant (not shippable -- boundary correctness dropped on purpose) reached 0.77-0.87 ms,
+# and a full-size reciprocal array read directly by the flat index, no div/mod at all
+# (also a diagnostic: it does not amortise a per-launch construction cost, measured
+# separately at 1.2-3.7 ms and unstable run to run -- rejected for that reason) reached
+# 1.16 ms. The `Int32` fix lands in between the two diagnostics, with none of either one's
+# downsides: no extra array, no extra memory traffic, no per-launch construction to pay for,
+# and the same win on every axis (`DIM = 1`, `2` or `3`) rather than only the cheap one.
+# Correctness: bitwise identical to the `Int64` version on the same input (`max|Δ| = 0.0`),
+# and within `rtol = 1f-5` of the CPU reference, exactly as the `Int64` version was.
+#
+# `benchmark/gpu_stencils.jl`'s own `_run_int32_index` section reruns this comparison.
+#
+# One reading note, since a percentage invites misreading it as an absolute: the "fraction
+# of peak" figures anywhere in this file or its benchmarks use whichever peak was measured
+# on THIS host (a plain KA copy kernel, ~72.35 GB/s), not the 73.5 GB/s Metal hardware
+# spec figure #306 quotes -- and even that is a floor, not a ceiling: a kernel whose
+# neighbour reads overlap between adjacent threads (as every stencil's do) can measure
+# *above* either figure, because some of those reads hit a cache line an adjacent thread
+# already pulled rather than round-tripping DRAM. Read the ratios in this file as "how much
+# closer to what a copy achieves", not as a literal fraction of an DRAM bandwidth ceiling.
+#
+# --- Reciprocal spacing (gpena/Bramble.jl#306 item 4) ------------------------------------
+#
+# Measured before the `Int32` fix above (so under a much larger, now-removed constant
+# factor): once the stride/branch-free rewrite is in place, a per-thread
+# `(cur - other) / h[i_dim]` against `(cur - other) * invh[i_dim]` -- `invh` a bulk
+# `inv.(h)` computed once, up front -- gave a stable 1.03x, small because the `Int64`
+# div/mod dominated everything else at the time. Kept after the `Int32` fix regardless: it
+# is still strictly cheaper (one multiply against one divide, same memory traffic, same
+# array, no new state), so there is no reason to divide once multiplying by a fresh
+# reciprocal is already correct and in place. `invh` is recomputed fresh, once per launch,
+# from whatever `h` this call was given (`_reciprocal_spacing` below), never cached on the
+# mesh across calls, for the reasons given at S12's `inv_spacings` design note (`h` is a
+# per-*axis* array, and a mesh-level cache would not reach `D₊`'s or `Dc`'s `h` either,
+# which are not the mesh's own cached `spacings` field).
+#
+# Applied to the two families #302/#306 actually measured as bottlenecks (`D₋ₓ`/`D₊ₓ`, the
+# one-sided finite differences, and `Dcₓ`, `Centered`): `CrossWeighted` (`Dₕ`) reads two
+# distinct raw spacings and combines them in a weighted average that is not a single
+# reciprocal multiply, so its interior branch keeps calling `_compute_difference` unchanged
+# (still a division, functionally identical to before this file) -- it still gets the
+# `Int32` fix, independent of this choice. The average engine has no spacing at all (it
+# divides by the literal constant 2) and needs none of this.
 # ---------------------------------------------------------------------------
 
+@inline _reciprocal_spacing(::Nothing) = nothing
+@inline _reciprocal_spacing(h::AbstractVector) = inv.(h)
+
+# The linear stride along axis `DIM` of a column-major `dims::NTuple{D,Int}` array: 1 for
+# `DIM == 1`, `dims[1]` for `DIM == 2`, `dims[1] * dims[2]` for `DIM == 3` -- exactly the
+# formula #306's proposal 2 gives. `D` and `DIM` are both `Val`s here, so this loop unrolls
+# to a handful of multiplications at compile time; it runs once on the host before a launch,
+# never per thread inside a kernel. Returned as `Int32` directly (see the file-level note
+# above): every kernel below takes `n`/`s` already narrowed, so nothing widens them back.
+#
+# `Int32(s)` throws (an ordinary `InexactError`, not a cryptic on-device one) once the
+# stride itself -- the product of every axis before `DIM`, which for a 3D mesh's third axis
+# is `dims[1] * dims[2]` -- exceeds `typemax(Int32)` (~2.1 billion): a mesh that large is far
+# past anything this milestone's hardware (or a Float32 field's memory footprint) supports
+# today, so this is a real but currently unreachable limit, named here rather than left to
+# surface as an unexplained conversion error deep in a kernel launch.
+@inline function _axis_stride(dims::NTuple{D, Int}, ::Val{DIM}) where {D, DIM}
+    s = 1
+    for d in 1:(DIM - 1)
+        s *= dims[d]
+    end
+    s <= typemax(Int32) || error(
+        "mesh too large for the Int32 device-index fast path: the linear stride along " *
+        "axis $DIM is $s, past typemax(Int32) = $(typemax(Int32))",
+    )
+    return Int32(s)
+end
+
+# A compile-time choice between the two neighbour steps a one-sided stencil can take,
+# resolved from `dir`'s own (concrete, zero-field) type -- never a per-thread branch on
+# data, unlike the boundary test below.
+@inline _signed_stride(::Bramble.Forward, s::Int32) = s
+@inline _signed_stride(::Bramble.Backward, s::Int32) = -s
+
+# The point's own coordinate along `DIM`, recovered from the flat `idx` in `Int32`
+# arithmetic (the file-level note above this section is the why): `idx` itself stays
+# whatever type `@index(Global)` gives (used for array indexing, where its width is not the
+# bottleneck), only the division/modulo operands are narrowed. Returns an `Int32`; callers
+# convert to `Int` only where `Bramble._compute_difference`/`_compute_average` (typed on a
+# plain `Int` index, and never actually reading it in the boundary methods -- see below)
+# need one.
+@inline function _axis_coord32(idx, n::Int32, s::Int32)
+    idx32 = Int32(idx)
+    return mod(fld(idx32 - Int32(1), s), n) + Int32(1)
+end
+
 @kernel function _difference_onesided_kernel!(
-        out, @Const(in_ref), h, dims::NTuple{D, Int}, dir, ::Val{DIM}
-) where {D, DIM}
-    I = @index(Global, Cartesian)
-    li = LinearIndices(dims)
-    n = dims[DIM]
+        out, @Const(in_ref), h, invh, n::Int32, s::Int32, boundary_idx::Int32, dir, ::Val{DIM}
+) where {DIM}
+    idx = @index(Global)
     @inbounds begin
-        idx = li[I]
-        if I[DIM] == Bramble._stencil_boundary_dim(dir, n)
-            out[idx] = Bramble._compute_difference(dir, Val(true), in_ref[idx], h, I[DIM])
-        else
-            step = Bramble._stencil_step(Val(DIM), Val(D))
-            other = li[Bramble._neighbour(dir, I, step)]
-            out[idx] = Bramble._compute_difference(dir, Val(false), in_ref[idx], in_ref[other], h, I[DIM])
-        end
+        i_dim32 = _axis_coord32(idx, n, s)
+        is_boundary = i_dim32 == boundary_idx
+        other_idx = ifelse(is_boundary, idx, idx + Int(_signed_stride(dir, s)))
+        cur = in_ref[idx]
+        other = in_ref[other_idx]
+        i_dim = Int(i_dim32)
+        interior_val = _onesided_interior(dir, cur, other, h, invh, i_dim)
+        boundary_val = Bramble._compute_difference(dir, Val(true), cur, h, i_dim)
+        out[idx] = ifelse(is_boundary, boundary_val, interior_val)
     end
 end
 
-function _launch_difference_onesided!(out::AbstractVector, in_ref, h, dims::Tuple, dir, dim_val::Val, dev)
+# Unscaled (`h === nothing`, so `invh === nothing` too, `_reciprocal_spacing` below):
+# no division ever appeared here, so this falls straight back to `_compute_difference`.
+@inline _onesided_interior(
+    dir::Bramble.GridDirection, cur, other, ::Nothing, ::Nothing, i) = Bramble._compute_difference(
+    dir, Val(false), cur, other, nothing, i)
+# Scaled: multiply by the reciprocal instead of dividing by `h` (see the file-level note
+# above this kernel's definitions).
+@inline _onesided_interior(::Bramble.Forward, cur, other, h, invh::AbstractVector, i) = (other - cur) *
+                                                                                        (@inbounds invh[i])
+@inline _onesided_interior(::Bramble.Backward, cur, other, h, invh::AbstractVector, i) = (cur - other) *
+                                                                                         (@inbounds invh[i])
+
+function _launch_difference_onesided!(
+        out::AbstractVector, in_ref, h, dims::Tuple, dir, dim_val::Val{DIM}, dev) where {DIM}
+    n = dims[DIM]
+    s = _axis_stride(dims, dim_val)
+    invh = _reciprocal_spacing(h)
+    boundary_idx = Int32(Bramble._stencil_boundary_dim(dir, n))
     try
-        _difference_onesided_kernel!(dev)(out, in_ref, h, dims, dir, dim_val; ndrange = dims)
+        _difference_onesided_kernel!(dev)(
+            out, in_ref, h, invh, Int32(n), s, boundary_idx, dir, dim_val; ndrange = length(out)
+        )
     catch err
         _wrap_device_kernel_error(err, "difference operator")
     end
@@ -484,57 +663,78 @@ function _launch_difference_onesided!(out::AbstractVector, in_ref, h, dims::Tupl
 end
 
 @kernel function _difference_centered_kernel!(
-        out, @Const(in_ref), h, dims::NTuple{D, Int}, dir, ::Val{DIM}
-) where {D, DIM}
-    I = @index(Global, Cartesian)
-    li = LinearIndices(dims)
-    n = dims[DIM]
-    i = I[DIM]
-    step = Bramble._stencil_step(Val(DIM), Val(D))
+        out, @Const(in_ref), h, invh, n::Int32, s::Int32, dir, ::Val{DIM}
+) where {DIM}
+    idx = @index(Global)
     @inbounds begin
-        idx = li[I]
-        if i == 1
-            fwd = li[I + step]
-            out[idx] = Bramble._compute_difference(dir, Val(true), in_ref[idx], in_ref[fwd], h, i)
-        elseif i == n
-            back = li[I - step]
-            out[idx] = Bramble._compute_difference(dir, Val(true), in_ref[idx], in_ref[back], h, i)
-        else
-            back = li[I - step]
-            fwd = li[I + step]
-            out[idx] = Bramble._compute_difference(dir, Val(false), in_ref[back], in_ref[idx], in_ref[fwd], h, i)
-        end
+        i_dim32 = _axis_coord32(idx, n, s)
+        is_lo = i_dim32 == Int32(1)
+        is_hi = i_dim32 == n
+        sInt = Int(s)
+        back_idx = ifelse(is_lo, idx, idx - sInt)
+        fwd_idx = ifelse(is_hi, idx, idx + sInt)
+        cur = in_ref[idx]
+        back = in_ref[back_idx]
+        fwd = in_ref[fwd_idx]
+        i_dim = Int(i_dim32)
+        # `CrossWeighted`'s interior formula reads `h[i]` *and* `h[i + 1]`
+        # (`_compute_difference`, difference.jl): at `i_dim == n` that second read is out of
+        # bounds, even though the result is about to be discarded by the `ifelse` below --
+        # every thread still evaluates it speculatively, branch-free. `i_interior` clamps to
+        # `n - 1` only for that speculative read; `i_dim` itself (unclamped) is still what
+        # `lo_val`/`hi_val` and the destination index use.
+        i_interior = ifelse(is_hi, Int(n) - 1, i_dim)
+        interior_val = _centered_interior(dir, back, cur, fwd, h, invh, i_interior)
+        lo_val = Bramble._compute_difference(dir, Val(true), cur, fwd, h, i_dim)
+        hi_val = Bramble._compute_difference(dir, Val(true), cur, back, h, i_dim)
+        out[idx] = ifelse(is_lo, lo_val, ifelse(is_hi, hi_val, interior_val))
     end
 end
 
-function _launch_difference_centered!(out::AbstractVector, in_ref, h, dims::Tuple, dir, dim_val::Val, dev)
+# `Centered` (`Dc`) divides by `2 * h[i]`, `h` here already the averaged *star* spacing
+# (`star_spacings`, resolved before this launch): one multiply by `invh[i] / 2` replaces it.
+@inline _centered_interior(dir::Bramble.Centered, back, cur, fwd, h, invh::AbstractVector, i) = (fwd - back) *
+                                                                                                (@inbounds invh[i]) / 2
+# `CrossWeighted` (`Dₕ`) reads two distinct raw spacings and combines them in a weighted
+# average that is not a single reciprocal multiply (see the file-level note above); kept on
+# `_compute_difference`, unchanged.
+@inline _centered_interior(dir::Bramble.CrossWeighted, back, cur, fwd, h, invh, i) = Bramble._compute_difference(
+    dir, Val(false), back, cur, fwd, h, i)
+
+function _launch_difference_centered!(
+        out::AbstractVector, in_ref, h, dims::Tuple, dir, dim_val::Val{DIM}, dev) where {DIM}
+    n = dims[DIM]
+    s = _axis_stride(dims, dim_val)
+    invh = _reciprocal_spacing(h)
     try
-        _difference_centered_kernel!(dev)(out, in_ref, h, dims, dir, dim_val; ndrange = dims)
+        _difference_centered_kernel!(dev)(out, in_ref, h, invh, Int32(n), s, dir, dim_val; ndrange = length(out))
     catch err
         _wrap_device_kernel_error(err, "centered difference operator")
     end
     return nothing
 end
 
-@kernel function _average_kernel!(out, @Const(in_ref), dims::NTuple{D, Int}, dir, ::Val{DIM}) where {D, DIM}
-    I = @index(Global, Cartesian)
-    li = LinearIndices(dims)
-    n = dims[DIM]
+@kernel function _average_kernel!(
+        out, @Const(in_ref), n::Int32, s::Int32, boundary_idx::Int32, dir, ::Val{DIM}) where {DIM}
+    idx = @index(Global)
     @inbounds begin
-        idx = li[I]
-        if I[DIM] == Bramble._stencil_boundary_dim(dir, n)
-            out[idx] = Bramble._compute_average(dir, Val(true), in_ref[idx])
-        else
-            step = Bramble._stencil_step(Val(DIM), Val(D))
-            other = li[Bramble._neighbour(dir, I, step)]
-            out[idx] = Bramble._compute_average(dir, Val(false), in_ref[idx], in_ref[other])
-        end
+        i_dim32 = _axis_coord32(idx, n, s)
+        is_boundary = i_dim32 == boundary_idx
+        other_idx = ifelse(is_boundary, idx, idx + Int(_signed_stride(dir, s)))
+        cur = in_ref[idx]
+        other = in_ref[other_idx]
+        interior_val = Bramble._compute_average(dir, Val(false), cur, other)
+        boundary_val = Bramble._compute_average(dir, Val(true), cur)
+        out[idx] = ifelse(is_boundary, boundary_val, interior_val)
     end
 end
 
-function _launch_average_engine!(out::AbstractVector, in_ref, dims::Tuple, dir, dim_val::Val, dev)
+function _launch_average_engine!(out::AbstractVector, in_ref, dims::Tuple, dir, dim_val::Val{DIM}, dev) where {DIM}
+    n = dims[DIM]
+    s = _axis_stride(dims, dim_val)
+    boundary_idx = Int32(Bramble._stencil_boundary_dim(dir, n))
     try
-        _average_kernel!(dev)(out, in_ref, dims, dir, dim_val; ndrange = dims)
+        _average_kernel!(dev)(out, in_ref, Int32(n), s, boundary_idx, dir, dim_val; ndrange = length(out))
     catch err
         _wrap_device_kernel_error(err, "average operator")
     end
@@ -591,6 +791,317 @@ function _launch_spmm_csr!(C::AbstractMatrix, rowPtr, colVal, nzVal, B::Abstract
         _spmm_csr_kernel!(dev)(C, rowPtr, colVal, nzVal, B, α, β; ndrange = size(C))
     catch err
         _wrap_device_kernel_error(err, "Metal sparse mul! (SpMM)")
+    end
+    return nothing
+end
+
+# --- Fused vector-calculus kernels (gpena/Bramble.jl#306, #302, S12 part 4) -------------- #
+#
+# `src/space/operators/vector_calculus.jl`'s CPU engines accumulate one spatial direction
+# (or, for the strain tensor's off-diagonal entries, one difference and the average composed
+# onto it) per pass over the whole grid, scalar-indexing `out[idx] += ...` as they go -- which
+# a device array refuses outright, and which even where it would not throw would round-trip
+# global memory once per direction instead of once. Every kernel below instead reads each
+# component array exactly once per grid point and accumulates every direction's contribution
+# in registers before the one write to `out`, using the same direct-stride, branch-free-select
+# idiom the difference/average kernels above do: `_onesided_term` is that idiom's shared
+# building block (one truncatable one-sided term, scaled by a reciprocal spacing), and every
+# kernel here is a small, explicit composition of it -- never a generic `NTuple{D}` loop
+# hidden behind an extra abstraction, since `D` is always 1, 2 or 3.
+#
+# `h`/`hs`/`hbs`/`hss` arrive already resolved to plain top-level arrays by
+# `Bramble._resolve_device_spacing`, exactly as the difference kernels' `h` does; the
+# reciprocal is computed once per launch, from whatever array arrives, for the same reason
+# and with the same measured payoff as the difference kernels' own reciprocal-spacing note
+# above (this array is per-*axis*, not per-*grid-point*, so the extra broadcast is tiny next
+# to the kernel it feeds). `n`/`s` are `Int32` throughout, for the same reason and with the
+# same measured payoff as the difference kernels' own 64-bit-index-arithmetic note above:
+# every one of these kernels does the identical `fld`/`mod` recovery per direction, so the
+# fix is not specific to the two-array difference kernel it was isolated on.
+
+@inline function _onesided_term(dir, u, invh, n::Int32, s::Int32, idx)
+    @inbounds begin
+        i_dim32 = _axis_coord32(idx, n, s)
+        is_boundary = i_dim32 == Int32(Bramble._stencil_boundary_dim(dir, Int(n)))
+        other_idx = ifelse(is_boundary, idx, idx + Int(_signed_stride(dir, s)))
+        cur = u[idx]
+        other = u[other_idx]
+        return ifelse(is_boundary, zero(cur), _onesided_pure(dir, cur, other) * invh[Int(i_dim32)])
+    end
+end
+
+@inline _onesided_pure(::Bramble.Forward, cur, other) = other - cur
+@inline _onesided_pure(::Bramble.Backward, cur, other) = cur - other
+
+# --- Divergence: divₕ (Backward) / div₊ₕ (Forward) --------------------------------------- #
+
+@kernel function _fused_divergence1d_kernel!(out, @Const(u1), invh1, n1::Int32, s1::Int32, dir)
+    idx = @index(Global)
+    @inbounds out[idx] = _onesided_term(dir, u1, invh1, n1, s1, idx)
+end
+
+@kernel function _fused_divergence2d_kernel!(
+        out, @Const(u1), @Const(u2), invh1, invh2, n1::Int32, n2::Int32, s1::Int32, s2::Int32, dir
+)
+    idx = @index(Global)
+    @inbounds out[idx] = _onesided_term(dir, u1, invh1, n1, s1, idx) +
+                         _onesided_term(dir, u2, invh2, n2, s2, idx)
+end
+
+@kernel function _fused_divergence3d_kernel!(
+        out, @Const(u1), @Const(u2), @Const(u3), invh1, invh2, invh3, n1::Int32, n2::Int32, n3::Int32,
+        s1::Int32, s2::Int32, s3::Int32, dir
+)
+    idx = @index(Global)
+    @inbounds out[idx] = _onesided_term(dir, u1, invh1, n1, s1, idx) +
+                         _onesided_term(dir, u2, invh2, n2, s2, idx) +
+                         _onesided_term(dir, u3, invh3, n3, s3, idx)
+end
+
+function _launch_fused_divergence!(out::AbstractVector, comps::Tuple, hs::Tuple, dims::Tuple, dir, dev)
+    D = length(dims)
+    strides = ntuple(d -> _axis_stride(dims, Val(d)), Val(D))
+    ns32 = ntuple(d -> Int32(dims[d]), Val(D))
+    invhs = map(h -> inv.(h), hs)
+    try
+        if D == 1
+            _fused_divergence1d_kernel!(dev)(out, comps[1], invhs[1], ns32[1], strides[1], dir; ndrange = length(out))
+        elseif D == 2
+            _fused_divergence2d_kernel!(dev)(
+                out, comps[1], comps[2], invhs[1], invhs[2], ns32[1], ns32[2], strides[1], strides[2], dir;
+                ndrange = length(out)
+            )
+        else
+            _fused_divergence3d_kernel!(
+                dev)(
+                out, comps[1], comps[2], comps[3], invhs[1], invhs[2], invhs[3], ns32[1], ns32[2], ns32[3],
+                strides[1], strides[2], strides[3], dir; ndrange = length(out)
+            )
+        end
+    catch err
+        _wrap_device_kernel_error(err, "divₕ!/div₊ₕ!")
+    end
+    return nothing
+end
+
+# --- Curl: curlₕ (Backward) / curl₊ₕ (Forward) -------------------------------------------- #
+
+@kernel function _fused_curl2d_kernel!(
+        out, @Const(u1), @Const(u2), invh1, invh2, n1::Int32, n2::Int32, s1::Int32, s2::Int32, dir
+)
+    idx = @index(Global)
+    @inbounds out[idx] = _onesided_term(dir, u2, invh1, n1, s1, idx) -
+                         _onesided_term(dir, u1, invh2, n2, s2, idx)
+end
+
+function _launch_fused_curl2d!(out::AbstractVector, u1, u2, h1, h2, dims::Tuple, dir, dev)
+    s1 = _axis_stride(dims, Val(1))
+    s2 = _axis_stride(dims, Val(2))
+    invh1 = inv.(h1)
+    invh2 = inv.(h2)
+    try
+        _fused_curl2d_kernel!(dev)(
+            out, u1, u2, invh1, invh2, Int32(dims[1]), Int32(dims[2]), s1, s2, dir; ndrange = length(out)
+        )
+    catch err
+        _wrap_device_kernel_error(err, "curlₕ!/curl₊ₕ!")
+    end
+    return nothing
+end
+
+@kernel function _fused_curl3d_kernel!(
+        out1, out2, out3, @Const(u1), @Const(u2), @Const(u3), invh1, invh2, invh3,
+        n1::Int32, n2::Int32, n3::Int32, s1::Int32, s2::Int32, s3::Int32, dir
+)
+    idx = @index(Global)
+    @inbounds begin
+        out1[idx] = _onesided_term(dir, u3, invh2, n2, s2, idx) - _onesided_term(dir, u2, invh3, n3, s3, idx)
+        out2[idx] = _onesided_term(dir, u1, invh3, n3, s3, idx) - _onesided_term(dir, u3, invh1, n1, s1, idx)
+        out3[idx] = _onesided_term(dir, u2, invh1, n1, s1, idx) - _onesided_term(dir, u1, invh2, n2, s2, idx)
+    end
+end
+
+function _launch_fused_curl3d!(out1, out2, out3, u1, u2, u3, h1, h2, h3, dims::Tuple, dir, dev)
+    s1 = _axis_stride(dims, Val(1))
+    s2 = _axis_stride(dims, Val(2))
+    s3 = _axis_stride(dims, Val(3))
+    invh1, invh2, invh3 = inv.(h1), inv.(h2), inv.(h3)
+    try
+        _fused_curl3d_kernel!(dev)(
+            out1, out2, out3, u1, u2, u3, invh1, invh2, invh3, Int32(dims[1]), Int32(dims[2]), Int32(dims[3]),
+            s1, s2, s3, dir; ndrange = length(out1)
+        )
+    catch err
+        _wrap_device_kernel_error(err, "curlₕ!/curl₊ₕ!")
+    end
+    return nothing
+end
+
+# --- Laplacian: Δₕ ------------------------------------------------------------------------ #
+#
+# One direction's flux-difference term, speculatively evaluated at every point and masked
+# rather than branched: `mask_hi` truncates the whole term to zero at the last slice along
+# this direction (matching `_accumulate_laplacian!`'s CPU sweep, which never visits it at
+# all), and every neighbour index and every `h`/`hs` index used only by a speculative read is
+# clamped to a safe in-bounds value with `ifelse` when the true one would fall outside its
+# own array -- `hs` (`star_spacings`, resolved) has `n - 1` entries, one fewer than `hb`, so
+# it needs its own clamp at `i_dim == n`, not just `hb`'s.
+#
+# Division, not the reciprocal-multiply the difference/average/divergence/curl kernels above
+# use: measured directly on a mildly non-uniform 1D mesh (spacing ratio ~2.8, nothing
+# pathological), multiplying by `1 ./ hb` and `1 ./ hs` disagreed with the CPU (dividing)
+# reference by up to 0.85% relative -- two orders of magnitude past `rtol = 1f-5` -- at
+# ordinary interior points, not just where a spacing happens to be tiny. The Laplacian
+# subtracts two flux terms that are individually much larger than their difference (a
+# forward and a backward first difference, each divided by a spacing on the order of `1/n`,
+# so each flux is `O(n)` while a smooth field's second difference is `O(1)`): that is
+# catastrophic cancellation by construction, and it amplifies the one-ULP disagreement
+# between `x / h` and `x * (1 / h)` into a difference orders of magnitude larger than either
+# value alone. The difference/average/divergence/curl kernels have no such cancellation (each
+# writes one first difference, not the difference of two comparably-sized ones), which is
+# where their own reciprocal-spacing note's measurement actually applies -- it does not
+# transfer here, and re-measuring on the Laplacian's own shape says so.
+@inline function _laplacian_term(u, cur, hb, hs, n::Int32, s::Int32, idx)
+    @inbounds begin
+        i_dim32 = _axis_coord32(idx, n, s)
+        mask_hi = i_dim32 != n
+        mask_lo = i_dim32 != Int32(1)
+        sInt = Int(s)
+        fwd_idx = ifelse(mask_hi, idx + sInt, idx)
+        back_idx = ifelse(mask_lo, idx - sInt, idx)
+        i_dim = Int(i_dim32)
+        hb_fwd_i = ifelse(mask_hi, i_dim + 1, i_dim)
+        hs_i = ifelse(mask_hi, i_dim, Int(n) - 1) # `hs` has n - 1 entries; clamp only matters when discarded
+        fwd_val = u[fwd_idx]
+        back_val = u[back_idx]
+        forward_flux = (fwd_val - cur) / hb[hb_fwd_i]
+        backward_flux = mask_lo * (cur - back_val) / hb[i_dim]
+        return mask_hi * (forward_flux - backward_flux) / hs[hs_i]
+    end
+end
+
+@kernel function _fused_laplacian1d_kernel!(out, @Const(u), hb1, hs1, n1::Int32, s1::Int32)
+    idx = @index(Global)
+    @inbounds begin
+        cur = u[idx]
+        out[idx] = _laplacian_term(u, cur, hb1, hs1, n1, s1, idx)
+    end
+end
+
+@kernel function _fused_laplacian2d_kernel!(
+        out, @Const(u), hb1, hs1, hb2, hs2, n1::Int32, n2::Int32, s1::Int32, s2::Int32
+)
+    idx = @index(Global)
+    @inbounds begin
+        cur = u[idx]
+        out[idx] = _laplacian_term(u, cur, hb1, hs1, n1, s1, idx) +
+                   _laplacian_term(u, cur, hb2, hs2, n2, s2, idx)
+    end
+end
+
+@kernel function _fused_laplacian3d_kernel!(
+        out, @Const(u), hb1, hs1, hb2, hs2, hb3, hs3,
+        n1::Int32, n2::Int32, n3::Int32, s1::Int32, s2::Int32, s3::Int32
+)
+    idx = @index(Global)
+    @inbounds begin
+        cur = u[idx]
+        out[idx] = _laplacian_term(u, cur, hb1, hs1, n1, s1, idx) +
+                   _laplacian_term(u, cur, hb2, hs2, n2, s2, idx) +
+                   _laplacian_term(u, cur, hb3, hs3, n3, s3, idx)
+    end
+end
+
+function _launch_fused_laplacian!(out::AbstractVector, u, hbs::Tuple, hss::Tuple, dims::Tuple, dev)
+    D = length(dims)
+    strides = ntuple(d -> _axis_stride(dims, Val(d)), Val(D))
+    ns32 = ntuple(d -> Int32(dims[d]), Val(D))
+    try
+        if D == 1
+            _fused_laplacian1d_kernel!(dev)(
+                out, u, hbs[1], hss[1], ns32[1], strides[1]; ndrange = length(out)
+            )
+        elseif D == 2
+            _fused_laplacian2d_kernel!(
+                dev)(
+                out, u, hbs[1], hss[1], hbs[2], hss[2], ns32[1], ns32[2], strides[1], strides[2];
+                ndrange = length(out)
+            )
+        else
+            _fused_laplacian3d_kernel!(
+                dev)(
+                out, u, hbs[1], hss[1], hbs[2], hss[2], hbs[3], hss[3],
+                ns32[1], ns32[2], ns32[3], strides[1], strides[2], strides[3]; ndrange = length(out)
+            )
+        end
+    catch err
+        _wrap_device_kernel_error(err, "Δₕ!")
+    end
+    return nothing
+end
+
+# --- Strain tensor: εₕ, off-diagonal entries ---------------------------------------------- #
+#
+# `ε_ij = (M₋ᵢ(D₋ⱼ(uᵢ)) + M₋ⱼ(D₋ᵢ(uⱼ))) / 2`, `i != j` (the CPU docstring on `εₕ`,
+# `src/space/operators/vector_calculus.jl`, has the full derivation). Composed directly
+# rather than as a difference kernel followed by an average kernel: `D₋ⱼ(uᵢ)` truncates to
+# zero exactly when its own `j`-coordinate is 1 (`mask_j`), and that truncation is shared by
+# both points the backward average at `i`-coordinate reads (shifting along `i` never changes
+# the `j`-coordinate, since `i != j`) -- so the average's own truncation (`mask_i`, at
+# `i`-coordinate 1) and the difference's (`mask_j`) combine into the single product
+# `mask_i & mask_j` gating the whole term, with no separate pass needed. `shift_i`/`shift_j`
+# zero out (rather than branch away) whichever neighbour offset a mask disallows, so every
+# one of `ui`/`uj`'s four reads stays in bounds regardless of where `idx` sits on the grid.
+# `ε_ii` (the diagonal) needs none of this: it is exactly `D₋ᵢ(uᵢ)`, so it reuses
+# `_launch_difference_onesided!` above rather than a kernel of its own
+# (`vector_calculus.jl`'s `_strain_diag!`).
+
+@kernel function _fused_strain_offdiag_kernel!(
+        out, @Const(ui), @Const(uj), invh_i, invh_j, ni::Int32, nj::Int32, si::Int32, sj::Int32
+)
+    idx = @index(Global)
+    @inbounds begin
+        i_i32 = _axis_coord32(idx, ni, si)
+        i_j32 = _axis_coord32(idx, nj, sj)
+        mask_i = i_i32 != Int32(1)
+        mask_j = i_j32 != Int32(1)
+        together = mask_i & mask_j
+        siInt, sjInt = Int(si), Int(sj)
+        shift_i = ifelse(mask_i, siInt, 0)
+        shift_j = ifelse(mask_j, sjInt, 0)
+        idx_mi = idx - shift_i
+        idx_mj = idx - shift_j
+        idx_mimj = idx - shift_i - shift_j
+        i_i, i_j = Int(i_i32), Int(i_j32)
+
+        ui_00 = ui[idx]
+        ui_mi = ui[idx_mi]
+        ui_mj = ui[idx_mj]
+        ui_mimj = ui[idx_mimj]
+        uj_00 = uj[idx]
+        uj_mi = uj[idx_mi]
+        uj_mj = uj[idx_mj]
+        uj_mimj = uj[idx_mimj]
+
+        term1 = ifelse(together, ((ui_00 - ui_mj) + (ui_mi - ui_mimj)) * invh_j[i_j] / 2, zero(ui_00))
+        term2 = ifelse(together, ((uj_00 - uj_mi) + (uj_mj - uj_mimj)) * invh_i[i_i] / 2, zero(uj_00))
+        out[idx] = (term1 + term2) / 2
+    end
+end
+
+function _launch_fused_strain_offdiag!(
+        out::AbstractVector, ui, uj, hi, hj, dims::Tuple, dim_i::Val{I}, dim_j::Val{J}, dev
+) where {I, J}
+    si = _axis_stride(dims, dim_i)
+    sj = _axis_stride(dims, dim_j)
+    invh_i = inv.(hi)
+    invh_j = inv.(hj)
+    try
+        _fused_strain_offdiag_kernel!(dev)(
+            out, ui, uj, invh_i, invh_j, Int32(dims[I]), Int32(dims[J]), si, sj; ndrange = length(out)
+        )
+    catch err
+        _wrap_device_kernel_error(err, "εₕ!")
     end
     return nothing
 end
