@@ -161,9 +161,9 @@ end
 # replacing the three sequential launches above (`_launch_spacing!`, `_launch_half_points!`,
 # `_launch_half_spacing!`) for a non-uniform device mesh. Each thread reads only its own
 # 3-point local stencil of `pts` -- unlike `_half_spacing_kernel!` above, which reads
-# `spacings` back from global memory, the interior half spacing here telescopes to
-# `(pts[i + 1] - pts[i - 1]) / 2`, so `spacings` never has to be written to memory before
-# this kernel can read it back. `src/mesh/mesh1d.jl` dispatches a non-uniform,
+# `spacings` back from global memory, the interior half spacing here recomputes both
+# adjacent spacings from `pts` directly, so `spacings` never has to be written to memory
+# before this kernel can read it back. `src/mesh/mesh1d.jl` dispatches a non-uniform,
 # non-collapsed, device-backed, `n >= 2` mesh here, at both construction and
 # `set_points!`; the formula is correct for any coordinates, not only genuinely
 # non-uniform ones, which is what lets `set_points!` (with no uniformity flag to branch
@@ -185,8 +185,17 @@ end
                 half_spacings[i] = h / 2
                 half_pts[i] = (pts[i] + pts[i - 1]) / 2
             else
-                spacings[i] = pts[i] - pts[i - 1]
-                half_spacings[i] = (pts[i + 1] - pts[i - 1]) / 2
+                # Sum the two already-rounded adjacent spacings and halve, the same
+                # association `half_spacing!` (src/mesh/mesh1d.jl) uses --
+                # `(spacing(i) + spacing(i + 1)) * 0.5` -- rather than the cheaper,
+                # marginally more accurate two-point difference `(pts[i + 1] - pts[i - 1]) / 2`
+                # this kernel used before. A fused kernel that changes results is not a
+                # fusion: cross-backend bit-reproducibility is worth more here than the
+                # half-ULP it costs.
+                back = pts[i] - pts[i - 1]
+                fwd = pts[i + 1] - pts[i]
+                spacings[i] = back
+                half_spacings[i] = (back + fwd) / 2
                 half_pts[i] = (pts[i] + pts[i - 1]) / 2
             end
         end
