@@ -114,6 +114,18 @@ if PRECOMPILE_WORKLOAD
             _pc_operator_session(e2, c2, Val(2))
             _pc_operator_session(e3, c3, Val(3))
 
+            # Single-precision Float32 CPU coverage (mirrors GPU element type and single-precision runs)
+            be32 = backend(Float32)
+            _pc_linear_algebra(be32)
+            Ω1_32 = domain(interval(0.0f0, 1.0f0), :left => :left, :right => :right)
+            Ωₕ1_32 = _pc_mesh_session(Ω1_32, 5, true, be32, :left)
+            Ω2_32 = domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 2.0f0), :wall => (:left, :right))
+            Ωₕ2_32 = _pc_mesh_session(Ω2_32, (4, 4), (true, true), be32, :wall)
+            _, e1_32, c1_32 = _pc_space_session(Ωₕ1_32, x -> x + 1.0f0, x -> 2.0f0 * x, :left)
+            _, e2_32, c2_32 = _pc_space_session(Ωₕ2_32, x -> x[1] * x[2], x -> x[1] + x[2], :wall)
+            _pc_operator_session(e1_32, c1_32, Val(1))
+            _pc_operator_session(e2_32, c2_32, Val(2))
+
             # The symbolic layer. Not reachable from the space sessions: a LazyOp tree is
             # built from IdentityOperator and the trial/test leaves, not from a grid
             # function.
