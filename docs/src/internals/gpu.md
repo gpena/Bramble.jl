@@ -344,3 +344,70 @@ v3.5.0). A masked reduction (`innerₕ`/`normₕ` with a mask) does run on a dev
 masked *projection* does not, and those are different mechanisms -- the mask folds into a
 reduction in the first case, but would need folding into a per-point projection kernel in
 the second.
+
+## A device kernel launch perturbs the global RNG stream
+
+Any code that mixes `rand()`/a seeded RNG with a device kernel launch -- Metal today, a
+future CUDA/ROCm/oneAPI backend later -- has to reckon with a hazard that has nothing to
+do with Bramble's own logic: **launching a kernel consumes a draw from Julia's global RNG
+as a side effect of the launch itself.** Seeding `Random.default_rng()` immediately before
+code that both calls `rand()` and launches a device kernel does not leave the stream in
+the state that code might expect afterward, even though nothing the caller wrote touched
+`Random` at all. Confirmed empirically while investigating
+[gpena/Bramble.jl#320](https://github.com/gpena/Bramble.jl/issues/320): seed, draw twice as
+a control; seed again, launch a device kernel, draw once more -- the post-kernel draw does
+not match the control's second draw.
+
+**Source, pinned down by reading the installed package code (not by launching a real
+kernel):** it is Metal.jl, not KernelAbstractions.jl. KernelAbstractions.jl 0.9.42's own
+source has no `Random`/`rand` use anywhere in its launch path -- the only hit anywhere in
+its `src/` is a `rand(1024)` inside a docstring example. Metal.jl does the drawing itself,
+unconditionally, on every kernel dispatch:
+
+```julia
+# Metal.jl src/compiler/execution.jl, function `launch`
+kernel_state = KernelState(Random.rand(UInt32), buf_ptr, exc_ptr)
+```
+
+`Random.rand(UInt32)` here has no explicit RNG argument, so it reads
+`Random.default_rng()` -- Julia's global stream. The draw happens before the function's
+first branch (the `kernel.loggingEnabled` / `precompiling` check a few lines below), so it
+is not conditional on logging, precompilation, or anything about the kernel body: **every
+launch costs exactly one `UInt32` draw, a fixed amount, not a variable one.** The result
+seeds `KernelState.random_seed` (`src/device/runtime.jl`), which is what Metal.jl's
+on-device `rand()` support (`src/device/random.jl`) uses to seed each thread's own
+generator -- the global-stream draw is not accidental leakage, it is how Metal.jl gives
+every kernel launch an unpredictable device-side seed by default. Checked across the three
+Metal.jl releases installed on this host (`~/.julia/packages/Metal/`) -- v1.9.3, v1.10.0
+(what this repository's `Manifest.toml` resolves to) and v1.11.1 -- and the same
+`Random.rand(UInt32)` call sits in the same spot in `launch` in all three, so this is a
+stable, versioned design choice, not a fluke of one release. Every kernel `Metal.jl`'s
+`KernelAbstractions.jl` backend launches (`MetalKernels.jl`'s `(::KA.Kernel{MetalBackend})`
+method) goes through this same `HostKernel` call and therefore this same `launch` function
+-- there is no path through `MetalBackend` that avoids it.
+
+Because the behaviour is consistent and clearly intentional (seeding a documented
+on-device RNG feature) rather than an oversight, it is not obviously a defect
+KernelAbstractions.jl or Metal.jl would want to change on request; this section only
+identifies where the draw happens; it does not file anything upstream, and no one should
+read this as Bramble's assessment of whether an issue is warranted -- that's a judgment
+call for a human maintainer with the exact file/line above in hand
+(`Metal.jl` `src/compiler/execution.jl`, function `launch`, the `KernelState(...)` line).
+
+**What Bramble provides, and its limits.** `_seed_mesh1d_rng!`/`_unseed_mesh1d_rng!`
+in `src/mesh/mesh1d.jl` exist so Bramble's own non-uniform mesh generation can opt out of
+the global stream entirely and draw from an isolated package-local `Xoshiro` instead,
+immune to whatever a device kernel launch does to `Random.default_rng()`. These are
+internal functions, not public API: they are not something user code is meant to call
+directly today. They were added for Bramble's own reproducibility needs (a host and device
+build of the "same" non-uniform mesh producing the same interior coordinates for a given
+seed) and for the test suite that checks it, not as a general-purpose answer to this
+hazard.
+
+Outside that one internal use, this is a general hazard for *any* code mixing `rand()`
+with a device kernel launch, Bramble's own or not, and Bramble cannot fix it on the
+user's behalf: the perturbation originates a layer below Bramble, in the backend package
+that actually launches kernels. A seeded cross-backend comparison written against
+Bramble's public API -- or against any other package that launches device kernels -- needs
+its own isolated RNG (seeded independently of `Random.default_rng()`) for any `rand()` call
+whose result must not depend on what kernel launches happened to run first.

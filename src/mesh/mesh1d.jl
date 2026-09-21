@@ -445,8 +445,85 @@ end
     return _apply_hs_logic(half_spacing(Ωₕ, idx))
 end
 
+# `_generate_random_points!` used to draw from `Random.default_rng()` unconditionally, but a
+# device backend's kernel launches (metrics, fused init, ...) draw from that same global
+# stream as a side effect of launching -- even a uniform device mesh, which calls no RNG
+# code of its own, perturbs it. That meant seeding the global RNG and building a non-uniform
+# mesh on the host, then seeding again and building the "same" mesh on a device backend,
+# produced different interior coordinates: the device path's other kernel launches had
+# already burned draws from the global stream before this function ever ran
+# (gpena/Bramble.jl#320).
+#
+# The fix is opt-in, not a blanket switch to a package-local RNG: dozens of existing tests
+# (test/form/jacobian_pattern.jl:132, test/form/kronecker.jl, test/ext/kronecker_ext.jl,
+# test/space/centered_difference.jl, and ~23 others) call `Random.seed!(N)` immediately
+# before building a non-uniform mesh and rely on that call alone controlling the mesh's
+# interior points -- some for a single deterministic mesh a numerical assertion depends on
+# (jacobian_pattern.jl's Newton-iteration-count bound is one), not a "build twice, compare"
+# pattern. Drawing from a separate RNG unconditionally would make every one of those
+# `Random.seed!(N)` calls silently stop controlling its mesh, and would instead have
+# `_generate_random_points!` read whatever state a permanently-live, never-reseeded package
+# RNG happens to have accumulated from every other non-uniform mesh built earlier in the
+# same process -- order-dependent and effectively random in practice. Arming
+# `_generate_random_points!` onto the isolated RNG only for a caller that explicitly asks
+# for it, via `_seed_mesh1d_rng!`, keeps every existing `Random.seed!(N)` call working
+# exactly as before (`_MESH1D_RNG_ARMED` stays `false`, so the `else` branch below runs,
+# unchanged from the original code) while still giving device-mesh-reproducibility code
+# (gpena/Bramble.jl#320's S1.2) a way to opt out of the global stream entirely.
+import Random
+
+const _MESH1D_RNG = Random.Xoshiro()
+const _MESH1D_RNG_ARMED = Ref(false)
+
+"""
+    _seed_mesh1d_rng!(seed) -> Nothing
+
+Seed the package-local RNG `_generate_random_points!` can draw from, and switch it
+onto that RNG instead of `Random.default_rng()` (gpena/Bramble.jl#320). A device backend's
+kernel launches (for metrics, fused init, and other work) consume draws from the global RNG
+as a side effect of launching, so seeding `Random.default_rng()` alone does not make a host
+and device build of the "same" non-uniform mesh agree.
+
+Call this immediately before building one or more non-uniform [`Mesh1D`](@ref)s that must
+reproduce the same interior coordinates for a given seed regardless of what any kernel
+launch does to the global stream, then call [`_unseed_mesh1d_rng!`](@ref) once done. Code
+that never calls this is unaffected: `_generate_random_points!` keeps drawing from
+`Random.default_rng()` exactly as it always did, so an existing `Random.seed!(N)` call
+immediately before a non-uniform mesh build keeps controlling it.
+"""
+function _seed_mesh1d_rng!(seed)
+    Random.seed!(_MESH1D_RNG, seed)
+    _MESH1D_RNG_ARMED[] = true
+    return nothing
+end
+
+"""
+    _unseed_mesh1d_rng!() -> Nothing
+
+Switch `_generate_random_points!` back onto `Random.default_rng()`, undoing
+[`_seed_mesh1d_rng!`](@ref). Call this once code that opted into the package-local RNG is
+done building its non-uniform mesh(es), so no later, unrelated code silently keeps reading
+from it.
+"""
+function _unseed_mesh1d_rng!()
+    _MESH1D_RNG_ARMED[] = false
+    return nothing
+end
+
 @inline function _generate_random_points!(v)
-    rand!(v)
+    if _MESH1D_RNG_ARMED[]
+        # Canonical `Float64` draws converted to `eltype(v)`, rather than
+        # `rand!(_MESH1D_RNG, v)` directly on `v` itself: Julia's `Float32` and `Float64`
+        # samplers consume a different number of bits per draw from the same `Xoshiro`
+        # stream, so a `Float32` destination (Metal's only type, gpena/Bramble.jl#308) and a
+        # `Float64` one would disagree on the same seed even with the RNG itself perfectly
+        # isolated from kernel-launch side effects.
+        draws = Vector{Float64}(undef, length(v))
+        rand!(_MESH1D_RNG, draws)
+        v .= draws
+    else
+        rand!(v)
+    end
     sort!(v)  # In-place sort
     return nothing
 end

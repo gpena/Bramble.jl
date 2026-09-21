@@ -5,6 +5,7 @@ using Bramble
 using Metal
 using SparseArrays
 using LinearAlgebra
+using Random
 using ..TestUtils: _run_gpu_tests
 
 # The Metal full stack's own test file (gpena/Bramble.jl#94, S2.7): every layer S2.1-S4.2
@@ -422,6 +423,42 @@ else
                     @test _close(g.hsp, c.hsp)
                 end
             end
+        end
+
+        # #320 (S1.2): `_seed_mesh1d_rng!` isolates non-uniform mesh point generation onto a
+        # package-local RNG immune to whatever a device kernel launch does to the global
+        # stream -- so seeding it, building a non-uniform mesh on the host, seeding it again
+        # with the same seed, and building the "same" non-uniform mesh on a Metal backend
+        # produces matching interior coordinates. Before this fix, the device path's other
+        # kernel launches (metrics, fused init, ...) had already burned draws from
+        # `Random.default_rng()` by the time point generation ran, so the two builds
+        # disagreed even under the same `Random.seed!`.
+        @testset "seeded non-uniform mesh matches across host/Metal backends (#320)" begin
+            n = 33
+            seed = 20260920
+
+            Bramble._seed_mesh1d_rng!(seed)
+            Ωc_seeded = mesh(domain(interval(0.0, 1.0)), n, false)
+            Bramble._seed_mesh1d_rng!(seed)
+            Ωg_seeded = mesh(domain(interval(0.0f0, 1.0f0)), n, false; backend = metal_backend())
+            Bramble._unseed_mesh1d_rng!()
+
+            # Host draws are Float64, device draws get converted to Float32 (see
+            # mesh1d.jl's `_generate_random_points!`), so the comparison tolerates that
+            # rounding rather than demanding exact equality.
+            @test isapprox(
+                Array(points(Ωg_seeded)), Float32.(points(Ωc_seeded)); rtol = 1.0f-6
+            )
+
+            # Negative control: without arming `_seed_mesh1d_rng!`, `Random.seed!(N)` alone
+            # still controls a non-uniform mesh build exactly as before -- the pattern the
+            # ~27 other test files already rely on -- proving the opt-in design didn't
+            # regress legacy behavior.
+            Random.seed!(20260921)
+            a = mesh(domain(interval(0.0, 1.0)), n, false)
+            Random.seed!(20260921)
+            b = mesh(domain(interval(0.0, 1.0)), n, false)
+            @test collect(points(a)) == collect(points(b))
         end
 
         # #302: no eager `synchronize` remains under `GpuAsync` (S11 removed all 21 call
