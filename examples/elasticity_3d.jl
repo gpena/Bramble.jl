@@ -81,69 +81,69 @@
 #
 # where ``S_{ij} = \{i\}`` for ``i = j`` and ``\{i,j\}`` otherwise.
 #
-# ``S = \emptyset`` is [`innerₕ`](@ref) and the three singletons are [`inner₊ₓ`](@ref),
-# [`inner₊ᵧ`](@ref) and [`inner₊₂`](@ref). The pairs and the triple are not in the library yet
-# ([#234](https://github.com/gpena/Bramble.jl/issues/234)), and the singletons that are cannot be
-# used on a free surface, because their transverse factor drops the first and last point of every
-# other axis ([#236](https://github.com/gpena/Bramble.jl/issues/236)). So this page builds all of
-# them the same way: as `innerₕ` against the ratio of the weight it wants to the weight `innerₕ`
-# already carries.
+# ``S = \emptyset`` is [`innerₕ`](@ref), the three singletons are [`inner₊ₓ`](@ref),
+# [`inner₊ᵧ`](@ref) and [`inner₊₂`](@ref), and the pairs and the triple that ``\varepsilon^{ij}_h``
+# and ``\mathrm{div}_h`` need are the rest of the same [`inner₊`](@ref)`(u, v, Val(S))` family
+# ([#234](https://github.com/gpena/Bramble.jl/issues/234)); the transverse-factor bug that used to
+# make the singletons wrong on a free surface is fixed too
+# ([#236](https://github.com/gpena/Bramble.jl/issues/236)). [`εₕ`](@ref) and [`divₕ`](@ref) build
+# the placements above directly from a composite trial or test function — one call each, over
+# ``u`` as a whole rather than component by component — placing ``\varepsilon^{ii}_h`` on the face
+# centre normal to ``i``, ``\varepsilon^{ij}_h`` on the edge centre the pair ``\{i,j\}`` shares,
+# and ``\mathrm{div}_h\,u_h`` on the cell centre every axis shares, and handing each term to
+# `inner₊` with the ``S`` it needs. The discrete form is exactly `a_h` above, spelled
+# `2μ * inner₊(εₕ(u), εₕ(v)) + λ * inner₊(divₕ(u), divₕ(v))`.
 
 using Bramble
 using ForwardDiff
 using Random
 
-const Dm = (D₋ₓ, D₋ᵧ, D₋₂)
-const Mm = (Mₓ, Mᵧ, M₂)
+elasticity_form(Vₕ, μ, λ) = form(
+    Vₕ, Vₕ, (u, v) -> 2μ * inner₊(εₕ(u), εₕ(v)) + λ * inner₊(divₕ(u), divₕ(v)))
 
-"""
-    stagger_ratio(Wₕ, S, scale) -> VectorElement
-
-`scale * wₛ / wₕ` as a grid function, where `wₛ` is the quadrature weight of a quantity
-staggered in the directions `S` and `wₕ` is the one `innerₕ` carries. Multiplying a term by
-this turns `innerₕ` into the inner product `S` calls for.
-"""
-function stagger_ratio(Wₕ, S, scale)
-    Ωₕ = mesh(Wₕ)
-    npts = npoints(Ωₕ, Tuple)
-    r = fill(float(scale), npts)
-    for d in S
-        ## `spacings[1]` is a cached placeholder: node 1 has no cell behind it, and every
-        ## quantity staggered in `d` is zero there anyway.
-        h = [i == 1 ? 0.0 : spacing(Ωₕ(d), i) for i in 1:npts[d]]
-        ratio = h ./ [half_spacing(Ωₕ(d), i) for i in 1:npts[d]]
-        r .*= reshape(ratio, ntuple(k -> k == d ? npts[d] : 1, 3))
-    end
-    cₕ = element(Wₕ)
-    copyto!(parent(cₕ), vec(r))
-    return cₕ
-end
-
-# One component of the discrete strain, and one term of the discrete divergence. The three
-# divergence terms are deliberately not summed before the inner product: `innerₕ` distributes
-# over a component-mixing sum of two terms and throws on one of three
-# ([#235](https://github.com/gpena/Bramble.jl/issues/235)), so the nine ``(i,j)`` products are
-# written out instead.
-
-εₕ(p, i, j) = i == j ? Dm[i](p(i)) :
-              0.5 * Mm[i](Dm[j](p(i))) + 0.5 * Mm[j](Dm[i](p(j)))
-
-divₜ(p, i) = foldl((op, d) -> Mm[d](op), filter(!=(i), 1:3); init = Dm[i](p(i)))
-
-function elasticity_form(Vₕ, μ, λ)
-    Wₕ = first(spaces(Vₕ))
-    cε = Dict(S => stagger_ratio(Wₕ, S, 2μ)
-    for S in ((1,), (2,), (3,), (1, 2), (1, 3), (2, 3)))
-    cdiv = stagger_ratio(Wₕ, (1, 2, 3), λ)
-    return form(Vₕ, Vₕ,
-        (p, q) -> sum(innerₕ(cε[i == j ? (i,) : minmax(i, j)] * εₕ(p, i, j), εₕ(q, i, j))
-        for i in 1:3, j in 1:3) +
-                  sum(innerₕ(cdiv * divₜ(p, i), divₜ(q, j)) for i in 1:3, j in 1:3))
-end
-
-# The material constant rides inside each term rather than multiplying the sum, for the same
-# reason the divergence is written out: a scalar in front of a sum of more than two blocks is
-# refused by the form simplifier today.
+# The compact form above must assemble to exactly the matrix the 27-term hand expansion it       #src
+# replaces would (`test/form/vector_calculus.jl` checks the same equality independently, from     #src
+# its own transcription, so a discrepancy here would mean this page's own algebra is wrong, not   #src
+# a shared bug). `isapprox` rather than `==`: the two sides reach the same staggered weight       #src
+# through different arithmetic -- this one from `SpaceWeights` directly, the hand-expanded one    #src
+# from a separately computed ratio -- so the last bit or two of a handful of entries can differ,   #src
+# and `atol = 1e-12` is the bound `vector_calculus.jl` found necessary for exactly that reason.    #src
+const _Dm = (D₋ₓ, D₋ᵧ, D₋₂)                                                                       #src
+const _Mm = (Mₓ, Mᵧ, M₂)                                                                          #src
+function _hand_stagger_ratio(Wₕ, S, scale)                                                        #src
+    Ωₕ = mesh(Wₕ)                                                                                 #src
+    npts = npoints(Ωₕ, Tuple)                                                                     #src
+    r = fill(float(scale), npts)                                                                  #src
+    for d in S                                                                                    #src
+        h = [i == 1 ? 0.0 : spacing(Ωₕ(d), i) for i in 1:npts[d]]                                  #src
+        ratio = h ./ [half_spacing(Ωₕ(d), i) for i in 1:npts[d]]                                   #src
+        r .*= reshape(ratio, ntuple(k -> k == d ? npts[d] : 1, 3))                                 #src
+    end                                                                                            #src
+    cₕ = element(Wₕ)                                                                               #src
+    copyto!(parent(cₕ), vec(r))                                                                    #src
+    return cₕ                                                                                      #src
+end                                                                                                 #src
+_hand_strain(p, i, j) = i == j ? _Dm[i](p(i)) :                                                    #src
+                        0.5 * _Mm[i](_Dm[j](p(i))) + 0.5 * _Mm[j](_Dm[i](p(j)))                    #src
+_hand_div_term(p, i) = foldl((op, d) -> _Mm[d](op), filter(!=(i), 1:3); init = _Dm[i](p(i)))       #src
+function _hand_elasticity_form(Vₕ, μ, λ)                                                           #src
+    Wₕ = first(spaces(Vₕ))                                                                         #src
+    cε = Dict(S => _hand_stagger_ratio(Wₕ, S, 2μ)                                                   #src
+    for S in ((1,), (2,), (3,), (1, 2), (1, 3), (2, 3)))                                           #src
+    cdiv = _hand_stagger_ratio(Wₕ, (1, 2, 3), λ)                                                    #src
+    return form(Vₕ, Vₕ,                                                                             #src
+        (p, q) -> sum(innerₕ(cε[i == j ? (i,) : minmax(i, j)] * _hand_strain(p, i, j),              #src
+                          _hand_strain(q, i, j)) for i in 1:3, j in 1:3) +                                            #src
+                  sum(innerₕ(cdiv * _hand_div_term(p, i), _hand_div_term(q, j))                     #src
+        for i in 1:3, j in 1:3))                                                                    #src
+end                                                                                                 #src
+Random.seed!(20260903)                                                                             #src
+Ωc_check = mesh(                                                                                    #src
+    domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (5, 4, 3), (false, true, false))                #src
+Vc_check = gridspace(Ωc_check)^Val(3)                                                               #src
+A_compact_check = assemble(elasticity_form(Vc_check, 1.7, 0.9))                                    #src
+A_hand_check = assemble(_hand_elasticity_form(Vc_check, 1.7, 0.9))                                  #src
+@test isapprox(A_compact_check, A_hand_check; atol = 1.0e-12)                                      #src
 
 lame(E, ν) = (E / (2 * (1 + ν)), E * ν / ((1 + ν) * (1 - 2ν)))
 const E, ν = 1.0, 0.3
@@ -205,8 +205,8 @@ order_1h = log(err_1h[end - 1] / err_1h[end]) / log(hs[end - 1] / hs[end])
 # pattern the [linear Poisson example](poisson_linear.md) uses and for the same reason: a
 # uniform grid can make a manufactured solution far more accurate than the scheme deserves, and
 # independently drawn random grids give an ``h`` sequence too erratic to read a rate from. A
-# non-uniform grid also makes the staggered weights above non-trivial, so `stagger_ratio` is
-# doing real work here rather than returning ones.
+# non-uniform grid also makes the staggered weights `inner₊` reads for `εₕ`/`divₕ` non-trivial,
+# rather than the trivial case a uniform mesh would exercise.
 #
 # Bracketed above as well as below, for the reason poisson_linear.jl gives. The ``H^1``    #src
 # bracket is the looser one: three levels is what 3D affords, so the rate is read off one   #src
@@ -256,9 +256,10 @@ for n in ((17, 5, 5), (25, 7, 5), (33, 9, 7))
 end
 round.(tips ./ (-δ_eb), digits = 3)
 
-# Converging on beam theory from below. Write the shear terms with `Dₕ` and `innerₕ` instead —
-# the only arrangement the inner products in the library today can express — and the same beam on
-# these same three grids gives `+0.00011`, `-0.00005` and `+0.00009`: three to four orders of
+# Converging on beam theory from below. Write the shear terms with `Dₕ` and `innerₕ` instead of
+# `εₕ`/`divₕ`'s staggered placements — collocating everything at the nodes rather than the
+# face/edge/cell centres the discrete strain and divergence actually live on — and the same beam
+# on these same three grids gives `+0.00011`, `-0.00005` and `+0.00009`: three to four orders of
 # magnitude too small, and on two of the three deflecting *upward* under a downward load. That is
 # not a checkerboard or an accuracy loss but an indefinite stiffness matrix, and where it comes
 # from is written up in [#236](https://github.com/gpena/Bramble.jl/issues/236).
