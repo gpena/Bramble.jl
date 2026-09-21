@@ -487,8 +487,8 @@ Fills all four of a uniform mesh's arrays -- `pts`, `half_pts`, `spacings` and
 h / 2` at `i = 1` or `i = n` and `h` elsewhere, and `half_pts[i] = a` at `i = 1`,
 `a + (n - 1) * h` at `i = n + 1`, and the midpoint formula in between. Every entry comes
 from `a`, `h` and `n` alone, with no read of `pts` itself -- the fusion of the uniform
-point fill, [`_launch_spacing!`](@ref), [`_launch_half_points!`](@ref)
-and [`_launch_half_spacing!`](@ref) into one kernel for a uniform device mesh
+point fill, `_launch_spacing!`, `_launch_half_points!`
+and `_launch_half_spacing!` into one kernel for a uniform device mesh
 (gpena/Bramble.jl#303).
 
 # Throws
@@ -546,9 +546,12 @@ Fills a non-uniform mesh's three derived arrays -- `spacings`, `half_pts` and
 `1:(n + 1)` work items, from `pts` alone: `spacings[i] = pts[i] - pts[i - 1]` (`pts[2] -
 pts[1]` at `i = 1`); `half_pts[i] = (pts[i] + pts[i - 1]) / 2` for `2 <= i <= n`, with
 boundary entries `pts[1]` at `i = 1` and `pts[n]` at `i = n + 1`; and `half_spacings[i] =
-spacing(i) / 2` at `i = 1` or `i = n`, and the telescoped interior form `(pts[i + 1] -
-pts[i - 1]) / 2` elsewhere -- the fusion of [`_launch_spacing!`](@ref),
-[`_launch_half_points!`](@ref) and [`_launch_half_spacing!`](@ref) into one kernel for a
+spacing(i) / 2` at `i = 1` or `i = n`, and, with `back = pts[i] - pts[i - 1]` and
+`fwd = pts[i + 1] - pts[i]`, `half_spacings[i] = (back + fwd) / 2` elsewhere -- the same
+association `half_spacing!` uses on its own already-rounded spacings, not the cheaper
+two-point difference `(pts[i + 1] - pts[i - 1]) / 2`, so a device mesh matches the CPU one
+bit for bit -- the fusion of `_launch_spacing!`,
+`_launch_half_points!` and `_launch_half_spacing!` into one kernel for a
 non-uniform device mesh (gpena/Bramble.jl#305). Each thread reads only its own 3-point
 local stencil of `pts`, so `spacings` never has to be written to device memory before
 `half_spacings` can be computed from it.

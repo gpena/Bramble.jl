@@ -515,7 +515,7 @@ than one scalar read per grid point (gpena/Bramble.jl#94 S4.0, #310).
 On a `ScalarGridSpace`, mesh and weights alike come along: [`allocate_system_matrix`](@ref)'s
 sparsity-pattern walk evaluates a form's AST through `local_stencil` and so reads both this
 space's weights and its mesh's spacings one grid point at a time; see the comment above
-[`_host_mirror_mesh`](@ref) for why both, not only the weight vectors the name alone might
+`_host_mirror_mesh` for why both, not only the weight vectors the name alone might
 suggest. On a bare `SeparableWeights` (gpena/Bramble.jl#310), only its `D` per-axis factor
 vectors move -- `map(Array, w.factors)` -- since that is everything a `SeparableWeights`
 owns; `Array(w)` calls this first and then forms the tensor product on the host.
