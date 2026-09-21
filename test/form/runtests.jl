@@ -11,7 +11,13 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
     include("linear.jl")
     include("dirac.jl")
     include("source_operators.jl")
-    include("coefficient_shift.jl")
+    # Behind `slow`: `for (nm, op) in (("D₋ₓ", D₋ₓ), ("D₊ₓ", D₊ₓ), ...)` binds `op` to a
+    # `Union` of the seven operator types being swept, and each iteration runs a full
+    # `form()`/`assemble()` on it -- 417ms/test, 11.7s total, against a ~65-95ms/test median
+    # elsewhere in this subsystem. Same class of bug as vector_calculus.jl below: a runtime
+    # loop over a heterogeneous tuple of operators forces the Union through the whole
+    # assembly pipeline. A cost of how the test is written, not of the feature.
+    TestUtils.WITH_SLOW_TESTS && include("coefficient_shift.jl")
     include("interpolation.jl")
     include("bilinear.jl")
     include("assemble_add.jl")

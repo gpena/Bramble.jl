@@ -51,6 +51,13 @@ const TEST_GROUP = get(ENV, "BRAMBLE_TEST_GROUP", "all")
 #                                        through `innerₕ`/`+`/`assemble`. A cost of how the
 #                                        test is written, not of the feature -- see its own
 #                                        comment in form/runtests.jl.
+#   form/coefficient_shift.jl   ~11.7s  a coefficient inside a shifting node, swept over
+#                                        seven operator kinds via `for (nm, op) in ((...))`.
+#                                        `op` is a `Union` of all seven, so each iteration's
+#                                        `form()`/`assemble()` infers over the whole Union --
+#                                        417ms/test against a ~65-95ms/test median elsewhere
+#                                        in this subsystem. Same class of cost as
+#                                        vector_calculus.jl above, smaller in absolute terms.
 #   the 15 Supposition testsets   ~20s   named `... (Supposition)`, plus meshnd.jl's
 #                                        "Refinement invariants", gridspaces.jl's "Partition
 #                                        of unity" and jump.jl's "Leibniz product rule",

@@ -29,8 +29,12 @@ const __bramble_test_group = TestUtils.TEST_GROUP
 # workflows do not already cover": the unit suite across both Julia versions, the expensive
 # AD backends, the package extensions and the manual snippets.
 #
-# A local `.claude/scripts/test.sh` run is unaffected: it passes no group at all and so gets
-# `all`, which still includes quality.
+# A local `.claude/scripts/test.sh` run with no argument gets `unit` (its own default,
+# `.claude/scripts/test.sh`'s `ARG="${1:-${BRAMBLE_TEST_GROUP:-unit}}"`) -- deliberately the
+# fast, every-push subset, not `quality` or `slow`. `unit` is only the *script's* default:
+# `TestUtils.TEST_GROUP` itself falls back to `all` (see below) for any invocation that does
+# not go through the script, e.g. a bare `Pkg.test()` or a subsystem's own standalone
+# `runtests.jl` with no `BRAMBLE_TEST_GROUP` set.
 const __bramble_with_quality = __bramble_test_group in ("all", "quality")
 const __bramble_with_unit_tests = __bramble_test_group in ("all", "unit", "full", "slow")
 
