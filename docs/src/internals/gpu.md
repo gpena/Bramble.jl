@@ -218,6 +218,20 @@ cache -- and `_flush_device_scatter!` ends the sweep with one
 `copyto!(A.nzVal, A.mirror.nzval)`, a single bulk transfer, not one write per nonzero. See
 "What a device sparse type must provide" above for the field's shape.
 
+**Read the mirror for what it actually is: the fill step performs no device compute.**
+Every scatter-add above happens on the CPU, into the mirror's plain `Vector` storage, on
+every backend. The device sparse matrix's own storage is touched exactly once per
+assembly, by the bulk `copyto!` at the end. "Assembling on a device-backed space" is CPU
+assembly plus an upload -- there is no device-side fill step to have sped up or slowed
+down. Measured on this host (`innerₕ(D₋ₓ(U), D₋ₓ(V))`, `BenchmarkTools`, one warmed
+process): device `assemble`/`assemble!` are 2-8x slower than the host path, in 1D, 2D and
+3D, both forms, with no offsetting benefit anywhere in the number, because the device
+never does anything the host wasn't already going to do. Full detail and the table:
+[gpena/Bramble.jl#317](https://github.com/gpena/Bramble.jl/issues/317#issuecomment-5764380143).
+Treat this path as a correctness fallback -- something that produces *a* device-resident
+matrix for a consumer that needs entries, not a performance path -- until and unless #317
+decides the fill itself should move to the device (the atomic-scatter architecture below).
+
 ## A target architecture, not yet built
 
 Recorded in [gpena/Bramble.jl#317](https://github.com/gpena/Bramble.jl/issues/317) (the
@@ -280,6 +294,11 @@ apply would make unnecessary -- if the apply belongs matrix-free and only a coar
 preconditioner operator stays assembled, the device-resident path above may never be
 worth building. [gpena/Bramble.jl#316](https://github.com/gpena/Bramble.jl/issues/316)
 (Metal shared storage) is blocked on that same decision.
+[gpena/Bramble.jl#323](https://github.com/gpena/Bramble.jl/issues/323) is the first concrete
+step toward matrix-free-on-device, for the narrow separable/Kronecker case; a broader
+version -- `assemble` on a device-backed form returning a matrix-free operator for any form
+the already-fused device kernels can express, rather than a matrix -- is recorded on #317
+but not yet scoped as its own issue.
 
 ## Traps worth knowing before touching any of this
 
