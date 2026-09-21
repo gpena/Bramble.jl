@@ -5,19 +5,24 @@ using Bramble
 using Metal
 using SparseArrays
 using LinearAlgebra
+using ..TestUtils: _run_gpu_tests
 
 # The Metal full stack's own test file (gpena/Bramble.jl#94, S2.7): every layer S2.1-S4.2
 # built -- mesh, grid space, Rₕ!/avgₕ!, difference/jump/average operators, inner products,
 # operator matrices and an assembled system matrix -- checked against the `Float64` CPU
 # result within `Float32` tolerance, on a genuine Metal device.
 #
-# `Metal.functional()` gates every testset below. Unlike `test/ext/metal_ext.jl`'s
-# `@test_skip`-only skip path, a host without a functional device `@warn`s here too:
-# a silently skipped file was exactly issue #84's failure mode, once already repeated in
-# this milestone (see S3.3), and this file must not repeat it a second time.
-if !Metal.functional()
-    @warn "Skipping Metal full-stack tests: Metal.functional() is false on this host"
-    @test_skip "Metal full-stack tests not exercised: Metal.functional() is false"
+# `Metal.functional() && _run_gpu_tests()` gates every testset below. Unlike
+# `test/ext/metal_ext.jl`'s `@test_skip`-only skip path, a host without a functional device
+# `@warn`s here too: a silently skipped file was exactly issue #84's failure mode, once
+# already repeated in this milestone (see S3.3), and this file must not repeat it a second
+# time. `_run_gpu_tests()` (TestUtils.jl) is the explicit CI opt-out on top of
+# `Metal.functional()`: GitHub's hosted macOS runners are real Apple Silicon hardware, so
+# `Metal.functional()` alone would let this file actually execute GPU kernels, unattended,
+# in CI.
+if !Metal.functional() || !_run_gpu_tests()
+    @warn "Skipping Metal full-stack tests: Metal.functional() is false, or GPU tests are skipped in CI"
+    @test_skip "Metal full-stack tests not exercised: Metal.functional() is false, or GPU tests are skipped in CI"
 else
     const _TOL = 1.0f-4
 
@@ -255,6 +260,6 @@ else
             end
         end
     end
-end # if Metal.functional()
+end # if Metal.functional() && _run_gpu_tests()
 
 end # module ExtMetalFullstackTests

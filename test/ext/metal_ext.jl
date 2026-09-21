@@ -7,6 +7,7 @@ using SparseArrays
 using LinearAlgebra: I, mul!
 using Bramble: Backend, vector, matrix, _backend_eye, _backend_zeros, metal_sparse_csr,
                metal_sparse_csc, host_points, host_weights, half_spacings
+using ..TestUtils: _run_gpu_tests
 
 # BrambleMetalExt's backend allocation primitives
 # (`vector`/`matrix`/`_backend_eye`/`_backend_zeros`/`metal_backend`). Meshes and
@@ -19,13 +20,16 @@ using Bramble: Backend, vector, matrix, _backend_eye, _backend_zeros, metal_spar
 # exercised anywhere here is a full PDE assembly pipeline on a GPU-resident mesh; that
 # remains a separate gap, outside the extension's own scope.
 #
-# `Metal.functional()` gates every testset here that touches an actual device array:
-# precompiling and loading `Metal` succeeds on any platform (it degrades gracefully rather
-# than erroring, the same convention CUDA.jl uses), but only a real Apple Silicon Mac has a
-# working device, so a CI runner without one skips those rather than fails. The
-# "rejects a CPU policy over device storage" testset below is the one exception: it checks a
-# construction-time `ArgumentError` derived from type information alone, so it runs whenever
-# Metal is loaded, functional or not.
+# `Metal.functional() && _run_gpu_tests()` gates every testset here that touches an actual
+# device array: precompiling and loading `Metal` succeeds on any platform (it degrades
+# gracefully rather than erroring, the same convention CUDA.jl uses), but only a real Apple
+# Silicon Mac has a working device, so a host without one skips those rather than fails.
+# `_run_gpu_tests()` is the second half of that gate, not a restatement of it: GitHub's
+# hosted macOS runners *are* real Apple Silicon hardware, so `Metal.functional()` alone is
+# not enough to keep device kernels from actually executing, unattended, in CI (see its
+# definition in TestUtils.jl). The "rejects a CPU policy over device storage" testset below
+# is the one exception to both halves: it checks a construction-time `ArgumentError`
+# derived from type information alone, so it runs whenever Metal is loaded, regardless.
 
 @testset "BrambleMetalExt" begin
     # A device VT (MtlVector) under a host CpuPolicy is rejected at construction
@@ -50,8 +54,8 @@ using Bramble: Backend, vector, matrix, _backend_eye, _backend_zeros, metal_spar
         end
     end
 
-    if !Metal.functional()
-        @test_skip "Metal backend not exercised: Metal.functional() is false on this host"
+    if !Metal.functional() || !_run_gpu_tests()
+        @test_skip "Metal backend not exercised: Metal.functional() is false, or GPU tests are skipped in CI"
     else
         @testset "metal_backend element types" begin
             @test metal_backend() isa Backend
@@ -113,9 +117,9 @@ end
 # instead of only `@test_skip`ing: a silent skip is issue #84's failure mode, and this
 # milestone has already shipped one silent skip that had to be fixed later, so a host
 # without a functional device is loud about what it did not check.
-if !Metal.functional()
-    @warn "Skipping Metal sparse CSR/CSC tests: Metal.functional() is false on this host"
-    @test_skip "Metal sparse CSR/CSC tests not exercised: Metal.functional() is false"
+if !Metal.functional() || !_run_gpu_tests()
+    @warn "Skipping Metal sparse CSR/CSC tests: Metal.functional() is false, or GPU tests are skipped in CI"
+    @test_skip "Metal sparse CSR/CSC tests not exercised: Metal.functional() is false, or GPU tests are skipped in CI"
 else
     @testset "metal_sparse_csr / metal_sparse_csc: non-densifying, round-trips" begin
         A = sprand(Float32, 100, 60, 0.05)
@@ -239,9 +243,9 @@ end
 # array. Gated on `Metal.functional()` with a loud `@warn` skip, like the sparse
 # CSR/CSC block above.
 # ---------------------------------------------------------------------------
-if !Metal.functional()
-    @warn "Skipping mesh/space device-quirk tests: Metal.functional() is false on this host"
-    @test_skip "mesh/space device-quirk tests not exercised: Metal.functional() is false"
+if !Metal.functional() || !_run_gpu_tests()
+    @warn "Skipping mesh/space device-quirk tests: Metal.functional() is false, or GPU tests are skipped in CI"
+    @test_skip "mesh/space device-quirk tests not exercised: Metal.functional() is false, or GPU tests are skipped in CI"
 else
     @testset "#307: is_uniform, stepsize and show on a device mesh" begin
         b = metal_backend()

@@ -123,6 +123,18 @@ _fd(f, a; h = 1e-6) = (f(a + h) - f(a - h)) / (2h)
 # two files' include order to a one-line predicate.
 _have(mod::Symbol) = Base.identify_package(String(mod)) !== nothing
 
+# Should a GPU-backed testset actually run its device kernels? test/ext/metal_ext.jl and
+# metal_fullstack.jl used to gate solely on `Metal.functional()`, on the assumption that a
+# CI runner has no working device -- true for a nested VM, but not for GitHub's hosted
+# macOS runners, which are real Apple Silicon hardware and expose a functional Metal device
+# for headless compute. Weekly.yml's `full` group therefore risks actually executing GPU
+# kernels, unattended, on a shared CI runner. `_run_gpu_tests()` adds an explicit opt-out on
+# top of `Metal.functional()`: `BRAMBLE_SKIP_GPU_TESTS=true` (set by intent) or `CI=true`
+# (GitHub Actions sets this on every runner) forces a skip regardless of what the host
+# reports, so the GPU path only ever runs where a maintainer runs it by hand.
+_run_gpu_tests() = get(ENV, "BRAMBLE_SKIP_GPU_TESTS", "false") != "true" &&
+                   get(ENV, "CI", "false") != "true"
+
 # Refines a manufactured problem and checks it converges at second order. `errfn(n)`
 # returns `(error, spacing)` for an n-point grid; the observed order between consecutive
 # refinements must clear `order`, and the errors themselves must fall monotonically -- a
