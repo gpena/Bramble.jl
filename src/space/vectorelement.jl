@@ -222,7 +222,13 @@ end
 # while `element(Wₕ, dual)` gives a Dual one.
 function element(Wₕ::AbstractSpaceType, α::Number)
     uₕ = element(Wₕ, promote_type(eltype(backend(Wₕ)), typeof(α)))
-    fill!(uₕ, α)
+    # `fill!(parent(uₕ), α)`, not `fill!(uₕ, α)`: the wrapper has no `fill!` of its own, so
+    # Base's `AbstractArray` fallback would store through `setindex!` one point at a time.
+    # On a device backend that is scalar indexing of a device array, which `GPUArraysCore`
+    # rejects outright ("Scalar indexing is disallowed."). Filling the storage instead
+    # reaches the device array's own `fill!` -- a single kernel -- and the plain loop as
+    # before on a `Vector`.
+    fill!(parent(uₕ), α)
     return uₕ
 end
 
@@ -239,7 +245,10 @@ Returns a [`VectorElement`](@ref) for a grid space `Wₕ` with the same coeffici
     ),
     )
     elem = element(Wₕ, promote_type(eltype(backend(Wₕ)), eltype(v)))
-    copyto!(elem, v)
+    # Into the storage, not the wrapper, for the same reason as the fill above: the
+    # wrapper's only `copyto!` is the broadcast one, so a plain vector source reaches
+    # Base's element-by-element `AbstractArray` copy and scalar-indexes a device array.
+    copyto!(parent(elem), v)
     return elem
 end
 

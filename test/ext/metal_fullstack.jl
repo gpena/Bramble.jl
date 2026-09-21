@@ -67,6 +67,32 @@ else
             end
         end
 
+        # `element(Wₕ, α)` filled through the `VectorElement` wrapper, so Base's generic
+        # `fill!` stored one point at a time and scalar-indexed the device array.
+        # `Metal.allowscalar(false)` is the default, so the call raised
+        # "Scalar indexing is disallowed." rather than running slowly.
+        @testset "element(Wₕ, α) fills device storage without scalar indexing" begin
+            Metal.allowscalar(false)
+            u1 = element(Wg1, 2.0f0)
+            @test parent(u1) isa MtlVector{Float32}
+            @test all(==(2.0f0), Array(parent(u1)))
+
+            u2 = element(Wg2, 0.0f0)
+            @test all(==(0.0f0), Array(parent(u2)))
+
+            # An `Int` fill still promotes against the backend's `Float32`.
+            u3 = element(Wg2, 1)
+            @test eltype(parent(u3)) === Float32
+            @test all(==(1.0f0), Array(parent(u3)))
+
+            # Same for the vector constructor, from host and from device memory alike.
+            u4 = element(Wg1, ones(Float32, ndofs(Wg1)))
+            @test all(==(1.0f0), Array(parent(u4)))
+
+            u5 = element(Wg1, Metal.ones(Float32, ndofs(Wg1)))
+            @test all(==(1.0f0), Array(parent(u5)))
+        end
+
         @testset "Rₕ!/avgₕ!: projection and cell average match CPU" begin
             uc1 = element(Wc1)
             ug1 = element(Wg1)
