@@ -682,3 +682,242 @@ function εₕ!(dest::NTuple{D, NTuple{D, VectorElement}}, uₕ) where {D}
     _strain_rows!(dest, comps, Ωₕ, dims, Val(D), Val(D))
     return dest
 end
+
+# --- Centered vector calculus (gpena/Bramble.jl#287) ------------------------------------- #
+#
+# The centered family reuses the accumulating machinery above with `Centered()` as the
+# direction: `_accumulate_one!` gains a `Centered` method over its own engine, and
+# `divcₕ`/`curlcₕ` then go through `_divergence!`/`_curl!` unchanged. The strain tensor needs
+# no averaging, since every centered difference sits on the grid point itself.
+#
+# There is no device kernel for any of them yet. Each entry point checks the locality of its
+# destination (or, for the allocating forms, of its input) before any scalar indexing, and
+# throws a named error rather than `ScalarIndexingDisallowed` partway through.
+
+@inline _direction_spacing(sub, ::Centered) = star_spacings(sub)
+
+@noinline function _throw_no_centered_device_kernel(fname::String)
+    error(
+        "$fname has no device kernel yet: the centered vector-calculus operators run on " *
+        "host arrays only. Apply it to a host-backed grid function instead.",
+    )
+end
+
+@inline _check_centered_host(v::VectorElement, fname) = _is_device(parent(v)) ?
+                                                        _throw_no_centered_device_kernel(fname) :
+                                                        nothing
+@inline _check_centered_host(v::Tuple, fname) = _check_centered_host(first(v), fname)
+
+# `out[I] += s * (u[I + eᵢ] - u[I - eᵢ]) / (2 h*ᵢ)` over the slices with a neighbour on each
+# side; both end slices receive nothing, which is `Dc`'s zero there. `hs` is the averaged
+# spacing `star_spacings` returns, the same view `Dc` divides by, so each term is exactly the
+# value `Dc` writes.
+@inline function _accumulate_centered!(
+        out, u, hs::H, dims::NTuple{D, Int}, ::Val{DIM}, s
+) where {H, D, DIM}
+    li = LinearIndices(dims)
+    step = _stencil_step(Val(DIM), Val(D))
+    interior, _, _ = _centered_stencil_ranges(axes(li), Val(DIM))
+
+    @inbounds @simd for I in CartesianIndices(interior)
+        idx = li[I]
+        out[idx] += s * (u[li[I + step]] - u[li[I - step]]) / (2 * _get_h_val(hs, I[DIM]))
+    end
+    return nothing
+end
+
+@inline function _accumulate_one!(out, u, Ωₕ, dims, ::Centered, ::Val{d}, s) where {d}
+    sub = Ωₕ(d)
+    _check_centered_points(sub, d)
+    return _accumulate_centered!(out, u, star_spacings(sub), dims, Val(d), s)
+end
+
+"""
+    ∇cₕ(uₕ::VectorElement) -> VectorElement or NTuple{D, VectorElement}
+
+Returns the centered discrete gradient of the grid function `uₕ`, one centered difference
+per direction:
+
+```math
+\\nabla_{c,h}(\\textrm{u}_h) = \\left(\\textrm{Dc}_{x_1}(\\textrm{u}_h), \\ldots,
+    \\textrm{Dc}_{x_D}(\\textrm{u}_h)\\right), \\qquad
+\\textrm{Dc}_{x_d}(\\textrm{u}_h)(i) = \\frac{u_{i+1} - u_{i-1}}{h_i + h_{i+1}}.
+```
+
+The same function as [`Dcₕ`](@ref), under the name the centered vector calculus family
+shares. In 1D it returns the bare grid function, above a `D`-tuple. Each difference is
+truncated to zero on the first and last slice of its direction.
+
+[`∇cₕ!`](@ref) writes into a destination instead, and allocates nothing.
+
+See also: [`divcₕ`](@ref), [`curlcₕ`](@ref), [`εcₕ`](@ref), [`∇ₕ`](@ref)
+"""
+const ∇cₕ = Dcₕ
+
+"""
+    ∇cₕ!(dest, uₕ::VectorElement) -> dest
+
+The in-place form of [`∇cₕ`](@ref): the centered gradient of `uₕ`, written into `dest` --
+a grid function in 1D, a `D`-tuple of them above, the shape `∇cₕ` returns.
+
+Allocates nothing. No destination may alias `uₕ`.
+"""
+function ∇cₕ!(dest, uₕ::VectorElement)
+    _check_centered_host(dest, "∇cₕ!")
+    Ωₕ = mesh(space(uₕ))
+    D = dim(Ωₕ)
+    outs = dest isa VectorElement ? (dest,) : dest
+    length(outs) == D || _throw_field_arity(length(outs), D, "∇cₕ!")
+    _centered_gradient!(outs, parent(uₕ), Ωₕ, npoints(Ωₕ, Tuple), Val(D))
+    return dest
+end
+
+@inline function _centered_gradient!(outs, u, Ωₕ, dims, ::Val{d}) where {d}
+    sub = Ωₕ(d)
+    _check_centered_points(sub, d)
+    _difference_engine!(parent(outs[d]), u, star_spacings(sub), dims, Centered(), Val(d))
+    _centered_gradient!(outs, u, Ωₕ, dims, Val(d - 1))
+    return nothing
+end
+
+@inline _centered_gradient!(outs, u, Ωₕ, dims, ::Val{0}) = nothing
+
+"""
+    divcₕ(uₕ) -> VectorElement
+    divcₕ!(vₕ::VectorElement, uₕ) -> vₕ
+
+Returns the centered discrete divergence of the vector field `uₕ`:
+
+```math
+\\textrm{div}_{c,h}(\\textrm{u}_h)(I) = \\sum_{d=1}^{D} \\textrm{Dc}_{x_d}(\\textrm{u}_{h,d})(I)
+```
+
+`uₕ` is spelled as for [`divₕ`](@ref): an `NTuple{D, VectorElement}`, or a grid function of a
+[`CompositeGridSpace`](@ref) with one leaf per spatial dimension (in 1D, a scalar grid
+function). Each centered difference is zero on the first and last slice of its direction.
+
+For fields vanishing on the boundary it is minus the adjoint of [`∇cₕ`](@ref),
+``(\\textrm{div}_{c,h} \\textrm{F}, \\textrm{u})_h = -\\sum_d (\\textrm{F}_d,
+\\textrm{Dc}_{x_d} \\textrm{u})_h``, on any mesh.
+
+`divcₕ!` writes into `vₕ`, which must not be one of the components, and allocates nothing.
+
+See also: [`divₕ`](@ref), [`curlcₕ`](@ref), [`εcₕ`](@ref)
+"""
+function divcₕ(uₕ)
+    _check_centered_host(first(_field_components(uₕ)), "divcₕ")
+    return divcₕ!(similar(first(_field_components(uₕ))), uₕ)
+end
+
+@doc (@doc divcₕ)
+function divcₕ!(vₕ::VectorElement, uₕ)
+    _check_centered_host(vₕ, "divcₕ!")
+    comps = _field_components(uₕ)
+    Wₕ = _field_space(uₕ)
+    D = dim(mesh(Wₕ))
+    _check_field_arity(comps, Val(D), "divcₕ")
+    _divergence!(vₕ, comps, Wₕ, Centered(), Val(D))
+    return vₕ
+end
+
+"""
+    curlcₕ(uₕ) -> VectorElement or NTuple{3, VectorElement}
+    curlcₕ!(vₕ, uₕ) -> vₕ
+
+Returns the centered discrete curl of the vector field `uₕ`. In 2D it is the scalar
+
+```math
+\\textrm{curl}_{c,h}(\\textrm{u}_h) =
+    \\textrm{Dc}_{x}(\\textrm{u}_{h,2}) - \\textrm{Dc}_{y}(\\textrm{u}_{h,1})
+```
+
+and in 3D the three-component field
+``(\\partial_y u_3 - \\partial_z u_2,\\; \\partial_z u_1 - \\partial_x u_3,\\;
+\\partial_x u_2 - \\partial_y u_1)``, each derivative a centered difference. There is no 1D
+curl, and asking for one is an `ArgumentError`.
+
+`curlcₕ!` takes a destination -- a grid function in 2D, a 3-tuple of them in 3D -- and
+allocates nothing.
+
+See also: [`curlₕ`](@ref), [`divcₕ`](@ref), [`∇cₕ`](@ref)
+"""
+function curlcₕ(uₕ)
+    _check_centered_host(first(_field_components(uₕ)), "curlcₕ")
+    return _curl(uₕ, Centered())
+end
+
+@doc (@doc curlcₕ)
+function curlcₕ!(vₕ, uₕ)
+    _check_centered_host(vₕ, "curlcₕ!")
+    return _curl!(vₕ, uₕ, Centered())
+end
+
+"""
+    εcₕ(uₕ) -> NTuple{D, NTuple{D, VectorElement}}
+    εcₕ!(dest::NTuple{D, NTuple{D, VectorElement}}, uₕ) -> dest
+
+Returns the centered discrete strain tensor of the vector field `uₕ`, entry by entry
+
+```math
+\\varepsilon^{ii}_{c,h}(\\textrm{u}_h) = \\textrm{Dc}_{x_i}(\\textrm{u}_{h,i}), \\qquad
+\\varepsilon^{ij}_{c,h}(\\textrm{u}_h) = \\tfrac{1}{2}\\left(
+    \\textrm{Dc}_{x_j}(\\textrm{u}_{h,i}) + \\textrm{Dc}_{x_i}(\\textrm{u}_{h,j})\\right),
+    \\quad i \\neq j.
+```
+
+Every centered difference sits on the grid point itself, so unlike [`εₕ`](@ref) no average
+relocates the shear terms. `uₕ` is spelled as for [`divcₕ`](@ref). The result is symmetric
+by construction: `dest[i][j]` and `dest[j][i]` hold the same values.
+
+`εcₕ!` writes into a preallocated `D`-by-`D` nested tuple and allocates nothing.
+
+See also: [`εₕ`](@ref), [`∇cₕ`](@ref), [`divcₕ`](@ref)
+"""
+function εcₕ(uₕ)
+    comps = _field_components(uₕ)
+    _check_centered_host(first(comps), "εcₕ")
+    D = dim(mesh(_field_space(uₕ)))
+    _check_field_arity(comps, Val(D), "εcₕ")
+    return εcₕ!(_strain_alloc(comps, Val(D)), uₕ)
+end
+
+@doc (@doc εcₕ)
+function εcₕ!(dest::NTuple{D, NTuple{D, VectorElement}}, uₕ) where {D}
+    _check_centered_host(dest[1], "εcₕ!")
+    comps = _field_components(uₕ)
+    Ωₕ = mesh(_field_space(uₕ))
+    dim(Ωₕ) == D || throw(DimensionMismatch("εcₕ! destination is $(D)x$D but the mesh is $(dim(Ωₕ))D"))
+    _check_field_arity(comps, Val(D), "εcₕ!")
+    _centered_strain_rows!(dest, comps, Ωₕ, npoints(Ωₕ, Tuple), Val(D), Val(D))
+    return dest
+end
+
+# `ε_ij`, `i != j`: `Dc_j(u_i)` into `dest[i][j]`, `Dc_i(u_j)` into `dest[j][i]`, then their
+# mean into both, so the two entries are equal bit for bit.
+@inline function _centered_strain_pair!(dest, comps, Ωₕ, dims, ::Val{i}, ::Val{j}) where {i, j}
+    dij, dji = dest[i][j], dest[j][i]
+    _difference_engine!(parent(dij), parent(comps[i]), star_spacings(Ωₕ(j)), dims, Centered(), Val(j))
+    _difference_engine!(parent(dji), parent(comps[j]), star_spacings(Ωₕ(i)), dims, Centered(), Val(i))
+    dij .= (dij .+ dji) ./ 2
+    dji .= dij
+    return nothing
+end
+
+@inline function _centered_strain_offdiag!(dest, comps, Ωₕ, dims, ::Val{i}, ::Val{j}) where {i, j}
+    j > i && _centered_strain_pair!(dest, comps, Ωₕ, dims, Val(i), Val(j))
+    _centered_strain_offdiag!(dest, comps, Ωₕ, dims, Val(i), Val(j - 1))
+    return nothing
+end
+
+@inline _centered_strain_offdiag!(dest, comps, Ωₕ, dims, ::Val{i}, ::Val{0}) where {i} = nothing
+
+@inline function _centered_strain_rows!(dest, comps, Ωₕ, dims, ::Val{i}, ::Val{D}) where {i, D}
+    sub = Ωₕ(i)
+    _check_centered_points(sub, i)
+    _difference_engine!(parent(dest[i][i]), parent(comps[i]), star_spacings(sub), dims, Centered(), Val(i))
+    _centered_strain_offdiag!(dest, comps, Ωₕ, dims, Val(i), Val(D))
+    _centered_strain_rows!(dest, comps, Ωₕ, dims, Val(i - 1), Val(D))
+    return nothing
+end
+
+@inline _centered_strain_rows!(dest, comps, Ωₕ, dims, ::Val{0}, ::Val{D}) where {D} = nothing
