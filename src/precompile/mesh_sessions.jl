@@ -92,7 +92,7 @@ function _pc_mesh_session(Ω, npts, unif, be, label::Symbol)
 end
 
 # Mesh mutation is a separate pass so the queries above stay on a pristine mesh.
-function _pc_mesh_mutation(Ωₕ, dm)
+function _pc_mesh_mutation(Ωₕ::AbstractMeshType, dm)
     # The one-argument path is for a mesh with no custom labels to begin with; every
     # `Ωₕ` reaching this function carries `dm`'s own, so calling it directly would throw
     # (correctly) rather than drop them on precompilation. Rebuild the mesh from scratch

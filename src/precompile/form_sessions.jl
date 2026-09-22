@@ -391,12 +391,27 @@ end
 # reusing `label`/`Ωₕ` from the caller left this cold even though the AST/stencil shapes
 # were already warm. The Laplacian/`innerₕ` shapes here match what a caller reaching for a
 # net-flux boundary quantity actually writes.
-function _pc_form_reaction(::Val{D}) where {D}
-    S = D == 1 ? interval(0.0, 1.0) : interval(0.0, 1.0) × interval(0.0, 1.0)
+# Split by dimension (rather than branching on `D` inside one method) so JET resolves each
+# call concretely instead of analysing both branches together against a single generic `D`:
+# a `Wₕ` inferred over the `Union` of the 1D/2D grid space types lets the union-split analysis
+# pair a 1D `TrialFunction` with a 2D `TestFunction` in the body below, which is never a call
+# either concrete session makes. `Val(1)`/`Val(2)` each build their own mesh and delegate to
+# the shared, dimension-agnostic body once `Wₕ` is concrete.
+function _pc_form_reaction(::Val{1})
+    S = interval(0.0, 1.0)
     Ω = domain(S, :boundary => boundary_symbols(S))
-    Ωₕ = D == 1 ? mesh(Ω, 8, false) : mesh(Ω, (8, 8), (false, false))
-    Wₕ = gridspace(Ωₕ)
+    Ωₕ = mesh(Ω, 8, false)
+    return _pc_form_reaction(gridspace(Ωₕ))
+end
 
+function _pc_form_reaction(::Val{2})
+    S = interval(0.0, 1.0) × interval(0.0, 1.0)
+    Ω = domain(S, :boundary => boundary_symbols(S))
+    Ωₕ = mesh(Ω, (8, 8), (false, false))
+    return _pc_form_reaction(gridspace(Ωₕ))
+end
+
+function _pc_form_reaction(Wₕ::ScalarGridSpace)
     a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
     fₕ = Rₕ(Wₕ, x -> 1.0)
     l = form(Wₕ, v -> innerₕ(fₕ, v))
