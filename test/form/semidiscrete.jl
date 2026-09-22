@@ -413,6 +413,65 @@ end
     end
 end
 
+# gpena/Bramble.jl#283: pin `sd2 = semidiscretize_second_order(...)`, `rhs =
+# semidiscretize_rhs(...)` and their residual calls as inferred and allocation-free -- the
+# calls a time-stepping loop makes every step. Allocation checks go behind a function
+# barrier (bramble-verification §1); `@inferred` reads no global binding here, so it is
+# left in the barrier alongside the warm-up rather than pulled out to top level.
+@testset "sd2 and rhs are inferred and allocation-free (#283)" begin
+    function _sd2_alloc(sd2, dv, v, u, t)
+        sd2(dv, v, u, nothing, t)             # cold: records
+        @inferred sd2(dv, v, u, nothing, t)
+        return @allocated sd2(dv, v, u, nothing, t)
+    end
+
+    function _rhs_alloc(rhs, du, u, t)
+        rhs(du, u, nothing, t)                # cold: records
+        @inferred rhs(du, u, nothing, t)
+        return @allocated rhs(du, u, nothing, t)
+    end
+
+    function _sd2_problem(dims)
+        Ωₕ = dims == 1 ?
+             Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0)), 21) :
+             Bramble.mesh(
+            Bramble.domain(Bramble.interval(0.0, 1.0) × Bramble.interval(0.0, 1.0)),
+            (9, 11),
+            (true, true)
+        )
+        Wₕ = gridspace(Ωₕ)
+        fₕ = Bramble.element(Wₕ, 0.0)
+        Rₕ!(fₕ, x -> 1.0)
+        K = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+        l = form(Wₕ, v -> innerₕ(fₕ, v))
+        return Wₕ, K, l
+    end
+
+    for (lbl, dims) in (("1D", 1), ("2D", 2))
+        @testset "$lbl" begin
+            Wₕ, K, l = _sd2_problem(dims)
+            n = ndofs(Wₕ)
+
+            @testset "semidiscretize_second_order, dirichlet = $(repr(dirichlet))" for dirichlet in (
+                :boundary, nothing
+            )
+                sd2 = semidiscretize_second_order(K, l; dirichlet = dirichlet)
+                dv = zeros(n)
+                v = collect(range(0.1, 0.9; length = n))
+                u = collect(range(0.25, 1.75; length = n))
+                @test _sd2_alloc(sd2, dv, v, u, 0.0) == 0
+            end
+
+            @testset "semidiscretize_rhs" begin
+                rhs = semidiscretize_rhs(semidiscretize(K, l))
+                du = zeros(n)
+                u = collect(range(0.2, 1.7; length = n))
+                @test _rhs_alloc(rhs, du, u, 0.0) == 0
+            end
+        end
+    end
+end
+
 @testset "semidiscretize on a composite space" begin
     Ωₕ = Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0)), 11)
     Wₕ = gridspace(Ωₕ)
