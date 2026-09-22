@@ -81,10 +81,9 @@ end
 # `offset` field of its own (its only prior caller, `innerₕ`, never needed one), so
 # `_ReactionMarked` adds it here rather than in `linear_algebra.jl`. Both walks visit a point
 # shared by two markers exactly once, same as `_combined_mask`'s union.
-@inline _reaction_marked(Ωₕ, markers::NTuple{1, Symbol}, offset::Int) =
-    MarkedIndices(index_in_marker(Ωₕ, markers[1]), offset)
-@inline _reaction_marked(Ωₕ, markers::NTuple{N, Symbol}, offset::Int) where {N} =
-    _ReactionMarked(_combined_marked_indices(Ωₕ, markers), offset)
+@inline _reaction_marked(Ωₕ, markers::NTuple{1, Symbol}, offset::Int) = MarkedIndices(index_in_marker(Ωₕ, markers[1]), offset)
+@inline _reaction_marked(Ωₕ, markers::NTuple{N, Symbol}, offset::Int) where {N} = _ReactionMarked(
+    _combined_marked_indices(Ωₕ, markers), offset)
 
 struct _ReactionMarked{U}
     union::U
@@ -141,8 +140,7 @@ end
 # `_restricted_matvec`/`_row_marked`'s recursion below stays fully unrolled. `markers` here
 # can name several labels, so each entry's mask is `_combined_mask`'s union rather than a
 # single `index_in_marker` -- everything else matches.
-@inline _reaction_leaf_entries(leaves::Tuple, markers, components) =
-    _reaction_leaf_entries_impl(leaves, markers, components, 1)
+@inline _reaction_leaf_entries(leaves::Tuple, markers, components) = _reaction_leaf_entries_impl(leaves, markers, components, 1)
 @inline _reaction_leaf_entries_impl(::Tuple{}, markers, components, i::Int) = ()
 @inline function _reaction_leaf_entries_impl(leaves::Tuple, markers, components, i::Int)
     sp, offset = first(leaves)
@@ -193,8 +191,9 @@ end
 
 # `A::SparseMatrixCSC`: restricted to the rows `entries` marks, per the note above -- no
 # full-length residual, no full matvec.
-_reaction_residual(A::SparseMatrixCSC, F::AbstractVector, u::AbstractVector, entries::Tuple) =
+function _reaction_residual(A::SparseMatrixCSC, F::AbstractVector, u::AbstractVector, entries::Tuple)
     _RestrictedResidual(_restricted_matvec(A, u, entries), F)
+end
 
 # Any other matrix type (dense, or an unrecognised backend): unchanged full computation --
 # the restricted path above only pays off against `SparseMatrixCSC`'s stored-entry sweep.
@@ -263,8 +262,7 @@ end
 # `index_in_marker` call is itself allocation-free), ORed bit-by-bit on the fly in
 # `_reaction_row_marked` -- unlike `_reaction_leaf_entries`/`_row_marked`
 # (dirichlet_constraints.jl) above, no label ever gets unioned into a fresh `BitVector`.
-@inline _reaction_leaf_entries!(leaves::Tuple, markers, components) =
-    _reaction_leaf_entries_impl!(leaves, markers, components, 1)
+@inline _reaction_leaf_entries!(leaves::Tuple, markers, components) = _reaction_leaf_entries_impl!(leaves, markers, components, 1)
 @inline _reaction_leaf_entries_impl!(
     ::Tuple{}, markers::NTuple{N, Symbol}, components, i::Int
 ) where {N} = ()
