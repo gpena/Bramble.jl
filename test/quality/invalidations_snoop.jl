@@ -22,12 +22,20 @@ using SnoopCompile
 
 trees = invalidation_trees(invalidations)
 
-# Package-owned: the method whose insertion triggered the tree is defined in
-# Bramble itself or one of its package extensions (BrambleMakieExt, etc.) --
-# never in Base, Core, or a standard library, which is what every other tree
-# here (OrderedCollections, SparseArrays, Dates precompiled elsewhere in the
-# depot) reflects instead.
-owned = filter(t -> startswith(string(t.method.module), "Bramble"), trees)
+# Package-owned: the method (or, on Julia 1.13+, the binding) whose insertion
+# triggered the tree is defined in Bramble itself or one of its package
+# extensions (BrambleMakieExt, etc.) -- never in Base, Core, or a standard
+# library, which is what every other tree here (OrderedCollections,
+# SparseArrays, Dates precompiled elsewhere in the depot) reflects instead.
+#
+# On Julia 1.13, `t.method` can be a `Core.Binding` (a binding invalidation)
+# rather than a `Method` -- it has no `.module` field, only `.globalref`, whose
+# `.mod` is the owning module. One method per type keeps the ownership check
+# the same for both.
+_owner_module(m::Method) = m.module
+_owner_module(b::Core.Binding) = b.globalref.mod
+
+owned = filter(t -> startswith(string(_owner_module(t.method)), "Bramble"), trees)
 
 println("OWNED_COUNT=", length(owned))
 for t in owned

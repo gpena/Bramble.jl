@@ -89,6 +89,14 @@ using ExplicitImports
                 :_scatter_point!,
                 :_throw_dot_dim_error,
                 :_write_components!,
+                # `SeparableWeights` (commit d8c34602): the Bramble internal `weights(Wₕ,
+                # Val(S))` returns for `length(S) >= 2` (src/space/scalar_gridspace.jl) --
+                # `_batch_dot`/`_batch_dot_masked` are specialised on it
+                # (ext/BramblePolyesterExt.jl:25) the same way the `CpuSerial`/`CpuThreaded`
+                # methods in `space/inner_product.jl` already are, so a `CpuBatch` inner
+                # product avoids the same per-point `CartesianIndex` conversion cost. Not
+                # exported or public.
+                :SeparableWeights,
                 :sparse!,
                 :Backend,
                 :_backend_eye,
@@ -289,7 +297,11 @@ using ExplicitImports
                 # BrambleMetalExt reaching into Bramble's own internals (gpena/Bramble.jl#192,
                 # #250): `_gpu_functional` is the loaded-and-functional predicate `gpu_backend`
                 # dispatches on by `Val`, more specific than the stub in `src/utils/backend.jl`
-                # and not itself public. `metal_sparse_csr`/`metal_sparse_csc` carry docstrings
+                # and not itself public. `_gpu_functional_override` (commit 9698755b) is the
+                # `Ref` test hook `_gpu_functional` reads to fake device (un)availability
+                # without redefining the method; the extension reads the same `Ref` so a test
+                # can force GPU-unavailable behaviour through it too. Neither is public.
+                # `metal_sparse_csr`/`metal_sparse_csc` carry docstrings
                 # on their `src/utils/backend.jl` stubs, but neither is exported nor declared
                 # `public` in `src/Bramble.jl`, nor documented in `docs/src/api.md` -- so today
                 # they are unqualified internals too, the same as the extension's other entry
@@ -298,6 +310,7 @@ using ExplicitImports
                 # builds the host-side CSR arrays it hands to `metal_sparse_csr` -- the same
                 # combiner `SparseMatrixCSC`'s own method already reaches for by the same name.
                 :_gpu_functional,
+                :_gpu_functional_override,
                 :metal_sparse_csr,
                 :metal_sparse_csc,
                 Symbol("sparse!"),
@@ -312,7 +325,14 @@ using ExplicitImports
                 :AbstractGPUSparseMatrixCSR,
                 :AbstractGPUSparseMatrixCSC,
                 :Adapt,
-                :GPUArrays
+                :GPUArrays,
+                # `Core.kwcall` (gpena/Bramble.jl#283): named in `precompile(Core.kwcall,
+                # (...))` directives in `src/precompile/solver_sessions.jl` and
+                # `src/precompile/form_sessions.jl`, caching the keyword-call entry
+                # signature a REPL call dispatches to -- otherwise inlined into the
+                # workload's static calls and never cached standalone. The documented
+                # lowering target of a keyword call, but not declared public in `Core`.
+                :kwcall
             )
         ) === nothing
     end
