@@ -22,8 +22,8 @@
 module BramblePolyesterExt
 
 using Bramble
-using Bramble: MarkedIndicesUnion, _reduce_or_chunk, _throw_dot_dim_error, _write_components!,
-               _band_range, _scatter_point!, _scatter_linear_point!
+using Bramble: MarkedIndicesUnion, SeparableWeights, _reduce_or_chunk, _throw_dot_dim_error,
+               _write_components!, _band_range, _scatter_point!, _scatter_linear_point!
 using Polyester: Polyester, @batch
 
 # --- _batch_for!/_batch_axis_for! (src/utils/linear_algebra.jl) -------------------- #
@@ -133,6 +133,63 @@ function Bramble._batch_dot_masked(
     @batch reduction=((+, s),) for i in 1:n
         @inbounds if _mask_bit(mask, i)
             s += T(u[i]) * T(v[i]) * T(w[i])
+        end
+    end
+    return s
+end
+
+# `SeparableWeights` specializations (gpena/Bramble.jl#281, #288): `inner₊(uₕ, vₕ, Val(S))`
+# passes the weight as the *second* positional argument (space/inner_product.jl:609), so
+# under `CpuBatch` it is `_batch_dot`'s own second parameter, not third -- these dispatch on
+# that position, mirroring the `CpuSerial`/`CpuThreaded` specializations at
+# space/inner_product.jl:435-476. Same reasoning as those: `w[I]` (the `CartesianIndex`
+# `getindex`) multiplies per-axis factors directly, while `w[i]` (linear) divrems `i` back
+# into a `CartesianIndex` first -- an `O(n^D)` cost paid on every point, every batch task.
+# The unmasked walk goes straight over `CartesianIndices(w.dims)` (which `@batch` also
+# accepts, see this file's header comment); the masked walks stay over the flat `1:n` mask
+# index space (masks are linear-indexed) and convert only the one index needed for `w`.
+function Bramble._batch_dot(u::AbstractVector, w::SeparableWeights{D}, v::AbstractVector) where {D}
+    n = length(w)
+    (length(u) == n == length(v)) || _throw_dot_dim_error(length(u), n, length(v))
+    T = promote_type(eltype(u), eltype(w), eltype(v))
+    s = zero(T)
+    li = LinearIndices(w.dims)
+    @batch reduction=((+, s),) for I in CartesianIndices(w.dims)
+        @inbounds i = li[I]
+        @inbounds s += T(u[i]) * T(v[i]) * T(w[I])
+    end
+    return s
+end
+
+function Bramble._batch_dot_masked(
+        u::AbstractVector, w::SeparableWeights{D}, v::AbstractVector, mask::BitVector
+) where {D}
+    n = length(w)
+    (length(u) == n == length(v) == length(mask)) ||
+        _throw_dot_dim_error(length(u), n, length(v), length(mask))
+    T = promote_type(eltype(u), eltype(w), eltype(v))
+    s = zero(T)
+    cart = CartesianIndices(w.dims)
+    @batch reduction=((+, s),) for i in 1:n
+        @inbounds if mask[i]
+            s += T(u[i]) * T(v[i]) * T(w[cart[i]])
+        end
+    end
+    return s
+end
+
+function Bramble._batch_dot_masked(
+        u::AbstractVector, w::SeparableWeights{D}, v::AbstractVector, mask::MarkedIndicesUnion
+) where {D}
+    n = length(w)
+    (length(u) == n == length(v) == mask.len) ||
+        _throw_dot_dim_error(length(u), n, length(v), mask.len)
+    T = promote_type(eltype(u), eltype(w), eltype(v))
+    s = zero(T)
+    cart = CartesianIndices(w.dims)
+    @batch reduction=((+, s),) for i in 1:n
+        @inbounds if _mask_bit(mask, i)
+            s += T(u[i]) * T(v[i]) * T(w[cart[i]])
         end
     end
     return s
