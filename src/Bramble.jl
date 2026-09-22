@@ -18,78 +18,26 @@ using PrecompileTools: @setup_workload, @compile_workload
 using Preferences: @load_preference
 using QuadGK: gauss
 
-# Utilities
+# --- Backend & Execution Policies ---
 export backend, gpu_backend, metal_backend, vector_type, matrix_type, backend_types
-# The CSR backend constructor for the memory-scaling milestone (gpena/Bramble.jl#214): a
-# `metal_backend`-style stub whose real method arrives with the SparseMatricesCSR extension.
 export csr_backend
 export ExecutionPolicy, Serial, Parallel, execution_policy
-# The CPU/GPU split of the policy hierarchy (gpena/Bramble.jl#191). `Serial` and `Parallel`
-# stay exported above: they are aliases of the first two of these, and every call site,
-# test and benchmark key in this repository spells them that way.
 export CpuPolicy, CpuSerial, CpuThreaded, GpuPolicy, GpuAsync
-# The Polyester-backed policy (gpena/Bramble.jl#190): the type ships here, the sweeps it
-# selects arrive with the BramblePolyesterExt package extension.
 export CpuBatch
-# The sweep hooks a `CpuBatch` backend dispatches to. `src/` declares each one as an
-# error-only stub naming Polyester; `BramblePolyesterExt` supplies the real methods
-# (gpena/Bramble.jl#190). They are `public` rather than exported because they are an
-# extension contract, not something a user calls: an extension has to reach them by name,
-# and a name an extension is expected to implement is not internal.
+
+# Backend extension hooks and traits
 public _batch_for!, _batch_axis_for!, _batch_scatter_for!, _batch_dot, _batch_dot_masked
 public _batch_bilinear_colour_sweep!, _batch_bilinear_band_sweep!
 public _batch_linear_colour_sweep!, _batch_linear_band_sweep!
-# The matrix-type assembly seam (gpena/Bramble.jl#12), documented in
-# `docs/src/internals/form.md`: the four methods a storage type implements to be usable as a
-# backend's `matrix_type`. `public` for the same reason as the hooks above -- an extension
-# has to reach them by name, so they are a contract rather than an internal.
 public _allocate_from_pattern, _scatter_position, _scatter_add!, _zero_stored!
-
-# `vector`/`matrix` build a raw backend array (point 70): real API, but two of the most
-# generic nouns in the language, and a beginner's own top-level `vector = [...]` after
-# `using Bramble` errors rather than shadows. `Bramble.vector(...)` still reaches them.
-public vector, matrix
-# Backend-extension plumbing (point 70): identity/zero matrices tied to a `Backend`, real,
-# tested, reached while implementing a new backend rather than while using one.
-public backend_eye, backend_zeros
-# Host -> device sparse conversion (gpena/Bramble.jl#250): real, documented, but not part of
-# the top-level "pick a backend" API that `metal_backend`/`gpu_backend` are exported for --
-# same tier as `vector`/`matrix`/`backend_eye`/`backend_zeros` above.
+public vector, matrix, backend_eye, backend_zeros
 public metal_sparse_csr, metal_sparse_csc
-# The contract a custom backend array type implements (gpena/Bramble.jl#100): declared by
-# whoever adds an array type, never called by a user of one, so `public` rather than
-# exported, alongside the allocators that read it.
 public supports_undef_construction
-# The KernelAbstractions device-kernel substrate (gpena/Bramble.jl#174): a GPU backend
-# implements this to name the `KernelAbstractions.Backend` its own arrays run kernels on, so
-# every `@kernel` in `BrambleKernelAbstractionsExt` becomes available on that backend for
-# free. Declared by whoever adds a GPU backend, never called by a user of one, so `public`
-# rather than exported, alongside `supports_undef_construction` above.
-public ka_device
-# The device-write synchronisation hook (gpena/Bramble.jl#94, S4.2): the same
-# extension-contract idiom as `ka_device` just above, for a different gap it does not cover
-# -- a plain `copyto!` into a device array (not a `@kernel` launch) queues asynchronously
-# too, and needs the same `synchronize` a kernel launch already gets. `BrambleMetalExt` calls
-# nothing new to supply this: `BrambleKernelAbstractionsExt` implements it once, generically,
-# against `KernelAbstractions` alone.
-public ka_synchronize
-# The memory-locality trait (gpena/Bramble.jl#298): derived from an array type, never
-# declared, so a `Backend`'s storage and its execution policy can be checked against each
-# other instead of each independently claiming a locality that need not agree. A GPU package
-# extension adds one method of `locality` for its own array type, the same contract as
-# `ka_device` above; `public` rather than exported for the same reason.
+public ka_device, ka_synchronize
 public locality, Locality, HostLocality, DeviceLocality
-# Read by every package extension's own `@compile_workload` gate (gpena/Bramble.jl#196), so
-# a user's `set_preferences!(Bramble, "precompile_workload" => false)` disables the
-# extensions' workloads along with the core one, not just the core one.
 public PRECOMPILE_WORKLOAD
 
-# The device-kernel launch hooks (gpena/Bramble.jl#94, #174): `src/` declares each one as an
-# error-only stub naming KernelAbstractions, exactly the `CpuBatch`/Polyester idiom above --
-# `BrambleKernelAbstractionsExt` supplies the real `@kernel`-backed methods. They are
-# `public` rather than exported for the same reason as the `_batch_*` hooks: an extension
-# has to reach them by name, and a name an extension is expected to implement is not
-# internal.
+# GPU kernel launch hooks (extended by BrambleKernelAbstractionsExt)
 public _gpu_for!, _gpu_scatter_for!
 public _launch_half_points!, _launch_spacing!, _launch_half_spacing!
 public _launch_refine_indices!
@@ -101,81 +49,30 @@ public _launch_difference_onesided!, _launch_difference_centered!, _launch_avera
 public _launch_uniform_mesh1d_init!, _launch_nonuniform_mesh1d_metrics!
 public _launch_fused_divergence!, _launch_fused_curl2d!, _launch_fused_curl3d!
 public _launch_fused_laplacian!, _launch_fused_strain_offdiag!
-# Row-parallel SpMV/SpMM for a device CSR matrix (gpena/Bramble.jl#250, #174): same
-# extension-contract idiom as the launch hooks above -- `BrambleMetalExt`'s `mul!` methods
-# for `MetalSparseMatrixCSR` call into these, and `BrambleKernelAbstractionsExt` supplies
-# the real `KernelAbstractions`-backed methods (stub definitions further down this file,
-# beside `fdm_solve`, since neither has a CPU call-site file of its own to live in).
 public _launch_spmv_csr!, _launch_spmm_csr!
 
-# domain/interval handling functions
+# --- Domain & Geometry ---
 export box, interval, ×, dim, topo_dim, extrema, point, center, projection, boundary_symbols
 export domain, markers, labels
-
-# `set` is `CartesianProduct`'s identity accessor, real, but the single most generic noun
-# in the language, same reasoning as `vector`/`matrix` above. `is_collapsed`/`point_type`
-# are queries about a `CartesianProduct`'s own internal shape, reached while building
-# geometry helpers, not while using one (point 70).
 public set, is_collapsed, point_type
 
-# Mesh handling
+# --- Mesh ---
 export Mesh1D, MeshnD
 export mesh, submeshes, hₘₐₓ, stepsize, locate_cell, iterative_refinement!, change_points!, set_points!
 export npoints, points, point, half_points, half_point
 export spacing, forward_spacing, half_spacing, spacings, forward_spacings, cell_measure
 export indices, boundary_indices, interior_indices, is_boundary_index, index_in_marker, is_uniform
-
-# `AbstractMeshType`/`MeshMarkers` are extension points for a new mesh type, not everyday
-# vocabulary; `mesh_type`/`normal_vector`/`hₘᵢₙ`/`half_spacings`/`cell_measures` are the
-# same layer, real, tested, reached while implementing a mesh or a boundary-facing
-# operator rather than while using one (point 70).
-public AbstractMeshType, MeshMarkers
-public mesh_type, hₘᵢₙ, half_spacings, cell_measures
-# `host_spacings` (gpena/Bramble.jl#94, S2.10): pulls a device-backed mesh's spacings to the
-# host in one bulk transfer, for a per-point caller (`spacing`/`forward_spacing`) that a
-# device array's own scalar-indexing guard refuses outright. Left `public`-only rather than
-# exported by S2.10, which could not reach this file; added here by S4.0, alongside
-# `host_weights` below, the space-layer sibling that needed the same treatment.
-public host_spacings
-# `host_half_spacings` (gpena/Bramble.jl#307, S1): the same bulk-transfer treatment as
-# `host_spacings` above, but for `half_spacings` -- a device-backed mesh's cell widths, not
-# its backward spacings. Left `public`-only rather than exported by S1, which could not
-# reach this file; declared here by S17, alongside `host_points` below.
-public host_half_spacings
-# `host_points` (gpena/Bramble.jl#308, S2): pulls a device-backed mesh's coordinates to the
-# host in one bulk transfer -- `Mesh1D`'s directly, `MeshnD`'s per-axis -- for `point`'s own
-# scalar-indexing guard, which throws outright rather than reading a device array one point
-# at a time, and for `locate_cell`'s non-uniform search. Left `public`-only rather than
-# exported by S2, which could not reach this file; declared here by S17.
-public host_points
-
-# Exported since v3.1 (gpena/Bramble.jl#213): the outward normal is part of writing a
-# Neumann or Robin term, not an internal query, now that `inner_Γ` exists.
 export normal_vector
 
-# Space handling
+public AbstractMeshType, MeshMarkers
+public mesh_type, hₘᵢₙ, half_spacings, cell_measures
+public host_spacings, host_half_spacings, host_points
+
+# --- Spaces & Grid Functions ---
 export gridspace, vector_gridspace, space, spaces, ScalarGridSpace, CompositeGridSpace
 export ndofs, ncomponents, weights
-
-# `VectorGridSpace` is a type alias for `CompositeGridSpace{N}`; `space_type` reads a
-# space's type back off a `VectorElement`. Neither appears in a tutorial: both are for
-# code written *against* a space's type, not for building one (point 70).
-public VectorGridSpace, space_type
-# `host_weights` (gpena/Bramble.jl#94, S4.0): mirrors a device-backed `ScalarGridSpace` --
-# mesh and weights alike -- to the host in one bulk transfer per underlying array, for the
-# sparsity-pattern walk (`allocate_system_matrix`) that reads both one grid point at a time.
-# Same tier as `host_spacings` above: real, tested, reached while implementing a device
-# backend or a form-assembly caller rather than while writing a form itself (point 70).
-public host_weights
 export VectorElement, element, parent, reshape, components, component_range, component_ranges
 export ldiv!
-# `*` is already in scope from Base regardless (a fundamental operator, never shadowed by
-# `using Bramble`), so this export is for documentation purposes alone -- the same reason
-# `parent`/`reshape` above are re-exported despite being Base's own functions too: it is what
-# keeps this file's `Base.:*(::Function, ::VectorElement)` docstring "public" from
-# Documenter's perspective, so `docs/src/internals/space.md`'s `Public = false` autodocs
-# sweep of `space/vectorelement.jl` does not also pick it up and conflict with its explicit
-# `@docs` entry in `api.md` (gpena/Bramble.jl#197).
 export *
 export Rₕ, Rₕ!, avgₕ, avgₕ!
 export interpolate_at, interpolation_matrix, πₕ, πₕ!
@@ -185,55 +82,13 @@ export n
 export inner₊, inner₊ₓ, inner₊ᵧ, inner₊₂
 export snorm₁ₕ, norm₁ₕ, norm₊, normₕ, norminf_h, norm∞ₕ
 
-# Three families are internal in v3.0 (gpena/Bramble.jl#211): the unscaled differences
-# `diff₋*`/`diff₊*`, the forward differences `D₊*`/`∇₊ₕ`, and the forward averages `M₊*`.
-# They keep their definitions, their docstrings and their entries in the API reference, and
-# are reached as `Bramble.D₊ₓ`; what they lose is a place on the surface `using Bramble`
-# brings in.
-#
-# The reasons differ by family. The unscaled differences have no form-layer node, so they
-# cannot appear inside a bilinear form, and `diff₊` is the same arithmetic as `jump`, which
-# carries the intent a caller reaching for it usually means. The forward difference and the
-# forward average are the duals the backward ones are built and checked against: Bramble
-# discretises with the backward operator paired with `inner₊`, and a user writing a form
-# reaches for `D₋ₓ` and `Mₓ`. Keeping their forward partners exported offered a choice that
-# the discretisation does not actually leave open.
+public VectorGridSpace, space_type, host_weights
 
-# The dimensional entry points (gpena/Bramble.jl#74) travel with their family: `D₋` is
-# exported because `D₋ₓ` is, `D₊` is `public` because `D₊ₓ` is, and `diff₋`/`diff₊` are
-# neither because their subscripts are neither. Two families have no entry point of their
-# own: the averages put theirs on `Mₕ`/`M₊ₕ`, already listed below, rather than mint a bare
-# `M` that `using Bramble` would take away from a caller's mass matrix.
-#
-# This is also where gpena/Bramble.jl#74 and gpena/Bramble.jl#211 have to be reconciled. #74
-# was written before #211 and says the subscript names are retained "permanently"; #211 then
-# took 28 of them off this surface. #211 wins: every forwarder below is still *defined*, and
-# `D₋(uₕ, 2)` reaches the same method `D₋ᵧ(uₕ)` does, but only the survivors are exported or
-# `public`.
+# --- Discrete Differential & Difference Operators ---
 export D₋ₓ, D₋ᵧ, D₋₂, ∇ₕ, D₋
-
-# The vector calculus operators built on those differences (gpena/Bramble.jl#158). The
-# backward-difference spellings are exported beside `∇ₕ`, which is also the backward one;
-# the forward twins are `public` for the same reason `∇₊ₕ` is (#211).
 export divₕ, divₕ!, curlₕ, curlₕ!, Δₕ, Δₕ!
-public div₊ₕ, div₊ₕ!, curl₊ₕ, curl₊ₕ!
-
-# The small-strain tensor (gpena/Bramble.jl#234): `εₕ`/`εₕ!` are the runtime pair over a
-# `VectorElement` or composite grid function, the same shape as `divₕ`/`divₕ!` above.
-# `εₕ` also has a builder-only symbolic method returning a `Bramble._StrainTensor`, consumed
-# immediately by `inner₊` inside a `form(...)` body and never a grid function -- that method
-# has no in-place counterpart, but the runtime one does, and both share this export.
 export εₕ, εₕ!
 export D₋ₓ!, D₋ᵧ!, D₋₂!
-
-# `public` rather than nothing at all, unlike the unscaled differences above: the forward
-# difference and the forward average are what the backward ones are checked against, so
-# `Bramble.D₊ₓ` is a supported thing to reach for -- the summation-by-parts tests and
-# `ext/BrambleILUZeroExt.jl`'s workload both do. Declaring them keeps that access honest
-# under `ExplicitImports.check_all_qualified_accesses_are_public`, and keeps them in
-# `names(Bramble)`, which is what requires them to stay documented.
-public D₊ₓ, D₊ᵧ, D₊₂, ∇₊ₕ, D₊
-public D₊ₓ!, D₊ᵧ!, D₊₂!
 
 export D̽ₓ, D̽ᵧ, D̽₂, D̽ₕ, D̽
 export D̽ₓ!, D̽ᵧ!, D̽₂!
@@ -250,19 +105,19 @@ export jumpₓ!, jumpᵧ!, jump₂!
 export Mₓ, Mᵧ, M₂, Mₕ
 export Mₓ!, Mᵧ!, M₂!
 
+# Forward operators (public for tests and extensions, unexported from default namespace)
+public D₊ₓ, D₊ᵧ, D₊₂, ∇₊ₕ, D₊
+public D₊ₓ!, D₊ᵧ!, D₊₂!
+public div₊ₕ, div₊ₕ!, curl₊ₕ, curl₊ₕ!
 public M₊ₓ, M₊ᵧ, M₊₂, M₊ₕ
 public M₊ₓ!, M₊ᵧ!, M₊₂!
 
+# --- Forms, Assembly & Problems ---
 export dirichlet_constraints, dirichlet_bc!, symmetrize!
 export reaction, reaction_density, reaction!, reaction_density!
 export form, assemble, assemble!, assemble_parallel!, allocate_system_matrix, evaluate!
 export expression
 export is_separable, kronecker_operator, KroneckerLinearOperator
-# `bandwidths`/`blockbandwidths` (gpena/Bramble.jl#175): the lower/upper (block) bandwidth a
-# form's matrix occupies, read from the resolved AST alone. Their only caller was the banded
-# backend extension, removed 2026-09-19 (v3.3.0 plan, "Removed: the banded backends"); they
-# stay and are exported because they answer a question about a form independently of any
-# storage type.
 export bandwidths, blockbandwidths
 export assemble_add!
 export jacobian_pattern, ast_sparsity_detector
@@ -271,11 +126,6 @@ export Semidiscretization, semidiscretize, mass_matrix, operator_matrix
 export SemidiscretizeRHS, semidiscretize_rhs
 export SecondOrderSemidiscretization,
        semidiscretize_second_order, damping_matrix, stiffness_matrix, block_mass_matrix
-# `jacobian!` is `public` rather than exported, the same call as `diff₋ₓ` above:
-# `DifferentiationInterface` exports a `jacobian!` of its own, and the two are ambiguous in
-# any session holding both -- which the test suite is, and any user pairing a Bramble
-# semidiscretisation with sparse AD would be. Reached as `Bramble.jacobian!`; it is also the
-# default `jacobian` of `ode_function`, so it rarely needs naming at all.
 public jacobian!
 export jacobian_prototype
 export ode_function, ode_problem, linear_problem, nonlinear_problem
@@ -289,26 +139,14 @@ export MUMPSFactorization, mumps_factorize, mumps_solve, mumps_refactor!
 export SparspakFactorization, sparspak_factorize, sparspak_solve, sparspak_refactor!
 export sparse_factorize, sparse_refactor!, refactor!
 export pde_solve
-# `fdm_solve` (gpena/Bramble.jl#259): a direct solve for a separable, constant-coefficient
-# `BilinearForm` by fast diagonalisation, implemented in `ext/BrambleKroneckerExt.jl` (S5.2).
-# A package extension cannot introduce a new binding into its parent module, so this stub
-# gives it one to add methods to, the way `csr_backend`/`_csr_backend` above and
-# `sparspak_solve`/`_sparspak_solve` (`src/solvers/sparspak_solver.jl`) let their extensions
-# extend a name this module already owns.
-#
-# Verified 2026-09-19 (S9.1) that this alone is *not* enough here: unlike those two, the
-# extension's `fdm_solve(a::BilinearForm, ...)`/`fdm_solve(K::KroneckerLinearOperator, ...)`
-# are written unqualified, and `using Bramble: Bramble, ...` (no `fdm_solve` in that list)
-# does not let an unqualified `function fdm_solve(...)` extend this stub -- Julia only
-# extends a parent's function through `import Parent: name` or a dot-qualified
-# `function Parent.name(...)` definition, confirmed by a minimal repro of the same shape.
-# After `using Bramble, Kronecker`, `methods(Bramble.fdm_solve)` is empty and
-# `Bramble.fdm_solve !== Base.get_extension(Bramble, :BrambleKroneckerExt).fdm_solve`: the
-# plain spelling does not yet work, and reaching the real implementation still needs
-# `Base.get_extension(Bramble, :BrambleKroneckerExt).fdm_solve`. Fixing this needs an edit
-# inside `ext/BrambleKroneckerExt.jl` (outside S9.1's ownership) to import `fdm_solve` from
-# `Bramble` or qualify its two method definitions as `Bramble.fdm_solve`; reported to the
-# integrator rather than done here.
+export issymmetric, isposdef
+public DirichletConstraint
+
+# --- Exporters ---
+export export_vtk
+export export_pgfplots
+
+# --- Extension Stubs ---
 """
     fdm_solve(a::BilinearForm, F::AbstractVector; dirichlet = nothing) -> Vector
     fdm_solve(K::KroneckerLinearOperator, F::AbstractVector) -> Vector
@@ -327,18 +165,6 @@ See also: [`kronecker_operator`](@ref), [`KroneckerLinearOperator`](@ref), [`is_
 """
 function fdm_solve end
 export fdm_solve
-
-# `_launch_spmv_csr!`/`_launch_spmm_csr!` (gpena/Bramble.jl#250, #174, S3.2 of
-# .agents/plans/metal-and-apple-silicon-acceleration.md): the extension contract
-# `BrambleMetalExt`'s `mul!` methods for `MetalSparseMatrixCSR` reach into, exactly the
-# `fdm_solve`/`Kronecker` idiom above -- a package extension cannot introduce a new binding
-# into this module, so these stubs give it one to add methods to. Unlike `fdm_solve`, a
-# plain `ErrorException` fallback rather than a bare `MethodError` when the caller has not
-# loaded `KernelAbstractions`, matching `ka_device`/`_launch_half_points!`'s idiom
-# (`src/utils/device_kernels.jl`, `src/mesh/mesh1d.jl`): `BrambleKernelAbstractionsExt`
-# supplies the real methods, written against `KernelAbstractions.Backend` alone, so a
-# future GPU backend inherits the same SpMV/SpMM kernel for the cost of one `ka_device`
-# method.
 
 """
     _launch_spmv_csr!(y, rowPtr, colVal, nzVal, x, α, β) -> Nothing
@@ -384,15 +210,7 @@ end
     )
 end
 
-# `DirichletConstraint` is `dirichlet_constraints(...)`'s own return type, reached for an
-# `isa` check rather than constructed by name: the tests already reach it as
-# `import Bramble: DirichletConstraint` rather than through `using` (point 70).
-public DirichletConstraint
-export issymmetric, isposdef
-
-export export_vtk
-export export_pgfplots
-
+# --- Submodule Includes ---
 include("utils/macros.jl")
 include("utils/backend.jl")
 include("utils/device_kernels.jl")
