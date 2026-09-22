@@ -371,6 +371,45 @@ function _pc_form_assembly(
     _pc_assemble_bilinear_composite(
         Vₕ, (u, v) -> inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + innerₕ(u(2), v(1))
     )
+
+    return nothing
+end
+
+# `assemble_add!`, `bandwidths`, `blockbandwidths`, `reaction` and `reaction_density`: each
+# is its own entry point over a real `BilinearForm`/`LinearForm`/`VectorElement`, not reached
+# by the bare AST/stencil construction above or by any `assemble`/`assemble!` shape already
+# warmed -- `assemble_add!` takes its own cached-record path with an explicit scale
+# (`_assemble_bilinear_core_cached!`/`_assemble_linear_core!` in src/form/assemble_add.jl),
+# `bandwidths`/`blockbandwidths` read the resolved AST without assembling, and `reaction`/
+# `reaction_density` walk the unconstrained residual through `leaf_spaces_offsets`
+# (gpena/Bramble.jl#283).
+#
+# Builds its own non-uniform mesh with a single `:boundary` marker covering the whole
+# boundary, rather than reusing the session's mesh/label: `markers(Ωₕ)` is a `NamedTuple`
+# keyed by label, so a caller whose domain names its boundary `:boundary` (one label) rather
+# than `:left`/`:right`/`:wall` (this file's other sessions) hits fresh method instances --
+# reusing `label`/`Ωₕ` from the caller left this cold even though the AST/stencil shapes
+# were already warm. The Laplacian/`innerₕ` shapes here match what a caller reaching for a
+# net-flux boundary quantity actually writes.
+function _pc_form_reaction(::Val{D}) where {D}
+    S = D == 1 ? interval(0.0, 1.0) : interval(0.0, 1.0) × interval(0.0, 1.0)
+    Ω = domain(S, :boundary => boundary_symbols(S))
+    Ωₕ = D == 1 ? mesh(Ω, 8, false) : mesh(Ω, (8, 8), (false, false))
+    Wₕ = gridspace(Ωₕ)
+
+    a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+    fₕ = Rₕ(Wₕ, x -> 1.0)
+    l = form(Wₕ, v -> innerₕ(fₕ, v))
+    A = assemble(a)
+    F = assemble(l)
+    uₕ = element(Wₕ, 1.0)
+
+    assemble_add!(A, a, 0.5)
+    assemble_add!(F, l, 0.5)
+    bandwidths(a)
+    blockbandwidths(a)
+    reaction(A, F, uₕ; marker = :boundary)
+    reaction_density(A, F, uₕ; marker = :boundary)
     return nothing
 end
 
@@ -385,6 +424,7 @@ function _pc_form_session(
     _pc_form_blocks(Vₕ, dim_val)
     _pc_form_dirichlet(Ωₕ, Wₕ, Vₕ, be, label, f, ft, I_time)
     _pc_form_assembly(Ωₕ, Wₕ, Vₕ, label, f, dim_val)
+    _pc_form_reaction(dim_val)
 
     # the composite space reaches the same nodes through a different space type
     _pc_form_ast(Vₕ, dim_val)
