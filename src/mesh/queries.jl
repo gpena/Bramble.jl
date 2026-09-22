@@ -24,16 +24,36 @@ When `tol` is not given, the tolerance is `_default_is_uniform_tol(eltype(Ωₕ)
 keeps today's `1e-10` for `Float64` and widens it for `Float32` (gpena/Bramble.jl#307); see
 that function for the measurement behind the constant. Passing `tol` explicitly uses it
 verbatim, with no further scaling.
+
+On a [`Mesh1D`](@ref), the default-tolerance (`tol === nothing`) answer is cached against the
+mesh's `version` (gpena/Bramble.jl#332): a repeated call on a mesh that has not mutated since
+the last check is O(1) instead of rescanning every spacing. Passing `tol` explicitly always
+recomputes and never reads or writes the cache.
 """
 function is_uniform(Ωₕ::AbstractMeshType{1}; tol = nothing)
-    h = host_spacings(Ωₕ)
-    n = length(h)
-    if n <= 1
-        return true
+    if tol === nothing && Ωₕ._uniform_cache_version == _mesh_version(Ωₕ)
+        return Ωₕ._uniform_cache
     end
 
-    h_ref = h[1]
-    atol = tol === nothing ? _default_is_uniform_tol(eltype(Ωₕ), h_ref, n) : tol
+    h = host_spacings(Ωₕ)
+    n = length(h)
+    result = if n <= 1
+        true
+    else
+        h_ref = h[1]
+        atol = tol === nothing ? _default_is_uniform_tol(eltype(Ωₕ), h_ref, n) : tol
+        _uniform_scan(h, h_ref, atol, n)
+    end
+
+    if tol === nothing
+        Ωₕ._uniform_cache = result
+        Ωₕ._uniform_cache_version = _mesh_version(Ωₕ)
+    end
+
+    return result
+end
+
+@inline function _uniform_scan(h, h_ref, atol, n)
     @inbounds for i in 2:n
         if abs(h[i] - h_ref) >= atol
             return false
@@ -43,7 +63,7 @@ function is_uniform(Ωₕ::AbstractMeshType{1}; tol = nothing)
 end
 
 function is_uniform(Ωₕ::AbstractMeshType{D}; tol = nothing) where {D}
-    return all(i -> is_uniform(Ωₕ(i); tol = tol), 1:D)
+    return all(ntuple(i -> is_uniform(Ωₕ(i); tol = tol), Val(D)))
 end
 
 # Float64 keeps the historical bare `1e-10`: eps(Float64) times a mesh span of order 1 is
@@ -172,7 +192,6 @@ See also: [`is_uniform`](@ref), [`spacing`](@ref).
 end
 
 @inline function stepsize(Ωₕ::AbstractMeshType{D}) where {D}
-    is_uniform(Ωₕ) || _throw_not_uniform()
     return ntuple(i -> stepsize(Ωₕ(i)), Val(D))
 end
 

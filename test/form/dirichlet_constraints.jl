@@ -370,6 +370,82 @@ using LinearAlgebra: I as LinearAlgebraI
         @test count(both) > count(marked)     # :top really adds rows
     end
 
+    @testset "Composite: multiple labels match sequential (#334)" begin
+        # Composite `dirichlet_bc!`/`symmetrize!` now combine every label into one mask
+        # per leaf and sweep `A` once, instead of once per label (gpena/Bramble.jl#334).
+        # The oracle is that combining changes nothing: applying `:bottom, :top` together
+        # must equal applying them one label at a time, for both the matrix and (for
+        # `symmetrize!`) the right-hand side.
+        A_combined = _eye(nV)
+        dirichlet_bc!(A_combined, Vₕ, :bottom, :top)
+
+        A_sequential = _eye(nV)
+        dirichlet_bc!(A_sequential, Vₕ, :bottom)
+        dirichlet_bc!(A_sequential, Vₕ, :top)
+        @test A_combined == A_sequential
+
+        # Dense agrees with sparse.
+        Ad_combined = _full(nV)
+        dirichlet_bc!(Ad_combined, Vₕ, :bottom, :top)
+        @test Ad_combined == Matrix(A_combined)
+
+        F_combined = collect(1.0:nV)
+        B_combined = copy(A_combined)
+        symmetrize!(B_combined, F_combined, Vₕ, :bottom, :top)
+
+        F_sequential = collect(1.0:nV)
+        B_sequential = copy(A_sequential)
+        symmetrize!(B_sequential, F_sequential, Vₕ, :bottom)
+        symmetrize!(B_sequential, F_sequential, Vₕ, :top)
+        @test B_combined == B_sequential
+        @test F_combined == F_sequential
+
+        # Restricted to a subset of leaves: combining still matches sequential, and the
+        # untouched leaf (2) stays the pristine identity.
+        Ac_combined = _eye(nV)
+        dirichlet_bc!(Ac_combined, Vₕ, :bottom, :top; components = (1, 3))
+
+        Ac_sequential = _eye(nV)
+        dirichlet_bc!(Ac_sequential, Vₕ, :bottom; components = (1, 3))
+        dirichlet_bc!(Ac_sequential, Vₕ, :top; components = (1, 3))
+        @test Ac_combined == Ac_sequential
+        @test Ac_combined[(nW + 1):(2nW), :] == _eye(nV)[(nW + 1):(2nW), :]
+
+        # A corner shared by two labels: overlap is idempotent under the old per-label
+        # loop, so the combined single pass (which visits that row once, not twice) has
+        # to land on the same result.
+        Ωo = mesh(
+            domain(
+                interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom, :left => :left
+            ),
+            (5, 5),
+            (true, true)
+        )
+        Vo = gridspace(Ωo, Val(2))
+        no = ndofs(Vo)
+        bottom_o = index_in_marker(Ωo, :bottom)
+        left_o = index_in_marker(Ωo, :left)
+        @test any(bottom_o .& left_o)      # the (0,0) corner is marked by both
+
+        Ao_combined = _eye(no)
+        dirichlet_bc!(Ao_combined, Vo, :bottom, :left)
+        Ao_sequential = _eye(no)
+        dirichlet_bc!(Ao_sequential, Vo, :bottom)
+        dirichlet_bc!(Ao_sequential, Vo, :left)
+        @test Ao_combined == Ao_sequential
+
+        Fo_combined = collect(1.0:no)
+        Bo_combined = copy(Ao_combined)
+        symmetrize!(Bo_combined, Fo_combined, Vo, :bottom, :left)
+
+        Fo_sequential = collect(1.0:no)
+        Bo_sequential = copy(Ao_sequential)
+        symmetrize!(Bo_sequential, Fo_sequential, Vo, :bottom)
+        symmetrize!(Bo_sequential, Fo_sequential, Vo, :left)
+        @test Bo_combined == Bo_sequential
+        @test Fo_combined == Fo_sequential
+    end
+
     @testset "Overlapping label precedence" begin
         # Two Dirichlet labels overlapping at a shared corner node (the (0,0) corner is
         # both :bottom and :left), each carrying a different value function.

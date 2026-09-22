@@ -20,6 +20,11 @@ Cartesian indices `indices`, and computational backend `backend`. Also precomput
   - `collapsed`: Boolean flag indicating whether the interval is degenerate (a single point).
   - `version`: Monotone counter bumped by every in-place point mutation (gpena/Bramble.jl#221);
     see [`set_points!`](@ref) and [`_mesh_version`](@ref).
+  - `_uniform_cache`: Cached result of the last default-tolerance [`is_uniform`](@ref) check
+    (gpena/Bramble.jl#332).
+  - `_uniform_cache_version`: The [`_mesh_version`](@ref) the cached `_uniform_cache` was
+    computed at; a mismatch means the cache is stale and must be recomputed. Starts at `-1`,
+    which never matches a real version, so the first call always computes fresh.
 
 See also: [`MeshnD`](@ref), [`mesh`](@ref), [`AbstractMeshType`](@ref).
 """
@@ -45,6 +50,40 @@ mutable struct Mesh1D{BT <: Backend, CI <: CartesianIndices{1}, VT <: AbstractVe
     collapsed::Bool
     "monotone counter bumped by every in-place point mutation; see `_mesh_version`."
     version::Int
+    "cached result of the last default-tolerance `is_uniform` check; see `_uniform_cache_version`."
+    _uniform_cache::Bool
+    "the `_mesh_version` the cached `_uniform_cache` was computed at; `-1` never matches a real version."
+    _uniform_cache_version::Int
+
+    function Mesh1D(
+            set::CartesianProduct{1, T},
+            markers::MeshMarkers,
+            indices::CI,
+            backend::BT,
+            pts::VT,
+            half_pts::VT,
+            half_spacings::VT,
+            spacings::VT,
+            collapsed::Bool,
+            version::Int,
+            uniform_cache::Bool = false,
+            uniform_cache_version::Int = -1
+    ) where {BT <: Backend, CI <: CartesianIndices{1}, VT <: AbstractVector, T}
+        return new{BT, CI, VT, T}(
+            set,
+            markers,
+            indices,
+            backend,
+            pts,
+            half_pts,
+            half_spacings,
+            spacings,
+            collapsed,
+            version,
+            uniform_cache,
+            uniform_cache_version
+        )
+    end
 end
 
 @noinline _throw_point_count_mismatch(expected::Int, got::Int) = throw(

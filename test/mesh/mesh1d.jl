@@ -438,6 +438,36 @@ import Base: diff
             @test npoints(Ωₕ_default) == 10
             @test is_uniform(Ωₕ_default)
         end
+
+        @testset "is_uniform caching" begin
+            Ω_c = create_test_domain(0.0, 1.0)
+            Ωₕ = mesh(Ω_c, 10; backend = backend())
+
+            # Uniform mesh: repeated default-tolerance calls hit the cache and agree.
+            @test is_uniform(Ωₕ)
+            @test is_uniform(Ωₕ)
+            @test stepsize(Ωₕ) ≈ 1 / 9
+
+            # Mutating the mesh bumps `version`, invalidating the cached answer.
+            nonunif_pts = collect(range(0.0, 1.0; length = 10))
+            nonunif_pts[3] += 0.01
+            set_points!(Ωₕ, nonunif_pts)
+            @test !is_uniform(Ωₕ)
+            @test !is_uniform(Ωₕ) # still false, re-cached against the new version
+            @test_throws ArgumentError stepsize(Ωₕ)
+
+            # An explicit `tol` always recomputes and never pollutes the default-tol cache:
+            # a large enough tolerance calls the same non-uniform mesh uniform...
+            @test is_uniform(Ωₕ; tol = 1.0)
+            # ...but the default-tolerance answer (and the cache behind it) is unaffected.
+            @test !is_uniform(Ωₕ)
+
+            # Mutating back to a uniform layout bumps the version again and the cache
+            # correctly picks up the new (true) answer.
+            change_points!(Ωₕ, collect(range(0.0, 1.0; length = 10)))
+            @test is_uniform(Ωₕ)
+            @test stepsize(Ωₕ) ≈ 1 / 9
+        end
     end
 end
 

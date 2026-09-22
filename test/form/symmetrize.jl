@@ -92,6 +92,64 @@ using ..TestUtils: _tri, _nonuniform_points
         @test all(iszero, Av[(n + 1):(2n), 1:n])
     end
 
+    @testset "Composite: multiple labels match sequential (#334)" begin
+        # `dirichlet_bc!`/`symmetrize!` on a `CompositeGridSpace` combine every label into
+        # one mask per leaf and sweep once, instead of once per label
+        # (gpena/Bramble.jl#334). The oracle is that combining changes nothing: applying
+        # `:bottom, :top` together has to equal applying them one at a time.
+        Av, Fv = blockdiag(_tri(n), _tri(n), _tri(n)), repeat(collect(1.0:n), 3)
+        dirichlet_bc!(Av, Vₕ, :bottom, :top)
+        symmetrize!(Av, Fv, Vₕ, :bottom, :top)
+        @test issymmetric(Av)
+
+        As, Fs = blockdiag(_tri(n), _tri(n), _tri(n)), repeat(collect(1.0:n), 3)
+        dirichlet_bc!(As, Vₕ, :bottom)
+        dirichlet_bc!(As, Vₕ, :top)
+        symmetrize!(As, Fs, Vₕ, :bottom)
+        symmetrize!(As, Fs, Vₕ, :top)
+
+        @test Av == As
+        @test Fv == Fs
+
+        # Dense agrees with sparse.
+        Avd, Fvd = Matrix(blockdiag(_tri(n), _tri(n), _tri(n))), repeat(collect(1.0:n), 3)
+        dirichlet_bc!(Avd, Vₕ, :bottom, :top)
+        symmetrize!(Avd, Fvd, Vₕ, :bottom, :top)
+        @test Avd == Matrix(Av)
+        @test Fvd == Fv
+
+        # A corner shared by two labels: `symmetrize!`'s docstring reasons that combining
+        # is safe because `dirichlet_bc!` has already zeroed every marked row off its
+        # diagonal, so no marked index's elimination can read a value another marked
+        # index's elimination wrote. Pin that on a mesh where the labels actually overlap,
+        # not just where they happen not to.
+        Ωo = mesh(
+            domain(
+                interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom, :left => :left
+            ),
+            (5, 5),
+            (true, true)
+        )
+        Vo = gridspace(Ωo, Val(2))
+        no_leaf = ndofs(gridspace(Ωo))
+        bottom_o = index_in_marker(Ωo, :bottom)
+        left_o = index_in_marker(Ωo, :left)
+        @test any(bottom_o .& left_o)      # the (0,0) corner is marked by both
+
+        Ao, Fo = blockdiag(_tri(no_leaf), _tri(no_leaf)), repeat(collect(1.0:no_leaf), 2)
+        dirichlet_bc!(Ao, Vo, :bottom, :left)
+        symmetrize!(Ao, Fo, Vo, :bottom, :left)
+        @test issymmetric(Ao)
+
+        Aos, Fos = blockdiag(_tri(no_leaf), _tri(no_leaf)), repeat(collect(1.0:no_leaf), 2)
+        dirichlet_bc!(Aos, Vo, :bottom)
+        dirichlet_bc!(Aos, Vo, :left)
+        symmetrize!(Aos, Fos, Vo, :bottom)
+        symmetrize!(Aos, Fos, Vo, :left)
+        @test Ao == Aos
+        @test Fo == Fos
+    end
+
     @testset "Nested leaf offsets" begin
         # a composite of composites must still see each leaf at its own offset
         inner = gridspace(Ωₕ, Val(2))

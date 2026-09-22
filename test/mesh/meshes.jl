@@ -395,6 +395,17 @@ import Bramble:
             M2_nu = mesh(domain(I × J), (11, 21), (false, false))
             @test_throws ArgumentError stepsize(M2_nu)
 
+            # is_uniform on the D-dim path (`all(ntuple(...))`, gpena/Bramble.jl#332)
+            @test is_uniform(M2)
+            @test !is_uniform(M2_nu)
+
+            # Uniform along one axis, non-uniform along the other: the D-dim `stepsize`
+            # no longer runs its own redundant `is_uniform` scan and relies entirely on
+            # each per-axis `stepsize` call to validate and throw.
+            M2_mixed = mesh(domain(I × J), (11, 21), (true, false))
+            @test !is_uniform(M2_mixed)
+            @test_throws ArgumentError stepsize(M2_mixed)
+
             # locate_cell
             @test locate_cell(M2, (0.35, 1.05)) == CartesianIndex(4, 11)
             @test locate_cell(M2, [0.35, 1.05]) == CartesianIndex(4, 11)

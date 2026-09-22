@@ -340,6 +340,23 @@ end
     return (entry, _leaf_entries_impl(Base.tail(leaves), label, components, i + 1)...)
 end
 
+# Multi-label overload: one entry per leaf, but that leaf's mask is already the union of
+# every label in `labels` (via `_combined_mask`, space/inner_product.jl), not just one. This
+# is what lets the composite `dirichlet_bc!` below hand `_dirichlet_bc_rows!` a single tuple
+# of entries for however many labels were given, so the sparse sweep over `A` runs once
+# total instead of once per label. `_combined_mask` already returns the mesh's own stored
+# mask with no copy when `labels` has one element, so a single-label call costs the same as
+# the `label::Symbol` method above.
+@inline _leaf_entries(leaves::Tuple, labels::NTuple{N, Symbol}, components) where {N} = _leaf_entries_impl(leaves, labels, components, 1)
+@inline _leaf_entries_impl(::Tuple{}, labels::NTuple{N, Symbol}, components, i::Int) where {N} = ()
+@inline function _leaf_entries_impl(leaves::Tuple, labels::NTuple{N, Symbol}, components, i::Int) where {N}
+    sp, offset = first(leaves)
+    entry = (
+        _combined_mask(mesh(sp), labels), offset, ndofs(sp), _leaf_selected(components, i)
+    )
+    return (entry, _leaf_entries_impl(Base.tail(leaves), labels, components, i + 1)...)
+end
+
 """
     dirichlet_bc!(A::AbstractMatrix, space::CompositeGridSpace, labels::Symbol...; components = nothing) -> AbstractMatrix
 
@@ -361,11 +378,14 @@ Successive calls with different `labels`/`components` pairs compose cleanly.
 function dirichlet_bc!(
         A::AbstractMatrix, space::CompositeGridSpace, labels::Symbol...; components = nothing
 )
+    isempty(labels) && return A
+    # One combined mask per leaf, one sweep over `A` -- not one sweep per label. Same
+    # reasoning as the scalar overload above: zeroing a row and setting its diagonal is
+    # idempotent, so unioning the labels' masks first changes nothing a per-label loop
+    # would have done.
     leaves = leaf_spaces_offsets(space)
     _validate_dirichlet_components(components, length(leaves))
-    for p in labels
-        _dirichlet_bc_rows!(A, _leaf_entries(leaves, p, components))
-    end
+    _dirichlet_bc_rows!(A, _leaf_entries(leaves, labels, components))
     return A
 end
 
@@ -614,6 +634,16 @@ returns a tuple, enabling loop unrolling and type stability.
 Takes the same `components` keyword as composite `dirichlet_bc!`, restricting which leaf
 components `labels` binds to (1-based positions in `leaf_spaces_offsets(Wₕ)`). `components = nothing`
 (the default) applies to every leaf.
+
+Combines every label into one mask per leaf (`_combined_mask`, space/inner_product.jl)
+rather than visiting each leaf once per label: by the time `symmetrize!` runs, `dirichlet_bc!`
+has already zeroed every marked row of `A` off its diagonal (the documented order of use),
+so for any two marked indices `i`, `k` in the combined set, `A[k, i] == 0`. That makes each
+marked index's elimination read/write entries that no other marked index's elimination
+touches, so the order they are visited in -- one combined pass here vs. the old label-by-label
+passes -- cannot change the result: a row marked by more than one label would previously
+just be visited again with nothing left to eliminate (idempotent), which the union mask
+now skips instead.
 """
 function symmetrize!(
         A::AbstractMatrix,
@@ -622,13 +652,13 @@ function symmetrize!(
         labels::Symbol...;
         components = nothing
 )
+    isempty(labels) && return nothing
     leaves = leaf_spaces_offsets(Wₕ)
     _validate_dirichlet_components(components, length(leaves))
-    for p in labels
-        _each_selected_leaf(leaves, components) do sp, offset
-            return symmetrize!(A, F, index_in_marker(mesh(sp), p), offset)
-        end
+    _each_selected_leaf(leaves, components) do sp, offset
+        return symmetrize!(A, F, _combined_mask(mesh(sp), labels), offset)
     end
+    return nothing
 end
 
 # Generic implementation for dense matrices
