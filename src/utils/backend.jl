@@ -162,7 +162,7 @@ differs by an order of magnitude between workloads, so a number from one does no
 another. `innerₕ`/`normₕ` have no entry here because they do not thread under this policy at
 all: `_dot(::CpuThreaded, ...)` (`src/utils/linear_algebra.jl`) forwards to the identical
 serial reduction, so switching to this policy leaves an inner product exactly as fast, or slow,
-as [`CpuSerial`](@ref) (gpena/Bramble.jl#112, open).
+as [`CpuSerial`](@ref) (gpena/Bramble.jl#112, closed, superseded by #190).
 
 See also: [`CpuSerial`](@ref), [`CpuBatch`](@ref), [`ExecutionPolicy`](@ref).
 """
