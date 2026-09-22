@@ -195,9 +195,29 @@ function _pattern_blocks!(
     return nothing
 end
 
+# A composite space on either side is walked block by block, the scalar side (if any) as a
+# one-leaf composite. `_walked_leaf` on a mixed pair would pick one whole space and drop the
+# component the term names on the composite side, so a term on leaf `d > 1` would land in
+# block 1 (composite trial) or not resolve at all (composite test).
 function allocate_system_matrix(
-        form::BilinearForm{D, TrialSpace, TestSpace, AST}, ast = form.ast
-) where {D, TrialSpace <: CompositeGridSpace, TestSpace <: CompositeGridSpace, AST}
+        form::BilinearForm{D, <:CompositeGridSpace, <:CompositeGridSpace}, ast = form.ast
+) where {D}
+    return _allocate_block_system_matrix(form, ast)
+end
+
+function allocate_system_matrix(
+        form::BilinearForm{D, <:ScalarGridSpace, <:CompositeGridSpace}, ast = form.ast
+) where {D}
+    return _allocate_block_system_matrix(form, ast)
+end
+
+function allocate_system_matrix(
+        form::BilinearForm{D, <:CompositeGridSpace, <:ScalarGridSpace}, ast = form.ast
+) where {D}
+    return _allocate_block_system_matrix(form, ast)
+end
+
+function _allocate_block_system_matrix(form::BilinearForm, ast)
     trial_leaves = leaf_spaces_offsets(form.trial_space)
     test_leaves = leaf_spaces_offsets(form.test_space)
 
