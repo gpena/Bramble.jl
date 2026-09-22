@@ -695,7 +695,7 @@ Construct a GPU [`Backend`](@ref) for whichever accelerator extension is loaded 
 has a functional device.
 
 Detects a loaded GPU package extension with `Base.get_extension`, checks
-[`_gpu_functional`](@ref) for that device, and forwards to the backend's own constructor:
+`_gpu_functional` for that device, and forwards to the backend's own constructor:
 currently [`metal_backend`](@ref), under `using Metal` with `Metal.functional()` true. A
 CUDA or AMDGPU extension joins this dispatch once it exists (gpena/Bramble.jl#11, v3.5.0).
 
