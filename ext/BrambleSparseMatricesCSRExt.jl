@@ -26,8 +26,24 @@
 # than silently doing nothing if it is not.
 module BrambleSparseMatricesCSRExt
 
-using Bramble: Bramble, Backend, ExecutionPolicy
+using Bramble:
+               Bramble,
+               Backend,
+               ExecutionPolicy,
+               csr_backend,
+               domain,
+               interval,
+               ×,
+               mesh,
+               gridspace,
+               form,
+               assemble,
+               assemble!,
+               inner₊,
+               ∇ₕ,
+               boundary_symbols
 using SparseMatricesCSR: SparseMatricesCSR, SparseMatrixCSR, sparsecsr
+using PrecompileTools: @setup_workload, @compile_workload
 
 # --- backend construction (S1.4's stub) -------------------------------------------- #
 
@@ -237,6 +253,43 @@ function Bramble.symmetrize!(
         i_marked && !diagonal_found && _throw_missing_csr_diagonal(i)
     end
     return A
+end
+
+# Warms this extension's own entry points -- `csr_backend`, `Bramble.matrix` for the CSR
+# backend, and `assemble`/`assemble!`/`assemble(...; dirichlet)` of the Laplacian form
+# against a `SparseMatrixCSR` destination -- since the CSR-typed method instances of the
+# core assembly seam (`_allocate_from_pattern`, `_scatter_position`, `_scatter_add!`,
+# `_zero_stored!`, `_dirichlet_bc_rows!`/`_dirichlet_bc_indices!` above) are only reachable
+# once `SparseMatricesCSR` is loaded, so only this extension's own precompile pass reaches
+# them. Covers both 1D and 2D meshes since `assemble` specialises on the form/grid-space
+# type, which depends on the mesh dimension, even though the assembled `SparseMatrixCSR{1,
+# Float64, Int}` itself does not. Not named in gpena/Bramble.jl#196; added for
+# gpena/Bramble.jl#284.
+if Bramble.PRECOMPILE_WORKLOAD
+    @setup_workload begin
+        be = csr_backend()
+        systems = map((1, 2)) do D
+            S = D == 1 ? interval(0.0, 1.0) : interval(0.0, 1.0) × interval(0.0, 1.0)
+            Ω = domain(S, :boundary => boundary_symbols(S))
+            Ωₕ = D == 1 ? mesh(Ω, 8, false; backend = be) : mesh(Ω, (8, 8), (false, false); backend = be)
+            Wₕ = gridspace(Ωₕ)
+            a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+            (; a,)
+        end
+
+        precompile(Bramble.matrix, (typeof(be), Int, Int))
+
+        @compile_workload begin
+            be2 = csr_backend()
+            Bramble.matrix(be2, 5, 5)
+
+            for sys in systems
+                A = assemble(sys.a)
+                assemble!(A, sys.a)
+                assemble(sys.a; dirichlet = :boundary)
+            end
+        end
+    end
 end
 
 end # module BrambleSparseMatricesCSRExt

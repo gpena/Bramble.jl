@@ -77,6 +77,8 @@ benchmark/*
 !benchmark/backends.jl
 !benchmark/polyester_crossover.jl
 !benchmark/accelerate_solvers.jl
+# v3.8.0 time-to-first-call harness (gpena/Bramble.jl#283 #284)
+!benchmark/ttfx.jl
 !benchmark/baselines/
 !benchmark/baselines/*.json
 research/

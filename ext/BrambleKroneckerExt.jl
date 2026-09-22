@@ -29,9 +29,27 @@
 # reach it through `Base.get_extension` pass, and only the exported spelling stays empty.
 module BrambleKroneckerExt
 
-using Bramble: Bramble, BilinearForm, is_separable, kronecker_operator, KroneckerLinearOperator
+using Bramble:
+               Bramble,
+               BilinearForm,
+               is_separable,
+               kronecker_operator,
+               KroneckerLinearOperator,
+               domain,
+               interval,
+               ×,
+               mesh,
+               gridspace,
+               boundary_symbols,
+               form,
+               assemble,
+               Rₕ,
+               inner₊,
+               ∇ₕ,
+               innerₕ
 using Kronecker: Kronecker, ⊗
 using LinearAlgebra: Diagonal, Symmetric, eigen
+using PrecompileTools: @setup_workload, @compile_workload
 
 # --- 1. Conversion to a Kronecker.jl object ------------------------------------------ #
 
@@ -335,6 +353,30 @@ See also: [`fdm_solve(::BilinearForm, ::AbstractVector)`](@ref).
 """
 function Bramble.fdm_solve(K::KroneckerLinearOperator, F::AbstractVector)
     return _fdm_solve_core(K, F, nothing)
+end
+
+# Warms this extension's entry points -- `Kronecker.kronecker` and both `fdm_solve` calls
+# (unconstrained and `dirichlet = :boundary`) -- on a 2D separable, constant-coefficient
+# form, only reachable once `Kronecker` is loaded so only this extension's own precompile
+# pass reaches them. Not named in gpena/Bramble.jl#259; added for gpena/Bramble.jl#284.
+if Bramble.PRECOMPILE_WORKLOAD
+    @setup_workload begin
+        Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0), :boundary =>
+            boundary_symbols(interval(0.0, 1.0) × interval(0.0, 1.0)))
+        Ωₕ = mesh(Ω, (8, 8), (false, false))
+        Wₕ = gridspace(Ωₕ)
+        a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+        fₕ = Rₕ(Wₕ, x -> 1.0)
+        l = form(Wₕ, v -> innerₕ(fₕ, v))
+        F = assemble(l)
+
+        @compile_workload begin
+            K = kronecker_operator(a)
+            Kronecker.kronecker(K)
+            Bramble.fdm_solve(a, F)
+            Bramble.fdm_solve(a, F; dirichlet = :boundary)
+        end
+    end
 end
 
 end # module BrambleKroneckerExt

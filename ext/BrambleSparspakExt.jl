@@ -1,9 +1,29 @@
 module BrambleSparspakExt
 
-using Bramble: Bramble, SparspakFactorization
+using Bramble:
+               Bramble,
+               SparspakFactorization,
+               sparspak_factorize,
+               sparspak_solve,
+               sparspak_refactor!,
+               sparse_factorize,
+               domain,
+               interval,
+               ×,
+               mesh,
+               gridspace,
+               element,
+               Rₕ,
+               form,
+               assemble,
+               inner₊,
+               ∇ₕ,
+               innerₕ,
+               boundary_symbols
 using Sparspak: Sparspak, sparspaklu, sparspaklu!
 using LinearAlgebra: LinearAlgebra, ldiv!
 using SparseArrays: SparseArrays, SparseMatrixCSC
+using PrecompileTools: @setup_workload, @compile_workload
 
 mutable struct ConcreteSparspakFactorization{T, LUT} <: SparspakFactorization{T}
     lu::LUT
@@ -95,6 +115,46 @@ end
 
 function LinearAlgebra.factorize(A::SparseMatrixCSC, ::Type{<:SparspakFactorization})
     return Bramble._sparspak_factorize(A)
+end
+
+# Warms this extension's Sparspak entry points -- `sparspak_factorize`, `sparspak_solve`,
+# `sparspak_refactor!`, and the two `ldiv!` methods above (one into a plain `Vector`, one into
+# a `VectorElement`, which needs its own disambiguating method) -- plus the core
+# `sparse_factorize` entry point routed to this backend, only reachable once `Sparspak` is
+# loaded so only this extension's own precompile pass reaches them. Sparspak always factors
+# as general unsymmetric LU (no `sym` keyword), so a single SPD system per dimension
+# exercises every call. Covers both 1D and 2D assembled systems since the `VectorElement`
+# type the second `ldiv!` method dispatches on depends on the mesh dimension. Added for
+# gpena/Bramble.jl#284.
+if Bramble.PRECOMPILE_WORKLOAD
+    @setup_workload begin
+        systems = map((1, 2)) do D
+            S = D == 1 ? interval(0.0, 1.0) : interval(0.0, 1.0) × interval(0.0, 1.0)
+            Ω = domain(S, :boundary => boundary_symbols(S))
+            Ωₕ = D == 1 ? mesh(Ω, 8, false) : mesh(Ω, (2, 2), (false, false))
+            Wₕ = gridspace(Ωₕ)
+            a_spd = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+            fₕ = Rₕ(Wₕ, x -> 1.0)
+            l = form(Wₕ, v -> innerₕ(fₕ, v))
+            A = assemble(a_spd)
+            F = assemble(l)
+            (; Wₕ, A, F)
+        end
+
+        @compile_workload begin
+            for sys in systems
+                x = zeros(length(sys.F))
+                uₕ = element(sys.Wₕ, 0.0)
+
+                fact = sparspak_factorize(sys.A)
+                ldiv!(x, fact, sys.F)
+                ldiv!(uₕ, fact, sys.F)
+                sparspak_refactor!(fact, sys.A)
+                sparspak_solve(sys.A, sys.F)
+                sparse_factorize(sys.A; solver = :sparspak)
+            end
+        end
+    end
 end
 
 end # module

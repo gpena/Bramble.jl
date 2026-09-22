@@ -172,5 +172,23 @@ function _pc_operator_session(uₕ, cₕ, dim_val::Val)
     kₕ = components(cₕ)[1]
     _pc_directional_ops(kₕ, dim_val)
     _pc_inner_products(kₕ, dim_val)
+
+    # Float64 only: the Float32 2D session below would otherwise rebuild the same
+    # Float64 mesh a second time for no extra coverage.
+    dim_val isa Val{2} && eltype(uₕ) === Float64 && _pc_strain_tensor_session()
+    return nothing
+end
+
+# εₕ/εₕ! dispatch on the field's grid space, which is keyed by the domain's marker names,
+# so it needs its own mesh rather than reusing uₕ/cₕ above: built small and standalone here
+# (gpena/Bramble.jl#283).
+function _pc_strain_tensor_session()
+    S = interval(0.0, 1.0) × interval(0.0, 1.0)
+    Ω = domain(S, :boundary => boundary_symbols(S))
+    Ωₕ = mesh(Ω, (2, 2), (false, false))
+    Vₕ = gridspace(Ωₕ, Val(2))
+    cₕ = element(Vₕ, 1.0)
+    E = εₕ(cₕ)
+    εₕ!(E, cₕ)
     return nothing
 end

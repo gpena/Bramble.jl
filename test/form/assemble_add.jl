@@ -247,6 +247,42 @@ _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
         @test F ≈ Fref
     end
 
+    # gpena/Bramble.jl#283: the explicit-scale, cached `assemble_add!(A, a, α)` /
+    # `assemble_add!(F, l, α)` path is inferred and allocates nothing on warm replay, 1D and
+    # 2D. `@inferred` reads no global binding here, so it stays in the barrier alongside the
+    # warm-up rather than being pulled out to top level.
+    @testset "Bilinear and linear: cached, explicit-scale path is inferred and allocation-free (#283)" begin
+        function _bilinear_scaled_alloc(A, a, α)
+            assemble_add!(A, a, α)             # cold: records
+            @inferred assemble_add!(A, a, α)
+            return _alloc(assemble_add!, A, a, α)
+        end
+
+        function _linear_scaled_alloc(F, l, α)
+            assemble_add!(F, l, α)             # cold: records
+            @inferred assemble_add!(F, l, α)
+            return _alloc(assemble_add!, F, l, α)
+        end
+
+        for (lbl, Ωₕ) in (
+            ("1D", mesh(domain(interval(0.0, 1.0)), 21, true)),
+            ("2D", mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 11), (true, true)))
+        )
+            @testset "$lbl" begin
+                Wₕ = gridspace(Ωₕ)
+                m_form = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
+                A = allocate_system_matrix(m_form)
+                fill!(nonzeros(A), 0.0)
+                @test _bilinear_scaled_alloc(A, m_form, 0.5) == 0
+
+                fₕ = Rₕ(Wₕ, x -> 1.0)
+                l_form = form(Wₕ, v -> innerₕ(fₕ, v))
+                F = zeros(ndofs(Wₕ))
+                @test _linear_scaled_alloc(F, l_form, 0.5) == 0
+            end
+        end
+    end
+
     @testset "Dirichlet interaction is left to the caller, not applied here" begin
         # assemble_add! never zeros or constrains rows -- accumulating twice doubles
         # every entry, exactly what a raw additive scatter should do; dirichlet_bc! is a

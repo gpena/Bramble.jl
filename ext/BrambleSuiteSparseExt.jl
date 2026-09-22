@@ -1,10 +1,32 @@
 module BrambleSuiteSparseExt
 
-using Bramble: Bramble, SuiteSparseFactorization
+using Bramble:
+               Bramble,
+               SuiteSparseFactorization,
+               suitesparse_factorize,
+               suitesparse_solve,
+               suitesparse_refactor!,
+               sparse_factorize,
+               refactor!,
+               pde_solve,
+               domain,
+               interval,
+               ×,
+               mesh,
+               gridspace,
+               element,
+               Rₕ,
+               form,
+               assemble,
+               inner₊,
+               ∇ₕ,
+               innerₕ,
+               boundary_symbols
 using SuiteSparse: SuiteSparse, CHOLMOD, UMFPACK
 using LinearAlgebra: LinearAlgebra, Factorization, ldiv!, issymmetric, Symmetric, cholesky, cholesky!, lu,
                      lu!, diag
 using SparseArrays: SparseArrays, SparseMatrixCSC
+using PrecompileTools: @setup_workload, @compile_workload
 
 mutable struct ConcreteSuiteSparseFactorization{T, FType <: Factorization} <: SuiteSparseFactorization{T}
     fact::FType
@@ -140,6 +162,51 @@ end
 
 function LinearAlgebra.factorize(A::SparseMatrixCSC, ::Type{<:SuiteSparseFactorization}; kwargs...)
     return Bramble._suitesparse_factorize(A; kwargs...)
+end
+
+# Warms this extension's SuiteSparse entry points -- `suitesparse_factorize`,
+# `suitesparse_solve`, `suitesparse_refactor!`, and the two `ldiv!` methods above (one into a
+# plain `Vector`, one into a `VectorElement`, which needs its own disambiguating method) --
+# plus the core `sparse_factorize`/`refactor!`/`pde_solve` entry points routed to this
+# backend, only reachable once `SuiteSparse` is loaded so only this extension's own
+# precompile pass reaches them. Covers both `:spd` (CHOLMOD) and `:unsymmetric` (UMFPACK)
+# factorizations, and both 1D and 2D assembled systems since the `VectorElement` type the
+# second `ldiv!` method dispatches on depends on the mesh dimension. Not named in
+# gpena/Bramble.jl#196; added for gpena/Bramble.jl#284.
+if Bramble.PRECOMPILE_WORKLOAD
+    @setup_workload begin
+        systems = map((1, 2)) do D
+            S = D == 1 ? interval(0.0, 1.0) : interval(0.0, 1.0) × interval(0.0, 1.0)
+            Ω = domain(S, :boundary => boundary_symbols(S))
+            Ωₕ = D == 1 ? mesh(Ω, 8, false) : mesh(Ω, (2, 2), (false, false))
+            Wₕ = gridspace(Ωₕ)
+            a_spd = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+            fₕ = Rₕ(Wₕ, x -> 1.0)
+            l = form(Wₕ, v -> innerₕ(fₕ, v))
+            A = assemble(a_spd)
+            F = assemble(l)
+            (; Wₕ, A, F)
+        end
+
+        @compile_workload begin
+            for sys in systems
+                x = zeros(length(sys.F))
+                uₕ = element(sys.Wₕ, 0.0)
+
+                for sym in (:spd, :unsymmetric)
+                    fact = suitesparse_factorize(sys.A; sym = sym)
+                    ldiv!(x, fact, sys.F)
+                    ldiv!(uₕ, fact, sys.F)
+                    suitesparse_refactor!(fact, sys.A)
+                    suitesparse_solve(sys.A, sys.F; sym = sym)
+                end
+
+                fs = sparse_factorize(sys.A)
+                refactor!(fs, sys.A)
+                pde_solve(sys.A, sys.F; solver = :suitesparse)
+            end
+        end
+    end
 end
 
 end # module

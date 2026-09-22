@@ -92,21 +92,21 @@ function _pc_mesh_session(Ω, npts, unif, be, label::Symbol)
 end
 
 # Mesh mutation is a separate pass so the queries above stay on a pristine mesh.
-function _pc_mesh_mutation(Ωₕ, dm)
+function _pc_mesh_mutation(Ωₕ::AbstractMeshType, dm)
     # The one-argument path is for a mesh with no custom labels to begin with; every
     # `Ωₕ` reaching this function carries `dm`'s own, so calling it directly would throw
-    # (correctly) rather than drop them on precompilation. Strip them first so this
-    # exercises the intended no-custom-labels case; the two-argument call right below
-    # already exercises the marked-mesh path. `MeshnD` carries labels twice: once on the
-    # multidimensional mesh itself, and once on each dimension's `Mesh1D` submesh, so both need
-    # clearing, not just the outer one.
-    bare = deepcopy(Ωₕ)
-    bare.markers = MeshMarkers()
-    if bare isa MeshnD
-        for sm in bare.submeshes
-            sm.markers = MeshMarkers()
-        end
-    end
+    # (correctly) rather than drop them on precompilation. Rebuild the mesh from scratch
+    # through the public constructor instead, over the same geometric set, sizes and
+    # uniformity: `mesh(X::CartesianProduct, ...)` provisions only the default
+    # `:boundary`/`:interior` markers, so this exercises the intended no-custom-labels
+    # case; the two-argument call right below already exercises the marked-mesh path.
+    D = dim(Ωₕ)
+    bare = mesh(
+        set(Ωₕ),
+        npoints(Ωₕ, Tuple),
+        ntuple(i -> is_uniform(Ωₕ(i)), D);
+        backend = backend(Ωₕ)
+    )
     iterative_refinement!(bare)
     iterative_refinement!(deepcopy(Ωₕ), dm)
     pts = points(Ωₕ)

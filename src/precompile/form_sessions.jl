@@ -371,6 +371,78 @@ function _pc_form_assembly(
     _pc_assemble_bilinear_composite(
         Vₕ, (u, v) -> inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + innerₕ(u(2), v(1))
     )
+
+    return nothing
+end
+
+# `assemble_add!`, `bandwidths`, `blockbandwidths`, `reaction` and `reaction_density`: each
+# is its own entry point over a real `BilinearForm`/`LinearForm`/`VectorElement`, not reached
+# by the bare AST/stencil construction above or by any `assemble`/`assemble!` shape already
+# warmed -- `assemble_add!` takes its own cached-record path with an explicit scale
+# (`_assemble_bilinear_core_cached!`/`_assemble_linear_core!` in src/form/assemble_add.jl),
+# `bandwidths`/`blockbandwidths` read the resolved AST without assembling, and `reaction`/
+# `reaction_density` walk the unconstrained residual through `leaf_spaces_offsets`
+# (gpena/Bramble.jl#283).
+#
+# Builds its own non-uniform mesh with a single `:boundary` marker covering the whole
+# boundary, rather than reusing the session's mesh/label: `markers(Ωₕ)` is a `NamedTuple`
+# keyed by label, so a caller whose domain names its boundary `:boundary` (one label) rather
+# than `:left`/`:right`/`:wall` (this file's other sessions) hits fresh method instances --
+# reusing `label`/`Ωₕ` from the caller left this cold even though the AST/stencil shapes
+# were already warm. The Laplacian/`innerₕ` shapes here match what a caller reaching for a
+# net-flux boundary quantity actually writes.
+# Split by dimension (rather than branching on `D` inside one method) so JET resolves each
+# call concretely instead of analysing both branches together against a single generic `D`:
+# a `Wₕ` inferred over the `Union` of the 1D/2D grid space types lets the union-split analysis
+# pair a 1D `TrialFunction` with a 2D `TestFunction` in the body below, which is never a call
+# either concrete session makes. `Val(1)`/`Val(2)` each build their own mesh and delegate to
+# the shared, dimension-agnostic body once `Wₕ` is concrete.
+function _pc_form_reaction(::Val{1})
+    S = interval(0.0, 1.0)
+    Ω = domain(S, :boundary => boundary_symbols(S))
+    Ωₕ = mesh(Ω, 8, false)
+    return _pc_form_reaction(gridspace(Ωₕ))
+end
+
+function _pc_form_reaction(::Val{2})
+    S = interval(0.0, 1.0) × interval(0.0, 1.0)
+    Ω = domain(S, :boundary => boundary_symbols(S))
+    Ωₕ = mesh(Ω, (8, 8), (false, false))
+    return _pc_form_reaction(gridspace(Ωₕ))
+end
+
+function _pc_form_reaction(Wₕ::ScalarGridSpace)
+    a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+    fₕ = Rₕ(Wₕ, x -> 1.0)
+    l = form(Wₕ, v -> innerₕ(fₕ, v))
+    A = assemble(a)
+    F = assemble(l)
+    uₕ = element(Wₕ, 1.0)
+
+    assemble_add!(A, a, 0.5)
+    assemble_add!(F, l, 0.5)
+    bandwidths(a)
+    blockbandwidths(a)
+    reaction(A, F, uₕ; marker = :boundary)
+    reaction_density(A, F, uₕ; marker = :boundary)
+
+    # The calls above are static -- the compiler sees the concrete types at the call site
+    # and can inline/constprop through them, so they warm the method *bodies* without
+    # necessarily caching a standalone method instance for the entry signature itself. A
+    # dynamically dispatched caller (a REPL session, or anything calling through a
+    # `Function` value) resolves that entry signature fresh and pays for it. `precompile`
+    # forces the standalone instance to exist, for the positional methods and for the
+    # `marker` keyword's `Core.kwcall` wrapper (`reaction`/`reaction_density` are
+    # keyword-only in `marker`).
+    nt = (; marker = :boundary)
+    precompile(assemble_add!, (typeof(A), typeof(a), typeof(0.5)))
+    precompile(assemble_add!, (typeof(F), typeof(l), typeof(0.5)))
+    precompile(bandwidths, (typeof(a),))
+    precompile(blockbandwidths, (typeof(a),))
+    precompile(Core.kwcall, (typeof(nt), typeof(reaction), typeof(A), typeof(F), typeof(uₕ)))
+    precompile(
+        Core.kwcall, (typeof(nt), typeof(reaction_density), typeof(A), typeof(F), typeof(uₕ))
+    )
     return nothing
 end
 
@@ -385,6 +457,7 @@ function _pc_form_session(
     _pc_form_blocks(Vₕ, dim_val)
     _pc_form_dirichlet(Ωₕ, Wₕ, Vₕ, be, label, f, ft, I_time)
     _pc_form_assembly(Ωₕ, Wₕ, Vₕ, label, f, dim_val)
+    _pc_form_reaction(dim_val)
 
     # the composite space reaches the same nodes through a different space type
     _pc_form_ast(Vₕ, dim_val)
