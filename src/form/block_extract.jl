@@ -89,6 +89,9 @@ function block_of(term, nblocks_trial::Int, nblocks_test::Int)
     sc = test_component_or_nothing(term)
 
     tc === nothing && sc === nothing && return nothing
+    # An unnamed side on a single-leaf space can only mean its one leaf.
+    tc === nothing && sc !== nothing && nblocks_trial == 1 && (tc = 1)
+    sc === nothing && tc !== nothing && nblocks_test == 1 && (sc = 1)
     (tc === nothing || sc === nothing) && _throw_half_named_block(tc, sc)
 
     1 <= tc <= nblocks_trial || _throw_block_out_of_range("trial", tc, nblocks_trial)
