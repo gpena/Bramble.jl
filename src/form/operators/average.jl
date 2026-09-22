@@ -24,6 +24,16 @@ struct ForwardAverage{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
 end
 
 """
+    CenteredAverage{D,Dim,OpType<:LazyOp{D}} <: LazyOp{D}
+
+An AST node representing the centered spatial averaging operator acting in dimension `Dim`,
+``(u_{i-1} + 2 u_{i} + u_{i+1})/4``, zero on both end slices of `Dim`.
+"""
+struct CenteredAverage{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
+    inner_op::OpType
+end
+
+"""
     ShiftNode{D,Dim,OpType<:LazyOp{D}} <: LazyOp{D}
 
 An AST node representing a stencil shift operation by `shift_amount` grid points in dimension `Dim`.
@@ -61,6 +71,17 @@ end
     dispatch_alias=M₊ₕ,
     vectorial_alias=M₊ₕ)
 
+@node_family(node=CenteredAverage,
+    stem=Mc,
+    what="centered spatial average",
+    dispatch_alias=Mcₕ,
+    vectorial_alias=Mcₕ)
+
+# The space-layer `Mcₕ(uₕ, d)` takes the direction as an `Int`, and the forms in
+# gpena/Bramble.jl#287 are written the same way, so the node takes one too. The `Val` it
+# builds is decided at runtime; this runs once per form construction, not per entry.
+@inline Mcₕ(op::LazyOp{D}, d::Int) where {D} = Mcₕ(op, Val(d))
+
 """
     shift_op(op::LazyOp{D}, dim::Int, amount::Int) where D
 
@@ -77,6 +98,7 @@ end
 # Both taps of an average carry the same weight, so the mask is the whole coefficient.
 @inline _stencil_taps(::BackwardAverage) = (Val(0), Val(-1))
 @inline _stencil_taps(::ForwardAverage) = (Val(1), Val(0))
+@inline _stencil_taps(::CenteredAverage) = (Val(1), Val(0), Val(-1))
 
 @inline function _stencil_weights(
         op::BackwardAverage{D, Dim}, space, I::CartesianIndex{D}
@@ -92,6 +114,15 @@ end
     T = eltype(space)
     mask = I[Dim] == npoints(mesh(space), Tuple)[Dim] ? zero(T) : T(1) / 2
     return (mask, mask)
+end
+
+@inline function _stencil_weights(
+        op::CenteredAverage{D, Dim}, space, I::CartesianIndex{D}
+) where {D, Dim}
+    T = eltype(space)
+    edge = I[Dim] == 1 || I[Dim] == npoints(mesh(space), Tuple)[Dim]
+    q = edge ? zero(T) : T(1) / 4
+    return (q, 2q, q)
 end
 
 @inline function local_stencil(
@@ -155,12 +186,13 @@ end
 """
     AverageNode{D, Dim}
 
-Either average node over a `D`-dimensional space, averaging along `Dim`.
+Any average node over a `D`-dimensional space, averaging along `Dim`.
 
-The pair carries the same parameters and differs only in which neighbour it reaches, so
+The three carry the same parameters and differ only in which neighbour it reaches, so
 anything reading the direction rather than choosing a stencil is written against this alias.
 """
-const AverageNode{D, Dim} = Union{BackwardAverage{D, Dim}, ForwardAverage{D, Dim}}
+const AverageNode{D, Dim} = Union{
+    BackwardAverage{D, Dim}, ForwardAverage{D, Dim}, CenteredAverage{D, Dim}}
 
 function resolve_ast(op::ShiftNode{D, Dim}) where {D, Dim}
     return ShiftNode{D, Dim, typeof(resolve_ast(op.inner_op))}(
@@ -183,6 +215,7 @@ end
 
 expression(op::BackwardAverage{D, Dim}) where {D, Dim} = "M$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
 expression(op::ForwardAverage{D, Dim}) where {D, Dim} = "M₊$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
+expression(op::CenteredAverage{D, Dim}) where {D, Dim} = "Mc$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
 function expression(op::ShiftNode{D, Dim}) where {D, Dim}
     "shift($(expression(op.inner_op)), $(_BRAMBLE_var2symbol[Dim]), $(op.shift_amount))"
 end
