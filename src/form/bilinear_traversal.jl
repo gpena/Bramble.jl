@@ -26,8 +26,8 @@ scan of the column when it holds few entries, a binary search otherwise -- both 
 bounds is "stored" for a dense backend, at `LinearIndices(A)[row, col]`.
 """
 @inline function _scatter_position(A::SparseMatrixCSC, row::Int, col::Int)
-    p1 = A.colptr[col]
-    p2 = A.colptr[col + 1] - 1
+    p1 = @inbounds A.colptr[col]
+    p2 = @inbounds A.colptr[col + 1] - 1
 
     if (p2 - p1) < 32
         idx = p1
@@ -1087,7 +1087,7 @@ instead of a stored position per entry.
 Paired with an ordinary [`ReplaySink`](@ref) for the boundary shell through the two-sink
 form of [`visit_bilinear_stencil`](@ref): this sink is only ever handed the interior region,
 so `_sink_point!` addresses a point by its rank `n` in `interior`'s own iteration order
-(zero-based, via `_interior_rank`) rather than by `lin_idx`, matching the order
+(zero-based, via an incrementing counter on the sink itself) rather than by `lin_idx`, matching the order
 `_record_segment!` validated the stride against. The `k`-th tap of that point
 (`1`-based, `k in 1:P`) then lands at `base[k] + stride[k] * n`, recovered from the running
 `slot` the shared walk already threads (`slot = n * P + (k - 1)`), so no per-entry lookup
@@ -1105,39 +1105,26 @@ mutable struct DiagonalReplaySink{M <: AbstractMatrix, D, R, S}
     n::Int
 end
 function DiagonalReplaySink(A, interior, base, stride, P, α)
-    return DiagonalReplaySink(A, interior, base, stride, P, α, 0)
+    return DiagonalReplaySink(A, interior, base, stride, P, α, -1)
 end
 
-# `interior`'s axes are `_interior_range`'s output -- typically not 1-based (a margin-1
-# interior on a `OneTo(n)` grid starts at 2) -- so `LinearIndices(interior)` cannot be used
-# directly: it normalizes to a 1-based range over the same *length*, not the same *values*,
-# and indexing it with `I` unchanged throws (or silently answers a different point). This
-# computes the 0-based rank `I` holds in `interior`'s own column-major iteration order --
-# first axis fastest, exactly how `for I in interior` visits it -- from first principles.
+# `interior::CartesianIndices{D,R}` on the struct names *both* type parameters deliberately:
+# `CartesianIndices{D}` alone is still a `UnionAll` over the ranges-tuple type `R`, not a
+# concrete type, and a struct field declared that way is stored boxed -- this is what made
+# every `DiagonalReplaySink`/`Segment` built from it allocate (measured 144-384 B per replay
+# before this was named).
 #
-# `CartesianIndices{D,R}` names *both* type parameters deliberately: `CartesianIndices{D}`
-# alone is still a `UnionAll` over the ranges-tuple type `R`, not a concrete type, and a
-# struct field or argument declared that way is stored boxed -- this is what made every
-# `DiagonalReplaySink`/`Segment` built from it allocate (measured 144-384 B per
-# replay before this was named).
-@inline function _interior_rank(
-        interior::CartesianIndices{D, R}, I::CartesianIndex{D}
-) where {D, R}
-    ax = interior.indices
-    n = 0
-    stride = 1
-    @inbounds for d in 1:D
-        n += (I[d] - first(ax[d])) * stride
-        stride *= length(ax[d])
-    end
-    return n
-end
-
+# `_sink_point!` no longer derives a point's rank from `I` at all (that used to be
+# `_interior_rank`, an O(D) recompute of `interior`'s per-axis strides on every call,
+# gpena/Bramble.jl#290): `_visit_interior!` (above) always walks this same `interior` in the
+# same column-major order (`for I in interior`), and a fresh sink is built once per
+# `_replay_segment!` call with no concurrent access, so the rank a point gets is simply its
+# 0-based position in that walk -- an incrementing counter on the sink, starting at `-1` so
+# the first call lands on `0`.
 @inline _sink_needs_coordinates(::DiagonalReplaySink) = false
-@inline function _sink_point!(sink::DiagonalReplaySink, ::Int, I::CartesianIndex)
-    n = _interior_rank(sink.interior, I)
-    sink.n = n
-    return n * sink.P
+@inline function _sink_point!(sink::DiagonalReplaySink, ::Int, ::CartesianIndex)
+    sink.n += 1
+    return sink.n * sink.P
 end
 Base.@propagate_inbounds function _sink_entry!(
         sink::DiagonalReplaySink, ::Int, ::Int, weight, slot::Int
