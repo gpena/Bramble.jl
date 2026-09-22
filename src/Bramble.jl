@@ -254,7 +254,7 @@ public M₊ₓ, M₊ᵧ, M₊₂, M₊ₕ
 public M₊ₓ!, M₊ᵧ!, M₊₂!
 
 export dirichlet_constraints, dirichlet_bc!, symmetrize!
-export reaction, reaction_density
+export reaction, reaction_density, reaction!, reaction_density!
 export form, assemble, assemble!, assemble_parallel!, allocate_system_matrix, evaluate!
 export is_separable, kronecker_operator, KroneckerLinearOperator
 # `bandwidths`/`blockbandwidths` (gpena/Bramble.jl#175): the lower/upper (block) bandwidth a
