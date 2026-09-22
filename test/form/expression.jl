@@ -115,6 +115,6 @@ using Bramble: restrict_to, dirac
     end
 end
 
-println("OK-S1.7")
+# println("OK-S1.7")
 
 end # module FormExpressionTests

@@ -16,15 +16,19 @@ using Meshes, MakieCore
 # `using Bramble, Meshes` together makes bare `×`/`mesh`/`domain` ambiguous (both packages
 # export names by these spellings).
 
+_viz_silent(x; kwargs...) = redirect_stdout(devnull) do
+    return Meshes.viz(x; kwargs...)
+end
+
 @testset "BrambleMeshesExt" begin
     @testset "2D CartesianProduct" begin
         S2 = Bramble.box((0.0, 0.0), (1.0, 2.0))
-        @test (Meshes.viz(S2); true)   # runs the Box conversion without throwing
+        @test (_viz_silent(S2); true)   # runs the Box conversion without throwing
     end
 
     @testset "3D CartesianProduct" begin
         S3 = Bramble.box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))
-        @test (Meshes.viz(S3); true)
+        @test (_viz_silent(S3); true)
     end
 
     @testset "1D CartesianProduct: no override, asserts" begin
@@ -38,7 +42,7 @@ using Meshes, MakieCore
         Ω2 = Bramble.mesh(
             Bramble.domain(Bramble.box((0.0, 0.0), (1.0, 2.0))), (4, 5), (true, true)
         )
-        @test (Meshes.viz(Ω2); true)   # RectilinearGrid conversion from the mesh's points
+        @test (_viz_silent(Ω2); true)   # RectilinearGrid conversion from the mesh's points
     end
 
     @testset "3D MeshnD" begin
@@ -47,7 +51,7 @@ using Meshes, MakieCore
             (3, 3, 3),
             (true, true, true)
         )
-        @test (Meshes.viz(Ω3); true)
+        @test (_viz_silent(Ω3); true)
     end
 
     @testset "1D Mesh1D: logs, does not throw" begin

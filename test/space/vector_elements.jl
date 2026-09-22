@@ -631,11 +631,11 @@ end
             be_parallel = backend(policy = Parallel())
             small = avg_bytes_direct(be_parallel, 32)
             large = avg_bytes_direct(be_parallel, 1024)
-            let per_point = (large - small) / (1_048_576 - 1_024)
-                @info "avgₕ! Parallel() allocation diagnostic: " *
-                      "small=$small large=$large per_point=$per_point " *
-                      "nthreads=$(Threads.nthreads())"
-            end
+            # let per_point = (large - small) / (1_048_576 - 1_024)
+            #     @info "avgₕ! Parallel() allocation diagnostic: " *
+            #           "small=$small large=$large per_point=$per_point " *
+            #           "nthreads=$(Threads.nthreads())"
+            # end
             @test large < 4 * small + 1     # +1 guards small == 0
             @test large < 100_000           # proportional (176 B/point) would be ~184 MB
         end

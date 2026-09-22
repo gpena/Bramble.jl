@@ -363,7 +363,7 @@ using ..TestUtils: alloc_test, @test_allocs
         # JULIA_NUM_THREADS=auto, so it is exercised there. The concurrent assertions below
         # are skipped rather than passed when only one thread is available, so a
         # single-threaded run cannot claim to have tested concurrency.
-        @info "parallel assembly tested on $(Threads.nthreads()) thread(s)"
+        # @info "parallel assembly tested on $(Threads.nthreads()) thread(s)"
 
         @testset "Sweep colouring" begin
             # Two points of one colour must have disjoint write footprints, so the stride is

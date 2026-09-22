@@ -673,15 +673,20 @@ host actually has the accelerator's hardware and drivers -- it degrades graceful
 rather than erroring. `ext/BrambleMetalExt.jl` overrides this for `Val(:metal)` with
 `Metal.functional()`, the one call that actually probes the device
 (gpena/Bramble.jl#192). [`gpu_backend`](@ref) requires both this and the extension being
-loaded before handing back a backend, so a loaded-but-broken GPU package is refused here
-rather than failing on first use.
-
 Declared with the generic `::Val` signature (rather than `::Val{:metal}` itself) so that
 `BrambleMetalExt`'s own `Val(:metal)` method is strictly more specific than this stub --
 otherwise the extension's method would silently overwrite this one instead of adding to
 it, which precompilation reports as method overwriting.
 """
-_gpu_functional(::Val) = false
+# Test/mock hook: when set to a Bool, overrides _gpu_functional for testing device failure
+# without method overwriting (which emits compiler warnings).
+const _gpu_functional_override = Ref{Union{Nothing, Bool}}(nothing)
+
+function _gpu_functional(::Val)
+    override = _gpu_functional_override[]
+    override !== nothing && return override
+    return false
+end
 
 """
     gpu_backend(::Type{T} = Float32; policy::ExecutionPolicy = GpuAsync()) -> Backend

@@ -64,7 +64,11 @@ Bramble.locality(::Type{<:MtlMatrix}) = Bramble.DeviceLocality()
 # More specific than the `::Val` stub in `src/utils/backend.jl` (this one matches only
 # `Val(:metal)`), so this is an added method, not an overwrite of the stub.
 
-Bramble._gpu_functional(::Val{:metal}) = Metal.functional()
+function Bramble._gpu_functional(::Val{:metal})
+    override = Bramble._gpu_functional_override[]
+    override !== nothing && return override
+    return Metal.functional()
+end
 
 # ---------------------------------------------------------------------------
 # vector / matrix allocation — GPU-side construction

@@ -574,7 +574,7 @@ end
     # 4. gpu_backend() refuses a loaded-but-non-functional extension (gpena/Bramble.jl#192,
     #    S1.4), with a diagnostic distinct from the no-extension one. This host has a
     #    functional Metal device (checked below), so Metal.functional() cannot be made to
-    #    answer false for real; `Bramble._gpu_functional(::Val{:metal})` is redefined to
+    #    answer false for real; `Bramble._gpu_functional_override[]` is set to
     #    `false` for the duration of one call and restored immediately after, in a
     #    try/finally so a failing @test still leaves the predicate correct for every test
     #    that follows.
@@ -597,11 +597,10 @@ end
             end
 
             @testset "refuses a loaded but non-functional extension" begin
-                # `Bramble` itself never imports `Metal` (only `BrambleMetalExt` does), so the
-                # restored method below closes over a plain `Bool` rather than re-calling
-                # `Metal.functional()` from a module that cannot see `Metal` at all.
+                # `Bramble` provides `_gpu_functional_override` so tests can simulate a loaded
+                # but non-functional GPU device without dynamically overwriting methods via `@eval`.
                 really_functional = Metal.functional()
-                @eval Bramble _gpu_functional(::Val{:metal}) = false
+                Bramble._gpu_functional_override[] = false
                 try
                     err = try
                         gpu_backend()
@@ -616,7 +615,7 @@ end
                     # distinct from the no-extension diagnostic's own wording
                     @test !occursin("no loaded GPU extension", msg)
                 finally
-                    @eval Bramble _gpu_functional(::Val{:metal}) = $really_functional
+                    Bramble._gpu_functional_override[] = nothing
                 end
                 # the predicate is back to reflecting reality
                 @test Bramble._gpu_functional(Val(:metal)) === really_functional

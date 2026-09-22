@@ -172,7 +172,7 @@ end
 end
 
 @testset "Parallel vs serial agreement" begin
-    @info "interpolation composition tested on $(Threads.nthreads()) thread(s)"
+    # @info "interpolation composition tested on $(Threads.nthreads()) thread(s)"
 
     Ωbig = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (10, 10), (true, true))
     Ωsmall = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (5, 5), (true, true))

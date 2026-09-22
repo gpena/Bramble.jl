@@ -187,7 +187,7 @@ end
         field_val = Data.Floats{Float64}(;
             minimum = -100.0, maximum = 100.0, nans = false, infs = false
         )
-        holds(lhs, rhs) = lhs <= rhs * (1 + 1e-10) + 1e-12
+        #holds(lhs, rhs) = lhs <= rhs * (1 + 1e-10) + 1e-12
 
         # 1D carries both inequalities, which is where the L^∞ one is stated.
         @check function check_poincare_1d(

@@ -60,8 +60,10 @@ if Bramble.PRECOMPILE_WORKLOAD
         Ωₕ = mesh(domain(X), (4, 4), (true, true))
 
         @compile_workload begin
-            Meshes.viz(X)
-            Meshes.viz(Ωₕ)
+            redirect_stdout(devnull) do
+                Meshes.viz(X)
+                Meshes.viz(Ωₕ)
+            end
         end
     end
 end
