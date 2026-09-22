@@ -422,7 +422,11 @@ const norm∞ₕ = norminf_h
 # `CartesianIndex` first. Measured on a 100³ grid
 # (`.agents/plans/v3-3-0-memory-scaling-notes.md` §2.3): the Cartesian loop here costs
 # ≈2.4x a dense `_dot`; the same reduction through the linear `getindex` fallback costs
-# ≈4.9x -- the gap this specialization exists to avoid.
+# ≈4.9x -- the gap this specialization exists to avoid. Re-measured for gpena/Bramble.jl#273:
+# ≈2.4-2.5x holds (docs/src/internals/space.md once reported 4.81-4.90x for this same loop;
+# that figure did not reproduce and has been corrected there to match). `@simd` on the loop
+# below was tried and reverted -- it changes the reduction at the bit level on a
+# deterministic-seed mesh (floating-point reassociation), not merely a speed/no-op change.
 #
 # No separate `CpuBatch` override is needed here: `inner₊(uₕ, vₕ, Val(S))` calls the
 # policy-dispatched `_dot`/`_dot_masked(policy, u, v, w[, mask])` (S7.1,

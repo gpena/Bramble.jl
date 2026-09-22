@@ -154,6 +154,23 @@ annotation. The load and power state moved during this session (above), so a sec
 contributor cannot be ruled out; both figures are reported rather than one silently
 preferred, per `bramble-verification`.
 
+**Reconciled for gpena/Bramble.jl#273** (2026-09-22, Julia 1.13.0, this machine,
+`--threads=4`, battery power at 76-77%, load average ~2.2 on 8 cores -- not the quiet
+machine `bramble-verification` asks for, but the same caveat the paragraph above already
+carries): re-running the exact 100³/`weights(Wₕ, Val((1,2)))` case from this page's own
+`CHECK` script, `_dot` against that `SeparableWeights` versus the same weights `collect`ed
+to a dense vector, `@belapsed`, four independent process runs gave 2.43-2.49x -- not the
+4.81-4.90x above, but squarely the ≈2.4x the source comment
+(`src/space/inner_product.jl:415-434`) and the ≈2.475x S6.3 recorded for this same
+specialization. The loop is unchanged (`@simd` was tried and reverted: on a
+deterministic-seed mesh it changes the reduction at the bit level, not only its speed, so
+it fails the correctness bar this figure is measured under). Nothing else moved either --
+same specialization, same `@which` dispatch, same missing `@simd`. The likeliest
+explanation is the one this section already named for the earlier run: its own mixed
+battery/AC/competing-language-server state, not a property of the code. **2.4-2.5x is the
+number both locations now report**; the 4.81-4.90x above is kept for the historical record
+but is superseded.
+
 One `assemble!` refill of `innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))` on the uniform `60³` mesh
 S6.2 used (`ndofs = 216,000`, `nnz(A) = 1,490,400`), warmed up, minimum of 5, at 4
 threads (this repository's standard, `bramble-benchmarks` §1):
@@ -180,7 +197,7 @@ tens of megabytes, and completes in well under a microsecond on a `10^6`-point m
 
 ### Why the trade is worth taking
 
-Eliminating the last `O(n^D)` storage costs roughly a 3.7-4.9x slower `innerₕ`/`inner₊`
+Eliminating the last `O(n^D)` storage costs roughly a 3.6-3.8x slower `innerₕ`/`inner₊`
 whole-vector reduction, against weights that no longer scale with the grid at all: 5,288
 B instead of 32,005,288 B on `100³`, a figure that would only have grown had the `2^D`
 staggered family S6.3/S6.4 added stayed dense alongside it. The one path that matters for
@@ -193,7 +210,7 @@ at a frequency comparable to `assemble!` itself, on a grid small enough that the
 dense storage was still affordable. A Krylov solver checking a residual norm once per
 outer iteration does not qualify -- that is `O(1)` calls per solve, not one per assembled
 point -- but a method recomputing `normₕ` on every inner-loop pass over a grid well under
-`100³` would pay the 3.7-4.9x penalty often enough to matter, with nothing to show for it
+`100³` would pay the 3.6-3.8x penalty often enough to matter, with nothing to show for it
 in memory saved.
 
 ### Adding a new weight consumer
