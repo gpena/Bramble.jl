@@ -127,3 +127,13 @@ end
 
 @inline _normal_term(w, left::LazyOp, right::LazyOp) = _product(w, left, right)
 @inline _normal_term(w, left, right::LazyOp) = _linear_source(w, left, right)
+
+# --- Expression rendering (gpena/Bramble.jl#274) ----------------------------------- #
+
+# `_inner_name` (src/form/operators/inner.jl, S1.3) gets its `InnerGammaNormal` case here --
+# no forward declaration needed, only consistent naming. Named after `InnerGamma`'s own
+# `"inner_Γ"` (both are surface integrals) plus the directional subscript
+# `InnerPlus{Dim}`/`_inner_name` already appends for its own directional weight, since this
+# type's docstring calls itself "the directional counterpart of InnerGamma": the subscript is
+# what distinguishes a term carrying one signed transverse measure from the lumped one.
+_inner_name(::InnerGammaNormal{MASK, DIM}) where {MASK, DIM} = "inner_Γ" * _BRAMBLE_var2symbol[DIM]

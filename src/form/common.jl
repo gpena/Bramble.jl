@@ -203,6 +203,24 @@ struct SourceConstant{D, T} <: LazyOp{D}
     value::T
 end
 
+# --- Display ----------------------------------------------------------------------- #
+
+expression(::TrialFunction) = "u"
+expression(::TestFunction) = "v"
+expression(op::IndexedTrialFunction) = "u($(op.component_idx))"
+expression(op::IndexedTestFunction) = "v($(op.component_idx))"
+
+# Anonymous closures get compiler-generated names like `#3` -- fall back to the placeholder.
+function expression(op::SourceFunction)
+    name = string(nameof(op.func))
+    return startswith(name, "#") ? "f" : name
+end
+
+# No name to recover for a bare vector -- always the placeholder.
+expression(op::SourceVector) = "vec"
+
+expression(op::SourceConstant) = _format_scalar(op.value)
+
 """
     AbsoluteColumn
 

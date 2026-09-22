@@ -404,6 +404,7 @@ assembled system. See the [forms tutorial](tutorials/form.md).
 
 ```@docs
 form
+expression
 ```
 
 ### Point (Dirac) sources

@@ -44,3 +44,9 @@ end
     reach = I[Dim] == npoints(mesh(space), Tuple)[Dim] ? 0 : 1
     return (reach, -1)
 end
+
+# ==============================================================================
+# Expression rendering (gpena/Bramble.jl#274)
+# ==============================================================================
+
+expression(op::JumpNode{D, Dim}) where {D, Dim} = "jump$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"

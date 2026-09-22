@@ -212,9 +212,10 @@ end
 #
 # Both form types fell through to Julia's default `show`, which printed the whole resolved
 # AST type -- every operator node and its parameters -- ahead of the spaces, which are
-# what a caller actually wants to check. The integrand is deliberately *not* rendered
-# here: reconstructing it from the AST would need a name for every node type, kept in step
-# with each one added, to restate an expression the caller just wrote.
+# what a caller actually wants to check. The detailed `show` below reports the spaces first,
+# then an `Expression` row rendered via `expression(form)`. That rendering logic itself
+# lives in `src/form/expression.jl`, with the per-node-type methods colocated with each
+# node's struct.
 #
 # Lives in this file rather than `linear.jl`/`bilinear.jl` because `issymmetric` below is
 # what the detailed bilinear block reports, and it is defined here.
@@ -238,7 +239,8 @@ function Base.show(io::IO, ::MIME"text/plain", l::LinearForm{D}) where {D}
 
         pp_indented = with_indent(pp, 1)
         print_key_value(pp_indented, "Test space", sprint(show, Vₕ); separator = ": ")
-        return print_key_value(pp_indented, "Vector", string(ndofs(Vₕ)); separator = ": ")
+        print_key_value(pp_indented, "Vector", string(ndofs(Vₕ)); separator = ": ")
+        return print_key_value(pp_indented, "Expression", expression(l); separator = ": ")
     end
 end
 
@@ -275,8 +277,9 @@ function Base.show(io::IO, ::MIME"text/plain", a::BilinearForm{D}) where {D}
         print_key_value(
             pp_indented, "Matrix", "$(ndofs(Vₕ)) × $(ndofs(Uₕ))"; separator = ": "
         )
-        return print_key_value(
+        print_key_value(
             pp_indented, "Symmetric", issymmetric(a) ? "yes" : "no"; separator = ": "
         )
+        return print_key_value(pp_indented, "Expression", expression(a); separator = ": ")
     end
 end

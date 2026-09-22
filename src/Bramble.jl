@@ -256,6 +256,7 @@ public M₊ₓ!, M₊ᵧ!, M₊₂!
 export dirichlet_constraints, dirichlet_bc!, symmetrize!
 export reaction, reaction_density, reaction!, reaction_density!
 export form, assemble, assemble!, assemble_parallel!, allocate_system_matrix, evaluate!
+export expression
 export is_separable, kronecker_operator, KroneckerLinearOperator
 # `bandwidths`/`blockbandwidths` (gpena/Bramble.jl#175): the lower/upper (block) bandwidth a
 # form's matrix occupies, read from the resolved AST alone. Their only caller was the banded
@@ -431,6 +432,7 @@ include("space/inner_product.jl")
 
 include("form/ast.jl")
 include("form/common.jl")
+include("form/expression.jl")
 include("form/operators/node_family.jl")
 include("form/operators/difference.jl")
 include("form/operators/jump.jl")

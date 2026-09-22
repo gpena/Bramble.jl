@@ -266,6 +266,9 @@ is_symbolic(op::OperatorAdd) = is_symbolic(op.left_op) || is_symbolic(op.right_o
 show(io::IO, ::IdentityOperator) = print(io, "I")
 show(io::IO, ::ZeroOperator) = print(io, "0")
 
+# Debugging-level render, not tuned for large point clouds.
+expression(op::DiracSource) = "dirac($(string(op.points)), $(string(op.strengths)))"
+
 # --- Algebra ----------------------------------------------------------------------- #
 
 @inline Base.:+(op1::LazyOp{D}, op2::LazyOp{D}) where {D} = OperatorAdd(op1, op2)

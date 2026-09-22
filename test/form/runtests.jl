@@ -51,6 +51,7 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
     # group.
     include("bandwidth.jl")
     include("kronecker.jl")
+    include("expression.jl")
     # Composite trial/test functions through the symbolic `∇ₕ`/`εₕ`/`divₕ` builders (S6.5).
     # Behind `slow`: its hand-expanded comparison functions (`hand_strain`, in particular)
     # branch on `i == j` to return structurally different `LazyOp` subtrees, so Julia infers

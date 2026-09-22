@@ -91,3 +91,11 @@ function _bind_interp_spaces(
     inner = _bind_interp_spaces(op.inner_op, trial_leaf, test_leaf)
     return RegionRestriction{D, RegionType, typeof(inner)}(op.region, inner)
 end
+
+# --- Expression rendering (gpena/Bramble.jl#274) ----------------------------------- #
+
+# `repr` rather than plain string interpolation: `"$(:boundary)"` prints `boundary`, dropping
+# the leading colon, while `repr(:boundary)` prints `:boundary`, which is what a caller wrote
+# and what the CHECK below expects. `repr` on the tuple form (`(:bottom, :left)`) keeps the
+# colon on every element too, so one call covers both `RegionType`s this node is built with.
+expression(op::RegionRestriction) = "Rₕ($(repr(op.region)), $(expression(op.inner_op)))"

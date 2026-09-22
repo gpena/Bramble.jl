@@ -897,3 +897,30 @@ all. Aqua's ambiguity check is what caught it.
 ) where {M}
     throw(ArgumentError("inner₊ needs at least one component; got two empty tuples"))
 end
+
+# ==============================================================================
+# Expression rendering (gpena/Bramble.jl#274)
+# ==============================================================================
+
+# One name per weight type. `InnerGammaNormal` (normal.jl, a different subplan) adds its own
+# method to this same generic function -- no forward declaration needed.
+_inner_name(::InnerH) = "innerₕ"
+_inner_name(::InnerPlus{Dim}) where {Dim} = "inner₊" * _BRAMBLE_var2symbol[Dim]
+_inner_name(::InnerPlusSet{S}) where {S} = "inner₊"
+_inner_name(::InnerGamma{MASK}) where {MASK} = "inner_Γ"
+
+# Shared by BilinearProduct/LinearProduct below. `InnerPlusSet` additionally names its
+# direction set as a third argument; every other weight renders as a plain two-argument call.
+function _product_expression(inner::AbstractInnerProduct, left, right)
+    "$(_inner_name(inner))($(expression(left)), $(expression(right)))"
+end
+function _product_expression(inner::InnerPlusSet{S}, left, right) where {S}
+    "$(_inner_name(inner))($(expression(left)), $(expression(right)), $(S))"
+end
+
+function expression(op::BilinearProduct{D, InnerType}) where {D, InnerType}
+    _product_expression(InnerType(), op.left_op, op.right_op)
+end
+function expression(op::LinearProduct{D, InnerType}) where {D, InnerType}
+    _product_expression(InnerType(), op.left_op, op.right_op)
+end

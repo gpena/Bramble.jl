@@ -482,3 +482,15 @@ end
         end
     )
 end
+
+# ==============================================================================
+# Expression rendering (gpena/Bramble.jl#274)
+# ==============================================================================
+
+expression(op::BackwardDifference{D, Dim}) where {D, Dim} = "D₋$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
+expression(op::ForwardDifference{D, Dim}) where {D, Dim} = "D₊$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
+expression(op::CenteredDifference{D, Dim}) where {D, Dim} = "Dc$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
+expression(op::StarDifference{D, Dim}) where {D, Dim} = "D̽$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
+function expression(op::CrossWeightedDifference{D, Dim}) where {D, Dim}
+    "Dₕ$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
+end

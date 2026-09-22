@@ -176,3 +176,13 @@ function _bind_interp_spaces(
     inner = _bind_interp_spaces(op.inner_op, trial_leaf, test_leaf)
     return ShiftNode{D, Dim, typeof(inner)}(op.shift_amount, inner)
 end
+
+# ==============================================================================
+# Expression rendering (gpena/Bramble.jl#274)
+# ==============================================================================
+
+expression(op::BackwardAverage{D, Dim}) where {D, Dim} = "M$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
+expression(op::ForwardAverage{D, Dim}) where {D, Dim} = "M₊$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
+function expression(op::ShiftNode{D, Dim}) where {D, Dim}
+    "shift($(expression(op.inner_op)), $(_BRAMBLE_var2symbol[Dim]), $(op.shift_amount))"
+end
