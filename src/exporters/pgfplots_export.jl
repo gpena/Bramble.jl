@@ -106,7 +106,11 @@ function export_pgfplots(filename::AbstractString, Ωₕ::AbstractMeshType{1}, f
     open(out, "w") do io
         println(io, join(("x", names...), ' '))
         for i in 1:n
-            println(io, join((x[i], (c[i] for c in cols)...), ' '))
+            print(io, x[i])
+            for col in cols
+                print(io, ' ', col[i])
+            end
+            println(io)
         end
     end
     return out

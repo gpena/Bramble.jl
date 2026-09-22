@@ -17,6 +17,16 @@ using SparseArrays
 using SparseMatricesCSR
 using LinearAlgebra: issymmetric, I
 
+# S3 (gpena/Bramble.jl#275, `docs/src/internals/csr_solvers.md`): the `sparse_factorize`/
+# `pde_solve`/`refactor!` CSC-conversion fallback for `SparseMatrixCSR`. `refactor_contract`
+# is the one shared contract that takes its Poisson system `p` as an argument rather than
+# building it internally (`poisson_system` always uses the default CSC backend), so it is
+# directly reusable against a CSR-built `p` below; `poisson_solve_contract` is not (its
+# `solve`/`solve_form` closures would still only ever see the CSC systems `poisson_system`
+# builds), so the 1D/2D/3D unified-dispatcher checks it would otherwise cover are written out
+# by hand against CSR-built systems instead.
+using ..ExtSolverContracts: refactor_contract
+
 const ZERO_BC = :dir => (x -> 0.0)
 
 _unit_cube(::Val{D}) where {D} = reduce(×, ntuple(_ -> interval(0.0, 1.0), Val(D)))
@@ -49,6 +59,15 @@ function _poisson_pair(dim::Val{D}, n::Integer; source = _sine_source(dim)) wher
     ac, lc = build(Wc)
     ar, lr = build(Wr)
     return (; Wc = Wc, Wr = Wr, ac = ac, lc = lc, ar = ar, lr = lr)
+end
+
+# The CSR half of `_poisson_pair`, assembled with Dirichlet data and symmetrized, in the
+# `(; Wₕ, a, l, A, F, u_ref)` shape `SolverContracts.poisson_system` returns -- what
+# `refactor_contract` expects as its `p` argument.
+function _csr_poisson_system(dim::Val{D}, n::Integer; source = _sine_source(dim)) where {D}
+    pair = _poisson_pair(dim, n; source = source)
+    A, F = assemble(pair.ar, pair.lr; dirichlet = ZERO_BC, symmetrize = true)
+    return (; Wₕ = pair.Wr, a = pair.ar, l = pair.lr, A = A, F = F, u_ref = A \ F)
 end
 
 @testset "SparseMatricesCSR extension" begin
@@ -190,6 +209,47 @@ end
         if Threads.nthreads() > 1
             @test isapprox(Matrix(A_serial), Matrix(A_par); atol = 1.0e-12)
         end
+    end
+
+    @testset "sparse_factorize/pde_solve accept SparseMatrixCSR (CSC-conversion fallback)" begin
+        # The unified-dispatcher half of `poisson_solve_contract` (1D/3D `pde_solve`, 2D
+        # `sparse_factorize`), against CSR-built systems -- see the module-level comment on
+        # why the shared contract itself isn't reusable here.
+        for (D, n) in ((1, 21), (2, 12), (3, 6))
+            p = _csr_poisson_system(Val(D), n)
+            @test p.A isa SparseMatrixCSR
+
+            u = pde_solve(p.A, p.F)
+            @test isapprox(u, p.u_ref; atol = 1.0e-10)
+
+            fact = sparse_factorize(p.A)
+            @test fact isa SuiteSparseFactorization
+            @test isapprox(fact \ p.F, p.u_ref; atol = 1.0e-10)
+        end
+    end
+
+    @testset "Factorization reuse and refactoring (CSC-conversion fallback)" begin
+        p = _csr_poisson_system(Val(2), 9)
+        refactor_contract(
+            p;
+            atol = 1.0e-10,
+            solver = :default,
+            facttype = SuiteSparseFactorization,
+            factorize = sparse_factorize,
+            backend_refactor! = sparse_refactor!
+        )
+    end
+
+    @testset "sparse_factorize/refactor! still reject non-CSR, non-CSC types" begin
+        # The catch-all's guarantee for a genuinely unsupported type (dense `Matrix`,
+        # test/form/sparse_solvers.jl) is unweakened by the CSR fallback: loading this
+        # extension only ever widens dispatch for a `SparseMatrixCSR`, never for anything
+        # else.
+        @test_throws MethodError sparse_factorize(rand(4, 4))
+
+        p = _csr_poisson_system(Val(1), 9)
+        fact = sparse_factorize(p.A)
+        @test_throws ArgumentError refactor!(fact, rand(4, 4))
     end
 end
 

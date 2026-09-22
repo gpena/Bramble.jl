@@ -75,6 +75,10 @@ chain differentiable.
 # Returns
 - `Vector`: the solution, of the promoted element type of `A` and `F`.
 
+A `SparseMatrixCSR` (`SparseMatricesCSR.jl`) `A` is also accepted: converted to
+`SparseMatrixCSC` first (see `docs/src/internals/csr_solvers.md`), then solved exactly as
+above.
+
 # Reverse-mode differentiation
 
 With `ChainRulesCore.jl` loaded, `BrambleChainRulesExt`'s `rrule` solves the adjoint system
@@ -133,3 +137,13 @@ function pde_solve(A::SparseMatrixCSC, F::AbstractVector; solver::Symbol = :defa
 end
 
 pde_solve(fact::Factorization, F::AbstractVector) = fact \ F
+
+# `SparseMatrixCSR` support, via the same CSC-conversion fallback `sparse_factorize` uses
+# (`_is_csr`/`_csr_to_csc`, src/solvers/sparse_solvers.jl -- see that file's comment for why
+# `SparseMatrixCSR` cannot be named as a compile-time type here). A non-CSR, non-CSC
+# `AbstractMatrix` (e.g. a dense `Matrix`) still throws a plain `MethodError`, the same as
+# before this method existed.
+function pde_solve(A::AbstractMatrix, F::AbstractVector; kwargs...)
+    _is_csr(A) && return pde_solve(_csr_to_csc(A), F; kwargs...)
+    throw(MethodError(pde_solve, (A, F)))
+end

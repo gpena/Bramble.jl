@@ -71,7 +71,7 @@ _vtk_axes(Ωₕ::AbstractMeshType) = points(Ωₕ)
 # axes imply, so no permutation is needed. A composite space gives a `Tuple` of them:
 # WriteVTK reads `length(data)` off a `Tuple` as the number of vector components, one array
 # per component.
-_vtk_data(uₕ::VectorElement{<:CompositeGridSpace}) = Tuple(reshape.(components(uₕ)))
+_vtk_data(uₕ::VectorElement{<:CompositeGridSpace}) = map(reshape, components(uₕ))
 _vtk_data(uₕ::VectorElement) = reshape(uₕ)
 _vtk_data(a::AbstractArray) = a
 

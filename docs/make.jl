@@ -107,7 +107,8 @@ internals = "Internals" => [
     "internals/form.md",
     "internals/autodiff.md",
     "internals/exporters.md",
-    "internals/gpu.md"
+    "internals/gpu.md",
+    "internals/csr_solvers.md"
 ]
 documentation = "Documentation" => ["api.md", "api_sciml.md", internals]
 
