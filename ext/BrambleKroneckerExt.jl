@@ -30,23 +30,23 @@
 module BrambleKroneckerExt
 
 using Bramble:
-                Bramble,
-                BilinearForm,
-                is_separable,
-                kronecker_operator,
-                KroneckerLinearOperator,
-                domain,
-                interval,
-                ×,
-                mesh,
-                gridspace,
-                boundary_symbols,
-                form,
-                assemble,
-                Rₕ,
-                inner₊,
-                ∇ₕ,
-                innerₕ
+               Bramble,
+               BilinearForm,
+               is_separable,
+               kronecker_operator,
+               KroneckerLinearOperator,
+               domain,
+               interval,
+               ×,
+               mesh,
+               gridspace,
+               boundary_symbols,
+               form,
+               assemble,
+               Rₕ,
+               inner₊,
+               ∇ₕ,
+               innerₕ
 using Kronecker: Kronecker, ⊗
 using LinearAlgebra: Diagonal, Symmetric, eigen
 using PrecompileTools: @setup_workload, @compile_workload
@@ -361,7 +361,8 @@ end
 # pass reaches them. Not named in gpena/Bramble.jl#259; added for gpena/Bramble.jl#284.
 if Bramble.PRECOMPILE_WORKLOAD
     @setup_workload begin
-        Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0), :boundary => boundary_symbols(interval(0.0, 1.0) × interval(0.0, 1.0)))
+        Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0), :boundary =>
+            boundary_symbols(interval(0.0, 1.0) × interval(0.0, 1.0)))
         Ωₕ = mesh(Ω, (8, 8), (false, false))
         Wₕ = gridspace(Ωₕ)
         a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))

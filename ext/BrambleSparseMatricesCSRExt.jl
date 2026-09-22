@@ -27,21 +27,21 @@
 module BrambleSparseMatricesCSRExt
 
 using Bramble:
-                Bramble,
-                Backend,
-                ExecutionPolicy,
-                csr_backend,
-                domain,
-                interval,
-                ×,
-                mesh,
-                gridspace,
-                form,
-                assemble,
-                assemble!,
-                inner₊,
-                ∇ₕ,
-                boundary_symbols
+               Bramble,
+               Backend,
+               ExecutionPolicy,
+               csr_backend,
+               domain,
+               interval,
+               ×,
+               mesh,
+               gridspace,
+               form,
+               assemble,
+               assemble!,
+               inner₊,
+               ∇ₕ,
+               boundary_symbols
 using SparseMatricesCSR: SparseMatricesCSR, SparseMatrixCSR, sparsecsr
 using PrecompileTools: @setup_workload, @compile_workload
 

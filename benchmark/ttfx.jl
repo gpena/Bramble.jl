@@ -128,7 +128,7 @@ const CASES = TTFXCase[
         String[],
         150.0,
         "A = assemble(a_spd)\nF = assemble(l)",
-        "pde_solve(A, F)",
+        "pde_solve(A, F)"
     ),
     TTFXCase(
         "sd2(dv, v, u, nothing, 0.0)",
@@ -137,7 +137,7 @@ const CASES = TTFXCase[
         120.0,
         "sd2 = semidiscretize_second_order(a, l; dirichlet = :boundary)\n" *
         "n = ndofs(Wₕ)\ndv = zeros(n)\nv = zeros(n)\nu = zeros(n)",
-        "sd2(dv, v, u, nothing, 0.0)",
+        "sd2(dv, v, u, nothing, 0.0)"
     ),
     TTFXCase(
         "assemble_add!(A, a, 0.5)",
@@ -145,7 +145,7 @@ const CASES = TTFXCase[
         String[],
         80.0,
         "A = assemble(a)",
-        "assemble_add!(A, a, 0.5)",
+        "assemble_add!(A, a, 0.5)"
     ),
     TTFXCase(
         "suitesparse_solve(A, F)",
@@ -153,7 +153,7 @@ const CASES = TTFXCase[
         ["SuiteSparse"],
         250.0,
         "A = assemble(a_spd)\nF = assemble(l)",
-        "suitesparse_solve(A, F)",
+        "suitesparse_solve(A, F)"
     ),
     TTFXCase(
         "sparspak_solve(A, F)",
@@ -161,7 +161,7 @@ const CASES = TTFXCase[
         ["Sparspak"],
         200.0,
         "A = assemble(a_spd)\nF = assemble(l)",
-        "sparspak_solve(A, F)",
+        "sparspak_solve(A, F)"
     ),
     TTFXCase(
         "fdm_solve(a, F)",
@@ -169,8 +169,8 @@ const CASES = TTFXCase[
         ["Kronecker"],
         500.0,
         "F = assemble(l)",
-        "fdm_solve(a_spd, F)",
-    ),
+        "fdm_solve(a_spd, F)"
+    )
 ]
 
 # Every case builds the same 2D fixture (issue-specified): a unit square, a Neumann-friendly
@@ -187,8 +187,7 @@ fₕ = Rₕ(Wₕ, x -> 1.0)
 l = form(Wₕ, v -> innerₕ(fₕ, v))
 """
 
-_project_for(tree::AbstractString, case::TTFXCase) =
-    case.project === :core ? tree : joinpath(tree, "test")
+_project_for(tree::AbstractString, case::TTFXCase) = case.project === :core ? tree : joinpath(tree, "test")
 
 function _case_using_line(case::TTFXCase)
     return isempty(case.using_pkgs) ? "using Bramble" :
@@ -227,7 +226,7 @@ end
 
 _core_precompile_cmd(
     tree,
-    threads,
+    threads
 ) = `julia --startup-file=no --threads=$threads --project=$tree -e "using Bramble"`
 function _ext_precompile_cmd(tree, threads)
     test_project = joinpath(tree, "test")
@@ -241,7 +240,7 @@ end
 function _median(xs::Vector{Float64})
     s = sort(xs)
     n = length(s)
-    return isodd(n) ? s[(n+1)÷2] : (s[n÷2] + s[n÷2+1]) / 2
+    return isodd(n) ? s[(n + 1) ÷ 2] : (s[n ÷ 2] + s[n ÷ 2 + 1]) / 2
 end
 
 # N fresh-depot launches of `using Bramble`, wall-timed from the orchestrator. Returns the
@@ -251,7 +250,7 @@ end
 function _time_core_precompile(tree::AbstractString, runs::Int, threads::Int)
     times = Float64[]
     depots = String[]
-    for _ = 1:runs
+    for _ in 1:runs
         depot = mktempdir()
         push!(depots, depot)
         env = _depot_env(depot)
@@ -276,15 +275,15 @@ end
 # untimed and times only the named first call with `@elapsed`, printing it as `TTFX_RESULT:
 # <seconds>`; the orchestrator greps that line out of the child's stdout.
 function _time_case(
-    tree::AbstractString,
-    case::TTFXCase,
-    depot::AbstractString,
-    threads::Int,
-    runs::Int,
+        tree::AbstractString,
+        case::TTFXCase,
+        depot::AbstractString,
+        threads::Int,
+        runs::Int
 )
     env = _depot_env(depot)
     times = Float64[]
-    for i = 1:runs
+    for i in 1:runs
         script = _write_case_script(case)
         cmd = setenv(_case_cmd(tree, case, threads, script), env)
         out = read(pipeline(cmd; stderr = devnull), String)
@@ -299,9 +298,9 @@ end
 # --- Load gate --------------------------------------------------------------- #
 
 function _wait_for_load(
-    threshold::Float64;
-    max_wait_s::Float64 = 600.0,
-    poll_s::Float64 = 30.0,
+        threshold::Float64;
+        max_wait_s::Float64 = 600.0,
+        poll_s::Float64 = 30.0
 )
     load1 = Sys.loadavg()[1]
     waited = 0.0
@@ -417,11 +416,9 @@ function main()
     println()
 
     println("Timing core precompile (--before)...")
-    before_pre_med, before_pre_times, before_depots =
-        _time_core_precompile(opts.before, opts.runs, opts.threads)
+    before_pre_med, before_pre_times, before_depots = _time_core_precompile(opts.before, opts.runs, opts.threads)
     println("Timing core precompile (--after)...")
-    after_pre_med, after_pre_times, after_depots =
-        _time_core_precompile(opts.after, opts.runs, opts.threads)
+    after_pre_med, after_pre_times, after_depots = _time_core_precompile(opts.after, opts.runs, opts.threads)
 
     println("Timing extension precompile, info only (--before)...")
     before_ext_extra = _time_ext_precompile(opts.before, before_depots[end], opts.threads)
@@ -434,16 +431,14 @@ function main()
     case_results = Vector{NamedTuple}(undef, length(CASES))
     for (idx, case) in enumerate(CASES)
         println("Timing case: $(case.name)")
-        b_med, b_times =
-            _time_case(opts.before, case, before_warm_depot, opts.threads, opts.runs)
-        a_med, a_times =
-            _time_case(opts.after, case, after_warm_depot, opts.threads, opts.runs)
+        b_med, b_times = _time_case(opts.before, case, before_warm_depot, opts.threads, opts.runs)
+        a_med, a_times = _time_case(opts.after, case, after_warm_depot, opts.threads, opts.runs)
         case_results[idx] = (
             case = case,
             before = b_med,
             after = a_med,
             before_times = b_times,
-            after_times = a_times,
+            after_times = a_times
         )
     end
 
@@ -463,7 +458,7 @@ function main()
     println("Results:")
     _print_table_row(
         ["case", "before", "after", "reduction", "threshold", "PASS/FAIL"],
-        widths,
+        widths
     )
 
     failed = String[]
@@ -478,9 +473,9 @@ function main()
             _fmt_s(after_pre_med),
             _fmt_s(pre_delta_s),
             "< +0.8 s",
-            pre_pass ? "PASS" : "FAIL",
+            pre_pass ? "PASS" : "FAIL"
         ],
-        widths,
+        widths
     )
 
     _print_table_row(
@@ -490,9 +485,9 @@ function main()
             _fmt_s(after_ext_extra),
             _fmt_s(after_ext_extra - before_ext_extra),
             "info only",
-            "-",
+            "-"
         ],
-        widths,
+        widths
     )
 
     for r in case_results
@@ -506,9 +501,9 @@ function main()
                 _fmt_ms(r.after),
                 string(round(reduction_ms; digits = 1)),
                 ">= $(r.case.threshold_ms) ms",
-                pass ? "PASS" : "FAIL",
+                pass ? "PASS" : "FAIL"
             ],
-            widths,
+            widths
         )
     end
 
