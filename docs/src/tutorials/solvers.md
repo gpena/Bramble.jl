@@ -81,9 +81,29 @@ flowchart TD
     J -->|"Yes"| J1["CpuThreaded<br/>note: innerₕ and _dot gain nothing here,<br/>see issue 112"]
     J -->|"No"| H1
 </pre>
-<script type="module">
-    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
-    mermaid.initialize({ startOnLoad: true, theme: "neutral" });
+<script>
+(function () {
+    // Documenter's own page runs a RequireJS/AMD loader (for highlight.js, KaTeX, ...),
+    // whose global `define`/`require` hijack mermaid's UMD bundle into loading as an AMD
+    // module instead of a plain global -- the failure mode is a silent-looking
+    // "Se.default.extend is not a function" deep inside mermaid's own dependency chain,
+    // with every `.mermaid` block left as unrendered text. Hiding `define`/`require` while
+    // the script loads, the standard workaround for embedding a UMD library on a page that
+    // already runs RequireJS, is what makes this the global (non-module) `mermaid.min.js`
+    // build resolves against `window.mermaid`, not the ESM build.
+    var savedDefine = window.define, savedRequire = window.require;
+    window.define = undefined;
+    window.require = undefined;
+    var s = document.createElement("script");
+    s.src = "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js";
+    s.onload = function () {
+        window.define = savedDefine;
+        window.require = savedRequire;
+        window.mermaid.initialize({ startOnLoad: false, theme: "neutral" });
+        window.mermaid.run({ querySelector: "pre.mermaid" });
+    };
+    document.currentScript.parentNode.appendChild(s);
+})();
 </script>
 ```
 
