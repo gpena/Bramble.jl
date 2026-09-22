@@ -295,6 +295,7 @@ struct CenteredDiffOp{Dim} <: StencilOp{Dim} end
 struct CrossWeightedDiffOp{Dim} <: StencilOp{Dim} end
 struct BackwardAvgOp{Dim} <: StencilOp{Dim} end
 struct ForwardAvgOp{Dim} <: StencilOp{Dim} end
+struct CenteredAvgOp{Dim} <: StencilOp{Dim} end
 
 """
     _stencil_taps(op::StencilOp) -> NTuple{K,Int}
@@ -313,6 +314,7 @@ stored zero.
 @inline _stencil_taps(::CrossWeightedDiffOp) = (1, 0, -1)
 @inline _stencil_taps(::BackwardAvgOp) = (0, -1)
 @inline _stencil_taps(::ForwardAvgOp) = (1, 0)
+@inline _stencil_taps(::CenteredAvgOp) = (-1, 0, 1)
 
 # --- Host mirror for the dense fallback's per-point weight reads --------------------- #
 #
@@ -459,6 +461,17 @@ end
     n = _axis_npoints(Ωₕ, Dim)
     mask = I[Dim] == n ? zero(T) : T(1) / 2
     return (mask, mask)
+end
+
+# Both end slices lack a neighbour on one side, so both rows are zeroed, as `CenteredDiffOp`
+# zeroes them.
+@inline function _stencil_weights(
+        ::CenteredAvgOp{Dim}, Ωₕ::Union{AbstractMeshType, _HostAxisSpacings}, I::CartesianIndex
+) where {Dim}
+    T = _axis_eltype(Ωₕ)
+    n = _axis_npoints(Ωₕ, Dim)
+    q = (I[Dim] == 1 || I[Dim] == n) ? zero(T) : T(1) / 4
+    return (q, 2q, q)
 end
 
 """
