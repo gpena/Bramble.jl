@@ -574,7 +574,9 @@ end
     uₕ::VectorElement * f::Function -> VectorElement
 
 Project the continuous function `f` onto `uₕ`'s own space and scale `uₕ` pointwise by it
-(gpena/Bramble.jl#197): `Rₕ(space(uₕ), f) .* uₕ`.
+(gpena/Bramble.jl#197): equivalent to `Rₕ(space(uₕ), f) .* uₕ`, computed as a single
+`VectorElement` allocation (`Rₕ!` projects `f` directly into it, then it is scaled by `uₕ`
+in place) rather than one allocation for the projection and a second for the broadcast.
 
 A plain `Function` has no meaning as a grid function on its own -- a form built from
 `innerₕ(f, v)` restricts it first through [`source_function`](@ref)/[`form`](@ref)'s own
@@ -588,7 +590,16 @@ now restricts `f` to `space(uₕ)` and multiplies elementwise, so the result is 
 `VectorElement`, usable anywhere one is -- including as a `SourceFunction`-lowered term
 inside another form.
 """
-@inline Base.:*(f::Function, uₕ::VectorElement) = Rₕ(space(uₕ), f) .* uₕ
+@inline function Base.:*(f::Function, uₕ::VectorElement)
+    Wₕ = space(uₕ)
+    # Same destination type `Rₕ(Wₕ, f) .* uₕ` would have promoted to, allocated once and
+    # filled in place (`Rₕ!`) instead of allocating a projected element and then a second
+    # array for the broadcast.
+    dest = element(Wₕ, promote_type(_restriction_eltype(Wₕ, f), eltype(uₕ)))
+    Rₕ!(dest, f)
+    dest .*= uₕ
+    return dest
+end
 @inline Base.:*(uₕ::VectorElement, f::Function) = f * uₕ
 
 # --- Display ---------------------------------------------------------------------- #
