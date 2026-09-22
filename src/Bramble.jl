@@ -91,10 +91,10 @@ export εₕ, εₕ!
 export D₋ₓ!, D₋ᵧ!, D₋₂!
 
 export D̽ₓ, D̽ᵧ, D̽₂, D̽ₕ, D̽
-export D̽ₓ!, D̽ᵧ!, D̽₂!
+export D̽ₓ!, D̽ᵧ!, D̽₂!, ∇̽ₕ, ∇̽ₕ!, div̽ₕ, div̽ₕ!, curl̽ₕ, curl̽ₕ!
 
 export Dcₓ, Dcᵧ, Dc₂, Dcₕ, Dc
-export Dcₓ!, Dcᵧ!, Dc₂!
+export Dcₓ!, Dcᵧ!, Dc₂!, ∇cₕ, ∇cₕ!, divcₕ, divcₕ!, curlcₕ, curlcₕ!, εcₕ, εcₕ!
 
 export Dₕₓ, Dₕᵧ, Dₕ₂, Dₕ
 export Dₕₓ!, Dₕᵧ!, Dₕ₂!
@@ -102,13 +102,13 @@ export Dₕₓ!, Dₕᵧ!, Dₕ₂!
 export jumpₓ, jumpᵧ, jump₂, jumpₕ, jump
 export jumpₓ!, jumpᵧ!, jump₂!
 
-export Mₓ, Mᵧ, M₂, Mₕ
-export Mₓ!, Mᵧ!, M₂!
+export Mₓ, Mᵧ, M₂, Mₕ, Mcₓ, Mcᵧ, Mc₂, Mcₕ
+export Mₓ!, Mᵧ!, M₂!, Mcₓ!, Mcᵧ!, Mc₂!
 
 # Forward operators (public for tests and extensions, unexported from default namespace)
 public D₊ₓ, D₊ᵧ, D₊₂, ∇₊ₕ, D₊
 public D₊ₓ!, D₊ᵧ!, D₊₂!
-public div₊ₕ, div₊ₕ!, curl₊ₕ, curl₊ₕ!
+public div₊ₕ, div₊ₕ!, curl₊ₕ, curl₊ₕ!, ε₊ₕ, ε₊ₕ!
 public M₊ₓ, M₊ᵧ, M₊₂, M₊ₕ
 public M₊ₓ!, M₊ᵧ!, M₊₂!
 

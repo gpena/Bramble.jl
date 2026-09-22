@@ -34,6 +34,8 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
     include("simplifier.jl")
     include("block_extract.jl")
     include("component.jl")
+    include("centered_average.jl")
+    include("centered_vector_calculus.jl")
     include("stencil_pattern.jl")
     # Behind the `slow` group (TestUtils.WITH_SLOW_TESTS): at ~46s it is the most expensive
     # file in this subsystem, and most of that is the structural half -- the AST-derived

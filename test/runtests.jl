@@ -112,7 +112,9 @@ if __bramble_with_unit_tests
         @testset "Operators" begin
             include("space/difference.jl")
             include("space/star_difference.jl")
+            include("space/star_vector_calculus.jl")
             include("space/centered_difference.jl")
+            include("space/centered_vector_calculus.jl")
             include("space/cross_weighted_difference.jl")
             include("space/sbp_identities.jl")
             include("space/sobolev_inequalities.jl")
@@ -120,6 +122,7 @@ if __bramble_with_unit_tests
             include("space/commutation.jl")
             include("space/jump.jl")
             include("space/average.jl")
+            include("space/centered_average.jl")
             include("space/dimensional_dispatch.jl")
             include("space/inplace_operators.jl")
             include("space/operators.jl")
