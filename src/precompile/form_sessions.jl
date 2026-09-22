@@ -410,6 +410,24 @@ function _pc_form_reaction(::Val{D}) where {D}
     blockbandwidths(a)
     reaction(A, F, uₕ; marker = :boundary)
     reaction_density(A, F, uₕ; marker = :boundary)
+
+    # The calls above are static -- the compiler sees the concrete types at the call site
+    # and can inline/constprop through them, so they warm the method *bodies* without
+    # necessarily caching a standalone method instance for the entry signature itself. A
+    # dynamically dispatched caller (a REPL session, or anything calling through a
+    # `Function` value) resolves that entry signature fresh and pays for it. `precompile`
+    # forces the standalone instance to exist, for the positional methods and for the
+    # `marker` keyword's `Core.kwcall` wrapper (`reaction`/`reaction_density` are
+    # keyword-only in `marker`).
+    nt = (; marker = :boundary)
+    precompile(assemble_add!, (typeof(A), typeof(a), typeof(0.5)))
+    precompile(assemble_add!, (typeof(F), typeof(l), typeof(0.5)))
+    precompile(bandwidths, (typeof(a),))
+    precompile(blockbandwidths, (typeof(a),))
+    precompile(Core.kwcall, (typeof(nt), typeof(reaction), typeof(A), typeof(F), typeof(uₕ)))
+    precompile(
+        Core.kwcall, (typeof(nt), typeof(reaction_density), typeof(A), typeof(F), typeof(uₕ))
+    )
     return nothing
 end
 

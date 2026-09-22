@@ -27,5 +27,19 @@ function _pc_solver_session()
     qr(A) \ F  # the `\` on a QRSparse directly, same call `suitesparse_qr_solve` makes internally
     pde_solve(A, F)
     pde_solve(A, F; solver = :spqr)
+
+    # The calls above run as static calls inside this function, so the compiler inlines
+    # straight to each callee's body and never caches the entry signature itself as a
+    # standalone method instance -- the positional wrapper `pde_solve(A, F)`, and the
+    # `Core.kwcall` generated for `pde_solve(A, F; solver = ...)`. A REPL caller reaches
+    # Bramble through ordinary dynamic dispatch, which resolves those entry signatures
+    # first, so `precompile` here forces exactly that lookup to be cached too.
+    precompile(pde_solve, (typeof(A), typeof(F)))
+    precompile(
+        Core.kwcall,
+        (NamedTuple{(:solver,), Tuple{Symbol}}, typeof(pde_solve), typeof(A), typeof(F))
+    )
+    precompile(suitesparse_qr_factorize, (typeof(A),))
+    precompile(suitesparse_qr_solve, (typeof(A), typeof(F)))
     return nothing
 end
