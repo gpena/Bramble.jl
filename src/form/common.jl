@@ -391,11 +391,29 @@ end
         ::Val{Dim},
         delta
 ) where {D, Dim}
+    _wraps_leaf(inner_op) &&
+        return _reevaluated_shift(inner_op, space, I, markers, Val(Dim), _shift_delta(delta))
+    return @noinline _reevaluated_shift(
+        inner_op, space, I, markers, Val(Dim), _shift_delta(delta)
+    )
+end
+
+# `delta` enters as an `Int` so every tap of a node shares one compiled instance.
+@inline function _reevaluated_shift(
+        inner_op, space, I::CartesianIndex{D}, markers, ::Val{Dim}, delta::Int
+) where {D, Dim}
     m = mesh(space)
-    Ishift = _clamped_shift(m, I, Val(Dim), _shift_delta(delta))
+    Ishift = _clamped_shift(m, I, Val(Dim), delta)
     at_shift = local_stencil(inner_op, space, Ishift, markers, LinearIndices(indices(m))[Ishift])
     return shift_stencil(at_shift, Val(Dim), delta)
 end
+
+# Whether `op` wraps a bare trial or test leaf directly. Such an operand's re-evaluation is
+# a handful of flops and is inlined into each tap; anything deeper is called out of line
+# instead, since inlining a fresh evaluation per tap makes the generated code (and so the
+# first-call compile time) grow like taps^depth. The check folds at compile time.
+@inline _wraps_leaf(op::T) where {T} = hasfield(T, :inner_op) &&
+                                       fieldtype(T, :inner_op) <: Union{TrialFunction, TestFunction}
 
 # A bare leaf's stencil is the same everywhere, so relabelling it is exact.
 @inline _shifted_inner_stencil(
