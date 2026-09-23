@@ -51,6 +51,7 @@ import Bramble:
                 _launch_average_engine!,
                 _launch_spmv_csr!,
                 _launch_spmm_csr!,
+                _launch_kron_sparse_mode!,
                 _launch_fused_divergence!,
                 _launch_fused_curl2d!,
                 _launch_fused_curl3d!,
@@ -777,6 +778,36 @@ function _launch_spmv_csr!(y::AbstractVector, rowPtr, colVal, nzVal, x::Abstract
         _spmv_csr_kernel!(dev)(y, rowPtr, colVal, nzVal, x, α, β; ndrange = length(y))
     catch err
         _wrap_device_kernel_error(err, "Metal sparse mul! (SpMV)")
+    end
+    return nothing
+end
+
+# `KroneckerLinearOperator` mode contraction by a symmetric sparse 1D factor
+# (gpena/Bramble.jl#323, `src/form/kronecker.jl`). One work item per output entry of the flat
+# `pre x m x post` array: output `(i, j, k)` gathers column `j` of the CSC storage, which
+# equals row `j` because every factor is symmetric, so no write conflicts and no atomics.
+@kernel function _kron_sparse_mode_kernel!(Y, @Const(colptr), @Const(rowval), @Const(nzval), @Const(X), pre, m)
+    g = @index(Global)
+    @inbounds begin
+        g0 = g - 1
+        i = g0 % pre
+        r = g0 ÷ pre
+        j = r % m + 1
+        base = (r ÷ m) * pre * m + i + 1
+        acc = zero(eltype(Y))
+        for p in colptr[j]:(colptr[j + 1] - Int32(1))
+            acc += nzval[p] * X[base + (rowval[p] - 1) * pre]
+        end
+        Y[g] = acc
+    end
+end
+
+function _launch_kron_sparse_mode!(Y::AbstractVector, colptr, rowval, nzval, X::AbstractVector, pre::Int, m::Int, post::Int)
+    dev = get_backend(Y)
+    try
+        _kron_sparse_mode_kernel!(dev)(Y, colptr, rowval, nzval, X, pre, m; ndrange = pre * m * post)
+    catch err
+        _wrap_device_kernel_error(err, "KroneckerLinearOperator mul!")
     end
     return nothing
 end

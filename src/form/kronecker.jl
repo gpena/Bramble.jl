@@ -182,6 +182,13 @@ one `K` never race). Sum factorisation needs two `n`-length scratch vectors;
 `mul!(y, K, x; scratch = (b1, b2))` (or `mul!(y, K, x, α, β; scratch = (b1, b2))`) uses caller-owned vectors and allocates nothing --
 give each thread its own pair.
 
+On a device-backed form (gpena/Bramble.jl#323) the factors are built on the host and then
+moved to the space backend's device storage, so `mul!` with device `x`/`y` runs entirely on
+the device -- mass factors as a broadcast, difference factors through a `KernelAbstractions`
+kernel (`using KernelAbstractions` required), with no host round trip between axes; the
+default scratch comes from `similar(x, ...)` and is device storage too. `getindex` and
+`SparseMatrixCSC(K)` stay host-only and throw an `ArgumentError` on such an operator.
+
 Dirichlet rows are out of scope: this operator carries no boundary constraint of its own.
 `bramble-plan`'s v3.3.0 subplan S5.2 layers that on top, through the `Kronecker.jl`
 extension and its fast-diagonalisation solve.
@@ -234,7 +241,9 @@ Build a matrix-free [`KroneckerLinearOperator`](@ref) for the separable bilinear
 For each axis `d`, the per-axis mass factor is the diagonal matrix of `d`'s cell measures
 (`weights(gridspace(Ωₕ(d)), Innerh())`); the factor on a term's touched axis is instead the
 assembled 1D operator `assemble(form(Wₕd, Wₕd, (u, v) -> inner₊(D₋ₓ(u), D₋ₓ(v))))` over
-`Wₕd = gridspace(Ωₕ(d))`, cached across terms that share an axis.
+`Wₕd = gridspace(Ωₕ(d))`, cached across terms that share an axis. Factors are always built on
+the host (a device mesh through its host mirror) and then converted to the storage
+`backend(trial_space(a))` uses, so a device-backed form yields device-resident factors.
 
 # Throws
 
@@ -261,7 +270,13 @@ function kronecker_operator(a::BilinearForm{D}) where {D}
     (Wu isa ScalarGridSpace && Wv isa ScalarGridSpace) || _throw_not_separable_space(Wu, Wv)
     mesh(Wu) === mesh(Wv) || _throw_not_separable_space(Wu, Wv)
 
-    Ωₕ = mesh(Wu)
+    # Factors are always built on the host -- a device-backed mesh's per-axis spaces would
+    # otherwise be scalar-indexed by `weights`/`assemble` -- and only then moved to the
+    # storage `Wu`'s backend chooses (`_kron_to_storage`). On a host mesh
+    # `_host_mirror_mesh` returns the mesh itself and `_kron_to_storage` is the identity,
+    # so the host operator is the same object graph it always was.
+    be = backend(Wu)
+    Ωₕ = _host_mirror_mesh(mesh(Wu))
     axis_spaces = ntuple(d -> gridspace(Ωₕ(d)), Val(D))
     mass_vecs = ntuple(d -> weights(axis_spaces[d], Innerh()), Val(D))
 
@@ -286,7 +301,8 @@ function kronecker_operator(a::BilinearForm{D}) where {D}
                 Diagonal(mass_vecs[d])
             end
         end
-        KroneckerTerm{D, typeof(scales), typeof(factors)}(scales, factors)
+        sfactors = map(F -> _kron_to_storage(locality(be), be, F), factors)
+        KroneckerTerm{D, typeof(scales), typeof(sfactors)}(scales, sfactors)
     end
 
     dims = ndofs(Wu, Tuple)
@@ -294,6 +310,122 @@ function kronecker_operator(a::BilinearForm{D}) where {D}
     T = eltype(mass_vecs[1])
     return KroneckerLinearOperator{T, D, typeof(terms)}(terms, dims, n)
 end
+
+# --- Device-resident factors (gpena/Bramble.jl#323) ---------------------------------- #
+#
+# On a device-backed space the host-built factors move to device storage, each wrapped in a
+# type of its own so the mode contraction dispatches on the factor, never on a GPU array
+# type (this file names no GPU package). The sparse factor keeps its CSC arrays separately
+# (`Int32` indices) because a kernel is handed the raw arrays, never a struct nesting a
+# device array -- see `docs/src/internals/gpu.md`. Every 1D factor here is symmetric, so
+# column `j` of the CSC storage is also row `j`: the kernel gathers output entry `j` from
+# column `j` without a transpose.
+
+struct _KronDeviceDiagonal{V <: AbstractVector}
+    diag::V
+end
+
+struct _KronDeviceSparse{V <: AbstractVector, IV <: AbstractVector}
+    colptr::IV
+    rowval::IV
+    nzval::V
+end
+
+@inline _kron_to_storage(::HostLocality, be, F) = F
+
+function _kron_device_vector(be, h::AbstractVector)
+    v = vector(be, length(h))
+    copyto!(v, Array(h))  # `h` may be a lazy `SeparableWeights`: tabulate it on the host
+    return v
+end
+
+function _kron_device_index(like::AbstractVector, h::AbstractVector)
+    v = similar(like, Int32, length(h))
+    copyto!(v, Int32.(h))
+    return v
+end
+
+function _kron_to_storage(::DeviceLocality, be, F::Diagonal)
+    return _KronDeviceDiagonal(_kron_device_vector(be, F.diag))
+end
+
+function _kron_to_storage(::DeviceLocality, be, F::SparseMatrixCSC)
+    nz = _kron_device_vector(be, nonzeros(F))
+    return _KronDeviceSparse(
+        _kron_device_index(nz, SparseArrays.getcolptr(F)), _kron_device_index(nz, rowvals(F)), nz
+    )
+end
+
+"""
+    _launch_kron_sparse_mode!(Y, colptr, rowval, nzval, X, pre, m, post) -> Nothing
+
+Device mode contraction of the flat `pre x m x post` array `X` by a symmetric 1D factor
+given as raw CSC arrays: `Y[i, j, k] = sum_l F[l, j] * X[i, l, k]`, one work item per
+output entry, so no write conflicts and no atomics. The arrays are passed separately, never
+as a struct, because a struct nesting a device array fails `KernelAbstractions` kernel
+compilation.
+
+Requires `using KernelAbstractions`; the real method is supplied by
+`BrambleKernelAbstractionsExt`.
+
+# Throws
+- `ErrorException`: if `KernelAbstractions` is not loaded.
+"""
+function _launch_kron_sparse_mode!(Y, colptr, rowval, nzval, X, pre, m, post)
+    return error(
+        "_launch_kron_sparse_mode! has no method loaded. Add `using KernelAbstractions` " *
+        "before applying a device-backed KroneckerLinearOperator.",
+    )
+end
+
+@inline function _kron_apply_mode!(
+        Y::AbstractVector, F::_KronDeviceDiagonal, X::AbstractVector, pre::Int, m::Int, post::Int
+)
+    reshape(Y, pre, m, post) .= reshape(F.diag, 1, m, 1) .* reshape(X, pre, m, post)
+    return Y
+end
+
+@inline function _kron_apply_mode!(
+        Y::AbstractVector, F::_KronDeviceSparse, X::AbstractVector, pre::Int, m::Int, post::Int
+)
+    _launch_kron_sparse_mode!(Y, F.colptr, F.rowval, F.nzval, X, pre, m, post)
+    return Y
+end
+
+@noinline function _throw_kron_device_entry()
+    throw(
+        ArgumentError(
+        "this KroneckerLinearOperator holds device-resident factors; reading single " *
+        "entries (getindex) or materialising SparseMatrixCSC(K) is host-only. Build the " *
+        "operator from a host-backed form for inspection.",
+    ),
+    )
+end
+
+@inline _kron_entry(F::AbstractMatrix, i::Int, j::Int) = F[i, j]
+_kron_entry(::Union{_KronDeviceDiagonal, _KronDeviceSparse}, ::Int, ::Int) = _throw_kron_device_entry()
+
+# `y *= β` and `y += c * cur`: scalar `@simd` loops on the host (unchanged, 0 bytes), one
+# broadcast on device storage, chosen by the locality of `y`'s own type.
+@inline _kron_scale!(y::AbstractVector, β, n::Int) = _kron_scale!(locality(typeof(y)), y, β, n)
+@inline function _kron_scale!(::HostLocality, y, β, n::Int)
+    @inbounds @simd for i in 1:n
+        y[i] *= β
+    end
+    return y
+end
+# Scalars are converted to `eltype(y)` first: `_kron_coeff` is a `Float64`, and a
+# `Float64` coefficient would not compile in the kernel on a device with no double precision.
+@inline _kron_scale!(::DeviceLocality, y, β, ::Int) = (y .*= convert(eltype(y), β); y)
+
+@inline _kron_axpy!(y::AbstractVector, c, cur, n::Int) = _kron_axpy!(locality(typeof(y)), y, c, cur, n)
+@inline function _kron_axpy!(::HostLocality, y, c, cur, n::Int)
+    @inbounds @simd for i in 1:n
+        y[i] += c * cur[i]
+    end
+    return y
+end
+@inline _kron_axpy!(::DeviceLocality, y, c, cur, ::Int) = (y .+= convert(eltype(y), c) .* cur; y)
 
 # --- Sum factorisation: mode-d contraction on a flat buffer -------------------------- #
 #
@@ -389,9 +521,7 @@ end
     term = terms[1]
     cur = _kron_apply_term!(buf1, buf2, term, x, dims)
     c = α * _kron_coeff(term.scales)
-    @inbounds @simd for i in 1:n
-        y[i] += c * cur[i]
-    end
+    _kron_axpy!(y, c, cur, n)
     return y
 end
 
@@ -401,9 +531,7 @@ end
     term = terms[1]
     cur = _kron_apply_term!(buf1, buf2, term, x, dims)
     c = α * _kron_coeff(term.scales)
-    @inbounds @simd for i in 1:n
-        y[i] += c * cur[i]
-    end
+    _kron_axpy!(y, c, cur, n)
     return _kron_accumulate!(y, buf1, buf2, Base.tail(terms), x, dims, n, α)
 end
 
@@ -457,9 +585,7 @@ function mul!(
     if iszero(β)
         fill!(y, zero(eltype(y)))
     elseif !isone(β)
-        @inbounds @simd for i in 1:n
-            y[i] *= β
-        end
+        _kron_scale!(y, β, n)
     end
     _kron_accumulate!(y, b1, b2, K.terms, x, K.dims, n, α)
     return y
@@ -495,7 +621,7 @@ function Base.getindex(K::KroneckerLinearOperator{T, D}, i::Int, j::Int) where {
         c = _kron_coeff(term.scales)
         p = one(T)
         for d in 1:D
-            p *= term.factors[d][Ic[d], Jc[d]]
+            p *= _kron_entry(term.factors[d], Ic[d], Jc[d])
         end
         total += c * p
     end
@@ -519,6 +645,7 @@ issymmetric(::KroneckerLinearOperator) = true
 
 _kron_as_sparse(F::SparseMatrixCSC) = F
 _kron_as_sparse(F::Diagonal) = sparse(F)
+_kron_as_sparse(::Union{_KronDeviceDiagonal, _KronDeviceSparse}) = _throw_kron_device_entry()
 
 """
     SparseMatrixCSC(K::KroneckerLinearOperator) -> SparseMatrixCSC
