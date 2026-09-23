@@ -44,20 +44,11 @@ _random_element(Wₕ) = (uₕ = element(Wₕ); parent(uₕ) .= randn(length(pare
                 @test parent(vₕ)' * (C * parent(uₕ)) ≈ innerₕ(uₕ, dirs[d](vₕ))
             end
         end
-        # A composed tap relabels the inner stencil evaluated at the point itself instead of
-        # re-evaluating it at the neighbour (`shifted_inner_stencil`, form/common.jl). For
-        # `D₋ₓ` that reads the spacing at the wrong point on a non-uniform mesh, and at the
-        # first slice it reads `u(1)/h` where the runtime operator writes zero; the sibling
-        # `Mₓ(D₋ₓ(u))` shares both. The comparison is therefore made on a uniform mesh, with
-        # a `uₕ` vanishing on that slice.
+        # A composed tap re-evaluates its inner stencil at the neighbour, so the composition
+        # matches the runtime on a non-uniform mesh too.
         @testset "$(D)D composition with D₋ₓ" begin
-            Uₕ = gridspace(mesh(domain(D == 1 ? interval(0.0, 1.0) :
-                                       reduce(×, ntuple(_ -> interval(0.0, 1.0), D))),
-                ntuple(_ -> 7, D), ntuple(_ -> true, D)))
-            wₕ, zₕ = _random_element(Uₕ), _random_element(Uₕ)
-            selectdim(reshape(parent(wₕ), npoints(mesh(Uₕ), Tuple)), 1, 1) .= 0
-            A = assemble(form(Uₕ, Uₕ, (u, v) -> innerₕ(Mcₓ(D₋ₓ(u)), v)))
-            @test parent(zₕ)' * (A * parent(wₕ)) ≈ innerₕ(Mcₓ(D₋ₓ(wₕ)), zₕ)
+            A = assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(Mcₓ(D₋ₓ(u)), v)))
+            @test parent(vₕ)' * (A * parent(uₕ)) ≈ innerₕ(Mcₓ(D₋ₓ(uₕ)), vₕ)
         end
     end
 

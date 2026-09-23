@@ -141,7 +141,9 @@ end
     space,
     I::CartesianIndex{D},
     markers
-) where {D, Dim} = shift_stencil(inner, Val(Dim), op.shift_amount)
+) where {D, Dim} = shifted_inner_stencil(
+    op.inner_op, inner, space, I, markers, Val(Dim), op.shift_amount
+)
 
 # `shift_op` has no mask of its own: every other wrapper that reaches a neighbour
 # (differences, averages, jumps) computes one first and multiplies a clamped boundary read by

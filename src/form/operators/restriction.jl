@@ -64,17 +64,32 @@ end
     # for every region. Read directly, a real `:interior` used to be silently overridden by
     # "not :boundary", which discarded a deliberately redefined `:interior` even though the
     # mesh warns that a custom definition wins (mesh/marker.jl).
-    in_region = if markers === nothing
-        (op.region === :interior)
-    else
-        _is_marked(markers, op.region, lin_idx)
-    end
-
-    if in_region
+    if _in_region(op, markers, lin_idx)
         return local_stencil(op.inner_op, space, I, markers, lin_idx)
     else
         return ()
     end
+end
+
+@inline _in_region(op::RegionRestriction, markers, lin_idx::Int) = markers === nothing ?
+                                                                  (op.region === :interior) :
+                                                                  _is_marked(markers, op.region, lin_idx)
+
+# A tap reaching `delta` points away re-evaluates the restriction at that neighbour. Doing
+# it through `local_stencil` above would return `()` or a full tuple depending on the
+# neighbour's marker, so the tap's tuple length would vary from point to point and the
+# assembly would lose type stability. Instead the operand is shifted by its own rule and
+# zeroed outside the region, which keeps the tuple length fixed.
+@inline function shifted_inner_stencil(
+        inner_op::RegionRestriction, inner, space, I::CartesianIndex{D}, markers, ::Val{Dim}, delta
+) where {D, Dim}
+    m = mesh(space)
+    lins = LinearIndices(indices(m))
+    Ishift = _clamped_shift(m, I, Val(Dim), _shift_delta(delta))
+    sub = local_stencil(inner_op.inner_op, space, I, markers, lins[I])
+    shifted = shifted_inner_stencil(inner_op.inner_op, sub, space, I, markers, Val(Dim), delta)
+    T = eltype(space)
+    return scale_stencil(shifted, _in_region(inner_op, markers, lins[Ishift]) ? one(T) : zero(T))
 end
 
 # --- AST resolution ---------------------------------------------------------------- #

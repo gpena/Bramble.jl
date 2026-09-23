@@ -35,6 +35,7 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
     include("block_extract.jl")
     include("component.jl")
     include("centered_average.jl")
+    include("nested_operators.jl")
     include("centered_vector_calculus.jl")
     include("stencil_pattern.jl")
     # Behind the `slow` group (TestUtils.WITH_SLOW_TESTS): at ~46s it is the most expensive
