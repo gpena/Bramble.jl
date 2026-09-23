@@ -7,7 +7,7 @@ using LinearAlgebra: issymmetric, mul!
 using SparseArrays: SparseMatrixCSC
 using Random
 using LinearSolve: LinearProblem, solve, KrylovJL_CG
-using ..TestUtils: @test_allocs
+using ForwardDiff
 
 # `is_separable`/`kronecker_operator` (gpena/Bramble.jl#162): a bilinear form whose
 # resolved AST is a sum of `innerₕ(u, v)`/`inner₊(∇ₕ(u), ∇ₕ(v))`-shaped terms over a
@@ -17,6 +17,10 @@ using ..TestUtils: @test_allocs
 # the explicit `assemble(a)` it is meant to agree with.
 
 const KRON_SEED = 20260919
+
+# Inside a function so `@allocated` measures `mul!` alone, not global-scope boxing.
+_kron_alloc_with_scratch(y, K, x, s) = @allocated mul!(y, K, x; scratch = s)
+_kron_alloc5_with_scratch(y, K, x, α, β, s) = @allocated mul!(y, K, x, α, β; scratch = s)
 
 @testset "Kronecker" begin
     @testset "is_separable" begin
@@ -95,9 +99,56 @@ const KRON_SEED = 20260919
             # `SparseMatrixCSC(K)`: an explicit `kron` of the factors.
             @test SparseMatrixCSC(K) ≈ A
 
-            # Zero allocations after warm-up.
-            mul!(y, K, x)
-            @test_allocs mul!(y, K, x)
+            # Zero allocations with caller-owned scratch (`K` holds no buffers).
+            s = (zeros(n), zeros(n))
+            _kron_alloc_with_scratch(y, K, x, s)
+            @test _kron_alloc_with_scratch(y, K, x, s) == 0
+            @test isapprox(y, yref; rtol = 1e-12, atol = 1e-12)
+
+            # One shared `K`, many threads: no shared state, so no race.
+            xs = [rand(n) for _ in 1:32]
+            ys = [zeros(n) for _ in 1:32]
+            Threads.@threads for i in 1:32
+                for _ in 1:10
+                    mul!(ys[i], K, xs[i])
+                end
+            end
+            @test all(isapprox(ys[i], A * xs[i]; rtol = 1e-12, atol = 1e-12) for i in 1:32)
+
+            # ForwardDiff Duals flow through the promoted scratch.
+            x0, v = rand(n), rand(n)
+            dK = ForwardDiff.derivative(t -> K * (x0 .+ t .* v), 0.0)
+            @test isapprox(dK, A * v; rtol = 1e-12, atol = 1e-12)
+
+            # Five-argument `mul!`: `y = α * K * x + β * y`, Int/Bool/Float α and β.
+            M = Matrix(A)
+            for (α, β) in ((1, 0), (2.0, 0.0), (-1, 1), (0.5, -3.0), (0, 2.0), (true, false))
+                y0 = rand(n)
+                y5 = copy(y0)
+                mul!(y5, K, x, α, β)
+                @test isapprox(y5, α * M * x + β * y0; rtol = 1e-12, atol = 1e-12)
+            end
+
+            # `β = 0` overwrites `y`: a NaN already there must not survive.
+            ynan = fill(NaN, n)
+            mul!(ynan, K, x, 1.0, 0.0)
+            @test isapprox(ynan, yref; rtol = 1e-12, atol = 1e-12)
+            ynan = fill(NaN, n)
+            mul!(ynan, K, x, 2, false)
+            @test isapprox(ynan, 2 * yref; rtol = 1e-12, atol = 1e-12)
+
+            # `semidiscretize_rhs`'s pattern: `copyto!(du, F); mul!(du, K, u, -1, 1)`.
+            F = rand(n)
+            du = similar(F)
+            copyto!(du, F)
+            mul!(du, K, x, -1, 1)
+            @test isapprox(du, F - A * x; rtol = 1e-12, atol = 1e-12)
+
+            # Zero allocations for the five-argument form with caller-owned scratch.
+            _kron_alloc5_with_scratch(du, K, x, -1, 1, s)
+            @test _kron_alloc5_with_scratch(du, K, x, -1, 1, s) == 0
+            _kron_alloc5_with_scratch(du, K, x, 0.5, 0.0, s)
+            @test _kron_alloc5_with_scratch(du, K, x, 0.5, 0.0, s) == 0
         end
     end
 

@@ -7,6 +7,7 @@ using Metal
 # not `Metal` alone -- both must be `using`'d here for the extension to load at all.
 using GPUArrays
 using SparseArrays
+using Kronecker: Kronecker  # loads BrambleKroneckerExt, which owns `fdm_solve`
 using LinearAlgebra: I, mul!
 using Bramble: Backend, vector, matrix, _backend_eye, _backend_zeros, metal_sparse_csr,
                metal_sparse_csc, host_points, host_weights, half_spacings
@@ -577,6 +578,73 @@ else
         πₕ!(u2_2d_host, u1_2d_host)
 
         @test Array(parent(u2_2d_dev)) ≈ parent(u2_2d_host)
+    end
+
+    @testset "#323: KroneckerLinearOperator mul! on device matches the host" begin
+        # Non-uniform meshes draw fresh random points on every `mesh` call, so the host
+        # reference is built from the device space's own host mirror (`host_weights`),
+        # not from a second, independently drawn host mesh.
+        I = interval(0.0f0, 1.0f0)
+        f = (u, v) -> 2 * innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))
+        for (dom, dims) in ((I × I, (31, 17)), (I × I × I, (9, 8, 7)))
+            Ωd = mesh(domain(dom), dims, ntuple(_ -> false, length(dims)); backend = metal_backend())
+            Wd = gridspace(Ωd)
+            Wh = host_weights(Wd)
+            Kd = kronecker_operator(form(Wd, Wd, f))
+            Kh = kronecker_operator(form(Wh, Wh, f))
+            n = size(Kd, 1)
+            xh = rand(Float32, n)
+            y0 = rand(Float32, n)
+            x = MtlArray(xh)
+            ref = Kh * xh
+
+            y = similar(x)
+            mul!(y, Kd, x)
+            @test y isa MtlArray
+            @test isapprox(Array(y), ref; rtol = 1.0f-5)
+
+            y = MtlArray(y0)
+            mul!(y, Kd, x, -1, 1)
+            @test isapprox(Array(y), y0 - ref; rtol = 1.0f-5)
+
+            y = MtlArray(y0)
+            mul!(y, Kd, x, 2.0f0, 0.5f0)
+            @test isapprox(Array(y), 2 .* ref .+ 0.5f0 .* y0; rtol = 1.0f-5)
+
+            s = (similar(x), similar(x))
+            y = similar(x)
+            mul!(y, Kd, x; scratch = s)
+            @test isapprox(Array(y), ref; rtol = 1.0f-5)
+
+            @test_throws ArgumentError Kd[1, 1]
+        end
+    end
+
+    @testset "#323 fdm_solve" begin
+        # A device-backed form's solve returns a device vector. The reference is built on
+        # the device mesh's own host mirror: a separately drawn non-uniform mesh differs.
+        I = interval(0.0f0, 1.0f0)
+        f = (u, v) -> 2 * innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))
+        for (dom, dims) in ((I × I, (31, 17)), (I × I × I, (9, 8, 7)))
+            Ωd = mesh(domain(dom), dims, ntuple(_ -> false, length(dims)); backend = metal_backend())
+            Wd = gridspace(Ωd)
+            Wh = gridspace(Bramble._host_mirror_mesh(mesh(Wd)))
+            ad = form(Wd, Wd, f)
+            ah = form(Wh, Wh, f)
+            n = prod(dims)
+
+            Fh = rand(Float32, n)
+            xd = fdm_solve(ad, MtlArray(Fh))
+            @test xd isa MtlArray
+            @test isapprox(Array(xd), fdm_solve(ah, Fh); rtol = 1.0f-5)
+
+            Fb = zeros(Float32, dims)
+            Fb[map(m -> 2:(m - 1), dims)...] .= rand(Float32, map(m -> m - 2, dims))
+            Fb = vec(Fb)
+            xb = fdm_solve(ad, MtlArray(Fb); dirichlet = :boundary)
+            @test xb isa MtlArray
+            @test isapprox(Array(xb), fdm_solve(ah, Fb; dirichlet = :boundary); rtol = 1.0f-5)
+        end
     end
 end
 

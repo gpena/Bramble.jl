@@ -163,22 +163,31 @@ end
 A matrix-free linear operator for a separable [`BilinearForm`](@ref) (see
 [`is_separable`](@ref)): the sum, over its terms, of a Kronecker product of `D`
 one-dimensional factor matrices, applied by sum factorisation
-(`LinearAlgebra.mul!(y, K, x)`) rather than ever materialising the `D`-dimensional matrix.
+(`LinearAlgebra.mul!(y, K, x)`, or the five-argument `mul!(y, K, x, α, β)` computing
+`α * K * x + β * y`) rather than ever materialising the `D`-dimensional matrix.
 For a `200^3` mesh the factors together hold `O(200)` numbers per axis instead of the
 assembled matrix's `O(200^3)` stored entries.
 
 Build one with [`kronecker_operator`](@ref). Subtypes `AbstractMatrix{T}` so it plugs into
 `LinearProblem`/`KrylovJL_CG` (`LinearSolve.jl`) the same way an assembled matrix does, and
-supports `size`, `eltype`, `getindex`, `Base.:*`, `LinearAlgebra.issymmetric`, and
+supports `size`, `eltype`, `getindex`, `Base.:*`, three- and five-argument `mul!`, `LinearAlgebra.issymmetric`, and
 `SparseMatrixCSC(K)` (an explicit `kron` of the factors, for testing and inspection -- the
 very matrix this operator avoids forming).
 
-The two `n`-length work buffers `mul!` needs for sum factorisation are grown on the first
-call rather than at construction (`resize!`, starting from an empty vector), so a freshly
-built `K` that has never multiplied anything costs only its `D` one-dimensional factors --
-this is what keeps `Base.summarysize(K)` small immediately after
-[`kronecker_operator`](@ref) returns. `mul!` still allocates nothing **after that first
-call**, matching every other zero-allocation refill in this package.
+`K` holds no work buffers: it stores only its `D` one-dimensional factors, so it is
+immutable after construction and safe to share across threads (concurrent `mul!` calls on
+one `K` never race). Sum factorisation needs two `n`-length scratch vectors;
+`mul!(y, K, x)` allocates them afresh on every call, with element type
+`promote_type(T, eltype(x), eltype(y))` so ForwardDiff `Dual`s pass through, while
+`mul!(y, K, x; scratch = (b1, b2))` (or `mul!(y, K, x, α, β; scratch = (b1, b2))`) uses caller-owned vectors and allocates nothing --
+give each thread its own pair.
+
+On a device-backed form (gpena/Bramble.jl#323) the factors are built on the host and then
+moved to the space backend's device storage, so `mul!` with device `x`/`y` runs entirely on
+the device -- mass factors as a broadcast, difference factors through a `KernelAbstractions`
+kernel (`using KernelAbstractions` required), with no host round trip between axes; the
+default scratch comes from `similar(x, ...)` and is device storage too. `getindex` and
+`SparseMatrixCSC(K)` stay host-only and throw an `ArgumentError` on such an operator.
 
 Dirichlet rows are out of scope: this operator carries no boundary constraint of its own.
 `bramble-plan`'s v3.3.0 subplan S5.2 layers that on top, through the `Kronecker.jl`
@@ -190,8 +199,6 @@ struct KroneckerLinearOperator{T, D, TermsT <: Tuple} <: AbstractMatrix{T}
     terms::TermsT
     dims::NTuple{D, Int}
     n::Int
-    buf1::Vector{T}
-    buf2::Vector{T}
 end
 
 @noinline function _throw_not_separable_dim(D::Int)
@@ -234,7 +241,9 @@ Build a matrix-free [`KroneckerLinearOperator`](@ref) for the separable bilinear
 For each axis `d`, the per-axis mass factor is the diagonal matrix of `d`'s cell measures
 (`weights(gridspace(Ωₕ(d)), Innerh())`); the factor on a term's touched axis is instead the
 assembled 1D operator `assemble(form(Wₕd, Wₕd, (u, v) -> inner₊(D₋ₓ(u), D₋ₓ(v))))` over
-`Wₕd = gridspace(Ωₕ(d))`, cached across terms that share an axis.
+`Wₕd = gridspace(Ωₕ(d))`, cached across terms that share an axis. Factors are always built on
+the host (a device mesh through its host mirror) and then converted to the storage
+`backend(trial_space(a))` uses, so a device-backed form yields device-resident factors.
 
 # Throws
 
@@ -261,7 +270,13 @@ function kronecker_operator(a::BilinearForm{D}) where {D}
     (Wu isa ScalarGridSpace && Wv isa ScalarGridSpace) || _throw_not_separable_space(Wu, Wv)
     mesh(Wu) === mesh(Wv) || _throw_not_separable_space(Wu, Wv)
 
-    Ωₕ = mesh(Wu)
+    # Factors are always built on the host -- a device-backed mesh's per-axis spaces would
+    # otherwise be scalar-indexed by `weights`/`assemble` -- and only then moved to the
+    # storage `Wu`'s backend chooses (`_kron_to_storage`). On a host mesh
+    # `_host_mirror_mesh` returns the mesh itself and `_kron_to_storage` is the identity,
+    # so the host operator is the same object graph it always was.
+    be = backend(Wu)
+    Ωₕ = _host_mirror_mesh(mesh(Wu))
     axis_spaces = ntuple(d -> gridspace(Ωₕ(d)), Val(D))
     mass_vecs = ntuple(d -> weights(axis_spaces[d], Innerh()), Val(D))
 
@@ -286,18 +301,131 @@ function kronecker_operator(a::BilinearForm{D}) where {D}
                 Diagonal(mass_vecs[d])
             end
         end
-        KroneckerTerm{D, typeof(scales), typeof(factors)}(scales, factors)
+        sfactors = map(F -> _kron_to_storage(locality(be), be, F), factors)
+        KroneckerTerm{D, typeof(scales), typeof(sfactors)}(scales, sfactors)
     end
 
     dims = ndofs(Wu, Tuple)
     n = ndofs(Wu)
     T = eltype(mass_vecs[1])
-    # Empty, not `Vector{T}(undef, n)`: `mul!` grows them to `n` on its first call
-    # (`_kron_ensure_buffers!`), so a freshly built `K` costs only its factors.
-    return KroneckerLinearOperator{T, D, typeof(terms)}(
-        terms, dims, n, Vector{T}(undef, 0), Vector{T}(undef, 0)
+    return KroneckerLinearOperator{T, D, typeof(terms)}(terms, dims, n)
+end
+
+# --- Device-resident factors (gpena/Bramble.jl#323) ---------------------------------- #
+#
+# On a device-backed space the host-built factors move to device storage, each wrapped in a
+# type of its own so the mode contraction dispatches on the factor, never on a GPU array
+# type (this file names no GPU package). The sparse factor keeps its CSC arrays separately
+# (`Int32` indices) because a kernel is handed the raw arrays, never a struct nesting a
+# device array -- see `docs/src/internals/gpu.md`. Every 1D factor here is symmetric, so
+# column `j` of the CSC storage is also row `j`: the kernel gathers output entry `j` from
+# column `j` without a transpose.
+
+struct _KronDeviceDiagonal{V <: AbstractVector}
+    diag::V
+end
+
+struct _KronDeviceSparse{V <: AbstractVector, IV <: AbstractVector}
+    colptr::IV
+    rowval::IV
+    nzval::V
+end
+
+@inline _kron_to_storage(::HostLocality, be, F) = F
+
+function _kron_device_vector(be, h::AbstractVector)
+    v = vector(be, length(h))
+    copyto!(v, Array(h))  # `h` may be a lazy `SeparableWeights`: tabulate it on the host
+    return v
+end
+
+function _kron_device_index(like::AbstractVector, h::AbstractVector)
+    v = similar(like, Int32, length(h))
+    copyto!(v, Int32.(h))
+    return v
+end
+
+function _kron_to_storage(::DeviceLocality, be, F::Diagonal)
+    return _KronDeviceDiagonal(_kron_device_vector(be, F.diag))
+end
+
+function _kron_to_storage(::DeviceLocality, be, F::SparseMatrixCSC)
+    nz = _kron_device_vector(be, nonzeros(F))
+    return _KronDeviceSparse(
+        _kron_device_index(nz, SparseArrays.getcolptr(F)), _kron_device_index(nz, rowvals(F)), nz
     )
 end
+
+"""
+    _launch_kron_sparse_mode!(Y, colptr, rowval, nzval, X, pre, m, post) -> Nothing
+
+Device mode contraction of the flat `pre x m x post` array `X` by a symmetric 1D factor
+given as raw CSC arrays: `Y[i, j, k] = sum_l F[l, j] * X[i, l, k]`, one work item per
+output entry, so no write conflicts and no atomics. The arrays are passed separately, never
+as a struct, because a struct nesting a device array fails `KernelAbstractions` kernel
+compilation.
+
+Requires `using KernelAbstractions`; the real method is supplied by
+`BrambleKernelAbstractionsExt`.
+
+# Throws
+- `ErrorException`: if `KernelAbstractions` is not loaded.
+"""
+function _launch_kron_sparse_mode!(Y, colptr, rowval, nzval, X, pre, m, post)
+    return error(
+        "_launch_kron_sparse_mode! has no method loaded. Add `using KernelAbstractions` " *
+        "before applying a device-backed KroneckerLinearOperator.",
+    )
+end
+
+@inline function _kron_apply_mode!(
+        Y::AbstractVector, F::_KronDeviceDiagonal, X::AbstractVector, pre::Int, m::Int, post::Int
+)
+    reshape(Y, pre, m, post) .= reshape(F.diag, 1, m, 1) .* reshape(X, pre, m, post)
+    return Y
+end
+
+@inline function _kron_apply_mode!(
+        Y::AbstractVector, F::_KronDeviceSparse, X::AbstractVector, pre::Int, m::Int, post::Int
+)
+    _launch_kron_sparse_mode!(Y, F.colptr, F.rowval, F.nzval, X, pre, m, post)
+    return Y
+end
+
+@noinline function _throw_kron_device_entry()
+    throw(
+        ArgumentError(
+        "this KroneckerLinearOperator holds device-resident factors; reading single " *
+        "entries (getindex) or materialising SparseMatrixCSC(K) is host-only. Build the " *
+        "operator from a host-backed form for inspection.",
+    ),
+    )
+end
+
+@inline _kron_entry(F::AbstractMatrix, i::Int, j::Int) = F[i, j]
+_kron_entry(::Union{_KronDeviceDiagonal, _KronDeviceSparse}, ::Int, ::Int) = _throw_kron_device_entry()
+
+# `y *= β` and `y += c * cur`: scalar `@simd` loops on the host (unchanged, 0 bytes), one
+# broadcast on device storage, chosen by the locality of `y`'s own type.
+@inline _kron_scale!(y::AbstractVector, β, n::Int) = _kron_scale!(locality(typeof(y)), y, β, n)
+@inline function _kron_scale!(::HostLocality, y, β, n::Int)
+    @inbounds @simd for i in 1:n
+        y[i] *= β
+    end
+    return y
+end
+# Scalars are converted to `eltype(y)` first: `_kron_coeff` is a `Float64`, and a
+# `Float64` coefficient would not compile in the kernel on a device with no double precision.
+@inline _kron_scale!(::DeviceLocality, y, β, ::Int) = (y .*= convert(eltype(y), β); y)
+
+@inline _kron_axpy!(y::AbstractVector, c, cur, n::Int) = _kron_axpy!(locality(typeof(y)), y, c, cur, n)
+@inline function _kron_axpy!(::HostLocality, y, c, cur, n::Int)
+    @inbounds @simd for i in 1:n
+        y[i] += c * cur[i]
+    end
+    return y
+end
+@inline _kron_axpy!(::DeviceLocality, y, c, cur, ::Int) = (y .+= convert(eltype(y), c) .* cur; y)
 
 # --- Sum factorisation: mode-d contraction on a flat buffer -------------------------- #
 #
@@ -313,8 +441,8 @@ end
 # non-abstract type and unrolls the whole `D`-axis loop with no dynamic dispatch.
 
 @inline function _kron_apply_mode!(
-        Y::Vector{T}, F::Diagonal, X::Vector{T}, pre::Int, m::Int, post::Int
-) where {T}
+        Y::AbstractVector, F::Diagonal, X::AbstractVector, pre::Int, m::Int, post::Int
+)
     d = F.diag
     @inbounds for k in 0:(post - 1)
         base = k * pre * m
@@ -330,9 +458,9 @@ end
 end
 
 @inline function _kron_apply_mode!(
-        Y::Vector{T}, F::SparseMatrixCSC, X::Vector{T}, pre::Int, m::Int, post::Int
-) where {T}
-    fill!(Y, zero(T))
+        Y::AbstractVector, F::SparseMatrixCSC, X::AbstractVector, pre::Int, m::Int, post::Int
+)
+    fill!(Y, zero(eltype(Y)))
     rows = rowvals(F)
     vals = nonzeros(F)
     @inbounds for k in 0:(post - 1)
@@ -354,8 +482,8 @@ end
 
 # One-axis-left base case: writes the result into `nxt` and returns it.
 @inline function _kron_apply_axes!(
-        cur::Vector{T}, nxt::Vector{T}, factors::Tuple{Any}, dims::Tuple{Any}, pre::Int, n::Int
-) where {T}
+        cur::AbstractVector, nxt::AbstractVector, factors::Tuple{Any}, dims::Tuple{Any}, pre::Int, n::Int
+)
     m = dims[1]
     post = n ÷ (pre * m)
     _kron_apply_mode!(nxt, factors[1], cur, pre, m, post)
@@ -363,8 +491,8 @@ end
 end
 
 @inline function _kron_apply_axes!(
-        cur::Vector{T}, nxt::Vector{T}, factors::Tuple, dims::Tuple, pre::Int, n::Int
-) where {T}
+        cur::AbstractVector, nxt::AbstractVector, factors::Tuple, dims::Tuple, pre::Int, n::Int
+)
     m = dims[1]
     post = n ÷ (pre * m)
     _kron_apply_mode!(nxt, factors[1], cur, pre, m, post)
@@ -375,40 +503,36 @@ end
 # ping-pongs `buf1`/`buf2` one axis at a time, returning whichever one ends up holding the
 # `D`-th axis's result -- `mul!` reads it back rather than assuming a fixed parity.
 @inline function _kron_apply_term!(
-        buf1::Vector{T}, buf2::Vector{T}, term::KroneckerTerm, x::AbstractVector, dims::Tuple
-) where {T}
+        buf1::AbstractVector, buf2::AbstractVector, term::KroneckerTerm, x::AbstractVector, dims::Tuple
+)
     copyto!(buf1, x)
     return _kron_apply_axes!(buf1, buf2, term.factors, dims, 1, length(buf1))
 end
 
-# One term's contribution accumulated into `y`, peeling `K.terms` (a heterogeneous `Tuple`
+# One term's contribution, times `α`, accumulated into `y`, peeling `K.terms` (a heterogeneous `Tuple`
 # -- each term's factors are a different concrete `SparseMatrixCSC`/`Diagonal` mix) the same
 # way `_kron_apply_axes!` peels `factors`, rather than `for term in K.terms`: the latter
 # gives `term` a small-`Union` type across iterations, and this package's zero-allocation
 # contract is measured, not assumed (`bramble-verification` #1) -- a `for` loop here
 # measured a nonzero `@allocated` on the very mixed-factor terms this operator exists for.
 @inline function _kron_accumulate!(
-        y::AbstractVector, buf1::Vector{T}, buf2::Vector{T}, terms::Tuple{Any}, x::AbstractVector, dims::Tuple, n::Int
-) where {T}
+        y::AbstractVector, buf1::AbstractVector, buf2::AbstractVector, terms::Tuple{Any}, x::AbstractVector, dims::Tuple, n::Int, α::Number
+)
     term = terms[1]
     cur = _kron_apply_term!(buf1, buf2, term, x, dims)
-    c = _kron_coeff(term.scales)
-    @inbounds @simd for i in 1:n
-        y[i] += c * cur[i]
-    end
+    c = α * _kron_coeff(term.scales)
+    _kron_axpy!(y, c, cur, n)
     return y
 end
 
 @inline function _kron_accumulate!(
-        y::AbstractVector, buf1::Vector{T}, buf2::Vector{T}, terms::Tuple, x::AbstractVector, dims::Tuple, n::Int
-) where {T}
+        y::AbstractVector, buf1::AbstractVector, buf2::AbstractVector, terms::Tuple, x::AbstractVector, dims::Tuple, n::Int, α::Number
+)
     term = terms[1]
     cur = _kron_apply_term!(buf1, buf2, term, x, dims)
-    c = _kron_coeff(term.scales)
-    @inbounds @simd for i in 1:n
-        y[i] += c * cur[i]
-    end
-    return _kron_accumulate!(y, buf1, buf2, Base.tail(terms), x, dims, n)
+    c = α * _kron_coeff(term.scales)
+    _kron_axpy!(y, c, cur, n)
+    return _kron_accumulate!(y, buf1, buf2, Base.tail(terms), x, dims, n, α)
 end
 
 @noinline function _throw_kron_dimmismatch(K::KroneckerLinearOperator, x, y)
@@ -420,18 +544,8 @@ end
     )
 end
 
-# Grows the two scratch buffers to `n` on the first call and never again -- see
-# `KroneckerLinearOperator`'s own docstring for why they start empty.
-@inline function _kron_ensure_buffers!(K::KroneckerLinearOperator, n::Int)
-    if length(K.buf1) != n
-        resize!(K.buf1, n)
-        resize!(K.buf2, n)
-    end
-    return nothing
-end
-
-# Ambiguous against `ReverseDiff.mul!(::TrackedArray, ::AbstractMatrix, ::TrackedArray{V,
-# D, 1})` whenever `ReverseDiff` is loaded alongside Bramble: `KroneckerLinearOperator <:
+# The three-argument method below is ambiguous against `ReverseDiff.mul!(::TrackedArray,
+# ::AbstractMatrix, ::TrackedArray{V, D, 1})` whenever `ReverseDiff` is loaded alongside Bramble: `KroneckerLinearOperator <:
 # AbstractMatrix`, so it satisfies ReverseDiff's unconstrained middle argument, while a
 # `TrackedVector` (`TrackedArray{V, D, 1}`) satisfies this method's `AbstractVector` on both
 # `y` and `x` -- the classic diagonal clash where each method wins on a different argument
@@ -441,19 +555,47 @@ end
 # to something other than `AbstractVector` was considered and rejected: this operator's own
 # docstring commits it to plugging into `LinearProblem`/`KrylovJL_CG` "the same way an
 # assembled matrix does", and those callers are entitled to pass any `AbstractVector` (a
-# view, a solver's own work buffer), not just `Vector`. The only real fix is a disambiguating
-# `mul!(::ReverseDiff.TrackedArray, ::KroneckerLinearOperator, ::ReverseDiff.TrackedArray)`,
-# which needs a (weak) dependency on `ReverseDiff` that Bramble does not have -- it is a test
-# dependency only, pulled in to check that `pde_solve`'s AD rules compose with third-party
-# backends, not something Bramble's own code touches. `test/quality/aqua.jl`'s "Extension
-# method ambiguity" testset documents and excludes this specific pair for the same reason.
-function mul!(y::AbstractVector, K::KroneckerLinearOperator{T}, x::AbstractVector) where {T}
+# view, a solver's own work buffer), not just `Vector`. Resolved in
+# `ext/BrambleReverseDiffExt.jl` (gpena/Bramble.jl#295), a weak dependency on `ReverseDiff`
+# that defines the disambiguating `mul!(::ReverseDiff.TrackedArray, ::KroneckerLinearOperator,
+# ::ReverseDiff.TrackedArray)`, forwarding to `ReverseDiff.record_mul!` so the reverse pass
+# stays correct.
+#
+# `scratch = (b1, b2)` supplies the two `n`-length sum-factorisation vectors (0 bytes
+# allocated); left at `nothing`, both are allocated per call so `K` itself stays
+# buffer-free and thread-safe (see `KroneckerLinearOperator`'s docstring).
+#
+# Five-argument form, `y = α * K * x + β * y`, with `LinearAlgebra`'s semantics: `β == 0`
+# (including `false`) overwrites `y`, so a `NaN` already in `y` does not survive; otherwise
+# `y` is scaled in place by `β` before the terms (each scaled by `α`) accumulate into it.
+# Without this method `mul!(y, K, x, α, β)` falls to `LinearAlgebra`'s generic `O(n^2)`
+# `getindex` loop. `α`/`β` may be `Int` (`semidiscretize_rhs` passes `-1, 1`).
+function mul!(
+        y::AbstractVector, K::KroneckerLinearOperator{T}, x::AbstractVector, α::Number,
+        β::Number; scratch = nothing
+) where {T}
     n = K.n
     (length(x) == n && length(y) == n) || _throw_kron_dimmismatch(K, x, y)
-    _kron_ensure_buffers!(K, n)
-    fill!(y, zero(eltype(y)))
-    _kron_accumulate!(y, K.buf1, K.buf2, K.terms, x, K.dims, n)
+    if scratch === nothing
+        Tp = promote_type(T, eltype(x), eltype(y))
+        b1, b2 = similar(x, Tp, n), similar(x, Tp, n)
+    else
+        b1, b2 = scratch
+    end
+    if iszero(β)
+        fill!(y, zero(eltype(y)))
+    elseif !isone(β)
+        _kron_scale!(y, β, n)
+    end
+    _kron_accumulate!(y, b1, b2, K.terms, x, K.dims, n, α)
     return y
+end
+
+# The three-argument form is the `α = true, β = false` case: one code path.
+function mul!(
+        y::AbstractVector, K::KroneckerLinearOperator, x::AbstractVector; scratch = nothing
+)
+    return mul!(y, K, x, true, false; scratch = scratch)
 end
 
 # Only the one-argument method. `AbstractArray` derives `size(A, i)` from it, and defining
@@ -479,7 +621,7 @@ function Base.getindex(K::KroneckerLinearOperator{T, D}, i::Int, j::Int) where {
         c = _kron_coeff(term.scales)
         p = one(T)
         for d in 1:D
-            p *= term.factors[d][Ic[d], Jc[d]]
+            p *= _kron_entry(term.factors[d], Ic[d], Jc[d])
         end
         total += c * p
     end
@@ -503,6 +645,7 @@ issymmetric(::KroneckerLinearOperator) = true
 
 _kron_as_sparse(F::SparseMatrixCSC) = F
 _kron_as_sparse(F::Diagonal) = sparse(F)
+_kron_as_sparse(::Union{_KronDeviceDiagonal, _KronDeviceSparse}) = _throw_kron_device_entry()
 
 """
     SparseMatrixCSC(K::KroneckerLinearOperator) -> SparseMatrixCSC
@@ -512,13 +655,22 @@ times the Kronecker product of its `D` one-dimensional factors, last axis leftmo
 (`A_2D = H_y ⊗ A_x + A_y ⊗ H_x`, matching gpena/Bramble.jl#162's own formula). For testing
 and inspection only -- this is exactly the `D`-dimensional matrix [`kronecker_operator`](@ref)
 is built to avoid forming.
+
+Built as a single `sparse(I, J, V, n, n)` call over every term's `findnz` triplets (`V`
+pre-scaled by that term's coefficient) rather than summing each term's Kronecker product
+into an accumulator one term at a time, which reallocates the whole `n x n` matrix per term.
 """
 function SparseArrays.SparseMatrixCSC(K::KroneckerLinearOperator{T}) where {T}
-    A = spzeros(T, K.n, K.n)
+    I = Int[]
+    J = Int[]
+    V = T[]
     for term in K.terms
         c = _kron_coeff(term.scales)
         Aterm = foldl(kron, reverse(map(_kron_as_sparse, term.factors)))
-        A = A + c * Aterm
+        i, j, v = SparseArrays.findnz(Aterm)
+        append!(I, i)
+        append!(J, j)
+        append!(V, c .* v)
     end
-    return A
+    return sparse(I, J, V, K.n, K.n)
 end
