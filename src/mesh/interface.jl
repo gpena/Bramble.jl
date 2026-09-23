@@ -93,10 +93,12 @@ consulted if available.
 """
 @inline function index_in_marker(Ωₕ::AbstractMeshType{D}, label::Symbol) where {D}
     m = markers(Ωₕ)
-    haskey(m, label) && return m[label]
+    direct = get(m, label, nothing)
+    direct !== nothing && return direct
     alias = _boundary_symbol_alias(Val(D), label)
-    if alias !== nothing && haskey(m, alias)
-        return m[alias]
+    if alias !== nothing
+        aliased = get(m, alias, nothing)
+        aliased !== nothing && return aliased
     end
     return _throw_unknown_marker_label(Ωₕ, label)
 end

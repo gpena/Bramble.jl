@@ -28,12 +28,12 @@ true
 
 See also: [`boundary_symbol_to_dict`](@ref), [`set_markers!`](@ref).
 """
-@inline boundary_symbol_to_cartesian(indices::CartesianIndices{1}) = (;
-    :xmin => first(indices),
-    :xmax => last(indices),
-    :left => first(indices),
-    :right => last(indices)
-)
+@inline function boundary_symbol_to_cartesian(indices::CartesianIndices{1})
+    N = length(indices)
+    xmin = indices[1:1]
+    xmax = indices[N:N]
+    return (; :xmin => xmin, :xmax => xmax, :left => xmin, :right => xmax)
+end
 
 function boundary_symbol_to_cartesian(indices::CartesianIndices{2})
     N, M = size(indices)
@@ -249,13 +249,6 @@ Utility function to update a boolean marker vector.
 
 Sets entries to `true` at the linear positions corresponding to `indices_to_mark`.
 """
-@inline function _mark_indices!(
-        marker_set::AbstractVector{Bool}, linear_indices, idx::CartesianIndex
-)
-    @inbounds marker_set[linear_indices[idx]] = true
-    return nothing
-end
-
 @inline function _mark_indices!(
         marker_set::AbstractVector{Bool}, linear_indices, indices_to_mark
 )

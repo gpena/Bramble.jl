@@ -109,6 +109,42 @@ using ..TestUtils: @test_allocs
         @test_allocs assemble!(B, a)
     end
 
+    @testset "Only the facet slice is set, 1D to 3D, non-uniform (#333)" begin
+        # Independent reference: the face is found from the geometric normal alone.
+        function reference(Ωₕ, marker, D)
+            ν = normal_vector(Ωₕ, marker)
+            np = npoints(Ωₕ, Tuple)
+            axis = findfirst(!iszero, ν)
+            side = ν[axis] < 0 ? 1 : np[axis]
+            out = ntuple(_ -> zeros(prod(np)), D)
+            for (k, I) in enumerate(CartesianIndices(np))
+                I[axis] == side || continue
+                for d in 1:D
+                    out[d][k] = ν[d]
+                end
+            end
+            return out
+        end
+        cases = (
+            (domain(interval(0.0, 1.0)), 9, false, (:xmin, :xmax, :left, :right)),
+            (domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (7, 6), (false, false),
+                (:xmin, :xmax, :ymin, :ymax, :left, :right, :bottom, :top)),
+            (domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 3.0)),
+                (5, 6, 4), (false, false, false),
+                (:xmin, :xmax, :ymin, :ymax, :zmin, :zmax,
+                    :back, :front, :left, :right, :bottom, :top))
+        )
+        for (D, (S, sz, unif, labels)) in enumerate(cases)
+            Ωₕ = mesh(S, sz, unif)
+            Wₕ = gridspace(Ωₕ)
+            for m in labels
+                nₕ = normal_vector(Wₕ, m)
+                ref = reference(Ωₕ, m, D)
+                @test all(parent(nₕ[d]) == ref[d] for d in 1:D)
+            end
+        end
+    end
+
     @testset "Refusals" begin
         Wₕ = gridspace(mesh(Ω, (7, 7), (true, true)))
         v = Bramble.TestFunction{2}()

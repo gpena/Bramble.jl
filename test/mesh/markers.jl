@@ -228,8 +228,10 @@ using ..TestUtils: alloc_test, @test_allocs
         @test_allocs Bramble._boundary_symbol_alias(Val(2), :ymin)
         @test_allocs Bramble._boundary_symbol_alias(Val(3), :zmax)
         @test_allocs Bramble.index_in_marker(Ωₕ_alias_test, :xmin)
+        @test_allocs Bramble.boundary_indices(Bramble.indices(Ωₕ_1d))
         @test_allocs Bramble.boundary_indices(Bramble.indices(Ωₕ_2d))
         @test_allocs Bramble.boundary_indices(Bramble.indices(Ωₕ_3d))
+        @test_allocs Bramble.boundary_symbol_to_cartesian(Bramble.indices(Ωₕ_1d))
     end
 end
 

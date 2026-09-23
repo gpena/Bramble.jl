@@ -99,7 +99,6 @@ if PRECOMPILE_WORKLOAD
             stepsize(Ωₕ2, 1)
             locate_cell(Ωₕ1, 0.5)
             locate_cell(Ωₕ2, (0.5, 0.5))
-            locate_cell(Ωₕ2, [0.5, 0.5])
             normal_vector(Ωₕ1, :left)
             normal_vector(Ωₕ2, :top)
             normal_vector(Ωₕ3, :front)

@@ -468,6 +468,21 @@ else
         ny = reshape(Array(parent(nu_dev[2])), n, n)
         @test all(==(0.0f0), ny[:, 1:(n - 1)])
         @test all(==(1.0f0), ny[:, n])
+
+        # #333: a 3D device space matches host on every face, and the fill builds only
+        # O(facet) host data -- far below one full-volume host buffer.
+        m3 = 64
+        S3 = domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0))
+        W3_dev = gridspace(mesh(S3, (m3, m3, m3), (true, false, true); backend = b))
+        W3_host = gridspace(mesh(S3, (m3, m3, m3), (true, false, true)))
+        for label in (:xmin, :xmax, :ymin, :ymax, :zmin, :zmax, :back, :top)
+            nd = normal_vector(W3_dev, label)
+            nh = normal_vector(W3_host, label)
+            @test parent(nd[1]) isa Metal.MtlArray
+            @test all(Array(parent(nd[d])) == parent(nh[d]) for d in 1:3)
+        end
+        normal_vector(W3_dev, :ymax)
+        @test (@allocated normal_vector(W3_dev, :ymax)) < m3^3 * sizeof(Float32) ÷ 4
     end
 
     @testset "#312: interpolation between device spaces matches the host" begin
