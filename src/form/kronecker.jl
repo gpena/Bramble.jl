@@ -427,12 +427,11 @@ end
 # to something other than `AbstractVector` was considered and rejected: this operator's own
 # docstring commits it to plugging into `LinearProblem`/`KrylovJL_CG` "the same way an
 # assembled matrix does", and those callers are entitled to pass any `AbstractVector` (a
-# view, a solver's own work buffer), not just `Vector`. The only real fix is a disambiguating
-# `mul!(::ReverseDiff.TrackedArray, ::KroneckerLinearOperator, ::ReverseDiff.TrackedArray)`,
-# which needs a (weak) dependency on `ReverseDiff` that Bramble does not have -- it is a test
-# dependency only, pulled in to check that `pde_solve`'s AD rules compose with third-party
-# backends, not something Bramble's own code touches. `test/quality/aqua.jl`'s "Extension
-# method ambiguity" testset documents and excludes this specific pair for the same reason.
+# view, a solver's own work buffer), not just `Vector`. Resolved in
+# `ext/BrambleReverseDiffExt.jl` (gpena/Bramble.jl#295), a weak dependency on `ReverseDiff`
+# that defines the disambiguating `mul!(::ReverseDiff.TrackedArray, ::KroneckerLinearOperator,
+# ::ReverseDiff.TrackedArray)`, forwarding to `ReverseDiff.record_mul!` so the reverse pass
+# stays correct.
 #
 # `scratch = (b1, b2)` supplies the two `n`-length sum-factorisation vectors (0 bytes
 # allocated); left at `nothing`, both are allocated per call so `K` itself stays

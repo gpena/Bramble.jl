@@ -141,4 +141,35 @@ end
     end
 end
 
+@testset "ReverseDiff/KroneckerLinearOperator mul! disambiguation (gpena/Bramble.jl#295)" begin
+    # A small non-uniform 2D separable form -- `is_separable`'s own recognised shape
+    # (`innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))`, see src/form/kronecker.jl). Exercises exactly
+    # what `ext/BrambleReverseDiffExt.jl`'s disambiguating `mul!` needs to get right: the
+    # extension only loads (and only needs to resolve the ambiguity) once `ReverseDiff` --
+    # already `using`'d above -- is loaded alongside Bramble.
+    @assert Base.get_extension(Bramble, :BrambleReverseDiffExt) !== nothing "BrambleReverseDiffExt did not load"
+
+    Random.seed!(20260923)
+    Ω = domain(Bramble.interval(0.0, 1.0) × Bramble.interval(0.0, 1.0))
+    Ωₕ = mesh(Ω, (9, 7), (false, false))
+    Wₕ = gridspace(Ωₕ)
+    a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+    K = kronecker_operator(a)
+    A = assemble(a)
+    n = size(K, 1)
+    x0 = rand(n)
+
+    @testset "tracked mul!" begin
+        ty = ReverseDiff.track(zeros(n))
+        tx = ReverseDiff.track(x0)
+        mul!(ty, K, tx)
+        @test ReverseDiff.value(ty) ≈ A * x0
+    end
+
+    @testset "gradient through K * x" begin
+        g = ReverseDiff.gradient(x -> sum(abs2, K * x), x0)
+        @test g ≈ 2 * (A' * (A * x0))
+    end
+end
+
 end # module ExtADBackendVerificationTests

@@ -129,20 +129,9 @@ using Aqua
     # default sparse factorization, not one Bramble names directly. Dropped for the same
     # reason and until the same kind of upstream fix.
     #
-    # `ReverseDiff` (a test dependency, used to check that `pde_solve`'s AD rules compose
-    # with third-party backends) defines
-    # `mul!(::TrackedArray, ::AbstractMatrix, ::TrackedArray{V, D, 1})` directly, not in an
-    # extension, ambiguous with `KroneckerLinearOperator`'s own
-    # `mul!(::AbstractVector, ::KroneckerLinearOperator, ::AbstractVector)`
-    # (src/form/kronecker.jl) because `KroneckerLinearOperator <: AbstractMatrix` satisfies
-    # ReverseDiff's unconstrained middle argument. See the comment beside that `mul!` for why
-    # neither narrowing it nor deleting it resolves this. Dropped until Bramble gains a (weak)
-    # dependency on `ReverseDiff` to define the disambiguating method, or `ReverseDiff`
-    # narrows its own signature away from bare `AbstractMatrix`.
     known_unfixable_ambiguities = (
         (:ldiv!, :LHLFactorizationSparseExt),
-        (:ldiv!, :PureKLUForwardDiffExt),
-        (:mul!, :ReverseDiff)
+        (:ldiv!, :PureKLUForwardDiffExt)
     )
 
     function _is_known_unfixable(m1::Method, m2::Method)
