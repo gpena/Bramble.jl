@@ -163,13 +163,14 @@ end
 A matrix-free linear operator for a separable [`BilinearForm`](@ref) (see
 [`is_separable`](@ref)): the sum, over its terms, of a Kronecker product of `D`
 one-dimensional factor matrices, applied by sum factorisation
-(`LinearAlgebra.mul!(y, K, x)`) rather than ever materialising the `D`-dimensional matrix.
+(`LinearAlgebra.mul!(y, K, x)`, or the five-argument `mul!(y, K, x, α, β)` computing
+`α * K * x + β * y`) rather than ever materialising the `D`-dimensional matrix.
 For a `200^3` mesh the factors together hold `O(200)` numbers per axis instead of the
 assembled matrix's `O(200^3)` stored entries.
 
 Build one with [`kronecker_operator`](@ref). Subtypes `AbstractMatrix{T}` so it plugs into
 `LinearProblem`/`KrylovJL_CG` (`LinearSolve.jl`) the same way an assembled matrix does, and
-supports `size`, `eltype`, `getindex`, `Base.:*`, `LinearAlgebra.issymmetric`, and
+supports `size`, `eltype`, `getindex`, `Base.:*`, three- and five-argument `mul!`, `LinearAlgebra.issymmetric`, and
 `SparseMatrixCSC(K)` (an explicit `kron` of the factors, for testing and inspection -- the
 very matrix this operator avoids forming).
 
@@ -178,7 +179,7 @@ immutable after construction and safe to share across threads (concurrent `mul!`
 one `K` never race). Sum factorisation needs two `n`-length scratch vectors;
 `mul!(y, K, x)` allocates them afresh on every call, with element type
 `promote_type(T, eltype(x), eltype(y))` so ForwardDiff `Dual`s pass through, while
-`mul!(y, K, x; scratch = (b1, b2))` uses caller-owned vectors and allocates nothing --
+`mul!(y, K, x; scratch = (b1, b2))` (or `mul!(y, K, x, α, β; scratch = (b1, b2))`) uses caller-owned vectors and allocates nothing --
 give each thread its own pair.
 
 Dirichlet rows are out of scope: this operator carries no boundary constraint of its own.
@@ -376,18 +377,18 @@ end
     return _kron_apply_axes!(buf1, buf2, term.factors, dims, 1, length(buf1))
 end
 
-# One term's contribution accumulated into `y`, peeling `K.terms` (a heterogeneous `Tuple`
+# One term's contribution, times `α`, accumulated into `y`, peeling `K.terms` (a heterogeneous `Tuple`
 # -- each term's factors are a different concrete `SparseMatrixCSC`/`Diagonal` mix) the same
 # way `_kron_apply_axes!` peels `factors`, rather than `for term in K.terms`: the latter
 # gives `term` a small-`Union` type across iterations, and this package's zero-allocation
 # contract is measured, not assumed (`bramble-verification` #1) -- a `for` loop here
 # measured a nonzero `@allocated` on the very mixed-factor terms this operator exists for.
 @inline function _kron_accumulate!(
-        y::AbstractVector, buf1::AbstractVector, buf2::AbstractVector, terms::Tuple{Any}, x::AbstractVector, dims::Tuple, n::Int
+        y::AbstractVector, buf1::AbstractVector, buf2::AbstractVector, terms::Tuple{Any}, x::AbstractVector, dims::Tuple, n::Int, α::Number
 )
     term = terms[1]
     cur = _kron_apply_term!(buf1, buf2, term, x, dims)
-    c = _kron_coeff(term.scales)
+    c = α * _kron_coeff(term.scales)
     @inbounds @simd for i in 1:n
         y[i] += c * cur[i]
     end
@@ -395,15 +396,15 @@ end
 end
 
 @inline function _kron_accumulate!(
-        y::AbstractVector, buf1::AbstractVector, buf2::AbstractVector, terms::Tuple, x::AbstractVector, dims::Tuple, n::Int
+        y::AbstractVector, buf1::AbstractVector, buf2::AbstractVector, terms::Tuple, x::AbstractVector, dims::Tuple, n::Int, α::Number
 )
     term = terms[1]
     cur = _kron_apply_term!(buf1, buf2, term, x, dims)
-    c = _kron_coeff(term.scales)
+    c = α * _kron_coeff(term.scales)
     @inbounds @simd for i in 1:n
         y[i] += c * cur[i]
     end
-    return _kron_accumulate!(y, buf1, buf2, Base.tail(terms), x, dims, n)
+    return _kron_accumulate!(y, buf1, buf2, Base.tail(terms), x, dims, n, α)
 end
 
 @noinline function _throw_kron_dimmismatch(K::KroneckerLinearOperator, x, y)
@@ -415,8 +416,8 @@ end
     )
 end
 
-# Ambiguous against `ReverseDiff.mul!(::TrackedArray, ::AbstractMatrix, ::TrackedArray{V,
-# D, 1})` whenever `ReverseDiff` is loaded alongside Bramble: `KroneckerLinearOperator <:
+# The three-argument method below is ambiguous against `ReverseDiff.mul!(::TrackedArray,
+# ::AbstractMatrix, ::TrackedArray{V, D, 1})` whenever `ReverseDiff` is loaded alongside Bramble: `KroneckerLinearOperator <:
 # AbstractMatrix`, so it satisfies ReverseDiff's unconstrained middle argument, while a
 # `TrackedVector` (`TrackedArray{V, D, 1}`) satisfies this method's `AbstractVector` on both
 # `y` and `x` -- the classic diagonal clash where each method wins on a different argument
@@ -436,8 +437,15 @@ end
 # `scratch = (b1, b2)` supplies the two `n`-length sum-factorisation vectors (0 bytes
 # allocated); left at `nothing`, both are allocated per call so `K` itself stays
 # buffer-free and thread-safe (see `KroneckerLinearOperator`'s docstring).
+#
+# Five-argument form, `y = α * K * x + β * y`, with `LinearAlgebra`'s semantics: `β == 0`
+# (including `false`) overwrites `y`, so a `NaN` already in `y` does not survive; otherwise
+# `y` is scaled in place by `β` before the terms (each scaled by `α`) accumulate into it.
+# Without this method `mul!(y, K, x, α, β)` falls to `LinearAlgebra`'s generic `O(n^2)`
+# `getindex` loop. `α`/`β` may be `Int` (`semidiscretize_rhs` passes `-1, 1`).
 function mul!(
-        y::AbstractVector, K::KroneckerLinearOperator{T}, x::AbstractVector; scratch = nothing
+        y::AbstractVector, K::KroneckerLinearOperator{T}, x::AbstractVector, α::Number,
+        β::Number; scratch = nothing
 ) where {T}
     n = K.n
     (length(x) == n && length(y) == n) || _throw_kron_dimmismatch(K, x, y)
@@ -447,9 +455,22 @@ function mul!(
     else
         b1, b2 = scratch
     end
-    fill!(y, zero(eltype(y)))
-    _kron_accumulate!(y, b1, b2, K.terms, x, K.dims, n)
+    if iszero(β)
+        fill!(y, zero(eltype(y)))
+    elseif !isone(β)
+        @inbounds @simd for i in 1:n
+            y[i] *= β
+        end
+    end
+    _kron_accumulate!(y, b1, b2, K.terms, x, K.dims, n, α)
     return y
+end
+
+# The three-argument form is the `α = true, β = false` case: one code path.
+function mul!(
+        y::AbstractVector, K::KroneckerLinearOperator, x::AbstractVector; scratch = nothing
+)
+    return mul!(y, K, x, true, false; scratch = scratch)
 end
 
 # Only the one-argument method. `AbstractArray` derives `size(A, i)` from it, and defining

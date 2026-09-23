@@ -20,6 +20,7 @@ const KRON_SEED = 20260919
 
 # Inside a function so `@allocated` measures `mul!` alone, not global-scope boxing.
 _kron_alloc_with_scratch(y, K, x, s) = @allocated mul!(y, K, x; scratch = s)
+_kron_alloc5_with_scratch(y, K, x, α, β, s) = @allocated mul!(y, K, x, α, β; scratch = s)
 
 @testset "Kronecker" begin
     @testset "is_separable" begin
@@ -118,6 +119,36 @@ _kron_alloc_with_scratch(y, K, x, s) = @allocated mul!(y, K, x; scratch = s)
             x0, v = rand(n), rand(n)
             dK = ForwardDiff.derivative(t -> K * (x0 .+ t .* v), 0.0)
             @test isapprox(dK, A * v; rtol = 1e-12, atol = 1e-12)
+
+            # Five-argument `mul!`: `y = α * K * x + β * y`, Int/Bool/Float α and β.
+            M = Matrix(A)
+            for (α, β) in ((1, 0), (2.0, 0.0), (-1, 1), (0.5, -3.0), (0, 2.0), (true, false))
+                y0 = rand(n)
+                y5 = copy(y0)
+                mul!(y5, K, x, α, β)
+                @test isapprox(y5, α * M * x + β * y0; rtol = 1e-12, atol = 1e-12)
+            end
+
+            # `β = 0` overwrites `y`: a NaN already there must not survive.
+            ynan = fill(NaN, n)
+            mul!(ynan, K, x, 1.0, 0.0)
+            @test isapprox(ynan, yref; rtol = 1e-12, atol = 1e-12)
+            ynan = fill(NaN, n)
+            mul!(ynan, K, x, 2, false)
+            @test isapprox(ynan, 2 * yref; rtol = 1e-12, atol = 1e-12)
+
+            # `semidiscretize_rhs`'s pattern: `copyto!(du, F); mul!(du, K, u, -1, 1)`.
+            F = rand(n)
+            du = similar(F)
+            copyto!(du, F)
+            mul!(du, K, x, -1, 1)
+            @test isapprox(du, F - A * x; rtol = 1e-12, atol = 1e-12)
+
+            # Zero allocations for the five-argument form with caller-owned scratch.
+            _kron_alloc5_with_scratch(du, K, x, -1, 1, s)
+            @test _kron_alloc5_with_scratch(du, K, x, -1, 1, s) == 0
+            _kron_alloc5_with_scratch(du, K, x, 0.5, 0.0, s)
+            @test _kron_alloc5_with_scratch(du, K, x, 0.5, 0.0, s) == 0
         end
     end
 
