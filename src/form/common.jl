@@ -411,9 +411,13 @@ end
 # Whether `op` wraps a bare trial or test leaf directly. Such an operand's re-evaluation is
 # a handful of flops and is inlined into each tap; anything deeper is called out of line
 # instead, since inlining a fresh evaluation per tap makes the generated code (and so the
-# first-call compile time) grow like taps^depth. The check folds at compile time.
-@inline _wraps_leaf(op::T) where {T} = hasfield(T, :inner_op) &&
-                                       fieldtype(T, :inner_op) <: Union{TrialFunction, TestFunction}
+# first-call compile time) grow like taps^depth. Answered by dispatch on the operand's type
+# parameter, so it folds at compile time; the node files add the methods for their own
+# wrappers (form/operators/average.jl, form/operators/restriction.jl).
+const _BareLeaf = Union{TrialFunction, TestFunction}
+@inline _wraps_leaf(::Any) = false
+@inline _wraps_leaf(::Union{
+    OperatorScale{D, S, <:_BareLeaf}, GridFunctionScale{D, S, <:_BareLeaf}}) where {D, S} = true
 
 # A bare leaf's stencil is the same everywhere, so relabelling it is exact.
 @inline _shifted_inner_stencil(

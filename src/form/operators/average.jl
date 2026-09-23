@@ -181,6 +181,14 @@ end
     end
 end
 
+# The wrappers whose operand is a bare trial or test leaf (see `_wraps_leaf`, form/common.jl).
+@inline _wraps_leaf(::Union{
+    BackwardDifference{D, Dim, <:_BareLeaf}, ForwardDifference{D, Dim, <:_BareLeaf},
+    CenteredDifference{D, Dim, <:_BareLeaf}, StarDifference{D, Dim, <:_BareLeaf},
+    CrossWeightedDifference{D, Dim, <:_BareLeaf}, JumpNode{D, Dim, <:_BareLeaf},
+    BackwardAverage{D, Dim, <:_BareLeaf}, ForwardAverage{D, Dim, <:_BareLeaf},
+    CenteredAverage{D, Dim, <:_BareLeaf}, ShiftNode{D, Dim, <:_BareLeaf}}) where {D, Dim} = true
+
 # ==============================================================================
 # AST Resolution
 # ==============================================================================

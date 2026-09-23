@@ -75,6 +75,8 @@ end
                                                                    (op.region === :interior) :
                                                                    _is_marked(markers, op.region, lin_idx)
 
+@inline _wraps_leaf(::RegionRestriction{D, R, <:_BareLeaf}) where {D, R} = true
+
 # A tap reaching `delta` points away re-evaluates the restriction at that neighbour. Doing
 # it through `local_stencil` above would return `()` or a full tuple depending on the
 # neighbour's marker, so the tap's tuple length would vary from point to point and the
