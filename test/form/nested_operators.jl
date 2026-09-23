@@ -4,7 +4,7 @@ using Test
 using Bramble
 using Random
 using LinearAlgebra: dot
-using ..TestUtils: @test_allocs
+using ..TestUtils: @test_allocs, TEST_GROUP
 import Bramble: D₋ₓ, D₊ₓ, Dcₓ, D̽ₓ, Dₕₓ, Mₓ, M₊ₓ, Mcₓ, jumpₓ, D₋ᵧ, Mcᵧ, Dₕᵧ, restrict_to
 
 # A random non-uniform mesh on the unit square (or interval): the relabelling bug this file
@@ -22,6 +22,30 @@ const XOPS = (("D₋ₓ", D₋ₓ), ("D₊ₓ", D₊ₓ), ("Dcₓ", Dcₓ), ("D�
 const YOPS = (("D₋ᵧ", D₋ᵧ), ("Mcᵧ", Mcᵧ), ("Dₕᵧ", Dₕᵧ))
 
 # `op1(op2(·))` in a form on each side, against the runtime composition on grid functions.
+# The full XOPS×XOPS (plus, in 2D, XOPS×YOPS and YOPS×XOPS) grid is 81/135 pairs -- 648
+# fresh form compilations across both dimensions, ~309 s and 1.5 GB locally -- about half
+# the Forms group's time, and the largest addition when the macOS CI unit job began being
+# killed. The default grid below is a *cover*, not a sample: a cyclic walk (op i with op
+# i+1 and op i+3, wrapping) puts every operator through as outer twice and as inner twice,
+# at a fraction of the cost. The full grid still runs, in the weekly `full` group
+# (Weekly.yml), via `group == "full"` below.
+function _pairs(D, group)
+    ops = D == 1 ? XOPS : (XOPS..., YOPS...)
+    if group == "full"
+        p = [(a, b) for a in XOPS for b in XOPS]
+        D == 2 && append!(p, [(a, b) for a in XOPS for b in YOPS],
+            [(a, b) for a in YOPS for b in XOPS])
+        return p
+    end
+    n = length(ops)
+    pairs = Tuple{Tuple{String, Function}, Tuple{String, Function}}[]
+    for i in 1:n
+        push!(pairs, (ops[i], ops[mod1(i + 1, n)]))
+        push!(pairs, (ops[i], ops[mod1(i + 3, n)]))
+    end
+    return pairs
+end
+
 function _check_pair(Wₕ, u, w, f, o1, o2)
     op = v -> o1(o2(v))
     A = assemble(form(Wₕ, Wₕ, (p, q) -> innerₕ(op(p), q)))
@@ -37,9 +61,7 @@ end
     for D in (1, 2)
         Wₕ = _nonuniform_space(D)
         u, w, f = _random_element(Wₕ), _random_element(Wₕ), _random_element(Wₕ)
-        pairs = [(a, b) for a in XOPS for b in XOPS]
-        D == 2 && append!(pairs, [(a, b) for a in XOPS for b in YOPS],
-            [(a, b) for a in YOPS for b in XOPS])
+        pairs = _pairs(D, TEST_GROUP)
         @testset "$(D)D" begin
             for ((n1, o1), (n2, o2)) in pairs
                 @testset "$n1($n2(u))" begin
