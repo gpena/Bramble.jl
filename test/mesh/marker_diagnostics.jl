@@ -3,6 +3,7 @@ module MarkerDiagnosticsTests
 using Test
 using Bramble
 using Bramble: index_in_marker, markers
+using ..TestUtils: @test_allocs
 
 @testset "Marker Predicate and Label Error Diagnostics (#224)" begin
     @testset "Non-Bool Predicate Validation at Domain Construction" begin
@@ -95,6 +96,31 @@ using Bramble: index_in_marker, markers
         @test occursin(":boundary", msg)
         @test occursin(":inlet", msg)
         @test occursin(":interior", msg)
+    end
+
+    @testset "index_in_marker single-probe lookup (#335)" begin
+        S = domain(interval(0.0, 1.0) × interval(0.0, 1.0), :inlet => :left, :left => :left)
+        Ωₕ = mesh(S, (6, 5), (true, true))
+
+        direct = index_in_marker(Ωₕ, :left)
+        @test direct === markers(Ωₕ)[:left]
+
+        alias = index_in_marker(Ωₕ, :xmin)
+        @test alias === direct
+
+        @test_allocs index_in_marker(Ωₕ, :left)
+        @test_allocs index_in_marker(Ωₕ, :xmin)
+
+        err = try
+            index_in_marker(Ωₕ, :lefft)
+            nothing
+        catch e
+            e
+        end
+        @test err isa KeyError
+        msg = sprint(showerror, err)
+        @test occursin("key :lefft not found", msg)
+        @test occursin("Available marker labels on this mesh are:", msg)
     end
 
     @testset "Informative Diagnostics in dirichlet_bc! and dirichlet_constraints" begin
