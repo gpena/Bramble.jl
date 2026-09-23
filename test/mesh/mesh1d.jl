@@ -53,13 +53,13 @@ import Base: diff
         @testset "boundary_symbol_to_dict" begin
             indices = CartesianIndices((10,))
             dict = boundary_symbol_to_dict(indices)
-            @test dict[:left] == CartesianIndex(1)
-            @test dict[:right] == CartesianIndex(10)
+            @test dict[:left] == CartesianIndices((1:1,))
+            @test dict[:right] == CartesianIndices((10:10,))
 
             indices_single = CartesianIndices((1,))
             dict_single = boundary_symbol_to_dict(indices_single)
-            @test dict_single[:left] == CartesianIndex(1)
-            @test dict_single[:right] == CartesianIndex(1)
+            @test dict_single[:left] == CartesianIndices((1:1,))
+            @test dict_single[:right] == CartesianIndices((1:1,))
         end
     end
 
@@ -233,17 +233,17 @@ import Base: diff
         Ω = create_test_domain(0.0, 1.0)
         Ωₕ = mesh(Ω, npts, true; backend = backend())
 
-        @test boundary_indices(Ωₕ) == (CartesianIndex(1), CartesianIndex(npts))
+        @test boundary_indices(Ωₕ) == (CartesianIndices((1:1,)), CartesianIndices((npts:npts,)))
         @test interior_indices(Ωₕ) == CartesianIndices((2:(npts - 1),))
 
         # Edge cases
         Ωₕ_2 = mesh(Ω, 2, true; backend = backend())
-        @test boundary_indices(Ωₕ_2) == (CartesianIndex(1), CartesianIndex(2))
+        @test boundary_indices(Ωₕ_2) == (CartesianIndices((1:1,)), CartesianIndices((2:2,)))
         @test isempty(interior_indices(Ωₕ_2)) # Interior is empty range 2:1
 
         # Test on CartesianIndices directly
         inds = CartesianIndices((10,))
-        @test boundary_indices(inds) == (CartesianIndex(1), CartesianIndex(10))
+        @test boundary_indices(inds) == (CartesianIndices((1:1,)), CartesianIndices((10:10,)))
         @test interior_indices(inds) == CartesianIndices((2:9,))
     end
 
