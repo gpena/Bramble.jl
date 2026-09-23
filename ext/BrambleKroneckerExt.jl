@@ -48,7 +48,8 @@ using Bramble:
                ∇ₕ,
                innerₕ
 using Kronecker: Kronecker, ⊗
-using LinearAlgebra: Diagonal, Symmetric, eigen
+using LinearAlgebra: Diagonal, Symmetric, eigen, mul!
+using SparseArrays: SparseMatrixCSC
 using PrecompileTools: @setup_workload, @compile_workload
 
 # --- 1. Conversion to a Kronecker.jl object ------------------------------------------ #
@@ -183,6 +184,19 @@ end
 # (`src/form/kronecker.jl`) already guarantees a mass term's factor is `Diagonal` on every
 # axis and a directional term's is `Diagonal` on every axis but the one it differentiates,
 # so which factor is which is read off its type alone.
+#
+# A device-backed `K` (gpena/Bramble.jl#323) holds `_KronDeviceDiagonal`/`_KronDeviceSparse`
+# factors (`src/form/kronecker.jl`); `_fdm_host_factor` brings each back to the host as a
+# `Diagonal`/`SparseMatrixCSC` first. They are the 1D factors, O(n_d) per axis, and the
+# eigendecomposition below is a host LAPACK call anyway, so this copy is negligible.
+_fdm_host_factor(F) = F
+_fdm_host_factor(F::Bramble._KronDeviceDiagonal) = Diagonal(Array(F.diag))
+function _fdm_host_factor(F::Bramble._KronDeviceSparse)
+    m = length(F.colptr) - 1
+    return SparseMatrixCSC(m, m, Vector{Int}(Array(F.colptr)), Vector{Int}(Array(F.rowval)),
+        Array(F.nzval))
+end
+
 function _fdm_axis_data(K::KroneckerLinearOperator{T, D}) where {T, D}
     H = Vector{Any}(undef, D)
     A = Vector{Any}(undef, D)
@@ -190,7 +204,7 @@ function _fdm_axis_data(K::KroneckerLinearOperator{T, D}) where {T, D}
     coeff_axis = zeros(T, D)
     coeff_mass = zero(T)
     for term in K.terms
-        factors = term.factors
+        factors = map(_fdm_host_factor, term.factors)
         c = Bramble._kron_coeff(term.scales)
         axis = 0
         for d in 1:D
@@ -201,7 +215,7 @@ function _fdm_axis_data(K::KroneckerLinearOperator{T, D}) where {T, D}
             end
         end
         if axis == 0
-            coeff_mass += c
+            coeff_mass += T(c)  # keep `T`: a Float64 grid would not reach a Float32-only device
         else
             A[axis] = factors[axis]
             coeff_axis[axis] += c
@@ -235,7 +249,7 @@ end
 # zero-allocation `_kron_apply_mode!`: `Q_d` is a full (not diagonal or sparse) matrix here,
 # and this runs once per `fdm_solve` call, not once per Krylov iteration, so it is not on the
 # path that contract measures allocation-free.
-function _fdm_apply_mode(X::AbstractArray{T}, M::AbstractMatrix, d::Int) where {T}
+function _fdm_apply_mode(X::Array{T}, M::AbstractMatrix, d::Int) where {T}
     dims = size(X)
     pre = prod(dims[1:(d - 1)]; init = 1)
     m = dims[d]
@@ -250,16 +264,54 @@ function _fdm_apply_mode(X::AbstractArray{T}, M::AbstractMatrix, d::Int) where {
     return reshape(Y3, newdims)
 end
 
+# Device path (gpena/Bramble.jl#323): `X` and `M` are both device arrays, so the mode
+# product is one dense device matmul with no host round trip. Axis `d` is brought to the
+# front with `permutedims` (a device kernel), `M * X2` runs on the `(m, pre * post)`
+# matricisation, and `permutedims` puts the axis back. For `d == 1` no permutation is
+# needed at all.
+function _fdm_apply_mode(X::AbstractArray{T}, M::AbstractMatrix, d::Int) where {T}
+    dims = size(X)
+    pre = prod(dims[1:(d - 1)]; init = 1)
+    m = dims[d]
+    post = prod(dims[(d + 1):end]; init = 1)
+    mo = size(M, 1)
+    newdims = ntuple(i -> i == d ? mo : dims[i], length(dims))
+    if pre == 1
+        Y2 = similar(X, T, mo, post)
+        mul!(Y2, M, reshape(X, m, post))
+        return reshape(Y2, newdims)
+    end
+    Xp = permutedims(reshape(X, pre, m, post), (2, 1, 3))
+    Y2 = similar(X, T, mo, pre * post)
+    mul!(Y2, M, reshape(Xp, m, pre * post))
+    return reshape(permutedims(reshape(Y2, mo, pre, post), (2, 1, 3)), newdims)
+end
+
+# Copies a host matrix/array to storage like the device vector `F` (`similar` + `copyto!`,
+# so no GPU package is named here); the identity for a host `F`.
+_fdm_to_storage(::Array, A::AbstractArray) = A
+function _fdm_to_storage(F::AbstractArray, A::AbstractArray{T}) where {T}
+    B = similar(F, T, size(A))
+    copyto!(B, Array(A))
+    return B
+end
+
 # Sum factorisation: `F` into the eigenbasis axis by axis (`Q_d'`), divide by the combined
 # eigenvalue grid, transform back (`Q_d`) -- the three steps the derivation comment ends on.
 function _fdm_apply(Q::NTuple{D}, Λ::AbstractArray{T, D}, F::AbstractVector, dims::NTuple{D, Int}) where {T, D}
-    X = reshape(Vector{T}(F), dims)
+    # Host `F`: `Q`, `Λ` are used as they are. Device `F`: `Q_d`, `Q_d'` (materialised, so
+    # the device matmul never sees a lazy `Transpose`) and `Λ` are copied to the device once
+    # per call, and every step below stays device-resident.
+    Xv = similar(F, T, length(F))
+    Xv .= F
+    X = reshape(Xv, dims)
     for d in 1:D
-        X = _fdm_apply_mode(X, transpose(Q[d]), d)
+        Qt = Xv isa Array ? transpose(Q[d]) : _fdm_to_storage(Xv, Matrix(transpose(Q[d])))
+        X = _fdm_apply_mode(X, Qt, d)
     end
-    Y = X ./ Λ
+    Y = X ./ _fdm_to_storage(Xv, Λ)
     for d in 1:D
-        Y = _fdm_apply_mode(Y, Q[d], d)
+        Y = _fdm_apply_mode(Y, _fdm_to_storage(Xv, Q[d]), d)
     end
     return vec(Y)
 end
@@ -276,7 +328,10 @@ function _fdm_solve_core(K::KroneckerLinearOperator{T, D}, F::AbstractVector, di
         dims_solve = ntuple(d -> dims_full[d] - 2, Val(D))
         H = ntuple(d -> H[d][rng[d]], Val(D))
         A = ntuple(d -> A[d][rng[d], rng[d]], Val(D))
-        Fint = vec(reshape(F, dims_full)[rng...])
+        # A view plus broadcast, not `getindex` with ranges: no scalar indexing on a
+        # device `F` (gpena/Bramble.jl#323), and the same values on the host.
+        Fint = similar(F, T, prod(dims_solve))
+        reshape(Fint, dims_solve) .= view(reshape(F, dims_full), rng...)
     else
         dims_solve = dims_full
         Fint = F
@@ -287,8 +342,8 @@ function _fdm_solve_core(K::KroneckerLinearOperator{T, D}, F::AbstractVector, di
 
     dirichlet === nothing && return xint
 
-    x = zeros(T, K.n)
-    reshape(x, dims_full)[rng...] .= reshape(xint, dims_solve)
+    x = fill!(similar(xint, T, K.n), zero(T))
+    view(reshape(x, dims_full), rng...) .= reshape(xint, dims_solve)
     return x
 end
 
