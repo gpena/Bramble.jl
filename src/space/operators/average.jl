@@ -156,6 +156,61 @@ end
     return vₕ
 end
 
+#------------------------------------------------------------------------------------------#
+# Centered average (gpena/Bramble.jl#287)
+#
+# `(u(i-1) + 2u(i) + u(i+1))/4` along one direction, zero on both end slices of that
+# direction, the truncation `Dc` uses. It reads both neighbours, so it traverses with
+# `_centered_stencil_ranges` (operators/difference.jl) rather than `_stencil_ranges`.
+#------------------------------------------------------------------------------------------#
+
+# Divided by 4 rather than multiplied by 0.25, for the element-type reason given at
+# `_compute_average`.
+@inline @propagate_inbounds _compute_average(::Centered, ::Val{false}, back, cur, fwd) = (back + 2 * cur + fwd) / 4
+
+function _centered_average_engine!(out, in_ref, dims::NTuple{D, Int}, ::Val{DIM}) where {D, DIM}
+    li = LinearIndices(dims)
+    step = _stencil_step(Val(DIM), Val(D))
+    interior, lo, hi = _centered_stencil_ranges(axes(li), Val(DIM))
+
+    @inbounds @simd for I in CartesianIndices(interior)
+        idx = li[I]
+        out[idx] = _compute_average(
+            Centered(), Val(false), in_ref[li[I - step]], in_ref[idx], in_ref[li[I + step]]
+        )
+    end
+
+    @inbounds for bnd in (lo, hi)
+        @simd for I in CartesianIndices(bnd)
+            idx = li[I]
+            out[idx] = _compute_average(Centered(), Val(true), in_ref[idx])
+        end
+    end
+
+    return nothing
+end
+
+@noinline function _throw_no_device_centered_average()
+    return error(
+        "the centered average (Mcₓ, Mcᵧ, Mc₂, Mcₕ) has no device kernel yet; apply it to " *
+        "a host-backed VectorElement instead.",
+    )
+end
+
+@inline function _apply_averaged!(
+        vₕ::VectorElement{<:ScalarGridSpace},
+        uₕ::VectorElement{<:ScalarGridSpace},
+        ::Centered,
+        dim_val::Val
+)
+    _check_no_alias(vₕ, uₕ)
+    sp = space(uₕ)
+    (execution_policy(sp) isa GpuPolicy || locality(typeof(vₕ.data)) isa DeviceLocality ||
+     locality(typeof(uₕ.data)) isa DeviceLocality) && _throw_no_device_centered_average()
+    _centered_average_engine!(vₕ.data, uₕ.data, _grid_dims(uₕ), dim_val)
+    return vₕ
+end
+
 # Divided by 2 rather than multiplied by 0.5, for the reason given at `_compute_average`:
 # the literal is a Float64 and promotes the whole matrix. On a Float32 backend everything
 # else in the library stayed Float32 and only the averaging matrices came back Float64.
@@ -172,6 +227,28 @@ end
 
 function _average_operator(Ωₕ::AbstractMeshType, ::Backward, ::Val{AVG_DIM}) where {AVG_DIM}
     return add_half_shift(Ωₕ, Val(AVG_DIM), Val(0), Val(-1))
+end
+
+function _average_operator(Ωₕ::AbstractMeshType, ::Centered, ::Val{AVG_DIM}) where {AVG_DIM}
+    return (shift(Ωₕ, Val(AVG_DIM), Val(-1)) + 2 * shift(Ωₕ, Val(AVG_DIM), Val(0)) +
+            shift(Ωₕ, Val(AVG_DIM), Val(1))) / 4
+end
+
+# The centered average's rows are one away from both end slices and zero on them, the
+# weight vector of the retained Kronecker oracle below; host-only, as the centered average
+# has no device path.
+function _average_weights!(
+        v::AbstractVector, Ωₕ::AbstractMeshType, ::Centered, ::Val{DIFF_DIM}
+) where {DIFF_DIM}
+    dims = npoints(Ωₕ, Tuple)
+    1 <= DIFF_DIM <= dim(Ωₕ) || _throw_stencil_dim_error(DIFF_DIM, dim(Ωₕ))
+    li = LinearIndices(dims)
+    n = dims[DIFF_DIM]
+
+    @inbounds for I in CartesianIndices(dims)
+        v[li[I]] = (I[DIFF_DIM] == 1 || I[DIFF_DIM] == n) ? zero(eltype(v)) : one(eltype(v))
+    end
+    return nothing
 end
 
 function _average_weights!(
@@ -244,6 +321,15 @@ const _AVERAGE_OP_CONFIGS = [
         dir_string_lowercase = "backward",
         math_op = "\\frac{u_{i-1} + u_{i}}{2}",
         stencil_op = :BackwardAvgOp
+    ),
+    (
+        direction = Centered(),
+        average_name = :centered_average,
+        average_alias = :Mc,
+        vectorial_average_alias = :Mcₕ,
+        dir_string_lowercase = "centered",
+        math_op = "\\frac{u_{i-1} + 2 u_{i} + u_{i+1}}{4}",
+        stencil_op = :CenteredAvgOp
     )
 ]
 
@@ -272,7 +358,11 @@ for config in _AVERAGE_OP_CONFIGS
             length(out) == length(in) == prod(dims) ||
                 _throw_stencil_size_error(length(out), length(in), dims)
             in_ref = (out === in) ? copy(in) : in
-            _average_engine!(out, in_ref, dims, $dir_instance, average_dim)
+            if $dir_instance isa Centered
+                _centered_average_engine!(out, in_ref, dims, average_dim)
+            else
+                _average_engine!(out, in_ref, dims, $dir_instance, average_dim)
+            end
             return nothing
         end
 
@@ -350,12 +440,28 @@ end
     dispatch_alias=Mₕ,
     vectorial_alias=Mₕ)
 
+# The centered average follows the same rule: there is no bare `Mc`, and `Mcₕ(uₕ, d)` is the
+# dimensional entry point (gpena/Bramble.jl#287).
+@operator_family(base=centered_average,
+    stem=Mc,
+    apply_fn=_apply_averaged!,
+    direction=Centered(),
+    dir_string="centered",
+    what="average",
+    formula="\\frac{u_{i-1} + 2 u_{i} + u_{i+1}}{4}",
+    trailing_note="The first and last points along `{direction}` are truncated "*
+                  "to zero. On a device-backed grid function it throws, as there is "*
+                  "no device kernel yet.",
+    dispatch_alias=Mcₕ,
+    vectorial_alias=Mcₕ)
+
 # --- Kronecker oracle dispatch (gpena/Bramble.jl#185) --------------------------------- #
 #
 # `kronecker_operator_matrix` is declared in shift.jl; each family's dispatch method maps
 # its public per-axis alias to the `_kron_*` construction kept above.
 for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
-    for (stem, kron_fn) in ((:M, :_kron_backward_average), (:M₊, :_kron_forward_average))
+    for (stem, kron_fn) in ((:M, :_kron_backward_average), (:M₊, :_kron_forward_average),
+        (:Mc, :_kron_centered_average))
         alias = Symbol(stem, suffix)
         @eval kronecker_operator_matrix(Ωₕ::AbstractMeshType, ::typeof($alias)) = $kron_fn(Ωₕ, Val($i))
     end

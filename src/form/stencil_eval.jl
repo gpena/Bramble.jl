@@ -79,6 +79,7 @@ const UnaryWrapper{D} = Union{
     JumpNode{D},
     BackwardAverage{D},
     ForwardAverage{D},
+    CenteredAverage{D},
     ShiftNode{D},
     OperatorScale{D},
     GridFunctionScale{D},
@@ -112,7 +113,7 @@ _is_dirac(op::UnaryWrapper) = _is_dirac(op.inner_op)
     TappedNode{D, Dim}
 
 The nodes whose stencil is ordered taps from {+1, 0, -1} along `Dim` with per-node weights:
-the one-sided and extended differences, the two averages, and the jump. `ShiftNode` is not
+the one-sided and extended differences, the three averages, and the jump. `ShiftNode` is not
 one of them -- it relabels its child's whole stencil rather than combining taps.
 """
 const TappedNode{D, Dim} = Union{
@@ -123,6 +124,7 @@ const TappedNode{D, Dim} = Union{
     CrossWeightedDifference{D, Dim},
     BackwardAverage{D, Dim},
     ForwardAverage{D, Dim},
+    CenteredAverage{D, Dim},
     JumpNode{D, Dim}
 }
 

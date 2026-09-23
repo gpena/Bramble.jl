@@ -640,6 +640,120 @@ Alias for `backward_average!(vₕ, uₕ, Val(3))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
 
 ### end M₂!
+### Mcₓ
+    Mcₓ(arg)
+
+The `centered` average along the `x` direction, ``\frac{u_{i-1} + 2 u_{i} + u_{i+1}}{4}``.
+
+Alias for `centered_average(arg, Val(1))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`. The first and last points along `x` are truncated to zero. On a device-backed grid function it throws, as there is no device kernel yet.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+---
+    Mcₓ(op::LazyOp{D})
+
+The symbolic centered spatial average of `op` along the `x` direction.
+
+Alias for `Mcₕ(op, Val(1))`.
+
+### end Mcₓ
+### Mcₓ!
+    Mcₓ!(vₕ, uₕ)
+
+The `centered` average of `uₕ` along the `x` direction, ``\frac{u_{i-1} + 2 u_{i} + u_{i+1}}{4}``, written into `vₕ`.
+
+The in-place form of [`Mcₓ`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(Mcₓ!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `centered_average!(vₕ, uₕ, Val(1))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end Mcₓ!
+### Mcᵧ
+    Mcᵧ(arg)
+
+The `centered` average along the `y` direction, ``\frac{u_{i-1} + 2 u_{i} + u_{i+1}}{4}``.
+
+Alias for `centered_average(arg, Val(2))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`. The first and last points along `y` are truncated to zero. On a device-backed grid function it throws, as there is no device kernel yet.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+---
+    Mcᵧ(op::LazyOp{D})
+
+The symbolic centered spatial average of `op` along the `y` direction.
+
+Alias for `Mcₕ(op, Val(2))`.
+
+### end Mcᵧ
+### Mcᵧ!
+    Mcᵧ!(vₕ, uₕ)
+
+The `centered` average of `uₕ` along the `y` direction, ``\frac{u_{i-1} + 2 u_{i} + u_{i+1}}{4}``, written into `vₕ`.
+
+The in-place form of [`Mcᵧ`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(Mcᵧ!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `centered_average!(vₕ, uₕ, Val(2))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end Mcᵧ!
+### Mc₂
+    Mc₂(arg)
+
+The `centered` average along the `z` direction, ``\frac{u_{i-1} + 2 u_{i} + u_{i+1}}{4}``.
+
+Alias for `centered_average(arg, Val(3))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`. The first and last points along `z` are truncated to zero. On a device-backed grid function it throws, as there is no device kernel yet.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+---
+    Mc₂(op::LazyOp{D})
+
+The symbolic centered spatial average of `op` along the `z` direction.
+
+Alias for `Mcₕ(op, Val(3))`.
+
+### end Mc₂
+### Mc₂!
+    Mc₂!(vₕ, uₕ)
+
+The `centered` average of `uₕ` along the `z` direction, ``\frac{u_{i-1} + 2 u_{i} + u_{i+1}}{4}``, written into `vₕ`.
+
+The in-place form of [`Mc₂`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(Mc₂!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `centered_average!(vₕ, uₕ, Val(3))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end Mc₂!
 ### M₊ₓ
     M₊ₓ(arg)
 
@@ -1170,6 +1284,48 @@ one per component.
 The forward twin of [`∇ₕ`](@ref)`(u::Union{TrialFunction,TestFunction})`.
 
 ### end ∇₊ₕ
+### ∇cₕ
+    ∇cₕ(uₕ::VectorElement) -> VectorElement or NTuple{D, VectorElement}
+
+Returns the centered discrete gradient of the grid function `uₕ`, one centered difference
+per direction:
+
+```math
+\nabla_{c,h}(\textrm{u}_h) = \left(\textrm{Dc}_{x_1}(\textrm{u}_h), \ldots,
+    \textrm{Dc}_{x_D}(\textrm{u}_h)\right), \qquad
+\textrm{Dc}_{x_d}(\textrm{u}_h)(i) = \frac{u_{i+1} - u_{i-1}}{h_i + h_{i+1}}.
+```
+
+The same function as [`Dcₕ`](@ref), under the name the centered vector calculus family
+shares. In 1D it returns the bare grid function, above a `D`-tuple. Each difference is
+truncated to zero on the first and last slice of its direction.
+
+[`∇cₕ!`](@ref) writes into a destination instead, and allocates nothing.
+
+See also: [`divcₕ`](@ref), [`curlcₕ`](@ref), [`εcₕ`](@ref), [`∇ₕ`](@ref)
+
+### end ∇cₕ
+### ∇̽ₕ
+    ∇̽ₕ(uₕ::VectorElement) -> VectorElement or NTuple{D, VectorElement}
+
+Returns the starred discrete gradient of the grid function `uₕ`, one starred forward
+difference per direction:
+
+```math
+\overset{\times}{\nabla}_h(\textrm{u}_h) = \left(\overset{\times}{\textrm{D}}_{x_1}(\textrm{u}_h),
+    \ldots, \overset{\times}{\textrm{D}}_{x_D}(\textrm{u}_h)\right), \qquad
+\overset{\times}{\textrm{D}}_{x_d}(\textrm{u}_h)(i) = \frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}.
+```
+
+The same function as [`D̽ₕ`](@ref), under the name the starred vector calculus family shares.
+In 1D it returns the bare grid function, above a `D`-tuple. Each difference is truncated to
+zero on the last slice of its direction.
+
+[`∇̽ₕ!`](@ref) writes into a destination instead, and allocates nothing.
+
+See also: [`div̽ₕ`](@ref), [`curl̽ₕ`](@ref), [`∇ₕ`](@ref)
+
+### end ∇̽ₕ
 ### diff₋ₕ
     diff₋ₕ(arg)
 
@@ -1277,6 +1433,61 @@ dimension there is one direction, so the node itself is returned rather than a
 one-element tuple.
 
 ### end Mₕ
+### Mcₕ
+    Mcₕ(arg, d)
+
+The `centered` average along the `d` direction, ``\frac{u_{i-1} + 2 u_{i} + u_{i+1}}{4}``.
+
+`d` names the direction three ways: a `Val` (`Val(1)`), an `Int` (`1`, `2`, `3`) or a
+`Symbol` (`:x`, `:y`, `:z`). The `Val` form is the one
+[`Mcₓ`](@ref) and its siblings forward through; the other two select between
+literal `Val`s, one arm per direction the mesh has, so the direction still reaches the
+stencil engine as a compile-time constant and a loop over `d` allocates nothing beyond
+its results. An `Int` outside `1:dim(mesh)`, or a `Symbol` that is not `:x`/`:y`/`:z`,
+throws an `ArgumentError`.
+
+Alias for `centered_average(arg, Val(d))`. `arg` is a mesh, a grid space or a
+[`VectorElement`](@ref): the first two give the operator as a sparse matrix, the third
+applies it and returns a `VectorElement`.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+---
+    Mcₕ(arg)
+
+The centered average of `arg` along every coordinate, as a tuple with one entry per
+spatial dimension. On a one-dimensional mesh it returns that single entry rather than
+a one-tuple.
+
+For a 2D space, `Mcₕ(uₕ)` is
+`(centered_average(uₕ, Val(1)), centered_average(uₕ, Val(2)))`. `arg` is a mesh, a grid
+space or a [`VectorElement`](@ref), as for `centered_average`.
+
+Accepts a grid function of a scalar or of a composite grid space, componentwise on
+the latter: each entry of the tuple is then itself a composite grid function.
+
+---
+    Mcₕ(op::LazyOp{D}, ::Val{Dim})
+
+The symbolic centered spatial average of `op` along direction `Dim`, as a `CenteredAverage` node.
+
+The entry point [`Mcₓ`](@ref) and its siblings forward through, and the same
+function the space layer applies to a grid function: `Mcₕ(uₕ, Val(1))` computes
+values, `Mcₕ(U, Val(1))` builds the node that will compute them during assembly.
+
+Takes a `Val` and not an `Int`, unlike its space-layer namesake: `Dim` is a type
+parameter of the node, so a runtime direction would make the return type a `Union`.
+
+---
+    Mcₕ(op::LazyOp{D})
+
+The symbolic centered spatial average of `op` along every coordinate, as a `D`-tuple of nodes. In one
+dimension there is one direction, so the node itself is returned rather than a
+one-element tuple.
+
+### end Mcₕ
 ### M₊ₕ
     M₊ₕ(arg, d)
 
@@ -1733,6 +1944,9 @@ is truncated: each collapses to the one-sided difference its near side still def
 See also: [`Dcₓ`](@ref), [`D₋ₓ`](@ref), [`D₊ₓ`](@ref).
 
 ### end cross_weighted_difference!
+### centered_average!
+<no docstring>
+### end centered_average!
 ### forward_average!
 <no docstring>
 ### end forward_average!

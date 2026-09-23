@@ -2,6 +2,8 @@ module FormBlockExtractTests
 
 using Test
 using InteractiveUtils: subtypes
+using Random
+using ..TestUtils: alloc_test
 using Bramble
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: D₊ₓ, D₊ᵧ, M₊ₓ, M₊ᵧ
@@ -196,6 +198,45 @@ using Bramble:
         # the two sides are counted separately, so a rectangular system works
         @test block_of(innerₕ(u(2), v(1)), 2, 1) == (2, 1)
         @test_throws ArgumentError block_of(innerₕ(u(2), v(1)), 1, 2)
+    end
+end
+
+# A scalar trial space against a composite test space: the scalar side is walked as a
+# one-leaf composite, and the matrix has the composite's rows and the scalar's columns.
+# The mirror (composite trial, scalar test) is the transpose.
+function _scalar_trial_composite_test(D)
+    Random.seed!(287 + D)
+    dom = D == 2 ? domain(interval(0.0, 1.0) × interval(0.0, 1.0)) :
+          domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)))
+    Ωₕ = mesh(dom, (7, 6, 5)[1:D], ntuple(_ -> false, D))
+    Wₕ = gridspace(Ωₕ)
+    Vₕ = gridspace(Ωₕ, Val(D))
+    p = Rₕ(Wₕ, x -> sin(3x[1]) + x[D]^2)
+    vc = element(Vₕ, 0.0)
+    for d in 1:D
+        parent(components(vc)[d]) .= rand(length(parent(p)))
+    end
+    return Wₕ, Vₕ, p, vc
+end
+
+@testset "Scalar trial, composite test" begin
+    for D in 2:3
+        Wₕ, Vₕ, p, vc = _scalar_trial_composite_test(D)
+        for d in 1:D
+            a = form(Wₕ, Vₕ, (q, v) -> innerₕ(q(1), Dcₓ(v(d))))
+            A = assemble(a)
+            @test size(A) == (ndofs(Vₕ), ndofs(Wₕ))
+            @test transpose(parent(vc)) * (A * parent(p)) ≈
+                  innerₕ(p, Dcₓ(components(vc)[d]))
+            B = assemble(form(Vₕ, Wₕ, (v, q) -> innerₕ(Dcₓ(v(d)), q(1))))
+            @test A ≈ transpose(B)
+
+            A0 = copy(A)
+            fill!(A.nzval, 0)
+            assemble!(A, a)
+            @test A ≈ A0
+            @test alloc_test(assemble!, A, a) == 0
+        end
     end
 end
 

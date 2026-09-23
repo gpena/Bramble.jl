@@ -256,12 +256,11 @@ end
 # --- Whether an operator's stencil may be shifted by relabelling its offsets -------- #
 #
 # Every wrapper that reaches a neighbour (the differences, the averages, Sₓ, the jumps)
-# evaluates its inner operator once, at the point being visited, and then produces the
-# neighbour's contribution by adding a constant to the offsets (`shift_stencil`). That is
-# exact whenever the inner stencil is the same shape everywhere, which is to say for a trial
-# or test function however deeply wrapped: relabelling `(0,)` as `(-1,)` says precisely what
-# evaluating at `I - e` would have said, and evaluating once instead of twice is why an
-# operator tower costs nothing to compose.
+# produces the neighbour's contribution by evaluating its inner operator at that neighbour
+# (clamped to the mesh) and adding a constant to the offsets (`shift_stencil`). Plain
+# relabelling of the stencil evaluated at the point itself is exact only for a bare trial or
+# test leaf: any nested stencil operator carries the neighbour's own spacing and boundary
+# mask, which the point's stencil does not (gpena/Bramble.jl#287).
 #
 # Two kinds of node break that. An interpolation's entries name absolute columns chosen by
 # `locate_cell` from the point's own coordinates, and a source's entries carry the function's
@@ -273,15 +272,14 @@ end
 # contraction (`_contracted_left_stencil`, `form/operators/inner.jl`) reads its values through.
 #
 # A Holy trait rather than a `Bool` predicate on purpose: the choice is made by dispatch on a
-# singleton, so neither branch is ever compiled into the other's code path, and the
-# translation-invariant path stays the single `shift_stencil` call it is today.
+# singleton, so neither branch is ever compiled into the other's code path.
 abstract type StencilShiftTrait end
 
 """
     TranslationInvariantStencil <: StencilShiftTrait
 
 The operator's stencil has the same shape at every point, so a neighbour's contribution is
-its own stencil with the offsets relabelled ([`shift_stencil`](@ref)).
+its stencil evaluated at the neighbour with the offsets relabelled ([`shift_stencil`](@ref)).
 """
 struct TranslationInvariantStencil <: StencilShiftTrait end
 
@@ -348,9 +346,9 @@ stencil already evaluated at `I`.
 
 The one place the "shift by relabelling" assumption is made, so the one place a node that
 cannot be relabelled has to be handled. The default dispatches on
-`stencil_shift_trait`: [`TranslationInvariantStencil`](@ref) relabels `inner`'s
-offsets and never touches `inner_op` again; [`PointDependentStencil`](@ref) discards `inner`
-and evaluates `inner_op` at the shifted point instead.
+`stencil_shift_trait`: [`TranslationInvariantStencil`](@ref) evaluates `inner_op` at the
+shifted point and relabels its offsets (a bare trial or test leaf relabels `inner` itself);
+[`PointDependentStencil`](@ref) evaluates `inner_op` at the shifted point with no relabelling.
 
 Two node types override this default outright rather than answering through the trait alone,
 because the trait's two stock branches cannot express what they need: re-evaluating the
@@ -379,9 +377,52 @@ sees exactly the shape it always did.
     )
 end
 
+# Re-evaluated at the clamped neighbour, then relabelled by `delta`: the inner stencil's
+# weights (spacings, boundary masks) are the neighbour's, its offsets are made relative to
+# `I`. Where the clamp bites, `Ishift == I` and this is the old relabelling of `inner`, whose
+# out-of-range offsets the assembly's bounds check drops.
+@inline function _shifted_inner_stencil(
+        ::TranslationInvariantStencil,
+        inner_op,
+        inner,
+        space,
+        I::CartesianIndex{D},
+        markers,
+        ::Val{Dim},
+        delta
+) where {D, Dim}
+    _wraps_leaf(inner_op) &&
+        return _reevaluated_shift(inner_op, space, I, markers, Val(Dim), _shift_delta(delta))
+    return @noinline _reevaluated_shift(
+        inner_op, space, I, markers, Val(Dim), _shift_delta(delta)
+    )
+end
+
+# `delta` enters as an `Int` so every tap of a node shares one compiled instance.
+@inline function _reevaluated_shift(
+        inner_op, space, I::CartesianIndex{D}, markers, ::Val{Dim}, delta::Int
+) where {D, Dim}
+    m = mesh(space)
+    Ishift = _clamped_shift(m, I, Val(Dim), delta)
+    at_shift = local_stencil(inner_op, space, Ishift, markers, LinearIndices(indices(m))[Ishift])
+    return shift_stencil(at_shift, Val(Dim), delta)
+end
+
+# Whether `op` wraps a bare trial or test leaf directly. Such an operand's re-evaluation is
+# a handful of flops and is inlined into each tap; anything deeper is called out of line
+# instead, since inlining a fresh evaluation per tap makes the generated code (and so the
+# first-call compile time) grow like taps^depth. Answered by dispatch on the operand's type
+# parameter, so it folds at compile time; the node files add the methods for their own
+# wrappers (form/operators/average.jl, form/operators/restriction.jl).
+const _BareLeaf = Union{TrialFunction, TestFunction}
+@inline _wraps_leaf(::Any) = false
+@inline _wraps_leaf(::Union{
+    OperatorScale{D, S, <:_BareLeaf}, GridFunctionScale{D, S, <:_BareLeaf}}) where {D, S} = true
+
+# A bare leaf's stencil is the same everywhere, so relabelling it is exact.
 @inline _shifted_inner_stencil(
     ::TranslationInvariantStencil,
-    inner_op,
+    inner_op::Union{TrialFunction, TestFunction},
     inner,
     space,
     I::CartesianIndex{D},

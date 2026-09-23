@@ -331,13 +331,29 @@ trial or test function -- the same name spans both, dispatching on what it is gi
 divₕ
 divₕ!
 div₊ₕ
+divcₕ
+divcₕ!
 curlₕ
 curlₕ!
 curl₊ₕ
+curlcₕ
+curlcₕ!
 Δₕ
 Δₕ!
 εₕ
 εₕ!
+εcₕ
+εcₕ!
+∇cₕ
+∇cₕ!
+∇̽ₕ
+∇̽ₕ!
+div̽ₕ
+div̽ₕ!
+curl̽ₕ
+curl̽ₕ!
+ε₊ₕ
+ε₊ₕ!
 ```
 
 Jumps across an interface, ``\llbracket u \rrbracket = u_{i+1} - u_i``. There is one
@@ -365,6 +381,13 @@ Mᵧ!
 M₂
 M₂!
 Mₕ
+Mcₓ
+Mcₓ!
+Mcᵧ
+Mcᵧ!
+Mc₂
+Mc₂!
+Mcₕ
 M₊ₓ
 M₊ₓ!
 M₊ᵧ

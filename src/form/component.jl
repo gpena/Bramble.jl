@@ -81,7 +81,8 @@ for T in (
     :CrossWeightedDifference,
     :JumpNode,
     :BackwardAverage,
-    :ForwardAverage
+    :ForwardAverage,
+    :CenteredAverage
 )
     @eval @inline function component(op::$T{D, Dim}, i::Int) where {D, Dim}
         inner = component(op.inner_op, i)

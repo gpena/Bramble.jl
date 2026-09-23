@@ -550,17 +550,23 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         @test stencil_shift_trait(u + node) isa PointDependentStencil
         @test stencil_shift_trait(u + D₋ₓ(u)) isa TranslationInvariantStencil
 
-        # `shifted_inner_stencil` must be exactly `shift_stencil` on the translation-invariant
-        # path: every operator in the package goes through it now, so this is what says the
-        # refactor changed nothing for them
+        # `shifted_inner_stencil` on the translation-invariant path: a bare leaf is relabelled,
+        # a nested operator is re-evaluated at the clamped neighbour and then relabelled
+        # (gpena/Bramble.jl#287)
         Ωₕ = mesh(Wt)
         mk = markers(Ωₕ)
         I = CartesianIndex(5)
-        for op in (u, D₋ₓ(u), Mₓ(D₊ₓ(u)), 2.0 * u)
+        nx = npoints(Ωₕ, Tuple)[1]
+        for δ in (Val(-1), Val(1), 2)
+            @test shifted_inner_stencil(u, local_stencil(u, Wt, I, mk, 5), Wt, I, mk, Val(1), δ) ==
+                  shift_stencil(local_stencil(u, Wt, I, mk, 5), Val(1), δ)
+        end
+        for op in (D₋ₓ(u), Mₓ(D₊ₓ(u)), 2.0 * u)
             inner = local_stencil(op, Wt, I, mk, 5)
             for δ in (Val(-1), Val(1), 2)
+                j = clamp(5 + (δ isa Val ? typeof(δ).parameters[1] : δ), 1, nx)
                 @test shifted_inner_stencil(op, inner, Wt, I, mk, Val(1), δ) ==
-                      shift_stencil(inner, Val(1), δ)
+                      shift_stencil(local_stencil(op, Wt, CartesianIndex(j), mk, j), Val(1), δ)
             end
         end
 

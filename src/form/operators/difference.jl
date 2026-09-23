@@ -483,6 +483,96 @@ end
     )
 end
 
+# --- divcₕ, εcₕ: centered divergence and strain over composite functions ---------------- #
+#
+# The centered difference is collocated: every `Dc` term sits on the grid point itself, so
+# neither builder averages or staggers anything. `divcₕ(u)` is therefore an ordinary scalar
+# `LazyOp` sum usable anywhere a test or trial expression is. `εcₕ(u)` keeps its entries'
+# additive pieces apart, for the reason `_strain_pieces` above gives, and is consumed only by
+# the `innerₕ` method beside it. Both methods take `LazyOp{D}`, which is more specific than
+# the runtime `divcₕ(uₕ)`/`εcₕ(uₕ)` over grid functions (untyped) and disjoint from any grid
+# function, so the symbolic and numeric families never meet.
+
+@inline function _vc_centered(op, d::Int)
+    d == 1 && return Dcₓ(op)
+    d == 2 && return Dcᵧ(op)
+    return Dc₂(op)
+end
+
+"""
+    divcₕ(u::LazyOp{D}) -> LazyOp
+
+The symbolic centered divergence of a trial or test function `u` with one component per
+spatial dimension,
+
+```math
+\\textrm{div}_{c,h}(u) = \\sum_{i=1}^{D} \\textrm{Dc}_{x_i}(u_i).
+```
+
+Every term is collocated at the grid point, so the result is a plain operator sum usable
+wherever an operator is, e.g. `innerₕ(p, divcₕ(v))`. Shares its name with the runtime
+[`divcₕ`](@ref) over grid functions (`space/operators/vector_calculus.jl`).
+
+See also: [`εcₕ`](@ref), [`divₕ`](@ref).
+"""
+function divcₕ(u::LazyOp{D}) where {D}
+    return foldl(+, ntuple(i -> _vc_centered(u(i), i), Val(D)))
+end
+
+"""
+    Bramble._CenteredStrainTensor{D}
+
+Builder-only container for [`εcₕ`](@ref)'s `D × D` entries, each held as its additive
+pieces. Consumed only by [`innerₕ`](@ref) on two of these, never part of an assembled AST.
+"""
+struct _CenteredStrainTensor{D, T}
+    entries::T
+end
+
+@inline function _centered_strain_pieces(u, i::Int, j::Int)
+    i == j && return (_vc_centered(u(i), i),)
+    return (0.5 * _vc_centered(u(i), j), 0.5 * _vc_centered(u(j), i))
+end
+
+"""
+    εcₕ(u::LazyOp{D}) -> Bramble._CenteredStrainTensor
+
+The symbolic centered small-strain tensor of a composite trial or test function `u`,
+
+```math
+\\varepsilon^{ii}_{c,h}(u) = \\textrm{Dc}_{x_i}(u_i), \\qquad
+\\varepsilon^{ij}_{c,h}(u) = \\tfrac{1}{2}\\left(\\textrm{Dc}_{x_j}(u_i)
+    + \\textrm{Dc}_{x_i}(u_j)\\right), \\quad i \\neq j.
+```
+
+The only supported use is `innerₕ(εcₕ(u), εcₕ(v))`, which expands to
+``\\sum_{i,j} (\\varepsilon^{ij}_{c,h}(u), \\varepsilon^{ij}_{c,h}(v))_h``. Shares its name
+with the runtime [`εcₕ`](@ref) over grid functions.
+
+See also: [`divcₕ`](@ref), [`εₕ`](@ref).
+"""
+function εcₕ(u::LazyOp{D}) where {D}
+    entries = ntuple(Val(D)) do i
+        ntuple(j -> _centered_strain_pieces(u, i, j), Val(D))
+    end
+    return _CenteredStrainTensor{D, typeof(entries)}(entries)
+end
+
+@inline function innerₕ(left::_CenteredStrainTensor{D}, right::_CenteredStrainTensor{D}) where {D}
+    terms = _flatten_tuples(
+        ntuple(Val(D)) do i
+        _flatten_tuples(
+            ntuple(Val(D)) do j
+            _flatten_tuples(
+                map(a -> map(b -> innerₕ(a, b), right.entries[i][j]), left.entries[i][j])
+            )
+        end
+        )
+    end
+    )
+    return foldl(+, terms)
+end
+
 # ==============================================================================
 # Expression rendering (gpena/Bramble.jl#274)
 # ==============================================================================

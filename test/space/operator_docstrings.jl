@@ -18,10 +18,10 @@ using Bramble
 #
 # and read the diff before committing it -- a surprise in that diff is the point of the test.
 
-const STEMS = ("diff₋", "diff₊", "D₋", "D₊", "jump", "M", "M₊", "D̽", "Dc", "Dₕ")
+const STEMS = ("diff₋", "diff₊", "D₋", "D₊", "jump", "M", "Mc", "M₊", "D̽", "Dc", "Dₕ")
 const SUFFIXES = ("ₓ", "ᵧ", "₂")
 const VECTORIAL = (
-    "∇ₕ", "∇₊ₕ", "diff₋ₕ", "diff₊ₕ", "jumpₕ", "Mₕ", "M₊ₕ", "D̽ₕ", "Dcₕ", "Dₕ"
+    "∇ₕ", "∇₊ₕ", "∇cₕ", "∇̽ₕ", "diff₋ₕ", "diff₊ₕ", "jumpₕ", "Mₕ", "Mcₕ", "M₊ₕ", "D̽ₕ", "Dcₕ", "Dₕ"
 )
 
 # The dimensional entry points (gpena/Bramble.jl#74). `Dₕ`, `Mₕ` and `M₊ₕ` are absent here
@@ -35,7 +35,7 @@ const DISPATCH = ("diff₋", "diff₊", "D₋", "D₊", "jump", "D̽", "Dc")
 const BASE_BANGS = (
     "backward_difference!", "forward_difference!", "backward_finite_difference!",
     "forward_finite_difference!", "forward_star_difference!", "centered_difference!",
-    "cross_weighted_difference!", "forward_average!", "backward_average!", "jump!"
+    "cross_weighted_difference!", "centered_average!", "forward_average!", "backward_average!", "jump!"
 )
 
 const REFERENCE = joinpath(@__DIR__, "operator_docstrings.txt")

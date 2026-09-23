@@ -51,6 +51,7 @@ for W in (
     :CrossWeightedDifference,
     :BackwardAverage,
     :ForwardAverage,
+    :CenteredAverage,
     :JumpNode
 )
     @eval _same_operator_shape(a::$W{D, Dim}, b::$W{D, Dim}) where {D, Dim} = _same_operator_shape(a.inner_op, b.inner_op)

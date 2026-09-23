@@ -159,9 +159,24 @@ end
 # type regardless of whether a given element is flat or diagonal (`is_diagonal` selects the
 # shape at the value level, not the type level) -- no `where {T <: ...}` indirection needed
 # to keep the vector unboxed, unlike the `AnySegment{D}` union this replaced.
+# A composite space on either side is assembled block by block, the scalar side (if any) as
+# a one-leaf composite (see `allocate_system_matrix`). `_walked_leaf` on a mixed pair would
+# pick one whole space and drop the component the term names on the composite side. Decided
+# from the types alone, so the branch folds away.
+@inline _is_block_pair(::Any, ::Any) = false
+@inline _is_block_pair(::CompositeGridSpace, ::Any) = true
+@inline _is_block_pair(::Any, ::CompositeGridSpace) = true
+@inline _is_block_pair(::CompositeGridSpace, ::CompositeGridSpace) = true
+
 function _record_bilinear_core!(
         A::AbstractMatrix, trial_space, test_space, ast::AST_TYPE, segments::Vector{Segment{D}}, α
 ) where {AST_TYPE, D}
+    if _is_block_pair(trial_space, test_space)
+        _record_blocks!(
+            A, ast, leaf_spaces_offsets(trial_space), leaf_spaces_offsets(test_space), segments, α
+        )
+        return nothing
+    end
     bound = _bind_interp_spaces(ast, trial_space, test_space)
     _check_block_meshes(bound, trial_space, test_space)
     sp = _walked_leaf(bound, trial_space, test_space)
@@ -172,6 +187,18 @@ end
 function _replay_bilinear_core!(
         A::AbstractMatrix, trial_space, test_space, ast::AST_TYPE, segments::Vector{Segment{D}}, α
 ) where {AST_TYPE, D}
+    if _is_block_pair(trial_space, test_space)
+        _replay_blocks!(
+            A,
+            ast,
+            leaf_spaces_offsets(trial_space),
+            leaf_spaces_offsets(test_space),
+            segments,
+            0,
+            α
+        )
+        return nothing
+    end
     bound = _bind_interp_spaces(ast, trial_space, test_space)
     _check_block_meshes(bound, trial_space, test_space)
     sp = _walked_leaf(bound, trial_space, test_space)
@@ -237,40 +264,6 @@ function _replay_blocks!(
         )
     end
     return next
-end
-
-function _record_bilinear_core!(
-        A::AbstractMatrix,
-        trial_space::CompositeGridSpace,
-        test_space::CompositeGridSpace,
-        ast::AST_TYPE,
-        segments::Vector{Segment{D}},
-        α
-) where {AST_TYPE, D}
-    _record_blocks!(
-        A, ast, leaf_spaces_offsets(trial_space), leaf_spaces_offsets(test_space), segments, α
-    )
-    return nothing
-end
-
-function _replay_bilinear_core!(
-        A::AbstractMatrix,
-        trial_space::CompositeGridSpace,
-        test_space::CompositeGridSpace,
-        ast::AST_TYPE,
-        segments::Vector{Segment{D}},
-        α
-) where {AST_TYPE, D}
-    _replay_blocks!(
-        A,
-        ast,
-        leaf_spaces_offsets(trial_space),
-        leaf_spaces_offsets(test_space),
-        segments,
-        0,
-        α
-    )
-    return nothing
 end
 
 # Picks recording (cache miss: a fresh `A`, a changed `ast` -- e.g. `assemble!(A, form;
@@ -641,6 +634,18 @@ end
 function _assemble_bilinear_parallel_core!(
         A::AbstractMatrix, trial_space, test_space, ast::AST_TYPE, α = true
 ) where {AST_TYPE}
+    if _is_block_pair(trial_space, test_space)
+        # Every leaf block `_assemble_blocks_parallel!` walks below gets its own
+        # `host_weights` leaf (different leaves can sit on different meshes), but they all
+        # scatter into the same `A`, and therefore the same `A.mirror` -- `add_to_sparse!`
+        # reads it off `A` directly, so nothing needs resolving or threading through here
+        # (gpena/Bramble.jl#313).
+        _assemble_blocks_parallel!(
+            A, ast, leaf_spaces_offsets(trial_space), leaf_spaces_offsets(test_space), α
+        )
+        _flush_device_scatter!(A)
+        return A
+    end
     bound = _bind_interp_spaces(ast, trial_space, test_space)
     _check_block_meshes(bound, trial_space, test_space)
     # `host_weights` (gpena/Bramble.jl#94, S4.2) -- see `_assemble_blocks_parallel!` above for why.
@@ -653,24 +658,6 @@ function _assemble_bilinear_parallel_core!(
     # A no-op for a host matrix; for a device one, copies `A`'s own mirror (gpena/Bramble.jl#313)
     # back across in one bulk `copyto!` -- see `_flush_device_scatter!`'s own docstring
     # (`bilinear_traversal.jl`).
-    _flush_device_scatter!(A)
-    return A
-end
-
-function _assemble_bilinear_parallel_core!(
-        A::AbstractMatrix,
-        trial_space::CompositeGridSpace,
-        test_space::CompositeGridSpace,
-        ast::AST_TYPE,
-        α = true
-) where {AST_TYPE}
-    # Every leaf block `_assemble_blocks_parallel!` walks below gets its own `host_weights`
-    # leaf (different leaves can sit on different meshes), but they all scatter into the same
-    # `A`, and therefore the same `A.mirror` -- `add_to_sparse!` reads it off `A` directly, so
-    # nothing needs resolving or threading through here (gpena/Bramble.jl#313).
-    _assemble_blocks_parallel!(
-        A, ast, leaf_spaces_offsets(trial_space), leaf_spaces_offsets(test_space), α
-    )
     _flush_device_scatter!(A)
     return A
 end
