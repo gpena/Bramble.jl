@@ -18,18 +18,18 @@ end
 _random_element(Wₕ) = (uₕ = element(Wₕ); parent(uₕ) .= randn(length(parent(uₕ))); uₕ)
 
 const XOPS = (("D₋ₓ", D₋ₓ), ("D₊ₓ", D₊ₓ), ("Dcₓ", Dcₓ), ("D̽ₓ", D̽ₓ), ("Dₕₓ", Dₕₓ),
-              ("Mₓ", Mₓ), ("M₊ₓ", M₊ₓ), ("Mcₓ", Mcₓ), ("jumpₓ", jumpₓ))
+    ("Mₓ", Mₓ), ("M₊ₓ", M₊ₓ), ("Mcₓ", Mcₓ), ("jumpₓ", jumpₓ))
 const YOPS = (("D₋ᵧ", D₋ᵧ), ("Mcᵧ", Mcᵧ), ("Dₕᵧ", Dₕᵧ))
 
 # `op1(op2(·))` in a form on each side, against the runtime composition on grid functions.
 function _check_pair(Wₕ, u, w, f, o1, o2)
     op = v -> o1(o2(v))
     A = assemble(form(Wₕ, Wₕ, (p, q) -> innerₕ(op(p), q)))
-    @test dot(parent(w), A * parent(u)) ≈ innerₕ(op(u), w) rtol = 1e-10 atol = 1e-12
+    @test dot(parent(w), A*parent(u))≈innerₕ(op(u), w) rtol=1e-10 atol=1e-12
     B = assemble(form(Wₕ, Wₕ, (p, q) -> innerₕ(p, op(q))))
-    @test dot(parent(w), B * parent(u)) ≈ innerₕ(u, op(w)) rtol = 1e-10 atol = 1e-12
+    @test dot(parent(w), B*parent(u))≈innerₕ(u, op(w)) rtol=1e-10 atol=1e-12
     F = assemble(form(Wₕ, q -> innerₕ(f, op(q))))
-    @test dot(F, parent(w)) ≈ innerₕ(f, op(w)) rtol = 1e-10 atol = 1e-12
+    @test dot(F, parent(w))≈innerₕ(f, op(w)) rtol=1e-10 atol=1e-12
 end
 
 @testset "Nested stencil operators in forms (#287)" begin
@@ -59,7 +59,7 @@ end
         um = copy(u)
         interior = markers(mesh(Wₕ))[:interior]
         parent(um)[.!vec(collect(interior))] .= 0
-        @test dot(parent(w), A * parent(u)) ≈ innerₕ(Mₓ(D₋ₓ(um)), w) rtol = 1e-10 atol = 1e-12
+        @test dot(parent(w), A*parent(u))≈innerₕ(Mₓ(D₋ₓ(um)), w) rtol=1e-10 atol=1e-12
         assemble!(A, a)
         @test_allocs assemble!(A, a)
     end

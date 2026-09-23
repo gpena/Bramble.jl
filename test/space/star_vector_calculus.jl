@@ -103,6 +103,7 @@ _field(u, D) = D == 1 ? u[1] : u
         F = _field(u, D)
         ε = ε₊ₕ(F)
         for i in 1:D, j in 1:D
+
             oracle = i == j ? parent(D₊(u[i], i)) :
                      (parent(M₊ₕ(D₊(u[i], j), i)) .+ parent(M₊ₕ(D₊(u[j], i), j))) ./ 2
             @test parent(ε[i][j]) ≈ oracle

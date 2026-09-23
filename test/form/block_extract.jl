@@ -201,7 +201,6 @@ using Bramble:
     end
 end
 
-
 # A scalar trial space against a composite test space: the scalar side is walked as a
 # one-leaf composite, and the matrix has the composite's rows and the scalar's columns.
 # The mirror (composite trial, scalar test) is the transpose.

@@ -72,8 +72,8 @@ end
 end
 
 @inline _in_region(op::RegionRestriction, markers, lin_idx::Int) = markers === nothing ?
-                                                                  (op.region === :interior) :
-                                                                  _is_marked(markers, op.region, lin_idx)
+                                                                   (op.region === :interior) :
+                                                                   _is_marked(markers, op.region, lin_idx)
 
 # A tap reaching `delta` points away re-evaluates the restriction at that neighbour. Doing
 # it through `local_stencil` above would return `()` or a full tuple depending on the
